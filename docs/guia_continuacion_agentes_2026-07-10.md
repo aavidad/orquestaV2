@@ -84,7 +84,7 @@ superficie publica el terminal, no `running`. El veredicto viaja como
 campos nuevos opcionales (`causal_verdict`, `causal_reason_code`), sin
 romper campos existentes.
 
-- [ ] PASO A1: veredicto en `observe_goal` (MCP).
+- [x] PASO A1: veredicto en `observe_goal` (MCP).
   Ficheros: `modulos/orquesta-mcp/observe_app_director_goal_tool_v0.go` y su
   test. El executor debe aceptar (opcional, inyectada) una fuente de
   evidencias con la misma interfaz que usa operational-status; si esta
@@ -203,3 +203,12 @@ backend tmux y cableados en
 ## Bitacora de desviaciones
 
 (Anotar aqui, con fecha y paso, todo lo que no cuadre con la guia.)
+
+- 2026-07-10, PASO A1: el executor de observe_goal YA tenia `EstadoVivoSource`
+  inyectable y un camino estado-vivo en la ruta de snapshot parcial
+  (`observe_app_director_goal_estado_vivo_v0.go`); lo que faltaba y se anadio
+  fue: campos `causal_verdict`/`causal_reason_code` en el resultado, derivar
+  el veredicto tambien en la ruta principal de `Execute`, y la regla de no
+  publicar `running` contradicho con `recommended_action=reconcile_goal_state`.
+- 2026-07-10, PASO A1: `modulos/orquesta-mcp/shared_contracts_resource_v0_test.go`
+  esta sin gofmt en HEAD (preexistente, no tocado en este paso).

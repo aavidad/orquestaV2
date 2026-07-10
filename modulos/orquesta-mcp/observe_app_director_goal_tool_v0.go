@@ -47,6 +47,8 @@ type MCPObserveAppDirectorGoalToolResultV0 struct {
 	GoalRef                  string                 `json:"goal_ref,omitempty"`
 	ExternalGoalRef          string                 `json:"external_goal_ref,omitempty"`
 	GoalStatus               string                 `json:"goal_status,omitempty"`
+	CausalVerdict            string                 `json:"causal_verdict,omitempty"`
+	CausalReasonCode         string                 `json:"causal_reason_code,omitempty"`
 	ResultRef                string                 `json:"result_ref,omitempty"`
 	LastEventAt              string                 `json:"last_event_at,omitempty"`
 	CurrentPhase             string                 `json:"current_phase,omitempty"`
@@ -83,7 +85,7 @@ func MCPObserveAppDirectorGoalDescriptorV0() MCPObserveAppDirectorGoalToolDescri
 		Name:        MCPObserveAppDirectorGoalToolNameV0,
 		Version:     MCPObserveAppDirectorGoalToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,run_ref,occurred_at?,requested_by?}",
-		Output:      "ok:{run_ref,run_status?,director_execution_mode?,goal_ref,goal_status,context_budget_total_bytes?,static_prompt_bytes?,dynamic_context_bytes?,code_context_cache_status?,recommended_action?,closure_status?,closure_accepted?,artifact_refs?,evidence_refs?}|error:{errores_publicos,recommended_action?,evidence_refs?}",
+		Output:      "ok:{run_ref,run_status?,director_execution_mode?,goal_ref,goal_status,causal_verdict?,causal_reason_code?,context_budget_total_bytes?,static_prompt_bytes?,dynamic_context_bytes?,code_context_cache_status?,recommended_action?,closure_status?,closure_accepted?,artifact_refs?,evidence_refs?}|error:{errores_publicos,recommended_action?,evidence_refs?}",
 		ResourceURI: MCPObserveAppDirectorGoalResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
@@ -395,6 +397,8 @@ func mergeMCPObserveAppDirectorGoalPartialIntoTimeoutV0(
 	timeout.GoalRef = firstNonEmptyMCPV0(partial.GoalRef, timeout.GoalRef)
 	timeout.ExternalGoalRef = firstNonEmptyMCPV0(partial.ExternalGoalRef, timeout.ExternalGoalRef)
 	timeout.GoalStatus = firstNonEmptyMCPV0(partial.GoalStatus, timeout.GoalStatus)
+	timeout.CausalVerdict = firstNonEmptyMCPV0(partial.CausalVerdict, timeout.CausalVerdict)
+	timeout.CausalReasonCode = firstNonEmptyMCPV0(partial.CausalReasonCode, timeout.CausalReasonCode)
 	timeout.ResultRef = firstNonEmptyMCPV0(partial.ResultRef, timeout.ResultRef)
 	timeout.LastEventAt = firstNonEmptyMCPV0(partial.LastEventAt, timeout.LastEventAt)
 	timeout.CurrentPhase = firstNonEmptyMCPV0(partial.CurrentPhase, timeout.CurrentPhase)

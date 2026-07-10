@@ -44,7 +44,7 @@ func (executor MCPObserveAppDirectorGoalToolExecutorV0) Execute(
 		}
 		return MCPObserveAppDirectorGoalToolResultV0{}, err
 	}
-	return NewMCPObserveAppDirectorGoalResultV0(input, result), nil
+	return executor.withCausalVerdictV0(ctx, input, NewMCPObserveAppDirectorGoalResultV0(input, result)), nil
 }
 
 func (executor MCPObserveAppDirectorGoalToolExecutorV0) withPartialSnapshotAfterObserveErrorV0(

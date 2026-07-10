@@ -8,7 +8,58 @@ import (
 	orquestagoal "orquesta/modulos/orquesta-goal"
 )
 
-const mcpObserveAppDirectorGoalEstadoVivoEvidenceLimitV0 = 32
+const (
+	mcpObserveAppDirectorGoalEstadoVivoEvidenceLimitV0  = 32
+	mcpObserveAppDirectorGoalActionReconcileGoalStateV0 = "reconcile_goal_state"
+)
+
+func (executor MCPObserveAppDirectorGoalToolExecutorV0) withCausalVerdictV0(
+	ctx context.Context,
+	input MCPObserveAppDirectorGoalToolInputV0,
+	result MCPObserveAppDirectorGoalToolResultV0,
+) MCPObserveAppDirectorGoalToolResultV0 {
+	if executor.EstadoVivoSource == nil {
+		return result
+	}
+	runRef := strings.TrimSpace(firstNonEmptyMCPV0(result.RunRef, input.RunRef))
+	if runRef == "" {
+		return result
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	evidencias, err := executor.EstadoVivoSource.ListarEvidenciasEstadoV0(ctx, orquestaestadovivo.FiltroEvidenciaEstadoV0{
+		RunRef: runRef,
+		Limit:  mcpObserveAppDirectorGoalEstadoVivoEvidenceLimitV0,
+	})
+	if err != nil || len(evidencias) == 0 {
+		return result
+	}
+	return applyMCPObserveAppDirectorGoalCausalVerdictV0(result, orquestaestadovivo.DerivarVeredictoCausalV0(evidencias))
+}
+
+func applyMCPObserveAppDirectorGoalCausalVerdictV0(
+	result MCPObserveAppDirectorGoalToolResultV0,
+	veredicto orquestaestadovivo.VeredictoCausalV0,
+) MCPObserveAppDirectorGoalToolResultV0 {
+	result.CausalVerdict = string(veredicto.Clase)
+	result.CausalReasonCode = strings.TrimSpace(veredicto.ReasonCode)
+	result.EvidenceRefs = compactStringsMCPV0(append(result.EvidenceRefs, veredicto.EvidenceRefs...))
+	if strings.TrimSpace(result.GoalStatus) != orquestagoal.GoalStatusRunningV0 {
+		return result
+	}
+	switch veredicto.Clase {
+	case orquestaestadovivo.VeredictoTerminalByArtifactV0, orquestaestadovivo.VeredictoProcessDeadStateStaleV0:
+	default:
+		return result
+	}
+	result.GoalStatus = string(veredicto.Clase)
+	if mcpEstadoVivoStatusPublicaRunningV0(result.RunStatus) {
+		result.RunStatus = string(veredicto.Clase)
+	}
+	result.RecommendedAction = mcpObserveAppDirectorGoalActionReconcileGoalStateV0
+	return result
+}
 
 func (executor MCPObserveAppDirectorGoalToolExecutorV0) withEstadoVivoSnapshotV0(
 	ctx context.Context,
@@ -55,6 +106,8 @@ func applyMCPObserveAppDirectorGoalEstadoVivoNodeV0(
 	result MCPObserveAppDirectorGoalToolResultV0,
 	node orquestaestadovivo.NodoCicloVidaV0,
 ) MCPObserveAppDirectorGoalToolResultV0 {
+	result.CausalVerdict = string(node.Veredicto.Clase)
+	result.CausalReasonCode = strings.TrimSpace(node.Veredicto.ReasonCode)
 	evidenceRefs := evidenceRefsFromEstadoVivoNodeMCPAutoprogrammingV0(node)
 	result.EvidenceRefs = compactStringsMCPV0(append(result.EvidenceRefs, evidenceRefs...))
 	if node.Veredicto.Clase == orquestaestadovivo.VeredictoDivergentNeedsRepairV0 {
