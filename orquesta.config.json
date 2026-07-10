@@ -1,0 +1,10 @@
+{
+  "schema_version": "orquesta_config.v0",
+  "server": {
+    "addr": "127.0.0.1:8787",
+    "state_dir": ".orquesta/state"
+  },
+  "control_plane": {
+    "remote_access_opt_in": false
+  }
+}

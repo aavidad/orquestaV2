@@ -151,7 +151,7 @@ backend tmux y cableados en
 
 ## ETAPA C - Preparacion del piloto (sin cuota Codex)
 
-- [ ] PASO C1: config canonica local minima. Crear `orquesta.config.json`
+- [x] PASO C1: config canonica local minima. Crear `orquesta.config.json`
   en la raiz SOLO si no existe, con el minimo que el server valida (mirar
   `rg -n "orquesta.config.json" cmd/orquesta-server --type go | head` y el
   test de config canonica para el schema). Sin Telegram, sin remoto.
