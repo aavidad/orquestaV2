@@ -2740,3 +2740,41 @@ migracion gobernada de 58 recibos movibles, proyeccion comun de procedencia y
 smoke real aislado. Ver
 `docs/incidencias/incidencia_orquesta_s13_destino_recibos_runtime_2026-07-10.md`
 y el indice vivo, que prevalecen sobre este resumen historico.
+
+## Actualizacion Codex 2026-07-10: revalidacion local de nucleo antes de limpieza
+
+El operador fijo el orden: cerrar nucleo primero; despues, limpieza gobernada
+de variables y codigo. PDF/tools, conectores y temarios quedan fuera de este
+corte.
+
+Revalidacion offline ejecutada sin arrancar servidor, agentes, apps ni tocar
+remoto/OPES/uso-app:
+
+```bash
+ORQUESTA_DRAIN_TEST_CACHE_ROOT=/tmp/orquesta-f3-r2-drain \
+  bash scripts/test_orquesta_server_drain.sh
+ORQUESTA_BATCH_TEST_CACHE_ROOT=/tmp/orquesta-f3-r2-batches \
+  bash scripts/test_orquesta_test_batches.sh
+GOCACHE=/tmp/orquesta-core-attestation-gocache \
+GOTMPDIR=/tmp/orquesta-core-attestation-tmp \
+  go test -count=1 \
+    ./modulos/orquesta-goal \
+    ./modulos/orquesta-runtime-required-test \
+    ./modulos/orquesta-state-file \
+    ./modulos/orquesta-app-director-service \
+    ./modulos/orquesta-app-codex-stack \
+    ./modulos/orquesta-autoprogramming
+```
+
+Resultado: verde. F3 valida identidad, backup, proteccion incondicional de
+`uso-app`, lock y lotes aislados; los seis paquetes validan atestacion
+independiente, persistencia, director y stack goal-first. No es evidencia de
+drain/deploy/API reales: los residuales vivos siguen siendo los del indice
+`docs/inventario_bugs_estado_vivo.md` y requieren ventana operativa
+autorizada.
+
+Checkpoint de limpieza no destructiva sincronizado: `4820516ec`
+(`chore: indexa funciones para limpieza segura`). El auditor genera un indice
+lexico de 25.199 funciones y una SQLite derivada; sirve para priorizar
+revision, nunca para borrar automaticamente. Detalle:
+`docs/auditorias/indice_funciones_orquesta_2026-07-10.md`.
