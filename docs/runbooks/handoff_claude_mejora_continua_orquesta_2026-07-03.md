@@ -3137,3 +3137,8 @@ unica autoridad que combina estado, terminalidad durable y liveness. Sus
 consumidores son proyeccion interna, MCP y rework residente Codex. Los
 predicados de run-control, cola y autoprogramming son politicas/proyecciones
 con vocabulario propio, no reconciliaciones duplicadas; no se borraron.
+
+`5968cd0e6` extrae de `orquesta-goal/validation_v0.go` solo los limites
+privados de `GoalWorkSpec` a `validation_limits_v0.go`. La validacion principal
+mantiene orden y normalizacion; no se movieron write-set, artefactos ni cierre.
+Focales de limites y `go test -count=1 ./modulos/orquesta-goal` verdes.

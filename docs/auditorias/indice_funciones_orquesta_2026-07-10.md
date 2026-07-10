@@ -144,3 +144,8 @@ autoprogramming confirma que `DerivarVeredictoCausalV0` sigue siendo la unica
 reconciliacion de estado persistido, terminalidad durable y liveness. Las
 proyecciones de fase, cola, control y review son politicas distintas; no se
 retiran ni se consolidan por parecido textual.
+
+`5968cd0e6` continua el mismo criterio en `orquesta-goal`: extrae la
+validacion privada de limites de `GoalWorkSpec` a `validation_limits_v0.go`.
+La fachada conserva normalizacion, orden, write-set, artefactos y cierre; los
+focales de objetivo/listas/comandos/tamano y la suite completa del modulo pasan.
