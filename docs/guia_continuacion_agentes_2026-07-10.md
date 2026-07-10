@@ -212,3 +212,10 @@ backend tmux y cableados en
   publicar `running` contradicho con `recommended_action=reconcile_goal_state`.
 - 2026-07-10, PASO A1: `modulos/orquesta-mcp/shared_contracts_resource_v0_test.go`
   esta sin gofmt en HEAD (preexistente, no tocado en este paso).
+- 2026-07-10, PASO C1: el schema de `orquesta.config.json` no exige secretos;
+  config minima creada (schema_version + addr local + state_dir +
+  remote_access_opt_in=false). Tres tests de cmd que manipulan sesiones tmux
+  reales (`TestWaitForStateHealthyV0Limpia...`, `TestCleanupCodexGoalBackend
+  AfterStartupFailure...`, `TestStopServerCommandV0Force...`) fallan en este
+  entorno sandbox CON y SIN la config nueva (verificado quitando el fichero):
+  fallo de entorno preexistente, no regresion.
