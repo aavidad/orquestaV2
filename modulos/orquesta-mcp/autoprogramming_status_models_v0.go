@@ -40,6 +40,8 @@ type MCPAutoprogrammingActionableRunV0 struct {
 	GoalRef                  string         `json:"goal_ref,omitempty"`
 	ExternalGoalRef          string         `json:"external_goal_ref,omitempty"`
 	GoalStatus               string         `json:"goal_status,omitempty"`
+	CausalVerdict            string         `json:"causal_verdict,omitempty"`
+	CausalReasonCode         string         `json:"causal_reason_code,omitempty"`
 	ClosureStatus            string         `json:"closure_status,omitempty"`
 	ClosureAccepted          bool           `json:"closure_accepted,omitempty"`
 	ClosureNeedsRework       bool           `json:"closure_needs_rework,omitempty"`

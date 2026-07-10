@@ -19,9 +19,13 @@ const (
 	mcpAutoprogrammingActionEstadoVivoHuerfanoV0    = "estado_vivo_huerfano"
 	mcpAutoprogrammingActionEstadoVivoDesconocidoV0 = "estado_vivo_desconocido"
 
+	mcpAutoprogrammingActionEstadoVivoReconcileGoalStateV0 = "estado_vivo_reconcile_goal_state"
+
 	mcpAutoprogrammingEvidenceEstadoVivoConflictoV0   = "evidence-ref-autoprogramming-status-estado-vivo-conflicto"
 	mcpAutoprogrammingEvidenceEstadoVivoHuerfanoV0    = "evidence-ref-autoprogramming-status-estado-vivo-huerfano"
 	mcpAutoprogrammingEvidenceEstadoVivoDesconocidoV0 = "evidence-ref-autoprogramming-status-estado-vivo-desconocido"
+
+	mcpAutoprogrammingEvidenceEstadoVivoReconcileGoalStateV0 = "evidence-ref-autoprogramming-status-estado-vivo-reconcile-goal-state"
 )
 
 func (executor MCPAutoprogrammingStatusToolExecutorV0) estadoVivoProjectionForAutoprogrammingStatusV0(
@@ -246,6 +250,58 @@ func staleRunningFromEstadoVivoMCPAutoprogrammingV0(
 func actionableRunFromEstadoVivoMCPAutoprogrammingV0(
 	node orquestaestadovivo.NodoCicloVidaV0,
 ) (MCPAutoprogrammingActionableRunV0, bool) {
+	action, ok := actionableRunFromEstadoVivoNodeSinVeredictoMCPAutoprogrammingV0(node)
+	if !ok {
+		return action, false
+	}
+	action.CausalVerdict = string(node.Veredicto.Clase)
+	action.CausalReasonCode = strings.TrimSpace(node.Veredicto.ReasonCode)
+	return action, true
+}
+
+// mcpAutoprogrammingEstadoVivoRunningContradichoV0 detecta un veredicto causal
+// que contradice un state running (terminal durable o proceso muerto con state
+// stale) mientras la fase proyectada aun no publica ese terminal. La
+// superficie no publica running en ese caso; pide reconciliar.
+func mcpAutoprogrammingEstadoVivoRunningContradichoV0(
+	node orquestaestadovivo.NodoCicloVidaV0,
+) bool {
+	if node.Veredicto.EstadoPersistido == "" {
+		return false
+	}
+	switch node.Fase {
+	case orquestaestadovivo.FaseSolicitadoV0, orquestaestadovivo.FaseLanzadoV0,
+		orquestaestadovivo.FaseDesconocidoV0, orquestaestadovivo.FaseHuerfanoV0:
+	default:
+		return false
+	}
+	switch node.Veredicto.Clase {
+	case orquestaestadovivo.VeredictoTerminalByArtifactV0, orquestaestadovivo.VeredictoProcessDeadStateStaleV0:
+		return true
+	default:
+		return false
+	}
+}
+
+func actionableRunFromEstadoVivoNodeSinVeredictoMCPAutoprogrammingV0(
+	node orquestaestadovivo.NodoCicloVidaV0,
+) (MCPAutoprogrammingActionableRunV0, bool) {
+	if mcpAutoprogrammingEstadoVivoRunningContradichoV0(node) {
+		return MCPAutoprogrammingActionableRunV0{
+			Code:              mcpAutoprogrammingActionEstadoVivoReconcileGoalStateV0,
+			Severity:          "blocked",
+			RunRef:            strings.TrimSpace(node.RunRef),
+			GoalRef:           strings.TrimSpace(node.GoalRef),
+			ExternalGoalRef:   strings.TrimSpace(node.ExternalGoalRef),
+			Status:            string(node.Fase),
+			Reason:            "veredicto causal contradice running persistido: reconciliar estado del goal",
+			RecommendedAction: mcpObserveAppDirectorGoalActionReconcileGoalStateV0,
+			EvidenceRefs: compactStringsMCPV0(append(
+				[]string{mcpAutoprogrammingEvidenceEstadoVivoReconcileGoalStateV0},
+				evidenceRefsFromEstadoVivoNodeMCPAutoprogrammingV0(node)...,
+			)),
+		}, true
+	}
 	switch node.Fase {
 	case orquestaestadovivo.FaseEntregadoParcialV0:
 		return MCPAutoprogrammingActionableRunV0{
@@ -310,6 +366,24 @@ func actionableRunFromEstadoVivoMCPAutoprogrammingV0(
 	default:
 		return MCPAutoprogrammingActionableRunV0{}, false
 	}
+}
+
+func applyCausalVerdictToStatusResultMCPAutoprogrammingV0(
+	result MCPAutoprogrammingStatusToolResultV0,
+	projection *orquestaestadovivo.ProyeccionCicloVidaV0,
+	runRef string,
+) MCPAutoprogrammingStatusToolResultV0 {
+	runRef = strings.TrimSpace(runRef)
+	if projection == nil || runRef == "" {
+		return result
+	}
+	node, ok := mcpDirectorStatsEstadoVivoNodeForRunV0(*projection, runRef)
+	if !ok {
+		return result
+	}
+	result.CausalVerdict = string(node.Veredicto.Clase)
+	result.CausalReasonCode = strings.TrimSpace(node.Veredicto.ReasonCode)
+	return result
 }
 
 func diagnosticsFromEstadoVivoMCPAutoprogrammingV0(

@@ -103,7 +103,7 @@ romper campos existentes.
   Test de wiring en el stack (patron: buscar tests `TestBuildStack*Cablea*`).
   Verifica: `go test -count=1 ./modulos/orquesta-app-codex-stack`.
 
-- [ ] PASO A3: veredicto en `autoprogramming/status`.
+- [x] PASO A3: veredicto en `autoprogramming/status`.
   Ficheros: `rg -ln "autoprogramming.status" modulos/orquesta-mcp` para
   localizar el executor. Mismo contrato que A1: campos opcionales + nunca
   running contradicho. Verifica: `go test -count=1 ./modulos/orquesta-mcp`.
