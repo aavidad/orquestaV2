@@ -37,6 +37,7 @@ func runCodexLaunchWaveV0(
 		UpdatedAt:      now,
 		DryRun:         config.DryRun,
 		OperatorInputs: codexWaveOperatorInputReceiptsCopyV0(config.OperatorInputs),
+		ProgressBudget: codexWaveProgressBudgetCopyV0(config.ProgressBudget),
 		Agents:         make([]codexWaveAgentSummaryV0, 0, config.Agents),
 	}
 	if err := codexWaveValidateUnmanagedLaunchPolicyV0(config); err != nil {
@@ -55,6 +56,9 @@ func runCodexLaunchWaveV0(
 		}
 	}
 	if err := os.MkdirAll(config.RuntimeWorkDir, 0o700); err != nil {
+		return codexWaveLaunchSummaryV0{}, err
+	}
+	if err := codexWaveInitializeProgressBudgetV0(&summary); err != nil {
 		return codexWaveLaunchSummaryV0{}, err
 	}
 	for i := 1; i <= config.Agents; i++ {

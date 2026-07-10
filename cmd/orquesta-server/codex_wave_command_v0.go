@@ -23,6 +23,7 @@ type codexWaveLaunchSummaryV0 struct {
 	DryRun         bool                              `json:"dry_run,omitempty"`
 	PurgeReport    *codexWavePurgeReportV0           `json:"purge_report,omitempty"`
 	OperatorInputs []codexWaveOperatorInputReceiptV0 `json:"operator_inputs,omitempty"`
+	ProgressBudget *codexWaveProgressBudgetV0        `json:"progress_budget,omitempty"`
 	Agents         []codexWaveAgentSummaryV0         `json:"agents"`
 	Errors         []codexWavePublicErrorV0          `json:"errors,omitempty"`
 }
@@ -48,6 +49,8 @@ type codexWaveAgentSummaryV0 struct {
 	StdoutBytes          int64                                   `json:"stdout_bytes,omitempty"`
 	StderrBytes          int64                                   `json:"stderr_bytes,omitempty"`
 	LastMessageBytes     int64                                   `json:"last_message_bytes,omitempty"`
+	ReworkRef            string                                  `json:"rework_ref,omitempty"`
+	ProgressReceipt      *codexWaveProgressReceiptV0             `json:"progress_receipt,omitempty"`
 	Status               string                                  `json:"status"`
 	CredentialProjection *codexWaveCredentialProjectionReceiptV0 `json:"credential_projection,omitempty"`
 }
@@ -78,6 +81,7 @@ type codexWaveConfigV0 struct {
 	AgentPrompts               []string
 	CredentialProjectionPolicy codexWaveCredentialProjectionPolicyV0
 	OperatorInputs             []codexWaveOperatorInputReceiptV0
+	ProgressBudget             *codexWaveProgressBudgetV0
 }
 
 func codexLaunchWaveCommandV0(args []string, stdout io.Writer, stderr io.Writer) int {

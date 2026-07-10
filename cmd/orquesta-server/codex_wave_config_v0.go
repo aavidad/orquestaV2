@@ -46,6 +46,9 @@ func codexWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexWaveConfig
 	allowUnmanagedLaunch := flags.Bool("allow-unmanaged-launch", codexWaveBoolValueFromProjectConfigFileV0(projectConfig, envCodexWaveAllowUnmanagedLaunchV0, false), "breakglass auditado para lanzar agentes fuera del servidor/cola de Orquesta")
 	unmanagedLaunchReason := flags.String("unmanaged-launch-reason", codexWaveStringValueFromProjectConfigFileV0(projectConfig, envCodexWaveUnmanagedLaunchReasonV0, ""), "motivo auditado para el breakglass unmanaged")
 	unmanagedLaunchConfirm := flags.String("confirm-unmanaged-launch", codexWaveStringValueFromProjectConfigFileV0(projectConfig, envCodexWaveUnmanagedLaunchConfirmV0, ""), "confirmacion explicita unmanaged: debe coincidir con wave-ref")
+	progressBudgetSeconds := flags.Int("no-progress-budget-seconds", 0, "presupuesto opt-in de segundos sin progreso durable")
+	diagnosticBudgetBytes := flags.Int64("diagnostic-budget-bytes", 0, "presupuesto opt-in de stderr sin progreso durable")
+	progressWriteSet := flags.String("progress-write-set", "", "write-set relativo, separado por comas, para detectar progreso")
 
 	if err := flags.Parse(args); err != nil {
 		return codexWaveConfigV0{}, err
@@ -80,6 +83,10 @@ func codexWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexWaveConfig
 	if *agents <= 0 || *agents > 64 {
 		return codexWaveConfigV0{}, errors.New("agents_out_of_range")
 	}
+	progressBudget, err := codexWaveProgressBudgetFromFlagsV0(*progressBudgetSeconds, *diagnosticBudgetBytes, *progressWriteSet)
+	if err != nil {
+		return codexWaveConfigV0{}, err
+	}
 
 	config := codexWaveConfigV0{
 		Agents:                 *agents,
@@ -112,6 +119,7 @@ func codexWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexWaveConfig
 			int64(*projectionMaxTotalBytes),
 		),
 		OperatorInputs: []codexWaveOperatorInputReceiptV0{inputReceipt},
+		ProgressBudget: progressBudget,
 	}
 	if err := codexWaveValidateProjectionPolicyV0(config); err != nil {
 		return codexWaveConfigV0{}, err

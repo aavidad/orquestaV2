@@ -45,3 +45,23 @@ cooperativa y preparar rework; el core no debe conocer logs ni procesos.
 La prueba de cierre debe lanzar un comando controlado que solo produzca stderr
 sin escribir entrega, comprobar la transicion y verificar que una ola con ACK
 o resultado no se corta por el mismo umbral.
+
+## Rework local 2026-07-10
+
+Se implemento el primer corte en `codex-launch-wave`/`codex-wave-status`, sin
+tocar el core: flags opt-in de segundos sin progreso, bytes de diagnostico y
+write-set; baseline de ese write-set; solicitud cooperativa durable; y un
+recibo con razon `no_progress_diagnostic_budget_exhausted` y `rework_ref`.
+
+Dos pruebas focales lo ejercen con un Codex falso: una ola que solo escribe
+stderr termina en `stop_requested` con recibo/rework; otra que publica
+`codex_last_message.txt` se conserva. El corte no se declara cerrado: el
+presupuesto se evalua al observar la ola y todavia debe cablearse al supervisor
+residente/goal-first para que replanifique de forma autonoma y aplique la
+escalada de parada confirmada sin polling de operador.
+
+En el mismo intento real se lanzaron cinco olas con write-sets disjuntos. Cuatro
+no entregaron artefactos y se pararon con su propio `wave_ref`; la quinta dejo
+el adaptador PDF parcial que despues se completo y verifico de forma focal.
+La evidencia runtime queda bajo `.orquesta-runtime/codex-waves/` (ignorada por
+Git); no se versionan logs ni resultados de ejecucion.

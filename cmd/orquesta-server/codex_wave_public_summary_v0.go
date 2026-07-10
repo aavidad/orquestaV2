@@ -34,6 +34,7 @@ type codexWavePublicSummaryV0 struct {
 	CanonicalSource     string                            `json:"canonical_source"`
 	PurgeReport         *codexWavePurgeReportV0           `json:"purge_report,omitempty"`
 	OperatorInputs      []codexWaveOperatorInputReceiptV0 `json:"operator_inputs,omitempty"`
+	ProgressBudget      *codexWaveProgressBudgetV0        `json:"progress_budget,omitempty"`
 	Agents              []codexWavePublicAgentSummaryV0   `json:"agents"`
 	Errors              []codexWavePublicErrorV0          `json:"errors,omitempty"`
 }
@@ -56,6 +57,8 @@ type codexWavePublicAgentSummaryV0 struct {
 	StdoutBytes          int64                                   `json:"stdout_bytes,omitempty"`
 	StderrBytes          int64                                   `json:"stderr_bytes,omitempty"`
 	LastMessageBytes     int64                                   `json:"last_message_bytes,omitempty"`
+	ReworkRef            string                                  `json:"rework_ref,omitempty"`
+	ProgressReceipt      *codexWaveProgressReceiptV0             `json:"progress_receipt,omitempty"`
 	Status               string                                  `json:"status"`
 	CredentialProjection *codexWaveCredentialProjectionReceiptV0 `json:"credential_projection,omitempty"`
 }
@@ -119,6 +122,7 @@ func codexWavePublicSummaryFromV0(summary codexWaveLaunchSummaryV0) codexWavePub
 		CanonicalSource:     commandPublicCanonicalSourceV0,
 		PurgeReport:         summary.PurgeReport,
 		OperatorInputs:      codexWaveOperatorInputReceiptsCopyV0(summary.OperatorInputs),
+		ProgressBudget:      codexWaveProgressBudgetPublicCopyV0(summary.ProgressBudget),
 		Agents:              make([]codexWavePublicAgentSummaryV0, 0, len(summary.Agents)),
 		Errors:              codexWavePublicErrorsFromV0(summary.Errors),
 	}
@@ -250,6 +254,8 @@ func codexWavePublicAgentFromV0(
 		StdoutBytes:          agent.StdoutBytes,
 		StderrBytes:          agent.StderrBytes,
 		LastMessageBytes:     agent.LastMessageBytes,
+		ReworkRef:            agent.ReworkRef,
+		ProgressReceipt:      codexWaveProgressReceiptCopyV0(agent.ProgressReceipt),
 		Status:               agent.Status,
 		CredentialProjection: agent.CredentialProjection,
 		// Preserve wave scope in refs through the hash input, never as a path.

@@ -39,6 +39,8 @@ func codexWaveStatusCommandV0(args []string, stdout io.Writer, stderr io.Writer)
 		return 1
 	}
 	codexWaveRefreshSummaryV0(&summary)
+	codexWaveEnforceProgressBudgetV0(&summary, time.Now().UTC())
+	codexWaveRefreshSummaryV0(&summary)
 	if err := codexWaveSaveRegistryV0(summary); err != nil {
 		_, _ = fmt.Fprintf(stderr, "codex-wave-status: %v\n", err)
 		return 1
@@ -213,7 +215,11 @@ func codexWaveRefreshSummaryV0(summary *codexWaveLaunchSummaryV0) {
 			continue
 		}
 		if codexWaveAgentProcessDoneV0(*agent) {
-			agent.Status = "stopped"
+			if agent.ReworkRef != "" {
+				agent.Status = "rework_required"
+			} else {
+				agent.Status = "stopped"
+			}
 			continue
 		}
 		if agent.PID > 0 && processAliveV0(agent.PID) {
@@ -225,7 +231,11 @@ func codexWaveRefreshSummaryV0(summary *codexWaveLaunchSummaryV0) {
 			continue
 		}
 		if agent.PID > 0 {
-			agent.Status = "stopped"
+			if agent.ReworkRef != "" {
+				agent.Status = "rework_required"
+			} else {
+				agent.Status = "stopped"
+			}
 			continue
 		}
 		if agent.Status == "" {

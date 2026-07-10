@@ -29,6 +29,13 @@ El descriptor provisional debe convertirse mediante esos puertos; no se crean
 tipos paralelos ni se copia su logica de claims, receipts, CAS, leases,
 snapshots o binding autorizado.
 
+Actualizacion posterior 2026-07-10: existe
+`modulos/orquesta-document-extraction-tool-capability`. Proyecta el descriptor
+por una autoridad propia hacia `ToolBundle/AttachPlan`, exige snapshot opaco y
+delegan claim/CAS/lease al SDK. Sus pruebas focales cubren proyeccion de metadata
+autorizada y rechazo si la autoridad devuelve otro bundle. No es aun worker,
+transport, parser PDF ni materializador real.
+
 Pendientes concretos:
 
 - Composición que convierta comandos asíncronos en workers y conecte un
@@ -37,9 +44,9 @@ Pendientes concretos:
   destinos) tras corpus autorizado, benchmark, licencia y política de datos.
 - Transporte MCP/API/CLI fino que delegue en el caso de uso y wizard que consulte
   el registro, cuando los módulos de composición correspondientes estén listos.
-- Adaptador de integración del descriptor de extracción con el SDK genérico
-  ToolBundle/AttachPlan, por composición y sin copiar tipos ni lógica. Requiere
-  materializador idempotente, binding authority y snapshot resolver propios.
+- Materializador idempotente, binding authority y snapshot resolver reales para
+  el adaptador de integración ya creado; el contrato existe pero no tiene una
+  composición productiva.
 
 Verificación local realizada:
 
