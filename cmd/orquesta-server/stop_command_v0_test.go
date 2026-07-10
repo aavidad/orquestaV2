@@ -52,6 +52,28 @@ func TestStopServerCommandV0ForceConDaemonMuertoLimpiaBackendGoalConfigurado(t *
 	}
 }
 
+func TestStopServerCommandV0ForceNoDeclaraLimpioSiCleanupR8FallaV0(t *testing.T) {
+	_, tmuxLog, socketPath := prepareStopServerCommandDeadDaemonWithFakeTmuxV0(t)
+	if err := os.WriteFile(tmuxLog+".kill-fail", []byte("fail"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	exitCode := stopServerCommandV0([]string{"--force", "--reason", "cleanup R8 debe propagarse"}, &stdout, &stderr)
+	if exitCode != 1 || !strings.Contains(stderr.String(), "reason_code=forced_cleanup_failed") {
+		t.Fatalf("exit=%d stdout=%s stderr=%s", exitCode, stdout.String(), stderr.String())
+	}
+	if strings.Contains(stdout.String(), "stop forced stale") {
+		t.Fatalf("stop publico falso limpio: %s", stdout.String())
+	}
+	if _, err := os.Stat(tmuxLog + ".session"); err != nil {
+		t.Fatalf("sesion debe persistir tras cleanup fallido: %v", err)
+	}
+	if _, err := os.Stat(socketPath); err != nil {
+		t.Fatalf("socket debe persistir tras cleanup fallido: %v", err)
+	}
+}
+
 func TestStopServerCommandV0SinForceConDaemonMuertoNoLimpiaBackendGoal(t *testing.T) {
 	store, tmuxLog, socketPath := prepareStopServerCommandDeadDaemonWithFakeTmuxV0(t)
 
@@ -155,12 +177,13 @@ func prepareStopServerCommandDeadDaemonWithFakeTmuxV0(
 	}
 	pathEnv := binDir + string(os.PathListSeparator) + os.Getenv("PATH")
 	t.Setenv("ORQUESTA_TEST_TMUX_LOG", tmuxLog)
+	t.Setenv("ORQUESTA_TEST_BINARY", os.Args[0])
 	t.Setenv(envCodexProjectWorkDirV0, projectDir)
 	t.Setenv(envServerStateDirV0, stateDir)
 	t.Setenv(envCodexRuntimeWorkDirV0, runtimeDir)
 	t.Setenv(envCodexPathV0, pathEnv)
 	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerTmuxV0)
-	t.Setenv(envCodexGoalPreflightTimeoutMSV0, "1000")
+	t.Setenv(envCodexGoalPreflightTimeoutMSV0, "2000")
 
 	config, err := serverConfigFromEnvV0()
 	if err != nil {
@@ -180,11 +203,15 @@ func prepareStopServerCommandDeadDaemonWithFakeTmuxV0(
 		SessionName:    codexAppServerTmuxSessionNameV0(config),
 		CodeHomeDir:    codeHomePath,
 		RuntimeWorkDir: runtimeDir,
-		Timeout:        time.Second,
+		Timeout:        2 * time.Second,
 	}
 	if err := backend.EnsureV0(context.Background(), fakeCodexAppServerProbeV0{}); err != nil {
 		t.Fatalf("EnsureV0: %v", err)
 	}
+	t.Cleanup(func() {
+		_ = os.Remove(tmuxLog + ".kill-fail")
+		_ = backend.ShutdownForcedStopV0(context.Background())
+	})
 
 	deadPID := 99999999
 	if processAliveV0(deadPID) {

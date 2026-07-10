@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"os"
-	"os/exec"
+	"path/filepath"
 	"strings"
 
 	orquestamcp "orquesta/modulos/orquesta-mcp"
@@ -52,27 +52,39 @@ func validatePrepareRunProjectWorkdirV0(
 	if projectWorkDir == "" {
 		return prepareRunWorkdirIssueV0(serverPrepareRunWorkdirMissingV0)
 	}
-	info, err := os.Stat(projectWorkDir)
+	abs, err := filepath.Abs(projectWorkDir)
+	if err != nil {
+		return prepareRunWorkdirIssueV0(serverPrepareRunWorkdirInvalidV0)
+	}
+	info, err := os.Stat(abs)
 	if err != nil || !info.IsDir() {
 		return prepareRunWorkdirIssueV0(serverPrepareRunWorkdirMissingV0)
 	}
-	if !prepareRunGitOKV0(ctx, projectWorkDir, "rev-parse", "--is-inside-work-tree") ||
-		!prepareRunGitOKV0(ctx, projectWorkDir, "rev-parse", "--verify", "HEAD") {
+	resolved, err := filepath.EvalSymlinks(abs)
+	if err != nil || filepath.Clean(resolved) != filepath.Clean(abs) {
 		return prepareRunWorkdirIssueV0(serverPrepareRunWorkdirInvalidV0)
 	}
-	upstream := strings.TrimSpace(prepareRunGitOutputV0(ctx, projectWorkDir, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"))
+	if !serverWorktreeGitOKV0(ctx, abs, "rev-parse", "--is-inside-work-tree") ||
+		!serverWorktreeGitOKV0(ctx, abs, "rev-parse", "--verify", "HEAD") {
+		return prepareRunWorkdirIssueV0(serverPrepareRunWorkdirInvalidV0)
+	}
+	root := serverWorktreeGitOutputV0(ctx, abs, "rev-parse", "--show-toplevel")
+	if root == "" || filepath.Clean(root) != filepath.Clean(abs) {
+		return prepareRunWorkdirIssueV0(serverPrepareRunWorkdirInvalidV0)
+	}
+	upstream := serverWorktreeGitOutputV0(ctx, abs, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
 	if upstream == "" {
 		return nil
 	}
-	head := strings.TrimSpace(prepareRunGitOutputV0(ctx, projectWorkDir, "rev-parse", "HEAD"))
-	upstreamSHA := strings.TrimSpace(prepareRunGitOutputV0(ctx, projectWorkDir, "rev-parse", upstream))
+	head := serverWorktreeGitOutputV0(ctx, abs, "rev-parse", "HEAD")
+	upstreamSHA := serverWorktreeGitOutputV0(ctx, abs, "rev-parse", upstream)
 	if head == "" || upstreamSHA == "" || head == upstreamSHA {
 		return nil
 	}
-	if prepareRunGitOKV0(ctx, projectWorkDir, "merge-base", "--is-ancestor", "HEAD", upstream) {
+	if serverWorktreeGitOKV0(ctx, abs, "merge-base", "--is-ancestor", "HEAD", upstream) {
 		return prepareRunWorkdirIssueV0(serverPrepareRunWorkdirStaleV0)
 	}
-	if !prepareRunGitOKV0(ctx, projectWorkDir, "merge-base", "--is-ancestor", upstream, "HEAD") {
+	if !serverWorktreeGitOKV0(ctx, abs, "merge-base", "--is-ancestor", upstream, "HEAD") {
 		return prepareRunWorkdirIssueV0(serverPrepareRunWorkdirNotAlignedV0)
 	}
 	return nil
@@ -84,20 +96,4 @@ func prepareRunWorkdirIssueV0(code string) *orquestamcp.MCPValidationIssueV0 {
 		Field:   "project_work_dir",
 		Message: code,
 	}
-}
-
-func prepareRunGitOKV0(ctx context.Context, repo string, args ...string) bool {
-	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", repo}, args...)...)
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GCM_INTERACTIVE=Never")
-	return cmd.Run() == nil
-}
-
-func prepareRunGitOutputV0(ctx context.Context, repo string, args ...string) string {
-	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", repo}, args...)...)
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GCM_INTERACTIVE=Never")
-	out, err := cmd.Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
 }

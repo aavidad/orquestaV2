@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -710,6 +711,21 @@ func TestServerGoalShutdownHooksFromBackendsV0DeduplicaMismoHookV0(t *testing.T)
 	}
 }
 
+func TestServerGoalShutdownHooksFromBackendsV0ConservaIdentidadesCausalesDistintasV0(t *testing.T) {
+	root := t.TempDir()
+	hooks := serverGoalShutdownHooksFromBackendsV0(
+		serverCodexGoalBackendV0{ShutdownHook: serverCodexAppServerTmuxBackendV0{
+			SocketPath: filepath.Join(root, "app.sock"), SessionName: "orquesta-goal-app-1234567890",
+		}},
+		serverCodexGoalBackendV0{ShutdownHook: serverCodexAppServerTmuxBackendV0{
+			SocketPath: filepath.Join(root, "idle.sock"), SessionName: "orquesta-goal-idle-1234567890",
+		}},
+	)
+	if len(hooks) != 2 {
+		t.Fatalf("hooks=%d", len(hooks))
+	}
+}
+
 func TestServerGoalWorkPortsFromBackendV0PropaganActiveShutdownWorkV0(t *testing.T) {
 	protocol := &fakeCodexAppServerProtocolV0{
 		thread: serverCodexAppServerThreadV0{ID: "thread-ref-wiring-001"},
@@ -866,6 +882,20 @@ func (fakeCodexAppServerProbeV0) ProbeV0(context.Context) error {
 	return nil
 }
 
+func TestCodexAppServerTmuxUnixServerHelperV0(t *testing.T) {
+	if os.Getenv("CODEX_TEST_UNIX_SERVER_HELPER") != "1" {
+		return
+	}
+	listener, err := net.Listen("unix", os.Args[len(os.Args)-1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	for {
+		time.Sleep(time.Hour)
+	}
+}
+
 func fakeCodexAppServerTmuxCommandForTestV0() string {
 	return `#!/bin/sh
 set -eu
@@ -877,24 +907,39 @@ case "${1:-}" in
     if [ -n "${ORQUESTA_TEST_TMUX_LOG:-}" ] && [ -e "${ORQUESTA_TEST_TMUX_LOG}.session" ]; then
       exit 0
     fi
+	target="${3:-}"
+	printf "can't find session: %s\n" "${target#=}" >&2
     exit 1
     ;;
   kill-session)
     if [ -n "${ORQUESTA_TEST_TMUX_LOG:-}" ]; then
+	  if [ -e "${ORQUESTA_TEST_TMUX_LOG}.kill-fail" ]; then exit 2; fi
+	  target="${3:-}"
+	  if [ ! -f "${ORQUESTA_TEST_TMUX_LOG}.sid" ] || [ "$target" != "$(cat "${ORQUESTA_TEST_TMUX_LOG}.sid")" ]; then exit 1; fi
+	  if [ -f "${ORQUESTA_TEST_TMUX_LOG}.pid" ]; then kill "$(cat "${ORQUESTA_TEST_TMUX_LOG}.pid")" 2>/dev/null || true; fi
       rm -f "${ORQUESTA_TEST_TMUX_LOG}.session"
     fi
     exit 0
     ;;
   display-message)
-    exit 0
+	printf '%s\t%s\t%s\n' "$(cat "${ORQUESTA_TEST_TMUX_LOG}.sid")" "$(cat "${ORQUESTA_TEST_TMUX_LOG}.created")" "$(cat "${ORQUESTA_TEST_TMUX_LOG}.pid")"
+	exit 0
+	;;
+  show-environment)
+	printf '%s=%s\n' 'ORQUESTA_CODEX_APP_SERVER_GENERATION_REF' "$(cat "${ORQUESTA_TEST_TMUX_LOG}.generation")"
+	exit 0
     ;;
   new-session)
     if [ -n "${ORQUESTA_TEST_TMUX_LOG:-}" ]; then
       : > "${ORQUESTA_TEST_TMUX_LOG}.session"
     fi
     sock=""
+	generation=""
     for arg in "$@"; do
       case "$arg" in
+	    ORQUESTA_CODEX_APP_SERVER_GENERATION_REF=*)
+	      generation="${arg#*=}"
+	      ;;
         unix://*)
           sock="${arg#unix://}"
           ;;
@@ -911,8 +956,16 @@ case "${1:-}" in
       exit 2
     fi
     mkdir -p "$(dirname "$sock")"
-    : > "$sock"
-    exit 0
+	CODEX_TEST_UNIX_SERVER_HELPER=1 "$ORQUESTA_TEST_BINARY" -test.run=^TestCodexAppServerTmuxUnixServerHelperV0$ -- "$sock" </dev/null >"${ORQUESTA_TEST_TMUX_LOG}.helper.log" 2>&1 &
+	pid=$!
+	printf '%s\n' "$pid" > "${ORQUESTA_TEST_TMUX_LOG}.pid"
+	printf '%s\n' '$cmd-test' > "${ORQUESTA_TEST_TMUX_LOG}.sid"
+	printf '%s\n' '100' > "${ORQUESTA_TEST_TMUX_LOG}.created"
+	printf '%s\n' "$generation" > "${ORQUESTA_TEST_TMUX_LOG}.generation"
+	i=0; while [ ! -S "$sock" ] && [ "$i" -lt 100 ]; do i=$((i+1)); sleep 0.01; done
+	test -S "$sock"
+	printf '%s\t%s\t%s\n' '$cmd-test' '100' "$pid"
+	exit 0
     ;;
 esac
 echo "tmux args inesperados: $*" >&2

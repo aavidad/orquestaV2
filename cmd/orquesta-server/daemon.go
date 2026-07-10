@@ -24,6 +24,15 @@ func startServerCommandV0(args []string, stdout io.Writer, stderr io.Writer) int
 		_, _ = fmt.Fprintf(stderr, "orquesta-server start: %v\n", err)
 		return 2
 	}
+	preflight, err := serverIdentityPreflightFromEnvV0(options.ConfigPath)
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, "orquesta-server start: reason_code=identity_preflight_failed")
+		return 1
+	}
+	if preflight.Issue != nil {
+		_, _ = fmt.Fprintf(stderr, "orquesta-server start: reason_code=%s\n", publicServerWorktreeIdentityReasonV0(preflight.Issue.Code))
+		return 1
+	}
 	config, err := serverConfigFromEnvWithProjectConfigPathV0(options.ConfigPath)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server start: %v\n", err)
@@ -33,14 +42,18 @@ func startServerCommandV0(args []string, stdout io.Writer, stderr io.Writer) int
 		_, _ = fmt.Fprintf(stderr, "orquesta-server start: %v\n", err)
 		return 1
 	}
-	pid, err := startDetachedRunV0(config)
+	daemonIdentity, err := startDetachedRunV0(config)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server start: %v\n", err)
 		return 1
 	}
+	pid := daemonIdentity.PID
 	state, err := waitForStateHealthyV0(config, serverStartReadinessTimeoutV0)
 	if err != nil {
-		cleanupCodexGoalBackendAfterStartupFailureIfDaemonGoneV0(config, pid)
+		if cleanupErr := cleanupDetachedDaemonAfterStartupFailureV0(config, daemonIdentity); cleanupErr != nil {
+			_, _ = fmt.Fprintf(stderr, "orquesta-server start pid=%d: reason_code=startup_cleanup_failed\n", pid)
+			return 1
+		}
 		_, _ = fmt.Fprintf(stderr, "orquesta-server start pid=%d: %v\n", pid, err)
 		return 1
 	}
@@ -50,20 +63,20 @@ func startServerCommandV0(args []string, stdout io.Writer, stderr io.Writer) int
 	return 0
 }
 
-func startDetachedRunV0(config orquestaserver.ConfigV0) (int, error) {
+func startDetachedRunV0(config orquestaserver.ConfigV0) (serverDaemonProcessIdentityV0, error) {
 	exe, err := os.Executable()
 	if err != nil {
-		return 0, fmt.Errorf("executable_unavailable")
+		return serverDaemonProcessIdentityV0{}, fmt.Errorf("executable_unavailable")
 	}
 	stdoutLog, stderrLog, err := openDaemonOutputFilesV0(config)
 	if err != nil {
-		return 0, err
+		return serverDaemonProcessIdentityV0{}, err
 	}
 	defer stdoutLog.Close()
 	defer stderrLog.Close()
 	runArgs, err := serverDaemonRunArgsV0(config)
 	if err != nil {
-		return 0, err
+		return serverDaemonProcessIdentityV0{}, err
 	}
 	cmd := exec.Command(exe, runArgs...)
 	cmd.Env = serverDaemonStartEnvironmentV0(os.Environ(), config)
@@ -72,9 +85,19 @@ func startDetachedRunV0(config orquestaserver.ConfigV0) (int, error) {
 	cmd.Stderr = stderrLog
 	configureDetachedProcessV0(cmd)
 	if err := cmd.Start(); err != nil {
-		return 0, fmt.Errorf("daemon_start_failed")
+		return serverDaemonProcessIdentityV0{}, fmt.Errorf("daemon_start_failed")
 	}
-	return cmd.Process.Pid, cmd.Process.Release()
+	identity, err := captureServerDaemonProcessIdentityV0(cmd.Process.Pid)
+	if err != nil {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		return serverDaemonProcessIdentityV0{}, err
+	}
+	if err := cmd.Process.Release(); err != nil {
+		_ = cleanupDetachedDaemonAfterStartupFailureV0(config, identity)
+		return serverDaemonProcessIdentityV0{}, fmt.Errorf("daemon_release_failed")
+	}
+	return identity, nil
 }
 
 func serverDaemonRunArgsV0(config orquestaserver.ConfigV0) ([]string, error) {
@@ -142,7 +165,9 @@ func waitForStateHealthyV0(
 				serverExitedAfterReadiness = serverExitedAfterReadiness || serverStateWasStartupReadyV0(loadedState)
 			}
 			last = state
-			if serverStateSnapshotReadyForReadinessV0(state) && serverReadinessOKV0(state.Addr) {
+			if serverStateSnapshotReadyForReadinessV0(state) &&
+				serverRuntimeIdentityMatchesExpectedV0(state.RuntimeIdentity, config.RuntimeIdentity) &&
+				serverReadinessOKV0(state.Addr, config.RuntimeIdentity) {
 				stableState, stableReconciled, ok := waitForStableReadinessV0(config, state, deadline)
 				if stableState.Addr != "" {
 					last = stableState
@@ -156,7 +181,6 @@ func waitForStateHealthyV0(
 		sleepUntilDeadlineV0(serverReadinessPollEveryV0, deadline)
 	}
 	if serverExitedAfterReadiness && serverStateIsProcessStaleV0(last) {
-		cleanupCodexGoalBackendAfterStartupFailureIfDaemonGoneV0(config, last.PID)
 		return last, fmt.Errorf("server_exited_after_readiness")
 	}
 	if last.Addr != "" {
@@ -184,10 +208,13 @@ func waitForStableReadinessV0(
 	if !serverStateSnapshotReadyForReadinessV0(stableState) {
 		return stableState, false, false
 	}
+	if !serverRuntimeIdentityMatchesExpectedV0(stableState.RuntimeIdentity, config.RuntimeIdentity) {
+		return stableState, false, false
+	}
 	if !sameStartupDaemonIdentityV0(readyState, stableState) {
 		return stableState, false, false
 	}
-	if !serverReadinessOKV0(stableState.Addr) {
+	if !serverReadinessOKV0(stableState.Addr, config.RuntimeIdentity) {
 		return stableState, false, false
 	}
 	return stableState, false, true
@@ -234,7 +261,7 @@ func serverStateIsProcessStaleV0(state orquestaserver.StateV0) bool {
 		strings.TrimSpace(state.StartupStatus) == orquestaserver.ServerProcessStaleReasonCodeV0
 }
 
-func serverReadinessOKV0(addr string) bool {
+func serverReadinessOKV0(addr string, expected orquestaserver.ServerRuntimeIdentityV0) bool {
 	baseURL, err := commandRESTBaseURLFromAddrV0(addr)
 	if err != nil {
 		return false
@@ -249,17 +276,63 @@ func serverReadinessOKV0(addr string) bool {
 		return false
 	}
 	defer response.Body.Close()
-	if response.StatusCode == http.StatusOK {
-		return true
+	return serverReadinessHTTPResponseOKV0(response, expected)
+}
+
+func serverReadinessHTTPResponseOKV0(
+	response *http.Response,
+	expected orquestaserver.ServerRuntimeIdentityV0,
+) bool {
+	if response == nil || response.Body == nil {
+		return false
 	}
-	if response.StatusCode != http.StatusServiceUnavailable {
+	if response.StatusCode != http.StatusOK {
 		return false
 	}
 	var readiness orquestaserver.ServerReadinessV0
 	if err := json.NewDecoder(response.Body).Decode(&readiness); err != nil {
 		return false
 	}
-	return readiness.StartupReady &&
+	if !serverRuntimeIdentityReadyForExactMatchV0(expected) {
+		return false
+	}
+	return readiness.SchemaVersion == orquestaserver.ServerReadinessSchemaVersionV0 &&
+		readiness.Ready &&
+		readiness.LivenessStatus == "ok" &&
+		readiness.StartupReady &&
+		strings.TrimSpace(readiness.StartupStatus) == orquestaserver.StartupCheckStatusReadyV0 &&
 		strings.TrimSpace(readiness.Status) == "running" &&
-		strings.TrimSpace(readiness.AvailabilityStatus) == "running"
+		strings.TrimSpace(readiness.AvailabilityStatus) == "running" &&
+		serverPublicRuntimeIdentityMatchesExpectedV0(readiness.RuntimeIdentity, expected)
+}
+
+func serverPublicRuntimeIdentityMatchesExpectedV0(
+	live orquestaserver.ServerPublicRuntimeIdentityV0,
+	expected orquestaserver.ServerRuntimeIdentityV0,
+) bool {
+	expected = orquestaserver.NormalizeServerRuntimeIdentityV0(expected)
+	return live.SchemaVersion == expected.SchemaVersion &&
+		live.BinaryPathRef == expected.BinaryPathRef &&
+		live.BinaryName == expected.BinaryName &&
+		live.BinarySHA256 == expected.BinarySHA256 &&
+		live.BuildRef == expected.BuildRef &&
+		live.CommitRef == expected.CommitRef &&
+		(expected.StartedAt == "" || live.StartedAt == expected.StartedAt)
+}
+
+func serverRuntimeIdentityMatchesExpectedV0(
+	live orquestaserver.ServerRuntimeIdentityV0,
+	expected orquestaserver.ServerRuntimeIdentityV0,
+) bool {
+	live = orquestaserver.NormalizeServerRuntimeIdentityV0(live)
+	expected = orquestaserver.NormalizeServerRuntimeIdentityV0(expected)
+	return serverRuntimeIdentityReadyForExactMatchV0(expected) &&
+		live.SchemaVersion == expected.SchemaVersion &&
+		live.BinaryPath == expected.BinaryPath &&
+		live.BinaryPathRef == expected.BinaryPathRef &&
+		live.BinaryName == expected.BinaryName &&
+		live.BinarySHA256 == expected.BinarySHA256 &&
+		live.BuildRef == expected.BuildRef &&
+		live.CommitRef == expected.CommitRef &&
+		(expected.StartedAt == "" || live.StartedAt == expected.StartedAt)
 }

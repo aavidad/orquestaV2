@@ -6,6 +6,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
+	"os"
+	"os/signal"
 	"strings"
 	"time"
 
@@ -16,6 +20,12 @@ func runMain(args []string, stdout io.Writer, stderr io.Writer) int {
 	command := "run"
 	if len(args) > 0 {
 		command = args[0]
+	}
+	if serverCommandRequiresExactIdentityV0(command) {
+		if code := validateServerBroadLaunchIdentityV0(args[1:]); code != "" {
+			_, _ = fmt.Fprintf(stderr, "orquesta-server %s: reason_code=%s\n", command, code)
+			return 1
+		}
 	}
 	switch command {
 	case "run":
@@ -50,6 +60,41 @@ func runMain(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 }
 
+func serverCommandRequiresExactIdentityV0(command string) bool {
+	switch strings.TrimSpace(command) {
+	case "codex-launch-wave", "codex-launch-director-wave":
+		return true
+	default:
+		return false
+	}
+}
+
+func validateServerBroadLaunchIdentityV0(args []string) string {
+	preflight, err := serverIdentityPreflightFromEnvV0("")
+	if err != nil || preflight.Issue != nil {
+		return serverWorkLaunchDegradedIdentityV0
+	}
+	if projectDir := serverCommandProjectDirArgV0(args); projectDir != "" {
+		canonicalProjectDir, issue := canonicalServerWorkdirV0(projectDir)
+		if issue != nil || canonicalProjectDir != preflight.ProjectWorkDir {
+			return serverWorkLaunchDegradedIdentityV0
+		}
+	}
+	return ""
+}
+
+func serverCommandProjectDirArgV0(args []string) string {
+	for index, arg := range args {
+		if strings.HasPrefix(arg, "--project-dir=") {
+			return strings.TrimSpace(strings.TrimPrefix(arg, "--project-dir="))
+		}
+		if arg == "--project-dir" && index+1 < len(args) {
+			return strings.TrimSpace(args[index+1])
+		}
+	}
+	return ""
+}
+
 type serverCommandConfigOptionsV0 struct {
 	ConfigPath string
 }
@@ -73,6 +118,18 @@ func runServerCommandV0(args []string, _ io.Writer, stderr io.Writer) int {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server run: %v\n", err)
 		return 2
 	}
+	preflight, err := serverIdentityPreflightFromEnvV0(options.ConfigPath)
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, "orquesta-server: reason_code=identity_preflight_failed")
+		return 1
+	}
+	if preflight.Issue != nil {
+		return runDegradedIdentityServerV0(orquestaserver.ConfigV0{
+			Addr:            degradedIdentityServerAddrFromEnvV0(),
+			ProjectWorkDir:  preflight.ProjectWorkDir,
+			RuntimeIdentity: preflight.RuntimeIdentity,
+		}, preflight.Issue.Code, stderr)
+	}
 	serverConfig, err := serverConfigFromEnvWithProjectConfigPathV0(options.ConfigPath)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server: %v\n", err)
@@ -82,6 +139,10 @@ func runServerCommandV0(args []string, _ io.Writer, stderr io.Writer) int {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server: detail_rails_env_default_failed: %v\n", err)
 		return 1
 	}
+	serverConfig.RuntimeIdentity = serverRuntimeIdentityWithWorktreeEvidenceV0(
+		preflight.RuntimeIdentity,
+		serverConfig.ProjectWorkDir,
+	)
 	runtime, err := buildRuntimeFromConfigV0(serverConfig)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server: %v\n", err)
@@ -135,6 +196,48 @@ func runServerCommandV0(args []string, _ io.Writer, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+func runDegradedIdentityServerV0(config orquestaserver.ConfigV0, reason string, stderr io.Writer) int {
+	listener, err := net.Listen("tcp", config.Addr)
+	if err != nil {
+		_, _ = fmt.Fprintln(stderr, "orquesta-server: reason_code=degraded_identity_listen_failed")
+		return 1
+	}
+	defer listener.Close()
+	server := &http.Server{Handler: newDegradedIdentityHTTPHandlerV0(config, reason)}
+	ctx, stop := signal.NotifyContext(context.Background(), serverShutdownSignalsV0()...)
+	defer stop()
+	serveDone := make(chan error, 1)
+	go func() {
+		serveDone <- server.Serve(listener)
+	}()
+	select {
+	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			_ = server.Close()
+		}
+	case err := <-serveDone:
+		if err != nil && err != http.ErrServerClosed {
+			_, _ = fmt.Fprintln(stderr, "orquesta-server: reason_code=degraded_identity_server_failed")
+			return 1
+		}
+		return 0
+	}
+	if err := <-serveDone; err != nil && err != http.ErrServerClosed {
+		_, _ = fmt.Fprintln(stderr, "orquesta-server: reason_code=degraded_identity_server_failed")
+		return 1
+	}
+	return 0
+}
+
+func degradedIdentityServerAddrFromEnvV0() string {
+	if addr := strings.TrimSpace(os.Getenv(envServerAddrV0)); addr != "" {
+		return addr
+	}
+	return orquestaserver.DefaultAddrV0
 }
 
 func statusServerCommandV0(args []string, stdout io.Writer, stderr io.Writer) int {
@@ -322,7 +425,13 @@ func stopServerCommandHandleUnavailableDaemonV0(
 		return false, 0
 	}
 	reconciled, _ := reconcileStatefileSnapshotLivenessV0(config, state)
-	cleanupCodexGoalBackendAfterStartupFailureIfDaemonGoneV0(config, state.PID)
+	if cleanupErr := cleanupCodexGoalBackendAfterStartupFailureIfDaemonGoneV0(
+		config,
+		stoppedServerDaemonIdentityV0(state.PID),
+	); cleanupErr != nil {
+		_, _ = fmt.Fprintln(stderr, "orquesta-server stop: reason_code=forced_cleanup_failed")
+		return true, 1
+	}
 	processRef := strings.TrimSpace(reconciled.ProcessRef)
 	if processRef == "" {
 		processRef = "process-ref-unavailable"
