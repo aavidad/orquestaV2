@@ -48,3 +48,13 @@ La consolidacion amplia de variables de entorno queda deliberadamente despues
 del cierre del nucleo. La primera ola ya tiene ratchet en
 `cmd/orquesta-server/server_env_registry_ast_v0_test.go`; no se ampliara
 mientras F3/F5/208 y la atestacion independiente sigan pendientes.
+
+## Actualizacion 2026-07-10: retirada minima revisada
+
+La primera pasada posterior a la consolidacion de configuracion retiro dos
+wrappers privados sin consumidores de produccion: el lector de politica de
+progreso usado solo por una prueba y el lector de limites Codex sin llamadas.
+La prueba de politica paso a consultar la configuracion viva equivalente. El
+indice reproducible baja de 25.223 a 25.221 funciones y de 1.238 a 1.236
+candidatas estaticas. No se borro ningun candidato cubierto por contrato,
+produccion o pruebas con semantica propia.

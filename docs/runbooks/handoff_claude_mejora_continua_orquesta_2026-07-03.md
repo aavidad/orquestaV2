@@ -2975,3 +2975,12 @@ PID junto con su helper, sin cambios de fuente ni procesos residuales. No se
 usa esa tentativa como evidencia de cierre: para este corte valen los focales
 aislados anteriores. El paquete completo necesita ejecutarse solo en un corte
 que admita sus fixtures OPES y tenga timeout/cleanup gobernados.
+
+## Actualizacion Codex 2026-07-10: limpieza minima de wrappers privados
+
+El indice actualizado se uso solo como triage. Se revisaron y retiraron dos
+wrappers sin consumidores de produccion: el lector de politica de progreso
+que servia exclusivamente a una prueba y el lector de limites Codex sin
+llamadas. La prueba consulta ahora la configuracion viva equivalente. El
+indice baja de 25.223 a 25.221 funciones y de 1.238 a 1.236 candidatas
+estaticas; no hay borrado masivo ni cambio de contratos.

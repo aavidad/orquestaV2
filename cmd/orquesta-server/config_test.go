@@ -932,7 +932,7 @@ func TestServerConfigFromEnvV0PublicaUmbralCheckpointGoalConfigurableV0(t *testi
 	if err != nil {
 		t.Fatalf("serverConfigFromEnvV0: %v", err)
 	}
-	policy := serverAutoprogrammingGoalProgressPolicyFromEnvV0()
+	policy := serverAutoprogrammingGoalProgressPolicyFromConfigV0(config)
 	if policy.CheckpointOnlyHighConsumptionTokens != 42000 ||
 		policy.CheckpointOnlyMaxWaitSeconds != 1200 ||
 		policy.NoCheckpointWarningMaxWaitSeconds != 900 {

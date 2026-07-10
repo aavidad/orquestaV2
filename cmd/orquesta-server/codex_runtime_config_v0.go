@@ -154,7 +154,3 @@ type codexRuntimeLimitsV0 struct {
 	MaxBatchReady    int
 	MaxLiveProcesses int
 }
-
-func codexRuntimeLimitsFromEnvV0() codexRuntimeLimitsV0 {
-	return codexRuntimeLimitsFromProjectConfigFileV0(serverProjectConfigFileV0{})
-}
