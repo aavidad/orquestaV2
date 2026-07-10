@@ -58,3 +58,9 @@ La prueba de politica paso a consultar la configuracion viva equivalente. El
 indice reproducible baja de 25.223 a 25.221 funciones y de 1.238 a 1.236
 candidatas estaticas. No se borro ningun candidato cubierto por contrato,
 produccion o pruebas con semantica propia.
+
+Una segunda revision retiro dos wrappers privados adicionales sin referencias:
+el lector de politica desde directorio de proyecto y el adaptador de runtime
+Codex desde directorio de proyecto. El indice baja a 25.219 funciones y 1.234
+candidatas. Siguen siendo necesarias referencias, contratos y pruebas focales
+antes de cualquier retirada posterior.

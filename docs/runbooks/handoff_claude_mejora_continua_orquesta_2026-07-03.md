@@ -2984,3 +2984,9 @@ que servia exclusivamente a una prueba y el lector de limites Codex sin
 llamadas. La prueba consulta ahora la configuracion viva equivalente. El
 indice baja de 25.223 a 25.221 funciones y de 1.238 a 1.236 candidatas
 estaticas; no hay borrado masivo ni cambio de contratos.
+
+Una segunda pasada retiro dos wrappers privados mas sin referencias (lector de
+politica desde directorio y adaptador runtime Codex desde directorio). El
+indice reproducible queda en 25.219 funciones y 1.234 candidatas. La regla se
+mantiene: candidatos estaticos no se borran sin verificar consumidores,
+contratos y prueba focal.

@@ -321,14 +321,6 @@ func projectConfigFromServerConfigBestEffortV0(config orquestaserver.ConfigV0) s
 	return projectConfigFromProjectDirBestEffortV0(config.ProjectWorkDir)
 }
 
-func serverAutoprogrammingGoalProgressPolicyConfigFromProjectV0(projectDir string) (orquestaserver.AutoprogrammingGoalProgressPolicyConfigV0, error) {
-	fileConfig, _, err := loadServerProjectConfigFileV0(projectDir)
-	if err != nil {
-		return orquestaserver.AutoprogrammingGoalProgressPolicyConfigV0{}, err
-	}
-	return serverAutoprogrammingGoalProgressPolicyConfigFromProjectFileV0(fileConfig), nil
-}
-
 func serverAutoprogrammingGoalProgressPolicyConfigFromProjectFileV0(
 	fileConfig serverProjectConfigFileV0,
 ) orquestaserver.AutoprogrammingGoalProgressPolicyConfigV0 {

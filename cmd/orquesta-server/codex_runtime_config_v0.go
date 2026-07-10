@@ -82,10 +82,6 @@ func codexRuntimeEnvConfigFromEnvV0() codexRuntimeEnvConfigV0 {
 	return codexRuntimeEnvConfigFromProjectFileV0(serverProjectConfigFileV0{})
 }
 
-func codexRuntimeEnvConfigFromProjectConfigV0(projectDir string) codexRuntimeEnvConfigV0 {
-	return codexRuntimeEnvConfigFromProjectFileV0(projectConfigFromProjectDirBestEffortV0(projectDir))
-}
-
 func codexRuntimeEnvConfigFromProjectFileV0(projectConfig serverProjectConfigFileV0) codexRuntimeEnvConfigV0 {
 	return codexRuntimeEnvConfigV0{
 		CommandPath: codexCommandPathV0(),
