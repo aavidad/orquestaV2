@@ -67,12 +67,24 @@ func (backend serverCodexAppServerTmuxBackendV0) cleanupTmuxOwnerMarkerPathV0(
 	markerDir := filepath.Dir(markerPath)
 	candidate := backend
 	candidate.SessionName = sessionName
-	candidate.SocketPath = filepath.Join(markerDir, "s.sock")
+	if marker.generationMarkerV0() {
+		candidate.SocketPath = strings.TrimSpace(marker.SocketPath)
+		if filepath.Dir(filepath.Clean(candidate.SocketPath)) != filepath.Clean(markerDir) {
+			return false
+		}
+	} else {
+		candidate.SocketPath = filepath.Join(markerDir, "s.sock")
+	}
 	if !candidate.tmuxConfiguredOrphanCleanupAllowedV0() {
 		return false
 	}
 	if err := candidate.shutdownTmuxSessionForCleanupV0(ctx); err != nil {
 		return false
+	}
+	if marker.generationMarkerV0() {
+		// Generation cleanup already removed exactly its socket and marker.
+		// Never glob a directory that may now host a newer generation.
+		return !candidate.detectTmuxOwnerMarkerResiduePathV0(ctx, markerPath)
 	}
 	cleanupTmuxOwnedSocketsInDirV0(markerDir)
 	_ = os.Remove(markerPath)

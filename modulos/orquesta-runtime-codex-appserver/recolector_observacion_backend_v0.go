@@ -137,7 +137,7 @@ func (backend serverCodexAppServerTmuxBackendV0) tmuxHasSessionV0(
 	ctx context.Context,
 	tmuxPath string,
 ) (bool, error) {
-	output, err := backend.runTmuxCommandV0(ctx, tmuxPath, "has-session", "-t", strings.TrimSpace(backend.SessionName))
+	output, err := backend.runTmuxCommandV0(ctx, tmuxPath, "has-session", "-t", backend.tmuxExactSessionTargetV0())
 	if err == nil {
 		return true, nil
 	}
@@ -158,7 +158,7 @@ func (backend serverCodexAppServerTmuxBackendV0) tmuxPanePIDV0(
 		"display-message",
 		"-p",
 		"-t",
-		strings.TrimSpace(backend.SessionName),
+		backend.tmuxExactSessionTargetV0(),
 		"#{pane_pid}",
 	)
 	if err != nil {

@@ -11,7 +11,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -435,53 +434,24 @@ func TestServerCodexAppServerGoalBackendV0StopForcedBloqueaGoalYApagaBackendV0(t
 	}
 }
 
-func TestCodexAppServerTmuxBackendV0ForcedStopIntentaTerminarProcesoAntesDeKillTmuxV0(t *testing.T) {
-	root := t.TempDir()
+func TestCodexAppServerTmuxBackendV0ForcedStopPreservaProcesoSinIdentidadPersistidaV0(t *testing.T) {
+	root := shortUnixSocketTestRootV0(t)
 	runtimeDir := filepath.Join(root, "runtime")
 	socketPath := filepath.Join(runtimeDir, codexAppServerTmuxDirV0, "s.sock")
 	if err := os.MkdirAll(filepath.Dir(socketPath), 0o700); err != nil {
 		t.Fatalf("mkdir socket dir: %v", err)
 	}
-	markerPath := filepath.Join(root, "term.marker")
-	cmd := exec.Command(
-		"sh",
-		"-c",
-		`trap 'printf term > "$TEST_TERM_MARKER"; exit 0' TERM; while :; do sleep 0.05; done`,
-		"codex",
-		"app-server",
-		"--listen",
-		"unix://"+socketPath,
-	)
-	cmd.Env = append(os.Environ(), "TEST_TERM_MARKER="+markerPath)
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("start fake app-server: %v", err)
-	}
-	t.Cleanup(func() {
-		if cmd.Process != nil && (cmd.ProcessState == nil || !cmd.ProcessState.Exited()) {
-			_ = cmd.Process.Kill()
-			_, _ = cmd.Process.Wait()
-		}
-	})
+	listener := listenUnixForGenerationTestV0(t, socketPath)
+	defer listener.Close()
 	backend := serverCodexAppServerTmuxBackendV0{
 		SocketPath:     socketPath,
 		SessionName:    "orquesta-goal-cooperative-1234567890",
 		RuntimeWorkDir: runtimeDir,
 		Timeout:        time.Second,
 	}
-	waitForMigratedTestConditionV0(t, time.Second, func() bool {
-		return len(backend.codexAppServerOwnedProcessPIDsV0(context.Background())) > 0
-	})
-	if ok := backend.requestCodexAppServerCooperativeStopV0(context.Background()); !ok {
-		t.Fatalf("cooperative stop no confirmo salida de proceso propio")
-	}
-	if err := cmd.Wait(); err != nil {
-		t.Fatalf("fake app-server no salio limpio tras SIGTERM: %v", err)
-	}
-	if _, err := os.Stat(markerPath); err != nil {
-		t.Fatalf("SIGTERM cooperativo no ejecuto trap: %v", err)
-	}
-	if pids := backend.codexAppServerOwnedProcessPIDsV0(context.Background()); len(pids) != 0 {
-		t.Fatalf("quedan procesos propios tras parada cooperativa: %v", pids)
+	assertGenerationConflictTestV0(t, backend.ShutdownForcedStopV0(context.Background()))
+	if !codexAppServerTmuxSocketListenerAliveV0(socketPath) {
+		t.Fatal("forced stop ambiguo termino el listener sin identidad persistida")
 	}
 }
 
@@ -996,7 +966,7 @@ func TestCodexAppServerWriteSetLooksLikeFileV0TrataExtensionesComoFicheroMigrado
 }
 
 func TestCodexAppServerTmuxBackendV0EnsureShutdownCleanupMigradoV0(t *testing.T) {
-	root := t.TempDir()
+	root := shortUnixSocketTestRootV0(t)
 	binDir := filepath.Join(root, "bin")
 	if err := os.MkdirAll(binDir, 0o700); err != nil {
 		t.Fatalf("mkdir bin: %v", err)
@@ -1018,6 +988,11 @@ func TestCodexAppServerTmuxBackendV0EnsureShutdownCleanupMigradoV0(t *testing.T)
 		Timeout:        time.Second,
 	}
 	t.Setenv("ORQUESTA_TEST_TMUX_LOG", tmuxLog)
+	t.Setenv("ORQUESTA_TEST_BINARY", os.Args[0])
+	probeListener := listenUnixForGenerationTestV0(t, socketPath)
+	if err := probeListener.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := backend.EnsureV0(context.Background(), fakeCodexAppServerProbeV0{}); err != nil {
 		t.Fatalf("EnsureV0: %v", err)
@@ -1031,7 +1006,7 @@ func TestCodexAppServerTmuxBackendV0EnsureShutdownCleanupMigradoV0(t *testing.T)
 		strings.Contains(string(rawTmuxLog), "< /dev/null") {
 		t.Fatalf("app-server tmux debe arrancar con stdin FIFO propia; log=%s", string(rawTmuxLog))
 	}
-	if _, err := os.Stat(filepath.Join(filepath.Dir(socketPath), codexAppServerTmuxMarkerFileV0)); err != nil {
+	if _, err := os.Stat(backend.tmuxOwnerMarkerPathV0()); err != nil {
 		t.Fatalf("owner marker ausente: %v", err)
 	}
 	active, err := backend.ReadActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkRequestV0{})
@@ -1309,7 +1284,7 @@ func startCodexAppServerWebSocketScriptForTestV0(
 	t *testing.T,
 ) (string, <-chan codexAppServerWebSocketRecordForTestV0) {
 	t.Helper()
-	root := t.TempDir()
+	root := shortUnixSocketTestRootV0(t)
 	socketPath := filepath.Join(root, "codex-app-server.sock")
 	listener, err := net.Listen("unix", socketPath)
 	if err != nil {
@@ -1574,57 +1549,7 @@ func (fake *fakeCodexAppServerProtocolV0) ReadThreadV0(
 }
 
 func fakeCodexAppServerTmuxCommandMigratedTestV0() string {
-	return `#!/bin/sh
-set -eu
-if [ -n "${ORQUESTA_TEST_TMUX_LOG:-}" ]; then
-  printf '%s\n' "$*" >> "$ORQUESTA_TEST_TMUX_LOG"
-fi
-case "${1:-}" in
-  ` + "has" + `-session)
-    if [ -n "${ORQUESTA_TEST_TMUX_LOG:-}" ] && [ -e "${ORQUESTA_TEST_TMUX_LOG}.session" ]; then
-      exit 0
-    fi
-    exit 1
-    ;;
-  kill-session)
-    if [ -n "${ORQUESTA_TEST_TMUX_LOG:-}" ]; then
-      rm -f "${ORQUESTA_TEST_TMUX_LOG}.session"
-    fi
-    exit 0
-    ;;
-  display-message)
-    exit 0
-    ;;
-  new-session)
-    if [ -n "${ORQUESTA_TEST_TMUX_LOG:-}" ]; then
-      : > "${ORQUESTA_TEST_TMUX_LOG}.session"
-    fi
-    sock=""
-    for arg in "$@"; do
-      case "$arg" in
-        unix://*)
-          sock="${arg#unix://}"
-          ;;
-        *unix://*)
-          sock="${arg#*unix://}"
-          sock="${sock%%\'*}"
-          sock="${sock%%\"*}"
-          sock="${sock%% *}"
-          ;;
-      esac
-    done
-    if [ -z "$sock" ]; then
-      echo "socket missing" >&2
-      exit 2
-    fi
-    mkdir -p "$(dirname "$sock")"
-    : > "$sock"
-    exit 0
-    ;;
-esac
-echo "tmux args inesperados: $*" >&2
-exit 2
-`
+	return fakeGenerationLeaseTmuxScriptV0()
 }
 
 func containsStringMigratedTestV0(values []string, want string) bool {

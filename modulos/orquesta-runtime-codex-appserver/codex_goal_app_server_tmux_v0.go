@@ -45,10 +45,21 @@ type serverCodexAppServerTmuxBackendV0 struct {
 }
 
 type codexAppServerTmuxOwnerMarkerV0 struct {
-	SchemaVersion string `json:"schema_version"`
-	OwnerRef      string `json:"owner_ref"`
-	SessionName   string `json:"session_name"`
-	SocketRef     string `json:"socket_ref"`
+	SchemaVersion           string `json:"schema_version"`
+	OwnerRef                string `json:"owner_ref"`
+	SessionName             string `json:"session_name"`
+	SocketRef               string `json:"socket_ref"`
+	SocketPath              string `json:"socket_path,omitempty"`
+	GenerationRef           string `json:"generation_ref,omitempty"`
+	LeaseOwnerPID           int    `json:"lease_owner_pid,omitempty"`
+	LeaseOwnerStartRef      string `json:"lease_owner_start_ref,omitempty"`
+	AppServerPID            int    `json:"app_server_pid,omitempty"`
+	AppServerStartRef       string `json:"app_server_start_ref,omitempty"`
+	AppServerProcessGroupID int    `json:"app_server_process_group_id,omitempty"`
+	TmuxSessionID           string `json:"tmux_session_id,omitempty"`
+	TmuxSessionCreated      string `json:"tmux_session_created,omitempty"`
+	TmuxPanePID             int    `json:"tmux_pane_pid,omitempty"`
+	TmuxPaneStartRef        string `json:"tmux_pane_start_ref,omitempty"`
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) EnsureV0(
@@ -69,6 +80,18 @@ func (backend serverCodexAppServerTmuxBackendV0) EnsureV0(
 	}
 	if err := ensureCodexAppServerTmuxRuntimeDirV0(socketPath); err != nil {
 		return err
+	}
+	leaseGuard, err := backend.acquireTmuxLeaseGuardV0(runCtx)
+	if err != nil {
+		return err
+	}
+	defer leaseGuard.releaseV0()
+	adopted, err := backend.adoptOrFenceExistingGenerationV0(runCtx, preflight)
+	if err != nil {
+		return err
+	}
+	if adopted {
+		return nil
 	}
 	tmuxPath, err := codexAppServerTmuxCommandPathV0(backend.PathEnv)
 	if err != nil {
@@ -99,24 +122,48 @@ func (backend serverCodexAppServerTmuxBackendV0) EnsureV0(
 		if observed.Estado == BackendListoV0 {
 			return nil
 		}
-		if err := backend.tmuxKillSessionV0(runCtx, tmuxPath); err != nil {
-			return err
-		}
+		return codexAppServerTmuxConflictErrorV0(codexAppServerTmuxGenerationConflictV0)
 	}
-	_ = os.Remove(socketPath)
+	if err := backend.removeStaleTmuxSocketV0(runCtx, codexAppServerTmuxOwnerMarkerV0{}); err != nil {
+		return err
+	}
 	if err := backend.prepareTmuxCodeHomeV0(); err != nil {
 		return err
 	}
+	marker, err := backend.newTmuxOwnerMarkerV0("", 0)
+	if err != nil {
+		return err
+	}
+	if err := backend.writeTmuxOwnerMarkerAtomicV0(marker); err != nil {
+		return err
+	}
 	if err := backend.tmuxStartSessionV0(runCtx, tmuxPath); err != nil {
-		backend.cleanupTmuxSessionAfterStartupFailureV0(tmuxPath)
+		backend.cleanupStartedTmuxGenerationV0(marker)
 		return err
 	}
-	if err := backend.writeTmuxOwnerMarkerV0(); err != nil {
-		backend.cleanupTmuxSessionAfterStartupFailureV0(tmuxPath)
+	identity, identityErr := backend.tmuxSessionIdentityV0(runCtx, tmuxPath)
+	if identityErr != nil || !identity.completeV0() {
+		backend.cleanupStartedTmuxGenerationV0(marker)
+		if identityErr != nil {
+			return identityErr
+		}
+		return codexAppServerTmuxConflictErrorV0(codexAppServerTmuxGenerationConflictV0)
+	}
+	updated := marker
+	updated.AppServerPID = identity.PanePID
+	updated.AppServerStartRef = identity.PaneStartRef
+	updated.AppServerProcessGroupID = codexAppServerTmuxOwnedProcessGroupV0(identity.PanePID)
+	updated.TmuxSessionID = identity.SessionID
+	updated.TmuxSessionCreated = identity.SessionCreated
+	updated.TmuxPanePID = identity.PanePID
+	updated.TmuxPaneStartRef = identity.PaneStartRef
+	if err := backend.replaceTmuxOwnerMarkerV0(marker, updated); err != nil {
+		backend.cleanupStartedTmuxGenerationV0(marker)
 		return err
 	}
+	marker = updated
 	if err := backend.waitForTmuxSocketV0(runCtx, tmuxPath, preflight); err != nil {
-		backend.cleanupTmuxSessionAfterStartupFailureV0(tmuxPath)
+		backend.cleanupStartedTmuxGenerationV0(marker)
 		return err
 	}
 	return nil
@@ -126,7 +173,7 @@ func (backend serverCodexAppServerTmuxBackendV0) tmuxKillSessionV0(
 	ctx context.Context,
 	tmuxPath string,
 ) error {
-	output, err := backend.runTmuxCommandV0(ctx, tmuxPath, "kill-session", "-t", strings.TrimSpace(backend.SessionName))
+	output, err := backend.runTmuxCommandV0(ctx, tmuxPath, "kill-session", "-t", backend.tmuxExactSessionTargetV0())
 	if err != nil {
 		return codexAppServerTmuxCommandErrorV0("codex_app_server_tmux_kill_failed", output, err)
 	}
@@ -159,16 +206,25 @@ func (backend serverCodexAppServerTmuxBackendV0) waitTmuxPaneExitedV0(
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) ShutdownV0(ctx context.Context) error {
+	if marker, ok := backend.readTmuxOwnerMarkerV0(); ok && marker.generationMarkerV0() {
+		return backend.shutdownTmuxGenerationLeaseV0(ctx, marker, false)
+	}
 	return backend.shutdownTmuxSessionV0(ctx, false)
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) ShutdownForcedStopV0(ctx context.Context) error {
+	if marker, ok := backend.readTmuxOwnerMarkerV0(); ok && marker.generationMarkerV0() {
+		return backend.shutdownTmuxGenerationLeaseV0(ctx, marker, true)
+	}
 	cleanup := backend
 	cleanup.Timeout = codexAppServerTmuxForcedStopV0
 	return cleanup.shutdownTmuxSessionWithOptionsV0(ctx, true, true)
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) ShutdownConfiguredSessionAfterStartupFailureV0(ctx context.Context) error {
+	if marker, ok := backend.readTmuxOwnerMarkerV0(); ok && marker.generationMarkerV0() {
+		return backend.shutdownTmuxGenerationLeaseV0(ctx, marker, true)
+	}
 	return backend.shutdownTmuxSessionV0(ctx, true)
 }
 
@@ -199,8 +255,8 @@ func (backend serverCodexAppServerTmuxBackendV0) shutdownTmuxSessionV0(ctx conte
 
 func (backend serverCodexAppServerTmuxBackendV0) shutdownTmuxSessionWithOptionsV0(
 	ctx context.Context,
-	allowConfiguredOrphan bool,
-	continueAfterPaneExitTimeout bool,
+	_ bool,
+	_ bool,
 ) error {
 	timeout := backend.Timeout
 	if timeout <= 0 {
@@ -208,131 +264,36 @@ func (backend serverCodexAppServerTmuxBackendV0) shutdownTmuxSessionWithOptionsV
 	}
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-
-	owned := backend.tmuxOwnerMarkerExistsV0()
-	if !owned && !allowConfiguredOrphan {
-		return nil
+	guard, err := backend.acquireTmuxLeaseGuardV0(runCtx)
+	if err != nil {
+		return err
 	}
-	if !owned && !backend.tmuxConfiguredOrphanCleanupAllowedV0() {
-		return nil
+	defer guard.releaseV0()
+	if marker, ok := backend.readTmuxOwnerMarkerV0(); ok && marker.generationMarkerV0() {
+		// The caller classified a legacy marker before taking the lease, but a
+		// newer generation won the race. Never fall through to broad cleanup.
+		return codexAppServerTmuxConflictErrorV0(codexAppServerTmuxGenerationConflictV0)
+	}
+
+	if backend.tmuxOwnerMarkerObservedV0() || backend.tmuxLegacyOwnerMarkerObservedV0() {
+		return codexAppServerTmuxConflictErrorV0(codexAppServerTmuxGenerationConflictV0)
 	}
 	tmuxPath, err := codexAppServerTmuxCommandPathV0(backend.PathEnv)
 	if err != nil {
-		return err
+		if codexAppServerTmuxSocketPresentV0(backend.SocketPath) {
+			return codexAppServerTmuxConflictErrorV0(codexAppServerTmuxGenerationConflictV0)
+		}
+		return nil
 	}
-	observed, err := backend.recolectarObservacionBackendV0(runCtx, solicitudObservacionBackendV0{
-		Actual:          BackendListoV0,
-		ActionRequested: AccionBackendShutdownV0,
-		TmuxPath:        tmuxPath,
-		CheckProcesses:  true,
-		RequireTmux:     true,
-	})
+	hasSession, err := backend.tmuxHasSessionV0(runCtx, tmuxPath)
 	if err != nil {
 		return err
 	}
-	if observed.Observacion.SessionObserved {
-		if continueAfterPaneExitTimeout && backend.requestCodexAppServerCooperativeStopV0(runCtx) {
-			observedAfterStop, _ := backend.recolectarObservacionBackendV0(runCtx, solicitudObservacionBackendV0{
-				Actual:          BackendListoV0,
-				ActionRequested: AccionBackendShutdownV0,
-				TmuxPath:        tmuxPath,
-				CheckProcesses:  true,
-				RequireTmux:     true,
-			})
-			if !observedAfterStop.Observacion.SessionObserved {
-				_ = os.Remove(strings.TrimSpace(backend.SocketPath))
-				_ = os.Remove(backend.tmuxStdinPathV0())
-				_ = os.Remove(backend.tmuxOwnerMarkerPathV0())
-				return nil
-			}
-			observed = observedAfterStop
-		}
-		if err := backend.tmuxKillSessionV0(runCtx, tmuxPath); err != nil {
-			return err
-		}
-		if err := backend.waitTmuxPaneExitedV0(runCtx, observed.PanePID); err != nil {
-			if !continueAfterPaneExitTimeout {
-				return err
-			}
-			cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), time.Second)
-			defer cleanupCancel()
-			runCtx = cleanupCtx
-		}
+	if hasSession || codexAppServerTmuxSocketPresentV0(backend.SocketPath) ||
+		len(codexAppServerTmuxSocketProcessPIDsV0(runCtx, backend.SocketPath)) > 0 {
+		return codexAppServerTmuxConflictErrorV0(codexAppServerTmuxGenerationConflictV0)
 	}
-	backend.stopCodexAppServerSocketProcessesV0(runCtx)
-	backend.stopCodexAppServerRuntimeOwnedProcessesV0(runCtx)
-	_ = os.Remove(strings.TrimSpace(backend.SocketPath))
-	_ = os.Remove(backend.tmuxStdinPathV0())
-	_ = os.Remove(backend.tmuxOwnerMarkerPathV0())
 	return nil
-}
-
-func (backend serverCodexAppServerTmuxBackendV0) requestCodexAppServerCooperativeStopV0(
-	ctx context.Context,
-) bool {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	pids := backend.codexAppServerOwnedProcessPIDsV0(ctx)
-	if len(pids) == 0 {
-		return false
-	}
-	stopCtx, cancel := context.WithTimeout(ctx, codexAppServerTmuxCooperativeStopV0)
-	defer cancel()
-	for _, pid := range pids {
-		_ = syscall.Kill(pid, syscall.SIGTERM)
-	}
-	backend.waitCodexAppServerOwnedProcessesGoneV0(stopCtx)
-	return len(backend.codexAppServerOwnedProcessPIDsV0(context.Background())) == 0
-}
-
-func (backend serverCodexAppServerTmuxBackendV0) codexAppServerOwnedProcessPIDsV0(ctx context.Context) []int {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	seen := map[int]struct{}{}
-	out := []int{}
-	add := func(pids []int) {
-		for _, pid := range pids {
-			if pid <= 0 {
-				continue
-			}
-			if _, exists := seen[pid]; exists {
-				continue
-			}
-			seen[pid] = struct{}{}
-			out = append(out, pid)
-		}
-	}
-	if socketPath := strings.TrimSpace(backend.SocketPath); socketPath != "" {
-		add(codexAppServerTmuxSocketProcessPIDsV0(ctx, socketPath))
-	}
-	if runtimeDir := strings.TrimSpace(backend.RuntimeWorkDir); runtimeDir != "" &&
-		backend.tmuxConfiguredOrphanCleanupAllowedV0() {
-		add(codexAppServerTmuxRuntimeOwnedProcessPIDsV0(
-			ctx,
-			filepath.Join(filepath.Clean(runtimeDir), codexAppServerTmuxDirV0),
-		))
-	}
-	return out
-}
-
-func (backend serverCodexAppServerTmuxBackendV0) waitCodexAppServerOwnedProcessesGoneV0(ctx context.Context) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	ticker := time.NewTicker(codexAppServerTmuxSocketPollEveryV0)
-	defer ticker.Stop()
-	for {
-		if len(backend.codexAppServerOwnedProcessPIDsV0(ctx)) == 0 {
-			return
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-		}
-	}
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) shutdownCleanupTimeoutV0() time.Duration {
@@ -345,74 +306,10 @@ func (backend serverCodexAppServerTmuxBackendV0) shutdownCleanupTimeoutV0() time
 func (backend serverCodexAppServerTmuxBackendV0) shutdownTmuxSessionForCleanupV0(ctx context.Context) error {
 	cleanup := backend
 	cleanup.Timeout = backend.shutdownCleanupTimeoutV0()
+	if marker, ok := cleanup.readTmuxOwnerMarkerV0(); ok && marker.generationMarkerV0() {
+		return cleanup.shutdownTmuxGenerationLeaseV0(ctx, marker, true)
+	}
 	return cleanup.shutdownTmuxSessionWithOptionsV0(ctx, true, true)
-}
-
-func (backend serverCodexAppServerTmuxBackendV0) stopCodexAppServerSocketProcessesV0(ctx context.Context) {
-	socketPath := strings.TrimSpace(backend.SocketPath)
-	if socketPath == "" {
-		return
-	}
-	pids := codexAppServerTmuxSocketProcessPIDsV0(ctx, socketPath)
-	for _, pid := range pids {
-		_ = syscall.Kill(pid, syscall.SIGTERM)
-	}
-	backend.waitCodexAppServerSocketProcessesGoneV0(ctx, socketPath)
-	killCtx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	for _, pid := range codexAppServerTmuxSocketProcessPIDsV0(killCtx, socketPath) {
-		_ = syscall.Kill(pid, syscall.SIGKILL)
-	}
-	backend.waitCodexAppServerSocketProcessesGoneV0(killCtx, socketPath)
-}
-
-func (backend serverCodexAppServerTmuxBackendV0) stopCodexAppServerRuntimeOwnedProcessesV0(ctx context.Context) {
-	runtimeDir := strings.TrimSpace(backend.RuntimeWorkDir)
-	if runtimeDir == "" || !backend.tmuxConfiguredOrphanCleanupAllowedV0() {
-		return
-	}
-	runtimeGoalDir := filepath.Join(filepath.Clean(runtimeDir), codexAppServerTmuxDirV0)
-	pids := codexAppServerTmuxRuntimeOwnedProcessPIDsV0(ctx, runtimeGoalDir)
-	for _, pid := range pids {
-		_ = syscall.Kill(pid, syscall.SIGTERM)
-	}
-	backend.waitCodexAppServerRuntimeOwnedProcessesGoneV0(ctx, runtimeGoalDir)
-	killCtx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	for _, pid := range codexAppServerTmuxRuntimeOwnedProcessPIDsV0(killCtx, runtimeGoalDir) {
-		_ = syscall.Kill(pid, syscall.SIGKILL)
-	}
-	backend.waitCodexAppServerRuntimeOwnedProcessesGoneV0(killCtx, runtimeGoalDir)
-}
-
-func (backend serverCodexAppServerTmuxBackendV0) waitCodexAppServerRuntimeOwnedProcessesGoneV0(ctx context.Context, runtimeGoalDir string) {
-	ticker := time.NewTicker(codexAppServerTmuxSocketPollEveryV0)
-	defer ticker.Stop()
-	for {
-		if len(codexAppServerTmuxRuntimeOwnedProcessPIDsV0(ctx, runtimeGoalDir)) == 0 {
-			return
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-		}
-	}
-}
-
-func (backend serverCodexAppServerTmuxBackendV0) waitCodexAppServerSocketProcessesGoneV0(ctx context.Context, socketPath string) {
-	ticker := time.NewTicker(codexAppServerTmuxSocketPollEveryV0)
-	defer ticker.Stop()
-	for {
-		if len(codexAppServerTmuxSocketProcessPIDsV0(ctx, socketPath)) == 0 {
-			return
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-		}
-	}
 }
 
 func codexAppServerTmuxSocketProcessPIDsV0(ctx context.Context, socketPath string) []int {
@@ -466,22 +363,13 @@ func (backend serverCodexAppServerTmuxBackendV0) tmuxConfiguredOrphanCleanupAllo
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) cleanupTmuxSessionAfterStartupFailureV0(
-	tmuxPath string,
+	_ string,
 ) {
 	cleanupCtx, cancel := context.WithTimeout(context.Background(), codexAppServerTmuxDefaultTimeoutV0)
 	defer cancel()
-
-	observed, err := backend.recolectarObservacionBackendV0(cleanupCtx, solicitudObservacionBackendV0{
-		Actual:          BackendPreparandoV0,
-		ActionRequested: AccionBackendCleanupV0,
-		TmuxPath:        tmuxPath,
-	})
-	if err == nil && observed.Observacion.SessionObserved {
-		_ = backend.tmuxKillSessionV0(cleanupCtx, tmuxPath)
+	if marker, ok := backend.readTmuxOwnerMarkerV0(); ok && marker.generationMarkerV0() {
+		_ = backend.cleanupTmuxGenerationV0(cleanupCtx, marker, true)
 	}
-	_ = os.Remove(strings.TrimSpace(backend.SocketPath))
-	_ = os.Remove(backend.tmuxStdinPathV0())
-	_ = os.Remove(backend.tmuxOwnerMarkerPathV0())
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) tmuxStartSessionV0(
@@ -575,7 +463,7 @@ func (backend serverCodexAppServerTmuxBackendV0) waitForTmuxSocketV0(
 		if ctx.Err() != nil {
 			return backend.tmuxStartupFailureV0("codex_app_server_tmux_socket_timeout", ctx.Err())
 		}
-		if _, err := os.Stat(socketPath); err == nil &&
+		if codexAppServerTmuxSocketListenerAliveV0(socketPath) &&
 			backend.ensureTmuxSocketPrivateV0() == nil &&
 			preflight.ProbeV0(ctx) == nil {
 			return nil
@@ -663,6 +551,14 @@ func (backend serverCodexAppServerTmuxBackendV0) tmuxOwnerMarkerPathV0() string 
 	if socketPath == "" {
 		return ""
 	}
+	return socketPath + ".owner.json"
+}
+
+func (backend serverCodexAppServerTmuxBackendV0) tmuxLegacyOwnerMarkerPathV0() string {
+	socketPath := strings.TrimSpace(backend.SocketPath)
+	if socketPath == "" {
+		return ""
+	}
 	return filepath.Join(filepath.Dir(socketPath), codexAppServerTmuxMarkerFileV0)
 }
 
@@ -698,11 +594,49 @@ func (backend serverCodexAppServerTmuxBackendV0) readTmuxOwnerMarkerV0() (codexA
 	}
 	marker, ok := readCodexAppServerTmuxOwnerMarkerPathV0(path)
 	if !ok {
+		marker, ok = backend.readUniqueLegacyTmuxOwnerMarkerV0()
+	}
+	if !ok {
 		return codexAppServerTmuxOwnerMarkerV0{}, false
 	}
-	if strings.TrimSpace(marker.SchemaVersion) != codexAppServerTmuxOwnerSchemaV0 ||
+	if !codexAppServerTmuxOwnerSchemaSupportedV0(marker.SchemaVersion) ||
 		strings.TrimSpace(marker.OwnerRef) != codexAppServerTmuxEvidenceOwnedV0 ||
 		strings.TrimSpace(marker.SessionName) != strings.TrimSpace(backend.SessionName) {
+		return codexAppServerTmuxOwnerMarkerV0{}, false
+	}
+	if marker.generationMarkerV0() && filepath.Clean(strings.TrimSpace(marker.SocketPath)) != filepath.Clean(strings.TrimSpace(backend.SocketPath)) {
+		return codexAppServerTmuxOwnerMarkerV0{}, false
+	}
+	return marker, true
+}
+
+func (backend serverCodexAppServerTmuxBackendV0) tmuxLegacyOwnerMarkerObservedV0() bool {
+	path := backend.tmuxLegacyOwnerMarkerPathV0()
+	if path == "" {
+		return false
+	}
+	info, err := os.Lstat(path)
+	return err == nil && info.Mode().IsRegular() && info.Mode()&os.ModeSymlink == 0
+}
+
+func (backend serverCodexAppServerTmuxBackendV0) readUniqueLegacyTmuxOwnerMarkerV0() (codexAppServerTmuxOwnerMarkerV0, bool) {
+	legacyPath := backend.tmuxLegacyOwnerMarkerPathV0()
+	marker, ok := readCodexAppServerTmuxOwnerMarkerPathV0(legacyPath)
+	if !ok || marker.generationMarkerV0() || strings.TrimSpace(marker.SessionName) != strings.TrimSpace(backend.SessionName) {
+		return codexAppServerTmuxOwnerMarkerV0{}, false
+	}
+	entries, err := os.ReadDir(filepath.Dir(strings.TrimSpace(backend.SocketPath)))
+	if err != nil {
+		return codexAppServerTmuxOwnerMarkerV0{}, false
+	}
+	sockets := []string{}
+	for _, entry := range entries {
+		info, infoErr := entry.Info()
+		if infoErr == nil && info.Mode()&os.ModeSocket != 0 {
+			sockets = append(sockets, filepath.Join(filepath.Dir(strings.TrimSpace(backend.SocketPath)), entry.Name()))
+		}
+	}
+	if len(sockets) != 1 || filepath.Clean(sockets[0]) != filepath.Clean(strings.TrimSpace(backend.SocketPath)) {
 		return codexAppServerTmuxOwnerMarkerV0{}, false
 	}
 	return marker, true
@@ -725,11 +659,20 @@ func readCodexAppServerTmuxOwnerMarkerPathV0(path string) (codexAppServerTmuxOwn
 	if err := json.Unmarshal(raw, &marker); err != nil {
 		return codexAppServerTmuxOwnerMarkerV0{}, false
 	}
-	if strings.TrimSpace(marker.SchemaVersion) != codexAppServerTmuxOwnerSchemaV0 ||
+	if !codexAppServerTmuxOwnerSchemaSupportedV0(marker.SchemaVersion) ||
 		strings.TrimSpace(marker.OwnerRef) != codexAppServerTmuxEvidenceOwnedV0 {
 		return codexAppServerTmuxOwnerMarkerV0{}, false
 	}
 	return marker, true
+}
+
+func codexAppServerTmuxOwnerSchemaSupportedV0(schema string) bool {
+	switch strings.TrimSpace(schema) {
+	case codexAppServerTmuxOwnerSchemaV0, codexAppServerTmuxOwnerSchemaGenerationV0:
+		return true
+	default:
+		return false
+	}
 }
 
 func shellQuoteCodexAppServerTmuxV0(value string) string {
@@ -737,25 +680,11 @@ func shellQuoteCodexAppServerTmuxV0(value string) string {
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) writeTmuxOwnerMarkerV0() error {
-	path := backend.tmuxOwnerMarkerPathV0()
-	if path == "" {
-		return codexAppServerCallErrorV0{Code: "codex_app_server_tmux_config_missing", Err: errors.New("codex_app_server_tmux_config_missing")}
-	}
-	marker := codexAppServerTmuxOwnerMarkerV0{
-		SchemaVersion: codexAppServerTmuxOwnerSchemaV0,
-		OwnerRef:      codexAppServerTmuxEvidenceOwnedV0,
-		SessionName:   strings.TrimSpace(backend.SessionName),
-		SocketRef:     "socket-ref-codex-goal-app-server-tmux",
-	}
-	raw, err := json.MarshalIndent(marker, "", "  ")
+	marker, err := backend.newTmuxOwnerMarkerV0("", 0)
 	if err != nil {
 		return err
 	}
-	raw = append(raw, '\n')
-	if err := os.WriteFile(path, raw, 0o600); err != nil {
-		return codexAppServerCallErrorV0{Code: "codex_app_server_tmux_marker_unavailable", Err: err}
-	}
-	return nil
+	return backend.writeTmuxOwnerMarkerAtomicV0(marker)
 }
 
 func codexAppServerTmuxCommandPathV0(pathEnv string) (string, error) {
