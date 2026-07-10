@@ -1,6 +1,6 @@
 # Bugs vivos de Orquesta - indice canonico
 
-Actualizado: 2026-07-10 (post-integracion del fix del lease, HEAD `1f24eb9f2`).
+Actualizado: 2026-07-10 (cierre local D3/208H, HEAD `ea00fcbe9`).
 Mantenedor: Claude (revisor). Regla: UNA fila por bug vivo con su residual
 exacto; el historial completo vive en
 `docs/inventario_bugs_orquesta_2026-06-30.md` y NO se cuenta desde alli.
@@ -80,7 +80,7 @@ mismo commit.
 
 ## Regla de conteo
 
-Bugs vivos de codigo del nucleo: los de la primera tabla (7 entradas, de las
+Bugs vivos de codigo del nucleo: los de la primera tabla (6 entradas, de las
 cuales 208A-E son el mismo frente con residuales distintos). Todo lo demas es
 operativo o de campo. Si una lectura antigua del inventario historico
 contradice este indice, prevalece este indice.
