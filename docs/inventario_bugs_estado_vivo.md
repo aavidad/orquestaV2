@@ -1,6 +1,6 @@
 # Bugs vivos de Orquesta - indice canonico
 
-Actualizado: 2026-07-10 (cierre local D3/208H, HEAD `ea00fcbe9`).
+Actualizado: 2026-07-10 (cierre local D3/208H).
 Mantenedor: Claude (revisor). Regla: UNA fila por bug vivo con su residual
 exacto; el historial completo vive en
 `docs/inventario_bugs_orquesta_2026-06-30.md` y NO se cuenta desde alli.
