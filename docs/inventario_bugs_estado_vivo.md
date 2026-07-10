@@ -12,7 +12,7 @@ mismo commit.
 | ID | Residual exacto que lo mantiene vivo | Siguiente accion |
 | --- | --- | --- |
 | BUG-ORQ-20260710-208A-D | patches focales (write-sets solapados, 504, workdir, rework) verdes en local; sin verificar por API contra servidor desplegado | tras deploy: repro/API de prepare-run, observe y runs/control |
-| BUG-ORQ-20260710-208E | tooling drain/harness listo (F3-R2); falta receipt real `clean` de drain + dos pases amplios verdes. El perfil aislado exige `ORQUESTA_TEST_CACHE_ROOT` y `ORQUESTA_TEST_BATCH_ROOT` fuera de `/srv`; su cleanup debe restaurar permisos readonly de `GOMODCACHE` | operador ejecuta drain + `orquesta_test_batches.sh` con ambas rutas aisladas; consolidar config y `chmod -R u+w` previo al cleanup en F3 |
+| BUG-ORQ-20260710-208E | tooling drain/harness listo (F3-R2); falta receipt real `clean` de drain + dos pases amplios verdes. El perfil aislado exige `ORQUESTA_TEST_CACHE_ROOT` y `ORQUESTA_TEST_BATCH_ROOT` fuera de `/srv`; una revision local 2026-07-10 confirmo que Go 1.25 deja `GOMODCACHE` readonly y un runner desligado puede dejar helpers Unix bajo esa raiz | operador ejecuta drain + `orquesta_test_batches.sh` con ambas rutas aisladas; consolidar config y restaurar `chmod -R u+w` antes del cleanup, verificando que no quedan helpers por identidad de runtime |
 | F5/identidad runtime | integrado en `2fe12f658` y completado localmente por D1 con `5f30973d7`: identidad de servidor y proyecto externo ya son distintos; closure accepted y shutdown listo | ejecutar drain/deploy gobernados y verificar por API el binario remoto, sin tocar `uso-app` |
 | BUG-ORQ-20260710-208H | integrado en `7444dcf8a`: D1 normal acepto el resultado y una reejecucion externa posterior paso, pero el servidor no llevaba atestador independiente configurado | probar atestador real integrado y sus rutas de fallo antes de cerrar el bug |
 | BUG-ORQ-20260710-208J | integrado en `7444dcf8a`: fallo del atestador persiste claim `failed` y cierre `blocked/rework`, sin reintento por polling | D1 debe confirmar comportamiento con atestador real; conservar la [incidencia 208J](incidencias/incidencia_orquesta_208h_claim_pending_sin_reintento_2026-07-10.md) como evidencia |
@@ -50,6 +50,12 @@ mismo commit.
   `/tmp/orquesta-test-batches/receipt.json` y
   `/tmp/orquesta-test-batches/logs/pass-001-batch-001.log`. No hubo cambios
   de fuente ni procesos residuales.
+- Revision routing 2026-07-10: los focales de capacity, runtimes y stack
+  fueron verdes, pero la bateria amplia del worktree WIP se desligo antes de
+  devolver resultado y dejo dos helpers Unix bajo
+  `/tmp/orquesta-routing-review-env`; se pararon por identidad de esa ruta y
+  se limpio despues de restaurar permisos de `GOMODCACHE`. No acredita el
+  test amplio ni la integracion del routing; pertenece a 208E/F3.
 
 ## Regla de conteo
 
