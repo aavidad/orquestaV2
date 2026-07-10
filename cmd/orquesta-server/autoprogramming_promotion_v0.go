@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -30,20 +31,35 @@ type serverAutoprogrammingPromotionPortV0 struct {
 func autoprogrammingPromotionConfigFromEnvV0(
 	config orquestaserver.ConfigV0,
 ) orquestaappcodexstack.AutoprogrammingPromotionConfigV0 {
-	if !boolEnvOrDefaultV0(envServerAutoprogrammingPromotionEnabledV0, false) {
+	projectConfig := projectConfigFromServerConfigBestEffortV0(config)
+	promotion := projectConfig.Autoprogramming.Promotion
+	if !autoprogrammingPromotionEnabledFromProjectConfigV0(promotion) {
 		return orquestaappcodexstack.AutoprogrammingPromotionConfigV0{}
 	}
-	archiveDir := absDirEnvOrDefaultV0(
+	archiveDir := absDirProjectConfigOrEnvOrDefaultV0(
 		envServerAutoprogrammingPromotionArchiveDirV0,
+		promotion.ArchiveDir,
 		filepath.Join(config.StateDir, "autoprogramming-promotion-archive"),
 	)
 	port := serverAutoprogrammingPromotionPortV0{
 		ProjectWorkDir: strings.TrimSpace(config.ProjectWorkDir),
 		ArchiveDir:     archiveDir,
-		RepoRef:        envOrDefaultV0(envServerAutoprogrammingPromotionRepoRefV0, defaultAutoprogrammingPromotionRepoRefV0),
-		AppRef:         envOrDefaultV0(envServerAutoprogrammingPromotionAppRefV0, defaultAutoprogrammingPromotionAppRefV0),
-		CommitMessage:  envOrDefaultV0(envServerAutoprogrammingPromotionCommitMessageV0, defaultAutoprogrammingPromotionMessageV0),
-		Guardian:       autoprogrammingPromotionGuardianFromEnvV0(config),
+		RepoRef: stringProjectConfigOrEnvOrDefaultV0(
+			envServerAutoprogrammingPromotionRepoRefV0,
+			promotion.RepoRef,
+			defaultAutoprogrammingPromotionRepoRefV0,
+		),
+		AppRef: stringProjectConfigOrEnvOrDefaultV0(
+			envServerAutoprogrammingPromotionAppRefV0,
+			promotion.AppRef,
+			defaultAutoprogrammingPromotionAppRefV0,
+		),
+		CommitMessage: stringProjectConfigOrEnvOrDefaultV0(
+			envServerAutoprogrammingPromotionCommitMessageV0,
+			promotion.CommitMessage,
+			defaultAutoprogrammingPromotionMessageV0,
+		),
+		Guardian: autoprogrammingPromotionGuardianFromEnvV0(config),
 	}
 	return orquestaappcodexstack.AutoprogrammingPromotionConfigV0{
 		Enabled:       true,
@@ -52,6 +68,30 @@ func autoprogrammingPromotionConfigFromEnvV0(
 		RepoRef:       port.RepoRef,
 		CommitMessage: port.CommitMessage,
 	}
+}
+
+func autoprogrammingPromotionEnabledFromProjectConfigV0(
+	promotion serverProjectConfigAutoprogrammingPromotionV0,
+) bool {
+	if _, ok := os.LookupEnv(envServerAutoprogrammingPromotionEnabledV0); ok {
+		return boolEnvOrDefaultV0(envServerAutoprogrammingPromotionEnabledV0, false)
+	}
+	return promotion.Enabled != nil && *promotion.Enabled
+}
+
+func autoprogrammingPromotionArchiveDirFromProjectConfigV0(
+	config orquestaserver.ConfigV0,
+) string {
+	projectConfig := projectConfigFromServerConfigBestEffortV0(config)
+	promotion := projectConfig.Autoprogramming.Promotion
+	if !autoprogrammingPromotionEnabledFromProjectConfigV0(promotion) {
+		return ""
+	}
+	return stringProjectConfigOrEnvOrDefaultV0(
+		envServerAutoprogrammingPromotionArchiveDirV0,
+		promotion.ArchiveDir,
+		"",
+	)
 }
 
 func (port serverAutoprogrammingPromotionPortV0) PromoteAutoprogrammingStagingV0(

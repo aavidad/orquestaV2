@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -47,6 +48,49 @@ func TestAutoprogrammingPromotionConfigFromEnvV0OptInYRefsOpacasV0(t *testing.T)
 		len(port.Guardian.SkipHealthEvidenceRefs) != 1 ||
 		port.Guardian.Runner == nil {
 		t.Fatalf("guardian=%+v ok=%v", port.Guardian, ok)
+	}
+}
+
+func TestAutoprogrammingPromotionConfigFromEnvV0ConfigFileCanonicoV0(t *testing.T) {
+	root := t.TempDir()
+	projectDir := filepath.Join(root, "project")
+	stateDir := filepath.Join(root, "state")
+	archiveDir := filepath.Join(root, "archive")
+	if err := os.MkdirAll(projectDir, 0o700); err != nil {
+		t.Fatalf("mkdir project: %v", err)
+	}
+	configPath := filepath.Join(projectDir, serverProjectConfigFileNameV0)
+	configFile := `{
+		"schema_version":"orquesta_config.v0",
+		"autoprogramming":{"promotion":{
+			"enabled":true,
+			"archive_dir":"` + archiveDir + `",
+			"repo_ref":"repo-ref-config",
+			"app_ref":"app-ref-config",
+			"commit_message":"chore: promote from config"
+		}}
+	}`
+	if err := os.WriteFile(configPath, []byte(configFile), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	config := orquestaserver.ConfigV0{
+		ProjectWorkDir:        projectDir,
+		StateDir:              stateDir,
+		ProjectConfigFilePath: configPath,
+	}
+	promotion := autoprogrammingPromotionConfigFromEnvV0(config)
+	port, ok := promotion.Port.(serverAutoprogrammingPromotionPortV0)
+	if !promotion.Enabled || !ok ||
+		port.ArchiveDir != archiveDir ||
+		promotion.RepoRef != "repo-ref-config" ||
+		promotion.AppRef != "app-ref-config" ||
+		promotion.CommitMessage != "chore: promote from config" {
+		t.Fatalf("promotion=%+v port=%+v ok=%v", promotion, port, ok)
+	}
+
+	t.Setenv(envServerAutoprogrammingPromotionEnabledV0, "false")
+	if promotion := autoprogrammingPromotionConfigFromEnvV0(config); promotion.Enabled || promotion.Port != nil {
+		t.Fatalf("promotion enabled despite env override: %+v", promotion)
 	}
 }
 

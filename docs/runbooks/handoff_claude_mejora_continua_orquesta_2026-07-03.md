@@ -2912,6 +2912,26 @@ scripts/orquesta_auditoria_codigo.sh --root "$PWD" --no-sqlite
 
 Resultado: verde. No se arranco servidor, app, agente ni proveedor.
 
+## Actualizacion Codex 2026-07-10: promocion de autoprogramacion tipada
+
+Se consolido la parte no ejecutora de promotion en
+`autoprogramming.promotion`: opt-in, archivo, refs opacas y mensaje de
+commit. El entorno continua teniendo precedencia por compatibilidad. El guard
+`self_programming_only` reutiliza la ruta resuelta en lugar de leer una
+segunda configuracion distinta.
+
+El guardian de reparacion no se modifica en este corte: ejecuta comandos y
+tiene mas de veinte inputs; requiere su propia revision y tests de seguridad.
+
+Pruebas locales:
+
+```bash
+go test -count=1 ./cmd/orquesta-server \
+  -run 'TestAutoprogrammingPromotionConfigFromEnvV0|TestSelfProgrammingOnlyConfigV0|TestServerEnvRegistryASTV0LecturasORQUESTARegistradas|TestConfig'
+```
+
+Resultado: verde; ratchet AST 42 -> 36. No se ejecuto promotion ni guardian.
+
 Checkpoint de limpieza no destructiva sincronizado: `4820516ec`
 (`chore: indexa funciones para limpieza segura`). El auditor genera un indice
 lexico de 25.199 funciones y una SQLite derivada; sirve para priorizar

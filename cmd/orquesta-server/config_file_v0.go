@@ -241,10 +241,19 @@ type serverProjectConfigEgressSanitizerSidecarV0 struct {
 }
 
 type serverProjectConfigAutoprogrammingV0 struct {
-	CheckpointOnlyHighConsumptionTokens *int    `json:"checkpoint_only_high_consumption_tokens,omitempty"`
-	CheckpointOnlyMaxWaitSeconds        *int    `json:"checkpoint_only_max_wait_seconds,omitempty"`
-	NoCheckpointWarningMaxWaitSeconds   *int    `json:"no_checkpoint_warning_max_wait_seconds,omitempty"`
-	RequiredTestAttestationConfigFile   *string `json:"required_test_attestation_config_file,omitempty"`
+	CheckpointOnlyHighConsumptionTokens *int                                          `json:"checkpoint_only_high_consumption_tokens,omitempty"`
+	CheckpointOnlyMaxWaitSeconds        *int                                          `json:"checkpoint_only_max_wait_seconds,omitempty"`
+	NoCheckpointWarningMaxWaitSeconds   *int                                          `json:"no_checkpoint_warning_max_wait_seconds,omitempty"`
+	RequiredTestAttestationConfigFile   *string                                       `json:"required_test_attestation_config_file,omitempty"`
+	Promotion                           serverProjectConfigAutoprogrammingPromotionV0 `json:"promotion,omitempty"`
+}
+
+type serverProjectConfigAutoprogrammingPromotionV0 struct {
+	Enabled       *bool   `json:"enabled,omitempty"`
+	ArchiveDir    *string `json:"archive_dir,omitempty"`
+	RepoRef       *string `json:"repo_ref,omitempty"`
+	AppRef        *string `json:"app_ref,omitempty"`
+	CommitMessage *string `json:"commit_message,omitempty"`
 }
 
 func serverProjectConfigFilePathV0(projectDir string) string {

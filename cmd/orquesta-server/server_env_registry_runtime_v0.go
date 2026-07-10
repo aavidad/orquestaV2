@@ -154,6 +154,26 @@ func init() {
 			Scope: "required_test_runner", Label: "Maximo de artefactos",
 			Description: "Limite de artefactos que el runner retiene por ejecucion.",
 		},
+		envServerAutoprogrammingPromotionEnabledV0: {
+			Scope: "autoprogramming_promotion", Label: "Promocion automatica",
+			Description: "Opt-in de promocion gobernada de staging de autoprogramacion.",
+		},
+		envServerAutoprogrammingPromotionArchiveDirV0: {
+			Scope: "autoprogramming_promotion", Label: "Archivo de promocion",
+			Description: "Directorio aislado donde se archiva staging promocionado.",
+		},
+		envServerAutoprogrammingPromotionRepoRefV0: {
+			Scope: "autoprogramming_promotion", Label: "Repositorio de promocion",
+			Description: "Ref opaca del repositorio de destino de la promocion.",
+		},
+		envServerAutoprogrammingPromotionAppRefV0: {
+			Scope: "autoprogramming_promotion", Label: "Aplicacion de promocion",
+			Description: "Ref opaca de la aplicacion asociada al staging.",
+		},
+		envServerAutoprogrammingPromotionCommitMessageV0: {
+			Scope: "autoprogramming_promotion", Label: "Mensaje de promocion",
+			Description: "Mensaje de commit usado por la promocion gobernada.",
+		},
 	} {
 		serverEffectiveEnvRegistryV0[key] = metadata
 	}

@@ -82,16 +82,13 @@ func validateServerSelfProgrammingOnlyConfigV0(config orquestaserver.ConfigV0) e
 			return fmt.Errorf("orquesta_server: self_programming_only_env_must_be_false:%s", key)
 		}
 	}
-	if boolEnvOrDefaultV0(envServerAutoprogrammingPromotionEnabledV0, false) {
-		archiveDir := strings.TrimSpace(os.Getenv(envServerAutoprogrammingPromotionArchiveDirV0))
-		if archiveDir != "" {
-			inside, err := ensureSelfProgrammingArchiveDirInsideRootV0(archiveDir, root)
-			if err != nil {
-				return err
-			}
-			if !inside {
-				return fmt.Errorf("orquesta_server: self_programming_only_promotion_archive_dir_outside_root")
-			}
+	if archiveDir := autoprogrammingPromotionArchiveDirFromProjectConfigV0(config); archiveDir != "" {
+		inside, err := ensureSelfProgrammingArchiveDirInsideRootV0(archiveDir, root)
+		if err != nil {
+			return err
+		}
+		if !inside {
+			return fmt.Errorf("orquesta_server: self_programming_only_promotion_archive_dir_outside_root")
 		}
 	}
 	projectConfig := opesProjectConfigFromEnvBestEffortV0()
