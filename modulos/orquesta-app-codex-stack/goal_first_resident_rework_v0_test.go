@@ -60,6 +60,60 @@ func TestRunSupervisorGoalFirstResidentPreparaReworkPorCheckpointHighConsumption
 	}
 }
 
+func TestRunSupervisorGoalFirstResidentPreparaReworkPorCheckpointStartedTerminalV0(t *testing.T) {
+	ctx := context.Background()
+	store := newGoalFirstQueueStateStoreForTestV0()
+	launcher := &goalFirstResidentReworkLauncherForTestV0{}
+	source := goalFirstResidentReworkSourceStateForTestV0(
+		"run-ref-goal-first-resident-checkpoint-started-001",
+		goalFirstResidentReworkReasonCheckpointStartedV0,
+	)
+	source.LastResult.Checklist.MissingRefs = []string{"implementation", "required_tests"}
+	source.LastResult.EvidenceRefs = []string{"evidence-ref-checkpoint-started"}
+	if err := store.SaveGoalWorkStateV0(ctx, source); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0 source: %v", err)
+	}
+	executor := CodexStackRunSupervisorExecutorV0{Stack: &StackV0{
+		Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
+			GoalStateStore:     store,
+			GoalReworkLauncher: launcher,
+		},
+		Stores: StoresV0{AppGoalStateStore: store},
+	}}
+
+	result, err := executor.Execute(ctx, orquestamcp.MCPRunSupervisorToolInputV0{
+		RunRef:       source.RunRef,
+		ResidentMode: true,
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.StopReason != "goal_first_resident_rework_prepared" ||
+		len(result.RepairRunRefs) != 1 ||
+		launcher.calls != 1 ||
+		!hasGoalFirstResidentReworkContextForTestV0(
+			launcher.specs[0].ContextRefs,
+			"rework_reason",
+			goalFirstResidentReworkReasonCheckpointStartedV0,
+		) ||
+		!launcher.specs[0].ReworkPolicy.PreserveArtifacts {
+		t.Fatalf("autorework checkpoint_started no preparado: result=%+v calls=%d spec=%+v", result, launcher.calls, launcher.specs)
+	}
+}
+
+func TestGoalFirstResidentCheckpointStartedNoSeInfiereDelSummaryV0(t *testing.T) {
+	state := goalFirstResidentReworkSourceStateForTestV0(
+		"run-ref-goal-first-resident-summary-only-001",
+		"unrelated_terminal_issue",
+	)
+	state.LastResult.EvidenceRefs = nil
+	state.LastResult.Summary = "checkpoint_started es solo texto informativo"
+
+	if reason, _, ok := goalFirstResidentReworkReasonV0(state); ok {
+		t.Fatalf("checkpoint_started inferido del summary: reason=%q state=%+v", reason, state)
+	}
+}
+
 func TestRunSupervisorGoalFirstResidentReworkEsIdempotenteV0(t *testing.T) {
 	ctx := context.Background()
 	store := newGoalFirstQueueStateStoreForTestV0()

@@ -12,6 +12,7 @@ import (
 const (
 	goalFirstResidentReworkPreparedEvidenceRefV0      = "evidence-ref-goal-first-resident-rework-prepared"
 	goalFirstResidentReworkExistingEvidencePrefixV0   = "evidence-ref-goal-first-resident-rework-goal:"
+	goalFirstResidentReworkReasonCheckpointStartedV0  = "checkpoint_started"
 	goalFirstResidentReworkReasonCheckpointOnlyV0     = "checkpoint_only_high_consumption"
 	goalFirstResidentReworkReasonNoCheckpointV0       = "goal_active_no_checkpoint_high_consumption"
 	goalFirstResidentReworkReasonActiveTimeoutV0      = "codex_app_server_goal_active_timeout"
@@ -100,6 +101,9 @@ func goalFirstResidentReworkReasonV0(state orquestagoal.GoalWorkStateV0) (string
 	if !goalFirstResidentStateNeedsReworkV0(state) {
 		return "", nil, false
 	}
+	if goalFirstResidentHasStructuredIssueOrEvidenceV0(state, goalFirstResidentReworkReasonCheckpointStartedV0) {
+		return goalFirstResidentReworkReasonCheckpointStartedV0, goalFirstResidentReworkEvidenceRefsV0(state), true
+	}
 	if goalFirstResidentHasIssueOrEvidenceV0(state, goalFirstResidentReworkReasonCheckpointOnlyV0) {
 		return goalFirstResidentReworkReasonCheckpointOnlyV0, goalFirstResidentReworkEvidenceRefsV0(state), true
 	}
@@ -148,6 +152,13 @@ func goalFirstResidentStateNeedsReworkV0(state orquestagoal.GoalWorkStateV0) boo
 }
 
 func goalFirstResidentHasIssueOrEvidenceV0(state orquestagoal.GoalWorkStateV0, code string) bool {
+	if goalFirstResidentHasStructuredIssueOrEvidenceV0(state, code) {
+		return true
+	}
+	return state.LastResult != nil && strings.Contains(strings.TrimSpace(state.LastResult.Summary), strings.TrimSpace(code))
+}
+
+func goalFirstResidentHasStructuredIssueOrEvidenceV0(state orquestagoal.GoalWorkStateV0, code string) bool {
 	code = strings.TrimSpace(code)
 	if code == "" {
 		return false
@@ -162,9 +173,6 @@ func goalFirstResidentHasIssueOrEvidenceV0(state orquestagoal.GoalWorkStateV0, c
 			strings.Contains(strings.TrimSpace(ref), strings.ReplaceAll(code, "_", "-")) {
 			return true
 		}
-	}
-	if state.LastResult != nil && strings.Contains(strings.TrimSpace(state.LastResult.Summary), code) {
-		return true
 	}
 	return false
 }

@@ -75,6 +75,9 @@ func (validator domainWorkGoalReceiptClosureValidatorV0) ValidateGoalWorkClosure
 		return closure, err
 	}
 	if !closure.Accepted {
+		if issue := goalDomainReceiptRequiredTestEvidenceIssueV0(spec, result); issue.Code != "" {
+			return goalDomainReceiptBlockedClosureV0(closure, issue), nil
+		}
 		if goalDomainReceiptClosureOnlyBlockedByArtifactPathsV0(closure) {
 			receiptEvidence, receiptIssue := validator.validateAcceptedDomainReceiptsV0(ctx, spec, result)
 			if receiptIssue.Code != "" {

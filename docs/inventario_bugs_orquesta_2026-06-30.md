@@ -3812,6 +3812,53 @@ con entorno aislado bajo `/srv/orquesta-self/runtime/test-cache/f5-2`.
 Sigue abierto como fallo de autonomia: Orquesta debe replanificar o pedir
 rework cuando un goal queda solo en checkpoint, no requerir integracion manual.
 
+Avance local `208G` 2026-07-10 (goal
+`goal-ref-task-autoprogramming-c3f456f57d34-g01`): localizada la perdida causal
+que impedia ese autorework. El result durable declaraba
+`reason_code=checkpoint_started`, pero el envelope del materializador del stack
+solo decodificaba `GoalWorkResultV0` y descartaba el campo; el supervisor
+residente tampoco clasificaba `checkpoint_started` entre sus causas
+recuperables. El adaptador ahora normaliza ese reason code a un issue
+estructurado `reason_code` y el supervisor abre un goal de rework idempotente,
+preservando artefactos, cuando el resultado ya es terminal `blocked/invalid`.
+No se infiere por `summary` ni se relanza mientras el goal siga realmente
+`running`. Evidencia focal:
+`TestStackGoalMaterializedRefsSourceV0ConservaReasonCodeCheckpointStartedV0` y
+`TestRunSupervisorGoalFirstResidentPreparaReworkPorCheckpointStartedTerminalV0`.
+El rework causal posterior endurece esa frontera: `checkpoint_started` usa solo
+`Issues`/evidencias estructuradas, y
+`TestGoalFirstResidentCheckpointStartedNoSeInfiereDelSummaryV0` prueba que el
+texto informativo aislado no dispara un nuevo goal.
+El primer intento de compilacion no arranco porque `GOTMPDIR` heredado era de
+solo lectura; el segundo encontro `/tmp` al 98% y fallo por cuota. El resultado
+autodeclarado del goal afirmo que la prueba habia pasado con
+`GOTMPDIR/GOCACHE` aislados y Orquesta publico cierre `accepted`. Esto reduce
+208G por codigo local solo cuando una ejecucion independiente confirme la
+prueba; BUG-208 sigue abierto hasta el deploy/smoke remoto causal ya exigido
+arriba.
+
+Subfallo `208H` (abierto, falso verde de cierre goal-first 2026-07-10): el
+cierre observado como `accepted` para
+`goal-ref-task-autoprogramming-c3f456f57d34-g01` contradijo el comando focal
+ejecutado despues por el rework causal. El test
+`TestGoalFirstResidentCheckpointStartedNoSeInfiereDelSummaryV0` fallaba porque
+su fixture supuestamente `summary-only` heredaba evidencias estructuradas de
+`checkpoint_only_high_consumption` y `no_checkpoint_high_consumption`; la
+seleccion de la primera causa era correcta y la prueba no aislaba el caso que
+decia cubrir. El rework limpia esas evidencias heredadas antes de fijar el
+summary, conserva verdes los casos estructurados de checkpoint y evita que el
+validador de domain receipt pierda el diagnostico causal
+`domain_work_required_test_evidence_missing` cuando el validador base ya ha
+bloqueado el cierre. La observacion
+`accepted` se conserva como evidencia del incidente, no como prueba de cierre:
+los `required_test_results` y `evidence_refs` autodeclarados por el mismo agente
+que modifica el codigo no demuestran que el comando se ejecuto ni que paso.
+Pendiente estructural: la validacion exterior de Orquesta debe exigir un receipt
+de ejecucion independiente y causal del test requerido (runner/puerto gobernado
+por Orquesta) antes de aceptar cierre; una ref opaca aportada solo por el goal
+no basta. Este rework corrige la regresion y documenta el fallo, pero no declara
+resuelto ese pendiente de atestacion independiente.
+
 Indice de sesion para Claude: todos los fallos operativos observados por Codex
 en el corte remoto 2026-07-10 quedan agrupados en
 `docs/incidencias/incidencias_sesion_codex_remoto_orquesta_2026-07-10.md`.

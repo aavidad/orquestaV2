@@ -721,6 +721,52 @@ func TestStackGoalMaterializedRefsSourceV0EncuentraReceiptTerminalTrasCacheVolum
 	}
 }
 
+func TestStackGoalMaterializedRefsSourceV0ConservaReasonCodeCheckpointStartedV0(t *testing.T) {
+	projectDir := t.TempDir()
+	docsDir := filepath.Join(projectDir, "docs", "runbooks", "docs")
+	if err := os.MkdirAll(docsDir, 0o700); err != nil {
+		t.Fatalf("mkdir docs: %v", err)
+	}
+	state := goalMaterializedRefsStateForTestV0(
+		t,
+		"run-goal-materialized-checkpoint-started-001",
+		"docs/runbooks",
+	)
+	receipt := `{
+  "schema_version":"orquesta_goal_result.v0",
+  "goal_ref":"` + state.GoalRef + `",
+  "status":"blocked",
+  "reason_code":"checkpoint_started",
+  "summary":"checkpoint temprano; faltan implementacion y pruebas",
+  "missing_refs":["implementation","required_tests"],
+  "evidence_refs":["evidence-ref-checkpoint-started"]
+}`
+	if err := os.WriteFile(filepath.Join(docsDir, goalMaterializedGoalResultFileV0), []byte(receipt), 0o600); err != nil {
+		t.Fatalf("write receipt: %v", err)
+	}
+
+	result, ok, err := (stackGoalMaterializedRefsSourceV0{
+		Config: ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir}},
+	}).LoadTerminalGoalMaterializedResultV0(context.Background(), state)
+	if err != nil {
+		t.Fatalf("LoadTerminalGoalMaterializedResultV0: %v", err)
+	}
+	if !ok || result.Status != orquestagoal.GoalStatusBlockedV0 ||
+		!containsStringV0(result.Checklist.MissingRefs, "implementation") ||
+		!goalFirstResultHasIssueCodeForTestV0(result, goalFirstResidentReworkReasonCheckpointStartedV0) {
+		t.Fatalf("reason_code causal perdido: ok=%v result=%+v", ok, result)
+	}
+}
+
+func goalFirstResultHasIssueCodeForTestV0(result orquestagoal.GoalWorkResultV0, code string) bool {
+	for _, issue := range result.Issues {
+		if issue.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
 func TestStackGoalMaterializedRefsSourceV0IgnoraReceiptTerminalDeOtroGoalV0(t *testing.T) {
 	projectDir := t.TempDir()
 	appDir := filepath.Join(projectDir, "generated-apps", "stale-receipt")

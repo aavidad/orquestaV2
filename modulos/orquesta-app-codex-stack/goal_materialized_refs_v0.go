@@ -616,6 +616,7 @@ func goalMaterializedReadValidTerminalGoalResultForStateV0(
 
 type goalMaterializedGoalWorkResultEnvelopeV0 struct {
 	orquestagoal.GoalWorkResultV0
+	ReasonCode  string   `json:"reason_code,omitempty"`
 	MissingRefs []string `json:"missing_refs,omitempty"`
 }
 
@@ -626,6 +627,12 @@ func goalMaterializedDecodeGoalWorkResultV0(raw []byte) (orquestagoal.GoalWorkRe
 	}
 	result := envelope.GoalWorkResultV0
 	result.Checklist.MissingRefs = compactStringsV0(append(result.Checklist.MissingRefs, envelope.MissingRefs...))
+	if reasonCode := strings.TrimSpace(envelope.ReasonCode); reasonCode != "" {
+		result.Issues = append(result.Issues, orquestagoal.GoalWorkIssueV0{
+			Code:  reasonCode,
+			Field: "reason_code",
+		})
+	}
 	return orquestagoal.NormalizeGoalWorkResultV0(result), nil
 }
 
