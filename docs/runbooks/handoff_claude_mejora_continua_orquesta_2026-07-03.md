@@ -3021,3 +3021,12 @@ SDK. Se verificaron sus cuatro modulos, el SDK y la frontera neutral raiz.
 No hay parser real, OCR, filesystem, driver SQL, DSN, red, LibreOffice ni
 composicion productiva en estos modulos. Esos adaptadores quedan como siguiente
 fase opt-in, no como dependencia del nucleo.
+
+## Actualizacion Codex 2026-07-11: MCP stdio local
+
+El endpoint HTTP `/mcp` ya existia; se completo el hueco de transporte por
+stdio con `orquesta-server mcp-stdio`. Lee una request JSON-RPC por linea,
+reutiliza el dispatcher existente, reserva stdout para respuestas y stderr para
+diagnostico, y no inicia listener HTTP. Los focales cubren handshake, listas,
+lectura de recurso, notificacion y JSON invalido/trailing. El falso verde del
+primer fixture de recurso queda registrado y cerrado como 208V.

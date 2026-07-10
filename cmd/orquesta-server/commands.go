@@ -46,6 +46,8 @@ func runMain(args []string, stdout io.Writer, stderr io.Writer) int {
 		return opesTemarioCycleCommandV0(stdout, stderr)
 	case "mcp-real-smoke":
 		return mcpRealSmokeCommandV0(stdout, stderr)
+	case "mcp-stdio":
+		return mcpStdioCommandV0(commandArgs, os.Stdin, stdout, stderr)
 	case "codex-launch-wave":
 		return codexLaunchWaveCommandV0(commandArgs, stdout, stderr)
 	case "codex-launch-director-wave":

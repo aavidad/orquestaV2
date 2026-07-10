@@ -74,6 +74,13 @@ mismo commit.
   canonico > legacy > fichero > default. Cierre: focales T90, registry,
   guardian, effective config y MCP verdes; sin servidor, guardian, agente ni
   proveedor real.
+- BUG-ORQ-20260711-208V: cerrado localmente. El primer test de `mcp-stdio`
+  pidió `resources/read` con el nombre de una tool (`orquesta.status.v0`) en
+  vez del URI canónico del recurso; el transporte devolvió correctamente
+  `mcp_resource_not_found`, aunque el worker lo había declarado verde. El
+  fixture usa ahora `MCPOperatorOperationsResourceURIV0`; focales de stdio,
+  JSON-RPC HTTP y montaje MCP verdes. No hubo servidor, proveedor ni efecto
+  externo.
 - D3 configuracion/envs 20260710: cerrado localmente. La metrica separa
   produccion `425/425` y fixtures exclusivos `103/103`, con dos pases verdes.
 - D3 local 2026-07-10: detenido tras el primer lote determinista para no

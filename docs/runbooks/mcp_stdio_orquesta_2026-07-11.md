@@ -1,0 +1,28 @@
+# MCP stdio de Orquesta
+
+`orquesta-server mcp-stdio` expone el mismo dispatcher MCP JSON-RPC que el
+endpoint HTTP `/mcp`, pero por entrada y salida estandar. Es una composicion
+local: no inicia listener HTTP ni cambia el nucleo.
+
+Cada linea de entrada debe contener un unico objeto JSON-RPC. Cada request con
+ID recibe una unica respuesta JSON en stdout; las notificaciones admitidas, como
+`notifications/initialized`, no escriben respuesta. Diagnosticos y rechazos se
+escriben en stderr, por lo que stdout queda reservado para el protocolo.
+
+Ejemplo local:
+
+```bash
+printf '%s\n' \
+  '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26"}}' \
+  | go run ./cmd/orquesta-server mcp-stdio
+```
+
+El comando acepta las mismas opciones de configuracion que el servidor. No se
+debe usar con datos sensibles sin una composicion de credenciales y politica
+explicitas. Para transporte residente se mantiene `POST /mcp`.
+
+Prueba focal:
+
+```bash
+go test -count=1 ./cmd/orquesta-server -run 'TestMCPStdioV0'
+```
