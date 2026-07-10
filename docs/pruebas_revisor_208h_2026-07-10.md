@@ -53,3 +53,35 @@ ORQUESTA_TEST_BATCH_ROOT=/tmp/orquesta-test-batches-208h \
 
 El script exige dos pases y escribe un receipt JSON. Un resultado sin ese
 receipt, o con cualquier lote fallido, no acredita 208H.
+
+## Revision ejecutada por el revisor externo (Claude) - 2026-07-10 tarde
+
+Rama revisada: `trabajo/plataforma-agentes` con la integracion ya fusionada
+(merge `7444dcf8a`). Ejecucion real, no autodeclarada; los conteos de tests
+se verificaron con `-v | grep -c "^=== RUN"` para descartar verdes vacios.
+
+Focales declarados (todos `ok`):
+
+- `./modulos/orquesta-goal -run 'TestGoalRequiredTestAttestationV0'`: ok, 8 tests.
+- `./modulos/orquesta-runtime-required-test -run 'TestLocalGoalRequiredTestAttestationAdapterV0'`: ok, 3 tests.
+- `./modulos/orquesta-state-file -run 'TestStoreV0GoalRequiredTest(...)|TestStoreV0GoalStateCAS'`: ok, 8 tests.
+- `./modulos/orquesta-app-codex-stack -run 'TestValidateConfigV0RejectsPartial...|TestLocalGoalRequiredTestAttestorV0...'`: ok, 2 tests.
+- `./modulos/orquesta-app-director-service -run 'TestObserveAppDirectorGoalV0BloqueaRunSiFaltanRequiredTestsV0'`: ok, 1 test.
+- `./modulos/orquesta-autoprogramming -run 'TestFrozenRequiredTest|TestGoalHasFrozenRequiredTestsPhase'`: ok, 3 tests.
+- `./cmd/orquesta-server -run 'TestGoalRequiredTestAttestationConfigV0|TestBuildStackFromEnvV0Wires...'`: ok, 4 tests.
+
+Ademas, suites COMPLETAS en verde de los modulos tocados:
+orquesta-goal, orquesta-state-file, orquesta-runtime-required-test,
+orquesta-app-director-service, orquesta-autoprogramming,
+orquesta-app-codex-stack y orquesta-mcp (`go test -count=1`, `ok` real).
+
+Verificacion amplia por lotes: NO acreditada aun. Bloqueada por el ratchet
+de envs (`TestEnvVarsOrquestaRatchetMEJ106V0`: 536 variables `ORQUESTA_*`
+frente al maximo 511) que afecta a `cmd/orquesta-server` dentro del listado;
+mismo bloqueador que D3. Se acreditara al aterrizar la consolidacion de envs
+del WIP de routing, sin subir el ratchet.
+
+Veredicto del revisor: focales y suites de modulo ACREDITADOS; el cierre de
+`BUG-ORQ-20260710-208H` sigue pendiente de (a) lotes dos pases verdes tras
+la consolidacion de envs y (b) prueba del atestador real integrado en un
+run con servidor configurado (rutas de fallo incluidas).
