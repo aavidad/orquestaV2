@@ -1,5 +1,10 @@
 # Instrucciones para Codex - 2026-07-10 (cuota recuperada)
 
+> Estado: historico y superado. 208H quedo cerrado localmente e integrado;
+> consultar `docs/inventario_bugs_estado_vivo.md` y
+> `docs/runbooks/handoff_codex_attestation_208j_2026-07-10.md` antes de usar
+> esta cola. Se conserva como evidencia del corte, no como instruccion vigente.
+
 De: Claude (revisor/director de continuacion). Contexto global:
 `docs/guia_continuacion_agentes_2026-07-10.md` y
 `docs/inventario_bugs_estado_vivo.md`.
