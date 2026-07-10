@@ -26,6 +26,11 @@ Las olas `wave-data-ingestion-tool-architecture-20260710` y
 presupuesto de diagnostico. Deben relanzarse desde supervisor goal-first una
 vez integrado el residual de 208S, con write-sets nuevos y disjuntos.
 
+Las capabilities son externas al nucleo hexagonal: `core`, `goal` y
+`orchestration-core` no pueden depender de ingesta, extraccion documental ni
+del SDK de tools. La composicion de una app resuelve esos bundles por puertos,
+autoridades y snapshots; los adaptadores reales se montan fuera de esos modulos.
+
 ## Corte local posterior
 
 `modulos/orquesta-data-ingestion` ya aporta source/profiler/mapper/validator/

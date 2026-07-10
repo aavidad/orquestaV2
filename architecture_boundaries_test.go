@@ -208,6 +208,21 @@ func TestNeutralOrchestrationPackagesDoNotImportProductAdapters(t *testing.T) {
 			},
 		},
 		{
+			pkg: "orquesta/modulos/orquesta-data-ingestion",
+			forbidden: []string{
+				"database/sql",
+				"orquesta/cmd",
+				"orquesta/db",
+				"orquesta/modulos/orquesta-mcp",
+				"orquesta/modulos/orquesta-runtime",
+				"orquesta/modulos/orquesta-state-file",
+				"orquesta/modulos/orquesta-web",
+				"net/http",
+				"os",
+				"os/exec",
+			},
+		},
+		{
 			pkg: "orquesta/modulos/orquesta-domain-work-memory",
 			forbidden: []string{
 				"database/sql",
@@ -286,8 +301,11 @@ func TestNeutralOrchestrationPackagesDoNotDependOnProductAdapters(t *testing.T) 
 		deps := packageDepsForBoundaryTest(t, pkg)
 		for _, forbidden := range []string{
 			"orquesta/modulos/orquesta-app-codex-stack",
+			"orquesta/modulos/orquesta-data-ingestion",
+			"orquesta/modulos/orquesta-document-extraction",
 			"orquesta/modulos/orquesta-opes-",
 			"orquesta/modulos/orquesta-runtime-codex",
+			"orquesta/modulos/orquesta-tool-capability",
 		} {
 			for _, dep := range deps {
 				if strings.Contains(dep, forbidden) {
