@@ -217,6 +217,20 @@ func buildStackFromEnvWithGoalBackendV0(
 		return orquestaappcodexstack.StackV0{}, err
 	}
 	projectConfig := projectConfigFromServerConfigBestEffortV0(serverConfig)
+	goalRequiredTestAttestation, err := goalRequiredTestAttestationAdapterFromConfigV0(serverConfig, projectConfig)
+	if err != nil {
+		return orquestaappcodexstack.StackV0{}, err
+	}
+	var goalRequiredTestSpecBinder orquestagoal.GoalRequiredTestSpecBinderPortV0
+	var goalRequiredTestSnapshotObserver orquestagoal.GoalRequiredTestFinalSnapshotObserverPortV0
+	var goalRequiredTestAttestor orquestagoal.GoalRequiredTestAttestorPortV0
+	var goalRequiredTestIdentityVerifier orquestagoal.GoalRequiredTestIdentityVerifierPortV0
+	if goalRequiredTestAttestation != nil {
+		goalRequiredTestSpecBinder = goalRequiredTestAttestation
+		goalRequiredTestSnapshotObserver = goalRequiredTestAttestation
+		goalRequiredTestAttestor = goalRequiredTestAttestation
+		goalRequiredTestIdentityVerifier = goalRequiredTestAttestation
+	}
 	egressSanitizer, err := egressSanitizerConfigWithSidecarPortFromProjectConfigFileV0(
 		projectConfig,
 	)
@@ -264,21 +278,22 @@ func buildStackFromEnvWithGoalBackendV0(
 		Timeout:        30 * time.Second,
 		DirectorLimits: directorLimitsV0(),
 		Stores: orquestaappcodexstack.StoresV0{
-			RunStore:                   runStore,
-			EventSink:                  stateStore,
-			OutboxLedger:               outboxLedgerPort,
-			TaskStore:                  stateStore,
-			WaitStateStore:             stateStore,
-			OperationalPlanStateWriter: stateStore,
-			OperationalPlanStateStore:  stateStore,
-			RequiredTestEvidenceStore:  stateStore,
-			AppChangeStore:             appChangeStore,
-			ReceiptStore:               receiptStorePort,
-			ProgressState:              progressStore,
-			ProcessRegistry:            stateStore,
-			RunControl:                 runControl,
-			RunQueue:                   runQueue,
-			AppGoalStateStore:          appGoalStateStore,
+			RunStore:                         runStore,
+			EventSink:                        stateStore,
+			OutboxLedger:                     outboxLedgerPort,
+			TaskStore:                        stateStore,
+			WaitStateStore:                   stateStore,
+			OperationalPlanStateWriter:       stateStore,
+			OperationalPlanStateStore:        stateStore,
+			RequiredTestEvidenceStore:        stateStore,
+			AppChangeStore:                   appChangeStore,
+			ReceiptStore:                     receiptStorePort,
+			ProgressState:                    progressStore,
+			ProcessRegistry:                  stateStore,
+			RunControl:                       runControl,
+			RunQueue:                         runQueue,
+			AppGoalStateStore:                appGoalStateStore,
+			GoalRequiredTestAttestationStore: stateStore,
 		},
 		RunQueue: orquestaappcodexstack.RunQueueConfigV0{
 			QueueRef:       "global",
@@ -297,18 +312,22 @@ func buildStackFromEnvWithGoalBackendV0(
 			processRuntime,
 			codexUsageMetricsFromProjectConfigV0(serverConfig.ProjectWorkDir, receiptStorePort),
 		),
-		Gemini:                       geminiRuntimeConfigV0(serverConfig),
-		Claude:                       claudeRuntimeConfigV0(serverConfig),
-		EgressSanitizer:              egressSanitizer,
-		WizardBotAssistant:           serverWizardBotLLMAssistantFromConfigV0(serverConfig.ProjectWorkDir, projectConfig, goalBackend),
-		Capacity:                     codexStackCapacityConfigFromProjectConfigV0(serverConfig.ProjectWorkDir),
-		AutonomousDirectorPolicy:     orquestacionnucleoapp.HeuristicAutonomousDirectorPolicyV0{},
-		AppGoalLauncher:              serverGoalWorkLauncherFromBackendV0(goalBackend),
-		AppGoalReworkLauncher:        serverGoalWorkLauncherFromBackendV0(goalBackend),
-		GoalRequiredTestDependencies: serverGoalRequiredTestDependencyResolverFromConfigV0(serverConfig),
-		AppGoalObserver:              serverGoalWorkObserverFromBackendV0(goalBackend),
-		AppGoalBackendControl:        serverGoalBackendControlFromBackendV0(goalBackend),
-		RuntimeModels:                runtimeModelManagerFromEnvV0(),
+		Gemini:                              geminiRuntimeConfigV0(serverConfig),
+		Claude:                              claudeRuntimeConfigV0(serverConfig),
+		EgressSanitizer:                     egressSanitizer,
+		WizardBotAssistant:                  serverWizardBotLLMAssistantFromConfigV0(serverConfig.ProjectWorkDir, projectConfig, goalBackend),
+		Capacity:                            codexStackCapacityConfigFromProjectConfigV0(serverConfig.ProjectWorkDir),
+		AutonomousDirectorPolicy:            orquestacionnucleoapp.HeuristicAutonomousDirectorPolicyV0{},
+		AppGoalLauncher:                     serverGoalWorkLauncherFromBackendV0(goalBackend),
+		AppGoalReworkLauncher:               serverGoalWorkLauncherFromBackendV0(goalBackend),
+		GoalRequiredTestDependencies:        serverGoalRequiredTestDependencyResolverFromConfigV0(serverConfig),
+		AppGoalObserver:                     serverGoalWorkObserverFromBackendV0(goalBackend),
+		AppGoalRequiredTestSpecBinder:       goalRequiredTestSpecBinder,
+		AppGoalRequiredTestSnapshotObserver: goalRequiredTestSnapshotObserver,
+		AppGoalRequiredTestAttestor:         goalRequiredTestAttestor,
+		AppGoalRequiredTestIdentityVerifier: goalRequiredTestIdentityVerifier,
+		AppGoalBackendControl:               serverGoalBackendControlFromBackendV0(goalBackend),
+		RuntimeModels:                       runtimeModelManagerFromEnvV0(),
 		ReviewGate: orquestaappcodexstack.ReviewGateConfigV0{
 			FileEvidence:            orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},
 			StrictGoLineBudget:      boolEnvOrDefaultV0(envReviewGateStrictGoLineBudgetV0, false),

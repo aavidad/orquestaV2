@@ -42,6 +42,7 @@ func autoprogrammingGoalWorkSpecForGroupV0(
 	index int,
 ) orquestagoal.GoalWorkSpecV0 {
 	task := group.Task
+	writeSet := autoprogrammingGoalWriteSetV0(group.WriteSet)
 	return orquestagoal.NormalizeGoalWorkSpecV0(orquestagoal.GoalWorkSpecV0{
 		GoalRef:            "goal-ref-" + task.TaskID,
 		RequestRef:         work.RequestRef,
@@ -53,7 +54,8 @@ func autoprogrammingGoalWorkSpecForGroupV0(
 		ContextRefs:        autoprogrammingGoalContextRefsV0(work, group),
 		RuleRefs:           autoprogrammingGoalRuleRefsV0(group),
 		SkillRefs:          append([]string(nil), task.SkillRefs...),
-		WriteSet:           autoprogrammingGoalWriteSetV0(group.WriteSet),
+		WriteSet:           writeSet,
+		WriteSetSHA256:     orquestagoal.GoalWriteSetSHA256V0(writeSet),
 		RequiredTests:      autoprogrammingGoalRequiredTestsV0(task.RequiredTests, task.TaskID),
 		AcceptanceCriteria: append([]string(nil), task.AcceptanceCriteria...),
 		EvidenceRefs:       autoprogrammingGoalEvidenceRefsV0(work, task.TaskID, index),
@@ -61,7 +63,8 @@ func autoprogrammingGoalWorkSpecForGroupV0(
 			MaxSubgoals: task.MaxRecursiveAgents,
 		},
 		ClosurePolicy: orquestagoal.GoalClosurePolicyV0{
-			RequireRequiredTests: len(task.RequiredTests) > 0,
+			RequireRequiredTests:                      len(task.RequiredTests) > 0,
+			RequireIndependentRequiredTestAttestation: len(task.RequiredTests) > 0,
 		},
 		ReworkPolicy: orquestagoal.GoalReworkPolicyV0{
 			PreferNewGoal:     true,
@@ -135,10 +138,11 @@ func autoprogrammingGoalRequiredTestsV0(commands []string, taskID string) []orqu
 		if command == "" {
 			continue
 		}
-		out = append(out, orquestagoal.GoalRequiredTestV0{
-			TestRef: "test-ref-" + taskID + "-" + shortAutoprogrammingGoalHashV0(fmt.Sprintf("%02d:%s", index+1, command)),
-			Command: command,
-		})
+		out = append(out, orquestagoal.FreezeGoalRequiredTestV0(orquestagoal.GoalRequiredTestV0{
+			TestRef:    "test-ref-" + taskID + "-" + shortAutoprogrammingGoalHashV0(fmt.Sprintf("%02d:%s", index+1, command)),
+			CommandRef: "command-ref-" + taskID + "-" + shortAutoprogrammingGoalHashV0(command),
+			Command:    command,
+		}))
 	}
 	if out == nil {
 		return []orquestagoal.GoalRequiredTestV0{}

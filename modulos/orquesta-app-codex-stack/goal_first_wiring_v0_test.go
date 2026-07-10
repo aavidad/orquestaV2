@@ -78,15 +78,30 @@ func TestBuildDirectorPortsV0CableaAppGoalLauncher(t *testing.T) {
 func TestBuildDirectorPortsV0CableaAttestorIndependienteOptIn(t *testing.T) {
 	attestor := &codexStackRequiredTestAttestorForTestV0{}
 	store := &codexStackRequiredTestAttestationStoreForTestV0{}
+	verifier := independentIdentityVerifierForStackTestV0{}
+	binder := independentSpecBinderForStackTestV0{}
+	snapshotter := independentSnapshotObserverForStackTestV0{}
 	ports := buildDirectorPortsV0(ConfigV0{
-		AppGoalRequiredTestAttestor: attestor,
-		Stores:                      StoresV0{GoalRequiredTestAttestationStore: store},
+		AppGoalRequiredTestSpecBinder:       binder,
+		AppGoalRequiredTestSnapshotObserver: snapshotter,
+		AppGoalRequiredTestAttestor:         attestor,
+		AppGoalRequiredTestIdentityVerifier: verifier,
+		Stores:                              StoresV0{GoalRequiredTestAttestationStore: store},
 	})
-	if ports.GoalRequiredTestAttestor != attestor || ports.GoalRequiredTestAttestationStore != store {
+	if ports.GoalRequiredTestSpecBinder == nil || ports.GoalRequiredTestSnapshotObserver == nil ||
+		ports.GoalRequiredTestAttestor != attestor || ports.GoalRequiredTestAttestationStore != store ||
+		ports.GoalRequiredTestIdentityVerifier == nil {
 		t.Fatalf("wiring attestation incompleto: %+v", ports)
 	}
 	if _, ok := ports.GoalClosureValidator.(orquestagoal.IndependentGoalRequiredTestAttestationClosureValidatorV0); !ok {
 		t.Fatalf("closure validator no exige reader independiente: %T", ports.GoalClosureValidator)
+	}
+}
+
+func TestValidateConfigV0RejectsPartialRequiredTestAttestationPorts(t *testing.T) {
+	err := validateConfigV0(ConfigV0{AppGoalRequiredTestAttestor: &codexStackRequiredTestAttestorForTestV0{}})
+	if err == nil || !strings.Contains(err.Error(), "goal_required_test_attestation_config_incomplete") {
+		t.Fatalf("err=%v", err)
 	}
 }
 
@@ -347,6 +362,36 @@ func (codexStackRequiredTestAttestationStoreForTestV0) ListGoalRequiredTestAttes
 	orquestagoal.GoalRequiredTestAttestationQueryV0,
 ) ([]orquestagoal.GoalRequiredTestAttestationV0, error) {
 	return nil, nil
+}
+
+func (codexStackRequiredTestAttestationStoreForTestV0) FreezeGoalRequiredTestFinalSnapshotV0(
+	_ context.Context,
+	snapshot orquestagoal.GoalRequiredTestFinalSnapshotV0,
+) (orquestagoal.GoalRequiredTestFinalSnapshotV0, error) {
+	return snapshot, nil
+}
+
+func (codexStackRequiredTestAttestationStoreForTestV0) LoadGoalRequiredTestFinalSnapshotV0(
+	context.Context,
+	string,
+	string,
+) (orquestagoal.GoalRequiredTestFinalSnapshotV0, error) {
+	return orquestagoal.GoalRequiredTestFinalSnapshotV0{}, nil
+}
+
+func (codexStackRequiredTestAttestationStoreForTestV0) AcquireGoalRequiredTestAttestationClaimV0(
+	context.Context,
+	orquestagoal.GoalRequiredTestAttestationClaimRequestV0,
+) (orquestagoal.GoalRequiredTestAttestationClaimResultV0, error) {
+	return orquestagoal.GoalRequiredTestAttestationClaimResultV0{}, nil
+}
+
+func (codexStackRequiredTestAttestationStoreForTestV0) CompleteGoalRequiredTestAttestationClaimV0(
+	context.Context,
+	orquestagoal.GoalRequiredTestAttestationClaimV0,
+	orquestagoal.GoalRequiredTestAttestationV0,
+) error {
+	return nil
 }
 
 func (codexStackGoalStateStoreForTestV0) SaveGoalWorkStateV0(

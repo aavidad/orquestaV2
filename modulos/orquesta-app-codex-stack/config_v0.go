@@ -49,7 +49,10 @@ type ConfigV0 struct {
 	AppGoalObserver              orquestagoal.GoalWorkObservationPortV0
 	// AppGoalRequiredTestAttestor is opt-in and must execute outside the
 	// implementer identity. It is intentionally not a Codex/runtime default.
+	AppGoalRequiredTestSpecBinder                  orquestagoal.GoalRequiredTestSpecBinderPortV0
+	AppGoalRequiredTestSnapshotObserver            orquestagoal.GoalRequiredTestFinalSnapshotObserverPortV0
 	AppGoalRequiredTestAttestor                    orquestagoal.GoalRequiredTestAttestorPortV0
+	AppGoalRequiredTestIdentityVerifier            orquestagoal.GoalRequiredTestIdentityVerifierPortV0
 	AppGoalBackendControl                          GoalBackendControlPortV0
 	AppGoalClosureValidator                        orquestagoal.GoalWorkClosureValidatorPortV0
 	DomainTests                                    DomainWorkRequiredTestConfigV0

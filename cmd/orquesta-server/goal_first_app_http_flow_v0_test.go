@@ -337,7 +337,7 @@ func TestRuntimeExternalWorkGoalFirstResidenteCierraSinObserveManualV0(t *testin
 	}
 }
 
-func TestServerAutoprogrammingHTTPGoalFirstPreparaSupervisaObservaYCierraV0(t *testing.T) {
+func TestServerAutoprogrammingHTTPGoalFirstFailClosedSinAttestorV0(t *testing.T) {
 	disableSelfProgrammingOnlyForGoalFirstHTTPTestV0(t)
 	projectDir := t.TempDir()
 	stateDir := t.TempDir()
@@ -405,12 +405,13 @@ func TestServerAutoprogrammingHTTPGoalFirstPreparaSupervisaObservaYCierraV0(t *t
 	}
 
 	observed := postAutoprogrammingGoalFirstObserveForTestV0(t, handler, prepared.RunRef)
-	if observed.Estado != orquestamcp.MCPAutoprogrammingObserveGoalEstadoOKV0 ||
+	if observed.Estado != orquestamcp.MCPAutoprogrammingObserveGoalEstadoErrorV0 ||
 		observed.GoalRef != prepared.Goal.GoalRef ||
 		observed.GoalStatus != orquestagoal.GoalStatusCompleteV0 ||
-		observed.RunStatus != "cerrada" ||
-		observed.ClosureStatus != orquestagoal.GoalStatusAcceptedV0 ||
-		!observed.ClosureAccepted {
+		observed.RunStatus != "activa" ||
+		observed.ClosureStatus != orquestagoal.GoalStatusBlockedV0 ||
+		observed.ClosureAccepted || !observed.ClosureNeedsRework ||
+		!goalFirstHTTPMCPClosureIssuesContainCodeForTestV0(observed.ClosureIssues, orquestagoal.ErrGoalRequiredTestAttestationMissingV0) {
 		t.Fatalf("observed=%+v", observed)
 	}
 }
@@ -940,6 +941,7 @@ func postAutoprogrammingGoalFirstPrepareForTestV0(
 	handler http.Handler,
 ) orquestamcp.MCPAutoprogrammingPrepareRunToolResultV0 {
 	t.Helper()
+	writeSetPath := "cmd/orquesta-server/goal_first_app_http_flow_v0_test.go"
 	payload, err := json.Marshal(orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
 		RequestID:     "request-http-autoprogramming-goal-first-001",
 		CorrelationID: "corr-http-autoprogramming-goal-first-001",
@@ -958,14 +960,14 @@ func postAutoprogrammingGoalFirstPrepareForTestV0(
 				Objective:          "Verificar que prepare-run lanza goal, supervise no usa loop legacy y observe cierra por evidencias.",
 				ContextRefs:        goalFirstHTTPAutoprogrammingCapabilityRefsForTestV0(),
 				AcceptanceCriteria: []string{"prepare-run devuelve goal running", "supervise redirige a observe_goal", "observe cierra aceptado"},
-				WriteSet:           []string{"cmd/orquesta-server/goal_first_app_http_flow_v0_test.go"},
-				RequiredTests:      []string{"go test -count=1 ./cmd/orquesta-server -run TestServerAutoprogrammingHTTPGoalFirstPreparaSupervisaObservaYCierraV0"},
+				WriteSet:           []string{writeSetPath},
+				RequiredTests:      []string{"go test -count=1 ./cmd/orquesta-server -run TestServerAutoprogrammingHTTPGoalFirstFailClosedSinAttestorV0"},
 			}},
 			WriteSet: []string{
-				"cmd/orquesta-server/goal_first_app_http_flow_v0_test.go",
+				writeSetPath,
 			},
 			RequiredTests: []string{
-				"go test -count=1 ./cmd/orquesta-server -run TestServerAutoprogrammingHTTPGoalFirstPreparaSupervisaObservaYCierraV0",
+				"go test -count=1 ./cmd/orquesta-server -run TestServerAutoprogrammingHTTPGoalFirstFailClosedSinAttestorV0",
 			},
 		},
 		MaxBursts:            3,
@@ -994,6 +996,15 @@ func postAutoprogrammingGoalFirstPrepareForTestV0(
 	return result
 }
 
+func goalFirstHTTPMCPClosureIssuesContainCodeForTestV0(issues []orquestamcp.MCPValidationIssueV0, code string) bool {
+	for _, issue := range issues {
+		if issue.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
 func postAutoprogrammingGoalFirstStatusForTestV0(
 	t *testing.T,
 	handler http.Handler,
@@ -1014,7 +1025,7 @@ func postAutoprogrammingGoalFirstStatusForTestV0(
 	req.Header.Set("X-Correlation-ID", "corr-http-autoprogramming-goal-first-001")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
+	if rec.Code != http.StatusOK && rec.Code != http.StatusBadRequest {
 		t.Fatalf("status code=%d body=%s", rec.Code, rec.Body.String())
 	}
 	var result orquestamcp.MCPAutoprogrammingStatusToolResultV0
@@ -1076,7 +1087,7 @@ func postAutoprogrammingGoalFirstObserveForTestV0(
 	req.Header.Set("X-Correlation-ID", "corr-http-autoprogramming-goal-first-001")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
+	if rec.Code != http.StatusOK && rec.Code != http.StatusBadRequest {
 		t.Fatalf("observe autoprogramming status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	var result orquestamcp.MCPAutoprogrammingObserveGoalToolResultV0

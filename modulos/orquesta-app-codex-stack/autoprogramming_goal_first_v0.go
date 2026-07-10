@@ -20,6 +20,22 @@ func autoprogrammingBridgeStartGoalFirstV0(
 	ports orquestaappdirectorservice.StartAppDirectorPortsV0,
 ) (AutoprogrammingBridgeResultV0, error) {
 	specs := autoprogrammingBridgeGoalSpecsForRunsV0(result.Work)
+	for index, spec := range specs {
+		if !spec.ClosurePolicy.RequireIndependentRequiredTestAttestation {
+			continue
+		}
+		if ports.GoalRequiredTestSpecBinder == nil {
+			return AutoprogrammingBridgeResultV0{}, fmt.Errorf("autoprogramming goal required test attestation binder unavailable")
+		}
+		bound, err := ports.GoalRequiredTestSpecBinder.BindGoalRequiredTestSpecV0(ctx, spec)
+		if err != nil {
+			return AutoprogrammingBridgeResultV0{}, err
+		}
+		if issues := orquestagoal.ValidateGoalRequiredTestAttestationBindingV0(bound); len(issues) > 0 {
+			return AutoprogrammingBridgeResultV0{}, fmt.Errorf("autoprogramming goal required test attestation binding invalid")
+		}
+		specs[index] = bound
+	}
 	result.Work.GoalSpecs = specs
 	for _, spec := range specs {
 		var err error

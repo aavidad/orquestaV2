@@ -627,8 +627,11 @@ func buildDirectorPortsV0(
 			config.CodeContext,
 		),
 		GoalObserver:                     goalFirstReconciledObserverFromConfigV0(config),
+		GoalRequiredTestSpecBinder:       config.AppGoalRequiredTestSpecBinder,
+		GoalRequiredTestSnapshotObserver: config.AppGoalRequiredTestSnapshotObserver,
 		GoalRequiredTestAttestor:         config.AppGoalRequiredTestAttestor,
 		GoalRequiredTestAttestationStore: goalRequiredTestAttestationStoreV0(config),
+		GoalRequiredTestIdentityVerifier: config.AppGoalRequiredTestIdentityVerifier,
 		GoalClosureValidator:             appGoalClosureValidatorV0(config),
 		GoalStateStore:                   config.Stores.AppGoalStateStore,
 		GoalFirstRunMarkerStore:          appGoalFirstRunMarkerStoreV0(config),
@@ -702,8 +705,10 @@ func appGoalClosureValidatorV0(
 		ProjectWorkDir: strings.TrimSpace(config.Codex.ProjectWorkDir),
 	}
 	return orquestagoal.IndependentGoalRequiredTestAttestationClosureValidatorV0{
-		Base:   frozen,
-		Reader: goalRequiredTestAttestationStoreV0(config),
+		Base:             frozen,
+		Reader:           goalRequiredTestAttestationStoreV0(config),
+		SnapshotReader:   goalRequiredTestAttestationStoreV0(config),
+		IdentityVerifier: config.AppGoalRequiredTestIdentityVerifier,
 	}
 }
 

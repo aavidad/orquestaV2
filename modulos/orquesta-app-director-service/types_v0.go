@@ -84,8 +84,11 @@ type StartAppDirectorPortsV0 struct {
 	GoalLauncher                     orquestagoal.GoalWorkLauncherPortV0
 	GoalReworkLauncher               orquestagoal.GoalWorkLauncherPortV0
 	GoalObserver                     orquestagoal.GoalWorkObservationPortV0
+	GoalRequiredTestSpecBinder       orquestagoal.GoalRequiredTestSpecBinderPortV0
+	GoalRequiredTestSnapshotObserver orquestagoal.GoalRequiredTestFinalSnapshotObserverPortV0
 	GoalRequiredTestAttestor         orquestagoal.GoalRequiredTestAttestorPortV0
 	GoalRequiredTestAttestationStore orquestagoal.GoalRequiredTestAttestationStorePortV0
+	GoalRequiredTestIdentityVerifier orquestagoal.GoalRequiredTestIdentityVerifierPortV0
 	GoalClosureValidator             orquestagoal.GoalWorkClosureValidatorPortV0
 	GoalStateStore                   orquestagoal.GoalWorkStateStorePortV0
 	GoalFirstRunMarkerStore          AppDirectorGoalFirstRunMarkerStorePortV0

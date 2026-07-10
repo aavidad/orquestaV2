@@ -8,6 +8,20 @@ import (
 )
 
 func validateConfigV0(config ConfigV0) error {
+	attestationPorts := 0
+	for _, configured := range []bool{
+		config.AppGoalRequiredTestSpecBinder != nil,
+		config.AppGoalRequiredTestSnapshotObserver != nil,
+		config.AppGoalRequiredTestAttestor != nil,
+		config.AppGoalRequiredTestIdentityVerifier != nil,
+	} {
+		if configured {
+			attestationPorts++
+		}
+	}
+	if attestationPorts != 0 && attestationPorts != 4 {
+		return fmt.Errorf("orquesta_app_codex_stack: goal_required_test_attestation_config_incomplete")
+	}
 	switch {
 	case !config.Enabled:
 		return fmt.Errorf("orquesta_app_codex_stack: opt_in_requerido")

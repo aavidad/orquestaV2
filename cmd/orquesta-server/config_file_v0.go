@@ -213,9 +213,10 @@ type serverProjectConfigEgressSanitizerSidecarV0 struct {
 }
 
 type serverProjectConfigAutoprogrammingV0 struct {
-	CheckpointOnlyHighConsumptionTokens *int `json:"checkpoint_only_high_consumption_tokens,omitempty"`
-	CheckpointOnlyMaxWaitSeconds        *int `json:"checkpoint_only_max_wait_seconds,omitempty"`
-	NoCheckpointWarningMaxWaitSeconds   *int `json:"no_checkpoint_warning_max_wait_seconds,omitempty"`
+	CheckpointOnlyHighConsumptionTokens *int    `json:"checkpoint_only_high_consumption_tokens,omitempty"`
+	CheckpointOnlyMaxWaitSeconds        *int    `json:"checkpoint_only_max_wait_seconds,omitempty"`
+	NoCheckpointWarningMaxWaitSeconds   *int    `json:"no_checkpoint_warning_max_wait_seconds,omitempty"`
+	RequiredTestAttestationConfigFile   *string `json:"required_test_attestation_config_file,omitempty"`
 }
 
 func serverProjectConfigFilePathV0(projectDir string) string {

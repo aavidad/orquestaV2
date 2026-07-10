@@ -45,8 +45,9 @@ func startAppDirectorGoalFirstV0(
 			EvidenceRefs: compactStartAppDirectorStringsV0(append([]string{"evidence-ref-app-director-goal-state-v0"}, prepared.EvidenceRefs...)),
 		},
 		orquestagoal.GoalWorkLifecyclePortsV0{
-			Launcher:   ports.GoalLauncher,
-			StateStore: ports.GoalStateStore,
+			Launcher:               ports.GoalLauncher,
+			StateStore:             ports.GoalStateStore,
+			RequiredTestSpecBinder: ports.GoalRequiredTestSpecBinder,
 		},
 	)
 	if err != nil {
@@ -151,8 +152,10 @@ func ObserveAppDirectorGoalV0(
 		orquestagoal.GoalWorkObserveRequestV0{RunRef: request.RunRef},
 		orquestagoal.GoalWorkLifecyclePortsV0{
 			Observer:                     ports.GoalObserver,
+			RequiredTestSnapshotObserver: ports.GoalRequiredTestSnapshotObserver,
 			RequiredTestAttestor:         ports.GoalRequiredTestAttestor,
 			RequiredTestAttestationStore: ports.GoalRequiredTestAttestationStore,
+			RequiredTestIdentityVerifier: ports.GoalRequiredTestIdentityVerifier,
 			ClosureValidator:             appDirectorGoalClosureValidatorV0{Base: ports.GoalClosureValidator},
 			StateStore:                   ports.GoalStateStore,
 		},
@@ -391,8 +394,9 @@ func launchAppDirectorGoalReworkIfAllowedV0(
 			EvidenceRefs: appDirectorGoalCommandEvidenceRefsV0(state, result, closure),
 		},
 		orquestagoal.GoalWorkLifecyclePortsV0{
-			Launcher:   ports.GoalReworkLauncher,
-			StateStore: ports.GoalStateStore,
+			Launcher:               ports.GoalReworkLauncher,
+			StateStore:             ports.GoalStateStore,
+			RequiredTestSpecBinder: ports.GoalRequiredTestSpecBinder,
 		},
 	)
 	if err != nil {

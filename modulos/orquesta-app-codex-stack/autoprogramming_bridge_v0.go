@@ -195,6 +195,16 @@ func autoprogrammingBridgeGoalFirstLaunchIssueV0(
 	if !autoprogrammingBridgeGoalFirstBackendAvailableV0(ports) {
 		return orquestaautoprogramming.AutoprogrammingRequestIssueV0{}
 	}
+	for _, spec := range work.GoalSpecs {
+		if spec.ClosurePolicy.RequireIndependentRequiredTestAttestation &&
+			ports.GoalRequiredTestSpecBinder == nil {
+			return orquestaautoprogramming.AutoprogrammingRequestIssueV0{
+				Code:    "autoprogramming_goal_required_test_attestation_unavailable",
+				Field:   "required_test_attestation",
+				Message: "atestacion independiente sin binding confiable configurado",
+			}
+		}
+	}
 	switch len(work.GoalSpecs) {
 	case 0:
 		return orquestaautoprogramming.AutoprogrammingRequestIssueV0{
