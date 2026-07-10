@@ -59,7 +59,10 @@ Objetivo: preparar una clasificacion JSON documentada de los artefactos S13
 versionados para que una ola posterior pueda retener, archivar o borrar solo
 con evidencia, sin eliminar ficheros en este piloto.
 
-Estado: pendiente.
+Estado: hecha fuera del piloto (revisor, 2026-07-10). Artefactos:
+`docs/clasificacion_retencion_s13_2026-07-10.json` (jq empty OK) y
+`docs/clasificacion_retencion_s13_2026-07-10.md`. Sustituida en el piloto
+por T9104.
 
 Alcance:
 
@@ -75,3 +78,29 @@ Tests:
 
 - `git diff --check -- docs`
 - el JSON de clasificacion es parseable por `jq empty`
+
+## T9104 verificar-muestra-clasificacion-s13
+
+Objetivo: verificar una muestra de 10 entradas de
+`docs/clasificacion_retencion_s13_2026-07-10.json` (al menos 3 de cada
+clase): comprobar que el fichero existe, que las referencias listadas son
+reales (grep) y que la clase asignada respeta el criterio documentado en
+`docs/clasificacion_retencion_s13_2026-07-10.md`. Registrar discrepancias.
+
+Estado: pendiente.
+
+Alcance:
+
+- `docs`
+
+Criterios:
+
+- cada entrada de la muestra queda anotada como correcta o discrepante con
+  la evidencia del comando ejecutado
+- no se borra, mueve ni modifica ningun artefacto historico
+- si hay discrepancias, se proponen correcciones sin aplicarlas
+
+Tests:
+
+- `jq empty docs/clasificacion_retencion_s13_2026-07-10.json`
+- `git diff --check -- docs`
