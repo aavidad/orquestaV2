@@ -15,7 +15,6 @@ mismo commit.
 | BUG-ORQ-20260710-208E | tooling drain/harness listo (F3-R2); falta receipt real `clean` de drain + dos pases amplios verdes. El perfil aislado exige `ORQUESTA_TEST_CACHE_ROOT` y `ORQUESTA_TEST_BATCH_ROOT` fuera de `/srv`; una revision local 2026-07-10 confirmo que Go 1.25 deja `GOMODCACHE` readonly y un runner desligado puede dejar helpers Unix bajo esa raiz | operador ejecuta drain + `orquesta_test_batches.sh` con ambas rutas aisladas; consolidar config y restaurar `chmod -R u+w` antes del cleanup, verificando que no quedan helpers por identidad de runtime |
 | F5/identidad runtime | integrado en `2fe12f658` y completado localmente por D1 con `5f30973d7`: identidad de servidor y proyecto externo ya son distintos; closure accepted y shutdown listo | ejecutar drain/deploy gobernados y verificar por API el binario remoto, sin tocar `uso-app` |
 | BUG-ORQ-20260710-208H | integrado en `7444dcf8a`; revisor externo (Claude) reejecuto 2026-07-10 los 7 focales declarados (29 tests, conteo -v verificado) y las suites completas de los modulos tocados: todo verde. Lotes dos pases NO acreditados (bloqueados por ratchet envs 536>511, mismo bloqueador que D3) | probar atestador real integrado y sus rutas de fallo + lotes dos pases tras consolidar envs, antes de cerrar el bug |
-| BUG-ORQ-20260710-208M | `codex-launch-wave` acepta un `--runtime-dir` arbitrario y lanza el agente, pero `codex-wave-status`/`tail` rechazan después ese mismo runtime como `blocked_registry_untrusted` si no cae bajo sus raíces permitidas | [incidencia 208M](incidencias/incidencia_orquesta_codex_wave_registry_untrusted_2026-07-10.md): unificar validación de ruta al lanzar y observar; no permitir una ola real inobservable |
 | BUG-ORQ-20260710-208I | timeout parcial de observe coexistio con `invalid` durable; causa raiz no demostrada. F1 YA adoptado en observe/status/stats (etapa A, 2026-07-10): la superficie local ya no puede publicar running contradicho; la evidencia del incidente es del servidor remoto | repro por API contra servidor desplegado y correlacionar refs/tiempos con el veredicto causal publicado; no cerrable en local |
 | D3 configuracion/envs 20260710 | routing/modelos ya cerrado; la metrica local actual mide 528 referencias `ORQUESTA_*` frente al limite 513 | consolidar/fusionar configuracion sin subir ratchet y repetir D3 |
 | BUG-ORQ-20260701-079 | solo frontera proveedor: cap duro pre-tool ante stdout crudo sin redireccion | esperar enforcement del proveedor o probe adversarial nuevo; no bloquea local |
@@ -55,6 +54,10 @@ mismo commit.
   atestador persiste claim `failed` y `blocked/rework` sin reintento por
   polling; la activacion de atestador real queda como evidencia de 208H, no
   como bug duplicado.
+- BUG-ORQ-20260710-208M: cerrado localmente. El lanzamiento rechaza runtime no
+  observable y la ola permitida se observa `running` por status/tail y termina
+  `stopped` por CLI; evidencia en la
+  [incidencia 208M](incidencias/incidencia_orquesta_codex_wave_registry_untrusted_2026-07-10.md).
 - D3 local 2026-07-10: detenido tras el primer lote determinista para no
   gastar un segundo pase imposible. `TestEnvVarsBudgetMEJ106V0` fallo con
   538 variables frente a 513; recibo y log retenidos en

@@ -1,6 +1,7 @@
 # Incidencia: 208M monitor de ola Codex rechaza su propio registro
 
-Fecha: 2026-07-10. Estado: abierto.
+Fecha: 2026-07-10. Estado: cerrado localmente; la validacion de ruta se aplica
+antes de lanzar y el contrato CLI se cubre con una ola de proceso minima.
 
 ## Sintoma observado
 
@@ -51,17 +52,21 @@ durable. El runtime temporal citado se purga tras comprobar que no quedan
 procesos propietarios, porque contiene una proyeccion aislada de credenciales
 de agente y no debe conservarse como cache de sesion.
 
-## Correccion y cierre requeridos
+## Correccion y cierre local
 
-1. Aplicar al lanzamiento la misma validación de raíces que al control, o
-   definir una raíz aislada `/tmp` canónica y validarla de forma idéntica en
-   ambas operaciones. Nunca iniciar una ola real con ruta no observable.
-2. Mantener rechazo para registros realmente manipulados o procesos fuera del
-   runtime permitido.
-3. Cubrir: ruta no permitida -> launch rechazado; ola creada en raíz permitida
-   -> status/tail `running`; ola terminada -> resultado
-   terminal; registro manipulado -> rechazo tipado sin lectura de logs.
-4. Hacer que invocar el binario sin subcomando devuelva uso/exit no cero, sin
-   panic.
-5. Ejecutar pruebas focales aisladas y dejar recibo de una ola local observada
-   y cerrada por la API/CLI de Orquesta.
+- `codexWaveConfigFromArgsV0` ahora rechaza `runtime_dir_not_observable` si la
+  ruta solicitada no cae bajo las mismas raices permitidas por control. El
+  lanzador ya no puede crear una ola que `status`, `tail` o `stop` rechacen por
+  su propia ruta.
+- La validacion de registros y pruebas de proceso conserva
+  `blocked_registry_untrusted` para registros manipulados o procesos fuera del
+  runtime permitido.
+- `TestCodexWaveConfigV0RejectsRuntimeOutsideObservedRoots` cubre el rechazo
+  previo al lanzamiento. `TestCodexWaveStopCommandV0SolicitaParadaDesdeFicheroDedicado`
+  cubre una ola permitida observada por `status` y `tail` como `running`, y su
+  cierre posterior como `stopped` por la CLI gobernada.
+- El panic sin subcomando se cerró aparte como 208N mediante
+  `TestRunMainV0WithoutCommandReturnsUsageError`.
+
+La evidencia usa un proceso falso aislado para probar control y no crea una
+aplicacion de ejemplo ni consume cuota de proveedor.

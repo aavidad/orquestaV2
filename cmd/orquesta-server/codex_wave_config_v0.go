@@ -66,6 +66,9 @@ func codexWaveConfigFromArgsV0(args []string, stderr io.Writer) (codexWaveConfig
 	if err != nil {
 		return codexWaveConfigV0{}, err
 	}
+	if !codexWaveRuntimeUnderAllowedRootV0(rootRuntimeDir, projectWorkDir) {
+		return codexWaveConfigV0{}, errors.New("runtime_dir_not_observable")
+	}
 	resolvedCommand, err := codexWaveCommandPathV0(*commandPath)
 	if err != nil {
 		return codexWaveConfigV0{}, err

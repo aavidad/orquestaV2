@@ -40,7 +40,7 @@ func TestCodexWaveConfigV0ConservaReasoningHighYXHigh(t *testing.T) {
 func TestCodexWaveConfigV0LeeFicheroCanonicoYEnvDeprecatedOverrideV0(t *testing.T) {
 	projectDir := t.TempDir()
 	sourceHome := t.TempDir()
-	runtimeDir := filepath.Join(projectDir, "runtime-file")
+	runtimeDir := filepath.Join(projectDir, ".orquesta-runtime", "codex-waves", "wave-file")
 	t.Setenv(envCodexProjectWorkDirV0, projectDir)
 	t.Setenv(envCodexWaveModelV0, "gpt-env-override")
 	configFile := `{
@@ -133,11 +133,12 @@ func TestCodexWaveConfigV0LeeFicheroCanonicoYEnvDeprecatedOverrideV0(t *testing.
 
 func mustCodexWaveConfigForTestV0(t *testing.T, extraArgs []string) codexWaveConfigV0 {
 	t.Helper()
+	projectDir := t.TempDir()
 	args := []string{
 		"--wave-ref", "wave-test",
 		"--prompt", "probar config",
-		"--project-dir", t.TempDir(),
-		"--runtime-dir", t.TempDir(),
+		"--project-dir", projectDir,
+		"--runtime-dir", filepath.Join(projectDir, ".orquesta-runtime", "codex-waves", "wave-test"),
 		"--command", codexWaveTestExecutablePathV0(t),
 	}
 	args = append(args, extraArgs...)
@@ -147,6 +148,22 @@ func mustCodexWaveConfigForTestV0(t *testing.T, extraArgs []string) codexWaveCon
 		t.Fatalf("codexWaveConfigFromArgsV0: %v stderr=%s", err, stderr.String())
 	}
 	return config
+}
+
+func TestCodexWaveConfigV0RejectsRuntimeOutsideObservedRoots(t *testing.T) {
+	projectDir := t.TempDir()
+	args := []string{
+		"--wave-ref", "wave-outside",
+		"--prompt", "probar config",
+		"--project-dir", projectDir,
+		"--runtime-dir", t.TempDir(),
+		"--command", codexWaveTestExecutablePathV0(t),
+		"--dry-run",
+	}
+	var stderr strings.Builder
+	if _, err := codexWaveConfigFromArgsV0(args, &stderr); err == nil || !strings.Contains(err.Error(), "runtime_dir_not_observable") {
+		t.Fatalf("err=%v stderr=%s", err, stderr.String())
+	}
 }
 
 func codexWaveTestExecutablePathV0(t *testing.T) string {

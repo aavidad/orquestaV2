@@ -79,6 +79,30 @@ wait "$!"
 
 	stdout.Reset()
 	stderr.Reset()
+	exitCode = codexWaveStatusCommandV0([]string{
+		"--runtime-dir", summary.RuntimeWorkDir,
+	}, &stdout, &stderr)
+	if exitCode != 0 {
+		t.Fatalf("running status exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+	}
+	running := mustReadCodexWaveCommandSummaryForTest(t, stdout.Bytes(), summary.RuntimeWorkDir)
+	if running.Agents[0].Status != "running" {
+		t.Fatalf("status inicial=%q, want running: %+v", running.Agents[0].Status, running.Agents[0])
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	exitCode = codexWaveTailCommandV0([]string{
+		"--runtime-dir", summary.RuntimeWorkDir,
+		"--reason", "test-running-tail",
+		"--file", "last-message",
+	}, &stdout, &stderr)
+	if exitCode != 0 || !strings.Contains(stdout.String(), `"status":"running"`) {
+		t.Fatalf("running tail exit=%d stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
 	exitCode = codexWaveStopCommandV0([]string{
 		"--runtime-dir", summary.RuntimeWorkDir,
 		"--confirm-stop", summary.WaveRef,

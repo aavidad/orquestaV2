@@ -12,7 +12,7 @@ import (
 func TestCodexWaveCredentialProjectionV0DeclaraCategoriasSinValores(t *testing.T) {
 	root := t.TempDir()
 	projectDir := filepath.Join(root, "project")
-	runtimeDir := filepath.Join(root, "runtime")
+	runtimeDir := filepath.Join(projectDir, ".orquesta-runtime", "codex-waves", "wave-projection")
 	sourceCodeHome := filepath.Join(root, "source-codex-home")
 	fakeCodex := filepath.Join(root, "codex-fake")
 
@@ -86,7 +86,7 @@ func TestCodexWaveCredentialProjectionV0StrictBloqueaAuthConfigFaltante(t *testi
 		"--agents", "1",
 		"--wave-ref", "wave-projection-missing",
 		"--project-dir", projectDir,
-		"--runtime-dir", filepath.Join(root, "runtime"),
+		"--runtime-dir", filepath.Join(projectDir, ".orquesta-runtime", "codex-waves", "wave-projection-missing"),
 		"--command", fakeCodex,
 		"--source-code-home", sourceCodeHome,
 		"--isolate-home=true",
@@ -96,7 +96,7 @@ func TestCodexWaveCredentialProjectionV0StrictBloqueaAuthConfigFaltante(t *testi
 	if exitCode != 1 {
 		t.Fatalf("exit=%d want 1 stderr=%s stdout=%s", exitCode, stderr.String(), stdout.String())
 	}
-	summary := mustReadCodexWaveCommandSummaryForTest(t, stdout.Bytes(), filepath.Join(root, "runtime"))
+	summary := mustReadCodexWaveCommandSummaryForTest(t, stdout.Bytes(), filepath.Join(projectDir, ".orquesta-runtime", "codex-waves", "wave-projection-missing"))
 	if len(summary.Errors) != 1 || !strings.Contains(summary.Errors[0].Message, "credential_projection_missing_required") {
 		t.Fatalf("error publico inesperado: %+v", summary.Errors)
 	}

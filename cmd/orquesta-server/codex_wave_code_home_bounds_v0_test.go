@@ -11,7 +11,7 @@ import (
 func TestCodexWaveCodeHomeProjectionV0AplicaSymlinkHardlinkModosYReceipt(t *testing.T) {
 	root := t.TempDir()
 	projectDir := filepath.Join(root, "project")
-	runtimeDir := filepath.Join(root, "runtime")
+	runtimeDir := filepath.Join(projectDir, ".orquesta-runtime", "codex-waves", "wave-projection-bounds")
 	sourceCodeHome := filepath.Join(root, "source-codex-home")
 	fakeCodex := filepath.Join(root, "codex-fake")
 
@@ -72,7 +72,7 @@ func TestCodexWaveCodeHomeProjectionV0AplicaSymlinkHardlinkModosYReceipt(t *test
 func TestCodexWaveCodeHomeProjectionV0RespetaPresupuestoTotalYFicheros(t *testing.T) {
 	root := t.TempDir()
 	projectDir := filepath.Join(root, "project")
-	runtimeDir := filepath.Join(root, "runtime")
+	runtimeDir := filepath.Join(projectDir, ".orquesta-runtime", "codex-waves", "wave-projection-bounds")
 	sourceCodeHome := filepath.Join(root, "source-codex-home")
 	fakeCodex := filepath.Join(root, "codex-fake")
 
