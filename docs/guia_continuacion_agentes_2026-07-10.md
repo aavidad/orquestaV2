@@ -40,6 +40,18 @@ esta guia cubre lo que falta para llegar ahi.
   cubre el caso), NO fuerces: anota el hallazgo en la seccion "Bitacora de
   desviaciones" al final, commitea y sigue con el paso siguiente.
 
+## Pruebas de aplicaciones
+
+- No crear mas aplicaciones desechables solo para probar el circuito. El D1
+  de esta guia ya ejercio el flujo completo.
+- Las siguientes ejecuciones reales de `Nueva App` se reservan para una app
+  util definida por el operador. El goal, sus artefactos y su documentacion
+  deben servir a ese producto, no a un fixture temporal.
+- Para regresiones del protocolo, usar fakes, tests focales, el harness
+  aislado y resultados durables sintéticos. Si una regresion exige proveedor
+  real, reutilizar una app util acordada y declarar coste/presupuesto antes de
+  lanzarla.
+
 ## Que NO tocar
 
 - Worktrees de Codex (solo LECTURA): todo lo que cuelga de
@@ -169,11 +181,13 @@ backend tmux y cableados en
 
 ## ETAPA D - Con cuota Codex recuperada (NO antes)
 
-- [ ] PASO D1: smoke de confirmacion desde la rama principal:
+- [x] PASO D1: smoke de confirmacion desde la rama principal:
   `ORQUESTA_KEEP_SMOKE_DIR=1 ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_REAL_CONFIRM=1
   ORQUESTA_CODEX_GOAL_FIRST_APP_SERVER_CODEX_EXECUTION_CONFIRMED=1
-  bash scripts/smoke_goal_first_app_server_real.sh` (en background, rc!=0
-  es fallo). Verde = goal complete + closure accepted + sin procesos.
+  bash scripts/smoke_goal_first_app_server_real.sh`. Ejecutado el 2026-07-10:
+  goal `complete`, cierre `accepted`, shutdown HTTP `ready` y ningun proceso
+  residual. La app temporal retenida solo es evidencia; no se repetira para
+  regresiones generales.
 - [ ] PASO D2: piloto de autoprogramacion supervisado con el backlog de C2
   (receta completa: `docs/bitacora_correccion_pericial_2026-07-03.md`,
   seccion "Receta completa"; MAX_REQUESTS=1; endpoints status/observe son
@@ -209,6 +223,20 @@ backend tmux y cableados en
   detecta `BUG-ORQ-20260710-208J`: un error posterior a adquirir el claim de
   atestacion deja `pending` sin recuperacion. D1/D2 se mantienen bloqueados
   hasta reparar y revisar ese contrato; no se lanzo runtime ni proveedor real.
+
+- 2026-07-10, PASO D1: tras `5f30973d7`, el servidor separo con exito el
+  worktree de identidad (`ORQUESTA_SERVER_WORKTREE`) del proyecto externo
+  temporal. El flujo real produjo resultado durable, `goal_status=complete`,
+  `run_status=cerrada`, `closure_status=accepted`, `shutdown_ready=true` y
+  ningun proceso residual. La comprobacion independiente posterior fue
+  `GOCACHE=<aislado> GOTMPDIR=<aislado> go test -count=1 ./...` sobre la app
+  generada y paso. El D1 no llevaba configurado un atestador externo dentro
+  del servidor: confirma el circuito normal pero no cierra 208H/208J.
+
+- 2026-07-10, decision del operador: no volver a gastar cuota en una app de
+  smoke desechable. Las siguientes pruebas reales de creacion se ejecutan
+  sobre una app util que el operador defina; los regresiones del protocolo se
+  cubren con fakes/harnesses focales.
 
 - 2026-07-10, PASO A1: el executor de observe_goal YA tenia `EstadoVivoSource`
   inyectable y un camino estado-vivo en la ruta de snapshot parcial

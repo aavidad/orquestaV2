@@ -13,10 +13,9 @@ mismo commit.
 | --- | --- | --- |
 | BUG-ORQ-20260710-208A-D | patches focales (write-sets solapados, 504, workdir, rework) verdes en local; sin verificar por API contra servidor desplegado | tras deploy: repro/API de prepare-run, observe y runs/control |
 | BUG-ORQ-20260710-208E | tooling drain/harness listo (F3-R2); falta receipt real `clean` de drain + dos pases amplios verdes. El perfil aislado exige `ORQUESTA_TEST_CACHE_ROOT` y `ORQUESTA_TEST_BATCH_ROOT` fuera de `/srv`; su cleanup debe restaurar permisos readonly de `GOMODCACHE` | operador ejecuta drain + `orquesta_test_batches.sh` con ambas rutas aisladas; consolidar config y `chmod -R u+w` previo al cleanup en F3 |
-| F5/identidad runtime | integrado en `2fe12f658`: valida ctl/worktree, degrada identidad y limpia backend por identidad; focales verdes | ejecutar drain/deploy gobernados y verificar por API el binario remoto, sin tocar `uso-app` |
-| BUG-ORQ-20260710-208H | integrado en `7444dcf8a`: atestacion independiente fail-closed con focales y dos lotes aislados verdes | D1 debe probarla en flujo goal-first real antes de cerrar el bug |
+| F5/identidad runtime | integrado en `2fe12f658` y completado localmente por D1 con `5f30973d7`: identidad de servidor y proyecto externo ya son distintos; closure accepted y shutdown listo | ejecutar drain/deploy gobernados y verificar por API el binario remoto, sin tocar `uso-app` |
+| BUG-ORQ-20260710-208H | integrado en `7444dcf8a`: D1 normal acepto el resultado y una reejecucion externa posterior paso, pero el servidor no llevaba atestador independiente configurado | probar atestador real integrado y sus rutas de fallo antes de cerrar el bug |
 | BUG-ORQ-20260710-208J | integrado en `7444dcf8a`: fallo del atestador persiste claim `failed` y cierre `blocked/rework`, sin reintento por polling | D1 debe confirmar comportamiento con atestador real; conservar la [incidencia 208J](incidencias/incidencia_orquesta_208h_claim_pending_sin_reintento_2026-07-10.md) como evidencia |
-| BUG-ORQ-20260710-208L | D1 local quedó bloqueado antes de readiness: F5 usaba `ORQUESTA_CODEX_PROJECT_WORKDIR` (app externa temporal no Git) como worktree de identidad del servidor | separar `ORQUESTA_SERVER_WORKTREE` del proyecto objetivo, repetir D1 y conservar evidencia de cierre |
 | BUG-ORQ-20260710-208K | routing de modelos en rama WIP rechaza configuraciones legacy sin `model_routing`, rompiendo Codex, Claude y stack | [incidencia 208K](incidencias/incidencia_orquesta_model_routing_fail_closed_legacy_2026-07-10.md): normalizar ausencia a politica conservadora y reejecutar paquetes |
 | BUG-ORQ-20260710-208I | timeout parcial de observe coexistio con `invalid` durable; causa raiz no demostrada | correlacionar refs/tiempos tras adoptar veredicto causal F1 en observe |
 | SUBFALLO routing/modelos 20260710 | fail-open en defaults/args vacios, herencia xhigh, PATH ambiguo; ratchet 521 vs limite 513 | WIP en `fix/model-routing-p0-p1-sol-20260710`; fail-closed y consolidar sin subir ratchet |
@@ -42,6 +41,9 @@ mismo commit.
 - BUG-ORQ-20260710-210 (guard textual stale del smoke compuesto).
 - 208G (perdida causal de `checkpoint_started` en materializador) - reducido
   local, pendiente confirmacion independiente.
+- BUG-ORQ-20260710-208L: cerrado por `5f30973d7` y D1 local retenido en
+  `/tmp/orquesta-goal-first-app-server.ZAorvf`; el target externo no Git ya
+  no se usa como identidad del binario.
 
 ## Regla de conteo
 
