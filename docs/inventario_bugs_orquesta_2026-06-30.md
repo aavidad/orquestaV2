@@ -3758,10 +3758,15 @@ paths absolutos ni llamar al backend, y el supervisor residente goal-first
 reconoce workdir/auth/provider/quota/storage/backend como causas recuperables
 para lanzar un goal de rework acotado preservando artefactos/evidencias. No se
 anade cleanup de servicios ajenos: solo se conserva estado y se abre reparacion
-por puertos ya inyectados. Evidencia focal esperada:
+por puertos ya inyectados. Evidencia:
 `TestServerCodexAppServerGoalBackendV0LaunchBloqueaWorkdirInexistenteSinRecrearloV0`
 y
-`TestRunSupervisorGoalFirstResidentPreparaReworkPorBloqueoOperativoRecuperableV0`.
+`TestRunSupervisorGoalFirstResidentPreparaReworkPorBloqueoOperativoRecuperableV0`;
+`go test -count=1 ./modulos/orquesta-runtime-codex-appserver`;
+`go test -count=1 ./modulos/orquesta-app-codex-stack ./modulos/orquesta-server ./cmd/orquesta-server`;
+`go test -count=1 ./modulos/orquesta-autoprogramming ./modulos/orquesta-mcp ./modulos/orquesta-app-codex-stack ./modulos/orquesta-server ./cmd/orquesta-server`;
+`bash -n scripts/orquesta_server_ctl.sh scripts/orquesta_server_deploy.sh scripts/orquesta_smoke_nightly.sh`;
+`git diff --check`.
 
 BUG nuevo `BUG-ORQ-20260710-208` (abierto): el goal-first remoto puede quedar publicado como `running` con solo checkpoint parcial y `runs/control` no confirma parada del backend app-server. Durante el goal remoto `run-ref-orquesta-100-continuous-20260710-001` se lanzaron cuatro goals; dos dejaron `orquesta_goal_result` con `status=blocked` y `reason_code=checkpoint_started`, pero `observe` seguia mostrando `goal_status=running`. El intento de parar `run-ref-orquesta-100-continuous-20260710-001-goal-04` por `/api/v0/runs/control` devolvio `control_not_propagated_to_goal_backend`; el reintento con `forced=true` mantuvo `goal_status_after=running`. Ademas el servidor remoto estaba vivo con `ORQUESTA_CTL_WORKDIR` apuntando a un worktree retirado, y la request acepto dos tareas paralelas con write-set solapado `scripts`. Incidencia detallada: `docs/incidencias/incidencia_orquesta_goal_first_remote_checkpoint_control_2026-07-10.md`. Hipotesis estructural: divergencia entre estado goal-first, artefactos checkpoint/resultado y proceso real app-server/tmux; Orquesta necesita reconciliacion causal antes de declarar progreso vivo o aceptar nuevos batches amplios.
 
@@ -3778,6 +3783,20 @@ compilacion terminado en el flaky harness; tambien fallo
 `208E`: falta un drain/cleanup gobernado o un harness remoto aislado para que
 las pruebas amplias no mezclen estado vivo, proveedor/app-server y ruido de
 concurrencia.
+
+
+Subfallo `208F` (observado en F3 rework 2026-07-10): el goal
+`goal-ref-task-autoprogramming-6dc6ba2489b7-g01` quedo `running` sin resultado
+terminal despues de escribir checkpoint, runbook parcial y cambios incompletos.
+El observe seguia recomendando `review_partial_artifacts` sin cierre causal. El
+operador/Codex tuvo que aplicar `/api/v0/runs/control` con `forced=true`; esta
+vez el control si confirmo `goal_status_after=blocked` y paro el tmux backend.
+Desbloqueo acotado: se completo manualmente F3 en el mismo write-set, se
+probaron `git diff --check`, `bash -n`, `bash scripts/test_orquesta_server_drain.sh`
+y `go test -count=1 ./cmd/orquesta-server -run TestSmokeGoalFirstScriptContractGuardV0`
+con entorno aislado en `/srv/orquesta-self/runtime/test-cache/f3-rework`. Sigue
+abierto como fallo estructural hasta que el supervisor residente convierta ese
+estancamiento en rework/autorreparacion sin operador.
 
 Indice de sesion para Claude: todos los fallos operativos observados por Codex
 en el corte remoto 2026-07-10 quedan agrupados en

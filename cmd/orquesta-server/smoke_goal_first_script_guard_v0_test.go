@@ -34,6 +34,10 @@ func TestSmokeScriptContractsConsolidadosV0(t *testing.T) {
 	}
 }
 
+func TestSmokeGoalFirstScriptContractGuardV0(t *testing.T) {
+	TestSmokeScriptContractsConsolidadosV0(t)
+}
+
 func smokeScriptContractGuardsV0() []scriptContractGuardV0 {
 	return []scriptContractGuardV0{
 		{
@@ -110,6 +114,44 @@ func smokeScriptContractGuardsV0() []scriptContractGuardV0 {
 				"deploy_config_missing",
 				"deploy_runtime_identity_mismatch",
 				"orquesta_server_ctl.sh",
+			},
+		},
+		{
+			name:   "f3-drain-script-governed",
+			script: "scripts/orquesta_server_drain.sh",
+			wants: []string{
+				"orquesta_server_drain_receipt.v0",
+				"orquesta_server_drain_inventory.v0",
+				"protected_uso_app",
+				"identity_not_managed",
+				"backup_prepared_before_stop",
+				"orquesta-server-drain",
+				"DRAIN_DRY_RUN",
+				"drain_status",
+				"/api/v0/server/shutdown",
+				"kill-session",
+				"-INT",
+				"-TERM",
+			},
+			forbids: []string{"/api/v0/runs/control", "kill -KILL", "kill -9"},
+		},
+		{
+			name:   "f3-isolated-test-env-profile",
+			script: "scripts/lib/isolated_test_env.sh",
+			wants: []string{
+				"orquesta_use_isolated_test_env",
+				"export TMPDIR",
+				"export GOTMPDIR",
+				"export GOCACHE",
+				"export GOMODCACHE",
+				"export GOPATH",
+				"export CODEX_HOME",
+				"export XDG_RUNTIME_DIR",
+				"ORQUESTA_FLAKY_HARNESS_CACHE_ROOT",
+				"ORQUESTA_TEST_RUNTIME_ROOT",
+				"ORQUESTA_TEST_PORT_BASE",
+				"ORQUESTA_TEST_PORT_RANGE",
+				"ORQUESTA_TEST_PORT_LOCK_DIR",
 			},
 		},
 	}
