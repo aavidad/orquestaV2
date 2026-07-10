@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -16,6 +18,8 @@ func codexWaveAgentPromptV0(config codexWaveConfigV0, agentRef string, index int
 	b.WriteString("- Trabaja en el repositorio indicado por Orquesta y respeta AGENTS.md locales antes de editar.\n")
 	b.WriteString("- No borres archivos ni codigo existente sin revisar primero su uso y dejar evidencia clara.\n")
 	b.WriteString("- Manten el write-set estrecho y coordina mentalmente tu parte con el resto de la ola.\n")
+	b.WriteString("- No escribas checkpoint_started_* ni orquesta_goal_result_* dentro del repositorio: son recibos de ejecucion, no artefactos de producto.\n")
+	b.WriteString("- Si una instruccion exige un recibo tecnico, usa solo el runtime del agente: " + filepath.Join(config.RuntimeWorkDir, fmt.Sprintf("agent-%02d", index)) + ".\n")
 	b.WriteString("- Al terminar, resume cambios, rutas tocadas, pruebas ejecutadas y bloqueos.\n\n")
 	b.WriteString("Instrucciones del operador:\n")
 	b.WriteString(codexWavePromptForAgentV0(config, index))

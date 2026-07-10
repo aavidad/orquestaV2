@@ -24,7 +24,7 @@ mismo commit.
 | ID | Residual | Siguiente accion |
 | --- | --- | --- |
 | S14/deploy remoto | binario remoto vivo `9541e2f0...` anterior al codigo; flujo nuevo: remoto = solo destino de deploy | drain gobernado + `orquesta_server_deploy.sh` cuando el operador decida subir |
-| S13/F4 artefactos versionados | conteo vivo: 61 con nombre de checkpoint/resultado; 68 al incluir cuatro fixtures eval y tres artefactos auxiliares de la familia. La auditoria y el guard Git ya rechazan nuevos no clasificados, pero el contrato aun permite que recibos caigan dentro del write-set versionable | destino de recibos inyectado por composicion + observador que lo lea; despues migrar los 58 movibles con commits gobernados |
+| S13/F4 artefactos versionados | conteo vivo: 61 con nombre de checkpoint/resultado; 68 al incluir cuatro fixtures eval y tres artefactos auxiliares de la familia. La auditoria/guard Git rechazan nuevos no clasificados y la ola Codex ya dirige recibos tecnicos a su runtime, pero el contrato goal-first aun permite que recibos caigan dentro del write-set versionable | destino de recibos inyectado por composicion + observador que lo lea; despues migrar los 58 movibles con commits gobernados |
 | S12 limpieza envs remota | perfil remoto/secretos/defaults sin corte gobernado | corte separado tras deploy; no mezclar con drain |
 | CODEX-HOME-TOKEN-INVALIDADO | auth Codex remota caducada | reauth del operador en servidor; hoy ademas cuota local agotada |
 | BUG-ORQ-20260701-058/066/075 (familia OPES) | solo residuales de campo: OPES temporal/preproduccion y proveedor real; local/fake cerrado | field test OPES temporal cuando se retome ese frente |
