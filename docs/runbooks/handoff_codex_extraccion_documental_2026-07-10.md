@@ -1,6 +1,53 @@
 # Handoff Codex: diseño de extracción documental - 2026-07-10
 
-## Alcance cerrado
+## Corte funcional local - 2026-07-10
+
+Implementado solo en este worktree, sin proveedores, red, despliegue ni PII:
+
+- `modulos/orquesta-document-extraction`: IR versionada para documento/página/
+  bloque/span/tabla/campo/evidencia, schemas tipados de persona/factura por
+  refs opacas, política local por defecto, contratos de conectores y servicio
+  de aplicación con source -> normalizer -> parser -> localizer -> slices ->
+  extractor -> evidencia -> validador/review -> exportador -> recibo.
+- El servicio preserva raw/normalizado/estado/provenance y no exporta candidatos
+  sin evidencia. El recibo registra hash, configuración, locales separados,
+  versión de contrato/IR y las identidades de adaptador usadas.
+- Adaptadores separados y sin filesystem: JSON, CSV y fakes deterministas.
+- Capability reutilizable: descriptor neutral, registro opt-in y único caso de
+  uso asíncrono para `documents.inspect.v0`, `documents.extract.v0`,
+  `documents.status.v0`, `documents.review.v0` y `documents.export.v0`.
+  MCP/API/CLI deben delegar en `ExecuteDocumentToolV0`.
+- Descriptor provisional aislado de bundle para `embedded_module`,
+  `local_sidecar` y `remote_connector`; incluye módulo/conector,
+  config+i18n+tests+hashes y recibo, sin duplicar el SDK ToolBundle/AttachPlan
+  que se está realizando en otro worktree.
+
+Pendientes concretos:
+
+- Composición que convierta comandos asíncronos en workers y conecte un
+  `DocumentToolOperationStorePortV0` durable.
+- Adaptadores opt-in reales (parsers, OCR/layout, schema extractors, review y
+  destinos) tras corpus autorizado, benchmark, licencia y política de datos.
+- Transporte MCP/API/CLI fino que delegue en el caso de uso y wizard que consulte
+  el registro, cuando los módulos de composición correspondientes estén listos.
+- Integración con el SDK genérico ToolBundle/AttachPlan desde su worktree, sin
+  copiar sus tipos ni su lógica aquí.
+
+Verificación local realizada:
+
+```text
+go test -count=1 -race ./modulos/orquesta-document-extraction ./modulos/orquesta-document-extraction-fake ./modulos/orquesta-document-extraction-json ./modulos/orquesta-document-extraction-csv
+go test -count=1 -run '^TestNeutralOrchestrationPackagesDoNotImportProductAdapters$' .
+git diff --check
+```
+
+Las tres verificaciones anteriores pasaron. `go test -count=1 .` sigue fallando
+fuera de este corte en `TestEnvVarsBudgetMEJ106V0`: contabiliza 521 variables
+`ORQUESTA_*` frente al máximo 513. No se modificó ese presupuesto ni sus
+variables desde este worktree; clasificar y resolver esa desviación en su frente
+propio antes de usarlo como verde raíz.
+
+## Alcance original
 
 Se redactaron, sin código, pruebas, despliegue ni cambios en `uso-app` u otras
 apps:
