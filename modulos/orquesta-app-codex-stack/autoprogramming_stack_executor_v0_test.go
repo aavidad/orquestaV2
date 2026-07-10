@@ -531,9 +531,11 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0BackendGoalCompletoMarcaGoalFir
 	launcher := &goalFirstQueueLauncherForTestV0{}
 	goalStates := newGoalFirstQueueStateStoreForTestV0()
 	stack.Ports.GoalLauncher = launcher
+	stack.Ports.GoalRequiredTestSpecBinder = independentSpecBinderForStackTestV0{}
 	stack.Ports.GoalObserver = &goalFirstQueueObserverForTestV0{}
 	stack.Ports.GoalClosureValidator = orquestagoal.DefaultGoalWorkClosureValidatorV0{}
 	stack.Ports.GoalStateStore = goalStates
+	enableIndependentAttestationForStackTestV0(&stack)
 	request := autoprogrammingBridgeRequestForTestV0()
 	request.RequestRef = "run-autoprogramming-goal-default-001"
 	request.Tasks[0].TaskRef = "source-task-ref-autoprogramming-goal-default-001"
@@ -600,11 +602,15 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaGoalFirstSinColaL
 	observer := &goalFirstQueueObserverForTestV0{}
 	goalStates := newGoalFirstQueueStateStoreForTestV0()
 	stack.Ports.GoalLauncher = launcher
+	stack.Ports.GoalRequiredTestSpecBinder = independentSpecBinderForStackTestV0{}
 	stack.Ports.GoalObserver = observer
 	stack.Ports.GoalClosureValidator = orquestagoal.DefaultGoalWorkClosureValidatorV0{}
 	stack.Ports.GoalStateStore = goalStates
 	request := autoprogrammingBridgeRequestForTestV0()
 	request.RequestRef = "run-autoprogramming-goal-first-launch-001"
+	enableIndependentAttestationForStackTestV0(&stack)
+	request.WriteSet = []string{"generated-apps"}
+	request = withAutoprogrammingAttestationForTestV0(request)
 	request.Tasks[0].TaskRef = "source-task-ref-autoprogramming-goal-first-launch-001"
 	request.Tasks[0].ContextRefs = []string{
 		"goal_migration:goal-first",
@@ -675,13 +681,6 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaGoalFirstSinColaL
 	}
 	if err := os.WriteFile(filepath.Join(generatedDir, "bug088_second_artifact.txt"), []byte("second artifact\n"), 0o600); err != nil {
 		t.Fatalf("write materialized artifact: %v", err)
-	}
-	state.Spec.WriteSet = []orquestagoal.GoalWriteScopeV0{{
-		Path:    "generated-apps",
-		Purpose: "bug088-materialized-artifact-test",
-	}}
-	if err := goalStates.SaveGoalWorkStateV0(context.Background(), state); err != nil {
-		t.Fatalf("SaveGoalWorkStateV0: %v", err)
 	}
 	ranking := postRunQueuePriorityStackV0(t, stack, orquestamcp.MCPRunQueuePriorityToolInputV0{
 		Action:   orquestamcp.MCPRunQueuePriorityActionRankV0,
@@ -831,6 +830,7 @@ func TestCodexStackSupervisorGlobalNoDrenaLegacySiGoalFirstEnCola(t *testing.T) 
 	goalStates := newGoalFirstQueueStateStoreForTestV0()
 	stack.Ports.GoalLauncher = launcher
 	stack.Ports.GoalObserver = &goalFirstQueueObserverForTestV0{}
+	stack.Ports.GoalRequiredTestSpecBinder = independentSpecBinderForStackTestV0{}
 	stack.Ports.GoalClosureValidator = orquestagoal.DefaultGoalWorkClosureValidatorV0{}
 	stack.Ports.GoalStateStore = goalStates
 	request := autoprogrammingBridgeRequestForTestV0()
@@ -955,6 +955,7 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaBatchGoalsSinCola
 	goalStates := newGoalFirstQueueStateStoreForTestV0()
 	stack.Ports.GoalLauncher = launcher
 	stack.Ports.GoalObserver = &goalFirstQueueObserverForTestV0{}
+	stack.Ports.GoalRequiredTestSpecBinder = independentSpecBinderForStackTestV0{}
 	stack.Ports.GoalClosureValidator = orquestagoal.DefaultGoalWorkClosureValidatorV0{}
 	stack.Ports.GoalStateStore = goalStates
 	request := autoprogrammingBridgeRequestForTestV0()
@@ -978,6 +979,7 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaBatchGoalsSinCola
 	request.MaxTaskRefs = 2
 	request.MaxAreas = 2
 	request.MaxWriteSetEntries = 2
+	request = withAutoprogrammingAttestationForTestV0(request)
 
 	prepared, err := NewCodexStackAutoprogrammingPrepareRunExecutorV0(
 		&stack,

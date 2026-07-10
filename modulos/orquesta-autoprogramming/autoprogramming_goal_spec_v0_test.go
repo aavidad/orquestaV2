@@ -46,19 +46,41 @@ func TestBuildAutoprogrammingProgrammableWorkV0GeneraGoalSpecsCuandoGoalListo(t 
 		spec.RequestRef != request.RequestRef ||
 		spec.ProjectRef != request.ProjectRef ||
 		spec.ClosurePolicy.RequireRequiredTests != true ||
+		!spec.ClosurePolicy.RequireIndependentRequiredTestAttestation ||
+		spec.ImplementerAgentRef != "" || spec.ImplementerCredentialRef != "" ||
+		spec.ClosurePolicy.RequiredAttestorTrustPolicyRef != "" ||
+		spec.WriteSetSHA256 != orquestagoal.GoalWriteSetSHA256V0(spec.WriteSet) ||
 		!spec.ReworkPolicy.PreferNewGoal {
 		t.Fatalf("spec inesperado: %+v", spec)
 	}
 	if !reflect.DeepEqual(goalSpecPathsForTestV0(spec.WriteSet), request.WriteSet) {
 		t.Fatalf("write_set=%v want=%v", goalSpecPathsForTestV0(spec.WriteSet), request.WriteSet)
 	}
-	if len(spec.RequiredTests) != 1 || spec.RequiredTests[0].Command != request.RequiredTests[0] {
+	if len(spec.RequiredTests) != 1 || spec.RequiredTests[0].Command != request.RequiredTests[0] ||
+		spec.RequiredTests[0].CommandRef == "" || spec.RequiredTests[0].CommandSHA256 == "" ||
+		spec.RequiredTests[0].DefinitionSHA256 == "" {
 		t.Fatalf("required_tests=%+v", spec.RequiredTests)
 	}
 	if !hasGoalContextRefForAutoprogrammingTestV0(spec.ContextRefs, "worktree", request.WorktreeRef) ||
 		!hasGoalContextRefForAutoprogrammingTestV0(spec.ContextRefs, "workflow_task_context", "source_task_ref:task-ref-goal-ready-001") ||
 		len(spec.RuleRefs) == 0 {
 		t.Fatalf("context/rules incompletos: context=%+v rules=%+v", spec.ContextRefs, spec.RuleRefs)
+	}
+}
+
+func TestBuildAutoprogrammingProgrammableWorkV0GoalReadyDejaBindingConfiableALaComposicion(t *testing.T) {
+	request := validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
+		request.Tasks = []AutoprogrammingTaskGroupCandidateV0{{
+			TaskRef: "task-ref-goal-attestation-missing-001", Area: "autoprogramming",
+			ContextRefs: []string{"goal_migration:goal-first", "goal_capability:starter", "goal_capability:observer", "goal_capability:closure-validator"},
+		}}
+	})
+	result := BuildAutoprogrammingProgrammableWorkV0(request)
+	if !result.Accepted || len(result.Work.GoalSpecs) != 1 {
+		t.Fatalf("result=%+v", result)
+	}
+	if issues := orquestagoal.ValidateGoalRequiredTestAttestationBindingV0(result.Work.GoalSpecs[0]); len(issues) == 0 {
+		t.Fatal("unbound spec must require trusted composition binding before launch")
 	}
 }
 

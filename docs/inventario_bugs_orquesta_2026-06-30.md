@@ -3937,6 +3937,15 @@ bypass si faltaban puertos y no resolvia replay parcial ni concurrencia
 multiproceso del store. Estado: abierto; el WIP se conserva en rama local y no
 se integra hasta cerrar esos contratos con tests adversariales.
 
+Actualizacion `208H` (2026-07-10, candidata local pendiente de revisor): la
+rama `wip/attestation-208h-20260710` incorpora binding de identidad confiable,
+snapshot observado del checkout antes de tests, receipt inmutable, claim unico
+entre procesos y fail-closed si faltan puertos. El adaptador ejecuta un
+`go test -count=1 ./...` real en un modulo temporal aislado. Dos pases focales
+por lotes terminaron verdes (receipt temporal documentado en el handoff), pero
+no cierran el bug: falta que un revisor externo repita
+`docs/pruebas_revisor_208h_2026-07-10.md` antes de integrar.
+
 Subfallo de routing/modelos (abierto, 2026-07-10): la implementacion inicial no
 distinguia complejidad de criticidad, admitia defaults/argumentos vacios,
 herencia de `xhigh`, PATH ambiguo hacia Codex `0.128.0` y receipt opcional no

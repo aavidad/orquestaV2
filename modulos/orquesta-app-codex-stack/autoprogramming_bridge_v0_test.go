@@ -230,13 +230,14 @@ func TestPrepareAutoprogrammingRunV0BackendGoalCompletoActivaGoalFirstPorComposi
 	bridged, err := PrepareAutoprogrammingRunV0(context.Background(), AutoprogrammingBridgeRequestV0{
 		Request: request,
 	}, orquestaappdirectorservice.StartAppDirectorPortsV0{
-		RunStore:                runStore,
-		DirectorTaskStore:       taskStore,
-		GoalLauncher:            launcher,
-		GoalObserver:            &goalFirstQueueObserverForTestV0{},
-		GoalClosureValidator:    orquestagoal.DefaultGoalWorkClosureValidatorV0{},
-		GoalStateStore:          goalStates,
-		GoalFirstRunMarkerStore: goalStates,
+		RunStore:                   runStore,
+		DirectorTaskStore:          taskStore,
+		GoalLauncher:               launcher,
+		GoalRequiredTestSpecBinder: independentSpecBinderForStackTestV0{},
+		GoalObserver:               &goalFirstQueueObserverForTestV0{},
+		GoalClosureValidator:       orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		GoalStateStore:             goalStates,
+		GoalFirstRunMarkerStore:    goalStates,
 	})
 	if err != nil {
 		t.Fatalf("PrepareAutoprogrammingRunV0: %v", err)
@@ -277,10 +278,11 @@ func TestAutoprogrammingBridgeRequestWithGoalFirstBackendMarkersV0RespetaLegacyR
 	got := autoprogrammingBridgeRequestWithGoalFirstBackendMarkersV0(
 		request,
 		orquestaappdirectorservice.StartAppDirectorPortsV0{
-			GoalLauncher:         &goalFirstQueueLauncherForTestV0{},
-			GoalObserver:         &goalFirstQueueObserverForTestV0{},
-			GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
-			GoalStateStore:       newGoalFirstQueueStateStoreForTestV0(),
+			GoalLauncher:               &goalFirstQueueLauncherForTestV0{},
+			GoalRequiredTestSpecBinder: independentSpecBinderForStackTestV0{},
+			GoalObserver:               &goalFirstQueueObserverForTestV0{},
+			GoalClosureValidator:       orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+			GoalStateStore:             newGoalFirstQueueStateStoreForTestV0(),
 		},
 	)
 	refs := got.Request.Tasks[0].ContextRefs
@@ -308,10 +310,11 @@ func TestPrepareAutoprogrammingRunV0GoalReadyConBackendParcialNoLanzaNiCaeALegac
 	bridged, err := PrepareAutoprogrammingRunV0(context.Background(), AutoprogrammingBridgeRequestV0{
 		Request: request,
 	}, orquestaappdirectorservice.StartAppDirectorPortsV0{
-		RunStore:          runStore,
-		DirectorTaskStore: taskStore,
-		GoalLauncher:      launcher,
-		GoalStateStore:    goalStates,
+		RunStore:                   runStore,
+		DirectorTaskStore:          taskStore,
+		GoalLauncher:               launcher,
+		GoalRequiredTestSpecBinder: independentSpecBinderForStackTestV0{},
+		GoalStateStore:             goalStates,
 	})
 	if err != nil {
 		t.Fatalf("PrepareAutoprogrammingRunV0: %v", err)
@@ -366,17 +369,19 @@ func TestPrepareAutoprogrammingRunV0GoalReadyMultiGoalLanzaBatchSinLegacy(t *tes
 	request.MaxTaskRefs = 2
 	request.MaxAreas = 2
 	request.MaxWriteSetEntries = 2
+	request = withAutoprogrammingAttestationForTestV0(request)
 
 	bridged, err := PrepareAutoprogrammingRunV0(context.Background(), AutoprogrammingBridgeRequestV0{
 		Request: request,
 	}, orquestaappdirectorservice.StartAppDirectorPortsV0{
-		RunStore:                runStore,
-		DirectorTaskStore:       taskStore,
-		GoalLauncher:            launcher,
-		GoalObserver:            &goalFirstQueueObserverForTestV0{},
-		GoalClosureValidator:    orquestagoal.DefaultGoalWorkClosureValidatorV0{},
-		GoalStateStore:          goalStates,
-		GoalFirstRunMarkerStore: goalStates,
+		RunStore:                   runStore,
+		DirectorTaskStore:          taskStore,
+		GoalLauncher:               launcher,
+		GoalRequiredTestSpecBinder: independentSpecBinderForStackTestV0{},
+		GoalObserver:               &goalFirstQueueObserverForTestV0{},
+		GoalClosureValidator:       orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		GoalStateStore:             goalStates,
+		GoalFirstRunMarkerStore:    goalStates,
 	})
 	if err != nil {
 		t.Fatalf("PrepareAutoprogrammingRunV0: %v", err)
@@ -466,13 +471,15 @@ func TestPrepareAutoprogrammingRunV0GoalReadyMultiGoalStateStoreFallaSinRelanzar
 	request.MaxTaskRefs = 2
 	request.MaxAreas = 2
 	request.MaxWriteSetEntries = 2
+	request = withAutoprogrammingAttestationForTestV0(request)
 	ports := orquestaappdirectorservice.StartAppDirectorPortsV0{
-		RunStore:             runStore,
-		DirectorTaskStore:    taskStore,
-		GoalLauncher:         launcher,
-		GoalObserver:         &goalFirstQueueObserverForTestV0{},
-		GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
-		GoalStateStore:       goalStates,
+		RunStore:                   runStore,
+		DirectorTaskStore:          taskStore,
+		GoalLauncher:               launcher,
+		GoalRequiredTestSpecBinder: independentSpecBinderForStackTestV0{},
+		GoalObserver:               &goalFirstQueueObserverForTestV0{},
+		GoalClosureValidator:       orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		GoalStateStore:             goalStates,
 	}
 
 	bridged, err := PrepareAutoprogrammingRunV0(ctx, AutoprogrammingBridgeRequestV0{
@@ -544,13 +551,14 @@ func TestPrepareAutoprogrammingRunV0GoalReadyLaunchFailedPersisteStateBloqueadoV
 		"goal_capability:closure-validator",
 	}
 	ports := orquestaappdirectorservice.StartAppDirectorPortsV0{
-		RunStore:                runStore,
-		DirectorTaskStore:       taskStore,
-		GoalLauncher:            launcher,
-		GoalObserver:            &goalFirstQueueObserverForTestV0{},
-		GoalClosureValidator:    orquestagoal.DefaultGoalWorkClosureValidatorV0{},
-		GoalStateStore:          goalStates,
-		GoalFirstRunMarkerStore: goalStates,
+		RunStore:                   runStore,
+		DirectorTaskStore:          taskStore,
+		GoalLauncher:               launcher,
+		GoalRequiredTestSpecBinder: independentSpecBinderForStackTestV0{},
+		GoalObserver:               &goalFirstQueueObserverForTestV0{},
+		GoalClosureValidator:       orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		GoalStateStore:             goalStates,
+		GoalFirstRunMarkerStore:    goalStates,
 	}
 
 	bridged, err := PrepareAutoprogrammingRunV0(ctx, AutoprogrammingBridgeRequestV0{
@@ -616,12 +624,13 @@ func TestPrepareAutoprogrammingRunV0GoalReadyRunExistenteConSpecDistintoNoReutil
 		"goal_capability:closure-validator",
 	}
 	ports := orquestaappdirectorservice.StartAppDirectorPortsV0{
-		RunStore:             runStore,
-		DirectorTaskStore:    taskStore,
-		GoalLauncher:         launcher,
-		GoalObserver:         &goalFirstQueueObserverForTestV0{},
-		GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
-		GoalStateStore:       goalStates,
+		RunStore:                   runStore,
+		DirectorTaskStore:          taskStore,
+		GoalLauncher:               launcher,
+		GoalRequiredTestSpecBinder: independentSpecBinderForStackTestV0{},
+		GoalObserver:               &goalFirstQueueObserverForTestV0{},
+		GoalClosureValidator:       orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		GoalStateStore:             goalStates,
 	}
 
 	first, err := PrepareAutoprogrammingRunV0(ctx, AutoprogrammingBridgeRequestV0{
@@ -636,6 +645,7 @@ func TestPrepareAutoprogrammingRunV0GoalReadyRunExistenteConSpecDistintoNoReutil
 
 	changed := request
 	changed.WriteSet = []string{"modulos/orquesta-app-codex-stack/changed/spec_mismatch.go"}
+	changed = withAutoprogrammingAttestationForTestV0(changed)
 	second, err := PrepareAutoprogrammingRunV0(ctx, AutoprogrammingBridgeRequestV0{
 		Request: changed,
 	}, ports)
@@ -688,12 +698,13 @@ func TestPrepareAutoprogrammingRunV0GoalReadyRunExistenteSinGoalStateNoRelanzaGo
 	bridged, err := PrepareAutoprogrammingRunV0(ctx, AutoprogrammingBridgeRequestV0{
 		Request: request,
 	}, orquestaappdirectorservice.StartAppDirectorPortsV0{
-		RunStore:             runStore,
-		DirectorTaskStore:    taskStore,
-		GoalLauncher:         launcher,
-		GoalObserver:         &goalFirstQueueObserverForTestV0{},
-		GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
-		GoalStateStore:       goalStates,
+		RunStore:                   runStore,
+		DirectorTaskStore:          taskStore,
+		GoalLauncher:               launcher,
+		GoalRequiredTestSpecBinder: independentSpecBinderForStackTestV0{},
+		GoalObserver:               &goalFirstQueueObserverForTestV0{},
+		GoalClosureValidator:       orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		GoalStateStore:             goalStates,
 	})
 	if err != nil {
 		t.Fatalf("PrepareAutoprogrammingRunV0: %v", err)
@@ -733,12 +744,13 @@ func TestPrepareAutoprogrammingRunV0GoalReadyRunExistenteConStateSinMarkerRepara
 		"goal_capability:closure-validator",
 	}
 	basePorts := orquestaappdirectorservice.StartAppDirectorPortsV0{
-		RunStore:             runStore,
-		DirectorTaskStore:    taskStore,
-		GoalLauncher:         launcher,
-		GoalObserver:         &goalFirstQueueObserverForTestV0{},
-		GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
-		GoalStateStore:       goalStates,
+		RunStore:                   runStore,
+		DirectorTaskStore:          taskStore,
+		GoalLauncher:               launcher,
+		GoalRequiredTestSpecBinder: independentSpecBinderForStackTestV0{},
+		GoalObserver:               &goalFirstQueueObserverForTestV0{},
+		GoalClosureValidator:       orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		GoalStateStore:             goalStates,
 	}
 	first, err := PrepareAutoprogrammingRunV0(ctx, AutoprogrammingBridgeRequestV0{
 		Request: request,

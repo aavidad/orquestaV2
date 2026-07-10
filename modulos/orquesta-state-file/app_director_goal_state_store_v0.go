@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -21,17 +22,35 @@ func (store *StoreV0) SaveGoalWorkStateV0(
 	ctx context.Context,
 	state orquestagoal.GoalWorkStateV0,
 ) error {
+	_, err := store.CompareAndSwapGoalWorkStateV0(ctx, state.StoreVersion, state)
+	return err
+}
+
+func (store *StoreV0) CompareAndSwapGoalWorkStateV0(
+	ctx context.Context,
+	expectedVersion uint64,
+	state orquestagoal.GoalWorkStateV0,
+) (orquestagoal.GoalWorkStateV0, error) {
 	ctx = contextOrBackgroundV0(ctx)
 	if err := ctx.Err(); err != nil {
-		return err
+		return orquestagoal.GoalWorkStateV0{}, err
 	}
 	normalized, err := orquestagoal.NewGoalWorkStateV0(state)
 	if err != nil {
-		return invalidErrorV0("app_director_goal_state", err.Error())
+		return orquestagoal.GoalWorkStateV0{}, invalidErrorV0("app_director_goal_state", err.Error())
+	}
+	if normalized.StoreVersion != expectedVersion {
+		return orquestagoal.GoalWorkStateV0{}, storeErrorV0("app_director_goal_state.store_version", "CAS expected_version inconsistente")
 	}
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	return store.saveAppDirectorGoalStateLockedV0(normalized)
+	path := store.appDirectorGoalStatePathV0(normalized.RunRef)
+	err = withProcessFileLockV0(ctx, path+".lock", func() error {
+		var saveErr error
+		normalized, saveErr = store.saveAppDirectorGoalStateCASLockedV0(normalized, expectedVersion)
+		return saveErr
+	})
+	return normalized, err
 }
 
 func (store *StoreV0) LoadGoalWorkStateV0(
@@ -48,7 +67,14 @@ func (store *StoreV0) LoadGoalWorkStateV0(
 	}
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	document, ok, err := readJSONFileV0[appDirectorGoalStateDocumentV0](store.appDirectorGoalStatePathV0(runRef))
+	path := store.appDirectorGoalStatePathV0(runRef)
+	var document appDirectorGoalStateDocumentV0
+	var ok bool
+	err := withProcessFileLockV0(ctx, path+".lock", func() error {
+		var readErr error
+		document, ok, readErr = readJSONFileV0[appDirectorGoalStateDocumentV0](path)
+		return readErr
+	})
 	if err != nil {
 		return orquestagoal.GoalWorkStateV0{}, err
 	}
@@ -95,16 +121,39 @@ func (store *StoreV0) ListGoalWorkStatesV0(
 	return states, nil
 }
 
-func (store *StoreV0) saveAppDirectorGoalStateLockedV0(
+func (store *StoreV0) saveAppDirectorGoalStateCASLockedV0(
 	state orquestagoal.GoalWorkStateV0,
-) error {
+	expectedVersion uint64,
+) (orquestagoal.GoalWorkStateV0, error) {
 	runRef := normalizeRefV0(state.RunRef)
-	return writeJSONAtomicV0(store.appDirectorGoalStatePathV0(runRef), appDirectorGoalStateDocumentV0{
+	if existingDocument, ok, err := readJSONFileV0[appDirectorGoalStateDocumentV0](store.appDirectorGoalStatePathV0(runRef)); err != nil {
+		return orquestagoal.GoalWorkStateV0{}, err
+	} else if ok {
+		existing, err := validateAppDirectorGoalStateDocumentV0(existingDocument, runRef)
+		if err != nil {
+			return orquestagoal.GoalWorkStateV0{}, err
+		}
+		if !reflect.DeepEqual(existing.Spec, state.Spec) {
+			return orquestagoal.GoalWorkStateV0{}, storeErrorV0("app_director_goal_state.spec", "goal spec congelada no puede cambiar")
+		}
+		if existing.StoreVersion != expectedVersion {
+			return orquestagoal.GoalWorkStateV0{}, orquestagoal.GoalWorkStateCASConflictErrorV0{
+				RunRef: runRef, ExpectedVersion: expectedVersion, CurrentVersion: existing.StoreVersion,
+			}
+		}
+	} else if expectedVersion != 0 {
+		return orquestagoal.GoalWorkStateV0{}, orquestagoal.GoalWorkStateCASConflictErrorV0{
+			RunRef: runRef, ExpectedVersion: expectedVersion,
+		}
+	}
+	state.StoreVersion = expectedVersion + 1
+	err := writeJSONAtomicV0(store.appDirectorGoalStatePathV0(runRef), appDirectorGoalStateDocumentV0{
 		SchemaVersion: orquestagoal.GoalWorkStateSchemaV0,
 		RunRef:        runRef,
 		GoalRef:       state.GoalRef,
 		State:         state,
 	})
+	return state, err
 }
 
 func (store *StoreV0) listAppDirectorGoalStatesByRunRefsLockedV0(

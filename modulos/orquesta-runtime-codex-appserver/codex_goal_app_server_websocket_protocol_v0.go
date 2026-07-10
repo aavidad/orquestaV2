@@ -177,7 +177,10 @@ func codexAppServerWebSocketInitializeRequestV0() map[string]interface{} {
 				"version": "0",
 			},
 			"capabilities": map[string]interface{}{
-				"experimentalApi":           true,
+				"experimentalApi": true,
+				// This app-server client capability is unrelated to the
+				// independently observed required-test receipt. Enabling it
+				// would still yield provider/runtime data, never closure authority.
 				"requestAttestation":        false,
 				"optOutNotificationMethods": []string{},
 			},

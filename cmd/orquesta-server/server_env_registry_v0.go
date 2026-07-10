@@ -250,6 +250,7 @@ const (
 	envRequiredTestAllowedCommandsV0            = "ORQUESTA_REQUIRED_TEST_ALLOWED_COMMANDS"
 	envRequiredTestOutputDirV0                  = "ORQUESTA_REQUIRED_TEST_OUTPUT_DIR"
 	envRequiredTestEnvV0                        = "ORQUESTA_REQUIRED_TEST_ENV"
+	envGoalRequiredTestAttestationConfigFileV0  = "ORQUESTA_GOAL_REQUIRED_TEST_ATTESTATION_CONFIG_FILE"
 
 	defaultCodexWaitIntervalMSV0               = 2000
 	defaultCodexStalledTicksV0                 = 300
@@ -587,6 +588,11 @@ var serverEffectiveEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 		Scope:       "autoprogramming",
 		Label:       "Backlog autoauditoria",
 		Description: "Activa una fuente opt-in que convierte hallazgos de auditoria local en backlog goal-first de automejora.",
+	},
+	envGoalRequiredTestAttestationConfigFileV0: {
+		Scope:       "autoprogramming_attestation",
+		Label:       "Config atestacion independiente",
+		Description: "Ruta local opt-in al JSON completo de runner aislado e identidad/policy confiable para tests requeridos goal-first.",
 	},
 	envOPESBridgeWaitResidentSecondsV0: {
 		Scope:       "opes_bridge",

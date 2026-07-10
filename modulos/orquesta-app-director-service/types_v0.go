@@ -56,39 +56,44 @@ type StartAppDirectorRequestV0 struct {
 }
 
 type StartAppDirectorPortsV0 struct {
-	RunStore                    orquestacionnucleoapp.RunStorePortV0
-	EventSink                   orquestacionnucleoapp.EventSinkPortV0
-	EventReader                 orquestacionnucleoapp.RunEventReaderPortV0
-	OutboxLedger                orquestadirectorcycleoutbox.DirectorCycleOutboxLedgerPortV0
-	Dispatchers                 []orquestacionnucleoapp.OutboxDispatcherBindingV0
-	BatchDispatchers            []orquestacionnucleoapp.OutboxBatchDispatcherBindingV0
-	DeliverySource              orquestacionnucleoapp.AgentDeliveryObservationProviderPortV0
-	ReviewGateSource            orquestacionnucleoapp.ReviewGateObservationProviderPortV0
-	ReviewReworkReplanSource    orquestacionnucleoapp.ReviewReworkReplanPlanProviderPortV0
-	ProgressSource              orquestacionnucleoapp.AgentProgressObservationProviderPortV0
-	RunControl                  orquestaruncontrol.RunControlReaderPortV0
-	RunControlTerminal          orquestaruncontrol.RunControlTerminalWriterPortV0
-	LeaseSource                 orquestacionnucleoapp.AgentLeaseAssessmentProviderPortV0
-	AssessmentReplanSource      orquestacionnucleoapp.AgentAssessmentReplanPlanProviderPortV0
-	DirectorDecisionSource      orquestadirectoragentworkflow.DirectorAgentDecisionSourcePortV0
-	DirectorTaskStore           AppDirectorWorkflowTaskStorePortV0
-	WorkflowTaskProfileResolver orquestacionnucleoapp.WorkflowTaskProfileResolverPortV0
-	WorkflowTaskDefaultCapacity orquestacoreworkflow.OrchestrationCapacityRecommendationV0
-	WaitStateWriter             orquestacionnucleoapp.WorkflowTaskWaitStateWriterPortV0
-	WaitStateStore              orquestacionnucleoapp.WorkflowTaskWaitStateStorePortV0
-	OperationalPlanStateWriter  orquestacionnucleoapp.OperationalDirectorPlanStateWriterPortV0
-	OperationalPlanStateStore   orquestacionnucleoapp.OperationalDirectorPlanStateStorePortV0
-	RequiredTestEvidenceStore   orquestacionnucleoapp.RequiredTestEvidenceReaderPortV0
-	RequiredTestRunner          orquestacionnucleoapp.RequiredTestRunnerPortV0
-	AutonomousDirectorPolicy    orquestacionnucleoapp.AutonomousDirectorPolicyPortV0
-	GoalLauncher                orquestagoal.GoalWorkLauncherPortV0
-	GoalReworkLauncher          orquestagoal.GoalWorkLauncherPortV0
-	GoalObserver                orquestagoal.GoalWorkObservationPortV0
-	GoalClosureValidator        orquestagoal.GoalWorkClosureValidatorPortV0
-	GoalStateStore              orquestagoal.GoalWorkStateStorePortV0
-	GoalFirstRunMarkerStore     AppDirectorGoalFirstRunMarkerStorePortV0
-	ExternalWaiter              orquestacionnucleoapp.ExternalProgressWaiterPortV0
-	OperationalClosureSource    AppDirectorOperationalClosureSourcePortV0
+	RunStore                         orquestacionnucleoapp.RunStorePortV0
+	EventSink                        orquestacionnucleoapp.EventSinkPortV0
+	EventReader                      orquestacionnucleoapp.RunEventReaderPortV0
+	OutboxLedger                     orquestadirectorcycleoutbox.DirectorCycleOutboxLedgerPortV0
+	Dispatchers                      []orquestacionnucleoapp.OutboxDispatcherBindingV0
+	BatchDispatchers                 []orquestacionnucleoapp.OutboxBatchDispatcherBindingV0
+	DeliverySource                   orquestacionnucleoapp.AgentDeliveryObservationProviderPortV0
+	ReviewGateSource                 orquestacionnucleoapp.ReviewGateObservationProviderPortV0
+	ReviewReworkReplanSource         orquestacionnucleoapp.ReviewReworkReplanPlanProviderPortV0
+	ProgressSource                   orquestacionnucleoapp.AgentProgressObservationProviderPortV0
+	RunControl                       orquestaruncontrol.RunControlReaderPortV0
+	RunControlTerminal               orquestaruncontrol.RunControlTerminalWriterPortV0
+	LeaseSource                      orquestacionnucleoapp.AgentLeaseAssessmentProviderPortV0
+	AssessmentReplanSource           orquestacionnucleoapp.AgentAssessmentReplanPlanProviderPortV0
+	DirectorDecisionSource           orquestadirectoragentworkflow.DirectorAgentDecisionSourcePortV0
+	DirectorTaskStore                AppDirectorWorkflowTaskStorePortV0
+	WorkflowTaskProfileResolver      orquestacionnucleoapp.WorkflowTaskProfileResolverPortV0
+	WorkflowTaskDefaultCapacity      orquestacoreworkflow.OrchestrationCapacityRecommendationV0
+	WaitStateWriter                  orquestacionnucleoapp.WorkflowTaskWaitStateWriterPortV0
+	WaitStateStore                   orquestacionnucleoapp.WorkflowTaskWaitStateStorePortV0
+	OperationalPlanStateWriter       orquestacionnucleoapp.OperationalDirectorPlanStateWriterPortV0
+	OperationalPlanStateStore        orquestacionnucleoapp.OperationalDirectorPlanStateStorePortV0
+	RequiredTestEvidenceStore        orquestacionnucleoapp.RequiredTestEvidenceReaderPortV0
+	RequiredTestRunner               orquestacionnucleoapp.RequiredTestRunnerPortV0
+	AutonomousDirectorPolicy         orquestacionnucleoapp.AutonomousDirectorPolicyPortV0
+	GoalLauncher                     orquestagoal.GoalWorkLauncherPortV0
+	GoalReworkLauncher               orquestagoal.GoalWorkLauncherPortV0
+	GoalObserver                     orquestagoal.GoalWorkObservationPortV0
+	GoalRequiredTestSpecBinder       orquestagoal.GoalRequiredTestSpecBinderPortV0
+	GoalRequiredTestSnapshotObserver orquestagoal.GoalRequiredTestFinalSnapshotObserverPortV0
+	GoalRequiredTestAttestor         orquestagoal.GoalRequiredTestAttestorPortV0
+	GoalRequiredTestAttestationStore orquestagoal.GoalRequiredTestAttestationStorePortV0
+	GoalRequiredTestIdentityVerifier orquestagoal.GoalRequiredTestIdentityVerifierPortV0
+	GoalClosureValidator             orquestagoal.GoalWorkClosureValidatorPortV0
+	GoalStateStore                   orquestagoal.GoalWorkStateStorePortV0
+	GoalFirstRunMarkerStore          AppDirectorGoalFirstRunMarkerStorePortV0
+	ExternalWaiter                   orquestacionnucleoapp.ExternalProgressWaiterPortV0
+	OperationalClosureSource         AppDirectorOperationalClosureSourcePortV0
 }
 
 type AppDirectorWorkflowTaskStorePortV0 interface {

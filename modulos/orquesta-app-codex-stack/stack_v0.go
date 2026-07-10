@@ -626,12 +626,17 @@ func buildDirectorPortsV0(
 			goalLauncherWithRequiredTestsDependenciesFromConfigV0(config.AppGoalReworkLauncher, config.GoalRequiredTestDependencies),
 			config.CodeContext,
 		),
-		GoalObserver:             goalFirstReconciledObserverFromConfigV0(config),
-		GoalClosureValidator:     appGoalClosureValidatorV0(config),
-		GoalStateStore:           config.Stores.AppGoalStateStore,
-		GoalFirstRunMarkerStore:  appGoalFirstRunMarkerStoreV0(config),
-		ExternalWaiter:           ackWaiterV0(config),
-		OperationalClosureSource: operationalClosureSourceV0(config),
+		GoalObserver:                     goalFirstReconciledObserverFromConfigV0(config),
+		GoalRequiredTestSpecBinder:       config.AppGoalRequiredTestSpecBinder,
+		GoalRequiredTestSnapshotObserver: config.AppGoalRequiredTestSnapshotObserver,
+		GoalRequiredTestAttestor:         config.AppGoalRequiredTestAttestor,
+		GoalRequiredTestAttestationStore: goalRequiredTestAttestationStoreV0(config),
+		GoalRequiredTestIdentityVerifier: config.AppGoalRequiredTestIdentityVerifier,
+		GoalClosureValidator:             appGoalClosureValidatorV0(config),
+		GoalStateStore:                   config.Stores.AppGoalStateStore,
+		GoalFirstRunMarkerStore:          appGoalFirstRunMarkerStoreV0(config),
+		ExternalWaiter:                   ackWaiterV0(config),
+		OperationalClosureSource:         operationalClosureSourceV0(config),
 		Dispatchers: []orquestacionnucleoapp.OutboxDispatcherBindingV0{
 			capacityDispatcherV0(config),
 			stopperDispatcherV0(config),
@@ -695,10 +700,20 @@ func appGoalClosureValidatorV0(
 		Base:   base,
 		Ledger: domainWorkSubmissionRecordReaderV0(config.DomainDelivery.Ledger),
 	}
-	return frozenRequiredTestsClosureValidatorV0{
+	frozen := frozenRequiredTestsClosureValidatorV0{
 		Base:           domainValidator,
 		ProjectWorkDir: strings.TrimSpace(config.Codex.ProjectWorkDir),
 	}
+	return orquestagoal.IndependentGoalRequiredTestAttestationClosureValidatorV0{
+		Base:             frozen,
+		Reader:           goalRequiredTestAttestationStoreV0(config),
+		SnapshotReader:   goalRequiredTestAttestationStoreV0(config),
+		IdentityVerifier: config.AppGoalRequiredTestIdentityVerifier,
+	}
+}
+
+func goalRequiredTestAttestationStoreV0(config ConfigV0) orquestagoal.GoalRequiredTestAttestationStorePortV0 {
+	return config.Stores.GoalRequiredTestAttestationStore
 }
 
 func requiredTestEvidenceStoreV0(

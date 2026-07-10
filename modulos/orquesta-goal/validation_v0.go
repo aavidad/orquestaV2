@@ -21,6 +21,9 @@ func NormalizeGoalWorkSpecV0(spec GoalWorkSpecV0) GoalWorkSpecV0 {
 	spec.GoalRef = strings.TrimSpace(spec.GoalRef)
 	spec.RequestRef = strings.TrimSpace(spec.RequestRef)
 	spec.RunRef = strings.TrimSpace(spec.RunRef)
+	spec.ImplementerAgentRef = strings.TrimSpace(spec.ImplementerAgentRef)
+	spec.ImplementerCredentialRef = strings.TrimSpace(spec.ImplementerCredentialRef)
+	spec.WriteSetSHA256 = strings.ToLower(strings.TrimSpace(spec.WriteSetSHA256))
 	spec.ProjectRef = strings.TrimSpace(spec.ProjectRef)
 	spec.DomainRef = strings.TrimSpace(spec.DomainRef)
 	spec.WorkKind = strings.TrimSpace(spec.WorkKind)
@@ -51,9 +54,7 @@ func NormalizeGoalWorkSpecV0(spec GoalWorkSpecV0) GoalWorkSpecV0 {
 		spec.WriteSet[i].Purpose = strings.TrimSpace(spec.WriteSet[i].Purpose)
 	}
 	for i := range spec.RequiredTests {
-		spec.RequiredTests[i].TestRef = strings.TrimSpace(spec.RequiredTests[i].TestRef)
-		spec.RequiredTests[i].CommandRef = strings.TrimSpace(spec.RequiredTests[i].CommandRef)
-		spec.RequiredTests[i].Command = strings.TrimSpace(spec.RequiredTests[i].Command)
+		spec.RequiredTests[i] = normalizeGoalRequiredTestAttestationTestV0(spec.RequiredTests[i])
 	}
 	for i := range spec.ArtifactContracts {
 		spec.ArtifactContracts[i].ArtifactRef = strings.TrimSpace(spec.ArtifactContracts[i].ArtifactRef)
@@ -65,6 +66,7 @@ func NormalizeGoalWorkSpecV0(spec GoalWorkSpecV0) GoalWorkSpecV0 {
 	for i := range spec.ClosurePolicy.RequiredEvidenceRefs {
 		spec.ClosurePolicy.RequiredEvidenceRefs[i] = strings.TrimSpace(spec.ClosurePolicy.RequiredEvidenceRefs[i])
 	}
+	spec.ClosurePolicy.RequiredAttestorTrustPolicyRef = strings.TrimSpace(spec.ClosurePolicy.RequiredAttestorTrustPolicyRef)
 	return spec
 }
 
@@ -258,6 +260,8 @@ func ValidateGoalWorkSpecV0(spec GoalWorkSpecV0) []GoalWorkIssueV0 {
 	}
 	validateGoalRefsV0(&issues, "request_ref", spec.RequestRef)
 	validateGoalRefsV0(&issues, "run_ref", spec.RunRef)
+	validateGoalRefsV0(&issues, "implementer_agent_ref", spec.ImplementerAgentRef)
+	validateGoalRefsV0(&issues, "implementer_credential_ref", spec.ImplementerCredentialRef)
 	validateGoalRefsV0(&issues, "project_ref", spec.ProjectRef)
 	validateGoalRefsV0(&issues, "domain_ref", spec.DomainRef)
 	for _, ctx := range spec.ContextRefs {
@@ -275,6 +279,17 @@ func ValidateGoalWorkSpecV0(spec GoalWorkSpecV0) []GoalWorkIssueV0 {
 	for _, test := range spec.RequiredTests {
 		validateRequiredGoalRefV0(&issues, "required_tests.test_ref", test.TestRef)
 		validateGoalRefsV0(&issues, "required_tests.command_ref", test.CommandRef)
+	}
+	if spec.ClosurePolicy.RequireIndependentRequiredTestAttestation {
+		if len(spec.RequiredTests) == 0 {
+			issues = append(issues, GoalWorkIssueV0{Code: ErrGoalRequiredTestAttestationMissingV0, Field: "required_tests"})
+		}
+		if spec.WriteSetSHA256 != GoalWriteSetSHA256V0(spec.WriteSet) {
+			issues = append(issues, GoalWorkIssueV0{Code: ErrGoalRequiredTestAttestationMismatchV0, Field: "write_set_sha256"})
+		}
+		for _, test := range spec.RequiredTests {
+			validateFrozenGoalRequiredTestV0(&issues, test, "required_tests")
+		}
 	}
 	for _, artifact := range spec.ArtifactContracts {
 		validateRequiredGoalRefV0(&issues, "artifact_contracts.artifact_ref", artifact.ArtifactRef)
@@ -299,6 +314,8 @@ func validateGoalWorkSpecLimitsV0(issues *[]GoalWorkIssueV0, spec GoalWorkSpecV0
 	validateGoalStringLimitV0(issues, "goal_ref", spec.GoalRef, GoalWorkSpecMaxStringBytesV0)
 	validateGoalStringLimitV0(issues, "request_ref", spec.RequestRef, GoalWorkSpecMaxStringBytesV0)
 	validateGoalStringLimitV0(issues, "run_ref", spec.RunRef, GoalWorkSpecMaxStringBytesV0)
+	validateGoalStringLimitV0(issues, "implementer_agent_ref", spec.ImplementerAgentRef, GoalWorkSpecMaxStringBytesV0)
+	validateGoalStringLimitV0(issues, "implementer_credential_ref", spec.ImplementerCredentialRef, GoalWorkSpecMaxStringBytesV0)
 	validateGoalStringLimitV0(issues, "project_ref", spec.ProjectRef, GoalWorkSpecMaxStringBytesV0)
 	validateGoalStringLimitV0(issues, "domain_ref", spec.DomainRef, GoalWorkSpecMaxStringBytesV0)
 	validateGoalStringLimitV0(issues, "work_kind", spec.WorkKind, GoalWorkSpecMaxStringBytesV0)
@@ -352,6 +369,7 @@ func validateGoalWorkSpecLimitsV0(issues *[]GoalWorkIssueV0, spec GoalWorkSpecV0
 
 	validateGoalStringListLimitV0(issues, "evidence_refs", spec.EvidenceRefs)
 	validateGoalStringListLimitV0(issues, "closure_policy.required_evidence_refs", spec.ClosurePolicy.RequiredEvidenceRefs)
+	validateGoalStringLimitV0(issues, "closure_policy.required_attestor_trust_policy_ref", spec.ClosurePolicy.RequiredAttestorTrustPolicyRef, GoalWorkSpecMaxStringBytesV0)
 }
 
 func validateGoalStringListLimitV0(issues *[]GoalWorkIssueV0, field string, values []string) {
@@ -640,9 +658,17 @@ func NormalizeGoalWorkStateV0(state GoalWorkStateV0) GoalWorkStateV0 {
 		state.LastResult = &normalized
 	}
 	if state.LastClosure != nil {
-		for i := range state.LastClosure.Issues {
-			state.LastClosure.Issues[i] = normalizeGoalWorkIssueV0(state.LastClosure.Issues[i])
+		closure := *state.LastClosure
+		closure.EvidenceRefs = compactGoalStringsV0(closure.EvidenceRefs)
+		closure.Issues = append([]GoalWorkIssueV0(nil), closure.Issues...)
+		for i := range closure.Issues {
+			closure.Issues[i] = normalizeGoalWorkIssueV0(closure.Issues[i])
 		}
+		closure.AttestationVerifications = append([]GoalRequiredTestIdentityVerificationV0(nil), closure.AttestationVerifications...)
+		for i := range closure.AttestationVerifications {
+			closure.AttestationVerifications[i] = normalizeGoalRequiredTestIdentityVerificationV0(closure.AttestationVerifications[i])
+		}
+		state.LastClosure = &closure
 	}
 	for i := range state.EvidenceRefs {
 		state.EvidenceRefs[i] = strings.TrimSpace(state.EvidenceRefs[i])

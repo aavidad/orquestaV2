@@ -89,6 +89,7 @@ func TestCodexStackAutoprogrammingPromotionV0GoalFirstE2ERepoTemporalReplayV0(t 
 	stack.Ports.GoalClosureValidator = orquestagoal.DefaultGoalWorkClosureValidatorV0{}
 	stack.Ports.GoalStateStore = goalStates
 	stack.Stores.AppGoalStateStore = goalStates
+	enableIndependentAttestationForStackTestV0(&stack)
 	port := &gitBackedAutoprogrammingPromotionPortForTestV0{
 		projectWorkDir: repo,
 		archiveDir:     filepath.Join(t.TempDir(), "archive"),
@@ -101,6 +102,7 @@ func TestCodexStackAutoprogrammingPromotionV0GoalFirstE2ERepoTemporalReplayV0(t 
 	request.WorktreeRef = "worktree-ref-autoprogramming-goal-first-promotion-e2e-001"
 	request.BranchRef = "branch-ref-autoprogramming-goal-first-promotion-e2e-001"
 	request.WriteSet = []string{"feature.md"}
+	request = withAutoprogrammingAttestationForTestV0(request)
 	request.RequiredTests = []string{"go test ./modulos/orquesta-app-codex-stack"}
 	request.Tasks[0].TaskRef = "source-task-ref-autoprogramming-goal-first-promotion-e2e-001"
 	request.Tasks[0].ContextRefs = []string{

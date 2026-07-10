@@ -2,14 +2,21 @@ package orquestagoal
 
 import (
 	"context"
+	"errors"
+	"reflect"
 	"strings"
 )
 
 type GoalWorkLifecyclePortsV0 struct {
-	Launcher         GoalWorkLauncherPortV0
-	Observer         GoalWorkObservationPortV0
-	ClosureValidator GoalWorkClosureValidatorPortV0
-	StateStore       GoalWorkStateStorePortV0
+	Launcher                     GoalWorkLauncherPortV0
+	Observer                     GoalWorkObservationPortV0
+	ClosureValidator             GoalWorkClosureValidatorPortV0
+	StateStore                   GoalWorkStateStorePortV0
+	RequiredTestSpecBinder       GoalRequiredTestSpecBinderPortV0
+	RequiredTestSnapshotObserver GoalRequiredTestFinalSnapshotObserverPortV0
+	RequiredTestAttestor         GoalRequiredTestAttestorPortV0
+	RequiredTestAttestationStore GoalRequiredTestAttestationStorePortV0
+	RequiredTestIdentityVerifier GoalRequiredTestIdentityVerifierPortV0
 }
 
 type GoalWorkStartRequestV0 struct {
@@ -73,12 +80,25 @@ func StartGoalWorkV0(
 		return GoalWorkStartResultV0{}, GoalWorkLifecycleIssueErrorV0{Field: "ports.goal_state_store"}
 	}
 	spec := goalWorkSpecWithRunRefV0(request.Spec, request.RunRef)
+	var err error
+	if spec.ClosurePolicy.RequireIndependentRequiredTestAttestation {
+		if ports.RequiredTestSpecBinder == nil {
+			return GoalWorkStartResultV0{}, GoalWorkLifecycleIssueErrorV0{Field: "ports.goal_required_test_spec_binder"}
+		}
+		spec, err = ports.RequiredTestSpecBinder.BindGoalRequiredTestSpecV0(ctx, spec)
+		if err != nil {
+			return GoalWorkStartResultV0{}, err
+		}
+	}
 	runRef, err := goalLifecycleRunRefV0(request.RunRef, spec)
 	if err != nil {
 		return GoalWorkStartResultV0{}, err
 	}
 	if issues := ValidateGoalWorkSpecV0(spec); len(issues) > 0 {
 		return GoalWorkStartResultV0{}, GoalWorkLifecycleIssueErrorV0{Field: "goal_spec"}
+	}
+	if issues := ValidateGoalRequiredTestAttestationBindingV0(spec); len(issues) > 0 {
+		return GoalWorkStartResultV0{}, GoalWorkLifecycleIssueErrorV0{Field: "goal_required_test_attestation_binding", Issues: issues}
 	}
 	receipt, err := ports.Launcher.LaunchGoalWorkV0(ctx, spec)
 	if err != nil {
@@ -99,9 +119,11 @@ func StartGoalWorkV0(
 		Receipt:      state.LaunchReceipt,
 		EvidenceRefs: append([]string(nil), state.EvidenceRefs...),
 	}
-	if err := ports.StateStore.SaveGoalWorkStateV0(ctx, state); err != nil {
+	state, err = saveGoalWorkStateV0(ctx, ports.StateStore, state)
+	if err != nil {
 		return result, err
 	}
+	result.State = state
 	return result, nil
 }
 
@@ -139,7 +161,9 @@ func persistPartialGoalLaunchStateV0(
 		EvidenceRefs: append([]string(nil), state.EvidenceRefs...),
 	}
 	if store != nil {
-		_ = store.SaveGoalWorkStateV0(ctx, state)
+		if saved, saveErr := saveGoalWorkStateV0(ctx, store, state); saveErr == nil {
+			result.State = saved
+		}
 	}
 	return result
 }
@@ -196,11 +220,88 @@ func ObserveGoalWorkV0(
 	closure := GoalClosureValidationV0{}
 	if terminal {
 		if ports.ClosureValidator == nil {
-			return GoalWorkObserveResultV0{}, GoalWorkLifecycleIssueErrorV0{Field: "ports.goal_closure_validator"}
+			if !state.Spec.ClosurePolicy.RequireIndependentRequiredTestAttestation {
+				return GoalWorkObserveResultV0{}, GoalWorkLifecycleIssueErrorV0{Field: "ports.goal_closure_validator"}
+			}
+			closure = blockedGoalRequiredTestAttestationClosureV0(
+				GoalClosureValidationV0{}, ErrGoalRequiredTestAttestationMissingV0, "ports.goal_closure_validator",
+			)
 		}
-		closure, err = ports.ClosureValidator.ValidateGoalWorkClosureV0(ctx, state.Spec, result)
-		if err != nil {
-			return GoalWorkObserveResultV0{}, err
+		closureValidator := ports.ClosureValidator
+		if state.Spec.ClosurePolicy.RequireIndependentRequiredTestAttestation && len(closure.Issues) == 0 {
+			if ports.RequiredTestSnapshotObserver == nil || ports.RequiredTestAttestor == nil || ports.RequiredTestAttestationStore == nil || ports.RequiredTestIdentityVerifier == nil {
+				closure = blockedGoalRequiredTestAttestationClosureV0(
+					GoalClosureValidationV0{},
+					ErrGoalRequiredTestAttestationMissingV0,
+					"ports.required_test_attestation",
+				)
+			} else {
+				if result.Status == GoalStatusCompleteV0 {
+					snapshot, err := ports.RequiredTestSnapshotObserver.CaptureGoalRequiredTestFinalSnapshotV0(ctx, GoalRequiredTestFinalSnapshotRequestV0{
+						RunRef: state.Spec.RunRef, GoalRef: state.Spec.GoalRef,
+						WriteSet: append([]GoalWriteScopeV0(nil), state.Spec.WriteSet...), WriteSetSHA256: state.Spec.WriteSetSHA256,
+					})
+					if err != nil {
+						return GoalWorkObserveResultV0{}, err
+					}
+					snapshot, err = ports.RequiredTestAttestationStore.FreezeGoalRequiredTestFinalSnapshotV0(ctx, snapshot)
+					if err != nil {
+						return GoalWorkObserveResultV0{}, err
+					}
+					existing, err := ports.RequiredTestAttestationStore.ListGoalRequiredTestAttestationsV0(ctx, GoalRequiredTestAttestationQueryV0{
+						RunRef: state.Spec.RunRef, GoalRef: state.Spec.GoalRef, RevisionRef: snapshot.RevisionRef,
+					})
+					if err != nil {
+						return GoalWorkObserveResultV0{}, err
+					}
+					missing := MissingGoalRequiredTestsForAttestationV0(state.Spec, existing)
+					for _, test := range missing {
+						claimResult, err := ports.RequiredTestAttestationStore.AcquireGoalRequiredTestAttestationClaimV0(ctx, GoalRequiredTestAttestationClaimRequestV0{
+							RunRef: state.Spec.RunRef, GoalRef: state.Spec.GoalRef, RevisionRef: snapshot.RevisionRef,
+							TestRef: test.TestRef, DefinitionSHA256: test.DefinitionSHA256,
+						})
+						if err != nil {
+							return GoalWorkObserveResultV0{}, err
+						}
+						if !claimResult.Acquired {
+							if claimResult.Claim.Status == GoalRequiredTestAttestationClaimStatusFailedV0 {
+								closure = blockedGoalRequiredTestAttestationClosureV0(GoalClosureValidationV0{}, ErrGoalRequiredTestAttestationFailedV0, "required_test_attestation_claim")
+								closure.EvidenceRefs = compactGoalStringsV0(append(closure.EvidenceRefs, claimResult.Claim.ClaimRef))
+								break
+							}
+							continue
+						}
+						attestationRequest := GoalRequiredTestAttestationRequestFromSpecV0(state.Spec, snapshot)
+						attestationRequest.RequiredTests = []GoalRequiredTestV0{test}
+						if _, err := RunAndPersistGoalRequiredTestAttestationsV0(
+							ctx,
+							attestationRequest,
+							claimResult.Claim,
+							ports.RequiredTestAttestor,
+							ports.RequiredTestAttestationStore,
+						); err != nil {
+							failedClaim, failErr := ports.RequiredTestAttestationStore.FailGoalRequiredTestAttestationClaimV0(ctx, claimResult.Claim, ErrGoalRequiredTestAttestationFailedV0)
+							if failErr != nil {
+								return GoalWorkObserveResultV0{}, failErr
+							}
+							closure = blockedGoalRequiredTestAttestationClosureV0(GoalClosureValidationV0{}, ErrGoalRequiredTestAttestationFailedV0, "required_test_attestation")
+							closure.EvidenceRefs = compactGoalStringsV0(append(closure.EvidenceRefs, failedClaim.ClaimRef))
+							break
+						}
+					}
+				}
+				closureValidator = EnforceIndependentGoalRequiredTestAttestationV0(
+					ports.ClosureValidator,
+					ports.RequiredTestAttestationStore,
+					ports.RequiredTestIdentityVerifier,
+				)
+			}
+		}
+		if closure.Issues == nil {
+			closure, err = closureValidator.ValidateGoalWorkClosureV0(ctx, state.Spec, result)
+			if err != nil {
+				return GoalWorkObserveResultV0{}, err
+			}
 		}
 		state.LastClosure = &closure
 		state.EvidenceRefs = compactGoalStringsV0(append(state.EvidenceRefs, closure.EvidenceRefs...))
@@ -209,8 +310,16 @@ func ObserveGoalWorkV0(
 	if err != nil {
 		return GoalWorkObserveResultV0{}, err
 	}
-	if err := ports.StateStore.SaveGoalWorkStateV0(ctx, state); err != nil {
+	state, err = saveGoalWorkStateV0(ctx, ports.StateStore, state)
+	if err != nil {
 		return GoalWorkObserveResultV0{}, err
+	}
+	if state.LastResult != nil {
+		result = *state.LastResult
+		terminal = GoalWorkResultTerminalV0(result.Status)
+	}
+	if state.LastClosure != nil {
+		closure = *state.LastClosure
 	}
 	return GoalWorkObserveResultV0{
 		State:            state,
@@ -246,7 +355,33 @@ func persistFailedGoalObservationV0(
 	if err != nil {
 		return
 	}
-	_ = store.SaveGoalWorkStateV0(ctx, normalized)
+	_, _ = saveGoalWorkStateV0(ctx, store, normalized)
+}
+
+func saveGoalWorkStateV0(
+	ctx context.Context,
+	store GoalWorkStateStorePortV0,
+	state GoalWorkStateV0,
+) (GoalWorkStateV0, error) {
+	if cas, ok := store.(GoalWorkStateCASStorePortV0); ok {
+		saved, err := cas.CompareAndSwapGoalWorkStateV0(ctx, state.StoreVersion, state)
+		if err == nil {
+			return saved, nil
+		}
+		var conflict GoalWorkStateCASConflictErrorV0
+		if !errors.As(err, &conflict) {
+			return GoalWorkStateV0{}, err
+		}
+		current, loadErr := store.LoadGoalWorkStateV0(ctx, state.RunRef)
+		if loadErr != nil {
+			return GoalWorkStateV0{}, err
+		}
+		if !reflect.DeepEqual(current.Spec, state.Spec) || current.StoreVersion <= state.StoreVersion {
+			return GoalWorkStateV0{}, err
+		}
+		return current, nil
+	}
+	return state, store.SaveGoalWorkStateV0(ctx, state)
 }
 
 func NewGoalWorkStateFromLaunchV0(
