@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+export LC_ALL=C
 set -euo pipefail
 
 # MEJ-106 mide por separado configuracion productiva y nombres exclusivos de

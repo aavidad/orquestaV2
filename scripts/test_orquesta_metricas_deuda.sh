@@ -72,6 +72,22 @@ assert_positive_key_value_output "$repo_output"
 repo_json_output="$(cd "$ROOT" && "$script" --json)"
 assert_json_matches_key_value_output "$repo_output" "$repo_json_output"
 
+# Use a synthetic unavailable locale so this case is portable without es_ES.
+# The shims simulate locale-sensitive sort/comm and reject calls unless the
+# metric script has overridden the inherited locale with LC_ALL=C.
+locale_shims="$workdir/locale-shims"
+mkdir -p "$locale_shims"
+system_sort="$(command -v sort)"
+system_comm="$(command -v comm)"
+printf '#!/usr/bin/env bash\n[ "${LC_ALL:-}" = C ] || { echo "sort requires LC_ALL=C" >&2; exit 1; }\nexec %q "$@"\n' \
+  "$system_sort" >"$locale_shims/sort"
+printf '#!/usr/bin/env bash\n[ "${LC_ALL:-}" = C ] || { echo "comm requires LC_ALL=C" >&2; exit 1; }\nexec %q "$@"\n' \
+  "$system_comm" >"$locale_shims/comm"
+chmod +x "$locale_shims/sort" "$locale_shims/comm"
+
+locale_simulated_output="$(cd "$ROOT" && LC_ALL=orquesta_test_non_c PATH="$locale_shims:$PATH" "$script" --json 2>"$workdir/locale-warning")"
+assert_json_matches_key_value_output "$repo_output" "$locale_simulated_output"
+
 fixture="$workdir/repo"
 mkdir -p \
   "$fixture/cmd/app" \
