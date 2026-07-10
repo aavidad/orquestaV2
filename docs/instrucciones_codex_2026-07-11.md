@@ -45,3 +45,33 @@ Trabajo de integracion y poda: bueno y disciplinado (ratchets separados y
 endurecidos en vez de subirlos, poda con clasificacion, fallos documentados
 con receipt). Debilidad sistematica: verificar solo en tu entorno y no
 reejecutar tus propios guards tras anadir superficie. R1-R3 atacan eso.
+
+## Directiva del operador (2026-07-11): terminar la app de DENTRO hacia AFUERA
+
+Vigente tras completar R1-R4 y la limpieza en curso (variables duplicadas y
+funciones sin uso). Orden obligatorio de frentes; no se abre una capa hasta
+que la anterior queda TERMINADA (funcional completa + suites de modulo
+verdes + contratos en docs/ del modulo + sin TODOs abiertos de esa capa):
+
+1. NUCLEO (dominio puro, sin proveedor ni IO):
+   `orquesta-estado-vivo`, `orquesta-goal`, `orquesta-orchestration-core`,
+   `orquesta-app-director-service`, `orquesta-run-control`,
+   `orquesta-run-queue`, `orquesta-autoprogramming`.
+   Criterio de terminado: contratos completos y estables, cero
+   reconciliaciones duplicadas fuera de `DerivarVeredictoCausalV0`,
+   property-tests del nucleo verdes.
+2. CONECTORES (adaptadores/puertos a mundo real):
+   `orquesta-runtime-codex-*` (goal backend, delivery, appserver),
+   `orquesta-state-file`, `orquesta-runtime-required-test`,
+   superficies MCP/HTTP de `orquesta-mcp` y wiring de
+   `orquesta-app-codex-stack` + `cmd/orquesta-server`.
+   Criterio: cada puerto del nucleo tiene adaptador probado (fake + real
+   cuando exista), sin logica de dominio en adaptadores.
+3. AUXILIARES (al final): tools/CLI extra, transporte stdio, ingesta y
+   presentaciones, web/telegram, scripts de operacion no criticos.
+   Nada auxiliar se amplia mientras 1 o 2 tengan huecos.
+
+Regla del revisor: features nuevas de capa 3 (como las de la noche del
+10-11: stdio, ingesta CSV/JSON, presentaciones) quedan CONGELADAS en cuanto
+cierres la limpieza actual, hasta que 1 y 2 esten terminadas. El revisor
+comprobara en cada despertar que los commits respetan el orden.
