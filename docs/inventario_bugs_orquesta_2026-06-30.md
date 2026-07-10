@@ -3798,6 +3798,18 @@ con entorno aislado en `/srv/orquesta-self/runtime/test-cache/f3-rework`. Sigue
 abierto como fallo estructural hasta que el supervisor residente convierta ese
 estancamiento en rework/autorreparacion sin operador.
 
+Subfallo `208G` (observado en F5 2026-07-10): tras desplegar el binario nuevo,
+el goal `goal-ref-task-autoprogramming-6efdd0df4cd6-g01` ya no quedo falso
+`running`, pero cerro `blocked` con `reason_code=checkpoint_started` y
+`missing_refs=[implementation, required_tests]`. Aun asi dejo cambios parciales
+validos en `cmd/orquesta-server` para guard de `prepare-run`; Codex integro esa
+entrega parcial, completo manualmente las guardas de `orquesta_server_ctl.sh` y
+el receipt de deploy, y valido `bash scripts/test_orquesta_server_ctl.sh`,
+`bash scripts/test_orquesta_server_deploy.sh` y
+`go test -count=1 ./cmd/orquesta-server -run TestSmokeGoalFirstScriptContractGuardV0|TestAutoprogrammingPrepareRunRuntimeWorkdirGuardV0` con entorno aislado.
+Sigue abierto como fallo de autonomia: Orquesta debe replanificar o pedir
+rework cuando un goal queda solo en checkpoint, no requerir integracion manual.
+
 Indice de sesion para Claude: todos los fallos operativos observados por Codex
 en el corte remoto 2026-07-10 quedan agrupados en
 `docs/incidencias/incidencias_sesion_codex_remoto_orquesta_2026-07-10.md`.

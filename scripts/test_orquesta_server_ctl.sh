@@ -64,6 +64,8 @@ run_start_case() {
   expected_config="$2"
   root="$workdir/$case_name"
   mkdir -p "$root/state" "$root/project"
+  git -C "$root/project" init -q
+  git -C "$root/project" -c user.name="Ctl Test" -c user.email="ctl-test@example.invalid" commit --allow-empty -q -m initial
   args_file="$root/args.txt"
   addr="$(free_addr)"
   if [ "$expected_config" = "auto" ]; then
@@ -97,6 +99,48 @@ run_start_case() {
   fake_pid=""
 }
 
+run_invalid_workdir_case() {
+  case_name="$1"
+  project_setup="$2"
+  root="$workdir/$case_name"
+  mkdir -p "$root/state"
+  addr="$(free_addr)"
+  project="$root/project"
+  case "$project_setup" in
+    missing)
+      ;;
+    file)
+      printf 'not-dir\n' >"$project"
+      ;;
+    non-git)
+      mkdir -p "$project"
+      ;;
+    *)
+      echo "project_setup no soportado: $project_setup" >&2
+      exit 2
+      ;;
+  esac
+  set +e
+  ORQUESTA_CTL_HOME="$root" \
+  ORQUESTA_CTL_BINARY="$fake_bin" \
+  ORQUESTA_CTL_USER="$(id -un)" \
+  ORQUESTA_CTL_ADDR="$addr" \
+  ORQUESTA_CTL_WORKDIR="$project" \
+  ORQUESTA_CTL_STARTUP_SLEEP="1" \
+  ORQUESTA_FAKE_ARGS_FILE="$root/args.txt" \
+    bash "$script" start >"$root/out.txt" 2>"$root/err.txt"
+  code=$?
+  set -e
+  if [ "$code" -eq 0 ]; then
+    echo "workdir invalido aceptado en $case_name" >&2
+    exit 1
+  fi
+  grep -q 'reason_code=ctl_workdir_invalid' "$root/err.txt"
+}
+
 bash -n "$script"
 run_start_case "without-config" "none"
 run_start_case "with-auto-config" "auto"
+run_invalid_workdir_case "missing-workdir" "missing"
+run_invalid_workdir_case "file-workdir" "file"
+run_invalid_workdir_case "nongit-workdir" "non-git"

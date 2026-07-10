@@ -345,6 +345,10 @@ func buildStackFromEnvWithGoalBackendV0(
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
+	stack.MCPTransportBindings.AutoprogrammingPrepareRun = guardPrepareRunExecutorWorkdirV0(
+		stack.MCPTransportBindings.AutoprogrammingPrepareRun,
+		serverConfig.ProjectWorkDir,
+	)
 	if watcher := serverGoalMaterializedResultWatcherFromStackV0(serverConfig, stack, goalBackend, supervisorWakeup); watcher != nil {
 		goalStateChange.bindV0(watcher.NotifyActiveGoalsChangedV0)
 		stack.GoalMaterializedResultWatcher = watcher

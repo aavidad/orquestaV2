@@ -150,6 +150,8 @@ if data.get("status") != status:
     raise SystemExit(f"status {data.get('status')} != {status}")
 if reason and data.get("reason_code") != reason:
     raise SystemExit(f"reason {data.get('reason_code')} != {reason}")
+if "remote_url" not in data:
+    raise SystemExit("remote_url missing")
 PY
 }
 

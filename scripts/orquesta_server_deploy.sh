@@ -23,6 +23,7 @@ DEPLOY_TELEGRAM_CONFIG="${ORQUESTA_DEPLOY_TELEGRAM_CONFIG:-${ORQUESTA_CTL_CONFIG
 tmp_root=""
 target_sha=""
 binary_sha=""
+deploy_remote_url=""
 status_text=""
 phase="init"
 receipt_written="0"
@@ -59,7 +60,7 @@ write_receipt() {
   writing_receipt="1"
   mkdir -p "$DEPLOY_STATE_DIR"
   tmp_receipt="$DEPLOY_RECEIPT.tmp.$$"
-  python3 - "$status" "$reason_code" "$message" "$DEPLOY_REF" "$target_sha" "$binary_sha" "$DEPLOY_BINARY" "$status_text" "$notification_status" "$notification_receipt_ref" "$notification_reason" >"$tmp_receipt" <<'PY'
+  python3 - "$status" "$reason_code" "$message" "$DEPLOY_REF" "$target_sha" "$binary_sha" "$DEPLOY_BINARY" "$deploy_remote_url" "$status_text" "$notification_status" "$notification_receipt_ref" "$notification_reason" >"$tmp_receipt" <<'PY'
 import json
 import os
 import sys
@@ -73,11 +74,12 @@ import time
     git_sha,
     binary_sha,
     binary,
+    remote_url,
     status_text,
     notification_status,
     notification_receipt_ref,
     notification_reason,
-) = sys.argv[1:12]
+) = sys.argv[1:13]
 receipt = {
     "schema_version": "orquesta_server_deploy_receipt.v0",
     "status": status,
@@ -87,6 +89,7 @@ receipt = {
     "git_sha": git_sha,
     "binary_sha256": binary_sha,
     "binary_path": binary,
+    "remote_url": remote_url,
     "ctl_status": status_text[:4000],
     "notification": {
         "status": notification_status,
@@ -289,6 +292,7 @@ sync_worktree_ff_only() {
   fi
   git -C "$DEPLOY_WORKTREE" fetch --quiet "$DEPLOY_REPO" "$DEPLOY_REF"
   target_sha="$(git -C "$DEPLOY_WORKTREE" rev-parse FETCH_HEAD)"
+  deploy_remote_url="$(git -C "$DEPLOY_WORKTREE" remote get-url origin 2>/dev/null || git -C "$DEPLOY_REPO" remote get-url origin 2>/dev/null || true)"
   current_sha="$(git -C "$DEPLOY_WORKTREE" rev-parse --verify HEAD 2>/dev/null || true)"
   if [ -n "$current_sha" ] && ! git -C "$DEPLOY_WORKTREE" merge-base --is-ancestor "$current_sha" "$target_sha"; then
     fail "deploy_not_fast_forward" "HEAD=$current_sha target=$target_sha"

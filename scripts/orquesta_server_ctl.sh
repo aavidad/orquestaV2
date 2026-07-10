@@ -15,7 +15,7 @@
 #   ORQUESTA_CTL_BINARY   binario servidor (default /srv/orquesta-self/runtime/orquesta-server-claude)
 #   ORQUESTA_CTL_USER     usuario de servicio esperado (default berserk)
 #   ORQUESTA_CTL_ADDR     addr de escucha (default 127.0.0.1:19071)
-#   ORQUESTA_CTL_WORKDIR  workdir de proyecto para agentes (default /srv/orquesta-self/worktrees/pilot-remoto-1)
+#   ORQUESTA_CTL_WORKDIR  workdir de proyecto para agentes (default /srv/orquesta-self/worktrees/orquesta)
 #   ORQUESTA_CTL_CONFIG   orquesta.config.json canonico; si no se indica, usa
 #                         $ORQUESTA_CTL_WORKDIR/orquesta.config.json cuando exista
 
@@ -25,7 +25,7 @@ R="${ORQUESTA_CTL_HOME:-/srv/orquesta-self/claude-director-20260705}"
 BIN="${ORQUESTA_CTL_BINARY:-/srv/orquesta-self/runtime/orquesta-server-claude}"
 SVC_USER="${ORQUESTA_CTL_USER:-berserk}"
 ADDR="${ORQUESTA_CTL_ADDR:-127.0.0.1:19071}"
-WORKDIR="${ORQUESTA_CTL_WORKDIR:-/srv/orquesta-self/worktrees/pilot-remoto-1}"
+WORKDIR="${ORQUESTA_CTL_WORKDIR:-/srv/orquesta-self/worktrees/orquesta}"
 CONFIG="${ORQUESTA_CTL_CONFIG:-}"
 if [ -z "$CONFIG" ] && [ -f "$WORKDIR/orquesta.config.json" ]; then
   CONFIG="$WORKDIR/orquesta.config.json"
@@ -39,6 +39,34 @@ preflight() {
     "debe ejecutarse como $SVC_USER (actual: $(id -un)); arrancar como otro usuario deja el estado con dueno equivocado"
   [ -x "$BIN" ] || fail "binary_missing" "no existe o no es ejecutable: $BIN"
   [ -d "$R/state" ] || fail "state_dir_missing" "no existe $R/state"
+  if [ ! -d "$WORKDIR" ]; then
+    fail "ctl_workdir_invalid" "workdir no existe o no es directorio: $WORKDIR"
+  fi
+  if ! git -C "$WORKDIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    fail "ctl_workdir_invalid" "workdir no es un worktree git valido: $WORKDIR"
+  fi
+  if ! git -C "$WORKDIR" rev-parse --verify HEAD >/dev/null 2>&1; then
+    fail "ctl_workdir_invalid" "workdir sin HEAD valido: $WORKDIR"
+  fi
+  if [ -f "$WORKDIR/.git" ]; then
+    gitdir="$(git -C "$WORKDIR" rev-parse --git-dir 2>/dev/null || true)"
+    if [ -n "$gitdir" ] && [ ! -d "$gitdir" ]; then
+      fail "ctl_workdir_invalid" "workdir gitdir retirado: $WORKDIR"
+    fi
+  fi
+  upstream="$(git -C "$WORKDIR" rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || true)"
+  if [ -n "$upstream" ]; then
+    head_sha="$(git -C "$WORKDIR" rev-parse HEAD)"
+    upstream_sha="$(git -C "$WORKDIR" rev-parse "$upstream" 2>/dev/null || true)"
+    if [ -n "$upstream_sha" ] && [ "$head_sha" != "$upstream_sha" ]; then
+      if git -C "$WORKDIR" merge-base --is-ancestor HEAD "$upstream" >/dev/null 2>&1; then
+        fail "ctl_workdir_stale" "workdir atrasado respecto a upstream=$upstream"
+      fi
+      if ! git -C "$WORKDIR" merge-base --is-ancestor "$upstream" HEAD >/dev/null 2>&1; then
+        fail "ctl_workdir_not_aligned" "workdir diverge de upstream=$upstream"
+      fi
+    fi
+  fi
   if [ -n "$CONFIG" ] && [ ! -r "$CONFIG" ]; then
     fail "config_missing" "config canonica no legible: $CONFIG"
   fi

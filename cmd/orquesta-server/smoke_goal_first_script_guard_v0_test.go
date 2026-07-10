@@ -117,6 +117,19 @@ func smokeScriptContractGuardsV0() []scriptContractGuardV0 {
 			},
 		},
 		{
+			name:   "f5-ctl-validates-runtime-workdir",
+			script: "scripts/orquesta_server_ctl.sh",
+			wants: []string{
+				"/srv/orquesta-self/worktrees/orquesta",
+				"ctl_workdir_invalid",
+				"ctl_workdir_stale",
+				"ctl_workdir_not_aligned",
+				"ORQUESTA_CODEX_PROJECT_WORKDIR=\"$WORKDIR\"",
+				"ORQUESTA_CODEX_SANDBOX=workspace-write",
+			},
+			forbids: []string{"/srv/orquesta-self/worktrees/pilot-remoto-1"},
+		},
+		{
 			name:   "f3-drain-script-governed",
 			script: "scripts/orquesta_server_drain.sh",
 			wants: []string{
