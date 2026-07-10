@@ -87,3 +87,22 @@ y promotion tambien queda cubierta; el ratchet AST baja de 36 a 5. Las cinco
 lecturas residuales pertenecen a OPES, conector fuera de este corte. El
 harness opt-in `ORQUESTA_MCP_REAL_SMOKE_CONFIRM` queda clasificado
 explícitamente y no forma parte de configuración de runtime.
+
+## Actualizacion Codex 2026-07-11: cierre de configuracion OPES y ratchet cero
+
+La familia OPES que quedaba fuera de la primera ola se consolido en el snapshot
+tipado `serverOPESConfigSnapshotV0`: workdir, timeout HTTP e intentos REST usan
+la misma precedencia `env > orquesta.config.json > default`, con metadata
+efectiva. El guard de workdir, el conector `domain_work` y la deteccion de
+contexto OPES consumen ese snapshot, sin cambiar el opt-in ni ejecutar OPES.
+
+La secuencia del bridge OPES se migro a la utilidad generica de listas del
+fichero de configuracion. Por tanto
+`TestServerEnvRegistryASTV0LecturasORQUESTARegistradas` baja de cinco lecturas
+residuales a cero y su baseline queda en `0`: una nueva lectura de
+`ORQUESTA_*` no registrada falla la prueba.
+
+En la misma pasada se retiraron cinco wrappers privados sin consumidores y se
+movio el helper comun de listas fuera de `domain_work`. Se verificaron los
+focales de configuracion/bridge y los paquetes runtime Codex/state-file. No se
+arranco servidor, bridge, OPES, agente ni proveedor.

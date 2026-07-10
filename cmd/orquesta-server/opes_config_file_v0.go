@@ -1,5 +1,46 @@
 package main
 
+import "strings"
+
+const (
+	defaultOPESTimeoutSecondsV0     = 30
+	defaultOPESDefaultMaxAttemptsV0 = 1
+)
+
+type serverOPESConfigSnapshotV0 struct {
+	ProjectWorkDir     string
+	TimeoutSeconds     int
+	DefaultMaxAttempts int
+}
+
+func serverOPESConfigSnapshotFromProjectConfigFileV0(config serverProjectConfigFileV0) serverOPESConfigSnapshotV0 {
+	return serverOPESConfigSnapshotV0{
+		ProjectWorkDir: stringProjectConfigOrEnvOrDefaultV0(
+			envOPESProjectWorkDirV0,
+			config.OPES.ProjectWorkDir,
+			"",
+		),
+		TimeoutSeconds: intProjectConfigOrEnvOrDefaultV0(
+			envOPESTimeoutSecondsV0,
+			config.OPES.TimeoutSeconds,
+			defaultOPESTimeoutSecondsV0,
+		),
+		DefaultMaxAttempts: intProjectConfigOrEnvOrDefaultV0(
+			envOPESDefaultMaxAttemptsV0,
+			config.OPES.DefaultMaxAttempts,
+			defaultOPESDefaultMaxAttemptsV0,
+		),
+	}
+}
+
+func serverOPESConfigSnapshotFromEnvV0() serverOPESConfigSnapshotV0 {
+	return serverOPESConfigSnapshotFromProjectConfigFileV0(opesProjectConfigFromEnvBestEffortV0())
+}
+
+func (snapshot serverOPESConfigSnapshotV0) HasProjectWorkDir() bool {
+	return strings.TrimSpace(snapshot.ProjectWorkDir) != ""
+}
+
 type serverProjectConfigOPESV0 struct {
 	BaseURL            *string `json:"base_url,omitempty"`
 	ProjectWorkDir     *string `json:"project_workdir,omitempty"`
@@ -83,5 +124,5 @@ type serverProjectConfigOPESTopicRegistryV0 struct {
 }
 
 func opesProjectWorkDirFromProjectConfigFileV0(config serverProjectConfigFileV0) string {
-	return stringProjectConfigOrEnvOrDefaultV0(envOPESProjectWorkDirV0, config.OPES.ProjectWorkDir, "")
+	return serverOPESConfigSnapshotFromProjectConfigFileV0(config).ProjectWorkDir
 }

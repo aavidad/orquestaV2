@@ -66,10 +66,6 @@ func (store *StoreV0) requiredTestEvidencePathV0(runRef string, evidenceRef stri
 	return filepath.Join(store.rootDir, requiredTestEvidenceDirV0, hashRefsV0(runRef), hashRefsV0(evidenceRef)+".json")
 }
 
-func (store *StoreV0) goalRequiredTestAttestationPathV0(runRef string, attestationRef string) string {
-	return filepath.Join(store.rootDir, goalRequiredTestAttestationsDirV0, hashRefsV0(runRef), hashRefsV0(attestationRef)+".json")
-}
-
 func (store *StoreV0) operationalDirectorPlanStatePathV0(runRef string, planRef string) string {
 	return filepath.Join(store.rootDir, operationalPlanStatesDirV0, hashRefsV0(runRef), hashRefsV0(planRef)+".json")
 }

@@ -14,6 +14,25 @@ func init() {
 		Label:       "Perfil autonomia",
 		Description: "Activa defaults explicitos para ejecucion autonoma residente sin pisar overrides especificos.",
 	}
+	for key, metadata := range map[string]serverEnvSettingMetadataV0{
+		envOPESProjectWorkDirV0: {
+			Scope:       "domain_work",
+			Label:       "Workdir OPES",
+			Description: "Directorio OPES opt-in para guards de escritura local y contexto de composicion.",
+		},
+		envOPESTimeoutSecondsV0: {
+			Scope:       "domain_work",
+			Label:       "Timeout OPES segundos",
+			Description: "Timeout HTTP en segundos para el conector REST OPES opt-in.",
+		},
+		envOPESDefaultMaxAttemptsV0: {
+			Scope:       "domain_work",
+			Label:       "Intentos REST OPES",
+			Description: "Intentos maximos por defecto para el conector REST OPES opt-in.",
+		},
+	} {
+		serverEffectiveEnvRegistryV0[key] = metadata
+	}
 }
 
 func serverAutonomyEnabledFromEnvV0() bool {
@@ -32,14 +51,20 @@ func serverResidentDirectorEnabledFromEnvV0() bool {
 }
 
 func serverOPESAutomationContextFromEnvV0() bool {
+	return serverOPESAutomationContextFromSnapshotV0(serverOPESConfigSnapshotFromEnvV0())
+}
+
+func serverOPESAutomationContextFromSnapshotV0(opesConfig serverOPESConfigSnapshotV0) bool {
 	if firstNonEmptyEnvV0(envOPESBaseURLV0, envOPESBaseURLLegacyV0) != "" {
 		return true
 	}
 	if serverProjectWorkDirLooksLikeOPESV0(os.Getenv(envCodexProjectWorkDirV0)) {
 		return true
 	}
+	if opesConfig.HasProjectWorkDir() {
+		return true
+	}
 	for _, key := range []string{
-		envOPESProjectWorkDirV0,
 		envOPESBridgeJobTypeV0,
 		envOPESBridgeJobRefV0,
 		envOPESBridgeJobTypeSequenceV0,

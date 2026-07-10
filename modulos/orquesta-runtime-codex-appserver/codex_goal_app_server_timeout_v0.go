@@ -297,7 +297,3 @@ func (timestamp serverCodexAppServerTimestampV0) TimeV0(now time.Time) (time.Tim
 	}
 	return parsed, true
 }
-
-func serverCodexAppServerTimestampFromTimeV0(value time.Time) serverCodexAppServerTimestampV0 {
-	return serverCodexAppServerTimestampV0{set: true, value: value.Unix()}
-}

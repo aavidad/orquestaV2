@@ -18,7 +18,8 @@ func externalWorkRunProjectWorkDirGuardConfigFromEnvV0(
 	serverConfig orquestaserver.ConfigV0,
 ) orquestaappcodexstack.ExternalWorkRunProjectWorkDirGuardConfigV0 {
 	projectConfig := projectConfigFromServerConfigBestEffortV0(serverConfig)
-	requiredOPESProjectDir := opesProjectWorkDirFromProjectConfigFileV0(projectConfig)
+	opesConfig := serverOPESConfigSnapshotFromProjectConfigFileV0(projectConfig)
+	requiredOPESProjectDir := opesConfig.ProjectWorkDir
 	if strings.TrimSpace(requiredOPESProjectDir) != "" {
 		requiredOPESProjectDir = filepath.Clean(requiredOPESProjectDir)
 	}

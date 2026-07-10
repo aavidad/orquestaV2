@@ -13,10 +13,6 @@ const (
 	codebaseBrokerConfiguredCommandRefV0  = "codebase-broker-command-configured"
 )
 
-func codebaseBrokerProjectConfigFromProjectDirV0(projectDir string) serverProjectConfigCodebaseBrokerV0 {
-	return projectConfigFromProjectDirBestEffortV0(projectDir).CodebaseBroker
-}
-
 func codebaseBrokerProviderKindFromProjectConfigFileV0(config serverProjectConfigFileV0) string {
 	return stringProjectConfigOrEnvOrDefaultV0(
 		envCodebaseBrokerProviderKindV0,

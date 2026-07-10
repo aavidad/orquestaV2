@@ -17,7 +17,7 @@ type serverEnvRegistryASTHitV0 struct {
 	Location string
 }
 
-const serverEnvRegistryASTMissingBaselineV0 = 5
+const serverEnvRegistryASTMissingBaselineV0 = 0
 
 func TestServerEnvRegistryASTV0LecturasORQUESTARegistradas(t *testing.T) {
 	root := findRepoRootForServerEnvRegistryASTV0(t)

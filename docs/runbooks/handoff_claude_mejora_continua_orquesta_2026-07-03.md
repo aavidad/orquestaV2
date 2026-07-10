@@ -3051,3 +3051,25 @@ root explícito, hash/snapshot/provenance y límites; rechaza traversal, symlink
 mutación de snapshot y trailing JSON. Mapping/validación de dominio y otros
 formatos o BBDD siguen fuera de este adaptador. La omisión inicial del trailing
 JSON se detectó en revisión, se probó y quedó cerrada como 208W antes de commit.
+
+## Actualizacion Codex 2026-07-11: limpieza antes de conectores y tools
+
+Por decision del operador, la limpieza estructural pasa a preceder cualquier
+nuevo conector o tool: primero configuracion canonica, duplicados, wrappers
+muertos y separaciones cohesivas de coordinadores grandes que afecten al
+nucleo/conectores; despues se retoma funcionalidad sobre esa base.
+
+Se cerro la familia OPES residual de configuracion local. El snapshot tipado
+`serverOPESConfigSnapshotV0` concentra workdir, timeout e intentos con
+precedencia `env > orquesta.config.json > default`; guard, `domain_work` y
+contexto OPES lo consumen. La secuencia de job types del bridge usa la utilidad
+generica de listas del fichero canonico. El ratchet AST de lecturas
+`ORQUESTA_*` no registradas pasa de 5 a 0 y queda estricto en 0.
+
+Tambien se retiraron cinco wrappers privados sin consumidores y se extrajo el
+helper de listas desde `domain_work` a configuracion comun. Focales verdes:
+`TestServerEnvRegistryASTV0LecturasORQUESTARegistradas`, precedencia OPES,
+configuracion del bridge, bucle seguro de secuencia, runtime Codex appserver y
+state-file. No se arranco servidor, OPES, bridge, agente ni proveedor. Quedan
+en revision separada los coordinadores grandes y candidatos de conectores;
+ningun borrado masivo esta autorizado por el indice.

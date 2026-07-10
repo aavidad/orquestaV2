@@ -64,10 +64,6 @@ func codexAppServerRPCMessageLineV0(request map[string]interface{}) (string, err
 	return string(data) + "\n", nil
 }
 
-func decodeCodexAppServerRPCResponseV0(stdout []byte, responseID int, out interface{}) error {
-	return decodeCodexAppServerRPCResponseReaderV0(bytes.NewReader(stdout), responseID, out)
-}
-
 func decodeCodexAppServerRPCResponseReaderV0(stdout io.Reader, responseID int, out interface{}) error {
 	scanner := bufio.NewScanner(stdout)
 	scanner.Buffer(

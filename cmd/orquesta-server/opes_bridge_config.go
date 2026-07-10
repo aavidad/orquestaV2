@@ -385,13 +385,14 @@ func opesBridgeJobTypeSequenceFromEnvV0() []string {
 }
 
 func opesBridgeJobTypeSequenceFromProjectConfigFileV0(config serverProjectConfigFileV0) []string {
-	if value := strings.TrimSpace(os.Getenv(envOPESBridgeJobTypeSequenceV0)); value != "" {
-		return parseOPESBridgeJobTypeSequenceV0(value)
-	}
-	if config.OPESBridge.JobTypeSequence == nil {
-		return []string{}
-	}
-	return parseOPESBridgeJobTypeSequenceV0(strings.Join(*config.OPESBridge.JobTypeSequence, " "))
+	return parseOPESBridgeJobTypeSequenceV0(strings.Join(
+		stringSliceProjectConfigOrEnvOrDefaultV0(
+			envOPESBridgeJobTypeSequenceV0,
+			config.OPESBridge.JobTypeSequence,
+			nil,
+		),
+		" ",
+	))
 }
 
 func opesBridgeEffectiveConfigSettingsV0(

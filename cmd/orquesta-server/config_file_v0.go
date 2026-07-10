@@ -388,6 +388,23 @@ func stringProjectConfigOrEnvOrDefaultV0(key string, fileValue *string, fallback
 	return fallback
 }
 
+func stringSliceProjectConfigOrEnvOrDefaultV0(key string, fileValue *[]string, fallback []string) []string {
+	if strings.TrimSpace(os.Getenv(key)) != "" {
+		return csvEnvOrDefaultV0(key, fallback)
+	}
+	if fileValue == nil {
+		return append([]string(nil), fallback...)
+	}
+	out := make([]string, 0, len(*fileValue))
+	for _, item := range *fileValue {
+		value := strings.TrimSpace(item)
+		if value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
+}
+
 func boolProjectConfigOrEnvOrDefaultV0(key string, fileValue *bool, fallback bool) bool {
 	if strings.TrimSpace(os.Getenv(key)) != "" {
 		return boolEnvOrDefaultV0(key, fallback)

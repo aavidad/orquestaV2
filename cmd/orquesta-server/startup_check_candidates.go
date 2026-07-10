@@ -273,7 +273,7 @@ func (check serverStartupCheckV0) startupDomainSessionSuppressesIdleSelfImprovem
 	}
 	if serverProjectWorkDirLooksLikeOPESV0(check.ServerConfig.ProjectWorkDir) ||
 		serverProjectWorkDirLooksLikeOPESV0(os.Getenv(envCodexProjectWorkDirV0)) ||
-		strings.TrimSpace(os.Getenv(envOPESProjectWorkDirV0)) != "" {
+		serverOPESProjectWorkDirConfiguredFromServerConfigV0(check.ServerConfig) {
 		return true
 	}
 	for _, setting := range check.ServerConfig.EffectiveConfig.Settings {
@@ -290,6 +290,23 @@ func (check serverStartupCheckV0) startupDomainSessionSuppressesIdleSelfImprovem
 			strings.Contains(scope, "opes") {
 			return true
 		}
+	}
+	return false
+}
+
+func serverOPESProjectWorkDirConfiguredFromServerConfigV0(config orquestaserver.ConfigV0) bool {
+	if serverOPESConfigSnapshotFromProjectConfigFileV0(
+		projectConfigFromServerConfigBestEffortV0(config),
+	).HasProjectWorkDir() {
+		return true
+	}
+	for _, setting := range config.EffectiveConfig.Settings {
+		if strings.TrimSpace(setting.Key) != envOPESProjectWorkDirV0 ||
+			strings.EqualFold(strings.TrimSpace(setting.Source), "defaulted") {
+			continue
+		}
+		return strings.TrimSpace(setting.Value) != "" &&
+			!strings.EqualFold(strings.TrimSpace(setting.Value), "absent")
 	}
 	return false
 }

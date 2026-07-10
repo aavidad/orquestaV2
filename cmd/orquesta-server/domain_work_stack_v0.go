@@ -20,6 +20,7 @@ func domainWorkExecutorFromEnvV0(
 	serverConfig orquestaserver.ConfigV0,
 ) (orquestamcp.MCPDomainWorkExecutorPortV0, error) {
 	projectConfig := projectConfigFromProjectDirBestEffortV0(serverConfig.ProjectWorkDir)
+	opesConfig := serverOPESConfigSnapshotFromProjectConfigFileV0(projectConfig)
 	baseURL := firstNonEmptyEnvV0(envOPESBaseURLV0, envOPESBaseURLLegacyV0)
 	httpBaseURL := strings.TrimSpace(domainWorkHTTPBaseURLFromProjectConfigFileV0(projectConfig))
 	fileDir := strings.TrimSpace(domainWorkFileDirFromProjectConfigFileV0(projectConfig))
@@ -40,8 +41,8 @@ func domainWorkExecutorFromEnvV0(
 		}
 		client := orquestaopesconnector.NewRESTClientV0(orquestaopesconnector.RESTClientConfigV0{
 			BaseURL:            baseURL,
-			HTTPClient:         commandOPESTemporalHTTPClientV0(time.Duration(intEnvOrDefaultV0(envOPESTimeoutSecondsV0, 30)) * time.Second),
-			DefaultMaxAttempts: intEnvOrDefaultV0(envOPESDefaultMaxAttemptsV0, 1),
+			HTTPClient:         commandOPESTemporalHTTPClientV0(time.Duration(opesConfig.TimeoutSeconds) * time.Second),
+			DefaultMaxAttempts: opesConfig.DefaultMaxAttempts,
 		})
 		return orquestamcp.NewMCPDomainWorkToolExecutorV0(client, client), nil
 	}

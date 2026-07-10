@@ -24,7 +24,6 @@ func serverConfigFromEnvV0() (orquestaserver.ConfigV0, error) {
 }
 
 func serverConfigFromEnvWithProjectConfigPathV0(projectConfigPath string) (orquestaserver.ConfigV0, error) {
-	opesAutomationContext := serverOPESAutomationContextFromEnvV0()
 	if err := validateServerSelfProgrammingOnlyPathEnvBeforeMkdirV0(); err != nil {
 		return orquestaserver.ConfigV0{}, err
 	}
@@ -36,6 +35,8 @@ func serverConfigFromEnvWithProjectConfigPathV0(projectConfigPath string) (orque
 	if err != nil {
 		return orquestaserver.ConfigV0{}, err
 	}
+	opesConfig := serverOPESConfigSnapshotFromProjectConfigFileV0(projectConfig)
+	opesAutomationContext := serverOPESAutomationContextFromSnapshotV0(opesConfig)
 	autoprogrammingGoalProgressPolicy := serverAutoprogrammingGoalProgressPolicyConfigFromProjectFileV0(projectConfig)
 	idleSelfImprovementProjectDir := serverIdleSelfImprovementProjectWorkDirFromProjectConfigFileV0(projectConfig, projectDir)
 	idleSelfImprovementAfterSeconds := serverIdleSelfImprovementAfterSecondsFromProjectConfigFileV0(projectConfig)
@@ -45,6 +46,7 @@ func serverConfigFromEnvWithProjectConfigPathV0(projectConfigPath string) (orque
 			opesAutomationContext,
 			projectDir,
 			idleSelfImprovementProjectDir,
+			opesConfig,
 		)
 	stateDir := absDirProjectConfigOrEnvOrDefaultV0(envServerStateDirV0,
 		projectConfig.Server.StateDir,
@@ -283,6 +285,7 @@ func serverIdleSelfImprovementDisabledForOPESContextV0(
 	opesAutomationContext bool,
 	projectDir string,
 	idleSelfImprovementProjectDir string,
+	opesConfig serverOPESConfigSnapshotV0,
 ) bool {
 	if !opesAutomationContext {
 		return false
@@ -293,8 +296,8 @@ func serverIdleSelfImprovementDisabledForOPESContextV0(
 	if sameAbsDirForConfigV0(idleSelfImprovementProjectDir, projectDir) {
 		return true
 	}
-	opesProjectDir := strings.TrimSpace(os.Getenv(envOPESProjectWorkDirV0))
-	return opesProjectDir != "" && sameAbsDirForConfigV0(idleSelfImprovementProjectDir, opesProjectDir)
+	return opesConfig.HasProjectWorkDir() &&
+		sameAbsDirForConfigV0(idleSelfImprovementProjectDir, opesConfig.ProjectWorkDir)
 }
 
 func idleSelfImprovementGoalFirstFromEnvV0() bool {

@@ -1551,6 +1551,42 @@ func TestServerConfigFromEnvV0ContextoOPESActivaDirectorResidenteV0(t *testing.T
 	}
 }
 
+func TestServerOPESConfigSnapshotV0PriorizaEnvFicheroYDefaultV0(t *testing.T) {
+	fileWorkDir := "/tmp/opes-from-file"
+	fileTimeout := 11
+	fileAttempts := 4
+	config := serverProjectConfigFileV0{OPES: serverProjectConfigOPESV0{
+		ProjectWorkDir:     &fileWorkDir,
+		TimeoutSeconds:     &fileTimeout,
+		DefaultMaxAttempts: &fileAttempts,
+	}}
+
+	t.Setenv(envOPESProjectWorkDirV0, "")
+	t.Setenv(envOPESTimeoutSecondsV0, "")
+	t.Setenv(envOPESDefaultMaxAttemptsV0, "")
+	fromFile := serverOPESConfigSnapshotFromProjectConfigFileV0(config)
+	if fromFile.ProjectWorkDir != fileWorkDir || !fromFile.HasProjectWorkDir() ||
+		fromFile.TimeoutSeconds != fileTimeout || fromFile.DefaultMaxAttempts != fileAttempts {
+		t.Fatalf("snapshot fichero=%+v", fromFile)
+	}
+
+	t.Setenv(envOPESProjectWorkDirV0, "/tmp/opes-from-env")
+	t.Setenv(envOPESTimeoutSecondsV0, "17")
+	t.Setenv(envOPESDefaultMaxAttemptsV0, "6")
+	fromEnv := serverOPESConfigSnapshotFromProjectConfigFileV0(config)
+	if fromEnv.ProjectWorkDir != "/tmp/opes-from-env" || fromEnv.TimeoutSeconds != 17 || fromEnv.DefaultMaxAttempts != 6 {
+		t.Fatalf("snapshot env=%+v", fromEnv)
+	}
+
+	t.Setenv(envOPESProjectWorkDirV0, "")
+	t.Setenv(envOPESTimeoutSecondsV0, "")
+	t.Setenv(envOPESDefaultMaxAttemptsV0, "")
+	defaults := serverOPESConfigSnapshotFromProjectConfigFileV0(serverProjectConfigFileV0{})
+	if defaults.HasProjectWorkDir() || defaults.TimeoutSeconds != defaultOPESTimeoutSecondsV0 || defaults.DefaultMaxAttempts != defaultOPESDefaultMaxAttemptsV0 {
+		t.Fatalf("snapshot default=%+v", defaults)
+	}
+}
+
 func TestServerConfigFromEnvV0PermiteOPESConDirectorResidenteApagadoExplicitoV0(t *testing.T) {
 	t.Setenv(envCodexProjectWorkDirV0, t.TempDir())
 	t.Setenv(envOPESProjectWorkDirV0, "/tmp/opes-workspace")
