@@ -2705,3 +2705,38 @@ Lectura corta:
 - Siguiente corte recomendado: F3 drain gobernado + harness aislado, despues F5
   deploy del binario nuevo con guard de identidad. No lanzar mas goals amplios
   antes de ese corte.
+
+## Actualizacion Codex 2026-07-10: recibos fuera del write-set
+
+Commits locales sincronizados: `37575b1e4`, `098fa1741`, `6bb71bdbe` y
+`27c06d251` sobre `trabajo/plataforma-agentes`.
+
+Cambios realizados:
+
+- Registro efectivo de variables de runtime, Director, supervisor y arranque:
+  el ratchet AST baja de 105 a 59 lecturas sin clasificar. La limpieza amplia
+  queda pospuesta hasta terminar el nucleo.
+- S13/F4: Codex app-server materializa checkpoint y resultado por `goal_ref`
+  bajo `.orquesta-runtime/goal-receipts/`, ignorado por Git. El observador
+  prioriza el recibo runtime con refs correladas y conserva el arbol del
+  proyecto solo como fallback para evidencia legacy.
+- Claude y Gemini usan su `RuntimeWorkDir` externo para el resultado final y
+  lo leen antes de `docs/`/write-set. Sus prompts ya no ordenan escribir
+  recibos de ejecucion como artefactos de producto.
+
+Pruebas locales ejecutadas:
+
+```bash
+go test -count=1 ./modulos/orquesta-runtime-codex-goal ./modulos/orquesta-runtime-codex-appserver
+go test -count=1 ./modulos/orquesta-runtime-claude ./modulos/orquesta-runtime-gemini
+go test -count=1 ./modulos/orquesta-app-codex-stack -run 'Test.*(GoalFirst|Materialized|Observe).*V0'
+bash scripts/test_orquesta_check_versioned_execution_artifacts.sh
+git diff --check
+```
+
+No se ejecuto smoke real de proveedor ni una app de prueba artificial: el
+operador pidio reservar esa cuota para una app real. S13 sigue abierto por la
+migracion gobernada de 58 recibos movibles, proyeccion comun de procedencia y
+smoke real aislado. Ver
+`docs/incidencias/incidencia_orquesta_s13_destino_recibos_runtime_2026-07-10.md`
+y el indice vivo, que prevalecen sobre este resumen historico.
