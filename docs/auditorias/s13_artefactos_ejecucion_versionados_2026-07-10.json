@@ -2,6 +2,7 @@
   "schema_version": "orquesta_s13_versioned_execution_artifact_audit.v0",
   "generated_at": "2026-07-10",
   "reproduction": "git ls-files | rg (checkpoint_started_goal-ref|orquesta_goal_result_goal-ref|goal-ref-task-autoprogramming|goal-ref-autoprogramming-backlog); para cada basename: rg -l --fixed-strings basename . -g !candidate -g !docs/auditorias/s13_artefactos_ejecucion_versionados_2026-07-10.json | wc -l",
+  "guard": {"script":"scripts/orquesta_check_versioned_execution_artifacts.sh","test":"scripts/test_orquesta_check_versioned_execution_artifacts.sh","policy":"any new tracked execution artifact must be classified in this audit before it can pass"},
   "summary": {"checkpoint_or_result_count": 61, "all_candidates_count": 68, "historical_evidence": 5, "test_fixture": 4, "movable_runtime_artifact": 58, "retain_pending_reference": 1},
   "entries": [
     {"path":"cmd/orquesta-server/docs/checkpoint_started_goal-ref-task-autoprogramming-6153eceb442b-g01.txt","category":"movable_runtime_artifact","bytes":869,"tracked_ref_count_outside_self":2,"decision":"move_after_runtime_receipt_destination_live","rationale":"execution receipt or checkpoint in a versionable documentation path; retain until the composition can read the replacement runtime receipt."},
