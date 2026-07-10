@@ -246,6 +246,11 @@ backend tmux y cableados en
   publicar `running` contradicho con `recommended_action=reconcile_goal_state`.
 - 2026-07-10, PASO A1: `modulos/orquesta-mcp/shared_contracts_resource_v0_test.go`
   esta sin gofmt en HEAD (preexistente, no tocado en este paso).
+  RESUELTO 2026-07-10 tarde: gofmt aplicado en `527186b6b`, suite verde.
+- 2026-07-10 tarde, revision 208H: focales declarados y suites de modulo
+  reejecutados en verde por el revisor (detalle en
+  `docs/pruebas_revisor_208h_2026-07-10.md`); lotes dos pases y D3 comparten
+  bloqueador: ratchet envs 536>511, consolidacion en WIP de routing.
 - 2026-07-10, PASO C1: el schema de `orquesta.config.json` no exige secretos;
   config minima creada (schema_version + addr local + state_dir +
   remote_access_opt_in=false). Tres tests de cmd que manipulan sesiones tmux
