@@ -151,11 +151,11 @@ func TestNewMCPSharedContractsResourceV0CompactoYSinDumps(t *testing.T) {
 
 func TestMCPSharedContractResourceByNameV0NormalizaEntradas(t *testing.T) {
 	cases := map[string]string{
-		" RuntimeLaunchRequest v0 ":                  "orquesta://contracts/runtime-launch-request/v0",
-		"runtime_launch_request":                     "orquesta://contracts/runtime-launch-request/v0",
-		"orquesta://contracts/governance-catalog/v0": "orquesta://contracts/governance-catalog/v0",
-		"operational_status_query":                   "orquesta://contracts/operational-status-query/v0",
-		"solicitar-nueva-app":                        MCPNuevaAppResourceURIV0,
+		" RuntimeLaunchRequest v0 ":                   "orquesta://contracts/runtime-launch-request/v0",
+		"runtime_launch_request":                      "orquesta://contracts/runtime-launch-request/v0",
+		"orquesta://contracts/governance-catalog/v0":  "orquesta://contracts/governance-catalog/v0",
+		"operational_status_query":                    "orquesta://contracts/operational-status-query/v0",
+		"solicitar-nueva-app":                         MCPNuevaAppResourceURIV0,
 		"orquesta://contracts/solicitar-nueva-app/v0": MCPNuevaAppResourceURIV0,
 	}
 
