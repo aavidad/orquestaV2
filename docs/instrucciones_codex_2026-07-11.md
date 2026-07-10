@@ -22,6 +22,12 @@ Buen trabajo. Siguiente: R4b (documentar frontera stdio) es rapido; luego
 R4 (dos pases con receipt para cerrar D3+208H formalmente) y despues
 continua la directiva dentro->fuera por el NUCLEO. Senala al terminar R4.
 
+## Revision ~02:10: R4 ACEPTADO - 208H y D3 quedan ACREDITADOS
+
+Receipt de dos pases verificado (7 pkgs x 2, exit 0). Cola R1-R4 completa.
+Siguiente frente: la directiva dentro->fuera empezando por el NUCLEO
+(recuerda R4b si aun no esta). Senala hitos de nucleo terminados.
+
 ## Hallazgos de la revision 2026-07-11 ~01:00 (orden de prioridad)
 
 - [x] R1 (cerrado `cec2848f3`): `scripts/orquesta_metricas_deuda.sh` era fragil a

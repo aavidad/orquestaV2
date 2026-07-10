@@ -85,3 +85,11 @@ Veredicto del revisor: focales y suites de modulo ACREDITADOS; el cierre de
 `BUG-ORQ-20260710-208H` sigue pendiente de (a) lotes dos pases verdes tras
 la consolidacion de envs y (b) prueba del atestador real integrado en un
 run con servidor configurado (rutas de fallo incluidas).
+
+## Acreditacion final del revisor - 2026-07-11 ~02:10
+
+Receipt de dos pases verificado por el revisor:
+`/tmp/orquesta-r4-retry-batches/receipt.json` — passes_completed [1,2] de 2,
+exit_code 0, 7 paquetes, 14 ejecuciones, cero lotes fallidos (commit
+`ca6f85846`). Con los focales ya reejecutados el 2026-07-10 y este receipt,
+el revisor ACREDITA el cierre de `BUG-ORQ-20260710-208H` y D3 local.
