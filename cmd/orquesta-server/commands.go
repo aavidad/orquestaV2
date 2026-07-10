@@ -17,27 +17,29 @@ import (
 )
 
 func runMain(args []string, stdout io.Writer, stderr io.Writer) int {
-	command := "run"
-	if len(args) > 0 {
-		command = args[0]
+	if len(args) == 0 {
+		_, _ = fmt.Fprintln(stderr, "comando requerido")
+		return 2
 	}
+	command := args[0]
+	commandArgs := args[1:]
 	if serverCommandRequiresExactIdentityV0(command) {
-		if code := validateServerBroadLaunchIdentityV0(args[1:]); code != "" {
+		if code := validateServerBroadLaunchIdentityV0(commandArgs); code != "" {
 			_, _ = fmt.Fprintf(stderr, "orquesta-server %s: reason_code=%s\n", command, code)
 			return 1
 		}
 	}
 	switch command {
 	case "run":
-		return runServerCommandV0(args[1:], stdout, stderr)
+		return runServerCommandV0(commandArgs, stdout, stderr)
 	case "start":
-		return startServerCommandV0(args[1:], stdout, stderr)
+		return startServerCommandV0(commandArgs, stdout, stderr)
 	case "status":
-		return statusServerCommandV0(args[1:], stdout, stderr)
+		return statusServerCommandV0(commandArgs, stdout, stderr)
 	case "run-status":
-		return runStatusCommandV0(args[1:], stdout, stderr)
+		return runStatusCommandV0(commandArgs, stdout, stderr)
 	case "stop":
-		return stopServerCommandV0(args[1:], stdout, stderr)
+		return stopServerCommandV0(commandArgs, stdout, stderr)
 	case "opes-drain-once":
 		return opesDrainOnceCommandV0(stdout, stderr)
 	case "opes-temario-cycle":
@@ -45,15 +47,15 @@ func runMain(args []string, stdout io.Writer, stderr io.Writer) int {
 	case "mcp-real-smoke":
 		return mcpRealSmokeCommandV0(stdout, stderr)
 	case "codex-launch-wave":
-		return codexLaunchWaveCommandV0(args[1:], stdout, stderr)
+		return codexLaunchWaveCommandV0(commandArgs, stdout, stderr)
 	case "codex-launch-director-wave":
-		return codexLaunchDirectorWaveCommandV0(args[1:], stdout, stderr)
+		return codexLaunchDirectorWaveCommandV0(commandArgs, stdout, stderr)
 	case "codex-wave-status":
-		return codexWaveStatusCommandV0(args[1:], stdout, stderr)
+		return codexWaveStatusCommandV0(commandArgs, stdout, stderr)
 	case "codex-wave-stop":
-		return codexWaveStopCommandV0(args[1:], stdout, stderr)
+		return codexWaveStopCommandV0(commandArgs, stdout, stderr)
 	case "codex-wave-tail":
-		return codexWaveTailCommandV0(args[1:], stdout, stderr)
+		return codexWaveTailCommandV0(commandArgs, stdout, stderr)
 	default:
 		_, _ = fmt.Fprintf(stderr, "comando no soportado: %s\n", command)
 		return 2

@@ -49,6 +49,9 @@ mismo commit.
   exige evidencia causal. Revisor: capacity, runtimes, stack completo y
   focales del servidor verdes; evidencia en la
   [incidencia 208K](incidencias/incidencia_orquesta_model_routing_fail_closed_legacy_2026-07-10.md).
+- BUG-ORQ-20260710-208N: cerrado localmente. `orquesta-server` sin subcomando
+  devuelve `comando requerido` con codigo 2, sin panic ni arranque implicito;
+  cobertura en `TestRunMainV0WithoutCommandReturnsUsageError`.
 - D3 local 2026-07-10: detenido tras el primer lote determinista para no
   gastar un segundo pase imposible. `TestEnvVarsBudgetMEJ106V0` fallo con
   538 variables frente a 513; recibo y log retenidos en
