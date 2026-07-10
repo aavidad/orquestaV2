@@ -105,8 +105,8 @@ func TestAuditHTTPHandlerV0ResponseWriteOKPersisteRecuperacionV0(t *testing.T) {
 	if state.ResponseWriteFailures != 1 ||
 		state.ResponseWriteLastCode != "" ||
 		state.ResponseWriteLastStage != "" ||
-		store.last.ResponseWriteLastCode != "" {
-		t.Fatalf("state=%+v stored=%+v", state, store.last)
+		store.snapshotV0().ResponseWriteLastCode != "" {
+		t.Fatalf("state=%+v stored=%+v", state, store.snapshotV0())
 	}
 }
 

@@ -56,8 +56,8 @@ func TestRuntimeV0SupervisorNoPreparaAutomejoraConWaitExternalActivoV0(t *testin
 	if supervisor.planCalls != 0 || supervisor.selfCalls != 0 {
 		t.Fatalf("wait_external activo no debe planificar: plan_calls=%d self_calls=%d", supervisor.planCalls, supervisor.selfCalls)
 	}
-	if store.last.IdleSelfImprovementReason != idleSelfImprovementExternalWaitBlockedReasonV0 {
-		t.Fatalf("reason=%q state=%+v", store.last.IdleSelfImprovementReason, store.last)
+	if store.snapshotV0().IdleSelfImprovementReason != idleSelfImprovementExternalWaitBlockedReasonV0 {
+		t.Fatalf("reason=%q state=%+v", store.snapshotV0().IdleSelfImprovementReason, store.snapshotV0())
 	}
 }
 
@@ -113,9 +113,9 @@ func TestRuntimeV0SupervisorNoPreparaAutomejoraConAckPendienteV0(t *testing.T) {
 	if supervisor.planCalls != 0 || supervisor.selfCalls != 0 {
 		t.Fatalf("ack pendiente no debe planificar: plan_calls=%d self_calls=%d", supervisor.planCalls, supervisor.selfCalls)
 	}
-	if store.last.LastSupervisorStatus != SupervisorPublicStatusWaitingExternalV0 ||
-		store.last.IdleSelfImprovementReason != idleSelfImprovementExternalWaitBlockedReasonV0 {
-		t.Fatalf("state=%+v", store.last)
+	if store.snapshotV0().LastSupervisorStatus != SupervisorPublicStatusWaitingExternalV0 ||
+		store.snapshotV0().IdleSelfImprovementReason != idleSelfImprovementExternalWaitBlockedReasonV0 {
+		t.Fatalf("state=%+v", store.snapshotV0())
 	}
 }
 

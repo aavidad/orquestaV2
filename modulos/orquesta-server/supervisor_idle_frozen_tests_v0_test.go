@@ -67,9 +67,9 @@ func TestRuntimeV0IdleSelfImprovementFrozenTestsOptInEncadenaDefinidorEImplement
 	clock.now = now.Add(2 * time.Minute)
 	runtime.runSupervisorTickV0(ctx)
 	if supervisor.observeCalls != 1 ||
-		store.last.IdleSelfImprovementGoalClosure == nil ||
-		!store.last.IdleSelfImprovementGoalClosure.Accepted {
-		t.Fatalf("definer closure observe=%d state=%+v", supervisor.observeCalls, store.last)
+		store.snapshotV0().IdleSelfImprovementGoalClosure == nil ||
+		!store.snapshotV0().IdleSelfImprovementGoalClosure.Accepted {
+		t.Fatalf("definer closure observe=%d state=%+v", supervisor.observeCalls, store.snapshotV0())
 	}
 
 	clock.now = now.Add(4 * time.Minute)

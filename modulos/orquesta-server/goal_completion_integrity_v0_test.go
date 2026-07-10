@@ -53,7 +53,7 @@ func TestRuntimeV0GoalObservationDetectaCompleteSinResultYAutoinformeEquivocadoV
 
 	runtime.runGoalObservationTickV0(context.Background())
 
-	result := store.last.IdleSelfImprovementGoalResult
+	result := store.snapshotV0().IdleSelfImprovementGoalResult
 	if result == nil ||
 		result.Status != orquestagoal.GoalStatusCompleteV0 ||
 		!goalWorkResultHasIssueCodeV0(*result, idleSelfImprovementGoalCompletedWithoutResultReasonV0) ||

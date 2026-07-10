@@ -50,12 +50,12 @@ func TestRuntimeV0AutomejoraIdleAplazaPorPresupuestoAgotadoV0(t *testing.T) {
 	if supervisor.planCalls != 0 || supervisor.selfCalls != 0 {
 		t.Fatalf("presupuesto agotado no debe planificar: plan_calls=%d self_calls=%d", supervisor.planCalls, supervisor.selfCalls)
 	}
-	if store.last.IdleSelfImprovementOperationalMessage == nil ||
-		store.last.IdleSelfImprovementOperationalMessage.ReasonCode != orquestaautoprogramming.AutoprogrammingIdleBudgetDeferredV0 ||
-		store.last.IdleSelfImprovementBudget.Reason != orquestaautoprogramming.AutoprogrammingIdleBudgetDeferredV0 ||
-		store.last.IdleSelfImprovementBudget.AllowedGoals != 0 ||
-		!strings.Contains(store.last.IdleSelfImprovementReason, orquestaautoprogramming.AutoprogrammingIdleBudgetDeferredV0) {
-		t.Fatalf("state=%+v budget=%+v", store.last, store.last.IdleSelfImprovementBudget)
+	if store.snapshotV0().IdleSelfImprovementOperationalMessage == nil ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage.ReasonCode != orquestaautoprogramming.AutoprogrammingIdleBudgetDeferredV0 ||
+		store.snapshotV0().IdleSelfImprovementBudget.Reason != orquestaautoprogramming.AutoprogrammingIdleBudgetDeferredV0 ||
+		store.snapshotV0().IdleSelfImprovementBudget.AllowedGoals != 0 ||
+		!strings.Contains(store.snapshotV0().IdleSelfImprovementReason, orquestaautoprogramming.AutoprogrammingIdleBudgetDeferredV0) {
+		t.Fatalf("state=%+v budget=%+v", store.snapshotV0(), store.snapshotV0().IdleSelfImprovementBudget)
 	}
 }
 
@@ -111,13 +111,15 @@ func TestRuntimeV0AutomejoraIdleDegradaLotePorPresupuestoContextoV0(t *testing.T
 	case <-time.After(time.Second):
 		t.Fatalf("automejora degradada no arranco")
 	}
+	waitRuntimeAsyncWorkForTestV0(t, runtime)
+	state := store.snapshotV0()
 	if supervisor.planCalls != 1 ||
 		supervisor.lastPlanRequest.MaxRequests != 1 ||
 		supervisor.selfCalls != 1 ||
-		store.last.IdleSelfImprovementBudget.Reason != orquestaautoprogramming.AutoprogrammingIdleBudgetDegradedV0 ||
-		!store.last.IdleSelfImprovementBudget.Degraded ||
-		store.last.IdleSelfImprovementBudget.EstimatedNextContextBudgetBytes != 100 ||
-		store.last.IdleSelfImprovementBudget.PromptCacheCachedInputTokensToday != 512 {
-		t.Fatalf("plan=%+v self_calls=%d budget=%+v", supervisor.lastPlanRequest, supervisor.selfCalls, store.last.IdleSelfImprovementBudget)
+		state.IdleSelfImprovementBudget.Reason != orquestaautoprogramming.AutoprogrammingIdleBudgetDegradedV0 ||
+		!state.IdleSelfImprovementBudget.Degraded ||
+		state.IdleSelfImprovementBudget.EstimatedNextContextBudgetBytes != 100 ||
+		state.IdleSelfImprovementBudget.PromptCacheCachedInputTokensToday != 512 {
+		t.Fatalf("plan=%+v self_calls=%d budget=%+v", supervisor.lastPlanRequest, supervisor.selfCalls, state.IdleSelfImprovementBudget)
 	}
 }

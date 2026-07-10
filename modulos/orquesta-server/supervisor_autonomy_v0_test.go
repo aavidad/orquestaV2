@@ -28,24 +28,24 @@ func TestRuntimeV0SupervisorRecuperaPanicYExponeMetricasV0(t *testing.T) {
 		t.Fatalf("NewRuntimeV0: %v", err)
 	}
 	runtime.runSupervisorTickV0(context.Background())
-	if store.last.LastSupervisorStatus != "error" ||
-		!strings.Contains(store.last.LastSupervisorError, "panic:tick roto") ||
-		!strings.Contains(store.last.SupervisorLastError, "panic:tick roto") ||
-		store.last.SupervisorLastErrorAt == "" ||
-		store.last.SupervisorErrorTicks != 1 {
-		t.Fatalf("state panic=%+v", store.last)
+	if store.snapshotV0().LastSupervisorStatus != "error" ||
+		!strings.Contains(store.snapshotV0().LastSupervisorError, "panic:tick roto") ||
+		!strings.Contains(store.snapshotV0().SupervisorLastError, "panic:tick roto") ||
+		store.snapshotV0().SupervisorLastErrorAt == "" ||
+		store.snapshotV0().SupervisorErrorTicks != 1 {
+		t.Fatalf("state panic=%+v", store.snapshotV0())
 	}
 	runtime.runSupervisorTickV0(context.Background())
-	if store.last.LastSupervisorStatus != "ok" ||
-		!strings.Contains(store.last.SupervisorLastError, "panic:tick roto") ||
-		store.last.LastSupervisorQueueSize != 3 ||
-		store.last.LastSupervisorTickNumber != 2 ||
-		store.last.LastSupervisorExecutions != 1 ||
-		store.last.LastSupervisorSkips != 2 ||
-		store.last.SupervisorExecutions != 1 ||
-		store.last.SupervisorSkips != 2 ||
-		store.last.SupervisorTicks != 2 {
-		t.Fatalf("state recovered=%+v", store.last)
+	if store.snapshotV0().LastSupervisorStatus != "ok" ||
+		!strings.Contains(store.snapshotV0().SupervisorLastError, "panic:tick roto") ||
+		store.snapshotV0().LastSupervisorQueueSize != 3 ||
+		store.snapshotV0().LastSupervisorTickNumber != 2 ||
+		store.snapshotV0().LastSupervisorExecutions != 1 ||
+		store.snapshotV0().LastSupervisorSkips != 2 ||
+		store.snapshotV0().SupervisorExecutions != 1 ||
+		store.snapshotV0().SupervisorSkips != 2 ||
+		store.snapshotV0().SupervisorTicks != 2 {
+		t.Fatalf("state recovered=%+v", store.snapshotV0())
 	}
 }
 

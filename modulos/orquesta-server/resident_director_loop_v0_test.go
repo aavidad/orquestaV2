@@ -42,13 +42,13 @@ func TestRuntimeV0ResidentDirectorTickPersisteResultadoV0(t *testing.T) {
 
 	if director.calls != 1 ||
 		director.lastCommand.MaxActions != 7 ||
-		store.last.ResidentDirectorStatus != "ok" ||
-		store.last.ResidentDirectorLastResult != "completed" ||
-		store.last.ResidentDirectorLastRunRef != "run-ref-resident-director-001" ||
-		store.last.ResidentDirectorTicks != 1 ||
-		store.last.ResidentDirectorExecutedActions != 3 ||
-		store.last.ResidentDirectorErrorTicks != 0 {
-		t.Fatalf("state=%+v director=%+v", store.last, director)
+		store.snapshotV0().ResidentDirectorStatus != "ok" ||
+		store.snapshotV0().ResidentDirectorLastResult != "completed" ||
+		store.snapshotV0().ResidentDirectorLastRunRef != "run-ref-resident-director-001" ||
+		store.snapshotV0().ResidentDirectorTicks != 1 ||
+		store.snapshotV0().ResidentDirectorExecutedActions != 3 ||
+		store.snapshotV0().ResidentDirectorErrorTicks != 0 {
+		t.Fatalf("state=%+v director=%+v", store.snapshotV0(), director)
 	}
 }
 
@@ -84,21 +84,21 @@ func TestRuntimeV0ResidentDirectorTickErrorVisibleYRecuperaV0(t *testing.T) {
 	}
 
 	runtime.runResidentDirectorTickV0(context.Background())
-	if store.last.ResidentDirectorStatus != "error" ||
-		store.last.ResidentDirectorErrorTicks != 1 ||
-		store.last.LastError == "" ||
-		len(store.last.RecentErrors) != 1 ||
-		store.last.RecentErrors[0].Scope != "resident_director" {
-		t.Fatalf("error state=%+v", store.last)
+	if store.snapshotV0().ResidentDirectorStatus != "error" ||
+		store.snapshotV0().ResidentDirectorErrorTicks != 1 ||
+		store.snapshotV0().LastError == "" ||
+		len(store.snapshotV0().RecentErrors) != 1 ||
+		store.snapshotV0().RecentErrors[0].Scope != "resident_director" {
+		t.Fatalf("error state=%+v", store.snapshotV0())
 	}
 
 	runtime.runResidentDirectorTickV0(context.Background())
-	if store.last.ResidentDirectorStatus != "ok" ||
-		store.last.ResidentDirectorErrorTicks != 1 ||
-		store.last.LastError != "" ||
-		store.last.ResidentDirectorLastRunRef != "run-ref-resident-director-ok-001" ||
-		store.last.ResidentDirectorExecutedActions != 3 {
-		t.Fatalf("recovered state=%+v", store.last)
+	if store.snapshotV0().ResidentDirectorStatus != "ok" ||
+		store.snapshotV0().ResidentDirectorErrorTicks != 1 ||
+		store.snapshotV0().LastError != "" ||
+		store.snapshotV0().ResidentDirectorLastRunRef != "run-ref-resident-director-ok-001" ||
+		store.snapshotV0().ResidentDirectorExecutedActions != 3 {
+		t.Fatalf("recovered state=%+v", store.snapshotV0())
 	}
 }
 
@@ -138,11 +138,11 @@ func TestRuntimeV0ResidentDirectorAsyncCoalesceaUnTickPendienteV0(t *testing.T) 
 	director.release()
 	director.waitDone(t)
 	waitRuntimeAsyncWorkForTestV0(t, runtime)
-	if store.last.ResidentDirectorTickActive {
-		t.Fatalf("resident director tick stayed active: %+v", store.last)
+	if store.snapshotV0().ResidentDirectorTickActive {
+		t.Fatalf("resident director tick stayed active: %+v", store.snapshotV0())
 	}
-	if director.calls != 2 || store.last.ResidentDirectorTicks != 2 {
-		t.Fatalf("calls=%d state=%+v", director.calls, store.last)
+	if director.calls != 2 || store.snapshotV0().ResidentDirectorTicks != 2 {
+		t.Fatalf("calls=%d state=%+v", director.calls, store.snapshotV0())
 	}
 }
 
@@ -195,8 +195,8 @@ func TestRuntimeV0ResidentDirectorControlPausaYResumeV0(t *testing.T) {
 		t.Fatalf("pause json: %v", err)
 	}
 	if !paused.Paused || paused.Status != "paused" ||
-		store.last.ResidentDirectorStatus != "paused" {
-		t.Fatalf("paused=%+v state=%+v", paused, store.last)
+		store.snapshotV0().ResidentDirectorStatus != "paused" {
+		t.Fatalf("paused=%+v state=%+v", paused, store.snapshotV0())
 	}
 	if runtime.RequestResidentDirectorWakeupV0("test_paused") {
 		t.Fatalf("wakeup aceptado con director residente pausado")
@@ -218,13 +218,13 @@ func TestRuntimeV0ResidentDirectorControlPausaYResumeV0(t *testing.T) {
 		t.Fatalf("resume json: %v", err)
 	}
 	if resumed.Paused || resumed.Status != "resumed" ||
-		store.last.ResidentDirectorStatus != "resumed" {
-		t.Fatalf("resumed=%+v state=%+v", resumed, store.last)
+		store.snapshotV0().ResidentDirectorStatus != "resumed" {
+		t.Fatalf("resumed=%+v state=%+v", resumed, store.snapshotV0())
 	}
 
 	runtime.runResidentDirectorTickV0(context.Background())
-	if director.calls != 1 || store.last.ResidentDirectorStatus != "ok" {
-		t.Fatalf("tick tras resume no ejecuto: calls=%d state=%+v", director.calls, store.last)
+	if director.calls != 1 || store.snapshotV0().ResidentDirectorStatus != "ok" {
+		t.Fatalf("tick tras resume no ejecuto: calls=%d state=%+v", director.calls, store.snapshotV0())
 	}
 }
 
@@ -246,12 +246,12 @@ func TestRuntimeV0ResidentDirectorPanicQuedaComoErrorDurableV0(t *testing.T) {
 
 	runtime.runResidentDirectorTickV0(context.Background())
 
-	if store.last.ResidentDirectorStatus != "error" ||
-		store.last.ResidentDirectorLastResult != "panic" ||
-		store.last.ResidentDirectorErrorTicks != 1 ||
-		store.last.LastError == "" ||
-		len(store.last.RecentErrors) != 1 {
-		t.Fatalf("state=%+v", store.last)
+	if store.snapshotV0().ResidentDirectorStatus != "error" ||
+		store.snapshotV0().ResidentDirectorLastResult != "panic" ||
+		store.snapshotV0().ResidentDirectorErrorTicks != 1 ||
+		store.snapshotV0().LastError == "" ||
+		len(store.snapshotV0().RecentErrors) != 1 {
+		t.Fatalf("state=%+v", store.snapshotV0())
 	}
 }
 

@@ -65,9 +65,9 @@ func TestRuntimeV0SupervisorNoPreparaAutomejoraConWaitUnhandledOutboxV0(t *testi
 	if supervisor.planCalls != 0 || supervisor.selfCalls != 0 {
 		t.Fatalf("wait_unhandled_outbox no debe planificar: plan_calls=%d self_calls=%d", supervisor.planCalls, supervisor.selfCalls)
 	}
-	if store.last.LastSupervisorStatus != SupervisorPublicStatusWaitingOutboxV0 ||
-		store.last.IdleSelfImprovementReason != SupervisorPublicStatusWaitingOutboxV0 {
-		t.Fatalf("state=%+v", store.last)
+	if store.snapshotV0().LastSupervisorStatus != SupervisorPublicStatusWaitingOutboxV0 ||
+		store.snapshotV0().IdleSelfImprovementReason != SupervisorPublicStatusWaitingOutboxV0 {
+		t.Fatalf("state=%+v", store.snapshotV0())
 	}
 }
 
@@ -112,9 +112,9 @@ func TestRuntimeV0IdleSelfImprovementAfterZeroDesactivaPlanificacionV0(t *testin
 		t.Fatalf("automejora apagada preparo trabajo")
 	case <-time.After(50 * time.Millisecond):
 	}
-	if store.last.IdleSelfImprovementReason != "disabled" ||
-		store.last.IdleSelfImprovementFlight {
-		t.Fatalf("state=%+v", store.last)
+	if store.snapshotV0().IdleSelfImprovementReason != "disabled" ||
+		store.snapshotV0().IdleSelfImprovementFlight {
+		t.Fatalf("state=%+v", store.snapshotV0())
 	}
 }
 
@@ -158,8 +158,8 @@ func TestRuntimeV0IdleSelfImprovementDefaultDisparaTrasSesentaSegundosV0(t *test
 	case <-time.After(50 * time.Millisecond):
 	}
 	if supervisor.planCalls != 0 ||
-		store.last.IdleSelfImprovementReason != "idle_window_waiting" {
-		t.Fatalf("antes de umbral plan_calls=%d state=%+v", supervisor.planCalls, store.last)
+		store.snapshotV0().IdleSelfImprovementReason != "idle_window_waiting" {
+		t.Fatalf("antes de umbral plan_calls=%d state=%+v", supervisor.planCalls, store.snapshotV0())
 	}
 
 	clock.now = now.Add(time.Second)
@@ -732,16 +732,16 @@ func TestRuntimeV0IdleSelfImprovementGoalFirstLanzaGoalSpecV0(t *testing.T) {
 		!containsGoalWorkStateRunRefForTestV0(active, externalState.RunRef) {
 		t.Fatalf("active=%+v idle=%s external=%s", active, spec.RunRef, externalState.RunRef)
 	}
-	if store.last.IdleSelfImprovementReason == "" ||
-		!strings.Contains(store.last.IdleSelfImprovementReason, "goal_ref="+spec.GoalRef) ||
-		store.last.IdleSelfImprovementOperationalMessage == nil ||
-		store.last.IdleSelfImprovementGoalSpec == nil ||
-		store.last.IdleSelfImprovementGoalSpec.GoalRef != spec.GoalRef ||
-		store.last.IdleSelfImprovementGoalReceipt == nil ||
-		store.last.IdleSelfImprovementGoalReceipt.GoalRef != spec.GoalRef ||
-		!containsStringForTestV0(store.last.IdleSelfImprovementOperationalMessage.GoalRefs, spec.GoalRef) ||
-		!containsStringForTestV0(store.last.IdleSelfImprovementOperationalMessage.EvidenceRefs, "evidence-ref-idle-self-improvement-goal-first-launched") {
-		t.Fatalf("state=%+v", store.last)
+	if store.snapshotV0().IdleSelfImprovementReason == "" ||
+		!strings.Contains(store.snapshotV0().IdleSelfImprovementReason, "goal_ref="+spec.GoalRef) ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage == nil ||
+		store.snapshotV0().IdleSelfImprovementGoalSpec == nil ||
+		store.snapshotV0().IdleSelfImprovementGoalSpec.GoalRef != spec.GoalRef ||
+		store.snapshotV0().IdleSelfImprovementGoalReceipt == nil ||
+		store.snapshotV0().IdleSelfImprovementGoalReceipt.GoalRef != spec.GoalRef ||
+		!containsStringForTestV0(store.snapshotV0().IdleSelfImprovementOperationalMessage.GoalRefs, spec.GoalRef) ||
+		!containsStringForTestV0(store.snapshotV0().IdleSelfImprovementOperationalMessage.EvidenceRefs, "evidence-ref-idle-self-improvement-goal-first-launched") {
+		t.Fatalf("state=%+v", store.snapshotV0())
 	}
 }
 
@@ -854,8 +854,8 @@ func TestRuntimeV0IdleSelfImprovementGoalFirstSinLauncherNoCaeALegacyV0(t *testi
 		t.Fatalf("goal-first sin launcher preparo automejora legacy")
 	case <-time.After(50 * time.Millisecond):
 	}
-	if store.last.IdleSelfImprovementReason != idleSelfImprovementGoalLauncherUnavailableReasonV0 {
-		t.Fatalf("reason=%q state=%+v", store.last.IdleSelfImprovementReason, store.last)
+	if store.snapshotV0().IdleSelfImprovementReason != idleSelfImprovementGoalLauncherUnavailableReasonV0 {
+		t.Fatalf("reason=%q state=%+v", store.snapshotV0().IdleSelfImprovementReason, store.snapshotV0())
 	}
 }
 
@@ -902,12 +902,12 @@ func TestRuntimeV0IdleSelfImprovementGoalFirstObservaGoalPendienteV0(t *testing.
 		supervisor.lastObservation.ExternalGoalRef != "external-goal-ref-observe-001" {
 		t.Fatalf("observe_calls=%d request=%+v", supervisor.observeCalls, supervisor.lastObservation)
 	}
-	if store.last.IdleSelfImprovementReason == "" ||
-		!strings.Contains(store.last.IdleSelfImprovementReason, idleSelfImprovementGoalRunningReasonV0) ||
-		store.last.IdleSelfImprovementOperationalMessage == nil ||
-		store.last.IdleSelfImprovementOperationalMessage.ReasonCode != idleSelfImprovementGoalRunningReasonV0 ||
-		!containsStringForTestV0(store.last.IdleSelfImprovementOperationalMessage.GoalRefs, "goal-ref-autoprogramming-observe-001") {
-		t.Fatalf("state=%+v", store.last)
+	if store.snapshotV0().IdleSelfImprovementReason == "" ||
+		!strings.Contains(store.snapshotV0().IdleSelfImprovementReason, idleSelfImprovementGoalRunningReasonV0) ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage == nil ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage.ReasonCode != idleSelfImprovementGoalRunningReasonV0 ||
+		!containsStringForTestV0(store.snapshotV0().IdleSelfImprovementOperationalMessage.GoalRefs, "goal-ref-autoprogramming-observe-001") {
+		t.Fatalf("state=%+v", store.snapshotV0())
 	}
 }
 
@@ -982,11 +982,11 @@ func TestRuntimeV0IdleSelfImprovementGoalFirstCompleteNoCierraSinValidacionV0(t 
 	if supervisor.observeCalls != 1 {
 		t.Fatalf("observe_calls=%d", supervisor.observeCalls)
 	}
-	if store.last.IdleSelfImprovementOperationalMessage == nil ||
-		store.last.IdleSelfImprovementOperationalMessage.ReasonCode != idleSelfImprovementGoalCompletePendingClosureV0 ||
-		store.last.IdleSelfImprovementGoalClosure != nil ||
-		store.last.IdleSelfImprovementOK != 1 {
-		t.Fatalf("state=%+v", store.last)
+	if store.snapshotV0().IdleSelfImprovementOperationalMessage == nil ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage.ReasonCode != idleSelfImprovementGoalCompletePendingClosureV0 ||
+		store.snapshotV0().IdleSelfImprovementGoalClosure != nil ||
+		store.snapshotV0().IdleSelfImprovementOK != 1 {
+		t.Fatalf("state=%+v", store.snapshotV0())
 	}
 }
 
@@ -1035,15 +1035,15 @@ func TestRuntimeV0IdleSelfImprovementGoalFirstCompleteValidaCierreConSpecPersist
 	if supervisor.observeCalls != 1 {
 		t.Fatalf("observe_calls=%d", supervisor.observeCalls)
 	}
-	if store.last.IdleSelfImprovementOperationalMessage == nil ||
-		store.last.IdleSelfImprovementOperationalMessage.ReasonCode != idleSelfImprovementGoalClosureAcceptedReasonV0 ||
-		store.last.IdleSelfImprovementOperationalMessage.Status != orquestagoal.GoalStatusAcceptedV0 ||
-		store.last.IdleSelfImprovementGoalResult == nil ||
-		store.last.IdleSelfImprovementGoalResult.GoalRef != goalRef ||
-		store.last.IdleSelfImprovementGoalClosure == nil ||
-		!store.last.IdleSelfImprovementGoalClosure.Accepted ||
-		!containsStringForTestV0(store.last.IdleSelfImprovementOperationalMessage.EvidenceRefs, "evidence-ref-required-closure") {
-		t.Fatalf("state=%+v", store.last)
+	if store.snapshotV0().IdleSelfImprovementOperationalMessage == nil ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage.ReasonCode != idleSelfImprovementGoalClosureAcceptedReasonV0 ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage.Status != orquestagoal.GoalStatusAcceptedV0 ||
+		store.snapshotV0().IdleSelfImprovementGoalResult == nil ||
+		store.snapshotV0().IdleSelfImprovementGoalResult.GoalRef != goalRef ||
+		store.snapshotV0().IdleSelfImprovementGoalClosure == nil ||
+		!store.snapshotV0().IdleSelfImprovementGoalClosure.Accepted ||
+		!containsStringForTestV0(store.snapshotV0().IdleSelfImprovementOperationalMessage.EvidenceRefs, "evidence-ref-required-closure") {
+		t.Fatalf("state=%+v", store.snapshotV0())
 	}
 }
 
@@ -1090,10 +1090,10 @@ func TestRuntimeV0SelfAuditBacklogGoalFirstResidenteCierraYEncadenaSiguienteV0(t
 		firstSpec.RequestRef != first.RequestRef ||
 		firstSpec.RunRef != firstSpec.RequestRef ||
 		firstSpec.DirectorKind != orquestagoal.GoalDirectorKindCodexGoalV0 ||
-		store.last.IdleSelfImprovementOperationalMessage == nil ||
-		store.last.IdleSelfImprovementOperationalMessage.ReasonCode != "prepared" {
+		store.snapshotV0().IdleSelfImprovementOperationalMessage == nil ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage.ReasonCode != "prepared" {
 		t.Fatalf("primer tick inesperado: plan=%d launch=%d self=%d spec=%+v state=%+v",
-			supervisor.planCalls, supervisor.launchCalls, supervisor.selfCalls, firstSpec, store.last)
+			supervisor.planCalls, supervisor.launchCalls, supervisor.selfCalls, firstSpec, store.snapshotV0())
 	}
 	state, err := goalStates.LoadGoalWorkStateV0(ctx, firstSpec.RunRef)
 	if err != nil || state.Status != orquestagoal.GoalStatusRunningV0 {
@@ -1104,16 +1104,16 @@ func TestRuntimeV0SelfAuditBacklogGoalFirstResidenteCierraYEncadenaSiguienteV0(t
 	runtime.runSupervisorTickV0(ctx)
 	if supervisor.observeCalls != 1 ||
 		supervisor.launchCalls != 1 ||
-		store.last.IdleSelfImprovementOperationalMessage == nil ||
-		store.last.IdleSelfImprovementOperationalMessage.ReasonCode != idleSelfImprovementGoalClosureAcceptedReasonV0 ||
-		store.last.IdleSelfImprovementGoalClosure == nil ||
-		!store.last.IdleSelfImprovementGoalClosure.Accepted ||
-		store.last.IdleSelfImprovementGoalResult == nil ||
-		store.last.IdleSelfImprovementGoalResult.Status != orquestagoal.GoalStatusCompleteV0 ||
-		store.last.IdleSelfImprovementFlight ||
-		!containsStringForTestV0(store.last.IdleSelfImprovementOperationalMessage.EvidenceRefs, "evidence-ref-required-test-001") {
+		store.snapshotV0().IdleSelfImprovementOperationalMessage == nil ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage.ReasonCode != idleSelfImprovementGoalClosureAcceptedReasonV0 ||
+		store.snapshotV0().IdleSelfImprovementGoalClosure == nil ||
+		!store.snapshotV0().IdleSelfImprovementGoalClosure.Accepted ||
+		store.snapshotV0().IdleSelfImprovementGoalResult == nil ||
+		store.snapshotV0().IdleSelfImprovementGoalResult.Status != orquestagoal.GoalStatusCompleteV0 ||
+		store.snapshotV0().IdleSelfImprovementFlight ||
+		!containsStringForTestV0(store.snapshotV0().IdleSelfImprovementOperationalMessage.EvidenceRefs, "evidence-ref-required-test-001") {
 		t.Fatalf("segundo tick cierre inesperado: observe=%d launch=%d state=%+v",
-			supervisor.observeCalls, supervisor.launchCalls, store.last)
+			supervisor.observeCalls, supervisor.launchCalls, store.snapshotV0())
 	}
 
 	clock.now = now.Add(4 * time.Minute)
@@ -1126,10 +1126,10 @@ func TestRuntimeV0SelfAuditBacklogGoalFirstResidenteCierraYEncadenaSiguienteV0(t
 		supervisor.selfCalls != 0 ||
 		secondSpec.RequestRef != second.RequestRef ||
 		secondSpec.GoalRef == firstSpec.GoalRef ||
-		store.last.IdleSelfImprovementOperationalMessage == nil ||
-		store.last.IdleSelfImprovementOperationalMessage.ReasonCode != "prepared" {
+		store.snapshotV0().IdleSelfImprovementOperationalMessage == nil ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage.ReasonCode != "prepared" {
 		t.Fatalf("tercer tick no encadeno segundo goal: plan=%d launch=%d self=%d first=%+v second=%+v state=%+v",
-			supervisor.planCalls, supervisor.launchCalls, supervisor.selfCalls, firstSpec, secondSpec, store.last)
+			supervisor.planCalls, supervisor.launchCalls, supervisor.selfCalls, firstSpec, secondSpec, store.snapshotV0())
 	}
 	state, err = goalStates.LoadGoalWorkStateV0(ctx, secondSpec.RunRef)
 	if err != nil || state.Status != orquestagoal.GoalStatusRunningV0 {

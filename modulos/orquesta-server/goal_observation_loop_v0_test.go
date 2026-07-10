@@ -59,12 +59,12 @@ func TestRuntimeV0GoalObservationTickCorreSinDirectorResidenteV0(t *testing.T) {
 		supervisor.lastGoalObservation.List.MaxItems != 5 {
 		t.Fatalf("goal calls=%d request=%+v", supervisor.goalObservationCalls, supervisor.lastGoalObservation)
 	}
-	if store.last.GoalObserverStatus != "ok" ||
-		store.last.GoalObserverTicks != 1 ||
-		store.last.GoalObserverObserved != 1 ||
-		store.last.GoalObserverTerminal != 1 ||
-		store.last.GoalObserverErrorTicks != 0 {
-		t.Fatalf("state=%+v", store.last)
+	if store.snapshotV0().GoalObserverStatus != "ok" ||
+		store.snapshotV0().GoalObserverTicks != 1 ||
+		store.snapshotV0().GoalObserverObserved != 1 ||
+		store.snapshotV0().GoalObserverTerminal != 1 ||
+		store.snapshotV0().GoalObserverErrorTicks != 0 {
+		t.Fatalf("state=%+v", store.snapshotV0())
 	}
 }
 
@@ -138,20 +138,20 @@ func TestRuntimeV0GoalObservationTickActualizaIdleSelfImprovementV0(t *testing.T
 	if supervisor.goalObservationCalls != 1 {
 		t.Fatalf("goal observer calls=%d", supervisor.goalObservationCalls)
 	}
-	if store.last.GoalObserverStatus != "ok" ||
-		store.last.GoalObserverTicks != 1 ||
-		store.last.GoalObserverTerminal != 1 {
-		t.Fatalf("goal observer state=%+v", store.last)
+	if store.snapshotV0().GoalObserverStatus != "ok" ||
+		store.snapshotV0().GoalObserverTicks != 1 ||
+		store.snapshotV0().GoalObserverTerminal != 1 {
+		t.Fatalf("goal observer state=%+v", store.snapshotV0())
 	}
-	if store.last.IdleSelfImprovementOperationalMessage == nil ||
-		store.last.IdleSelfImprovementOperationalMessage.ReasonCode != idleSelfImprovementGoalClosureAcceptedReasonV0 ||
-		store.last.IdleSelfImprovementGoalResult == nil ||
-		store.last.IdleSelfImprovementGoalResult.GoalRef != goalRef ||
-		store.last.IdleSelfImprovementGoalClosure == nil ||
-		!store.last.IdleSelfImprovementGoalClosure.Accepted ||
-		store.last.IdleSelfImprovementFlight ||
-		store.last.LastError != "" {
-		t.Fatalf("idle state no actualizado por observer generico: %+v", store.last)
+	if store.snapshotV0().IdleSelfImprovementOperationalMessage == nil ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage.ReasonCode != idleSelfImprovementGoalClosureAcceptedReasonV0 ||
+		store.snapshotV0().IdleSelfImprovementGoalResult == nil ||
+		store.snapshotV0().IdleSelfImprovementGoalResult.GoalRef != goalRef ||
+		store.snapshotV0().IdleSelfImprovementGoalClosure == nil ||
+		!store.snapshotV0().IdleSelfImprovementGoalClosure.Accepted ||
+		store.snapshotV0().IdleSelfImprovementFlight ||
+		store.snapshotV0().LastError != "" {
+		t.Fatalf("idle state no actualizado por observer generico: %+v", store.snapshotV0())
 	}
 }
 
@@ -215,14 +215,14 @@ func TestRuntimeV0GoalObservationBloqueaIdleGoalConsumoCrecienteSinProgresoV0(t 
 		stopper.last.RecommendedAction != idleSelfImprovementGoalReviewReplanRecommendedActionV0 {
 		t.Fatalf("stopper calls=%d request=%+v", stopper.calls, stopper.last)
 	}
-	if store.last.IdleSelfImprovementOperationalMessage == nil ||
-		store.last.IdleSelfImprovementOperationalMessage.ReasonCode != idleSelfImprovementGoalHighConsumptionNoProgressReasonV0 ||
-		store.last.IdleSelfImprovementGoalResult == nil ||
-		store.last.IdleSelfImprovementGoalResult.Status != orquestagoal.GoalStatusBlockedV0 ||
-		!containsStringForTestV0(store.last.IdleSelfImprovementGoalResult.ReworkPlanRefs, idleSelfImprovementGoalReviewReplanRefV0) ||
-		!containsStringForTestV0(store.last.IdleSelfImprovementGoalResult.EvidenceRefs, "evidence-ref-goal-cooperative-stop-requested") ||
-		!goalWorkResultHasIssueCodeV0(*store.last.IdleSelfImprovementGoalResult, idleSelfImprovementGoalHighConsumptionNoProgressReasonV0) {
-		t.Fatalf("idle state=%+v", store.last)
+	if store.snapshotV0().IdleSelfImprovementOperationalMessage == nil ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage.ReasonCode != idleSelfImprovementGoalHighConsumptionNoProgressReasonV0 ||
+		store.snapshotV0().IdleSelfImprovementGoalResult == nil ||
+		store.snapshotV0().IdleSelfImprovementGoalResult.Status != orquestagoal.GoalStatusBlockedV0 ||
+		!containsStringForTestV0(store.snapshotV0().IdleSelfImprovementGoalResult.ReworkPlanRefs, idleSelfImprovementGoalReviewReplanRefV0) ||
+		!containsStringForTestV0(store.snapshotV0().IdleSelfImprovementGoalResult.EvidenceRefs, "evidence-ref-goal-cooperative-stop-requested") ||
+		!goalWorkResultHasIssueCodeV0(*store.snapshotV0().IdleSelfImprovementGoalResult, idleSelfImprovementGoalHighConsumptionNoProgressReasonV0) {
+		t.Fatalf("idle state=%+v", store.snapshotV0())
 	}
 	loaded, err := goalStore.LoadGoalWorkStateV0(context.Background(), runRef)
 	if err != nil {
@@ -293,13 +293,13 @@ func TestRuntimeV0GoalObservationNoCortaConProgresoUtilRecienteV0(t *testing.T) 
 	if stopper.calls != 0 {
 		t.Fatalf("goal con progreso util no debe parar: calls=%d request=%+v", stopper.calls, stopper.last)
 	}
-	if store.last.IdleSelfImprovementOperationalMessage == nil ||
-		store.last.IdleSelfImprovementOperationalMessage.ReasonCode != idleSelfImprovementGoalRunningReasonV0 ||
-		store.last.IdleSelfImprovementGoalResult == nil ||
-		store.last.IdleSelfImprovementGoalResult.Status != orquestagoal.GoalStatusRunningV0 ||
-		store.last.IdleSelfImprovementGoalUsefulProgressAt != formatTimeV0(now) ||
-		store.last.IdleSelfImprovementGoalUsefulProgressSignature == "sha256:previous-useful-progress" {
-		t.Fatalf("idle state=%+v", store.last)
+	if store.snapshotV0().IdleSelfImprovementOperationalMessage == nil ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage.ReasonCode != idleSelfImprovementGoalRunningReasonV0 ||
+		store.snapshotV0().IdleSelfImprovementGoalResult == nil ||
+		store.snapshotV0().IdleSelfImprovementGoalResult.Status != orquestagoal.GoalStatusRunningV0 ||
+		store.snapshotV0().IdleSelfImprovementGoalUsefulProgressAt != formatTimeV0(now) ||
+		store.snapshotV0().IdleSelfImprovementGoalUsefulProgressSignature == "sha256:previous-useful-progress" {
+		t.Fatalf("idle state=%+v", store.snapshotV0())
 	}
 }
 
@@ -372,12 +372,12 @@ func TestRuntimeV0GoalObservationCheckpointInvalidoRepetidoCuentaSinProgresoV0(t
 	if stopper.calls != 1 {
 		t.Fatalf("checkpoint invalido repetido debe cortar por sin-progreso: calls=%d", stopper.calls)
 	}
-	if store.last.IdleSelfImprovementGoalInvalidCheckpointRepeats != 2 ||
-		store.last.IdleSelfImprovementOperationalMessage == nil ||
-		store.last.IdleSelfImprovementOperationalMessage.ReasonCode != idleSelfImprovementGoalHighConsumptionNoProgressReasonV0 ||
-		store.last.IdleSelfImprovementGoalResult == nil ||
-		!containsStringForTestV0(store.last.IdleSelfImprovementGoalResult.EvidenceRefs, "evidence-ref-goal-invalid-checkpoint-repeated") {
-		t.Fatalf("idle state=%+v", store.last)
+	if store.snapshotV0().IdleSelfImprovementGoalInvalidCheckpointRepeats != 2 ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage == nil ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage.ReasonCode != idleSelfImprovementGoalHighConsumptionNoProgressReasonV0 ||
+		store.snapshotV0().IdleSelfImprovementGoalResult == nil ||
+		!containsStringForTestV0(store.snapshotV0().IdleSelfImprovementGoalResult.EvidenceRefs, "evidence-ref-goal-invalid-checkpoint-repeated") {
+		t.Fatalf("idle state=%+v", store.snapshotV0())
 	}
 }
 
@@ -672,13 +672,13 @@ func TestRuntimeV0IdleFallbackReconciliaResultMaterializadoPorPuertoV0(t *testin
 	if supervisor.materializedGoalCalls != 1 {
 		t.Fatalf("materialized calls=%d", supervisor.materializedGoalCalls)
 	}
-	if store.last.IdleSelfImprovementOperationalMessage == nil ||
-		store.last.IdleSelfImprovementOperationalMessage.ReasonCode != idleSelfImprovementGoalClosureAcceptedReasonV0 ||
-		store.last.IdleSelfImprovementGoalClosure == nil ||
-		!store.last.IdleSelfImprovementGoalClosure.Accepted ||
-		store.last.IdleSelfImprovementGoalResult == nil ||
-		!containsStringForTestV0(store.last.IdleSelfImprovementGoalResult.EvidenceRefs, "evidence-ref-idle-materialized-port") {
-		t.Fatalf("state=%+v", store.last)
+	if store.snapshotV0().IdleSelfImprovementOperationalMessage == nil ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage.ReasonCode != idleSelfImprovementGoalClosureAcceptedReasonV0 ||
+		store.snapshotV0().IdleSelfImprovementGoalClosure == nil ||
+		!store.snapshotV0().IdleSelfImprovementGoalClosure.Accepted ||
+		store.snapshotV0().IdleSelfImprovementGoalResult == nil ||
+		!containsStringForTestV0(store.snapshotV0().IdleSelfImprovementGoalResult.EvidenceRefs, "evidence-ref-idle-materialized-port") {
+		t.Fatalf("state=%+v", store.snapshotV0())
 	}
 }
 
@@ -869,17 +869,17 @@ func TestRuntimeV0GoalObservationFingerprintSaltaRunSinCambiosV0(t *testing.T) {
 	if supervisor.goalObservationCalls != 1 {
 		t.Fatalf("fingerprint estable no debe re-observar: calls=%d", supervisor.goalObservationCalls)
 	}
-	if store.last.GoalObserverStatus != "skipped" ||
-		store.last.GoalObserverTicks != 1 ||
-		store.last.GoalObserverObserved != 1 {
-		t.Fatalf("state=%+v", store.last)
+	if store.snapshotV0().GoalObserverStatus != "skipped" ||
+		store.snapshotV0().GoalObserverTicks != 1 ||
+		store.snapshotV0().GoalObserverObserved != 1 {
+		t.Fatalf("state=%+v", store.snapshotV0())
 	}
-	if store.last.GoalObserverOperationalMessage == nil ||
-		store.last.GoalObserverOperationalMessage.Counters["observed"] != 1 ||
-		store.last.GoalObserverOperationalMessage.Counters["terminal"] != 0 ||
-		!containsStringForTestV0(store.last.GoalObserverOperationalMessage.RunRefs, state.RunRef) ||
-		!containsStringForTestV0(store.last.GoalObserverOperationalMessage.GoalRefs, state.GoalRef) {
-		t.Fatalf("active goal snapshot lost after fingerprint skip: %+v", store.last.GoalObserverOperationalMessage)
+	if store.snapshotV0().GoalObserverOperationalMessage == nil ||
+		store.snapshotV0().GoalObserverOperationalMessage.Counters["observed"] != 1 ||
+		store.snapshotV0().GoalObserverOperationalMessage.Counters["terminal"] != 0 ||
+		!containsStringForTestV0(store.snapshotV0().GoalObserverOperationalMessage.RunRefs, state.RunRef) ||
+		!containsStringForTestV0(store.snapshotV0().GoalObserverOperationalMessage.GoalRefs, state.GoalRef) {
+		t.Fatalf("active goal snapshot lost after fingerprint skip: %+v", store.snapshotV0().GoalObserverOperationalMessage)
 	}
 }
 
@@ -1020,20 +1020,20 @@ func TestRuntimeV0GoalObservationErrorVisibleYRecuperaV0(t *testing.T) {
 	}
 
 	runtime.runGoalObservationTickV0(context.Background())
-	if store.last.GoalObserverStatus != "error" ||
-		store.last.GoalObserverErrorTicks != 1 ||
-		store.last.LastError == "" ||
-		len(store.last.RecentErrors) != 1 ||
-		store.last.RecentErrors[0].Scope != "goal_observer" {
-		t.Fatalf("error state=%+v", store.last)
+	if store.snapshotV0().GoalObserverStatus != "error" ||
+		store.snapshotV0().GoalObserverErrorTicks != 1 ||
+		store.snapshotV0().LastError == "" ||
+		len(store.snapshotV0().RecentErrors) != 1 ||
+		store.snapshotV0().RecentErrors[0].Scope != "goal_observer" {
+		t.Fatalf("error state=%+v", store.snapshotV0())
 	}
 
 	runtime.runGoalObservationTickV0(context.Background())
-	if store.last.GoalObserverStatus != "ok_with_issues" ||
-		store.last.GoalObserverErrorTicks != 1 ||
-		store.last.LastError != "" ||
-		store.last.GoalObserverIssues != 1 {
-		t.Fatalf("recovered state=%+v", store.last)
+	if store.snapshotV0().GoalObserverStatus != "ok_with_issues" ||
+		store.snapshotV0().GoalObserverErrorTicks != 1 ||
+		store.snapshotV0().LastError != "" ||
+		store.snapshotV0().GoalObserverIssues != 1 {
+		t.Fatalf("recovered state=%+v", store.snapshotV0())
 	}
 }
 
@@ -1074,11 +1074,11 @@ func TestRuntimeV0GoalObservationAsyncCoalesceaUnTickPendienteV0(t *testing.T) {
 	}
 	supervisor.goalRelease <- struct{}{}
 	waitRuntimeAsyncWorkForTestV0(t, runtime)
-	if store.last.GoalObserverTickActive {
-		t.Fatalf("goal observer tick stayed active: %+v", store.last)
+	if store.snapshotV0().GoalObserverTickActive {
+		t.Fatalf("goal observer tick stayed active: %+v", store.snapshotV0())
 	}
-	if supervisor.goalObservationCalls != 2 || store.last.GoalObserverTicks != 2 {
-		t.Fatalf("calls=%d state=%+v", supervisor.goalObservationCalls, store.last)
+	if supervisor.goalObservationCalls != 2 || store.snapshotV0().GoalObserverTicks != 2 {
+		t.Fatalf("calls=%d state=%+v", supervisor.goalObservationCalls, store.snapshotV0())
 	}
 }
 
@@ -1107,11 +1107,11 @@ func TestRuntimeV0GoalObservationTickTimeoutPublicaErrorAccionableV0(t *testing.
 	if calls := atomic.LoadInt32(&supervisor.calls); calls != 1 {
 		t.Fatalf("goal observer calls=%d", calls)
 	}
-	if store.last.GoalObserverStatus != "error" ||
-		store.last.GoalObserverLastError != "goal_observer_timeout" ||
-		store.last.GoalObserverErrorTicks != 1 ||
-		store.last.GoalObserverTickActive {
-		t.Fatalf("state=%+v", store.last)
+	if store.snapshotV0().GoalObserverStatus != "error" ||
+		store.snapshotV0().GoalObserverLastError != "goal_observer_timeout" ||
+		store.snapshotV0().GoalObserverErrorTicks != 1 ||
+		store.snapshotV0().GoalObserverTickActive {
+		t.Fatalf("state=%+v", store.snapshotV0())
 	}
 }
 
@@ -1154,17 +1154,17 @@ func TestRuntimeV0GoalObservationTickTimeoutNoBloqueaSiBackendIgnoraContextoV0(t
 	case <-time.After(time.Second):
 		t.Fatalf("goal observer tick blocked behind backend that ignored context")
 	}
-	if store.last.GoalObserverStatus != "error" ||
-		store.last.GoalObserverLastError != "goal_observer_timeout" ||
-		store.last.GoalObserverErrorTicks != 1 {
-		t.Fatalf("first timeout state=%+v", store.last)
+	if store.snapshotV0().GoalObserverStatus != "error" ||
+		store.snapshotV0().GoalObserverLastError != "goal_observer_timeout" ||
+		store.snapshotV0().GoalObserverErrorTicks != 1 {
+		t.Fatalf("first timeout state=%+v", store.snapshotV0())
 	}
 
 	runtime.runGoalObservationTickV0(context.Background())
-	if store.last.GoalObserverStatus != "error" ||
-		store.last.GoalObserverLastError != "goal_observer_backend_call_in_flight" ||
-		store.last.GoalObserverErrorTicks != 2 {
-		t.Fatalf("second timeout state=%+v", store.last)
+	if store.snapshotV0().GoalObserverStatus != "error" ||
+		store.snapshotV0().GoalObserverLastError != "goal_observer_backend_call_in_flight" ||
+		store.snapshotV0().GoalObserverErrorTicks != 2 {
+		t.Fatalf("second timeout state=%+v", store.snapshotV0())
 	}
 	close(supervisor.release)
 	select {

@@ -41,19 +41,19 @@ func TestRuntimeV0SupervisorNoPreparaAutomejoraConResidentPendingSinDispatchV0(t
 	if supervisor.planCalls != 0 || supervisor.selfCalls != 0 {
 		t.Fatalf("resident pending no debe planificar: plan_calls=%d self_calls=%d", supervisor.planCalls, supervisor.selfCalls)
 	}
-	if !strings.HasPrefix(store.last.IdleSelfImprovementReason, idleSelfImprovementResidentPendingBlockedReasonV0) ||
-		store.last.IdleSelfImprovementOperationalMessage == nil ||
-		store.last.IdleSelfImprovementOperationalMessage.Counters["resident_pending_without_dispatch"] != 1 {
-		t.Fatalf("state=%+v", store.last)
+	if !strings.HasPrefix(store.snapshotV0().IdleSelfImprovementReason, idleSelfImprovementResidentPendingBlockedReasonV0) ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage == nil ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage.Counters["resident_pending_without_dispatch"] != 1 {
+		t.Fatalf("state=%+v", store.snapshotV0())
 	}
-	if !strings.Contains(strings.Join(store.last.IdleSelfImprovementOperationalMessage.RunRefs, ","), "b305970086cb77343865513f32df7a66") {
-		t.Fatalf("run_refs=%v", store.last.IdleSelfImprovementOperationalMessage.RunRefs)
+	if !strings.Contains(strings.Join(store.snapshotV0().IdleSelfImprovementOperationalMessage.RunRefs, ","), "b305970086cb77343865513f32df7a66") {
+		t.Fatalf("run_refs=%v", store.snapshotV0().IdleSelfImprovementOperationalMessage.RunRefs)
 	}
 	if !containsStringForTestV0(
-		store.last.IdleSelfImprovementOperationalMessage.EvidenceRefs,
+		store.snapshotV0().IdleSelfImprovementOperationalMessage.EvidenceRefs,
 		"evidence-ref-resident-director-wakeup-unavailable",
 	) {
-		t.Fatalf("evidence_refs=%v", store.last.IdleSelfImprovementOperationalMessage.EvidenceRefs)
+		t.Fatalf("evidence_refs=%v", store.snapshotV0().IdleSelfImprovementOperationalMessage.EvidenceRefs)
 	}
 }
 
@@ -98,13 +98,13 @@ func TestRuntimeV0SupervisorDespiertaDirectorResidenteConResidentPendingSinDispa
 	if supervisor.planCalls != 0 || supervisor.selfCalls != 0 {
 		t.Fatalf("resident pending no debe planificar: plan_calls=%d self_calls=%d", supervisor.planCalls, supervisor.selfCalls)
 	}
-	if store.last.IdleSelfImprovementOperationalMessage == nil ||
-		store.last.IdleSelfImprovementOperationalMessage.Message != "resident_director_wakeup_requested" ||
+	if store.snapshotV0().IdleSelfImprovementOperationalMessage == nil ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage.Message != "resident_director_wakeup_requested" ||
 		!containsStringForTestV0(
-			store.last.IdleSelfImprovementOperationalMessage.EvidenceRefs,
+			store.snapshotV0().IdleSelfImprovementOperationalMessage.EvidenceRefs,
 			"evidence-ref-resident-director-wakeup-requested",
 		) {
-		t.Fatalf("state=%+v", store.last)
+		t.Fatalf("state=%+v", store.snapshotV0())
 	}
 }
 
@@ -158,14 +158,14 @@ func TestRuntimeV0SupervisorResidentPendingConOutboxNoQuedaSoloWaitingOutboxV0(t
 	if supervisor.planCalls != 0 || supervisor.selfCalls != 0 {
 		t.Fatalf("resident pending no debe planificar: plan_calls=%d self_calls=%d", supervisor.planCalls, supervisor.selfCalls)
 	}
-	if !strings.HasPrefix(store.last.IdleSelfImprovementReason, idleSelfImprovementResidentPendingBlockedReasonV0) ||
-		store.last.IdleSelfImprovementOperationalMessage == nil ||
-		store.last.IdleSelfImprovementOperationalMessage.Counters["resident_pending_without_dispatch"] != 1 {
-		t.Fatalf("idle state=%+v", store.last)
+	if !strings.HasPrefix(store.snapshotV0().IdleSelfImprovementReason, idleSelfImprovementResidentPendingBlockedReasonV0) ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage == nil ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage.Counters["resident_pending_without_dispatch"] != 1 {
+		t.Fatalf("idle state=%+v", store.snapshotV0())
 	}
-	if store.last.LastSupervisorOperationalMessage == nil ||
-		store.last.LastSupervisorOperationalMessage.Counters["resident_pending_without_dispatch"] != 1 {
-		t.Fatalf("supervisor message=%+v state=%+v", store.last.LastSupervisorOperationalMessage, store.last)
+	if store.snapshotV0().LastSupervisorOperationalMessage == nil ||
+		store.snapshotV0().LastSupervisorOperationalMessage.Counters["resident_pending_without_dispatch"] != 1 {
+		t.Fatalf("supervisor message=%+v state=%+v", store.snapshotV0().LastSupervisorOperationalMessage, store.snapshotV0())
 	}
 }
 
@@ -303,10 +303,10 @@ func TestRuntimeV0SupervisorResidentPendingIgnoraProcesoVivoDeOtraRunV0(t *testi
 	if supervisor.planCalls != 0 || supervisor.selfCalls != 0 {
 		t.Fatalf("resident pending con proceso de otra run no debe planificar: plan_calls=%d self_calls=%d", supervisor.planCalls, supervisor.selfCalls)
 	}
-	if store.last.IdleSelfImprovementOperationalMessage == nil ||
-		store.last.IdleSelfImprovementOperationalMessage.Counters["resident_pending_without_dispatch"] != 1 ||
-		!strings.Contains(strings.Join(store.last.IdleSelfImprovementOperationalMessage.RunRefs, ","), "b305970086cb77343865513f32df7a66") {
-		t.Fatalf("state=%+v", store.last)
+	if store.snapshotV0().IdleSelfImprovementOperationalMessage == nil ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage.Counters["resident_pending_without_dispatch"] != 1 ||
+		!strings.Contains(strings.Join(store.snapshotV0().IdleSelfImprovementOperationalMessage.RunRefs, ","), "b305970086cb77343865513f32df7a66") {
+		t.Fatalf("state=%+v", store.snapshotV0())
 	}
 }
 

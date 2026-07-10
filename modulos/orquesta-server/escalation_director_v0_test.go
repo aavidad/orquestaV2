@@ -184,11 +184,11 @@ func TestRuntimeV0EscalationDirectorAplicaStopYEsIdempotentePorFirmaV0(t *testin
 			t.Fatalf("stopper evidence refs=%v want %s", stopper.last.EvidenceRefs, want)
 		}
 	}
-	if store.last.EscalationDirectorLastDecision != escalationDirectorDecisionStopV0 ||
-		store.last.EscalationDirectorInvocationsToday != 1 ||
-		store.last.EscalationDirectorDay != "2026-07-03" ||
-		store.last.EscalationDirectorLastReason != "cierre sin result durable" {
-		t.Fatalf("estado escalation=%+v", store.last)
+	if store.snapshotV0().EscalationDirectorLastDecision != escalationDirectorDecisionStopV0 ||
+		store.snapshotV0().EscalationDirectorInvocationsToday != 1 ||
+		store.snapshotV0().EscalationDirectorDay != "2026-07-03" ||
+		store.snapshotV0().EscalationDirectorLastReason != "cierre sin result durable" {
+		t.Fatalf("estado escalation=%+v", store.snapshotV0())
 	}
 }
 
@@ -219,9 +219,9 @@ func TestRuntimeV0EscalationDirectorRespetaPresupuestoDiarioV0(t *testing.T) {
 	if _, err := os.Stat(invocationsLog); !os.IsNotExist(err) {
 		t.Fatalf("el comando no debia invocarse con presupuesto agotado")
 	}
-	if store.last.EscalationDirectorLastDecision != "budget_exhausted" ||
-		store.last.EscalationDirectorInvocationsToday != 1 {
-		t.Fatalf("estado escalation=%+v", store.last)
+	if store.snapshotV0().EscalationDirectorLastDecision != "budget_exhausted" ||
+		store.snapshotV0().EscalationDirectorInvocationsToday != 1 {
+		t.Fatalf("estado escalation=%+v", store.snapshotV0())
 	}
 }
 

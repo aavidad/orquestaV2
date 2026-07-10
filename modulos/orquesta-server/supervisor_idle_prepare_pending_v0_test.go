@@ -44,21 +44,21 @@ func TestRuntimeV0PrepareIdleSelfImprovementProcesoVivoNoEmiteErrorTerminalV0(t 
 		RequestRef: "request-ref-autoprogramming-backlog-srv-task-022",
 	}})
 
-	reason := store.last.IdleSelfImprovementReason
+	reason := store.snapshotV0().IdleSelfImprovementReason
 	if !strings.HasPrefix(reason, "reconcile_pending") ||
 		!strings.Contains(reason, "external_wait_live_process") ||
 		!strings.Contains(reason, "ack_pending") {
 		t.Fatalf("reason=%q", reason)
 	}
-	if store.last.LastError != "" || len(store.last.RecentErrors) != 0 {
-		t.Fatalf("terminal error persisted: last_error=%q recent=%+v", store.last.LastError, store.last.RecentErrors)
+	if store.snapshotV0().LastError != "" || len(store.snapshotV0().RecentErrors) != 0 {
+		t.Fatalf("terminal error persisted: last_error=%q recent=%+v", store.snapshotV0().LastError, store.snapshotV0().RecentErrors)
 	}
-	if store.last.IdleSelfImprovementOperationalMessage == nil ||
-		store.last.IdleSelfImprovementOperationalMessage.ReasonCode != "reconcile_pending" ||
-		store.last.IdleSelfImprovementOperationalMessage.Status != "reconcile_pending" {
-		t.Fatalf("operational_message=%+v", store.last.IdleSelfImprovementOperationalMessage)
+	if store.snapshotV0().IdleSelfImprovementOperationalMessage == nil ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage.ReasonCode != "reconcile_pending" ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage.Status != "reconcile_pending" {
+		t.Fatalf("operational_message=%+v", store.snapshotV0().IdleSelfImprovementOperationalMessage)
 	}
-	if store.last.IdleSelfImprovementRuns != 1 || store.last.IdleSelfImprovementOK != 0 {
-		t.Fatalf("counters runs=%d ok=%d", store.last.IdleSelfImprovementRuns, store.last.IdleSelfImprovementOK)
+	if store.snapshotV0().IdleSelfImprovementRuns != 1 || store.snapshotV0().IdleSelfImprovementOK != 0 {
+		t.Fatalf("counters runs=%d ok=%d", store.snapshotV0().IdleSelfImprovementRuns, store.snapshotV0().IdleSelfImprovementOK)
 	}
 }

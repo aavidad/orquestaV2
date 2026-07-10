@@ -163,20 +163,24 @@ func (fake *fakeSupervisorV0) LoadIdleSelfImprovementMaterializedGoalResultV0(
 }
 
 type memoryStateStoreV0 struct {
-	mu   sync.Mutex
-	last StateV0
+	mu    sync.Mutex
+	state StateV0
 }
 
 func (store *memoryStateStoreV0) SaveServerStateV0(_ context.Context, state StateV0) error {
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	store.last = state
+	store.state = state
 	return nil
 }
 func (store *memoryStateStoreV0) LoadServerStateV0(context.Context) (StateV0, error) {
+	return store.snapshotV0(), nil
+}
+
+func (store *memoryStateStoreV0) snapshotV0() StateV0 {
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	return store.last, nil
+	return store.state
 }
 
 type memoryGoalStateStoreV0 struct {

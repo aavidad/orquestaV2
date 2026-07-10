@@ -23,12 +23,12 @@ func TestRuntimeV0PrepareStartupPersisteReadyV0(t *testing.T) {
 	if err := runtime.prepareStartupV0(context.Background()); err != nil {
 		t.Fatalf("prepareStartupV0: %v", err)
 	}
-	if !store.last.StartupReady ||
-		store.last.StartupStatus != StartupCheckStatusReadyV0 ||
-		store.last.StartupMessage != "director: orquesta preparada" ||
-		len(store.last.StartupEvidenceRefs) != 1 ||
-		store.last.StartupEvidenceRefs[0] != "evidence-startup-ready" {
-		t.Fatalf("state=%+v", store.last)
+	if !store.snapshotV0().StartupReady ||
+		store.snapshotV0().StartupStatus != StartupCheckStatusReadyV0 ||
+		store.snapshotV0().StartupMessage != "director: orquesta preparada" ||
+		len(store.snapshotV0().StartupEvidenceRefs) != 1 ||
+		store.snapshotV0().StartupEvidenceRefs[0] != "evidence-startup-ready" {
+		t.Fatalf("state=%+v", store.snapshotV0())
 	}
 }
 
@@ -46,11 +46,11 @@ func TestRuntimeV0PrepareStartupBloqueaSiNoEstaListaV0(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected startup error")
 	}
-	if store.last.Status != "startup_blocked" ||
-		store.last.StartupReady ||
-		store.last.StartupStatus != "startup_waiting_cleanup" ||
-		store.last.LastError != "runs transitorios pendientes" {
-		t.Fatalf("state=%+v err=%v", store.last, err)
+	if store.snapshotV0().Status != "startup_blocked" ||
+		store.snapshotV0().StartupReady ||
+		store.snapshotV0().StartupStatus != "startup_waiting_cleanup" ||
+		store.snapshotV0().LastError != "runs transitorios pendientes" {
+		t.Fatalf("state=%+v err=%v", store.snapshotV0(), err)
 	}
 }
 
@@ -86,10 +86,10 @@ func TestRuntimeV0RunEjecutaShutdownHooksSiStartupBloqueaV0(t *testing.T) {
 	if got := atomic.LoadInt32(&hook.calls); got != 1 {
 		t.Fatalf("shutdown hook calls=%d", got)
 	}
-	if store.last.Status != "startup_blocked" ||
-		store.last.StartupReady ||
-		store.last.StartupStatus != "startup_dirty_runs_detected" {
-		t.Fatalf("state=%+v", store.last)
+	if store.snapshotV0().Status != "startup_blocked" ||
+		store.snapshotV0().StartupReady ||
+		store.snapshotV0().StartupStatus != "startup_dirty_runs_detected" {
+		t.Fatalf("state=%+v", store.snapshotV0())
 	}
 }
 

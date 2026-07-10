@@ -174,25 +174,25 @@ func TestRuntimeV0AuditEventNoSilenciaFalloDeSinkV0(t *testing.T) {
 
 	runtime.auditEventV0(context.Background(), "supervisor_tick_result", "ok", "", map[string]interface{}{"run_ref": "run-ref-001"})
 
-	if store.last.AuditStatus != "degraded" ||
-		store.last.AuditFailures != 1 ||
-		store.last.AuditLastCode != auditWriteFailureCodeV0 ||
-		store.last.AuditLastEvent != "supervisor_tick_result" ||
-		store.last.AuditLastSeverity != "warning" {
-		t.Fatalf("fallo audit no visible en proyeccion compacta: %+v", store.last)
+	if store.snapshotV0().AuditStatus != "degraded" ||
+		store.snapshotV0().AuditFailures != 1 ||
+		store.snapshotV0().AuditLastCode != auditWriteFailureCodeV0 ||
+		store.snapshotV0().AuditLastEvent != "supervisor_tick_result" ||
+		store.snapshotV0().AuditLastSeverity != "warning" {
+		t.Fatalf("fallo audit no visible en proyeccion compacta: %+v", store.snapshotV0())
 	}
-	if len(store.last.RecentErrors) != 1 ||
-		store.last.RecentErrors[0].Code != auditWriteFailureCodeV0 ||
-		store.last.RecentErrors[0].Message != auditWriteFailureCodeV0 {
-		t.Fatalf("recent_errors no registra audit failure: %+v", store.last.RecentErrors)
+	if len(store.snapshotV0().RecentErrors) != 1 ||
+		store.snapshotV0().RecentErrors[0].Code != auditWriteFailureCodeV0 ||
+		store.snapshotV0().RecentErrors[0].Message != auditWriteFailureCodeV0 {
+		t.Fatalf("recent_errors no registra audit failure: %+v", store.snapshotV0().RecentErrors)
 	}
-	body, _ := json.Marshal(store.last)
+	body, _ := json.Marshal(store.snapshotV0())
 	for _, forbidden := range []string{"sink roto", "runtime-secret", "state.json", "HOME", "token"} {
 		if strings.Contains(string(body), forbidden) {
 			t.Fatalf("audit failure filtra detalle privado %q: %s", forbidden, string(body))
 		}
 	}
-	readiness := NewServerReadinessV0(store.last)
+	readiness := NewServerReadinessV0(store.snapshotV0())
 	if readiness.Ready || readiness.LivenessStatus != "ok" {
 		t.Fatalf("readiness/liveness inesperado: %+v", readiness)
 	}

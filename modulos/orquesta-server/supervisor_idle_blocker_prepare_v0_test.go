@@ -50,17 +50,17 @@ func TestRuntimeV0SupervisorNoPreparaAutomejoraConProveedorAuthBloqueadoV0(t *te
 	if supervisor.planCalls != 0 || supervisor.selfCalls != 0 {
 		t.Fatalf("bloqueo proveedor no debe planificar: plan_calls=%d self_calls=%d", supervisor.planCalls, supervisor.selfCalls)
 	}
-	if !strings.HasPrefix(store.last.IdleSelfImprovementReason, "provider_unavailable_paused") ||
-		!strings.Contains(store.last.IdleSelfImprovementReason, "run-ref-auth-blocked-001") ||
-		!strings.Contains(store.last.IdleSelfImprovementReason, "restore_provider_credentials_then_resume_run") {
-		t.Fatalf("reason=%q state=%+v", store.last.IdleSelfImprovementReason, store.last)
+	if !strings.HasPrefix(store.snapshotV0().IdleSelfImprovementReason, "provider_unavailable_paused") ||
+		!strings.Contains(store.snapshotV0().IdleSelfImprovementReason, "run-ref-auth-blocked-001") ||
+		!strings.Contains(store.snapshotV0().IdleSelfImprovementReason, "restore_provider_credentials_then_resume_run") {
+		t.Fatalf("reason=%q state=%+v", store.snapshotV0().IdleSelfImprovementReason, store.snapshotV0())
 	}
-	if store.last.IdleSelfImprovementOperationalMessage == nil ||
-		store.last.IdleSelfImprovementOperationalMessage.ReasonCode != "provider_unavailable_paused" ||
-		store.last.IdleSelfImprovementOperationalMessage.Status != "blocked" ||
-		store.last.IdleSelfImprovementOperationalMessage.RunRefs[0] != "run-ref-auth-blocked-001" ||
-		store.last.IdleSelfImprovementOperationalMessage.EvidenceRefs[0] != "evidence-ref-auth-config-blocker" {
-		t.Fatalf("operational_message=%+v", store.last.IdleSelfImprovementOperationalMessage)
+	if store.snapshotV0().IdleSelfImprovementOperationalMessage == nil ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage.ReasonCode != "provider_unavailable_paused" ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage.Status != "blocked" ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage.RunRefs[0] != "run-ref-auth-blocked-001" ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage.EvidenceRefs[0] != "evidence-ref-auth-config-blocker" {
+		t.Fatalf("operational_message=%+v", store.snapshotV0().IdleSelfImprovementOperationalMessage)
 	}
 }
 
@@ -102,11 +102,11 @@ func TestRuntimeV0SuprimeAutomejoraIdleEnSesionDominioSinOptInV0(t *testing.T) {
 	if supervisor.planCalls != 0 || supervisor.selfCalls != 0 {
 		t.Fatalf("sesion dominio no debe planificar: plan_calls=%d self_calls=%d", supervisor.planCalls, supervisor.selfCalls)
 	}
-	if store.last.IdleSelfImprovementOperationalMessage == nil ||
-		store.last.IdleSelfImprovementOperationalMessage.ReasonCode != idleSelfImprovementDomainSessionSuppressedReasonV0 ||
-		!strings.Contains(store.last.IdleSelfImprovementReason, idleSelfImprovementDomainSessionSuppressedReasonV0) ||
-		strings.Contains(store.last.IdleSelfImprovementReason, "/tmp/proyecto-dominio") {
-		t.Fatalf("idle suppression state=%+v", store.last)
+	if store.snapshotV0().IdleSelfImprovementOperationalMessage == nil ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage.ReasonCode != idleSelfImprovementDomainSessionSuppressedReasonV0 ||
+		!strings.Contains(store.snapshotV0().IdleSelfImprovementReason, idleSelfImprovementDomainSessionSuppressedReasonV0) ||
+		strings.Contains(store.snapshotV0().IdleSelfImprovementReason, "/tmp/proyecto-dominio") {
+		t.Fatalf("idle suppression state=%+v", store.snapshotV0())
 	}
 }
 
@@ -223,7 +223,7 @@ func TestRuntimeV0PrepareIdleSelfImprovementBatchNoMezclaFalloConRunAceptadoV0(t
 		{RequestRef: "request-ref-autoprogramming-backlog-t197-cli-rest-response-bounds-redaction-parity-4f78dcfb"},
 	})
 
-	reason := store.last.IdleSelfImprovementReason
+	reason := store.snapshotV0().IdleSelfImprovementReason
 	if !strings.Contains(reason, "run_ref=request-ref-autoprogramming-backlog-t197-cli-rest-response-bounds-redaction-parity-4f78dcfb") ||
 		!strings.Contains(reason, "status=ok") ||
 		!strings.Contains(reason, "repair_failed_prepare_requests_and_retry") {
@@ -267,27 +267,27 @@ func TestRuntimeV0PrepareIdleSelfImprovementBatchExponeFalloAccionableV0(t *test
 		RequestRef: "request-ref-autoprogramming-backlog-t999",
 	}})
 
-	reason := store.last.IdleSelfImprovementReason
+	reason := store.snapshotV0().IdleSelfImprovementReason
 	if !strings.HasPrefix(reason, "error:prepare_failed") ||
 		!strings.Contains(reason, "request_ref=request-ref-autoprogramming-backlog-t999") ||
 		!strings.Contains(reason, "message=idle_self_improvement_queue_candidate_not_executable") ||
 		!strings.Contains(reason, "planner_should_skip_control_blocked_backlog_ref") {
 		t.Fatalf("reason=%q", reason)
 	}
-	if store.last.IdleSelfImprovementOperationalMessage == nil ||
-		store.last.IdleSelfImprovementOperationalMessage.ReasonCode != "prepare_failed" ||
-		store.last.IdleSelfImprovementOperationalMessage.RequestRefs[0] != "request-ref-autoprogramming-backlog-t999" ||
-		store.last.IdleSelfImprovementOperationalMessage.EvidenceRefs[0] != "evidence-ref-idle-self-improvement-control-blocked" {
-		t.Fatalf("operational_message=%+v", store.last.IdleSelfImprovementOperationalMessage)
+	if store.snapshotV0().IdleSelfImprovementOperationalMessage == nil ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage.ReasonCode != "prepare_failed" ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage.RequestRefs[0] != "request-ref-autoprogramming-backlog-t999" ||
+		store.snapshotV0().IdleSelfImprovementOperationalMessage.EvidenceRefs[0] != "evidence-ref-idle-self-improvement-control-blocked" {
+		t.Fatalf("operational_message=%+v", store.snapshotV0().IdleSelfImprovementOperationalMessage)
 	}
-	if len(store.last.RecentErrors) == 0 ||
-		store.last.RecentErrors[0].Code != "idle_self_improvement_prepare_failed" ||
-		store.last.RecentErrors[0].EvidenceRefs[0] != "evidence-ref-idle-self-improvement-control-blocked" {
-		t.Fatalf("recent_errors=%+v", store.last.RecentErrors)
+	if len(store.snapshotV0().RecentErrors) == 0 ||
+		store.snapshotV0().RecentErrors[0].Code != "idle_self_improvement_prepare_failed" ||
+		store.snapshotV0().RecentErrors[0].EvidenceRefs[0] != "evidence-ref-idle-self-improvement-control-blocked" {
+		t.Fatalf("recent_errors=%+v", store.snapshotV0().RecentErrors)
 	}
 
 	runtime.markIdleSelfImprovementCheckedV0(context.Background(), "attempt_blocked", now.Add(time.Second))
-	reason = store.last.IdleSelfImprovementReason
+	reason = store.snapshotV0().IdleSelfImprovementReason
 	if !strings.Contains(reason, "pending=failed_attempt") ||
 		!strings.Contains(reason, "request_ref=request-ref-autoprogramming-backlog-t999") {
 		t.Fatalf("reason tras attempt_blocked=%q", reason)

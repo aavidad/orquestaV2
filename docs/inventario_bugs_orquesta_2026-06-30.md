@@ -3974,3 +3974,17 @@ con receipt por lote. Evidencia offline y límites:
 `docs/runbooks/handoff_codex_f3_r2_2026-07-10.md`. El bug sigue abierto para
 operación hasta que un operador produzca receipt real `clean` y el receipt
 amplio con ambos pases verdes; esta reparación no ejecuta drain/deploy/API real.
+
+BUG nuevo `BUG-ORQ-20260710-209` (cerrado local, test harness):
+`TestRuntimeV0AutomejoraIdleDegradaLotePorPresupuestoContextoV0` leía el campo
+interno del `memoryStateStoreV0` mientras la preparación idle asíncrona seguía
+persistiendo, y `go test -race -count=5` detectaba la carrera. No era un fallo de
+producción: `StatusTrackerV0`, `FileStateStoreV0` y las APIs del fake ya usan
+mutex; la prueba eludía esa sincronización y `selfStarted` solo acreditaba la
+entrada al puerto, no el fin del trabajo. Cierre: el fake encapsula el estado y
+expone `snapshotV0()` sincronizado, todos sus accesos directos fueron migrados,
+y el focal espera causalmente `waitRuntimeAsyncWorkForTestV0` antes de afirmar
+el snapshot final. Evidencia local: focal `-race -count=20`, focal y vecinos
+`-race -count=5`, y paquete completo `go test -race -count=1
+./modulos/orquesta-server`, todos verdes. Sin cambios de producción, procesos
+persistentes, remoto ni deploy.

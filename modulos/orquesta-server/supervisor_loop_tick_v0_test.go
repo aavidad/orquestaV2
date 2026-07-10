@@ -28,13 +28,13 @@ func TestRuntimeV0SupervisorPersisteTicksV0(t *testing.T) {
 	if supervisor.lastCommand.MaxTicks != DefaultSupervisorMaxTicksV0 {
 		t.Fatalf("max_ticks=%d want=%d", supervisor.lastCommand.MaxTicks, DefaultSupervisorMaxTicksV0)
 	}
-	if store.last.SupervisorTicks != 1 ||
-		store.last.LastSupervisorStatus != "ok" ||
-		store.last.LastSupervisorStop != orquestarunsupervisor.RunSupervisorStopNoExecutionV0 ||
-		store.last.LastSupervisorStopPublic != "idle_no_execution" ||
-		store.last.LastSupervisorStopCategory != "idle" ||
-		store.last.LastSupervisorQueueRef != "" {
-		t.Fatalf("state=%+v", store.last)
+	if store.snapshotV0().SupervisorTicks != 1 ||
+		store.snapshotV0().LastSupervisorStatus != "ok" ||
+		store.snapshotV0().LastSupervisorStop != orquestarunsupervisor.RunSupervisorStopNoExecutionV0 ||
+		store.snapshotV0().LastSupervisorStopPublic != "idle_no_execution" ||
+		store.snapshotV0().LastSupervisorStopCategory != "idle" ||
+		store.snapshotV0().LastSupervisorQueueRef != "" {
+		t.Fatalf("state=%+v", store.snapshotV0())
 	}
 }
 
@@ -64,13 +64,13 @@ func TestRuntimeV0SupervisorDistingueColaIdleConGoalBackendActivoV0(t *testing.T
 
 	runtime.runSupervisorTickV0(context.Background())
 
-	if store.last.LastSupervisorQueueSize != 0 ||
-		store.last.LastSupervisorStatus != SupervisorPublicStatusQueueIdleGoalBackendActiveV0 ||
-		store.last.LastSupervisorStopPublic != SupervisorPublicStopQueueIdleButGoalBackendActiveV0 ||
-		store.last.LastSupervisorStopCategory != SupervisorPublicCategoryGoalBackendV0 {
-		t.Fatalf("state=%+v", store.last)
+	if store.snapshotV0().LastSupervisorQueueSize != 0 ||
+		store.snapshotV0().LastSupervisorStatus != SupervisorPublicStatusQueueIdleGoalBackendActiveV0 ||
+		store.snapshotV0().LastSupervisorStopPublic != SupervisorPublicStopQueueIdleButGoalBackendActiveV0 ||
+		store.snapshotV0().LastSupervisorStopCategory != SupervisorPublicCategoryGoalBackendV0 {
+		t.Fatalf("state=%+v", store.snapshotV0())
 	}
-	message := store.last.LastSupervisorOperationalMessage
+	message := store.snapshotV0().LastSupervisorOperationalMessage
 	if message == nil ||
 		message.ReasonCode != SupervisorPublicStatusQueueIdleGoalBackendActiveV0 ||
 		message.Counters["goal_backend_active"] != 1 ||
@@ -78,8 +78,8 @@ func TestRuntimeV0SupervisorDistingueColaIdleConGoalBackendActivoV0(t *testing.T
 		!containsStringForTestV0(message.GoalRefs, "goal-ref-bug-069-goal-backend-active-001") {
 		t.Fatalf("operational message=%+v", message)
 	}
-	if store.last.IdleSelfImprovementReason != SupervisorPublicStopQueueIdleButGoalBackendActiveV0 {
-		t.Fatalf("idle self-improvement reason=%q", store.last.IdleSelfImprovementReason)
+	if store.snapshotV0().IdleSelfImprovementReason != SupervisorPublicStopQueueIdleButGoalBackendActiveV0 {
+		t.Fatalf("idle self-improvement reason=%q", store.snapshotV0().IdleSelfImprovementReason)
 	}
 	events := readAuditEventsForTestV0(t, AuditPathV0(runtime.config))
 	if len(events) < 2 {
@@ -121,10 +121,10 @@ func TestRuntimeV0SupervisorRespetaComandoConfiguradoV0(t *testing.T) {
 		!supervisor.lastCommand.AllowRepeatedRuns {
 		t.Fatalf("command=%+v", supervisor.lastCommand)
 	}
-	if store.last.LastSupervisorExecutions != 1 ||
-		store.last.LastSupervisorSkips != 2 ||
-		store.last.LastSupervisorResultTicks != 1 {
-		t.Fatalf("state=%+v", store.last)
+	if store.snapshotV0().LastSupervisorExecutions != 1 ||
+		store.snapshotV0().LastSupervisorSkips != 2 ||
+		store.snapshotV0().LastSupervisorResultTicks != 1 {
+		t.Fatalf("state=%+v", store.snapshotV0())
 	}
 }
 
@@ -186,25 +186,25 @@ func TestRuntimeV0SupervisorRegistraErrorYPermiteSiguienteTickV0(t *testing.T) {
 		t.Fatalf("NewRuntimeV0: %v", err)
 	}
 	runtime.runSupervisorTickV0(context.Background())
-	if store.last.LastSupervisorStatus != "error" ||
-		store.last.LastSupervisorError != "fallo_transitorio" ||
-		store.last.SupervisorTicks != 1 ||
-		store.last.SupervisorErrorTicks != 1 ||
-		store.last.LastSupervisorQueueRef != "global" ||
-		len(store.last.RecentErrors) != 1 ||
-		store.last.RecentErrors[0].Code != orquestarunsupervisor.RunSupervisorStopTickErrorV0 ||
-		store.last.RecentErrors[0].Scope != "supervisor" {
-		t.Fatalf("state error=%+v", store.last)
+	if store.snapshotV0().LastSupervisorStatus != "error" ||
+		store.snapshotV0().LastSupervisorError != "fallo_transitorio" ||
+		store.snapshotV0().SupervisorTicks != 1 ||
+		store.snapshotV0().SupervisorErrorTicks != 1 ||
+		store.snapshotV0().LastSupervisorQueueRef != "global" ||
+		len(store.snapshotV0().RecentErrors) != 1 ||
+		store.snapshotV0().RecentErrors[0].Code != orquestarunsupervisor.RunSupervisorStopTickErrorV0 ||
+		store.snapshotV0().RecentErrors[0].Scope != "supervisor" {
+		t.Fatalf("state error=%+v", store.snapshotV0())
 	}
 	runtime.runSupervisorTickV0(context.Background())
 	if supervisor.calls != 2 ||
-		store.last.LastSupervisorStatus != "ok" ||
-		store.last.LastError != "" ||
-		store.last.LastSupervisorError != "" ||
-		store.last.LastSupervisorExecutions != 2 ||
-		store.last.SupervisorTicks != 2 ||
-		store.last.SupervisorErrorTicks != 1 ||
-		len(store.last.RecentErrors) != 1 {
-		t.Fatalf("state recovered=%+v calls=%d", store.last, supervisor.calls)
+		store.snapshotV0().LastSupervisorStatus != "ok" ||
+		store.snapshotV0().LastError != "" ||
+		store.snapshotV0().LastSupervisorError != "" ||
+		store.snapshotV0().LastSupervisorExecutions != 2 ||
+		store.snapshotV0().SupervisorTicks != 2 ||
+		store.snapshotV0().SupervisorErrorTicks != 1 ||
+		len(store.snapshotV0().RecentErrors) != 1 {
+		t.Fatalf("state recovered=%+v calls=%d", store.snapshotV0(), supervisor.calls)
 	}
 }
