@@ -92,14 +92,14 @@ start)
   if [ -n "$CONFIG" ]; then
     config_args=(--config "$CONFIG")
   fi
-  nohup env PATH=/srv/orquesta-self/tools/go/bin:/usr/local/bin:/usr/bin:/bin \
+  nohup env PATH=/srv/orquesta-self/tools/npm-global/bin:/srv/orquesta-self/tools/go/bin:/usr/local/bin:/usr/bin:/bin \
     ORQUESTA_SERVER_ADDR="$ADDR" \
     ORQUESTA_SERVER_STATE_DIR="$R/state" \
     ORQUESTA_CODEX_RUNTIME_WORKDIR="$R/runtime" \
     ORQUESTA_CODEX_PROJECT_WORKDIR="$WORKDIR" \
     ORQUESTA_CODEX_GOAL_BACKEND=app_server_tmux \
     ORQUESTA_CODEX_CODE_HOME=/srv/orquesta-self/codex-home \
-    ORQUESTA_CODEX_COMMAND=/usr/local/bin/codex \
+    ORQUESTA_CODEX_COMMAND="${ORQUESTA_CODEX_COMMAND:-/srv/orquesta-self/tools/npm-global/bin/codex}" \
     ORQUESTA_CODEX_APPROVAL_POLICY=never \
     ORQUESTA_CODEX_SANDBOX=workspace-write \
     ORQUESTA_CODEX_GOAL_TIMEOUT_MS=1800000 \
