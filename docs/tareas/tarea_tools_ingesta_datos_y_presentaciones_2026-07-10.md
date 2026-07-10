@@ -1,6 +1,7 @@
 # Tarea: tools de ingesta de datos y presentaciones
 
-Estado: preparada; sin adaptadores reales ni apps temporales.
+Estado: contrato local de ingesta implementado; sin adaptadores reales ni apps
+temporales.
 
 ## Alcance
 
@@ -24,3 +25,11 @@ Las olas `wave-data-ingestion-tool-architecture-20260710` y
 `wave-presentation-extraction-tool-20260710` se pararon sin entrega por el
 presupuesto de diagnostico. Deben relanzarse desde supervisor goal-first una
 vez integrado el residual de 208S, con write-sets nuevos y disjuntos.
+
+## Corte local posterior
+
+`modulos/orquesta-data-ingestion` ya aporta source/profiler/mapper/validator/
+receipt por puertos, conserva source kind, hash, snapshot y provenance, y
+rechaza formatos fuera del contrato. Sus pruebas usan fakes sin ficheros ni
+drivers. Falta conectar su descriptor al SDK de tools y crear los adaptadores
+opt-in reales; no se ha aceptado ningun parser ni conector de BBDD todavia.
