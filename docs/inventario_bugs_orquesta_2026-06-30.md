@@ -3859,6 +3859,26 @@ por Orquesta) antes de aceptar cierre; una ref opaca aportada solo por el goal
 no basta. Este rework corrige la regresion y documenta el fallo, pero no declara
 resuelto ese pendiente de atestacion independiente.
 
+Subfallo `208I` (abierto, observacion/persistencia 2026-07-10): una nueva
+llamada HTTP de `observe` devolvio timeout parcial y simultaneamente publico o
+recupero `goal_status=invalid`; `invalid` persistio como estado durable. Hechos
+confirmados: coexistieron la respuesta parcial y el estado durable, y a las
+01:34 UTC dejaron de estar visibles todas las generaciones app-server que se
+venian observando. Inferencia acotada: el transporte y el estado persistido no
+comparten todavia un veredicto causal unico; el timeout no prueba que el goal
+siga `running`, y `invalid` no es cierre aceptable. Causa pendiente: estos datos
+no permiten distinguir entre terminacion cooperativa, limpieza externa, crash,
+reemplazo generacional o una carrera de persistencia/observacion. Estado
+honesto: abierto; no se declara despliegue, drain gobernado ni correccion total.
+Orden de ataque: (1) preservar refs/timestamps y reobservar identidad, procesos,
+store y receipts; (2) reconciliar `invalid` durable sin perder artefactos
+parciales; (3) exigir receipt causal para cualquier desaparicion generacional;
+(4) desplegar/reprobar `observe` y control en entorno aislado. Evidencia y
+cronologia compacta: S15-S16 de
+`docs/incidencias/incidencias_sesion_codex_remoto_orquesta_2026-07-10.md`;
+lectura estructural en
+`docs/analisis_fallos_estructurales_orquesta_2026-07-10.md`.
+
 Indice de sesion para Claude: todos los fallos operativos observados por Codex
 en el corte remoto 2026-07-10 quedan agrupados en
 `docs/incidencias/incidencias_sesion_codex_remoto_orquesta_2026-07-10.md`.
@@ -3866,3 +3886,91 @@ en el corte remoto 2026-07-10 quedan agrupados en
 Analisis estructural Claude/Codex 2026-07-10: los patrones transversales del
 inventario y el orden de ataque recomendado quedan en
 `docs/analisis_fallos_estructurales_orquesta_2026-07-10.md`.
+
+Subfallo `208J` (abierto, generaciones app-server duplicadas 2026-07-10): se
+confirmo que, si desaparecia la sesion tmux pero sobrevivian el proceso y el
+listener Unix, `EnsureV0` podia borrar/rebindear el mismo socket y crear una
+segunda generacion. Se observaron dos pares node/native asociados al mismo
+socket. El patch local de `orquesta-runtime-codex-appserver` introduce marker y
+lease por socket, identidad tmux exacta persistida (`session_id`, created, pane
+PID y starttime), CAS completo serializado por ruta, adopcion solo de una
+generacion exacta viva/respondiente y politica conservadora sin señales por
+PID/PGID ni unlink ante listener/owner ambiguo. La ruta legacy queda read-only:
+sin identidad completa devuelve conflicto. Evidencia local ejecutada:
+`go test -count=1 ./modulos/orquesta-runtime-codex-appserver`, CAS concurrente
+100 repeticiones y focal adversarial con `-race`, todos verdes. Limitaciones:
+el sandbox devolvio `EPERM` al crear sockets Unix reales incluso bajo `/tmp`,
+por lo que esas pruebas existen pero quedaron `SKIP`; `.git` era de solo
+lectura y el corte no pudo commitearse/pushearse. No hubo inventario de PIDs,
+drain ni deploy en este corte. Estado: patch local listo, cierre remoto y smoke
+de una sola generacion pendientes en un entorno que permita Unix sockets y
+escritura Git.
+
+Reapertura r2 de `208J`: la suite externa ya ejecuto sin `SKIP` y confirmo
+verdes el listener vivo sin marker, adopcion con tmux desaparecido, sesion
+reemplazada, legacy conservador, CAS stale, WebSocket y forced-stop ambiguo.
+Quedaron dos defectos del harness. Primero, el lifecycle migrado intentaba
+`net.Listen` antes de crear `runtime/goal-srv`; el helper de listener crea ahora
+su padre temporal. Segundo, el fake `new-session` lanzaba el servidor Unix en
+background heredando stdout/stderr de `exec.Cmd`: el shell terminaba, pero las
+pipes seguian abiertas y `cmd.Run()` esperaba EOF indefinidamente, impidiendo
+que el test alcanzara su shutdown exacto y dejando el helper huerfano al cortar
+la prueba. El helper nace ahora con stdio desacoplado; no se aumentaron timeouts
+ni se añadieron kills/unlinks amplios. Evidencia local disponible:
+`go test -count=1 ./modulos/orquesta-runtime-codex-appserver`, focales puros y
+`-race` verdes; los dos casos Unix r2 siguen `SKIP` solo por `EPERM` del sandbox.
+Estado: listo para tercera verificacion externa, no cierre productivo.
+
+Avance local r3 de `208J` (2026-07-10): la prueba viva dejo de usar
+`sh -c "sleep 30"` como owner intermedio y registra el PID exacto de `sleep`.
+La bateria independiente paso focal `-race`, 50 repeticiones del owner,
+20 repeticiones de tmux/forced-stop y el paquete completo sin `SKIP`. El paquete
+completo detecto una variante real de tmux sin servidor
+`error connecting to ... (No such file or directory)`; se normaliza solo esa
+forma exacta, mientras permisos y otros errores siguen fail-closed. Integrado
+solo localmente en `6b848faa5`; deploy/smoke remoto siguen pendientes.
+
+Reapertura arquitectonica de `208H` (revision independiente 2026-07-10): la
+primera implementacion no activaba atestacion en specs reales, confiaba en refs
+de agente autodeclaradas, no ligaba hash/revision al checkout probado, permitia
+bypass si faltaban puertos y no resolvia replay parcial ni concurrencia
+multiproceso del store. Estado: abierto; el WIP se conserva en rama local y no
+se integra hasta cerrar esos contratos con tests adversariales.
+
+Subfallo de routing/modelos (abierto, 2026-07-10): la implementacion inicial no
+distinguia complejidad de criticidad, admitia defaults/argumentos vacios,
+herencia de `xhigh`, PATH ambiguo hacia Codex `0.128.0` y receipt opcional no
+correlacionado. El ratchet global publica 521 lecturas `ORQUESTA_*` frente a
+limite 513. Accion: fail-closed, ruta CLI canonica, receipt del launcher,
+`normal|complex|critical`, `max` prohibido y consolidacion sin elevar ratchet.
+
+Avance de cierre de `208E` / TAREA-F3 (Codex directo, 2026-07-10): queda
+implementado el tooling offline listo para revisión de operador. El drain ya
+no usa inventario `ps` textual: construye identidad causal desde `/proc`, tmux
+y markers, propaga protección a todo descendiente de `uso-app`, rehúsa
+identidades ambiguas y revalida PID/starttime/PPID/PGID/session antes de TERM y
+KILL, además de revalidar sesión/created/pane antes de `kill-session`. Backup,
+payload HTTP y receipt son estructurados y están cubiertos por tests shell
+sintéticos. El harness aislado común ya es consumido por deploy, nightly y el
+smoke compuesto, y existe runner Go por lotes con timeout/receipt. Evidencia y
+fronteras exactas:
+`docs/runbooks/handoff_codex_f3_remoto_2026-07-10.md`; operación:
+`docs/runbooks/orquesta_server_drain_f3_2026-07-10.md`. Estado honesto de BUG:
+tooling listo; cierre remoto todavía exige al operador receipt real clean y
+dos pases amplios verdes en la ruta canónica. No se ejecutó drain, deploy,
+restart ni señal sobre procesos vivos en este corte.
+
+Reapertura crítica F3-R2 de `208E` (revisión adversarial, 2026-07-10): el verde
+anterior era falso. Los fixtures inventaban `owner/pid/starttime` en vez del
+schema real de `owner.json`; `refused` y `residual` devolvían rc 0; la señal
+separaba check de identidad y `kill` numérico; errores de `/proc`, tmux y backup
+se silenciaban; URL y protección `uso-app` dependían de patrones textuales; y
+`go list` podía entregar una lista parcial verde. F3-R2 reemplaza esa frontera
+por marker generación real, inventario/backup fail-closed, URL estructurada y
+causal al socket LISTEN del servidor, señal por `pidfd_open` +
+`pidfd_send_signal`, tmux por socket y session ID inmutables, rc no-cero para
+todo `refused/residual`, lock exclusivo, leases de puertos y runner de dos pases
+con receipt por lote. Evidencia offline y límites:
+`docs/runbooks/handoff_codex_f3_r2_2026-07-10.md`. El bug sigue abierto para
+operación hasta que un operador produzca receipt real `clean` y el receipt
+amplio con ambos pases verdes; esta reparación no ejecuta drain/deploy/API real.

@@ -1,20 +1,38 @@
 # Fallos estructurales del inventario de bugs - encargo para Codex
 
+<!-- checkpoint_started: task-ref-documentar-208h-208i-estructural-20260710 -->
+<!-- checkpoint_started: task-ref-orquesta-doc-fallos-finalize-20260710 -->
+## Checkpoint temprano del corte documental 208H/208I
+
+Objetivo: consolidar evidencia confirmada de 208H y 208I, corregir estados
+ambiguos y dejar a Claude un orden global de resolucion. Alcance estricto: este
+analisis, el inventario y la bitacora de sesion; no se implementa codigo. El
+siguiente artefacto es la seccion factual 208H/208I contrastada con commits,
+goal y pruebas conservadas en el repositorio.
+
+Checkpoint de finalizacion 2026-07-10: se conservan las ediciones parciales y
+el alcance sigue limitado a estos tres documentos. El siguiente artefacto es
+la incorporacion contrastada del timeout parcial que persistio `invalid` y del
+corte operativo de las 01:34 UTC, seguida por enlaces reciprocos, estados
+honestos y el test Markdown requerido.
+
 Fecha: 2026-07-10 (actualizado tras el cierre de sesion remota, HEAD
-`43aea232b`, indice de sesion ampliado a S1-S14).
+`43aea232b`, indice de sesion ampliado a S1-S16).
 Autor: Claude (revision transversal solicitada por el operador).
 Fuentes: `docs/inventario_bugs_orquesta_2026-06-30.md` (completo),
 `docs/incidencias/incidencias_sesion_codex_remoto_orquesta_2026-07-10.md`
-(S1-S14),
+(S1-S16),
 `docs/incidencias/incidencia_orquesta_goal_first_remote_checkpoint_control_2026-07-10.md`.
 
-Estado operativo al escribir esto: local, remoto y GitHub sincronizados en
-`43aea232b` sobre `trabajo/plataforma-agentes`, pero el binario Orquesta vivo
-en remoto es anterior al codigo pusheado
-(`binary_sha256=9541e2f0...`, ver S14). No se desplego porque hay
-goals/app-server/tests antiguos vivos y la parada por `runs/control` no es
-fiable (208C). Esa es exactamente la dependencia circular que este documento
-ordena romper.
+Estado operativo contrastado por cortes: local, remoto y GitHub quedaron
+sincronizados en `43aea232b` sobre `trabajo/plataforma-agentes`, mientras el
+binario Orquesta observado en S14 era anterior al codigo pusheado
+(`binary_sha256=9541e2f0...`). A las 01:34 UTC dejaron de estar visibles todas
+las generaciones app-server observadas (S16). Este hecho elimina la evidencia
+de esos procesos vivos en ese instante, pero no demuestra por si solo drain
+gobernado, despliegue del binario nuevo ni causa de terminacion. La identidad
+del binario y el cierre causal deben reobservarse antes de declarar mitigado
+S14 o reanudar trabajo amplio.
 
 Proposito: este documento NO pide revisar bugs sueltos. Identifica los fallos
 estructurales que explican por que el inventario sigue generando bugs nuevos
@@ -59,6 +77,17 @@ BUG-090, BUG-096, BUG-101, BUG-105, BUG-130, BUG-131 (que ya nombro esta raiz
 textualmente), BUG-141, BUG-165, BUG-198 y BUG-208B (goal con
 `orquesta_goal_result status=blocked` en disco mientras `observe` publica
 `goal_status=running`; 504 parcial que mezclaba running con cierre blocked).
+
+Ampliacion 208I/S15: una observacion HTTP posterior devolvio timeout parcial a
+la vez que el estado goal-first persistido aparecia `invalid`. Hecho: ambas
+senales coexistieron y `invalid` quedo durable. Inferencia: la respuesta parcial
+esta mezclando el resultado del intento de observacion con el ultimo estado
+persistido; un timeout de transporte no convierte `invalid` en `running` ni
+autoriza cierre. Causa raiz: no demostrada. La hipotesis principal sigue siendo
+la falta de un veredicto causal unico entre observador, store y backend, pero
+requiere correlacion por refs y tiempos antes de atribuirla a persistencia,
+normalizacion o terminacion del proceso. Ver el subfallo `208I` en el
+inventario y S15-S16 en la bitacora de sesion.
 
 Que hay ya (verificado en codigo en `43aea232b`):
 `ActiveShutdownWorkCleanerPortV0` en
@@ -299,14 +328,16 @@ regla de no reutilizar IDs. El inventario actual queda como historial.
 
 ## Orden de ataque propuesto
 
-La situacion S14 fija el primer paso: hoy el sistema esta en un ciclo
-bloqueado (no se despliega porque no hay drain fiable; los fixes de control
-no llegan al binario vivo porque no se despliega). El punto de corte del
-ciclo es un drain a nivel de proceso que no dependa del control plane.
+La situacion S14 fijo inicialmente un ciclo bloqueado: no se desplegaba porque
+no habia drain fiable y los fixes de control no llegaban al binario vivo. El
+corte de las 01:34 UTC (S16) cambia el estado observado, no la prueba de cierre:
+antes de actuar hay que capturar identidad/estado actual y determinar si la
+desaparicion fue cooperativa, externa o un fallo.
 
-1. F3 (drain gobernado + harness aislado): rompe el ciclo de S14 y
-   desbloquea la verificacion de todo lo demas; sin el, ningun cierre remoto
-   es demostrable.
+1. F3 (reobservacion + drain gobernado + harness aislado): capturar primero el
+   estado posterior a las 01:34 UTC; si quedan procesos propios, drenarlos por
+   el camino gobernado. Sin receipt causal, la mera ausencia de procesos no
+   demuestra cierre remoto.
 2. F5 (deploy del binario ya pusheado + startup guard de identidad):
    inmediatamente despues del drain; corta la clase S1/S3/S14 antes de
    reanudar autoprogramacion.
@@ -323,3 +354,40 @@ ciclo es un drain a nivel de proceso que no dependa del control plane.
 Regla transversal: cada corte cita `F<n>`, deja test focal + repro/API, y no
 mezcla frentes (en particular, nada de limpieza de codigo muerto dentro de
 cortes operativos, regla S2).
+
+## Cierre durable del corte documental
+
+Task origen preservada: `task-ref-orquesta-doc-fallos-finalize-20260710`.
+
+Estado del encargo documental: completo. Los tres documentos autorizados se
+actualizaron y quedaron enlazados: este analisis aporta la lectura estructural,
+el [inventario](inventario_bugs_orquesta_2026-06-30.md) conserva 208H/208I y la
+[bitacora de sesion](incidencias/incidencias_sesion_codex_remoto_orquesta_2026-07-10.md)
+conserva S1-S16. El timeout parcial con `invalid` durable y la desaparicion de
+generaciones a las 01:34 UTC quedan registrados como hechos; las lecturas sobre
+divergencia causal quedan marcadas como inferencias; la causa de la desaparicion
+y del cruce timeout/estado sigue pendiente, sin atribucion ficticia.
+
+Estado del sistema: no cerrado por este trabajo solo documental. 208H y 208I
+siguen abiertos, y no se afirma cobertura total, despliegue, drain gobernado ni
+reparacion productiva. El orden de ataque vigente es el de la seccion anterior.
+El test requerido para este corte es `git diff --check` acotado a los tres
+Markdown; su resultado se declara en el ACK estructurado del goal.
+
+## Anexo 208J - identidad generacional como requisito de mutacion
+
+El duplicado app-server no es un fallo de deteccion por comandos: es una falta
+de CAS entre tres identidades que pueden divergir, marker durable, sesion tmux y
+listener Unix. Buscar la ruta del socket en `ps` sirve como diagnostico, pero no
+autoriza una señal ni un unlink. La correccion local hace que toda mutacion
+dependa de marker completo por socket y, para `kill-session`, de coincidencia
+exacta de `session_id`, created, pane PID y starttime. Si tmux ya no existe, el
+adaptador puede adoptar el proceso exacto vivo/respondiente tras restart del
+servidor, pero no detenerlo sin primitiva atomica segura. El coste deliberado es
+un conflicto recuperable antes que una segunda generacion o la muerte de un PID
+reutilizado.
+
+El cierre de 208J requiere todavia: ejecutar sin `SKIP` los tests Unix reales,
+commit/push del patch, deploy atomico con backup, y smoke aislado que demuestre
+una sola generacion tras simular desaparicion de tmux. Ninguna de esas acciones
+operativas se realizo en este sandbox.
