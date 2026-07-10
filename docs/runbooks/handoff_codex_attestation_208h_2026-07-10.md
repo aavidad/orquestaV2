@@ -1,6 +1,23 @@
 # Handoff: atestacion independiente 208H
 
-Fecha: 2026-07-10. Estado: `ready_for_terra_final_review_no_commit`.
+Fecha: 2026-07-10. Estado: `candidate_ready_for_independent_review`.
+
+Actualizacion: la rama se rebased sobre `f24926d87` y se detectaron dos
+conflictos de integracion que habian ocultado DTOs de resultado JSON y rutas de
+`autonomy_program`. Se restauraron desde la base sin alterar la frontera de
+208H; los tests focales se repitieron despues. La prueba del adaptador local
+ahora ejecuta un `go test -count=1 ./...` real dentro de un modulo Go temporal,
+con checkout, cache y entorno aislados. La lista exacta para reejecucion externa
+vive en `docs/pruebas_revisor_208h_2026-07-10.md`.
+
+La primera ejecucion de `scripts/orquesta_test_batches.sh` con solo
+`ORQUESTA_TEST_BATCH_ROOT` fallo antes de probar codigo: el perfil aislado usa
+ademas `ORQUESTA_TEST_CACHE_ROOT` para leases y mantenia el default remoto bajo
+`/srv/orquesta-self`. El comando reproducible declara ambas rutas en `/tmp`.
+No se modificaron scripts de F3 desde este corte. El receipt posterior ejecuto
+dos pases: los paquetes 208H pasaron en ambos; `cmd/orquesta-server` fallo por
+la asercion fail-closed desalineada, tmux/hook y ratchet. La asercion 208H se
+corrigio y los otros tres frentes quedan fuera de este write-set.
 
 ## Alcance y frontera
 
@@ -17,7 +34,8 @@ upstream de extraccion documental:
 - `docs/inventario_herramientas_extraccion_documental_2026-07-10.md`;
 - `docs/runbooks/handoff_codex_extraccion_documental_2026-07-10.md`.
 
-No hay commit nuevo.
+Los commits de codigo existen en esta rama y han sido rebased sobre
+`f24926d87`; la documentacion final se commitea con la evidencia de pruebas.
 
 ## Findings cerrados en codigo local
 
@@ -131,3 +149,17 @@ Terra debe revisar el diff local, especialmente el contrato del identity
 verifier y la semantica CAS. Para un smoke real posterior, el operador debe
 inyectar un attestor aislado, un verifier de credenciales y policy confiable;
 este corte no autoriza remoto, deploy ni proveedor real.
+
+## Receipt final local
+
+El receipt `orquesta_test_batches_receipt.v1` de
+`/tmp/orquesta-test-batches-208h-focal/receipt.json` registra dos pases
+consecutivos verdes: 6 paquetes, 4 lotes y 12 ejecuciones. Incluye
+`orquesta-goal`, `orquesta-runtime-required-test`, `orquesta-state-file`,
+`orquesta-app-director-service`, `orquesta-app-codex-stack` y
+`orquesta-autoprogramming`.
+
+El lote ampliado que tambien incluyo `cmd/orquesta-server` fallo en dos pases.
+El test 208H desalineado se corrigio y su focal queda verde. Siguen abiertos y
+fuera de 208H: deduplicacion de shutdown hooks, cleanup tmux/app-server y el
+ratchet de variables (`537 > 511`). No se usan como evidencia de cierre.
