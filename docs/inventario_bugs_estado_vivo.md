@@ -18,7 +18,7 @@ mismo commit.
 | BUG-ORQ-20260710-208J | integrado en `7444dcf8a`: fallo del atestador persiste claim `failed` y cierre `blocked/rework`, sin reintento por polling | D1 debe confirmar comportamiento con atestador real; conservar la [incidencia 208J](incidencias/incidencia_orquesta_208h_claim_pending_sin_reintento_2026-07-10.md) como evidencia |
 | BUG-ORQ-20260710-208K | routing de modelos en rama WIP rechaza configuraciones legacy sin `model_routing`, rompiendo Codex, Claude y stack | [incidencia 208K](incidencias/incidencia_orquesta_model_routing_fail_closed_legacy_2026-07-10.md): normalizar ausencia a politica conservadora y reejecutar paquetes |
 | BUG-ORQ-20260710-208I | timeout parcial de observe coexistio con `invalid` durable; causa raiz no demostrada | correlacionar refs/tiempos tras adoptar veredicto causal F1 en observe |
-| SUBFALLO routing/modelos 20260710 | fail-open en defaults/args vacios, herencia xhigh, PATH ambiguo; ratchet 521 vs limite 513 | WIP en `fix/model-routing-p0-p1-sol-20260710`; fail-closed y consolidar sin subir ratchet |
+| SUBFALLO routing/modelos 20260710 | fail-open en defaults/args vacios, herencia xhigh, PATH ambiguo; D3 local mide 538 variables `ORQUESTA_*` frente al limite 513 | WIP en `fix/model-routing-p0-p1-sol-20260710`; consolidar/fusionar configuracion sin subir ratchet y repetir D3 |
 | BUG-ORQ-20260701-079 | solo frontera proveedor: cap duro pre-tool ante stdout crudo sin redireccion | esperar enforcement del proveedor o probe adversarial nuevo; no bloquea local |
 | BUG-ORQ-20260704-165 / 20260701-065 | residual amplio de observabilidad/control lento con proveedor real; nucleo local cerrado | se paga con la adopcion completa del veredicto F1 + repro 208 tras deploy |
 
@@ -44,6 +44,12 @@ mismo commit.
 - BUG-ORQ-20260710-208L: cerrado por `5f30973d7` y D1 local retenido en
   `/tmp/orquesta-goal-first-app-server.ZAorvf`; el target externo no Git ya
   no se usa como identidad del binario.
+- D3 local 2026-07-10: detenido tras el primer lote determinista para no
+  gastar un segundo pase imposible. `TestEnvVarsBudgetMEJ106V0` fallo con
+  538 variables frente a 513; recibo y log retenidos en
+  `/tmp/orquesta-test-batches/receipt.json` y
+  `/tmp/orquesta-test-batches/logs/pass-001-batch-001.log`. No hubo cambios
+  de fuente ni procesos residuales.
 
 ## Regla de conteo
 
