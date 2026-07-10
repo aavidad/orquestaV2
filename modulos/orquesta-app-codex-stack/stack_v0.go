@@ -42,6 +42,7 @@ type StackV0 struct {
 	ProviderRuntimes                      []RuntimeProviderConfigV0
 	EgressSanitizer                       EgressSanitizerConfigV0
 	Codex                                 CodexRuntimeConfigV0
+	Claude                                ClaudeRuntimeConfigV0
 	CodexRuntimeWorkDir                   string
 	CodexSnapshotSource                   orquestaruntimecodexdelivery.CodexProcessSnapshotSourcePortV0
 	PromoteMaterializedArtifactWithoutAck bool
@@ -51,6 +52,7 @@ type StackV0 struct {
 }
 
 func BuildStackV0(config ConfigV0) (StackV0, error) {
+	config = normalizeModelRoutingConfigV0(config)
 	config = configWithCanonicalEgressSanitizerV0(config)
 	if err := validateConfigV0(config); err != nil {
 		return StackV0{}, err
@@ -81,6 +83,7 @@ func BuildStackV0(config ConfigV0) (StackV0, error) {
 		ProviderRuntimes:                      CanonicalRuntimeProviderConfigsV0(config),
 		EgressSanitizer:                       NormalizeEgressSanitizerConfigV0(config.EgressSanitizer),
 		Codex:                                 config.Codex,
+		Claude:                                config.Claude,
 		CodexRuntimeWorkDir:                   config.Codex.RuntimeWorkDir,
 		CodexSnapshotSource:                   config.Codex.SnapshotSource,
 		PromoteMaterializedArtifactWithoutAck: config.PromoteMaterializedArtifactWithoutAck,

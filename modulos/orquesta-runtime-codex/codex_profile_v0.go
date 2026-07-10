@@ -52,24 +52,25 @@ const (
 )
 
 type CodexConnectorProfileV0 struct {
-	SchemaVersion            string                    `json:"schema_version"`
-	OptIn                    bool                      `json:"opt_in"`
-	CommandPath              string                    `json:"command_path"`
-	ProjectWorkDir           string                    `json:"project_work_dir"`
-	RuntimeWorkDir           string                    `json:"runtime_work_dir"`
-	RuntimeWorkDirPlacement  string                    `json:"runtime_work_dir_placement,omitempty"`
-	CodeHomeDir              string                    `json:"code_home_dir,omitempty"`
-	HomeDir                  string                    `json:"home_dir,omitempty"`
-	PathEnv                  string                    `json:"path_env,omitempty"`
-	Model                    string                    `json:"model,omitempty"`
-	ReasoningEffort          string                    `json:"reasoning_effort,omitempty"`
-	Profile                  string                    `json:"profile,omitempty"`
-	Sandbox                  string                    `json:"sandbox,omitempty"`
-	ApprovalPolicy           string                    `json:"approval_policy,omitempty"`
-	InteractiveApprovalOptIn bool                      `json:"interactive_approval_opt_in,omitempty"`
-	ExtraArgs                []string                  `json:"extra_args,omitempty"`
-	PromptHints              []string                  `json:"prompt_hints,omitempty"`
-	SkillInstructions        []CodexSkillInstructionV0 `json:"skill_instructions,omitempty"`
+	SchemaVersion            string                     `json:"schema_version"`
+	OptIn                    bool                       `json:"opt_in"`
+	CommandPath              string                     `json:"command_path"`
+	ProjectWorkDir           string                     `json:"project_work_dir"`
+	RuntimeWorkDir           string                     `json:"runtime_work_dir"`
+	RuntimeWorkDirPlacement  string                     `json:"runtime_work_dir_placement,omitempty"`
+	CodeHomeDir              string                     `json:"code_home_dir,omitempty"`
+	HomeDir                  string                     `json:"home_dir,omitempty"`
+	PathEnv                  string                     `json:"path_env,omitempty"`
+	Model                    string                     `json:"model,omitempty"`
+	ModelRouting             CodexModelRoutingReceiptV0 `json:"model_routing,omitempty"`
+	ReasoningEffort          string                     `json:"reasoning_effort,omitempty"`
+	Profile                  string                     `json:"profile,omitempty"`
+	Sandbox                  string                     `json:"sandbox,omitempty"`
+	ApprovalPolicy           string                     `json:"approval_policy,omitempty"`
+	InteractiveApprovalOptIn bool                       `json:"interactive_approval_opt_in,omitempty"`
+	ExtraArgs                []string                   `json:"extra_args,omitempty"`
+	PromptHints              []string                   `json:"prompt_hints,omitempty"`
+	SkillInstructions        []CodexSkillInstructionV0  `json:"skill_instructions,omitempty"`
 }
 
 type CodexSkillInstructionV0 struct {

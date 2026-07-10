@@ -22,15 +22,19 @@ func codexRuntimeConfigV0(
 	if len(usageMetrics) > 0 {
 		usageSource = usageMetrics[0]
 	}
-	envConfig := codexRuntimeEnvConfigFromProjectConfigV0(serverConfig.ProjectWorkDir)
+	projectConfig := projectConfigFromServerConfigBestEffortV0(serverConfig)
+	envConfig := codexRuntimeEnvConfigFromProjectFileV0(projectConfig)
 	return orquestaappcodexstack.CodexRuntimeConfigV0{
-		CommandPath:              envConfig.CommandPath,
-		ProjectWorkDir:           serverConfig.ProjectWorkDir,
-		RuntimeWorkDir:           serverConfig.RuntimeWorkDir,
-		CodeHomeDir:              envConfig.CodeHomeDir,
-		HomeDir:                  envConfig.HomeDir,
-		PathEnv:                  envConfig.PathEnv,
-		Model:                    envConfig.Model,
+		CommandPath:    envConfig.CommandPath,
+		ProjectWorkDir: serverConfig.ProjectWorkDir,
+		RuntimeWorkDir: serverConfig.RuntimeWorkDir,
+		CodeHomeDir:    envConfig.CodeHomeDir,
+		HomeDir:        envConfig.HomeDir,
+		PathEnv:        envConfig.PathEnv,
+		Model:          envConfig.Model,
+		// Never seed routing from ORQUESTA_CODEX_MODEL: a legacy global may be
+		// sol. A concrete alias in the canonical file is required for launches.
+		ModelRouting:             codexModelRoutingFromProjectConfigFileV0(projectConfig),
 		ReasoningEffort:          envConfig.ReasoningEffort,
 		Profile:                  envConfig.Profile,
 		Sandbox:                  envConfig.Sandbox,
@@ -88,12 +92,11 @@ func codexRuntimeEnvConfigFromProjectFileV0(projectConfig serverProjectConfigFil
 		CodeHomeDir: codeHomeDirV0(),
 		HomeDir:     homeDirV0(),
 		PathEnv:     envOrDefaultV0(envCodexPathV0, os.Getenv("PATH")),
-		Model:       strings.TrimSpace(os.Getenv(envCodexModelV0)),
-		// Default medium: Goal-first y la recuperacion de artefacto-sin-ACK
-		// reducen el coste de exigir high por defecto. Las composiciones pueden
-		// subirlo con ORQUESTA_CODEX_REASONING_EFFORT cuando el riesgo lo justifique.
-		ReasoningEffort:          codexReasoningEffortFromProjectConfigFileV0(projectConfig),
-		Profile:                  strings.TrimSpace(os.Getenv(envCodexProfileV0)),
+		// Model, effort and profile are task-scoped routing outputs. Runtime env
+		// never seeds or inherits them.
+		Model:                    "",
+		ReasoningEffort:          "",
+		Profile:                  "",
 		Sandbox:                  codexSandboxFromEnvV0(envCodexSandboxV0, "workspace-write"),
 		ApprovalPolicy:           envOrDefaultV0(envCodexApprovalPolicyV0, "never"),
 		DirectorSandbox:          codexOptionalSandboxFromEnvV0(envCodexDirectorSandboxV0),

@@ -52,6 +52,11 @@ func (r ClaudeExecResolverV0) ResolveExternalAgentProcessCommandV0(
 		issue.Evidence = compactClaudeIssueEvidenceV0(evidence)
 		return orquestaruntime.ProcessRuntimeLaunchRequestV0{}, []orquestaruntime.ExternalAgentConnectorErrorV0{issue}
 	}
+	if !r.launchRoutingReceiptV0(spec).validForLaunchV0(r.profile.Model) {
+		return orquestaruntime.ProcessRuntimeLaunchRequestV0{}, []orquestaruntime.ExternalAgentConnectorErrorV0{
+			claudeIssueV0(ClaudeConnectorValueInvalidV0, "model_routing", spec.CorrelationID, "model_routing_invalid"),
+		}
+	}
 	req := r.processRuntimeLaunchRequestV0()
 	if issue := claudeProcessRuntimeRequestIssueV0(spec.CorrelationID, req); issue != nil {
 		return orquestaruntime.ProcessRuntimeLaunchRequestV0{}, []orquestaruntime.ExternalAgentConnectorErrorV0{*issue}
@@ -106,9 +111,15 @@ func (r ClaudeExecResolverV0) materializeFilesV0(
 	}
 	packetPath := filepath.Join(r.profile.RuntimeWorkDir, ClaudeAgentPacketFileNameV0)
 	promptPath := filepath.Join(r.profile.RuntimeWorkDir, ClaudeAgentPromptFileNameV0)
+	receiptPath := filepath.Join(r.profile.RuntimeWorkDir, ClaudeModelRoutingReceiptFileNameV0)
 	if err := writeClaudeJSONFileV0(r.profile.RuntimeWorkDir, packetPath, spec.AgentPacket); err != nil {
 		return []orquestaruntime.ExternalAgentConnectorErrorV0{
 			claudeIssueV0(ClaudeConnectorFilesystemV0, ClaudeAgentPacketFileNameV0, spec.CorrelationID, err.Error()),
+		}
+	}
+	if err := writeClaudeJSONFileV0(r.profile.RuntimeWorkDir, receiptPath, r.launchRoutingReceiptV0(spec)); err != nil {
+		return []orquestaruntime.ExternalAgentConnectorErrorV0{
+			claudeIssueV0(ClaudeConnectorFilesystemV0, ClaudeModelRoutingReceiptFileNameV0, spec.CorrelationID, err.Error()),
 		}
 	}
 	promptHints := append([]string(nil), r.profile.PromptHints...)
@@ -137,6 +148,16 @@ func (r ClaudeExecResolverV0) materializeFilesV0(
 		}
 	}
 	return nil
+}
+
+func (r ClaudeExecResolverV0) launchRoutingReceiptV0(spec orquestaruntime.ExternalAgentLaunchSpecV0) ClaudeModelRoutingReceiptV0 {
+	receipt := r.profile.ModelRouting
+	receipt.SchemaVersion = ClaudeModelRoutingReceiptSchemaVersionV0
+	receipt.RequestID = strings.TrimSpace(spec.RequestID)
+	receipt.CorrelationID = strings.TrimSpace(spec.CorrelationID)
+	receipt.TaskRef = strings.TrimSpace(spec.AgentPacket.Task.TaskRef)
+	receipt.ReasoningEffort = strings.TrimSpace(r.profile.Effort)
+	return receipt
 }
 
 func claudeRuntimeWorkDirPromptHintV0(profile ClaudeConnectorProfileV0) string {

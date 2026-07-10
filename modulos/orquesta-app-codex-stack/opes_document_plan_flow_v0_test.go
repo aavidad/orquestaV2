@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
+	orquestaappchangedirectorsource "orquesta/modulos/orquesta-app-change-director-source"
+	orquestacapacity "orquesta/modulos/orquesta-capacity"
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestaexternalworkrun "orquesta/modulos/orquesta-external-work-run"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
@@ -65,7 +67,6 @@ func TestCodexStackV0OPESPlanTemarioOperadoresSupervisorXHighEnviaDocumentPlan(t
 	runtime := newFakeCodexStackRuntimeV0().
 		withDeliveryBodyForTargetV0(target, validPlanTemarioOperadoresPayloadForTestV0())
 	domainWork := &fakeCodexStackDomainWorkExecutorV0{}
-	stack := mustBuildCodexStackWithDomainWorkForTestV0(t, runtime, domainWork)
 	request, ok := orquestaopesbridge.BuildExternalWorkRunRequestV0(
 		orquestaopesconnector.ExternalJobV0{
 			ID:            "job-ref-plan-operadores-001",
@@ -90,6 +91,18 @@ func TestCodexStackV0OPESPlanTemarioOperadoresSupervisorXHighEnviaDocumentPlan(t
 	)
 	if !ok {
 		t.Fatalf("request no construida")
+	}
+	config := codexStackBaseConfigForTestV0(t, runtime, domainWork, nil)
+	config.Codex.ModelRouting.TaskRoutes[orquestaappchangedirectorsource.AppChangeTaskRefV0(request.AppChangeRequest.ChangeRef)] = orquestacapacity.ModelRoutingRequestV0{
+		Level:                 orquestacapacity.ModelRoutingLevelComplexV0,
+		RequestedEffort:       "xhigh",
+		ReasonRef:             "reason-ref-opes-plan-temario-xhigh",
+		EvidenceRefs:          []string{"evidence-ref-opes-plan-temario-xhigh"},
+		XHighAuthorizationRef: "authorization-ref-opes-plan-temario-xhigh",
+	}
+	stack, err := BuildStackV0(config)
+	if err != nil {
+		t.Fatalf("BuildStackV0: %v", err)
 	}
 	run := postExternalWorkRunRequestStackV0(t, stack, request)
 	supervisor := postRunSupervisorStackV0(t, stack, legacyRunSupervisorInputForStackTestV0(orquestamcp.MCPRunSupervisorToolInputV0{

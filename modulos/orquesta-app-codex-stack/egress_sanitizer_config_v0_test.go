@@ -26,7 +26,6 @@ func TestEgressSanitizerConfigV0CentralizaRuntimePorProveedor(t *testing.T) {
 			Enabled:        true,
 			CommandPath:    "/bin/claude",
 			RuntimeWorkDir: "runtime/claude",
-			Model:          "model-claude",
 		},
 		EgressSanitizer: EgressSanitizerConfigV0{
 			Enabled: true,

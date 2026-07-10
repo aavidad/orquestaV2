@@ -211,12 +211,21 @@ func canonicalClaudeRuntimeProviderConfigV0(config ClaudeRuntimeConfigV0) Runtim
 		RuntimeWorkDirConfigured: strings.TrimSpace(config.RuntimeWorkDir) != "",
 		HomeDirConfigured:        strings.TrimSpace(config.HomeDir) != "",
 		PathEnvConfigured:        strings.TrimSpace(config.PathEnv) != "",
-		ModelRef:                 strings.TrimSpace(config.Model),
-		ReasoningEffort:          strings.TrimSpace(config.Effort),
+		ModelRef:                 strings.TrimSpace(config.ModelRouting.Policy.PolicyRef),
+		ReasoningEffort:          claudeModelRoutingEffortsV0(config.ModelRouting),
 		ApprovalPolicy:           strings.TrimSpace(config.PermissionMode),
 		ExtraArgsCount:           len(compactStringsV0(config.ExtraArgs)),
 		PromptHintsCount:         len(compactStringsV0(config.PromptHints)),
 	}
+}
+
+func claudeModelRoutingEffortsV0(config ClaudeModelRoutingConfigV0) string {
+	return strings.Join([]string{
+		strings.TrimSpace(config.Policy.TrivialEffort),
+		strings.TrimSpace(config.Policy.NormalEffort),
+		strings.TrimSpace(config.Policy.ComplexEffort),
+		strings.TrimSpace(config.Policy.CriticalEffort),
+	}, ",")
 }
 
 func canonicalEgressSanitizerProviderConfigV0(config EgressSanitizerConfigV0) RuntimeProviderConfigV0 {

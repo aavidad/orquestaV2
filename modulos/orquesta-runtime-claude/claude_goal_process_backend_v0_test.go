@@ -256,6 +256,8 @@ func claudeGoalProcessBackendForTestV0(
 			CommandPath:    commandPath,
 			ProjectWorkDir: projectDir,
 			RuntimeWorkDir: runtimeDir,
+			Model:          "sonnet",
+			Effort:         "medium",
 			PermissionMode: "bypassPermissions",
 			OutputFormat:   "text",
 		},

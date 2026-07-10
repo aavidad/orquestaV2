@@ -16,6 +16,7 @@ type CodexControlFilesV0 struct {
 	ShutdownRequestPath string
 	ShutdownAckPath     string
 	SkillInstructions   []CodexSkillInstructionV0
+	ModelRouting        CodexModelRoutingReceiptV0
 }
 
 func BuildCodexAgentPromptV0(packet orquestaruntime.AgentStartPacketV0, hints []string) string {
@@ -107,6 +108,10 @@ func BuildCodexAgentPromptWithControlFilesV0(packet orquestaruntime.AgentStartPa
 		"\",\"status\":\"completed\",\"files\":",
 	)
 	writeStringsV0(&b, promptJSONStringArrayV0(promptACKFilesV0(packet)), ",\"tests\":", promptJSONStringArrayV0(packet.Task.RequiredTests))
+	if control.ModelRouting.SelectedModelRef != "" {
+		data, _ := json.Marshal(control.ModelRouting)
+		writeStringsV0(&b, ",\"model_routing\":", string(data))
+	}
 	if len(compactPromptValuesV0(packet.Task.RequiredTests)) > 0 {
 		writeStringsV0(&b, ",\"test_receipts\":", promptACKTestReceiptsJSONV0(packet.Task.RequiredTests))
 	}

@@ -60,7 +60,15 @@ func (resolver CodexLaunchSpecResolverV0) ResolveExternalAgentLaunchSpecV0(
 	)
 	spec.AgentPacket.Context = contextBundle
 	spec.AgentPacket.Policies = packetPoliciesWithContextGuardV0(spec.AgentPacket.Policies, contextBundle)
+	route, selectedModel, err := codexModelRouteForTaskV0(resolver.Config, task.TaskRef)
+	if err != nil {
+		return orquestacionnucleoapp.ExternalAgentLaunchSpecResolutionV0{}, err
+	}
+	spec.AgentPacket.Policies = append(spec.AgentPacket.Policies, "model-routing-policy="+route.PolicyRef, "model-routing-level="+string(route.Level), "model-routing-model-ref="+route.SelectedModelRef)
 	profile := codexProfileForAreaV0(resolver.Config, runtimeDir, area)
+	profile.Model = selectedModel
+	profile.ReasoningEffort = route.ReasoningEffort
+	profile.ModelRouting = orquestaruntimecodex.CodexModelRoutingReceiptV0{Level: string(route.Level), Trivial: route.Trivial, SelectedModelRef: route.SelectedModelRef, ReasoningEffort: route.ReasoningEffort, PolicyRef: route.PolicyRef, ReasonRef: route.ReasonRef, EvidenceRefs: route.EvidenceRefs, XHighAuthorizationRef: route.XHighAuthorizationRef}
 	return orquestacionnucleoapp.ExternalAgentLaunchSpecResolutionV0{
 		Spec:            spec,
 		CommandResolver: orquestaruntimecodex.NewCodexExecResolverV0(profile),

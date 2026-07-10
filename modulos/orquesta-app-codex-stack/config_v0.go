@@ -5,6 +5,7 @@ import (
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
+	orquestacapacity "orquesta/modulos/orquesta-capacity"
 	orquestacontext "orquesta/modulos/orquesta-context"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectoragentworkflow "orquesta/modulos/orquesta-director-agent-workflow"
@@ -122,6 +123,7 @@ type CodexRuntimeConfigV0 struct {
 	HomeDir                  string
 	PathEnv                  string
 	Model                    string
+	ModelRouting             CodexModelRoutingConfigV0
 	ReasoningEffort          string
 	Profile                  string
 	Sandbox                  string
@@ -146,6 +148,14 @@ type CodexRuntimeConfigV0 struct {
 	UsageMetrics   CodexStackAgentUsageMetricsProviderPortV0
 }
 
+// CodexModelRoutingConfigV0 is composition data. TaskRoutes are Director
+// declarations keyed by task_ref; no title/prompt heuristic is permitted.
+type CodexModelRoutingConfigV0 struct {
+	Policy     orquestacapacity.ModelRoutingPolicyV0
+	ModelAlias map[string]string
+	TaskRoutes map[string]orquestacapacity.ModelRoutingRequestV0
+}
+
 type GeminiRuntimeConfigV0 struct {
 	Enabled        bool
 	CommandPath    string
@@ -168,13 +178,22 @@ type ClaudeRuntimeConfigV0 struct {
 	RuntimeWorkDir string
 	HomeDir        string
 	PathEnv        string
-	Model          string
+	// Model and Effort are intentionally not configuration fallbacks. Every
+	// Claude launch obtains both values from ModelRouting for its own task_ref.
 	PermissionMode string
 	OutputFormat   string
-	Effort         string
+	ModelRouting   ClaudeModelRoutingConfigV0
 	PromptLocale   string
 	ExtraArgs      []string
 	PromptHints    []string
+}
+
+// ClaudeModelRoutingConfigV0 keeps provider selection separate from the
+// neutral task-class decision. Model aliases are resolved only by composition.
+type ClaudeModelRoutingConfigV0 struct {
+	Policy     orquestacapacity.ModelRoutingPolicyV0
+	ModelAlias map[string]string
+	TaskRoutes map[string]orquestacapacity.ModelRoutingRequestV0
 }
 
 type RunQueueConfigV0 struct {

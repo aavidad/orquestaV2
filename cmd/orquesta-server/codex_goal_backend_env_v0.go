@@ -285,20 +285,24 @@ func serverClaudeGoalBackendFromValueForWorkDirV0(
 		PromptLocale:   goalBackendPromptLocaleFromProjectConfigFileV0(projectConfig),
 	}
 	if backend == claudeGoalBackendProcessV0 {
+		decision, model, err := claudeGoalModelRouteV0(claudeModelRoutingFromProjectConfigFileV0(projectConfig))
+		if err != nil {
+			return serverCodexGoalBackendV0{}, err
+		}
 		client := &orquestaruntimeclaude.ClaudeGoalProcessBackendV0{
 			Control: control,
 			Profile: orquestaruntimeclaude.ClaudeConnectorProfileV0{
 				SchemaVersion:  orquestaruntimeclaude.ClaudeConnectorProfileSchemaVersionV0,
 				OptIn:          true,
-				CommandPath:    claudeCommandPathV0(),
+				CommandPath:    claudeCommandPathV0(projectConfig),
 				ProjectWorkDir: projectWorkDir,
 				RuntimeWorkDir: runtimeWorkDir,
 				HomeDir:        strings.TrimSpace(os.Getenv(envClaudeHomeV0)),
 				PathEnv:        envOrDefaultV0(envClaudePathV0, os.Getenv("PATH")),
-				Model:          strings.TrimSpace(os.Getenv(envClaudeModelV0)),
+				Model:          model,
 				PermissionMode: envOrDefaultV0(envClaudePermissionModeV0, "bypassPermissions"),
 				OutputFormat:   envOrDefaultV0(envClaudeOutputFormatV0, "text"),
-				Effort:         strings.TrimSpace(os.Getenv(envClaudeEffortV0)),
+				Effort:         decision.ReasoningEffort,
 				PromptLocale:   control.PromptLocale,
 				ExtraArgs:      strings.Fields(os.Getenv(envClaudeExtraArgsV0)),
 				PromptHints:    []string{"goal-first Claude process backend opt-in"},

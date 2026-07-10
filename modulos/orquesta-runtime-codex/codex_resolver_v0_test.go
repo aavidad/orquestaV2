@@ -2,6 +2,7 @@ package orquestaruntimecodex
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -67,6 +68,7 @@ func TestCodexExecResolverV0MaterializaPacketPromptYWrapper(t *testing.T) {
 
 	requireFileExistsV0(t, filepath.Join(profile.RuntimeWorkDir, CodexAgentPacketFileNameV0))
 	requireFileExistsV0(t, filepath.Join(profile.RuntimeWorkDir, CodexAgentPromptFileNameV0))
+	requireFileExistsV0(t, filepath.Join(profile.RuntimeWorkDir, CodexModelRoutingReceiptFileNameV0))
 	requireFileExistsV0(t, filepath.Join(profile.RuntimeWorkDir, CodexWrapperFileNameV0))
 	if req.CommandPath != filepath.Join(profile.RuntimeWorkDir, CodexWrapperFileNameV0) {
 		t.Fatalf("command path=%q", req.CommandPath)
@@ -79,6 +81,30 @@ func TestCodexExecResolverV0MaterializaPacketPromptYWrapper(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(profile.ProjectWorkDir, CodexAgentPacketFileNameV0)); err == nil {
 		t.Fatalf("packet no debe materializarse en project workdir compartido")
+	}
+}
+
+func TestCodexExecResolverV0PersisteReceiptPropioCorrelacionado(t *testing.T) {
+	profile := codexProfileForTestV0(t)
+	spec := codexSpecForTestV0()
+	profile.ModelRouting.RequestID = "ack-autodeclarado-no-confiable"
+	profile.ModelRouting.TaskRef = "task-ajena"
+	_, issues := NewCodexExecResolverV0(profile).ResolveExternalAgentProcessCommandV0(context.Background(), spec)
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	data, err := os.ReadFile(filepath.Join(profile.RuntimeWorkDir, CodexModelRoutingReceiptFileNameV0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var receipt CodexModelRoutingReceiptV0
+	if err := json.Unmarshal(data, &receipt); err != nil {
+		t.Fatal(err)
+	}
+	if receipt.RequestID != spec.RequestID || receipt.CorrelationID != spec.CorrelationID ||
+		receipt.TaskRef != spec.AgentPacket.Task.TaskRef || receipt.PolicyRef != "policy-ref-test" ||
+		receipt.SelectedModelRef != "model-ref-test" || receipt.ReasoningEffort != profile.ReasoningEffort {
+		t.Fatalf("receipt=%+v", receipt)
 	}
 }
 

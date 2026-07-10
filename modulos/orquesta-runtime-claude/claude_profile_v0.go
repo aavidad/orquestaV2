@@ -38,21 +38,22 @@ const (
 )
 
 type ClaudeConnectorProfileV0 struct {
-	SchemaVersion           string   `json:"schema_version"`
-	OptIn                   bool     `json:"opt_in"`
-	CommandPath             string   `json:"command_path"`
-	ProjectWorkDir          string   `json:"project_work_dir"`
-	RuntimeWorkDir          string   `json:"runtime_work_dir"`
-	RuntimeWorkDirPlacement string   `json:"runtime_work_dir_placement,omitempty"`
-	HomeDir                 string   `json:"home_dir,omitempty"`
-	PathEnv                 string   `json:"path_env,omitempty"`
-	Model                   string   `json:"model,omitempty"`
-	PermissionMode          string   `json:"permission_mode,omitempty"`
-	OutputFormat            string   `json:"output_format,omitempty"`
-	Effort                  string   `json:"effort,omitempty"`
-	PromptLocale            string   `json:"prompt_locale,omitempty"`
-	ExtraArgs               []string `json:"extra_args,omitempty"`
-	PromptHints             []string `json:"prompt_hints,omitempty"`
+	SchemaVersion           string                      `json:"schema_version"`
+	OptIn                   bool                        `json:"opt_in"`
+	CommandPath             string                      `json:"command_path"`
+	ProjectWorkDir          string                      `json:"project_work_dir"`
+	RuntimeWorkDir          string                      `json:"runtime_work_dir"`
+	RuntimeWorkDirPlacement string                      `json:"runtime_work_dir_placement,omitempty"`
+	HomeDir                 string                      `json:"home_dir,omitempty"`
+	PathEnv                 string                      `json:"path_env,omitempty"`
+	Model                   string                      `json:"model,omitempty"`
+	ModelRouting            ClaudeModelRoutingReceiptV0 `json:"model_routing,omitempty"`
+	PermissionMode          string                      `json:"permission_mode,omitempty"`
+	OutputFormat            string                      `json:"output_format,omitempty"`
+	Effort                  string                      `json:"effort,omitempty"`
+	PromptLocale            string                      `json:"prompt_locale,omitempty"`
+	ExtraArgs               []string                    `json:"extra_args,omitempty"`
+	PromptHints             []string                    `json:"prompt_hints,omitempty"`
 }
 
 func ValidateClaudeConnectorProfileV0(
@@ -72,10 +73,10 @@ func ValidateClaudeConnectorProfileV0(
 	v.validateRuntimeWorkDirIsolationV0(profile)
 	v.optionalAbsPath("home_dir", profile.HomeDir)
 	v.optionalSafeValue("path_env", profile.PathEnv)
-	v.optionalSafeValue("model", profile.Model)
+	v.requireRoutingModelV0(profile.Model)
 	v.optionalSafeValue("permission_mode", profile.PermissionMode)
 	v.optionalSafeValue("output_format", profile.OutputFormat)
-	v.optionalSafeValue("effort", profile.Effort)
+	v.requireRoutingEffortV0(profile)
 	v.optionalSafeValue("prompt_locale", profile.PromptLocale)
 	for i, value := range profile.ExtraArgs {
 		field := fmt.Sprintf("extra_args[%d]", i)
@@ -86,6 +87,30 @@ func ValidateClaudeConnectorProfileV0(
 		v.optionalSafeValue(fmt.Sprintf("prompt_hints[%d]", i), value)
 	}
 	return v.issues
+}
+
+func (v *claudeProfileValidatorV0) requireRoutingModelV0(value string) {
+	if strings.TrimSpace(value) == "" || strings.Contains(strings.ToLower(value), "opus") {
+		v.add(ClaudeConnectorValueInvalidV0, "model")
+		return
+	}
+	v.optionalSafeValue("model", value)
+}
+
+func (v *claudeProfileValidatorV0) requireRoutingEffortV0(profile ClaudeConnectorProfileV0) {
+	switch strings.TrimSpace(profile.Effort) {
+	case "low", "medium", "high":
+		v.optionalSafeValue("effort", profile.Effort)
+	case "xhigh":
+		if strings.TrimSpace(profile.ModelRouting.XHighAuthorizationRef) == "" ||
+			strings.TrimSpace(profile.ModelRouting.ReasonRef) == "" || len(profile.ModelRouting.EvidenceRefs) == 0 {
+			v.add(ClaudeConnectorValueInvalidV0, "effort")
+			return
+		}
+		v.optionalSafeValue("effort", profile.Effort)
+	default:
+		v.add(ClaudeConnectorValueInvalidV0, "effort")
+	}
 }
 
 func InferClaudeRuntimeWorkDirPlacementV0(projectWorkDir string, runtimeWorkDir string) string {

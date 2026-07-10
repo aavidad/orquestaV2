@@ -2,6 +2,7 @@ package orquestaruntimeclaude
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,6 +21,9 @@ func TestClaudeExecResolverV0MaterializaControlFiles(t *testing.T) {
 		CommandPath:    filepath.Join(root, "claude"),
 		ProjectWorkDir: filepath.Join(root, "project"),
 		RuntimeWorkDir: runtimeDir,
+		Model:          "sonnet",
+		Effort:         "medium",
+		ModelRouting:   claudeRoutingReceiptForTestV0(),
 		PermissionMode: "dontAsk",
 		OutputFormat:   "text",
 	})
@@ -36,11 +40,41 @@ func TestClaudeExecResolverV0MaterializaControlFiles(t *testing.T) {
 	for _, name := range []string{
 		ClaudeAgentPacketFileNameV0,
 		ClaudeAgentPromptFileNameV0,
+		ClaudeModelRoutingReceiptFileNameV0,
 		ClaudeWrapperFileNameV0,
 	} {
 		if _, err := os.Stat(filepath.Join(runtimeDir, name)); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
+	}
+}
+
+func TestClaudeExecResolverV0PersisteReceiptPropioCorrelacionado(t *testing.T) {
+	root := t.TempDir()
+	runtimeDir := filepath.Join(root, "runtime")
+	profile := ClaudeConnectorProfileV0{
+		SchemaVersion: ClaudeConnectorProfileSchemaVersionV0, OptIn: true,
+		CommandPath: filepath.Join(root, "claude"), ProjectWorkDir: filepath.Join(root, "project"), RuntimeWorkDir: runtimeDir,
+		Model: "sonnet", Effort: "medium", ModelRouting: claudeRoutingReceiptForTestV0(),
+	}
+	profile.ModelRouting.TaskRef = "task-ajena"
+	spec := claudeSpecForTestV0()
+	_, issues := NewClaudeExecResolverV0(profile).ResolveExternalAgentProcessCommandV0(context.Background(), spec)
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	data, err := os.ReadFile(filepath.Join(runtimeDir, ClaudeModelRoutingReceiptFileNameV0))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var receipt ClaudeModelRoutingReceiptV0
+	if err := json.Unmarshal(data, &receipt); err != nil {
+		t.Fatal(err)
+	}
+	if receipt.RequestID != spec.RequestID || receipt.CorrelationID != spec.CorrelationID ||
+		receipt.TaskRef != spec.AgentPacket.Task.TaskRef || receipt.PolicyRef != "policy-ref-test" ||
+		receipt.SelectedModelRef != "model-ref-sonnet-test" || receipt.ReasoningEffort != profile.Effort {
+		t.Fatalf("receipt=%+v", receipt)
 	}
 }
 
@@ -60,6 +94,9 @@ func TestClaudeExecResolverV0PromptUsaControlFilesOperativos(t *testing.T) {
 		CommandPath:    filepath.Join(root, "claude"),
 		ProjectWorkDir: filepath.Join(root, "project"),
 		RuntimeWorkDir: runtimeDir,
+		Model:          "sonnet",
+		Effort:         "medium",
+		ModelRouting:   claudeRoutingReceiptForTestV0(),
 		PermissionMode: "dontAsk",
 		OutputFormat:   "text",
 	})
@@ -113,6 +150,9 @@ func TestClaudeExecResolverV0PromptUsaPromptLocaleIngles(t *testing.T) {
 		CommandPath:    filepath.Join(root, "claude"),
 		ProjectWorkDir: filepath.Join(root, "project"),
 		RuntimeWorkDir: runtimeDir,
+		Model:          "sonnet",
+		Effort:         "medium",
+		ModelRouting:   claudeRoutingReceiptForTestV0(),
 		PermissionMode: "dontAsk",
 		OutputFormat:   "text",
 		PromptLocale:   "en-US",
@@ -225,4 +265,8 @@ func mustReadClaudeFileForTestV0(t *testing.T, path string) string {
 		t.Fatalf("ReadFile(%s): %v", path, err)
 	}
 	return string(data)
+}
+
+func claudeRoutingReceiptForTestV0() ClaudeModelRoutingReceiptV0 {
+	return ClaudeModelRoutingReceiptV0{Level: "normal", SelectedModelRef: "model-ref-sonnet-test", PolicyRef: "policy-ref-test"}
 }

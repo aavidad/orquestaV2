@@ -13,11 +13,16 @@ func codexProfileForTestV0(t *testing.T) CodexConnectorProfileV0 {
 	t.Helper()
 	root := t.TempDir()
 	return CodexConnectorProfileV0{
-		SchemaVersion:  CodexConnectorProfileSchemaVersionV0,
-		OptIn:          true,
-		CommandPath:    filepath.Join(root, "bin", "codex"),
-		ProjectWorkDir: filepath.Join(root, "project"),
-		RuntimeWorkDir: filepath.Join(root, "runtime", "agent"),
+		SchemaVersion:   CodexConnectorProfileSchemaVersionV0,
+		OptIn:           true,
+		CommandPath:     filepath.Join(root, "bin", "codex"),
+		ProjectWorkDir:  filepath.Join(root, "project"),
+		RuntimeWorkDir:  filepath.Join(root, "runtime", "agent"),
+		Model:           "model-concrete-test",
+		ReasoningEffort: "medium",
+		ModelRouting: CodexModelRoutingReceiptV0{
+			Level: "normal", SelectedModelRef: "model-ref-test", PolicyRef: "policy-ref-test",
+		},
 		Sandbox:        "workspace-write",
 		ApprovalPolicy: "never",
 	}

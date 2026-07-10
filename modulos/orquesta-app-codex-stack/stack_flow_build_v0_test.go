@@ -8,6 +8,7 @@ import (
 
 	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
+	orquestacapacity "orquesta/modulos/orquesta-capacity"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
@@ -116,6 +117,25 @@ func codexStackBaseConfigForTestV0(
 			ProjectWorkDir:  projectDir,
 			RuntimeWorkDir:  runtimeDir,
 			Model:           "gpt-5.5",
+			ModelRouting: CodexModelRoutingConfigV0{
+				Policy: orquestacapacity.ModelRoutingPolicyV0{
+					PolicyRef:        "policy-ref-test",
+					Strict:           true,
+					TrivialModelRef:  "luna",
+					NormalModelRef:   "terra",
+					CriticalModelRef: "sol",
+					TrivialEffort:    "low",
+					NormalEffort:     "medium",
+					ComplexEffort:    "high",
+					CriticalEffort:   "high",
+				},
+				ModelAlias: map[string]string{
+					"luna": "gpt-5.6-luna",
+					"terra": "gpt-5.6-terra",
+					"sol":  "gpt-5.6-sol",
+				},
+				TaskRoutes: map[string]orquestacapacity.ModelRoutingRequestV0{},
+			},
 			ReasoningEffort: string(orquestacoreworkflow.OrchestrationCapacityXHighV0),
 			Sandbox:         "workspace-write",
 			Runtime:         runtime,

@@ -1,8 +1,6 @@
 package main
 
 import (
-	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -11,76 +9,74 @@ import (
 )
 
 const (
-	envClaudeEnabledV0        = "ORQUESTA_CLAUDE_ENABLED"
-	envClaudeProjectWorkDirV0 = "ORQUESTA_CLAUDE_PROJECT_WORKDIR"
-	envClaudeRuntimeWorkDirV0 = "ORQUESTA_CLAUDE_RUNTIME_WORKDIR"
-	envClaudeCommandV0        = "ORQUESTA_CLAUDE_COMMAND"
-	envClaudeHomeV0           = "ORQUESTA_CLAUDE_HOME"
-	envClaudePathV0           = "ORQUESTA_CLAUDE_PATH"
-	envClaudeModelV0          = "ORQUESTA_CLAUDE_MODEL"
-	envClaudePermissionModeV0 = "ORQUESTA_CLAUDE_PERMISSION_MODE"
-	envClaudeOutputFormatV0   = "ORQUESTA_CLAUDE_OUTPUT_FORMAT"
-	envClaudeEffortV0         = "ORQUESTA_CLAUDE_EFFORT"
-	envClaudeExtraArgsV0      = "ORQUESTA_CLAUDE_EXTRA_ARGS"
+	envClaudeEnabledV0        = "claude_runtime.enabled"
+	envClaudeProjectWorkDirV0 = "claude_runtime.project_work_dir"
+	envClaudeRuntimeWorkDirV0 = "claude_runtime.runtime_work_dir"
+	envClaudeCommandV0        = "claude_runtime.command_path"
+	envClaudeHomeV0           = "claude_runtime.home_dir"
+	envClaudePathV0           = "claude_runtime.path"
+	envClaudePermissionModeV0 = "claude_runtime.permission_mode"
+	envClaudeOutputFormatV0   = "claude_runtime.output_format"
+	envClaudeExtraArgsV0      = "claude_runtime.extra_args"
 
 	claudeGoalBackendFileControlV0 = "claude_file_control"
 	claudeGoalBackendProcessV0     = "claude_process"
 )
 
-func init() {
-	serverEffectiveEnvRegistryV0[envClaudeEnabledV0] = serverEnvSettingMetadataV0{
-		Scope:       "claude_runtime",
-		Label:       "Claude activo",
-		Description: "Activa el proveedor Claude opt-in para revisiones OPES.",
-	}
-	serverEffectiveEnvRegistryV0[envClaudeModelV0] = serverEnvSettingMetadataV0{
-		Scope:       "claude_runtime",
-		Label:       "Modelo Claude",
-		Description: "Modelo Claude CLI usado por el adaptador de revision.",
-	}
-	serverEffectiveEnvRegistryV0[envClaudePermissionModeV0] = serverEnvSettingMetadataV0{
-		Scope:       "claude_runtime",
-		Label:       "Permisos Claude",
-		Description: "Modo de permisos Claude CLI para revisiones opt-in.",
-	}
+type serverProjectConfigClaudeRuntimeV0 struct {
+	Enabled        *bool    `json:"enabled,omitempty"`
+	CommandPath    *string  `json:"command_path,omitempty"`
+	ProjectWorkDir *string  `json:"project_work_dir,omitempty"`
+	RuntimeWorkDir *string  `json:"runtime_work_dir,omitempty"`
+	HomeDir        *string  `json:"home_dir,omitempty"`
+	Path           *string  `json:"path,omitempty"`
+	PermissionMode *string  `json:"permission_mode,omitempty"`
+	OutputFormat   *string  `json:"output_format,omitempty"`
+	ExtraArgs      []string `json:"extra_args,omitempty"`
 }
 
-func claudeRuntimeConfigV0(
-	serverConfig orquestaserver.ConfigV0,
-) orquestaappcodexstack.ClaudeRuntimeConfigV0 {
-	if !boolEnvOrDefaultV0(envClaudeEnabledV0, false) {
+func claudeRuntimeConfigV0(serverConfig orquestaserver.ConfigV0) orquestaappcodexstack.ClaudeRuntimeConfigV0 {
+	projectConfig := projectConfigFromServerConfigBestEffortV0(serverConfig)
+	runtime := projectConfig.ClaudeRuntime
+	if runtime.Enabled == nil || !*runtime.Enabled {
 		return orquestaappcodexstack.ClaudeRuntimeConfigV0{}
 	}
-	projectConfig := projectConfigFromServerConfigBestEffortV0(serverConfig)
 	return orquestaappcodexstack.ClaudeRuntimeConfigV0{
 		Enabled:        true,
-		CommandPath:    claudeCommandPathV0(),
-		ProjectWorkDir: absDirEnvOrDefaultV0(envClaudeProjectWorkDirV0, serverConfig.ProjectWorkDir),
-		RuntimeWorkDir: absDirEnvOrDefaultV0(envClaudeRuntimeWorkDirV0, serverConfig.RuntimeWorkDir),
-		HomeDir:        strings.TrimSpace(os.Getenv(envClaudeHomeV0)),
-		PathEnv:        envOrDefaultV0(envClaudePathV0, os.Getenv("PATH")),
-		Model:          strings.TrimSpace(os.Getenv(envClaudeModelV0)),
-		PermissionMode: envOrDefaultV0(envClaudePermissionModeV0, "bypassPermissions"),
-		OutputFormat:   envOrDefaultV0(envClaudeOutputFormatV0, "text"),
-		Effort:         strings.TrimSpace(os.Getenv(envClaudeEffortV0)),
+		CommandPath:    claudeCommandPathV0(projectConfig),
+		ProjectWorkDir: claudeConfiguredAbsDirV0(runtime.ProjectWorkDir, serverConfig.ProjectWorkDir),
+		RuntimeWorkDir: claudeConfiguredAbsDirV0(runtime.RuntimeWorkDir, serverConfig.RuntimeWorkDir),
+		HomeDir:        claudeConfiguredStringV0(runtime.HomeDir, ""),
+		PathEnv:        claudeConfiguredStringV0(runtime.Path, ""),
+		PermissionMode: claudeConfiguredStringV0(runtime.PermissionMode, "bypassPermissions"),
+		OutputFormat:   claudeConfiguredStringV0(runtime.OutputFormat, "text"),
+		ModelRouting:   claudeModelRoutingFromProjectConfigFileV0(projectConfig),
 		PromptLocale:   goalBackendPromptLocaleFromProjectConfigFileV0(projectConfig),
-		ExtraArgs:      strings.Fields(os.Getenv(envClaudeExtraArgsV0)),
+		ExtraArgs:      compactStringsV0(runtime.ExtraArgs),
 	}
 }
 
-func claudeCommandPathV0() string {
-	raw := strings.TrimSpace(os.Getenv(envClaudeCommandV0))
-	if raw == "" {
-		raw = "claude"
+func claudeCommandPathV0(project serverProjectConfigFileV0) string {
+	path := claudeConfiguredStringV0(project.ClaudeRuntime.CommandPath, "")
+	if path == "" || !filepath.IsAbs(path) {
+		return ""
 	}
-	if filepath.IsAbs(raw) {
-		return raw
+	return filepath.Clean(path)
+}
+
+func claudeConfiguredAbsDirV0(value *string, fallback string) string {
+	configured := claudeConfiguredStringV0(value, fallback)
+	if configured == "" || !filepath.IsAbs(configured) {
+		return configured
 	}
-	path, err := exec.LookPath(raw)
-	if err != nil {
-		return raw
+	return filepath.Clean(configured)
+}
+
+func claudeConfiguredStringV0(value *string, fallback string) string {
+	if value == nil {
+		return strings.TrimSpace(fallback)
 	}
-	return path
+	return strings.TrimSpace(*value)
 }
 
 func claudeGoalBackendFromEnvV0() string {

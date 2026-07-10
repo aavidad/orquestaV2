@@ -234,6 +234,42 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 			codexRuntime.ReasoningEffort,
 			configSettingSourceFromConfigOrProjectConfigV0(config, envCodexReasoningEffortV0),
 		),
+		serverConfigSettingWithSourceV0(
+			"codex_model_routing.policy_ref",
+			codexModelRoutingFromProjectConfigFileV0(projectConfig).Policy.PolicyRef,
+			codexModelRoutingConfigSourceV0(projectConfig),
+			"codex_model_routing", "Política de modelo Codex", "Ref opaca de la política tipada de selección de modelo.",
+		),
+		serverConfigSettingWithSourceV0(
+			"codex_model_routing.alias_refs",
+			strings.Join(codexModelRoutingAliasRefsV0(codexModelRoutingFromProjectConfigFileV0(projectConfig)), ","),
+			codexModelRoutingConfigSourceV0(projectConfig),
+			"codex_model_routing", "Aliases de modelo Codex", "Solo refs de alias; nunca nombres de modelo ni secretos.",
+		),
+		serverConfigSettingWithSourceV0(
+			"codex_model_routing.efforts",
+			codexModelRoutingEffortsSummaryV0(codexModelRoutingFromProjectConfigFileV0(projectConfig)),
+			codexModelRoutingConfigSourceV0(projectConfig),
+			"codex_model_routing", "Esfuerzos de modelo Codex", "Esfuerzo explícito por clase de tarea.",
+		),
+		serverConfigSettingWithSourceV0(
+			"claude_model_routing.policy_ref",
+			claudeModelRoutingFromProjectConfigFileV0(projectConfig).Policy.PolicyRef,
+			claudeModelRoutingConfigSourceV0(projectConfig),
+			"claude_model_routing", "Política de modelo Claude", "Ref opaca de la política tipada de selección de modelo.",
+		),
+		serverConfigSettingWithSourceV0(
+			"claude_model_routing.alias_refs",
+			strings.Join(claudeModelRoutingAliasRefsV0(claudeModelRoutingFromProjectConfigFileV0(projectConfig)), ","),
+			claudeModelRoutingConfigSourceV0(projectConfig),
+			"claude_model_routing", "Aliases de modelo Claude", "Solo refs de alias; nunca nombres de modelo ni secretos.",
+		),
+		serverConfigSettingWithSourceV0(
+			"claude_model_routing.efforts",
+			claudeModelRoutingEffortsSummaryV0(claudeModelRoutingFromProjectConfigFileV0(projectConfig)),
+			claudeModelRoutingConfigSourceV0(projectConfig),
+			"claude_model_routing", "Esfuerzos de modelo Claude", "Esfuerzo explícito por clase de tarea.",
+		),
 		serverPositiveConfigSettingFromConfigV0(config, envCodexMaxExpectedSecondsV0, int(codexRuntime.ProgressBudget.MaxExpected/time.Second)),
 		serverConfigSettingFromRegistryWithSourceV0(
 			envCodexUsageAccountingV0,
@@ -775,6 +811,19 @@ func serverConfigSettingV0(
 		Editable:        true,
 		Canonical:       true,
 	}
+}
+
+func serverConfigSettingWithSourceV0(
+	key string,
+	value string,
+	source string,
+	scope string,
+	label string,
+	description string,
+) orquestaserver.ServerConfigSettingV0 {
+	setting := serverConfigSettingV0(key, value, scope, label, description)
+	setting.Source = strings.TrimSpace(source)
+	return setting
 }
 
 func configSettingSourceFromEnvV0(key string) string {

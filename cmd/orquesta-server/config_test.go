@@ -2299,7 +2299,7 @@ func TestCodexRuntimeConfigV0UsaUmbralesConservadoresPorDefecto(t *testing.T) {
 	t.Setenv("ORQUESTA_CODEX_WAIT_INTERVAL_MS", "")
 	t.Setenv("ORQUESTA_CODEX_NO_ACTIVITY_SECONDS", "")
 	t.Setenv("ORQUESTA_CODEX_MAX_EXPECTED_SECONDS", "")
-	t.Setenv("ORQUESTA_CODEX_REASONING_EFFORT", "")
+	t.Setenv("ORQUESTA_CODEX_REASONING_EFFORT", "high")
 
 	config := codexRuntimeConfigV0(orquestaserver.ConfigV0{
 		ProjectWorkDir: t.TempDir(),
@@ -2329,8 +2329,8 @@ func TestCodexRuntimeConfigV0UsaUmbralesConservadoresPorDefecto(t *testing.T) {
 	if config.ProgressBudget.MaxExpected != 20*time.Minute {
 		t.Fatalf("max_expected=%s want 20m", config.ProgressBudget.MaxExpected)
 	}
-	if config.ReasoningEffort != "medium" {
-		t.Fatalf("reasoning_effort=%q want medium", config.ReasoningEffort)
+	if config.ReasoningEffort != "" {
+		t.Fatalf("reasoning_effort=%q want empty: global env must not seed runtime config", config.ReasoningEffort)
 	}
 }
 
@@ -2371,8 +2371,8 @@ func TestCodexRuntimeConfigV0PermiteSobrescribirReasoningEffort(t *testing.T) {
 		RuntimeWorkDir: t.TempDir(),
 	}, nil)
 
-	if config.ReasoningEffort != "high" {
-		t.Fatalf("reasoning_effort=%q want high", config.ReasoningEffort)
+	if config.ReasoningEffort != "" {
+		t.Fatalf("reasoning_effort=%q want empty: global env must not seed runtime config", config.ReasoningEffort)
 	}
 }
 
@@ -2384,8 +2384,8 @@ func TestCodexRuntimeConfigV0ConservaReasoningEffortMedium(t *testing.T) {
 		RuntimeWorkDir: t.TempDir(),
 	}, nil)
 
-	if config.ReasoningEffort != "medium" {
-		t.Fatalf("reasoning_effort=%q want medium", config.ReasoningEffort)
+	if config.ReasoningEffort != "" {
+		t.Fatalf("reasoning_effort=%q want empty: global env must not seed runtime config", config.ReasoningEffort)
 	}
 }
 

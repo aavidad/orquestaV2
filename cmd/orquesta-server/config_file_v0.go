@@ -34,6 +34,9 @@ type serverProjectConfigFileV0 struct {
 	WorktreeSnapshot     serverProjectConfigWorktreeSnapshotV0     `json:"worktree_snapshot,omitempty"`
 	DaemonLogs           serverProjectConfigDaemonLogsV0           `json:"daemon_logs,omitempty"`
 	CodexRuntime         serverProjectConfigCodexRuntimeV0         `json:"codex_runtime,omitempty"`
+	CodexModelRouting    *serverProjectConfigCodexModelRoutingV0   `json:"codex_model_routing,omitempty"`
+	ClaudeRuntime        serverProjectConfigClaudeRuntimeV0        `json:"claude_runtime,omitempty"`
+	ClaudeModelRouting   *serverProjectConfigClaudeModelRoutingV0  `json:"claude_model_routing,omitempty"`
 	CodexDirector        serverProjectConfigCodexDirectorV0        `json:"codex_director,omitempty"`
 	CodexWave            serverProjectConfigCodexWaveV0            `json:"codex_wave,omitempty"`
 	GoalBackend          serverProjectConfigGoalBackendV0          `json:"goal_backend,omitempty"`

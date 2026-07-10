@@ -38,6 +38,11 @@ func (r CodexExecResolverV0) ResolveExternalAgentProcessCommandV0(
 			codexIssueV0(CodexConnectorProfileInvalidV0, "external_agent_launch_spec", spec.CorrelationID, "invalid_spec"),
 		}
 	}
+	if !r.launchRoutingReceiptV0(spec).validForLaunchV0(r.profile.Model) {
+		return orquestaruntime.ProcessRuntimeLaunchRequestV0{}, []orquestaruntime.ExternalAgentConnectorErrorV0{
+			codexIssueV0(CodexConnectorValueInvalidV0, "model_routing", spec.CorrelationID, "model_routing_invalid"),
+		}
+	}
 	req := r.processRuntimeLaunchRequestV0()
 	if issue := codexProcessRuntimeRequestIssueV0(spec.CorrelationID, req); issue != nil {
 		return orquestaruntime.ProcessRuntimeLaunchRequestV0{}, []orquestaruntime.ExternalAgentConnectorErrorV0{*issue}
@@ -92,9 +97,15 @@ func (r CodexExecResolverV0) materializeFilesV0(
 	}
 	packetPath := filepath.Join(r.profile.RuntimeWorkDir, CodexAgentPacketFileNameV0)
 	promptPath := filepath.Join(r.profile.RuntimeWorkDir, CodexAgentPromptFileNameV0)
+	receiptPath := filepath.Join(r.profile.RuntimeWorkDir, CodexModelRoutingReceiptFileNameV0)
 	if err := writeJSONFileV0(r.profile.RuntimeWorkDir, packetPath, spec.AgentPacket); err != nil {
 		return []orquestaruntime.ExternalAgentConnectorErrorV0{
 			codexIssueV0(CodexConnectorFilesystemV0, CodexAgentPacketFileNameV0, spec.CorrelationID, err.Error()),
+		}
+	}
+	if err := writeJSONFileV0(r.profile.RuntimeWorkDir, receiptPath, r.launchRoutingReceiptV0(spec)); err != nil {
+		return []orquestaruntime.ExternalAgentConnectorErrorV0{
+			codexIssueV0(CodexConnectorFilesystemV0, CodexModelRoutingReceiptFileNameV0, spec.CorrelationID, err.Error()),
 		}
 	}
 	promptHints := append([]string(nil), r.profile.PromptHints...)
@@ -109,6 +120,7 @@ func (r CodexExecResolverV0) materializeFilesV0(
 			ShutdownRequestPath: filepath.Join(r.profile.RuntimeWorkDir, CodexShutdownRequestFileNameV0),
 			ShutdownAckPath:     filepath.Join(r.profile.RuntimeWorkDir, CodexShutdownCheckpointAckFileNameV0),
 			SkillInstructions:   append([]CodexSkillInstructionV0(nil), r.profile.SkillInstructions...),
+			ModelRouting:        CodexModelRoutingReceiptV0{},
 		},
 	)
 	if err := writeControlFileV0(r.profile.RuntimeWorkDir, promptPath, CodexAgentPromptFileNameV0, "agent_prompt", []byte(prompt), 0o600); err != nil {
@@ -116,18 +128,23 @@ func (r CodexExecResolverV0) materializeFilesV0(
 			codexIssueV0(CodexConnectorFilesystemV0, CodexAgentPromptFileNameV0, spec.CorrelationID, err.Error()),
 		}
 	}
-	wrapperProfile := r.profile
-	wrapperProfile.ReasoningEffort = codexEffectiveReasoningEffortV0(
-		r.profile.ReasoningEffort,
-		spec.AgentPacket.CapacityLevel,
-	)
-	wrapper := BuildCodexWrapperScriptV0(wrapperProfile)
+	wrapper := BuildCodexWrapperScriptV0(r.profile)
 	if err := writeControlFileV0(r.profile.RuntimeWorkDir, filepath.Join(r.profile.RuntimeWorkDir, CodexWrapperFileNameV0), CodexWrapperFileNameV0, "codex_wrapper", []byte(wrapper), 0o700); err != nil {
 		return []orquestaruntime.ExternalAgentConnectorErrorV0{
 			codexIssueV0(CodexConnectorFilesystemV0, CodexWrapperFileNameV0, spec.CorrelationID, err.Error()),
 		}
 	}
 	return nil
+}
+
+func (r CodexExecResolverV0) launchRoutingReceiptV0(spec orquestaruntime.ExternalAgentLaunchSpecV0) CodexModelRoutingReceiptV0 {
+	receipt := r.profile.ModelRouting
+	receipt.SchemaVersion = CodexModelRoutingReceiptSchemaVersionV0
+	receipt.RequestID = strings.TrimSpace(spec.RequestID)
+	receipt.CorrelationID = strings.TrimSpace(spec.CorrelationID)
+	receipt.TaskRef = strings.TrimSpace(spec.AgentPacket.Task.TaskRef)
+	receipt.ReasoningEffort = strings.TrimSpace(r.profile.ReasoningEffort)
+	return receipt
 }
 
 func codexRuntimeWorkDirPromptHintV0(profile CodexConnectorProfileV0) string {

@@ -14,6 +14,7 @@ func TestValidateClaudeConnectorProfileV0AceptaOptIn(t *testing.T) {
 		ProjectWorkDir: filepath.Join(root, "project"),
 		RuntimeWorkDir: filepath.Join(root, "runtime"),
 		Model:          "sonnet",
+		Effort:         "medium",
 		PermissionMode: "dontAsk",
 		OutputFormat:   "text",
 	}
@@ -30,6 +31,8 @@ func TestValidateClaudeConnectorProfileV0AceptaPromptLocale(t *testing.T) {
 		CommandPath:    filepath.Join(root, "claude"),
 		ProjectWorkDir: filepath.Join(root, "project"),
 		RuntimeWorkDir: filepath.Join(root, "runtime"),
+		Model:          "sonnet",
+		Effort:         "medium",
 		PromptLocale:   "en-US",
 	}
 
@@ -87,6 +90,8 @@ func TestValidateClaudeConnectorProfileV0AceptaRuntimeDentroDelProyecto(t *testi
 		CommandPath:    filepath.Join(root, "claude"),
 		ProjectWorkDir: filepath.Join(root, "project"),
 		RuntimeWorkDir: filepath.Join(root, "project", ".orquesta-runtime", "agent"),
+		Model:          "sonnet",
+		Effort:         "medium",
 	}
 
 	if issues := ValidateClaudeConnectorProfileV0(profile); len(issues) != 0 {

@@ -32,3 +32,11 @@ func TestBuildClaudeWrapperScriptV0UsaPrintYPromptPorStdin(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildClaudeWrapperScriptV0NoGeneraFlagsVacios(t *testing.T) {
+	root := t.TempDir()
+	script := BuildClaudeWrapperScriptV0(ClaudeConnectorProfileV0{CommandPath: filepath.Join(root, "claude"), ProjectWorkDir: filepath.Join(root, "project"), RuntimeWorkDir: filepath.Join(root, "runtime")})
+	if strings.Contains(script, "--model") || strings.Contains(script, "--effort") {
+		t.Fatalf("wrapper genera flags vacios:\n%s", script)
+	}
+}

@@ -295,7 +295,15 @@ func (resolver ClaudeLaunchSpecResolverV0) ResolveExternalAgentLaunchSpecV0(
 	spec.Command.WorkingDirRef = "workdir-ref-app-stack-claude-review"
 	spec.AgentPacket.Context = contextBundle
 	spec.AgentPacket.Policies = packetPoliciesWithContextGuardV0(spec.AgentPacket.Policies, contextBundle)
+	route, selectedModel, err := claudeModelRouteForTaskV0(resolver.Config, task.TaskRef)
+	if err != nil {
+		return orquestacionnucleoapp.ExternalAgentLaunchSpecResolutionV0{}, err
+	}
+	spec.AgentPacket.Policies = append(spec.AgentPacket.Policies, "model-routing-policy="+route.PolicyRef, "model-routing-level="+string(route.Level), "model-routing-model-ref="+route.SelectedModelRef)
 	profile := claudeProfileV0(resolver.Config, resolver.CodexConfig, runtimeDir)
+	profile.Model = selectedModel
+	profile.Effort = route.ReasoningEffort
+	profile.ModelRouting = orquestaruntimeclaude.ClaudeModelRoutingReceiptV0{Level: string(route.Level), Trivial: route.Trivial, SelectedModelRef: route.SelectedModelRef, ReasoningEffort: route.ReasoningEffort, PolicyRef: route.PolicyRef, ReasonRef: route.ReasonRef, EvidenceRefs: route.EvidenceRefs, XHighAuthorizationRef: route.XHighAuthorizationRef}
 	return orquestacionnucleoapp.ExternalAgentLaunchSpecResolutionV0{
 		Spec:            spec,
 		CommandResolver: orquestaruntimeclaude.NewClaudeExecResolverV0(profile),
@@ -349,10 +357,8 @@ func claudeProfileV0(
 		RuntimeWorkDir: strings.TrimSpace(runtimeDir),
 		HomeDir:        strings.TrimSpace(config.HomeDir),
 		PathEnv:        strings.TrimSpace(config.PathEnv),
-		Model:          strings.TrimSpace(config.Model),
 		PermissionMode: strings.TrimSpace(config.PermissionMode),
 		OutputFormat:   strings.TrimSpace(config.OutputFormat),
-		Effort:         strings.TrimSpace(config.Effort),
 		PromptLocale:   strings.TrimSpace(config.PromptLocale),
 		ExtraArgs:      append([]string(nil), config.ExtraArgs...),
 		PromptHints:    claudePromptHintsV0(config.PromptHints),

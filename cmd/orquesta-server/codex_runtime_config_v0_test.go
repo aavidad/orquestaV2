@@ -43,6 +43,10 @@ func configureServerPackageTestEnvV0() func() {
 	}
 	_ = os.Unsetenv("CODEX_HOME")
 	_ = os.Setenv(envCodexSandboxV0, "danger-full-access")
+	if executable, executableErr := os.Executable(); executableErr == nil {
+		_ = os.Setenv(envCodexCommandV0, executable)
+		_ = os.Setenv("TEST_CODEX_APP_SERVER_BINARY", executable)
+	}
 	return func() {
 		if tmpDir != "" {
 			cleanupServerPackageTestTempDirV0(tmpDir)
@@ -124,7 +128,7 @@ func TestCodeHomeDirV0UsaCodexHomeLegacyAliasSiNoHayCanonicaNiOrquestaAliasV0(t 
 	}
 }
 
-func TestCodexCommandPathV0ResuelveConCodexPathProyectado(t *testing.T) {
+func TestCodexCommandPathV0RechazaRutaRelativaAunqueEsteEnPath(t *testing.T) {
 	binDir := filepath.Join(t.TempDir(), "bin")
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		t.Fatalf("mkdir bin: %v", err)
@@ -137,8 +141,27 @@ func TestCodexCommandPathV0ResuelveConCodexPathProyectado(t *testing.T) {
 	t.Setenv(envCodexPathV0, binDir)
 	t.Setenv("PATH", filepath.Join(t.TempDir(), "empty-path"))
 
-	if got := codexCommandPathV0(); got != codexBin {
-		t.Fatalf("codex_command=%q want %q", got, codexBin)
+	if got := codexCommandPathV0(); got != "" {
+		t.Fatalf("codex_command=%q want vacio", got)
+	}
+}
+
+func TestValidateCodexCommandAvailableV0PreflightVersion(t *testing.T) {
+	root := t.TempDir()
+	codexBin := filepath.Join(root, "codex")
+	if err := os.WriteFile(codexBin, []byte("#!/bin/sh\nprintf 'codex-cli 1.2.3\\n'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(envCodexCommandV0, codexBin)
+	t.Setenv(envCodexPathV0, "/bin:/usr/bin")
+	if err := validateCodexCommandAvailableV0(); err != nil {
+		t.Fatalf("preflight: %v", err)
+	}
+	if err := os.WriteFile(codexBin, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateCodexCommandAvailableV0(); err == nil || err.Error() != "codex_command_version_unavailable" {
+		t.Fatalf("preflight vacio err=%v", err)
 	}
 }
 
@@ -155,7 +178,7 @@ func TestCodexRuntimeConfigV0DangerFullAccessSoloOptInExplicito(t *testing.T) {
 	}
 }
 
-func TestCodexRuntimeConfigV0ConservaReasoningHighYXHigh(t *testing.T) {
+func TestCodexRuntimeConfigV0NoHeredaReasoningGlobal(t *testing.T) {
 	for _, effort := range []string{"high", "xhigh"} {
 		t.Run(effort, func(t *testing.T) {
 			t.Setenv(envCodexReasoningEffortV0, effort)
@@ -165,8 +188,8 @@ func TestCodexRuntimeConfigV0ConservaReasoningHighYXHigh(t *testing.T) {
 				RuntimeWorkDir: t.TempDir(),
 			}, nil)
 
-			if config.ReasoningEffort != effort {
-				t.Fatalf("reasoning_effort=%q want %q", config.ReasoningEffort, effort)
+			if config.ReasoningEffort != "" {
+				t.Fatalf("reasoning_effort heredado=%q", config.ReasoningEffort)
 			}
 		})
 	}
