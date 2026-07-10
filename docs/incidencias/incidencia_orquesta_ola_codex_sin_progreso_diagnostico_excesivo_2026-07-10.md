@@ -55,10 +55,17 @@ recibo con razon `no_progress_diagnostic_budget_exhausted` y `rework_ref`.
 
 Dos pruebas focales lo ejercen con un Codex falso: una ola que solo escribe
 stderr termina en `stop_requested` con recibo/rework; otra que publica
-`codex_last_message.txt` se conserva. El corte no se declara cerrado: el
-presupuesto se evalua al observar la ola y todavia debe cablearse al supervisor
-residente/goal-first para que replanifique de forma autonoma y aplique la
-escalada de parada confirmada sin polling de operador.
+`codex_last_message.txt` se conserva. La revision posterior confirma que el
+supervisor residente goal-first ya tiene el equivalente gobernado por
+`reconcileIdleSelfImprovementGoalProgressV0`: bloquea consumo creciente sin
+progreso, persiste `blocked/rework`, solicita parada cooperativa y despierta el
+supervisor; sus tres focales pasan. Por tanto no se debe duplicar esa politica.
+
+El residual de esta incidencia queda acotado a `codex-launch-wave`, una utilidad
+breakglass que no entra al ciclo goal-first y cuyo presupuesto se evalua al usar
+`codex-wave-status`. Si se conserva para operaciones reales, debe materializar
+una tarea gobernada o un observador residente; no se presenta como autonomia del
+nucleo.
 
 En el mismo intento real se lanzaron cinco olas con write-sets disjuntos. Cuatro
 no entregaron artefactos y se pararon con su propio `wave_ref`; la quinta dejo
