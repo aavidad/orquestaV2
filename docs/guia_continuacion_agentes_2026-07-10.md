@@ -112,7 +112,7 @@ romper campos existentes.
   Ficheros: `modulos/orquesta-mcp/director_stats_*` (localizar con rg).
   Mismo contrato. Verifica: `go test -count=1 ./modulos/orquesta-mcp`.
 
-- [ ] PASO A5: el supervisor residente consulta el veredicto antes de
+- [x] PASO A5: el supervisor residente consulta el veredicto antes de
   decidir rework/timeout. Ficheros: buscar
   `rg -ln "RunSupervisorGoalFirstResident" modulos cmd` y el punto donde
   decide rework por bloqueo recuperable (referencia:

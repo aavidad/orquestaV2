@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	orquestaestadovivo "orquesta/modulos/orquesta-estado-vivo"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
@@ -30,6 +31,8 @@ const (
 	goalFirstResidentReworkReasonProviderLimitedV0    = "codex_app_server_goal_provider_limited"
 	goalFirstResidentReworkReasonStorageQuotaV0       = "codex_app_server_storage_quota_exceeded"
 	goalFirstResidentReworkReasonBackendUnavailableV0 = "codex_app_server_unavailable"
+	goalFirstResidentReworkReasonProcessDeadV0        = "goal_first_process_dead_state_stale"
+	goalFirstResidentProcessDeadEvidenceRefV0         = "evidence-ref-goal-first-resident-process-dead-state-stale"
 	goalFirstResidentBackendMissingEvidenceRefV0      = "evidence-ref-autoprogramming-goal-backend-missing-after-external-cleanup"
 	goalFirstResidentBackendMissingReconciledV0       = "evidence-ref-goal-first-resident-backend-missing-reconciled"
 	goalFirstResidentRunControlTerminalEvidenceV0     = "evidence-ref-run-control-terminal-after-goal-reconcile"
@@ -114,6 +117,7 @@ func goalFirstResidentReworkReasonV0(state orquestagoal.GoalWorkStateV0) (string
 		return goalFirstResidentReworkReasonActiveTimeoutV0, goalFirstResidentReworkEvidenceRefsV0(state), true
 	}
 	for _, reason := range []string{
+		goalFirstResidentReworkReasonProcessDeadV0,
 		goalFirstResidentReworkReasonBackendMissingV0,
 		goalFirstResidentReworkReasonWorkdirV0,
 		goalFirstResidentReworkReasonAuthV0,
@@ -254,6 +258,88 @@ func goalFirstResidentReworkEvidenceRefsV0(state orquestagoal.GoalWorkStateV0) [
 		}
 	}
 	return compactStringsV0(refs)
+}
+
+// maybeReconcileGoalFirstResidentDeadProcessV0 consulta el veredicto causal
+// antes de decidir espera: si el veredicto es process_dead_state_stale, el
+// goal se trata como terminal reconciliable (blocked + rework), no como
+// running en espera infinita.
+func (executor CodexStackRunSupervisorExecutorV0) maybeReconcileGoalFirstResidentDeadProcessV0(
+	ctx context.Context,
+	input orquestamcp.MCPRunSupervisorToolInputV0,
+	state orquestagoal.GoalWorkStateV0,
+	result orquestamcp.MCPRunSupervisorToolResultV0,
+) (orquestagoal.GoalWorkStateV0, orquestamcp.MCPRunSupervisorToolResultV0) {
+	if !input.ResidentMode ||
+		executor.Stack == nil ||
+		executor.Stack.Ports.GoalStateStore == nil ||
+		!orquestagoal.GoalWorkStatePendingObservationV0(state) {
+		return state, result
+	}
+	source := NewCodexStackObserveAppDirectorGoalExecutorV0(executor.Stack).estadoVivoSourceForObserveV0()
+	if source == nil {
+		return state, result
+	}
+	evidencias, err := source.ListarEvidenciasEstadoV0(ctx, orquestaestadovivo.FiltroEvidenciaEstadoV0{
+		RunRef: strings.TrimSpace(state.RunRef),
+		Limit:  32,
+	})
+	if err != nil || len(evidencias) == 0 {
+		return state, result
+	}
+	veredicto := orquestaestadovivo.DerivarVeredictoCausalV0(evidencias)
+	if veredicto.Clase != orquestaestadovivo.VeredictoProcessDeadStateStaleV0 {
+		return state, result
+	}
+	evidenceRefs := compactStringsV0(append(
+		[]string{goalFirstResidentProcessDeadEvidenceRefV0},
+		veredicto.EvidenceRefs...,
+	))
+	var artifactRefs []string
+	if state.LastResult != nil {
+		artifactRefs = compactStringsV0(state.LastResult.ArtifactRefs)
+	}
+	state.Status = orquestagoal.GoalStatusBlockedV0
+	state.LastResult = &orquestagoal.GoalWorkResultV0{
+		SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+		Status:          orquestagoal.GoalStatusBlockedV0,
+		GoalRef:         strings.TrimSpace(state.GoalRef),
+		ExternalGoalRef: strings.TrimSpace(state.ExternalGoalRef),
+		Summary:         "resident supervisor reconciled dead process with stale running state",
+		ArtifactRefs:    artifactRefs,
+		EvidenceRefs:    evidenceRefs,
+		Issues: []orquestagoal.GoalWorkIssueV0{{
+			Code:  goalFirstResidentReworkReasonProcessDeadV0,
+			Field: "goal_runtime",
+		}},
+	}
+	state.LastClosure = &orquestagoal.GoalClosureValidationV0{
+		Status:       orquestagoal.GoalStatusBlockedV0,
+		NeedsRework:  true,
+		EvidenceRefs: evidenceRefs,
+		Issues: []orquestagoal.GoalWorkIssueV0{{
+			Code:  goalFirstResidentReworkReasonProcessDeadV0,
+			Field: "goal_runtime",
+		}},
+	}
+	state.EvidenceRefs = compactStringsV0(append(state.EvidenceRefs, evidenceRefs...))
+	if err := executor.Stack.Ports.GoalStateStore.SaveGoalWorkStateV0(ctx, state); err != nil {
+		result.Diagnostics = append(result.Diagnostics, orquestamcp.MCPAutoprogrammingDiagnosticV0{
+			Code:         "goal_first_resident_process_dead_reconcile_failed",
+			Scope:        "run:" + strings.TrimSpace(state.RunRef),
+			Message:      err.Error(),
+			EvidenceRefs: evidenceRefs,
+		})
+		return state, result
+	}
+	result.EvidenceRefs = compactStringsV0(append(result.EvidenceRefs, evidenceRefs...))
+	result.Diagnostics = append(result.Diagnostics, orquestamcp.MCPAutoprogrammingDiagnosticV0{
+		Code:         "goal_first_resident_process_dead_reconciled",
+		Scope:        "run:" + strings.TrimSpace(state.RunRef),
+		Message:      "veredicto causal process_dead_state_stale: goal tratado como terminal reconciliable",
+		EvidenceRefs: evidenceRefs,
+	})
+	return state, result
 }
 
 func (executor CodexStackRunSupervisorExecutorV0) maybeReconcileGoalFirstResidentBackendMissingV0(

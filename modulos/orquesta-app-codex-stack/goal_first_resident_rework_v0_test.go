@@ -5,10 +5,12 @@ import (
 	"strings"
 	"testing"
 
+	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
+	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
 
 func TestRunSupervisorGoalFirstResidentPreparaReworkPorCheckpointHighConsumptionV0(t *testing.T) {
@@ -858,4 +860,185 @@ func (launcher *goalFirstResidentReworkLauncherForTestV0) LaunchGoalWorkV0(
 		ExternalGoalRef: "thread-ref-goal-first-resident-rework-test",
 		EvidenceRefs:    []string{"evidence-ref-goal-first-resident-rework-launch"},
 	}, nil
+}
+
+func TestRunSupervisorGoalFirstResidentReconciliaProcesoMuertoConVeredictoCausalV0(t *testing.T) {
+	ctx := context.Background()
+	store := newGoalFirstQueueStateStoreForTestV0()
+	launcher := &goalFirstResidentReworkLauncherForTestV0{}
+	runRef := "run-ref-goal-first-resident-process-dead-001"
+	goalRef := "goal-ref-goal-first-resident-process-dead-001"
+	source := orquestagoal.GoalWorkStateV0{
+		RunRef:  runRef,
+		GoalRef: goalRef,
+		Status:  orquestagoal.GoalStatusRunningV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			GoalRef:      goalRef,
+			RequestRef:   "request-ref-goal-first-resident-process-dead-001",
+			RunRef:       runRef,
+			ProjectRef:   "project-ref-goal-first-resident-process-dead",
+			Objective:    "No esperar infinito un proceso muerto con state stale.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet: []orquestagoal.GoalWriteScopeV0{{
+				Path:    "docs/goal-first-resident-process-dead.md",
+				Purpose: "evidencia de test",
+			}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			SchemaVersion: orquestagoal.GoalWorkLaunchReceiptSchemaV0,
+			Status:        orquestagoal.GoalStatusRunningV0,
+			GoalRef:       goalRef,
+		},
+		EvidenceRefs: []string{"evidence-ref-goal-first-resident-process-dead-source"},
+	}
+	if err := store.SaveGoalWorkStateV0(ctx, source); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0 source: %v", err)
+	}
+	processRegistry := orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0()
+	if err := processRegistry.RecordAgentProcessV0(ctx, orquestaagentprocessregistrymemory.AgentProcessRecordV0{
+		RunID:          runRef,
+		AgentRequestID: "agent-ref-goal-first-resident-process-dead-001",
+		ProcessRef:     "process-ref-goal-first-resident-process-dead-001",
+		SessionRef:     "session-ref-goal-first-resident-process-dead-001",
+		LaunchRef:      "launch-ref-goal-first-resident-process-dead-001",
+		ReadinessRef:   "readiness-ref-goal-first-resident-process-dead-001",
+		EvidenceRefs:   []string{"evidence-ref-goal-first-resident-process-dead-process"},
+	}); err != nil {
+		t.Fatalf("RecordAgentProcessV0: %v", err)
+	}
+	executor := CodexStackRunSupervisorExecutorV0{Stack: &StackV0{
+		Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
+			GoalStateStore:     store,
+			GoalReworkLauncher: launcher,
+		},
+		Stores: StoresV0{
+			AppGoalStateStore: store,
+			ProcessRegistry:   processRegistry,
+		},
+		Codex: CodexRuntimeConfigV0{SnapshotSource: evidenciaEstadoSnapshotSourceForTestV0{
+			snapshots: map[string]orquestaruntime.ProcessRuntimeSnapshotV0{
+				"process-ref-goal-first-resident-process-dead-001": {
+					SchemaVersion: orquestaruntime.ProcessRuntimeConnectorVersionV0,
+					ProcessRef:    "process-ref-goal-first-resident-process-dead-001",
+					SessionRef:    "session-ref-goal-first-resident-process-dead-001",
+					LaunchRef:     "launch-ref-goal-first-resident-process-dead-001",
+					Status:        orquestaruntime.ProcessRuntimeStoppedV0,
+				},
+			},
+		}},
+	}}
+
+	result, err := executor.Execute(ctx, orquestamcp.MCPRunSupervisorToolInputV0{
+		RunRef:       runRef,
+		ResidentMode: true,
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.StopReason != "goal_first_resident_rework_prepared" ||
+		len(result.RepairRunRefs) != 1 ||
+		launcher.calls != 1 {
+		t.Fatalf("proceso muerto sin rework: result=%+v calls=%d", result, launcher.calls)
+	}
+	hasReconciled := false
+	for _, diagnostic := range result.Diagnostics {
+		if diagnostic.Code == "goal_first_resident_process_dead_reconciled" {
+			hasReconciled = true
+		}
+	}
+	if !hasReconciled {
+		t.Fatalf("sin diagnostico de reconciliacion: %+v", result.Diagnostics)
+	}
+	persisted, err := store.LoadGoalWorkStateV0(ctx, runRef)
+	if err != nil {
+		t.Fatalf("Load source: %v", err)
+	}
+	if persisted.Status != orquestagoal.GoalStatusBlockedV0 ||
+		persisted.LastClosure == nil ||
+		!persisted.LastClosure.NeedsRework {
+		t.Fatalf("state no reconciliado como terminal reconciliable: %+v", persisted)
+	}
+}
+
+func TestRunSupervisorGoalFirstResidentProcesoVivoNoReconciliaV0(t *testing.T) {
+	ctx := context.Background()
+	store := newGoalFirstQueueStateStoreForTestV0()
+	launcher := &goalFirstResidentReworkLauncherForTestV0{}
+	runRef := "run-ref-goal-first-resident-process-live-001"
+	goalRef := "goal-ref-goal-first-resident-process-live-001"
+	source := orquestagoal.GoalWorkStateV0{
+		RunRef:  runRef,
+		GoalRef: goalRef,
+		Status:  orquestagoal.GoalStatusRunningV0,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			GoalRef:      goalRef,
+			RequestRef:   "request-ref-goal-first-resident-process-live-001",
+			RunRef:       runRef,
+			ProjectRef:   "project-ref-goal-first-resident-process-live",
+			Objective:    "Proceso vivo confirmado no debe reconciliarse.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			WriteSet: []orquestagoal.GoalWriteScopeV0{{
+				Path:    "docs/goal-first-resident-process-live.md",
+				Purpose: "evidencia de test",
+			}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			SchemaVersion: orquestagoal.GoalWorkLaunchReceiptSchemaV0,
+			Status:        orquestagoal.GoalStatusRunningV0,
+			GoalRef:       goalRef,
+		},
+	}
+	if err := store.SaveGoalWorkStateV0(ctx, source); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0 source: %v", err)
+	}
+	processRegistry := orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0()
+	if err := processRegistry.RecordAgentProcessV0(ctx, orquestaagentprocessregistrymemory.AgentProcessRecordV0{
+		RunID:          runRef,
+		AgentRequestID: "agent-ref-goal-first-resident-process-live-001",
+		ProcessRef:     "process-ref-goal-first-resident-process-live-001",
+		SessionRef:     "session-ref-goal-first-resident-process-live-001",
+		LaunchRef:      "launch-ref-goal-first-resident-process-live-001",
+		ReadinessRef:   "readiness-ref-goal-first-resident-process-live-001",
+	}); err != nil {
+		t.Fatalf("RecordAgentProcessV0: %v", err)
+	}
+	executor := CodexStackRunSupervisorExecutorV0{Stack: &StackV0{
+		Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
+			GoalStateStore:     store,
+			GoalReworkLauncher: launcher,
+		},
+		Stores: StoresV0{
+			AppGoalStateStore: store,
+			ProcessRegistry:   processRegistry,
+		},
+		Codex: CodexRuntimeConfigV0{SnapshotSource: evidenciaEstadoSnapshotSourceForTestV0{
+			snapshots: map[string]orquestaruntime.ProcessRuntimeSnapshotV0{
+				"process-ref-goal-first-resident-process-live-001": {
+					SchemaVersion: orquestaruntime.ProcessRuntimeConnectorVersionV0,
+					ProcessRef:    "process-ref-goal-first-resident-process-live-001",
+					SessionRef:    "session-ref-goal-first-resident-process-live-001",
+					LaunchRef:     "launch-ref-goal-first-resident-process-live-001",
+					Status:        orquestaruntime.ProcessRuntimeRunningV0,
+				},
+			},
+		}},
+	}}
+
+	result, err := executor.Execute(ctx, orquestamcp.MCPRunSupervisorToolInputV0{
+		RunRef:       runRef,
+		ResidentMode: true,
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.StopReason == "goal_first_resident_rework_prepared" || launcher.calls != 0 {
+		t.Fatalf("proceso vivo reconciliado indebidamente: result=%+v calls=%d", result, launcher.calls)
+	}
+	persisted, err := store.LoadGoalWorkStateV0(ctx, runRef)
+	if err != nil {
+		t.Fatalf("Load source: %v", err)
+	}
+	if persisted.Status != orquestagoal.GoalStatusRunningV0 {
+		t.Fatalf("state vivo alterado: %+v", persisted)
+	}
 }

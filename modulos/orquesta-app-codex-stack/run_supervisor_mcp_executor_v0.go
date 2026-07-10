@@ -290,6 +290,7 @@ func (executor CodexStackRunSupervisorExecutorV0) goalFirstRunSupervisorResultV0
 		EvidenceRefs: evidenceRefs,
 	}}
 	state, result = executor.maybeReconcileGoalFirstResidentBackendMissingV0(ctx, input, state, result)
+	state, result = executor.maybeReconcileGoalFirstResidentDeadProcessV0(ctx, input, state, result)
 	result = executor.maybePrepareGoalFirstResidentReworkV0(ctx, input, state, result)
 	return result, true
 }
