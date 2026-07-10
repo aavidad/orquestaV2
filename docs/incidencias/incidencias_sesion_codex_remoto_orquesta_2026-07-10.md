@@ -389,3 +389,35 @@ app-server, decoder neutral F6 y DAG durable de autonomia. La bateria conjunta
 paso nueve paquetes, cuatro paquetes con `-race` y la frontera neutral. Estos
 commits no se han pusheado ni desplegado; el remoto sigue en `6a8cb3e066` y
 Orquesta permanece apagada.
+
+### S23 - Contencion S13 y revalidacion local F3/F5
+
+Se corrigio la deuda documental S13 sin borrar evidencia a ciegas. La auditoria
+`docs/auditorias/s13_artefactos_ejecucion_versionados_2026-07-10.json` inventaria
+68 rutas: 61 con nombre de checkpoint/resultado, 58 movibles cuando exista el
+lector de recibos runtime, 5 historicas, 4 fixtures y 1 pendiente de triaje.
+El script `scripts/orquesta_check_versioned_execution_artifacts.sh` compara el
+arbol Git con esa auditoria y falla ante una ruta nueva no clasificada; su test
+incluye un repositorio fixture con un candidato no clasificado. El prompt de
+`codex-launch-wave` tambien ordena guardar recibos tecnicos solo en el runtime
+del agente, nunca en el repositorio. Commits: `59d3be620`, `a268a87e9` y
+`ca7a057b1`, todos pusheados a `trabajo/plataforma-agentes`.
+
+La prueba local de dos olas S13 no produjo entrega verificable en unos 98 s y
+acumulo diagnostico interno (969811 y 85171 bytes). Se pararon por
+`codex-wave-stop --force`, confirmando `stopped` y sin procesos residuales. Se
+registro `BUG-ORQ-20260710-208S`: falta que la composicion corte/replanifique
+autonomamente por presupuesto de diagnostico/progreso; no se mezcla esa futura
+pieza con core ni con F3/F5.
+
+Revalidacion posterior, solo con harnesses sinteticos y caches bajo `/tmp`:
+
+- `scripts/test_orquesta_server_drain.sh`: verde (`pidfd_real`, backup,
+  tmux limpio, matriz fail-closed y lock exclusivo).
+- `scripts/test_orquesta_server_deploy.sh`: verde.
+
+No se ejecuto drain/deploy contra remoto, no se arranco `orquesta-server`, no
+se creo una app temporal y no se toco `uso-app`. El primer intento del harness
+de deploy solo evidencio que un `TMPDIR` aislado debe existir antes de
+`mktemp`; al crear la raiz declarada el mismo test paso. La rama continua limpia
+y sincronizada con `origin/trabajo/plataforma-agentes`.
