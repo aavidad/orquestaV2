@@ -204,6 +204,12 @@ backend tmux y cableados en
 
 (Anotar aqui, con fecha y paso, todo lo que no cuadre con la guia.)
 
+- 2026-07-10, revision previa a D1: los siete focales declarados de 208H, dos
+  pases aislados de sus seis paquetes y el guard de neutralidad pasan, pero se
+  detecta `BUG-ORQ-20260710-208J`: un error posterior a adquirir el claim de
+  atestacion deja `pending` sin recuperacion. D1/D2 se mantienen bloqueados
+  hasta reparar y revisar ese contrato; no se lanzo runtime ni proveedor real.
+
 - 2026-07-10, PASO A1: el executor de observe_goal YA tenia `EstadoVivoSource`
   inyectable y un camino estado-vivo en la ruta de snapshot parcial
   (`observe_app_director_goal_estado_vivo_v0.go`); lo que faltaba y se anadio
