@@ -93,6 +93,16 @@ func applyMCPDirectorStatsEstadoVivoNodeV0(
 		return
 	}
 	evidenceRefs := evidenceRefsFromEstadoVivoNodeMCPDirectorStatsV0(node)
+	if node.Veredicto.Clase == orquestaestadovivo.VeredictoDivergentNeedsRepairV0 {
+		markMCPDirectorStatsBlockedByEstadoVivoV0(
+			stats,
+			mcpDirectorStatsEstadoVivoConflictoV0,
+			"estado_vivo.veredicto."+node.Veredicto.ReasonCode,
+			"veredicto causal divergente; requiere reconciliacion por identidad y evidencias",
+			evidenceRefs,
+		)
+		return
+	}
 	switch node.Fase {
 	case orquestaestadovivo.FaseTerminalAceptadoV0:
 		stats.Status = "closed"
@@ -130,7 +140,7 @@ func applyMCPDirectorStatsEstadoVivoNodeV0(
 		markMCPDirectorStatsBlockedByEstadoVivoV0(
 			stats,
 			mcpDirectorStatsEstadoVivoDesconocidoV0,
-			"estado_vivo.desconocido",
+			"estado_vivo.veredicto."+node.Veredicto.ReasonCode,
 			"estado vivo desconocido: falta evidencia suficiente para cierre verde",
 			compactStringsMCPV0(append([]string{mcpDirectorStatsEvidenceEstadoVivoDesconocidoV0}, evidenceRefs...)),
 		)

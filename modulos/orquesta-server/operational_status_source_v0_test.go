@@ -93,12 +93,16 @@ func TestResidentOperationalStatusSourceV0AgregaEstadoVivoCompactoV0(t *testing.
 				EvidenceRefs: []string{"delivery-ref-estado-vivo-001"},
 			},
 			{
-				RunRef:       "run-ref-estado-vivo-001",
-				GoalRef:      "goal-ref-estado-vivo-001",
-				Fuente:       "process_snapshot",
-				Estado:       "running",
-				ProcesoVivo:  true,
-				EvidenceRefs: []string{"process-ref-estado-vivo-001"},
+				RunRef:                      "run-ref-estado-vivo-001",
+				GoalRef:                     "goal-ref-estado-vivo-001",
+				Fuente:                      "process_snapshot",
+				Estado:                      "running",
+				Scope:                       orquestaestadovivo.ScopeGoalExecutionV0,
+				RuntimeIdentityRef:          "runtime-server-live",
+				RuntimeObservationAttempted: true,
+				RuntimeObservado:            true,
+				ProcesoVivo:                 true,
+				EvidenceRefs:                []string{"process-ref-estado-vivo-001"},
 			},
 			{
 				RunRef:          "run-ref-estado-vivo-001",
@@ -135,12 +139,18 @@ func TestResidentOperationalStatusSourceV0AgregaEstadoVivoCompactoV0(t *testing.
 	assertOperationalCounterForTestV0(t, diagnostic, "estado_vivo_nodos", 1)
 	assertOperationalCounterForTestV0(t, diagnostic, "estado_vivo_conflictos", 1)
 	assertOperationalCounterForTestV0(t, diagnostic, "estado_vivo_procesos_vivos", 1)
+	assertOperationalCounterForTestV0(t, diagnostic, "estado_vivo_veredictos_divergent", 1)
+	assertOperationalCounterForTestV0(t, diagnostic, "estado_vivo_veredictos_indeterminate", 0)
 	if !diagnosticoContainsReferenceForTestV0(diagnostic, "run-ref-estado-vivo-001") ||
 		!diagnosticoContainsReferenceForTestV0(diagnostic, "ack-ref-estado-vivo-001") {
 		t.Fatalf("missing estado vivo refs: %+v", diagnostic.Referencias)
 	}
 	if source.lastFiltro.Limit != residentOperationalEstadoVivoEvidenceLimitV0 {
 		t.Fatalf("filtro=%+v", source.lastFiltro)
+	}
+	body, err := json.Marshal(diagnostic)
+	if err != nil || !strings.Contains(string(body), `"estado_vivo_veredictos_divergent":1`) {
+		t.Fatalf("API JSON no transporta clase causal tipada: err=%v body=%s", err, body)
 	}
 }
 

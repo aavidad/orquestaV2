@@ -57,6 +57,16 @@ func applyMCPObserveAppDirectorGoalEstadoVivoNodeV0(
 ) MCPObserveAppDirectorGoalToolResultV0 {
 	evidenceRefs := evidenceRefsFromEstadoVivoNodeMCPAutoprogrammingV0(node)
 	result.EvidenceRefs = compactStringsMCPV0(append(result.EvidenceRefs, evidenceRefs...))
+	if node.Veredicto.Clase == orquestaestadovivo.VeredictoDivergentNeedsRepairV0 {
+		return mcpObserveAppDirectorGoalBlockWithEstadoVivoIssueV0(
+			result,
+			mcpAutoprogrammingActionEstadoVivoConflictoV0,
+			"estado_vivo.veredicto."+node.Veredicto.ReasonCode,
+			"veredicto causal divergente; requiere reconciliacion por identidad y evidencias",
+			compactStringsMCPV0(append([]string{mcpAutoprogrammingEvidenceEstadoVivoConflictoV0}, evidenceRefs...)),
+			"reconcile_estado_vivo",
+		)
+	}
 	switch node.Fase {
 	case orquestaestadovivo.FaseTerminalAceptadoV0:
 		result.RunStatus = "closed"
@@ -103,7 +113,14 @@ func applyMCPObserveAppDirectorGoalEstadoVivoNodeV0(
 			"observe_or_reconcile_estado_vivo",
 		)
 	case orquestaestadovivo.FaseDesconocidoV0:
-		return result
+		return mcpObserveAppDirectorGoalBlockWithEstadoVivoIssueV0(
+			result,
+			mcpAutoprogrammingActionEstadoVivoDesconocidoV0,
+			"estado_vivo.veredicto."+node.Veredicto.ReasonCode,
+			"veredicto causal indeterminado; no se confirma running ni cierre",
+			compactStringsMCPV0(append([]string{mcpAutoprogrammingEvidenceEstadoVivoDesconocidoV0}, evidenceRefs...)),
+			"observe_estado_vivo",
+		)
 	case orquestaestadovivo.FaseBloqueadoV0:
 		return mcpObserveAppDirectorGoalBlockWithEstadoVivoIssueV0(
 			result,
@@ -152,6 +169,12 @@ func mcpObserveAppDirectorGoalBlockWithEstadoVivoIssueV0(
 	evidenceRefs []string,
 	recommendedAction string,
 ) MCPObserveAppDirectorGoalToolResultV0 {
+	if mcpEstadoVivoStatusPublicaRunningV0(result.RunStatus) {
+		result.RunStatus = strings.TrimSpace(code)
+	}
+	if mcpEstadoVivoStatusPublicaRunningV0(result.GoalStatus) {
+		result.GoalStatus = strings.TrimSpace(code)
+	}
 	result.EvidenceRefs = compactStringsMCPV0(append(result.EvidenceRefs, evidenceRefs...))
 	if !mcpObserveAppDirectorGoalHasClosureIssueCodeV0(result.ClosureIssues, code) {
 		result.ClosureIssues = append(result.ClosureIssues, MCPValidationIssueV0{
@@ -165,4 +188,13 @@ func mcpObserveAppDirectorGoalBlockWithEstadoVivoIssueV0(
 	result.ClosureNeedsRework = true
 	result.RecommendedAction = firstNonEmptyMCPV0(recommendedAction, mcpObserveAppDirectorGoalRecommendedActionV0(result))
 	return result
+}
+
+func mcpEstadoVivoStatusPublicaRunningV0(status string) bool {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "running", "active", "in_progress", "proceso_vivo", mcpDirectorStatsEstadoVivoProcesoVivoV0:
+		return true
+	default:
+		return false
+	}
 }

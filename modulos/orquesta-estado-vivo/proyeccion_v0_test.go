@@ -10,7 +10,7 @@ func TestConstruirProyeccionCicloVidaV0ProcesoVivoDominaEstadoStale(t *testing.T
 	ahora := mustTimeV0(t, "2026-07-03T10:00:00Z")
 	proyeccion := ConstruirProyeccionCicloVidaV0([]EvidenciaEstadoV0{
 		{RunRef: "run-1", Fuente: "run_store", Estado: "blocked", ObservadoEn: "2026-07-03T09:00:00Z"},
-		{RunRef: "run-1", Fuente: "process_registry", ProcesoVivo: true, ObservadoEn: "2026-07-03T09:59:00Z"},
+		{RunRef: "run-1", Fuente: "process_registry", Scope: ScopeGoalV0, RuntimeIdentityRef: "runtime-1", RuntimeObservado: true, ProcesoVivo: true, ObservadoEn: "2026-07-03T09:59:00Z"},
 	}, ahora, time.Hour)
 
 	assertFaseUnicaV0(t, proyeccion, FaseProcesoVivoV0)
@@ -37,7 +37,7 @@ func TestConstruirProyeccionCicloVidaV0TerminalReworkSinProcesoVivo(t *testing.T
 func TestConstruirProyeccionCicloVidaV0ProcesoVivoTrasTerminalEsConflicto(t *testing.T) {
 	ahora := mustTimeV0(t, "2026-07-03T10:00:00Z")
 	proyeccion := ConstruirProyeccionCicloVidaV0([]EvidenciaEstadoV0{
-		{RunRef: "run-1", Fuente: "process_snapshot", ProcesoVivo: true, ObservadoEn: "2026-07-03T09:59:00Z"},
+		{RunRef: "run-1", Fuente: "process_snapshot", Scope: ScopeGoalV0, RuntimeIdentityRef: "runtime-1", RuntimeObservado: true, ProcesoVivo: true, ObservadoEn: "2026-07-03T09:59:00Z"},
 		{RunRef: "run-1", Fuente: "receipt", Terminal: true, Aceptado: true, ObservadoEn: "2026-07-03T09:58:00Z"},
 	}, ahora, time.Hour)
 
@@ -75,7 +75,7 @@ func TestConstruirProyeccionCicloVidaV0EsDeterminista(t *testing.T) {
 	entrada := []EvidenciaEstadoV0{
 		{RunRef: "run-b", Fuente: "run_marker", ObservadoEn: "2026-07-03T09:50:00Z", EvidenceRefs: []string{"e2", "e1"}},
 		{RunRef: "run-a", Fuente: "run_store", Estado: "blocked", ObservadoEn: "2026-07-03T09:45:00Z"},
-		{RunRef: "run-b", Fuente: "process_registry", ProcesoVivo: true, ObservadoEn: "2026-07-03T09:59:00Z"},
+		{RunRef: "run-b", Fuente: "process_registry", Scope: ScopeGoalV0, RuntimeIdentityRef: "runtime-b", RuntimeObservado: true, ProcesoVivo: true, ObservadoEn: "2026-07-03T09:59:00Z"},
 	}
 	reordenada := []EvidenciaEstadoV0{entrada[2], entrada[0], entrada[1]}
 
@@ -105,7 +105,7 @@ func TestConstruirProyeccionCicloVidaV0DistingueOutboxWaitYProcesoExterno(t *tes
 	proyeccion := ConstruirProyeccionCicloVidaV0([]EvidenciaEstadoV0{
 		{RunRef: "run-outbox", Fuente: "outbox", Estado: "pending", ObservadoEn: "2026-07-03T09:58:00Z"},
 		{RunRef: "run-wait", Fuente: "run_store", Estado: "wait_external", ObservadoEn: "2026-07-03T09:58:00Z"},
-		{RunRef: "run-process", Fuente: "process_snapshot", ProcesoVivo: true, ObservadoEn: "2026-07-03T09:58:00Z"},
+		{RunRef: "run-process", Fuente: "process_snapshot", Scope: ScopeGoalV0, RuntimeIdentityRef: "runtime-process", RuntimeObservado: true, ProcesoVivo: true, ObservadoEn: "2026-07-03T09:58:00Z"},
 	}, ahora, time.Hour)
 
 	fases := map[string]FaseCicloVidaV0{}

@@ -3,9 +3,11 @@ package orquestaappcodexstack
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
@@ -158,14 +160,69 @@ func TestEvidenciaEstadoProcesosV0MarcaProcesoVivoSoloConSnapshotConfirmado(t *t
 		t.Fatalf("evidencias=%+v, want registry+snapshot por proceso", evidencias)
 	}
 	live := evidenciaPorFuenteYEstadoForTestV0(evidencias, "process_snapshot", string(orquestaruntime.ProcessRuntimeRunningV0))
-	if live == nil || !live.ProcesoVivo {
+	if live == nil || !live.ProcesoVivo || !live.RuntimeObservado || !live.RuntimeObservationAttempted ||
+		live.Scope != orquestaestadovivo.ScopeGoalExecutionV0 || live.RuntimeIdentityRef != "process-ref-live" {
 		t.Fatalf("snapshot running debe confirmar proceso vivo: %+v", live)
 	}
 	stopped := evidenciaPorFuenteYEstadoForTestV0(evidencias, "process_snapshot", string(orquestaruntime.ProcessRuntimeStoppedV0))
-	if stopped == nil || stopped.ProcesoVivo {
+	if stopped == nil || stopped.ProcesoVivo || !stopped.RuntimeObservado || !stopped.RuntimeObservationAttempted ||
+		stopped.Scope != orquestaestadovivo.ScopeGoalExecutionV0 || stopped.RuntimeIdentityRef != "process-ref-stopped" {
 		t.Fatalf("snapshot stopped no debe marcar proceso vivo: %+v", stopped)
 	}
+	registryLive := evidenciaPorFuenteYEstadoForTestV0(evidencias, "process_registry", "registered")
+	if registryLive == nil || registryLive.Scope != orquestaestadovivo.ScopeGoalExecutionV0 ||
+		registryLive.RuntimeIdentityRef == "" || registryLive.RuntimeGenerationRef == "" || registryLive.RuntimeObservado {
+		t.Fatalf("registry debe aportar identidad esperada sin fingir observacion: %+v", registryLive)
+	}
 	requireEvidenceRefsV0(t, live.EvidenceRefs, "process-ref-live", "agent-ref-proceso-live", "evidence-ref-process-agent-ref-proceso-live")
+}
+
+func TestEvidenciaEstadoProcesosV0SnapshotFallidoEmiteObservacionIndeterminadaTipadaV0(t *testing.T) {
+	registry := orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0()
+	mustRecordAgentProcessForEvidenciaTestV0(t, registry, "run-ref-timeout-001", "agent-ref-timeout-001", "process-ref-timeout-001")
+	source := EvidenciaEstadoProcesosV0{
+		Registry: registry,
+		SnapshotSource: evidenciaEstadoSnapshotSourceForTestV0{
+			errs: map[string]error{"process-ref-timeout-001": errors.New("timeout privado")},
+		},
+	}
+
+	evidencias, err := source.ListarEvidenciasEstadoV0(context.Background(), orquestaestadovivo.FiltroEvidenciaEstadoV0{RunRef: "run-ref-timeout-001"})
+	if err != nil {
+		t.Fatalf("ListarEvidenciasEstadoV0: %v", err)
+	}
+	indeterminate := evidenciaPorFuenteYEstadoForTestV0(evidencias, "process_snapshot", "observation_indeterminate")
+	if indeterminate == nil || !indeterminate.RuntimeObservationAttempted || indeterminate.RuntimeObservado ||
+		indeterminate.ProcesoVivo || indeterminate.RuntimeIdentityRef != "process-ref-timeout-001" {
+		t.Fatalf("observacion fallida incompleta o falsamente viva: %+v", indeterminate)
+	}
+	body, _ := json.Marshal(evidencias)
+	if string(body) == "" || strings.Contains(string(body), "timeout privado") {
+		t.Fatalf("evidencia no debe filtrar error privado: %s", body)
+	}
+}
+
+func TestEvidenciaEstadoProcesosV0SnapshotGeneracionDistintaEmiteDivergenciaCausalV0(t *testing.T) {
+	registry := orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0()
+	mustRecordAgentProcessForEvidenciaTestV0(t, registry, "run-ref-mismatch-001", "agent-ref-mismatch-001", "process-ref-mismatch-001")
+	source := EvidenciaEstadoProcesosV0{
+		Registry: registry,
+		SnapshotSource: evidenciaEstadoSnapshotSourceForTestV0{snapshots: map[string]orquestaruntime.ProcessRuntimeSnapshotV0{
+			"process-ref-mismatch-001": {
+				ProcessRef: "process-ref-mismatch-001", SessionRef: "session-ref-otra-generacion",
+				LaunchRef: "launch-ref-otra-generacion", Status: orquestaruntime.ProcessRuntimeRunningV0,
+			},
+		}},
+	}
+	evidencias, err := source.ListarEvidenciasEstadoV0(context.Background(), orquestaestadovivo.FiltroEvidenciaEstadoV0{RunRef: "run-ref-mismatch-001"})
+	if err != nil {
+		t.Fatalf("ListarEvidenciasEstadoV0: %v", err)
+	}
+	veredicto := orquestaestadovivo.DerivarVeredictoCausalV0(evidencias)
+	if veredicto.Clase != orquestaestadovivo.VeredictoDivergentNeedsRepairV0 ||
+		veredicto.ReasonCode != orquestaestadovivo.RazonVeredictoIdentidadNoCoincidenteV0 || veredicto.PublicarRunning {
+		t.Fatalf("snapshot de otra generacion no puede confirmar running: evidencias=%+v veredicto=%+v", evidencias, veredicto)
+	}
 }
 
 func TestEvidenciaEstadoReceiptsV0TraduceGoalWorkResultYReceiptCodex(t *testing.T) {
@@ -308,11 +365,15 @@ func mustRecordAgentProcessForEvidenciaTestV0(
 
 type evidenciaEstadoSnapshotSourceForTestV0 struct {
 	snapshots map[string]orquestaruntime.ProcessRuntimeSnapshotV0
+	errs      map[string]error
 }
 
 func (source evidenciaEstadoSnapshotSourceForTestV0) SnapshotV0(
 	processRef string,
 ) (orquestaruntime.ProcessRuntimeSnapshotV0, error) {
+	if err := source.errs[processRef]; err != nil {
+		return orquestaruntime.ProcessRuntimeSnapshotV0{}, err
+	}
 	return source.snapshots[processRef], nil
 }
 

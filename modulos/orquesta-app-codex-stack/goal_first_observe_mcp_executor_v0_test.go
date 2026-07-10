@@ -73,7 +73,9 @@ func TestCodexStackObserveAppDirectorGoalExecutorV0TimeoutSnapshotIncluyeProcess
 		t.Fatalf("ObserveAppDirectorGoalTimeoutSnapshotV0: %v", err)
 	}
 	if !result.Partial ||
-		result.GoalStatus != orquestagoal.GoalStatusRunningV0 ||
+		result.GoalStatus == orquestagoal.GoalStatusRunningV0 ||
+		result.RecommendedAction != "observe_estado_vivo" ||
+		!result.ClosureNeedsRework ||
 		!codexStackStringInSetForTestV0(result.ProcessRefs, "process-ref-stack-observe-snapshot-001") ||
 		!codexStackStringInSetForTestV0(result.EvidenceRefs, "evidence-ref-stack-observe-snapshot-process-001") {
 		t.Fatalf("result=%+v", result)
@@ -471,7 +473,7 @@ func TestCodexStackAutoprogrammingObserveGoalExecutorV0ErrorPublicoIncluyeSnapsh
 		result.GoalRef != goalRef ||
 		result.ExternalGoalRef != externalGoalRef ||
 		result.GoalStatus != orquestagoal.GoalStatusInvalidV0 ||
-		result.RecommendedAction != "blocked" ||
+		result.RecommendedAction != "observe_estado_vivo" ||
 		len(result.Errores) != 1 ||
 		result.Errores[0].Code != "codex_goal_observation_rejected" ||
 		!codexStackStringInSetForTestV0(result.ProcessRefs, "process-ref-stack-autoprogramming-observe-rejected-001") ||

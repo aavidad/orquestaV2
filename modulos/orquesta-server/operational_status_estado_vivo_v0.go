@@ -23,9 +23,11 @@ func residentOperationalCountersWithEstadoVivoV0(
 		{key: "estado_vivo_evidencias", value: float64(nonNegativeServerIntV0(len(evidencias)))},
 		{key: "estado_vivo_nodos", value: float64(nonNegativeServerIntV0(len(projection.Nodos)))},
 		{key: "estado_vivo_conflictos", value: float64(nonNegativeServerIntV0(residentOperationalEstadoVivoConflictsV0(projection)))},
-		{key: "estado_vivo_procesos_vivos", value: float64(nonNegativeServerIntV0(residentOperationalEstadoVivoLiveProcessesV0(evidencias)))},
+		{key: "estado_vivo_procesos_vivos", value: float64(nonNegativeServerIntV0(residentOperationalEstadoVivoLiveProcessesV0(projection)))},
 		{key: "estado_vivo_terminales", value: float64(nonNegativeServerIntV0(residentOperationalEstadoVivoTerminalNodesV0(projection)))},
 		{key: "estado_vivo_entregas_parciales", value: float64(nonNegativeServerIntV0(residentOperationalEstadoVivoPartialDeliveryNodesV0(projection)))},
+		{key: "estado_vivo_veredictos_indeterminate", value: float64(nonNegativeServerIntV0(residentOperationalEstadoVivoVerdictsV0(projection, orquestaestadovivo.VeredictoIndeterminateV0)))},
+		{key: "estado_vivo_veredictos_divergent", value: float64(nonNegativeServerIntV0(residentOperationalEstadoVivoVerdictsV0(projection, orquestaestadovivo.VeredictoDivergentNeedsRepairV0)))},
 	} {
 		if _, exists := counters[item.key]; !exists && len(counters) >= residentOperationalDiagnosticoCounterBudgetV0 {
 			*warnings = residentOperationalAppendWarningOnceV0(
@@ -97,11 +99,24 @@ func residentOperationalEstadoVivoConflictsV0(
 }
 
 func residentOperationalEstadoVivoLiveProcessesV0(
-	evidencias []orquestaestadovivo.EvidenciaEstadoV0,
+	projection orquestaestadovivo.ProyeccionCicloVidaV0,
 ) int {
 	total := 0
-	for _, evidencia := range evidencias {
-		if evidencia.ProcesoVivo {
+	for _, node := range projection.Nodos {
+		if node.Veredicto.ProcesoVivo {
+			total++
+		}
+	}
+	return total
+}
+
+func residentOperationalEstadoVivoVerdictsV0(
+	projection orquestaestadovivo.ProyeccionCicloVidaV0,
+	class orquestaestadovivo.ClaseVeredictoCausalV0,
+) int {
+	total := 0
+	for _, node := range projection.Nodos {
+		if node.Veredicto.Clase == class {
 			total++
 		}
 	}

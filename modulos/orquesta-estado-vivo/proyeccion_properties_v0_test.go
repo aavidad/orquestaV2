@@ -32,7 +32,7 @@ func TestConstruirProyeccionCicloVidaV0PropConflictoNoSilenciosoV0(t *testing.T)
 		runRef := "run-conflict-" + strconv.Itoa(rapid.IntRange(0, 999).Draw(rt, "run"))
 		aceptado := rapid.Bool().Draw(rt, "aceptado")
 		proyeccion := ConstruirProyeccionCicloVidaV0([]EvidenciaEstadoV0{
-			{RunRef: runRef, Fuente: rapid.SampledFrom([]string{"process_registry", "process_snapshot"}).Draw(rt, "proceso_fuente"), ProcesoVivo: true, ObservadoEn: "2026-07-03T09:59:00Z"},
+			{RunRef: runRef, Fuente: rapid.SampledFrom([]string{"process_registry", "process_snapshot"}).Draw(rt, "proceso_fuente"), Scope: ScopeGoalV0, RuntimeIdentityRef: "runtime-property", RuntimeObservado: true, ProcesoVivo: true, ObservadoEn: "2026-07-03T09:59:00Z"},
 			{RunRef: runRef, Fuente: rapid.SampledFrom([]string{"receipt", "review"}).Draw(rt, "terminal_fuente"), Terminal: true, Aceptado: aceptado, ObservadoEn: "2026-07-03T09:58:00Z"},
 		}, ahoraRapidV0(), time.Hour)
 
@@ -73,7 +73,7 @@ func TestConstruirProyeccionCicloVidaV0PropDistingueOutboxWaitYProcesoV0(t *test
 		proyeccion := ConstruirProyeccionCicloVidaV0([]EvidenciaEstadoV0{
 			{RunRef: "run-outbox-" + suffix, Fuente: rapid.SampledFrom([]string{"outbox", "queue"}).Draw(rt, "outbox_fuente"), Estado: rapid.SampledFrom([]string{"pending", "queued", "pendiente"}).Draw(rt, "outbox_estado"), ObservadoEn: "2026-07-03T09:58:00Z"},
 			{RunRef: "run-wait-" + suffix, Fuente: "run_store", Estado: rapid.SampledFrom([]string{"wait_external", "external_wait", "lanzado"}).Draw(rt, "wait_estado"), ObservadoEn: "2026-07-03T09:58:00Z"},
-			{RunRef: "run-process-" + suffix, Fuente: "process_snapshot", ProcesoVivo: true, ObservadoEn: "2026-07-03T09:58:00Z"},
+			{RunRef: "run-process-" + suffix, Fuente: "process_snapshot", Scope: ScopeGoalV0, RuntimeIdentityRef: "runtime-" + suffix, RuntimeObservado: true, ProcesoVivo: true, ObservadoEn: "2026-07-03T09:58:00Z"},
 		}, ahoraRapidV0(), time.Hour)
 
 		fases := map[string]FaseCicloVidaV0{}

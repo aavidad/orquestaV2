@@ -145,11 +145,15 @@ func TestMCPAutoprogrammingStatusExecutorV0DerivaVidaDesdeProyeccionV0(t *testin
 	runRef := "run-ref-estado-vivo-status-001"
 	estadoVivo := &fakeMCPAutoprogrammingEstadoVivoSourceV0{
 		evidencias: []orquestaestadovivo.EvidenciaEstadoV0{{
-			RunRef:       runRef,
-			Fuente:       "process_snapshot",
-			Estado:       "running",
-			ProcesoVivo:  true,
-			EvidenceRefs: []string{"evidence-ref-estado-vivo-process-live"},
+			RunRef:                      runRef,
+			Fuente:                      "process_snapshot",
+			Estado:                      "running",
+			Scope:                       orquestaestadovivo.ScopeGoalExecutionV0,
+			RuntimeIdentityRef:          "runtime-status-live",
+			RuntimeObservationAttempted: true,
+			RuntimeObservado:            true,
+			ProcesoVivo:                 true,
+			EvidenceRefs:                []string{"evidence-ref-estado-vivo-process-live"},
 		}},
 	}
 
@@ -258,11 +262,15 @@ func TestMCPAutoprogrammingStatusExecutorV0ConflictoEstadoVivoNuncaProyectaVerde
 	estadoVivo := &fakeMCPAutoprogrammingEstadoVivoSourceV0{
 		evidencias: []orquestaestadovivo.EvidenciaEstadoV0{
 			{
-				RunRef:       runRef,
-				Fuente:       "process_snapshot",
-				Estado:       "running",
-				ProcesoVivo:  true,
-				EvidenceRefs: []string{"evidence-ref-estado-vivo-process-live"},
+				RunRef:                      runRef,
+				Fuente:                      "process_snapshot",
+				Estado:                      "running",
+				Scope:                       orquestaestadovivo.ScopeGoalExecutionV0,
+				RuntimeIdentityRef:          "runtime-status-conflict",
+				RuntimeObservationAttempted: true,
+				RuntimeObservado:            true,
+				ProcesoVivo:                 true,
+				EvidenceRefs:                []string{"evidence-ref-estado-vivo-process-live"},
 			},
 			{
 				RunRef:       runRef,

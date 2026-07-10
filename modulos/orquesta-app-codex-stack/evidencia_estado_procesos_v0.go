@@ -40,10 +40,13 @@ func (source EvidenciaEstadoProcesosV0) ListarEvidenciasEstadoV0(
 	evidencias := make([]orquestaestadovivo.EvidenciaEstadoV0, 0, len(records)*2)
 	for _, record := range records {
 		registryEvidence := normalizarEvidenciaEstadoV0(orquestaestadovivo.EvidenciaEstadoV0{
-			RunRef:       record.RunID,
-			Fuente:       evidenciaEstadoFuenteProcessRegistryV0,
-			Estado:       "registered",
-			EvidenceRefs: evidenciaEstadoProcessRecordRefsV0(record),
+			RunRef:               record.RunID,
+			Fuente:               evidenciaEstadoFuenteProcessRegistryV0,
+			Estado:               "registered",
+			Scope:                orquestaestadovivo.ScopeGoalExecutionV0,
+			RuntimeIdentityRef:   strings.TrimSpace(record.ProcessRef),
+			RuntimeGenerationRef: evidenciaEstadoRuntimeGenerationRefV0(record.SessionRef, record.LaunchRef),
+			EvidenceRefs:         evidenciaEstadoProcessRecordRefsV0(record),
 		})
 		if evidenciaEstadoPasaFiltroV0(registryEvidence, filtro) {
 			evidencias = append(evidencias, registryEvidence)
@@ -53,14 +56,33 @@ func (source EvidenciaEstadoProcesosV0) ListarEvidenciasEstadoV0(
 		}
 		snapshot, err := source.SnapshotSource.SnapshotV0(strings.TrimSpace(record.ProcessRef))
 		if err != nil {
+			indeterminate := normalizarEvidenciaEstadoV0(orquestaestadovivo.EvidenciaEstadoV0{
+				RunRef:                      record.RunID,
+				Fuente:                      evidenciaEstadoFuenteProcessSnapshotV0,
+				Estado:                      "observation_indeterminate",
+				Scope:                       orquestaestadovivo.ScopeGoalExecutionV0,
+				RuntimeIdentityRef:          strings.TrimSpace(record.ProcessRef),
+				RuntimeGenerationRef:        evidenciaEstadoRuntimeGenerationRefV0(record.SessionRef, record.LaunchRef),
+				RuntimeObservationAttempted: true,
+				EvidenceRefs:                evidenciaEstadoProcessRecordRefsV0(record),
+			})
+			if evidenciaEstadoPasaFiltroV0(indeterminate, filtro) {
+				evidencias = append(evidencias, indeterminate)
+			}
 			continue
 		}
 		snapshotEvidence := normalizarEvidenciaEstadoV0(orquestaestadovivo.EvidenciaEstadoV0{
-			RunRef:       record.RunID,
-			Fuente:       evidenciaEstadoFuenteProcessSnapshotV0,
-			Estado:       strings.TrimSpace(string(snapshot.Status)),
-			ProcesoVivo:  evidenciaEstadoProcesoVivoConfirmadoV0(record, snapshot),
-			EvidenceRefs: compactStringsV0(append(evidenciaEstadoProcessRecordRefsV0(record), evidenciaEstadoSnapshotRefsV0(snapshot)...)),
+			RunRef:                      record.RunID,
+			Fuente:                      evidenciaEstadoFuenteProcessSnapshotV0,
+			Estado:                      strings.TrimSpace(string(snapshot.Status)),
+			Scope:                       orquestaestadovivo.ScopeGoalExecutionV0,
+			RuntimeIdentityRef:          strings.TrimSpace(snapshot.ProcessRef),
+			RuntimeGenerationRef:        evidenciaEstadoRuntimeGenerationRefV0(snapshot.SessionRef, snapshot.LaunchRef),
+			RuntimeIdentityMismatch:     !evidenciaEstadoProcessRecordMatchesSnapshotV0(record, snapshot),
+			RuntimeObservationAttempted: true,
+			RuntimeObservado:            true,
+			ProcesoVivo:                 evidenciaEstadoProcesoVivoConfirmadoV0(record, snapshot),
+			EvidenceRefs:                compactStringsV0(append(evidenciaEstadoProcessRecordRefsV0(record), evidenciaEstadoSnapshotRefsV0(snapshot)...)),
 		})
 		if evidenciaEstadoPasaFiltroV0(snapshotEvidence, filtro) {
 			evidencias = append(evidencias, snapshotEvidence)
@@ -70,4 +92,11 @@ func (source EvidenciaEstadoProcesosV0) ListarEvidenciasEstadoV0(
 		}
 	}
 	return limitarEvidenciasEstadoV0(evidencias, filtro.Limit), nil
+}
+
+func evidenciaEstadoRuntimeGenerationRefV0(sessionRef, launchRef string) string {
+	if launchRef = strings.TrimSpace(launchRef); launchRef != "" {
+		return launchRef
+	}
+	return strings.TrimSpace(sessionRef)
 }

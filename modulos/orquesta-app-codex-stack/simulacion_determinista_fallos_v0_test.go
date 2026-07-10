@@ -459,12 +459,16 @@ func simulacionEvidenciasEstadoV0(
 	}
 	if state.Status == orquestagoal.GoalStatusRunningV0 || fault == simulacionFaultProcessCutV0 {
 		evidencias = append(evidencias, orquestaestadovivo.EvidenciaEstadoV0{
-			RunRef:       state.RunRef,
-			GoalRef:      state.GoalRef,
-			Fuente:       "process_snapshot",
-			ProcesoVivo:  true,
-			ObservadoEn:  "2026-07-03T11:59:45Z",
-			EvidenceRefs: []string{"evidence-ref-simulacion-process-live"},
+			RunRef:                      state.RunRef,
+			GoalRef:                     state.GoalRef,
+			Fuente:                      "process_snapshot",
+			Scope:                       orquestaestadovivo.ScopeGoalExecutionV0,
+			RuntimeIdentityRef:          "runtime-ref-simulacion-process-live",
+			RuntimeObservationAttempted: true,
+			RuntimeObservado:            true,
+			ProcesoVivo:                 true,
+			ObservadoEn:                 "2026-07-03T11:59:45Z",
+			EvidenceRefs:                []string{"evidence-ref-simulacion-process-live"},
 		})
 	}
 	return evidencias

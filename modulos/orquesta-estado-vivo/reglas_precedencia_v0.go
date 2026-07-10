@@ -11,6 +11,7 @@ const (
 
 func decidirFaseCicloVidaV0(
 	evidencias []EvidenciaEstadoV0,
+	veredicto VeredictoCausalV0,
 	ahora time.Time,
 	umbralHuerfano time.Duration,
 	runRef string,
@@ -19,41 +20,31 @@ func decidirFaseCicloVidaV0(
 		return FaseDesconocidoV0, nil
 	}
 
-	tieneProcesoVivo := false
-	tieneTerminal := false
-	tieneTerminalAceptado := false
-	fuentesProceso := make([]string, 0)
-	fuentesTerminal := make([]string, 0)
-
-	for _, evidencia := range evidencias {
-		if evidencia.ProcesoVivo {
-			tieneProcesoVivo = true
-			fuentesProceso = append(fuentesProceso, evidencia.Fuente)
-		}
-		if evidencia.Terminal {
-			tieneTerminal = true
-			fuentesTerminal = append(fuentesTerminal, evidencia.Fuente)
-			if evidencia.Aceptado {
-				tieneTerminalAceptado = true
-			}
-		}
+	if len(veredicto.Conflictos) > 0 && veredicto.RunRef == "" {
+		veredicto.Conflictos[0].RunRef = runRef
 	}
-
-	if tieneProcesoVivo && tieneTerminal {
-		return FaseConflictoV0, []ConflictoEstadoV0{{
-			RunRef:  runRef,
-			Codigo:  CodigoConflictoProcesoVivoTrasTerminalV0,
-			Fuentes: ordenarStringsUnicosV0(append(fuentesProceso, fuentesTerminal...)),
-		}}
-	}
-	if tieneProcesoVivo {
+	switch veredicto.Clase {
+	case VeredictoRunningConfirmedV0:
 		return FaseProcesoVivoV0, nil
-	}
-	if tieneTerminal {
-		if tieneTerminalAceptado {
+	case VeredictoTerminalByArtifactV0:
+		if veredicto.ResultadoAceptado {
 			return FaseTerminalAceptadoV0, nil
 		}
 		return FaseTerminalReworkV0, nil
+	case VeredictoProcessDeadStateStaleV0:
+		return FaseHuerfanoV0, nil
+	case VeredictoDivergentNeedsRepairV0:
+		if len(veredicto.Conflictos) > 0 {
+			return FaseConflictoV0, veredicto.Conflictos
+		}
+		return FaseConflictoV0, []ConflictoEstadoV0{{
+			RunRef: runRef, Codigo: veredicto.ReasonCode,
+		}}
+	case VeredictoIndeterminateV0:
+		if veredicto.ReasonCode == RazonVeredictoLivenessNoConfirmadoV0 ||
+			veredicto.ReasonCode == RazonVeredictoObservacionRuntimeIncompletaV0 {
+			return FaseDesconocidoV0, nil
+		}
 	}
 	if tieneEstadoBloqueadoV0(evidencias) {
 		return FaseBloqueadoV0, nil

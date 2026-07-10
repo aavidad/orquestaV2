@@ -16,7 +16,8 @@ func ConstruirProyeccionCicloVidaV0(
 		GeneradaEn:    ahora.UTC().Format(time.RFC3339Nano),
 	}
 	if len(evidencias) == 0 {
-		proyeccion.Nodos = []NodoCicloVidaV0{{Fase: FaseDesconocidoV0}}
+		veredicto := DerivarVeredictoCausalV0(nil)
+		proyeccion.Nodos = []NodoCicloVidaV0{{Fase: FaseDesconocidoV0, Veredicto: veredicto}}
 		return proyeccion
 	}
 
@@ -31,7 +32,8 @@ func ConstruirProyeccionCicloVidaV0(
 	for _, clave := range claves {
 		evidenciasNodo := copiarYOrdenarEvidenciasV0(grupos[clave])
 		nodo := nodoBaseCicloVidaV0(evidenciasNodo)
-		fase, conflictos := decidirFaseCicloVidaV0(evidenciasNodo, ahora, umbralHuerfano, refConflictoV0(clave, nodo))
+		nodo.Veredicto = DerivarVeredictoCausalV0(evidenciasNodo)
+		fase, conflictos := decidirFaseCicloVidaV0(evidenciasNodo, nodo.Veredicto, ahora, umbralHuerfano, refConflictoV0(clave, nodo))
 		nodo.Fase = fase
 		nodo.Evidencias = evidenciasNodo
 		nodo.Conflictos = conflictos
@@ -96,6 +98,12 @@ func claveEvidenciaV0(evidencia EvidenciaEstadoV0) string {
 		evidencia.ExternalGoalRef,
 		evidencia.Fuente,
 		evidencia.Estado,
+		string(evidencia.Scope),
+		evidencia.RuntimeIdentityRef,
+		evidencia.RuntimeGenerationRef,
+		boolOrdenableV0(evidencia.RuntimeIdentityMismatch),
+		boolOrdenableV0(evidencia.RuntimeObservationAttempted),
+		boolOrdenableV0(evidencia.RuntimeObservado),
 		boolOrdenableV0(evidencia.ProcesoVivo),
 		boolOrdenableV0(evidencia.Terminal),
 		boolOrdenableV0(evidencia.Aceptado),

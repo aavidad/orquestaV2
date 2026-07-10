@@ -195,11 +195,15 @@ func TestMCPDirectorStatsToolExecutorV0PlanStateCerradoNoPisaConflictoEstadoVivo
 	planState := mcpDirectorStatsClosedOperationalPlanStateForTestV0(run.RunID)
 	estadoVivo := &fakeMCPAutoprogrammingEstadoVivoSourceV0{
 		evidencias: []orquestaestadovivo.EvidenciaEstadoV0{{
-			RunRef:       run.RunID,
-			Fuente:       "process_snapshot",
-			ProcesoVivo:  true,
-			ObservadoEn:  "2026-07-09T15:59:00Z",
-			EvidenceRefs: []string{"evidence-ref-mcp-director-stats-conflict-process"},
+			RunRef:                      run.RunID,
+			Fuente:                      "process_snapshot",
+			Scope:                       orquestaestadovivo.ScopeGoalExecutionV0,
+			RuntimeIdentityRef:          "runtime-plan-conflict",
+			RuntimeObservationAttempted: true,
+			RuntimeObservado:            true,
+			ProcesoVivo:                 true,
+			ObservadoEn:                 "2026-07-09T15:59:00Z",
+			EvidenceRefs:                []string{"evidence-ref-mcp-director-stats-conflict-process"},
 		}, {
 			RunRef:       run.RunID,
 			Fuente:       "receipt",
@@ -461,11 +465,15 @@ func TestMCPDirectorStatsToolExecutorV0DerivaVidaDesdeProyeccionV0(t *testing.T)
 	run.Deliveries = []string{"delivery-ref-stats-estado-vivo-001"}
 	estadoVivo := &fakeMCPAutoprogrammingEstadoVivoSourceV0{
 		evidencias: []orquestaestadovivo.EvidenciaEstadoV0{{
-			RunRef:       run.RunID,
-			Fuente:       "process_snapshot",
-			ProcesoVivo:  true,
-			ObservadoEn:  "2026-07-03T09:59:00Z",
-			EvidenceRefs: []string{"evidence-ref-estado-vivo-process-live-001"},
+			RunRef:                      run.RunID,
+			Fuente:                      "process_snapshot",
+			Scope:                       orquestaestadovivo.ScopeGoalExecutionV0,
+			RuntimeIdentityRef:          "runtime-stats-live",
+			RuntimeObservationAttempted: true,
+			RuntimeObservado:            true,
+			ProcesoVivo:                 true,
+			ObservadoEn:                 "2026-07-03T09:59:00Z",
+			EvidenceRefs:                []string{"evidence-ref-estado-vivo-process-live-001"},
 		}},
 	}
 
@@ -525,11 +533,15 @@ func TestMCPDirectorStatsToolExecutorV0ConflictoEstadoVivoNuncaProyectaVerdeV0(t
 	}
 	estadoVivo := &fakeMCPAutoprogrammingEstadoVivoSourceV0{
 		evidencias: []orquestaestadovivo.EvidenciaEstadoV0{{
-			RunRef:       run.RunID,
-			Fuente:       "process_snapshot",
-			ProcesoVivo:  true,
-			ObservadoEn:  "2026-07-03T09:59:00Z",
-			EvidenceRefs: []string{"evidence-ref-estado-vivo-process-live-conflict"},
+			RunRef:                      run.RunID,
+			Fuente:                      "process_snapshot",
+			Scope:                       orquestaestadovivo.ScopeGoalExecutionV0,
+			RuntimeIdentityRef:          "runtime-stats-conflict",
+			RuntimeObservationAttempted: true,
+			RuntimeObservado:            true,
+			ProcesoVivo:                 true,
+			ObservadoEn:                 "2026-07-03T09:59:00Z",
+			EvidenceRefs:                []string{"evidence-ref-estado-vivo-process-live-conflict"},
 		}, {
 			RunRef:       run.RunID,
 			Fuente:       "receipt",

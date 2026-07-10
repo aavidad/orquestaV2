@@ -101,11 +101,15 @@ func TestMCPTransportV0AutoprogrammingStatusUsaEstadoVivoDesdeBindings(t *testin
 	if err := RegisterMCPTransportV0(transport, MCPTransportBindingsV0{
 		AutoprogrammingEstadoVivoSource: &fakeMCPAutoprogrammingEstadoVivoSourceV0{
 			evidencias: []orquestaestadovivo.EvidenciaEstadoV0{{
-				RunRef:       runRef,
-				Fuente:       "process_snapshot",
-				Estado:       "running",
-				ProcesoVivo:  true,
-				EvidenceRefs: []string{"evidence-ref-estado-vivo-transport-live"},
+				RunRef:                      runRef,
+				Fuente:                      "process_snapshot",
+				Estado:                      "running",
+				Scope:                       orquestaestadovivo.ScopeGoalExecutionV0,
+				RuntimeIdentityRef:          "runtime-transport-live",
+				RuntimeObservationAttempted: true,
+				RuntimeObservado:            true,
+				ProcesoVivo:                 true,
+				EvidenceRefs:                []string{"evidence-ref-estado-vivo-transport-live"},
 			}},
 		},
 	}); err != nil {

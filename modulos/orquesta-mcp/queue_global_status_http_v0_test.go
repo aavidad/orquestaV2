@@ -222,11 +222,15 @@ func TestMCPQueueGlobalStatusHTTPHandlerV0DerivaVidaDesdeProyeccionV0(t *testing
 	}
 	estadoVivo := &fakeMCPAutoprogrammingEstadoVivoSourceV0{
 		evidencias: []orquestaestadovivo.EvidenciaEstadoV0{{
-			RunRef:       runRef,
-			Fuente:       "process_snapshot",
-			ProcesoVivo:  true,
-			ObservadoEn:  "2026-07-03T09:59:00Z",
-			EvidenceRefs: []string{"evidence-ref-estado-vivo-running-live-001"},
+			RunRef:                      runRef,
+			Fuente:                      "process_snapshot",
+			Scope:                       orquestaestadovivo.ScopeGoalExecutionV0,
+			RuntimeIdentityRef:          "runtime-queue-live",
+			RuntimeObservationAttempted: true,
+			RuntimeObservado:            true,
+			ProcesoVivo:                 true,
+			ObservadoEn:                 "2026-07-03T09:59:00Z",
+			EvidenceRefs:                []string{"evidence-ref-estado-vivo-running-live-001"},
 		}},
 	}
 	executor := MCPAutoprogrammingStatusToolExecutorV0{

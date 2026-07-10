@@ -92,6 +92,41 @@ func TestMCPObserveAppDirectorGoalToolExecutorV0SnapshotDesdeProyeccionV0(t *tes
 	}
 }
 
+func TestMCPObserveAppDirectorGoalEstadoVivoTimeoutNoPublicaRunningV0(t *testing.T) {
+	node := orquestaestadovivo.ConstruirProyeccionCicloVidaV0([]orquestaestadovivo.EvidenciaEstadoV0{
+		{RunRef: "run-ref-observe-timeout-001", Fuente: "state", Estado: "running"},
+		{
+			RunRef: "run-ref-observe-timeout-001", Fuente: "snapshot", Scope: orquestaestadovivo.ScopeGoalExecutionV0,
+			RuntimeIdentityRef: "runtime-ref-observe-timeout-001", RuntimeObservationAttempted: true,
+		},
+	}, nowForEstadoVivoMCPAutoprogrammingV0("2026-07-03T10:00:00Z"), mcpAutoprogrammingEstadoVivoHuerfanoV0).Nodos[0]
+
+	result := applyMCPObserveAppDirectorGoalEstadoVivoNodeV0(MCPObserveAppDirectorGoalToolResultV0{
+		RunRef: "run-ref-observe-timeout-001", RunStatus: "running", GoalStatus: "running",
+	}, node)
+	if result.RunStatus == "running" || result.GoalStatus == "running" ||
+		result.RecommendedAction != "observe_estado_vivo" || !result.ClosureNeedsRework ||
+		!mcpObserveAppDirectorGoalHasClosureIssueCodeV0(result.ClosureIssues, mcpAutoprogrammingActionEstadoVivoDesconocidoV0) {
+		t.Fatalf("timeout causal publicado incorrectamente: %+v", result)
+	}
+}
+
+func TestMCPObserveAppDirectorGoalEstadoVivoIdentidadDivergenteNoCaeALegacyV0(t *testing.T) {
+	node := orquestaestadovivo.ConstruirProyeccionCicloVidaV0([]orquestaestadovivo.EvidenciaEstadoV0{
+		{RunRef: "run-ref-observe-mismatch-001", Fuente: "registry", Scope: orquestaestadovivo.ScopeGoalExecutionV0, RuntimeIdentityRef: "runtime-expected"},
+		{RunRef: "run-ref-observe-mismatch-001", Fuente: "snapshot", Scope: orquestaestadovivo.ScopeGoalExecutionV0, RuntimeIdentityRef: "runtime-observed", RuntimeObservationAttempted: true, RuntimeObservado: true, ProcesoVivo: true},
+		{RunRef: "run-ref-observe-mismatch-001", Fuente: "receipt", Estado: "blocked"},
+	}, nowForEstadoVivoMCPAutoprogrammingV0("2026-07-03T10:00:00Z"), mcpAutoprogrammingEstadoVivoHuerfanoV0).Nodos[0]
+
+	result := applyMCPObserveAppDirectorGoalEstadoVivoNodeV0(MCPObserveAppDirectorGoalToolResultV0{
+		RunRef: "run-ref-observe-mismatch-001", RunStatus: "running", GoalStatus: "running",
+	}, node)
+	if node.Veredicto.Clase != orquestaestadovivo.VeredictoDivergentNeedsRepairV0 ||
+		result.RecommendedAction != "reconcile_estado_vivo" || result.RunStatus == "running" || result.GoalStatus == "running" {
+		t.Fatalf("identidad divergente oculta por precedencia legacy: node=%+v result=%+v", node, result)
+	}
+}
+
 func TestEnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0QAFailedPublicTextPideRework(t *testing.T) {
 	result := EnrichMCPObserveAppDirectorGoalWithMaterializedRefsV0(
 		MCPObserveAppDirectorGoalToolResultV0{
