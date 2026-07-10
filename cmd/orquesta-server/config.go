@@ -276,9 +276,6 @@ func projectDirFromEnvOrFallbackV0(fallback string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("project_work_dir_invalid")
 	}
-	if err := os.MkdirAll(abs, 0o700); err != nil {
-		return "", fmt.Errorf("project_work_dir_unavailable")
-	}
 	return abs, nil
 }
 

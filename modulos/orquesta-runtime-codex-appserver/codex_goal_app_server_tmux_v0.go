@@ -46,6 +46,7 @@ type serverCodexAppServerTmuxBackendV0 struct {
 	beforeSocketQuarantineV0 func()
 	beforeSessionKillV0      func()
 	beforePathQuarantineV0   func(string)
+	signalProcessIdentityV0  func(int, string, syscall.Signal) error
 }
 
 type codexAppServerTmuxOwnerMarkerV0 struct {
