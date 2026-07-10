@@ -39,6 +39,11 @@ go test -count=1 . \
   -run 'TestNeutralOrchestrationPackagesDoNotImportProductAdapters$'
 ```
 
+Sobre la rama rebasada, `scripts/orquesta_test_batches.sh` completo dos pases
+aislados consecutivos de los seis paquetes de 208H/208J: 12 ejecuciones,
+`status=passed`, `reason_code=two_consecutive_passes_passed`. El cache temporal
+se elimina despues de registrar este resumen.
+
 ## Pendiente de integracion
 
 Un revisor debe rebasar 208H+208J sobre la rama principal actual, resolver
