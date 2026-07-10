@@ -2790,6 +2790,20 @@ La cobertura local confirma que el veredicto causal no publica `running` sin
 liveness y que el servidor rechaza identidad/worktree degradados antes de crear
 runtime. No sustituye la comprobacion por API contra el binario desplegado.
 
+Comprobacion de integracion adicional, sin arrancar el binario:
+
+```bash
+GOCACHE=/tmp/orquesta-server-build-gocache \
+GOTMPDIR=/tmp/orquesta-server-build-gotmp \
+GOFLAGS=-buildvcs=false \
+  go build -o /tmp/orquesta-server-build/orquesta-server ./cmd/orquesta-server
+```
+
+Resultado: binario local compilado (SHA-256
+`8b49eb580231468e14844f5c3fd79ee56c5792d8af8f5968cfbc08ccb09f70e0`).
+Ese digest solo acredita este build local aislado; el digest exigible para F5
+es el que produzca el deploy remoto y publique despues `/api/status`.
+
 Checkpoint de limpieza no destructiva sincronizado: `4820516ec`
 (`chore: indexa funciones para limpieza segura`). El auditor genera un indice
 lexico de 25.199 funciones y una SQLite derivada; sirve para priorizar
