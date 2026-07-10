@@ -2817,6 +2817,18 @@ GOTMPDIR=/tmp/orquesta-deploy-test-gotmp \
 Resultado: `orquesta_server_deploy_tests=ok`. Permanece pendiente el receipt
 de un deploy real, que no se simula desde el equipo local.
 
+Revalidacion no destructiva de S13/F4:
+
+```bash
+bash scripts/test_orquesta_check_versioned_execution_artifacts.sh
+scripts/orquesta_check_versioned_execution_artifacts.sh --root "$PWD" --json
+```
+
+Resultado: verde, 68 candidatos Git clasificados y sin rutas stale o sin
+clasificar: 58 `movable_runtime_artifact`, 5 evidencia historica, 4 fixtures
+y una referencia pendiente. No cierra S13: siguen requeridos la migracion
+gobernada, procedencia comun y smoke real aislado.
+
 Checkpoint de limpieza no destructiva sincronizado: `4820516ec`
 (`chore: indexa funciones para limpieza segura`). El auditor genera un indice
 lexico de 25.199 funciones y una SQLite derivada; sirve para priorizar
