@@ -3988,3 +3988,14 @@ el snapshot final. Evidencia local: focal `-race -count=20`, focal y vecinos
 `-race -count=5`, y paquete completo `go test -race -count=1
 ./modulos/orquesta-server`, todos verdes. Sin cambios de producción, procesos
 persistentes, remoto ni deploy.
+
+BUG nuevo `BUG-ORQ-20260710-210` (cerrado local, contrato del smoke):
+`TestSmokeSelfProgrammingCompositeGoalFirstGuardsV0` seguia exigiendo exports
+locales de `GOMODCACHE` y `GOPATH` despues de que el smoke compuesto migrase al
+perfil comun `scripts/lib/isolated_test_env.sh`. El runtime ya quedaba aislado;
+el falso rojo procedia de un guard textual stale. Cierre: el guard exige la
+llamada exacta a `orquesta_use_isolated_test_env`, fuente canonica que configura
+`GOTMPDIR`, `GOCACHE`, `GOMODCACHE`, `GOPATH` y el resto del entorno aislado,
+sin duplicar asignaciones en el smoke. Evidencia: focal
+`TestSmokeSelfProgrammingCompositeGoalFirstGuardsV0`, paquete `./scripts` y
+`git diff --check`; sin remoto, deploy ni ejecucion del smoke real.
