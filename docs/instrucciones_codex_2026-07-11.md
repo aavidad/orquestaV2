@@ -26,6 +26,12 @@ anterior (`docs/instrucciones_codex_2026-07-10.md`) queda historica.
   guard raiz de budget y los focales de lo tocado. Esta noche dejaste tu
   propio guard rojo sin saberlo; la regla "no verde autodeclarado" tambien
   aplica a guards que tu mismo escribiste.
+- [ ] R4b (frontera permanente, orden del operador): `mcp-stdio` es SOLO
+  transporte de cliente MCP (JSON-RPC por stdin/stdout hacia las tools).
+  PROHIBIDO usar stdio para pilotar/observar agentes o backends de goals:
+  eso sigue siendo tmux (`app_server_tmux`) con identidad y evidencias.
+  Documentalo asi en `docs/runbooks/mcp_stdio_orquesta_2026-07-11.md` y no
+  amplies esta superficie hasta terminar nucleo y conectores.
 - [ ] R4 (pendiente ya conocido): con R1+R2 verdes, ejecutar los dos pases
   de `scripts/orquesta_test_batches.sh` con rutas aisladas y receipt, y
   cerrar formalmente D3 + `BUG-ORQ-20260710-208H` en el inventario.
