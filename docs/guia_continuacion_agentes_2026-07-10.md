@@ -158,7 +158,7 @@ backend tmux y cableados en
   Verifica: focal de config en cmd. Si el schema exige secretos que no
   tienes, deja el paso anotado en la bitacora y sigue.
 
-- [ ] PASO C2: backlog acotado del piloto. Crear
+- [x] PASO C2: backlog acotado del piloto. Crear
   `docs/backlog_piloto_autonomia_2026-07-10.md` con 3 tareas PEQUENAS de
   este mismo roadmap (por ejemplo: A3 si quedo pendiente, un test de
   contrato faltante, una correccion de la bitacora de desviaciones), en el
