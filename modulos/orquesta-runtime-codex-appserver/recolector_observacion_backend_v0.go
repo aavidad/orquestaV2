@@ -137,12 +137,26 @@ func (backend serverCodexAppServerTmuxBackendV0) tmuxHasSessionV0(
 	ctx context.Context,
 	tmuxPath string,
 ) (bool, error) {
-	output, err := backend.runTmuxCommandV0(ctx, tmuxPath, "has-session", "-t", backend.tmuxExactSessionTargetV0())
+	return backend.tmuxHasSessionTargetV0(ctx, tmuxPath, backend.tmuxExactSessionTargetV0())
+}
+
+func (backend serverCodexAppServerTmuxBackendV0) tmuxHasSessionTargetV0(
+	ctx context.Context,
+	tmuxPath string,
+	target string,
+) (bool, error) {
+	target = strings.TrimSpace(target)
+	output, err := backend.runTmuxCommandV0(ctx, tmuxPath, "has-session", "-t", target)
 	if err == nil {
 		return true, nil
 	}
 	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
+	message := strings.TrimSpace(output)
+	wantName := strings.TrimPrefix(target, "=")
+	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 &&
+		(message == "can't find session: "+wantName || message == "can't find session: "+target ||
+			strings.HasPrefix(message, "no server running on ") ||
+			(strings.HasPrefix(message, "error connecting to ") && strings.HasSuffix(message, "(No such file or directory)"))) {
 		return false, nil
 	}
 	return false, codexAppServerTmuxCommandErrorV0("codex_app_server_tmux_has_session_failed", output, err)

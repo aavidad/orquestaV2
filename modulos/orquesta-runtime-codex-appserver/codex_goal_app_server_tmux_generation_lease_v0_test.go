@@ -1,15 +1,19 @@
 package orquestaruntimecodexappserver
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -28,29 +32,275 @@ func TestGenerationLeaseUnixServerHelperV0(t *testing.T) {
 	if len(args) == 0 {
 		os.Exit(2)
 	}
-	socketPath := args[len(args)-1]
-	listener, err := net.Listen("unix", socketPath)
+	socketPath := strings.TrimSpace(os.Getenv("ORQUESTA_TEST_UNIX_SOCKET_PATH"))
+	if socketPath == "" {
+		socketPath = args[len(args)-1]
+	}
+	fd, err := listenUnixFDForGenerationTestV0(socketPath)
 	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "unix helper listen %q: %v\n", socketPath, err)
 		os.Exit(3)
 	}
-	defer listener.Close()
+	defer syscall.Close(fd)
 	for {
-		connection, acceptErr := listener.Accept()
+		connection, _, acceptErr := syscall.Accept(fd)
 		if acceptErr != nil {
 			return
 		}
-		_ = connection.Close()
+		_ = syscall.Close(connection)
 	}
 }
 
-func TestShortUnixSocketTestRootV0AcotaSockaddrV0(t *testing.T) {
-	root := shortUnixSocketTestRootV0(t)
-	socketPath := filepath.Join(root, "runtime", codexAppServerTmuxDirV0, "codex-app-server.sock")
-	if len(socketPath) >= 100 {
-		t.Fatalf("ruta Unix de test sigue siendo larga: len=%d path=%s", len(socketPath), socketPath)
+func TestMarkerCASProcessHelperV0(t *testing.T) {
+	if os.Getenv("ORQUESTA_TEST_MARKER_CAS_HELPER") != "1" {
+		return
 	}
-	if err := os.MkdirAll(filepath.Dir(socketPath), 0o700); err != nil {
+	expectedRaw, err := os.ReadFile(os.Getenv("ORQUESTA_TEST_MARKER_EXPECTED"))
+	if err != nil {
 		t.Fatal(err)
+	}
+	var expected codexAppServerTmuxOwnerMarkerV0
+	if err := json.Unmarshal(expectedRaw, &expected); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(os.Getenv("ORQUESTA_TEST_MARKER_READY"), []byte("ready\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		if _, err := os.Stat(os.Getenv("ORQUESTA_TEST_MARKER_START")); err == nil {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	backend := serverCodexAppServerTmuxBackendV0{
+		SocketPath:  expected.SocketPath,
+		SessionName: expected.SessionName,
+		Timeout:     2 * time.Second,
+	}
+	next := expected
+	next.SocketRef = os.Getenv("ORQUESTA_TEST_MARKER_NEXT")
+	err = backend.replaceTmuxOwnerMarkerV0(expected, next)
+	result := "success\n"
+	if err != nil {
+		var callErr codexAppServerCallErrorV0
+		if !errors.As(err, &callErr) || callErr.Code != codexAppServerTmuxGenerationConflictV0 {
+			t.Fatalf("CAS helper: %v", err)
+		}
+		result = "conflict\n"
+	}
+	if err := os.WriteFile(os.Getenv("ORQUESTA_TEST_MARKER_RESULT"), []byte(result), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSocketOwnerWrapperHelperV0(t *testing.T) {
+	if os.Getenv("ORQUESTA_TEST_SOCKET_WRAPPER_HELPER") != "1" {
+		return
+	}
+	listenerFile := os.NewFile(3, "inherited-unix-listener")
+	if listenerFile == nil {
+		t.Fatal("fd 3 ausente")
+	}
+	child := exec.Command("sleep", "30")
+	child.ExtraFiles = []*os.File{listenerFile}
+	if err := child.Start(); err != nil {
+		t.Fatal(err)
+	}
+	_ = listenerFile.Close()
+	if err := os.WriteFile(os.Getenv("ORQUESTA_TEST_SOCKET_OWNER_PATH"), []byte(strconv.Itoa(child.Process.Pid)+"\n"), 0o600); err != nil {
+		_ = child.Process.Kill()
+		t.Fatal(err)
+	}
+	if err := child.Wait(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSocketOwnerV0AceptaDescendienteDeWrapperV0(t *testing.T) {
+	root := shortUnixSocketTestRootV0(t)
+	socketPath := filepath.Join(root, "wrapped.sock")
+	ownerPath := filepath.Join(root, "owner.pid")
+	listenerFD, err := listenUnixFDForGenerationTestV0(socketPath)
+	if err != nil {
+		if errors.Is(err, syscall.EPERM) {
+			t.Skipf("sandbox no permite listen Unix: %v", err)
+		}
+		t.Fatal(err)
+	}
+	listenerFile := os.NewFile(uintptr(listenerFD), "wrapped-listener")
+	command := exec.Command(os.Args[0], "-test.run=^TestSocketOwnerWrapperHelperV0$")
+	command.Env = append(os.Environ(),
+		"ORQUESTA_TEST_SOCKET_WRAPPER_HELPER=1",
+		"ORQUESTA_TEST_SOCKET_PATH="+socketPath,
+		"ORQUESTA_TEST_SOCKET_OWNER_PATH="+ownerPath,
+	)
+	command.ExtraFiles = []*os.File{listenerFile}
+	var commandOutput bytes.Buffer
+	command.Stdout = &commandOutput
+	command.Stderr = &commandOutput
+	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	_ = listenerFile.Close()
+	t.Cleanup(func() {
+		_ = syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
+		_ = command.Wait()
+	})
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && !codexAppServerTmuxSocketListenerAliveV0(socketPath) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !codexAppServerTmuxSocketListenerAliveV0(socketPath) {
+		t.Fatalf("listener wrapper no arranco: output=%s", commandOutput.String())
+	}
+	var wantPID int
+	var ownerHandshakeErr error
+	for time.Now().Before(deadline) {
+		raw, readErr := os.ReadFile(ownerPath)
+		if readErr == nil {
+			text := strings.TrimSpace(string(raw))
+			if text != "" {
+				pid, parseErr := strconv.Atoi(text)
+				if parseErr == nil && strconv.Itoa(pid) == text && pid > 0 {
+					aliveErr := syscall.Kill(pid, 0)
+					if aliveErr == nil || errors.Is(aliveErr, syscall.EPERM) {
+						wantPID = pid
+						break
+					}
+					ownerHandshakeErr = fmt.Errorf("owner pid %d no esta vivo: %w", pid, aliveErr)
+				} else {
+					ownerHandshakeErr = fmt.Errorf("owner.pid incompleto/no parseable %q: %v", text, parseErr)
+				}
+			}
+		} else {
+			ownerHandshakeErr = readErr
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if wantPID == 0 {
+		t.Fatalf("handshake owner.pid no completado: err=%v output=%s", ownerHandshakeErr, commandOutput.String())
+	}
+	owner, err := codexAppServerTmuxSocketOwnerDescendantV0(socketPath, command.Process.Pid)
+	if err != nil {
+		t.Fatalf("owner descendiente: %v", err)
+	}
+	if owner.PID != wantPID || owner.PID == command.Process.Pid || owner.StartRef == "" {
+		t.Fatalf("owner=%+v wrapper=%d want_child=%d", owner, command.Process.Pid, wantPID)
+	}
+}
+
+func TestSocketOwnerV0RechazaListenerNoDescendienteV0(t *testing.T) {
+	root := shortUnixSocketTestRootV0(t)
+	socketPath := filepath.Join(root, "foreign.sock")
+	listenerFD, err := listenUnixFDForGenerationTestV0(socketPath)
+	if err != nil {
+		if errors.Is(err, syscall.EPERM) {
+			t.Skipf("sandbox no permite listen Unix: %v", err)
+		}
+		t.Fatal(err)
+	}
+	defer syscall.Close(listenerFD)
+	foreignPane := exec.Command("sh", "-c", "sleep 30")
+	if err := foreignPane.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = foreignPane.Process.Kill(); _ = foreignPane.Wait() })
+	if _, err := codexAppServerTmuxSocketOwnerDescendantV0(socketPath, foreignPane.Process.Pid); err == nil {
+		t.Fatal("listener ajeno al arbol fue aceptado")
+	}
+}
+
+func TestSocketOwnerProcV0ResuelveNativeDescendienteDeWrapperV0(t *testing.T) {
+	procRoot := t.TempDir()
+	socketPath := "/private/runtime/app owner.sock"
+	writeProcUnixFixtureV0(t, procRoot, "9001", socketPath)
+	writeProcProcessFixtureV0(t, procRoot, 100, 1, "1000", "")
+	writeProcProcessFixtureV0(t, procRoot, 110, 100, "1100", "")
+	writeProcProcessFixtureV0(t, procRoot, 120, 110, "1200", "socket:[9001]")
+	owner, err := codexAppServerTmuxSocketOwnerDescendantAtV0(procRoot, socketPath, 100)
+	if err != nil || owner.PID != 120 || owner.StartRef != "1200" {
+		t.Fatalf("owner=%+v err=%v", owner, err)
+	}
+}
+
+func TestSocketOwnerProcV0IgnoraPeersConectadosDelMismoPathV0(t *testing.T) {
+	procRoot := t.TempDir()
+	socketPath := "/private/runtime/app.sock"
+	writeProcUnixRowsFixtureV0(t, procRoot,
+		procUnixRowFixtureV0{inode: "9100", socketPath: socketPath, flags: "00010000", socketType: "0001", state: "01"},
+		procUnixRowFixtureV0{inode: "9101", socketPath: socketPath, flags: "00000000", socketType: "0001", state: "03"},
+	)
+	writeProcProcessFixtureV0(t, procRoot, 100, 1, "1000", "")
+	writeProcProcessFixtureV0(t, procRoot, 120, 100, "1200", "socket:[9100]")
+	writeProcProcessFixtureV0(t, procRoot, 130, 100, "1300", "socket:[9101]")
+	owner, err := codexAppServerTmuxSocketOwnerDescendantAtV0(procRoot, socketPath, 100)
+	if err != nil || owner.PID != 120 || owner.StartRef != "1200" {
+		t.Fatalf("owner listener=%+v err=%v", owner, err)
+	}
+}
+
+func TestSocketOwnerProcV0DeduplicaMismoListenerSinOcultarRebindV0(t *testing.T) {
+	procRoot := t.TempDir()
+	socketPath := "/private/runtime/app.sock"
+	row := procUnixRowFixtureV0{inode: "9200", socketPath: socketPath, flags: "00010000", socketType: "0001", state: "01"}
+	writeProcUnixRowsFixtureV0(t, procRoot, row, row)
+	writeProcProcessFixtureV0(t, procRoot, 100, 1, "1000", "")
+	writeProcProcessFixtureV0(t, procRoot, 120, 100, "1200", "socket:[9200]")
+	if owner, err := codexAppServerTmuxSocketOwnerDescendantAtV0(procRoot, socketPath, 100); err != nil || owner.PID != 120 {
+		t.Fatalf("fila duplicada del mismo listener: owner=%+v err=%v", owner, err)
+	}
+
+	writeProcUnixRowsFixtureV0(t, procRoot, row,
+		procUnixRowFixtureV0{inode: "9201", socketPath: socketPath, flags: "00010000", socketType: "0001", state: "01"},
+	)
+	if _, err := codexAppServerTmuxSocketOwnerDescendantAtV0(procRoot, socketPath, 100); err == nil || !strings.Contains(err.Error(), "socket_inode_ambiguous") {
+		t.Fatalf("dos listeners distintos no fueron ambiguos: %v", err)
+	}
+}
+
+func TestSocketOwnerProcV0EligeHojaUnicaDeWrapperQueRetieneFDV0(t *testing.T) {
+	procRoot := t.TempDir()
+	socketPath := "/private/runtime/app.sock"
+	writeProcUnixFixtureV0(t, procRoot, "9300", socketPath)
+	writeProcProcessFixtureV0(t, procRoot, 100, 1, "1000", "")
+	writeProcProcessFixtureV0(t, procRoot, 110, 100, "1100", "socket:[9300]")
+	writeProcProcessFixtureV0(t, procRoot, 120, 110, "1200", "socket:[9300]")
+	owner, err := codexAppServerTmuxSocketOwnerDescendantAtV0(procRoot, socketPath, 100)
+	if err != nil || owner.PID != 120 {
+		t.Fatalf("owner hoja=%+v err=%v", owner, err)
+	}
+}
+
+func TestSocketOwnerProcV0RechazaHolderAjenoYAceptacionAmbiguaV0(t *testing.T) {
+	procRoot := t.TempDir()
+	socketPath := "/private/runtime/app.sock"
+	writeProcUnixFixtureV0(t, procRoot, "9400", socketPath)
+	writeProcProcessFixtureV0(t, procRoot, 100, 1, "1000", "")
+	writeProcProcessFixtureV0(t, procRoot, 120, 100, "1200", "socket:[9400]")
+	writeProcProcessFixtureV0(t, procRoot, 200, 1, "2000", "socket:[9400]")
+	if _, err := codexAppServerTmuxSocketOwnerDescendantAtV0(procRoot, socketPath, 100); err == nil || !strings.Contains(err.Error(), "owner_outside_pane") {
+		t.Fatalf("holder ajeno fue aceptado: %v", err)
+	}
+
+	procRoot = t.TempDir()
+	writeProcUnixFixtureV0(t, procRoot, "9401", socketPath)
+	writeProcProcessFixtureV0(t, procRoot, 100, 1, "1000", "")
+	writeProcProcessFixtureV0(t, procRoot, 120, 100, "1200", "socket:[9401]")
+	writeProcProcessFixtureV0(t, procRoot, 130, 100, "1300", "socket:[9401]")
+	if _, err := codexAppServerTmuxSocketOwnerDescendantAtV0(procRoot, socketPath, 100); err == nil || !strings.Contains(err.Error(), "owner_ambiguous") {
+		t.Fatalf("holders hermanos fueron aceptados: %v", err)
+	}
+}
+
+func TestSocketOwnerProcV0RechazaOwnerNoDescendienteV0(t *testing.T) {
+	procRoot := t.TempDir()
+	socketPath := "/private/runtime/app.sock"
+	writeProcUnixFixtureV0(t, procRoot, "9002", socketPath)
+	writeProcProcessFixtureV0(t, procRoot, 100, 1, "1000", "")
+	writeProcProcessFixtureV0(t, procRoot, 200, 1, "2000", "socket:[9002]")
+	if _, err := codexAppServerTmuxSocketOwnerDescendantAtV0(procRoot, socketPath, 100); err == nil {
+		t.Fatal("owner no descendiente aceptado")
 	}
 }
 
@@ -59,6 +309,8 @@ func TestEnsureV0AdoptaGeneracionExactaCuandoTmuxDesapareceV0(t *testing.T) {
 	listener := listenUnixForGenerationTestV0(t, backend.SocketPath)
 	defer listener.Close()
 	marker := generationMarkerForCurrentProcessTestV0(t, backend, "generation-ref-surviving")
+	marker.TmuxSessionID = "$vanished"
+	marker.TmuxSessionCreated = "100"
 	writeGenerationMarkerTestV0(t, backend.tmuxOwnerMarkerPathV0(), marker)
 
 	if err := backend.EnsureV0(context.Background(), fakeCodexAppServerProbeV0{}); err != nil {
@@ -67,6 +319,88 @@ func TestEnsureV0AdoptaGeneracionExactaCuandoTmuxDesapareceV0(t *testing.T) {
 	got, ok := backend.readTmuxOwnerMarkerV0()
 	if !ok || got.GenerationRef != marker.GenerationRef || got.AppServerPID != os.Getpid() {
 		t.Fatalf("marker sustituido: %+v ok=%v", got, ok)
+	}
+	assertTmuxLogExcludesV0(t, tmuxLog, "new-session", "kill-session")
+}
+
+func TestEnsureV0SinTmuxRechazaMarkerIncompletoOMismatchedV0(t *testing.T) {
+	for _, testCase := range []struct {
+		name   string
+		mutate func(*codexAppServerTmuxOwnerMarkerV0)
+	}{
+		{name: "identidad tmux incompleta", mutate: func(marker *codexAppServerTmuxOwnerMarkerV0) {
+			marker.TmuxSessionID = ""
+			marker.TmuxSessionCreated = ""
+		}},
+		{name: "app server distinto del owner", mutate: func(marker *codexAppServerTmuxOwnerMarkerV0) {
+			marker.AppServerStartRef += "-reused"
+		}},
+		{name: "pane reutilizado", mutate: func(marker *codexAppServerTmuxOwnerMarkerV0) {
+			marker.TmuxPaneStartRef += "-reused"
+		}},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			backend, tmuxLog := newGenerationLeaseBackendForTestV0(t)
+			listener := listenUnixForGenerationTestV0(t, backend.SocketPath)
+			defer listener.Close()
+			marker := generationMarkerForCurrentProcessTestV0(t, backend, "generation-ref-no-takeover")
+			marker.TmuxSessionID = "$vanished"
+			marker.TmuxSessionCreated = "100"
+			testCase.mutate(&marker)
+			writeGenerationMarkerTestV0(t, backend.tmuxOwnerMarkerPathV0(), marker)
+
+			assertGenerationConflictTestV0(t, backend.EnsureV0(context.Background(), fakeCodexAppServerProbeV0{}))
+			got, ok := backend.readTmuxOwnerMarkerV0()
+			if !ok || !reflect.DeepEqual(got, marker) {
+				t.Fatalf("marker inseguro mutado: got=%+v want=%+v ok=%v", got, marker, ok)
+			}
+			assertTmuxLogExcludesV0(t, tmuxLog, "new-session", "kill-session")
+		})
+	}
+}
+
+func TestEnsureV0ConTmuxRechazaOtraGeneracionV0(t *testing.T) {
+	backend, tmuxLog := newGenerationLeaseBackendForTestV0(t)
+	listener := listenUnixForGenerationTestV0(t, backend.SocketPath)
+	defer listener.Close()
+	marker := generationMarkerForCurrentProcessTestV0(t, backend, "generation-ref-expected")
+	marker.TmuxSessionID = "$present"
+	marker.TmuxSessionCreated = "100"
+	writeGenerationMarkerTestV0(t, backend.tmuxOwnerMarkerPathV0(), marker)
+	writeFakeTmuxStateTestV0(t, tmuxLog, marker.TmuxSessionID, marker.TmuxSessionCreated, marker.TmuxPanePID)
+	if err := os.WriteFile(tmuxLog+".generation", []byte("generation-ref-foreign\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	assertGenerationConflictTestV0(t, backend.EnsureV0(context.Background(), fakeCodexAppServerProbeV0{}))
+	got, ok := backend.readTmuxOwnerMarkerV0()
+	if !ok || !reflect.DeepEqual(got, marker) {
+		t.Fatalf("otra generacion muto marker: got=%+v want=%+v ok=%v", got, marker, ok)
+	}
+	assertTmuxLogExcludesV0(t, tmuxLog, "new-session", "kill-session")
+}
+
+func TestEnsureV0NoAdoptaSiAusenciaTmuxNoEsObservableV0(t *testing.T) {
+	backend, tmuxLog := newGenerationLeaseBackendForTestV0(t)
+	listener := listenUnixForGenerationTestV0(t, backend.SocketPath)
+	defer listener.Close()
+	marker := generationMarkerForCurrentProcessTestV0(t, backend, "generation-ref-observation-required")
+	marker.TmuxSessionID = "$vanished"
+	marker.TmuxSessionCreated = "100"
+	writeGenerationMarkerTestV0(t, backend.tmuxOwnerMarkerPathV0(), marker)
+	tmuxPath := filepath.Join(strings.Split(backend.PathEnv, string(os.PathListSeparator))[0], "tmux")
+	if err := os.WriteFile(tmuxPath, []byte("#!/bin/sh\nprintf '%s\\n' 'permission denied by tmux server' >&2\nexit 1\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	err := backend.EnsureV0(context.Background(), fakeCodexAppServerProbeV0{})
+	var callErr codexAppServerCallErrorV0
+	if !errors.As(err, &callErr) || callErr.Code != "codex_app_server_permission_denied" {
+		t.Fatalf("error de observacion convertido en ausencia: %v", err)
+	}
+	got, ok := backend.readTmuxOwnerMarkerV0()
+	if !ok || !reflect.DeepEqual(got, marker) {
+		t.Fatalf("fallo de observacion muto marker: got=%+v want=%+v ok=%v", got, marker, ok)
 	}
 	assertTmuxLogExcludesV0(t, tmuxLog, "new-session", "kill-session")
 }
@@ -101,18 +435,26 @@ func TestTmuxCommandsV0UsanTargetExactoV0(t *testing.T) {
 	if _, err := backend.tmuxHasSessionV0(context.Background(), tmuxPath); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := backend.tmuxSessionIdentityV0(context.Background(), tmuxPath); err != nil {
+	identity, err := backend.tmuxSessionIdentityV0(context.Background(), tmuxPath)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := backend.tmuxKillSessionV0(context.Background(), tmuxPath); err != nil {
+	if err := backend.tmuxKillSessionV0(context.Background(), tmuxPath, identity); err != nil {
 		t.Fatal(err)
 	}
 	raw, _ := os.ReadFile(tmuxLog)
 	for _, line := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
-		if strings.Contains(line, "has-session") || strings.Contains(line, "display-message") || strings.Contains(line, "kill-session") {
+		if strings.Contains(line, "has-session") {
 			if !strings.Contains(line, "-t ="+backend.SessionName) {
 				t.Fatalf("target tmux no exacto: %q", line)
 			}
+		}
+		if strings.Contains(line, "display-message") &&
+			!strings.Contains(line, "-t ="+backend.SessionName) && !strings.Contains(line, "-t $exact") {
+			t.Fatalf("display target inesperado: %q", line)
+		}
+		if strings.Contains(line, "kill-session") && !strings.Contains(line, "-t $exact") {
+			t.Fatalf("kill no usa session_id inmutable: %q", line)
 		}
 	}
 }
@@ -132,6 +474,35 @@ func TestEnsureV0NoQuedaVerdeConPanePIDCeroV0(t *testing.T) {
 	raw, _ := os.ReadFile(tmuxLog)
 	if strings.Count(string(raw), "new-session") != 1 {
 		t.Fatalf("startup duplicado: %s", raw)
+	}
+}
+
+func TestProvisionalGenerationV0RecuperaSesionPorTokenYCierraExactaV0(t *testing.T) {
+	backend, tmuxLog := newGenerationLeaseBackendForTestV0(t)
+	marker, err := backend.newTmuxOwnerMarkerV0("generation-ref-provisional-recovery", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeGenerationMarkerTestV0(t, backend.tmuxOwnerMarkerPathV0(), marker)
+	writeFakeTmuxStateTestV0(t, tmuxLog, "$provisional", "55", os.Getpid())
+	if err := os.WriteFile(tmuxLog+".generation", []byte(marker.GenerationRef+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	guard, err := backend.acquireTmuxLeaseGuardV0(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer guard.releaseV0()
+	adopted, err := backend.adoptOrFenceExistingGenerationV0(context.Background(), fakeCodexAppServerProbeV0{}, guard)
+	if err != nil || adopted {
+		t.Fatalf("recovery provisional adopted=%v err=%v", adopted, err)
+	}
+	if _, err := os.Lstat(backend.tmuxOwnerMarkerPathV0()); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("marker provisional exacto no retirado: %v", err)
+	}
+	raw, _ := os.ReadFile(tmuxLog)
+	if !strings.Contains(string(raw), "kill-session -t $provisional") {
+		t.Fatalf("recovery no mato session_id exacta: %s", raw)
 	}
 }
 
@@ -188,6 +559,71 @@ func TestMarkerCASV0ConcurrenteMismaGeneracionTieneUnSoloGanadorV0(t *testing.T)
 	}
 }
 
+func TestMarkerCASV0MultiprocesoRealTieneUnSoloGanadorV0(t *testing.T) {
+	backend, _ := newGenerationLeaseBackendForTestV0(t)
+	marker := generationMarkerForCurrentProcessTestV0(t, backend, "generation-ref-multiprocess")
+	writeGenerationMarkerTestV0(t, backend.tmuxOwnerMarkerPathV0(), marker)
+	root := filepath.Dir(backend.SocketPath)
+	expectedPath := filepath.Join(root, "expected.json")
+	raw, err := json.Marshal(marker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(expectedPath, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	startPath := filepath.Join(root, "cas.start")
+	commands := make([]*exec.Cmd, 0, 2)
+	results := make([]string, 0, 2)
+	readyPaths := make([]string, 0, 2)
+	for index := 0; index < 2; index++ {
+		resultPath := filepath.Join(root, fmt.Sprintf("cas-%d.result", index))
+		readyPath := filepath.Join(root, fmt.Sprintf("cas-%d.ready", index))
+		cmd := exec.Command(os.Args[0], "-test.run=^TestMarkerCASProcessHelperV0$")
+		cmd.Env = append(os.Environ(),
+			"ORQUESTA_TEST_MARKER_CAS_HELPER=1",
+			"ORQUESTA_TEST_MARKER_EXPECTED="+expectedPath,
+			"ORQUESTA_TEST_MARKER_READY="+readyPath,
+			"ORQUESTA_TEST_MARKER_START="+startPath,
+			fmt.Sprintf("ORQUESTA_TEST_MARKER_NEXT=socket-ref-process-%d", index),
+			"ORQUESTA_TEST_MARKER_RESULT="+resultPath,
+		)
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		commands = append(commands, cmd)
+		results = append(results, resultPath)
+		readyPaths = append(readyPaths, readyPath)
+	}
+	waitForMigratedTestConditionV0(t, 2*time.Second, func() bool {
+		for _, path := range readyPaths {
+			if _, err := os.Stat(path); err != nil {
+				return false
+			}
+		}
+		return true
+	})
+	if err := os.WriteFile(startPath, []byte("start\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, cmd := range commands {
+		if err := cmd.Wait(); err != nil {
+			t.Fatalf("helper CAS: %v", err)
+		}
+	}
+	counts := map[string]int{}
+	for _, path := range results {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		counts[strings.TrimSpace(string(raw))]++
+	}
+	if counts["success"] != 1 || counts["conflict"] != 1 {
+		t.Fatalf("resultados CAS multiproceso=%v", counts)
+	}
+}
+
 func TestMarkerYLeaseV0SonDisjuntosParaDosSocketsV0(t *testing.T) {
 	backend, _ := newGenerationLeaseBackendForTestV0(t)
 	other := backend
@@ -209,6 +645,32 @@ func TestMarkerYLeaseV0SonDisjuntosParaDosSocketsV0(t *testing.T) {
 		t.Fatal(err)
 	}
 	guard2.releaseV0()
+}
+
+func TestMarkerScanV0SoloUsaSocketPathOwnerJSONExactoV0(t *testing.T) {
+	backend, _ := newGenerationLeaseBackendForTestV0(t)
+	paths := backend.tmuxOwnerMarkerScanPathsV0()
+	if len(paths) != 1 || filepath.Clean(paths[0]) != filepath.Clean(backend.SocketPath+".owner.json") {
+		t.Fatalf("marker paths=%v exact=%s", paths, backend.SocketPath+".owner.json")
+	}
+}
+
+func TestRollbackLegacyV0NuncaBorraMarkerGeneracionalExactoV0(t *testing.T) {
+	backend, _ := newGenerationLeaseBackendForTestV0(t)
+	current := generationMarkerForCurrentProcessTestV0(t, backend, "generation-ref-preserved")
+	writeGenerationMarkerTestV0(t, backend.tmuxOwnerMarkerPathV0(), current)
+	legacy := codexAppServerTmuxOwnerMarkerV0{
+		SchemaVersion: codexAppServerTmuxOwnerSchemaV0,
+		OwnerRef:      codexAppServerTmuxEvidenceOwnedV0,
+		SessionName:   backend.SessionName,
+	}
+	next := current
+	next.GenerationRef = "generation-ref-illegal-legacy-rollback"
+	assertGenerationConflictTestV0(t, backend.replaceTmuxOwnerMarkerV0(legacy, next))
+	got, ok := backend.readTmuxOwnerMarkerV0()
+	if !ok || !reflect.DeepEqual(got, current) {
+		t.Fatalf("rollback legacy muto marker nuevo: got=%+v ok=%v", got, ok)
+	}
 }
 
 func TestEnsureV0NoBorraSocketUnixVivoSinMarkerV0(t *testing.T) {
@@ -237,12 +699,119 @@ func TestEnsureV0RetiraSocketUnixStaleAntesDeUnaUnicaGeneracionV0(t *testing.T) 
 	if !ok || marker.AppServerPID <= 0 || marker.AppServerStartRef == "" || !marker.tmuxIdentityV0().completeV0() {
 		t.Fatalf("marker startup incompleto: %+v ok=%v", marker, ok)
 	}
+	generationRaw, err := os.ReadFile(tmuxLog + ".generation")
+	if err != nil || strings.TrimSpace(string(generationRaw)) != marker.GenerationRef {
+		t.Fatalf("token generacional no observable en sesion: raw=%q err=%v marker=%+v", generationRaw, err, marker)
+	}
 	raw, _ := os.ReadFile(tmuxLog)
 	if strings.Count(string(raw), "new-session") != 1 {
 		t.Fatalf("numero de generaciones=%d log=%s", strings.Count(string(raw), "new-session"), raw)
 	}
 	if err := backend.ShutdownV0(context.Background()); err != nil {
 		t.Fatalf("shutdown test-owned generation: %v", err)
+	}
+}
+
+func TestRemoveStaleSocketV0DetectaSustitucionAntesDeMutarV0(t *testing.T) {
+	backend, _ := newGenerationLeaseBackendForTestV0(t)
+	listenerFD, err := listenUnixFDForGenerationTestV0(backend.SocketPath)
+	if err != nil {
+		if errors.Is(err, syscall.EPERM) {
+			t.Skipf("sandbox no permite listen Unix: %v", err)
+		}
+		t.Fatal(err)
+	}
+	_ = syscall.Close(listenerFD)
+	attackerOld := backend.SocketPath + ".attacker-old"
+	backend.beforeSocketQuarantineV0 = func() {
+		if err := os.Rename(backend.SocketPath, attackerOld); err != nil {
+			t.Fatalf("adversary rename: %v", err)
+		}
+		replacementFD, err := listenUnixFDForGenerationTestV0(backend.SocketPath)
+		if err != nil {
+			t.Fatalf("adversary listen: %v", err)
+		}
+		_ = syscall.Close(replacementFD)
+	}
+	assertGenerationConflictTestV0(t, backend.removeStaleTmuxSocketV0(context.Background(), codexAppServerTmuxOwnerMarkerV0{}))
+	if _, err := os.Lstat(backend.SocketPath); err != nil {
+		t.Fatalf("socket sustituto fue mutado: %v", err)
+	}
+	if _, err := os.Lstat(attackerOld); err != nil {
+		t.Fatalf("socket original adversarial desaparecio: %v", err)
+	}
+}
+
+func TestQuarantineMarkerV0DetectaSustitucionAntesDeRenameV0(t *testing.T) {
+	backend, _ := newGenerationLeaseBackendForTestV0(t)
+	expected := generationMarkerForCurrentProcessTestV0(t, backend, "generation-ref-quarantine-old")
+	writeGenerationMarkerTestV0(t, backend.tmuxOwnerMarkerPathV0(), expected)
+	replacement := expected
+	replacement.GenerationRef = "generation-ref-quarantine-new"
+	oldPath := backend.tmuxOwnerMarkerPathV0() + ".attacker-old"
+	backend.beforePathQuarantineV0 = func(path string) {
+		if err := os.Rename(path, oldPath); err != nil {
+			t.Fatalf("attacker rename marker: %v", err)
+		}
+		writeGenerationMarkerTestV0(t, path, replacement)
+	}
+	guard, err := backend.acquireTmuxLeaseGuardV0(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer guard.releaseV0()
+	assertGenerationConflictTestV0(t, backend.removeTmuxOwnerMarkerExpectedWithLeaseV0(guard, expected))
+	got, ok := backend.readTmuxOwnerMarkerV0()
+	if !ok || !reflect.DeepEqual(got, replacement) {
+		t.Fatalf("marker sustituto fue mutado: got=%+v ok=%v", got, ok)
+	}
+}
+
+func TestTmuxKillSessionV0SustitucionConservaSesionNuevaV0(t *testing.T) {
+	backend, tmuxLog := newGenerationLeaseBackendForTestV0(t)
+	writeFakeTmuxStateTestV0(t, tmuxLog, "$old", "40", os.Getpid())
+	tmuxPath, err := codexAppServerTmuxCommandPathV0(backend.PathEnv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected, err := backend.tmuxSessionIdentityV0(context.Background(), tmuxPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	backend.beforeSessionKillV0 = func() {
+		writeFakeTmuxStateTestV0(t, tmuxLog, "$replacement", "41", os.Getpid())
+	}
+	if err := backend.tmuxKillSessionV0(context.Background(), tmuxPath, expected); err == nil {
+		t.Fatal("kill de session_id sustituida no fallo")
+	}
+	if _, err := os.Stat(tmuxLog + ".session"); err != nil {
+		t.Fatalf("sesion sustituta fue eliminada: %v", err)
+	}
+	raw, _ := os.ReadFile(tmuxLog + ".sid")
+	if strings.TrimSpace(string(raw)) != "$replacement" {
+		t.Fatalf("session id sustituto=%q", raw)
+	}
+}
+
+func TestTmuxHasSessionV0NoConfundeExitErrorAjenoConNotFoundV0(t *testing.T) {
+	backend, _ := newGenerationLeaseBackendForTestV0(t)
+	badTmux := filepath.Join(filepath.Dir(strings.Split(backend.PathEnv, string(os.PathListSeparator))[0]), "tmux-bad")
+	if err := os.WriteFile(badTmux, []byte("#!/bin/sh\nprintf '%s\\n' 'permission denied by tmux server' >&2\nexit 1\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if found, err := backend.tmuxHasSessionV0(context.Background(), badTmux); err == nil || found {
+		t.Fatalf("ExitError ajeno clasificado como not-found: found=%v err=%v", found, err)
+	}
+}
+
+func TestTmuxHasSessionV0ReconoceSocketDeServidorAusenteV0(t *testing.T) {
+	backend, _ := newGenerationLeaseBackendForTestV0(t)
+	missingTmux := filepath.Join(filepath.Dir(strings.Split(backend.PathEnv, string(os.PathListSeparator))[0]), "tmux-missing-server")
+	if err := os.WriteFile(missingTmux, []byte("#!/bin/sh\nprintf '%s\\n' 'error connecting to /tmp/tmux-test/default (No such file or directory)' >&2\nexit 1\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if found, err := backend.tmuxHasSessionV0(context.Background(), missingTmux); err != nil || found {
+		t.Fatalf("servidor tmux ausente no reconocido: found=%v err=%v", found, err)
 	}
 }
 
@@ -303,42 +872,31 @@ func newGenerationLeaseBackendForTestV0(t *testing.T) (serverCodexAppServerTmuxB
 	}, tmuxLog
 }
 
-func shortUnixSocketTestRootV0(t *testing.T) string {
-	t.Helper()
-	root := t.TempDir()
-	if len(filepath.Join(root, "runtime", codexAppServerTmuxDirV0, "codex-app-server.sock")) < 100 {
-		return root
-	}
-	aliasFile, err := os.CreateTemp("/tmp", "oq-gl-")
-	if err != nil {
-		t.Fatalf("crear alias corto para socket Unix: %v", err)
-	}
-	aliasPath := aliasFile.Name()
-	if err := aliasFile.Close(); err != nil {
-		t.Fatalf("cerrar reserva de alias corto: %v", err)
-	}
-	if err := os.Remove(aliasPath); err != nil {
-		t.Fatalf("retirar reserva de alias corto: %v", err)
-	}
-	if err := os.Symlink(root, aliasPath); err != nil {
-		t.Fatalf("crear alias corto para t.TempDir: %v", err)
-	}
-	t.Cleanup(func() { _ = os.Remove(aliasPath) })
-	return aliasPath
-}
-
 func fakeGenerationLeaseTmuxScriptV0() string {
 	return `#!/bin/sh
 set -eu
 log="$ORQUESTA_TEST_TMUX_LOG"
 printf '%s\n' "$*" >> "$log"
 case "${1:-}" in
-  has-session) test -f "$log.session" ;;
+  has-session)
+    if [ -f "$log.session" ]; then exit 0; fi
+    target="${3:-}"
+    printf "can't find session: %s\n" "${target#=}" >&2
+    exit 1
+    ;;
   display-message)
     if [ "${ORQUESTA_TEST_TMUX_INVALID_IDENTITY:-}" = 1 ]; then printf '\t\t0\n'; exit 0; fi
     printf '%s\t%s\t%s\n' "$(cat "$log.sid")" "$(cat "$log.created")" "$(cat "$log.pid")"
     ;;
+  show-environment)
+    printf '%s=%s\n' 'ORQUESTA_CODEX_APP_SERVER_GENERATION_REF' "$(cat "$log.generation")"
+    ;;
   kill-session)
+	    target="${3:-}"
+	    if [ ! -f "$log.sid" ] || [ "$target" != "$(cat "$log.sid")" ]; then
+	      printf "can't find session: %s\n" "$target" >&2
+	      exit 1
+	    fi
 	    if [ -f "$log.helper" ] && [ -f "$log.pid" ]; then kill "$(cat "$log.pid")" 2>/dev/null || true; fi
 	    rm -f "$log.session" "$log.helper"
     ;;
@@ -348,17 +906,25 @@ case "${1:-}" in
 	      exit 0
 	    fi
 	    sock=""
-    for arg in "$@"; do case "$arg" in *unix://*) sock="${arg#*unix://}"; sock="${sock%%\'*}"; sock="${sock%%\"*}"; sock="${sock%% *}" ;; esac; done
+    generation=""
+    for arg in "$@"; do
+      case "$arg" in
+        *unix://*) sock="${arg#*unix://}"; sock="${sock%%\'*}"; sock="${sock%%\"*}"; sock="${sock%% *}" ;;
+        ORQUESTA_CODEX_APP_SERVER_GENERATION_REF=*) generation="${arg#*=}" ;;
+      esac
+    done
     test -n "$sock"
     ORQUESTA_TEST_UNIX_SERVER_HELPER=1 "$ORQUESTA_TEST_BINARY" -test.run=TestGenerationLeaseUnixServerHelperV0 -- "$sock" </dev/null >/dev/null 2>&1 &
     pid=$!
     printf '%s\n' "$pid" > "$log.pid"
     printf '%s\n' '$test' > "$log.sid"
 	    printf '%s\n' '100' > "$log.created"
+	    printf '%s\n' "$generation" > "$log.generation"
 	    : > "$log.session"
 	    : > "$log.helper"
     i=0; while [ ! -S "$sock" ] && [ "$i" -lt 100 ]; do i=$((i+1)); sleep 0.01; done
     test -S "$sock"
+	    printf '%s\t%s\t%s\n' '$test' '100' "$pid"
     ;;
   *) exit 2 ;;
 esac
@@ -369,6 +935,9 @@ func listenUnixForGenerationTestV0(t *testing.T, socketPath string) net.Listener
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(socketPath), 0o700); err != nil {
 		t.Fatalf("crear padre de socket Unix temporal: %v", err)
+	}
+	if err := validateUnixSocketPathLengthV0(socketPath); err != nil {
+		t.Fatalf("ruta socket Unix: %v", err)
 	}
 	listener, err := net.Listen("unix", socketPath)
 	if err != nil {
@@ -386,6 +955,10 @@ func generationMarkerForCurrentProcessTestV0(t *testing.T, backend serverCodexAp
 	if err != nil {
 		t.Fatal(err)
 	}
+	marker.SocketOwnerPID = os.Getpid()
+	marker.SocketOwnerStartRef = codexAppServerTmuxProcessStartRefV0(os.Getpid())
+	marker.TmuxPanePID = os.Getpid()
+	marker.TmuxPaneStartRef = marker.SocketOwnerStartRef
 	return marker
 }
 
@@ -406,6 +979,59 @@ func writeFakeTmuxStateTestV0(t *testing.T, logPath, sessionID, created string, 
 		".session": "", ".sid": sessionID, ".created": created, ".pid": strconv.Itoa(panePID),
 	} {
 		if err := os.WriteFile(logPath+suffix, []byte(value), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+type procUnixRowFixtureV0 struct {
+	inode      string
+	socketPath string
+	flags      string
+	socketType string
+	state      string
+}
+
+func writeProcUnixFixtureV0(t *testing.T, procRoot, inode, socketPath string) {
+	t.Helper()
+	writeProcUnixRowsFixtureV0(t, procRoot, procUnixRowFixtureV0{
+		inode: inode, socketPath: socketPath, flags: "00010000", socketType: "0001", state: "01",
+	})
+}
+
+func writeProcUnixRowsFixtureV0(t *testing.T, procRoot string, rows ...procUnixRowFixtureV0) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(procRoot, "net"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	body := "Num RefCount Protocol Flags Type St Inode Path\n"
+	for _, row := range rows {
+		body += fmt.Sprintf("00000000: 00000002 00000000 %s %s %s %s %s\n", row.flags, row.socketType, row.state, row.inode, row.socketPath)
+	}
+	if err := os.WriteFile(filepath.Join(procRoot, "net", "unix"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeProcProcessFixtureV0(t *testing.T, procRoot string, pid, parent int, startRef, socketLink string) {
+	t.Helper()
+	dir := filepath.Join(procRoot, strconv.Itoa(pid))
+	if err := os.MkdirAll(filepath.Join(dir, "fd"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	fields := make([]string, 20)
+	for index := range fields {
+		fields[index] = "0"
+	}
+	fields[0] = "S"
+	fields[1] = strconv.Itoa(parent)
+	fields[19] = startRef
+	body := fmt.Sprintf("%d (fixture) %s\n", pid, strings.Join(fields, " "))
+	if err := os.WriteFile(filepath.Join(dir, "stat"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if socketLink != "" {
+		if err := os.Symlink(socketLink, filepath.Join(dir, "fd", "7")); err != nil {
 			t.Fatal(err)
 		}
 	}

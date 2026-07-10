@@ -1286,6 +1286,9 @@ func startCodexAppServerWebSocketScriptForTestV0(
 	t.Helper()
 	root := shortUnixSocketTestRootV0(t)
 	socketPath := filepath.Join(root, "codex-app-server.sock")
+	if err := validateUnixSocketPathLengthV0(socketPath); err != nil {
+		t.Fatalf("ruta socket Unix: %v", err)
+	}
 	listener, err := net.Listen("unix", socketPath)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "operation not permitted") {

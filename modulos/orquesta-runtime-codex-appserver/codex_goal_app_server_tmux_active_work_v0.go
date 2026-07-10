@@ -181,36 +181,11 @@ func (backend serverCodexAppServerTmuxBackendV0) detectTmuxOwnerMarkerResiduesV0
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) tmuxOwnerMarkerScanPathsV0() []string {
-	paths := []string{}
-	if runtimeDir := strings.TrimSpace(backend.RuntimeWorkDir); runtimeDir != "" {
-		paths = append(paths, filepath.Join(runtimeDir, codexAppServerTmuxDirV0, codexAppServerTmuxMarkerFileV0))
-	}
-	if socketPath := strings.TrimSpace(backend.SocketPath); socketPath != "" {
-		socketDir := filepath.Dir(socketPath)
-		paths = append(paths, filepath.Join(socketDir, codexAppServerTmuxMarkerFileV0))
-		if strings.HasPrefix(filepath.Base(socketDir), "oq-gsrv-") {
-			for _, dir := range codexAppServerTmuxFallbackDirsV0() {
-				paths = append(paths, filepath.Join(dir, codexAppServerTmuxMarkerFileV0))
-			}
-		}
-	}
-	return paths
-}
-
-func codexAppServerTmuxFallbackDirsV0() []string {
-	matches, err := filepath.Glob(filepath.Join(os.TempDir(), "oq-gsrv-*"))
-	if err != nil {
+	path := strings.TrimSpace(backend.tmuxOwnerMarkerPathV0())
+	if path == "" {
 		return nil
 	}
-	out := make([]string, 0, len(matches))
-	for _, match := range matches {
-		info, err := os.Lstat(match)
-		if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-			continue
-		}
-		out = append(out, match)
-	}
-	return out
+	return []string{path}
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) tmuxResidueConfigLooksOwnV0() bool {
