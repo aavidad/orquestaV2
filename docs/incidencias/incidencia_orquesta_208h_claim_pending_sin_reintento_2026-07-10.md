@@ -30,8 +30,9 @@ atascado indefinidamente. Esto contradice el objetivo de autonomia de 208H.
   claim.
 - Revision independiente ejecutada sobre la rama candidata: los siete focales
   declarados pasan, la bateria aislada de seis paquetes pasa dos veces
-  consecutivas (`/tmp/orquesta-review-208h-batches/batches/receipt.json`) y
-  `TestNeutralOrchestrationPackagesDoNotImportProductAdapters` pasa. Ninguna
+  consecutivas (6 paquetes y 12 ejecuciones, `two_consecutive_passes_passed`)
+  y `TestNeutralOrchestrationPackagesDoNotImportProductAdapters` pasa. La
+  cache aislada de esa revision se elimina tras registrar este resumen. Ninguna
   de esas pruebas fuerza un error del atestador despues de adquirir el claim.
 
 ## Reproduccion minima que falta como test
