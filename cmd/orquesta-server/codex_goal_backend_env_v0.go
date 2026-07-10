@@ -238,31 +238,8 @@ func codexAppServerAuthEnvPresentV0() bool {
 	return false
 }
 
-func codexGoalBackendFromEnvV0() string {
-	return strings.TrimSpace(os.Getenv(envCodexGoalBackendV0))
-}
-
-func codexGoalBackendOperationalFromEnvV0() bool {
-	return codexGoalBackendFromEnvV0() == codexGoalBackendAppServerTmuxV0
-}
-
 func codexGoalBackendFromConfigV0(config orquestaserver.ConfigV0) string {
 	return codexGoalBackendFromProjectConfigFileV0(projectConfigFromServerConfigBestEffortV0(config))
-}
-
-func codexGoalBackendOperationalFromProjectConfigFileV0(fileConfig serverProjectConfigFileV0) bool {
-	return codexGoalBackendFromProjectConfigFileV0(fileConfig) == codexGoalBackendAppServerTmuxV0
-}
-
-func serverClaudeGoalBackendFromEnvForWorkDirV0(
-	config orquestaserver.ConfigV0,
-	workDir string,
-) (serverCodexGoalBackendV0, error) {
-	return serverClaudeGoalBackendFromValueForWorkDirV0(
-		config,
-		workDir,
-		claudeGoalBackendFromValueV0(codexGoalBackendFromConfigV0(config)),
-	)
 }
 
 func serverClaudeGoalBackendFromValueForWorkDirV0(
@@ -334,17 +311,6 @@ func claudeGoalRuntimeWorkDirFromEnvV0(config orquestaserver.ConfigV0) string {
 		return filepath.Join(filepath.Dir(stateDir), "claude-goal")
 	}
 	return filepath.Join(filepath.Dir(config.RuntimeWorkDir), ".orquesta-claude-goal")
-}
-
-func serverGeminiGoalBackendFromEnvForWorkDirV0(
-	config orquestaserver.ConfigV0,
-	workDir string,
-) (serverCodexGoalBackendV0, error) {
-	return serverGeminiGoalBackendFromValueForWorkDirV0(
-		config,
-		workDir,
-		geminiGoalBackendFromValueV0(codexGoalBackendFromConfigV0(config)),
-	)
 }
 
 func serverGeminiGoalBackendFromValueForWorkDirV0(
@@ -421,30 +387,11 @@ func geminiGoalRuntimeWorkDirFromEnvV0(config orquestaserver.ConfigV0) string {
 	return filepath.Join(filepath.Dir(config.RuntimeWorkDir), ".orquesta-gemini-goal")
 }
 
-func serverGoalBackendOperationalFromEnvV0() bool {
-	return codexGoalBackendOperationalFromEnvV0() ||
-		claudeGoalBackendOperationalFromEnvV0() ||
-		geminiGoalBackendOperationalFromEnvV0()
-}
-
 func serverGoalBackendOperationalFromProjectConfigFileV0(fileConfig serverProjectConfigFileV0) bool {
 	backend := codexGoalBackendFromProjectConfigFileV0(fileConfig)
 	return backend == codexGoalBackendAppServerTmuxV0 ||
 		claudeGoalBackendFromValueV0(backend) != "" ||
 		geminiGoalBackendFromValueV0(backend) != ""
-}
-
-func serverGoalBackendDerivationSourceV0() string {
-	if codexGoalBackendOperationalFromEnvV0() {
-		return "derived_from_codex_goal_backend"
-	}
-	if claudeGoalBackendOperationalFromEnvV0() {
-		return "derived_from_claude_goal_backend"
-	}
-	if geminiGoalBackendOperationalFromEnvV0() {
-		return "derived_from_gemini_goal_backend"
-	}
-	return ""
 }
 
 func serverGoalBackendDerivationSourceFromProjectConfigFileV0(fileConfig serverProjectConfigFileV0) string {
@@ -457,19 +404,6 @@ func serverGoalBackendDerivationSourceFromProjectConfigFileV0(fileConfig serverP
 	}
 	if geminiGoalBackendFromValueV0(backend) != "" {
 		return "derived_from_gemini_goal_backend"
-	}
-	return ""
-}
-
-func serverGoalBackendDerivationEnvV0() string {
-	if codexGoalBackendOperationalFromEnvV0() {
-		return envCodexGoalBackendV0
-	}
-	if claudeGoalBackendOperationalFromEnvV0() {
-		return envCodexGoalBackendV0
-	}
-	if geminiGoalBackendOperationalFromEnvV0() {
-		return envCodexGoalBackendV0
 	}
 	return ""
 }

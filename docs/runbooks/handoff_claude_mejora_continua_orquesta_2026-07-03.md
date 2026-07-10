@@ -2894,6 +2894,24 @@ scripts/orquesta_auditoria_codigo.sh --root "$PWD" --no-sqlite
 Resultado: verde; el indice ya no contiene ninguna de las dos funciones. No se
 usan los 1.249 candidatos restantes como autorizacion de borrado masivo.
 
+## Actualizacion Codex 2026-07-10: retirada de wrappers legacy Goal
+
+Se retiraron doce wrappers privados sin llamadas de deteccion `*FromEnv` y
+derivacion legacy de backend Codex/Claude/Gemini. No se elimina la capacidad de
+seleccionar backend: la composicion viva consume
+`codexGoalBackendFromProjectConfigFileV0` y sus adaptadores por valor.
+
+La auditoria reproducible queda en 1.237 candidatas y no contiene los wrappers
+retirados. Verificacion focal:
+
+```bash
+go test -count=1 ./cmd/orquesta-server \
+  -run 'Test(ServerGoalBackend|GeminiRuntimeConfigV0|Config|ServerEnvRegistryASTV0LecturasORQUESTARegistradas)'
+scripts/orquesta_auditoria_codigo.sh --root "$PWD" --no-sqlite
+```
+
+Resultado: verde. No se arranco servidor, app, agente ni proveedor.
+
 Checkpoint de limpieza no destructiva sincronizado: `4820516ec`
 (`chore: indexa funciones para limpieza segura`). El auditor genera un indice
 lexico de 25.199 funciones y una SQLite derivada; sirve para priorizar

@@ -64,3 +64,9 @@ precedencia tipada de `goal_backend`.
 Verificacion: pruebas focales del backend/configuracion verdes y auditoria
 reproducible sin ambas declaraciones. El conteo global no se usa como prueba
 de cierre: sigue requiriendo clasificacion por modulo.
+
+El corte siguiente retiro doce wrappers privados de deteccion/configuracion
+legacy del backend Goal: los adaptadores `Claude`/ `Gemini` y Codex ya
+resuelven el backend desde `goal_backend` tipado. No tenian llamadas fuera del
+grupo eliminado. La auditoria posterior pasa de 1.249 a 1.237 candidatas y la
+prueba focal de backend sigue verde.

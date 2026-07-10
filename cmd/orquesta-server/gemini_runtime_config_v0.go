@@ -143,23 +143,10 @@ func geminiExtraArgsFromProjectConfigV0(runtime serverProjectConfigGeminiRuntime
 	return compactStringsV0(runtime.ExtraArgs)
 }
 
-func geminiGoalBackendFromEnvV0() string {
-	return geminiGoalBackendFromValueV0(codexGoalBackendFromEnvV0())
-}
-
 func geminiGoalBackendFromValueV0(backend string) string {
 	backend = strings.TrimSpace(backend)
 	if backend == geminiGoalBackendFileControlV0 || backend == geminiGoalBackendProcessV0 {
 		return backend
 	}
 	return ""
-}
-
-func geminiGoalBackendOperationalFromEnvV0() bool {
-	switch geminiGoalBackendFromEnvV0() {
-	case geminiGoalBackendFileControlV0, geminiGoalBackendProcessV0:
-		return true
-	default:
-		return false
-	}
 }

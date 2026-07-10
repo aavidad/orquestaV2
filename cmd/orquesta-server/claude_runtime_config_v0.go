@@ -79,23 +79,10 @@ func claudeConfiguredStringV0(value *string, fallback string) string {
 	return strings.TrimSpace(*value)
 }
 
-func claudeGoalBackendFromEnvV0() string {
-	return claudeGoalBackendFromValueV0(codexGoalBackendFromEnvV0())
-}
-
 func claudeGoalBackendFromValueV0(backend string) string {
 	backend = strings.TrimSpace(backend)
 	if backend == claudeGoalBackendFileControlV0 || backend == claudeGoalBackendProcessV0 {
 		return backend
 	}
 	return ""
-}
-
-func claudeGoalBackendOperationalFromEnvV0() bool {
-	switch claudeGoalBackendFromEnvV0() {
-	case claudeGoalBackendFileControlV0, claudeGoalBackendProcessV0:
-		return true
-	default:
-		return false
-	}
 }
