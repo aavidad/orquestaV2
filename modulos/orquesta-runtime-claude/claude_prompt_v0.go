@@ -291,10 +291,6 @@ func buildClaudeAgentPromptEnglishV0(
 	return b.String()
 }
 
-func writeClaudeDurableResultProtocolV0(b *strings.Builder) {
-	writeClaudeDurableResultProtocolForLocaleV0(b, "")
-}
-
 func writeClaudeDurableResultProtocolForLocaleV0(b *strings.Builder, locale string) {
 	if claudeGoalPromptEnglishLocaleV0(locale) {
 		b.WriteString("NEUTRAL DURABLE RESULT: the final goal receipt belongs in the designated runtime receipt path, never in the product write-set.\n")

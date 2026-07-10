@@ -293,10 +293,6 @@ func buildGeminiAgentPromptEnglishV0(
 	return b.String()
 }
 
-func writeGeminiDurableResultProtocolV0(b *strings.Builder) {
-	writeGeminiDurableResultProtocolForLocaleV0(b, "")
-}
-
 func writeGeminiDurableResultProtocolForLocaleV0(b *strings.Builder, locale string) {
 	if geminiGoalPromptEnglishLocaleV0(locale) {
 		b.WriteString("NEUTRAL DURABLE RESULT: the final goal receipt belongs in the designated runtime receipt path, never in the product write-set.\n")
