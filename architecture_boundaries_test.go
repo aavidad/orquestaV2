@@ -304,6 +304,7 @@ func TestNeutralOrchestrationPackagesDoNotDependOnProductAdapters(t *testing.T) 
 			"orquesta/modulos/orquesta-data-ingestion",
 			"orquesta/modulos/orquesta-document-extraction",
 			"orquesta/modulos/orquesta-opes-",
+			"orquesta/modulos/orquesta-presentation-extraction",
 			"orquesta/modulos/orquesta-runtime-codex",
 			"orquesta/modulos/orquesta-tool-capability",
 		} {

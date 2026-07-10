@@ -38,3 +38,7 @@ receipt por puertos, conserva source kind, hash, snapshot y provenance, y
 rechaza formatos fuera del contrato. Sus pruebas usan fakes sin ficheros ni
 drivers. Falta conectar su descriptor al SDK de tools y crear los adaptadores
 opt-in reales; no se ha aceptado ningun parser ni conector de BBDD todavia.
+
+`modulos/orquesta-presentation-extraction` ya define source y proyector por
+puertos para PPTX/ODP y exige que las diapositivas lleguen ordenadas como paginas
+de la IR documental. No contiene librerias Office, filesystem ni parser real.
