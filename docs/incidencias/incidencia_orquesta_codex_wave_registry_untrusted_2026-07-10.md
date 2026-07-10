@@ -46,6 +46,11 @@ del mismo frente, sin asumir aun causa comun.
 - El proceso hijo `codex exec` seguia vivo mientras los comandos gobernados
   devolvian `blocked_registry_untrusted`.
 
+Retencion: los refs, digest, PID y diagnostico anterior son la evidencia
+durable. El runtime temporal citado se purga tras comprobar que no quedan
+procesos propietarios, porque contiene una proyeccion aislada de credenciales
+de agente y no debe conservarse como cache de sesion.
+
 ## Correccion y cierre requeridos
 
 1. Aplicar al lanzamiento la misma validación de raíces que al control, o
