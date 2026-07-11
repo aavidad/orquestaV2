@@ -1170,6 +1170,34 @@ func TestStackGoalMaterializedRefsSourceV0DetectaArtifactPathDeclaradoPeroBorrad
 	}
 }
 
+func TestStackGoalMaterializedRefsSourceV0NormalizaArtifactPathCercanoUnicoV0(t *testing.T) {
+	projectDir := t.TempDir()
+	docsDir := filepath.Join(projectDir, "docs")
+	if err := os.MkdirAll(docsDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	actual := "verificacion_muestra_s13_2026.md"
+	if err := os.WriteFile(filepath.Join(docsDir, actual), []byte("# Verificacion\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	state := goalMaterializedRefsStateForTestV0(t, "run-goal-materialized-nearby-artifact-001", "docs")
+	state.Status = orquestagoal.GoalStatusCompleteV0
+	state.LastResult = &orquestagoal.GoalWorkResultV0{
+		SchemaVersion: orquestagoal.GoalWorkResultSchemaV0,
+		Status:        orquestagoal.GoalStatusCompleteV0, GoalRef: state.GoalRef,
+		ArtifactPaths: []string{"docs/verificacion_muestra_s13-2026.md"},
+		ArtifactRefs:  []string{"artifact-ref-verificacion-s13"}, EvidenceRefs: []string{"evidence-ref-result"},
+	}
+	result, ok, err := (stackGoalMaterializedRefsSourceV0{
+		Config: ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir}},
+	}).ResolveDirectorGoalMaterializedRefsV0(context.Background(), state)
+	if err != nil || !ok || containsStringV0(result.IssueCodes, "terminal_artifact_missing_after_goal_complete") ||
+		!containsStringV0(result.EvidenceRefs, goalMaterializedTerminalArtifactNormalizedEvidence) ||
+		!containsStringPrefixForTestV0(result.EvidenceRefs, goalMaterializedTerminalArtifactNormalizedEvidence+":") {
+		t.Fatalf("result=%+v ok=%v err=%v", result, ok, err)
+	}
+}
+
 func TestStackGoalMaterializedRefsSourceV0DetectaRequiredTestEvidenceAusenteEnReceiptTerminal(t *testing.T) {
 	projectDir := t.TempDir()
 	topicDir := filepath.Join(projectDir, "temas", "tema_037")

@@ -275,3 +275,34 @@ Cierre local de `BUG-ORQ-20260711-234`:
 
 El claim fallido de `r8` es inmutable por diseño; el cierre empirico necesita
 estado nuevo con el arreglo de limpieza.
+
+## Replay r9 y BUG-ORQ-20260711-235
+
+`r9` arranco limpio desde `f0a74f1cb` y cerro la cadena completa:
+
+- goal externo `019f508b-c4ae-7910-9f75-b299c799ae49`;
+- baseline, progreso `none -> diff` y resultado durable;
+- test focal ejecutado por el atestador externo en cache privado;
+- receipt `goal-required-test-attestation-ref-2880387ca7bf7606fe30139c701fe3ff665ba69ed9f45b0eac47bcbef54e08ab`,
+  `status=passed`, `exit_code=0`, hashes de `docs` iguales antes/despues;
+- run `cerrada`, closure `accepted`, `recommended_action=no_action_closed`.
+
+El cierre era valido porque la policy no exigia todas las rutas de artefacto y
+la atestacion independiente paso. La proyeccion enriquecida conservo, no
+obstante, un advisory recuperable: el receipt declaro
+`docs/verificacion_muestra_clasificacion_s13-2026-07-11.md`, mientras el fichero
+real unico era `docs/verificacion_muestra_clasificacion_s13_2026-07-11.md`.
+Esto se registra como `BUG-ORQ-20260711-235`, no como falso verde.
+
+Cierre local de `BUG-235`:
+
+- el adaptador busca solo en el mismo directorio y dentro del write-set;
+- acepta exclusivamente un fichero regular, no symlink, de igual longitud y
+  una sola sustitucion;
+- exige candidato unico; cero o varios conservan el issue missing;
+- publica evidencia del path declarado y del real sin reescribir el artefacto;
+- regresiones cubren alias unico y ausencia real.
+
+Con `r9`, `BUG-226/227/228/229/230/231/232/233/234` quedan cerrados
+empiricamente. `BUG-235` queda pendiente solo de reconsultar el mismo estado con
+el binario nuevo y confirmar que desaparece el advisory missing.

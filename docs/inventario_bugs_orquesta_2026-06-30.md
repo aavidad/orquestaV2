@@ -4124,6 +4124,15 @@ restaura permisos solo dentro del workdir efimero antes de borrarlo, manteniendo
 el fallo cerrado si aun no pudiera limpiar. Regresion y evidencia en la
 [incidencia T9104](incidencias/incidencia_orquesta_t9104_wakeup_material_progress_shutdown_stale_2026-07-11.md).
 
+BUG `BUG-ORQ-20260711-235` (cerrado localmente, pendiente de reconsulta): el
+cierre aceptado e independientemente atestado de `r9` conservo un advisory de
+artefacto ausente porque el receipt uso `s13-2026` y el fichero real unico era
+`s13_2026`. No fue falso verde: la policy no exigia todas las rutas y los hashes
+y tests eran validos. El resolver normaliza ahora solo un candidato regular
+unico, en el mismo directorio/write-set y a una sustitucion; ambiguedad o
+ausencia real siguen siendo issue. Evidencia y criterio en la
+[incidencia T9104](incidencias/incidencia_orquesta_t9104_wakeup_material_progress_shutdown_stale_2026-07-11.md).
+
 Avance 2026-07-11: `b96e9b115` añade refs obligatorias de criterios
 verificables al contrato Goal; el transporte posterior añade
 `acceptance_checks` tipados a autoprogramacion V0/V1 y los publica por MCP. Los
