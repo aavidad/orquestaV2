@@ -65,8 +65,24 @@ func NormalizeGoalWorkSpecV0(spec GoalWorkSpecV0) GoalWorkSpecV0 {
 	for i := range spec.ClosurePolicy.RequiredEvidenceRefs {
 		spec.ClosurePolicy.RequiredEvidenceRefs[i] = strings.TrimSpace(spec.ClosurePolicy.RequiredEvidenceRefs[i])
 	}
+	spec.ClosurePolicy.RequiredAcceptanceCriteriaRefs = normalizeGoalRequiredAcceptanceCriteriaRefsV0(spec.ClosurePolicy.RequiredAcceptanceCriteriaRefs)
 	spec.ClosurePolicy.RequiredAttestorTrustPolicyRef = strings.TrimSpace(spec.ClosurePolicy.RequiredAttestorTrustPolicyRef)
 	return spec
+}
+
+func normalizeGoalRequiredAcceptanceCriteriaRefsV0(refs []string) []string {
+	refs = append([]string(nil), refs...)
+	seen := make(map[string]bool, len(refs))
+	out := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		ref = strings.TrimSpace(ref)
+		if seen[ref] {
+			continue
+		}
+		seen[ref] = true
+		out = append(out, ref)
+	}
+	return out
 }
 
 func cloneGoalWorkSpecSlicesV0(spec GoalWorkSpecV0) GoalWorkSpecV0 {
@@ -86,6 +102,7 @@ func cloneGoalWorkSpecSlicesV0(spec GoalWorkSpecV0) GoalWorkSpecV0 {
 		spec.ArtifactContracts[i].EvidenceRefs = append([]string(nil), spec.ArtifactContracts[i].EvidenceRefs...)
 	}
 	spec.EvidenceRefs = append([]string(nil), spec.EvidenceRefs...)
+	spec.ClosurePolicy.RequiredAcceptanceCriteriaRefs = append([]string(nil), spec.ClosurePolicy.RequiredAcceptanceCriteriaRefs...)
 	spec.ClosurePolicy.RequiredEvidenceRefs = append([]string(nil), spec.ClosurePolicy.RequiredEvidenceRefs...)
 	return spec
 }
@@ -279,7 +296,8 @@ func ValidateGoalWorkSpecV0(spec GoalWorkSpecV0) []GoalWorkIssueV0 {
 		validateRequiredGoalRefV0(&issues, "required_tests.test_ref", test.TestRef)
 		validateGoalRefsV0(&issues, "required_tests.command_ref", test.CommandRef)
 	}
-	if spec.ClosurePolicy.RequireIndependentRequiredTestAttestation {
+	requiresIndependentRequiredTestAttestation := spec.ClosurePolicy.RequireIndependentRequiredTestAttestation || len(spec.ClosurePolicy.RequiredAcceptanceCriteriaRefs) > 0
+	if requiresIndependentRequiredTestAttestation {
 		if len(spec.RequiredTests) == 0 {
 			issues = append(issues, GoalWorkIssueV0{Code: ErrGoalRequiredTestAttestationMissingV0, Field: "required_tests"})
 		}
@@ -288,6 +306,17 @@ func ValidateGoalWorkSpecV0(spec GoalWorkSpecV0) []GoalWorkIssueV0 {
 		}
 		for _, test := range spec.RequiredTests {
 			validateFrozenGoalRequiredTestV0(&issues, test, "required_tests")
+		}
+	}
+	if len(spec.ClosurePolicy.RequiredAcceptanceCriteriaRefs) > 0 {
+		if !spec.ClosurePolicy.RequireIndependentRequiredTestAttestation {
+			issues = append(issues, GoalWorkIssueV0{Code: ErrGoalRequiredTestAttestationMissingV0, Field: "closure_policy.require_independent_required_test_attestation"})
+		}
+		for _, criterionRef := range spec.ClosurePolicy.RequiredAcceptanceCriteriaRefs {
+			validateRequiredGoalRefV0(&issues, "closure_policy.required_acceptance_criteria_refs", criterionRef)
+			if !goalRequiredAcceptanceCriterionCoveredByFrozenTestV0(criterionRef, spec.RequiredTests) {
+				issues = append(issues, GoalWorkIssueV0{Code: ErrGoalRequiredAcceptanceCriterionAttestationMissingV0, Field: "closure_policy.required_acceptance_criteria_refs"})
+			}
 		}
 	}
 	for _, artifact := range spec.ArtifactContracts {
@@ -303,6 +332,17 @@ func ValidateGoalWorkSpecV0(spec GoalWorkSpecV0) []GoalWorkIssueV0 {
 		validateRequiredGoalRefV0(&issues, "closure_policy.required_evidence_refs", evidenceRef)
 	}
 	return issues
+}
+
+func goalRequiredAcceptanceCriterionCoveredByFrozenTestV0(criterionRef string, requiredTests []GoalRequiredTestV0) bool {
+	for _, test := range requiredTests {
+		for _, testCriterionRef := range test.AcceptanceCriteriaRefs {
+			if criterionRef == testCriterionRef {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func ValidateGoalWorkClosureV0(spec GoalWorkSpecV0, result GoalWorkResultV0) GoalClosureValidationV0 {

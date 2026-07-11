@@ -34,31 +34,32 @@ const (
 )
 
 const (
-	ErrGoalRefRequiredV0                              = "goal_ref_required"
-	ErrGoalRefInvalidV0                               = "goal_ref_invalid"
-	ErrGoalObjectiveRequiredV0                        = "goal_objective_required"
-	ErrGoalDirectorRequiredV0                         = "goal_director_kind_required"
-	ErrGoalDirectorInvalidV0                          = "goal_director_kind_invalid"
-	ErrGoalWriteSetRequiredV0                         = "goal_write_set_required"
-	ErrGoalWriteSetInvalidV0                          = "goal_write_set_invalid"
-	ErrGoalRefFieldInvalidV0                          = "goal_ref_field_invalid"
-	ErrGoalRuleInvalidV0                              = "goal_rule_invalid"
-	ErrGoalSpecLimitExceededV0                        = "goal_spec_limit_exceeded"
-	ErrGoalStatusInvalidV0                            = "goal_status_invalid"
-	ErrGoalClosureInvalidV0                           = "goal_closure_invalid"
-	ErrGoalArtifactPathScopeV0                        = "goal_artifact_path_out_of_scope"
-	ErrGoalMaterializedArtifactInvalidV0              = "goal_materialized_artifact_invalid"
-	ErrGoalChecklistIncompleteV0                      = "goal_checklist_incomplete"
-	ErrGoalReworkPlanRequiredV0                       = "goal_rework_plan_required"
-	ErrGoalResultJSONInvalidV0                        = "goal_result_json_invalid"
-	ErrGoalRequiredTestAttestationMissingV0           = "goal_required_test_attestation_missing"
-	ErrGoalRequiredTestAttestationFailedV0            = "goal_required_test_attestation_failed"
-	ErrGoalRequiredTestAttestorInfrastructureFailedV0 = "goal_required_test_attestor_infrastructure_failed"
-	ErrGoalRequiredTestAttestationMismatchV0          = "goal_required_test_attestation_mismatch"
-	ErrGoalRequiredTestAttestorUntrustedV0            = "goal_required_test_attestor_untrusted"
-	ErrGoalRequiredTestAttestationClaimedV0           = "goal_required_test_attestation_claimed"
-	ErrGoalRequiredTestSnapshotMissingV0              = "goal_required_test_final_snapshot_missing"
-	ErrGoalRequiredTestSnapshotMismatchV0             = "goal_required_test_final_snapshot_mismatch"
+	ErrGoalRefRequiredV0                                   = "goal_ref_required"
+	ErrGoalRefInvalidV0                                    = "goal_ref_invalid"
+	ErrGoalObjectiveRequiredV0                             = "goal_objective_required"
+	ErrGoalDirectorRequiredV0                              = "goal_director_kind_required"
+	ErrGoalDirectorInvalidV0                               = "goal_director_kind_invalid"
+	ErrGoalWriteSetRequiredV0                              = "goal_write_set_required"
+	ErrGoalWriteSetInvalidV0                               = "goal_write_set_invalid"
+	ErrGoalRefFieldInvalidV0                               = "goal_ref_field_invalid"
+	ErrGoalRuleInvalidV0                                   = "goal_rule_invalid"
+	ErrGoalSpecLimitExceededV0                             = "goal_spec_limit_exceeded"
+	ErrGoalStatusInvalidV0                                 = "goal_status_invalid"
+	ErrGoalClosureInvalidV0                                = "goal_closure_invalid"
+	ErrGoalArtifactPathScopeV0                             = "goal_artifact_path_out_of_scope"
+	ErrGoalMaterializedArtifactInvalidV0                   = "goal_materialized_artifact_invalid"
+	ErrGoalChecklistIncompleteV0                           = "goal_checklist_incomplete"
+	ErrGoalReworkPlanRequiredV0                            = "goal_rework_plan_required"
+	ErrGoalResultJSONInvalidV0                             = "goal_result_json_invalid"
+	ErrGoalRequiredTestAttestationMissingV0                = "goal_required_test_attestation_missing"
+	ErrGoalRequiredTestAttestationFailedV0                 = "goal_required_test_attestation_failed"
+	ErrGoalRequiredTestAttestorInfrastructureFailedV0      = "goal_required_test_attestor_infrastructure_failed"
+	ErrGoalRequiredTestAttestationMismatchV0               = "goal_required_test_attestation_mismatch"
+	ErrGoalRequiredTestAttestorUntrustedV0                 = "goal_required_test_attestor_untrusted"
+	ErrGoalRequiredTestAttestationClaimedV0                = "goal_required_test_attestation_claimed"
+	ErrGoalRequiredTestSnapshotMissingV0                   = "goal_required_test_final_snapshot_missing"
+	ErrGoalRequiredTestSnapshotMismatchV0                  = "goal_required_test_final_snapshot_mismatch"
+	ErrGoalRequiredAcceptanceCriterionAttestationMissingV0 = "goal_required_acceptance_criterion_attestation_missing"
 )
 
 const (
@@ -149,6 +150,7 @@ type GoalClosurePolicyV0 struct {
 	RequireDomainReceipt                      bool     `json:"require_domain_receipt,omitempty"`
 	RequireIndependentRequiredTestAttestation bool     `json:"require_independent_required_test_attestation,omitempty"`
 	RequiredAttestorTrustPolicyRef            string   `json:"required_attestor_trust_policy_ref,omitempty"`
+	RequiredAcceptanceCriteriaRefs            []string `json:"required_acceptance_criteria_refs,omitempty"`
 	RequiredEvidenceRefs                      []string `json:"required_evidence_refs,omitempty"`
 }
 

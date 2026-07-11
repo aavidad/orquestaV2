@@ -49,7 +49,7 @@ func TestNormalizeGoalWorkSpecV0NoMutaSlicesDeEntrada(t *testing.T) {
 		RequiredTests:     []GoalRequiredTestV0{{TestRef: " test-ref-001 ", CommandRef: " command-ref-001 ", Command: " go test ./... ", AcceptanceCriteria: []string{" criterio "}, AcceptanceCriteriaRefs: []string{" criteria-ref-001 "}, EvidenceRefs: []string{" evidence-ref-test-001 "}}},
 		ArtifactContracts: []GoalArtifactContractV0{{ArtifactRef: " artifact-ref-001 ", ArtifactType: " markdown ", EvidenceRefs: []string{" evidence-ref-artifact-001 "}}},
 		EvidenceRefs:      []string{" evidence-ref-spec-001 "},
-		ClosurePolicy:     GoalClosurePolicyV0{RequiredEvidenceRefs: []string{" evidence-ref-closure-001 "}},
+		ClosurePolicy:     GoalClosurePolicyV0{RequiredAcceptanceCriteriaRefs: []string{" criterion-ref-closure-001 "}, RequiredEvidenceRefs: []string{" evidence-ref-closure-001 "}},
 	}
 
 	normalized := NormalizeGoalWorkSpecV0(spec)
@@ -64,6 +64,7 @@ func TestNormalizeGoalWorkSpecV0NoMutaSlicesDeEntrada(t *testing.T) {
 	normalized.ArtifactContracts[0].ArtifactRef = "changed"
 	normalized.ArtifactContracts[0].EvidenceRefs[0] = "changed"
 	normalized.EvidenceRefs[0] = "changed"
+	normalized.ClosurePolicy.RequiredAcceptanceCriteriaRefs[0] = "changed"
 	normalized.ClosurePolicy.RequiredEvidenceRefs[0] = "changed"
 
 	if spec.ContextRefs[0].Kind != " doc " ||
@@ -77,8 +78,69 @@ func TestNormalizeGoalWorkSpecV0NoMutaSlicesDeEntrada(t *testing.T) {
 		spec.ArtifactContracts[0].ArtifactRef != " artifact-ref-001 " ||
 		spec.ArtifactContracts[0].EvidenceRefs[0] != " evidence-ref-artifact-001 " ||
 		spec.EvidenceRefs[0] != " evidence-ref-spec-001 " ||
+		spec.ClosurePolicy.RequiredAcceptanceCriteriaRefs[0] != " criterion-ref-closure-001 " ||
 		spec.ClosurePolicy.RequiredEvidenceRefs[0] != " evidence-ref-closure-001 " {
 		t.Fatalf("NormalizeGoalWorkSpecV0 muto el spec de entrada: %+v", spec)
+	}
+}
+
+func TestValidateGoalWorkSpecV0RequiredAcceptanceCriteriaRefsRequireAttestation(t *testing.T) {
+	spec := goalSpecWithRequiredAcceptanceCriterionForTestV0()
+	spec.ClosurePolicy.RequireIndependentRequiredTestAttestation = false
+	issues := ValidateGoalWorkSpecV0(spec)
+	if !hasGoalIssueFieldCodeV0(issues, "closure_policy.require_independent_required_test_attestation", ErrGoalRequiredTestAttestationMissingV0) {
+		t.Fatalf("issues=%v", issues)
+	}
+}
+
+func TestValidateGoalWorkSpecV0RequiredAcceptanceCriterionWithoutFrozenTestCoverageIsInvalid(t *testing.T) {
+	spec := goalSpecWithRequiredAcceptanceCriterionForTestV0()
+	spec.ClosurePolicy.RequiredAcceptanceCriteriaRefs = []string{"criterion-ref-unmapped-001"}
+	issues := ValidateGoalWorkSpecV0(spec)
+	if !hasGoalIssueFieldCodeV0(issues, "closure_policy.required_acceptance_criteria_refs", ErrGoalRequiredAcceptanceCriterionAttestationMissingV0) {
+		t.Fatalf("issues=%v", issues)
+	}
+}
+
+func TestValidateGoalWorkSpecV0RequiredAcceptanceCriterionMappedToFrozenTestIsValid(t *testing.T) {
+	if issues := ValidateGoalWorkSpecV0(goalSpecWithRequiredAcceptanceCriterionForTestV0()); len(issues) != 0 {
+		t.Fatalf("issues=%v", issues)
+	}
+}
+
+func TestNormalizeGoalWorkSpecV0DeduplicatesRequiredAcceptanceCriteriaRefs(t *testing.T) {
+	spec := NormalizeGoalWorkSpecV0(GoalWorkSpecV0{
+		ClosurePolicy: GoalClosurePolicyV0{RequiredAcceptanceCriteriaRefs: []string{" criterion-ref-001 ", "criterion-ref-001"}},
+	})
+	if len(spec.ClosurePolicy.RequiredAcceptanceCriteriaRefs) != 1 || spec.ClosurePolicy.RequiredAcceptanceCriteriaRefs[0] != "criterion-ref-001" {
+		t.Fatalf("refs=%v", spec.ClosurePolicy.RequiredAcceptanceCriteriaRefs)
+	}
+}
+
+func TestValidateGoalWorkSpecV0LegacyClosurePolicyWithoutRequiredAcceptanceCriteriaRefsIsValid(t *testing.T) {
+	spec := GoalWorkSpecV0{
+		GoalRef: "goal-ref-legacy-001", Objective: "Legacy contract remains valid.",
+		DirectorKind: GoalDirectorKindRuntimeGoalV0, WriteSet: []GoalWriteScopeV0{{Path: "modulos/orquesta-goal"}},
+	}
+	if issues := ValidateGoalWorkSpecV0(spec); len(issues) != 0 {
+		t.Fatalf("issues=%v", issues)
+	}
+}
+
+func goalSpecWithRequiredAcceptanceCriterionForTestV0() GoalWorkSpecV0 {
+	writeSet := []GoalWriteScopeV0{{Path: "modulos/orquesta-goal"}}
+	requiredTest := FreezeGoalRequiredTestV0(GoalRequiredTestV0{
+		TestRef: "test-ref-criterion-001", CommandRef: "command-ref-criterion-001", Command: "go test ./modulos/orquesta-goal",
+		AcceptanceCriteriaRefs: []string{"criterion-ref-001"},
+	})
+	return GoalWorkSpecV0{
+		GoalRef: "goal-ref-criterion-001", Objective: "Attest required acceptance criteria.",
+		DirectorKind: GoalDirectorKindRuntimeGoalV0, WriteSet: writeSet, WriteSetSHA256: GoalWriteSetSHA256V0(writeSet),
+		RequiredTests: []GoalRequiredTestV0{requiredTest},
+		ClosurePolicy: GoalClosurePolicyV0{
+			RequireIndependentRequiredTestAttestation: true,
+			RequiredAcceptanceCriteriaRefs:            []string{"criterion-ref-001"},
+		},
 	}
 }
 

@@ -64,6 +64,7 @@ func validateGoalWorkSpecLimitsV0(issues *[]GoalWorkIssueV0, spec GoalWorkSpecV0
 	}
 
 	validateGoalStringListLimitV0(issues, "evidence_refs", spec.EvidenceRefs)
+	validateGoalStringListLimitV0(issues, "closure_policy.required_acceptance_criteria_refs", spec.ClosurePolicy.RequiredAcceptanceCriteriaRefs)
 	validateGoalStringListLimitV0(issues, "closure_policy.required_evidence_refs", spec.ClosurePolicy.RequiredEvidenceRefs)
 	validateGoalStringLimitV0(issues, "closure_policy.required_attestor_trust_policy_ref", spec.ClosurePolicy.RequiredAttestorTrustPolicyRef, GoalWorkSpecMaxStringBytesV0)
 }
