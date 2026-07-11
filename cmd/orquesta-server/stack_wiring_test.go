@@ -103,6 +103,20 @@ func TestBuildStackFromEnvV0UsaConectoresDurablesFileBased(t *testing.T) {
 	}
 
 	assertServerStackDurableStoresV0(t, stack)
+	deps := serverRuntimeDepsFromStackV0(
+		config,
+		nil,
+		nil,
+		nil,
+		stack,
+		serverCodexGoalBackendsV0{},
+	)
+	if deps.MaterialProgressStore == nil {
+		t.Fatal("MaterialProgressStore debe reutilizar el state store durable")
+	}
+	if deps.MaterialProgressEvidence == nil {
+		t.Fatal("MaterialProgressEvidence debe quedar cableado en la composicion Codex")
+	}
 }
 
 func TestBuildStackFromEnvV0CableaOperationalClosureSourceV0(t *testing.T) {

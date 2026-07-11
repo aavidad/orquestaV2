@@ -93,27 +93,6 @@ type GoalCooperativeStopResultV0 struct {
 	EvidenceRefs []string
 }
 
-type GoalMaterialProgressEvidenceRequestV0 struct {
-	State  orquestagoal.GoalWorkStateV0
-	Result orquestagoal.GoalWorkResultV0
-}
-
-type GoalMaterialProgressEvidenceV0 struct {
-	Verified           bool
-	MaterialClass      orquestaautoprogramming.MaterialProgressClassV0
-	BaselineRef        string
-	WriteSetSHA256     string
-	ContextRevisionRef string
-	EvidenceRefs       []string
-}
-
-type GoalMaterialProgressEvidencePortV0 interface {
-	ClassifyGoalMaterialProgressV0(
-		context.Context,
-		GoalMaterialProgressEvidenceRequestV0,
-	) (GoalMaterialProgressEvidenceV0, error)
-}
-
 type IdleSelfImprovementPlannerPortV0 interface {
 	PlanIdleSelfImprovementV0(
 		context.Context,

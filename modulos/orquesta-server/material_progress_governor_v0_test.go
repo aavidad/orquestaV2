@@ -130,8 +130,8 @@ type materialProgressEvidenceForTestV0 struct {
 	refs  []string
 }
 
-func (source materialProgressEvidenceForTestV0) ClassifyGoalMaterialProgressV0(context.Context, GoalMaterialProgressEvidenceRequestV0) (GoalMaterialProgressEvidenceV0, error) {
-	return GoalMaterialProgressEvidenceV0{
+func (source materialProgressEvidenceForTestV0) ClassifyMaterialProgressV0(context.Context, orquestaautoprogramming.MaterialProgressEvidenceRequestV0) (orquestaautoprogramming.MaterialProgressEvidenceV0, error) {
+	return orquestaautoprogramming.MaterialProgressEvidenceV0{
 		Verified: true, MaterialClass: source.class, EvidenceRefs: source.refs,
 		BaselineRef: "baseline-ref-material-progress", WriteSetSHA256: strings.Repeat("a", 64),
 		ContextRevisionRef: "context-ref-material-progress",

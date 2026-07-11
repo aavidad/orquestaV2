@@ -22,7 +22,7 @@ type RuntimeDepsV0 struct {
 	GoalFingerprint            GoalObservationFingerprintPortV0
 	GoalStopper                GoalCooperativeStopPortV0
 	MaterialProgressStore      orquestaautoprogramming.MaterialProgressStateStorePortV0
-	MaterialProgressEvidence   GoalMaterialProgressEvidencePortV0
+	MaterialProgressEvidence   orquestaautoprogramming.MaterialProgressEvidencePortV0
 	EstadoVivoSource           orquestaestadovivo.FuenteEvidenciaEstadoPortV0
 	ShutdownSnapshot           ShutdownSnapshotPortV0
 	ShutdownHooks              []RuntimeShutdownHookPortV0
@@ -46,7 +46,7 @@ type RuntimeV0 struct {
 	goalFingerprint               GoalObservationFingerprintPortV0
 	goalStopper                   GoalCooperativeStopPortV0
 	materialProgressStore         orquestaautoprogramming.MaterialProgressStateStorePortV0
-	materialProgressEvidence      GoalMaterialProgressEvidencePortV0
+	materialProgressEvidence      orquestaautoprogramming.MaterialProgressEvidencePortV0
 	estadoVivoSource              orquestaestadovivo.FuenteEvidenciaEstadoPortV0
 	goalObservationFingerprintsMu sync.Mutex
 	goalObservationFingerprints   map[string]orquestagoal.GoalObservationFingerprintV0

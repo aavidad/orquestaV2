@@ -45,7 +45,7 @@ func (runtime *RuntimeV0) governMaterialProgressObservationV0(
 		orquestagoal.GoalUsageObservationEmptyV0(usage) || usage.ObservedAt == "" {
 		return observation, false
 	}
-	evidence, err := runtime.materialProgressEvidence.ClassifyGoalMaterialProgressV0(ctx, GoalMaterialProgressEvidenceRequestV0{State: state, Result: result})
+	evidence, err := runtime.materialProgressEvidence.ClassifyMaterialProgressV0(ctx, orquestaautoprogramming.MaterialProgressEvidenceRequestV0{State: state, Result: result})
 	if err != nil || !evidence.Verified {
 		return observation, false
 	}
@@ -78,7 +78,7 @@ func (runtime *RuntimeV0) nextMaterialProgressStateV0(
 	ctx context.Context,
 	goalState orquestagoal.GoalWorkStateV0,
 	result orquestagoal.GoalWorkResultV0,
-	evidence GoalMaterialProgressEvidenceV0,
+	evidence orquestaautoprogramming.MaterialProgressEvidenceV0,
 ) (orquestaautoprogramming.MaterialProgressStateV0, uint64, bool) {
 	policy := materialProgressPolicyFromConfigV0(runtime.config, goalState.Spec)
 	segment := orquestaautoprogramming.MaterialProgressSegmentV0{

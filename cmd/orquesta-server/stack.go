@@ -12,6 +12,7 @@ import (
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
 	orquestaappgateway "orquesta/modulos/orquesta-app-gateway"
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestahttpgateway "orquesta/modulos/orquesta-http-gateway"
@@ -92,6 +93,8 @@ func serverRuntimeDepsFromStackV0(
 		GoalRequiredTestSpecBinder: stack.Ports.GoalRequiredTestSpecBinder,
 		GoalFingerprint:            serverGoalObservationFingerprintFromBackendV0(goalBackends.AppGoal, serverGoalObserverFingerprintEnabledFromEnvV0()),
 		GoalStopper:                serverGoalCooperativeStopperFromRunControlV0(stack.Stores.RunControl, stack.MCPTransportBindings.RunControl),
+		MaterialProgressStore:      serverMaterialProgressStoreFromStackV0(stack),
+		MaterialProgressEvidence:   orquestaappcodexstack.CodexStackMaterialProgressEvidenceV0{Stack: &stack},
 		EstadoVivoSource:           stack.MCPTransportBindings.AutoprogrammingEstadoVivoSource,
 		ShutdownSnapshot:           serverShutdownSnapshotFromStackV0(stack, goalBackends),
 		ShutdownHooks:              serverGoalShutdownHooksFromBackendsV0(goalBackends.AppGoal, goalBackends.IdleGoal),
@@ -102,6 +105,13 @@ func serverRuntimeDepsFromStackV0(
 		),
 		ForceExit: serverForceExitPortV0{},
 	}
+}
+
+func serverMaterialProgressStoreFromStackV0(
+	stack orquestaappcodexstack.StackV0,
+) orquestaautoprogramming.MaterialProgressStateStorePortV0 {
+	store, _ := stack.Stores.AppGoalStateStore.(orquestaautoprogramming.MaterialProgressStateStorePortV0)
+	return store
 }
 
 type serverForceExitPortV0 struct{}
