@@ -189,7 +189,10 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 		Runtime:                 &orquestaruntimecodexappserver.GoalRuntimeV0{},
 	}
 	return serverCodexGoalBackendV0{
-		Starter:      serverCodexGoalCostRoutingStarterV0{Backend: client},
+		Starter: serverCodexGoalCostRoutingStarterV0{
+			Backend:      client,
+			ModelRouting: codexModelRoutingFromProjectConfigFileV0(projectConfig),
+		},
 		Observer:     client,
 		Controller:   client,
 		ShutdownHook: shutdownHook,

@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
+	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
+	orquestacapacity "orquesta/modulos/orquesta-capacity"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaruntimecodexappserver "orquesta/modulos/orquesta-runtime-codex-appserver"
 	orquestaruntimecodexgoal "orquesta/modulos/orquesta-runtime-codex-goal"
@@ -59,21 +62,54 @@ type serverCodexAppServerTurnStartParamsV0 = orquestaruntimecodexappserver.TurnS
 type serverCodexAppServerTurnStartResponseV0 = orquestaruntimecodexappserver.TurnStartResponseV0
 type serverCodexAppServerTurnV0 = orquestaruntimecodexappserver.TurnV0
 
-const serverCodexGoalDocTaskReasoningEffortV0 = "low"
-
 type serverCodexGoalCostRoutingStarterV0 struct {
-	Backend serverCodexAppServerGoalBackendV0
+	Backend      serverCodexAppServerGoalBackendV0
+	ModelRouting orquestaappcodexstack.CodexModelRoutingConfigV0
 }
 
 func (starter serverCodexGoalCostRoutingStarterV0) StartCodexGoalV0(
 	ctx context.Context,
 	packet orquestaruntimecodexgoal.CodexGoalStartPacketV0,
 ) (orquestaruntimecodexgoal.CodexGoalStartReceiptV0, error) {
-	backend := starter.Backend
-	if serverCodexGoalTaskCostClassForPacketV0(packet) == orquestaruntimecodexgoal.CodexGoalTaskCostClassDocV0 {
-		backend.ReasoningEffort = serverCodexGoalDocTaskReasoningEffortV0
+	decision, model, err := serverCodexGoalModelRouteForPacketV0(starter.ModelRouting, packet)
+	if err != nil {
+		return orquestaruntimecodexgoal.CodexGoalStartReceiptV0{
+			Status:    orquestagoal.GoalStatusInvalidV0,
+			GoalRef:   strings.TrimSpace(packet.GoalRef),
+			IssueCode: "codex_goal_model_routing_rejected",
+		}, err
 	}
+	backend := starter.Backend
+	backend.Model = model
+	backend.ReasoningEffort = decision.ReasoningEffort
 	return backend.StartCodexGoalV0(ctx, packet)
+}
+
+func serverCodexGoalModelRouteForPacketV0(
+	routing orquestaappcodexstack.CodexModelRoutingConfigV0,
+	packet orquestaruntimecodexgoal.CodexGoalStartPacketV0,
+) (orquestacapacity.ModelRoutingDecisionV0, string, error) {
+	taskRef := strings.TrimSpace(packet.GoalRef)
+	request := orquestacapacity.ModelRoutingRequestV0{
+		TaskRef: taskRef,
+		Level:   orquestacapacity.ModelRoutingLevelNormalV0,
+		Trivial: serverCodexGoalTaskCostClassForPacketV0(packet) == orquestaruntimecodexgoal.CodexGoalTaskCostClassDocV0,
+	}
+	// An explicit GoalRef route keeps the critical/Sol path available with the
+	// policy's existing causal authorization requirements.
+	if declared, ok := routing.TaskRoutes[taskRef]; ok {
+		request = declared
+		request.TaskRef = taskRef
+	}
+	decision := orquestacapacity.ResolveModelRoutingV0(routing.Policy, request)
+	if decision.Rejected {
+		return decision, "", fmt.Errorf("model_routing_rejected:%s", decision.RejectionRef)
+	}
+	model := strings.TrimSpace(routing.ModelAlias[decision.SelectedModelRef])
+	if model == "" {
+		return decision, "", fmt.Errorf("model_routing_alias_missing:%s", decision.SelectedModelRef)
+	}
+	return decision, model, nil
 }
 
 func serverCodexGoalTaskCostClassForPacketV0(

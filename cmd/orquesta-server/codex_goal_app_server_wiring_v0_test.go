@@ -11,6 +11,7 @@ import (
 	"time"
 
 	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
+	orquestacapacity "orquesta/modulos/orquesta-capacity"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaruntimeclaude "orquesta/modulos/orquesta-runtime-claude"
 	orquestaruntimecodexgoal "orquesta/modulos/orquesta-runtime-codex-goal"
@@ -59,40 +60,45 @@ func TestServerGoalObservationFingerprintFromBackendV0EsOptInV0(t *testing.T) {
 	}
 }
 
-func TestServerCodexGoalCostRoutingStarterV0BajaSoloDocumentacionALowV0(t *testing.T) {
+func TestServerCodexGoalCostRoutingStarterV0AplicaModelRoutingCanonicoV0(t *testing.T) {
 	tests := []struct {
-		name     string
-		writeSet []orquestagoal.GoalWriteScopeV0
-		want     string
+		name       string
+		writeSet   []orquestagoal.GoalWriteScopeV0
+		wantModel  string
+		wantEffort string
 	}{
 		{
-			name: "doc markdown baja a low",
+			name: "doc markdown usa luna low",
 			writeSet: []orquestagoal.GoalWriteScopeV0{{
 				Path: "docs/auditoria.md",
 			}},
-			want: serverCodexGoalDocTaskReasoningEffortV0,
+			wantModel:  "gpt-5.6-luna",
+			wantEffort: "low",
 		},
 		{
-			name: "doc folder baja a low",
+			name: "doc folder usa luna low",
 			writeSet: []orquestagoal.GoalWriteScopeV0{{
 				Path: "docs/runbooks",
 			}},
-			want: serverCodexGoalDocTaskReasoningEffortV0,
+			wantModel:  "gpt-5.6-luna",
+			wantEffort: "low",
 		},
 		{
-			name: "code conserva esfuerzo configurado",
+			name: "code usa terra medium sin heredar sol high",
 			writeSet: []orquestagoal.GoalWriteScopeV0{{
 				Path: "cmd/orquesta-server",
 			}},
-			want: "high",
+			wantModel:  "gpt-5.6-terra",
+			wantEffort: "medium",
 		},
 		{
-			name: "mixed conserva esfuerzo configurado",
+			name: "mixed usa terra medium sin heredar sol high",
 			writeSet: []orquestagoal.GoalWriteScopeV0{
 				{Path: "docs/auditoria.md"},
 				{Path: "cmd/orquesta-server"},
 			},
-			want: "high",
+			wantModel:  "gpt-5.6-terra",
+			wantEffort: "medium",
 		},
 	}
 	for _, tt := range tests {
@@ -106,9 +112,11 @@ func TestServerCodexGoalCostRoutingStarterV0BajaSoloDocumentacionALowV0(t *testi
 				Backend: serverCodexAppServerGoalBackendV0{
 					Protocol:        protocol,
 					CWD:             t.TempDir(),
+					Model:           "gpt-5.6-sol",
 					ReasoningEffort: "high",
 					ApprovalPolicy:  "never",
 				},
+				ModelRouting: defaultCodexModelRoutingConfigV0(),
 			}
 			packet := orquestaruntimecodexgoal.CodexGoalStartPacketV0{
 				GoalRef:       "goal-ref-cost-routing-" + strings.ReplaceAll(tt.name, " ", "-"),
@@ -121,10 +129,48 @@ func TestServerCodexGoalCostRoutingStarterV0BajaSoloDocumentacionALowV0(t *testi
 			if err != nil {
 				t.Fatalf("StartCodexGoalV0: %v receipt=%+v", err, receipt)
 			}
-			if protocol.turnParams.Effort != tt.want {
-				t.Fatalf("effort=%q want %q packet=%+v", protocol.turnParams.Effort, tt.want, packet)
+			if protocol.turnParams.Model != tt.wantModel || protocol.turnParams.Effort != tt.wantEffort {
+				t.Fatalf("turn params model=%q effort=%q want model=%q effort=%q packet=%+v",
+					protocol.turnParams.Model, protocol.turnParams.Effort, tt.wantModel, tt.wantEffort, packet)
 			}
 		})
+	}
+}
+
+func TestServerCodexGoalCostRoutingStarterV0RechazaConfigInvalidaV0(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{}
+	starter := serverCodexGoalCostRoutingStarterV0{
+		Backend: serverCodexAppServerGoalBackendV0{Protocol: protocol, CWD: t.TempDir()},
+		ModelRouting: orquestaappcodexstack.CodexModelRoutingConfigV0{
+			Policy: orquestacapacity.ModelRoutingPolicyV0{Strict: true},
+		},
+	}
+	receipt, err := starter.StartCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		GoalRef:  "goal-ref-routing-invalid",
+		WriteSet: []orquestagoal.GoalWriteScopeV0{{Path: "cmd/orquesta-server"}},
+	})
+	if err == nil || receipt.Status != orquestagoal.GoalStatusInvalidV0 || receipt.IssueCode != "codex_goal_model_routing_rejected" {
+		t.Fatalf("receipt=%+v err=%v", receipt, err)
+	}
+	if protocol.turnParams.ThreadID != "" {
+		t.Fatalf("config invalida alcanzo turn/start: %+v", protocol.turnParams)
+	}
+}
+
+func TestServerCodexGoalModelRouteForPacketV0PermiteCriticalCausalV0(t *testing.T) {
+	routing := defaultCodexModelRoutingConfigV0()
+	goalRef := "goal-ref-routing-critical"
+	routing.TaskRoutes[goalRef] = orquestacapacity.ModelRoutingRequestV0{
+		Level:        orquestacapacity.ModelRoutingLevelCriticalV0,
+		ReasonRef:    "reason-ref-routing-critical",
+		EvidenceRefs: []string{"evidence-ref-routing-critical"},
+	}
+	decision, model, err := serverCodexGoalModelRouteForPacketV0(routing, orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		GoalRef:  goalRef,
+		WriteSet: []orquestagoal.GoalWriteScopeV0{{Path: "cmd/orquesta-server"}},
+	})
+	if err != nil || decision.Rejected || model != "gpt-5.6-sol" || decision.ReasoningEffort != "high" {
+		t.Fatalf("decision=%+v model=%q err=%v", decision, model, err)
 	}
 }
 
