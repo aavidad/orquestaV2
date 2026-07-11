@@ -56,7 +56,7 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) runPreflightV0(
 		return orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{}, err
 	}
 	defer func() {
-		if cleanupErr := os.RemoveAll(runDir); resultErr == nil && cleanupErr != nil {
+		if cleanupErr := removeGoalRequiredTestExecutionDirV0(runDir); resultErr == nil && cleanupErr != nil {
 			result = orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{}
 			resultErr = fmt.Errorf("goal_required_test_execution_cleanup_failed: %w", cleanupErr)
 		}
@@ -139,7 +139,7 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) hermeticEnvironmentV0(
 	}
 	sort.Strings(orderedPathDirs)
 	return []string{
-		"CGO_ENABLED=0", "GOWORK=off", "GOPROXY=off", "GOSUMDB=off", "GONOSUMDB=*", "GOTOOLCHAIN=local",
+		"CGO_ENABLED=0", "GOWORK=off", "GOPROXY=off", "GOSUMDB=off", "GONOSUMDB=*", "GOTOOLCHAIN=local", "GOFLAGS=-modcacherw",
 		"GOCACHE=" + filepath.Join(runDir, "go-cache"), "GOMODCACHE=" + modCache,
 		"GOPATH=" + filepath.Join(runDir, "go-path"), "GOTMPDIR=" + filepath.Join(runDir, "tmp"),
 		"TMPDIR=" + filepath.Join(runDir, "tmp"), "PATH=" + strings.Join(orderedPathDirs, string(os.PathListSeparator)),

@@ -128,6 +128,28 @@ func TestLocalGoalRequiredTestAttestationAdapterV0AcceptsReadOnlySnapshotAndGree
 	}
 }
 
+func TestLocalGoalRequiredTestAttestationAdapterV0CleansReadOnlyDirectoriesCreatedByCommandV0(t *testing.T) {
+	project, runtimeRoot, gitPath := localGoalAttestationGitRepoForTestV0(t)
+	probePath := filepath.Join(t.TempDir(), "readonly-probe")
+	probe := "#!/bin/sh\nset -eu\nmkdir -p \"$GOMODCACHE/readonly\"\nprintf x > \"$GOMODCACHE/readonly/file\"\nchmod 500 \"$GOMODCACHE/readonly\"\n"
+	if err := os.WriteFile(probePath, []byte(probe), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	config := localGoalAttestationConfigForTestV0(project, runtimeRoot, gitPath, map[string]string{"readonly-probe": probePath})
+	config.PreflightCommands = []string{"readonly-probe"}
+	adapter, err := NewLocalGoalRequiredTestAttestationAdapterV0(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := adapter.PreflightGoalRequiredTestAttestationV0(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := os.ReadDir(filepath.Join(runtimeRoot, "preflight"))
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("readonly workdir retained: entries=%v err=%v", entries, err)
+	}
+}
+
 func TestLocalGoalRequiredTestAttestationAdapterV0MaterializesWritablePrivateSnapshotV0(t *testing.T) {
 	project, runtimeRoot, gitPath := localGoalAttestationGitRepoForTestV0(t)
 	testPath, err := exec.LookPath("test")
@@ -213,12 +235,16 @@ func TestLocalGoalRequiredTestAttestationAdapterV0BuildsMinimalDeterministicPath
 	sort.Strings(wantDirs)
 	wantPath := "PATH=" + strings.Join(wantDirs, string(os.PathListSeparator))
 	count := 0
+	goFlags := 0
 	for _, item := range env {
 		if item == wantPath {
 			count++
 		}
+		if item == "GOFLAGS=-modcacherw" {
+			goFlags++
+		}
 	}
-	if count != 1 {
+	if count != 1 || goFlags != 1 {
 		t.Fatalf("env=%v, want exactly %q", env, wantPath)
 	}
 	for _, item := range env {

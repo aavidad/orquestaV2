@@ -174,6 +174,21 @@ func makeGoalRequiredTestDependencySnapshotWritableV0(root string) error {
 	})
 }
 
+func removeGoalRequiredTestExecutionDirV0(root string) error {
+	if err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return os.Chmod(path, 0o700)
+		}
+		return nil
+	}); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return os.RemoveAll(root)
+}
+
 func normalizeGoalRequiredTestDependencySnapshotV0(value string) (string, string, error) {
 	value = strings.TrimSpace(value)
 	if value == "" {

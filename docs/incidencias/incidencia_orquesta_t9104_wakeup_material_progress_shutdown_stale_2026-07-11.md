@@ -240,3 +240,38 @@ Cierre local de `BUG-ORQ-20260711-233`:
 
 Se reiniciara el mismo estado `r7` con el binario corregido para reobservar el
 thread ya terminal sin gastar otro goal y cerrar la atestacion pendiente.
+
+## Replay r8 y BUG-ORQ-20260711-234
+
+La reobservacion de `r7` no pudo recuperar el marker despues de limpiar su
+backend y quedo bloqueada honestamente como `goal_backend_gone_without_result`.
+No se fabrico un cierre manual. `r8` arranco limpio desde `96f1fe70c`, completo
+T9104 en el goal `019f5085-67a1-7863-9664-28c9f0f36dc5`, materializo un
+resultado durable correcto y alcanzo la atestacion independiente.
+
+El comando independiente paso realmente:
+
+```text
+status=passed
+ok orquesta/cmd/orquesta-server 0.007s
+```
+
+Sin embargo, el claim durable termino
+`goal_required_test_attestor_infrastructure_failed` sin receipt. La causa fue
+posterior al test: Go vuelve a marcar directorios de su module cache como
+read-only; el `defer os.RemoveAll(runDir)` no podia atravesarlos y convertia el
+verde en fallo de limpieza.
+
+Cierre local de `BUG-ORQ-20260711-234`:
+
+- el entorno Go aislado fija `GOFLAGS=-modcacherw`;
+- la limpieza recorre unicamente el workdir efimero, restaura `0700` en sus
+  directorios y despues ejecuta `RemoveAll`;
+- un fallo de limpieza sigue siendo infraestructura roja, nunca falso verde;
+- una regresion ejecuta un comando que crea deliberadamente un subdirectorio
+  read-only dentro de `GOMODCACHE` y exige que no quede ningun workdir;
+- evidencia real retenida en
+  `/tmp/orquesta-bug226-t9104-r8-runtime/attestation/evidence/commands/17d07c63b092cee037a6ade1.log`.
+
+El claim fallido de `r8` es inmutable por diseño; el cierre empirico necesita
+estado nuevo con el arreglo de limpieza.

@@ -285,7 +285,7 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) runFrozenTestV0(
 		return orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{}, err
 	}
 	defer func() {
-		if cleanupErr := os.RemoveAll(runDir); resultErr == nil && cleanupErr != nil {
+		if cleanupErr := removeGoalRequiredTestExecutionDirV0(runDir); resultErr == nil && cleanupErr != nil {
 			result = orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{}
 			resultErr = fmt.Errorf("goal_required_test_execution_cleanup_failed: %w", cleanupErr)
 		}

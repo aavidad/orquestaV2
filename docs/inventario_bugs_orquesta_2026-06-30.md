@@ -4116,6 +4116,14 @@ publica evidencia de la reparacion y sigue rechazando refs no cercanas o
 external refs divergentes. Detalle en la
 [incidencia T9104](incidencias/incidencia_orquesta_t9104_wakeup_material_progress_shutdown_stale_2026-07-11.md).
 
+BUG `BUG-ORQ-20260711-234` (cerrado localmente, pendiente de replay integrado):
+en `r8` el test independiente paso, pero Go dejo directorios read-only dentro
+del cache privado y la limpieza con `os.RemoveAll` fallo; el claim quedo rojo de
+infraestructura sin receipt. El entorno usa ahora `-modcacherw` y la limpieza
+restaura permisos solo dentro del workdir efimero antes de borrarlo, manteniendo
+el fallo cerrado si aun no pudiera limpiar. Regresion y evidencia en la
+[incidencia T9104](incidencias/incidencia_orquesta_t9104_wakeup_material_progress_shutdown_stale_2026-07-11.md).
+
 Avance 2026-07-11: `b96e9b115` añade refs obligatorias de criterios
 verificables al contrato Goal; el transporte posterior añade
 `acceptance_checks` tipados a autoprogramacion V0/V1 y los publica por MCP. Los
