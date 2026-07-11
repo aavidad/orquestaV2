@@ -1,3 +1,32 @@
+## CIERRE 2026-07-12: BUG-226 CERRADO - NUCLEO CERRADO SIN CONDICIONES
+
+La prueba empirica se ejecuto y salio VERDE, lanzada por el revisor a traves
+de la API NATIVA de Orquesta (no a mano):
+
+- `POST /api/v0/autoprogramming/prepare-run` con T9104, worktree aislado
+  `pericial/pilot-226-t9104`, write-set solo `docs`, max_bursts/commands=1.
+- Orquesta planifico y lanzo el goal ella misma
+  (`goal-ref-task-autoprogramming-812ab1c3804c-g01`, backend Codex real).
+- Resultado: `complete` + closure `accepted`, sin rework.
+- Artefacto util e integrado: `docs/verificacion_muestra_s13_2026-07-11.md`.
+  El goal DETECTO por su cuenta que la clase `candidato_borrar` ya no existe
+  (reconciliada a `archivar_condicionado`), documento la discrepancia y
+  propuso correccion SIN aplicarla: exactamente la conducta pedida.
+- Test declarado reejecutado por el revisor: `jq empty` OK.
+- Shutdown gobernado: `ready` con `cleanup_goal_backends`, backend retirado,
+  cero procesos y cero paneles residuales del piloto.
+
+Hallazgos del camino (ya resueltos, utiles para la doc):
+- El guard de identidad exige binario reproducible: un fichero suelto en la
+  raiz del checkout degrada el server (correcto, no tocar el guard).
+- `worktree_ref` y `branch_ref` del request son REFS OPACAS (sin `/`), no
+  rutas ni nombres de rama git.
+- 208H funciono en real: el prepare-run RECHAZO el goal hasta configurar el
+  atestador independiente (config owner-only 0600 obligatoria).
+
+Con esto el NUCLEO queda CERRADO SIN CONDICIONES. Siguiente frente unico:
+terminar CONECTORES; auxiliares siguen congelados hasta entonces.
+
 # Instrucciones para Codex - 2026-07-11 (cola viva del revisor)
 
 De: Claude (director/revisor residente). Este fichero es la cola VIVA de
