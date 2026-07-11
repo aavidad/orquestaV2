@@ -400,10 +400,22 @@ func (fake *fakeAutoprogrammingPromotionPortV0) PromoteAutoprogrammingStagingV0(
 	fake.promotions++
 	fake.lastPromotion = command
 	return orquestaautoprogramming.AutoprogrammingStagingEffectResultV0{
-		SchemaVersion: orquestaautoprogramming.AutoprogrammingStagingPromotionSchemaVersionV0,
-		Status:        orquestaautoprogramming.AutoprogrammingStagingEffectPromotedV0,
-		EvidenceRefs:  []string{"evidence-ref-fake-promotion"},
+		SchemaVersion:         orquestaautoprogramming.AutoprogrammingStagingPromotionSchemaVersionV0,
+		Status:                orquestaautoprogramming.AutoprogrammingStagingEffectPromotedV0,
+		IntegrationStatus:     orquestaautoprogramming.AutoprogrammingStagingIntegrationStatusIntegratedV0,
+		IntegrationReceiptRef: "integration-receipt-ref-fake-promotion",
+		EvidenceRefs:          []string{"evidence-ref-fake-promotion"},
 	}, nil
+}
+
+func TestAutoprogrammingPromotionEffectWithIntegrationStatusV0DoesNotInferIntegrationV0(t *testing.T) {
+	result := autoprogrammingPromotionEffectWithIntegrationStatusV0(orquestaautoprogramming.AutoprogrammingStagingEffectResultV0{
+		Status: orquestaautoprogramming.AutoprogrammingStagingEffectPromotedV0,
+	})
+	if result.IntegrationStatus != orquestaautoprogramming.AutoprogrammingStagingIntegrationStatusPendingIntegrationV0 ||
+		autoprogrammingPromotionEffectCompleteV0(result) {
+		t.Fatalf("result=%+v", result)
+	}
 }
 
 func (fake *fakeAutoprogrammingPromotionPortV0) ArchiveAutoprogrammingStagingV0(

@@ -538,6 +538,11 @@ func autoprogrammingPromotionEffectForTestV0(
 		Retryable:      result.Retryable,
 		EvidenceRefs:   result.EvidenceRefs,
 	}
+	if result.Status == orquestaruntimeworktree.StagingPromotionStatusPromotedV0 ||
+		result.Status == orquestaruntimeworktree.StagingPromotionStatusCleanV0 {
+		out.IntegrationStatus = orquestaautoprogramming.AutoprogrammingStagingIntegrationStatusIntegratedV0
+		out.IntegrationReceiptRef = "integration-receipt-ref-test-" + result.CommitShortRef
+	}
 	for _, issue := range issues {
 		out.Issues = append(out.Issues, orquestaautoprogramming.AutoprogrammingRequestIssueV0{Code: string(issue.Code), Field: issue.Field})
 	}
@@ -556,7 +561,13 @@ func (port *statusAutoprogrammingPromotionPortForTestV0) PromoteAutoprogrammingS
 	orquestaautoprogramming.AutoprogrammingStagingPromotionCommandV0,
 ) (orquestaautoprogramming.AutoprogrammingStagingEffectResultV0, error) {
 	port.promotions++
-	return orquestaautoprogramming.AutoprogrammingStagingEffectResultV0{Status: port.promoteStatus, EvidenceRefs: []string{"evidence-ref-promotion-status"}}, nil
+	result := orquestaautoprogramming.AutoprogrammingStagingEffectResultV0{Status: port.promoteStatus, EvidenceRefs: []string{"evidence-ref-promotion-status"}}
+	if port.promoteStatus == orquestaautoprogramming.AutoprogrammingStagingEffectPromotedV0 ||
+		port.promoteStatus == orquestaautoprogramming.AutoprogrammingStagingEffectCleanV0 {
+		result.IntegrationStatus = orquestaautoprogramming.AutoprogrammingStagingIntegrationStatusIntegratedV0
+		result.IntegrationReceiptRef = "integration-receipt-ref-status-test"
+	}
+	return result, nil
 }
 
 func (port *statusAutoprogrammingPromotionPortForTestV0) ArchiveAutoprogrammingStagingV0(

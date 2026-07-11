@@ -60,7 +60,7 @@ func (stack StackV0) maybePromoteClosedAutoprogrammingRunV0(
 	}
 	promoted = autoprogrammingPromotionEffectWithIntegrationStatusV0(promoted)
 	refs := compactStringsV0(append(decision.EvidenceRefs, autoprogrammingPromotionEffectEvidenceRefsV0(promoted)...))
-	if !autoprogrammingPromotionEffectCompleteV0(promoted.Status) {
+	if !autoprogrammingPromotionEffectCompleteV0(promoted) {
 		return false, refs, nil
 	}
 	archived, err := config.Port.ArchiveAutoprogrammingStagingV0(ctx, decision.CleanupCommand)
@@ -534,8 +534,12 @@ func autoprogrammingPromotionPlanRefV0(runRef string) string {
 	return "operational-director-plan-director-decisions-" + safe
 }
 
-func autoprogrammingPromotionEffectCompleteV0(status string) bool {
-	switch strings.TrimSpace(status) {
+func autoprogrammingPromotionEffectCompleteV0(result orquestaautoprogramming.AutoprogrammingStagingEffectResultV0) bool {
+	if strings.TrimSpace(result.IntegrationStatus) != orquestaautoprogramming.AutoprogrammingStagingIntegrationStatusIntegratedV0 ||
+		strings.TrimSpace(result.IntegrationReceiptRef) == "" {
+		return false
+	}
+	switch strings.TrimSpace(result.Status) {
 	case orquestaautoprogramming.AutoprogrammingStagingEffectPromotedV0,
 		orquestaautoprogramming.AutoprogrammingStagingEffectCleanV0:
 		return true
@@ -553,7 +557,7 @@ func autoprogrammingPromotionEffectWithIntegrationStatusV0(
 		switch strings.TrimSpace(result.Status) {
 		case orquestaautoprogramming.AutoprogrammingStagingEffectPromotedV0,
 			orquestaautoprogramming.AutoprogrammingStagingEffectCleanV0:
-			result.IntegrationStatus = orquestaautoprogramming.AutoprogrammingStagingIntegrationStatusIntegratedV0
+			result.IntegrationStatus = orquestaautoprogramming.AutoprogrammingStagingIntegrationStatusPendingIntegrationV0
 		case orquestaautoprogramming.AutoprogrammingStagingEffectPendingPushV0:
 			result.IntegrationStatus = orquestaautoprogramming.AutoprogrammingStagingIntegrationStatusPendingIntegrationV0
 		case orquestaautoprogramming.AutoprogrammingStagingEffectBlockedV0:
