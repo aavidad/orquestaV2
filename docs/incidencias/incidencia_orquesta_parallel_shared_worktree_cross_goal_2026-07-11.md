@@ -1,7 +1,7 @@
 # Incidencia: goals paralelos comparten worktree y se bloquean entre si
 
 Fecha: 2026-07-11
-Estado: abierto
+Estado: en correccion; aislamiento y routing implementados, integracion/batch pendientes
 Area: autoprogramacion goal-first / paralelismo / worktree / atestacion
 
 ## Contexto
@@ -90,6 +90,51 @@ obtuvo un receipt independiente `passed` para uno; un segundo claim quedo
 concurrente HTTP/residente. Se enlaza como evidencia adicional de 208AC y del
 scheduler de atestaciones pendiente; no se abre identificador duplicado.
 
+## BUG-ORQ-20260711-246: tests globales replicados por goal
+
+El compilador fusionaba `request.required_tests` dentro de cada grupo. En una
+ola de dos goals, ambos ejecutaban los tests globales sobre el mismo arbol
+mutable, ademas de sus tests focales. Esto duplicaba coste y permitia resultados
+dependientes del estado transitorio del hermano.
+
+`569e16287` separa `BatchRequiredTests` de los tests focales. En multi-goal,
+cada goal recibe solo tests de tarea, acceptance checks y guards contractuales;
+un grupo sin test focal se rechaza antes del launch. Sigue pendiente ejecutar
+los tests de batch una sola vez sobre la revision integrada antes del cierre
+definitivo.
+
+## BUG-ORQ-20260711-247: commit aislado publicado como integrado
+
+`autoprogrammingPromotionEffectWithIntegrationStatusV0` inferia
+`integration_status=integrated` cuando el puerto devolvia `promoted|clean` sin
+estado explicito. Esa inferencia era tolerable mientras el puerto operaba sobre
+el checkout canonico, pero se convierte en falso verde cuando el commit vive en
+una worktree fisica del goal.
+
+La correccion exige que el adaptador produzca un recibo durable de integracion:
+commit del goal verificado, lock multiproceso, cherry-pick/merge gobernado sobre
+el checkout de integracion, conflicto con abort y retencion, y replay que
+demuestre que el commit integrado sigue en la historia. Un commit aislado sin
+ese recibo queda `pending_integration`, nunca `integrated`.
+
+## Avance implementado
+
+- `0dce780b3`: autorizaciones destructivas exactas en el verificador; falta
+  completar su transporte desde tarea hasta packet/runtime.
+- `ba33d04b3`: provisionador Git idempotente de worktree fisica por goal.
+- `c4bdedf0c`: app-server resuelve el CWD por goal en start/observe/fingerprint.
+- `ca16cbfdd`: el stack captura cada baseline en su workspace y rechaza un
+  multi-goal sin provisionador fisico.
+- `023cdc486` y `d2ce9f80c`: binding durable reiniciable y wiring exclusivo del
+  backend de autoprogramacion; apps externas no cambian de workspace.
+- `872eed05a`: `goal_ref` viaja por el contrato causal de promocion.
+- `b88c7428a`: progreso material y write-set se verifican en el workspace del
+  goal, no en el checkout compartido.
+
+Estos commits cierran la contaminacion durante ejecucion, pero BUG-244 no se
+declara cerrado hasta integrar dos commits paralelos, ejecutar el gate global y
+limpiar solo workspaces ya integrados.
+
 ## Criterios de cierre
 
 1. Dos goals con write-sets disjuntos ejecutan en worktrees fisicos distintos.
@@ -102,6 +147,8 @@ scheduler de atestaciones pendiente; no se abre identificador duplicado.
 6. Rename/remove no autorizado sigue bloqueado.
 7. Shutdown limpia procesos y worktrees ya integrados, pero no evidencia ni
    ramas bloqueadas.
+8. Los tests globales se ejecutan una vez sobre la revision integrada y su
+   atestacion no pertenece a ningun implementador individual.
 
 El shutdown de la ola devolvio `shutdown_ready=true`, retiro backend/tmux y el
 servidor salio con codigo cero.

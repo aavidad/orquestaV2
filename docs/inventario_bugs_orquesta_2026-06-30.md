@@ -4228,6 +4228,21 @@ verificador, conservar evidencia advisory y bloquear solo cambios destructivos
 no autorizados. Detalle en la
 [incidencia de worktree paralelo](incidencias/incidencia_orquesta_parallel_shared_worktree_cross_goal_2026-07-11.md).
 
+BUG `BUG-ORQ-20260711-246` (parcial, atestacion multi-goal): los tests globales
+del request se copiaban a cada goal y se ejecutaban repetidos sobre un arbol
+compartido mutable. `569e16287` separa tests focales y `BatchRequiredTests`, y
+rechaza goals sin prueba focal. Falta el runner independiente unico posterior a
+la integracion del lote. Evidencia en la
+[incidencia de worktree paralelo](incidencias/incidencia_orquesta_parallel_shared_worktree_cross_goal_2026-07-11.md).
+
+BUG `BUG-ORQ-20260711-247` (abierto, falso verde de integracion): el stack
+inferia `integrated` de un efecto `promoted|clean` sin recibo, lo que permite
+confundir un commit creado en worktree aislada con un commit presente en la
+rama de integracion. Se exige lock, integracion Git real, recibo durable y
+replay verificable; sin ellos el estado debe ser `pending_integration`.
+Evidencia y avance en la
+[incidencia de worktree paralelo](incidencias/incidencia_orquesta_parallel_shared_worktree_cross_goal_2026-07-11.md).
+
 Avance 2026-07-11: `b96e9b115` añade refs obligatorias de criterios
 verificables al contrato Goal; el transporte posterior añade
 `acceptance_checks` tipados a autoprogramacion V0/V1 y los publica por MCP. Los
