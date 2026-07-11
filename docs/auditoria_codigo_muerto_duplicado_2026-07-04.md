@@ -108,3 +108,24 @@ Correccion de ratchet aplicada despues de la segunda ola:
   `deadcode_source=deadcode_tool`, `deadcode_candidates=1228`,
   `helper_duplicate_definitions=288`, `orphan_modules=1`,
   `large_files_over_800=17`.
+
+## Actualizacion Codex 2026-07-11: ola privada verificable
+
+La auditoria viva previa dio `deadcode_candidates=1202`, 30 privados sin refs
+textuales, 409 exportados/contratos por revisar, 40 privados usados solo por
+tests, 8 modulos sin importadores internos, 307 helpers duplicados y 22
+ficheros grandes. Estos conteos sustituyen los snapshots 1188/1228 para el
+arbol actual; no equivalen a bugs ni autorizan borrados masivos.
+
+Tres commits eliminan solo los 30 privados sin ninguna referencia:
+`65616e06a` (10 wrappers, 77 lineas), `9009d8321` (17 wrappers, 100 lineas) y
+`6d1781812` (3 helpers de modulos, 18 lineas). Tras la ola y la nueva config
+canonica: `deadcode_candidates=1173`, `helper_duplicate_definitions=307`,
+`orphan_modules=8`, `large_files_over_800=22`, `functions_indexed=25490`.
+Evidencia derivada local:
+`/tmp/orquesta-code-audit-20260711-r2/current.json`.
+
+Los ocho modulos sin importadores no se borran: son adaptadores/tools opt-in
+recientes, incluido SQL de referencia declarado en AGENTS. Los exportados,
+contratos y privados de test quedan fuera de esta ola. Duplicados y ficheros
+grandes son deuda de mantenibilidad, no prueba de codigo muerto.

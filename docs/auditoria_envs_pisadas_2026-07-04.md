@@ -736,3 +736,22 @@ Verificación:
 - `go test -count=1 ./...`
 - `bash scripts/orquesta_metricas_deuda.sh --json`
 - `git diff --check`
+
+## Actualizacion Codex 2026-07-11: medicion viva y runtime_models
+
+La medicion vigente de `scripts/orquesta_metricas_deuda.sh --json` sustituye
+los baselines historicos 511/512: `env_vars_orquesta=423` productivas y 103
+solo de test. El ratchet AST de `cmd/orquesta-server` declara cero lecturas
+productivas fuera del registro. Los nombres de proceso hijo Guardian, wrappers,
+caches y `SMOKE_*` no se convierten en settings globales.
+
+`bc5a2cdcf` migra las cuatro envs Ollama a `runtime_models.*` en
+`orquesta.config.json`. Las envs siguen como overrides deprecated; token solo
+por `bearer_token_file` confinado y redactado. La primera version funcional fue
+rechazada por seguridad y queda documentada como BUG-220.
+
+Residual real de configuracion persistente: `hermes_operator` (15 envs) y la
+decision sobre `startup_cleanup` (3 inputs de invocacion). Los aliases
+`ORQUESTA_BASE_URL`, `ORQUESTA_CODEX_HOME`/`CODEX_HOME`, `OPES_BASE_URL` e idle
+`...AFTER` siguen diagnosticados; no se retiran sin una ventana de
+compatibilidad medida.
