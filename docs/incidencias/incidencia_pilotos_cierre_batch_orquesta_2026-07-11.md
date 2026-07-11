@@ -43,6 +43,12 @@ app desechable ni se toco OPES/remoto.
   incluia `golang.org/x/text@v0.38.0`; diez tests anidados con `GOPROXY=off`
   expusieron que el preflight no validaba cierre completo de dependencias. G02
   cerro accepted, g01 quedo con cierre bloqueado y no hubo integracion.
+- replay10 supero el preflight con un snapshot completo de 52 MB, pero el
+  comando `go mod download all` anadio checksums al `go.sum` canonico. Se paro
+  antes de integrar y se restauro solo ese diff generado. Tres shutdown forced
+  quedaron `stop_pending` mientras tests/turns seguian activos; SIGINT del PID
+  propio cerro servidor y tmux. El preflight queda reemplazado por dos `go list`
+  readonly y el shutdown activo se registra como BUG-267.
 - los shutdown de replay3/4/5 quedaron `stop_pending` con contadores cero y un
   tmux propio vivo; el fallback acotado uso SIGINT del PID del piloto y elimino
   exclusivamente su sesion `orquesta-goal-*` tras varios intentos HTTP.
@@ -56,6 +62,7 @@ app desechable ni se toco OPES/remoto.
 - `/tmp/orquesta-live-bug255-replay7-20260711`
 - `/tmp/orquesta-live-bug255-replay8-20260711`
 - `/tmp/orquesta-live-bug255-replay9-20260711`
+- `/tmp/orquesta-live-bug255-replay10-20260711`
 
 Se retienen hasta extraer el recibo final. No contienen autoridad documental y
 se eliminaran de forma gobernada al cerrar la incidencia. No versionar

@@ -86,14 +86,25 @@ func ensureGoalRequiredTestGoSnapshotPreflightV0(commands []string, goCommand st
 	if goCommand == "" {
 		return commands
 	}
-	required := []string{goCommand, "mod", "download", "all"}
-	for _, command := range commands {
-		tokens, err := splitCommandV0(command)
-		if err == nil && slices.Equal(tokens, required) {
-			return commands
+	requiredCommands := [][]string{
+		{goCommand, "list", "-mod=readonly", "-m", "all"},
+		{goCommand, "list", "-mod=readonly", "-test", "-deps", "./..."},
+	}
+	missing := make([]string, 0, len(requiredCommands))
+	for _, required := range requiredCommands {
+		found := false
+		for _, command := range commands {
+			tokens, err := splitCommandV0(command)
+			if err == nil && slices.Equal(tokens, required) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			missing = append(missing, strings.Join(required, " "))
 		}
 	}
-	return append([]string{strings.Join(required, " ")}, commands...)
+	return append(missing, commands...)
 }
 
 func (adapter *LocalGoalRequiredTestAttestationAdapterV0) materializeDependencySnapshotV0(runDir string) (string, error) {

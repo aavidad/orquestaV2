@@ -4437,5 +4437,19 @@ si Go esta permitido y existe `go.mod`, el preflight ejecuta obligatoriamente
 `go mod download all` con `GOPROXY=off`; snapshot incompleto bloquea startup.
 El piloto debe regenerar snapshot, cerrar batch e idempotencia.
 
+BUG `BUG-ORQ-20260711-266` (cerrado localmente, preflight Go mutaba modulo):
+el primer preflight obligatorio uso `go mod download all` y replay10 anadio
+seis checksums a `go.sum` canonico antes de lanzar goals. La guarda de checkout
+lo hizo visible y no hubo integracion. El comando se sustituye por
+`go list -mod=readonly -m all` y
+`go list -mod=readonly -test -deps ./...`: ambos validan el snapshot offline,
+el antiguo falla, el nuevo pasa en menos de un segundo y `go.sum` no cambia.
+
+BUG `BUG-ORQ-20260711-267` (abierto, forced shutdown durante tests activos):
+replay10 devolvio `stop_pending` tres veces mientras un test atestado y turns
+Codex seguian activos; SIGINT al PID propio cerro servidor y tmux en el segundo
+sondeo. Los cierres 6-9 prueban shutdown idle/terminal, pero falta demostrar que
+forced cancela test/turn activos y alcanza `shutdown_ready` por API sin fallback.
+
 Evidencia transversal de `BUG-255` a `BUG-264`:
 [pilotos de cierre batch del 2026-07-11](incidencias/incidencia_pilotos_cierre_batch_orquesta_2026-07-11.md).

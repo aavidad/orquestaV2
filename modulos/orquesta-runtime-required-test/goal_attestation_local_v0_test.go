@@ -409,19 +409,21 @@ func TestLocalGoalRequiredTestAttestationAdapterV0AddsGoSnapshotPreflightOnceV0(
 	}
 	config := localGoalAttestationConfigForTestV0(project, runtimeRoot, gitPath, map[string]string{"go": goPath})
 	config.DependencySnapshotPath = localGoalAttestationReadOnlySnapshotForTestV0(t)
-	config.PreflightCommands = []string{"go mod download all", "go list -mod=readonly -deps ./..."}
+	config.PreflightCommands = []string{"go list -mod=readonly -m all", "go list -mod=readonly -test -deps ./..."}
 	adapter, err := NewLocalGoalRequiredTestAttestationAdapterV0(config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	count := 0
-	for _, command := range adapter.config.PreflightCommands {
-		if command == "go mod download all" {
-			count++
+	for _, required := range []string{"go list -mod=readonly -m all", "go list -mod=readonly -test -deps ./..."} {
+		count := 0
+		for _, command := range adapter.config.PreflightCommands {
+			if command == required {
+				count++
+			}
 		}
-	}
-	if count != 1 {
-		t.Fatalf("go snapshot preflight count=%d commands=%v", count, adapter.config.PreflightCommands)
+		if count != 1 {
+			t.Fatalf("go snapshot preflight %q count=%d commands=%v", required, count, adapter.config.PreflightCommands)
+		}
 	}
 }
 
