@@ -4178,17 +4178,35 @@ repara esa run y prueba reentrada sin segundo launch; falta reconsultar el
 estado real retenido. El replay creo la run omitida y `observe` devolvio HTTP
 200 con cierre bloqueado publico en lugar del 500.
 
-BUG `BUG-ORQ-20260711-241` (cerrado localmente, pendiente de A/B,
+BUG `BUG-ORQ-20260711-241` (mejora funcional verificada; ahorro no acreditado,
 economia/autonomia): el goal fuente y el
 rework de BUG-237 consumieron 50.115 y 51.121 tokens sin diff. El governor paro
 ambos, pero la reparacion repitio el mismo patron en una tarea estrecha. No se
 sube el umbral: elimina la contradiccion del checkpoint y no relanza rework si
-la evidencia tipada sigue siendo `none`; se exige A/B real hasta primer progreso.
+la evidencia tipada sigue siendo `none`. El A/B BUG-242 produjo diff real y
+renovo el segmento a 53.463 tokens ajustados, pero no demuestra ahorro: el
+stream del proveedor acumulo 868.185 tokens incluyendo contexto/cache y el
+cierre se desvio por BUG-243. Se exige un par comparable con desglose de input,
+cache y output antes de declarar cerrada la economia.
 
-BUG `BUG-ORQ-20260711-242` (abierto, ratchet de configuracion): el scanner AST
+BUG `BUG-ORQ-20260711-242` (cerrado en codigo y focales, ratchet de configuracion): el scanner AST
 solo mira el primer argumento y omite claves pasadas a `firstNonEmptyEnvV0`.
-Dos fallbacks globales Codex wave quedan fuera del supuesto baseline cero. Se
-usa como tarea real del A/B de BUG-241.
+Dos fallbacks globales Codex wave quedaban fuera del supuesto baseline cero.
+Orquesta genero el parche real, ahora se recorren todos los argumentos
+variadicos, wave/Director/config efectiva no heredan model/profile global y el
+focal aislado queda verde. Commit `8a43e5fd7`; evidencia en la
+[incidencia de limpieza](incidencias/incidencia_orquesta_limpieza_config_metricas_falsas_2026-07-11.md).
+
+BUG `BUG-ORQ-20260711-243` (cerrado localmente, pendiente de replay real,
+atestacion/preflight): un required-test con alternancia regex `|` sin comillas
+fue aceptado por el binder, descubierto solo por el ejecutor hermetico tras
+terminar el goal y reducido a fallo ordinario, por lo que Orquesta lanzo un
+rework Codex incapaz de reparar el contrato congelado. El binder valida ahora
+sintaxis, allowlist y shell con la misma politica antes del launch; la ruta
+legacy devuelve error de infraestructura y no consume rework de codigo; un
+argumento citado con `|` sigue valido. Focales de runtime-required-test, goal y
+stack verdes; evidencia y refs en la
+[incidencia de limpieza](incidencias/incidencia_orquesta_limpieza_config_metricas_falsas_2026-07-11.md).
 
 Avance 2026-07-11: `b96e9b115` añade refs obligatorias de criterios
 verificables al contrato Goal; el transporte posterior añade

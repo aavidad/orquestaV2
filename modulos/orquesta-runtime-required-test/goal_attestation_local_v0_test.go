@@ -109,6 +109,67 @@ func TestLocalGoalRequiredTestAttestationAdapterV0RejectsNonIndependentPolicy(t 
 	}
 }
 
+func TestLocalGoalRequiredTestAttestationAdapterV0RejectsInvalidFrozenCommandBeforeLaunch(t *testing.T) {
+	project, runtimeRoot, gitPath := localGoalAttestationGitRepoForTestV0(t)
+	testPath, err := exec.LookPath("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapter := localGoalAttestationAdapterForTestV0(t, project, runtimeRoot, gitPath, map[string]string{"test": testPath})
+
+	if _, err := adapter.BindGoalRequiredTestSpecV0(
+		context.Background(),
+		localGoalAttestationSpecForTestV0("test -n value|other"),
+	); err == nil || !strings.Contains(err.Error(), "goal_required_test_command_invalid_before_launch") {
+		t.Fatalf("invalid command err=%v", err)
+	}
+	if _, err := adapter.BindGoalRequiredTestSpecV0(
+		context.Background(),
+		localGoalAttestationSpecForTestV0("unknown-tool --check"),
+	); err == nil || !strings.Contains(err.Error(), "goal_required_test_command_not_allowed_before_launch") {
+		t.Fatalf("not allowed command err=%v", err)
+	}
+	if _, err := adapter.BindGoalRequiredTestSpecV0(
+		context.Background(),
+		localGoalAttestationSpecForTestV0("test -n 'value|other'"),
+	); err != nil {
+		t.Fatalf("quoted argument must remain valid: %v", err)
+	}
+}
+
+func TestLocalGoalRequiredTestAttestationAdapterV0LegacyInvalidCommandIsInfrastructureError(t *testing.T) {
+	project, runtimeRoot, gitPath := localGoalAttestationGitRepoForTestV0(t)
+	testPath, err := exec.LookPath("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapter := localGoalAttestationAdapterForTestV0(t, project, runtimeRoot, gitPath, map[string]string{"test": testPath})
+	bound, err := adapter.BindGoalRequiredTestSpecV0(context.Background(), localGoalAttestationSpecForTestV0("test -f artifact.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	bound.RequiredTests[0] = orquestagoal.FreezeGoalRequiredTestV0(orquestagoal.GoalRequiredTestV0{
+		TestRef:    bound.RequiredTests[0].TestRef,
+		CommandRef: bound.RequiredTests[0].CommandRef,
+		Command:    "test -n value|other",
+	})
+	snapshot, err := adapter.CaptureGoalRequiredTestFinalSnapshotV0(context.Background(), orquestagoal.GoalRequiredTestFinalSnapshotRequestV0{
+		RunRef: bound.RunRef, GoalRef: bound.GoalRef, WriteSet: bound.WriteSet, WriteSetSHA256: bound.WriteSetSHA256,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = adapter.AttestGoalRequiredTestsV0(context.Background(), orquestagoal.GoalRequiredTestAttestationRequestV0{
+		RunRef: bound.RunRef, GoalRef: bound.GoalRef,
+		ImplementerAgentRef: bound.ImplementerAgentRef, ImplementerCredentialRef: bound.ImplementerCredentialRef,
+		AttestorTrustPolicyRef: bound.ClosurePolicy.RequiredAttestorTrustPolicyRef,
+		FinalSnapshot:          snapshot, RequiredTests: bound.RequiredTests,
+	})
+	if err == nil || !strings.Contains(err.Error(), "goal_required_test_command_invalid_before_launch") {
+		t.Fatalf("legacy invalid command err=%v", err)
+	}
+}
+
 func TestLocalGoalRequiredTestAttestationAdapterV0AcceptsReadOnlySnapshotAndGreenPreflight(t *testing.T) {
 	project, runtimeRoot, gitPath := localGoalAttestationGitRepoForTestV0(t)
 	testPath, err := exec.LookPath("test")

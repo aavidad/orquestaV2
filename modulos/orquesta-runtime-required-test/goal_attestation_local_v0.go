@@ -77,6 +77,11 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) BindGoalRequiredTestSp
 	if !spec.ClosurePolicy.RequireIndependentRequiredTestAttestation {
 		return spec, nil
 	}
+	for _, required := range spec.RequiredTests {
+		if err := adapter.validateFrozenRequiredTestCommandV0(required); err != nil {
+			return orquestagoal.GoalWorkSpecV0{}, err
+		}
+	}
 	identity := adapter.config.Identity
 	for field, pair := range map[string][2]string{
 		"implementer_agent_ref":              {spec.ImplementerAgentRef, identity.ImplementerAgentRef},
@@ -150,6 +155,9 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) AttestGoalRequiredTest
 		return nil, fmt.Errorf("goal_required_test_attestation_request_invalid")
 	}
 	test := request.RequiredTests[0]
+	if err := adapter.validateFrozenRequiredTestCommandV0(test); err != nil {
+		return nil, err
+	}
 	writeSet := make([]orquestagoal.GoalWriteScopeV0, 0, len(request.FinalSnapshot.Hashes))
 	for _, hash := range request.FinalSnapshot.Hashes {
 		writeSet = append(writeSet, orquestagoal.GoalWriteScopeV0{Path: hash.Ref})
@@ -220,6 +228,23 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) AttestGoalRequiredTest
 	attestation.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	attestation.AttestationRef = orquestagoal.GoalRequiredTestAttestationCanonicalRefV0(attestation)
 	return []orquestagoal.GoalRequiredTestAttestationV0{orquestagoal.NormalizeGoalRequiredTestAttestationV0(attestation)}, nil
+}
+
+func (adapter *LocalGoalRequiredTestAttestationAdapterV0) validateFrozenRequiredTestCommandV0(
+	test orquestagoal.GoalRequiredTestV0,
+) error {
+	tokens, err := splitCommandV0(test.Command)
+	if err != nil {
+		return fmt.Errorf("goal_required_test_command_invalid_before_launch: %w", err)
+	}
+	commandPath, ok := adapter.config.AllowedCommands[tokens[0]]
+	if !ok {
+		return fmt.Errorf("goal_required_test_command_not_allowed_before_launch: %s", tokens[0])
+	}
+	if commandIsShellV0(tokens[0]) || commandIsShellV0(commandPath) {
+		return fmt.Errorf("goal_required_test_command_shell_prohibited_before_launch")
+	}
+	return nil
 }
 
 func (adapter *LocalGoalRequiredTestAttestationAdapterV0) VerifyGoalRequiredTestIdentityV0(

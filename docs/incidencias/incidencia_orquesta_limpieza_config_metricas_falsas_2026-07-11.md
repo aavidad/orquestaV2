@@ -167,7 +167,8 @@ real sobre una tarea pequena antes de cerrar empiricamente.
 
 ## BUG-ORQ-20260711-242: ratchet AST omite argumentos varargs
 
-Estado: abierto; tarea A/B de BUG-241.
+Estado: cerrado en codigo y verificado focalmente; cierre integral bloqueado por
+BUG-243, ajeno al artefacto.
 
 `serverEnvRegistryASTFindReadsV0` solo inspecciona el primer argumento de cada
 helper. `firstNonEmptyEnvV0(envCodexModelV0)` y su variante profile quedan fuera
@@ -181,3 +182,60 @@ Criterio de cierre:
 - focales de config wave y ratchet verdes;
 - Orquesta produce el primer diff antes del umbral o BUG-241 conserva evidencia
   de fallo sin lanzar un segundo backend.
+
+Resultado real 2026-07-11:
+
+- run `request-ref-bug242-env-varargs-ab-20260711`, goal
+  `goal-ref-task-autoprogramming-ec94eda16810-g01`, backend externo
+  `019f50c2-85ec-7293-a144-affbf04b7620`;
+- Orquesta produjo un diff valido en cinco ficheros y lo clasifico como
+  `material_class=diff`; el primer checkpoint material se observo a 53.463
+  tokens ajustados, 3.463 despues del umbral de replan, y renovo el segmento;
+- el parche detecta todos los argumentos de `firstNonEmptyEnvV0`, elimina los
+  fallbacks globales de model/profile en wave y cubre ola, Director y
+  configuracion efectiva;
+- verificacion independiente del operador con cache aislada:
+  `go test -count=1 ./cmd/orquesta-server -run
+  'Test(ServerEnvRegistryASTV0|CodexWave|CodexDirectorWave)'`, verde;
+- commit de integracion `8a43e5fd7`;
+- el goal no pudo cerrar accepted porque el required-test llevaba el regex sin
+  comillas y el attestor rechazo el caracter `|`. Esa causa de composicion se
+  separa como BUG-243; no invalida el parche BUG-242.
+
+El A/B de BUG-241 prueba que el nuevo contrato llega a diff y evita el segundo
+backend por ausencia de progreso, pero no acredita aun reduccion de coste: el
+contador material ajustado alcanzo 90.249 y el stream del proveedor publico
+868.185 tokens acumulados incluyendo contexto/cache. No se suben umbrales ni se
+declara ahorro hasta separar input nuevo, cacheado y output en un piloto
+comparable.
+
+## BUG-ORQ-20260711-243: required-test invalido se descubre tras implementar
+
+Estado: cerrado localmente; pendiente de replay real.
+
+El contrato congelo
+`go test ... -run Test(ServerEnvRegistryASTV0|CodexWave|CodexDirectorWave)`.
+El parser hermetico prohibe metacaracteres shell fuera de comillas, por lo que
+el attestor genero un receipt `failed` con
+`required_test_command_shell_syntax_prohibited`. El binder habia aceptado ese
+comando antes de lanzar Codex. Tras terminar el codigo, el cierre lo trato como
+fallo ordinario de test y materializo el rework
+`goal-ref-task-autoprogramming-ec94eda16810-g01-rework-1`, aunque ningun
+implementador podia modificar el test congelado.
+
+Correccion global:
+
+- `LocalGoalRequiredTestAttestationAdapterV0.BindGoalRequiredTestSpecV0`
+  valida sintaxis, allowlist y prohibicion de shell con la misma politica del
+  ejecutor antes de lanzar al implementador;
+- la entrada legacy al attestor repite la validacion y devuelve error operativo,
+  que el lifecycle clasifica como infraestructura y bloquea sin rework de
+  codigo;
+- un argumento citado que contiene `|` sigue siendo valido;
+- focales de `orquesta-runtime-required-test`, `orquesta-goal` y
+  `orquesta-app-codex-stack` quedan verdes.
+
+La orden `runs/control` posterior confirmo el goal original ya completo, pero
+no terminalizo el marcador del rework activo; el shutdown gobernado con
+`cleanup_goal_backends=true` si retiro backend, tmux y servidor. Es evidencia
+adicional del residual global BUG-165/208C, no un identificador duplicado.
