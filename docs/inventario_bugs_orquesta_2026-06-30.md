@@ -4210,7 +4210,8 @@ stack verdes; evidencia y refs en la
 [incidencia de limpieza](incidencias/incidencia_orquesta_limpieza_config_metricas_falsas_2026-07-11.md)
 y el [recibo A/B](runbooks/resultado_ab_bug241_243_2026-07-11.md).
 
-BUG `BUG-ORQ-20260711-244` (abierto, paralelismo/worktree): dos goals con
+BUG `BUG-ORQ-20260711-244` (cerrado localmente y por E2E temporal,
+paralelismo/worktree): dos goals con
 write-sets disjuntos fueron lanzados en paralelo sobre el mismo worktree
 fisico. El guard de g01 atribuyo el rename valido de g02 como escritura fuera
 de scope y bloqueo Guardian con `codex_app_server_runtime_write_set_violation`.
@@ -4218,6 +4219,9 @@ No es seguro allowlistear paths hermanos: se exige worktree fisico por goal,
 lease/ownership, CWD y attestor resueltos por goal, e integracion gobernada de
 commits sobre una sola rama canonica. Evidencia y criterios en la
 [incidencia de worktree paralelo](incidencias/incidencia_orquesta_parallel_shared_worktree_cross_goal_2026-07-11.md).
+El E2E batch crea dos worktrees fisicos disjuntos y verifica su integracion
+encadenada sin contaminacion cruzada; queda pendiente solo repetir con proveedor
+real como validacion operativa, no codigo de aislamiento.
 
 BUG `BUG-ORQ-20260711-245` (abierto, limpieza/cambios destructivos tipados): un
 rename 100% solicitado, con origen y destino dentro del write-set, se clasifica
@@ -4229,22 +4233,29 @@ verificador, conservar evidencia advisory y bloquear solo cambios destructivos
 no autorizados. Detalle en la
 [incidencia de worktree paralelo](incidencias/incidencia_orquesta_parallel_shared_worktree_cross_goal_2026-07-11.md).
 
-BUG `BUG-ORQ-20260711-246` (parcial, atestacion multi-goal): los tests globales
+BUG `BUG-ORQ-20260711-246` (cerrado localmente y por E2E temporal,
+atestacion multi-goal): los tests globales
 del request se copiaban a cada goal y se ejecutaban repetidos sobre un arbol
 compartido mutable. `569e16287` separa tests focales y `BatchRequiredTests`, y
-rechaza goals sin prueba focal. Falta el runner independiente unico posterior a
-la integracion del lote. Evidencia en la
+rechaza goals sin prueba focal. El cierre añade agregado/store batch, runner
+independiente unico posterior a todas las integraciones, generacion de gate y
+receipts durables. El E2E ejecuta el gate una vez y el replay no lo repite.
+Evidencia en la
 [incidencia de worktree paralelo](incidencias/incidencia_orquesta_parallel_shared_worktree_cross_goal_2026-07-11.md).
 
-BUG `BUG-ORQ-20260711-247` (abierto, falso verde de integracion): el stack
+BUG `BUG-ORQ-20260711-247` (cerrado localmente y por E2E temporal, falso verde
+de integracion): el stack
 inferia `integrated` de un efecto `promoted|clean` sin recibo, lo que permite
 confundir un commit creado en worktree aislada con un commit presente en la
 rama de integracion. Se exige lock, integracion Git real, recibo durable y
 replay verificable; sin ellos el estado debe ser `pending_integration`.
+El conector Git usa lock, padre esperado y receipt; el E2E prueba dos commits
+encadenados y replay sin duplicacion.
 Evidencia y avance en la
 [incidencia de worktree paralelo](incidencias/incidencia_orquesta_parallel_shared_worktree_cross_goal_2026-07-11.md).
 
-BUG `BUG-ORQ-20260711-249` (abierto, batch causal/CAS): la revision
+BUG `BUG-ORQ-20260711-249` (cerrado localmente y por E2E temporal, batch
+causal/CAS): la revision
 independiente de los commits `85c23ecd4` y `185b1a3f9` encontro que el store
 batch podia aceptar rollback o saltos de estado al sobrescribir
 `StoreVersion`, que el ultimo HEAD integrado no demostraba contener los HEAD
@@ -4259,8 +4270,11 @@ revision del wiring anadio una restriccion: el conector Git crea el commit
 fuente durante el efecto, por lo que el claim previo se liga a
 generacion+miembro+`parent_revision`; `source_revision` nace y se valida solo
 en el receipt posterior.
+El store rechaza rollback/saltos, los efectos usan claims previos y el E2E
+reabre `StoreV0` entre cierres antes de completar el batch.
 
-BUG `BUG-ORQ-20260711-250` (abierto, falso verde post-gate): el primer wiring
+BUG `BUG-ORQ-20260711-250` (cerrado localmente y por E2E temporal, falso verde
+post-gate): el primer wiring
 de BUG-246 reutilizaba `PromoteAutoprogrammingStagingV0` para cerrar el batch.
 Sin `GoalRef`, el adaptador entraba por `PromoteStagingWorktreeV0`, que puede
 hacer `git add/commit` sobre el checkout canonico despues de ejecutar el gate;
@@ -4270,6 +4284,9 @@ atestada o quedar bloqueado tras un crash. Criterio de cierre: finalizador batch
 dedicado bajo lock, arbol limpio, `HEAD == integrated_revision`, cero commit,
 receipt durable y reconciliacion solo desde ese receipt; prueba negativa con
 cambio post-gate y replay tras claim.
+El finalizador dedicado ya no llama a la promocion generica: comparte lock con
+la integracion, exige checkout limpio y revision exacta, y el E2E demuestra que
+un fichero post-gate queda sin commit y bloquea el cierre.
 
 BUG `BUG-ORQ-20260711-251` (cerrado localmente, fixture watcher): la suite
 amplia fallo aunque el watcher desperto y cerro correctamente porque el test
@@ -4285,12 +4302,26 @@ mientras el proceso hijo aun lo escribia, publicando
 con schema, estado, `goal_ref` y `external_goal_ref` causales antes de observar.
 Focal `-count=50` y paquete Claude verdes; no hubo cambio productivo.
 
-BUG `BUG-ORQ-20260711-253` (abierto, superficie de reconciliacion batch): el
+BUG `BUG-ORQ-20260711-253` (cerrado localmente, superficie de reconciliacion
+batch): el
 primer E2E temporal necesito entrar al reconciliador de run cerrado, pero el
 stack solo exponia el metodo privado usado por la cola. Usar `go:linkname` en
 el test ocultaria la limitacion. Criterio de cierre: entrada publica estrecha
 para reconciliar un run batch cerrado, consumible por API/MCP/autoreparacion,
 y E2E sin `unsafe` que conserve el mismo camino productivo.
+`ReconcileClosedAutoprogrammingBatchRunV0` expone un wrapper estrecho sin
+duplicar logica; el E2E lo consume sin `unsafe` ni `go:linkname`.
+
+BUG `BUG-ORQ-20260711-254` (cerrado localmente y por E2E temporal, receipt
+adapter/contrato): el E2E temporal
+descubrio que los adapters de test y finalizacion batch emitian
+`ReceiptRef` como `prefijo/hash.json`, mientras el agregado exige refs opacas
+sin `/` ni separadores de ruta. Los unitarios de adapter no atravesaban la
+transicion real y quedaron falsamente verdes. Criterio de cierre: adapters
+emiten una ref opaca valida, la ruta durable se deriva internamente y el E2E
+persiste test/promocion sin normalizacion silenciosa en app-stack.
+Ambos adapters emiten ahora refs `prefijo-hash`; el nombre de fichero se deriva
+internamente y los tests atraviesan las transiciones reales del agregado.
 
 Avance 2026-07-11: `b96e9b115` añade refs obligatorias de criterios
 verificables al contrato Goal; el transporte posterior añade
