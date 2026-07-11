@@ -76,6 +76,9 @@ func (tracker *StatusTrackerV0) MarkShutdownSnapshotV0(
 			len(refs),
 		))
 		state.ShutdownActiveWorkRefs = compactServerStringsV0(refs)
+		// A new active-work snapshot supersedes actions derived from an older one.
+		// The downstream shutdown response repopulates current actions if needed.
+		state.ShutdownGoalActions = nil
 		state.SupervisorFrozen = true
 		state.SupervisorTickActive = false
 	})

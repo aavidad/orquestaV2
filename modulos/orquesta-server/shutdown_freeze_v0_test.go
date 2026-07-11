@@ -879,6 +879,79 @@ func TestRuntimeV0ServerShutdownSnapshotVacioLimpiaTrabajoPrevioYSolicitaSalidaV
 	}
 }
 
+func TestRuntimeV0ServerShutdownSnapshotVacioRetiraAccionBloqueantePreviaV0(t *testing.T) {
+	stateDir := t.TempDir()
+	responses := [][]byte{
+		[]byte(`{
+			"estado":"ok",
+			"status":"backend_still_running",
+			"shutdown_ready":false,
+			"active_work_count":1,
+			"goal_actions":[{
+				"kind":"goal_backend",
+				"work_ref":"goal-ref-shutdown-action-sequence-001",
+				"status":"backend_still_running",
+				"action_taken":"cleanup_required"
+			}]
+		}`),
+		[]byte(`{"estado":"ok","status":"ready","shutdown_ready":true}`),
+	}
+	call := 0
+	app := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != serverShutdownRoutePathV0 {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		index := call
+		if index >= len(responses) {
+			index = len(responses) - 1
+		}
+		call++
+		_, _ = w.Write(responses[index])
+	})
+	snapshots := &sequenceShutdownSnapshotPortV0{results: []ShutdownSnapshotResultV0{{
+		Status:          "backend_still_running",
+		ActiveWorkCount: 1,
+		ActiveWorks: []ShutdownSnapshotWorkV0{{
+			Kind:    "goal_backend",
+			WorkRef: "goal-ref-shutdown-action-sequence-001",
+			Status:  "backend_still_running",
+		}},
+	}, {}}}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:     stateDir,
+		TickInterval: time.Hour,
+	}, RuntimeDepsV0{
+		AppHandler:       app,
+		Clock:            fixedClockV0{now: time.Date(2026, 7, 11, 10, 30, 0, 0, time.UTC)},
+		ShutdownSnapshot: snapshots,
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	first := httptest.NewRecorder()
+	runtime.HandlerV0().ServeHTTP(first, httptest.NewRequest(http.MethodPost, serverShutdownRoutePathV0, nil))
+	if state := runtime.StateV0(); len(state.ShutdownGoalActions) != 1 || state.ShutdownReady {
+		t.Fatalf("primera accion bloqueante no persistida: %+v", state)
+	}
+
+	second := httptest.NewRecorder()
+	runtime.HandlerV0().ServeHTTP(second, httptest.NewRequest(http.MethodPost, serverShutdownRoutePathV0, nil))
+	var payload serverShutdownHTTPProjectionV0
+	if err := json.Unmarshal(second.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode second shutdown response: %v body=%s", err, second.Body.String())
+	}
+	if !payload.ShutdownReady || payload.Status != "ready" || !payload.ExitPending || len(payload.GoalActions) != 0 {
+		t.Fatalf("snapshot vacio heredo accion previa: %+v", payload)
+	}
+	state := runtime.StateV0()
+	if state.ShutdownInProgress || state.SupervisorFrozen || !state.ShutdownReady || len(state.ShutdownGoalActions) != 0 {
+		t.Fatalf("estado final conserva accion previa: %+v", state)
+	}
+}
+
 func TestRuntimeV0ServerShutdownConflictSinCuerpoConservaSnapshotPrevioActivoV0(t *testing.T) {
 	stateDir := t.TempDir()
 	app := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

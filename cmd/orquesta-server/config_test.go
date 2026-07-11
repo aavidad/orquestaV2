@@ -1498,6 +1498,13 @@ func TestBuildStackFromEnvV0CableaWatcherResultMaterializadoConBackendGoalV0(t *
 	if stack.GoalMaterializedResultWatcher == nil {
 		t.Fatalf("watcher result materializado no cableado")
 	}
+	if stack.MCPTransportBindings.AutoprogrammingMaterialProgressStateReader == nil {
+		t.Fatalf("relay de wakeup no debe ocultar el reader de progreso material")
+	}
+	runControl, ok := stack.MCPTransportBindings.RunControl.(orquestamcp.MCPRunControlToolExecutorV0)
+	if !ok || runControl.MaterialProgressStateReader == nil {
+		t.Fatalf("relay de wakeup no debe ocultar progreso material a runs/control")
+	}
 	if workers := serverBackgroundWorkersFromStackV0(stack); len(workers) != 1 {
 		t.Fatalf("background workers=%d", len(workers))
 	}

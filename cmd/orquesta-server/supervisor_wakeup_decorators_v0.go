@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadirectoragentfilesource "orquesta/modulos/orquesta-director-agent-file-source"
 	orquestadirectorcycleoutbox "orquesta/modulos/orquesta-director-cycle-outbox"
@@ -443,6 +445,30 @@ func (store serverWakeupGoalStateStoreV0) ListGoalWorkStatesV0(
 	request orquestagoal.GoalWorkStateListRequestV0,
 ) ([]orquestagoal.GoalWorkStateV0, error) {
 	return store.inner.ListGoalWorkStatesV0(ctx, request)
+}
+
+func (store serverWakeupGoalStateStoreV0) LoadMaterialProgressStateV0(
+	ctx context.Context,
+	runRef string,
+	goalRef string,
+) (orquestaautoprogramming.MaterialProgressStateV0, error) {
+	reader, ok := store.inner.(orquestaautoprogramming.MaterialProgressStateReaderPortV0)
+	if !ok || reader == nil {
+		return orquestaautoprogramming.MaterialProgressStateV0{}, errors.New("material_progress_state_reader_unavailable")
+	}
+	return reader.LoadMaterialProgressStateV0(ctx, runRef, goalRef)
+}
+
+func (store serverWakeupGoalStateStoreV0) CompareAndSwapMaterialProgressStateV0(
+	ctx context.Context,
+	expectedVersion uint64,
+	state orquestaautoprogramming.MaterialProgressStateV0,
+) (orquestaautoprogramming.MaterialProgressStateV0, error) {
+	stateStore, ok := store.inner.(orquestaautoprogramming.MaterialProgressStateStorePortV0)
+	if !ok || stateStore == nil {
+		return orquestaautoprogramming.MaterialProgressStateV0{}, errors.New("material_progress_state_store_unavailable")
+	}
+	return stateStore.CompareAndSwapMaterialProgressStateV0(ctx, expectedVersion, state)
 }
 
 type serverWakeupDomainWorkArtifactSubmissionLedgerV0 struct {
