@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
-	orquestaruntimeworktree "orquesta/modulos/orquesta-runtime-worktree"
 )
 
 type CodexStackAutoprogrammingExecutorV0 struct {
@@ -50,9 +49,8 @@ func PrepareAutoprogrammingRunFromStackV0(
 	request = autoprogrammingBridgeRequestWithGoalFirstBackendMarkersV0(request, stack.Ports)
 	work := orquestaautoprogramming.BuildAutoprogrammingProgrammableWorkV0(request.Request)
 	if work.Accepted {
-		var snapshotStore orquestaruntimeworktree.WorktreeSnapshotStorePortV0
+		snapshotStore := stack.AutoprogrammingPromotion.GoalFirstSnapshotStore
 		if stack.AutoprogrammingPromotion.Enabled {
-			snapshotStore = stack.AutoprogrammingPromotion.GoalFirstSnapshotStore
 			if snapshotStore == nil {
 				work.Accepted = false
 				work.Issues = append(work.Issues, orquestaautoprogramming.AutoprogrammingRequestIssueV0{

@@ -2,7 +2,9 @@
 
 Fecha: 2026-07-11
 
-Estado: `BUG-ORQ-20260711-227/228` cerrados localmente; replay real pendiente.
+Estado: `BUG-ORQ-20260711-227` cerrado empiricamente;
+`BUG-ORQ-20260711-228` cerrado localmente y wiring real confirmado;
+`BUG-ORQ-20260711-229` cerrado localmente, replay real pendiente.
 
 ## Alcance y evidencia retenida
 
@@ -82,3 +84,35 @@ ok orquesta/modulos/orquesta-server 0.444s
 5. Confirmar que el shutdown termina en `shutdown_ready=true` sin señal manual.
 6. Conservar recibos y actualizar `BUG-226/227/228`; no declarar cerrado el
    nucleo solo por los tests focales.
+
+## Replay r2 y BUG-ORQ-20260711-229
+
+El replay `r2` arranco desde `1018f8c31`, con binario limpio, worktree/estado
+nuevos y `ORQUESTA_SERVER_WORKTREE` canonico. El primer preflight degradado por
+omitir esa variable no lanzo goals y se cerro antes de repetir.
+
+Evidencia retenida en `/tmp/orquesta-bug226-t9104-r2-runtime`:
+
+- goal nuevo `019f5052-2813-7943-a2f6-3e7137c37cb0`;
+- ningun diagnostico `material_progress_state_reader_unbound`;
+- uso tipado observado hasta 41.526 tokens y un informe materializado;
+- `run-control-bug229-2.json`: parada tipada confirmada;
+- `shutdown-bug229.json`: `shutdown_ready=true`, `exit_pending=true`, backend
+  `cleanup_completed`; el proceso salio sin senal manual.
+
+La ausencia de estado material revelo `BUG-ORQ-20260711-229`: el servidor solo
+inyectaba `GoalFirstSnapshotStore` cuando la promocion Git estaba activada, y
+el prepare-run solo grababa el baseline en ese caso. Con promocion desactivada
+por seguridad, el clasificador devolvia `material_progress_diff_verifier_unavailable`
+y el governor omitia la decision.
+
+Cierre local:
+
+- la composicion server inyecta siempre su state-file como snapshot store;
+- prepare-run graba baseline siempre que exista ese puerto, con independencia
+  de `promotion.Enabled`;
+- `promotion.Enabled` sigue gobernando exclusivamente promocion/commit;
+- focales prueban baseline durable con promotion desactivada y wiring server.
+
+El goal `r2` tampoco se reutiliza. El siguiente replay debe usar refs, estado y
+worktree nuevos, y demostrar el fichero `material_progress_states/*.json`.

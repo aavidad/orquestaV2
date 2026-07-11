@@ -280,9 +280,7 @@ func buildStackFromProjectConfigV0(
 	}
 	var worktreeSnapshotStore orquestaruntimeworktree.WorktreeSnapshotStorePortV0 = stateStore
 	autoprogrammingPromotion := autoprogrammingPromotionConfigFromEnvV0(serverConfig)
-	if autoprogrammingPromotion.Enabled {
-		autoprogrammingPromotion.GoalFirstSnapshotStore = worktreeSnapshotStore
-	}
+	autoprogrammingPromotion.GoalFirstSnapshotStore = worktreeSnapshotStore
 	runStore := orquestacionnucleoapp.RunStorePortV0(stateStore)
 	runQueue := orquestarunqueue.RunQueuePortV0(runFileStore)
 	runControl := orquestaruncontrol.RunControlPortV0(runFileStore)

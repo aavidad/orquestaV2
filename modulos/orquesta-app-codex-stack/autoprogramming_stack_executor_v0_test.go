@@ -21,6 +21,7 @@ import (
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 	orquestarunsupervisor "orquesta/modulos/orquesta-run-supervisor"
+	orquestaruntimeworktree "orquesta/modulos/orquesta-runtime-worktree"
 	orquestaservershutdown "orquesta/modulos/orquesta-server-shutdown"
 )
 
@@ -528,6 +529,20 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0DevuelveGoalSpecsCuandoGoalRead
 func TestCodexStackAutoprogrammingPrepareRunAPIV0BackendGoalCompletoMarcaGoalFirstPorDefecto(t *testing.T) {
 	runtime := newFakeCodexStackRuntimeV0()
 	stack := mustBuildCodexStackForTestV0(t, runtime)
+	projectDir := t.TempDir()
+	writePath := filepath.Join(projectDir, "modulos/orquesta-app-codex-stack/autoprogramming_bridge_v0.go")
+	if err := os.MkdirAll(filepath.Dir(writePath), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(writePath, []byte("package orquestaappcodexstack\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	snapshotStore := orquestaruntimeworktree.NewInMemoryWorktreeSnapshotStoreV0()
+	stack.Codex.ProjectWorkDir = projectDir
+	stack.AutoprogrammingPromotion = AutoprogrammingPromotionConfigV0{
+		Enabled:                false,
+		GoalFirstSnapshotStore: snapshotStore,
+	}
 	launcher := &goalFirstQueueLauncherForTestV0{}
 	goalStates := newGoalFirstQueueStateStoreForTestV0()
 	stack.Ports.GoalLauncher = launcher
@@ -574,6 +589,13 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0BackendGoalCompletoMarcaGoalFir
 	}
 	if len(launcher.specs) != 1 || launcher.specs[0].RunRef != prepared.RunRef {
 		t.Fatalf("launcher specs=%+v prepared=%+v", launcher.specs, prepared)
+	}
+	baselineRef := goalMaterialProgressContextRefV0(launcher.specs[0].ContextRefs, "worktree_baseline")
+	if baselineRef == "" {
+		t.Fatalf("goal sin baseline con promotion disabled: %+v", launcher.specs[0].ContextRefs)
+	}
+	if _, err := snapshotStore.LoadWorktreeSnapshotV0(context.Background(), baselineRef); err != nil {
+		t.Fatalf("baseline no persistido con promotion disabled: %v", err)
 	}
 	run, err := stack.Ports.RunStore.LoadRunV0(context.Background(), prepared.RunRef)
 	if err != nil {

@@ -117,6 +117,9 @@ func TestBuildStackFromEnvV0UsaConectoresDurablesFileBased(t *testing.T) {
 	if deps.MaterialProgressEvidence == nil {
 		t.Fatal("MaterialProgressEvidence debe quedar cableado en la composicion Codex")
 	}
+	if stack.AutoprogrammingPromotion.GoalFirstSnapshotStore == nil {
+		t.Fatal("el verificador material necesita snapshot store aunque promotion este desactivada")
+	}
 	if stack.MCPTransportBindings.AutoprogrammingMaterialProgressStateReader == nil {
 		t.Fatal("MCP debe proyectar el mismo estado durable de progreso material")
 	}
