@@ -238,4 +238,6 @@ Correccion global:
 La orden `runs/control` posterior confirmo el goal original ya completo, pero
 no terminalizo el marcador del rework activo; el shutdown gobernado con
 `cleanup_goal_backends=true` si retiro backend, tmux y servidor. Es evidencia
-adicional del residual global BUG-165/208C, no un identificador duplicado.
+adicional del residual global BUG-165/208C, no un identificador duplicado. El
+recibo compacto y hashes previos a la limpieza estan en
+`docs/runbooks/resultado_ab_bug241_243_2026-07-11.md`.

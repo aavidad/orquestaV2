@@ -4206,7 +4206,8 @@ sintaxis, allowlist y shell con la misma politica antes del launch; la ruta
 legacy devuelve error de infraestructura y no consume rework de codigo; un
 argumento citado con `|` sigue valido. Focales de runtime-required-test, goal y
 stack verdes; evidencia y refs en la
-[incidencia de limpieza](incidencias/incidencia_orquesta_limpieza_config_metricas_falsas_2026-07-11.md).
+[incidencia de limpieza](incidencias/incidencia_orquesta_limpieza_config_metricas_falsas_2026-07-11.md)
+y el [recibo A/B](runbooks/resultado_ab_bug241_243_2026-07-11.md).
 
 Avance 2026-07-11: `b96e9b115` añade refs obligatorias de criterios
 verificables al contrato Goal; el transporte posterior añade
