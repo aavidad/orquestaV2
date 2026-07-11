@@ -1087,6 +1087,15 @@ antes de su cierre posterior:
 
 ## Ejes de arquitectura a vigilar
 
+Actualizacion S13 2026-07-11: `BUG-ORQ-20260711-219` permanece abierto como
+incidencia documental/operativa. El manifiesto de retencion ampliada contenia
+25 `candidato_borrar` catalogados por JSON; se reclasifican a
+`archivar_condicionado`. La reconciliacion distingue 68 rutas en auditoria
+estricta, 103 en retencion ampliada, 61 comunes, 42 exclusivas del ampliado y 7
+omitidas por este. No se mueve ni borra nada: la accion pendiente es comprobar
+referencias por ruta y destino trazable en una ola gobernada. Evidencia:
+[incidencia 219](incidencias/incidencia_orquesta_s13_clasificacion_borrado_referenciada_2026-07-11.md).
+
 | Eje | Sintoma repetido | Riesgo arquitectonico |
 | --- | --- | --- |
 | Goal-first vs loop legacy | rutas que caen al director antiguo, modos implicitos, tests que no fijan opt-in | migracion incompleta y doble fuente de verdad del ciclo |

@@ -1,13 +1,13 @@
 {
-  "schema_version": "orquesta_clasificacion_retencion_s13.v0",
-  "generado": "2026-07-10",
-  "generado_por": "Claude Fable (revisor), tarea T9103 del backlog piloto",
-  "regla": "ningun fichero se borra ni se mueve en esta clasificacion; la poda posterior debe ser una ola gobernada con git como garantia y este JSON como entrada",
+  "schema_version": "orquesta_clasificacion_retencion_s13.v1",
+  "generado": "2026-07-11",
+  "generado_por": "Claude Fable (revisor), tarea T9103 del backlog piloto; reconciliado documentalmente el 2026-07-11",
+  "regla": "ningun fichero se borra ni se mueve en esta clasificacion; los registros archivar_condicionado requieren comprobacion por ruta, destino trazable y una ola gobernada con git como garantia",
   "total": 103,
   "resumen": {
     "retener": 3,
     "archivar": 75,
-    "candidato_borrar": 25
+    "archivar_condicionado": 25
   },
   "artefactos": [
     {
@@ -66,45 +66,75 @@
     },
     {
       "path": "cmd/orquesta-server/docs/checkpoint_started_goal-ref-task-autoprogramming-6153eceb442b-g01.txt",
-      "clasificacion": "candidato_borrar",
-      "motivo": "marcador efimero de arranque de goal; el estado durable vive en los stores de goal state, no en el arbol fuente",
-      "riesgo_borrado": "bajo: no es fuente ni evidencia de cierre; riesgo residual solo si un doc lo cita como evidencia",
-      "referencias_encontradas": []
+      "clasificacion": "archivar_condicionado",
+      "motivo": "marcador de ejecucion catalogado en el manifiesto JSON de retencion ampliada S13; no se declara libre de referencias. Solo puede archivarse tras comprobar referencias por ruta y destino trazable en una ola gobernada.",
+      "riesgo_borrado": "medio: no es candidato de borrado; su presencia en manifiestos JSON S13 exige reconciliacion y comprobacion de referencias antes de cualquier movimiento",
+      "referencias_encontradas": [],
+      "cobertura_json_s13": {
+        "retencion_ampliada_ref": "docs/clasificacion_retencion_s13_2026-07-10.json",
+        "auditoria_estricta_ref": "docs/auditorias/s13_artefactos_ejecucion_versionados_2026-07-10.json",
+        "tracked_ref_count_outside_self": 2
+      }
     },
     {
       "path": "cmd/orquesta-server/docs/checkpoint_started_goal-ref-task-autoprogramming-93e0439fa334-g01.txt",
-      "clasificacion": "candidato_borrar",
-      "motivo": "marcador efimero de arranque de goal; el estado durable vive en los stores de goal state, no en el arbol fuente",
-      "riesgo_borrado": "bajo: no es fuente ni evidencia de cierre; riesgo residual solo si un doc lo cita como evidencia",
-      "referencias_encontradas": []
+      "clasificacion": "archivar_condicionado",
+      "motivo": "marcador de ejecucion catalogado en el manifiesto JSON de retencion ampliada S13; no se declara libre de referencias. Solo puede archivarse tras comprobar referencias por ruta y destino trazable en una ola gobernada.",
+      "riesgo_borrado": "medio: no es candidato de borrado; su presencia en manifiestos JSON S13 exige reconciliacion y comprobacion de referencias antes de cualquier movimiento",
+      "referencias_encontradas": [],
+      "cobertura_json_s13": {
+        "retencion_ampliada_ref": "docs/clasificacion_retencion_s13_2026-07-10.json",
+        "auditoria_estricta_ref": "docs/auditorias/s13_artefactos_ejecucion_versionados_2026-07-10.json",
+        "tracked_ref_count_outside_self": 2
+      }
     },
     {
       "path": "cmd/orquesta-server/docs/checkpoint_started_goal-ref-task-autoprogramming-9fa50e72c7ef-g01.txt",
-      "clasificacion": "candidato_borrar",
-      "motivo": "marcador efimero de arranque de goal; el estado durable vive en los stores de goal state, no en el arbol fuente",
-      "riesgo_borrado": "bajo: no es fuente ni evidencia de cierre; riesgo residual solo si un doc lo cita como evidencia",
-      "referencias_encontradas": []
+      "clasificacion": "archivar_condicionado",
+      "motivo": "marcador de ejecucion catalogado en el manifiesto JSON de retencion ampliada S13; no se declara libre de referencias. Solo puede archivarse tras comprobar referencias por ruta y destino trazable en una ola gobernada.",
+      "riesgo_borrado": "medio: no es candidato de borrado; su presencia en manifiestos JSON S13 exige reconciliacion y comprobacion de referencias antes de cualquier movimiento",
+      "referencias_encontradas": [],
+      "cobertura_json_s13": {
+        "retencion_ampliada_ref": "docs/clasificacion_retencion_s13_2026-07-10.json",
+        "auditoria_estricta_ref": "docs/auditorias/s13_artefactos_ejecucion_versionados_2026-07-10.json",
+        "tracked_ref_count_outside_self": 2
+      }
     },
     {
       "path": "cmd/orquesta-server/docs/checkpoint_started_t281_diagnostico_etiquetas_backlog.txt",
-      "clasificacion": "candidato_borrar",
-      "motivo": "marcador efimero de arranque de goal; el estado durable vive en los stores de goal state, no en el arbol fuente",
-      "riesgo_borrado": "bajo: no es fuente ni evidencia de cierre; riesgo residual solo si un doc lo cita como evidencia",
-      "referencias_encontradas": []
+      "clasificacion": "archivar_condicionado",
+      "motivo": "marcador de ejecucion catalogado en el manifiesto JSON de retencion ampliada S13; no se declara libre de referencias. Solo puede archivarse tras comprobar referencias por ruta y destino trazable en una ola gobernada.",
+      "riesgo_borrado": "medio: no es candidato de borrado; su presencia en manifiestos JSON S13 exige reconciliacion y comprobacion de referencias antes de cualquier movimiento",
+      "referencias_encontradas": [],
+      "cobertura_json_s13": {
+        "retencion_ampliada_ref": "docs/clasificacion_retencion_s13_2026-07-10.json",
+        "auditoria_estricta_ref": null,
+        "tracked_ref_count_outside_self": null
+      }
     },
     {
       "path": "cmd/orquesta-server/docs/checkpoint_started_t283_prompt_estable_cache_proveedor.txt",
-      "clasificacion": "candidato_borrar",
-      "motivo": "marcador efimero de arranque de goal; el estado durable vive en los stores de goal state, no en el arbol fuente",
-      "riesgo_borrado": "bajo: no es fuente ni evidencia de cierre; riesgo residual solo si un doc lo cita como evidencia",
-      "referencias_encontradas": []
+      "clasificacion": "archivar_condicionado",
+      "motivo": "marcador de ejecucion catalogado en el manifiesto JSON de retencion ampliada S13; no se declara libre de referencias. Solo puede archivarse tras comprobar referencias por ruta y destino trazable en una ola gobernada.",
+      "riesgo_borrado": "medio: no es candidato de borrado; su presencia en manifiestos JSON S13 exige reconciliacion y comprobacion de referencias antes de cualquier movimiento",
+      "referencias_encontradas": [],
+      "cobertura_json_s13": {
+        "retencion_ampliada_ref": "docs/clasificacion_retencion_s13_2026-07-10.json",
+        "auditoria_estricta_ref": null,
+        "tracked_ref_count_outside_self": null
+      }
     },
     {
       "path": "cmd/orquesta-server/docs/checkpoint_started_task-envs-ola1-consolidacion.txt",
-      "clasificacion": "candidato_borrar",
-      "motivo": "marcador efimero de arranque de goal; el estado durable vive en los stores de goal state, no en el arbol fuente",
-      "riesgo_borrado": "bajo: no es fuente ni evidencia de cierre; riesgo residual solo si un doc lo cita como evidencia",
-      "referencias_encontradas": []
+      "clasificacion": "archivar_condicionado",
+      "motivo": "marcador de ejecucion catalogado en el manifiesto JSON de retencion ampliada S13; no se declara libre de referencias. Solo puede archivarse tras comprobar referencias por ruta y destino trazable en una ola gobernada.",
+      "riesgo_borrado": "medio: no es candidato de borrado; su presencia en manifiestos JSON S13 exige reconciliacion y comprobacion de referencias antes de cualquier movimiento",
+      "referencias_encontradas": [],
+      "cobertura_json_s13": {
+        "retencion_ampliada_ref": "docs/clasificacion_retencion_s13_2026-07-10.json",
+        "auditoria_estricta_ref": null,
+        "tracked_ref_count_outside_self": null
+      }
     },
     {
       "path": "cmd/orquesta-server/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t281-diagnostico-etiquetas-backlog-d23bb3aa.json",
@@ -412,17 +442,27 @@
     },
     {
       "path": "modulos/orquesta-app-codex-stack/docs/checkpoint_started_goal-ref-autoprogramming-backlog-t291-simulacion-determinista-fallos-aa4bc2a0.txt",
-      "clasificacion": "candidato_borrar",
-      "motivo": "marcador efimero de arranque de goal; el estado durable vive en los stores de goal state, no en el arbol fuente",
-      "riesgo_borrado": "bajo: no es fuente ni evidencia de cierre; riesgo residual solo si un doc lo cita como evidencia",
-      "referencias_encontradas": []
+      "clasificacion": "archivar_condicionado",
+      "motivo": "marcador de ejecucion catalogado en el manifiesto JSON de retencion ampliada S13; no se declara libre de referencias. Solo puede archivarse tras comprobar referencias por ruta y destino trazable en una ola gobernada.",
+      "riesgo_borrado": "medio: no es candidato de borrado; su presencia en manifiestos JSON S13 exige reconciliacion y comprobacion de referencias antes de cualquier movimiento",
+      "referencias_encontradas": [],
+      "cobertura_json_s13": {
+        "retencion_ampliada_ref": "docs/clasificacion_retencion_s13_2026-07-10.json",
+        "auditoria_estricta_ref": "docs/auditorias/s13_artefactos_ejecucion_versionados_2026-07-10.json",
+        "tracked_ref_count_outside_self": 2
+      }
     },
     {
       "path": "modulos/orquesta-app-codex-stack/docs/checkpoint_started_t285_despertar_por_result_materializado.txt",
-      "clasificacion": "candidato_borrar",
-      "motivo": "marcador efimero de arranque de goal; el estado durable vive en los stores de goal state, no en el arbol fuente",
-      "riesgo_borrado": "bajo: no es fuente ni evidencia de cierre; riesgo residual solo si un doc lo cita como evidencia",
-      "referencias_encontradas": []
+      "clasificacion": "archivar_condicionado",
+      "motivo": "marcador de ejecucion catalogado en el manifiesto JSON de retencion ampliada S13; no se declara libre de referencias. Solo puede archivarse tras comprobar referencias por ruta y destino trazable en una ola gobernada.",
+      "riesgo_borrado": "medio: no es candidato de borrado; su presencia en manifiestos JSON S13 exige reconciliacion y comprobacion de referencias antes de cualquier movimiento",
+      "referencias_encontradas": [],
+      "cobertura_json_s13": {
+        "retencion_ampliada_ref": "docs/clasificacion_retencion_s13_2026-07-10.json",
+        "auditoria_estricta_ref": null,
+        "tracked_ref_count_outside_self": null
+      }
     },
     {
       "path": "modulos/orquesta-app-codex-stack/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t267-adaptadores-evidencia-estado-vivo-5785380b.json",
@@ -474,17 +514,27 @@
     },
     {
       "path": "modulos/orquesta-autoprogramming/docs/checkpoint_started_goal-ref-task-autoprogramming-72bb10d53162-g02.txt",
-      "clasificacion": "candidato_borrar",
-      "motivo": "marcador efimero de arranque de goal; el estado durable vive en los stores de goal state, no en el arbol fuente",
-      "riesgo_borrado": "bajo: no es fuente ni evidencia de cierre; riesgo residual solo si un doc lo cita como evidencia",
-      "referencias_encontradas": []
+      "clasificacion": "archivar_condicionado",
+      "motivo": "marcador de ejecucion catalogado en el manifiesto JSON de retencion ampliada S13; no se declara libre de referencias. Solo puede archivarse tras comprobar referencias por ruta y destino trazable en una ola gobernada.",
+      "riesgo_borrado": "medio: no es candidato de borrado; su presencia en manifiestos JSON S13 exige reconciliacion y comprobacion de referencias antes de cualquier movimiento",
+      "referencias_encontradas": [],
+      "cobertura_json_s13": {
+        "retencion_ampliada_ref": "docs/clasificacion_retencion_s13_2026-07-10.json",
+        "auditoria_estricta_ref": "docs/auditorias/s13_artefactos_ejecucion_versionados_2026-07-10.json",
+        "tracked_ref_count_outside_self": 2
+      }
     },
     {
       "path": "modulos/orquesta-autoprogramming/docs/checkpoint_started_t292_tests_congelados_actor_critico.txt",
-      "clasificacion": "candidato_borrar",
-      "motivo": "marcador efimero de arranque de goal; el estado durable vive en los stores de goal state, no en el arbol fuente",
-      "riesgo_borrado": "bajo: no es fuente ni evidencia de cierre; riesgo residual solo si un doc lo cita como evidencia",
-      "referencias_encontradas": []
+      "clasificacion": "archivar_condicionado",
+      "motivo": "marcador de ejecucion catalogado en el manifiesto JSON de retencion ampliada S13; no se declara libre de referencias. Solo puede archivarse tras comprobar referencias por ruta y destino trazable en una ola gobernada.",
+      "riesgo_borrado": "medio: no es candidato de borrado; su presencia en manifiestos JSON S13 exige reconciliacion y comprobacion de referencias antes de cualquier movimiento",
+      "referencias_encontradas": [],
+      "cobertura_json_s13": {
+        "retencion_ampliada_ref": "docs/clasificacion_retencion_s13_2026-07-10.json",
+        "auditoria_estricta_ref": null,
+        "tracked_ref_count_outside_self": null
+      }
     },
     {
       "path": "modulos/orquesta-autoprogramming/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t292-tests-congelados-actor-critico-65e58024.json",
@@ -606,10 +656,15 @@
     },
     {
       "path": "modulos/orquesta-context/docs/checkpoint_started_t278_repo_map_compacto_broker.txt",
-      "clasificacion": "candidato_borrar",
-      "motivo": "marcador efimero de arranque de goal; el estado durable vive en los stores de goal state, no en el arbol fuente",
-      "riesgo_borrado": "bajo: no es fuente ni evidencia de cierre; riesgo residual solo si un doc lo cita como evidencia",
-      "referencias_encontradas": []
+      "clasificacion": "archivar_condicionado",
+      "motivo": "marcador de ejecucion catalogado en el manifiesto JSON de retencion ampliada S13; no se declara libre de referencias. Solo puede archivarse tras comprobar referencias por ruta y destino trazable en una ola gobernada.",
+      "riesgo_borrado": "medio: no es candidato de borrado; su presencia en manifiestos JSON S13 exige reconciliacion y comprobacion de referencias antes de cualquier movimiento",
+      "referencias_encontradas": [],
+      "cobertura_json_s13": {
+        "retencion_ampliada_ref": "docs/clasificacion_retencion_s13_2026-07-10.json",
+        "auditoria_estricta_ref": null,
+        "tracked_ref_count_outside_self": null
+      }
     },
     {
       "path": "modulos/orquesta-context/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t278-repo-map-compacto-broker-2b547c9d.json",
@@ -663,10 +718,15 @@
     },
     {
       "path": "modulos/orquesta-estado-vivo/docs/checkpoint_started_t287_property_based_nucleo_puro.txt",
-      "clasificacion": "candidato_borrar",
-      "motivo": "marcador efimero de arranque de goal; el estado durable vive en los stores de goal state, no en el arbol fuente",
-      "riesgo_borrado": "bajo: no es fuente ni evidencia de cierre; riesgo residual solo si un doc lo cita como evidencia",
-      "referencias_encontradas": []
+      "clasificacion": "archivar_condicionado",
+      "motivo": "marcador de ejecucion catalogado en el manifiesto JSON de retencion ampliada S13; no se declara libre de referencias. Solo puede archivarse tras comprobar referencias por ruta y destino trazable en una ola gobernada.",
+      "riesgo_borrado": "medio: no es candidato de borrado; su presencia en manifiestos JSON S13 exige reconciliacion y comprobacion de referencias antes de cualquier movimiento",
+      "referencias_encontradas": [],
+      "cobertura_json_s13": {
+        "retencion_ampliada_ref": "docs/clasificacion_retencion_s13_2026-07-10.json",
+        "auditoria_estricta_ref": null,
+        "tracked_ref_count_outside_self": null
+      }
     },
     {
       "path": "modulos/orquesta-estado-vivo/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t266-modulo-estado-vivo-pericial-29b09fc7.json",
@@ -684,17 +744,27 @@
     },
     {
       "path": "modulos/orquesta-goal/docs/checkpoint_started_t276_causa_primera_clase_launch_receipt.txt",
-      "clasificacion": "candidato_borrar",
-      "motivo": "marcador efimero de arranque de goal; el estado durable vive en los stores de goal state, no en el arbol fuente",
-      "riesgo_borrado": "bajo: no es fuente ni evidencia de cierre; riesgo residual solo si un doc lo cita como evidencia",
-      "referencias_encontradas": []
+      "clasificacion": "archivar_condicionado",
+      "motivo": "marcador de ejecucion catalogado en el manifiesto JSON de retencion ampliada S13; no se declara libre de referencias. Solo puede archivarse tras comprobar referencias por ruta y destino trazable en una ola gobernada.",
+      "riesgo_borrado": "medio: no es candidato de borrado; su presencia en manifiestos JSON S13 exige reconciliacion y comprobacion de referencias antes de cualquier movimiento",
+      "referencias_encontradas": [],
+      "cobertura_json_s13": {
+        "retencion_ampliada_ref": "docs/clasificacion_retencion_s13_2026-07-10.json",
+        "auditoria_estricta_ref": null,
+        "tracked_ref_count_outside_self": null
+      }
     },
     {
       "path": "modulos/orquesta-goal/docs/checkpoint_started_t282_presupuesto_contexto_por_goal.txt",
-      "clasificacion": "candidato_borrar",
-      "motivo": "marcador efimero de arranque de goal; el estado durable vive en los stores de goal state, no en el arbol fuente",
-      "riesgo_borrado": "bajo: no es fuente ni evidencia de cierre; riesgo residual solo si un doc lo cita como evidencia",
-      "referencias_encontradas": []
+      "clasificacion": "archivar_condicionado",
+      "motivo": "marcador de ejecucion catalogado en el manifiesto JSON de retencion ampliada S13; no se declara libre de referencias. Solo puede archivarse tras comprobar referencias por ruta y destino trazable en una ola gobernada.",
+      "riesgo_borrado": "medio: no es candidato de borrado; su presencia en manifiestos JSON S13 exige reconciliacion y comprobacion de referencias antes de cualquier movimiento",
+      "referencias_encontradas": [],
+      "cobertura_json_s13": {
+        "retencion_ampliada_ref": "docs/clasificacion_retencion_s13_2026-07-10.json",
+        "auditoria_estricta_ref": null,
+        "tracked_ref_count_outside_self": null
+      }
     },
     {
       "path": "modulos/orquesta-goal/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t276-causa-primera-clase-launch-receipt-550e90d.json",
@@ -934,10 +1004,15 @@
     },
     {
       "path": "modulos/orquesta-runtime-codex-appserver/docs/checkpoint_started_t270.txt",
-      "clasificacion": "candidato_borrar",
-      "motivo": "marcador efimero de arranque de goal; el estado durable vive en los stores de goal state, no en el arbol fuente",
-      "riesgo_borrado": "bajo: no es fuente ni evidencia de cierre; riesgo residual solo si un doc lo cita como evidencia",
-      "referencias_encontradas": []
+      "clasificacion": "archivar_condicionado",
+      "motivo": "marcador de ejecucion catalogado en el manifiesto JSON de retencion ampliada S13; no se declara libre de referencias. Solo puede archivarse tras comprobar referencias por ruta y destino trazable en una ola gobernada.",
+      "riesgo_borrado": "medio: no es candidato de borrado; su presencia en manifiestos JSON S13 exige reconciliacion y comprobacion de referencias antes de cualquier movimiento",
+      "referencias_encontradas": [],
+      "cobertura_json_s13": {
+        "retencion_ampliada_ref": "docs/clasificacion_retencion_s13_2026-07-10.json",
+        "auditoria_estricta_ref": null,
+        "tracked_ref_count_outside_self": null
+      }
     },
     {
       "path": "modulos/orquesta-runtime-codex-appserver/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t270-cerrar-migracion-backend-appserver-4176cd2.json",
@@ -1074,24 +1149,39 @@
     },
     {
       "path": "modulos/orquesta-server/docs/checkpoint_started_t273_supervisor_idle_dormido_por_eventos.txt",
-      "clasificacion": "candidato_borrar",
-      "motivo": "marcador efimero de arranque de goal; el estado durable vive en los stores de goal state, no en el arbol fuente",
-      "riesgo_borrado": "bajo: no es fuente ni evidencia de cierre; riesgo residual solo si un doc lo cita como evidencia",
-      "referencias_encontradas": []
+      "clasificacion": "archivar_condicionado",
+      "motivo": "marcador de ejecucion catalogado en el manifiesto JSON de retencion ampliada S13; no se declara libre de referencias. Solo puede archivarse tras comprobar referencias por ruta y destino trazable en una ola gobernada.",
+      "riesgo_borrado": "medio: no es candidato de borrado; su presencia en manifiestos JSON S13 exige reconciliacion y comprobacion de referencias antes de cualquier movimiento",
+      "referencias_encontradas": [],
+      "cobertura_json_s13": {
+        "retencion_ampliada_ref": "docs/clasificacion_retencion_s13_2026-07-10.json",
+        "auditoria_estricta_ref": null,
+        "tracked_ref_count_outside_self": null
+      }
     },
     {
       "path": "modulos/orquesta-server/docs/checkpoint_started_t275_reconciliar_goal_idle_terminado.txt",
-      "clasificacion": "candidato_borrar",
-      "motivo": "marcador efimero de arranque de goal; el estado durable vive en los stores de goal state, no en el arbol fuente",
-      "riesgo_borrado": "bajo: no es fuente ni evidencia de cierre; riesgo residual solo si un doc lo cita como evidencia",
-      "referencias_encontradas": []
+      "clasificacion": "archivar_condicionado",
+      "motivo": "marcador de ejecucion catalogado en el manifiesto JSON de retencion ampliada S13; no se declara libre de referencias. Solo puede archivarse tras comprobar referencias por ruta y destino trazable en una ola gobernada.",
+      "riesgo_borrado": "medio: no es candidato de borrado; su presencia en manifiestos JSON S13 exige reconciliacion y comprobacion de referencias antes de cualquier movimiento",
+      "referencias_encontradas": [],
+      "cobertura_json_s13": {
+        "retencion_ampliada_ref": "docs/clasificacion_retencion_s13_2026-07-10.json",
+        "auditoria_estricta_ref": null,
+        "tracked_ref_count_outside_self": null
+      }
     },
     {
       "path": "modulos/orquesta-server/docs/checkpoint_started_t290_goal_high_consumption_without_progress.txt",
-      "clasificacion": "candidato_borrar",
-      "motivo": "marcador efimero de arranque de goal; el estado durable vive en los stores de goal state, no en el arbol fuente",
-      "riesgo_borrado": "bajo: no es fuente ni evidencia de cierre; riesgo residual solo si un doc lo cita como evidencia",
-      "referencias_encontradas": []
+      "clasificacion": "archivar_condicionado",
+      "motivo": "marcador de ejecucion catalogado en el manifiesto JSON de retencion ampliada S13; no se declara libre de referencias. Solo puede archivarse tras comprobar referencias por ruta y destino trazable en una ola gobernada.",
+      "riesgo_borrado": "medio: no es candidato de borrado; su presencia en manifiestos JSON S13 exige reconciliacion y comprobacion de referencias antes de cualquier movimiento",
+      "referencias_encontradas": [],
+      "cobertura_json_s13": {
+        "retencion_ampliada_ref": "docs/clasificacion_retencion_s13_2026-07-10.json",
+        "auditoria_estricta_ref": null,
+        "tracked_ref_count_outside_self": null
+      }
     },
     {
       "path": "modulos/orquesta-server/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t273-supervisor-idle-dormido-por-eventos-1ec0a4.json",
@@ -1182,31 +1272,51 @@
     },
     {
       "path": "modulos/orquesta-web/docs/checkpoint_started_goal-ref-task-autoprogramming-2d2ba45d5118-g01.txt",
-      "clasificacion": "candidato_borrar",
-      "motivo": "marcador efimero de arranque de goal; el estado durable vive en los stores de goal state, no en el arbol fuente",
-      "riesgo_borrado": "bajo: no es fuente ni evidencia de cierre; riesgo residual solo si un doc lo cita como evidencia",
-      "referencias_encontradas": []
+      "clasificacion": "archivar_condicionado",
+      "motivo": "marcador de ejecucion catalogado en el manifiesto JSON de retencion ampliada S13; no se declara libre de referencias. Solo puede archivarse tras comprobar referencias por ruta y destino trazable en una ola gobernada.",
+      "riesgo_borrado": "medio: no es candidato de borrado; su presencia en manifiestos JSON S13 exige reconciliacion y comprobacion de referencias antes de cualquier movimiento",
+      "referencias_encontradas": [],
+      "cobertura_json_s13": {
+        "retencion_ampliada_ref": "docs/clasificacion_retencion_s13_2026-07-10.json",
+        "auditoria_estricta_ref": "docs/auditorias/s13_artefactos_ejecucion_versionados_2026-07-10.json",
+        "tracked_ref_count_outside_self": 2
+      }
     },
     {
       "path": "modulos/orquesta-web/docs/checkpoint_started_goal-ref-task-autoprogramming-72bb10d53162-g01.txt",
-      "clasificacion": "candidato_borrar",
-      "motivo": "marcador efimero de arranque de goal; el estado durable vive en los stores de goal state, no en el arbol fuente",
-      "riesgo_borrado": "bajo: no es fuente ni evidencia de cierre; riesgo residual solo si un doc lo cita como evidencia",
-      "referencias_encontradas": []
+      "clasificacion": "archivar_condicionado",
+      "motivo": "marcador de ejecucion catalogado en el manifiesto JSON de retencion ampliada S13; no se declara libre de referencias. Solo puede archivarse tras comprobar referencias por ruta y destino trazable en una ola gobernada.",
+      "riesgo_borrado": "medio: no es candidato de borrado; su presencia en manifiestos JSON S13 exige reconciliacion y comprobacion de referencias antes de cualquier movimiento",
+      "referencias_encontradas": [],
+      "cobertura_json_s13": {
+        "retencion_ampliada_ref": "docs/clasificacion_retencion_s13_2026-07-10.json",
+        "auditoria_estricta_ref": "docs/auditorias/s13_artefactos_ejecucion_versionados_2026-07-10.json",
+        "tracked_ref_count_outside_self": 2
+      }
     },
     {
       "path": "modulos/orquesta-web/docs/checkpoint_started_goal-ref-task-autoprogramming-b9e17fae3b8d-g01.txt",
-      "clasificacion": "candidato_borrar",
-      "motivo": "marcador efimero de arranque de goal; el estado durable vive en los stores de goal state, no en el arbol fuente",
-      "riesgo_borrado": "bajo: no es fuente ni evidencia de cierre; riesgo residual solo si un doc lo cita como evidencia",
-      "referencias_encontradas": []
+      "clasificacion": "archivar_condicionado",
+      "motivo": "marcador de ejecucion catalogado en el manifiesto JSON de retencion ampliada S13; no se declara libre de referencias. Solo puede archivarse tras comprobar referencias por ruta y destino trazable en una ola gobernada.",
+      "riesgo_borrado": "medio: no es candidato de borrado; su presencia en manifiestos JSON S13 exige reconciliacion y comprobacion de referencias antes de cualquier movimiento",
+      "referencias_encontradas": [],
+      "cobertura_json_s13": {
+        "retencion_ampliada_ref": "docs/clasificacion_retencion_s13_2026-07-10.json",
+        "auditoria_estricta_ref": "docs/auditorias/s13_artefactos_ejecucion_versionados_2026-07-10.json",
+        "tracked_ref_count_outside_self": 2
+      }
     },
     {
       "path": "modulos/orquesta-web/docs/checkpoint_started_goal-ref-task-autoprogramming-be9fb9250b29-g01.txt",
-      "clasificacion": "candidato_borrar",
-      "motivo": "marcador efimero de arranque de goal; el estado durable vive en los stores de goal state, no en el arbol fuente",
-      "riesgo_borrado": "bajo: no es fuente ni evidencia de cierre; riesgo residual solo si un doc lo cita como evidencia",
-      "referencias_encontradas": []
+      "clasificacion": "archivar_condicionado",
+      "motivo": "marcador de ejecucion catalogado en el manifiesto JSON de retencion ampliada S13; no se declara libre de referencias. Solo puede archivarse tras comprobar referencias por ruta y destino trazable en una ola gobernada.",
+      "riesgo_borrado": "medio: no es candidato de borrado; su presencia en manifiestos JSON S13 exige reconciliacion y comprobacion de referencias antes de cualquier movimiento",
+      "referencias_encontradas": [],
+      "cobertura_json_s13": {
+        "retencion_ampliada_ref": "docs/clasificacion_retencion_s13_2026-07-10.json",
+        "auditoria_estricta_ref": "docs/auditorias/s13_artefactos_ejecucion_versionados_2026-07-10.json",
+        "tracked_ref_count_outside_self": 2
+      }
     },
     {
       "path": "modulos/orquesta-web/docs/orquesta_goal_result_goal-ref-task-autoprogramming-0cc9487d6778-g01.json",
@@ -1288,24 +1398,39 @@
     },
     {
       "path": "scripts/checkpoint_started_task-smoke-opes-lifecycle-real.txt",
-      "clasificacion": "candidato_borrar",
-      "motivo": "marcador efimero de arranque de goal; el estado durable vive en los stores de goal state, no en el arbol fuente",
-      "riesgo_borrado": "bajo: no es fuente ni evidencia de cierre; riesgo residual solo si un doc lo cita como evidencia",
-      "referencias_encontradas": []
+      "clasificacion": "archivar_condicionado",
+      "motivo": "marcador de ejecucion catalogado en el manifiesto JSON de retencion ampliada S13; no se declara libre de referencias. Solo puede archivarse tras comprobar referencias por ruta y destino trazable en una ola gobernada.",
+      "riesgo_borrado": "medio: no es candidato de borrado; su presencia en manifiestos JSON S13 exige reconciliacion y comprobacion de referencias antes de cualquier movimiento",
+      "referencias_encontradas": [],
+      "cobertura_json_s13": {
+        "retencion_ampliada_ref": "docs/clasificacion_retencion_s13_2026-07-10.json",
+        "auditoria_estricta_ref": null,
+        "tracked_ref_count_outside_self": null
+      }
     },
     {
       "path": "scripts/docs/checkpoint_started_goal-ref-autoprogramming-backlog-t288-mutation-testing-piloto-9d60769c.txt",
-      "clasificacion": "candidato_borrar",
-      "motivo": "marcador efimero de arranque de goal; el estado durable vive en los stores de goal state, no en el arbol fuente",
-      "riesgo_borrado": "bajo: no es fuente ni evidencia de cierre; riesgo residual solo si un doc lo cita como evidencia",
-      "referencias_encontradas": []
+      "clasificacion": "archivar_condicionado",
+      "motivo": "marcador de ejecucion catalogado en el manifiesto JSON de retencion ampliada S13; no se declara libre de referencias. Solo puede archivarse tras comprobar referencias por ruta y destino trazable en una ola gobernada.",
+      "riesgo_borrado": "medio: no es candidato de borrado; su presencia en manifiestos JSON S13 exige reconciliacion y comprobacion de referencias antes de cualquier movimiento",
+      "referencias_encontradas": [],
+      "cobertura_json_s13": {
+        "retencion_ampliada_ref": "docs/clasificacion_retencion_s13_2026-07-10.json",
+        "auditoria_estricta_ref": "docs/auditorias/s13_artefactos_ejecucion_versionados_2026-07-10.json",
+        "tracked_ref_count_outside_self": 2
+      }
     },
     {
       "path": "scripts/docs/checkpoint_started_t284_context_compression_benchmark.txt",
-      "clasificacion": "candidato_borrar",
-      "motivo": "marcador efimero de arranque de goal; el estado durable vive en los stores de goal state, no en el arbol fuente",
-      "riesgo_borrado": "bajo: no es fuente ni evidencia de cierre; riesgo residual solo si un doc lo cita como evidencia",
-      "referencias_encontradas": []
+      "clasificacion": "archivar_condicionado",
+      "motivo": "marcador de ejecucion catalogado en el manifiesto JSON de retencion ampliada S13; no se declara libre de referencias. Solo puede archivarse tras comprobar referencias por ruta y destino trazable en una ola gobernada.",
+      "riesgo_borrado": "medio: no es candidato de borrado; su presencia en manifiestos JSON S13 exige reconciliacion y comprobacion de referencias antes de cualquier movimiento",
+      "referencias_encontradas": [],
+      "cobertura_json_s13": {
+        "retencion_ampliada_ref": "docs/clasificacion_retencion_s13_2026-07-10.json",
+        "auditoria_estricta_ref": null,
+        "tracked_ref_count_outside_self": null
+      }
     },
     {
       "path": "scripts/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t284-benchmark-compresion-contexto-optin-2425a2.json",
@@ -1328,5 +1453,6 @@
       "riesgo_borrado": "bajo-medio: evidencia de cierres aceptados; no borrar, archivar con ruta trazable",
       "referencias_encontradas": []
     }
-  ]
+  ],
+  "ambito_retencion_ampliada_ref": "docs/auditorias/reconciliacion_s13_retencion_ampliada_2026-07-11.json"
 }

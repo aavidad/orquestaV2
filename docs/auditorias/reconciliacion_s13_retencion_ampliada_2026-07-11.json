@@ -1,0 +1,339 @@
+{
+  "schema_version": "orquesta_s13_retention_reconciliation.v0",
+  "generated_at": "2026-07-11",
+  "sources": {
+    "ambito_auditoria_estricta_s13_v0": "docs/auditorias/s13_artefactos_ejecucion_versionados_2026-07-10.json",
+    "ambito_retencion_ampliada_s13_v1": "docs/clasificacion_retencion_s13_2026-07-10.json"
+  },
+  "scopes": {
+    "ambito_auditoria_estricta_s13_v0": {
+      "description": "inventario gobernado de artefactos versionados que pasan el patron y criterio estricto de la auditoria S13",
+      "count": 68
+    },
+    "ambito_retencion_ampliada_s13_v1": {
+      "description": "manifest de retencion documental ampliado; no equivale al inventario estricto y no autoriza borrado",
+      "count": 103
+    }
+  },
+  "comparison": {
+    "intersection_count": 61,
+    "expanded_only_count": 42,
+    "strict_only_count": 7,
+    "intersection_paths": [
+      "cmd/orquesta-server/docs/checkpoint_started_goal-ref-task-autoprogramming-6153eceb442b-g01.txt",
+      "cmd/orquesta-server/docs/checkpoint_started_goal-ref-task-autoprogramming-93e0439fa334-g01.txt",
+      "cmd/orquesta-server/docs/checkpoint_started_goal-ref-task-autoprogramming-9fa50e72c7ef-g01.txt",
+      "cmd/orquesta-server/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t281-diagnostico-etiquetas-backlog-d23bb3aa.json",
+      "cmd/orquesta-server/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t283-prompt-estable-cache-proveedor-e080eaeb.json",
+      "cmd/orquesta-server/docs/orquesta_goal_result_goal-ref-task-autoprogramming-1b05f5450521-g01.json",
+      "cmd/orquesta-server/docs/orquesta_goal_result_goal-ref-task-autoprogramming-5ccdd5fa3aea-g01.json",
+      "cmd/orquesta-server/docs/orquesta_goal_result_goal-ref-task-autoprogramming-6153eceb442b-g01.json",
+      "cmd/orquesta-server/docs/orquesta_goal_result_goal-ref-task-autoprogramming-6d18adf66582-g01.json",
+      "cmd/orquesta-server/docs/orquesta_goal_result_goal-ref-task-autoprogramming-72bb10d53162-g04.json",
+      "cmd/orquesta-server/docs/orquesta_goal_result_goal-ref-task-autoprogramming-93e0439fa334-g01.json",
+      "cmd/orquesta-server/docs/orquesta_goal_result_goal-ref-task-autoprogramming-9fa50e72c7ef-g01.json",
+      "cmd/orquesta-server/docs/orquesta_goal_result_goal-ref-task-autoprogramming-d75ef5f8379d-g01.json",
+      "docs/evals/checkpoint_started_goal-ref-autoprogramming-backlog-t289-golden-tasks-evals-a009e049.txt",
+      "docs/evals/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t289-golden-tasks-evals-a009e049.json",
+      "docs/historico/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t272-limpieza-raiz-repo-df0c2f74.json",
+      "docs/triaje_wip_remoto_2026-07-04/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t279-triaje-wip-remoto-fd524960.json",
+      "modulos/orquesta-app-codex-stack/docs/checkpoint_started_goal-ref-autoprogramming-backlog-t291-simulacion-determinista-fallos-aa4bc2a0.txt",
+      "modulos/orquesta-app-codex-stack/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t267-adaptadores-evidencia-estado-vivo-5785380b.json",
+      "modulos/orquesta-app-codex-stack/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t285-despertar-por-result-materializado-4c8de71.json",
+      "modulos/orquesta-app-codex-stack/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t291-simulacion-determinista-fallos-aa4bc2a0.json",
+      "modulos/orquesta-autoprogramming/docs/checkpoint_started_goal-ref-task-autoprogramming-72bb10d53162-g02.txt",
+      "modulos/orquesta-autoprogramming/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t292-tests-congelados-actor-critico-65e58024.json",
+      "modulos/orquesta-autoprogramming/docs/orquesta_goal_result_goal-ref-task-autoprogramming-72bb10d53162-g02.json",
+      "modulos/orquesta-context/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t278-repo-map-compacto-broker-2b547c9d.json",
+      "modulos/orquesta-context/docs/orquesta_goal_result_goal-ref-task-autoprogramming-b16dbf6de0af-g01.json",
+      "modulos/orquesta-deploy/docs/orquesta_goal_result_goal-ref-task-autoprogramming-49e10ec01497-g01.json",
+      "modulos/orquesta-estado-vivo/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t266-modulo-estado-vivo-pericial-29b09fc7.json",
+      "modulos/orquesta-estado-vivo/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t287-property-based-nucleo-puro-1728e5b3.json",
+      "modulos/orquesta-goal/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t276-causa-primera-clase-launch-receipt-550e90d.json",
+      "modulos/orquesta-goal/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t282-presupuesto-contexto-por-goal-a6ac0452.json",
+      "modulos/orquesta-operator-director-channel/docs/orquesta_goal_result_goal-ref-task-autoprogramming-afceb345c0cf-g01-rework-1.json",
+      "modulos/orquesta-operator-director-channel/docs/orquesta_goal_result_goal-ref-task-autoprogramming-afceb345c0cf-g01.json",
+      "modulos/orquesta-operator-telegram/docs/orquesta_goal_result_goal-ref-task-autoprogramming-72bb10d53162-g03.json",
+      "modulos/orquesta-operator-telegram/docs/orquesta_goal_result_goal-ref-task-autoprogramming-8f064b280aca-g01.json",
+      "modulos/orquesta-opes-connector/docs/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t280-wip-tasks-docs-guards-29858632.json",
+      "modulos/orquesta-opes-director/docs/orquesta_goal_result_goal-ref-task-autoprogramming-8b61180dcd7d-g01.json",
+      "modulos/orquesta-orchestration-core/docs/checkpoint_started_goal-ref-task-autoprogramming-7050ce832266-g01.txt",
+      "modulos/orquesta-orchestration-core/docs/orquesta_goal_result_goal-ref-task-autoprogramming-7050ce832266-g01.json",
+      "modulos/orquesta-runtime-codex-appserver/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t270-cerrar-migracion-backend-appserver-4176cd2.json",
+      "modulos/orquesta-runtime-codex-goal/docs/orquesta_goal_result_goal-ref-task-autoprogramming-5fb5b8417b08-g01.json",
+      "modulos/orquesta-server-shutdown/docs/orquesta_goal_result_goal-ref-task-autoprogramming-edd43a30277f-g01.json",
+      "modulos/orquesta-server/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t273-supervisor-idle-dormido-por-eventos-1ec0a4.json",
+      "modulos/orquesta-server/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t275-reconciliar-goal-idle-terminado-48dda62f.json",
+      "modulos/orquesta-server/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t290-corte-durante-ejecucion-goal-sin-progreso.json",
+      "modulos/orquesta-web/docs/checkpoint_started_goal-ref-task-autoprogramming-0cc9487d6778-g01.txt",
+      "modulos/orquesta-web/docs/checkpoint_started_goal-ref-task-autoprogramming-2d2ba45d5118-g01.txt",
+      "modulos/orquesta-web/docs/checkpoint_started_goal-ref-task-autoprogramming-72bb10d53162-g01.txt",
+      "modulos/orquesta-web/docs/checkpoint_started_goal-ref-task-autoprogramming-b9e17fae3b8d-g01.txt",
+      "modulos/orquesta-web/docs/checkpoint_started_goal-ref-task-autoprogramming-be9fb9250b29-g01.txt",
+      "modulos/orquesta-web/docs/orquesta_goal_result_goal-ref-task-autoprogramming-0cc9487d6778-g01.json",
+      "modulos/orquesta-web/docs/orquesta_goal_result_goal-ref-task-autoprogramming-1d01424da32d-g01.json",
+      "modulos/orquesta-web/docs/orquesta_goal_result_goal-ref-task-autoprogramming-2d2ba45d5118-g01.json",
+      "modulos/orquesta-web/docs/orquesta_goal_result_goal-ref-task-autoprogramming-441c8ac7373d-g01.json",
+      "modulos/orquesta-web/docs/orquesta_goal_result_goal-ref-task-autoprogramming-72bb10d53162-g01.json",
+      "modulos/orquesta-web/docs/orquesta_goal_result_goal-ref-task-autoprogramming-b9e17fae3b8d-g01.json",
+      "modulos/orquesta-web/docs/orquesta_goal_result_goal-ref-task-autoprogramming-be9fb9250b29-g01.json",
+      "scripts/docs/checkpoint_started_goal-ref-autoprogramming-backlog-t288-mutation-testing-piloto-9d60769c.txt",
+      "scripts/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t284-benchmark-compresion-contexto-optin-2425a2.json",
+      "scripts/docs/orquesta_goal_result_goal-ref-autoprogramming-backlog-t288-mutation-testing-piloto-9d60769c.json",
+      "scripts/docs/orquesta_goal_result_goal-ref-task-autoprogramming-57285ae2856f-g01.json"
+    ],
+    "expanded_only_paths": [
+      "cmd/orquesta-server/checkpoint_started.txt",
+      "cmd/orquesta-server/docs/checkpoint_started.txt",
+      "cmd/orquesta-server/docs/checkpoint_started_t281_diagnostico_etiquetas_backlog.txt",
+      "cmd/orquesta-server/docs/checkpoint_started_t283_prompt_estable_cache_proveedor.txt",
+      "cmd/orquesta-server/docs/checkpoint_started_task-envs-ola1-consolidacion.txt",
+      "docs/historico/checkpoint_started_t272_limpieza_raiz_repo.md",
+      "docs/incidencias/incidencia_orquesta_goal_result_canonico_compartido_2026-07-02.md",
+      "docs/orquesta_parallel_smoke_2026-06-30/domain_work.md/docs/orquesta_goal_result_v0.json",
+      "docs/orquesta_parallel_smoke_2026-06-30/tooling_cpu.md/docs/orquesta_goal_result_v0.json",
+      "docs/runbooks/checkpoint_started.txt",
+      "docs/triaje_wip_remoto_2026-07-04/checkpoint_started.txt",
+      "modulos/orquesta-app-codex-stack/checkpoint_started.txt",
+      "modulos/orquesta-app-codex-stack/docs/checkpoint_started_t285_despertar_por_result_materializado.txt",
+      "modulos/orquesta-autoprogramming/checkpoint_started.txt",
+      "modulos/orquesta-autoprogramming/docs/checkpoint_started_t292_tests_congelados_actor_critico.txt",
+      "modulos/orquesta-autoprogramming/docs/orquesta_goal_result_v0.json",
+      "modulos/orquesta-context/checkpoint_started.txt",
+      "modulos/orquesta-context/docs/checkpoint_started.txt",
+      "modulos/orquesta-context/docs/checkpoint_started_t278_repo_map_compacto_broker.txt",
+      "modulos/orquesta-deploy/checkpoint_started.txt",
+      "modulos/orquesta-estado-vivo/docs/checkpoint_started_t287_property_based_nucleo_puro.txt",
+      "modulos/orquesta-goal/docs/checkpoint_started_t276_causa_primera_clase_launch_receipt.txt",
+      "modulos/orquesta-goal/docs/checkpoint_started_t282_presupuesto_contexto_por_goal.txt",
+      "modulos/orquesta-operator-director-channel/checkpoint_started.txt",
+      "modulos/orquesta-operator-telegram/checkpoint_started.txt",
+      "modulos/orquesta-operator-telegram/docs/checkpoint_started.txt",
+      "modulos/orquesta-opes-director/checkpoint_started.txt",
+      "modulos/orquesta-opes-director/docs/checkpoint_started.txt",
+      "modulos/orquesta-orchestration-core/checkpoint_started.txt",
+      "modulos/orquesta-runtime-codex-appserver/docs/checkpoint_started_t270.txt",
+      "modulos/orquesta-runtime-codex-goal/checkpoint_started.txt",
+      "modulos/orquesta-runtime-codex-goal/docs/checkpoint_started.txt",
+      "modulos/orquesta-server-shutdown/checkpoint_started.txt",
+      "modulos/orquesta-server-shutdown/docs/checkpoint_started.txt",
+      "modulos/orquesta-server/docs/checkpoint_started_t273_supervisor_idle_dormido_por_eventos.txt",
+      "modulos/orquesta-server/docs/checkpoint_started_t275_reconciliar_goal_idle_terminado.txt",
+      "modulos/orquesta-server/docs/checkpoint_started_t290_goal_high_consumption_without_progress.txt",
+      "modulos/orquesta-web/checkpoint_started.txt",
+      "modulos/orquesta-web/docs/checkpoint_started.txt",
+      "scripts/checkpoint_started.txt",
+      "scripts/checkpoint_started_task-smoke-opes-lifecycle-real.txt",
+      "scripts/docs/checkpoint_started_t284_context_compression_benchmark.txt"
+    ],
+    "strict_only_paths": [
+      "docs/evals/backlog_scan_ack_goal-ref-autoprogramming-backlog-t289-golden-tasks-evals-a009e049.json",
+      "docs/evals/scope_audit_goal-ref-autoprogramming-backlog-t289-golden-tasks-evals-a009e049.md",
+      "modulos/orquesta-deploy/docs/auditoria_codigo_goal-ref-task-autoprogramming-49e10ec01497-g01.json",
+      "modulos/orquesta-deploy/docs/deadcode_classification_goal-ref-task-autoprogramming-49e10ec01497-g01.json",
+      "modulos/orquesta-orchestration-core/docs/deadcode_classification_goal-ref-task-autoprogramming-7050ce832266-g01.json",
+      "modulos/orquesta-orchestration-core/docs/deadcode_verification_goal-ref-task-autoprogramming-7050ce832266-g01.json",
+      "scripts/docs/backlog_scan_rebase_note_goal-ref-autoprogramming-backlog-t288-mutation-testing-piloto-9d60769c.txt"
+    ]
+  },
+  "reclassification": {
+    "former_candidato_borrar_count": 25,
+    "new_classification": "archivar_condicionado",
+    "strict_audit_covered_count": 10,
+    "expanded_only_count": 15,
+    "records": [
+      {
+        "path": "cmd/orquesta-server/docs/checkpoint_started_goal-ref-task-autoprogramming-6153eceb442b-g01.txt",
+        "ambito_retencion_ampliada": true,
+        "ambito_auditoria_estricta": true,
+        "tracked_ref_count_outside_self": 2,
+        "decision": "archivar_condicionado"
+      },
+      {
+        "path": "cmd/orquesta-server/docs/checkpoint_started_goal-ref-task-autoprogramming-93e0439fa334-g01.txt",
+        "ambito_retencion_ampliada": true,
+        "ambito_auditoria_estricta": true,
+        "tracked_ref_count_outside_self": 2,
+        "decision": "archivar_condicionado"
+      },
+      {
+        "path": "cmd/orquesta-server/docs/checkpoint_started_goal-ref-task-autoprogramming-9fa50e72c7ef-g01.txt",
+        "ambito_retencion_ampliada": true,
+        "ambito_auditoria_estricta": true,
+        "tracked_ref_count_outside_self": 2,
+        "decision": "archivar_condicionado"
+      },
+      {
+        "path": "cmd/orquesta-server/docs/checkpoint_started_t281_diagnostico_etiquetas_backlog.txt",
+        "ambito_retencion_ampliada": true,
+        "ambito_auditoria_estricta": false,
+        "tracked_ref_count_outside_self": null,
+        "decision": "archivar_condicionado"
+      },
+      {
+        "path": "cmd/orquesta-server/docs/checkpoint_started_t283_prompt_estable_cache_proveedor.txt",
+        "ambito_retencion_ampliada": true,
+        "ambito_auditoria_estricta": false,
+        "tracked_ref_count_outside_self": null,
+        "decision": "archivar_condicionado"
+      },
+      {
+        "path": "cmd/orquesta-server/docs/checkpoint_started_task-envs-ola1-consolidacion.txt",
+        "ambito_retencion_ampliada": true,
+        "ambito_auditoria_estricta": false,
+        "tracked_ref_count_outside_self": null,
+        "decision": "archivar_condicionado"
+      },
+      {
+        "path": "modulos/orquesta-app-codex-stack/docs/checkpoint_started_goal-ref-autoprogramming-backlog-t291-simulacion-determinista-fallos-aa4bc2a0.txt",
+        "ambito_retencion_ampliada": true,
+        "ambito_auditoria_estricta": true,
+        "tracked_ref_count_outside_self": 2,
+        "decision": "archivar_condicionado"
+      },
+      {
+        "path": "modulos/orquesta-app-codex-stack/docs/checkpoint_started_t285_despertar_por_result_materializado.txt",
+        "ambito_retencion_ampliada": true,
+        "ambito_auditoria_estricta": false,
+        "tracked_ref_count_outside_self": null,
+        "decision": "archivar_condicionado"
+      },
+      {
+        "path": "modulos/orquesta-autoprogramming/docs/checkpoint_started_goal-ref-task-autoprogramming-72bb10d53162-g02.txt",
+        "ambito_retencion_ampliada": true,
+        "ambito_auditoria_estricta": true,
+        "tracked_ref_count_outside_self": 2,
+        "decision": "archivar_condicionado"
+      },
+      {
+        "path": "modulos/orquesta-autoprogramming/docs/checkpoint_started_t292_tests_congelados_actor_critico.txt",
+        "ambito_retencion_ampliada": true,
+        "ambito_auditoria_estricta": false,
+        "tracked_ref_count_outside_self": null,
+        "decision": "archivar_condicionado"
+      },
+      {
+        "path": "modulos/orquesta-context/docs/checkpoint_started_t278_repo_map_compacto_broker.txt",
+        "ambito_retencion_ampliada": true,
+        "ambito_auditoria_estricta": false,
+        "tracked_ref_count_outside_self": null,
+        "decision": "archivar_condicionado"
+      },
+      {
+        "path": "modulos/orquesta-estado-vivo/docs/checkpoint_started_t287_property_based_nucleo_puro.txt",
+        "ambito_retencion_ampliada": true,
+        "ambito_auditoria_estricta": false,
+        "tracked_ref_count_outside_self": null,
+        "decision": "archivar_condicionado"
+      },
+      {
+        "path": "modulos/orquesta-goal/docs/checkpoint_started_t276_causa_primera_clase_launch_receipt.txt",
+        "ambito_retencion_ampliada": true,
+        "ambito_auditoria_estricta": false,
+        "tracked_ref_count_outside_self": null,
+        "decision": "archivar_condicionado"
+      },
+      {
+        "path": "modulos/orquesta-goal/docs/checkpoint_started_t282_presupuesto_contexto_por_goal.txt",
+        "ambito_retencion_ampliada": true,
+        "ambito_auditoria_estricta": false,
+        "tracked_ref_count_outside_self": null,
+        "decision": "archivar_condicionado"
+      },
+      {
+        "path": "modulos/orquesta-runtime-codex-appserver/docs/checkpoint_started_t270.txt",
+        "ambito_retencion_ampliada": true,
+        "ambito_auditoria_estricta": false,
+        "tracked_ref_count_outside_self": null,
+        "decision": "archivar_condicionado"
+      },
+      {
+        "path": "modulos/orquesta-server/docs/checkpoint_started_t273_supervisor_idle_dormido_por_eventos.txt",
+        "ambito_retencion_ampliada": true,
+        "ambito_auditoria_estricta": false,
+        "tracked_ref_count_outside_self": null,
+        "decision": "archivar_condicionado"
+      },
+      {
+        "path": "modulos/orquesta-server/docs/checkpoint_started_t275_reconciliar_goal_idle_terminado.txt",
+        "ambito_retencion_ampliada": true,
+        "ambito_auditoria_estricta": false,
+        "tracked_ref_count_outside_self": null,
+        "decision": "archivar_condicionado"
+      },
+      {
+        "path": "modulos/orquesta-server/docs/checkpoint_started_t290_goal_high_consumption_without_progress.txt",
+        "ambito_retencion_ampliada": true,
+        "ambito_auditoria_estricta": false,
+        "tracked_ref_count_outside_self": null,
+        "decision": "archivar_condicionado"
+      },
+      {
+        "path": "modulos/orquesta-web/docs/checkpoint_started_goal-ref-task-autoprogramming-2d2ba45d5118-g01.txt",
+        "ambito_retencion_ampliada": true,
+        "ambito_auditoria_estricta": true,
+        "tracked_ref_count_outside_self": 2,
+        "decision": "archivar_condicionado"
+      },
+      {
+        "path": "modulos/orquesta-web/docs/checkpoint_started_goal-ref-task-autoprogramming-72bb10d53162-g01.txt",
+        "ambito_retencion_ampliada": true,
+        "ambito_auditoria_estricta": true,
+        "tracked_ref_count_outside_self": 2,
+        "decision": "archivar_condicionado"
+      },
+      {
+        "path": "modulos/orquesta-web/docs/checkpoint_started_goal-ref-task-autoprogramming-b9e17fae3b8d-g01.txt",
+        "ambito_retencion_ampliada": true,
+        "ambito_auditoria_estricta": true,
+        "tracked_ref_count_outside_self": 2,
+        "decision": "archivar_condicionado"
+      },
+      {
+        "path": "modulos/orquesta-web/docs/checkpoint_started_goal-ref-task-autoprogramming-be9fb9250b29-g01.txt",
+        "ambito_retencion_ampliada": true,
+        "ambito_auditoria_estricta": true,
+        "tracked_ref_count_outside_self": 2,
+        "decision": "archivar_condicionado"
+      },
+      {
+        "path": "scripts/checkpoint_started_task-smoke-opes-lifecycle-real.txt",
+        "ambito_retencion_ampliada": true,
+        "ambito_auditoria_estricta": false,
+        "tracked_ref_count_outside_self": null,
+        "decision": "archivar_condicionado"
+      },
+      {
+        "path": "scripts/docs/checkpoint_started_goal-ref-autoprogramming-backlog-t288-mutation-testing-piloto-9d60769c.txt",
+        "ambito_retencion_ampliada": true,
+        "ambito_auditoria_estricta": true,
+        "tracked_ref_count_outside_self": 2,
+        "decision": "archivar_condicionado"
+      },
+      {
+        "path": "scripts/docs/checkpoint_started_t284_context_compression_benchmark.txt",
+        "ambito_retencion_ampliada": true,
+        "ambito_auditoria_estricta": false,
+        "tracked_ref_count_outside_self": null,
+        "decision": "archivar_condicionado"
+      }
+    ]
+  },
+  "safe_next_step": {
+    "action": "abrir una ola gobernada separada que compruebe referencias por ruta y prepare destino trazable antes de cualquier archivo",
+    "prohibited": [
+      "borrar",
+      "mover sin comprobacion de referencias",
+      "inferir que una ruta esta libre por no pertenecer al ambito estricto"
+    ]
+  },
+  "reproducibility": {
+    "json_validation": [
+      "python3 -m json.tool docs/auditorias/s13_artefactos_ejecucion_versionados_2026-07-10.json >/dev/null",
+      "python3 -m json.tool docs/clasificacion_retencion_s13_2026-07-10.json >/dev/null",
+      "python3 -m json.tool docs/auditorias/reconciliacion_s13_retencion_ampliada_2026-07-11.json >/dev/null"
+    ],
+    "count_query": "python3 -c \"import json; from pathlib import Path; a=json.loads(Path('docs/auditorias/s13_artefactos_ejecucion_versionados_2026-07-10.json').read_text()); b=json.loads(Path('docs/clasificacion_retencion_s13_2026-07-10.json').read_text()); A={x['path'] for x in a['entries']}; B={x['path'] for x in b['artefactos']}; print(f'estricto={len(A)} ampliado={len(B)} interseccion={len(A&B)} extras_ampliado={len(B-A)} omitidos_ampliado={len(A-B)} condicionales={sum(x[\\\"clasificacion\\\"] == \\\"archivar_condicionado\\\" for x in b[\\\"artefactos\\\"])}')\"",
+    "expected": "estricto=68 ampliado=103 interseccion=61 extras_ampliado=42 omitidos_ampliado=7 condicionales=25"
+  }
+}
