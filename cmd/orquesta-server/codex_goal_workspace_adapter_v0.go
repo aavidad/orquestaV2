@@ -213,6 +213,17 @@ func codexGoalWorkspaceAdapterIDV0(goalRef string) string {
 	return hex.EncodeToString(digest[:16])
 }
 
+func codexGoalWorkspaceRootForSourceV0(sourceWorkDir string) string {
+	sourceWorkDir = strings.TrimSpace(sourceWorkDir)
+	abs, err := filepath.Abs(sourceWorkDir)
+	if sourceWorkDir == "" || err != nil {
+		return ""
+	}
+	abs = filepath.Clean(abs)
+	digest := sha256.Sum256([]byte(abs))
+	return filepath.Join(filepath.Dir(abs), ".orquesta-goal-workspaces-"+hex.EncodeToString(digest[:8]))
+}
+
 func codexGoalWorkspaceRequestIdentityFromRequestV0(request orquestaruntimeworktree.GoalWorkspaceRequestV0) codexGoalWorkspaceRequestIdentityV0 {
 	return codexGoalWorkspaceRequestIdentityV0{
 		RunRef:      strings.TrimSpace(request.RunRef),

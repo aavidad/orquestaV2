@@ -37,9 +37,10 @@ func serverCodexGoalBackendsFromEnvV0(
 	if err != nil {
 		return serverCodexGoalBackendsV0{}, err
 	}
-	idleGoal, err := serverCodexGoalBackendFromEnvForWorkDirV0(
+	idleGoal, err := serverCodexGoalBackendFromEnvForWorkDirModeV0(
 		config,
 		firstNonEmptyServerStackV0(config.IdleSelfImprovementProjectWorkDir, config.ProjectWorkDir),
+		true,
 	)
 	if err != nil {
 		return serverCodexGoalBackendsV0{}, err
@@ -53,6 +54,14 @@ func serverCodexGoalBackendsFromEnvV0(
 func serverCodexGoalBackendFromEnvForWorkDirV0(
 	config orquestaserver.ConfigV0,
 	workDir string,
+) (serverCodexGoalBackendV0, error) {
+	return serverCodexGoalBackendFromEnvForWorkDirModeV0(config, workDir, false)
+}
+
+func serverCodexGoalBackendFromEnvForWorkDirModeV0(
+	config orquestaserver.ConfigV0,
+	workDir string,
+	physicalGoalWorkspaces bool,
 ) (serverCodexGoalBackendV0, error) {
 	projectConfig := projectConfigFromServerConfigBestEffortV0(config)
 	backend := codexGoalBackendFromProjectConfigFileV0(projectConfig)
@@ -187,6 +196,15 @@ func serverCodexGoalBackendFromEnvForWorkDirV0(
 		Timeout:                 time.Duration(codexGoalTimeoutMSFromProjectConfigFileV0(projectConfig)) * time.Millisecond,
 		HighTokenUsageThreshold: int(goalProgressPolicy.CheckpointOnlyHighConsumptionTokens),
 		Runtime:                 &orquestaruntimecodexappserver.GoalRuntimeV0{},
+	}
+	if physicalGoalWorkspaces {
+		sourceWorkDir := firstNonEmptyServerStackV0(workDir, config.ProjectWorkDir)
+		client.WorkspaceRouter = codexGoalWorkspaceAdapterV0{
+			SourceWorkDir:       sourceWorkDir,
+			WorkspaceRoot:       codexGoalWorkspaceRootForSourceV0(sourceWorkDir),
+			ProjectRefFallback:  firstNonEmptyServerStackV0(config.IdleSelfImprovementProjectRef, "project-ref-orquesta-autoprogramming"),
+			WorktreeRefFallback: firstNonEmptyServerStackV0(config.IdleSelfImprovementWorktreeRef, "worktree-ref-orquesta-autoprogramming"),
+		}
 	}
 	return serverCodexGoalBackendV0{
 		Starter: serverCodexGoalCostRoutingStarterV0{

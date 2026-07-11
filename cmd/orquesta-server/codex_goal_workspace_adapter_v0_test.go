@@ -73,6 +73,17 @@ func TestCodexGoalWorkspaceAdapterV0RejectsConflictingRequestIdentity(t *testing
 	}
 }
 
+func TestCodexGoalWorkspaceRootForSourceV0IsStableAndOutsideRepo(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
+	root := codexGoalWorkspaceRootForSourceV0(repo)
+	if root == "" || filepath.Dir(root) != filepath.Dir(repo) || root == repo {
+		t.Fatalf("root=%q repo=%q", root, repo)
+	}
+	if replay := codexGoalWorkspaceRootForSourceV0(repo); replay != root {
+		t.Fatalf("root not stable: %q / %q", root, replay)
+	}
+}
+
 func newCodexGoalWorkspaceAdapterGitRepoV0(t *testing.T) string {
 	t.Helper()
 	repo := filepath.Join(t.TempDir(), "source")

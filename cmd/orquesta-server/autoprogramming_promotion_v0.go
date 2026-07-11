@@ -33,8 +33,13 @@ func autoprogrammingPromotionConfigFromEnvV0(
 ) orquestaappcodexstack.AutoprogrammingPromotionConfigV0 {
 	projectConfig := projectConfigFromServerConfigBestEffortV0(config)
 	promotion := projectConfig.Autoprogramming.Promotion
+	workspaceSource := firstNonEmptyServerStackV0(config.IdleSelfImprovementProjectWorkDir, config.ProjectWorkDir)
+	result := orquestaappcodexstack.AutoprogrammingPromotionConfigV0{
+		GoalWorkspaceProvisioner: orquestaruntimeworktree.GitGoalWorkspaceProvisionerV0{},
+		GoalWorkspaceRoot:        codexGoalWorkspaceRootForSourceV0(workspaceSource),
+	}
 	if !autoprogrammingPromotionEnabledFromProjectConfigV0(promotion) {
-		return orquestaappcodexstack.AutoprogrammingPromotionConfigV0{}
+		return result
 	}
 	archiveDir := absDirProjectConfigOrEnvOrDefaultV0(
 		envServerAutoprogrammingPromotionArchiveDirV0,
@@ -61,13 +66,12 @@ func autoprogrammingPromotionConfigFromEnvV0(
 		),
 		Guardian: autoprogrammingPromotionGuardianFromEnvV0(config),
 	}
-	return orquestaappcodexstack.AutoprogrammingPromotionConfigV0{
-		Enabled:       true,
-		Port:          port,
-		AppRef:        port.AppRef,
-		RepoRef:       port.RepoRef,
-		CommitMessage: port.CommitMessage,
-	}
+	result.Enabled = true
+	result.Port = port
+	result.AppRef = port.AppRef
+	result.RepoRef = port.RepoRef
+	result.CommitMessage = port.CommitMessage
+	return result
 }
 
 func autoprogrammingPromotionEnabledFromProjectConfigV0(
