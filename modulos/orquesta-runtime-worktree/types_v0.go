@@ -78,18 +78,35 @@ type WorktreeSnapshotRequestV0 struct {
 }
 
 type WorktreeVerifyRequestV0 struct {
-	Baseline                   WorktreeSnapshotV0 `json:"baseline"`
-	ProjectWorkDir             string             `json:"project_work_dir"`
-	WriteSet                   []string           `json:"write_set"`
-	AckFiles                   []string           `json:"ack_files,omitempty"`
-	IgnorePrefixes             []string           `json:"ignore_prefixes,omitempty"`
-	MaxSnapshotFiles           int                `json:"max_snapshot_files,omitempty"`
-	MaxSnapshotFileBytes       int64              `json:"max_snapshot_file_bytes,omitempty"`
-	MaxSnapshotTotalBytes      int64              `json:"max_snapshot_total_bytes,omitempty"`
-	AllowPartialSnapshot       bool               `json:"allow_partial_snapshot,omitempty"`
-	StrictGoLineBudget         bool               `json:"strict_go_line_budget,omitempty"`
-	MaxGoFileLines             int                `json:"max_go_file_lines,omitempty"`
-	AcceptedPartitionFollowups []string           `json:"accepted_partition_followups,omitempty"`
+	Baseline                   WorktreeSnapshotV0                   `json:"baseline"`
+	ProjectWorkDir             string                               `json:"project_work_dir"`
+	WriteSet                   []string                             `json:"write_set"`
+	AckFiles                   []string                             `json:"ack_files,omitempty"`
+	DestructiveAuthorizations  []WorktreeDestructiveAuthorizationV0 `json:"destructive_authorizations,omitempty"`
+	IgnorePrefixes             []string                             `json:"ignore_prefixes,omitempty"`
+	MaxSnapshotFiles           int                                  `json:"max_snapshot_files,omitempty"`
+	MaxSnapshotFileBytes       int64                                `json:"max_snapshot_file_bytes,omitempty"`
+	MaxSnapshotTotalBytes      int64                                `json:"max_snapshot_total_bytes,omitempty"`
+	AllowPartialSnapshot       bool                                 `json:"allow_partial_snapshot,omitempty"`
+	StrictGoLineBudget         bool                                 `json:"strict_go_line_budget,omitempty"`
+	MaxGoFileLines             int                                  `json:"max_go_file_lines,omitempty"`
+	AcceptedPartitionFollowups []string                             `json:"accepted_partition_followups,omitempty"`
+}
+
+type WorktreeDestructiveAuthorizationKindV0 string
+
+const (
+	WorktreeDestructiveAuthorizationRenameV0   WorktreeDestructiveAuthorizationKindV0 = "renamed_or_moved"
+	WorktreeDestructiveAuthorizationRemoveV0   WorktreeDestructiveAuthorizationKindV0 = "removed"
+	WorktreeDestructiveAuthorizationTruncateV0 WorktreeDestructiveAuthorizationKindV0 = "truncated"
+	WorktreeDestructiveAuthorizationReplaceV0  WorktreeDestructiveAuthorizationKindV0 = "replaced_large_delta"
+)
+
+type WorktreeDestructiveAuthorizationV0 struct {
+	Kind         WorktreeDestructiveAuthorizationKindV0 `json:"kind"`
+	Path         string                                 `json:"path,omitempty"`
+	PreviousPath string                                 `json:"previous_path,omitempty"`
+	CurrentPath  string                                 `json:"current_path,omitempty"`
 }
 
 type WorktreeVerifyResultV0 struct {

@@ -32,39 +32,56 @@ func VerifyWorktreeWriteSetV0(
 		request.AckFiles,
 		request,
 	)
-	if len(result.RenamedOrMovedPaths) > 0 {
+	unauthorizedDestructiveChanges := worktreeUnauthorizedDestructiveChangesV0(
+		result.DestructiveChanges,
+		request.DestructiveAuthorizations,
+	)
+	if paths := worktreeDestructivePathsByKindV0(
+		unauthorizedDestructiveChanges,
+		WorktreeDestructiveRenamedOrMovedV0,
+	); len(paths) > 0 {
 		return result, []WorktreeIssueV0{
 			worktreeIssueV0(
 				WorktreeIssueRenamedOrMovedV0,
 				"renamed_or_moved_paths",
-				result.RenamedOrMovedPaths...,
+				paths...,
 			),
 		}
 	}
-	if len(result.TruncatedPaths) > 0 {
+	if paths := worktreeDestructivePathsByKindV0(
+		unauthorizedDestructiveChanges,
+		WorktreeDestructiveTruncatedV0,
+	); len(paths) > 0 {
 		return result, []WorktreeIssueV0{
 			worktreeIssueV0(
 				WorktreeIssueTruncatedPathV0,
 				"truncated_paths",
-				result.TruncatedPaths...,
+				paths...,
 			),
 		}
 	}
-	if len(result.RemovedPaths) > 0 {
+	if paths := worktreeUnauthorizedRemovedPathsV0(
+		result.RemovedPaths,
+		result.DestructiveChanges,
+		request.DestructiveAuthorizations,
+	); len(paths) > 0 {
 		return result, []WorktreeIssueV0{
 			worktreeIssueV0(
 				WorktreeIssueRemovedPathV0,
 				"removed_paths",
-				result.RemovedPaths...,
+				paths...,
 			),
 		}
 	}
-	if len(result.ReplacedLargeDelta) > 0 {
+	if paths := worktreeDestructivePathsByKindV0(
+		unauthorizedDestructiveChanges,
+		WorktreeDestructiveReplacedLargeDeltaV0,
+	); len(paths) > 0 {
 		return result, []WorktreeIssueV0{
 			worktreeIssueV0(
 				WorktreeIssueReplacedLargeV0,
 				"replaced_large_delta",
-				result.ReplacedLargeDelta...,
+				paths...,
 			),
 		}
 	}
@@ -123,10 +140,160 @@ func normalizeWorktreeVerifyRequestV0(
 		issues = append(issues, ackIssues...)
 		issues = append(issues, worktreeControlPathIssuesV0(request.AckFiles)...)
 	}
+	var destructiveAuthorizationIssues []WorktreeIssueV0
+	request.DestructiveAuthorizations, destructiveAuthorizationIssues = normalizeWorktreeDestructiveAuthorizationsV0(
+		request.DestructiveAuthorizations,
+	)
+	issues = append(issues, destructiveAuthorizationIssues...)
 	if len(request.WriteSet) == 0 {
 		issues = append(issues, worktreeIssueV0(WorktreeIssueInvalidRequestV0, "write_set"))
 	}
 	return request, issues
+}
+
+func normalizeWorktreeDestructiveAuthorizationsV0(
+	authorizations []WorktreeDestructiveAuthorizationV0,
+) ([]WorktreeDestructiveAuthorizationV0, []WorktreeIssueV0) {
+	result := make([]WorktreeDestructiveAuthorizationV0, 0, len(authorizations))
+	var issues []WorktreeIssueV0
+	for _, authorization := range authorizations {
+		normalized, ok := normalizeWorktreeDestructiveAuthorizationV0(authorization)
+		if !ok {
+			issues = append(issues, worktreeIssueV0(WorktreeIssueInvalidRequestV0, "destructive_authorizations"))
+			continue
+		}
+		if !worktreeDestructiveAuthorizationInSetV0(result, normalized) {
+			result = append(result, normalized)
+		}
+	}
+	return result, issues
+}
+
+func normalizeWorktreeDestructiveAuthorizationV0(
+	authorization WorktreeDestructiveAuthorizationV0,
+) (WorktreeDestructiveAuthorizationV0, bool) {
+	path, pathOK := normalizeWorktreeOptionalRelPathV0(authorization.Path)
+	previousPath, previousPathOK := normalizeWorktreeOptionalRelPathV0(authorization.PreviousPath)
+	currentPath, currentPathOK := normalizeWorktreeOptionalRelPathV0(authorization.CurrentPath)
+	switch authorization.Kind {
+	case WorktreeDestructiveAuthorizationRenameV0:
+		if authorization.Path != "" || !previousPathOK || !currentPathOK {
+			return WorktreeDestructiveAuthorizationV0{}, false
+		}
+		return WorktreeDestructiveAuthorizationV0{
+			Kind:         authorization.Kind,
+			PreviousPath: previousPath,
+			CurrentPath:  currentPath,
+		}, true
+	case WorktreeDestructiveAuthorizationRemoveV0,
+		WorktreeDestructiveAuthorizationTruncateV0,
+		WorktreeDestructiveAuthorizationReplaceV0:
+		if !pathOK || authorization.PreviousPath != "" || authorization.CurrentPath != "" {
+			return WorktreeDestructiveAuthorizationV0{}, false
+		}
+		return WorktreeDestructiveAuthorizationV0{
+			Kind: authorization.Kind,
+			Path: path,
+		}, true
+	default:
+		return WorktreeDestructiveAuthorizationV0{}, false
+	}
+}
+
+func normalizeWorktreeOptionalRelPathV0(value string) (string, bool) {
+	if value == "" {
+		return "", true
+	}
+	return normalizeWorktreeRelPathV0(value, false)
+}
+
+func worktreeDestructiveAuthorizationInSetV0(
+	authorizations []WorktreeDestructiveAuthorizationV0,
+	want WorktreeDestructiveAuthorizationV0,
+) bool {
+	for _, authorization := range authorizations {
+		if authorization == want {
+			return true
+		}
+	}
+	return false
+}
+
+func worktreeUnauthorizedDestructiveChangesV0(
+	changes []WorktreeDestructiveChangeV0,
+	authorizations []WorktreeDestructiveAuthorizationV0,
+) []WorktreeDestructiveChangeV0 {
+	result := make([]WorktreeDestructiveChangeV0, 0, len(changes))
+	for _, change := range changes {
+		if !worktreeDestructiveChangeAuthorizedV0(change, authorizations) {
+			result = append(result, change)
+		}
+	}
+	return result
+}
+
+func worktreeDestructiveChangeAuthorizedV0(
+	change WorktreeDestructiveChangeV0,
+	authorizations []WorktreeDestructiveAuthorizationV0,
+) bool {
+	for _, authorization := range authorizations {
+		switch change.Kind {
+		case WorktreeDestructiveRenamedOrMovedV0:
+			if authorization.Kind == WorktreeDestructiveAuthorizationRenameV0 &&
+				authorization.PreviousPath == change.PreviousPath &&
+				authorization.CurrentPath == change.CurrentPath {
+				return true
+			}
+		case WorktreeDestructiveRemovedV0:
+			if authorization.Kind == WorktreeDestructiveAuthorizationRemoveV0 && authorization.Path == change.Path {
+				return true
+			}
+		case WorktreeDestructiveTruncatedV0:
+			if authorization.Kind == WorktreeDestructiveAuthorizationTruncateV0 && authorization.Path == change.Path {
+				return true
+			}
+		case WorktreeDestructiveReplacedLargeDeltaV0:
+			if authorization.Kind == WorktreeDestructiveAuthorizationReplaceV0 && authorization.Path == change.Path {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func worktreeUnauthorizedRemovedPathsV0(
+	removedPaths []string,
+	changes []WorktreeDestructiveChangeV0,
+	authorizations []WorktreeDestructiveAuthorizationV0,
+) []string {
+	result := make([]string, 0, len(removedPaths))
+	for _, path := range removedPaths {
+		if !worktreeRemovedPathAuthorizedV0(path, changes, authorizations) {
+			result = append(result, path)
+		}
+	}
+	return result
+}
+
+func worktreeRemovedPathAuthorizedV0(
+	path string,
+	changes []WorktreeDestructiveChangeV0,
+	authorizations []WorktreeDestructiveAuthorizationV0,
+) bool {
+	if worktreeDestructiveChangeAuthorizedV0(
+		WorktreeDestructiveChangeV0{Kind: WorktreeDestructiveRemovedV0, Path: path},
+		authorizations,
+	) {
+		return true
+	}
+	for _, change := range changes {
+		if change.Kind == WorktreeDestructiveRenamedOrMovedV0 &&
+			change.PreviousPath == path &&
+			worktreeDestructiveChangeAuthorizedV0(change, authorizations) {
+			return true
+		}
+	}
+	return false
 }
 
 func diffWorktreeSnapshotsV0(
