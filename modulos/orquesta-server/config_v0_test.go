@@ -87,6 +87,12 @@ func TestNormalizeConfigV0ObservadorGoalFirstActivoPorDefectoV0(t *testing.T) {
 	}
 }
 
+func TestDefaultGoalObserverTimeoutV0AllowsDurableAttestation(t *testing.T) {
+	if DefaultGoalObserverTimeoutV0 < 10*time.Minute {
+		t.Fatalf("goal observer timeout=%s, want durable attestation window", DefaultGoalObserverTimeoutV0)
+	}
+}
+
 func TestNormalizeConfigV0PermiteDesactivarObservadorGoalFirstV0(t *testing.T) {
 	config := NormalizeConfigV0(ConfigV0{
 		GoalObserverEnabledConfigured: true,

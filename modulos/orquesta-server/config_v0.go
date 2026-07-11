@@ -12,12 +12,14 @@ import (
 )
 
 const (
-	DefaultAddrV0                             = "127.0.0.1:8787"
-	DefaultStateFileV0                        = "orquesta_server_state_v0.json"
-	DefaultAuditFileV0                        = "orquesta_server_audit_v0.jsonl"
-	DefaultTickIntervalV0                     = 5 * time.Second
-	DefaultGoalObserverIntervalV0             = DefaultTickIntervalV0
-	DefaultGoalObserverTimeoutV0              = 2 * time.Second
+	DefaultAddrV0                 = "127.0.0.1:8787"
+	DefaultStateFileV0            = "orquesta_server_state_v0.json"
+	DefaultAuditFileV0            = "orquesta_server_audit_v0.jsonl"
+	DefaultTickIntervalV0         = 5 * time.Second
+	DefaultGoalObserverIntervalV0 = DefaultTickIntervalV0
+	// The resident observer also performs durable required-test attestation.
+	// Its budget must not reuse the short HTTP response deadline.
+	DefaultGoalObserverTimeoutV0              = 15 * time.Minute
 	DefaultShutdownGracePeriodV0              = 10 * time.Second
 	DefaultSupervisorMaxTicksV0               = 1
 	DefaultIdleSelfImprovementAfterV0         = 60 * time.Second
