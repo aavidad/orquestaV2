@@ -243,35 +243,6 @@ func TestServerCodexAppServerTurnStartParamsV0SerializaToolOutputPolicyV0(t *tes
 	}
 }
 
-func TestServerCodexAppServerTurnStartParamsV0SerializaSandboxPolicyV0(t *testing.T) {
-	params := serverCodexAppServerTurnStartParamsV0{
-		ThreadID:  "thread-sandbox-policy-001",
-		InputText: "turn acotado",
-		SandboxPolicy: serverCodexAppServerTurnStartSandboxPolicyV0{
-			Type:          "workspaceWrite",
-			WritableRoots: []string{"/workspace/a", "/workspace/a", "/workspace/b"},
-		},
-	}
-
-	raw := params.toJSONV0()
-	policy, ok := raw["sandboxPolicy"].(map[string]interface{})
-	if !ok || policy["type"] != "workspaceWrite" {
-		t.Fatalf("sandboxPolicy=%#v", raw["sandboxPolicy"])
-	}
-	roots, ok := policy["writableRoots"].([]string)
-	if !ok || !reflect.DeepEqual(roots, []string{"/workspace/a", "/workspace/b"}) {
-		t.Fatalf("writableRoots=%#v", policy["writableRoots"])
-	}
-
-	params.SandboxPolicy = serverCodexAppServerTurnStartSandboxPolicyV0{}
-	if _, exists := params.toJSONV0()["sandboxPolicy"]; exists {
-		t.Fatalf("sandboxPolicy no debe serializarse vacia")
-	}
-	if policy := codexAppServerTurnStartSandboxPolicyForV0("read-only", []string{"/workspace/a"}); !policy.emptyV0() {
-		t.Fatalf("sandboxPolicy fuera de workspace-write=%+v", policy)
-	}
-}
-
 func TestServerCodexAppServerGoalBackendV0TurnStartToolOutputPolicyFallbackCompatibleV0(t *testing.T) {
 	protocol := &fakeCodexAppServerProtocolV0{
 		thread: serverCodexAppServerThreadV0{ID: "thread-ref-policy-fallback-001"},

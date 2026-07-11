@@ -99,7 +99,7 @@ func (adapter codexGoalWorkspaceAdapterV0) PrepareCodexGoalWorkspaceV0(
 		if err := adapter.writeGoalIndexV0(request.GoalRef, request); err != nil {
 			return orquestaruntimecodexappserver.GoalWorkspaceBindingV0{}, err
 		}
-		return adapter.bindingFromWorkspaceV0(ctx, workspace)
+		return codexGoalWorkspaceBindingFromWorkspaceV0(workspace), nil
 	})
 }
 
@@ -128,7 +128,7 @@ func (adapter codexGoalWorkspaceAdapterV0) ResolveCodexGoalWorkspaceV0(
 		if len(issues) > 0 {
 			return orquestaruntimecodexappserver.GoalWorkspaceBindingV0{}, errCodexGoalWorkspaceAdapterUnavailableV0
 		}
-		return adapter.bindingFromWorkspaceV0(ctx, workspace)
+		return codexGoalWorkspaceBindingFromWorkspaceV0(workspace), nil
 	})
 }
 
@@ -273,43 +273,11 @@ func codexGoalWorkspaceRequestIdentityFromRequestV0(request orquestaruntimeworkt
 	}
 }
 
-func (adapter codexGoalWorkspaceAdapterV0) bindingFromWorkspaceV0(
-	ctx context.Context,
-	workspace orquestaruntimeworktree.GoalWorkspaceV0,
-) (orquestaruntimecodexappserver.GoalWorkspaceBindingV0, error) {
-	gitAdminDir, err := codexGoalLinkedWorktreeAdminDirV0(ctx, adapter.SourceWorkDir, workspace.ProjectWorkDir)
-	if err != nil {
-		return orquestaruntimecodexappserver.GoalWorkspaceBindingV0{}, errCodexGoalWorkspaceAdapterUnavailableV0
-	}
+func codexGoalWorkspaceBindingFromWorkspaceV0(workspace orquestaruntimeworktree.GoalWorkspaceV0) orquestaruntimecodexappserver.GoalWorkspaceBindingV0 {
 	return orquestaruntimecodexappserver.GoalWorkspaceBindingV0{
 		ProjectWorkDir: workspace.ProjectWorkDir,
-		WritableRoots:  []string{gitAdminDir},
 		EvidenceRefs:   append([]string(nil), workspace.EvidenceRefs...),
-	}, nil
-}
-
-func codexGoalLinkedWorktreeAdminDirV0(ctx context.Context, sourceWorkDir string, workspaceDir string) (string, error) {
-	adminDir := serverWorktreeGitOutputV0(ctx, workspaceDir, "rev-parse", "--path-format=absolute", "--git-dir")
-	commonDir := serverWorktreeGitOutputV0(ctx, workspaceDir, "rev-parse", "--path-format=absolute", "--git-common-dir")
-	sourceCommonDir := serverWorktreeGitOutputV0(ctx, sourceWorkDir, "rev-parse", "--path-format=absolute", "--git-common-dir")
-	if adminDir == "" || commonDir == "" || sourceCommonDir == "" {
-		return "", errCodexGoalWorkspaceAdapterUnavailableV0
 	}
-	adminDir = filepath.Clean(adminDir)
-	commonDir = filepath.Clean(commonDir)
-	sourceCommonDir = filepath.Clean(sourceCommonDir)
-	if !filepath.IsAbs(adminDir) || !filepath.IsAbs(commonDir) || commonDir != sourceCommonDir || adminDir == commonDir {
-		return "", errCodexGoalWorkspaceAdapterUnavailableV0
-	}
-	rel, err := filepath.Rel(filepath.Join(commonDir, "worktrees"), adminDir)
-	if err != nil || rel == "." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) || strings.ContainsRune(rel, filepath.Separator) {
-		return "", errCodexGoalWorkspaceAdapterUnavailableV0
-	}
-	info, err := os.Lstat(filepath.Join(adminDir, "commondir"))
-	if err != nil || !info.Mode().IsRegular() {
-		return "", errCodexGoalWorkspaceAdapterUnavailableV0
-	}
-	return adminDir, nil
 }
 
 func firstNonEmptyCodexGoalWorkspaceAdapterV0(values ...string) string {

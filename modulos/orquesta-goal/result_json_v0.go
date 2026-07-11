@@ -297,7 +297,7 @@ func goalWorkResultJSONNormalizeIssueListV0(root map[string]any, key string, rec
 	for _, item := range items {
 		switch typed := item.(type) {
 		case string:
-			out = append(out, map[string]any{"code": strings.TrimSpace(typed)})
+			out = append(out, map[string]any{"code": goalWorkResultJSONIssueCodeAliasV0(typed)})
 			goalWorkResultJSONTransformationV0(receipt, key, "issue_string")
 		case map[string]any:
 			if _, exists := typed["code"]; !exists {
@@ -307,10 +307,27 @@ func goalWorkResultJSONNormalizeIssueListV0(root map[string]any, key string, rec
 					goalWorkResultJSONTransformationV0(receipt, key, "issue_reason_alias")
 				}
 			}
+			if code, ok := goalWorkResultJSONStringV0(typed["code"]); ok {
+				canonical := goalWorkResultJSONIssueCodeAliasV0(code)
+				if canonical != code {
+					typed["code"] = canonical
+					goalWorkResultJSONTransformationV0(receipt, key, "issue_code_alias")
+				}
+			}
 			out = append(out, typed)
 		}
 	}
 	root[key] = out
+}
+
+func goalWorkResultJSONIssueCodeAliasV0(code string) string {
+	code = strings.ToLower(strings.TrimSpace(code))
+	switch code {
+	case "external_test_environment_restriction", "test_environment_unavailable":
+		return GoalIssueRequiredTestsEnvironmentUnavailableV0
+	default:
+		return code
+	}
 }
 
 func goalWorkResultJSONTransformationV0(receipt *GoalWorkResultRepairReceiptV0, field, kind string) {

@@ -68,6 +68,18 @@ func TestDecodeGoalWorkResultJSONV0ProviderEquivalenceV0(t *testing.T) {
 	}
 }
 
+func TestDecodeGoalWorkResultJSONV0NormalizaAliasTipadoDeEntornoDeTestsV0(t *testing.T) {
+	raw := []byte(`{"schema_version":"orquesta_goal_result.v0","goal_ref":"goal-ref-test-env-alias","status":"blocked","reason_code":"external_test_environment_restriction"}`)
+	decoded, err := DecodeGoalWorkResultJSONV0(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Disposition != GoalWorkResultJSONDispositionRepairedV0 || len(decoded.Result.Issues) != 1 ||
+		decoded.Result.Issues[0].Code != GoalIssueRequiredTestsEnvironmentUnavailableV0 {
+		t.Fatalf("decoded=%+v", decoded)
+	}
+}
+
 func TestDecodeGoalWorkResultJSONV0IdempotentEncodeDecodeV0(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("testdata", "goal_result_json", "claude_alias_object_evidence.json"))
 	if err != nil {

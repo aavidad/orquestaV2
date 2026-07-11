@@ -27,6 +27,12 @@ app desechable ni se toco OPES/remoto.
   termino servidor y tmux en dos segundos. El batch no pudo cerrar porque el
   sandbox del worktree permite escribir el checkout pero no su admin dir Git
   externo; `git mv` fallo al crear `index.lock`;
+- replay7 confirmo por el perfil efectivo de Codex que la raiz Git adicional
+  se declara pero sigue protegida. El agente completo el rename en filesystem;
+  el segundo goal completo su cambio y focal, pero quedo blocked porque el
+  alias `external_test_environment_restriction` no activo al atestador para el
+  test global dependiente. El checkout canonico permanecio limpio y el shutdown
+  volvio a cerrar servidor/backend en dos segundos.
 - los tres shutdown de piloto quedaron `stop_pending` con contadores cero y un
   tmux propio vivo; el fallback acotado uso SIGINT del PID del piloto y elimino
   exclusivamente su sesion `orquesta-goal-*` tras varios intentos HTTP.
@@ -37,6 +43,7 @@ app desechable ni se toco OPES/remoto.
 - `/tmp/orquesta-live-bug255-replay4-20260711`
 - `/tmp/orquesta-live-bug255-replay5-20260711`
 - `/tmp/orquesta-live-bug255-replay6-20260711`
+- `/tmp/orquesta-live-bug255-replay7-20260711`
 
 Se retienen hasta extraer el recibo final. No contienen autoridad documental y
 se eliminaran de forma gobernada al cerrar la incidencia. No versionar
@@ -60,11 +67,13 @@ transcripts, CODEX_HOME, sockets ni caches.
 
 1. No consumir un receipt terminal antes de que el provider turn termine.
 2. Persistir y observar rework con una sola generacion causal tras restart.
-3. Permitir operaciones Git de indice dentro del worktree sin exponer el
-   common dir ni el repositorio canonico al sandbox.
-4. Repetir el batch desde estado limpio: dos accepted, dos commits encadenados,
+3. Mantener indice/staging/commit bajo propiedad de Orquesta; el agente solo
+   modifica filesystem, incluido rename tipado.
+4. Normalizar el alias estructurado de entorno de tests y delegar el test
+   bloqueado al atestador independiente.
+5. Repetir el batch desde estado limpio: dos accepted, dos commits encadenados,
    gate unico, checkout canonico limpio y batch closed.
-5. Reenviar exactamente la request: cero threads, commits y gates nuevos.
-6. Suite amplia verde y documentacion/inventario actualizados con commits de
+6. Reenviar exactamente la request: cero threads, commits y gates nuevos.
+7. Suite amplia verde y documentacion/inventario actualizados con commits de
    cierre. Hasta entonces `BUG-255`, `259`, `260` y `263` siguen abiertos;
    `BUG-261` y `BUG-262` quedan cerrados por replay6.

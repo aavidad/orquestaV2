@@ -59,7 +59,6 @@ type serverCodexAppServerGoalBackendV0 struct {
 	Model                   string
 	ReasoningEffort         string
 	Sandbox                 string
-	WritableRoots           []string
 	ApprovalPolicy          string
 	ServiceTier             string
 	Timeout                 time.Duration
@@ -871,7 +870,6 @@ func (backend serverCodexAppServerGoalBackendV0) turnStartParamsV0(
 	threadID string,
 	packet orquestaruntimecodexgoal.CodexGoalStartPacketV0,
 ) serverCodexAppServerTurnStartParamsV0 {
-	effectiveSandbox := codexAppServerGoalSandboxForPacketV0(backend.Sandbox, packet)
 	return serverCodexAppServerTurnStartParamsV0{
 		ThreadID:        threadID,
 		CWD:             strings.TrimSpace(backend.CWD),
@@ -881,23 +879,9 @@ func (backend serverCodexAppServerGoalBackendV0) turnStartParamsV0(
 		Effort:          strings.TrimSpace(backend.ReasoningEffort),
 		ApprovalPolicy:  strings.TrimSpace(backend.ApprovalPolicy),
 		ServiceTier:     strings.TrimSpace(backend.ServiceTier),
-		SandboxPolicy:   codexAppServerTurnStartSandboxPolicyForV0(effectiveSandbox, backend.WritableRoots),
 		ToolOutputPolicy: codexAppServerTurnStartToolOutputPolicyV0(
 			packet.DirectionContract.ToolOutputPolicy,
 		),
-	}
-}
-
-func codexAppServerTurnStartSandboxPolicyForV0(
-	effectiveSandbox string,
-	writableRoots []string,
-) serverCodexAppServerTurnStartSandboxPolicyV0 {
-	if strings.TrimSpace(effectiveSandbox) != "workspace-write" {
-		return serverCodexAppServerTurnStartSandboxPolicyV0{}
-	}
-	return serverCodexAppServerTurnStartSandboxPolicyV0{
-		Type:          "workspaceWrite",
-		WritableRoots: compactServerStackStringsV0(writableRoots),
 	}
 }
 
@@ -975,6 +959,7 @@ func codexAppServerTurnStartRuntimeContractV0(packet orquestaruntimecodexgoal.Co
 	b.WriteString("- Orquesta ya materializo ")
 	b.WriteString(checkpointFile)
 	b.WriteString(" en su runtime ignorado por Git; no lo crees dentro del write-set ni lo declares como artefacto. Empieza por el primer cambio material verificable.\n")
+	b.WriteString("- Orquesta posee el indice, commits e integracion Git. Modifica solo el filesystem del worktree; para renombrar usa una operacion de filesystem y no git mv/add/commit.\n")
 	b.WriteString("- No pegues salidas largas de comandos, busquedas, dumps, logs, binarios ni base64 en la conversacion; max_text_bytes=")
 	b.WriteString(fmt.Sprintf("%d", maxTextBytes))
 	b.WriteString(" y thread_read_max_bytes=256 KiB.\n")

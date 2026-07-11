@@ -18,10 +18,9 @@ func TestCodexGoalWorkspaceRouterV0UsesGoalSpecificCWDAtStartV0(t *testing.T) {
 	}
 	router := &fakeCodexGoalWorkspaceRouterV0{binding: GoalWorkspaceBindingV0{
 		ProjectWorkDir: workspace,
-		WritableRoots:  []string{"  " + workspace + "/generated/../generated  ", workspace + "/generated"},
 		EvidenceRefs:   []string{"evidence-ref-test-workspace"},
 	}}
-	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol, CWD: t.TempDir(), Sandbox: "workspace-write", WorkspaceRouter: router}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol, CWD: t.TempDir(), WorkspaceRouter: router}
 	receipt, err := backend.StartCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalStartPacketV0{
 		GoalRef: "goal-ref-workspace-001", Objective: "cambio aislado",
 	})
@@ -31,24 +30,8 @@ func TestCodexGoalWorkspaceRouterV0UsesGoalSpecificCWDAtStartV0(t *testing.T) {
 	if protocol.startParams.CWD != filepath.Clean(workspace) || protocol.turnParams.CWD != filepath.Clean(workspace) {
 		t.Fatalf("start cwd=%q turn cwd=%q", protocol.startParams.CWD, protocol.turnParams.CWD)
 	}
-	policy := protocol.turnParams.SandboxPolicy
-	if policy.Type != "workspaceWrite" || len(policy.WritableRoots) != 1 || policy.WritableRoots[0] != filepath.Join(workspace, "generated") {
-		t.Fatalf("sandbox policy=%+v", policy)
-	}
 	if !codexGoalWorkspaceContainsForTestV0(receipt.EvidenceRefs, "evidence-ref-test-workspace") || router.prepared != 1 {
 		t.Fatalf("receipt=%+v router=%+v", receipt, router)
-	}
-}
-
-func TestCodexGoalWorkspaceRouterV0RejectsRelativeWritableRootV0(t *testing.T) {
-	router := &fakeCodexGoalWorkspaceRouterV0{binding: GoalWorkspaceBindingV0{
-		ProjectWorkDir: t.TempDir(),
-		WritableRoots:  []string{"relative/output"},
-	}}
-	backend := serverCodexAppServerGoalBackendV0{Protocol: &fakeCodexAppServerProtocolV0{}, WorkspaceRouter: router}
-	receipt, err := backend.StartCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalStartPacketV0{GoalRef: "goal-ref-relative-root"})
-	if err == nil || receipt.IssueCode != codexGoalWorkspaceUnavailableIssueV0 {
-		t.Fatalf("receipt=%+v err=%v", receipt, err)
 	}
 }
 

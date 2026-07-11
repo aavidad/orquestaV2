@@ -4403,14 +4403,23 @@ shutdown real de replay6 devolvio `shutdown_ready=true`,
 BUG-261 y BUG-262 quedan cerrados localmente. BUG-259 y BUG-260 conservan el
 estado pendiente de replay batch completo aunque sus focales esten verdes.
 
-BUG `BUG-ORQ-20260711-263` (abierto, sandbox Git de worktree enlazado): replay6
-arranco en el CWD fisico correcto, pero `git mv` no pudo crear `index.lock`.
-`workspace-write` permite escribir el checkout, no el directorio administrativo
-que Git guarda fuera del worktree enlazado. Cierre exigido: `turn/start` recibe
-una politica estructurada con una unica raiz adicional, el admin dir exacto de
-ese worktree validado contra `.git/worktrees` del repositorio fuente; nunca el
-common dir ni el checkout canonico. Prueba focal y replay real deben demostrar
-el rename, canonico limpio e integracion gobernada.
+BUG `BUG-ORQ-20260711-263` (abierto, propiedad Git del worktree enlazado):
+replay6/7 arrancaron en el CWD fisico correcto, pero `git mv` no pudo crear
+`index.lock`. Replay7 demostro que incluso una raiz escribible exacta queda
+protegida por Codex y que el rename de filesystem si produce el diff esperado.
+La primera solucion se retira: el agente no debe poseer indice, staging ni
+commits. Cierre exigido: el contrato del turn declara que Orquesta posee VCS y
+el agente modifica solo el filesystem; rename tipado, atestacion e integracion
+se validan fuera del proveedor. Replay real debe demostrar canonico limpio,
+commit gobernado y cero permisos Git adicionales.
+
+BUG `BUG-ORQ-20260711-264` (abierto, alias tipado de bloqueo de tests): replay7
+devolvio `external_test_environment_restriction` para un test global que
+necesitaba sockets, mientras el delegador de atestacion solo aceptaba el codigo
+canonico `required_tests_environment_unavailable`. Artefacto y test focal eran
+validos, pero el batch quedo bloqueado. Cierre: normalizar el alias conocido al
+decodificar JSON, registrar recibo de reparacion y ejecutar el test mediante el
+atestador independiente; no clasificar summary ni palabras libres.
 
 Evidencia transversal de `BUG-255` a `BUG-262`:
 [pilotos de cierre batch del 2026-07-11](incidencias/incidencia_pilotos_cierre_batch_orquesta_2026-07-11.md).
