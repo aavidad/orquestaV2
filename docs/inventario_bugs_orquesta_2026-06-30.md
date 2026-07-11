@@ -4486,3 +4486,9 @@ de sucesor y el cierre pendiente de replay; no atribuye el fallo al contexto
 L2 advisory. Variaciones del contexto no bloquean. Cierre de esta entrada:
 solo inventario actualizado y receipt inmediato; queda pendiente unicamente el
 replay declarado por la fuente, sin ampliar frontera ni investigacion.
+El batch predecessor `batch-ref-autoprogramming-025f2f66e470bffc66c121af433b9b2b1c2b8a3a7da724edf07a8807e0b77d8e`
+integro dos commits, pero su regex no selecciono tests y el resultado quedo en
+`rework_pending` por `required_test_go_no_tests_executed`: no fue un fallo del
+comportamiento ni del contexto. El batch sucesor
+`request-ref-batch-attestor-testname-successor-20260711` queda enlazado como
+cierre pendiente.
