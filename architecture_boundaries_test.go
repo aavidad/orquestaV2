@@ -1,6 +1,9 @@
 package orquesta_test
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -535,6 +538,74 @@ func TestNeutralOrchestrationProductionCodeDoesNotHardcodeLocalPaths(t *testing.
 		})
 		if err != nil {
 			t.Fatalf("walk %s: %v", dir, err)
+		}
+	}
+}
+
+func TestCausalVerdictAuthorityCallersRemainExplicitV0(t *testing.T) {
+	approved := map[string]bool{
+		"modulos/orquesta-app-codex-stack/goal_first_resident_rework_v0.go": false,
+		"modulos/orquesta-estado-vivo/proyeccion_v0.go":                     false,
+		"modulos/orquesta-mcp/observe_app_director_goal_estado_vivo_v0.go":  false,
+	}
+
+	err := filepath.WalkDir(".", func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			if path != "." && strings.HasPrefix(entry.Name(), ".") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+
+		file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		if err != nil {
+			return err
+		}
+		callsAuthority := false
+		ast.Inspect(file, func(node ast.Node) bool {
+			if callsAuthority {
+				return false
+			}
+			call, ok := node.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			switch fun := call.Fun.(type) {
+			case *ast.Ident:
+				if fun.Name == "DerivarVeredictoCausalV0" {
+					callsAuthority = true
+				}
+			case *ast.SelectorExpr:
+				if fun.Sel.Name == "DerivarVeredictoCausalV0" {
+					callsAuthority = true
+				}
+			}
+			return !callsAuthority
+		})
+		if !callsAuthority {
+			return nil
+		}
+
+		path = filepath.ToSlash(strings.TrimPrefix(path, "./"))
+		if _, ok := approved[path]; !ok {
+			t.Errorf("DerivarVeredictoCausalV0 has unapproved production caller %s", path)
+			return nil
+		}
+		approved[path] = true
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("scan production Go callers: %v", err)
+	}
+	for path, found := range approved {
+		if !found {
+			t.Errorf("approved DerivarVeredictoCausalV0 caller missing from %s", path)
 		}
 	}
 }

@@ -1,6 +1,6 @@
 # Bugs vivos de Orquesta - indice canonico
 
-Actualizado: 2026-07-10 (cierre local D3/208H).
+Actualizado: 2026-07-11 (auditoria real del attestor 208AA).
 Mantenedor: Claude (revisor). Regla: UNA fila por bug vivo con su residual
 exacto; el historial completo vive en
 `docs/inventario_bugs_orquesta_2026-06-30.md` y NO se cuenta desde alli.
@@ -11,7 +11,7 @@ mismo commit.
 
 | ID | Residual exacto que lo mantiene vivo | Siguiente accion |
 | --- | --- | --- |
-| BUG-ORQ-20260710-208A-D | patches focales (write-sets solapados, 504, workdir, rework) verdes en local; sin verificar por API contra servidor desplegado | tras deploy: repro/API de prepare-run, observe y runs/control |
+| BUG-ORQ-20260710-208A-D | patches focales verdes en local; un repro local 2026-07-11 elimino el backend pero el primer control no propago terminalidad, observe tuvo que reconciliar a `blocked` y shutdown publico `ready` sin salir | cerrar propagacion/actuador causal y probar por API que control + shutdown terminan sin segundo intento ni SIGINT propietario; repetir tras deploy |
 | BUG-ORQ-20260710-208E | tooling drain/harness listo (F3-R2); falta receipt real `clean` de drain + dos pases amplios verdes. El perfil aislado exige `ORQUESTA_TEST_CACHE_ROOT` y `ORQUESTA_TEST_BATCH_ROOT` fuera de `/srv`; una revision local 2026-07-10 confirmo que Go 1.25 deja `GOMODCACHE` readonly y un runner desligado puede dejar helpers Unix bajo esa raiz | operador ejecuta drain + `orquesta_test_batches.sh` con ambas rutas aisladas; consolidar config y restaurar `chmod -R u+w` antes del cleanup, verificando que no quedan helpers por identidad de runtime |
 | F5/identidad runtime | integrado en `2fe12f658` y completado localmente por D1 con `5f30973d7`: identidad de servidor y proyecto externo ya son distintos; closure accepted y shutdown listo | ejecutar drain/deploy gobernados y verificar por API el binario remoto, sin tocar `uso-app` |
 | BUG-ORQ-20260710-208I | timeout parcial de observe coexistio con `invalid` durable; causa raiz no demostrada. F1 YA adoptado en observe/status/stats (etapa A, 2026-07-10): la superficie local ya no puede publicar running contradicho; la evidencia del incidente es del servidor remoto | repro por API contra servidor desplegado y correlacionar refs/tiempos con el veredicto causal publicado; no cerrable en local |
@@ -19,6 +19,7 @@ mismo commit.
 | BUG-ORQ-20260701-079 | solo frontera proveedor: cap duro pre-tool ante stdout crudo sin redireccion | esperar enforcement del proveedor o probe adversarial nuevo; no bloquea local |
 | BUG-ORQ-20260704-165 / 20260701-065 | residual amplio de observabilidad/control lento con proveedor real; nucleo local cerrado | se paga con la adopcion completa del veredicto F1 + repro 208 tras deploy |
 | BUG-ORQ-20260711-208Z | una instancia con `degraded_identity` bloquea correctamente trabajo, pero tambien rechaza `POST /api/v0/server/shutdown` con `server_work_launch_degraded_identity` | separar shutdown seguro del guard de lanzamiento; conservar idempotencia y demostrar que prepare-run sigue bloqueado. Evidencia en la [incidencia 208Z](incidencias/incidencia_orquesta_degraded_identity_bloquea_shutdown_2026-07-11.md) |
+| BUG-ORQ-20260711-208AA | un goal real termino con codigo y tests focales verdes, pero el attestor hermetico uso un bootstrap Go sin el toolchain del modulo; Orquesta trato el fallo de infraestructura como test rojo y lanzo un rework Codex incapaz de reparar esa configuracion | preflight del comando en el entorno hermetico, reason code de infraestructura y bloqueo sin rework de codigo; reatestar el mismo artefacto tras reparar la composicion. Evidencia en la [incidencia 208AA](incidencias/incidencia_orquesta_attestor_toolchain_infra_lanza_rework_2026-07-11.md) |
 
 ## Vivos (operativos, no de codigo)
 
