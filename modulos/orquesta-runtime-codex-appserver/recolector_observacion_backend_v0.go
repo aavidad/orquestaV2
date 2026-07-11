@@ -153,8 +153,10 @@ func (backend serverCodexAppServerTmuxBackendV0) tmuxHasSessionTargetV0(
 	var exitErr *exec.ExitError
 	message := strings.TrimSpace(output)
 	wantName := strings.TrimPrefix(target, "=")
+	sessionName := strings.TrimSuffix(wantName, ":")
 	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 &&
-		(message == "can't find session: "+wantName || message == "can't find session: "+target ||
+		(message == "can't find session: "+sessionName || message == "can't find session: "+wantName ||
+			message == "can't find session: "+target ||
 			strings.HasPrefix(message, "no server running on ") ||
 			(strings.HasPrefix(message, "error connecting to ") && strings.HasSuffix(message, "(No such file or directory)"))) {
 		return false, nil

@@ -972,6 +972,17 @@ func TestTmuxHasSessionV0NoConfundeExitErrorAjenoConNotFoundV0(t *testing.T) {
 	}
 }
 
+func TestTmuxHasSessionV0ReconoceSesionAusenteConTargetPaneExactoV0(t *testing.T) {
+	backend, _ := newGenerationLeaseBackendForTestV0(t)
+	missingTmux := filepath.Join(filepath.Dir(strings.Split(backend.PathEnv, string(os.PathListSeparator))[0]), "tmux-missing-session")
+	if err := os.WriteFile(missingTmux, []byte("#!/bin/sh\nprintf '%s\\n' \"can't find session: "+backend.SessionName+"\" >&2\nexit 1\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if found, err := backend.tmuxHasSessionV0(context.Background(), missingTmux); err != nil || found {
+		t.Fatalf("sesion tmux ausente no reconocida: found=%v err=%v", found, err)
+	}
+}
+
 func TestTmuxHasSessionV0ReconoceSocketDeServidorAusenteV0(t *testing.T) {
 	backend, _ := newGenerationLeaseBackendForTestV0(t)
 	missingTmux := filepath.Join(filepath.Dir(strings.Split(backend.PathEnv, string(os.PathListSeparator))[0]), "tmux-missing-server")
