@@ -22629,3 +22629,105 @@ con `contexto_ref_only_resuelto`, sin relanzar otro owner solapado.
   autorizadas aqui, como tool MCP especifica del bot o gateway si se exige una
   ruta HTTP nueva dedicada. El nucleo reusable ya no debe usar envs
   `ORQUESTA_WIZARD_BOT_*`.
+
+## T263 - Estudiar e integrar Dokploy como adaptador de despliegue opt-in
+
+Origen: peticion explicita del operador del 2026-07-11. Ejecutar esta tarea al
+final de las tareas ya comprometidas por el agente activo; no interrumpir ni
+reordenar el trabajo causal en curso.
+
+Objetivo: estudiar Dokploy con fuentes oficiales vigentes y diseñar e
+implementar la integracion que mejor encaje en Orquesta. La forma final puede
+ser conector, adaptador, puerto y composicion opt-in, o una combinacion de esas
+piezas, segun la evidencia del estudio; no asumir de antemano que Dokploy deba
+entrar en el nucleo ni acoplar el contrato neutral a su API concreta.
+
+Principio de separacion aportado por el operador: Dokploy es exclusivamente
+plataforma de despliegue y operacion. Nunca decide objetivos, tareas, agentes,
+orden, reintentos, review, rework ni cierre; eso pertenece al Director.
+
+Regla YAGNI obligatoria: el diagrama aportado es contexto, no lista de compras.
+Antes de crear cualquier pieza, comprobar si Orquesta ya resuelve la necesidad.
+Implementar solo el corte minimo que permita desplegar y operar Orquesta con
+Dokploy de forma segura. No introducir PostgreSQL, Redis/Valkey, Asynq, NATS,
+Qdrant, MinIO, Prometheus, Grafana, Loki, OpenTelemetry, nuevos workers, GPU,
+Ollama/vLLM ni otra infraestructura salvo que el estudio demuestre un hueco
+actual imprescindible para la integracion Dokploy y documente coste, beneficio,
+compatibilidad y rollback. Una posibilidad futura no justifica codigo presente.
+
+Conservar de los consejos solo estas invariantes ya alineadas con Orquesta:
+
+- API/panel ligeros, Director coordinador y trabajo pesado fuera de handlers.
+- Dokploy separado del orquestador y cableado como adaptador opt-in.
+- Reutilizar contratos, cola/outbox, eventos, persistencia, observabilidad,
+  proveedores y runtimes existentes; no crear sistemas paralelos.
+- No asumir singleton cuando el codigo tocado ya admita varias instancias, pero
+  no redisenar todo el runtime distribuido como parte de esta tarea.
+- Persistencia importante fuera del contenedor efimero y servicios internos no
+  expuestos publicamente, usando las capacidades que realmente se desplieguen.
+- Mantener arquitectura hexagonal, i18n, secretos fuera del repo, pruebas y
+  compatibilidad con el despliegue local actual.
+
+Resultado esperado del estudio: clasificar cada propuesta como `reutilizar`,
+`necesaria_ahora`, `opcional_futura` o `descartada`, con razon breve. Solo
+`necesaria_ahora` entra en el write-set de implementacion de T263.
+
+Fases obligatorias:
+
+1. Inventariar contratos y conectores de `modulos/orquesta-deploy`, superficies
+   de configuracion, i18n, servidor/composicion y smokes existentes. Revisar
+   `AGENTS.md`, foto vigente, guia del nucleo, principio del Director y
+   `modulos/orquesta-deploy/AGENTS.md` con sus docs locales.
+2. Estudiar documentacion oficial vigente de Dokploy: API o mecanismo de
+   integracion recomendado, autenticacion, proyectos, aplicaciones/servicios,
+   dominios, variables/secretos, despliegues, estado/healthcheck, logs,
+   rollback, idempotencia, errores, rate limits y opciones de entorno efimero.
+   Guardar informe compacto con fuentes, alternativas, riesgos y decision
+   arquitectonica.
+3. Proponer plan por tareas con write-sets disjuntos y pruebas. Si la frontera
+   queda suficientemente definida, implementar el corte util completo sin
+   esperar otra orden; si una decision de producto, credenciales o efecto
+   externo no autorizado impide hacerlo, cerrar el corte offline y dejar el
+   bloqueo/accion exacta al operador.
+4. Integrar mediante arquitectura hexagonal pura: contratos neutrales en su
+   owner, puerto de salida, adaptador Dokploy fuera del core y wiring solo en
+   composicion/bootstrap. Usar refs opacas; no compartir DB ni filesystem
+   interno; no importar proveedor, HTTP, secretos o runtime real desde core,
+   workflow ni dominio neutral.
+5. Toda superficie visible, mensajes, errores, UI, ayuda y documentacion
+   generada debe usar el sistema i18n canonico, con claves y traducciones
+   coherentes; no introducir strings visibles hardcodeados ni una segunda
+   configuracion paralela.
+
+Criterios de aceptacion:
+
+- La configuracion Dokploy vive en la superficie canonica de la composicion,
+  con defaults seguros, metadata de reinicio y secretos solo por mecanismo
+  inyectado; nunca tokens en repo, logs, fixtures ni resultados publicos.
+- El adaptador es opt-in. Por defecto solo permite contrato/dry-run o entorno
+  efimero aislado. Crear, actualizar, desplegar, borrar o cambiar recursos
+  reales exige autorizacion y guardas explicitas; esta tarea no autoriza tocar
+  Dokploy productivo.
+- Traduccion tipada y testeada entre contratos neutrales de deploy y Dokploy,
+  incluyendo validacion, idempotencia, estados, healthcheck, evidencias,
+  errores publicos recuperables y rollback cuando Dokploy lo soporte.
+- Ninguna heuristica de texto se convierte en veto de agentes. Errores
+  recuperables se normalizan o producen rework; solo seguridad, secretos,
+  causalidad, refs imposibles o efectos externos no autorizados bloquean.
+- Documentacion de contrato, decisiones, configuracion, operacion, prueba y
+  desactivacion/rollback. Si se expone por web/API/MCP, mantener contratos
+  versionados, control de acceso e i18n.
+- Pruebas unitarias puras con fake HTTP/transport o puerto equivalente;
+  contract tests del adaptador; smoke offline/dry-run por defecto; smoke real
+  opt-in solo contra instancia temporal confirmada. Conservar verde
+  `TestNeutralOrchestrationPackagesDoNotImportProductAdapters`,
+  `git diff --check` y `go test -count=1 ./...`.
+
+Direccion arquitectonica inicial, no mandato de implementacion: reutilizar
+`DeploymentPlanV0` y puertos de `orquesta-deploy` cuando expresen el caso sin
+forzarlo; alojar detalles Dokploy en un modulo adaptador pequeno, por ejemplo
+`orquesta-deploy-dokploy`, y cablearlo en `cmd/orquesta-server` o composicion
+propietaria. Si el estudio demuestra una frontera mejor, documentarla y usarla
+sin romper la neutralidad del nucleo.
+
+Estado: pendiente; prioridad posterior a la cola actual del agente.
