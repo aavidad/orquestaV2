@@ -25,9 +25,10 @@ wrapper shell, `CommandPath`, `HOME`, `PATH` ni proceso local como superficie
 principal. La configuracion debe ser opt-in, con endpoint, token redacted,
 nombres de tools, refs opacas, timeout, cancelacion y errores publicos.
 
-Implementado: `modulos/orquesta-operator-mcp-hermes` y wiring opt-in
-`ORQUESTA_HERMES_*` en `cmd/orquesta-server`, inyectando `OperatorConnector`
-para `/mcp`.
+Implementado: `modulos/orquesta-operator-mcp-hermes` y wiring opt-in mediante
+`hermes_operator.*` de `orquesta.config.json` en `cmd/orquesta-server`,
+inyectando `OperatorConnector` para `/mcp`. `ORQUESTA_HERMES_*` permanece solo
+como override deprecated.
 
 Validacion esperada: smoke API-only contra instancia temporal de Hermes mediante
 `go test -count=1 ./cmd/orquesta-server -run 'TestHermesOperatorRealSmoke' -v`,
@@ -46,7 +47,8 @@ Validacion ejecutada: `go test -count=1 ./modulos/orquesta-operator-mcp-hermes
 cuatro operaciones de operador contra Hermes fake HTTP: `status`,
 `pending_outbox`, `supervised_burst` y `directed_query`.
 
-Bloqueos: falta endpoint/credenciales Hermes reales para smoke externo. No hay
+Bloqueos: falta endpoint/credenciales Hermes reales para smoke externo y el
+harness aun usa los overrides legacy en vez del fichero canonico. No hay
 evidencia de ejecucion contra Hermes productivo y no debe marcarse como cerrado
 hasta que el smoke opt-in pase contra instancia temporal o de smoke aprobada.
 T16/T23/T124/T145 no se reabren salvo regresion: el pendiente restante es smoke

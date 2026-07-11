@@ -739,9 +739,10 @@ Verificación:
 
 ## Actualizacion Codex 2026-07-11: medicion viva y runtime_models
 
-La medicion vigente de `scripts/orquesta_metricas_deuda.sh --json` sustituye
-los baselines historicos 511/512: `env_vars_orquesta=423` productivas y 103
-solo de test. El ratchet AST de `cmd/orquesta-server` declara cero lecturas
+La medicion tomada en este corte sustituyo los baselines historicos 511/512:
+`env_vars_orquesta=423` productivas y 103 solo de test. La actualizacion Hermes
+posterior de este mismo documento contiene la medicion vigente. El ratchet AST
+de `cmd/orquesta-server` declara cero lecturas
 productivas fuera del registro. Los nombres de proceso hijo Guardian, wrappers,
 caches y `SMOKE_*` no se convierten en settings globales.
 

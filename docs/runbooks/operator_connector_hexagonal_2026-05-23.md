@@ -32,20 +32,15 @@ outbox pendiente y consulta dirigida por MCP sin conocer internals de Orquesta.
   `/api/v0/*` cuando aplique.
 - No usar `/api/mcp`, `/api/*` legacy, OpenClaw V1 ni CLI de proveedor para
   cerrar evidencias nuevas.
-- Si faltan `ORQUESTA_HERMES_BASE_URL` o credenciales opt-in, reportar
+- Si falta `hermes_operator.base_url` o la credencial opt-in, reportar
   `operator_mcp_connector_unavailable` o dejar el smoke bloqueado; no leer DB,
   filesystem productivo ni outbox interno como alternativa.
 
-Variables canonicas del conector Hermes de servidor:
+Configuracion canonica del conector Hermes de servidor:
 
-- `ORQUESTA_HERMES_ENABLED=1`
-- `ORQUESTA_HERMES_BASE_URL=https://...`
-- `ORQUESTA_HERMES_MCP_PATH=/mcp`
-- `ORQUESTA_HERMES_API_KEY=...`
-- `ORQUESTA_HERMES_STATUS_TOOL`, `ORQUESTA_HERMES_BURST_TOOL`,
-  `ORQUESTA_HERMES_OUTBOX_TOOL`, `ORQUESTA_HERMES_QUERY_TOOL`
-- `ORQUESTA_HERMES_*_CONNECTOR_REF`
-- `ORQUESTA_HERMES_TIMEOUT_SECONDS`
+- seccion `hermes_operator.*` de `orquesta.config.json`;
+- secreto solo por `hermes_operator.api_key_file` confinado al proyecto;
+- `ORQUESTA_HERMES_*` queda como override deprecated de compatibilidad.
 
 ## Smoke real Hermes API/MCP opt-in
 
@@ -55,10 +50,10 @@ operativa explicita, alcance acotado y salida publica sin secretos.
 
 El harness existe en
 `cmd/orquesta-server/hermes_operator_real_smoke_v0_test.go` y se ejecuta como
-prueba Go. Esta guardado por `ORQUESTA_HERMES_REAL_SMOKE_CONFIRM=1`; si falta
-esa confirmacion, si falta `ORQUESTA_HERMES_BASE_URL` o si el endpoint no es el
-Hermes temporal aprobado, la prueba salta o bloquea sin tocar CLI, DB ni
-internals.
+prueba Go. Esta guardado por `ORQUESTA_HERMES_REAL_SMOKE_CONFIRM=1`. El harness
+actual aun configura el adaptador mediante overrides legacy; debe migrarse al
+fichero canonico cuando se reabra la capa de conectores. Hasta entonces solo
+acredita compatibilidad, no la ruta operativa canonica.
 
 Comando base:
 

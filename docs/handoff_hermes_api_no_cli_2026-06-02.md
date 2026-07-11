@@ -39,8 +39,9 @@ endpoint/token reales.
 
 ## Hallazgos
 
-- Ya existe un adaptador concreto `orquesta-operator-mcp-hermes` y configuracion
-  canonica `ORQUESTA_HERMES_*` cableada en `cmd/orquesta-server`.
+- Ya existe un adaptador concreto `orquesta-operator-mcp-hermes`. Desde
+  2026-07-11 la configuracion canonica es `hermes_operator.*` en
+  `orquesta.config.json`; `ORQUESTA_HERMES_*` queda como override deprecated.
 - El paquete `modulos/orquesta-runtime-gemini` creado para infografias es CLI
   headless. Puede quedar como proveedor Gemini CLI opt-in, pero no representa a
   Hermes.
