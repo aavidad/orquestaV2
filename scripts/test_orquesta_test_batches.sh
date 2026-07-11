@@ -27,6 +27,12 @@ shift 3
 exec "$@"
 SH
 chmod +x "$test_root/go-fake" "$test_root/timeout-fake"
+cat >"$test_root/df-fake" <<'SH'
+#!/usr/bin/env bash
+set -eu
+printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/test 8192 1 4096 1%% /test\n'
+SH
+chmod +x "$test_root/df-fake"
 
 common_env=(
   ORQUESTA_TEST_CACHE_ROOT="$test_root/cache"
@@ -35,6 +41,8 @@ common_env=(
   ORQUESTA_TEST_BATCH_TIMEOUT=37s
   ORQUESTA_TEST_BATCH_KILL_AFTER=5s
   ORQUESTA_GO_TEST_TIMEOUT=31s
+  ORQUESTA_SESSION_DISK_BUDGET_BYTES=1
+  ORQUESTA_SESSION_DISK_DF_BIN="$test_root/df-fake"
   ORQUESTA_BATCH_GO_COMMAND="$test_root/go-fake"
   ORQUESTA_BATCH_TIMEOUT_COMMAND="$test_root/timeout-fake"
 )
@@ -52,7 +60,19 @@ assert [len(x['packages']) for x in r['batches']]==[2,2,1,2,2,1]
 assert len(open(sys.argv[2]).read().splitlines())==6
 assert open(sys.argv[3]).read().splitlines()==['--signal=TERM --kill-after=5s 37s']*6
 assert all(os.path.isfile(x['receipt']) for x in r['batches'])
-assert not os.path.exists(os.path.join(r['run_root'],'env')), 'env propio debe limpiarse conservando receipts'
+env_root=os.path.join(r['run_root'],'env')
+receipts=[]
+cleanup_receipts=[]
+for current, _, files in os.walk(env_root):
+    receipts += [os.path.join(current, name) for name in files if name == 'session_disk_receipt.json']
+    cleanup_receipts += [os.path.join(current, name) for name in files if name == 'session_disk_cleanup_receipt.json']
+assert len(receipts)==1, 'receipt de preflight debe conservarse'
+assert len(cleanup_receipts)==1, 'receipt de cleanup debe conservarse'
+cleanup=json.load(open(cleanup_receipts[0], encoding='utf-8'))
+assert cleanup['schema_version']=='orquesta_session_disk_cleanup_receipt.v0'
+assert cleanup['mode']=='cleanup' and cleanup['preflight_receipt']==receipts[0]
+assert len(cleanup['actions'])==9 and {a['action'] for a in cleanup['actions']}=={'delete'}
+assert not any(name == '.orquesta-session-owned.v0' for current, _, files in os.walk(env_root) for name in files), 'cleanup no debe conservar caches atestadas'
 PY
 
 set +e
@@ -92,12 +112,12 @@ set -e
 [ "$symlink_rc" -ne 0 ]
 
 lease_root="$test_root/shared-leases"
-env ORQUESTA_TEST_CACHE_ROOT="$test_root/cache" ORQUESTA_TEST_PORT_LEASE_ROOT="$lease_root" ORQUESTA_TEST_PORT_BASE=42000 \
+env ORQUESTA_TEST_CACHE_ROOT="$test_root/cache" ORQUESTA_TEST_PORT_LEASE_ROOT="$lease_root" ORQUESTA_TEST_PORT_BASE=42000 ORQUESTA_SESSION_DISK_BUDGET_BYTES=1 ORQUESTA_SESSION_DISK_DF_BIN="$test_root/df-fake" \
   bash -c 'source "$1"; orquesta_use_isolated_test_env "$2"; printf ready >"$3"; sleep 2' _ \
   "$ROOT/scripts/lib/isolated_test_env.sh" "$test_root/lease-one" "$test_root/lease.ready" & lease_pid=$!
 for _ in $(seq 1 30); do [ -s "$test_root/lease.ready" ] && break; sleep 0.05; done
 set +e
-env ORQUESTA_TEST_CACHE_ROOT="$test_root/cache" ORQUESTA_TEST_PORT_LEASE_ROOT="$lease_root" ORQUESTA_TEST_PORT_BASE=42000 \
+env ORQUESTA_TEST_CACHE_ROOT="$test_root/cache" ORQUESTA_TEST_PORT_LEASE_ROOT="$lease_root" ORQUESTA_TEST_PORT_BASE=42000 ORQUESTA_SESSION_DISK_BUDGET_BYTES=1 ORQUESTA_SESSION_DISK_DF_BIN="$test_root/df-fake" \
   bash -c 'source "$1"; orquesta_use_isolated_test_env "$2"' _ "$ROOT/scripts/lib/isolated_test_env.sh" "$test_root/lease-two" >/dev/null 2>&1
 lease_rc=$?
 set -e

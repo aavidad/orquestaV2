@@ -83,14 +83,19 @@ PY
 }
 
 orquesta_use_isolated_test_env() {
-  local root="${1:-}" cache_base port_seed port_base range
+  local root="${1:-}" cache_base port_seed port_base range session_ref preflight_script preflight_output exports
   orquesta_isolated_test_preflight || return
   cache_base="${ORQUESTA_TEST_CACHE_ROOT:-/srv/orquesta-self/runtime/test-cache}"
   if [ -z "$root" ]; then root="$cache_base/isolated/${ORQUESTA_TEST_RUN_ID:-run-$(date +%s%N)-$$}"; fi
   umask 077
   orquesta_private_test_root "$root" || return
-  mkdir -m 700 -p "$root/tmp" "$root/go-tmp" "$root/go-cache" "$root/go-mod-cache" \
-    "$root/go-path" "$root/codex-home" "$root/xdg-runtime" "$root/flaky-cache" "$root/runtime"
+  preflight_script="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/orquesta_session_disk_preflight.sh"
+  [ -x "$preflight_script" ] || { echo "isolated_test_session_disk_preflight_missing" >&2; return 2; }
+  session_ref="${ORQUESTA_ISOLATED_TEST_SESSION_REF:-isolated-$(printf '%s' "$root" | cksum | awk '{print $1}')}"
+  preflight_output="$("$preflight_script" --preflight --init-session-base --session-ref "$session_ref" --session-base "$root" --workdir "$(pwd -P)")" || return
+  exports="$(printf '%s\n' "$preflight_output" | sed -n 's/^export //p')"
+  [ -n "$exports" ] || { echo "isolated_test_session_disk_preflight_exports_missing" >&2; return 2; }
+  eval "$exports"
 
   port_seed="$(printf '%s' "$root" | cksum | awk '{print $1}')"
   port_base="${ORQUESTA_TEST_PORT_BASE:-$((20000 + port_seed % 25000))}"
@@ -98,17 +103,12 @@ orquesta_use_isolated_test_env() {
   case "$port_base:$range" in *[!0-9:]*) echo "isolated_test_port_config_invalid" >&2; return 2;; esac
   orquesta_acquire_test_port_lease "$root" "$range" "$port_base" || return
 
-  export TMPDIR="$root/tmp"
-  export GOTMPDIR="$root/go-tmp"
-  export GOCACHE="$root/go-cache"
-  export GOMODCACHE="${ORQUESTA_ISOLATED_TEST_GOMODCACHE:-$root/go-mod-cache}"
-  export GOPATH="$root/go-path"
-  export CODEX_HOME="$root/codex-home"
-  export XDG_RUNTIME_DIR="$root/xdg-runtime"
-  export ORQUESTA_FLAKY_HARNESS_CACHE_ROOT="$root/flaky-cache"
-  export ORQUESTA_TEST_RUNTIME_ROOT="$root/runtime"
   export ORQUESTA_ISOLATED_TEST_ENV_REQUESTED_ROOT="$root"
   export ORQUESTA_ISOLATED_TEST_ENV_ROOT="$root"
+  export ORQUESTA_ISOLATED_TEST_SESSION_REF="$session_ref"
+  export ORQUESTA_ISOLATED_TEST_SESSION_BASE="$root"
+  export ORQUESTA_ISOLATED_TEST_SESSION_ROOT="$root/$session_ref"
+  export ORQUESTA_ISOLATED_TEST_SESSION_RECEIPT="$root/$session_ref/session_disk_receipt.json"
 }
 
 orquesta_cleanup_isolated_test_env() {
@@ -116,10 +116,14 @@ orquesta_cleanup_isolated_test_env() {
   [ -n "$root" ] || return 0
   orquesta_private_test_root "$root" || return
   orquesta_release_test_port_lease
-  rm -rf -- "$root"
+  local preflight_script session_ref
+  preflight_script="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/orquesta_session_disk_preflight.sh"
+  session_ref="${ORQUESTA_ISOLATED_TEST_SESSION_REF:-}"
+  [ -n "$session_ref" ] || return 0
+  "$preflight_script" --cleanup --confirm-cleanup "$session_ref" --session-ref "$session_ref" --session-base "$root" --workdir "$(pwd -P)" >/dev/null
 }
 
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   orquesta_use_isolated_test_env "${1:-}"
-  env | sed -n '/^TMPDIR=/p;/^GOTMPDIR=/p;/^GOCACHE=/p;/^GOMODCACHE=/p;/^GOPATH=/p;/^CODEX_HOME=/p;/^XDG_RUNTIME_DIR=/p;/^ORQUESTA_FLAKY_HARNESS_CACHE_ROOT=/p;/^ORQUESTA_TEST_RUNTIME_ROOT=/p;/^ORQUESTA_TEST_PORT_/p;/^ORQUESTA_ISOLATED_TEST_ENV_/p' | sort
+  env | sed -n '/^TMPDIR=/p;/^GOTMPDIR=/p;/^GOCACHE=/p;/^GOMODCACHE=/p;/^GOPATH=/p;/^CODEX_HOME=/p;/^XDG_RUNTIME_DIR=/p;/^ORQUESTA_FLAKY_HARNESS_CACHE_ROOT=/p;/^ORQUESTA_TEST_RUNTIME_ROOT=/p;/^ORQUESTA_TEST_PORT_/p;/^ORQUESTA_ISOLATED_TEST_/p' | sort
 fi
