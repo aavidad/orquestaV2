@@ -4345,3 +4345,55 @@ autodeclarado cuando falta closure atestado. Cierre: `a245a90a8` migra los
 productores deterministas y la ruta residente, clasifica el texto legacy como
 advisory y cablea el binder; `7a91f8052` reproduce U1000 como check tipado. No
 se asocia lenguaje natural a comandos por heuristica.
+
+BUG `BUG-ORQ-20260711-256` (cerrado localmente y reproducido con proveedor,
+watcher de recibos): el watcher resolvia el workspace fisico correcto, pero
+solo vigilaba directorios del write-set; el recibo terminal vive en
+`.orquesta-runtime/goal-receipts/<goal_ref>`, por lo que no habia wakeup al
+materializarlo. `19d2ef78b` prioriza ese directorio causal. Replay4/5 demostro
+observacion automatica sin llamar manualmente a `goal/observe`.
+
+BUG `BUG-ORQ-20260711-257` (cerrado localmente y reproducido con proveedor,
+rename autorizado): un rename que ademas modifica contenido se proyectaba como
+remove+add y el guard exigia digest identico para reconocerlo. `f8fc97ba4`
+acepta el remove solo si la autorizacion tipada liga origen y destino exactos y
+el destino figura realmente entre los paths añadidos; destino ausente o
+distinto sigue bloqueado. Replay4/5 paso el guard de write-set.
+
+BUG `BUG-ORQ-20260711-258` (cerrado localmente y por prueba hermetica, entorno
+del atestador): el runner independiente elimina correctamente `HOME` y secretos,
+pero `codeHomeDirV0` inventaba `.codex` relativo cuando no habia HOME; la
+composicion fallaba con `codex_profile.code_home_dir`. `67b475fc3` deja vacio
+el puerto opcional y conserva el aislamiento. El comando exacto
+`go test ./cmd/orquesta-server` pasa con `env -i`, red desactivada y snapshot de
+modulos.
+
+BUG `BUG-ORQ-20260711-259` (abierto, carrera receipt/task-complete): el agente
+escribe el recibo antes de terminar su turn, el observer activo lo acepta y
+congela el snapshot mientras el agente aun puede modificar el write-set. En
+replay5 el hash cambio entre freeze y attestation; los tres tests independientes
+fallaron por mismatch y se abrio rework innecesario. Cierre: un recibo no puede
+cerrar mientras el provider turn siga activo; prueba focal y replay real.
+
+BUG `BUG-ORQ-20260711-260` (abierto, rework huerfano): tras el mismatch de
+replay5, `goal-ref-...-rework-1` se persistio running en el run marker y llego a
+`task_complete`, pero el `GoalWorkState` del mismo run siguio apuntando al goal
+original complete/blocked. El observer residente no volvio a observar el
+rework. Cierre: estado/marker comparten generacion causal, sobreviven restart y
+el rework cierra el run sin relanzamiento duplicado.
+
+BUG `BUG-ORQ-20260711-261` (abierto, shutdown autoprogramacion): replay3/4/5
+devolvieron repetidamente `stop_pending` con runs=0, agentes=0 y checkpoints=0,
+mientras el tmux app-server propio seguia vivo. Los selectores, snapshot HTTP y
+hooks SIGINT omiten el backend `AutoprogrammingGoal`. Cierre: exponer
+ActiveShutdownWork read/cleanup/identity, incluir ese backend con deduplicacion
+y demostrar `shutdown_ready=true` sin fallback de proceso.
+
+BUG `BUG-ORQ-20260711-262` (abierto, owner marker en cuarentena): el scanner
+activo solo considera el owner marker vigente y puede ocultar un marker
+cuarentenado aunque su sesion tmux propia siga viva. Cierre: conservar identidad
+verificada hasta confirmar que sesion/proceso murieron; nunca proyectar cero
+trabajo vivo por mover el marker de nombre.
+
+Evidencia transversal de `BUG-255` a `BUG-262`:
+[pilotos de cierre batch del 2026-07-11](incidencias/incidencia_pilotos_cierre_batch_orquesta_2026-07-11.md).
