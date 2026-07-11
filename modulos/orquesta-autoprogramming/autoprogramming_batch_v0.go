@@ -286,16 +286,15 @@ func RegisterAutoprogrammingBatchFocalCloseV0(batch AutoprogrammingBatchV0, expe
 	})
 }
 
-func ClaimAutoprogrammingBatchIntegrationV0(batch AutoprogrammingBatchV0, expectedStoreVersion uint64, idempotencyKey, claimRef, taskRef, sourceRevision, parentRevision string) AutoprogrammingBatchTransitionResultV0 {
+func ClaimAutoprogrammingBatchIntegrationV0(batch AutoprogrammingBatchV0, expectedStoreVersion uint64, idempotencyKey, claimRef, taskRef, parentRevision string) AutoprogrammingBatchTransitionResultV0 {
 	generation := strconv.FormatUint(batch.GateGeneration, 10)
-	return transitionAutoprogrammingBatchV0(batch, expectedStoreVersion, idempotencyKey, "claim_integration", []string{generation, claimRef, taskRef, sourceRevision, parentRevision}, func(next *AutoprogrammingBatchV0) []AutoprogrammingRequestIssueV0 {
+	return transitionAutoprogrammingBatchV0(batch, expectedStoreVersion, idempotencyKey, "claim_integration", []string{generation, claimRef, taskRef, parentRevision}, func(next *AutoprogrammingBatchV0) []AutoprogrammingRequestIssueV0 {
 		if next.Status != AutoprogrammingBatchStatusPendingIntegrationV0 {
 			return autoprogrammingBatchTransitionIssueV0("batch_integration_claim_not_allowed", "status", "claim de integracion requiere todos los focales cerrados")
 		}
 		claimRef = autoprogrammingBatchRefV0(claimRef)
-		sourceRevision = autoprogrammingBatchRefV0(sourceRevision)
 		parentRevision = autoprogrammingBatchRefV0(parentRevision)
-		if !autoprogrammingBatchRefValidV0(claimRef) || !autoprogrammingBatchRefValidV0(sourceRevision) || parentRevision != autoprogrammingBatchExpectedParentRevisionV0(*next) {
+		if !autoprogrammingBatchRefValidV0(claimRef) || parentRevision != autoprogrammingBatchExpectedParentRevisionV0(*next) {
 			return autoprogrammingBatchTransitionIssueV0("batch_integration_parent_revision_invalid", "parent_revision", "parent revision debe coincidir con el HEAD causal vigente")
 		}
 		member := autoprogrammingBatchMemberIndexV0(next.Members, taskRef)
@@ -307,7 +306,7 @@ func ClaimAutoprogrammingBatchIntegrationV0(batch AutoprogrammingBatchV0, expect
 		}
 		next.IntegrationClaims = append(next.IntegrationClaims, AutoprogrammingBatchIntegrationClaimV0{
 			GateGeneration: next.GateGeneration, ClaimRef: claimRef, TaskRef: next.Members[member].TaskRef,
-			SourceRevision: sourceRevision, ParentRevision: parentRevision, Status: AutoprogrammingBatchClaimStatusClaimedV0,
+			ParentRevision: parentRevision, Status: AutoprogrammingBatchClaimStatusClaimedV0,
 		})
 		return nil
 	})
@@ -326,11 +325,12 @@ func RegisterAutoprogrammingBatchIntegrationV0(batch AutoprogrammingBatchV0, exp
 			return autoprogrammingBatchTransitionIssueV0("batch_integration_parent_revision_invalid", "parent_revision", "receipt debe continuar desde el HEAD causal vigente")
 		}
 		member := autoprogrammingBatchMemberIndexV0(next.Members, taskRef)
-		claim := autoprogrammingBatchIntegrationClaimIndexV0(*next, claimRef, taskRef, sourceRevision, parentRevision)
+		claim := autoprogrammingBatchIntegrationClaimIndexV0(*next, claimRef, taskRef, parentRevision)
 		if member < 0 || next.Members[member].IntegrationStatus != AutoprogrammingBatchIntegrationPendingV0 || claim < 0 || next.IntegrationClaims[claim].Status != AutoprogrammingBatchClaimStatusClaimedV0 {
 			return autoprogrammingBatchTransitionIssueV0("batch_integration_claim_missing", "claim_ref", "receipt requiere claim exacto pendiente")
 		}
 		next.IntegrationClaims[claim].Status = AutoprogrammingBatchClaimStatusReceiptedV0
+		next.IntegrationClaims[claim].SourceRevision = sourceRevision
 		next.IntegrationClaims[claim].IntegrationRevision = integrationRevision
 		next.IntegrationClaims[claim].ReceiptRef = receiptRef
 		next.Members[member].IntegrationStatus = AutoprogrammingBatchIntegrationIntegratedV0
@@ -593,11 +593,11 @@ func autoprogrammingBatchEvidenceIssuesV0(batch AutoprogrammingBatchV0) []Autopr
 	integrationClaimRefs := map[string]bool{}
 	for _, claim := range batch.IntegrationClaims {
 		key := strconv.FormatUint(claim.GateGeneration, 10) + "\x00" + claim.ClaimRef
-		valid := claim.GateGeneration > 0 && claim.GateGeneration <= batch.GateGeneration && autoprogrammingBatchRefValidV0(claim.ClaimRef) && autoprogrammingBatchMemberIndexV0(batch.Members, claim.TaskRef) >= 0 && autoprogrammingBatchRefValidV0(claim.SourceRevision) && autoprogrammingBatchRefValidV0(claim.ParentRevision) && !integrationClaimRefs[key]
+		valid := claim.GateGeneration > 0 && claim.GateGeneration <= batch.GateGeneration && autoprogrammingBatchRefValidV0(claim.ClaimRef) && autoprogrammingBatchMemberIndexV0(batch.Members, claim.TaskRef) >= 0 && autoprogrammingBatchRefValidV0(claim.ParentRevision) && !integrationClaimRefs[key]
 		if claim.Status == AutoprogrammingBatchClaimStatusClaimedV0 {
-			valid = valid && claim.IntegrationRevision == "" && claim.ReceiptRef == ""
+			valid = valid && claim.SourceRevision == "" && claim.IntegrationRevision == "" && claim.ReceiptRef == ""
 		} else if claim.Status == AutoprogrammingBatchClaimStatusReceiptedV0 {
-			valid = valid && autoprogrammingBatchRefValidV0(claim.IntegrationRevision) && autoprogrammingBatchRefValidV0(claim.ReceiptRef)
+			valid = valid && autoprogrammingBatchRefValidV0(claim.SourceRevision) && autoprogrammingBatchRefValidV0(claim.IntegrationRevision) && autoprogrammingBatchRefValidV0(claim.ReceiptRef)
 		} else {
 			valid = false
 		}
@@ -939,9 +939,9 @@ func autoprogrammingBatchHasOpenIntegrationClaimV0(batch AutoprogrammingBatchV0)
 	}
 	return false
 }
-func autoprogrammingBatchIntegrationClaimIndexV0(batch AutoprogrammingBatchV0, claimRef, taskRef, sourceRevision, parentRevision string) int {
+func autoprogrammingBatchIntegrationClaimIndexV0(batch AutoprogrammingBatchV0, claimRef, taskRef, parentRevision string) int {
 	for index, claim := range batch.IntegrationClaims {
-		if claim.GateGeneration == batch.GateGeneration && claim.ClaimRef == claimRef && claim.TaskRef == taskRef && claim.SourceRevision == sourceRevision && claim.ParentRevision == parentRevision {
+		if claim.GateGeneration == batch.GateGeneration && claim.ClaimRef == claimRef && claim.TaskRef == taskRef && claim.ParentRevision == parentRevision {
 			return index
 		}
 	}

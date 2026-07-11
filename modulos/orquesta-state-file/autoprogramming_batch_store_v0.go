@@ -231,7 +231,7 @@ func autoprogrammingBatchExactSuccessorV0(
 		}
 	}
 	for _, claim := range next.IntegrationClaims {
-		if matches(orquestaautoprogramming.ClaimAutoprogrammingBatchIntegrationV0(current, current.StoreVersion, idempotencyKey, claim.ClaimRef, claim.TaskRef, claim.SourceRevision, claim.ParentRevision)) ||
+		if matches(orquestaautoprogramming.ClaimAutoprogrammingBatchIntegrationV0(current, current.StoreVersion, idempotencyKey, claim.ClaimRef, claim.TaskRef, claim.ParentRevision)) ||
 			matches(orquestaautoprogramming.RegisterAutoprogrammingBatchIntegrationV0(current, current.StoreVersion, idempotencyKey, claim.ClaimRef, claim.TaskRef, claim.SourceRevision, claim.ParentRevision, claim.IntegrationRevision, claim.ReceiptRef)) {
 			return true
 		}

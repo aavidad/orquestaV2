@@ -89,8 +89,25 @@ func TestAutoprogrammingBatchV0AcceptsSuccessiveIntegrationHeadsAndExactReplay(t
 	batch = mustBatchTransitionV0(t, RegisterAutoprogrammingBatchLaunchV0(batch, 2, "launch-b", "task-b"))
 	batch = mustBatchTransitionV0(t, RegisterAutoprogrammingBatchFocalCloseV0(batch, 3, "close-a", "task-a"))
 	batch = mustBatchTransitionV0(t, RegisterAutoprogrammingBatchFocalCloseV0(batch, 4, "close-b", "task-b"))
-	batch = mustBatchTransitionV0(t, ClaimAutoprogrammingBatchIntegrationV0(batch, 5, "claim-integrate-a", "integration-claim-a", "task-a", "source-a", "base-revision-001"))
-	if got := ClaimAutoprogrammingBatchIntegrationV0(batch, batch.StoreVersion, "claim-integrate-b-early", "integration-claim-b", "task-b", "source-b", "base-revision-001"); got.Accepted || !hasAutoprogrammingBatchIssueV0(got.Issues, "batch_integration_claim_orphaned") {
+	batch = mustBatchTransitionV0(t, ClaimAutoprogrammingBatchIntegrationV0(batch, 5, "claim-integrate-a", "integration-claim-a", "task-a", "base-revision-001"))
+	if batch.IntegrationClaims[0].SourceRevision != "" {
+		t.Fatalf("pre-effect claim contains source revision: %+v", batch.IntegrationClaims[0])
+	}
+	claimReplay := ClaimAutoprogrammingBatchIntegrationV0(batch, 5, "claim-integrate-a", "integration-claim-a", "task-a", "base-revision-001")
+	if !claimReplay.Accepted || !claimReplay.Replay || !reflect.DeepEqual(claimReplay.Batch, batch) {
+		t.Fatalf("claim replay=%+v", claimReplay)
+	}
+	for _, divergent := range []struct{ claimRef, taskRef, parentRevision string }{
+		{"integration-claim-other", "task-a", "base-revision-001"},
+		{"integration-claim-a", "task-b", "base-revision-001"},
+		{"integration-claim-a", "task-a", "parent-other"},
+	} {
+		got := ClaimAutoprogrammingBatchIntegrationV0(batch, 5, "claim-integrate-a", divergent.claimRef, divergent.taskRef, divergent.parentRevision)
+		if got.Accepted || !hasAutoprogrammingBatchIssueV0(got.Issues, "batch_idempotency_key_reused") {
+			t.Fatalf("claim divergence=%+v", got)
+		}
+	}
+	if got := ClaimAutoprogrammingBatchIntegrationV0(batch, batch.StoreVersion, "claim-integrate-b-early", "integration-claim-b", "task-b", "base-revision-001"); got.Accepted || !hasAutoprogrammingBatchIssueV0(got.Issues, "batch_integration_claim_orphaned") {
 		t.Fatalf("orphan claim=%+v", got)
 	}
 	receiptExpected := batch.StoreVersion
@@ -110,7 +127,7 @@ func TestAutoprogrammingBatchV0AcceptsSuccessiveIntegrationHeadsAndExactReplay(t
 		t.Fatalf("source divergence=%+v", got)
 	}
 
-	if got := ClaimAutoprogrammingBatchIntegrationV0(batch, batch.StoreVersion, "claim-b-stale", "integration-claim-b-stale", "task-b", "source-b", "base-revision-001"); got.Accepted || !hasAutoprogrammingBatchIssueV0(got.Issues, "batch_integration_parent_revision_invalid") {
+	if got := ClaimAutoprogrammingBatchIntegrationV0(batch, batch.StoreVersion, "claim-b-stale", "integration-claim-b-stale", "task-b", "base-revision-001"); got.Accepted || !hasAutoprogrammingBatchIssueV0(got.Issues, "batch_integration_parent_revision_invalid") {
 		t.Fatalf("stale head=%+v", got)
 	}
 	batch = integrateAutoprogrammingBatchMemberV0(t, batch, "b", "task-b", "source-b", "revision-a", "revision-b")
@@ -190,7 +207,7 @@ func readyAutoprogrammingBatchGateV0(t *testing.T) AutoprogrammingBatchV0 {
 func integrateAutoprogrammingBatchMemberV0(t *testing.T, batch AutoprogrammingBatchV0, suffix, taskRef, sourceRevision, parentRevision, integrationRevision string) AutoprogrammingBatchV0 {
 	t.Helper()
 	claimRef := "integration-claim-" + suffix
-	batch = mustBatchTransitionV0(t, ClaimAutoprogrammingBatchIntegrationV0(batch, batch.StoreVersion, "claim-integration-"+suffix, claimRef, taskRef, sourceRevision, parentRevision))
+	batch = mustBatchTransitionV0(t, ClaimAutoprogrammingBatchIntegrationV0(batch, batch.StoreVersion, "claim-integration-"+suffix, claimRef, taskRef, parentRevision))
 	return mustBatchTransitionV0(t, RegisterAutoprogrammingBatchIntegrationV0(batch, batch.StoreVersion, "receipt-integration-"+suffix, claimRef, taskRef, sourceRevision, parentRevision, integrationRevision, "integration-receipt-"+suffix))
 }
 

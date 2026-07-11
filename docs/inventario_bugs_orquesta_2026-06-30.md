@@ -4254,7 +4254,11 @@ podia quedar bloqueada por claims antiguos. Criterio de cierre: transiciones
 monotonicas validadas desde el estado persistido, terminales irreversibles,
 cadena `parent_revision -> integration_revision`, claims previos con replay
 por receipt y generacion de gate explicita; focales de rollback, HEAD obsoleto,
-claim huerfano y rework deben quedar verdes antes del wiring del stack.
+claim huerfano y rework deben quedar verdes antes del wiring del stack. La
+revision del wiring anadio una restriccion: el conector Git crea el commit
+fuente durante el efecto, por lo que el claim previo se liga a
+generacion+miembro+`parent_revision`; `source_revision` nace y se valida solo
+en el receipt posterior.
 
 Avance 2026-07-11: `b96e9b115` añade refs obligatorias de criterios
 verificables al contrato Goal; el transporte posterior añade
