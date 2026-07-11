@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
+	orquestaruntimeworktree "orquesta/modulos/orquesta-runtime-worktree"
 )
 
 type CodexStackAutoprogrammingExecutorV0 struct {
@@ -49,12 +50,31 @@ func PrepareAutoprogrammingRunFromStackV0(
 	request = autoprogrammingBridgeRequestWithGoalFirstBackendMarkersV0(request, stack.Ports)
 	work := orquestaautoprogramming.BuildAutoprogrammingProgrammableWorkV0(request.Request)
 	if work.Accepted {
-		prepared, issues := autoprogrammingPrepareWorktreeIsolationV0(ctx, stack.Codex.ProjectWorkDir, work.Work)
-		if len(issues) > 0 {
-			work.Accepted = false
-			work.Issues = append(work.Issues, issues...)
+		var snapshotStore orquestaruntimeworktree.WorktreeSnapshotStorePortV0
+		if stack.AutoprogrammingPromotion.Enabled {
+			snapshotStore = stack.AutoprogrammingPromotion.GoalFirstSnapshotStore
+			if snapshotStore == nil {
+				work.Accepted = false
+				work.Issues = append(work.Issues, orquestaautoprogramming.AutoprogrammingRequestIssueV0{
+					Code:    "worktree_baseline_store_missing",
+					Field:   "autoprogramming_promotion.goal_first_snapshot_store",
+					Message: "snapshot store requerido antes de preparar un goal promocionable",
+				})
+			}
 		}
-		work.Work = prepared
+		if work.Accepted {
+			prepared, issues := autoprogrammingPrepareWorktreeIsolationV0(
+				ctx,
+				stack.Codex.ProjectWorkDir,
+				work.Work,
+				snapshotStore,
+			)
+			if len(issues) > 0 {
+				work.Accepted = false
+				work.Issues = append(work.Issues, issues...)
+			}
+			work.Work = prepared
+		}
 	}
 	return prepareAutoprogrammingRunWithWorkV0(ctx, request, stack.Ports, work)
 }

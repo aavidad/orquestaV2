@@ -71,6 +71,33 @@ func TestBuildAutoprogrammingProgrammableWorkV0GeneraGoalSpecsCuandoGoalListo(t 
 	}
 }
 
+func TestBuildAutoprogrammingProgrammableWorkV0ConvierteBaselineDeTaskEnContextoGoalTipadoV0(t *testing.T) {
+	const baselineRef = "worktree-baseline-ref-goal-context-001"
+	result := BuildAutoprogrammingProgrammableWorkV0(validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
+		request.Tasks = []AutoprogrammingTaskGroupCandidateV0{{
+			TaskRef: "task-ref-goal-baseline-context-001",
+			Area:    "autoprogramming",
+			ContextRefs: []string{
+				"goal_migration:goal-first",
+				"goal_capability:starter",
+				"goal_capability:observer",
+				"goal_capability:closure-validator",
+				autoprogrammingWorktreeBaselinePrefixV0 + baselineRef,
+			},
+		}}
+	}))
+	if !result.Accepted || len(result.Work.GoalSpecs) != 1 {
+		t.Fatalf("result=%+v", result)
+	}
+	refs := result.Work.GoalSpecs[0].ContextRefs
+	if !hasGoalContextRefForAutoprogrammingTestV0(refs, "worktree_baseline", baselineRef) {
+		t.Fatalf("context_refs=%+v", refs)
+	}
+	if hasGoalContextRefForAutoprogrammingTestV0(refs, "workflow_task_context", autoprogrammingWorktreeBaselinePrefixV0+baselineRef) {
+		t.Fatalf("baseline conservado como contexto generico: %+v", refs)
+	}
+}
+
 func TestBuildAutoprogrammingProgrammableWorkV0GoalSpecAddsAcceptanceCheckTestAndPolicy(t *testing.T) {
 	check := AutoprogrammingAcceptanceCheckV0{
 		CriterionRef: "criterion-ref-bug-208ag-001",

@@ -10,14 +10,16 @@ import (
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
+	orquestaruntimeworktree "orquesta/modulos/orquesta-runtime-worktree"
 )
 
 type AutoprogrammingPromotionConfigV0 struct {
-	Enabled       bool
-	Port          orquestaautoprogramming.AutoprogrammingStagingPromotionPortV0
-	AppRef        string
-	RepoRef       string
-	CommitMessage string
+	Enabled                bool
+	Port                   orquestaautoprogramming.AutoprogrammingStagingPromotionPortV0
+	GoalFirstSnapshotStore orquestaruntimeworktree.WorktreeSnapshotStorePortV0
+	AppRef                 string
+	RepoRef                string
+	CommitMessage          string
 }
 
 func (stack StackV0) maybePromoteClosedAutoprogrammingRunV0(
@@ -39,6 +41,13 @@ func (stack StackV0) maybePromoteClosedAutoprogrammingRunV0(
 		}
 		return true, nil, nil
 	}
+	if state, goalFirst, err := stack.autoprogrammingPromotionGoalStateV0(ctx, run); err != nil {
+		return false, nil, err
+	} else if goalFirst {
+		if refs, verified := stack.autoprogrammingPromotionGoalFirstWriteSetVerifiedV0(ctx, state, request); !verified {
+			return false, refs, nil
+		}
+	}
 	decision := orquestaautoprogramming.EvaluateAutoprogrammingStagingPromotionV0(request)
 	if !decision.Ready {
 		return false, decision.EvidenceRefs, nil
@@ -58,6 +67,71 @@ func (stack StackV0) maybePromoteClosedAutoprogrammingRunV0(
 	}
 	refs = compactStringsV0(append(refs, archived.EvidenceRefs...))
 	return archived.Status == orquestaautoprogramming.AutoprogrammingStagingEffectArchivedV0, refs, nil
+}
+
+func (stack StackV0) autoprogrammingPromotionGoalFirstWriteSetVerifiedV0(
+	ctx context.Context,
+	state orquestagoal.GoalWorkStateV0,
+	request orquestaautoprogramming.AutoprogrammingStagingPromotionRequestV0,
+) ([]string, bool) {
+	const evidencePrefix = "evidence-ref-codex-stack-autoprogramming-goal-first-worktree-verify"
+	baselineRef := autoprogrammingPromotionGoalContextRefV0(
+		state.Spec.ContextRefs,
+		"worktree_baseline",
+		"",
+	)
+	if baselineRef == "" {
+		return []string{evidencePrefix, evidencePrefix + "-baseline-ref-missing"}, false
+	}
+	if stack.AutoprogrammingPromotion.GoalFirstSnapshotStore == nil {
+		return []string{evidencePrefix, evidencePrefix + "-snapshot-store-missing", baselineRef}, false
+	}
+	baseline, err := stack.AutoprogrammingPromotion.GoalFirstSnapshotStore.LoadWorktreeSnapshotV0(ctx, baselineRef)
+	if err != nil {
+		return []string{evidencePrefix, evidencePrefix + "-baseline-unavailable", baselineRef}, false
+	}
+	if len(baseline.OmittedPaths) > 0 {
+		refs := []string{evidencePrefix, evidencePrefix + "-baseline-partial", baselineRef}
+		for _, path := range baseline.OmittedPaths {
+			refs = append(refs, evidencePrefix+"-baseline-omitted-path:"+strings.TrimSpace(path))
+		}
+		return compactStringsV0(refs), false
+	}
+	projectWorkDir := strings.TrimSpace(stack.Codex.ProjectWorkDir)
+	if projectWorkDir == "" {
+		return []string{evidencePrefix, evidencePrefix + "-project-work-dir-missing", baselineRef}, false
+	}
+	result, issues := orquestaruntimeworktree.VerifyWorktreeWriteSetV0(ctx, orquestaruntimeworktree.WorktreeVerifyRequestV0{
+		Baseline:             baseline,
+		ProjectWorkDir:       projectWorkDir,
+		WriteSet:             request.WriteSet,
+		IgnorePrefixes:       codexStackWorktreeIgnorePrefixesV0(),
+		AllowPartialSnapshot: false,
+	})
+	refs := autoprogrammingPromotionGoalFirstWriteSetEvidenceRefsV0(evidencePrefix, baselineRef, result, issues)
+	return refs, len(issues) == 0 && result.OK
+}
+
+func autoprogrammingPromotionGoalFirstWriteSetEvidenceRefsV0(
+	prefix string,
+	baselineRef string,
+	result orquestaruntimeworktree.WorktreeVerifyResultV0,
+	issues []orquestaruntimeworktree.WorktreeIssueV0,
+) []string {
+	refs := []string{prefix, baselineRef}
+	for _, path := range result.ChangedPaths {
+		refs = append(refs, prefix+"-changed-path:"+strings.TrimSpace(path))
+	}
+	for _, path := range result.OutsideWriteSet {
+		refs = append(refs, prefix+"-outside-write-set:"+strings.TrimSpace(path))
+	}
+	for _, issue := range issues {
+		refs = append(refs, prefix+"-issue:"+string(issue.Code))
+		for _, evidence := range issue.Evidence {
+			refs = append(refs, prefix+"-issue-evidence:"+strings.TrimSpace(evidence))
+		}
+	}
+	return compactStringsV0(refs)
 }
 
 func (stack StackV0) autoprogrammingPromotionRequestV0(

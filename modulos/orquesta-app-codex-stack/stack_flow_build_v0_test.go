@@ -3,6 +3,7 @@ package orquestaappcodexstack
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -32,6 +33,21 @@ func mustBuildCodexStackForTestV0(
 ) StackV0 {
 	t.Helper()
 	return mustBuildCodexStackWithDomainWorkForTestV0(t, runtime, nil)
+}
+
+func TestBuildStackV0PromotionEnabledRequiresGoalFirstSnapshotStoreV0(t *testing.T) {
+	config := codexStackBaseConfigForTestV0(t, newFakeCodexStackRuntimeV0(), nil, nil)
+	config.AutoprogrammingPromotion = AutoprogrammingPromotionConfigV0{
+		Enabled: true,
+		Port:    &fakeAutoprogrammingPromotionPortV0{},
+	}
+	if _, err := BuildStackV0(config); err == nil || !strings.Contains(err.Error(), "goal_first_snapshot_store requerido") {
+		t.Fatalf("err=%v", err)
+	}
+	config.AutoprogrammingPromotion.GoalFirstSnapshotStore = orquestaruntimeworktree.NewInMemoryWorktreeSnapshotStoreV0()
+	if _, err := BuildStackV0(config); err != nil {
+		t.Fatalf("BuildStackV0 con snapshot store: %v", err)
+	}
 }
 
 func mustBuildCodexStackWithDomainWorkForTestV0(
@@ -113,10 +129,10 @@ func codexStackBaseConfigForTestV0(
 			RunQueue:        runMemory,
 		},
 		Codex: CodexRuntimeConfigV0{
-			CommandPath:     filepath.Join(projectDir, "codex-bin"),
-			ProjectWorkDir:  projectDir,
-			RuntimeWorkDir:  runtimeDir,
-			Model:           "gpt-5.5",
+			CommandPath:    filepath.Join(projectDir, "codex-bin"),
+			ProjectWorkDir: projectDir,
+			RuntimeWorkDir: runtimeDir,
+			Model:          "gpt-5.5",
 			ModelRouting: CodexModelRoutingConfigV0{
 				Policy: orquestacapacity.ModelRoutingPolicyV0{
 					PolicyRef:        "policy-ref-test",
@@ -130,9 +146,9 @@ func codexStackBaseConfigForTestV0(
 					CriticalEffort:   "high",
 				},
 				ModelAlias: map[string]string{
-					"luna": "gpt-5.6-luna",
+					"luna":  "gpt-5.6-luna",
 					"terra": "gpt-5.6-terra",
-					"sol":  "gpt-5.6-sol",
+					"sol":   "gpt-5.6-sol",
 				},
 				TaskRoutes: map[string]orquestacapacity.ModelRoutingRequestV0{},
 			},

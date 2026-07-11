@@ -91,7 +91,7 @@ func serverRuntimeDepsFromStackV0(
 		GoalStateStore:             stack.Stores.AppGoalStateStore,
 		GoalRequiredTestSpecBinder: stack.Ports.GoalRequiredTestSpecBinder,
 		GoalFingerprint:            serverGoalObservationFingerprintFromBackendV0(goalBackends.AppGoal, serverGoalObserverFingerprintEnabledFromEnvV0()),
-		GoalStopper:                serverGoalCooperativeStopperFromRunControlV0(stack.Stores.RunControl),
+		GoalStopper:                serverGoalCooperativeStopperFromRunControlV0(stack.Stores.RunControl, stack.MCPTransportBindings.RunControl),
 		EstadoVivoSource:           stack.MCPTransportBindings.AutoprogrammingEstadoVivoSource,
 		ShutdownSnapshot:           serverShutdownSnapshotFromStackV0(stack, goalBackends),
 		ShutdownHooks:              serverGoalShutdownHooksFromBackendsV0(goalBackends.AppGoal, goalBackends.IdleGoal),
@@ -268,7 +268,11 @@ func buildStackFromProjectConfigV0(
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
-	worktreeSnapshotStore := orquestaruntimeworktree.NewInMemoryWorktreeSnapshotStoreV0()
+	var worktreeSnapshotStore orquestaruntimeworktree.WorktreeSnapshotStorePortV0 = stateStore
+	autoprogrammingPromotion := autoprogrammingPromotionConfigFromEnvV0(serverConfig)
+	if autoprogrammingPromotion.Enabled {
+		autoprogrammingPromotion.GoalFirstSnapshotStore = worktreeSnapshotStore
+	}
 	runStore := orquestacionnucleoapp.RunStorePortV0(stateStore)
 	runQueue := orquestarunqueue.RunQueuePortV0(runFileStore)
 	runControl := orquestaruncontrol.RunControlPortV0(runFileStore)
@@ -367,7 +371,7 @@ func buildStackFromProjectConfigV0(
 		},
 		RequiredTests:                    requiredTestRunner,
 		DomainTests:                      domainWorkRequiredTestConfigFromEnvV0(),
-		AutoprogrammingPromotion:         autoprogrammingPromotionConfigFromEnvV0(serverConfig),
+		AutoprogrammingPromotion:         autoprogrammingPromotion,
 		AutoprogrammingStatusDiagnostics: serverAutoprogrammingStatusDiagnosticsFromEffectiveConfigV0(serverConfig.EffectiveConfig),
 		AutoprogrammingIdleSelfImprovementBudgetSource: idleBudgetSource,
 		AutoprogrammingGoalProgressPolicy:              serverAutoprogrammingGoalProgressPolicyFromConfigV0(serverConfig),

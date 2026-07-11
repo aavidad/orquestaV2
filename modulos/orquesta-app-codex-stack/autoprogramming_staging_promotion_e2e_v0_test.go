@@ -2,6 +2,7 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -77,6 +78,7 @@ func TestCodexStackAutoprogrammingPromotionV0GoalFirstE2ERepoTemporalReplayV0(t 
 	ctx := context.Background()
 	repo := initAutoprogrammingPromotionE2ERepoV0(t)
 	baseCommits := gitCommitCountForPromotionE2EV0(t, repo)
+	baselineStore := orquestaruntimeworktree.NewInMemoryWorktreeSnapshotStoreV0()
 
 	runtime := newFakeCodexStackRuntimeV0()
 	stack := mustBuildCodexStackForTestV0(t, runtime)
@@ -89,12 +91,17 @@ func TestCodexStackAutoprogrammingPromotionV0GoalFirstE2ERepoTemporalReplayV0(t 
 	stack.Ports.GoalClosureValidator = orquestagoal.DefaultGoalWorkClosureValidatorV0{}
 	stack.Ports.GoalStateStore = goalStates
 	stack.Stores.AppGoalStateStore = goalStates
+	stack.Codex.ProjectWorkDir = repo
 	enableIndependentAttestationForStackTestV0(&stack)
 	port := &gitBackedAutoprogrammingPromotionPortForTestV0{
 		projectWorkDir: repo,
 		archiveDir:     filepath.Join(t.TempDir(), "archive"),
 	}
-	stack.AutoprogrammingPromotion = AutoprogrammingPromotionConfigV0{Enabled: true, Port: port}
+	stack.AutoprogrammingPromotion = AutoprogrammingPromotionConfigV0{
+		Enabled:                true,
+		Port:                   port,
+		GoalFirstSnapshotStore: baselineStore,
+	}
 
 	request := autoprogrammingBridgeRequestForTestV0()
 	request.RequestRef = "run-autoprogramming-goal-first-promotion-e2e-001"
@@ -137,6 +144,14 @@ func TestCodexStackAutoprogrammingPromotionV0GoalFirstE2ERepoTemporalReplayV0(t 
 	if err != nil {
 		t.Fatalf("LoadGoalWorkStateV0: %v", err)
 	}
+	baselineRef := autoprogrammingPromotionGoalContextRefV0(state.Spec.ContextRefs, "worktree_baseline", "")
+	if baselineRef == "" {
+		t.Fatalf("goal sin worktree_baseline tipado: %+v", state.Spec.ContextRefs)
+	}
+	baseline, err := baselineStore.LoadWorktreeSnapshotV0(ctx, baselineRef)
+	if err != nil || baseline.SnapshotRef != baselineRef {
+		t.Fatalf("baseline no persistido por prepare-run: ref=%q snapshot=%+v err=%v", baselineRef, baseline, err)
+	}
 	if err := os.WriteFile(filepath.Join(repo, "feature.md"), []byte("v2\n"), 0o600); err != nil {
 		t.Fatalf("write feature: %v", err)
 	}
@@ -167,12 +182,12 @@ func TestCodexStackAutoprogrammingPromotionV0GoalFirstE2ERepoTemporalReplayV0(t 
 		t.Fatalf("goal-first run materializo tareas legacy: %+v", run)
 	}
 
-	status, err := stack.stackDrainQueueStatusForCoordinatorV0(ctx, promotionE2ELoopResultV0(run))
+	status, refs, err := stack.stackDrainQueueStatusAndEvidenceForCoordinatorV0(ctx, promotionE2ELoopResultV0(run))
 	if err != nil {
 		t.Fatalf("queue status: %v", err)
 	}
 	if status != orquestarunqueue.RunStatusClosedV0 {
-		t.Fatalf("queue_status=%q", status)
+		t.Fatalf("queue_status=%q evidence_refs=%v", status, refs)
 	}
 	if port.promotions != 1 || port.archives != 1 {
 		t.Fatalf("port=%+v", port)
@@ -188,7 +203,7 @@ func TestCodexStackAutoprogrammingPromotionV0GoalFirstE2ERepoTemporalReplayV0(t 
 		t.Fatalf("promotion refs=%+v", port.lastPromotion)
 	}
 
-	status, err = stack.stackDrainQueueStatusForCoordinatorV0(ctx, promotionE2ELoopResultV0(run))
+	status, _, err = stack.stackDrainQueueStatusAndEvidenceForCoordinatorV0(ctx, promotionE2ELoopResultV0(run))
 	if err != nil {
 		t.Fatalf("queue status replay: %v", err)
 	}
@@ -201,6 +216,179 @@ func TestCodexStackAutoprogrammingPromotionV0GoalFirstE2ERepoTemporalReplayV0(t 
 	if files := archiveManifestCountForPromotionE2EV0(t, port.archiveDir); files != 1 {
 		t.Fatalf("archive files=%d", files)
 	}
+}
+
+func TestCodexStackAutoprogrammingPromotionV0GoalFirstBloqueaCambioFueraDeWriteSetV0(t *testing.T) {
+	ctx := context.Background()
+	projectDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(projectDir, "feature.md"), []byte("before\n"), 0o600); err != nil {
+		t.Fatalf("write feature baseline: %v", err)
+	}
+	baseline := captureAutoprogrammingPromotionBaselineForTestV0(t, projectDir, "goal-first-outside-write-set")
+	if err := os.WriteFile(filepath.Join(projectDir, "daemon.go"), []byte("package daemon\n"), 0o600); err != nil {
+		t.Fatalf("write outside change: %v", err)
+	}
+
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	stack = withAutoprogrammingPromotionStoresForTestV0(stack)
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	stack.Ports.GoalStateStore = goalStates
+	stack.Stores.AppGoalStateStore = goalStates
+	stack.Codex.ProjectWorkDir = projectDir
+	port := &fakeAutoprogrammingPromotionPortV0{}
+	stack.AutoprogrammingPromotion = AutoprogrammingPromotionConfigV0{
+		Enabled:                true,
+		Port:                   port,
+		GoalFirstSnapshotStore: orquestaruntimeworktree.NewInMemoryWorktreeSnapshotStoreV0(baseline),
+	}
+	run := seedClosedGoalFirstAutoprogrammingPromotionForTestV0(t, ctx, stack, goalStates, baseline.SnapshotRef, "feature.md")
+
+	for attempt := 0; attempt < 2; attempt++ {
+		complete, refs, err := stack.maybePromoteClosedAutoprogrammingRunV0(ctx, run)
+		if err != nil {
+			t.Fatalf("maybePromoteClosedAutoprogrammingRunV0 attempt=%d: %v", attempt, err)
+		}
+		if complete || port.promotions != 0 || port.archives != 0 {
+			t.Fatalf("attempt=%d complete=%v port=%+v", attempt, complete, port)
+		}
+		if !codexStackStringInSetForTestV0(refs, "evidence-ref-codex-stack-autoprogramming-goal-first-worktree-verify-outside-write-set:daemon.go") {
+			t.Fatalf("attempt=%d evidence_refs=%v", attempt, refs)
+		}
+	}
+}
+
+func TestCodexStackAutoprogrammingPrepareRunV0NoLanzaGoalSiNoPersisteBaselineV0(t *testing.T) {
+	ctx := context.Background()
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	launcher := &goalFirstQueueLauncherForTestV0{}
+	stack.Ports.GoalLauncher = launcher
+	stack.Ports.GoalObserver = &goalFirstQueueObserverForTestV0{}
+	stack.Ports.GoalClosureValidator = orquestagoal.DefaultGoalWorkClosureValidatorV0{}
+	stack.Ports.GoalStateStore = goalStates
+	stack.Stores.AppGoalStateStore = goalStates
+	stack.AutoprogrammingPromotion = AutoprogrammingPromotionConfigV0{
+		Enabled:                true,
+		Port:                   &fakeAutoprogrammingPromotionPortV0{},
+		GoalFirstSnapshotStore: failingAutoprogrammingSnapshotStoreForTestV0{},
+	}
+
+	request := autoprogrammingBridgeRequestForTestV0()
+	request.Tasks[0].ContextRefs = []string{
+		"goal_migration:goal-first",
+		"goal_capability:starter",
+		"goal_capability:observer",
+		"goal_capability:closure-validator",
+	}
+	result, err := PrepareAutoprogrammingRunFromStackV0(ctx, stack, AutoprogrammingBridgeRequestV0{Request: request})
+	if err != nil {
+		t.Fatalf("PrepareAutoprogrammingRunFromStackV0: %v", err)
+	}
+	if result.Accepted || len(launcher.specs) != 0 || len(result.Issues) == 0 || result.Issues[0].Code != "worktree_baseline_store_failed" {
+		t.Fatalf("result=%+v launched_specs=%+v", result, launcher.specs)
+	}
+}
+
+type failingAutoprogrammingSnapshotStoreForTestV0 struct{}
+
+func (failingAutoprogrammingSnapshotStoreForTestV0) RecordWorktreeSnapshotV0(
+	context.Context,
+	orquestaruntimeworktree.WorktreeSnapshotV0,
+) error {
+	return errors.New("snapshot store unavailable")
+}
+
+func (failingAutoprogrammingSnapshotStoreForTestV0) LoadWorktreeSnapshotV0(
+	context.Context,
+	string,
+) (orquestaruntimeworktree.WorktreeSnapshotV0, error) {
+	return orquestaruntimeworktree.WorktreeSnapshotV0{}, errors.New("snapshot store unavailable")
+}
+
+func captureAutoprogrammingPromotionBaselineForTestV0(
+	t *testing.T,
+	projectDir string,
+	name string,
+) orquestaruntimeworktree.WorktreeSnapshotV0 {
+	t.Helper()
+	snapshot, issues := orquestaruntimeworktree.CaptureWorktreeSnapshotV0(context.Background(), orquestaruntimeworktree.WorktreeSnapshotRequestV0{
+		SnapshotRef:    "worktree-baseline-ref-" + name,
+		ProjectWorkDir: projectDir,
+	})
+	if len(issues) > 0 {
+		t.Fatalf("CaptureWorktreeSnapshotV0 issues=%+v", issues)
+	}
+	return snapshot
+}
+
+func seedClosedGoalFirstAutoprogrammingPromotionForTestV0(
+	t *testing.T,
+	ctx context.Context,
+	stack StackV0,
+	goalStates orquestagoal.GoalWorkStateStorePortV0,
+	baselineRef string,
+	writeSet string,
+) orquestacoreworkflow.OrchestrationRunV0 {
+	t.Helper()
+	runRef := "run-autoprogramming-goal-first-write-set-promotion-001"
+	goalRef := "goal-ref-autoprogramming-goal-first-write-set-promotion-001"
+	run := orquestacoreworkflow.OrchestrationRunV0{
+		SchemaVersion: orquestacoreworkflow.OrchestrationRunSchemaVersionV0,
+		RunID:         runRef,
+		ProjectRef:    "project-ref-autoprogramming-goal-first-write-set-promotion-001",
+		AppSpecRef:    "app-spec-ref-autoprogramming-goal-first-write-set-promotion-001",
+		Status:        orquestacoreworkflow.OrchestrationRunStatusClosedV0,
+		CurrentPhase:  orquestacoreworkflow.OrchestrationPhaseCierreV0,
+	}
+	if err := stack.Stores.RunStore.SaveRunV0(ctx, run); err != nil {
+		t.Fatalf("SaveRunV0: %v", err)
+	}
+	state, err := orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
+		RunRef: runRef,
+		Spec: orquestagoal.GoalWorkSpecV0{
+			GoalRef:      goalRef,
+			RunRef:       runRef,
+			RequestRef:   runRef,
+			ProjectRef:   run.ProjectRef,
+			WorkKind:     orquestaautoprogramming.AutoprogrammingGoalWorkKindV0,
+			Objective:    "Promote a closed goal-first staging worktree.",
+			DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+			ContextRefs: []orquestagoal.GoalContextRefV0{
+				{Kind: "worktree", Ref: "worktree-ref-goal-first-write-set", Required: true},
+				{Kind: "branch", Ref: "branch-ref-goal-first-write-set", Required: true},
+				{Kind: "worktree_baseline", Ref: baselineRef, Required: true},
+			},
+			WriteSet: []orquestagoal.GoalWriteScopeV0{{Path: writeSet}},
+			RequiredTests: []orquestagoal.GoalRequiredTestV0{{
+				TestRef: "test-ref-goal-first-write-set",
+				Command: "go test ./modulos/orquesta-app-codex-stack",
+			}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{Status: orquestagoal.GoalStatusRunningV0, GoalRef: goalRef},
+	})
+	if err != nil {
+		t.Fatalf("NewGoalWorkStateFromLaunchV0: %v", err)
+	}
+	state.Status = orquestagoal.GoalStatusCompleteV0
+	state.LastResult = &orquestagoal.GoalWorkResultV0{
+		SchemaVersion: orquestagoal.GoalWorkResultSchemaV0,
+		Status:        orquestagoal.GoalStatusCompleteV0,
+		GoalRef:       goalRef,
+		RequiredTestResults: []orquestagoal.GoalRequiredTestResultV0{{
+			TestRef:      "test-ref-goal-first-write-set",
+			Status:       "passed",
+			EvidenceRefs: []string{"evidence-ref-goal-first-write-set-test-passed"},
+		}},
+	}
+	state.LastClosure = &orquestagoal.GoalClosureValidationV0{
+		Status:       orquestagoal.GoalStatusCompleteV0,
+		Accepted:     true,
+		EvidenceRefs: []string{"accepted-review-ref-goal-first-write-set"},
+	}
+	if err := goalStates.SaveGoalWorkStateV0(ctx, state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	return run
 }
 
 func TestCodexStackAutoprogrammingPromotionV0NoCierraColaConEfectoIncompletoV0(t *testing.T) {

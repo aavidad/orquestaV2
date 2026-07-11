@@ -369,13 +369,14 @@ func (runtime *RuntimeV0) requestGoalObserverHighConsumptionStopV0(
 		}}
 	}
 	stopResult, err := runtime.goalStopper.RequestGoalCooperativeStopV0(ctx, GoalCooperativeStopRequestV0{
-		RunRef:            runRef,
-		GoalRef:           strings.TrimSpace(result.GoalRef),
-		ExternalGoalRef:   strings.TrimSpace(result.ExternalGoalRef),
-		Reason:            reason,
-		RecommendedAction: goalObserverHighConsumptionRecommendedActionV0,
-		RequestedBy:       goalObserverHighConsumptionRequestedByV0,
-		IdempotencyKey:    "idem-goal-observer-high-consumption-" + serverGoalProgressSafeRefPartV0(runRef),
+		RunRef:                      runRef,
+		GoalRef:                     strings.TrimSpace(result.GoalRef),
+		ExternalGoalRef:             strings.TrimSpace(result.ExternalGoalRef),
+		RequireConfirmedBackendStop: true,
+		Reason:                      reason,
+		RecommendedAction:           goalObserverHighConsumptionRecommendedActionV0,
+		RequestedBy:                 goalObserverHighConsumptionRequestedByV0,
+		IdempotencyKey:              "idem-goal-observer-high-consumption-" + serverGoalProgressSafeRefPartV0(runRef),
 		EvidenceRefs: compactConfigStringsV0(append(
 			result.EvidenceRefs,
 			goalObserverHighConsumptionStopEvidenceV0,

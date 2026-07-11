@@ -155,7 +155,7 @@ func TestRuntimeV0GoalObservationTickActualizaIdleSelfImprovementV0(t *testing.T
 	}
 }
 
-func TestRuntimeV0GoalObservationBloqueaIdleGoalConsumoCrecienteSinProgresoV0(t *testing.T) {
+func TestRuntimeV0GoalObservationHighConsumptionBloqueaIdleGoalSinProgresoV0(t *testing.T) {
 	now := time.Date(2026, 7, 3, 19, 0, 0, 0, time.UTC)
 	const runRef = "run-ref-idle-progress-governor-001"
 	const goalRef = "goal-ref-idle-progress-governor-001"
@@ -211,6 +211,7 @@ func TestRuntimeV0GoalObservationBloqueaIdleGoalConsumoCrecienteSinProgresoV0(t 
 
 	if stopper.calls != 1 ||
 		stopper.last.RunRef != runRef ||
+		!stopper.last.RequireConfirmedBackendStop ||
 		stopper.last.Reason != idleSelfImprovementGoalHighConsumptionNoProgressReasonV0 ||
 		stopper.last.RecommendedAction != idleSelfImprovementGoalReviewReplanRecommendedActionV0 {
 		t.Fatalf("stopper calls=%d request=%+v", stopper.calls, stopper.last)
@@ -381,7 +382,7 @@ func TestRuntimeV0GoalObservationCheckpointInvalidoRepetidoCuentaSinProgresoV0(t
 	}
 }
 
-func TestRuntimeV0GoalObserverAltoConsumoCheckpointOnlyPideStopCooperativoV0(t *testing.T) {
+func TestRuntimeV0GoalObserverHighConsumptionCheckpointOnlyPideStopCooperativoV0(t *testing.T) {
 	now := time.Date(2026, 7, 3, 22, 45, 0, 0, time.UTC)
 	const runRef = "run-ref-goal-observer-checkpoint-only-001"
 	const goalRef = "goal-ref-goal-observer-checkpoint-only-001"
@@ -433,6 +434,7 @@ func TestRuntimeV0GoalObserverAltoConsumoCheckpointOnlyPideStopCooperativoV0(t *
 
 	if stopper.calls != 1 ||
 		stopper.last.RunRef != runRef ||
+		!stopper.last.RequireConfirmedBackendStop ||
 		stopper.last.Reason != goalObserverHighConsumptionCheckpointOnlyReasonV0 ||
 		stopper.last.RecommendedAction != goalObserverHighConsumptionRecommendedActionV0 ||
 		stopper.last.RequestedBy != goalObserverHighConsumptionRequestedByV0 {
@@ -489,7 +491,7 @@ func TestGoalObserverEvidenceCheckpointSoloAceptaRefsCanonicasV0(t *testing.T) {
 	}
 }
 
-func TestRuntimeV0GoalObserverAltoConsumoSinCheckpointPideStopCooperativoV0(t *testing.T) {
+func TestRuntimeV0GoalObserverHighConsumptionSinCheckpointPideStopCooperativoV0(t *testing.T) {
 	now := time.Date(2026, 7, 3, 23, 0, 0, 0, time.UTC)
 	const runRef = "run-ref-goal-observer-no-checkpoint-001"
 	const goalRef = "goal-ref-goal-observer-no-checkpoint-001"
@@ -545,6 +547,7 @@ func TestRuntimeV0GoalObserverAltoConsumoSinCheckpointPideStopCooperativoV0(t *t
 	runtime.runGoalObservationTickV0(context.Background())
 
 	if stopper.calls != 1 ||
+		!stopper.last.RequireConfirmedBackendStop ||
 		stopper.last.Reason != goalObserverHighConsumptionNoCheckpointReasonV0 ||
 		stopper.last.RecommendedAction != goalObserverHighConsumptionRecommendedActionV0 {
 		t.Fatalf("stopper calls=%d request=%+v", stopper.calls, stopper.last)

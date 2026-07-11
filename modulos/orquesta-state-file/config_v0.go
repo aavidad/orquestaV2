@@ -19,6 +19,7 @@ const (
 	operationalDirectorPlanStateSchemaV0 = "orquesta_state_file.operational_director_plan_state.v0"
 	agentProcessDocumentSchemaV0         = "orquesta_state_file.agent_process.v0"
 	autonomyProgramDocumentSchemaV0      = "orquesta_state_file.autonomy_program.v0"
+	worktreeSnapshotDocumentSchemaV0     = "orquesta_state_file.worktree_snapshot.v0"
 )
 
 type ConfigV0 struct {

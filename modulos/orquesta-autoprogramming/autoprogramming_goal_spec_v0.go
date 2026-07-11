@@ -10,8 +10,9 @@ import (
 )
 
 const (
-	AutoprogrammingGoalWorkKindV0  = "autoprogramming"
-	autoprogrammingGoalSpecIssueV0 = "goal_work_spec_invalid"
+	AutoprogrammingGoalWorkKindV0           = "autoprogramming"
+	autoprogrammingGoalSpecIssueV0          = "goal_work_spec_invalid"
+	autoprogrammingWorktreeBaselinePrefixV0 = "worktree_baseline_ref:"
 )
 
 func BuildAutoprogrammingGoalWorkSpecsV0(
@@ -91,13 +92,27 @@ func autoprogrammingGoalContextRefsV0(
 		}
 	}
 	for _, ref := range group.Task.ContextRefs {
-		if strings.TrimSpace(ref) != "" {
-			refs = append(refs, orquestagoal.GoalContextRefV0{
-				Kind:    "workflow_task_context",
-				Ref:     ref,
-				Purpose: "Contexto compacto heredado de WorkflowTaskV0.",
-			})
+		ref = strings.TrimSpace(ref)
+		if ref == "" {
+			continue
 		}
+		if baselineRef, ok := strings.CutPrefix(ref, autoprogrammingWorktreeBaselinePrefixV0); ok {
+			baselineRef = strings.TrimSpace(baselineRef)
+			if baselineRef != "" {
+				refs = append(refs, orquestagoal.GoalContextRefV0{
+					Kind:     "worktree_baseline",
+					Ref:      baselineRef,
+					Purpose:  "Baseline congelado del worktree antes de lanzar el Goal.",
+					Required: true,
+				})
+			}
+			continue
+		}
+		refs = append(refs, orquestagoal.GoalContextRefV0{
+			Kind:    "workflow_task_context",
+			Ref:     ref,
+			Purpose: "Contexto compacto heredado de WorkflowTaskV0.",
+		})
 	}
 	return refs
 }

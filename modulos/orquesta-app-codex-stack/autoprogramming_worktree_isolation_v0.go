@@ -6,6 +6,7 @@ import (
 
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaruntimeworktree "orquesta/modulos/orquesta-runtime-worktree"
 )
 
@@ -19,6 +20,7 @@ func autoprogrammingPrepareWorktreeIsolationV0(
 	ctx context.Context,
 	projectWorkDir string,
 	work orquestaautoprogramming.AutoprogrammingProgrammableWorkV0,
+	snapshotStore orquestaruntimeworktree.WorktreeSnapshotStorePortV0,
 ) (orquestaautoprogramming.AutoprogrammingProgrammableWorkV0, []orquestaautoprogramming.AutoprogrammingRequestIssueV0) {
 	projectWorkDir = strings.TrimSpace(projectWorkDir)
 	if projectWorkDir == "" {
@@ -28,14 +30,38 @@ func autoprogrammingPrepareWorktreeIsolationV0(
 			Message: "project_work_dir requerido para materializar worktree antes de lanzar agentes",
 		}}
 	}
-	for _, task := range work.Tasks {
+	for _, task := range autoprogrammingWorktreeIsolationTasksV0(work) {
 		isolation, issues := autoprogrammingPrepareTaskWorktreeIsolationV0(ctx, projectWorkDir, work, task)
 		if len(issues) > 0 {
 			return work, autoprogrammingWorktreeIssuesV0(issues)
 		}
+		if snapshotStore != nil {
+			if err := snapshotStore.RecordWorktreeSnapshotV0(ctx, isolation.Snapshot); err != nil {
+				return work, []orquestaautoprogramming.AutoprogrammingRequestIssueV0{{
+					Code:    "worktree_baseline_store_failed",
+					Field:   "worktree_baseline",
+					Message: "no se pudo persistir el baseline congelado antes de lanzar el goal",
+				}}
+			}
+		}
 		work = autoprogrammingApplyTaskWorktreeIsolationV0(work, task.TaskID, isolation)
 	}
 	return work, nil
+}
+
+func autoprogrammingWorktreeIsolationTasksV0(
+	work orquestaautoprogramming.AutoprogrammingProgrammableWorkV0,
+) []orquestacoreworkflow.WorkflowTaskV0 {
+	if len(work.Tasks) > 0 {
+		return append([]orquestacoreworkflow.WorkflowTaskV0(nil), work.Tasks...)
+	}
+	tasks := make([]orquestacoreworkflow.WorkflowTaskV0, 0, len(work.GoalSpecs))
+	for _, spec := range work.GoalSpecs {
+		tasks = append(tasks, orquestacoreworkflow.WorkflowTaskV0{
+			TaskID: strings.TrimPrefix(strings.TrimSpace(spec.GoalRef), "goal-ref-"),
+		})
+	}
+	return tasks
 }
 
 func autoprogrammingPrepareTaskWorktreeIsolationV0(
@@ -87,6 +113,22 @@ func autoprogrammingApplyTaskWorktreeIsolationV0(
 			work.Groups[index].Task.ContextRefs,
 			isolation,
 		)
+	}
+	goalRef := "goal-ref-" + strings.TrimSpace(taskRef)
+	for index := range work.GoalSpecs {
+		if strings.TrimSpace(work.GoalSpecs[index].GoalRef) != goalRef {
+			continue
+		}
+		work.GoalSpecs[index].ContextRefs = append(
+			work.GoalSpecs[index].ContextRefs,
+			orquestagoal.GoalContextRefV0{
+				Kind:     "worktree_baseline",
+				Ref:      strings.TrimSpace(isolation.BaselineRef),
+				Purpose:  "Baseline congelado del worktree antes de lanzar el Goal.",
+				Required: true,
+			},
+		)
+		work.GoalSpecs[index] = orquestagoal.NormalizeGoalWorkSpecV0(work.GoalSpecs[index])
 	}
 	return work
 }

@@ -1,6 +1,7 @@
 # Incidencia local 2026-07-11: preflight, consumo y scope en autoprogramacion
 
-Estado: `BUG-ORQ-20260711-221/225` cerrados localmente; `222/223/224` abiertos.
+Estado: `BUG-ORQ-20260711-221/222/223/224/225` cerrados localmente;
+`BUG-ORQ-20260711-226` abierto.
 Alcance: solo Orquesta local. No se toco remoto, OPES ni produccion.
 
 ## Contexto
@@ -38,11 +39,31 @@ continuo vivo hasta un `POST /api/v0/runs/control` forzado. Ese control si
 confirmo `goal_status_after=blocked`, `goal_control_signal_confirmed=true` y
 elimino todos los procesos del goal.
 
-Pendiente estructural: demostrar que el limite de consumo ejecuta y confirma
-el actuador de proceso, no solo persiste una peticion cooperativa; separar
-progreso real de repeticion interna y exigir result/checkpoint enriquecido
-antes de seguir consumiendo. Debe haber test real que pruebe proceso ausente
-tras el corte automatico.
+Cierre local: `GoalCooperativeStopRequestV0` declara de forma tipada
+`RequireConfirmedBackendStop`. Las dos rutas de alto consumo lo activan y el
+adaptador de composicion invoca el executor `runs/control` forzado ya existente,
+que gobierna escalador, reobservacion, reconciliacion e idempotencia. Solo
+publica `Requested=true` con estado final stopped y señal de backend confirmada;
+la via cooperativa no marcada conserva su comportamiento.
+
+Segundo intento controlado: desde el binario `3d2fbf693`, el run
+`run-bug222-confirmed-stop-20260711-001` y goal externo
+`019f4fb4-99f7-7632-b2c7-abc209bc4bd2` consumieron `300.297` tokens sin tocar
+ningun fichero. El supervisor lo corto por `runs/control` forzado; el resultado
+confirmo `goal_status_after=blocked` y `goal_control_signal_confirmed=true`.
+No se reutiliza ese goal ni se declara avance de codigo.
+
+## BUG-ORQ-20260711-226: autoprogramacion sin progreso material temprano
+
+El segundo intento de `222` consumio `300.297` tokens sin tocar ficheros. La
+parada confirmada evita que el proceso quede vivo, pero no corrige por si sola
+la ineficiencia anterior al umbral. Este hallazgo queda separado de `222` para
+no confundir control seguro con productividad.
+
+Pendiente: exigir progreso material verificable por tramo (diff dentro del
+write-set, test nuevo o resultado durable), contabilizar lecturas/reintentos y
+replanificar con contexto mas estrecho antes de alcanzar el limite duro. No
+usar un simple checkpoint de inicio como evidencia de progreso util.
 
 ## BUG-ORQ-20260711-223: `observe` manual dio 500 durante observacion residente
 
@@ -52,9 +73,10 @@ ticks `ok` con una observacion. En paralelo, un
 HTTP 500 con `autoprogramming_observe_goal_error`. No se perdio el goal, pero
 la superficie publica no distinguio contencion/reintento de un fallo interno.
 
-Pendiente: reproducir concurrencia entre observer residente y llamada manual;
-si existe lease ocupado, devolver estado recuperable y accion `retry/observe`,
-no 500 generico. Conservar causa publica sin filtrar detalles sensibles.
+Cierre local: `context.DeadlineExceeded` y `context.Canceled` devueltos por el
+executor se proyectan como HTTP 504 tipado, parcial y recuperable, con
+`recommended_action=observe_later`; errores reales siguen en 500 y no se
+publican paths ni mensajes internos.
 
 ## BUG-ORQ-20260711-224: rework escribio fuera del write-set
 
@@ -62,10 +84,11 @@ El rework `run-run-preflight-rework-20260711-001` declaro exclusivamente
 `commands.go` y `commands_test.go`, pero modifico tambien `daemon.go`. La
 integracion detecto el desvio y retiro ese cambio antes de aceptar el diff.
 
-Pendiente estructural: atestar el snapshot final contra el write-set congelado
-y bloquear cierre/promocion si aparece una ruta no autorizada. El Director
-puede abrir un rework causal con write-set ampliado, pero el adaptador no debe
-aceptar silenciosamente la escritura.
+Cierre local: prepare-run captura el baseline antes del Goal, lo persiste en el
+store JSON atomico de `orquesta-state-file` y transporta una ref Goal tipada.
+La promocion reutiliza `VerifyWorktreeWriteSetV0`; ruta ajena, baseline parcial,
+ausente o divergente bloquean commit/archive. El store sobrevive reinicio,
+acepta replay identico y rechaza la misma ref con contenido distinto.
 
 ## BUG-ORQ-20260711-225: el perfil aislado filtraba `umask 077` a los tests
 
@@ -94,6 +117,11 @@ del perfil aislado.
 - `bash scripts/test_orquesta_test_batches.sh`, los focales de permisos y
   `go test -count=1 ./...` bajo el perfil aislado quedan verdes tras cerrar
   `221/225`.
+- Tras cerrar `222/223/224`, una segunda `go test -count=1 ./...` bajo perfil
+  aislado queda verde. Tambien pasan con `-race` los paquetes
+  `orquesta-state-file`, `orquesta-app-codex-stack`, `orquesta-mcp`,
+  `orquesta-server` y los focales `HighConsumption|GoalRunControlStopper` de
+  `cmd/orquesta-server`.
 
-No declarar `222/223/224` cerrados por los arreglos de `221/225`: comparten la ruta
-de autoprogramacion, pero tienen criterios de cierre independientes.
+`BUG-226` no queda cerrado por la parada confirmada de `222`: control y
+eficiencia tienen criterios independientes.

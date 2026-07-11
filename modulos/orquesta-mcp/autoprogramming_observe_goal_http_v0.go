@@ -3,6 +3,7 @@ package orquestamcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -81,7 +82,10 @@ func (handler mcpAutoprogrammingObserveGoalHTTPHandlerV0) ServeHTTP(w http.Respo
 		return
 	}
 	result, err, timedOut := handler.executeAutoprogrammingObserveGoalWithResponseTimeoutV0(r, input)
-	if timedOut {
+	if timedOut || isMCPAutoprogrammingObserveGoalHTTPRecoverableTimeoutV0(err) {
+		if !timedOut {
+			result = handler.newMCPAutoprogrammingObserveGoalHTTPTimeoutResultV0(r, input)
+		}
 		writeMCPAutoprogrammingObserveGoalHTTPV0(w, http.StatusGatewayTimeout, result)
 		return
 	}
@@ -110,6 +114,10 @@ func (handler mcpAutoprogrammingObserveGoalHTTPHandlerV0) ServeHTTP(w http.Respo
 		status = http.StatusBadRequest
 	}
 	writeMCPAutoprogrammingObserveGoalHTTPV0(w, status, result)
+}
+
+func isMCPAutoprogrammingObserveGoalHTTPRecoverableTimeoutV0(err error) bool {
+	return errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)
 }
 
 type mcpAutoprogrammingObserveGoalHTTPExecutionV0 struct {

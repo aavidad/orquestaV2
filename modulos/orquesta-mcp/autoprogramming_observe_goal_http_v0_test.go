@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -85,6 +86,58 @@ func TestMCPAutoprogrammingObserveGoalHTTPHandlerV0TimeoutDevuelveJSONPublico(t 
 	case <-executor.done:
 	case <-time.After(time.Second):
 		t.Fatalf("executor no recibio cancelacion tras timeout HTTP")
+	}
+}
+
+func TestMCPAutoprogrammingObserveGoalHTTPHandlerV0ExecutorTimeoutOrCancellationDevuelveTimeoutPublico(t *testing.T) {
+	testCases := []struct {
+		name string
+		err  error
+	}{
+		{
+			name: "deadline exceeded",
+			err:  fmt.Errorf("observer residente bloqueado en /private/runtime: %w", context.DeadlineExceeded),
+		},
+		{
+			name: "cancelled",
+			err:  fmt.Errorf("observer residente cancelado con token sensible: %w", context.Canceled),
+		},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			executor := &fakeMCPAutoprogrammingObserveGoalHTTPExecutorV0{err: testCase.err}
+			input := MCPAutoprogrammingObserveGoalToolInputV0{
+				RequestID: "request-ref-autoprogramming-observe-goal-http-contention-001",
+				RunRef:    "run-ref-autoprogramming-goal-http-contention-001",
+			}
+			body := bytes.NewBuffer(nil)
+			if err := json.NewEncoder(body).Encode(input); err != nil {
+				t.Fatalf("encode: %v", err)
+			}
+			req := httptest.NewRequest(http.MethodPost, MCPAutoprogrammingObserveGoalHTTPPathV0, body)
+			rec := httptest.NewRecorder()
+
+			NewMCPAutoprogrammingObserveGoalHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusGatewayTimeout {
+				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+			}
+			if strings.Contains(rec.Body.String(), "/private/runtime") || strings.Contains(rec.Body.String(), "token sensible") {
+				t.Fatalf("body expone detalle interno: %s", rec.Body.String())
+			}
+			var result MCPAutoprogrammingObserveGoalToolResultV0
+			if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if result.Estado != MCPAutoprogrammingObserveGoalEstadoErrorV0 ||
+				!result.Partial ||
+				result.RunRef != input.RunRef ||
+				result.RecommendedAction != "observe_later" ||
+				len(result.Errores) != 1 ||
+				result.Errores[0].Code != MCPAutoprogrammingObserveGoalHTTPTimeoutCodeV0 {
+				t.Fatalf("result=%+v", result)
+			}
+		})
 	}
 }
 
@@ -249,6 +302,24 @@ func TestMCPAutoprogrammingObserveGoalHTTPHandlerV0ErrorOperativoNoDevuelve500(t
 		result.Errores[0].Field != "goal_state" ||
 		result.Errores[0].Message != "goal_state_not_found" {
 		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestMCPAutoprogrammingObserveGoalHTTPHandlerV0ErrorRealDevuelve500(t *testing.T) {
+	executor := &fakeMCPAutoprogrammingObserveGoalHTTPExecutorV0{
+		err: errors.New("fallo inesperado del executor"),
+	}
+	req := httptest.NewRequest(
+		http.MethodPost,
+		MCPAutoprogrammingObserveGoalHTTPPathV0,
+		strings.NewReader(`{"run_ref":"run-ref-autoprogramming-observe-goal-http-real-error-001"}`),
+	)
+	rec := httptest.NewRecorder()
+
+	NewMCPAutoprogrammingObserveGoalHTTPHandlerV0(executor).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
 

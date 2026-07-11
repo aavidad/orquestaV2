@@ -239,14 +239,15 @@ func (runtime *RuntimeV0) requestIdleSelfImprovementGoalCooperativeStopV0(
 		}}
 	}
 	stopResult, err := runtime.goalStopper.RequestGoalCooperativeStopV0(ctx, GoalCooperativeStopRequestV0{
-		RunRef:            runRef,
-		GoalRef:           strings.TrimSpace(result.GoalRef),
-		ExternalGoalRef:   strings.TrimSpace(result.ExternalGoalRef),
-		Reason:            idleSelfImprovementGoalHighConsumptionNoProgressReasonV0,
-		RecommendedAction: idleSelfImprovementGoalReviewReplanRecommendedActionV0,
-		RequestedBy:       "orquesta-server-goal-progress-governor",
-		IdempotencyKey:    "idem-goal-progress-stop-" + serverGoalProgressSafeRefPartV0(runRef),
-		EvidenceRefs:      result.EvidenceRefs,
+		RunRef:                      runRef,
+		GoalRef:                     strings.TrimSpace(result.GoalRef),
+		ExternalGoalRef:             strings.TrimSpace(result.ExternalGoalRef),
+		RequireConfirmedBackendStop: true,
+		Reason:                      idleSelfImprovementGoalHighConsumptionNoProgressReasonV0,
+		RecommendedAction:           idleSelfImprovementGoalReviewReplanRecommendedActionV0,
+		RequestedBy:                 "orquesta-server-goal-progress-governor",
+		IdempotencyKey:              "idem-goal-progress-stop-" + serverGoalProgressSafeRefPartV0(runRef),
+		EvidenceRefs:                result.EvidenceRefs,
 	})
 	if err != nil {
 		return []string{"evidence-ref-goal-cooperative-stop-request-failed"}, []orquestagoal.GoalWorkIssueV0{{

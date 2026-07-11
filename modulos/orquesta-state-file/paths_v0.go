@@ -23,10 +23,11 @@ const (
 	appDirectorGoalMarkersDirV0       = "app_director_goal_markers"
 	agentProcessesDirV0               = "agent_processes"
 	autonomyProgramsDirV0             = "autonomy_programs"
+	worktreeSnapshotsDirV0            = "worktree_snapshots"
 )
 
 func ensureStoreDirsV0(rootDir string) error {
-	for _, dir := range []string{runsDirV0, eventsDirV0, eventIndexesDirV0, eventRecordsDirV0, workflowTasksDirV0, workflowTaskParentIndexesDirV0, workflowWaitsDirV0, requiredTestEvidenceDirV0, goalRequiredTestAttestationsDirV0, operationalPlanStatesDirV0, appDirectorGoalStatesDirV0, appDirectorGoalMarkersDirV0, agentProcessesDirV0, autonomyProgramsDirV0} {
+	for _, dir := range []string{runsDirV0, eventsDirV0, eventIndexesDirV0, eventRecordsDirV0, workflowTasksDirV0, workflowTaskParentIndexesDirV0, workflowWaitsDirV0, requiredTestEvidenceDirV0, goalRequiredTestAttestationsDirV0, operationalPlanStatesDirV0, appDirectorGoalStatesDirV0, appDirectorGoalMarkersDirV0, agentProcessesDirV0, autonomyProgramsDirV0, worktreeSnapshotsDirV0} {
 		if err := os.MkdirAll(filepath.Join(rootDir, dir), 0o700); err != nil {
 			return err
 		}
@@ -88,6 +89,10 @@ func (store *StoreV0) autonomyProgramPathV0(projectRef string, rootRef string, p
 
 func (store *StoreV0) autonomyProgramLockPathV0(projectRef string, rootRef string, programRef string) string {
 	return store.autonomyProgramPathV0(projectRef, rootRef, programRef) + ".lock"
+}
+
+func (store *StoreV0) worktreeSnapshotPathV0(snapshotRef string) string {
+	return filepath.Join(store.rootDir, worktreeSnapshotsDirV0, hashRefsV0(snapshotRef)+".json")
 }
 
 func hashRefsV0(refs ...string) string {

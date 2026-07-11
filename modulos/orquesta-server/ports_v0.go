@@ -75,14 +75,15 @@ type GoalCooperativeStopPortV0 interface {
 }
 
 type GoalCooperativeStopRequestV0 struct {
-	RunRef            string
-	GoalRef           string
-	ExternalGoalRef   string
-	Reason            string
-	RecommendedAction string
-	RequestedBy       string
-	IdempotencyKey    string
-	EvidenceRefs      []string
+	RunRef                      string
+	GoalRef                     string
+	ExternalGoalRef             string
+	RequireConfirmedBackendStop bool
+	Reason                      string
+	RecommendedAction           string
+	RequestedBy                 string
+	IdempotencyKey              string
+	EvidenceRefs                []string
 }
 
 type GoalCooperativeStopResultV0 struct {
