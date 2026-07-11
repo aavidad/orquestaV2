@@ -42,8 +42,11 @@ func TestGroupAutoprogrammingTasksByAreaV0PreservaContratoExplicito(t *testing.T
 		Context:            []string{" contexto durable ", ""},
 		ContextRefs:        []string{"doc-ref:autoprog-t03"},
 		AcceptanceCriteria: []string{" criterio verificable "},
-		RequiredTests:      []string{" go test ./modulos/orquesta-autoprogramming "},
-		CompactRules:       []string{" conservar refs opacas "},
+		AcceptanceChecks: []AutoprogrammingAcceptanceCheckV0{{
+			CriterionRef: " criterion-ref-001 ", Description: " comprobacion tipada ", Command: " go test ./modulos/orquesta-autoprogramming ",
+		}},
+		RequiredTests: []string{" go test ./modulos/orquesta-autoprogramming "},
+		CompactRules:  []string{" conservar refs opacas "},
 	}})
 	if err != nil {
 		t.Fatalf("GroupAutoprogrammingTasksByAreaV0: %v", err)
@@ -54,10 +57,20 @@ func TestGroupAutoprogrammingTasksByAreaV0PreservaContratoExplicito(t *testing.T
 		task.Context[0] != "contexto durable" ||
 		task.ContextRefs[0] != "doc-ref:autoprog-t03" ||
 		task.AcceptanceCriteria[0] != "criterio verificable" ||
+		task.AcceptanceChecks[0] != (AutoprogrammingAcceptanceCheckV0{CriterionRef: "criterion-ref-001", Description: "comprobacion tipada", Command: "go test ./modulos/orquesta-autoprogramming"}) ||
 		task.RequiredTests[0] != "go test ./modulos/orquesta-autoprogramming" ||
 		task.CompactRules[0] != "conservar refs opacas" {
 		t.Fatalf("task=%+v", task)
 	}
+}
+
+func TestGroupAutoprogrammingTasksByAreaV0RejectsDuplicateAcceptanceCheckRefInGroup(t *testing.T) {
+	_, err := GroupAutoprogrammingTasksByAreaV0([]AutoprogrammingTaskGroupCandidateV0{
+		{TaskRef: "task-ref-a", Area: "task-groups", AcceptanceChecks: []AutoprogrammingAcceptanceCheckV0{{CriterionRef: "criterion-ref-001", Command: "go test ./a"}}},
+		{TaskRef: "task-ref-b", Area: "task-groups", AcceptanceChecks: []AutoprogrammingAcceptanceCheckV0{{CriterionRef: "criterion-ref-001", Command: "go test ./b"}}},
+	})
+
+	assertAutoprogrammingErrorV0(t, err, ErrAutoprogrammingInvalidoV0, "acceptance_checks.criterion_ref")
 }
 
 func TestGroupAutoprogrammingTasksByAreaV0RejectsMissingTaskRef(t *testing.T) {

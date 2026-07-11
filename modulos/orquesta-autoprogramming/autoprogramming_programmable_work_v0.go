@@ -33,14 +33,15 @@ type AutoprogrammingProgrammableWorkV0 struct {
 }
 
 type AutoprogrammingProgrammableGroupV0 struct {
-	Area          string                              `json:"area"`
-	TaskRefs      []string                            `json:"task_refs"`
-	WriteSet      []string                            `json:"write_set"`
-	RequiredTests []string                            `json:"required_tests"`
-	DependsOn     []string                            `json:"depends_on,omitempty"`
-	BlockedBy     []string                            `json:"blocked_by,omitempty"`
-	Profile       orquestacoreworkflow.WorkProfileV0  `json:"profile"`
-	Task          orquestacoreworkflow.WorkflowTaskV0 `json:"task"`
+	Area             string                              `json:"area"`
+	TaskRefs         []string                            `json:"task_refs"`
+	WriteSet         []string                            `json:"write_set"`
+	RequiredTests    []string                            `json:"required_tests"`
+	AcceptanceChecks []AutoprogrammingAcceptanceCheckV0  `json:"acceptance_checks,omitempty"`
+	DependsOn        []string                            `json:"depends_on,omitempty"`
+	BlockedBy        []string                            `json:"blocked_by,omitempty"`
+	Profile          orquestacoreworkflow.WorkProfileV0  `json:"profile"`
+	Task             orquestacoreworkflow.WorkflowTaskV0 `json:"task"`
 }
 
 const (
@@ -99,14 +100,15 @@ func BuildAutoprogrammingProgrammableWorkV0(
 			}
 		}
 		workGroup := AutoprogrammingProgrammableGroupV0{
-			Area:          group.Area,
-			TaskRefs:      append([]string(nil), group.TaskRefs...),
-			WriteSet:      append([]string(nil), task.WriteSet...),
-			RequiredTests: append([]string(nil), task.RequiredTests...),
-			DependsOn:     append([]string(nil), task.DependsOn...),
-			BlockedBy:     append([]string(nil), partition.BlockedByArea[group.Area]...),
-			Profile:       profile,
-			Task:          task,
+			Area:             group.Area,
+			TaskRefs:         append([]string(nil), group.TaskRefs...),
+			WriteSet:         append([]string(nil), task.WriteSet...),
+			RequiredTests:    append([]string(nil), task.RequiredTests...),
+			AcceptanceChecks: autoprogrammingAcceptanceChecksForGroupV0(group),
+			DependsOn:        append([]string(nil), task.DependsOn...),
+			BlockedBy:        append([]string(nil), partition.BlockedByArea[group.Area]...),
+			Profile:          profile,
+			Task:             task,
 		}
 		work.Groups = append(work.Groups, workGroup)
 		work.Profiles = append(work.Profiles, profile)
@@ -132,6 +134,19 @@ func BuildAutoprogrammingProgrammableWorkV0(
 		Accepted: true,
 		Work:     work,
 	}
+}
+
+func autoprogrammingAcceptanceChecksForGroupV0(
+	group AutoprogrammingTaskGroupV0,
+) []AutoprogrammingAcceptanceCheckV0 {
+	out := make([]AutoprogrammingAcceptanceCheckV0, 0)
+	for _, task := range group.Tasks {
+		out = append(out, task.AcceptanceChecks...)
+	}
+	if out == nil {
+		return []AutoprogrammingAcceptanceCheckV0{}
+	}
+	return out
 }
 
 func autoprogrammingGoalReadyWithoutLegacyWorkflowSurfaceV0(

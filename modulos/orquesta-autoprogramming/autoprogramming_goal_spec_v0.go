@@ -43,6 +43,7 @@ func autoprogrammingGoalWorkSpecForGroupV0(
 ) orquestagoal.GoalWorkSpecV0 {
 	task := group.Task
 	writeSet := autoprogrammingGoalWriteSetV0(group.WriteSet)
+	requiredTests := autoprogrammingGoalRequiredTestsV0(task.RequiredTests, task.TaskID, group.AcceptanceChecks)
 	return orquestagoal.NormalizeGoalWorkSpecV0(orquestagoal.GoalWorkSpecV0{
 		GoalRef:            "goal-ref-" + task.TaskID,
 		RequestRef:         work.RequestRef,
@@ -56,16 +57,13 @@ func autoprogrammingGoalWorkSpecForGroupV0(
 		SkillRefs:          append([]string(nil), task.SkillRefs...),
 		WriteSet:           writeSet,
 		WriteSetSHA256:     orquestagoal.GoalWriteSetSHA256V0(writeSet),
-		RequiredTests:      autoprogrammingGoalRequiredTestsV0(task.RequiredTests, task.TaskID),
+		RequiredTests:      requiredTests,
 		AcceptanceCriteria: append([]string(nil), task.AcceptanceCriteria...),
 		EvidenceRefs:       autoprogrammingGoalEvidenceRefsV0(work, task.TaskID, index),
 		Budget: orquestagoal.GoalBudgetV0{
 			MaxSubgoals: task.MaxRecursiveAgents,
 		},
-		ClosurePolicy: orquestagoal.GoalClosurePolicyV0{
-			RequireRequiredTests:                      len(task.RequiredTests) > 0,
-			RequireIndependentRequiredTestAttestation: len(task.RequiredTests) > 0,
-		},
+		ClosurePolicy: autoprogrammingGoalClosurePolicyV0(requiredTests, group.AcceptanceChecks),
 		ReworkPolicy: orquestagoal.GoalReworkPolicyV0{
 			PreferNewGoal:     true,
 			MaxReworkGoals:    1,
@@ -131,7 +129,11 @@ func autoprogrammingGoalWriteSetV0(paths []string) []orquestagoal.GoalWriteScope
 	return out
 }
 
-func autoprogrammingGoalRequiredTestsV0(commands []string, taskID string) []orquestagoal.GoalRequiredTestV0 {
+func autoprogrammingGoalRequiredTestsV0(
+	commands []string,
+	taskID string,
+	checks []AutoprogrammingAcceptanceCheckV0,
+) []orquestagoal.GoalRequiredTestV0 {
 	out := make([]orquestagoal.GoalRequiredTestV0, 0, len(commands))
 	for index, command := range commands {
 		command = strings.TrimSpace(command)
@@ -144,10 +146,53 @@ func autoprogrammingGoalRequiredTestsV0(commands []string, taskID string) []orqu
 			Command:    command,
 		}))
 	}
+	byCommand := make(map[string]int, len(out))
+	for index, test := range out {
+		byCommand[test.Command] = index
+	}
+	for _, check := range checks {
+		command := strings.TrimSpace(check.Command)
+		if index, ok := byCommand[command]; ok {
+			out[index] = autoprogrammingGoalRequiredTestWithAcceptanceCheckV0(out[index], check)
+			continue
+		}
+		out = append(out, autoprogrammingGoalRequiredTestWithAcceptanceCheckV0(orquestagoal.GoalRequiredTestV0{
+			TestRef:    "test-ref-" + taskID + "-" + shortAutoprogrammingGoalHashV0(fmt.Sprintf("%02d:%s", len(out)+1, command)),
+			CommandRef: "command-ref-" + taskID + "-" + shortAutoprogrammingGoalHashV0(command),
+			Command:    command,
+		}, check))
+		byCommand[command] = len(out) - 1
+	}
 	if out == nil {
 		return []orquestagoal.GoalRequiredTestV0{}
 	}
 	return out
+}
+
+func autoprogrammingGoalRequiredTestWithAcceptanceCheckV0(
+	test orquestagoal.GoalRequiredTestV0,
+	check AutoprogrammingAcceptanceCheckV0,
+) orquestagoal.GoalRequiredTestV0 {
+	if description := strings.TrimSpace(check.Description); description != "" {
+		test.AcceptanceCriteria = compactStringsV0(append(test.AcceptanceCriteria, description))
+	}
+	test.AcceptanceCriteriaRefs = compactStringsV0(append(test.AcceptanceCriteriaRefs, check.CriterionRef))
+	return orquestagoal.FreezeGoalRequiredTestV0(test)
+}
+
+func autoprogrammingGoalClosurePolicyV0(
+	requiredTests []orquestagoal.GoalRequiredTestV0,
+	checks []AutoprogrammingAcceptanceCheckV0,
+) orquestagoal.GoalClosurePolicyV0 {
+	criterionRefs := make([]string, 0, len(checks))
+	for _, check := range checks {
+		criterionRefs = append(criterionRefs, check.CriterionRef)
+	}
+	return orquestagoal.GoalClosurePolicyV0{
+		RequireRequiredTests:                      len(requiredTests) > 0,
+		RequireIndependentRequiredTestAttestation: len(requiredTests) > 0,
+		RequiredAcceptanceCriteriaRefs:            compactStringsV0(criterionRefs),
+	}
 }
 
 func autoprogrammingGoalEvidenceRefsV0(

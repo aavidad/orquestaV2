@@ -61,10 +61,62 @@ func TestBuildAutoprogrammingProgrammableWorkV0GeneraGoalSpecsCuandoGoalListo(t 
 		spec.RequiredTests[0].DefinitionSHA256 == "" {
 		t.Fatalf("required_tests=%+v", spec.RequiredTests)
 	}
+	if len(spec.ClosurePolicy.RequiredAcceptanceCriteriaRefs) != 0 {
+		t.Fatalf("legacy closure criteria refs=%v", spec.ClosurePolicy.RequiredAcceptanceCriteriaRefs)
+	}
 	if !hasGoalContextRefForAutoprogrammingTestV0(spec.ContextRefs, "worktree", request.WorktreeRef) ||
 		!hasGoalContextRefForAutoprogrammingTestV0(spec.ContextRefs, "workflow_task_context", "source_task_ref:task-ref-goal-ready-001") ||
 		len(spec.RuleRefs) == 0 {
 		t.Fatalf("context/rules incompletos: context=%+v rules=%+v", spec.ContextRefs, spec.RuleRefs)
+	}
+}
+
+func TestBuildAutoprogrammingProgrammableWorkV0GoalSpecAddsAcceptanceCheckTestAndPolicy(t *testing.T) {
+	check := AutoprogrammingAcceptanceCheckV0{
+		CriterionRef: "criterion-ref-bug-208ag-001",
+		Description:  "El transporte tipado conserva el criterio verificable.",
+		Command:      "go test -count=1 ./modulos/orquesta-autoprogramming -run TestBUG208AG",
+	}
+	result := BuildAutoprogrammingProgrammableWorkV0(validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
+		request.Tasks = []AutoprogrammingTaskGroupCandidateV0{{
+			TaskRef: "task-ref-goal-acceptance-check-001", Area: "autoprogramming",
+			ContextRefs:      []string{"goal_migration:goal-first", "goal_capability:starter", "goal_capability:observer", "goal_capability:closure-validator"},
+			AcceptanceChecks: []AutoprogrammingAcceptanceCheckV0{check},
+		}}
+	}))
+	if !result.Accepted || len(result.Work.GoalSpecs) != 1 {
+		t.Fatalf("result=%+v", result)
+	}
+	spec := result.Work.GoalSpecs[0]
+	if issues := orquestagoal.ValidateGoalWorkSpecV0(spec); len(issues) != 0 {
+		t.Fatalf("goal spec invalido: %+v", issues)
+	}
+	acceptanceTest := goalRequiredTestForCommandForAutoprogrammingTestV0(spec.RequiredTests, check.Command)
+	if acceptanceTest == nil || !reflect.DeepEqual(acceptanceTest.AcceptanceCriteria, []string{check.Description}) ||
+		!reflect.DeepEqual(acceptanceTest.AcceptanceCriteriaRefs, []string{check.CriterionRef}) ||
+		!reflect.DeepEqual(spec.ClosurePolicy.RequiredAcceptanceCriteriaRefs, []string{check.CriterionRef}) {
+		t.Fatalf("acceptance check no transportado: test=%+v policy=%+v", acceptanceTest, spec.ClosurePolicy)
+	}
+}
+
+func TestBuildAutoprogrammingProgrammableWorkV0GoalSpecMergesAcceptanceCheckWithExistingCommand(t *testing.T) {
+	command := "go test -count=1 ./modulos/orquesta-autoprogramming"
+	check := AutoprogrammingAcceptanceCheckV0{CriterionRef: "criterion-ref-bug-208ag-merge", Description: "El comando existente queda enriquecido.", Command: command}
+	result := BuildAutoprogrammingProgrammableWorkV0(validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
+		request.RequiredTests = []string{command}
+		request.Tasks = []AutoprogrammingTaskGroupCandidateV0{{
+			TaskRef: "task-ref-goal-acceptance-merge-001", Area: "autoprogramming",
+			ContextRefs:      []string{"goal_migration:goal-first", "goal_capability:starter", "goal_capability:observer", "goal_capability:closure-validator"},
+			AcceptanceChecks: []AutoprogrammingAcceptanceCheckV0{check},
+		}}
+	}))
+	if !result.Accepted || len(result.Work.GoalSpecs) != 1 {
+		t.Fatalf("result=%+v", result)
+	}
+	spec := result.Work.GoalSpecs[0]
+	if len(spec.RequiredTests) != 1 || spec.RequiredTests[0].DefinitionSHA256 != orquestagoal.FreezeGoalRequiredTestV0(spec.RequiredTests[0]).DefinitionSHA256 ||
+		!reflect.DeepEqual(spec.RequiredTests[0].AcceptanceCriteriaRefs, []string{check.CriterionRef}) {
+		t.Fatalf("required_tests=%+v", spec.RequiredTests)
 	}
 }
 
@@ -220,6 +272,15 @@ func hasGoalRequiredTestCommandForAutoprogrammingTestV0(
 		}
 	}
 	return false
+}
+
+func goalRequiredTestForCommandForAutoprogrammingTestV0(values []orquestagoal.GoalRequiredTestV0, command string) *orquestagoal.GoalRequiredTestV0 {
+	for index := range values {
+		if values[index].Command == command {
+			return &values[index]
+		}
+	}
+	return nil
 }
 
 func hasGoalRuleRefForAutoprogrammingTestV0(

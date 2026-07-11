@@ -30,3 +30,34 @@ Referencias: [inventario vivo](../inventario_bugs_estado_vivo.md),
 [inventario historico](../inventario_bugs_orquesta_2026-06-30.md),
 [208AF](incidencia_orquesta_goal_observer_high_consumption_terminal_reconcile_2026-07-11.md),
 y [pruebas de atestación de 208H](../pruebas_revisor_208h_2026-07-10.md).
+
+## Avance estructural 2026-07-11
+
+Commits base: `b96e9b115` y corte de transporte pendiente de hash final.
+
+- `GoalClosurePolicyV0` declara
+  `required_acceptance_criteria_refs`: refs opacas de criterios verificables
+  obligatorios. Cada ref debe estar mapeada a un `GoalRequiredTestV0`, cuya
+  definicion congelada incluye `acceptance_criteria_refs`.
+- La autoprogramacion acepta `acceptance_checks` tipados por tarea
+  (`criterion_ref`, descripcion y comando). El compilador fusiona comandos
+  iguales, congela la definicion y exige atestacion independiente para todos
+  los checks. No deriva comandos ni refs desde lenguaje natural.
+- V0 y V1 conservan checks y specs; las proyecciones MCP publican refs y conteo
+  separados de los criterios cualitativos.
+- El fallback idle ya no puede aceptar un `complete` autodeclarado cuando el
+  spec exige atestacion independiente o refs de criterios obligatorios.
+
+Cobertura demostrada: una ref obligatoria sin test mapeado invalida el spec;
+una request con check incompleto/duplicado se rechaza; dos refs sobre el mismo
+comando producen un solo test congelado; y el cierre requiere el receipt
+independiente de ese test.
+
+Residual para cerrar 208AG: migrar o clasificar las requests legacy que solo
+usan `acceptance_criteria` textual. Esas frases no pueden asociarse
+automaticamente a comandos sin inventar semantica. Hasta esa migracion deben
+considerarse advisory y nunca citarse como evidencia de criterio verificado.
+El cierre final exige que los creadores productivos (incluido Director humano
+y backlog) emitan `acceptance_checks` para criterios verificables o los marquen
+explicitamente cualitativos; despues se repetira el caso U1000 con el comando
+de analizador como check independiente.

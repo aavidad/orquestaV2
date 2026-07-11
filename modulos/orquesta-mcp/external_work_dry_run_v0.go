@@ -57,24 +57,26 @@ type MCPExternalWorkDryRunToolResultV0 struct {
 }
 
 type MCPGoalWorkSpecSummaryV0 struct {
-	SchemaVersion            string   `json:"schema_version"`
-	GoalRef                  string   `json:"goal_ref,omitempty"`
-	RunRef                   string   `json:"run_ref,omitempty"`
-	DirectorKind             string   `json:"director_kind,omitempty"`
-	SpecHash                 string   `json:"spec_hash,omitempty"`
-	ContextRefs              []string `json:"context_refs,omitempty"`
-	RuleRefs                 []string `json:"rule_refs,omitempty"`
-	RequiredTestRefs         []string `json:"required_test_refs,omitempty"`
-	ArtifactTypes            []string `json:"artifact_types,omitempty"`
-	ContextRefCount          int      `json:"context_ref_count,omitempty"`
-	RuleRefCount             int      `json:"rule_ref_count,omitempty"`
-	WriteSetCount            int      `json:"write_set_count,omitempty"`
-	RequiredTestCount        int      `json:"required_test_count,omitempty"`
-	AcceptanceCriteriaCount  int      `json:"acceptance_criteria_count,omitempty"`
-	ArtifactContractCount    int      `json:"artifact_contract_count,omitempty"`
-	ClosureRequiresTests     bool     `json:"closure_requires_tests,omitempty"`
-	ClosureRequiresArtifacts bool     `json:"closure_requires_artifacts,omitempty"`
-	ClosureRequiresPaths     bool     `json:"closure_requires_artifact_paths,omitempty"`
+	SchemaVersion                      string   `json:"schema_version"`
+	GoalRef                            string   `json:"goal_ref,omitempty"`
+	RunRef                             string   `json:"run_ref,omitempty"`
+	DirectorKind                       string   `json:"director_kind,omitempty"`
+	SpecHash                           string   `json:"spec_hash,omitempty"`
+	ContextRefs                        []string `json:"context_refs,omitempty"`
+	RuleRefs                           []string `json:"rule_refs,omitempty"`
+	RequiredTestRefs                   []string `json:"required_test_refs,omitempty"`
+	RequiredAcceptanceCriteriaRefs     []string `json:"required_acceptance_criteria_refs,omitempty"`
+	ArtifactTypes                      []string `json:"artifact_types,omitempty"`
+	ContextRefCount                    int      `json:"context_ref_count,omitempty"`
+	RuleRefCount                       int      `json:"rule_ref_count,omitempty"`
+	WriteSetCount                      int      `json:"write_set_count,omitempty"`
+	RequiredTestCount                  int      `json:"required_test_count,omitempty"`
+	RequiredAcceptanceCriteriaRefCount int      `json:"required_acceptance_criteria_ref_count,omitempty"`
+	AcceptanceCriteriaCount            int      `json:"acceptance_criteria_count,omitempty"`
+	ArtifactContractCount              int      `json:"artifact_contract_count,omitempty"`
+	ClosureRequiresTests               bool     `json:"closure_requires_tests,omitempty"`
+	ClosureRequiresArtifacts           bool     `json:"closure_requires_artifacts,omitempty"`
+	ClosureRequiresPaths               bool     `json:"closure_requires_artifact_paths,omitempty"`
 }
 
 type MCPExternalWorkDryRunToolExecutorV0 struct {
@@ -153,6 +155,7 @@ func BuildExternalWorkDryRunV0(
 func mcpGoalWorkSpecSummaryV0(spec orquestagoal.GoalWorkSpecV0) MCPGoalWorkSpecSummaryV0 {
 	spec = orquestagoal.NormalizeGoalWorkSpecV0(spec)
 	requiredTestRefs := make([]string, 0, len(spec.RequiredTests))
+	requiredAcceptanceCriteriaRefs := append([]string(nil), spec.ClosurePolicy.RequiredAcceptanceCriteriaRefs...)
 	for _, test := range spec.RequiredTests {
 		requiredTestRefs = append(requiredTestRefs, firstNonEmptyMCPV0(test.TestRef, test.CommandRef))
 	}
@@ -161,24 +164,26 @@ func mcpGoalWorkSpecSummaryV0(spec orquestagoal.GoalWorkSpecV0) MCPGoalWorkSpecS
 		artifactTypes = append(artifactTypes, artifact.ArtifactType)
 	}
 	return MCPGoalWorkSpecSummaryV0{
-		SchemaVersion:            "orquesta_goal_work_spec_summary.v0",
-		GoalRef:                  strings.TrimSpace(spec.GoalRef),
-		RunRef:                   strings.TrimSpace(spec.RunRef),
-		DirectorKind:             strings.TrimSpace(spec.DirectorKind),
-		SpecHash:                 mcpGoalWorkSpecHashV0(spec),
-		ContextRefs:              mcpGoalContextRefsV0(spec.ContextRefs),
-		RuleRefs:                 mcpGoalRuleRefsV0(spec.RuleRefs),
-		RequiredTestRefs:         compactStringsMCPV0(requiredTestRefs),
-		ArtifactTypes:            compactStringsMCPV0(artifactTypes),
-		ContextRefCount:          len(spec.ContextRefs),
-		RuleRefCount:             len(spec.RuleRefs),
-		WriteSetCount:            len(spec.WriteSet),
-		RequiredTestCount:        len(spec.RequiredTests),
-		AcceptanceCriteriaCount:  len(spec.AcceptanceCriteria),
-		ArtifactContractCount:    len(spec.ArtifactContracts),
-		ClosureRequiresTests:     spec.ClosurePolicy.RequireRequiredTests,
-		ClosureRequiresArtifacts: spec.ClosurePolicy.RequireArtifacts,
-		ClosureRequiresPaths:     spec.ClosurePolicy.RequireArtifactPaths,
+		SchemaVersion:                      "orquesta_goal_work_spec_summary.v0",
+		GoalRef:                            strings.TrimSpace(spec.GoalRef),
+		RunRef:                             strings.TrimSpace(spec.RunRef),
+		DirectorKind:                       strings.TrimSpace(spec.DirectorKind),
+		SpecHash:                           mcpGoalWorkSpecHashV0(spec),
+		ContextRefs:                        mcpGoalContextRefsV0(spec.ContextRefs),
+		RuleRefs:                           mcpGoalRuleRefsV0(spec.RuleRefs),
+		RequiredTestRefs:                   compactStringsMCPV0(requiredTestRefs),
+		RequiredAcceptanceCriteriaRefs:     compactStringsMCPV0(requiredAcceptanceCriteriaRefs),
+		ArtifactTypes:                      compactStringsMCPV0(artifactTypes),
+		ContextRefCount:                    len(spec.ContextRefs),
+		RuleRefCount:                       len(spec.RuleRefs),
+		WriteSetCount:                      len(spec.WriteSet),
+		RequiredTestCount:                  len(spec.RequiredTests),
+		RequiredAcceptanceCriteriaRefCount: len(compactStringsMCPV0(requiredAcceptanceCriteriaRefs)),
+		AcceptanceCriteriaCount:            len(spec.AcceptanceCriteria),
+		ArtifactContractCount:              len(spec.ArtifactContracts),
+		ClosureRequiresTests:               spec.ClosurePolicy.RequireRequiredTests,
+		ClosureRequiresArtifacts:           spec.ClosurePolicy.RequireArtifacts,
+		ClosureRequiresPaths:               spec.ClosurePolicy.RequireArtifactPaths,
 	}
 }
 

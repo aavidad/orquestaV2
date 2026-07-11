@@ -53,18 +53,19 @@ type MCPAutoprogrammingProgrammableWorkV0 struct {
 }
 
 type MCPAutoprogrammingProgrammableWorkGroupV0 struct {
-	Area            string   `json:"area"`
-	SourceTaskRefs  []string `json:"source_task_refs,omitempty"`
-	WorkProfileRef  string   `json:"work_profile_ref"`
-	WorkflowTaskRef string   `json:"workflow_task_ref"`
-	WorkKind        string   `json:"work_kind"`
-	PhaseID         string   `json:"phase_id"`
-	Title           string   `json:"title,omitempty"`
-	Summary         string   `json:"summary,omitempty"`
-	WriteSet        []string `json:"write_set,omitempty"`
-	RequiredTests   []string `json:"required_tests,omitempty"`
-	Criteria        []string `json:"acceptance_criteria,omitempty"`
-	ContextRefs     []string `json:"context_refs,omitempty"`
+	Area             string                                                     `json:"area"`
+	SourceTaskRefs   []string                                                   `json:"source_task_refs,omitempty"`
+	WorkProfileRef   string                                                     `json:"work_profile_ref"`
+	WorkflowTaskRef  string                                                     `json:"workflow_task_ref"`
+	WorkKind         string                                                     `json:"work_kind"`
+	PhaseID          string                                                     `json:"phase_id"`
+	Title            string                                                     `json:"title,omitempty"`
+	Summary          string                                                     `json:"summary,omitempty"`
+	WriteSet         []string                                                   `json:"write_set,omitempty"`
+	RequiredTests    []string                                                   `json:"required_tests,omitempty"`
+	Criteria         []string                                                   `json:"acceptance_criteria,omitempty"`
+	AcceptanceChecks []orquestaautoprogramming.AutoprogrammingAcceptanceCheckV0 `json:"acceptance_checks,omitempty"`
+	ContextRefs      []string                                                   `json:"context_refs,omitempty"`
 }
 
 type MCPAutoprogrammingValidateRequestToolExecutorV0 struct{}
@@ -174,6 +175,7 @@ func newMCPAutoprogrammingProgrammableWorkV0(
 		writeSet := compactStringsMCPV0(task.WriteSet)
 		requiredTests := compactStringsMCPV0(task.RequiredTests)
 		criteria := compactStringsMCPV0(task.AcceptanceCriteria)
+		acceptanceChecks := append([]orquestaautoprogramming.AutoprogrammingAcceptanceCheckV0(nil), group.AcceptanceChecks...)
 		contextRefs := compactStringsMCPV0(task.ContextRefs)
 		if goalReady {
 			workflowTaskRef = ""
@@ -186,18 +188,19 @@ func newMCPAutoprogrammingProgrammableWorkV0(
 			contextRefs = nil
 		}
 		out.Groups = append(out.Groups, MCPAutoprogrammingProgrammableWorkGroupV0{
-			Area:            strings.TrimSpace(group.Area),
-			SourceTaskRefs:  compactStringsMCPV0(group.TaskRefs),
-			WorkProfileRef:  workProfileRef,
-			WorkflowTaskRef: workflowTaskRef,
-			WorkKind:        workKind,
-			PhaseID:         phaseID,
-			Title:           title,
-			Summary:         summary,
-			WriteSet:        writeSet,
-			RequiredTests:   requiredTests,
-			Criteria:        criteria,
-			ContextRefs:     contextRefs,
+			Area:             strings.TrimSpace(group.Area),
+			SourceTaskRefs:   compactStringsMCPV0(group.TaskRefs),
+			WorkProfileRef:   workProfileRef,
+			WorkflowTaskRef:  workflowTaskRef,
+			WorkKind:         workKind,
+			PhaseID:          phaseID,
+			Title:            title,
+			Summary:          summary,
+			WriteSet:         writeSet,
+			RequiredTests:    requiredTests,
+			Criteria:         criteria,
+			AcceptanceChecks: acceptanceChecks,
+			ContextRefs:      contextRefs,
 		})
 	}
 	return &out

@@ -139,6 +139,36 @@ func TestValidateAutoprogrammingRequestV0RejectsDelegationBudgetFueraDeRango(t *
 	assertAutoprogrammingRequestIssueV0(t, result, "recursive_agents_budget_invalid")
 }
 
+func TestValidateAutoprogrammingRequestV0RejectsAcceptanceCheckWithoutRefOrCommand(t *testing.T) {
+	for name, check := range map[string]AutoprogrammingAcceptanceCheckV0{
+		"missing_ref":     {Command: "go test ./modulos/orquesta-autoprogramming"},
+		"missing_command": {CriterionRef: "criterion-ref-missing-command"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			result := ValidateAutoprogrammingRequestV0(validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
+				request.Tasks[0].AcceptanceChecks = []AutoprogrammingAcceptanceCheckV0{check}
+			}))
+			if result.Accepted {
+				t.Fatalf("accepted=true result=%+v", result)
+			}
+			assertAutoprogrammingRequestIssueV0(t, result, "task_group_invalid")
+		})
+	}
+}
+
+func TestValidateAutoprogrammingRequestV0RejectsDuplicateAcceptanceCheckRefInTask(t *testing.T) {
+	result := ValidateAutoprogrammingRequestV0(validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
+		request.Tasks[0].AcceptanceChecks = []AutoprogrammingAcceptanceCheckV0{
+			{CriterionRef: "criterion-ref-duplicate", Command: "go test ./a"},
+			{CriterionRef: "criterion-ref-duplicate", Command: "go test ./b"},
+		}
+	}))
+	if result.Accepted {
+		t.Fatalf("accepted=true result=%+v", result)
+	}
+	assertAutoprogrammingRequestIssueV0(t, result, "task_group_invalid")
+}
+
 func validAutoprogrammingRequestV0(
 	mutate func(*AutoprogrammingRequestV0),
 ) AutoprogrammingRequestV0 {

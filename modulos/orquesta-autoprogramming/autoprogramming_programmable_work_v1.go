@@ -70,14 +70,15 @@ func BuildAutoprogrammingProgrammableWorkV1(
 			}
 		}
 		work.Base.Groups = append(work.Base.Groups, AutoprogrammingProgrammableGroupV0{
-			Area:          group.Area,
-			TaskRefs:      append([]string(nil), group.TaskRefs...),
-			WriteSet:      append([]string(nil), task.WriteSet...),
-			RequiredTests: append([]string(nil), task.RequiredTests...),
-			DependsOn:     append([]string(nil), task.DependsOn...),
-			BlockedBy:     append([]string(nil), partition.BlockedByArea[group.Area]...),
-			Profile:       profile,
-			Task:          task,
+			Area:             group.Area,
+			TaskRefs:         append([]string(nil), group.TaskRefs...),
+			WriteSet:         append([]string(nil), task.WriteSet...),
+			RequiredTests:    append([]string(nil), task.RequiredTests...),
+			AcceptanceChecks: autoprogrammingAcceptanceChecksForGroupV0(group),
+			DependsOn:        append([]string(nil), task.DependsOn...),
+			BlockedBy:        append([]string(nil), partition.BlockedByArea[group.Area]...),
+			Profile:          profile,
+			Task:             task,
 		})
 		work.Base.Profiles = append(work.Base.Profiles, profile)
 		work.Base.Tasks = append(work.Base.Tasks, task)
@@ -88,6 +89,16 @@ func BuildAutoprogrammingProgrammableWorkV1(
 			Source:      selected.source,
 		})
 	}
+	goalSpecs, goalIssues := BuildAutoprogrammingGoalWorkSpecsV0(work.Base)
+	if len(goalIssues) > 0 {
+		return AutoprogrammingProgrammableWorkResultV1{
+			Accepted: false,
+			Work:     work,
+			Issues:   goalIssues,
+		}
+	}
+	work.Base.GoalSpecs = goalSpecs
+	work.Base = autoprogrammingGoalReadyWithoutLegacyWorkflowSurfaceV0(work.Base)
 	return AutoprogrammingProgrammableWorkResultV1{Accepted: true, Work: work}
 }
 

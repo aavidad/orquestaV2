@@ -53,6 +53,15 @@ func (tracker *StatusTrackerV0) applyIdleSelfImprovementGoalObservedWithClosureV
 		closure := orquestagoal.GoalClosureValidationV0{}
 		if observedClosure != nil {
 			closure = copyGoalClosureValidationForServerStateV0(*observedClosure)
+		} else if idleSelfImprovementGoalSpecRequiresObservedClosureV0(*state.IdleSelfImprovementGoalSpec) {
+			closure = orquestagoal.GoalClosureValidationV0{
+				Status:      orquestagoal.GoalStatusBlockedV0,
+				NeedsRework: true,
+				Issues: []orquestagoal.GoalWorkIssueV0{{
+					Code:  orquestagoal.ErrGoalRequiredTestAttestationMissingV0,
+					Field: "observed_goal_closure",
+				}},
+			}
 		} else {
 			closure = orquestagoal.ValidateGoalWorkClosureV0(*state.IdleSelfImprovementGoalSpec, result)
 		}
@@ -101,6 +110,12 @@ func (tracker *StatusTrackerV0) applyIdleSelfImprovementGoalObservedWithClosureV
 	}
 	state.LastError = ""
 	state.LastErrorOperationalMessage = nil
+}
+
+func idleSelfImprovementGoalSpecRequiresObservedClosureV0(spec orquestagoal.GoalWorkSpecV0) bool {
+	spec = orquestagoal.NormalizeGoalWorkSpecV0(spec)
+	return spec.ClosurePolicy.RequireIndependentRequiredTestAttestation ||
+		len(spec.ClosurePolicy.RequiredAcceptanceCriteriaRefs) > 0
 }
 
 func idleSelfImprovementGoalObservationReasonCodeV0(

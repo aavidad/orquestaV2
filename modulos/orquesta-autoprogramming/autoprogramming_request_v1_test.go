@@ -1,6 +1,7 @@
 package orquestaautoprogramming
 
 import (
+	"reflect"
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -127,6 +128,72 @@ func TestBuildAutoprogrammingProgrammableWorkV1ConservaFallbackV0(t *testing.T) 
 	}
 	if result.Work.ProfileBindings[0].Source != "default-v0" {
 		t.Fatalf("profile_bindings=%+v", result.Work.ProfileBindings)
+	}
+}
+
+func TestBuildAutoprogrammingProgrammableWorkV1GoalReadyConservaAcceptanceChecksYGoalSpecs(t *testing.T) {
+	command := "go test -count=1 ./modulos/orquesta-autoprogramming -run TestBUG208AG"
+	checks := []AutoprogrammingAcceptanceCheckV0{
+		{
+			CriterionRef: "criterion-ref-bug-208ag-v1-001",
+			Description:  "El primer criterio queda asociado al comando.",
+			Command:      command,
+		},
+		{
+			CriterionRef: "criterion-ref-bug-208ag-v1-002",
+			Description:  "El segundo criterio comparte el mismo comando.",
+			Command:      command,
+		},
+	}
+	result := BuildAutoprogrammingProgrammableWorkV1(validAutoprogrammingRequestV1(func(request *AutoprogrammingRequestV1) {
+		request.RequiredTests = []string{command}
+		request.Tasks = []AutoprogrammingTaskGroupCandidateV0{{
+			TaskRef: "task-ref-goal-acceptance-check-v1-001",
+			Area:    "autoprogramming",
+			ContextRefs: []string{
+				"goal_migration:goal-first",
+				"goal_capability:starter",
+				"goal_capability:observer",
+				"goal_capability:closure-validator",
+			},
+			AcceptanceChecks: checks,
+		}}
+	}))
+	if !result.Accepted {
+		t.Fatalf("issues=%+v", result.Issues)
+	}
+	if len(result.Work.Base.Groups) != 1 ||
+		!reflect.DeepEqual(result.Work.Base.Groups[0].AcceptanceChecks, checks) {
+		t.Fatalf("acceptance_checks=%+v", result.Work.Base.Groups)
+	}
+	if len(result.Work.Base.GoalSpecs) != 1 {
+		t.Fatalf("stored goal_specs=%+v", result.Work.Base.GoalSpecs)
+	}
+	if len(result.Work.Base.Profiles) != 0 || len(result.Work.Base.Tasks) != 0 {
+		t.Fatalf("legacy workflow surface profiles=%+v tasks=%+v", result.Work.Base.Profiles, result.Work.Base.Tasks)
+	}
+	if !reflect.DeepEqual(result.Work.Base.Groups[0].Profile, orquestacoreworkflow.WorkProfileV0{}) ||
+		!reflect.DeepEqual(result.Work.Base.Groups[0].Task, orquestacoreworkflow.WorkflowTaskV0{}) {
+		t.Fatalf("legacy group workflow surface=%+v", result.Work.Base.Groups[0])
+	}
+	if len(result.Work.ProfileBindings) != 1 || result.Work.ProfileBindings[0].Source != "default-v0" {
+		t.Fatalf("profile_bindings=%+v", result.Work.ProfileBindings)
+	}
+	spec := result.Work.Base.GoalSpecs[0]
+	if len(spec.RequiredTests) != 1 ||
+		!reflect.DeepEqual(spec.RequiredTests[0].AcceptanceCriteria, []string{
+			checks[0].Description,
+			checks[1].Description,
+		}) ||
+		!reflect.DeepEqual(spec.RequiredTests[0].AcceptanceCriteriaRefs, []string{
+			checks[0].CriterionRef,
+			checks[1].CriterionRef,
+		}) ||
+		!reflect.DeepEqual(spec.ClosurePolicy.RequiredAcceptanceCriteriaRefs, []string{
+			checks[0].CriterionRef,
+			checks[1].CriterionRef,
+		}) {
+		t.Fatalf("required_tests=%+v closure_policy=%+v", spec.RequiredTests, spec.ClosurePolicy)
 	}
 }
 

@@ -36,9 +36,12 @@ func TestMCPAutoprogrammingPrepareRunDescriptorV0EsAdaptadorOptIn(t *testing.T) 
 		"context_refs?",
 		"rule_refs?",
 		"required_test_refs?",
+		"required_acceptance_criteria_refs?",
 		"artifact_types?",
 		"write_set_count?",
 		"required_test_count?",
+		"required_acceptance_criteria_ref_count?",
+		"acceptance_criteria_count?",
 		"closure_requires_artifact_paths?",
 	} {
 		if !strings.Contains(descriptor.Output, want) {

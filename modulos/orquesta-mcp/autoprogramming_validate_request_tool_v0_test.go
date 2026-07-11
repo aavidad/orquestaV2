@@ -75,8 +75,13 @@ func TestMCPAutoprogrammingValidateRequestExecutorV0ProyectaContratoExplicito(t 
 		Context:            []string{"contexto compacto del director"},
 		ContextRefs:        []string{"doc-ref:autoprog-explicita"},
 		AcceptanceCriteria: []string{"criterio visible en MCP"},
-		RequiredTests:      []string{"go test -count=1 ./modulos/orquesta-mcp -run TestMCPAutoprogramming"},
-		CompactRules:       []string{"no inferir semantica desde task_ref"},
+		AcceptanceChecks: []orquestaautoprogramming.AutoprogrammingAcceptanceCheckV0{{
+			CriterionRef: "criterion-ref-mcp-visible-001",
+			Description:  "el verificador MCP conserva la referencia tipada",
+			Command:      "go test -count=1 ./modulos/orquesta-mcp -run TestMCPAutoprogramming",
+		}},
+		RequiredTests: []string{"go test -count=1 ./modulos/orquesta-mcp -run TestMCPAutoprogramming"},
+		CompactRules:  []string{"no inferir semantica desde task_ref"},
 	}}
 
 	result, err := MCPAutoprogrammingValidateRequestToolExecutorV0{}.Execute(
@@ -95,7 +100,10 @@ func TestMCPAutoprogrammingValidateRequestExecutorV0ProyectaContratoExplicito(t 
 		!stringsSliceContainsMCPAutoprogrammingV0(group.ContextRefs, "doc-ref:autoprog-explicita") ||
 		!stringsSliceContainsMCPAutoprogrammingV0(group.RequiredTests, "go test -count=1 ./modulos/orquesta-mcp -run TestMCPAutoprogramming") ||
 		!stringsSliceContainsSubstringMCPAutoprogrammingV0(group.Criteria, "criterio visible en MCP") ||
-		!stringsSliceContainsSubstringMCPAutoprogrammingV0(group.Criteria, "no inferir semantica") {
+		!stringsSliceContainsSubstringMCPAutoprogrammingV0(group.Criteria, "no inferir semantica") ||
+		len(group.AcceptanceChecks) != 1 ||
+		group.AcceptanceChecks[0].CriterionRef != "criterion-ref-mcp-visible-001" ||
+		group.AcceptanceChecks[0].Command != "go test -count=1 ./modulos/orquesta-mcp -run TestMCPAutoprogramming" {
 		t.Fatalf("group=%+v", group)
 	}
 }
@@ -172,6 +180,10 @@ func TestMCPAutoprogrammingValidateRequestExecutorV0GoalFirstNoExponeWorkflowTas
 		TaskRef:     "task-ref-mcp-goal-first-001",
 		Area:        "MCP",
 		ContextRefs: []string{"goal_migration:goal-first", "goal_capability:starter", "goal_capability:observer", "goal_capability:closure-validator"},
+		AcceptanceChecks: []orquestaautoprogramming.AutoprogrammingAcceptanceCheckV0{{
+			CriterionRef: "criterion-ref-mcp-goal-ready-001",
+			Command:      "go test -count=1 ./modulos/orquesta-mcp -run TestMCPAutoprogrammingValidateRequest",
+		}},
 	}}
 	request.WriteSet = []string{"modulos/orquesta-mcp/autoprogramming_validate_request_tool_v0.go"}
 
@@ -197,7 +209,10 @@ func TestMCPAutoprogrammingValidateRequestExecutorV0GoalFirstNoExponeWorkflowTas
 		group.WorkProfileRef != "" ||
 		group.WorkKind != "goal_work_spec" ||
 		group.PhaseID != "goal_first" ||
-		len(group.WriteSet) != 1 {
+		len(group.WriteSet) != 1 ||
+		len(group.AcceptanceChecks) != 1 ||
+		group.AcceptanceChecks[0].CriterionRef != "criterion-ref-mcp-goal-ready-001" ||
+		group.AcceptanceChecks[0].Command != "go test -count=1 ./modulos/orquesta-mcp -run TestMCPAutoprogrammingValidateRequest" {
 		t.Fatalf("group=%+v", group)
 	}
 }

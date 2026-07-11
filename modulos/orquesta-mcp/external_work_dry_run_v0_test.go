@@ -46,7 +46,9 @@ func TestBuildExternalWorkDryRunV0CompilaMismoSpecGoalFirstSinLanzarV0(t *testin
 		result.SpecSummary.SpecHash != wantSummary.SpecHash ||
 		result.SpecSummary.WriteSetCount != len(want.WriteSet) ||
 		result.SpecSummary.RequiredTestCount != len(want.RequiredTests) ||
-		!mcpExternalWorkRunStringInSetTestV0(result.SpecSummary.RequiredTestRefs, "domain-test-ref-qc") {
+		!mcpExternalWorkRunStringInSetTestV0(result.SpecSummary.RequiredTestRefs, "domain-test-ref-qc") ||
+		result.SpecSummary.RequiredAcceptanceCriteriaRefCount != 0 ||
+		result.SpecSummary.AcceptanceCriteriaCount != len(want.AcceptanceCriteria) {
 		t.Fatalf("spec_summary dry-run no coincide\nwant=%+v\ngot=%+v", wantSummary, result.SpecSummary)
 	}
 	if result.EstModel != "gpt-test" || result.EstTokens <= 0 || result.EstCostUSD <= 0 || result.EstWallClock == "" {
@@ -63,6 +65,57 @@ func TestBuildExternalWorkDryRunV0CompilaMismoSpecGoalFirstSinLanzarV0(t *testin
 		if strings.Contains(string(encoded), forbidden) {
 			t.Fatalf("dry-run publico filtra %q en %s", forbidden, string(encoded))
 		}
+	}
+}
+
+func TestMCPGoalWorkSpecSummaryV0SeparaRefsRequeridasDeCriteriosCualitativos(t *testing.T) {
+	summary := mcpGoalWorkSpecSummaryV0(orquestagoal.GoalWorkSpecV0{
+		GoalRef:            "goal-ref-required-criteria-summary-001",
+		Objective:          "Proyectar refs de aceptacion requeridas.",
+		DirectorKind:       orquestagoal.GoalDirectorKindCodexGoalV0,
+		AcceptanceCriteria: nil,
+		RequiredTests: []orquestagoal.GoalRequiredTestV0{{
+			TestRef:                "test-ref-required-criteria-summary-001",
+			AcceptanceCriteriaRefs: []string{"criterion-ref-summary-001", "criterion-ref-summary-002"},
+		}},
+		ClosurePolicy: orquestagoal.GoalClosurePolicyV0{
+			RequiredAcceptanceCriteriaRefs: []string{"criterion-ref-summary-001", "criterion-ref-summary-002", "criterion-ref-summary-003"},
+		},
+	})
+
+	if summary.AcceptanceCriteriaCount != 0 ||
+		summary.RequiredAcceptanceCriteriaRefCount != 3 ||
+		!mcpExternalWorkRunStringInSetTestV0(summary.RequiredAcceptanceCriteriaRefs, "criterion-ref-summary-001") ||
+		!mcpExternalWorkRunStringInSetTestV0(summary.RequiredAcceptanceCriteriaRefs, "criterion-ref-summary-002") ||
+		!mcpExternalWorkRunStringInSetTestV0(summary.RequiredAcceptanceCriteriaRefs, "criterion-ref-summary-003") {
+		t.Fatalf("summary=%+v", summary)
+	}
+}
+
+func TestMCPAutoprogrammingPrepareRunSummaryV0ExponeRefsRequeridasSinCriteriosCualitativos(t *testing.T) {
+	payload, err := json.Marshal(MCPAutoprogrammingPrepareRunToolResultV0{
+		Estado:   MCPAutoprogrammingPrepareRunEstadoOKV0,
+		Accepted: true,
+		GoalSpecs: []orquestagoal.GoalWorkSpecV0{{
+			GoalRef:       "goal-ref-prepare-required-criteria-001",
+			Objective:     "Preparar handoff con refs requeridas.",
+			DirectorKind:  orquestagoal.GoalDirectorKindCodexGoalV0,
+			RequiredTests: []orquestagoal.GoalRequiredTestV0{{TestRef: "test-ref-prepare-required-criteria-001", AcceptanceCriteriaRefs: []string{"criterion-ref-prepare-001"}}},
+			ClosurePolicy: orquestagoal.GoalClosurePolicyV0{RequiredAcceptanceCriteriaRefs: []string{"criterion-ref-prepare-001"}},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal prepare-run: %v", err)
+	}
+	var result MCPAutoprogrammingPrepareRunToolResultV0
+	if err := json.Unmarshal(payload, &result); err != nil {
+		t.Fatalf("decode prepare-run: %v", err)
+	}
+	if len(result.GoalSpecSummaries) != 1 ||
+		result.GoalSpecSummaries[0].AcceptanceCriteriaCount != 0 ||
+		result.GoalSpecSummaries[0].RequiredAcceptanceCriteriaRefCount != 1 ||
+		!mcpExternalWorkRunStringInSetTestV0(result.GoalSpecSummaries[0].RequiredAcceptanceCriteriaRefs, "criterion-ref-prepare-001") {
+		t.Fatalf("prepare-run summaries=%+v", result.GoalSpecSummaries)
 	}
 }
 

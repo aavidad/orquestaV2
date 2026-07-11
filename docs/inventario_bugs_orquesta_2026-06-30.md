@@ -4065,3 +4065,13 @@ cierre: verificador independiente que ejecute invariantes de aceptación además
 de tests, detecte símbolos residuales y rechace checklist autodeclarado. Detalle
 en la [incidencia 208AG](incidencias/incidencia_orquesta_cleanup_symbols_self_declared_2026-07-11.md);
 queda abierto.
+
+Avance 2026-07-11: `b96e9b115` añade refs obligatorias de criterios
+verificables al contrato Goal; el transporte posterior añade
+`acceptance_checks` tipados a autoprogramacion V0/V1 y los publica por MCP. Los
+checks se fusionan por comando, quedan dentro del hash congelado y exigen
+atestacion independiente. El fallback idle deja de aceptar un result
+autodeclarado cuando falta closure atestado. Residual abierto: migrar callers
+legacy que solo emiten `acceptance_criteria` textual; no se asocian por
+heuristica a un comando. Repetir el fixture U1000 como check tipado antes del
+cierre final.
