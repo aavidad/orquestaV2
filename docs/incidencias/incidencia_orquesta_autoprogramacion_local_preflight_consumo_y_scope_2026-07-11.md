@@ -74,6 +74,31 @@ reduce contexto y conserva artefactos/baseline. Si sigue sin progreso, aplica
 el hard stop confirmado de `222`. No inferir avance desde summary, nombres de
 fichero, heartbeat ni refs que solo contengan la palabra checkpoint.
 
+Avance de nucleo 2026-07-11:
+
+- `ab1896d68` define en `orquesta-autoprogramming` la decision pura por tramo,
+  con clases `diff|test|result|receipt|none` y escalado
+  `warning -> replan_required -> hard_stop_required`. Conserva la historia de
+  evidencias para impedir replay `A -> B -> A` y un cambio de revision exige
+  tramo causal nuevo.
+- `5e5ae3c2e` añade a `orquesta-goal` uso observado neutral y tipado por goal:
+  tokens acumulados, runtime, fecha, fuente y evidencias. El valor cero no
+  cambia el JSON historico.
+- `7aee819f4` define documento/puerto CAS de progreso con identidad compuesta,
+  baseline, hash de write-set, checkpoint y claves de accion deterministas.
+
+Hallazgo estructural durante la integracion: `autoprogramming/status` tomaba
+`UsageSummary.TotalTokens` agregado del run, mientras el app-server dispone de
+`thread/goal/get.tokensUsed` por goal y solo lo reducia a `Summary` al superar
+un umbral. No se pueden sumar ni intercambiar ambos contadores. La politica
+nueva consumira exclusivamente la observacion tipada por goal; MCP quedara como
+proyeccion de la decision persistida y no parseara summaries ni nombres.
+
+Pendiente para cerrar `226`: adaptador JSON atomico/CAS, transporte del uso
+desde cada backend, clasificacion verificada de diff/test/result/receipt,
+ejecutor idempotente de warning/replan/stop y prueba empirica con un goal real
+acotado. Los contratos puros por si solos no cierran el bug.
+
 ## BUG-ORQ-20260711-223: `observe` manual dio 500 durante observacion residente
 
 Mientras el goal anterior estaba `running`, el observador residente produjo
