@@ -156,10 +156,23 @@ func (adapter codexGoalWorkspaceAdapterV0) requestForStartV0(packet orquestarunt
 		RunRef:        firstNonEmptyCodexGoalWorkspaceAdapterV0(packet.RequestRef, goalRef),
 		GoalRef:       goalRef,
 		ProjectRef:    firstNonEmptyCodexGoalWorkspaceAdapterV0(packet.ProjectRef, adapter.ProjectRefFallback),
-		WorktreeRef:   strings.TrimSpace(adapter.WorktreeRefFallback),
+		WorktreeRef:   firstNonEmptyCodexGoalWorkspaceAdapterV0(codexGoalWorkspacePacketContextRefV0(packet, "worktree"), adapter.WorktreeRefFallback),
 		SourceWorkDir: strings.TrimSpace(adapter.SourceWorkDir),
 		WorkspaceRoot: strings.TrimSpace(adapter.WorkspaceRoot),
 	}
+}
+
+func codexGoalWorkspacePacketContextRefV0(
+	packet orquestaruntimecodexgoal.CodexGoalStartPacketV0,
+	kind string,
+) string {
+	kind = strings.TrimSpace(kind)
+	for _, ref := range packet.ContextRefs {
+		if strings.TrimSpace(ref.Kind) == kind {
+			return strings.TrimSpace(ref.Ref)
+		}
+	}
+	return ""
 }
 
 func (adapter codexGoalWorkspaceAdapterV0) requestFromIdentityV0(identity codexGoalWorkspaceRequestIdentityV0) orquestaruntimeworktree.GoalWorkspaceRequestV0 {

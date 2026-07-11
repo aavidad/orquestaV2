@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaruntimecodexgoal "orquesta/modulos/orquesta-runtime-codex-goal"
 )
 
@@ -70,6 +71,27 @@ func TestCodexGoalWorkspaceAdapterV0RejectsConflictingRequestIdentity(t *testing
 	packet.ProjectRef = "project-ref-conflict"
 	if _, err := adapter.PrepareCodexGoalWorkspaceV0(context.Background(), packet); !errors.Is(err, errCodexGoalWorkspaceAdapterConflictV0) {
 		t.Fatalf("conflicting identity err=%v", err)
+	}
+}
+
+func TestCodexGoalWorkspaceAdapterV0UsaWorktreeTipadoDelGoalV0(t *testing.T) {
+	adapter := codexGoalWorkspaceAdapterV0{
+		SourceWorkDir:       t.TempDir(),
+		WorkspaceRoot:       t.TempDir(),
+		ProjectRefFallback:  "project-ref-fallback",
+		WorktreeRefFallback: "worktree-ref-fallback",
+	}
+	request := adapter.requestForStartV0(orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		GoalRef:    "goal-ref-workspace-typed",
+		RequestRef: "run-ref-workspace-typed",
+		ProjectRef: "project-ref-workspace-typed",
+		ContextRefs: []orquestagoal.GoalContextRefV0{{
+			Kind: "worktree",
+			Ref:  "worktree-ref-workspace-typed",
+		}},
+	})
+	if request.WorktreeRef != "worktree-ref-workspace-typed" {
+		t.Fatalf("worktree_ref=%q", request.WorktreeRef)
 	}
 }
 
