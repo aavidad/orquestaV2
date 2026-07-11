@@ -2,7 +2,7 @@
 
 Fecha: 2026-07-11
 ID: BUG-ORQ-20260711-208AF
-Estado: abierto
+Estado: cerrado en codigo local y replay real aislado
 Area: autoprogramacion goal-first / observacion Codex app-server / reconciliacion terminal
 
 ## Resumen
@@ -40,4 +40,33 @@ Raiz del smoke: `/tmp/orquesta-cleanup-goal-20260711`.
   irreversible por si solo.
 - Un terminal de backend con resultado durable puede reconciliar un `blocked`
   transitorio anterior.
-- Pruebas focales y el smoke aceptan el goal terminado y su resultado durable.
+- Pruebas focales y replay real ingieren el goal terminado y su resultado
+  durable. La aceptacion final sigue sometida a la atestacion independiente;
+  no se fuerza un verde si aparece otro fallo causal.
+
+## Cierre 2026-07-11
+
+Commit: `c0e728fc3` (`fix: reconcilia recibos canonicos de goals`).
+
+- El observer futuro ya no persiste `blocked` irreversible por alto consumo:
+  el corte `b0755fc5b` conserva `running` y publica aviso/replan recuperable.
+- El reconciliador y el watcher leen primero el recibo canonico derivado en
+  `.orquesta-runtime/goal-receipts/<goal>/`, fuera del write-set de producto.
+- El recibo canonico exige fichero regular, path resuelto dentro del proyecto,
+  resultado terminal valido y `goal_ref` exacto. Un canonico invalido no cae a
+  un recibo legacy ni activa reparacion sintetica; un canonico valido tiene
+  precedencia sobre sidecars legacy.
+- `LoadTerminalGoalMaterializedResultV0` y
+  `ResolveDirectorGoalMaterializedRefsV0` comparten esa precedencia.
+
+Verificacion:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack`: verde.
+- `go test -race -count=1 ./modulos/orquesta-app-codex-stack`: verde.
+- Replay sobre copia del estado real en
+  `/tmp/orquesta-208af-replay-20260711-4`: el store paso de version 12
+  `blocked/goal_active_no_checkpoint_high_consumption` a version 14
+  `complete`, con el summary y la evidencia del resultado durable canonico.
+  El cierre quedo `blocked/requires_rework` por falta de atestacion independiente
+  confiable, no por alto consumo. Es el comportamiento correcto ante el falso
+  verde separado `BUG-ORQ-20260711-208AG`.

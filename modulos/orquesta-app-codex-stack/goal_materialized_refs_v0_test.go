@@ -989,6 +989,62 @@ func TestStackGoalMaterializedRefsSourceV0NoReparaReceiptCanonicoInvalidoBUG208A
 	}
 }
 
+func TestStackGoalMaterializedRefsSourceV0RechazaExternalGoalRefCanonicoContradictorioBUG208AFV0(t *testing.T) {
+	ctx := context.Background()
+	projectDir := t.TempDir()
+	state := goalMaterializedRefsStateForTestV0(t, "run-goal-materialized-canonical-external-mismatch", "generated-apps/empty")
+	state.ExternalGoalRef = "external-goal-real"
+	state.LaunchReceipt.ExternalGoalRef = state.ExternalGoalRef
+	var err error
+	state, err = orquestagoal.NewGoalWorkStateV0(state)
+	if err != nil {
+		t.Fatalf("NewGoalWorkStateV0: %v", err)
+	}
+	goalMaterializedWriteCanonicalReceiptForTestV0(t, projectDir, state, `{
+  "schema_version":"orquesta_goal_result.v0",
+  "goal_ref":"`+state.GoalRef+`",
+  "external_goal_ref":"external-goal-ajeno",
+  "status":"complete",
+  "summary":"external contradictorio"
+}`)
+	store := newGoalFirstQueueStateStoreForTestV0()
+	if err := store.SaveGoalWorkStateV0(ctx, state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	_, ok, err := (stackGoalMaterializedRefsSourceV0{
+		Config:                       ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir}},
+		GoalStateStore:               store,
+		RepairMissingTerminalReceipt: true,
+	}).ResolveDirectorGoalMaterializedRefsV0(ctx, state)
+	if err != nil || ok {
+		t.Fatalf("external_goal_ref contradictorio aceptado: ok=%v err=%v", ok, err)
+	}
+	persisted, err := store.LoadGoalWorkStateV0(ctx, state.RunRef)
+	if err != nil || !reflect.DeepEqual(state, persisted) {
+		t.Fatalf("estado modificado: state=%+v persisted=%+v err=%v", state, persisted, err)
+	}
+}
+
+func TestStackGoalMaterializedRefsSourceV0RechazaReceiptCanonicoSymlinkFueraDelProyectoBUG208AFV0(t *testing.T) {
+	projectDir := t.TempDir()
+	state := goalMaterializedRefsStateForTestV0(t, "run-goal-materialized-canonical-symlink", "generated-apps/empty")
+	outside := filepath.Join(t.TempDir(), "receipt.json")
+	if err := os.WriteFile(outside, []byte(`{"schema_version":"orquesta_goal_result.v0","goal_ref":"`+state.GoalRef+`","status":"complete"}`), 0o600); err != nil {
+		t.Fatalf("write outside receipt: %v", err)
+	}
+	canonicalPath := goalMaterializedCanonicalReceiptPathForTestV0(projectDir, state)
+	if err := os.MkdirAll(filepath.Dir(canonicalPath), 0o700); err != nil {
+		t.Fatalf("mkdir canonical receipt: %v", err)
+	}
+	if err := os.Symlink(outside, canonicalPath); err != nil {
+		t.Fatalf("symlink canonical receipt: %v", err)
+	}
+	scan, err := (stackGoalMaterializedRefsSourceV0{}).scanCanonicalGoalMaterializedReceiptV0(projectDir, state)
+	if err != nil || !scan.HasInvalidCanonicalReceipt || scan.TerminalResult != nil {
+		t.Fatalf("symlink canonico no rechazado: scan=%+v err=%v", scan, err)
+	}
+}
+
 func TestStackGoalMaterializedRefsSourceV0MantieneBlockedAjenoSinReceiptBUG208AFV0(t *testing.T) {
 	ctx := context.Background()
 	state := goalMaterializedRefsStateForTestV0(t, "run-goal-materialized-blocked-intact-001", "generated-apps/empty")
@@ -1282,18 +1338,22 @@ func goalMaterializedWriteCanonicalReceiptForTestV0(
 	receipt string,
 ) {
 	t.Helper()
-	goalRef := goalMaterializedStateGoalRefV0(state)
-	path := filepath.Join(
-		projectDir,
-		filepath.FromSlash(orquestaruntimecodexgoal.CodexGoalRuntimeReceiptRelativeDirV0(goalRef)),
-		orquestaruntimecodexgoal.CodexGoalResultFileNameForGoalRefV0(goalRef),
-	)
+	path := goalMaterializedCanonicalReceiptPathForTestV0(projectDir, state)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatalf("mkdir canonical receipt: %v", err)
 	}
 	if err := os.WriteFile(path, []byte(receipt), 0o600); err != nil {
 		t.Fatalf("write canonical receipt: %v", err)
 	}
+}
+
+func goalMaterializedCanonicalReceiptPathForTestV0(projectDir string, state orquestagoal.GoalWorkStateV0) string {
+	goalRef := goalMaterializedStateGoalRefV0(state)
+	return filepath.Join(
+		projectDir,
+		filepath.FromSlash(orquestaruntimecodexgoal.CodexGoalRuntimeReceiptRelativeDirV0(goalRef)),
+		orquestaruntimecodexgoal.CodexGoalResultFileNameForGoalRefV0(goalRef),
+	)
 }
 
 func containsStringPrefixForTestV0(values []string, prefix string) bool {

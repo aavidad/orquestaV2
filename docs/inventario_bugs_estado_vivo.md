@@ -1,6 +1,6 @@
 # Bugs vivos de Orquesta - indice canonico
 
-Actualizado: 2026-07-11 (incidencias operativas 208AF, 208AG y 208AH abiertas).
+Actualizado: 2026-07-11 (incidencias operativas 208AG y 208AH abiertas).
 Mantenedor: Claude (revisor). Regla: UNA fila por bug vivo con su residual
 exacto; el historial completo vive en
 `docs/inventario_bugs_orquesta_2026-06-30.md` y NO se cuenta desde alli.
@@ -35,7 +35,6 @@ remoto ni cierra validaciones de proveedor/campo.
 | CODEX-HOME-TOKEN-INVALIDADO | auth Codex remota caducada | reauth del operador en servidor; hoy ademas cuota local agotada |
 | BUG-ORQ-20260711-208AD | smoke local de autoprogramacion: `prepare-run` acepto el goal, pero el receipt quedo `invalid` por `codex_app_server_tmux_has_session_failed` y la observacion acabo `blocked/goal_backend_gone_without_result`; la causa sigue en investigacion | reproducir la carrera tmux con target exacto que contiene `:` y retener argv/rc/stdout/stderr antes de proponer cambio; evidencia en la [incidencia 208AD](incidencias/incidencia_orquesta_autoprogramacion_tmux_target_colon_race_2026-07-11.md) |
 | BUG-ORQ-20260711-208AE | goal-first `app_server_tmux` ignoraba el routing canonico: el modelo ya queda Terra en `f40ff7252`, pero `thread/goal/set` activa el goal antes del override medium de `turn/start` y conserva high | aplicar `thread/settings/update` antes de activar el goal, fallar cerrado y repetir el smoke con Terra/medium; evidencia en la [incidencia 208AE](incidencias/incidencia_orquesta_goal_first_ignora_model_routing_2026-07-11.md) |
-| BUG-ORQ-20260711-208AF | el observer marco `blocked/goal_active_no_checkpoint_high_consumption` cerca de 100k pese a checkpoint temprano; el goal Terra/medium termino `complete` con resultado durable y 202292 tokens, pero `observe` posterior 504 no reconcilio ese terminal | reconocer progreso material, tratar alto consumo como aviso/replan recuperable y reconciliar `blocked` transitorio desde el resultado durable; evidencia en la [incidencia 208AF](incidencias/incidencia_orquesta_goal_observer_high_consumption_terminal_reconcile_2026-07-11.md) |
 | BUG-ORQ-20260711-208AG | falso verde: el goal `019f4f10...` declaro diez grupos eliminados y tests pasados, pero un verificador independiente encontro `writeTmuxOwnerMarkerAtomicV0`, `cleanupStartedTmuxGenerationV0` y `codexAppServerWriteSetCheckpointDirRelV0` aun U1000; required tests no prueban la invariante de simbolos ni rechazan checklist autodeclarado | ejecutar verificador independiente de invariantes de aceptación además de tests y rechazar receipts sin prueba de ausencia de símbolos residuales; evidencia en la [incidencia 208AG](incidencias/incidencia_orquesta_cleanup_symbols_self_declared_2026-07-11.md), relacionada con [208H](../pruebas_revisor_208h_2026-07-10.md) y [208AF](incidencias/incidencia_orquesta_goal_observer_high_consumption_terminal_reconcile_2026-07-11.md) |
 | BUG-ORQ-20260711-208AH | mitigado localmente: al reabrir un subagente, `/home` estaba al 100% y falló `No space left on device`; `/` tenía 134G y `/tmp` 44G. Sin procesos Go, `go clean -cache` liberó 17G y `/home` quedó al 99% | prevención pendiente: preflight `df` por mounts incluyendo `$HOME`, caches aisladas y `cache budget/receipt`; no atribuir todo el uso a Orquesta ni borrar caches ajenas. Evidencia en la [incidencia 208AH](incidencias/incidencia_orquesta_home_lleno_reapertura_subagente_2026-07-11.md), relacionada con [BUG-ORQ-20260704-172](inventario_bugs_orquesta_2026-06-30.md) |
 | BUG-ORQ-20260710-208T | retencion runtime sin cuota: `.orquesta-runtime/codex-waves` ocupa 16 GB y conserva 399 homes aislados; no se puede purgar sin clasificar evidencia | retenedor gobernado con inventario, dry-run, export/compresion, cuota y recibo; evidencia en la [incidencia 208T](incidencias/incidencia_orquesta_retencion_runtime_codex_waves_2026-07-10.md) |
@@ -43,6 +42,12 @@ remoto ni cierra validaciones de proveedor/campo.
 
 ## Cerrados hoy (referencia rapida)
 
+- BUG-ORQ-20260711-208AF: cerrado por `b0755fc5b` + `c0e728fc3`. Alto
+  consumo ya no crea un terminal irreversible y los caminos residente/MCP
+  reconcilian el recibo canonico causal fuera del write-set. El replay real
+  paso el estado antiguo de `blocked/high_consumption` a `complete`; la
+  aceptacion quedo correctamente en rework por el bug independiente 208AG.
+  Evidencia en la [incidencia 208AF](incidencias/incidencia_orquesta_goal_observer_high_consumption_terminal_reconcile_2026-07-11.md).
 - BUG-ORQ-20260710-208A-D: cierre de codigo local R4. Una confirmacion de
   cleanup atribuible supera snapshot stale; fallos parciales son reintentables;
   shutdown no publica ready con trabajo; ausencia no prueba parada. Evidencia

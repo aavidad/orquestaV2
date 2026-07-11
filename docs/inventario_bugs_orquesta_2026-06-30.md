@@ -4032,7 +4032,7 @@ solo esa metrica bajo instrumentacion `-race`, ejecutando todas las aserciones.
 Evidencia:
 `docs/incidencias/incidencia_orquesta_race_harness_shutdown_2026-07-11.md`.
 
-BUG nuevo `BUG-ORQ-20260711-208AF` (abierto, observacion/reconciliacion
+BUG `BUG-ORQ-20260711-208AF` (cerrado localmente, observacion/reconciliacion
 goal-first): el smoke local retenido en `/tmp/orquesta-cleanup-goal-20260711`,
 run `autoprog-cleanup-deadcode-appserver-20260711`, completo el goal externo
 `019f4f10-0c7f-7421-ae18-143dc6482642` con Terra/`medium`, diff de 156 lineas
@@ -4040,9 +4040,13 @@ borradas, resultado durable y `202292` tokens. Sin embargo, cerca de 100k el
 observer ya habia persistido `blocked` por
 `goal_active_no_checkpoint_high_consumption`, pese a checkpoint temprano. El
 `observe` HTTP posterior devolvio 504, conservo el bloqueo y no ingirio el
-terminal. Estado abierto: reconocer progreso/checkpoint material, mantener alto
-consumo como aviso o replan recuperable y permitir que un resultado durable de
-backend reconcilie un `blocked` transitorio. Detalle y cierre exigido en la
+terminal. Cierre: `b0755fc5b` deja el alto consumo como aviso recuperable y
+`c0e728fc3` ingiere con precedencia el recibo canonico causal fuera del
+write-set, sin fallback desde canonico invalido. Suite focal y `-race` verdes.
+El replay `/tmp/orquesta-208af-replay-20260711-4` llevo la copia del estado real
+de version 12 `blocked/high_consumption` a version 14 `complete`; no publico
+`accepted` porque la atestacion independiente de ese trabajo sigue fallando por
+el bug separado 208AG. Detalle y evidencia en la
 [incidencia 208AF](incidencias/incidencia_orquesta_goal_observer_high_consumption_terminal_reconcile_2026-07-11.md); indice vigente:
 [estado vivo](inventario_bugs_estado_vivo.md).
 
