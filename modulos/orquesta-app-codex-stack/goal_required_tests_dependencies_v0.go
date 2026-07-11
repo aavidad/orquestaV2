@@ -156,10 +156,12 @@ func goalSpecWithDependencyRequiredTestsV0(
 		if command == "" || goalRequiredTestCommandAlreadyExistsV0(existing, command) {
 			continue
 		}
-		spec.RequiredTests = append(spec.RequiredTests, orquestagoal.GoalRequiredTestV0{
-			TestRef: "test-ref-goal-dependency-" + shortGoalRequiredTestDependencyHashV0(command),
-			Command: command,
+		test := orquestagoal.FreezeGoalRequiredTestV0(orquestagoal.GoalRequiredTestV0{
+			TestRef:    "test-ref-goal-dependency-" + shortGoalRequiredTestDependencyHashV0(command),
+			CommandRef: "command-ref-goal-dependency-" + shortGoalRequiredTestDependencyHashV0(command),
+			Command:    command,
 		})
+		spec.RequiredTests = append(spec.RequiredTests, test)
 		existing = append(existing, command)
 	}
 	if len(result.Commands) > 0 {

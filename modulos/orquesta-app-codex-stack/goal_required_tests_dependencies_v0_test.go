@@ -83,6 +83,13 @@ func TestGoalLauncherWithRequiredTestsDependenciesV0InyectaTestsAntesDeLanzarV0(
 		!stringInSetV0(inner.lastSpec.EvidenceRefs, "evidence-ref-deps-orchestration-core") {
 		t.Fatalf("spec sin required deps: %+v", inner.lastSpec)
 	}
+	for _, test := range inner.lastSpec.RequiredTests {
+		if test.Command == "go test -count=1 ./modulos/orquesta-orchestration-core" &&
+			(test.CommandRef == "" || test.CommandSHA256 == "" ||
+				test.DefinitionSHA256 != orquestagoal.FreezeGoalRequiredTestV0(test).DefinitionSHA256) {
+			t.Fatalf("required test dependiente sin congelar: %+v", test)
+		}
+	}
 }
 
 func TestGoalLauncherWithRequiredTestsDependenciesV0FailOpenConEvidenciaSiResolverFallaV0(t *testing.T) {

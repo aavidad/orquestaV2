@@ -241,6 +241,10 @@ func NormalizeGoalRequiredTestAttestationV0(attestation GoalRequiredTestAttestat
 	attestation.CommandSHA256 = strings.ToLower(strings.TrimSpace(attestation.CommandSHA256))
 	attestation.DefinitionSHA256 = strings.ToLower(strings.TrimSpace(attestation.DefinitionSHA256))
 	attestation.Status = strings.TrimSpace(attestation.Status)
+	attestation.FailureCode = strings.TrimSpace(attestation.FailureCode)
+	if attestation.Status == GoalRequiredTestAttestationStatusFailedV0 && attestation.FailureCode == "" {
+		attestation.FailureCode = ErrGoalRequiredTestAttestationFailedV0
+	}
 	attestation.ImplementerAgentRef = strings.TrimSpace(attestation.ImplementerAgentRef)
 	attestation.AttestorAgentRef = strings.TrimSpace(attestation.AttestorAgentRef)
 	attestation.AttestorCredentialRef = strings.TrimSpace(attestation.AttestorCredentialRef)
@@ -277,6 +281,12 @@ func ValidateGoalRequiredTestAttestationV0(attestation GoalRequiredTestAttestati
 	}
 	if attestation.Status != GoalRequiredTestAttestationStatusPassedV0 && attestation.Status != GoalRequiredTestAttestationStatusFailedV0 {
 		issues = append(issues, GoalWorkIssueV0{Code: ErrGoalRequiredTestAttestationMismatchV0, Field: "status"})
+	}
+	if attestation.Status == GoalRequiredTestAttestationStatusFailedV0 {
+		validateRequiredGoalRefV0(&issues, "failure_code", attestation.FailureCode)
+	}
+	if attestation.Status == GoalRequiredTestAttestationStatusPassedV0 && attestation.FailureCode != "" {
+		issues = append(issues, GoalWorkIssueV0{Code: ErrGoalRequiredTestAttestationMismatchV0, Field: "failure_code"})
 	}
 	if !validGoalSHA256V0(attestation.WriteSetSHA256) {
 		issues = append(issues, GoalWorkIssueV0{Code: ErrGoalRequiredTestAttestationMismatchV0, Field: "write_set_sha256"})
@@ -336,7 +346,7 @@ func independentGoalRequiredTestAttestationBindingsV0(
 				return nil, GoalWorkIssueV0{Code: ErrGoalRequiredTestSnapshotMismatchV0, Field: "hashes_before_after"}
 			}
 			if attestation.Status != GoalRequiredTestAttestationStatusPassedV0 || attestation.ExitCode != 0 {
-				return nil, GoalWorkIssueV0{Code: ErrGoalRequiredTestAttestationFailedV0, Field: "required_test_attestations"}
+				return nil, GoalWorkIssueV0{Code: attestationFailureCodeV0(attestation), Field: "required_test_attestations"}
 			}
 		}
 		if len(matched) == 0 {
@@ -353,9 +363,16 @@ func independentGoalRequiredTestAttestationBindingsV0(
 func blockedGoalRequiredTestAttestationClosureV0(closure GoalClosureValidationV0, code, field string) GoalClosureValidationV0 {
 	closure.Status = GoalStatusBlockedV0
 	closure.Accepted = false
-	closure.NeedsRework = true
+	closure.NeedsRework = code != ErrGoalRequiredTestAttestorInfrastructureFailedV0
 	closure.Issues = append(closure.Issues, GoalWorkIssueV0{Code: code, Field: field})
 	return closure
+}
+
+func attestationFailureCodeV0(attestation GoalRequiredTestAttestationV0) string {
+	if code := strings.TrimSpace(attestation.FailureCode); code != "" {
+		return code
+	}
+	return ErrGoalRequiredTestAttestationFailedV0
 }
 
 func normalizeGoalRequiredTestAttestationTestV0(test GoalRequiredTestV0) GoalRequiredTestV0 {
@@ -538,10 +555,15 @@ func GoalRequiredTestAttestationClaimRefV0(request GoalRequiredTestAttestationCl
 }
 
 func GoalRequiredTestAttestationCanonicalRefV0(attestation GoalRequiredTestAttestationV0) string {
-	return "goal-required-test-attestation-ref-" + goalRequiredTestCommandSHA256V0(strings.Join([]string{
+	parts := []string{
 		strings.TrimSpace(attestation.RunRef), strings.TrimSpace(attestation.GoalRef), strings.TrimSpace(attestation.RevisionRef),
 		strings.TrimSpace(attestation.TestRef), strings.ToLower(strings.TrimSpace(attestation.DefinitionSHA256)),
-	}, "\x00"))
+	}
+	if failureCode := attestationFailureCodeV0(attestation); strings.TrimSpace(attestation.Status) == GoalRequiredTestAttestationStatusFailedV0 &&
+		failureCode != ErrGoalRequiredTestAttestationFailedV0 {
+		parts = append(parts, failureCode)
+	}
+	return "goal-required-test-attestation-ref-" + goalRequiredTestCommandSHA256V0(strings.Join(parts, "\x00"))
 }
 
 func NormalizeGoalRequiredTestAttestationClaimV0(claim GoalRequiredTestAttestationClaimV0) GoalRequiredTestAttestationClaimV0 {

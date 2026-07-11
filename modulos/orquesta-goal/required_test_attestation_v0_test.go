@@ -66,6 +66,46 @@ func TestGoalRequiredTestAttestationV0TestMutationAfterSnapshotBlocks(t *testing
 	}
 }
 
+func TestGoalRequiredTestAttestationV0InfrastructureFailureBlocksWithoutRework(t *testing.T) {
+	spec := attestationSpecForTestV0(1)
+	snapshot := attestationSnapshotForTestV0(spec, "revision-ref-current")
+	receipt := attestationForTestV0(spec, snapshot, spec.RequiredTests[0], GoalRequiredTestAttestationStatusFailedV0)
+	receipt.FailureCode = ErrGoalRequiredTestAttestorInfrastructureFailedV0
+	receipt.AttestationRef = GoalRequiredTestAttestationCanonicalRefV0(receipt)
+	store := &attestationStoreForTestV0{snapshot: snapshot, items: []GoalRequiredTestAttestationV0{receipt}}
+	closure, err := (IndependentGoalRequiredTestAttestationClosureValidatorV0{
+		Reader: store, SnapshotReader: store, IdentityVerifier: identityVerifierForTestV0{verified: true, independent: true},
+	}).ValidateGoalWorkClosureV0(context.Background(), spec, completedAttestedGoalResultForTestV0(spec))
+	if err != nil || closure.Accepted || closure.NeedsRework || !hasAttestationIssueForTestV0(closure, ErrGoalRequiredTestAttestorInfrastructureFailedV0) {
+		t.Fatalf("closure=%+v err=%v", closure, err)
+	}
+}
+
+func TestGoalRequiredTestAttestationV0OrdinaryFailureNeedsRework(t *testing.T) {
+	spec := attestationSpecForTestV0(1)
+	snapshot := attestationSnapshotForTestV0(spec, "revision-ref-current")
+	receipt := attestationForTestV0(spec, snapshot, spec.RequiredTests[0], GoalRequiredTestAttestationStatusFailedV0)
+	store := &attestationStoreForTestV0{snapshot: snapshot, items: []GoalRequiredTestAttestationV0{receipt}}
+	closure, err := (IndependentGoalRequiredTestAttestationClosureValidatorV0{
+		Reader: store, SnapshotReader: store, IdentityVerifier: identityVerifierForTestV0{verified: true, independent: true},
+	}).ValidateGoalWorkClosureV0(context.Background(), spec, completedAttestedGoalResultForTestV0(spec))
+	if err != nil || closure.Accepted || !closure.NeedsRework || !hasAttestationIssueForTestV0(closure, ErrGoalRequiredTestAttestationFailedV0) {
+		t.Fatalf("closure=%+v err=%v", closure, err)
+	}
+}
+
+func TestGoalRequiredTestAttestationV0OrdinaryFailurePreservesLegacyCanonicalRef(t *testing.T) {
+	spec := attestationSpecForTestV0(1)
+	snapshot := attestationSnapshotForTestV0(spec, "revision-ref-current")
+	receipt := attestationForTestV0(spec, snapshot, spec.RequiredTests[0], GoalRequiredTestAttestationStatusFailedV0)
+	receipt.FailureCode = ""
+	legacyRef := GoalRequiredTestAttestationCanonicalRefV0(receipt)
+	receipt.FailureCode = ErrGoalRequiredTestAttestationFailedV0
+	if currentRef := GoalRequiredTestAttestationCanonicalRefV0(receipt); currentRef != legacyRef {
+		t.Fatalf("ordinary failed receipt changed canonical identity: legacy=%s current=%s", legacyRef, currentRef)
+	}
+}
+
 func TestGoalRequiredTestAttestationV0LifecycleFailsClosedWithoutSnapshotPort(t *testing.T) {
 	spec := attestationSpecForTestV0(1)
 	stateStore := &attestationGoalStateStoreForTestV0{state: attestationRunningStateForTestV0(spec)}
@@ -138,6 +178,22 @@ func TestGoalRequiredTestAttestationV0ErrorTrasClaimPersisteReworkSinReintento(t
 	}
 }
 
+func TestGoalRequiredTestAttestationV0InfrastructureFailureReplayDoesNotRunAttestor(t *testing.T) {
+	spec := attestationSpecForTestV0(1)
+	snapshot := attestationSnapshotForTestV0(spec, "revision-ref-current")
+	receipt := attestationForTestV0(spec, snapshot, spec.RequiredTests[0], GoalRequiredTestAttestationStatusFailedV0)
+	receipt.FailureCode = ErrGoalRequiredTestAttestorInfrastructureFailedV0
+	receipt.AttestationRef = GoalRequiredTestAttestationCanonicalRefV0(receipt)
+	store := &attestationStoreForTestV0{snapshot: snapshot, items: []GoalRequiredTestAttestationV0{receipt}}
+	attestor := &attestorForTestV0{}
+	stateStore := &attestationGoalStateStoreForTestV0{state: attestationRunningStateForTestV0(spec)}
+	result, err := ObserveGoalWorkV0(context.Background(), GoalWorkObserveRequestV0{RunRef: spec.RunRef}, attestedLifecyclePortsForTestV0(snapshot, store, attestor, stateStore))
+	if err != nil || result.Accepted || result.NeedsRework || attestor.calls != 0 ||
+		!hasAttestationIssueForTestV0(result.Closure, ErrGoalRequiredTestAttestorInfrastructureFailedV0) {
+		t.Fatalf("result=%+v calls=%d err=%v", result, attestor.calls, err)
+	}
+}
+
 func TestGoalRequiredTestSpecBinderRequiredBeforeLaunch(t *testing.T) {
 	spec := attestationSpecForTestV0(1)
 	spec.ImplementerAgentRef = ""
@@ -189,6 +245,7 @@ func attestationForTestV0(spec GoalWorkSpecV0, snapshot GoalRequiredTestFinalSna
 		CheckoutRef: snapshot.CheckoutRef, RevisionRef: snapshot.RevisionRef, WriteSetSHA256: snapshot.WriteSetSHA256,
 		TestRef: test.TestRef, CommandRef: test.CommandRef, CommandSHA256: test.CommandSHA256, DefinitionSHA256: test.DefinitionSHA256,
 		Status: status, ImplementerAgentRef: spec.ImplementerAgentRef,
+		FailureCode:      map[string]string{GoalRequiredTestAttestationStatusFailedV0: ErrGoalRequiredTestAttestationFailedV0}[status],
 		AttestorAgentRef: "agent-ref-attestor-001", AttestorCredentialRef: "credential-ref-attestor-001",
 		StartedAt: "2026-07-10T10:00:00Z", FinishedAt: "2026-07-10T10:00:01Z",
 		IsolatedEnvironmentRef: "environment-ref-isolated-001",
