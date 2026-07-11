@@ -116,6 +116,43 @@ func TestGoalFirstResidentCheckpointStartedNoSeInfiereDelSummaryV0(t *testing.T)
 	}
 }
 
+func TestGoalFirstResidentMaterialProgressReplanRespetaPresupuestoV0(t *testing.T) {
+	state := orquestagoal.GoalWorkStateV0{
+		Status: orquestagoal.GoalStatusBlockedV0,
+		Spec: orquestagoal.GoalWorkSpecV0{ReworkPolicy: orquestagoal.GoalReworkPolicyV0{
+			MaxReworkGoals: 1,
+		}},
+		LastResult: &orquestagoal.GoalWorkResultV0{
+			Status: orquestagoal.GoalStatusBlockedV0,
+			Issues: []orquestagoal.GoalWorkIssueV0{{Code: goalFirstResidentReworkReasonMaterialProgressV0}},
+		},
+	}
+	reason, _, ok := goalFirstResidentReworkReasonV0(state)
+	if !ok || reason != goalFirstResidentReworkReasonMaterialProgressV0 ||
+		!goalFirstResidentReworkBudgetAvailableV0(state.Spec) {
+		t.Fatalf("reason=%q ok=%v spec=%+v", reason, ok, state.Spec)
+	}
+	state.Spec.ContextRefs = append(state.Spec.ContextRefs, orquestagoal.GoalContextRefV0{
+		Kind: "source_goal", Ref: "goal-ref-material-progress-source",
+	})
+	if goalFirstResidentReworkBudgetAvailableV0(state.Spec) {
+		t.Fatal("rework material permitido tras agotar max_rework_goals")
+	}
+}
+
+func TestGoalFirstResidentMaterialProgressHardStopNuncaRelanzaV0(t *testing.T) {
+	state := orquestagoal.GoalWorkStateV0{
+		Status: orquestagoal.GoalStatusBlockedV0,
+		LastResult: &orquestagoal.GoalWorkResultV0{
+			Status: orquestagoal.GoalStatusBlockedV0,
+			Issues: []orquestagoal.GoalWorkIssueV0{{Code: goalFirstResidentHardStopMaterialProgressV0}},
+		},
+	}
+	if reason, refs, ok := goalFirstResidentReworkReasonV0(state); ok || reason != "" || len(refs) != 0 {
+		t.Fatalf("reason=%q refs=%v ok=%v", reason, refs, ok)
+	}
+}
+
 func TestRunSupervisorGoalFirstResidentReworkEsIdempotenteV0(t *testing.T) {
 	ctx := context.Background()
 	store := newGoalFirstQueueStateStoreForTestV0()

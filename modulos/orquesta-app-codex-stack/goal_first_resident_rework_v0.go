@@ -32,6 +32,8 @@ const (
 	goalFirstResidentReworkReasonStorageQuotaV0       = "codex_app_server_storage_quota_exceeded"
 	goalFirstResidentReworkReasonBackendUnavailableV0 = "codex_app_server_unavailable"
 	goalFirstResidentReworkReasonProcessDeadV0        = "goal_first_process_dead_state_stale"
+	goalFirstResidentReworkReasonMaterialProgressV0   = "material_progress_replan_required"
+	goalFirstResidentHardStopMaterialProgressV0       = "material_progress_hard_stop_required"
 	goalFirstResidentProcessDeadEvidenceRefV0         = "evidence-ref-goal-first-resident-process-dead-state-stale"
 	goalFirstResidentBackendMissingEvidenceRefV0      = "evidence-ref-autoprogramming-goal-backend-missing-after-external-cleanup"
 	goalFirstResidentBackendMissingReconciledV0       = "evidence-ref-goal-first-resident-backend-missing-reconciled"
@@ -53,7 +55,8 @@ func (executor CodexStackRunSupervisorExecutorV0) maybePrepareGoalFirstResidentR
 		return result
 	}
 	reason, evidenceRefs, ok := goalFirstResidentReworkReasonV0(state)
-	if !ok {
+	if !ok || (reason == goalFirstResidentReworkReasonMaterialProgressV0 &&
+		!goalFirstResidentReworkBudgetAvailableV0(state.Spec)) {
 		return result
 	}
 	if existing := goalFirstResidentExistingReworkRunRefV0(state); existing != "" {
@@ -101,6 +104,9 @@ func (executor CodexStackRunSupervisorExecutorV0) maybePrepareGoalFirstResidentR
 }
 
 func goalFirstResidentReworkReasonV0(state orquestagoal.GoalWorkStateV0) (string, []string, bool) {
+	if goalFirstResidentHasStructuredIssueOrEvidenceV0(state, goalFirstResidentHardStopMaterialProgressV0) {
+		return "", nil, false
+	}
 	if !goalFirstResidentStateNeedsReworkV0(state) {
 		return "", nil, false
 	}
@@ -112,6 +118,9 @@ func goalFirstResidentReworkReasonV0(state orquestagoal.GoalWorkStateV0) (string
 	}
 	if goalFirstResidentHasIssueOrEvidenceV0(state, goalFirstResidentReworkReasonNoCheckpointV0) {
 		return goalFirstResidentReworkReasonNoCheckpointV0, goalFirstResidentReworkEvidenceRefsV0(state), true
+	}
+	if goalFirstResidentHasStructuredIssueOrEvidenceV0(state, goalFirstResidentReworkReasonMaterialProgressV0) {
+		return goalFirstResidentReworkReasonMaterialProgressV0, goalFirstResidentReworkEvidenceRefsV0(state), true
 	}
 	if goalFirstResidentInitialTimeoutWithoutArtifactsV0(state) {
 		return goalFirstResidentReworkReasonActiveTimeoutV0, goalFirstResidentReworkEvidenceRefsV0(state), true
@@ -227,6 +236,8 @@ func goalFirstResidentReworkEvidenceRefsV0(state orquestagoal.GoalWorkStateV0) [
 	for _, ref := range goalFirstResidentAllEvidenceRefsV0(state) {
 		trimmed := strings.TrimSpace(ref)
 		if strings.Contains(trimmed, "high-consumption") ||
+			strings.Contains(trimmed, "material-progress") ||
+			strings.Contains(trimmed, "material_progress") ||
 			strings.Contains(trimmed, "high_consumption") ||
 			strings.Contains(trimmed, "checkpoint-only") ||
 			strings.Contains(trimmed, "no-checkpoint") ||
@@ -258,6 +269,23 @@ func goalFirstResidentReworkEvidenceRefsV0(state orquestagoal.GoalWorkStateV0) [
 		}
 	}
 	return compactStringsV0(refs)
+}
+
+func goalFirstResidentReworkBudgetAvailableV0(spec orquestagoal.GoalWorkSpecV0) bool {
+	maxReworks := spec.ReworkPolicy.MaxReworkGoals
+	if maxReworks <= 0 {
+		maxReworks = spec.Budget.MaxReworkGoals
+	}
+	if maxReworks <= 0 {
+		return false
+	}
+	used := 0
+	for _, ref := range spec.ContextRefs {
+		if strings.TrimSpace(ref.Kind) == "source_goal" {
+			used++
+		}
+	}
+	return used < maxReworks
 }
 
 // maybeReconcileGoalFirstResidentDeadProcessV0 consulta el veredicto causal

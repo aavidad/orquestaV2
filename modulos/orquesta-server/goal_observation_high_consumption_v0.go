@@ -96,6 +96,9 @@ func (runtime *RuntimeV0) goalObserverHighConsumptionTerminalSnapshotV0(
 func goalObserverHighConsumptionReasonV0(
 	observation orquestagoal.GoalWorkObserveResultV0,
 ) (string, []string, bool) {
+	if goalObservationHasEvidenceV0(observation, materialProgressGovernedEvidenceV0) {
+		return "", nil, false
+	}
 	result := orquestagoal.NormalizeGoalWorkResultV0(observation.Result)
 	if strings.TrimSpace(result.Status) != orquestagoal.GoalStatusRunningV0 {
 		return "", nil, false

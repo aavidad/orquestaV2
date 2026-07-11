@@ -55,6 +55,9 @@ func (runtime *RuntimeV0) reconcileIdleSelfImprovementGoalProgressV0(
 	if !ok || observed.Status != orquestagoal.GoalStatusRunningV0 {
 		return result
 	}
+	if goalObservationHasEvidenceV0(result.Observations[index], materialProgressGovernedEvidenceV0) {
+		return result
+	}
 	evaluation := idleSelfImprovementGoalProgressEvaluationFromObservationV0(
 		runtime.config,
 		state,

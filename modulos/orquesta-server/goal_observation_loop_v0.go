@@ -125,6 +125,7 @@ func (runtime *RuntimeV0) runGoalObservationTickV0(ctx context.Context) {
 		)
 		return
 	}
+	result = runtime.reconcileMaterialProgressV0(ctx, result)
 	result = runtime.reconcileIdleSelfImprovementGoalProgressV0(ctx, result, now)
 	result = runtime.reconcileIdleSelfImprovementGoalCompletionIntegrityV0(ctx, result)
 	result = runtime.reconcileGoalObserverHighConsumptionV0(ctx, result)

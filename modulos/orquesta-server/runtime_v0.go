@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"sync"
 
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestaestadovivo "orquesta/modulos/orquesta-estado-vivo"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 )
@@ -20,6 +21,8 @@ type RuntimeDepsV0 struct {
 	GoalRequiredTestSpecBinder orquestagoal.GoalRequiredTestSpecBinderPortV0
 	GoalFingerprint            GoalObservationFingerprintPortV0
 	GoalStopper                GoalCooperativeStopPortV0
+	MaterialProgressStore      orquestaautoprogramming.MaterialProgressStateStorePortV0
+	MaterialProgressEvidence   GoalMaterialProgressEvidencePortV0
 	EstadoVivoSource           orquestaestadovivo.FuenteEvidenciaEstadoPortV0
 	ShutdownSnapshot           ShutdownSnapshotPortV0
 	ShutdownHooks              []RuntimeShutdownHookPortV0
@@ -42,6 +45,8 @@ type RuntimeV0 struct {
 	goalRequiredTestSpecBinder    orquestagoal.GoalRequiredTestSpecBinderPortV0
 	goalFingerprint               GoalObservationFingerprintPortV0
 	goalStopper                   GoalCooperativeStopPortV0
+	materialProgressStore         orquestaautoprogramming.MaterialProgressStateStorePortV0
+	materialProgressEvidence      GoalMaterialProgressEvidencePortV0
 	estadoVivoSource              orquestaestadovivo.FuenteEvidenciaEstadoPortV0
 	goalObservationFingerprintsMu sync.Mutex
 	goalObservationFingerprints   map[string]orquestagoal.GoalObservationFingerprintV0
@@ -112,6 +117,8 @@ func NewRuntimeV0(config ConfigV0, deps RuntimeDepsV0) (*RuntimeV0, error) {
 		goalRequiredTestSpecBinder:  deps.GoalRequiredTestSpecBinder,
 		goalFingerprint:             deps.GoalFingerprint,
 		goalStopper:                 deps.GoalStopper,
+		materialProgressStore:       deps.MaterialProgressStore,
+		materialProgressEvidence:    deps.MaterialProgressEvidence,
 		estadoVivoSource:            deps.EstadoVivoSource,
 		goalObservationFingerprints: map[string]orquestagoal.GoalObservationFingerprintV0{},
 		shutdownSnapshot:            deps.ShutdownSnapshot,
