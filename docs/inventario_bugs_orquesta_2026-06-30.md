@@ -4477,3 +4477,12 @@ operativa extremo a extremo.
 
 Evidencia transversal de `BUG-255` a `BUG-269`:
 [pilotos de cierre batch del 2026-07-11](incidencias/incidencia_pilotos_cierre_batch_orquesta_2026-07-11.md).
+
+BUG `BUG-ORQ-20260711-270` (aceptado, atestacion de rework Dokploy):
+`task-ref-attestor-rework-bugdoc-gate3` reproduce la entrada aceptada de
+`request-ref-batch-attestor-rework-integration2-20260711-goal-02`. El registro
+distingue un artefacto Dokploy valido, un fallo de infraestructura, la ausencia
+de sucesor y el cierre pendiente de replay; no atribuye el fallo al contexto
+L2 advisory. Variaciones del contexto no bloquean. Cierre de esta entrada:
+solo inventario actualizado y receipt inmediato; queda pendiente unicamente el
+replay declarado por la fuente, sin ampliar frontera ni investigacion.
