@@ -145,3 +145,29 @@ La discrepancia declarada por los agentes `r1/r2` sobre el hash del backlog no
 demuestra mutacion: compararon el SHA del fichero completo con una ref de scan
 acotada por linea/seccion. Se conserva como ambiguedad contractual a revisar en
 limpieza; no se usa como evidencia de cierre ni como causa de `BUG-230`.
+
+## Replays r4/r5 y BUG-ORQ-20260711-231
+
+El replay `r4` no lanzo un goal: el pipeline completo rechazo correctamente el
+piloto porque solo declaraba comprobaciones manuales y ninguna atestacion
+independiente. No fue un fallo de Orquesta. En `r5` se anadio el test focal
+requerido y el primer tick persistio el baseline, pero los siguientes fallaron
+con `worktree_baseline_store_failed` antes de lanzar un agente.
+
+La comparacion diagnostica retenida en
+`/tmp/orquesta-bug226-t9104-r5-runtime/compare_snapshot.go` confirmo 5.091
+ficheros, paths y digests identicos. La unica diferencia era semantica de JSON:
+el snapshot recapturado tenia `OmittedPaths=[]`, mientras que el reabierto tenia
+`OmittedPaths=nil`. `reflect.DeepEqual` convertia esa representacion opcional en
+un conflicto de contenido y rompia la idempotencia del prepare-run residente.
+
+Cierre local de `BUG-ORQ-20260711-231`:
+
+- el store normaliza a `nil` las listas opcionales vacias antes de comparar;
+- contenido real divergente sigue devolviendo conflicto;
+- una regresion recrea el store tras la serializacion JSON y repite el record;
+- `/tmp/orquesta-bug226-t9104-r5-runtime/shutdown-bug231.json` acredita
+  `shutdown_ready=true`, cero trabajo en vuelo y salida cooperativa del proceso.
+
+El cierre empirico de `BUG-226` sigue pendiente de un replay completamente
+nuevo que alcance lanzamiento, progreso material, atestacion y cierre terminal.

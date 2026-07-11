@@ -38,6 +38,21 @@ func TestStoreV0WorktreeSnapshotStoreV0RecuperaReplayYRechazaConflictoTrasReinic
 	}
 }
 
+func TestStoreV0WorktreeSnapshotReplayAceptaListasOpcionalesVaciasTrasJSONV0(t *testing.T) {
+	ctx := context.Background()
+	rootDir := t.TempDir()
+	snapshot := validWorktreeSnapshotV0()
+	snapshot.OmittedPaths = []string{}
+	snapshot.ExclusionReceipts = []orquestaruntimeworktree.WorktreeLocalArtifactExclusionReceiptV0{}
+
+	if err := mustStoreV0(t, rootDir).RecordWorktreeSnapshotV0(ctx, snapshot); err != nil {
+		t.Fatalf("record snapshot: %v", err)
+	}
+	if err := mustStoreV0(t, rootDir).RecordWorktreeSnapshotV0(ctx, snapshot); err != nil {
+		t.Fatalf("replay semantico tras JSON: %v", err)
+	}
+}
+
 func validWorktreeSnapshotV0() orquestaruntimeworktree.WorktreeSnapshotV0 {
 	return orquestaruntimeworktree.WorktreeSnapshotV0{
 		SchemaVersion: orquestaruntimeworktree.WorktreeSnapshotSchemaVersionV0,

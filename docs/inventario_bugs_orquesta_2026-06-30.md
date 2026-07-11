@@ -4087,6 +4087,16 @@ de tests, detecte símbolos residuales y rechace checklist autodeclarado. Detall
 en la [incidencia 208AG](incidencias/incidencia_orquesta_cleanup_symbols_self_declared_2026-07-11.md);
 quedo cerrado localmente por `a245a90a8` y `7a91f8052`.
 
+BUG `BUG-ORQ-20260711-231` (cerrado localmente, pendiente de replay integrado):
+el prepare-run residente podia persistir el baseline una vez y rechazar todos
+sus replays como divergentes porque JSON reabre una lista opcional vacia como
+`nil`, mientras la captura nueva produce `[]`. Los 5.091 paths y digests eran
+identicos; la falsa divergencia impedia lanzar cualquier goal. El state-file
+normaliza colecciones opcionales vacias para la comparacion idempotente y
+mantiene el rechazo de contenido real distinto. Test focal y evidencia de
+shutdown en la
+[incidencia T9104](incidencias/incidencia_orquesta_t9104_wakeup_material_progress_shutdown_stale_2026-07-11.md).
+
 Avance 2026-07-11: `b96e9b115` añade refs obligatorias de criterios
 verificables al contrato Goal; el transporte posterior añade
 `acceptance_checks` tipados a autoprogramacion V0/V1 y los publica por MCP. Los

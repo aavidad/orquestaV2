@@ -38,7 +38,7 @@ func (store *StoreV0) RecordWorktreeSnapshotV0(
 			if err != nil {
 				return err
 			}
-			if reflect.DeepEqual(loaded, snapshot) {
+			if worktreeSnapshotsSemanticallyEqualV0(loaded, snapshot) {
 				return nil
 			}
 			return storeErrorV0("worktree_snapshot", "snapshot_ref existente con contenido divergente")
@@ -49,6 +49,25 @@ func (store *StoreV0) RecordWorktreeSnapshotV0(
 			Snapshot:      snapshot,
 		})
 	})
+}
+
+func worktreeSnapshotsSemanticallyEqualV0(
+	left orquestaruntimeworktree.WorktreeSnapshotV0,
+	right orquestaruntimeworktree.WorktreeSnapshotV0,
+) bool {
+	if len(left.OmittedPaths) == 0 {
+		left.OmittedPaths = nil
+	}
+	if len(right.OmittedPaths) == 0 {
+		right.OmittedPaths = nil
+	}
+	if len(left.ExclusionReceipts) == 0 {
+		left.ExclusionReceipts = nil
+	}
+	if len(right.ExclusionReceipts) == 0 {
+		right.ExclusionReceipts = nil
+	}
+	return reflect.DeepEqual(left, right)
 }
 
 func (store *StoreV0) LoadWorktreeSnapshotV0(
