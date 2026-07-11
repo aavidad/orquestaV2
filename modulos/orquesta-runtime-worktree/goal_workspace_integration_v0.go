@@ -95,6 +95,15 @@ func (connector GitGoalWorkspaceIntegrationConnectorV0) IntegrateGoalWorkspaceV0
 		return newGoalWorkspaceIntegrationResultV0(request, GoalWorkspaceIntegrationStatusBlockedV0, "", "", nil, issues), issues
 	}
 	request.BaseRevision = base
+	receiptPath := goalWorkspaceIntegrationReceiptPathV0(request)
+	receipt, receiptFound, receiptIssues := loadGoalWorkspaceIntegrationReceiptV0(receiptPath)
+	if receiptFound && request.ExpectedParentRevision == "" {
+		request.ExpectedParentRevision = strings.TrimSpace(receipt.ExpectedParentRevision)
+		if request.ExpectedParentRevision == "" {
+			issues := []WorktreeIssueV0{worktreeIssueV0(WorktreeIssueWorkspaceConflictV0, "integration_receipt")}
+			return newGoalWorkspaceIntegrationResultV0(request, GoalWorkspaceIntegrationStatusBlockedV0, "", receipt.IntegratedCommit, nil, issues), issues
+		}
+	}
 	expectedParent, issue := connector.resolveGoalWorkspaceExpectedParentV0(ctx, request)
 	if issue != nil {
 		issues := []WorktreeIssueV0{*issue}
@@ -113,7 +122,7 @@ func (connector GitGoalWorkspaceIntegrationConnectorV0) IntegrateGoalWorkspaceV0
 		issues := []WorktreeIssueV0{*issue}
 		return newGoalWorkspaceIntegrationResultV0(request, GoalWorkspaceIntegrationStatusBlockedV0, sourceCommit, "", changedPaths, issues), issues
 	}
-	if receipt, found, receiptIssues := loadGoalWorkspaceIntegrationReceiptV0(goalWorkspaceIntegrationReceiptPathV0(request)); found || len(receiptIssues) > 0 {
+	if receiptFound || len(receiptIssues) > 0 {
 		if len(receiptIssues) > 0 {
 			return newGoalWorkspaceIntegrationResultV0(request, GoalWorkspaceIntegrationStatusBlockedV0, sourceCommit, "", changedPaths, receiptIssues), receiptIssues
 		}
@@ -145,7 +154,7 @@ func (connector GitGoalWorkspaceIntegrationConnectorV0) IntegrateGoalWorkspaceV0
 			return newGoalWorkspaceIntegrationResultV0(request, GoalWorkspaceIntegrationStatusBlockedV0, sourceCommit, integratedCommit, changedPaths, issues), issues
 		}
 		receipt := newGoalWorkspaceIntegrationReceiptV0(request, sourceCommit, integratedCommit)
-		if receiptIssues := writeGoalWorkspaceIntegrationReceiptV0(goalWorkspaceIntegrationReceiptPathV0(request), receipt); len(receiptIssues) > 0 {
+		if receiptIssues := writeGoalWorkspaceIntegrationReceiptV0(receiptPath, receipt); len(receiptIssues) > 0 {
 			return newGoalWorkspaceIntegrationResultV0(request, GoalWorkspaceIntegrationStatusBlockedV0, sourceCommit, integratedCommit, changedPaths, receiptIssues), receiptIssues
 		}
 		return newGoalWorkspaceIntegrationResultV0(request, GoalWorkspaceIntegrationStatusReplayedV0, sourceCommit, integratedCommit, changedPaths, nil), nil
@@ -171,8 +180,8 @@ func (connector GitGoalWorkspaceIntegrationConnectorV0) IntegrateGoalWorkspaceV0
 		issues := []WorktreeIssueV0{goalWorkspaceGitIssueV0("git.rev_parse", *gitIssue)}
 		return newGoalWorkspaceIntegrationResultV0(request, GoalWorkspaceIntegrationStatusBlockedV0, sourceCommit, "", changedPaths, issues), issues
 	}
-	receipt := newGoalWorkspaceIntegrationReceiptV0(request, sourceCommit, integratedCommit)
-	if receiptIssues := writeGoalWorkspaceIntegrationReceiptV0(goalWorkspaceIntegrationReceiptPathV0(request), receipt); len(receiptIssues) > 0 {
+	receipt = newGoalWorkspaceIntegrationReceiptV0(request, sourceCommit, integratedCommit)
+	if receiptIssues := writeGoalWorkspaceIntegrationReceiptV0(receiptPath, receipt); len(receiptIssues) > 0 {
 		return newGoalWorkspaceIntegrationResultV0(request, GoalWorkspaceIntegrationStatusBlockedV0, sourceCommit, integratedCommit, changedPaths, receiptIssues), receiptIssues
 	}
 	return newGoalWorkspaceIntegrationResultV0(request, GoalWorkspaceIntegrationStatusIntegratedV0, sourceCommit, integratedCommit, changedPaths, nil), nil

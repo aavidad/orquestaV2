@@ -58,7 +58,7 @@ func TestGitGoalWorkspaceIntegrationConnectorV0IntegratesChainedExpectedParentsV
 	}
 }
 
-func TestGitGoalWorkspaceIntegrationConnectorV0ReplaysReceiptV0(t *testing.T) {
+func TestGitGoalWorkspaceIntegrationConnectorV0ReplaysLegacyRequestFromReceiptV0(t *testing.T) {
 	canonical, source, _, base := newGoalWorkspaceIntegrationReposV0(t)
 	receiptDir := filepath.Join(t.TempDir(), "receipts")
 	writeAppVCSFileV0(t, source, "replay.txt", "replay\n")
@@ -72,7 +72,9 @@ func TestGitGoalWorkspaceIntegrationConnectorV0ReplaysReceiptV0(t *testing.T) {
 	goalWorkspaceRunGitForTestV0(t, canonical, "add", "local-only.txt")
 	goalWorkspaceRunGitForTestV0(t, canonical, "commit", "-m", "later canonical change")
 	head := strings.TrimSpace(runAppVCSGitV0(t, canonical, "rev-parse", "HEAD"))
-	replay, issues := connector.IntegrateGoalWorkspaceV0(context.Background(), request)
+	legacyReplayRequest := request
+	legacyReplayRequest.ExpectedParentRevision = ""
+	replay, issues := connector.IntegrateGoalWorkspaceV0(context.Background(), legacyReplayRequest)
 	if len(issues) > 0 || replay.Status != GoalWorkspaceIntegrationStatusReplayedV0 || replay.IntegratedCommit != first.IntegratedCommit {
 		t.Fatalf("replay=%+v issues=%+v", replay, issues)
 	}
@@ -93,7 +95,7 @@ func TestGitGoalWorkspaceIntegrationConnectorV0ReplaysReceiptV0(t *testing.T) {
 	if receiptIssues := writeGoalWorkspaceIntegrationReceiptV0(filepath.Join(receiptDir, request.IntegrationRef+".json"), receipt); len(receiptIssues) > 0 {
 		t.Fatalf("write tampered receipt: %+v", receiptIssues)
 	}
-	blocked, issues := connector.IntegrateGoalWorkspaceV0(context.Background(), request)
+	blocked, issues := connector.IntegrateGoalWorkspaceV0(context.Background(), legacyReplayRequest)
 	if blocked.Status != GoalWorkspaceIntegrationStatusBlockedV0 || !goalWorkspaceHasIssueForTestV0(issues, WorktreeIssueWorkspaceConflictV0) {
 		t.Fatalf("tampered receipt replay=%+v issues=%+v", blocked, issues)
 	}
