@@ -52,11 +52,33 @@ ese runbook, manda el runbook y avisa al revisor.
 - Bugs abiertos restantes: solo residuales de campo (remoto/OPES/proveedor real).
   Ninguno bloquea el trabajo local.
 
+## REPARTO DE CARRILES (orden del operador 2026-07-12)
+
+Hermes NO trabaja el mismo frente que Codex. Reparto vinculante:
+
+- **Hermes: BUGS + PROGRAMACION DE TOOLS.** Es tu carril propio. Las tools
+  dejan de estar congeladas PARA TI (siguen congeladas para Codex, que no
+  debe abrir frente auxiliar mientras cierra conectores).
+- **Codex: CONECTORES** (runtime-codex-*, state-file, required-test,
+  superficies MCP/HTTP, wiring stack/cmd). No entres en esos ficheros: si un
+  bug tuyo obliga a tocarlos, avisa al revisor por la senal y espera.
+- Si dos carriles chocan en un mismo fichero, gana quien lo tenga asignado y
+  el otro espera; nunca se edita el write-set activo del otro agente.
+
 ## Cola de trabajo
 
-- [ ] H1: Trabajar SOLO dentro de goals que Orquesta te entregue (fase
-  conectores). Para cada goal: leer el write-set, ejecutar, materializar
-  artefacto verificable y devolver resultado con evidencia real.
+- [ ] H1: BUGS. Coge los bugs abiertos del inventario
+  (`docs/inventario_bugs_orquesta_2026-06-30.md`) de uno en uno, empezando por
+  los reproducibles en local. Para cada uno: reproducir, arreglar, test que
+  falle sin el fix, y cierre con evidencia real. Los residuales de campo
+  (remoto/OPES/proveedor real) NO son tuyos: dejalos abiertos y anotados.
+- [ ] H1b: TOOLS. Programacion de tools nuevas de Orquesta en tu carril. Cada
+  tool: contrato claro, tests focales, sin logica de dominio duplicada (el
+  nucleo ya es autoridad unica: no reimplementes reconciliacion causal ni
+  gobierno de progreso material).
+- [ ] H1c: Preferentemente trabaja DENTRO de goals que Orquesta te entregue
+  (write-set gobernado). Si trabajas fuera de un goal, respeta igual el
+  write-set del bug/tool y no toques el carril de Codex.
 - [ ] H2: Si un goal se te queda sin progreso material (sin diff, test, result
   ni receipt), NO sigas quemando contexto: devuelvelo con causa concreta. El
   gobierno de progreso material (BUG-226) esta activo y cortara igualmente.
@@ -82,3 +104,12 @@ ese runbook, manda el runbook y avisa al revisor.
 - Los goals escriben su resultado durable bajo el **primer scope directorio** del
   write-set: pon `docs` primero para no ensuciar `scripts/`.
 - **tmux 3.6**: no "simplifiques" selectores (`=sesion:` con `:`).
+
+## Hallazgo del arranque (2026-07-12, revisor)
+
+La entrada canonica arranca y el aislamiento se aplica, pero Hermes pide
+`hermes setup` (proveedor OpenAI Codex, modelo gpt-5.5): la instalacion no
+tiene la configuracion/credencial completada. El operador debe ejecutar
+`hermes setup` (y `hermes doctor` para diagnostico) desde la sesion TUI antes
+de que Hermes pueda ejecutar trabajo real. Sin ese paso, el contenedor
+levanta, muestra status y sale.
