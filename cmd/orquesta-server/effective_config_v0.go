@@ -21,6 +21,14 @@ func init() {
 func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserver.ServerEffectiveConfigV0 {
 	config = orquestaserver.NormalizeConfigV0(config)
 	projectConfig := projectConfigFromServerConfigBestEffortV0(config)
+	return serverEffectiveConfigFromEnvAndProjectConfigV0(config, projectConfig)
+}
+
+func serverEffectiveConfigFromEnvAndProjectConfigV0(
+	config orquestaserver.ConfigV0,
+	projectConfig serverProjectConfigFileV0,
+) orquestaserver.ServerEffectiveConfigV0 {
+	config = orquestaserver.NormalizeConfigV0(config)
 	codexRuntime := codexRuntimeEnvConfigFromProjectFileV0(projectConfig)
 	stackCapacity := codexStackCapacityEnvConfigFromProjectConfigFileV0(projectConfig)
 	directorWaveLimits := codexDirectorWaveLimitsFromProjectConfigFileV0(projectConfig)
@@ -465,7 +473,7 @@ func serverEffectiveConfigFromEnvV0(config orquestaserver.ConfigV0) orquestaserv
 	settings = append(settings, codexWaveEffectiveConfigSettingsV0(config, projectConfig)...)
 	settings = append(settings, codexServerWorktreeSnapshotBudgetSettingsV0(config.ProjectWorkDir, worktreeSnapshotBudget)...)
 	settings = append(settings, hermesOperatorEffectiveConfigSettingsV0()...)
-	settings = append(settings, ollamaModelManagerEffectiveConfigSettingsV0()...)
+	settings = append(settings, ollamaModelManagerEffectiveConfigSettingsV0(config, projectConfig)...)
 	settings = append(settings, opesRegistryFinalPkgEffectiveConfigSettingsV0(config, projectConfig)...)
 	settings = append(settings, opesTopicRegistryEffectiveConfigSettingsV0(config, projectConfig)...)
 	settings = append(settings, daemonStartEnvSettingsV0(daemonEnvPolicy)...)
@@ -576,6 +584,13 @@ func serverEffectiveConfigDiagnosticsFromConfigV0(projectConfig serverProjectCon
 		"server_idle.*",
 		"evidence-ref-config-deprecated-env-override-server-idle",
 		serverIdleEnvKeysV0()...,
+	)...)
+	diagnostics = append(diagnostics, serverDeprecatedEnvOverridesForProjectConfigV0(
+		projectConfig,
+		"runtime_models",
+		"runtime_models.*",
+		"evidence-ref-config-deprecated-env-override-runtime-models",
+		ollamaModelManagerEnvKeysV0()...,
 	)...)
 	if !serverGoalBackendOperationalFromProjectConfigFileV0(projectConfig) &&
 		!boolEnvOrDefaultV0(envExternalWorkLegacyDirectorLoopV0, false) {

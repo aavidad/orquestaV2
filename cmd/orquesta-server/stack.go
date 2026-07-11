@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -36,7 +37,11 @@ func buildRuntimeFromConfigV0(serverConfig orquestaserver.ConfigV0) (*orquestase
 		return nil, err
 	}
 	serverConfig = serverConfigWithCodexGoalBackendDiagnosticsV0(serverConfig, goalBackends)
-	stack, err := buildStackFromEnvWithGoalBackendV0(serverConfig, goalBackends.AppGoal, supervisorWakeup)
+	projectConfig, err := projectConfigForBuildStackV0(serverConfig)
+	if err != nil {
+		return nil, err
+	}
+	stack, err := buildStackFromProjectConfigV0(serverConfig, goalBackends.AppGoal, projectConfig, supervisorWakeup)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +49,6 @@ func buildRuntimeFromConfigV0(serverConfig orquestaserver.ConfigV0) (*orquestase
 	if err != nil {
 		return nil, err
 	}
-	projectConfig := projectConfigFromServerConfigBestEffortV0(serverConfig)
 	baseSupervisor := serverStackSupervisorV0{
 		stack:                   &stack,
 		projectWorkDir:          serverConfig.IdleSelfImprovementProjectWorkDir,
@@ -179,6 +183,19 @@ func buildStackFromEnvWithGoalBackendV0(
 	goalBackend serverCodexGoalBackendV0,
 	supervisorWakeups ...*serverSupervisorWakeupRelayV0,
 ) (orquestaappcodexstack.StackV0, error) {
+	projectConfig, err := projectConfigForBuildStackV0(serverConfig)
+	if err != nil {
+		return orquestaappcodexstack.StackV0{}, err
+	}
+	return buildStackFromProjectConfigV0(serverConfig, goalBackend, projectConfig, supervisorWakeups...)
+}
+
+func buildStackFromProjectConfigV0(
+	serverConfig orquestaserver.ConfigV0,
+	goalBackend serverCodexGoalBackendV0,
+	projectConfig serverProjectConfigFileV0,
+	supervisorWakeups ...*serverSupervisorWakeupRelayV0,
+) (orquestaappcodexstack.StackV0, error) {
 	var supervisorWakeup *serverSupervisorWakeupRelayV0
 	if len(supervisorWakeups) > 0 {
 		supervisorWakeup = supervisorWakeups[0]
@@ -227,7 +244,6 @@ func buildStackFromEnvWithGoalBackendV0(
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
-	projectConfig := projectConfigFromServerConfigBestEffortV0(serverConfig)
 	goalRequiredTestAttestation, err := goalRequiredTestAttestationAdapterFromConfigV0(serverConfig, projectConfig)
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
@@ -245,6 +261,10 @@ func buildStackFromEnvWithGoalBackendV0(
 	egressSanitizer, err := egressSanitizerConfigWithSidecarPortFromProjectConfigFileV0(
 		projectConfig,
 	)
+	if err != nil {
+		return orquestaappcodexstack.StackV0{}, err
+	}
+	runtimeModels, err := runtimeModelManagerFromConfigV0(serverConfig, projectConfig)
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
@@ -338,7 +358,7 @@ func buildStackFromEnvWithGoalBackendV0(
 		AppGoalRequiredTestAttestor:         goalRequiredTestAttestor,
 		AppGoalRequiredTestIdentityVerifier: goalRequiredTestIdentityVerifier,
 		AppGoalBackendControl:               serverGoalBackendControlFromBackendV0(goalBackend),
-		RuntimeModels:                       runtimeModelManagerFromEnvV0(),
+		RuntimeModels:                       runtimeModels,
 		ReviewGate: orquestaappcodexstack.ReviewGateConfigV0{
 			FileEvidence:            orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},
 			StrictGoLineBudget:      boolEnvOrDefaultV0(envReviewGateStrictGoLineBudgetV0, false),
@@ -398,6 +418,28 @@ func buildStackFromEnvWithGoalBackendV0(
 	)
 	stack.Handler = withFunctionContractRoutesV0(stack.Handler, stateStore)
 	return stack, nil
+}
+
+// ConfigV0 intentionally does not carry composition-private project config.
+// Load it once per stack build and fail closed if the startup snapshot vanished
+// or became invalid; providers receive this same value rather than rereading it.
+func projectConfigForBuildStackV0(config orquestaserver.ConfigV0) (serverProjectConfigFileV0, error) {
+	config = orquestaserver.NormalizeConfigV0(config)
+	if path := strings.TrimSpace(config.ProjectConfigFilePath); path != "" {
+		projectConfig, ok, err := loadServerProjectConfigPathV0(path)
+		if err != nil || !ok {
+			return serverProjectConfigFileV0{}, fmt.Errorf("%s: read", configFileInvalidPublicCodeV0)
+		}
+		return projectConfig, nil
+	}
+	projectConfig, ok, err := loadServerProjectConfigFileV0(config.ProjectWorkDir)
+	if err != nil || !ok {
+		if err != nil {
+			return serverProjectConfigFileV0{}, err
+		}
+		return serverProjectConfigFileV0{}, nil
+	}
+	return projectConfig, nil
 }
 
 func serverConfigProjectionSettingsForMCPV0(

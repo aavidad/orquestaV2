@@ -43,6 +43,7 @@ type serverProjectConfigFileV0 struct {
 	CodexWave            serverProjectConfigCodexWaveV0            `json:"codex_wave,omitempty"`
 	GoalBackend          serverProjectConfigGoalBackendV0          `json:"goal_backend,omitempty"`
 	CodexUsageAccounting serverProjectConfigCodexUsageAccountingV0 `json:"codex_usage_accounting,omitempty"`
+	RuntimeModels        serverProjectConfigRuntimeModelsV0        `json:"runtime_models,omitempty"`
 	CodebaseBroker       serverProjectConfigCodebaseBrokerV0       `json:"codebase_broker,omitempty"`
 	WizardBot            serverProjectConfigWizardBotV0            `json:"wizard_bot,omitempty"`
 	TelegramOperator     serverProjectConfigTelegramOperatorV0     `json:"telegram_operator,omitempty"`
@@ -515,6 +516,9 @@ func serverConfigUsesDaemonSnapshotV0(config orquestaserver.ConfigV0) bool {
 func serverProjectConfigHasEffectiveValueForEnvKeyV0(config serverProjectConfigFileV0, key string) bool {
 	if value := serverProjectConfigAutoprogrammingValueForEnvKeyV0(config.Autoprogramming, key); value != nil {
 		return *value > 0
+	}
+	if runtimeModelsProjectConfigHasValueForEnvKeyV0(config.RuntimeModels, key) {
+		return true
 	}
 	switch key {
 	case envServerAddrV0:

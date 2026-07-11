@@ -190,7 +190,12 @@ func serverConfigFromEnvWithProjectConfigPathV0(projectConfigPath string) (orque
 	if err := validateServerSelfProgrammingOnlyConfigV0(config); err != nil {
 		return orquestaserver.ConfigV0{}, err
 	}
-	config.EffectiveConfig = serverEffectiveConfigFromEnvV0(config)
+	// The effective projection is only published after runtime-model inputs pass
+	// the same strict resolver used by the composition root.
+	if _, err := ollamaModelManagerConfigFromProjectConfigV0(projectConfig); err != nil {
+		return orquestaserver.ConfigV0{}, err
+	}
+	config.EffectiveConfig = serverEffectiveConfigFromEnvAndProjectConfigV0(config, projectConfig)
 	return config, orquestaserver.ValidateConfigV0(config)
 }
 
