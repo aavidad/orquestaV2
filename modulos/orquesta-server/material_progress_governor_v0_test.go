@@ -23,14 +23,14 @@ func TestMaterialProgressGovernorV0WarningNoDetieneV0(t *testing.T) {
 	}
 }
 
-func TestMaterialProgressGovernorV0ReplanConfirmadoDejaReworkV0(t *testing.T) {
+func TestMaterialProgressGovernorV0SinDiffConfirmadoNoRelanzaV0(t *testing.T) {
 	runtime, _, stopper := materialProgressRuntimeForTestV0(orquestaautoprogramming.MaterialProgressClassNoneV0, nil, true)
 	result := runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(50, false))
 
 	observation := result.Observations[0]
-	if !observation.Terminal || !observation.NeedsRework || stopper.uniqueStops != 1 ||
-		observation.State.LastClosure == nil || !observation.State.LastClosure.NeedsRework ||
-		!materialProgressResultHasIssueForTestV0(observation.Result, materialProgressReplanCodeV0) {
+	if !observation.Terminal || observation.NeedsRework || stopper.uniqueStops != 1 ||
+		observation.State.LastClosure == nil || observation.State.LastClosure.NeedsRework ||
+		!materialProgressResultHasIssueForTestV0(observation.Result, materialProgressNoDiffStopCodeV0) {
 		t.Fatalf("observation=%+v stopper=%+v", observation, stopper)
 	}
 }
@@ -67,7 +67,7 @@ func TestMaterialProgressGovernorV0StopNoConfirmadoNoPublicaTerminalV0(t *testin
 
 	observation := result.Observations[0]
 	if observation.Terminal || observation.State.Status != orquestagoal.GoalStatusRunningV0 || stopper.uniqueStops != 1 ||
-		!materialProgressResultHasIssueForTestV0(observation.Result, materialProgressReplanCodeV0+"_stop_unconfirmed") {
+		!materialProgressResultHasIssueForTestV0(observation.Result, materialProgressNoDiffStopCodeV0+"_stop_unconfirmed") {
 		t.Fatalf("observation=%+v stopper=%+v", observation, stopper)
 	}
 }
@@ -100,7 +100,7 @@ func TestMaterialProgressGovernorV0FalloPersistenciaGoalNoPublicaTerminalV0(t *t
 	result := runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(50, false))
 	observation := result.Observations[0]
 	if observation.Terminal || stopper.uniqueStops != 1 ||
-		!materialProgressResultHasIssueForTestV0(observation.Result, materialProgressReplanCodeV0+"_state_save_failed") {
+		!materialProgressResultHasIssueForTestV0(observation.Result, materialProgressNoDiffStopCodeV0+"_state_save_failed") {
 		t.Fatalf("observation=%+v stopper=%+v", observation, stopper)
 	}
 }

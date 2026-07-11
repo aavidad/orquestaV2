@@ -799,3 +799,17 @@ completa de `cmd/orquesta-server`, `TestEnvVarsBudgetMEJ106V0`,
 `scripts/orquesta_metricas_deuda.sh --json` y `git diff --check` quedan verdes.
 La metrica se mantiene en 424 variables productivas y 103 solo de test; no se
 sube ningun presupuesto.
+
+## Actualizacion Codex 2026-07-11: ola 1 de consumidores legacy
+
+Los smokes propios dejan de emitir tres aliases internos: los arranques idle
+usan solo `ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER_SECONDS`, los drains OPES
+exportan `ORQUESTA_SERVER_URL` y el smoke external-work usa
+`ORQUESTA_OPES_BASE_URL` de extremo a extremo. Los smokes no-OPES siguen
+limpiando explicitamente aliases heredados hasta retirar el boundary.
+
+`CODEX_HOME` no es basura global: es la variable estandar consumida por Codex y
+debe seguir proyectandose al proceso hijo. Lo pendiente es dejar de aceptarla
+como entrada alternativa de configuracion Orquesta cuando la telemetria de
+perfiles local/remoto confirme cero `deprecated_env_used`. La retirada de
+fallbacks no se mezcla con esta migracion de consumidores.

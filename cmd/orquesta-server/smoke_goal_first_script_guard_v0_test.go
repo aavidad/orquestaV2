@@ -601,12 +601,17 @@ func TestSmokeOPESExternalWorkAgentRealUsaShutdownDelegadoConRuntimeDirV0(t *tes
 	for _, want := range []string{
 		`smoke_shutdown_orquesta_server "$server_pid" "$base_url" 5 30 "$RUNTIME_DIR"`,
 		`export ORQUESTA_CODEX_RUNTIME_WORKDIR="$RUNTIME_DIR"`,
+		`export ORQUESTA_OPES_BASE_URL`,
 		`export ORQUESTA_SERVER_ADDR="127.0.0.1:0"`,
 		`server_pid="$!"`,
 	} {
 		if !strings.Contains(ops, want) {
 			t.Fatalf("helper OPES external-work debe pasar runtime_dir al shutdown comun: falta %q", want)
 		}
+	}
+	if strings.Contains(wrapper, "\nOPES_BASE_URL=") || strings.Contains(wrapper, `"$OPES_BASE_URL`) ||
+		strings.Contains(ops, `"$OPES_BASE_URL`) {
+		t.Fatalf("smoke OPES external-work debe usar ORQUESTA_OPES_BASE_URL como nombre canonico")
 	}
 }
 
@@ -1489,6 +1494,7 @@ func TestSmokesOPESLargosAceptanEndpointOrquestaGestionadoV0(t *testing.T) {
 				"smoke_orquesta_base_url_from_env_or_runtime",
 				"ORQUESTA_RUNTIME_DIR/base_url.txt",
 				"falta endpoint Orquesta gestionado",
+				`export ORQUESTA_SERVER_URL="$ORQUESTA_BASE_URL_EFFECTIVE"`,
 			} {
 				if !strings.Contains(text, want) {
 					t.Fatalf("%s debe aceptar endpoint Orquesta gestionado: falta %q", rel, want)
@@ -1496,6 +1502,9 @@ func TestSmokesOPESLargosAceptanEndpointOrquestaGestionadoV0(t *testing.T) {
 			}
 			if strings.Contains(text, "falta ORQUESTA_BASE_URL explicito") {
 				t.Fatalf("%s no debe exigir solo ORQUESTA_BASE_URL", rel)
+			}
+			if strings.Contains(text, `export ORQUESTA_BASE_URL="$ORQUESTA_BASE_URL_EFFECTIVE"`) {
+				t.Fatalf("%s no debe exportar el alias ORQUESTA_BASE_URL al servidor", rel)
 			}
 		})
 	}
@@ -1760,6 +1769,20 @@ func TestSmokeGoalFirstAppServerRealNoLanzaAutomejoraIdleV0(t *testing.T) {
 	} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("smoke Nueva App debe aislar automejora idle: falta %q", want)
+		}
+	}
+}
+
+func TestSmokesNoExportanAliasIdleSelfImprovementAfterV0(t *testing.T) {
+	root := findRepoRootForResidualGoFileBudgetTestV0(t)
+	for _, rel := range []string{
+		"scripts/smoke_goal_first_app_server_real.sh",
+		"scripts/smoke_goal_first_claude_process_server_real.sh",
+		"scripts/smoke_autoprogramming_bolsa_real.sh",
+	} {
+		text := readOperationalDocGuardV0(t, root, rel)
+		if strings.Contains(text, "ORQUESTA_SERVER_IDLE_SELF_IMPROVEMENT_AFTER=") {
+			t.Fatalf("%s no debe exportar el alias idle sin unidad", rel)
 		}
 	}
 }

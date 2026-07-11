@@ -4178,6 +4178,13 @@ repara esa run y prueba reentrada sin segundo launch; falta reconsultar el
 estado real retenido. El replay creo la run omitida y `observe` devolvio HTTP
 200 con cierre bloqueado publico en lugar del 500.
 
+BUG `BUG-ORQ-20260711-241` (cerrado localmente, pendiente de A/B,
+economia/autonomia): el goal fuente y el
+rework de BUG-237 consumieron 50.115 y 51.121 tokens sin diff. El governor paro
+ambos, pero la reparacion repitio el mismo patron en una tarea estrecha. No se
+sube el umbral: elimina la contradiccion del checkpoint y no relanza rework si
+la evidencia tipada sigue siendo `none`; se exige A/B real hasta primer progreso.
+
 Avance 2026-07-11: `b96e9b115` añade refs obligatorias de criterios
 verificables al contrato Goal; el transporte posterior añade
 `acceptance_checks` tipados a autoprogramacion V0/V1 y los publica por MCP. Los

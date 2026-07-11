@@ -31,7 +31,7 @@ smoke_start_orquesta_server() {
   export ORQUESTA_CODEX_PROJECT_WORKDIR="$PROJECT_DIR"
   export ORQUESTA_CODEX_RUNTIME_WORKDIR="$RUNTIME_DIR"
   export ORQUESTA_CODEX_GOAL_BACKEND="${ORQUESTA_CODEX_GOAL_BACKEND:-app_server_tmux}"
-  export ORQUESTA_OPES_BASE_URL="$OPES_BASE_URL"
+  export ORQUESTA_OPES_BASE_URL
   export ORQUESTA_SERVER_TICK_INTERVAL_MS="${ORQUESTA_SERVER_TICK_INTERVAL_MS:-1000}"
   export ORQUESTA_SERVER_MAX_RUNS_PER_TICK="${ORQUESTA_SERVER_MAX_RUNS_PER_TICK:-1}"
   export ORQUESTA_SERVER_MAX_EXECUTIONS_PER_TICK="${ORQUESTA_SERVER_MAX_EXECUTIONS_PER_TICK:-2}"
@@ -57,7 +57,7 @@ smoke_start_orquesta_server() {
 }
 
 smoke_create_opes_domain_objects() {
-  smoke_post_json "$OPES_BASE_URL/api/topics" \
+  smoke_post_json "$ORQUESTA_OPES_BASE_URL/api/topics" \
     '{"title":"Smoke Orquesta Agente Real","subject_area":"juridico"}' \
     "$SMOKE_OUT_DIR/opes_topic.json"
   local topic_id
@@ -67,7 +67,7 @@ smoke_create_opes_domain_objects() {
     exit 1
   fi
 
-  smoke_post_json "$OPES_BASE_URL/api/topics/$topic_id/chapters" \
+  smoke_post_json "$ORQUESTA_OPES_BASE_URL/api/topics/$topic_id/chapters" \
     '{"title":"Capitulo de integracion","order":1}' \
     "$SMOKE_OUT_DIR/opes_chapter.json"
   local chapter_id
@@ -87,7 +87,7 @@ smoke_create_opes_external_job() {
   local idem="idem-opes-agent-smoke-$SMOKE_ID-job"
   smoke_write_opes_job_request "$run_ref" "$topic_id" "$chapter_id" "$idem" \
     "$SMOKE_OUT_DIR/opes_job_request.json"
-  smoke_post_json "$OPES_BASE_URL/api/jobs" \
+  smoke_post_json "$ORQUESTA_OPES_BASE_URL/api/jobs" \
     "$(cat "$SMOKE_OUT_DIR/opes_job_request.json")" \
     "$SMOKE_OUT_DIR/opes_job_response.json"
 
@@ -136,9 +136,9 @@ smoke_poll_until_artifact() {
       --data-binary "@$SMOKE_OUT_DIR/stats_request_$poll.json" \
       >"$SMOKE_OUT_DIR/stats_response_$poll.json" || true
 
-    curl -sS -m 20 "$OPES_BASE_URL/api/jobs/$job_ref/artifacts" \
+    curl -sS -m 20 "$ORQUESTA_OPES_BASE_URL/api/jobs/$job_ref/artifacts" \
       >"$SMOKE_OUT_DIR/opes_artifacts_$poll.json" || true
-    curl -sS -m 20 "$OPES_BASE_URL/api/topics/$topic_id/blocks" \
+    curl -sS -m 20 "$ORQUESTA_OPES_BASE_URL/api/topics/$topic_id/blocks" \
       >"$SMOKE_OUT_DIR/opes_blocks_$poll.json" || true
 
     local artifacts_count
@@ -206,7 +206,7 @@ smoke_write_summary() {
   cat >"$SMOKE_OUT_DIR/summary.txt" <<EOF
 smoke_id=$SMOKE_ID
 orquesta_base_url_ref=$(smoke_url_ref "$base_url")
-opes_base_url_ref=$(smoke_url_ref "$OPES_BASE_URL")
+opes_base_url_ref=$(smoke_url_ref "$ORQUESTA_OPES_BASE_URL")
 run_ref=$run_ref
 topic_id=$topic_id
 chapter_id=$chapter_id

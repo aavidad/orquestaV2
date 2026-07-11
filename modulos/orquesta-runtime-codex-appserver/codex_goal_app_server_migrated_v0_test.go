@@ -135,6 +135,8 @@ func TestServerCodexAppServerGoalBackendV0TurnStartInyectaContratoSalidaCompacta
 		!strings.Contains(input, "prompt operativo minimo") ||
 		!strings.Contains(input, codexAppServerTurnStartRuntimeContractHeaderV0) ||
 		!strings.Contains(input, "checkpoint_started.txt") ||
+		!strings.Contains(input, "Orquesta ya materializo checkpoint_started.txt") ||
+		strings.Contains(input, "materializa checkpoint_started.txt dentro del write-set") ||
 		!strings.Contains(input, "max_text_bytes=16384") ||
 		!strings.Contains(input, "thread_read_max_bytes=256 KiB") ||
 		!strings.Contains(input, "rg --max-count") ||

@@ -11,12 +11,9 @@ func (runtime *RuntimeV0) stopForMaterialProgressV0(
 	ctx context.Context,
 	observation orquestagoal.GoalWorkObserveResultV0,
 	progress orquestaautoprogramming.MaterialProgressStateV0,
+	code string,
 	replan bool,
 ) orquestagoal.GoalWorkObserveResultV0 {
-	code := materialProgressHardStopCodeV0
-	if replan {
-		code = materialProgressReplanCodeV0
-	}
 	if runtime.goalStopper == nil {
 		observation.Result.Issues = append(observation.Result.Issues, orquestagoal.GoalWorkIssueV0{Code: code + "_stop_unavailable", Field: "goal_stopper"})
 		return observation

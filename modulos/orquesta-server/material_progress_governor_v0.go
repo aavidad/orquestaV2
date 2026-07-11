@@ -14,6 +14,7 @@ const (
 	materialProgressWarningCodeV0      = "material_progress_warning"
 	materialProgressReplanCodeV0       = "material_progress_replan_required"
 	materialProgressHardStopCodeV0     = "material_progress_hard_stop_required"
+	materialProgressNoDiffStopCodeV0   = "material_progress_no_diff_stop_required"
 )
 
 func (runtime *RuntimeV0) reconcileMaterialProgressV0(
@@ -66,9 +67,12 @@ func (runtime *RuntimeV0) governMaterialProgressObservationV0(
 	case orquestaautoprogramming.MaterialProgressActionWarningV0:
 		return materialProgressWarningObservationV0(observation, saved), true
 	case orquestaautoprogramming.MaterialProgressActionReplanRequiredV0:
-		return runtime.stopForMaterialProgressV0(ctx, observation, saved, true), true
+		if saved.LastCheckpoint.MaterialClass == orquestaautoprogramming.MaterialProgressClassNoneV0 {
+			return runtime.stopForMaterialProgressV0(ctx, observation, saved, materialProgressNoDiffStopCodeV0, false), true
+		}
+		return runtime.stopForMaterialProgressV0(ctx, observation, saved, materialProgressReplanCodeV0, true), true
 	case orquestaautoprogramming.MaterialProgressActionHardStopRequiredV0:
-		return runtime.stopForMaterialProgressV0(ctx, observation, saved, false), true
+		return runtime.stopForMaterialProgressV0(ctx, observation, saved, materialProgressHardStopCodeV0, false), true
 	default:
 		return observation, true
 	}

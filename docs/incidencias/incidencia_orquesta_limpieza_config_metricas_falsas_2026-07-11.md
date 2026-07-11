@@ -125,3 +125,42 @@ En `ed5c0bff94f2` la auditoria reproducible informa 1.177 candidatos `deadcode`,
 pero cero privados sin referencias textuales. Los ocho modulos sin importador
 son adaptadores opt-in ya clasificados para conservar. Por tanto no existe otra
 retirada destructiva automatica autorizada en este corte.
+
+## BUG-ORQ-20260711-241: dos goals consumen presupuesto sin diff
+
+Estado: cerrado localmente, pendiente de A/B real.
+
+El goal fuente de BUG-237 alcanzo 50.115 tokens observados y su rework 51.121,
+ambos con `material_class=none`, `evidence-ref-material-progress-no-diff` y
+ninguna modificacion del write-set. El governor los paro como estaba previsto,
+pero el segundo intento repitio el mismo patron pese al contexto de rework
+compacto. El trabajo objetivo era un cambio de dos ficheros y no requeria
+exploracion amplia.
+
+Impacto: el control de presupuesto evita consumo ilimitado, pero Orquesta no
+programa y duplica unos 50k tokens antes de reconocer el mismo bloqueo. Esto
+invalida declarar autonomia de programacion estable.
+
+Criterio de cierre:
+
+- identificar si el consumo procede de modelo/routing, prompt, tooling o
+  contabilidad de cache;
+- no subir umbrales como unica solucion;
+- prueba A/B con una tarea real pequena y mismo write-set;
+- aceptar el cambio solo si reduce tokens hasta primer diff sin aumentar fallo,
+  y conserva parada/replan ante ausencia real de progreso.
+
+Diagnostico: el umbral de replan es exactamente la mitad del hard stop
+(`50.000/100.000`). El estado conservaba `material-progress-no-diff`, pero el
+rework se lanzaba con una instruccion generica y sin informacion nueva, por lo
+que repetia el tramo. Ademas, el prompt neutral decia que Orquesta ya habia
+creado el checkpoint runtime mientras el contrato app-server ordenaba al agente
+crearlo dentro del write-set y declararlo como artefacto.
+
+Cierre local: el contrato app-server ya reconoce el checkpoint creado por
+Orquesta y ordena empezar por el primer cambio material. Cuando la evidencia
+tipada en el umbral de replan sigue siendo clase `none`, el cierre usa
+`material_progress_no_diff_stop_required`, queda `NeedsRework=false` y no lanza
+otro backend sin contexto nuevo. Los focales y paquetes completos de
+`orquesta-server` y `orquesta-runtime-codex-appserver` quedan verdes. Falta A/B
+real sobre una tarea pequena antes de cerrar empiricamente.

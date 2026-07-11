@@ -13,8 +13,8 @@ if [[ "${ORQUESTA_OPES_AGENT_SMOKE_CONFIRM:-0}" != "1" ]]; then
   exit 2
 fi
 
-OPES_BASE_URL="${OPES_BASE_URL:-http://127.0.0.1:18082}"
-smoke_require_opes_temporal_destination "$OPES_BASE_URL" "OPES_BASE_URL"
+ORQUESTA_OPES_BASE_URL="${ORQUESTA_OPES_BASE_URL:-http://127.0.0.1:18082}"
+smoke_require_opes_temporal_destination "$ORQUESTA_OPES_BASE_URL" "ORQUESTA_OPES_BASE_URL"
 SMOKE_ID="${SMOKE_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 smoke_root_source="generated"
 if [[ -n "${SMOKE_ROOT:-}" ]]; then
@@ -41,7 +41,7 @@ main() {
   smoke_temp_root_prepare "$SMOKE_ROOT" "$smoke_root_source"
   mkdir -p "$SMOKE_OUT_DIR"
 
-  smoke_get_json "$OPES_BASE_URL/api/health" "$SMOKE_OUT_DIR/opes_health.json"
+  smoke_get_json "$ORQUESTA_OPES_BASE_URL/api/health" "$SMOKE_OUT_DIR/opes_health.json"
   smoke_write_project_context
   smoke_start_orquesta_server
 

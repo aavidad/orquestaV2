@@ -946,9 +946,9 @@ func codexAppServerTurnStartRuntimeContractV0(packet orquestaruntimecodexgoal.Co
 	var b strings.Builder
 	b.WriteString(codexAppServerTurnStartRuntimeContractHeaderV0)
 	b.WriteByte('\n')
-	b.WriteString("- Antes de exploracion larga o comandos costosos, materializa ")
+	b.WriteString("- Orquesta ya materializo ")
 	b.WriteString(checkpointFile)
-	b.WriteString(" dentro del write-set autorizado cuando exista; luego declaralo como artifact_paths/materialized_artifacts/evidence_refs.\n")
+	b.WriteString(" en su runtime ignorado por Git; no lo crees dentro del write-set ni lo declares como artefacto. Empieza por el primer cambio material verificable.\n")
 	b.WriteString("- No pegues salidas largas de comandos, busquedas, dumps, logs, binarios ni base64 en la conversacion; max_text_bytes=")
 	b.WriteString(fmt.Sprintf("%d", maxTextBytes))
 	b.WriteString(" y thread_read_max_bytes=256 KiB.\n")
