@@ -6,6 +6,7 @@
   "snapshot": {"ref": "snapshot-synthetic", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
   "temporary_root": "/tmp/orquesta-apg006-synthetic",
   "state_root": "/tmp/orquesta-apg006-synthetic/state",
+  "randomization": {"algorithm": "sha256-balanced-block-v1", "seed": "apg-006-synthetic-randomization-seed-0001", "concurrent_within_pair": true},
   "execution": {
     "model": "synthetic-model-v1",
     "effort": "medium",
@@ -20,7 +21,10 @@
     "blinded": true,
     "fresh_context": true,
     "blinding_key_sha256": "843bc8317bb7484786b33d04d3046fe05cd13a2a36d28d30503b315cf4ba9ffb",
-    "reproduction_test": "bash scripts/experimentos/context_rotation/test_harness.sh"
+    "reproduction_test": "bash scripts/experimentos/context_rotation/test_harness.sh",
+    "quality_scale": "0-100-higher-is-better",
+    "unnecessary_code_definition": "Changed lines not needed for the stated objective, acceptance criteria, required tests, safety, or maintainability",
+    "review_instructions_sha256": "9999999999999999999999999999999999999999999999999999999999999999"
   },
   "retention": {"allow_worktree_cleanup": true, "preserve_receipts": true, "minimum_retention_hours": 24},
   "pairs": [
@@ -49,6 +53,33 @@
       "treatment_stages": [
         {"stage_ref": "store-implementation", "objective": "Implement store", "cause": "semantic implementation boundary", "write_set": ["synthetic/store.go"], "context_refs": [{"ref": "context-store-implementation", "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}]},
         {"stage_ref": "store-tests", "objective": "Add store tests", "cause": "semantic verification boundary", "write_set": ["synthetic/store_test.go"], "context_refs": [{"ref": "context-store-tests", "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"}]}
+      ]
+    },
+    {
+      "pair_ref": "pair-config", "objective": "Implement synthetic config change", "write_set": ["synthetic/config.go", "synthetic/config_test.go"],
+      "acceptance_criteria": ["Config behavior passes fixture"], "required_tests": ["go test ./synthetic/config"],
+      "context_refs": [{"ref": "context-config", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}],
+      "treatment_stages": [
+        {"stage_ref": "config-implementation", "objective": "Implement config", "cause": "semantic implementation boundary", "write_set": ["synthetic/config.go"], "context_refs": [{"ref": "context-config-implementation", "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}]},
+        {"stage_ref": "config-tests", "objective": "Add config tests", "cause": "semantic verification boundary", "write_set": ["synthetic/config_test.go"], "context_refs": [{"ref": "context-config-tests", "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"}]}
+      ]
+    },
+    {
+      "pair_ref": "pair-worker", "objective": "Implement synthetic worker change", "write_set": ["synthetic/worker.go", "synthetic/worker_test.go"],
+      "acceptance_criteria": ["Worker behavior passes fixture"], "required_tests": ["go test ./synthetic/worker"],
+      "context_refs": [{"ref": "context-worker", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}],
+      "treatment_stages": [
+        {"stage_ref": "worker-implementation", "objective": "Implement worker", "cause": "semantic implementation boundary", "write_set": ["synthetic/worker.go"], "context_refs": [{"ref": "context-worker-implementation", "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}]},
+        {"stage_ref": "worker-tests", "objective": "Add worker tests", "cause": "semantic verification boundary", "write_set": ["synthetic/worker_test.go"], "context_refs": [{"ref": "context-worker-tests", "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"}]}
+      ]
+    },
+    {
+      "pair_ref": "pair-report", "objective": "Implement synthetic report change", "write_set": ["synthetic/report.go", "synthetic/report_test.go"],
+      "acceptance_criteria": ["Report behavior passes fixture"], "required_tests": ["go test ./synthetic/report"],
+      "context_refs": [{"ref": "context-report", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}],
+      "treatment_stages": [
+        {"stage_ref": "report-implementation", "objective": "Implement report", "cause": "semantic implementation boundary", "write_set": ["synthetic/report.go"], "context_refs": [{"ref": "context-report-implementation", "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}]},
+        {"stage_ref": "report-tests", "objective": "Add report tests", "cause": "semantic verification boundary", "write_set": ["synthetic/report_test.go"], "context_refs": [{"ref": "context-report-tests", "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"}]}
       ]
     }
   ]

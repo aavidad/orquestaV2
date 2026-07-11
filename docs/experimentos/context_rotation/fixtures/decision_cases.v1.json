@@ -1,8 +1,8 @@
 {
   "schema_version": "orquesta.context_rotation.synthetic_cases.v1",
   "cases": [
-    {"name": "adopt", "treatment_token_ratio_bps": 7500, "treatment_cost_ratio_bps": 7500, "treatment_time_ratio_bps": 10500, "quality_ok": true, "complete_pairs": 3, "expected": "adopt"},
-    {"name": "keep_control", "treatment_token_ratio_bps": 9000, "treatment_cost_ratio_bps": 9000, "treatment_time_ratio_bps": 10000, "quality_ok": true, "complete_pairs": 3, "expected": "keep_control"},
-    {"name": "inconclusive", "treatment_token_ratio_bps": 7500, "treatment_cost_ratio_bps": 7500, "treatment_time_ratio_bps": 10000, "quality_ok": true, "complete_pairs": 2, "expected": "inconclusive"}
+    {"name": "adopt", "treatment_token_ratio_bps": 7500, "treatment_cost_ratio_bps": 7500, "treatment_time_ratio_bps": 10500, "quality_ok": true, "complete_pairs": 6, "expected": "adopt"},
+    {"name": "keep_control", "treatment_token_ratio_bps": 9000, "treatment_cost_ratio_bps": 9000, "treatment_time_ratio_bps": 10000, "quality_ok": true, "complete_pairs": 6, "expected": "keep_control"},
+    {"name": "inconclusive", "treatment_token_ratio_bps": 7500, "treatment_cost_ratio_bps": 7500, "treatment_time_ratio_bps": 10000, "quality_ok": true, "complete_pairs": 5, "expected": "inconclusive"}
   ]
 }

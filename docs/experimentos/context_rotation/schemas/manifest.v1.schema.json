@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "orquesta.context_rotation.manifest.v1",
   "type": "object",
-  "required": ["schema_version", "experiment_ref", "repository_path", "baseline_commit", "snapshot", "temporary_root", "state_root", "execution", "reviewer", "retention", "pairs"],
+  "required": ["schema_version", "experiment_ref", "repository_path", "baseline_commit", "snapshot", "temporary_root", "state_root", "randomization", "execution", "reviewer", "retention", "pairs"],
   "properties": {
     "schema_version": {"const": "orquesta.context_rotation.manifest.v1"},
     "experiment_ref": {"$ref": "#/$defs/ref"},
@@ -11,10 +11,11 @@
     "snapshot": {"$ref": "#/$defs/evidence"},
     "temporary_root": {"type": "string", "pattern": "^/"},
     "state_root": {"type": "string", "pattern": "^/"},
+    "randomization": {"type": "object", "additionalProperties": false, "required": ["algorithm", "seed", "concurrent_within_pair"], "properties": {"algorithm": {"const": "sha256-balanced-block-v1"}, "seed": {"type": "string", "minLength": 32}, "concurrent_within_pair": {"const": true}}},
     "execution": {"$ref": "#/$defs/config"},
-    "reviewer": {"allOf": [{"$ref": "#/$defs/config"}, {"type": "object", "required": ["blinded", "fresh_context", "blinding_key_sha256", "reproduction_test"], "properties": {"blinded": {"const": true}, "fresh_context": {"const": true}, "blinding_key_sha256": {"$ref": "#/$defs/sha"}, "reproduction_test": {"type": "string", "minLength": 1}}}]},
+    "reviewer": {"allOf": [{"$ref": "#/$defs/config"}, {"type": "object", "required": ["blinded", "fresh_context", "blinding_key_sha256", "reproduction_test", "quality_scale", "unnecessary_code_definition", "review_instructions_sha256"], "properties": {"blinded": {"const": true}, "fresh_context": {"const": true}, "blinding_key_sha256": {"$ref": "#/$defs/sha"}, "reproduction_test": {"type": "string", "minLength": 1}, "quality_scale": {"const": "0-100-higher-is-better"}, "unnecessary_code_definition": {"type": "string", "minLength": 1}, "review_instructions_sha256": {"$ref": "#/$defs/sha"}}}]},
     "retention": {"type": "object", "additionalProperties": false, "required": ["allow_worktree_cleanup", "preserve_receipts", "minimum_retention_hours"], "properties": {"allow_worktree_cleanup": {"type": "boolean"}, "preserve_receipts": {"const": true}, "minimum_retention_hours": {"type": "integer", "minimum": 1, "maximum": 8760}}},
-    "pairs": {"type": "array", "minItems": 3, "maxItems": 20, "items": {"$ref": "#/$defs/pair"}}
+    "pairs": {"type": "array", "minItems": 6, "maxItems": 20, "items": {"$ref": "#/$defs/pair"}}
   },
   "additionalProperties": false,
   "$defs": {
