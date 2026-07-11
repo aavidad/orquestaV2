@@ -29,6 +29,8 @@ const (
 	WorktreeIssueGitOutputTooLargeV0     WorktreeIssueCodeV0 = "git_output_too_large"
 	WorktreeIssueGitStatusTooManyPathsV0 WorktreeIssueCodeV0 = "git_status_too_many_paths"
 	WorktreeIssueGitCommandTimeoutV0     WorktreeIssueCodeV0 = "git_command_timeout"
+	WorktreeIssueWorkspaceConflictV0     WorktreeIssueCodeV0 = "goal_workspace_conflict"
+	WorktreeIssueWorkspaceLockedV0       WorktreeIssueCodeV0 = "goal_workspace_locked"
 )
 
 type WorktreeIssueV0 struct {
