@@ -15,7 +15,6 @@ ese runbook, manda el runbook y avisa al revisor.
 - **Hermes** es agente de trabajo dentro del contenedor aislado: opera sobre
   `/workspace`, dentro del write-set del goal, y devuelve el resultado a
   Orquesta. No lanza servidores fuera del contenedor ni toca el host.
-- **Codex** trabaja su cola en `docs/instrucciones_codex_2026-07-11.md`.
 - **Claude (revisor)** valida cierres reejecutando los tests declarados; ningun
   cierre se acepta autodeclarado.
 
@@ -45,28 +44,42 @@ ese runbook, manda el runbook y avisa al revisor.
 - **NUCLEO: CERRADO SIN CONDICIONES** (BUG-226 cerrado en `befb3707b` con
   prueba empirica real: Orquesta lanzo y completo un goal por su API nativa,
   closure accepted, shutdown limpio).
-- **Frente unico vigente: CONECTORES** (runtime-codex-*, state-file,
-  required-test, superficies MCP/HTTP, wiring stack/`cmd/orquesta-server`).
-- **AUXILIARES CONGELADOS** hasta cerrar conectores: tools/CLI extra, transporte
-  stdio, ingesta, presentaciones, web/telegram.
+- **Frente que falta para TERMINAR la app: CONECTORES** (runtime-codex-*,
+  state-file, required-test, superficies MCP/HTTP, wiring stack/`cmd/orquesta-server`).
+  Es ahora tu prioridad 1.
+- Auxiliares (stdio, ingesta, presentaciones, web/telegram): no los amplies
+  hasta cerrar conectores, salvo tools que te encargue el revisor.
 - Bugs abiertos restantes: solo residuales de campo (remoto/OPES/proveedor real).
   Ninguno bloquea el trabajo local.
 
-## REPARTO DE CARRILES (orden del operador 2026-07-12)
+## REPARTO DE CARRILES (actualizado 2026-07-12 ~01:00)
 
-Hermes NO trabaja el mismo frente que Codex. Reparto vinculante:
+**Codex ya no esta en juego**: no hay sesiones Codex vivas y su cola
+(`docs/instrucciones_codex_2026-07-11.md`) queda HISTORICA. El trabajo lo
+llevan ahora dos actores:
 
-- **Hermes: BUGS + PROGRAMACION DE TOOLS.** Es tu carril propio. Las tools
-  dejan de estar congeladas PARA TI (siguen congeladas para Codex, que no
-  debe abrir frente auxiliar mientras cierra conectores).
-- **Codex: CONECTORES** (runtime-codex-*, state-file, required-test,
-  superficies MCP/HTTP, wiring stack/cmd). No entres en esos ficheros: si un
-  bug tuyo obliga a tocarlos, avisa al revisor por la senal y espera.
-- Si dos carriles chocan en un mismo fichero, gana quien lo tenga asignado y
-  el otro espera; nunca se edita el write-set activo del otro agente.
+- **Hermes (tu)**: BUGS del inventario + PROGRAMACION DE TOOLS + el frente de
+  CONECTORES que Codex dejo abierto (runtime-codex-*, state-file,
+  required-test, superficies MCP/HTTP, wiring stack/`cmd/orquesta-server`).
+  Las tools dejan de estar congeladas: son tu carril.
+- **Claude (revisor/director)**: no programa el dia a dia. Dirige, revisa
+  cierres reejecutando tests, arbitra, lanza goals por la API nativa de
+  Orquesta cuando toca y arregla bloqueos. Interviene en codigo solo si tu
+  te atascas o si es trabajo de direccion (contratos, guards, arbitraje).
+- **Orquesta**: ejecuta goals; es quien materializa cambios dentro del
+  write-set que ella entrega. Cuando puedas, trabaja DENTRO de un goal suyo.
+
+Prioridad de tu cola: (1) CONECTORES hasta cerrarlos -- es lo unico que falta
+para terminar la app; (2) BUGS locales reproducibles; (3) TOOLS.
 
 ## Cola de trabajo
 
+- [ ] H0 (PRIORIDAD 1): CONECTORES. Cerrar el frente que falta para terminar
+  la app: cada puerto del nucleo con adaptador probado (fake + real cuando
+  exista) y sin logica de dominio en los adaptadores. Modulos:
+  runtime-codex-* (goal backend, delivery, appserver), state-file,
+  runtime-required-test, superficies MCP/HTTP de orquesta-mcp y el wiring de
+  orquesta-app-codex-stack + cmd/orquesta-server. Senal al revisor por hito.
 - [ ] H1: BUGS. Coge los bugs abiertos del inventario
   (`docs/inventario_bugs_orquesta_2026-06-30.md`) de uno en uno, empezando por
   los reproducibles en local. Para cada uno: reproducir, arreglar, test que

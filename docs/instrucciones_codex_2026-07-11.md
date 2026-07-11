@@ -1,3 +1,7 @@
+> ESTADO: COLA HISTORICA (2026-07-12). No hay sesiones Codex vivas; el
+> trabajo pasa a Hermes (`docs/instrucciones_hermes_2026-07-12.md`) con el
+> revisor Claude dirigiendo. Se conserva como evidencia del corte.
+
 ## CIERRE 2026-07-12: BUG-226 CERRADO - NUCLEO CERRADO SIN CONDICIONES
 
 La prueba empirica se ejecuto y salio VERDE, lanzada por el revisor a traves
