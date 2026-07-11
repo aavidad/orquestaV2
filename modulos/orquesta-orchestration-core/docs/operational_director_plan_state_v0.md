@@ -77,8 +77,10 @@ apuntar a esas refs, no convertirse en un segundo log paralelo.
    agent refs, pending agent refs, `parent_task_ref` si aplica y `wait_ref`.
 6. Lectura de reentrada inicial desde `ContinueAppDirectorV0` usando
    `operational_director_plan_ref`.
-7. Avance inicial `wait_subagents -> review_deliveries` cuando el wait queda
-   consumido y los agentes pendientes entregaron.
+7. Avance inicial `wait_subagents -> review_deliveries` con las entregas
+   disponibles del scope; la review puede procesarse de forma incremental/
+   streaming por delivery y el cierre del paso espera a que no queden entregas
+   pendientes del scope.
 8. Avance positivo `review_deliveries -> run_required_tests/replan_or_close`
    cuando las entregas del scope activo tienen cadena causal
    `DeliveryRegistered -> ReviewRequested -> ReviewResultRecorded(accepted) ->

@@ -10,8 +10,9 @@ import (
 )
 
 const (
-	stackRunControlEscalatorEvidenceCleanedV0      = "evidence-ref-run-control-backend-stop-cleaned"
-	stackRunControlEscalatorEvidenceNoActiveWorkV0 = "evidence-ref-run-control-backend-stop-no-active-work"
+	stackRunControlEscalatorEvidenceCleanedV0            = "evidence-ref-run-control-backend-stop-cleaned"
+	stackRunControlEscalatorEvidenceSnapshotIncompleteV0 = "evidence-ref-run-control-backend-stop-snapshot-incomplete"
+	stackRunControlEscalatorEvidenceCleanupUnconfirmedV0 = "evidence-ref-run-control-backend-stop-cleanup-unconfirmed"
 )
 
 // stackRunControlBackendStopEscalatorV0 implementa la escalada real de parada
@@ -47,9 +48,10 @@ func (escalator stackRunControlBackendStopEscalatorV0) EscalateBackendStopV0(
 	matched := stackRunControlEscalatorMatchingWorksV0(active.ActiveWorks, request)
 	if len(matched) == 0 {
 		return orquestamcp.MCPRunControlBackendStopEscalationResultV0{
-			Stopped: true,
+			Stopped:      false,
+			ResidualRefs: stackRunControlEscalatorRequestResidualRefsV0(request),
 			EvidenceRefs: compactStringsV0(append(
-				[]string{stackRunControlEscalatorEvidenceNoActiveWorkV0},
+				[]string{stackRunControlEscalatorEvidenceSnapshotIncompleteV0},
 				active.EvidenceRefs...,
 			)),
 		}, nil
@@ -63,20 +65,36 @@ func (escalator stackRunControlBackendStopEscalatorV0) EscalateBackendStopV0(
 		return orquestamcp.MCPRunControlBackendStopEscalationResultV0{}, err
 	}
 	evidenceRefs := compactStringsV0(append(
-		[]string{stackRunControlEscalatorEvidenceCleanedV0},
+		append([]string(nil), active.EvidenceRefs...),
 		cleaned.EvidenceRefs...,
 	))
+	cleanupConfirmed := cleaned.CleanedWorkCount >= len(matched)
+	if cleanupConfirmed {
+		evidenceRefs = compactStringsV0(append(
+			[]string{stackRunControlEscalatorEvidenceCleanedV0},
+			evidenceRefs...,
+		))
+	} else {
+		evidenceRefs = compactStringsV0(append(
+			[]string{stackRunControlEscalatorEvidenceCleanupUnconfirmedV0},
+			evidenceRefs...,
+		))
+	}
 	after, err := escalator.Reader.ReadActiveShutdownWorkV0(ctx, orquestaservershutdown.ActiveShutdownWorkRequestV0{
 		EvidenceRefs: compactStringsV0(request.EvidenceRefs),
 	})
 	if err != nil {
 		return orquestamcp.MCPRunControlBackendStopEscalationResultV0{}, err
 	}
+	evidenceRefs = compactStringsV0(append(evidenceRefs, after.EvidenceRefs...))
 	residual := stackRunControlEscalatorMatchingWorksV0(after.ActiveWorks, request)
-	if len(residual) > 0 {
+	if len(residual) > 0 || !cleanupConfirmed {
 		residualRefs := make([]string, 0, len(residual))
 		for _, work := range residual {
 			residualRefs = append(residualRefs, firstNonEmptyQueuedSourceV0(work.WorkRef, work.ExternalWorkRef, work.RunRef))
+		}
+		if len(residualRefs) == 0 {
+			residualRefs = stackRunControlEscalatorRequestResidualRefsV0(request)
 		}
 		return orquestamcp.MCPRunControlBackendStopEscalationResultV0{
 			Stopped:      false,
@@ -88,6 +106,16 @@ func (escalator stackRunControlBackendStopEscalatorV0) EscalateBackendStopV0(
 		Stopped:      true,
 		EvidenceRefs: evidenceRefs,
 	}, nil
+}
+
+func stackRunControlEscalatorRequestResidualRefsV0(
+	request orquestamcp.MCPRunControlBackendStopEscalationRequestV0,
+) []string {
+	return compactStringsV0([]string{
+		request.GoalRef,
+		request.ExternalGoalRef,
+		request.RunRef,
+	})
 }
 
 func stackRunControlEscalatorMatchingWorksV0(

@@ -37,8 +37,8 @@ func TestReconcileExternalWorkPublicStatusV0PropAckSinCierreNoCompletaV0(t *test
 	})
 }
 
-func TestReconcileExternalWorkPublicStatusV0PropOutboxPendienteMantieneRunningV0(t *testing.T) {
-	// Invariant: outbox pendiente es trabajo causal vivo y no se bloquea como proyeccion cerrada.
+func TestReconcileExternalWorkPublicStatusV0PropOutboxPendienteMantienePendingV0(t *testing.T) {
+	// Invariant: outbox pendiente prueba trabajo solicitado, no un proceso vivo.
 	rapid.Check(t, func(rt *rapid.T) {
 		input := ExternalWorkReconciliationInputV0{
 			RunRef:                "run-outbox-property",
@@ -50,10 +50,10 @@ func TestReconcileExternalWorkPublicStatusV0PropOutboxPendienteMantieneRunningV0
 			EvidenceRefs:          []string{"projection-ref", "outbox-ref", "domain-ref"},
 		}
 		got := ReconcileExternalWorkPublicStatusV0(input)
-		if got.PublicStatus != ExternalWorkPublicStatusRunningV0 ||
-			got.Reason != "live_process_open_task_pending_outbox_or_liveness" ||
+		if got.PublicStatus != ExternalWorkPublicStatusPendingV0 ||
+			got.Reason != "causal_work_pending_without_runtime_liveness" ||
 			!containsRunCoordinatorStringForTestV0(got.CausalSourceRefs, "outbox_ledger") {
-			rt.Fatalf("outbox pendiente no mantuvo running: input=%+v decision=%+v", input, got)
+			rt.Fatalf("outbox pendiente no mantuvo pending: input=%+v decision=%+v", input, got)
 		}
 	})
 }

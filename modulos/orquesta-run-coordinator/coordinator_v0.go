@@ -36,8 +36,10 @@ func CoordinateRunsTickV0(
 	if policy.Now.IsZero() {
 		policy = orquestarunqueue.DefaultRunQueueRankingPolicyV0(command.OccurredAt)
 	}
-	ranked := orquestarunqueue.RankRunCandidatesV0(candidates, policy)
 	attempts := activeAttemptsByRunRefV0(candidates)
+	candidates = filterSupersededAttemptCandidatesV0(candidates)
+	ranked := orquestarunqueue.RankRunCandidatesV0(candidates, policy)
+	ranked = limitRankedCandidatesV0(ranked, command.QueueLimit)
 	result := RunCoordinatorTickResultV0{Ranked: compactRankedV0(ranked, attempts)}
 
 	maxRuns := command.MaxRuns
@@ -97,12 +99,63 @@ func CoordinateRunsTickV0(
 	return result, nil
 }
 
+func filterSupersededAttemptCandidatesV0(
+	candidates []orquestarunqueue.RunSchedulingCandidateV0,
+) []orquestarunqueue.RunSchedulingCandidateV0 {
+	byRunRef := make(map[string]orquestarunqueue.RunSchedulingCandidateV0, len(candidates))
+	for _, candidate := range candidates {
+		if runRef := strings.TrimSpace(candidate.RunRef); runRef != "" {
+			byRunRef[runRef] = candidate
+		}
+	}
+	superseded := make(map[string]bool)
+	for _, candidate := range candidates {
+		runRef := strings.TrimSpace(candidate.SupersedesRunRef)
+		target, ok := byRunRef[runRef]
+		if runRef != "" && ok && runQueueCandidatesShareAttemptGroupV0(candidate, target) {
+			superseded[runRef] = true
+		}
+	}
+	filtered := make([]orquestarunqueue.RunSchedulingCandidateV0, 0, len(candidates))
+	for _, candidate := range candidates {
+		if superseded[strings.TrimSpace(candidate.RunRef)] {
+			continue
+		}
+		filtered = append(filtered, candidate)
+	}
+	return filtered
+}
+
+func runQueueCandidatesShareAttemptGroupV0(
+	superseder orquestarunqueue.RunSchedulingCandidateV0,
+	target orquestarunqueue.RunSchedulingCandidateV0,
+) bool {
+	supersederGroup := orquestarunqueue.RunQueueAttemptGroupRefV0(superseder)
+	targetGroup := orquestarunqueue.RunQueueAttemptGroupRefV0(target)
+	if supersederGroup != "" || targetGroup != "" {
+		return supersederGroup != "" && supersederGroup == targetGroup
+	}
+	return strings.TrimSpace(superseder.ParentRunRef) == strings.TrimSpace(target.RunRef)
+}
+
 func queueReadRequestV0(command RunCoordinatorTickCommandV0) orquestarunqueue.RunQueueReadRequestV0 {
 	return orquestarunqueue.RunQueueReadRequestV0{
 		QueueRef: strings.TrimSpace(command.QueueRef),
 		AppRefs:  append([]string(nil), command.AppRefs...),
-		Limit:    command.QueueLimit,
+		// Supersession must be resolved against the complete attempt group before
+		// the visible queue limit can be applied.
+		Limit: 0,
 	}
+}
+
+func limitRankedCandidatesV0(
+	ranked []orquestarunqueue.RankedRunCandidateV0,
+	queueLimit int,
+) []orquestarunqueue.RankedRunCandidateV0 {
+	if queueLimit <= 0 || len(ranked) <= queueLimit {
+		return ranked
+	}
+	return ranked[:queueLimit]
 }
 
 func syncControlBlockedQueueStatusV0(

@@ -544,9 +544,10 @@ func TestNeutralOrchestrationProductionCodeDoesNotHardcodeLocalPaths(t *testing.
 
 func TestCausalVerdictAuthorityCallersRemainExplicitV0(t *testing.T) {
 	approved := map[string]bool{
-		"modulos/orquesta-app-codex-stack/goal_first_resident_rework_v0.go": false,
-		"modulos/orquesta-estado-vivo/proyeccion_v0.go":                     false,
-		"modulos/orquesta-mcp/observe_app_director_goal_estado_vivo_v0.go":  false,
+		"modulos/orquesta-app-codex-stack/goal_first_resident_rework_v0.go":   false,
+		"modulos/orquesta-estado-vivo/proyeccion_v0.go":                       false,
+		"modulos/orquesta-mcp/observe_app_director_goal_estado_vivo_v0.go":    false,
+		"modulos/orquesta-run-coordinator/external_work_reconciliation_v0.go": false,
 	}
 
 	err := filepath.WalkDir(".", func(path string, entry os.DirEntry, err error) error {

@@ -31,8 +31,9 @@ Cobertura esperada:
   registrar `WorkflowTaskWaitStateV0` sin pasar por Codex/OPES ni runtime real;
 - `ContinueAppDirectorV0` puede reentrar desde `OperationalDirectorPlanStateV0`
   con `operational_director_plan_ref`, sin volver al scope global del run;
-- el plan state avanza de `wait_subagents` a `review_deliveries` cuando los
-  agentes pendientes entregaron y el loop queda `quiescent`;
+- el plan state puede entrar en `review_deliveries` con entregas disponibles
+  del scope y procesarlas de forma incremental/streaming; el cierre del paso
+  espera a que no queden entregas pendientes y el loop quede `quiescent`;
 - si ese avance deja el run en `programacion`, `ContinueAppDirectorV0` abre
   `revision` por comando workflow y ejecuta un pase acotado de review sobre el
   mismo scope;

@@ -15,7 +15,9 @@ su estado bruto en `Estado` y aporta flags estructurales cuando los conoce:
 `Terminal` y `Aceptado`. `RuntimeObservado`
 distingue una identidad runtime inspeccionada y muerta de la ausencia de una
 observacion runtime. `Terminal` representa un resultado terminal durable, no
-una inferencia desde el string del state.
+una inferencia desde el string del state. Para ejercer autoridad de cierre debe
+traer `Fuente` no vacia y al menos una `EvidenceRefs` durable; sin ambas queda
+`indeterminate` con `durable_terminal_evidence_missing` y reparacion requerida.
 
 `ScopeGoalExecutionV0` (`goal_execution`) exige `RuntimeIdentityRef` o
 `RuntimeGenerationRef` coincidente para que una
@@ -51,8 +53,9 @@ y liveness runtime. Devuelve `VeredictoCausalV0` con una clase tipada:
 - `divergent_needs_repair`: terminal y vivo coexisten, la identidad runtime
   falta/no coincide, o las refs causales se contradicen;
 - `indeterminate`: hubo timeout/observacion incompleta, falta observar
-  liveness para un state `running`, o la evidencia aun es insuficiente. No
-  publica `running` ni afirma reparacion antes de reobservar.
+  liveness para un state `running`, la evidencia aun es insuficiente o un
+  terminal no trae referencia durable. No publica `running`; el terminal no
+  demostrado exige reparacion y el timeout exige reobservacion.
 
 La funcion conserva refs opacas, no lee stores/artefactos/procesos y no decide
 por nombres de fuente. Los adaptadores solo traducen sus observaciones a

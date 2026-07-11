@@ -1,6 +1,6 @@
 # Bugs vivos de Orquesta - indice canonico
 
-Actualizado: 2026-07-11 (auditoria real del attestor 208AA).
+Actualizado: 2026-07-11 (cierre local de nucleo R4).
 Mantenedor: Claude (revisor). Regla: UNA fila por bug vivo con su residual
 exacto; el historial completo vive en
 `docs/inventario_bugs_orquesta_2026-06-30.md` y NO se cuenta desde alli.
@@ -9,23 +9,26 @@ mismo commit.
 
 ## Vivos (nucleo)
 
-| ID | Residual exacto que lo mantiene vivo | Siguiente accion |
-| --- | --- | --- |
-| BUG-ORQ-20260710-208A-D | patches focales verdes en local; un repro local 2026-07-11 elimino el backend pero el primer control no propago terminalidad, observe tuvo que reconciliar a `blocked` y shutdown publico `ready` sin salir | cerrar propagacion/actuador causal y probar por API que control + shutdown terminan sin segundo intento ni SIGINT propietario; repetir tras deploy |
-| BUG-ORQ-20260710-208E | tooling drain/harness listo (F3-R2); falta receipt real `clean` de drain + dos pases amplios verdes. El perfil aislado exige `ORQUESTA_TEST_CACHE_ROOT` y `ORQUESTA_TEST_BATCH_ROOT` fuera de `/srv`; una revision local 2026-07-10 confirmo que Go 1.25 deja `GOMODCACHE` readonly y un runner desligado puede dejar helpers Unix bajo esa raiz | operador ejecuta drain + `orquesta_test_batches.sh` con ambas rutas aisladas; consolidar config y restaurar `chmod -R u+w` antes del cleanup, verificando que no quedan helpers por identidad de runtime |
-| F5/identidad runtime | integrado en `2fe12f658` y completado localmente por D1 con `5f30973d7`: identidad de servidor y proyecto externo ya son distintos; closure accepted y shutdown listo | ejecutar drain/deploy gobernados y verificar por API el binario remoto, sin tocar `uso-app` |
-| BUG-ORQ-20260710-208I | timeout parcial de observe coexistio con `invalid` durable; causa raiz no demostrada. F1 YA adoptado en observe/status/stats (etapa A, 2026-07-10): la superficie local ya no puede publicar running contradicho; la evidencia del incidente es del servidor remoto | repro por API contra servidor desplegado y correlacionar refs/tiempos con el veredicto causal publicado; no cerrable en local |
-| BUG-ORQ-20260710-208S | goal-first residente ya cubre bloqueo/rework/parada por falta de progreso; el residual es `codex-launch-wave`, utilidad breakglass cuyo presupuesto depende de `codex-wave-status` | no usar esa utilidad como flujo productivo; si se conserva para operacion real, conectarla a una tarea/observador gobernado; evidencia en la [incidencia 208S](incidencias/incidencia_orquesta_ola_codex_sin_progreso_diagnostico_excesivo_2026-07-10.md) |
-| BUG-ORQ-20260701-079 | solo frontera proveedor: cap duro pre-tool ante stdout crudo sin redireccion | esperar enforcement del proveedor o probe adversarial nuevo; no bloquea local |
-| BUG-ORQ-20260704-165 / 20260701-065 | residual amplio de observabilidad/control lento con proveedor real; nucleo local cerrado | se paga con la adopcion completa del veredicto F1 + repro 208 tras deploy |
-| BUG-ORQ-20260711-208Z | una instancia con `degraded_identity` bloquea correctamente trabajo, pero tambien rechaza `POST /api/v0/server/shutdown` con `server_work_launch_degraded_identity` | separar shutdown seguro del guard de lanzamiento; conservar idempotencia y demostrar que prepare-run sigue bloqueado. Evidencia en la [incidencia 208Z](incidencias/incidencia_orquesta_degraded_identity_bloquea_shutdown_2026-07-11.md) |
-| BUG-ORQ-20260711-208AA | cerrado funcionalmente: un goal real termino con codigo y tests focales verdes, pero el attestor carecia de toolchain/cache y despues de `PATH`; Orquesta trataba errores operativos del attestor como test rojo y lanzaba rework inutil | `b9205ca71` integra preflight, snapshot verificado, `PATH` minimo y fallo de infraestructura sin rework; E2E `autoprog-attestor-e2e-autonomous-20260711` cerro `accepted` con dos receipts independientes `passed`. Evidencia en la [incidencia 208AA](incidencias/incidencia_orquesta_attestor_toolchain_infra_lanza_rework_2026-07-11.md) |
-| BUG-ORQ-20260711-208AC | cerrado funcionalmente: el observador residente reutilizaba un timeout de dos segundos y cancelaba la atestacion independiente antes de que un test Go real terminase | `4a4ce945d` separa la ventana durable del residente (15 minutos) de la respuesta HTTP acotada; el E2E final cerro `accepted` sin intervencion ni rework. Residual documentado: scheduler concurrente de atestaciones para escala. Evidencia en la [incidencia 208AC](incidencias/incidencia_orquesta_attestor_cancelado_por_timeout_observador_2026-07-11.md) |
+No quedan bugs de codigo local conocidos tras R4. Esto no declara desplegado el
+remoto ni cierra validaciones de proveedor/campo.
+
+## Vivos (conectores)
+
+| Residual | Siguiente accion |
+| --- | --- |
+| El reconciliador external-work ya falla cerrado y usa autoridad causal, pero el caller productivo actual solo alimenta la ruta de run stale; ACK, artefacto y estado de dominio siguen cubiertos por contrato/test directo, no por wiring real | al retomar conectores, cablear las señales desde la composicion external-work y añadir smoke temporal; no reabrir el nucleo mientras siga fail-closed |
 
 ## Vivos (operativos, no de codigo)
 
 | ID | Residual | Siguiente accion |
 | --- | --- | --- |
+| BUG-ORQ-20260710-208A-D | codigo local cerrado por R4: control, cleanup, replay parcial y shutdown pasan focales, suite completa y `-race`; falta smoke API local post-commit y repeticion tras deploy | ejecutar una sola orden de control y un solo shutdown contra backend aislado; despues validar remoto gobernado |
+| BUG-ORQ-20260710-208E | tooling drain/harness listo (F3-R2); falta receipt real `clean` y dos pases amplios en el entorno de despliegue | operador ejecuta drain y lotes aislados cuando se retome remoto |
+| F5/identidad runtime | codigo local cerrado; falta verificar identidad del binario desplegado | ejecutar drain/deploy gobernados sin tocar `uso-app` |
+| BUG-ORQ-20260710-208I | evidencia original solo remota; local ya falla cerrado | repro por API tras desplegar el binario vigente |
+| BUG-ORQ-20260710-208S | residual de utilidad breakglass, fuera del flujo productivo | no usarla como flujo principal; gobernarla si se conserva |
+| BUG-ORQ-20260701-079 | frontera de enforcement del proveedor | esperar cap del proveedor o probe adversarial nuevo |
+| BUG-ORQ-20260704-165 / 20260701-065 | residual con proveedor lento real; nucleo local cerrado | revalidar tras deploy |
 | S14/deploy remoto | binario remoto vivo `9541e2f0...` anterior al codigo; flujo nuevo: remoto = solo destino de deploy | drain gobernado + `orquesta_server_deploy.sh` cuando el operador decida subir |
 | S13/F4 artefactos versionados | conteo vivo: 61 con nombre de checkpoint/resultado; 68 al incluir cuatro fixtures eval y tres artefactos auxiliares de la familia. Codex app-server, Claude y Gemini ya escriben/leen primero recibos runtime por goal; el guard Git conserva el rechazo de nuevos no clasificados. Quedan proyeccion comun de procedencia, smoke real aislado y migracion de 58 movibles. Evidencia en la [incidencia S13](incidencias/incidencia_orquesta_s13_destino_recibos_runtime_2026-07-10.md). | probar proveedor real aislado y migrar los 58 movibles con commits gobernados |
 | S12 limpieza envs remota | perfil remoto/secretos/defaults sin corte gobernado | corte separado tras deploy; no mezclar con drain |
@@ -35,6 +38,24 @@ mismo commit.
 
 ## Cerrados hoy (referencia rapida)
 
+- BUG-ORQ-20260710-208A-D: cierre de codigo local R4. Una confirmacion de
+  cleanup atribuible supera snapshot stale; fallos parciales son reintentables;
+  shutdown no publica ready con trabajo; ausencia no prueba parada. Evidencia
+  en la [incidencia 208C](incidencias/incidencia_orquesta_208c_control_shutdown_primera_orden_2026-07-11.md).
+- BUG-ORQ-20260711-215/216/217: cerradas la carrera de contadores del harness HTTP
+  y la observacion transitoria posterior a `tmux kill-session`, sin ampliar
+  timeouts ni relajar identidad; el guard de latencia conserva 60 s normal y
+  no se aplica bajo `-race`, manteniendo todas las aserciones. Evidencia en la
+  [incidencia race/shutdown](incidencias/incidencia_orquesta_race_harness_shutdown_2026-07-11.md).
+- BUG-ORQ-20260711-208Z: cerrado localmente. La identidad degradada sigue
+  bloqueando todo lanzamiento, pero `POST /api/v0/server/shutdown` termina el
+  servidor cooperativamente e idempotente, sin señal externa. Evidencia en la
+  [incidencia 208Z](incidencias/incidencia_orquesta_degraded_identity_bloquea_shutdown_2026-07-11.md).
+- BUG-ORQ-20260711-211/212/213/214: cerrados localmente. El reconciliador
+  external-work usa la autoridad causal comun; un terminal exige referencia
+  durable; la supersesion de intentos no depende del orden; y el substream no
+  amplia review fuera del wait. Evidencia en la
+  [incidencia de invariantes causales](incidencias/incidencia_orquesta_invariantes_causales_nucleo_2026-07-11.md).
 - BUG-ORQ-20260711-208AB: cerrado localmente por `97d1d913a`. Los tests
   derivados del grafo ya salen con `CommandRef` y hashes congelados; el repro
   API `autoprog-attestor-contract-repro-20260711` lanzo un goal real sin spec
@@ -131,7 +152,6 @@ mismo commit.
 
 ## Regla de conteo
 
-Bugs vivos de codigo del nucleo: los de la primera tabla (6 entradas, de las
-cuales 208A-E son el mismo frente con residuales distintos). Todo lo demas es
-operativo o de campo. Si una lectura antigua del inventario historico
-contradice este indice, prevalece este indice.
+Bugs vivos de codigo local del nucleo: 0 conocidos tras R4. Residuales de
+conectores: 1 wiring fail-closed. El resto es operativo, remoto, proveedor o de
+campo. Si una lectura historica contradice este indice, prevalece este indice.

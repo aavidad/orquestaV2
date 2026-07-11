@@ -2,7 +2,7 @@ package orquestaservershutdown
 
 import "strings"
 
-func serverShutdownRequesterAuthorizedV0(requestedBy string) bool {
+func ServerShutdownRequesterAuthorizedV0(requestedBy string) bool {
 	value := strings.ToLower(strings.TrimSpace(requestedBy))
 	if value == "" {
 		return false
@@ -13,6 +13,10 @@ func serverShutdownRequesterAuthorizedV0(requestedBy string) bool {
 		return false
 	}
 	return strings.Contains(value, "director")
+}
+
+func serverShutdownRequesterAuthorizedV0(requestedBy string) bool {
+	return ServerShutdownRequesterAuthorizedV0(requestedBy)
 }
 
 func missingServerShutdownDepV0(status string) ServerShutdownResultV0 {

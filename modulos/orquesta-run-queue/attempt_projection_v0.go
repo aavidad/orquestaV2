@@ -8,8 +8,7 @@ import (
 func ProjectRunQueueAttemptsV0(candidates []RunSchedulingCandidateV0) []RunQueueAttemptProjectionV0 {
 	groups := map[string]*RunQueueAttemptProjectionV0{}
 	order := []string{}
-	activeByGroup := map[string]RunSchedulingCandidateV0{}
-	hasActive := map[string]bool{}
+	candidatesByGroup := map[string][]RunSchedulingCandidateV0{}
 	superseded := map[string]map[string]bool{}
 
 	for _, raw := range candidates {
@@ -28,6 +27,7 @@ func ProjectRunQueueAttemptsV0(candidates []RunSchedulingCandidateV0) []RunQueue
 			groups[groupRef] = projection
 			order = append(order, groupRef)
 		}
+		candidatesByGroup[groupRef] = append(candidatesByGroup[groupRef], candidate)
 		if projection.OriginalRunRef == "" && strings.TrimSpace(candidate.ParentRunRef) == "" {
 			projection.OriginalRunRef = candidate.RunRef
 		}
@@ -46,15 +46,11 @@ func ProjectRunQueueAttemptsV0(candidates []RunSchedulingCandidateV0) []RunQueue
 			}
 			superseded[groupRef][candidate.SupersedesRunRef] = true
 		}
-		if !superseded[groupRef][candidate.RunRef] && runQueueCandidateMoreActiveV0(candidate, activeByGroup[groupRef], hasActive[groupRef]) {
-			activeByGroup[groupRef] = candidate
-			hasActive[groupRef] = true
-		}
 	}
 
 	for groupRef, projection := range groups {
-		active := activeByGroup[groupRef]
-		if active.RunRef == "" {
+		active, ok := activeRunQueueAttemptV0(candidatesByGroup[groupRef], superseded[groupRef])
+		if !ok {
 			continue
 		}
 		projection.ActiveAttemptRef = active.RunRef
@@ -70,6 +66,24 @@ func ProjectRunQueueAttemptsV0(candidates []RunSchedulingCandidateV0) []RunQueue
 		out = append(out, *groups[groupRef])
 	}
 	return out
+}
+
+func activeRunQueueAttemptV0(
+	candidates []RunSchedulingCandidateV0,
+	superseded map[string]bool,
+) (RunSchedulingCandidateV0, bool) {
+	var active RunSchedulingCandidateV0
+	hasActive := false
+	for _, candidate := range candidates {
+		if superseded[candidate.RunRef] {
+			continue
+		}
+		if runQueueCandidateMoreActiveV0(candidate, active, hasActive) {
+			active = candidate
+			hasActive = true
+		}
+	}
+	return active, hasActive
 }
 
 func normalizeRunSchedulingCandidateV0(candidate RunSchedulingCandidateV0) RunSchedulingCandidateV0 {
@@ -105,6 +119,13 @@ func runQueueAttemptGroupRefV0(candidate RunSchedulingCandidateV0) string {
 		parts = append(parts, "write:"+ref)
 	}
 	return strings.Join(parts, "|")
+}
+
+// RunQueueAttemptGroupRefV0 devuelve la identidad causal normalizada del grupo
+// para que los consumidores validen enlaces entre intentos sin reimplementar
+// la derivacion.
+func RunQueueAttemptGroupRefV0(candidate RunSchedulingCandidateV0) string {
+	return runQueueAttemptGroupRefV0(normalizeRunSchedulingCandidateV0(candidate))
 }
 
 func runQueueCandidateMoreActiveV0(candidate RunSchedulingCandidateV0, current RunSchedulingCandidateV0, hasCurrent bool) bool {

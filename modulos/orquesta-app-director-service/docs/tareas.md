@@ -171,10 +171,11 @@ Estado: cerrado offline para el ciclo probado. Cerrado el camino positivo
 `wait -> review_deliveries -> run_required_tests -> replan_or_close -> close`
 para microtareas nacidas de decisiones del director y el consumo durable de
 `run_required_tests` desde `RequiredTestEvidenceV0`.
-Aniadido pase operativo de continuidad: cuando `wait_subagents` queda consumido
-y el state pasa a `review_deliveries`, `ContinueAppDirectorV0` abre `revision`
-si el run seguia en `programacion` y relanza un pase acotado del loop para
-aplicar review gate sin llamada manual adicional.
+Aniadido pase operativo de continuidad: las entregas disponibles pueden entrar
+en `review_deliveries` de forma incremental/streaming, sin esperar agentes
+ajenos al scope. `ContinueAppDirectorV0` abre `revision` si el run seguia en
+`programacion` y relanza un pase acotado del loop para aplicar review gate sin
+llamada manual adicional.
 Aniadido primer runner por puerto: si el `PlanState` entra en
 `run_required_tests` sin evidencias causales ya guardadas, el servicio invoca
 `RequiredTestRunnerPortV0`, persiste evidencias durables y reevalua el avance.
@@ -189,7 +190,7 @@ ni apertura de fase. El reinicio `state-file` cubre tambien wait expirado,
 review negativa `changes_requested` con rework/replan ya registrado, y bloqueo
 de prerequisitos de cierre hasta reentrada/cierre sin duplicar evidencias ni
 eventos. Actualizacion 2026-05-23: `CODEX-WAVE-REAL` y
-`CODEX-RECURSION-REAL` ya cerraron ola/cohorte Codex amplia y recursion con
+`CODEX-RECURSION-REAL` cerraron ola/cohorte Codex amplia y recursion con
 proveedor real opt-in; no son backlog abierto salvo regresion demostrada.
 Actualizacion 2026-06-28: OPES temporal real de derivados/cierre quedo cerrado
 funcionalmente en el runbook goal-first real; pertenece a la composicion/bridge

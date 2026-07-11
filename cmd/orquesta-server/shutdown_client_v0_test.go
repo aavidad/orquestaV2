@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -263,15 +264,15 @@ func TestRequestServerShutdownV0ErrorTransporteConsultaStatusAccionableV0(t *tes
 
 func TestRequestServerShutdownV0PostColgadoConsultaStatusAccionableV0(t *testing.T) {
 	withShutdownClientRequestTimeoutForTestV0(t, 20*time.Millisecond)
-	shutdownCalls := 0
-	statusCalls := 0
+	var shutdownCalls int32
+	var statusCalls int32
 	server := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/api/v0/server/shutdown":
-			shutdownCalls++
+			atomic.AddInt32(&shutdownCalls, 1)
 			time.Sleep(60 * time.Millisecond)
 		case orquestaserver.ServerStatusEndpointV0:
-			statusCalls++
+			atomic.AddInt32(&statusCalls, 1)
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(orquestaserver.NewServerPublicStatusV0(orquestaserver.StateV0{
 				Status:                  "running",
@@ -293,8 +294,8 @@ func TestRequestServerShutdownV0PostColgadoConsultaStatusAccionableV0(t *testing
 	if time.Since(started) > time.Second {
 		t.Fatalf("POST colgado no debe esperar timeout global")
 	}
-	if shutdownCalls != 1 || statusCalls != 1 {
-		t.Fatalf("calls shutdown=%d status=%d", shutdownCalls, statusCalls)
+	if gotShutdown, gotStatus := atomic.LoadInt32(&shutdownCalls), atomic.LoadInt32(&statusCalls); gotShutdown != 1 || gotStatus != 1 {
+		t.Fatalf("calls shutdown=%d status=%d", gotShutdown, gotStatus)
 	}
 	if err == nil ||
 		!strings.Contains(err.Error(), "shutdown_not_ready status=backend_still_running") ||
@@ -796,16 +797,16 @@ func TestWaitServerShutdownReadyV0CortaTrasRepostNoRecuperableV0(t *testing.T) {
 
 func TestWaitServerShutdownReadyV0RepostColgadoRespetaDeadlineYDevuelveStatusAccionableV0(t *testing.T) {
 	withShutdownClientRequestTimeoutForTestV0(t, 20*time.Millisecond)
-	shutdownCalls := 0
-	statusCalls := 0
+	var shutdownCalls int32
+	var statusCalls int32
 	server := newLocalHTTPServerForTestV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/api/v0/server/shutdown":
-			shutdownCalls++
+			atomic.AddInt32(&shutdownCalls, 1)
 			time.Sleep(60 * time.Millisecond)
 		case orquestaserver.ServerStatusEndpointV0:
-			statusCalls++
+			atomic.AddInt32(&statusCalls, 1)
 			_ = json.NewEncoder(w).Encode(orquestaserver.ServerPublicStatusV0{
 				Status:                  "running",
 				ShutdownInProgress:      true,
@@ -850,8 +851,8 @@ func TestWaitServerShutdownReadyV0RepostColgadoRespetaDeadlineYDevuelveStatusAcc
 		!strings.Contains(err.Error(), "shutdown-active-work-goal-backend-goal-ref-repost-hang") {
 		t.Fatalf("err=%v", err)
 	}
-	if shutdownCalls == 0 || statusCalls == 0 {
-		t.Fatalf("calls shutdown=%d status=%d", shutdownCalls, statusCalls)
+	if gotShutdown, gotStatus := atomic.LoadInt32(&shutdownCalls), atomic.LoadInt32(&statusCalls); gotShutdown == 0 || gotStatus == 0 {
+		t.Fatalf("calls shutdown=%d status=%d", gotShutdown, gotStatus)
 	}
 }
 

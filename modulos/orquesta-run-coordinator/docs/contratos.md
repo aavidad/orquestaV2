@@ -7,7 +7,10 @@ runner global multiapp.
 
 Entradas:
 
-- `QueueRef`, `AppRefs` y `QueueLimit` se pasan a `RunQueueReaderPortV0`.
+- `QueueRef` y `AppRefs` se pasan a `RunQueueReaderPortV0`. El coordinador
+  pide todos los candidatos del scope sin limite, resuelve supersession y
+  ranking global, y despues aplica `QueueLimit` al resultado visible y
+  elegible para el drain.
 - `ExcludeRunRefs` evita ejecutar runs concretas en este tick; se devuelven
   como skips con razon `run_excluded`.
 - `RankingPolicy` controla el ranking; si no trae `Now`, se usa una politica

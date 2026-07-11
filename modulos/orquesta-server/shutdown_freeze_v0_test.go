@@ -812,6 +812,73 @@ func TestRuntimeV0ServerShutdownReadyTrasCleanupNoHeredaSnapshotPrevioActivoV0(t
 	}
 }
 
+func TestRuntimeV0ServerShutdownSnapshotVacioLimpiaTrabajoPrevioYSolicitaSalidaV0(t *testing.T) {
+	stateDir := t.TempDir()
+	app := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != serverShutdownRoutePathV0 {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"estado":"ok","status":"ready","shutdown_ready":true}`))
+	})
+	snapshots := &sequenceShutdownSnapshotPortV0{results: []ShutdownSnapshotResultV0{{
+		Status:          "backend_still_running",
+		ActiveWorkCount: 1,
+		ActiveWorks: []ShutdownSnapshotWorkV0{{
+			Kind:    "goal_backend",
+			WorkRef: "goal-ref-shutdown-sequence-001",
+			Status:  "backend_still_running",
+		}},
+	}, {}}}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:     stateDir,
+		TickInterval: time.Hour,
+	}, RuntimeDepsV0{
+		AppHandler:       app,
+		Clock:            fixedClockV0{now: time.Date(2026, 7, 11, 10, 0, 0, 0, time.UTC)},
+		ShutdownSnapshot: snapshots,
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+
+	first := httptest.NewRecorder()
+	runtime.HandlerV0().ServeHTTP(first, httptest.NewRequest(http.MethodPost, serverShutdownRoutePathV0, nil))
+	var firstPayload serverShutdownHTTPProjectionV0
+	if err := json.Unmarshal(first.Body.Bytes(), &firstPayload); err != nil {
+		t.Fatalf("decode first shutdown response: %v body=%s", err, first.Body.String())
+	}
+	if firstPayload.ShutdownReady || firstPayload.Status != "stop_pending" || firstPayload.ExitPending {
+		t.Fatalf("respuesta con trabajo conservado publica ready: %+v", firstPayload)
+	}
+	select {
+	case <-runtime.shutdownReadyRequested:
+		t.Fatal("solicito salida con snapshot activo")
+	default:
+	}
+
+	second := httptest.NewRecorder()
+	runtime.HandlerV0().ServeHTTP(second, httptest.NewRequest(http.MethodPost, serverShutdownRoutePathV0, nil))
+	var secondPayload serverShutdownHTTPProjectionV0
+	if err := json.Unmarshal(second.Body.Bytes(), &secondPayload); err != nil {
+		t.Fatalf("decode second shutdown response: %v body=%s", err, second.Body.String())
+	}
+	if !secondPayload.ShutdownReady || secondPayload.Status != "ready" || !secondPayload.ExitPending || secondPayload.PID != os.Getpid() {
+		t.Fatalf("respuesta limpia no solicita salida: %+v", secondPayload)
+	}
+	state := runtime.StateV0()
+	if state.ShutdownInProgress || state.SupervisorFrozen || !state.ShutdownReady ||
+		state.ShutdownActiveWorkCount != 0 || len(state.ShutdownActiveWorkRefs) != 0 {
+		t.Fatalf("snapshot vacio no limpio shutdown: %+v", state)
+	}
+	select {
+	case <-runtime.shutdownReadyRequested:
+	default:
+		t.Fatal("shutdown limpio no solicito salida")
+	}
+}
+
 func TestRuntimeV0ServerShutdownConflictSinCuerpoConservaSnapshotPrevioActivoV0(t *testing.T) {
 	stateDir := t.TempDir()
 	app := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -903,6 +970,23 @@ func (hook *notifyingRuntimeShutdownHookV0) ShutdownV0(context.Context) error {
 type fakeShutdownSnapshotPortV0 struct {
 	result ShutdownSnapshotResultV0
 	err    error
+}
+
+type sequenceShutdownSnapshotPortV0 struct {
+	results []ShutdownSnapshotResultV0
+	next    int
+}
+
+func (port *sequenceShutdownSnapshotPortV0) SnapshotShutdownV0(
+	context.Context,
+	ShutdownSnapshotRequestV0,
+) (ShutdownSnapshotResultV0, error) {
+	if port.next >= len(port.results) {
+		return ShutdownSnapshotResultV0{}, nil
+	}
+	result := port.results[port.next]
+	port.next++
+	return result, nil
 }
 
 func (fake fakeShutdownSnapshotPortV0) SnapshotShutdownV0(

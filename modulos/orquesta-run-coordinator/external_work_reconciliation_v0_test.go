@@ -80,6 +80,56 @@ func TestReconcileExternalWorkPublicStatusV0AckCompletedConArtefactoCierra(t *te
 	}
 }
 
+func TestReconcileExternalWorkPublicStatusV0AckConArtefactoSinRefNoCierra(t *testing.T) {
+	got := ReconcileExternalWorkPublicStatusV0(ExternalWorkReconciliationInputV0{
+		RunRef:               "run-ref-ack-artifact-unproven-001",
+		ProjectionStatus:     "running",
+		AgentAckCompleted:    true,
+		LocalArtifactPresent: true,
+	})
+
+	if got.PublicStatus != ExternalWorkPublicStatusBlockedV0 ||
+		got.Reason != "durable_terminal_evidence_missing" ||
+		got.CausalVerdict.ResultadoTerminal ||
+		!got.CausalVerdict.RequiereReparacion {
+		t.Fatalf("cierre sin referencia durable no debe publicarse: %+v", got)
+	}
+}
+
+func TestReconcileExternalWorkPublicStatusV0ProcesoVivoExigeIdentidadV0(t *testing.T) {
+	got := ReconcileExternalWorkPublicStatusV0(ExternalWorkReconciliationInputV0{
+		RunRef:                 "run-ref-process-unattributed-001",
+		ProjectionStatus:       "running",
+		ProcessRegistryChecked: true,
+		ProcessAlive:           true,
+		EvidenceRefs:           []string{"process-ref-001"},
+	})
+
+	if got.PublicStatus == ExternalWorkPublicStatusRunningV0 ||
+		got.CausalVerdict.ReasonCode != "goal_runtime_identity_missing" ||
+		!got.CausalVerdict.RequiereReparacion {
+		t.Fatalf("proceso sin identidad causal no debe confirmar running: %+v", got)
+	}
+}
+
+func TestReconcileExternalWorkPublicStatusV0RepairCausalGanaAOutboxPendienteV0(t *testing.T) {
+	got := ReconcileExternalWorkPublicStatusV0(ExternalWorkReconciliationInputV0{
+		RunRef:                 "run-ref-process-unattributed-outbox-001",
+		ProjectionStatus:       "running",
+		PendingOutboxCount:     1,
+		DomainJobStatus:        "pending",
+		ProcessRegistryChecked: true,
+		ProcessAlive:           true,
+		EvidenceRefs:           []string{"process-ref-001", "outbox-ref-001"},
+	})
+
+	if got.PublicStatus != ExternalWorkPublicStatusBlockedV0 ||
+		got.Reason != "goal_runtime_identity_missing" ||
+		got.NextAction != "repair_causal_evidence_before_reconcile" {
+		t.Fatalf("repair causal no debe ocultarse como pending: %+v", got)
+	}
+}
+
 func TestReconcileExternalWorkPublicStatusV0RunningStaleNoProcessNoDeclaraRunning(t *testing.T) {
 	got := ReconcileExternalWorkPublicStatusV0(ExternalWorkReconciliationInputV0{
 		RunRef:                 "run-ref-stale-no-process-001",

@@ -19,7 +19,7 @@ func TestConstruirProyeccionCicloVidaV0ProcesoVivoDominaEstadoStale(t *testing.T
 func TestConstruirProyeccionCicloVidaV0TerminalAceptadoSinProcesoVivo(t *testing.T) {
 	ahora := mustTimeV0(t, "2026-07-03T10:00:00Z")
 	proyeccion := ConstruirProyeccionCicloVidaV0([]EvidenciaEstadoV0{
-		{RunRef: "run-1", Fuente: "receipt", Terminal: true, Aceptado: true, ObservadoEn: "2026-07-03T09:59:00Z"},
+		{RunRef: "run-1", Fuente: "receipt", Terminal: true, Aceptado: true, EvidenceRefs: []string{"receipt-ref"}, ObservadoEn: "2026-07-03T09:59:00Z"},
 	}, ahora, time.Hour)
 
 	assertFaseUnicaV0(t, proyeccion, FaseTerminalAceptadoV0)
@@ -28,7 +28,7 @@ func TestConstruirProyeccionCicloVidaV0TerminalAceptadoSinProcesoVivo(t *testing
 func TestConstruirProyeccionCicloVidaV0TerminalReworkSinProcesoVivo(t *testing.T) {
 	ahora := mustTimeV0(t, "2026-07-03T10:00:00Z")
 	proyeccion := ConstruirProyeccionCicloVidaV0([]EvidenciaEstadoV0{
-		{RunRef: "run-1", Fuente: "receipt", Terminal: true, Aceptado: false, ObservadoEn: "2026-07-03T09:59:00Z"},
+		{RunRef: "run-1", Fuente: "receipt", Terminal: true, Aceptado: false, EvidenceRefs: []string{"receipt-ref"}, ObservadoEn: "2026-07-03T09:59:00Z"},
 	}, ahora, time.Hour)
 
 	assertFaseUnicaV0(t, proyeccion, FaseTerminalReworkV0)
@@ -38,7 +38,7 @@ func TestConstruirProyeccionCicloVidaV0ProcesoVivoTrasTerminalEsConflicto(t *tes
 	ahora := mustTimeV0(t, "2026-07-03T10:00:00Z")
 	proyeccion := ConstruirProyeccionCicloVidaV0([]EvidenciaEstadoV0{
 		{RunRef: "run-1", Fuente: "process_snapshot", Scope: ScopeGoalV0, RuntimeIdentityRef: "runtime-1", RuntimeObservado: true, ProcesoVivo: true, ObservadoEn: "2026-07-03T09:59:00Z"},
-		{RunRef: "run-1", Fuente: "receipt", Terminal: true, Aceptado: true, ObservadoEn: "2026-07-03T09:58:00Z"},
+		{RunRef: "run-1", Fuente: "receipt", Terminal: true, Aceptado: true, EvidenceRefs: []string{"receipt-ref"}, ObservadoEn: "2026-07-03T09:58:00Z"},
 	}, ahora, time.Hour)
 
 	assertFaseUnicaV0(t, proyeccion, FaseConflictoV0)
@@ -90,7 +90,7 @@ func TestConstruirProyeccionCicloVidaV0EsDeterminista(t *testing.T) {
 func TestConstruirProyeccionCicloVidaV0AgrupaPorGoalRefSiFaltaRunRef(t *testing.T) {
 	ahora := mustTimeV0(t, "2026-07-03T10:00:00Z")
 	proyeccion := ConstruirProyeccionCicloVidaV0([]EvidenciaEstadoV0{
-		{GoalRef: "goal-1", Fuente: "receipt", Terminal: true, Aceptado: true, ObservadoEn: "2026-07-03T09:59:00Z"},
+		{GoalRef: "goal-1", Fuente: "receipt", Terminal: true, Aceptado: true, EvidenceRefs: []string{"receipt-ref"}, ObservadoEn: "2026-07-03T09:59:00Z"},
 		{GoalRef: "goal-1", Fuente: "run_store", Estado: "running", ObservadoEn: "2026-07-03T09:58:00Z"},
 	}, ahora, time.Hour)
 

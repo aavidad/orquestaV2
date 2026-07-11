@@ -77,6 +77,167 @@ func TestCoordinateRunsTickPropagaMetadataCausalDeRescateV0(t *testing.T) {
 	}
 }
 
+func TestCoordinateRunsTickNoRankeaNiDrenaIntentoSupersededV0(t *testing.T) {
+	now := time.Date(2026, 7, 11, 12, 0, 0, 0, time.UTC)
+	supersessionGroup := orquestarunqueue.RunQueueAttemptGroupV0{GroupRef: "attempt-group-supersession"}
+	unsupersededGroup := orquestarunqueue.RunQueueAttemptGroupV0{GroupRef: "attempt-group-no-supersession"}
+	deps := coordinatorDepsV0([]orquestarunqueue.RunSchedulingCandidateV0{
+		{
+			RunRef:        "run-superseded",
+			AppRef:        "app",
+			Status:        orquestarunqueue.RunStatusReadyV0,
+			PriorityScore: 100,
+			UpdatedAt:     now.Add(-time.Hour),
+			AttemptGroup:  supersessionGroup,
+		},
+		{
+			RunRef:           "run-active-rescue",
+			AppRef:           "app",
+			Status:           orquestarunqueue.RunStatusReadyV0,
+			PriorityScore:    5,
+			UpdatedAt:        now,
+			AttemptGroup:     supersessionGroup,
+			ParentRunRef:     "run-superseded",
+			SupersedesRunRef: "run-superseded",
+		},
+		{
+			RunRef:        "run-no-supersession-high",
+			AppRef:        "app",
+			Status:        orquestarunqueue.RunStatusReadyV0,
+			PriorityScore: 9,
+			UpdatedAt:     now,
+			AttemptGroup:  unsupersededGroup,
+		},
+		{
+			RunRef:        "run-no-supersession-low",
+			AppRef:        "app",
+			Status:        orquestarunqueue.RunStatusReadyV0,
+			PriorityScore: 7,
+			UpdatedAt:     now,
+			AttemptGroup:  unsupersededGroup,
+		},
+	})
+	command := tickCommandV0(3)
+	command.OccurredAt = now
+	command.RankingPolicy = orquestarunqueue.DefaultRunQueueRankingPolicyV0(now)
+
+	result, err := CoordinateRunsTickV0(context.Background(), deps, command)
+	if err != nil {
+		t.Fatalf("coordinate tick: %v", err)
+	}
+
+	assertRunRefsV0(t, rankedRefsV0(result.Ranked), []string{
+		"run-no-supersession-high",
+		"run-no-supersession-low",
+		"run-active-rescue",
+	})
+	assertRunRefsV0(t, executionRefsV0(result.Executions), []string{
+		"run-no-supersession-high",
+		"run-no-supersession-low",
+		"run-active-rescue",
+	})
+	drainer := deps.Drainer.(*fakeDrainerV0)
+	if len(drainer.requests) != 3 {
+		t.Fatalf("drain requests=%+v", drainer.requests)
+	}
+	for _, request := range drainer.requests {
+		if request.RunRef == "run-superseded" {
+			t.Fatalf("superseded attempt reached drainer: requests=%+v", drainer.requests)
+		}
+	}
+}
+
+func TestCoordinateRunsTickResuelveSupersessionAntesDeQueueLimitV0(t *testing.T) {
+	now := time.Date(2026, 7, 11, 12, 0, 0, 0, time.UTC)
+	queue := &fakeQueueReaderV0{
+		applyLimit: true,
+		candidates: []orquestarunqueue.RunSchedulingCandidateV0{
+			candidateWithUpdatedAtV0("run-original", "app", 100, now.Add(-time.Hour)),
+			{
+				RunRef:           "run-rescue",
+				AppRef:           "app",
+				Status:           orquestarunqueue.RunStatusReadyV0,
+				PriorityScore:    9,
+				UpdatedAt:        now,
+				ParentRunRef:     "run-original",
+				SupersedesRunRef: "run-original",
+			},
+			candidateWithUpdatedAtV0("run-other", "app", 1, now),
+		},
+	}
+	drainer := &fakeDrainerV0{}
+	deps := RunCoordinatorDepsV0{QueueReader: queue, Drainer: drainer}
+	command := tickCommandV0(2)
+	command.QueueLimit = 1
+	command.OccurredAt = now
+	command.RankingPolicy = orquestarunqueue.DefaultRunQueueRankingPolicyV0(now)
+
+	result, err := CoordinateRunsTickV0(context.Background(), deps, command)
+	if err != nil {
+		t.Fatalf("coordinate tick: %v", err)
+	}
+
+	if queue.request.Limit != 0 {
+		t.Fatalf("reader limit=%d, want complete read", queue.request.Limit)
+	}
+	assertRunRefsV0(t, rankedRefsV0(result.Ranked), []string{"run-rescue"})
+	assertRunRefsV0(t, executionRefsV0(result.Executions), []string{"run-rescue"})
+	if len(result.Ranked) != command.QueueLimit {
+		t.Fatalf("ranked output exceeds queue limit: %+v", result.Ranked)
+	}
+	if len(drainer.requests) != 1 || drainer.requests[0].RunRef != "run-rescue" {
+		t.Fatalf("drain requests=%+v", drainer.requests)
+	}
+	for _, request := range drainer.requests {
+		if request.RunRef == "run-original" {
+			t.Fatalf("superseded original reached drainer: requests=%+v", drainer.requests)
+		}
+	}
+}
+
+func TestFilterSupersededAttemptCandidatesV0NoDependeDelIntentoActivoV0(t *testing.T) {
+	candidates := []orquestarunqueue.RunSchedulingCandidateV0{
+		{RunRef: "run-original", AttemptGroup: orquestarunqueue.RunQueueAttemptGroupV0{GroupRef: "group-chain"}, PriorityScore: 100},
+		{RunRef: "run-rescue", SupersedesRunRef: "run-original", AttemptGroup: orquestarunqueue.RunQueueAttemptGroupV0{GroupRef: "group-chain"}, PriorityScore: 1},
+		{RunRef: "run-other-active", AttemptGroup: orquestarunqueue.RunQueueAttemptGroupV0{GroupRef: "group-chain"}, PriorityScore: 200},
+	}
+
+	filtered := filterSupersededAttemptCandidatesV0(candidates)
+	refs := make([]string, 0, len(filtered))
+	for _, candidate := range filtered {
+		refs = append(refs, candidate.RunRef)
+	}
+	assertRunRefsV0(t, refs, []string{"run-rescue", "run-other-active"})
+}
+
+func TestFilterSupersededAttemptCandidatesV0IgnoraEnlaceDeOtroGrupoV0(t *testing.T) {
+	candidates := []orquestarunqueue.RunSchedulingCandidateV0{
+		{RunRef: "run-group-a", AttemptGroup: orquestarunqueue.RunQueueAttemptGroupV0{GroupRef: "group-a"}},
+		{
+			RunRef: "run-group-b", ParentRunRef: "run-group-a", SupersedesRunRef: "run-group-a",
+			AttemptGroup: orquestarunqueue.RunQueueAttemptGroupV0{GroupRef: "group-b"},
+		},
+	}
+
+	filtered := filterSupersededAttemptCandidatesV0(candidates)
+	refs := make([]string, 0, len(filtered))
+	for _, candidate := range filtered {
+		refs = append(refs, candidate.RunRef)
+	}
+	assertRunRefsV0(t, refs, []string{"run-group-a", "run-group-b"})
+}
+
+func TestFilterSupersededAttemptCandidatesV0LegacyExigeParentExactoV0(t *testing.T) {
+	candidates := []orquestarunqueue.RunSchedulingCandidateV0{
+		{RunRef: "run-legacy-a"},
+		{RunRef: "run-legacy-b", ParentRunRef: "run-distinto", SupersedesRunRef: "run-legacy-a"},
+	}
+
+	if got := filterSupersededAttemptCandidatesV0(candidates); len(got) != 2 {
+		t.Fatalf("supersesion legacy sin parent causal elimino candidato: %+v", got)
+	}
+}
+
 func TestCoordinateRunsTickPreservaMetadataCausalAlRotarColaV0(t *testing.T) {
 	now := time.Date(2026, 6, 13, 10, 0, 0, 0, time.UTC)
 	claim := orquestarunqueue.WorksetClaimV0{
@@ -661,18 +822,19 @@ func TestCoordinateRunsTickSkipsExcludedRunsV0(t *testing.T) {
 	}
 }
 
-func TestCoordinateRunsTickPropagatesLimitAndTraceFieldsV0(t *testing.T) {
+func TestCoordinateRunsTickAppliesQueueLimitAfterRankingAndPropagatesTraceFieldsV0(t *testing.T) {
 	deps := coordinatorDepsV0([]orquestarunqueue.RunSchedulingCandidateV0{
 		candidateV0("run-a", "app", 9),
+		candidateV0("run-b", "app", 8),
 	})
 	queue := deps.QueueReader.(*fakeQueueReaderV0)
 	drainer := deps.Drainer.(*fakeDrainerV0)
 	occurredAt := time.Date(2026, 5, 11, 12, 0, 0, 0, time.UTC)
 
-	_, err := CoordinateRunsTickV0(context.Background(), deps, RunCoordinatorTickCommandV0{
+	result, err := CoordinateRunsTickV0(context.Background(), deps, RunCoordinatorTickCommandV0{
 		QueueRef:      "queue-main",
 		AppRefs:       []string{"app"},
-		QueueLimit:    25,
+		QueueLimit:    1,
 		MaxRuns:       1,
 		OccurredAt:    occurredAt,
 		CorrelationID: "corr-123",
@@ -685,8 +847,11 @@ func TestCoordinateRunsTickPropagatesLimitAndTraceFieldsV0(t *testing.T) {
 		t.Fatalf("coordinate tick: %v", err)
 	}
 
-	if queue.request.Limit != 25 {
+	if queue.request.Limit != 0 {
 		t.Fatalf("queue limit = %d", queue.request.Limit)
+	}
+	if len(result.Ranked) != 1 || result.Ranked[0].RunRef != "run-a" {
+		t.Fatalf("ranked=%+v", result.Ranked)
 	}
 	if len(drainer.requests) != 1 {
 		t.Fatalf("drain requests = %d", len(drainer.requests))
@@ -723,6 +888,7 @@ func TestCoordinateRunsTickDoesNotMutateCandidatesV0(t *testing.T) {
 type fakeQueueReaderV0 struct {
 	candidates []orquestarunqueue.RunSchedulingCandidateV0
 	request    orquestarunqueue.RunQueueReadRequestV0
+	applyLimit bool
 }
 
 func (fake *fakeQueueReaderV0) ListRunSchedulingCandidatesV0(
@@ -730,6 +896,9 @@ func (fake *fakeQueueReaderV0) ListRunSchedulingCandidatesV0(
 	request orquestarunqueue.RunQueueReadRequestV0,
 ) ([]orquestarunqueue.RunSchedulingCandidateV0, error) {
 	fake.request = request
+	if fake.applyLimit && request.Limit > 0 && len(fake.candidates) > request.Limit {
+		return fake.candidates[:request.Limit], nil
+	}
 	return fake.candidates, nil
 }
 

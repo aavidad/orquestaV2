@@ -1,6 +1,6 @@
 # Incidencia: degraded identity bloquea shutdown
 
-Fecha: 2026-07-11. Estado: abierto. ID:
+Fecha: 2026-07-11. Estado: cerrado localmente. ID:
 `BUG-ORQ-20260711-208Z`.
 
 ## Reproduccion local aislada
@@ -32,3 +32,21 @@ control que depende del componente que necesita detener.
 - Prueba HTTP reproduce readiness degradada, shutdown aceptado y cierre del
   proceso/cleanup; las rutas de prepare-run siguen rechazadas.
 - No se toca `uso-app`, OPES ni servicios externos.
+
+## Cierre local
+
+El handler degradado conserva health/status/readiness y el bloqueo 503 de
+prepare-run y de todas las rutas de trabajo. Solo `POST
+/api/v0/server/shutdown` acepta una parada segura, responde `ready` con
+`exit_pending`, y usa `sync.Once` para solicitar una unica vez el cierre
+cooperativo del `http.Server`. Otros metodos sobre esa ruta siguen bloqueados.
+
+Pruebas:
+
+```text
+TestDegradedIdentityHTTPHandlerV0ShutdownAceptaPOSTIdempotenteV0
+TestDegradedIdentityHTTPHandlerV0ShutdownCierraServidorCooperativamenteV0
+go test -count=1 ./cmd/orquesta-server
+```
+
+No se enviaron señales de proceso ni se tocaron remoto, OPES o `uso-app`.

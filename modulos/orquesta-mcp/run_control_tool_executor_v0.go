@@ -202,10 +202,11 @@ func (executor MCPRunControlToolExecutorV0) reconcileGoalStateAfterForcedControl
 	afterGoal *MCPDirectorStatsToolResultV0,
 ) MCPRunControlToolResultV0 {
 	action := normalizeMCPRunControlActionV0(input.Action)
+	backendStopEvidenceRefs := mcpRunControlBackendStopEscalationEvidenceRefsV0(result)
 	if executor.GoalStateStore == nil ||
 		result.Estado != MCPRunControlEstadoOKV0 ||
 		(action != "stop" && action != "cancel") ||
-		mcpRunControlGoalBackendActiveForControlV0(input, afterGoal) {
+		(mcpRunControlGoalBackendActiveForControlV0(input, afterGoal) && len(backendStopEvidenceRefs) == 0) {
 		return result
 	}
 	allowForcedReconcile := input.Forced
@@ -219,11 +220,34 @@ func (executor MCPRunControlToolExecutorV0) reconcileGoalStateAfterForcedControl
 		return result
 	}
 	state, err = orquestagoal.NewGoalWorkStateV0(state)
-	if err != nil || orquestagoal.GoalWorkResultTerminalV0(state.Status) {
+	if err != nil {
+		return result
+	}
+	if orquestagoal.GoalWorkResultTerminalV0(state.Status) {
+		persistedEvidenceRefs := mcpRunControlPersistedReconcileEvidenceRefsV0(state, input)
+		if len(persistedEvidenceRefs) == 0 {
+			return result
+		}
+		result = executor.completeRunControlAfterForcedGoalReconcileV0(ctx, result, input, persistedEvidenceRefs)
+		if result.Estado != MCPRunControlEstadoOKV0 {
+			return result
+		}
+		result.RecommendedAction = "replan_narrow_context"
+		result.EvidenceRefs = compactStringsMCPV0(append(result.EvidenceRefs, persistedEvidenceRefs...))
+		result.Diagnostics = append(result.Diagnostics, MCPRunControlDiagnosticV0{
+			Code:         "goal_state_terminal_reconcile_replayed",
+			Scope:        "run:" + runRef,
+			Message:      "goal reconcile ya persistido; replay completo run-control pendiente",
+			EvidenceRefs: persistedEvidenceRefs,
+		})
 		return result
 	}
 	reasonCode, evidenceRef, ok := "", "", false
-	if allowForcedReconcile {
+	if len(backendStopEvidenceRefs) > 0 {
+		reasonCode = mcpRunControlReasonBackendStopEscalatedV0
+		evidenceRef = mcpRunControlEvidenceBackendStopEscalatedV0
+		ok = true
+	} else if allowForcedReconcile {
 		reasonCode, evidenceRef, ok = mcpRunControlForcedTerminalReasonV0(beforeGoal, executor.GoalProgressPolicy)
 	}
 	if !ok && (allowForcedReconcile || allowExternalCleanupReconcile) {
@@ -246,6 +270,7 @@ func (executor MCPRunControlToolExecutorV0) reconcileGoalStateAfterForcedControl
 		reconcileEvidenceRef,
 		evidenceRef,
 	})
+	evidenceRefs = compactStringsMCPV0(append(evidenceRefs, backendStopEvidenceRefs...))
 	goalRef := firstNonEmptyMCPV0(
 		state.GoalRef,
 		mcpRunControlGoalRefFromStatsV0(beforeGoal),
@@ -281,9 +306,18 @@ func (executor MCPRunControlToolExecutorV0) reconcileGoalStateAfterForcedControl
 	}
 	state.EvidenceRefs = compactStringsMCPV0(append(state.EvidenceRefs, evidenceRefs...))
 	if err := executor.GoalStateStore.SaveGoalWorkStateV0(ctx, state); err != nil {
-		return result
+		return mcpRunControlPersistenceFailureV0(
+			result,
+			input,
+			"goal_state_save_failed",
+			"goal_state_store",
+			mcpRunControlEvidenceGoalStateSaveErrorV0,
+		)
 	}
 	result = executor.completeRunControlAfterForcedGoalReconcileV0(ctx, result, input, evidenceRefs)
+	if result.Estado != MCPRunControlEstadoOKV0 {
+		return result
+	}
 	result.RecommendedAction = "replan_narrow_context"
 	result.EvidenceRefs = compactStringsMCPV0(append(result.EvidenceRefs, evidenceRefs...))
 	result.Diagnostics = append(result.Diagnostics, MCPRunControlDiagnosticV0{
@@ -297,6 +331,23 @@ func (executor MCPRunControlToolExecutorV0) reconcileGoalStateAfterForcedControl
 		)),
 	})
 	return result
+}
+
+func mcpRunControlPersistedReconcileEvidenceRefsV0(
+	state orquestagoal.GoalWorkStateV0,
+	input MCPRunControlToolInputV0,
+) []string {
+	if state.Status != orquestagoal.GoalStatusBlockedV0 {
+		return nil
+	}
+	marker := "evidence-ref-run-control-goal-forced-terminal-reconciled"
+	if !input.Forced && mcpRunControlInputRequestsExternalCleanupReconcileV0(input) {
+		marker = "evidence-ref-run-control-goal-external-cleanup-reconciled"
+	}
+	if !containsStringMCPV0(state.EvidenceRefs, marker) {
+		return nil
+	}
+	return compactStringsMCPV0(state.EvidenceRefs)
 }
 
 func mcpRunControlInputRequestsExternalCleanupReconcileV0(input MCPRunControlToolInputV0) bool {
@@ -316,7 +367,13 @@ func (executor MCPRunControlToolExecutorV0) completeRunControlAfterForcedGoalRec
 ) MCPRunControlToolResultV0 {
 	terminal, ok := executor.Port.(orquestaruncontrol.RunControlTerminalWriterPortV0)
 	if !ok || terminal == nil {
-		return result
+		return mcpRunControlPersistenceFailureV0(
+			result,
+			input,
+			"run_control_complete_unavailable",
+			"run_control_terminal_port",
+			mcpRunControlEvidenceCompleteErrorV0,
+		)
 	}
 	action := normalizeMCPRunControlActionV0(input.Action)
 	target := orquestaruncontrol.RunControlStatusStoppedV0
@@ -338,11 +395,55 @@ func (executor MCPRunControlToolExecutorV0) completeRunControlAfterForcedGoalRec
 		EvidenceRefs:   compactStringsMCPV0(append(evidenceRefs, "evidence-ref-run-control-terminal-after-goal-reconcile")),
 	})
 	if err != nil {
-		return result
+		return mcpRunControlPersistenceFailureV0(
+			result,
+			input,
+			"run_control_complete_failed",
+			"run_control_terminal_port",
+			mcpRunControlEvidenceCompleteErrorV0,
+		)
 	}
-	result.Status = string(orquestaruncontrol.NormalizeRunControlStatusV0(completed.Status))
+	completedStatus := orquestaruncontrol.NormalizeRunControlStatusV0(completed.Status)
+	if completedStatus != target {
+		return mcpRunControlPersistenceFailureV0(
+			result,
+			input,
+			"run_control_complete_not_terminal",
+			"run_control_terminal_port",
+			mcpRunControlEvidenceCompleteErrorV0,
+		)
+	}
+	result.Status = string(completedStatus)
 	result.FinalStatus = result.Status
 	result.EvidenceRefs = compactStringsMCPV0(append(result.EvidenceRefs, completed.EvidenceRefs...))
+	return result
+}
+
+func mcpRunControlPersistenceFailureV0(
+	result MCPRunControlToolResultV0,
+	input MCPRunControlToolInputV0,
+	code string,
+	field string,
+	evidenceRef string,
+) MCPRunControlToolResultV0 {
+	requestedStatus := mcpRunControlRequestedStatusForActionV0(normalizeMCPRunControlActionV0(input.Action))
+	evidenceRefs := compactStringsMCPV0([]string{evidenceRef})
+	result.Estado = MCPRunControlEstadoErrorV0
+	result.Status = requestedStatus
+	result.FinalStatus = requestedStatus
+	result.RecommendedAction = "retry_same_run_control_order"
+	result.EvidenceRefs = compactStringsMCPV0(append(result.EvidenceRefs, evidenceRefs...))
+	result.Diagnostics = append(result.Diagnostics, MCPRunControlDiagnosticV0{
+		Code:         code,
+		Scope:        "run:" + strings.TrimSpace(input.RunRef),
+		Message:      "persistencia parcial de reconcile; reintentar la misma orden de control",
+		EvidenceRefs: evidenceRefs,
+	})
+	result.Errores = append(result.Errores, MCPValidationIssueV0{
+		Code:    code,
+		Field:   field,
+		Message: "persistencia parcial de reconcile",
+	})
 	return result
 }
 

@@ -11,6 +11,7 @@ const (
 	RazonVeredictoObservacionRuntimeIncompletaV0 = "runtime_observation_indeterminate"
 	RazonVeredictoIdentidadRuntimeFaltanteV0     = "goal_runtime_identity_missing"
 	RazonVeredictoIdentidadNoCoincidenteV0       = "goal_execution_identity_mismatch"
+	RazonVeredictoEvidenciaTerminalFaltanteV0    = "durable_terminal_evidence_missing"
 	RazonVeredictoEvidenciaCausalInsuficienteV0  = "causal_evidence_insufficient"
 )
 
@@ -28,6 +29,7 @@ func DerivarVeredictoCausalV0(evidencias []EvidenciaEstadoV0) VeredictoCausalV0 
 	identidadNoCoincidente := false
 	observacionIncompleta := false
 	procesoVivoObservado := false
+	evidenciaTerminalFaltante := false
 
 	for _, evidencia := range evidencias {
 		veredicto.RunRef, identidadNoCoincidente = acumularRefCoincidenteV0(veredicto.RunRef, evidencia.RunRef, identidadNoCoincidente)
@@ -75,10 +77,14 @@ func DerivarVeredictoCausalV0(evidencias []EvidenciaEstadoV0) VeredictoCausalV0 
 			}
 		}
 		if evidencia.Scope != ScopeBackendServiceV0 && evidencia.Terminal {
-			veredicto.ResultadoTerminal = true
-			fuentesTerminal = append(fuentesTerminal, evidencia.Fuente)
-			if evidencia.Aceptado {
-				veredicto.ResultadoAceptado = true
+			if strings.TrimSpace(evidencia.Fuente) == "" || !tieneRefsNoVaciasV0(evidencia.EvidenceRefs) {
+				evidenciaTerminalFaltante = true
+			} else {
+				veredicto.ResultadoTerminal = true
+				fuentesTerminal = append(fuentesTerminal, evidencia.Fuente)
+				if evidencia.Aceptado {
+					veredicto.ResultadoAceptado = true
+				}
 			}
 		}
 		veredicto.EvidenceRefs = append(veredicto.EvidenceRefs, evidencia.EvidenceRefs...)
@@ -113,6 +119,10 @@ func DerivarVeredictoCausalV0(evidencias []EvidenciaEstadoV0) VeredictoCausalV0 
 	case observacionIncompleta:
 		veredicto.Clase = VeredictoIndeterminateV0
 		veredicto.ReasonCode = RazonVeredictoObservacionRuntimeIncompletaV0
+	case evidenciaTerminalFaltante && !veredicto.ResultadoTerminal:
+		veredicto.Clase = VeredictoIndeterminateV0
+		veredicto.ReasonCode = RazonVeredictoEvidenciaTerminalFaltanteV0
+		veredicto.RequiereReparacion = true
 	case veredicto.ResultadoTerminal:
 		veredicto.Clase = VeredictoTerminalByArtifactV0
 		veredicto.ReasonCode = RazonVeredictoResultadoDurableTerminalV0
@@ -133,6 +143,15 @@ func DerivarVeredictoCausalV0(evidencias []EvidenciaEstadoV0) VeredictoCausalV0 
 	}
 
 	return veredicto
+}
+
+func tieneRefsNoVaciasV0(refs []string) bool {
+	for _, ref := range refs {
+		if strings.TrimSpace(ref) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func marcarDivergenciaV0(veredicto *VeredictoCausalV0, reason string) {

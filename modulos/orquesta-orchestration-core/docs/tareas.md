@@ -99,8 +99,10 @@ Implementado:
   y cubre reentrada/replay con `state-file` para cierre, bloqueo y replan por
   tests fallidos.
 
-Pendiente operativo: repetir el ciclo con proveedor Codex real en ola/cohorte
-amplia o recursion, y con OPES solo mediante conector/adaptador de dominio.
+El ciclo con proveedor Codex real en ola/cohorte amplia y recursion queda
+cubierto por `CODEX-WAVE-REAL` y `CODEX-RECURSION-REAL` en la matriz vigente;
+solo debe reabrirse ante regresion demostrada. OPES sigue entrando unicamente
+mediante conector/adaptador de dominio.
 
 Validacion:
 
@@ -148,8 +150,9 @@ servicio ya puede invocar el runner inyectado si no encuentra evidencias
 causales ya persistidas, reevalua el `PlanState` con las refs generadas y
 bloquea si una evidencia causal llega como `failed`.
 
-Pendiente: prueba real de programacion con ola/cohorte amplia o recursion
-Codex usando el runner activado. El replan negativo automatico por test fallido
+La prueba real de programacion con ola/cohorte amplia o recursion Codex queda
+cubierta por `CODEX-WAVE-REAL` y `CODEX-RECURSION-REAL`. El replan negativo
+automatico por test fallido
 de una unica task causal ya queda cerrado offline con replay `state-file`; si
 aparece un blocker distinto del runner, debe entrar como caso nuevo con prueba
 propia.

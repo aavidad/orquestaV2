@@ -189,8 +189,12 @@ func operationalDirectorPartitionDeliveredAgentsV0(
 }
 
 // operationalDirectorTasksForDeliveredAgentsV0 devuelve las task refs del scope del
-// wait que corresponden a agentes ya entregados, derivadas de run.DeliveredTasks
-// acotadas al scope del paso.
+// wait que corresponden a agentes ya entregados. Cuando el paso no conserva
+// TaskRefs, reconstruye ese scope unicamente mediante la relacion causal
+// TaskRef -> AgentRequestRef de las microtareas materializadas. No puede usar
+// todas las DeliveredTasks del run: pueden pertenecer a otra ola o a otro wait.
+// La reconstruccion exige una relacion inequivoca: si varias tareas entregadas
+// normalizan al mismo AgentRequestRef, no se atribuye ninguna al wait.
 func operationalDirectorTasksForDeliveredAgentsV0(
 	activeStep orquestacionnucleoapp.OperationalDirectorPlanStepStateV0,
 	deliveredAgents []string,
@@ -198,7 +202,21 @@ func operationalDirectorTasksForDeliveredAgentsV0(
 ) []string {
 	stepTasks := compactServiceRefsV0(activeStep.TaskRefs)
 	if len(stepTasks) == 0 {
-		return compactServiceRefsV0(run.DeliveredTasks)
+		tasksByAgentRef := make(map[string][]string)
+		for _, taskRef := range compactServiceRefsV0(run.DeliveredTasks) {
+			agentRef := orquestacionnucleoapp.WorkflowTaskAgentRequestRefV0(taskRef)
+			if startAppDirectorStringInSetV0(deliveredAgents, agentRef) {
+				tasksByAgentRef[agentRef] = append(tasksByAgentRef[agentRef], taskRef)
+			}
+		}
+		out := make([]string, 0, len(tasksByAgentRef))
+		for _, agentRef := range compactServiceRefsV0(deliveredAgents) {
+			tasks := tasksByAgentRef[agentRef]
+			if len(tasks) == 1 {
+				out = append(out, tasks[0])
+			}
+		}
+		return compactServiceRefsV0(out)
 	}
 	out := make([]string, 0, len(stepTasks))
 	for _, taskRef := range stepTasks {

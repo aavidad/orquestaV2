@@ -17,6 +17,8 @@ Cobertura local:
 - ejecuta hasta `MaxRuns`;
 - rota runs ejecutados de igual prioridad actualizando `updated_at`;
 - propaga `QueueStatus` terminal devuelto por el drainer al writer de cola;
-- propaga limite de cola, `occurred_at`, `correlation_id` y `DrainLimits`;
+- resuelve supersession antes de aplicar `QueueLimit`, sin omitir un rescate
+  paginado, y limita la salida rankeada;
+- propaga `occurred_at`, `correlation_id` y `DrainLimits`;
 - no muta los candidatos recibidos de la cola;
 - bloquea imports de adaptadores o stack en codigo de produccion.

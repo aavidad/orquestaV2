@@ -42,10 +42,13 @@ sustituye el cierre local `app_server_tmux`.
 
 ## GOAL-003 migracion del loop historico
 
-Estado: avance local 2026-06-25.
+Estado: cerrado para el camino de produccion nuevo; `legacy_director_loop`
+queda en sunset segun el mapa canonico del 2026-07-03.
 
-Marcar que casos siguen usando `app-director-service` y cuales ya usan goal,
-sin borrar el flujo historico hasta tener smokes equivalentes.
+Goal-first es el unico camino de produccion para trabajo nuevo. El loop
+historico se conserva como compatibilidad y mantenimiento correctivo explicito,
+sin features nuevas, y es candidato a retirada cuando goal-first cubra Claude y
+Gemini.
 
 Avance: `StartAppDirectorResultV0`, el tool/bridge
 `orquesta.apps.arrancar_director.v0` y la web `/nueva-app` exponen
@@ -53,8 +56,9 @@ Avance: `StartAppDirectorResultV0`, el tool/bridge
 `GoalWorkSpecV0` sin loop legacy; `legacy_director_loop` identifica la ruta
 historica de Director/agentes. `ObserveAppDirectorGoalV0` y
 `orquesta.apps.observe_director_goal.v0` exponen tambien `goal_first` para la
-observacion/cierre. Queda pendiente la matriz completa de migracion y los
-smokes reales equivalentes antes de declarar legacy las rutas historicas.
+observacion/cierre. La matriz vigente y los smokes reales equivalentes ya
+cubren el camino goal-first; no se requiere reabrir la migracion por esta
+compatibilidad legacy.
 
 ## GOAL-004 lifecycle neutral reutilizable
 

@@ -47,9 +47,6 @@ func (runtime *RuntimeV0) snapshotShutdownActiveWorkForHTTPV0(ctx context.Contex
 		})
 		return
 	}
-	if shutdownSnapshotEmptyV0(snapshot) {
-		return
-	}
 	runtime.persistStateTransitionV0(
 		ctx,
 		runtime.tracker.MarkShutdownSnapshotV0(snapshot, runtime.clock.Now()),
@@ -62,7 +59,9 @@ func (tracker *StatusTrackerV0) MarkShutdownSnapshotV0(
 	now time.Time,
 ) StateV0 {
 	status := strings.TrimSpace(snapshot.Status)
-	if status == "" {
+	if shutdownSnapshotEmptyV0(snapshot) {
+		status = "snapshot_empty"
+	} else if status == "" {
 		status = "active_work_snapshot"
 	}
 	refs := shutdownSnapshotActiveWorkRefsV0(snapshot.ActiveWorks)

@@ -33,7 +33,7 @@ func TestConstruirProyeccionCicloVidaV0PropConflictoNoSilenciosoV0(t *testing.T)
 		aceptado := rapid.Bool().Draw(rt, "aceptado")
 		proyeccion := ConstruirProyeccionCicloVidaV0([]EvidenciaEstadoV0{
 			{RunRef: runRef, Fuente: rapid.SampledFrom([]string{"process_registry", "process_snapshot"}).Draw(rt, "proceso_fuente"), Scope: ScopeGoalV0, RuntimeIdentityRef: "runtime-property", RuntimeObservado: true, ProcesoVivo: true, ObservadoEn: "2026-07-03T09:59:00Z"},
-			{RunRef: runRef, Fuente: rapid.SampledFrom([]string{"receipt", "review"}).Draw(rt, "terminal_fuente"), Terminal: true, Aceptado: aceptado, ObservadoEn: "2026-07-03T09:58:00Z"},
+			{RunRef: runRef, Fuente: rapid.SampledFrom([]string{"receipt", "review"}).Draw(rt, "terminal_fuente"), Terminal: true, Aceptado: aceptado, EvidenceRefs: []string{"terminal-ref"}, ObservadoEn: "2026-07-03T09:58:00Z"},
 		}, ahoraRapidV0(), time.Hour)
 
 		if len(proyeccion.Nodos) != 1 || proyeccion.Nodos[0].Fase != FaseConflictoV0 {
@@ -51,11 +51,12 @@ func TestConstruirProyeccionCicloVidaV0PropTerminalAceptadoDominaPrecedenciasMen
 	rapid.Check(t, func(rt *rapid.T) {
 		runRef := "run-terminal-" + strconv.Itoa(rapid.IntRange(0, 999).Draw(rt, "run"))
 		evidencias := []EvidenciaEstadoV0{{
-			RunRef:      runRef,
-			Fuente:      "receipt",
-			Terminal:    true,
-			Aceptado:    true,
-			ObservadoEn: "2026-07-03T09:59:00Z",
+			RunRef:       runRef,
+			Fuente:       "receipt",
+			Terminal:     true,
+			Aceptado:     true,
+			EvidenceRefs: []string{"terminal-ref"},
+			ObservadoEn:  "2026-07-03T09:59:00Z",
 		}}
 		evidencias = append(evidencias, evidenciaMenorPrecedenciaRapidV0(runRef).Draw(rt, "menor"))
 

@@ -18,6 +18,8 @@ Las fuentes aportan evidencia; SOLO ConstruirProyeccionCicloVidaV0 decide fase
 - No leer reloj interno: `ConstruirProyeccionCicloVidaV0` recibe `ahora`.
 - No resolver conflictos en silencio: proceso vivo y terminal simultaneos
   produce fase `conflicto` con codigo `proceso_vivo_tras_terminal`.
+- No aceptar `Terminal=true` sin fuente y al menos una referencia durable;
+  queda indeterminado y requiere reparacion.
 
 ## Validacion
 

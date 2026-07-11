@@ -898,7 +898,7 @@ func (backend serverCodexAppServerTmuxBackendV0) cleanupTmuxGenerationWithLeaseV
 			if stillPresent, _ := backend.tmuxHasSessionTargetV0(ctx, tmuxPath, marker.TmuxSessionID); stillPresent {
 				return codexAppServerTmuxConflictErrorV0(codexAppServerTmuxGenerationConflictV0)
 			}
-			if err := backend.terminateRecordedTmuxAppServerV0(ctx, guard, marker); err != nil {
+			if err := backend.stopExactTmuxGenerationProcessV0(ctx, guard, marker); err != nil {
 				return err
 			}
 		}

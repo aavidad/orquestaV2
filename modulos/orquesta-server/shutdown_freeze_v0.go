@@ -57,6 +57,8 @@ func (runtime *RuntimeV0) shutdownFreezeHTTPHandlerV0(next http.Handler) http.Ha
 		projection, keepFrozen := runtime.recordShutdownHTTPResultV0(r.Context(), capture.statusCode, capture.body)
 		if projection.Ready && !keepFrozen {
 			capture.body = shutdownHTTPBodyWithExitPendingV0(capture.body, os.Getpid())
+		} else if keepFrozen && shutdownProjectionHasBlockingWorkV0(projection) {
+			capture.body = shutdownHTTPBodyWithStopPendingV0(capture.body)
 		}
 		capture.FlushV0()
 		if projection.Ready && !keepFrozen {
@@ -303,6 +305,22 @@ func shutdownHTTPBodyWithExitPendingV0(body []byte, pid int) []byte {
 		return body
 	}
 	return append(out, '\n')
+}
+
+func shutdownHTTPBodyWithStopPendingV0(body []byte) []byte {
+	var payload map[string]interface{}
+	if err := json.Unmarshal(body, &payload); err != nil || payload == nil {
+		return []byte(`{"status":"stop_pending","shutdown_ready":false,"exit_pending":false}`)
+	}
+	payload["status"] = "stop_pending"
+	payload["shutdown_ready"] = false
+	payload["exit_pending"] = false
+	delete(payload, "pid")
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return []byte(`{"status":"stop_pending","shutdown_ready":false,"exit_pending":false}`)
+	}
+	return encoded
 }
 
 func shutdownProjectionActiveWorkRefsV0(

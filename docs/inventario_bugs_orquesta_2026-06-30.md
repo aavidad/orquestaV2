@@ -4008,3 +4008,25 @@ llamada exacta a `orquesta_use_isolated_test_env`, fuente canonica que configura
 sin duplicar asignaciones en el smoke. Evidencia: focal
 `TestSmokeSelfProgrammingCompositeGoalFirstGuardsV0`, paquete `./scripts` y
 `git diff --check`; sin remoto, deploy ni ejecucion del smoke real.
+
+Familia `BUG-ORQ-20260711-211/212/213/214` (cerrada localmente, invariantes
+causales): una auditoria por propiedades encontro cuatro inferencias no
+demostradas: reconciliacion external-work paralela a la autoridad causal,
+terminales sin referencia durable, intento activo dependiente del orden de
+`supersedes_run_ref` y ampliacion de review a entregas ajenas cuando el wait no
+conservaba `TaskRefs`. El cierre centraliza el veredicto, diferencia trabajo
+`pending` de proceso `running`, exige fuente y `evidence_refs` terminales,
+resuelve supersesiones tras leer todo el grupo y reconstruye el mapping
+`TaskRef -> AgentRequestRef` sin fallback al run completo. Evidencia y criterio
+de reapertura:
+`docs/incidencias/incidencia_orquesta_invariantes_causales_nucleo_2026-07-11.md`.
+
+Familia `BUG-ORQ-20260711-215/216/217` (cerrada localmente, race/shutdown): el
+race detector encontro contadores HTTP de test sin sincronizacion y una ventana
+real tras `tmux kill-session` donde el proceso exacto seguia vivo pero el socket
+ya no era observable. Los contadores pasan a atomicos; la fase post-kill usa el
+PID/startRef ya protegido por marker y lease, sin aumentar timeout ni señalar
+procesos no atribuibles. La simulacion conserva su guard de 60 s normal y omite
+solo esa metrica bajo instrumentacion `-race`, ejecutando todas las aserciones.
+Evidencia:
+`docs/incidencias/incidencia_orquesta_race_harness_shutdown_2026-07-11.md`.

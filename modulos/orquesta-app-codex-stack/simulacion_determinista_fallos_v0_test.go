@@ -60,7 +60,7 @@ func TestSimulacionDeterministaFallosGoalFirstV0(t *testing.T) {
 	if !reflect.DeepEqual(first, second) {
 		t.Fatalf("simulacion no determinista seed=%d\nfirst=%v\nsecond=%v", simulacionDeterministaSeedV0, first, second)
 	}
-	if elapsed := time.Since(started); elapsed >= 60*time.Second {
+	if elapsed, limit := time.Since(started), simulacionDeterministaFallosElapsedLimitV0(); limit > 0 && elapsed >= limit {
 		t.Fatalf("simulacion lenta seed=%d elapsed=%s points=%d", simulacionDeterministaSeedV0, elapsed, len(points))
 	}
 }
@@ -148,7 +148,7 @@ func TestSimulacionCriteriosAutomejoraIdleYProyeccionPublicaV0(t *testing.T) {
 			PendingOutboxCount: 1,
 		},
 	)
-	if reconciled.PublicStatus != orquestaruncoordinator.ExternalWorkPublicStatusRunningV0 ||
+	if reconciled.PublicStatus != orquestaruncoordinator.ExternalWorkPublicStatusPendingV0 ||
 		reconciled.Action != orquestaruncoordinator.ExternalWorkReconcileActionObserveV0 {
 		t.Fatalf("outbox pendiente no queda running observable: %+v", reconciled)
 	}

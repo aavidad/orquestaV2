@@ -104,7 +104,7 @@ func TestDerivarVeredictoCausalV0PropCuatroCombinacionesV0(t *testing.T) {
 		got := DerivarVeredictoCausalV0([]EvidenciaEstadoV0{
 			{RunRef: "run-property", Fuente: "goal_state", Estado: "running"},
 			{RunRef: "run-property", Fuente: "runtime_identity", Scope: ScopeGoalV0, RuntimeIdentityRef: "runtime-property", RuntimeObservado: true, ProcesoVivo: procesoVivo},
-			{RunRef: "run-property", Fuente: "durable_result", Terminal: terminal},
+			{RunRef: "run-property", Fuente: "durable_result", Terminal: terminal, EvidenceRefs: []string{"result-ref"}},
 		})
 
 		want := VeredictoProcessDeadStateStaleV0
@@ -184,7 +184,7 @@ func TestDerivarVeredictoCausalV0TablaScopeIdentidadYObservacion(t *testing.T) {
 				runtime,
 			}
 			if tt.terminal {
-				evidencias = append(evidencias, EvidenciaEstadoV0{RunRef: "run-1", GoalRef: "goal-1", Fuente: "result", Terminal: true})
+				evidencias = append(evidencias, EvidenciaEstadoV0{RunRef: "run-1", GoalRef: "goal-1", Fuente: "result", Terminal: true, EvidenceRefs: []string{"result-ref"}})
 			}
 			got := DerivarVeredictoCausalV0(evidencias)
 			if got.Clase != tt.wantClase || got.ReasonCode != tt.wantReason || got.PublicarRunning != tt.wantRunning {
@@ -211,7 +211,7 @@ func TestDerivarVeredictoCausalV0RunningExigeScopeGoalExecutionLiteralV0(t *test
 func TestDerivarVeredictoCausalV0ProcesoLegacySinIdentidadNoOcultaDivergenciaV0(t *testing.T) {
 	got := DerivarVeredictoCausalV0([]EvidenciaEstadoV0{
 		{RunRef: "run-legacy", Fuente: "process_snapshot", ProcesoVivo: true},
-		{RunRef: "run-legacy", Fuente: "result", Terminal: true, Aceptado: true},
+		{RunRef: "run-legacy", Fuente: "result", Terminal: true, Aceptado: true, EvidenceRefs: []string{"result-ref"}},
 	})
 	if got.Clase != VeredictoDivergentNeedsRepairV0 || got.ReasonCode != RazonVeredictoIdentidadRuntimeFaltanteV0 {
 		t.Fatalf("proceso sin identidad no puede caer a terminal legacy: %#v", got)
@@ -224,7 +224,7 @@ func TestDerivarVeredictoCausalV0ProcesoLegacySinIdentidadNoOcultaDivergenciaV0(
 func TestDerivarVeredictoCausalV0TimeoutEsIndeterminadoAunqueHayaTerminalV0(t *testing.T) {
 	got := DerivarVeredictoCausalV0([]EvidenciaEstadoV0{
 		{RunRef: "run-timeout", Fuente: "goal_state", Estado: "running"},
-		{RunRef: "run-timeout", Fuente: "result", Terminal: true},
+		{RunRef: "run-timeout", Fuente: "result", Terminal: true, EvidenceRefs: []string{"result-ref"}},
 		{
 			RunRef: "run-timeout", Fuente: "runtime", Scope: ScopeGoalExecutionV0,
 			RuntimeIdentityRef: "runtime-timeout", RuntimeObservationAttempted: true,
@@ -236,6 +236,32 @@ func TestDerivarVeredictoCausalV0TimeoutEsIndeterminadoAunqueHayaTerminalV0(t *t
 	}
 	if got.PublicarRunning || got.RequiereReparacion {
 		t.Fatalf("timeout requiere reobservacion, no running ni reparacion afirmada: %#v", got)
+	}
+}
+
+func TestDerivarVeredictoCausalV0TerminalSinEvidenciaDurableNoCierraV0(t *testing.T) {
+	got := DerivarVeredictoCausalV0([]EvidenciaEstadoV0{
+		{RunRef: "run-unproven", Fuente: "result", Terminal: true, Aceptado: true},
+	})
+
+	if got.Clase != VeredictoIndeterminateV0 || got.ReasonCode != RazonVeredictoEvidenciaTerminalFaltanteV0 {
+		t.Fatalf("terminal sin referencia durable debe quedar indeterminado: %#v", got)
+	}
+	if got.ResultadoTerminal || got.ResultadoAceptado || !got.RequiereReparacion {
+		t.Fatalf("terminal sin referencia no puede publicarse como cierre: %#v", got)
+	}
+}
+
+func TestDerivarVeredictoCausalV0TerminalMalformadoNoOcultaConflictoDemostradoV0(t *testing.T) {
+	got := DerivarVeredictoCausalV0([]EvidenciaEstadoV0{
+		{RunRef: "run-conflict-proven", Fuente: "registry", Scope: ScopeGoalExecutionV0, RuntimeIdentityRef: "runtime-1"},
+		{RunRef: "run-conflict-proven", Fuente: "snapshot", Scope: ScopeGoalExecutionV0, RuntimeIdentityRef: "runtime-1", RuntimeObservationAttempted: true, RuntimeObservado: true, ProcesoVivo: true},
+		{RunRef: "run-conflict-proven", Fuente: "receipt", Terminal: true, EvidenceRefs: []string{"receipt-ref"}},
+		{RunRef: "run-conflict-proven", Fuente: "stale_result", Terminal: true},
+	})
+
+	if got.Clase != VeredictoDivergentNeedsRepairV0 || got.ReasonCode != RazonVeredictoProcesoVivoTrasTerminalV0 {
+		t.Fatalf("terminal malformado no debe ocultar conflicto demostrado: %#v", got)
 	}
 }
 

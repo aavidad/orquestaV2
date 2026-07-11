@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,9 +10,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaserver "orquesta/modulos/orquesta-server"
+	orquestaservershutdown "orquesta/modulos/orquesta-server-shutdown"
 )
 
 func TestDegradedIdentityHTTPHandlerV0PublicaSoloDiagnosticoRedactadoV0(t *testing.T) {
@@ -85,6 +88,94 @@ func TestDegradedIdentityHTTPHandlerV0BloqueaTodasLasEntradasAmpliasConContratoP
 				t.Fatalf("path=%s status=%d body=%s", path, response.Code, body)
 			}
 		})
+	}
+}
+
+func TestDegradedIdentityHTTPHandlerV0ShutdownAceptaPOSTIdempotenteV0(t *testing.T) {
+	shutdownCalls := 0
+	handler := newDegradedIdentityHTTPHandlerWithShutdownV0(serverWorktreeIdentityInvalidV0, func() {
+		shutdownCalls++
+	})
+
+	for attempt := 0; attempt < 2; attempt++ {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, serverDegradedIdentityShutdownPathV0, strings.NewReader(`{"requested_by":"orquesta-director","idempotency_key":"idem-degraded-shutdown-001"}`)))
+		var body map[string]any
+		if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+			t.Fatalf("shutdown json: %v", err)
+		}
+		if response.Code != http.StatusOK || body["estado"] != "ok" || body["status"] != "ready" ||
+			body["shutdown_ready"] != true || body["exit_pending"] != true {
+			t.Fatalf("attempt=%d status=%d body=%s", attempt, response.Code, response.Body.String())
+		}
+	}
+	if shutdownCalls != 1 {
+		t.Fatalf("shutdown calls=%d, want idempotent 1", shutdownCalls)
+	}
+
+	blocked := httptest.NewRecorder()
+	handler.ServeHTTP(blocked, httptest.NewRequest(http.MethodGet, serverDegradedIdentityShutdownPathV0, nil))
+	if blocked.Code != http.StatusServiceUnavailable {
+		t.Fatalf("shutdown GET status=%d body=%s", blocked.Code, blocked.Body.String())
+	}
+}
+
+func TestDegradedIdentityHTTPHandlerV0ShutdownRechazaSolicitudInvalidaSinApagarV0(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		body string
+		code string
+	}{
+		{name: "cuerpo vacio", body: "", code: orquestamcp.MCPPublicErrBodyInvalidV0},
+		{name: "json malformado", body: `{`, code: orquestamcp.MCPPublicErrBodyInvalidV0},
+		{name: "campos vacios", body: `{}`, code: orquestaservershutdown.ServerShutdownStatusRequesterDeniedV0},
+		{name: "solicitante no autorizado", body: `{"requested_by":"agent-director","idempotency_key":"idem-agent"}`, code: orquestaservershutdown.ServerShutdownStatusRequesterDeniedV0},
+		{name: "idempotencia vacia", body: `{"requested_by":"orquesta-director","idempotency_key":" "}`, code: orquestamcp.MCPPublicMutationIssueIdempotencyKeyRequiredV0},
+		{name: "datos posteriores", body: `{"requested_by":"orquesta-director","idempotency_key":"idem-trailing"} {}`, code: orquestamcp.MCPPublicErrBodyTrailingDataV0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			shutdownCalls := 0
+			handler := newDegradedIdentityHTTPHandlerWithShutdownV0(serverWorktreeIdentityInvalidV0, func() {
+				shutdownCalls++
+			})
+			response := httptest.NewRecorder()
+			handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, serverDegradedIdentityShutdownPathV0, strings.NewReader(tc.body)))
+
+			if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), tc.code) || shutdownCalls != 0 {
+				t.Fatalf("status=%d calls=%d body=%s", response.Code, shutdownCalls, response.Body.String())
+			}
+		})
+	}
+}
+
+func TestDegradedIdentityHTTPHandlerV0ShutdownCierraServidorCooperativamenteV0(t *testing.T) {
+	listener := newLocalTCPListenerForTestV0(t)
+	server := &http.Server{Handler: newDegradedIdentityHTTPHandlerV0(orquestaserver.ConfigV0{}, serverWorktreeIdentityInvalidV0)}
+	serveDone := make(chan error, 1)
+	go func() {
+		serveDone <- server.Serve(listener)
+	}()
+	t.Cleanup(func() {
+		_ = server.Close()
+	})
+
+	client := &http.Client{Timeout: time.Second}
+	response, err := client.Post("http://"+listener.Addr().String()+serverDegradedIdentityShutdownPathV0, "application/json", strings.NewReader(`{"requested_by":"orquesta-director","idempotency_key":"idem-degraded-server-stop"}`))
+	if err != nil {
+		t.Fatalf("POST degraded shutdown: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("shutdown status=%d", response.StatusCode)
+	}
+
+	select {
+	case err := <-serveDone:
+		if err != nil && err != http.ErrServerClosed {
+			t.Fatalf("serve error=%v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("degraded server no termino tras shutdown HTTP cooperativo")
 	}
 }
 

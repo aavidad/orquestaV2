@@ -162,10 +162,13 @@ sigue activo y existen puertos de task store/fuente de cierre. Steps no
 soportados siguen fallando de forma explicita para no volver al scope legacy de
 todo el run.
 
-Regla de avance del plan state tras el loop: si el loop queda `quiescent`, el
-state pasa de `wait_subagents` a `review_deliveries` cuando todos los agentes
-pendientes entregaron. Si el step activo es `review_deliveries`, outbox esta a
-cero y el historial de eventos trae la cadena causal del scope activo
+Regla de avance del plan state tras el loop: las entregas disponibles del scope
+activo pueden abrir o reabrir `review_deliveries` sin esperar agentes ajenos al
+scope. El servicio soporta review incremental/streaming por delivery: cada
+entrega disponible conserva su cadena causal y puede pasar por el review gate;
+la transicion posterior solo se completa cuando el scope ya no tiene entregas
+pendientes. Si el step activo es `review_deliveries`, outbox esta a cero y el
+historial de eventos trae la cadena causal del scope activo
 `DeliveryRegistered -> ReviewRequested -> ReviewResultRecorded(accepted) ->
 ReviewAccepted`, el state marca review como aceptada, guarda `delivery_refs`,
 `review_result_refs` y `accepted_review_refs`, y activa `run_required_tests` en
