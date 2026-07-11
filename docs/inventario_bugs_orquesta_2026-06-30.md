@@ -4492,3 +4492,11 @@ integro dos commits, pero su regex no selecciono tests y el resultado quedo en
 comportamiento ni del contexto. El batch sucesor
 `request-ref-batch-attestor-testname-successor-20260711` queda enlazado como
 cierre pendiente.
+
+BUG `task-ref-register-hermes-runbook-drift-bug` (corregido por batch sucesor):
+un goal documental aceptado promovio un runbook que no coincidia con el
+runtime local materializado. Causa probable: contexto basado en el objetivo
+conceptual sin refs exactas de los scripts ignorados; no se atribuye al tamano
+del contexto. Evidencia de cierre: smoke real de version/MCP/status/test Go y
+revision del runbook; request `request-ref-batch-fix-hermes-runbook-drift-20260711`.
+Solo se actualiza este inventario; no cambia otras incidencias.
