@@ -120,8 +120,8 @@ func (source CodexStackMaterialProgressEvidenceV0) classifyMaterialProgressDiffV
 	base orquestaautoprogramming.MaterialProgressEvidenceV0,
 ) (orquestaautoprogramming.MaterialProgressEvidenceV0, error) {
 	store := source.Stack.AutoprogrammingPromotion.GoalFirstSnapshotStore
-	projectDir := strings.TrimSpace(source.Stack.Codex.ProjectWorkDir)
-	if store == nil || projectDir == "" {
+	projectDir, projectDirErr := source.Stack.autoprogrammingGoalProjectWorkDirV0(ctx, state)
+	if store == nil || projectDirErr != nil {
 		return base, fmt.Errorf("material_progress_diff_verifier_unavailable")
 	}
 	baseline, err := store.LoadWorktreeSnapshotV0(ctx, base.BaselineRef)

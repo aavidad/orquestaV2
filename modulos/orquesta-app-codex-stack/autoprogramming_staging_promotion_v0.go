@@ -99,8 +99,8 @@ func (stack StackV0) autoprogrammingPromotionGoalFirstWriteSetVerifiedV0(
 		}
 		return compactStringsV0(refs), false
 	}
-	projectWorkDir := strings.TrimSpace(stack.Codex.ProjectWorkDir)
-	if projectWorkDir == "" {
+	projectWorkDir, projectWorkDirErr := stack.autoprogrammingGoalProjectWorkDirV0(ctx, state)
+	if projectWorkDirErr != nil {
 		return []string{evidencePrefix, evidencePrefix + "-project-work-dir-missing", baselineRef}, false
 	}
 	result, issues := orquestaruntimeworktree.VerifyWorktreeWriteSetV0(ctx, orquestaruntimeworktree.WorktreeVerifyRequestV0{
