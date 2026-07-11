@@ -168,3 +168,12 @@ funciones y el deadcode bruto a 1.177; la categoria
 privados que requieren revision y 1.895 exportados/contratos no son borrables
 por conteo. Los 8 modulos sin importador conservan decision
 `retain_pending_composition`.
+
+## Actualizacion 2026-07-11: metrica de duplicacion corregida
+
+La medicion posterior informa 25.729 funciones, 1.177 candidatos `deadcode` y
+cero privados sin referencias. La antigua cifra de 307 helpers duplicados era
+un solape de prefijos nominales entre paquetes: ahora se publica como
+`helper_name_family_overlap_definitions=307`; duplicados de implementacion
+demostrados por el auditor actual: cero. Recibo:
+`docs/runbooks/resultado_limpieza_bug237_240_2026-07-11.md`.

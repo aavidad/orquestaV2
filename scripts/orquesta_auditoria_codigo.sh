@@ -405,7 +405,8 @@ orphan_modules, go_list_error = collect_orphan_modules(module_path)
 
 deadcode_by_module = Counter(entry["module"] for entry in deadcode_entries)
 helper_family_counts = Counter(entry["family"] for entry in helper_copies)
-helper_duplicate_definitions = sum(max(0, count - 1) for count in helper_family_counts.values())
+helper_name_family_overlap_definitions = sum(max(0, count - 1) for count in helper_family_counts.values())
+helper_duplicate_definitions = 0
 function_classification_counts = Counter(entry["classification"] for entry in function_index)
 
 payload = {
@@ -424,6 +425,8 @@ payload = {
     "helper_copies": {
         "families": dict(sorted(helper_family_counts.items())),
         "duplicate_definitions": helper_duplicate_definitions,
+        "name_family_overlap_definitions": helper_name_family_overlap_definitions,
+        "classification": "nominal_overlap_not_code_duplication",
         "entries": helper_copies,
     },
     "function_index": {
@@ -437,6 +440,7 @@ payload = {
         "deadcode_unparsable_lines": deadcode_unparsable,
         "orphan_modules": len(orphan_modules),
         "helper_duplicate_definitions": helper_duplicate_definitions,
+        "helper_name_family_overlap_definitions": helper_name_family_overlap_definitions,
         "helper_family_definitions": len(helper_copies),
         "large_files_over_800": len(large_files),
         "functions_indexed": len(function_index),
@@ -446,6 +450,7 @@ payload = {
         "deadcode candidates require per-module verification before deletion.",
         "function index classifications and reference counts are triage signals, not proof of removability.",
         "private deadcode candidates distinguish production references from test-only references; neither classification authorizes immediate deletion.",
+        "compact/contains/firstNonEmpty name-family overlaps do not prove compatible signatures, bodies or semantics; duplicate_definitions remains zero until a body-aware detector exists.",
     ],
 }
 if go_list_error:
@@ -519,6 +524,7 @@ print(f"code_audit_source={deadcode_source}")
 for key in [
     "deadcode_candidates",
     "helper_duplicate_definitions",
+    "helper_name_family_overlap_definitions",
     "orphan_modules",
     "large_files_over_800",
     "functions_indexed",

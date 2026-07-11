@@ -178,6 +178,9 @@ func daemonStartEnvCountsV0(policy daemonStartEnvPolicyV0) string {
 }
 
 func daemonStartEnvCategoryV0(key string) (string, bool) {
+	if _, registered := serverEffectiveEnvRegistryV0[key]; !registered {
+		return "", false
+	}
 	if key == envOPESBaseURLLegacyV0 {
 		return "opes_bridge", true
 	}

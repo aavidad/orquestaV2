@@ -4146,16 +4146,18 @@ closure accepted, `no_action_closed` y `closure_issues=[]`; el shutdown final
 quedo ready sin trabajo residual. `BUG-226..236` de este replay quedan cerrados.
 Recibo: [resultado T9104](runbooks/resultado_replay_t9104_bug226_2026-07-11.md).
 
-BUG `BUG-ORQ-20260711-237` (abierto, configuracion/daemon): el proceso hijo
+BUG `BUG-ORQ-20260711-237` (cerrado localmente, configuracion/daemon): el proceso hijo
 acepta variables heredadas mediante prefijos amplios aunque no existan en el
 registro canonico. El ratchet de lecturas puede quedar verde mientras una clave
 inventada `ORQUESTA_SERVER_*` cruza al daemon. El cierre exige allowlist por
-clave registrada y prueba negativa independiente.
+clave registrada y prueba negativa independiente. El filtro exige ahora
+pertenencia al registro antes de categorizar y los focales/ratchets quedan verdes.
 
-BUG `BUG-ORQ-20260711-238` (abierto, falso indicador de limpieza):
+BUG `BUG-ORQ-20260711-238` (cerrado localmente, falso indicador de limpieza):
 `helper_duplicate_definitions=307` agrupa solo por prefijos nominales
 `compact`/`contains`/`firstNonEmpty`, sin comparar firma, cuerpo ni semantica y
-cruzando paquetes. No autoriza consolidar codigo. Evidencia y criterios en la
+cruzando paquetes. El auditor conserva el solape nominal con nombre correcto y
+neutraliza a cero los duplicados no demostrados. Evidencia y criterios en la
 [incidencia de limpieza](incidencias/incidencia_orquesta_limpieza_config_metricas_falsas_2026-07-11.md).
 
 BUG `BUG-ORQ-20260711-239` (cerrado empiricamente,
@@ -4166,14 +4168,15 @@ El rework con tests fallo antes de arrancar y la cola original quedo terminal.
 El lifecycle de rework recibe ahora el binder del stack y una regresion exige
 su invocacion con tests atestados. El replay materializo y lanzo el goal hijo.
 
-BUG `BUG-ORQ-20260711-240` (cerrado localmente, pendiente de replay,
+BUG `BUG-ORQ-20260711-240` (cerrado empiricamente,
 causalidad de rework): el goal hijo de
 BUG-239 se ejecuto con `GoalWorkState`, pero sin una `OrchestrationRunV0` bajo
 su nuevo `run_ref`. Al quedar terminal, `observe` no pudo reflejar el cierre en
 `RunStore` y devolvio HTTP 500. El launcher residente debe crear o reparar la
 run hija idempotentemente antes de lanzar/observar. El cierre local crea o
 repara esa run y prueba reentrada sin segundo launch; falta reconsultar el
-estado real retenido.
+estado real retenido. El replay creo la run omitida y `observe` devolvio HTTP
+200 con cierre bloqueado publico en lugar del 500.
 
 Avance 2026-07-11: `b96e9b115` añade refs obligatorias de criterios
 verificables al contrato Goal; el transporte posterior añade

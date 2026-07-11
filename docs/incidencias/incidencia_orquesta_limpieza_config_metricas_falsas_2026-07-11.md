@@ -4,7 +4,7 @@ Fecha: 2026-07-11.
 
 ## BUG-ORQ-20260711-237: allowlist por prefijo no registrada
 
-Estado: abierto.
+Estado: cerrado localmente.
 
 El ratchet AST del servidor informa cero lecturas `ORQUESTA_*` fuera del
 registro, pero `serverDaemonStartEnvironmentV0` acepta variables del proceso
@@ -24,9 +24,17 @@ Criterio de cierre:
 - focales de daemon, registro y configuracion verdes;
 - ejecucion por Orquesta con atestacion independiente antes de declarar cierre.
 
+Cierre: la categorizacion comprueba primero pertenencia al registro efectivo y
+solo despues aplica bloqueo de secretos y categoria por familia. La regresion
+demuestra que `ORQUESTA_SERVER_UNREGISTERED` no cruza; tambien deja de proyectar
+el alias global no registrado `ORQUESTA_CODEX_MODEL`, mientras conserva las
+claves registradas y derivadas requeridas. Orquesta intento el trabajo y expuso
+BUG-239/240; tras dos goals sin diff, el desbloqueo se integro de forma local y
+se verifico con focales de daemon y ratchets de registro.
+
 ## BUG-ORQ-20260711-238: duplicacion nominal presentada como codigo duplicado
 
-Estado: abierto, diagnostico confirmado.
+Estado: cerrado localmente.
 
 La metrica `helper_duplicate_definitions=307` no compara firmas, cuerpos ni
 semantica. Agrupa cualquier funcion productiva cuyo nombre empiece por
@@ -45,9 +53,15 @@ Criterio de cierre:
 - actualizar tests, nightly y auditorias sin subir un baseline artificial;
 - conservar la regla de revision por paquete y prueba focal.
 
+Cierre: el contrato v0 conserva el campo historico por compatibilidad, pero lo
+neutraliza a cero porque no existe prueba de duplicacion. La misma muestra se
+publica como `helper_name_family_overlap_definitions` y se marca
+`nominal_overlap_not_code_duplication`. El test del auditor exige ambas
+semanticas y el nightly solo puede ratchear duplicados demostrados, no nombres.
+
 ## BUG-ORQ-20260711-239: rework residente sin binder de tests
 
-Estado: cerrado localmente, pendiente de replay integrado.
+Estado: cerrado empiricamente.
 
 El primer goal de BUG-237 alcanzo el umbral `material_progress_replan_required`
 sin diff. El supervisor residente detecto el cierre reparable, pero
@@ -79,7 +93,7 @@ nuevo goal real; BUG-239 queda cerrado.
 
 ## BUG-ORQ-20260711-240: rework sin OrchestrationRun causal
 
-Estado: cerrado localmente, pendiente de replay integrado.
+Estado: cerrado empiricamente.
 
 El rework de BUG-239 persistio y ejecuto su `GoalWorkState`, pero el launcher
 residente no creo la `OrchestrationRunV0` con el nuevo `run_ref`. Cuando el
@@ -100,6 +114,10 @@ estaba persistido pero faltaba la run, la reentrada la materializa sin relanzar
 el proveedor. La regresion ejecuta el supervisor dos veces, conserva una sola
 llamada al launcher/binder y carga la misma run activa. Focal y paquete completo
 del stack verdes.
+
+Replay: el binario actualizado reentro sobre el estado retenido, creo la run
+hija ausente sin relanzar el proveedor y `observe` paso de HTTP 500 a HTTP 200
+con goal/run/closure `blocked` y causa publica. BUG-240 queda cerrado.
 
 ## Evidencia de control
 

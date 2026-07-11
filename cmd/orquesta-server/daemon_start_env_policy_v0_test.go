@@ -25,10 +25,11 @@ func TestServerDaemonStartEnvironmentV0UsaAllowlistYDerivaRuntime(t *testing.T) 
 		"ORQUESTA_SERVER_MAX_RUNS_PER_TICK=3",
 		"ORQUESTA_CODEX_MODEL=model-ref-local",
 		"ORQUESTA_CODEX_COMMAND=/usr/bin/codex",
+		"ORQUESTA_SERVER_UNREGISTERED=must-not-cross",
 	}
 
 	got := serverDaemonStartEnvironmentV0(parent, config)
-	for _, forbidden := range []string{"HOME=", "PATH=", "GITHUB_TOKEN="} {
+	for _, forbidden := range []string{"HOME=", "PATH=", "GITHUB_TOKEN=", "ORQUESTA_CODEX_MODEL=", "ORQUESTA_SERVER_UNREGISTERED="} {
 		if daemonStartEnvHasKeyForTestV0(got, strings.TrimSuffix(forbidden, "=")) {
 			t.Fatalf("env proyecto contiene %s: %v", forbidden, got)
 		}
@@ -36,7 +37,6 @@ func TestServerDaemonStartEnvironmentV0UsaAllowlistYDerivaRuntime(t *testing.T) 
 	body := strings.Join(got, "\n")
 	for _, want := range []string{
 		"ORQUESTA_SERVER_MAX_RUNS_PER_TICK=3",
-		"ORQUESTA_CODEX_MODEL=model-ref-local",
 		"ORQUESTA_CODEX_COMMAND=/usr/bin/codex",
 		"ORQUESTA_CODEX_PROJECT_WORKDIR=" + projectDir,
 		"ORQUESTA_CODEX_RUNTIME_WORKDIR=" + runtimeDir,

@@ -134,7 +134,9 @@ with open(json_path, encoding="utf-8") as fh:
 assert payload["schema_version"] == "orquesta_code_audit.v0", payload
 assert payload["deadcode"]["source"] == "provided_file", payload["deadcode"]
 assert payload["metrics"]["deadcode_candidates"] == 4, payload["metrics"]
-assert payload["metrics"]["helper_duplicate_definitions"] >= 2, payload["metrics"]
+assert payload["metrics"]["helper_duplicate_definitions"] == 0, payload["metrics"]
+assert payload["metrics"]["helper_name_family_overlap_definitions"] >= 2, payload["metrics"]
+assert payload["helper_copies"]["classification"] == "nominal_overlap_not_code_duplication", payload["helper_copies"]
 assert payload["metrics"]["large_files_over_800"] == 1, payload["metrics"]
 assert payload["metrics"]["functions_indexed"] >= 7, payload["metrics"]
 function_index = {item["name"]: item for item in payload["function_index"]["entries"]}

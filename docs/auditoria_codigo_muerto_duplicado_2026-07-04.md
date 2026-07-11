@@ -144,3 +144,13 @@ mas de 800 lineas y 25.684 funciones indexadas. La categoria
 `static_candidate_without_text_references_requires_review` queda en cero. No
 hay otra retirada destructiva autorizada por esta auditoria; el resto exige
 clasificacion de contrato, wiring, test-only o API publica.
+
+## Actualizacion Codex 2026-07-11: correccion del falso indicador de duplicados
+
+La metrica historica `helper_duplicate_definitions=307` no comparaba codigo:
+agrupaba por el inicio nominal `compact`, `contains` o `firstNonEmpty`, incluso
+entre paquetes y firmas incompatibles. BUG-238 neutraliza ese falso indicador:
+`helper_duplicate_definitions=0` significa que el auditor actual no demuestra
+duplicados de cuerpo, y `helper_name_family_overlap_definitions=307` conserva
+la senal nominal solo para triage. El nightly no puede usar el solape nominal
+como autorizacion de refactor o borrado.
