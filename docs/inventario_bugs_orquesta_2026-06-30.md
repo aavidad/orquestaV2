@@ -4244,6 +4244,18 @@ replay verificable; sin ellos el estado debe ser `pending_integration`.
 Evidencia y avance en la
 [incidencia de worktree paralelo](incidencias/incidencia_orquesta_parallel_shared_worktree_cross_goal_2026-07-11.md).
 
+BUG `BUG-ORQ-20260711-249` (abierto, batch causal/CAS): la revision
+independiente de los commits `85c23ecd4` y `185b1a3f9` encontro que el store
+batch podia aceptar rollback o saltos de estado al sobrescribir
+`StoreVersion`, que el ultimo HEAD integrado no demostraba contener los HEAD
+anteriores y que integracion/promocion carecian de claim durable previo. El
+rework tampoco separaba generaciones de gate, por lo que una revision repetida
+podia quedar bloqueada por claims antiguos. Criterio de cierre: transiciones
+monotonicas validadas desde el estado persistido, terminales irreversibles,
+cadena `parent_revision -> integration_revision`, claims previos con replay
+por receipt y generacion de gate explicita; focales de rollback, HEAD obsoleto,
+claim huerfano y rework deben quedar verdes antes del wiring del stack.
+
 Avance 2026-07-11: `b96e9b115` añade refs obligatorias de criterios
 verificables al contrato Goal; el transporte posterior añade
 `acceptance_checks` tipados a autoprogramacion V0/V1 y los publica por MCP. Los

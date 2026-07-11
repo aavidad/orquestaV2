@@ -12,8 +12,8 @@ func TestAutoprogrammingBatchV0CompletesFrozenBatchGateAndPromotion(t *testing.T
 	batch = mustBatchTransitionV0(t, RegisterAutoprogrammingBatchLaunchV0(batch, 2, "launch-b", "task-b"))
 	batch = mustBatchTransitionV0(t, RegisterAutoprogrammingBatchFocalCloseV0(batch, 3, "close-a", "task-a"))
 	batch = mustBatchTransitionV0(t, RegisterAutoprogrammingBatchFocalCloseV0(batch, 4, "close-b", "task-b"))
-	batch = mustBatchTransitionV0(t, RegisterAutoprogrammingBatchIntegrationV0(batch, 5, "integrate-a", "task-a", "source-a", "revision-a", "integration-receipt-a"))
-	batch = mustBatchTransitionV0(t, RegisterAutoprogrammingBatchIntegrationV0(batch, 6, "integrate-b", "task-b", "source-b", "revision-001", "integration-receipt-b"))
+	batch = integrateAutoprogrammingBatchMemberV0(t, batch, "a", "task-a", "source-a", "base-revision-001", "revision-a")
+	batch = integrateAutoprogrammingBatchMemberV0(t, batch, "b", "task-b", "source-b", "revision-a", "revision-001")
 	if batch.Status != AutoprogrammingBatchStatusPendingBatchGateV0 {
 		t.Fatalf("status=%q", batch.Status)
 	}
@@ -30,9 +30,18 @@ func TestAutoprogrammingBatchV0CompletesFrozenBatchGateAndPromotion(t *testing.T
 	if got := CloseAutoprogrammingBatchV0(batch, batch.StoreVersion, "close-too-early"); got.Accepted {
 		t.Fatal("close accepted without promotion")
 	}
-	batch = mustBatchTransitionV0(t, RegisterAutoprogrammingBatchPromotionV0(batch, batch.StoreVersion, "promote", "revision-001", "promotion-receipt-001"))
+	batch = mustBatchTransitionV0(t, ClaimAutoprogrammingBatchPromotionV0(batch, batch.StoreVersion, "claim-promote", "promotion-claim-001", "revision-001"))
+	if got := CloseAutoprogrammingBatchV0(batch, batch.StoreVersion, "close-with-orphan-promotion"); got.Accepted {
+		t.Fatal("close accepted with promotion claim without receipt")
+	}
+	promotionExpected := batch.StoreVersion
+	batch = mustBatchTransitionV0(t, RegisterAutoprogrammingBatchPromotionV0(batch, promotionExpected, "promote", "promotion-claim-001", "revision-001", "promotion-receipt-001"))
+	replay := RegisterAutoprogrammingBatchPromotionV0(batch, promotionExpected, "promote", "promotion-claim-001", "revision-001", "promotion-receipt-001")
+	if !replay.Accepted || !replay.Replay || !reflect.DeepEqual(replay.Batch, batch) {
+		t.Fatalf("promotion replay=%+v", replay)
+	}
 	batch = mustBatchTransitionV0(t, CloseAutoprogrammingBatchV0(batch, batch.StoreVersion, "close"))
-	if batch.Status != AutoprogrammingBatchStatusClosedV0 || batch.StoreVersion != 13 {
+	if batch.Status != AutoprogrammingBatchStatusClosedV0 || batch.StoreVersion != 16 {
 		t.Fatalf("batch=%+v", batch)
 	}
 }
@@ -80,23 +89,31 @@ func TestAutoprogrammingBatchV0AcceptsSuccessiveIntegrationHeadsAndExactReplay(t
 	batch = mustBatchTransitionV0(t, RegisterAutoprogrammingBatchLaunchV0(batch, 2, "launch-b", "task-b"))
 	batch = mustBatchTransitionV0(t, RegisterAutoprogrammingBatchFocalCloseV0(batch, 3, "close-a", "task-a"))
 	batch = mustBatchTransitionV0(t, RegisterAutoprogrammingBatchFocalCloseV0(batch, 4, "close-b", "task-b"))
-	batch = mustBatchTransitionV0(t, RegisterAutoprogrammingBatchIntegrationV0(batch, 5, "integrate-a", "task-a", "source-a", "revision-a", "integration-receipt-a"))
+	batch = mustBatchTransitionV0(t, ClaimAutoprogrammingBatchIntegrationV0(batch, 5, "claim-integrate-a", "integration-claim-a", "task-a", "source-a", "base-revision-001"))
+	if got := ClaimAutoprogrammingBatchIntegrationV0(batch, batch.StoreVersion, "claim-integrate-b-early", "integration-claim-b", "task-b", "source-b", "base-revision-001"); got.Accepted || !hasAutoprogrammingBatchIssueV0(got.Issues, "batch_integration_claim_orphaned") {
+		t.Fatalf("orphan claim=%+v", got)
+	}
+	receiptExpected := batch.StoreVersion
+	batch = mustBatchTransitionV0(t, RegisterAutoprogrammingBatchIntegrationV0(batch, receiptExpected, "integrate-a", "integration-claim-a", "task-a", "source-a", "base-revision-001", "revision-a", "integration-receipt-a"))
 	if batch.IntegratedRevision != "" || batch.Members[0].SourceRevision != "source-a" || batch.Members[0].IntegrationRevision != "revision-a" || batch.Members[0].IntegrationReceiptRef != "integration-receipt-a" {
 		t.Fatalf("first integration=%+v", batch)
 	}
 
-	replay := RegisterAutoprogrammingBatchIntegrationV0(batch, 5, "integrate-a", "task-a", "source-a", "revision-a", "integration-receipt-a")
+	replay := RegisterAutoprogrammingBatchIntegrationV0(batch, receiptExpected, "integrate-a", "integration-claim-a", "task-a", "source-a", "base-revision-001", "revision-a", "integration-receipt-a")
 	if !replay.Accepted || !replay.Replay || !reflect.DeepEqual(replay.Batch, batch) {
 		t.Fatalf("replay=%+v batch=%+v", replay, batch)
 	}
-	if got := RegisterAutoprogrammingBatchIntegrationV0(batch, 5, "integrate-a", "task-a", "source-a", "revision-a", "integration-receipt-other"); got.Accepted || !hasAutoprogrammingBatchIssueV0(got.Issues, "batch_idempotency_key_reused") {
+	if got := RegisterAutoprogrammingBatchIntegrationV0(batch, receiptExpected, "integrate-a", "integration-claim-a", "task-a", "source-a", "base-revision-001", "revision-a", "integration-receipt-other"); got.Accepted || !hasAutoprogrammingBatchIssueV0(got.Issues, "batch_idempotency_key_reused") {
 		t.Fatalf("divergence=%+v", got)
 	}
-	if got := RegisterAutoprogrammingBatchIntegrationV0(batch, 5, "integrate-a", "task-a", "source-other", "revision-a", "integration-receipt-a"); got.Accepted || !hasAutoprogrammingBatchIssueV0(got.Issues, "batch_idempotency_key_reused") {
+	if got := RegisterAutoprogrammingBatchIntegrationV0(batch, receiptExpected, "integrate-a", "integration-claim-a", "task-a", "source-other", "base-revision-001", "revision-a", "integration-receipt-a"); got.Accepted || !hasAutoprogrammingBatchIssueV0(got.Issues, "batch_idempotency_key_reused") {
 		t.Fatalf("source divergence=%+v", got)
 	}
 
-	batch = mustBatchTransitionV0(t, RegisterAutoprogrammingBatchIntegrationV0(batch, 6, "integrate-b", "task-b", "source-b", "revision-b", "integration-receipt-b"))
+	if got := ClaimAutoprogrammingBatchIntegrationV0(batch, batch.StoreVersion, "claim-b-stale", "integration-claim-b-stale", "task-b", "source-b", "base-revision-001"); got.Accepted || !hasAutoprogrammingBatchIssueV0(got.Issues, "batch_integration_parent_revision_invalid") {
+		t.Fatalf("stale head=%+v", got)
+	}
+	batch = integrateAutoprogrammingBatchMemberV0(t, batch, "b", "task-b", "source-b", "revision-a", "revision-b")
 	if batch.Status != AutoprogrammingBatchStatusPendingBatchGateV0 || batch.IntegratedRevision != "revision-b" {
 		t.Fatalf("batch=%+v", batch)
 	}
@@ -107,6 +124,7 @@ func TestAutoprogrammingBatchV0AcceptsSuccessiveIntegrationHeadsAndExactReplay(t
 
 func TestAutoprogrammingBatchV0FailedReceiptRequiresReworkAndInvalidatesIntegration(t *testing.T) {
 	batch := readyAutoprogrammingBatchGateV0(t)
+	previousGeneration := batch.GateGeneration
 	hash := AutoprogrammingBatchTestHashV0(batch.FrozenTests[0])
 	batch = mustBatchTransitionV0(t, ClaimAutoprogrammingBatchTestV0(batch, batch.StoreVersion, "claim-a", "revision-001", hash, "claim-ref-a"))
 	batch = mustBatchTransitionV0(t, RecordAutoprogrammingBatchTestReceiptV0(batch, batch.StoreVersion, "failed-a", "revision-001", hash, "claim-ref-a", "receipt-ref-a", AutoprogrammingBatchTestReceiptFailedV0))
@@ -114,8 +132,11 @@ func TestAutoprogrammingBatchV0FailedReceiptRequiresReworkAndInvalidatesIntegrat
 		t.Fatalf("status=%q", batch.Status)
 	}
 	batch = mustBatchTransitionV0(t, RequestAutoprogrammingBatchReworkV0(batch, batch.StoreVersion, "rework-a", "task-a"))
-	if batch.Status != AutoprogrammingBatchStatusGoalsRunningV0 || batch.IntegratedRevision != "" || batch.Members[0].FocalStatus != AutoprogrammingBatchFocalRunningV0 {
+	if batch.Status != AutoprogrammingBatchStatusGoalsRunningV0 || batch.GateGeneration != previousGeneration+1 || batch.IntegratedRevision != "" || batch.Members[0].FocalStatus != AutoprogrammingBatchFocalRunningV0 {
 		t.Fatalf("batch=%+v", batch)
+	}
+	if autoprogrammingBatchAllTestsPassedV0(batch) || batch.TestClaims[0].GateGeneration != previousGeneration || batch.TestReceipts[0].GateGeneration != previousGeneration {
+		t.Fatalf("old generation evidence reused: %+v", batch)
 	}
 	for _, member := range batch.Members {
 		if member.IntegrationStatus != AutoprogrammingBatchIntegrationPendingV0 {
@@ -162,8 +183,15 @@ func readyAutoprogrammingBatchGateV0(t *testing.T) AutoprogrammingBatchV0 {
 	batch = mustBatchTransitionV0(t, RegisterAutoprogrammingBatchLaunchV0(batch, 2, "launch-b", "task-b"))
 	batch = mustBatchTransitionV0(t, RegisterAutoprogrammingBatchFocalCloseV0(batch, 3, "close-a", "task-a"))
 	batch = mustBatchTransitionV0(t, RegisterAutoprogrammingBatchFocalCloseV0(batch, 4, "close-b", "task-b"))
-	batch = mustBatchTransitionV0(t, RegisterAutoprogrammingBatchIntegrationV0(batch, 5, "integrate-a", "task-a", "source-a", "revision-a", "integration-receipt-a"))
-	return mustBatchTransitionV0(t, RegisterAutoprogrammingBatchIntegrationV0(batch, 6, "integrate-b", "task-b", "source-b", "revision-001", "integration-receipt-b"))
+	batch = integrateAutoprogrammingBatchMemberV0(t, batch, "a", "task-a", "source-a", "base-revision-001", "revision-a")
+	return integrateAutoprogrammingBatchMemberV0(t, batch, "b", "task-b", "source-b", "revision-a", "revision-001")
+}
+
+func integrateAutoprogrammingBatchMemberV0(t *testing.T, batch AutoprogrammingBatchV0, suffix, taskRef, sourceRevision, parentRevision, integrationRevision string) AutoprogrammingBatchV0 {
+	t.Helper()
+	claimRef := "integration-claim-" + suffix
+	batch = mustBatchTransitionV0(t, ClaimAutoprogrammingBatchIntegrationV0(batch, batch.StoreVersion, "claim-integration-"+suffix, claimRef, taskRef, sourceRevision, parentRevision))
+	return mustBatchTransitionV0(t, RegisterAutoprogrammingBatchIntegrationV0(batch, batch.StoreVersion, "receipt-integration-"+suffix, claimRef, taskRef, sourceRevision, parentRevision, integrationRevision, "integration-receipt-"+suffix))
 }
 
 func mustBatchTransitionV0(t *testing.T, result AutoprogrammingBatchTransitionResultV0) AutoprogrammingBatchV0 {

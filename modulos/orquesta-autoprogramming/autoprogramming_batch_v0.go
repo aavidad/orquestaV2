@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -35,6 +36,9 @@ const (
 
 	AutoprogrammingBatchTestReceiptPassedV0 = "passed"
 	AutoprogrammingBatchTestReceiptFailedV0 = "failed"
+
+	AutoprogrammingBatchClaimStatusClaimedV0   = "claimed"
+	AutoprogrammingBatchClaimStatusReceiptedV0 = "receipted"
 )
 
 type AutoprogrammingBatchPlanV0 struct {
@@ -47,22 +51,26 @@ type AutoprogrammingBatchPlanV0 struct {
 }
 
 type AutoprogrammingBatchV0 struct {
-	SchemaVersion      string                                 `json:"schema_version"`
-	StoreVersion       uint64                                 `json:"store_version"`
-	BatchRef           string                                 `json:"batch_ref"`
-	RequestRef         string                                 `json:"request_ref"`
-	ProjectRef         string                                 `json:"project_ref"`
-	PlanHash           string                                 `json:"plan_hash"`
-	BaseRevision       string                                 `json:"base_revision"`
-	Members            []AutoprogrammingBatchMemberV0         `json:"members"`
-	FrozenTests        []AutoprogrammingBatchTestV0           `json:"frozen_tests"`
-	IntegratedRevision string                                 `json:"integrated_revision,omitempty"`
-	TestClaims         []AutoprogrammingBatchTestClaimV0      `json:"test_claims,omitempty"`
-	TestReceipts       []AutoprogrammingBatchTestReceiptV0    `json:"test_receipts,omitempty"`
-	PromotionReceipt   AutoprogrammingBatchPromotionReceiptV0 `json:"promotion_receipt,omitempty"`
-	Status             string                                 `json:"status"`
-	BlockRef           string                                 `json:"block_ref,omitempty"`
-	ActionReceipts     []AutoprogrammingBatchActionReceiptV0  `json:"action_receipts,omitempty"`
+	SchemaVersion           string                                   `json:"schema_version"`
+	StoreVersion            uint64                                   `json:"store_version"`
+	BatchRef                string                                   `json:"batch_ref"`
+	RequestRef              string                                   `json:"request_ref"`
+	ProjectRef              string                                   `json:"project_ref"`
+	PlanHash                string                                   `json:"plan_hash"`
+	BaseRevision            string                                   `json:"base_revision"`
+	Members                 []AutoprogrammingBatchMemberV0           `json:"members"`
+	FrozenTests             []AutoprogrammingBatchTestV0             `json:"frozen_tests"`
+	GateGeneration          uint64                                   `json:"gate_generation"`
+	IntegrationHeadRevision string                                   `json:"integration_head_revision,omitempty"`
+	IntegratedRevision      string                                   `json:"integrated_revision,omitempty"`
+	IntegrationClaims       []AutoprogrammingBatchIntegrationClaimV0 `json:"integration_claims,omitempty"`
+	TestClaims              []AutoprogrammingBatchTestClaimV0        `json:"test_claims,omitempty"`
+	TestReceipts            []AutoprogrammingBatchTestReceiptV0      `json:"test_receipts,omitempty"`
+	PromotionClaims         []AutoprogrammingBatchPromotionClaimV0   `json:"promotion_claims,omitempty"`
+	PromotionReceipt        AutoprogrammingBatchPromotionReceiptV0   `json:"promotion_receipt,omitempty"`
+	Status                  string                                   `json:"status"`
+	BlockRef                string                                   `json:"block_ref,omitempty"`
+	ActionReceipts          []AutoprogrammingBatchActionReceiptV0    `json:"action_receipts,omitempty"`
 }
 
 type AutoprogrammingBatchMemberV0 struct {
@@ -72,8 +80,10 @@ type AutoprogrammingBatchMemberV0 struct {
 	WorkspaceRef          string   `json:"workspace_ref"`
 	WriteSet              []string `json:"write_set"`
 	SourceRevision        string   `json:"source_revision"`
+	ParentRevision        string   `json:"parent_revision,omitempty"`
 	IntegrationRevision   string   `json:"integration_revision,omitempty"`
 	IntegrationReceiptRef string   `json:"integration_receipt_ref,omitempty"`
+	IntegrationOrder      uint64   `json:"integration_order,omitempty"`
 	FocalStatus           string   `json:"focal_status"`
 	IntegrationStatus     string   `json:"integration_status"`
 	ReworkStatus          string   `json:"rework_status"`
@@ -85,22 +95,45 @@ type AutoprogrammingBatchTestV0 struct {
 }
 
 type AutoprogrammingBatchTestClaimV0 struct {
-	Revision string `json:"revision"`
-	TestHash string `json:"test_hash"`
-	ClaimRef string `json:"claim_ref"`
+	GateGeneration uint64 `json:"gate_generation"`
+	Revision       string `json:"revision"`
+	TestHash       string `json:"test_hash"`
+	ClaimRef       string `json:"claim_ref"`
 }
 
 type AutoprogrammingBatchTestReceiptV0 struct {
-	Revision   string `json:"revision"`
-	TestHash   string `json:"test_hash"`
-	ClaimRef   string `json:"claim_ref"`
-	ReceiptRef string `json:"receipt_ref"`
-	Status     string `json:"status"`
+	GateGeneration uint64 `json:"gate_generation"`
+	Revision       string `json:"revision"`
+	TestHash       string `json:"test_hash"`
+	ClaimRef       string `json:"claim_ref"`
+	ReceiptRef     string `json:"receipt_ref"`
+	Status         string `json:"status"`
+}
+
+type AutoprogrammingBatchIntegrationClaimV0 struct {
+	GateGeneration      uint64 `json:"gate_generation"`
+	ClaimRef            string `json:"claim_ref"`
+	TaskRef             string `json:"task_ref"`
+	SourceRevision      string `json:"source_revision"`
+	ParentRevision      string `json:"parent_revision"`
+	IntegrationRevision string `json:"integration_revision,omitempty"`
+	ReceiptRef          string `json:"receipt_ref,omitempty"`
+	Status              string `json:"status"`
+}
+
+type AutoprogrammingBatchPromotionClaimV0 struct {
+	GateGeneration uint64 `json:"gate_generation"`
+	ClaimRef       string `json:"claim_ref"`
+	Revision       string `json:"revision"`
+	ReceiptRef     string `json:"receipt_ref,omitempty"`
+	Status         string `json:"status"`
 }
 
 type AutoprogrammingBatchPromotionReceiptV0 struct {
-	Revision   string `json:"revision"`
-	ReceiptRef string `json:"receipt_ref"`
+	GateGeneration uint64 `json:"gate_generation"`
+	ClaimRef       string `json:"claim_ref"`
+	Revision       string `json:"revision"`
+	ReceiptRef     string `json:"receipt_ref"`
 }
 
 type AutoprogrammingBatchActionReceiptV0 struct {
@@ -131,22 +164,25 @@ type AutoprogrammingBatchTransitionResultV0 struct {
 func NewAutoprogrammingBatchV0(plan AutoprogrammingBatchPlanV0) AutoprogrammingBatchValidationResultV0 {
 	for index := range plan.Members {
 		plan.Members[index].SourceRevision = ""
+		plan.Members[index].ParentRevision = ""
 		plan.Members[index].IntegrationRevision = ""
 		plan.Members[index].IntegrationReceiptRef = ""
+		plan.Members[index].IntegrationOrder = 0
 		plan.Members[index].FocalStatus = AutoprogrammingBatchFocalPendingV0
 		plan.Members[index].IntegrationStatus = AutoprogrammingBatchIntegrationPendingV0
 		plan.Members[index].ReworkStatus = AutoprogrammingBatchReworkNoneV0
 	}
 	batch := AutoprogrammingBatchV0{
-		SchemaVersion: AutoprogrammingBatchSchemaVersionV0,
-		StoreVersion:  1,
-		BatchRef:      plan.BatchRef,
-		RequestRef:    plan.RequestRef,
-		ProjectRef:    plan.ProjectRef,
-		BaseRevision:  plan.BaseRevision,
-		Members:       plan.Members,
-		FrozenTests:   plan.FrozenTests,
-		Status:        AutoprogrammingBatchStatusPreparedV0,
+		SchemaVersion:  AutoprogrammingBatchSchemaVersionV0,
+		StoreVersion:   1,
+		BatchRef:       plan.BatchRef,
+		RequestRef:     plan.RequestRef,
+		ProjectRef:     plan.ProjectRef,
+		BaseRevision:   plan.BaseRevision,
+		Members:        plan.Members,
+		FrozenTests:    plan.FrozenTests,
+		GateGeneration: 1,
+		Status:         AutoprogrammingBatchStatusPreparedV0,
 	}
 	batch = NormalizeAutoprogrammingBatchV0(batch)
 	batch.PlanHash = AutoprogrammingBatchPlanHashV0(batch)
@@ -160,13 +196,17 @@ func NormalizeAutoprogrammingBatchV0(batch AutoprogrammingBatchV0) Autoprogrammi
 	batch.ProjectRef = autoprogrammingBatchRefV0(batch.ProjectRef)
 	batch.PlanHash = strings.ToLower(strings.TrimSpace(batch.PlanHash))
 	batch.BaseRevision = autoprogrammingBatchRefV0(batch.BaseRevision)
+	batch.IntegrationHeadRevision = autoprogrammingBatchRefV0(batch.IntegrationHeadRevision)
 	batch.IntegratedRevision = autoprogrammingBatchRefV0(batch.IntegratedRevision)
 	batch.Status = strings.TrimSpace(batch.Status)
 	batch.BlockRef = autoprogrammingBatchRefV0(batch.BlockRef)
 	batch.Members = autoprogrammingBatchMembersV0(batch.Members)
 	batch.FrozenTests = autoprogrammingBatchTestsV0(batch.FrozenTests)
+	batch.IntegrationClaims = autoprogrammingBatchIntegrationClaimsV0(batch.IntegrationClaims)
 	batch.TestClaims = autoprogrammingBatchClaimsV0(batch.TestClaims)
 	batch.TestReceipts = autoprogrammingBatchReceiptsV0(batch.TestReceipts)
+	batch.PromotionClaims = autoprogrammingBatchPromotionClaimsV0(batch.PromotionClaims)
+	batch.PromotionReceipt.ClaimRef = autoprogrammingBatchRefV0(batch.PromotionReceipt.ClaimRef)
 	batch.PromotionReceipt.Revision = autoprogrammingBatchRefV0(batch.PromotionReceipt.Revision)
 	batch.PromotionReceipt.ReceiptRef = autoprogrammingBatchRefV0(batch.PromotionReceipt.ReceiptRef)
 	batch.ActionReceipts = autoprogrammingBatchActionReceiptsV0(batch.ActionReceipts)
@@ -246,26 +286,62 @@ func RegisterAutoprogrammingBatchFocalCloseV0(batch AutoprogrammingBatchV0, expe
 	})
 }
 
-func RegisterAutoprogrammingBatchIntegrationV0(batch AutoprogrammingBatchV0, expectedStoreVersion uint64, idempotencyKey, taskRef, sourceRevision, integrationRevision, receiptRef string) AutoprogrammingBatchTransitionResultV0 {
-	return transitionAutoprogrammingBatchV0(batch, expectedStoreVersion, idempotencyKey, "integration", []string{taskRef, sourceRevision, integrationRevision, receiptRef}, func(next *AutoprogrammingBatchV0) []AutoprogrammingRequestIssueV0 {
+func ClaimAutoprogrammingBatchIntegrationV0(batch AutoprogrammingBatchV0, expectedStoreVersion uint64, idempotencyKey, claimRef, taskRef, sourceRevision, parentRevision string) AutoprogrammingBatchTransitionResultV0 {
+	generation := strconv.FormatUint(batch.GateGeneration, 10)
+	return transitionAutoprogrammingBatchV0(batch, expectedStoreVersion, idempotencyKey, "claim_integration", []string{generation, claimRef, taskRef, sourceRevision, parentRevision}, func(next *AutoprogrammingBatchV0) []AutoprogrammingRequestIssueV0 {
+		if next.Status != AutoprogrammingBatchStatusPendingIntegrationV0 {
+			return autoprogrammingBatchTransitionIssueV0("batch_integration_claim_not_allowed", "status", "claim de integracion requiere todos los focales cerrados")
+		}
+		claimRef = autoprogrammingBatchRefV0(claimRef)
+		sourceRevision = autoprogrammingBatchRefV0(sourceRevision)
+		parentRevision = autoprogrammingBatchRefV0(parentRevision)
+		if !autoprogrammingBatchRefValidV0(claimRef) || !autoprogrammingBatchRefValidV0(sourceRevision) || parentRevision != autoprogrammingBatchExpectedParentRevisionV0(*next) {
+			return autoprogrammingBatchTransitionIssueV0("batch_integration_parent_revision_invalid", "parent_revision", "parent revision debe coincidir con el HEAD causal vigente")
+		}
+		member := autoprogrammingBatchMemberIndexV0(next.Members, taskRef)
+		if member < 0 || next.Members[member].IntegrationStatus != AutoprogrammingBatchIntegrationPendingV0 {
+			return autoprogrammingBatchTransitionIssueV0("batch_integration_claim_invalid", "task_ref", "miembro sin integracion pendiente")
+		}
+		if autoprogrammingBatchHasOpenIntegrationClaimV0(*next) {
+			return autoprogrammingBatchTransitionIssueV0("batch_integration_claim_orphaned", "integration_claims", "claim previo sin receipt requiere reconciliacion")
+		}
+		next.IntegrationClaims = append(next.IntegrationClaims, AutoprogrammingBatchIntegrationClaimV0{
+			GateGeneration: next.GateGeneration, ClaimRef: claimRef, TaskRef: next.Members[member].TaskRef,
+			SourceRevision: sourceRevision, ParentRevision: parentRevision, Status: AutoprogrammingBatchClaimStatusClaimedV0,
+		})
+		return nil
+	})
+}
+
+func RegisterAutoprogrammingBatchIntegrationV0(batch AutoprogrammingBatchV0, expectedStoreVersion uint64, idempotencyKey, claimRef, taskRef, sourceRevision, parentRevision, integrationRevision, receiptRef string) AutoprogrammingBatchTransitionResultV0 {
+	generation := strconv.FormatUint(batch.GateGeneration, 10)
+	return transitionAutoprogrammingBatchV0(batch, expectedStoreVersion, idempotencyKey, "integration_receipt", []string{generation, claimRef, taskRef, sourceRevision, parentRevision, integrationRevision, receiptRef}, func(next *AutoprogrammingBatchV0) []AutoprogrammingRequestIssueV0 {
 		if next.Status != AutoprogrammingBatchStatusPendingIntegrationV0 {
 			return autoprogrammingBatchTransitionIssueV0("batch_integration_not_allowed", "status", "integracion requiere todos los focales cerrados")
 		}
-		sourceRevision = autoprogrammingBatchRefV0(sourceRevision)
-		integrationRevision = autoprogrammingBatchRefV0(integrationRevision)
-		if !autoprogrammingBatchRefValidV0(sourceRevision) || !autoprogrammingBatchRefValidV0(integrationRevision) {
-			return autoprogrammingBatchTransitionIssueV0("batch_integrated_revision_invalid", "revision", "revisiones fuente e integrada requeridas")
+		claimRef, sourceRevision = autoprogrammingBatchRefV0(claimRef), autoprogrammingBatchRefV0(sourceRevision)
+		parentRevision, integrationRevision = autoprogrammingBatchRefV0(parentRevision), autoprogrammingBatchRefV0(integrationRevision)
+		receiptRef = autoprogrammingBatchRefV0(receiptRef)
+		if !autoprogrammingBatchRefValidV0(integrationRevision) || !autoprogrammingBatchRefValidV0(receiptRef) || parentRevision != autoprogrammingBatchExpectedParentRevisionV0(*next) {
+			return autoprogrammingBatchTransitionIssueV0("batch_integration_parent_revision_invalid", "parent_revision", "receipt debe continuar desde el HEAD causal vigente")
 		}
 		member := autoprogrammingBatchMemberIndexV0(next.Members, taskRef)
-		if member < 0 || next.Members[member].IntegrationStatus != AutoprogrammingBatchIntegrationPendingV0 || !autoprogrammingBatchRefValidV0(receiptRef) {
-			return autoprogrammingBatchTransitionIssueV0("batch_integration_invalid", "task_ref", "miembro sin integracion pendiente")
+		claim := autoprogrammingBatchIntegrationClaimIndexV0(*next, claimRef, taskRef, sourceRevision, parentRevision)
+		if member < 0 || next.Members[member].IntegrationStatus != AutoprogrammingBatchIntegrationPendingV0 || claim < 0 || next.IntegrationClaims[claim].Status != AutoprogrammingBatchClaimStatusClaimedV0 {
+			return autoprogrammingBatchTransitionIssueV0("batch_integration_claim_missing", "claim_ref", "receipt requiere claim exacto pendiente")
 		}
+		next.IntegrationClaims[claim].Status = AutoprogrammingBatchClaimStatusReceiptedV0
+		next.IntegrationClaims[claim].IntegrationRevision = integrationRevision
+		next.IntegrationClaims[claim].ReceiptRef = receiptRef
 		next.Members[member].IntegrationStatus = AutoprogrammingBatchIntegrationIntegratedV0
 		next.Members[member].SourceRevision = sourceRevision
+		next.Members[member].ParentRevision = parentRevision
 		next.Members[member].IntegrationRevision = integrationRevision
-		next.Members[member].IntegrationReceiptRef = autoprogrammingBatchRefV0(receiptRef)
+		next.Members[member].IntegrationReceiptRef = receiptRef
+		next.Members[member].IntegrationOrder = uint64(autoprogrammingBatchIntegratedCountV0(next.Members))
+		next.IntegrationHeadRevision = integrationRevision
 		if autoprogrammingBatchAllIntegratedV0(next.Members) {
-			next.IntegratedRevision = integrationRevision
+			next.IntegratedRevision = next.IntegrationHeadRevision
 			next.Status = AutoprogrammingBatchStatusPendingBatchGateV0
 		}
 		return nil
@@ -273,7 +349,8 @@ func RegisterAutoprogrammingBatchIntegrationV0(batch AutoprogrammingBatchV0, exp
 }
 
 func ClaimAutoprogrammingBatchTestV0(batch AutoprogrammingBatchV0, expectedStoreVersion uint64, idempotencyKey, revision, testHash, claimRef string) AutoprogrammingBatchTransitionResultV0 {
-	return transitionAutoprogrammingBatchV0(batch, expectedStoreVersion, idempotencyKey, "claim_test", []string{revision, testHash, claimRef}, func(next *AutoprogrammingBatchV0) []AutoprogrammingRequestIssueV0 {
+	generation := strconv.FormatUint(batch.GateGeneration, 10)
+	return transitionAutoprogrammingBatchV0(batch, expectedStoreVersion, idempotencyKey, "claim_test", []string{generation, revision, testHash, claimRef}, func(next *AutoprogrammingBatchV0) []AutoprogrammingRequestIssueV0 {
 		if next.Status != AutoprogrammingBatchStatusPendingBatchGateV0 && next.Status != AutoprogrammingBatchStatusBatchGateRunningV0 {
 			return autoprogrammingBatchTransitionIssueV0("batch_test_claim_not_allowed", "status", "claim requiere batch gate pendiente")
 		}
@@ -284,29 +361,30 @@ func ClaimAutoprogrammingBatchTestV0(batch AutoprogrammingBatchV0, expectedStore
 			return autoprogrammingBatchTransitionIssueV0("batch_test_claim_invalid", "test_hash", "test congelado y claim ref requeridos")
 		}
 		for _, claim := range next.TestClaims {
-			if claim.Revision == revision && claim.TestHash == testHash {
+			if claim.GateGeneration == next.GateGeneration && claim.Revision == revision && claim.TestHash == testHash {
 				return autoprogrammingBatchTransitionIssueV0("batch_test_claim_duplicate", "test_hash", "solo existe un claim por revision y test")
 			}
 		}
-		next.TestClaims = append(next.TestClaims, AutoprogrammingBatchTestClaimV0{Revision: revision, TestHash: testHash, ClaimRef: autoprogrammingBatchRefV0(claimRef)})
+		next.TestClaims = append(next.TestClaims, AutoprogrammingBatchTestClaimV0{GateGeneration: next.GateGeneration, Revision: revision, TestHash: testHash, ClaimRef: autoprogrammingBatchRefV0(claimRef)})
 		next.Status = AutoprogrammingBatchStatusBatchGateRunningV0
 		return nil
 	})
 }
 
 func RecordAutoprogrammingBatchTestReceiptV0(batch AutoprogrammingBatchV0, expectedStoreVersion uint64, idempotencyKey, revision, testHash, claimRef, receiptRef, status string) AutoprogrammingBatchTransitionResultV0 {
-	return transitionAutoprogrammingBatchV0(batch, expectedStoreVersion, idempotencyKey, "test_receipt", []string{revision, testHash, claimRef, receiptRef, status}, func(next *AutoprogrammingBatchV0) []AutoprogrammingRequestIssueV0 {
+	generation := strconv.FormatUint(batch.GateGeneration, 10)
+	return transitionAutoprogrammingBatchV0(batch, expectedStoreVersion, idempotencyKey, "test_receipt", []string{generation, revision, testHash, claimRef, receiptRef, status}, func(next *AutoprogrammingBatchV0) []AutoprogrammingRequestIssueV0 {
 		if next.Status != AutoprogrammingBatchStatusBatchGateRunningV0 {
 			return autoprogrammingBatchTransitionIssueV0("batch_test_receipt_not_allowed", "status", "receipt requiere batch gate en curso")
 		}
 		revision, testHash, claimRef, receiptRef, status = autoprogrammingBatchRefV0(revision), strings.TrimSpace(testHash), autoprogrammingBatchRefV0(claimRef), autoprogrammingBatchRefV0(receiptRef), strings.TrimSpace(status)
-		if revision != next.IntegratedRevision || !autoprogrammingBatchClaimExistsV0(next.TestClaims, revision, testHash, claimRef) || !autoprogrammingBatchRefValidV0(receiptRef) || !autoprogrammingBatchTestReceiptStatusValidV0(status) {
+		if revision != next.IntegratedRevision || !autoprogrammingBatchClaimExistsV0(next.TestClaims, next.GateGeneration, revision, testHash, claimRef) || !autoprogrammingBatchRefValidV0(receiptRef) || !autoprogrammingBatchTestReceiptStatusValidV0(status) {
 			return autoprogrammingBatchTransitionIssueV0("batch_test_receipt_invalid", "test_receipt", "receipt debe corresponder a un claim valido de la revision integrada")
 		}
-		if autoprogrammingBatchReceiptExistsV0(next.TestReceipts, revision, testHash) {
+		if autoprogrammingBatchReceiptExistsV0(next.TestReceipts, next.GateGeneration, revision, testHash) {
 			return autoprogrammingBatchTransitionIssueV0("batch_test_receipt_duplicate", "test_hash", "solo existe un receipt por revision y test")
 		}
-		next.TestReceipts = append(next.TestReceipts, AutoprogrammingBatchTestReceiptV0{Revision: revision, TestHash: testHash, ClaimRef: claimRef, ReceiptRef: receiptRef, Status: status})
+		next.TestReceipts = append(next.TestReceipts, AutoprogrammingBatchTestReceiptV0{GateGeneration: next.GateGeneration, Revision: revision, TestHash: testHash, ClaimRef: claimRef, ReceiptRef: receiptRef, Status: status})
 		if status == AutoprogrammingBatchTestReceiptFailedV0 {
 			next.Status = AutoprogrammingBatchStatusReworkPendingV0
 		} else if autoprogrammingBatchAllTestsPassedV0(*next) {
@@ -330,9 +408,13 @@ func RequestAutoprogrammingBatchReworkV0(batch AutoprogrammingBatchV0, expectedS
 		for index := range next.Members {
 			next.Members[index].IntegrationStatus = AutoprogrammingBatchIntegrationPendingV0
 			next.Members[index].SourceRevision = ""
+			next.Members[index].ParentRevision = ""
 			next.Members[index].IntegrationRevision = ""
 			next.Members[index].IntegrationReceiptRef = ""
+			next.Members[index].IntegrationOrder = 0
 		}
+		next.GateGeneration++
+		next.IntegrationHeadRevision = ""
 		next.IntegratedRevision = ""
 		next.PromotionReceipt = AutoprogrammingBatchPromotionReceiptV0{}
 		next.Status = AutoprogrammingBatchStatusGoalsRunningV0
@@ -340,20 +422,42 @@ func RequestAutoprogrammingBatchReworkV0(batch AutoprogrammingBatchV0, expectedS
 	})
 }
 
-func RegisterAutoprogrammingBatchPromotionV0(batch AutoprogrammingBatchV0, expectedStoreVersion uint64, idempotencyKey, revision, receiptRef string) AutoprogrammingBatchTransitionResultV0 {
-	return transitionAutoprogrammingBatchV0(batch, expectedStoreVersion, idempotencyKey, "promotion", []string{revision, receiptRef}, func(next *AutoprogrammingBatchV0) []AutoprogrammingRequestIssueV0 {
-		if next.Status != AutoprogrammingBatchStatusBatchGatePassedV0 || autoprogrammingBatchRefV0(revision) != next.IntegratedRevision || !autoprogrammingBatchRefValidV0(receiptRef) {
-			return autoprogrammingBatchTransitionIssueV0("batch_promotion_invalid", "promotion_receipt", "promocion requiere gate pasado, revision integrada y receipt")
+func ClaimAutoprogrammingBatchPromotionV0(batch AutoprogrammingBatchV0, expectedStoreVersion uint64, idempotencyKey, claimRef, revision string) AutoprogrammingBatchTransitionResultV0 {
+	generation := strconv.FormatUint(batch.GateGeneration, 10)
+	return transitionAutoprogrammingBatchV0(batch, expectedStoreVersion, idempotencyKey, "claim_promotion", []string{generation, claimRef, revision}, func(next *AutoprogrammingBatchV0) []AutoprogrammingRequestIssueV0 {
+		claimRef, revision = autoprogrammingBatchRefV0(claimRef), autoprogrammingBatchRefV0(revision)
+		if next.Status != AutoprogrammingBatchStatusBatchGatePassedV0 || revision != next.IntegratedRevision || !autoprogrammingBatchRefValidV0(claimRef) || !autoprogrammingBatchAllTestsPassedV0(*next) {
+			return autoprogrammingBatchTransitionIssueV0("batch_promotion_claim_invalid", "promotion_claim", "claim de promocion requiere gate vigente pasado")
 		}
-		next.PromotionReceipt = AutoprogrammingBatchPromotionReceiptV0{Revision: next.IntegratedRevision, ReceiptRef: autoprogrammingBatchRefV0(receiptRef)}
+		if autoprogrammingBatchCurrentPromotionClaimIndexV0(*next, "") >= 0 {
+			return autoprogrammingBatchTransitionIssueV0("batch_promotion_claim_orphaned", "promotion_claims", "claim previo sin receipt requiere reconciliacion")
+		}
+		next.PromotionClaims = append(next.PromotionClaims, AutoprogrammingBatchPromotionClaimV0{
+			GateGeneration: next.GateGeneration, ClaimRef: claimRef, Revision: revision, Status: AutoprogrammingBatchClaimStatusClaimedV0,
+		})
 		next.Status = AutoprogrammingBatchStatusPromotionPendingV0
+		return nil
+	})
+}
+
+func RegisterAutoprogrammingBatchPromotionV0(batch AutoprogrammingBatchV0, expectedStoreVersion uint64, idempotencyKey, claimRef, revision, receiptRef string) AutoprogrammingBatchTransitionResultV0 {
+	generation := strconv.FormatUint(batch.GateGeneration, 10)
+	return transitionAutoprogrammingBatchV0(batch, expectedStoreVersion, idempotencyKey, "promotion_receipt", []string{generation, claimRef, revision, receiptRef}, func(next *AutoprogrammingBatchV0) []AutoprogrammingRequestIssueV0 {
+		claimRef, revision, receiptRef = autoprogrammingBatchRefV0(claimRef), autoprogrammingBatchRefV0(revision), autoprogrammingBatchRefV0(receiptRef)
+		claim := autoprogrammingBatchCurrentPromotionClaimIndexV0(*next, claimRef)
+		if next.Status != AutoprogrammingBatchStatusPromotionPendingV0 || revision != next.IntegratedRevision || !autoprogrammingBatchRefValidV0(receiptRef) || claim < 0 || next.PromotionClaims[claim].Revision != revision || next.PromotionClaims[claim].Status != AutoprogrammingBatchClaimStatusClaimedV0 {
+			return autoprogrammingBatchTransitionIssueV0("batch_promotion_invalid", "promotion_receipt", "promocion requiere claim exacto pendiente")
+		}
+		next.PromotionClaims[claim].Status = AutoprogrammingBatchClaimStatusReceiptedV0
+		next.PromotionClaims[claim].ReceiptRef = receiptRef
+		next.PromotionReceipt = AutoprogrammingBatchPromotionReceiptV0{GateGeneration: next.GateGeneration, ClaimRef: claimRef, Revision: revision, ReceiptRef: receiptRef}
 		return nil
 	})
 }
 
 func CloseAutoprogrammingBatchV0(batch AutoprogrammingBatchV0, expectedStoreVersion uint64, idempotencyKey string) AutoprogrammingBatchTransitionResultV0 {
 	return transitionAutoprogrammingBatchV0(batch, expectedStoreVersion, idempotencyKey, "close", nil, func(next *AutoprogrammingBatchV0) []AutoprogrammingRequestIssueV0 {
-		if next.Status != AutoprogrammingBatchStatusPromotionPendingV0 || !autoprogrammingBatchAllTestsPassedV0(*next) || next.PromotionReceipt.Revision != next.IntegratedRevision || !autoprogrammingBatchRefValidV0(next.PromotionReceipt.ReceiptRef) {
+		if next.Status != AutoprogrammingBatchStatusPromotionPendingV0 || !autoprogrammingBatchAllTestsPassedV0(*next) || !autoprogrammingBatchPromotionReceiptedV0(*next) {
 			return autoprogrammingBatchTransitionIssueV0("batch_close_invalid", "status", "cierre requiere todos los tests passed y promocion registrada")
 		}
 		next.Status = AutoprogrammingBatchStatusClosedV0
@@ -411,6 +515,9 @@ func autoprogrammingBatchStaticIssuesV0(batch AutoprogrammingBatchV0) []Autoprog
 	if batch.StoreVersion == 0 {
 		issues = append(issues, autoprogrammingRequestIssueV0("batch_store_version_invalid", "store_version", "store version positiva requerida"))
 	}
+	if batch.GateGeneration == 0 {
+		issues = append(issues, autoprogrammingRequestIssueV0("batch_gate_generation_invalid", "gate_generation", "gate generation positiva requerida"))
+	}
 	for _, item := range []struct{ field, value string }{{"batch_ref", batch.BatchRef}, {"request_ref", batch.RequestRef}, {"project_ref", batch.ProjectRef}, {"base_revision", batch.BaseRevision}} {
 		if !autoprogrammingBatchRefValidV0(item.value) {
 			issues = append(issues, autoprogrammingRequestIssueV0("batch_"+item.field+"_invalid", item.field, "ref compacta requerida"))
@@ -467,34 +574,70 @@ func autoprogrammingBatchDynamicIssuesV0(batch AutoprogrammingBatchV0) []Autopro
 	if batch.IntegratedRevision != "" && !autoprogrammingBatchRefValidV0(batch.IntegratedRevision) {
 		issues = append(issues, autoprogrammingRequestIssueV0("batch_integrated_revision_invalid", "integrated_revision", "revision integrada compacta requerida"))
 	}
+	if batch.IntegrationHeadRevision != "" && !autoprogrammingBatchRefValidV0(batch.IntegrationHeadRevision) {
+		issues = append(issues, autoprogrammingRequestIssueV0("batch_integration_head_invalid", "integration_head_revision", "HEAD de integracion compacto requerido"))
+	}
 	for _, member := range batch.Members {
 		if !autoprogrammingBatchMemberStateValidV0(member) {
 			issues = append(issues, autoprogrammingRequestIssueV0("batch_member_state_invalid", "members", "estado de miembro invalido"))
 		}
 	}
 	issues = append(issues, autoprogrammingBatchEvidenceIssuesV0(batch)...)
+	issues = append(issues, autoprogrammingBatchIntegrationChainIssuesV0(batch)...)
 	issues = append(issues, autoprogrammingBatchStatusIssuesV0(batch)...)
 	return issues
 }
 
 func autoprogrammingBatchEvidenceIssuesV0(batch AutoprogrammingBatchV0) []AutoprogrammingRequestIssueV0 {
 	var issues []AutoprogrammingRequestIssueV0
+	integrationClaimRefs := map[string]bool{}
+	for _, claim := range batch.IntegrationClaims {
+		key := strconv.FormatUint(claim.GateGeneration, 10) + "\x00" + claim.ClaimRef
+		valid := claim.GateGeneration > 0 && claim.GateGeneration <= batch.GateGeneration && autoprogrammingBatchRefValidV0(claim.ClaimRef) && autoprogrammingBatchMemberIndexV0(batch.Members, claim.TaskRef) >= 0 && autoprogrammingBatchRefValidV0(claim.SourceRevision) && autoprogrammingBatchRefValidV0(claim.ParentRevision) && !integrationClaimRefs[key]
+		if claim.Status == AutoprogrammingBatchClaimStatusClaimedV0 {
+			valid = valid && claim.IntegrationRevision == "" && claim.ReceiptRef == ""
+		} else if claim.Status == AutoprogrammingBatchClaimStatusReceiptedV0 {
+			valid = valid && autoprogrammingBatchRefValidV0(claim.IntegrationRevision) && autoprogrammingBatchRefValidV0(claim.ReceiptRef)
+		} else {
+			valid = false
+		}
+		if !valid {
+			issues = append(issues, autoprogrammingRequestIssueV0("batch_integration_claim_invalid", "integration_claims", "claim de integracion durable invalido"))
+		}
+		integrationClaimRefs[key] = true
+	}
 	claims := map[string]AutoprogrammingBatchTestClaimV0{}
 	for _, claim := range batch.TestClaims {
-		key := claim.Revision + "\x00" + claim.TestHash
-		if !autoprogrammingBatchRefValidV0(claim.Revision) || !autoprogrammingBatchHasTestHashV0(batch.FrozenTests, claim.TestHash) || !autoprogrammingBatchRefValidV0(claim.ClaimRef) || claims[key].ClaimRef != "" {
+		key := strconv.FormatUint(claim.GateGeneration, 10) + "\x00" + claim.Revision + "\x00" + claim.TestHash
+		if claim.GateGeneration == 0 || claim.GateGeneration > batch.GateGeneration || !autoprogrammingBatchRefValidV0(claim.Revision) || !autoprogrammingBatchHasTestHashV0(batch.FrozenTests, claim.TestHash) || !autoprogrammingBatchRefValidV0(claim.ClaimRef) || claims[key].ClaimRef != "" {
 			issues = append(issues, autoprogrammingRequestIssueV0("batch_test_claim_invalid", "test_claims", "claim debe ser unico y pertenecer a test congelado"))
 		}
 		claims[key] = claim
 	}
 	receipts := map[string]bool{}
 	for _, receipt := range batch.TestReceipts {
-		key := receipt.Revision + "\x00" + receipt.TestHash
+		key := strconv.FormatUint(receipt.GateGeneration, 10) + "\x00" + receipt.Revision + "\x00" + receipt.TestHash
 		claim, claimed := claims[key]
-		if !claimed || claim.ClaimRef != receipt.ClaimRef || !autoprogrammingBatchRefValidV0(receipt.ReceiptRef) || !autoprogrammingBatchTestReceiptStatusValidV0(receipt.Status) || receipts[key] {
+		if receipt.GateGeneration == 0 || receipt.GateGeneration > batch.GateGeneration || !claimed || claim.ClaimRef != receipt.ClaimRef || !autoprogrammingBatchRefValidV0(receipt.ReceiptRef) || !autoprogrammingBatchTestReceiptStatusValidV0(receipt.Status) || receipts[key] {
 			issues = append(issues, autoprogrammingRequestIssueV0("batch_test_receipt_invalid", "test_receipts", "receipt debe corresponder a claim unico"))
 		}
 		receipts[key] = true
+	}
+	promotionClaimRefs := map[string]bool{}
+	for _, claim := range batch.PromotionClaims {
+		key := strconv.FormatUint(claim.GateGeneration, 10) + "\x00" + claim.ClaimRef
+		valid := claim.GateGeneration > 0 && claim.GateGeneration <= batch.GateGeneration && autoprogrammingBatchRefValidV0(claim.ClaimRef) && autoprogrammingBatchRefValidV0(claim.Revision) && !promotionClaimRefs[key]
+		if claim.Status == AutoprogrammingBatchClaimStatusClaimedV0 {
+			valid = valid && claim.ReceiptRef == ""
+		} else if claim.Status == AutoprogrammingBatchClaimStatusReceiptedV0 {
+			valid = valid && autoprogrammingBatchRefValidV0(claim.ReceiptRef)
+		} else {
+			valid = false
+		}
+		if !valid {
+			issues = append(issues, autoprogrammingRequestIssueV0("batch_promotion_claim_invalid", "promotion_claims", "claim de promocion durable invalido"))
+		}
+		promotionClaimRefs[key] = true
 	}
 	seenKeys := map[string]bool{}
 	for _, receipt := range batch.ActionReceipts {
@@ -504,6 +647,42 @@ func autoprogrammingBatchEvidenceIssuesV0(batch AutoprogrammingBatchV0) []Autopr
 		seenKeys[receipt.IdempotencyKey] = true
 	}
 	return issues
+}
+
+func autoprogrammingBatchIntegrationChainIssuesV0(batch AutoprogrammingBatchV0) []AutoprogrammingRequestIssueV0 {
+	integrated := make([]AutoprogrammingBatchMemberV0, 0, len(batch.Members))
+	for _, member := range batch.Members {
+		if member.IntegrationStatus == AutoprogrammingBatchIntegrationIntegratedV0 {
+			integrated = append(integrated, member)
+		}
+	}
+	sort.SliceStable(integrated, func(left, right int) bool {
+		return integrated[left].IntegrationOrder < integrated[right].IntegrationOrder
+	})
+	expectedParent := batch.BaseRevision
+	for index, member := range integrated {
+		if member.IntegrationOrder != uint64(index+1) || member.ParentRevision != expectedParent || !autoprogrammingBatchIntegrationReceiptMatchesV0(batch, member) {
+			return autoprogrammingBatchTransitionIssueV0("batch_integration_chain_invalid", "members", "cadena de parent revision o receipt de integracion invalida")
+		}
+		expectedParent = member.IntegrationRevision
+	}
+	if len(integrated) == 0 {
+		if batch.IntegrationHeadRevision != "" || batch.IntegratedRevision != "" {
+			return autoprogrammingBatchTransitionIssueV0("batch_integration_head_invalid", "integration_head_revision", "sin integraciones no puede existir HEAD")
+		}
+		return nil
+	}
+	if batch.IntegrationHeadRevision != expectedParent {
+		return autoprogrammingBatchTransitionIssueV0("batch_integration_head_invalid", "integration_head_revision", "HEAD debe coincidir con el ultimo receipt causal")
+	}
+	if autoprogrammingBatchAllIntegratedV0(batch.Members) {
+		if batch.IntegratedRevision != batch.IntegrationHeadRevision {
+			return autoprogrammingBatchTransitionIssueV0("batch_integrated_revision_invalid", "integrated_revision", "revision final debe demostrar la cadena completa")
+		}
+	} else if batch.IntegratedRevision != "" {
+		return autoprogrammingBatchTransitionIssueV0("batch_integrated_revision_early", "integrated_revision", "revision final solo se congela al integrar el ultimo miembro")
+	}
+	return nil
 }
 
 func autoprogrammingBatchStatusIssuesV0(batch AutoprogrammingBatchV0) []AutoprogrammingRequestIssueV0 {
@@ -517,10 +696,10 @@ func autoprogrammingBatchStatusIssuesV0(batch AutoprogrammingBatchV0) []Autoprog
 	if (batch.Status == AutoprogrammingBatchStatusBatchGatePassedV0 || batch.Status == AutoprogrammingBatchStatusPromotionPendingV0 || batch.Status == AutoprogrammingBatchStatusClosedV0) && !autoprogrammingBatchAllTestsPassedV0(batch) {
 		return autoprogrammingBatchTransitionIssueV0("batch_tests_not_passed", "test_receipts", "estado requiere todos los tests batch passed")
 	}
-	if (batch.Status == AutoprogrammingBatchStatusPromotionPendingV0 || batch.Status == AutoprogrammingBatchStatusClosedV0) && (batch.PromotionReceipt.Revision != batch.IntegratedRevision || !autoprogrammingBatchRefValidV0(batch.PromotionReceipt.ReceiptRef)) {
-		return autoprogrammingBatchTransitionIssueV0("batch_promotion_receipt_invalid", "promotion_receipt", "estado requiere promotion receipt de la revision integrada")
+	if batch.Status == AutoprogrammingBatchStatusPromotionPendingV0 && autoprogrammingBatchCurrentPromotionClaimIndexV0(batch, "") < 0 {
+		return autoprogrammingBatchTransitionIssueV0("batch_promotion_claim_missing", "promotion_claims", "promocion pendiente requiere claim durable")
 	}
-	if batch.Status == AutoprogrammingBatchStatusClosedV0 && (!autoprogrammingBatchAllTestsPassedV0(batch) || !autoprogrammingBatchRefValidV0(batch.PromotionReceipt.ReceiptRef)) {
+	if batch.Status == AutoprogrammingBatchStatusClosedV0 && (!autoprogrammingBatchAllTestsPassedV0(batch) || !autoprogrammingBatchPromotionReceiptedV0(batch)) {
 		return autoprogrammingBatchTransitionIssueV0("batch_close_invalid", "status", "close requiere tests passed y promotion receipt")
 	}
 	return nil
@@ -535,6 +714,7 @@ func autoprogrammingBatchMembersV0(members []AutoprogrammingBatchMemberV0) []Aut
 		out[index].WorkspaceRef = autoprogrammingBatchRefV0(out[index].WorkspaceRef)
 		out[index].WriteSet = compactStringsV0(out[index].WriteSet)
 		out[index].SourceRevision = autoprogrammingBatchRefV0(out[index].SourceRevision)
+		out[index].ParentRevision = autoprogrammingBatchRefV0(out[index].ParentRevision)
 		out[index].IntegrationRevision = autoprogrammingBatchRefV0(out[index].IntegrationRevision)
 		out[index].IntegrationReceiptRef = autoprogrammingBatchRefV0(out[index].IntegrationReceiptRef)
 		out[index].FocalStatus = strings.TrimSpace(out[index].FocalStatus)
@@ -560,13 +740,44 @@ func autoprogrammingBatchTestV0(test AutoprogrammingBatchTestV0) Autoprogramming
 	return AutoprogrammingBatchTestV0{Command: strings.TrimSpace(test.Command), SHA256: strings.ToLower(strings.TrimSpace(test.SHA256))}
 }
 
+func autoprogrammingBatchIntegrationClaimsV0(claims []AutoprogrammingBatchIntegrationClaimV0) []AutoprogrammingBatchIntegrationClaimV0 {
+	out := append([]AutoprogrammingBatchIntegrationClaimV0(nil), claims...)
+	for index := range out {
+		out[index].ClaimRef = autoprogrammingBatchRefV0(out[index].ClaimRef)
+		out[index].TaskRef = autoprogrammingBatchRefV0(out[index].TaskRef)
+		out[index].SourceRevision = autoprogrammingBatchRefV0(out[index].SourceRevision)
+		out[index].ParentRevision = autoprogrammingBatchRefV0(out[index].ParentRevision)
+		out[index].IntegrationRevision = autoprogrammingBatchRefV0(out[index].IntegrationRevision)
+		out[index].ReceiptRef = autoprogrammingBatchRefV0(out[index].ReceiptRef)
+		out[index].Status = strings.TrimSpace(out[index].Status)
+	}
+	sort.SliceStable(out, func(left, right int) bool {
+		return out[left].GateGeneration < out[right].GateGeneration || (out[left].GateGeneration == out[right].GateGeneration && out[left].ClaimRef < out[right].ClaimRef)
+	})
+	return out
+}
+
+func autoprogrammingBatchPromotionClaimsV0(claims []AutoprogrammingBatchPromotionClaimV0) []AutoprogrammingBatchPromotionClaimV0 {
+	out := append([]AutoprogrammingBatchPromotionClaimV0(nil), claims...)
+	for index := range out {
+		out[index].ClaimRef = autoprogrammingBatchRefV0(out[index].ClaimRef)
+		out[index].Revision = autoprogrammingBatchRefV0(out[index].Revision)
+		out[index].ReceiptRef = autoprogrammingBatchRefV0(out[index].ReceiptRef)
+		out[index].Status = strings.TrimSpace(out[index].Status)
+	}
+	sort.SliceStable(out, func(left, right int) bool {
+		return out[left].GateGeneration < out[right].GateGeneration || (out[left].GateGeneration == out[right].GateGeneration && out[left].ClaimRef < out[right].ClaimRef)
+	})
+	return out
+}
+
 func autoprogrammingBatchClaimsV0(claims []AutoprogrammingBatchTestClaimV0) []AutoprogrammingBatchTestClaimV0 {
 	out := append([]AutoprogrammingBatchTestClaimV0(nil), claims...)
 	for index := range out {
 		out[index].Revision, out[index].TestHash, out[index].ClaimRef = autoprogrammingBatchRefV0(out[index].Revision), strings.TrimSpace(out[index].TestHash), autoprogrammingBatchRefV0(out[index].ClaimRef)
 	}
 	sort.SliceStable(out, func(left, right int) bool {
-		return out[left].Revision+"\x00"+out[left].TestHash < out[right].Revision+"\x00"+out[right].TestHash
+		return strconv.FormatUint(out[left].GateGeneration, 10)+"\x00"+out[left].Revision+"\x00"+out[left].TestHash < strconv.FormatUint(out[right].GateGeneration, 10)+"\x00"+out[right].Revision+"\x00"+out[right].TestHash
 	})
 	return out
 }
@@ -577,7 +788,7 @@ func autoprogrammingBatchReceiptsV0(receipts []AutoprogrammingBatchTestReceiptV0
 		out[index].Revision, out[index].TestHash, out[index].ClaimRef, out[index].ReceiptRef, out[index].Status = autoprogrammingBatchRefV0(out[index].Revision), strings.TrimSpace(out[index].TestHash), autoprogrammingBatchRefV0(out[index].ClaimRef), autoprogrammingBatchRefV0(out[index].ReceiptRef), strings.TrimSpace(out[index].Status)
 	}
 	sort.SliceStable(out, func(left, right int) bool {
-		return out[left].Revision+"\x00"+out[left].TestHash < out[right].Revision+"\x00"+out[right].TestHash
+		return strconv.FormatUint(out[left].GateGeneration, 10)+"\x00"+out[left].Revision+"\x00"+out[left].TestHash < strconv.FormatUint(out[right].GateGeneration, 10)+"\x00"+out[right].Revision+"\x00"+out[right].TestHash
 	})
 	return out
 }
@@ -623,9 +834,9 @@ func autoprogrammingBatchMemberStateValidV0(member AutoprogrammingBatchMemberV0)
 		return false
 	}
 	if member.IntegrationStatus == AutoprogrammingBatchIntegrationPendingV0 {
-		return member.SourceRevision == "" && member.IntegrationRevision == "" && member.IntegrationReceiptRef == ""
+		return member.SourceRevision == "" && member.ParentRevision == "" && member.IntegrationRevision == "" && member.IntegrationReceiptRef == "" && member.IntegrationOrder == 0
 	}
-	return member.IntegrationStatus == AutoprogrammingBatchIntegrationIntegratedV0 && autoprogrammingBatchRefValidV0(member.SourceRevision) && autoprogrammingBatchRefValidV0(member.IntegrationRevision) && autoprogrammingBatchRefValidV0(member.IntegrationReceiptRef)
+	return member.IntegrationStatus == AutoprogrammingBatchIntegrationIntegratedV0 && autoprogrammingBatchRefValidV0(member.SourceRevision) && autoprogrammingBatchRefValidV0(member.ParentRevision) && autoprogrammingBatchRefValidV0(member.IntegrationRevision) && autoprogrammingBatchRefValidV0(member.IntegrationReceiptRef) && member.IntegrationOrder > 0
 }
 
 func autoprogrammingBatchRefV0(value string) string { return strings.TrimSpace(value) }
@@ -679,17 +890,17 @@ func autoprogrammingBatchHasTestHashV0(tests []AutoprogrammingBatchTestV0, want 
 	}
 	return false
 }
-func autoprogrammingBatchClaimExistsV0(claims []AutoprogrammingBatchTestClaimV0, revision, testHash, claimRef string) bool {
+func autoprogrammingBatchClaimExistsV0(claims []AutoprogrammingBatchTestClaimV0, generation uint64, revision, testHash, claimRef string) bool {
 	for _, claim := range claims {
-		if claim.Revision == revision && claim.TestHash == testHash && claim.ClaimRef == claimRef {
+		if claim.GateGeneration == generation && claim.Revision == revision && claim.TestHash == testHash && claim.ClaimRef == claimRef {
 			return true
 		}
 	}
 	return false
 }
-func autoprogrammingBatchReceiptExistsV0(receipts []AutoprogrammingBatchTestReceiptV0, revision, testHash string) bool {
+func autoprogrammingBatchReceiptExistsV0(receipts []AutoprogrammingBatchTestReceiptV0, generation uint64, revision, testHash string) bool {
 	for _, receipt := range receipts {
-		if receipt.Revision == revision && receipt.TestHash == testHash {
+		if receipt.GateGeneration == generation && receipt.Revision == revision && receipt.TestHash == testHash {
 			return true
 		}
 	}
@@ -703,7 +914,7 @@ func autoprogrammingBatchAllTestsPassedV0(batch AutoprogrammingBatchV0) bool {
 		found := false
 		hash := AutoprogrammingBatchTestHashV0(test)
 		for _, receipt := range batch.TestReceipts {
-			if receipt.Revision == batch.IntegratedRevision && receipt.TestHash == hash && receipt.Status == AutoprogrammingBatchTestReceiptPassedV0 {
+			if receipt.GateGeneration == batch.GateGeneration && receipt.Revision == batch.IntegratedRevision && receipt.TestHash == hash && receipt.Status == AutoprogrammingBatchTestReceiptPassedV0 {
 				found = true
 				break
 			}
@@ -713,6 +924,57 @@ func autoprogrammingBatchAllTestsPassedV0(batch AutoprogrammingBatchV0) bool {
 		}
 	}
 	return len(batch.FrozenTests) > 0
+}
+func autoprogrammingBatchExpectedParentRevisionV0(batch AutoprogrammingBatchV0) string {
+	if batch.IntegrationHeadRevision != "" {
+		return batch.IntegrationHeadRevision
+	}
+	return batch.BaseRevision
+}
+func autoprogrammingBatchHasOpenIntegrationClaimV0(batch AutoprogrammingBatchV0) bool {
+	for _, claim := range batch.IntegrationClaims {
+		if claim.GateGeneration == batch.GateGeneration && claim.Status == AutoprogrammingBatchClaimStatusClaimedV0 {
+			return true
+		}
+	}
+	return false
+}
+func autoprogrammingBatchIntegrationClaimIndexV0(batch AutoprogrammingBatchV0, claimRef, taskRef, sourceRevision, parentRevision string) int {
+	for index, claim := range batch.IntegrationClaims {
+		if claim.GateGeneration == batch.GateGeneration && claim.ClaimRef == claimRef && claim.TaskRef == taskRef && claim.SourceRevision == sourceRevision && claim.ParentRevision == parentRevision {
+			return index
+		}
+	}
+	return -1
+}
+func autoprogrammingBatchIntegratedCountV0(members []AutoprogrammingBatchMemberV0) int {
+	count := 0
+	for _, member := range members {
+		if member.IntegrationStatus == AutoprogrammingBatchIntegrationIntegratedV0 {
+			count++
+		}
+	}
+	return count
+}
+func autoprogrammingBatchIntegrationReceiptMatchesV0(batch AutoprogrammingBatchV0, member AutoprogrammingBatchMemberV0) bool {
+	for _, claim := range batch.IntegrationClaims {
+		if claim.GateGeneration == batch.GateGeneration && claim.Status == AutoprogrammingBatchClaimStatusReceiptedV0 && claim.TaskRef == member.TaskRef && claim.SourceRevision == member.SourceRevision && claim.ParentRevision == member.ParentRevision && claim.IntegrationRevision == member.IntegrationRevision && claim.ReceiptRef == member.IntegrationReceiptRef {
+			return true
+		}
+	}
+	return false
+}
+func autoprogrammingBatchCurrentPromotionClaimIndexV0(batch AutoprogrammingBatchV0, claimRef string) int {
+	for index, claim := range batch.PromotionClaims {
+		if claim.GateGeneration == batch.GateGeneration && (claimRef == "" || claim.ClaimRef == claimRef) {
+			return index
+		}
+	}
+	return -1
+}
+func autoprogrammingBatchPromotionReceiptedV0(batch AutoprogrammingBatchV0) bool {
+	claim := autoprogrammingBatchCurrentPromotionClaimIndexV0(batch, batch.PromotionReceipt.ClaimRef)
+	return claim >= 0 && batch.PromotionClaims[claim].Status == AutoprogrammingBatchClaimStatusReceiptedV0 && batch.PromotionClaims[claim].ReceiptRef == batch.PromotionReceipt.ReceiptRef && batch.PromotionReceipt.GateGeneration == batch.GateGeneration && batch.PromotionReceipt.Revision == batch.IntegratedRevision && autoprogrammingBatchRefValidV0(batch.PromotionReceipt.ReceiptRef)
 }
 func autoprogrammingBatchActionHashV0(action string, values []string) string {
 	action = strings.TrimSpace(action)
