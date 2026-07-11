@@ -72,14 +72,40 @@ llevan ahora dos actores:
 Prioridad de tu cola: (1) CONECTORES hasta cerrarlos -- es lo unico que falta
 para terminar la app; (2) BUGS locales reproducibles; (3) TOOLS.
 
+## DIAGNOSTICO DE CONECTORES (T9201, 2026-07-12) - CAMBIA EL PLAN
+
+Orquesta ejecuto el diagnostico por su API nativa (goal
+`goal-ref-task-autoprogramming-e0d0ac4a630f-g01`, complete + accepted; test
+declarado reejecutado por el revisor). Resultado en
+`docs/diagnostico_frente_conectores_T9201_2026-07-12.md`.
+
+Hallazgo principal, aceptado por el revisor: **NO faltan adaptadores**. Todos
+los puertos del nucleo (goal, state, required-test, delivery, transporte)
+tienen implementacion y wiring identificables y probados con fakes. Lo que
+falta para cerrar el frente es **EVIDENCIA DE INTEGRACION**, tres smokes de
+composicion:
+
+1. Backend `app_server_tmux` real: launch -> observe -> closure con receipt
+   durable.
+2. Registro simultaneo completo MCP/HTTP: un bootstrap que enumere resources
+   y tools registrados y haga una llamada representativa por grupo.
+3. Ciclo delivery -> review -> closure causal (ACK + delivery + review).
+
+Es decir: conectores se cierra EJECUTANDO Y CONSERVANDO EVIDENCIA, no
+programando adaptadores nuevos. No conviertas "falta smoke" en "falta
+adaptador".
+
 ## Cola de trabajo
 
-- [ ] H0 (PRIORIDAD 1): CONECTORES. Cerrar el frente que falta para terminar
-  la app: cada puerto del nucleo con adaptador probado (fake + real cuando
-  exista) y sin logica de dominio en los adaptadores. Modulos:
-  runtime-codex-* (goal backend, delivery, appserver), state-file,
-  runtime-required-test, superficies MCP/HTTP de orquesta-mcp y el wiring de
-  orquesta-app-codex-stack + cmd/orquesta-server. Senal al revisor por hito.
+- [x] H0-diagnostico: hecho por Orquesta (T9201) y aceptado por el revisor.
+- [ ] H0a (PRIORIDAD 1): smoke real del backend `app_server_tmux`:
+  launch -> observe -> closure con receipt durable; conservar refs compactas
+  de probe, launch, observe y stop. Cierre gobernado y cero residuos.
+- [ ] H0b: smoke de bootstrap MCP/HTTP: enumerar resources y tools
+  registrados en el servidor arrancado y hacer una llamada representativa por
+  grupo (MCP y HTTP). Debe fallar si falta un binding.
+- [ ] H0c: smoke del ciclo delivery -> review -> closure causal (ACK,
+  delivery, review), con evidencia durable enlazada en la matriz de pruebas.
 - [ ] H1: BUGS. Coge los bugs abiertos del inventario
   (`docs/inventario_bugs_orquesta_2026-06-30.md`) de uno en uno, empezando por
   los reproducibles en local. Para cada uno: reproducir, arreglar, test que
