@@ -1,6 +1,6 @@
 # BUG-ORQ-20260711-208AH: HOME lleno al reabrir subagente
 
-Fecha: 2026-07-11. Estado: mitigado localmente; prevención pendiente.
+Fecha: 2026-07-11. Estado: cerrado localmente.
 
 ## Evidencia
 
@@ -26,8 +26,26 @@ borrar.
 
 Preflight documentado con `df` por mount (`$HOME`, `/`, `/tmp` y mounts de
 trabajo), presupuesto de cache por sesión y recibo de creación/uso/limpieza.
-El estado actual queda mitigado, pero no cerrado, hasta demostrar ese
-preflight y `cache budget/receipt` en una reapertura equivalente.
+## Cierre local 2026-07-11
+
+El commit `514b86c49` incorpora
+`scripts/orquesta_session_disk_preflight.sh`: mide los mounts reales de HOME,
+`/`, `/tmp`, workdir y raiz de sesion; deduplica filesystem; usa presupuesto
+unico en bytes; rechaza bases/symlinks no declarados; crea caches privadas con
+marker; y solo permite cleanup confirmado de rutas listadas en el receipt.
+`scripts/lib/isolated_test_env.sh` lo ejecuta antes de crear caches y conserva
+recibos durables de preflight y cleanup. El cleanup no borra la raiz ni la
+evidencia.
+
+La prueba real `bug-208ah-real-20260711` midio cuatro mounts, incluido HOME con
+aproximadamente 15 GiB libres, aplico presupuesto de 1 GiB y elimino solo nueve
+caches con marker. Evidencia retenida:
+`/tmp/orquesta-sessions-208ah-evidence/bug-208ah-real-20260711/session_disk_receipt.json`
+y `session_disk_cleanup_receipt.json`. El test con `df` falso cubre HOME
+insuficiente, mounts grandes, unidades, symlinks, dry-run, confirmacion y marker
+ausente. `test_orquesta_test_batches.sh`, `bash -n`, `git diff --check` y la
+suite Go completa quedan verdes. Los scripts que no consuman el perfil aislado
+deben invocar el preflight explicitamente antes de trabajo largo.
 
 Inventario vivo: [`inventario_bugs_estado_vivo.md`](../inventario_bugs_estado_vivo.md).
 Inventario histórico: [`inventario_bugs_orquesta_2026-06-30.md`](../inventario_bugs_orquesta_2026-06-30.md).

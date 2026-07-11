@@ -1,6 +1,6 @@
 # BUG-ORQ-20260711-208AG: falso verde de cleanup por criterios autodeclarados
 
-Estado: abierto.
+Estado: cerrado localmente.
 
 El goal `019f4f10-0c7f-7421-ae18-143dc6482642` publicó `result=complete`,
 afirmando que había eliminado exactamente diez grupos y que los tests habían
@@ -33,7 +33,7 @@ y [pruebas de atestación de 208H](../pruebas_revisor_208h_2026-07-10.md).
 
 ## Avance estructural 2026-07-11
 
-Commits base: `b96e9b115` y corte de transporte pendiente de hash final.
+Commits: `b96e9b115`, `2735b1dae`, `a245a90a8` y `7a91f8052`.
 
 - `GoalClosurePolicyV0` declara
   `required_acceptance_criteria_refs`: refs opacas de criterios verificables
@@ -53,11 +53,22 @@ una request con check incompleto/duplicado se rechaza; dos refs sobre el mismo
 comando producen un solo test congelado; y el cierre requiere el receipt
 independiente de ese test.
 
-Residual para cerrar 208AG: migrar o clasificar las requests legacy que solo
-usan `acceptance_criteria` textual. Esas frases no pueden asociarse
-automaticamente a comandos sin inventar semantica. Hasta esa migracion deben
-considerarse advisory y nunca citarse como evidencia de criterio verificado.
-El cierre final exige que los creadores productivos (incluido Director humano
-y backlog) emitan `acceptance_checks` para criterios verificables o los marquen
-explicitamente cualitativos; despues se repetira el caso U1000 con el comando
-de analizador como check independiente.
+## Cierre local 2026-07-11
+
+Los criterios textuales legacy quedan clasificados como advisory: nunca se
+convierten en comandos ni se citan como atestacion. El Director humano acepta
+`acceptance_checks` tipados y falla cerrado ante refs/comandos vacios o refs
+duplicadas. Self-audit genera ref estable, descripcion y comando determinista;
+backlog, request idle, ruta goal-first residente y MCP conservan el contrato.
+El runtime recibe el `GoalRequiredTestSpecBinder` del stack, congela los tests
+y exige atestacion independiente de todas las refs antes de aceptar cierre.
+
+La revision previa al commit encontro y corrigio cuatro huecos: checks perdidos
+en la ruta residente, binder no cableado, entrada humana no validada y schema
+MCP no descubrible. El smoke focal reproduce ahora exactamente el residual
+`U1000` de `codexAppServerWriteSetCheckpointDirRelV0` y demuestra que llega al
+goal como check tipado con cierre independiente. La evidencia negativa original
+se conserva en `/tmp/orquesta-cleanup-goal-20260711/staticcheck-after.txt`; en
+el arbol vigente `/home/alberto/go/bin/staticcheck -checks U1000
+./modulos/orquesta-runtime-codex-appserver` queda verde. Tambien quedan verdes
+el smoke U1000, las baterias focales y `go test -count=1 ./...`.
