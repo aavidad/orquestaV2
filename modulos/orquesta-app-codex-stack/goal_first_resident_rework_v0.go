@@ -2,11 +2,14 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestaestadovivo "orquesta/modulos/orquesta-estado-vivo"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 )
 
@@ -59,11 +62,17 @@ func (executor CodexStackRunSupervisorExecutorV0) maybePrepareGoalFirstResidentR
 		!goalFirstResidentReworkBudgetAvailableV0(state.Spec)) {
 		return result
 	}
+	spec := goalFirstResidentReworkSpecV0(state, reason, evidenceRefs)
 	if existing := goalFirstResidentExistingReworkRunRefV0(state); existing != "" {
+		if err := ensureGoalFirstResidentReworkRunV0(ctx, executor.Stack, spec); err != nil {
+			return goalFirstResidentReworkLaunchFailureV0(result, state.RunRef, evidenceRefs, err)
+		}
 		return goalFirstResidentReworkResultV0(result, state.RunRef, existing, reason, evidenceRefs, true)
 	}
-	spec := goalFirstResidentReworkSpecV0(state, reason, evidenceRefs)
 	if _, err := store.LoadGoalWorkStateV0(ctx, spec.RunRef); err == nil {
+		if err := ensureGoalFirstResidentReworkRunV0(ctx, executor.Stack, spec); err != nil {
+			return goalFirstResidentReworkLaunchFailureV0(result, state.RunRef, evidenceRefs, err)
+		}
 		state.EvidenceRefs = compactStringsV0(append(
 			state.EvidenceRefs,
 			goalFirstResidentReworkExistingEvidencePrefixV0+spec.RunRef,
@@ -71,6 +80,9 @@ func (executor CodexStackRunSupervisorExecutorV0) maybePrepareGoalFirstResidentR
 		))
 		_ = store.SaveGoalWorkStateV0(ctx, state)
 		return goalFirstResidentReworkResultV0(result, state.RunRef, spec.RunRef, reason, evidenceRefs, true)
+	}
+	if err := ensureGoalFirstResidentReworkRunV0(ctx, executor.Stack, spec); err != nil {
+		return goalFirstResidentReworkLaunchFailureV0(result, state.RunRef, evidenceRefs, err)
 	}
 	start, err := orquestagoal.StartGoalWorkV0(ctx, orquestagoal.GoalWorkStartRequestV0{
 		RunRef:       spec.RunRef,
@@ -82,14 +94,7 @@ func (executor CodexStackRunSupervisorExecutorV0) maybePrepareGoalFirstResidentR
 		RequiredTestSpecBinder: executor.Stack.Ports.GoalRequiredTestSpecBinder,
 	})
 	if err != nil {
-		result.NextActions = compactStringsV0(append(result.NextActions, "goal_first_rework_launcher_failed", "inspect_goal_rework_launcher"))
-		result.Diagnostics = append(result.Diagnostics, orquestamcp.MCPAutoprogrammingDiagnosticV0{
-			Code:         "goal_first_resident_rework_launch_failed",
-			Scope:        "run:" + strings.TrimSpace(state.RunRef),
-			Message:      err.Error(),
-			EvidenceRefs: evidenceRefs,
-		})
-		return result
+		return goalFirstResidentReworkLaunchFailureV0(result, state.RunRef, evidenceRefs, err)
 	}
 	reworkRunRef := strings.TrimSpace(start.State.RunRef)
 	if reworkRunRef == "" {
@@ -102,6 +107,54 @@ func (executor CodexStackRunSupervisorExecutorV0) maybePrepareGoalFirstResidentR
 	))
 	_ = store.SaveGoalWorkStateV0(ctx, state)
 	return goalFirstResidentReworkResultV0(result, state.RunRef, reworkRunRef, reason, evidenceRefs, false)
+}
+
+func ensureGoalFirstResidentReworkRunV0(ctx context.Context, stack *StackV0, spec orquestagoal.GoalWorkSpecV0) error {
+	if stack == nil || stack.Ports.RunStore == nil {
+		return nil
+	}
+	phases := orquestacoreworkflow.OrchestrationPhaseCatalogV0()
+	for index := range phases {
+		if phases[index].ID == orquestacoreworkflow.OrchestrationPhaseProgramacionV0 {
+			phases[index].Status = orquestacoreworkflow.OrchestrationPhaseStatusActiveV0
+		}
+	}
+	run := orquestacoreworkflow.OrchestrationRunV0{
+		SchemaVersion: orquestacoreworkflow.OrchestrationRunSchemaVersionV0,
+		RunID:         strings.TrimSpace(spec.RunRef),
+		ProjectRef:    strings.TrimSpace(spec.ProjectRef),
+		AppSpecRef:    "app-spec-ref-autoprogramming-" + autoprogrammingBridgeHashRefV0(spec.RunRef),
+		Status:        orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+		CurrentPhase:  orquestacoreworkflow.OrchestrationPhaseProgramacionV0,
+		Phases:        phases,
+	}
+	if issues := orquestacoreworkflow.ValidateOrchestrationRunV0(run); len(issues) > 0 {
+		return fmt.Errorf("goal_first_resident_rework_run_invalid: %s", issues[0].Error())
+	}
+	existing, err := stack.Ports.RunStore.LoadRunV0(ctx, run.RunID)
+	if err == nil {
+		return autoprogrammingBridgeValidateExistingGoalRunV0(existing, run)
+	}
+	if !orquestacionnucleoapp.IsRunNotFoundErrorV0(err) {
+		return err
+	}
+	return stack.Ports.RunStore.SaveRunV0(ctx, run)
+}
+
+func goalFirstResidentReworkLaunchFailureV0(
+	result orquestamcp.MCPRunSupervisorToolResultV0,
+	sourceRunRef string,
+	evidenceRefs []string,
+	err error,
+) orquestamcp.MCPRunSupervisorToolResultV0 {
+	result.NextActions = compactStringsV0(append(result.NextActions, "goal_first_rework_launcher_failed", "inspect_goal_rework_launcher"))
+	result.Diagnostics = append(result.Diagnostics, orquestamcp.MCPAutoprogrammingDiagnosticV0{
+		Code:         "goal_first_resident_rework_launch_failed",
+		Scope:        "run:" + strings.TrimSpace(sourceRunRef),
+		Message:      err.Error(),
+		EvidenceRefs: evidenceRefs,
+	})
+	return result
 }
 
 func goalFirstResidentReworkReasonV0(state orquestagoal.GoalWorkStateV0) (string, []string, bool) {

@@ -68,11 +68,38 @@ Criterio de cierre:
 - repetir BUG-237 por Orquesta y comprobar que el trabajo llega a cierre o que
   un nuevo replan se lanza causalmente sin intervencion manual.
 
-Cierre local: el lifecycle de rework transporta ahora
+Cierre empirico: el lifecycle de rework transporta ahora
 `GoalRequiredTestSpecBinder` desde los puertos del stack. La regresion conserva
 un required test congelado, exige atestacion independiente y comprueba que el
 binder se invoca antes del launcher. El focal y el paquete completo
-`./modulos/orquesta-app-codex-stack` quedan verdes.
+`./modulos/orquesta-app-codex-stack` quedan verdes. Tras desplegar el binario
+local, el estado bloqueado materializo el rework
+`request-ref-bug237-daemon-env-20260711-rework-38a04c4c4f93b543` y lanzo un
+nuevo goal real; BUG-239 queda cerrado.
+
+## BUG-ORQ-20260711-240: rework sin OrchestrationRun causal
+
+Estado: cerrado localmente, pendiente de replay integrado.
+
+El rework de BUG-239 persistio y ejecuto su `GoalWorkState`, pero el launcher
+residente no creo la `OrchestrationRunV0` con el nuevo `run_ref`. Cuando el
+governor lo paro terminal, `ObserveAppDirectorGoalV0` intento reflejar el cierre
+en `RunStore`, no encontro la run hija y el HTTP devolvio 500 generico. El goal
+hijo quedo bloqueado y sin procesos vivos, pero no era observable por API.
+
+Criterio de cierre:
+
+- crear la run hija valida antes de lanzar el goal residente;
+- reentrada idempotente que repare reworks ya persistidos sin run;
+- la observacion terminal devuelve estado publico, nunca 500 por run ausente;
+- focal, paquete y replay del estado vivo verdes.
+
+Cierre local: el launcher asegura una run goal-first minima y valida antes de
+arrancar. Si la run ya existe, comprueba identidad y forma; si el goal hijo ya
+estaba persistido pero faltaba la run, la reentrada la materializa sin relanzar
+el proveedor. La regresion ejecuta el supervisor dos veces, conserva una sola
+llamada al launcher/binder y carga la misma run activa. Focal y paquete completo
+del stack verdes.
 
 ## Evidencia de control
 

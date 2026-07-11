@@ -7,8 +7,10 @@ import (
 
 	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
@@ -18,6 +20,7 @@ func TestRunSupervisorGoalFirstResidentPreparaReworkPorCheckpointHighConsumption
 	store := newGoalFirstQueueStateStoreForTestV0()
 	launcher := &goalFirstResidentReworkLauncherForTestV0{}
 	binder := &goalFirstResidentReworkBinderForTestV0{}
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0()
 	source := goalFirstResidentReworkSourceStateForTestV0(
 		"run-ref-goal-first-resident-rework-source-001",
 		"checkpoint_only_high_consumption",
@@ -39,11 +42,12 @@ func TestRunSupervisorGoalFirstResidentPreparaReworkPorCheckpointHighConsumption
 	}
 	executor := CodexStackRunSupervisorExecutorV0{Stack: &StackV0{
 		Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
+			RunStore:                   runStore,
 			GoalStateStore:             store,
 			GoalReworkLauncher:         launcher,
 			GoalRequiredTestSpecBinder: binder,
 		},
-		Stores: StoresV0{AppGoalStateStore: store},
+		Stores: StoresV0{RunStore: runStore, AppGoalStateStore: store},
 	}}
 
 	result, err := executor.Execute(ctx, orquestamcp.MCPRunSupervisorToolInputV0{
@@ -67,6 +71,19 @@ func TestRunSupervisorGoalFirstResidentPreparaReworkPorCheckpointHighConsumption
 	}
 	if _, err := store.LoadGoalWorkStateV0(ctx, result.RepairRunRefs[0]); err != nil {
 		t.Fatalf("estado rework no persistido: %v", err)
+	}
+	if reworkRun, err := runStore.LoadRunV0(ctx, result.RepairRunRefs[0]); err != nil ||
+		reworkRun.Status != orquestacoreworkflow.OrchestrationRunStatusActiveV0 {
+		t.Fatalf("run causal de rework no persistida: run=%+v err=%v", reworkRun, err)
+	}
+	replayed, err := executor.Execute(ctx, orquestamcp.MCPRunSupervisorToolInputV0{
+		RunRef:       source.RunRef,
+		ResidentMode: true,
+	})
+	if err != nil || len(replayed.RepairRunRefs) != 1 ||
+		replayed.RepairRunRefs[0] != result.RepairRunRefs[0] ||
+		launcher.calls != 1 || binder.calls != 1 {
+		t.Fatalf("replay rework no idempotente: replay=%+v err=%v launcher_calls=%d binder_calls=%d", replayed, err, launcher.calls, binder.calls)
 	}
 	persistedSource, err := store.LoadGoalWorkStateV0(ctx, source.RunRef)
 	if err != nil {

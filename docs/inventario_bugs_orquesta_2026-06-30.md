@@ -4158,13 +4158,22 @@ BUG `BUG-ORQ-20260711-238` (abierto, falso indicador de limpieza):
 cruzando paquetes. No autoriza consolidar codigo. Evidencia y criterios en la
 [incidencia de limpieza](incidencias/incidencia_orquesta_limpieza_config_metricas_falsas_2026-07-11.md).
 
-BUG `BUG-ORQ-20260711-239` (cerrado localmente, pendiente de replay,
+BUG `BUG-ORQ-20260711-239` (cerrado empiricamente,
 autoreparacion goal-first): el primer goal
 de BUG-237 fue parado por `material_progress_replan_required`, pero el launcher
 residente no transporto el `GoalRequiredTestSpecBinder` ya presente en el stack.
 El rework con tests fallo antes de arrancar y la cola original quedo terminal.
 El lifecycle de rework recibe ahora el binder del stack y una regresion exige
-su invocacion con tests atestados. Se exige repetir el goal por Orquesta.
+su invocacion con tests atestados. El replay materializo y lanzo el goal hijo.
+
+BUG `BUG-ORQ-20260711-240` (cerrado localmente, pendiente de replay,
+causalidad de rework): el goal hijo de
+BUG-239 se ejecuto con `GoalWorkState`, pero sin una `OrchestrationRunV0` bajo
+su nuevo `run_ref`. Al quedar terminal, `observe` no pudo reflejar el cierre en
+`RunStore` y devolvio HTTP 500. El launcher residente debe crear o reparar la
+run hija idempotentemente antes de lanzar/observar. El cierre local crea o
+repara esa run y prueba reentrada sin segundo launch; falta reconsultar el
+estado real retenido.
 
 Avance 2026-07-11: `b96e9b115` añade refs obligatorias de criterios
 verificables al contrato Goal; el transporte posterior añade
