@@ -19,13 +19,17 @@ const (
 )
 
 type serverAutoprogrammingPromotionPortV0 struct {
-	ProjectWorkDir string
-	ArchiveDir     string
-	RepoRef        string
-	AppRef         string
-	CommitMessage  string
-	Connector      orquestaruntimeworktree.GitStagingPromotionConnectorV0
-	Guardian       serverAutoprogrammingPromotionGuardianV0
+	ProjectWorkDir        string
+	ArchiveDir            string
+	RepoRef               string
+	AppRef                string
+	CommitMessage         string
+	GoalWorkspaceRoot     string
+	IntegrationReceiptDir string
+	WorkspaceProvisioner  orquestaruntimeworktree.GoalWorkspaceProvisionerPortV0
+	Connector             orquestaruntimeworktree.GitStagingPromotionConnectorV0
+	IntegrationConnector  orquestaruntimeworktree.GoalWorkspaceIntegrationPortV0
+	Guardian              serverAutoprogrammingPromotionGuardianV0
 }
 
 func autoprogrammingPromotionConfigFromEnvV0(
@@ -47,7 +51,7 @@ func autoprogrammingPromotionConfigFromEnvV0(
 		filepath.Join(config.StateDir, "autoprogramming-promotion-archive"),
 	)
 	port := serverAutoprogrammingPromotionPortV0{
-		ProjectWorkDir: strings.TrimSpace(config.ProjectWorkDir),
+		ProjectWorkDir: strings.TrimSpace(workspaceSource),
 		ArchiveDir:     archiveDir,
 		RepoRef: stringProjectConfigOrEnvOrDefaultV0(
 			envServerAutoprogrammingPromotionRepoRefV0,
@@ -64,7 +68,11 @@ func autoprogrammingPromotionConfigFromEnvV0(
 			promotion.CommitMessage,
 			defaultAutoprogrammingPromotionMessageV0,
 		),
-		Guardian: autoprogrammingPromotionGuardianFromEnvV0(config),
+		Guardian:              autoprogrammingPromotionGuardianFromEnvV0(config),
+		GoalWorkspaceRoot:     result.GoalWorkspaceRoot,
+		IntegrationReceiptDir: filepath.Join(result.GoalWorkspaceRoot, "integration-receipts"),
+		WorkspaceProvisioner:  result.GoalWorkspaceProvisioner,
+		IntegrationConnector:  orquestaruntimeworktree.GitGoalWorkspaceIntegrationConnectorV0{},
 	}
 	result.Enabled = true
 	result.Port = port
@@ -102,6 +110,9 @@ func (port serverAutoprogrammingPromotionPortV0) PromoteAutoprogrammingStagingV0
 	ctx context.Context,
 	command orquestaautoprogramming.AutoprogrammingStagingPromotionCommandV0,
 ) (orquestaautoprogramming.AutoprogrammingStagingEffectResultV0, error) {
+	if strings.TrimSpace(command.GoalRef) != "" {
+		return port.promoteGoalWorkspaceV0(ctx, command)
+	}
 	result, issues := port.Connector.PromoteStagingWorktreeV0(ctx, orquestaruntimeworktree.StagingPromotionRequestV0{
 		PromotionRef:   command.PromotionRef,
 		RunRef:         command.RunRef,
@@ -116,6 +127,10 @@ func (port serverAutoprogrammingPromotionPortV0) PromoteAutoprogrammingStagingV0
 		EvidenceRefs:   append([]string(nil), command.EvidenceRefs...),
 	})
 	effect := autoprogrammingPromotionEffectFromWorktreeV0(result, issues)
+	if autoprogrammingPromotionWorktreeEffectCompleteV0(effect.Status) {
+		effect.IntegrationStatus = orquestaautoprogramming.AutoprogrammingStagingIntegrationStatusIntegratedV0
+		effect.IntegrationReceiptRef = "integration-receipt-ref-canonical-" + strings.TrimSpace(command.PromotionRef)
+	}
 	if !autoprogrammingPromotionWorktreeEffectCompleteV0(effect.Status) || port.Guardian.Runner == nil {
 		return effect, nil
 	}
@@ -127,6 +142,95 @@ func (port serverAutoprogrammingPromotionPortV0) PromoteAutoprogrammingStagingV0
 		return autoprogrammingPromotionGuardianBlockedEffectV0(effect, command, guarded, err), nil
 	}
 	return autoprogrammingPromotionEffectWithGuardianV0(effect, command, guarded), nil
+}
+
+func (port serverAutoprogrammingPromotionPortV0) promoteGoalWorkspaceV0(
+	ctx context.Context,
+	command orquestaautoprogramming.AutoprogrammingStagingPromotionCommandV0,
+) (orquestaautoprogramming.AutoprogrammingStagingEffectResultV0, error) {
+	if port.WorkspaceProvisioner == nil || port.IntegrationConnector == nil {
+		return orquestaautoprogramming.AutoprogrammingStagingEffectResultV0{
+			SchemaVersion:     orquestaautoprogramming.AutoprogrammingStagingPromotionSchemaVersionV0,
+			Status:            orquestaautoprogramming.AutoprogrammingStagingEffectBlockedV0,
+			IntegrationStatus: orquestaautoprogramming.AutoprogrammingStagingIntegrationStatusBlockedIntegrationV0,
+			Issues: []orquestaautoprogramming.AutoprogrammingRequestIssueV0{{
+				Code: "goal_workspace_integration_unavailable", Field: "goal_ref", Message: "integrador de workspace requerido",
+			}},
+		}, nil
+	}
+	workspace, workspaceIssues := port.WorkspaceProvisioner.ResolveGoalWorkspaceV0(ctx, orquestaruntimeworktree.GoalWorkspaceRequestV0{
+		RunRef:        firstNonEmptyV0(command.RequestRef, command.RunRef),
+		GoalRef:       command.GoalRef,
+		ProjectRef:    command.ProjectRef,
+		WorktreeRef:   command.WorktreeRef,
+		SourceWorkDir: port.ProjectWorkDir,
+		WorkspaceRoot: port.GoalWorkspaceRoot,
+	})
+	if len(workspaceIssues) > 0 {
+		return serverGoalWorkspaceIntegrationBlockedEffectV0(command, workspaceIssues), nil
+	}
+	integrated, integrationIssues := port.IntegrationConnector.IntegrateGoalWorkspaceV0(ctx, orquestaruntimeworktree.GoalWorkspaceIntegrationRequestV0{
+		IntegrationRef:     command.PromotionRef,
+		SourceWorkspaceDir: workspace.ProjectWorkDir,
+		CanonicalWorkDir:   port.ProjectWorkDir,
+		BaseRevision:       workspace.BaseRevision,
+		WriteSet:           append([]string(nil), command.WriteSet...),
+		CommitMessage:      port.CommitMessage,
+		ReceiptDir:         port.IntegrationReceiptDir,
+	})
+	effect := serverGoalWorkspaceIntegrationEffectV0(command, integrated, integrationIssues)
+	if effect.IntegrationStatus != orquestaautoprogramming.AutoprogrammingStagingIntegrationStatusIntegratedV0 || port.Guardian.Runner == nil {
+		return effect, nil
+	}
+	guarded, err := port.Guardian.Runner.CheckAutoprogrammingPromotionGuardianV0(ctx, autoprogrammingPromotionGuardianRequestV0(port, command))
+	if err != nil {
+		return autoprogrammingPromotionGuardianBlockedEffectV0(effect, command, guarded, err), nil
+	}
+	return autoprogrammingPromotionEffectWithGuardianV0(effect, command, guarded), nil
+}
+
+func serverGoalWorkspaceIntegrationEffectV0(
+	command orquestaautoprogramming.AutoprogrammingStagingPromotionCommandV0,
+	result orquestaruntimeworktree.GoalWorkspaceIntegrationResultV0,
+	issues []orquestaruntimeworktree.WorktreeIssueV0,
+) orquestaautoprogramming.AutoprogrammingStagingEffectResultV0 {
+	effect := orquestaautoprogramming.AutoprogrammingStagingEffectResultV0{
+		SchemaVersion:     orquestaautoprogramming.AutoprogrammingStagingPromotionSchemaVersionV0,
+		Status:            orquestaautoprogramming.AutoprogrammingStagingEffectBlockedV0,
+		PromotionRef:      command.PromotionRef,
+		RunRef:            command.RunRef,
+		ProjectRef:        command.ProjectRef,
+		WorktreeRef:       command.WorktreeRef,
+		BranchRef:         command.BranchRef,
+		ChangedPaths:      append([]string(nil), result.ChangedPaths...),
+		CommitRef:         result.IntegratedCommit,
+		CommitShortRef:    shortServerCommitRefV0(result.IntegratedCommit),
+		IntegrationStatus: orquestaautoprogramming.AutoprogrammingStagingIntegrationStatusBlockedIntegrationV0,
+		EvidenceRefs:      append([]string(nil), result.EvidenceRefs...),
+		Issues:            autoprogrammingPromotionIssuesFromWorktreeV0(issues),
+	}
+	if result.Status == orquestaruntimeworktree.GoalWorkspaceIntegrationStatusIntegratedV0 ||
+		result.Status == orquestaruntimeworktree.GoalWorkspaceIntegrationStatusReplayedV0 {
+		effect.Status = orquestaautoprogramming.AutoprogrammingStagingEffectPromotedV0
+		effect.IntegrationStatus = orquestaautoprogramming.AutoprogrammingStagingIntegrationStatusIntegratedV0
+		effect.IntegrationReceiptRef = "integration-receipt-ref-" + strings.TrimSpace(command.PromotionRef)
+	}
+	return effect
+}
+
+func serverGoalWorkspaceIntegrationBlockedEffectV0(
+	command orquestaautoprogramming.AutoprogrammingStagingPromotionCommandV0,
+	issues []orquestaruntimeworktree.WorktreeIssueV0,
+) orquestaautoprogramming.AutoprogrammingStagingEffectResultV0 {
+	return serverGoalWorkspaceIntegrationEffectV0(command, orquestaruntimeworktree.GoalWorkspaceIntegrationResultV0{}, issues)
+}
+
+func shortServerCommitRefV0(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) > 12 {
+		return value[:12]
+	}
+	return value
 }
 
 func (port serverAutoprogrammingPromotionPortV0) ArchiveAutoprogrammingStagingV0(

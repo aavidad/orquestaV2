@@ -562,7 +562,7 @@ func autoprogrammingPromotionEffectWithIntegrationStatusV0(
 		case orquestaautoprogramming.AutoprogrammingStagingEffectPendingPushV0:
 			result.IntegrationStatus = orquestaautoprogramming.AutoprogrammingStagingIntegrationStatusPendingIntegrationV0
 		case orquestaautoprogramming.AutoprogrammingStagingEffectBlockedV0:
-			result.IntegrationStatus = orquestaautoprogramming.AutoprogrammingStagingIntegrationStatusBlockedPushV0
+			result.IntegrationStatus = orquestaautoprogramming.AutoprogrammingStagingIntegrationStatusBlockedIntegrationV0
 		}
 	}
 	if result.IntegrationReceiptRef == "" &&
@@ -590,6 +590,8 @@ func autoprogrammingPromotionEffectEvidenceRefsV0(
 		refs = append(refs, "evidence-ref-autoprogramming-pending-integration")
 	case orquestaautoprogramming.AutoprogrammingStagingIntegrationStatusBlockedPushV0:
 		refs = append(refs, "evidence-ref-autoprogramming-blocked-push")
+	case orquestaautoprogramming.AutoprogrammingStagingIntegrationStatusBlockedIntegrationV0:
+		refs = append(refs, "evidence-ref-autoprogramming-blocked-integration")
 	}
 	return compactStringsV0(refs)
 }

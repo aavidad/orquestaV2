@@ -14,6 +14,7 @@ const (
 
 	AutoprogrammingStagingIntegrationStatusIntegratedV0         = "integrated"
 	AutoprogrammingStagingIntegrationStatusPendingIntegrationV0 = "pending_integration"
+	AutoprogrammingStagingIntegrationStatusBlockedIntegrationV0 = "blocked_integration"
 	AutoprogrammingStagingIntegrationStatusBlockedPushV0        = "blocked_push"
 
 	AutoprogrammingStagingEffectPromotedV0    = "promoted"
