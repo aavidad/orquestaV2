@@ -36,8 +36,12 @@ type MaterialProgressStateValidationResultV0 struct {
 	Issues   []MaterialProgressIssueV0 `json:"issues,omitempty"`
 }
 
-type MaterialProgressStateStorePortV0 interface {
+type MaterialProgressStateReaderPortV0 interface {
 	LoadMaterialProgressStateV0(context.Context, string, string) (MaterialProgressStateV0, error)
+}
+
+type MaterialProgressStateStorePortV0 interface {
+	MaterialProgressStateReaderPortV0
 	CompareAndSwapMaterialProgressStateV0(context.Context, uint64, MaterialProgressStateV0) (MaterialProgressStateV0, error)
 }
 
