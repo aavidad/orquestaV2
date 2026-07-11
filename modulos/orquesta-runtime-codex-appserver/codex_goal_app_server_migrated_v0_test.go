@@ -1042,6 +1042,62 @@ func TestServerCodexAppServerGoalBackendV0RuntimeWriteSetGuardPermiteCambioDentr
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0RuntimeWriteSetGuardBloqueaResultadoBlockedRequiredTestsEnvironmentUnavailableV0(t *testing.T) {
+	root := t.TempDir()
+	protocol := &fakeCodexAppServerProtocolV0{
+		thread: serverCodexAppServerThreadV0{ID: "thread-ref-runtime-write-set-required-tests-001"},
+		goal:   serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-runtime-write-set-required-tests-001", Status: "active"},
+		turn:   serverCodexAppServerTurnV0{ID: "turn-ref-runtime-write-set-required-tests-001", Status: "complete"},
+	}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol, CWD: root, Sandbox: "workspace-write", Runtime: &serverCodexAppServerGoalRuntimeV0{}}
+	packet := codexAppServerRuntimeWriteSetGuardPacketForTestV0("goal-ref-runtime-write-set-required-tests-001", "docs")
+
+	receipt, err := backend.StartCodexGoalV0(context.Background(), packet)
+	if err != nil {
+		t.Fatalf("StartCodexGoalV0: %v", err)
+	}
+	writeCodexAppServerGoalResultWithStatusAndReasonForTestV0(t, root, "docs", packet.GoalRef, receipt.ExternalGoalRef, orquestagoal.GoalStatusBlockedV0, orquestagoal.GoalIssueRequiredTestsEnvironmentUnavailableV0)
+	writeCodexAppServerTestFileV0(t, root, "fuera.md", "fuera\n")
+	protocol.observedGoal = &serverCodexAppServerThreadGoalV0{ThreadID: receipt.ExternalGoalRef, Status: "complete"}
+
+	observed, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{GoalRef: packet.GoalRef, ExternalGoalRef: receipt.ExternalGoalRef})
+	if err != nil || observed.Status != orquestagoal.GoalStatusBlockedV0 || observed.IssueCode != codexAppServerRuntimeWriteSetViolationV0 {
+		t.Fatalf("observed=%+v err=%v", observed, err)
+	}
+	if !containsStringMigratedTestV0(observed.EvidenceRefs, codexAppServerRuntimeWriteSetViolationEvidenceV0) {
+		t.Fatalf("evidence_refs=%+v", observed.EvidenceRefs)
+	}
+}
+
+func TestServerCodexAppServerGoalBackendV0RuntimeWriteSetGuardOmiteResultadoBlockedOrdinarioV0(t *testing.T) {
+	root := t.TempDir()
+	protocol := &fakeCodexAppServerProtocolV0{
+		thread: serverCodexAppServerThreadV0{ID: "thread-ref-runtime-write-set-ordinary-blocked-001"},
+		goal:   serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-runtime-write-set-ordinary-blocked-001", Status: "active"},
+		turn:   serverCodexAppServerTurnV0{ID: "turn-ref-runtime-write-set-ordinary-blocked-001", Status: "complete"},
+	}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol, CWD: root, Sandbox: "workspace-write", Runtime: &serverCodexAppServerGoalRuntimeV0{}}
+	packet := codexAppServerRuntimeWriteSetGuardPacketForTestV0("goal-ref-runtime-write-set-ordinary-blocked-001", "docs")
+
+	receipt, err := backend.StartCodexGoalV0(context.Background(), packet)
+	if err != nil {
+		t.Fatalf("StartCodexGoalV0: %v", err)
+	}
+	ordinaryReason := "required_tests_environment_unavailable_extra"
+	writeCodexAppServerGoalResultWithStatusAndReasonForTestV0(t, root, "docs", packet.GoalRef, receipt.ExternalGoalRef, orquestagoal.GoalStatusBlockedV0, ordinaryReason)
+	writeCodexAppServerTestFileV0(t, root, "fuera.md", "fuera\n")
+	protocol.observedGoal = &serverCodexAppServerThreadGoalV0{ThreadID: receipt.ExternalGoalRef, Status: "complete"}
+
+	observed, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{GoalRef: packet.GoalRef, ExternalGoalRef: receipt.ExternalGoalRef})
+	if err != nil || observed.Status != orquestagoal.GoalStatusBlockedV0 || observed.IssueCode != ordinaryReason {
+		t.Fatalf("observed=%+v err=%v", observed, err)
+	}
+	if containsStringMigratedTestV0(observed.EvidenceRefs, codexAppServerRuntimeWriteSetViolationEvidenceV0) ||
+		containsStringMigratedTestV0(observed.EvidenceRefs, codexAppServerRuntimeWriteSetGuardEvidenceV0) {
+		t.Fatalf("ordinary blocked result must skip write-set guard: evidence_refs=%+v", observed.EvidenceRefs)
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0RuntimeWriteSetGuardPermiteRenameAutorizadoV0(t *testing.T) {
 	root := t.TempDir()
 	writeCodexAppServerTestFileV0(t, root, "docs/original.md", "contenido\n")
@@ -1816,17 +1872,33 @@ func writeCodexAppServerGoalResultForTestV0(
 	goalRef string,
 	externalGoalRef string,
 ) {
+	writeCodexAppServerGoalResultWithStatusAndReasonForTestV0(t, root, dir, goalRef, externalGoalRef, orquestagoal.GoalStatusCompleteV0, "")
+}
+
+func writeCodexAppServerGoalResultWithStatusAndReasonForTestV0(
+	t *testing.T,
+	root string,
+	dir string,
+	goalRef string,
+	externalGoalRef string,
+	status string,
+	reasonCode string,
+) {
 	t.Helper()
-	payload, err := json.Marshal(map[string]any{
+	result := map[string]any{
 		"schema_version":      orquestaruntimecodexgoal.CodexGoalResultSchemaV0,
-		"status":              orquestagoal.GoalStatusCompleteV0,
+		"status":              status,
 		"goal_ref":            goalRef,
 		"external_goal_ref":   externalGoalRef,
 		"summary":             "resultado terminal",
 		"artifact_paths":      []string{filepath.ToSlash(filepath.Join(dir, "ok.md"))},
 		"domain_receipt_refs": []string{"domain-receipt-ref-runtime-write-set"},
 		"evidence_refs":       []string{"evidence-ref-runtime-write-set-result"},
-	})
+	}
+	if reasonCode != "" {
+		result["reason_code"] = reasonCode
+	}
+	payload, err := json.Marshal(result)
 	if err != nil {
 		t.Fatalf("marshal result: %v", err)
 	}

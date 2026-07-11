@@ -78,7 +78,7 @@ func (backend serverCodexAppServerGoalBackendV0) codexAppServerRuntimeWriteSetGu
 	marked codexAppServerGoalResultMarkerV0,
 ) bool {
 	if receipt == nil ||
-		!codexAppServerGoalResultStatusIsCompletionV0(codexAppServerGoalResultExplicitStatusV0(marked)) ||
+		!codexAppServerRuntimeWriteSetGuardAppliesToResultV0(marked) ||
 		backend.Runtime == nil {
 		return false
 	}
@@ -112,6 +112,14 @@ func (backend serverCodexAppServerGoalBackendV0) codexAppServerRuntimeWriteSetGu
 	))
 	receipt.ArtifactPaths = compactServerStackStringsV0(append(receipt.ArtifactPaths, result.ChangedPaths...))
 	return true
+}
+
+func codexAppServerRuntimeWriteSetGuardAppliesToResultV0(marked codexAppServerGoalResultMarkerV0) bool {
+	if codexAppServerGoalResultStatusIsCompletionV0(codexAppServerGoalResultExplicitStatusV0(marked)) {
+		return true
+	}
+	return codexAppServerGoalResultExplicitStatusV0(marked) == orquestagoal.GoalStatusBlockedV0 &&
+		strings.TrimSpace(marked.ReasonCode) == orquestagoal.GoalIssueRequiredTestsEnvironmentUnavailableV0
 }
 
 func codexAppServerWorktreeDestructiveAuthorizationsV0(

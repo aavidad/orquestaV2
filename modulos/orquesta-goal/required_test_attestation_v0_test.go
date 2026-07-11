@@ -120,6 +120,33 @@ func TestGoalRequiredTestAttestationV0LifecycleFailsClosedWithoutSnapshotPort(t 
 	}
 }
 
+func TestGoalRequiredTestAttestationV0PromotesProviderTestEnvironmentBlockV0(t *testing.T) {
+	spec := attestationSpecForTestV0(1)
+	snapshot := attestationSnapshotForTestV0(spec, "revision-ref-current")
+	store := &attestationStoreForTestV0{snapshot: snapshot}
+	attestor := &attestorForTestV0{}
+	stateStore := &attestationGoalStateStoreForTestV0{state: attestationRunningStateForTestV0(spec)}
+	ports := attestedLifecyclePortsForTestV0(snapshot, store, attestor, stateStore)
+	ports.Observer = attestationObserverForTestV0{result: blockedProviderTestEnvironmentResultForTestV0(spec)}
+	result, err := ObserveGoalWorkV0(context.Background(), GoalWorkObserveRequestV0{RunRef: spec.RunRef}, ports)
+	if err != nil || !result.Accepted || result.Result.Status != GoalStatusCompleteV0 || attestor.calls != 1 {
+		t.Fatalf("result=%+v calls=%d err=%v", result, attestor.calls, err)
+	}
+	if len(result.Result.Checklist.MissingRefs) != 0 || result.Result.MaterializedArtifacts[0].Status != GoalMaterializedArtifactStatusValidV0 {
+		t.Fatalf("normalized result=%+v", result.Result)
+	}
+}
+
+func TestGoalRequiredTestAttestationV0DoesNotPromoteMixedProviderBlockV0(t *testing.T) {
+	spec := attestationSpecForTestV0(1)
+	result := blockedProviderTestEnvironmentResultForTestV0(spec)
+	result.Issues = append(result.Issues, GoalWorkIssueV0{Code: "implementation_incomplete"})
+	result = promoteGoalResultForIndependentTestAttestationV0(spec, result)
+	if result.Status != GoalStatusBlockedV0 {
+		t.Fatalf("mixed block promoted: %+v", result)
+	}
+}
+
 func TestGoalRequiredTestAttestationV0PartialReplayClaimsAndRunsOnlyMissingTest(t *testing.T) {
 	spec := attestationSpecForTestV0(2)
 	snapshot := attestationSnapshotForTestV0(spec, "revision-ref-current")
@@ -264,6 +291,23 @@ func completedAttestedGoalResultForTestV0(spec GoalWorkSpecV0) GoalWorkResultV0 
 		results = append(results, GoalRequiredTestResultV0{TestRef: test.TestRef, Status: "passed", EvidenceRefs: []string{"evidence-ref-implementer-diagnostic"}})
 	}
 	return NormalizeGoalWorkResultV0(GoalWorkResultV0{GoalRef: spec.GoalRef, Status: GoalStatusCompleteV0, RequiredTestResults: results})
+}
+
+func blockedProviderTestEnvironmentResultForTestV0(spec GoalWorkSpecV0) GoalWorkResultV0 {
+	testRef := spec.RequiredTests[0].TestRef
+	return NormalizeGoalWorkResultV0(GoalWorkResultV0{
+		GoalRef: spec.GoalRef, Status: GoalStatusBlockedV0,
+		ArtifactPaths: []string{"modulos/orquesta-goal/example.go"},
+		MaterializedArtifacts: []GoalMaterializedArtifactV0{{
+			ArtifactRef: "artifact-ref-change-001", Path: "modulos/orquesta-goal/example.go",
+			Status: GoalMaterializedArtifactStatusPartialV0,
+		}},
+		Checklist: GoalWorkChecklistV0{
+			ExpectedRefs: []string{"artifact-ref-change-001"}, CompletedRefs: []string{"artifact-ref-change-001"}, MissingRefs: []string{testRef},
+		},
+		RequiredTestResults: []GoalRequiredTestResultV0{{TestRef: testRef, Status: GoalStatusBlockedV0}},
+		Issues:              []GoalWorkIssueV0{{Code: GoalIssueRequiredTestsEnvironmentUnavailableV0}},
+	})
 }
 
 func attestationRunningStateForTestV0(spec GoalWorkSpecV0) GoalWorkStateV0 {

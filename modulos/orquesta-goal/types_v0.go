@@ -66,6 +66,7 @@ const (
 	ErrGoalUsageObservationTimestampInvalidV0              = "goal_usage_observation_timestamp_invalid"
 	ErrGoalUsageObservationEvidenceRequiredV0              = "goal_usage_observation_evidence_required"
 	ErrGoalUsageObservationSourceRequiredV0                = "goal_usage_observation_source_required"
+	GoalIssueRequiredTestsEnvironmentUnavailableV0         = "required_tests_environment_unavailable"
 )
 
 const (

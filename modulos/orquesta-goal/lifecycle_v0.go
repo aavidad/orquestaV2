@@ -210,6 +210,7 @@ func ObserveGoalWorkV0(
 	if issues := ValidateGoalWorkResultV0(result); len(issues) > 0 {
 		return GoalWorkObserveResultV0{}, GoalWorkLifecycleIssueErrorV0{Field: "goal_result"}
 	}
+	result = promoteGoalResultForIndependentTestAttestationV0(state.Spec, result)
 	state.ContextBudget = MergeGoalContextBudgetV0(state.ContextBudget, result.ContextBudget)
 	result.ContextBudget = state.ContextBudget
 	state.LastResult = &result
@@ -335,6 +336,41 @@ func ObserveGoalWorkV0(
 		NeedsRework:      closure.NeedsRework,
 		EvidenceRefs:     append([]string(nil), state.EvidenceRefs...),
 	}, nil
+}
+
+func promoteGoalResultForIndependentTestAttestationV0(spec GoalWorkSpecV0, result GoalWorkResultV0) GoalWorkResultV0 {
+	if !spec.ClosurePolicy.RequireIndependentRequiredTestAttestation ||
+		result.Status != GoalStatusBlockedV0 ||
+		len(result.ArtifactPaths) == 0 ||
+		len(result.Issues) == 0 {
+		return result
+	}
+	for _, issue := range result.Issues {
+		if issue.Code != GoalIssueRequiredTestsEnvironmentUnavailableV0 {
+			return result
+		}
+	}
+	requiredTests := make(map[string]bool, len(spec.RequiredTests))
+	for _, test := range spec.RequiredTests {
+		requiredTests[test.TestRef] = true
+	}
+	for _, missingRef := range result.Checklist.MissingRefs {
+		if !requiredTests[missingRef] {
+			return result
+		}
+	}
+	result.Status = GoalStatusCompleteV0
+	result.Checklist.MissingRefs = nil
+	for index := range result.MaterializedArtifacts {
+		if result.MaterializedArtifacts[index].Status == GoalMaterializedArtifactStatusPartialV0 {
+			result.MaterializedArtifacts[index].Status = GoalMaterializedArtifactStatusValidV0
+		}
+	}
+	result.EvidenceRefs = compactGoalStringsV0(append(
+		result.EvidenceRefs,
+		"evidence-ref-goal-required-tests-delegated-to-independent-attestor",
+	))
+	return result
 }
 
 func persistFailedGoalObservationV0(
