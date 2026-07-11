@@ -279,8 +279,32 @@ func buildStackFromProjectConfigV0(
 		return orquestaappcodexstack.StackV0{}, err
 	}
 	var worktreeSnapshotStore orquestaruntimeworktree.WorktreeSnapshotStorePortV0 = stateStore
+	canonicalSelfProgrammingDir := firstNonEmptyServerStackV0(
+		serverConfig.IdleSelfImprovementProjectWorkDir,
+		serverConfig.ProjectWorkDir,
+	)
 	autoprogrammingPromotion := autoprogrammingPromotionConfigFromEnvV0(serverConfig)
 	autoprogrammingPromotion.GoalFirstSnapshotStore = worktreeSnapshotStore
+	autoprogrammingPromotion.GoalWorkspaceIntegration = orquestaruntimeworktree.GitGoalWorkspaceIntegrationConnectorV0{}
+	batchTestRunner, err := autoprogrammingBatchTestRunnerFromConfigV0(serverConfig, canonicalSelfProgrammingDir)
+	if err != nil {
+		return orquestaappcodexstack.StackV0{}, err
+	}
+	autoprogrammingPromotion.BatchTestRunner = batchTestRunner
+	if promotionPort, ok := autoprogrammingPromotion.Port.(serverAutoprogrammingPromotionPortV0); ok {
+		autoprogrammingPromotion.GoalWorkspaceIntegration = promotionPort.IntegrationConnector
+		autoprogrammingPromotion.BatchIntegrationReceiptDir = promotionPort.IntegrationReceiptDir
+	}
+	if autoprogrammingPromotion.BatchIntegrationReceiptDir == "" && autoprogrammingPromotion.GoalWorkspaceRoot != "" {
+		autoprogrammingPromotion.BatchIntegrationReceiptDir = filepath.Join(autoprogrammingPromotion.GoalWorkspaceRoot, "autoprogramming-integration-receipts-v0")
+	}
+	batchPromotionFinalizer := newServerAutoprogrammingBatchPromotionFinalizerV0(
+		canonicalSelfProgrammingDir,
+		autoprogrammingPromotion.BatchIntegrationReceiptDir,
+	)
+	autoprogrammingPromotion.BatchPromotionFinalizer = batchPromotionFinalizer
+	autoprogrammingPromotion.BatchPromotionReconciler = batchPromotionFinalizer
+	autoprogrammingPromotion.BatchPromotionReceiptDir = autoprogrammingPromotion.BatchIntegrationReceiptDir
 	runStore := orquestacionnucleoapp.RunStorePortV0(stateStore)
 	runQueue := orquestarunqueue.RunQueuePortV0(runFileStore)
 	runControl := orquestaruncontrol.RunControlPortV0(runFileStore)
@@ -337,6 +361,7 @@ func buildStackFromProjectConfigV0(
 			RunQueue:                         runQueue,
 			AppGoalStateStore:                appGoalStateStore,
 			GoalRequiredTestAttestationStore: stateStore,
+			AutoprogrammingBatchStore:        stateStore,
 		},
 		RunQueue: orquestaappcodexstack.RunQueueConfigV0{
 			QueueRef:       "global",

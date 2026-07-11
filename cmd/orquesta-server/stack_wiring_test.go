@@ -494,6 +494,7 @@ func assertServerStackDurableStoresV0(
 	assertTypeV0[*orquestastatefile.StoreV0](t, "OperationalPlanStateStore", stack.Stores.OperationalPlanStateStore)
 	assertTypeV0[*orquestastatefile.StoreV0](t, "ProcessRegistry", stack.Stores.ProcessRegistry)
 	assertTypeV0[*orquestastatefile.StoreV0](t, "GoalRequiredTestAttestationStore", stack.Stores.GoalRequiredTestAttestationStore)
+	assertTypeV0[*orquestastatefile.StoreV0](t, "AutoprogrammingBatchStore", stack.Stores.AutoprogrammingBatchStore)
 	assertTypeV0[*orquestapersistence.FileOutboxLedgerV0](t, "OutboxLedger", stack.Stores.OutboxLedger)
 	assertTypeV0[*orquestarunfile.RunFileStoreV0](t, "AppChangeStore", stack.Stores.AppChangeStore)
 	assertTypeV0[*orquestarunfile.RunFileStoreV0](t, "RunControl", stack.Stores.RunControl)
