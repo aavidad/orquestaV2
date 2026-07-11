@@ -9,12 +9,6 @@ import (
 
 const opesBridgeExternalSystemV0 = "opes"
 
-func opesBridgeInputLedgerFromEnvV0(
-	dryRun bool,
-) (externalBridgeInputLedgerV0, error) {
-	return opesBridgeInputLedgerFromProjectConfigFileV0(opesProjectConfigFromEnvBestEffortV0(), dryRun)
-}
-
 func opesBridgeInputLedgerFromProjectConfigFileV0(
 	config serverProjectConfigFileV0,
 	dryRun bool,

@@ -125,10 +125,6 @@ func opesDrainConfigFromEnvWithBaseURLV0(
 	}, nil
 }
 
-func opesBridgeRuntimeCompatibilityPolicyFromEnvV0() opesBridgeRuntimeCompatibilityPolicyV0 {
-	return opesBridgeRuntimeCompatibilityPolicyFromProjectConfigFileV0(serverProjectConfigFileV0{})
-}
-
 func opesBridgeRuntimeCompatibilityPolicyFromProjectConfigFileV0(
 	config serverProjectConfigFileV0,
 ) opesBridgeRuntimeCompatibilityPolicyV0 {
@@ -378,10 +374,6 @@ func opesBridgeStringValueFromProjectConfigFileV0(config serverProjectConfigFile
 	default:
 		return strings.TrimSpace(os.Getenv(key))
 	}
-}
-
-func opesBridgeJobTypeSequenceFromEnvV0() []string {
-	return opesBridgeJobTypeSequenceFromProjectConfigFileV0(serverProjectConfigFileV0{})
 }
 
 func opesBridgeJobTypeSequenceFromProjectConfigFileV0(config serverProjectConfigFileV0) []string {
@@ -686,12 +678,6 @@ func opesBridgeExternalCapabilitiesFromProjectConfigFileV0(config serverProjectC
 	return out
 }
 
-func opesBridgeSpeechSynthesisToolPreflightFromEnvV0(
-	capability orquestadomainwork.DomainWorkExternalCapabilityV0,
-) orquestadomainwork.DomainWorkExternalCapabilityV0 {
-	return opesBridgeSpeechSynthesisToolPreflightFromProjectConfigFileV0(serverProjectConfigFileV0{}, capability)
-}
-
 func opesBridgeSpeechSynthesisToolPreflightFromProjectConfigFileV0(
 	config serverProjectConfigFileV0,
 	capability orquestadomainwork.DomainWorkExternalCapabilityV0,
@@ -806,16 +792,6 @@ func opesBridgeSpeechSynthesisToolPreflightFailedV0(
 	return capability
 }
 
-func opesBridgeExternalCapabilityFromEnvV0(
-	kind string,
-	capabilityEnv string,
-	refEnv string,
-	evidenceEnv string,
-	reasonEnv string,
-) (orquestadomainwork.DomainWorkExternalCapabilityV0, bool) {
-	return opesBridgeExternalCapabilityFromProjectConfigFileV0(serverProjectConfigFileV0{}, kind, capabilityEnv, refEnv, evidenceEnv, reasonEnv)
-}
-
 func opesBridgeExternalCapabilityFromProjectConfigFileV0(
 	config serverProjectConfigFileV0,
 	kind string,
@@ -853,16 +829,6 @@ func opesBridgeCapabilityAvailabilityFromEnvV0(raw string, kind string) (bool, s
 	default:
 		return false, strings.TrimSpace(kind) + "_capability_invalid"
 	}
-}
-
-func opesBridgeCapabilityReadinessFromEnvV0(
-	envName string,
-	defaultReady bool,
-	currentReason string,
-	kind string,
-	check string,
-) (bool, string) {
-	return opesBridgeCapabilityReadinessFromProjectConfigFileV0(serverProjectConfigFileV0{}, envName, defaultReady, currentReason, kind, check)
 }
 
 func opesBridgeCapabilityReadinessFromProjectConfigFileV0(

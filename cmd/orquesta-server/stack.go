@@ -29,14 +29,6 @@ import (
 	orquestaweb "orquesta/modulos/orquesta-web"
 )
 
-func buildRuntimeFromEnvV0() (*orquestaserver.RuntimeV0, error) {
-	serverConfig, err := serverConfigFromEnvV0()
-	if err != nil {
-		return nil, err
-	}
-	return buildRuntimeFromConfigV0(serverConfig)
-}
-
 func buildRuntimeFromConfigV0(serverConfig orquestaserver.ConfigV0) (*orquestaserver.RuntimeV0, error) {
 	supervisorWakeup := &serverSupervisorWakeupRelayV0{}
 	goalBackends, err := serverCodexGoalBackendsFromEnvV0(serverConfig)
@@ -562,10 +554,6 @@ func directorLimitsV0() orquestaweb.WebArrancarDirectorAppLimitsV0 {
 		MaxOutboxPerCycle:    intEnvOrDefaultV0(envDirectorMaxOutboxV0, 8),
 		MaxExternalWaits:     intEnvOrDefaultV0(envDirectorMaxExternalWaitsV0, 120),
 	}
-}
-
-func serverRunQueueLimitFromEnvV0() int {
-	return serverRunQueueLimitFromProjectConfigFileV0(serverProjectConfigFileV0{})
 }
 
 type codexDirectorWaveLimitsEnvConfigV0 struct {

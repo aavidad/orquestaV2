@@ -143,10 +143,6 @@ func validateOPESRegistryFinalPkgConfigV0(config opesRegistryFinalPkgConfigV0) e
 	return nil
 }
 
-func opesRegistryFinalPkgDryRunFromEnvV0() bool {
-	return opesRegistryFinalPkgDryRunFromProjectConfigFileV0(serverProjectConfigFileV0{})
-}
-
 func opesRegistryFinalPkgEnabledFromProjectConfigFileV0(config serverProjectConfigFileV0) bool {
 	return boolProjectConfigOrEnvOrDefaultV0(envOPESRegistryFinalPkgEnabledV0, config.OPESRegistryFinalPkg.Enabled, false)
 }

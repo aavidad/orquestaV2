@@ -160,10 +160,6 @@ func egressSanitizerConfigFromProjectConfigFileV0(
 	})
 }
 
-func egressSanitizerConfigWithSidecarPortFromEnvV0() (orquestaappcodexstack.EgressSanitizerConfigV0, error) {
-	return egressSanitizerConfigWithSidecarPortFromProjectConfigFileV0(serverProjectConfigFileV0{})
-}
-
 func egressSanitizerConfigWithSidecarPortFromProjectConfigFileV0(
 	projectConfig serverProjectConfigFileV0,
 ) (orquestaappcodexstack.EgressSanitizerConfigV0, error) {

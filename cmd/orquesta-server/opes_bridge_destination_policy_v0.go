@@ -20,14 +20,6 @@ type opesDrainDestinationV0 struct {
 	URLRef   string
 }
 
-func opesDrainDestinationPolicyFromEnvV0(
-	opesBaseURL string,
-	orquestaBaseURL string,
-	dryRun bool,
-) (opesDrainDestinationPolicyV0, error) {
-	return opesDrainDestinationPolicyFromProjectConfigFileV0(opesProjectConfigFromEnvBestEffortV0(), opesBaseURL, orquestaBaseURL, dryRun)
-}
-
 func opesDrainDestinationPolicyFromProjectConfigFileV0(
 	config serverProjectConfigFileV0,
 	opesBaseURL string,
@@ -63,14 +55,6 @@ func opesDrainDestinationPolicyFromProjectConfigFileV0(
 		OrquestaDestination:    orquesta,
 		DestinationEvidenceRef: evidenceRef,
 	}, nil
-}
-
-func opesBridgeDestinationFromURLV0(
-	kind string,
-	raw string,
-	dryRun bool,
-) (opesDrainDestinationV0, error) {
-	return opesBridgeDestinationFromProjectConfigFileV0(opesProjectConfigFromEnvBestEffortV0(), kind, raw, dryRun)
 }
 
 func opesBridgeDestinationFromProjectConfigFileV0(
@@ -109,10 +93,6 @@ func opesBridgeDestinationFromProjectConfigFileV0(
 	}, nil
 }
 
-func opesBridgeDestinationCategoryV0(parsed *url.URL) (string, error) {
-	return opesBridgeDestinationCategoryFromProjectConfigFileV0(opesProjectConfigFromEnvBestEffortV0(), parsed)
-}
-
 func opesBridgeDestinationCategoryFromProjectConfigFileV0(config serverProjectConfigFileV0, parsed *url.URL) (string, error) {
 	host := strings.ToLower(strings.TrimSpace(parsed.Hostname()))
 	if host == "" {
@@ -133,10 +113,6 @@ func opesBridgeHostIsLoopbackV0(host string) bool {
 	}
 	ip := net.ParseIP(host)
 	return ip != nil && ip.IsLoopback()
-}
-
-func opesBridgeRequireRealOPESConfirmationV0(destination opesDrainDestinationV0, dryRun bool) error {
-	return opesBridgeRequireRealOPESConfirmationFromProjectConfigFileV0(opesProjectConfigFromEnvBestEffortV0(), destination, dryRun)
 }
 
 func opesBridgeRequireRealOPESConfirmationFromProjectConfigFileV0(config serverProjectConfigFileV0, destination opesDrainDestinationV0, dryRun bool) error {

@@ -161,10 +161,6 @@ func codexStackCapacityEnvConfigFromProjectConfigFileV0(projectConfig serverProj
 	}
 }
 
-func codexDirectorWaveLimitsFromProjectConfigV0(projectDir string) codexDirectorWaveLimitsEnvConfigV0 {
-	return codexDirectorWaveLimitsFromProjectConfigFileV0(projectConfigFromProjectDirBestEffortV0(projectDir))
-}
-
 func codexDirectorWaveLimitsFromProjectConfigFileV0(projectConfig serverProjectConfigFileV0) codexDirectorWaveLimitsEnvConfigV0 {
 	executionMode := codexExecutionModeFromProjectConfigFileV0(projectConfig)
 	return codexDirectorWaveLimitsEnvConfigV0{
@@ -206,14 +202,6 @@ func capacityRecommendationEnvOrStringOrDefaultV0(
 	default:
 		return fallback
 	}
-}
-
-func serverPositiveConfigSettingV0(projectDir string, key string, value int) orquestaserver.ServerConfigSettingV0 {
-	return serverConfigSettingFromRegistryWithSourceV0(
-		key,
-		strconv.Itoa(value),
-		configSettingSourceFromEnvOrProjectConfigV0(projectDir, key),
-	)
 }
 
 func serverPositiveConfigSettingFromConfigV0(config orquestaserver.ConfigV0, key string, value int) orquestaserver.ServerConfigSettingV0 {

@@ -80,10 +80,6 @@ func serverWorktreeDirFromEnvV0(fallback string) string {
 	return fallback
 }
 
-func validateServerWorktreeIdentityV0(ctx context.Context, workdir string) *serverWorktreeIdentityIssueV0 {
-	return validateServerWorktreeIdentityWithRuntimeV0(ctx, workdir, serverRuntimeIdentityFromExecutableV0())
-}
-
 func validateServerWorktreeIdentityWithRuntimeV0(
 	ctx context.Context,
 	workdir string,
