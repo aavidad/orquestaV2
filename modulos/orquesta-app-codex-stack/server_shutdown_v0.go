@@ -46,7 +46,7 @@ func stackShutdownRunControlWriterFromConfigV0(
 		return nil
 	}
 	return stackShutdownRunControlWriterV0{
-		Inner:          config.Stores.RunControl,
+		Inner:          goalFirstRunControlPortFromConfigV0(config),
 		Reader:         config.Stores.RunControl,
 		Terminal:       config.Stores.RunControl,
 		GoalStateStore: config.Stores.AppGoalStateStore,

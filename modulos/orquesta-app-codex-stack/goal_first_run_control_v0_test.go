@@ -158,6 +158,66 @@ func TestCodexStackRunControlAPIV0ForcedStopGoalFirstPropagaBackendYBloqueaTermi
 	}
 }
 
+func TestCodexStackServerShutdownAPIForcedStopPropagaSoloGoalActivoV0(t *testing.T) {
+	ctx := context.Background()
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	backend := &fakeGoalBackendControlForRunControlTestV0{
+		result: GoalBackendControlResultV0{
+			Status:         orquestagoal.GoalStatusBlockedV0,
+			GoalStatusSet:  true,
+			BackendStopped: true,
+			EvidenceRefs:   []string{"evidence-ref-forced-shutdown-goal-backend-stopped"},
+		},
+	}
+	config := codexStackBaseConfigForTestV0(t, newPendingAckCodexStackRuntimeV0(), nil, nil)
+	config.Stores.AppGoalStateStore = goalStates
+	config.AppGoalBackendControl = backend
+	stack, err := BuildStackV0(config)
+	if err != nil {
+		t.Fatalf("BuildStackV0: %v", err)
+	}
+	target := postDirectorAPIV0(t, stack)
+	if err := goalStates.SaveGoalWorkStateV0(ctx, goalFirstRunControlRunningStateForTestV0(
+		t, target.RunRef, "goal-ref-forced-shutdown-required-test", "thread-ref-forced-shutdown-required-test",
+	)); err != nil {
+		t.Fatalf("Save target goal state: %v", err)
+	}
+	foreignRunRef := "run-ref-foreign-turn-must-stay-alive"
+	if err := goalStates.SaveGoalWorkStateV0(ctx, goalFirstRunControlRunningStateForTestV0(
+		t, foreignRunRef, "goal-ref-foreign-turn", "thread-ref-foreign-turn",
+	)); err != nil {
+		t.Fatalf("Save foreign goal state: %v", err)
+	}
+
+	shutdown := postServerShutdownStackV0(t, stack, orquestamcp.MCPServerShutdownToolInputV0{
+		RequestID:      "request-ref-forced-shutdown-active-required-test",
+		CorrelationID:  "corr-forced-shutdown-active-required-test",
+		Forced:         true,
+		RequestedBy:    "orquesta-director",
+		Reason:         "forced shutdown during active required test and turn",
+		IdempotencyKey: "idem-forced-shutdown-active-required-test",
+		MaxTicks:       2,
+		MaxExecutions:  2,
+	})
+	if shutdown.Estado != orquestamcp.MCPServerShutdownEstadoOKV0 ||
+		!shutdown.ShutdownReady || shutdown.Status != "ready" {
+		t.Fatalf("shutdown=%+v", shutdown)
+	}
+	if backend.calls != 1 || backend.last.RunRef != target.RunRef ||
+		backend.last.GoalRef != "goal-ref-forced-shutdown-required-test" ||
+		backend.last.ExternalGoalRef != "thread-ref-forced-shutdown-required-test" ||
+		backend.last.Action != "stop" || !backend.last.Forced {
+		t.Fatalf("backend calls=%d last=%+v", backend.calls, backend.last)
+	}
+	foreign, err := goalStates.LoadGoalWorkStateV0(ctx, foreignRunRef)
+	if err != nil {
+		t.Fatalf("Load foreign goal state: %v", err)
+	}
+	if foreign.Status != orquestagoal.GoalStatusRunningV0 {
+		t.Fatalf("foreign goal must remain running: %+v", foreign)
+	}
+}
+
 func TestGoalFirstRunControlPortV0ForcedStopCompletaControlSiObserverYaBloqueoAltoConsumoV0(t *testing.T) {
 	ctx := context.Background()
 	runRef := "run-ref-goal-first-forced-stop-already-blocked-001"
