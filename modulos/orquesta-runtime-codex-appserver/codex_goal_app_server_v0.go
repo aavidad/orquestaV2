@@ -65,6 +65,7 @@ type serverCodexAppServerGoalBackendV0 struct {
 	HighTokenUsageThreshold int
 	Runtime                 *serverCodexAppServerGoalRuntimeV0
 	BackendShutdown         BackendShutdownPortV0
+	WorkspaceRouter         GoalWorkspaceRouterPortV0
 	Now                     func() time.Time
 }
 
@@ -81,6 +82,9 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 	ctx context.Context,
 	packet orquestaruntimecodexgoal.CodexGoalStartPacketV0,
 ) (orquestaruntimecodexgoal.CodexGoalStartReceiptV0, error) {
+	if backend.WorkspaceRouter != nil {
+		return backend.startCodexGoalInResolvedWorkspaceV0(ctx, packet)
+	}
 	if backend.Protocol == nil {
 		return codexAppServerStartReceiptV0(packet, "", "codex_app_server_protocol_missing"), errors.New("codex_app_server_protocol_missing")
 	}
@@ -444,6 +448,9 @@ func (backend serverCodexAppServerGoalBackendV0) ObserveCodexGoalV0(
 	ctx context.Context,
 	request orquestaruntimecodexgoal.CodexGoalObservationRequestV0,
 ) (orquestaruntimecodexgoal.CodexGoalObservationReceiptV0, error) {
+	if backend.WorkspaceRouter != nil {
+		return backend.observeCodexGoalInResolvedWorkspaceV0(ctx, request)
+	}
 	if backend.Protocol == nil {
 		return codexAppServerObservationReceiptV0(request, orquestagoal.GoalStatusInvalidV0, "codex_app_server_protocol_missing"), errors.New("codex_app_server_protocol_missing")
 	}
@@ -533,6 +540,9 @@ func (backend serverCodexAppServerGoalBackendV0) FingerprintGoalObservationV0(
 	ctx context.Context,
 	state orquestagoal.GoalWorkStateV0,
 ) (orquestagoal.GoalObservationFingerprintV0, bool, error) {
+	if backend.WorkspaceRouter != nil {
+		return backend.fingerprintCodexGoalInResolvedWorkspaceV0(ctx, state)
+	}
 	if backend.Protocol == nil {
 		return orquestagoal.GoalObservationFingerprintV0{}, false, nil
 	}
