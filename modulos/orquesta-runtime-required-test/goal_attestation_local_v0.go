@@ -31,14 +31,17 @@ type LocalTrustedGoalRequiredTestIdentityPolicyV0 struct {
 }
 
 type LocalGoalRequiredTestAttestationConfigV0 struct {
-	ProjectWorkDir  string
-	RuntimeRoot     string
-	GitCommandPath  string
-	AllowedCommands map[string]string
-	MaxRuntime      time.Duration
-	MaxOutputBytes  int64
-	MaxArtifacts    int
-	Identity        LocalTrustedGoalRequiredTestIdentityPolicyV0
+	ProjectWorkDir           string
+	RuntimeRoot              string
+	GitCommandPath           string
+	AllowedCommands          map[string]string
+	DependencySnapshotPath   string
+	DependencySnapshotSHA256 string
+	PreflightCommands        []string
+	MaxRuntime               time.Duration
+	MaxOutputBytes           int64
+	MaxArtifacts             int
+	Identity                 LocalTrustedGoalRequiredTestIdentityPolicyV0
 }
 
 // LocalGoalRequiredTestAttestationAdapterV0 is an external adapter. It derives
@@ -172,6 +175,28 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) AttestGoalRequiredTest
 	}
 
 	attestation.AttestationRef = orquestagoal.GoalRequiredTestAttestationCanonicalRefV0(attestation)
+	preflight, err := adapter.runPreflightV0(ctx, attestation.AttestationRef, request.GoalRef)
+	if err != nil {
+		return nil, err
+	}
+	attestation.EvidenceRefs = append(attestation.EvidenceRefs, preflight.EvidenceRefs...)
+	if preflight.Status != orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0 {
+		after, err := adapter.CaptureGoalRequiredTestFinalSnapshotV0(ctx, orquestagoal.GoalRequiredTestFinalSnapshotRequestV0{
+			RunRef: request.RunRef, GoalRef: request.GoalRef, WriteSet: writeSet,
+			WriteSetSHA256: request.FinalSnapshot.WriteSetSHA256,
+		})
+		if err != nil {
+			return nil, err
+		}
+		attestation.HashesAfter = append([]orquestagoal.GoalAttestedHashV0(nil), after.Hashes...)
+		attestation.EvidenceRefs = append(attestation.EvidenceRefs, after.EvidenceRefs...)
+		attestation.Status = orquestagoal.GoalRequiredTestAttestationStatusFailedV0
+		attestation.FailureCode = orquestagoal.ErrGoalRequiredTestAttestorInfrastructureFailedV0
+		attestation.ExitCode = 1
+		attestation.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
+		attestation.AttestationRef = orquestagoal.GoalRequiredTestAttestationCanonicalRefV0(attestation)
+		return []orquestagoal.GoalRequiredTestAttestationV0{orquestagoal.NormalizeGoalRequiredTestAttestationV0(attestation)}, nil
+	}
 	execution, err := adapter.runFrozenTestV0(ctx, attestation.AttestationRef, request, test)
 	if err != nil {
 		return nil, err
@@ -253,7 +278,7 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) runFrozenTestV0(
 ) (orquestacionnucleoapp.RequiredTestCommandExecutionResultV0, error) {
 	runDir := filepath.Join(adapter.config.RuntimeRoot, "runs", localGoalAttestationHashV0(attestationRef))
 	outputDir := filepath.Join(adapter.config.RuntimeRoot, "evidence", "commands")
-	for _, dir := range []string{runDir, outputDir, filepath.Join(runDir, "tmp"), filepath.Join(runDir, "go-cache"), filepath.Join(runDir, "go-mod-cache"), filepath.Join(runDir, "go-path")} {
+	for _, dir := range []string{runDir, outputDir, filepath.Join(runDir, "tmp"), filepath.Join(runDir, "go-cache"), filepath.Join(runDir, "go-path")} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{}, err
 		}
@@ -263,14 +288,8 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) runFrozenTestV0(
 	executor := LocalCommandExecutorV0{
 		ProjectWorkDir: adapter.config.ProjectWorkDir, OutputDir: outputDir,
 		AllowedCommands: adapter.config.AllowedCommands,
-		Env: []string{
-			"CGO_ENABLED=0", "GOWORK=off", "GOPROXY=off", "GOSUMDB=off",
-			"GOCACHE=" + filepath.Join(runDir, "go-cache"),
-			"GOMODCACHE=" + filepath.Join(runDir, "go-mod-cache"),
-			"GOPATH=" + filepath.Join(runDir, "go-path"),
-			"GOTMPDIR=" + filepath.Join(runDir, "tmp"), "TMPDIR=" + filepath.Join(runDir, "tmp"),
-		},
-		MaxOutputBytes: adapter.config.MaxOutputBytes, MaxArtifacts: adapter.config.MaxArtifacts,
+		Env:             adapter.hermeticEnvironmentV0(runDir),
+		MaxOutputBytes:  adapter.config.MaxOutputBytes, MaxArtifacts: adapter.config.MaxArtifacts,
 	}
 	return executor.RunRequiredTestCommandV0(executionContext, orquestacionnucleoapp.RequiredTestCommandExecutionRequestV0{
 		RunRef: request.RunRef, TaskRef: test.TestRef, TestCommand: test.Command,
@@ -444,6 +463,28 @@ func normalizeLocalGoalRequiredTestAttestationConfigV0(
 	if len(allowed) == 0 || config.MaxRuntime <= 0 || config.MaxOutputBytes <= 0 || config.MaxArtifacts <= 0 {
 		return config, fmt.Errorf("goal_required_test_attestation_config_incomplete")
 	}
+	preflightCommands := make([]string, 0, len(config.PreflightCommands))
+	for _, command := range config.PreflightCommands {
+		command = strings.TrimSpace(command)
+		tokens, err := splitCommandV0(command)
+		if err != nil || len(tokens) == 0 || commandIsShellV0(tokens[0]) {
+			return config, fmt.Errorf("goal_required_test_preflight_command_invalid")
+		}
+		if _, ok := allowed[tokens[0]]; !ok {
+			return config, fmt.Errorf("goal_required_test_preflight_command_not_allowed")
+		}
+		preflightCommands = append(preflightCommands, command)
+	}
+	if len(preflightCommands) == 0 {
+		return config, fmt.Errorf("goal_required_test_preflight_required")
+	}
+	snapshotPath, snapshotHash, err := normalizeGoalRequiredTestDependencySnapshotV0(config.DependencySnapshotPath)
+	if err != nil {
+		return config, err
+	}
+	if goalRequiredTestGoAllowedV0(allowed) && snapshotPath == "" {
+		return config, fmt.Errorf("goal_required_test_go_attestation_config_incomplete")
+	}
 	identity := config.Identity
 	identity.TrustPolicyRef = strings.TrimSpace(identity.TrustPolicyRef)
 	identity.PolicyEvidenceRef = strings.TrimSpace(identity.PolicyEvidenceRef)
@@ -470,6 +511,9 @@ func normalizeLocalGoalRequiredTestAttestationConfigV0(
 	config.RuntimeRoot = runtimeRoot
 	config.GitCommandPath = gitPath
 	config.AllowedCommands = allowed
+	config.DependencySnapshotPath = snapshotPath
+	config.DependencySnapshotSHA256 = snapshotHash
+	config.PreflightCommands = preflightCommands
 	config.Identity = identity
 	return config, nil
 }

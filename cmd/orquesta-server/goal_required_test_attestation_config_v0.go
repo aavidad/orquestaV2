@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -19,15 +20,17 @@ import (
 const goalRequiredTestAttestationConfigSchemaV0 = "orquesta_goal_required_test_attestation_config.v0"
 
 type serverGoalRequiredTestAttestationConfigFileV0 struct {
-	SchemaVersion     string                                          `json:"schema_version"`
-	ProjectWorkDir    string                                          `json:"project_work_dir"`
-	RuntimeRoot       string                                          `json:"runtime_root"`
-	GitCommandPath    string                                          `json:"git_command_path"`
-	AllowedCommands   map[string]string                               `json:"allowed_commands"`
-	MaxRuntimeSeconds int                                             `json:"max_runtime_seconds"`
-	MaxOutputBytes    int64                                           `json:"max_output_bytes"`
-	MaxArtifacts      int                                             `json:"max_artifacts"`
-	Identity          serverGoalRequiredTestAttestationIdentityFileV0 `json:"identity"`
+	SchemaVersion       string                                          `json:"schema_version"`
+	ProjectWorkDir      string                                          `json:"project_work_dir"`
+	RuntimeRoot         string                                          `json:"runtime_root"`
+	GitCommandPath      string                                          `json:"git_command_path"`
+	AllowedCommands     map[string]string                               `json:"allowed_commands"`
+	ModuleCacheSnapshot string                                          `json:"module_cache_snapshot"`
+	PreflightCommands   []string                                        `json:"preflight_commands"`
+	MaxRuntimeSeconds   int                                             `json:"max_runtime_seconds"`
+	MaxOutputBytes      int64                                           `json:"max_output_bytes"`
+	MaxArtifacts        int                                             `json:"max_artifacts"`
+	Identity            serverGoalRequiredTestAttestationIdentityFileV0 `json:"identity"`
 }
 
 type serverGoalRequiredTestAttestationIdentityFileV0 struct {
@@ -89,13 +92,15 @@ func goalRequiredTestAttestationAdapterFromConfigV0(
 	}
 	digest := sha256.Sum256(raw)
 	identity := document.Identity
-	return orquestaruntimerequiredtest.NewLocalGoalRequiredTestAttestationAdapterV0(
+	adapter, err := orquestaruntimerequiredtest.NewLocalGoalRequiredTestAttestationAdapterV0(
 		orquestaruntimerequiredtest.LocalGoalRequiredTestAttestationConfigV0{
 			ProjectWorkDir: configuredProject,
 			RuntimeRoot:    strings.TrimSpace(document.RuntimeRoot), GitCommandPath: strings.TrimSpace(document.GitCommandPath),
-			AllowedCommands: document.AllowedCommands,
-			MaxRuntime:      time.Duration(document.MaxRuntimeSeconds) * time.Second,
-			MaxOutputBytes:  document.MaxOutputBytes, MaxArtifacts: document.MaxArtifacts,
+			AllowedCommands:        document.AllowedCommands,
+			DependencySnapshotPath: strings.TrimSpace(document.ModuleCacheSnapshot),
+			PreflightCommands:      append([]string(nil), document.PreflightCommands...),
+			MaxRuntime:             time.Duration(document.MaxRuntimeSeconds) * time.Second,
+			MaxOutputBytes:         document.MaxOutputBytes, MaxArtifacts: document.MaxArtifacts,
 			Identity: orquestaruntimerequiredtest.LocalTrustedGoalRequiredTestIdentityPolicyV0{
 				TrustPolicyRef:           strings.TrimSpace(identity.TrustPolicyRef),
 				PolicyEvidenceRef:        "goal-required-test-local-policy-evidence-ref-" + hex.EncodeToString(digest[:]),
@@ -108,6 +113,13 @@ func goalRequiredTestAttestationAdapterFromConfigV0(
 			},
 		},
 	)
+	if err != nil {
+		return nil, err
+	}
+	if err := adapter.PreflightGoalRequiredTestAttestationV0(context.Background()); err != nil {
+		return nil, fmt.Errorf("goal_required_test_attestation_preflight_failed")
+	}
+	return adapter, nil
 }
 
 func goalRequiredTestAttestationConfigFilePathV0(

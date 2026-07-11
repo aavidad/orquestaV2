@@ -32,6 +32,31 @@ func TestGoalRequiredTestAttestationConfigV0PartialJSONFailsStartup(t *testing.T
 	}
 }
 
+func TestGoalRequiredTestAttestationConfigV0FailsStartupOnRedPreflight(t *testing.T) {
+	projectDir := goalRequiredTestAttestationGitFixtureV0(t)
+	path := writeCompleteGoalRequiredTestAttestationConfigForTestV0(t, projectDir, filepath.Join(t.TempDir(), "attestation-runtime"))
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document serverGoalRequiredTestAttestationConfigFileV0
+	if err := json.Unmarshal(raw, &document); err != nil {
+		t.Fatal(err)
+	}
+	document.PreflightCommands = []string{"test -f toolchain-ready"}
+	raw, err = json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(envGoalRequiredTestAttestationConfigFileV0, path)
+	if _, err := goalRequiredTestAttestationAdapterFromConfigV0(orquestaserver.ConfigV0{ProjectWorkDir: projectDir}, serverProjectConfigFileV0{}); err == nil {
+		t.Fatal("red attestation preflight must block startup")
+	}
+}
+
 func TestBuildStackFromEnvV0WiresCompleteGoalRequiredTestAttestationConfig(t *testing.T) {
 	projectDir := t.TempDir()
 	stateDir := t.TempDir()
@@ -156,6 +181,7 @@ func writeCompleteGoalRequiredTestAttestationConfigForTestV0(t *testing.T, proje
 		SchemaVersion:  goalRequiredTestAttestationConfigSchemaV0,
 		ProjectWorkDir: projectDir, RuntimeRoot: runtimeRoot, GitCommandPath: gitPath,
 		AllowedCommands:   map[string]string{"test": testPath},
+		PreflightCommands: []string{"test -d ."},
 		MaxRuntimeSeconds: 15, MaxOutputBytes: 64 * 1024, MaxArtifacts: 20,
 		Identity: serverGoalRequiredTestAttestationIdentityFileV0{
 			TrustPolicyRef:      "policy-ref-server-attestation-001",

@@ -45,6 +45,9 @@ func TestLocalGoalRequiredTestAttestationAdapterV0RealCheckoutAndIsolatedProcess
 	if len(receipts[0].EvidenceRefs) < 3 {
 		t.Fatalf("evidencia durable incompleta: %+v", receipts[0].EvidenceRefs)
 	}
+	if !localGoalAttestationHasEvidencePrefixV0(receipts[0].EvidenceRefs, "goal-required-test-module-cache-snapshot-evidence-ref-") {
+		t.Fatalf("falta evidencia durable del snapshot: %+v", receipts[0].EvidenceRefs)
+	}
 	verification, err := adapter.VerifyGoalRequiredTestIdentityV0(context.Background(), orquestagoal.GoalRequiredTestIdentityVerificationRequestV0{
 		AttestationRef: receipts[0].AttestationRef, TestRef: receipts[0].TestRef,
 		ImplementerAgentRef: bound.ImplementerAgentRef, ImplementerCredentialRef: bound.ImplementerCredentialRef,
@@ -105,6 +108,151 @@ func TestLocalGoalRequiredTestAttestationAdapterV0RejectsNonIndependentPolicy(t 
 	}
 }
 
+func TestLocalGoalRequiredTestAttestationAdapterV0AcceptsReadOnlySnapshotAndGreenPreflight(t *testing.T) {
+	project, runtimeRoot, gitPath := localGoalAttestationGitRepoForTestV0(t)
+	testPath, err := exec.LookPath("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := localGoalAttestationConfigForTestV0(project, runtimeRoot, gitPath, map[string]string{"test": testPath})
+	config.DependencySnapshotPath = localGoalAttestationReadOnlySnapshotForTestV0(t)
+	config.PreflightCommands = []string{"test -f artifact.txt"}
+	adapter, err := NewLocalGoalRequiredTestAttestationAdapterV0(config)
+	if err != nil || adapter.PreflightGoalRequiredTestAttestationV0(context.Background()) != nil {
+		t.Fatalf("adapter=%v err=%v", adapter, err)
+	}
+}
+
+func TestLocalGoalRequiredTestAttestationAdapterV0FailedTestKeepsOrdinaryFailureCode(t *testing.T) {
+	project, runtimeRoot, gitPath := localGoalAttestationGitRepoForTestV0(t)
+	testPath, err := exec.LookPath("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapter := localGoalAttestationAdapterForTestV0(t, project, runtimeRoot, gitPath, map[string]string{"test": testPath})
+	bound, err := adapter.BindGoalRequiredTestSpecV0(context.Background(), localGoalAttestationSpecForTestV0("test -f absent.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipts, err := localGoalAttestationAttestForTestV0(context.Background(), adapter, bound)
+	if err != nil || len(receipts) != 1 || receipts[0].Status != orquestagoal.GoalRequiredTestAttestationStatusFailedV0 ||
+		receipts[0].FailureCode != orquestagoal.ErrGoalRequiredTestAttestationFailedV0 {
+		t.Fatalf("receipts=%+v err=%v", receipts, err)
+	}
+}
+
+func TestLocalGoalRequiredTestAttestationAdapterV0PostStartupPreflightFailureIsInfrastructureReceipt(t *testing.T) {
+	project, runtimeRoot, gitPath := localGoalAttestationGitRepoForTestV0(t)
+	testPath, err := exec.LookPath("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(project, "preflight-ready")
+	if err := os.WriteFile(marker, []byte("ready\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	config := localGoalAttestationConfigForTestV0(project, runtimeRoot, gitPath, map[string]string{"test": testPath})
+	config.PreflightCommands = []string{"test -f preflight-ready"}
+	adapter, err := NewLocalGoalRequiredTestAttestationAdapterV0(config)
+	if err != nil || adapter.PreflightGoalRequiredTestAttestationV0(context.Background()) != nil {
+		t.Fatalf("startup adapter=%v err=%v", adapter, err)
+	}
+	if err := os.Remove(marker); err != nil {
+		t.Fatal(err)
+	}
+	bound, err := adapter.BindGoalRequiredTestSpecV0(context.Background(), localGoalAttestationSpecForTestV0("test -f artifact.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipts, err := localGoalAttestationAttestForTestV0(context.Background(), adapter, bound)
+	if err != nil || len(receipts) != 1 || receipts[0].Status != orquestagoal.GoalRequiredTestAttestationStatusFailedV0 ||
+		receipts[0].FailureCode != orquestagoal.ErrGoalRequiredTestAttestorInfrastructureFailedV0 ||
+		len(receipts[0].EvidenceRefs) < 3 || !reflect.DeepEqual(receipts[0].HashesBefore, receipts[0].HashesAfter) {
+		t.Fatalf("receipts=%+v err=%v", receipts, err)
+	}
+}
+
+func TestLocalGoalRequiredTestAttestationAdapterV0GoPreflightDetectsNewMissingModuleBeforeTest(t *testing.T) {
+	project, runtimeRoot, gitPath := localGoalAttestationGitRepoForTestV0(t)
+	goPath, err := exec.LookPath("go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapter := localGoalAttestationAdapterForTestV0(t, project, runtimeRoot, gitPath, map[string]string{"go": goPath})
+	if err := adapter.PreflightGoalRequiredTestAttestationV0(context.Background()); err != nil {
+		t.Fatalf("green go preflight: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "dependency.go"), []byte("package fixture\n\nimport _ \"example.com/missing/module\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "go.mod"), []byte("module example.com/orquesta-goal-attestation-fixture\n\ngo 1.22\n\nrequire example.com/missing v1.0.0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "go.sum"), []byte("example.com/missing v1.0.0 h1:0000000000000000000000000000000000000000000=\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	bound, err := adapter.BindGoalRequiredTestSpecV0(context.Background(), localGoalAttestationSpecForTestV0("go test -count=1 ./..."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipts, err := localGoalAttestationAttestForTestV0(context.Background(), adapter, bound)
+	if err != nil || len(receipts) != 1 || receipts[0].FailureCode != orquestagoal.ErrGoalRequiredTestAttestorInfrastructureFailedV0 {
+		t.Fatalf("receipts=%+v err=%v", receipts, err)
+	}
+	if _, err := os.Stat(filepath.Join(runtimeRoot, "evidence", "commands")); !os.IsNotExist(err) {
+		t.Fatalf("required test must not execute, commands err=%v", err)
+	}
+}
+
+func TestLocalGoalRequiredTestAttestationAdapterV0RejectsWritableOrSymlinkSnapshot(t *testing.T) {
+	project, runtimeRoot, gitPath := localGoalAttestationGitRepoForTestV0(t)
+	testPath, err := exec.LookPath("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := localGoalAttestationConfigForTestV0(project, runtimeRoot, gitPath, map[string]string{"test": testPath})
+	writable := filepath.Join(t.TempDir(), "writable")
+	if err := os.Mkdir(writable, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	config.DependencySnapshotPath = writable
+	if _, err := NewLocalGoalRequiredTestAttestationAdapterV0(config); err == nil {
+		t.Fatal("writable snapshot must fail")
+	}
+	readonly := localGoalAttestationReadOnlySnapshotForTestV0(t)
+	link := filepath.Join(t.TempDir(), "snapshot-link")
+	if err := os.Symlink(readonly, link); err != nil {
+		t.Fatal(err)
+	}
+	config.DependencySnapshotPath = link
+	if _, err := NewLocalGoalRequiredTestAttestationAdapterV0(config); err == nil {
+		t.Fatal("symlink snapshot must fail")
+	}
+}
+
+func localGoalAttestationHasEvidencePrefixV0(refs []string, prefix string) bool {
+	for _, ref := range refs {
+		if strings.HasPrefix(ref, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func localGoalAttestationAttestForTestV0(ctx context.Context, adapter *LocalGoalRequiredTestAttestationAdapterV0, bound orquestagoal.GoalWorkSpecV0) ([]orquestagoal.GoalRequiredTestAttestationV0, error) {
+	snapshot, err := adapter.CaptureGoalRequiredTestFinalSnapshotV0(ctx, orquestagoal.GoalRequiredTestFinalSnapshotRequestV0{
+		RunRef: bound.RunRef, GoalRef: bound.GoalRef, WriteSet: bound.WriteSet, WriteSetSHA256: bound.WriteSetSHA256,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return adapter.AttestGoalRequiredTestsV0(ctx, orquestagoal.GoalRequiredTestAttestationRequestV0{
+		RunRef: bound.RunRef, GoalRef: bound.GoalRef, ImplementerAgentRef: bound.ImplementerAgentRef,
+		ImplementerCredentialRef: bound.ImplementerCredentialRef, AttestorTrustPolicyRef: bound.ClosurePolicy.RequiredAttestorTrustPolicyRef,
+		FinalSnapshot: snapshot, RequiredTests: bound.RequiredTests,
+	})
+}
+
 func localGoalAttestationGitRepoForTestV0(t *testing.T) (string, string, string) {
 	t.Helper()
 	root := t.TempDir()
@@ -161,17 +309,37 @@ func localGoalAttestationGitRepoForTestV0(t *testing.T) (string, string, string)
 
 func localGoalAttestationAdapterForTestV0(t *testing.T, project, runtimeRoot, gitPath string, commands map[string]string) *LocalGoalRequiredTestAttestationAdapterV0 {
 	t.Helper()
-	adapter, err := NewLocalGoalRequiredTestAttestationAdapterV0(localGoalAttestationConfigForTestV0(project, runtimeRoot, gitPath, commands))
+	config := localGoalAttestationConfigForTestV0(project, runtimeRoot, gitPath, commands)
+	if _, ok := commands["go"]; ok {
+		config.DependencySnapshotPath = localGoalAttestationReadOnlySnapshotForTestV0(t)
+		config.PreflightCommands = []string{"go list -mod=readonly -deps ./..."}
+	}
+	adapter, err := NewLocalGoalRequiredTestAttestationAdapterV0(config)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return adapter
 }
 
+func localGoalAttestationReadOnlySnapshotForTestV0(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "module-cache-snapshot")
+	if err := os.Mkdir(path, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
 func localGoalAttestationConfigForTestV0(project, runtimeRoot, gitPath string, commands map[string]string) LocalGoalRequiredTestAttestationConfigV0 {
+	allowed := make(map[string]string, len(commands)+1)
+	for name, path := range commands {
+		allowed[name] = path
+	}
+	allowed["git"] = gitPath
 	return LocalGoalRequiredTestAttestationConfigV0{
 		ProjectWorkDir: project, RuntimeRoot: runtimeRoot, GitCommandPath: gitPath,
-		AllowedCommands: commands, MaxRuntime: 10 * time.Second, MaxOutputBytes: 64 * 1024, MaxArtifacts: 20,
+		AllowedCommands: allowed, PreflightCommands: []string{"git --version"},
+		MaxRuntime: 10 * time.Second, MaxOutputBytes: 64 * 1024, MaxArtifacts: 20,
 		Identity: LocalTrustedGoalRequiredTestIdentityPolicyV0{
 			TrustPolicyRef: "policy-ref-local-attestation-001", PolicyEvidenceRef: "evidence-ref-owner-only-policy-001",
 			ImplementerAgentRef: "agent-ref-implementer-local-001", ImplementerCredentialRef: "credential-ref-implementer-local-001",
