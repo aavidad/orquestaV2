@@ -22,6 +22,21 @@ Buen trabajo. Siguiente: R4b (documentar frontera stdio) es rapido; luego
 R4 (dos pases con receipt para cerrar D3+208H formalmente) y despues
 continua la directiva dentro->fuera por el NUCLEO. Senala al terminar R4.
 
+## Revision ~04:00: NUCLEO ACEPTADO por el revisor - fase CONECTORES abierta
+
+Verificado por el revisor tras 24f855618 (53 commits revisados en rango):
+las 7 suites del nucleo (estado-vivo, goal, orchestration-core,
+app-director-service, run-control, run-queue, autoprogramming) + mcp +
+stack + guard raiz de envs: TODO verde reejecutado. Evidencia del E2E
+autonomo (autoprog-attestor-e2e-autonomous-20260711: complete/accepted,
+2 receipts independientes, shutdown limpio) verificada en la incidencia.
+Hito historico registrado. Residuales aceptados como trabajo de la fase
+conectores: external-work (clasificado conector), scheduler concurrente de
+atestaciones. VIA LIBRE a CONECTORES en el orden de la directiva:
+runtime-codex-* -> state-file -> required-test -> superficies mcp/http ->
+wiring stack/cmd. Mismas reglas: senal por hito, guards antes de cerrar,
+auxiliares siguen congelados. T263 no se toca (confirmado).
+
 ## Revision ~02:10: R4 ACEPTADO - 208H y D3 quedan ACREDITADOS
 
 Receipt de dos pases verificado (7 pkgs x 2, exit 0). Cola R1-R4 completa.
