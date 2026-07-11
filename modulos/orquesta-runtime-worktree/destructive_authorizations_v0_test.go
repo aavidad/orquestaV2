@@ -38,6 +38,72 @@ func TestVerifyWorktreeWriteSetV0PermiteRenameExactamenteAutorizadoV0(t *testing
 	}
 }
 
+func TestVerifyWorktreeWriteSetV0PermiteRemovePorRenameAutorizadoConContenidoModificadoV0(t *testing.T) {
+	root := t.TempDir()
+	writeWorktreeFileForTestV0(t, root, "docs/manual.md", "contenido original\n")
+	baseline := captureWorktreeSnapshotForTestV0(t, root, nil)
+	if err := os.Rename(filepath.Join(root, "docs", "manual.md"), filepath.Join(root, "docs", "manual-renamed.md")); err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+	writeWorktreeFileForTestV0(t, root, "docs/manual-renamed.md", "contenido actualizado\n")
+
+	result, issues := VerifyWorktreeWriteSetV0(context.Background(), WorktreeVerifyRequestV0{
+		Baseline:       baseline,
+		ProjectWorkDir: root,
+		WriteSet:       []string{"docs"},
+		DestructiveAuthorizations: []WorktreeDestructiveAuthorizationV0{{
+			Kind:         WorktreeDestructiveAuthorizationRenameV0,
+			PreviousPath: "docs/manual.md",
+			CurrentPath:  "docs/manual-renamed.md",
+		}},
+	})
+
+	if len(issues) > 0 || !result.OK {
+		t.Fatalf("result=%+v issues=%+v", result, issues)
+	}
+	if len(result.RemovedPaths) != 1 || result.RemovedPaths[0] != "docs/manual.md" ||
+		len(result.AddedPaths) != 1 || result.AddedPaths[0] != "docs/manual-renamed.md" {
+		t.Fatalf("removed=%v added=%v", result.RemovedPaths, result.AddedPaths)
+	}
+}
+
+func TestVerifyWorktreeWriteSetV0BloqueaRemovePorRenameAutorizadoSinDestinoExactoV0(t *testing.T) {
+	for _, test := range []struct {
+		name        string
+		currentPath string
+	}{
+		{name: "destino_ausente"},
+		{name: "destino_equivocado", currentPath: "docs/otro.md"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			writeWorktreeFileForTestV0(t, root, "docs/manual.md", "contenido original\n")
+			baseline := captureWorktreeSnapshotForTestV0(t, root, nil)
+			if test.currentPath != "" {
+				writeWorktreeFileForTestV0(t, root, test.currentPath, "contenido actualizado\n")
+			}
+			if err := os.Remove(filepath.Join(root, "docs", "manual.md")); err != nil {
+				t.Fatalf("remove: %v", err)
+			}
+
+			result, issues := VerifyWorktreeWriteSetV0(context.Background(), WorktreeVerifyRequestV0{
+				Baseline:       baseline,
+				ProjectWorkDir: root,
+				WriteSet:       []string{"docs"},
+				DestructiveAuthorizations: []WorktreeDestructiveAuthorizationV0{{
+					Kind:         WorktreeDestructiveAuthorizationRenameV0,
+					PreviousPath: "docs/manual.md",
+					CurrentPath:  "docs/manual-renamed.md",
+				}},
+			})
+
+			if len(issues) != 1 || issues[0].Code != WorktreeIssueRemovedPathV0 {
+				t.Fatalf("result=%+v issues=%+v", result, issues)
+			}
+		})
+	}
+}
+
 func TestVerifyWorktreeWriteSetV0BloqueaRenameNoAutorizadoV0(t *testing.T) {
 	root := t.TempDir()
 	writeWorktreeFileForTestV0(t, root, "docs/manual.md", "contenido estable\n")

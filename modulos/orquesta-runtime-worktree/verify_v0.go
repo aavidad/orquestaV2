@@ -62,6 +62,7 @@ func VerifyWorktreeWriteSetV0(
 	}
 	if paths := worktreeUnauthorizedRemovedPathsV0(
 		result.RemovedPaths,
+		result.AddedPaths,
 		result.DestructiveChanges,
 		request.DestructiveAuthorizations,
 	); len(paths) > 0 {
@@ -263,12 +264,13 @@ func worktreeDestructiveChangeAuthorizedV0(
 
 func worktreeUnauthorizedRemovedPathsV0(
 	removedPaths []string,
+	addedPaths []string,
 	changes []WorktreeDestructiveChangeV0,
 	authorizations []WorktreeDestructiveAuthorizationV0,
 ) []string {
 	result := make([]string, 0, len(removedPaths))
 	for _, path := range removedPaths {
-		if !worktreeRemovedPathAuthorizedV0(path, changes, authorizations) {
+		if !worktreeRemovedPathAuthorizedV0(path, addedPaths, changes, authorizations) {
 			result = append(result, path)
 		}
 	}
@@ -277,6 +279,7 @@ func worktreeUnauthorizedRemovedPathsV0(
 
 func worktreeRemovedPathAuthorizedV0(
 	path string,
+	addedPaths []string,
 	changes []WorktreeDestructiveChangeV0,
 	authorizations []WorktreeDestructiveAuthorizationV0,
 ) bool {
@@ -290,6 +293,22 @@ func worktreeRemovedPathAuthorizedV0(
 		if change.Kind == WorktreeDestructiveRenamedOrMovedV0 &&
 			change.PreviousPath == path &&
 			worktreeDestructiveChangeAuthorizedV0(change, authorizations) {
+			return true
+		}
+	}
+	for _, authorization := range authorizations {
+		if authorization.Kind == WorktreeDestructiveAuthorizationRenameV0 &&
+			authorization.PreviousPath == path &&
+			worktreePathInSetV0(authorization.CurrentPath, addedPaths) {
+			return true
+		}
+	}
+	return false
+}
+
+func worktreePathInSetV0(path string, paths []string) bool {
+	for _, candidate := range paths {
+		if candidate == path {
 			return true
 		}
 	}
