@@ -331,3 +331,11 @@ Cierre local de `BUG-ORQ-20260711-236`:
 
 Pendiente final de este corte: reconsultar `r9` con el binario nuevo y exigir
 `closure_issues=[]`; despues apagar el runtime y cerrar la incidencia completa.
+
+## Cierre final
+
+La reconsulta con `6c3ec8e95` devolvio `closure_issues=[]`, mantuvo el cierre
+aceptado y no relanzo trabajo. El shutdown final devolvio `shutdown_ready=true`,
+cero agentes/checkpoints y el proceso salio cooperativamente. `BUG-236` y todo
+el corte `BUG-226..236` quedan cerrados empiricamente. Recibo compacto:
+`docs/runbooks/resultado_replay_t9104_bug226_2026-07-11.md`.

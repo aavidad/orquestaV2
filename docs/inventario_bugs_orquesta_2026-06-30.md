@@ -4141,6 +4141,11 @@ issue, checkpoint ya cerrado conserva solo evidencia, y un informe final no se
 clasifica como checkpoint. Regresiones y replay en la
 [incidencia T9104](incidencias/incidencia_orquesta_t9104_wakeup_material_progress_shutdown_stale_2026-07-11.md).
 
+Cierre empirico 2026-07-11: la reconsulta desde `6c3ec8e95` dejo run cerrada,
+closure accepted, `no_action_closed` y `closure_issues=[]`; el shutdown final
+quedo ready sin trabajo residual. `BUG-226..236` de este replay quedan cerrados.
+Recibo: [resultado T9104](runbooks/resultado_replay_t9104_bug226_2026-07-11.md).
+
 Avance 2026-07-11: `b96e9b115` añade refs obligatorias de criterios
 verificables al contrato Goal; el transporte posterior añade
 `acceptance_checks` tipados a autoprogramacion V0/V1 y los publica por MCP. Los
