@@ -22,6 +22,27 @@ Buen trabajo. Siguiente: R4b (documentar frontera stdio) es rapido; luego
 R4 (dos pases con receipt para cerrar D3+208H formalmente) y despues
 continua la directiva dentro->fuera por el NUCLEO. Senala al terminar R4.
 
+## CONSENTIMIENTO DEL OPERADOR ~11:10: prueba empirica de 226 APROBADA
+
+El operador autoriza la prueba empirica de BUG-226 con la tarea T9104 del
+backlog (`docs/backlog_piloto_autonomia_2026-07-10.md`: verificar muestra
+de la clasificacion S13). Condiciones vinculantes:
+
+- Goal REAL y util, write-set SOLO `docs`, MAX_REQUESTS=1.
+- La prueba debe ejercer el gobierno de progreso material completo
+  (checkpoint tipado por tramo, clase material verificada, replan temprano
+  si no hay progreso, hard stop confirmado si persiste).
+- Clase `test` solo desde atestacion independiente durable.
+- Evidencia retenida (state/runtime + receipts) y senal al revisor al
+  terminar: el revisor valida el cierre reejecutando lo declarado antes de
+  marcar 226 cerrado.
+- No reusar el goal fallido 019f4fb4-...; goal causal nuevo.
+
+Directiva general del operador: "haz lo que tengas que hacer para terminar
+la app" - via libre para avanzar conectores en paralelo manteniendo las
+reglas (senal por hito, guards antes de cerrar, auxiliares congelados
+hasta terminar conectores).
+
 ## Arbitraje ~11:00 sobre BUG-226 (desacuerdo aceptado, revisor rectifica)
 
 Codex discrepo de la orden "via libre a conectores" en lo tocante a 226 y
