@@ -133,13 +133,14 @@ func (store *StoreV0) saveAppDirectorGoalStateCASLockedV0(
 		if err != nil {
 			return orquestagoal.GoalWorkStateV0{}, err
 		}
-		if !reflect.DeepEqual(existing.Spec, state.Spec) {
-			return orquestagoal.GoalWorkStateV0{}, storeErrorV0("app_director_goal_state.spec", "goal spec congelada no puede cambiar")
-		}
 		if existing.StoreVersion != expectedVersion {
 			return orquestagoal.GoalWorkStateV0{}, orquestagoal.GoalWorkStateCASConflictErrorV0{
 				RunRef: runRef, ExpectedVersion: expectedVersion, CurrentVersion: existing.StoreVersion,
 			}
+		}
+		if !reflect.DeepEqual(existing.Spec, state.Spec) &&
+			len(orquestagoal.ValidateGoalWorkReworkSuccessorV0(existing, state, "")) > 0 {
+			return orquestagoal.GoalWorkStateV0{}, storeErrorV0("app_director_goal_state.spec", "goal spec congelada no puede cambiar")
 		}
 	} else if expectedVersion != 0 {
 		return orquestagoal.GoalWorkStateV0{}, orquestagoal.GoalWorkStateCASConflictErrorV0{

@@ -30,6 +30,15 @@ func (stack *StackV0) ObserveActiveGoalWorksV0(
 	}
 	out := orquestagoal.GoalWorkObserveActiveResultV0{}
 	for _, state := range states {
+		if repaired, ok, repairErr := orquestaappdirectorservice.ReconcileAppDirectorGoalReworkStateFromMarkerV0(ctx, state, stack.Ports); repairErr != nil {
+			out.Issues = append(out.Issues, orquestagoal.GoalWorkObserveActiveIssueV0{
+				RunRef: strings.TrimSpace(state.RunRef), GoalRef: strings.TrimSpace(state.GoalRef),
+				Code: "goal_rework_state_reconcile_failed", Field: "goal_state", Message: repairErr.Error(),
+			})
+			continue
+		} else if ok {
+			state = repaired
+		}
 		if !orquestagoal.GoalWorkStatePendingObservationV0(state) {
 			if !orquestagoal.GoalWorkStateShouldReturnActiveSnapshotV0(state, listRequest) {
 				continue

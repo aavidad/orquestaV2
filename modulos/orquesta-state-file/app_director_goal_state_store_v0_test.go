@@ -61,6 +61,51 @@ func TestStoreV0AppDirectorGoalStateNoPermiteMutarSpecCongelada(t *testing.T) {
 	}
 }
 
+func TestStoreV0AppDirectorGoalStatePermiteSucesorReworkCausalYRecuperaV0(t *testing.T) {
+	root := t.TempDir()
+	store, err := NewStoreV0(ConfigV0{RootDir: root})
+	if err != nil {
+		t.Fatalf("NewStoreV0: %v", err)
+	}
+	parent := appDirectorGoalStateForTestV0()
+	parent.Status = orquestagoal.GoalStatusCompleteV0
+	parent.LastClosure = &orquestagoal.GoalClosureValidationV0{Status: orquestagoal.GoalStatusBlockedV0, NeedsRework: true}
+	if err := store.SaveGoalWorkStateV0(context.Background(), parent); err != nil {
+		t.Fatalf("Save parent: %v", err)
+	}
+	parent, err = store.LoadGoalWorkStateV0(context.Background(), parent.RunRef)
+	if err != nil {
+		t.Fatalf("Load parent: %v", err)
+	}
+	closureRef := "closure-ref-state-file-parent-001"
+	successorSpec := parent.Spec
+	successorSpec.GoalRef = parent.GoalRef + "-rework-1"
+	successorSpec.ContextRefs = append(successorSpec.ContextRefs,
+		orquestagoal.GoalContextRefV0{Kind: "goal", Ref: parent.GoalRef, Required: true},
+		orquestagoal.GoalContextRefV0{Kind: "closure", Ref: closureRef, Required: true},
+	)
+	successor, err := orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
+		RunRef: parent.RunRef, Spec: successorSpec,
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{Status: orquestagoal.GoalStatusRunningV0},
+	})
+	if err != nil {
+		t.Fatalf("New successor: %v", err)
+	}
+	successor.StoreVersion = parent.StoreVersion
+	saved, err := store.CompareAndSwapGoalWorkStateV0(context.Background(), parent.StoreVersion, successor)
+	if err != nil || saved.GoalRef != successorSpec.GoalRef {
+		t.Fatalf("saved=%+v err=%v", saved, err)
+	}
+	recovered, err := NewStoreV0(ConfigV0{RootDir: root})
+	if err != nil {
+		t.Fatalf("NewStore recovered: %v", err)
+	}
+	loaded, err := recovered.LoadGoalWorkStateV0(context.Background(), parent.RunRef)
+	if err != nil || loaded.GoalRef != successorSpec.GoalRef || loaded.StoreVersion != parent.StoreVersion+1 {
+		t.Fatalf("loaded=%+v err=%v", loaded, err)
+	}
+}
+
 func TestStoreV0AppDirectorGoalFirstRunMarkerSobreviveRecreate(t *testing.T) {
 	root := t.TempDir()
 	store, err := NewStoreV0(ConfigV0{RootDir: root})

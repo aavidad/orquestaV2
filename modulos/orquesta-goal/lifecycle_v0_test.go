@@ -101,6 +101,55 @@ func TestStartGoalWorkV0PersisteContextBudgetDelReceiptV0(t *testing.T) {
 	}
 }
 
+func TestStartGoalWorkReworkSuccessorV0ReemplazaVersionExactaV0(t *testing.T) {
+	store := newGoalLifecycleStoreForTestV0()
+	parent := mustGoalLifecycleStateForTestV0(t)
+	parent.Status = GoalStatusCompleteV0
+	parent.LastResult = &GoalWorkResultV0{SchemaVersion: GoalWorkResultSchemaV0, Status: GoalStatusCompleteV0, GoalRef: parent.GoalRef}
+	parent.LastClosure = &GoalClosureValidationV0{Status: GoalStatusBlockedV0, NeedsRework: true}
+	parent.StoreVersion = 3
+	store.states[parent.RunRef] = parent
+	closureRef := "closure-ref-lifecycle-parent-001"
+	successor := parent.Spec
+	successor.GoalRef = parent.GoalRef + "-rework-1"
+	successor.ContextRefs = append(successor.ContextRefs,
+		GoalContextRefV0{Kind: "goal", Ref: parent.GoalRef, Required: true},
+		GoalContextRefV0{Kind: "closure", Ref: closureRef, Required: true},
+	)
+	launcher := &goalLifecycleLauncherForTestV0{receipt: GoalLaunchReceiptV0{Status: GoalStatusRunningV0}}
+
+	result, err := StartGoalWorkReworkSuccessorV0(context.Background(), GoalWorkReworkSuccessorStartRequestV0{
+		ParentState: parent, ParentClosureRef: closureRef, SuccessorSpec: successor,
+	}, GoalWorkLifecyclePortsV0{Launcher: launcher, StateStore: store})
+	if err != nil || launcher.calls != 1 || result.State.GoalRef != successor.GoalRef || result.State.StoreVersion != 4 {
+		t.Fatalf("result=%+v calls=%d err=%v", result, launcher.calls, err)
+	}
+	loaded, err := store.LoadGoalWorkStateV0(context.Background(), parent.RunRef)
+	if err != nil || loaded.GoalRef != successor.GoalRef || loaded.LastClosure != nil {
+		t.Fatalf("loaded=%+v err=%v", loaded, err)
+	}
+}
+
+func TestStartGoalWorkReworkSuccessorV0RechazaSaltoDeGeneracionV0(t *testing.T) {
+	parent := mustGoalLifecycleStateForTestV0(t)
+	parent.Status = GoalStatusCompleteV0
+	parent.LastClosure = &GoalClosureValidationV0{Status: GoalStatusBlockedV0, NeedsRework: true}
+	successor := parent.Spec
+	successor.GoalRef = parent.GoalRef + "-rework-2"
+	closureRef := "closure-ref-lifecycle-parent-001"
+	successor.ContextRefs = append(successor.ContextRefs,
+		GoalContextRefV0{Kind: "goal", Ref: parent.GoalRef, Required: true},
+		GoalContextRefV0{Kind: "closure", Ref: closureRef, Required: true},
+	)
+	launcher := &goalLifecycleLauncherForTestV0{}
+	_, err := StartGoalWorkReworkSuccessorV0(context.Background(), GoalWorkReworkSuccessorStartRequestV0{
+		ParentState: parent, ParentClosureRef: closureRef, SuccessorSpec: successor,
+	}, GoalWorkLifecyclePortsV0{Launcher: launcher, StateStore: newGoalLifecycleStoreForTestV0()})
+	if err == nil || launcher.calls != 0 {
+		t.Fatalf("err=%v calls=%d", err, launcher.calls)
+	}
+}
+
 func TestObserveGoalWorkV0FusionaContextBudgetDeProveedorV0(t *testing.T) {
 	state := mustGoalLifecycleStateForTestV0(t)
 	state.ContextBudget = GoalContextBudgetV0{
@@ -837,6 +886,28 @@ func (store *goalLifecycleStoreForTestV0) LoadGoalWorkStateV0(
 		return GoalWorkStateV0{}, errors.New("goal_state_not_found")
 	}
 	return state, nil
+}
+
+func (store *goalLifecycleStoreForTestV0) CompareAndSwapGoalWorkStateV0(
+	_ context.Context,
+	expectedVersion uint64,
+	state GoalWorkStateV0,
+) (GoalWorkStateV0, error) {
+	store.saves++
+	if store.saveErr != nil {
+		return GoalWorkStateV0{}, store.saveErr
+	}
+	current, ok := store.states[state.RunRef]
+	if (!ok && expectedVersion != 0) || (ok && current.StoreVersion != expectedVersion) {
+		return GoalWorkStateV0{}, GoalWorkStateCASConflictErrorV0{RunRef: state.RunRef, ExpectedVersion: expectedVersion, CurrentVersion: current.StoreVersion}
+	}
+	state.StoreVersion = expectedVersion + 1
+	normalized, err := NewGoalWorkStateV0(state)
+	if err != nil {
+		return GoalWorkStateV0{}, err
+	}
+	store.states[state.RunRef] = normalized
+	return normalized, nil
 }
 
 func (store *goalLifecycleStoreForTestV0) ListGoalWorkStatesV0(

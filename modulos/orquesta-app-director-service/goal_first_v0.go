@@ -386,12 +386,19 @@ func launchAppDirectorGoalReworkIfAllowedV0(
 	if !ok {
 		return run, false, nil
 	}
-	goalStarted, err := orquestagoal.StartGoalWorkV0(
+	if recovered, ok, err := ReconcileAppDirectorGoalReworkStateFromMarkerV0(ctx, state, ports); err != nil {
+		return run, true, err
+	} else if ok {
+		loaded, loadErr := ports.RunStore.LoadRunV0(ctx, recovered.RunRef)
+		return loaded, true, loadErr
+	}
+	goalStarted, err := orquestagoal.StartGoalWorkReworkSuccessorV0(
 		ctx,
-		orquestagoal.GoalWorkStartRequestV0{
-			RunRef:       state.RunRef,
-			Spec:         spec,
-			EvidenceRefs: appDirectorGoalCommandEvidenceRefsV0(state, result, closure),
+		orquestagoal.GoalWorkReworkSuccessorStartRequestV0{
+			ParentState:      state,
+			ParentClosureRef: appDirectorGoalClosureRefV0(state),
+			SuccessorSpec:    spec,
+			EvidenceRefs:     appDirectorGoalCommandEvidenceRefsV0(state, result, closure),
 		},
 		orquestagoal.GoalWorkLifecyclePortsV0{
 			Launcher:               ports.GoalReworkLauncher,
@@ -434,6 +441,56 @@ func launchAppDirectorGoalReworkIfAllowedV0(
 	}
 	loaded, err := ports.RunStore.LoadRunV0(ctx, state.RunRef)
 	return loaded, true, err
+}
+
+// ReconcileAppDirectorGoalReworkStateFromMarkerV0 repairs the narrow crash
+// window where a rework launch receipt was persisted but its successor state
+// CAS did not complete. It never launches a provider.
+func ReconcileAppDirectorGoalReworkStateFromMarkerV0(
+	ctx context.Context,
+	parent AppDirectorGoalStateV0,
+	ports StartAppDirectorPortsV0,
+) (AppDirectorGoalStateV0, bool, error) {
+	if ports.GoalFirstRunMarkerStore == nil || ports.GoalStateStore == nil {
+		return parent, false, nil
+	}
+	marker, err := ports.GoalFirstRunMarkerStore.LoadGoalWorkRunMarkerV0(ctx, parent.RunRef)
+	if err != nil {
+		if continueAppDirectorGoalFirstMarkerMissingV0(err) {
+			return parent, false, nil
+		}
+		return AppDirectorGoalStateV0{}, false, err
+	}
+	marker, err = NewAppDirectorGoalFirstRunMarkerV0(marker)
+	if err != nil {
+		return AppDirectorGoalStateV0{}, false, err
+	}
+	if marker.GoalRef == parent.GoalRef || marker.Spec == nil || marker.LaunchReceipt == nil {
+		return parent, false, nil
+	}
+	successor, err := orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
+		RunRef: parent.RunRef, Spec: *marker.Spec, LaunchReceipt: *marker.LaunchReceipt,
+		EvidenceRefs: compactStartAppDirectorStringsV0(append(
+			[]string{"evidence-ref-app-director-goal-rework-state-repaired-from-marker-v0"},
+			marker.EvidenceRefs...,
+		)),
+	})
+	if err != nil {
+		return AppDirectorGoalStateV0{}, false, err
+	}
+	if issues := orquestagoal.ValidateGoalWorkReworkSuccessorV0(parent, successor, appDirectorGoalClosureRefV0(parent)); len(issues) > 0 {
+		return parent, false, nil
+	}
+	cas, ok := ports.GoalStateStore.(orquestagoal.GoalWorkStateCASStorePortV0)
+	if !ok {
+		return AppDirectorGoalStateV0{}, false, AppDirectorServiceIssueV0{Field: "ports.goal_state_cas_store"}
+	}
+	successor.StoreVersion = parent.StoreVersion
+	saved, err := cas.CompareAndSwapGoalWorkStateV0(ctx, parent.StoreVersion, successor)
+	if err != nil {
+		return AppDirectorGoalStateV0{}, false, err
+	}
+	return saved, true, nil
 }
 
 func appDirectorGoalShouldLaunchReworkV0(

@@ -1097,6 +1097,45 @@ func TestObserveAppDirectorGoalV0LanzaReworkGoalSiPolicyYPuertoDisponibles(t *te
 	}
 }
 
+func TestReconcileAppDirectorGoalReworkStateFromMarkerV0RecuperaSinRelanzarV0(t *testing.T) {
+	_, _, goalStates, launcher, _ := serviceStartGoalFirstForObserveTestV0(t)
+	parent, err := goalStates.LoadGoalWorkStateV0(context.Background(), launcher.specs[0].RunRef)
+	if err != nil {
+		t.Fatalf("Load parent: %v", err)
+	}
+	parent.Status = orquestagoal.GoalStatusCompleteV0
+	parent.LastClosure = &orquestagoal.GoalClosureValidationV0{Status: orquestagoal.GoalStatusBlockedV0, NeedsRework: true}
+	parent, err = goalStates.CompareAndSwapGoalWorkStateV0(context.Background(), parent.StoreVersion, parent)
+	if err != nil {
+		t.Fatalf("CAS parent: %v", err)
+	}
+	reworkSpec := parent.Spec
+	reworkSpec.GoalRef = parent.GoalRef + "-rework-1"
+	reworkSpec.ContextRefs = append(reworkSpec.ContextRefs,
+		orquestagoal.GoalContextRefV0{Kind: "goal", Ref: parent.GoalRef, Required: true},
+		orquestagoal.GoalContextRefV0{Kind: "closure", Ref: appDirectorGoalClosureRefV0(parent), Required: true},
+	)
+	markers := newServiceGoalFirstRunMarkerStoreForTestV0()
+	if err := markers.SaveGoalWorkRunMarkerV0(context.Background(), appDirectorGoalFirstRunMarkerFromLaunchV0(
+		parent.RunRef,
+		reworkSpec,
+		orquestagoal.GoalLaunchReceiptV0{Status: orquestagoal.GoalStatusRunningV0, GoalRef: reworkSpec.GoalRef, ExternalGoalRef: "thread-ref-rework-recovered-001"},
+		[]string{"evidence-ref-rework-launch-recovered-001"},
+	)); err != nil {
+		t.Fatalf("Save marker: %v", err)
+	}
+
+	recovered, ok, err := ReconcileAppDirectorGoalReworkStateFromMarkerV0(context.Background(), parent, StartAppDirectorPortsV0{
+		GoalStateStore: goalStates, GoalFirstRunMarkerStore: markers,
+	})
+	if err != nil || !ok || recovered.GoalRef != reworkSpec.GoalRef || recovered.StoreVersion != parent.StoreVersion+1 {
+		t.Fatalf("recovered=%+v ok=%v err=%v", recovered, ok, err)
+	}
+	if launcher.calls != 1 {
+		t.Fatalf("recovery relaunched provider: calls=%d", launcher.calls)
+	}
+}
+
 func TestObserveAppDirectorGoalV0LanzaReworkGoalPorTimeoutActivoV0(t *testing.T) {
 	store, sink, goalStates, launcher, started := serviceStartGoalFirstForObserveTestV0(t)
 	spec := launcher.specs[0]
@@ -1821,6 +1860,29 @@ func (store *serviceGoalStateStoreForTestV0) LoadGoalWorkStateV0(
 		return AppDirectorGoalStateV0{}, AppDirectorServiceIssueV0{Field: "goal_state"}
 	}
 	return state, nil
+}
+
+func (store *serviceGoalStateStoreForTestV0) CompareAndSwapGoalWorkStateV0(
+	_ context.Context,
+	expectedVersion uint64,
+	state AppDirectorGoalStateV0,
+) (AppDirectorGoalStateV0, error) {
+	if store.saveErr != nil {
+		return AppDirectorGoalStateV0{}, store.saveErr
+	}
+	current, ok := store.states[state.RunRef]
+	if (!ok && expectedVersion != 0) || (ok && current.StoreVersion != expectedVersion) {
+		return AppDirectorGoalStateV0{}, orquestagoal.GoalWorkStateCASConflictErrorV0{
+			RunRef: state.RunRef, ExpectedVersion: expectedVersion, CurrentVersion: current.StoreVersion,
+		}
+	}
+	state.StoreVersion = expectedVersion + 1
+	normalized, err := NewAppDirectorGoalStateV0(state)
+	if err != nil {
+		return AppDirectorGoalStateV0{}, err
+	}
+	store.states[state.RunRef] = normalized
+	return normalized, nil
 }
 
 type serviceGoalFirstRunMarkerStoreForTestV0 struct {

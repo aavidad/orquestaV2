@@ -31,6 +31,15 @@ type GoalWorkStartResultV0 struct {
 	EvidenceRefs []string            `json:"evidence_refs,omitempty"`
 }
 
+// GoalWorkReworkSuccessorStartRequestV0 replaces one completed reworkable
+// attempt with its immediate successor under the same run.
+type GoalWorkReworkSuccessorStartRequestV0 struct {
+	ParentState      GoalWorkStateV0 `json:"parent_state"`
+	ParentClosureRef string          `json:"parent_closure_ref"`
+	SuccessorSpec    GoalWorkSpecV0  `json:"successor_spec"`
+	EvidenceRefs     []string        `json:"evidence_refs,omitempty"`
+}
+
 type GoalWorkObserveRequestV0 struct {
 	RunRef string `json:"run_ref"`
 }
@@ -124,6 +133,81 @@ func StartGoalWorkV0(
 		return result, err
 	}
 	result.State = state
+	return result, nil
+}
+
+// StartGoalWorkReworkSuccessorV0 launches and atomically persists the next
+// causal rework attempt for a run. It deliberately requires a CAS store: a
+// successor must replace the exact parent version, never a new version-zero
+// state.
+func StartGoalWorkReworkSuccessorV0(
+	ctx context.Context,
+	request GoalWorkReworkSuccessorStartRequestV0,
+	ports GoalWorkLifecyclePortsV0,
+) (GoalWorkStartResultV0, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if ports.Launcher == nil {
+		return GoalWorkStartResultV0{}, GoalWorkLifecycleIssueErrorV0{Field: "ports.goal_launcher"}
+	}
+	if ports.StateStore == nil {
+		return GoalWorkStartResultV0{}, GoalWorkLifecycleIssueErrorV0{Field: "ports.goal_state_store"}
+	}
+	cas, ok := ports.StateStore.(GoalWorkStateCASStorePortV0)
+	if !ok {
+		return GoalWorkStartResultV0{}, GoalWorkLifecycleIssueErrorV0{Field: "ports.goal_state_cas_store"}
+	}
+	parent, err := NewGoalWorkStateV0(request.ParentState)
+	if err != nil {
+		return GoalWorkStartResultV0{}, GoalWorkLifecycleIssueErrorV0{Field: "parent_state"}
+	}
+	spec := goalWorkSpecWithRunRefV0(request.SuccessorSpec, parent.RunRef)
+	if spec.ClosurePolicy.RequireIndependentRequiredTestAttestation {
+		if ports.RequiredTestSpecBinder == nil {
+			return GoalWorkStartResultV0{}, GoalWorkLifecycleIssueErrorV0{Field: "ports.goal_required_test_spec_binder"}
+		}
+		spec, err = ports.RequiredTestSpecBinder.BindGoalRequiredTestSpecV0(ctx, spec)
+		if err != nil {
+			return GoalWorkStartResultV0{}, err
+		}
+	}
+	if issues := ValidateGoalWorkReworkSuccessorV0(parent, GoalWorkStateV0{
+		RunRef:  parent.RunRef,
+		GoalRef: spec.GoalRef,
+		Spec:    spec,
+	}, request.ParentClosureRef); len(issues) > 0 {
+		return GoalWorkStartResultV0{}, GoalWorkLifecycleIssueErrorV0{Field: "rework_successor_spec", Issues: issues}
+	}
+	if issues := ValidateGoalRequiredTestAttestationBindingV0(spec); len(issues) > 0 {
+		return GoalWorkStartResultV0{}, GoalWorkLifecycleIssueErrorV0{Field: "goal_required_test_attestation_binding", Issues: issues}
+	}
+	receipt, err := ports.Launcher.LaunchGoalWorkV0(ctx, spec)
+	if err != nil {
+		return GoalWorkStartResultV0{Receipt: NormalizeGoalLaunchReceiptV0(receipt)}, err
+	}
+	state, err := NewGoalWorkStateFromLaunchV0(GoalWorkStateFromLaunchRequestV0{
+		RunRef:        parent.RunRef,
+		Spec:          spec,
+		LaunchReceipt: receipt,
+		EvidenceRefs:  request.EvidenceRefs,
+	})
+	if err != nil {
+		return GoalWorkStartResultV0{Receipt: NormalizeGoalLaunchReceiptV0(receipt)}, err
+	}
+	state.StoreVersion = parent.StoreVersion
+	result := GoalWorkStartResultV0{
+		State:        state,
+		Receipt:      state.LaunchReceipt,
+		EvidenceRefs: append([]string(nil), state.EvidenceRefs...),
+	}
+	saved, err := cas.CompareAndSwapGoalWorkStateV0(ctx, parent.StoreVersion, state)
+	if err != nil {
+		return result, err
+	}
+	result.State = saved
+	result.Receipt = saved.LaunchReceipt
+	result.EvidenceRefs = append([]string(nil), saved.EvidenceRefs...)
 	return result, nil
 }
 
