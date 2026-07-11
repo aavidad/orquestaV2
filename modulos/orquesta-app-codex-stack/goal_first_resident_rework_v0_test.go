@@ -824,6 +824,82 @@ func TestRunSupervisorGoalFirstResidentNoRelanzaTimeoutConArtefactosV0(t *testin
 	}
 }
 
+func TestRunSupervisorGoalFirstResidentPreparaSucesorPorAttestorInfraTipadoV0(t *testing.T) {
+	ctx := context.Background()
+	store := newGoalFirstQueueStateStoreForTestV0()
+	launcher := &goalFirstResidentReworkLauncherForTestV0{}
+	source := goalFirstResidentReworkSourceStateForTestV0(
+		"run-ref-goal-first-resident-attestor-infra-001",
+		orquestagoal.ErrGoalRequiredTestAttestorInfrastructureFailedV0,
+	)
+	source.LastResult.EvidenceRefs = nil
+	source.LastClosure.EvidenceRefs = nil
+	source.LastClosure.NeedsRework = false
+	source.Spec.ContextRefs = []orquestagoal.GoalContextRefV0{{
+		Kind: "source_task", Ref: "task-ref-attestor-rework-code-gate3", Required: true,
+	}}
+	if err := store.SaveGoalWorkStateV0(ctx, source); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0 source: %v", err)
+	}
+	executor := CodexStackRunSupervisorExecutorV0{Stack: &StackV0{
+		Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
+			GoalStateStore:     store,
+			GoalReworkLauncher: launcher,
+		},
+		Stores: StoresV0{AppGoalStateStore: store},
+	}}
+
+	result, err := executor.Execute(ctx, orquestamcp.MCPRunSupervisorToolInputV0{
+		RunRef: source.RunRef, ResidentMode: true,
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.StopReason != "goal_first_resident_rework_prepared" || len(result.RepairRunRefs) != 1 || launcher.calls != 1 {
+		t.Fatalf("attestor infra no preparo sucesor causal: result=%+v calls=%d", result, launcher.calls)
+	}
+	if !hasGoalFirstResidentReworkContextForTestV0(launcher.specs[0].ContextRefs, "source_run", source.RunRef) ||
+		!hasGoalFirstResidentReworkContextForTestV0(launcher.specs[0].ContextRefs, "rework_reason", orquestagoal.ErrGoalRequiredTestAttestorInfrastructureFailedV0) ||
+		!hasGoalFirstResidentReworkContextForTestV0(launcher.specs[0].ContextRefs, "source_task", "task-ref-attestor-rework-code-gate3") {
+		t.Fatalf("sucesor sin causalidad de attestor infra: %+v", launcher.specs[0].ContextRefs)
+	}
+}
+
+func TestRunSupervisorGoalFirstResidentNoPreparaSucesorPorTextoAttestorInfraV0(t *testing.T) {
+	ctx := context.Background()
+	store := newGoalFirstQueueStateStoreForTestV0()
+	launcher := &goalFirstResidentReworkLauncherForTestV0{}
+	source := goalFirstResidentReworkSourceStateForTestV0(
+		"run-ref-goal-first-resident-attestor-infra-text-001",
+		"unrelated_blocked_issue",
+	)
+	source.LastResult.Issues = nil
+	source.LastClosure.Issues = nil
+	source.LastResult.Summary = orquestagoal.ErrGoalRequiredTestAttestorInfrastructureFailedV0
+	source.LastResult.EvidenceRefs = []string{"evidence-ref-" + orquestagoal.ErrGoalRequiredTestAttestorInfrastructureFailedV0}
+	source.LastClosure.EvidenceRefs = []string{"log-ref-" + orquestagoal.ErrGoalRequiredTestAttestorInfrastructureFailedV0}
+	if err := store.SaveGoalWorkStateV0(ctx, source); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0 source: %v", err)
+	}
+	executor := CodexStackRunSupervisorExecutorV0{Stack: &StackV0{
+		Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
+			GoalStateStore:     store,
+			GoalReworkLauncher: launcher,
+		},
+		Stores: StoresV0{AppGoalStateStore: store},
+	}}
+
+	result, err := executor.Execute(ctx, orquestamcp.MCPRunSupervisorToolInputV0{
+		RunRef: source.RunRef, ResidentMode: true,
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if launcher.calls != 0 || len(result.RepairRunRefs) != 0 || result.StopReason != "goal_first_observe_required" {
+		t.Fatalf("texto de attestor infra preparo sucesor indebidamente: result=%+v calls=%d", result, launcher.calls)
+	}
+}
+
 func goalFirstResidentReworkSourceStateForTestV0(runRef, reason string) orquestagoal.GoalWorkStateV0 {
 	goalRef := strings.Replace(runRef, "run-ref-", "goal-ref-", 1)
 	return orquestagoal.GoalWorkStateV0{

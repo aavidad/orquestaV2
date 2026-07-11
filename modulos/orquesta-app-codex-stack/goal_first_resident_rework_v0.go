@@ -161,6 +161,12 @@ func goalFirstResidentReworkReasonV0(state orquestagoal.GoalWorkStateV0) (string
 	if goalFirstResidentHasStructuredIssueOrEvidenceV0(state, goalFirstResidentHardStopMaterialProgressV0) {
 		return "", nil, false
 	}
+	// Un fallo de infraestructura del attestor es una causa durable y tipada.
+	// No se deriva de summaries, logs ni evidence refs: esos textos pueden ser
+	// diagnosticos recuperables y no autorizan por si solos un sucesor causal.
+	if goalFirstResidentHasTypedIssueV0(state, orquestagoal.ErrGoalRequiredTestAttestorInfrastructureFailedV0) {
+		return orquestagoal.ErrGoalRequiredTestAttestorInfrastructureFailedV0, goalFirstResidentReworkEvidenceRefsV0(state), true
+	}
 	if !goalFirstResidentStateNeedsReworkV0(state) {
 		return "", nil, false
 	}
@@ -201,6 +207,19 @@ func goalFirstResidentReworkReasonV0(state orquestagoal.GoalWorkStateV0) (string
 		}
 	}
 	return "", nil, false
+}
+
+func goalFirstResidentHasTypedIssueV0(state orquestagoal.GoalWorkStateV0, code string) bool {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		return false
+	}
+	for _, issue := range goalFirstResidentIssueCodesV0(state) {
+		if strings.TrimSpace(issue) == code {
+			return true
+		}
+	}
+	return false
 }
 
 func goalFirstResidentStateNeedsReworkV0(state orquestagoal.GoalWorkStateV0) bool {
