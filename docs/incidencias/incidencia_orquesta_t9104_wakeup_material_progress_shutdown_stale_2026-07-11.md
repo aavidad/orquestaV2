@@ -50,8 +50,18 @@ Cierre local:
 - cada snapshot nuevo invalida las acciones derivadas del anterior;
 - la respuesta downstream vuelve a persistir las acciones actuales si siguen
   siendo necesarias;
+- un resultado `ready` fresco no hereda `ShutdownAsyncWorkActive` de un intento
+  anterior y limpia `ShutdownStopTimeoutAt`; los estados no terminales siguen
+  conservando el contador async, porque aun puede representar drain real;
 - una regresion secuencial demuestra `backend_still_running -> snapshot vacio
   -> ready`, sin relajar el guard que conserva trabajo realmente observado.
+
+La auditoria paralela encontro dos decoradores adicionales que estrechan sus
+interfaces: `serverWakeupRunStoreV0` no reexpone lectores de eventos y
+`ackRuntimeCleanupEventSinkV0` tampoco. No se registran como bug operativo en
+este corte: los consumidores actuales usan `EventReader` explicito o el
+`EventSink` original. Quedan como hallazgo de limpieza estructural para revisar
+sin bloquear el replay de nucleo.
 
 ## Verificacion local
 

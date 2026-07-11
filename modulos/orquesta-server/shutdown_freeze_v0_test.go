@@ -952,6 +952,50 @@ func TestRuntimeV0ServerShutdownSnapshotVacioRetiraAccionBloqueantePreviaV0(t *t
 	}
 }
 
+func TestRuntimeV0ServerShutdownNuevoIntentoRetiraTimeoutYAsyncPreviosV0(t *testing.T) {
+	stateDir := t.TempDir()
+	app := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != serverShutdownRoutePathV0 {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"estado":"ok","status":"ready","shutdown_ready":true}`))
+	})
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:     stateDir,
+		TickInterval: time.Hour,
+	}, RuntimeDepsV0{
+		AppHandler:       app,
+		Clock:            fixedClockV0{now: time.Date(2026, 7, 11, 10, 45, 0, 0, time.UTC)},
+		ShutdownSnapshot: fakeShutdownSnapshotPortV0{},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+	runtime.persistStateTransitionV0(
+		context.Background(),
+		runtime.tracker.MarkRuntimeStopTimeoutV0("previous_stop_timeout", 2, time.Date(2026, 7, 11, 10, 40, 0, 0, time.UTC)),
+		"test_previous_stop_timeout",
+	)
+	if previous := runtime.StateV0(); previous.ShutdownAsyncWorkActive != 2 || previous.ShutdownStopTimeoutAt == "" {
+		t.Fatalf("fixture timeout previo invalido: %+v", previous)
+	}
+
+	recorder := httptest.NewRecorder()
+	runtime.HandlerV0().ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, serverShutdownRoutePathV0, nil))
+	var payload serverShutdownHTTPProjectionV0
+	if err := json.Unmarshal(recorder.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode shutdown response: %v body=%s", err, recorder.Body.String())
+	}
+	state := runtime.StateV0()
+	if !payload.ShutdownReady || !payload.ExitPending || payload.Status != "ready" ||
+		state.ShutdownInProgress || !state.ShutdownReady ||
+		state.ShutdownAsyncWorkActive != 0 || state.ShutdownStopTimeoutAt != "" {
+		t.Fatalf("nuevo intento heredo timeout/async previos: payload=%+v state=%+v", payload, state)
+	}
+}
+
 func TestRuntimeV0ServerShutdownConflictSinCuerpoConservaSnapshotPrevioActivoV0(t *testing.T) {
 	stateDir := t.TempDir()
 	app := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

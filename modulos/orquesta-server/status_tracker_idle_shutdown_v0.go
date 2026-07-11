@@ -71,6 +71,9 @@ func (tracker *StatusTrackerV0) MarkShutdownResultV0(
 		state.ShutdownActiveWorkRefs = compactServerStringsV0(result.ActiveWorkRefs)
 		state.ShutdownGoalActions = compactShutdownGoalActionsV0(result.GoalActions)
 		state.SupervisorFrozen = keepFrozen
+		if result.Ready {
+			state.ShutdownStopTimeoutAt = ""
+		}
 		if keepFrozen {
 			state.SupervisorTickActive = false
 		}

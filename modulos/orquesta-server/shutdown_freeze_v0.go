@@ -140,7 +140,7 @@ func (runtime *RuntimeV0) shutdownProjectionWithPreviousSnapshotV0(
 	if len(projection.GoalActions) == 0 && len(state.ShutdownGoalActions) > 0 {
 		projection.GoalActions = compactShutdownGoalActionsV0(state.ShutdownGoalActions)
 	}
-	if projection.AsyncWorkActive <= 0 && state.ShutdownAsyncWorkActive > 0 {
+	if !projection.Ready && projection.AsyncWorkActive <= 0 && state.ShutdownAsyncWorkActive > 0 {
 		projection.AsyncWorkActive = state.ShutdownAsyncWorkActive
 	}
 	if strings.TrimSpace(projection.Status) == "http_status" &&
