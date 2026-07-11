@@ -267,14 +267,14 @@ func TestIdleSelfImprovementBacklogPlannerV0DeduplicaSelfAuditConKnownRefV0(t *t
 	}
 }
 
-func TestRuntimeV0SelfAuditBacklogGoalFirstLanzaSpecOperacionalV0(t *testing.T) {
+func TestRuntimeV0SelfAuditBacklogGoalFirstLanzaSpecU1000TipadoV0(t *testing.T) {
 	requireLocalTCPForTestV0(t)
 	restore := replaceSelfAuditRunnerForTestV0(func(_ context.Context, _ string, command selfAuditCommandV0) selfAuditCommandResultV0 {
 		if command.ToolRef != "staticcheck" {
 			return selfAuditCommandResultV0{}
 		}
 		return selfAuditCommandResultV0{
-			Output: "cmd/orquesta-server/self_audit_fixture_v0.go:12:3: should replace loop with copy (S1011)\n",
+			Output: "modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_v0.go:251:6: func codexAppServerWriteSetCheckpointDirRelV0 is unused (U1000)\n",
 		}
 	})
 	defer restore()
@@ -329,9 +329,11 @@ func TestRuntimeV0SelfAuditBacklogGoalFirstLanzaSpecOperacionalV0(t *testing.T) 
 	if spec.WorkKind != "idle_self_improvement" ||
 		spec.DirectorKind != orquestagoal.GoalDirectorKindCodexGoalV0 ||
 		spec.ProjectRef != "project-ref-self-audit-operational" ||
-		!strings.Contains(spec.Objective, "S1011") ||
-		!containsGoalWritePathSelfAuditTestV0(spec.WriteSet, "cmd/orquesta-server/self_audit_fixture_v0.go") ||
+		!strings.Contains(spec.Objective, "U1000") ||
+		!containsGoalWritePathSelfAuditTestV0(spec.WriteSet, "modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_v0.go") ||
 		!containsGoalRequiredTestSelfAuditTestV0(spec.RequiredTests, "staticcheck ./...") ||
+		len(spec.ClosurePolicy.RequiredAcceptanceCriteriaRefs) != 1 ||
+		!spec.ClosurePolicy.RequireIndependentRequiredTestAttestation ||
 		!containsGoalContextRefSelfAuditTestV0(spec.ContextRefs, "backlog_doc:self_audit://staticcheck") ||
 		!containsStringPrefixSelfAuditTestV0(spec.EvidenceRefs, "evidence-ref-autoprogramming-backlog-section-self-audit-") ||
 		!spec.ClosurePolicy.RequireRequiredTests ||
