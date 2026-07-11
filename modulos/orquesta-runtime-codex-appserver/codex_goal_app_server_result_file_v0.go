@@ -198,21 +198,6 @@ func codexAppServerActiveThreadReadFailureBlocksV0(issueCode string) bool {
 	}
 }
 
-func codexAppServerGoalResultReadyForActiveCompletionV0(marked codexAppServerGoalResultMarkerV0) bool {
-	if !codexAppServerGoalResultStatusIsCompletionV0(codexAppServerGoalResultExplicitStatusV0(marked)) {
-		return false
-	}
-	for _, result := range marked.RequiredTestResults {
-		switch strings.TrimSpace(result.Status) {
-		case "passed", orquestagoal.GoalStatusAcceptedV0:
-			continue
-		default:
-			return false
-		}
-	}
-	return true
-}
-
 func codexAppServerGoalResultFromWorkspaceV0(
 	root string,
 	goalRef string,

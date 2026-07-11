@@ -53,3 +53,28 @@ retirada y E2E que reabre adaptadores. Se descarta modificar el observador y se
 evita un limite que pueda causar starvation. La prueba demuestra que contexto
 minimo sin criterio de integracion puede ahorrar tokens pero empeorar evidencia;
 contexto completo tampoco garantiza una solucion mejor.
+
+## Replica con limpieza simple
+
+Se repitio el mismo protocolo sobre otra tarea real: retirar
+`codexAppServerGoalResultReadyForActiveCompletionV0`, privada y sin callers
+globales. Los cuatro agentes partieron de `c2bc646a8` y produjeron exactamente
+el mismo diff: un fichero y 15 eliminaciones.
+
+| Nivel | Tiempo | Comandos | Input | Cached | Nuevo | Output | Evidencia |
+|---|---:|---:|---:|---:|---:|---:|---|
+| L1 | 57 s | 6 | 258.727 | 234.240 | 24.487 | 2.081 | diff/check; paquete bloqueado por tmux sandbox |
+| L2 | 83 s | 7 | 360.609 | 318.720 | 41.889 | 3.154 | añade focales receipt activo verdes |
+| L3 | 82 s | 9 | 480.962 | 439.296 | 41.666 | 2.901 | misma evidencia funcional que L2 |
+| L4 | 149 s | 15 | 1.558.731 | 1.455.872 | 102.859 | 6.578 | añade historia y vet; mismo diff |
+
+La replica descarta usar siempre L3: para limpieza local simple, L2 obtiene la
+evidencia necesaria con 25 % menos input que L3 y 77 % menos que L4. L1 es el
+mas barato, pero el prompt no exigia focales concretas y dejo menor evidencia.
+La politica resultante es adaptativa:
+
+1. Tarea mecanica/local: L2, con contrato local, referencias y focales.
+2. Bug causal/restart: paquete compacto de sintomas e invariantes mas criterio
+   E2E explicito; ampliar simbolos, no documentos completos.
+3. Contexto amplio solo tras una busqueda acotada que demuestre una frontera
+   desconocida; nunca por defecto.
