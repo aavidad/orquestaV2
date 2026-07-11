@@ -824,7 +824,7 @@ func TestRunSupervisorGoalFirstResidentNoRelanzaTimeoutConArtefactosV0(t *testin
 	}
 }
 
-func TestRunSupervisorGoalFirstResidentPreparaSucesorPorAttestorInfraTipadoV0(t *testing.T) {
+func TestRunSupervisorGoalFirstResidentReworkPreparaSucesorPorAttestorInfraTipadoV0(t *testing.T) {
 	ctx := context.Background()
 	store := newGoalFirstQueueStateStoreForTestV0()
 	launcher := &goalFirstResidentReworkLauncherForTestV0{}
@@ -865,7 +865,7 @@ func TestRunSupervisorGoalFirstResidentPreparaSucesorPorAttestorInfraTipadoV0(t 
 	}
 }
 
-func TestRunSupervisorGoalFirstResidentNoPreparaSucesorPorTextoAttestorInfraV0(t *testing.T) {
+func TestRunSupervisorGoalFirstResidentReworkNoPreparaSucesorPorTextoAttestorInfraV0(t *testing.T) {
 	ctx := context.Background()
 	store := newGoalFirstQueueStateStoreForTestV0()
 	launcher := &goalFirstResidentReworkLauncherForTestV0{}
