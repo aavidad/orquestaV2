@@ -815,11 +815,44 @@ func TestMarkerYLeaseV0SonDisjuntosParaDosSocketsV0(t *testing.T) {
 	guard2.releaseV0()
 }
 
-func TestMarkerScanV0SoloUsaSocketPathOwnerJSONExactoV0(t *testing.T) {
+func TestMarkerScanV0IncluyeSoloCuarentenasDelOwnerJSONConfiguradoV0(t *testing.T) {
 	backend, _ := newGenerationLeaseBackendForTestV0(t)
+	quarantine := filepath.Join(filepath.Dir(backend.tmuxOwnerMarkerPathV0()), ".orquesta-quarantine-"+filepath.Base(backend.tmuxOwnerMarkerPathV0())+"-test")
+	writeGenerationMarkerTestV0(t, quarantine, generationMarkerForCurrentProcessTestV0(t, backend, "generation-ref-scan"))
+	if err := os.WriteFile(filepath.Join(filepath.Dir(quarantine), ".orquesta-quarantine-other.json-test"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	paths := backend.tmuxOwnerMarkerScanPathsV0()
-	if len(paths) != 1 || filepath.Clean(paths[0]) != filepath.Clean(backend.SocketPath+".owner.json") {
-		t.Fatalf("marker paths=%v exact=%s", paths, backend.SocketPath+".owner.json")
+	if len(paths) != 2 || filepath.Clean(paths[0]) != filepath.Clean(backend.SocketPath+".owner.json") || filepath.Clean(paths[1]) != quarantine {
+		t.Fatalf("marker paths=%v", paths)
+	}
+}
+
+func TestCleanupV0DescubreYRestauraMarkerCuarentenadoConSesionVerificadaV0(t *testing.T) {
+	backend, tmuxLog := newGenerationLeaseBackendForTestV0(t)
+	marker := generationMarkerForCurrentProcessTestV0(t, backend, "generation-ref-quarantined-live")
+	marker.AppServerPID = 99999999
+	marker.AppServerStartRef = ""
+	marker.TmuxSessionID = "$quarantined"
+	marker.TmuxSessionCreated = "100"
+	writeFakeTmuxStateTestV0(t, tmuxLog, "$quarantined", "100", os.Getpid())
+	if err := os.WriteFile(tmuxLog+".generation", []byte(marker.GenerationRef+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	quarantine := filepath.Join(filepath.Dir(backend.tmuxOwnerMarkerPathV0()), ".orquesta-quarantine-"+filepath.Base(backend.tmuxOwnerMarkerPathV0())+"-live")
+	writeGenerationMarkerTestV0(t, quarantine, marker)
+
+	active, err := backend.ReadActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkRequestV0{})
+	if err != nil || len(active.ActiveWorks) != 1 || !containsStringMigratedTestV0(active.EvidenceRefs, "evidence-ref-codex-app-server-tmux-owner-quarantine") {
+		t.Fatalf("active=%+v err=%v", active, err)
+	}
+	result, err := backend.CleanupActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkCleanupCommandV0{CleanupGoalBackends: true})
+	if err != nil || result.CleanedWorkCount != 1 || !containsStringMigratedTestV0(result.EvidenceRefs, "evidence-ref-codex-app-server-tmux-owner-quarantine-restored") {
+		t.Fatalf("cleanup=%+v err=%v", result, err)
+	}
+	active, err = backend.ReadActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkRequestV0{})
+	if err != nil || len(active.ActiveWorks) != 0 {
+		t.Fatalf("active after cleanup=%+v err=%v", active, err)
 	}
 }
 

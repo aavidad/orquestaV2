@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"syscall"
@@ -160,6 +161,16 @@ func (backend serverCodexAppServerTmuxBackendV0) CleanupActiveShutdownWorkV0(
 		"evidence-ref-codex-app-server-tmux-cleanup-requested",
 	))
 	cleaned := 0
+	if restored, err := backend.restoreLiveQuarantinedTmuxOwnerMarkerV0(ctx); err != nil {
+		if codexAppServerTmuxIsGenerationConflictV0(err) || codexAppServerTmuxIsObservationTransientV0(err) {
+			return orquestaservershutdown.ActiveShutdownWorkCleanupResultV0{
+				EvidenceRefs: compactStringsV0(append(evidenceRefs, "evidence-ref-codex-app-server-tmux-generation-conflict-residual")),
+			}, nil
+		}
+		return orquestaservershutdown.ActiveShutdownWorkCleanupResultV0{}, err
+	} else if restored {
+		evidenceRefs = append(evidenceRefs, "evidence-ref-codex-app-server-tmux-owner-quarantine-restored")
+	}
 	if backend.detectTmuxResidueV0(ctx).Active {
 		if err := backend.shutdownTmuxSessionForCleanupV0(ctx); err != nil {
 			if codexAppServerTmuxIsGenerationConflictV0(err) || codexAppServerTmuxIsObservationTransientV0(err) {
@@ -185,4 +196,52 @@ func (backend serverCodexAppServerTmuxBackendV0) CleanupActiveShutdownWorkV0(
 		CleanedWorkCount: cleaned,
 		EvidenceRefs:     compactStringsV0(evidenceRefs),
 	}, nil
+}
+
+func (backend serverCodexAppServerTmuxBackendV0) restoreLiveQuarantinedTmuxOwnerMarkerV0(ctx context.Context) (bool, error) {
+	canonical := filepath.Clean(backend.tmuxOwnerMarkerPathV0())
+	if canonical == "." || canonical == "" {
+		return false, nil
+	}
+	guard, err := backend.acquireTmuxLeaseGuardV0(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer guard.releaseV0()
+	if _, err := os.Lstat(canonical); !errors.Is(err, os.ErrNotExist) {
+		if err != nil {
+			return false, codexAppServerTmuxConflictErrorV0(codexAppServerTmuxGenerationConflictV0)
+		}
+		return false, nil
+	}
+	for _, path := range backend.tmuxOwnerMarkerScanPathsV0() {
+		path = filepath.Clean(path)
+		if path == canonical {
+			continue
+		}
+		marker, ok := readCodexAppServerTmuxOwnerMarkerPathV0(path)
+		if !ok || !backend.tmuxGenerationMarkerMatchesBackendV0(marker) || !backend.quarantinedTmuxOwnerMarkerLiveV0(ctx, marker) {
+			continue
+		}
+		identity, err := readCodexAppServerTmuxPathIdentityV0(path)
+		if err != nil || !codexAppServerTmuxPrivateParentV0(path) {
+			return false, codexAppServerTmuxConflictErrorV0(codexAppServerTmuxGenerationConflictV0)
+		}
+		current, ok := readCodexAppServerTmuxOwnerMarkerPathV0(path)
+		if !ok || !reflect.DeepEqual(current, marker) || !backend.quarantinedTmuxOwnerMarkerLiveV0(ctx, current) {
+			return false, codexAppServerTmuxConflictErrorV0(codexAppServerTmuxGenerationConflictV0)
+		}
+		if latest, err := readCodexAppServerTmuxPathIdentityV0(path); err != nil || latest != identity {
+			return false, codexAppServerTmuxConflictErrorV0(codexAppServerTmuxGenerationConflictV0)
+		}
+		if err := os.Rename(path, canonical); err != nil {
+			return false, codexAppServerCallErrorV0{Code: "codex_app_server_tmux_quarantine_restore_failed", Err: err}
+		}
+		restored, ok := backend.readTmuxOwnerMarkerV0()
+		if !ok || !reflect.DeepEqual(restored, marker) {
+			return false, codexAppServerTmuxConflictErrorV0(codexAppServerTmuxGenerationConflictV0)
+		}
+		return true, nil
+	}
+	return false, nil
 }

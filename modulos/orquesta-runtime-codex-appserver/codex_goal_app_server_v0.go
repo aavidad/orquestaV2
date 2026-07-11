@@ -623,10 +623,11 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerWithoutGoa
 		)
 		return receipt, nil
 	}
+	providerTurnActive := codexAppServerThreadReadHasActiveTurnV0(thread)
 	if found &&
 		!codexAppServerGoalResultMarkerGoalRefMismatchV0(marked, request.GoalRef) &&
 		!codexAppServerGoalResultMarkerExternalGoalRefMismatchV0(marked, request.ExternalGoalRef) &&
-		(status != orquestagoal.GoalStatusRunningV0 || codexAppServerGoalResultReadyForActiveCompletionV0(marked)) {
+		!providerTurnActive {
 		receipt.Status = orquestagoal.GoalStatusCompleteV0
 		receipt.Summary = "codex_app_server_goal_result_marker"
 		backend.mergeCodexAppServerGoalResultGuardedV0(ctx, request, &receipt, marked, "evidence-ref-codex-app-server-goal-result-marker")
@@ -644,8 +645,7 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerWithoutGoa
 		)
 		return receipt, nil
 	}
-	if fileFound &&
-		(status != orquestagoal.GoalStatusRunningV0 || codexAppServerGoalResultReadyForActiveCompletionV0(fileMarked)) {
+	if fileFound && !providerTurnActive {
 		receipt.Status = orquestagoal.GoalStatusCompleteV0
 		receipt.Summary = "codex_app_server_goal_result_file"
 		backend.mergeCodexAppServerGoalResultGuardedV0(ctx, request, &receipt, fileMarked, "evidence-ref-codex-app-server-goal-result-file")

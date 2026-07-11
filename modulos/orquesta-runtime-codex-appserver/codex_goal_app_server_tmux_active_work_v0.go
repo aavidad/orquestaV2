@@ -84,6 +84,12 @@ func (backend serverCodexAppServerTmuxBackendV0) detectTmuxResiduesV0(ctx contex
 		key := strings.TrimSpace(residue.WorkRef)
 		if key != "" {
 			if _, exists := seen[key]; exists {
+				for index := range residues {
+					if strings.TrimSpace(residues[index].WorkRef) == key {
+						residues[index].EvidenceRefs = compactStringsV0(append(residues[index].EvidenceRefs, residue.EvidenceRefs...))
+						break
+					}
+				}
 				continue
 			}
 			seen[key] = struct{}{}
@@ -149,7 +155,8 @@ func (backend serverCodexAppServerTmuxBackendV0) detectTmuxOwnerMarkerResiduesV0
 		}
 		seen[path] = struct{}{}
 		marker, ok := readCodexAppServerTmuxOwnerMarkerPathV0(path)
-		if !ok {
+		if !ok || !backend.tmuxGenerationMarkerMatchesBackendV0(marker) ||
+			!backend.quarantinedTmuxOwnerMarkerLiveV0(ctx, marker) {
 			continue
 		}
 		sessionName := strings.TrimSpace(marker.SessionName)
@@ -163,6 +170,7 @@ func (backend serverCodexAppServerTmuxBackendV0) detectTmuxOwnerMarkerResiduesV0
 				"evidence-ref-codex-app-server-tmux-residue",
 				"evidence-ref-codex-app-server-tmux-owner-marker",
 				"evidence-ref-codex-app-server-tmux-owner-scan",
+				"evidence-ref-codex-app-server-tmux-owner-quarantine",
 			},
 		}
 		if session, process := backend.detectTmuxSessionResidueByNameV0(ctx, sessionName); session {
@@ -182,10 +190,39 @@ func (backend serverCodexAppServerTmuxBackendV0) detectTmuxOwnerMarkerResiduesV0
 
 func (backend serverCodexAppServerTmuxBackendV0) tmuxOwnerMarkerScanPathsV0() []string {
 	path := strings.TrimSpace(backend.tmuxOwnerMarkerPathV0())
-	if path == "" {
+	if path == "" || !codexAppServerTmuxPrivateParentV0(path) {
 		return nil
 	}
-	return []string{path}
+	paths := []string{path}
+	entries, err := os.ReadDir(filepath.Dir(path))
+	if err != nil {
+		return paths
+	}
+	prefix := ".orquesta-quarantine-" + filepath.Base(path) + "-"
+	for _, entry := range entries {
+		if entry.Type().IsRegular() && strings.HasPrefix(entry.Name(), prefix) {
+			paths = append(paths, filepath.Join(filepath.Dir(path), entry.Name()))
+		}
+	}
+	return paths
+}
+
+func (backend serverCodexAppServerTmuxBackendV0) quarantinedTmuxOwnerMarkerLiveV0(ctx context.Context, marker codexAppServerTmuxOwnerMarkerV0) bool {
+	tmuxPath, err := codexAppServerTmuxCommandPathV0(backend.PathEnv)
+	if err != nil {
+		return false
+	}
+	timeout := backend.Timeout
+	if timeout <= 0 {
+		timeout = codexAppServerTmuxDefaultTimeoutV0
+	}
+	runCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	hasSession, err := backend.tmuxHasSessionTargetV0(runCtx, tmuxPath, marker.TmuxSessionID)
+	if err != nil || !hasSession {
+		return false
+	}
+	return backend.observeRecordedTmuxGenerationV0(runCtx, tmuxPath, marker) == codexAppServerTmuxGenerationVerifiedV0
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) tmuxResidueConfigLooksOwnV0() bool {

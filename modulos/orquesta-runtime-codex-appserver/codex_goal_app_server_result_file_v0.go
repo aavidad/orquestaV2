@@ -125,21 +125,12 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerActiveGoal
 				)
 				return observed, true
 			}
-			if markerErr == nil && found &&
-				!codexAppServerGoalResultMarkerGoalRefMismatchV0(marked, request.GoalRef) &&
-				!codexAppServerGoalResultMarkerExternalGoalRefMismatchV0(marked, request.ExternalGoalRef) &&
-				codexAppServerGoalResultReadyForActiveCompletionV0(marked) {
-				observed.Status = "complete"
-				observed.Summary = "codex_app_server_goal_result_marker"
-				backend.mergeCodexAppServerGoalResultGuardedV0(ctx, request, &observed, marked, "evidence-ref-codex-app-server-goal-result-marker")
-				return observed, true
-			}
 			threadIssueCode = backend.codexAppServerThreadIssueCodeV0(thread)
 		} else {
 			threadReadIssueCode = codexAppServerIssueCodeForErrorV0(err, "codex_app_server_thread_read_failed")
 		}
 	}
-	fileMarked, fileFound, fileErr := codexAppServerGoalResultFromWorkspaceV0(
+	_, _, fileErr := codexAppServerGoalResultFromWorkspaceV0(
 		backend.CWD,
 		request.GoalRef,
 		request.ExternalGoalRef,
@@ -149,12 +140,6 @@ func (backend serverCodexAppServerGoalBackendV0) observeCodexAppServerActiveGoal
 			fileErr,
 			"codex_app_server_goal_result_file_invalid",
 		)
-		return observed, true
-	}
-	if fileErr == nil && fileFound && codexAppServerGoalResultReadyForActiveCompletionV0(fileMarked) {
-		observed.Status = "complete"
-		observed.Summary = "codex_app_server_goal_result_file"
-		backend.mergeCodexAppServerGoalResultGuardedV0(ctx, request, &observed, fileMarked, "evidence-ref-codex-app-server-goal-result-file")
 		return observed, true
 	}
 	if codexAppServerActiveThreadReadFailureBlocksV0(threadReadIssueCode) {

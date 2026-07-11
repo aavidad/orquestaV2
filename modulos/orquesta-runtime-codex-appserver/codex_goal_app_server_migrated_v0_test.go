@@ -544,6 +544,89 @@ func TestServerCodexAppServerGoalBackendV0ObservaResultadoMarcadoMigradoV0(t *te
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0NoCierraReciboTerminalMientrasGoalSigueActivoV0(t *testing.T) {
+	root := t.TempDir()
+	goalRef := "goal-ref-active-receipt-race-001"
+	externalGoalRef := "thread-ref-active-receipt-race-001"
+	protocol := &fakeCodexAppServerProtocolV0{
+		observedGoal: &serverCodexAppServerThreadGoalV0{ThreadID: externalGoalRef, Status: "active"},
+		readThread: serverCodexAppServerThreadReadV0{
+			ID:     externalGoalRef,
+			Status: "running",
+			Turns: []serverCodexAppServerReadTurnV0{{
+				Items: []serverCodexAppServerReadItemV0{{
+					Type:  "agentMessage",
+					Phase: "final_answer",
+					Text:  orquestaruntimecodexgoal.CodexGoalResultMarkerV0 + ` {"schema_version":"orquesta_goal_work_result.v0","status":"complete","goal_ref":"goal-ref-active-receipt-race-001","external_goal_ref":"thread-ref-active-receipt-race-001"}`,
+				}},
+			}},
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol, CWD: root}
+	writeCodexAppServerGoalResultForTestV0(t, root, "docs", goalRef, externalGoalRef)
+	request := orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		GoalRef: goalRef, ExternalGoalRef: externalGoalRef,
+	}
+
+	activeReceipt, err := backend.ObserveCodexGoalV0(context.Background(), request)
+	if err != nil || activeReceipt.Status != orquestagoal.GoalStatusRunningV0 ||
+		containsStringMigratedTestV0(activeReceipt.DomainReceiptRefs, "domain-receipt-ref-runtime-write-set") {
+		t.Fatalf("active receipt=%+v err=%v", activeReceipt, err)
+	}
+
+	writeCodexAppServerTestFileV0(t, root, filepath.ToSlash(filepath.Join(
+		"docs",
+		orquestaruntimecodexgoal.CodexGoalResultFileNameForGoalRefV0(goalRef),
+	)), `{"schema_version":"orquesta_goal_work_result.v0","status":"complete","goal_ref":"goal-ref-active-receipt-race-001","external_goal_ref":"thread-ref-active-receipt-race-001","domain_receipt_refs":["domain-receipt-ref-final"]}`)
+	protocol.observedGoal = &serverCodexAppServerThreadGoalV0{ThreadID: externalGoalRef, Status: "complete"}
+	terminalReceipt, err := backend.ObserveCodexGoalV0(context.Background(), request)
+	if err != nil || terminalReceipt.Status != orquestagoal.GoalStatusCompleteV0 ||
+		!containsStringMigratedTestV0(terminalReceipt.DomainReceiptRefs, "domain-receipt-ref-final") ||
+		containsStringMigratedTestV0(terminalReceipt.DomainReceiptRefs, "domain-receipt-ref-runtime-write-set") {
+		t.Fatalf("terminal receipt=%+v err=%v", terminalReceipt, err)
+	}
+}
+
+func TestServerCodexAppServerGoalBackendV0FallbackNoCierraReciboTerminalMientrasThreadSigueActivoV0(t *testing.T) {
+	root := t.TempDir()
+	goalRef := "goal-ref-fallback-active-receipt-race-001"
+	externalGoalRef := "thread-ref-fallback-active-receipt-race-001"
+	protocol := &fakeCodexAppServerProtocolV0{
+		getGoalErr: codexAppServerCallErrorV0{
+			Code: "codex_app_server_rpc_method_not_found",
+			Err:  errors.New("goal rpc unavailable"),
+		},
+		readThread: serverCodexAppServerThreadReadV0{
+			ID:     externalGoalRef,
+			Status: "running",
+			Turns:  []serverCodexAppServerReadTurnV0{{Status: "inProgress"}},
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol, CWD: root}
+	writeCodexAppServerGoalResultForTestV0(t, root, "docs", goalRef, externalGoalRef)
+	request := orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		GoalRef: goalRef, ExternalGoalRef: externalGoalRef,
+	}
+
+	activeReceipt, err := backend.ObserveCodexGoalV0(context.Background(), request)
+	if err != nil || activeReceipt.Status != orquestagoal.GoalStatusRunningV0 ||
+		containsStringMigratedTestV0(activeReceipt.DomainReceiptRefs, "domain-receipt-ref-runtime-write-set") {
+		t.Fatalf("active fallback receipt=%+v err=%v", activeReceipt, err)
+	}
+
+	writeCodexAppServerTestFileV0(t, root, filepath.ToSlash(filepath.Join(
+		"docs",
+		orquestaruntimecodexgoal.CodexGoalResultFileNameForGoalRefV0(goalRef),
+	)), `{"schema_version":"orquesta_goal_work_result.v0","status":"complete","goal_ref":"goal-ref-fallback-active-receipt-race-001","external_goal_ref":"thread-ref-fallback-active-receipt-race-001","domain_receipt_refs":["domain-receipt-ref-fallback-final"]}`)
+	protocol.readThread.Turns[0].Status = "complete"
+	terminalReceipt, err := backend.ObserveCodexGoalV0(context.Background(), request)
+	if err != nil || terminalReceipt.Status != orquestagoal.GoalStatusCompleteV0 ||
+		!containsStringMigratedTestV0(terminalReceipt.DomainReceiptRefs, "domain-receipt-ref-fallback-final") ||
+		containsStringMigratedTestV0(terminalReceipt.DomainReceiptRefs, "domain-receipt-ref-runtime-write-set") {
+		t.Fatalf("terminal fallback receipt=%+v err=%v", terminalReceipt, err)
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0NormalizaUnTypoDeGoalRefLigadoAlThreadV0(t *testing.T) {
 	expectedGoalRef := "goal-ref-task-autoprogramming-c0ae86a2ae2e-g01"
 	protocol := &fakeCodexAppServerProtocolV0{
