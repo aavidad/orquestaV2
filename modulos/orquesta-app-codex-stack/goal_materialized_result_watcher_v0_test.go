@@ -10,6 +10,7 @@ import (
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
+	orquestaruntimecodexgoal "orquesta/modulos/orquesta-runtime-codex-goal"
 )
 
 func TestGoalMaterializedResultWatcherV0DespiertaReconciliacionSinWatchdogV0(t *testing.T) {
@@ -67,7 +68,7 @@ func TestGoalMaterializedResultWatcherV0DespiertaReconciliacionSinWatchdogV0(t *
 	if err != nil {
 		t.Fatalf("LoadGoalWorkStateV0: %v", err)
 	}
-	materializedDir := filepath.Join(projectRoot, filepath.FromSlash(state.Spec.WriteSet[0].Path), "docs")
+	materializedDir := filepath.Dir(goalMaterializedResultWatcherCanonicalReceiptPathForTestV0(projectRoot, state))
 	if err := os.MkdirAll(materializedDir, 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
@@ -88,7 +89,7 @@ func TestGoalMaterializedResultWatcherV0DespiertaReconciliacionSinWatchdogV0(t *
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(materializedDir, goalMaterializedGoalResultFileV0), raw, 0o600); err != nil {
+	if err := os.WriteFile(goalMaterializedResultWatcherCanonicalReceiptPathForTestV0(projectRoot, state), raw, 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
@@ -132,11 +133,11 @@ func TestGoalMaterializedResultWatcherV0DetectaResultadoTerminalSobrescritoV0(t 
 	if err != nil {
 		t.Fatalf("LoadGoalWorkStateV0: %v", err)
 	}
-	materializedDir := filepath.Join(projectRoot, filepath.FromSlash(state.Spec.WriteSet[0].Path), "docs")
+	materializedDir := filepath.Dir(goalMaterializedResultWatcherCanonicalReceiptPathForTestV0(projectRoot, state))
 	if err := os.MkdirAll(materializedDir, 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	resultPath := filepath.Join(materializedDir, goalMaterializedGoalResultFileV0)
+	resultPath := goalMaterializedResultWatcherCanonicalReceiptPathForTestV0(projectRoot, state)
 	if err := os.WriteFile(resultPath, []byte(`{"schema_version":"orquesta_goal_result.v0","status":"pending"}`), 0o600); err != nil {
 		t.Fatalf("WriteFile pending result: %v", err)
 	}
@@ -221,7 +222,7 @@ func TestGoalMaterializedResultWatcherV0ResuelveRootPorGoalV0(t *testing.T) {
 	}
 	canonicalRoot := t.TempDir()
 	workspaceRoot := t.TempDir()
-	materializedDir := filepath.Join(workspaceRoot, filepath.FromSlash(state.Spec.WriteSet[0].Path), "docs")
+	materializedDir := filepath.Dir(goalMaterializedResultWatcherCanonicalReceiptPathForTestV0(workspaceRoot, state))
 	if err := os.MkdirAll(materializedDir, 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
@@ -242,7 +243,7 @@ func TestGoalMaterializedResultWatcherV0ResuelveRootPorGoalV0(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(materializedDir, goalMaterializedGoalResultFileV0), raw, 0o600); err != nil {
+	if err := os.WriteFile(goalMaterializedResultWatcherCanonicalReceiptPathForTestV0(workspaceRoot, state), raw, 0o600); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	wakeupCh := make(chan GoalMaterializedResultWakeupV0, 1)
@@ -278,6 +279,18 @@ func (resolver fixedGoalMaterializedResultRootResolverForTestV0) ResolveGoalMate
 	orquestagoal.GoalWorkStateV0,
 ) (string, error) {
 	return resolver.root, resolver.err
+}
+
+func goalMaterializedResultWatcherCanonicalReceiptPathForTestV0(
+	projectRoot string,
+	state orquestagoal.GoalWorkStateV0,
+) string {
+	goalRef := goalMaterializedStateGoalRefV0(state)
+	return filepath.Join(
+		projectRoot,
+		filepath.FromSlash(orquestaruntimecodexgoal.CodexGoalRuntimeReceiptRelativeDirV0(goalRef)),
+		orquestaruntimecodexgoal.CodexGoalResultFileNameForGoalRefV0(goalRef),
+	)
 }
 
 func TestGoalMaterializedResultWatcherV0SinGoalsActivosNoPollV0(t *testing.T) {

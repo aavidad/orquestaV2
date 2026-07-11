@@ -12,6 +12,7 @@ import (
 	"time"
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
+	orquestaruntimecodexgoal "orquesta/modulos/orquesta-runtime-codex-goal"
 )
 
 const (
@@ -356,6 +357,18 @@ func goalMaterializedResultWatchDirsForStateV0(
 		maxDirs = defaultGoalMaterializedResultWatcherMaxDirsV0
 	}
 	out := map[string]goalMaterializedResultDirFingerprintV0{}
+	receiptRoot, ok := goalMaterializedResultScopeRootV0(projectRoot, orquestagoal.GoalWriteScopeV0{
+		Path: orquestaruntimecodexgoal.CodexGoalRuntimeReceiptRelativeDirV0(
+			goalMaterializedStateGoalRefV0(state),
+		),
+	})
+	if ok {
+		for _, dir := range goalMaterializedResultDirsUnderRootV0(projectRoot, receiptRoot, maxDirs) {
+			if fingerprint, ok := goalMaterializedResultInitialDirFingerprintV0(dir); ok {
+				out[filepath.Clean(dir)] = fingerprint
+			}
+		}
+	}
 	for _, scope := range state.Spec.WriteSet {
 		if len(out) >= maxDirs {
 			break
