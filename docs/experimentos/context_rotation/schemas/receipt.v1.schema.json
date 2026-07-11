@@ -1,0 +1,5 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "orquesta.context_rotation.receipt.v1", "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "receipt_ref", "operation_ref", "operation_kind", "experiment_ref", "input_sha256", "result_sha256", "status", "created_at", "evidence"],
+  "properties": {"schema_version": {"const": "orquesta.context_rotation.receipt.v1"}, "receipt_ref": {"type": "string"}, "operation_ref": {"type": "string"}, "operation_kind": {"type": "string"}, "experiment_ref": {"type": "string"}, "input_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "result_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}, "status": {"const": "completed"}, "created_at": {"type": "string", "format": "date-time"}, "evidence": {"type": "array", "items": {"type": "object", "required": ["ref", "sha256"]}}}
+}

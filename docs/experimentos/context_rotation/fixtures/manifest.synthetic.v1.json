@@ -1,0 +1,55 @@
+{
+  "schema_version": "orquesta.context_rotation.manifest.v1",
+  "experiment_ref": "apg-006-synthetic",
+  "repository_path": ".",
+  "baseline_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "snapshot": {"ref": "snapshot-synthetic", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},
+  "temporary_root": "/tmp/orquesta-apg006-synthetic",
+  "state_root": "/tmp/orquesta-apg006-synthetic/state",
+  "execution": {
+    "model": "synthetic-model-v1",
+    "effort": "medium",
+    "tools": ["read", "edit", "test"],
+    "budget": {"max_total_tokens": 200000, "max_cost_micros": 2000000, "max_duration_ms": 7200000, "max_tool_calls": 1000, "max_handoff_tokens": 20000, "max_workspace_bytes": 1048576}
+  },
+  "reviewer": {
+    "model": "synthetic-reviewer-v1",
+    "effort": "medium",
+    "tools": ["read", "test"],
+    "budget": {"max_total_tokens": 20000, "max_cost_micros": 200000, "max_duration_ms": 600000, "max_tool_calls": 100, "max_handoff_tokens": 1000, "max_workspace_bytes": 1048576},
+    "blinded": true,
+    "fresh_context": true,
+    "blinding_key_sha256": "843bc8317bb7484786b33d04d3046fe05cd13a2a36d28d30503b315cf4ba9ffb",
+    "reproduction_test": "bash scripts/experimentos/context_rotation/test_harness.sh"
+  },
+  "retention": {"allow_worktree_cleanup": true, "preserve_receipts": true, "minimum_retention_hours": 24},
+  "pairs": [
+    {
+      "pair_ref": "pair-api", "objective": "Implement synthetic API change", "write_set": ["synthetic/api.go", "synthetic/api_test.go"],
+      "acceptance_criteria": ["API behavior passes fixture"], "required_tests": ["go test ./synthetic/api"],
+      "context_refs": [{"ref": "context-api", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}],
+      "treatment_stages": [
+        {"stage_ref": "api-implementation", "objective": "Implement API", "cause": "semantic implementation boundary", "write_set": ["synthetic/api.go"], "context_refs": [{"ref": "context-api-implementation", "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}]},
+        {"stage_ref": "api-tests", "objective": "Add API tests", "cause": "semantic verification boundary", "write_set": ["synthetic/api_test.go"], "context_refs": [{"ref": "context-api-tests", "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"}]}
+      ]
+    },
+    {
+      "pair_ref": "pair-cli", "objective": "Implement synthetic CLI change", "write_set": ["synthetic/cli.go", "synthetic/cli_test.go"],
+      "acceptance_criteria": ["CLI behavior passes fixture"], "required_tests": ["go test ./synthetic/cli"],
+      "context_refs": [{"ref": "context-cli", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}],
+      "treatment_stages": [
+        {"stage_ref": "cli-implementation", "objective": "Implement CLI", "cause": "semantic implementation boundary", "write_set": ["synthetic/cli.go"], "context_refs": [{"ref": "context-cli-implementation", "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}]},
+        {"stage_ref": "cli-tests", "objective": "Add CLI tests", "cause": "semantic verification boundary", "write_set": ["synthetic/cli_test.go"], "context_refs": [{"ref": "context-cli-tests", "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"}]}
+      ]
+    },
+    {
+      "pair_ref": "pair-store", "objective": "Implement synthetic store change", "write_set": ["synthetic/store.go", "synthetic/store_test.go"],
+      "acceptance_criteria": ["Store behavior passes fixture"], "required_tests": ["go test ./synthetic/store"],
+      "context_refs": [{"ref": "context-store", "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}],
+      "treatment_stages": [
+        {"stage_ref": "store-implementation", "objective": "Implement store", "cause": "semantic implementation boundary", "write_set": ["synthetic/store.go"], "context_refs": [{"ref": "context-store-implementation", "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}]},
+        {"stage_ref": "store-tests", "objective": "Add store tests", "cause": "semantic verification boundary", "write_set": ["synthetic/store_test.go"], "context_refs": [{"ref": "context-store-tests", "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"}]}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema", "$id": "orquesta.context_rotation.blind_review.v1", "type": "object", "additionalProperties": false,
+  "required": ["schema_version", "experiment_ref", "pair_ref", "candidate_ref", "objective", "acceptance_criteria", "required_tests", "diff", "artifacts", "test_evidence"],
+  "properties": {"schema_version": {"const": "orquesta.context_rotation.blind_review.v1"}, "experiment_ref": {"type": "string"}, "pair_ref": {"type": "string"}, "candidate_ref": {"type": "string", "pattern": "^candidate-[a-f0-9]{24}$"}, "objective": {"type": "string"}, "acceptance_criteria": {"type": "array"}, "required_tests": {"type": "array"}, "diff": {"type": "object"}, "artifacts": {"type": "array"}, "test_evidence": {"type": "array"}}
+}
