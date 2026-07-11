@@ -497,9 +497,11 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 	if operatorConnector != nil {
 		stack.MCPTransportBindings.OperatorConnector = operatorConnector
 	}
-	stack.MCPTransportBindings.OperatorDirectorMessage = newOperatorDirectorChannelServiceV0(
+	stack.MCPTransportBindings.OperatorDirectorMessage = newOperatorDirectorChannelServiceWithMailboxV0(
 		operatorConnector,
 		newOperatorDirectorChannelMemoryStoreV0(),
+		serverConfig.StateDir,
+		operatorDirectorMailboxEnabledFromProjectConfigV0(projectConfig),
 	)
 	stack.MCPTransportBindings.CodebaseStatus = serverCodebaseStatusExecutorWithOwnerMarkersV0(
 		stack.MCPTransportBindings.CodebaseStatus,

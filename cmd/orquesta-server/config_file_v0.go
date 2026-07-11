@@ -22,41 +22,42 @@ const (
 )
 
 type serverProjectConfigFileV0 struct {
-	SchemaVersion        string                                    `json:"schema_version"`
-	Server               serverProjectConfigServerV0               `json:"server,omitempty"`
-	ServerHTTP           serverProjectConfigServerHTTPV0           `json:"server_http,omitempty"`
-	ServerLifecycle      serverProjectConfigServerLifecycleV0      `json:"server_lifecycle,omitempty"`
-	StartupCleanup       serverProjectConfigStartupCleanupV0       `json:"startup_cleanup,omitempty"`
-	ControlPlane         serverProjectConfigControlPlaneV0         `json:"control_plane,omitempty"`
-	ServerSupervisor     serverProjectConfigServerSupervisorV0     `json:"server_supervisor,omitempty"`
-	ServerIdle           serverProjectConfigServerIdleV0           `json:"server_idle,omitempty"`
-	ServerIdleLegacy     serverProjectConfigServerIdleV0           `json:"server_idle_self_improvement,omitempty"`
-	ServerResident       serverProjectConfigServerResidentV0       `json:"server_resident_director,omitempty"`
-	WorktreeSnapshot     serverProjectConfigWorktreeSnapshotV0     `json:"worktree_snapshot,omitempty"`
-	DaemonLogs           serverProjectConfigDaemonLogsV0           `json:"daemon_logs,omitempty"`
-	CodexRuntime         serverProjectConfigCodexRuntimeV0         `json:"codex_runtime,omitempty"`
-	CodexModelRouting    *serverProjectConfigCodexModelRoutingV0   `json:"codex_model_routing,omitempty"`
-	GeminiRuntime        serverProjectConfigGeminiRuntimeV0        `json:"gemini_runtime,omitempty"`
-	ClaudeRuntime        serverProjectConfigClaudeRuntimeV0        `json:"claude_runtime,omitempty"`
-	ClaudeModelRouting   *serverProjectConfigClaudeModelRoutingV0  `json:"claude_model_routing,omitempty"`
-	RequiredTestRunner   serverProjectConfigRequiredTestRunnerV0   `json:"required_test_runner,omitempty"`
-	CodexDirector        serverProjectConfigCodexDirectorV0        `json:"codex_director,omitempty"`
-	CodexWave            serverProjectConfigCodexWaveV0            `json:"codex_wave,omitempty"`
-	GoalBackend          serverProjectConfigGoalBackendV0          `json:"goal_backend,omitempty"`
-	CodexUsageAccounting serverProjectConfigCodexUsageAccountingV0 `json:"codex_usage_accounting,omitempty"`
-	RuntimeModels        serverProjectConfigRuntimeModelsV0        `json:"runtime_models,omitempty"`
-	HermesOperator       serverProjectConfigHermesOperatorV0       `json:"hermes_operator,omitempty"`
-	CodebaseBroker       serverProjectConfigCodebaseBrokerV0       `json:"codebase_broker,omitempty"`
-	WizardBot            serverProjectConfigWizardBotV0            `json:"wizard_bot,omitempty"`
-	TelegramOperator     serverProjectConfigTelegramOperatorV0     `json:"telegram_operator,omitempty"`
-	DomainWork           serverProjectConfigDomainWorkV0           `json:"domain_work,omitempty"`
-	OPES                 serverProjectConfigOPESV0                 `json:"opes,omitempty"`
-	OPESBridge           serverProjectConfigOPESBridgeV0           `json:"opes_bridge,omitempty"`
-	RailsSecurity        serverProjectConfigRailsSecurityV0        `json:"rails_security,omitempty"`
-	EgressSanitizer      serverProjectConfigEgressSanitizerV0      `json:"egress_sanitizer,omitempty"`
-	OPESRegistryFinalPkg serverProjectConfigOPESRegistryFinalPkgV0 `json:"opes_registry_finalpkg,omitempty"`
-	OPESTopicRegistry    serverProjectConfigOPESTopicRegistryV0    `json:"opes_topic_registry,omitempty"`
-	Autoprogramming      serverProjectConfigAutoprogrammingV0      `json:"autoprogramming,omitempty"`
+	SchemaVersion           string                                       `json:"schema_version"`
+	Server                  serverProjectConfigServerV0                  `json:"server,omitempty"`
+	ServerHTTP              serverProjectConfigServerHTTPV0              `json:"server_http,omitempty"`
+	ServerLifecycle         serverProjectConfigServerLifecycleV0         `json:"server_lifecycle,omitempty"`
+	StartupCleanup          serverProjectConfigStartupCleanupV0          `json:"startup_cleanup,omitempty"`
+	ControlPlane            serverProjectConfigControlPlaneV0            `json:"control_plane,omitempty"`
+	ServerSupervisor        serverProjectConfigServerSupervisorV0        `json:"server_supervisor,omitempty"`
+	ServerIdle              serverProjectConfigServerIdleV0              `json:"server_idle,omitempty"`
+	ServerIdleLegacy        serverProjectConfigServerIdleV0              `json:"server_idle_self_improvement,omitempty"`
+	ServerResident          serverProjectConfigServerResidentV0          `json:"server_resident_director,omitempty"`
+	WorktreeSnapshot        serverProjectConfigWorktreeSnapshotV0        `json:"worktree_snapshot,omitempty"`
+	DaemonLogs              serverProjectConfigDaemonLogsV0              `json:"daemon_logs,omitempty"`
+	CodexRuntime            serverProjectConfigCodexRuntimeV0            `json:"codex_runtime,omitempty"`
+	CodexModelRouting       *serverProjectConfigCodexModelRoutingV0      `json:"codex_model_routing,omitempty"`
+	GeminiRuntime           serverProjectConfigGeminiRuntimeV0           `json:"gemini_runtime,omitempty"`
+	ClaudeRuntime           serverProjectConfigClaudeRuntimeV0           `json:"claude_runtime,omitempty"`
+	ClaudeModelRouting      *serverProjectConfigClaudeModelRoutingV0     `json:"claude_model_routing,omitempty"`
+	RequiredTestRunner      serverProjectConfigRequiredTestRunnerV0      `json:"required_test_runner,omitempty"`
+	CodexDirector           serverProjectConfigCodexDirectorV0           `json:"codex_director,omitempty"`
+	CodexWave               serverProjectConfigCodexWaveV0               `json:"codex_wave,omitempty"`
+	GoalBackend             serverProjectConfigGoalBackendV0             `json:"goal_backend,omitempty"`
+	CodexUsageAccounting    serverProjectConfigCodexUsageAccountingV0    `json:"codex_usage_accounting,omitempty"`
+	RuntimeModels           serverProjectConfigRuntimeModelsV0           `json:"runtime_models,omitempty"`
+	HermesOperator          serverProjectConfigHermesOperatorV0          `json:"hermes_operator,omitempty"`
+	OperatorDirectorMailbox serverProjectConfigOperatorDirectorMailboxV0 `json:"operator_director_mailbox,omitempty"`
+	CodebaseBroker          serverProjectConfigCodebaseBrokerV0          `json:"codebase_broker,omitempty"`
+	WizardBot               serverProjectConfigWizardBotV0               `json:"wizard_bot,omitempty"`
+	TelegramOperator        serverProjectConfigTelegramOperatorV0        `json:"telegram_operator,omitempty"`
+	DomainWork              serverProjectConfigDomainWorkV0              `json:"domain_work,omitempty"`
+	OPES                    serverProjectConfigOPESV0                    `json:"opes,omitempty"`
+	OPESBridge              serverProjectConfigOPESBridgeV0              `json:"opes_bridge,omitempty"`
+	RailsSecurity           serverProjectConfigRailsSecurityV0           `json:"rails_security,omitempty"`
+	EgressSanitizer         serverProjectConfigEgressSanitizerV0         `json:"egress_sanitizer,omitempty"`
+	OPESRegistryFinalPkg    serverProjectConfigOPESRegistryFinalPkgV0    `json:"opes_registry_finalpkg,omitempty"`
+	OPESTopicRegistry       serverProjectConfigOPESTopicRegistryV0       `json:"opes_topic_registry,omitempty"`
+	Autoprogramming         serverProjectConfigAutoprogrammingV0         `json:"autoprogramming,omitempty"`
 }
 
 type serverProjectConfigControlPlaneV0 struct {
@@ -887,4 +888,8 @@ func serverProjectConfigAutoprogrammingValueForEnvKeyV0(
 	default:
 		return nil
 	}
+}
+
+type serverProjectConfigOperatorDirectorMailboxV0 struct {
+	Enabled *bool `json:"enabled,omitempty"`
 }

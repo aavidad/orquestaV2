@@ -6,5 +6,8 @@
   },
   "control_plane": {
     "remote_access_opt_in": false
+  },
+  "operator_director_mailbox": {
+    "enabled": true
   }
 }

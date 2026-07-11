@@ -16,10 +16,36 @@ func newOperatorDirectorChannelServiceV0(
 	query operator.OperatorMCPDirectedQueryPortV0,
 	store channel.OperatorDirectorExchangeStorePortV0,
 ) channel.OperatorDirectorChannelServiceV0 {
+	return newOperatorDirectorChannelServiceWithMailboxV0(query, store, "", false)
+}
+
+// newOperatorDirectorChannelServiceWithMailboxV0 conserva el conector MCP del
+// operador cuando existe. El buzon durable es OPT-IN explicito
+// (envOperatorDirectorMailboxEnabledV0): sin conector y sin opt-in el canal
+// sigue fallando cerrado, como exige su contrato.
+func newOperatorDirectorChannelServiceWithMailboxV0(
+	query operator.OperatorMCPDirectedQueryPortV0,
+	store channel.OperatorDirectorExchangeStorePortV0,
+	stateDir string,
+	mailboxEnabled bool,
+) channel.OperatorDirectorChannelServiceV0 {
+	var dispatcher channel.OperatorDirectorDispatchPortV0 = operatorDirectorChannelBridgeV0{Query: query}
+	if query == nil && mailboxEnabled {
+		if mailbox := newOperatorDirectorMailboxDispatcherV0(stateDir); mailbox != nil {
+			dispatcher = mailbox
+		}
+	}
 	return channel.OperatorDirectorChannelServiceV0{
-		Dispatcher: operatorDirectorChannelBridgeV0{Query: query},
+		Dispatcher: dispatcher,
 		Store:      store,
 	}
+}
+
+// operatorDirectorMailboxEnabledFromProjectConfigV0 lee el opt-in del fichero
+// canonico (`operator_director_mailbox.enabled`); no anade variable de entorno.
+func operatorDirectorMailboxEnabledFromProjectConfigV0(projectConfig serverProjectConfigFileV0) bool {
+	enabled := projectConfig.OperatorDirectorMailbox.Enabled
+	return enabled != nil && *enabled
 }
 
 func (bridge operatorDirectorChannelBridgeV0) DispatchOperatorMessageV0(
