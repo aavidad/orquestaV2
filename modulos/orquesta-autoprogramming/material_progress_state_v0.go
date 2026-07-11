@@ -56,6 +56,15 @@ func (err MaterialProgressStateCASConflictErrorV0) Error() string {
 	return "material_progress_state_cas_conflict"
 }
 
+type MaterialProgressStateNotFoundErrorV0 struct {
+	RunRef  string
+	GoalRef string
+}
+
+func (err MaterialProgressStateNotFoundErrorV0) Error() string {
+	return "material_progress_state_not_found"
+}
+
 func NormalizeMaterialProgressStateV0(state MaterialProgressStateV0) MaterialProgressStateV0 {
 	state.SchemaVersion = strings.TrimSpace(state.SchemaVersion)
 	state.RunRef = materialProgressStateNormalizeRefV0(state.RunRef)

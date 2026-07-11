@@ -117,6 +117,13 @@ func TestBuildStackFromEnvV0UsaConectoresDurablesFileBased(t *testing.T) {
 	if deps.MaterialProgressEvidence == nil {
 		t.Fatal("MaterialProgressEvidence debe quedar cableado en la composicion Codex")
 	}
+	if stack.MCPTransportBindings.AutoprogrammingMaterialProgressStateReader == nil {
+		t.Fatal("MCP debe proyectar el mismo estado durable de progreso material")
+	}
+	runControl, ok := stack.MCPTransportBindings.RunControl.(orquestamcp.MCPRunControlToolExecutorV0)
+	if !ok || runControl.MaterialProgressStateReader == nil {
+		t.Fatal("runs/control debe usar la decision durable de progreso material")
+	}
 }
 
 func TestBuildStackFromEnvV0CableaOperationalClosureSourceV0(t *testing.T) {

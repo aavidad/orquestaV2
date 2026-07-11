@@ -84,6 +84,7 @@ type MCPAutoprogrammingStatusToolExecutorV0 struct {
 	EstadoVivoSource                orquestaestadovivo.FuenteEvidenciaEstadoPortV0
 	GoalStateStore                  orquestagoal.GoalWorkStateStorePortV0
 	GoalRunMarkerStore              orquestagoal.GoalWorkRunMarkerStorePortV0
+	MaterialProgressStateReader     orquestaautoprogramming.MaterialProgressStateReaderPortV0
 	IdleSelfImprovementBudgetSource MCPAutoprogrammingIdleSelfImprovementBudgetSourceV0
 	StatusDiagnostics               []MCPAutoprogrammingDiagnosticV0
 	GoalProgressPolicy              MCPAutoprogrammingGoalProgressPolicyV0
@@ -283,6 +284,13 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 		goalRunMarkersByRunRef,
 		observedByRunRef,
 	)
+	materialProgress := mcpMaterialProgressProjectionForStatusV0(
+		ctx,
+		executor.MaterialProgressStateReader,
+		goalStates,
+		observedByRunRef,
+	)
+	result.Diagnostics = append(result.Diagnostics, materialProgress.statusDiagnostics()...)
 	result.StaleRunning = buildMCPAutoprogrammingStaleRunningV0(result.Queue, goalStatesByRunRef, goalRunMarkersByRunRef, healthRun, healthObservedRuns...)
 	result.StaleRunning = append(result.StaleRunning, mcpAutoprogrammingPendingIntegrationActionsV0(result.Queue, observedByRunRef)...)
 	result.StaleRunning = append(result.StaleRunning, staleRunningFromEstadoVivoMCPAutoprogrammingV0(estadoVivo)...)
@@ -299,6 +307,11 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 		observedByRunRef,
 		goalProgressPolicy,
 	)...)
+	result.StaleRunning = filterMCPAutoprogrammingLegacyMaterialProgressActionsV0(
+		result.StaleRunning,
+		materialProgress.legacySuppressedRuns(),
+	)
+	result.StaleRunning = append(result.StaleRunning, materialProgress.actions(observedByRunRef)...)
 	result.StaleRunning = append(result.StaleRunning, mcpAutoprogrammingGoalBackendMissingAfterExternalCleanupActionsV0(goalStates, observedByRunRef)...)
 	result.StaleRunning = append(result.StaleRunning, mcpAutoprogrammingQAFailedPublicTextActionsV0(observedByRunRef)...)
 	result.StaleRunning = append(result.StaleRunning, mcpAutoprogrammingArtifactPathsOmittedActionsV0(observedByRunRef)...)

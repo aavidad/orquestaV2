@@ -9,6 +9,7 @@ import (
 
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestaappgateway "orquesta/modulos/orquesta-app-gateway"
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacontext "orquesta/modulos/orquesta-context"
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestaestadovivo "orquesta/modulos/orquesta-estado-vivo"
@@ -119,6 +120,7 @@ func buildStackMCPTransportBindingsV0(
 	})
 	estadoVivoSource := estadoVivoSourceV0(config)
 	runControlPort := goalFirstRunControlPortFromConfigV0(config)
+	materialProgressReader := materialProgressStateReaderV0(config)
 	directorStats := orquestamcp.MCPDirectorStatsToolExecutorV0{
 		RunStore:                  config.Stores.RunStore,
 		RunControl:                config.Stores.RunControl,
@@ -149,11 +151,12 @@ func buildStackMCPTransportBindingsV0(
 		RequestAppChange: orquestamcp.NewMCPRequestAppChangeToolExecutorV0(appChangePortsV0(config)),
 		DirectorStats:    directorStats,
 		RunControl: orquestamcp.MCPRunControlToolExecutorV0{
-			Port:               runControlPort,
-			ExternalJobSource:  externalJobStatsSourceV0(config),
-			GoalBackendState:   directorStats,
-			GoalStateStore:     config.Stores.AppGoalStateStore,
-			GoalProgressPolicy: config.AutoprogrammingGoalProgressPolicy,
+			Port:                        runControlPort,
+			ExternalJobSource:           externalJobStatsSourceV0(config),
+			GoalBackendState:            directorStats,
+			GoalStateStore:              config.Stores.AppGoalStateStore,
+			MaterialProgressStateReader: materialProgressReader,
+			GoalProgressPolicy:          config.AutoprogrammingGoalProgressPolicy,
 			BackendStopEscalator: stackRunControlBackendStopEscalatorV0{
 				Reader:  stackShutdownActiveWorkReaderV0{Config: config},
 				Cleaner: stackShutdownActiveWorkCleanerV0{Config: config},
@@ -183,14 +186,15 @@ func buildStackMCPTransportBindingsV0(
 			NewCodexStackAutoprogrammingObserveGoalExecutorV0(stack),
 		),
 		AutoprogrammingGoalStates:                      config.Stores.AppGoalStateStore,
+		AutoprogrammingMaterialProgressStateReader:     materialProgressReader,
 		AutoprogrammingEstadoVivoSource:                estadoVivoSource,
 		AutoprogrammingIdleSelfImprovementBudgetSource: config.AutoprogrammingIdleSelfImprovementBudgetSource,
 		AutoprogrammingStatusDiagnostics:               config.AutoprogrammingStatusDiagnostics,
 		AutoprogrammingGoalProgressPolicy:              config.AutoprogrammingGoalProgressPolicy,
 		AllowLegacyAutoprogrammingSupervisorActions:    config.AllowLegacyAutoprogrammingRun,
-		ServerShutdown:                                 serverShutdownExecutorV0(config, stack),
-		DomainWork:                                     config.DomainWork,
-		CodebaseQuery:                                  orquestamcp.MCPCodebaseQueryToolExecutorV0{Broker: config.CodeContext},
+		ServerShutdown: serverShutdownExecutorV0(config, stack),
+		DomainWork:     config.DomainWork,
+		CodebaseQuery:  orquestamcp.MCPCodebaseQueryToolExecutorV0{Broker: config.CodeContext},
 		CodebaseStatus: orquestamcp.MCPCodebaseStatusToolExecutorV0{
 			Leases: config.CodeContextToolLeases,
 			Clock: func() time.Time {
@@ -205,6 +209,13 @@ func buildStackMCPTransportBindingsV0(
 		Store:      newStackOperatorDirectorMemoryStoreV0(),
 	}
 	return bindings
+}
+
+func materialProgressStateReaderV0(
+	config ConfigV0,
+) orquestaautoprogramming.MaterialProgressStateReaderPortV0 {
+	reader, _ := config.Stores.AppGoalStateStore.(orquestaautoprogramming.MaterialProgressStateReaderPortV0)
+	return reader
 }
 
 type stackOperatorDirectorDispatcherV0 struct {
@@ -571,7 +582,8 @@ func buildStackHTTPHandlerV0(
 		AutoprogrammingObserveGoal:        bindings.AutoprogrammingObserveGoal,
 		AutoprogrammingObserveActiveGoals: bindings.AutoprogrammingObserveActiveGoals,
 		AutoprogrammingGoalStates:         bindings.AutoprogrammingGoalStates,
-		AutoprogrammingEstadoVivoSource:   bindings.AutoprogrammingEstadoVivoSource,
+		AutoprogrammingMaterialProgressStateReader:     bindings.AutoprogrammingMaterialProgressStateReader,
+		AutoprogrammingEstadoVivoSource:                bindings.AutoprogrammingEstadoVivoSource,
 		AutoprogrammingIdleSelfImprovementBudgetSource: bindings.AutoprogrammingIdleSelfImprovementBudgetSource,
 		AutoprogrammingStatusDiagnostics:               bindings.AutoprogrammingStatusDiagnostics,
 		AutoprogrammingGoalProgressPolicy:              bindings.AutoprogrammingGoalProgressPolicy,

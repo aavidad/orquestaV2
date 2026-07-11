@@ -43,7 +43,10 @@ func (store *StoreV0) LoadMaterialProgressStateV0(
 		return orquestaautoprogramming.MaterialProgressStateV0{}, err
 	}
 	if !found {
-		return orquestaautoprogramming.MaterialProgressStateV0{}, storeErrorV0("material_progress_state", "estado no encontrado")
+		return orquestaautoprogramming.MaterialProgressStateV0{}, orquestaautoprogramming.MaterialProgressStateNotFoundErrorV0{
+			RunRef:  runRef,
+			GoalRef: goalRef,
+		}
 	}
 	return validateMaterialProgressStateDocumentV0(document, runRef, goalRef)
 }

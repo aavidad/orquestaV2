@@ -4,18 +4,20 @@ import (
 	"context"
 	"strings"
 
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
 )
 
 type MCPRunControlToolExecutorV0 struct {
-	Port                 orquestaruncontrol.RunControlWriterPortV0
-	ExternalJobSource    MCPDirectorExternalJobStatsSourcePortV0
-	GoalBackendState     MCPTransportDirectorStatsExecutorV0
-	GoalStateStore       orquestagoal.GoalWorkStateStorePortV0
-	GoalProgressPolicy   MCPAutoprogrammingGoalProgressPolicyV0
-	BackendStopEscalator MCPRunControlBackendStopEscalatorPortV0
+	Port                        orquestaruncontrol.RunControlWriterPortV0
+	ExternalJobSource           MCPDirectorExternalJobStatsSourcePortV0
+	GoalBackendState            MCPTransportDirectorStatsExecutorV0
+	GoalStateStore              orquestagoal.GoalWorkStateStorePortV0
+	MaterialProgressStateReader orquestaautoprogramming.MaterialProgressStateReaderPortV0
+	GoalProgressPolicy          MCPAutoprogrammingGoalProgressPolicyV0
+	BackendStopEscalator        MCPRunControlBackendStopEscalatorPortV0
 }
 
 func NewMCPRunControlToolExecutorV0(
@@ -248,7 +250,18 @@ func (executor MCPRunControlToolExecutorV0) reconcileGoalStateAfterForcedControl
 		evidenceRef = mcpRunControlEvidenceBackendStopEscalatedV0
 		ok = true
 	} else if allowForcedReconcile {
-		reasonCode, evidenceRef, ok = mcpRunControlForcedTerminalReasonV0(beforeGoal, executor.GoalProgressPolicy)
+		materialProgress := mcpMaterialProgressStateForRunGoalV0(
+			ctx,
+			executor.MaterialProgressStateReader,
+			runRef,
+			state.GoalRef,
+		)
+		result.Diagnostics = append(result.Diagnostics, materialProgress.runControlDiagnostics(runRef)...)
+		if materialProgress.Valid {
+			reasonCode, evidenceRef, ok = materialProgress.forcedTerminalReason()
+		} else if materialProgress.LegacyFallback {
+			reasonCode, evidenceRef, ok = mcpRunControlForcedTerminalReasonV0(beforeGoal, executor.GoalProgressPolicy)
+		}
 	}
 	if !ok && (allowForcedReconcile || allowExternalCleanupReconcile) {
 		reasonCode, evidenceRef, ok = mcpRunControlForcedExternalCleanupReasonV0(state, beforeGoal, afterGoal)

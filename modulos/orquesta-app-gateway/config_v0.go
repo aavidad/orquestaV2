@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"time"
 
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacore "orquesta/modulos/orquesta-core"
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestaestadovivo "orquesta/modulos/orquesta-estado-vivo"
@@ -42,6 +43,7 @@ type ConfigV0 struct {
 	AutoprogrammingObserveGoal                     orquestamcp.MCPTransportAutoprogrammingObserveGoalExecutorV0
 	AutoprogrammingObserveActiveGoals              orquestamcp.MCPTransportAutoprogrammingObserveActiveGoalsExecutorV0
 	AutoprogrammingGoalStates                      orquestagoal.GoalWorkStateStorePortV0
+	AutoprogrammingMaterialProgressStateReader     orquestaautoprogramming.MaterialProgressStateReaderPortV0
 	AutoprogrammingEstadoVivoSource                orquestaestadovivo.FuenteEvidenciaEstadoPortV0
 	AutoprogrammingIdleSelfImprovementBudgetSource orquestamcp.MCPAutoprogrammingIdleSelfImprovementBudgetSourceV0
 	AutoprogrammingStatusDiagnostics               []orquestamcp.MCPAutoprogrammingDiagnosticV0

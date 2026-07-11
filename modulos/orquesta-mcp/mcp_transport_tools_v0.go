@@ -115,6 +115,8 @@ func autoprogrammingStatusExecutorFromBindingsV0(
 ) MCPTransportAutoprogrammingStatusExecutorV0 {
 	if bindings.RunQueuePriority == nil &&
 		bindings.DirectorStats == nil &&
+		bindings.AutoprogrammingGoalStates == nil &&
+		bindings.AutoprogrammingMaterialProgressStateReader == nil &&
 		bindings.AutoprogrammingEstadoVivoSource == nil &&
 		bindings.AutoprogrammingIdleSelfImprovementBudgetSource == nil &&
 		len(bindings.AutoprogrammingStatusDiagnostics) == 0 {
@@ -125,6 +127,7 @@ func autoprogrammingStatusExecutorFromBindingsV0(
 		Stats:                           bindings.DirectorStats,
 		EstadoVivoSource:                bindings.AutoprogrammingEstadoVivoSource,
 		GoalStateStore:                  bindings.AutoprogrammingGoalStates,
+		MaterialProgressStateReader:     bindings.AutoprogrammingMaterialProgressStateReader,
 		IdleSelfImprovementBudgetSource: bindings.AutoprogrammingIdleSelfImprovementBudgetSource,
 		StatusDiagnostics:               bindings.AutoprogrammingStatusDiagnostics,
 		GoalProgressPolicy:              bindings.AutoprogrammingGoalProgressPolicy,
@@ -138,6 +141,9 @@ func runControlExecutorFromBindingsV0(
 	switch executor := bindings.RunControl.(type) {
 	case MCPRunControlToolExecutorV0:
 		executor.GoalProgressPolicy = bindings.AutoprogrammingGoalProgressPolicy
+		if bindings.AutoprogrammingMaterialProgressStateReader != nil {
+			executor.MaterialProgressStateReader = bindings.AutoprogrammingMaterialProgressStateReader
+		}
 		return executor
 	case *MCPRunControlToolExecutorV0:
 		if executor == nil {
@@ -145,6 +151,9 @@ func runControlExecutorFromBindingsV0(
 		}
 		clone := *executor
 		clone.GoalProgressPolicy = bindings.AutoprogrammingGoalProgressPolicy
+		if bindings.AutoprogrammingMaterialProgressStateReader != nil {
+			clone.MaterialProgressStateReader = bindings.AutoprogrammingMaterialProgressStateReader
+		}
 		return clone
 	default:
 		return executor

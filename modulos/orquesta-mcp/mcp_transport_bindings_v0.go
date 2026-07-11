@@ -3,6 +3,7 @@ package orquestamcp
 import (
 	"context"
 
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestaestadovivo "orquesta/modulos/orquesta-estado-vivo"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaobservability "orquesta/modulos/orquesta-observability"
@@ -32,6 +33,7 @@ type MCPTransportBindingsV0 struct {
 	AutoprogrammingObserveGoal                     MCPTransportAutoprogrammingObserveGoalExecutorV0
 	AutoprogrammingObserveActiveGoals              MCPTransportAutoprogrammingObserveActiveGoalsExecutorV0
 	AutoprogrammingGoalStates                      orquestagoal.GoalWorkStateStorePortV0
+	AutoprogrammingMaterialProgressStateReader     orquestaautoprogramming.MaterialProgressStateReaderPortV0
 	AutoprogrammingEstadoVivoSource                orquestaestadovivo.FuenteEvidenciaEstadoPortV0
 	AutoprogrammingIdleSelfImprovementBudgetSource MCPAutoprogrammingIdleSelfImprovementBudgetSourceV0
 	AutoprogrammingStatusDiagnostics               []MCPAutoprogrammingDiagnosticV0
