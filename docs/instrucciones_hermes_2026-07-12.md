@@ -118,11 +118,20 @@ para terminar la app; (2) BUGS locales reproducibles; (3) TOOLS.
   write-set: pon `docs` primero para no ensuciar `scripts/`.
 - **tmux 3.6**: no "simplifiques" selectores (`=sesion:` con `:`).
 
-## Hallazgo del arranque (2026-07-12, revisor)
+## Verificacion de arranque (2026-07-12, revisor) - CORREGIDA
 
-La entrada canonica arranca y el aislamiento se aplica, pero Hermes pide
-`hermes setup` (proveedor OpenAI Codex, modelo gpt-5.5): la instalacion no
-tiene la configuracion/credencial completada. El operador debe ejecutar
-`hermes setup` (y `hermes doctor` para diagnostico) desde la sesion TUI antes
-de que Hermes pueda ejecutar trabajo real. Sin ese paso, el contenedor
-levanta, muestra status y sale.
+La instalacion esta INSTALADA Y CONFIGURADA: `.env` presente, `auth.json`
+presente, provider OpenAI Codex, modelo gpt-5.5. Los `x (not set)` del panel
+de API keys son esperados: la autenticacion va por `auth.json`, no por
+variables de entorno.
+
+Comportamiento correcto observado: la entrada canonica arranca el contenedor
+efimero con el aislamiento del runbook. Sin TTY (lanzada desde una tool o
+script) Hermes imprime el status y termina; la sesion de trabajo requiere
+terminal interactivo:
+
+    ./.orquesta-runtime/hermes/hermes-orquesta.sh
+
+Nota del revisor: una primera lectura parcial del status hizo creer que
+faltaba `hermes setup`. Era un error de lectura mio, no un fallo de la
+instalacion; queda corregido aqui para que nadie repita el diagnostico.
