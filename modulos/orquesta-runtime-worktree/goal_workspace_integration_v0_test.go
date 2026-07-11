@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestGitGoalWorkspaceIntegrationConnectorV0IntegratesDisjointWorkspacesV0(t *testing.T) {
+func TestGitGoalWorkspaceIntegrationConnectorV0IntegratesChainedExpectedParentsV0(t *testing.T) {
 	canonical, first, second, base := newGoalWorkspaceIntegrationReposV0(t)
 	receiptDir := filepath.Join(t.TempDir(), "receipts")
 	writeAppVCSFileV0(t, first, "first.txt", "first\n")
@@ -18,13 +18,27 @@ func TestGitGoalWorkspaceIntegrationConnectorV0IntegratesDisjointWorkspacesV0(t 
 	if len(issues) > 0 || firstResult.Status != GoalWorkspaceIntegrationStatusIntegratedV0 {
 		t.Fatalf("first=%+v issues=%+v", firstResult, issues)
 	}
-	secondResult, issues := connector.IntegrateGoalWorkspaceV0(context.Background(), goalWorkspaceIntegrationRequestForTestV0("integration-ref-disjoint-002", second, canonical, base, []string{"second.txt"}, receiptDir))
+	if firstResult.ExpectedParentRevision != base {
+		t.Fatalf("first expected parent=%s want=%s", firstResult.ExpectedParentRevision, base)
+	}
+	if parent := strings.TrimSpace(runAppVCSGitV0(t, canonical, "rev-parse", firstResult.IntegratedCommit+"^")); parent != firstResult.ExpectedParentRevision {
+		t.Fatalf("first integrated parent=%s want=%s", parent, firstResult.ExpectedParentRevision)
+	}
+	secondRequest := goalWorkspaceIntegrationRequestForTestV0("integration-ref-disjoint-002", second, canonical, base, []string{"second.txt"}, receiptDir)
+	secondRequest.ExpectedParentRevision = firstResult.IntegratedCommit
+	secondResult, issues := connector.IntegrateGoalWorkspaceV0(context.Background(), secondRequest)
 	if len(issues) > 0 || secondResult.Status != GoalWorkspaceIntegrationStatusIntegratedV0 {
 		t.Fatalf("second=%+v issues=%+v", secondResult, issues)
 	}
+	if secondResult.ExpectedParentRevision != firstResult.IntegratedCommit {
+		t.Fatalf("second expected parent=%s want=%s", secondResult.ExpectedParentRevision, firstResult.IntegratedCommit)
+	}
+	if parent := strings.TrimSpace(runAppVCSGitV0(t, canonical, "rev-parse", secondResult.IntegratedCommit+"^")); parent != secondResult.ExpectedParentRevision {
+		t.Fatalf("second integrated parent=%s want=%s", parent, secondResult.ExpectedParentRevision)
+	}
 	for _, result := range []GoalWorkspaceIntegrationResultV0{firstResult, secondResult} {
 		receipt, found, receiptIssues := loadGoalWorkspaceIntegrationReceiptV0(filepath.Join(receiptDir, result.IntegrationRef+".json"))
-		if len(receiptIssues) > 0 || !found || receipt.SourceCommit != result.SourceCommit || receipt.IntegratedCommit != result.IntegratedCommit {
+		if len(receiptIssues) > 0 || !found || receipt.SourceCommit != result.SourceCommit || receipt.IntegratedCommit != result.IntegratedCommit || receipt.ExpectedParentRevision != result.ExpectedParentRevision {
 			t.Fatalf("receipt=%+v found=%t issues=%+v result=%+v", receipt, found, receiptIssues, result)
 		}
 	}
@@ -54,8 +68,10 @@ func TestGitGoalWorkspaceIntegrationConnectorV0ReplaysReceiptV0(t *testing.T) {
 	if len(issues) > 0 || first.Status != GoalWorkspaceIntegrationStatusIntegratedV0 {
 		t.Fatalf("first=%+v issues=%+v", first, issues)
 	}
+	writeAppVCSFileV0(t, canonical, "local-only.txt", "later\n")
+	goalWorkspaceRunGitForTestV0(t, canonical, "add", "local-only.txt")
+	goalWorkspaceRunGitForTestV0(t, canonical, "commit", "-m", "later canonical change")
 	head := strings.TrimSpace(runAppVCSGitV0(t, canonical, "rev-parse", "HEAD"))
-	writeAppVCSFileV0(t, canonical, "local-only.txt", "dirty\n")
 	replay, issues := connector.IntegrateGoalWorkspaceV0(context.Background(), request)
 	if len(issues) > 0 || replay.Status != GoalWorkspaceIntegrationStatusReplayedV0 || replay.IntegratedCommit != first.IntegratedCommit {
 		t.Fatalf("replay=%+v issues=%+v", replay, issues)
@@ -63,8 +79,77 @@ func TestGitGoalWorkspaceIntegrationConnectorV0ReplaysReceiptV0(t *testing.T) {
 	if got := strings.TrimSpace(runAppVCSGitV0(t, canonical, "rev-parse", "HEAD")); got != head {
 		t.Fatalf("replay created a second commit: got=%s want=%s", got, head)
 	}
-	if status := strings.TrimSpace(runAppVCSGitV0(t, canonical, "status", "--porcelain")); status == "" {
-		t.Fatal("replay cleaned unrelated canonical changes")
+	if parent := strings.TrimSpace(runAppVCSGitV0(t, canonical, "rev-parse", replay.IntegratedCommit+"^")); parent != replay.ExpectedParentRevision {
+		t.Fatalf("receipt replay accepted wrong integrated parent: got=%s want=%s", parent, replay.ExpectedParentRevision)
+	}
+	if _, err := os.Stat(filepath.Join(canonical, "local-only.txt")); err != nil {
+		t.Fatalf("replay lost later canonical commit: %v", err)
+	}
+	receipt, found, receiptIssues := loadGoalWorkspaceIntegrationReceiptV0(filepath.Join(receiptDir, request.IntegrationRef+".json"))
+	if len(receiptIssues) > 0 || !found {
+		t.Fatalf("receipt=%+v found=%t issues=%+v", receipt, found, receiptIssues)
+	}
+	receipt.IntegratedCommit = head
+	if receiptIssues := writeGoalWorkspaceIntegrationReceiptV0(filepath.Join(receiptDir, request.IntegrationRef+".json"), receipt); len(receiptIssues) > 0 {
+		t.Fatalf("write tampered receipt: %+v", receiptIssues)
+	}
+	blocked, issues := connector.IntegrateGoalWorkspaceV0(context.Background(), request)
+	if blocked.Status != GoalWorkspaceIntegrationStatusBlockedV0 || !goalWorkspaceHasIssueForTestV0(issues, WorktreeIssueWorkspaceConflictV0) {
+		t.Fatalf("tampered receipt replay=%+v issues=%+v", blocked, issues)
+	}
+}
+
+func TestGitGoalWorkspaceIntegrationConnectorV0BlocksStaleExpectedParentWithoutCherryPickV0(t *testing.T) {
+	canonical, source, _, base := newGoalWorkspaceIntegrationReposV0(t)
+	receiptDir := filepath.Join(t.TempDir(), "receipts")
+	writeAppVCSFileV0(t, source, "source.txt", "source\n")
+	writeAppVCSFileV0(t, canonical, "later.txt", "later\n")
+	goalWorkspaceRunGitForTestV0(t, canonical, "add", "later.txt")
+	goalWorkspaceRunGitForTestV0(t, canonical, "commit", "-m", "advance canonical head")
+	head := strings.TrimSpace(runAppVCSGitV0(t, canonical, "rev-parse", "HEAD"))
+
+	result, issues := (GitGoalWorkspaceIntegrationConnectorV0{}).IntegrateGoalWorkspaceV0(
+		context.Background(),
+		goalWorkspaceIntegrationRequestForTestV0("integration-ref-stale-parent-001", source, canonical, base, []string{"source.txt"}, receiptDir),
+	)
+	if result.Status != GoalWorkspaceIntegrationStatusBlockedV0 || !goalWorkspaceHasIssueForTestV0(issues, WorktreeIssueWorkspaceConflictV0) {
+		t.Fatalf("result=%+v issues=%+v", result, issues)
+	}
+	if got := strings.TrimSpace(runAppVCSGitV0(t, canonical, "rev-parse", "HEAD")); got != head {
+		t.Fatalf("stale integration changed HEAD: got=%s want=%s", got, head)
+	}
+	if result.SourceCommit == "" {
+		t.Fatalf("expected source commit in blocked result: %+v", result)
+	}
+	if _, err := (GitGoalWorkspaceIntegrationConnectorV0{}).VCS.gitOutputV0(context.Background(), canonical, "merge-base", "--is-ancestor", result.SourceCommit, "HEAD"); err == nil {
+		t.Fatalf("stale source commit was cherry-picked: %s", result.SourceCommit)
+	}
+	if _, err := os.Stat(filepath.Join(receiptDir, "integration-ref-stale-parent-001.json")); !os.IsNotExist(err) {
+		t.Fatalf("stale integration wrote receipt: %v", err)
+	}
+}
+
+func TestGitGoalWorkspaceIntegrationConnectorV0DefaultsExpectedParentToLockedCanonicalHeadV0(t *testing.T) {
+	canonical, first, second, base := newGoalWorkspaceIntegrationReposV0(t)
+	receiptDir := filepath.Join(t.TempDir(), "receipts")
+	writeAppVCSFileV0(t, first, "first.txt", "first\n")
+	writeAppVCSFileV0(t, second, "second.txt", "second\n")
+	connector := GitGoalWorkspaceIntegrationConnectorV0{}
+	firstResult, issues := connector.IntegrateGoalWorkspaceV0(
+		context.Background(),
+		goalWorkspaceIntegrationRequestForTestV0("integration-ref-legacy-first-001", first, canonical, base, []string{"first.txt"}, receiptDir),
+	)
+	if len(issues) > 0 || firstResult.Status != GoalWorkspaceIntegrationStatusIntegratedV0 {
+		t.Fatalf("first=%+v issues=%+v", firstResult, issues)
+	}
+	secondRequest := goalWorkspaceIntegrationRequestForTestV0("integration-ref-legacy-second-001", second, canonical, base, []string{"second.txt"}, receiptDir)
+	secondRequest.ExpectedParentRevision = ""
+	secondResult, issues := connector.IntegrateGoalWorkspaceV0(context.Background(), secondRequest)
+	if len(issues) > 0 || secondResult.Status != GoalWorkspaceIntegrationStatusIntegratedV0 {
+		t.Fatalf("second=%+v issues=%+v", secondResult, issues)
+	}
+	if secondResult.ExpectedParentRevision != firstResult.IntegratedCommit {
+		t.Fatalf("legacy expected parent=%s want=%s", secondResult.ExpectedParentRevision, firstResult.IntegratedCommit)
 	}
 }
 
@@ -193,13 +278,14 @@ func newGoalWorkspaceIntegrationReposV0(t *testing.T) (string, string, string, s
 
 func goalWorkspaceIntegrationRequestForTestV0(integrationRef string, source string, canonical string, base string, writeSet []string, receiptDir string) GoalWorkspaceIntegrationRequestV0 {
 	return GoalWorkspaceIntegrationRequestV0{
-		IntegrationRef:     integrationRef,
-		SourceWorkspaceDir: source,
-		CanonicalWorkDir:   canonical,
-		BaseRevision:       base,
-		WriteSet:           writeSet,
-		CommitMessage:      "test: integrate goal workspace",
-		ReceiptDir:         receiptDir,
+		IntegrationRef:         integrationRef,
+		SourceWorkspaceDir:     source,
+		CanonicalWorkDir:       canonical,
+		BaseRevision:           base,
+		ExpectedParentRevision: base,
+		WriteSet:               writeSet,
+		CommitMessage:          "test: integrate goal workspace",
+		ReceiptDir:             receiptDir,
 	}
 }
 

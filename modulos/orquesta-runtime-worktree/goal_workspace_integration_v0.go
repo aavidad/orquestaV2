@@ -20,25 +20,27 @@ const (
 )
 
 type GoalWorkspaceIntegrationRequestV0 struct {
-	IntegrationRef     string   `json:"integration_ref"`
-	SourceWorkspaceDir string   `json:"source_workspace_dir"`
-	CanonicalWorkDir   string   `json:"canonical_work_dir"`
-	BaseRevision       string   `json:"base_revision"`
-	WriteSet           []string `json:"write_set"`
-	CommitMessage      string   `json:"commit_message"`
-	ReceiptDir         string   `json:"receipt_dir"`
+	IntegrationRef         string   `json:"integration_ref"`
+	SourceWorkspaceDir     string   `json:"source_workspace_dir"`
+	CanonicalWorkDir       string   `json:"canonical_work_dir"`
+	BaseRevision           string   `json:"base_revision"`
+	ExpectedParentRevision string   `json:"expected_parent_revision"`
+	WriteSet               []string `json:"write_set"`
+	CommitMessage          string   `json:"commit_message"`
+	ReceiptDir             string   `json:"receipt_dir"`
 }
 
 type GoalWorkspaceIntegrationResultV0 struct {
-	SchemaVersion    string            `json:"schema_version"`
-	Status           string            `json:"status"`
-	IntegrationRef   string            `json:"integration_ref,omitempty"`
-	BaseRevision     string            `json:"base_revision,omitempty"`
-	SourceCommit     string            `json:"source_commit,omitempty"`
-	IntegratedCommit string            `json:"integrated_commit,omitempty"`
-	ChangedPaths     []string          `json:"changed_paths,omitempty"`
-	EvidenceRefs     []string          `json:"evidence_refs,omitempty"`
-	Issues           []WorktreeIssueV0 `json:"issues,omitempty"`
+	SchemaVersion          string            `json:"schema_version"`
+	Status                 string            `json:"status"`
+	IntegrationRef         string            `json:"integration_ref,omitempty"`
+	BaseRevision           string            `json:"base_revision,omitempty"`
+	ExpectedParentRevision string            `json:"expected_parent_revision,omitempty"`
+	SourceCommit           string            `json:"source_commit,omitempty"`
+	IntegratedCommit       string            `json:"integrated_commit,omitempty"`
+	ChangedPaths           []string          `json:"changed_paths,omitempty"`
+	EvidenceRefs           []string          `json:"evidence_refs,omitempty"`
+	Issues                 []WorktreeIssueV0 `json:"issues,omitempty"`
 }
 
 type GoalWorkspaceIntegrationPortV0 interface {
@@ -50,13 +52,14 @@ type GitGoalWorkspaceIntegrationConnectorV0 struct {
 }
 
 type goalWorkspaceIntegrationReceiptV0 struct {
-	SchemaVersion    string   `json:"schema_version"`
-	IntegrationRef   string   `json:"integration_ref"`
-	BaseRevision     string   `json:"base_revision"`
-	SourceCommit     string   `json:"source_commit"`
-	IntegratedCommit string   `json:"integrated_commit"`
-	WriteSet         []string `json:"write_set"`
-	CommitMessage    string   `json:"commit_message"`
+	SchemaVersion          string   `json:"schema_version"`
+	IntegrationRef         string   `json:"integration_ref"`
+	BaseRevision           string   `json:"base_revision"`
+	ExpectedParentRevision string   `json:"expected_parent_revision"`
+	SourceCommit           string   `json:"source_commit"`
+	IntegratedCommit       string   `json:"integrated_commit"`
+	WriteSet               []string `json:"write_set"`
+	CommitMessage          string   `json:"commit_message"`
 }
 
 func (connector GitGoalWorkspaceIntegrationConnectorV0) IntegrateGoalWorkspaceV0(
@@ -92,6 +95,12 @@ func (connector GitGoalWorkspaceIntegrationConnectorV0) IntegrateGoalWorkspaceV0
 		return newGoalWorkspaceIntegrationResultV0(request, GoalWorkspaceIntegrationStatusBlockedV0, "", "", nil, issues), issues
 	}
 	request.BaseRevision = base
+	expectedParent, issue := connector.resolveGoalWorkspaceExpectedParentV0(ctx, request)
+	if issue != nil {
+		issues := []WorktreeIssueV0{*issue}
+		return newGoalWorkspaceIntegrationResultV0(request, GoalWorkspaceIntegrationStatusBlockedV0, "", "", nil, issues), issues
+	}
+	request.ExpectedParentRevision = expectedParent
 	sourceCommit, changedPaths, issues := connector.promoteGoalWorkspaceSourceV0(ctx, request)
 	if len(issues) > 0 {
 		return newGoalWorkspaceIntegrationResultV0(request, GoalWorkspaceIntegrationStatusBlockedV0, sourceCommit, "", changedPaths, issues), issues
@@ -112,17 +121,26 @@ func (connector GitGoalWorkspaceIntegrationConnectorV0) IntegrateGoalWorkspaceV0
 			issues := []WorktreeIssueV0{*issue}
 			return newGoalWorkspaceIntegrationResultV0(request, GoalWorkspaceIntegrationStatusBlockedV0, sourceCommit, receipt.IntegratedCommit, changedPaths, issues), issues
 		}
+		if issue := connector.validateGoalWorkspaceReceiptIntegrationV0(ctx, request, receipt); issue != nil {
+			issues := []WorktreeIssueV0{*issue}
+			return newGoalWorkspaceIntegrationResultV0(request, GoalWorkspaceIntegrationStatusBlockedV0, sourceCommit, receipt.IntegratedCommit, changedPaths, issues), issues
+		}
 		if issue := connector.requireGoalWorkspaceCommitAncestorV0(ctx, request.CanonicalWorkDir, receipt.IntegratedCommit, "integrated_commit"); issue != nil {
 			issues := []WorktreeIssueV0{*issue}
 			return newGoalWorkspaceIntegrationResultV0(request, GoalWorkspaceIntegrationStatusBlockedV0, sourceCommit, receipt.IntegratedCommit, changedPaths, issues), issues
 		}
 		return newGoalWorkspaceIntegrationResultV0(request, GoalWorkspaceIntegrationStatusReplayedV0, sourceCommit, receipt.IntegratedCommit, changedPaths, nil), nil
 	}
+	canonicalHead, issue := connector.resolveGoalWorkspaceCanonicalHeadV0(ctx, request.CanonicalWorkDir)
+	if issue != nil {
+		issues := []WorktreeIssueV0{*issue}
+		return newGoalWorkspaceIntegrationResultV0(request, GoalWorkspaceIntegrationStatusBlockedV0, sourceCommit, "", changedPaths, issues), issues
+	}
 	if integratedCommit, issue := connector.findGoalWorkspaceCherryPickV0(ctx, request.CanonicalWorkDir, sourceCommit); issue != nil {
 		issues := []WorktreeIssueV0{*issue}
 		return newGoalWorkspaceIntegrationResultV0(request, GoalWorkspaceIntegrationStatusBlockedV0, sourceCommit, "", changedPaths, issues), issues
 	} else if integratedCommit != "" {
-		if issue := connector.requireGoalWorkspaceCommitAncestorV0(ctx, request.CanonicalWorkDir, integratedCommit, "integrated_commit"); issue != nil {
+		if issue := connector.validateGoalWorkspaceRecoveredIntegrationV0(ctx, request, integratedCommit, canonicalHead); issue != nil {
 			issues := []WorktreeIssueV0{*issue}
 			return newGoalWorkspaceIntegrationResultV0(request, GoalWorkspaceIntegrationStatusBlockedV0, sourceCommit, integratedCommit, changedPaths, issues), issues
 		}
@@ -133,6 +151,10 @@ func (connector GitGoalWorkspaceIntegrationConnectorV0) IntegrateGoalWorkspaceV0
 		return newGoalWorkspaceIntegrationResultV0(request, GoalWorkspaceIntegrationStatusReplayedV0, sourceCommit, integratedCommit, changedPaths, nil), nil
 	}
 	if issue := connector.requireGoalWorkspaceCanonicalCleanV0(ctx, request); issue != nil {
+		issues := []WorktreeIssueV0{*issue}
+		return newGoalWorkspaceIntegrationResultV0(request, GoalWorkspaceIntegrationStatusBlockedV0, sourceCommit, "", changedPaths, issues), issues
+	}
+	if issue := connector.requireGoalWorkspaceCanonicalHeadV0(ctx, request); issue != nil {
 		issues := []WorktreeIssueV0{*issue}
 		return newGoalWorkspaceIntegrationResultV0(request, GoalWorkspaceIntegrationStatusBlockedV0, sourceCommit, "", changedPaths, issues), issues
 	}
@@ -161,6 +183,7 @@ func normalizeGoalWorkspaceIntegrationRequestV0(request GoalWorkspaceIntegration
 	request.SourceWorkspaceDir = strings.TrimSpace(request.SourceWorkspaceDir)
 	request.CanonicalWorkDir = strings.TrimSpace(request.CanonicalWorkDir)
 	request.BaseRevision = strings.TrimSpace(request.BaseRevision)
+	request.ExpectedParentRevision = strings.TrimSpace(request.ExpectedParentRevision)
 	request.CommitMessage = strings.TrimSpace(request.CommitMessage)
 	request.ReceiptDir = strings.TrimSpace(request.ReceiptDir)
 	writeSet, issues := normalizeWorktreePathListV0(request.WriteSet, true)
@@ -195,6 +218,9 @@ func normalizeGoalWorkspaceIntegrationRequestV0(request GoalWorkspaceIntegration
 	if request.BaseRevision == "" || strings.ContainsAny(request.BaseRevision, "\x00\r\n") {
 		issues = append(issues, worktreeIssueV0(WorktreeIssueInvalidRequestV0, "base_revision"))
 	}
+	if request.ExpectedParentRevision != "" && strings.ContainsAny(request.ExpectedParentRevision, "\x00\r\n") {
+		issues = append(issues, worktreeIssueV0(WorktreeIssueInvalidRequestV0, "expected_parent_revision"))
+	}
 	if request.CommitMessage == "" {
 		issues = append(issues, worktreeIssueV0(WorktreeIssueInvalidRequestV0, "commit_message"))
 	}
@@ -225,6 +251,22 @@ func (connector GitGoalWorkspaceIntegrationConnectorV0) resolveGoalWorkspaceInte
 		return "", &result
 	}
 	return base, nil
+}
+
+func (connector GitGoalWorkspaceIntegrationConnectorV0) resolveGoalWorkspaceExpectedParentV0(
+	ctx context.Context,
+	request GoalWorkspaceIntegrationRequestV0,
+) (string, *WorktreeIssueV0) {
+	expected := request.ExpectedParentRevision
+	if expected == "" {
+		return connector.resolveGoalWorkspaceCanonicalHeadV0(ctx, request.CanonicalWorkDir)
+	}
+	resolved, issue := connector.VCS.gitOutputV0(ctx, request.CanonicalWorkDir, "rev-parse", "--verify", "--end-of-options", expected+"^{commit}")
+	if issue != nil {
+		result := goalWorkspaceGitIssueV0("git.rev_parse", *issue)
+		return "", &result
+	}
+	return resolved, nil
 }
 
 func (connector GitGoalWorkspaceIntegrationConnectorV0) promoteGoalWorkspaceSourceV0(
@@ -298,6 +340,64 @@ func (connector GitGoalWorkspaceIntegrationConnectorV0) requireGoalWorkspaceComm
 	return nil
 }
 
+func (connector GitGoalWorkspaceIntegrationConnectorV0) resolveGoalWorkspaceCanonicalHeadV0(
+	ctx context.Context,
+	canonicalWorkDir string,
+) (string, *WorktreeIssueV0) {
+	head, issue := connector.VCS.gitOutputV0(ctx, canonicalWorkDir, "rev-parse", "--verify", "HEAD^{commit}")
+	if issue != nil {
+		result := goalWorkspaceGitIssueV0("git.rev_parse", *issue)
+		return "", &result
+	}
+	return head, nil
+}
+
+func (connector GitGoalWorkspaceIntegrationConnectorV0) requireGoalWorkspaceCanonicalHeadV0(
+	ctx context.Context,
+	request GoalWorkspaceIntegrationRequestV0,
+) *WorktreeIssueV0 {
+	head, issue := connector.resolveGoalWorkspaceCanonicalHeadV0(ctx, request.CanonicalWorkDir)
+	if issue != nil {
+		return issue
+	}
+	if head != request.ExpectedParentRevision {
+		result := worktreeIssueV0(WorktreeIssueWorkspaceConflictV0, "expected_parent_revision")
+		return &result
+	}
+	return nil
+}
+
+func (connector GitGoalWorkspaceIntegrationConnectorV0) validateGoalWorkspaceRecoveredIntegrationV0(
+	ctx context.Context,
+	request GoalWorkspaceIntegrationRequestV0,
+	integratedCommit string,
+	canonicalHead string,
+) *WorktreeIssueV0 {
+	parent, issue := connector.VCS.gitOutputV0(ctx, request.CanonicalWorkDir, "rev-parse", "--verify", integratedCommit+"^{commit}^")
+	if issue != nil || parent != request.ExpectedParentRevision {
+		result := worktreeIssueV0(WorktreeIssueWorkspaceConflictV0, "integrated_commit_parent")
+		return &result
+	}
+	if _, issue := connector.VCS.gitOutputV0(ctx, request.CanonicalWorkDir, "merge-base", "--is-ancestor", integratedCommit, canonicalHead); issue != nil {
+		result := worktreeIssueV0(WorktreeIssueWorkspaceConflictV0, "integrated_commit")
+		return &result
+	}
+	return nil
+}
+
+func (connector GitGoalWorkspaceIntegrationConnectorV0) validateGoalWorkspaceReceiptIntegrationV0(
+	ctx context.Context,
+	request GoalWorkspaceIntegrationRequestV0,
+	receipt goalWorkspaceIntegrationReceiptV0,
+) *WorktreeIssueV0 {
+	parent, issue := connector.VCS.gitOutputV0(ctx, request.CanonicalWorkDir, "rev-parse", "--verify", receipt.IntegratedCommit+"^{commit}^")
+	if issue != nil || parent != receipt.ExpectedParentRevision {
+		result := worktreeIssueV0(WorktreeIssueWorkspaceConflictV0, "integrated_commit_parent")
+		return &result
+	}
+	return nil
+}
+
 func (connector GitGoalWorkspaceIntegrationConnectorV0) findGoalWorkspaceCherryPickV0(
 	ctx context.Context,
 	canonicalWorkDir string,
@@ -362,6 +462,7 @@ func validateGoalWorkspaceIntegrationReceiptV0(
 	if receipt.SchemaVersion != GoalWorkspaceIntegrationSchemaVersionV0 ||
 		receipt.IntegrationRef != request.IntegrationRef ||
 		receipt.BaseRevision != request.BaseRevision ||
+		receipt.ExpectedParentRevision != request.ExpectedParentRevision ||
 		receipt.SourceCommit != sourceCommit ||
 		receipt.CommitMessage != request.CommitMessage ||
 		!reflect.DeepEqual(receipt.WriteSet, request.WriteSet) ||
@@ -378,13 +479,14 @@ func newGoalWorkspaceIntegrationReceiptV0(
 	integratedCommit string,
 ) goalWorkspaceIntegrationReceiptV0 {
 	return goalWorkspaceIntegrationReceiptV0{
-		SchemaVersion:    GoalWorkspaceIntegrationSchemaVersionV0,
-		IntegrationRef:   request.IntegrationRef,
-		BaseRevision:     request.BaseRevision,
-		SourceCommit:     sourceCommit,
-		IntegratedCommit: integratedCommit,
-		WriteSet:         request.WriteSet,
-		CommitMessage:    request.CommitMessage,
+		SchemaVersion:          GoalWorkspaceIntegrationSchemaVersionV0,
+		IntegrationRef:         request.IntegrationRef,
+		BaseRevision:           request.BaseRevision,
+		ExpectedParentRevision: request.ExpectedParentRevision,
+		SourceCommit:           sourceCommit,
+		IntegratedCommit:       integratedCommit,
+		WriteSet:               request.WriteSet,
+		CommitMessage:          request.CommitMessage,
 	}
 }
 
@@ -433,13 +535,14 @@ func newGoalWorkspaceIntegrationResultV0(
 	issues []WorktreeIssueV0,
 ) GoalWorkspaceIntegrationResultV0 {
 	return GoalWorkspaceIntegrationResultV0{
-		SchemaVersion:    GoalWorkspaceIntegrationSchemaVersionV0,
-		Status:           status,
-		IntegrationRef:   request.IntegrationRef,
-		BaseRevision:     request.BaseRevision,
-		SourceCommit:     sourceCommit,
-		IntegratedCommit: integratedCommit,
-		ChangedPaths:     compactWorktreeStringsV0(changedPaths),
+		SchemaVersion:          GoalWorkspaceIntegrationSchemaVersionV0,
+		Status:                 status,
+		IntegrationRef:         request.IntegrationRef,
+		BaseRevision:           request.BaseRevision,
+		ExpectedParentRevision: request.ExpectedParentRevision,
+		SourceCommit:           sourceCommit,
+		IntegratedCommit:       integratedCommit,
+		ChangedPaths:           compactWorktreeStringsV0(changedPaths),
 		EvidenceRefs: compactWorktreeStringsV0([]string{
 			"evidence-ref-goal-workspace-integration-v0",
 			"evidence-ref-goal-workspace-integration:" + request.IntegrationRef,
