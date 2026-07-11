@@ -22,11 +22,13 @@ command -v python3 >/dev/null 2>&1 && command -v "$TIMEOUT_COMMAND" >/dev/null 2
   echo "orquesta_test_batches=not_ok reason=preflight_tool_missing" >&2; exit 2;
 }
 
+caller_umask="$(umask)"
 umask 077
 orquesta_private_test_root "$RUN_ROOT"
 orquesta_private_test_root "$(dirname "$RECEIPT")"
 mkdir -m 700 -p "$RUN_ROOT/logs" "$RUN_ROOT/receipts"
 orquesta_use_isolated_test_env "$RUN_ROOT/env"
+umask "$caller_umask"
 summaries="$RUN_ROOT/batches.jsonl"
 list_file="$RUN_ROOT/packages.txt"
 list_stderr="$RUN_ROOT/go-list.stderr"

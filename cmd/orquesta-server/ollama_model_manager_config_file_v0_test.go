@@ -112,6 +112,9 @@ func TestReadServerProjectSecretFileV0RejectsUnsafePathsV0(t *testing.T) {
 	if err := os.Mkdir(unsafeDir, 0o770); err != nil {
 		t.Fatalf("mkdir unsafe: %v", err)
 	}
+	if err := os.Chmod(unsafeDir, 0o770); err != nil {
+		t.Fatalf("chmod unsafe: %v", err)
+	}
 	if err := os.WriteFile(filepath.Join(unsafeDir, "token"), []byte("unsafe"), 0o600); err != nil {
 		t.Fatalf("write unsafe token: %v", err)
 	}

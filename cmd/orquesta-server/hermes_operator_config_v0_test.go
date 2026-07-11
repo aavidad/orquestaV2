@@ -160,6 +160,9 @@ func TestHermesOperatorConfigV0EnabledUnsafeSecretFailsOnlyAtWiringV0(t *testing
 	if err := os.WriteFile(filepath.Join(projectDir, "key"), []byte("secret"), 0o644); err != nil {
 		t.Fatalf("write key: %v", err)
 	}
+	if err := os.Chmod(filepath.Join(projectDir, "key"), 0o644); err != nil {
+		t.Fatalf("chmod key: %v", err)
+	}
 	writeHermesOperatorConfigForTestV0(t, projectDir, `"enabled":true,"base_url":"https://hermes.example.test","api_key_file":"key"`)
 	config, err := serverConfigFromEnvWithProjectConfigPathV0(filepath.Join(projectDir, serverProjectConfigFileNameV0))
 	if err != nil {

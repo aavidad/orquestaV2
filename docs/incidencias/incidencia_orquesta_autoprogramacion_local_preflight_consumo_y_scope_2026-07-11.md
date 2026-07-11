@@ -156,6 +156,26 @@ exito y error, sin relajar los modos `0700/0600` del setup. La prueba del
 script valida ambos caminos; los dos focales de permisos pasan de nuevo dentro
 del perfil aislado.
 
+Reapertura durante la verificacion de `BUG-226`: el runner
+`orquesta_test_batches.sh` imponia por separado `umask 077` antes de invocar el
+perfil y nunca restauraba la mascara antes de ejecutar `go test`. Dos pasadas
+reprodujeron los falsos rojos en tres pruebas de seguridad; recibo retenido en
+`/tmp/orquesta-bug226-batches-20260711/receipt.json`. La correccion restaura el
+umask del operador tras crear las rutas privadas y el self-test comprueba la
+mascara observada por el proceso `go` hijo. Ademas, el fixture de secreto usaba
+`Mkdir(0770)` como si el modo resultante ignorase el umask; ahora aplica
+`Chmod(0770)` explicito antes de verificar el rechazo. La misma correccion se
+aplica a los fixtures `WriteFile(0644)` de Hermes y `Mkdir(0755)` del store de
+tools: un test de permisos debe fijar el modo que afirma probar. Los tres
+focales pasan incluso bajo `umask 077`; el runner completo se verifica de nuevo
+por dos pasadas antes de volver a cerrar `225`.
+
+Segundo cierre local: `bash scripts/test_orquesta_test_batches.sh` queda verde;
+los tres focales pasan con `umask 077`; y dos pasadas reales de
+`orquesta_test_batches.sh` sobre `cmd/orquesta-server` y
+`orquesta-tool-capability-file` quedan verdes. Recibo:
+`/tmp/orquesta-bug225-focal-fixed-20260711/receipt.json`.
+
 ## Evidencia y cierre del corte
 
 - Runtime fallido: `/tmp/orquesta-self-hermes-20260711/runtime`.

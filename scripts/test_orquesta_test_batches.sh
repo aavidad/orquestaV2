@@ -16,7 +16,7 @@ if [ "$1" = list ]; then
   printf '%s\n' example/p3 example/p4 example/p5
   exit 0
 fi
-printf '%s\n' "$*" >>'__ROOT__/go.log'
+printf '%s|%s\n' "$(umask)" "$*" >>'__ROOT__/go.log'
 if printf '%s\n' "$*" | grep -q example/p3 && [ "${FAKE_FAIL_P3:-0}" = 1 ]; then exit 7; fi
 SH
 sed "s#__ROOT__#$test_root#g" >"$test_root/timeout-fake" <<'SH'
@@ -47,6 +47,7 @@ common_env=(
   ORQUESTA_BATCH_TIMEOUT_COMMAND="$test_root/timeout-fake"
 )
 
+umask 022
 env "${common_env[@]}" ORQUESTA_TEST_BATCH_ROOT="$test_root/pass" \
   "$ROOT/scripts/orquesta_test_batches.sh" >/dev/null
 
@@ -57,7 +58,9 @@ assert r['schema_version']=='orquesta_test_batches_receipt.v1'
 assert r['status']=='passed' and r['passes_required']==2 and r['passes_completed']==[1,2]
 assert r['packages_total']==5 and r['package_executions_total']==10
 assert [len(x['packages']) for x in r['batches']]==[2,2,1,2,2,1]
-assert len(open(sys.argv[2]).read().splitlines())==6
+go_lines=open(sys.argv[2]).read().splitlines()
+assert len(go_lines)==6
+assert all(line.startswith('0022|') for line in go_lines), go_lines
 assert open(sys.argv[3]).read().splitlines()==['--signal=TERM --kill-after=5s 37s']*6
 assert all(os.path.isfile(x['receipt']) for x in r['batches'])
 env_root=os.path.join(r['run_root'],'env')

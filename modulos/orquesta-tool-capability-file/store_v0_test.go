@@ -170,6 +170,9 @@ func TestToolOperationFileStoreRejectsPermissiveRootAndTrailingStateV0(t *testin
 	if err := os.Mkdir(permissive, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.Chmod(permissive, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := NewToolOperationFileStoreV0(permissive); err == nil {
 		t.Fatal("accepted group/world accessible root")
 	}
