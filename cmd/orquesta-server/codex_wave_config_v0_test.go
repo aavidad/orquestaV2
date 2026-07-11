@@ -37,6 +37,44 @@ func TestCodexWaveConfigV0ConservaReasoningHighYXHigh(t *testing.T) {
 	}
 }
 
+func TestCodexWaveConfigsV0NoHeredanModeloNiPerfilGlobales(t *testing.T) {
+	t.Setenv(envCodexModelV0, "modelo-global")
+	t.Setenv(envCodexProfileV0, "perfil-global")
+	t.Setenv(envCodexWaveModelV0, "")
+	t.Setenv(envCodexWaveProfileV0, "")
+
+	wave := mustCodexWaveConfigForTestV0(t, nil)
+	if wave.Model != "" || wave.Profile != "" {
+		t.Fatalf("ola heredo modelo/perfil globales: %+v", wave)
+	}
+
+	projectDir := t.TempDir()
+	var stderr strings.Builder
+	director, err := codexDirectorWaveConfigFromArgsV0([]string{
+		"--dry-run", "--wave-ref", "wave-director", "--objective", "probar aislamiento",
+		"--project-dir", projectDir,
+		"--runtime-dir", filepath.Join(projectDir, ".orquesta-runtime", "codex-waves", "wave-director"),
+		"--command", codexWaveTestExecutablePathV0(t),
+	}, &stderr)
+	if err != nil {
+		t.Fatalf("codexDirectorWaveConfigFromArgsV0: %v stderr=%s", err, stderr.String())
+	}
+	if director.Wave.Model != "" || director.Wave.Profile != "" {
+		t.Fatalf("director wave heredo modelo/perfil globales: %+v", director.Wave)
+	}
+
+	t.Setenv(envCodexProjectWorkDirV0, projectDir)
+	serverConfig, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	for _, key := range []string{envCodexWaveModelV0, envCodexWaveProfileV0} {
+		if setting := effectiveSettingForTestV0(serverConfig.EffectiveConfig.Settings, key); setting.Value != "" {
+			t.Fatalf("effective %s heredo global: %+v", key, setting)
+		}
+	}
+}
+
 func TestCodexWaveConfigV0LeeFicheroCanonicoYEnvDeprecatedOverrideV0(t *testing.T) {
 	projectDir := t.TempDir()
 	sourceHome := t.TempDir()

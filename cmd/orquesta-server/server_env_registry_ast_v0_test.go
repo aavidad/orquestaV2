@@ -72,6 +72,21 @@ func TestServerEnvRegistryASTV0LecturasORQUESTARegistradas(t *testing.T) {
 	}
 }
 
+func TestServerEnvRegistryASTV0DetectaTodosLosArgumentosVariadicos(t *testing.T) {
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "variadic.go", `package main
+func read() { firstNonEmptyEnvV0("NOT_ORQUESTA", "ORQUESTA_SEGUNDO", "ORQUESTA_TERCERO") }
+`, 0)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	hits := serverEnvRegistryASTFindReadsV0(fset, []*ast.File{file}, nil)
+	if len(hits) != 2 || hits[0].Env != "ORQUESTA_SEGUNDO" || hits[1].Env != "ORQUESTA_TERCERO" {
+		t.Fatalf("hits=%+v", hits)
+	}
+}
+
 func serverEnvRegistryASTProductionFilesV0(root string) ([]string, error) {
 	var files []string
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
@@ -150,6 +165,7 @@ func serverEnvRegistryASTFindReadsV0(fset *token.FileSet, files []*ast.File, lit
 		"int64EnvOrDefaultV0": true,
 		"boolEnvOrDefaultV0":  true,
 		"csvEnvOrDefaultV0":   true,
+		"firstNonEmptyEnvV0":  true,
 	}
 	seen := map[string]bool{}
 	var hits []serverEnvRegistryASTHitV0
@@ -162,18 +178,20 @@ func serverEnvRegistryASTFindReadsV0(fset *token.FileSet, files []*ast.File, lit
 			if !serverEnvRegistryASTIsTrackedCallV0(call, helperNames) {
 				return true
 			}
-			env, ok := serverEnvRegistryASTEnvValueV0(call.Args[0], literals)
-			if !ok || !strings.HasPrefix(env, "ORQUESTA_") {
-				return true
-			}
 			pos := fset.Position(call.Lparen)
 			location := serverEnvRegistryASTRelLocationV0(pos.Filename) + ":" + strconv.Itoa(pos.Line)
-			key := env + "\x00" + location
-			if seen[key] {
-				return true
+			for _, argIndex := range serverEnvRegistryASTTrackedArgIndexesV0(call) {
+				env, ok := serverEnvRegistryASTEnvValueV0(call.Args[argIndex], literals)
+				if !ok || !strings.HasPrefix(env, "ORQUESTA_") {
+					continue
+				}
+				key := env + "\x00" + location
+				if seen[key] {
+					continue
+				}
+				seen[key] = true
+				hits = append(hits, serverEnvRegistryASTHitV0{Env: env, Location: location})
 			}
-			seen[key] = true
-			hits = append(hits, serverEnvRegistryASTHitV0{Env: env, Location: location})
 			return true
 		})
 	}
@@ -184,6 +202,18 @@ func serverEnvRegistryASTFindReadsV0(fset *token.FileSet, files []*ast.File, lit
 		return hits[i].Env < hits[j].Env
 	})
 	return hits
+}
+
+func serverEnvRegistryASTTrackedArgIndexesV0(call *ast.CallExpr) []int {
+	ident, ok := call.Fun.(*ast.Ident)
+	if !ok || ident.Name != "firstNonEmptyEnvV0" {
+		return []int{0}
+	}
+	indexes := make([]int, len(call.Args))
+	for i := range call.Args {
+		indexes[i] = i
+	}
+	return indexes
 }
 
 func serverEnvRegistryASTRelLocationV0(path string) string {
