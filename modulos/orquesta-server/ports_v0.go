@@ -45,6 +45,13 @@ type IdleSelfImprovementPortV0 interface {
 	) (IdleSelfImprovementResultV0, error)
 }
 
+// GoalFirstIdleSelfImprovementPreparerPortV0 identifies compositions whose
+// preparation path launches goal-first work with its durable prerequisites.
+type GoalFirstIdleSelfImprovementPreparerPortV0 interface {
+	IdleSelfImprovementPortV0
+	GoalFirstIdleSelfImprovementPreparationEnabledV0() bool
+}
+
 type IdleSelfImprovementGoalLauncherPortV0 interface {
 	LaunchGoalWorkV0(context.Context, orquestagoal.GoalWorkSpecV0) (orquestagoal.GoalLaunchReceiptV0, error)
 }

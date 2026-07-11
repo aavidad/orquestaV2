@@ -31,6 +31,15 @@ func TestIdleSelfImprovementProposalFromServerV0TransportaAcceptanceChecksSinInf
 	}
 }
 
+func TestServerStackSupervisorV0DeclaraPreparacionGoalFirstCompletaV0(t *testing.T) {
+	var preparer orquestaserver.GoalFirstIdleSelfImprovementPreparerPortV0 = serverStackSupervisorV0{
+		stack: &orquestaappcodexstack.StackV0{},
+	}
+	if !preparer.GoalFirstIdleSelfImprovementPreparationEnabledV0() {
+		t.Fatal("stack server debe preferir prepare-run goal-first sobre launch directo")
+	}
+}
+
 func TestIdleSelfImprovementStackV0RechazaCandidatoNoEjecutableV0(t *testing.T) {
 	queue := &fakeIdleSelfRunQueueV0{candidates: []orquestarunqueue.RunSchedulingCandidateV0{{
 		RunRef: "run-ref-1", Status: orquestarunqueue.RunStatusPausedV0,

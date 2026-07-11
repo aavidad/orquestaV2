@@ -34,8 +34,12 @@ func (runtime *RuntimeV0) maybeScheduleIdleSelfImprovementCausalV0(
 		return
 	}
 	port, portOK := runtime.supervisor.(IdleSelfImprovementPortV0)
+	goalPreparer, goalPrepareOK := runtime.supervisor.(GoalFirstIdleSelfImprovementPreparerPortV0)
+	goalPrepareReady := runtime.config.IdleSelfImprovementGoalFirst && goalPrepareOK &&
+		goalPreparer != nil && goalPreparer.GoalFirstIdleSelfImprovementPreparationEnabledV0()
 	goalLauncher, goalOK := runtime.supervisor.(IdleSelfImprovementGoalLauncherPortV0)
-	goalReady := runtime.config.IdleSelfImprovementGoalFirst && goalOK && goalLauncher != nil
+	goalLaunchReady := runtime.config.IdleSelfImprovementGoalFirst && goalOK && goalLauncher != nil
+	goalReady := goalPrepareReady || goalLaunchReady
 	if runtime.config.IdleSelfImprovementGoalFirst && !goalReady {
 		runtime.auditEventV0(ctx, "idle_self_improvement_check", "skipped", "", map[string]interface{}{"reason": idleSelfImprovementGoalLauncherUnavailableReasonV0})
 		runtime.markIdleSelfImprovementCheckedV0(ctx, idleSelfImprovementGoalLauncherUnavailableReasonV0, now)
@@ -98,7 +102,13 @@ func (runtime *RuntimeV0) maybeScheduleIdleSelfImprovementCausalV0(
 		runtime.tracker.MarkIdleSelfImprovementBudgetDecisionV0(decision.BudgetDecision, now),
 		"idle_self_improvement_scheduled",
 	)
-	if goalReady {
+	if goalPrepareReady {
+		runtime.runAsyncWorkV0("idle_self_improvement_goal_prepare", func() {
+			runtime.prepareIdleSelfImprovementBatchV0(ctx, goalPreparer, requests)
+		})
+		return
+	}
+	if goalLaunchReady {
 		runtime.runAsyncWorkV0("idle_self_improvement_goal_launch", func() {
 			runtime.launchIdleSelfImprovementGoalsV0(ctx, goalLauncher, requests)
 		})

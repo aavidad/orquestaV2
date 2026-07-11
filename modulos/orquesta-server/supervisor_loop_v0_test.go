@@ -745,6 +745,41 @@ func TestRuntimeV0IdleSelfImprovementGoalFirstLanzaGoalSpecV0(t *testing.T) {
 	}
 }
 
+func TestRuntimeV0IdleGoalFirstPrefierePreparacionCompletaSiComposicionLaDeclaraV0(t *testing.T) {
+	now := time.Date(2026, 7, 11, 11, 0, 0, 0, time.UTC)
+	direct := &goalFirstSupervisorForTestV0{started: make(chan struct{}, 1)}
+	supervisor := &goalFirstPreparedSupervisorForTestV0{
+		goalFirstSupervisorForTestV0: direct,
+		prepared:                     make(chan struct{}, 1),
+	}
+	runtime, err := NewRuntimeV0(ConfigV0{
+		StateDir:                     t.TempDir(),
+		TickInterval:                 time.Hour,
+		IdleSelfImprovementAfter:     time.Minute,
+		IdleSelfImprovementGoalFirst: true,
+		AuditDisabled:                true,
+	}, RuntimeDepsV0{
+		Supervisor: supervisor,
+		StateStore: &memoryStateStoreV0{},
+		Clock:      fixedClockV0{now: now},
+	})
+	if err != nil {
+		t.Fatalf("NewRuntimeV0: %v", err)
+	}
+	markNoExecutionSinceForTestV0(runtime, now)
+
+	runtime.runSupervisorTickV0(context.Background())
+	select {
+	case <-supervisor.prepared:
+	case <-time.After(time.Second):
+		t.Fatal("preparacion goal-first completa no invocada")
+	}
+	waitRuntimeAsyncWorkForTestV0(t, runtime)
+	if supervisor.prepareCalls != 1 || direct.launchCalls != 0 {
+		t.Fatalf("prepare_calls=%d direct_launch_calls=%d", supervisor.prepareCalls, direct.launchCalls)
+	}
+}
+
 func TestRuntimeV0IdleSelfImprovementGoalFirstCompactaObjectiveLargoV0(t *testing.T) {
 	runtime, err := NewRuntimeV0(ConfigV0{
 		StateDir:                      t.TempDir(),
@@ -1166,6 +1201,32 @@ type goalFirstSupervisorForTestV0 struct {
 	launchCalls int
 	lastSpec    orquestagoal.GoalWorkSpecV0
 	started     chan struct{}
+}
+
+type goalFirstPreparedSupervisorForTestV0 struct {
+	*goalFirstSupervisorForTestV0
+	prepareCalls int
+	prepared     chan struct{}
+}
+
+func (fake *goalFirstPreparedSupervisorForTestV0) GoalFirstIdleSelfImprovementPreparationEnabledV0() bool {
+	return true
+}
+
+func (fake *goalFirstPreparedSupervisorForTestV0) PrepareIdleSelfImprovementV0(
+	_ context.Context,
+	request IdleSelfImprovementRequestV0,
+) (IdleSelfImprovementResultV0, error) {
+	fake.prepareCalls++
+	if fake.prepared != nil {
+		fake.prepared <- struct{}{}
+	}
+	return IdleSelfImprovementResultV0{
+		Accepted:   true,
+		RequestRef: request.RequestRef,
+		RunRef:     request.RequestRef,
+		Status:     "prepared",
+	}, nil
 }
 
 func (fake *goalFirstSupervisorForTestV0) RunGlobalSupervisorV0(

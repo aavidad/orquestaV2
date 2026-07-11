@@ -26,6 +26,10 @@ type serverStackSupervisorV0 struct {
 	operatorNotifier        operatorTaskTerminalNotifierV0
 }
 
+func (supervisor serverStackSupervisorV0) GoalFirstIdleSelfImprovementPreparationEnabledV0() bool {
+	return supervisor.stack != nil
+}
+
 func (supervisor serverStackSupervisorV0) RunGlobalSupervisorV0(
 	ctx context.Context,
 	command orquestarunsupervisor.RunSupervisorCommandV0,

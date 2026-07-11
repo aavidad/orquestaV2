@@ -116,3 +116,32 @@ Cierre local:
 
 El goal `r2` tampoco se reutiliza. El siguiente replay debe usar refs, estado y
 worktree nuevos, y demostrar el fichero `material_progress_states/*.json`.
+
+## Replay r3 y BUG-ORQ-20260711-230
+
+El replay `r3`, goal `019f5059-3866-7912-953f-83f63615b6a7`, arranco limpio
+desde `6a0cbe9a7` y fue detenido en la primera observacion al comprobar que su
+spec seguia sin `worktree_baseline`. Evidencia retenida en
+`/tmp/orquesta-bug226-t9104-r3-runtime`, incluidos `run-control-bug230.json` y
+`shutdown-bug230.json`; la parada tipada quedo confirmada y shutdown termino
+`ready` sin procesos residuales.
+
+La causa no era un fallo del enlace por task ref. El scheduler residente, al
+ver un launcher Goal, elegia `launchIdleSelfImprovementGoalsV0` y evitaba
+`PrepareIdleSelfImprovementV0`, incluso cuando la composicion server ofrecia
+ambos. Ese shortcut compila otra spec y no captura el baseline durable del
+prepare-run.
+
+Cierre local:
+
+- nuevo puerto de capacidad `GoalFirstIdleSelfImprovementPreparerPortV0`;
+- el stack server declara que su preparador soporta goal-first completo;
+- el scheduler prefiere ese puerto y conserva launch directo solo para
+  composiciones que no dispongan de preparacion completa;
+- no cae a un preparador legacy por inferencia;
+- regresion con ambos puertos exige una preparacion y cero launches directos.
+
+La discrepancia declarada por los agentes `r1/r2` sobre el hash del backlog no
+demuestra mutacion: compararon el SHA del fichero completo con una ref de scan
+acotada por linea/seccion. Se conserva como ambiguedad contractual a revisar en
+limpieza; no se usa como evidencia de cierre ni como causa de `BUG-230`.
