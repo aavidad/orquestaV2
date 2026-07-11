@@ -211,6 +211,75 @@ func TestGoalMaterializedResultWatcherV0DetectaResultadoTerminalSobrescritoV0(t 
 	}
 }
 
+func TestGoalMaterializedResultWatcherV0ResuelveRootPorGoalV0(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stack, _, launcher, started := startGoalFirstQueueSyncStackForTestV0(t)
+	state, err := stack.Ports.GoalStateStore.LoadGoalWorkStateV0(ctx, started.Run.RunID)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	canonicalRoot := t.TempDir()
+	workspaceRoot := t.TempDir()
+	materializedDir := filepath.Join(workspaceRoot, filepath.FromSlash(state.Spec.WriteSet[0].Path), "docs")
+	if err := os.MkdirAll(materializedDir, 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	spec := launcher.specs[0]
+	raw, err := json.Marshal(orquestagoal.GoalWorkResultV0{
+		SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+		Status:          orquestagoal.GoalStatusCompleteV0,
+		GoalRef:         spec.GoalRef,
+		ExternalGoalRef: started.ExternalGoalRef,
+		ArtifactRefs:    goalFirstQueueRequiredArtifactRefsV0(spec),
+		ArtifactPaths:   goalFirstQueueTechnicalArtifactPathsV0(),
+		RequiredTestResults: goalFirstQueueRequiredTestResultsV0(
+			spec,
+			"evidence-ref-goal-materialized-result-workspace-required-test",
+		),
+		EvidenceRefs: spec.ClosurePolicy.RequiredEvidenceRefs,
+	})
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(materializedDir, goalMaterializedGoalResultFileV0), raw, 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	wakeupCh := make(chan GoalMaterializedResultWakeupV0, 1)
+	watcher := NewGoalMaterializedResultWatcherV0(GoalMaterializedResultWatcherConfigV0{
+		ProjectWorkDir:      canonicalRoot,
+		ProjectRootResolver: fixedGoalMaterializedResultRootResolverForTestV0{root: workspaceRoot},
+		StateStore:          stack.Stores.AppGoalStateStore,
+		Interval:            20 * time.Millisecond,
+		Wakeup: func(_ context.Context, wakeup GoalMaterializedResultWakeupV0) bool {
+			wakeupCh <- wakeup
+			return true
+		},
+	})
+	go watcher.RunBackgroundV0(ctx)
+	watcher.NotifyActiveGoalsChangedV0()
+	select {
+	case wakeup := <-wakeupCh:
+		if wakeup.RunRef != state.RunRef || wakeup.GoalRef != state.GoalRef {
+			t.Fatalf("wakeup no causal: %+v", wakeup)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatalf("resultado en workspace no detectado: stats=%+v", watcher.StatsV0())
+	}
+}
+
+type fixedGoalMaterializedResultRootResolverForTestV0 struct {
+	root string
+	err  error
+}
+
+func (resolver fixedGoalMaterializedResultRootResolverForTestV0) ResolveGoalMaterializedResultProjectRootV0(
+	context.Context,
+	orquestagoal.GoalWorkStateV0,
+) (string, error) {
+	return resolver.root, resolver.err
+}
+
 func TestGoalMaterializedResultWatcherV0SinGoalsActivosNoPollV0(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

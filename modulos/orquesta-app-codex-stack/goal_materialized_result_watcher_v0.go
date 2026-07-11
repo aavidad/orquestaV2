@@ -28,13 +28,18 @@ const (
 )
 
 type GoalMaterializedResultWatcherConfigV0 struct {
-	ProjectWorkDir string
-	StateStore     orquestagoal.GoalWorkStateStorePortV0
-	Interval       time.Duration
-	MaxGoals       int
-	MaxDirsPerGoal int
-	Wakeup         func(context.Context, GoalMaterializedResultWakeupV0) bool
-	BeforeWakeup   func(context.Context, GoalMaterializedResultWakeupV0)
+	ProjectWorkDir      string
+	ProjectRootResolver GoalMaterializedResultProjectRootResolverPortV0
+	StateStore          orquestagoal.GoalWorkStateStorePortV0
+	Interval            time.Duration
+	MaxGoals            int
+	MaxDirsPerGoal      int
+	Wakeup              func(context.Context, GoalMaterializedResultWakeupV0) bool
+	BeforeWakeup        func(context.Context, GoalMaterializedResultWakeupV0)
+}
+
+type GoalMaterializedResultProjectRootResolverPortV0 interface {
+	ResolveGoalMaterializedResultProjectRootV0(context.Context, orquestagoal.GoalWorkStateV0) (string, error)
 }
 
 type GoalMaterializedResultWakeupV0 struct {
@@ -62,8 +67,9 @@ type GoalMaterializedResultWatcherV0 struct {
 }
 
 type goalMaterializedResultWatchV0 struct {
-	State orquestagoal.GoalWorkStateV0
-	Dirs  map[string]goalMaterializedResultDirFingerprintV0
+	State       orquestagoal.GoalWorkStateV0
+	ProjectRoot string
+	Dirs        map[string]goalMaterializedResultDirFingerprintV0
 }
 
 type goalMaterializedResultDirFingerprintV0 struct {
@@ -156,12 +162,12 @@ func (watcher *GoalMaterializedResultWatcherV0) refreshActiveWatchesV0(
 	if len(states) == 0 {
 		return nil
 	}
-	projectRoot, ok := goalMaterializedResultWatcherProjectRootV0(watcher.config.ProjectWorkDir)
-	if !ok {
-		return nil
-	}
 	watches := make([]goalMaterializedResultWatchV0, 0, len(states))
 	for _, state := range states {
+		projectRoot, ok := watcher.projectRootForStateV0(ctx, state)
+		if !ok {
+			continue
+		}
 		if watcher.detectMaterializedResultV0(ctx, projectRoot, state) {
 			continue
 		}
@@ -174,8 +180,9 @@ func (watcher *GoalMaterializedResultWatcherV0) refreshActiveWatchesV0(
 			continue
 		}
 		watches = append(watches, goalMaterializedResultWatchV0{
-			State: state,
-			Dirs:  dirs,
+			State:       state,
+			ProjectRoot: projectRoot,
+			Dirs:        dirs,
 		})
 	}
 	return watches
@@ -190,10 +197,6 @@ func (watcher *GoalMaterializedResultWatcherV0) pollActiveWatchesV0(
 	if len(states) == 0 {
 		return nil
 	}
-	projectRoot, ok := goalMaterializedResultWatcherProjectRootV0(watcher.config.ProjectWorkDir)
-	if !ok {
-		return nil
-	}
 	stateByRun := map[string]orquestagoal.GoalWorkStateV0{}
 	for _, state := range states {
 		stateByRun[strings.TrimSpace(state.RunRef)] = state
@@ -203,6 +206,10 @@ func (watcher *GoalMaterializedResultWatcherV0) pollActiveWatchesV0(
 		runRef := strings.TrimSpace(watch.State.RunRef)
 		state, ok := stateByRun[runRef]
 		if !ok {
+			continue
+		}
+		projectRoot, ok := watcher.projectRootForStateV0(ctx, state)
+		if !ok || projectRoot != watch.ProjectRoot {
 			continue
 		}
 		current := goalMaterializedResultRefreshKnownDirsV0(watch.Dirs)
@@ -225,8 +232,9 @@ func (watcher *GoalMaterializedResultWatcherV0) pollActiveWatchesV0(
 			continue
 		}
 		next = append(next, goalMaterializedResultWatchV0{
-			State: state,
-			Dirs:  current,
+			State:       state,
+			ProjectRoot: projectRoot,
+			Dirs:        current,
 		})
 	}
 	seen := map[string]bool{}
@@ -236,6 +244,10 @@ func (watcher *GoalMaterializedResultWatcherV0) pollActiveWatchesV0(
 	for _, state := range states {
 		runRef := strings.TrimSpace(state.RunRef)
 		if seen[runRef] {
+			continue
+		}
+		projectRoot, ok := watcher.projectRootForStateV0(ctx, state)
+		if !ok {
 			continue
 		}
 		if watcher.detectMaterializedResultV0(ctx, projectRoot, state) {
@@ -250,11 +262,27 @@ func (watcher *GoalMaterializedResultWatcherV0) pollActiveWatchesV0(
 			continue
 		}
 		next = append(next, goalMaterializedResultWatchV0{
-			State: state,
-			Dirs:  dirs,
+			State:       state,
+			ProjectRoot: projectRoot,
+			Dirs:        dirs,
 		})
 	}
 	return next
+}
+
+func (watcher *GoalMaterializedResultWatcherV0) projectRootForStateV0(
+	ctx context.Context,
+	state orquestagoal.GoalWorkStateV0,
+) (string, bool) {
+	root := watcher.config.ProjectWorkDir
+	if watcher.config.ProjectRootResolver != nil {
+		resolved, err := watcher.config.ProjectRootResolver.ResolveGoalMaterializedResultProjectRootV0(ctx, state)
+		if err != nil {
+			return "", false
+		}
+		root = resolved
+	}
+	return goalMaterializedResultWatcherProjectRootV0(root)
 }
 
 func (watcher *GoalMaterializedResultWatcherV0) activeGoalStatesV0(

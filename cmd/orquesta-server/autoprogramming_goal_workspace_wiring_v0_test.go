@@ -169,6 +169,17 @@ func TestGoalRequiredTestAttestationWorkspaceSelectorResolvesAfterRestartAndFail
 	if err != nil {
 		t.Fatalf("capture restarted workspace: %v", err)
 	}
+	resultRootResolver := serverGoalMaterializedResultWorkspaceRootV0{
+		CanonicalRoot:   repo,
+		WorkspaceLookup: restarted,
+	}
+	resolvedRoot, err := resultRootResolver.ResolveGoalMaterializedResultProjectRootV0(
+		context.Background(),
+		orquestagoal.GoalWorkStateV0{GoalRef: packet.GoalRef},
+	)
+	if err != nil || filepath.Clean(resolvedRoot) != filepath.Clean(binding.ProjectWorkDir) {
+		t.Fatalf("result watcher root=%q want=%q err=%v", resolvedRoot, binding.ProjectWorkDir, err)
+	}
 	canonicalSnapshot, err := selector.CaptureGoalRequiredTestFinalSnapshotV0(context.Background(), orquestagoal.GoalRequiredTestFinalSnapshotRequestV0{
 		RunRef: "run-ref-attestation-canonical", GoalRef: "goal-ref-attestation-canonical",
 		WriteSet:       []orquestagoal.GoalWriteScopeV0{{Path: "workspace-only.txt"}},
@@ -182,6 +193,12 @@ func TestGoalRequiredTestAttestationWorkspaceSelectorResolvesAfterRestartAndFail
 	}
 	if _, err := selector.CaptureGoalRequiredTestFinalSnapshotV0(context.Background(), request); err == nil {
 		t.Fatal("capture debe fallar si un indice persistido no resuelve su workspace")
+	}
+	if _, err := resultRootResolver.ResolveGoalMaterializedResultProjectRootV0(
+		context.Background(),
+		orquestagoal.GoalWorkStateV0{GoalRef: packet.GoalRef},
+	); err == nil {
+		t.Fatal("result watcher debe fallar si un indice persistido no resuelve su workspace")
 	}
 	if _, err := selector.AttestGoalRequiredTestsV0(context.Background(), orquestagoal.GoalRequiredTestAttestationRequestV0{
 		RunRef: request.RunRef, GoalRef: request.GoalRef, FinalSnapshot: workspaceSnapshot,

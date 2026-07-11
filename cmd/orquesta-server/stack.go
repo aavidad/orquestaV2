@@ -484,7 +484,13 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 		stack.MCPTransportBindings.AutoprogrammingPrepareRun,
 		serverConfig.ProjectWorkDir,
 	)
-	if watcher := serverGoalMaterializedResultWatcherFromStackV0(serverConfig, stack, goalBackend, supervisorWakeup); watcher != nil {
+	if watcher := serverGoalMaterializedResultWatcherFromStackV0(
+		serverConfig,
+		stack,
+		goalBackend,
+		autoprogrammingGoalBackend,
+		supervisorWakeup,
+	); watcher != nil {
 		goalStateChange.bindV0(watcher.NotifyActiveGoalsChangedV0)
 		stack.GoalMaterializedResultWatcher = watcher
 	}
@@ -561,6 +567,7 @@ func serverGoalMaterializedResultWatcherFromStackV0(
 	serverConfig orquestaserver.ConfigV0,
 	stack orquestaappcodexstack.StackV0,
 	goalBackend serverCodexGoalBackendV0,
+	autoprogrammingGoalBackend serverCodexGoalBackendV0,
 	supervisorWakeup *serverSupervisorWakeupRelayV0,
 ) *orquestaappcodexstack.GoalMaterializedResultWatcherV0 {
 	serverConfig = orquestaserver.NormalizeConfigV0(serverConfig)
@@ -574,7 +581,11 @@ func serverGoalMaterializedResultWatcherFromStackV0(
 	return orquestaappcodexstack.NewGoalMaterializedResultWatcherV0(
 		orquestaappcodexstack.GoalMaterializedResultWatcherConfigV0{
 			ProjectWorkDir: stack.Codex.ProjectWorkDir,
-			StateStore:     stack.Stores.AppGoalStateStore,
+			ProjectRootResolver: serverGoalMaterializedResultWorkspaceRootV0{
+				CanonicalRoot:   stack.Codex.ProjectWorkDir,
+				WorkspaceLookup: serverCodexGoalWorkspaceLookupFromBackendV0(autoprogrammingGoalBackend),
+			},
+			StateStore: stack.Stores.AppGoalStateStore,
 			BeforeWakeup: func(_ context.Context, wakeup orquestaappcodexstack.GoalMaterializedResultWakeupV0) {
 				supervisorWakeup.forgetGoalObservationFingerprintV0(wakeup.RunRef)
 			},
