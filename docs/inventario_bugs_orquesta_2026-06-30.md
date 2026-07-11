@@ -4323,6 +4323,19 @@ persiste test/promocion sin normalizacion silenciosa en app-stack.
 Ambos adapters emiten ahora refs `prefijo-hash`; el nombre de fichero se deriva
 internamente y los tests atraviesan las transiciones reales del agregado.
 
+BUG `BUG-ORQ-20260711-255` (abierto, aislamiento/wiring real): un piloto real
+de `prepare-run` creo dos worktrees fisicos para un batch, pero los dos Codex
+app-server nacieron con el checkout canonico como CWD. `AppGoal` no tenia el
+`WorkspaceRouter` que si se inyectaba en `IdleGoal`; la provision batch y el
+launcher publico estaban desacoplados. Un goal escribio directamente en el
+canonico y el otro atribuyo ese cambio ajeno como violacion de su write-set.
+El batch no dio falso verde: quedo en `goals_running` y el servidor temporal se
+detuvo cooperativamente. Cierre exigido: wiring causal de workspace para launch,
+observe, fingerprint y atestacion, prueba de composicion y replay real de dos
+goals con canonico limpio hasta integrar, gate unico y replay idempotente.
+Evidencia y analisis en la
+[incidencia del router de workspace batch](incidencias/incidencia_orquesta_batch_workspace_router_desacoplado_2026-07-11.md).
+
 Avance 2026-07-11: `b96e9b115` añade refs obligatorias de criterios
 verificables al contrato Goal; el transporte posterior añade
 `acceptance_checks` tipados a autoprogramacion V0/V1 y los publica por MCP. Los
