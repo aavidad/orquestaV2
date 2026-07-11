@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -32,20 +31,18 @@ func startupCheckFromEnvV0(
 	stack orquestaappcodexstack.StackV0,
 	serverConfig orquestaserver.ConfigV0,
 ) orquestaserver.StartupCheckPortV0 {
-	mode := strings.TrimSpace(os.Getenv(envStartupCleanupModeV0))
-	if mode == "" {
-		mode = startupCleanupModeDiagnoseV0
-	}
-	mode = strings.ToLower(mode)
-	if mode == startupCleanupModeOffV0 || mode == "disabled" || mode == "0" {
+	resolved := startupCleanupConfigFromProjectConfigFileV0(
+		projectConfigFromServerConfigBestEffortV0(serverConfig),
+	)
+	if resolved.Mode == startupCleanupModeOffV0 || resolved.Mode == "disabled" || resolved.Mode == "0" {
 		return nil
 	}
 	return serverStartupCheckV0{
 		Stack:        stack,
 		ServerConfig: serverConfig,
-		Mode:         mode,
-		QueueLimit:   intEnvOrDefaultV0(envStartupQueueLimitV0, 0),
-		ScopeRefs:    csvEnvOrDefaultV0(envStartupCleanupScopeRefsV0, nil),
+		Mode:         resolved.Mode,
+		QueueLimit:   resolved.QueueLimit,
+		ScopeRefs:    resolved.ScopeRefs,
 	}
 }
 

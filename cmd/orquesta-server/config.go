@@ -202,9 +202,6 @@ func serverConfigFromEnvWithProjectConfigPathV0(projectConfigPath string) (orque
 	return config, orquestaserver.ValidateConfigV0(config)
 }
 
-func startupCleanupModeEffectiveValueV0() string {
-	return envOrDefaultV0(envStartupCleanupModeV0, startupCleanupModeDiagnoseV0)
-}
 func defaultIdleSelfImprovementWriteSetV0() []string {
 	return []string{
 		"modulos/orquesta-server",

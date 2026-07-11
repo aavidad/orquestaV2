@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -20,6 +21,18 @@ func serverProjectConfigEffectiveStringValueForEnvKeyV0(config serverProjectConf
 		return value, true
 	}
 	switch key {
+	case envStartupCleanupModeV0:
+		if configStringPointerHasValueV0(config.StartupCleanup.Mode) {
+			return strings.ToLower(strings.TrimSpace(*config.StartupCleanup.Mode)), true
+		}
+	case envStartupCleanupScopeRefsV0:
+		if config.StartupCleanup.ScopeRefs != nil && len(*config.StartupCleanup.ScopeRefs) > 0 {
+			return strings.Join(compactServerStringsV0(*config.StartupCleanup.ScopeRefs), ","), true
+		}
+	case envStartupQueueLimitV0:
+		if configIntPointerPositiveV0(config.StartupCleanup.QueueLimit) {
+			return strconv.Itoa(*config.StartupCleanup.QueueLimit), true
+		}
 	case envSecurityModeV0:
 		if configStringPointerHasValueV0(config.RailsSecurity.SecurityMode) {
 			return serverSecurityModeEffectiveValueFromProjectConfigFileV0(config), true

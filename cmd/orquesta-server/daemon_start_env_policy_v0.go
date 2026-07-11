@@ -87,6 +87,7 @@ func (builder daemonStartEnvBuilderV0) addParentV0(parent []string) {
 func (builder daemonStartEnvBuilderV0) addDerivedV0(config orquestaserver.ConfigV0) {
 	config = orquestaserver.NormalizeConfigV0(config)
 	projectConfig := projectConfigFromServerConfigBestEffortV0(config)
+	startupCleanup := startupCleanupConfigFromProjectConfigFileV0(projectConfig)
 	builder.setConfigV0(envServerAddrV0, config.Addr, "defaulted", "server_bootstrap", true)
 	builder.setConfigV0(envServerStateDirV0, config.StateDir, "derived", "server_bootstrap", true)
 	builder.setV0(envServerWorktreeV0, serverWorktreeDirFromEnvV0(config.ProjectWorkDir), "derived", "server_bootstrap", false)
@@ -104,7 +105,9 @@ func (builder daemonStartEnvBuilderV0) addDerivedV0(config orquestaserver.Config
 	builder.setConfigV0(envRailsModeV0, serverRailsModeEffectiveValueFromProjectConfigFileV0(projectConfig), "defaulted", "rails", false)
 	builder.setConfigV0(detailProhibitedRailsEnvV0, serverDetailRailsEffectiveValueFromProjectConfigFileV0(projectConfig), "defaulted", "rails", false)
 	builder.setConfigV0(detailProhibitedRailsScopeEnvV0, serverDetailRailsScopeEffectiveValueFromProjectConfigFileV0(projectConfig), "defaulted", "rails", false)
-	builder.setConfigV0(envStartupCleanupModeV0, startupCleanupModeEffectiveValueV0(), "defaulted", "startup", false)
+	builder.setConfigV0(envStartupCleanupModeV0, startupCleanup.Mode, "defaulted", "startup", false)
+	builder.setConfigV0(envStartupCleanupScopeRefsV0, strings.Join(startupCleanup.ScopeRefs, ","), "defaulted", "startup", false)
+	builder.setConfigV0(envStartupQueueLimitV0, strconv.Itoa(startupCleanup.QueueLimit), "defaulted", "startup", false)
 	builder.setConfigV0(envServerDaemonLogMaxBytesV0, strconv.FormatInt(config.DaemonLogPolicy.MaxBytes, 10), "defaulted", "daemon_logs", false)
 	builder.setConfigV0(envServerDaemonLogMaxRotatedV0, strconv.Itoa(config.DaemonLogPolicy.MaxRotatedFiles), "defaulted", "daemon_logs", false)
 	builder.setConfigV0(envServerDaemonLogRetentionDaysV0, strconv.Itoa(config.DaemonLogPolicy.RetentionDays), "defaulted", "daemon_logs", false)

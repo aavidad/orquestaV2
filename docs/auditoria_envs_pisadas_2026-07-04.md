@@ -778,3 +778,24 @@ Verificacion:
 - `go test -race -count=1 ./cmd/orquesta-server -run Hermes`
 - `scripts/orquesta_metricas_deuda.sh --json` -> 424 productivas, 103 solo test
 - `git diff --check`
+
+## Actualizacion Codex 2026-07-11: cierre de startup_cleanup
+
+El ultimo residual clasificado de configuracion persistente queda migrado a la
+seccion tipada `startup_cleanup` de `orquesta.config.json`, con campos `mode`,
+`scope_refs` y `queue_limit`. Los tres nombres `ORQUESTA_STARTUP_*` se conservan
+como overrides de compatibilidad y la precedencia es
+`env > fichero > default`.
+
+`startupCheckFromEnvV0` ya no compone esos valores mediante tres lecturas
+separadas: consume un snapshot unico. La misma resolucion alimenta
+`effective_config` y el entorno minimo del daemon, evitando que un default
+proyectado por el padre tape la seccion canonica del snapshot hijo. El default
+sigue siendo `diagnose`; esta migracion no activa `forced_stop` ni limpia
+estado por si sola.
+
+Pruebas nuevas cubren fichero, precedencia env y proyeccion daemon. La suite
+completa de `cmd/orquesta-server`, `TestEnvVarsBudgetMEJ106V0`,
+`scripts/orquesta_metricas_deuda.sh --json` y `git diff --check` quedan verdes.
+La metrica se mantiene en 424 variables productivas y 103 solo de test; no se
+sube ningun presupuesto.

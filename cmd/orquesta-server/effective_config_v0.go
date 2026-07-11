@@ -36,6 +36,7 @@ func serverEffectiveConfigFromEnvAndProjectConfigV0(
 	worktreeSnapshotBudget := codexServerWorktreeSnapshotReadBudgetFromProjectConfigV0(config.ProjectWorkDir)
 	daemonEnvPolicy := serverDaemonStartEnvPolicyV0(os.Environ(), config)
 	goalProgressPolicy := serverAutoprogrammingGoalProgressPolicyFromConfigV0(config)
+	startupCleanup := startupCleanupConfigFromProjectConfigFileV0(projectConfig)
 	settings := []orquestaserver.ServerConfigSettingV0{
 		serverOrquestaBaseURLSettingV0(),
 		serverSensitiveConfigSettingFromRegistryV0(
@@ -354,13 +355,20 @@ func serverEffectiveConfigFromEnvAndProjectConfigV0(
 			envExternalWorkLegacyDirectorLoopV0,
 			strconv.FormatBool(boolEnvOrDefaultV0(envExternalWorkLegacyDirectorLoopV0, false)),
 		),
-		serverConfigSettingFromRegistryV0(
+		serverConfigSettingFromRegistryWithSourceV0(
 			envStartupCleanupModeV0,
-			startupCleanupModeEffectiveValueV0(),
+			startupCleanup.Mode,
+			configSettingSourceFromConfigOrProjectConfigV0(config, envStartupCleanupModeV0),
 		),
-		serverConfigSettingFromRegistryV0(
+		serverConfigSettingFromRegistryWithSourceV0(
 			envStartupCleanupScopeRefsV0,
-			strings.Join(csvEnvOrDefaultV0(envStartupCleanupScopeRefsV0, nil), ","),
+			strings.Join(startupCleanup.ScopeRefs, ","),
+			configSettingSourceFromConfigOrProjectConfigV0(config, envStartupCleanupScopeRefsV0),
+		),
+		serverConfigSettingFromRegistryWithSourceV0(
+			envStartupQueueLimitV0,
+			strconv.Itoa(startupCleanup.QueueLimit),
+			configSettingSourceFromConfigOrProjectConfigV0(config, envStartupQueueLimitV0),
 		),
 		serverConfigSettingFromRegistryV0(envCapacityReasoningEffortV0, string(stackCapacity.ReasoningEffort)),
 		serverConfigSettingFromRegistryV0(envCapacityPolicyRefV0, stackCapacity.PolicyRef),

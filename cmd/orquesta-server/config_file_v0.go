@@ -26,6 +26,7 @@ type serverProjectConfigFileV0 struct {
 	Server               serverProjectConfigServerV0               `json:"server,omitempty"`
 	ServerHTTP           serverProjectConfigServerHTTPV0           `json:"server_http,omitempty"`
 	ServerLifecycle      serverProjectConfigServerLifecycleV0      `json:"server_lifecycle,omitempty"`
+	StartupCleanup       serverProjectConfigStartupCleanupV0       `json:"startup_cleanup,omitempty"`
 	ControlPlane         serverProjectConfigControlPlaneV0         `json:"control_plane,omitempty"`
 	ServerSupervisor     serverProjectConfigServerSupervisorV0     `json:"server_supervisor,omitempty"`
 	ServerIdle           serverProjectConfigServerIdleV0           `json:"server_idle,omitempty"`
@@ -58,23 +59,6 @@ type serverProjectConfigFileV0 struct {
 	Autoprogramming      serverProjectConfigAutoprogrammingV0      `json:"autoprogramming,omitempty"`
 }
 
-type serverProjectConfigServerV0 struct {
-	Addr          *string `json:"addr,omitempty"`
-	StateDir      *string `json:"state_dir,omitempty"`
-	AuditFile     *string `json:"audit_file,omitempty"`
-	AuditDisabled *bool   `json:"audit_disabled,omitempty"`
-}
-type serverProjectConfigServerHTTPV0 struct {
-	ReadHeaderTimeoutMS *int `json:"read_header_timeout_ms,omitempty"`
-	ReadTimeoutMS       *int `json:"read_timeout_ms,omitempty"`
-	WriteTimeoutMS      *int `json:"write_timeout_ms,omitempty"`
-	IdleTimeoutMS       *int `json:"idle_timeout_ms,omitempty"`
-	MaxHeaderBytes      *int `json:"max_header_bytes,omitempty"`
-	ControlBodyMaxBytes *int `json:"control_body_max_bytes,omitempty"`
-}
-type serverProjectConfigServerLifecycleV0 struct {
-	ShutdownGraceMS *int `json:"shutdown_grace_ms,omitempty"`
-}
 type serverProjectConfigControlPlaneV0 struct {
 	RemoteAccessOptIn *bool   `json:"remote_access_opt_in,omitempty"`
 	Token             *string `json:"token,omitempty"`
@@ -557,6 +541,12 @@ func serverProjectConfigHasEffectiveValueForEnvKeyV0(config serverProjectConfigF
 		return configIntPointerPositiveV0(config.ServerHTTP.ControlBodyMaxBytes)
 	case envServerShutdownGraceMSV0:
 		return configIntPointerPositiveV0(config.ServerLifecycle.ShutdownGraceMS)
+	case envStartupCleanupModeV0:
+		return configStringPointerHasValueV0(config.StartupCleanup.Mode)
+	case envStartupCleanupScopeRefsV0:
+		return config.StartupCleanup.ScopeRefs != nil && len(*config.StartupCleanup.ScopeRefs) > 0
+	case envStartupQueueLimitV0:
+		return configIntPointerPositiveV0(config.StartupCleanup.QueueLimit)
 	case envServerMaxRunsPerTickV0:
 		return configIntPointerPositiveV0(config.ServerSupervisor.MaxRunsPerTick)
 	case envServerMaxExecutionsPerTickV0:
