@@ -129,3 +129,18 @@ Los ocho modulos sin importadores no se borran: son adaptadores/tools opt-in
 recientes, incluido SQL de referencia declarado en AGENTS. Los exportados,
 contratos y privados de test quedan fuera de esta ola. Duplicados y ficheros
 grandes son deuda de mantenibilidad, no prueba de codigo muerto.
+
+## Actualizacion Codex 2026-07-11: agotamiento de privados sin referencias
+
+La medicion fresca del arbol en `bea1c3f89` encontro 1.178 candidatas brutas,
+pero solo un privado marcado por `deadcode` sin referencias textuales:
+`idleSelfImprovementGoalFirstFromProjectConfigFileV0`. Era un wrapper legacy de
+`server_idle` sustituido por la configuracion tipada y sin callers ni tests.
+
+Tras retirarlo y pasar los focales de configuracion/idle/registro, el informe
+`/tmp/orquesta-code-audit-after-clean-20260711/current.json` queda en 1.177
+candidatas, 307 helpers duplicados, 8 modulos sin importadores, 23 ficheros de
+mas de 800 lineas y 25.684 funciones indexadas. La categoria
+`static_candidate_without_text_references_requires_review` queda en cero. No
+hay otra retirada destructiva autorizada por esta auditoria; el resto exige
+clasificacion de contrato, wiring, test-only o API publica.

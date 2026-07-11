@@ -156,3 +156,15 @@ artefactos pasan a `validation_closure_artifacts_v0.go`. El subagente no llego
 a devolver resultado, por lo que el diff se trato como no confiable y se
 revisaron/reexecutaron focales y suite completa antes del commit. No cambia el
 orden de `ValidateGoalWorkClosureV0` ni sus codigos de error.
+
+## Actualizacion 2026-07-11: categoria privada sin referencias en cero
+
+Una medicion fresca posterior al cierre del nucleo encontro un unico privado
+sin referencias textuales. La retirada del wrapper legacy
+`idleSelfImprovementGoalFirstFromProjectConfigFileV0` reduce el indice a 25.684
+funciones y el deadcode bruto a 1.177; la categoria
+`static_candidate_without_text_references_requires_review` queda vacia. Los
+722 candidatos con referencias de produccion, 43 usados solo por tests, 412
+privados que requieren revision y 1.895 exportados/contratos no son borrables
+por conteo. Los 8 modulos sin importador conservan decision
+`retain_pending_composition`.

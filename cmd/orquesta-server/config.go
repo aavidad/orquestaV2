@@ -293,13 +293,6 @@ func serverIdleSelfImprovementDisabledForOPESContextV0(
 		sameAbsDirForConfigV0(idleSelfImprovementProjectDir, opesConfig.ProjectWorkDir)
 }
 
-func idleSelfImprovementGoalFirstFromProjectConfigFileV0(projectConfig serverProjectConfigFileV0) bool {
-	if strings.TrimSpace(os.Getenv(envServerIdleSelfImprovementGoalFirstV0)) != "" {
-		return boolEnvOrDefaultV0(envServerIdleSelfImprovementGoalFirstV0, false)
-	}
-	return serverGoalBackendOperationalFromProjectConfigFileV0(projectConfig)
-}
-
 func sameAbsDirForConfigV0(left string, right string) bool {
 	leftAbs, err := filepath.Abs(strings.TrimSpace(left))
 	if err != nil {
