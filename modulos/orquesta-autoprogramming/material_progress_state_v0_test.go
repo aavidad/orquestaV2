@@ -155,7 +155,7 @@ func validMaterialProgressStateV0() MaterialProgressStateV0 {
 		SchemaVersion: MaterialProgressStateSchemaVersionV0,
 		StoreVersion:  1,
 		RunRef:        "run-ref-001", GoalRef: "goal-ref-001", Policy: MaterialProgressPolicyV0{
-			WarningAfterTokens: 10, ReplanRequiredAfterTokens: 20, HardStopRequiredAfterTokens: 30,
+			WarningAfterTokens: 10, ReplanRequiredAfterTokens: 20, HardStopRequiredAfterTokens: 30, MaxReplans: 1,
 		},
 		Segment: segment, LastCheckpoint: checkpoint, LastDecision: decision,
 		BaselineRef: "baseline-ref-001", WriteSetSHA256: strings.Repeat("a", 64),

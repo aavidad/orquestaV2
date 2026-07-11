@@ -185,6 +185,9 @@ func materialProgressStateRequiredIssuesV0(state MaterialProgressStateV0) []Mate
 		state.ContextRevisionRef != state.LastCheckpoint.ContextRevisionRef {
 		issues = append(issues, materialProgressIssueV0("state_context_revision_ref_mismatch", "context_revision_ref", "contexto del estado, tramo y checkpoint debe coincidir"))
 	}
+	if state.Policy.MaxReplans < 0 || state.Segment.ReplansUsed > state.Policy.MaxReplans {
+		issues = append(issues, materialProgressIssueV0("state_replan_budget_invalid", "segment.replans_used", "presupuesto de replan invalido"))
+	}
 	wantCheckpointRef := MaterialProgressCheckpointRefV0(
 		state.RunRef, state.GoalRef, state.BaselineRef, state.WriteSetSHA256, state.LastCheckpoint,
 	)
@@ -267,6 +270,7 @@ func materialProgressStateActionValidV0(action MaterialProgressActionV0) bool {
 func materialProgressStateSegmentsEqualV0(left, right MaterialProgressSegmentV0) bool {
 	if left.StartSequence != right.StartSequence ||
 		left.StartTokensAccumulated != right.StartTokensAccumulated ||
+		left.ReplansUsed != right.ReplansUsed ||
 		left.ContextRevisionRef != right.ContextRevisionRef ||
 		len(left.EvidenceRefs) != len(right.EvidenceRefs) {
 		return false

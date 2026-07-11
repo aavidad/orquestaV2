@@ -34,6 +34,7 @@ type MaterialProgressCheckpointV0 struct {
 type MaterialProgressSegmentV0 struct {
 	StartSequence          int64    `json:"start_sequence"`
 	StartTokensAccumulated int64    `json:"start_tokens_accumulated"`
+	ReplansUsed            int      `json:"replans_used,omitempty"`
 	ContextRevisionRef     string   `json:"context_revision_ref"`
 	EvidenceRefs           []string `json:"evidence_refs,omitempty"`
 }
@@ -42,6 +43,7 @@ type MaterialProgressPolicyV0 struct {
 	WarningAfterTokens          int64 `json:"warning_after_tokens"`
 	ReplanRequiredAfterTokens   int64 `json:"replan_required_after_tokens"`
 	HardStopRequiredAfterTokens int64 `json:"hard_stop_required_after_tokens"`
+	MaxReplans                  int   `json:"max_replans,omitempty"`
 }
 
 type MaterialProgressInputV0 struct {

@@ -219,12 +219,25 @@ func TestDecideMaterialProgressV0PropertySeleccionaMayorUmbralAplicable(t *testi
 	}
 }
 
+func TestDecideMaterialProgressV0ReincidenciaAgotaReplanYExigeHardStop(t *testing.T) {
+	input := validMaterialProgressInputV0()
+	input.Segment.ReplansUsed = input.Policy.MaxReplans
+	input.Checkpoint.TokensAccumulated = input.Segment.StartTokensAccumulated + input.Policy.ReplanRequiredAfterTokens
+
+	got := DecideMaterialProgressV0(input)
+
+	if !got.Accepted || got.Action != MaterialProgressActionHardStopRequiredV0 || got.MaterialProgressed {
+		t.Fatalf("decision=%+v", got)
+	}
+}
+
 func validMaterialProgressInputV0() MaterialProgressInputV0 {
 	return MaterialProgressInputV0{
 		Policy: MaterialProgressPolicyV0{
 			WarningAfterTokens:          10,
 			ReplanRequiredAfterTokens:   20,
 			HardStopRequiredAfterTokens: 30,
+			MaxReplans:                  1,
 		},
 		Segment: MaterialProgressSegmentV0{
 			StartSequence:          1,

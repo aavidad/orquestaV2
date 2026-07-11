@@ -64,6 +64,7 @@ func DecideMaterialProgressV0(input MaterialProgressInputV0) MaterialProgressDec
 			Segment: MaterialProgressSegmentV0{
 				StartSequence:          input.Checkpoint.Sequence,
 				StartTokensAccumulated: input.Checkpoint.TokensAccumulated,
+				ReplansUsed:            input.Segment.ReplansUsed,
 				ContextRevisionRef:     input.Checkpoint.ContextRevisionRef,
 				EvidenceRefs: compactStringsV0(append(
 					append([]string{}, input.Segment.EvidenceRefs...),
@@ -76,7 +77,7 @@ func DecideMaterialProgressV0(input MaterialProgressInputV0) MaterialProgressDec
 	tokensWithoutMaterial := input.Checkpoint.TokensAccumulated - input.Segment.StartTokensAccumulated
 	return MaterialProgressDecisionV0{
 		Accepted:              true,
-		Action:                materialProgressActionV0(input.Policy, tokensWithoutMaterial),
+		Action:                materialProgressActionV0(input.Policy, input.Segment, tokensWithoutMaterial),
 		TokensWithoutMaterial: tokensWithoutMaterial,
 		Segment:               input.Segment,
 	}
@@ -108,6 +109,13 @@ func materialProgressPolicyIssuesV0(policy MaterialProgressPolicyV0) []MaterialP
 			"warning, replan y hard stop deben tener umbrales estrictamente crecientes",
 		))
 	}
+	if policy.MaxReplans < 0 {
+		issues = append(issues, materialProgressIssueV0(
+			"policy_max_replans_invalid",
+			"policy.max_replans",
+			"max replans no puede ser negativo",
+		))
+	}
 	return issues
 }
 
@@ -125,6 +133,13 @@ func materialProgressSegmentIssuesV0(segment MaterialProgressSegmentV0) []Materi
 			"segment_start_tokens_invalid",
 			"segment.start_tokens_accumulated",
 			"tokens iniciales no pueden ser negativos",
+		))
+	}
+	if segment.ReplansUsed < 0 {
+		issues = append(issues, materialProgressIssueV0(
+			"segment_replans_used_invalid",
+			"segment.replans_used",
+			"replans usados no pueden ser negativos",
 		))
 	}
 	if segment.ContextRevisionRef == "" {
@@ -177,11 +192,18 @@ func materialProgressCheckpointIssuesV0(checkpoint MaterialProgressCheckpointV0)
 	return issues
 }
 
-func materialProgressActionV0(policy MaterialProgressPolicyV0, tokensWithoutMaterial int64) MaterialProgressActionV0 {
+func materialProgressActionV0(
+	policy MaterialProgressPolicyV0,
+	segment MaterialProgressSegmentV0,
+	tokensWithoutMaterial int64,
+) MaterialProgressActionV0 {
 	switch {
 	case tokensWithoutMaterial >= policy.HardStopRequiredAfterTokens:
 		return MaterialProgressActionHardStopRequiredV0
 	case tokensWithoutMaterial >= policy.ReplanRequiredAfterTokens:
+		if segment.ReplansUsed >= policy.MaxReplans {
+			return MaterialProgressActionHardStopRequiredV0
+		}
 		return MaterialProgressActionReplanRequiredV0
 	case tokensWithoutMaterial >= policy.WarningAfterTokens:
 		return MaterialProgressActionWarningV0
