@@ -222,21 +222,6 @@ func defaultIdleSelfImprovementAcceptanceV0() []string {
 	}
 }
 
-func serverSupervisorMaxExternalWaitsV0() (int, error) {
-	raw := strings.TrimSpace(os.Getenv(envServerDrainMaxExternalWaitsV0))
-	if raw == "" {
-		return defaultServerSupervisorMaxExternalWaitsV0, nil
-	}
-	value, err := strconv.Atoi(raw)
-	if err != nil || value <= 0 {
-		return 0, fmt.Errorf("%s incompatible: usar entero positivo hasta %d", envServerDrainMaxExternalWaitsV0, maxServerSupervisorMaxExternalWaitsV0)
-	}
-	if value > maxServerSupervisorMaxExternalWaitsV0 {
-		return 0, fmt.Errorf("%s incompatible con supervisor residente: max=%d", envServerDrainMaxExternalWaitsV0, maxServerSupervisorMaxExternalWaitsV0)
-	}
-	return value, nil
-}
-
 func defaultControlDirV0(projectDir string) string {
 	cleanProject := filepath.Clean(projectDir)
 	base := filepath.Base(cleanProject)
@@ -298,10 +283,6 @@ func serverIdleSelfImprovementDisabledForOPESContextV0(
 	}
 	return opesConfig.HasProjectWorkDir() &&
 		sameAbsDirForConfigV0(idleSelfImprovementProjectDir, opesConfig.ProjectWorkDir)
-}
-
-func idleSelfImprovementGoalFirstFromEnvV0() bool {
-	return idleSelfImprovementGoalFirstFromProjectConfigFileV0(serverProjectConfigFileV0{})
 }
 
 func idleSelfImprovementGoalFirstFromProjectConfigFileV0(projectConfig serverProjectConfigFileV0) bool {

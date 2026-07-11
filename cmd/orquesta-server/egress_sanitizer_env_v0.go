@@ -92,10 +92,6 @@ func init() {
 	}
 }
 
-func egressSanitizerConfigFromEnvV0() orquestaappcodexstack.EgressSanitizerConfigV0 {
-	return egressSanitizerConfigFromProjectConfigFileV0(serverProjectConfigFileV0{})
-}
-
 func egressSanitizerConfigFromProjectConfigFileV0(
 	config serverProjectConfigFileV0,
 ) orquestaappcodexstack.EgressSanitizerConfigV0 {

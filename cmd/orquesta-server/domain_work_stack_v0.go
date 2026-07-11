@@ -83,19 +83,11 @@ func domainWorkExecutorFromEnvV0(
 	return orquestamcp.NewMCPDomainWorkToolExecutorV0(creator, creator), nil
 }
 
-func domainWorkHTTPDestinationPolicyFromEnvV0() error {
-	return domainWorkHTTPDestinationPolicyFromProjectConfigFileV0(serverProjectConfigFileV0{})
-}
-
 func domainWorkHTTPDestinationPolicyFromProjectConfigFileV0(config serverProjectConfigFileV0) error {
 	if strings.EqualFold(domainWorkHTTPDomainRefFromProjectConfigFileV0(config), "opes") {
 		return fmt.Errorf("opes_destination_productive_not_allowed")
 	}
 	return nil
-}
-
-func domainWorkHTTPEgressPolicyFromEnvV0() (orquestadomainworkhttp.EgressPolicyV0, error) {
-	return domainWorkHTTPEgressPolicyFromProjectConfigFileV0(serverProjectConfigFileV0{})
 }
 
 func domainWorkHTTPEgressPolicyFromProjectConfigFileV0(config serverProjectConfigFileV0) (orquestadomainworkhttp.EgressPolicyV0, error) {
@@ -134,17 +126,6 @@ func opesDomainWorkDestinationPolicyFromEnvV0(baseURL string) error {
 		return fmt.Errorf("opes_destination_evidence_ref_required")
 	}
 	return nil
-}
-
-func splitCSVEnvV0(raw string) []string {
-	var values []string
-	for _, item := range strings.Split(raw, ",") {
-		value := strings.TrimSpace(item)
-		if value != "" {
-			values = append(values, value)
-		}
-	}
-	return values
 }
 
 func domainWorkDeliveryEnabledFromEnvV0() bool {

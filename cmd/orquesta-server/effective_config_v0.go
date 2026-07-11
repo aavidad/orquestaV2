@@ -528,17 +528,6 @@ func serverCodexCodeHomeSettingV0() orquestaserver.ServerConfigSettingV0 {
 	return setting
 }
 
-func serverOPESBaseURLSettingV0() orquestaserver.ServerConfigSettingV0 {
-	setting := serverSensitiveConfigSettingFromRegistryV0(
-		envOPESBaseURLV0,
-		configuredRefValueV0(firstNonEmptyEnvV0(envOPESBaseURLV0, envOPESBaseURLLegacyV0), "opes-base-url-configured"),
-	)
-	if configSettingSourceFromEnvOrLegacyV0(envOPESBaseURLV0, envOPESBaseURLLegacyV0) == "legacy_alias" {
-		setting.Source = "legacy_alias"
-	}
-	return setting
-}
-
 func serverEffectiveConfigDiagnosticsFromConfigV0(projectConfig serverProjectConfigFileV0) []orquestaserver.ServerDiagnosticV0 {
 	diagnostics := []orquestaserver.ServerDiagnosticV0{}
 	diagnostics = append(diagnostics, serverEnvAliasDiagnosticsV0(
@@ -776,14 +765,6 @@ func configSettingSourceFromEnvOrLegacyV0(canonical string, legacies ...string) 
 func serverIdleSelfImprovementAfterLegacyActiveV0() bool {
 	return strings.TrimSpace(os.Getenv(envServerIdleSelfImprovementAfterV0)) == "" &&
 		strings.TrimSpace(os.Getenv(envServerIdleSelfImprovementAfterLegacyV0)) != ""
-}
-
-func detailRailsEffectiveValueV0() string {
-	return serverDetailRailsEffectiveValueV0()
-}
-
-func detailRailsScopeEffectiveValueV0() string {
-	return serverDetailRailsScopeEffectiveValueV0()
 }
 
 func tokenPresenceV0(value string) string {
