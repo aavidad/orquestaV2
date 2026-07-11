@@ -38,6 +38,11 @@ app desechable ni se toco OPES/remoto.
   `sandbox_unix_socket_operation_not_permitted`; al faltar aun en el catalogo
   tipado, consumio tres continuaciones y cerro blocked. El canonico siguio
   limpio y el shutdown termino en el primer sondeo.
+- replay9 normalizo el alias y ejecuto atestacion independiente para g01. Dos
+  checks pasaron, pero el test Go fallo: el snapshot de modulos configurado no
+  incluia `golang.org/x/text@v0.38.0`; diez tests anidados con `GOPROXY=off`
+  expusieron que el preflight no validaba cierre completo de dependencias. G02
+  cerro accepted, g01 quedo con cierre bloqueado y no hubo integracion.
 - los shutdown de replay3/4/5 quedaron `stop_pending` con contadores cero y un
   tmux propio vivo; el fallback acotado uso SIGINT del PID del piloto y elimino
   exclusivamente su sesion `orquesta-goal-*` tras varios intentos HTTP.
@@ -50,6 +55,7 @@ app desechable ni se toco OPES/remoto.
 - `/tmp/orquesta-live-bug255-replay6-20260711`
 - `/tmp/orquesta-live-bug255-replay7-20260711`
 - `/tmp/orquesta-live-bug255-replay8-20260711`
+- `/tmp/orquesta-live-bug255-replay9-20260711`
 
 Se retienen hasta extraer el recibo final. No contienen autoridad documental y
 se eliminaran de forma gobernada al cerrar la incidencia. No versionar
@@ -77,9 +83,11 @@ transcripts, CODEX_HOME, sockets ni caches.
    modifica filesystem, incluido rename tipado.
 4. Normalizar el alias estructurado de entorno de tests y delegar el test
    bloqueado al atestador independiente.
-5. Repetir el batch desde estado limpio: dos accepted, dos commits encadenados,
+5. Validar en preflight que el snapshot Go resuelve `go mod download all` sin
+   red y regenerar el snapshot del piloto.
+6. Repetir el batch desde estado limpio: dos accepted, dos commits encadenados,
    gate unico, checkout canonico limpio y batch closed.
-6. Reenviar exactamente la request: cero threads, commits y gates nuevos.
-7. Suite amplia verde y documentacion/inventario actualizados con commits de
+7. Reenviar exactamente la request: cero threads, commits y gates nuevos.
+8. Suite amplia verde y documentacion/inventario actualizados con commits de
    cierre. Hasta entonces `BUG-255`, `259`, `260` y `263` siguen abiertos;
    `BUG-261` y `BUG-262` quedan cerrados por replay6.

@@ -90,7 +90,7 @@ PY
 }
 
 orquesta_use_isolated_test_env() {
-  local root="${1:-}" cache_base port_seed port_base range session_ref preflight_script preflight_output exports caller_umask
+  local root="${1:-}" cache_base port_seed port_base range session_ref preflight_script preflight_output exports caller_umask module_cache_seed
   orquesta_isolated_test_preflight || return
   cache_base="${ORQUESTA_TEST_CACHE_ROOT:-/srv/orquesta-self/runtime/test-cache}"
   if [ -z "$root" ]; then root="$cache_base/isolated/${ORQUESTA_TEST_RUN_ID:-run-$(date +%s%N)-$$}"; fi
@@ -104,6 +104,12 @@ orquesta_use_isolated_test_env() {
   exports="$(printf '%s\n' "$preflight_output" | sed -n 's/^export //p')"
   [ -n "$exports" ] || { echo "isolated_test_session_disk_preflight_exports_missing" >&2; umask "$caller_umask"; return 2; }
   eval "$exports"
+
+  module_cache_seed="${ORQUESTA_ISOLATED_TEST_MODULE_CACHE_SEED:-}"
+  if [ -n "$module_cache_seed" ]; then
+    orquesta_private_test_root "$module_cache_seed" || { local rc=$?; umask "$caller_umask"; return "$rc"; }
+    export GOMODCACHE="$module_cache_seed"
+  fi
 
   port_seed="$(printf '%s' "$root" | cksum | awk '{print $1}')"
   port_base="${ORQUESTA_TEST_PORT_BASE:-$((20000 + port_seed % 25000))}"

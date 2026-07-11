@@ -141,6 +141,7 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) hermeticEnvironmentV0(
 	return []string{
 		"CGO_ENABLED=0", "GOWORK=off", "GOPROXY=off", "GOSUMDB=off", "GONOSUMDB=*", "GOTOOLCHAIN=local", "GOFLAGS=-modcacherw",
 		"GOCACHE=" + filepath.Join(runDir, "go-cache"), "GOMODCACHE=" + modCache,
+		"ORQUESTA_ISOLATED_TEST_MODULE_CACHE_SEED=" + modCache,
 		"GOPATH=" + filepath.Join(runDir, "go-path"), "GOTMPDIR=" + filepath.Join(runDir, "tmp"),
 		"TMPDIR=" + filepath.Join(runDir, "tmp"), "PATH=" + strings.Join(orderedPathDirs, string(os.PathListSeparator)),
 	}

@@ -4427,5 +4427,15 @@ tres continuaciones aunque el cambio estaba completo. El catalogo tipado se
 amplia con ese codigo y cubre las tres formas JSON (`reason_code`, issue string
 e issue object). BUG-264 sigue abierto hasta replay de cierre del batch.
 
+BUG `BUG-ORQ-20260711-265` (abierto, preflight de snapshot Go incompleto):
+replay9 normalizo el bloqueo y ejecuto tres atestaciones independientes; dos
+checks de filesystem pasaron, pero `go test ./cmd/orquesta-server` fallo porque
+el snapshot configurado no contenia `golang.org/x/text@v0.38.0`. El paquete
+principal podia compilar desde build cache y el preflight solo comprobaba
+`go version`/directorio, por lo que el defecto se descubrio al final. Cierre:
+si Go esta permitido y existe `go.mod`, el preflight ejecuta obligatoriamente
+`go mod download all` con `GOPROXY=off`; snapshot incompleto bloquea startup.
+El piloto debe regenerar snapshot, cerrar batch e idempotencia.
+
 Evidencia transversal de `BUG-255` a `BUG-264`:
 [pilotos de cierre batch del 2026-07-11](incidencias/incidencia_pilotos_cierre_batch_orquesta_2026-07-11.md).

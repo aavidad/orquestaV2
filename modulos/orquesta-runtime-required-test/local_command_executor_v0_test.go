@@ -119,6 +119,7 @@ func TestLocalCommandExecutorV0AceptaEntornoGoExplicitoSinHome(t *testing.T) {
 		"GOCACHE="+filepath.Join(t.TempDir(), "go-build-cache"),
 		"GOPATH="+filepath.Join(t.TempDir(), "go-path"),
 		"GOMODCACHE="+filepath.Join(t.TempDir(), "go-mod-cache"),
+		"ORQUESTA_ISOLATED_TEST_MODULE_CACHE_SEED="+filepath.Join(t.TempDir(), "go-mod-cache-seed"),
 	)
 
 	if _, err := executor.RunRequiredTestCommandV0(context.Background(), commandRequestForTestV0("orquesta-test-bin")); err != nil {

@@ -128,6 +128,13 @@ env -u ORQUESTA_TEST_CACHE_ROOT -u ORQUESTA_TEST_PORT_LEASE_ROOT \
   bash -c 'source "$1"; orquesta_use_isolated_test_env "$2"; test "$ORQUESTA_TEST_PORT_LOCK_DIR" = "$(dirname "$2")/port-leases"; orquesta_cleanup_isolated_test_env "$2"' _ \
   "$ROOT/scripts/lib/isolated_test_env.sh" "$explicit_root"
 
+module_cache_seed="$test_root/module-cache-seed"
+mkdir -m 700 "$module_cache_seed"
+env ORQUESTA_ISOLATED_TEST_MODULE_CACHE_SEED="$module_cache_seed" ORQUESTA_TEST_CACHE_ROOT="$test_root/cache" \
+  ORQUESTA_SESSION_DISK_BUDGET_BYTES=1 ORQUESTA_SESSION_DISK_DF_BIN="$test_root/df-fake" \
+  bash -c 'source "$1"; orquesta_use_isolated_test_env "$2"; test "$GOMODCACHE" = "$3"; orquesta_cleanup_isolated_test_env "$2"; test -d "$3"' _ \
+  "$ROOT/scripts/lib/isolated_test_env.sh" "$test_root/seeded-root" "$module_cache_seed"
+
 lease_root="$test_root/shared-leases"
 env ORQUESTA_TEST_CACHE_ROOT="$test_root/cache" ORQUESTA_TEST_PORT_LEASE_ROOT="$lease_root" ORQUESTA_TEST_PORT_BASE=42000 ORQUESTA_SESSION_DISK_BUDGET_BYTES=1 ORQUESTA_SESSION_DISK_DF_BIN="$test_root/df-fake" \
   bash -c 'source "$1"; orquesta_use_isolated_test_env "$2"; printf ready >"$3"; sleep 2' _ \

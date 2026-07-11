@@ -524,8 +524,15 @@ func normalizeLocalGoalRequiredTestAttestationConfigV0(
 	if err != nil {
 		return config, err
 	}
+	hasGoModule, err := goalRequiredTestProjectHasGoModuleV0(project)
+	if err != nil {
+		return config, err
+	}
 	if goalRequiredTestGoAllowedV0(allowed) && snapshotPath == "" {
 		return config, fmt.Errorf("goal_required_test_go_attestation_config_incomplete")
+	}
+	if hasGoModule {
+		preflightCommands = ensureGoalRequiredTestGoSnapshotPreflightV0(preflightCommands, goalRequiredTestGoCommandV0(allowed))
 	}
 	identity := config.Identity
 	identity.TrustPolicyRef = strings.TrimSpace(identity.TrustPolicyRef)

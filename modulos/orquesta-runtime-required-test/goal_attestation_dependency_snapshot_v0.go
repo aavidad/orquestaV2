@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
+	"sort"
 	"strings"
 )
 
@@ -49,12 +51,49 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) writeDependencySnapsho
 }
 
 func goalRequiredTestGoAllowedV0(allowed map[string]string) bool {
+	return goalRequiredTestGoCommandV0(allowed) != ""
+}
+
+func goalRequiredTestGoCommandV0(allowed map[string]string) string {
+	if _, ok := allowed["go"]; ok {
+		return "go"
+	}
+	names := make([]string, 0, len(allowed))
 	for name, path := range allowed {
-		if strings.TrimSpace(name) == "go" || filepath.Base(path) == "go" {
-			return true
+		if filepath.Base(path) == "go" {
+			names = append(names, name)
 		}
 	}
-	return false
+	if len(names) == 0 {
+		return ""
+	}
+	sort.Strings(names)
+	return names[0]
+}
+
+func goalRequiredTestProjectHasGoModuleV0(project string) (bool, error) {
+	info, err := os.Lstat(filepath.Join(project, "go.mod"))
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return false, fmt.Errorf("goal_required_test_go_module_invalid")
+	}
+	return true, nil
+}
+
+func ensureGoalRequiredTestGoSnapshotPreflightV0(commands []string, goCommand string) []string {
+	if goCommand == "" {
+		return commands
+	}
+	required := []string{goCommand, "mod", "download", "all"}
+	for _, command := range commands {
+		tokens, err := splitCommandV0(command)
+		if err == nil && slices.Equal(tokens, required) {
+			return commands
+		}
+	}
+	return append([]string{strings.Join(required, " ")}, commands...)
 }
 
 func (adapter *LocalGoalRequiredTestAttestationAdapterV0) materializeDependencySnapshotV0(runDir string) (string, error) {

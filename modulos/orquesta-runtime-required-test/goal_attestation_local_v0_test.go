@@ -295,8 +295,10 @@ func TestLocalGoalRequiredTestAttestationAdapterV0BuildsMinimalDeterministicPath
 	wantDirs := []string{filepath.Dir(commandPath), filepath.Dir(gitPath)}
 	sort.Strings(wantDirs)
 	wantPath := "PATH=" + strings.Join(wantDirs, string(os.PathListSeparator))
+	wantModuleCacheSeed := "ORQUESTA_ISOLATED_TEST_MODULE_CACHE_SEED=" + filepath.Join(runDir, "go-mod-cache-private")
 	count := 0
 	goFlags := 0
+	moduleCacheSeed := 0
 	for _, item := range env {
 		if item == wantPath {
 			count++
@@ -304,8 +306,11 @@ func TestLocalGoalRequiredTestAttestationAdapterV0BuildsMinimalDeterministicPath
 		if item == "GOFLAGS=-modcacherw" {
 			goFlags++
 		}
+		if item == wantModuleCacheSeed {
+			moduleCacheSeed++
+		}
 	}
-	if count != 1 || goFlags != 1 {
+	if count != 1 || goFlags != 1 || moduleCacheSeed != 1 {
 		t.Fatalf("env=%v, want exactly %q", env, wantPath)
 	}
 	for _, item := range env {
@@ -393,6 +398,51 @@ func TestLocalGoalRequiredTestAttestationAdapterV0GoPreflightDetectsNewMissingMo
 	}
 	if _, err := os.Stat(filepath.Join(runtimeRoot, "evidence", "commands")); !os.IsNotExist(err) {
 		t.Fatalf("required test must not execute, commands err=%v", err)
+	}
+}
+
+func TestLocalGoalRequiredTestAttestationAdapterV0AddsGoSnapshotPreflightOnceV0(t *testing.T) {
+	project, runtimeRoot, gitPath := localGoalAttestationGitRepoForTestV0(t)
+	goPath, err := exec.LookPath("go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := localGoalAttestationConfigForTestV0(project, runtimeRoot, gitPath, map[string]string{"go": goPath})
+	config.DependencySnapshotPath = localGoalAttestationReadOnlySnapshotForTestV0(t)
+	config.PreflightCommands = []string{"go mod download all", "go list -mod=readonly -deps ./..."}
+	adapter, err := NewLocalGoalRequiredTestAttestationAdapterV0(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for _, command := range adapter.config.PreflightCommands {
+		if command == "go mod download all" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("go snapshot preflight count=%d commands=%v", count, adapter.config.PreflightCommands)
+	}
+}
+
+func TestLocalGoalRequiredTestAttestationAdapterV0FailsStartupForIncompleteGoSnapshotV0(t *testing.T) {
+	project, runtimeRoot, gitPath := localGoalAttestationGitRepoForTestV0(t)
+	goPath, err := exec.LookPath("go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "go.mod"), []byte("module example.com/orquesta-goal-attestation-fixture\n\ngo 1.22\n\nrequire example.com/missing v1.0.0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	config := localGoalAttestationConfigForTestV0(project, runtimeRoot, gitPath, map[string]string{"go": goPath})
+	config.DependencySnapshotPath = localGoalAttestationReadOnlySnapshotForTestV0(t)
+	config.PreflightCommands = []string{"go list -mod=readonly -deps ./..."}
+	adapter, err := NewLocalGoalRequiredTestAttestationAdapterV0(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := adapter.PreflightGoalRequiredTestAttestationV0(context.Background()); err == nil || !strings.Contains(err.Error(), "goal_required_test_attestation_preflight_failed") {
+		t.Fatalf("startup err=%v", err)
 	}
 }
 
