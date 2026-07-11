@@ -339,7 +339,8 @@ func TestRuntimeExternalWorkGoalFirstResidenteCierraSinObserveManualV0(t *testin
 
 func TestServerAutoprogrammingHTTPGoalFirstFailClosedSinAttestorV0(t *testing.T) {
 	disableSelfProgrammingOnlyForGoalFirstHTTPTestV0(t)
-	projectDir := t.TempDir()
+	withoutGoalRequiredTestAttestationEnvV0(t)
+	projectDir := goalRequiredTestAttestationGitFixtureV0(t)
 	stateDir := t.TempDir()
 	runtimeDir := filepath.Join(t.TempDir(), "runtime")
 	t.Setenv(envCodexProjectWorkDirV0, projectDir)
