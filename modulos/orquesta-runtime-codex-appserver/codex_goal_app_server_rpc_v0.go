@@ -10,27 +10,6 @@ import (
 	"strings"
 )
 
-func codexAppServerRPCPayloadV0(method string, params interface{}) (string, error) {
-	var b strings.Builder
-	for _, request := range []map[string]interface{}{
-		codexAppServerInitializeRequestV0(),
-		codexAppServerInitializedNotificationV0(),
-		{
-			"jsonrpc": "2.0",
-			"id":      2,
-			"method":  method,
-			"params":  params,
-		},
-	} {
-		line, err := codexAppServerRPCMessageLineV0(request)
-		if err != nil {
-			return "", err
-		}
-		b.WriteString(line)
-	}
-	return b.String(), nil
-}
-
 func codexAppServerInitializeRequestV0() map[string]interface{} {
 	return map[string]interface{}{
 		"jsonrpc": "2.0",

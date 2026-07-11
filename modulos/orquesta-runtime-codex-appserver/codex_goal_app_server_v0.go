@@ -248,28 +248,6 @@ func codexAppServerEarlyCheckpointFileV0(value string) string {
 	return clean
 }
 
-func codexAppServerWriteSetCheckpointDirRelV0(path string) (string, bool) {
-	raw := strings.TrimSpace(path)
-	if raw == "" || filepath.IsAbs(raw) {
-		return "", false
-	}
-	clean := filepath.ToSlash(filepath.Clean(strings.Trim(raw, "/")))
-	if clean == "" || clean == "." {
-		return ".", true
-	}
-	if clean == ".." || strings.HasPrefix(clean, "../") || clean == ".git" || strings.HasPrefix(clean, ".git/") || filepath.IsAbs(clean) {
-		return "", false
-	}
-	if codexAppServerWriteSetLooksLikeFileV0(clean) {
-		dir := filepath.ToSlash(filepath.Dir(clean))
-		if dir == "." || dir == "" {
-			return ".", true
-		}
-		return dir, true
-	}
-	return clean, true
-}
-
 func codexAppServerEarlyCheckpointBodyV0(
 	packet orquestaruntimecodexgoal.CodexGoalStartPacketV0,
 	externalGoalRef string,

@@ -311,10 +311,6 @@ type codexAppServerTmuxProcessIdentityV0 struct {
 	StartRef string
 }
 
-func codexAppServerTmuxProcessParentPIDV0(pid int) int {
-	return codexAppServerTmuxProcessParentPIDAtV0("/proc", pid)
-}
-
 func codexAppServerTmuxProcessParentPIDAtV0(procRoot string, pid int) int {
 	if pid <= 0 {
 		return 0
@@ -355,10 +351,6 @@ func codexAppServerTmuxProcessDescendsFromAtV0(procRoot string, pid, ancestor in
 		seen[current] = struct{}{}
 	}
 	return false
-}
-
-func codexAppServerTmuxSocketInodeV0(socketPath string) (string, error) {
-	return codexAppServerTmuxSocketInodeAtV0("/proc", socketPath)
 }
 
 func codexAppServerTmuxSocketInodeAtV0(procRoot, socketPath string) (string, error) {
@@ -639,32 +631,10 @@ func (backend serverCodexAppServerTmuxBackendV0) newTmuxOwnerMarkerV0(generation
 	}, nil
 }
 
-func (backend serverCodexAppServerTmuxBackendV0) claimTmuxOwnerLeaseV0(marker codexAppServerTmuxOwnerMarkerV0) error {
-	ctx, cancel := context.WithTimeout(context.Background(), codexAppServerTmuxDefaultTimeoutV0)
-	defer cancel()
-	guard, err := backend.acquireTmuxLeaseGuardV0(ctx)
-	if err != nil {
-		return err
-	}
-	defer guard.releaseV0()
-	return backend.claimTmuxOwnerLeaseWithLeaseV0(guard, marker)
-}
-
 func (backend serverCodexAppServerTmuxBackendV0) claimTmuxOwnerLeaseWithLeaseV0(guard *codexAppServerTmuxLeaseGuardV0, marker codexAppServerTmuxOwnerMarkerV0) error {
 	claimed := marker
 	claimed.LeaseOwnerPID, claimed.LeaseOwnerStartRef = currentCodexAppServerTmuxLeaseIdentityV0()
 	return backend.replaceTmuxOwnerMarkerWithLeaseV0(guard, marker, claimed)
-}
-
-func (backend serverCodexAppServerTmuxBackendV0) writeTmuxOwnerMarkerAtomicV0(marker codexAppServerTmuxOwnerMarkerV0) error {
-	ctx, cancel := context.WithTimeout(context.Background(), codexAppServerTmuxDefaultTimeoutV0)
-	defer cancel()
-	guard, err := backend.acquireTmuxLeaseGuardV0(ctx)
-	if err != nil {
-		return err
-	}
-	defer guard.releaseV0()
-	return backend.writeTmuxOwnerMarkerAtomicWithLeaseV0(guard, marker)
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) requireTmuxLeaseV0(guard *codexAppServerTmuxLeaseGuardV0) error {
@@ -918,50 +888,6 @@ func (backend serverCodexAppServerTmuxBackendV0) cleanupTmuxGenerationWithLeaseV
 	return backend.removeTmuxOwnerMarkerExpectedWithLeaseV0(guard, marker)
 }
 
-func (backend serverCodexAppServerTmuxBackendV0) terminateRecordedTmuxAppServerV0(
-	ctx context.Context,
-	guard *codexAppServerTmuxLeaseGuardV0,
-	marker codexAppServerTmuxOwnerMarkerV0,
-) error {
-	if !codexAppServerTmuxProcessIdentityAliveV0(marker.AppServerPID, marker.AppServerStartRef) {
-		return nil
-	}
-	if err := backend.requireTmuxLeaseV0(guard); err != nil {
-		return err
-	}
-	current, ok := backend.readTmuxOwnerMarkerV0()
-	if !ok || !reflect.DeepEqual(current, marker) || marker.AppServerPID != marker.SocketOwnerPID ||
-		marker.AppServerStartRef == "" || marker.AppServerStartRef != marker.SocketOwnerStartRef {
-		return codexAppServerTmuxConflictErrorV0(codexAppServerTmuxGenerationConflictV0)
-	}
-	owner, ownerErr := codexAppServerTmuxSocketOwnerDescendantV0(backend.SocketPath, marker.TmuxPanePID)
-	if errors.Is(ownerErr, errCodexAppServerTmuxSocketOwnerOutsidePaneV0) ||
-		(ownerErr == nil && (owner.PID != marker.SocketOwnerPID || owner.StartRef != marker.SocketOwnerStartRef)) {
-		return codexAppServerTmuxConflictErrorV0(codexAppServerTmuxGenerationConflictV0)
-	}
-	if ownerErr != nil {
-		return codexAppServerTmuxObservationErrorV0()
-	}
-	if err := syscall.Kill(marker.AppServerPID, syscall.SIGTERM); err != nil && !errors.Is(err, syscall.ESRCH) {
-		return codexAppServerCallErrorV0{Code: "codex_app_server_tmux_process_stop_failed", Err: err}
-	}
-	cooperativeCtx, cancel := context.WithTimeout(ctx, codexAppServerTmuxCooperativeStopV0)
-	cooperativeErr := waitCodexAppServerTmuxProcessIdentityGoneV0(cooperativeCtx, marker.AppServerPID, marker.AppServerStartRef)
-	cancel()
-	if cooperativeErr == nil {
-		return nil
-	}
-	current, ok = backend.readTmuxOwnerMarkerV0()
-	if !ok || !reflect.DeepEqual(current, marker) ||
-		!codexAppServerTmuxProcessIdentityAliveV0(marker.AppServerPID, marker.AppServerStartRef) {
-		return nil
-	}
-	if err := syscall.Kill(marker.AppServerPID, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
-		return codexAppServerCallErrorV0{Code: "codex_app_server_tmux_process_kill_failed", Err: err}
-	}
-	return waitCodexAppServerTmuxProcessIdentityGoneV0(ctx, marker.AppServerPID, marker.AppServerStartRef)
-}
-
 func (backend serverCodexAppServerTmuxBackendV0) tmuxKillRecordedGenerationV0(
 	ctx context.Context,
 	tmuxPath string,
@@ -1052,12 +978,6 @@ func (backend serverCodexAppServerTmuxBackendV0) removeStaleTmuxSocketWithLeaseV
 		return codexAppServerTmuxConflictErrorV0(codexAppServerTmuxGenerationConflictV0)
 	}
 	return nil
-}
-
-func (backend serverCodexAppServerTmuxBackendV0) cleanupStartedTmuxGenerationV0(marker codexAppServerTmuxOwnerMarkerV0) {
-	ctx, cancel := context.WithTimeout(context.Background(), codexAppServerTmuxDefaultTimeoutV0)
-	defer cancel()
-	_ = backend.cleanupTmuxGenerationV0(ctx, marker, true)
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) cleanupStartedTmuxGenerationWithLeaseV0(guard *codexAppServerTmuxLeaseGuardV0, marker codexAppServerTmuxOwnerMarkerV0) {

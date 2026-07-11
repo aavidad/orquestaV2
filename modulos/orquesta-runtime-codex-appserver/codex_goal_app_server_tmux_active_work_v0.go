@@ -192,10 +192,6 @@ func (backend serverCodexAppServerTmuxBackendV0) tmuxResidueConfigLooksOwnV0() b
 	return backend.tmuxOwnerMarkerExistsV0() || backend.tmuxConfiguredOrphanCleanupAllowedV0()
 }
 
-func (backend serverCodexAppServerTmuxBackendV0) detectTmuxSessionResidueV0(ctx context.Context) (bool, bool) {
-	return backend.detectTmuxSessionResidueByNameV0(ctx, strings.TrimSpace(backend.SessionName))
-}
-
 func (backend serverCodexAppServerTmuxBackendV0) detectTmuxSessionResidueByNameV0(
 	ctx context.Context,
 	sessionName string,

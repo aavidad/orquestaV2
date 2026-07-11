@@ -47,16 +47,6 @@ func (backend serverCodexAppServerGoalBackendV0) codexAppServerActiveGoalElapsed
 	return now.Sub(startedAt), true
 }
 
-func (backend serverCodexAppServerGoalBackendV0) recordCodexAppServerGoalStartedAtV0(
-	threadID string,
-	startedAt time.Time,
-) {
-	if backend.Runtime == nil {
-		return
-	}
-	backend.Runtime.recordStartedAtV0(threadID, startedAt)
-}
-
 func (backend serverCodexAppServerGoalBackendV0) recordCodexAppServerGoalRuntimeV0(
 	threadID string,
 	startedAt time.Time,
@@ -135,21 +125,6 @@ func (runtime *serverCodexAppServerGoalRuntimeV0) recordGoalRuntimeV0(
 		if _, exists := runtime.timeouts[threadID]; !exists {
 			runtime.timeouts[threadID] = timeout
 		}
-	}
-}
-
-func (runtime *serverCodexAppServerGoalRuntimeV0) recordStartedAtV0(threadID string, startedAt time.Time) {
-	threadID = strings.TrimSpace(threadID)
-	if runtime == nil || threadID == "" || startedAt.IsZero() {
-		return
-	}
-	runtime.mu.Lock()
-	defer runtime.mu.Unlock()
-	if runtime.startedAt == nil {
-		runtime.startedAt = map[string]time.Time{}
-	}
-	if _, exists := runtime.startedAt[threadID]; !exists {
-		runtime.startedAt[threadID] = startedAt.UTC()
 	}
 }
 

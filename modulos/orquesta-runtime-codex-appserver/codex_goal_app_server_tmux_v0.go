@@ -192,31 +192,6 @@ func (backend serverCodexAppServerTmuxBackendV0) tmuxKillSessionV0(
 	return nil
 }
 
-func (backend serverCodexAppServerTmuxBackendV0) waitTmuxPaneExitedV0(
-	ctx context.Context,
-	panePID string,
-) error {
-	pid, err := strconv.Atoi(strings.TrimSpace(panePID))
-	if err != nil || pid <= 0 {
-		return nil
-	}
-	ticker := time.NewTicker(codexAppServerTmuxSocketPollEveryV0)
-	defer ticker.Stop()
-	for {
-		if err := syscall.Kill(pid, 0); errors.Is(err, syscall.ESRCH) {
-			return nil
-		}
-		select {
-		case <-ctx.Done():
-			return codexAppServerCallErrorV0{
-				Code: "codex_app_server_tmux_pane_exit_timeout",
-				Err:  ctx.Err(),
-			}
-		case <-ticker.C:
-		}
-	}
-}
-
 func (backend serverCodexAppServerTmuxBackendV0) ShutdownV0(ctx context.Context) error {
 	var err error
 	if marker, ok := backend.readTmuxOwnerMarkerV0(); ok && marker.generationMarkerV0() {
@@ -380,16 +355,6 @@ func (backend serverCodexAppServerTmuxBackendV0) tmuxConfiguredOrphanCleanupAllo
 		return false
 	}
 	return true
-}
-
-func (backend serverCodexAppServerTmuxBackendV0) cleanupTmuxSessionAfterStartupFailureV0(
-	_ string,
-) {
-	cleanupCtx, cancel := context.WithTimeout(context.Background(), codexAppServerTmuxDefaultTimeoutV0)
-	defer cancel()
-	if marker, ok := backend.readTmuxOwnerMarkerV0(); ok && marker.generationMarkerV0() {
-		_ = backend.cleanupTmuxGenerationV0(cleanupCtx, marker, true)
-	}
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) tmuxStartSessionV0(
@@ -719,14 +684,6 @@ func codexAppServerTmuxOwnerSchemaSupportedV0(schema string) bool {
 
 func shellQuoteCodexAppServerTmuxV0(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
-}
-
-func (backend serverCodexAppServerTmuxBackendV0) writeTmuxOwnerMarkerV0() error {
-	marker, err := backend.newTmuxOwnerMarkerV0("", 0)
-	if err != nil {
-		return err
-	}
-	return backend.writeTmuxOwnerMarkerAtomicV0(marker)
 }
 
 func codexAppServerTmuxCommandPathV0(pathEnv string) (string, error) {
