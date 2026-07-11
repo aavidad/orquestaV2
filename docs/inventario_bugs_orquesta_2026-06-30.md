@@ -4462,5 +4462,18 @@ atestador. La suite hermetica completa de `cmd/orquesta-server` pasa en 62,567 s
 y cubre los wrappers OPES y el flaky harness que antes fallaban. Falta replay
 batch para cerrar tambien BUG-265 con evidencia extremo a extremo.
 
-Evidencia transversal de `BUG-255` a `BUG-268`:
+BUG `BUG-ORQ-20260711-269` (cerrado localmente, batch no reconciliado tras
+cierre goal-first): replay12 termino los dos goals y sus atestaciones como
+`complete/accepted`; las runs y la cola quedaron `closed`, pero el agregado
+batch siguio en `goals_running`. La reconciliacion solo se invocaba desde el
+drain de candidatos ejecutables y `closed` deja de ser ejecutable. El tick
+residente recupera ahora proyecciones cerradas desde la cola durable, relee la
+run por puerto y delega al reconciliador CAS existente. Tolera runs ya
+retiradas, respeta `queue_ref`/`app_refs` y no ejecuta integracion/gate dentro
+del observador HTTP. El test de composicion y el E2E con reapertura real de
+estado, cola y control prueban dos integraciones, un gate, una promocion y
+replay sin efectos duplicados. Falta replay13 real para cerrar la evidencia
+operativa extremo a extremo.
+
+Evidencia transversal de `BUG-255` a `BUG-269`:
 [pilotos de cierre batch del 2026-07-11](incidencias/incidencia_pilotos_cierre_batch_orquesta_2026-07-11.md).

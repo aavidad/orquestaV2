@@ -10,7 +10,10 @@ import (
 
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
+	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestagoal "orquesta/modulos/orquesta-goal"
+	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
+	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 	orquestaruntimeworktree "orquesta/modulos/orquesta-runtime-worktree"
 )
 
@@ -83,6 +86,103 @@ func TestAutoprogrammingBatchDosGoalsIntegraEncadenadoGateUnicoPromueveYReplayV0
 	replayed, _, err := restarted.advanceAutoprogrammingBatchV0(ctx, mustLoadAutoprogrammingBatchForStackTestV0(t, ctx, store, batch.BatchRef))
 	if err != nil || replayed.Status != orquestaautoprogramming.AutoprogrammingBatchStatusClosedV0 || integration.calls != 2 || runner.calls != 1 || finalizer.calls != 1 || promotion.promotions != 0 || promotion.archives != 0 {
 		t.Fatalf("replay=%+v err=%v calls=%d/%d/%d/%d/%d", replayed, err, integration.calls, runner.calls, finalizer.calls, promotion.promotions, promotion.archives)
+	}
+}
+
+func TestPrepareRunCoordinatorReconciliaBatchConRunsCerradasNoEjecutablesV0(t *testing.T) {
+	ctx := context.Background()
+	store := newAutoprogrammingBatchStoreForTestV0()
+	batch := autoprogrammingBatchForStackTestV0(t)
+	mustSaveAutoprogrammingBatchForStackTestV0(t, ctx, store, 0, batch)
+	for _, member := range batch.Members {
+		batch = mustTransitionAutoprogrammingBatchForStackTestV0(t, ctx, store, batch.BatchRef, func(current orquestaautoprogramming.AutoprogrammingBatchV0) orquestaautoprogramming.AutoprogrammingBatchTransitionResultV0 {
+			return orquestaautoprogramming.RegisterAutoprogrammingBatchLaunchV0(current, current.StoreVersion, "launch-resident-"+member.TaskRef, member.TaskRef)
+		})
+	}
+	states := newGoalFirstQueueStateStoreForTestV0()
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	stack.Stores.AutoprogrammingBatchStore = store
+	stack.Stores.AppGoalStateStore = states
+	stack.Ports.GoalStateStore = states
+	integration := &batchIntegrationPortForTestV0{store: store, batchRef: batch.BatchRef}
+	runner := &batchTestRunnerForTestV0{store: store, batchRef: batch.BatchRef}
+	finalizer := &batchPromotionFinalizerForTestV0{store: store, batchRef: batch.BatchRef}
+	stack.AutoprogrammingPromotion = AutoprogrammingPromotionConfigV0{
+		Enabled: true, BatchPromotionFinalizer: finalizer,
+		GoalWorkspaceProvisioner: &fakeGoalWorkspaceProvisionerForStackTestV0{root: t.TempDir()},
+		GoalWorkspaceIntegration: integration, BatchTestRunner: runner,
+		GoalWorkspaceRoot: t.TempDir(), BatchIntegrationReceiptDir: t.TempDir(),
+		BatchPromotionReceiptDir: t.TempDir(), CommitMessage: "test: integrate resident batch",
+	}
+	for _, member := range batch.Members {
+		state, err := orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
+			RunRef: member.RunRef,
+			Spec: orquestagoal.GoalWorkSpecV0{
+				SchemaVersion: orquestagoal.GoalWorkSpecSchemaV0,
+				RunRef:        member.RunRef, RequestRef: batch.RequestRef, ProjectRef: batch.ProjectRef,
+				GoalRef: member.GoalRef, WorkKind: orquestaautoprogramming.AutoprogrammingGoalWorkKindV0,
+				Objective: "Reconcile accepted closed batch member.", DirectorKind: orquestagoal.GoalDirectorKindCodexGoalV0,
+				ContextRefs: []orquestagoal.GoalContextRefV0{
+					{Kind: autoprogrammingBatchContextKindV0, Ref: batch.BatchRef},
+					{Kind: autoprogrammingBatchTaskContextKindV0, Ref: member.TaskRef},
+					{Kind: "goal_workspace", Ref: member.WorkspaceRef},
+					{Kind: "worktree", Ref: "worktree-ref-batch"},
+					{Kind: "branch", Ref: "branch-ref-batch"},
+				},
+				WriteSet: []orquestagoal.GoalWriteScopeV0{{Path: member.WriteSet[0]}},
+			},
+			LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+				SchemaVersion: orquestagoal.GoalWorkLaunchReceiptSchemaV0,
+				Status:        orquestagoal.GoalStatusRunningV0, GoalRef: member.GoalRef,
+				ExternalGoalRef: "external-" + member.GoalRef,
+			},
+		})
+		if err != nil {
+			t.Fatalf("NewGoalWorkStateFromLaunchV0 %s: %v", member.RunRef, err)
+		}
+		state.Status = orquestagoal.GoalStatusCompleteV0
+		state.LastResult = &orquestagoal.GoalWorkResultV0{
+			SchemaVersion: orquestagoal.GoalWorkResultSchemaV0,
+			Status:        orquestagoal.GoalStatusCompleteV0, GoalRef: member.GoalRef,
+		}
+		state.LastClosure = &orquestagoal.GoalClosureValidationV0{
+			Status: orquestagoal.GoalStatusCompleteV0, Accepted: true,
+		}
+		if err := states.SaveGoalWorkStateV0(ctx, state); err != nil {
+			t.Fatalf("SaveGoalWorkStateV0 %s: %v", member.RunRef, err)
+		}
+		if err := stack.Stores.RunStore.SaveRunV0(ctx, orquestacoreworkflow.OrchestrationRunV0{
+			SchemaVersion: orquestacoreworkflow.OrchestrationRunSchemaVersionV0,
+			RunID:         member.RunRef, ProjectRef: batch.ProjectRef,
+			Status:       orquestacoreworkflow.OrchestrationRunStatusClosedV0,
+			CurrentPhase: orquestacoreworkflow.OrchestrationPhaseCierreV0,
+		}); err != nil {
+			t.Fatalf("SaveRunV0 %s: %v", member.RunRef, err)
+		}
+		if _, err := stack.Stores.RunQueue.SetRunPriorityV0(ctx, orquestarunqueue.RunQueuePriorityCommandV0{
+			RunRef: member.RunRef, QueueRef: "global", AppRef: "app-ref-batch",
+			Status: orquestarunqueue.RunStatusClosedV0, PriorityScore: 50,
+			RequestedBy: "test", Reason: "goal_first_terminal_observed",
+			IdempotencyKey: "queue-closed-" + member.RunRef,
+		}); err != nil {
+			t.Fatalf("SetRunPriorityV0 %s: %v", member.RunRef, err)
+		}
+	}
+
+	command := orquestaruncoordinator.RunCoordinatorTickCommandV0{QueueRef: "global"}
+	if _, err := stack.prepareRunCoordinatorTickV0(ctx, command); err != nil {
+		t.Fatalf("prepareRunCoordinatorTickV0: %v", err)
+	}
+	closed := mustLoadAutoprogrammingBatchForStackTestV0(t, ctx, store, batch.BatchRef)
+	if closed.Status != orquestaautoprogramming.AutoprogrammingBatchStatusClosedV0 ||
+		integration.calls != 2 || runner.calls != 1 || finalizer.calls != 1 {
+		t.Fatalf("closed=%+v calls=%d/%d/%d", closed, integration.calls, runner.calls, finalizer.calls)
+	}
+	if _, err := stack.prepareRunCoordinatorTickV0(ctx, command); err != nil {
+		t.Fatalf("prepareRunCoordinatorTickV0 replay: %v", err)
+	}
+	if integration.calls != 2 || runner.calls != 1 || finalizer.calls != 1 {
+		t.Fatalf("replay repitio efectos calls=%d/%d/%d", integration.calls, runner.calls, finalizer.calls)
 	}
 }
 

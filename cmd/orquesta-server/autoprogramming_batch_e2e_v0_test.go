@@ -12,17 +12,59 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestagoal "orquesta/modulos/orquesta-goal"
+	orquestaruncoordinator "orquesta/modulos/orquesta-run-coordinator"
+	orquestarunfile "orquesta/modulos/orquesta-run-file"
+	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 	orquestaruntimeworktree "orquesta/modulos/orquesta-runtime-worktree"
 	orquestaserver "orquesta/modulos/orquesta-server"
 	orquestastatefile "orquesta/modulos/orquesta-state-file"
 )
 
 func TestAutoprogrammingBatchE2ETemporalRestartGitGateFinalizerYReplayV0(t *testing.T) {
+	t.Run("cola closed recupera batch tras restart sin repetir efectos", func(t *testing.T) {
+		fixture := newServerAutoprogrammingBatchE2EV0(t, false)
+		fixture.queueClosedRunV0(t, fixture.runs[0])
+
+		if result, err := fixture.stack.RunGlobalTickV0(fixture.ctx, serverAutoprogrammingBatchCoordinatorCommandV0()); err != nil || len(result.Executions) != 0 {
+			t.Fatalf("primer tick=%+v err=%v", result, err)
+		}
+		first := fixture.loadBatchV0(t)
+		if first.Status != orquestaautoprogramming.AutoprogrammingBatchStatusGoalsRunningV0 ||
+			first.Members[0].FocalStatus != orquestaautoprogramming.AutoprogrammingBatchFocalClosedV0 ||
+			first.Members[1].FocalStatus != orquestaautoprogramming.AutoprogrammingBatchFocalRunningV0 {
+			t.Fatalf("primer closed no reconciliado: %+v", first)
+		}
+		fixture.assertEffectsV0(t, fixture.baseCommitCount, 0, 0, 0)
+
+		fixture.restartStoreV0(t)
+		fixture.queueClosedRunV0(t, fixture.runs[1])
+		if result, err := fixture.stack.RunGlobalTickV0(fixture.ctx, serverAutoprogrammingBatchCoordinatorCommandV0()); err != nil || len(result.Executions) != 0 {
+			t.Fatalf("tick tras restart=%+v err=%v", result, err)
+		}
+		closed := fixture.loadBatchV0(t)
+		if closed.Status != orquestaautoprogramming.AutoprogrammingBatchStatusClosedV0 {
+			t.Fatalf("batch no cerrado tras restart: %+v", closed)
+		}
+		fixture.assertIntegratedChainV0(t, closed)
+		fixture.assertEffectsV0(t, fixture.baseCommitCount+2, 1, 1, 1)
+
+		version := closed.StoreVersion
+		if result, err := fixture.stack.RunGlobalTickV0(fixture.ctx, serverAutoprogrammingBatchCoordinatorCommandV0()); err != nil || len(result.Executions) != 0 {
+			t.Fatalf("tick replay=%+v err=%v", result, err)
+		}
+		replayed := fixture.loadBatchV0(t)
+		if replayed.Status != orquestaautoprogramming.AutoprogrammingBatchStatusClosedV0 || replayed.StoreVersion != version {
+			t.Fatalf("replay mutante: before=%d batch=%+v", version, replayed)
+		}
+		fixture.assertEffectsV0(t, fixture.baseCommitCount+2, 1, 1, 1)
+	})
+
 	t.Run("dos goals cierran, integran y finalizan una vez", func(t *testing.T) {
 		fixture := newServerAutoprogrammingBatchE2EV0(t, false)
 
@@ -289,6 +331,14 @@ func (fixture *serverAutoprogrammingBatchE2EV0) restartStoreV0(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reopen StoreV0: %v", err)
 	}
+	queue, err := orquestarunfile.NewRunFileStoreV0(filepath.Join(filepath.Dir(fixture.stateRoot), "run-state"))
+	if err != nil {
+		t.Fatalf("reopen RunFileStoreV0: %v", err)
+	}
+	fixture.stack.Stores.RunStore = reopened
+	fixture.stack.Ports.RunStore = reopened
+	fixture.stack.Stores.RunQueue = queue
+	fixture.stack.Stores.RunControl = queue
 	fixture.stack.Stores.AutoprogrammingBatchStore = reopened
 	fixture.stack.Stores.AppGoalStateStore = reopened
 	fixture.stack.Ports.GoalStateStore = reopened
@@ -299,6 +349,33 @@ func (fixture *serverAutoprogrammingBatchE2EV0) restartStoreV0(t *testing.T) {
 		if _, err := reopened.LoadGoalWorkStateV0(fixture.ctx, run.RunID); err != nil {
 			t.Fatalf("goal %s no sobrevivio restart: %v", run.RunID, err)
 		}
+	}
+}
+
+func (fixture *serverAutoprogrammingBatchE2EV0) queueClosedRunV0(
+	t *testing.T,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) {
+	t.Helper()
+	if len(run.Phases) == 0 {
+		run.Phases = orquestacoreworkflow.OrchestrationPhaseCatalogV0()
+	}
+	if err := fixture.stack.Stores.RunStore.SaveRunV0(fixture.ctx, run); err != nil {
+		t.Fatalf("SaveRunV0 %s: %v", run.RunID, err)
+	}
+	if _, err := fixture.stack.Stores.RunQueue.SetRunPriorityV0(fixture.ctx, orquestarunqueue.RunQueuePriorityCommandV0{
+		RunRef: run.RunID, QueueRef: fixture.stack.RunQueue.QueueRef, AppRef: run.ProjectRef,
+		Status: orquestarunqueue.RunStatusClosedV0, UpdatedAt: time.Date(2026, 7, 11, 12, 0, 0, 0, time.UTC),
+		EvidenceRefs: []string{"evidence-ref-autoprogramming-batch-e2e-closed-queue"},
+	}); err != nil {
+		t.Fatalf("SetRunPriorityV0 %s: %v", run.RunID, err)
+	}
+}
+
+func serverAutoprogrammingBatchCoordinatorCommandV0() orquestaruncoordinator.RunCoordinatorTickCommandV0 {
+	return orquestaruncoordinator.RunCoordinatorTickCommandV0{
+		QueueRef: "global", QueueLimit: 70, MaxRuns: 1,
+		OccurredAt: time.Date(2026, 7, 11, 12, 0, 0, 0, time.UTC),
 	}
 }
 

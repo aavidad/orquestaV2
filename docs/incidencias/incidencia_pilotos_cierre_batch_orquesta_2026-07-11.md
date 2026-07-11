@@ -1,7 +1,7 @@
 # Incidencia: pilotos de cierre batch Orquesta
 
 Fecha: 2026-07-11  
-Alcance: `BUG-ORQ-20260711-255` a `BUG-ORQ-20260711-268`
+Alcance: `BUG-ORQ-20260711-255` a `BUG-ORQ-20260711-269`
 Estado: en reparacion; no declarar autonomia completa hasta replay final
 
 ## Objetivo del piloto
@@ -58,6 +58,13 @@ app desechable ni se toco OPES/remoto.
   vacio y borraba el seed. Tras corregirlo, la misma suite hermetica pasa
   completa. El shutdown terminal del replay devolvio `ready` y cerro proceso y
   backend por API en el primer intento valido.
+- replay12 cerro ambos goals como `complete/accepted`; las cuatro atestaciones
+  independientes pasaron, las dos runs quedaron `cerrada/cierre` y la cola
+  marco ambos candidatos `closed`. El batch permanecio `goals_running` incluso
+  tras 73 ticks de supervisor y 39 de observador: el drain no vuelve a ver
+  candidatos no ejecutables. El cierre terminal por API fue `ready` y paro el
+  proceso en el segundo sondeo. BUG-269 queda corregido localmente recuperando
+  esas proyecciones durables en el tick residente, con E2E de restart y replay.
 - los shutdown de replay3/4/5 quedaron `stop_pending` con contadores cero y un
   tmux propio vivo; el fallback acotado uso SIGINT del PID del piloto y elimino
   exclusivamente su sesion `orquesta-goal-*` tras varios intentos HTTP.
@@ -73,6 +80,7 @@ app desechable ni se toco OPES/remoto.
 - `/tmp/orquesta-live-bug255-replay9-20260711`
 - `/tmp/orquesta-live-bug255-replay10-20260711`
 - `/tmp/orquesta-live-bug255-replay11-20260711`
+- `/tmp/orquesta-live-bug255-replay12-20260711`
 
 Se retienen hasta extraer el recibo final. No contienen autoridad documental y
 se eliminaran de forma gobernada al cerrar la incidencia. No versionar
@@ -107,4 +115,5 @@ transcripts, CODEX_HOME, sockets ni caches.
 7. Reenviar exactamente la request: cero threads, commits y gates nuevos.
 8. Suite amplia verde y documentacion/inventario actualizados con commits de
    cierre. Hasta entonces `BUG-255`, `259`, `260` y `263` siguen abiertos;
-   `BUG-261` y `BUG-262` quedan cerrados por replay6.
+   `BUG-261` y `BUG-262` quedan cerrados por replay6 y `BUG-269` requiere el
+   replay13 para cierre operativo.
