@@ -69,14 +69,21 @@ func TestDecodeGoalWorkResultJSONV0ProviderEquivalenceV0(t *testing.T) {
 }
 
 func TestDecodeGoalWorkResultJSONV0NormalizaAliasTipadoDeEntornoDeTestsV0(t *testing.T) {
-	raw := []byte(`{"schema_version":"orquesta_goal_result.v0","goal_ref":"goal-ref-test-env-alias","status":"blocked","reason_code":"external_test_environment_restriction"}`)
-	decoded, err := DecodeGoalWorkResultJSONV0(raw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if decoded.Disposition != GoalWorkResultJSONDispositionRepairedV0 || len(decoded.Result.Issues) != 1 ||
-		decoded.Result.Issues[0].Code != GoalIssueRequiredTestsEnvironmentUnavailableV0 {
-		t.Fatalf("decoded=%+v", decoded)
+	for name, raw := range map[string][]byte{
+		"reason_code":  []byte(`{"schema_version":"orquesta_goal_result.v0","goal_ref":"goal-ref-test-env-alias","status":"blocked","reason_code":"sandbox_unix_socket_operation_not_permitted"}`),
+		"issue_string": []byte(`{"schema_version":"orquesta_goal_result.v0","goal_ref":"goal-ref-test-env-alias","status":"blocked","issues":["external_test_environment_restriction"]}`),
+		"issue_object": []byte(`{"schema_version":"orquesta_goal_result.v0","goal_ref":"goal-ref-test-env-alias","status":"blocked","issues":[{"code":"test_environment_unavailable"}]}`),
+	} {
+		t.Run(name, func(t *testing.T) {
+			decoded, err := DecodeGoalWorkResultJSONV0(raw)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if decoded.Disposition != GoalWorkResultJSONDispositionRepairedV0 || len(decoded.Result.Issues) != 1 ||
+				decoded.Result.Issues[0].Code != GoalIssueRequiredTestsEnvironmentUnavailableV0 {
+				t.Fatalf("decoded=%+v", decoded)
+			}
+		})
 	}
 }
 

@@ -33,7 +33,12 @@ app desechable ni se toco OPES/remoto.
   alias `external_test_environment_restriction` no activo al atestador para el
   test global dependiente. El checkout canonico permanecio limpio y el shutdown
   volvio a cerrar servidor/backend en dos segundos.
-- los tres shutdown de piloto quedaron `stop_pending` con contadores cero y un
+- replay8 probo la propiedad VCS corregida y cerro g02 `complete` con su test
+  global delegado. G01 completo rename y checks de filesystem, pero uso
+  `sandbox_unix_socket_operation_not_permitted`; al faltar aun en el catalogo
+  tipado, consumio tres continuaciones y cerro blocked. El canonico siguio
+  limpio y el shutdown termino en el primer sondeo.
+- los shutdown de replay3/4/5 quedaron `stop_pending` con contadores cero y un
   tmux propio vivo; el fallback acotado uso SIGINT del PID del piloto y elimino
   exclusivamente su sesion `orquesta-goal-*` tras varios intentos HTTP.
 
@@ -44,6 +49,7 @@ app desechable ni se toco OPES/remoto.
 - `/tmp/orquesta-live-bug255-replay5-20260711`
 - `/tmp/orquesta-live-bug255-replay6-20260711`
 - `/tmp/orquesta-live-bug255-replay7-20260711`
+- `/tmp/orquesta-live-bug255-replay8-20260711`
 
 Se retienen hasta extraer el recibo final. No contienen autoridad documental y
 se eliminaran de forma gobernada al cerrar la incidencia. No versionar

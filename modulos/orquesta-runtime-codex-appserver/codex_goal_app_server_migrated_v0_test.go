@@ -867,6 +867,12 @@ func TestServerCodexAppServerGoalBackendV0ToolOutputPolicyYThreadReadGigantePorW
 		t.Fatalf("settings websocket=%#v", settings.Params)
 	}
 	turnStart := findCodexAppServerWebSocketRecordForTestV0(t, startCalls, "turn/start")
+	if _, exists := turnStart.Params["sandboxPolicy"]; exists {
+		t.Fatalf("turn/start no debe delegar permisos Git al agente: %#v", turnStart.Params)
+	}
+	if _, exists := turnStart.Params["writableRoots"]; exists {
+		t.Fatalf("turn/start no debe publicar writableRoots: %#v", turnStart.Params)
+	}
 	policy, ok := turnStart.Params["toolOutputPolicy"].(map[string]interface{})
 	if !ok {
 		t.Fatalf("turn/start sin toolOutputPolicy: %#v", turnStart.Params)

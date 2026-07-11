@@ -4421,5 +4421,11 @@ validos, pero el batch quedo bloqueado. Cierre: normalizar el alias conocido al
 decodificar JSON, registrar recibo de reparacion y ejecutar el test mediante el
 atestador independiente; no clasificar summary ni palabras libres.
 
-Evidencia transversal de `BUG-255` a `BUG-262`:
+Replay8 cerro g02 con atestacion independiente, pero g01 uso el alias mas
+especifico `sandbox_unix_socket_operation_not_permitted` y quedo bloqueado tras
+tres continuaciones aunque el cambio estaba completo. El catalogo tipado se
+amplia con ese codigo y cubre las tres formas JSON (`reason_code`, issue string
+e issue object). BUG-264 sigue abierto hasta replay de cierre del batch.
+
+Evidencia transversal de `BUG-255` a `BUG-264`:
 [pilotos de cierre batch del 2026-07-11](incidencias/incidencia_pilotos_cierre_batch_orquesta_2026-07-11.md).

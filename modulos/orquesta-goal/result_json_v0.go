@@ -323,7 +323,7 @@ func goalWorkResultJSONNormalizeIssueListV0(root map[string]any, key string, rec
 func goalWorkResultJSONIssueCodeAliasV0(code string) string {
 	code = strings.ToLower(strings.TrimSpace(code))
 	switch code {
-	case "external_test_environment_restriction", "test_environment_unavailable":
+	case "external_test_environment_restriction", "test_environment_unavailable", "sandbox_unix_socket_operation_not_permitted":
 		return GoalIssueRequiredTestsEnvironmentUnavailableV0
 	default:
 		return code
