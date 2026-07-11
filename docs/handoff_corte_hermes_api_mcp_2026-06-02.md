@@ -13,14 +13,19 @@ Orquesta si funciono como apoyo operativo en esta sesion:
   tools MCP de operador.
 
 La prueba real API-only de Hermes sigue pendiente porque en esta sesion no habia
-servidor local en `127.0.0.1:16543` ni endpoint/token Hermes reales. La
-configuracion canonica es `ORQUESTA_HERMES_*`.
+servidor local en `127.0.0.1:16543` ni endpoint/token Hermes reales.
+
+Actualizacion 2026-07-11: la configuracion operativa canonica es la seccion
+`hermes_operator.*` de `orquesta.config.json`. Las 15 variables
+`ORQUESTA_HERMES_*` quedan como overrides deprecated con precedencia temporal
+para compatibilidad y para el smoke opt-in. El token se configura mediante
+`api_key_file`; `ORQUESTA_HERMES_API_KEY` es solo un override legado.
 
 Actualizacion: el harness real opt-in ya existe en
 `cmd/orquesta-server/hermes_operator_real_smoke_v0_test.go`. Se activa con
 `ORQUESTA_HERMES_REAL_SMOKE_CONFIRM=1` y apunta a `ORQUESTA_HERMES_BASE_URL` de
-una instancia Hermes temporal. `ORQUESTA_HERMES_API_KEY` es opcional y debe
-tratarse como secreto. `supervised_burst` queda en un test separado y requiere
+una instancia Hermes temporal. `ORQUESTA_HERMES_API_KEY` es opcional, legacy y
+debe tratarse como secreto. `supervised_burst` queda en un test separado y requiere
 `ORQUESTA_HERMES_REAL_SMOKE_BURST_CONFIRM=1`; sin esa confirmacion extra, el
 harness valida solo descubrimiento local, estado, outbox y consulta dirigida.
 

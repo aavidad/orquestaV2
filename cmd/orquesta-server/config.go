@@ -195,6 +195,9 @@ func serverConfigFromEnvWithProjectConfigPathV0(projectConfigPath string) (orque
 	if _, err := ollamaModelManagerConfigFromProjectConfigV0(projectConfig); err != nil {
 		return orquestaserver.ConfigV0{}, err
 	}
+	if _, err := hermesOperatorConfigFromProjectConfigV0(projectConfig); err != nil {
+		return orquestaserver.ConfigV0{}, err
+	}
 	config.EffectiveConfig = serverEffectiveConfigFromEnvAndProjectConfigV0(config, projectConfig)
 	return config, orquestaserver.ValidateConfigV0(config)
 }

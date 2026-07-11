@@ -232,7 +232,7 @@ func buildStackFromProjectConfigV0(
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
-	operatorConnector, err := hermesOperatorConnectorFromEnvV0()
+	operatorConnector, err := hermesOperatorConnectorFromProjectConfigV0(serverConfig, projectConfig)
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}

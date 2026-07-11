@@ -750,8 +750,30 @@ caches y `SMOKE_*` no se convierten en settings globales.
 por `bearer_token_file` confinado y redactado. La primera version funcional fue
 rechazada por seguridad y queda documentada como BUG-220.
 
-Residual real de configuracion persistente: `hermes_operator` (15 envs) y la
-decision sobre `startup_cleanup` (3 inputs de invocacion). Los aliases
+Residual real de configuracion persistente: la decision sobre `startup_cleanup`
+(3 inputs de invocacion). Los aliases
 `ORQUESTA_BASE_URL`, `ORQUESTA_CODEX_HOME`/`CODEX_HOME`, `OPES_BASE_URL` e idle
 `...AFTER` siguen diagnosticados; no se retiran sin una ventana de
 compatibilidad medida.
+
+## Actualizacion Codex 2026-07-11: hermes_operator
+
+Las 15 variables `ORQUESTA_HERMES_*` quedan migradas a la seccion canonica
+`hermes_operator.*` de `orquesta.config.json`. La precedencia es
+`env > fichero > default`; las envs se conservan como overrides deprecated y
+`effective_config` publica su fuente sin exponer URL, token ni ruta del secreto.
+El token no puede escribirse en JSON: `api_key_file` referencia un fichero
+confinado al proyecto y validado por permisos.
+
+La validacion y la proyeccion efectiva no abren ese fichero. Solo el wiring del
+adaptador Hermes, y solo cuando esta habilitado, lo lee una vez antes de crear
+el conector. Un Hermes deshabilitado no falla por una referencia ausente o
+insegura; habilitado, ambas condiciones bloquean el wiring. Se cubren tambien
+inputs adversarios, precedencia, redaccion y ausencia de carreras.
+
+Verificacion:
+
+- `go test -count=1 ./cmd/orquesta-server -run 'Hermes|FicheroCanonico|EnvRegistryAST|EnvVars|Ratchet'`
+- `go test -race -count=1 ./cmd/orquesta-server -run Hermes`
+- `scripts/orquesta_metricas_deuda.sh --json` -> 424 productivas, 103 solo test
+- `git diff --check`

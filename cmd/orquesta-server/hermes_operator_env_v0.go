@@ -43,7 +43,7 @@ var hermesOperatorEnvRegistryV0 = map[string]serverEnvSettingMetadataV0{
 	envHermesAPIKeyV0: {
 		Scope:       "hermes_operator",
 		Label:       "Hermes API key",
-		Description: "Token opt-in del operador Hermes; nunca se publica en claro.",
+		Description: "Override legacy/deprecated del token Hermes; nunca se publica en claro.",
 	},
 	envHermesStatusToolV0: {
 		Scope:       "hermes_operator",

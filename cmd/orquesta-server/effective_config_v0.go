@@ -472,7 +472,7 @@ func serverEffectiveConfigFromEnvAndProjectConfigV0(
 	settings = append(settings, opesBridgeEffectiveConfigSettingsV0(config, projectConfig)...)
 	settings = append(settings, codexWaveEffectiveConfigSettingsV0(config, projectConfig)...)
 	settings = append(settings, codexServerWorktreeSnapshotBudgetSettingsV0(config.ProjectWorkDir, worktreeSnapshotBudget)...)
-	settings = append(settings, hermesOperatorEffectiveConfigSettingsV0()...)
+	settings = append(settings, hermesOperatorEffectiveConfigSettingsV0(config, projectConfig)...)
 	settings = append(settings, ollamaModelManagerEffectiveConfigSettingsV0(config, projectConfig)...)
 	settings = append(settings, opesRegistryFinalPkgEffectiveConfigSettingsV0(config, projectConfig)...)
 	settings = append(settings, opesTopicRegistryEffectiveConfigSettingsV0(config, projectConfig)...)
@@ -592,6 +592,14 @@ func serverEffectiveConfigDiagnosticsFromConfigV0(projectConfig serverProjectCon
 		"evidence-ref-config-deprecated-env-override-runtime-models",
 		ollamaModelManagerEnvKeysV0()...,
 	)...)
+	diagnostics = append(diagnostics, serverDeprecatedEnvOverridesForProjectConfigV0(
+		projectConfig,
+		"hermes_operator",
+		"hermes_operator.*",
+		"evidence-ref-config-deprecated-env-override-hermes-operator",
+		hermesOperatorNonSecretEnvKeysV0()...,
+	)...)
+	diagnostics = append(diagnostics, hermesOperatorLegacyAPIKeyDiagnosticV0()...)
 	if !serverGoalBackendOperationalFromProjectConfigFileV0(projectConfig) &&
 		!boolEnvOrDefaultV0(envExternalWorkLegacyDirectorLoopV0, false) {
 		diagnostics = append(diagnostics, orquestaserver.ServerDiagnosticV0{
@@ -630,6 +638,18 @@ func serverEffectiveConfigDiagnosticsFromConfigV0(projectConfig serverProjectCon
 		Message:      envServerIdleSelfImprovementAfterLegacyV0 + " es legacy; usar " + envServerIdleSelfImprovementAfterV0,
 		EvidenceRefs: []string{"evidence-ref-server-idle-self-improvement-env-legacy-alias"},
 	})
+}
+
+func hermesOperatorLegacyAPIKeyDiagnosticV0() []orquestaserver.ServerDiagnosticV0 {
+	if strings.TrimSpace(os.Getenv(envHermesAPIKeyV0)) == "" {
+		return nil
+	}
+	return []orquestaserver.ServerDiagnosticV0{{
+		Code:         "deprecated_env_used",
+		Scope:        "hermes_operator",
+		Message:      envHermesAPIKeyV0 + " override deprecated; usar hermes_operator.api_key_file en orquesta.config.json",
+		EvidenceRefs: []string{"evidence-ref-config-deprecated-env-override-hermes-api-key"},
+	}}
 }
 
 func serverDeprecatedEnvOverridesForProjectConfigV0(

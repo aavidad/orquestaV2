@@ -44,6 +44,7 @@ type serverProjectConfigFileV0 struct {
 	GoalBackend          serverProjectConfigGoalBackendV0          `json:"goal_backend,omitempty"`
 	CodexUsageAccounting serverProjectConfigCodexUsageAccountingV0 `json:"codex_usage_accounting,omitempty"`
 	RuntimeModels        serverProjectConfigRuntimeModelsV0        `json:"runtime_models,omitempty"`
+	HermesOperator       serverProjectConfigHermesOperatorV0       `json:"hermes_operator,omitempty"`
 	CodebaseBroker       serverProjectConfigCodebaseBrokerV0       `json:"codebase_broker,omitempty"`
 	WizardBot            serverProjectConfigWizardBotV0            `json:"wizard_bot,omitempty"`
 	TelegramOperator     serverProjectConfigTelegramOperatorV0     `json:"telegram_operator,omitempty"`
@@ -518,6 +519,9 @@ func serverProjectConfigHasEffectiveValueForEnvKeyV0(config serverProjectConfigF
 		return *value > 0
 	}
 	if runtimeModelsProjectConfigHasValueForEnvKeyV0(config.RuntimeModels, key) {
+		return true
+	}
+	if hermesOperatorProjectConfigHasValueForEnvKeyV0(config.HermesOperator, key) {
 		return true
 	}
 	switch key {

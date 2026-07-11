@@ -112,7 +112,10 @@ func newHermesOperatorRealSmokeHandlerV0(t *testing.T, baseURL string) http.Hand
 }
 
 func newHermesOperatorRealSmokeConnectorV0() (operator.OperatorMCPConnectorV0, error) {
-	config := hermesOperatorEnvConfigFromEnvV0()
+	config, err := hermesOperatorConfigFromProjectConfigV0(serverProjectConfigFileV0{})
+	if err != nil {
+		return nil, err
+	}
 	return operatorhermes.NewHermesOperatorMCPConnectorV0(operatorhermes.HermesOperatorMCPConfigV0{
 		BaseURL:          config.BaseURL,
 		MCPPath:          config.MCPPath,
