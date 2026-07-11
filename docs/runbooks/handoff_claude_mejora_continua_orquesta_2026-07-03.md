@@ -3142,3 +3142,9 @@ con vocabulario propio, no reconciliaciones duplicadas; no se borraron.
 privados de `GoalWorkSpec` a `validation_limits_v0.go`. La validacion principal
 mantiene orden y normalizacion; no se movieron write-set, artefactos ni cierre.
 Focales de limites y `go test -count=1 ./modulos/orquesta-goal` verdes.
+
+`9d82bf95f` extrae cierre/artefactos/write-set/evidencias a
+`validation_closure_artifacts_v0.go`. El worker fue detenido por no responder,
+pero habia materializado el diff; Codex lo reviso como trabajo no confiable y
+reejecuto los cuatro focales de cierre y toda la suite `orquesta-goal`, verdes.
+La fachada y el orden de errores no cambian.

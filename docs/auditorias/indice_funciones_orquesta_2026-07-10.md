@@ -149,3 +149,10 @@ retiran ni se consolidan por parecido textual.
 validacion privada de limites de `GoalWorkSpec` a `validation_limits_v0.go`.
 La fachada conserva normalizacion, orden, write-set, artefactos y cierre; los
 focales de objetivo/listas/comandos/tamano y la suite completa del modulo pasan.
+
+`9d82bf95f` separa el segundo bloque cohesivo de `validation_v0.go`: cierre
+parcial, evidencias, paths dentro del write-set, required tests y presencia de
+artefactos pasan a `validation_closure_artifacts_v0.go`. El subagente no llego
+a devolver resultado, por lo que el diff se trato como no confiable y se
+revisaron/reexecutaron focales y suite completa antes del commit. No cambia el
+orden de `ValidateGoalWorkClosureV0` ni sus codigos de error.
