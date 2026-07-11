@@ -510,10 +510,6 @@ func stackShutdownGoalBackendStillRunningV0(state orquestagoal.GoalWorkStateV0) 
 	return stackShutdownGoalBackendActiveTimeoutV0(state)
 }
 
-func stackShutdownGoalBackendRunningStateV0(state orquestagoal.GoalWorkStateV0) bool {
-	return strings.TrimSpace(state.Status) == orquestagoal.GoalStatusRunningV0
-}
-
 func stackShutdownGoalBackendActiveTimeoutV0(state orquestagoal.GoalWorkStateV0) bool {
 	status := strings.TrimSpace(state.Status)
 	if status != orquestagoal.GoalStatusBlockedV0 && status != orquestagoal.GoalStatusInvalidV0 {

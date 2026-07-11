@@ -512,16 +512,6 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) goalRunRefsForAutoprogram
 	return compactStringsMCPV0(runRefs)
 }
 
-func mcpAutoprogrammingGoalStateRunRefsV0(
-	states []orquestagoal.GoalWorkStateV0,
-) []string {
-	out := make([]string, 0, len(states))
-	for _, state := range states {
-		out = append(out, strings.TrimSpace(state.RunRef))
-	}
-	return compactStringsMCPV0(out)
-}
-
 func mcpAutoprogrammingGoalStateObservableRunRefsV0(
 	states []orquestagoal.GoalWorkStateV0,
 ) []string {

@@ -53,10 +53,6 @@ func (store *StoreV0) SaveAutonomyProgramV0(ctx context.Context, program orquest
 	})
 }
 
-func autonomyProgramTopologyEqualV0(left, right orquestaautonomyprogram.AutonomyProgramV0) bool {
-	return orquestaautonomyprogram.SameAutonomyProgramTopologyV0(left, right)
-}
-
 func (store *StoreV0) CompareAndSwapAutonomyProgramV0(ctx context.Context, expected, next orquestaautonomyprogram.AutonomyProgramV0) (bool, error) {
 	ctx = contextOrBackgroundV0(ctx)
 	if err := ctx.Err(); err != nil {
