@@ -22,7 +22,30 @@ Buen trabajo. Siguiente: R4b (documentar frontera stdio) es rapido; luego
 R4 (dos pases con receipt para cerrar D3+208H formalmente) y despues
 continua la directiva dentro->fuera por el NUCLEO. Senala al terminar R4.
 
+## Arbitraje ~11:00 sobre BUG-226 (desacuerdo aceptado, revisor rectifica)
+
+Codex discrepo de la orden "via libre a conectores" en lo tocante a 226 y
+TIENE RAZON: el gobierno de progreso material es NUCLEO, no residual de
+conectores. Rectificacion del revisor:
+
+1. 226 continua como trabajo de nucleo en paralelo al arranque de
+   conectores; no queda aplazado por mi orden anterior.
+2. Clasificar `test` SOLO desde atestacion independiente durable: aprobado,
+   procede (coherente con 208H; nunca desde resultados autodeclarados).
+3. La prueba empirica con goal real: APROBADA por el revisor con dos
+   condiciones: (a) consentimiento del operador para el gasto de tokens
+   (pedido; en cuanto conteste se anota aqui), y (b) el goal debe ser UTIL,
+   no sintetico: usar una tarea del backlog del piloto
+   (`docs/backlog_piloto_autonomia_2026-07-10.md`), propuesta T9104
+   (verificar muestra de la clasificacion S13; write-set solo docs,
+   pequena). MAX_REQUESTS=1 y revisor validando el cierre.
+4. Nota de delegacion: el relanzamiento Terra->Sol high por "model at
+   capacity" esta bien resuelto y bien documentado (sin atribuir avance al
+   worker fallido). Mantener esa disciplina.
+
 ## Revision ~04:00: NUCLEO ACEPTADO por el revisor - fase CONECTORES abierta
+(matiz posterior: ver arbitraje 226 arriba - el cierre de nucleo queda
+condicionado a cerrar 226)
 
 Verificado por el revisor tras 24f855618 (53 commits revisados en rango):
 las 7 suites del nucleo (estado-vivo, goal, orchestration-core,
