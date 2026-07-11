@@ -18,6 +18,7 @@ func TestMain(m *testing.M) {
 }
 
 func configureServerPackageTestEnvV0() func() {
+	moduleCacheSeed := strings.TrimSpace(os.Getenv("ORQUESTA_ISOLATED_TEST_MODULE_CACHE_SEED"))
 	tmpParent := "."
 	for _, candidate := range []string{"/workspace/runtime", "/var/tmp"} {
 		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
@@ -32,7 +33,7 @@ func configureServerPackageTestEnvV0() func() {
 			_ = os.Setenv("GOTMPDIR", abs)
 			_ = os.Setenv("GOCACHE", filepath.Join(abs, "go-cache"))
 			_ = os.Setenv("GOPATH", filepath.Join(abs, "go"))
-			_ = os.Setenv("GOMODCACHE", filepath.Join(abs, "go", "pkg", "mod"))
+			_ = os.Setenv("GOMODCACHE", serverPackageTestModuleCacheV0(moduleCacheSeed, filepath.Join(abs, "go", "pkg", "mod")))
 		}
 	}
 	for _, entry := range os.Environ() {
@@ -52,6 +53,16 @@ func configureServerPackageTestEnvV0() func() {
 			cleanupServerPackageTestTempDirV0(tmpDir)
 		}
 	}
+}
+
+func serverPackageTestModuleCacheV0(seed string, fallback string) string {
+	seed = strings.TrimSpace(seed)
+	if filepath.IsAbs(seed) {
+		if info, err := os.Stat(seed); err == nil && info.IsDir() {
+			return seed
+		}
+	}
+	return fallback
 }
 
 func cleanupServerPackageTestTempDirV0(path string) {
@@ -87,6 +98,17 @@ func TestCleanupServerPackageTestTempDirV0EliminaModuloGoReadOnly(t *testing.T) 
 
 	if _, err := os.Stat(root); !os.IsNotExist(err) {
 		t.Fatalf("root no eliminado, err=%v", err)
+	}
+}
+
+func TestServerPackageTestModuleCacheV0ConservaSnapshotAisladoV0(t *testing.T) {
+	seed := t.TempDir()
+	fallback := filepath.Join(t.TempDir(), "fallback")
+	if got := serverPackageTestModuleCacheV0(seed, fallback); got != seed {
+		t.Fatalf("module cache=%q want=%q", got, seed)
+	}
+	if got := serverPackageTestModuleCacheV0("relative", fallback); got != fallback {
+		t.Fatalf("fallback=%q want=%q", got, fallback)
 	}
 }
 

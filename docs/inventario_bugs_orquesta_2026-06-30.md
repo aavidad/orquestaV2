@@ -4451,5 +4451,16 @@ Codex seguian activos; SIGINT al PID propio cerro servidor y tmux en el segundo
 sondeo. Los cierres 6-9 prueban shutdown idle/terminal, pero falta demostrar que
 forced cancela test/turn activos y alcanza `shutdown_ready` por API sin fallback.
 
-Evidencia transversal de `BUG-255` a `BUG-264`:
+BUG `BUG-ORQ-20260711-268` (cerrado localmente, TestMain perdia snapshot Go):
+replay11 arranco con el snapshot completo y el preflight readonly verde, pero
+la atestacion de `go test ./cmd/orquesta-server` reprodujo los diez fallos de
+replay9. La causa no era el snapshot: `configureServerPackageTestEnvV0`
+eliminaba `ORQUESTA_ISOLATED_TEST_MODULE_CACHE_SEED` y sustituia `GOMODCACHE`
+por un directorio vacio antes de ejecutar tests anidados con `GOPROXY=off`.
+El `TestMain` conserva ahora el seed absoluto existente como cache privada del
+atestador. La suite hermetica completa de `cmd/orquesta-server` pasa en 62,567 s
+y cubre los wrappers OPES y el flaky harness que antes fallaban. Falta replay
+batch para cerrar tambien BUG-265 con evidencia extremo a extremo.
+
+Evidencia transversal de `BUG-255` a `BUG-268`:
 [pilotos de cierre batch del 2026-07-11](incidencias/incidencia_pilotos_cierre_batch_orquesta_2026-07-11.md).

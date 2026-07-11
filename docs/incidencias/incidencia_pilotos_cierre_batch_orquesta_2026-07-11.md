@@ -1,7 +1,7 @@
 # Incidencia: pilotos de cierre batch Orquesta
 
 Fecha: 2026-07-11  
-Alcance: `BUG-ORQ-20260711-255` a `BUG-ORQ-20260711-262`  
+Alcance: `BUG-ORQ-20260711-255` a `BUG-ORQ-20260711-268`
 Estado: en reparacion; no declarar autonomia completa hasta replay final
 
 ## Objetivo del piloto
@@ -49,6 +49,15 @@ app desechable ni se toco OPES/remoto.
   quedaron `stop_pending` mientras tests/turns seguian activos; SIGINT del PID
   propio cerro servidor y tmux. El preflight queda reemplazado por dos `go list`
   readonly y el shutdown activo se registra como BUG-267.
+- replay11 supero el preflight readonly sin ensuciar `go.sum`. G01 termino el
+  cambio, pero su atestacion volvio a fallar en diez tests anidados; G02 termino
+  su focal y quedo blocked por el test dependiente de `cmd/orquesta-server`.
+  Ambos cierres quedaron correctamente en rework y el batch en `goals_running`:
+  no era un falso atasco del coordinador porque ninguna run habia cerrado. La
+  causa comun fue `TestMain`, que reemplazaba el `GOMODCACHE` privado por uno
+  vacio y borraba el seed. Tras corregirlo, la misma suite hermetica pasa
+  completa. El shutdown terminal del replay devolvio `ready` y cerro proceso y
+  backend por API en el primer intento valido.
 - los shutdown de replay3/4/5 quedaron `stop_pending` con contadores cero y un
   tmux propio vivo; el fallback acotado uso SIGINT del PID del piloto y elimino
   exclusivamente su sesion `orquesta-goal-*` tras varios intentos HTTP.
@@ -63,6 +72,7 @@ app desechable ni se toco OPES/remoto.
 - `/tmp/orquesta-live-bug255-replay8-20260711`
 - `/tmp/orquesta-live-bug255-replay9-20260711`
 - `/tmp/orquesta-live-bug255-replay10-20260711`
+- `/tmp/orquesta-live-bug255-replay11-20260711`
 
 Se retienen hasta extraer el recibo final. No contienen autoridad documental y
 se eliminaran de forma gobernada al cerrar la incidencia. No versionar
@@ -91,7 +101,7 @@ transcripts, CODEX_HOME, sockets ni caches.
 4. Normalizar el alias estructurado de entorno de tests y delegar el test
    bloqueado al atestador independiente.
 5. Validar en preflight que el snapshot Go resuelve `go mod download all` sin
-   red y regenerar el snapshot del piloto.
+   red y conservarlo en todos los tests anidados sin mutar el modulo.
 6. Repetir el batch desde estado limpio: dos accepted, dos commits encadenados,
    gate unico, checkout canonico limpio y batch closed.
 7. Reenviar exactamente la request: cero threads, commits y gates nuevos.
