@@ -107,7 +107,7 @@ func serverRuntimeDepsFromStackV0(
 		MaterialProgressEvidence: orquestaappcodexstack.CodexStackMaterialProgressEvidenceV0{Stack: &stack},
 		EstadoVivoSource:         stack.MCPTransportBindings.AutoprogrammingEstadoVivoSource,
 		ShutdownSnapshot:         serverShutdownSnapshotFromStackV0(stack, goalBackends),
-		ShutdownHooks:            serverGoalShutdownHooksFromBackendsV0(goalBackends.AppGoal, goalBackends.IdleGoal),
+		ShutdownHooks:            serverGoalShutdownHooksFromBackendsV0(goalBackends.AppGoal, goalBackends.AutoprogrammingGoal, goalBackends.IdleGoal),
 		BackgroundWorkers:        serverBackgroundWorkersFromStackV0(stack),
 		StartupCheck:             startupCheckFromEnvV0(stack, serverConfig),
 		SelfWatchdog: orquestaserver.NewProcessSelfWatchdogObserverV0(

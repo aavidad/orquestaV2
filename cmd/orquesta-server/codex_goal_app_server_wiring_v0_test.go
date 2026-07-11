@@ -786,6 +786,7 @@ func TestServerGoalShutdownHooksFromBackendsV0DeduplicaMismoHookV0(t *testing.T)
 	hooks := serverGoalShutdownHooksFromBackendsV0(
 		serverCodexGoalBackendV0{ShutdownHook: hook},
 		serverCodexGoalBackendV0{ShutdownHook: hook},
+		serverCodexGoalBackendV0{ShutdownHook: hook},
 	)
 	if len(hooks) != 1 {
 		t.Fatalf("hooks=%d", len(hooks))
@@ -799,11 +800,56 @@ func TestServerGoalShutdownHooksFromBackendsV0ConservaIdentidadesCausalesDistint
 			SocketPath: filepath.Join(root, "app.sock"), SessionName: "orquesta-goal-app-1234567890",
 		}},
 		serverCodexGoalBackendV0{ShutdownHook: serverCodexAppServerTmuxBackendV0{
+			SocketPath: filepath.Join(root, "autoprogramming.sock"), SessionName: "orquesta-goal-autoprogramming-1234567890",
+		}},
+		serverCodexGoalBackendV0{ShutdownHook: serverCodexAppServerTmuxBackendV0{
 			SocketPath: filepath.Join(root, "idle.sock"), SessionName: "orquesta-goal-idle-1234567890",
 		}},
 	)
-	if len(hooks) != 2 {
+	if len(hooks) != 3 {
 		t.Fatalf("hooks=%d", len(hooks))
+	}
+}
+
+func TestServerAutoprogrammingGoalWorkspaceSelectorsV0DeleganActiveShutdownWorkV0(t *testing.T) {
+	app := &fakeServerGoalWorkspacePortV0{
+		identity: "shutdown-identity-app",
+		active: orquestaservershutdown.ActiveShutdownWorkResultV0{ActiveWorks: []orquestaservershutdown.ActiveShutdownWorkV0{{
+			Kind: "goal_backend", RunRef: "run-ref-app", WorkRef: "goal-ref-app",
+		}}},
+	}
+	autoprogramming := &fakeServerGoalWorkspacePortV0{
+		identity: "shutdown-identity-autoprogramming",
+		active: orquestaservershutdown.ActiveShutdownWorkResultV0{ActiveWorks: []orquestaservershutdown.ActiveShutdownWorkV0{{
+			Kind: "goal_backend", RunRef: "run-ref-autoprogramming", WorkRef: "goal-ref-autoprogramming",
+		}}},
+	}
+	launcher := serverAutoprogrammingGoalWorkspaceLauncherV0{AppGoal: app, AutoprogrammingGoal: autoprogramming}
+	observer := serverAutoprogrammingGoalWorkspaceObserverV0{AppGoal: app, AutoprogrammingGoal: autoprogramming}
+
+	active, err := launcher.ReadActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkRequestV0{})
+	if err != nil || len(active.ActiveWorks) != 2 || app.readCalls != 1 || autoprogramming.readCalls != 1 {
+		t.Fatalf("active=%+v app_reads=%d autoprogramming_reads=%d err=%v", active, app.readCalls, autoprogramming.readCalls, err)
+	}
+	cleaned, err := observer.CleanupActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkCleanupCommandV0{})
+	if err != nil || cleaned.CleanedWorkCount != 2 || app.cleanupCalls != 1 || autoprogramming.cleanupCalls != 1 {
+		t.Fatalf("cleaned=%+v app_cleanups=%d autoprogramming_cleanups=%d err=%v", cleaned, app.cleanupCalls, autoprogramming.cleanupCalls, err)
+	}
+	if launcher.ActiveShutdownWorkIdentityV0() == "" || launcher.ActiveShutdownWorkIdentityV0() != observer.ActiveShutdownWorkIdentityV0() {
+		t.Fatalf("identidades launcher=%q observer=%q", launcher.ActiveShutdownWorkIdentityV0(), observer.ActiveShutdownWorkIdentityV0())
+	}
+
+	shared := &fakeServerGoalWorkspacePortV0{identity: "shutdown-identity-shared"}
+	sharedLauncher := serverAutoprogrammingGoalWorkspaceLauncherV0{AppGoal: shared, AutoprogrammingGoal: shared}
+	sharedObserver := serverAutoprogrammingGoalWorkspaceObserverV0{AppGoal: shared, AutoprogrammingGoal: shared}
+	if _, err := sharedLauncher.ReadActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkRequestV0{}); err != nil {
+		t.Fatalf("shared ReadActiveShutdownWorkV0: %v", err)
+	}
+	if _, err := sharedObserver.CleanupActiveShutdownWorkV0(context.Background(), orquestaservershutdown.ActiveShutdownWorkCleanupCommandV0{}); err != nil {
+		t.Fatalf("shared CleanupActiveShutdownWorkV0: %v", err)
+	}
+	if shared.readCalls != 1 || shared.cleanupCalls != 1 {
+		t.Fatalf("backend compartido duplicado reads=%d cleanups=%d", shared.readCalls, shared.cleanupCalls)
 	}
 }
 
@@ -1093,6 +1139,47 @@ func (hook fakeServerGoalActiveShutdownHookV0) CleanupActiveShutdownWorkV0(
 	orquestaservershutdown.ActiveShutdownWorkCleanupCommandV0,
 ) (orquestaservershutdown.ActiveShutdownWorkCleanupResultV0, error) {
 	return orquestaservershutdown.ActiveShutdownWorkCleanupResultV0{}, nil
+}
+
+type fakeServerGoalWorkspacePortV0 struct {
+	identity     string
+	active       orquestaservershutdown.ActiveShutdownWorkResultV0
+	readCalls    int
+	cleanupCalls int
+}
+
+func (port *fakeServerGoalWorkspacePortV0) LaunchGoalWorkV0(
+	context.Context,
+	orquestagoal.GoalWorkSpecV0,
+) (orquestagoal.GoalLaunchReceiptV0, error) {
+	return orquestagoal.GoalLaunchReceiptV0{}, nil
+}
+
+func (port *fakeServerGoalWorkspacePortV0) ObserveGoalWorkV0(
+	context.Context,
+	orquestagoal.GoalObservationRequestV0,
+) (orquestagoal.GoalWorkResultV0, error) {
+	return orquestagoal.GoalWorkResultV0{}, nil
+}
+
+func (port *fakeServerGoalWorkspacePortV0) ReadActiveShutdownWorkV0(
+	context.Context,
+	orquestaservershutdown.ActiveShutdownWorkRequestV0,
+) (orquestaservershutdown.ActiveShutdownWorkResultV0, error) {
+	port.readCalls++
+	return port.active, nil
+}
+
+func (port *fakeServerGoalWorkspacePortV0) CleanupActiveShutdownWorkV0(
+	context.Context,
+	orquestaservershutdown.ActiveShutdownWorkCleanupCommandV0,
+) (orquestaservershutdown.ActiveShutdownWorkCleanupResultV0, error) {
+	port.cleanupCalls++
+	return orquestaservershutdown.ActiveShutdownWorkCleanupResultV0{CleanedWorkCount: 1}, nil
+}
+
+func (port *fakeServerGoalWorkspacePortV0) ActiveShutdownWorkIdentityV0() string {
+	return port.identity
 }
 
 func (fake *fakeCodexAppServerProtocolV0) StartThreadV0(

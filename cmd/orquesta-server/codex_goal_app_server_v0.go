@@ -14,6 +14,7 @@ import (
 	orquestaruntimecodexappserver "orquesta/modulos/orquesta-runtime-codex-appserver"
 	orquestaruntimecodexgoal "orquesta/modulos/orquesta-runtime-codex-goal"
 	orquestaserver "orquesta/modulos/orquesta-server"
+	orquestaservershutdown "orquesta/modulos/orquesta-server-shutdown"
 )
 
 const (
@@ -217,6 +218,24 @@ func (launcher serverAutoprogrammingGoalWorkspaceLauncherV0) LaunchGoalWorkV0(
 	return delegate.LaunchGoalWorkV0(ctx, spec)
 }
 
+func (launcher serverAutoprogrammingGoalWorkspaceLauncherV0) ReadActiveShutdownWorkV0(
+	ctx context.Context,
+	request orquestaservershutdown.ActiveShutdownWorkRequestV0,
+) (orquestaservershutdown.ActiveShutdownWorkResultV0, error) {
+	return serverAutoprogrammingGoalReadActiveShutdownWorkV0(ctx, request, launcher.AppGoal, launcher.AutoprogrammingGoal)
+}
+
+func (launcher serverAutoprogrammingGoalWorkspaceLauncherV0) CleanupActiveShutdownWorkV0(
+	ctx context.Context,
+	command orquestaservershutdown.ActiveShutdownWorkCleanupCommandV0,
+) (orquestaservershutdown.ActiveShutdownWorkCleanupResultV0, error) {
+	return serverAutoprogrammingGoalCleanupActiveShutdownWorkV0(ctx, command, launcher.AppGoal, launcher.AutoprogrammingGoal)
+}
+
+func (launcher serverAutoprogrammingGoalWorkspaceLauncherV0) ActiveShutdownWorkIdentityV0() string {
+	return serverAutoprogrammingGoalActiveShutdownWorkIdentityV0(launcher.AppGoal, launcher.AutoprogrammingGoal)
+}
+
 func serverGoalWorkObserverFromBackendV0(
 	backend serverCodexGoalBackendV0,
 ) orquestagoal.GoalWorkObservationPortV0 {
@@ -278,6 +297,24 @@ func (observer serverAutoprogrammingGoalWorkspaceObserverV0) ObserveGoalWorkV0(
 	return delegate.ObserveGoalWorkV0(ctx, request)
 }
 
+func (observer serverAutoprogrammingGoalWorkspaceObserverV0) ReadActiveShutdownWorkV0(
+	ctx context.Context,
+	request orquestaservershutdown.ActiveShutdownWorkRequestV0,
+) (orquestaservershutdown.ActiveShutdownWorkResultV0, error) {
+	return serverAutoprogrammingGoalReadActiveShutdownWorkV0(ctx, request, observer.AppGoal, observer.AutoprogrammingGoal)
+}
+
+func (observer serverAutoprogrammingGoalWorkspaceObserverV0) CleanupActiveShutdownWorkV0(
+	ctx context.Context,
+	command orquestaservershutdown.ActiveShutdownWorkCleanupCommandV0,
+) (orquestaservershutdown.ActiveShutdownWorkCleanupResultV0, error) {
+	return serverAutoprogrammingGoalCleanupActiveShutdownWorkV0(ctx, command, observer.AppGoal, observer.AutoprogrammingGoal)
+}
+
+func (observer serverAutoprogrammingGoalWorkspaceObserverV0) ActiveShutdownWorkIdentityV0() string {
+	return serverAutoprogrammingGoalActiveShutdownWorkIdentityV0(observer.AppGoal, observer.AutoprogrammingGoal)
+}
+
 func (observer serverAutoprogrammingGoalWorkspaceObserverV0) delegateForGoalV0(
 	ctx context.Context,
 	goalRef string,
@@ -293,6 +330,87 @@ func (observer serverAutoprogrammingGoalWorkspaceObserverV0) delegateForGoalV0(
 		return observer.AutoprogrammingGoal, nil
 	}
 	return observer.AppGoal, nil
+}
+
+func serverAutoprogrammingGoalReadActiveShutdownWorkV0(
+	ctx context.Context,
+	request orquestaservershutdown.ActiveShutdownWorkRequestV0,
+	ports ...interface{},
+) (orquestaservershutdown.ActiveShutdownWorkResultV0, error) {
+	out := orquestaservershutdown.ActiveShutdownWorkResultV0{}
+	seen := map[string]struct{}{}
+	for _, port := range ports {
+		reader, ok := port.(orquestaservershutdown.ActiveShutdownWorkReaderPortV0)
+		if !ok || reader == nil || serverAutoprogrammingGoalActiveShutdownWorkPortSeenV0(seen, reader) {
+			continue
+		}
+		active, err := reader.ReadActiveShutdownWorkV0(ctx, request)
+		if err != nil {
+			return orquestaservershutdown.ActiveShutdownWorkResultV0{}, err
+		}
+		out.ActiveWorks = append(out.ActiveWorks, active.ActiveWorks...)
+		out.EvidenceRefs = append(out.EvidenceRefs, active.EvidenceRefs...)
+	}
+	return out, nil
+}
+
+func serverAutoprogrammingGoalCleanupActiveShutdownWorkV0(
+	ctx context.Context,
+	command orquestaservershutdown.ActiveShutdownWorkCleanupCommandV0,
+	ports ...interface{},
+) (orquestaservershutdown.ActiveShutdownWorkCleanupResultV0, error) {
+	out := orquestaservershutdown.ActiveShutdownWorkCleanupResultV0{}
+	seen := map[string]struct{}{}
+	for _, port := range ports {
+		cleaner, ok := port.(orquestaservershutdown.ActiveShutdownWorkCleanerPortV0)
+		if !ok || cleaner == nil || serverAutoprogrammingGoalActiveShutdownWorkPortSeenV0(seen, cleaner) {
+			continue
+		}
+		cleaned, err := cleaner.CleanupActiveShutdownWorkV0(ctx, command)
+		if err != nil {
+			return orquestaservershutdown.ActiveShutdownWorkCleanupResultV0{}, err
+		}
+		out.CleanedWorkCount += cleaned.CleanedWorkCount
+		out.EvidenceRefs = append(out.EvidenceRefs, cleaned.EvidenceRefs...)
+	}
+	return out, nil
+}
+
+func serverAutoprogrammingGoalActiveShutdownWorkIdentityV0(ports ...interface{}) string {
+	seen := map[string]struct{}{}
+	identities := make([]string, 0, len(ports))
+	for _, port := range ports {
+		identity, ok := port.(orquestaservershutdown.ActiveShutdownWorkIdentityPortV0)
+		if !ok || identity == nil {
+			continue
+		}
+		value := strings.TrimSpace(identity.ActiveShutdownWorkIdentityV0())
+		if value == "" {
+			continue
+		}
+		if _, exists := seen[value]; exists {
+			continue
+		}
+		seen[value] = struct{}{}
+		identities = append(identities, fmt.Sprintf("%d:%s", len(value), value))
+	}
+	return strings.Join(identities, "|")
+}
+
+func serverAutoprogrammingGoalActiveShutdownWorkPortSeenV0(seen map[string]struct{}, port interface{}) bool {
+	identity, ok := port.(orquestaservershutdown.ActiveShutdownWorkIdentityPortV0)
+	if !ok || identity == nil {
+		return false
+	}
+	value := strings.TrimSpace(identity.ActiveShutdownWorkIdentityV0())
+	if value == "" {
+		return false
+	}
+	if _, exists := seen[value]; exists {
+		return true
+	}
+	seen[value] = struct{}{}
+	return false
 }
 
 func serverCodexGoalWorkspaceLookupFromBackendV0(

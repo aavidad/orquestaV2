@@ -9,7 +9,7 @@ import (
 	orquestaservershutdown "orquesta/modulos/orquesta-server-shutdown"
 )
 
-func TestServerShutdownSnapshotFromStackV0FusionaAppEIdleV0(t *testing.T) {
+func TestServerShutdownSnapshotFromStackV0FusionaAppAutoprogrammingEIdleV0(t *testing.T) {
 	protocol := &fakeCodexAppServerProtocolV0{}
 	appHook := fakeServerGoalActiveShutdownHookV0{
 		result: orquestaservershutdown.ActiveShutdownWorkResultV0{
@@ -34,6 +34,17 @@ func TestServerShutdownSnapshotFromStackV0FusionaAppEIdleV0(t *testing.T) {
 			EvidenceRefs: []string{"evidence-ref-idle-shutdown-snapshot"},
 		},
 	}
+	autoprogrammingHook := fakeServerGoalActiveShutdownHookV0{
+		result: orquestaservershutdown.ActiveShutdownWorkResultV0{
+			ActiveWorks: []orquestaservershutdown.ActiveShutdownWorkV0{{
+				Kind:    "goal_backend",
+				RunRef:  "run-ref-autoprogramming-shutdown-snapshot",
+				WorkRef: "goal-ref-autoprogramming-shutdown-snapshot",
+				Status:  orquestaservershutdown.ServerShutdownStatusBackendStillRunningV0,
+			}},
+			EvidenceRefs: []string{"evidence-ref-autoprogramming-shutdown-snapshot"},
+		},
+	}
 	snapshot := serverShutdownSnapshotFromStackV0(orquestaappcodexstack.StackV0{}, serverCodexGoalBackendsV0{
 		AppGoal: serverCodexGoalBackendV0{
 			Starter:      serverCodexAppServerGoalBackendV0{Protocol: protocol},
@@ -42,6 +53,9 @@ func TestServerShutdownSnapshotFromStackV0FusionaAppEIdleV0(t *testing.T) {
 		},
 		IdleGoal: serverCodexGoalBackendV0{
 			ShutdownHook: idleHook,
+		},
+		AutoprogrammingGoal: serverCodexGoalBackendV0{
+			ShutdownHook: autoprogrammingHook,
 		},
 	})
 
@@ -52,8 +66,9 @@ func TestServerShutdownSnapshotFromStackV0FusionaAppEIdleV0(t *testing.T) {
 		t.Fatalf("SnapshotShutdownV0: %v", err)
 	}
 	if result.Status != orquestaservershutdown.ServerShutdownStatusBackendStillRunningV0 ||
-		result.ActiveWorkCount != 2 ||
+		result.ActiveWorkCount != 3 ||
 		!hasShutdownSnapshotWorkV0(result.ActiveWorks, "run-ref-app-shutdown-snapshot", "goal-ref-app-shutdown-snapshot") ||
+		!hasShutdownSnapshotWorkV0(result.ActiveWorks, "run-ref-autoprogramming-shutdown-snapshot", "goal-ref-autoprogramming-shutdown-snapshot") ||
 		!hasShutdownSnapshotWorkV0(result.ActiveWorks, "run-ref-idle-shutdown-snapshot", "goal-ref-idle-shutdown-snapshot") {
 		t.Fatalf("snapshot result=%+v", result)
 	}

@@ -10,12 +10,14 @@ import (
 
 func serverGoalShutdownHooksFromBackendsV0(
 	appGoal serverCodexGoalBackendV0,
+	autoprogrammingGoal serverCodexGoalBackendV0,
 	idleGoal serverCodexGoalBackendV0,
 ) []orquestaserver.RuntimeShutdownHookPortV0 {
-	hooks := make([]orquestaserver.RuntimeShutdownHookPortV0, 0, 2)
+	hooks := make([]orquestaserver.RuntimeShutdownHookPortV0, 0, 3)
 	causalIdentities := map[string]struct{}{}
 	for _, hook := range []orquestaserver.RuntimeShutdownHookPortV0{
 		appGoal.ShutdownHook,
+		autoprogrammingGoal.ShutdownHook,
 		idleGoal.ShutdownHook,
 	} {
 		if hook == nil || serverGoalShutdownHookAlreadyRegisteredV0(hooks, causalIdentities, hook) {

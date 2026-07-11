@@ -28,6 +28,9 @@ func serverShutdownSnapshotFromStackV0(
 	if idleReader := serverGoalActiveShutdownWorkReaderFromBackendV0(backends.IdleGoal); idleReader != nil {
 		readers = append(readers, idleReader)
 	}
+	if autoprogrammingReader := serverGoalActiveShutdownWorkReaderFromBackendV0(backends.AutoprogrammingGoal); autoprogrammingReader != nil {
+		readers = append(readers, autoprogrammingReader)
+	}
 	return serverShutdownSnapshotPortV0{readers: readers}
 }
 
