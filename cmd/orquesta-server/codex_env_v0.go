@@ -32,7 +32,11 @@ func codeHomeDirV0() string {
 	if value != "" {
 		return value
 	}
-	return filepath.Join(homeDirV0(), ".codex")
+	home := homeDirV0()
+	if home == "" {
+		return ""
+	}
+	return filepath.Join(home, ".codex")
 }
 
 func homeDirV0() string {

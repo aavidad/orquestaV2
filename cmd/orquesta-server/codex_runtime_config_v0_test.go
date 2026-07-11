@@ -128,6 +128,17 @@ func TestCodeHomeDirV0UsaCodexHomeLegacyAliasSiNoHayCanonicaNiOrquestaAliasV0(t 
 	}
 }
 
+func TestCodeHomeDirV0NoInventaRutaRelativaSinHomeV0(t *testing.T) {
+	t.Setenv(envCodexCodeHomeV0, "")
+	t.Setenv(envCodexHomeV0, "")
+	t.Setenv(envCodexCodeHomeLegacyV0, "")
+	t.Setenv("HOME", "")
+
+	if got := codeHomeDirV0(); got != "" {
+		t.Fatalf("code_home=%q want vacio", got)
+	}
+}
+
 func TestCodexCommandPathV0RechazaRutaRelativaAunqueEsteEnPath(t *testing.T) {
 	binDir := filepath.Join(t.TempDir(), "bin")
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
