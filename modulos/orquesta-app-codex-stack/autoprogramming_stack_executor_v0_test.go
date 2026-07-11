@@ -984,6 +984,7 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaBatchGoalsSinCola
 	request.RequestRef = "run-autoprogramming-goal-first-batch-001"
 	request.Tasks[0].TaskRef = "source-task-ref-autoprogramming-goal-first-batch-api-001"
 	request.Tasks[0].Area = "api"
+	request.Tasks[0].RequiredTests = []string{"go test -count=1 ./modulos/orquesta-app-codex-stack -run TestGoalBatchAPI"}
 	request.Tasks[0].ContextRefs = []string{
 		"goal_migration:goal-first",
 		"goal_capability:starter",
@@ -993,6 +994,7 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaBatchGoalsSinCola
 	second := request.Tasks[0]
 	second.TaskRef = "source-task-ref-autoprogramming-goal-first-batch-web-001"
 	second.Area = "web"
+	second.RequiredTests = []string{"go test -count=1 ./modulos/orquesta-app-codex-stack -run TestGoalBatchWeb"}
 	request.Tasks = append(request.Tasks, second)
 	request.WriteSet = []string{
 		"modulos/orquesta-app-codex-stack/api/batch_goal.go",
@@ -1002,6 +1004,12 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaBatchGoalsSinCola
 	request.MaxAreas = 2
 	request.MaxWriteSetEntries = 2
 	request = withAutoprogrammingAttestationForTestV0(request)
+	blocked, err := PrepareAutoprogrammingRunFromStackV0(context.Background(), stack, AutoprogrammingBridgeRequestV0{Request: request})
+	if err != nil || blocked.Accepted || len(blocked.Issues) != 1 || blocked.Issues[0].Code != "physical_goal_workspace_required" {
+		t.Fatalf("multi-goal shared workspace must fail before launch: blocked=%+v err=%v", blocked, err)
+	}
+	stack.AutoprogrammingPromotion.GoalWorkspaceProvisioner = &fakeGoalWorkspaceProvisionerForStackTestV0{root: t.TempDir()}
+	stack.AutoprogrammingPromotion.GoalWorkspaceRoot = t.TempDir()
 
 	prepared, err := NewCodexStackAutoprogrammingPrepareRunExecutorV0(
 		&stack,
@@ -1066,6 +1074,33 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaBatchGoalsSinCola
 	if len(ranking.Ranked) != 0 {
 		t.Fatalf("batch goal-first no debe encolar legacy: %+v", ranking)
 	}
+}
+
+type fakeGoalWorkspaceProvisionerForStackTestV0 struct {
+	root string
+}
+
+func (fake *fakeGoalWorkspaceProvisionerForStackTestV0) PrepareGoalWorkspaceV0(
+	_ context.Context,
+	request orquestaruntimeworktree.GoalWorkspaceRequestV0,
+) (orquestaruntimeworktree.GoalWorkspaceV0, []orquestaruntimeworktree.WorktreeIssueV0) {
+	dir := filepath.Join(fake.root, request.GoalRef)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return orquestaruntimeworktree.GoalWorkspaceV0{}, []orquestaruntimeworktree.WorktreeIssueV0{{Code: orquestaruntimeworktree.WorktreeIssueFilesystemV0}}
+	}
+	return orquestaruntimeworktree.GoalWorkspaceV0{
+		SchemaVersion: orquestaruntimeworktree.GoalWorkspaceSchemaVersionV0,
+		RunRef:        request.RunRef, GoalRef: request.GoalRef, ProjectRef: request.ProjectRef,
+		WorktreeRef: request.WorktreeRef, WorkspaceID: "workspace-" + request.GoalRef,
+		ProjectWorkDir: dir, BaseRevision: "base-revision-test",
+	}, nil
+}
+
+func (fake *fakeGoalWorkspaceProvisionerForStackTestV0) ResolveGoalWorkspaceV0(
+	ctx context.Context,
+	request orquestaruntimeworktree.GoalWorkspaceRequestV0,
+) (orquestaruntimeworktree.GoalWorkspaceV0, []orquestaruntimeworktree.WorktreeIssueV0) {
+	return fake.PrepareGoalWorkspaceV0(ctx, request)
 }
 
 func TestCodexStackAutoprogrammingPrepareRunAPIV0EncolaYSupervisorGlobalArranca(t *testing.T) {

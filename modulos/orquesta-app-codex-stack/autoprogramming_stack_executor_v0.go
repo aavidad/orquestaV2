@@ -50,6 +50,14 @@ func PrepareAutoprogrammingRunFromStackV0(
 	work := orquestaautoprogramming.BuildAutoprogrammingProgrammableWorkV0(request.Request)
 	if work.Accepted {
 		snapshotStore := stack.AutoprogrammingPromotion.GoalFirstSnapshotStore
+		if len(work.Work.GoalSpecs) > 1 && stack.AutoprogrammingPromotion.GoalWorkspaceProvisioner == nil {
+			work.Accepted = false
+			work.Issues = append(work.Issues, orquestaautoprogramming.AutoprogrammingRequestIssueV0{
+				Code:    "physical_goal_workspace_required",
+				Field:   "autoprogramming_promotion.goal_workspace_provisioner",
+				Message: "los goals paralelos requieren una worktree fisica independiente antes del launch",
+			})
+		}
 		if stack.AutoprogrammingPromotion.Enabled {
 			if snapshotStore == nil {
 				work.Accepted = false
@@ -66,6 +74,8 @@ func PrepareAutoprogrammingRunFromStackV0(
 				stack.Codex.ProjectWorkDir,
 				work.Work,
 				snapshotStore,
+				stack.AutoprogrammingPromotion.GoalWorkspaceProvisioner,
+				stack.AutoprogrammingPromotion.GoalWorkspaceRoot,
 			)
 			if len(issues) > 0 {
 				work.Accepted = false

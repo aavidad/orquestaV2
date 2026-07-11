@@ -65,6 +65,10 @@ func validateConfigV0(config ConfigV0) error {
 		return fmt.Errorf("orquesta_app_codex_stack: autoprogramming_promotion.port requerido")
 	case config.AutoprogrammingPromotion.Enabled && config.AutoprogrammingPromotion.GoalFirstSnapshotStore == nil:
 		return fmt.Errorf("orquesta_app_codex_stack: autoprogramming_promotion.goal_first_snapshot_store requerido")
+	case config.AutoprogrammingPromotion.GoalWorkspaceProvisioner != nil && strings.TrimSpace(config.AutoprogrammingPromotion.GoalWorkspaceRoot) == "":
+		return fmt.Errorf("orquesta_app_codex_stack: autoprogramming_promotion.goal_workspace_root requerido")
+	case config.AutoprogrammingPromotion.GoalWorkspaceProvisioner == nil && strings.TrimSpace(config.AutoprogrammingPromotion.GoalWorkspaceRoot) != "":
+		return fmt.Errorf("orquesta_app_codex_stack: autoprogramming_promotion.goal_workspace_provisioner requerido")
 	}
 	if issues := orquestaruntimecodex.ValidateCodexConnectorProfileV0(
 		codexProfileV0(config.Codex, config.Codex.RuntimeWorkDir),

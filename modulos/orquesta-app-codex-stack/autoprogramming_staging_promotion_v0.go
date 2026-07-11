@@ -14,12 +14,14 @@ import (
 )
 
 type AutoprogrammingPromotionConfigV0 struct {
-	Enabled                bool
-	Port                   orquestaautoprogramming.AutoprogrammingStagingPromotionPortV0
-	GoalFirstSnapshotStore orquestaruntimeworktree.WorktreeSnapshotStorePortV0
-	AppRef                 string
-	RepoRef                string
-	CommitMessage          string
+	Enabled                  bool
+	Port                     orquestaautoprogramming.AutoprogrammingStagingPromotionPortV0
+	GoalFirstSnapshotStore   orquestaruntimeworktree.WorktreeSnapshotStorePortV0
+	GoalWorkspaceProvisioner orquestaruntimeworktree.GoalWorkspaceProvisionerPortV0
+	GoalWorkspaceRoot        string
+	AppRef                   string
+	RepoRef                  string
+	CommitMessage            string
 }
 
 func (stack StackV0) maybePromoteClosedAutoprogrammingRunV0(

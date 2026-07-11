@@ -21,6 +21,8 @@ func autoprogrammingPrepareWorktreeIsolationV0(
 	projectWorkDir string,
 	work orquestaautoprogramming.AutoprogrammingProgrammableWorkV0,
 	snapshotStore orquestaruntimeworktree.WorktreeSnapshotStorePortV0,
+	workspaceProvisioner orquestaruntimeworktree.GoalWorkspaceProvisionerPortV0,
+	workspaceRoot string,
 ) (orquestaautoprogramming.AutoprogrammingProgrammableWorkV0, []orquestaautoprogramming.AutoprogrammingRequestIssueV0) {
 	projectWorkDir = strings.TrimSpace(projectWorkDir)
 	if projectWorkDir == "" {
@@ -31,7 +33,24 @@ func autoprogrammingPrepareWorktreeIsolationV0(
 		}}
 	}
 	for _, task := range autoprogrammingWorktreeIsolationTasksV0(work) {
-		isolation, issues := autoprogrammingPrepareTaskWorktreeIsolationV0(ctx, projectWorkDir, work, task)
+		taskWorkDir := projectWorkDir
+		var workspace orquestaruntimeworktree.GoalWorkspaceV0
+		if workspaceProvisioner != nil {
+			var workspaceIssues []orquestaruntimeworktree.WorktreeIssueV0
+			workspace, workspaceIssues = workspaceProvisioner.PrepareGoalWorkspaceV0(ctx, orquestaruntimeworktree.GoalWorkspaceRequestV0{
+				RunRef:        strings.TrimSpace(work.RequestRef),
+				GoalRef:       "goal-ref-" + strings.TrimSpace(task.TaskID),
+				ProjectRef:    strings.TrimSpace(work.ProjectRef),
+				WorktreeRef:   strings.TrimSpace(work.WorktreeRef),
+				SourceWorkDir: projectWorkDir,
+				WorkspaceRoot: strings.TrimSpace(workspaceRoot),
+			})
+			if len(workspaceIssues) > 0 {
+				return work, autoprogrammingWorktreeIssuesV0(workspaceIssues)
+			}
+			taskWorkDir = strings.TrimSpace(workspace.ProjectWorkDir)
+		}
+		isolation, issues := autoprogrammingPrepareTaskWorktreeIsolationV0(ctx, taskWorkDir, work, task)
 		if len(issues) > 0 {
 			return work, autoprogrammingWorktreeIssuesV0(issues)
 		}
@@ -45,8 +64,33 @@ func autoprogrammingPrepareWorktreeIsolationV0(
 			}
 		}
 		work = autoprogrammingApplyTaskWorktreeIsolationV0(work, task.TaskID, isolation)
+		if strings.TrimSpace(workspace.WorkspaceID) != "" {
+			work = autoprogrammingApplyGoalWorkspaceV0(work, task.TaskID, workspace)
+		}
 	}
 	return work, nil
+}
+
+func autoprogrammingApplyGoalWorkspaceV0(
+	work orquestaautoprogramming.AutoprogrammingProgrammableWorkV0,
+	taskRef string,
+	workspace orquestaruntimeworktree.GoalWorkspaceV0,
+) orquestaautoprogramming.AutoprogrammingProgrammableWorkV0 {
+	goalRef := "goal-ref-" + strings.TrimSpace(taskRef)
+	for index := range work.GoalSpecs {
+		if strings.TrimSpace(work.GoalSpecs[index].GoalRef) != goalRef {
+			continue
+		}
+		work.GoalSpecs[index].ContextRefs = append(work.GoalSpecs[index].ContextRefs, orquestagoal.GoalContextRefV0{
+			Kind:     "goal_workspace",
+			Ref:      strings.TrimSpace(workspace.WorkspaceID),
+			Purpose:  "Workspace fisico exclusivo del goal, resuelto solo por la composicion.",
+			Required: true,
+		})
+		work.GoalSpecs[index].EvidenceRefs = compactStringsV0(append(work.GoalSpecs[index].EvidenceRefs, workspace.EvidenceRefs...))
+		work.GoalSpecs[index] = orquestagoal.NormalizeGoalWorkSpecV0(work.GoalSpecs[index])
+	}
+	return work
 }
 
 func autoprogrammingWorktreeIsolationTasksV0(

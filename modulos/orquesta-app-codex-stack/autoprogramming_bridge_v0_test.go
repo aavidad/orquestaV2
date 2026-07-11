@@ -342,8 +342,9 @@ func TestPrepareAutoprogrammingRunV0GoalReadyMultiGoalLanzaBatchSinLegacy(t *tes
 	request.RequestRef = "run-autoprogramming-goal-multi-001"
 	request.Tasks = []orquestaautoprogramming.AutoprogrammingTaskGroupCandidateV0{
 		{
-			TaskRef: "source-task-ref-autoprogramming-goal-multi-api-001",
-			Area:    "api",
+			TaskRef:       "source-task-ref-autoprogramming-goal-multi-api-001",
+			Area:          "api",
+			RequiredTests: []string{"go test -count=1 ./modulos/orquesta-app-codex-stack -run TestGoalMultiAPI"},
 			ContextRefs: []string{
 				"goal_migration:goal-first",
 				"goal_capability:starter",
@@ -352,8 +353,9 @@ func TestPrepareAutoprogrammingRunV0GoalReadyMultiGoalLanzaBatchSinLegacy(t *tes
 			},
 		},
 		{
-			TaskRef: "source-task-ref-autoprogramming-goal-multi-web-001",
-			Area:    "web",
+			TaskRef:       "source-task-ref-autoprogramming-goal-multi-web-001",
+			Area:          "web",
+			RequiredTests: []string{"go test -count=1 ./modulos/orquesta-app-codex-stack -run TestGoalMultiWeb"},
 			ContextRefs: []string{
 				"goal_migration:goal-first",
 				"goal_capability:starter",
@@ -454,6 +456,7 @@ func TestPrepareAutoprogrammingRunV0GoalReadyMultiGoalStateStoreFallaSinRelanzar
 	request.RequestRef = "run-autoprogramming-goal-state-fails-001"
 	request.Tasks[0].TaskRef = "source-task-ref-autoprogramming-goal-state-api-001"
 	request.Tasks[0].Area = "api"
+	request.Tasks[0].RequiredTests = []string{"go test -count=1 ./modulos/orquesta-app-codex-stack -run TestGoalStateAPI"}
 	request.Tasks[0].ContextRefs = []string{
 		"goal_migration:goal-first",
 		"goal_capability:starter",
@@ -463,6 +466,7 @@ func TestPrepareAutoprogrammingRunV0GoalReadyMultiGoalStateStoreFallaSinRelanzar
 	second := request.Tasks[0]
 	second.TaskRef = "source-task-ref-autoprogramming-goal-state-web-001"
 	second.Area = "web"
+	second.RequiredTests = []string{"go test -count=1 ./modulos/orquesta-app-codex-stack -run TestGoalStateWeb"}
 	request.Tasks = append(request.Tasks, second)
 	request.WriteSet = []string{
 		"modulos/orquesta-app-codex-stack/api/state_fails.go",
