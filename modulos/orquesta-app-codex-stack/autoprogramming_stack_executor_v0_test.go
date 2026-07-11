@@ -1010,6 +1010,7 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaBatchGoalsSinCola
 	}
 	stack.AutoprogrammingPromotion.GoalWorkspaceProvisioner = &fakeGoalWorkspaceProvisionerForStackTestV0{root: t.TempDir()}
 	stack.AutoprogrammingPromotion.GoalWorkspaceRoot = t.TempDir()
+	stack.Stores.AutoprogrammingBatchStore = newAutoprogrammingBatchStoreForTestV0()
 
 	prepared, err := NewCodexStackAutoprogrammingPrepareRunExecutorV0(
 		&stack,

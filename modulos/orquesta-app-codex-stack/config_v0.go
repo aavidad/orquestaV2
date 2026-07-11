@@ -5,6 +5,7 @@ import (
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacapacity "orquesta/modulos/orquesta-capacity"
 	orquestacontext "orquesta/modulos/orquesta-context"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -101,6 +102,7 @@ type StoresV0 struct {
 	RunQueue                         orquestarunqueue.RunQueuePortV0
 	AppGoalStateStore                orquestagoal.GoalWorkStateStorePortV0
 	GoalRequiredTestAttestationStore orquestagoal.GoalRequiredTestAttestationStorePortV0
+	AutoprogrammingBatchStore        orquestaautoprogramming.AutoprogrammingBatchStorePortV0
 }
 
 type OutboxLedgerPortV0 interface {

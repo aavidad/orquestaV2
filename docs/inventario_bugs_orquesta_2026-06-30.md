@@ -4260,6 +4260,17 @@ fuente durante el efecto, por lo que el claim previo se liga a
 generacion+miembro+`parent_revision`; `source_revision` nace y se valida solo
 en el receipt posterior.
 
+BUG `BUG-ORQ-20260711-250` (abierto, falso verde post-gate): el primer wiring
+de BUG-246 reutilizaba `PromoteAutoprogrammingStagingV0` para cerrar el batch.
+Sin `GoalRef`, el adaptador entraba por `PromoteStagingWorktreeV0`, que puede
+hacer `git add/commit` sobre el checkout canonico despues de ejecutar el gate;
+ademas `cmd/orquesta-server` no inyectaba el reconciliador del claim de
+promocion. Un cierre podia por tanto referirse a una revision distinta de la
+atestada o quedar bloqueado tras un crash. Criterio de cierre: finalizador batch
+dedicado bajo lock, arbol limpio, `HEAD == integrated_revision`, cero commit,
+receipt durable y reconciliacion solo desde ese receipt; prueba negativa con
+cambio post-gate y replay tras claim.
+
 Avance 2026-07-11: `b96e9b115` añade refs obligatorias de criterios
 verificables al contrato Goal; el transporte posterior añade
 `acceptance_checks` tipados a autoprogramacion V0/V1 y los publica por MCP. Los

@@ -14,20 +14,32 @@ import (
 )
 
 type AutoprogrammingPromotionConfigV0 struct {
-	Enabled                  bool
-	Port                     orquestaautoprogramming.AutoprogrammingStagingPromotionPortV0
-	GoalFirstSnapshotStore   orquestaruntimeworktree.WorktreeSnapshotStorePortV0
-	GoalWorkspaceProvisioner orquestaruntimeworktree.GoalWorkspaceProvisionerPortV0
-	GoalWorkspaceRoot        string
-	AppRef                   string
-	RepoRef                  string
-	CommitMessage            string
+	Enabled                    bool
+	Port                       orquestaautoprogramming.AutoprogrammingStagingPromotionPortV0
+	GoalFirstSnapshotStore     orquestaruntimeworktree.WorktreeSnapshotStorePortV0
+	GoalWorkspaceProvisioner   orquestaruntimeworktree.GoalWorkspaceProvisionerPortV0
+	GoalWorkspaceIntegration   orquestaruntimeworktree.GoalWorkspaceIntegrationPortV0
+	BatchTestRunner            AutoprogrammingBatchTestRunnerPortV0
+	BatchPromotionFinalizer    AutoprogrammingBatchPromotionFinalizerPortV0
+	BatchPromotionReconciler   AutoprogrammingBatchPromotionClaimReconcilerPortV0
+	GoalWorkspaceRoot          string
+	BatchIntegrationReceiptDir string
+	BatchPromotionReceiptDir   string
+	AppRef                     string
+	RepoRef                    string
+	CommitMessage              string
 }
 
 func (stack StackV0) maybePromoteClosedAutoprogrammingRunV0(
 	ctx context.Context,
 	run orquestacoreworkflow.OrchestrationRunV0,
 ) (bool, []string, error) {
+	if run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
+		handled, complete, refs, err := stack.maybeFinalizeClosedAutoprogrammingBatchV0(ctx, run)
+		if handled || err != nil {
+			return complete, refs, err
+		}
+	}
 	config := stack.AutoprogrammingPromotion
 	if !config.Enabled || config.Port == nil ||
 		run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 {

@@ -98,6 +98,36 @@ func autoprogrammingBridgeGoalSpecsForRunsV0(
 	return specs
 }
 
+func autoprogrammingBridgeWorkWithBatchRefsV0(
+	work orquestaautoprogramming.AutoprogrammingProgrammableWorkV0,
+	batch orquestaautoprogramming.AutoprogrammingBatchV0,
+) orquestaautoprogramming.AutoprogrammingProgrammableWorkV0 {
+	for index := range work.GoalSpecs {
+		taskRef := strings.TrimPrefix(strings.TrimSpace(work.GoalSpecs[index].GoalRef), "goal-ref-")
+		for _, member := range batch.Members {
+			if member.TaskRef != taskRef || member.GoalRef != strings.TrimSpace(work.GoalSpecs[index].GoalRef) {
+				continue
+			}
+			work.GoalSpecs[index].ContextRefs = append(work.GoalSpecs[index].ContextRefs,
+				orquestagoal.GoalContextRefV0{Kind: autoprogrammingBatchContextKindV0, Ref: batch.BatchRef, Required: true},
+				orquestagoal.GoalContextRefV0{Kind: autoprogrammingBatchTaskContextKindV0, Ref: member.TaskRef, Required: true},
+			)
+			work.GoalSpecs[index] = orquestagoal.NormalizeGoalWorkSpecV0(work.GoalSpecs[index])
+			break
+		}
+	}
+	return work
+}
+
+func autoprogrammingBatchGoalContextRefV0(refs []orquestagoal.GoalContextRefV0, kind string) string {
+	for _, ref := range refs {
+		if strings.TrimSpace(ref.Kind) == kind {
+			return strings.TrimSpace(ref.Ref)
+		}
+	}
+	return ""
+}
+
 func autoprogrammingBridgeGoalSpecForRunRefV0(
 	work orquestaautoprogramming.AutoprogrammingProgrammableWorkV0,
 	spec orquestagoal.GoalWorkSpecV0,

@@ -83,6 +83,20 @@ func PrepareAutoprogrammingRunFromStackV0(
 			}
 			work.Work = prepared
 		}
+		if work.Accepted && len(work.Work.GoalSpecs) > 1 {
+			prepared, batch, issues := stack.prepareAutoprogrammingBatchV0(ctx, work.Work)
+			work.Work = prepared
+			if len(issues) > 0 {
+				work.Accepted = false
+				work.Issues = append(work.Issues, issues...)
+			} else {
+				stack.Ports.GoalLauncher = autoprogrammingBatchGoalLauncherV0{
+					Delegate: stack.Ports.GoalLauncher,
+					Store:    stack.Stores.AutoprogrammingBatchStore,
+					BatchRef: batch.BatchRef,
+				}
+			}
+		}
 	}
 	return prepareAutoprogrammingRunWithWorkV0(ctx, request, stack.Ports, work)
 }
