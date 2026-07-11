@@ -433,11 +433,3 @@ func autoprogrammingBatchPromotionClaimRefV0(batch orquestaautoprogramming.Autop
 	}
 	return "", false
 }
-
-func autoprogrammingBatchWriteSetV0(batch orquestaautoprogramming.AutoprogrammingBatchV0) []string {
-	var paths []string
-	for _, member := range batch.Members {
-		paths = append(paths, member.WriteSet...)
-	}
-	return compactStringsV0(paths)
-}
