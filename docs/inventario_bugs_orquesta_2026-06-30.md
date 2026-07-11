@@ -4185,6 +4185,11 @@ ambos, pero la reparacion repitio el mismo patron en una tarea estrecha. No se
 sube el umbral: elimina la contradiccion del checkpoint y no relanza rework si
 la evidencia tipada sigue siendo `none`; se exige A/B real hasta primer progreso.
 
+BUG `BUG-ORQ-20260711-242` (abierto, ratchet de configuracion): el scanner AST
+solo mira el primer argumento y omite claves pasadas a `firstNonEmptyEnvV0`.
+Dos fallbacks globales Codex wave quedan fuera del supuesto baseline cero. Se
+usa como tarea real del A/B de BUG-241.
+
 Avance 2026-07-11: `b96e9b115` añade refs obligatorias de criterios
 verificables al contrato Goal; el transporte posterior añade
 `acceptance_checks` tipados a autoprogramacion V0/V1 y los publica por MCP. Los

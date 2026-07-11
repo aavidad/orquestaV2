@@ -164,3 +164,20 @@ tipada en el umbral de replan sigue siendo clase `none`, el cierre usa
 otro backend sin contexto nuevo. Los focales y paquetes completos de
 `orquesta-server` y `orquesta-runtime-codex-appserver` quedan verdes. Falta A/B
 real sobre una tarea pequena antes de cerrar empiricamente.
+
+## BUG-ORQ-20260711-242: ratchet AST omite argumentos varargs
+
+Estado: abierto; tarea A/B de BUG-241.
+
+`serverEnvRegistryASTFindReadsV0` solo inspecciona el primer argumento de cada
+helper. `firstNonEmptyEnvV0(envCodexModelV0)` y su variante profile quedan fuera
+del conjunto de helpers rastreados; por eso el ratchet publica cero aunque las
+dos variables globales no esten registradas y sigan como fallback de waves.
+
+Criterio de cierre:
+
+- el scanner inspecciona todos los argumentos que representan claves env;
+- `ORQUESTA_CODEX_MODEL/PROFILE` dejan de actuar como fallback global de wave;
+- focales de config wave y ratchet verdes;
+- Orquesta produce el primer diff antes del umbral o BUG-241 conserva evidencia
+  de fallo sin lanzar un segundo backend.
