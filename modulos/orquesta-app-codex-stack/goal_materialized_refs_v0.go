@@ -54,6 +54,7 @@ type goalMaterializedRefsScanV0 struct {
 	Result                     orquestamcp.MCPDirectorGoalMaterializedRefsV0
 	FilesScanned               int
 	HasArtifact                bool
+	HasCheckpoint              bool
 	HasQAPass                  bool
 	HasQAFail                  bool
 	HasTerminalReceipt         bool
@@ -207,9 +208,11 @@ func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedR
 		result.EvidenceRefs = append(result.EvidenceRefs, "evidence-ref-goal-materialized-work-delivery-detected")
 		result.IssueCodes = append(result.IssueCodes, "goal_first_materialized_work_delivery_detected")
 	}
-	if len(result.ArtifactRefs) > 0 {
+	if scan.HasCheckpoint {
 		result.EvidenceRefs = append(result.EvidenceRefs, "evidence-ref-goal-materialized-checkpoint-detected")
-		result.IssueCodes = append(result.IssueCodes, "goal_first_materialized_checkpoint_detected")
+		if !scan.HasTerminalReceipt {
+			result.IssueCodes = append(result.IssueCodes, "goal_first_materialized_checkpoint_detected")
+		}
 	}
 	result.ExpectedReceiptRefs = append(result.ExpectedReceiptRefs, goalMaterializedExpectedChecklistRefsV0(state)...)
 	result.ExpectedReceiptRefs = compactStringsV0(result.ExpectedReceiptRefs)
@@ -412,6 +415,7 @@ func (source stackGoalMaterializedRefsSourceV0) scanGoalMaterializedFileV0(
 	scan := goalMaterializedRefsScanV0{FilesScanned: 1}
 	base := strings.ToLower(strings.TrimSpace(filepath.Base(path)))
 	if goalMaterializedFileLooksLikeCheckpointV0(base) {
+		scan.HasCheckpoint = true
 		scan.Result.ArtifactRefs = []string{goalMaterializedCheckpointRefV0(projectRoot, path, state.RunRef)}
 	}
 	switch base {
@@ -644,6 +648,7 @@ func mergeGoalMaterializedRefsScanV0(
 	current.InvalidArtifactPaths = compactStringsV0(append(current.InvalidArtifactPaths, next.InvalidArtifactPaths...))
 	current.FilesScanned += next.FilesScanned
 	current.HasArtifact = current.HasArtifact || next.HasArtifact
+	current.HasCheckpoint = current.HasCheckpoint || next.HasCheckpoint
 	current.HasQAPass = current.HasQAPass || next.HasQAPass
 	current.HasQAFail = current.HasQAFail || next.HasQAFail
 	current.HasTerminalReceipt = current.HasTerminalReceipt || next.HasTerminalReceipt

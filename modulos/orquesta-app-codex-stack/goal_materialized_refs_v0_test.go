@@ -70,6 +70,32 @@ func TestStackGoalMaterializedRefsSourceV0DetectaCheckpointEnWriteSet(t *testing
 	}
 }
 
+func TestStackGoalMaterializedRefsSourceV0CheckpointConReceiptTerminalEsEvidenciaNoIssueV0(t *testing.T) {
+	projectDir := t.TempDir()
+	docsDir := filepath.Join(projectDir, "docs")
+	if err := os.MkdirAll(docsDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	state := goalMaterializedRefsStateForTestV0(t, "run-goal-materialized-terminal-checkpoint-001", "docs")
+	if err := os.WriteFile(filepath.Join(docsDir, "checkpoint_started.txt"), []byte("started\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(docsDir, "report.md"), []byte("# Report\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	receipt := `{"schema_version":"orquesta_goal_result.v0","goal_ref":"` + state.GoalRef + `","status":"complete","artifact_refs":["artifact-ref-report"],"artifact_paths":["docs/report.md"]}`
+	if err := os.WriteFile(filepath.Join(docsDir, "orquesta_goal_result_v0.json"), []byte(receipt), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	result, ok, err := (stackGoalMaterializedRefsSourceV0{
+		Config: ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir}},
+	}).ResolveDirectorGoalMaterializedRefsV0(context.Background(), state)
+	if err != nil || !ok || !containsStringV0(result.EvidenceRefs, "evidence-ref-goal-materialized-checkpoint-detected") ||
+		containsStringV0(result.IssueCodes, "goal_first_materialized_checkpoint_detected") {
+		t.Fatalf("result=%+v ok=%v err=%v", result, ok, err)
+	}
+}
+
 func TestStackGoalMaterializedRefsSourceV0DetectaArtefactosTxtBUG088V0(t *testing.T) {
 	projectDir := t.TempDir()
 	generatedDir := filepath.Join(projectDir, "generated-apps")

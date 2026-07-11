@@ -306,3 +306,28 @@ Cierre local de `BUG-235`:
 Con `r9`, `BUG-226/227/228/229/230/231/232/233/234` quedan cerrados
 empiricamente. `BUG-235` queda pendiente solo de reconsultar el mismo estado con
 el binario nuevo y confirmar que desaparece el advisory missing.
+
+## Reconsulta r9 y BUG-ORQ-20260711-236
+
+La reconsulta con `5f5b4f641` mantuvo `run_status=cerrada`, closure `accepted`,
+`no_action_closed`, elimino por completo el issue/evidence de artefacto missing
+y publico `evidence-ref-goal-materialized-terminal-artifact-path-normalized`.
+`BUG-235` queda cerrado empiricamente sin relanzar ningun goal.
+
+Quedo un ultimo advisory incoherente:
+`goal_first_materialized_checkpoint_detected`. La causa era general: el
+resolver lo anadia siempre que `len(ArtifactRefs)>0`, aunque el ref fuera un
+informe final; si habia checkpoint real, tambien mantenia el issue despues de
+existir receipt terminal.
+
+Cierre local de `BUG-ORQ-20260711-236`:
+
+- el scan transporta `HasCheckpoint` separado de `HasArtifact`;
+- solo nombres reconocidos como checkpoint activan la señal;
+- con checkpoint sin receipt se conserva evidencia + issue accionable;
+- con receipt terminal se conserva solo la evidencia historica, no un closure
+  issue;
+- artefactos finales ordinarios no se etiquetan como checkpoint.
+
+Pendiente final de este corte: reconsultar `r9` con el binario nuevo y exigir
+`closure_issues=[]`; despues apagar el runtime y cerrar la incidencia completa.
