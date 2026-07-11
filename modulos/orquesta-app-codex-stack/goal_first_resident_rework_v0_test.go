@@ -17,17 +17,31 @@ func TestRunSupervisorGoalFirstResidentPreparaReworkPorCheckpointHighConsumption
 	ctx := context.Background()
 	store := newGoalFirstQueueStateStoreForTestV0()
 	launcher := &goalFirstResidentReworkLauncherForTestV0{}
+	binder := &goalFirstResidentReworkBinderForTestV0{}
 	source := goalFirstResidentReworkSourceStateForTestV0(
 		"run-ref-goal-first-resident-rework-source-001",
 		"checkpoint_only_high_consumption",
 	)
+	source.Spec.RequiredTests = []orquestagoal.GoalRequiredTestV0{orquestagoal.FreezeGoalRequiredTestV0(orquestagoal.GoalRequiredTestV0{
+		TestRef:    "test-ref-goal-first-resident-rework-source-001",
+		CommandRef: "command-ref-goal-first-resident-rework-source-001",
+		Command:    "go test ./modulos/orquesta-app-codex-stack",
+	})}
+	source.Spec.ClosurePolicy.RequireIndependentRequiredTestAttestation = true
+	var err error
+	source.Spec, err = (independentSpecBinderForStackTestV0{}).BindGoalRequiredTestSpecV0(ctx, source.Spec)
+	if err != nil {
+		t.Fatalf("Bind source spec: %v", err)
+	}
+	source.Spec.WriteSetSHA256 = orquestagoal.GoalWriteSetSHA256V0(source.Spec.WriteSet)
 	if err := store.SaveGoalWorkStateV0(ctx, source); err != nil {
 		t.Fatalf("SaveGoalWorkStateV0 source: %v", err)
 	}
 	executor := CodexStackRunSupervisorExecutorV0{Stack: &StackV0{
 		Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
-			GoalStateStore:     store,
-			GoalReworkLauncher: launcher,
+			GoalStateStore:             store,
+			GoalReworkLauncher:         launcher,
+			GoalRequiredTestSpecBinder: binder,
 		},
 		Stores: StoresV0{AppGoalStateStore: store},
 	}}
@@ -41,12 +55,13 @@ func TestRunSupervisorGoalFirstResidentPreparaReworkPorCheckpointHighConsumption
 	}
 	if result.StopReason != "goal_first_resident_rework_prepared" ||
 		len(result.RepairRunRefs) != 1 ||
-		launcher.calls != 1 {
-		t.Fatalf("resultado rework inesperado: result=%+v calls=%d", result, launcher.calls)
+		launcher.calls != 1 || binder.calls != 1 {
+		t.Fatalf("resultado rework inesperado: result=%+v launcher_calls=%d binder_calls=%d", result, launcher.calls, binder.calls)
 	}
 	spec := launcher.specs[0]
 	if spec.RunRef != result.RepairRunRefs[0] ||
 		!strings.Contains(spec.Objective, "Rework acotado") ||
+		spec.ImplementerAgentRef != "agent-ref-goal-first-resident-rework-binder" ||
 		!stringInSetV0(spec.EvidenceRefs, goalFirstResidentReworkPreparedEvidenceRefV0) {
 		t.Fatalf("spec rework incompleto: %+v result=%+v", spec, result)
 	}
@@ -838,6 +853,19 @@ func goalFirstResidentReworkSourceStateForTestV0(runRef, reason string) orquesta
 type goalFirstResidentReworkLauncherForTestV0 struct {
 	calls int
 	specs []orquestagoal.GoalWorkSpecV0
+}
+
+type goalFirstResidentReworkBinderForTestV0 struct{ calls int }
+
+func (binder *goalFirstResidentReworkBinderForTestV0) BindGoalRequiredTestSpecV0(
+	_ context.Context,
+	spec orquestagoal.GoalWorkSpecV0,
+) (orquestagoal.GoalWorkSpecV0, error) {
+	binder.calls++
+	spec.ImplementerAgentRef = "agent-ref-goal-first-resident-rework-binder"
+	spec.ImplementerCredentialRef = "credential-ref-goal-first-resident-rework-binder"
+	spec.ClosurePolicy.RequiredAttestorTrustPolicyRef = "policy-ref-goal-first-resident-rework-binder"
+	return orquestagoal.NormalizeGoalWorkSpecV0(spec), nil
 }
 
 type goalFirstResidentDirectorStatsForTestV0 struct {

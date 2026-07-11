@@ -4158,6 +4158,14 @@ BUG `BUG-ORQ-20260711-238` (abierto, falso indicador de limpieza):
 cruzando paquetes. No autoriza consolidar codigo. Evidencia y criterios en la
 [incidencia de limpieza](incidencias/incidencia_orquesta_limpieza_config_metricas_falsas_2026-07-11.md).
 
+BUG `BUG-ORQ-20260711-239` (cerrado localmente, pendiente de replay,
+autoreparacion goal-first): el primer goal
+de BUG-237 fue parado por `material_progress_replan_required`, pero el launcher
+residente no transporto el `GoalRequiredTestSpecBinder` ya presente en el stack.
+El rework con tests fallo antes de arrancar y la cola original quedo terminal.
+El lifecycle de rework recibe ahora el binder del stack y una regresion exige
+su invocacion con tests atestados. Se exige repetir el goal por Orquesta.
+
 Avance 2026-07-11: `b96e9b115` añade refs obligatorias de criterios
 verificables al contrato Goal; el transporte posterior añade
 `acceptance_checks` tipados a autoprogramacion V0/V1 y los publica por MCP. Los

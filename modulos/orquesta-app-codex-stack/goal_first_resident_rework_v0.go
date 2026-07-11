@@ -77,8 +77,9 @@ func (executor CodexStackRunSupervisorExecutorV0) maybePrepareGoalFirstResidentR
 		Spec:         spec,
 		EvidenceRefs: compactStringsV0(append(evidenceRefs, goalFirstResidentReworkPreparedEvidenceRefV0)),
 	}, orquestagoal.GoalWorkLifecyclePortsV0{
-		Launcher:   launcher,
-		StateStore: store,
+		Launcher:               launcher,
+		StateStore:             store,
+		RequiredTestSpecBinder: executor.Stack.Ports.GoalRequiredTestSpecBinder,
 	})
 	if err != nil {
 		result.NextActions = compactStringsV0(append(result.NextActions, "goal_first_rework_launcher_failed", "inspect_goal_rework_launcher"))

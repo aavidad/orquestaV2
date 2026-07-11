@@ -45,6 +45,35 @@ Criterio de cierre:
 - actualizar tests, nightly y auditorias sin subir un baseline artificial;
 - conservar la regla de revision por paquete y prueba focal.
 
+## BUG-ORQ-20260711-239: rework residente sin binder de tests
+
+Estado: cerrado localmente, pendiente de replay integrado.
+
+El primer goal de BUG-237 alcanzo el umbral `material_progress_replan_required`
+sin diff. El supervisor residente detecto el cierre reparable, pero
+`maybePrepareGoalFirstResidentReworkV0` invoco `StartGoalWorkV0` sin transportar
+`GoalRequiredTestSpecBinder`. Como el spec original tenia tests obligatorios, el
+rework fallo con `goal_work_lifecycle_invalid:
+ports.goal_required_test_spec_binder` y la cola original ya estaba `stopped`.
+
+Impacto: Orquesta recomienda `replan`, dispone de launcher y binder en el stack,
+pero no puede materializar por si misma la reparacion de un goal con tests. La
+observacion manual no debe convertirse en un flujo operativo alternativo.
+
+Criterio de cierre:
+
+- el lifecycle de rework recibe el binder ya inyectado en el stack;
+- regresion con spec de rework que conserve tests obligatorios;
+- focal y paquete del stack verdes;
+- repetir BUG-237 por Orquesta y comprobar que el trabajo llega a cierre o que
+  un nuevo replan se lanza causalmente sin intervencion manual.
+
+Cierre local: el lifecycle de rework transporta ahora
+`GoalRequiredTestSpecBinder` desde los puertos del stack. La regresion conserva
+un required test congelado, exige atestacion independiente y comprueba que el
+binder se invoca antes del launcher. El focal y el paquete completo
+`./modulos/orquesta-app-codex-stack` quedan verdes.
+
 ## Evidencia de control
 
 En `ed5c0bff94f2` la auditoria reproducible informa 1.177 candidatos `deadcode`,
