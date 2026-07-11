@@ -42,7 +42,13 @@ func buildRuntimeFromConfigV0(serverConfig orquestaserver.ConfigV0) (*orquestase
 	if err != nil {
 		return nil, err
 	}
-	stack, err := buildStackFromProjectConfigV0(serverConfig, goalBackends.AppGoal, projectConfig, supervisorWakeup)
+	stack, err := buildStackFromProjectConfigWithGoalBackendsV0(
+		serverConfig,
+		goalBackends.AppGoal,
+		goalBackends.AutoprogrammingGoal,
+		projectConfig,
+		supervisorWakeup,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -91,15 +97,19 @@ func serverRuntimeDepsFromStackV0(
 		RouteManifest:              serverRouteManifestResourcesV0(),
 		GoalStateStore:             stack.Stores.AppGoalStateStore,
 		GoalRequiredTestSpecBinder: stack.Ports.GoalRequiredTestSpecBinder,
-		GoalFingerprint:            serverGoalObservationFingerprintFromBackendV0(goalBackends.AppGoal, serverGoalObserverFingerprintEnabledFromEnvV0()),
-		GoalStopper:                serverGoalCooperativeStopperFromRunControlV0(stack.Stores.RunControl, stack.MCPTransportBindings.RunControl),
-		MaterialProgressStore:      serverMaterialProgressStoreFromStackV0(stack),
-		MaterialProgressEvidence:   orquestaappcodexstack.CodexStackMaterialProgressEvidenceV0{Stack: &stack},
-		EstadoVivoSource:           stack.MCPTransportBindings.AutoprogrammingEstadoVivoSource,
-		ShutdownSnapshot:           serverShutdownSnapshotFromStackV0(stack, goalBackends),
-		ShutdownHooks:              serverGoalShutdownHooksFromBackendsV0(goalBackends.AppGoal, goalBackends.IdleGoal),
-		BackgroundWorkers:          serverBackgroundWorkersFromStackV0(stack),
-		StartupCheck:               startupCheckFromEnvV0(stack, serverConfig),
+		GoalFingerprint: serverGoalObservationFingerprintForAppAndAutoprogrammingV0(
+			goalBackends.AppGoal,
+			goalBackends.AutoprogrammingGoal,
+			serverGoalObserverFingerprintEnabledFromEnvV0(),
+		),
+		GoalStopper:              serverGoalCooperativeStopperFromRunControlV0(stack.Stores.RunControl, stack.MCPTransportBindings.RunControl),
+		MaterialProgressStore:    serverMaterialProgressStoreFromStackV0(stack),
+		MaterialProgressEvidence: orquestaappcodexstack.CodexStackMaterialProgressEvidenceV0{Stack: &stack},
+		EstadoVivoSource:         stack.MCPTransportBindings.AutoprogrammingEstadoVivoSource,
+		ShutdownSnapshot:         serverShutdownSnapshotFromStackV0(stack, goalBackends),
+		ShutdownHooks:            serverGoalShutdownHooksFromBackendsV0(goalBackends.AppGoal, goalBackends.IdleGoal),
+		BackgroundWorkers:        serverBackgroundWorkersFromStackV0(stack),
+		StartupCheck:             startupCheckFromEnvV0(stack, serverConfig),
 		SelfWatchdog: orquestaserver.NewProcessSelfWatchdogObserverV0(
 			orquestaserver.NewProcSelfCPUSamplerV0(),
 		),
@@ -197,12 +207,34 @@ func buildStackFromEnvWithGoalBackendV0(
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
-	return buildStackFromProjectConfigV0(serverConfig, goalBackend, projectConfig, supervisorWakeups...)
+	return buildStackFromProjectConfigWithGoalBackendsV0(
+		serverConfig,
+		goalBackend,
+		goalBackend,
+		projectConfig,
+		supervisorWakeups...,
+	)
 }
 
 func buildStackFromProjectConfigV0(
 	serverConfig orquestaserver.ConfigV0,
 	goalBackend serverCodexGoalBackendV0,
+	projectConfig serverProjectConfigFileV0,
+	supervisorWakeups ...*serverSupervisorWakeupRelayV0,
+) (orquestaappcodexstack.StackV0, error) {
+	return buildStackFromProjectConfigWithGoalBackendsV0(
+		serverConfig,
+		goalBackend,
+		goalBackend,
+		projectConfig,
+		supervisorWakeups...,
+	)
+}
+
+func buildStackFromProjectConfigWithGoalBackendsV0(
+	serverConfig orquestaserver.ConfigV0,
+	goalBackend serverCodexGoalBackendV0,
+	autoprogrammingGoalBackend serverCodexGoalBackendV0,
 	projectConfig serverProjectConfigFileV0,
 	supervisorWakeups ...*serverSupervisorWakeupRelayV0,
 ) (orquestaappcodexstack.StackV0, error) {
@@ -254,7 +286,11 @@ func buildStackFromProjectConfigV0(
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
-	goalRequiredTestAttestation, err := goalRequiredTestAttestationAdapterFromConfigV0(serverConfig, projectConfig)
+	goalRequiredTestAttestation, err := goalRequiredTestAttestationWorkspaceSelectorFromConfigV0(
+		serverConfig,
+		projectConfig,
+		serverCodexGoalWorkspaceLookupFromBackendV0(autoprogrammingGoalBackend),
+	)
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
@@ -380,22 +416,34 @@ func buildStackFromProjectConfigV0(
 			processRuntime,
 			codexUsageMetricsFromProjectConfigV0(serverConfig.ProjectWorkDir, receiptStorePort),
 		),
-		Gemini:                              geminiRuntimeConfigV0(serverConfig),
-		Claude:                              claudeRuntimeConfigV0(serverConfig),
-		EgressSanitizer:                     egressSanitizer,
-		WizardBotAssistant:                  serverWizardBotLLMAssistantFromConfigV0(serverConfig.ProjectWorkDir, projectConfig, goalBackend),
-		Capacity:                            codexStackCapacityConfigFromProjectConfigV0(serverConfig.ProjectWorkDir),
-		AutonomousDirectorPolicy:            orquestacionnucleoapp.HeuristicAutonomousDirectorPolicyV0{},
-		AppGoalLauncher:                     serverGoalWorkLauncherFromBackendV0(goalBackend),
-		AppGoalReworkLauncher:               serverGoalWorkLauncherFromBackendV0(goalBackend),
-		GoalRequiredTestDependencies:        serverGoalRequiredTestDependencyResolverFromConfigV0(serverConfig),
-		AppGoalObserver:                     serverGoalWorkObserverFromBackendV0(goalBackend),
+		Gemini:                   geminiRuntimeConfigV0(serverConfig),
+		Claude:                   claudeRuntimeConfigV0(serverConfig),
+		EgressSanitizer:          egressSanitizer,
+		WizardBotAssistant:       serverWizardBotLLMAssistantFromConfigV0(serverConfig.ProjectWorkDir, projectConfig, goalBackend),
+		Capacity:                 codexStackCapacityConfigFromProjectConfigV0(serverConfig.ProjectWorkDir),
+		AutonomousDirectorPolicy: orquestacionnucleoapp.HeuristicAutonomousDirectorPolicyV0{},
+		AppGoalLauncher: serverGoalWorkLauncherForAppAndAutoprogrammingV0(
+			goalBackend,
+			autoprogrammingGoalBackend,
+		),
+		AppGoalReworkLauncher: serverGoalWorkLauncherForAppAndAutoprogrammingV0(
+			goalBackend,
+			autoprogrammingGoalBackend,
+		),
+		GoalRequiredTestDependencies: serverGoalRequiredTestDependencyResolverFromConfigV0(serverConfig),
+		AppGoalObserver: serverGoalWorkObserverForAppAndAutoprogrammingV0(
+			goalBackend,
+			autoprogrammingGoalBackend,
+		),
 		AppGoalRequiredTestSpecBinder:       goalRequiredTestSpecBinder,
 		AppGoalRequiredTestSnapshotObserver: goalRequiredTestSnapshotObserver,
 		AppGoalRequiredTestAttestor:         goalRequiredTestAttestor,
 		AppGoalRequiredTestIdentityVerifier: goalRequiredTestIdentityVerifier,
-		AppGoalBackendControl:               serverGoalBackendControlFromBackendV0(goalBackend),
-		RuntimeModels:                       runtimeModels,
+		AppGoalBackendControl: serverGoalBackendControlForAppAndAutoprogrammingV0(
+			goalBackend,
+			autoprogrammingGoalBackend,
+		),
+		RuntimeModels: runtimeModels,
 		ReviewGate: orquestaappcodexstack.ReviewGateConfigV0{
 			FileEvidence:            orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},
 			StrictGoLineBudget:      boolEnvOrDefaultV0(envReviewGateStrictGoLineBudgetV0, false),

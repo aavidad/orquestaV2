@@ -45,6 +45,33 @@ type codexGoalWorkspaceRequestIdentityV0 struct {
 
 var _ orquestaruntimecodexappserver.GoalWorkspaceRouterPortV0 = codexGoalWorkspaceAdapterV0{}
 
+type serverCodexGoalWorkspaceBindingLookupV0 interface {
+	HasCodexGoalWorkspaceBindingV0(context.Context, string) (bool, error)
+	ResolveCodexGoalWorkspaceV0(context.Context, orquestaruntimecodexgoal.CodexGoalObservationRequestV0) (orquestaruntimecodexappserver.GoalWorkspaceBindingV0, error)
+}
+
+func (adapter codexGoalWorkspaceAdapterV0) HasCodexGoalWorkspaceBindingV0(
+	ctx context.Context,
+	goalRef string,
+) (bool, error) {
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return false, err
+		}
+	}
+	var err error
+	adapter, err = adapter.normalizedV0()
+	if err != nil {
+		return false, err
+	}
+	goalRef = strings.TrimSpace(goalRef)
+	if goalRef == "" {
+		return false, errCodexGoalWorkspaceAdapterUnavailableV0
+	}
+	_, found, err := adapter.loadGoalIndexV0(goalRef)
+	return found, err
+}
+
 func (adapter codexGoalWorkspaceAdapterV0) PrepareCodexGoalWorkspaceV0(
 	ctx context.Context,
 	packet orquestaruntimecodexgoal.CodexGoalStartPacketV0,

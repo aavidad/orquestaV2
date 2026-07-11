@@ -15,8 +15,9 @@ import (
 )
 
 type serverCodexGoalBackendsV0 struct {
-	AppGoal  serverCodexGoalBackendV0
-	IdleGoal serverCodexGoalBackendV0
+	AppGoal             serverCodexGoalBackendV0
+	AutoprogrammingGoal serverCodexGoalBackendV0
+	IdleGoal            serverCodexGoalBackendV0
 }
 
 const serverCodexGoalBackendDegradedDiagnosticCodeV0 = "codex_goal_backend_degraded"
@@ -37,6 +38,14 @@ func serverCodexGoalBackendsFromEnvV0(
 	if err != nil {
 		return serverCodexGoalBackendsV0{}, err
 	}
+	autoprogrammingGoal, err := serverCodexGoalBackendFromEnvForWorkDirModeV0(
+		config,
+		config.ProjectWorkDir,
+		true,
+	)
+	if err != nil {
+		return serverCodexGoalBackendsV0{}, err
+	}
 	idleGoal, err := serverCodexGoalBackendFromEnvForWorkDirModeV0(
 		config,
 		firstNonEmptyServerStackV0(config.IdleSelfImprovementProjectWorkDir, config.ProjectWorkDir),
@@ -46,8 +55,9 @@ func serverCodexGoalBackendsFromEnvV0(
 		return serverCodexGoalBackendsV0{}, err
 	}
 	return serverCodexGoalBackendsV0{
-		AppGoal:  appGoal,
-		IdleGoal: idleGoal,
+		AppGoal:             appGoal,
+		AutoprogrammingGoal: autoprogrammingGoal,
+		IdleGoal:            idleGoal,
 	}, nil
 }
 
@@ -435,6 +445,7 @@ func serverConfigWithCodexGoalBackendDiagnosticsV0(
 ) orquestaserver.ConfigV0 {
 	diagnostics := append([]orquestaserver.ServerDiagnosticV0(nil), config.EffectiveConfig.Diagnostics...)
 	diagnostics = append(diagnostics, serverCodexGoalBackendDiagnosticV0("app_goal", backends.AppGoal)...)
+	diagnostics = append(diagnostics, serverCodexGoalBackendDiagnosticV0("autoprogramming_goal", backends.AutoprogrammingGoal)...)
 	diagnostics = append(diagnostics, serverCodexGoalBackendDiagnosticV0("idle_goal", backends.IdleGoal)...)
 	config.EffectiveConfig.Diagnostics = diagnostics
 	config.EffectiveConfig = orquestaserver.NormalizeServerEffectiveConfigV0(config.EffectiveConfig)

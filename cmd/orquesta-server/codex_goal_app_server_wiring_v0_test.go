@@ -234,6 +234,41 @@ func TestServerCodexGoalBackendFromEnvV0TmuxNoArrancaAppServerEnConstruccionV0(t
 	}
 }
 
+func TestServerCodexGoalBackendsFromEnvV0SeparaWorkspaceAutoprogrammingDeAppsV0(t *testing.T) {
+	root := t.TempDir()
+	projectDir := filepath.Join(root, "project")
+	runtimeDir := filepath.Join(root, "runtime")
+	codeHome := filepath.Join(root, "codex-home")
+	if err := os.MkdirAll(codeHome, 0o700); err != nil {
+		t.Fatalf("mkdir code home: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(codeHome, "auth.json"), []byte(`{"ok":true}`), 0o600); err != nil {
+		t.Fatalf("write auth: %v", err)
+	}
+	t.Setenv(envCodexProjectWorkDirV0, projectDir)
+	t.Setenv(envCodexRuntimeWorkDirV0, runtimeDir)
+	t.Setenv(envCodexCodeHomeV0, codeHome)
+	t.Setenv(envCodexCommandV0, filepath.Join(root, "codex"))
+	t.Setenv(envCodexGoalBackendV0, codexGoalBackendAppServerTmuxV0)
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	backends, err := serverCodexGoalBackendsFromEnvV0(config)
+	if err != nil {
+		t.Fatalf("serverCodexGoalBackendsFromEnvV0: %v", err)
+	}
+	app := codexAppServerGoalBackendFromPortForTestV0(t, backends.AppGoal.Starter)
+	autoprogramming := codexAppServerGoalBackendFromPortForTestV0(t, backends.AutoprogrammingGoal.Starter)
+	if app.WorkspaceRouter != nil {
+		t.Fatalf("AppGoal normal no debe provisionar workspaces fisicos: %+v", app)
+	}
+	if autoprogramming.WorkspaceRouter == nil {
+		t.Fatalf("AutoprogrammingGoal debe resolver GoalWorkspace fisico: %+v", autoprogramming)
+	}
+}
+
 func TestServerCodexGoalBackendFromEnvV0TmuxLeeGoalBackendDesdeFicheroCanonicoV0(t *testing.T) {
 	root := t.TempDir()
 	projectDir := filepath.Join(root, "project")

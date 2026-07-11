@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 
 	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
 	orquestaruntimeclaude "orquesta/modulos/orquesta-runtime-claude"
@@ -46,6 +47,47 @@ func serverGoalBackendControlFromBackendV0(
 		return serverCodexGoalBackendControlV0{Controller: backend.Controller}
 	}
 	return nil
+}
+
+type serverAutoprogrammingGoalWorkspaceControlV0 struct {
+	AppGoal             orquestaappcodexstack.GoalBackendControlPortV0
+	AutoprogrammingGoal orquestaappcodexstack.GoalBackendControlPortV0
+	WorkspaceLookup     serverCodexGoalWorkspaceBindingLookupV0
+}
+
+func serverGoalBackendControlForAppAndAutoprogrammingV0(
+	appGoal serverCodexGoalBackendV0,
+	autoprogrammingGoal serverCodexGoalBackendV0,
+) orquestaappcodexstack.GoalBackendControlPortV0 {
+	appControl := serverGoalBackendControlFromBackendV0(appGoal)
+	autoprogrammingControl := serverGoalBackendControlFromBackendV0(autoprogrammingGoal)
+	lookup := serverCodexGoalWorkspaceLookupFromBackendV0(autoprogrammingGoal)
+	if lookup == nil {
+		return appControl
+	}
+	return serverAutoprogrammingGoalWorkspaceControlV0{
+		AppGoal:             appControl,
+		AutoprogrammingGoal: autoprogrammingControl,
+		WorkspaceLookup:     lookup,
+	}
+}
+
+func (control serverAutoprogrammingGoalWorkspaceControlV0) ControlGoalBackendV0(
+	ctx context.Context,
+	request orquestaappcodexstack.GoalBackendControlRequestV0,
+) (orquestaappcodexstack.GoalBackendControlResultV0, error) {
+	found, err := control.WorkspaceLookup.HasCodexGoalWorkspaceBindingV0(ctx, request.GoalRef)
+	if err != nil {
+		return orquestaappcodexstack.GoalBackendControlResultV0{}, err
+	}
+	delegate := control.AppGoal
+	if found {
+		delegate = control.AutoprogrammingGoal
+	}
+	if delegate == nil {
+		return orquestaappcodexstack.GoalBackendControlResultV0{}, fmt.Errorf("autoprogramming_goal_workspace_control_unavailable")
+	}
+	return delegate.ControlGoalBackendV0(ctx, request)
 }
 
 func (control serverCodexGoalBackendControlV0) ControlGoalBackendV0(

@@ -13,6 +13,8 @@ import (
 	"strings"
 	"time"
 
+	orquestagoal "orquesta/modulos/orquesta-goal"
+	orquestaruntimecodexgoal "orquesta/modulos/orquesta-runtime-codex-goal"
 	orquestaruntimerequiredtest "orquesta/modulos/orquesta-runtime-required-test"
 	orquestaserver "orquesta/modulos/orquesta-server"
 )
@@ -47,72 +49,11 @@ func goalRequiredTestAttestationAdapterFromConfigV0(
 	serverConfig orquestaserver.ConfigV0,
 	projectConfig serverProjectConfigFileV0,
 ) (*orquestaruntimerequiredtest.LocalGoalRequiredTestAttestationAdapterV0, error) {
-	path, configured, err := goalRequiredTestAttestationConfigFilePathV0(serverConfig.ProjectWorkDir, projectConfig)
+	config, configured, err := goalRequiredTestAttestationRuntimeConfigFromConfigV0(serverConfig, projectConfig)
 	if err != nil || !configured {
 		return nil, err
 	}
-	info, err := os.Stat(path)
-	if err != nil {
-		return nil, fmt.Errorf("goal_required_test_attestation_config_read: %w", err)
-	}
-	if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
-		return nil, fmt.Errorf("goal_required_test_attestation_config_not_owner_only")
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("goal_required_test_attestation_config_read: %w", err)
-	}
-	if len(raw) == 0 || len(raw) > 1024*1024 {
-		return nil, fmt.Errorf("goal_required_test_attestation_config_size_invalid")
-	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	var document serverGoalRequiredTestAttestationConfigFileV0
-	if err := decoder.Decode(&document); err != nil {
-		return nil, fmt.Errorf("goal_required_test_attestation_config_json_invalid: %w", err)
-	}
-	if err := rejectGoalRequiredTestAttestationConfigTrailingJSONV0(decoder); err != nil {
-		return nil, err
-	}
-	if strings.TrimSpace(document.SchemaVersion) != goalRequiredTestAttestationConfigSchemaV0 {
-		return nil, fmt.Errorf("goal_required_test_attestation_config_schema_invalid")
-	}
-	configuredProject, err := filepath.Abs(strings.TrimSpace(document.ProjectWorkDir))
-	if err != nil {
-		return nil, fmt.Errorf("goal_required_test_attestation_project_work_dir_invalid")
-	}
-	serverProject, err := filepath.Abs(strings.TrimSpace(serverConfig.ProjectWorkDir))
-	if err != nil {
-		return nil, fmt.Errorf("goal_required_test_attestation_project_work_dir_invalid")
-	}
-	configuredProject, configuredErr := filepath.EvalSymlinks(configuredProject)
-	serverProject, serverErr := filepath.EvalSymlinks(serverProject)
-	if configuredErr != nil || serverErr != nil || configuredProject != serverProject {
-		return nil, fmt.Errorf("goal_required_test_attestation_project_work_dir_mismatch")
-	}
-	digest := sha256.Sum256(raw)
-	identity := document.Identity
-	adapter, err := orquestaruntimerequiredtest.NewLocalGoalRequiredTestAttestationAdapterV0(
-		orquestaruntimerequiredtest.LocalGoalRequiredTestAttestationConfigV0{
-			ProjectWorkDir: configuredProject,
-			RuntimeRoot:    strings.TrimSpace(document.RuntimeRoot), GitCommandPath: strings.TrimSpace(document.GitCommandPath),
-			AllowedCommands:        document.AllowedCommands,
-			DependencySnapshotPath: strings.TrimSpace(document.ModuleCacheSnapshot),
-			PreflightCommands:      append([]string(nil), document.PreflightCommands...),
-			MaxRuntime:             time.Duration(document.MaxRuntimeSeconds) * time.Second,
-			MaxOutputBytes:         document.MaxOutputBytes, MaxArtifacts: document.MaxArtifacts,
-			Identity: orquestaruntimerequiredtest.LocalTrustedGoalRequiredTestIdentityPolicyV0{
-				TrustPolicyRef:           strings.TrimSpace(identity.TrustPolicyRef),
-				PolicyEvidenceRef:        "goal-required-test-local-policy-evidence-ref-" + hex.EncodeToString(digest[:]),
-				ImplementerAgentRef:      strings.TrimSpace(identity.ImplementerAgentRef),
-				ImplementerCredentialRef: strings.TrimSpace(identity.ImplementerCredentialRef),
-				ImplementerPrincipalRef:  strings.TrimSpace(identity.ImplementerPrincipalRef),
-				AttestorAgentRef:         strings.TrimSpace(identity.AttestorAgentRef),
-				AttestorCredentialRef:    strings.TrimSpace(identity.AttestorCredentialRef),
-				AttestorPrincipalRef:     strings.TrimSpace(identity.AttestorPrincipalRef),
-			},
-		},
-	)
+	adapter, err := orquestaruntimerequiredtest.NewLocalGoalRequiredTestAttestationAdapterV0(config)
 	if err != nil {
 		return nil, err
 	}
@@ -121,6 +62,188 @@ func goalRequiredTestAttestationAdapterFromConfigV0(
 	}
 	return adapter, nil
 }
+
+func goalRequiredTestAttestationRuntimeConfigFromConfigV0(
+	serverConfig orquestaserver.ConfigV0,
+	projectConfig serverProjectConfigFileV0,
+) (orquestaruntimerequiredtest.LocalGoalRequiredTestAttestationConfigV0, bool, error) {
+	path, configured, err := goalRequiredTestAttestationConfigFilePathV0(serverConfig.ProjectWorkDir, projectConfig)
+	if err != nil || !configured {
+		return orquestaruntimerequiredtest.LocalGoalRequiredTestAttestationConfigV0{}, configured, err
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return orquestaruntimerequiredtest.LocalGoalRequiredTestAttestationConfigV0{}, false, fmt.Errorf("goal_required_test_attestation_config_read: %w", err)
+	}
+	if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
+		return orquestaruntimerequiredtest.LocalGoalRequiredTestAttestationConfigV0{}, false, fmt.Errorf("goal_required_test_attestation_config_not_owner_only")
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return orquestaruntimerequiredtest.LocalGoalRequiredTestAttestationConfigV0{}, false, fmt.Errorf("goal_required_test_attestation_config_read: %w", err)
+	}
+	if len(raw) == 0 || len(raw) > 1024*1024 {
+		return orquestaruntimerequiredtest.LocalGoalRequiredTestAttestationConfigV0{}, false, fmt.Errorf("goal_required_test_attestation_config_size_invalid")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	var document serverGoalRequiredTestAttestationConfigFileV0
+	if err := decoder.Decode(&document); err != nil {
+		return orquestaruntimerequiredtest.LocalGoalRequiredTestAttestationConfigV0{}, false, fmt.Errorf("goal_required_test_attestation_config_json_invalid: %w", err)
+	}
+	if err := rejectGoalRequiredTestAttestationConfigTrailingJSONV0(decoder); err != nil {
+		return orquestaruntimerequiredtest.LocalGoalRequiredTestAttestationConfigV0{}, false, err
+	}
+	if strings.TrimSpace(document.SchemaVersion) != goalRequiredTestAttestationConfigSchemaV0 {
+		return orquestaruntimerequiredtest.LocalGoalRequiredTestAttestationConfigV0{}, false, fmt.Errorf("goal_required_test_attestation_config_schema_invalid")
+	}
+	configuredProject, err := filepath.Abs(strings.TrimSpace(document.ProjectWorkDir))
+	if err != nil {
+		return orquestaruntimerequiredtest.LocalGoalRequiredTestAttestationConfigV0{}, false, fmt.Errorf("goal_required_test_attestation_project_work_dir_invalid")
+	}
+	serverProject, err := filepath.Abs(strings.TrimSpace(serverConfig.ProjectWorkDir))
+	if err != nil {
+		return orquestaruntimerequiredtest.LocalGoalRequiredTestAttestationConfigV0{}, false, fmt.Errorf("goal_required_test_attestation_project_work_dir_invalid")
+	}
+	configuredProject, configuredErr := filepath.EvalSymlinks(configuredProject)
+	serverProject, serverErr := filepath.EvalSymlinks(serverProject)
+	if configuredErr != nil || serverErr != nil || configuredProject != serverProject {
+		return orquestaruntimerequiredtest.LocalGoalRequiredTestAttestationConfigV0{}, false, fmt.Errorf("goal_required_test_attestation_project_work_dir_mismatch")
+	}
+	digest := sha256.Sum256(raw)
+	identity := document.Identity
+	return orquestaruntimerequiredtest.LocalGoalRequiredTestAttestationConfigV0{
+		ProjectWorkDir: configuredProject,
+		RuntimeRoot:    strings.TrimSpace(document.RuntimeRoot), GitCommandPath: strings.TrimSpace(document.GitCommandPath),
+		AllowedCommands:        document.AllowedCommands,
+		DependencySnapshotPath: strings.TrimSpace(document.ModuleCacheSnapshot),
+		PreflightCommands:      append([]string(nil), document.PreflightCommands...),
+		MaxRuntime:             time.Duration(document.MaxRuntimeSeconds) * time.Second,
+		MaxOutputBytes:         document.MaxOutputBytes, MaxArtifacts: document.MaxArtifacts,
+		Identity: orquestaruntimerequiredtest.LocalTrustedGoalRequiredTestIdentityPolicyV0{
+			TrustPolicyRef:           strings.TrimSpace(identity.TrustPolicyRef),
+			PolicyEvidenceRef:        "goal-required-test-local-policy-evidence-ref-" + hex.EncodeToString(digest[:]),
+			ImplementerAgentRef:      strings.TrimSpace(identity.ImplementerAgentRef),
+			ImplementerCredentialRef: strings.TrimSpace(identity.ImplementerCredentialRef),
+			ImplementerPrincipalRef:  strings.TrimSpace(identity.ImplementerPrincipalRef),
+			AttestorAgentRef:         strings.TrimSpace(identity.AttestorAgentRef),
+			AttestorCredentialRef:    strings.TrimSpace(identity.AttestorCredentialRef),
+			AttestorPrincipalRef:     strings.TrimSpace(identity.AttestorPrincipalRef),
+		},
+	}, true, nil
+}
+
+type serverGoalRequiredTestAttestationWorkspaceSelectorV0 struct {
+	Canonical       *orquestaruntimerequiredtest.LocalGoalRequiredTestAttestationAdapterV0
+	RuntimeConfig   orquestaruntimerequiredtest.LocalGoalRequiredTestAttestationConfigV0
+	WorkspaceLookup serverCodexGoalWorkspaceBindingLookupV0
+}
+
+func goalRequiredTestAttestationWorkspaceSelectorFromConfigV0(
+	serverConfig orquestaserver.ConfigV0,
+	projectConfig serverProjectConfigFileV0,
+	workspaceLookup serverCodexGoalWorkspaceBindingLookupV0,
+) (*serverGoalRequiredTestAttestationWorkspaceSelectorV0, error) {
+	runtimeConfig, configured, err := goalRequiredTestAttestationRuntimeConfigFromConfigV0(serverConfig, projectConfig)
+	if err != nil || !configured {
+		return nil, err
+	}
+	canonical, err := orquestaruntimerequiredtest.NewLocalGoalRequiredTestAttestationAdapterV0(runtimeConfig)
+	if err != nil {
+		return nil, err
+	}
+	if err := canonical.PreflightGoalRequiredTestAttestationV0(context.Background()); err != nil {
+		return nil, fmt.Errorf("goal_required_test_attestation_preflight_failed")
+	}
+	return &serverGoalRequiredTestAttestationWorkspaceSelectorV0{
+		Canonical:       canonical,
+		RuntimeConfig:   runtimeConfig,
+		WorkspaceLookup: workspaceLookup,
+	}, nil
+}
+
+func (selector *serverGoalRequiredTestAttestationWorkspaceSelectorV0) BindGoalRequiredTestSpecV0(
+	ctx context.Context,
+	spec orquestagoal.GoalWorkSpecV0,
+) (orquestagoal.GoalWorkSpecV0, error) {
+	if selector == nil || selector.Canonical == nil {
+		return orquestagoal.GoalWorkSpecV0{}, fmt.Errorf("goal_required_test_attestation_adapter_unavailable")
+	}
+	return selector.Canonical.BindGoalRequiredTestSpecV0(ctx, spec)
+}
+
+func (selector *serverGoalRequiredTestAttestationWorkspaceSelectorV0) CaptureGoalRequiredTestFinalSnapshotV0(
+	ctx context.Context,
+	request orquestagoal.GoalRequiredTestFinalSnapshotRequestV0,
+) (orquestagoal.GoalRequiredTestFinalSnapshotV0, error) {
+	adapter, err := selector.adapterForGoalV0(ctx, request.GoalRef)
+	if err != nil {
+		return orquestagoal.GoalRequiredTestFinalSnapshotV0{}, err
+	}
+	return adapter.CaptureGoalRequiredTestFinalSnapshotV0(ctx, request)
+}
+
+func (selector *serverGoalRequiredTestAttestationWorkspaceSelectorV0) AttestGoalRequiredTestsV0(
+	ctx context.Context,
+	request orquestagoal.GoalRequiredTestAttestationRequestV0,
+) ([]orquestagoal.GoalRequiredTestAttestationV0, error) {
+	adapter, err := selector.adapterForGoalV0(ctx, request.GoalRef)
+	if err != nil {
+		return nil, err
+	}
+	return adapter.AttestGoalRequiredTestsV0(ctx, request)
+}
+
+func (selector *serverGoalRequiredTestAttestationWorkspaceSelectorV0) VerifyGoalRequiredTestIdentityV0(
+	ctx context.Context,
+	request orquestagoal.GoalRequiredTestIdentityVerificationRequestV0,
+) (orquestagoal.GoalRequiredTestIdentityVerificationV0, error) {
+	if selector == nil || selector.Canonical == nil {
+		return orquestagoal.GoalRequiredTestIdentityVerificationV0{}, fmt.Errorf("goal_required_test_attestation_adapter_unavailable")
+	}
+	return selector.Canonical.VerifyGoalRequiredTestIdentityV0(ctx, request)
+}
+
+func (selector *serverGoalRequiredTestAttestationWorkspaceSelectorV0) adapterForGoalV0(
+	ctx context.Context,
+	goalRef string,
+) (*orquestaruntimerequiredtest.LocalGoalRequiredTestAttestationAdapterV0, error) {
+	if selector == nil || selector.Canonical == nil {
+		return nil, fmt.Errorf("goal_required_test_attestation_adapter_unavailable")
+	}
+	if selector.WorkspaceLookup == nil {
+		return selector.Canonical, nil
+	}
+	found, err := selector.WorkspaceLookup.HasCodexGoalWorkspaceBindingV0(ctx, goalRef)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return selector.Canonical, nil
+	}
+	binding, err := selector.WorkspaceLookup.ResolveCodexGoalWorkspaceV0(ctx, orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		GoalRef: strings.TrimSpace(goalRef),
+	})
+	if err != nil || strings.TrimSpace(binding.ProjectWorkDir) == "" {
+		return nil, fmt.Errorf("autoprogramming_goal_workspace_attestation_unavailable")
+	}
+	workspaceDir := filepath.Clean(binding.ProjectWorkDir)
+	workspaceConfig := selector.RuntimeConfig
+	workspaceConfig.ProjectWorkDir = workspaceDir
+	adapter, err := orquestaruntimerequiredtest.NewLocalGoalRequiredTestAttestationAdapterV0(workspaceConfig)
+	if err != nil {
+		return nil, err
+	}
+	if err := adapter.PreflightGoalRequiredTestAttestationV0(context.Background()); err != nil {
+		return nil, fmt.Errorf("autoprogramming_goal_workspace_attestation_preflight_failed")
+	}
+	return adapter, nil
+}
+
+var _ orquestagoal.GoalRequiredTestSpecBinderPortV0 = (*serverGoalRequiredTestAttestationWorkspaceSelectorV0)(nil)
+var _ orquestagoal.GoalRequiredTestFinalSnapshotObserverPortV0 = (*serverGoalRequiredTestAttestationWorkspaceSelectorV0)(nil)
+var _ orquestagoal.GoalRequiredTestAttestorPortV0 = (*serverGoalRequiredTestAttestationWorkspaceSelectorV0)(nil)
+var _ orquestagoal.GoalRequiredTestIdentityVerifierPortV0 = (*serverGoalRequiredTestAttestationWorkspaceSelectorV0)(nil)
 
 func goalRequiredTestAttestationConfigFilePathV0(
 	projectWorkDir string,

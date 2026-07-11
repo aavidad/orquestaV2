@@ -8,6 +8,7 @@ import (
 	"time"
 
 	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacapacity "orquesta/modulos/orquesta-capacity"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaruntimecodexappserver "orquesta/modulos/orquesta-runtime-codex-appserver"
@@ -179,6 +180,43 @@ func serverGoalWorkLauncherFromBackendV0(
 	return launcher
 }
 
+// serverAutoprogrammingGoalWorkspaceLauncherV0 preserves the normal app Goal
+// backend while routing only autoprogramming work to its physical workspace.
+// The stack's context and required-test wrappers remain outside this selector.
+type serverAutoprogrammingGoalWorkspaceLauncherV0 struct {
+	AppGoal             orquestagoal.GoalWorkLauncherPortV0
+	AutoprogrammingGoal orquestagoal.GoalWorkLauncherPortV0
+}
+
+func serverGoalWorkLauncherForAppAndAutoprogrammingV0(
+	appGoal serverCodexGoalBackendV0,
+	autoprogrammingGoal serverCodexGoalBackendV0,
+) orquestagoal.GoalWorkLauncherPortV0 {
+	appLauncher := serverGoalWorkLauncherFromBackendV0(appGoal)
+	autoprogrammingLauncher := serverGoalWorkLauncherFromBackendV0(autoprogrammingGoal)
+	if appLauncher == nil && autoprogrammingLauncher == nil {
+		return nil
+	}
+	return serverAutoprogrammingGoalWorkspaceLauncherV0{
+		AppGoal:             appLauncher,
+		AutoprogrammingGoal: autoprogrammingLauncher,
+	}
+}
+
+func (launcher serverAutoprogrammingGoalWorkspaceLauncherV0) LaunchGoalWorkV0(
+	ctx context.Context,
+	spec orquestagoal.GoalWorkSpecV0,
+) (orquestagoal.GoalLaunchReceiptV0, error) {
+	delegate := launcher.AppGoal
+	if strings.TrimSpace(spec.WorkKind) == orquestaautoprogramming.AutoprogrammingGoalWorkKindV0 {
+		delegate = launcher.AutoprogrammingGoal
+	}
+	if delegate == nil {
+		return orquestagoal.GoalLaunchReceiptV0{}, errors.New("autoprogramming_goal_workspace_launcher_unavailable")
+	}
+	return delegate.LaunchGoalWorkV0(ctx, spec)
+}
+
 func serverGoalWorkObserverFromBackendV0(
 	backend serverCodexGoalBackendV0,
 ) orquestagoal.GoalWorkObservationPortV0 {
@@ -203,6 +241,71 @@ func serverGoalWorkObserverFromBackendV0(
 	return observer
 }
 
+type serverAutoprogrammingGoalWorkspaceObserverV0 struct {
+	AppGoal             orquestagoal.GoalWorkObservationPortV0
+	AutoprogrammingGoal orquestagoal.GoalWorkObservationPortV0
+	WorkspaceLookup     serverCodexGoalWorkspaceBindingLookupV0
+}
+
+func serverGoalWorkObserverForAppAndAutoprogrammingV0(
+	appGoal serverCodexGoalBackendV0,
+	autoprogrammingGoal serverCodexGoalBackendV0,
+) orquestagoal.GoalWorkObservationPortV0 {
+	appObserver := serverGoalWorkObserverFromBackendV0(appGoal)
+	autoprogrammingObserver := serverGoalWorkObserverFromBackendV0(autoprogrammingGoal)
+	lookup := serverCodexGoalWorkspaceLookupFromBackendV0(autoprogrammingGoal)
+	if lookup == nil {
+		return appObserver
+	}
+	return serverAutoprogrammingGoalWorkspaceObserverV0{
+		AppGoal:             appObserver,
+		AutoprogrammingGoal: autoprogrammingObserver,
+		WorkspaceLookup:     lookup,
+	}
+}
+
+func (observer serverAutoprogrammingGoalWorkspaceObserverV0) ObserveGoalWorkV0(
+	ctx context.Context,
+	request orquestagoal.GoalObservationRequestV0,
+) (orquestagoal.GoalWorkResultV0, error) {
+	delegate, err := observer.delegateForGoalV0(ctx, request.GoalRef)
+	if err != nil {
+		return orquestagoal.GoalWorkResultV0{}, err
+	}
+	if delegate == nil {
+		return orquestagoal.GoalWorkResultV0{}, errors.New("autoprogramming_goal_workspace_observer_unavailable")
+	}
+	return delegate.ObserveGoalWorkV0(ctx, request)
+}
+
+func (observer serverAutoprogrammingGoalWorkspaceObserverV0) delegateForGoalV0(
+	ctx context.Context,
+	goalRef string,
+) (orquestagoal.GoalWorkObservationPortV0, error) {
+	if observer.WorkspaceLookup == nil {
+		return observer.AppGoal, nil
+	}
+	found, err := observer.WorkspaceLookup.HasCodexGoalWorkspaceBindingV0(ctx, goalRef)
+	if err != nil {
+		return nil, err
+	}
+	if found {
+		return observer.AutoprogrammingGoal, nil
+	}
+	return observer.AppGoal, nil
+}
+
+func serverCodexGoalWorkspaceLookupFromBackendV0(
+	backend serverCodexGoalBackendV0,
+) serverCodexGoalWorkspaceBindingLookupV0 {
+	client, ok := backend.Observer.(serverCodexAppServerGoalBackendV0)
+	if !ok || client.WorkspaceRouter == nil {
+		return nil
+	}
+	lookup, _ := client.WorkspaceRouter.(serverCodexGoalWorkspaceBindingLookupV0)
+	return lookup
+}
+
 func serverGoalObservationFingerprintFromBackendV0(
 	backend serverCodexGoalBackendV0,
 	enabled bool,
@@ -215,6 +318,48 @@ func serverGoalObservationFingerprintFromBackendV0(
 		return nil
 	}
 	return fingerprint
+}
+
+type serverAutoprogrammingGoalWorkspaceFingerprintV0 struct {
+	AppGoal             orquestaserver.GoalObservationFingerprintPortV0
+	AutoprogrammingGoal orquestaserver.GoalObservationFingerprintPortV0
+	WorkspaceLookup     serverCodexGoalWorkspaceBindingLookupV0
+}
+
+func serverGoalObservationFingerprintForAppAndAutoprogrammingV0(
+	appGoal serverCodexGoalBackendV0,
+	autoprogrammingGoal serverCodexGoalBackendV0,
+	enabled bool,
+) orquestaserver.GoalObservationFingerprintPortV0 {
+	appFingerprint := serverGoalObservationFingerprintFromBackendV0(appGoal, enabled)
+	autoprogrammingFingerprint := serverGoalObservationFingerprintFromBackendV0(autoprogrammingGoal, enabled)
+	lookup := serverCodexGoalWorkspaceLookupFromBackendV0(autoprogrammingGoal)
+	if lookup == nil || (appFingerprint == nil && autoprogrammingFingerprint == nil) {
+		return appFingerprint
+	}
+	return serverAutoprogrammingGoalWorkspaceFingerprintV0{
+		AppGoal:             appFingerprint,
+		AutoprogrammingGoal: autoprogrammingFingerprint,
+		WorkspaceLookup:     lookup,
+	}
+}
+
+func (fingerprint serverAutoprogrammingGoalWorkspaceFingerprintV0) FingerprintGoalObservationV0(
+	ctx context.Context,
+	state orquestagoal.GoalWorkStateV0,
+) (orquestagoal.GoalObservationFingerprintV0, bool, error) {
+	found, err := fingerprint.WorkspaceLookup.HasCodexGoalWorkspaceBindingV0(ctx, state.GoalRef)
+	if err != nil {
+		return orquestagoal.GoalObservationFingerprintV0{}, true, err
+	}
+	delegate := fingerprint.AppGoal
+	if found {
+		delegate = fingerprint.AutoprogrammingGoal
+	}
+	if delegate == nil {
+		return orquestagoal.GoalObservationFingerprintV0{}, false, nil
+	}
+	return delegate.FingerprintGoalObservationV0(ctx, state)
 }
 
 func (supervisor serverGoalSupervisorV0) LaunchGoalWorkV0(
