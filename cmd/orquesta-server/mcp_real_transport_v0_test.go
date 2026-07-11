@@ -126,6 +126,9 @@ func TestMCPRealTransportV0HandshakeCompatibleClienteMCP(t *testing.T) {
 	if init.ProtocolVersion == "" || init.ServerInfo.Name != "orquesta-mcp" {
 		t.Fatalf("initialize inesperado: %+v", init)
 	}
+	if init.Capabilities.Tools == nil || init.Capabilities.Resources == nil {
+		t.Fatalf("Hermes requiere capabilities.tools y capabilities.resources, capabilities=%+v", init.Capabilities)
+	}
 
 	var pong map[string]any
 	callMCPJSONRPCTestV0(t, server.URL+mcpRealHTTPPathV0, "ping", map[string]any{}, &pong)

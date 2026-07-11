@@ -91,8 +91,8 @@ type mcpInitializeResultV0 struct {
 }
 
 type mcpServerCapabilitiesV0 struct {
-	Resources map[string]any `json:"resources,omitempty"`
-	Tools     map[string]any `json:"tools,omitempty"`
+	Resources map[string]any `json:"resources"`
+	Tools     map[string]any `json:"tools"`
 }
 
 type mcpServerImplementationV0 struct {
