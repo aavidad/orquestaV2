@@ -98,6 +98,45 @@ func TestBuildAutoprogrammingProgrammableWorkV0SeparaTestsBatchDeGoalsMultiples(
 	}
 }
 
+func TestBuildAutoprogrammingProgrammableWorkV0ProyectaSoloAutorizacionesDeSusTasksV0(t *testing.T) {
+	result := BuildAutoprogrammingProgrammableWorkV0(validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
+		request.Tasks = []AutoprogrammingTaskGroupCandidateV0{
+			{
+				TaskRef: "task-ref-destructive-a", Area: "area-a", WriteSet: []string{"modulos/orquesta-autoprogramming/area-a.go", "modulos/orquesta-autoprogramming/area-a-renamed.go"}, RequiredTests: []string{"go test ./area-a"},
+				ContextRefs:               []string{"goal_migration:goal-first", "goal_capability:starter", "goal_capability:observer", "goal_capability:closure-validator"},
+				DestructiveAuthorizations: []orquestagoal.GoalDestructiveChangeAuthorizationV0{{Kind: orquestagoal.GoalDestructiveChangeAuthorizationRenameV0, PreviousPath: "modulos/orquesta-autoprogramming/area-a.go", CurrentPath: "modulos/orquesta-autoprogramming/area-a-renamed.go"}},
+			},
+			{
+				TaskRef: "task-ref-destructive-b", Area: "area-b", WriteSet: []string{"modulos/orquesta-autoprogramming/area-b.go"}, RequiredTests: []string{"go test ./area-b"},
+				ContextRefs:               []string{"goal_migration:goal-first", "goal_capability:starter", "goal_capability:observer", "goal_capability:closure-validator"},
+				DestructiveAuthorizations: []orquestagoal.GoalDestructiveChangeAuthorizationV0{{Kind: orquestagoal.GoalDestructiveChangeAuthorizationRemoveV0, Path: "modulos/orquesta-autoprogramming/area-b.go"}},
+			},
+		}
+		request.WriteSet = []string{"modulos/orquesta-autoprogramming/area-a.go", "modulos/orquesta-autoprogramming/area-a-renamed.go", "modulos/orquesta-autoprogramming/area-b.go"}
+	}))
+
+	if !result.Accepted || len(result.Work.GoalSpecs) != 2 {
+		t.Fatalf("result=%+v", result)
+	}
+	first, second := result.Work.GoalSpecs[0].DestructiveAuthorizations, result.Work.GoalSpecs[1].DestructiveAuthorizations
+	if len(first) != 1 || first[0].Kind != orquestagoal.GoalDestructiveChangeAuthorizationRenameV0 ||
+		len(second) != 1 || second[0].Kind != orquestagoal.GoalDestructiveChangeAuthorizationRemoveV0 {
+		t.Fatalf("authorizations=%+v / %+v", first, second)
+	}
+}
+
+func TestBuildAutoprogrammingProgrammableWorkV0RechazaAutorizacionFueraDelWriteSetAntesDeLaunchV0(t *testing.T) {
+	result := BuildAutoprogrammingProgrammableWorkV0(validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
+		request.Tasks[0].ContextRefs = []string{"goal_migration:goal-first", "goal_capability:starter", "goal_capability:observer", "goal_capability:closure-validator"}
+		request.Tasks[0].DestructiveAuthorizations = []orquestagoal.GoalDestructiveChangeAuthorizationV0{{
+			Kind: orquestagoal.GoalDestructiveChangeAuthorizationRemoveV0, Path: "modulos/orquesta-goal/forbidden.go",
+		}}
+	}))
+	if result.Accepted || len(result.Issues) == 0 || result.Issues[0].Code != autoprogrammingGoalSpecIssueV0 {
+		t.Fatalf("result=%+v", result)
+	}
+}
+
 func TestBuildAutoprogrammingProgrammableWorkV0ConvierteBaselineDeTaskEnContextoGoalTipadoV0(t *testing.T) {
 	const baselineRef = "worktree-baseline-ref-goal-context-001"
 	result := BuildAutoprogrammingProgrammableWorkV0(validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {

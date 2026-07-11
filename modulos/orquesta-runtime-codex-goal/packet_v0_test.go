@@ -117,6 +117,18 @@ func TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion(t *testing.T) {
 	}
 }
 
+func TestBuildCodexGoalStartPacketV0ProyectaAutorizacionesDestructivasAlContratoDireccionV0(t *testing.T) {
+	spec := validCodexGoalSpecV0()
+	spec.DestructiveAuthorizations = []orquestagoal.GoalDestructiveChangeAuthorizationV0{{
+		Kind: orquestagoal.GoalDestructiveChangeAuthorizationRenameV0, PreviousPath: "modulos/orquesta-goal/antes.go", CurrentPath: "modulos/orquesta-goal/despues.go",
+	}}
+	packet, issues := BuildCodexGoalStartPacketV0(spec)
+	if len(issues) != 0 || len(packet.DirectionContract.DestructiveAuthorizations) != 1 ||
+		packet.DirectionContract.DestructiveAuthorizations[0] != spec.DestructiveAuthorizations[0] {
+		t.Fatalf("packet=%+v issues=%+v", packet, issues)
+	}
+}
+
 func TestBuildCodexGoalStartPacketV0SoloExigeAnalizadorConWriteSetCodigoV0(t *testing.T) {
 	spec := validCodexGoalSpecV0()
 	spec.WriteSet = []orquestagoal.GoalWriteScopeV0{{Path: "docs"}}

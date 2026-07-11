@@ -1042,6 +1042,55 @@ func TestServerCodexAppServerGoalBackendV0RuntimeWriteSetGuardPermiteCambioDentr
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0RuntimeWriteSetGuardPermiteRenameAutorizadoV0(t *testing.T) {
+	root := t.TempDir()
+	writeCodexAppServerTestFileV0(t, root, "docs/original.md", "contenido\n")
+	protocol := &fakeCodexAppServerProtocolV0{thread: serverCodexAppServerThreadV0{ID: "thread-ref-runtime-rename-authorized-001"}}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol, CWD: root, Sandbox: "workspace-write", Runtime: &serverCodexAppServerGoalRuntimeV0{}}
+	packet := codexAppServerRuntimeWriteSetGuardPacketForTestV0("goal-ref-runtime-rename-authorized-001", "docs")
+	packet.DirectionContract.DestructiveAuthorizations = []orquestagoal.GoalDestructiveChangeAuthorizationV0{{
+		Kind: orquestagoal.GoalDestructiveChangeAuthorizationRenameV0, PreviousPath: "docs/original.md", CurrentPath: "docs/renombrado.md",
+	}}
+
+	receipt, err := backend.StartCodexGoalV0(context.Background(), packet)
+	if err != nil {
+		t.Fatalf("StartCodexGoalV0: %v", err)
+	}
+	if err := os.Rename(filepath.Join(root, "docs", "original.md"), filepath.Join(root, "docs", "renombrado.md")); err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+	writeCodexAppServerGoalResultForTestV0(t, root, "docs", packet.GoalRef, receipt.ExternalGoalRef)
+	protocol.observedGoal = &serverCodexAppServerThreadGoalV0{ThreadID: receipt.ExternalGoalRef, Status: "complete"}
+
+	observed, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{GoalRef: packet.GoalRef, ExternalGoalRef: receipt.ExternalGoalRef})
+	if err != nil || observed.Status != orquestagoal.GoalStatusCompleteV0 {
+		t.Fatalf("observed=%+v err=%v", observed, err)
+	}
+}
+
+func TestServerCodexAppServerGoalBackendV0RuntimeWriteSetGuardBloqueaRenameNoAutorizadoV0(t *testing.T) {
+	root := t.TempDir()
+	writeCodexAppServerTestFileV0(t, root, "docs/original.md", "contenido\n")
+	protocol := &fakeCodexAppServerProtocolV0{thread: serverCodexAppServerThreadV0{ID: "thread-ref-runtime-rename-unauthorized-001"}}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol, CWD: root, Sandbox: "workspace-write", Runtime: &serverCodexAppServerGoalRuntimeV0{}}
+	packet := codexAppServerRuntimeWriteSetGuardPacketForTestV0("goal-ref-runtime-rename-unauthorized-001", "docs")
+
+	receipt, err := backend.StartCodexGoalV0(context.Background(), packet)
+	if err != nil {
+		t.Fatalf("StartCodexGoalV0: %v", err)
+	}
+	if err := os.Rename(filepath.Join(root, "docs", "original.md"), filepath.Join(root, "docs", "renombrado.md")); err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+	writeCodexAppServerGoalResultForTestV0(t, root, "docs", packet.GoalRef, receipt.ExternalGoalRef)
+	protocol.observedGoal = &serverCodexAppServerThreadGoalV0{ThreadID: receipt.ExternalGoalRef, Status: "complete"}
+
+	observed, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{GoalRef: packet.GoalRef, ExternalGoalRef: receipt.ExternalGoalRef})
+	if err != nil || observed.Status != orquestagoal.GoalStatusBlockedV0 || observed.IssueCode != codexAppServerRuntimeWriteSetViolationV0 {
+		t.Fatalf("observed=%+v err=%v", observed, err)
+	}
+}
+
 func TestCodexAppServerWriteSetLooksLikeFileV0TrataExtensionesComoFicheroMigradoV0(t *testing.T) {
 	cases := map[string]bool{
 		"docs/informe.md":              true,

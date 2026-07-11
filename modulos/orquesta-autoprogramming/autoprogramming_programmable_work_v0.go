@@ -34,15 +34,16 @@ type AutoprogrammingProgrammableWorkV0 struct {
 }
 
 type AutoprogrammingProgrammableGroupV0 struct {
-	Area             string                              `json:"area"`
-	TaskRefs         []string                            `json:"task_refs"`
-	WriteSet         []string                            `json:"write_set"`
-	RequiredTests    []string                            `json:"required_tests"`
-	AcceptanceChecks []AutoprogrammingAcceptanceCheckV0  `json:"acceptance_checks,omitempty"`
-	DependsOn        []string                            `json:"depends_on,omitempty"`
-	BlockedBy        []string                            `json:"blocked_by,omitempty"`
-	Profile          orquestacoreworkflow.WorkProfileV0  `json:"profile"`
-	Task             orquestacoreworkflow.WorkflowTaskV0 `json:"task"`
+	Area                      string                                              `json:"area"`
+	TaskRefs                  []string                                            `json:"task_refs"`
+	WriteSet                  []string                                            `json:"write_set"`
+	RequiredTests             []string                                            `json:"required_tests"`
+	AcceptanceChecks          []AutoprogrammingAcceptanceCheckV0                  `json:"acceptance_checks,omitempty"`
+	DependsOn                 []string                                            `json:"depends_on,omitempty"`
+	BlockedBy                 []string                                            `json:"blocked_by,omitempty"`
+	DestructiveAuthorizations []orquestagoal.GoalDestructiveChangeAuthorizationV0 `json:"destructive_authorizations,omitempty"`
+	Profile                   orquestacoreworkflow.WorkProfileV0                  `json:"profile"`
+	Task                      orquestacoreworkflow.WorkflowTaskV0                 `json:"task"`
 }
 
 const (
@@ -102,15 +103,16 @@ func BuildAutoprogrammingProgrammableWorkV0(
 			}
 		}
 		workGroup := AutoprogrammingProgrammableGroupV0{
-			Area:             group.Area,
-			TaskRefs:         append([]string(nil), group.TaskRefs...),
-			WriteSet:         append([]string(nil), task.WriteSet...),
-			RequiredTests:    append([]string(nil), task.RequiredTests...),
-			AcceptanceChecks: autoprogrammingAcceptanceChecksForGroupV0(group),
-			DependsOn:        append([]string(nil), task.DependsOn...),
-			BlockedBy:        append([]string(nil), partition.BlockedByArea[group.Area]...),
-			Profile:          profile,
-			Task:             task,
+			Area:                      group.Area,
+			TaskRefs:                  append([]string(nil), group.TaskRefs...),
+			WriteSet:                  append([]string(nil), task.WriteSet...),
+			RequiredTests:             append([]string(nil), task.RequiredTests...),
+			AcceptanceChecks:          autoprogrammingAcceptanceChecksForGroupV0(group),
+			DependsOn:                 append([]string(nil), task.DependsOn...),
+			BlockedBy:                 append([]string(nil), partition.BlockedByArea[group.Area]...),
+			DestructiveAuthorizations: autoprogrammingDestructiveAuthorizationsForGroupV0(group),
+			Profile:                   profile,
+			Task:                      task,
 		}
 		work.Groups = append(work.Groups, workGroup)
 		work.Profiles = append(work.Profiles, profile)
@@ -136,6 +138,17 @@ func BuildAutoprogrammingProgrammableWorkV0(
 		Accepted: true,
 		Work:     work,
 	}
+}
+
+func autoprogrammingDestructiveAuthorizationsForGroupV0(group AutoprogrammingTaskGroupV0) []orquestagoal.GoalDestructiveChangeAuthorizationV0 {
+	var authorizations []orquestagoal.GoalDestructiveChangeAuthorizationV0
+	for _, task := range group.Tasks {
+		authorizations = append(authorizations, task.DestructiveAuthorizations...)
+	}
+	if authorizations == nil {
+		return []orquestagoal.GoalDestructiveChangeAuthorizationV0{}
+	}
+	return authorizations
 }
 
 func autoprogrammingBatchRequiredTestsForGroupV0(

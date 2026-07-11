@@ -74,14 +74,15 @@ type CodexGoalPromptCacheProjectionV0 struct {
 }
 
 type CodexGoalDirectionContractV0 struct {
-	RequireEarlyCheckpoint    bool                                  `json:"require_early_checkpoint,omitempty"`
-	EarlyCheckpointFile       string                                `json:"early_checkpoint_file,omitempty"`
-	ToolOutputPolicy          CodexGoalToolOutputPolicyV0           `json:"tool_output_policy,omitempty"`
-	RequiredTerminalFields    []string                              `json:"required_terminal_fields,omitempty"`
-	WriteSetEnforcement       string                                `json:"write_set_enforcement,omitempty"`
-	MinimumSandbox            string                                `json:"minimum_sandbox,omitempty"`
-	AllowedWriteSet           []orquestagoal.GoalWriteScopeV0       `json:"allowed_write_set,omitempty"`
-	RequiredArtifactContracts []orquestagoal.GoalArtifactContractV0 `json:"required_artifact_contracts,omitempty"`
+	RequireEarlyCheckpoint    bool                                                `json:"require_early_checkpoint,omitempty"`
+	EarlyCheckpointFile       string                                              `json:"early_checkpoint_file,omitempty"`
+	ToolOutputPolicy          CodexGoalToolOutputPolicyV0                         `json:"tool_output_policy,omitempty"`
+	RequiredTerminalFields    []string                                            `json:"required_terminal_fields,omitempty"`
+	WriteSetEnforcement       string                                              `json:"write_set_enforcement,omitempty"`
+	MinimumSandbox            string                                              `json:"minimum_sandbox,omitempty"`
+	AllowedWriteSet           []orquestagoal.GoalWriteScopeV0                     `json:"allowed_write_set,omitempty"`
+	DestructiveAuthorizations []orquestagoal.GoalDestructiveChangeAuthorizationV0 `json:"destructive_authorizations,omitempty"`
+	RequiredArtifactContracts []orquestagoal.GoalArtifactContractV0               `json:"required_artifact_contracts,omitempty"`
 }
 
 type CodexGoalToolOutputPolicyV0 struct {
@@ -331,6 +332,7 @@ func codexGoalDirectionContractV0(spec orquestagoal.GoalWorkSpecV0) CodexGoalDir
 		WriteSetEnforcement:       CodexGoalWriteSetEnforcementV0,
 		MinimumSandbox:            CodexGoalMinimumSandboxV0,
 		AllowedWriteSet:           append([]orquestagoal.GoalWriteScopeV0(nil), spec.WriteSet...),
+		DestructiveAuthorizations: append([]orquestagoal.GoalDestructiveChangeAuthorizationV0(nil), spec.DestructiveAuthorizations...),
 		RequiredArtifactContracts: append([]orquestagoal.GoalArtifactContractV0(nil), spec.ArtifactContracts...),
 	}
 }

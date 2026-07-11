@@ -3,6 +3,8 @@ package orquestaautoprogramming
 import (
 	"strings"
 	"unicode"
+
+	orquestagoal "orquesta/modulos/orquesta-goal"
 )
 
 type AutoprogrammingTaskGroupCandidateV0 struct {
@@ -21,8 +23,9 @@ type AutoprogrammingTaskGroupCandidateV0 struct {
 	// las dependencias explicitas (refs de otras task_ref). Si se declaran, ganan
 	// sobre la inferencia automatica por area/solapamiento. Vacios = comportamiento
 	// historico (inferencia por area). Aditivo y retrocompatible.
-	WriteSet  []string `json:"write_set,omitempty"`
-	DependsOn []string `json:"depends_on,omitempty"`
+	WriteSet                  []string                                            `json:"write_set,omitempty"`
+	DependsOn                 []string                                            `json:"depends_on,omitempty"`
+	DestructiveAuthorizations []orquestagoal.GoalDestructiveChangeAuthorizationV0 `json:"destructive_authorizations,omitempty"`
 }
 
 type AutoprogrammingAcceptanceCheckV0 struct {
@@ -108,20 +111,29 @@ func normalizeAutoprogrammingTaskCandidateV0(
 	if err != nil {
 		return AutoprogrammingTaskGroupCandidateV0{}, err
 	}
+	authorizations := make([]orquestagoal.GoalDestructiveChangeAuthorizationV0, 0, len(task.DestructiveAuthorizations))
+	for _, authorization := range task.DestructiveAuthorizations {
+		authorization = orquestagoal.NormalizeGoalDestructiveChangeAuthorizationV0(authorization)
+		if !orquestagoal.ValidGoalDestructiveChangeAuthorizationV0(authorization) {
+			return AutoprogrammingTaskGroupCandidateV0{}, errorV0(ErrAutoprogrammingInvalidoV0, "destructive_authorizations", "autorizacion destructiva invalida")
+		}
+		authorizations = append(authorizations, authorization)
+	}
 	return AutoprogrammingTaskGroupCandidateV0{
-		TaskRef:            taskRef,
-		Area:               area,
-		Title:              strings.TrimSpace(task.Title),
-		Objective:          strings.TrimSpace(task.Objective),
-		Context:            compactStringsV0(task.Context),
-		ContextRefs:        compactStringsV0(task.ContextRefs),
-		AcceptanceCriteria: compactStringsV0(task.AcceptanceCriteria),
-		AcceptanceChecks:   checks,
-		RequiredTests:      compactStringsV0(task.RequiredTests),
-		CompactRules:       compactStringsV0(task.CompactRules),
-		SkillRefs:          compactStringsV0(task.SkillRefs),
-		WriteSet:           compactStringsV0(task.WriteSet),
-		DependsOn:          compactStringsV0(task.DependsOn),
+		TaskRef:                   taskRef,
+		Area:                      area,
+		Title:                     strings.TrimSpace(task.Title),
+		Objective:                 strings.TrimSpace(task.Objective),
+		Context:                   compactStringsV0(task.Context),
+		ContextRefs:               compactStringsV0(task.ContextRefs),
+		AcceptanceCriteria:        compactStringsV0(task.AcceptanceCriteria),
+		AcceptanceChecks:          checks,
+		RequiredTests:             compactStringsV0(task.RequiredTests),
+		CompactRules:              compactStringsV0(task.CompactRules),
+		SkillRefs:                 compactStringsV0(task.SkillRefs),
+		WriteSet:                  compactStringsV0(task.WriteSet),
+		DependsOn:                 compactStringsV0(task.DependsOn),
+		DestructiveAuthorizations: authorizations,
 	}, nil
 }
 

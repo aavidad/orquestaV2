@@ -44,6 +44,14 @@ func validateGoalWorkSpecLimitsV0(issues *[]GoalWorkIssueV0, spec GoalWorkSpecV0
 		validateGoalStringLimitV0(issues, "write_set.purpose", scope.Purpose, GoalWorkSpecMaxStringBytesV0)
 	}
 
+	validateGoalListLimitV0(issues, "destructive_authorizations", len(spec.DestructiveAuthorizations))
+	for _, authorization := range spec.DestructiveAuthorizations {
+		validateGoalStringLimitV0(issues, "destructive_authorizations.kind", string(authorization.Kind), GoalWorkSpecMaxStringBytesV0)
+		validateGoalStringLimitV0(issues, "destructive_authorizations.path", authorization.Path, GoalWorkSpecMaxStringBytesV0)
+		validateGoalStringLimitV0(issues, "destructive_authorizations.previous_path", authorization.PreviousPath, GoalWorkSpecMaxStringBytesV0)
+		validateGoalStringLimitV0(issues, "destructive_authorizations.current_path", authorization.CurrentPath, GoalWorkSpecMaxStringBytesV0)
+	}
+
 	validateGoalListLimitV0(issues, "required_tests", len(spec.RequiredTests))
 	for _, test := range spec.RequiredTests {
 		validateGoalStringLimitV0(issues, "required_tests.test_ref", test.TestRef, GoalWorkSpecMaxStringBytesV0)

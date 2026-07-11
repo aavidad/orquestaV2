@@ -41,6 +41,8 @@ const (
 	ErrGoalDirectorInvalidV0                               = "goal_director_kind_invalid"
 	ErrGoalWriteSetRequiredV0                              = "goal_write_set_required"
 	ErrGoalWriteSetInvalidV0                               = "goal_write_set_invalid"
+	ErrGoalDestructiveAuthorizationInvalidV0               = "goal_destructive_authorization_invalid"
+	ErrGoalDestructiveAuthorizationOutsideWriteSetV0       = "goal_destructive_authorization_outside_write_set"
 	ErrGoalRefFieldInvalidV0                               = "goal_ref_field_invalid"
 	ErrGoalRuleInvalidV0                                   = "goal_rule_invalid"
 	ErrGoalSpecLimitExceededV0                             = "goal_spec_limit_exceeded"
@@ -75,30 +77,31 @@ const (
 )
 
 type GoalWorkSpecV0 struct {
-	SchemaVersion            string                   `json:"schema_version"`
-	GoalRef                  string                   `json:"goal_ref"`
-	RequestRef               string                   `json:"request_ref,omitempty"`
-	RunRef                   string                   `json:"run_ref,omitempty"`
-	ImplementerAgentRef      string                   `json:"implementer_agent_ref,omitempty"`
-	ImplementerCredentialRef string                   `json:"implementer_credential_ref,omitempty"`
-	ProjectRef               string                   `json:"project_ref,omitempty"`
-	DomainRef                string                   `json:"domain_ref,omitempty"`
-	WorkKind                 string                   `json:"work_kind,omitempty"`
-	WorkProfileKind          string                   `json:"work_profile_kind,omitempty"`
-	Objective                string                   `json:"objective"`
-	DirectorKind             string                   `json:"director_kind"`
-	ContextRefs              []GoalContextRefV0       `json:"context_refs,omitempty"`
-	RuleRefs                 []GoalRuleRefV0          `json:"rule_refs,omitempty"`
-	SkillRefs                []string                 `json:"skill_refs,omitempty"`
-	WriteSet                 []GoalWriteScopeV0       `json:"write_set,omitempty"`
-	WriteSetSHA256           string                   `json:"write_set_sha256,omitempty"`
-	RequiredTests            []GoalRequiredTestV0     `json:"required_tests,omitempty"`
-	AcceptanceCriteria       []string                 `json:"acceptance_criteria,omitempty"`
-	ArtifactContracts        []GoalArtifactContractV0 `json:"artifact_contracts,omitempty"`
-	EvidenceRefs             []string                 `json:"evidence_refs,omitempty"`
-	Budget                   GoalBudgetV0             `json:"budget,omitempty"`
-	ClosurePolicy            GoalClosurePolicyV0      `json:"closure_policy,omitempty"`
-	ReworkPolicy             GoalReworkPolicyV0       `json:"rework_policy,omitempty"`
+	SchemaVersion             string                                 `json:"schema_version"`
+	GoalRef                   string                                 `json:"goal_ref"`
+	RequestRef                string                                 `json:"request_ref,omitempty"`
+	RunRef                    string                                 `json:"run_ref,omitempty"`
+	ImplementerAgentRef       string                                 `json:"implementer_agent_ref,omitempty"`
+	ImplementerCredentialRef  string                                 `json:"implementer_credential_ref,omitempty"`
+	ProjectRef                string                                 `json:"project_ref,omitempty"`
+	DomainRef                 string                                 `json:"domain_ref,omitempty"`
+	WorkKind                  string                                 `json:"work_kind,omitempty"`
+	WorkProfileKind           string                                 `json:"work_profile_kind,omitempty"`
+	Objective                 string                                 `json:"objective"`
+	DirectorKind              string                                 `json:"director_kind"`
+	ContextRefs               []GoalContextRefV0                     `json:"context_refs,omitempty"`
+	RuleRefs                  []GoalRuleRefV0                        `json:"rule_refs,omitempty"`
+	SkillRefs                 []string                               `json:"skill_refs,omitempty"`
+	WriteSet                  []GoalWriteScopeV0                     `json:"write_set,omitempty"`
+	DestructiveAuthorizations []GoalDestructiveChangeAuthorizationV0 `json:"destructive_authorizations,omitempty"`
+	WriteSetSHA256            string                                 `json:"write_set_sha256,omitempty"`
+	RequiredTests             []GoalRequiredTestV0                   `json:"required_tests,omitempty"`
+	AcceptanceCriteria        []string                               `json:"acceptance_criteria,omitempty"`
+	ArtifactContracts         []GoalArtifactContractV0               `json:"artifact_contracts,omitempty"`
+	EvidenceRefs              []string                               `json:"evidence_refs,omitempty"`
+	Budget                    GoalBudgetV0                           `json:"budget,omitempty"`
+	ClosurePolicy             GoalClosurePolicyV0                    `json:"closure_policy,omitempty"`
+	ReworkPolicy              GoalReworkPolicyV0                     `json:"rework_policy,omitempty"`
 }
 
 type GoalContextRefV0 struct {
@@ -117,6 +120,22 @@ type GoalRuleRefV0 struct {
 type GoalWriteScopeV0 struct {
 	Path    string `json:"path"`
 	Purpose string `json:"purpose,omitempty"`
+}
+
+type GoalDestructiveChangeAuthorizationKindV0 string
+
+const (
+	GoalDestructiveChangeAuthorizationRenameV0   GoalDestructiveChangeAuthorizationKindV0 = "rename"
+	GoalDestructiveChangeAuthorizationRemoveV0   GoalDestructiveChangeAuthorizationKindV0 = "remove"
+	GoalDestructiveChangeAuthorizationTruncateV0 GoalDestructiveChangeAuthorizationKindV0 = "truncate"
+	GoalDestructiveChangeAuthorizationReplaceV0  GoalDestructiveChangeAuthorizationKindV0 = "replace"
+)
+
+type GoalDestructiveChangeAuthorizationV0 struct {
+	Kind         GoalDestructiveChangeAuthorizationKindV0 `json:"kind"`
+	Path         string                                   `json:"path,omitempty"`
+	PreviousPath string                                   `json:"previous_path,omitempty"`
+	CurrentPath  string                                   `json:"current_path,omitempty"`
 }
 
 type GoalRequiredTestV0 struct {

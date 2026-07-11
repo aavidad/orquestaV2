@@ -18,9 +18,10 @@ type serverCodexAppServerGoalRuntimeV0 struct {
 }
 
 type codexAppServerRuntimeWriteSetBaselineV0 struct {
-	ProjectWorkDir string
-	WriteSet       []string
-	Snapshot       orquestaruntimeworktree.WorktreeSnapshotV0
+	ProjectWorkDir            string
+	WriteSet                  []string
+	DestructiveAuthorizations []orquestaruntimeworktree.WorktreeDestructiveAuthorizationV0
+	Snapshot                  orquestaruntimeworktree.WorktreeSnapshotV0
 }
 
 func (backend serverCodexAppServerGoalBackendV0) codexAppServerActiveGoalElapsedV0(
@@ -180,9 +181,10 @@ func (runtime *serverCodexAppServerGoalRuntimeV0) recordWriteSetBaselineV0(
 		return
 	}
 	runtime.writeSetBaselines[threadID] = codexAppServerRuntimeWriteSetBaselineV0{
-		ProjectWorkDir: strings.TrimSpace(baseline.ProjectWorkDir),
-		WriteSet:       append([]string(nil), baseline.WriteSet...),
-		Snapshot:       baseline.Snapshot,
+		ProjectWorkDir:            strings.TrimSpace(baseline.ProjectWorkDir),
+		WriteSet:                  append([]string(nil), baseline.WriteSet...),
+		DestructiveAuthorizations: append([]orquestaruntimeworktree.WorktreeDestructiveAuthorizationV0(nil), baseline.DestructiveAuthorizations...),
+		Snapshot:                  baseline.Snapshot,
 	}
 }
 
@@ -203,6 +205,7 @@ func (runtime *serverCodexAppServerGoalRuntimeV0) writeSetBaselineForThreadV0(
 		return codexAppServerRuntimeWriteSetBaselineV0{}, false
 	}
 	baseline.WriteSet = append([]string(nil), baseline.WriteSet...)
+	baseline.DestructiveAuthorizations = append([]orquestaruntimeworktree.WorktreeDestructiveAuthorizationV0(nil), baseline.DestructiveAuthorizations...)
 	return baseline, true
 }
 

@@ -52,6 +52,9 @@ func NormalizeGoalWorkSpecV0(spec GoalWorkSpecV0) GoalWorkSpecV0 {
 		spec.WriteSet[i].Path = filepath.ToSlash(strings.TrimSpace(spec.WriteSet[i].Path))
 		spec.WriteSet[i].Purpose = strings.TrimSpace(spec.WriteSet[i].Purpose)
 	}
+	for i := range spec.DestructiveAuthorizations {
+		spec.DestructiveAuthorizations[i] = NormalizeGoalDestructiveChangeAuthorizationV0(spec.DestructiveAuthorizations[i])
+	}
 	for i := range spec.RequiredTests {
 		spec.RequiredTests[i] = normalizeGoalRequiredTestAttestationTestV0(spec.RequiredTests[i])
 	}
@@ -90,6 +93,7 @@ func cloneGoalWorkSpecSlicesV0(spec GoalWorkSpecV0) GoalWorkSpecV0 {
 	spec.RuleRefs = append([]GoalRuleRefV0(nil), spec.RuleRefs...)
 	spec.SkillRefs = append([]string(nil), spec.SkillRefs...)
 	spec.WriteSet = append([]GoalWriteScopeV0(nil), spec.WriteSet...)
+	spec.DestructiveAuthorizations = append([]GoalDestructiveChangeAuthorizationV0(nil), spec.DestructiveAuthorizations...)
 	spec.RequiredTests = append([]GoalRequiredTestV0(nil), spec.RequiredTests...)
 	for i := range spec.RequiredTests {
 		spec.RequiredTests[i].AcceptanceCriteria = append([]string(nil), spec.RequiredTests[i].AcceptanceCriteria...)
@@ -272,6 +276,15 @@ func ValidateGoalWorkSpecV0(spec GoalWorkSpecV0) []GoalWorkIssueV0 {
 	for _, scope := range spec.WriteSet {
 		if !validGoalWriteScopePathV0(scope.Path) {
 			issues = append(issues, GoalWorkIssueV0{Code: ErrGoalWriteSetInvalidV0, Field: "write_set.path"})
+		}
+	}
+	for _, authorization := range spec.DestructiveAuthorizations {
+		if !ValidGoalDestructiveChangeAuthorizationV0(authorization) {
+			issues = append(issues, GoalWorkIssueV0{Code: ErrGoalDestructiveAuthorizationInvalidV0, Field: "destructive_authorizations"})
+			continue
+		}
+		if goalDestructiveAuthorizationOutsideWriteSetV0(authorization, spec.WriteSet) {
+			issues = append(issues, GoalWorkIssueV0{Code: ErrGoalDestructiveAuthorizationOutsideWriteSetV0, Field: "destructive_authorizations"})
 		}
 	}
 	validateGoalRefsV0(&issues, "request_ref", spec.RequestRef)
