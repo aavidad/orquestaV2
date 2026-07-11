@@ -70,10 +70,10 @@ func TestGenerationLeaseUnixServerHelperV0(t *testing.T) {
 }
 
 func TestMarkerCASProcessHelperV0(t *testing.T) {
-	if os.Getenv("ORQUESTA_TEST_MARKER_CAS_HELPER") != "1" {
+	if os.Getenv("TEST_MARKER_CAS_HELPER") != "1" {
 		return
 	}
-	expectedRaw, err := os.ReadFile(os.Getenv("ORQUESTA_TEST_MARKER_EXPECTED"))
+	expectedRaw, err := os.ReadFile(os.Getenv("TEST_MARKER_EXPECTED"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,11 +81,11 @@ func TestMarkerCASProcessHelperV0(t *testing.T) {
 	if err := json.Unmarshal(expectedRaw, &expected); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(os.Getenv("ORQUESTA_TEST_MARKER_READY"), []byte("ready\n"), 0o600); err != nil {
+	if err := os.WriteFile(os.Getenv("TEST_MARKER_READY"), []byte("ready\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	for {
-		if _, err := os.Stat(os.Getenv("ORQUESTA_TEST_MARKER_START")); err == nil {
+		if _, err := os.Stat(os.Getenv("TEST_MARKER_START")); err == nil {
 			break
 		}
 		time.Sleep(5 * time.Millisecond)
@@ -96,7 +96,7 @@ func TestMarkerCASProcessHelperV0(t *testing.T) {
 		Timeout:     2 * time.Second,
 	}
 	next := expected
-	next.SocketRef = os.Getenv("ORQUESTA_TEST_MARKER_NEXT")
+	next.SocketRef = os.Getenv("TEST_MARKER_NEXT")
 	err = backend.replaceTmuxOwnerMarkerV0(expected, next)
 	result := "success\n"
 	if err != nil {
@@ -106,7 +106,7 @@ func TestMarkerCASProcessHelperV0(t *testing.T) {
 		}
 		result = "conflict\n"
 	}
-	if err := os.WriteFile(os.Getenv("ORQUESTA_TEST_MARKER_RESULT"), []byte(result), 0o600); err != nil {
+	if err := os.WriteFile(os.Getenv("TEST_MARKER_RESULT"), []byte(result), 0o600); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -749,12 +749,12 @@ func TestMarkerCASV0MultiprocesoRealTieneUnSoloGanadorV0(t *testing.T) {
 		readyPath := filepath.Join(root, fmt.Sprintf("cas-%d.ready", index))
 		cmd := exec.Command(os.Args[0], "-test.run=^TestMarkerCASProcessHelperV0$")
 		cmd.Env = append(os.Environ(),
-			"ORQUESTA_TEST_MARKER_CAS_HELPER=1",
-			"ORQUESTA_TEST_MARKER_EXPECTED="+expectedPath,
-			"ORQUESTA_TEST_MARKER_READY="+readyPath,
-			"ORQUESTA_TEST_MARKER_START="+startPath,
-			fmt.Sprintf("ORQUESTA_TEST_MARKER_NEXT=socket-ref-process-%d", index),
-			"ORQUESTA_TEST_MARKER_RESULT="+resultPath,
+			"TEST_MARKER_CAS_HELPER=1",
+			"TEST_MARKER_EXPECTED="+expectedPath,
+			"TEST_MARKER_READY="+readyPath,
+			"TEST_MARKER_START="+startPath,
+			fmt.Sprintf("TEST_MARKER_NEXT=socket-ref-process-%d", index),
+			"TEST_MARKER_RESULT="+resultPath,
 		)
 		if err := cmd.Start(); err != nil {
 			t.Fatal(err)
