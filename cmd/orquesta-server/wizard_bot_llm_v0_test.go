@@ -122,6 +122,13 @@ func (fake *fakeWizardBotAppServerProtocolV0) StartThreadV0(
 	return serverCodexAppServerThreadV0{ID: "thread-wizard-bot-001"}, nil
 }
 
+func (fake *fakeWizardBotAppServerProtocolV0) UpdateThreadSettingsV0(
+	context.Context,
+	serverCodexAppServerThreadSettingsUpdateParamsV0,
+) error {
+	return nil
+}
+
 func (fake *fakeWizardBotAppServerProtocolV0) SetGoalV0(
 	context.Context,
 	serverCodexAppServerThreadGoalSetParamsV0,

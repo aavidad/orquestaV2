@@ -41,6 +41,18 @@ func (params serverCodexAppServerThreadGoalSetParamsV0) toJSONV0() map[string]in
 	return out
 }
 
+type serverCodexAppServerThreadSettingsUpdateParamsV0 struct {
+	ThreadID string
+	Effort   string
+}
+
+func (params serverCodexAppServerThreadSettingsUpdateParamsV0) toJSONV0() map[string]interface{} {
+	return map[string]interface{}{
+		"threadId": strings.TrimSpace(params.ThreadID),
+		"effort":   strings.TrimSpace(params.Effort),
+	}
+}
+
 type serverCodexAppServerTurnStartParamsV0 struct {
 	ThreadID          string
 	CWD               string

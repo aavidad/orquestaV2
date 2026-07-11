@@ -30,6 +30,7 @@ type ReadTurnV0 = serverCodexAppServerReadTurnV0
 type ThreadGoalGetResponseV0 = serverCodexAppServerThreadGoalGetResponseV0
 type ThreadGoalSetParamsV0 = serverCodexAppServerThreadGoalSetParamsV0
 type ThreadGoalV0 = serverCodexAppServerThreadGoalV0
+type ThreadSettingsUpdateParamsV0 = serverCodexAppServerThreadSettingsUpdateParamsV0
 type ThreadReadResponseV0 = serverCodexAppServerThreadReadResponseV0
 type ThreadReadV0 = serverCodexAppServerThreadReadV0
 type ThreadStartParamsV0 = serverCodexAppServerThreadStartParamsV0

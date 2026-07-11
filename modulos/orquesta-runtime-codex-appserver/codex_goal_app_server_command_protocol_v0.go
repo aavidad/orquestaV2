@@ -41,6 +41,14 @@ func (protocol serverCodexAppServerCommandProtocolV0) StartThreadV0(
 	return response.Thread, err
 }
 
+func (protocol serverCodexAppServerCommandProtocolV0) UpdateThreadSettingsV0(
+	ctx context.Context,
+	params serverCodexAppServerThreadSettingsUpdateParamsV0,
+) error {
+	var response struct{}
+	return protocol.callV0(ctx, "thread/settings/update", params.toJSONV0(), &response)
+}
+
 func (protocol serverCodexAppServerCommandProtocolV0) SetGoalV0(
 	ctx context.Context,
 	params serverCodexAppServerThreadGoalSetParamsV0,

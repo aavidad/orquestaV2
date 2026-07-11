@@ -25,6 +25,16 @@ func (protocol serverCodexAppServerLazyTmuxProtocolV0) StartThreadV0(
 	return protocol.Inner.StartThreadV0(ctx, params)
 }
 
+func (protocol serverCodexAppServerLazyTmuxProtocolV0) UpdateThreadSettingsV0(
+	ctx context.Context,
+	params serverCodexAppServerThreadSettingsUpdateParamsV0,
+) error {
+	if err := protocol.ensureV0(ctx); err != nil {
+		return err
+	}
+	return protocol.Inner.UpdateThreadSettingsV0(ctx, params)
+}
+
 func (protocol serverCodexAppServerLazyTmuxProtocolV0) SetGoalV0(
 	ctx context.Context,
 	params serverCodexAppServerThreadGoalSetParamsV0,

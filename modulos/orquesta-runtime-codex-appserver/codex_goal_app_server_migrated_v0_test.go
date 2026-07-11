@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"syscall"
@@ -47,15 +48,51 @@ func TestServerCodexAppServerGoalBackendV0LanzaThreadGoalYTurnMigradoV0(t *testi
 	}
 	if receipt.Status != orquestagoal.GoalStatusRunningV0 ||
 		receipt.ExternalGoalRef != "thread-ref-goal-001" ||
-		!containsStringMigratedTestV0(protocol.calls, "thread/start") ||
-		!containsStringMigratedTestV0(protocol.calls, "thread/goal/set") ||
-		!containsStringMigratedTestV0(protocol.calls, "turn/start") {
+		len(protocol.calls) < 4 ||
+		!reflect.DeepEqual(protocol.calls[:4], []string{"thread/start", "thread/settings/update", "thread/goal/set", "turn/start"}) {
 		t.Fatalf("receipt=%+v calls=%+v", receipt, protocol.calls)
+	}
+	if protocol.settingsParams != (serverCodexAppServerThreadSettingsUpdateParamsV0{ThreadID: "thread-ref-goal-001", Effort: "medium"}) {
+		t.Fatalf("settings params=%+v", protocol.settingsParams)
 	}
 	if protocol.turnParams.Model != "gpt-test" ||
 		protocol.turnParams.Effort != "medium" ||
 		protocol.turnParams.ApprovalPolicy != "never" {
 		t.Fatalf("turn params=%+v", protocol.turnParams)
+	}
+}
+
+func TestServerCodexAppServerGoalBackendV0FallaCerradoSiNoActualizaSettingsAntesDeGoalV0(t *testing.T) {
+	updateErr := errors.New("settings update unavailable")
+	protocol := &fakeCodexAppServerProtocolV0{
+		thread:            serverCodexAppServerThreadV0{ID: "thread-ref-settings-fail-001"},
+		updateSettingsErr: updateErr,
+	}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol:        protocol,
+		ReasoningEffort: "medium",
+		Sandbox:         "workspace-write",
+	}
+
+	receipt, err := backend.StartCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		GoalRef: "goal-ref-settings-fail-001",
+	})
+	if !errors.Is(err, updateErr) || receipt.IssueCode != "codex_app_server_thread_settings_update_failed" ||
+		!reflect.DeepEqual(protocol.calls, []string{"thread/start", "thread/settings/update"}) {
+		t.Fatalf("receipt=%+v err=%v calls=%+v", receipt, err, protocol.calls)
+	}
+}
+
+func TestCodexAppServerThreadSettingsUpdateParamsV0SerializaExactamenteV0(t *testing.T) {
+	params := serverCodexAppServerThreadSettingsUpdateParamsV0{
+		ThreadID: " thread-settings-json-001 ",
+		Effort:   " medium ",
+	}
+	if got := params.toJSONV0(); !reflect.DeepEqual(got, map[string]interface{}{
+		"threadId": "thread-settings-json-001",
+		"effort":   "medium",
+	}) {
+		t.Fatalf("json=%#v", got)
 	}
 }
 
@@ -679,9 +716,10 @@ func TestServerCodexAppServerGoalBackendV0ToolOutputPolicyYThreadReadGigantePorW
 		Timeout:    2 * time.Second,
 	}
 	backend := serverCodexAppServerGoalBackendV0{
-		Protocol:       protocol,
-		Sandbox:        "workspace-write",
-		ApprovalPolicy: "never",
+		Protocol:        protocol,
+		ReasoningEffort: "medium",
+		Sandbox:         "workspace-write",
+		ApprovalPolicy:  "never",
 	}
 	packet := orquestaruntimecodexgoal.CodexGoalStartPacketV0{
 		GoalRef:   "goal-ref-websocket-policy-big-read-001",
@@ -704,7 +742,17 @@ func TestServerCodexAppServerGoalBackendV0ToolOutputPolicyYThreadReadGigantePorW
 		!containsStringMigratedTestV0(startReceipt.EvidenceRefs, codexAppServerTurnStartToolOutputPolicyAcceptedV0) {
 		t.Fatalf("start receipt=%+v", startReceipt)
 	}
-	startCalls := readCodexAppServerWebSocketRecordsForTestV0(t, records, 3)
+	startCalls := readCodexAppServerWebSocketRecordsForTestV0(t, records, 4)
+	if got := []string{startCalls[0].Method, startCalls[1].Method, startCalls[2].Method, startCalls[3].Method}; !reflect.DeepEqual(got, []string{"thread/start", "thread/settings/update", "thread/goal/set", "turn/start"}) {
+		t.Fatalf("start methods=%+v", got)
+	}
+	settings := findCodexAppServerWebSocketRecordForTestV0(t, startCalls, "thread/settings/update")
+	if !reflect.DeepEqual(settings.Params, map[string]interface{}{
+		"threadId": "thread-ref-websocket-direct-001",
+		"effort":   "medium",
+	}) {
+		t.Fatalf("settings websocket=%#v", settings.Params)
+	}
 	turnStart := findCodexAppServerWebSocketRecordForTestV0(t, startCalls, "turn/start")
 	policy, ok := turnStart.Params["toolOutputPolicy"].(map[string]interface{})
 	if !ok {
@@ -1174,6 +1222,52 @@ printf '%s\n' '"}}}'
 	}
 }
 
+func TestCodexAppServerCommandProtocolThreadSettingsUpdateJSONV0(t *testing.T) {
+	root := t.TempDir()
+	fakeCodex := filepath.Join(root, "fake-codex-app-server")
+	capturePath := filepath.Join(root, "request.json")
+	body := `#!/bin/sh
+set -eu
+IFS= read -r _init
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{}}'
+IFS= read -r _initialized
+IFS= read -r _call
+printf '%s' "$_call" > "$1"
+printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{}}'
+`
+	if err := os.WriteFile(fakeCodex, []byte(body), 0o700); err != nil {
+		t.Fatalf("write fake codex app server: %v", err)
+	}
+	protocol := serverCodexAppServerCommandProtocolV0{
+		CommandPath: fakeCodex,
+		Args:        []string{capturePath},
+		Timeout:     2 * time.Second,
+	}
+	if err := protocol.UpdateThreadSettingsV0(context.Background(), serverCodexAppServerThreadSettingsUpdateParamsV0{
+		ThreadID: "thread-command-settings-001",
+		Effort:   "medium",
+	}); err != nil {
+		t.Fatalf("UpdateThreadSettingsV0: %v", err)
+	}
+	raw, err := os.ReadFile(capturePath)
+	if err != nil {
+		t.Fatalf("read request: %v", err)
+	}
+	var request struct {
+		Method string                 `json:"method"`
+		Params map[string]interface{} `json:"params"`
+	}
+	if err := json.Unmarshal(raw, &request); err != nil {
+		t.Fatalf("decode request: %v", err)
+	}
+	if request.Method != "thread/settings/update" || !reflect.DeepEqual(request.Params, map[string]interface{}{
+		"threadId": "thread-command-settings-001",
+		"effort":   "medium",
+	}) {
+		t.Fatalf("request=%#v", request)
+	}
+}
+
 func TestCodexAppServerLegacyRPCReaderResponseBudgetV0(t *testing.T) {
 	oversizedResponseBytes := codexAppServerCommandProtocolDefaultMaxResponseLineBytesV0 + 1
 	var payload bytes.Buffer
@@ -1401,6 +1495,9 @@ func writeCodexAppServerWebSocketScriptResponseForTestV0(conn net.Conn, method s
 	case "thread/start":
 		_, err := conn.Write(codexAppServerTestWebSocketFrameV0([]byte(`{"id":2,"result":{"thread":{"id":"thread-ref-websocket-direct-001"}}}`)))
 		return err
+	case "thread/settings/update":
+		_, err := conn.Write(codexAppServerTestWebSocketFrameV0([]byte(`{"id":2,"result":{}}`)))
+		return err
 	case "thread/goal/set":
 		_, err := conn.Write(codexAppServerTestWebSocketFrameV0([]byte(`{"id":2,"result":{"goal":{"threadId":"thread-ref-websocket-direct-001","status":"active"}}}`)))
 		return err
@@ -1482,23 +1579,25 @@ func (fake *fakeCodexAppServerBackendShutdownV0) ShutdownForcedStopV0(context.Co
 type fakeCodexAppServerProtocolV0 struct {
 	calls             []string
 	startParams       serverCodexAppServerThreadStartParamsV0
+	settingsParams    serverCodexAppServerThreadSettingsUpdateParamsV0
 	setParams         serverCodexAppServerThreadGoalSetParamsV0
 	turnParams        serverCodexAppServerTurnStartParamsV0
 	turnParamsHistory []serverCodexAppServerTurnStartParamsV0
 	getThreadID       string
 	onStartTurn       func()
 
-	thread           serverCodexAppServerThreadV0
-	goal             serverCodexAppServerThreadGoalV0
-	turn             serverCodexAppServerTurnV0
-	setGoalErr       error
-	startTurnErrs    []error
-	getGoalErr       error
-	observedGoal     *serverCodexAppServerThreadGoalV0
-	readThread       serverCodexAppServerThreadReadV0
-	readThreadErr    error
-	readThreadID     string
-	readIncludeTurns bool
+	thread            serverCodexAppServerThreadV0
+	goal              serverCodexAppServerThreadGoalV0
+	turn              serverCodexAppServerTurnV0
+	setGoalErr        error
+	updateSettingsErr error
+	startTurnErrs     []error
+	getGoalErr        error
+	observedGoal      *serverCodexAppServerThreadGoalV0
+	readThread        serverCodexAppServerThreadReadV0
+	readThreadErr     error
+	readThreadID      string
+	readIncludeTurns  bool
 }
 
 func (fake *fakeCodexAppServerProtocolV0) StartThreadV0(
@@ -1508,6 +1607,15 @@ func (fake *fakeCodexAppServerProtocolV0) StartThreadV0(
 	fake.calls = append(fake.calls, "thread/start")
 	fake.startParams = params
 	return fake.thread, nil
+}
+
+func (fake *fakeCodexAppServerProtocolV0) UpdateThreadSettingsV0(
+	_ context.Context,
+	params serverCodexAppServerThreadSettingsUpdateParamsV0,
+) error {
+	fake.calls = append(fake.calls, "thread/settings/update")
+	fake.settingsParams = params
+	return fake.updateSettingsErr
 }
 
 func (fake *fakeCodexAppServerProtocolV0) SetGoalV0(

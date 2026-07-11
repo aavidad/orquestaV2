@@ -1069,6 +1069,13 @@ func (fake *fakeCodexAppServerProtocolV0) StartThreadV0(
 	return fake.thread, nil
 }
 
+func (fake *fakeCodexAppServerProtocolV0) UpdateThreadSettingsV0(
+	context.Context,
+	serverCodexAppServerThreadSettingsUpdateParamsV0,
+) error {
+	return nil
+}
+
 func (fake *fakeCodexAppServerProtocolV0) SetGoalV0(
 	_ context.Context,
 	params serverCodexAppServerThreadGoalSetParamsV0,

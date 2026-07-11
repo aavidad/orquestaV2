@@ -70,6 +70,7 @@ type serverCodexAppServerGoalBackendV0 struct {
 
 type serverCodexAppServerProtocolPortV0 interface {
 	StartThreadV0(context.Context, serverCodexAppServerThreadStartParamsV0) (serverCodexAppServerThreadV0, error)
+	UpdateThreadSettingsV0(context.Context, ThreadSettingsUpdateParamsV0) error
 	SetGoalV0(context.Context, serverCodexAppServerThreadGoalSetParamsV0) (serverCodexAppServerThreadGoalV0, error)
 	StartTurnV0(context.Context, serverCodexAppServerTurnStartParamsV0) (serverCodexAppServerTurnV0, error)
 	GetGoalV0(context.Context, string) (*serverCodexAppServerThreadGoalV0, error)
@@ -106,6 +107,15 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 	threadID := strings.TrimSpace(thread.ID)
 	if threadID == "" {
 		return codexAppServerStartReceiptV0(packet, "", "codex_app_server_thread_id_missing"), errors.New("codex_app_server_thread_id_missing")
+	}
+	if effort := strings.TrimSpace(backend.ReasoningEffort); effort != "" {
+		if err := backend.Protocol.UpdateThreadSettingsV0(ctx, serverCodexAppServerThreadSettingsUpdateParamsV0{
+			ThreadID: threadID,
+			Effort:   effort,
+		}); err != nil {
+			code := codexAppServerIssueCodeForErrorV0(err, "codex_app_server_thread_settings_update_failed")
+			return codexAppServerStartReceiptV0(packet, threadID, code), err
+		}
 	}
 	if hasWriteSetBaseline {
 		backend.recordCodexAppServerRuntimeWriteSetBaselineV0(threadID, writeSetBaseline)
