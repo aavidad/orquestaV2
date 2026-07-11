@@ -65,6 +65,15 @@ write-set, test nuevo o resultado durable), contabilizar lecturas/reintentos y
 replanificar con contexto mas estrecho antes de alcanzar el limite duro. No
 usar un simple checkpoint de inicio como evidencia de progreso util.
 
+Diseño para el corte posterior, sujeto a prueba empirica: checkpoint tipado con
+secuencia, tokens acumulados, revision de contexto y una clase material
+`diff|test|result|receipt|none`. Solo renuevan el tramo un diff nuevo verificado
+contra baseline/write-set, un test durable, un result o un receipt causal. Un
+warning temprano debe preceder al replan; el replan crea un Goal causal nuevo,
+reduce contexto y conserva artefactos/baseline. Si sigue sin progreso, aplica
+el hard stop confirmado de `222`. No inferir avance desde summary, nombres de
+fichero, heartbeat ni refs que solo contengan la palabra checkpoint.
+
 ## BUG-ORQ-20260711-223: `observe` manual dio 500 durante observacion residente
 
 Mientras el goal anterior estaba `running`, el observador residente produjo
