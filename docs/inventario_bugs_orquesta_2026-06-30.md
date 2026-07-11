@@ -4209,6 +4209,25 @@ stack verdes; evidencia y refs en la
 [incidencia de limpieza](incidencias/incidencia_orquesta_limpieza_config_metricas_falsas_2026-07-11.md)
 y el [recibo A/B](runbooks/resultado_ab_bug241_243_2026-07-11.md).
 
+BUG `BUG-ORQ-20260711-244` (abierto, paralelismo/worktree): dos goals con
+write-sets disjuntos fueron lanzados en paralelo sobre el mismo worktree
+fisico. El guard de g01 atribuyo el rename valido de g02 como escritura fuera
+de scope y bloqueo Guardian con `codex_app_server_runtime_write_set_violation`.
+No es seguro allowlistear paths hermanos: se exige worktree fisico por goal,
+lease/ownership, CWD y attestor resueltos por goal, e integracion gobernada de
+commits sobre una sola rama canonica. Evidencia y criterios en la
+[incidencia de worktree paralelo](incidencias/incidencia_orquesta_parallel_shared_worktree_cross_goal_2026-07-11.md).
+
+BUG `BUG-ORQ-20260711-245` (abierto, limpieza/cambios destructivos tipados): un
+rename 100% solicitado, con origen y destino dentro del write-set, se clasifica
+siempre como `renamed_or_moved_path`; el governor lo reduce a
+`material_class=none` y el runtime no puede distinguirlo de un movimiento no
+autorizado. El movimiento fue verificado e integrado como `269de5ad2`, pero el
+cierre autonomo exige transportar autorizacion exacta rename/remove hasta el
+verificador, conservar evidencia advisory y bloquear solo cambios destructivos
+no autorizados. Detalle en la
+[incidencia de worktree paralelo](incidencias/incidencia_orquesta_parallel_shared_worktree_cross_goal_2026-07-11.md).
+
 Avance 2026-07-11: `b96e9b115` añade refs obligatorias de criterios
 verificables al contrato Goal; el transporte posterior añade
 `acceptance_checks` tipados a autoprogramacion V0/V1 y los publica por MCP. Los
