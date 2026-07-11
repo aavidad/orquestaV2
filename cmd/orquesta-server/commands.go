@@ -134,6 +134,10 @@ func runServerCommandV0(args []string, _ io.Writer, stderr io.Writer) int {
 			RuntimeIdentity: preflight.RuntimeIdentity,
 		}, preflight.Issue.Code, stderr)
 	}
+	if err := validateCodexCommandAvailableV0(); err != nil {
+		_, _ = fmt.Fprintf(stderr, "orquesta-server: %v\n", err)
+		return 1
+	}
 	serverConfig, err := serverConfigFromEnvWithProjectConfigPathV0(options.ConfigPath)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server: %v\n", err)

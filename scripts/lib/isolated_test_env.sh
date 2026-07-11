@@ -90,25 +90,26 @@ PY
 }
 
 orquesta_use_isolated_test_env() {
-  local root="${1:-}" cache_base port_seed port_base range session_ref preflight_script preflight_output exports
+  local root="${1:-}" cache_base port_seed port_base range session_ref preflight_script preflight_output exports caller_umask
   orquesta_isolated_test_preflight || return
   cache_base="${ORQUESTA_TEST_CACHE_ROOT:-/srv/orquesta-self/runtime/test-cache}"
   if [ -z "$root" ]; then root="$cache_base/isolated/${ORQUESTA_TEST_RUN_ID:-run-$(date +%s%N)-$$}"; fi
+  caller_umask="$(umask)"
   umask 077
-  orquesta_private_test_root "$root" || return
+  orquesta_private_test_root "$root" || { local rc=$?; umask "$caller_umask"; return "$rc"; }
   preflight_script="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/orquesta_session_disk_preflight.sh"
-  [ -x "$preflight_script" ] || { echo "isolated_test_session_disk_preflight_missing" >&2; return 2; }
+  [ -x "$preflight_script" ] || { echo "isolated_test_session_disk_preflight_missing" >&2; umask "$caller_umask"; return 2; }
   session_ref="${ORQUESTA_ISOLATED_TEST_SESSION_REF:-isolated-$(printf '%s' "$root" | cksum | awk '{print $1}')}"
-  preflight_output="$("$preflight_script" --preflight --init-session-base --session-ref "$session_ref" --session-base "$root" --workdir "$(pwd -P)")" || return
+  preflight_output="$("$preflight_script" --preflight --init-session-base --session-ref "$session_ref" --session-base "$root" --workdir "$(pwd -P)")" || { local rc=$?; umask "$caller_umask"; return "$rc"; }
   exports="$(printf '%s\n' "$preflight_output" | sed -n 's/^export //p')"
-  [ -n "$exports" ] || { echo "isolated_test_session_disk_preflight_exports_missing" >&2; return 2; }
+  [ -n "$exports" ] || { echo "isolated_test_session_disk_preflight_exports_missing" >&2; umask "$caller_umask"; return 2; }
   eval "$exports"
 
   port_seed="$(printf '%s' "$root" | cksum | awk '{print $1}')"
   port_base="${ORQUESTA_TEST_PORT_BASE:-$((20000 + port_seed % 25000))}"
   range="${ORQUESTA_TEST_PORT_RANGE:-63}"
-  case "$port_base:$range" in *[!0-9:]*) echo "isolated_test_port_config_invalid" >&2; return 2;; esac
-  orquesta_acquire_test_port_lease "$root" "$range" "$port_base" || return
+  case "$port_base:$range" in *[!0-9:]*) echo "isolated_test_port_config_invalid" >&2; umask "$caller_umask"; return 2;; esac
+  orquesta_acquire_test_port_lease "$root" "$range" "$port_base" || { local rc=$?; umask "$caller_umask"; return "$rc"; }
 
   export ORQUESTA_ISOLATED_TEST_ENV_REQUESTED_ROOT="$root"
   export ORQUESTA_ISOLATED_TEST_ENV_ROOT="$root"
@@ -116,6 +117,7 @@ orquesta_use_isolated_test_env() {
   export ORQUESTA_ISOLATED_TEST_SESSION_BASE="$root"
   export ORQUESTA_ISOLATED_TEST_SESSION_ROOT="$root/$session_ref"
   export ORQUESTA_ISOLATED_TEST_SESSION_RECEIPT="$root/$session_ref/session_disk_receipt.json"
+  umask "$caller_umask"
 }
 
 orquesta_cleanup_isolated_test_env() {

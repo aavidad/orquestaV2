@@ -103,6 +103,14 @@ grep -q 'orquesta_test_batches=not_ok' "$test_root/list-fail.out"
 
 # Raíz symlink se rehúsa y dos consumidores no pueden compartir el mismo rango.
 source "$ROOT/scripts/lib/isolated_test_env.sh"
+
+# La máscara temporal de aislamiento no debe contaminar al consumidor, tampoco
+# cuando la preparación falla.
+umask 022
+env ORQUESTA_TEST_CACHE_ROOT="$test_root/cache" ORQUESTA_TEST_PORT_LEASE_ROOT="$test_root/mode-leases" ORQUESTA_SESSION_DISK_BUDGET_BYTES=1 ORQUESTA_SESSION_DISK_DF_BIN="$test_root/df-fake" \
+  bash -c 'source "$1"; umask 022; orquesta_use_isolated_test_env "$2"; test "$(umask)" = 0022; test "$(stat -c %a "$2")" = 700; test "$(stat -c %a "$ORQUESTA_TEST_PORT_LOCK_DIR"/ports-*.lock)" = 600; orquesta_cleanup_isolated_test_env "$2"; umask 022; ln -s "$2" "$2-link"; orquesta_use_isolated_test_env "$2-link" >/dev/null 2>&1 && exit 1 || true; test "$(umask)" = 0022' _ \
+  "$ROOT/scripts/lib/isolated_test_env.sh" "$test_root/mode-root"
+
 mkdir -m 700 "$test_root/real-root"
 ln -s "$test_root/real-root" "$test_root/root-link"
 set +e
