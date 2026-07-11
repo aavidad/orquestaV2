@@ -314,7 +314,19 @@ cuando cambien versiones, runtimes o skills.
   limites y metadata editable en una superficie unica por composicion/app. No
   dupliques variables con nombres distintos repartidas por el codigo; los
   adaptadores deben consumir constantes/registro canonico y documentar ahi los
-  cambios que requieran reinicio.
+  cambios que requieran reinicio. Regla estricta: queda prohibido crear,
+  declarar, leer o aplicar una variable de entorno, default, limite o clave de
+  configuracion fuera del fichero/registro canonico de esa composicion/app. Antes
+  de anadir una clave, el agente debe buscar en ese registro y en `effective_config`
+  si ya existe una variable con semantica igual o reutilizable; si existe, debe
+  reutilizarla y no crear un alias nuevo. Una clave nueva solo se admite cuando
+  ninguna existente representa la necesidad: debe incorporarse primero al
+  registro canonico, con tipo, default, validacion, sensibilidad, alcance,
+  requisito de reinicio y proyeccion efectiva documentados. Fuera del registro,
+  adaptadores y procesos hijos solo consumen accesores/constantes canonicos: no
+  se permiten `os.Getenv`, `os.LookupEnv`, strings de entorno ad hoc ni filtros
+  por prefijo amplio. Los aliases temporales de migracion deben declararse en el
+  mismo registro, apuntar a la clave canonica y llevar retirada verificable.
 - Pendiente prioritario 2026-06-08: ver T259 en
   `docs/autoprogramacion_orquesta_pendientes_2026-05-23.md`. Orquesta debe
   autoverificarse y parar cooperativamente cuando consuma CPU de forma sostenida
