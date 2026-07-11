@@ -1,7 +1,7 @@
 # Incidencia 208AC: el observador cancela la atestacion real a los dos segundos
 
 Fecha: 2026-07-11
-Estado: en verificacion E2E
+Estado: cerrado funcionalmente; residual de concurrencia documentado
 Area: nucleo goal-first / observador residente / atestacion independiente
 
 ## Resumen
@@ -52,3 +52,20 @@ segundos ni aceptar resultados autodeclarados.
 3. La API sigue devolviendo snapshot parcial acotado si el operador observa
    mientras la atestacion esta en curso.
 4. No se lanza rework Codex por timeout o infraestructura del attestor.
+
+## Cierre verificado
+
+El E2E `/tmp/orquesta-208aa-e2e-autonomous`, ejecutado con binario reproducible
+`4a4ce945d`, cerro sin intervencion manual:
+
+- el observador residente detecto el resultado `complete`;
+- persistio dos receipts independientes `passed`;
+- la closure quedo `accepted` con las dos verificaciones de identidad;
+- no aparecio ningun rework;
+- la prueba anterior `/tmp/orquesta-208aa-e2e-accepted` conserva el 504 y
+  snapshot parcial de la API, demostrando que la respuesta HTTP sigue acotada;
+- el runtime final termino sin procesos residuales.
+
+El scheduler concurrente citado arriba sigue como mejora estructural de escala,
+pero ya no bloquea el cierre autonomo funcional ni rebaja la autoridad de las
+atestaciones.

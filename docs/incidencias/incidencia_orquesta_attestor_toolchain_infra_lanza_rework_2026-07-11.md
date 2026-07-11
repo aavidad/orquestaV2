@@ -1,7 +1,7 @@
 # Incidencia 208AA: el attestor sin toolchain lanza rework de codigo
 
 Fecha: 2026-07-11
-Estado: en verificacion E2E
+Estado: cerrado funcionalmente
 Area: nucleo goal-first / atestacion independiente / rework
 
 ## Resumen
@@ -116,5 +116,26 @@ El corte siguiente construye `PATH` exclusivamente desde los directorios de
 `allowed_commands` y `git_command_path`, ordenados y sin heredar el valor del
 padre. Tambien hace que cualquier error operativo devuelto por el attestor se
 persista como `goal_required_test_attestor_infrastructure_failed`; replay
-conserva ese codigo y no vuelve a lanzar attestor ni rework. Falta el E2E final
-`accepted` para cerrar la incidencia.
+conserva ese codigo y no vuelve a lanzar attestor ni rework.
+
+## Cierre verificado
+
+Los commits `b9205ca71` y `4a4ce945d` cierran el corte. El E2E final uso el
+binario reproducible `4a4ce945d` y dejo que el observador residente trabajase
+sin llamadas manuales:
+
+- runtime: `/tmp/orquesta-208aa-e2e-autonomous`;
+- run: `autoprog-attestor-e2e-autonomous-20260711`;
+- goal: `goal-ref-task-autoprogramming-1538232ca26d-g01`;
+- resultado `complete`, closure `accepted`;
+- dos receipts `passed`, uno por required test;
+- ambas verificaciones declaran `verified=true` e `independent=true`, con
+  principals y credenciales distintos;
+- snapshot de dependencias, preflights, salidas y hashes antes/despues quedan
+  citados por la closure;
+- no se materializo goal de rework;
+- shutdown retiro el backend en el primer intento y cerro el servidor en el
+  segundo, sin procesos residuales.
+
+La incompatibilidad adicional del timeout residente se separo como 208AC y
+tambien quedo cerrada funcionalmente por este E2E.
