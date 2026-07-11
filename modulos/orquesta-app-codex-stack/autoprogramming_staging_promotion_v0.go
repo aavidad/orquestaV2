@@ -211,6 +211,7 @@ func (stack StackV0) autoprogrammingPromotionGoalStateRequestV0(
 	return orquestaautoprogramming.AutoprogrammingStagingPromotionRequestV0{
 		RequestRef:           firstNonEmptyQueuedSourceV0(state.Spec.RequestRef, run.AppSpecRef),
 		RunRef:               run.RunID,
+		GoalRef:              state.GoalRef,
 		ProjectRef:           firstNonEmptyQueuedSourceV0(state.Spec.ProjectRef, run.ProjectRef),
 		WorktreeRef:          autoprogrammingPromotionGoalContextRefV0(state.Spec.ContextRefs, "worktree", "worktree_ref:"),
 		BranchRef:            autoprogrammingPromotionGoalContextRefV0(state.Spec.ContextRefs, "branch", "branch_ref:"),

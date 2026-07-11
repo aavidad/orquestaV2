@@ -34,6 +34,7 @@ type AutoprogrammingRequiredTestEvidenceV0 struct {
 type AutoprogrammingStagingPromotionRequestV0 struct {
 	RequestRef           string                                  `json:"request_ref,omitempty"`
 	RunRef               string                                  `json:"run_ref"`
+	GoalRef              string                                  `json:"goal_ref,omitempty"`
 	ProjectRef           string                                  `json:"project_ref"`
 	WorktreeRef          string                                  `json:"worktree_ref"`
 	BranchRef            string                                  `json:"branch_ref"`
@@ -64,6 +65,7 @@ type AutoprogrammingStagingPromotionCommandV0 struct {
 	PromotionRef string   `json:"promotion_ref"`
 	RequestRef   string   `json:"request_ref,omitempty"`
 	RunRef       string   `json:"run_ref"`
+	GoalRef      string   `json:"goal_ref,omitempty"`
 	ProjectRef   string   `json:"project_ref"`
 	WorktreeRef  string   `json:"worktree_ref"`
 	BranchRef    string   `json:"branch_ref"`
@@ -76,6 +78,7 @@ type AutoprogrammingStagingCleanupCommandV0 struct {
 	PromotionRef string   `json:"promotion_ref"`
 	RequestRef   string   `json:"request_ref,omitempty"`
 	RunRef       string   `json:"run_ref"`
+	GoalRef      string   `json:"goal_ref,omitempty"`
 	ProjectRef   string   `json:"project_ref"`
 	WorktreeRef  string   `json:"worktree_ref"`
 	BranchRef    string   `json:"branch_ref"`
@@ -138,6 +141,7 @@ func normalizeAutoprogrammingStagingPromotionRequestV0(
 ) AutoprogrammingStagingPromotionRequestV0 {
 	request.RequestRef = strings.TrimSpace(request.RequestRef)
 	request.RunRef = strings.TrimSpace(request.RunRef)
+	request.GoalRef = strings.TrimSpace(request.GoalRef)
 	request.ProjectRef = strings.TrimSpace(request.ProjectRef)
 	request.WorktreeRef = strings.TrimSpace(request.WorktreeRef)
 	request.BranchRef = strings.TrimSpace(request.BranchRef)
@@ -234,11 +238,13 @@ func autoprogrammingStagingPromotionReadyV0(
 		ArchiveRef:   archiveRef,
 		PromotionCommand: AutoprogrammingStagingPromotionCommandV0{
 			PromotionRef: promotionRef, RequestRef: request.RequestRef, RunRef: request.RunRef,
+			GoalRef:    request.GoalRef,
 			ProjectRef: request.ProjectRef, WorktreeRef: request.WorktreeRef, BranchRef: request.BranchRef,
 			WriteSet: request.WriteSet, EvidenceRefs: evidence,
 		},
 		CleanupCommand: AutoprogrammingStagingCleanupCommandV0{
 			ArchiveRef: archiveRef, PromotionRef: promotionRef, RequestRef: request.RequestRef, RunRef: request.RunRef,
+			GoalRef:    request.GoalRef,
 			ProjectRef: request.ProjectRef, WorktreeRef: request.WorktreeRef, BranchRef: request.BranchRef,
 			WriteSet: request.WriteSet, EvidenceRefs: evidence,
 		},

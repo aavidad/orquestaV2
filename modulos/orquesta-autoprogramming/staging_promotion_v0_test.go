@@ -6,6 +6,7 @@ func TestEvaluateAutoprogrammingStagingPromotionV0ReadyV0(t *testing.T) {
 	decision := EvaluateAutoprogrammingStagingPromotionV0(AutoprogrammingStagingPromotionRequestV0{
 		RequestRef:         "request-ref-autoprogramming-promotion-001",
 		RunRef:             "run-ref-autoprogramming-promotion-001",
+		GoalRef:            "goal-ref-autoprogramming-promotion-001",
 		ProjectRef:         "project-ref-autoprogramming-promotion-001",
 		WorktreeRef:        "worktree-ref-autoprogramming-promotion-001",
 		BranchRef:          "branch-ref-autoprogramming-promotion-001",
@@ -26,6 +27,8 @@ func TestEvaluateAutoprogrammingStagingPromotionV0ReadyV0(t *testing.T) {
 		decision.Status != AutoprogrammingStagingPromotionStatusReadyV0 ||
 		decision.PromotionCommand.WorktreeRef != "worktree-ref-autoprogramming-promotion-001" ||
 		decision.PromotionCommand.BranchRef != "branch-ref-autoprogramming-promotion-001" ||
+		decision.PromotionCommand.GoalRef != "goal-ref-autoprogramming-promotion-001" ||
+		decision.CleanupCommand.GoalRef != "goal-ref-autoprogramming-promotion-001" ||
 		decision.CleanupCommand.ArchiveRef == "" {
 		t.Fatalf("decision=%+v", decision)
 	}
