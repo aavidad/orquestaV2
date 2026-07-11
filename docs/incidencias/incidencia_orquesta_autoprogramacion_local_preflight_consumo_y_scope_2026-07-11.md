@@ -100,6 +100,13 @@ Avance de nucleo 2026-07-11:
   contra baseline y write-set desde el adaptador Codex y cablea clasificador y
   store CAS en la composicion real. Los cambios fuera del write-set no renuevan
   el presupuesto.
+- `93b3715c8` separa el puerto de lectura del puerto CAS para que las
+  proyecciones dependan solo del contrato minimo.
+- `2b31e156f` hace que MCP, HTTP y `runs/control` proyecten la decision durable;
+  si existe estado valido ya no recalculan consumo ni infieren checkpoints por
+  nombres. Ausencia real conserva compatibilidad; error o estado invalido
+  bloquea la inferencia y publica diagnostico. El error `not found` es tipado,
+  no se reconoce por texto.
 
 Hallazgo estructural durante la integracion: `autoprogramming/status` tomaba
 `UsageSummary.TotalTokens` agregado del run, mientras el app-server dispone de
@@ -108,13 +115,18 @@ un umbral. No se pueden sumar ni intercambiar ambos contadores. La politica
 nueva consumira exclusivamente la observacion tipada por goal; MCP quedara como
 proyeccion de la decision persistida y no parseara summaries ni nombres.
 
-Pendiente para cerrar `226`: proyectar en MCP la decision persistida y retirar
-su clasificacion duplicada por strings/tokens; clasificar `test` solo desde
-atestacion independiente durable (nunca desde resultados autodeclarados por el
-agente); y ejecutar una prueba empirica con un goal real, acotado y util. Las
-suites completas de `autoprogramming`, `state-file`, `server`,
+Pendiente para cerrar `226`: clasificar `test` solo desde atestacion
+independiente durable (nunca desde resultados autodeclarados por el agente) y
+ejecutar una prueba empirica con un goal real, acotado y util. Las suites
+completas de `autoprogramming`, `state-file`, `mcp`, `app-gateway`, `server`,
 `app-codex-stack` y `cmd/orquesta-server` pasan tras el cableado, pero esa
 evidencia offline aun no cierra el bug operativo.
+
+Incidencia de delegacion retenida: el primer worker Terra termino sin editar
+porque el proveedor devolvio `model at capacity`; se cerro esa instancia y el
+mismo write-set se relanzo con Sol `high`, que entrego el corte MCP y sus tests.
+No se atribuye avance a la ejecucion fallida ni se cambia la politica de modelo
+por este bloqueo externo puntual.
 
 ## BUG-ORQ-20260711-223: `observe` manual dio 500 durante observacion residente
 
