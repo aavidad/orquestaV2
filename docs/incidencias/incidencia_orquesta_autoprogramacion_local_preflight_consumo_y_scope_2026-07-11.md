@@ -107,6 +107,11 @@ Avance de nucleo 2026-07-11:
   nombres. Ausencia real conserva compatibilidad; error o estado invalido
   bloquea la inferencia y publica diagnostico. El error `not found` es tipado,
   no se reconoce por texto.
+- `cb87c6108` completa la clase `test`: solo renueva progreso desde una
+  `LastClosure` aceptada y persistida que cubra todos los tests requeridos con
+  verificaciones `verified` e `independent`, principals y credenciales
+  distintos y trust policy coincidente. `RequiredTestResults` autodeclarados
+  por el implementador se ignoran expresamente.
 
 Hallazgo estructural durante la integracion: `autoprogramming/status` tomaba
 `UsageSummary.TotalTokens` agregado del run, mientras el app-server dispone de
@@ -115,9 +120,10 @@ un umbral. No se pueden sumar ni intercambiar ambos contadores. La politica
 nueva consumira exclusivamente la observacion tipada por goal; MCP quedara como
 proyeccion de la decision persistida y no parseara summaries ni nombres.
 
-Pendiente para cerrar `226`: clasificar `test` solo desde atestacion
-independiente durable (nunca desde resultados autodeclarados por el agente) y
-ejecutar una prueba empirica con un goal real, acotado y util. Las suites
+Pendiente para cerrar `226`: ejecutar una prueba empirica con un goal real,
+acotado y util. El revisor propone T9104 del backlog de piloto, con
+`MAX_REQUESTS=1`, write-set documental estrecho y consentimiento previo del
+operador para el gasto. Las suites
 completas de `autoprogramming`, `state-file`, `mcp`, `app-gateway`, `server`,
 `app-codex-stack` y `cmd/orquesta-server` pasan tras el cableado, pero esa
 evidencia offline aun no cierra el bug operativo.
