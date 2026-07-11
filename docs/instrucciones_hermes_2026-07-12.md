@@ -95,6 +95,32 @@ Es decir: conectores se cierra EJECUTANDO Y CONSERVANDO EVIDENCIA, no
 programando adaptadores nuevos. No conviertas "falta smoke" en "falta
 adaptador".
 
+## CANAL DIRECTO DE MENSAJES (hallazgo del revisor 2026-07-12)
+
+Pregunta del operador: "¿no seria bueno poder mandarle mensajes directos por
+MCP?". Respuesta: **ya existe y esta implementado**, solo falta cablearlo.
+
+Verificado por el revisor:
+- Tool MCP: `orquesta.operator.director.message.v0` (registrada, con store
+  durable; contrato en `modulos/orquesta-operator-director-channel`):
+  campos `sender_ref`, `target_ref`, `intent` (`instruction`), `body`.
+- Endpoint MCP vivo del servidor: `POST /mcp` (JSON-RPC `tools/call`).
+- Conector Hermes ya implementado: `modulos/orquesta-operator-mcp-hermes`
+  (`NewHermesOperatorMCPConnectorV0`) y su config
+  (`cmd/orquesta-server/hermes_operator_config_v0.go`, bloque
+  `hermes_operator` de `orquesta.config.json`: `enabled`, `base_url`,
+  `mcp_path`, `api_key_file`, tools y connector refs).
+
+Estado real: al llamar la tool en el servidor vivo devuelve
+`operator_message_port_unavailable`, porque el servicio se construye con el
+`operatorConnector` y este es **nil**: el bloque `hermes_operator` no esta
+habilitado en la config del servidor
+(`cmd/orquesta-server/stack.go:500`, `newOperatorDirectorChannelServiceV0`).
+
+Esto es un HUECO DE CONECTORES de manual: la superficie existe pero el
+bootstrap no inyecta el binding. Encaja exactamente con lo que predijo el
+diagnostico T9201.
+
 ## Cola de trabajo
 
 - [x] H0-diagnostico: hecho por Orquesta (T9201) y aceptado por el revisor.
@@ -106,6 +132,12 @@ adaptador".
   grupo (MCP y HTTP). Debe fallar si falta un binding.
 - [ ] H0c: smoke del ciclo delivery -> review -> closure causal (ACK,
   delivery, review), con evidencia durable enlazada en la matriz de pruebas.
+- [ ] H0d (canal directo, alto valor para el operador): habilitar el bloque
+  `hermes_operator` en la config del servidor y cablear el conector para que
+  `orquesta.operator.director.message.v0` deje de devolver
+  `operator_message_port_unavailable`. Criterio de cierre: un `tools/call`
+  contra `POST /mcp` con `target_ref` de Hermes entrega el mensaje y queda
+  registro durable; test de composicion que falle si el binding no se inyecta.
 - [ ] H1: BUGS. Coge los bugs abiertos del inventario
   (`docs/inventario_bugs_orquesta_2026-06-30.md`) de uno en uno, empezando por
   los reproducibles en local. Para cada uno: reproducir, arreglar, test que
