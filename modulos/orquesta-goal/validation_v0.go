@@ -467,6 +467,7 @@ func NormalizeGoalWorkResultV0(result GoalWorkResultV0) GoalWorkResultV0 {
 	result.ExternalGoalRef = strings.TrimSpace(result.ExternalGoalRef)
 	result.Summary = strings.TrimSpace(result.Summary)
 	result.ContextBudget = NormalizeGoalContextBudgetV0(result.ContextBudget)
+	result.UsageObservation = NormalizeGoalUsageObservationV0(result.UsageObservation)
 	for i := range result.ArtifactRefs {
 		result.ArtifactRefs[i] = strings.TrimSpace(result.ArtifactRefs[i])
 	}
@@ -763,6 +764,7 @@ func ValidateGoalWorkResultV0(result GoalWorkResultV0) []GoalWorkIssueV0 {
 			validateRequiredGoalRefV0(&issues, "repair_receipt.evidence_refs", evidenceRef)
 		}
 	}
+	issues = append(issues, ValidateGoalUsageObservationV0(result.UsageObservation)...)
 	return issues
 }
 

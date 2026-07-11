@@ -60,6 +60,10 @@ const (
 	ErrGoalRequiredTestSnapshotMissingV0                   = "goal_required_test_final_snapshot_missing"
 	ErrGoalRequiredTestSnapshotMismatchV0                  = "goal_required_test_final_snapshot_mismatch"
 	ErrGoalRequiredAcceptanceCriterionAttestationMissingV0 = "goal_required_acceptance_criterion_attestation_missing"
+	ErrGoalUsageObservationInvalidV0                       = "goal_usage_observation_invalid"
+	ErrGoalUsageObservationTimestampInvalidV0              = "goal_usage_observation_timestamp_invalid"
+	ErrGoalUsageObservationEvidenceRequiredV0              = "goal_usage_observation_evidence_required"
+	ErrGoalUsageObservationSourceRequiredV0                = "goal_usage_observation_source_required"
 )
 
 const (
@@ -192,6 +196,7 @@ type GoalWorkResultV0 struct {
 	ExternalGoalRef       string                         `json:"external_goal_ref,omitempty"`
 	Summary               string                         `json:"summary,omitempty"`
 	ContextBudget         GoalContextBudgetV0            `json:"context_budget,omitempty"`
+	UsageObservation      GoalUsageObservationV0         `json:"usage_observation,omitzero"`
 	ArtifactRefs          []string                       `json:"artifact_refs,omitempty"`
 	ArtifactPaths         []string                       `json:"artifact_paths,omitempty"`
 	MaterializedArtifacts []GoalMaterializedArtifactV0   `json:"materialized_artifacts,omitempty"`
@@ -202,6 +207,16 @@ type GoalWorkResultV0 struct {
 	EvidenceRefs          []string                       `json:"evidence_refs,omitempty"`
 	Issues                []GoalWorkIssueV0              `json:"issues,omitempty"`
 	RepairReceipt         *GoalWorkResultRepairReceiptV0 `json:"repair_receipt,omitempty"`
+}
+
+// GoalUsageObservationV0 carries usage reported by a goal execution. It is
+// descriptive evidence, not a budget policy or an enforcement decision.
+type GoalUsageObservationV0 struct {
+	TokensAccumulated int64    `json:"tokens_accumulated,omitempty"`
+	RuntimeSeconds    int64    `json:"runtime_seconds,omitempty"`
+	ObservedAt        string   `json:"observed_at,omitempty"`
+	EvidenceRefs      []string `json:"evidence_refs,omitempty"`
+	SourceRef         string   `json:"source_ref,omitempty"`
 }
 
 // GoalWorkResultJSONDecodeV0 is the neutral outcome of reading a durable goal
