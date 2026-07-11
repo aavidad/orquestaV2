@@ -33,6 +33,12 @@ func (source CodexStackMaterialProgressEvidenceV0) ClassifyMaterialProgressV0(
 		base.Verified = true
 		return base, nil
 	}
+	if refs, ok := goalMaterialProgressIndependentTestEvidenceV0(state); ok {
+		base.MaterialClass = orquestaautoprogramming.MaterialProgressClassTestV0
+		base.EvidenceRefs = []string{goalMaterialProgressEvidenceRefV0("test", refs)}
+		base.Verified = true
+		return base, nil
+	}
 	if goalMaterialProgressTerminalResultV0(result) {
 		base.MaterialClass = orquestaautoprogramming.MaterialProgressClassResultV0
 		base.EvidenceRefs = []string{goalMaterialProgressResultEvidenceRefV0(result)}
@@ -40,6 +46,52 @@ func (source CodexStackMaterialProgressEvidenceV0) ClassifyMaterialProgressV0(
 		return base, nil
 	}
 	return source.classifyMaterialProgressDiffV0(ctx, state, base)
+}
+
+func goalMaterialProgressIndependentTestEvidenceV0(
+	state orquestagoal.GoalWorkStateV0,
+) ([]string, bool) {
+	spec := orquestagoal.NormalizeGoalWorkSpecV0(state.Spec)
+	closure := state.LastClosure
+	if closure == nil || !closure.Accepted ||
+		!spec.ClosurePolicy.RequireIndependentRequiredTestAttestation ||
+		len(spec.RequiredTests) == 0 {
+		return nil, false
+	}
+	refs := append([]string(nil), closure.EvidenceRefs...)
+	for _, required := range spec.RequiredTests {
+		testRef := strings.TrimSpace(required.TestRef)
+		matched := false
+		for _, verification := range closure.AttestationVerifications {
+			if strings.TrimSpace(verification.TestRef) != testRef ||
+				!goalMaterialProgressIdentityVerificationValidV0(spec, verification) {
+				continue
+			}
+			refs = append(refs, verification.AttestationRef)
+			refs = append(refs, verification.EvidenceRefs...)
+			matched = true
+			break
+		}
+		if testRef == "" || !matched {
+			return nil, false
+		}
+	}
+	refs = compactStringsV0(refs)
+	return refs, len(refs) > 0
+}
+
+func goalMaterialProgressIdentityVerificationValidV0(
+	spec orquestagoal.GoalWorkSpecV0,
+	verification orquestagoal.GoalRequiredTestIdentityVerificationV0,
+) bool {
+	return verification.Verified && verification.Independent &&
+		strings.TrimSpace(verification.AttestationRef) != "" &&
+		strings.TrimSpace(verification.ImplementerPrincipalRef) != "" &&
+		strings.TrimSpace(verification.AttestorPrincipalRef) != "" &&
+		strings.TrimSpace(verification.ImplementerPrincipalRef) != strings.TrimSpace(verification.AttestorPrincipalRef) &&
+		strings.TrimSpace(verification.AttestorCredentialRef) != "" &&
+		strings.TrimSpace(verification.AttestorCredentialRef) != strings.TrimSpace(spec.ImplementerCredentialRef) &&
+		strings.TrimSpace(verification.TrustPolicyRef) == strings.TrimSpace(spec.ClosurePolicy.RequiredAttestorTrustPolicyRef)
 }
 
 func (source CodexStackMaterialProgressEvidenceV0) materialProgressBaseEvidenceV0(
@@ -135,6 +187,13 @@ func goalMaterialProgressDiffEvidenceRefV0(baselineRef string, paths []string) s
 	sort.Strings(paths)
 	sum := sha256.Sum256([]byte(strings.Join(append([]string{baselineRef}, paths...), "\n")))
 	return fmt.Sprintf("evidence-ref-material-progress-diff-%x", sum[:])
+}
+
+func goalMaterialProgressEvidenceRefV0(kind string, refs []string) string {
+	refs = compactStringsV0(refs)
+	sort.Strings(refs)
+	sum := sha256.Sum256([]byte(strings.Join(append([]string{kind}, refs...), "\n")))
+	return fmt.Sprintf("evidence-ref-material-progress-%s-%x", kind, sum[:])
 }
 
 func goalMaterialProgressResultEvidenceRefV0(result orquestagoal.GoalWorkResultV0) string {

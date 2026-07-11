@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
@@ -72,6 +73,72 @@ func TestCodexStackMaterialProgressEvidenceV0CambioFueraDeWriteSetNoRenuevaV0(t 
 	if err != nil || !result.Verified || result.MaterialClass != orquestaautoprogramming.MaterialProgressClassNoneV0 ||
 		len(result.EvidenceRefs) < 2 {
 		t.Fatalf("result=%+v err=%v", result, err)
+	}
+}
+
+func TestCodexStackMaterialProgressEvidenceV0ClasificaTestIndependientePersistidoV0(t *testing.T) {
+	_, _, state := materialProgressEvidenceFixtureV0(t)
+	state.Spec.ImplementerCredentialRef = "credential-ref-implementer"
+	state.Spec.RequiredTests = []orquestagoal.GoalRequiredTestV0{{TestRef: "test-ref-independent"}}
+	state.Spec.ClosurePolicy.RequireIndependentRequiredTestAttestation = true
+	state.Spec.ClosurePolicy.RequiredAttestorTrustPolicyRef = "trust-policy-ref-independent"
+	state.LastClosure = &orquestagoal.GoalClosureValidationV0{
+		Status: orquestagoal.GoalStatusAcceptedV0, Accepted: true,
+		EvidenceRefs: []string{"attestation-ref-independent", "snapshot-ref-independent"},
+		AttestationVerifications: []orquestagoal.GoalRequiredTestIdentityVerificationV0{{
+			AttestationRef: "attestation-ref-independent", TestRef: "test-ref-independent",
+			Verified: true, Independent: true,
+			ImplementerPrincipalRef: "principal-ref-implementer", AttestorPrincipalRef: "principal-ref-attestor",
+			AttestorCredentialRef: "credential-ref-attestor", TrustPolicyRef: "trust-policy-ref-independent",
+			EvidenceRefs: []string{"evidence-ref-identity-independent"},
+		}},
+	}
+	source := CodexStackMaterialProgressEvidenceV0{Stack: &StackV0{}}
+	classified, err := source.ClassifyMaterialProgressV0(context.Background(), orquestaautoprogramming.MaterialProgressEvidenceRequestV0{
+		State: state, Result: materialProgressRunningResultV0(state),
+	})
+	if err != nil || !classified.Verified || classified.MaterialClass != orquestaautoprogramming.MaterialProgressClassTestV0 ||
+		len(classified.EvidenceRefs) != 1 || !strings.HasPrefix(classified.EvidenceRefs[0], "evidence-ref-material-progress-test-") {
+		t.Fatalf("result=%+v err=%v", classified, err)
+	}
+}
+
+func TestCodexStackMaterialProgressEvidenceV0NoConfiaEnTestsAutodeclaradosV0(t *testing.T) {
+	projectDir, store, state := materialProgressEvidenceFixtureV0(t)
+	result := materialProgressRunningResultV0(state)
+	result.RequiredTestResults = []orquestagoal.GoalRequiredTestResultV0{{
+		TestRef: "test-ref-self-declared", Status: orquestagoal.GoalRequiredTestAttestationStatusPassedV0,
+	}}
+	source := CodexStackMaterialProgressEvidenceV0{Stack: &StackV0{
+		Codex:                    CodexRuntimeConfigV0{ProjectWorkDir: projectDir},
+		AutoprogrammingPromotion: AutoprogrammingPromotionConfigV0{GoalFirstSnapshotStore: store},
+	}}
+	classified, err := source.ClassifyMaterialProgressV0(context.Background(), orquestaautoprogramming.MaterialProgressEvidenceRequestV0{
+		State: state, Result: result,
+	})
+	if err != nil || !classified.Verified || classified.MaterialClass != orquestaautoprogramming.MaterialProgressClassNoneV0 {
+		t.Fatalf("result=%+v err=%v", classified, err)
+	}
+}
+
+func TestCodexStackMaterialProgressEvidenceV0RechazaTestSinIndependenciaV0(t *testing.T) {
+	_, _, state := materialProgressEvidenceFixtureV0(t)
+	state.Spec.ImplementerCredentialRef = "credential-ref-shared"
+	state.Spec.RequiredTests = []orquestagoal.GoalRequiredTestV0{{TestRef: "test-ref-not-independent"}}
+	state.Spec.ClosurePolicy.RequireIndependentRequiredTestAttestation = true
+	state.Spec.ClosurePolicy.RequiredAttestorTrustPolicyRef = "trust-policy-ref-independent"
+	state.LastClosure = &orquestagoal.GoalClosureValidationV0{
+		Status: orquestagoal.GoalStatusAcceptedV0, Accepted: true,
+		EvidenceRefs: []string{"attestation-ref-not-independent"},
+		AttestationVerifications: []orquestagoal.GoalRequiredTestIdentityVerificationV0{{
+			AttestationRef: "attestation-ref-not-independent", TestRef: "test-ref-not-independent",
+			Verified: true, Independent: false,
+			ImplementerPrincipalRef: "principal-ref-shared", AttestorPrincipalRef: "principal-ref-shared",
+			AttestorCredentialRef: "credential-ref-shared", TrustPolicyRef: "trust-policy-ref-independent",
+		}},
+	}
+	if refs, ok := goalMaterialProgressIndependentTestEvidenceV0(state); ok || len(refs) > 0 {
+		t.Fatalf("evidencia no independiente aceptada: %v", refs)
 	}
 }
 
