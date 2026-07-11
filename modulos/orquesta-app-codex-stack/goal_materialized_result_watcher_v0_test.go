@@ -109,7 +109,7 @@ func TestGoalMaterializedResultWatcherV0DespiertaReconciliacionSinWatchdogV0(t *
 		all[0].Status != orquestarunqueue.RunStatusClosedV0 {
 		t.Fatalf("queue no sincronizada por wakeup materializado: %+v", all)
 	}
-	if stats := watcher.StatsV0(); stats.Wakeups != 1 || stats.DirectoryPolls == 0 {
+	if stats := watcher.StatsV0(); stats.Wakeups != 1 || stats.ResultChecks == 0 {
 		t.Fatalf("watcher stats=%+v", stats)
 	}
 }

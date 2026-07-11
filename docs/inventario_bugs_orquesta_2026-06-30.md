@@ -4271,6 +4271,27 @@ dedicado bajo lock, arbol limpio, `HEAD == integrated_revision`, cero commit,
 receipt durable y reconciliacion solo desde ese receipt; prueba negativa con
 cambio post-gate y replay tras claim.
 
+BUG `BUG-ORQ-20260711-251` (cerrado localmente, fixture watcher): la suite
+amplia fallo aunque el watcher desperto y cerro correctamente porque el test
+exigia `DirectoryPolls > 0`. La comprobacion directa del resultado puede evitar
+el barrido de directorio; el contrato causal real es `Wakeups == 1` y
+`ResultChecks > 0`. El focal repetido 30 veces y el paquete completo quedan
+verdes; no hubo cambio productivo.
+
+BUG `BUG-ORQ-20260711-252` (cerrado localmente, carrera de fixture Claude): el
+test de proceso esperaba solo `os.Stat(resultPath)` y podia observar el JSON
+mientras el proceso hijo aun lo escribia, publicando
+`claude_goal_result_invalid`. Ahora espera un resultado decodificable y valido
+con schema, estado, `goal_ref` y `external_goal_ref` causales antes de observar.
+Focal `-count=50` y paquete Claude verdes; no hubo cambio productivo.
+
+BUG `BUG-ORQ-20260711-253` (abierto, superficie de reconciliacion batch): el
+primer E2E temporal necesito entrar al reconciliador de run cerrado, pero el
+stack solo exponia el metodo privado usado por la cola. Usar `go:linkname` en
+el test ocultaria la limitacion. Criterio de cierre: entrada publica estrecha
+para reconciliar un run batch cerrado, consumible por API/MCP/autoreparacion,
+y E2E sin `unsafe` que conserve el mismo camino productivo.
+
 Avance 2026-07-11: `b96e9b115` añade refs obligatorias de criterios
 verificables al contrato Goal; el transporte posterior añade
 `acceptance_checks` tipados a autoprogramacion V0/V1 y los publica por MCP. Los

@@ -34,10 +34,7 @@ func TestClaudeGoalProcessBackendV0LanzaProcesoYObservaResultadoDurableV0(t *tes
 		t.Fatalf("receipt inesperado: %+v", receipt)
 	}
 	resultPath := filepath.Join(backend.Control.ProjectWorkDir, "docs", ClaudeGoalResultFileNameV0)
-	waitForClaudeGoalProcessTestV0(t, func() bool {
-		_, err := os.Stat(resultPath)
-		return err == nil
-	})
+	waitForClaudeGoalResultForTestV0(t, resultPath, spec.GoalRef, receipt.ExternalGoalRef)
 
 	observed, err := backend.ObserveGoalWorkV0(context.Background(), orquestagoal.GoalObservationRequestV0{
 		GoalRef:         spec.GoalRef,
@@ -287,11 +284,12 @@ func claudeGoalProcessSpecForTestV0(goalRef string) orquestagoal.GoalWorkSpecV0 
 func claudeGoalFakeCommandWritesResultV0(t *testing.T, root string, goalRef string) string {
 	t.Helper()
 	result := orquestagoal.GoalWorkResultV0{
-		SchemaVersion: orquestagoal.GoalWorkResultSchemaV0,
-		Status:        orquestagoal.GoalStatusCompleteV0,
-		GoalRef:       goalRef,
-		Summary:       "claude process complete",
-		ArtifactPaths: []string{"docs/orquesta_goal_result_v0.json"},
+		SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+		Status:          orquestagoal.GoalStatusCompleteV0,
+		GoalRef:         goalRef,
+		ExternalGoalRef: claudeGoalExternalRefV0(goalRef),
+		Summary:         "claude process complete",
+		ArtifactPaths:   []string{"docs/orquesta_goal_result_v0.json"},
 		MaterializedArtifacts: []orquestagoal.GoalMaterializedArtifactV0{{
 			ArtifactRef:  "artifact-ref-" + goalRef,
 			Path:         "docs/orquesta_goal_result_v0.json",
@@ -352,6 +350,28 @@ func waitForClaudeGoalProcessTestV0(t *testing.T, ready func() bool) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("timeout esperando proceso Claude goal")
+}
+
+func waitForClaudeGoalResultForTestV0(t *testing.T, path string, goalRef string, externalGoalRef string) {
+	t.Helper()
+	waitForClaudeGoalProcessTestV0(t, func() bool {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return false
+		}
+		var raw orquestagoal.GoalWorkResultV0
+		if err := json.Unmarshal(data, &raw); err != nil ||
+			raw.SchemaVersion != orquestagoal.GoalWorkResultSchemaV0 ||
+			raw.Status != orquestagoal.GoalStatusCompleteV0 ||
+			raw.GoalRef != goalRef ||
+			raw.ExternalGoalRef != externalGoalRef {
+			return false
+		}
+		decoded, err := orquestagoal.DecodeGoalWorkResultJSONV0(data)
+		return err == nil &&
+			decoded.Disposition != orquestagoal.GoalWorkResultJSONDispositionIrrecoverableV0 &&
+			len(orquestagoal.ValidateGoalWorkResultV0(decoded.Result)) == 0
+	})
 }
 
 func shellQuoteClaudeGoalProcessTestV0(value string) string {
