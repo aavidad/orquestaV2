@@ -31,7 +31,7 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) runPreflightV0(
 	ctx context.Context,
 	correlationID string,
 	scope string,
-) (orquestacionnucleoapp.RequiredTestCommandExecutionResultV0, error) {
+) (result orquestacionnucleoapp.RequiredTestCommandExecutionResultV0, resultErr error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -47,14 +47,31 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) runPreflightV0(
 			Status: orquestacionnucleoapp.RequiredTestEvidenceStatusFailedV0, EvidenceRefs: []string{snapshotEvidenceRef},
 		}, nil
 	}
-	runDir := filepath.Join(adapter.config.RuntimeRoot, "preflight", localGoalAttestationHashV0(correlationID))
+	preflightRoot := filepath.Join(adapter.config.RuntimeRoot, "preflight")
+	if err := os.MkdirAll(preflightRoot, 0o700); err != nil {
+		return orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{}, err
+	}
+	runDir, err := os.MkdirTemp(preflightRoot, localGoalAttestationHashV0(correlationID)+"-")
+	if err != nil {
+		return orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{}, err
+	}
+	defer func() {
+		if cleanupErr := os.RemoveAll(runDir); resultErr == nil && cleanupErr != nil {
+			result = orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{}
+			resultErr = fmt.Errorf("goal_required_test_execution_cleanup_failed: %w", cleanupErr)
+		}
+	}()
 	outputDir := filepath.Join(adapter.config.RuntimeRoot, "evidence", "preflight")
 	for _, dir := range []string{runDir, outputDir, filepath.Join(runDir, "tmp"), filepath.Join(runDir, "go-cache"), filepath.Join(runDir, "go-path")} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{}, err
 		}
 	}
-	result := orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{Status: orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0}
+	moduleCache, err := adapter.materializeDependencySnapshotV0(runDir)
+	if err != nil {
+		return orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{}, err
+	}
+	result = orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{Status: orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0}
 	if snapshotEvidenceRef != "" {
 		result.EvidenceRefs = append(result.EvidenceRefs, snapshotEvidenceRef)
 	}
@@ -63,7 +80,7 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) runPreflightV0(
 			RunRef: "goal-required-test-preflight", TaskRef: scope,
 			TestCommand: command, CorrelationID: fmt.Sprintf("%s-%d", correlationID, index),
 		}
-		execution, err := adapter.runHermeticCommandV0(ctx, runDir, outputDir, request)
+		execution, err := adapter.runHermeticCommandV0(ctx, runDir, moduleCache, outputDir, request)
 		if err != nil {
 			return orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{}, err
 		}
@@ -79,12 +96,13 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) runPreflightV0(
 func (adapter *LocalGoalRequiredTestAttestationAdapterV0) runHermeticCommandV0(
 	ctx context.Context,
 	runDir string,
+	moduleCache string,
 	outputDir string,
 	request orquestacionnucleoapp.RequiredTestCommandExecutionRequestV0,
 ) (orquestacionnucleoapp.RequiredTestCommandExecutionResultV0, error) {
 	executor := LocalCommandExecutorV0{
 		ProjectWorkDir: adapter.config.ProjectWorkDir, OutputDir: outputDir,
-		AllowedCommands: adapter.config.AllowedCommands, Env: adapter.hermeticEnvironmentV0(runDir),
+		AllowedCommands: adapter.config.AllowedCommands, Env: adapter.hermeticEnvironmentV0(runDir, moduleCache),
 		MaxOutputBytes: adapter.config.MaxOutputBytes, MaxArtifacts: adapter.config.MaxArtifacts,
 	}
 	tokens, err := splitCommandV0(request.TestCommand)
@@ -109,11 +127,7 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) runHermeticCommandV0(
 	return orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{Status: status, EvidenceRefs: []string{ref}}, nil
 }
 
-func (adapter *LocalGoalRequiredTestAttestationAdapterV0) hermeticEnvironmentV0(runDir string) []string {
-	modCache := adapter.config.DependencySnapshotPath
-	if modCache == "" {
-		modCache = filepath.Join(runDir, "go-mod-cache")
-	}
+func (adapter *LocalGoalRequiredTestAttestationAdapterV0) hermeticEnvironmentV0(runDir string, modCache string) []string {
 	pathDirs := map[string]struct{}{}
 	for _, commandPath := range adapter.config.AllowedCommands {
 		pathDirs[filepath.Dir(commandPath)] = struct{}{}

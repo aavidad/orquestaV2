@@ -275,20 +275,37 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) runFrozenTestV0(
 	attestationRef string,
 	request orquestagoal.GoalRequiredTestAttestationRequestV0,
 	test orquestagoal.GoalRequiredTestV0,
-) (orquestacionnucleoapp.RequiredTestCommandExecutionResultV0, error) {
-	runDir := filepath.Join(adapter.config.RuntimeRoot, "runs", localGoalAttestationHashV0(attestationRef))
+) (result orquestacionnucleoapp.RequiredTestCommandExecutionResultV0, resultErr error) {
+	runsRoot := filepath.Join(adapter.config.RuntimeRoot, "runs")
+	if err := os.MkdirAll(runsRoot, 0o700); err != nil {
+		return orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{}, err
+	}
+	runDir, err := os.MkdirTemp(runsRoot, localGoalAttestationHashV0(attestationRef)+"-")
+	if err != nil {
+		return orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{}, err
+	}
+	defer func() {
+		if cleanupErr := os.RemoveAll(runDir); resultErr == nil && cleanupErr != nil {
+			result = orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{}
+			resultErr = fmt.Errorf("goal_required_test_execution_cleanup_failed: %w", cleanupErr)
+		}
+	}()
 	outputDir := filepath.Join(adapter.config.RuntimeRoot, "evidence", "commands")
 	for _, dir := range []string{runDir, outputDir, filepath.Join(runDir, "tmp"), filepath.Join(runDir, "go-cache"), filepath.Join(runDir, "go-path")} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{}, err
 		}
 	}
+	moduleCache, err := adapter.materializeDependencySnapshotV0(runDir)
+	if err != nil {
+		return orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{}, err
+	}
 	executionContext, cancel := context.WithTimeout(ctx, adapter.config.MaxRuntime)
 	defer cancel()
 	executor := LocalCommandExecutorV0{
 		ProjectWorkDir: adapter.config.ProjectWorkDir, OutputDir: outputDir,
 		AllowedCommands: adapter.config.AllowedCommands,
-		Env:             adapter.hermeticEnvironmentV0(runDir),
+		Env:             adapter.hermeticEnvironmentV0(runDir, moduleCache),
 		MaxOutputBytes:  adapter.config.MaxOutputBytes, MaxArtifacts: adapter.config.MaxArtifacts,
 	}
 	return executor.RunRequiredTestCommandV0(executionContext, orquestacionnucleoapp.RequiredTestCommandExecutionRequestV0{

@@ -4097,6 +4097,16 @@ mantiene el rechazo de contenido real distinto. Test focal y evidencia de
 shutdown en la
 [incidencia T9104](incidencias/incidencia_orquesta_t9104_wakeup_material_progress_shutdown_stale_2026-07-11.md).
 
+BUG `BUG-ORQ-20260711-232` (cerrado localmente, pendiente de replay integrado):
+la atestacion independiente apuntaba `GOMODCACHE` al snapshot congelado de solo
+lectura, pero Go necesita escribir metadata y locks incluso con `GOPROXY=off`.
+El test real de T9104 fue correctamente rechazado y Orquesta lanzo un rework
+causal, pero ningun test Go con dependencias externas podia quedar atestado.
+El adaptador ahora revalida la fuente, verifica una copia read-only por hash,
+expone solo una copia privada escribible y unica por ejecucion, y elimina el
+workdir conservando evidencia durable. Detalle y recibos en la
+[incidencia T9104](incidencias/incidencia_orquesta_t9104_wakeup_material_progress_shutdown_stale_2026-07-11.md).
+
 Avance 2026-07-11: `b96e9b115` añade refs obligatorias de criterios
 verificables al contrato Goal; el transporte posterior añade
 `acceptance_checks` tipados a autoprogramacion V0/V1 y los publica por MCP. Los

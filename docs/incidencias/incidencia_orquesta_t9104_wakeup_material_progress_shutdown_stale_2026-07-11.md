@@ -171,3 +171,43 @@ Cierre local de `BUG-ORQ-20260711-231`:
 
 El cierre empirico de `BUG-226` sigue pendiente de un replay completamente
 nuevo que alcance lanzamiento, progreso material, atestacion y cierre terminal.
+
+## Replay r6 y BUG-ORQ-20260711-232
+
+`r6` acredito que los fixes anteriores alcanzan el runtime real:
+
+- goal externo `019f5072-08d7-78e0-ba01-2a5c2e530ade` lanzado una sola vez;
+- baseline durable ligado a la spec y binder independiente activo;
+- progreso material persistido: primero `none` y despues `diff`, reiniciando a
+  cero los tokens sin material;
+- entrega terminal con el artefacto esperado y test autodeclarado verde;
+- el atestador externo ejecuto realmente el test y rechazo ese verde.
+
+El rechazo descubrio `BUG-ORQ-20260711-232`: el adaptador configuraba
+`GOMODCACHE` directamente sobre el snapshot de dependencias de solo lectura.
+Go siempre intenta crear metadata/locks bajo `cache/download`; sin ese indice
+fallaba al crear el directorio y con el indice fallaba al abrir el `.lock`.
+Por tanto, ningun `go test` con modulo externo podia superar la atestacion
+hermetica. Evidencia retenida:
+
+- `/tmp/orquesta-bug226-t9104-r6-runtime/attestation/evidence/commands/591d63e280932913f89929f1.log`;
+- recibo independiente `goal-required-test-attestation-ref-049a83c81f0d83ef7f4c54c9fdfd6cb69cb8fd53f7b48df9db9106d6d12c5c46`,
+  `status=failed`, `exit_code=1`;
+- Orquesta no acepto el cierre y lanzo automaticamente el rework causal
+  `019f5073-c8a2-72b3-a4f7-a7a1cdaf9815`, conservando el artefacto anterior.
+
+Cierre local de `BUG-232`:
+
+- el snapshot canonico se revalida antes y despues de copiar;
+- la copia se valida contra el mismo hash mientras aun es read-only;
+- solo la copia privada y unica por ejecucion se hace escribible y se expone
+  como `GOMODCACHE`;
+- preflight y test usan workdirs temporales distintos, eliminados al terminar;
+- outputs y recibos durables permanecen fuera del workdir efimero;
+- regresiones prueban fuente inmutable, copia escribible, replay sin residuos,
+  deteccion de mutacion y limpieza de preflight.
+
+El rework de `r6` se detuvo por control tipado al confirmar que el fixture no
+podia pasar; shutdown elimino el app-server con `shutdown_ready=true`. El
+cierre integrado de `BUG-226/232` requiere un replay nuevo con snapshot offline
+completo y binario que contenga este arreglo.

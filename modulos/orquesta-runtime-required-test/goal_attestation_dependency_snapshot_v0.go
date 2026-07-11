@@ -57,6 +57,123 @@ func goalRequiredTestGoAllowedV0(allowed map[string]string) bool {
 	return false
 }
 
+func (adapter *LocalGoalRequiredTestAttestationAdapterV0) materializeDependencySnapshotV0(runDir string) (string, error) {
+	destination, err := os.MkdirTemp(runDir, "go-mod-cache-")
+	if err != nil {
+		return "", err
+	}
+	source := adapter.config.DependencySnapshotPath
+	if source == "" {
+		return destination, nil
+	}
+	_, beforeHash, err := normalizeGoalRequiredTestDependencySnapshotV0(source)
+	if err != nil || beforeHash != adapter.config.DependencySnapshotSHA256 {
+		_ = os.RemoveAll(destination)
+		return "", fmt.Errorf("goal_required_test_dependency_snapshot_changed")
+	}
+	if err := copyGoalRequiredTestDependencySnapshotV0(source, destination); err != nil {
+		_ = os.RemoveAll(destination)
+		return "", err
+	}
+	_, afterHash, err := normalizeGoalRequiredTestDependencySnapshotV0(source)
+	if err != nil || afterHash != beforeHash {
+		_ = os.RemoveAll(destination)
+		return "", fmt.Errorf("goal_required_test_dependency_snapshot_changed")
+	}
+	_, copiedHash, err := normalizeGoalRequiredTestDependencySnapshotV0(destination)
+	if err != nil || copiedHash != beforeHash {
+		_ = os.RemoveAll(destination)
+		return "", fmt.Errorf("goal_required_test_dependency_snapshot_copy_invalid")
+	}
+	if err := makeGoalRequiredTestDependencySnapshotWritableV0(destination); err != nil {
+		_ = os.RemoveAll(destination)
+		return "", err
+	}
+	return destination, nil
+}
+
+func copyGoalRequiredTestDependencySnapshotV0(source string, destination string) error {
+	type directoryModeV0 struct {
+		path string
+		mode os.FileMode
+	}
+	directories := make([]directoryModeV0, 0)
+	err := filepath.WalkDir(source, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(source, path)
+		if err != nil {
+			return err
+		}
+		if rel == "." {
+			directories = append(directories, directoryModeV0{path: destination, mode: info.Mode().Perm()})
+			return nil
+		}
+		target := filepath.Join(destination, rel)
+		if entry.IsDir() {
+			if err := os.Mkdir(target, 0o700); err != nil {
+				return err
+			}
+			directories = append(directories, directoryModeV0{path: target, mode: info.Mode().Perm()})
+			return nil
+		}
+		if !entry.Type().IsRegular() {
+			return fmt.Errorf("goal_required_test_dependency_snapshot_entry_invalid")
+		}
+		input, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		output, err := os.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if err != nil {
+			_ = input.Close()
+			return err
+		}
+		_, copyErr := io.Copy(output, input)
+		closeOutputErr := output.Close()
+		closeInputErr := input.Close()
+		if copyErr != nil {
+			return copyErr
+		}
+		if closeOutputErr != nil {
+			return closeOutputErr
+		}
+		if closeInputErr != nil {
+			return closeInputErr
+		}
+		return os.Chmod(target, info.Mode().Perm())
+	})
+	if err != nil {
+		return err
+	}
+	for index := len(directories) - 1; index >= 0; index-- {
+		if err := os.Chmod(directories[index].path, directories[index].mode); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func makeGoalRequiredTestDependencySnapshotWritableV0(root string) error {
+	return filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return os.Chmod(path, 0o700)
+		}
+		if !entry.Type().IsRegular() {
+			return fmt.Errorf("goal_required_test_dependency_snapshot_entry_invalid")
+		}
+		return os.Chmod(path, 0o600)
+	})
+}
+
 func normalizeGoalRequiredTestDependencySnapshotV0(value string) (string, string, error) {
 	value = strings.TrimSpace(value)
 	if value == "" {

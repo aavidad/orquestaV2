@@ -122,6 +122,80 @@ func TestLocalGoalRequiredTestAttestationAdapterV0AcceptsReadOnlySnapshotAndGree
 	if err != nil || adapter.PreflightGoalRequiredTestAttestationV0(context.Background()) != nil {
 		t.Fatalf("adapter=%v err=%v", adapter, err)
 	}
+	entries, err := os.ReadDir(filepath.Join(runtimeRoot, "preflight"))
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("private preflight workdir retained: entries=%v err=%v", entries, err)
+	}
+}
+
+func TestLocalGoalRequiredTestAttestationAdapterV0MaterializesWritablePrivateSnapshotV0(t *testing.T) {
+	project, runtimeRoot, gitPath := localGoalAttestationGitRepoForTestV0(t)
+	testPath, err := exec.LookPath("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := localGoalAttestationReadOnlySnapshotWithFileForTestV0(t)
+	config := localGoalAttestationConfigForTestV0(project, runtimeRoot, gitPath, map[string]string{"test": testPath})
+	config.DependencySnapshotPath = snapshot
+	adapter, err := NewLocalGoalRequiredTestAttestationAdapterV0(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runDir := filepath.Join(runtimeRoot, "materialization-test")
+	if err := os.Mkdir(runDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	privateCache, err := adapter.materializeDependencySnapshotV0(runDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	privateFile := filepath.Join(privateCache, "module.txt")
+	if err := os.WriteFile(privateFile, []byte("private mutation\n"), 0o600); err != nil {
+		t.Fatalf("private snapshot must be writable: %v", err)
+	}
+	source, err := os.ReadFile(filepath.Join(snapshot, "module.txt"))
+	if err != nil || string(source) == "private mutation\n" {
+		t.Fatalf("source snapshot changed: %q err=%v", source, err)
+	}
+	replayedCache, err := adapter.materializeDependencySnapshotV0(runDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replayedCache == privateCache {
+		t.Fatalf("private module cache reused: %s", replayedCache)
+	}
+	replayed, err := os.ReadFile(filepath.Join(replayedCache, "module.txt"))
+	if err != nil || string(replayed) != string(source) {
+		t.Fatalf("replay did not restore frozen snapshot: %q err=%v", replayed, err)
+	}
+}
+
+func TestLocalGoalRequiredTestAttestationAdapterV0RejectsChangedSnapshotBeforeMaterializationV0(t *testing.T) {
+	project, runtimeRoot, gitPath := localGoalAttestationGitRepoForTestV0(t)
+	testPath, err := exec.LookPath("test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := localGoalAttestationReadOnlySnapshotWithFileForTestV0(t)
+	config := localGoalAttestationConfigForTestV0(project, runtimeRoot, gitPath, map[string]string{"test": testPath})
+	config.DependencySnapshotPath = snapshot
+	adapter, err := NewLocalGoalRequiredTestAttestationAdapterV0(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Join(snapshot, "module.txt"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(snapshot, "module.txt"), []byte("changed\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	changedRunDir := filepath.Join(runtimeRoot, "changed-test")
+	if err := os.Mkdir(changedRunDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := adapter.materializeDependencySnapshotV0(changedRunDir); err == nil || err.Error() != "goal_required_test_dependency_snapshot_changed" {
+		t.Fatalf("err=%v", err)
+	}
 }
 
 func TestLocalGoalRequiredTestAttestationAdapterV0BuildsMinimalDeterministicPath(t *testing.T) {
@@ -133,7 +207,8 @@ func TestLocalGoalRequiredTestAttestationAdapterV0BuildsMinimalDeterministicPath
 	adapter := localGoalAttestationAdapterForTestV0(t, project, runtimeRoot, gitPath, map[string]string{"go": commandPath})
 	t.Setenv("PATH", "/must/not/leak")
 
-	env := adapter.hermeticEnvironmentV0(t.TempDir())
+	runDir := t.TempDir()
+	env := adapter.hermeticEnvironmentV0(runDir, filepath.Join(runDir, "go-mod-cache-private"))
 	wantDirs := []string{filepath.Dir(commandPath), filepath.Dir(gitPath)}
 	sort.Strings(wantDirs)
 	wantPath := "PATH=" + strings.Join(wantDirs, string(os.PathListSeparator))
@@ -357,6 +432,25 @@ func localGoalAttestationReadOnlySnapshotForTestV0(t *testing.T) string {
 	if err := os.Mkdir(path, 0o500); err != nil {
 		t.Fatal(err)
 	}
+	return path
+}
+
+func localGoalAttestationReadOnlySnapshotWithFileForTestV0(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "module-cache-snapshot")
+	if err := os.Mkdir(path, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(path, "module.txt"), []byte("frozen module\n"), 0o400); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chmod(path, 0o700)
+		_ = os.Chmod(filepath.Join(path, "module.txt"), 0o600)
+	})
 	return path
 }
 
