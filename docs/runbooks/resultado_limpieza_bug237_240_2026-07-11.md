@@ -36,6 +36,11 @@ orphan_modules=8 (retain_pending_composition)
 Los 307 son solapes nominales y no autorizan consolidacion. El auditor publica
 la clasificacion `nominal_overlap_not_code_duplication`.
 
+Medicion posterior a los pilotos batch del mismo dia: 26.161 funciones,
+1.172 candidatos, 309 solapes nominales, 24 ficheros mayores de 800 lineas y
+cero duplicados demostrados. La foto anterior se conserva como recibo del
+corte BUG-237..240; no debe usarse como contador vigente.
+
 ## Huellas retenidas
 
 - prepare: `95a3a6693124f5efd3955589679a8b12d4214680d99cc2750f05e7159103dc24`;

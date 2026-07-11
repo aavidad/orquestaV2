@@ -177,3 +177,13 @@ un solape de prefijos nominales entre paquetes: ahora se publica como
 `helper_name_family_overlap_definitions=307`; duplicados de implementacion
 demostrados por el auditor actual: cero. Recibo:
 `docs/runbooks/resultado_limpieza_bug237_240_2026-07-11.md`.
+
+## Actualizacion 2026-07-11: medicion posterior a los pilotos batch
+
+La regeneracion posterior a los cambios del nucleo publica 26.161 funciones,
+1.172 candidatos `deadcode`, cero privados sin referencias textuales y cero
+duplicados de implementacion demostrados. Los solapes nominales pasan de 307 a
+309 y los ficheros mayores de 800 lineas de 23 a 24. Estas variaciones son una
+nueva foto del arbol, no autorizacion de borrado: los 8 modulos sin importador
+siguen retenidos como adaptadores opt-in y no hay otra retirada destructiva
+demostrada.

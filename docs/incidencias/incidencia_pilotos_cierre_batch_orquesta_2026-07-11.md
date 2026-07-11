@@ -22,6 +22,11 @@ app desechable ni se toco OPES/remoto.
 - replay5 probo `go test ./cmd/orquesta-server` verde en entorno hermetico tras
   `67b475fc3`, pero expuso que el receipt se consume antes de `task_complete`;
   el snapshot prematuro cambio, abrio rework y ese rework quedo solo en marker;
+- replay6 probo el shutdown corregido: la API encontro el backend de
+  autoprogramacion y su marker cuarentenado, devolvio `shutdown_ready=true` y
+  termino servidor y tmux en dos segundos. El batch no pudo cerrar porque el
+  sandbox del worktree permite escribir el checkout pero no su admin dir Git
+  externo; `git mv` fallo al crear `index.lock`;
 - los tres shutdown de piloto quedaron `stop_pending` con contadores cero y un
   tmux propio vivo; el fallback acotado uso SIGINT del PID del piloto y elimino
   exclusivamente su sesion `orquesta-goal-*` tras varios intentos HTTP.
@@ -31,6 +36,7 @@ app desechable ni se toco OPES/remoto.
 - `/tmp/orquesta-live-bug255-replay3-20260711`
 - `/tmp/orquesta-live-bug255-replay4-20260711`
 - `/tmp/orquesta-live-bug255-replay5-20260711`
+- `/tmp/orquesta-live-bug255-replay6-20260711`
 
 Se retienen hasta extraer el recibo final. No contienen autoridad documental y
 se eliminaran de forma gobernada al cerrar la incidencia. No versionar
@@ -46,15 +52,19 @@ transcripts, CODEX_HOME, sockets ni caches.
 - `b6ed60d0d`: test no ejecutable por sandbox puede delegarse al atestador sin
   saltarse el guard de write-set;
 - `67b475fc3`: HOME ausente no produce CodeHomeDir relativo.
+- `2cdec492e`: shutdown incluye el backend de autoprogramacion;
+- `f945b2981`: cierre espera terminacion real y conserva residuos verificables;
+- `b012a88f9`: rework usa un sucesor causal persistido.
 
 ## Criterio de cierre restante
 
 1. No consumir un receipt terminal antes de que el provider turn termine.
 2. Persistir y observar rework con una sola generacion causal tras restart.
-3. Shutdown HTTP descubre y limpia `AutoprogrammingGoal`, incluido owner marker
-   cuarentenado, sin fallback manual.
+3. Permitir operaciones Git de indice dentro del worktree sin exponer el
+   common dir ni el repositorio canonico al sandbox.
 4. Repetir el batch desde estado limpio: dos accepted, dos commits encadenados,
    gate unico, checkout canonico limpio y batch closed.
 5. Reenviar exactamente la request: cero threads, commits y gates nuevos.
 6. Suite amplia verde y documentacion/inventario actualizados con commits de
-   cierre. Hasta entonces `BUG-255`, `259`, `260`, `261` y `262` siguen abiertos.
+   cierre. Hasta entonces `BUG-255`, `259`, `260` y `263` siguen abiertos;
+   `BUG-261` y `BUG-262` quedan cerrados por replay6.

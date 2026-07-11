@@ -59,6 +59,7 @@ type serverCodexAppServerGoalBackendV0 struct {
 	Model                   string
 	ReasoningEffort         string
 	Sandbox                 string
+	WritableRoots           []string
 	ApprovalPolicy          string
 	ServiceTier             string
 	Timeout                 time.Duration
@@ -870,6 +871,7 @@ func (backend serverCodexAppServerGoalBackendV0) turnStartParamsV0(
 	threadID string,
 	packet orquestaruntimecodexgoal.CodexGoalStartPacketV0,
 ) serverCodexAppServerTurnStartParamsV0 {
+	effectiveSandbox := codexAppServerGoalSandboxForPacketV0(backend.Sandbox, packet)
 	return serverCodexAppServerTurnStartParamsV0{
 		ThreadID:        threadID,
 		CWD:             strings.TrimSpace(backend.CWD),
@@ -879,9 +881,23 @@ func (backend serverCodexAppServerGoalBackendV0) turnStartParamsV0(
 		Effort:          strings.TrimSpace(backend.ReasoningEffort),
 		ApprovalPolicy:  strings.TrimSpace(backend.ApprovalPolicy),
 		ServiceTier:     strings.TrimSpace(backend.ServiceTier),
+		SandboxPolicy:   codexAppServerTurnStartSandboxPolicyForV0(effectiveSandbox, backend.WritableRoots),
 		ToolOutputPolicy: codexAppServerTurnStartToolOutputPolicyV0(
 			packet.DirectionContract.ToolOutputPolicy,
 		),
+	}
+}
+
+func codexAppServerTurnStartSandboxPolicyForV0(
+	effectiveSandbox string,
+	writableRoots []string,
+) serverCodexAppServerTurnStartSandboxPolicyV0 {
+	if strings.TrimSpace(effectiveSandbox) != "workspace-write" {
+		return serverCodexAppServerTurnStartSandboxPolicyV0{}
+	}
+	return serverCodexAppServerTurnStartSandboxPolicyV0{
+		Type:          "workspaceWrite",
+		WritableRoots: compactServerStackStringsV0(writableRoots),
 	}
 }
 

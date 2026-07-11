@@ -62,6 +62,7 @@ type serverCodexAppServerTurnStartParamsV0 struct {
 	Effort            string
 	ApprovalPolicy    string
 	ServiceTier       string
+	SandboxPolicy     serverCodexAppServerTurnStartSandboxPolicyV0
 	ToolOutputPolicy  serverCodexAppServerTurnStartToolOutputPolicyV0
 	DisablePolicyJSON bool
 }
@@ -80,10 +81,29 @@ func (params serverCodexAppServerTurnStartParamsV0) toJSONV0() map[string]interf
 	setNonEmptyJSONFieldV0(out, "effort", params.Effort)
 	setNonEmptyJSONFieldV0(out, "approvalPolicy", params.ApprovalPolicy)
 	setNonEmptyJSONFieldV0(out, "serviceTier", params.ServiceTier)
+	if !params.SandboxPolicy.emptyV0() {
+		out["sandboxPolicy"] = params.SandboxPolicy.toJSONV0()
+	}
 	if !params.DisablePolicyJSON && !params.ToolOutputPolicy.emptyV0() {
 		out["toolOutputPolicy"] = params.ToolOutputPolicy.toJSONV0()
 	}
 	return out
+}
+
+type serverCodexAppServerTurnStartSandboxPolicyV0 struct {
+	Type          string
+	WritableRoots []string
+}
+
+func (policy serverCodexAppServerTurnStartSandboxPolicyV0) emptyV0() bool {
+	return strings.TrimSpace(policy.Type) == ""
+}
+
+func (policy serverCodexAppServerTurnStartSandboxPolicyV0) toJSONV0() map[string]interface{} {
+	return map[string]interface{}{
+		"type":          strings.TrimSpace(policy.Type),
+		"writableRoots": compactServerStackStringsV0(policy.WritableRoots),
+	}
 }
 
 type serverCodexAppServerTurnStartToolOutputPolicyV0 struct {

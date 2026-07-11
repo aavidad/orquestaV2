@@ -4395,5 +4395,22 @@ cuarentenado aunque su sesion tmux propia siga viva. Cierre: conservar identidad
 verificada hasta confirmar que sesion/proceso murieron; nunca proyectar cero
 trabajo vivo por mover el marker de nombre.
 
+Avance de cierre 2026-07-11: `2cdec492e`, `f945b2981` y `b012a88f9`
+implementan respectivamente el routing de `AutoprogrammingGoal`, la espera de
+cierre real con residuos tmux verificables y el sucesor rework causal. El
+shutdown real de replay6 devolvio `shutdown_ready=true`,
+`cleanup_completed` y termino servidor/backend en dos segundos sin fallback;
+BUG-261 y BUG-262 quedan cerrados localmente. BUG-259 y BUG-260 conservan el
+estado pendiente de replay batch completo aunque sus focales esten verdes.
+
+BUG `BUG-ORQ-20260711-263` (abierto, sandbox Git de worktree enlazado): replay6
+arranco en el CWD fisico correcto, pero `git mv` no pudo crear `index.lock`.
+`workspace-write` permite escribir el checkout, no el directorio administrativo
+que Git guarda fuera del worktree enlazado. Cierre exigido: `turn/start` recibe
+una politica estructurada con una unica raiz adicional, el admin dir exacto de
+ese worktree validado contra `.git/worktrees` del repositorio fuente; nunca el
+common dir ni el checkout canonico. Prueba focal y replay real deben demostrar
+el rename, canonico limpio e integracion gobernada.
+
 Evidencia transversal de `BUG-255` a `BUG-262`:
 [pilotos de cierre batch del 2026-07-11](incidencias/incidencia_pilotos_cierre_batch_orquesta_2026-07-11.md).

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"os"
@@ -35,6 +36,14 @@ func TestCodexGoalWorkspaceAdapterV0ProvisionsAndResolvesAfterRestart(t *testing
 	if first.ProjectWorkDir == second.ProjectWorkDir {
 		t.Fatalf("workspaces must differ: first=%q second=%q", first.ProjectWorkDir, second.ProjectWorkDir)
 	}
+	if len(first.WritableRoots) != 1 || len(second.WritableRoots) != 1 {
+		t.Fatalf("linked worktree roots first=%+v second=%+v", first.WritableRoots, second.WritableRoots)
+	}
+	firstGitDir := codexGoalWorkspaceBindingGitOutputV0(t, first.ProjectWorkDir, "rev-parse", "--path-format=absolute", "--git-dir")
+	commonDir := codexGoalWorkspaceBindingGitOutputV0(t, first.ProjectWorkDir, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	if first.WritableRoots[0] != firstGitDir || first.WritableRoots[0] == commonDir {
+		t.Fatalf("writable root=%q git_dir=%q common_dir=%q", first.WritableRoots[0], firstGitDir, commonDir)
+	}
 	if err := os.WriteFile(filepath.Join(first.ProjectWorkDir, "only-first.txt"), []byte("first\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -53,6 +62,9 @@ func TestCodexGoalWorkspaceAdapterV0ProvisionsAndResolvesAfterRestart(t *testing
 	})
 	if err != nil || resolved.ProjectWorkDir != first.ProjectWorkDir {
 		t.Fatalf("resolved=%+v err=%v first=%+v", resolved, err, first)
+	}
+	if len(resolved.WritableRoots) != 1 || resolved.WritableRoots[0] != first.WritableRoots[0] {
+		t.Fatalf("resolved writable roots=%+v first=%+v", resolved.WritableRoots, first.WritableRoots)
 	}
 }
 
@@ -133,4 +145,14 @@ func codexGoalWorkspaceAdapterRunGitV0(t *testing.T, repo string, args ...string
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %v: %s", args, err, output)
 	}
+}
+
+func codexGoalWorkspaceBindingGitOutputV0(t *testing.T, repo string, args ...string) string {
+	t.Helper()
+	command := exec.Command("git", append([]string{"-C", repo}, args...)...)
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("git %v: %v", args, err)
+	}
+	return string(bytes.TrimSpace(output))
 }
