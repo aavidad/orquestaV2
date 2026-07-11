@@ -59,3 +59,6 @@ external/opes/**
 !external/opes/plan_temario/
 !external/opes/plan_temario/9784a562f074769a08043707fdd79eb2
 validaciones/
+
+# Artefactos de ejecucion (tests/smokes): nunca son fuente y degradan el guard de identidad
+/runtime/
