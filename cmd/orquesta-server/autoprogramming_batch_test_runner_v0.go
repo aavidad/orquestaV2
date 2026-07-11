@@ -161,7 +161,7 @@ func (runner *serverAutoprogrammingBatchTestRunnerV0) receiptForRequestV0(reques
 	digest := sha256.Sum256([]byte(identity))
 	return serverAutoprogrammingBatchTestReceiptV0{
 		SchemaVersion:  serverAutoprogrammingBatchTestReceiptSchemaV0,
-		ReceiptRef:     "autoprogramming-batch-test-receipt-v0/" + hex.EncodeToString(digest[:16]) + ".json",
+		ReceiptRef:     "autoprogramming-batch-test-receipt-v0-" + hex.EncodeToString(digest[:16]),
 		BatchRef:       strings.TrimSpace(request.BatchRef),
 		Revision:       strings.TrimSpace(request.Revision),
 		TestCommand:    strings.TrimSpace(request.Test.Command),
@@ -202,7 +202,7 @@ func (runner *serverAutoprogrammingBatchTestRunnerV0) loadReceiptV0(request orqu
 }
 
 func (runner *serverAutoprogrammingBatchTestRunnerV0) receiptPathV0(receiptRef string) string {
-	return filepath.Join(runner.ReceiptDir, filepath.Base(strings.TrimSpace(receiptRef)))
+	return filepath.Join(runner.ReceiptDir, filepath.Base(strings.TrimSpace(receiptRef))+".json")
 }
 
 func serverAutoprogrammingBatchTestReceiptMatchesV0(got, want serverAutoprogrammingBatchTestReceiptV0) bool {

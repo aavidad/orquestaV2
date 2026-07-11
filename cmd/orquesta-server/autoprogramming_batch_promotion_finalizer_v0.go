@@ -149,7 +149,7 @@ func (finalizer *serverAutoprogrammingBatchPromotionFinalizerV0) receiptForReque
 	sum := sha256.Sum256([]byte(identity))
 	return serverAutoprogrammingBatchPromotionReceiptV0{
 		SchemaVersion:      serverAutoprogrammingBatchPromotionReceiptSchemaV0,
-		ReceiptRef:         "autoprogramming-batch-promotion-receipt-v0/" + hex.EncodeToString(sum[:16]) + ".json",
+		ReceiptRef:         "autoprogramming-batch-promotion-receipt-v0-" + hex.EncodeToString(sum[:16]),
 		BatchRef:           strings.TrimSpace(request.BatchRef),
 		GateGeneration:     request.GateGeneration,
 		ClaimRef:           strings.TrimSpace(request.ClaimRef),
@@ -188,7 +188,7 @@ func (finalizer *serverAutoprogrammingBatchPromotionFinalizerV0) loadReceiptV0(r
 }
 
 func (finalizer *serverAutoprogrammingBatchPromotionFinalizerV0) receiptPathV0(receiptRef string) string {
-	return filepath.Join(finalizer.ReceiptDir, filepath.Base(strings.TrimSpace(receiptRef)))
+	return filepath.Join(finalizer.ReceiptDir, filepath.Base(strings.TrimSpace(receiptRef))+".json")
 }
 
 func (finalizer *serverAutoprogrammingBatchPromotionFinalizerV0) gitOutputV0(ctx context.Context, args ...string) (string, error) {

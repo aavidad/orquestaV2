@@ -25,7 +25,8 @@ func TestAutoprogrammingBatchTestRunnerV0EjecutaEnWorkdirCanonicoYPersisteReceip
 		t.Fatalf("RunAutoprogrammingBatchTestV0: %v", err)
 	}
 	if result.Status != orquestaautoprogramming.AutoprogrammingBatchTestReceiptPassedV0 ||
-		!strings.HasPrefix(result.ReceiptRef, "autoprogramming-batch-test-receipt-v0/") ||
+		!strings.HasPrefix(result.ReceiptRef, "autoprogramming-batch-test-receipt-v0-") ||
+		strings.ContainsAny(result.ReceiptRef, `/\\`) || strings.HasSuffix(result.ReceiptRef, ".json") ||
 		len(result.EvidenceRefs) < 2 {
 		t.Fatalf("result=%+v", result)
 	}
@@ -35,6 +36,7 @@ func TestAutoprogrammingBatchTestRunnerV0EjecutaEnWorkdirCanonicoYPersisteReceip
 	if !serverAutoprogrammingBatchHasRefV0(result.EvidenceRefs, "required-test-output-v0/") {
 		t.Fatalf("evidencia de executor ausente: %v", result.EvidenceRefs)
 	}
+	serverAutoprogrammingBatchRecordTestReceiptV0(t, request, result)
 }
 
 func TestAutoprogrammingBatchTestRunnerV0ReconcilesOnlyDurableReceiptV0(t *testing.T) {
@@ -188,4 +190,66 @@ func serverAutoprogrammingBatchHasRefV0(values []string, prefix string) bool {
 
 func serverAutoprogrammingBatchJSONV0(value string) string {
 	return `"` + strings.ReplaceAll(value, `\`, `\\`) + `"`
+}
+
+func serverAutoprogrammingBatchRecordTestReceiptV0(
+	t *testing.T,
+	request orquestaappcodexstack.AutoprogrammingBatchTestRunRequestV0,
+	result orquestaappcodexstack.AutoprogrammingBatchTestRunResultV0,
+) {
+	t.Helper()
+	batch := serverAutoprogrammingBatchClaimedTestV0(t, request.Revision, request.Test, request.TestHash, request.ClaimRef)
+	recorded := orquestaautoprogramming.RecordAutoprogrammingBatchTestReceiptV0(
+		batch, batch.StoreVersion, "record-adapter-test-receipt", request.Revision, request.TestHash,
+		request.ClaimRef, result.ReceiptRef, result.Status,
+	)
+	if !recorded.Accepted || len(recorded.Batch.TestReceipts) != 1 || recorded.Batch.TestReceipts[0].ReceiptRef != result.ReceiptRef {
+		t.Fatalf("receipt de test rechazado por agregado: result=%+v transition=%+v", result, recorded)
+	}
+}
+
+func serverAutoprogrammingBatchClaimedTestV0(
+	t *testing.T,
+	revision string,
+	test orquestaautoprogramming.AutoprogrammingBatchTestV0,
+	testHash string,
+	testClaimRef string,
+) orquestaautoprogramming.AutoprogrammingBatchV0 {
+	t.Helper()
+	created := orquestaautoprogramming.NewAutoprogrammingBatchV0(orquestaautoprogramming.AutoprogrammingBatchPlanV0{
+		BatchRef: "batch-ref-server-receipt-contract", RequestRef: "request-ref-server-receipt-contract",
+		ProjectRef: "project-ref-server-receipt-contract", BaseRevision: "revision-base-server-receipt-contract",
+		Members: []orquestaautoprogramming.AutoprogrammingBatchMemberV0{{
+			TaskRef: "task-ref-server-receipt-contract", GoalRef: "goal-ref-server-receipt-contract",
+			RunRef: "run-ref-server-receipt-contract", WorkspaceRef: "workspace-ref-server-receipt-contract",
+			WriteSet: []string{"cmd/receipt_contract.go"},
+		}},
+		FrozenTests: []orquestaautoprogramming.AutoprogrammingBatchTestV0{test},
+	})
+	if !created.Accepted {
+		t.Fatalf("crear batch: %+v", created.Issues)
+	}
+	batch := created.Batch
+	batch = serverAutoprogrammingBatchMustTransitionV0(t, orquestaautoprogramming.RegisterAutoprogrammingBatchLaunchV0(batch, batch.StoreVersion, "launch-receipt-contract", batch.Members[0].TaskRef))
+	batch = serverAutoprogrammingBatchMustTransitionV0(t, orquestaautoprogramming.RegisterAutoprogrammingBatchFocalCloseV0(batch, batch.StoreVersion, "close-receipt-contract", batch.Members[0].TaskRef))
+	batch = serverAutoprogrammingBatchMustTransitionV0(t, orquestaautoprogramming.ClaimAutoprogrammingBatchIntegrationV0(batch, batch.StoreVersion, "claim-integration-receipt-contract", "claim-ref-integration-receipt-contract", batch.Members[0].TaskRef, batch.BaseRevision))
+	batch = serverAutoprogrammingBatchMustTransitionV0(t, orquestaautoprogramming.RegisterAutoprogrammingBatchIntegrationV0(
+		batch, batch.StoreVersion, "integration-receipt-contract", "claim-ref-integration-receipt-contract",
+		batch.Members[0].TaskRef, "revision-source-server-receipt-contract", batch.BaseRevision, revision,
+		"receipt-ref-integration-receipt-contract",
+	))
+	return serverAutoprogrammingBatchMustTransitionV0(t, orquestaautoprogramming.ClaimAutoprogrammingBatchTestV0(
+		batch, batch.StoreVersion, "claim-test-receipt-contract", revision, testHash, testClaimRef,
+	))
+}
+
+func serverAutoprogrammingBatchMustTransitionV0(
+	t *testing.T,
+	result orquestaautoprogramming.AutoprogrammingBatchTransitionResultV0,
+) orquestaautoprogramming.AutoprogrammingBatchV0 {
+	t.Helper()
+	if !result.Accepted {
+		t.Fatalf("transicion batch rechazada: %+v", result.Issues)
+	}
+	return result.Batch
 }

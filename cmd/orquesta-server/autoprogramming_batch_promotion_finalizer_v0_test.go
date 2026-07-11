@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"os/exec"
@@ -10,6 +12,7 @@ import (
 	"testing"
 
 	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 )
 
 func TestAutoprogrammingBatchPromotionFinalizerV0BloqueaCanonicalDirtySinReceiptV0(t *testing.T) {
@@ -51,6 +54,7 @@ func TestAutoprogrammingBatchPromotionFinalizerV0AtestaRevisionLimpiaSinGitMutad
 
 	result, err := finalizer.FinalizeAutoprogrammingBatchPromotionV0(context.Background(), request)
 	if err != nil || !result.CanonicalClean || result.IntegratedRevision != headBefore || result.ReceiptRef == "" ||
+		strings.ContainsAny(result.ReceiptRef, `/\\`) || strings.HasSuffix(result.ReceiptRef, ".json") ||
 		!serverAutoprogrammingBatchHasRefV0(result.EvidenceRefs, "evidence-ref-autoprogramming-batch-promotion-clean") {
 		t.Fatalf("result=%+v err=%v", result, err)
 	}
@@ -63,6 +67,7 @@ func TestAutoprogrammingBatchPromotionFinalizerV0AtestaRevisionLimpiaSinGitMutad
 	if _, err := os.Stat(finalizer.receiptPathV0(result.ReceiptRef)); err != nil {
 		t.Fatalf("receipt durable: %v", err)
 	}
+	serverAutoprogrammingBatchRecordPromotionReceiptV0(t, result)
 }
 
 func TestAutoprogrammingBatchPromotionFinalizerV0ReconcilesReceiptSinSegundoGitV0(t *testing.T) {
@@ -125,4 +130,29 @@ func serverAutoprogrammingBatchPromotionGitV0(t *testing.T, repo string, args ..
 		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, output)
 	}
 	return strings.TrimSpace(string(output))
+}
+
+func serverAutoprogrammingBatchRecordPromotionReceiptV0(
+	t *testing.T,
+	result orquestaappcodexstack.AutoprogrammingBatchPromotionResultV0,
+) {
+	t.Helper()
+	command := "go test ./..."
+	sum := sha256.Sum256([]byte(command))
+	test := orquestaautoprogramming.AutoprogrammingBatchTestV0{Command: command, SHA256: hex.EncodeToString(sum[:])}
+	testHash := orquestaautoprogramming.AutoprogrammingBatchTestHashV0(test)
+	batch := serverAutoprogrammingBatchClaimedTestV0(t, result.IntegratedRevision, test, testHash, "claim-ref-promotion-contract-test")
+	batch = serverAutoprogrammingBatchMustTransitionV0(t, orquestaautoprogramming.RecordAutoprogrammingBatchTestReceiptV0(
+		batch, batch.StoreVersion, "record-promotion-contract-test", result.IntegratedRevision, testHash,
+		"claim-ref-promotion-contract-test", "receipt-ref-promotion-contract-test", orquestaautoprogramming.AutoprogrammingBatchTestReceiptPassedV0,
+	))
+	batch = serverAutoprogrammingBatchMustTransitionV0(t, orquestaautoprogramming.ClaimAutoprogrammingBatchPromotionV0(
+		batch, batch.StoreVersion, "claim-promotion-contract", result.ClaimRef, result.IntegratedRevision,
+	))
+	recorded := orquestaautoprogramming.RegisterAutoprogrammingBatchPromotionV0(
+		batch, batch.StoreVersion, "record-promotion-contract", result.ClaimRef, result.IntegratedRevision, result.ReceiptRef,
+	)
+	if !recorded.Accepted || recorded.Batch.PromotionReceipt.ReceiptRef != result.ReceiptRef {
+		t.Fatalf("receipt de finalizer rechazado por agregado: result=%+v transition=%+v", result, recorded)
+	}
 }
