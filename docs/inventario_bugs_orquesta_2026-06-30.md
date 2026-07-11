@@ -4146,6 +4146,18 @@ closure accepted, `no_action_closed` y `closure_issues=[]`; el shutdown final
 quedo ready sin trabajo residual. `BUG-226..236` de este replay quedan cerrados.
 Recibo: [resultado T9104](runbooks/resultado_replay_t9104_bug226_2026-07-11.md).
 
+BUG `BUG-ORQ-20260711-237` (abierto, configuracion/daemon): el proceso hijo
+acepta variables heredadas mediante prefijos amplios aunque no existan en el
+registro canonico. El ratchet de lecturas puede quedar verde mientras una clave
+inventada `ORQUESTA_SERVER_*` cruza al daemon. El cierre exige allowlist por
+clave registrada y prueba negativa independiente.
+
+BUG `BUG-ORQ-20260711-238` (abierto, falso indicador de limpieza):
+`helper_duplicate_definitions=307` agrupa solo por prefijos nominales
+`compact`/`contains`/`firstNonEmpty`, sin comparar firma, cuerpo ni semantica y
+cruzando paquetes. No autoriza consolidar codigo. Evidencia y criterios en la
+[incidencia de limpieza](incidencias/incidencia_orquesta_limpieza_config_metricas_falsas_2026-07-11.md).
+
 Avance 2026-07-11: `b96e9b115` añade refs obligatorias de criterios
 verificables al contrato Goal; el transporte posterior añade
 `acceptance_checks` tipados a autoprogramacion V0/V1 y los publica por MCP. Los

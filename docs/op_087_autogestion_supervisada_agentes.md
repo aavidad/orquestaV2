@@ -15,8 +15,13 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 > se usa Terminator, `tmux` o wrapper manual, queda como recuperacion asistida o
 > adaptador legacy con decision y pruebas propias.
 
-> Nota de vigencia 2026-04-05
-> La doctrina viva de runtime local interactivo ya no es `pty/process` como primer driver. El criterio vigente está en `docs/BIBLIA_APP_ORQUESTA.md`: `tmux` + `manifest/status/heartbeat` + continuidad por `session_resume`. Las referencias de esta OP a `pty/process` se conservan como contexto histórico y no deben abrir tareas nuevas PTY-first.
+> Nota historica 2026-04-05
+> La recomendacion `tmux` + `manifest/status/heartbeat` + continuidad por
+> `session_resume` pertenecia a la doctrina V1 y no prevalece sobre la
+> cuarentena anterior. Las fuentes vigentes son `AGENTS.md`,
+> `docs/estado_actual_2026-05-17.md` y
+> `docs/mapa_generaciones_director_2026-07-03.md`; esta OP no debe abrir tareas
+> nuevas de runtime.
 
 ## Objetivo
 

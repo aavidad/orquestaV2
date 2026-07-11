@@ -23,11 +23,11 @@ Este fichero conserva contexto historico y vision amplia. Cualquier referencia
 al antiguo control-plane, `db/`, rutas legacy o programacion como unico dominio
 queda subordinada a la frontera vigente del nucleo neutral.
 
-Documento canonico consolidado:
-
-- `docs/BIBLIA_APP_ORQUESTA.md`
-
-Este fichero sigue siendo la referencia especifica de arquitectura, pero la doctrina estatica del proyecto se consolida ya en la biblia para evitar divergencias entre agentes y documentos dispersos.
+Las fuentes canonicas vigentes son `AGENTS.md`,
+`docs/estado_actual_2026-05-17.md` y
+`docs/mapa_generaciones_director_2026-07-03.md`. La antigua
+`docs/BIBLIA_APP_ORQUESTA.md` y las secciones V1 de este fichero se conservan
+solo como contexto historico y no abren trabajo nuevo.
 
 Este fichero resume la direccion arquitectonica.
 La especificacion ampliada de trabajo y la matriz de voto viven en:

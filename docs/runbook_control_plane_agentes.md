@@ -7,6 +7,13 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 
 # Runbook operativo del control plane de agentes
 
+> **Runbook V1 en cuarentena historica.** Los comandos, rutas y contratos de
+> este documento se conservan para diagnostico o recuperacion legacy; no deben
+> asumirse vigentes. Consultar `AGENTS.md`,
+> `docs/estado_actual_2026-05-17.md`,
+> `docs/mapa_generaciones_director_2026-07-03.md` y
+> `docs/uso_actual_app_orquesta.md` antes de operar el servidor actual.
+
 ## Objetivo
 
 Definir el procedimiento operativo mínimo para supervisar y operar el control plane de agentes en Orquesta sin recurrir a acceso directo a la base de datos ni a atajos fuera de la app.

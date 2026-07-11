@@ -21,10 +21,12 @@ Motivo:
 
 La referencia vigente pasa a ser:
 
-- `docs/BIBLIA_APP_ORQUESTA.md`
-- `docs/diseno_microprogramacion_dirigida_agentes.md`
-- `docs/matriz_modelo_y_razonamiento.md`
-- `docs/orquesta_v1_roadmap.md`
+- `AGENTS.md`
+- `docs/estado_actual_2026-05-17.md`
+- `docs/mapa_generaciones_director_2026-07-03.md`
+
+Las referencias V1 y la decision operativa que sigue se conservan como
+contexto historico; no fijan proveedores o modelos para composiciones actuales.
 
 ## Decisión operativa vigente
 

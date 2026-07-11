@@ -7,6 +7,12 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 
 # Politica de supervisor residente y recuperacion local-first
 
+> **Compatibilidad legacy.** Esta politica describe el control-plane V1 y no
+> gobierna nuevas rutas productivas. Para trabajo nuevo prevalecen `AGENTS.md`,
+> `docs/estado_actual_2026-05-17.md` y
+> `docs/mapa_generaciones_director_2026-07-03.md`, con `goal-first` como ruta
+> productiva.
+
 ## Estado
 
 Este documento consolida una politica operativa ya reflejada de forma dispersa en:
@@ -18,7 +24,7 @@ Este documento consolida una politica operativa ya reflejada de forma dispersa e
 
 No introduce una arquitectura nueva de produccion. Sirve como contrato de lectura rapida para documentacion, soporte y futuros tests.
 
-## Politica canonica
+## Politica historica V1
 
 El modelo objetivo de autonomia persistente en Orquesta es:
 

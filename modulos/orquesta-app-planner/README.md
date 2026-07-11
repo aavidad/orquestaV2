@@ -5,8 +5,9 @@ programacion con write-set acotado y dependencias explicitas.
 
 No pertenece al nucleo de workflow durable. Es un adaptador/servicio exterior
 que prepara planes deterministas para compatibilidad. La ruta operativa
-preferente de `AppSpecV0` para apps nuevas es el Director V2 mediante
-`orquesta.apps.arrancar_director.v0`; este planner no demuestra plan-state,
+productiva para apps nuevas es `goal-first`; el Director V2 queda como
+preview/compatibilidad mediante `orquesta.apps.arrancar_director.v0`. Este
+planner no demuestra plan-state,
 waits por ola/cohorte, review/tests/cierre ni recursion.
 
 Responsabilidades:

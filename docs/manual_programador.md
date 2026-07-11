@@ -1,9 +1,16 @@
 # Orquesta: Manual del Programador
 
-## Documento canónico obligatorio
+> **Manual V1 historico-stale.** Conserva contratos y ejemplos de la etapa
+> anterior; no es fuente operativa para trabajo nuevo. La autoridad vigente es
+> `AGENTS.md`, `docs/estado_actual_2026-05-17.md` y
+> `docs/mapa_generaciones_director_2026-07-03.md`. Para uso actual, consultar
+> `docs/uso_actual_app_orquesta.md` y los contratos versionados de
+> `modulos/orquesta-mcp`.
 
-Antes de extender Orquesta o tocar flujos operativos, lea `docs/BIBLIA_APP_ORQUESTA.md`.
-Ese archivo consolida la doctrina del proyecto y prevalece sobre documentos parciales u obsoletos cuando haya contradicciones.
+## Documento historico de referencia
+
+`docs/BIBLIA_APP_ORQUESTA.md` se conserva como evidencia de la doctrina V1,
+subordinada a las fuentes vigentes anteriores cuando haya contradicciones.
 
 Este manual está dirigido a desarrolladores que desean integrar nuevos agentes en Orquesta, extender sus funcionalidades o consumir sus APIs.
 

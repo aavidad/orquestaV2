@@ -7,6 +7,12 @@ Oficina de Software Libre (OSL) - Diputacion de Granada
 
 # OP 096 — Control total de estado de proyecto y estadisticas
 
+> **OP historica.** Conserva decisiones y evidencia del control-plane V1, pero
+> sus afirmaciones de estado vivo no describen por si solas la composicion
+> actual. La foto vigente y la generacion productiva se fijan en `AGENTS.md`,
+> `docs/estado_actual_2026-05-17.md` y
+> `docs/mapa_generaciones_director_2026-07-03.md`.
+
 ## Objetivo
 
 Fijar el contrato operativo para que Orquesta pueda responder, sin shell ni inspeccion manual ad hoc, preguntas como:
