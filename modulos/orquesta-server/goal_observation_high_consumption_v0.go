@@ -16,6 +16,9 @@ const (
 	goalObserverHighConsumptionStopEvidenceV0      = "evidence-ref-goal-observer-high-consumption-stop-requested"
 	goalObserverCheckpointOnlyHighConsumptionRefV0 = "evidence-ref-goal-observer-checkpoint-only-high-consumption"
 	goalObserverNoCheckpointHighConsumptionRefV0   = "evidence-ref-goal-observer-no-checkpoint-high-consumption"
+
+	goalObserverAppServerCheckpointStartedEvidenceV0 = "evidence-ref-codex-app-server-checkpoint-started"
+	goalObserverAppServerEarlyCheckpointPrefixV0     = "evidence-ref-codex-app-server-early-checkpoint-materialized:"
 )
 
 func (runtime *RuntimeV0) reconcileGoalObserverHighConsumptionV0(
@@ -31,29 +34,63 @@ func (runtime *RuntimeV0) reconcileGoalObserverHighConsumptionV0(
 		if !ok {
 			continue
 		}
-		blocked := runtime.blockGoalObserverHighConsumptionV0(ctx, observation, reason, evidenceRefs)
-		result.Observations[index].Result = blocked
-		result.Observations[index].State.Status = blocked.Status
-		result.Observations[index].State.LastResult = &blocked
+		if terminal, ok := runtime.goalObserverHighConsumptionTerminalSnapshotV0(ctx, observation.State.RunRef); ok {
+			result.Observations[index] = terminal
+			result.EvidenceRefs = compactConfigStringsV0(append(result.EvidenceRefs, terminal.EvidenceRefs...))
+			continue
+		}
+		advisory := runtime.adviseGoalObserverHighConsumptionV0(ctx, observation, reason, evidenceRefs)
+		if terminal, ok := runtime.goalObserverHighConsumptionTerminalSnapshotV0(ctx, observation.State.RunRef); ok {
+			result.Observations[index] = terminal
+			result.EvidenceRefs = compactConfigStringsV0(append(result.EvidenceRefs, terminal.EvidenceRefs...))
+			continue
+		}
+		result.Observations[index].Result = advisory
+		result.Observations[index].State.Status = orquestagoal.GoalStatusRunningV0
+		result.Observations[index].State.LastResult = &advisory
+		result.Observations[index].State.LastClosure = nil
 		result.Observations[index].State.EvidenceRefs = compactConfigStringsV0(
-			append(result.Observations[index].State.EvidenceRefs, blocked.EvidenceRefs...),
+			append(result.Observations[index].State.EvidenceRefs, advisory.EvidenceRefs...),
 		)
-		result.Observations[index].Terminal = true
+		result.Observations[index].Terminal = false
+		result.Observations[index].ClosureEvaluated = false
 		result.Observations[index].Accepted = false
-		result.Observations[index].NeedsRework = true
+		result.Observations[index].NeedsRework = false
 		result.Observations[index].EvidenceRefs = compactConfigStringsV0(
-			append(result.Observations[index].EvidenceRefs, blocked.EvidenceRefs...),
+			append(result.Observations[index].EvidenceRefs, advisory.EvidenceRefs...),
 		)
-		result.EvidenceRefs = compactConfigStringsV0(append(result.EvidenceRefs, blocked.EvidenceRefs...))
+		result.EvidenceRefs = compactConfigStringsV0(append(result.EvidenceRefs, advisory.EvidenceRefs...))
 		result.Issues = append(result.Issues, orquestagoal.GoalWorkObserveActiveIssueV0{
 			RunRef:  strings.TrimSpace(result.Observations[index].State.RunRef),
-			GoalRef: strings.TrimSpace(blocked.GoalRef),
+			GoalRef: strings.TrimSpace(advisory.GoalRef),
 			Code:    reason,
 			Field:   "goal_progress",
 			Message: goalObserverHighConsumptionRecommendedActionV0,
 		})
 	}
 	return result
+}
+
+func (runtime *RuntimeV0) goalObserverHighConsumptionTerminalSnapshotV0(
+	ctx context.Context,
+	runRef string,
+) (orquestagoal.GoalWorkObserveResultV0, bool) {
+	if runtime == nil || runtime.goalStateStore == nil {
+		return orquestagoal.GoalWorkObserveResultV0{}, false
+	}
+	runRef = strings.TrimSpace(runRef)
+	if runRef == "" {
+		return orquestagoal.GoalWorkObserveResultV0{}, false
+	}
+	state, err := runtime.goalStateStore.LoadGoalWorkStateV0(ctx, runRef)
+	if err != nil || !orquestagoal.GoalWorkResultTerminalV0(state.Status) {
+		return orquestagoal.GoalWorkObserveResultV0{}, false
+	}
+	snapshot, err := orquestagoal.GoalWorkObservationSnapshotFromStateV0(state)
+	if err != nil {
+		return orquestagoal.GoalWorkObserveResultV0{}, false
+	}
+	return snapshot, true
 }
 
 func goalObserverHighConsumptionReasonV0(
@@ -70,7 +107,7 @@ func goalObserverHighConsumptionReasonV0(
 		return "", nil, false
 	}
 	evidenceRefs := goalObserverHighConsumptionEvidenceRefsV0(observation, result)
-	if goalObserverHasCheckpointArtifactV0(result) ||
+	if goalObserverHasCheckpointArtifactV0(observation, result) ||
 		goalObserverHasIssueOrEvidenceV0(observation, result, goalObserverHighConsumptionCheckpointOnlyReasonV0) {
 		return goalObserverHighConsumptionCheckpointOnlyReasonV0,
 			compactConfigStringsV0(append(evidenceRefs, goalObserverCheckpointOnlyHighConsumptionRefV0)),
@@ -182,7 +219,15 @@ func goalObserverHasNonCheckpointArtifactV0(result orquestagoal.GoalWorkResultV0
 	return false
 }
 
-func goalObserverHasCheckpointArtifactV0(result orquestagoal.GoalWorkResultV0) bool {
+func goalObserverHasCheckpointArtifactV0(
+	observation orquestagoal.GoalWorkObserveResultV0,
+	result orquestagoal.GoalWorkResultV0,
+) bool {
+	for _, ref := range goalObserverHighConsumptionEvidenceRefsV0(observation, result) {
+		if goalObserverEvidenceRefLooksLikeCheckpointV0(ref) {
+			return true
+		}
+	}
 	for _, ref := range result.ArtifactRefs {
 		if goalObserverArtifactLooksLikeCheckpointV0(ref) {
 			return true
@@ -201,6 +246,13 @@ func goalObserverHasCheckpointArtifactV0(result orquestagoal.GoalWorkResultV0) b
 	return false
 }
 
+func goalObserverEvidenceRefLooksLikeCheckpointV0(value string) bool {
+	value = strings.TrimSpace(value)
+	return value == goalObserverAppServerCheckpointStartedEvidenceV0 ||
+		(strings.HasPrefix(value, goalObserverAppServerEarlyCheckpointPrefixV0) &&
+			len(value) > len(goalObserverAppServerEarlyCheckpointPrefixV0))
+}
+
 func goalObserverMaterializedArtifactLooksLikeCheckpointV0(
 	artifact orquestagoal.GoalMaterializedArtifactV0,
 ) bool {
@@ -216,7 +268,7 @@ func goalObserverArtifactLooksLikeCheckpointV0(value string) bool {
 	return strings.Contains(strings.ToLower(strings.TrimSpace(value)), "checkpoint")
 }
 
-func (runtime *RuntimeV0) blockGoalObserverHighConsumptionV0(
+func (runtime *RuntimeV0) adviseGoalObserverHighConsumptionV0(
 	ctx context.Context,
 	observation orquestagoal.GoalWorkObserveResultV0,
 	reason string,
@@ -229,25 +281,72 @@ func (runtime *RuntimeV0) blockGoalObserverHighConsumptionV0(
 	if strings.TrimSpace(result.ExternalGoalRef) == "" {
 		result.ExternalGoalRef = strings.TrimSpace(observation.State.ExternalGoalRef)
 	}
-	blocked := result
-	blocked.Status = orquestagoal.GoalStatusBlockedV0
-	blocked.Summary = reason
-	blocked.ReworkPlanRefs = compactConfigStringsV0(append(
-		blocked.ReworkPlanRefs,
-		"rework-plan-ref-"+strings.ReplaceAll(reason, "_", "-"),
-	))
-	blocked.EvidenceRefs = compactConfigStringsV0(append(blocked.EvidenceRefs, evidenceRefs...))
-	blocked.Issues = append(blocked.Issues, orquestagoal.GoalWorkIssueV0{
+	advisory := result
+	advisory.Status = orquestagoal.GoalStatusRunningV0
+	advisory.EvidenceRefs = compactConfigStringsV0(append(advisory.EvidenceRefs, evidenceRefs...))
+	advisory.Issues = append(advisory.Issues, orquestagoal.GoalWorkIssueV0{
 		Code:   reason,
 		Field:  "goal_progress",
 		Detail: "recommended_action=" + goalObserverHighConsumptionRecommendedActionV0,
 	})
-	stopEvidence, stopIssues := runtime.requestGoalObserverHighConsumptionStopV0(ctx, observation, blocked, reason)
-	blocked.EvidenceRefs = compactConfigStringsV0(append(blocked.EvidenceRefs, stopEvidence...))
-	blocked.Issues = append(blocked.Issues, stopIssues...)
-	blocked = orquestagoal.NormalizeGoalWorkResultV0(blocked)
-	runtime.persistGoalObserverHighConsumptionStateV0(ctx, observation.State, blocked, reason)
-	return blocked
+	accumulatedEvidence, storedTerminal := runtime.goalObserverHighConsumptionGovernanceSnapshotV0(
+		ctx,
+		observation,
+		advisory,
+	)
+	if goalObserverEvidenceRefsContainV0(accumulatedEvidence, goalObserverHighConsumptionStopEvidenceV0) {
+		advisory.EvidenceRefs = compactConfigStringsV0(append(
+			advisory.EvidenceRefs,
+			goalObserverHighConsumptionStopEvidenceV0,
+		))
+	} else if !storedTerminal {
+		stopEvidence, stopIssues := runtime.requestGoalObserverHighConsumptionStopV0(ctx, observation, advisory, reason)
+		advisory.EvidenceRefs = compactConfigStringsV0(append(advisory.EvidenceRefs, stopEvidence...))
+		advisory.Issues = append(advisory.Issues, stopIssues...)
+	}
+	advisory = orquestagoal.NormalizeGoalWorkResultV0(advisory)
+	runtime.persistGoalObserverHighConsumptionStateV0(ctx, observation.State, advisory)
+	return advisory
+}
+
+func (runtime *RuntimeV0) goalObserverHighConsumptionGovernanceSnapshotV0(
+	ctx context.Context,
+	observation orquestagoal.GoalWorkObserveResultV0,
+	result orquestagoal.GoalWorkResultV0,
+) ([]string, bool) {
+	refs := goalObserverHighConsumptionEvidenceRefsV0(observation, result)
+	if runtime == nil || runtime.goalStateStore == nil {
+		return refs, false
+	}
+	runRef := strings.TrimSpace(observation.State.RunRef)
+	if runRef == "" {
+		return refs, false
+	}
+	state, err := runtime.goalStateStore.LoadGoalWorkStateV0(ctx, runRef)
+	if err != nil {
+		return refs, false
+	}
+	refs = append(refs, state.EvidenceRefs...)
+	if state.LastResult != nil {
+		refs = append(refs, goalObserverHighConsumptionEvidenceRefsV0(
+			orquestagoal.GoalWorkObserveResultV0{State: state},
+			*state.LastResult,
+		)...)
+	}
+	if state.LastClosure != nil {
+		refs = append(refs, state.LastClosure.EvidenceRefs...)
+	}
+	return compactConfigStringsV0(refs), orquestagoal.GoalWorkResultTerminalV0(state.Status)
+}
+
+func goalObserverEvidenceRefsContainV0(refs []string, expected string) bool {
+	expected = strings.TrimSpace(expected)
+	for _, ref := range refs {
+		if strings.TrimSpace(ref) == expected {
+			return true
+		}
+	}
+	return false
 }
 
 func (runtime *RuntimeV0) requestGoalObserverHighConsumptionStopV0(
@@ -299,8 +398,7 @@ func (runtime *RuntimeV0) requestGoalObserverHighConsumptionStopV0(
 func (runtime *RuntimeV0) persistGoalObserverHighConsumptionStateV0(
 	ctx context.Context,
 	observedState orquestagoal.GoalWorkStateV0,
-	blocked orquestagoal.GoalWorkResultV0,
-	reason string,
+	advisory orquestagoal.GoalWorkResultV0,
 ) {
 	if runtime == nil || runtime.goalStateStore == nil {
 		return
@@ -313,17 +411,12 @@ func (runtime *RuntimeV0) persistGoalObserverHighConsumptionStateV0(
 	if loaded, err := runtime.goalStateStore.LoadGoalWorkStateV0(ctx, runRef); err == nil {
 		state = loaded
 	}
-	state.Status = orquestagoal.GoalStatusBlockedV0
-	state.LastResult = &blocked
-	state.LastClosure = &orquestagoal.GoalClosureValidationV0{
-		Status:       orquestagoal.GoalStatusBlockedV0,
-		NeedsRework:  true,
-		EvidenceRefs: append([]string(nil), blocked.EvidenceRefs...),
-		Issues: []orquestagoal.GoalWorkIssueV0{{
-			Code:  reason,
-			Field: "goal_progress",
-		}},
+	if orquestagoal.GoalWorkResultTerminalV0(state.Status) {
+		return
 	}
-	state.EvidenceRefs = compactConfigStringsV0(append(state.EvidenceRefs, blocked.EvidenceRefs...))
+	state.Status = orquestagoal.GoalStatusRunningV0
+	state.LastResult = &advisory
+	state.LastClosure = nil
+	state.EvidenceRefs = compactConfigStringsV0(append(state.EvidenceRefs, advisory.EvidenceRefs...))
 	_ = runtime.goalStateStore.SaveGoalWorkStateV0(ctx, state)
 }
