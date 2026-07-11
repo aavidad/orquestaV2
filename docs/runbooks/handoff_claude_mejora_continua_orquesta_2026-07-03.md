@@ -3148,3 +3148,13 @@ Focales de limites y `go test -count=1 ./modulos/orquesta-goal` verdes.
 pero habia materializado el diff; Codex lo reviso como trabajo no confiable y
 reejecuto los cuatro focales de cierre y toda la suite `orquesta-goal`, verdes.
 La fachada y el orden de errores no cambian.
+
+## Actualizacion Codex 2026-07-11: BUG-208Z en bootstrap de Orquesta local
+
+Al preparar una ejecucion real de Orquesta por API, un worktree temporal sin
+upstream publico correctamente `degraded_identity`, pero el mismo guard rechazo
+`POST /api/v0/server/shutdown` con `server_work_launch_degraded_identity`.
+SIGINT cooperativo cerro el PID sin residuos. Se abre
+`BUG-ORQ-20260711-208Z`: shutdown debe seguir disponible bajo identidad
+degradada sin habilitar prepare-run ni otros efectos. Incidencia:
+`docs/incidencias/incidencia_orquesta_degraded_identity_bloquea_shutdown_2026-07-11.md`.

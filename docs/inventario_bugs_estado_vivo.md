@@ -18,6 +18,7 @@ mismo commit.
 | BUG-ORQ-20260710-208S | goal-first residente ya cubre bloqueo/rework/parada por falta de progreso; el residual es `codex-launch-wave`, utilidad breakglass cuyo presupuesto depende de `codex-wave-status` | no usar esa utilidad como flujo productivo; si se conserva para operacion real, conectarla a una tarea/observador gobernado; evidencia en la [incidencia 208S](incidencias/incidencia_orquesta_ola_codex_sin_progreso_diagnostico_excesivo_2026-07-10.md) |
 | BUG-ORQ-20260701-079 | solo frontera proveedor: cap duro pre-tool ante stdout crudo sin redireccion | esperar enforcement del proveedor o probe adversarial nuevo; no bloquea local |
 | BUG-ORQ-20260704-165 / 20260701-065 | residual amplio de observabilidad/control lento con proveedor real; nucleo local cerrado | se paga con la adopcion completa del veredicto F1 + repro 208 tras deploy |
+| BUG-ORQ-20260711-208Z | una instancia con `degraded_identity` bloquea correctamente trabajo, pero tambien rechaza `POST /api/v0/server/shutdown` con `server_work_launch_degraded_identity` | separar shutdown seguro del guard de lanzamiento; conservar idempotencia y demostrar que prepare-run sigue bloqueado. Evidencia en la [incidencia 208Z](incidencias/incidencia_orquesta_degraded_identity_bloquea_shutdown_2026-07-11.md) |
 
 ## Vivos (operativos, no de codigo)
 
