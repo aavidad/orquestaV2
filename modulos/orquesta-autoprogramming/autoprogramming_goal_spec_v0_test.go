@@ -34,6 +34,9 @@ func TestBuildAutoprogrammingProgrammableWorkV0GeneraGoalSpecsCuandoGoalListo(t 
 		len(result.Work.GoalSpecs) != 1 {
 		t.Fatalf("goal_migration/specs inesperados: %+v specs=%d", result.Work.GoalMigration, len(result.Work.GoalSpecs))
 	}
+	if !reflect.DeepEqual(result.Work.BatchRequiredTests, request.RequiredTests) {
+		t.Fatalf("batch_required_tests=%v want=%v", result.Work.BatchRequiredTests, request.RequiredTests)
+	}
 	if len(result.Work.Tasks) != 0 || len(result.Work.Profiles) != 0 {
 		t.Fatalf("goal-ready no debe publicar superficie WorkflowTask legacy: tasks=%d profiles=%d", len(result.Work.Tasks), len(result.Work.Profiles))
 	}
@@ -68,6 +71,30 @@ func TestBuildAutoprogrammingProgrammableWorkV0GeneraGoalSpecsCuandoGoalListo(t 
 		!hasGoalContextRefForAutoprogrammingTestV0(spec.ContextRefs, "workflow_task_context", "source_task_ref:task-ref-goal-ready-001") ||
 		len(spec.RuleRefs) == 0 {
 		t.Fatalf("context/rules incompletos: context=%+v rules=%+v", spec.ContextRefs, spec.RuleRefs)
+	}
+}
+
+func TestBuildAutoprogrammingProgrammableWorkV0SeparaTestsBatchDeGoalsMultiples(t *testing.T) {
+	const batchTest = "go test -count=1 ./..."
+	const taskTestA = "go test -count=1 ./modulos/orquesta-autoprogramming -run TestGoalA"
+	const taskTestB = "go test -count=1 ./modulos/orquesta-autoprogramming -run TestGoalB"
+	result := BuildAutoprogrammingProgrammableWorkV0(validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
+		request.RequiredTests = []string{batchTest}
+		request.Tasks = []AutoprogrammingTaskGroupCandidateV0{
+			{TaskRef: "task-ref-goal-batch-a", Area: "area-a", RequiredTests: []string{taskTestA}, ContextRefs: []string{"goal_migration:goal-first", "goal_capability:starter", "goal_capability:observer", "goal_capability:closure-validator"}},
+			{TaskRef: "task-ref-goal-batch-b", Area: "area-b", RequiredTests: []string{taskTestB}, ContextRefs: []string{"goal_migration:goal-first", "goal_capability:starter", "goal_capability:observer", "goal_capability:closure-validator"}},
+		}
+		request.WriteSet = []string{"modulos/orquesta-autoprogramming/area-a.go", "modulos/orquesta-autoprogramming/area-b.go"}
+	}))
+
+	if !result.Accepted || !reflect.DeepEqual(result.Work.BatchRequiredTests, []string{batchTest}) || len(result.Work.GoalSpecs) != 2 {
+		t.Fatalf("result=%+v", result)
+	}
+	if !hasGoalRequiredTestCommandForAutoprogrammingTestV0(result.Work.GoalSpecs[0].RequiredTests, taskTestA) ||
+		hasGoalRequiredTestCommandForAutoprogrammingTestV0(result.Work.GoalSpecs[0].RequiredTests, batchTest) ||
+		!hasGoalRequiredTestCommandForAutoprogrammingTestV0(result.Work.GoalSpecs[1].RequiredTests, taskTestB) ||
+		hasGoalRequiredTestCommandForAutoprogrammingTestV0(result.Work.GoalSpecs[1].RequiredTests, batchTest) {
+		t.Fatalf("goal required_tests=%+v / %+v", result.Work.GoalSpecs[0].RequiredTests, result.Work.GoalSpecs[1].RequiredTests)
 	}
 }
 
@@ -167,14 +194,16 @@ func TestBuildAutoprogrammingProgrammableWorkV0GeneraGoalSpecsPorGrupo(t *testin
 	request := validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
 		request.Tasks = []AutoprogrammingTaskGroupCandidateV0{
 			{
-				TaskRef:     "task-ref-goal-api-001",
-				Area:        "api",
-				ContextRefs: []string{"goal_migration:goal-first", "goal_capability:starter", "goal_capability:observer", "goal_capability:closure-validator"},
+				TaskRef:       "task-ref-goal-api-001",
+				Area:          "api",
+				RequiredTests: []string{"go test -count=1 ./modulos/orquesta-autoprogramming -run TestGoalAPI"},
+				ContextRefs:   []string{"goal_migration:goal-first", "goal_capability:starter", "goal_capability:observer", "goal_capability:closure-validator"},
 			},
 			{
-				TaskRef:     "task-ref-goal-web-001",
-				Area:        "web",
-				ContextRefs: []string{"goal_migration:goal-first", "goal_capability:starter", "goal_capability:observer", "goal_capability:closure-validator"},
+				TaskRef:       "task-ref-goal-web-001",
+				Area:          "web",
+				RequiredTests: []string{"go test -count=1 ./modulos/orquesta-autoprogramming -run TestGoalWeb"},
+				ContextRefs:   []string{"goal_migration:goal-first", "goal_capability:starter", "goal_capability:observer", "goal_capability:closure-validator"},
 			},
 		}
 		request.WriteSet = []string{

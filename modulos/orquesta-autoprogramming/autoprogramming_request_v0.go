@@ -89,6 +89,7 @@ func ValidateAutoprogrammingRequestV0(
 			"tests obligatorios requeridos",
 		))
 	}
+	issues = append(issues, autoprogrammingRequestMultiGoalFocalTestIssuesV0(request, groups)...)
 
 	return AutoprogrammingRequestValidationResultV0{
 		Accepted:      len(issues) == 0,
@@ -97,6 +98,29 @@ func ValidateAutoprogrammingRequestV0(
 		RequiredTests: requiredTests,
 		Issues:        issues,
 	}
+}
+
+func autoprogrammingRequestMultiGoalFocalTestIssuesV0(
+	request AutoprogrammingRequestV0,
+	groups []AutoprogrammingTaskGroupV0,
+) []AutoprogrammingRequestIssueV0 {
+	if ClassifyAutoprogrammingGoalMigrationV0(request).Status != AutoprogrammingGoalMigrationGoalReadyV0 ||
+		len(groups) <= 1 {
+		return nil
+	}
+	var issues []AutoprogrammingRequestIssueV0
+	for _, group := range groups {
+		if len(autoprogrammingFocalRequiredTestsForGroupV0(group)) > 0 ||
+			len(autoprogrammingAcceptanceChecksForGroupV0(group)) > 0 {
+			continue
+		}
+		issues = append(issues, autoprogrammingRequestIssueV0(
+			"goal_focal_required_tests_missing",
+			"tasks."+group.Area+".required_tests",
+			"cada goal multigrupo requiere tests focales declarados por tarea, acceptance check o guard contractual; required_tests globales pertenecen al batch",
+		))
+	}
+	return issues
 }
 
 func autoprogrammingRequestRequiredRefIssuesV0(

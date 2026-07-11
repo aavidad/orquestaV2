@@ -71,10 +71,18 @@ func autoprogrammingSummaryForGroupV0(
 }
 
 func autoprogrammingRequiredTestsForGroupV0(
-	requiredTests []string,
+	batchRequiredTests []string,
 	group AutoprogrammingTaskGroupV0,
 ) []string {
-	out := append([]string(nil), requiredTests...)
+	out := append([]string(nil), batchRequiredTests...)
+	out = append(out, autoprogrammingFocalRequiredTestsForGroupV0(group)...)
+	return compactStringsV0(out)
+}
+
+func autoprogrammingFocalRequiredTestsForGroupV0(
+	group AutoprogrammingTaskGroupV0,
+) []string {
+	var out []string
 	for _, task := range group.Tasks {
 		out = append(out, task.RequiredTests...)
 	}

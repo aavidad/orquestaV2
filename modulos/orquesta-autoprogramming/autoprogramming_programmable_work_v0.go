@@ -19,17 +19,18 @@ type AutoprogrammingProgrammableWorkResultV0 struct {
 }
 
 type AutoprogrammingProgrammableWorkV0 struct {
-	RequestRef      string                                       `json:"request_ref"`
-	ProjectRef      string                                       `json:"project_ref"`
-	WorktreeRef     string                                       `json:"worktree_ref"`
-	BranchRef       string                                       `json:"branch_ref"`
-	GoalMigration   AutoprogrammingGoalMigrationClassificationV0 `json:"goal_migration"`
-	Partition       AutoprogrammingPartitionPlanV0               `json:"partition,omitempty"`
-	Groups          []AutoprogrammingProgrammableGroupV0         `json:"groups"`
-	GoalSpecs       []orquestagoal.GoalWorkSpecV0                `json:"goal_specs,omitempty"`
-	AutonomyProgram orquestaautonomyprogram.AutonomyProgramV0    `json:"autonomy_program,omitempty"`
-	Profiles        []orquestacoreworkflow.WorkProfileV0         `json:"profiles"`
-	Tasks           []orquestacoreworkflow.WorkflowTaskV0        `json:"tasks"`
+	RequestRef         string                                       `json:"request_ref"`
+	ProjectRef         string                                       `json:"project_ref"`
+	WorktreeRef        string                                       `json:"worktree_ref"`
+	BranchRef          string                                       `json:"branch_ref"`
+	GoalMigration      AutoprogrammingGoalMigrationClassificationV0 `json:"goal_migration"`
+	Partition          AutoprogrammingPartitionPlanV0               `json:"partition,omitempty"`
+	BatchRequiredTests []string                                     `json:"batch_required_tests"`
+	Groups             []AutoprogrammingProgrammableGroupV0         `json:"groups"`
+	GoalSpecs          []orquestagoal.GoalWorkSpecV0                `json:"goal_specs,omitempty"`
+	AutonomyProgram    orquestaautonomyprogram.AutonomyProgramV0    `json:"autonomy_program,omitempty"`
+	Profiles           []orquestacoreworkflow.WorkProfileV0         `json:"profiles"`
+	Tasks              []orquestacoreworkflow.WorkflowTaskV0        `json:"tasks"`
 }
 
 type AutoprogrammingProgrammableGroupV0 struct {
@@ -82,6 +83,7 @@ func BuildAutoprogrammingProgrammableWorkV0(
 	}
 
 	work := autoprogrammingProgrammableWorkSkeletonV0(request)
+	work.BatchRequiredTests = append([]string(nil), validation.RequiredTests...)
 	work.Partition = partition
 	for i, group := range validation.Groups {
 		profile, task, issue := autoprogrammingWorkflowTaskForGroupV0(
@@ -89,7 +91,7 @@ func BuildAutoprogrammingProgrammableWorkV0(
 			group,
 			partition.WriteSetByArea[group.Area],
 			partition.DependsOnByArea[group.Area],
-			validation.RequiredTests,
+			autoprogrammingBatchRequiredTestsForGroupV0(validation.RequiredTests, validation.Groups, work.GoalMigration),
 			i,
 		)
 		if issue.Code != "" {
@@ -134,6 +136,17 @@ func BuildAutoprogrammingProgrammableWorkV0(
 		Accepted: true,
 		Work:     work,
 	}
+}
+
+func autoprogrammingBatchRequiredTestsForGroupV0(
+	batchRequiredTests []string,
+	groups []AutoprogrammingTaskGroupV0,
+	goalMigration AutoprogrammingGoalMigrationClassificationV0,
+) []string {
+	if len(groups) != 1 && goalMigration.Status == AutoprogrammingGoalMigrationGoalReadyV0 {
+		return nil
+	}
+	return append([]string(nil), batchRequiredTests...)
 }
 
 func autoprogrammingAcceptanceChecksForGroupV0(

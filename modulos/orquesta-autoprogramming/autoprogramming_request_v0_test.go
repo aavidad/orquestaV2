@@ -96,6 +96,21 @@ func TestValidateAutoprogrammingRequestV0RejectsMissingTestsAndWriteSet(t *testi
 	assertAutoprogrammingRequestIssueV0(t, result, "write_set_missing")
 }
 
+func TestValidateAutoprogrammingRequestV0RejectsGoalReadyMultiGroupWithoutFocalTests(t *testing.T) {
+	result := ValidateAutoprogrammingRequestV0(validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
+		request.Tasks = []AutoprogrammingTaskGroupCandidateV0{
+			{TaskRef: "task-ref-goal-focal-a", Area: "area-a", ContextRefs: []string{"goal_migration:goal-first", "goal_capability:starter", "goal_capability:observer", "goal_capability:closure-validator"}},
+			{TaskRef: "task-ref-goal-focal-b", Area: "area-b", ContextRefs: []string{"goal_migration:goal-first", "goal_capability:starter", "goal_capability:observer", "goal_capability:closure-validator"}},
+		}
+		request.WriteSet = []string{"modulos/orquesta-autoprogramming/area-a.go", "modulos/orquesta-autoprogramming/area-b.go"}
+	}))
+
+	if result.Accepted {
+		t.Fatalf("accepted=true result=%+v", result)
+	}
+	assertAutoprogrammingRequestIssueV0(t, result, "goal_focal_required_tests_missing")
+}
+
 func TestValidateAutoprogrammingRequestV0RejectsUnsafeWriteSetPath(t *testing.T) {
 	result := ValidateAutoprogrammingRequestV0(validAutoprogrammingRequestV0(func(request *AutoprogrammingRequestV0) {
 		request.WriteSet = []string{
