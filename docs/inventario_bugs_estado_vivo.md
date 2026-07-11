@@ -20,7 +20,6 @@ mismo commit.
 | BUG-ORQ-20260704-165 / 20260701-065 | residual amplio de observabilidad/control lento con proveedor real; nucleo local cerrado | se paga con la adopcion completa del veredicto F1 + repro 208 tras deploy |
 | BUG-ORQ-20260711-208Z | una instancia con `degraded_identity` bloquea correctamente trabajo, pero tambien rechaza `POST /api/v0/server/shutdown` con `server_work_launch_degraded_identity` | separar shutdown seguro del guard de lanzamiento; conservar idempotencia y demostrar que prepare-run sigue bloqueado. Evidencia en la [incidencia 208Z](incidencias/incidencia_orquesta_degraded_identity_bloquea_shutdown_2026-07-11.md) |
 | BUG-ORQ-20260711-208AA | un goal real termino con codigo y tests focales verdes, pero el attestor hermetico uso un bootstrap Go sin el toolchain del modulo; Orquesta trato el fallo de infraestructura como test rojo y lanzo un rework Codex incapaz de reparar esa configuracion | preflight del comando en el entorno hermetico, reason code de infraestructura y bloqueo sin rework de codigo; reatestar el mismo artefacto tras reparar la composicion. Evidencia en la [incidencia 208AA](incidencias/incidencia_orquesta_attestor_toolchain_infra_lanza_rework_2026-07-11.md) |
-| BUG-ORQ-20260711-208AB | tres requests validos produjeron specs goal-first rechazados por `required_tests.command_ref` y hashes tras el binding de atestacion; no se lanzo Codex pero quedaron runs `invalid` | hacer idempotente materializacion/binding, validar antes de persistir y demostrar por API una/dos pruebas sin run invalido. Evidencia en la [incidencia 208AB](incidencias/incidencia_orquesta_goal_spec_generado_invalido_2026-07-11.md) |
 
 ## Vivos (operativos, no de codigo)
 
@@ -35,6 +34,10 @@ mismo commit.
 
 ## Cerrados hoy (referencia rapida)
 
+- BUG-ORQ-20260711-208AB: cerrado localmente por `97d1d913a`. Los tests
+  derivados del grafo ya salen con `CommandRef` y hashes congelados; el repro
+  API `autoprog-attestor-contract-repro-20260711` lanzo un goal real sin spec
+  invalido. Evidencia en la [incidencia 208AB](incidencias/incidencia_orquesta_goal_spec_generado_invalido_2026-07-11.md).
 - Incidencia lease generation conflict primer lanzamiento: cerrada con
   `01cb27d77` (selector tmux `=sesion:` + verificacion tri-estado +
   cleanup/shutdown degradan a evidencia residual). Smoke real local verde

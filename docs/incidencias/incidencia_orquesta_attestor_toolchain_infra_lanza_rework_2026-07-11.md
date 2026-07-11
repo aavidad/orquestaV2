@@ -82,3 +82,11 @@ fronteras que hoy se mezclan:
 7. Pruebas focales cubren bootstrap sin toolchain, dependencia presente en el
    snapshot y dependencia ausente. Las dos primeras cierran sin red; la ultima
    bloquea antes de lanzar o sin rework de codigo.
+
+## Avance integrado
+
+`97d1d913a` incorpora el corte neutral: `failure_code` durable, reason code
+`goal_required_test_attestor_infrastructure_failed`, cierre bloqueado sin
+`NeedsRework` para infraestructura y compatibilidad de identidad con recibos
+fallidos legacy. Falta que el adaptador local produzca ese code desde un fallo
+real, el preflight previo al launcher y la cache semilla content-addressed.

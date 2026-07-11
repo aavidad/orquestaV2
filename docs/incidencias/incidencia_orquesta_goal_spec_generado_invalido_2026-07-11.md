@@ -1,7 +1,7 @@
 # Incidencia 208AB: goal spec generado invalido
 
 Fecha: 2026-07-11
-Estado: abierto
+Estado: cerrado localmente por `97d1d913a`
 Area: autoprogramacion goal-first / binder de atestacion / lanzamiento
 
 ## Resumen
@@ -42,3 +42,19 @@ un `GoalWorkSpecV0` con refs y hashes no vacios, pero el launcher los rechazo co
 5. Repro real por API lanza exactamente un goal y no consume reintentos para
    corregir refs generadas internamente.
 
+## Cierre
+
+La causa estaba en `goalSpecWithDependencyRequiredTestsV0`: los tests derivados
+del grafo se anadian con `TestRef` y `Command`, pero sin `CommandRef` ni hashes
+congelados. El wrapper mutaba un spec valido despues de la validacion inicial y
+el launcher Codex lo rechazaba.
+
+`97d1d913a` genera `CommandRef` determinista y aplica
+`FreezeGoalRequiredTestV0` antes de entregar el spec al launcher. Los focales de
+dependencias y stack pasan. El repro API
+`autoprog-attestor-contract-repro-20260711` fue aceptado y lanzo exactamente un
+goal real, sin `goal_ref_field_invalid` ni run invalido. El goal de verificacion
+se detuvo despues manualmente porque la instancia se arranco deliberadamente
+sin director/observador residente y amplio su diagnostico; control confirmo
+`stopped` y shutdown termino en el primer intento. Ese cierre manual no acredita
+208AA ni el attestor con dependencias externas.
