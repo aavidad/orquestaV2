@@ -86,6 +86,20 @@ Avance de nucleo 2026-07-11:
   cambia el JSON historico.
 - `7aee819f4` define documento/puerto CAS de progreso con identidad compuesta,
   baseline, hash de write-set, checkpoint y claves de accion deterministas.
+- `a1dd2daad` persiste ese estado con CAS y escritura JSON atomica en el unico
+  `orquesta-state-file`; cubre reinicio, replay, concurrencia y contrato
+  inmutable.
+- `f98c41228` transporta el uso acumulado por goal desde app-server sin
+  mezclarlo con el total agregado del run.
+- `4a56cc212` limita los replans causales; una recurrencia sin progreso escala
+  a parada dura en vez de crear una cadena ilimitada.
+- `0018b0eef` ejecuta warning, replan y hard stop desde el servidor residente,
+  con parada confirmada, idempotencia y fallback al comportamiento anterior si
+  faltan los nuevos puertos.
+- `f6ba9fea5` mueve el puerto de evidencia al modulo puro, verifica el diff
+  contra baseline y write-set desde el adaptador Codex y cablea clasificador y
+  store CAS en la composicion real. Los cambios fuera del write-set no renuevan
+  el presupuesto.
 
 Hallazgo estructural durante la integracion: `autoprogramming/status` tomaba
 `UsageSummary.TotalTokens` agregado del run, mientras el app-server dispone de
@@ -94,10 +108,13 @@ un umbral. No se pueden sumar ni intercambiar ambos contadores. La politica
 nueva consumira exclusivamente la observacion tipada por goal; MCP quedara como
 proyeccion de la decision persistida y no parseara summaries ni nombres.
 
-Pendiente para cerrar `226`: adaptador JSON atomico/CAS, transporte del uso
-desde cada backend, clasificacion verificada de diff/test/result/receipt,
-ejecutor idempotente de warning/replan/stop y prueba empirica con un goal real
-acotado. Los contratos puros por si solos no cierran el bug.
+Pendiente para cerrar `226`: proyectar en MCP la decision persistida y retirar
+su clasificacion duplicada por strings/tokens; clasificar `test` solo desde
+atestacion independiente durable (nunca desde resultados autodeclarados por el
+agente); y ejecutar una prueba empirica con un goal real, acotado y util. Las
+suites completas de `autoprogramming`, `state-file`, `server`,
+`app-codex-stack` y `cmd/orquesta-server` pasan tras el cableado, pero esa
+evidencia offline aun no cierra el bug operativo.
 
 ## BUG-ORQ-20260711-223: `observe` manual dio 500 durante observacion residente
 
