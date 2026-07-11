@@ -48,7 +48,14 @@ orquesta_release_test_port_lease() {
 
 orquesta_acquire_test_port_lease() {
   local root="$1" range="$2" preferred="$3" lease_root candidate offset lock fd
-  lease_root="${ORQUESTA_TEST_PORT_LEASE_ROOT:-${ORQUESTA_TEST_CACHE_ROOT:-/srv/orquesta-self/runtime/test-cache}/port-leases}"
+  lease_root="${ORQUESTA_TEST_PORT_LEASE_ROOT:-}"
+  if [ -z "$lease_root" ]; then
+    if [ -n "${ORQUESTA_TEST_CACHE_ROOT:-}" ]; then
+      lease_root="$ORQUESTA_TEST_CACHE_ROOT/port-leases"
+    else
+      lease_root="$(dirname "$root")/port-leases"
+    fi
+  fi
   orquesta_private_test_root "$lease_root" || return
   orquesta_release_test_port_lease
   for offset in $(seq 0 255); do

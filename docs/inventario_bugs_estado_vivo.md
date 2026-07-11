@@ -40,6 +40,9 @@ remoto ni cierra validaciones de proveedor/campo.
 
 ## Cerrados hoy (referencia rapida)
 
+- BUG-ORQ-20260711-218: cerrado localmente. Una raiz de test explicita ya
+  deriva tambien el lease de puertos dentro de su filesystem y no cae al
+  default remoto `/srv`. Evidencia en la [incidencia 218](incidencias/incidencia_orquesta_isolated_env_lease_default_remoto_2026-07-11.md).
 - BUG-ORQ-20260711-208AG: cerrado por `a245a90a8` + `7a91f8052` sobre la
   base `b96e9b115`/`2735b1dae`. Director humano, self-audit, backlog, idle,
   goal residente y MCP conservan checks tipados; binder y cierre independiente
