@@ -2,8 +2,10 @@ package orquestaruntimecodexappserver
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"strings"
+	"time"
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaruntimecodexgoal "orquesta/modulos/orquesta-runtime-codex-goal"
@@ -58,10 +60,24 @@ func (backend serverCodexAppServerGoalBackendV0) codexAppServerObservationReceip
 	receipt orquestaruntimecodexgoal.CodexGoalObservationReceiptV0,
 	goal *serverCodexAppServerThreadGoalV0,
 ) orquestaruntimecodexgoal.CodexGoalObservationReceiptV0 {
-	if goal == nil || strings.TrimSpace(receipt.Status) != orquestagoal.GoalStatusRunningV0 {
+	if goal == nil {
 		return receipt
 	}
-	if goal.TokensUsed < backend.codexAppServerGoalHighTokenUsageThresholdV0() {
+	threadID := strings.TrimSpace(firstNonEmptyServerStackV0(goal.ThreadID, receipt.ExternalGoalRef))
+	now := backend.nowCodexAppServerGoalV0()
+	observedAt, ok := goal.UpdatedAt.TimeV0(now)
+	if !ok {
+		observedAt = now
+	}
+	receipt.UsageObservation = orquestagoal.GoalUsageObservationV0{
+		TokensAccumulated: int64(goal.TokensUsed),
+		RuntimeSeconds:    int64(goal.TimeUsedSeconds),
+		ObservedAt:        observedAt.UTC().Format(time.RFC3339Nano),
+		EvidenceRefs:      []string{"evidence-ref-codex-app-server-goal-usage-observed"},
+		SourceRef:         codexAppServerGoalUsageSourceRefV0(threadID),
+	}
+	if strings.TrimSpace(receipt.Status) != orquestagoal.GoalStatusRunningV0 ||
+		goal.TokensUsed < backend.codexAppServerGoalHighTokenUsageThresholdV0() {
 		return receipt
 	}
 	usage := []string{
@@ -80,6 +96,11 @@ func (backend serverCodexAppServerGoalBackendV0) codexAppServerObservationReceip
 		"evidence-ref-codex-app-server-goal-high-token-usage",
 	))
 	return receipt
+}
+
+func codexAppServerGoalUsageSourceRefV0(threadID string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(threadID)))
+	return fmt.Sprintf("codex-app-server-goal-ref-%x", sum[:])
 }
 
 func (backend serverCodexAppServerGoalBackendV0) codexAppServerGoalHighTokenUsageThresholdV0() int {

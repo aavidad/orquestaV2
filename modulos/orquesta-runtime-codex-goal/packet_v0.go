@@ -113,6 +113,7 @@ type CodexGoalObservationReceiptV0 struct {
 	ExternalGoalRef       string                                      `json:"external_goal_ref,omitempty"`
 	Summary               string                                      `json:"summary,omitempty"`
 	ContextBudget         orquestagoal.GoalContextBudgetV0            `json:"context_budget,omitempty"`
+	UsageObservation      orquestagoal.GoalUsageObservationV0         `json:"usage_observation,omitzero"`
 	ArtifactRefs          []string                                    `json:"artifact_refs,omitempty"`
 	ArtifactPaths         []string                                    `json:"artifact_paths,omitempty"`
 	MaterializedArtifacts []orquestagoal.GoalMaterializedArtifactV0   `json:"materialized_artifacts,omitempty"`
@@ -978,6 +979,7 @@ func goalWorkResultFromCodexObservationV0(
 		ExternalGoalRef:       firstNonEmptyCodexGoalStringV0(receipt.ExternalGoalRef, request.ExternalGoalRef),
 		Summary:               strings.TrimSpace(receipt.Summary),
 		ContextBudget:         receipt.ContextBudget,
+		UsageObservation:      receipt.UsageObservation,
 		ArtifactRefs:          append([]string(nil), receipt.ArtifactRefs...),
 		ArtifactPaths:         append([]string(nil), receipt.ArtifactPaths...),
 		MaterializedArtifacts: append([]orquestagoal.GoalMaterializedArtifactV0(nil), receipt.MaterializedArtifacts...),
