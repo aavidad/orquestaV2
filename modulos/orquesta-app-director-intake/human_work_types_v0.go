@@ -30,12 +30,19 @@ type HumanDirectorWorkIntakeRequestV0 struct {
 }
 
 type HumanDirectorWorkRequestV0 struct {
-	Title              string   `json:"title,omitempty"`
-	Objective          string   `json:"objective"`
-	Context            []string `json:"context,omitempty"`
-	AcceptanceCriteria []string `json:"acceptance_criteria,omitempty"`
-	RequiredTests      []string `json:"required_tests,omitempty"`
-	CompactRules       []string `json:"compact_rules,omitempty"`
+	Title              string                           `json:"title,omitempty"`
+	Objective          string                           `json:"objective"`
+	Context            []string                         `json:"context,omitempty"`
+	AcceptanceCriteria []string                         `json:"acceptance_criteria,omitempty"`
+	AcceptanceChecks   []HumanDirectorAcceptanceCheckV0 `json:"acceptance_checks,omitempty"`
+	RequiredTests      []string                         `json:"required_tests,omitempty"`
+	CompactRules       []string                         `json:"compact_rules,omitempty"`
+}
+
+type HumanDirectorAcceptanceCheckV0 struct {
+	CriterionRef string `json:"criterion_ref"`
+	Description  string `json:"description,omitempty"`
+	Command      string `json:"command"`
 }
 
 type HumanDirectorWorkLimitsV0 struct {
@@ -78,18 +85,19 @@ type HumanDirectorReviewablePlanV0 struct {
 }
 
 type HumanDirectorPlanStepV0 struct {
-	StepRef            string   `json:"step_ref"`
-	Action             string   `json:"action"`
-	Title              string   `json:"title"`
-	Objective          string   `json:"objective,omitempty"`
-	Area               string   `json:"area,omitempty"`
-	WriteSet           []string `json:"write_set,omitempty"`
-	DependsOnStepRefs  []string `json:"depends_on_step_refs,omitempty"`
-	Reason             string   `json:"reason,omitempty"`
-	AcceptanceCriteria []string `json:"acceptance_criteria,omitempty"`
-	RequiredTests      []string `json:"required_tests,omitempty"`
-	ContextRefs        []string `json:"context_refs,omitempty"`
-	SafeRepairAllowed  bool     `json:"safe_repair_allowed,omitempty"`
+	StepRef            string                           `json:"step_ref"`
+	Action             string                           `json:"action"`
+	Title              string                           `json:"title"`
+	Objective          string                           `json:"objective,omitempty"`
+	Area               string                           `json:"area,omitempty"`
+	WriteSet           []string                         `json:"write_set,omitempty"`
+	DependsOnStepRefs  []string                         `json:"depends_on_step_refs,omitempty"`
+	Reason             string                           `json:"reason,omitempty"`
+	AcceptanceCriteria []string                         `json:"acceptance_criteria,omitempty"`
+	AcceptanceChecks   []HumanDirectorAcceptanceCheckV0 `json:"acceptance_checks,omitempty"`
+	RequiredTests      []string                         `json:"required_tests,omitempty"`
+	ContextRefs        []string                         `json:"context_refs,omitempty"`
+	SafeRepairAllowed  bool                             `json:"safe_repair_allowed,omitempty"`
 }
 
 type HumanDirectorPlanIssueV0 struct {

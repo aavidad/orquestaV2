@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
+	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
 	orquestacontext "orquesta/modulos/orquesta-context"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
@@ -48,6 +49,35 @@ func TestServerConfigProjectionSettingsForMCPV0ProyectaEffectiveConfigV0(t *test
 		!got[1].Sensitive {
 		t.Fatalf("projection=%+v", got)
 	}
+}
+
+func TestServerRuntimeDepsFromStackV0CableaGoalRequiredTestSpecBinderV0(t *testing.T) {
+	binder := serverGoalRequiredTestSpecBinderForTestV0{}
+	deps := serverRuntimeDepsFromStackV0(
+		orquestaserver.ConfigV0{},
+		nil,
+		nil,
+		nil,
+		orquestaappcodexstack.StackV0{Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
+			GoalRequiredTestSpecBinder: binder,
+		}},
+		serverCodexGoalBackendsV0{},
+	)
+	if deps.GoalRequiredTestSpecBinder == nil {
+		t.Fatal("GoalRequiredTestSpecBinder no llega al runtime residente")
+	}
+}
+
+type serverGoalRequiredTestSpecBinderForTestV0 struct{}
+
+func (serverGoalRequiredTestSpecBinderForTestV0) BindGoalRequiredTestSpecV0(
+	_ context.Context,
+	spec orquestagoal.GoalWorkSpecV0,
+) (orquestagoal.GoalWorkSpecV0, error) {
+	spec.ImplementerAgentRef = "agent-ref-server-wiring-test"
+	spec.ImplementerCredentialRef = "credential-ref-server-wiring-test"
+	spec.ClosurePolicy.RequiredAttestorTrustPolicyRef = "trust-policy-ref-server-wiring-test"
+	return spec, nil
 }
 
 func TestBuildStackFromEnvV0UsaConectoresDurablesFileBased(t *testing.T) {

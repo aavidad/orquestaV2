@@ -118,9 +118,27 @@ func humanDirectorTaskCandidateMCPV0(
 		Context:            compactStringsMCPV0([]string{step.Reason}),
 		ContextRefs:        compactStringsMCPV0(append(append([]string(nil), plan.ContextRefs...), step.ContextRefs...)),
 		AcceptanceCriteria: compactStringsMCPV0(step.AcceptanceCriteria),
+		AcceptanceChecks:   humanDirectorAcceptanceChecksMCPV0(step.AcceptanceChecks),
 		RequiredTests:      compactStringsMCPV0(step.RequiredTests),
 		CompactRules:       compactStringsMCPV0(plan.Rules),
 	}
+}
+
+func humanDirectorAcceptanceChecksMCPV0(
+	checks []orquestaappdirectorintake.HumanDirectorAcceptanceCheckV0,
+) []orquestaautoprogramming.AutoprogrammingAcceptanceCheckV0 {
+	if checks == nil {
+		return nil
+	}
+	out := make([]orquestaautoprogramming.AutoprogrammingAcceptanceCheckV0, len(checks))
+	for index, check := range checks {
+		out[index] = orquestaautoprogramming.AutoprogrammingAcceptanceCheckV0{
+			CriterionRef: check.CriterionRef,
+			Description:  check.Description,
+			Command:      check.Command,
+		}
+	}
+	return out
 }
 
 func positiveOrDefaultMCPHumanWorkV0(value int, fallback int) int {

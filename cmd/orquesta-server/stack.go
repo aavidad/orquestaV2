@@ -64,29 +64,48 @@ func buildRuntimeFromConfigV0(serverConfig orquestaserver.ConfigV0) (*orquestase
 	}
 	supervisor := serverSupervisorWithCodexGoalBackendV0(baseSupervisor, goalBackends.IdleGoal)
 	residentDirector := newServerResidentDirectorV0(&stack, serverConfig)
-	runtime, err := orquestaserver.NewRuntimeV0(serverConfig, orquestaserver.RuntimeDepsV0{
-		AppHandler:        appHandler,
-		Supervisor:        supervisor,
-		ResidentDirector:  residentDirector,
-		RouteManifest:     serverRouteManifestResourcesV0(),
-		GoalStateStore:    stack.Stores.AppGoalStateStore,
-		GoalFingerprint:   serverGoalObservationFingerprintFromBackendV0(goalBackends.AppGoal, serverGoalObserverFingerprintEnabledFromEnvV0()),
-		GoalStopper:       serverGoalCooperativeStopperFromRunControlV0(stack.Stores.RunControl),
-		EstadoVivoSource:  stack.MCPTransportBindings.AutoprogrammingEstadoVivoSource,
-		ShutdownSnapshot:  serverShutdownSnapshotFromStackV0(stack, goalBackends),
-		ShutdownHooks:     serverGoalShutdownHooksFromBackendsV0(goalBackends.AppGoal, goalBackends.IdleGoal),
-		BackgroundWorkers: serverBackgroundWorkersFromStackV0(stack),
-		StartupCheck:      startupCheckFromEnvV0(stack, serverConfig),
-		SelfWatchdog: orquestaserver.NewProcessSelfWatchdogObserverV0(
-			orquestaserver.NewProcSelfCPUSamplerV0(),
-		),
-		ForceExit: serverForceExitPortV0{},
-	})
+	runtime, err := orquestaserver.NewRuntimeV0(serverConfig, serverRuntimeDepsFromStackV0(
+		serverConfig,
+		appHandler,
+		supervisor,
+		residentDirector,
+		stack,
+		goalBackends,
+	))
 	if err != nil {
 		return nil, err
 	}
 	supervisorWakeup.bindRuntimeV0(runtime)
 	return runtime, nil
+}
+
+func serverRuntimeDepsFromStackV0(
+	serverConfig orquestaserver.ConfigV0,
+	appHandler http.Handler,
+	supervisor orquestaserver.SupervisorPortV0,
+	residentDirector orquestaserver.ResidentDirectorPortV0,
+	stack orquestaappcodexstack.StackV0,
+	goalBackends serverCodexGoalBackendsV0,
+) orquestaserver.RuntimeDepsV0 {
+	return orquestaserver.RuntimeDepsV0{
+		AppHandler:                 appHandler,
+		Supervisor:                 supervisor,
+		ResidentDirector:           residentDirector,
+		RouteManifest:              serverRouteManifestResourcesV0(),
+		GoalStateStore:             stack.Stores.AppGoalStateStore,
+		GoalRequiredTestSpecBinder: stack.Ports.GoalRequiredTestSpecBinder,
+		GoalFingerprint:            serverGoalObservationFingerprintFromBackendV0(goalBackends.AppGoal, serverGoalObserverFingerprintEnabledFromEnvV0()),
+		GoalStopper:                serverGoalCooperativeStopperFromRunControlV0(stack.Stores.RunControl),
+		EstadoVivoSource:           stack.MCPTransportBindings.AutoprogrammingEstadoVivoSource,
+		ShutdownSnapshot:           serverShutdownSnapshotFromStackV0(stack, goalBackends),
+		ShutdownHooks:              serverGoalShutdownHooksFromBackendsV0(goalBackends.AppGoal, goalBackends.IdleGoal),
+		BackgroundWorkers:          serverBackgroundWorkersFromStackV0(stack),
+		StartupCheck:               startupCheckFromEnvV0(stack, serverConfig),
+		SelfWatchdog: orquestaserver.NewProcessSelfWatchdogObserverV0(
+			orquestaserver.NewProcSelfCPUSamplerV0(),
+		),
+		ForceExit: serverForceExitPortV0{},
+	}
 }
 
 type serverForceExitPortV0 struct{}

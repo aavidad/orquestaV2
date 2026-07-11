@@ -22,6 +22,11 @@ func TestMCPHumanDirectorWorkReviewPlanDescriptorV0EsAdaptadorFino(t *testing.T)
 		len(descriptor.Invariantes) == 0 {
 		t.Fatalf("descriptor=%+v", descriptor)
 	}
+	for _, want := range []string{"acceptance_checks", "criterion_ref", "description?", "command"} {
+		if !strings.Contains(descriptor.InputSchema, want) {
+			t.Fatalf("input_schema no declara %q: %s", want, descriptor.InputSchema)
+		}
+	}
 	assertTransportPayloadSaneadoMCPTestV0(t, descriptor, 1200)
 }
 

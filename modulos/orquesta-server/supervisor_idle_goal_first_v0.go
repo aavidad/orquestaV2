@@ -27,9 +27,12 @@ func (runtime *RuntimeV0) launchIdleSelfImprovementGoalsV0(
 			EvidenceRefs: []string{
 				"evidence-ref-idle-self-improvement-goal-state-v0",
 			},
+			// Snapshot, attestation and identity are consumed by the stack's
+			// observation/closure path; launch only needs the spec binder.
 		}, orquestagoal.GoalWorkLifecyclePortsV0{
-			Launcher:   launcher,
-			StateStore: runtime.goalStateStore,
+			Launcher:               launcher,
+			StateStore:             runtime.goalStateStore,
+			RequiredTestSpecBinder: runtime.goalRequiredTestSpecBinder,
 		})
 		result := idleSelfImprovementGoalLaunchResultV0(request, spec, start.State, start.Receipt, err)
 		if err != nil || !result.Accepted {
@@ -60,13 +63,7 @@ func (runtime *RuntimeV0) idleSelfImprovementGoalWorkSpecV0(
 	for _, path := range compactConfigStringsV0(request.WriteSet) {
 		writeSet = append(writeSet, orquestagoal.GoalWriteScopeV0{Path: path})
 	}
-	tests := make([]orquestagoal.GoalRequiredTestV0, 0, len(request.RequiredTests))
-	for _, command := range compactConfigStringsV0(request.RequiredTests) {
-		tests = append(tests, orquestagoal.GoalRequiredTestV0{
-			TestRef: "required-test-ref-" + idleSelfImprovementHashV0(command),
-			Command: command,
-		})
-	}
+	tests, acceptanceCriterionRefs, invalidAcceptanceChecks := idleSelfImprovementGoalRequiredTestsV0(request)
 	contextRefs := make([]orquestagoal.GoalContextRefV0, 0, len(request.ContextRefs))
 	for _, ref := range compactConfigStringsV0(request.ContextRefs) {
 		contextRefs = append(contextRefs, orquestagoal.GoalContextRefV0{Kind: "context_ref", Ref: ref})
@@ -90,7 +87,18 @@ func (runtime *RuntimeV0) idleSelfImprovementGoalWorkSpecV0(
 			Enforcement: orquestagoal.GoalRuleEnforcementAdvisoryV0,
 		})
 	}
-	closurePolicy := orquestagoal.GoalClosurePolicyV0{RequireRequiredTests: len(tests) > 0}
+	closurePolicy := orquestagoal.GoalClosurePolicyV0{
+		RequireRequiredTests:                      len(tests) > 0,
+		RequireIndependentRequiredTestAttestation: len(acceptanceCriterionRefs) > 0 || invalidAcceptanceChecks,
+		RequiredAcceptanceCriteriaRefs:            acceptanceCriterionRefs,
+	}
+	if invalidAcceptanceChecks {
+		// StartGoalWorkV0 validates this sentinel before launch, so an incomplete
+		// typed contract cannot silently fall back to advisory acceptance text.
+		tests = append(tests, orquestagoal.GoalRequiredTestV0{
+			TestRef: "required-test-ref-invalid-acceptance-check",
+		})
+	}
 	spec := orquestagoal.GoalWorkSpecV0{
 		GoalRef:            idleSelfImprovementGoalRefV0(request),
 		RequestRef:         request.RequestRef,
@@ -111,8 +119,61 @@ func (runtime *RuntimeV0) idleSelfImprovementGoalWorkSpecV0(
 		ClosurePolicy:      closurePolicy,
 		ReworkPolicy:       orquestagoal.GoalReworkPolicyV0{PreferNewGoal: true, MaxReworkGoals: 1, PreserveArtifacts: true},
 	}
+	if closurePolicy.RequireIndependentRequiredTestAttestation {
+		spec.WriteSetSHA256 = orquestagoal.GoalWriteSetSHA256V0(writeSet)
+	}
 	spec = idleSelfImprovementGoalSpecWithFrozenRequiredTestsV0(spec, request)
 	return orquestagoal.NormalizeGoalWorkSpecV0(spec)
+}
+
+func idleSelfImprovementGoalRequiredTestsV0(
+	request IdleSelfImprovementRequestV0,
+) ([]orquestagoal.GoalRequiredTestV0, []string, bool) {
+	tests := make([]orquestagoal.GoalRequiredTestV0, 0, len(request.RequiredTests)+len(request.AcceptanceChecks))
+	byCommand := make(map[string]int, len(request.RequiredTests)+len(request.AcceptanceChecks))
+	addTest := func(command string) int {
+		command = strings.TrimSpace(command)
+		if index, ok := byCommand[command]; ok {
+			return index
+		}
+		index := len(tests)
+		byCommand[command] = index
+		tests = append(tests, orquestagoal.GoalRequiredTestV0{
+			TestRef:    "required-test-ref-" + idleSelfImprovementHashV0(command),
+			CommandRef: "command-ref-" + idleSelfImprovementHashV0(command),
+			Command:    command,
+		})
+		return index
+	}
+	for _, command := range compactConfigStringsV0(request.RequiredTests) {
+		addTest(command)
+	}
+
+	criterionRefs := make([]string, 0, len(request.AcceptanceChecks))
+	seenCriterionRefs := make(map[string]bool, len(request.AcceptanceChecks))
+	invalid := false
+	for _, check := range request.AcceptanceChecks {
+		criterionRef := strings.TrimSpace(check.CriterionRef)
+		command := strings.TrimSpace(check.Command)
+		if criterionRef == "" || command == "" || seenCriterionRefs[criterionRef] {
+			invalid = true
+			continue
+		}
+		seenCriterionRefs[criterionRef] = true
+		index := addTest(command)
+		tests[index].AcceptanceCriteriaRefs = append(tests[index].AcceptanceCriteriaRefs, criterionRef)
+		if description := strings.TrimSpace(check.Description); description != "" {
+			tests[index].AcceptanceCriteria = append(tests[index].AcceptanceCriteria, description)
+		}
+		criterionRefs = append(criterionRefs, criterionRef)
+	}
+	if len(criterionRefs) == 0 {
+		return tests, nil, invalid
+	}
+	for index := range tests {
+		tests[index] = orquestagoal.FreezeGoalRequiredTestV0(tests[index])
+	}
+	return tests, criterionRefs, invalid
 }
 
 func idleSelfImprovementGoalRunRefV0(request IdleSelfImprovementRequestV0) string {

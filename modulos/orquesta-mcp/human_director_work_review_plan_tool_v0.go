@@ -55,7 +55,7 @@ func MCPHumanDirectorWorkReviewPlanDescriptorV0() MCPHumanDirectorWorkReviewPlan
 	return MCPHumanDirectorWorkReviewPlanToolDescriptorV0{
 		Name:        MCPHumanDirectorWorkReviewPlanToolNameV0,
 		Version:     MCPHumanDirectorWorkReviewPlanToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,worktree_isolated?,raise_operator_question?,operator_query?,work_intake}",
+		InputSchema: "envelope:{request_id?,correlation_id?,worktree_isolated?,raise_operator_question?,operator_query?,work_intake:{request:{acceptance_checks?:[{criterion_ref,description?,command}]},...}}",
 		Output:      "ok:{plan,next_actions,autoprogramming_request?,operator_question?}|error:{errores_publicos,plan?}",
 		ResourceURI: MCPHumanDirectorWorkReviewPlanResourceURIV0,
 		Invariantes: []string{

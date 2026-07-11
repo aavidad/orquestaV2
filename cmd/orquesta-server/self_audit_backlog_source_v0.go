@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 )
 
 const selfAuditCommandTimeoutV0 = 20 * time.Second
@@ -295,6 +297,11 @@ func selfAuditBacklogSectionV0(finding selfAuditFindingV0) idleSelfImprovementBa
 		Criteria: []string{
 			finding.ToolRef + " no reporta el hallazgo " + finding.Code + " para " + finding.Path,
 		},
+		AcceptanceChecks: []orquestaautoprogramming.AutoprogrammingAcceptanceCheckV0{{
+			CriterionRef: selfAuditAcceptanceCriterionRefV0(finding),
+			Description:  finding.ToolRef + " no reporta el hallazgo " + finding.Code + " para " + finding.Path,
+			Command:      strings.TrimSpace(finding.Command),
+		}},
 		Tests: []string{finding.Command},
 		Inputs: []string{
 			"self_audit_tool:" + finding.ToolRef,
@@ -310,6 +317,15 @@ func selfAuditBacklogSectionV0(finding selfAuditFindingV0) idleSelfImprovementBa
 	}
 	section.TaskInstanceRef = idleSelfImprovementBacklogTaskInstanceRefV0(section)
 	return section
+}
+
+func selfAuditAcceptanceCriterionRefV0(finding selfAuditFindingV0) string {
+	return "criterion-ref-self-audit-" + idleSelfImprovementBacklogHashV0(strings.Join([]string{
+		strings.TrimSpace(finding.ToolRef),
+		strings.TrimSpace(finding.Path),
+		strconv.Itoa(finding.Line),
+		strings.TrimSpace(finding.Code),
+	}, "|"))
 }
 
 func cleanSelfAuditFindingPathV0(projectDir string, value string) (string, bool) {

@@ -12,23 +12,24 @@ import (
 )
 
 type RuntimeDepsV0 struct {
-	AppHandler        http.Handler
-	Supervisor        SupervisorPortV0
-	ResidentDirector  ResidentDirectorPortV0
-	RouteManifest     []ServerRouteResourceV0
-	GoalStateStore    orquestagoal.GoalWorkStateStorePortV0
-	GoalFingerprint   GoalObservationFingerprintPortV0
-	GoalStopper       GoalCooperativeStopPortV0
-	EstadoVivoSource  orquestaestadovivo.FuenteEvidenciaEstadoPortV0
-	ShutdownSnapshot  ShutdownSnapshotPortV0
-	ShutdownHooks     []RuntimeShutdownHookPortV0
-	BackgroundWorkers []RuntimeBackgroundWorkerPortV0
-	StateStore        StateStorePortV0
-	AuditSink         AuditSinkPortV0
-	StartupCheck      StartupCheckPortV0
-	SelfWatchdog      SelfWatchdogObservationPortV0
-	ForceExit         ForceExitPortV0
-	Clock             ClockPortV0
+	AppHandler                 http.Handler
+	Supervisor                 SupervisorPortV0
+	ResidentDirector           ResidentDirectorPortV0
+	RouteManifest              []ServerRouteResourceV0
+	GoalStateStore             orquestagoal.GoalWorkStateStorePortV0
+	GoalRequiredTestSpecBinder orquestagoal.GoalRequiredTestSpecBinderPortV0
+	GoalFingerprint            GoalObservationFingerprintPortV0
+	GoalStopper                GoalCooperativeStopPortV0
+	EstadoVivoSource           orquestaestadovivo.FuenteEvidenciaEstadoPortV0
+	ShutdownSnapshot           ShutdownSnapshotPortV0
+	ShutdownHooks              []RuntimeShutdownHookPortV0
+	BackgroundWorkers          []RuntimeBackgroundWorkerPortV0
+	StateStore                 StateStorePortV0
+	AuditSink                  AuditSinkPortV0
+	StartupCheck               StartupCheckPortV0
+	SelfWatchdog               SelfWatchdogObservationPortV0
+	ForceExit                  ForceExitPortV0
+	Clock                      ClockPortV0
 }
 
 type RuntimeV0 struct {
@@ -38,6 +39,7 @@ type RuntimeV0 struct {
 	residentDirector              ResidentDirectorPortV0
 	routeManifest                 []ServerRouteResourceV0
 	goalStateStore                orquestagoal.GoalWorkStateStorePortV0
+	goalRequiredTestSpecBinder    orquestagoal.GoalRequiredTestSpecBinderPortV0
 	goalFingerprint               GoalObservationFingerprintPortV0
 	goalStopper                   GoalCooperativeStopPortV0
 	estadoVivoSource              orquestaestadovivo.FuenteEvidenciaEstadoPortV0
@@ -107,6 +109,7 @@ func NewRuntimeV0(config ConfigV0, deps RuntimeDepsV0) (*RuntimeV0, error) {
 		residentDirector:            deps.ResidentDirector,
 		routeManifest:               compactServerRouteResourcesV0(deps.RouteManifest),
 		goalStateStore:              deps.GoalStateStore,
+		goalRequiredTestSpecBinder:  deps.GoalRequiredTestSpecBinder,
 		goalFingerprint:             deps.GoalFingerprint,
 		goalStopper:                 deps.GoalStopper,
 		estadoVivoSource:            deps.EstadoVivoSource,

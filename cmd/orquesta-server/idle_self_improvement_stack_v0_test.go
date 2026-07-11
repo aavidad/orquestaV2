@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
@@ -13,6 +15,21 @@ import (
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 	orquestaserver "orquesta/modulos/orquesta-server"
 )
+
+func TestIdleSelfImprovementProposalFromServerV0TransportaAcceptanceChecksSinInferenciaV0(t *testing.T) {
+	checks := []orquestaautoprogramming.AutoprogrammingAcceptanceCheckV0{{
+		CriterionRef: "criterion-ref-server-acceptance-001",
+		Description:  "El check llega como contrato tipado.",
+		Command:      "go test -count=1 ./modulos/orquesta-autoprogramming",
+	}}
+	proposal := idleSelfImprovementProposalFromServerV0(orquestaserver.IdleSelfImprovementRequestV0{
+		AcceptanceCriteria: []string{"texto que no debe convertirse en acceptance check"},
+		AcceptanceChecks:   checks,
+	})
+	if !reflect.DeepEqual(proposal.AcceptanceChecks, checks) {
+		t.Fatalf("acceptance_checks=%+v", proposal.AcceptanceChecks)
+	}
+}
 
 func TestIdleSelfImprovementStackV0RechazaCandidatoNoEjecutableV0(t *testing.T) {
 	queue := &fakeIdleSelfRunQueueV0{candidates: []orquestarunqueue.RunSchedulingCandidateV0{{

@@ -181,6 +181,7 @@ type IdleSelfImprovementRequestV0 struct {
 	WriteSet                          []string
 	RequiredTests                     []string
 	AcceptanceCriteria                []string
+	AcceptanceChecks                  []orquestaautoprogramming.AutoprogrammingAcceptanceCheckV0
 	CompactRules                      []string
 	SkillRefs                         []string
 	FrozenRequiredTests               []orquestaautoprogramming.FrozenRequiredTestV0

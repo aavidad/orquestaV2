@@ -1,6 +1,10 @@
 package orquestaappdirectorintake
 
-import "testing"
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+)
 
 func TestBuildHumanDirectorReviewablePlanV0ExecuteNowConRefsOpacas(t *testing.T) {
 	result := BuildHumanDirectorReviewablePlanV0(validHumanDirectorWorkIntakeRequestForTestV0())
@@ -21,6 +25,82 @@ func TestBuildHumanDirectorReviewablePlanV0ExecuteNowConRefsOpacas(t *testing.T)
 	}
 	if !result.Plan.Steps[0].SafeRepairAllowed {
 		t.Fatalf("safe repair no preservado: %+v", result.Plan.Steps[0])
+	}
+}
+
+func TestBuildHumanDirectorReviewablePlanV0PreservaAcceptanceChecks(t *testing.T) {
+	request := validHumanDirectorWorkIntakeRequestForTestV0()
+	request.Request.AcceptanceChecks = []HumanDirectorAcceptanceCheckV0{{
+		CriterionRef: " criterion-ref-human-001 ",
+		Description:  " comprobacion humana explicita ",
+		Command:      " go test -count=1 ./modulos/orquesta-app-director-intake ",
+	}}
+
+	result := BuildHumanDirectorReviewablePlanV0(request)
+	if !result.Accepted || len(result.Plan.Steps) != 1 {
+		t.Fatalf("result=%+v", result)
+	}
+	got := result.Plan.Steps[0].AcceptanceChecks
+	if len(got) != 1 || got[0] != (HumanDirectorAcceptanceCheckV0{
+		CriterionRef: "criterion-ref-human-001",
+		Description:  "comprobacion humana explicita",
+		Command:      "go test -count=1 ./modulos/orquesta-app-director-intake",
+	}) {
+		t.Fatalf("acceptance_checks=%+v", got)
+	}
+	request.Request.AcceptanceChecks[0].Command = "mutado"
+	if result.Plan.Steps[0].AcceptanceChecks[0].Command == "mutado" {
+		t.Fatalf("acceptance_checks comparte memoria con request")
+	}
+}
+
+func TestBuildHumanDirectorReviewablePlanV0RechazaAcceptanceChecksInvalidos(t *testing.T) {
+	for _, testCase := range []struct {
+		name   string
+		checks []HumanDirectorAcceptanceCheckV0
+		code   string
+	}{
+		{
+			name:   "criterion_ref ausente",
+			checks: []HumanDirectorAcceptanceCheckV0{{Command: "go test ./..."}},
+			code:   "acceptance_check_criterion_ref_required",
+		},
+		{
+			name:   "command ausente",
+			checks: []HumanDirectorAcceptanceCheckV0{{CriterionRef: "criterion-ref-001"}},
+			code:   "acceptance_check_command_required",
+		},
+		{
+			name: "criterion_ref duplicado",
+			checks: []HumanDirectorAcceptanceCheckV0{
+				{CriterionRef: "criterion-ref-001", Command: "go test ./one"},
+				{CriterionRef: " criterion-ref-001 ", Command: "go test ./two"},
+			},
+			code: "acceptance_check_criterion_ref_duplicate",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			request := validHumanDirectorWorkIntakeRequestForTestV0()
+			request.Request.AcceptanceChecks = testCase.checks
+
+			result := BuildHumanDirectorReviewablePlanV0(request)
+			if result.Accepted || result.Plan.Status != HumanDirectorPlanStatusInvalidV0 {
+				t.Fatalf("result=%+v", result)
+			}
+			if !humanDirectorPlanIssuesContainCodeV0(result.Issues, testCase.code) {
+				t.Fatalf("issues=%+v want=%s", result.Issues, testCase.code)
+			}
+		})
+	}
+}
+
+func TestHumanDirectorWorkRequestV0LegacySinAcceptanceChecksSerializaIgual(t *testing.T) {
+	payload, err := json.Marshal(HumanDirectorWorkRequestV0{Objective: "objetivo"})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(payload), "acceptance_checks") {
+		t.Fatalf("payload legacy incluye acceptance_checks: %s", payload)
 	}
 }
 
@@ -168,4 +248,13 @@ func assertHumanDirectorContextRefV0(t *testing.T, refs []string, expected strin
 		}
 	}
 	t.Fatalf("context_ref %s no encontrada en %v", expected, refs)
+}
+
+func humanDirectorPlanIssuesContainCodeV0(issues []HumanDirectorPlanIssueV0, expected string) bool {
+	for _, issue := range issues {
+		if issue.Code == expected {
+			return true
+		}
+	}
+	return false
 }

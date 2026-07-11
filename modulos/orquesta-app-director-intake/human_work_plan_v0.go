@@ -135,6 +135,7 @@ func normalizeHumanDirectorWorkIntakeRequestV0(
 	request.Request.Objective = compactDirectorTaskSummaryTextV0(request.Request.Objective)
 	request.Request.Context = compactDirectorIntakeStringsV0(request.Request.Context)
 	request.Request.AcceptanceCriteria = compactDirectorIntakeStringsV0(request.Request.AcceptanceCriteria)
+	request.Request.AcceptanceChecks = normalizeHumanDirectorAcceptanceChecksV0(request.Request.AcceptanceChecks)
 	request.Request.RequiredTests = compactDirectorIntakeStringsV0(request.Request.RequiredTests)
 	request.Request.CompactRules = compactDirectorIntakeStringsV0(request.Request.CompactRules)
 	request.Rules = compactDirectorIntakeStringsV0(request.Rules)
@@ -168,6 +169,39 @@ func validateHumanDirectorWorkIntakeRequestV0(
 	}
 	if request.SchemaVersion != "" && request.SchemaVersion != HumanDirectorWorkIntakeSchemaVersionV0 {
 		issues = append(issues, humanDirectorPlanIssueV0("schema_version_invalid", "schema_version", request.SchemaVersion))
+	}
+	issues = append(issues, validateHumanDirectorAcceptanceChecksV0(request.Request.AcceptanceChecks)...)
+	return issues
+}
+
+func validateHumanDirectorAcceptanceChecksV0(
+	checks []HumanDirectorAcceptanceCheckV0,
+) []HumanDirectorPlanIssueV0 {
+	issues := make([]HumanDirectorPlanIssueV0, 0)
+	seenCriterionRefs := map[string]struct{}{}
+	for _, check := range checks {
+		if check.CriterionRef == "" {
+			issues = append(issues, humanDirectorPlanIssueV0(
+				"acceptance_check_criterion_ref_required",
+				"request.acceptance_checks.criterion_ref",
+				"campo obligatorio",
+			))
+		} else if _, duplicate := seenCriterionRefs[check.CriterionRef]; duplicate {
+			issues = append(issues, humanDirectorPlanIssueV0(
+				"acceptance_check_criterion_ref_duplicate",
+				"request.acceptance_checks.criterion_ref",
+				"criterion_ref duplicado",
+			))
+		} else {
+			seenCriterionRefs[check.CriterionRef] = struct{}{}
+		}
+		if check.Command == "" {
+			issues = append(issues, humanDirectorPlanIssueV0(
+				"acceptance_check_command_required",
+				"request.acceptance_checks.command",
+				"campo obligatorio",
+			))
+		}
 	}
 	return issues
 }
@@ -243,10 +277,28 @@ func humanDirectorPlanStepV0(
 		DependsOnStepRefs:  append([]string(nil), dependsOn...),
 		Reason:             compactDirectorTaskSummaryTextV0(reason),
 		AcceptanceCriteria: append([]string(nil), request.Request.AcceptanceCriteria...),
+		AcceptanceChecks:   normalizeHumanDirectorAcceptanceChecksV0(request.Request.AcceptanceChecks),
 		RequiredTests:      append([]string(nil), request.Request.RequiredTests...),
 		ContextRefs:        append([]string(nil), request.ContextRefs...),
 		SafeRepairAllowed:  len(request.Hints.CanRepairSafely) > 0,
 	}
+}
+
+func normalizeHumanDirectorAcceptanceChecksV0(
+	checks []HumanDirectorAcceptanceCheckV0,
+) []HumanDirectorAcceptanceCheckV0 {
+	if checks == nil {
+		return nil
+	}
+	out := make([]HumanDirectorAcceptanceCheckV0, len(checks))
+	for index, check := range checks {
+		out[index] = HumanDirectorAcceptanceCheckV0{
+			CriterionRef: strings.TrimSpace(check.CriterionRef),
+			Description:  strings.TrimSpace(check.Description),
+			Command:      strings.TrimSpace(check.Command),
+		}
+	}
+	return out
 }
 
 func humanDirectorReviewablePlanResultV0(

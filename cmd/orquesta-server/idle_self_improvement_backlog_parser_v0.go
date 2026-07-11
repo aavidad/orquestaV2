@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 )
 
 var idleSelfImprovementExecutableBacklogHeadingV0 = regexp.MustCompile(`^##\s+T[0-9]+(?:\s|:|$)`)
@@ -20,6 +22,7 @@ type idleSelfImprovementBacklogSectionV0 struct {
 	CanonicalRef, TaskInstanceRef                   string
 	TaskID, TaskAlias, TaskIDIssue                  string
 	Scope, Criteria, Tests                          []string
+	AcceptanceChecks                                []orquestaautoprogramming.AutoprogrammingAcceptanceCheckV0
 	ManualVerifications                             []string
 	Dependencies, Inputs, Outputs                   []string
 	StateEvidenceRefs, DiagnosticEvidenceRefs       []string

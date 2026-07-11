@@ -105,7 +105,44 @@ func mcpCanonicalToolSchemaV0(name string) (map[string]any, []string, bool) {
 			required = append(required, field.Name)
 		}
 	}
+	mcpAddAcceptanceChecksSchemaV0(name, properties)
 	return properties, required, true
+}
+
+func mcpAddAcceptanceChecksSchemaV0(name string, properties map[string]any) {
+	acceptanceChecks := map[string]any{
+		"type": "array",
+		"items": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"criterion_ref": map[string]any{"type": "string"},
+				"description":   map[string]any{"type": "string"},
+				"command":       map[string]any{"type": "string"},
+			},
+			"required": []string{"criterion_ref", "command"},
+		},
+	}
+	switch name {
+	case orquestamcp.MCPHumanDirectorWorkReviewPlanToolNameV0:
+		properties["work_intake"] = map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"request": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"acceptance_checks": acceptanceChecks,
+					},
+				},
+			},
+		}
+	case orquestamcp.MCPAutoprogrammingSelfImprovementToolNameV0:
+		properties["proposal"] = map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"acceptance_checks": acceptanceChecks,
+			},
+		}
+	}
 }
 
 func mcpCanonicalInputFieldSchemaV0(

@@ -93,6 +93,7 @@ func idleSelfImprovementProposalFromServerV0(
 		SuggestedWriteSet:  append([]string(nil), request.WriteSet...),
 		RequiredTests:      append([]string(nil), request.RequiredTests...),
 		AcceptanceCriteria: append([]string(nil), request.AcceptanceCriteria...),
+		AcceptanceChecks:   append([]orquestaautoprogramming.AutoprogrammingAcceptanceCheckV0(nil), request.AcceptanceChecks...),
 		CompactRules:       append([]string(nil), request.CompactRules...),
 		ContextRefs:        append([]string(nil), request.ContextRefs...),
 		EvidenceRefs:       append([]string(nil), request.EvidenceRefs...),

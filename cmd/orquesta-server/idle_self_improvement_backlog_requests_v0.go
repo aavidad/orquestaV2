@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"strings"
 
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestaserver "orquesta/modulos/orquesta-server"
 )
 
@@ -55,6 +56,7 @@ func idleSelfImprovementRequestForBacklogSectionV0(
 	request.FailureKind = "backlog_autoprogramming"
 	request.FailureSummary = idleSelfImprovementBacklogSummaryV0(section)
 	request.WriteSet = idleSelfImprovementBacklogWriteSetV0(base.WriteSet, section.Scope)
+	request.AcceptanceChecks = append([]orquestaautoprogramming.AutoprogrammingAcceptanceCheckV0(nil), section.AcceptanceChecks...)
 	request.AcceptanceCriteria = compactServerStackStringsV0(append(
 		append([]string(nil), section.Criteria...),
 		append(

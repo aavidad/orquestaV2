@@ -1,6 +1,9 @@
 package orquestaautoprogramming
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestBuildAutoprogrammingSelfImprovementRequestV0CreaTrabajoDeBajaPrioridad(t *testing.T) {
 	result := BuildAutoprogrammingSelfImprovementRequestV0(validSelfImprovementProposalForTestV0())
@@ -84,6 +87,41 @@ func TestBuildAutoprogrammingSelfImprovementRequestV0TransportaBacklogScanV0(t *
 	if !work.Accepted ||
 		!stringsSliceContainsForAutoprogrammingTestV0(work.Work.Tasks[0].ContextRefs, "backlog_scan_epoch:backlog-scan-epoch-001") {
 		t.Fatalf("work=%+v", work)
+	}
+}
+
+func TestBuildAutoprogrammingSelfImprovementRequestV0TransportaAcceptanceChecksHastaGoalSpecV0(t *testing.T) {
+	proposal := validSelfImprovementProposalForTestV0()
+	proposal.ContextRefs = append(proposal.ContextRefs,
+		"goal_migration:goal-first",
+		"goal_capability:starter",
+		"goal_capability:observer",
+		"goal_capability:closure-validator",
+	)
+	proposal.AcceptanceChecks = []AutoprogrammingAcceptanceCheckV0{{
+		CriterionRef: " criterion-ref-self-improvement-001 ",
+		Description:  " El cierre exige la comprobacion tipada. ",
+		Command:      " go test -count=1 ./modulos/orquesta-autoprogramming ",
+	}}
+
+	result := BuildAutoprogrammingSelfImprovementRequestV0(proposal)
+	if !result.Accepted || len(result.Request.Tasks) != 1 {
+		t.Fatalf("result=%+v", result)
+	}
+	check := AutoprogrammingAcceptanceCheckV0{
+		CriterionRef: "criterion-ref-self-improvement-001",
+		Description:  "El cierre exige la comprobacion tipada.",
+		Command:      "go test -count=1 ./modulos/orquesta-autoprogramming",
+	}
+	if !reflect.DeepEqual(result.Request.Tasks[0].AcceptanceChecks, []AutoprogrammingAcceptanceCheckV0{check}) {
+		t.Fatalf("acceptance_checks=%+v", result.Request.Tasks[0].AcceptanceChecks)
+	}
+	work := BuildAutoprogrammingProgrammableWorkV0(result.Request)
+	if !work.Accepted || len(work.Work.GoalSpecs) != 1 {
+		t.Fatalf("work=%+v", work)
+	}
+	if !reflect.DeepEqual(work.Work.GoalSpecs[0].ClosurePolicy.RequiredAcceptanceCriteriaRefs, []string{check.CriterionRef}) {
+		t.Fatalf("closure_policy=%+v", work.Work.GoalSpecs[0].ClosurePolicy)
 	}
 }
 

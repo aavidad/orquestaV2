@@ -37,6 +37,11 @@ func TestMCPAutoprogrammingSelfImprovementDescriptorV0EsAdaptadorFino(t *testing
 			t.Fatalf("descriptor self-improvement no declara %q en output=%q", want, descriptor.Output)
 		}
 	}
+	for _, want := range []string{"acceptance_checks", "criterion_ref", "description?", "command"} {
+		if !containsMCPTestStringV0(descriptor.InputSchema, want) {
+			t.Fatalf("descriptor self-improvement no declara %q en input=%q", want, descriptor.InputSchema)
+		}
+	}
 	assertTransportPayloadSaneadoMCPTestV0(t, descriptor, 1200)
 }
 

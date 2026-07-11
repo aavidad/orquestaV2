@@ -38,6 +38,11 @@ func TestSelfAuditBacklogSectionsV0StaticcheckFindingEmiteSeccionEstableV0(t *te
 		section.SourceKind != "self_audit" ||
 		section.Scope[0] != "modulos/orquesta-server/foo_v0.go" ||
 		section.Tests[0] != "staticcheck ./..." ||
+		len(section.AcceptanceChecks) != 1 ||
+		section.AcceptanceChecks[0].CriterionRef == "" ||
+		section.AcceptanceChecks[0].CriterionRef != second[0].AcceptanceChecks[0].CriterionRef ||
+		section.AcceptanceChecks[0].Description != "staticcheck no reporta el hallazgo SA4006 para modulos/orquesta-server/foo_v0.go" ||
+		section.AcceptanceChecks[0].Command != "staticcheck ./..." ||
 		!strings.Contains(section.Criteria[0], "staticcheck no reporta el hallazgo SA4006") ||
 		!containsStringForTestV0(section.Inputs, "self_audit_tool:staticcheck") {
 		t.Fatalf("section=%+v second=%+v", section, second[0])
@@ -159,6 +164,10 @@ func TestIdleSelfImprovementBacklogPlannerV0IncluyeSelfAuditSoloConFlagV0(t *tes
 		!strings.HasPrefix(request.SuggestedArea, "self-audit-") ||
 		!containsStringForTestV0(request.WriteSet, "cmd/orquesta-server/self_audit_fixture_v0.go") ||
 		!containsStringForTestV0(request.RequiredTests, "staticcheck ./...") ||
+		len(request.AcceptanceChecks) != 1 ||
+		!strings.HasPrefix(request.AcceptanceChecks[0].CriterionRef, "criterion-ref-self-audit-") ||
+		request.AcceptanceChecks[0].Description != "staticcheck no reporta el hallazgo S1011 para cmd/orquesta-server/self_audit_fixture_v0.go" ||
+		request.AcceptanceChecks[0].Command != "staticcheck ./..." ||
 		!containsStringForTestV0(request.ContextRefs, "backlog_doc:self_audit://staticcheck") {
 		t.Fatalf("request=%+v", request)
 	}
@@ -300,8 +309,9 @@ func TestRuntimeV0SelfAuditBacklogGoalFirstLanzaSpecOperacionalV0(t *testing.T) 
 		IdleSelfImprovementTargetQueue: 1,
 		AuditDisabled:                  true,
 	}, orquestaserver.RuntimeDepsV0{
-		Supervisor:     supervisor,
-		GoalStateStore: goalStates,
+		Supervisor:                 supervisor,
+		GoalStateStore:             goalStates,
+		GoalRequiredTestSpecBinder: serverGoalRequiredTestSpecBinderForTestV0{},
 	})
 	if err != nil {
 		t.Fatalf("NewRuntimeV0: %v", err)
