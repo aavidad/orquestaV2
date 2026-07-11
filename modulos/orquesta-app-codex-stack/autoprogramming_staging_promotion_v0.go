@@ -104,11 +104,12 @@ func (stack StackV0) autoprogrammingPromotionGoalFirstWriteSetVerifiedV0(
 		return []string{evidencePrefix, evidencePrefix + "-project-work-dir-missing", baselineRef}, false
 	}
 	result, issues := orquestaruntimeworktree.VerifyWorktreeWriteSetV0(ctx, orquestaruntimeworktree.WorktreeVerifyRequestV0{
-		Baseline:             baseline,
-		ProjectWorkDir:       projectWorkDir,
-		WriteSet:             request.WriteSet,
-		IgnorePrefixes:       codexStackWorktreeIgnorePrefixesV0(),
-		AllowPartialSnapshot: false,
+		Baseline:                  baseline,
+		ProjectWorkDir:            projectWorkDir,
+		WriteSet:                  request.WriteSet,
+		DestructiveAuthorizations: autoprogrammingWorktreeDestructiveAuthorizationsV0(state.Spec.DestructiveAuthorizations),
+		IgnorePrefixes:            codexStackWorktreeIgnorePrefixesV0(),
+		AllowPartialSnapshot:      false,
 	})
 	refs := autoprogrammingPromotionGoalFirstWriteSetEvidenceRefsV0(evidencePrefix, baselineRef, result, issues)
 	return refs, len(issues) == 0 && result.OK

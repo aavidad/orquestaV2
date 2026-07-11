@@ -134,7 +134,8 @@ func (source CodexStackMaterialProgressEvidenceV0) classifyMaterialProgressDiffV
 	}
 	verified, issues := orquestaruntimeworktree.VerifyWorktreeWriteSetV0(ctx, orquestaruntimeworktree.WorktreeVerifyRequestV0{
 		Baseline: baseline, ProjectWorkDir: projectDir, WriteSet: writeSet,
-		IgnorePrefixes: codexStackWorktreeIgnorePrefixesV0(), AllowPartialSnapshot: false,
+		DestructiveAuthorizations: autoprogrammingWorktreeDestructiveAuthorizationsV0(state.Spec.DestructiveAuthorizations),
+		IgnorePrefixes:            codexStackWorktreeIgnorePrefixesV0(), AllowPartialSnapshot: false,
 	})
 	if len(issues) > 0 || !verified.OK {
 		base.Verified = true

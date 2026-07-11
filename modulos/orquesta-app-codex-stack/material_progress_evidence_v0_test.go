@@ -30,6 +30,42 @@ func TestCodexStackMaterialProgressEvidenceV0ClasificaDiffVerificadoV0(t *testin
 	}
 }
 
+func TestCodexStackMaterialProgressEvidenceV0ClasificaRenameAutorizadoComoDiffV0(t *testing.T) {
+	projectDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(projectDir, "docs"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(projectDir, "docs", "original.md"), []byte("before\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	baseline, issues := orquestaruntimeworktree.CaptureWorktreeSnapshotV0(context.Background(), orquestaruntimeworktree.WorktreeSnapshotRequestV0{
+		SnapshotRef: "baseline-ref-material-progress-rename", ProjectWorkDir: projectDir,
+	})
+	if len(issues) > 0 {
+		t.Fatalf("capture issues=%+v", issues)
+	}
+	store := orquestaruntimeworktree.NewInMemoryWorktreeSnapshotStoreV0(baseline)
+	if err := os.Rename(filepath.Join(projectDir, "docs", "original.md"), filepath.Join(projectDir, "docs", "renamed.md")); err != nil {
+		t.Fatal(err)
+	}
+	writeSet := []orquestagoal.GoalWriteScopeV0{{Path: "docs"}}
+	state := orquestagoal.GoalWorkStateV0{GoalRef: "goal-ref-material-progress-rename", Spec: orquestagoal.GoalWorkSpecV0{
+		WriteSet: writeSet, WriteSetSHA256: orquestagoal.GoalWriteSetSHA256V0(writeSet),
+		DestructiveAuthorizations: []orquestagoal.GoalDestructiveChangeAuthorizationV0{{
+			Kind: orquestagoal.GoalDestructiveChangeAuthorizationRenameV0, PreviousPath: "docs/original.md", CurrentPath: "docs/renamed.md",
+		}},
+		ContextRefs: []orquestagoal.GoalContextRefV0{{Kind: "worktree_baseline", Ref: baseline.SnapshotRef}},
+	}}
+	result, err := (CodexStackMaterialProgressEvidenceV0{Stack: &StackV0{
+		Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir}, AutoprogrammingPromotion: AutoprogrammingPromotionConfigV0{GoalFirstSnapshotStore: store},
+	}}).ClassifyMaterialProgressV0(context.Background(), orquestaautoprogramming.MaterialProgressEvidenceRequestV0{
+		State: state, Result: materialProgressRunningResultV0(state),
+	})
+	if err != nil || !result.Verified || result.MaterialClass != orquestaautoprogramming.MaterialProgressClassDiffV0 {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+}
+
 func TestCodexStackMaterialProgressEvidenceV0SinCambioEsNoneV0(t *testing.T) {
 	projectDir, store, state := materialProgressEvidenceFixtureV0(t)
 	source := CodexStackMaterialProgressEvidenceV0{Stack: &StackV0{
