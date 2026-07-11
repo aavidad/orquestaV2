@@ -4,11 +4,14 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
+	orquestamcp "orquesta/modulos/orquesta-mcp"
+	orquestaruntimecodexgoal "orquesta/modulos/orquesta-runtime-codex-goal"
 )
 
 func TestStackGoalMaterializedRefsSourceV0DetectaWorkDeliveryEnWriteSet(t *testing.T) {
@@ -821,6 +824,208 @@ func TestStackGoalMaterializedRefsSourceV0IgnoraReceiptTerminalDeOtroGoalV0(t *t
 	}
 }
 
+func TestStackGoalMaterializedRefsSourceV0ReparaReceiptCanonicoFueraDeWriteSetBUG208AFV0(t *testing.T) {
+	ctx := context.Background()
+	projectDir := t.TempDir()
+	writeSet := "generated-apps/receipt-canonical"
+	artifactPath := filepath.Join(projectDir, writeSet, "README.md")
+	if err := os.MkdirAll(filepath.Dir(artifactPath), 0o700); err != nil {
+		t.Fatalf("mkdir artifact: %v", err)
+	}
+	if err := os.WriteFile(artifactPath, []byte("# Generated\n"), 0o600); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	state := goalMaterializedRefsStateForTestV0(t, "run-goal-materialized-canonical-repair-001", writeSet)
+	artifactRef := "artifact-ref-" + state.RunRef + "-readme"
+	state.Spec.ArtifactContracts = []orquestagoal.GoalArtifactContractV0{{
+		ArtifactRef:  artifactRef,
+		ArtifactType: "source_tree",
+		Required:     true,
+	}}
+	state.Spec.ClosurePolicy = orquestagoal.GoalClosurePolicyV0{
+		RequireArtifacts:     true,
+		RequireArtifactPaths: true,
+	}
+	var err error
+	state, err = orquestagoal.NewGoalWorkStateV0(state)
+	if err != nil {
+		t.Fatalf("NewGoalWorkStateV0: %v", err)
+	}
+	goalMaterializedWriteCanonicalReceiptForTestV0(t, projectDir, state, `{
+  "schema_version":"orquesta_goal_result.v0",
+  "goal_ref":"`+state.GoalRef+`",
+  "status":"complete",
+  "summary":"receipt canonico",
+  "artifact_refs":["`+artifactRef+`"],
+  "artifact_paths":["`+writeSet+`/README.md"]
+}`)
+	if err := os.WriteFile(filepath.Join(projectDir, writeSet, "orquesta_goal_result_v0.json"), []byte(`{
+  "schema_version":"orquesta_goal_result.v0",
+  "goal_ref":"`+state.GoalRef+`",
+  "status":"complete",
+  "summary":"receipt legacy no debe ganar"
+}`), 0o600); err != nil {
+		t.Fatalf("write legacy receipt: %v", err)
+	}
+	store := newGoalFirstQueueStateStoreForTestV0()
+	if err := store.SaveGoalWorkStateV0(ctx, state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	source := stackGoalMaterializedRefsSourceV0{
+		Config:                       ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir}},
+		GoalStateStore:               store,
+		GoalClosureValidator:         orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		RepairMissingTerminalReceipt: true,
+	}
+	loadedResult, ok, err := source.LoadTerminalGoalMaterializedResultV0(ctx, state)
+	if err != nil || !ok || loadedResult.GoalRef != state.GoalRef {
+		t.Fatalf("LoadTerminalGoalMaterializedResultV0: ok=%v result=%+v err=%v", ok, loadedResult, err)
+	}
+	if _, ok, err := source.ResolveDirectorGoalMaterializedRefsV0(ctx, state); err != nil || !ok {
+		t.Fatalf("ResolveDirectorGoalMaterializedRefsV0: ok=%v err=%v", ok, err)
+	}
+	persisted, err := store.LoadGoalWorkStateV0(ctx, state.RunRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	if persisted.Status != orquestagoal.GoalStatusCompleteV0 || persisted.LastClosure == nil || !persisted.LastClosure.Accepted {
+		t.Fatalf("receipt canonico no reparo state=%+v", persisted)
+	}
+	if persisted.LastResult == nil || persisted.LastResult.Summary != "receipt canonico" {
+		t.Fatalf("receipt legacy gano precedencia: result=%+v", persisted.LastResult)
+	}
+	if _, ok, err := source.ResolveDirectorGoalMaterializedRefsV0(ctx, persisted); err != nil || !ok {
+		t.Fatalf("replay ResolveDirectorGoalMaterializedRefsV0: ok=%v err=%v", ok, err)
+	}
+	replayed, err := store.LoadGoalWorkStateV0(ctx, state.RunRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0 replay: %v", err)
+	}
+	if !reflect.DeepEqual(persisted, replayed) {
+		t.Fatalf("replay reescribio state: before=%+v after=%+v", persisted, replayed)
+	}
+}
+
+func TestStackGoalMaterializedRefsSourceV0ReceiptCanonicoInvalidoNoActivaRepairSinteticoBUG208AFV0(t *testing.T) {
+	ctx := context.Background()
+	projectDir := t.TempDir()
+	writeSet := "generated-apps/canonical-invalid-with-qa"
+	if err := os.MkdirAll(filepath.Join(projectDir, writeSet), 0o700); err != nil {
+		t.Fatalf("mkdir write set: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(projectDir, writeSet, "artifact.md"), []byte("# valid\n"), 0o600); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(projectDir, writeSet, "informe_qa.json"), []byte(`{"qa_passes":{"extension_pass":true,"official_text_qa_pass":true,"strict_editorial_qa_pass":true,"question_bank_publicable":true,"tutor_assets_publicable":true}}`), 0o600); err != nil {
+		t.Fatalf("write qa: %v", err)
+	}
+	state := goalMaterializedRefsStateForTestV0(t, "run-goal-materialized-canonical-invalid-qa", writeSet)
+	goalMaterializedWriteCanonicalReceiptForTestV0(t, projectDir, state, `{`)
+	if err := os.WriteFile(filepath.Join(projectDir, writeSet, "orquesta_goal_result_v0.json"), []byte(`{
+  "schema_version":"orquesta_goal_result.v0",
+  "goal_ref":"`+state.GoalRef+`",
+  "status":"complete",
+  "summary":"legacy valido no debe saltar canonical invalido"
+}`), 0o600); err != nil {
+		t.Fatalf("write legacy receipt: %v", err)
+	}
+	store := newGoalFirstQueueStateStoreForTestV0()
+	if err := store.SaveGoalWorkStateV0(ctx, state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	result, ok, err := (stackGoalMaterializedRefsSourceV0{
+		Config:                       ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir}},
+		GoalStateStore:               store,
+		GoalClosureValidator:         orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		RepairMissingTerminalReceipt: true,
+	}).ResolveDirectorGoalMaterializedRefsV0(ctx, state)
+	if err != nil {
+		t.Fatalf("ResolveDirectorGoalMaterializedRefsV0: %v", err)
+	}
+	if !ok || containsStringV0(result.IssueCodes, orquestamcp.MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0) {
+		t.Fatalf("receipt canonico invalido tratado como ausente: ok=%v result=%+v", ok, result)
+	}
+	persisted, err := store.LoadGoalWorkStateV0(ctx, state.RunRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	if !reflect.DeepEqual(state, persisted) {
+		t.Fatalf("receipt canonico invalido activo repair sintetico: before=%+v after=%+v", state, persisted)
+	}
+}
+
+func TestStackGoalMaterializedRefsSourceV0NoReparaReceiptCanonicoInvalidoBUG208AFV0(t *testing.T) {
+	for name, receipt := range map[string]string{
+		"goal_ref_vacio": `{"schema_version":"orquesta_goal_result.v0","goal_ref":"","status":"complete","summary":"sin goal"}`,
+		"goal_ref_ajeno": `{"schema_version":"orquesta_goal_result.v0","goal_ref":"goal-ref-ajeno","status":"complete","summary":"otro goal"}`,
+		"malformed":      `{`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			projectDir := t.TempDir()
+			state := goalMaterializedRefsStateForTestV0(t, "run-goal-materialized-canonical-invalid-"+name, "generated-apps/empty")
+			goalMaterializedWriteCanonicalReceiptForTestV0(t, projectDir, state, receipt)
+			store := newGoalFirstQueueStateStoreForTestV0()
+			if err := store.SaveGoalWorkStateV0(ctx, state); err != nil {
+				t.Fatalf("SaveGoalWorkStateV0: %v", err)
+			}
+			result, ok, err := (stackGoalMaterializedRefsSourceV0{
+				Config:                       ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir}},
+				GoalStateStore:               store,
+				GoalClosureValidator:         orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+				RepairMissingTerminalReceipt: true,
+			}).ResolveDirectorGoalMaterializedRefsV0(ctx, state)
+			if err != nil || ok || len(result.EvidenceRefs) != 0 {
+				t.Fatalf("receipt invalido aceptado: ok=%v result=%+v err=%v", ok, result, err)
+			}
+			persisted, err := store.LoadGoalWorkStateV0(ctx, state.RunRef)
+			if err != nil {
+				t.Fatalf("LoadGoalWorkStateV0: %v", err)
+			}
+			if !reflect.DeepEqual(state, persisted) {
+				t.Fatalf("receipt invalido reescribio state: before=%+v after=%+v", state, persisted)
+			}
+		})
+	}
+}
+
+func TestStackGoalMaterializedRefsSourceV0MantieneBlockedAjenoSinReceiptBUG208AFV0(t *testing.T) {
+	ctx := context.Background()
+	state := goalMaterializedRefsStateForTestV0(t, "run-goal-materialized-blocked-intact-001", "generated-apps/empty")
+	state.Status = orquestagoal.GoalStatusBlockedV0
+	state.LastResult = &orquestagoal.GoalWorkResultV0{
+		SchemaVersion: orquestagoal.GoalWorkResultSchemaV0,
+		Status:        orquestagoal.GoalStatusBlockedV0,
+		GoalRef:       state.GoalRef,
+		Summary:       "blocked ajeno",
+	}
+	state.LastClosure = &orquestagoal.GoalClosureValidationV0{Status: orquestagoal.GoalStatusBlockedV0, NeedsRework: true}
+	var err error
+	state, err = orquestagoal.NewGoalWorkStateV0(state)
+	if err != nil {
+		t.Fatalf("NewGoalWorkStateV0: %v", err)
+	}
+	store := newGoalFirstQueueStateStoreForTestV0()
+	if err := store.SaveGoalWorkStateV0(ctx, state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	result, ok, err := (stackGoalMaterializedRefsSourceV0{
+		Config:                       ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: t.TempDir()}},
+		GoalStateStore:               store,
+		RepairMissingTerminalReceipt: true,
+	}).ResolveDirectorGoalMaterializedRefsV0(ctx, state)
+	if err != nil || ok || len(result.EvidenceRefs) != 0 {
+		t.Fatalf("blocked ajeno modificado: ok=%v result=%+v err=%v", ok, result, err)
+	}
+	persisted, err := store.LoadGoalWorkStateV0(ctx, state.RunRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	if !reflect.DeepEqual(state, persisted) {
+		t.Fatalf("blocked ajeno reescrito: before=%+v after=%+v", state, persisted)
+	}
+}
+
 func TestStackGoalMaterializedRefsSourceV0DetectaArtefactosOPESFueraDeWriteSet(t *testing.T) {
 	projectDir := t.TempDir()
 	phaseDir := filepath.Join(projectDir, "temas", "tema_003", "coordinacion_wave14")
@@ -1068,6 +1273,27 @@ func goalMaterializedRefsOPESStateForTestV0(
 		Purpose: "qa-materializada",
 	}}
 	return state
+}
+
+func goalMaterializedWriteCanonicalReceiptForTestV0(
+	t *testing.T,
+	projectDir string,
+	state orquestagoal.GoalWorkStateV0,
+	receipt string,
+) {
+	t.Helper()
+	goalRef := goalMaterializedStateGoalRefV0(state)
+	path := filepath.Join(
+		projectDir,
+		filepath.FromSlash(orquestaruntimecodexgoal.CodexGoalRuntimeReceiptRelativeDirV0(goalRef)),
+		orquestaruntimecodexgoal.CodexGoalResultFileNameForGoalRefV0(goalRef),
+	)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatalf("mkdir canonical receipt: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(receipt), 0o600); err != nil {
+		t.Fatalf("write canonical receipt: %v", err)
+	}
 }
 
 func containsStringPrefixForTestV0(values []string, prefix string) bool {

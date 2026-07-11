@@ -50,19 +50,20 @@ type stackGoalMaterializedRefsSourceV0 struct {
 }
 
 type goalMaterializedRefsScanV0 struct {
-	Result               orquestamcp.MCPDirectorGoalMaterializedRefsV0
-	FilesScanned         int
-	HasArtifact          bool
-	HasQAPass            bool
-	HasQAFail            bool
-	HasTerminalReceipt   bool
-	HasPhase0Delivery    bool
-	TerminalResult       *orquestagoal.GoalWorkResultV0
-	ArtifactPaths        []string
-	ValidArtifactPaths   []string
-	InvalidArtifactPaths []string
-	MissingTestKeys      []string
-	PassedTestKeys       []string
+	Result                     orquestamcp.MCPDirectorGoalMaterializedRefsV0
+	FilesScanned               int
+	HasArtifact                bool
+	HasQAPass                  bool
+	HasQAFail                  bool
+	HasTerminalReceipt         bool
+	HasInvalidCanonicalReceipt bool
+	HasPhase0Delivery          bool
+	TerminalResult             *orquestagoal.GoalWorkResultV0
+	ArtifactPaths              []string
+	ValidArtifactPaths         []string
+	InvalidArtifactPaths       []string
+	MissingTestKeys            []string
+	PassedTestKeys             []string
 }
 
 func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedRefsV0(
@@ -81,6 +82,11 @@ func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedR
 		return orquestamcp.MCPDirectorGoalMaterializedRefsV0{}, false, nil
 	}
 	scan := goalMaterializedRefsScanV0{}
+	canonical, err := source.scanCanonicalGoalMaterializedReceiptV0(projectRoot, state)
+	if err != nil {
+		return orquestamcp.MCPDirectorGoalMaterializedRefsV0{}, false, err
+	}
+	scan = mergeGoalMaterializedRefsScanV0(scan, canonical)
 	for _, scope := range state.Spec.WriteSet {
 		if len(scan.Result.DomainReceiptRefs)+len(scan.Result.ArtifactRefs) >= goalMaterializedRefsMaxFilesV0 ||
 			scan.FilesScanned >= goalMaterializedQAScanMaxFilesV0 {
@@ -91,6 +97,11 @@ func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedR
 			return orquestamcp.MCPDirectorGoalMaterializedRefsV0{}, false, err
 		}
 		scan = mergeGoalMaterializedRefsScanV0(scan, next)
+	}
+	if canonical.HasInvalidCanonicalReceipt {
+		scan.TerminalResult = nil
+	} else if canonical.TerminalResult != nil {
+		scan.TerminalResult = canonical.TerminalResult
 	}
 	result := scan.Result
 	if source.RepairMissingTerminalReceipt &&
@@ -198,6 +209,42 @@ func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedR
 	return result, true, nil
 }
 
+func (source stackGoalMaterializedRefsSourceV0) scanCanonicalGoalMaterializedReceiptV0(
+	projectRoot string,
+	state orquestagoal.GoalWorkStateV0,
+) (goalMaterializedRefsScanV0, error) {
+	goalRef := goalMaterializedStateGoalRefV0(state)
+	if goalRef == "" {
+		return goalMaterializedRefsScanV0{}, nil
+	}
+	relativeDir := filepath.FromSlash(orquestaruntimecodexgoal.CodexGoalRuntimeReceiptRelativeDirV0(goalRef))
+	path := filepath.Join(projectRoot, relativeDir, orquestaruntimecodexgoal.CodexGoalResultFileNameForGoalRefV0(goalRef))
+	if !pathWithinRootV0(projectRoot, path) {
+		return goalMaterializedRefsScanV0{}, nil
+	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		return goalMaterializedRefsScanV0{}, nil
+	}
+	invalid := goalMaterializedRefsScanV0{FilesScanned: 1, HasTerminalReceipt: true, HasInvalidCanonicalReceipt: true}
+	if !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > goalMaterializedQAScanMaxBytesV0 {
+		return invalid, nil
+	}
+	resolvedRoot, rootErr := filepath.EvalSymlinks(projectRoot)
+	resolvedPath, pathErr := filepath.EvalSymlinks(path)
+	if rootErr != nil || pathErr != nil || !pathWithinRootV0(resolvedRoot, resolvedPath) {
+		return invalid, nil
+	}
+	result, ok := goalMaterializedReadValidTerminalGoalResultForStateV0(projectRoot, path, state)
+	if !ok || !goalMaterializedTerminalResultExactlyMatchesStateV0(result, state) {
+		return invalid, nil
+	}
+	scan := source.scanGoalMaterializedFileV0(projectRoot, state, path, info)
+	scan.TerminalResult = &result
+	scan.HasInvalidCanonicalReceipt = false
+	return scan, nil
+}
+
 func (source stackGoalMaterializedRefsSourceV0) LoadTerminalGoalMaterializedResultV0(
 	ctx context.Context,
 	state orquestagoal.GoalWorkStateV0,
@@ -212,6 +259,16 @@ func (source stackGoalMaterializedRefsSourceV0) LoadTerminalGoalMaterializedResu
 		return orquestagoal.GoalWorkResultV0{}, false, nil
 	}
 	projectRoot = filepath.Clean(projectRoot)
+	canonical, err := source.scanCanonicalGoalMaterializedReceiptV0(projectRoot, state)
+	if err != nil {
+		return orquestagoal.GoalWorkResultV0{}, false, err
+	}
+	if canonical.HasInvalidCanonicalReceipt {
+		return orquestagoal.GoalWorkResultV0{}, false, nil
+	}
+	if canonical.TerminalResult != nil {
+		return *canonical.TerminalResult, true, nil
+	}
 	for _, scope := range state.Spec.WriteSet {
 		result, ok, err := source.loadTerminalGoalMaterializedResultFromScopeV0(projectRoot, state, scope)
 		if err != nil || ok {
@@ -581,6 +638,7 @@ func mergeGoalMaterializedRefsScanV0(
 	current.HasQAPass = current.HasQAPass || next.HasQAPass
 	current.HasQAFail = current.HasQAFail || next.HasQAFail
 	current.HasTerminalReceipt = current.HasTerminalReceipt || next.HasTerminalReceipt
+	current.HasInvalidCanonicalReceipt = current.HasInvalidCanonicalReceipt || next.HasInvalidCanonicalReceipt
 	current.HasPhase0Delivery = current.HasPhase0Delivery || next.HasPhase0Delivery
 	current.MissingTestKeys = compactStringsV0(append(current.MissingTestKeys, next.MissingTestKeys...))
 	current.PassedTestKeys = compactStringsV0(append(current.PassedTestKeys, next.PassedTestKeys...))
@@ -630,18 +688,34 @@ func goalMaterializedTerminalResultMatchesStateV0(
 	result orquestagoal.GoalWorkResultV0,
 	state orquestagoal.GoalWorkStateV0,
 ) bool {
-	goalRef := strings.TrimSpace(state.GoalRef)
-	if goalRef == "" {
-		goalRef = strings.TrimSpace(state.Spec.GoalRef)
-	}
-	if goalRef == "" {
-		goalRef = strings.TrimSpace(state.LaunchReceipt.GoalRef)
-	}
+	goalRef := goalMaterializedStateGoalRefV0(state)
 	resultGoalRef := strings.TrimSpace(result.GoalRef)
 	if resultGoalRef == "" {
 		return goalRef != ""
 	}
 	return goalRef != "" && resultGoalRef == goalRef
+}
+
+func goalMaterializedTerminalResultExactlyMatchesStateV0(
+	result orquestagoal.GoalWorkResultV0,
+	state orquestagoal.GoalWorkStateV0,
+) bool {
+	if strings.TrimSpace(result.GoalRef) == "" ||
+		strings.TrimSpace(result.GoalRef) != goalMaterializedStateGoalRefV0(state) {
+		return false
+	}
+	resultExternal := strings.TrimSpace(result.ExternalGoalRef)
+	stateExternal := strings.TrimSpace(state.ExternalGoalRef)
+	return resultExternal == "" || stateExternal == "" || resultExternal == stateExternal
+}
+
+func goalMaterializedStateGoalRefV0(state orquestagoal.GoalWorkStateV0) string {
+	for _, goalRef := range []string{state.GoalRef, state.Spec.GoalRef, state.LaunchReceipt.GoalRef} {
+		if goalRef = strings.TrimSpace(goalRef); goalRef != "" {
+			return goalRef
+		}
+	}
+	return ""
 }
 
 func goalMaterializedGoalResultRequiredTestsPassedV0(result orquestagoal.GoalWorkResultV0) bool {
