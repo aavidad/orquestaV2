@@ -1,7 +1,7 @@
 # Incidencia 208AA: el attestor sin toolchain lanza rework de codigo
 
 Fecha: 2026-07-11
-Estado: abierto
+Estado: en verificacion E2E
 Area: nucleo goal-first / atestacion independiente / rework
 
 ## Resumen
@@ -88,5 +88,33 @@ fronteras que hoy se mezclan:
 `97d1d913a` incorpora el corte neutral: `failure_code` durable, reason code
 `goal_required_test_attestor_infrastructure_failed`, cierre bloqueado sin
 `NeedsRework` para infraestructura y compatibilidad de identidad con recibos
-fallidos legacy. Falta que el adaptador local produzca ese code desde un fallo
-real, el preflight previo al launcher y la cache semilla content-addressed.
+fallidos legacy.
+
+`350b48da7` incorpora el preflight obligatorio previo al launcher, snapshot de
+modulos de solo lectura con hash verificado y el mismo entorno hermetico para
+preflight y test (`GOPROXY=off`, `GOTOOLCHAIN=local`, sin entorno heredado).
+
+El primer E2E sobre ese commit encontro una tercera causa de la misma familia:
+el entorno hermetico no definia `PATH`. El `go test` congelado arrancaba, pero
+los tests que invocan una herramienta declarada (`git`) por nombre fallaban con
+`executable file not found in $PATH`. El implementador habia pasado porque su
+entorno si tenia `PATH`. El attestor persistio un claim fallido generico, no un
+recibo, y el ciclo volvio a marcar `NeedsRework=true`.
+
+Evidencia del E2E:
+
+- runtime: `/tmp/orquesta-208aa-e2e-runtime`;
+- run: `autoprog-attestor-e2e-close-20260711`;
+- goal: `goal-ref-task-autoprogramming-c202da3d0f17-g01`;
+- los dos preflights y el hash del snapshot fueron validos;
+- el comando exacto fallo bajo `env -i` sin `PATH` y paso con un `PATH`
+  determinista limitado a los directorios de Go y Git;
+- `runs/control` detuvo el rework y shutdown retiro el backend en el primer
+  intento, devolvio `backend_still_running`, y cerro el servidor en el segundo.
+
+El corte siguiente construye `PATH` exclusivamente desde los directorios de
+`allowed_commands` y `git_command_path`, ordenados y sin heredar el valor del
+padre. Tambien hace que cualquier error operativo devuelto por el attestor se
+persista como `goal_required_test_attestor_infrastructure_failed`; replay
+conserva ese codigo y no vuelve a lanzar attestor ni rework. Falta el E2E final
+`accepted` para cerrar la incidencia.

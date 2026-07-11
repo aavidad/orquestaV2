@@ -265,7 +265,11 @@ func ObserveGoalWorkV0(
 						}
 						if !claimResult.Acquired {
 							if claimResult.Claim.Status == GoalRequiredTestAttestationClaimStatusFailedV0 {
-								closure = blockedGoalRequiredTestAttestationClosureV0(GoalClosureValidationV0{}, ErrGoalRequiredTestAttestationFailedV0, "required_test_attestation_claim")
+								failureCode := strings.TrimSpace(claimResult.Claim.FailureCode)
+								if failureCode == "" {
+									failureCode = ErrGoalRequiredTestAttestationFailedV0
+								}
+								closure = blockedGoalRequiredTestAttestationClosureV0(GoalClosureValidationV0{}, failureCode, "required_test_attestation_claim")
 								closure.EvidenceRefs = compactGoalStringsV0(append(closure.EvidenceRefs, claimResult.Claim.ClaimRef))
 								break
 							}
@@ -280,11 +284,11 @@ func ObserveGoalWorkV0(
 							ports.RequiredTestAttestor,
 							ports.RequiredTestAttestationStore,
 						); err != nil {
-							failedClaim, failErr := ports.RequiredTestAttestationStore.FailGoalRequiredTestAttestationClaimV0(ctx, claimResult.Claim, ErrGoalRequiredTestAttestationFailedV0)
+							failedClaim, failErr := ports.RequiredTestAttestationStore.FailGoalRequiredTestAttestationClaimV0(ctx, claimResult.Claim, ErrGoalRequiredTestAttestorInfrastructureFailedV0)
 							if failErr != nil {
 								return GoalWorkObserveResultV0{}, failErr
 							}
-							closure = blockedGoalRequiredTestAttestationClosureV0(GoalClosureValidationV0{}, ErrGoalRequiredTestAttestationFailedV0, "required_test_attestation")
+							closure = blockedGoalRequiredTestAttestationClosureV0(GoalClosureValidationV0{}, ErrGoalRequiredTestAttestorInfrastructureFailedV0, "required_test_attestation")
 							closure.EvidenceRefs = compactGoalStringsV0(append(closure.EvidenceRefs, failedClaim.ClaimRef))
 							break
 						}

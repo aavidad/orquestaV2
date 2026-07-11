@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
@@ -112,10 +114,20 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) hermeticEnvironmentV0(
 	if modCache == "" {
 		modCache = filepath.Join(runDir, "go-mod-cache")
 	}
+	pathDirs := map[string]struct{}{}
+	for _, commandPath := range adapter.config.AllowedCommands {
+		pathDirs[filepath.Dir(commandPath)] = struct{}{}
+	}
+	pathDirs[filepath.Dir(adapter.config.GitCommandPath)] = struct{}{}
+	orderedPathDirs := make([]string, 0, len(pathDirs))
+	for dir := range pathDirs {
+		orderedPathDirs = append(orderedPathDirs, dir)
+	}
+	sort.Strings(orderedPathDirs)
 	return []string{
 		"CGO_ENABLED=0", "GOWORK=off", "GOPROXY=off", "GOSUMDB=off", "GONOSUMDB=*", "GOTOOLCHAIN=local",
 		"GOCACHE=" + filepath.Join(runDir, "go-cache"), "GOMODCACHE=" + modCache,
 		"GOPATH=" + filepath.Join(runDir, "go-path"), "GOTMPDIR=" + filepath.Join(runDir, "tmp"),
-		"TMPDIR=" + filepath.Join(runDir, "tmp"),
+		"TMPDIR=" + filepath.Join(runDir, "tmp"), "PATH=" + strings.Join(orderedPathDirs, string(os.PathListSeparator)),
 	}
 }

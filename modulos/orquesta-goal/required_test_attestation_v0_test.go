@@ -156,7 +156,7 @@ func TestGoalRequiredTestAttestationV0ConcurrentClaimsRunOneAttestor(t *testing.
 	}
 }
 
-func TestGoalRequiredTestAttestationV0ErrorTrasClaimPersisteReworkSinReintento(t *testing.T) {
+func TestGoalRequiredTestAttestationV0ErrorTrasClaimPersisteInfraSinReintento(t *testing.T) {
 	spec := attestationSpecForTestV0(1)
 	snapshot := attestationSnapshotForTestV0(spec, "revision-ref-current")
 	store := &attestationStoreForTestV0{snapshot: snapshot}
@@ -164,15 +164,16 @@ func TestGoalRequiredTestAttestationV0ErrorTrasClaimPersisteReworkSinReintento(t
 	stateStore := &attestationGoalStateStoreForTestV0{state: attestationRunningStateForTestV0(spec)}
 	ports := attestedLifecyclePortsForTestV0(snapshot, store, attestor, stateStore)
 	first, err := ObserveGoalWorkV0(context.Background(), GoalWorkObserveRequestV0{RunRef: spec.RunRef}, ports)
-	if err != nil || first.Accepted || !first.NeedsRework || !hasAttestationIssueForTestV0(first.Closure, ErrGoalRequiredTestAttestationFailedV0) {
+	if err != nil || first.Accepted || first.NeedsRework || !hasAttestationIssueForTestV0(first.Closure, ErrGoalRequiredTestAttestorInfrastructureFailedV0) {
 		t.Fatalf("first=%+v err=%v", first, err)
 	}
 	second, err := ObserveGoalWorkV0(context.Background(), GoalWorkObserveRequestV0{RunRef: spec.RunRef}, ports)
-	if err != nil || second.Accepted || !second.NeedsRework || attestor.calls != 1 {
+	if err != nil || second.Accepted || second.NeedsRework || attestor.calls != 1 ||
+		!hasAttestationIssueForTestV0(second.Closure, ErrGoalRequiredTestAttestorInfrastructureFailedV0) {
 		t.Fatalf("second=%+v calls=%d err=%v", second, attestor.calls, err)
 	}
 	for _, claim := range store.claims {
-		if claim.Status != GoalRequiredTestAttestationClaimStatusFailedV0 || claim.FailureCode != ErrGoalRequiredTestAttestationFailedV0 {
+		if claim.Status != GoalRequiredTestAttestationClaimStatusFailedV0 || claim.FailureCode != ErrGoalRequiredTestAttestorInfrastructureFailedV0 {
 			t.Fatalf("claim=%+v", claim)
 		}
 	}

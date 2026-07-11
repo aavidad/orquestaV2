@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -120,6 +121,35 @@ func TestLocalGoalRequiredTestAttestationAdapterV0AcceptsReadOnlySnapshotAndGree
 	adapter, err := NewLocalGoalRequiredTestAttestationAdapterV0(config)
 	if err != nil || adapter.PreflightGoalRequiredTestAttestationV0(context.Background()) != nil {
 		t.Fatalf("adapter=%v err=%v", adapter, err)
+	}
+}
+
+func TestLocalGoalRequiredTestAttestationAdapterV0BuildsMinimalDeterministicPath(t *testing.T) {
+	project, runtimeRoot, gitPath := localGoalAttestationGitRepoForTestV0(t)
+	commandPath, err := exec.LookPath("go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapter := localGoalAttestationAdapterForTestV0(t, project, runtimeRoot, gitPath, map[string]string{"go": commandPath})
+	t.Setenv("PATH", "/must/not/leak")
+
+	env := adapter.hermeticEnvironmentV0(t.TempDir())
+	wantDirs := []string{filepath.Dir(commandPath), filepath.Dir(gitPath)}
+	sort.Strings(wantDirs)
+	wantPath := "PATH=" + strings.Join(wantDirs, string(os.PathListSeparator))
+	count := 0
+	for _, item := range env {
+		if item == wantPath {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("env=%v, want exactly %q", env, wantPath)
+	}
+	for _, item := range env {
+		if strings.Contains(item, "/must/not/leak") {
+			t.Fatalf("parent PATH leaked: %v", env)
+		}
 	}
 }
 
