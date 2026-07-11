@@ -427,7 +427,7 @@ func codexAppServerGoalResultFromFileV0(
 	}
 	marked := codexAppServerGoalResultMarkerFromNeutralV0(decoded.Result)
 	marked = normalizeCodexAppServerGoalResultMarkerV0(marked)
-	if marked.GoalRef != strings.TrimSpace(goalRef) {
+	if codexAppServerGoalResultMarkerGoalRefMismatchV0(marked, goalRef) {
 		return codexAppServerGoalResultMarkerV0{}, false, nil
 	}
 	if codexAppServerGoalResultMarkerExternalGoalRefMismatchV0(marked, externalGoalRef) {

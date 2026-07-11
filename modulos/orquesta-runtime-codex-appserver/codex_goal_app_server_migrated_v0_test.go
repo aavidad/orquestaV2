@@ -542,6 +542,34 @@ func TestServerCodexAppServerGoalBackendV0ObservaResultadoMarcadoMigradoV0(t *te
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0NormalizaUnTypoDeGoalRefLigadoAlThreadV0(t *testing.T) {
+	expectedGoalRef := "goal-ref-task-autoprogramming-c0ae86a2ae2e-g01"
+	protocol := &fakeCodexAppServerProtocolV0{
+		observedGoal: &serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-goal-typo-001", Status: "complete"},
+		readThread: serverCodexAppServerThreadReadV0{
+			ID: "thread-ref-goal-typo-001", Status: "closed",
+			Turns: []serverCodexAppServerReadTurnV0{{
+				ID: "turn-ref-goal-typo-001",
+				Items: []serverCodexAppServerReadItemV0{{
+					Type: "agentMessage", Phase: "final_answer",
+					Text: orquestaruntimecodexgoal.CodexGoalResultMarkerV0 + ` {"schema_version":"orquesta_goal_result.v0","status":"complete","summary":"ok","goal_ref":"goal-ref-task-autoprogramming-a0ae86a2ae2e-g01","external_goal_ref":"thread-ref-goal-typo-001","evidence_refs":["evidence-ref-work"]}`,
+				}},
+			}},
+		},
+	}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol}
+	receipt, err := backend.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		GoalRef: expectedGoalRef, ExternalGoalRef: "thread-ref-goal-typo-001",
+	})
+	if err != nil || receipt.Status != orquestagoal.GoalStatusCompleteV0 || receipt.GoalRef != expectedGoalRef ||
+		!containsStringMigratedTestV0(receipt.EvidenceRefs, codexAppServerGoalResultGoalRefNormalizedEvidenceV0) {
+		t.Fatalf("receipt=%+v err=%v", receipt, err)
+	}
+	if !codexAppServerGoalResultMarkerGoalRefMismatchV0(codexAppServerGoalResultMarkerV0{GoalRef: "goal-ref-unrelated-999"}, expectedGoalRef) {
+		t.Fatal("unrelated goal_ref must remain rejected")
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0NormalizaMissingRefsRaizEnChecklistV0(t *testing.T) {
 	protocol := &fakeCodexAppServerProtocolV0{
 		observedGoal: &serverCodexAppServerThreadGoalV0{

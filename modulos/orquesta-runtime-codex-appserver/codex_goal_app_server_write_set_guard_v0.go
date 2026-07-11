@@ -62,6 +62,7 @@ func (backend serverCodexAppServerGoalBackendV0) mergeCodexAppServerGoalResultGu
 	marked codexAppServerGoalResultMarkerV0,
 	sourceEvidenceRef string,
 ) bool {
+	marked, _ = normalizeCodexAppServerGoalResultGoalRefForRequestV0(marked, request.GoalRef)
 	if !backend.codexAppServerRuntimeWriteSetGuardBlocksResultV0(ctx, request, receipt, marked) {
 		mergeCodexAppServerGoalResultV0(receipt, marked, sourceEvidenceRef)
 		return false

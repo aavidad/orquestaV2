@@ -165,7 +165,48 @@ func codexAppServerGoalResultMarkerGoalRefMismatchV0(
 	goalRef string,
 ) bool {
 	markedGoalRef := strings.TrimSpace(marked.GoalRef)
-	return markedGoalRef != "" && markedGoalRef != strings.TrimSpace(goalRef)
+	return markedGoalRef != "" && !codexAppServerGoalResultGoalRefMatchesV0(markedGoalRef, goalRef)
+}
+
+const codexAppServerGoalResultGoalRefNormalizedEvidenceV0 = "evidence-ref-codex-app-server-goal-result-goal-ref-normalized"
+
+func codexAppServerGoalResultGoalRefMatchesV0(actual string, expected string) bool {
+	actual = strings.TrimSpace(actual)
+	expected = strings.TrimSpace(expected)
+	if actual == expected {
+		return true
+	}
+	if !strings.HasPrefix(actual, "goal-ref-") || !strings.HasPrefix(expected, "goal-ref-") || len(actual) != len(expected) {
+		return false
+	}
+	differences := 0
+	for index := range actual {
+		if actual[index] == expected[index] {
+			continue
+		}
+		differences++
+		if differences > 1 {
+			return false
+		}
+	}
+	return differences == 1
+}
+
+func normalizeCodexAppServerGoalResultGoalRefForRequestV0(
+	marked codexAppServerGoalResultMarkerV0,
+	goalRef string,
+) (codexAppServerGoalResultMarkerV0, bool) {
+	actual := strings.TrimSpace(marked.GoalRef)
+	expected := strings.TrimSpace(goalRef)
+	if actual == "" || actual == expected || !codexAppServerGoalResultGoalRefMatchesV0(actual, expected) {
+		return marked, false
+	}
+	marked.GoalRef = expected
+	marked.EvidenceRefs = compactServerStackStringsV0(append(
+		marked.EvidenceRefs,
+		codexAppServerGoalResultGoalRefNormalizedEvidenceV0,
+	))
+	return marked, true
 }
 
 func codexAppServerGoalResultMarkerExternalGoalRefMismatchV0(

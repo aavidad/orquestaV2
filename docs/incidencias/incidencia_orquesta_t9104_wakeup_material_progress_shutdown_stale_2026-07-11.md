@@ -211,3 +211,32 @@ El rework de `r6` se detuvo por control tipado al confirmar que el fixture no
 podia pasar; shutdown elimino el app-server con `shutdown_ready=true`. El
 cierre integrado de `BUG-226/232` requiere un replay nuevo con snapshot offline
 completo y binario que contenga este arreglo.
+
+## Replay r7 y BUG-ORQ-20260711-233
+
+`r7` arranco desde `6ae099cd3` con snapshot offline completo. El preflight uso
+su copia privada y limpio el workdir; el goal
+`019f507d-58e7-7dc1-897e-127fb9851444` materializo un informe, y el gobernador
+registro `warning` a 33.015 tokens seguido de progreso `diff` a 37.512 tokens.
+
+El resultado final escribio por error
+`goal-ref-task-autoprogramming-a2ae86a2ae2e-g01` en vez de
+`goal-ref-task-autoprogramming-c0ae86a2ae2e-g01`. El thread externo y todos los
+demas refs estaban ligados al goal correcto, pero el adaptador descarto el
+marker completo y dejo `attempt_blocked` sin atestacion. Es una forma
+recuperable que la regla canonica obliga a normalizar, no una ref imposible.
+
+Cierre local de `BUG-ORQ-20260711-233`:
+
+- solo se recuperan refs `goal-ref-*` de igual longitud con exactamente una
+  sustitucion, dentro del thread externo ya ligado por la observacion;
+- la ref se reemplaza por la esperada antes del guard de write-set y del merge;
+- el recibo conserva evidencia explicita
+  `evidence-ref-codex-app-server-goal-result-goal-ref-normalized`;
+- refs con dos cambios, otra longitud/prefijo o external ref divergente siguen
+  rechazadas;
+- una regresion app-server reproduce el typo y exige resultado terminal unido a
+  la ref esperada.
+
+Se reiniciara el mismo estado `r7` con el binario corregido para reobservar el
+thread ya terminal sin gastar otro goal y cerrar la atestacion pendiente.

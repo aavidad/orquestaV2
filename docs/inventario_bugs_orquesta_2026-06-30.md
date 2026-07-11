@@ -4107,6 +4107,15 @@ expone solo una copia privada escribible y unica por ejecucion, y elimina el
 workdir conservando evidencia durable. Detalle y recibos en la
 [incidencia T9104](incidencias/incidencia_orquesta_t9104_wakeup_material_progress_shutdown_stale_2026-07-11.md).
 
+BUG `BUG-ORQ-20260711-233` (cerrado localmente, pendiente de reobservacion): el
+resultado terminal real de `r7` altero un solo caracter del `goal_ref`; pese a
+que el thread externo y el resto de evidencia estaban causalmente ligados, el
+adaptador descarto el marker y no llego a la atestacion. Ahora normaliza solo
+una sustitucion en refs `goal-ref-*` de igual longitud ligadas al thread,
+publica evidencia de la reparacion y sigue rechazando refs no cercanas o
+external refs divergentes. Detalle en la
+[incidencia T9104](incidencias/incidencia_orquesta_t9104_wakeup_material_progress_shutdown_stale_2026-07-11.md).
+
 Avance 2026-07-11: `b96e9b115` añade refs obligatorias de criterios
 verificables al contrato Goal; el transporte posterior añade
 `acceptance_checks` tipados a autoprogramacion V0/V1 y los publica por MCP. Los
