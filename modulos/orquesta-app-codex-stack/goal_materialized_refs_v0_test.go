@@ -1301,6 +1301,50 @@ func TestStackGoalMaterializedRefsSourceV0DetectaRequiredTestEvidenceAusenteEnRe
 	}
 }
 
+func TestStackGoalMaterializedRefsSourceV0ReconciliaAtestacionIndependienteAceptadaV0(t *testing.T) {
+	projectDir := t.TempDir()
+	topicDir := filepath.Join(projectDir, "modulos", "orquesta-native-smoke-tool")
+	if err := os.MkdirAll(topicDir, 0o700); err != nil {
+		t.Fatalf("mkdir module: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(topicDir, "tool_v0.go"), []byte("package smoke\n"), 0o600); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(topicDir, "orquesta_goal_result_v0.json"),
+		[]byte(`{"status":"complete","artifact_paths":["modulos/orquesta-native-smoke-tool/tool_v0.go"],"required_test_results":[{"test_ref":"test-ref-native-smoke","status":"passed","evidence_refs":[]}]}`),
+		0o600,
+	); err != nil {
+		t.Fatalf("write receipt: %v", err)
+	}
+	state := goalMaterializedRefsStateForTestV0(t, "run-goal-materialized-attested-001", "modulos/orquesta-native-smoke-tool")
+	state.Spec.RequiredTests = []orquestagoal.GoalRequiredTestV0{{
+		TestRef: "test-ref-native-smoke",
+		Command: "go test ./modulos/orquesta-native-smoke-tool",
+	}}
+	state.LastClosure = &orquestagoal.GoalClosureValidationV0{
+		Accepted: true,
+		AttestationVerifications: []orquestagoal.GoalRequiredTestIdentityVerificationV0{{
+			AttestationRef: "attestation-ref-native-smoke-independent",
+			TestRef:        "test-ref-native-smoke", Verified: true, Independent: true,
+			EvidenceRefs: []string{"evidence-ref-native-smoke-identity"},
+		}},
+	}
+
+	result, ok, err := (stackGoalMaterializedRefsSourceV0{
+		Config: ConfigV0{Codex: CodexRuntimeConfigV0{ProjectWorkDir: projectDir}},
+	}).ResolveDirectorGoalMaterializedRefsV0(context.Background(), state)
+	if err != nil {
+		t.Fatalf("ResolveDirectorGoalMaterializedRefsV0: %v", err)
+	}
+	if !ok ||
+		containsStringV0(result.IssueCodes, "required_test_evidence_missing") ||
+		!containsStringV0(result.EvidenceRefs, "attestation-ref-native-smoke-independent") ||
+		!containsStringV0(result.EvidenceRefs, "evidence-ref-native-smoke-identity") {
+		t.Fatalf("atestacion independiente no reconciliada: ok=%v result=%+v", ok, result)
+	}
+}
+
 func TestStackGoalMaterializedRefsSourceV0UsaRequiredTestEvidenceMaterializadaFueraDeReceipt(t *testing.T) {
 	projectDir := t.TempDir()
 	topicDir := filepath.Join(projectDir, "temas", "tema_040")

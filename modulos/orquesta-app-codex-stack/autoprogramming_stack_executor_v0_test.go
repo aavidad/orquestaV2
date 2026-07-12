@@ -1729,10 +1729,14 @@ func autoprogrammingGoalRequiredTestResultsForTestV0(
 ) []orquestagoal.GoalRequiredTestResultV0 {
 	results := make([]orquestagoal.GoalRequiredTestResultV0, 0, len(spec.RequiredTests))
 	for _, test := range spec.RequiredTests {
+		var evidenceRefs []string
+		if strings.TrimSpace(evidenceRef) != "" {
+			evidenceRefs = []string{evidenceRef}
+		}
 		results = append(results, orquestagoal.GoalRequiredTestResultV0{
 			TestRef:      test.TestRef,
 			Status:       "passed",
-			EvidenceRefs: []string{evidenceRef},
+			EvidenceRefs: evidenceRefs,
 		})
 	}
 	return results

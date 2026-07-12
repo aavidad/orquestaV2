@@ -537,25 +537,60 @@ func autoprogrammingPromotionGoalAcceptedReviewRefsV0(state orquestagoal.GoalWor
 func autoprogrammingPromotionGoalRequiredTestEvidenceV0(
 	state orquestagoal.GoalWorkStateV0,
 ) []orquestaautoprogramming.AutoprogrammingRequiredTestEvidenceV0 {
-	if state.LastResult == nil {
+	if state.LastClosure == nil || !state.LastClosure.Accepted {
 		return nil
 	}
 	commandsByRef := make(map[string]string, len(state.Spec.RequiredTests))
 	for _, test := range state.Spec.RequiredTests {
-		commandsByRef[strings.TrimSpace(test.TestRef)] = autoprogrammingPromotionGoalRequiredTestCommandV0(test)
+		testRef := strings.TrimSpace(test.TestRef)
+		if testRef != "" {
+			commandsByRef[testRef] = autoprogrammingPromotionGoalRequiredTestCommandV0(test)
+		}
 	}
 	var out []orquestaautoprogramming.AutoprogrammingRequiredTestEvidenceV0
+	seen := make(map[string]struct{}, len(state.LastClosure.AttestationVerifications))
+	for _, verification := range state.LastClosure.AttestationVerifications {
+		testRef := strings.TrimSpace(verification.TestRef)
+		command, required := commandsByRef[testRef]
+		evidenceRef := strings.TrimSpace(verification.AttestationRef)
+		if !required || !verification.Verified || !verification.Independent || evidenceRef == "" {
+			continue
+		}
+		key := testRef + "\x00" + evidenceRef
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, orquestaautoprogramming.AutoprogrammingRequiredTestEvidenceV0{
+			EvidenceRef: evidenceRef,
+			TaskRef:     state.GoalRef,
+			TestCommand: command,
+			Status:      orquestagoal.GoalRequiredTestAttestationStatusPassedV0,
+		})
+	}
+	if state.Spec.ClosurePolicy.RequireIndependentRequiredTestAttestation || state.LastResult == nil {
+		return out
+	}
+	// Compatibilidad con contratos que no exigen atestacion independiente:
+	// solo esos contratos pueden usar evidencia declarada en el resultado.
 	for _, result := range state.LastResult.RequiredTestResults {
-		command := strings.TrimSpace(commandsByRef[strings.TrimSpace(result.TestRef)])
-		if command == "" {
-			command = strings.TrimSpace(result.TestRef)
+		testRef := strings.TrimSpace(result.TestRef)
+		command, required := commandsByRef[testRef]
+		if !required {
+			continue
 		}
 		for _, evidenceRef := range result.EvidenceRefs {
-			if strings.TrimSpace(evidenceRef) == "" {
+			evidenceRef = strings.TrimSpace(evidenceRef)
+			if evidenceRef == "" {
 				continue
 			}
+			key := testRef + "\x00" + evidenceRef
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
 			out = append(out, orquestaautoprogramming.AutoprogrammingRequiredTestEvidenceV0{
-				EvidenceRef: strings.TrimSpace(evidenceRef),
+				EvidenceRef: evidenceRef,
 				TaskRef:     state.GoalRef,
 				TestCommand: command,
 				Status:      result.Status,

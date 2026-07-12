@@ -157,12 +157,14 @@ func TestCodexStackAutoprogrammingPromotionV0GoalFirstE2ERepoTemporalReplayV0(t 
 		t.Fatalf("write feature: %v", err)
 	}
 	observer.result = orquestagoal.GoalWorkResultV0{
-		SchemaVersion:       orquestagoal.GoalWorkResultSchemaV0,
-		Status:              orquestagoal.GoalStatusCompleteV0,
-		GoalRef:             state.GoalRef,
-		ExternalGoalRef:     state.ExternalGoalRef,
-		Summary:             "autoprogramming goal-first promocionable",
-		RequiredTestResults: autoprogrammingGoalRequiredTestResultsForTestV0(state.Spec, "evidence-ref-autoprogramming-goal-first-promotion-test-passed"),
+		SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+		Status:          orquestagoal.GoalStatusCompleteV0,
+		GoalRef:         state.GoalRef,
+		ExternalGoalRef: state.ExternalGoalRef,
+		Summary:         "autoprogramming goal-first promocionable",
+		// El implementador solo declara resultado. La autoridad de promocion
+		// nace de la atestacion independiente ejecutada por el lifecycle.
+		RequiredTestResults: autoprogrammingGoalRequiredTestResultsForTestV0(state.Spec, ""),
 		EvidenceRefs:        state.Spec.ClosurePolicy.RequiredEvidenceRefs,
 	}
 	observed, err := NewCodexStackAutoprogrammingObserveGoalExecutorV0(&stack).Execute(ctx, orquestamcp.MCPAutoprogrammingObserveGoalToolInputV0{
@@ -189,6 +191,15 @@ func TestCodexStackAutoprogrammingPromotionV0GoalFirstE2ERepoTemporalReplayV0(t 
 	persistedAfterObserve, err := goalStates.LoadGoalWorkStateV0(ctx, prepared.RunRef)
 	if err != nil || !autoprogrammingGoalFirstPromotionCompletionVerifiedV0(persistedAfterObserve, prepared.RunRef) {
 		t.Fatalf("promocion no acreditada en state: state=%+v err=%v", persistedAfterObserve, err)
+	}
+	if persistedAfterObserve.LastResult == nil ||
+		len(persistedAfterObserve.LastResult.RequiredTestResults) != 1 ||
+		len(compactStringsV0(persistedAfterObserve.LastResult.RequiredTestResults[0].EvidenceRefs)) != 0 ||
+		persistedAfterObserve.LastClosure == nil ||
+		len(persistedAfterObserve.LastClosure.AttestationVerifications) != 1 ||
+		!persistedAfterObserve.LastClosure.AttestationVerifications[0].Verified ||
+		!persistedAfterObserve.LastClosure.AttestationVerifications[0].Independent {
+		t.Fatalf("autoridad de test no separada del implementador: state=%+v", persistedAfterObserve)
 	}
 	run := mustLoadCodexStackRunForTestV0(t, stack, prepared.RunRef)
 	if len(run.Tasks) != 0 || len(run.ClosedTasks) != 0 {
@@ -338,6 +349,21 @@ func TestMaybePromoteClosedAutoprogrammingRunV0SinPortQuedaPendingV0(t *testing.
 	if err != nil || !goalFirstStringSliceContainsV0(state.EvidenceRefs, autoprogrammingGoalFirstPromotionPendingEvidenceV0) ||
 		autoprogrammingGoalFirstPromotionCompletionVerifiedV0(state, run.RunID) {
 		t.Fatalf("state=%+v err=%v", state, err)
+	}
+	active, err := stack.ObserveActiveGoalWorksV0(ctx, orquestagoal.GoalWorkObserveActiveRequestV0{
+		List: orquestagoal.GoalWorkStateListRequestV0{RunRefs: []string{run.RunID}},
+	})
+	if err != nil {
+		t.Fatalf("ObserveActiveGoalWorksV0: %v", err)
+	}
+	foundPending := false
+	for _, issue := range active.Issues {
+		if issue.RunRef == run.RunID && issue.Code == "goal_first_promotion_recovery_pending" {
+			foundPending = true
+		}
+	}
+	if !foundPending {
+		t.Fatalf("pending de promocion invisible: %+v", active)
 	}
 }
 

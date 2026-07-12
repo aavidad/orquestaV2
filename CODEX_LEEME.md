@@ -391,3 +391,48 @@ lease/owner/expiry y reclaim gobernado; (3) serializacion por run entre observer
 residente/manual; (4) HTTP observe desacoplado (`202` + poll/wakeup) para que el
 deadline no cancele trabajo durable. Hasta ese fix no repetire `observe` REST
 sobre cierres que esten atestando; usare MCP directo o successor causal.
+
+### 2026-07-12 — H3 reabierto por prueba live y reparado para reacreditacion
+
+La app real pedida por el operador encontro una regresion que los E2E anteriores
+enmascaraban. Ejecucion local por API/MCP:
+
+- request `request-ref-native-tool-final-003`;
+- run `run-ref-native-tool-final-003`;
+- goal `goal-ref-task-autoprogramming-9625cae418dd-g01`;
+- cierre `accepted`, snapshot final y atestacion independiente verificada;
+- resultado del implementador con required test `passed` y `evidence_refs=[]`;
+- promocion detenida en `promotion-pending`, sin receipt, commit ni archive.
+
+Causa: `autoprogrammingPromotionGoalRequiredTestEvidenceV0` solo leia evidencia
+autorreportada desde `LastResult`. Ignoraba la autoridad ya persistida en
+`LastClosure.AttestationVerifications`. El evaluador devolvia por tanto
+`required_test_not_passed`. La proyeccion materializada repetia la misma doble
+fuente de verdad y publicaba `required_test_evidence_missing`. Ademas, recovery
+convertia `complete=false, err=nil` en exito silencioso.
+
+Decision aplicada, sin tocar modelos, routing, seguridad, envs ni ratchets:
+
+1. Cuando el contrato exige atestacion independiente, promocion solo acepta un
+   cierre accepted con verification `Verified && Independent`, TestRef requerido
+   y AttestationRef no vacio. No usa evidencia del implementador.
+2. Contratos legacy que no exigen atestacion independiente conservan la via
+   previa para no cambiar su contrato.
+3. La proyeccion materializada reconcilia esas verificaciones aceptadas sin
+   reescribir el receipt del implementador y expone sus refs auditables.
+4. Recovery incompleto publica `goal_first_promotion_recovery_pending`; ya no
+   desaparece como falso exito.
+5. El E2E Goal-first fue endurecido: el implementador entrega evidencia vacia,
+   el lifecycle atestigua de forma independiente y aun asi deben ocurrir
+   promocion, commit, archive, marker y replay sin segundo commit. Volver a leer
+   solo `LastResult` deja ese E2E rojo.
+
+Evidencia local tras el cambio:
+
+- suite completa `./modulos/orquesta-app-codex-stack` verde (25.845 s);
+- focal E2E + pending con `-race` verde;
+- guard `TestEnvVarsBudgetMEJ106V0` verde, sin subir presupuesto.
+
+H3 no se vuelve a declarar cerrado hasta reconstruir el Docker local, recuperar
+el mismo run por API/MCP, verificar receipt+commit+archive+ficheros canonicos y
+obtener reacreditacion independiente del revisor.

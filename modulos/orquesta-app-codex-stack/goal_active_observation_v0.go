@@ -40,12 +40,19 @@ func (stack *StackV0) ObserveActiveGoalWorksV0(
 			state = repaired
 		}
 		if stack.goalFirstAutoprogrammingPromotionRecoveryPendingV0(state) {
-			if err := stack.recoverGoalFirstAutoprogrammingPromotionV0(ctx, state); err != nil {
+			complete, err := stack.recoverGoalFirstAutoprogrammingPromotionV0(ctx, state)
+			if err != nil {
 				out.Issues = append(out.Issues, orquestagoal.GoalWorkObserveActiveIssueV0{
 					RunRef: strings.TrimSpace(state.RunRef), GoalRef: strings.TrimSpace(state.GoalRef),
 					Code: "goal_first_promotion_recovery_failed", Field: "autoprogramming_promotion", Message: err.Error(),
 				})
 				continue
+			}
+			if !complete {
+				out.Issues = append(out.Issues, orquestagoal.GoalWorkObserveActiveIssueV0{
+					RunRef: strings.TrimSpace(state.RunRef), GoalRef: strings.TrimSpace(state.GoalRef),
+					Code: "goal_first_promotion_recovery_pending", Field: "autoprogramming_promotion",
+				})
 			}
 			if refreshed, loadErr := stack.Ports.GoalStateStore.LoadGoalWorkStateV0(ctx, state.RunRef); loadErr == nil {
 				state = refreshed
@@ -126,17 +133,17 @@ func (stack *StackV0) goalFirstAutoprogrammingPromotionRecoveryPendingV0(
 func (stack *StackV0) recoverGoalFirstAutoprogrammingPromotionV0(
 	ctx context.Context,
 	state orquestagoal.GoalWorkStateV0,
-) error {
+) (bool, error) {
 	if stack.Ports.RunStore == nil {
-		return fmt.Errorf("run_store requerido para recuperar promocion goal-first")
+		return false, fmt.Errorf("run_store requerido para recuperar promocion goal-first")
 	}
 	run, err := stack.Ports.RunStore.LoadRunV0(ctx, state.RunRef)
 	if err != nil {
-		return err
+		return false, err
 	}
 	complete, refs, err := stack.maybePromoteClosedAutoprogrammingRunV0(ctx, run)
 	if err != nil || !complete {
-		return err
+		return false, err
 	}
 	result := orquestaappdirectorservice.ObserveAppDirectorGoalResultV0{
 		SchemaVersion:         orquestaappdirectorservice.ObserveAppDirectorGoalResultSchemaV0,
@@ -154,11 +161,14 @@ func (stack *StackV0) recoverGoalFirstAutoprogrammingPromotionV0(
 	if state.LastClosure != nil {
 		result.Closure = *state.LastClosure
 	}
-	return stack.syncGoalFirstQueueAfterObservationV0(
+	if err := stack.syncGoalFirstQueueAfterObservationV0(
 		ctx,
 		orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0{RunRef: state.RunRef},
 		result,
-	)
+	); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func stackActiveGoalWorkStateListRequestV0(

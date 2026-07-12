@@ -34,6 +34,72 @@ func TestCodexStackAutoprogrammingPromotionV0PromocionaTrasCierreCausalV0(t *tes
 	}
 }
 
+func TestAutoprogrammingPromotionGoalRequiredTestEvidenceV0UsaAtestacionIndependienteV0(t *testing.T) {
+	state := orquestagoal.GoalWorkStateV0{
+		GoalRef: "goal-ref-promotion-attested-001",
+		Spec: orquestagoal.GoalWorkSpecV0{RequiredTests: []orquestagoal.GoalRequiredTestV0{{
+			TestRef: "test-ref-promotion-attested-001",
+			Command: "go test -count=1 ./modulos/orquesta-native-smoke-tool",
+		}}},
+		LastResult: &orquestagoal.GoalWorkResultV0{RequiredTestResults: []orquestagoal.GoalRequiredTestResultV0{{
+			TestRef: "test-ref-promotion-attested-001",
+			Status:  orquestagoal.GoalRequiredTestAttestationStatusPassedV0,
+		}}},
+		LastClosure: &orquestagoal.GoalClosureValidationV0{
+			Accepted: true,
+			AttestationVerifications: []orquestagoal.GoalRequiredTestIdentityVerificationV0{{
+				AttestationRef: "attestation-ref-promotion-independent-001",
+				TestRef:        "test-ref-promotion-attested-001",
+				Verified:       true,
+				Independent:    true,
+			}},
+		},
+	}
+
+	evidence := autoprogrammingPromotionGoalRequiredTestEvidenceV0(state)
+	if len(evidence) != 1 ||
+		evidence[0].EvidenceRef != "attestation-ref-promotion-independent-001" ||
+		evidence[0].TaskRef != state.GoalRef ||
+		evidence[0].TestCommand != "go test -count=1 ./modulos/orquesta-native-smoke-tool" ||
+		evidence[0].Status != orquestagoal.GoalRequiredTestAttestationStatusPassedV0 {
+		t.Fatalf("evidence=%+v", evidence)
+	}
+}
+
+func TestAutoprogrammingPromotionGoalRequiredTestEvidenceV0RechazaAtestacionNoAutoritativaV0(t *testing.T) {
+	base := orquestagoal.GoalWorkStateV0{
+		GoalRef: "goal-ref-promotion-untrusted-001",
+		Spec: orquestagoal.GoalWorkSpecV0{RequiredTests: []orquestagoal.GoalRequiredTestV0{{
+			TestRef: "test-ref-promotion-untrusted-001",
+			Command: "go test ./modulos/orquesta-native-smoke-tool",
+		}}},
+		LastClosure: &orquestagoal.GoalClosureValidationV0{Accepted: true},
+	}
+	tests := []orquestagoal.GoalRequiredTestIdentityVerificationV0{
+		{AttestationRef: "attestation-ref-unverified", TestRef: "test-ref-promotion-untrusted-001", Independent: true},
+		{AttestationRef: "attestation-ref-dependent", TestRef: "test-ref-promotion-untrusted-001", Verified: true},
+		{AttestationRef: "attestation-ref-unknown-test", TestRef: "test-ref-unknown", Verified: true, Independent: true},
+		{TestRef: "test-ref-promotion-untrusted-001", Verified: true, Independent: true},
+	}
+	for _, verification := range tests {
+		state := base
+		closure := *base.LastClosure
+		closure.AttestationVerifications = []orquestagoal.GoalRequiredTestIdentityVerificationV0{verification}
+		state.LastClosure = &closure
+		if evidence := autoprogrammingPromotionGoalRequiredTestEvidenceV0(state); len(evidence) != 0 {
+			t.Fatalf("verification=%+v evidence=%+v", verification, evidence)
+		}
+	}
+	base.LastClosure.Accepted = false
+	base.LastClosure.AttestationVerifications = []orquestagoal.GoalRequiredTestIdentityVerificationV0{{
+		AttestationRef: "attestation-ref-accepted-required",
+		TestRef:        "test-ref-promotion-untrusted-001", Verified: true, Independent: true,
+	}}
+	if evidence := autoprogrammingPromotionGoalRequiredTestEvidenceV0(base); len(evidence) != 0 {
+		t.Fatalf("cierre no aceptado produjo evidence=%+v", evidence)
+	}
+}
+
 func TestCodexStackAutoprogrammingPromotionV0QuedaPendientePorSolapeVivoV0(t *testing.T) {
 	ctx := context.Background()
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())

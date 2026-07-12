@@ -111,6 +111,9 @@ func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedR
 		}
 		scan = mergeGoalMaterializedRefsScanV0(scan, next)
 	}
+	attestedTestKeys, attestationEvidenceRefs := goalMaterializedAcceptedAttestationEvidenceV0(state)
+	scan.PassedTestKeys = compactStringsV0(append(scan.PassedTestKeys, attestedTestKeys...))
+	scan.Result.EvidenceRefs = compactStringsV0(append(scan.Result.EvidenceRefs, attestationEvidenceRefs...))
 	if canonical.HasInvalidCanonicalReceipt {
 		scan.TerminalResult = nil
 	} else if canonical.TerminalResult != nil {
@@ -228,6 +231,33 @@ func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedR
 	result.EvidenceRefs = compactStringsV0(result.EvidenceRefs)
 	result.IssueCodes = compactStringsV0(result.IssueCodes)
 	return result, true, nil
+}
+
+func goalMaterializedAcceptedAttestationEvidenceV0(
+	state orquestagoal.GoalWorkStateV0,
+) ([]string, []string) {
+	if state.LastClosure == nil || !state.LastClosure.Accepted {
+		return nil, nil
+	}
+	required := make(map[string]struct{}, len(state.Spec.RequiredTests))
+	for _, test := range state.Spec.RequiredTests {
+		if testRef := strings.TrimSpace(test.TestRef); testRef != "" {
+			required[testRef] = struct{}{}
+		}
+	}
+	var keys []string
+	var evidenceRefs []string
+	for _, verification := range state.LastClosure.AttestationVerifications {
+		testRef := strings.TrimSpace(verification.TestRef)
+		attestationRef := strings.TrimSpace(verification.AttestationRef)
+		if _, ok := required[testRef]; !ok || !verification.Verified || !verification.Independent || attestationRef == "" {
+			continue
+		}
+		keys = append(keys, "test-ref:"+testRef)
+		evidenceRefs = append(evidenceRefs, attestationRef)
+		evidenceRefs = append(evidenceRefs, verification.EvidenceRefs...)
+	}
+	return compactStringsV0(keys), compactStringsV0(evidenceRefs)
 }
 
 func (source stackGoalMaterializedRefsSourceV0) scanCanonicalGoalMaterializedReceiptV0(
