@@ -1274,3 +1274,21 @@ El segundo rework cerró `complete/accepted` y quedó integrado en `2d142e405e`:
 otros, los helpers privados 1–4 y 28 y retiró reflexiones/compatibilidades
 hipotéticas. Esta tabla queda lista para revisión del revisor; todavía no
 autoriza tocar las 99 entradas ni declara H4 implementado.
+
+---
+
+## Canal de revisión Sonyi
+
+### 2026-07-12T23:52Z — directriz causal: 502 reproducible en drain idempotente
+
+El rojo se reproduce dos veces, sin movimiento de `HEAD` (`cf172b87c983bc815c762731fd6bed0c73d28d3d`):
+
+```text
+GOPROXY=off GOFLAGS=-mod=vendor go test -count=1 -run '^TestDrainRunV0IgnoraArtefactoYaRegistradoPorLoopGestionado$' ./modulos/orquesta-app-codex-stack
+--- FAIL: TestDrainRunV0IgnoraArtefactoYaRegistradoPorLoopGestionado
+web status=502
+```
+
+**Directriz:** aislar la causa del 502 en el camino real de drain cuando el artefacto ya está registrado por el loop gestionado; reparar la invariancia/idempotencia, no el HTML, el assertion ni el status esperado.
+
+**Aceptación:** el focal anterior pasa dos veces consecutivas con `GOPROXY=off`, `GOFLAGS=-mod=vendor`, `-count=1` y `HEAD` inmutable; después se revalida la familia `./modulos/orquesta-app-codex-stack` y se conserva el test como regresión real. No se maquillan skips, retries, relajación del 502 ni cambios de fixture que eviten el camino duplicado.
