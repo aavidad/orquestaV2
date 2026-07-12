@@ -22,6 +22,11 @@ const (
 	MCPCouncilErrConveneFailedV0   = "council_convene_failed"
 )
 
+// MCPCouncilPublicErrorClassifierV0 lo aporta el stack para traducir el error
+// TIPADO del dominio a un codigo publico. La superficie MCP nunca vuelca
+// `err.Error()`: seria filtrar detalle interno al exterior.
+type MCPCouncilPublicErrorClassifierV0 func(error) (code string, field string, ok bool)
+
 type MCPCouncilMemberV0 struct {
 	MemberRef       string  `json:"member_ref"`
 	FamilyRef       string  `json:"family_ref,omitempty"`
@@ -92,7 +97,8 @@ type MCPCouncilPortV0 interface {
 }
 
 type MCPCouncilToolExecutorV0 struct {
-	Council MCPCouncilPortV0
+	Council           MCPCouncilPortV0
+	ClassifyPublicErr MCPCouncilPublicErrorClassifierV0
 }
 
 func MCPCouncilDescriptorV0() MCPToolCapabilitiesListToolDescriptorV0 {
@@ -129,9 +135,13 @@ func (executor MCPCouncilToolExecutorV0) Execute(
 	}
 	result, err := executor.Council.ConveneCouncilV0(ctx, input)
 	if err != nil {
-		result = newMCPCouncilErrorV0(input, MCPCouncilErrConveneFailedV0, "action")
-		result.Rationale = err.Error()
-		return result, nil
+		code, field := MCPCouncilErrConveneFailedV0, "action"
+		if executor.ClassifyPublicErr != nil {
+			if clasificado, campo, ok := executor.ClassifyPublicErr(err); ok {
+				code, field = clasificado, campo
+			}
+		}
+		return newMCPCouncilErrorV0(input, code, field), nil
 	}
 	result.Estado = MCPCouncilEstadoOKV0
 	result.RequestRef = input.RequestRef

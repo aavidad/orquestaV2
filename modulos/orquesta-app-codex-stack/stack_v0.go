@@ -222,7 +222,8 @@ func buildStackMCPTransportBindingsV0(
 			Profiler: config.DataProfile,
 		},
 		Council: orquestamcp.MCPCouncilToolExecutorV0{
-			Council: config.Council,
+			Council:           config.Council,
+			ClassifyPublicErr: config.CouncilPublicErrorClassifier,
 		},
 		CodebaseQuery: orquestamcp.MCPCodebaseQueryToolExecutorV0{Broker: config.CodeContext},
 		CodebaseStatus: orquestamcp.MCPCodebaseStatusToolExecutorV0{

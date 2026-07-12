@@ -2,23 +2,118 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	council "orquesta/modulos/orquesta-council"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 )
 
+// councilOverridesFileNameV0 guarda los overrides PERSISTENTES del operador: los
+// que valen para todos los consejos hasta que los cambie, no solo para una
+// peticion. El operador pidio los dos alcances.
+const councilOverridesFileNameV0 = "council_overrides_v0.json"
+
+// Precedencia acordada, de mayor a menor:
+//
+//  1. override de la peticion concreta
+//  2. override persistente del operador
+//  3. asignacion automatica por presupuesto
+type councilPersistentOverridesV0 struct {
+	SchemaVersion string                             `json:"schema_version"`
+	Overrides     []orquestamcp.MCPCouncilOverrideV0 `json:"overrides"`
+}
+
+// councilPublicErrorClassifierV0 traduce el error TIPADO del dominio a un codigo
+// publico. Nunca se vuelca err.Error() a la superficie: seria filtrar detalle
+// interno al exterior.
+func councilPublicErrorClassifierV0(err error) (string, string, bool) {
+	switch {
+	case errors.Is(err, council.ErrAutorNoSeRevisaV0):
+		return "council_autor_no_se_revisa_a_si_mismo", "overrides", true
+	case errors.Is(err, council.ErrAdversarioMismaFamiliaV0):
+		return "council_adversario_misma_familia_que_autor", "overrides", true
+	case errors.Is(err, council.ErrOverrideMiembroDesconocidoV0):
+		return "council_override_miembro_desconocido", "overrides", true
+	case errors.Is(err, council.ErrRolDesconocidoV0):
+		return "council_rol_desconocido", "overrides", true
+	case errors.Is(err, council.ErrMiembrosInsuficientesV0):
+		return "council_miembros_insuficientes", "members", true
+	case errors.Is(err, council.ErrSeguridadSinVetoV0):
+		return "council_seguridad_no_puede_quedar_sin_asignar", "members", true
+	case errors.Is(err, council.ErrVotanteNoConvocadoV0):
+		return "council_votante_no_convocado", "ballots", true
+	case errors.Is(err, council.ErrVotoDuplicadoV0):
+		return "council_voto_duplicado", "ballots", true
+	case errors.Is(err, council.ErrVetoSinSeguridadV0):
+		return "council_veto_reservado_a_seguridad", "ballots", true
+	case errors.Is(err, council.ErrQuorumIncompletoV0):
+		return "council_quorum_incompleto", "ballots", true
+	case errors.Is(err, council.ErrVotoDesconocidoV0):
+		return "council_voto_desconocido", "ballots", true
+	default:
+		return "", "", false
+	}
+}
+
 // councilExecutorV0 cablea el consejo de sabios sobre su dominio. El adaptador no
 // decide nada: traduce. Toda la autoridad (roles en caliente, precedencia del
 // override, veto de seguridad, umbral) vive en el nucleo.
-type councilExecutorV0 struct{}
+type councilExecutorV0 struct {
+	overridesPath string
+}
 
 var _ orquestamcp.MCPCouncilPortV0 = councilExecutorV0{}
 
-func (councilExecutorV0) ConveneCouncilV0(
+func newCouncilExecutorV0(stateDir string) councilExecutorV0 {
+	return councilExecutorV0{overridesPath: filepath.Join(stateDir, councilOverridesFileNameV0)}
+}
+
+// overridesPersistentesV0 lee los overrides durables del operador. Si no hay
+// fichero, no hay overrides: la ausencia no es un error.
+func (executor councilExecutorV0) overridesPersistentesV0() []orquestamcp.MCPCouncilOverrideV0 {
+	if executor.overridesPath == "" {
+		return nil
+	}
+	bytes, err := os.ReadFile(executor.overridesPath)
+	if err != nil {
+		return nil
+	}
+	var persistentes councilPersistentOverridesV0
+	if err := json.Unmarshal(bytes, &persistentes); err != nil {
+		return nil
+	}
+	return persistentes.Overrides
+}
+
+// mergeOverridesV0 aplica la precedencia: lo que el operador manda en ESTA
+// peticion pisa a su ajuste persistente, y ambos pisan al automatico.
+func mergeOverridesV0(
+	persistentes []orquestamcp.MCPCouncilOverrideV0,
+	deLaPeticion []orquestamcp.MCPCouncilOverrideV0,
+) []orquestamcp.MCPCouncilOverrideV0 {
+	porRol := map[string]orquestamcp.MCPCouncilOverrideV0{}
+	for _, override := range persistentes {
+		porRol[override.Role] = override
+	}
+	for _, override := range deLaPeticion {
+		porRol[override.Role] = override
+	}
+	fusionados := make([]orquestamcp.MCPCouncilOverrideV0, 0, len(porRol))
+	for _, override := range porRol {
+		fusionados = append(fusionados, override)
+	}
+	return fusionados
+}
+
+func (executor councilExecutorV0) ConveneCouncilV0(
 	_ context.Context,
 	input orquestamcp.MCPCouncilToolInputV0,
 ) (orquestamcp.MCPCouncilToolResultV0, error) {
+	input.Overrides = mergeOverridesV0(executor.overridesPersistentesV0(), input.Overrides)
 	assignment, err := council.AssignRolesV0(convocationFromMCPV0(input))
 	if err != nil {
 		return orquestamcp.MCPCouncilToolResultV0{}, err
