@@ -1,50 +1,46 @@
 # CODEX: LEE ESTO ANTES DE TOCAR NADA
 
-## DECISIONES DEL OPERADOR (2026-07-12 ~16:00): domain_work y runtime.models
+## ⚠ REENCAUZAMIENTO DEL REVISOR (2026-07-12 ~15:45): PARA DE PREPARAR Y ARREGLA H2
 
-Preguntaste bien y aqui tienes la respuesta. **Las dos dejan de ser opt-in.**
+Tu trabajo de hoy tiene valor real: H0b/H0c acreditados con tests que muerden,
+el runner reparado (pin, toolchain, GOTMPDIR) y **tres fallos estructurales
+que yo no vi** (H2, H3, toolchain). Eso es trabajo de primera.
 
-### 1. `orquesta.domain_work.v0` → ENCENDER SIEMPRE
+**Pero llevas horas en infraestructura y los tres frentes que importan siguen
+a cero:** H2 sin empezar, H3 sin empezar, las seis tools siguen muertas (el
+guard sigue diciendo `NO cableadas (6)`).
 
-- Backend por defecto: **file durable bajo `StateDir`**, igual que el resto del
-  estado de Orquesta (goals, runs, evidencias). Es coherente con el modelo: la
-  plataforma NO usa base de datos, todo su estado durable son ficheros con
-  escritura atomica y CAS.
-- Deja de estar apagada: si Orquesta la anuncia, tiene que responder.
-- Sin dependencias nuevas, sin env nueva.
+### El error de razonamiento que te esta bloqueando
 
-### 2. `orquesta.runtime.models.v0` → COMPLETA (list/status/pull/serve/stop)
+Estas esperando a tener el runner perfecto para atacar H2. **H2 NO NECESITA EL
+RUNNER.**
 
-El operador autoriza la superficie completa, **incluidas las operaciones
-mutantes** (`pull`, `serve`, `stop`). Es una decision suya, tomada con
-conocimiento de que un agente podra descargar, arrancar y parar modelos.
+H2 es codigo y tests puros:
+- que `repairGoalFirstReceipt*` delegue en el lifecycle (capturar snapshot +
+  atestar) en vez de llamar al validator a pelo;
+- lease/owner/expiry + reclaim en
+  `goal_required_test_attestation_store_v0.go`;
+- serializacion por run entre observer residente y observe manual;
+- HTTP observe desacoplado (202 + poll) para que el deadline no mate trabajo
+  durable.
 
-**Condiciones del revisor (obligatorias, por ser superficie mutante):**
+Todo eso se hace **en local, con `go test`**. Sin Docker, sin goals, sin API,
+sin runner. La ola de goals es una forma de trabajar, no un requisito.
 
-1. **Trazabilidad**: toda operacion mutante (`pull`/`serve`/`stop`) deja
-   evidencia durable (refs) igual que cualquier otra accion causal. Nada de
-   mutar el entorno sin rastro.
-2. **Sin descargas ciegas**: `pull` solo sobre modelos que el routing/config ya
-   conoce. **NO** conviertas esto en una puerta para traer modelos arbitrarios.
-3. **No toca routing ni aliases**: esta tool gestiona *disponibilidad*
-   (que modelo esta descargado/arrancado), NO *decision* (que modelo se usa).
-   La regla de no tocar modelos/routing sigue intacta: `gpt-5.6-sol`,
-   `gpt-5.6-luna`, `gpt-5.6-terra` y el default `gpt-5.6` son del operador.
-   Retiro mi frase anterior «solo exponer lo que el routing ya decide»: tenias
-   razon, no encajaba con el contrato del port.
-4. **Test que falle** si una operacion mutante se ejecuta sin dejar evidencia.
+### Orden directa
 
-### Recordatorio de prioridad (no lo pierdas de vista)
+1. **Ataca H2 AHORA, en local, con tests.** Un test de carrera concurrente que
+   falle si dos observaciones dejan pasar un cierre sin atestacion. Un test de
+   claim abandonado que demuestre el reclaim. Un test que falle si el repair
+   valida sin atestar.
+2. Cuando H2 este verde y acreditado por mi (con prueba de mutacion), sigues
+   con H3, y luego H1b.
+3. **No mas infraestructura** salvo que un frente la exija de verdad. El taller
+   ya esta suficientemente montado.
 
-Estas dos decisiones **no cambian el orden**:
-
-1. **H2 — carrera de atestacion** (un cierre puede acreditar mal sus tests).
-2. **H3 — promocion desde cierre Goal-first** (el trabajo valido no se integra).
-3. **H1b — las seis tools** (deuda de superficie).
-
-Ahora ya no tienes ninguna decision pendiente de nadie: las cuatro tools claras
-estaban desbloqueadas y estas dos acaban de resolverse. Pero **H2 sigue siendo
-lo primero**.
+Si crees que me equivoco y H2 necesita el runner, dimelo con el motivo
+concreto. Pero no sigas preparando entorno mientras el nucleo tiene una
+carrera que puede acreditar mal los tests.
 
 ---
 
