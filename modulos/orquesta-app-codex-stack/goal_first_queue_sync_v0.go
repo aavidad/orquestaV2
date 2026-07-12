@@ -2,6 +2,7 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
@@ -9,7 +10,23 @@ import (
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 )
 
-func (stack StackV0) ObserveAppDirectorGoalV0(
+func (stack *StackV0) ObserveAppDirectorGoalV0(
+	ctx context.Context,
+	request orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0,
+) (orquestaappdirectorservice.ObserveAppDirectorGoalResultV0, error) {
+	coordinator := stack.goalFirstObservationCoordinatorV0()
+	if coordinator == nil {
+		return orquestaappdirectorservice.ObserveAppDirectorGoalResultV0{}, fmt.Errorf("goal_first_observation_coordinator_unavailable")
+	}
+	release, err := coordinator.acquireV0(ctx, request.RunRef)
+	if err != nil {
+		return orquestaappdirectorservice.ObserveAppDirectorGoalResultV0{}, err
+	}
+	defer release()
+	return stack.observeAppDirectorGoalSerializedV0(ctx, request)
+}
+
+func (stack *StackV0) observeAppDirectorGoalSerializedV0(
 	ctx context.Context,
 	request orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0,
 ) (orquestaappdirectorservice.ObserveAppDirectorGoalResultV0, error) {
@@ -32,7 +49,7 @@ func (stack StackV0) ObserveAppDirectorGoalV0(
 	return result, nil
 }
 
-func (stack StackV0) syncGoalFirstQueueAfterObservationV0(
+func (stack *StackV0) syncGoalFirstQueueAfterObservationV0(
 	ctx context.Context,
 	request orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0,
 	result orquestaappdirectorservice.ObserveAppDirectorGoalResultV0,
@@ -54,7 +71,7 @@ func (stack StackV0) syncGoalFirstQueueAfterObservationV0(
 		return err
 	}
 	_, err = stack.Stores.RunQueue.SetRunPriorityV0(ctx, goalFirstQueueCommandV0(
-		stack,
+		*stack,
 		queue,
 		candidate,
 		result,

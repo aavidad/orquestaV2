@@ -143,14 +143,25 @@ func (executor CodexStackObserveAppDirectorGoalExecutorV0) withMaterializedRefsV
 	if store == nil {
 		return result
 	}
+	coordinator := executor.stack.goalFirstObservationCoordinatorV0()
+	if coordinator == nil {
+		return result
+	}
+	release, lockErr := coordinator.acquireV0(ctx, runRef)
+	if lockErr != nil {
+		return result
+	}
+	defer release()
 	state, err := store.LoadGoalWorkStateV0(ctx, runRef)
 	if err != nil {
 		return result
 	}
 	refs, ok, err := (stackGoalMaterializedRefsSourceV0{
-		Config:                       ConfigV0{Codex: executor.stack.Codex},
-		GoalStateStore:               store,
-		GoalClosureValidator:         executor.stack.Ports.GoalClosureValidator,
+		Config:               ConfigV0{Codex: executor.stack.Codex},
+		GoalStateStore:       store,
+		GoalClosureValidator: executor.stack.Ports.GoalClosureValidator,
+		// Esta proyeccion forma parte del comando observe y conserva la
+		// reparacion dentro del mismo coordinador por run.
 		RepairMissingTerminalReceipt: true,
 	}).ResolveDirectorGoalMaterializedRefsV0(ctx, state)
 	if err != nil || !ok {

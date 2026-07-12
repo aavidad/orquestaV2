@@ -50,6 +50,7 @@ type StackV0 struct {
 	AllowLegacyAutoprogrammingRun         bool
 	AllowLegacyExternalWorkRun            bool
 	GoalMaterializedResultWatcher         *GoalMaterializedResultWatcherV0
+	goalObservationCoordinator            *goalFirstObservationCoordinatorV0
 }
 
 func BuildStackV0(config ConfigV0) (StackV0, error) {
@@ -90,6 +91,7 @@ func BuildStackV0(config ConfigV0) (StackV0, error) {
 		PromoteMaterializedArtifactWithoutAck: config.PromoteMaterializedArtifactWithoutAck,
 		AllowLegacyAutoprogrammingRun:         config.AllowLegacyAutoprogrammingRun,
 		AllowLegacyExternalWorkRun:            config.AllowLegacyExternalWorkRun,
+		goalObservationCoordinator:            newGoalFirstObservationCoordinatorV0(),
 	}
 	stack.MCPTransportBindings = buildStackMCPTransportBindingsV0(config, ports, queueConfig, &stack)
 	stack.Handler = buildStackHTTPHandlerV0(config, stack.MCPTransportBindings)
@@ -134,10 +136,11 @@ func buildStackMCPTransportBindingsV0(
 		GoalMarkerSource:          appGoalFirstRunMarkerStoreV0(config),
 		OperationalPlanStateStore: config.Stores.OperationalPlanStateStore,
 		GoalMaterializedRefsSource: stackGoalMaterializedRefsSourceV0{
-			Config:                       config,
-			GoalStateStore:               config.Stores.AppGoalStateStore,
-			GoalClosureValidator:         ports.GoalClosureValidator,
-			RepairMissingTerminalReceipt: true,
+			Config:               config,
+			GoalStateStore:       config.Stores.AppGoalStateStore,
+			GoalClosureValidator: ports.GoalClosureValidator,
+			// director/stats es una lectura: nunca ejecuta tests ni muta el goal.
+			RepairMissingTerminalReceipt: false,
 		},
 	}
 	bindings := orquestamcp.MCPTransportBindingsV0{
@@ -647,6 +650,7 @@ func buildDirectorPortsV0(
 		GoalRequiredTestAttestor:         config.AppGoalRequiredTestAttestor,
 		GoalRequiredTestAttestationStore: goalRequiredTestAttestationStoreV0(config),
 		GoalRequiredTestIdentityVerifier: config.AppGoalRequiredTestIdentityVerifier,
+		GoalRequiredTestClaimPolicy:      config.GoalRequiredTestClaimPolicy,
 		GoalClosureValidator:             appGoalClosureValidatorV0(config),
 		GoalStateStore:                   config.Stores.AppGoalStateStore,
 		GoalFirstRunMarkerStore:          appGoalFirstRunMarkerStoreV0(config),
