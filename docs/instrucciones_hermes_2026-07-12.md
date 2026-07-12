@@ -182,9 +182,9 @@ diagnostico T9201.
 - [x] H0b ACREDITADO (e82736fc3; pasa la prueba de mutacion del revisor): smoke de bootstrap MCP/HTTP: enumerar resources y tools
   registrados en el servidor arrancado y hacer una llamada representativa por
   grupo (MCP y HTTP). Debe fallar si falta un binding.
-- [ ] H0c: smoke del ciclo delivery -> review -> closure causal (ACK,
+- [x] H0c ACREDITADO (fd2e18f7d; pasa la prueba de mutacion del revisor en codigo de produccion): smoke del ciclo delivery -> review -> closure causal (ACK,
   delivery, review), con evidencia durable enlazada en la matriz de pruebas.
-- [ ] H0d (canal directo, alto valor para el operador): habilitar el bloque
+- [x] H0d CERRADO (c66b9e009 + 862c1a6a2): habilitar el bloque
   `hermes_operator` en la config del servidor y cablear el conector para que
   `orquesta.operator.director.message.v0` deje de devolver
   `operator_message_port_unavailable`. Criterio de cierre: un `tools/call`

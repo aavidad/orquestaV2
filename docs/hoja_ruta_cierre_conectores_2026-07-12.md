@@ -1,3 +1,28 @@
+# ✅ FRENTE CONECTORES CERRADO — ORQUESTA TERMINADA COMO PLATAFORMA
+
+Declarado por el revisor el 2026-07-12 ~12:20, tras verificacion adversarial
+de los cuatro hitos. Estado final:
+
+| Hito | Estado | Evidencia verificada por el revisor |
+|---|---|---|
+| Diagnostico T9201 | ACEPTADO | Hecho por Orquesta via API nativa; conclusion "no faltan adaptadores, falta evidencia de integracion" |
+| H0a backend `app_server_tmux` | ACREDITADO | 4 goals reales complete+accepted, artefacto materializado, required tests atestiguados, shutdown limpio |
+| H0b bootstrap MCP/HTTP | ACREDITADO (`e82736fc3`) | Pasa PRUEBA DE MUTACION del revisor: desactive `RunControl` y se puso rojo. tools/list real, llamadas HTTP por grupo, deteccion de `port_unavailable` |
+| H0c delivery->review->closure | ACREDITADO (`fd2e18f7d`) | Pasa PRUEBA DE MUTACION del revisor: rompi el registro del closure causal EN CODIGO DE PRODUCCION (`close_run_v0.go`) y el smoke se puso rojo. Fuentes reales Codex (no fakes), ACK, review gate, runner de tests con evidencia, cadena de eventos causales |
+| H0d canal operador-director | CERRADO | Buzon durable opt-in (`c66b9e009`) + test de `tools/call` durable (`862c1a6a2`) |
+
+Guards al cierre: `TestEnvVarsBudgetMEJ106V0` verde (426, justificado), suites
+de `orquesta-runtime-codex-delivery`, `orquesta-app-codex-stack` y
+`cmd/orquesta-server` verdes. Sin envs nuevas ni relajaciones de seguridad en
+el ultimo tramo.
+
+**Siguiente fase (requiere visto bueno del operador): APP REAL.** Que Orquesta
+cree una app de verdad — modulo nuevo o tool nueva — lanzada por su API nativa
+con goal acotado y el revisor validando el cierre. Ademas queda pendiente el
+informe del Baremador que pidio el operador.
+
+---
+
 # Hoja de ruta: cierre del frente CONECTORES
 
 Autor: Claude (director/revisor). Fecha: 2026-07-12.
