@@ -429,3 +429,30 @@ Evidencia local tras el cambio:
 H3 no se vuelve a declarar cerrado hasta reconstruir el Docker local, recuperar
 el mismo run por API/MCP, verificar receipt+commit+archive+ficheros canonicos y
 obtener reacreditacion independiente del revisor.
+
+### 2026-07-12 — bloqueo live posterior: identidad Git del integrador Docker
+
+Tras reconstruir el runner en `c68c82960`, la observacion API del mismo run
+reutilizo snapshot+atestacion y alcanzo por fin el puerto de integracion. Quedo
+`blocked_integration` sin receipt. Diagnostico read-only del workspace fisico:
+
+- los dos `.go` estaban realmente materializados y staged sobre base
+  `ac5649269`;
+- canonical estaba limpio en `c68c82960`, con la base como ancestro;
+- ni workspace ni canonical tenian `user.name`/`user.email`;
+- el source commit no llegaba a crearse.
+
+El fixture Git ocultaba esta frontera porque configuraba identidad antes de
+crear los worktrees. El conector ejecutaba tanto `commit -m` como
+`cherry-pick -x` sin identidad propia. Decision: identidad tecnica fija solo
+por comando con `git -c`, sin escribir config, tocar HOME, anadir env ni usar la
+identidad personal del operador:
+
+- `Orquesta Integration`;
+- `orquesta-integration@localhost.invalid`.
+
+Test nuevo elimina config local, aisla global/system, exige identidad exacta de
+autor y committer en source+canonical, repos limpios y replay con mismo HEAD.
+Suite `orquesta-runtime-worktree`, E2E H3 focal y guard de envs verdes. Falta
+reconstruir runner, recuperar otra vez el mismo run y comprobar integracion
+completa antes del cierre operativo.

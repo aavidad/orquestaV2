@@ -14,6 +14,11 @@ import (
 const GoalWorkspaceIntegrationSchemaVersionV0 = "goal_workspace_integration.v0"
 
 const (
+	goalWorkspaceIntegrationGitUserNameV0  = "Orquesta Integration"
+	goalWorkspaceIntegrationGitUserEmailV0 = "orquesta-integration@localhost.invalid"
+)
+
+const (
 	GoalWorkspaceIntegrationStatusIntegratedV0 = "integrated"
 	GoalWorkspaceIntegrationStatusReplayedV0   = "replayed"
 	GoalWorkspaceIntegrationStatusBlockedV0    = "blocked"
@@ -167,7 +172,11 @@ func (connector GitGoalWorkspaceIntegrationConnectorV0) IntegrateGoalWorkspaceV0
 		issues := []WorktreeIssueV0{*issue}
 		return newGoalWorkspaceIntegrationResultV0(request, GoalWorkspaceIntegrationStatusBlockedV0, sourceCommit, "", changedPaths, issues), issues
 	}
-	if _, gitIssue := connector.VCS.gitOutputV0(ctx, request.CanonicalWorkDir, "cherry-pick", "-x", sourceCommit); gitIssue != nil {
+	if _, gitIssue := connector.VCS.gitOutputV0(ctx, request.CanonicalWorkDir,
+		"-c", "user.name="+goalWorkspaceIntegrationGitUserNameV0,
+		"-c", "user.email="+goalWorkspaceIntegrationGitUserEmailV0,
+		"cherry-pick", "-x", sourceCommit,
+	); gitIssue != nil {
 		_, abortIssue := connector.VCS.gitOutputV0(ctx, request.CanonicalWorkDir, "cherry-pick", "--abort")
 		issues := []WorktreeIssueV0{worktreeIssueV0(WorktreeIssueWorkspaceConflictV0, "cherry_pick", gitIssue.Evidence...)}
 		if abortIssue != nil {
@@ -296,7 +305,11 @@ func (connector GitGoalWorkspaceIntegrationConnectorV0) promoteGoalWorkspaceSour
 		if _, issue := connector.VCS.gitOutputV0(ctx, request.SourceWorkspaceDir, addArgs...); issue != nil {
 			return "", changedPaths, []WorktreeIssueV0{goalWorkspaceGitIssueV0("git.add", *issue)}
 		}
-		if _, issue := connector.VCS.gitOutputV0(ctx, request.SourceWorkspaceDir, "commit", "-m", request.CommitMessage); issue != nil {
+		if _, issue := connector.VCS.gitOutputV0(ctx, request.SourceWorkspaceDir,
+			"-c", "user.name="+goalWorkspaceIntegrationGitUserNameV0,
+			"-c", "user.email="+goalWorkspaceIntegrationGitUserEmailV0,
+			"commit", "-m", request.CommitMessage,
+		); issue != nil {
 			return "", changedPaths, []WorktreeIssueV0{goalWorkspaceGitIssueV0("git.commit", *issue)}
 		}
 	}

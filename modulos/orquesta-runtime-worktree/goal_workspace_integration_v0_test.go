@@ -3,6 +3,7 @@ package orquestaruntimeworktree
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -55,6 +56,61 @@ func TestGitGoalWorkspaceIntegrationConnectorV0IntegratesChainedExpectedParentsV
 	requireGoalWorkspaceIntegrationCleanV0(t, canonical)
 	if strings.Contains(strings.Join(firstResult.EvidenceRefs, " "), canonical) || strings.Contains(strings.Join(secondResult.EvidenceRefs, " "), second) {
 		t.Fatalf("evidence references leak local paths: first=%+v second=%+v", firstResult.EvidenceRefs, secondResult.EvidenceRefs)
+	}
+}
+
+func TestGitGoalWorkspaceIntegrationConnectorV0IntegraSinIdentidadGitConfiguradaV0(t *testing.T) {
+	canonical, source, _, base := newGoalWorkspaceIntegrationReposV0(t)
+	receiptDir := filepath.Join(t.TempDir(), "receipts")
+	if err := os.WriteFile(filepath.Join(source, "identity-free.txt"), []byte("goal output\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	goalWorkspaceRunGitForTestV0(t, canonical, "config", "--unset-all", "user.name")
+	goalWorkspaceRunGitForTestV0(t, canonical, "config", "--unset-all", "user.email")
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+
+	result, issues := (GitGoalWorkspaceIntegrationConnectorV0{}).IntegrateGoalWorkspaceV0(
+		context.Background(),
+		goalWorkspaceIntegrationRequestForTestV0(
+			"integration-ref-without-git-identity-001",
+			source,
+			canonical,
+			base,
+			[]string{"identity-free.txt"},
+			receiptDir,
+		),
+	)
+	if len(issues) > 0 || result.Status != GoalWorkspaceIntegrationStatusIntegratedV0 {
+		t.Fatalf("result=%+v issues=%+v", result, issues)
+	}
+	wantIdentity := goalWorkspaceIntegrationGitUserNameV0 + " <" + goalWorkspaceIntegrationGitUserEmailV0 + ">"
+	if got := strings.TrimSpace(runAppVCSGitV0(t, canonical, "show", "-s", "--format=%an <%ae>|%cn <%ce>", result.IntegratedCommit)); got != wantIdentity+"|"+wantIdentity {
+		t.Fatalf("identidad commit=%q", got)
+	}
+	if got := strings.TrimSpace(runAppVCSGitV0(t, source, "show", "-s", "--format=%an <%ae>|%cn <%ce>", result.SourceCommit)); got != wantIdentity+"|"+wantIdentity {
+		t.Fatalf("identidad source commit=%q", got)
+	}
+	head := strings.TrimSpace(runAppVCSGitV0(t, canonical, "rev-parse", "HEAD"))
+	replay, replayIssues := (GitGoalWorkspaceIntegrationConnectorV0{}).IntegrateGoalWorkspaceV0(
+		context.Background(),
+		goalWorkspaceIntegrationRequestForTestV0(
+			"integration-ref-without-git-identity-001", source, canonical, base,
+			[]string{"identity-free.txt"}, receiptDir,
+		),
+	)
+	if len(replayIssues) > 0 || replay.Status != GoalWorkspaceIntegrationStatusReplayedV0 ||
+		replay.IntegratedCommit != result.IntegratedCommit ||
+		strings.TrimSpace(runAppVCSGitV0(t, canonical, "rev-parse", "HEAD")) != head {
+		t.Fatalf("replay=%+v issues=%+v", replay, replayIssues)
+	}
+	requireGoalWorkspaceIntegrationCleanV0(t, canonical)
+	requireGoalWorkspaceIntegrationCleanV0(t, source)
+	for _, key := range []string{"user.name", "user.email"} {
+		command := exec.Command("git", "-C", canonical, "config", "--local", "--get", key)
+		if output, err := command.CombinedOutput(); err == nil || strings.TrimSpace(string(output)) != "" {
+			t.Fatalf("config %s persistida: output=%q err=%v", key, output, err)
+		}
 	}
 }
 
