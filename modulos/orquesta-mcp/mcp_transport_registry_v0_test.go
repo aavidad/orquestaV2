@@ -53,12 +53,10 @@ func TestRegisterMCPTransportV0ExponeOperacionesExistentes(t *testing.T) {
 		MCPBootstrapToolNameV0,
 		MCPCoreWorkflowCommandToolNameV0,
 		MCPRunControlToolNameV0,
-		MCPRuntimeModelsToolNameV0,
 		MCPRunQueuePriorityToolNameV0,
 		MCPRunSupervisorToolNameV0,
 		MCPWorkspaceTimelineToolNameV0,
 		MCPServerShutdownToolNameV0,
-		MCPDomainWorkToolNameV0,
 		MCPExternalWorkDryRunToolNameV0,
 		MCPExternalWorkRunToolNameV0,
 		MCPCodebaseQueryToolNameV0,
@@ -77,6 +75,11 @@ func TestRegisterMCPTransportV0ExponeOperacionesExistentes(t *testing.T) {
 	} {
 		if _, ok := transport.tools[name]; !ok {
 			t.Fatalf("tool no registrado: %s", name)
+		}
+	}
+	for _, name := range []string{MCPRuntimeModelsToolNameV0, MCPDomainWorkToolNameV0} {
+		if _, ok := transport.tools[name]; ok {
+			t.Fatalf("tool opt-in sin puerto anunciada: %s", name)
 		}
 	}
 	assertTransportPayloadSaneadoMCPTestV0(t, transport.resources, 22000)
@@ -386,30 +389,9 @@ func TestMCPTransportV0DomainWorkQuedaOptInSinPuerto(t *testing.T) {
 	if err := RegisterMCPTransportV0(transport, MCPTransportBindingsV0{}); err != nil {
 		t.Fatalf("register transport: %v", err)
 	}
-	tool, ok := transport.tools[MCPDomainWorkToolNameV0]
-	if !ok {
-		t.Fatalf("domain work no registrado: %s", MCPDomainWorkToolNameV0)
+	if _, ok := transport.tools[MCPDomainWorkToolNameV0]; ok {
+		t.Fatalf("domain work sin puerto no debe anunciarse")
 	}
-	descriptor := MCPDomainWorkDescriptorV0()
-	if tool.ResourceURI != descriptor.ResourceURI ||
-		tool.InputShape != descriptor.InputSchema ||
-		tool.OutputShape != descriptor.Output ||
-		tool.Mode != MCPTransportModeOptInV0 {
-		t.Fatalf("domain work envelope inesperado: %+v", tool)
-	}
-
-	output, err := transport.CallToolV0(context.Background(), MCPDomainWorkToolNameV0, MCPDomainWorkToolInputV0{})
-	if err != nil {
-		t.Fatalf("call domain work unbound: %v", err)
-	}
-	var result MCPTransportToolErrorV0
-	if err := json.Unmarshal(output, &result); err != nil {
-		t.Fatalf("decode unbound: %v", err)
-	}
-	if result.Tool != MCPDomainWorkToolNameV0 || result.ErrorCode != MCPTransportToolUnboundV0 {
-		t.Fatalf("domain work debe ser opt-in: %+v", result)
-	}
-	assertTransportPayloadSaneadoMCPTestV0(t, json.RawMessage(output), 300)
 }
 
 type fakeTransportStatusPortMCPV0 struct{ called int }

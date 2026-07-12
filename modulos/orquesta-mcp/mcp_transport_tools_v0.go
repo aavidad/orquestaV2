@@ -52,6 +52,25 @@ func MCPTransportToolsV0(bindings MCPTransportBindingsV0) []MCPTransportToolEnve
 	return applyMCPTransportExecutionProfilesV0(tools)
 }
 
+// MCPBoundTransportToolsV0 devuelve la superficie realmente invocable. El
+// catalogo completo sigue disponible en MCPTransportToolsV0 para toolbelts y
+// presupuestos estáticos, pero un adaptador opt-in sin puerto no se anuncia en
+// tools/list como si estuviera operativo.
+func MCPBoundTransportToolsV0(bindings MCPTransportBindingsV0) []MCPTransportToolEnvelopeV0 {
+	tools := MCPTransportToolsV0(bindings)
+	out := make([]MCPTransportToolEnvelopeV0, 0, len(tools))
+	for _, tool := range tools {
+		if tool.Name == MCPRuntimeModelsToolNameV0 && bindings.RuntimeModels == nil {
+			continue
+		}
+		if tool.Name == MCPDomainWorkToolNameV0 && bindings.DomainWork == nil {
+			continue
+		}
+		out = append(out, tool)
+	}
+	return out
+}
+
 func applyMCPTransportExecutionProfilesV0(
 	tools []MCPTransportToolEnvelopeV0,
 ) []MCPTransportToolEnvelopeV0 {

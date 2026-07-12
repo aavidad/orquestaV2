@@ -62,7 +62,7 @@ func RegisterMCPTransportV0(port MCPTransportPortV0, bindings MCPTransportBindin
 			return err
 		}
 	}
-	for _, tool := range MCPTransportToolsV0(bindings) {
+	for _, tool := range MCPBoundTransportToolsV0(bindings) {
 		if err := port.RegisterToolV0(tool); err != nil {
 			return err
 		}

@@ -15,17 +15,8 @@ func TestMCPTransportV0RuntimeModelsQuedaOptInSinPuerto(t *testing.T) {
 	if err := RegisterMCPTransportV0(transport, MCPTransportBindingsV0{}); err != nil {
 		t.Fatalf("register transport: %v", err)
 	}
-	output, err := transport.CallToolV0(context.Background(), MCPRuntimeModelsToolNameV0, MCPRuntimeModelsToolInputV0{})
-	if err != nil {
-		t.Fatalf("call runtime models unbound: %v", err)
-	}
-	var result MCPTransportToolErrorV0
-	if err := json.Unmarshal(output, &result); err != nil {
-		t.Fatalf("decode unbound: %v", err)
-	}
-	if result.ErrorCode != MCPTransportToolUnboundV0 ||
-		result.Tool != MCPRuntimeModelsToolNameV0 {
-		t.Fatalf("runtime models debe ser opt-in: %+v", result)
+	if _, ok := transport.tools[MCPRuntimeModelsToolNameV0]; ok {
+		t.Fatalf("runtime models sin puerto no debe anunciarse")
 	}
 }
 
