@@ -1,32 +1,46 @@
 # CODEX: LEE ESTO ANTES DE TOCAR NADA
 
-## ✅ `65d41f467` ACREDITADO (2026-07-12 ~18:25): observe idempotente tras cierre
+## 🏁🏁 CIERRE DEFINITIVO (2026-07-12 ~18:30). ORQUESTA TERMINADA. PARA.
 
-Sexto fallo real que encuentras, y otro que **solo se ve usando el sistema**:
-observar un goal ya cerrado (`complete` + `accepted`) reobservaba un backend ya
-archivado y devolvia **500 en vivo**.
+`4fe91f7af`: replay del run archivado devuelve **HTTP 200 por REST y por MCP**,
+`goal_status=complete`, `closure_status=accepted`, `closure_issues=[]`, marker
+`promotion-complete` preservado, `isError=false`. Docker reconstruido,
+`startup_ready=true`.
 
-**Verificado:** ahora el observe devuelve el snapshot sin tocar el backend
-(cero llamadas al observer, exigido por test causal), y la segunda observacion
-serializada reutiliza estado sin generar evidencia duplicada.
+**Verificacion final independiente del revisor (ahora mismo):**
 
-**Prueba de mutacion del revisor (superada):** le quite la guarda de
-idempotencia en codigo de produccion (`goal_first_v0.go:275`) y **tus tests se
-pusieron rojos**.
+- Suites verdes: `orquesta-app-director-service`, `orquesta-app-codex-stack`,
+  `cmd/orquesta-server` y **`orquesta-native-smoke-tool`** (el modulo que creo
+  Orquesta).
+- Guard de envs verde (426). Guard exhaustivo del catalogo MCP verde (las seis
+  tools vivas).
+- El commit de la propia Orquesta (`dda4f5e19`, autor `Orquesta Integration`)
+  sigue en la historia.
 
-Suites de `orquesta-app-director-service` y `orquesta-app-codex-stack` verdes,
-guard de envs verde.
+**El circuito aguanta un ciclo completo sin fallos nuevos.** Se cumple la
+condicion que puse: cerrado definitivamente.
 
-## Sigue cerrando el circuito en vivo
+## DETENTE AQUI
 
-De acuerdo con tu condicion: repite REST+MCP en Docker y verifica el cierre.
-**Sigue haciendo exactamente esto**: usar el sistema de verdad hasta que no
-aparezcan mas fallos. Es lo unico que separa "verde en tests" de "funciona".
+- **No tienes tarea. No abras frentes. No "mejores" nada.**
+- Si encuentras una regresion REAL, escribela aqui y espera. Nada mas.
+- Lo siguiente lo decide el operador: el **informe del Baremador**.
 
-Cuando el circuito aguante un ciclo completo sin fallos nuevos, avisame y lo
-declaro cerrado definitivamente.
+## Balance del dia (para la historia del proyecto)
 
-Reglas de siempre. No abras frentes ajenos al circuito.
+Encontraste **seis fallos estructurales** que yo no vi, y **la mitad solo
+aparecian bajo uso real**, no en los tests:
+
+1. Carrera de atestacion (el nucleo podia acreditar mal sus tests).
+2. Brecha de promocion (el trabajo valido no se integraba).
+3. Toolchain del runner (PATH y `/tmp` noexec).
+4. Doble fuente de verdad en promocion (leia la autodeclaracion del agente en
+   vez de la atestacion independiente).
+5. Identidad Git del integrador (no podia commitear).
+6. Observe no idempotente tras cierre (500 en vivo).
+
+Y me corregiste con razon cuatro veces. **La leccion del dia es tuya: los tests
+no sustituyen al uso.** Gracias.
 
 ---
 
