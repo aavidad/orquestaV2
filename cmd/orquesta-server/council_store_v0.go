@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -23,6 +24,8 @@ import (
 const councilReceiptsDirNameV0 = "council-receipts"
 
 const councilOutcomeAcceptedV0 = "council_decision_accepted"
+
+const councilReceiptSchemaVersionV0 = "orquesta_council_receipt.v0"
 
 var (
 	// ErrCouncilReceiptConflictV0 se devuelve cuando el mismo council_ref se
@@ -98,7 +101,35 @@ func (store councilReceiptStoreV0) LoadV0(councilRef string) (councilReceiptV0, 
 	if err := json.Unmarshal(bytes, &receipt); err != nil {
 		return councilReceiptV0{}, false, fmt.Errorf("%w: %s", ErrCouncilReceiptCorruptV0, councilRef)
 	}
+	// Un JSON que parsea no es un recibo valido. Sin esta validacion, dejar caer
+	// {"outcome":"council_decision_accepted"} en el directorio de estado abria el
+	// gate: dos lineas de fichero valian por una decision del consejo.
+	if err := validarReciboV0(receipt, councilRef); err != nil {
+		return councilReceiptV0{}, false, err
+	}
 	return receipt, true, nil
+}
+
+func validarReciboV0(receipt councilReceiptV0, councilRef string) error {
+	if receipt.SchemaVersion != councilReceiptSchemaVersionV0 {
+		return fmt.Errorf("%w: schema_version=%q", ErrCouncilReceiptCorruptV0, receipt.SchemaVersion)
+	}
+	if strings.TrimSpace(receipt.CouncilRef) != strings.TrimSpace(councilRef) {
+		return fmt.Errorf("%w: council_ref no coincide con el fichero", ErrCouncilReceiptCorruptV0)
+	}
+	if strings.TrimSpace(receipt.InputFingerprint) == "" {
+		return fmt.Errorf("%w: sin huella de convocatoria", ErrCouncilReceiptCorruptV0)
+	}
+	switch receipt.Outcome {
+	case councilOutcomeAcceptedV0, "council_decision_rework", "council_decision_blocked":
+	default:
+		return fmt.Errorf("%w: outcome=%q", ErrCouncilReceiptCorruptV0, receipt.Outcome)
+	}
+	// Una decision sin votantes no es una decision.
+	if receipt.Total <= 0 || len(receipt.Seats) == 0 {
+		return fmt.Errorf("%w: decision sin consejo (total=%d)", ErrCouncilReceiptCorruptV0, receipt.Total)
+	}
+	return nil
 }
 
 // SaveV0 crea el recibo con O_EXCL: si ya existe, NO lo sobrescribe. Dos decide
@@ -109,7 +140,7 @@ func (store councilReceiptStoreV0) SaveV0(receipt councilReceiptV0) (councilRece
 	if err != nil {
 		return councilReceiptV0{}, err
 	}
-	receipt.SchemaVersion = "orquesta_council_receipt.v0"
+	receipt.SchemaVersion = councilReceiptSchemaVersionV0
 	if receipt.DecidedAtUTC == "" {
 		receipt.DecidedAtUTC = time.Now().UTC().Format(time.RFC3339)
 	}
@@ -164,6 +195,21 @@ func (store councilReceiptStoreV0) SaveV0(receipt councilReceiptV0) (councilRece
 // overrides y votos. Reutilizar un council_ref con cualquiera de esos datos
 // cambiados produce una huella distinta y, por tanto, un conflicto.
 func councilInputFingerprintV0(input orquestamcp.MCPCouncilToolInputV0) string {
+	// CANONICALIZACION: los overrides salen de un map y los miembros/votos pueden
+	// llegar en cualquier orden. Sin ordenarlos, la misma convocatoria produce
+	// huellas distintas segun el barrido del map y un reintento legitimo choca.
+	members := append([]orquestamcp.MCPCouncilMemberV0(nil), input.Members...)
+	sort.Slice(members, func(i, j int) bool { return members[i].MemberRef < members[j].MemberRef })
+	overrides := append([]orquestamcp.MCPCouncilOverrideV0(nil), input.Overrides...)
+	sort.Slice(overrides, func(i, j int) bool {
+		if overrides[i].Role != overrides[j].Role {
+			return overrides[i].Role < overrides[j].Role
+		}
+		return overrides[i].MemberRef < overrides[j].MemberRef
+	})
+	ballots := append([]orquestamcp.MCPCouncilBallotV0(nil), input.Ballots...)
+	sort.Slice(ballots, func(i, j int) bool { return ballots[i].MemberRef < ballots[j].MemberRef })
+
 	material := struct {
 		AuthorRef        string                             `json:"author_ref"`
 		SecurityCritical bool                               `json:"security_critical"`
@@ -173,9 +219,9 @@ func councilInputFingerprintV0(input orquestamcp.MCPCouncilToolInputV0) string {
 	}{
 		AuthorRef:        input.AuthorRef,
 		SecurityCritical: input.SecurityCritical,
-		Members:          input.Members,
-		Overrides:        input.Overrides,
-		Ballots:          input.Ballots,
+		Members:          members,
+		Overrides:        overrides,
+		Ballots:          ballots,
 	}
 	bytes, err := json.Marshal(material)
 	if err != nil {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	council "orquesta/modulos/orquesta-council"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
@@ -118,6 +119,9 @@ func mergeOverridesV0(
 	for _, override := range porRol {
 		fusionados = append(fusionados, override)
 	}
+	// Orden estable: recorrer un map da un orden distinto en cada llamada, y eso
+	// bastaba para que la huella de la misma convocatoria cambiara.
+	sort.Slice(fusionados, func(i, j int) bool { return fusionados[i].Role < fusionados[j].Role })
 	return fusionados
 }
 

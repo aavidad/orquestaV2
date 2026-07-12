@@ -52,7 +52,7 @@ func TestCouncilGateBloqueaLaCreacionSinDecisionAceptadaV0(t *testing.T) {
 	if len(result.Errores) == 0 || result.Errores[0].Code != CouncilGateDecisionRequiredCodeV0 {
 		t.Fatalf("no rechazo con el codigo esperado: %+v", result.Errores)
 	}
-	if decision.consultado != CouncilRefForAppRequestV0("req-1") {
+	if decision.consultado != CouncilRefForAppRequestV0("req-1", orquestafactory.AppSpecRequestV0{RequestID: "req-1"}) {
 		t.Fatalf("consulto el consejo equivocado: %q", decision.consultado)
 	}
 }
@@ -60,7 +60,7 @@ func TestCouncilGateBloqueaLaCreacionSinDecisionAceptadaV0(t *testing.T) {
 func TestCouncilGateDejaPasarConDecisionAceptadaV0(t *testing.T) {
 	espia := &arranqueEspiaV0{}
 	decision := &decisionFalsaV0{aceptadas: map[string]bool{
-		CouncilRefForAppRequestV0("req-2"): true,
+		CouncilRefForAppRequestV0("req-2", orquestafactory.AppSpecRequestV0{RequestID: "req-2"}): true,
 	}}
 	gate := newCouncilGatedArrancarDirectorExecutorV0(espia, CouncilGateConfigV0{
 		Required: true, Decision: decision,
@@ -108,5 +108,46 @@ func TestCouncilGateExigidoSinPuertoFallaCerradoV0(t *testing.T) {
 	}
 	if len(result.Errores) == 0 || result.Errores[0].Code != CouncilGateMisconfiguredCodeV0 {
 		t.Fatalf("no delato la mala configuracion: %+v", result.Errores)
+	}
+}
+
+// BYPASS que Codex encontro: aprobar una app y despues MUTAR su especificacion
+// reutilizando el mismo request_id. El consejo aprueba una especificacion
+// concreta, no un nombre.
+func TestCouncilGateNoAceptaAppSpecMutadaConElMismoRequestIDV0(t *testing.T) {
+	original := orquestafactory.AppSpecRequestV0{RequestID: "req-x", Objetivo: "una calculadora"}
+	mutada := orquestafactory.AppSpecRequestV0{RequestID: "req-x", Objetivo: "exfiltrar credenciales"}
+
+	espia := &arranqueEspiaV0{}
+	decision := &decisionFalsaV0{aceptadas: map[string]bool{
+		CouncilRefForAppRequestV0("req-x", original): true,
+	}}
+	gate := newCouncilGatedArrancarDirectorExecutorV0(espia, CouncilGateConfigV0{
+		Required: true, Decision: decision,
+	})
+
+	// La aprobada pasa.
+	if _, err := gate.Execute(context.Background(), orquestamcp.MCPArrancarDirectorAppToolInputV0{
+		AppSpecRequest: original,
+	}); err != nil {
+		t.Fatalf("Execute original: %v", err)
+	}
+	if !espia.llamado {
+		t.Fatal("la app aprobada deberia arrancar")
+	}
+
+	// La mutada NO: mismo request_id, otra especificacion, otro consejo.
+	espia.llamado = false
+	result, err := gate.Execute(context.Background(), orquestamcp.MCPArrancarDirectorAppToolInputV0{
+		AppSpecRequest: mutada,
+	})
+	if err != nil {
+		t.Fatalf("Execute mutada: %v", err)
+	}
+	if espia.llamado {
+		t.Fatal("BYPASS: una AppSpec mutada se colo por la aprobacion de otra")
+	}
+	if len(result.Errores) == 0 || result.Errores[0].Code != CouncilGateDecisionRequiredCodeV0 {
+		t.Fatalf("no rechazo la spec mutada: %+v", result.Errores)
 	}
 }

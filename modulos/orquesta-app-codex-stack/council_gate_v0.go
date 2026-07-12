@@ -2,8 +2,12 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"strings"
 
+	orquestafactory "orquesta/modulos/orquesta-factory"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 )
 
@@ -33,15 +37,29 @@ const CouncilGateDecisionRequiredCodeV0 = "council_decision_required"
 // un fallo de despliegue, y se resuelve cerrando la puerta, no abriendola.
 const CouncilGateMisconfiguredCodeV0 = "council_gate_misconfigured"
 
-// CouncilRefForAppRequestV0 deriva el consejo de la PETICION DE CREACION de forma
-// determinista: la misma peticion convoca siempre al mismo consejo, que es lo que
-// permite la idempotencia del recibo.
-func CouncilRefForAppRequestV0(requestID string) string {
+// CouncilRefForAppRequestV0 deriva el consejo de la PETICION DE CREACION.
+//
+// Incluye el HASH DE LA APPSPEC, no solo el request_id: si solo dependiera del
+// identificador, se podria aprobar una app, mutar su especificacion reutilizando
+// el mismo request_id, y colarse por una puerta abierta para OTRA cosa. El
+// consejo aprueba una especificacion concreta, no un nombre.
+func CouncilRefForAppRequestV0(requestID string, spec orquestafactory.AppSpecRequestV0) string {
 	ref := strings.TrimSpace(requestID)
 	if ref == "" {
 		return ""
 	}
-	return "council-app-" + ref
+	return "council-app-" + ref + "-" + appSpecFingerprintV0(spec)
+}
+
+func appSpecFingerprintV0(spec orquestafactory.AppSpecRequestV0) string {
+	bytes, err := json.Marshal(spec)
+	if err != nil {
+		// Un spec que no serializa no puede acreditarse: se le da una huella
+		// imposible de igualar, de modo que el gate cierre.
+		return "unhashable"
+	}
+	sum := sha256.Sum256(bytes)
+	return hex.EncodeToString(sum[:])[:16]
 }
 
 type councilGatedArrancarDirectorExecutorV0 struct {
@@ -78,7 +96,7 @@ func (executor councilGatedArrancarDirectorExecutorV0) Execute(
 	if requestID == "" {
 		requestID = strings.TrimSpace(input.RequestID)
 	}
-	councilRef := CouncilRefForAppRequestV0(requestID)
+	councilRef := CouncilRefForAppRequestV0(requestID, input.AppSpecRequest)
 
 	// Gate exigido sin puerto de decision: mala configuracion. Se cierra, no se
 	// abre. Un error de despliegue no puede desactivar un control.

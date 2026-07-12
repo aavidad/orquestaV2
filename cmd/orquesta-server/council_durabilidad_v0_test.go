@@ -81,7 +81,7 @@ func TestCouncilRefNoEscapaDelDirectorioDeRecibosV0(t *testing.T) {
 		t.Fatalf("newCouncilReceiptStoreV0: %v", err)
 	}
 	for _, ref := range []string{"../fuera", "sub/dir", "..", ""} {
-		if _, err := store.SaveV0(councilReceiptV0{CouncilRef: ref, Outcome: councilOutcomeAcceptedV0}); err == nil {
+		if _, err := store.SaveV0(reciboValidoParaTestV0(ref, "sha256:x", 3)); err == nil {
 			t.Fatalf("council_ref %q escapo del directorio de recibos", ref)
 		}
 	}
@@ -107,12 +107,7 @@ func TestCouncilReceiptNoSePisaEnConcurrenciaV0(t *testing.T) {
 		go func(idx int) {
 			defer fin.Done()
 			arranque.Wait()
-			guardado, err := store.SaveV0(councilReceiptV0{
-				CouncilRef:       "concurrente",
-				InputFingerprint: "sha256:misma-convocatoria",
-				Outcome:          councilOutcomeAcceptedV0,
-				Approvals:        idx,
-			})
+			guardado, err := store.SaveV0(reciboValidoParaTestV0("concurrente", "sha256:misma-convocatoria", idx))
 			if err != nil {
 				errores <- err
 				return
@@ -151,14 +146,10 @@ func TestCouncilReceiptRechazaMismoRefConOtraConvocatoriaV0(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newCouncilReceiptStoreV0: %v", err)
 	}
-	if _, err := store.SaveV0(councilReceiptV0{
-		CouncilRef: "c", InputFingerprint: "sha256:a", Outcome: councilOutcomeAcceptedV0,
-	}); err != nil {
+	if _, err := store.SaveV0(reciboValidoParaTestV0("c", "sha256:a", 3)); err != nil {
 		t.Fatalf("primera decision: %v", err)
 	}
-	_, err = store.SaveV0(councilReceiptV0{
-		CouncilRef: "c", InputFingerprint: "sha256:DISTINTA", Outcome: "council_decision_rework",
-	})
+	_, err = store.SaveV0(reciboValidoParaTestV0("c", "sha256:DISTINTA", 1))
 	if !errors.Is(err, ErrCouncilReceiptConflictV0) {
 		t.Fatalf("reutilizar el council_ref con otra convocatoria debe chocar: %v", err)
 	}
@@ -182,5 +173,72 @@ func TestCouncilReceiptCorruptoNoAbreLaPuertaV0(t *testing.T) {
 	aceptada, err := store.CouncilDecisionAcceptedV0(context.Background(), "roto")
 	if err == nil || aceptada {
 		t.Fatalf("el gate debe fallar CERRADO ante un recibo ilegible: aceptada=%v err=%v", aceptada, err)
+	}
+}
+
+// Un JSON minimo no es una decision del consejo. Sin validacion, dejar caer dos
+// lineas en el directorio de estado abria el gate de creacion.
+func TestCouncilReciboFalsificadoNoAbreLaPuertaV0(t *testing.T) {
+	dir := t.TempDir()
+	store, err := newCouncilReceiptStoreV0(dir)
+	if err != nil {
+		t.Fatalf("newCouncilReceiptStoreV0: %v", err)
+	}
+	falsificados := map[string]string{
+		"minimo":       `{"outcome":"council_decision_accepted"}`,
+		"sin-huella":   `{"schema_version":"orquesta_council_receipt.v0","council_ref":"sin-huella","outcome":"council_decision_accepted","total":3}`,
+		"otro-consejo": `{"schema_version":"orquesta_council_receipt.v0","council_ref":"otro","input_fingerprint":"sha256:x","outcome":"council_decision_accepted","total":3,"seats":[{"role":"revisor","member_ref":"a","material":"diff_crudo"}]}`,
+		"sin-votantes": `{"schema_version":"orquesta_council_receipt.v0","council_ref":"sin-votantes","input_fingerprint":"sha256:x","outcome":"council_decision_accepted","total":0}`,
+	}
+	for ref, contenido := range falsificados {
+		path := filepath.Join(dir, councilReceiptsDirNameV0, ref+".json")
+		if err := os.WriteFile(path, []byte(contenido), 0o600); err != nil {
+			t.Fatalf("escribiendo %s: %v", ref, err)
+		}
+		aceptada, err := store.CouncilDecisionAcceptedV0(context.Background(), ref)
+		if err == nil || aceptada {
+			t.Fatalf("el recibo falsificado %q abrio la puerta: aceptada=%v err=%v", ref, aceptada, err)
+		}
+	}
+}
+
+// La huella tiene que ser estable ante el orden: overrides que salen de un map y
+// miembros en distinto orden son la MISMA convocatoria.
+func TestCouncilHuellaEsEstableAnteElOrdenV0(t *testing.T) {
+	uno := orquestamcp.MCPCouncilToolInputV0{
+		AuthorRef: "autor",
+		Members: []orquestamcp.MCPCouncilMemberV0{
+			{MemberRef: "a"}, {MemberRef: "b"},
+		},
+		Overrides: []orquestamcp.MCPCouncilOverrideV0{
+			{Role: "revisor", MemberRef: "a"}, {Role: "consultor", MemberRef: "b"},
+		},
+	}
+	otro := orquestamcp.MCPCouncilToolInputV0{
+		AuthorRef: "autor",
+		Members: []orquestamcp.MCPCouncilMemberV0{
+			{MemberRef: "b"}, {MemberRef: "a"},
+		},
+		Overrides: []orquestamcp.MCPCouncilOverrideV0{
+			{Role: "consultor", MemberRef: "b"}, {Role: "revisor", MemberRef: "a"},
+		},
+	}
+	if councilInputFingerprintV0(uno) != councilInputFingerprintV0(otro) {
+		t.Fatal("la misma convocatoria en distinto orden dio huellas distintas: un reintento legitimo chocaria")
+	}
+}
+
+func reciboValidoParaTestV0(councilRef string, fingerprint string, approvals int) councilReceiptV0 {
+	return councilReceiptV0{
+		CouncilRef:       councilRef,
+		InputFingerprint: fingerprint,
+		Outcome:          councilOutcomeAcceptedV0,
+		Approvals:        approvals,
+		Total:            3,
+		Seats: []orquestamcp.MCPCouncilSeatV0{
+			{Role: "revisor", MemberRef: "a", Material: "diff_crudo"},
+			{Role: "consultor", MemberRef: "b", Material: "masticado"},
+			{Role: "adversario", MemberRef: "c", Material: "diff_crudo"},
+		},
 	}
 }
