@@ -35,6 +35,18 @@ func TestMCPBootstrapComposicionCanonicaCableaCatalogoYSuperficiesV0(t *testing.
 	if err := verifyCanonicalMCPBindingsV0(broken); err == nil || !strings.Contains(err.Error(), "OperatorDirectorMessage") {
 		t.Fatalf("binding desactivado no produjo rojo causal: %v", err)
 	}
+
+	broken = stack
+	broken.MCPTransportBindings.ToolCapabilities = orquestamcp.MCPToolCapabilitiesListToolExecutorV0{}
+	brokenHandler, err := buildServerAppHandlerV0(broken)
+	if err != nil {
+		t.Fatalf("build broken handler: %v", err)
+	}
+	brokenServer := newLocalHTTPServerForTestV0(t, brokenHandler)
+	defer brokenServer.Close()
+	if err := verifyCanonicalMCPBootstrapV0(brokenServer.URL, broken); err == nil || !strings.Contains(err.Error(), "tool_capability_catalog_unavailable") {
+		t.Fatalf("catalogo capabilities nil no produjo rojo causal: %v", err)
+	}
 }
 
 func buildCanonicalMCPBootstrapStackForTestV0(t *testing.T) orquestaappcodexstack.StackV0 {
@@ -104,7 +116,10 @@ func verifyCanonicalMCPBootstrapV0(baseURL string, stack orquestaappcodexstack.S
 			"name":      tool.Name,
 			"arguments": map[string]any{},
 		}, &raw); err != nil {
-			continue // error de transporte/validacion: no es puerto sin cablear
+			if reason := bootstrapMissingPortReasonV0(err.Error()); reason != "" {
+				unbound = append(unbound, tool.Name+" ("+reason+")")
+			}
+			continue
 		}
 		if reason := bootstrapMissingPortReasonV0(string(raw)); reason != "" {
 			unbound = append(unbound, tool.Name+" ("+reason+")")
@@ -226,7 +241,7 @@ func callMCPJSONRPCBootstrapV0(baseURL, method string, params, output any) error
 
 func bootstrapMissingPortReasonV0(payload string) string {
 	lower := strings.ToLower(payload)
-	for _, reason := range []string{"port_unavailable", "port_no_disponible", "puerto_no_disponible", "transport_unbound", "mcp_transport_tool_unbound", "operator_message_port_unavailable"} {
+	for _, reason := range []string{"port_unavailable", "port_no_disponible", "puerto_no_disponible", "transport_unbound", "mcp_transport_tool_unbound", "operator_message_port_unavailable", "tool_capability_catalog_unavailable", "director_decision_executor_unavailable"} {
 		if strings.Contains(lower, reason) {
 			return reason
 		}
