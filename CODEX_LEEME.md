@@ -1,31 +1,41 @@
 # CODEX: LEE ESTO ANTES DE TOCAR NADA
 
-## NOTA DEL REVISOR (2026-07-12 ~16:10): PARTE H2 EN COMMITS PEQUENOS
+## ✅ H2 ACREDITADO POR EL REVISOR (2026-07-12 ~16:25)
 
-Veo que estas en H2 (bien: `goal_first_repair_receipt_v0.go`, wiring del stack,
-tests). Pero llevas **25 ficheros abiertos sin commitear**, 8 de ellos tests.
+Excelente trabajo. Lo partiste en cinco commits como te pedi, cada uno con su
+test, y **pasa mi verificacion adversarial**:
 
-Un cambio de 25 ficheros de una pieza es dificil de revisar y facil de colar
-cosas sin querer. Partelo, en este orden natural (cada uno con su test):
+- `4cd5d945f` repara receipts mediante lifecycle atestiguado (la raiz).
+- `25244f344` gobierna claims de atestacion con **leases**.
+- `050c2da8c` serializa observaciones goal-first por run.
+- `a1c73b002` desacopla observe HTTP con **202 + polling**.
+- `d30d5fdf6` no confunde refs normales con workspaces.
 
-1. **Repair delega en el lifecycle** (la raiz): que `repairGoalFirstReceipt*`
-   capture snapshot y ateste antes de validar, en vez de llamar al validator a
-   pelo. Test: falla si el repair valida sin atestar.
-2. **Claim con lease/owner/expiry + reclaim**. Test: claim abandonado se
-   recupera sin dejar pasar un cierre sin atestacion.
-3. **Serializacion por run** (observer residente vs observe manual) con fusion
-   de receipts. Test de **carrera concurrente real**: falla si dos
-   observaciones simultaneas pierden receipts o dejan pasar un cierre.
-4. **Observe HTTP desacoplado** (202 + poll/wakeup).
+**Prueba de mutacion del revisor (superada):** le quite el atestador al repair
+en codigo de produccion (`ports.RequiredTestAttestor = nil`) — es decir,
+reintroduje el bug original — y **tus tests se pusieron rojos**. La reparacion
+muerde de verdad, no es decorativa.
 
-Si ya lo tienes todo entrelazado y partirlo cuesta mas que cerrarlo, cierralo
-de una pieza — pero **avisame en este fichero** de que va todo junto, para que
-lo revise con mas cuidado. No lo hagas en silencio.
+**Verificado ademas:** suites de `orquesta-goal`, `orquesta-state-file`,
+`orquesta-app-codex-stack` y `orquesta-mcp` verdes; guard de envs verde (426);
+**sin envs nuevas, sin relajaciones de seguridad, sin tocar modelos ni
+routing**. Limpio.
 
-Recordatorio de lo que verificare: prueba de mutacion propia (rompo un eslabon
-DISTINTO al que tu pruebes), guard de envs (426), sin envs nuevas sin
-reejecutar el guard, sin relajaciones de seguridad sin anunciar, sin tocar
-modelos ni routing.
+El agujero por el que la atestacion independiente podia saltarse esta cerrado.
+
+## SIGUIENTE: H3 (promocion desde cierre Goal-first)
+
+Ahora si, con el nucleo sano, ataca H3:
+
+- El cierre Goal-first `accepted` debe disparar promocion/integracion **sin
+  pasar por el drain legacy** (hoy `maybePromoteClosedAutoprogrammingRunV0`
+  solo tiene caller ahi).
+- **Test que falle** si un goal cierra aceptado y su artefacto NO se promociona.
+- **Sin push automatico**: la promocion prepara e integra en local; publicar
+  sigue siendo decision del operador.
+- Mismo estilo: commits pequenos, cada uno con su test.
+
+Luego, H1b (las seis tools). El guard sigue diciendo `NO cableadas (6)`.
 
 ---
 
