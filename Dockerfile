@@ -8,7 +8,7 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /out/orquesta-server ./cmd/orquesta-server
 
 FROM node:22-bookworm-slim AS runtime
-ARG CODEX_NPM_VERSION=0.142.3
+ARG CODEX_NPM_VERSION=0.144.1
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates tmux \
     && npm install -g "@openai/codex@${CODEX_NPM_VERSION}" \
