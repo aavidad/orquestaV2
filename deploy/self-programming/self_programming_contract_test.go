@@ -144,6 +144,7 @@ func TestSelfProgrammingDocsV0KeepRemoteSafetyRunbook(t *testing.T) {
 
 func TestSelfProgrammingImageV0IncludesPinnedIntegrationRuntime(t *testing.T) {
 	dockerfile := readContractFileV0(t, "../../Dockerfile.self-programming")
+	compose := readContractFileV0(t, "docker-compose.yml")
 
 	for _, snippet := range []string{
 		"FROM golang:1.25.11-bookworm AS builder",
@@ -160,6 +161,9 @@ func TestSelfProgrammingImageV0IncludesPinnedIntegrationRuntime(t *testing.T) {
 	readme := readContractFileV0(t, "README.md")
 	if !strings.Contains(readme, `--build-arg ORQUESTA_BUILD_COMMIT="$(git rev-parse HEAD)"`) {
 		t.Fatal("README debe inyectar el commit canonico al build aislado")
+	}
+	if !strings.Contains(compose, "ORQUESTA_CODEX_COMMAND: /usr/local/bin/codex") {
+		t.Fatal("compose debe fijar la ruta absoluta del Codex instalado")
 	}
 
 	localReplaceCopy := strings.Index(dockerfile, "COPY modulos/orquesta-estado-vivo/testdeps/rapid")

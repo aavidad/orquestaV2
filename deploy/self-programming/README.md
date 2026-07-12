@@ -56,6 +56,9 @@ El Dockerfile acepta solo un SHA Git hexadecimal completo de 40 caracteres y
 lo conserva como identidad VCS del binario; asi el guard puede contrastar la
 imagen con el `HEAD` exacto montado en `/workspace/project`.
 
+El compose fija `ORQUESTA_CODEX_COMMAND=/usr/local/bin/codex`, ruta absoluta
+del CLI instalado en la imagen. No depende del `PATH` ni añade credenciales.
+
 ## Contrato verificable
 
 El contrato local de seguridad del perfil aislado se valida con:
