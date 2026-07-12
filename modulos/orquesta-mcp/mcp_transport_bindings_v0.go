@@ -2,6 +2,7 @@ package orquestamcp
 
 import (
 	"context"
+	"encoding/json"
 
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestaestadovivo "orquesta/modulos/orquesta-estado-vivo"
@@ -41,6 +42,7 @@ type MCPTransportBindingsV0 struct {
 	AllowLegacyAutoprogrammingSupervisorActions    bool
 	ServerShutdown                                 MCPTransportServerShutdownExecutorV0
 	DomainWork                                     MCPDomainWorkExecutorPortV0
+	DocumentPlanExpand                             MCPTransportDocumentPlanExpandExecutorV0
 	ExternalWorkDryRun                             MCPTransportExternalWorkDryRunExecutorV0
 	ExternalWorkRun                                MCPTransportExternalWorkRunExecutorV0
 	ToolCapabilities                               MCPTransportToolCapabilitiesListExecutorV0
@@ -60,6 +62,29 @@ type MCPTransportBindingsV0 struct {
 
 type MCPTransportNuevaAppExecutorV0 interface {
 	Execute(context.Context, MCPNuevaAppToolInputV0) (MCPNuevaAppToolResultV0, error)
+}
+
+type MCPTransportDocumentPlanExpandExecutorV0 interface {
+	Execute(context.Context, MCPDocumentPlanExpandToolInputV0) (MCPDocumentPlanExpandToolResultV0, error)
+}
+
+func mcpDocumentPlanExpandTransportHandlerV0(
+	port MCPTransportDocumentPlanExpandExecutorV0,
+) MCPTransportToolHandlerV0 {
+	return func(ctx context.Context, raw json.RawMessage) (json.RawMessage, error) {
+		var input MCPDocumentPlanExpandToolInputV0
+		if err := json.Unmarshal(raw, &input); err != nil {
+			return nil, err
+		}
+		if port == nil {
+			return mcpTransportToolErrorPayloadV0(MCPDocumentPlanExpandToolNameV0, MCPTransportToolUnboundV0)
+		}
+		result, err := port.Execute(ctx, input)
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(result)
+	}
 }
 
 type MCPTransportArrancarDirectorAppExecutorV0 interface {

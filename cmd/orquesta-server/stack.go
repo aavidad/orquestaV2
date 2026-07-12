@@ -538,6 +538,7 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 		stack.MCPTransportBindings.AutoprogrammingPrepareRun,
 		serverConfig.ProjectWorkDir,
 	)
+	stack.MCPTransportBindings.DocumentPlanExpand = serverDocumentPlanExpandExecutorV0(stack.DomainWork)
 	if watcher := serverGoalMaterializedResultWatcherFromStackV0(
 		serverConfig,
 		stack,

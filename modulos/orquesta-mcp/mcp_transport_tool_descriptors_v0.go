@@ -1,5 +1,7 @@
 package orquestamcp
 
+const mcpDocumentPlanExpandResourceURIV0 = "orquesta://contracts/document-plan-expand/v0"
+
 type mcpTransportToolDescriptorsV0 struct {
 	nueva                    MCPNuevaAppToolDescriptorV0
 	nuevaWizard              MCPNuevaAppWizardToolDescriptorV0
@@ -29,6 +31,7 @@ type mcpTransportToolDescriptorsV0 struct {
 	workspaceTimeline        MCPWorkspaceTimelineToolDescriptorV0
 	serverShutdown           MCPServerShutdownToolDescriptorV0
 	domainWork               MCPDomainWorkToolDescriptorV0
+	documentPlanExpand       MCPDocumentPlanExpandToolDescriptorV0
 	externalWorkDryRun       MCPExternalWorkDryRunToolDescriptorV0
 	externalWorkRun          MCPExternalWorkRunToolDescriptorV0
 	toolCapabilities         MCPToolCapabilitiesListToolDescriptorV0
@@ -71,6 +74,7 @@ func newMCPTransportToolDescriptorsV0() mcpTransportToolDescriptorsV0 {
 		workspaceTimeline:        MCPWorkspaceTimelineToolDescriptorV0Value(),
 		serverShutdown:           MCPServerShutdownDescriptorV0(),
 		domainWork:               MCPDomainWorkDescriptorV0(),
+		documentPlanExpand:       MCPDocumentPlanExpandDescriptorV0(),
 		externalWorkDryRun:       MCPExternalWorkDryRunDescriptorV0(),
 		externalWorkRun:          MCPExternalWorkRunDescriptorV0(),
 		toolCapabilities:         MCPToolCapabilitiesListDescriptorV0(),

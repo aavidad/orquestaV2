@@ -36,6 +36,7 @@ func MCPTransportToolsV0(bindings MCPTransportBindingsV0) []MCPTransportToolEnve
 		mcpTransportToolEnvelopeV0(descriptors.workspaceTimeline.Name, descriptors.workspaceTimeline.Version, descriptors.workspaceTimeline.ResourceURI, descriptors.workspaceTimeline.InputSchema, descriptors.workspaceTimeline.Output, mcpWorkspaceTimelineTransportHandlerV0(bindings.WorkspaceTimeline)),
 		mcpTransportToolEnvelopeV0(descriptors.serverShutdown.Name, descriptors.serverShutdown.Version, descriptors.serverShutdown.ResourceURI, descriptors.serverShutdown.InputSchema, descriptors.serverShutdown.Output, mcpServerShutdownTransportHandlerV0(bindings.ServerShutdown)),
 		mcpTransportToolEnvelopeV0(descriptors.domainWork.Name, descriptors.domainWork.Version, descriptors.domainWork.ResourceURI, descriptors.domainWork.InputSchema, descriptors.domainWork.Output, mcpDomainWorkTransportHandlerV0(bindings.DomainWork)),
+		mcpTransportToolEnvelopeV0(descriptors.documentPlanExpand.Name, descriptors.documentPlanExpand.Version, mcpDocumentPlanExpandResourceURIV0, descriptors.documentPlanExpand.InputSchema, descriptors.documentPlanExpand.Output, mcpDocumentPlanExpandTransportHandlerV0(bindings.DocumentPlanExpand)),
 		mcpTransportToolEnvelopeV0(descriptors.externalWorkDryRun.Name, descriptors.externalWorkDryRun.Version, descriptors.externalWorkDryRun.ResourceURI, descriptors.externalWorkDryRun.InputSchema, descriptors.externalWorkDryRun.Output, mcpExternalWorkDryRunTransportHandlerV0(bindings.ExternalWorkDryRun)),
 		mcpTransportToolEnvelopeV0(descriptors.externalWorkRun.Name, descriptors.externalWorkRun.Version, descriptors.externalWorkRun.ResourceURI, descriptors.externalWorkRun.InputSchema, descriptors.externalWorkRun.Output, mcpExternalWorkRunTransportHandlerV0(bindings.ExternalWorkRun)),
 		mcpTransportToolEnvelopeV0(descriptors.toolCapabilities.Name, descriptors.toolCapabilities.Version, descriptors.toolCapabilities.ResourceURI, descriptors.toolCapabilities.InputSchema, descriptors.toolCapabilities.Output, mcpToolCapabilitiesListTransportHandlerV0(bindings.ToolCapabilities)),
@@ -69,6 +70,9 @@ func MCPBoundTransportToolsV0(bindings MCPTransportBindingsV0) []MCPTransportToo
 		if tool.Name == MCPDomainWorkToolNameV0 && bindings.DomainWork == nil {
 			continue
 		}
+		if tool.Name == MCPDocumentPlanExpandToolNameV0 && bindings.DocumentPlanExpand == nil {
+			continue
+		}
 		out = append(out, tool)
 	}
 	return out
@@ -87,6 +91,7 @@ func applyMCPTransportExecutionProfilesV0(
 			MCPAutoprogrammingSuperviseToolNameV0,
 			MCPRuntimeModelsToolNameV0,
 			MCPDomainWorkToolNameV0,
+			MCPDocumentPlanExpandToolNameV0,
 			MCPExternalWorkRunToolNameV0:
 			profile = MCPTransportExecutionProfileAutoprogrammingLongV0
 		case MCPWorkspaceTimelineToolNameV0,

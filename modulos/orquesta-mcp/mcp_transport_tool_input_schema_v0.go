@@ -89,6 +89,8 @@ func mcpTransportToolInputDTOByNameV0(name string) (any, bool) {
 		return MCPServerShutdownToolInputV0{}, true
 	case MCPDomainWorkToolNameV0:
 		return MCPDomainWorkToolInputV0{}, true
+	case MCPDocumentPlanExpandToolNameV0:
+		return MCPDocumentPlanExpandToolInputV0{}, true
 	case MCPExternalWorkDryRunToolNameV0:
 		return MCPExternalWorkDryRunToolInputV0{}, true
 	case MCPExternalWorkRunToolNameV0:
@@ -218,6 +220,8 @@ func mcpTransportToolEnumsV0(name string) map[string][]string {
 		return map[string][]string{"action": []string{"rank", "set_priority"}}
 	case MCPDomainWorkToolNameV0:
 		return map[string][]string{"action": []string{"create_job", "submit_artifact"}}
+	case MCPDocumentPlanExpandToolNameV0:
+		return map[string][]string{"action": []string{MCPDocumentPlanExpandActionPreviewV0, MCPDocumentPlanExpandActionCreateJobsV0}}
 	case MCPExternalWorkRunToolNameV0:
 		return map[string][]string{"director_execution_mode": []string{"goal_first", "legacy_director_loop"}}
 	case MCPExternalWorkDryRunToolNameV0:
