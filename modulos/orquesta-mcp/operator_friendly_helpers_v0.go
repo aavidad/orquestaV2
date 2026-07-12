@@ -154,7 +154,10 @@ func mcpOperatorFriendlyNextActionsV0(
 	status MCPOperatorFriendlyStatusResultV0,
 ) []string {
 	if len(status.Tasks) == 0 {
-		return []string{"queue_empty_or_not_visible", "ask_orquesta_to_start_autonomy_review_if_needed"}
+		if status.Counts.TerminalRunsVisible > 0 {
+			return []string{"no_active_queue_work", "terminal_runs_visible_in_queue_status"}
+		}
+		return []string{"no_active_queue_work", "no_terminal_runs_visible", "ask_orquesta_to_start_autonomy_review_if_needed"}
 	}
 	switch toolName {
 	case MCPOperatorFriendlyAgentsToolNameV0:

@@ -43,12 +43,15 @@ type MCPOperatorFriendlyStatusResultV0 struct {
 }
 
 type MCPOperatorFriendlyCountsV0 struct {
-	Projects  int            `json:"projects"`
-	Tasks     int            `json:"tasks"`
-	Runs      int            `json:"runs"`
-	Agents    int            `json:"agents"`
-	ByStatus  map[string]int `json:"by_status,omitempty"`
-	QueueLive bool           `json:"queue_live"`
+	Scope               string         `json:"scope"`
+	Projects            int            `json:"projects"`
+	Tasks               int            `json:"tasks"`
+	Runs                int            `json:"runs"`
+	Agents              int            `json:"agents"`
+	ByStatus            map[string]int `json:"by_status,omitempty"`
+	QueueLive           bool           `json:"queue_live"`
+	ActiveQueueEmpty    bool           `json:"active_queue_empty"`
+	TerminalRunsVisible int            `json:"terminal_runs_visible"`
 }
 
 type MCPOperatorFriendlyAgentV0 struct {
@@ -70,15 +73,15 @@ func mcpOperatorFriendlyTransportToolsV0(
 			MCPOperatorFriendlyStatusToolNameV0,
 			"v0",
 			"orquesta://operator/friendly/status/v0",
-			"envelope:{request_id?,correlation_id?,queue_ref?,run_ref?,project_ref?,status?,limit?,include_agents?,include_run_stats?,include_usage?}; no required fields; use for general status/como va",
-			"ok:{counts,projects,tasks,runs?,agents?,next_actions}|error:{errores_publicos}",
+			"envelope:{request_id?,correlation_id?,queue_ref?,run_ref?,project_ref?,status?,limit?,include_agents?,include_run_stats?,include_usage?}; no required fields; use for general status/como va; counts scope is active_queue",
+			"ok:{counts:{scope,projects,tasks,runs,agents,queue_live,active_queue_empty,terminal_runs_visible},projects,tasks,runs?,agents?,next_actions}|error:{errores_publicos}",
 			mcpOperatorFriendlyStatusTransportHandlerV0(bindings, MCPOperatorFriendlyStatusToolNameV0),
 		),
 		mcpTransportToolEnvelopeV0(
 			MCPOperatorFriendlyTasksToolNameV0,
 			"v0",
 			"orquesta://operator/friendly/tasks/v0",
-			"envelope:{request_id?,correlation_id?,queue_ref?,project_ref?,status?,limit?}; no required fields; list queue tasks",
+			"envelope:{request_id?,correlation_id?,queue_ref?,project_ref?,status?,limit?}; no required fields; list active queue tasks",
 			"ok:{counts,tasks,projects}|error:{errores_publicos}",
 			mcpOperatorFriendlyStatusTransportHandlerV0(bindings, MCPOperatorFriendlyTasksToolNameV0),
 		),
@@ -94,7 +97,7 @@ func mcpOperatorFriendlyTransportToolsV0(
 			MCPOperatorFriendlyAgentsToolNameV0,
 			"v0",
 			"orquesta://operator/friendly/agents/v0",
-			"envelope:{request_id?,correlation_id?,queue_ref?,run_ref?,project_ref?,status?,limit?,include_usage?}; no required fields; list agents using queued runs",
+			"envelope:{request_id?,correlation_id?,queue_ref?,run_ref?,project_ref?,status?,limit?,include_usage?}; no required fields; list agents using active queued runs",
 			"ok:{counts,agents,runs?}|error:{errores_publicos}",
 			mcpOperatorFriendlyStatusTransportHandlerV0(bindings, MCPOperatorFriendlyAgentsToolNameV0),
 		),
@@ -147,9 +150,12 @@ func executeMCPOperatorFriendlyStatusV0(
 		showRuns = true
 	}
 	out := MCPOperatorFriendlyStatusResultV0{
-		Estado:  "ok",
-		Tool:    toolName,
-		Counts:  MCPOperatorFriendlyCountsV0{ByStatus: map[string]int{}},
+		Estado: "ok",
+		Tool:   toolName,
+		Counts: MCPOperatorFriendlyCountsV0{
+			Scope:    "active_queue",
+			ByStatus: map[string]int{},
+		},
 		Errores: []MCPValidationIssueV0{},
 	}
 	queue, queueOK, err := mcpOperatorFriendlyQueueV0(ctx, bindings, input)
@@ -166,6 +172,7 @@ func executeMCPOperatorFriendlyStatusV0(
 		return out, nil
 	}
 	out.QueueRef = queue.QueueRef
+	out.Counts.TerminalRunsVisible = len(queue.Terminal)
 	baseTasks := filterMCPFriendlyTasksByProjectV0(queue.Ranked, input)
 	if bindings.DirectorStats != nil && len(baseTasks) > 0 {
 		runs, agents := mcpOperatorFriendlyRunStatsV0(ctx, bindings, input, baseTasks, includeAgents)
@@ -178,6 +185,7 @@ func executeMCPOperatorFriendlyStatusV0(
 	out.Tasks = filterMCPFriendlyTasksV0(baseTasks, input)
 	out.Projects = projectsFromMCPFriendlyTasksV0(out.Tasks)
 	out.Counts.QueueLive = true
+	out.Counts.ActiveQueueEmpty = len(queue.Ranked) == 0
 	out.Counts.Tasks = len(out.Tasks)
 	out.Counts.Projects = len(out.Projects)
 	out.Counts.ByStatus = statusCountsFromMCPFriendlyTasksV0(out.Tasks)

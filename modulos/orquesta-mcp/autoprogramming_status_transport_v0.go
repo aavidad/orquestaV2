@@ -38,17 +38,13 @@ func mcpAutoprogrammingStatusTransportHandlerV0(
 		normalizedAdvice := input.OperatorAdvice.normalizedMCPV0(
 			firstNonEmptyMCPV0(result.RunRef, result.QueueRef, result.RequestID, result.CorrelationID),
 		)
-		if len(normalizedAdvice) == 0 {
-			return json.Marshal(result)
+		if len(normalizedAdvice) > 0 {
+			result.Diagnostics = append(result.Diagnostics, mcpAutoprogrammingDiagnosticV0(
+				"operator_advice_recorded_non_blocking",
+				"operator_advice",
+				"consejo de operador registrado sin bloquear estado de autoprogramacion",
+			))
 		}
-		result.Diagnostics = append(result.Diagnostics, mcpAutoprogrammingDiagnosticV0(
-			"operator_advice_recorded_non_blocking",
-			"operator_advice",
-			"consejo de operador registrado sin bloquear estado de autoprogramacion",
-		))
-		return json.Marshal(mcpAutoprogrammingStatusTransportResultV0{
-			MCPAutoprogrammingStatusToolResultV0: result,
-			OperatorAdvice:                       normalizedAdvice,
-		})
+		return marshalMCPAutoprogrammingStatusTransportV0(result, normalizedAdvice)
 	}
 }

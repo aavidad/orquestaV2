@@ -3,10 +3,79 @@ package orquestamcp
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 
 	orquestaestadovivo "orquesta/modulos/orquesta-estado-vivo"
 )
+
+func TestMCPAutoprogrammingStatusTransportV0CompactaSalidaBajoLimiteMCP(t *testing.T) {
+	diagnostics := make([]MCPAutoprogrammingDiagnosticV0, 60)
+	for index := range diagnostics {
+		diagnostics[index] = MCPAutoprogrammingDiagnosticV0{
+			Code:    fmt.Sprintf("diagnostic-%02d", index),
+			Scope:   "transport-test",
+			Message: strings.Repeat(fmt.Sprintf("detalle-%02d-", index), 300),
+			EvidenceRefs: []string{
+				fmt.Sprintf("evidence-%02d-a", index),
+				fmt.Sprintf("evidence-%02d-b", index),
+				fmt.Sprintf("evidence-%02d-c", index),
+			},
+		}
+	}
+	result := MCPAutoprogrammingStatusToolResultV0{
+		Estado:      MCPAutoprogrammingStatusEstadoOKV0,
+		RequestID:   "request-compact-001",
+		Diagnostics: diagnostics,
+		EvidenceRefs: []string{
+			strings.Repeat("evidence-large-", 5000),
+		},
+	}
+	payload, err := marshalMCPAutoprogrammingStatusTransportV0(result, []MCPAutoprogrammingOperatorAdviceV0{{
+		AdviceRef: strings.Repeat("advice-ref-large-", 5000),
+		Message:   strings.Repeat("operator-message-large-", 5000),
+	}})
+	if err != nil {
+		t.Fatalf("marshal compact status: %v", err)
+	}
+	if len(payload) > mcpAutoprogrammingStatusTransportTargetBytesV0 {
+		t.Fatalf("payload=%d target=%d", len(payload), mcpAutoprogrammingStatusTransportTargetBytesV0)
+	}
+	var projected mcpAutoprogrammingStatusTransportProjectedResultV0
+	if err := json.Unmarshal(payload, &projected); err != nil {
+		t.Fatalf("decode projected status: %v", err)
+	}
+	projection := projected.OutputProjection
+	if projected.Estado != MCPAutoprogrammingStatusEstadoOKV0 ||
+		projection == nil || projection.Mode != "compact" || !projection.Truncated ||
+		projection.ObservedBytes <= projection.TargetBytes ||
+		projection.ReturnedBytes > projection.TargetBytes ||
+		projection.DiagnosticsTotal != len(diagnostics) {
+		t.Fatalf("projected=%+v projection=%+v", projected, projection)
+	}
+	if !hasMCPAutoprogrammingDiagnosticCodeV0(projected.Diagnostics, "mcp_status_output_compacted") {
+		t.Fatalf("diagnostics=%+v", projected.Diagnostics)
+	}
+}
+
+func TestMCPAutoprogrammingStatusTransportV0ConservaSalidaPequena(t *testing.T) {
+	result := MCPAutoprogrammingStatusToolResultV0{
+		Estado:    MCPAutoprogrammingStatusEstadoOKV0,
+		RequestID: "request-small-001",
+	}
+	payload, err := marshalMCPAutoprogrammingStatusTransportV0(result, nil)
+	if err != nil {
+		t.Fatalf("marshal small status: %v", err)
+	}
+	var projected mcpAutoprogrammingStatusTransportProjectedResultV0
+	if err := json.Unmarshal(payload, &projected); err != nil {
+		t.Fatalf("decode small status: %v", err)
+	}
+	if projected.RequestID != result.RequestID || projected.OutputProjection != nil {
+		t.Fatalf("projected=%+v", projected)
+	}
+}
 
 func TestMCPTransportV0AutoprogrammingStatusQuedaOptInSinPuertos(t *testing.T) {
 	transport := newFakeMCPTransportV0()

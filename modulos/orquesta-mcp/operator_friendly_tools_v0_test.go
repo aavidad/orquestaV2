@@ -36,6 +36,35 @@ func TestMCPOperatorFriendlyStatusTransportV0AceptaIncludesComoListas(t *testing
 	}
 }
 
+func TestMCPOperatorFriendlyStatusTransportV0AclaraColaActivaVaciaConTerminales(t *testing.T) {
+	transport := newFakeMCPTransportV0()
+	if err := RegisterMCPTransportV0(transport, MCPTransportBindingsV0{
+		RunQueuePriority: fakeMCPFriendlyTerminalOnlyQueueV0{},
+	}); err != nil {
+		t.Fatalf("register transport: %v", err)
+	}
+
+	output, err := transport.CallToolV0(context.Background(), MCPOperatorFriendlyStatusToolNameV0, map[string]any{})
+	if err != nil {
+		t.Fatalf("call tool: %v", err)
+	}
+	var result MCPOperatorFriendlyStatusResultV0
+	if err := json.Unmarshal(output, &result); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if result.Counts.Scope != "active_queue" ||
+		!result.Counts.QueueLive || !result.Counts.ActiveQueueEmpty ||
+		result.Counts.Tasks != 0 || result.Counts.Runs != 0 || result.Counts.Agents != 0 ||
+		result.Counts.TerminalRunsVisible != 1 {
+		t.Fatalf("counts=%+v", result.Counts)
+	}
+	if !containsStringMCPTestV0(result.NextActions, "no_active_queue_work") ||
+		!containsStringMCPTestV0(result.NextActions, "terminal_runs_visible_in_queue_status") ||
+		containsStringMCPTestV0(result.NextActions, "queue_empty_or_not_visible") {
+		t.Fatalf("next_actions=%+v", result.NextActions)
+	}
+}
+
 func TestMCPOperatorFriendlyAgentsTransportV0FiltraPorProyecto(t *testing.T) {
 	transport := newFakeMCPTransportV0()
 	err := RegisterMCPTransportV0(transport, MCPTransportBindingsV0{
@@ -137,6 +166,23 @@ func TestMCPOperatorFriendlyTasksTransportV0UsaRunRefDeStatsEnProyeccionLive(t *
 }
 
 type fakeMCPFriendlyQueueV0 struct{}
+
+type fakeMCPFriendlyTerminalOnlyQueueV0 struct{}
+
+func (fakeMCPFriendlyTerminalOnlyQueueV0) Execute(
+	_ context.Context,
+	input MCPRunQueuePriorityToolInputV0,
+) (MCPRunQueuePriorityToolResultV0, error) {
+	return MCPRunQueuePriorityToolResultV0{
+		Estado:   MCPRunQueuePriorityEstadoOKV0,
+		Action:   MCPRunQueuePriorityActionRankV0,
+		QueueRef: input.QueueRef,
+		Terminal: []MCPRunQueueRankedCandidateCompactV0{{
+			RunRef: "run-ref-terminal", AppRef: "app-ref-terminal", Status: "closed",
+		}},
+		Errores: []MCPValidationIssueV0{},
+	}, nil
+}
 
 func (fakeMCPFriendlyQueueV0) Execute(
 	_ context.Context,
