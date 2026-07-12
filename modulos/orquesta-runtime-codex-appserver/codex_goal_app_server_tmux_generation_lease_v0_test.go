@@ -628,9 +628,12 @@ func TestSmokeGoalFirstHandoffPipelinePropagaFalloV0(t *testing.T) {
 	}
 	script := filepath.Join(repoRoot, "scripts", "smoke_goal_first_app_server_real.sh")
 	logPath := filepath.Join(t.TempDir(), "handoff.log")
+	smokeRoot := t.TempDir()
 	command := exec.Command("bash", "-o", "pipefail", "-c", fmt.Sprintf("%q | tee %q", script, logPath))
 	command.Env = append(os.Environ(),
 		"SMOKE_GOAL_FIRST_HANDOFF_FAILURE_SELFTEST=1",
+		"ORQUESTA_SMOKE_ROOT="+smokeRoot,
+		"ORQUESTA_CODEX_RUNTIME_WORKDIR=",
 		"TMPDIR="+t.TempDir(),
 	)
 	output, runErr := command.CombinedOutput()
@@ -640,6 +643,9 @@ func TestSmokeGoalFirstHandoffPipelinePropagaFalloV0(t *testing.T) {
 	}
 	if !strings.Contains(string(output), "smoke_goal_first_handoff_failure_selftest=expected_failure") {
 		t.Fatalf("handoff pipeline sin evidencia: %s", output)
+	}
+	if strings.Contains(string(output), "find_tmux_owner_file: command not found") {
+		t.Fatalf("cleanup del handoff ejecuto helper no definido: %s", output)
 	}
 }
 

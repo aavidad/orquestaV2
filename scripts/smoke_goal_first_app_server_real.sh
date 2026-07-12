@@ -79,8 +79,10 @@ shutdown_coordination_sleep_seconds="${ORQUESTA_GOAL_FIRST_SHUTDOWN_COORDINATION
 
 cleanup() {
   smoke_shutdown_orquesta_server "$server_pid" "$base_url" 5 25 "$runtime_dir"
-  local tmux_owner
-  tmux_owner="$(find_tmux_owner_file || true)"
+  local tmux_owner=""
+  if declare -F find_tmux_owner_file >/dev/null; then
+    tmux_owner="$(find_tmux_owner_file || true)"
+  fi
   if [[ -f "$tmux_owner" ]] && command -v python3 >/dev/null 2>&1 && command -v tmux >/dev/null 2>&1; then
     local tmux_session
     tmux_session="$(python3 - "$tmux_owner" <<'PY' 2>/dev/null || true
