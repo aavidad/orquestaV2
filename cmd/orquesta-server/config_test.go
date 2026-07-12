@@ -2675,7 +2675,7 @@ func TestDomainWorkExecutorFromEnvV0RechazaOPESProductivo(t *testing.T) {
 	}
 }
 
-func TestDomainWorkExecutorFromEnvV0SinOPESQuedaApagado(t *testing.T) {
+func TestDomainWorkExecutorFromEnvV0SinOPESUsaFileDurableV0(t *testing.T) {
 	t.Setenv("ORQUESTA_OPES_BASE_URL", "")
 	t.Setenv("OPES_BASE_URL", "")
 	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_ENABLED", "")
@@ -2687,8 +2687,8 @@ func TestDomainWorkExecutorFromEnvV0SinOPESQuedaApagado(t *testing.T) {
 	if err != nil {
 		t.Fatalf("domainWorkExecutorFromEnvV0: %v", err)
 	}
-	if executor != nil {
-		t.Fatalf("executor debe ser nil sin ORQUESTA_OPES_BASE_URL ni OPES_BASE_URL")
+	if executor == nil {
+		t.Fatalf("executor file debe seguir vivo sin ORQUESTA_OPES_BASE_URL ni OPES_BASE_URL")
 	}
 }
 
