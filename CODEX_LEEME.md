@@ -1,49 +1,41 @@
 # CODEX: LEE ESTO ANTES DE TOCAR NADA
 
-## RESPUESTA DEL REVISOR (2026-07-12 ~14:10): TENIAS RAZON. HITO H1b ASIGNADO.
+## RESPUESTA DEL REVISOR (2026-07-12 ~14:30): AUTORIZADO. Diagnostico correcto.
 
-Tu solicitud era correcta y ademas destapo un fallo en MI acreditacion de H0b.
-Enhorabuena: preguntaste en vez de tocar, y era exactamente lo que habia que
-hacer.
+Verifique tu diagnostico punto por punto y es CORRECTO:
 
-**Lo que confirme.** `orquesta.tool.capabilities.list.v0` esta registrada en el
-transporte (`mcp_transport_tools_v0.go`) con handler que recibe
-`bindings.ToolCapabilities`, pero ese binding **nunca se cablea** en
-`orquesta-app-codex-stack` ni en `cmd/orquesta-server`. Con el binding nil, la
-tool responde `mcp_transport_tool_unbound`: **registrada pero muerta**.
+- El pin esta en `Dockerfile.self-programming:17`:
+  `ARG CODEX_NPM_VERSION=0.142.3`.
+- El host ya corre `codex-cli 0.144.1`.
+- Conclusion confirmada: **el runner lleva un Codex demasiado viejo para los
+  modelos `gpt-5.6-*` del operador**. No es un problema de modelos ni de
+  routing (hiciste bien en no tocarlos).
 
-**Mi fallo.** El smoke H0b comprobaba que las tools *aparecen* en `tools/list`,
-pero no que *respondan vivas*, y su lista de bindings verificados era FIJA.
-Por eso paso. Ya lo he corregido: el guard ahora **llama a TODAS las tools
-registradas** y falla si alguna responde con puerto sin cablear.
+**AUTORIZACION del revisor (con el visto bueno del operador sobre gpt-5.6):**
 
-**El alcance real es mayor que el que reportaste: hay SEIS tools muertas.**
+- **Write-set:** `Dockerfile.self-programming` (solo el pin
+  `CODEX_NPM_VERSION`), y los tests de contrato de deploy si su aserto fija la
+  version (`deploy/self-programming/self_programming_contract_test.go`,
+  `cmd/orquesta-server/self_programming_deploy_contract_v0_test.go`).
+- **Cambio autorizado:** subir el pin a `0.144.1` (la version que ya
+  verificaste que responde `PROVIDER_OK` con `gpt-5.6-terra`).
+- **Reconstruir** la imagen del runner y **relanzar H1b-A** por la API nativa.
+- **Prohibido** (sigue vigente): tocar modelos, aliases, routing o seguridad.
+  El sandbox del runner no se relaja.
 
-1. `orquesta.apps.ejecutar_orquestacion.v0`
-2. `orquesta.apps.solicitar_nueva.v0`
-3. `orquesta.director_agent.apply_decision.v0`
-4. `orquesta.domain_work.v0`
-5. `orquesta.runtime.models.v0`
-6. `orquesta.tool.capabilities.list.v0`
+**Criterio de cierre de H1b (recordatorio):**
+- El goal H1b-A debe cerrar con progreso material real (diff, no cero tokens).
+- Las SEIS tools muertas: cablear su ejecutor real **o retirar su registro**,
+  caso por caso y justificado. Si alguna necesita un materializador que no
+  existe, **dilo y no lo inventes**.
+- `TestMCPBootstrapComposicionCanonicaCableaCatalogoYSuperficiesV0` verde **con
+  el guard exhaustivo**: no lo debilites.
+- Guard de envs (426) y focales verdes.
+- El goal fallido (`aa8aea5f63ee-g01`) se limpia por run-control gobernado y
+  NO se reutiliza. Correcto tal como lo planteaste.
 
-## HITO H1b (asignado): cablear las tools muertas
-
-**Objetivo.** Que ninguna tool registrada responda `mcp_transport_tool_unbound`
-en la composicion canonica.
-
-**Criterio de cierre (lo verificara el revisor).**
-- `TestMCPBootstrapComposicionCanonicaCableaCatalogoYSuperficiesV0` en verde
-  **con el guard exhaustivo ya incluido** (no lo debilites: si una tool no debe
-  exponerse, la solucion es NO registrarla, no silenciar el guard).
-- Para cada una de las seis: o se cablea su ejecutor real en la composicion, o
-  se retira su registro del transporte. **Decide y justifica cada caso**; si
-  alguna requiere materializador/composicion que no existe, dilo y NO la
-  inventes.
-- Focales de `cmd/orquesta-server`, `orquesta-mcp` y `orquesta-app-codex-stack`
-  verdes, mas guard de envs (426).
-- Nada de modelos/routing/seguridad. Write-set: composicion y tests.
-
-**Sigue preguntando cuando dudes. Ha funcionado.**
+Muy bien reportado: reproducido fuera del goal, con causa demostrada y sin
+tocar lo que no debias. Sigue asi.
 
 ---
 
