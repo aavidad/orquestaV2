@@ -26,6 +26,7 @@ no se trabaja como root.
 sudo install -d -o 10001 -g 10001 /srv/orquesta-self/state
 sudo install -d -o 10001 -g 10001 /srv/orquesta-self/runtime
 sudo install -d -o 10001 -g 10001 /srv/orquesta-self/worktrees
+sudo install -d -o 10001 -g 10001 /srv/orquesta-self/workspaces
 sudo install -d -o 10001 -g 10001 /srv/orquesta-self/home
 sudo install -d -o 10001 -g 10001 /srv/orquesta-self/cache/go
 sudo install -d -o 10001 -g 10001 /srv/orquesta-self/cache/gomod
@@ -58,6 +59,9 @@ imagen con el `HEAD` exacto montado en `/workspace/project`.
 
 El compose fija `ORQUESTA_CODEX_COMMAND=/usr/local/bin/codex`, ruta absoluta
 del CLI instalado en la imagen. No depende del `PATH` ni añade credenciales.
+Los worktrees efimeros de goals se escriben exclusivamente en
+`/srv/orquesta-self/workspaces`, montado sobre la raiz determinista derivada de
+`/workspace/project`; no requieren escritura en el rootfs ni acceso al host.
 
 ## Contrato verificable
 

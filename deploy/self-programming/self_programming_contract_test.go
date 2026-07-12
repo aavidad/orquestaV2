@@ -120,6 +120,7 @@ func TestSelfProgrammingDocsV0KeepRemoteSafetyRunbook(t *testing.T) {
 		"/var/run/docker.sock",
 		"no publica puertos externos",
 		"sudo install -d -o 10001 -g 10001 /srv/orquesta-self/state",
+		"sudo install -d -o 10001 -g 10001 /srv/orquesta-self/workspaces",
 		"127.0.0.1:19039",
 		"No se copian credenciales de produccion",
 		"go test -count=1 ./deploy/self-programming",

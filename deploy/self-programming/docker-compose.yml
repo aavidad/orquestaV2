@@ -15,6 +15,7 @@ services:
       - /srv/orquesta-self/state:/workspace/state
       - /srv/orquesta-self/runtime:/workspace/runtime
       - /srv/orquesta-self/worktrees/orquesta:/workspace/project
+      - /srv/orquesta-self/workspaces:/workspace/.orquesta-goal-workspaces-e3af8a7251583e76
       - /srv/orquesta-self/home:/workspace/home
       - /srv/orquesta-self/codex-home:/workspace/codex-home
       - /srv/orquesta-self/cache/go:/workspace/cache/go
