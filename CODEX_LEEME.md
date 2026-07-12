@@ -520,3 +520,50 @@ reacreditacion. Docker reconstruido en `65d41f467`, `startup_ready=true`; replay
 del mismo run archivado devuelve HTTP 200 tanto por REST como por MCP,
 `goal_status=complete`, `closure_status=accepted`, `closure_issues=[]`, marker
 `promotion-complete` preservado y `isError=false` en MCP.
+
+### 2026-07-12 — reapertura Sonyi, tapón MCP y ejecución gobernada de H4
+
+Revisión independiente posterior al falso cierre:
+
+- Reproduje el rojo de
+  `TestGoalFirstProcessBackendsE2EV0ReworkThenClose` en Claude/Gemini por
+  `ports.goal_state_cas_store`. Verifiqué que producción ya usa el store file
+  con CAS y que el fake E2E era el que había quedado por detrás. El fix
+  `8a969a52b` es causal: el focal, la raíz completa y el test del store file
+  quedan verdes. No se acredita el cierre documental `00906c368`.
+- Encontré otro fallo live no recogido por ese E2E:
+  `orquesta.autoprogramming.status.v0` excedía el límite MCP de 65.536 bytes
+  tanto sin filtros como con `queue_limit=5` y con `run_ref`; la respuesta HTTP
+  válida medía aproximadamente 186 KiB. El peso principal estaba en
+  `stale_running` (~103 KiB) y `diagnostics` (~67 KiB).
+- La reparación local pendiente de commit conserva la respuesta completa por
+  HTTP y proyecta solo el transporte MCP cuando supera 48 KiB. Publica
+  `output_projection` con bytes observados/devueltos, totales originales y la
+  ruta de detalle; limita colecciones y refs, y tiene fallback mínimo acotado
+  incluso ante strings/advice hostiles. Una prueba con payload sintético mayor
+  de 64 KiB exige salida menor o igual a 48 KiB; quitar la compactación la deja
+  roja.
+- Las tools amigables ya no dicen `queue_empty_or_not_visible`. Sus contadores
+  declaran `scope=active_queue`, `active_queue_empty` y
+  `terminal_runs_visible`; así `projects=0 tasks=0 runs=0 agents=0` significa
+  cero trabajo activo visible, no ausencia global de historial.
+- Evidencia tras los cambios: suites completas de raíz, `orquesta-mcp`,
+  `cmd/orquesta-server` y `orquesta-app-codex-stack` verdes; focal CAS verde;
+  `TestEnvVarsBudgetMEJ106V0` verde en 426/426, sin env ni ratchet nuevos.
+
+H4 se lanzó exclusivamente por la API local de Orquesta. Primer run
+`request-ref-h4-deadcode-classification-20260712-002`, goal
+`goal-ref-task-autoprogramming-679abcb83943-g01`, cierre accepted y promoción
+`dabf2bff66`. La revisión humana rechazó su calidad: la tabla tenía 38
+`CONECTAR` y 61 `CONSERVAR`, pero el resumen afirmaba 40/59; además usaba
+motivos especulativos y clasificaba cero `BORRAR`. Se lanzó rework causal por
+API, no edición manual: run
+`request-ref-h4-deadcode-classification-rework-20260712-003`, goal
+`goal-ref-task-autoprogramming-58f1aa6dfdc8-g01`, con tres subagentes exigidos,
+write-set exclusivo del documento y criterios contra conservación hipotética.
+Ese rework corrigió el resumen a 38 CONECTAR, 8 BORRAR y 53 CONSERVAR, pero
+dejó motivos hipotéticos en las filas 1–4 y 28. Se rechazó de nuevo la calidad
+y se lanzó el segundo rework focal
+`request-ref-h4-deadcode-classification-rework-20260712-004` /
+`goal-ref-task-autoprogramming-442d1bc0b131-g01`, que obliga a demostrar caller,
+interfaz o registro real para conservar símbolos privados.
