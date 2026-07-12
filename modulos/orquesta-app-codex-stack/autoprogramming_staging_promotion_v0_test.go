@@ -418,6 +418,19 @@ func TestAutoprogrammingPromotionEffectWithIntegrationStatusV0DoesNotInferIntegr
 	}
 }
 
+func TestAutoprogrammingPromotionGoalContextRefV0PrefijoVacioNoCapturaOtroKindV0(t *testing.T) {
+	refs := []orquestagoal.GoalContextRefV0{
+		{Kind: "request", Ref: "request-ref-no-es-workspace"},
+		{Kind: "worktree", Ref: "worktree_ref:worktree-ref-legacy"},
+	}
+	if got := autoprogrammingPromotionGoalContextRefV0(refs, "goal_workspace", ""); got != "" {
+		t.Fatalf("prefijo vacio capturo ref ajena: %q", got)
+	}
+	if got := autoprogrammingPromotionGoalContextRefV0(refs, "worktree_missing", "worktree_ref:"); got != "worktree-ref-legacy" {
+		t.Fatalf("fallback legacy perdido: %q", got)
+	}
+}
+
 func (fake *fakeAutoprogrammingPromotionPortV0) ArchiveAutoprogrammingStagingV0(
 	_ context.Context,
 	command orquestaautoprogramming.AutoprogrammingStagingCleanupCommandV0,

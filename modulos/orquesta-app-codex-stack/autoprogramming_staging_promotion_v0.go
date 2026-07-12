@@ -309,9 +309,12 @@ func autoprogrammingPromotionGoalContextRefV0(
 			return strings.TrimSpace(ref.Ref)
 		}
 	}
-	for _, ref := range refs {
-		if value, ok := strings.CutPrefix(strings.TrimSpace(ref.Ref), legacyPrefix); ok {
-			return strings.TrimSpace(value)
+	legacyPrefix = strings.TrimSpace(legacyPrefix)
+	if legacyPrefix != "" {
+		for _, ref := range refs {
+			if value, ok := strings.CutPrefix(strings.TrimSpace(ref.Ref), legacyPrefix); ok {
+				return strings.TrimSpace(value)
+			}
 		}
 	}
 	return ""
