@@ -135,18 +135,26 @@ func TestMCPRealTransportV0HandshakeCompatibleClienteMCP(t *testing.T) {
 }
 
 func TestMCPRealTransportV0ToleraArgumentsComoStringJSONObjectV0(t *testing.T) {
-	handler, err := newMCPRealHTTPHandlerV0(orquestamcp.MCPTransportBindingsV0{})
+	handler, err := newMCPRealHTTPHandlerV0(orquestamcp.MCPTransportBindingsV0{
+		RunQueuePriority: fakeWorkspaceTimelineQueueV0{now: time.Now().UTC()},
+	})
 	if err != nil {
 		t.Fatalf("handler: %v", err)
 	}
 	server := newLocalHTTPServerForTestV0(t, handler)
 	defer server.Close()
 
-	var result mcpToolCallResultV0
-	callMCPJSONRPCTestV0(t, server.URL+mcpRealHTTPPathV0, "tools/call", map[string]any{
+	rpc := callMCPJSONRPCRawTestV0(t, server.URL+mcpRealHTTPPathV0, "tools/call", map[string]any{
 		"name":      "orquesta.status.v0",
 		"arguments": `{"include_recent_errors":true}`,
-	}, &result)
+	})
+	if !bytes.Contains(rpc.Result, []byte(`"isError":false`)) {
+		t.Fatalf("tools/call exitoso debe publicar isError=false: %s", rpc.Result)
+	}
+	var result mcpToolCallResultV0
+	if err := json.Unmarshal(rpc.Result, &result); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
 	if len(result.Content) == 0 {
 		t.Fatalf("tool result inesperado: %+v", result)
 	}

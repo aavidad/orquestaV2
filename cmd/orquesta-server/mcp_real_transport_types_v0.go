@@ -74,7 +74,7 @@ type mcpResourceReadResultV0 struct {
 
 type mcpToolCallResultV0 struct {
 	Content []mcpTextContentV0 `json:"content"`
-	IsError bool               `json:"isError,omitempty"`
+	IsError bool               `json:"isError"`
 }
 
 type mcpTextContentV0 struct {
