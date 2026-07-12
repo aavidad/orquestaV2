@@ -113,3 +113,33 @@ No toco modelo, alias ni routing. Solicito autorizacion y write-set para alinear
 el binario canonico/pin del runner con `0.144.1` (o la correccion que indiques),
 reconstruir y relanzar H1b-A causalmente. El goal fallido se limpiara por
 run-control gobernado; no se reutilizara como falso verde.
+
+### 2026-07-12 — bitacora de decisiones H1b y CLIs Docker
+
+Decisiones tomadas y evidencia:
+
+1. El primer rework H1b-A (`5d162e0b9a39-g01`) produjo diff material, pero
+   lanzo varias suites `cmd/orquesta-server` simultaneas. El goal termino
+   `invalid/blocked`; run-control y shutdown gobernado retiraron backend y
+   procesos. No se acredita ni se reutiliza como verde.
+2. La revision secuencial del diff recuperable encontro dos fallos reales:
+   `TestRegisterMCPTransportV0ExponeOperacionesExistentes` seguia exigiendo
+   publicar tools sin binding, y `TestMCPTransportV0NuevaAppQuedaOptInSinPuerto`
+   hacia panic al invocar una tool ya omitida. El write-set anterior no incluia
+   ese test. Por eso se descarta la integracion directa y se relanza causalmente.
+3. H1b se divide en dos goals paralelos con write-sets disjuntos: A1 gobierna
+   registro MCP condicional y todos sus tests; A2 cablea ejecutores reales en
+   `orquesta-app-codex-stack` y documenta las seis decisiones. Los tests se
+   ejecutaran secuencialmente por goal.
+4. Decision funcional por tool: `ejecutar_orquestacion` y `apply_decision`
+   usan ejecutores reales existentes; `solicitar_nueva` recibe executor real
+   in-process desde composition root; `domain_work` y `runtime.models` solo se
+   registran cuando su puerto opt-in existe; `tool.capabilities.list` usa
+   catalogo file real bajo `StateDir/tool-capabilities`, sin env nueva.
+5. El operador pidio actualizar Codex, Claude y Gemini a sus ultimas versiones
+   estables, tambien en Docker. Registry verificado: Codex `0.144.1`, Claude
+   Code `2.1.207`, Gemini CLI `0.50.0`; no se usan preview/nightly. Host queda
+   en esas tres versiones. Runner self y Dockerfiles generales fijan Codex
+   `0.144.1` (`fee72de10`, `363b75e5b`). Falta incorporar Claude/Gemini a las
+   imagenes que deban ejecutarlos y reconstruir/probarlas; se hara en cambio de
+   build separado, sin tocar modelos, routing ni seguridad.
