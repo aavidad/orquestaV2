@@ -29,7 +29,7 @@ Autor: Claude (director/revisor). Fecha: 2026-07-12.
 Destinatario: Codex. Esta hoja es **vinculante** y sustituye a cualquier
 interpretacion previa de "cerrar conectores".
 
-## Estado de partida (verificado por el revisor, no autodeclarado)
+## Estado de partida historico (superado; ver estado final al inicio)
 
 - **NUCLEO: cerrado sin condiciones** (BUG-226 cerrado con prueba empirica
   real; `befb3707b`).
@@ -42,11 +42,13 @@ interpretacion previa de "cerrar conectores".
     tests atestiguados `passed` y shutdown gobernado sin residuos.
   - [x] **H0d** (canal operador-director): cerrado. Buzon durable opt-in
     (`c66b9e009`) + test de `tools/call` durable (`862c1a6a2`).
-  - [ ] **H0b** (bootstrap MCP/HTTP): SIN EMPEZAR.
-  - [ ] **H0c** (ciclo delivery -> review -> closure): SIN EMPEZAR.
+  - [x] **H0b** (bootstrap MCP/HTTP): ACREDITADO en `e82736fc3`.
+  - [x] **H0c** (ciclo delivery -> review -> closure): ACREDITADO en
+    `fd2e18f7d`.
 
-Cuando H0b y H0c esten acreditados por el revisor, **Orquesta esta terminada**
-en su frente de plataforma y pasa a la fase de app real.
+H0b y H0c quedaron acreditados por el revisor; Orquesta termino su frente de
+plataforma y completo despues la fase de app real documentada en
+`CODEX_LEEME.md`.
 
 ## Reglas que aplican a los dos hitos (no negociables)
 

@@ -242,17 +242,15 @@ diagnostico T9201.
   los reproducibles en local. Para cada uno: reproducir, arreglar, test que
   falle sin el fix, y cierre con evidencia real. Los residuales de campo
   (remoto/OPES/proveedor real) NO son tuyos: dejalos abiertos y anotados.
-- [ ] H1b: TOOLS. Programacion de tools nuevas de Orquesta en tu carril. Cada
-  tool: contrato claro, tests focales, sin logica de dominio duplicada (el
-  nucleo ya es autoridad unica: no reimplementes reconciliacion causal ni
-  gobierno de progreso material).
-- [ ] H1c: Preferentemente trabaja DENTRO de goals que Orquesta te entregue
+- [x] H1b: TOOLS CERRADO. Las seis tools canonicas estan vivas y gobernadas;
+  la app real creo ademas `orquesta-native-smoke-tool` por el circuito completo.
+- H1c (regla permanente): preferentemente trabaja DENTRO de goals que Orquesta te entregue
   (write-set gobernado). Si trabajas fuera de un goal, respeta igual el
   write-set del bug/tool y no toques el carril de Codex.
-- [ ] H2: Si un goal se te queda sin progreso material (sin diff, test, result
+- H2 (regla permanente): si un goal se te queda sin progreso material (sin diff, test, result
   ni receipt), NO sigas quemando contexto: devuelvelo con causa concreta. El
   gobierno de progreso material (BUG-226) esta activo y cortara igualmente.
-- [ ] H3: Al terminar un hito, avisar al revisor con la senal (una linea):
+- H3 (regla permanente): al terminar un hito, avisar al revisor con la senal (una linea):
 
       echo "H<n> cerrado en <commit>: <resumen>" > /home/alberto/Trabajo/orquesta/.orquesta-revisor-wake
 
