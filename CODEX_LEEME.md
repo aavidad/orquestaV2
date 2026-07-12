@@ -1,3 +1,56 @@
+# ⏭️ COLA DE TRABAJO — NO TE PARES. Al terminar una, sigues con la siguiente.
+
+**No esperes visto bueno del revisor entre tareas.** Ya estan todas aprobadas
+abajo. Cierras una, commiteas, avisas, y **arrancas la siguiente sin pausa**.
+Si algo te bloquea, lo escribes aqui y **saltas a la siguiente de la lista**.
+
+| # | Tarea | Estado |
+|---|---|---|
+| T1 | Ejecutar los **15 BORRAR autorizados** (28 y 29 CONGELADOS) | AUTORIZADO — hazlo ya |
+| T2 | **H5-A.1**: conectar `orquesta-document-extraction` | AUTORIZADO |
+| T3 | **H5-A.2**: conectar `orquesta-data-ingestion` | AUTORIZADO |
+| T4 | **H5-A.3**: conectar las 3 capacidades muertas restantes | AUTORIZADO |
+| T5 | **H5-B**: implementar el consejo (roles en caliente + override) | AUTORIZADO |
+| T6 | **H4-CONECTAR**: las 38 funciones huerfanas que si valen | AUTORIZADO |
+
+## T1 — Los 15 borrados (empieza AHORA)
+
+Tabla validada: 38 CONECTAR / 15 BORRAR / 46 CONSERVAR / 2 DIFERIDOS = 99.
+**Entradas 28 y 29 NO se tocan** (viven en `document-extraction`, que T2 conecta).
+Commit propio, guards verdes (`TestEnvVarsBudgetMEJ106V0` en 426), focales del
+paquete tocado. No `go test ./...` global.
+
+## T2/T3 — H5-A: conectar extraccion e ingesta (LO QUE DESBLOQUEA EL BAREMADOR)
+
+Estas dos son **prioridad maxima** despues de T1. El operador lleva dias
+esperando un informe del Baremador que necesita **leer un PDF de un proceso
+selectivo**, y hoy Orquesta **no puede** porque la capacidad existe y no esta
+enchufada.
+
+Criterio de cierre (lo verificare con prueba de mutacion):
+1. El servidor **importa** el modulo (hoy ni lo importa).
+2. La capacidad se expone por **tool MCP real**, y responde de verdad:
+   nada de `*_port_unavailable`. El guard exhaustivo de bootstrap debe cubrirla.
+3. **Prueba de uso real, no de test**: extraer texto de un PDF de verdad y
+   ensenar la salida. Un test verde con fake **no acredita**: ya nos mordio.
+4. La politica por defecto (`DefaultDocumentExtractionPolicyV0`, entrada 29,
+   congelada precisamente para esto) queda **cableada**, no borrada.
+
+## T5 — H5-B: el consejo, EN CODIGO
+
+El diseno esta aprobado y cerrado (roles en caliente por presupuesto, override
+manual del operador con precedencia, veto de seguridad innegociable, autor que
+no se acredita a si mismo). **Ya no hay nada que disenar: se implementa.**
+El operador pregunto por que nunca ha visto al consejo en accion. La respuesta
+es que **no existe en codigo**. Que exista.
+
+## Regla permanente
+
+Cuando cierres algo, **no te quedes esperandome**. Avisas y sigues. El revisor
+te alcanzara; tu no te pares.
+
+---
+
 # CODEX: LEE ESTO ANTES DE TOCAR NADA
 
 ## 0. ✅ TAPON MCP: ACREDITADO POR EL REVISOR (verificacion adversarial superada)
