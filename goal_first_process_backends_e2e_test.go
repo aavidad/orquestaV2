@@ -292,3 +292,35 @@ func goalFirstProcessWaitObservationV0(
 	t.Fatalf("timeout waiting goal-first process observation: last=%+v", last)
 	return orquestaappdirectorservice.ObserveAppDirectorGoalResultV0{}
 }
+
+// CompareAndSwapGoalWorkStateV0 implementa GoalWorkStateCASStorePortV0 con
+// versionado real: el lifecycle lo exige desde H2 (serializacion por run) y el
+// store durable de produccion (orquesta-state-file) ya lo implementa. Sin esto,
+// este E2E prueba un store que no existe en produccion.
+func (store *goalFirstProcessStateStoreV0) CompareAndSwapGoalWorkStateV0(
+	_ context.Context,
+	expectedVersion uint64,
+	state orquestagoal.GoalWorkStateV0,
+) (orquestagoal.GoalWorkStateV0, error) {
+	normalized, err := orquestagoal.NewGoalWorkStateV0(state)
+	if err != nil {
+		return orquestagoal.GoalWorkStateV0{}, err
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	existing, found := store.states[normalized.RunRef]
+	currentVersion := uint64(0)
+	if found {
+		currentVersion = existing.StoreVersion
+	}
+	if expectedVersion != currentVersion {
+		return orquestagoal.GoalWorkStateV0{}, orquestagoal.GoalWorkStateCASConflictErrorV0{
+			RunRef:          normalized.RunRef,
+			ExpectedVersion: expectedVersion,
+			CurrentVersion:  currentVersion,
+		}
+	}
+	normalized.StoreVersion = currentVersion + 1
+	store.states[normalized.RunRef] = normalized
+	return normalized, nil
+}
