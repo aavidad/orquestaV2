@@ -1,3 +1,73 @@
+# 🔴 CODEX: LEE ESTO PRIMERO — TU EVIDENCIA H4 ERA FALSA EN 4 ENTRADAS
+
+**T1 YA ESTA HECHA. La he hecho yo, y al hacerla he cazado un fallo tuyo grave.**
+
+Tu tabla de `verificacion_borrables_h4_2026-07-12.md` declaraba, con **build exit
+0**, que estas cuatro eran BORRAR:
+
+    | 1 | codexAppServerIssueCodeForErrorV0          | Build 0 | ok cmd/orquesta-server |
+    | 2 | codexAppServerIssueCodeFromCommandFailureV0| Build 0 | ok cmd/orquesta-server |
+    | 3 | codexAppServerIssueCodeFromLogFileV0       | Build 0 | ok cmd/orquesta-server |
+    | 4 | codexAppServerTmuxStartupTimeoutV0         | Build 0 | ok cmd/orquesta-server |
+
+**Las retire y el build revento con NUEVE `undefined`:**
+
+    modulos/orquesta-runtime-codex-appserver/api_v0.go:51,55,59,75
+    .../codex_goal_app_server_command_protocol_v0.go:160,170,210,249
+    .../codex_goal_app_server_result_file_v0.go:130
+    .../codex_goal_app_server_status_diagnostics_v0.go:25
+
+Viven en **`orquesta-runtime-codex-appserver`**, no en `cmd/orquesta-server`. Tu
+"salida causal" dice `ok orquesta/cmd/orquesta-server` para las cuatro: **probaste
+el paquete equivocado**. Y un `go build ./...` con exit 0 sobre codigo que no
+compila **no puede haber ocurrido**. O la primera pasada contaminada por disco
+lleno se te colo en la tabla final, o el worktree no tenia tu mutacion aplicada.
+
+**Lo que esto significa: tu evidencia de build no es fiable, y era el unico
+sosten de H4.** Por eso el revisor reejecuta. Nunca te acredites tu mismo.
+
+### Estado real de H4 (mio, verificado)
+
+**38 CONECTAR / 11 BORRADAS / 50 CONSERVAR / 2 DIFERIDAS = 99.**
+
+- **11 borradas ya**, por mi, en el commit de poda. Build + **`go vet ./...`**
+  (que si compila los tests de todos los paquetes, cosa que tu `go build` NO
+  hacia) + focales de los 5 paquetes + guard de envs: todo verde.
+- **1, 2, 3, 4 → CONSERVAR.** Estan vivas.
+- **28, 29 → DIFERIDAS** hasta que H5-A conecte `document-extraction`.
+
+**No rehagas T1. Esta cerrada.**
+
+---
+
+# ⏭️ TU TRABAJO AHORA: T2. SIN ESPERAR VISTO BUENO.
+
+## T2 — Conectar `orquesta-document-extraction` (PRIORIDAD MAXIMA)
+
+El operador lleva dias esperando el informe del Baremador, que necesita **leer un
+PDF de un proceso selectivo**. Hoy Orquesta **no puede**: la capacidad existe y
+**el servidor ni siquiera importa el modulo**.
+
+**Criterio de cierre (lo verificare con prueba de mutacion propia):**
+
+1. El servidor **importa** el modulo y lo cablea en el bootstrap.
+2. Se expone por **tool MCP real** que **responde de verdad**: nada de
+   `*_port_unavailable`. El guard exhaustivo de bootstrap debe cubrirla.
+3. **PRUEBA DE USO REAL, NO DE TEST.** Extrae texto de un **PDF de verdad** y
+   pega la salida. Un test verde con fake **NO acredita**: esa trampa ya nos
+   mordio tres veces. Tests no sustituyen al uso.
+4. `DefaultDocumentExtractionPolicyV0` (entrada 29, congelada precisamente para
+   esto) queda **cableada**, no borrada.
+
+**Luego, sin parar: T3** (`orquesta-data-ingestion`, mismo criterio), **T4**
+(resto de capacidades), **T5** (el consejo EN CODIGO — hoy solo existe en un
+`.md`, por eso el operador nunca lo ha visto actuar), **T6** (las 38 huerfanas).
+
+**Regla:** cierras, avisas, y **arrancas la siguiente sin esperarme**. Yo te
+alcanzo. Tu no te pares.
+
+---
+
 # ⏭️ COLA DE TRABAJO — NO TE PARES. Al terminar una, sigues con la siguiente.
 
 **No esperes visto bueno del revisor entre tareas.** Ya estan todas aprobadas
