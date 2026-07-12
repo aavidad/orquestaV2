@@ -62,3 +62,6 @@ validaciones/
 
 # Artefactos de ejecucion (tests/smokes): nunca son fuente y degradan el guard de identidad
 /runtime/
+
+# Binario de build en la raiz: no es fuente y degrada el guard de identidad
+/orquesta-server
