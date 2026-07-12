@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -86,6 +87,30 @@ func verifyCanonicalMCPBootstrapV0(baseURL string, stack orquestaappcodexstack.S
 		if !actualTools[expected.Name] {
 			return fmt.Errorf("mcp bootstrap: binding declarado sin tool registrada: %s", expected.Name)
 		}
+	}
+
+	// Guard exhaustivo: registrado != cableado. Llama a TODAS las tools
+	// registradas y falla si alguna responde con puerto sin cablear. Sin este
+	// barrido, una tool declarada con binding nil (p.ej.
+	// orquesta.tool.capabilities.list.v0) pasaba el bootstrap: aparecia en
+	// tools/list y nadie la llamaba nunca.
+	unbound := []string{}
+	for _, tool := range listedTools.Tools {
+		var raw json.RawMessage
+		if err := callMCPJSONRPCBootstrapV0(baseURL, "tools/call", map[string]any{
+			"name":      tool.Name,
+			"arguments": map[string]any{},
+		}, &raw); err != nil {
+			continue // error de transporte/validacion: no es puerto sin cablear
+		}
+		if reason := bootstrapMissingPortReasonV0(string(raw)); reason != "" {
+			unbound = append(unbound, tool.Name+" ("+reason+")")
+		}
+	}
+
+	if len(unbound) > 0 {
+		sort.Strings(unbound)
+		return fmt.Errorf("mcp bootstrap: tools registradas pero NO cableadas (%d): %s", len(unbound), strings.Join(unbound, ", "))
 	}
 
 	var listedResources mcpResourceListResultV0
@@ -198,7 +223,7 @@ func callMCPJSONRPCBootstrapV0(baseURL, method string, params, output any) error
 
 func bootstrapMissingPortReasonV0(payload string) string {
 	lower := strings.ToLower(payload)
-	for _, reason := range []string{"port_unavailable", "port_no_disponible", "puerto_no_disponible", "transport_unbound", "operator_message_port_unavailable"} {
+	for _, reason := range []string{"port_unavailable", "port_no_disponible", "puerto_no_disponible", "transport_unbound", "mcp_transport_tool_unbound", "operator_message_port_unavailable"} {
 		if strings.Contains(lower, reason) {
 			return reason
 		}
