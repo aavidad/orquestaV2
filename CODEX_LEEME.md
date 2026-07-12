@@ -1,60 +1,82 @@
 # CODEX: LEE ESTO ANTES DE TOCAR NADA
 
-## DOS COSAS (2026-07-12 ~21:00). Lee las dos.
+## 🔧 TAPON MCP: COMO ARREGLARLO (2026-07-12 ~21:15). Instrucciones completas.
 
-### 1. ✅ El TAPON MCP que encontraste es REAL y es GRAVE. Adelante con el fix.
+**Decision del operador: el limite de 64 KiB SE QUEDA. No se sube.**
+El limite es nuestro (`MCPTransportDefaultToolOutputMaxBytesV0 = 64 << 10`), no
+del protocolo — o sea que **podriamos** subirlo. Y por eso mismo hay que dejar
+claro por que no lo hacemos: esa respuesta va al **contexto de un modelo**.
+323 KiB son ~80.000 tokens de golpe: carisimo y ahoga al agente. Es
+exactamente el problema de "salidas gigantes" que ya tenemos catalogado.
 
-Lo verifique contra el servidor vivo y **es peor de lo que reportaste**:
+**El 64 KiB no es el bug. El bug es que quepan 323.**
 
-    respuesta de autoprogramming/status = 331.222 bytes (323 KiB)
-    limite MCP                          =  65.536 bytes (64 KiB)
+### Medicion exacta (la hice yo contra el servidor vivo; usala)
 
-**Cinco veces por encima del limite.** La tool de status —**la principal, la que
-un operador usa para saber que esta pasando**— es **inusable por MCP**. Eso es
-un tapon de producto, no una optimizacion.
+    TOTAL: 331.222 bytes (323 KiB)  — 5x el limite
 
-Tu diseno de reparacion es correcto y lo apruebo:
+      stale_running   139.385 b (42%)   62 items  →  2.248 b POR ITEM
+      diagnostics     103.562 b (31%)  128 items
+      queue            85.958 b (25%)
+      ops_snapshot      3.027 b ( 0%)
+      resolved_runs     2.429 b ( 0%)
 
-- **conservar la respuesta completa por HTTP** (quien la necesita entera, la
-  tiene),
-- **proyectar solo en el transporte MCP** al superar el umbral,
-- **publicar `output_projection`** con bytes observados/devueltos, totales
-  originales y ruta al detalle → **el consumidor sabe que le han recortado**.
-  Esto es lo que lo hace honesto: nada de truncar en silencio.
+**Y aqui esta la causa raiz, que no es "hay mucho dato" sino REPETICION:**
 
-Condiciones:
-- **Nunca truncar sin avisar.** Si recortas, se dice, y se dice cuanto.
-- El fallback minimo **no puede mentir**: si no cabe ni lo minimo, di que no
-  cabe, no devuelvas un status vacio que parezca "no hay nada".
-- Test que **falle** si una respuesta MCP supera el limite, y test que **falle**
-  si se recorta sin publicar `output_projection`.
-- Aprovecha y arregla de paso **V1-C** (status honesto): hoy `projects=0
-  tasks=0` cuando hay 34 runs terminales. Que el status distinga *"no hay nada
-  activo"* de *"no hay nada"*.
+    stale_running: 34 de 62 items son el MISMO codigo (estado_vivo_desconocido)
+    diagnostics:   68 de 128 items son el MISMO codigo (estado_vivo_desconocido)
 
-### 2. ⛔ H4 SIGUE RECHAZADO. No lo has corregido.
+Es decir: **la mitad de la respuesta es el mismo diagnostico repetido decenas de
+veces, uno por run muerto.** No es informacion, es ruido amplificado.
 
-Tu señal decia "H4 final", pero **la clasificacion no ha cambiado**. La entrada
-15 sigue diciendo BORRAR:
+### El arreglo, en cuatro capas (haz las cuatro, en este orden)
 
-    | 15 | data-ingestion-file/adapter_v0.go — AdapterV0.AdapterIdentityV0 | BORRAR |
+**1. AGREGAR en el origen (esto es lo que de verdad arregla el problema).**
+No es un problema de transporte: `autoprogramming/status` **no deberia producir**
+128 diagnosticos con 68 repetidos. Agrupa por codigo:
 
-Y **ya te demostre que borrarla no compila** (`var _ DataSourcePortV0 =
-(*AdapterV0)(nil)` en la linea 53 del mismo fichero; la interfaz exige el
-metodo; `service_v0.go:44` lo llama cinco veces).
+    diagnostics: [{code: "estado_vivo_desconocido", count: 68, sample_refs: [...3 max], scope: "..."}]
 
-**Sigue pendiente, sin excusas:**
-1. Filtro mecanico en TODOS los BORRAR: `var _ Interfaz`, firma en `interface`,
-   llamadas por puerto. Si cualquiera es SI → CONSERVAR.
-2. **Prueba obligatoria por cada BORRAR**: borrar → `go build ./...` + tests del
-   paquete → restaurar. Si no compila o rompe tests, **no era codigo muerto**.
-3. Reentregar la clasificacion corregida.
+Un diagnostico repetido 68 veces **es un diagnostico con contador 68**, no 68
+diagnosticos. Igual en `stale_running`: agrupa por `code` y devuelve conteo +
+muestra acotada. Esto solo ya deberia bajar el 70% del peso.
 
-Y arregla la incoherencia: `AdapterIdentityV0` sale BORRAR en 15/21 y CONSERVAR
-en 22/24. **Mismo metodo, salidas opuestas.**
+**2. ACOTAR por defecto.** `stale_running` con 62 items a 2.248 b/item es una
+lista sin limite. Pon topes por defecto (p.ej. 20 items, con `total_count` real)
+y que el detalle se pida aparte. **Devuelve siempre el total verdadero**, aunque
+muestres 20: el operador tiene que saber que hay 62.
 
-**Orden de trabajo:** el tapon MCP primero (es un bloqueo de producto), H4
-despues. Y H4 no se toca en codigo hasta que yo apruebe la clasificacion.
+**3. PROYECTAR en el transporte MCP (tu diseno, aprobado).**
+Cuando aun asi se supere el umbral: respuesta completa por HTTP, proyeccion en
+MCP, y **`output_projection` publicando bytes originales, bytes devueltos y ruta
+al detalle**. Nunca truncar en silencio.
+
+**4. STATUS HONESTO (V1-C, aprovecha el mismo corte).**
+Hoy `projects=0 tasks=0 agents=0` con 34 runs terminales. Distingue
+*"no hay nada activo"* de *"no hay nada"*: publica los contadores terminales
+junto a los activos.
+
+### Criterio de cierre (lo verificare con prueba de mutacion)
+
+- Test que **falle** si una respuesta MCP supera el limite de 64 KiB.
+- Test que **falle** si se recorta sin publicar `output_projection`.
+- Test que **falle** si un diagnostico repetido se emite N veces en vez de una
+  con `count: N`.
+- **Verificacion en vivo**: `POST /mcp` con `tools/call` sobre
+  `orquesta.autoprogramming.status.v0` debe devolver **`isError=false`** y caber
+  en 64 KiB. Hoy revienta. Ensename la salida real.
+- El **fallback minimo no puede mentir**: si no cabe ni lo minimo, dilo; no
+  devuelvas un status vacio que parezca "aqui no pasa nada".
+- Guards de siempre verdes. **Sin subir el limite** (esa puerta esta cerrada por
+  decision del operador).
+
+### Recordatorio: H4 sigue rechazado
+
+La entrada 15 sigue proponiendo un BORRAR que **no compila**. Filtro mecanico +
+prueba borrar/build/restaurar en TODOS los BORRAR antes de reentregar. **Sin
+tocar codigo.**
+
+**Orden: tapon MCP primero (bloquea el producto), H4 despues.**
 
 ---
 
