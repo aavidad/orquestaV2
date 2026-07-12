@@ -1,41 +1,56 @@
 # CODEX: LEE ESTO ANTES DE TOCAR NADA
 
-## RESPUESTA DEL REVISOR (2026-07-12 ~14:30): AUTORIZADO. Diagnostico correcto.
+## H1b — ORDEN DEL OPERADOR (2026-07-12 ~14:30): CABLEAR, NO BORRAR
 
-Verifique tu diagnostico punto por punto y es CORRECTO:
+El operador ha decidido: **si las tools son validas, se cablean; NO se
+borran**. Esa es la linea. Ninguna de las seis se retira del registro sin
+autorizacion explicita suya.
 
-- El pin esta en `Dockerfile.self-programming:17`:
-  `ARG CODEX_NPM_VERSION=0.142.3`.
-- El host ya corre `codex-cli 0.144.1`.
-- Conclusion confirmada: **el runner lleva un Codex demasiado viejo para los
-  modelos `gpt-5.6-*` del operador**. No es un problema de modelos ni de
-  routing (hiciste bien en no tocarlos).
+### Analisis del revisor (ya hecho, no lo repitas)
 
-**AUTORIZACION del revisor (con el visto bueno del operador sobre gpt-5.6):**
+Verifique el estado real de las seis y **ninguna tiene ejecutor concreto
+implementado** (cero implementaciones declaradas del port en todo el repo):
 
-- **Write-set:** `Dockerfile.self-programming` (solo el pin
-  `CODEX_NPM_VERSION`), y los tests de contrato de deploy si su aserto fija la
-  version (`deploy/self-programming/self_programming_contract_test.go`,
-  `cmd/orquesta-server/self_programming_deploy_contract_v0_test.go`).
-- **Cambio autorizado:** subir el pin a `0.144.1` (la version que ya
-  verificaste que responde `PROVIDER_OK` con `gpt-5.6-terra`).
-- **Reconstruir** la imagen del runner y **relanzar H1b-A** por la API nativa.
-- **Prohibido** (sigue vigente): tocar modelos, aliases, routing o seguridad.
-  El sandbox del runner no se relaja.
+| Tool | Binding | Estado real |
+|---|---|---|
+| `orquesta.apps.ejecutar_orquestacion.v0` | `EjecutarOrquestacion` | Existe `NewMCPEjecutarOrquestacionAppToolExecutorV0(ports orquestaapprunner.RunPreparedAppOrchestrationPortsV0)`. **Es el mas cercano a cablearse**: hay que construir esos ports en la composicion. |
+| `orquesta.apps.solicitar_nueva.v0` | `NuevaApp` | Solo hay handler de transporte; sin executor concreto. |
+| `orquesta.director_agent.apply_decision.v0` | — | Sin implementacion. |
+| `orquesta.domain_work.v0` | `DomainWork` | El stack lo propaga desde `config.DomainWork`, pero **nadie construye un DomainWork real** en `cmd/orquesta-server`. |
+| `orquesta.runtime.models.v0` | `RuntimeModels` | `RuntimeModelManagerPortV0` es una interfaz **sin implementacion** en el repo. |
+| `orquesta.tool.capabilities.list.v0` | `ToolCapabilities` | La registraste tu en `9d8c312b8`; su materializador sigue pendiente (lo dijiste tu mismo). |
 
-**Criterio de cierre de H1b (recordatorio):**
-- El goal H1b-A debe cerrar con progreso material real (diff, no cero tokens).
-- Las SEIS tools muertas: cablear su ejecutor real **o retirar su registro**,
-  caso por caso y justificado. Si alguna necesita un materializador que no
-  existe, **dilo y no lo inventes**.
-- `TestMCPBootstrapComposicionCanonicaCableaCatalogoYSuperficiesV0` verde **con
-  el guard exhaustivo**: no lo debilites.
-- Guard de envs (426) y focales verdes.
-- El goal fallido (`aa8aea5f63ee-g01`) se limpia por run-control gobernado y
-  NO se reutiliza. Correcto tal como lo planteaste.
+**Conclusion:** "cablear" aqui **no es enchufar algo que ya existe: es
+implementarlo**. Es trabajo de verdad, no de fontaneria.
 
-Muy bien reportado: reproducido fuera del goal, con causa demostrada y sin
-tocar lo que no debias. Sigue asi.
+### Como quiero que lo hagas
+
+Una tool por vez, en este orden (de mas cerca a mas lejos):
+
+1. `ejecutar_orquestacion` (tiene executor; construye sus ports).
+2. `domain_work` (el stack ya lo propaga; falta la implementacion real).
+3. `runtime.models` (implementa `RuntimeModelManagerPortV0` — **OJO: sin tocar
+   modelos ni routing; solo exponer lo que el routing ya decide**).
+4. `tool.capabilities.list` (tu materializador pendiente).
+5. `apps.solicitar_nueva` y `director_agent.apply_decision`.
+
+Para cada una:
+- **Un commit por tool**, con su test.
+- Si al abrirla ves que la implementacion real exige decisiones de producto
+  que no estan tomadas, **PARA y escribelo aqui**. No la inventes ni la
+  simules: una tool que responde algo falso es peor que una tool muerta.
+- **No debilites** el guard exhaustivo
+  (`TestMCPBootstrapComposicionCanonicaCableaCatalogoYSuperficiesV0`). El
+  rojo actual (6 tools) es correcto: es tu lista de trabajo. Ira bajando a
+  medida que cierres cada una.
+- Prohibido seguir vigente: modelos, aliases, routing, seguridad.
+
+### Estado que ya cerraste (bien hecho)
+
+- Pin del runner a Codex `0.144.1` (`fee72de10`) y alineado en las imagenes
+  generales (`363b75e5b`). Verificado por el revisor: el contrato de deploy
+  pasa. Con eso el runner ya puede hablar con los modelos `gpt-5.6-*`.
+- Relanza el goal H1b-A cuando quieras: el bloqueo de version esta resuelto.
 
 ---
 
