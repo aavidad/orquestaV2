@@ -70,7 +70,7 @@ Fuente vinculante: `docs/auditorias/codigo_inalcanzable_2026-07-12.txt`, generad
 | 64 | `modulos/orquesta-tool-capability-file/store_v0.go` — `ToolOperationFileStoreV0.GetToolOperationRecordByReceiptRefV0` | CONECTAR | Lectura por receipt necesaria para replay/idempotencia de operaciones de tools. |
 | 65 | `modulos/orquesta-tool-capability-file/store_v0.go` — `ToolOperationFileStoreV0.ListToolOperationReceiptsV0` | CONECTAR | Listado de receipts necesario para auditoría y recuperación durable del store. |
 | 66 | `modulos/orquesta-tool-capability/usecase_v0.go` — `UninstallGeneratedAppToolV0` | CONECTAR | Caso de uso de desinstalación declarado; debe exponerse por adaptador gobernado si existe la operación. |
-| 67 | `modulos/orquesta-web/autoprogramming_prepare_run_client_v0.go` — `autoprogrammingStatusToolInputV0` | CONSERVAR | DTO privado del transporte; puede ser instanciado por encoding/reflection y mantiene el schema del cliente. |
+| 67 | `modulos/orquesta-web/autoprogramming_prepare_run_client_v0.go` — `autoprogrammingStatusToolInputV0` | BORRAR | DTO privado sin referencias de uso en el repositorio; la búsqueda exacta solo encuentra su declaración. No hay contrato de reflexión ni consumidor externo documentado. |
 | 68 | `modulos/orquesta-web/autoprogramming_prepare_run_client_v0.go` — `decodeAutoprogrammingStatusResponseV0` | CONECTAR | Decodificador de status; debe usarse para validar respuestas REST antes de proyectarlas. |
 | 69 | `modulos/orquesta-web/autoprogramming_prepare_run_client_v0.go` — `normalizeAutoprogrammingStatusQueryV0` | CONECTAR | Normaliza query de status; debe proteger refs y estados equivalentes antes de enviar la petición. |
 | 70 | `modulos/orquesta-web/autoprogramming_prepare_run_client_v0.go` — `RESTAutoprogrammingPrepareRunClientV0.ConsultarAutoprogrammingStatus` | CONECTAR | Operación REST declarada de consulta; debe cablearse en el cliente para completar el ciclo de observación. |
@@ -81,11 +81,11 @@ Fuente vinculante: `docs/auditorias/codigo_inalcanzable_2026-07-12.txt`, generad
 | 75 | `modulos/orquesta-web/public_error_catalog_v0.go` — `WebPublicErrorDescriptorV0` | CONSERVAR | Descriptor público de errores web, parte del catálogo de compatibilidad. |
 | 76 | `modulos/orquesta-web/run_control_client_v0.go` — `IsWebRunControlClientErrorCodeV0` | CONECTAR | Clasifica errores de control de run; debe conectarse al cliente para distinguir reintento de bloqueo. |
 | 77 | `modulos/orquesta-web/run_queue_client_v0.go` — `IsWebRunQueueClientErrorCodeV0` | CONECTAR | Clasifica errores de cola; debe usarse al proyectar respuestas del endpoint. |
-| 78 | `cmd/orquesta-server/goal_first_app_http_flow_v0_test.go` — `goalFirstHTTPMCPClosureIssuesContainCodeForTestV0` | CONSERVAR | Helper de test que cubre forma de issues; deadcode sobre tests no justifica borrarlo sin revisar cobertura. |
-| 79 | `cmd/orquesta-server/goal_first_app_http_flow_v0_test.go` — `postAutoprogrammingGoalFirstObserveForTestV0` | CONSERVAR | Helper de fixture HTTP para escenarios futuros/replay de goal-first. |
-| 80 | `cmd/orquesta-server/goal_first_app_http_flow_v0_test.go` — `postAutoprogrammingGoalFirstStatusForTestV0` | CONSERVAR | Helper de test del endpoint status; conserva vocabulario de contrato E2E. |
-| 81 | `cmd/orquesta-server/goal_first_app_http_flow_v0_test.go` — `postAutoprogrammingGoalFirstSuperviseForTestV0` | CONSERVAR | Helper de supervisión usado por variantes de pruebas HTTP/MCP. |
-| 82 | `cmd/orquesta-server/idle_self_improvement_test_helpers_v0_test.go` — `minIntForTestV0` | CONSERVAR | Helper determinista de fixtures; es test-only y no debe inferirse basura productiva. |
+| 78 | `cmd/orquesta-server/goal_first_app_http_flow_v0_test.go` — `goalFirstHTTPMCPClosureIssuesContainCodeForTestV0` | BORRAR | Helper test-only sin llamada en los tests ni en producción; la búsqueda exacta no encuentra referencias fuera de su declaración. |
+| 79 | `cmd/orquesta-server/goal_first_app_http_flow_v0_test.go` — `postAutoprogrammingGoalFirstObserveForTestV0` | BORRAR | Fixture test-only sin llamada; no forma parte de un puerto ni de una API publicada. |
+| 80 | `cmd/orquesta-server/goal_first_app_http_flow_v0_test.go` — `postAutoprogrammingGoalFirstStatusForTestV0` | BORRAR | Fixture test-only sin llamada; no forma parte de un puerto ni de una API publicada. |
+| 81 | `cmd/orquesta-server/goal_first_app_http_flow_v0_test.go` — `postAutoprogrammingGoalFirstSuperviseForTestV0` | BORRAR | Fixture test-only sin llamada; no forma parte de un puerto ni de una API publicada. |
+| 82 | `cmd/orquesta-server/idle_self_improvement_test_helpers_v0_test.go` — `minIntForTestV0` | BORRAR | Helper test-only sin llamada en el repositorio; no aporta un contrato de producción. |
 | 83 | `modulos/orquesta-core/puertos_salida_v0_test.go` — `fakeGovernanceCatalogPortV0.ConsultarGovernanceCatalogV0` | CONSERVAR | Implementación de método de fake para satisfacer puerto en pruebas. |
 | 84 | `modulos/orquesta-core/puertos_salida_v0_test.go` — `fakeOrquestaEventPublisherPortV0.PublicarOrquestaEventV0` | CONSERVAR | Método de fake del publisher; llamado indirectamente por el caso bajo prueba. |
 | 85 | `modulos/orquesta-core/puertos_salida_v0_test.go` — `fakePersistenceRepositoryPortV0.GuardarProyectoBorradorV0` | CONSERVAR | Método de fake de persistencia requerido por interfaz. |
@@ -101,13 +101,17 @@ Fuente vinculante: `docs/auditorias/codigo_inalcanzable_2026-07-12.txt`, generad
 | 95 | `modulos/orquesta-run-control/contracts_v0_test.go` — `fakeRunControlPortV0.ResumeRunV0` | CONSERVAR | Implementación de fake de reanudación. |
 | 96 | `modulos/orquesta-run-control/contracts_v0_test.go` — `fakeRunControlPortV0.StopRunV0` | CONSERVAR | Implementación de fake de parada gobernada. |
 | 97 | `modulos/orquesta-run-queue/contracts_v0_test.go` — `fakeRunQueueReaderPortV0.ListRunSchedulingCandidatesV0` | CONSERVAR | Método de fake del puerto de candidatos de scheduling. |
-| 98 | `modulos/orquesta-server/supervisor_loop_test_helpers_v0_test.go` — `markNoExecutionWindowStartForTestV0` | CONSERVAR | Helper de fixture para ventana sin ejecución; pertenece exclusivamente a tests. |
-| 99 | `modulos/orquesta-server/supervisor_loop_test_helpers_v0_test.go` — `resetNoExecutionWindowForTestV0` | CONSERVAR | Helper complementario de fixture; conserva aislamiento y restauración del estado de test. |
+| 98 | `modulos/orquesta-server/supervisor_loop_test_helpers_v0_test.go` — `markNoExecutionWindowStartForTestV0` | BORRAR | Helper test-only sin llamada en el repositorio; la declaración no tiene consumidor verificable. |
+| 99 | `modulos/orquesta-server/supervisor_loop_test_helpers_v0_test.go` — `resetNoExecutionWindowForTestV0` | BORRAR | Helper test-only sin llamada en el repositorio; la declaración no tiene consumidor verificable. |
 
 ## Resumen
 
-- CONECTAR: 40 entradas.
-- BORRAR: 0 entradas. No hay evidencia suficiente para borrar wrappers, contratos, adaptadores o fakes sin revisar sus consumidores indirectos.
-- CONSERVAR: 59 entradas.
+- CONECTAR: 38 entradas.
+- BORRAR: 8 entradas (67, 78–82, 98–99). Son helpers privados/test-only cuya declaración es la única referencia verificable; no se confunden con métodos de puerto ni errores tipados.
+- CONSERVAR: 53 entradas.
+
+## Método de evidencia
+
+La lista de entradas se cotejó literalmente con `codigo_inalcanzable_2026-07-12.txt` (99/99, sin duplicados). Para cada fila se revisó la declaración y las referencias exactas con `rg`; una conservación solo se mantiene cuando la propia firma implementa un contrato (`error` o puerto), es un tipo/constante de API o el adaptador está documentado como opt-in. Las filas BORRAR tienen únicamente la declaración como referencia verificable. No se usa posibilidad de reflexión, uso futuro o “escenarios futuros” como motivo.
 
 La prioridad de implementación posterior es conectar primero las garantías de validación (`ValidateStrictEventSequenceV0`, `ValidateOrchestrationEventPayloadBudgetV0`, leases, decisión del director y registries), y hacerlo en cambios separados con sus pruebas. Esta clasificación no autoriza esos cambios: el write-set H4 es únicamente este documento.
