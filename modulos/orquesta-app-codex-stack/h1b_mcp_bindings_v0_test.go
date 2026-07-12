@@ -2,6 +2,7 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
@@ -53,5 +54,23 @@ func TestBuildStackV0CableaDecisionYCapabilitiesSinTransportUnboundV0(t *testing
 	if err != nil || capabilities.Estado != orquestamcp.MCPToolCapabilitiesListEstadoErrorV0 ||
 		len(capabilities.Errores) != 1 || capabilities.Errores[0].Code != orquestamcp.MCPToolCapabilitiesListErrCatalogUnavailableV0 {
 		t.Fatalf("capabilities=%+v err=%v", capabilities, err)
+	}
+}
+
+func TestBuildStackV0ApplyDecisionUsaPuertosGobernadosDelStackV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	outer, ok := stack.MCPTransportBindings.DirectorDecision.(codexStackDirectorDecisionExecutorV0)
+	if !ok {
+		t.Fatalf("executor=%T", stack.MCPTransportBindings.DirectorDecision)
+	}
+	inner, ok := outer.Inner.(orquestamcp.MCPDirectorAgentDecisionToolExecutorV0)
+	if !ok {
+		t.Fatalf("inner=%T", outer.Inner)
+	}
+	if reflect.TypeOf(inner.Ports.EventSink) != reflect.TypeOf(stack.Ports.EventSink) {
+		t.Fatalf("apply_decision salta EventSink gobernado: inner=%T stack=%T", inner.Ports.EventSink, stack.Ports.EventSink)
+	}
+	if inner.Ports.RunStore == nil || inner.Ports.TaskStore == nil {
+		t.Fatalf("ports incompletos: %+v", inner.Ports)
 	}
 }

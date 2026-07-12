@@ -163,7 +163,7 @@ func buildStackMCPTransportBindingsV0(
 		),
 		DirectorDecision: codexStackDirectorDecisionExecutorV0{
 			Inner: orquestamcp.NewMCPDirectorAgentDecisionToolExecutorV0(orquestadirectoragentworkflow.ApplyDirectorAgentDecisionPortsV0{
-				RunStore: config.Stores.RunStore, EventSink: config.Stores.EventSink, TaskStore: config.Stores.TaskStore,
+				RunStore: ports.RunStore, EventSink: ports.EventSink, TaskStore: ports.DirectorTaskStore,
 			}),
 			Coordinator: stack.directorDecisionCoordinator,
 		},
