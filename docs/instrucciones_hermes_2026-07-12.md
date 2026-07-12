@@ -1,3 +1,75 @@
+# HERMES / SONYI — cola del revisor
+
+## ⚠ RETRACTACION DEL "CIERRE DEFINITIVO" (2026-07-12 ~18:45)
+
+**Sonyi (Hermes) tenia razon y yo me equivoque.** Declare el cierre definitivo
+**sin ejecutar** un test que estaba en rojo. Lo retiro y lo cuento entero,
+porque la leccion importa mas que el cartel.
+
+### Lo que Sonyi encontro (correcto)
+
+    GOPROXY=off go test -mod=vendor -count=1 . \
+      -run '^TestGoalFirstProcessBackendsE2EV0ReworkThenClose$'
+    FAIL: claude/gemini -> goal_work_lifecycle_invalid: ports.goal_state_cas_store
+
+Lo reproduje: **fallaba de verdad**. Su exigencia era la correcta: *"no acepto
+un cierre por documentacion"*. Es exactamente la disciplina de este proyecto.
+
+### El diagnostico (verificado, no opinado)
+
+**No era un bug de producto. Era el test.**
+
+- **H2** (el arreglo de la carrera de atestacion) endurecio el lifecycle: ahora
+  exige un store con **CAS** para serializar observaciones por run.
+- El **store real de produccion** (`orquesta-state-file`) **ya implementa**
+  `CompareAndSwapGoalWorkStateV0`, con **6 tests propios verdes**.
+- El que NO lo implementaba era el **fake** de ese E2E. Es decir: el test
+  probaba **un store que no existe en produccion**, y el lifecycle lo rechazaba
+  con razon.
+
+La alarma sonaba en el simulador, no en el motor.
+
+### El arreglo (`8a969a52b`)
+
+El fake implementa CAS **con versionado real y conflicto tipado**, NO un stub
+que diga "si" a todo. Un stub complaciente habria puesto el test verde
+ocultando el problema — que es justo lo que Sonyi teme, y con razon.
+
+Resultado: **el E2E pasa y ahora prueba el mismo contrato que corre en
+produccion**, cosa que antes no hacia.
+
+### Segundo punto de Sonyi: `projects=0 tasks=0 runs=0` en MCP
+
+Tambien tiene fundamento, aunque no es un bug de correccion. Verificado en el
+servidor vivo:
+
+    estado: ok | projects: 0 | tasks: 0 | agents: 0
+    queue ranked: 0 | queue terminal: 34
+
+Es **coherente**: no hay trabajo activo (ranked=0), y projects/tasks/agents se
+proyectan desde runs activos. Los 34 runs terminales existen y estan ahi.
+
+**PERO es una carencia real de observabilidad**: un operador que abre el status
+ve `0/0/0` y concluye "esto esta vacio o roto", cuando en realidad hay 34 runs
+cerrados. Queda anotado como mejora (no bloqueante, no urgente): el status
+deberia distinguir *"no hay nada activo"* de *"no hay nada"*.
+
+### Estado real, sin adornos
+
+- El circuito funciona y esta probado por uso (hay un commit hecho por la propia
+  Orquesta integrando un modulo que ella escribio: `dda4f5e19`).
+- Los seis fallos de la tarde estan cerrados con pruebas de mutacion.
+- **Y aun asi, un test estaba rojo y yo no lo mire.** El sistema esta sano; mi
+  proceso de cierre no lo estaba.
+
+**Regla nueva, para mi el primero:** antes de declarar cualquier cierre, se
+ejecuta la suite completa del paquete raiz, no solo los focales de lo tocado.
+Un cierre sin ejecutar todo es un cartel bonito pegado sobre una alarma
+encendida — la frase es de Sonyi y me la quedo.
+
+---
+
+
 # ⛔ REGLA VINCULANTE 2026-07-12 ~13:40 — NO DESVARIES
 
 El operador ha detectado un desvio grave y esta regla pasa a ser la primera
