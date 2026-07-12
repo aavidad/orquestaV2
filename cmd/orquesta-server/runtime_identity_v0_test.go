@@ -21,3 +21,19 @@ func TestServerRuntimeIdentityFromExecutableV0CalculaSHAyBuildRefV0(t *testing.T
 		t.Fatalf("build_ref filtra path: %q", identity.BuildRef)
 	}
 }
+
+func TestServerRuntimeBuildInfoCommitV0UsaCommitExplicitoDelBuildAisladoV0(t *testing.T) {
+	previous := serverRuntimeBuildCommitOverrideV0
+	t.Cleanup(func() { serverRuntimeBuildCommitOverrideV0 = previous })
+	serverRuntimeBuildCommitOverrideV0 = strings.Repeat("a", 40)
+
+	commit, modified := serverRuntimeBuildInfoCommitV0()
+	if commit != strings.Repeat("a", 40) || modified {
+		t.Fatalf("commit=%q modified=%v", commit, modified)
+	}
+
+	serverRuntimeBuildCommitOverrideV0 = "not-a-git-sha"
+	if validServerRuntimeBuildCommitOverrideV0(serverRuntimeBuildCommitOverrideV0) {
+		t.Fatal("override invalido aceptado")
+	}
+}

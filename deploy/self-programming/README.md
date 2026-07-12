@@ -45,9 +45,16 @@ Codex aisladas en `/srv/orquesta-self/codex-home`, montadas como
 ## Arranque
 
 ```bash
-docker build -f Dockerfile.self-programming -t orquesta-self-programming:local .
+docker build -f Dockerfile.self-programming \
+  --build-arg ORQUESTA_BUILD_COMMIT="$(git rev-parse HEAD)" \
+  -t orquesta-self-programming:local .
 docker compose -f deploy/self-programming/docker-compose.yml up -d
 ```
+
+El argumento de build es obligatorio porque el contexto Docker excluye `.git`.
+El Dockerfile acepta solo un SHA Git hexadecimal completo de 40 caracteres y
+lo conserva como identidad VCS del binario; asi el guard puede contrastar la
+imagen con el `HEAD` exacto montado en `/workspace/project`.
 
 ## Contrato verificable
 

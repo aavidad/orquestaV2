@@ -147,6 +147,8 @@ func TestSelfProgrammingImageV0IncludesPinnedIntegrationRuntime(t *testing.T) {
 
 	for _, snippet := range []string{
 		"FROM golang:1.25.11-bookworm AS builder",
+		"ARG ORQUESTA_BUILD_COMMIT",
+		"-X main.serverRuntimeBuildCommitOverrideV0=${ORQUESTA_BUILD_COMMIT}",
 		"COPY --from=golang:1.25.11-bookworm /usr/local/go /usr/local/go",
 		"COPY modulos/orquesta-estado-vivo/testdeps/rapid ./modulos/orquesta-estado-vivo/testdeps/rapid",
 		"ca-certificates bash curl git iptables jq openssh-client procps python3 tmux",
@@ -154,6 +156,10 @@ func TestSelfProgrammingImageV0IncludesPinnedIntegrationRuntime(t *testing.T) {
 		if !strings.Contains(dockerfile, snippet) {
 			t.Fatalf("Dockerfile.self-programming must contain %q", snippet)
 		}
+	}
+	readme := readContractFileV0(t, "README.md")
+	if !strings.Contains(readme, `--build-arg ORQUESTA_BUILD_COMMIT="$(git rev-parse HEAD)"`) {
+		t.Fatal("README debe inyectar el commit canonico al build aislado")
 	}
 
 	localReplaceCopy := strings.Index(dockerfile, "COPY modulos/orquesta-estado-vivo/testdeps/rapid")

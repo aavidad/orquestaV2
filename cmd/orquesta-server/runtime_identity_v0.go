@@ -12,6 +12,11 @@ import (
 	orquestaserver "orquesta/modulos/orquesta-server"
 )
 
+// serverRuntimeBuildCommitOverrideV0 se rellena solo en builds de contenedor
+// cuyo contexto excluye .git. El Dockerfile valida que sea un SHA-1 Git
+// hexadecimal completo antes de pasarlo mediante -ldflags -X.
+var serverRuntimeBuildCommitOverrideV0 string
+
 func serverRuntimeIdentityFromExecutableV0() orquestaserver.ServerRuntimeIdentityV0 {
 	executable, err := os.Executable()
 	if err != nil {
@@ -60,6 +65,9 @@ func serverRuntimeBinarySHA256V0(path string) string {
 }
 
 func serverRuntimeBuildInfoCommitV0() (string, bool) {
+	if commit := strings.TrimSpace(serverRuntimeBuildCommitOverrideV0); validServerRuntimeBuildCommitOverrideV0(commit) {
+		return commit, false
+	}
 	info, ok := debug.ReadBuildInfo()
 	if !ok {
 		return "", false
@@ -75,6 +83,18 @@ func serverRuntimeBuildInfoCommitV0() (string, bool) {
 		}
 	}
 	return commit, modified
+}
+
+func validServerRuntimeBuildCommitOverrideV0(value string) bool {
+	if len(value) != 40 {
+		return false
+	}
+	for _, char := range value {
+		if (char < '0' || char > '9') && (char < 'a' || char > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func serverRuntimeBuildRefV0(commitRef string, binarySHA string, modified bool) string {
