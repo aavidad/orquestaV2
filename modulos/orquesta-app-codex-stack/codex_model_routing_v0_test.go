@@ -53,7 +53,7 @@ func TestCodexModelRouteForTaskV0CriticalYXHighRequierenCausalidad(t *testing.T)
 
 func TestCodexModelRouteForTaskV0NoUsaModeloGlobalComoFallback(t *testing.T) {
 	decision, model, err := codexModelRouteForTaskV0(CodexRuntimeConfigV0{Model: "gpt-5.6-sol"}, "task-normal")
-	if err != nil || model != "gpt-5.5" || decision.ReasoningEffort != "medium" || decision.Rejected {
+	if err != nil || model != "gpt-5.6-terra" || decision.ReasoningEffort != "medium" || decision.Rejected {
 		t.Fatalf("decision=%+v model=%q err=%v", decision, model, err)
 	}
 }

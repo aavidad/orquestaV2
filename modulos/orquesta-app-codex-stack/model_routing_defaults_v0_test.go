@@ -15,7 +15,7 @@ func TestBuildStackV0NormalizaModelRoutingCeroConDefaultsEstricos(t *testing.T) 
 	if err != nil {
 		t.Fatalf("BuildStackV0: %v", err)
 	}
-	if decision, model, err := codexModelRouteForTaskV0(stack.Codex, "task-normal"); err != nil || model != "gpt-5.5" || decision.ReasoningEffort != "medium" {
+	if decision, model, err := codexModelRouteForTaskV0(stack.Codex, "task-normal"); err != nil || model != "gpt-5.6-terra" || decision.ReasoningEffort != "medium" {
 		t.Fatalf("codex default decision=%+v model=%q err=%v", decision, model, err)
 	}
 	if decision, model, err := claudeModelRouteForTaskV0(stack.Claude, "task-normal"); err != nil || model != "sonnet-5" || decision.ReasoningEffort != "medium" {

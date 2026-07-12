@@ -72,7 +72,7 @@ func TestServerCodexGoalCostRoutingStarterV0AplicaModelRoutingCanonicoV0(t *test
 			writeSet: []orquestagoal.GoalWriteScopeV0{{
 				Path: "docs/auditoria.md",
 			}},
-			wantModel:  "gpt-5.4-mini",
+			wantModel:  "gpt-5.6-luna",
 			wantEffort: "low",
 		},
 		{
@@ -80,7 +80,7 @@ func TestServerCodexGoalCostRoutingStarterV0AplicaModelRoutingCanonicoV0(t *test
 			writeSet: []orquestagoal.GoalWriteScopeV0{{
 				Path: "docs/runbooks",
 			}},
-			wantModel:  "gpt-5.4-mini",
+			wantModel:  "gpt-5.6-luna",
 			wantEffort: "low",
 		},
 		{
@@ -88,7 +88,7 @@ func TestServerCodexGoalCostRoutingStarterV0AplicaModelRoutingCanonicoV0(t *test
 			writeSet: []orquestagoal.GoalWriteScopeV0{{
 				Path: "cmd/orquesta-server",
 			}},
-			wantModel:  "gpt-5.5",
+			wantModel:  "gpt-5.6-terra",
 			wantEffort: "medium",
 		},
 		{
@@ -97,7 +97,7 @@ func TestServerCodexGoalCostRoutingStarterV0AplicaModelRoutingCanonicoV0(t *test
 				{Path: "docs/auditoria.md"},
 				{Path: "cmd/orquesta-server"},
 			},
-			wantModel:  "gpt-5.5",
+			wantModel:  "gpt-5.6-terra",
 			wantEffort: "medium",
 		},
 	}
@@ -169,7 +169,7 @@ func TestServerCodexGoalModelRouteForPacketV0PermiteCriticalCausalV0(t *testing.
 		GoalRef:  goalRef,
 		WriteSet: []orquestagoal.GoalWriteScopeV0{{Path: "cmd/orquesta-server"}},
 	})
-	if err != nil || decision.Rejected || model != "gpt-5.5" || decision.ReasoningEffort != "high" {
+	if err != nil || decision.Rejected || model != "gpt-5.6-sol" || decision.ReasoningEffort != "high" {
 		t.Fatalf("decision=%+v model=%q err=%v", decision, model, err)
 	}
 }
