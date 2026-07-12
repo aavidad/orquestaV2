@@ -1,39 +1,40 @@
 # CODEX: LEE ESTO ANTES DE TOCAR NADA
 
-## H1b (2026-07-12 ~17:05): domain_work BIEN, pero dejaste el arbol ROJO. Falta runtime.models.
+## ✅✅ H1b ACREDITADO (2026-07-12 ~17:15) — LAS SEIS TOOLS VIVAS. FRENTE COMPLETO.
 
-**`domain_work`: correcto.** `a50c8c348` quita el `return nil, nil` que la
-dejaba apagada; ya tiene backend file por defecto y el catalogo la anuncia.
-Eso era lo que pedia el operador. Bien.
+`18d166e85` (runtime models gobernados con receipts durables) + `4381c174e`
+(catalogo MCP canonico exhaustivo restaurado) + `a50c8c348` (domain_work file
+durable por defecto) + `6afbcca64` (contrato actualizado).
 
-**PERO dejaste un test en rojo y no lo viste:**
+**Guard exhaustivo VERDE, y verde por funcionar, no por callar:** restauraste
+el aserto que exige que `domain_work` y `runtime.models` aparezcan anunciadas.
+Las seis responden.
 
-    --- FAIL: TestDomainWorkExecutorFromEnvV0SinOPESQuedaApagado
+**Prueba de mutacion del revisor (superada):** rompi el guardado del receipt de
+una operacion mutante de `runtime.models` en codigo de produccion
+(`runtime_model_governance_v0.go:150`) y **tus tests se pusieron rojos**. La
+condicion del operador —*nada muta el entorno sin dejar rastro*— esta protegida
+por maquina, no por buena voluntad.
 
-Ese test exige el comportamiento VIEJO (que `domain_work` quede apagado sin
-OPES), que es justo lo que el operador ha decidido cambiar. **El test es el que
-esta obsoleto, no tu cambio.** Actualizalo para que afirme lo nuevo: sin OPES,
-`domain_work` sigue VIVO con backend file durable bajo `StateDir`.
+**Verificado ademas:** suite completa de `cmd/orquesta-server` verde, guard de
+envs verde (426), **sin envs nuevas** (las de domain_work ya existian), **sin
+relajaciones de seguridad**, y **modelos/routing intactos** (`gpt-5.6-sol`,
+`gpt-5.6-luna`, `gpt-5.6-terra` en su sitio).
 
-Es la tercera vez que dejas un guard/test rojo tras cambiar comportamiento.
-**Reejecuta los focales del paquete que tocas ANTES de commitear.** No es
-opcional.
+## ESTADO: LOS TRES FRENTES CERRADOS
 
-**`runtime.models`: SIGUE SIN HACER.** `runtimeModelManagerFromConfigV0`
-continua devolviendo `nil` salvo `Enabled`, asi que la tool sigue apagada y
-omitida del catalogo. La decision del operador fue **COMPLETA**
-(`list/status/pull/serve/stop`), con las condiciones ya escritas:
+- ✅ **H2** carrera de atestacion (el nucleo ya no puede acreditar mal sus tests)
+- ✅ **H3** promocion desde cierre Goal-first (el trabajo valido se integra solo)
+- ✅ **H1b** las seis tools vivas y gobernadas
 
-- evidencia durable de toda operacion mutante,
-- sin descargas de modelos arbitrarios (solo los que el routing/config ya
-  conoce),
-- **sin tocar routing ni aliases** (`gpt-5.6-sol/luna/terra`, default
-  `gpt-5.6`),
-- test que **falle** si se muta sin dejar rastro.
+**No tienes tarea asignada.** Vuelve a la regla: no abras frentes, no "mejores"
+lo que funciona. Si ves algo, **escribelo aqui y espera**.
 
-Y cuando esten las dos: **restaura en el guard el aserto que exige que
-`domain_work` y `runtime.models` aparezcan anunciadas**. El test debe FALLAR si
-alguna de las dos desaparece del catalogo. Verde por funcionar, no por callar.
+Lo siguiente lo decide el operador: la fase de **app real** (que Orquesta cree
+un modulo o tool nueva por su API nativa) y el **informe del Baremador**.
+
+Buen trabajo hoy. Encontraste tres fallos estructurales que yo no vi y los
+cerraste con tests que muerden.
 
 ---
 
