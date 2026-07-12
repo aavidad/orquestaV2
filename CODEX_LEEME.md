@@ -1,59 +1,52 @@
 # CODEX: LEE ESTO ANTES DE TOCAR NADA
 
-## 🧹 HITO H4 (asignado 2026-07-12 ~19:00): AUDITORIA DE CODIGO INALCANZABLE
+## HOJA DE RUTA A v1.0 (2026-07-12 ~19:20): `docs/hoja_ruta_v1_0.md`
 
-**Orden del operador, literal: "no es borrar por borrar. Si hay funciones que
-no tienen conector pero si serian buenas, se programan."**
+Decision del operador: **primero Orquesta 100% funcional, version 1.0.**
+Multiusuario queda como mejora futura (v2), pero **v1.0 no le cierra la
+puerta**.
 
-Esto NO es una poda. Es una **auditoria con tres salidas posibles por funcion**.
+**Tu orden de trabajo (no lo alteres):**
 
-### El dato (medido por el revisor con la herramienta oficial)
+1. **H4** — auditoria de codigo inalcanzable (ya asignado, sigue con el).
+   Recuerda: CONECTAR / BORRAR / CONSERVAR CON MOTIVO. Las validaciones
+   muertas son lo importante.
+2. **V1-B** — credenciales con dueño y trazabilidad. **Va antes que la UI**
+   porque condiciona la arquitectura.
+3. **V1-A** — configuracion por API + web.
+4. **V1-C** — status honesto (`projects=0` cuando hay 34 runs terminales
+   engaña).
+5. Etiquetar v1.0.
 
-    go run golang.org/x/tools/cmd/deadcode@latest -test ./...
+### El hueco confirmado (lo verifique en codigo)
 
-- **99 funciones inalcanzables**: **77 en produccion** + 22 en tests.
-- Listado completo: `docs/auditorias/codigo_inalcanzable_2026-07-12.txt`
-- Ademas: `env_vars_orquesta = 426/426` y `test_only = 103/103`. **Estamos
-  clavados en el tope**: la proxima env que alguien anada rompe el guard. No es
-  "limpio", es "justo".
+- `orquesta.config.json`: el servidor **solo lo LEE**. Cero rutas de escritura.
+- **No hay ningun endpoint de configuracion**.
+- Las credenciales viven a mano en disco (`auth.json`, `api_key_file`).
+- **Hoy Orquesta se configura editando ficheros y reiniciando. Eso no es un
+  1.0.**
 
-### Las tres salidas (clasifica CADA funcion, una por una)
+### La regla de oro de V1-B (leela dos veces)
 
-1. **CONECTAR** — la funcion es buena y deberia estar en uso, pero nadie la
-   llama. **Se programa el conector.** Ejemplos que veo a simple vista y que
-   huelen a esto (verificalo tu):
-   - `ValidateStrictEventSequenceV0` (core-workflow/replay): validar la
-     secuencia estricta de eventos... y no se usa. ¿Por que no?
-   - `ValidateOrchestrationEventPayloadBudgetV0`: presupuesto de payload de
-     eventos, sin llamar.
-   - `DecodeAgentTimeoutAssessmentV0` y `AgentLeaseEvaluationInputV0.Validate`
-     (core-leases): evaluacion de timeouts/leases de agentes, muerta — y
-     acabamos de arreglar H2, que va justo de leases.
-   - `DirectorAgentDecisionValidV0`: validacion de decisiones del director.
-   **Estas son las importantes.** Codigo de validacion muerto = garantia que
-   creemos tener y no tenemos.
+El operador quiere que mañana **cada usuario configure su cuenta OAuth y que
+nadie gaste los recursos de otro**. Aunque v1.0 sea de un solo dueño:
 
-2. **BORRAR** — muerto de verdad: wrappers, helpers duplicados, restos de
-   refactor. Bórralo. (Autorizacion permanente del operador, con git como red.)
+- **`owner_ref` es OBLIGATORIO desde v1.0** en toda credencial. Es un campo, no
+  una feature: cuesta cero ahora y lo cuesta todo despues.
+- **El goal recibe una `credential_ref`, NUNCA el secreto.** El secreto no viaja
+  por el request, ni por el estado, ni por los logs, ni por las evidencias.
+- **La API nunca devuelve el secreto**: solo ref, proveedor y estado. La UI dice
+  "conectado como X", no la clave.
+- **Evidencia durable de todo uso**: que goal uso que credencial. Sin eso no se
+  puede auditar quien gasta que — que es exactamente lo que el operador quiere
+  impedir.
 
-3. **CONSERVAR CON MOTIVO** — falso positivo (reflexion, interfaces,
-   `Error()` de tipos de error que sí se usan por la interfaz `error`, API
-   publica consumida desde fuera). **Documenta el motivo**; no lo borres ni lo
-   conectes.
+Misma disciplina que aplicamos a `runtime.models`: **ninguna operacion sensible
+sin rastro**.
 
-### Como quiero el trabajo
-
-- **Un fichero de clasificacion primero**: `docs/auditorias/clasificacion_codigo_inalcanzable_2026-07-12.md`
-  con las 99 y su salida (conectar/borrar/conservar + motivo). **Antes de tocar
-  codigo.** Lo reviso.
-- Luego, **un commit por grupo pequeno**, empezando por las de **CONECTAR**
-  (son las que importan: son garantias que no estan enchufadas).
-- Guards reejecutados antes de cada commit. Sin envs nuevas (no hay margen).
-- Sin tocar modelos, routing ni seguridad.
-
-**Ojo con el sesgo facil:** borrar es comodo y da la sensacion de progreso. Lo
-valioso aqui es **encontrar las validaciones muertas y enchufarlas**. Si una
-funcion de validacion lleva meses sin llamarse, tenemos un agujero, no basura.
+**No empieces V1-B sin pasar antes por mi el diseno del almacen de credenciales
+y su contrato.** Escribelo aqui y espera. Esto toca seguridad: si te equivocas,
+se filtran secretos.
 
 ---
 
