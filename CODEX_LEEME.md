@@ -1,40 +1,33 @@
 # CODEX: LEE ESTO ANTES DE TOCAR NADA
 
-## ✅✅ H1b ACREDITADO (2026-07-12 ~17:15) — LAS SEIS TOOLS VIVAS. FRENTE COMPLETO.
+## ✅ H3 REACREDITADO (2026-07-12 ~17:55) — y tenias razon: mi acreditacion anterior era floja
 
-`18d166e85` (runtime models gobernados con receipts durables) + `4381c174e`
-(catalogo MCP canonico exhaustivo restaurado) + `a50c8c348` (domain_work file
-durable por defecto) + `6afbcca64` (contrato actualizado).
+`be86ea0d1`. **Lo verificado:**
 
-**Guard exhaustivo VERDE, y verde por funcionar, no por callar:** restauraste
-el aserto que exige que `domain_work` y `runtime.models` aparezcan anunciadas.
-Las seis responden.
+- La causa que encontraste es real y fina: la promocion leia la evidencia
+  **autodeclarada por el implementador** (`LastResult.RequiredTestResults`) en
+  vez de la **atestacion independiente ya verificada**
+  (`LastClosure.AttestationVerifications`). Un goal correctamente atestado
+  **no se promocionaba** (`required_test_not_passed`). Doble fuente de verdad.
+- Ahora la promocion consulta la atestacion como autoridad. Correcto: es
+  coherente con 208H — **la palabra del implementador no acredita nada**.
+- **Prueba de mutacion del revisor (superada):** hice que la promocion ignorase
+  las atestaciones verificadas en codigo de produccion y **tus tests se
+  pusieron rojos**.
+- Suite de `orquesta-app-codex-stack` verde, guard de envs verde (426), sin
+  subir presupuesto.
 
-**Prueba de mutacion del revisor (superada):** rompi el guardado del receipt de
-una operacion mutante de `runtime.models` en codigo de produccion
-(`runtime_model_governance_v0.go:150`) y **tus tests se pusieron rojos**. La
-condicion del operador —*nada muta el entorno sin dejar rastro*— esta protegida
-por maquina, no por buena voluntad.
+**Mi error, reconocido:** acredite H3 con tests, no con un run real. Tu lo
+probaste en vivo y encontraste lo que los E2E enmascaraban. **Los tests no
+sustituyen al uso.** Lo apunto para mi.
 
-**Verificado ademas:** suite completa de `cmd/orquesta-server` verde, guard de
-envs verde (426), **sin envs nuevas** (las de domain_work ya existian), **sin
-relajaciones de seguridad**, y **modelos/routing intactos** (`gpt-5.6-sol`,
-`gpt-5.6-luna`, `gpt-5.6-terra` en su sitio).
+**De acuerdo con tu condicion:** H3 no se declara cerrado del todo hasta
+reconstruir el Docker local, recuperar el mismo run por API/MCP y verificar
+receipt + commit + archive + ficheros canonicos. Hazlo y lo reacredito.
 
-## ESTADO: LOS TRES FRENTES CERRADOS
-
-- ✅ **H2** carrera de atestacion (el nucleo ya no puede acreditar mal sus tests)
-- ✅ **H3** promocion desde cierre Goal-first (el trabajo valido se integra solo)
-- ✅ **H1b** las seis tools vivas y gobernadas
-
-**No tienes tarea asignada.** Vuelve a la regla: no abras frentes, no "mejores"
-lo que funciona. Si ves algo, **escribelo aqui y espera**.
-
-Lo siguiente lo decide el operador: la fase de **app real** (que Orquesta cree
-un modulo o tool nueva por su API nativa) y el **informe del Baremador**.
-
-Buen trabajo hoy. Encontraste tres fallos estructurales que yo no vi y los
-cerraste con tests que muerden.
+Y ojo: te dije que no tenias tarea, pero **hiciste bien** en reportar y reparar
+un fallo que rompia el circuito. La regla es no abrir frentes **por iniciativa
+propia**; encontrar una regresion real y avisar **siempre** es correcto.
 
 ---
 
