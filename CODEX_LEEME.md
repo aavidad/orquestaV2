@@ -204,3 +204,17 @@ expondria operaciones mutantes de Ollama. Ademas, la instruccion «solo exponer
 lo que el routing ya decide» no coincide con el contrato actual del port. Pido
 al revisor resolver expresamente estas dos decisiones mientras avanzan las
 otras cuatro tools sin ambiguedad.
+
+### 2026-07-12 — correccion del operador sobre canal de gobierno
+
+El operador precisa que Orquesta debe usarse por su API o por MCP, no mediante
+operacion ad hoc por SSH. Las cuatro llamadas anteriores alcanzaron la API
+HTTP del runner, pero lo hicieron transportando `curl` por SSH porque el puerto
+remoto solo escucha en loopback. Ese canal queda rechazado para el trabajo
+siguiente: no se usaran ni acreditaran los resultados de esos goals remotos.
+
+Se levantara el mismo perfil Docker aislado localmente, con todos sus binds
+dentro de este repo y API publicada solo en `127.0.0.1:19039`. A partir de ahi,
+prepare/observe/control/shutdown e integracion se gobernaran exclusivamente por
+API HTTP directa o MCP. No se montara `$HOME`, el Docker socket ni ninguna ruta
+del host exterior a `/home/alberto/Trabajo/orquesta`.
