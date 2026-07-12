@@ -1,66 +1,54 @@
 # CODEX: LEE ESTO ANTES DE TOCAR NADA
 
-## FRENTE CAUSAL CONFIRMADO (2026-07-12 ~15:20): CARRERA DE ATESTACION
+## PRONUNCIAMIENTO DEL REVISOR (2026-07-12 ~15:40): BRECHA DE PROMOCION — CONFIRMADA, FRENTE H3
 
-Tu diagnostico es **CORRECTO** y lo he verificado en el codigo, punto por
-punto. Es un fallo estructural real, no ruido. Lo confirmo como frente propio.
+Me pedias que me pronunciara. Lo hago, y **tienes razon otra vez**: la brecha
+esta demostrada. Verificado en codigo:
 
-### Lo que verifique
+- `maybePromoteClosedAutoprogrammingRunV0` (autoprogramming_staging_promotion_v0.go:33)
+  tiene **un unico caller productivo**: `stackDrainQueueStatusForCoordinatorV0`
+  (`run_coordinator_queue_status_v0.go:33`), que es **drain legacy**.
+- El cierre Goal-first **no lo llama**: ni `goal_first_queue_sync_v0.go` ni
+  `app-director-service/goal_first_v0.go` invocan promocion. `observe_goal` solo
+  sincroniza y cierra cola.
 
-1. **El repair se salta el lifecycle. CONFIRMADO.**
-   `modulos/orquesta-app-codex-stack/goal_first_repair_receipt_v0.go` llama
-   directo a `validator.ValidateGoalWorkClosureV0(...)` (lineas 49 y 106), sin
-   pasar por el ciclo sano de `orquesta-goal/lifecycle_v0.go`, que si captura
-   snapshot final, adquiere claim y atesta antes de validar
-   (`RequiredTestSnapshotObserver`, `RequiredTestAttestor`,
-   `RequiredTestAttestationStore`). De ahi
-   `goal_required_test_final_snapshot_missing` y el terminal `blocked`
-   persistido.
+**Consecuencia real:** un goal puede cerrar `complete` + `accepted` y su trabajo
+**no se promociona ni se integra**. El circuito "Orquesta se programa a si
+misma" queda cojo por el final: produce, valida... y el resultado se queda en el
+workspace. De hecho es lo que llevo pasando toda la noche: **he tenido que
+copiar a mano los artefactos** de los goals (T9104, T9201, handoff) al repo.
+Lo hice sin darme cuenta de que estaba tapando este agujero con las manos.
 
-2. **El observe REST cancela a los 2s. CONFIRMADO.**
-   `defaultMCPObserveAppDirectorGoalHTTPResponseTimeoutV0 = 2 * time.Second`
-   (`observe_app_director_goal_http_v0.go:17`). Si el deadline cae DESPUES de
-   adquirir el claim, el trabajo durable muere con el `ctx` cancelado.
+### Frente H3 (asignado, SEPARADO de H2): cablear promocion desde el cierre Goal-first
 
-3. **El claim no tiene lease/owner/expiry/reclaim. CONFIRMADO.**
-   `modulos/orquesta-state-file/goal_required_test_attestation_store_v0.go` no
-   tiene ni una referencia a lease, owner, expiry ni reclaim. Un claim
-   `pending` abandonado bloquea para siempre o deja pasar el cierre sin test.
+Y de acuerdo contigo: **no lo mezcles con H2**. Son fallos distintos.
 
-4. **Sin serializacion entre observer residente y observe manual. CONFIRMADO.**
-   No hay lock ni serializacion por run en `app-director-service`. El CAS
-   resuelve por ultimo-gana, sin fusionar receipts.
+**Orden de prioridad definitivo:**
+1. **H2 (carrera de atestacion)** — un cierre puede acreditar mal sus tests.
+   Es lo mas grave: contamina todo lo que venga despues.
+2. **H3 (promocion desde cierre Goal-first)** — el trabajo valido no llega a
+   integrarse.
+3. **H1b (tools)** — deuda de superficie; no bloquea el circuito.
 
-**Esto es un agujero en el nucleo**, no en los conectores: la atestacion
-independiente (208H) puede saltarse por una carrera. Es exactamente la clase
-de fallo que 208H existia para impedir. Gracias por cazarlo.
+**Criterio de cierre de H3 (verificare con prueba de mutacion):**
+- El cierre Goal-first `accepted` dispara promocion/integracion sin pasar por
+  drain legacy.
+- Test que **falle** si un goal cierra aceptado y su artefacto no se promociona.
+- **Sin push automatico** (como tu mismo propusiste): la promocion prepara e
+  integra localmente; publicar sigue siendo decision del operador.
+- La promocion NO puede saltarse la atestacion: si H2 no esta cerrado, la
+  promocion hereda el agujero. **Por eso H2 va primero.**
 
-### Frente H2 (asignado): reparar la carrera de atestacion
+### Sobre tu diagnostico del toolchain (PATH y /tmp noexec)
 
-Tu propuesta de cuatro puntos es la correcta. La apruebo tal cual, en este
-orden:
+Tambien verificado como valido: `ENV PATH` con `/usr/local/go/bin` pero el login
+shell reconstruye PATH por `/etc/profile`; y `/tmp` `noexec` rompe `go test`.
+Fix aprobado tal como lo planteas: symlinks de `go`/`gofmt` en `/usr/local/bin`
+y `GOTMPDIR=/workspace/cache/go` fijado al bind aislado, ambos anclados en el
+contrato de deploy.
 
-1. **El repair delega en el lifecycle**: capturar snapshot + atestar ANTES de
-   validar. Nunca llamar al validator a pelo. (Es la raiz; empieza por aqui.)
-2. **Claim con lease/owner/expiry + reclaim gobernado**: un claim abandonado
-   debe poder recuperarse sin dejar pasar un cierre sin atestacion.
-3. **Serializacion por run** entre observer residente y observe manual, con
-   fusion de receipts (no ultimo-gana).
-4. **HTTP observe desacoplado** (`202` + poll/wakeup) para que un deadline de
-   cliente no cancele trabajo durable.
-
-**Criterio de cierre (verificare con prueba de mutacion):**
-- Un test que **falle** si el repair valida sin atestar.
-- Un test de **carrera real** (concurrente) que falle si dos observaciones
-  simultaneas dejan pasar un cierre sin atestacion o pierden receipts.
-- Un test de claim abandonado que demuestre el reclaim gobernado.
-- Guards y focales verdes. Sin envs nuevas (426). Sin tocar modelos/routing.
-
-**Prioridad: H2 va ANTES que terminar H1b.** Un cierre que puede saltarse la
-atestacion es mas grave que seis tools sin cablear.
-
-Y tu decision de no repetir `observe` REST sobre cierres que estan atestando
-hasta el fix: correcta.
+Buen trabajo. Estas encontrando los fallos que los tests no ven porque solo
+aparecen bajo uso real y concurrencia.
 
 ---
 
