@@ -587,6 +587,22 @@ func TestEnsureV0PrimerLanzamientoTmuxRealConSocketRealV0(t *testing.T) {
 	}
 }
 
+func TestTmuxSessionIdentityFromOutputV0AceptaSeparadorPortableYLegacyV0(t *testing.T) {
+	pid := os.Getpid()
+	for _, output := range []string{
+		fmt.Sprintf("$7|1700000000|%d", pid),
+		fmt.Sprintf("$7\t1700000000\t%d", pid),
+	} {
+		identity, err := codexAppServerTmuxSessionIdentityFromOutputV0(output)
+		if err != nil {
+			t.Fatalf("output=%q: %v", output, err)
+		}
+		if identity.SessionID != "$7" || identity.SessionCreated != "1700000000" || identity.PanePID != pid {
+			t.Fatalf("output=%q identity=%+v", output, identity)
+		}
+	}
+}
+
 func TestEnsureV0ReintentaPredicadoPostCASTransitorioV0(t *testing.T) {
 	backend, _ := newGenerationLeaseBackendForTestV0(t)
 	probe := &transientPostCASCodexAppServerProbeV0{}

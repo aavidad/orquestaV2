@@ -201,6 +201,12 @@ func (backend serverCodexAppServerTmuxBackendV0) tmuxSessionIdentityTargetV0(ctx
 
 func codexAppServerTmuxSessionIdentityFromOutputV0(output string) (codexAppServerTmuxSessionIdentityV0, error) {
 	parts := strings.Split(strings.TrimSpace(output), "\t")
+	// tmux 3.3a does not expand `\t` in new-session -P -F; newer versions do.
+	// The pipe form is portable across both families, while accepting tabs
+	// keeps compatibility with already deployed wrappers and test fixtures.
+	if len(parts) != 3 {
+		parts = strings.Split(strings.TrimSpace(output), "|")
+	}
 	if len(parts) != 3 {
 		return codexAppServerTmuxSessionIdentityV0{}, codexAppServerTmuxConflictErrorV0(codexAppServerTmuxGenerationConflictV0)
 	}

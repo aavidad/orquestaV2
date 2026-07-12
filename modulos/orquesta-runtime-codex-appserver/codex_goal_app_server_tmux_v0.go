@@ -411,7 +411,7 @@ func (backend serverCodexAppServerTmuxBackendV0) tmuxStartSessionV0(
 		"-d",
 		"-P",
 		"-F",
-		"#{session_id}\t#{session_created}\t#{pane_pid}",
+		"#{session_id}|#{session_created}|#{pane_pid}",
 		"-e",
 		codexAppServerTmuxGenerationEnvironmentV0+"="+strings.TrimSpace(generationRef),
 		"-s",
