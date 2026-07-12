@@ -1,3 +1,50 @@
+# ⛔ REGLA VINCULANTE 2026-07-12 ~13:40 — NO DESVARIES
+
+El operador ha detectado un desvio grave y esta regla pasa a ser la primera
+de todas, por encima de cualquier otra tarea.
+
+## Lo que paso
+
+En `2ee709096` intentaste **borrar los modelos del operador**
+(`gpt-5.6-sol`, `gpt-5.6-luna`, `gpt-5.6-terra`) del routing y sustituirlos
+por `gpt-5.5`/`gpt-5.4-mini`, porque no los reconociste. Lo revertiste tu
+mismo en `f40f0f420`, asi que no hubo dano; el revisor lo verifico.
+
+Pero el patron es el problema: **asumiste que lo que no conocias estaba mal
+y fuiste a "corregirlo"**. Es la misma familia de desvio que colar un opt-in
+de sandbox (`danger-full-access`) dentro de un commit titulado "docs:".
+
+## Reglas (no negociables, aplican a TODO lo que hagas)
+
+1. **No toques modelos, aliases ni routing.** Los modelos del operador son
+   `gpt-5.6-sol`, `gpt-5.6-luna`, `gpt-5.6-terra` y el default general es
+   `gpt-5.6`. Si un modelo "no te suena", **NO es un error tuyo que corregir**:
+   es del operador. Si crees que hay un problema, PREGUNTA por la senal al
+   revisor; no lo cambies.
+2. **Lo que no entiendes no se "arregla": se pregunta.** Ante cualquier
+   configuracion, constante o contrato que no reconozcas: para, documenta la
+   duda y avisa al revisor. Nunca lo sustituyas por lo que a ti te parece
+   normal.
+3. **No trabajes por iniciativa propia sin tarea asignada.** Si no tienes
+   hito abierto en una hoja de ruta o cola, NO abras frentes. Pide trabajo
+   por la senal. La plataforma esta TERMINADA: el riesgo ahora es romper algo
+   que ya funciona, no dejar algo sin hacer.
+4. **Cambios de seguridad o de configuracion sensible: commit propio y
+   anuncio explicito.** Nada de esconderlos dentro de commits de docs o fix.
+5. Las reglas anteriores (guards reejecutados, nada de verdes autodeclarados,
+   no subir ratchets, write-set estricto) siguen vigentes.
+
+## Estado actual: NO HAY TAREA ABIERTA
+
+El frente CONECTORES esta cerrado y **Orquesta esta terminada como
+plataforma** (`14f8c8c7c`). Los cuatro hitos fueron acreditados por el
+revisor con pruebas de mutacion. **No hay hito pendiente asignado a ti.**
+
+Hasta que el revisor te asigne la siguiente hoja de ruta:
+- No abras frentes nuevos.
+- No "mejores" cosas que ya funcionan.
+- Si ves algo que crees que esta mal, escribelo por la senal y espera.
+
 > HOJA DE RUTA VIGENTE PARA CERRAR CONECTORES:
 > `docs/hoja_ruta_cierre_conectores_2026-07-12.md` (H0b y H0c, con criterios
 > de cierre exactos). Esa hoja manda sobre cualquier interpretacion previa.

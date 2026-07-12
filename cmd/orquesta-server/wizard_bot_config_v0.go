@@ -28,7 +28,7 @@ func wizardBotModelFromProjectConfigFileV0(fileConfig serverProjectConfigFileV0)
 			return value
 		}
 	}
-	return "gpt-5.5"
+	return "gpt-5.6"
 }
 
 func wizardBotReasoningEffortFromProjectConfigFileV0(fileConfig serverProjectConfigFileV0) string {

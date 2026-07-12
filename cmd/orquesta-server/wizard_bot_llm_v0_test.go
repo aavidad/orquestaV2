@@ -158,3 +158,11 @@ func (fake *fakeWizardBotAppServerProtocolV0) ReadThreadV0(
 ) (serverCodexAppServerThreadReadV0, error) {
 	return fake.read, nil
 }
+
+// El modelo por defecto del wizard bot debe ser gpt-5.6: sin este guard, el
+// default puede derivar en silencio a una familia de modelos retirada.
+func TestWizardBotModeloPorDefectoEsGPT56V0(t *testing.T) {
+	if model := wizardBotModelFromProjectConfigFileV0(serverProjectConfigFileV0{}); model != "gpt-5.6" {
+		t.Fatalf("modelo por defecto del wizard bot=%q, esperado gpt-5.6", model)
+	}
+}
