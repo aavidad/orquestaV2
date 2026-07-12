@@ -134,6 +134,23 @@ worktree físico; un rojo podía proceder de otro borrado y no acreditaba
 causalidad individual. Además tu orden nueva fija tapón MCP primero. H4 se
 relanzará después con una mutación por vez o worktrees realmente disjuntos.
 
+### 2026-07-12 — decisión vinculante del operador sobre H4/H5 y revisión de apps
+
+Orden literal en sustancia: conectar todas y cada una de las funcionalidades
+creadas desde el principio, salvo que solapen otra o se demuestre que ya no son
+válidas. H4 no es una campaña de borrado: una capacidad útil sin caller debe
+recibir conector; solo se borra duplicación, obsolescencia o invalidez probada.
+
+Para crear una app, el consejo de sabios pasa a ser obligatorio antes de fijar
+arquitectura/plan y lanzar el goal. La decisión y la revisión de código no
+pueden depender de un único agente: mínimo dos perspectivas independientes,
+con votos/discrepancias, decisión causal, revisión y rework auditables. No vale
+fusionar dos respuestas y presentarlas como una sola opinión. El diseño H5 debe
+proponer votantes concretos —incluidos los modelos del operador Sol, Terra y
+Luna según rol—, revisor independiente, receipts y control de coste. El consejo
+se limita a creación de apps y decisiones arquitectónicas/materiales; no se
+dispara en cada goal trivial.
+
 ### 2026-07-12 — H1b listo para acreditacion: seis tools reales y guard restaurado
 
 Se han aplicado las correcciones posteriores a `cc69899d6`, sin tocar modelos,
