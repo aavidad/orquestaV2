@@ -4,12 +4,12 @@ Fuente vinculante: `docs/auditorias/codigo_inalcanzable_2026-07-12.txt`, generad
 
 | # | Entrada | Salida | Motivo técnico |
 |---:|---|---|---|
-| 1 | `cmd/orquesta-server/codex_goal_app_server_v0.go` — `codexAppServerIssueCodeForErrorV0` | CONSERVAR | Mapeador interno de diagnóstico; puede ser alcanzado por composición/errores concretos y mantiene códigos estables de API. |
-| 2 | `cmd/orquesta-server/codex_goal_app_server_v0.go` — `codexAppServerIssueCodeFromCommandFailureV0` | CONSERVAR | Clasifica fallos de proceso del adaptador; es una frontera de diagnóstico, no basura aunque el análisis no siga ese camino. |
-| 3 | `cmd/orquesta-server/codex_goal_app_server_v0.go` — `codexAppServerIssueCodeFromLogFileV0` | CONSERVAR | Parser de diagnóstico del arranque; preserva códigos de fallo recuperables del backend app-server. |
-| 4 | `cmd/orquesta-server/codex_goal_app_server_v0.go` — `codexAppServerTmuxStartupTimeoutV0` | CONSERVAR | Constante/helper de clasificación del timeout de arranque; forma parte del contrato observable del adaptador. |
+| 1 | `cmd/orquesta-server/codex_goal_app_server_v0.go` — `codexAppServerIssueCodeForErrorV0` | BORRAR | Símbolo privado; `rg` no encuentra caller ni implementación de puerto/error ni reflexión real. |
+| 2 | `cmd/orquesta-server/codex_goal_app_server_v0.go` — `codexAppServerIssueCodeFromCommandFailureV0` | BORRAR | Símbolo privado; `rg` no encuentra caller ni contrato verificable. |
+| 3 | `cmd/orquesta-server/codex_goal_app_server_v0.go` — `codexAppServerIssueCodeFromLogFileV0` | BORRAR | Símbolo privado; `rg` no encuentra caller ni contrato verificable. |
+| 4 | `cmd/orquesta-server/codex_goal_app_server_v0.go` — `codexAppServerTmuxStartupTimeoutV0` | BORRAR | Símbolo privado; `rg` no encuentra caller ni contrato verificable. |
 | 5 | `modulos/orquesta-app-planner/unit_lookup_v0.go` — `FindAppPlanUnitByTaskRefV0` | CONECTAR | Búsqueda causal por task ref; debe usarse al resolver tareas del plan para no perder el vínculo entre intake y unidad. |
-| 6 | `modulos/orquesta-cli/public_error_catalog_v0.go` — `CliPublicErrorCodeKnownV0` | CONSERVAR | Guard de catálogo público para consumidores CLI; API de consulta que puede ser usada fuera del grafo del módulo. |
+| 6 | `modulos/orquesta-cli/public_error_catalog_v0.go` — `CliPublicErrorCodeKnownV0` | BORRAR | Función sin caller verificable; ser exportada no demuestra consumidor externo ni contrato de puerto. |
 | 7 | `modulos/orquesta-core-leases/lease_evaluator_v0.go` — `AgentLeaseEvaluationInputV0.Validate` | CONECTAR | Validación de entrada de leases; dejarla sin caller permite evaluar expiraciones con datos inválidos y pierde la garantía H2. |
 | 8 | `modulos/orquesta-core-leases/lease_evaluator_v0.go` — `DecodeAgentTimeoutAssessmentV0` | CONECTAR | Decodificación de assessment de timeout; debe entrar en la ruta real de reclaim/lease para validar la decisión recibida. |
 | 9 | `modulos/orquesta-core/puertos_salida_events_v0.go` — `OrquestaEventPublishErrorV0.Error` | CONSERVAR | Método requerido por `error`; deadcode no ve necesariamente la invocación polimórfica. |
@@ -18,26 +18,26 @@ Fuente vinculante: `docs/auditorias/codigo_inalcanzable_2026-07-12.txt`, generad
 | 12 | `modulos/orquesta-core/puertos_salida_runtime_v0.go` — `RuntimeLaunchErrorV0.Error` | CONSERVAR | Método polimórfico del error de lanzamiento, no una función muerta semánticamente. |
 | 13 | `modulos/orquesta-core-workflow/payload_budget_v0.go` — `ValidateOrchestrationEventPayloadBudgetV0` | CONECTAR | Garantía de tamaño de payload de eventos; debe ejecutarse antes de persistir/publicar eventos para evitar entradas fuera de presupuesto. |
 | 14 | `modulos/orquesta-core-workflow/replay_v0.go` — `ValidateStrictEventSequenceV0` | CONECTAR | Garantía de causalidad del replay; debe validar secuencias antes de reconstruir estado, como exige H4. |
-| 15 | `modulos/orquesta-data-ingestion-file/adapter_v0.go` — `AdapterV0.AdapterIdentityV0` | CONSERVAR | Método de identidad de adaptador implementado para contrato/registro; reflexión o consumidor externo puede invocarlo. |
+| 15 | `modulos/orquesta-data-ingestion-file/adapter_v0.go` — `AdapterV0.AdapterIdentityV0` | BORRAR | Método sin caller ni interfaz/registro verificable; la posibilidad de reflexión no es evidencia. |
 | 16 | `modulos/orquesta-director-agent/director_decision_validation_v0.go` — `DirectorAgentDecisionValidV0` | CONECTAR | Validación de decisiones del director; sin cablearla se aceptan decisiones estructuralmente inválidas. |
 | 17 | `modulos/orquesta-director-agent/director_stats_v0.go` — `DirectorAgentCompactStatsValidV0` | CONECTAR | Validación de estadísticas compactas recibidas del agente; debe proteger review/telemetría de datos corruptos. |
-| 18 | `modulos/orquesta-director-agent-workflow/decision_source_budget_v0.go` — `DefaultDirectorAgentDecisionBatchBudgetV0` | CONSERVAR | Default contractual del presupuesto de batch; lo consume configuración/composición aunque no haya caller estático directo. |
+| 18 | `modulos/orquesta-director-agent-workflow/decision_source_budget_v0.go` — `DefaultDirectorAgentDecisionBatchBudgetV0` | BORRAR | Función default sin caller ni contrato verificable; el posible consumo de configuración no está demostrado. |
 | 19 | `modulos/orquesta-director-supervised-burst/burst_adapters_v0.go` — `DirectorCycleStepExecutorFuncV0.ExecuteDirectorCycleStepV0` | CONSERVAR | Método de adaptador funcional que satisface un puerto; su uso es indirecto mediante interfaz. |
 | 20 | `modulos/orquesta-director-supervised-burst/burst_adapters_v0.go` — `DirectorCycleStepInputBuilderFuncV0.BuildDirectorCycleStepInputV0` | CONSERVAR | Igual que la entrada anterior: método de función adaptadora invocado polimórficamente. |
-| 21 | `modulos/orquesta-document-extraction-csv/exporter_v0.go` — `CSVDocumentExporterV0.AdapterIdentityV0` | CONSERVAR | Identidad requerida por el contrato de exporter/registro y potencialmente por reflexión. |
+| 21 | `modulos/orquesta-document-extraction-csv/exporter_v0.go` — `CSVDocumentExporterV0.AdapterIdentityV0` | BORRAR | Método sin caller ni interfaz/registro verificable; la posibilidad de reflexión no es evidencia. |
 | 22 | `modulos/orquesta-document-extraction-fake/fake_v0.go` — `AcceptingDocumentHumanReviewV0.AdapterIdentityV0` | CONSERVAR | Identidad de fake para composición y pruebas de contrato; no es producción inalcanzable. |
 | 23 | `modulos/orquesta-document-extraction-fake/fake_v0.go` — `AcceptingDocumentHumanReviewV0.ReviewDocumentFieldV0` | CONSERVAR | Método de puerto de revisión humana usado indirectamente por el caso de uso. |
 | 24 | `modulos/orquesta-document-extraction-fake/fake_v0.go` — `StaticDocumentToolCapabilityRegistryV0.AdapterIdentityV0` | CONSERVAR | Identidad del registro fake, necesaria para sustituir el adaptador en tests. |
 | 25 | `modulos/orquesta-document-extraction-fake/fake_v0.go` — `StaticDocumentToolCapabilityRegistryV0.DiscoverDocumentToolCapabilitiesV0` | CONSERVAR | Método de puerto de discovery; el análisis no sigue la llamada a través de la interfaz. |
 | 26 | `modulos/orquesta-document-extraction-json/exporter_v0.go` — `JSONDocumentExporterV0.AdapterIdentityV0` | CONSERVAR | Identidad contractual del exporter JSON, no helper descartable. |
 | 27 | `modulos/orquesta-document-extraction-tool-capability/adapter_v0.go` — `AttachDocumentExtractionToolV0` | CONECTAR | Registro de capability de extracción; debe componerse para que la tool declarada tenga binding efectivo. |
-| 28 | `modulos/orquesta-document-extraction/tool_usecase_v0.go` — `documentToolPublicErrorV0` | CONSERVAR | Constructor privado de error público; queda disponible para ramas/adaptadores y conserva códigos de API. |
-| 29 | `modulos/orquesta-document-extraction/validation_v0.go` — `DefaultDocumentExtractionPolicyV0` | CONSERVAR | Política default del contrato de extracción; configura comportamiento aunque no aparezca como caller directo. |
+| 28 | `modulos/orquesta-document-extraction/tool_usecase_v0.go` — `documentToolPublicErrorV0` | BORRAR | Constructor privado; `rg` no encuentra caller ni mecanismo real de reflexión o contrato de puerto/error. |
+| 29 | `modulos/orquesta-document-extraction/validation_v0.go` — `DefaultDocumentExtractionPolicyV0` | BORRAR | Función default sin caller ni contrato verificable; la configuración hipotética no basta. |
 | 30 | `modulos/orquesta-document-extraction/validation_v0.go` — `ValidateDocumentConnectorRegistryV0` | CONECTAR | Validación del registry de conectores; debe ejecutarse en bootstrap para detectar bindings incompletos. |
 | 31 | `modulos/orquesta-factory/architecture_policy_v0.go` — `SupportedArchitecturePatternsV0` | CONSERVAR | Catálogo público de patrones admitidos por factory; API declarativa, no código prescindible. |
 | 32 | `modulos/orquesta-factory/request_policy_v0.go` — `SupportedExecutionModesV0` | CONSERVAR | Catálogo de modos de ejecución expuesto por la policy de requests. |
 | 33 | `modulos/orquesta-factory/request_policy_v0.go` — `SupportedRequestKindsV0` | CONSERVAR | Catálogo de tipos de request para consumidores y validación futura del factory. |
-| 34 | `modulos/orquesta-mcp/arrancar_director_app_tool_v0.go` — `NewMCPArrancarDirectorAppErrorResultV0` | CONSERVAR | Constructor de respuesta MCP de error estable; se preserva para compatibilidad de transporte. |
+| 34 | `modulos/orquesta-mcp/arrancar_director_app_tool_v0.go` — `NewMCPArrancarDirectorAppErrorResultV0` | BORRAR | Constructor sin caller verificable; la compatibilidad de transporte no está respaldada por una interfaz o uso real. |
 | 35 | `modulos/orquesta-mcp/external_work_run_http_v0.go` — `NewMCPExternalWorkRunHTTPHandlerV0` | CONECTAR | Handler MCP/HTTP declarado; debe cablearse en la composición cuando el adaptador externo esté habilitado. |
 | 36 | `modulos/orquesta-mcp/public_error_catalog_v0.go` — `MCPPublicErrorDescriptorV0` | CONSERVAR | Descriptor de catálogo público consumido por clientes MCP y generado por registro. |
 | 37 | `modulos/orquesta-observability/orquesta_event_v0.go` — `DecodePublishOrquestaEventRequestV0` | CONECTAR | Decodificador de requests de publicación; debe preceder al sink para validar payload y contrato. |
@@ -52,14 +52,14 @@ Fuente vinculante: `docs/auditorias/codigo_inalcanzable_2026-07-12.txt`, generad
 | 46 | `modulos/orquesta-outbox-dispatch/outbox_delivery_lease_plan_v0.go` — `validateObservedAtV0` | CONECTAR | Valida timestamp de observación antes de calcular lease; es una garantía temporal que debe estar en la ruta real. |
 | 47 | `modulos/orquesta-presentation-extraction-tool-capability/adapter_v0.go` — `AttachPresentationExtractionToolV0` | CONECTAR | Binding de capability de presentación; debe cablearse cuando se anuncia esa tool. |
 | 48 | `modulos/orquesta-rails/security_mode_v0.go` — `RailsModeV0` | CONSERVAR | Tipo/contrato de modo de seguridad usado por configuración y adaptadores. |
-| 49 | `modulos/orquesta-rails/security_mode_v0.go` — `RailsOfflineV0` | CONSERVAR | Valor de modo offline; forma parte del contrato de seguridad aunque no haya caller local. |
+| 49 | `modulos/orquesta-rails/security_mode_v0.go` — `RailsOfflineV0` | CONSERVAR | Constante exportada del tipo `RailsModeV0`, usada como valor nominal del contrato de modos de seguridad. |
 | 50 | `modulos/orquesta-rails/security_mode_v0.go` — `SecurityModeProductionEnabledV0` | CONSERVAR | Predicado público de modo productivo; debe mantenerse como API de decisión de seguridad. |
 | 51 | `modulos/orquesta-rails/text_policy_v0.go` — `ValuesContainOperationalSensitiveDetailV0` | CONECTAR | Detector advisory de detalle sensible; debe alimentar auditoría/política sin convertir heurística en veto automático. |
 | 52 | `modulos/orquesta-runtime-claude/claude_prompt_v0.go` — `BuildClaudeAgentPromptV0` | CONECTAR | Constructor base de prompt; debe ser el camino común del adaptador Claude para evitar prompts sin reglas. |
 | 53 | `modulos/orquesta-runtime-claude/claude_prompt_v0.go` — `BuildClaudeAgentPromptWithControlFilesV0` | CONECTAR | Variante que incorpora control files; debe usarse cuando el spec declara esos refs. |
 | 54 | `modulos/orquesta-runtime-claude/claude_prompt_v0.go` — `BuildClaudeAgentPromptWithLocaleV0` | CONECTAR | Variante localizada del prompt; debe conectarse al launcher Claude cuando hay locale en el contrato. |
-| 55 | `modulos/orquesta-runtime-codex-appserver/api_v0.go` — `CodexAppServerIssueCodeFromCommandFailureV0` | CONSERVAR | Clasificador de fallo del adaptador público; complementa el diagnóstico del servidor. |
-| 56 | `modulos/orquesta-runtime-codex-appserver/api_v0.go` — `CodexAppServerIssueCodeFromLogFileV0` | CONSERVAR | Clasificador de logs del app-server, útil para observación/recovery indirectos. |
+| 55 | `modulos/orquesta-runtime-codex-appserver/api_v0.go` — `CodexAppServerIssueCodeFromCommandFailureV0` | BORRAR | Función exportada sin caller, interfaz ni contrato verificable; utilidad indirecta no demostrada. |
+| 56 | `modulos/orquesta-runtime-codex-appserver/api_v0.go` — `CodexAppServerIssueCodeFromLogFileV0` | BORRAR | Función exportada sin caller, interfaz ni contrato verificable; utilidad indirecta no demostrada. |
 | 57 | `modulos/orquesta-runtime-codex-appserver/api_v0.go` — `CodexAppServerTmuxOwnerMarkerPathV0` | CONECTAR | Deriva marker de ownership; debe usarse en lifecycle para evitar sesiones huérfanas o cruzadas. |
 | 58 | `modulos/orquesta-runtime-codex-goal/packet_v0.go` — `BuildCodexGoalContextBudgetV0` | CONECTAR | Compila el presupuesto de contexto del goal; debe alimentar el packet para respetar límites declarados. |
 | 59 | `modulos/orquesta-runtime-gemini/gemini_prompt_v0.go` — `BuildGeminiAgentPromptV0` | CONECTAR | Constructor base del prompt Gemini; debe asegurar reglas y cierre del goal en el adaptador. |
@@ -76,7 +76,7 @@ Fuente vinculante: `docs/auditorias/codigo_inalcanzable_2026-07-12.txt`, generad
 | 70 | `modulos/orquesta-web/autoprogramming_prepare_run_client_v0.go` — `RESTAutoprogrammingPrepareRunClientV0.ConsultarAutoprogrammingStatus` | CONECTAR | Operación REST declarada de consulta; debe cablearse en el cliente para completar el ciclo de observación. |
 | 71 | `modulos/orquesta-web/bootstrap_client_v0.go` — `NewLocalBootstrapProyectoDesdeAppSpecClientV0` | CONECTAR | Cliente de bootstrap local declarado; debe integrarse en el wizard/app flow que lo ofrece. |
 | 72 | `modulos/orquesta-web/nueva_app_director_client_v0.go` — `IsWebArrancarDirectorClientErrorCodeV0` | CONECTAR | Clasificación de errores del endpoint; debe alimentar respuestas/reintentos del cliente web. |
-| 73 | `modulos/orquesta-web/nueva_app_i18n_v0.go` — `NuevaAppI18nTextV0` | CONSERVAR | Constructor de textos localizados; API de presentación preparada para claves futuras y consumo indirecto. |
+| 73 | `modulos/orquesta-web/nueva_app_i18n_v0.go` — `NuevaAppI18nTextV0` | BORRAR | Constructor sin caller verificable; preparación para claves futuras y consumo indirecto son hipótesis. |
 | 74 | `modulos/orquesta-web/nueva_app_wizard_bot_endpoint_v0.go` — `NewWebNuevaAppWizardBotResponseV0` | CONECTAR | Constructor de respuesta del wizard bot; debe usarse en el handler para conservar schema estable. |
 | 75 | `modulos/orquesta-web/public_error_catalog_v0.go` — `WebPublicErrorDescriptorV0` | CONSERVAR | Descriptor público de errores web, parte del catálogo de compatibilidad. |
 | 76 | `modulos/orquesta-web/run_control_client_v0.go` — `IsWebRunControlClientErrorCodeV0` | CONECTAR | Clasifica errores de control de run; debe conectarse al cliente para distinguir reintento de bloqueo. |
@@ -107,11 +107,11 @@ Fuente vinculante: `docs/auditorias/codigo_inalcanzable_2026-07-12.txt`, generad
 ## Resumen
 
 - CONECTAR: 38 entradas.
-- BORRAR: 8 entradas (67, 78–82, 98–99). Son helpers privados/test-only cuya declaración es la única referencia verificable; no se confunden con métodos de puerto ni errores tipados.
-- CONSERVAR: 53 entradas.
+- BORRAR: 22 entradas (1–4, 6, 15, 18, 21, 28–29, 34, 55–56, 67, 73, 78–82, 98–99). Son símbolos sin caller ni contrato verificable; no se confunden con métodos de puerto ni errores tipados.
+- CONSERVAR: 39 entradas.
 
 ## Método de evidencia
 
-La lista de entradas se cotejó literalmente con `codigo_inalcanzable_2026-07-12.txt` (99/99, sin duplicados). Para cada fila se revisó la declaración y las referencias exactas con `rg`; una conservación solo se mantiene cuando la propia firma implementa un contrato (`error` o puerto), es un tipo/constante de API o el adaptador está documentado como opt-in. Las filas BORRAR tienen únicamente la declaración como referencia verificable. No se usa posibilidad de reflexión, uso futuro o “escenarios futuros” como motivo.
+La lista de entradas se cotejó literalmente con `codigo_inalcanzable_2026-07-12.txt` (99/99, sin duplicados). Para cada fila se revisó la declaración y las referencias exactas con `rg`; una conservación solo se mantiene cuando la propia firma implementa un contrato (`error` o puerto), o es un tipo/constante contractual verificable. Las filas BORRAR tienen únicamente la declaración como referencia verificable. No se usa posibilidad de reflexión, uso futuro, compatibilidad hipotética ni “escenarios futuros” como motivo.
 
 La prioridad de implementación posterior es conectar primero las garantías de validación (`ValidateStrictEventSequenceV0`, `ValidateOrchestrationEventPayloadBudgetV0`, leases, decisión del director y registries), y hacerlo en cambios separados con sus pruebas. Esta clasificación no autoriza esos cambios: el write-set H4 es únicamente este documento.
