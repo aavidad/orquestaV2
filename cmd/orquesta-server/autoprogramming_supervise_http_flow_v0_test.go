@@ -497,19 +497,18 @@ func TestServerObserveAppDirectorGoalHTTPClienteRealRecibeTimeoutJSONV0(t *testi
 		t.Fatalf("client.Do elapsed=%s err=%v", elapsed, err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusGatewayTimeout || elapsed > 4*time.Second {
+	if resp.StatusCode != http.StatusAccepted || elapsed > 4*time.Second {
 		t.Fatalf("status=%d elapsed=%s", resp.StatusCode, elapsed)
 	}
 	var result orquestamcp.MCPObserveAppDirectorGoalToolResultV0
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if result.Estado != orquestamcp.MCPObserveAppDirectorGoalEstadoErrorV0 ||
+	if result.Estado != orquestamcp.MCPObserveAppDirectorGoalEstadoOKV0 || result.OperationRef == "" ||
 		!result.Partial ||
 		result.RunRef != "run-ref-server-observe-goal-timeout-001" ||
 		result.RecommendedAction != "observe_later" ||
-		len(result.Errores) != 1 ||
-		result.Errores[0].Code != orquestamcp.MCPObserveAppDirectorGoalHTTPTimeoutCodeV0 ||
+		len(result.Errores) != 0 || resp.Header.Get("Retry-After") != "1" ||
 		resp.Header.Get("X-Correlation-ID") != "corr-server-observe-goal-timeout-header-001" {
 		t.Fatalf("result=%+v headers=%v", result, resp.Header)
 	}
@@ -518,9 +517,16 @@ func TestServerObserveAppDirectorGoalHTTPClienteRealRecibeTimeoutJSONV0(t *testi
 	}
 	select {
 	case <-observeGoal.done:
-	case <-time.After(time.Second):
-		t.Fatalf("observe goal executor no recibio cancelacion tras timeout HTTP")
+		t.Fatal("la ventana HTTP cancelo trabajo durable")
+	default:
 	}
+	close(observeGoal.release)
+	<-observeGoal.done
+	replay := postServerObserveGoalForTestV0(t, client, server.URL+orquestamcp.MCPObserveAppDirectorGoalHTTPPathV0, body)
+	if replay.StatusCode != http.StatusOK || observeGoal.callsV0() != 1 {
+		t.Fatalf("replay status=%d calls=%d", replay.StatusCode, observeGoal.callsV0())
+	}
+	replay.Body.Close()
 }
 
 func TestServerAutoprogrammingObserveGoalHTTPClienteRealRecibeTimeoutJSONV0(t *testing.T) {
@@ -563,17 +569,16 @@ func TestServerAutoprogrammingObserveGoalHTTPClienteRealRecibeTimeoutJSONV0(t *t
 		t.Fatalf("client.Do elapsed=%s err=%v", elapsed, err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusGatewayTimeout || elapsed > 4*time.Second {
+	if resp.StatusCode != http.StatusAccepted || elapsed > 4*time.Second {
 		t.Fatalf("status=%d elapsed=%s", resp.StatusCode, elapsed)
 	}
 	var result orquestamcp.MCPAutoprogrammingObserveGoalToolResultV0
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if result.Estado != orquestamcp.MCPAutoprogrammingObserveGoalEstadoErrorV0 ||
+	if result.Estado != orquestamcp.MCPAutoprogrammingObserveGoalEstadoOKV0 || result.OperationRef == "" ||
 		result.RunRef != "run-ref-server-autop-observe-goal-timeout-001" ||
-		len(result.Errores) != 1 ||
-		result.Errores[0].Code != orquestamcp.MCPAutoprogrammingObserveGoalHTTPTimeoutCodeV0 ||
+		len(result.Errores) != 0 || resp.Header.Get("Retry-After") != "1" ||
 		resp.Header.Get("X-Correlation-ID") != "corr-server-autop-observe-goal-timeout-header-001" {
 		t.Fatalf("result=%+v headers=%v", result, resp.Header)
 	}
@@ -582,9 +587,16 @@ func TestServerAutoprogrammingObserveGoalHTTPClienteRealRecibeTimeoutJSONV0(t *t
 	}
 	select {
 	case <-observeGoal.done:
-	case <-time.After(time.Second):
-		t.Fatalf("autoprogramming observe goal executor no recibio cancelacion tras timeout HTTP")
+		t.Fatal("la ventana HTTP cancelo trabajo durable")
+	default:
 	}
+	close(observeGoal.release)
+	<-observeGoal.done
+	replay := postServerObserveGoalForTestV0(t, client, server.URL+orquestamcp.MCPAutoprogrammingObserveGoalHTTPPathV0, body)
+	if replay.StatusCode != http.StatusOK || observeGoal.callsV0() != 1 {
+		t.Fatalf("replay status=%d calls=%d", replay.StatusCode, observeGoal.callsV0())
+	}
+	replay.Body.Close()
 }
 
 func postServerAutoprogrammingSuperviseForTestV0(
@@ -605,6 +617,26 @@ func postServerAutoprogrammingSuperviseForTestV0(
 	started := time.Now()
 	handler.ServeHTTP(rec, req)
 	return rec, time.Since(started)
+}
+
+func postServerObserveGoalForTestV0(
+	t *testing.T,
+	client *http.Client,
+	url string,
+	body []byte,
+) *http.Response {
+	t.Helper()
+	request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept", "application/json")
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return response
 }
 
 func decodeServerAutoprogrammingSuperviseResultForTestV0(
@@ -652,17 +684,19 @@ type blockingServerExternalWorkRunExecutorV0 struct {
 }
 
 type blockingServerObserveAppDirectorGoalExecutorV0 struct {
-	mu    sync.Mutex
-	once  sync.Once
-	calls int
-	done  chan struct{}
+	mu      sync.Mutex
+	once    sync.Once
+	calls   int
+	done    chan struct{}
+	release chan struct{}
 }
 
 type blockingServerAutoprogrammingObserveGoalExecutorV0 struct {
-	mu    sync.Mutex
-	once  sync.Once
-	calls int
-	done  chan struct{}
+	mu      sync.Mutex
+	once    sync.Once
+	calls   int
+	done    chan struct{}
+	release chan struct{}
 }
 
 func newBlockingServerAutoprogrammingSuperviseExecutorV0() *blockingServerAutoprogrammingSuperviseExecutorV0 {
@@ -692,13 +726,13 @@ func newBlockingServerExternalWorkRunExecutorV0() *blockingServerExternalWorkRun
 
 func newBlockingServerObserveAppDirectorGoalExecutorV0() *blockingServerObserveAppDirectorGoalExecutorV0 {
 	return &blockingServerObserveAppDirectorGoalExecutorV0{
-		done: make(chan struct{}),
+		done: make(chan struct{}), release: make(chan struct{}),
 	}
 }
 
 func newBlockingServerAutoprogrammingObserveGoalExecutorV0() *blockingServerAutoprogrammingObserveGoalExecutorV0 {
 	return &blockingServerAutoprogrammingObserveGoalExecutorV0{
-		done: make(chan struct{}),
+		done: make(chan struct{}), release: make(chan struct{}),
 	}
 }
 
@@ -777,7 +811,10 @@ func (executor *blockingServerObserveAppDirectorGoalExecutorV0) Execute(
 	executor.mu.Lock()
 	executor.calls++
 	executor.mu.Unlock()
-	<-ctx.Done()
+	select {
+	case <-ctx.Done():
+	case <-executor.release:
+	}
 	executor.once.Do(func() { close(executor.done) })
 	return orquestamcp.MCPObserveAppDirectorGoalToolResultV0{
 		Estado: orquestamcp.MCPObserveAppDirectorGoalEstadoOKV0,
@@ -792,7 +829,10 @@ func (executor *blockingServerAutoprogrammingObserveGoalExecutorV0) Execute(
 	executor.mu.Lock()
 	executor.calls++
 	executor.mu.Unlock()
-	<-ctx.Done()
+	select {
+	case <-ctx.Done():
+	case <-executor.release:
+	}
 	executor.once.Do(func() { close(executor.done) })
 	return orquestamcp.MCPAutoprogrammingObserveGoalToolResultV0{
 		Estado: orquestamcp.MCPAutoprogrammingObserveGoalEstadoOKV0,
