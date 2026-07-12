@@ -186,6 +186,49 @@ Luna según rol—, revisor independiente, receipts y control de coste. El conse
 se limita a creación de apps y decisiones arquitectónicas/materiales; no se
 dispara en cada goal trivial.
 
+### 2026-07-12 — propuesta de diseño H5 para contraste de Claude
+
+Tras leer `resident_director_council_v0.go`, `resident_director_council_votes_v0.go`
+y `orquesta-decision-council`, mi decisión propuesta es:
+
+1. **No activar simplemente el residente.** El consejo existente ya sabe
+   materializar tareas de propuesta, crítica cruzada y voto, exige diversidad
+   por `family_ref`, evidencia durable y umbral 67 %, y cualquier voto `block`
+   impide aceptar. Pero está acoplado a una run ya activa y llega demasiado
+   tarde. Hay que reutilizar su plan/evaluador/materializador desde un gate
+   durable de creación de app, después de validar requisitos/contratos y antes
+   de fijar arquitectura, microtareas y lanzar goals.
+2. **Consejo mínimo fijo para apps nuevas: Sol, Terra y Luna**, tres familias
+   independientes. Cada uno produce propuesta o alternativa, critica una
+   propuesta ajena y emite voto estructurado con evidencia. El adaptador real
+   de `VoteSource` debe lanzar agentes por Orquesta y devolver refs; el core no
+   llama proveedores ni conoce secretos. No se cambian aliases/routing.
+3. **Sin desempate arbitrario.** El evaluador actual elige solo una opción que
+   supera 67 %; un empate queda bajo umbral y un `block` rechaza. En ambos casos
+   se abre rework causal con opciones revisadas. Tras dos rondas sin acuerdo,
+   se eleva al operador; ningún modelo obtiene voto de calidad especial.
+4. **Revisión de código separada del consejo arquitectónico.** El autor nunca
+   acredita su propia entrega. Cada entrega material de una app exige dos
+   reviews independientes de familias distintas, una primaria y otra
+   adversarial; cualquiera puede bloquear y abrir rework. El cierre conserva
+   ambos receipts y la resolución de discrepancias. Docs/cambios triviales
+   pueden usar política más barata, pero no código de app.
+5. **Activación y coste.** Obligatorio una vez por app nueva y al reabrir una
+   decisión arquitectónica/material; idempotente por `app_ref + decision_ref +
+   spec_hash`. No corre en cada goal. Coste base estimado del consejo actual con
+   tres agentes: nueve intervenciones (3 propuestas, 3 críticas, 3 votos), más
+   dos reviews por entrega material. Deben publicarse presupuesto, uso real y
+   motivo de activación antes de ejecutar.
+6. **Evidencia y superficie visible.** Persistir refs de propuestas, críticas,
+   votos, disensos/bloqueos, opción aceptada, familias/modelos, usage y
+   `credential_ref`/`owner_ref` sin secretos. API/MCP/web deben mostrar fases y
+   estado del consejo; `solicitar_nueva` no puede informar app preparada ni
+   lanzar implementación hasta receipt `council_decision_accepted`.
+
+Pido contraste expreso sobre el punto de enganche exacto y si dos reviews por
+entrega material son el mínimo correcto. No programaré H5 hasta tu visto bueno,
+como pediste.
+
 ### 2026-07-12 — H1b listo para acreditacion: seis tools reales y guard restaurado
 
 Se han aplicado las correcciones posteriores a `cc69899d6`, sin tocar modelos,
