@@ -183,6 +183,48 @@ func TestGoalRequiredTestAttestationV0ConcurrentClaimsRunOneAttestor(t *testing.
 	}
 }
 
+func TestGoalRequiredTestAttestationV0ClaimVivoEsperaSinReworkNiCierreV0(t *testing.T) {
+	spec := attestationSpecForTestV0(1)
+	snapshot := attestationSnapshotForTestV0(spec, "revision-ref-current")
+	request := goalRequiredTestAttestationClaimRequestV0(
+		spec, snapshot, spec.RequiredTests[0], GoalRequiredTestAttestationClaimPolicyV0{},
+	)
+	claimRef := GoalRequiredTestAttestationClaimRefV0(request)
+	store := &attestationStoreForTestV0{
+		snapshot: snapshot,
+		claims: map[string]GoalRequiredTestAttestationClaimV0{
+			claimRef: NormalizeGoalRequiredTestAttestationClaimV0(GoalRequiredTestAttestationClaimV0{
+				ClaimRef: claimRef, RunRef: request.RunRef, GoalRef: request.GoalRef,
+				RevisionRef: request.RevisionRef, TestRef: request.TestRef,
+				DefinitionSHA256: request.DefinitionSHA256,
+				Status:           GoalRequiredTestAttestationClaimStatusPendingV0,
+				ClaimedAt:        time.Now().UTC().Format(time.RFC3339Nano),
+			}),
+		},
+	}
+	attestor := &attestorForTestV0{}
+	stateStore := &attestationGoalStateStoreForTestV0{state: attestationRunningStateForTestV0(spec)}
+	result, err := ObserveGoalWorkV0(
+		context.Background(), GoalWorkObserveRequestV0{RunRef: spec.RunRef},
+		attestedLifecyclePortsForTestV0(snapshot, store, attestor, stateStore),
+	)
+	if err != nil || result.Terminal || result.ClosureEvaluated || result.NeedsRework || result.Accepted ||
+		result.Result.Status != GoalStatusRunningV0 || result.State.Status != GoalStatusRunningV0 ||
+		result.State.LastClosure != nil || attestor.calls != 0 ||
+		!hasGoalRequiredTestResultIssueForTestV0(result.Result.Issues, ErrGoalRequiredTestAttestationClaimedV0) {
+		t.Fatalf("result=%+v calls=%d err=%v", result, attestor.calls, err)
+	}
+}
+
+func hasGoalRequiredTestResultIssueForTestV0(issues []GoalWorkIssueV0, code string) bool {
+	for _, issue := range issues {
+		if issue.Code == code {
+			return true
+		}
+	}
+	return false
+}
+
 func TestGoalRequiredTestAttestationV0ErrorTrasClaimPersisteInfraSinReintento(t *testing.T) {
 	spec := attestationSpecForTestV0(1)
 	snapshot := attestationSnapshotForTestV0(spec, "revision-ref-current")

@@ -195,6 +195,160 @@ func TestStoreV0GoalRequiredTestAttestationClaimFailedSurvivesRecreateWithoutRea
 	}
 }
 
+func TestStoreV0GoalRequiredTestAttestationLeaseVivoNoSeRobaYExpiradoExigeGobiernoV0(t *testing.T) {
+	root := t.TempDir()
+	store, err := NewStoreV0(ConfigV0{RootDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := goalRequiredTestAttestationClaimRequestForStoreTestV0()
+	request.OwnerRef = "owner-ref-attestor-a"
+	request.ObservedAt = "2026-07-12T10:00:00Z"
+	request.LeaseDurationSeconds = 60
+	first, err := store.AcquireGoalRequiredTestAttestationClaimV0(context.Background(), request)
+	if err != nil || !first.Acquired || first.Reclaimed || first.Claim.LeaseGeneration != 1 {
+		t.Fatalf("first=%+v err=%v", first, err)
+	}
+
+	live := request
+	live.OwnerRef = "owner-ref-attestor-b"
+	live.ObservedAt = "2026-07-12T10:00:59Z"
+	live.ReclaimExpired = true
+	live.ReclaimAuthorizationRef = "reclaim-auth-ref-lease-test"
+	result, err := store.AcquireGoalRequiredTestAttestationClaimV0(context.Background(), live)
+	if err != nil || result.Acquired || result.Claim.OwnerRef != first.Claim.OwnerRef {
+		t.Fatalf("live lease robado: result=%+v err=%v", result, err)
+	}
+
+	expiredWithoutAuthority := live
+	expiredWithoutAuthority.ObservedAt = "2026-07-12T10:01:00Z"
+	expiredWithoutAuthority.ReclaimExpired = false
+	expiredWithoutAuthority.ReclaimAuthorizationRef = ""
+	result, err = store.AcquireGoalRequiredTestAttestationClaimV0(context.Background(), expiredWithoutAuthority)
+	if err != nil || result.Acquired || result.Claim.OwnerRef != first.Claim.OwnerRef {
+		t.Fatalf("expired lease sin autoridad fue adquirido: result=%+v err=%v", result, err)
+	}
+
+	reclaimed, err := store.AcquireGoalRequiredTestAttestationClaimV0(context.Background(), orquestagoal.GoalRequiredTestAttestationClaimRequestV0{
+		RunRef: request.RunRef, GoalRef: request.GoalRef, RevisionRef: request.RevisionRef,
+		TestRef: request.TestRef, DefinitionSHA256: request.DefinitionSHA256,
+		OwnerRef: "owner-ref-attestor-b", ObservedAt: "2026-07-12T10:01:00Z", LeaseDurationSeconds: 60,
+		ReclaimExpired: true, ReclaimAuthorizationRef: "reclaim-auth-ref-lease-test",
+	})
+	if err != nil || !reclaimed.Acquired || !reclaimed.Reclaimed || reclaimed.Claim.LeaseGeneration != 2 ||
+		reclaimed.Claim.OwnerRef != "owner-ref-attestor-b" || reclaimed.Claim.PreviousOwnerRef != "owner-ref-attestor-a" {
+		t.Fatalf("reclaimed=%+v err=%v", reclaimed, err)
+	}
+	if err := store.CompleteGoalRequiredTestAttestationClaimV0(context.Background(), first.Claim, goalRequiredTestAttestationForStoreTestV0()); err == nil {
+		t.Fatal("owner antiguo no debe completar tras reclaim")
+	}
+}
+
+func TestStoreV0GoalRequiredTestAttestationReclaimConcurrenteYCompletedNoReabreTrasRecreateV0(t *testing.T) {
+	root := t.TempDir()
+	initial, _ := NewStoreV0(ConfigV0{RootDir: root})
+	request := goalRequiredTestAttestationClaimRequestForStoreTestV0()
+	request.OwnerRef = "owner-ref-abandoned"
+	request.ObservedAt = "2026-07-12T10:00:00Z"
+	request.LeaseDurationSeconds = 1
+	if acquired, err := initial.AcquireGoalRequiredTestAttestationClaimV0(context.Background(), request); err != nil || !acquired.Acquired {
+		t.Fatalf("initial=%+v err=%v", acquired, err)
+	}
+	left, _ := NewStoreV0(ConfigV0{RootDir: root})
+	right, _ := NewStoreV0(ConfigV0{RootDir: root})
+	stores := []*StoreV0{left, right}
+	results := make(chan orquestagoal.GoalRequiredTestAttestationClaimResultV0, 2)
+	errors := make(chan error, 2)
+	for index, candidate := range stores {
+		go func(index int, candidate *StoreV0) {
+			reclaim := request
+			reclaim.OwnerRef = fmt.Sprintf("owner-ref-reclaimer-%d", index)
+			reclaim.ObservedAt = "2026-07-12T10:00:02Z"
+			reclaim.LeaseDurationSeconds = 60
+			reclaim.ReclaimExpired = true
+			reclaim.ReclaimAuthorizationRef = "reclaim-auth-ref-concurrent"
+			result, acquireErr := candidate.AcquireGoalRequiredTestAttestationClaimV0(context.Background(), reclaim)
+			results <- result
+			errors <- acquireErr
+		}(index, candidate)
+	}
+	var winner orquestagoal.GoalRequiredTestAttestationClaimV0
+	wins := 0
+	for range 2 {
+		result := <-results
+		if err := <-errors; err != nil {
+			t.Fatal(err)
+		}
+		if result.Acquired {
+			wins++
+			winner = result.Claim
+		}
+	}
+	if wins != 1 || winner.LeaseGeneration != 2 {
+		t.Fatalf("wins=%d winner=%+v", wins, winner)
+	}
+	if err := initial.CompleteGoalRequiredTestAttestationClaimV0(context.Background(), winner, goalRequiredTestAttestationForStoreTestV0()); err != nil {
+		t.Fatalf("complete winner: %v", err)
+	}
+	recovered, _ := NewStoreV0(ConfigV0{RootDir: root})
+	reopen := request
+	reopen.OwnerRef = "owner-ref-after-complete"
+	reopen.ObservedAt = "2026-07-12T11:00:00Z"
+	reopen.ReclaimExpired = true
+	reopen.ReclaimAuthorizationRef = "reclaim-auth-ref-after-complete"
+	result, err := recovered.AcquireGoalRequiredTestAttestationClaimV0(context.Background(), reopen)
+	if err != nil || result.Acquired || result.Claim.Status != orquestagoal.GoalRequiredTestAttestationClaimStatusCompletedV0 ||
+		result.Claim.OwnerRef != winner.OwnerRef || result.Claim.LeaseGeneration != winner.LeaseGeneration {
+		t.Fatalf("completed reabierto: result=%+v err=%v", result, err)
+	}
+}
+
+func TestStoreV0GoalRequiredTestClaimFallidoNoResucitaACompletedV0(t *testing.T) {
+	root := t.TempDir()
+	store, err := NewStoreV0(ConfigV0{RootDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := goalRequiredTestAttestationClaimRequestForStoreTestV0()
+	request.OwnerRef = "owner-ref-failed-terminal"
+	claim, err := store.AcquireGoalRequiredTestAttestationClaimV0(context.Background(), request)
+	if err != nil || !claim.Acquired {
+		t.Fatalf("acquire=%+v err=%v", claim, err)
+	}
+	failed, err := store.FailGoalRequiredTestAttestationClaimV0(
+		context.Background(), claim.Claim, "attestor_infrastructure_failed",
+	)
+	if err != nil || failed.Status != orquestagoal.GoalRequiredTestAttestationClaimStatusFailedV0 {
+		t.Fatalf("failed=%+v err=%v", failed, err)
+	}
+	if err := store.CompleteGoalRequiredTestAttestationClaimV0(
+		context.Background(), claim.Claim, goalRequiredTestAttestationForStoreTestV0(),
+	); err == nil {
+		t.Fatal("un claim failed no puede resucitar a completed")
+	}
+	restarted, err := NewStoreV0(ConfigV0{RootDir: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	reloaded, err := restarted.AcquireGoalRequiredTestAttestationClaimV0(context.Background(), request)
+	if err != nil || reloaded.Acquired || reloaded.Claim.Status != orquestagoal.GoalRequiredTestAttestationClaimStatusFailedV0 {
+		t.Fatalf("reloaded=%+v err=%v", reloaded, err)
+	}
+}
+
+func TestStoreV0GoalRequiredTestClaimRechazaLeaseNegativaV0(t *testing.T) {
+	store, err := NewStoreV0(ConfigV0{RootDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := goalRequiredTestAttestationClaimRequestForStoreTestV0()
+	request.OwnerRef = "owner-ref-negative-lease"
+	request.LeaseDurationSeconds = -1
+	if _, err := store.AcquireGoalRequiredTestAttestationClaimV0(context.Background(), request); err == nil {
+		t.Fatal("lease negativa aceptada como default")
+	}
+}
+
 func TestStoreV0GoalStateCASAcrossInstancesAllowsSingleWriterAndPersistsOperatorEvidence(t *testing.T) {
 	root := t.TempDir()
 	first, _ := NewStoreV0(ConfigV0{RootDir: root})

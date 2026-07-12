@@ -58,6 +58,7 @@ func (source stackGoalMaterializedRefsSourceV0) goalFirstReceiptRepairLifecycleP
 		RequiredTestAttestor:         source.Config.AppGoalRequiredTestAttestor,
 		RequiredTestAttestationStore: source.Config.Stores.GoalRequiredTestAttestationStore,
 		RequiredTestIdentityVerifier: source.Config.AppGoalRequiredTestIdentityVerifier,
+		RequiredTestClaimPolicy:      source.Config.GoalRequiredTestClaimPolicy,
 	}
 }
 

@@ -31,6 +31,12 @@ import (
 	orquestaweb "orquesta/modulos/orquesta-web"
 )
 
+var serverGoalRequiredTestClaimOwnerRefV0 = fmt.Sprintf(
+	"owner-ref-orquesta-server-goal-observer-%d-%d",
+	os.Getpid(),
+	time.Now().UTC().UnixNano(),
+)
+
 func buildRuntimeFromConfigV0(serverConfig orquestaserver.ConfigV0) (*orquestaserver.RuntimeV0, error) {
 	supervisorWakeup := &serverSupervisorWakeupRelayV0{}
 	goalBackends, err := serverCodexGoalBackendsFromEnvV0(serverConfig)
@@ -439,6 +445,12 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 		AppGoalRequiredTestSnapshotObserver: goalRequiredTestSnapshotObserver,
 		AppGoalRequiredTestAttestor:         goalRequiredTestAttestor,
 		AppGoalRequiredTestIdentityVerifier: goalRequiredTestIdentityVerifier,
+		GoalRequiredTestClaimPolicy: orquestagoal.GoalRequiredTestAttestationClaimPolicyV0{
+			OwnerRef:                serverGoalRequiredTestClaimOwnerRefV0,
+			LeaseDurationSeconds:    orquestagoal.GoalRequiredTestAttestationClaimDefaultLeaseSecondsV0,
+			ReclaimExpired:          true,
+			ReclaimAuthorizationRef: "authorization-ref-orquesta-server-goal-observer-reclaim-v0",
+		},
 		AppGoalBackendControl: serverGoalBackendControlForAppAndAutoprogrammingV0(
 			goalBackend,
 			autoprogrammingGoalBackend,

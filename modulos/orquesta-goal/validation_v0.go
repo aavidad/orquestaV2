@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 	"unicode"
 )
 
@@ -13,6 +14,102 @@ var (
 	goalWorkIssueWindowsPathPatternV0  = regexp.MustCompile(`(?i)(^|[\s"'=:(])([a-z]:\\[^ \n\r\t"')]+)`)
 	goalWorkIssueSecretPatternV0       = regexp.MustCompile(`(?i)(bearer\s+)[a-z0-9._\-+/=]{12,}|(sk-[a-z0-9_\-]{8,})|((?:api[_-]?key|token|oauth[_-]?token|access[_-]?token|authorization)=)[^ \n\r\t"')]+`)
 )
+
+func NormalizeGoalRequiredTestAttestationClaimRequestLeaseV0(
+	request GoalRequiredTestAttestationClaimRequestV0,
+) GoalRequiredTestAttestationClaimRequestV0 {
+	request.RunRef = strings.TrimSpace(request.RunRef)
+	request.GoalRef = strings.TrimSpace(request.GoalRef)
+	request.RevisionRef = strings.TrimSpace(request.RevisionRef)
+	request.TestRef = strings.TrimSpace(request.TestRef)
+	request.DefinitionSHA256 = strings.ToLower(strings.TrimSpace(request.DefinitionSHA256))
+	request.OwnerRef = strings.TrimSpace(request.OwnerRef)
+	request.ObservedAt = strings.TrimSpace(request.ObservedAt)
+	request.ReclaimAuthorizationRef = strings.TrimSpace(request.ReclaimAuthorizationRef)
+	if request.LeaseDurationSeconds == 0 {
+		request.LeaseDurationSeconds = GoalRequiredTestAttestationClaimDefaultLeaseSecondsV0
+	}
+	return request
+}
+
+func ValidateGoalRequiredTestAttestationClaimRequestLeaseV0(
+	request GoalRequiredTestAttestationClaimRequestV0,
+) []GoalWorkIssueV0 {
+	request = NormalizeGoalRequiredTestAttestationClaimRequestLeaseV0(request)
+	issues := []GoalWorkIssueV0{}
+	validateRequiredGoalRefV0(&issues, "owner_ref", request.OwnerRef)
+	if request.LeaseDurationSeconds <= 0 || request.LeaseDurationSeconds > GoalRequiredTestAttestationClaimMaxLeaseSecondsV0 {
+		issues = append(issues, GoalWorkIssueV0{Code: ErrGoalRequiredTestAttestationLeaseInvalidV0, Field: "lease_duration_seconds"})
+	}
+	if request.ObservedAt != "" {
+		if _, err := time.Parse(time.RFC3339Nano, request.ObservedAt); err != nil {
+			issues = append(issues, GoalWorkIssueV0{Code: ErrGoalRequiredTestAttestationLeaseInvalidV0, Field: "observed_at"})
+		}
+	}
+	if request.ReclaimExpired {
+		validateRequiredGoalRefV0(&issues, "reclaim_authorization_ref", request.ReclaimAuthorizationRef)
+	} else if request.ReclaimAuthorizationRef != "" {
+		issues = append(issues, GoalWorkIssueV0{Code: ErrGoalRequiredTestAttestationReclaimUnauthorizedV0, Field: "reclaim_authorization_ref"})
+	}
+	return issues
+}
+
+func NormalizeGoalRequiredTestAttestationClaimLeaseV0(
+	claim GoalRequiredTestAttestationClaimV0,
+) GoalRequiredTestAttestationClaimV0 {
+	claim = NormalizeGoalRequiredTestAttestationClaimV0(claim)
+	claim.OwnerRef = strings.TrimSpace(claim.OwnerRef)
+	claim.LeaseExpiresAt = strings.TrimSpace(claim.LeaseExpiresAt)
+	claim.PreviousOwnerRef = strings.TrimSpace(claim.PreviousOwnerRef)
+	claim.ReclaimedAt = strings.TrimSpace(claim.ReclaimedAt)
+	claim.ReclaimAuthorizationRef = strings.TrimSpace(claim.ReclaimAuthorizationRef)
+	// Claims written before leases existed remain readable. They receive a
+	// deterministic legacy owner and an expiry derived from their durable claim
+	// time; reclaim still requires explicit authorization.
+	if claim.OwnerRef == "" && claim.ClaimRef != "" {
+		claim.OwnerRef = "owner-ref-legacy-" + claim.ClaimRef
+	}
+	if claim.LeaseGeneration == 0 {
+		claim.LeaseGeneration = 1
+	}
+	if claim.LeaseExpiresAt == "" {
+		if claimedAt, err := time.Parse(time.RFC3339Nano, claim.ClaimedAt); err == nil {
+			claim.LeaseExpiresAt = claimedAt.Add(time.Duration(GoalRequiredTestAttestationClaimDefaultLeaseSecondsV0) * time.Second).Format(time.RFC3339Nano)
+		}
+	}
+	return claim
+}
+
+func ValidateGoalRequiredTestAttestationClaimLeaseV0(
+	claim GoalRequiredTestAttestationClaimV0,
+) []GoalWorkIssueV0 {
+	claim = NormalizeGoalRequiredTestAttestationClaimLeaseV0(claim)
+	issues := ValidateGoalRequiredTestAttestationClaimV0(claim)
+	validateRequiredGoalRefV0(&issues, "owner_ref", claim.OwnerRef)
+	if claim.LeaseGeneration == 0 {
+		issues = append(issues, GoalWorkIssueV0{Code: ErrGoalRequiredTestAttestationLeaseInvalidV0, Field: "lease_generation"})
+	}
+	if _, err := time.Parse(time.RFC3339Nano, claim.LeaseExpiresAt); err != nil {
+		issues = append(issues, GoalWorkIssueV0{Code: ErrGoalRequiredTestAttestationLeaseInvalidV0, Field: "lease_expires_at"})
+	}
+	if claim.ReclaimedAt != "" {
+		if _, err := time.Parse(time.RFC3339Nano, claim.ReclaimedAt); err != nil {
+			issues = append(issues, GoalWorkIssueV0{Code: ErrGoalRequiredTestAttestationLeaseInvalidV0, Field: "reclaimed_at"})
+		}
+		validateRequiredGoalRefV0(&issues, "previous_owner_ref", claim.PreviousOwnerRef)
+		validateRequiredGoalRefV0(&issues, "reclaim_authorization_ref", claim.ReclaimAuthorizationRef)
+	}
+	return issues
+}
+
+func GoalRequiredTestAttestationClaimLeaseExpiredV0(
+	claim GoalRequiredTestAttestationClaimV0,
+	observedAt time.Time,
+) bool {
+	claim = NormalizeGoalRequiredTestAttestationClaimLeaseV0(claim)
+	expiresAt, err := time.Parse(time.RFC3339Nano, claim.LeaseExpiresAt)
+	return err == nil && !observedAt.Before(expiresAt)
+}
 
 func NormalizeGoalWorkSpecV0(spec GoalWorkSpecV0) GoalWorkSpecV0 {
 	spec = cloneGoalWorkSpecSlicesV0(spec)

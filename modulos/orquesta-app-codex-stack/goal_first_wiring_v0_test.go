@@ -81,17 +81,25 @@ func TestBuildDirectorPortsV0CableaAttestorIndependienteOptIn(t *testing.T) {
 	verifier := independentIdentityVerifierForStackTestV0{}
 	binder := independentSpecBinderForStackTestV0{}
 	snapshotter := independentSnapshotObserverForStackTestV0{}
+	claimPolicy := orquestagoal.GoalRequiredTestAttestationClaimPolicyV0{
+		OwnerRef: "owner-ref-stack-wiring-attestor", LeaseDurationSeconds: 45,
+		ReclaimExpired: true, ReclaimAuthorizationRef: "authorization-ref-stack-wiring-reclaim",
+	}
 	ports := buildDirectorPortsV0(ConfigV0{
 		AppGoalRequiredTestSpecBinder:       binder,
 		AppGoalRequiredTestSnapshotObserver: snapshotter,
 		AppGoalRequiredTestAttestor:         attestor,
 		AppGoalRequiredTestIdentityVerifier: verifier,
 		Stores:                              StoresV0{GoalRequiredTestAttestationStore: store},
+		GoalRequiredTestClaimPolicy:         claimPolicy,
 	})
 	if ports.GoalRequiredTestSpecBinder == nil || ports.GoalRequiredTestSnapshotObserver == nil ||
 		ports.GoalRequiredTestAttestor != attestor || ports.GoalRequiredTestAttestationStore != store ||
 		ports.GoalRequiredTestIdentityVerifier == nil {
 		t.Fatalf("wiring attestation incompleto: %+v", ports)
+	}
+	if ports.GoalRequiredTestClaimPolicy != claimPolicy {
+		t.Fatalf("politica de claim no cableada: %+v", ports.GoalRequiredTestClaimPolicy)
 	}
 	if _, ok := ports.GoalClosureValidator.(orquestagoal.IndependentGoalRequiredTestAttestationClosureValidatorV0); !ok {
 		t.Fatalf("closure validator no exige reader independiente: %T", ports.GoalClosureValidator)

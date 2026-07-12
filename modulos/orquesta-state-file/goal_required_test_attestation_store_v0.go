@@ -227,19 +227,30 @@ func (store *StoreV0) AcquireGoalRequiredTestAttestationClaimV0(
 	request orquestagoal.GoalRequiredTestAttestationClaimRequestV0,
 ) (orquestagoal.GoalRequiredTestAttestationClaimResultV0, error) {
 	ctx = contextOrBackgroundV0(ctx)
-	request.RunRef = strings.TrimSpace(request.RunRef)
-	request.GoalRef = strings.TrimSpace(request.GoalRef)
-	request.RevisionRef = strings.TrimSpace(request.RevisionRef)
-	request.TestRef = strings.TrimSpace(request.TestRef)
-	request.DefinitionSHA256 = strings.ToLower(strings.TrimSpace(request.DefinitionSHA256))
-	claim := orquestagoal.NormalizeGoalRequiredTestAttestationClaimV0(orquestagoal.GoalRequiredTestAttestationClaimV0{
-		ClaimRef: orquestagoal.GoalRequiredTestAttestationClaimRefV0(request),
+	request = orquestagoal.NormalizeGoalRequiredTestAttestationClaimRequestLeaseV0(request)
+	claimRef := orquestagoal.GoalRequiredTestAttestationClaimRefV0(request)
+	if request.OwnerRef == "" {
+		request.OwnerRef = "owner-ref-default-" + claimRef
+	}
+	if issues := orquestagoal.ValidateGoalRequiredTestAttestationClaimRequestLeaseV0(request); len(issues) > 0 {
+		return orquestagoal.GoalRequiredTestAttestationClaimResultV0{}, invalidErrorV0("goal_required_test_attestation_claim", "lease request invalido")
+	}
+	observedAt := time.Now().UTC()
+	if request.ObservedAt != "" {
+		observedAt, _ = time.Parse(time.RFC3339Nano, request.ObservedAt)
+	}
+	leaseExpiresAt := observedAt.Add(time.Duration(request.LeaseDurationSeconds) * time.Second)
+	claim := orquestagoal.NormalizeGoalRequiredTestAttestationClaimLeaseV0(orquestagoal.GoalRequiredTestAttestationClaimV0{
+		ClaimRef: claimRef,
 		RunRef:   request.RunRef, GoalRef: request.GoalRef, RevisionRef: request.RevisionRef,
 		TestRef: request.TestRef, DefinitionSHA256: request.DefinitionSHA256,
-		Status:    orquestagoal.GoalRequiredTestAttestationClaimStatusPendingV0,
-		ClaimedAt: time.Now().UTC().Format(time.RFC3339Nano),
+		Status:          orquestagoal.GoalRequiredTestAttestationClaimStatusPendingV0,
+		ClaimedAt:       observedAt.Format(time.RFC3339Nano),
+		OwnerRef:        request.OwnerRef,
+		LeaseExpiresAt:  leaseExpiresAt.Format(time.RFC3339Nano),
+		LeaseGeneration: 1,
 	})
-	if issues := orquestagoal.ValidateGoalRequiredTestAttestationClaimV0(claim); len(issues) > 0 {
+	if issues := orquestagoal.ValidateGoalRequiredTestAttestationClaimLeaseV0(claim); len(issues) > 0 {
 		return orquestagoal.GoalRequiredTestAttestationClaimResultV0{}, invalidErrorV0("goal_required_test_attestation_claim", "claim invalido")
 	}
 	store.mu.Lock()
@@ -258,6 +269,30 @@ func (store *StoreV0) AcquireGoalRequiredTestAttestationClaimV0(
 			}
 			if current.ClaimRef != claim.ClaimRef || current.DefinitionSHA256 != claim.DefinitionSHA256 {
 				return storeErrorV0("goal_required_test_attestation_claim", "claim canonico contradice definicion congelada")
+			}
+			if current.Status == orquestagoal.GoalRequiredTestAttestationClaimStatusPendingV0 &&
+				orquestagoal.GoalRequiredTestAttestationClaimLeaseExpiredV0(current, observedAt) &&
+				request.ReclaimExpired && request.ReclaimAuthorizationRef != "" {
+				previousOwnerRef := current.OwnerRef
+				current.OwnerRef = request.OwnerRef
+				current.PreviousOwnerRef = previousOwnerRef
+				current.ClaimedAt = observedAt.Format(time.RFC3339Nano)
+				current.LeaseExpiresAt = leaseExpiresAt.Format(time.RFC3339Nano)
+				current.LeaseGeneration++
+				current.ReclaimedAt = observedAt.Format(time.RFC3339Nano)
+				current.ReclaimAuthorizationRef = request.ReclaimAuthorizationRef
+				current = orquestagoal.NormalizeGoalRequiredTestAttestationClaimLeaseV0(current)
+				if issues := orquestagoal.ValidateGoalRequiredTestAttestationClaimLeaseV0(current); len(issues) > 0 {
+					return storeErrorV0("goal_required_test_attestation_claim", "reclaim invalido")
+				}
+				if err := writeJSONAtomicV0(path, goalRequiredTestAttestationClaimDocumentV0{
+					SchemaVersion: goalRequiredTestAttestationClaimDocumentSchemaV0,
+					RunRef:        current.RunRef, ClaimRef: current.ClaimRef, Claim: current,
+				}); err != nil {
+					return err
+				}
+				result = orquestagoal.GoalRequiredTestAttestationClaimResultV0{Claim: current, Acquired: true, Reclaimed: true}
+				return nil
 			}
 			result.Claim = current
 			return nil
@@ -281,8 +316,9 @@ func (store *StoreV0) CompleteGoalRequiredTestAttestationClaimV0(
 ) error {
 	ctx = contextOrBackgroundV0(ctx)
 	claim = orquestagoal.NormalizeGoalRequiredTestAttestationClaimV0(claim)
+	claim = orquestagoal.NormalizeGoalRequiredTestAttestationClaimLeaseV0(claim)
 	attestation = orquestagoal.NormalizeGoalRequiredTestAttestationV0(attestation)
-	if issues := orquestagoal.ValidateGoalRequiredTestAttestationClaimV0(claim); len(issues) > 0 ||
+	if issues := orquestagoal.ValidateGoalRequiredTestAttestationClaimLeaseV0(claim); len(issues) > 0 ||
 		len(orquestagoal.ValidateGoalRequiredTestAttestationV0(attestation)) > 0 {
 		return invalidErrorV0("goal_required_test_attestation_claim", "claim o receipt invalido")
 	}
@@ -305,14 +341,17 @@ func (store *StoreV0) CompleteGoalRequiredTestAttestationClaimV0(
 		if err != nil {
 			return err
 		}
-		if current.ClaimRef != claim.ClaimRef {
-			return storeErrorV0("goal_required_test_attestation_claim", "claim durable distinto")
+		if !goalRequiredTestAttestationClaimLeaseIdentityEqualV0(current, claim) {
+			return storeErrorV0("goal_required_test_attestation_claim", orquestagoal.ErrGoalRequiredTestAttestationLeaseOwnerMismatchV0)
 		}
 		if current.Status == orquestagoal.GoalRequiredTestAttestationClaimStatusCompletedV0 {
 			if current.AttestationRef != attestation.AttestationRef {
 				return storeErrorV0("goal_required_test_attestation_claim", "claim completado con receipt contradictorio")
 			}
 			return store.saveGoalRequiredTestAttestationLockedV0(attestation)
+		}
+		if current.Status == orquestagoal.GoalRequiredTestAttestationClaimStatusFailedV0 {
+			return storeErrorV0("goal_required_test_attestation_claim", "claim fallido no puede completarse")
 		}
 		if err := store.saveGoalRequiredTestAttestationLockedV0(attestation); err != nil {
 			return err
@@ -333,9 +372,9 @@ func (store *StoreV0) FailGoalRequiredTestAttestationClaimV0(
 	failureCode string,
 ) (orquestagoal.GoalRequiredTestAttestationClaimV0, error) {
 	ctx = contextOrBackgroundV0(ctx)
-	claim = orquestagoal.NormalizeGoalRequiredTestAttestationClaimV0(claim)
+	claim = orquestagoal.NormalizeGoalRequiredTestAttestationClaimLeaseV0(claim)
 	failureCode = strings.TrimSpace(failureCode)
-	if issues := orquestagoal.ValidateGoalRequiredTestAttestationClaimV0(claim); len(issues) > 0 || failureCode == "" {
+	if issues := orquestagoal.ValidateGoalRequiredTestAttestationClaimLeaseV0(claim); len(issues) > 0 || failureCode == "" {
 		return orquestagoal.GoalRequiredTestAttestationClaimV0{}, invalidErrorV0("goal_required_test_attestation_claim", "claim o fallo invalido")
 	}
 	store.mu.Lock()
@@ -354,8 +393,8 @@ func (store *StoreV0) FailGoalRequiredTestAttestationClaimV0(
 		if err != nil {
 			return err
 		}
-		if current.ClaimRef != claim.ClaimRef {
-			return storeErrorV0("goal_required_test_attestation_claim", "claim durable distinto")
+		if !goalRequiredTestAttestationClaimLeaseIdentityEqualV0(current, claim) {
+			return storeErrorV0("goal_required_test_attestation_claim", orquestagoal.ErrGoalRequiredTestAttestationLeaseOwnerMismatchV0)
 		}
 		if current.Status == orquestagoal.GoalRequiredTestAttestationClaimStatusCompletedV0 {
 			return storeErrorV0("goal_required_test_attestation_claim", "claim ya completado")
@@ -433,9 +472,20 @@ func validateGoalRequiredTestAttestationClaimDocumentV0(
 	if document.SchemaVersion != goalRequiredTestAttestationClaimDocumentSchemaV0 || document.RunRef != runRef {
 		return orquestagoal.GoalRequiredTestAttestationClaimV0{}, storeErrorV0("goal_required_test_attestation_claim", "documento inconsistente")
 	}
-	claim := orquestagoal.NormalizeGoalRequiredTestAttestationClaimV0(document.Claim)
-	if issues := orquestagoal.ValidateGoalRequiredTestAttestationClaimV0(claim); len(issues) > 0 || claim.RunRef != runRef || claim.ClaimRef != document.ClaimRef {
+	claim := orquestagoal.NormalizeGoalRequiredTestAttestationClaimLeaseV0(document.Claim)
+	if issues := orquestagoal.ValidateGoalRequiredTestAttestationClaimLeaseV0(claim); len(issues) > 0 || claim.RunRef != runRef || claim.ClaimRef != document.ClaimRef {
 		return orquestagoal.GoalRequiredTestAttestationClaimV0{}, storeErrorV0("goal_required_test_attestation_claim", "claim interno invalido")
 	}
 	return claim, nil
+}
+
+func goalRequiredTestAttestationClaimLeaseIdentityEqualV0(
+	current orquestagoal.GoalRequiredTestAttestationClaimV0,
+	claim orquestagoal.GoalRequiredTestAttestationClaimV0,
+) bool {
+	current = orquestagoal.NormalizeGoalRequiredTestAttestationClaimLeaseV0(current)
+	claim = orquestagoal.NormalizeGoalRequiredTestAttestationClaimLeaseV0(claim)
+	return current.ClaimRef == claim.ClaimRef &&
+		current.OwnerRef == claim.OwnerRef &&
+		current.LeaseGeneration == claim.LeaseGeneration
 }

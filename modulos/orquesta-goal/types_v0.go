@@ -59,6 +59,9 @@ const (
 	ErrGoalRequiredTestAttestationMismatchV0               = "goal_required_test_attestation_mismatch"
 	ErrGoalRequiredTestAttestorUntrustedV0                 = "goal_required_test_attestor_untrusted"
 	ErrGoalRequiredTestAttestationClaimedV0                = "goal_required_test_attestation_claimed"
+	ErrGoalRequiredTestAttestationLeaseInvalidV0           = "goal_required_test_attestation_lease_invalid"
+	ErrGoalRequiredTestAttestationLeaseOwnerMismatchV0     = "goal_required_test_attestation_lease_owner_mismatch"
+	ErrGoalRequiredTestAttestationReclaimUnauthorizedV0    = "goal_required_test_attestation_reclaim_unauthorized"
 	ErrGoalRequiredTestSnapshotMissingV0                   = "goal_required_test_final_snapshot_missing"
 	ErrGoalRequiredTestSnapshotMismatchV0                  = "goal_required_test_final_snapshot_mismatch"
 	ErrGoalRequiredAcceptanceCriterionAttestationMissingV0 = "goal_required_acceptance_criterion_attestation_missing"
@@ -401,38 +404,62 @@ type GoalRequiredTestAttestationQueryV0 struct {
 }
 
 const (
-	GoalRequiredTestAttestationClaimStatusPendingV0   = "pending"
-	GoalRequiredTestAttestationClaimStatusCompletedV0 = "completed"
-	GoalRequiredTestAttestationClaimStatusFailedV0    = "failed"
+	GoalRequiredTestAttestationClaimStatusPendingV0       = "pending"
+	GoalRequiredTestAttestationClaimStatusCompletedV0     = "completed"
+	GoalRequiredTestAttestationClaimStatusFailedV0        = "failed"
+	GoalRequiredTestAttestationClaimDefaultLeaseSecondsV0 = 15 * 60
+	GoalRequiredTestAttestationClaimMaxLeaseSecondsV0     = 60 * 60
 )
 
 type GoalRequiredTestAttestationClaimV0 struct {
-	SchemaVersion    string `json:"schema_version"`
-	ClaimRef         string `json:"claim_ref"`
-	RunRef           string `json:"run_ref"`
-	GoalRef          string `json:"goal_ref"`
-	RevisionRef      string `json:"revision_ref"`
-	TestRef          string `json:"test_ref"`
-	DefinitionSHA256 string `json:"definition_sha256"`
-	Status           string `json:"status"`
-	AttestationRef   string `json:"attestation_ref,omitempty"`
-	ClaimedAt        string `json:"claimed_at"`
-	CompletedAt      string `json:"completed_at,omitempty"`
-	FailedAt         string `json:"failed_at,omitempty"`
-	FailureCode      string `json:"failure_code,omitempty"`
+	SchemaVersion           string `json:"schema_version"`
+	ClaimRef                string `json:"claim_ref"`
+	RunRef                  string `json:"run_ref"`
+	GoalRef                 string `json:"goal_ref"`
+	RevisionRef             string `json:"revision_ref"`
+	TestRef                 string `json:"test_ref"`
+	DefinitionSHA256        string `json:"definition_sha256"`
+	Status                  string `json:"status"`
+	AttestationRef          string `json:"attestation_ref,omitempty"`
+	ClaimedAt               string `json:"claimed_at"`
+	CompletedAt             string `json:"completed_at,omitempty"`
+	FailedAt                string `json:"failed_at,omitempty"`
+	FailureCode             string `json:"failure_code,omitempty"`
+	OwnerRef                string `json:"owner_ref,omitempty"`
+	LeaseExpiresAt          string `json:"lease_expires_at,omitempty"`
+	LeaseGeneration         uint64 `json:"lease_generation,omitempty"`
+	PreviousOwnerRef        string `json:"previous_owner_ref,omitempty"`
+	ReclaimedAt             string `json:"reclaimed_at,omitempty"`
+	ReclaimAuthorizationRef string `json:"reclaim_authorization_ref,omitempty"`
 }
 
 type GoalRequiredTestAttestationClaimRequestV0 struct {
-	RunRef           string `json:"run_ref"`
-	GoalRef          string `json:"goal_ref"`
-	RevisionRef      string `json:"revision_ref"`
-	TestRef          string `json:"test_ref"`
-	DefinitionSHA256 string `json:"definition_sha256"`
+	RunRef                  string `json:"run_ref"`
+	GoalRef                 string `json:"goal_ref"`
+	RevisionRef             string `json:"revision_ref"`
+	TestRef                 string `json:"test_ref"`
+	DefinitionSHA256        string `json:"definition_sha256"`
+	OwnerRef                string `json:"owner_ref,omitempty"`
+	LeaseDurationSeconds    int    `json:"lease_duration_seconds,omitempty"`
+	ObservedAt              string `json:"observed_at,omitempty"`
+	ReclaimExpired          bool   `json:"reclaim_expired,omitempty"`
+	ReclaimAuthorizationRef string `json:"reclaim_authorization_ref,omitempty"`
 }
 
 type GoalRequiredTestAttestationClaimResultV0 struct {
-	Claim    GoalRequiredTestAttestationClaimV0 `json:"claim"`
-	Acquired bool                               `json:"acquired"`
+	Claim     GoalRequiredTestAttestationClaimV0 `json:"claim"`
+	Acquired  bool                               `json:"acquired"`
+	Reclaimed bool                               `json:"reclaimed,omitempty"`
+}
+
+// GoalRequiredTestAttestationClaimPolicyV0 is injected by composition. An
+// expired lease is never reclaimed merely because another observer arrived:
+// the caller must opt in and carry an opaque governance authorization ref.
+type GoalRequiredTestAttestationClaimPolicyV0 struct {
+	OwnerRef                string `json:"owner_ref,omitempty"`
+	LeaseDurationSeconds    int    `json:"lease_duration_seconds,omitempty"`
+	ReclaimExpired          bool   `json:"reclaim_expired,omitempty"`
+	ReclaimAuthorizationRef string `json:"reclaim_authorization_ref,omitempty"`
 }
 
 type GoalObservationRequestV0 struct {

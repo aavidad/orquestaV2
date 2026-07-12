@@ -89,6 +89,7 @@ type StartAppDirectorPortsV0 struct {
 	GoalRequiredTestAttestor         orquestagoal.GoalRequiredTestAttestorPortV0
 	GoalRequiredTestAttestationStore orquestagoal.GoalRequiredTestAttestationStorePortV0
 	GoalRequiredTestIdentityVerifier orquestagoal.GoalRequiredTestIdentityVerifierPortV0
+	GoalRequiredTestClaimPolicy      orquestagoal.GoalRequiredTestAttestationClaimPolicyV0
 	GoalClosureValidator             orquestagoal.GoalWorkClosureValidatorPortV0
 	GoalStateStore                   orquestagoal.GoalWorkStateStorePortV0
 	GoalFirstRunMarkerStore          AppDirectorGoalFirstRunMarkerStorePortV0

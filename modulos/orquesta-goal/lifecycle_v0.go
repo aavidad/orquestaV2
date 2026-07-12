@@ -17,6 +17,7 @@ type GoalWorkLifecyclePortsV0 struct {
 	RequiredTestAttestor         GoalRequiredTestAttestorPortV0
 	RequiredTestAttestationStore GoalRequiredTestAttestationStorePortV0
 	RequiredTestIdentityVerifier GoalRequiredTestIdentityVerifierPortV0
+	RequiredTestClaimPolicy      GoalRequiredTestAttestationClaimPolicyV0
 }
 
 type GoalWorkStartRequestV0 struct {
@@ -313,6 +314,7 @@ func ObserveGoalWorkV0(
 			)
 		}
 		closureValidator := ports.ClosureValidator
+		attestationClaimPending := false
 		if state.Spec.ClosurePolicy.RequireIndependentRequiredTestAttestation && len(closure.Issues) == 0 {
 			if ports.RequiredTestSnapshotObserver == nil || ports.RequiredTestAttestor == nil || ports.RequiredTestAttestationStore == nil || ports.RequiredTestIdentityVerifier == nil {
 				closure = blockedGoalRequiredTestAttestationClosureV0(
@@ -341,10 +343,10 @@ func ObserveGoalWorkV0(
 					}
 					missing := MissingGoalRequiredTestsForAttestationV0(state.Spec, existing)
 					for _, test := range missing {
-						claimResult, err := ports.RequiredTestAttestationStore.AcquireGoalRequiredTestAttestationClaimV0(ctx, GoalRequiredTestAttestationClaimRequestV0{
-							RunRef: state.Spec.RunRef, GoalRef: state.Spec.GoalRef, RevisionRef: snapshot.RevisionRef,
-							TestRef: test.TestRef, DefinitionSHA256: test.DefinitionSHA256,
-						})
+						claimResult, err := ports.RequiredTestAttestationStore.AcquireGoalRequiredTestAttestationClaimV0(
+							ctx,
+							goalRequiredTestAttestationClaimRequestV0(state.Spec, snapshot, test, ports.RequiredTestClaimPolicy),
+						)
 						if err != nil {
 							return GoalWorkObserveResultV0{}, err
 						}
@@ -356,6 +358,20 @@ func ObserveGoalWorkV0(
 								}
 								closure = blockedGoalRequiredTestAttestationClosureV0(GoalClosureValidationV0{}, failureCode, "required_test_attestation_claim")
 								closure.EvidenceRefs = compactGoalStringsV0(append(closure.EvidenceRefs, claimResult.Claim.ClaimRef))
+								break
+							}
+							if claimResult.Claim.Status == GoalRequiredTestAttestationClaimStatusPendingV0 {
+								// Otra instancia esta atestando este mismo snapshot. No
+								// materializamos missing/rework: el goal durable vuelve a
+								// running y el observer residente lo reconciliara cuando
+								// aparezca el receipt o expire la lease.
+								attestationClaimPending = true
+								result.Status = GoalStatusRunningV0
+								result.Issues = append(result.Issues, GoalWorkIssueV0{
+									Code:  ErrGoalRequiredTestAttestationClaimedV0,
+									Field: "required_test_attestation_claim",
+								})
+								result.EvidenceRefs = compactGoalStringsV0(append(result.EvidenceRefs, claimResult.Claim.ClaimRef))
 								break
 							}
 							continue
@@ -379,21 +395,31 @@ func ObserveGoalWorkV0(
 						}
 					}
 				}
-				closureValidator = EnforceIndependentGoalRequiredTestAttestationV0(
-					ports.ClosureValidator,
-					ports.RequiredTestAttestationStore,
-					ports.RequiredTestIdentityVerifier,
-				)
+				if !attestationClaimPending {
+					closureValidator = EnforceIndependentGoalRequiredTestAttestationV0(
+						ports.ClosureValidator,
+						ports.RequiredTestAttestationStore,
+						ports.RequiredTestIdentityVerifier,
+					)
+				}
 			}
 		}
-		if closure.Issues == nil {
+		if !attestationClaimPending && closure.Issues == nil {
 			closure, err = closureValidator.ValidateGoalWorkClosureV0(ctx, state.Spec, result)
 			if err != nil {
 				return GoalWorkObserveResultV0{}, err
 			}
 		}
-		state.LastClosure = &closure
-		state.EvidenceRefs = compactGoalStringsV0(append(state.EvidenceRefs, closure.EvidenceRefs...))
+		if attestationClaimPending {
+			terminal = false
+			state.Status = GoalStatusRunningV0
+			state.LastResult = &result
+			state.LastClosure = nil
+			state.EvidenceRefs = compactGoalStringsV0(append(state.EvidenceRefs, result.EvidenceRefs...))
+		} else {
+			state.LastClosure = &closure
+			state.EvidenceRefs = compactGoalStringsV0(append(state.EvidenceRefs, closure.EvidenceRefs...))
+		}
 	}
 	state, err = NewGoalWorkStateV0(state)
 	if err != nil {
@@ -420,6 +446,25 @@ func ObserveGoalWorkV0(
 		NeedsRework:      closure.NeedsRework,
 		EvidenceRefs:     append([]string(nil), state.EvidenceRefs...),
 	}, nil
+}
+
+func goalRequiredTestAttestationClaimRequestV0(
+	spec GoalWorkSpecV0,
+	snapshot GoalRequiredTestFinalSnapshotV0,
+	test GoalRequiredTestV0,
+	policy GoalRequiredTestAttestationClaimPolicyV0,
+) GoalRequiredTestAttestationClaimRequestV0 {
+	return NormalizeGoalRequiredTestAttestationClaimRequestLeaseV0(GoalRequiredTestAttestationClaimRequestV0{
+		RunRef:                  spec.RunRef,
+		GoalRef:                 spec.GoalRef,
+		RevisionRef:             snapshot.RevisionRef,
+		TestRef:                 test.TestRef,
+		DefinitionSHA256:        test.DefinitionSHA256,
+		OwnerRef:                policy.OwnerRef,
+		LeaseDurationSeconds:    policy.LeaseDurationSeconds,
+		ReclaimExpired:          policy.ReclaimExpired,
+		ReclaimAuthorizationRef: policy.ReclaimAuthorizationRef,
+	})
 }
 
 func promoteGoalResultForIndependentTestAttestationV0(spec GoalWorkSpecV0, result GoalWorkResultV0) GoalWorkResultV0 {

@@ -156,6 +156,7 @@ func ObserveAppDirectorGoalV0(
 			RequiredTestAttestor:         ports.GoalRequiredTestAttestor,
 			RequiredTestAttestationStore: ports.GoalRequiredTestAttestationStore,
 			RequiredTestIdentityVerifier: ports.GoalRequiredTestIdentityVerifier,
+			RequiredTestClaimPolicy:      ports.GoalRequiredTestClaimPolicy,
 			ClosureValidator:             appDirectorGoalClosureValidatorV0{Base: ports.GoalClosureValidator},
 			StateStore:                   ports.GoalStateStore,
 		},

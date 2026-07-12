@@ -58,6 +58,30 @@ func TestStartGoalWorkV0LanzaYGuardaEstadoNeutral(t *testing.T) {
 	}
 }
 
+func TestGoalRequiredTestAttestationClaimRequestV0PropagaLeaseYReclaimGobernadoV0(t *testing.T) {
+	spec := validGoalLifecycleSpecForTestV0()
+	spec.RunRef = "run-ref-claim-policy-001"
+	test := GoalRequiredTestV0{
+		TestRef:          "test-ref-claim-policy-001",
+		DefinitionSHA256: strings.Repeat("a", 64),
+	}
+	request := goalRequiredTestAttestationClaimRequestV0(
+		spec,
+		GoalRequiredTestFinalSnapshotV0{RevisionRef: "revision-ref-claim-policy-001"},
+		test,
+		GoalRequiredTestAttestationClaimPolicyV0{
+			OwnerRef: "owner-ref-observer-001", LeaseDurationSeconds: 45,
+			ReclaimExpired: true, ReclaimAuthorizationRef: "reclaim-auth-ref-observer-001",
+		},
+	)
+	if request.RunRef != spec.RunRef || request.GoalRef != spec.GoalRef ||
+		request.RevisionRef != "revision-ref-claim-policy-001" || request.TestRef != test.TestRef ||
+		request.OwnerRef != "owner-ref-observer-001" || request.LeaseDurationSeconds != 45 ||
+		!request.ReclaimExpired || request.ReclaimAuthorizationRef != "reclaim-auth-ref-observer-001" {
+		t.Fatalf("request=%+v", request)
+	}
+}
+
 func TestStartGoalWorkV0PersisteContextBudgetDelReceiptV0(t *testing.T) {
 	launcher := &goalLifecycleLauncherForTestV0{
 		receipt: GoalLaunchReceiptV0{

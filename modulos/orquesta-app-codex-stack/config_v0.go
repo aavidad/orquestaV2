@@ -55,6 +55,7 @@ type ConfigV0 struct {
 	AppGoalRequiredTestSnapshotObserver            orquestagoal.GoalRequiredTestFinalSnapshotObserverPortV0
 	AppGoalRequiredTestAttestor                    orquestagoal.GoalRequiredTestAttestorPortV0
 	AppGoalRequiredTestIdentityVerifier            orquestagoal.GoalRequiredTestIdentityVerifierPortV0
+	GoalRequiredTestClaimPolicy                    orquestagoal.GoalRequiredTestAttestationClaimPolicyV0
 	AppGoalBackendControl                          GoalBackendControlPortV0
 	AppGoalClosureValidator                        orquestagoal.GoalWorkClosureValidatorPortV0
 	DomainTests                                    DomainWorkRequiredTestConfigV0
