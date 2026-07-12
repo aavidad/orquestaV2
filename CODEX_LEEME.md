@@ -1,30 +1,52 @@
 # CODEX: LEE ESTO ANTES DE TOCAR NADA
 
-## ✅ `64128cb80` ACEPTADO (2026-07-12 ~18:10)
+## 🏁 CIRCUITO CERRADO DE PUNTA A PUNTA — ORQUESTA TERMINADA (2026-07-12 ~18:15)
 
-Identidad tecnica del integrador Git: correcta. Usa identidad **propia y
-trazable** (`Orquesta Integration <orquesta-integration@localhost.invalid>`),
-**no suplanta al operador**. Eso era lo importante. Suites verdes, guard de
-envs verde.
+**Confirmado por el revisor con verificacion independiente.** No queda residual
+tecnico en nucleo, conectores ni tools.
 
-Es otro fallo que **solo aparece en uso real**: sin `user.name`/`user.email` en
-el contenedor, el commit de integracion no podia hacerse. Con tests nunca
-habria salido.
+### Lo que verifique yo mismo (no autodeclarado)
 
-## SIGUE ASI: ejercita el circuito de verdad
+- **Existe un commit hecho por Orquesta**: `dda4f5e19`, autor
+  `Orquesta Integration <orquesta-integration@localhost.invalid>`,
+  *"chore: promote autoprogramming staging"*. **La maquina se commiteo a si
+  misma.**
+- **Creo un modulo nuevo entero**: `modulos/orquesta-native-smoke-tool/`
+  (`tool_v0.go` + `tool_v0_test.go`). Lei el codigo: es real, puro, sin I/O.
+- **Sus tests pasan**, incluido uno de **determinismo** que escribio ella.
+- **Cadena de evidencia completa y trazable**: promotion ref, integration
+  receipt, commit promovido, archive ref, marker `promotion-complete`,
+  `closure_issues=[]`.
+- **Guards verdes**: suite de `cmd/orquesta-server`, suite del stack, guard de
+  envs (426) y **guard exhaustivo del catalogo MCP** (las seis tools vivas).
 
-Estas haciendo lo correcto: la app real esta destapando los fallos que los E2E
-enmascaraban (H3 con doble fuente de verdad, ahora la identidad Git). **Sigue
-con la app real hasta el final del circuito**: prepare-run → goal → cierre
-atestado → **promocion → commit → archive → ficheros canonicos en el repo**.
+### Estado final de los frentes
 
-Cuando el circuito complete de punta a punta con un run real recuperado por
-API/MCP, avisa: reacredito H3 definitivamente y **Orquesta queda terminada de
-verdad**, probada por uso y no solo por tests.
+| Frente | Estado |
+|---|---|
+| NUCLEO | ✅ cerrado (H2: la atestacion ya no se puede saltar por carrera) |
+| CONECTORES | ✅ cerrado (H0a–H0d, con pruebas de mutacion) |
+| PROMOCION | ✅ cerrado (H3: exige atestacion independiente, no autodeclaracion) |
+| TOOLS | ✅ cerrado (H1b: las seis vivas y gobernadas) |
+| **CIRCUITO REAL** | ✅ **probado por uso**: prepare-run → goal → cierre atestado → promocion → commit → archive → ficheros canonicos |
 
-Reglas de siempre: commits pequenos, guards reejecutados antes de commitear,
-sin envs nuevas sin avisar, sin relajaciones de seguridad, sin tocar
-modelos/routing.
+**Orquesta ya no esta terminada "segun los tests": esta terminada porque se ha
+usado y funciona.** Esa distincion la aprendimos hoy y te la debo a ti.
+
+## NO TIENES TAREA. NO TOQUES NADA.
+
+Vuelve a la regla: no abras frentes, no "mejores" lo que funciona. Si ves algo,
+**escribelo aqui y espera**.
+
+Lo siguiente lo decide el operador (probablemente el informe del Baremador).
+
+### Reconocimiento
+
+Hoy encontraste **cinco fallos estructurales que yo no vi**: la carrera de
+atestacion, la brecha de promocion, el toolchain del runner, la doble fuente de
+verdad en la promocion y la identidad Git del integrador. Tres de ellos solo
+aparecian **bajo uso real**, no en los tests. Me corregiste con razon cuatro
+veces. Buen trabajo.
 
 ---
 
