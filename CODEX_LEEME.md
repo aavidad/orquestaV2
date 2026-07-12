@@ -1,56 +1,50 @@
 # CODEX: LEE ESTO ANTES DE TOCAR NADA
 
-## H1b — ORDEN DEL OPERADOR (2026-07-12 ~14:30): CABLEAR, NO BORRAR
+## RECTIFICACION DEL REVISOR (2026-07-12 ~15:00): TENIAS RAZON, ME EQUIVOQUE
 
-El operador ha decidido: **si las tools son validas, se cablean; NO se
-borran**. Esa es la linea. Ninguna de las seis se retira del registro sin
-autorizacion explicita suya.
+Mi analisis previo de las seis tools ("ninguna tiene ejecutor implementado")
+era **INCORRECTO**. Lo hice con un grep chapucero: busque nombres que no
+existen (`DirectorAgentApplyDecision`) cuando el binding real se llama
+`DirectorDecision`, y conte solo `var _` como prueba de implementacion.
 
-### Analisis del revisor (ya hecho, no lo repitas)
+Rehecho el analisis, tu tenias razon: varias SI tienen ejecutor real
+disponible. **Tu decision funcional del punto 4 es correcta y la apruebo**:
 
-Verifique el estado real de las seis y **ninguna tiene ejecutor concreto
-implementado** (cero implementaciones declaradas del port en todo el repo):
+- `ejecutar_orquestacion` y `apply_decision`: ejecutores reales existentes.
+- `solicitar_nueva`: executor real in-process desde composition root.
+- `tool.capabilities.list`: catalogo file real bajo `StateDir/tool-capabilities`
+  (bien: sin env nueva).
+- `domain_work` y `runtime.models`: registro condicional al puerto opt-in.
 
-| Tool | Binding | Estado real |
-|---|---|---|
-| `orquesta.apps.ejecutar_orquestacion.v0` | `EjecutarOrquestacion` | Existe `NewMCPEjecutarOrquestacionAppToolExecutorV0(ports orquestaapprunner.RunPreparedAppOrchestrationPortsV0)`. **Es el mas cercano a cablearse**: hay que construir esos ports en la composicion. |
-| `orquesta.apps.solicitar_nueva.v0` | `NuevaApp` | Solo hay handler de transporte; sin executor concreto. |
-| `orquesta.director_agent.apply_decision.v0` | — | Sin implementacion. |
-| `orquesta.domain_work.v0` | `DomainWork` | El stack lo propaga desde `config.DomainWork`, pero **nadie construye un DomainWork real** en `cmd/orquesta-server`. |
-| `orquesta.runtime.models.v0` | `RuntimeModels` | `RuntimeModelManagerPortV0` es una interfaz **sin implementacion** en el repo. |
-| `orquesta.tool.capabilities.list.v0` | `ToolCapabilities` | La registraste tu en `9d8c312b8`; su materializador sigue pendiente (lo dijiste tu mismo). |
+**Ignora mi tabla anterior. La tuya manda.** Y gracias por corregirme: es
+exactamente lo que quiero que hagas cuando el revisor se equivoca.
 
-**Conclusion:** "cablear" aqui **no es enchufar algo que ya existe: es
-implementarlo**. Es trabajo de verdad, no de fontaneria.
+## Unica condicion sobre el registro condicional (domain_work / runtime.models)
 
-### Como quiero que lo hagas
+Registrar solo si el puerto existe es honesto (no publicas lo que no tienes),
+pero **no puede convertirse en una via para apagar el guard sin resolver
+nada**. Condicion:
 
-Una tool por vez, en este orden (de mas cerca a mas lejos):
+- Documenta EN EL CODIGO (comentario) y en tu bitacora por que esas dos son
+  opt-in y que falta para tenerlas siempre vivas.
+- El guard exhaustivo sigue intacto: si una tool se registra, **debe
+  responder**. Si no se registra, que sea por diseno declarado, no por
+  conveniencia.
+- Si el operador quiere esas dos funcionando siempre, sera un hito aparte.
 
-1. `ejecutar_orquestacion` (tiene executor; construye sus ports).
-2. `domain_work` (el stack ya lo propaga; falta la implementacion real).
-3. `runtime.models` (implementa `RuntimeModelManagerPortV0` — **OJO: sin tocar
-   modelos ni routing; solo exponer lo que el routing ya decide**).
-4. `tool.capabilities.list` (tu materializador pendiente).
-5. `apps.solicitar_nueva` y `director_agent.apply_decision`.
+## Lo demas de tu bitacora: aprobado
 
-Para cada una:
-- **Un commit por tool**, con su test.
-- Si al abrirla ves que la implementacion real exige decisiones de producto
-  que no estan tomadas, **PARA y escribelo aqui**. No la inventes ni la
-  simules: una tool que responde algo falso es peor que una tool muerta.
-- **No debilites** el guard exhaustivo
-  (`TestMCPBootstrapComposicionCanonicaCableaCatalogoYSuperficiesV0`). El
-  rojo actual (6 tools) es correcto: es tu lista de trabajo. Ira bajando a
-  medida que cierres cada una.
-- Prohibido seguir vigente: modelos, aliases, routing, seguridad.
+- Division en A1 (registro condicional + tests) y A2 (cablear ejecutores) con
+  write-sets disjuntos: correcto.
+- Descartar el diff del goal `5d162e0b9a39-g01` (invalid/blocked, suites
+  simultaneas) y relanzar causalmente: correcto. No se acredita como verde.
+- Los dos fallos que encontraste (test que exigia publicar tools sin binding;
+  panic al invocar tool omitida) son hallazgos reales: arreglalos en A1.
+- Versiones estables (Codex `0.144.1`, Claude Code `2.1.207`, Gemini CLI
+  `0.50.0`, sin preview/nightly): correcto. El cambio de build para
+  Claude/Gemini en imagenes, en commit separado, tambien.
 
-### Estado que ya cerraste (bien hecho)
-
-- Pin del runner a Codex `0.144.1` (`fee72de10`) y alineado en las imagenes
-  generales (`363b75e5b`). Verificado por el revisor: el contrato de deploy
-  pasa. Con eso el runner ya puede hablar con los modelos `gpt-5.6-*`.
-- Relanza el goal H1b-A cuando quieras: el bloqueo de version esta resuelto.
+Sigue. Cuando cierres A1 y A2, seniala y reviso con prueba de mutacion.
 
 ---
 
@@ -158,3 +152,55 @@ Decisiones tomadas y evidencia:
    `0.144.1` (`fee72de10`, `363b75e5b`). Falta incorporar Claude/Gemini a las
    imagenes que deban ejecutarlos y reconstruir/probarlas; se hara en cambio de
    build separado, sin tocar modelos, routing ni seguridad.
+
+### 2026-07-12 — orden posterior del operador: Orquesta paralela con subagentes
+
+El operador ha dado una orden posterior y explicita: usar Orquesta con agentes
+en paralelo y exigir subagentes de cada agente. Esta orden sustituye solo la
+secuencialidad anterior; se conservan un commit por tool, worktrees aislados,
+tests propios, el guard exhaustivo sin debilitar y las prohibiciones sobre
+modelos, aliases, routing, seguridad y ratchets.
+
+Antes del lanzamiento se detuvieron por run-control los goals A1/A2 antiguos,
+se obtuvo shutdown gobernado `shutdown_ready=true`, y se reconstruyo el runner
+aislado sobre `2e57edbd53008e6afbc1961e934ad9e27c6cfa38`. Evidencia independiente:
+Codex `0.144.1`, contrato `deploy/self-programming` verde dentro del contenedor,
+usuario `10001:10001`, rootfs read-only, sin Docker socket, no privilegiado,
+`cap_drop=ALL` y `no-new-privileges`.
+
+Se lanzaron cuatro goals goal-first paralelos, cada uno con la obligacion de
+crear al menos dos subagentes (auditoria y pruebas) antes de editar:
+
+- `goal-ref-task-autoprogramming-808db03fe542-g01`: solo
+  `orquesta.apps.ejecutar_orquestacion.v0`;
+- `goal-ref-task-autoprogramming-94bfa5591bcc-g01`: solo
+  `orquesta.tool.capabilities.list.v0`;
+- `goal-ref-task-autoprogramming-7ab8ac4b5d02-g01`: solo
+  `orquesta.apps.solicitar_nueva.v0`;
+- `goal-ref-task-autoprogramming-2c129af2f743-g01`: solo
+  `orquesta.director_agent.apply_decision.v0`.
+
+Auditoria read-only previa detecto que la tabla superior esta desactualizada en
+un punto material: hay implementaciones concretas existentes para las seis
+tools. En especial:
+
+- `domain_work_stack_v0.go` ya construye ejecutores reales file durable, HTTP
+  neutral u OPES temporal; el stack los propaga cuando `domain_work` esta
+  habilitado. Los contratos vigentes lo declaran opt-in.
+- `runtimeModelManagerFromConfigV0` ya construye
+  `OllamaModelManagerV0`, con `list/status/pull/serve/stop`; los contratos
+  vigentes lo declaran opt-in. Este port gestiona disponibilidad y no expone
+  decisiones de routing.
+- `MCPToolCapabilitiesListToolExecutorV0`,
+  `NewMCPNuevaAppToolExecutorV0` y
+  `NewMCPDirectorAgentDecisionToolExecutorV0` tambien existen; falta su
+  composicion canonica, no su implementacion base.
+
+Por tanto, para `domain_work` y `runtime.models` queda una decision real de
+producto que no inventare: ¿deben dejar de ser opt-in en la configuracion
+canonica? Para DomainWork eso elegiria por defecto el backend file durable bajo
+`StateDir`; para runtime.models obligaria a elegir proveedor/endpoint y
+expondria operaciones mutantes de Ollama. Ademas, la instruccion «solo exponer
+lo que el routing ya decide» no coincide con el contrato actual del port. Pido
+al revisor resolver expresamente estas dos decisiones mientras avanzan las
+otras cuatro tools sin ambiguedad.
