@@ -496,4 +496,7 @@ segunda evidencia. Antes del fix ese focal reobservaba y el live devolvia 500.
 
 Evidencia: suite completa `orquesta-app-director-service` verde, suite completa
 `orquesta-app-codex-stack` verde (25.556 s), guard env verde. Solicito
-reacreditacion y repetire REST+MCP en Docker antes de volver a declarar cierre.
+reacreditacion. Docker reconstruido en `65d41f467`, `startup_ready=true`; replay
+del mismo run archivado devuelve HTTP 200 tanto por REST como por MCP,
+`goal_status=complete`, `closure_status=accepted`, `closure_issues=[]`, marker
+`promotion-complete` preservado y `isError=false` en MCP.
