@@ -29,6 +29,7 @@ var (
 	errCodexAppServerTmuxSocketInodeNotObservedV0 = errors.New("codex_app_server_tmux_socket_inode_not_observed")
 	errCodexAppServerTmuxSocketOwnerOutsidePaneV0 = errors.New("codex_app_server_tmux_socket_owner_outside_pane")
 	errCodexAppServerTmuxSocketOwnerAmbiguousV0   = errors.New("codex_app_server_tmux_socket_owner_ambiguous")
+	errCodexAppServerTmuxPeerCredUnavailableV0    = errors.New("codex_app_server_tmux_peer_credentials_unavailable")
 )
 
 type codexAppServerTmuxGenerationObservationV0 uint8
@@ -192,7 +193,7 @@ func (backend serverCodexAppServerTmuxBackendV0) tmuxSessionIdentityV0(ctx conte
 }
 
 func (backend serverCodexAppServerTmuxBackendV0) tmuxSessionIdentityTargetV0(ctx context.Context, tmuxPath, target string) (codexAppServerTmuxSessionIdentityV0, error) {
-	output, err := backend.runTmuxCommandV0(ctx, tmuxPath, "display-message", "-p", "-t", strings.TrimSpace(target), "#{session_id}\t#{session_created}\t#{pane_pid}")
+	output, err := backend.runTmuxCommandV0(ctx, tmuxPath, "display-message", "-p", "-t", strings.TrimSpace(target), "#{session_id}|#{session_created}|#{pane_pid}")
 	if err != nil {
 		return codexAppServerTmuxSessionIdentityV0{}, codexAppServerTmuxCommandErrorV0("codex_app_server_tmux_identity_failed", output, err)
 	}
@@ -438,7 +439,31 @@ func codexAppServerTmuxSocketOwnerIdentitiesAtV0(procRoot, socketPath string) ([
 }
 
 func codexAppServerTmuxSocketOwnerDescendantV0(socketPath string, panePID int) (codexAppServerTmuxProcessIdentityV0, error) {
-	return codexAppServerTmuxSocketOwnerDescendantAtV0("/proc", socketPath, panePID)
+	info, statErr := os.Lstat(strings.TrimSpace(socketPath))
+	if statErr != nil || info.Mode()&os.ModeSocket == 0 {
+		return codexAppServerTmuxProcessIdentityV0{}, errCodexAppServerTmuxSocketInodeNotObservedV0
+	}
+	// Linux SO_PEERCRED identifies the process at the other end of the connected
+	// Unix socket without an expensive scan of every /proc/<pid>/fd entry.
+	peer, peerErr := codexAppServerTmuxSocketPeerIdentityV0(socketPath)
+	if peerErr == nil && codexAppServerTmuxProcessDescendsFromV0(peer.PID, panePID) {
+		return peer, nil
+	}
+	if peerErr != nil && !errors.Is(peerErr, errCodexAppServerTmuxPeerCredUnavailableV0) {
+		// The socket inode can be visible just before listen/accept is ready.
+		// Retry cheaply instead of entering a full /proc scan during startup.
+		return codexAppServerTmuxProcessIdentityV0{}, errCodexAppServerTmuxSocketInodeNotObservedV0
+	}
+	// Keep /proc as a portability/compatibility fallback when peer credentials
+	// cannot be obtained, or when a listener FD was transferred to a child.
+	owner, err := codexAppServerTmuxSocketOwnerDescendantAtV0("/proc", socketPath, panePID)
+	if err == nil {
+		return owner, nil
+	}
+	if peerErr == nil {
+		return codexAppServerTmuxProcessIdentityV0{}, errCodexAppServerTmuxSocketOwnerOutsidePaneV0
+	}
+	return codexAppServerTmuxProcessIdentityV0{}, err
 }
 
 func codexAppServerTmuxSocketOwnerDescendantAtV0(procRoot, socketPath string, panePID int) (codexAppServerTmuxProcessIdentityV0, error) {

@@ -52,3 +52,41 @@ func TestCodexAppServerWebSocketProtocolV0ProbeRealOptInV0(t *testing.T) {
 		t.Fatalf("probe real: %T %v stderr=%s", err, err, stderr.String())
 	}
 }
+
+func TestCodexAppServerTmuxBackendV0EnsureRealOptInV0(t *testing.T) {
+	command := os.Getenv("ORQUESTA_TEST_CODEX_APP_SERVER_COMMAND")
+	sourceCodeHome := os.Getenv("CODEX_HOME")
+	if command == "" || sourceCodeHome == "" {
+		t.Skip("requiere ORQUESTA_TEST_CODEX_APP_SERVER_COMMAND y CODEX_HOME")
+	}
+	root := t.TempDir()
+	runtimeDir := filepath.Join(root, "runtime")
+	socketPath := filepath.Join(runtimeDir, codexAppServerTmuxDirV0, "real.sock")
+	backend := serverCodexAppServerTmuxBackendV0{
+		CommandPath:       command,
+		PathEnv:           os.Getenv("PATH"),
+		SocketPath:        socketPath,
+		SessionName:       "orquesta-goal-real-opt-in",
+		HomeDir:           filepath.Join(root, "home"),
+		CodeHomeDir:       filepath.Join(runtimeDir, codexAppServerTmuxDirV0, "codex-home"),
+		RuntimeWorkDir:    runtimeDir,
+		ProjectWorkDir:    root,
+		SourceCodeHomeDir: sourceCodeHome,
+		Timeout:           8 * time.Second,
+	}
+	if err := os.MkdirAll(backend.HomeDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	protocol := serverCodexAppServerWebSocketProtocolV0{
+		SocketPath: socketPath,
+		Timeout:    3 * time.Second,
+	}
+	if err := backend.EnsureV0(t.Context(), protocol); err != nil {
+		t.Fatalf("ensure tmux real: %T %v", err, err)
+	}
+	cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := backend.ShutdownForcedStopV0(cleanupCtx); err != nil {
+		t.Fatalf("shutdown tmux real: %v", err)
+	}
+}
