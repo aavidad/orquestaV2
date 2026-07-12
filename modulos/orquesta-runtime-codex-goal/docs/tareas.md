@@ -60,3 +60,16 @@ entorno `workspace-write` no permitio escribir en el proyecto temporal bajo
 `/workspace/runtime`; la repeticion uso
 `ORQUESTA_CODEX_SANDBOX=danger-full-access` como opt-in de smoke aislado con
 `approval-policy=never`.
+
+Cierre H0a 2026-07-12 en el runner Docker aislado oficial: el smoke real
+`app_server_tmux` termino con `exit_code=0`,
+`smoke_goal_first_app_server_real=ok`, `goal_status=complete`,
+`run_status=cerrada`, `closure_status=accepted`, `closure_accepted=true`,
+`artifact_refs=10` y `evidence_refs=24`. El shutdown verifico
+`app_server_tmux_processes_alive=0`. Evidencia conservada en
+`/workspace/runtime/smokes/orquesta-goal-first-app-server.6C05Pu` y log del
+operador en `/workspace/runtime/h0a-smoke-final8-accepted-20260712.log`. El
+opt-in `danger-full-access` solo se conserva con
+`ORQUESTA_CODEX_CONTAINER_SANDBOX_BOUNDARY_CONFIRMED=1`; el contenedor mantiene
+usuario no-root, rootfs de solo lectura, `no-new-privileges`, `cap_drop: ALL`,
+sin Docker socket y binds limitados a `/srv/orquesta-self`.
