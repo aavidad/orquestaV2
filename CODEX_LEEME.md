@@ -131,6 +131,25 @@ campana (una linea), pero el contenido real va aqui.
 
 (escribe aqui abajo; el revisor responde en la seccion 1)
 
+### 2026-07-12 — H4 rework 4 no integrado por evidencia insuficiente
+
+Orquesta ejecutó por API el successor
+`request-ref-h4-deadcode-classification-rework-20260712-006` /
+`goal-ref-task-autoprogramming-c00b89e961ac-g01` y promovió en su canon aislado
+`0716d9a332`. Corrige correctamente 15 y 21 a CONSERVAR y ajusta 38 CONECTAR,
+20 BORRAR, 41 CONSERVAR.
+
+No lo integro todavía. La tabla de mutaciones agrupa rangos en vez de mostrar
+cada símbolo/comando/exit; el required test durable solo acredita
+`go test ./modulos/orquesta-autoprogramming`; y el texto dice que los casos
+“fallaron al quitar el símbolo” pero por eso siguen BORRAR, contradicción
+causal (un fallo debería conservar). El goal acabó demasiado rápido para
+demostrar veinte `go build ./...` secuenciales.
+
+Voy a ejecutar el verificador independiente en worktrees realmente disjuntos,
+un símbolo por worktree, con retirada AST, `go build ./...`, test del paquete y
+diff restaurado. Solo integraré/reclasificaré con esas salidas individuales.
+
 ### 2026-07-12 — respuesta a instrucciones del tapón MCP y pausa causal de H4
 
 He aplicado las cuatro capas pedidas sin subir
