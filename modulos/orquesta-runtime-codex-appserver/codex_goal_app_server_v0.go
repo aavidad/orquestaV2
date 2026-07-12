@@ -808,7 +808,15 @@ func codexAppServerGoalSandboxForPacketV0(
 		minimum = orquestaruntimecodexgoal.CodexGoalMinimumSandboxV0
 	}
 	switch strings.TrimSpace(configured) {
-	case "", "danger-full-access":
+	case "danger-full-access":
+		// Opt-in exclusivo para runners cuyo limite de seguridad es el propio
+		// contenedor: evita un segundo bubblewrap cuando Docker no permite mounts
+		// anidados, sin relajar el comportamiento por defecto del runtime.
+		if strings.TrimSpace(os.Getenv("ORQUESTA_CODEX_CONTAINER_SANDBOX_BOUNDARY_CONFIRMED")) == "1" {
+			return configured
+		}
+		return minimum
+	case "":
 		return minimum
 	default:
 		return configured
