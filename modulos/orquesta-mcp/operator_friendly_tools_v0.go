@@ -223,11 +223,12 @@ func mcpOperatorFriendlyQueueV0(
 		limit = 50
 	}
 	result, err := bindings.RunQueuePriority.Execute(ctx, MCPRunQueuePriorityToolInputV0{
-		RequestID:     input.RequestID,
-		CorrelationID: input.CorrelationID,
-		Action:        MCPRunQueuePriorityActionRankV0,
-		QueueRef:      input.QueueRef,
-		Limit:         limit,
+		RequestID:            input.RequestID,
+		CorrelationID:        input.CorrelationID,
+		Action:               MCPRunQueuePriorityActionRankV0,
+		QueueRef:             input.QueueRef,
+		Limit:                limit,
+		IncludeNonExecutable: true,
 	})
 	if err != nil {
 		return MCPRunQueuePriorityToolResultV0{}, false, err

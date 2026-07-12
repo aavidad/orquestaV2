@@ -32,6 +32,8 @@ type MCPAutoprogrammingQueueHealthV0 struct {
 
 type MCPAutoprogrammingActionableRunV0 struct {
 	Code                     string         `json:"code"`
+	Count                    int            `json:"count,omitempty"`
+	SampleRefs               []string       `json:"sample_refs,omitempty"`
 	Severity                 string         `json:"severity,omitempty"`
 	RunRef                   string         `json:"run_ref,omitempty"`
 	AppRef                   string         `json:"app_ref,omitempty"`
@@ -134,6 +136,8 @@ type MCPAutoprogrammingAgentV0 struct {
 
 type MCPAutoprogrammingDiagnosticV0 struct {
 	Code         string   `json:"code"`
+	Count        int      `json:"count,omitempty"`
+	SampleRefs   []string `json:"sample_refs,omitempty"`
 	Scope        string   `json:"scope,omitempty"`
 	Message      string   `json:"message,omitempty"`
 	EvidenceRefs []string `json:"evidence_refs,omitempty"`

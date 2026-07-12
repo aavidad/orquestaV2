@@ -173,6 +173,12 @@ func (fakeMCPFriendlyTerminalOnlyQueueV0) Execute(
 	_ context.Context,
 	input MCPRunQueuePriorityToolInputV0,
 ) (MCPRunQueuePriorityToolResultV0, error) {
+	if !input.IncludeNonExecutable {
+		return MCPRunQueuePriorityToolResultV0{
+			Estado: MCPRunQueuePriorityEstadoOKV0,
+			Action: MCPRunQueuePriorityActionRankV0,
+		}, nil
+	}
 	return MCPRunQueuePriorityToolResultV0{
 		Estado:   MCPRunQueuePriorityEstadoOKV0,
 		Action:   MCPRunQueuePriorityActionRankV0,

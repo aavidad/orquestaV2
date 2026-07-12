@@ -128,10 +128,16 @@ func newMCPAutoprogrammingStatusOutputProjectionV0(
 	projection := mcpAutoprogrammingStatusOutputProjectionV0{
 		Mode: "compact", Truncated: true,
 		ObservedBytes: observedBytes, TargetBytes: mcpAutoprogrammingStatusTransportTargetBytesV0,
-		StaleRunningTotal: len(result.StaleRunning), ResolvedRunsTotal: len(result.ResolvedRuns),
+		StaleRunningTotal: result.StaleRunningTotal, ResolvedRunsTotal: len(result.ResolvedRuns),
 		ProjectsTotal: len(result.Projects), TasksTotal: len(result.Tasks), AgentsTotal: len(result.Agents),
-		DiagnosticsTotal: len(result.Diagnostics), EvidenceRefsTotal: len(result.EvidenceRefs),
+		DiagnosticsTotal: result.DiagnosticsTotal, EvidenceRefsTotal: len(result.EvidenceRefs),
 		DetailTool: MCPAutoprogrammingStatusToolNameV0, DetailHTTPPath: MCPAutoprogrammingStatusHTTPPathV0,
+	}
+	if projection.StaleRunningTotal == 0 {
+		projection.StaleRunningTotal = len(result.StaleRunning)
+	}
+	if projection.DiagnosticsTotal == 0 {
+		projection.DiagnosticsTotal = len(result.Diagnostics)
 	}
 	if result.Queue != nil {
 		projection.QueueRankedTotal = len(result.Queue.Ranked)

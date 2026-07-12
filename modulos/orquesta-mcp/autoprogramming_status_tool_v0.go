@@ -20,6 +20,7 @@ const (
 	mcpAutoprogrammingDomainSessionSuppressedReasonV0   = "idle_self_improvement_suppressed_by_domain_session"
 	mcpAutoprogrammingDomainSessionSuppressedEvidenceV0 = "evidence-ref-idle-self-improvement-domain-session"
 	mcpAutoprogrammingRunningStatsMaxV0                 = 8
+	mcpAutoprogrammingStatusDefaultListLimitV0          = 20
 )
 
 type MCPAutoprogrammingStatusToolDescriptorV0 struct {
@@ -58,6 +59,7 @@ type MCPAutoprogrammingStatusToolResultV0 struct {
 	Run                       *MCPDirectorStatsToolResultV0                                               `json:"run,omitempty"`
 	QueueHealth               *MCPAutoprogrammingQueueHealthV0                                            `json:"queue_health,omitempty"`
 	StaleRunning              []MCPAutoprogrammingActionableRunV0                                         `json:"stale_running,omitempty"`
+	StaleRunningTotal         int                                                                         `json:"stale_running_total,omitempty"`
 	ResolvedRuns              []MCPAutoprogrammingActionableRunV0                                         `json:"resolved_runs,omitempty"`
 	Projects                  []MCPAutoprogrammingProjectV0                                               `json:"projects,omitempty"`
 	Tasks                     []MCPAutoprogrammingTaskV0                                                  `json:"tasks,omitempty"`
@@ -69,6 +71,7 @@ type MCPAutoprogrammingStatusToolResultV0 struct {
 	OpsSnapshot               *orquestaobservability.DirectorAutonomousOpsSnapshotV0                      `json:"ops_snapshot,omitempty"`
 	EvidenceRefs              []string                                                                    `json:"evidence_refs,omitempty"`
 	Diagnostics               []MCPAutoprogrammingDiagnosticV0                                            `json:"diagnostics,omitempty"`
+	DiagnosticsTotal          int                                                                         `json:"diagnostics_total,omitempty"`
 	Errores                   []MCPValidationIssueV0                                                      `json:"errores_publicos,omitempty"`
 }
 
@@ -117,7 +120,7 @@ func MCPAutoprogrammingStatusDescriptorV0() MCPAutoprogrammingStatusToolDescript
 		Name:        MCPAutoprogrammingStatusToolNameV0,
 		Version:     MCPAutoprogrammingStatusToolVersionV0,
 		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,app_ref?,external_job_ref?,queue_ref?,app_refs?,queue_limit?,occurred_at?,include_process_refs?,include_agent_progress?,include_agent_usage?,telemetry_flags?,operator_advice?}",
-		Output:      "ok:{causal_verdict?,causal_reason_code?,queue?,run?,queue_health?,stale_running?[]{code,severity?,run_ref?,status?,goal_ref?,goal_status?,causal_verdict?,causal_reason_code?,context_budget_total_bytes?,static_prompt_bytes?,dynamic_context_bytes?,code_context_cache_status?,recommended_action?,evidence_refs?},projects?,tasks?,agents?,operator?,goal_progress_policy?,efficiency_summary?{schema_version,state,recommended_action?,reasons?},idle_self_improvement_budget?,ops_snapshot?,diagnostics?,evidence_refs?}|error:{errores_publicos,evidence_refs?,diagnostics?,operator_advice?}",
+		Output:      "ok:{causal_verdict?,causal_reason_code?,queue?,run?,queue_health?,stale_running_total?,stale_running?[]{code,count?,sample_refs?,severity?,run_ref?,status?,goal_ref?,goal_status?,causal_verdict?,causal_reason_code?,context_budget_total_bytes?,static_prompt_bytes?,dynamic_context_bytes?,code_context_cache_status?,recommended_action?,evidence_refs?},projects?,tasks?,agents?,operator?,goal_progress_policy?,efficiency_summary?{schema_version,state,recommended_action?,reasons?},idle_self_improvement_budget?,ops_snapshot?,diagnostics_total?,diagnostics?[]{code,count?,sample_refs?,scope?,message?,evidence_refs?},evidence_refs?}|error:{errores_publicos,evidence_refs?,diagnostics?,operator_advice?}",
 		ResourceURI: MCPAutoprogrammingStatusResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
@@ -380,6 +383,7 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 		result.Diagnostics,
 	)
 	result.OpsSnapshot = buildMCPAutoprogrammingOpsSnapshotV0(result.Queue, result.Run, result.Operator, result.StaleRunning, input.OccurredAt)
+	result = projectMCPAutoprogrammingStatusListsV0(result)
 	return result, nil
 }
 
@@ -961,6 +965,10 @@ func newMCPAutoprogrammingStatusBaseV0(
 func mcpAutoprogrammingQueueInputV0(
 	input MCPAutoprogrammingStatusToolInputV0,
 ) MCPRunQueuePriorityToolInputV0 {
+	limit := input.QueueLimit
+	if limit <= 0 {
+		limit = mcpAutoprogrammingStatusDefaultListLimitV0
+	}
 	return MCPRunQueuePriorityToolInputV0{
 		RequestID:            input.RequestID,
 		CorrelationID:        input.CorrelationID,
@@ -968,7 +976,7 @@ func mcpAutoprogrammingQueueInputV0(
 		QueueRef:             input.QueueRef,
 		RunRef:               input.RunRef,
 		AppRefs:              input.AppRefs,
-		Limit:                input.QueueLimit,
+		Limit:                limit,
 		IncludeNonExecutable: true,
 		OccurredAt:           input.OccurredAt,
 	}
