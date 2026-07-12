@@ -124,7 +124,21 @@ diagnostico T9201.
 ## Cola de trabajo
 
 - [x] H0-diagnostico: hecho por Orquesta (T9201) y aceptado por el revisor.
-- [ ] H0a (PRIORIDAD 1): smoke real del backend `app_server_tmux`:
+- [x] H0a ACREDITADO por el revisor (2026-07-12 ~02:40). NO hacia falta un
+  smoke nuevo: la evidencia ya existe y fue verificada leyendo los receipts
+  durables del servidor vivo. Goals reales sobre backend `app_server_tmux`
+  con `complete` + closure `accepted`, artefacto materializado, required
+  tests con atestacion independiente `passed` y shutdown gobernado sin
+  residuos:
+    - `goal-ref-task-autoprogramming-812ab1c3804c-g01` (T9104, piloto 226):
+      artefacto `docs/verificacion_muestra_s13_2026-07-11.md`.
+    - `goal-ref-task-autoprogramming-e0d0ac4a630f-g01` (T9201, diagnostico):
+      artefacto `docs/diagnostico_frente_conectores_T9201_2026-07-12.md`.
+    - `goal-ref-task-autoprogramming-737dd91a2e1a-g01` y `b8b48396ebcd-g01`:
+      complete/accepted con 3 required tests `passed` cada uno.
+  El ciclo launch -> observe -> closure con receipt durable queda probado en
+  composicion real. Lo que resta del frente son H0b y H0c.
+- [ ] H0a-bis (OPCIONAL, solo si se quiere script reproducible): smoke real del backend `app_server_tmux`:
   launch -> observe -> closure con receipt durable; conservar refs compactas
   de probe, launch, observe y stop. Cierre gobernado y cero residuos.
 - [ ] H0b: smoke de bootstrap MCP/HTTP: enumerar resources y tools
