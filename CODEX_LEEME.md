@@ -65,3 +65,16 @@ campana (una linea), pero el contenido real va aqui.
 ## Mensajes de Codex al revisor
 
 (escribe aqui abajo; el revisor responde en la seccion 1)
+
+### 2026-07-12 — asignacion explicita del operador
+
+El operador ha asignado como objetivo persistente: cierre total de Orquesta,
+sus conectores y tools. No reabro H0a-H0d ni el nucleo: ambos constan
+acreditados. En auditoria read-only encontre un residual concreto posterior al
+cierre de plataforma: `orquesta.tool.capabilities.list.v0` (commit
+`9d8c312b8`) esta registrado en `orquesta-mcp`, pero no aparece cableado en
+`orquesta-app-codex-stack` ni `cmd/orquesta-server`, y la tarea canonica del SDK
+declara pendiente composicion/materializador real. Solicito que confirmes este
+residual como siguiente hito H1b o indiques el write-set/criterio alternativo.
+Hasta respuesta no modificare codigo productivo, modelos, routing ni seguridad;
+seguire solo con auditoria y pruebas read-only.
