@@ -1,82 +1,59 @@
 # CODEX: LEE ESTO ANTES DE TOCAR NADA
 
-## 🔧 TAPON MCP: COMO ARREGLARLO (2026-07-12 ~21:15). Instrucciones completas.
+## 🔍 HALLAZGO DEL OPERADOR (2026-07-12 ~21:30): el CONSEJO DE DECISION nunca se ejecuta
 
-**Decision del operador: el limite de 64 KiB SE QUEDA. No se sube.**
-El limite es nuestro (`MCPTransportDefaultToolOutputMaxBytesV0 = 64 << 10`), no
-del protocolo — o sea que **podriamos** subirlo. Y por eso mismo hay que dejar
-claro por que no lo hacemos: esa respuesta va al **contexto de un modelo**.
-323 KiB son ~80.000 tokens de golpe: carisimo y ahoga al agente. Es
-exactamente el problema de "salidas gigantes" que ya tenemos catalogado.
+El operador pregunta: *"una de las fases de los agentes es crear un grupo de
+discusion para crear las apps, pero no los he visto nunca en accion. ¿Por que?"*
 
-**El 64 KiB no es el bug. El bug es que quepan 323.**
+**Tiene razon: el consejo existe en el codigo y NUNCA se ha ejecutado.** Lo
+investigue y son **dos causas apiladas**:
 
-### Medicion exacta (la hice yo contra el servidor vivo; usala)
+### Causa 1: el VoteSource nunca se construye en el servidor real
 
-    TOTAL: 331.222 bytes (323 KiB)  — 5x el limite
+- El consejo vive en `modulos/orquesta-app-codex-stack/resident_director_council_v0.go`
+  y `resident_director_council_votes_v0.go`.
+- Se activa solo si `DecisionCouncilConfigV0.VoteSource != nil`.
+- **`grep -rn "VoteSource" cmd/orquesta-server/` → CERO resultados.**
+  Nadie lo construye nunca en la composicion real. Es un puerto **declarado y
+  jamas cableado**: exactamente el mismo patron que las seis tools muertas de
+  H1b y las validaciones muertas de H4.
 
-      stale_running   139.385 b (42%)   62 items  →  2.248 b POR ITEM
-      diagnostics     103.562 b (31%)  128 items
-      queue            85.958 b (25%)
-      ops_snapshot      3.027 b ( 0%)
-      resolved_runs     2.429 b ( 0%)
+### Causa 2: el consejo cuelga del DIRECTOR RESIDENTE, y el residente esta apagado
 
-**Y aqui esta la causa raiz, que no es "hay mucho dato" sino REPETICION:**
+- El unico punto que lo invoca es
+  `resident_director_briefing_loop_v0.go:487` (`shouldMaterializeDecisionCouncilV0`),
+  dentro del **briefing loop del director residente**.
+- Y el residente estuvo **desactivado en las pruebas** que hemos hecho:
+  `ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED=false`.
+- **El consejo NO forma parte del ciclo del goal**: `grep Council` en
+  `orquesta-goal`, `orquesta-app-director-service` y `orquesta-autoprogramming`
+  → **cero**. Es decir, un goal normal (prepare-run → goal → cierre) **jamas
+  pasa por el consejo**, aunque el residente estuviera encendido.
 
-    stale_running: 34 de 62 items son el MISMO codigo (estado_vivo_desconocido)
-    diagnostics:   68 de 128 items son el MISMO codigo (estado_vivo_desconocido)
+**Resumen:** el consejo no es una fase del ciclo de creacion de apps. Es una
+rama del director residente que nadie cableo. Por eso el operador nunca lo vio:
+**no es que fallara, es que no existe en el camino de ejecucion.**
 
-Es decir: **la mitad de la respuesta es el mismo diagnostico repetido decenas de
-veces, uno por run muerto.** No es informacion, es ruido amplificado.
+### Hito H5 (asignado): resucitar el consejo de decision
 
-### El arreglo, en cuatro capas (haz las cuatro, en este orden)
+**Antes de programar nada, escribe aqui y espera mi visto bueno:**
 
-**1. AGREGAR en el origen (esto es lo que de verdad arregla el problema).**
-No es un problema de transporte: `autoprogramming/status` **no deberia producir**
-128 diagnosticos con 68 repetidos. Agrupa por codigo:
+1. **Que hace hoy el consejo** leyendo el codigo (`resident_director_council_v0.go`):
+   quien vota, sobre que, como se resuelve el empate, que evidencia deja.
+2. **Donde deberia engancharse** para que el operador lo vea de verdad. Mi
+   hipotesis (verificala): la decision de **arquitectura/plan de una app nueva**,
+   ANTES de lanzar el goal — que es justo donde un debate aporta y donde el
+   operador espera verlo.
+3. **Que falta**: el `VoteSource` real (¿quien vota? ¿varios modelos? ¿director
+   + revisor?), y el cableado en `cmd/orquesta-server`.
+4. **Coste**: un consejo son N llamadas a modelo por decision. Propon cuando se
+   activa (¿solo en apps nuevas? ¿solo si la complejidad supera un umbral?) para
+   que no dispare el gasto en cada goal trivial.
 
-    diagnostics: [{code: "estado_vivo_desconocido", count: 68, sample_refs: [...3 max], scope: "..."}]
+**No lo cablees a lo bruto.** Un consejo que vota en cada goal es un incendio de
+cuota. Quiero el diseno primero.
 
-Un diagnostico repetido 68 veces **es un diagnostico con contador 68**, no 68
-diagnosticos. Igual en `stale_running`: agrupa por `code` y devuelve conteo +
-muestra acotada. Esto solo ya deberia bajar el 70% del peso.
-
-**2. ACOTAR por defecto.** `stale_running` con 62 items a 2.248 b/item es una
-lista sin limite. Pon topes por defecto (p.ej. 20 items, con `total_count` real)
-y que el detalle se pida aparte. **Devuelve siempre el total verdadero**, aunque
-muestres 20: el operador tiene que saber que hay 62.
-
-**3. PROYECTAR en el transporte MCP (tu diseno, aprobado).**
-Cuando aun asi se supere el umbral: respuesta completa por HTTP, proyeccion en
-MCP, y **`output_projection` publicando bytes originales, bytes devueltos y ruta
-al detalle**. Nunca truncar en silencio.
-
-**4. STATUS HONESTO (V1-C, aprovecha el mismo corte).**
-Hoy `projects=0 tasks=0 agents=0` con 34 runs terminales. Distingue
-*"no hay nada activo"* de *"no hay nada"*: publica los contadores terminales
-junto a los activos.
-
-### Criterio de cierre (lo verificare con prueba de mutacion)
-
-- Test que **falle** si una respuesta MCP supera el limite de 64 KiB.
-- Test que **falle** si se recorta sin publicar `output_projection`.
-- Test que **falle** si un diagnostico repetido se emite N veces en vez de una
-  con `count: N`.
-- **Verificacion en vivo**: `POST /mcp` con `tools/call` sobre
-  `orquesta.autoprogramming.status.v0` debe devolver **`isError=false`** y caber
-  en 64 KiB. Hoy revienta. Ensename la salida real.
-- El **fallback minimo no puede mentir**: si no cabe ni lo minimo, dilo; no
-  devuelvas un status vacio que parezca "aqui no pasa nada".
-- Guards de siempre verdes. **Sin subir el limite** (esa puerta esta cerrada por
-  decision del operador).
-
-### Recordatorio: H4 sigue rechazado
-
-La entrada 15 sigue proponiendo un BORRAR que **no compila**. Filtro mecanico +
-prueba borrar/build/restaurar en TODOS los BORRAR antes de reentregar. **Sin
-tocar codigo.**
-
-**Orden: tapon MCP primero (bloquea el producto), H4 despues.**
+**Prioridad:** despues del tapon MCP y de H4 (que sigue rechazado).
 
 ---
 
