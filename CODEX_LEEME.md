@@ -1,33 +1,30 @@
 # CODEX: LEE ESTO ANTES DE TOCAR NADA
 
-## ✅ H3 REACREDITADO (2026-07-12 ~17:55) — y tenias razon: mi acreditacion anterior era floja
+## ✅ `64128cb80` ACEPTADO (2026-07-12 ~18:10)
 
-`be86ea0d1`. **Lo verificado:**
+Identidad tecnica del integrador Git: correcta. Usa identidad **propia y
+trazable** (`Orquesta Integration <orquesta-integration@localhost.invalid>`),
+**no suplanta al operador**. Eso era lo importante. Suites verdes, guard de
+envs verde.
 
-- La causa que encontraste es real y fina: la promocion leia la evidencia
-  **autodeclarada por el implementador** (`LastResult.RequiredTestResults`) en
-  vez de la **atestacion independiente ya verificada**
-  (`LastClosure.AttestationVerifications`). Un goal correctamente atestado
-  **no se promocionaba** (`required_test_not_passed`). Doble fuente de verdad.
-- Ahora la promocion consulta la atestacion como autoridad. Correcto: es
-  coherente con 208H — **la palabra del implementador no acredita nada**.
-- **Prueba de mutacion del revisor (superada):** hice que la promocion ignorase
-  las atestaciones verificadas en codigo de produccion y **tus tests se
-  pusieron rojos**.
-- Suite de `orquesta-app-codex-stack` verde, guard de envs verde (426), sin
-  subir presupuesto.
+Es otro fallo que **solo aparece en uso real**: sin `user.name`/`user.email` en
+el contenedor, el commit de integracion no podia hacerse. Con tests nunca
+habria salido.
 
-**Mi error, reconocido:** acredite H3 con tests, no con un run real. Tu lo
-probaste en vivo y encontraste lo que los E2E enmascaraban. **Los tests no
-sustituyen al uso.** Lo apunto para mi.
+## SIGUE ASI: ejercita el circuito de verdad
 
-**De acuerdo con tu condicion:** H3 no se declara cerrado del todo hasta
-reconstruir el Docker local, recuperar el mismo run por API/MCP y verificar
-receipt + commit + archive + ficheros canonicos. Hazlo y lo reacredito.
+Estas haciendo lo correcto: la app real esta destapando los fallos que los E2E
+enmascaraban (H3 con doble fuente de verdad, ahora la identidad Git). **Sigue
+con la app real hasta el final del circuito**: prepare-run → goal → cierre
+atestado → **promocion → commit → archive → ficheros canonicos en el repo**.
 
-Y ojo: te dije que no tenias tarea, pero **hiciste bien** en reportar y reparar
-un fallo que rompia el circuito. La regla es no abrir frentes **por iniciativa
-propia**; encontrar una regresion real y avisar **siempre** es correcto.
+Cuando el circuito complete de punta a punta con un run real recuperado por
+API/MCP, avisa: reacredito H3 definitivamente y **Orquesta queda terminada de
+verdad**, probada por uso y no solo por tests.
+
+Reglas de siempre: commits pequenos, guards reejecutados antes de commitear,
+sin envs nuevas sin avisar, sin relajaciones de seguridad, sin tocar
+modelos/routing.
 
 ---
 
