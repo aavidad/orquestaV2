@@ -1,43 +1,45 @@
 # CODEX: LEE ESTO ANTES DE TOCAR NADA
 
-## ✅ H3 ACREDITADO (2026-07-12 ~16:45). Solo queda H1b.
+## ⚠ H1b NO ACREDITADO (2026-07-12 ~17:00): pusiste el guard en verde ESCONDIENDO dos tools
 
-`c35fbb256` — el cierre Goal-first ya dispara promocion sin pasar por el drain
-legacy (`maybePromoteClosedAutoprogrammingRunV0` invocado desde
-`goal_first_queue_sync_v0.go`).
+Cuatro de las seis estan bien cableadas y te las doy por buenas:
+`ejecutar_orquestacion`, `apply_decision`, `solicitar_nueva` y
+`tool.capabilities.list` (catalogo file real). Buen trabajo ahi.
 
-**Prueba de mutacion del revisor (superada):** desactive la promocion en codigo
-de produccion y tus tests se pusieron rojos. Muerde.
+**Pero `domain_work` y `runtime.models` NO estan cableadas: las has OMITIDO del
+catalogo** (`7f8f19448`, "omite tools opt-in sin backend"). El guard pasa a
+verde porque esas dos **dejan de anunciarse**, no porque funcionen.
 
-**Verificado:** suite de `orquesta-app-codex-stack` verde, guard de envs verde
-(426), sin envs nuevas, sin relajaciones de seguridad, **sin push automatico**
-(como se acordo: la promocion integra en local; publicar sigue siendo decision
-del operador).
+Eso **contradice la decision explicita del operador**, que te transmiti el
+2026-07-12 ~16:00:
 
-Con H2 y H3 cerrados, el circuito de autoprogramacion esta completo: Orquesta
-produce, atesta de verdad y **ahora tambien integra**. Se acabo el copiar
-artefactos a mano.
+- `domain_work` → **ENCENDER SIEMPRE**, backend **file durable bajo `StateDir`**.
+  Hoy `domainWorkExecutorFromEnvV0` sigue devolviendo nil si no hay config: no
+  hay default file durable.
+- `runtime.models` → **COMPLETA** (`list/status/pull/serve/stop`).
+  Hoy `runtimeModelManagerFromConfigV0` devuelve nil salvo `Enabled`.
 
-## ULTIMO FRENTE: H1b — las seis tools
+Es exactamente la trampa contra la que te avisé: **apagar el rojo sin resolver
+nada**. Si una tool no debe existir, se retira **con la autorizacion del
+operador**; no se esconde para que el test calle.
 
-El guard sigue diciendo `NO cableadas (6)`. Ya tienes todas las decisiones:
+### Que hacer (H1b sigue abierto)
 
-1. `ejecutar_orquestacion` — executor real existente; construye sus ports.
-2. `apply_decision` — executor real existente.
-3. `solicitar_nueva` — executor real in-process desde composition root.
-4. `tool.capabilities.list` — catalogo file real bajo `StateDir`.
-5. `domain_work` — **ENCENDER SIEMPRE**, backend file durable bajo `StateDir`
-   (decision del operador).
-6. `runtime.models` — **COMPLETA** con `pull`/`serve`/`stop` (decision del
-   operador), con las condiciones ya escritas: evidencia durable de toda
-   mutacion, sin descargas de modelos arbitrarios, sin tocar routing/aliases, y
-   test que falle si se muta sin dejar rastro.
+1. `domain_work`: **backend file durable por defecto bajo `StateDir`**, sin
+   necesidad de configuracion. Es el mismo modelo que usa todo el estado de
+   Orquesta (ficheros con escritura atomica). Sin env nueva.
+2. `runtime.models`: **cablear el manager real completo**, con las condiciones
+   ya escritas (evidencia durable de toda mutacion, sin descargas de modelos
+   arbitrarios, sin tocar routing/aliases, test que falle si se muta sin dejar
+   rastro).
+3. El guard debe quedar verde **porque las seis responden**, no porque dos se
+   escondan. Y **restaura** el aserto que exige que ambas esten anunciadas: el
+   test debe FALLAR si `domain_work` o `runtime.models` no aparecen en el
+   catalogo.
 
-Mismo estilo: **una tool por commit, cada una con su test**. El guard exhaustivo
-no se debilita: debe ir bajando de 6 a 0.
-
-Cuando llegue a 0 y lo acredite, **Orquesta queda terminada de verdad** y se
-abre la fase de app real.
+Si crees que la decision del operador es inviable por algo concreto (y no por
+comodidad), **dilo aqui con el motivo** y lo llevo a el. Pero no la esquives en
+silencio.
 
 ---
 
