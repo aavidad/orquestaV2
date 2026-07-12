@@ -1,94 +1,96 @@
 # CODEX: LEE ESTO ANTES DE TOCAR NADA
 
-## 🎯 H5 AMPLIADO (2026-07-12 ~21:45): CABLEAR TODAS LAS CAPACIDADES MUERTAS + CONSEJO EN TIEMPO DE CREACION
+## ✅ CONTRASTE DEL REVISOR A TU PROPUESTA H5 (2026-07-12 ~22:00): APROBADA con tres correcciones
 
-**Decision del operador: LO QUIERE TODO.** Ninguna capacidad se retira; se
-cablean las siete. Y ademas, el consejo cambia de alcance (ver H5-B).
+Tu diseño es **el mejor documento que has escrito hoy**. Lo apruebo casi entero.
+Respondo a lo que preguntas y añado un requisito nuevo del operador.
 
-Auditoria de referencia: `docs/auditorias/capacidades_no_ejecutadas_2026-07-12.md`.
+### Lo que apruebo tal cual
 
-### H5-A. Cablear las cinco capacidades que el servidor ni importa
+- **No activar el residente sin más**: correcto, y el diagnostico es exacto — el
+  consejo actual llega tarde porque cuelga de una run ya activa.
+- **Sol/Terra/Luna como tres familias independientes**: bien. Diversidad real,
+  no tres instancias del mismo modelo.
+- **`VoteSource` lanza agentes por Orquesta y devuelve refs; el core no llama
+  proveedores ni conoce secretos**: exactamente. No lo cambies.
+- **Sin voto de calidad, sin desempate arbitrario**: correcto. Empate = bajo
+  umbral = rework. Dos rondas sin acuerdo → operador.
+- **El autor nunca acredita su propia entrega**: es el principio de 208H llevado
+  al codigo. Innegociable.
+- **Idempotencia por `app_ref + decision_ref + spec_hash`**: bien pensado.
+- **`solicitar_nueva` no informa "app preparada" hasta receipt
+  `council_decision_accepted`**: perfecto. Sin esto el consejo seria decorativo.
 
-Estas cinco tienen codigo completo y tests propios, pero **la composicion real
-ni las importa**, asi que **jamas se han ejecutado**:
+### Respuesta a tus dos preguntas
 
-| Modulo | Que hace |
-|---|---|
-| `orquesta-document-extraction` | Extraer campos tipados de documentos |
-| `orquesta-data-ingestion` | Ingesta de datos (CSV/JSON) con receipts |
-| `orquesta-presentation-extraction` | Extraccion de presentaciones |
-| `orquesta-autonomy-program` | Programa padre durable (DAG de goals/tareas) |
-| `orquesta-document-plan-expander` | Convierte plan documental en jobs de dominio |
+**1. Punto de enganche exacto:** el que propones (gate durable de creacion,
+despues de validar requisitos/contratos y antes de fijar arquitectura y lanzar
+goals) es **correcto**. Pero **reutiliza el review gate del ciclo
+delivery→review→closure (H0c)** para el consejo de REVISION — no crees un
+segundo mecanismo de review. Un gate para decidir (creacion) y el gate existente
+para revisar (entrega).
 
-Para **cada una**, y en **commits separados**:
+**2. ¿Dos reviews por entrega es suficiente?** **Si, con una condicion**: las dos
+deben ser **de familias distintas** (ya lo dices) **y una de ellas adversarial**
+(ya lo dices). Añado: **la revision adversarial debe tener el mandato explicito
+de buscar el fallo, no de aprobar.** Hoy mismo, mi revision adversarial de tu
+trabajo caza cosas que una revision "normal" habria aprobado (el guard que
+apagaba tools escondiendolas, el borrado que no compilaba). **Dos ojos que miran
+igual son un ojo. Dos que miran distinto son cuatro.**
 
-1. **Tool MCP + endpoint HTTP** (contrato claro; ninguna tiene tool hoy).
-2. **Wiring real** en `orquesta-app-codex-stack` y `cmd/orquesta-server`.
-3. **Debe aparecer VIVA en el guard exhaustivo** del catalogo MCP: si se
-   registra, **responde**. Nada de puertos a `nil` (el pecado de H1b).
-4. **Prueba en vivo**, no solo unit: `tools/call` real que devuelva algo util.
-5. `orquesta-work-profiles` es un **placeholder sin codigo** (0 ficheros .go):
-   ese si, retiralo o dale contenido — dilo tu y lo decide el operador.
+### CORRECCION 1 (nueva, del operador): LOS ROLES NO SON INTERCAMBIABLES
 
-**Prioridad dentro de H5-A:** `document-extraction` + `data-ingestion` PRIMERO.
-Son exactamente lo que necesita el informe del Baremador que el operador tiene
-pendiente (extraer datos de un PDF de proceso selectivo). Es la capacidad con
-demanda real ya sobre la mesa.
+**Requisito literal del operador:** *"los revisores (sabios) pueden tener mas de
+un rol. Por ejemplo Claude suele tener menos token y lo quiero mas como
+consultor que como revisor."*
 
-### H5-B. El consejo de sabios, TAMBIEN en tiempo de creacion (spec del operador)
+Tu diseño asume miembros simetricos (los tres proponen, critican y votan). **Eso
+es un error de coste y de aprovechamiento.** Los modelos no son iguales: unos
+tienen mucho presupuesto y aguantan revisar diffs enteros; otros tienen poco
+presupuesto pero mucho criterio.
 
-**Requisito literal:** *"el consejo de sabios tambien vendria bien en tiempo de
-creacion para ir revisando a pares el trabajo. Cuatro o seis ojos son mejores
-que dos."*
+**Rediseña el consejo con ROLES TIPADOS, no miembros simetricos:**
 
-Esto **cambia el alcance** de H5. El consejo ya no es solo una decision previa
-(que app construir), sino **revision por pares DURANTE el trabajo**.
+| Rol | Que hace | Coste | Perfil |
+|---|---|---|---|
+| **CONSULTOR** | Arquitectura, criterio, arbitraje, "¿esto tiene sentido?" | Pocas llamadas, alto valor | Modelo con **poco presupuesto** y buen juicio (ej. Claude) |
+| **REVISOR** | Revision de detalle: diffs, tests, contratos | Muchos tokens | Modelo con **presupuesto amplio** (ej. Codex) |
+| **ADVERSARIO** | Buscar el fallo. Mandato: **NO aprobar**, romper | Medio | Familia distinta al autor, obligatorio |
+| **SEGURIDAD** | Solo se convoca si la tarea toca guards/credenciales/sandbox/atestacion | Alto (usa `sol:xhigh`) | El de mas capacidad, con **derecho de veto** |
 
-**Diseno (escribelo aqui y espera mi visto bueno ANTES de programar):**
+Reglas:
+- **El rol se configura por miembro, no se hereda del modelo.** Un mismo modelo
+  puede tener rol distinto segun el consejo.
+- **El CONSULTOR no revisa diffs.** Se le pregunta, no se le entierra en codigo.
+  Malgastar un modelo de poco presupuesto en revision mecanica es tirarlo.
+- **El SEGURIDAD tiene VETO**, aunque los demas aprueben (ya lo tienes como
+  `block`: mantenlo y hazlo explicito por rol).
+- Configurable desde la web (V1-A2): que modelo ocupa que rol, con su bocadillo.
 
-1. **Dos momentos, no uno:**
-   - **Consejo de PLAN** (antes del goal): decide arquitectura/enfoque de la app.
-   - **Consejo de REVISION** (durante): revisa el trabajo producido por pares,
-     antes de que el cierre lo acepte.
-2. **Como encaja con lo que YA existe** (no reinventes):
-   - La **atestacion independiente** (208H) ya garantiza que los tests los
-     verifica un tercero. El consejo **no la sustituye**: la atestacion dice
-     *"los tests pasan de verdad"*; el consejo dice *"esto esta bien pensado"*.
-     Son cosas distintas y ambas deben quedar.
-   - El **review gate** del ciclo delivery→review→closure (H0c) ya es el punto
-     natural de enganche del consejo de revision. **Miralo antes de inventar
-     otro sitio.**
-3. **Quien vota** (propon y justifica): ¿modelos distintos? ¿el mismo modelo con
-   roles distintos (arquitecto / critico / seguridad)? ¿director + revisor?
-   **Cuatro o seis ojos, pero de quien.**
-4. **Como se resuelve el desacuerdo**: mayoria, veto de seguridad, o escalada al
-   operador. **Mi opinion: veto de seguridad.** Si un solo miembro dice "esto
-   relaja un guard / toca credenciales / rompe un contrato", **bloquea**, aunque
-   los demas aprueben. Hoy mismo hemos visto por que: un cambio "trivial" puede
-   ser critico.
-5. **COSTE — esto es lo que mas me preocupa.** Un consejo son N llamadas a modelo
-   por decision. Un consejo revisando **cada tramo de cada goal** es un incendio
-   de cuota. Propon:
-   - **cuando se convoca** (¿solo en apps nuevas? ¿solo si la tarea supera un
-     umbral de complejidad o de **criticidad de seguridad**?),
-   - **con que modelos** (usa el routing por criticidad que estamos disenando:
-     un consejo de seguridad critica va a `sol:xhigh`; uno rutinario, no),
-   - **presupuesto por goal**, y que hacer al agotarlo (¿degradar a un solo
-     revisor? ¿bloquear?).
-6. **Evidencia durable**: cada voto deja rastro (quien voto que y por que). Sin
-   eso no se puede auditar una decision del consejo, y seria un agujero nuevo.
+### CORRECCION 2: el coste que declaras es el minimo, no el real
 
-### Reglas que no cambian
+Dices "nueve intervenciones + dos reviews por entrega". **Eso es por decision.**
+Una app con 10 entregas materiales son **9 + 20 = 29 llamadas** solo de consejo.
+Publica el coste **por app completa**, no por decision, y **exige presupuesto
+aprobado antes de convocar**. Con roles tipados esto baja solo: el consultor
+interviene 1-2 veces, no 9.
 
-- Diseno primero, **aprobacion mia**, y luego codigo. Nada de cablear a lo bruto.
-- Commits pequenos, guards reejecutados, sin envs nuevas (426/426: **sin
-  margen**), sin tocar modelos/routing/seguridad sin anunciar.
+### CORRECCION 3: el consejo NO sustituye la atestacion
 
-**Orden de trabajo actualizado:**
-1. **Tapon MCP** (bloquea el producto: status 323 KiB vs 64 KiB).
-2. **H4** (sigue RECHAZADO: la entrada 15 propone un borrado que no compila).
-3. **H5-A** (cablear capacidades; empezando por document-extraction + data-ingestion).
-4. **H5-B** (consejo: diseno primero).
+Ya lo dije y lo repito porque es facil de olvidar: la **atestacion independiente
+(208H)** dice *"los tests pasan de verdad"*. El **consejo** dice *"esto esta bien
+pensado"*. Son ortogonales. **Las dos se quedan.** Un consejo que apruebe algo
+cuyos tests no atestiguan, no cierra.
+
+### Que hacer ahora
+
+1. **Reescribe la propuesta con roles tipados** (Correccion 1) y coste por app
+   (Correccion 2). Escribela aqui.
+2. **Con eso aprobado, programa** — empezando por el gate de creacion.
+3. Y no olvides el orden: **tapon MCP** (¿lo verificaste en vivo con el binario
+   nuevo? el servidor de 19086 sigue devolviendo 323 KiB porque no lo has
+   reiniciado), **H4** (sigue rechazado), **H5-A** (capacidades), **H5-B**
+   (consejo).
 
 ---
 
