@@ -142,6 +142,27 @@ func TestSelfProgrammingDocsV0KeepRemoteSafetyRunbook(t *testing.T) {
 	}
 }
 
+func TestSelfProgrammingImageV0IncludesPinnedIntegrationRuntime(t *testing.T) {
+	dockerfile := readContractFileV0(t, "../../Dockerfile.self-programming")
+
+	for _, snippet := range []string{
+		"FROM golang:1.25.11-bookworm AS builder",
+		"COPY --from=golang:1.25.11-bookworm /usr/local/go /usr/local/go",
+		"COPY modulos/orquesta-estado-vivo/testdeps/rapid ./modulos/orquesta-estado-vivo/testdeps/rapid",
+		"ca-certificates bash curl git iptables jq openssh-client procps python3 tmux",
+	} {
+		if !strings.Contains(dockerfile, snippet) {
+			t.Fatalf("Dockerfile.self-programming must contain %q", snippet)
+		}
+	}
+
+	localReplaceCopy := strings.Index(dockerfile, "COPY modulos/orquesta-estado-vivo/testdeps/rapid")
+	moduleDownload := strings.Index(dockerfile, "RUN go mod download")
+	if localReplaceCopy < 0 || moduleDownload < 0 || localReplaceCopy > moduleDownload {
+		t.Fatalf("local replace module must be copied before go mod download")
+	}
+}
+
 func readContractFileV0(t *testing.T, path string) string {
 	t.Helper()
 	data, err := os.ReadFile(path)

@@ -174,6 +174,10 @@ write_fake_codex() {
   cat >"$bin_dir/codex-fake" <<'SH'
 #!/usr/bin/env sh
 set -eu
+if [ "${1:-}" = "--version" ]; then
+  echo "codex-fake 0.0.0"
+  exit 0
+fi
 out=""
 project_dir=""
 while [ "$#" -gt 0 ]; do
