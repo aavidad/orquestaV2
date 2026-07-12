@@ -50,6 +50,17 @@ type stackGoalMaterializedRefsSourceV0 struct {
 	RepairMissingTerminalReceipt bool
 }
 
+func (source stackGoalMaterializedRefsSourceV0) goalFirstReceiptRepairLifecyclePortsV0() orquestagoal.GoalWorkLifecyclePortsV0 {
+	return orquestagoal.GoalWorkLifecyclePortsV0{
+		StateStore:                   source.GoalStateStore,
+		ClosureValidator:             source.GoalClosureValidator,
+		RequiredTestSnapshotObserver: source.Config.AppGoalRequiredTestSnapshotObserver,
+		RequiredTestAttestor:         source.Config.AppGoalRequiredTestAttestor,
+		RequiredTestAttestationStore: source.Config.Stores.GoalRequiredTestAttestationStore,
+		RequiredTestIdentityVerifier: source.Config.AppGoalRequiredTestIdentityVerifier,
+	}
+}
+
 type goalMaterializedRefsScanV0 struct {
 	Result                     orquestamcp.MCPDirectorGoalMaterializedRefsV0
 	FilesScanned               int
@@ -112,8 +123,7 @@ func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedR
 			ctx,
 			state,
 			*scan.TerminalResult,
-			source.GoalStateStore,
-			source.GoalClosureValidator,
+			source.goalFirstReceiptRepairLifecyclePortsV0(),
 		)
 		if repairErr == nil && repaired.Repaired {
 			source.RepairMissingTerminalReceipt = false
@@ -189,8 +199,7 @@ func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedR
 			ctx,
 			state,
 			result,
-			source.GoalStateStore,
-			source.GoalClosureValidator,
+			source.goalFirstReceiptRepairLifecyclePortsV0(),
 		)
 		if repairErr == nil && repaired.Repaired {
 			source.RepairMissingTerminalReceipt = false

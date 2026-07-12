@@ -21,12 +21,42 @@ type goalFirstReceiptRepairResultV0 struct {
 	Repaired bool
 }
 
+type goalFirstReceiptRepairResultObserverV0 struct {
+	Result orquestagoal.GoalWorkResultV0
+}
+
+func (observer goalFirstReceiptRepairResultObserverV0) ObserveGoalWorkV0(
+	_ context.Context,
+	_ orquestagoal.GoalObservationRequestV0,
+) (orquestagoal.GoalWorkResultV0, error) {
+	return orquestagoal.NormalizeGoalWorkResultV0(observer.Result), nil
+}
+
+type goalFirstReceiptRepairClosureValidatorV0 struct {
+	Base orquestagoal.GoalWorkClosureValidatorPortV0
+}
+
+func (validator goalFirstReceiptRepairClosureValidatorV0) ValidateGoalWorkClosureV0(
+	ctx context.Context,
+	spec orquestagoal.GoalWorkSpecV0,
+	result orquestagoal.GoalWorkResultV0,
+) (orquestagoal.GoalClosureValidationV0, error) {
+	base := validator.Base
+	if base == nil {
+		base = orquestagoal.DefaultGoalWorkClosureValidatorV0{}
+	}
+	closure, err := base.ValidateGoalWorkClosureV0(ctx, spec, result)
+	if err != nil {
+		return orquestagoal.GoalClosureValidationV0{}, err
+	}
+	return goalFirstReceiptRepairClosureV0(closure), nil
+}
+
 func repairGoalFirstReceiptFromMaterializedRefsV0(
 	ctx context.Context,
 	state orquestagoal.GoalWorkStateV0,
 	refs orquestamcp.MCPDirectorGoalMaterializedRefsV0,
-	store orquestagoal.GoalWorkStateStorePortV0,
-	validator orquestagoal.GoalWorkClosureValidatorPortV0,
+	ports orquestagoal.GoalWorkLifecyclePortsV0,
 ) (goalFirstReceiptRepairResultV0, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -36,50 +66,21 @@ func repairGoalFirstReceiptFromMaterializedRefsV0(
 		return goalFirstReceiptRepairResultV0{}, err
 	}
 	out := goalFirstReceiptRepairResultV0{State: state}
-	if store == nil ||
+	if ports.StateStore == nil ||
 		!goalFirstStringSliceContainsV0(refs.IssueCodes, orquestamcp.MCPGoalFirstMissingTerminalReceiptAfterArtifactsPassV0) ||
 		goalFirstReceiptRepairAlreadyClosedV0(state) ||
 		goalFirstReceiptRepairAlreadyAttemptedV0(state) {
 		return out, nil
 	}
-	if validator == nil {
-		validator = orquestagoal.DefaultGoalWorkClosureValidatorV0{}
-	}
 	result := goalFirstReceiptRepairResultFromRefsV0(state, refs)
-	closure, err := validator.ValidateGoalWorkClosureV0(ctx, state.Spec, result)
-	if err != nil {
-		return goalFirstReceiptRepairResultV0{}, err
-	}
-	closure = goalFirstReceiptRepairClosureV0(closure)
-	updated := state
-	updated.Status = result.Status
-	updated.LastResult = &result
-	updated.LastClosure = &closure
-	updated.EvidenceRefs = compactStringsV0(append(
-		updated.EvidenceRefs,
-		result.EvidenceRefs...,
-	))
-	updated.EvidenceRefs = compactStringsV0(append(updated.EvidenceRefs, closure.EvidenceRefs...))
-	updated, err = orquestagoal.NewGoalWorkStateV0(updated)
-	if err != nil {
-		return goalFirstReceiptRepairResultV0{}, err
-	}
-	if err := store.SaveGoalWorkStateV0(ctx, updated); err != nil {
-		return goalFirstReceiptRepairResultV0{}, err
-	}
-	return goalFirstReceiptRepairResultV0{
-		State:    updated,
-		Closure:  closure,
-		Repaired: true,
-	}, nil
+	return runGoalFirstReceiptRepairLifecycleV0(ctx, state, result, ports)
 }
 
 func repairGoalFirstReceiptFromMaterializedResultV0(
 	ctx context.Context,
 	state orquestagoal.GoalWorkStateV0,
 	result orquestagoal.GoalWorkResultV0,
-	store orquestagoal.GoalWorkStateStorePortV0,
-	validator orquestagoal.GoalWorkClosureValidatorPortV0,
+	ports orquestagoal.GoalWorkLifecyclePortsV0,
 ) (goalFirstReceiptRepairResultV0, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -89,7 +90,7 @@ func repairGoalFirstReceiptFromMaterializedResultV0(
 		return goalFirstReceiptRepairResultV0{}, err
 	}
 	out := goalFirstReceiptRepairResultV0{State: state}
-	if store == nil ||
+	if ports.StateStore == nil ||
 		goalFirstReceiptRepairAlreadyClosedV0(state) {
 		return out, nil
 	}
@@ -100,32 +101,50 @@ func repairGoalFirstReceiptFromMaterializedResultV0(
 	result.GoalRef = strings.TrimSpace(state.GoalRef)
 	result.ExternalGoalRef = strings.TrimSpace(state.ExternalGoalRef)
 	result.EvidenceRefs = compactStringsV0(append(result.EvidenceRefs, goalFirstRepairReceiptAttemptedEvidenceRefV0))
-	if validator == nil {
-		validator = orquestagoal.DefaultGoalWorkClosureValidatorV0{}
+	return runGoalFirstReceiptRepairLifecycleV0(ctx, state, result, ports)
+}
+
+func runGoalFirstReceiptRepairLifecycleV0(
+	ctx context.Context,
+	state orquestagoal.GoalWorkStateV0,
+	result orquestagoal.GoalWorkResultV0,
+	ports orquestagoal.GoalWorkLifecyclePortsV0,
+) (goalFirstReceiptRepairResultV0, error) {
+	out := goalFirstReceiptRepairResultV0{State: state}
+	if !goalFirstReceiptRepairLifecycleReadyV0(state.Spec, ports) {
+		return out, nil
 	}
-	closure, err := validator.ValidateGoalWorkClosureV0(ctx, state.Spec, result)
+	ports.Observer = goalFirstReceiptRepairResultObserverV0{Result: result}
+	ports.ClosureValidator = goalFirstReceiptRepairClosureValidatorV0{Base: ports.ClosureValidator}
+	observed, err := orquestagoal.ObserveGoalWorkV0(
+		ctx,
+		orquestagoal.GoalWorkObserveRequestV0{RunRef: state.RunRef},
+		ports,
+	)
 	if err != nil {
-		return goalFirstReceiptRepairResultV0{}, err
-	}
-	closure = goalFirstReceiptRepairClosureV0(closure)
-	updated := state
-	updated.Status = result.Status
-	updated.LastResult = &result
-	updated.LastClosure = &closure
-	updated.EvidenceRefs = compactStringsV0(append(updated.EvidenceRefs, result.EvidenceRefs...))
-	updated.EvidenceRefs = compactStringsV0(append(updated.EvidenceRefs, closure.EvidenceRefs...))
-	updated, err = orquestagoal.NewGoalWorkStateV0(updated)
-	if err != nil {
-		return goalFirstReceiptRepairResultV0{}, err
-	}
-	if err := store.SaveGoalWorkStateV0(ctx, updated); err != nil {
 		return goalFirstReceiptRepairResultV0{}, err
 	}
 	return goalFirstReceiptRepairResultV0{
-		State:    updated,
-		Closure:  closure,
+		State:    observed.State,
+		Closure:  observed.Closure,
 		Repaired: true,
 	}, nil
+}
+
+func goalFirstReceiptRepairLifecycleReadyV0(
+	spec orquestagoal.GoalWorkSpecV0,
+	ports orquestagoal.GoalWorkLifecyclePortsV0,
+) bool {
+	if ports.StateStore == nil {
+		return false
+	}
+	if !spec.ClosurePolicy.RequireIndependentRequiredTestAttestation {
+		return true
+	}
+	return ports.RequiredTestSnapshotObserver != nil &&
+		ports.RequiredTestAttestor != nil &&
+		ports.RequiredTestAttestationStore != nil &&
+		ports.RequiredTestIdentityVerifier != nil
 }
 
 func goalFirstReceiptRepairResultFromRefsV0(
