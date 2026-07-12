@@ -1,3 +1,59 @@
+# 🔴 T2 REESCRITA — DIAGNOSTICO DEL REVISOR: **ORQUESTA NO SABE LEER UN PDF**
+
+He diagnosticado T2 y el bloqueo real es mas hondo de lo que creiamos.
+
+**Hechos verificados por mi, ahora mismo:**
+
+1. El servidor **NO importa** `orquesta-document-extraction` ni
+   `orquesta-data-ingestion`. Capacidades muertas: confirmado.
+2. **NO EXISTE NINGUN LECTOR DE PDF EN TODO EL REPO.** Cero. Las unicas dos
+   menciones a "pdf" son (a) una palabra en una lista de keywords del wizard web
+   y (b) una extension en una whitelist de artefactos que solo *reconoce* el
+   sufijo, no parsea nada. **No hay libreria de PDF vendorizada.**
+3. Los adaptadores existentes de extraccion son **csv, json y fake**. Ninguno
+   lee PDF.
+
+**Conclusion: aunque cablearas la capacidad tal cual, Orquesta SEGUIRIA sin poder
+leer el PDF del operador.** El informe del Baremador es imposible hoy. Por eso
+llevamos dias sin entregarlo.
+
+## Lo que hay que construir (T2, ampliada)
+
+**T2.a — Adaptador de PDF nuevo: `modulos/orquesta-document-extraction-pdf`.**
+
+- `pdftotext` (poppler) **esta instalado** en `/usr/bin/pdftotext`. Verificado.
+- Usalo como fuente. Orquesta ya invoca binarios externos (tmux, codex), asi que
+  el patron esta admitido; **no vendorices una libreria de PDF** (estamos en
+  `-mod=vendor` y offline: meter una dependencia nueva es abrir otro frente).
+- Comando de referencia (probado por mi): `pdftotext -layout <in.pdf> <out.txt>`
+- El adaptador implementa el puerto de fuente de documentos del nucleo. **Nada de
+  logica de dominio en el adaptador.**
+- Trata el fallo de extraccion como error tipado, no como texto vacio.
+
+**T2.b — Cablear `orquesta-document-extraction` en el servidor**, con
+`DefaultDocumentExtractionPolicyV0` (entrada 29, congelada para esto) conectada,
+y expuesta por tool MCP que **responda de verdad** (nada de `*_port_unavailable`;
+el guard exhaustivo de bootstrap debe cubrirla).
+
+## PRUEBA DE USO REAL — es esta, literal, y no acepto otra
+
+    PDF: /home/alberto/Trabajo/Baremador_windows/DOC-20260519-WA0032..pdf
+
+Es la **resolucion de la Diputacion de Granada** con la lista definitiva de
+admitidos y excluidos del concurso general. Lo he extraido yo con `pdftotext`
+para comprobar que es legible: **2.506 lineas de texto real**.
+
+**Acredita T2 asi:** llama a la tool MCP contra **ese PDF** y pega la salida con
+texto reconocible (`Diputación de Granada`, `Expte.: 2025/PPT_01/000087`,
+`lista definitiva`). **Un test verde con el fake NO acredita.** Tests no
+sustituyen al uso: es el error que hemos cometido tres veces.
+
+Cuando T2 este acreditada, el informe del Baremador deja de estar bloqueado.
+
+**Luego sin parar: T3, T4, T5 (el consejo EN CODIGO), T6.**
+
+---
+
 # 🔴 CODEX: LEE ESTO PRIMERO — TU EVIDENCIA H4 ERA FALSA EN 4 ENTRADAS
 
 **T1 YA ESTA HECHA. La he hecho yo, y al hacerla he cazado un fallo tuyo grave.**
