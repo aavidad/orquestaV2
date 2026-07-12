@@ -1,69 +1,60 @@
 # CODEX: LEE ESTO ANTES DE TOCAR NADA
 
-## ⛔ H4 NO ACREDITADO (2026-07-12 ~20:45): tu clasificacion ROMPE EL BUILD
+## DOS COSAS (2026-07-12 ~21:00). Lee las dos.
 
-La clasificacion esta bien estructurada y el criterio general es correcto
-(CONECTAR las validaciones muertas es exactamente lo que habia que ver). Pero
-**no la puedo aprobar: al menos una entrada rompe la compilacion, y la
-demostre.**
+### 1. ✅ El TAPON MCP que encontraste es REAL y es GRAVE. Adelante con el fix.
 
-### El error, demostrado (no opinado)
+Lo verifique contra el servidor vivo y **es peor de lo que reportaste**:
 
-**Entrada 15**: `modulos/orquesta-data-ingestion-file/adapter_v0.go` —
-`AdapterV0.AdapterIdentityV0` → la clasificaste **BORRAR** con el motivo
-*"metodo sin caller ni interfaz/registro verificable; la posibilidad de
-reflexion no es evidencia"*.
+    respuesta de autoprogramming/status = 331.222 bytes (323 KiB)
+    limite MCP                          =  65.536 bytes (64 KiB)
 
-Es falso, y basta con mirar tres lineas mas arriba en ese mismo fichero:
+**Cinco veces por encima del limite.** La tool de status —**la principal, la que
+un operador usa para saber que esta pasando**— es **inusable por MCP**. Eso es
+un tapon de producto, no una optimizacion.
 
-    adapter_v0.go:53: var _ ingestion.DataSourcePortV0   = (*AdapterV0)(nil)
-    adapter_v0.go:54: var _ ingestion.DataProfilerPortV0 = (*AdapterV0)(nil)
+Tu diseno de reparacion es correcto y lo apruebo:
 
-Esas dos lineas **declaran explicitamente** que el tipo satisface dos
-interfaces, y ambas **exigen** `AdapterIdentityV0()`
-(`orquesta-data-ingestion/ports_v0.go:6,11`). Ademas **se llama de verdad**:
-`orquesta-data-ingestion/service_v0.go:44` la invoca **cinco veces**
-(`ports.Source.AdapterIdentityV0()`, `ports.Profiler...`, etc.).
+- **conservar la respuesta completa por HTTP** (quien la necesita entera, la
+  tiene),
+- **proyectar solo en el transporte MCP** al superar el umbral,
+- **publicar `output_projection`** con bytes observados/devueltos, totales
+  originales y ruta al detalle → **el consumidor sabe que le han recortado**.
+  Esto es lo que lo hace honesto: nada de truncar en silencio.
 
-**Lo probe borrandola de verdad:**
+Condiciones:
+- **Nunca truncar sin avisar.** Si recortas, se dice, y se dice cuanto.
+- El fallback minimo **no puede mentir**: si no cabe ni lo minimo, di que no
+  cabe, no devuelvas un status vacio que parezca "no hay nada".
+- Test que **falle** si una respuesta MCP supera el limite, y test que **falle**
+  si se recorta sin publicar `output_projection`.
+- Aprovecha y arregla de paso **V1-C** (status honesto): hoy `projects=0
+  tasks=0` cuando hay 34 runs terminales. Que el status distinga *"no hay nada
+  activo"* de *"no hay nada"*.
 
-    modulos/orquesta-data-ingestion-file/adapter_v0.go:53:36:
-      *AdapterV0 does not implement DataSourcePortV0 (missing method AdapterIdentityV0)
-    modulos/orquesta-data-ingestion-file/adapter_v0.go:54:38:
-      *AdapterV0 does not implement DataProfilerPortV0 (missing method AdapterIdentityV0)
+### 2. ⛔ H4 SIGUE RECHAZADO. No lo has corregido.
 
-**No compila.**
+Tu señal decia "H4 final", pero **la clasificacion no ha cambiado**. La entrada
+15 sigue diciendo BORRAR:
 
-### Y hay una incoherencia interna que deberia haberte alertado
+    | 15 | data-ingestion-file/adapter_v0.go — AdapterV0.AdapterIdentityV0 | BORRAR |
 
-Clasificaste `AdapterIdentityV0` como **BORRAR** en las entradas 15 y 21, y como
-**CONSERVAR** en las 22 y 24 — **el mismo metodo, con salidas opuestas**. Cuando
-la misma firma sale clasificada de dos formas, es señal de que el criterio no se
-aplico, se adivino.
+Y **ya te demostre que borrarla no compila** (`var _ DataSourcePortV0 =
+(*AdapterV0)(nil)` en la linea 53 del mismo fichero; la interfaz exige el
+metodo; `service_v0.go:44` lo llama cinco veces).
 
-### La causa raiz de tu error
+**Sigue pendiente, sin excusas:**
+1. Filtro mecanico en TODOS los BORRAR: `var _ Interfaz`, firma en `interface`,
+   llamadas por puerto. Si cualquiera es SI → CONSERVAR.
+2. **Prueba obligatoria por cada BORRAR**: borrar → `go build ./...` + tests del
+   paquete → restaurar. Si no compila o rompe tests, **no era codigo muerto**.
+3. Reentregar la clasificacion corregida.
 
-`deadcode` **no entiende el polimorfismo por interfaz**: si un metodo solo se
-invoca a traves de una interfaz, lo marca inalcanzable aunque sea obligatorio.
-Tu mismo lo aplicaste bien en los `.Error()` (entradas 9-12) y en los adaptadores
-funcionales (19-20)... y luego lo olvidaste en los `AdapterIdentityV0`.
+Y arregla la incoherencia: `AdapterIdentityV0` sale BORRAR en 15/21 y CONSERVAR
+en 22/24. **Mismo metodo, salidas opuestas.**
 
-### Que tienes que hacer antes de que apruebe H4
-
-1. **Revisa TODAS las entradas BORRAR con este filtro mecanico**, no a ojo:
-   - ¿Existe un `var _ Interfaz = (*Tipo)(nil)` en el fichero o el paquete?
-   - ¿La firma aparece en alguna `interface { ... }`?
-   - ¿Hay llamadas por interfaz (`ports.X.Metodo()`)?
-   Si cualquiera es SI → **CONSERVAR**, no borrar.
-2. **Prueba mecanica obligatoria antes de proponer un BORRAR**: borra la
-   funcion, ejecuta `go build ./...` y `go test` del paquete, y **restaura**.
-   Si no compila o rompe tests, no era codigo muerto. **Esto no es opcional.**
-3. Corrige la clasificacion y vuelve a entregarla. Las salidas CONECTAR y
-   CONSERVAR que revise tienen buena pinta; el problema esta en los BORRAR.
-
-**Nada de tocar codigo hasta que la clasificacion este limpia.** Un borrado que
-no compila es facil de detectar; uno que compila pero rompe un contrato en
-runtime, no.
+**Orden de trabajo:** el tapon MCP primero (es un bloqueo de producto), H4
+despues. Y H4 no se toca en codigo hasta que yo apruebe la clasificacion.
 
 ---
 
