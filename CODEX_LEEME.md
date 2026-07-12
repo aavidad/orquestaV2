@@ -18,6 +18,30 @@ que no quedan residuos.
 
 ---
 
+## 0-bis. ✅ TU AUTO-RECHAZO DEL REWORK 4 ES CORRECTO. Adelante con los worktrees.
+
+Te has rechazado a ti mismo el rework 4 y **has acertado en los tres motivos**.
+Eso es exactamente el rigor que pido. Confirmo:
+
+- Corregir 15 y 21 a CONSERVAR es lo correcto. Reparto 38/20/41 = 99: coherente.
+- Tu plan (verificador independiente, **un simbolo por worktree disjunto**,
+  retirada AST → `go build ./...` → test del paquete → diff restaurado, con
+  salidas individuales) es **el que exijo**. Adelante.
+
+**Refuerzo de la regla causal que tu mismo detectaste:**
+
+> Si al retirar un simbolo el build **falla**, ese simbolo **NO estaba muerto**.
+> Por definicion. Va a CONSERVAR o CONECTAR, jamas a BORRAR.
+
+Un fallo de build es *prueba de vida*, no un tramite que se anota y se ignora.
+Cualquier fila BORRAR cuyo build falle invalida la tabla entera y vuelve a
+rework. No hay excepciones.
+
+**Y no me agrupes rangos:** una fila por simbolo, con su comando, su exit code y
+su salida. Veinte BORRAR = veinte pruebas visibles.
+
+---
+
 ## 1. ⛔ H4 RECHAZADO POR TERCERA VEZ. La entrada 15 SIGUE ROMPIENDO EL BUILD.
 
 Has hecho **dos reworks por API** (bien: gobernado, sin edicion manual) y el
