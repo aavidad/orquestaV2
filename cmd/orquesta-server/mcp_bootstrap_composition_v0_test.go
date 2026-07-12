@@ -83,7 +83,10 @@ func verifyCanonicalMCPBootstrapV0(baseURL string, stack orquestaappcodexstack.S
 	for _, tool := range listedTools.Tools {
 		actualTools[tool.Name] = true
 	}
-	for _, expected := range orquestamcp.MCPBoundTransportToolsV0(stack.MCPTransportBindings) {
+	// La obligación canónica es fija e independiente de los bindings. Si una
+	// composición omite un puerto, la tool debe faltar aquí y el guard ponerse
+	// rojo; derivar esta lista de los bindings ocultaría exactamente el fallo.
+	for _, expected := range orquestamcp.MCPTransportToolsV0(stack.MCPTransportBindings) {
 		if !actualTools[expected.Name] {
 			return fmt.Errorf("mcp bootstrap: binding declarado sin tool registrada: %s", expected.Name)
 		}
