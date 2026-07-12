@@ -31,6 +31,7 @@ type mcpTransportToolDescriptorsV0 struct {
 	domainWork               MCPDomainWorkToolDescriptorV0
 	externalWorkDryRun       MCPExternalWorkDryRunToolDescriptorV0
 	externalWorkRun          MCPExternalWorkRunToolDescriptorV0
+	toolCapabilities         MCPToolCapabilitiesListToolDescriptorV0
 	codebaseQuery            MCPCodebaseQueryToolDescriptorV0
 	codebaseStatus           MCPCodebaseStatusToolDescriptorV0
 	appVCS                   MCPAppVCSToolDescriptorV0
@@ -69,6 +70,7 @@ func newMCPTransportToolDescriptorsV0() mcpTransportToolDescriptorsV0 {
 		domainWork:               MCPDomainWorkDescriptorV0(),
 		externalWorkDryRun:       MCPExternalWorkDryRunDescriptorV0(),
 		externalWorkRun:          MCPExternalWorkRunDescriptorV0(),
+		toolCapabilities:         MCPToolCapabilitiesListDescriptorV0(),
 		codebaseQuery:            MCPCodebaseQueryDescriptorV0(),
 		codebaseStatus:           MCPCodebaseStatusDescriptorV0(),
 		appVCS:                   MCPAppVCSDescriptorV0(),
