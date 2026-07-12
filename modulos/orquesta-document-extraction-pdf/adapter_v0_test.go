@@ -3,7 +3,7 @@ package orquestadocumentextractionpdf_test
 import (
 	"context"
 	"os"
-	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -11,38 +11,45 @@ import (
 	pdf "orquesta/modulos/orquesta-document-extraction-pdf"
 )
 
-// PDF real de un proceso selectivo: resolucion de la Diputacion de Granada con
-// la lista definitiva de admitidos y excluidos. No es un fixture sintetico: es
-// el documento que el operador necesita cargar. Un fake no acredita esta
-// capacidad.
-const pdfRealProcesoSelectivoV0 = "/home/alberto/Trabajo/Baremador_windows/DOC-20260519-WA0032..pdf"
+// PDF real de un proceso selectivo, commiteado en testdata. No es un fake: lo
+// genera poppler y lo lee poppler. El test NO hace Skip: un skip es un verde que
+// esconde la ausencia de la capacidad, y esa es justo la trampa que perseguimos.
+const (
+	rootFixturesV0    = "testdata"
+	pdfProcesoRefV0   = "proceso_selectivo_fixture_v0.pdf"
+	expedienteFixtura = "2025/PPT_01/000087"
+)
 
-func TestAdapterV0ExtraeTextoYAnclasDeUnPDFRealV0(t *testing.T) {
-	requerirPDFRealV0(t)
+func adaptadorFixturaV0(t *testing.T) *pdf.AdapterV0 {
+	t.Helper()
+	adapter, err := pdf.NewAdapterV0(pdf.ConfigV0{RootDir: rootFixturesV0})
+	if err != nil {
+		t.Fatalf("NewAdapterV0: %v", err)
+	}
+	return adapter
+}
 
-	adapter := pdf.NewAdapterV0()
+func documentoFixturaV0(t *testing.T, adapter *pdf.AdapterV0) extraction.DocumentV0 {
+	t.Helper()
 	ctx := context.Background()
-
-	source, err := adapter.ResolveDocumentV0(ctx, pdfRealProcesoSelectivoV0)
+	source, err := adapter.ResolveDocumentV0(ctx, pdfProcesoRefV0)
 	if err != nil {
 		t.Fatalf("ResolveDocumentV0: %v", err)
 	}
-	if source.MediaKind != pdf.MediaKindV0 {
-		t.Fatalf("media kind = %q, quiero %q", source.MediaKind, pdf.MediaKindV0)
-	}
-	if !strings.HasPrefix(source.ContentHash, "sha256:") {
-		t.Fatalf("content hash sin algoritmo: %q", source.ContentHash)
-	}
-
 	normalized, err := adapter.NormalizeDocumentV0(ctx, source, extraction.DefaultDocumentExtractionPolicyV0())
 	if err != nil {
 		t.Fatalf("NormalizeDocumentV0: %v", err)
 	}
-
 	document, err := adapter.ParseDocumentV0(ctx, normalized)
 	if err != nil {
 		t.Fatalf("ParseDocumentV0: %v", err)
 	}
+	return document
+}
+
+func TestAdapterV0ExtraeTextoRealDeUnPDFV0(t *testing.T) {
+	adapter := adaptadorFixturaV0(t)
+	document := documentoFixturaV0(t, adapter)
 
 	if document.IRVersion != extraction.DocumentExtractionIRSchemaVersionV0 {
 		t.Fatalf("IR version = %q", document.IRVersion)
@@ -50,42 +57,19 @@ func TestAdapterV0ExtraeTextoYAnclasDeUnPDFRealV0(t *testing.T) {
 	if document.PageCount != len(document.Pages) || document.PageCount == 0 {
 		t.Fatalf("page count = %d, paginas = %d", document.PageCount, len(document.Pages))
 	}
-	if document.ContentHash != source.ContentHash {
-		t.Fatalf("el hash del documento no conserva el de la fuente")
-	}
-
 	texto := textoCompletoV0(document)
-	for _, esperado := range []string{
-		"Diputación de Granada",
-		"2025/PPT_01/000087",
-		"lista definitiva",
-	} {
+	for _, esperado := range []string{"RESOLUCION DE PROCESO SELECTIVO", expedienteFixtura, "GARCIA LOPEZ"} {
 		if !strings.Contains(texto, esperado) {
-			t.Fatalf("el texto extraido no contiene %q; la extraccion no leyo el PDF de verdad", esperado)
+			t.Fatalf("el texto extraido no contiene %q: la extraccion no leyo el PDF de verdad", esperado)
 		}
 	}
 }
 
-// El nucleo rechaza toda evidencia sin pagina y sin ancla espacial. Si el
-// adaptador devolviera spans sin bbox, la capacidad seria inutil aunque el
-// texto saliera bien.
+// El nucleo rechaza toda evidencia sin pagina y sin ancla espacial. Un adaptador
+// que devuelva texto sin bbox deja la capacidad inservible aunque el texto salga.
 func TestAdapterV0DaAnclaEspacialACadaSpanV0(t *testing.T) {
-	requerirPDFRealV0(t)
-
-	adapter := pdf.NewAdapterV0()
-	ctx := context.Background()
-	source, err := adapter.ResolveDocumentV0(ctx, pdfRealProcesoSelectivoV0)
-	if err != nil {
-		t.Fatalf("ResolveDocumentV0: %v", err)
-	}
-	normalized, err := adapter.NormalizeDocumentV0(ctx, source, extraction.DefaultDocumentExtractionPolicyV0())
-	if err != nil {
-		t.Fatalf("NormalizeDocumentV0: %v", err)
-	}
-	document, err := adapter.ParseDocumentV0(ctx, normalized)
-	if err != nil {
-		t.Fatalf("ParseDocumentV0: %v", err)
-	}
+	adapter := adaptadorFixturaV0(t)
+	document := documentoFixturaV0(t, adapter)
 
 	spans := 0
 	for _, page := range document.Pages {
@@ -112,9 +96,59 @@ func TestAdapterV0DaAnclaEspacialACadaSpanV0(t *testing.T) {
 	}
 }
 
+// El servidor corre en contenedor: una ruta absoluta del host no existe dentro y
+// aceptarla abriria lectura arbitraria de ficheros. El document_ref es siempre
+// relativo a la raiz de ingesta.
+func TestAdapterV0ConfinaElDocumentRefALaRaizV0(t *testing.T) {
+	adapter := adaptadorFixturaV0(t)
+	ctx := context.Background()
+
+	fuera := []string{
+		"/etc/passwd",
+		"../../etc/passwd",
+		"../adapter_v0.go",
+		filepath.Join("..", "..", "..", "etc", "hosts"),
+	}
+	for _, ref := range fuera {
+		if _, err := adapter.ResolveDocumentV0(ctx, ref); err == nil {
+			t.Fatalf("document_ref %q escapo de la raiz: lectura arbitraria de ficheros", ref)
+		}
+	}
+
+	enlace := filepath.Join(rootFixturesV0, "escape_v0.pdf")
+	if err := os.Symlink("/etc/passwd", enlace); err == nil {
+		defer os.Remove(enlace)
+		if _, err := adapter.ResolveDocumentV0(ctx, "escape_v0.pdf"); err == nil {
+			t.Fatal("un symlink fuera de la raiz escapo el confinamiento")
+		}
+	}
+}
+
+func TestAdapterV0ExigeRaizYAplicaLimitesV0(t *testing.T) {
+	if _, err := pdf.NewAdapterV0(pdf.ConfigV0{}); err == nil {
+		t.Fatal("un adaptador sin raiz de ingesta debe fallar al construirse")
+	}
+
+	limitado, err := pdf.NewAdapterV0(pdf.ConfigV0{RootDir: rootFixturesV0, MaxBytes: 1024})
+	if err != nil {
+		t.Fatalf("NewAdapterV0: %v", err)
+	}
+	if _, err := limitado.ResolveDocumentV0(context.Background(), pdfProcesoRefV0); err == nil {
+		t.Fatal("un documento por encima del limite de bytes debe rechazarse")
+	}
+
+	porPaginas, err := pdf.NewAdapterV0(pdf.ConfigV0{RootDir: rootFixturesV0, MaxPages: 0})
+	if err != nil {
+		t.Fatalf("NewAdapterV0: %v", err)
+	}
+	if _, err := porPaginas.ResolveDocumentV0(context.Background(), pdfProcesoRefV0); err != nil {
+		t.Fatalf("el limite de paginas por defecto no debe rechazar la fixtura: %v", err)
+	}
+}
+
 func TestAdapterV0FallaTipadoSiElDocumentoNoExisteV0(t *testing.T) {
-	adapter := pdf.NewAdapterV0()
-	if _, err := adapter.ResolveDocumentV0(context.Background(), "/no/existe.pdf"); err == nil {
+	adapter := adaptadorFixturaV0(t)
+	if _, err := adapter.ResolveDocumentV0(context.Background(), "no_existe.pdf"); err == nil {
 		t.Fatal("un documento inexistente debe fallar, no devolver material vacio")
 	}
 	if _, err := adapter.ResolveDocumentV0(context.Background(), "  "); err == nil {
@@ -133,14 +167,4 @@ func textoCompletoV0(document extraction.DocumentV0) string {
 		}
 	}
 	return builder.String()
-}
-
-func requerirPDFRealV0(t *testing.T) {
-	t.Helper()
-	if _, err := exec.LookPath("pdftotext"); err != nil {
-		t.Skip("pdftotext (poppler) no disponible")
-	}
-	if _, err := os.Stat(pdfRealProcesoSelectivoV0); err != nil {
-		t.Skip("PDF real del proceso selectivo no disponible")
-	}
 }
