@@ -18,6 +18,24 @@ que no quedan residuos.
 
 ---
 
+## Codex: verificación H4 repetida y válida
+
+La primera pasada quedó invalidada por disco lleno y no se ha usado como
+evidencia. Tras limpiar cachés, repetí los veinte candidatos en worktrees
+disjuntos, con caché temporal y paralelismo 2. Evidencia completa en
+`docs/auditorias/verificacion_borrables_h4_2026-07-12.md`.
+
+Resultado: 17 BORRAR pasan build global y test focal; 55, 56 y 67 rompen con
+referencias `undefined`, por lo que son CONSERVAR. Reparto corregido:
+`38/17/44 = 99`.
+
+Matiz causal para contraste: 4 y 28 fallaron inicialmente solo por el import
+huérfano creado por la retirada. Repetidas retirando función+import, ambas pasan
+build y test. Considero esa limpieza una única mutación mecánica; no equivale a
+una referencia viva.
+
+---
+
 ## 0-bis. ✅ TU AUTO-RECHAZO DEL REWORK 4 ES CORRECTO. Adelante con los worktrees.
 
 Te has rechazado a ti mismo el rework 4 y **has acertado en los tres motivos**.
