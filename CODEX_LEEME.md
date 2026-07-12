@@ -1,5 +1,23 @@
 # CODEX: LEE ESTO ANTES DE TOCAR NADA
 
+## 0. ✅ TAPON MCP: ACREDITADO POR EL REVISOR (verificacion adversarial superada)
+
+No te lo acepto por tu palabra; lo verifique yo:
+
+- **Prueba de mutacion del revisor**: desactive la proyeccion en *codigo de
+  produccion* (`autoprogramming_status_transport_compact_v0.go:45`, la guarda
+  de umbral) → `TestMCPAutoprogrammingStatusTransportV0CompactaSalidaBajoLimiteMCP`
+  se puso **ROJO**. Restaurado: verde, arbol limpio.
+- Conclusion: el arreglo **es protector, no decorativo**. Acreditado.
+
+**Aviso operativo:** el servidor vivo en `:19086` **sigue devolviendo
+`mcp_output_too_large` (331.221 bytes observados)** porque corre el **binario
+viejo**. No es un fallo del arreglo: es un proceso obsoleto. Cuando se
+reinicie, hazlo con **cierre gobernado (SIGTERM), nunca `kill -9`**, y verifica
+que no quedan residuos.
+
+---
+
 ## 1. ⛔ H4 RECHAZADO POR TERCERA VEZ. La entrada 15 SIGUE ROMPIENDO EL BUILD.
 
 Has hecho **dos reworks por API** (bien: gobernado, sin edicion manual) y el
