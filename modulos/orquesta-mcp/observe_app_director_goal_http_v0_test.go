@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -63,7 +64,7 @@ func TestMCPObserveAppDirectorGoalHTTPHandlerV0DelegaEnExecutor(t *testing.T) {
 }
 
 func TestMCPObserveAppDirectorGoalHTTPHandlerV0TimeoutDevuelveJSONPublico(t *testing.T) {
-	executor := &blockingMCPObserveAppDirectorGoalHTTPExecutorV0{done: make(chan struct{})}
+	executor := newBlockingMCPObserveAppDirectorGoalHTTPExecutorV0()
 	body := &bytes.Buffer{}
 	if err := json.NewEncoder(body).Encode(MCPObserveAppDirectorGoalToolInputV0{
 		RequestID:     "req-goal-http-timeout-001",
@@ -76,9 +77,12 @@ func TestMCPObserveAppDirectorGoalHTTPHandlerV0TimeoutDevuelveJSONPublico(t *tes
 	req.Header.Set("X-Correlation-ID", "corr-goal-http-timeout-header-001")
 	rec := httptest.NewRecorder()
 
-	newMCPObserveAppDirectorGoalHTTPHandlerWithTimeoutV0(executor, time.Millisecond).ServeHTTP(rec, req)
+	handler := newMCPObserveAppDirectorGoalHTTPHandlerWithTimeoutV0(executor, time.Millisecond)
+	handler.ServeHTTP(rec, req)
+	<-executor.started
 
-	if rec.Code != http.StatusGatewayTimeout ||
+	if rec.Code != http.StatusAccepted || rec.Header().Get("Location") != MCPObserveAppDirectorGoalHTTPPathV0 ||
+		rec.Header().Get("Retry-After") != "1" ||
 		rec.Header().Get("X-Correlation-ID") != "corr-goal-http-timeout-header-001" {
 		t.Fatalf("status=%d headers=%v body=%s", rec.Code, rec.Header(), rec.Body.String())
 	}
@@ -86,27 +90,66 @@ func TestMCPObserveAppDirectorGoalHTTPHandlerV0TimeoutDevuelveJSONPublico(t *tes
 	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatalf("decode result: %v", err)
 	}
-	if result.Estado != MCPObserveAppDirectorGoalEstadoErrorV0 ||
+	if result.Estado != MCPObserveAppDirectorGoalEstadoOKV0 || result.OperationRef == "" ||
 		!result.Partial ||
 		result.RunRef != "run-ref-goal-http-timeout-001" ||
 		result.RecommendedAction != "observe_later" ||
 		result.Summary == "" ||
-		len(result.Errores) != 1 ||
-		result.Errores[0].Code != MCPObserveAppDirectorGoalHTTPTimeoutCodeV0 ||
-		result.Errores[0].Field != "executor" ||
+		len(result.Errores) != 0 ||
 		!stringInSliceForMCPObserveGoalHTTPTestV0(result.EvidenceRefs, "evidence-ref-observe-app-director-goal-timeout") {
 		t.Fatalf("result=%+v", result)
 	}
 	select {
 	case <-executor.done:
-	case <-time.After(time.Second):
-		t.Fatalf("executor no recibio cancelacion tras timeout HTTP")
+		t.Fatalf("el deadline HTTP cancelo el executor durable")
+	default:
 	}
+	replayRunning := httptest.NewRecorder()
+	replayRunningRequest := httptest.NewRequest(http.MethodPost, MCPObserveAppDirectorGoalHTTPPathV0, strings.NewReader(`{"request_id":"req-goal-http-timeout-distinto-002","run_ref":"run-ref-goal-http-timeout-001"}`))
+	handler.ServeHTTP(replayRunning, replayRunningRequest)
+	if replayRunning.Code != http.StatusAccepted || executor.calls != 1 {
+		t.Fatalf("replay running status=%d calls=%d body=%s", replayRunning.Code, executor.calls, replayRunning.Body.String())
+	}
+	close(executor.release)
+	<-executor.done
+	replay := httptest.NewRecorder()
+	replayRequest := httptest.NewRequest(http.MethodPost, MCPObserveAppDirectorGoalHTTPPathV0, strings.NewReader(`{"request_id":"req-goal-http-timeout-001","run_ref":"run-ref-goal-http-timeout-001"}`))
+	handler.ServeHTTP(replay, replayRequest)
+	if replay.Code != http.StatusOK || executor.calls != 1 {
+		t.Fatalf("replay status=%d calls=%d body=%s", replay.Code, executor.calls, replay.Body.String())
+	}
+}
+
+func TestMCPObserveAppDirectorGoalHTTPHandlerV0ClienteCanceladoNoCancelaTrabajoV0(t *testing.T) {
+	executor := newBlockingMCPObserveAppDirectorGoalHTTPExecutorV0()
+	handler := newMCPObserveAppDirectorGoalHTTPHandlerWithTimeoutV0(executor, time.Millisecond)
+	request := httptest.NewRequest(http.MethodPost, MCPObserveAppDirectorGoalHTTPPathV0, strings.NewReader(
+		`{"request_id":"req-goal-http-client-cancel-001","run_ref":"run-ref-goal-http-client-cancel-001"}`,
+	))
+	clientContext, cancelClient := context.WithCancel(request.Context())
+	cancelClient()
+	request = request.WithContext(clientContext)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	select {
+	case <-executor.done:
+		t.Fatalf("la cancelacion del cliente cancelo el trabajo durable")
+	default:
+	}
+	close(executor.release)
+	<-executor.done
 }
 
 func TestMCPObserveAppDirectorGoalHTTPHandlerV0TimeoutIncluyeSnapshotParcialV0(t *testing.T) {
 	executor := &blockingSnapshotMCPObserveAppDirectorGoalHTTPExecutorV0{
-		done: make(chan struct{}),
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+		done:    make(chan struct{}),
 		snapshot: MCPObserveAppDirectorGoalToolResultV0{
 			Estado:                MCPObserveAppDirectorGoalEstadoOKV0,
 			Partial:               true,
@@ -132,29 +175,30 @@ func TestMCPObserveAppDirectorGoalHTTPHandlerV0TimeoutIncluyeSnapshotParcialV0(t
 
 	newMCPObserveAppDirectorGoalHTTPHandlerWithTimeoutV0(executor, time.Millisecond).ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusGatewayTimeout {
+	if rec.Code != http.StatusAccepted {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	var result MCPObserveAppDirectorGoalToolResultV0
 	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatalf("decode result: %v", err)
 	}
-	if result.Estado != MCPObserveAppDirectorGoalEstadoErrorV0 ||
+	if result.Estado != MCPObserveAppDirectorGoalEstadoOKV0 || result.OperationRef == "" ||
 		!result.Partial ||
 		result.GoalRef != "goal-ref-http-timeout-snapshot-001" ||
 		result.ExternalGoalRef != "thread-ref-http-timeout-snapshot-001" ||
 		result.GoalStatus != orquestagoal.GoalStatusRunningV0 ||
 		result.RecommendedAction != "observe_later" ||
-		len(result.Errores) != 1 ||
-		result.Errores[0].Code != MCPObserveAppDirectorGoalHTTPTimeoutCodeV0 ||
+		len(result.Errores) != 0 ||
 		!stringInSliceForMCPObserveGoalHTTPTestV0(result.EvidenceRefs, "evidence-ref-http-timeout-snapshot-001") {
 		t.Fatalf("result=%+v", result)
 	}
 	select {
 	case <-executor.done:
-	case <-time.After(time.Second):
-		t.Fatalf("executor no recibio cancelacion tras timeout HTTP")
+		t.Fatalf("el deadline HTTP cancelo el executor durable")
+	default:
 	}
+	close(executor.release)
+	<-executor.done
 }
 
 func TestMCPObserveAppDirectorGoalHTTPHandlerV0RunRefRequerido(t *testing.T) {
@@ -600,14 +644,32 @@ func (observer mcpObserveGoalRejectedObserverForTestV0) ObserveGoalWorkV0(
 }
 
 type blockingMCPObserveAppDirectorGoalHTTPExecutorV0 struct {
-	done chan struct{}
+	started chan struct{}
+	release chan struct{}
+	done    chan struct{}
+	once    sync.Once
+	calls   int
+}
+
+func newBlockingMCPObserveAppDirectorGoalHTTPExecutorV0() *blockingMCPObserveAppDirectorGoalHTTPExecutorV0 {
+	return &blockingMCPObserveAppDirectorGoalHTTPExecutorV0{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+		done:    make(chan struct{}),
+	}
 }
 
 func (executor *blockingMCPObserveAppDirectorGoalHTTPExecutorV0) Execute(
 	ctx context.Context,
 	input MCPObserveAppDirectorGoalToolInputV0,
 ) (MCPObserveAppDirectorGoalToolResultV0, error) {
-	<-ctx.Done()
+	executor.calls++
+	executor.once.Do(func() { close(executor.started) })
+	select {
+	case <-executor.release:
+	case <-ctx.Done():
+		return MCPObserveAppDirectorGoalToolResultV0{}, ctx.Err()
+	}
 	close(executor.done)
 	return MCPObserveAppDirectorGoalToolResultV0{
 		Estado: MCPObserveAppDirectorGoalEstadoOKV0,
@@ -616,7 +678,10 @@ func (executor *blockingMCPObserveAppDirectorGoalHTTPExecutorV0) Execute(
 }
 
 type blockingSnapshotMCPObserveAppDirectorGoalHTTPExecutorV0 struct {
+	started  chan struct{}
+	release  chan struct{}
 	done     chan struct{}
+	once     sync.Once
 	snapshot MCPObserveAppDirectorGoalToolResultV0
 }
 
@@ -624,7 +689,12 @@ func (executor *blockingSnapshotMCPObserveAppDirectorGoalHTTPExecutorV0) Execute
 	ctx context.Context,
 	input MCPObserveAppDirectorGoalToolInputV0,
 ) (MCPObserveAppDirectorGoalToolResultV0, error) {
-	<-ctx.Done()
+	executor.once.Do(func() { close(executor.started) })
+	select {
+	case <-executor.release:
+	case <-ctx.Done():
+		return MCPObserveAppDirectorGoalToolResultV0{}, ctx.Err()
+	}
 	close(executor.done)
 	return MCPObserveAppDirectorGoalToolResultV0{
 		Estado: MCPObserveAppDirectorGoalEstadoOKV0,

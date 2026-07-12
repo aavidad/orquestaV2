@@ -32,12 +32,14 @@ func newMCPAutoprogrammingObserveGoalHTTPHandlerWithTimeoutV0(
 	return mcpAutoprogrammingObserveGoalHTTPHandlerV0{
 		executor:        executor,
 		responseTimeout: responseTimeout,
+		operations:      newMCPObserveHTTPAsyncCoordinatorV0[MCPAutoprogrammingObserveGoalToolResultV0](),
 	}
 }
 
 type mcpAutoprogrammingObserveGoalHTTPHandlerV0 struct {
 	executor        MCPTransportAutoprogrammingObserveGoalExecutorV0
 	responseTimeout time.Duration
+	operations      *mcpObserveHTTPAsyncCoordinatorV0[MCPAutoprogrammingObserveGoalToolResultV0]
 }
 
 func (handler mcpAutoprogrammingObserveGoalHTTPHandlerV0) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -83,10 +85,15 @@ func (handler mcpAutoprogrammingObserveGoalHTTPHandlerV0) ServeHTTP(w http.Respo
 	}
 	result, err, timedOut := handler.executeAutoprogrammingObserveGoalWithResponseTimeoutV0(r, input)
 	if timedOut || isMCPAutoprogrammingObserveGoalHTTPRecoverableTimeoutV0(err) {
+		status := http.StatusGatewayTimeout
 		if !timedOut {
 			result = handler.newMCPAutoprogrammingObserveGoalHTTPTimeoutResultV0(r, input)
+		} else {
+			status = http.StatusAccepted
+			w.Header().Set("Location", r.URL.Path)
+			w.Header().Set("Retry-After", "1")
 		}
-		writeMCPAutoprogrammingObserveGoalHTTPV0(w, http.StatusGatewayTimeout, result)
+		writeMCPAutoprogrammingObserveGoalHTTPV0(w, status, result)
 		return
 	}
 	if err != nil {
@@ -129,26 +136,34 @@ func (handler mcpAutoprogrammingObserveGoalHTTPHandlerV0) executeAutoprogramming
 	r *http.Request,
 	input MCPAutoprogrammingObserveGoalToolInputV0,
 ) (MCPAutoprogrammingObserveGoalToolResultV0, error, bool) {
+	if handler.operations == nil {
+		handler.operations = newMCPObserveHTTPAsyncCoordinatorV0[MCPAutoprogrammingObserveGoalToolResultV0]()
+	}
+	operationKey := mcpObserveHTTPAsyncOperationKeyV0(input.RunRef, input.RequestID, input.CorrelationID)
+	operation := handler.operations.getOrStartV0(
+		operationKey,
+		func() (MCPAutoprogrammingObserveGoalToolResultV0, error) {
+			executionCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), mcpObserveHTTPAsyncExecutionMaxRuntimeV0)
+			defer cancel()
+			return handler.executor.Execute(executionCtx, input)
+		},
+	)
 	timeout := handler.responseTimeout
 	if timeout <= 0 {
-		result, err := handler.executor.Execute(r.Context(), input)
-		return result, err, false
+		<-operation.done
+		handler.operations.forgetCompletedV0(operationKey, operation)
+		return operation.result, operation.err, false
 	}
-	ctx, cancel := context.WithCancel(r.Context())
-	defer cancel()
-	done := make(chan mcpAutoprogrammingObserveGoalHTTPExecutionV0, 1)
-	go func() {
-		result, err := handler.executor.Execute(ctx, input)
-		done <- mcpAutoprogrammingObserveGoalHTTPExecutionV0{result: result, err: err}
-	}()
 	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	select {
-	case execution := <-done:
-		return execution.result, execution.err, false
+	case <-operation.done:
+		handler.operations.forgetCompletedV0(operationKey, operation)
+		return operation.result, operation.err, false
+	case <-r.Context().Done():
+		return mcpObserveHTTPAcceptedResultV0(handler.newMCPAutoprogrammingObserveGoalHTTPTimeoutResultV0(r, input), input.RunRef), nil, true
 	case <-timer.C:
-		cancel()
-		return handler.newMCPAutoprogrammingObserveGoalHTTPTimeoutResultV0(r, input), nil, true
+		return mcpObserveHTTPAcceptedResultV0(handler.newMCPAutoprogrammingObserveGoalHTTPTimeoutResultV0(r, input), input.RunRef), nil, true
 	}
 }
 
@@ -161,7 +176,7 @@ func (handler mcpAutoprogrammingObserveGoalHTTPHandlerV0) newMCPAutoprogrammingO
 	if !ok || snapshotter == nil {
 		return timeoutResult
 	}
-	snapshotCtx, cancel := context.WithTimeout(r.Context(), defaultMCPObserveAppDirectorGoalHTTPSnapshotTimeoutV0)
+	snapshotCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), defaultMCPObserveAppDirectorGoalHTTPSnapshotTimeoutV0)
 	defer cancel()
 	done := make(chan mcpAutoprogrammingObserveGoalHTTPExecutionV0, 1)
 	go func() {
@@ -208,12 +223,12 @@ func newMCPAutoprogrammingObserveGoalHTTPTimeoutResultV0(
 		input,
 		MCPAutoprogrammingObserveGoalHTTPTimeoutCodeV0,
 		"executor",
-		"autoprogramming observe_goal excedio la ventana HTTP acotada",
+		"autoprogramming observe_goal sigue ejecutandose fuera de la ventana HTTP acotada",
 	)
 	result.CorrelationID = firstNonEmptyMCPV0(r.Header.Get("X-Correlation-ID"), result.CorrelationID, input.CorrelationID, input.RequestID)
 	result.Partial = true
 	result.RecommendedAction = "observe_later"
-	result.Summary = "observacion de autoprogramacion incompleta por timeout HTTP; conservar run_ref y reintentar observe acotado antes de replanificar o relanzar"
+	result.Summary = "observacion de autoprogramacion aceptada en segundo plano; conservar request_id y run_ref para consultar el mismo resultado sin relanzarla"
 	result.EvidenceRefs = compactStringsMCPV0([]string{
 		"evidence-ref-autoprogramming-observe-goal-timeout",
 		strings.TrimSpace(input.RunRef),

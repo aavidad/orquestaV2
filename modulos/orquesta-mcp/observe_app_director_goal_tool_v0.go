@@ -40,6 +40,7 @@ type MCPObserveAppDirectorGoalToolResultV0 struct {
 	Estado                   string                 `json:"estado"`
 	RequestID                string                 `json:"request_id,omitempty"`
 	CorrelationID            string                 `json:"correlation_id,omitempty"`
+	OperationRef             string                 `json:"operation_ref,omitempty"`
 	Partial                  bool                   `json:"partial,omitempty"`
 	RunRef                   string                 `json:"run_ref,omitempty"`
 	RunStatus                string                 `json:"run_status,omitempty"`

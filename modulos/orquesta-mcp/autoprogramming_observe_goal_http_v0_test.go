@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -48,7 +49,7 @@ func TestMCPAutoprogrammingObserveGoalHTTPHandlerV0DelegaEnExecutor(t *testing.T
 }
 
 func TestMCPAutoprogrammingObserveGoalHTTPHandlerV0TimeoutDevuelveJSONPublico(t *testing.T) {
-	executor := &blockingMCPAutoprogrammingObserveGoalHTTPExecutorV0{done: make(chan struct{})}
+	executor := newBlockingMCPAutoprogrammingObserveGoalHTTPExecutorV0()
 	body := bytes.NewBuffer(nil)
 	if err := json.NewEncoder(body).Encode(MCPAutoprogrammingObserveGoalToolInputV0{
 		RequestID:     "request-ref-autoprogramming-observe-goal-http-timeout-001",
@@ -61,9 +62,12 @@ func TestMCPAutoprogrammingObserveGoalHTTPHandlerV0TimeoutDevuelveJSONPublico(t 
 	req.Header.Set("X-Correlation-ID", "corr-autoprogramming-observe-goal-http-timeout-header-001")
 	rec := httptest.NewRecorder()
 
-	newMCPAutoprogrammingObserveGoalHTTPHandlerWithTimeoutV0(executor, time.Millisecond).ServeHTTP(rec, req)
+	handler := newMCPAutoprogrammingObserveGoalHTTPHandlerWithTimeoutV0(executor, time.Millisecond)
+	handler.ServeHTTP(rec, req)
+	<-executor.started
 
-	if rec.Code != http.StatusGatewayTimeout ||
+	if rec.Code != http.StatusAccepted || rec.Header().Get("Location") != MCPAutoprogrammingObserveGoalHTTPPathV0 ||
+		rec.Header().Get("Retry-After") != "1" ||
 		rec.Header().Get("X-Correlation-ID") != "corr-autoprogramming-observe-goal-http-timeout-header-001" {
 		t.Fatalf("status=%d headers=%v body=%s", rec.Code, rec.Header(), rec.Body.String())
 	}
@@ -71,22 +75,59 @@ func TestMCPAutoprogrammingObserveGoalHTTPHandlerV0TimeoutDevuelveJSONPublico(t 
 	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if result.Estado != MCPAutoprogrammingObserveGoalEstadoErrorV0 ||
+	if result.Estado != MCPAutoprogrammingObserveGoalEstadoOKV0 || result.OperationRef == "" ||
 		!result.Partial ||
 		result.RunRef != "run-ref-autoprogramming-goal-http-timeout-001" ||
 		result.RecommendedAction != "observe_later" ||
 		result.Summary == "" ||
-		len(result.Errores) != 1 ||
-		result.Errores[0].Code != MCPAutoprogrammingObserveGoalHTTPTimeoutCodeV0 ||
-		result.Errores[0].Field != "executor" ||
+		len(result.Errores) != 0 ||
 		!stringInSliceForMCPObserveGoalHTTPTestV0(result.EvidenceRefs, "evidence-ref-autoprogramming-observe-goal-timeout") {
 		t.Fatalf("result=%+v", result)
 	}
 	select {
 	case <-executor.done:
-	case <-time.After(time.Second):
-		t.Fatalf("executor no recibio cancelacion tras timeout HTTP")
+		t.Fatalf("el deadline HTTP cancelo el executor durable")
+	default:
 	}
+	replayRunning := httptest.NewRecorder()
+	replayRunningRequest := httptest.NewRequest(http.MethodPost, MCPAutoprogrammingObserveGoalHTTPPathV0, strings.NewReader(`{"request_id":"request-ref-autoprogramming-observe-goal-http-timeout-distinto-002","run_ref":"run-ref-autoprogramming-goal-http-timeout-001"}`))
+	handler.ServeHTTP(replayRunning, replayRunningRequest)
+	if replayRunning.Code != http.StatusAccepted || executor.calls != 1 {
+		t.Fatalf("replay running status=%d calls=%d body=%s", replayRunning.Code, executor.calls, replayRunning.Body.String())
+	}
+	close(executor.release)
+	<-executor.done
+	replay := httptest.NewRecorder()
+	replayRequest := httptest.NewRequest(http.MethodPost, MCPAutoprogrammingObserveGoalHTTPPathV0, strings.NewReader(`{"request_id":"request-ref-autoprogramming-observe-goal-http-timeout-001","run_ref":"run-ref-autoprogramming-goal-http-timeout-001"}`))
+	handler.ServeHTTP(replay, replayRequest)
+	if replay.Code != http.StatusOK || executor.calls != 1 {
+		t.Fatalf("replay status=%d calls=%d body=%s", replay.Code, executor.calls, replay.Body.String())
+	}
+}
+
+func TestMCPAutoprogrammingObserveGoalHTTPHandlerV0ClienteCanceladoNoCancelaTrabajoV0(t *testing.T) {
+	executor := newBlockingMCPAutoprogrammingObserveGoalHTTPExecutorV0()
+	handler := newMCPAutoprogrammingObserveGoalHTTPHandlerWithTimeoutV0(executor, time.Millisecond)
+	request := httptest.NewRequest(http.MethodPost, MCPAutoprogrammingObserveGoalHTTPPathV0, strings.NewReader(
+		`{"request_id":"req-autoprogramming-http-client-cancel-001","run_ref":"run-ref-autoprogramming-http-client-cancel-001"}`,
+	))
+	clientContext, cancelClient := context.WithCancel(request.Context())
+	cancelClient()
+	request = request.WithContext(clientContext)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("status=%d body=%s", response.Code, response.Body.String())
+	}
+	select {
+	case <-executor.done:
+		t.Fatalf("la cancelacion del cliente cancelo el trabajo durable")
+	default:
+	}
+	close(executor.release)
+	<-executor.done
 }
 
 func TestMCPAutoprogrammingObserveGoalHTTPHandlerV0ExecutorTimeoutOrCancellationDevuelveTimeoutPublico(t *testing.T) {
@@ -143,7 +184,9 @@ func TestMCPAutoprogrammingObserveGoalHTTPHandlerV0ExecutorTimeoutOrCancellation
 
 func TestMCPAutoprogrammingObserveGoalHTTPHandlerV0TimeoutIncluyeSnapshotParcialV0(t *testing.T) {
 	executor := &blockingSnapshotMCPAutoprogrammingObserveGoalHTTPExecutorV0{
-		done: make(chan struct{}),
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+		done:    make(chan struct{}),
 		snapshot: MCPObserveAppDirectorGoalToolResultV0{
 			Estado:            MCPObserveAppDirectorGoalEstadoOKV0,
 			Partial:           true,
@@ -169,35 +212,38 @@ func TestMCPAutoprogrammingObserveGoalHTTPHandlerV0TimeoutIncluyeSnapshotParcial
 
 	newMCPAutoprogrammingObserveGoalHTTPHandlerWithTimeoutV0(executor, time.Millisecond).ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusGatewayTimeout {
+	if rec.Code != http.StatusAccepted {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	var result MCPAutoprogrammingObserveGoalToolResultV0
 	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if result.Estado != MCPAutoprogrammingObserveGoalEstadoErrorV0 ||
+	if result.Estado != MCPAutoprogrammingObserveGoalEstadoOKV0 || result.OperationRef == "" ||
 		!result.Partial ||
 		result.GoalRef != "goal-ref-autoprogramming-goal-http-timeout-snapshot-001" ||
 		result.ExternalGoalRef != "thread-ref-autoprogramming-goal-http-timeout-snapshot-001" ||
 		result.GoalStatus != "blocked" ||
 		result.RecommendedAction != "replan" ||
-		len(result.Errores) != 1 ||
-		result.Errores[0].Code != MCPAutoprogrammingObserveGoalHTTPTimeoutCodeV0 ||
+		len(result.Errores) != 0 ||
 		!stringInSliceForMCPObserveGoalHTTPTestV0(result.ArtifactRefs, "artifact-ref-checkpoint-timeout-snapshot-001") ||
 		!stringInSliceForMCPObserveGoalHTTPTestV0(result.EvidenceRefs, "evidence-ref-autoprogramming-timeout-snapshot-001") {
 		t.Fatalf("result=%+v", result)
 	}
 	select {
 	case <-executor.done:
-	case <-time.After(time.Second):
-		t.Fatalf("executor no recibio cancelacion tras timeout HTTP")
+		t.Fatalf("el deadline HTTP cancelo el executor durable")
+	default:
 	}
+	close(executor.release)
+	<-executor.done
 }
 
 func TestMCPAutoprogrammingObserveGoalHTTPHandlerV0TimeoutNoPublicaClosureBloqueadoSiGoalSigueRunningV0(t *testing.T) {
 	executor := &blockingSnapshotMCPAutoprogrammingObserveGoalHTTPExecutorV0{
-		done: make(chan struct{}),
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+		done:    make(chan struct{}),
 		snapshot: MCPObserveAppDirectorGoalToolResultV0{
 			Estado:             MCPObserveAppDirectorGoalEstadoOKV0,
 			Partial:            true,
@@ -228,7 +274,7 @@ func TestMCPAutoprogrammingObserveGoalHTTPHandlerV0TimeoutNoPublicaClosureBloque
 
 	newMCPAutoprogrammingObserveGoalHTTPHandlerWithTimeoutV0(executor, time.Millisecond).ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusGatewayTimeout {
+	if rec.Code != http.StatusAccepted {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	var result MCPAutoprogrammingObserveGoalToolResultV0
@@ -247,9 +293,11 @@ func TestMCPAutoprogrammingObserveGoalHTTPHandlerV0TimeoutNoPublicaClosureBloque
 	}
 	select {
 	case <-executor.done:
-	case <-time.After(time.Second):
-		t.Fatalf("executor no recibio cancelacion tras timeout HTTP")
+		t.Fatalf("el deadline HTTP cancelo el executor durable")
+	default:
 	}
+	close(executor.release)
+	<-executor.done
 }
 
 func TestMCPAutoprogrammingObserveGoalHTTPHandlerV0RunRefRequerido(t *testing.T) {
@@ -344,14 +392,32 @@ func (executor *fakeMCPAutoprogrammingObserveGoalHTTPExecutorV0) Execute(
 }
 
 type blockingMCPAutoprogrammingObserveGoalHTTPExecutorV0 struct {
-	done chan struct{}
+	started chan struct{}
+	release chan struct{}
+	done    chan struct{}
+	once    sync.Once
+	calls   int
+}
+
+func newBlockingMCPAutoprogrammingObserveGoalHTTPExecutorV0() *blockingMCPAutoprogrammingObserveGoalHTTPExecutorV0 {
+	return &blockingMCPAutoprogrammingObserveGoalHTTPExecutorV0{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+		done:    make(chan struct{}),
+	}
 }
 
 func (executor *blockingMCPAutoprogrammingObserveGoalHTTPExecutorV0) Execute(
 	ctx context.Context,
 	input MCPAutoprogrammingObserveGoalToolInputV0,
 ) (MCPAutoprogrammingObserveGoalToolResultV0, error) {
-	<-ctx.Done()
+	executor.calls++
+	executor.once.Do(func() { close(executor.started) })
+	select {
+	case <-executor.release:
+	case <-ctx.Done():
+		return MCPAutoprogrammingObserveGoalToolResultV0{}, ctx.Err()
+	}
 	close(executor.done)
 	return MCPAutoprogrammingObserveGoalToolResultV0{
 		Estado: MCPAutoprogrammingObserveGoalEstadoOKV0,
@@ -360,7 +426,10 @@ func (executor *blockingMCPAutoprogrammingObserveGoalHTTPExecutorV0) Execute(
 }
 
 type blockingSnapshotMCPAutoprogrammingObserveGoalHTTPExecutorV0 struct {
+	started  chan struct{}
+	release  chan struct{}
 	done     chan struct{}
+	once     sync.Once
 	snapshot MCPObserveAppDirectorGoalToolResultV0
 }
 
@@ -368,7 +437,12 @@ func (executor *blockingSnapshotMCPAutoprogrammingObserveGoalHTTPExecutorV0) Exe
 	ctx context.Context,
 	input MCPAutoprogrammingObserveGoalToolInputV0,
 ) (MCPAutoprogrammingObserveGoalToolResultV0, error) {
-	<-ctx.Done()
+	executor.once.Do(func() { close(executor.started) })
+	select {
+	case <-executor.release:
+	case <-ctx.Done():
+		return MCPAutoprogrammingObserveGoalToolResultV0{}, ctx.Err()
+	}
 	close(executor.done)
 	return MCPAutoprogrammingObserveGoalToolResultV0{
 		Estado: MCPAutoprogrammingObserveGoalEstadoOKV0,
