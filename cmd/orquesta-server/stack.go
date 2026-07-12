@@ -28,6 +28,7 @@ import (
 	orquestaruntimeworktree "orquesta/modulos/orquesta-runtime-worktree"
 	orquestaserver "orquesta/modulos/orquesta-server"
 	orquestastatefile "orquesta/modulos/orquesta-state-file"
+	orquestatoolcapabilityfile "orquesta/modulos/orquesta-tool-capability-file"
 	orquestaweb "orquesta/modulos/orquesta-web"
 )
 
@@ -382,6 +383,12 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 		}
 	}
 	codeContextWiring := codeContextBrokerWiringFromEnvV0(serverConfig)
+	toolCapabilities, err := orquestatoolcapabilityfile.NewToolCapabilityFileCatalogV0(
+		filepath.Join(serverConfig.StateDir, "tool-capabilities"),
+	)
+	if err != nil {
+		return orquestaappcodexstack.StackV0{}, err
+	}
 	stack, err := orquestaappcodexstack.BuildStackV0(orquestaappcodexstack.ConfigV0{
 		Enabled:        true,
 		Timeout:        30 * time.Second,
@@ -455,7 +462,8 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 			goalBackend,
 			autoprogrammingGoalBackend,
 		),
-		RuntimeModels: runtimeModels,
+		RuntimeModels:    runtimeModels,
+		ToolCapabilities: toolCapabilities,
 		ReviewGate: orquestaappcodexstack.ReviewGateConfigV0{
 			FileEvidence:            orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},
 			StrictGoLineBudget:      boolEnvOrDefaultV0(envReviewGateStrictGoLineBudgetV0, false),

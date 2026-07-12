@@ -83,7 +83,7 @@ func verifyCanonicalMCPBootstrapV0(baseURL string, stack orquestaappcodexstack.S
 	for _, tool := range listedTools.Tools {
 		actualTools[tool.Name] = true
 	}
-	for _, expected := range orquestamcp.MCPTransportToolsV0(stack.MCPTransportBindings) {
+	for _, expected := range orquestamcp.MCPBoundTransportToolsV0(stack.MCPTransportBindings) {
 		if !actualTools[expected.Name] {
 			return fmt.Errorf("mcp bootstrap: binding declarado sin tool registrada: %s", expected.Name)
 		}
