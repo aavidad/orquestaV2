@@ -43,21 +43,21 @@ type MCPDocumentTextExtractPageV0 struct {
 }
 
 type MCPDocumentTextExtractToolResultV0 struct {
-	Estado          string                         `json:"estado"`
-	RequestRef      string                         `json:"request_ref,omitempty"`
-	CorrelationID   string                         `json:"correlation_id,omitempty"`
-	DocumentRef     string                         `json:"document_ref,omitempty"`
-	SourceRef       string                         `json:"source_ref,omitempty"`
-	ContentHash     string                         `json:"content_hash,omitempty"`
-	MediaKind       string                         `json:"media_kind,omitempty"`
-	AdapterRef      string                         `json:"adapter_ref,omitempty"`
-	PageCount       int                            `json:"page_count,omitempty"`
-	PageFrom        int                            `json:"page_from,omitempty"`
-	PageTo          int                            `json:"page_to,omitempty"`
-	SpanCount       int                            `json:"span_count,omitempty"`
-	HasMorePages    bool                           `json:"has_more_pages,omitempty"`
-	Pages           []MCPDocumentTextExtractPageV0 `json:"pages,omitempty"`
-	ErroresPublicos []MCPToolCapabilitiesListPublicErrorV0    `json:"errores_publicos,omitempty"`
+	Estado          string                                 `json:"estado"`
+	RequestRef      string                                 `json:"request_ref,omitempty"`
+	CorrelationID   string                                 `json:"correlation_id,omitempty"`
+	DocumentRef     string                                 `json:"document_ref,omitempty"`
+	SourceRef       string                                 `json:"source_ref,omitempty"`
+	ContentHash     string                                 `json:"content_hash,omitempty"`
+	MediaKind       string                                 `json:"media_kind,omitempty"`
+	AdapterRef      string                                 `json:"adapter_ref,omitempty"`
+	PageCount       int                                    `json:"page_count,omitempty"`
+	PageFrom        int                                    `json:"page_from,omitempty"`
+	PageTo          int                                    `json:"page_to,omitempty"`
+	SpanCount       int                                    `json:"span_count,omitempty"`
+	HasMorePages    bool                                   `json:"has_more_pages,omitempty"`
+	Pages           []MCPDocumentTextExtractPageV0         `json:"pages,omitempty"`
+	ErroresPublicos []MCPToolCapabilitiesListPublicErrorV0 `json:"errores_publicos,omitempty"`
 }
 
 // MCPDocumentTextExtractExtractorPortV0 lo implementa el stack sobre el

@@ -218,6 +218,9 @@ func buildStackMCPTransportBindingsV0(
 		DocumentTextExtract: orquestamcp.MCPDocumentTextExtractToolExecutorV0{
 			Extractor: config.DocumentTextExtract,
 		},
+		DataProfile: orquestamcp.MCPDataProfileToolExecutorV0{
+			Profiler: config.DataProfile,
+		},
 		CodebaseQuery: orquestamcp.MCPCodebaseQueryToolExecutorV0{Broker: config.CodeContext},
 		CodebaseStatus: orquestamcp.MCPCodebaseStatusToolExecutorV0{
 			Leases: config.CodeContextToolLeases,

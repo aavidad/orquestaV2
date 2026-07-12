@@ -72,6 +72,7 @@ type ConfigV0 struct {
 	RuntimeModels                                  orquestaruntime.RuntimeModelManagerPortV0
 	ToolCapabilities                               orquestatoolcapability.CapabilityCatalogPortV0
 	DocumentTextExtract                            orquestamcp.MCPDocumentTextExtractExtractorPortV0
+	DataProfile                                    orquestamcp.MCPDataProfileProfilerPortV0
 	DecisionCouncil                                DecisionCouncilConfigV0
 	DomainDelivery                                 DomainWorkDeliveryBridgeConfigV0
 	ExternalWorkRunGuard                           ExternalWorkRunProjectWorkDirGuardConfigV0

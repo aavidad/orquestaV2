@@ -399,6 +399,14 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
+	dataInboxDir := filepath.Join(serverConfig.StateDir, "data-inbox")
+	if err := os.MkdirAll(dataInboxDir, 0o700); err != nil {
+		return orquestaappcodexstack.StackV0{}, err
+	}
+	dataProfile, err := newDataProfileExecutorV0(dataInboxDir)
+	if err != nil {
+		return orquestaappcodexstack.StackV0{}, err
+	}
 	stack, err := orquestaappcodexstack.BuildStackV0(orquestaappcodexstack.ConfigV0{
 		Enabled:        true,
 		Timeout:        30 * time.Second,
@@ -475,6 +483,7 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 		RuntimeModels:       runtimeModels,
 		ToolCapabilities:    toolCapabilities,
 		DocumentTextExtract: documentTextExtract,
+		DataProfile:         dataProfile,
 		ReviewGate: orquestaappcodexstack.ReviewGateConfigV0{
 			FileEvidence:            orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},
 			StrictGoLineBudget:      boolEnvOrDefaultV0(envReviewGateStrictGoLineBudgetV0, false),
