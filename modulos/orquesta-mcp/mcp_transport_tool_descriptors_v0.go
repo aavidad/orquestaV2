@@ -34,6 +34,7 @@ type mcpTransportToolDescriptorsV0 struct {
 	toolCapabilities         MCPToolCapabilitiesListToolDescriptorV0
 	documentTextExtract      MCPToolCapabilitiesListToolDescriptorV0
 	dataProfile              MCPToolCapabilitiesListToolDescriptorV0
+	council                  MCPToolCapabilitiesListToolDescriptorV0
 	codebaseQuery            MCPCodebaseQueryToolDescriptorV0
 	codebaseStatus           MCPCodebaseStatusToolDescriptorV0
 	appVCS                   MCPAppVCSToolDescriptorV0
@@ -75,6 +76,7 @@ func newMCPTransportToolDescriptorsV0() mcpTransportToolDescriptorsV0 {
 		toolCapabilities:         MCPToolCapabilitiesListDescriptorV0(),
 		documentTextExtract:      MCPDocumentTextExtractDescriptorV0(),
 		dataProfile:              MCPDataProfileDescriptorV0(),
+		council:                  MCPCouncilDescriptorV0(),
 		codebaseQuery:            MCPCodebaseQueryDescriptorV0(),
 		codebaseStatus:           MCPCodebaseStatusDescriptorV0(),
 		appVCS:                   MCPAppVCSDescriptorV0(),

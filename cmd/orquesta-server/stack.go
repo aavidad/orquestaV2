@@ -484,6 +484,7 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 		ToolCapabilities:    toolCapabilities,
 		DocumentTextExtract: documentTextExtract,
 		DataProfile:         dataProfile,
+		Council:             councilExecutorV0{},
 		ReviewGate: orquestaappcodexstack.ReviewGateConfigV0{
 			FileEvidence:            orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},
 			StrictGoLineBudget:      boolEnvOrDefaultV0(envReviewGateStrictGoLineBudgetV0, false),

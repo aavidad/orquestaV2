@@ -221,6 +221,9 @@ func buildStackMCPTransportBindingsV0(
 		DataProfile: orquestamcp.MCPDataProfileToolExecutorV0{
 			Profiler: config.DataProfile,
 		},
+		Council: orquestamcp.MCPCouncilToolExecutorV0{
+			Council: config.Council,
+		},
 		CodebaseQuery: orquestamcp.MCPCodebaseQueryToolExecutorV0{Broker: config.CodeContext},
 		CodebaseStatus: orquestamcp.MCPCodebaseStatusToolExecutorV0{
 			Leases: config.CodeContextToolLeases,

@@ -46,6 +46,7 @@ type MCPTransportBindingsV0 struct {
 	ToolCapabilities                               MCPTransportToolCapabilitiesListExecutorV0
 	DocumentTextExtract                            MCPTransportDocumentTextExtractExecutorV0
 	DataProfile                                    MCPTransportDataProfileExecutorV0
+	Council                                        MCPTransportCouncilExecutorV0
 	CodebaseQuery                                  MCPTransportCodebaseQueryExecutorV0
 	CodebaseStatus                                 MCPTransportCodebaseStatusExecutorV0
 	AppVCS                                         MCPAppVCSExecutorPortV0
@@ -139,6 +140,10 @@ type MCPTransportDocumentTextExtractExecutorV0 interface {
 
 type MCPTransportDataProfileExecutorV0 interface {
 	Execute(context.Context, MCPDataProfileToolInputV0) (MCPDataProfileToolResultV0, error)
+}
+
+type MCPTransportCouncilExecutorV0 interface {
+	Execute(context.Context, MCPCouncilToolInputV0) (MCPCouncilToolResultV0, error)
 }
 
 type MCPTransportCodebaseQueryExecutorV0 interface {
