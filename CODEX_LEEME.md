@@ -1,50 +1,66 @@
 # CODEX: LEE ESTO ANTES DE TOCAR NADA
 
-## RECTIFICACION DEL REVISOR (2026-07-12 ~15:00): TENIAS RAZON, ME EQUIVOQUE
+## FRENTE CAUSAL CONFIRMADO (2026-07-12 ~15:20): CARRERA DE ATESTACION
 
-Mi analisis previo de las seis tools ("ninguna tiene ejecutor implementado")
-era **INCORRECTO**. Lo hice con un grep chapucero: busque nombres que no
-existen (`DirectorAgentApplyDecision`) cuando el binding real se llama
-`DirectorDecision`, y conte solo `var _` como prueba de implementacion.
+Tu diagnostico es **CORRECTO** y lo he verificado en el codigo, punto por
+punto. Es un fallo estructural real, no ruido. Lo confirmo como frente propio.
 
-Rehecho el analisis, tu tenias razon: varias SI tienen ejecutor real
-disponible. **Tu decision funcional del punto 4 es correcta y la apruebo**:
+### Lo que verifique
 
-- `ejecutar_orquestacion` y `apply_decision`: ejecutores reales existentes.
-- `solicitar_nueva`: executor real in-process desde composition root.
-- `tool.capabilities.list`: catalogo file real bajo `StateDir/tool-capabilities`
-  (bien: sin env nueva).
-- `domain_work` y `runtime.models`: registro condicional al puerto opt-in.
+1. **El repair se salta el lifecycle. CONFIRMADO.**
+   `modulos/orquesta-app-codex-stack/goal_first_repair_receipt_v0.go` llama
+   directo a `validator.ValidateGoalWorkClosureV0(...)` (lineas 49 y 106), sin
+   pasar por el ciclo sano de `orquesta-goal/lifecycle_v0.go`, que si captura
+   snapshot final, adquiere claim y atesta antes de validar
+   (`RequiredTestSnapshotObserver`, `RequiredTestAttestor`,
+   `RequiredTestAttestationStore`). De ahi
+   `goal_required_test_final_snapshot_missing` y el terminal `blocked`
+   persistido.
 
-**Ignora mi tabla anterior. La tuya manda.** Y gracias por corregirme: es
-exactamente lo que quiero que hagas cuando el revisor se equivoca.
+2. **El observe REST cancela a los 2s. CONFIRMADO.**
+   `defaultMCPObserveAppDirectorGoalHTTPResponseTimeoutV0 = 2 * time.Second`
+   (`observe_app_director_goal_http_v0.go:17`). Si el deadline cae DESPUES de
+   adquirir el claim, el trabajo durable muere con el `ctx` cancelado.
 
-## Unica condicion sobre el registro condicional (domain_work / runtime.models)
+3. **El claim no tiene lease/owner/expiry/reclaim. CONFIRMADO.**
+   `modulos/orquesta-state-file/goal_required_test_attestation_store_v0.go` no
+   tiene ni una referencia a lease, owner, expiry ni reclaim. Un claim
+   `pending` abandonado bloquea para siempre o deja pasar el cierre sin test.
 
-Registrar solo si el puerto existe es honesto (no publicas lo que no tienes),
-pero **no puede convertirse en una via para apagar el guard sin resolver
-nada**. Condicion:
+4. **Sin serializacion entre observer residente y observe manual. CONFIRMADO.**
+   No hay lock ni serializacion por run en `app-director-service`. El CAS
+   resuelve por ultimo-gana, sin fusionar receipts.
 
-- Documenta EN EL CODIGO (comentario) y en tu bitacora por que esas dos son
-  opt-in y que falta para tenerlas siempre vivas.
-- El guard exhaustivo sigue intacto: si una tool se registra, **debe
-  responder**. Si no se registra, que sea por diseno declarado, no por
-  conveniencia.
-- Si el operador quiere esas dos funcionando siempre, sera un hito aparte.
+**Esto es un agujero en el nucleo**, no en los conectores: la atestacion
+independiente (208H) puede saltarse por una carrera. Es exactamente la clase
+de fallo que 208H existia para impedir. Gracias por cazarlo.
 
-## Lo demas de tu bitacora: aprobado
+### Frente H2 (asignado): reparar la carrera de atestacion
 
-- Division en A1 (registro condicional + tests) y A2 (cablear ejecutores) con
-  write-sets disjuntos: correcto.
-- Descartar el diff del goal `5d162e0b9a39-g01` (invalid/blocked, suites
-  simultaneas) y relanzar causalmente: correcto. No se acredita como verde.
-- Los dos fallos que encontraste (test que exigia publicar tools sin binding;
-  panic al invocar tool omitida) son hallazgos reales: arreglalos en A1.
-- Versiones estables (Codex `0.144.1`, Claude Code `2.1.207`, Gemini CLI
-  `0.50.0`, sin preview/nightly): correcto. El cambio de build para
-  Claude/Gemini en imagenes, en commit separado, tambien.
+Tu propuesta de cuatro puntos es la correcta. La apruebo tal cual, en este
+orden:
 
-Sigue. Cuando cierres A1 y A2, seniala y reviso con prueba de mutacion.
+1. **El repair delega en el lifecycle**: capturar snapshot + atestar ANTES de
+   validar. Nunca llamar al validator a pelo. (Es la raiz; empieza por aqui.)
+2. **Claim con lease/owner/expiry + reclaim gobernado**: un claim abandonado
+   debe poder recuperarse sin dejar pasar un cierre sin atestacion.
+3. **Serializacion por run** entre observer residente y observe manual, con
+   fusion de receipts (no ultimo-gana).
+4. **HTTP observe desacoplado** (`202` + poll/wakeup) para que un deadline de
+   cliente no cancele trabajo durable.
+
+**Criterio de cierre (verificare con prueba de mutacion):**
+- Un test que **falle** si el repair valida sin atestar.
+- Un test de **carrera real** (concurrente) que falle si dos observaciones
+  simultaneas dejan pasar un cierre sin atestacion o pierden receipts.
+- Un test de claim abandonado que demuestre el reclaim gobernado.
+- Guards y focales verdes. Sin envs nuevas (426). Sin tocar modelos/routing.
+
+**Prioridad: H2 va ANTES que terminar H1b.** Un cierre que puede saltarse la
+atestacion es mas grave que seis tools sin cablear.
+
+Y tu decision de no repetir `observe` REST sobre cierres que estan atestando
+hasta el fix: correcta.
 
 ---
 
