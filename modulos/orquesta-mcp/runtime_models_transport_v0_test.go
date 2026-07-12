@@ -35,6 +35,7 @@ func TestMCPTransportV0RuntimeModelsInvocaPuerto(t *testing.T) {
 		MCPRuntimeModelsToolNameV0,
 		MCPRuntimeModelsToolInputV0{
 			Action:       "serve",
+			OperationRef: "operation-ref-runtime-model-serve-001",
 			Model:        "qwen2.5:7b",
 			EvidenceRefs: []string{"evidence-ref-runtime-model-serve-001"},
 		},
@@ -51,8 +52,56 @@ func TestMCPTransportV0RuntimeModelsInvocaPuerto(t *testing.T) {
 		result.ActionResult.Model != "qwen2.5:7b" ||
 		len(result.ActionResult.Evidence) != 1 ||
 		result.ActionResult.Evidence[0].Ref != "evidence-ref-runtime-model-serve-001" ||
-		port.serve.Model != "qwen2.5:7b" {
+		port.serve.Model != "qwen2.5:7b" ||
+		port.serve.OperationRef != "operation-ref-runtime-model-serve-001" {
 		t.Fatalf("result=%+v port=%+v", result, port)
+	}
+}
+
+func TestMCPTransportV0RuntimeModelsExponeCincoAccionesV0(t *testing.T) {
+	for _, action := range []string{"list", "status", "pull", "serve", "stop"} {
+		t.Run(action, func(t *testing.T) {
+			port := &fakeMCPRuntimeModelsPortV0{}
+			transport := newFakeMCPTransportV0()
+			if err := RegisterMCPTransportV0(transport, MCPTransportBindingsV0{RuntimeModels: port}); err != nil {
+				t.Fatal(err)
+			}
+			output, err := transport.CallToolV0(context.Background(), MCPRuntimeModelsToolNameV0, MCPRuntimeModelsToolInputV0{
+				Action:       action,
+				OperationRef: "operation-ref-runtime-model-" + action,
+				Model:        "qwen2.5:7b",
+				EvidenceRefs: []string{"evidence-ref-runtime-model-" + action},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var result MCPRuntimeModelsToolResultV0
+			if err := json.Unmarshal(output, &result); err != nil || result.Estado != MCPRuntimeModelsEstadoOKV0 {
+				t.Fatalf("result=%+v err=%v", result, err)
+			}
+			switch action {
+			case "list":
+				if result.ListResult == nil || len(result.ListResult.Models) != 1 || result.ListResult.Models[0].Status != "available" {
+					t.Fatalf("list no invocada: %+v", result)
+				}
+			case "status":
+				if result.ListResult == nil || len(result.ListResult.Models) != 1 || result.ListResult.Models[0].Status != "running" {
+					t.Fatalf("status no invocada: %+v", result)
+				}
+			case "pull":
+				if port.pull.OperationRef == "" {
+					t.Fatal("pull no invocada")
+				}
+			case "serve":
+				if port.serve.OperationRef == "" {
+					t.Fatal("serve no invocada")
+				}
+			case "stop":
+				if port.stop.OperationRef == "" {
+					t.Fatal("stop no invocada")
+				}
+			}
+		})
 	}
 }
 

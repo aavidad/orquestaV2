@@ -9,5 +9,9 @@
   },
   "operator_director_mailbox": {
     "enabled": true
+  },
+  "runtime_models": {
+    "enabled": true,
+    "allowed_models": []
   }
 }

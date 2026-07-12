@@ -76,7 +76,11 @@ func runtimeModelManagerFromConfigV0(
 		}
 	}
 	manager.BearerToken = token
-	return manager, nil
+	receipts, err := newFileRuntimeModelMutationReceiptStoreV0(serverConfig.StateDir)
+	if err != nil {
+		return nil, err
+	}
+	return newGovernedRuntimeModelManagerV0(manager, receipts, projectConfig.RuntimeModels.AllowedModels), nil
 }
 
 func ollamaModelManagerConfigFromProjectConfigV0(projectConfig serverProjectConfigFileV0) (ollamaModelManagerConfigV0, error) {

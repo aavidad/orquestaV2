@@ -26,6 +26,7 @@ type MCPRuntimeModelsToolDescriptorV0 struct {
 
 type MCPRuntimeModelsToolInputV0 struct {
 	Action       string   `json:"action"`
+	OperationRef string   `json:"operation_ref,omitempty"`
 	ProviderRef  string   `json:"provider_ref,omitempty"`
 	EndpointRef  string   `json:"endpoint_ref,omitempty"`
 	Model        string   `json:"model,omitempty"`
@@ -46,7 +47,7 @@ func MCPRuntimeModelsDescriptorV0() MCPRuntimeModelsToolDescriptorV0 {
 	return MCPRuntimeModelsToolDescriptorV0{
 		Name:        MCPRuntimeModelsToolNameV0,
 		Version:     MCPRuntimeModelsToolVersionV0,
-		InputSchema: "envelope:{action:list|status|pull|serve|stop,provider_ref?,endpoint_ref?,model?,keep_alive?,tags?,evidence_refs?}",
+		InputSchema: "envelope:{action:list|status|pull|serve|stop,operation_ref?,provider_ref?,endpoint_ref?,model?,keep_alive?,tags?,evidence_refs?}",
 		Output:      "ok:{list_result?{models?,evidence?},action_result?{accepted,status,evidence?}}|error:{errores_publicos}",
 		ResourceURI: MCPRuntimeModelsResourceURIV0,
 		Invariantes: []string{
@@ -116,12 +117,13 @@ func runtimeModelListRequestFromMCPV0(input MCPRuntimeModelsToolInputV0) orquest
 
 func runtimeModelActionRequestFromMCPV0(input MCPRuntimeModelsToolInputV0) orquestaruntime.RuntimeModelActionRequestV0 {
 	return orquestaruntime.RuntimeModelActionRequestV0{
-		ProviderRef: strings.TrimSpace(input.ProviderRef),
-		EndpointRef: strings.TrimSpace(input.EndpointRef),
-		Model:       strings.TrimSpace(input.Model),
-		KeepAlive:   strings.TrimSpace(input.KeepAlive),
-		Tags:        compactStringsMCPV0(input.Tags),
-		Evidence:    compactStringsMCPV0(input.EvidenceRefs),
+		OperationRef: strings.TrimSpace(input.OperationRef),
+		ProviderRef:  strings.TrimSpace(input.ProviderRef),
+		EndpointRef:  strings.TrimSpace(input.EndpointRef),
+		Model:        strings.TrimSpace(input.Model),
+		KeepAlive:    strings.TrimSpace(input.KeepAlive),
+		Tags:         compactStringsMCPV0(input.Tags),
+		Evidence:     compactStringsMCPV0(input.EvidenceRefs),
 	}
 }
 

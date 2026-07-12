@@ -1,10 +1,11 @@
 package main
 
 type serverProjectConfigRuntimeModelsV0 struct {
-	Enabled         *bool   `json:"enabled,omitempty"`
-	BaseURL         *string `json:"base_url,omitempty"`
-	TimeoutSeconds  *int    `json:"timeout_seconds,omitempty"`
-	BearerTokenFile *string `json:"bearer_token_file,omitempty"`
+	Enabled         *bool    `json:"enabled,omitempty"`
+	BaseURL         *string  `json:"base_url,omitempty"`
+	TimeoutSeconds  *int     `json:"timeout_seconds,omitempty"`
+	BearerTokenFile *string  `json:"bearer_token_file,omitempty"`
+	AllowedModels   []string `json:"allowed_models,omitempty"`
 }
 
 func runtimeModelsProjectConfigHasValueForEnvKeyV0(config serverProjectConfigRuntimeModelsV0, key string) bool {

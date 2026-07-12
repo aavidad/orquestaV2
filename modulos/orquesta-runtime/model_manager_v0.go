@@ -17,12 +17,13 @@ type RuntimeModelListRequestV0 struct {
 }
 
 type RuntimeModelActionRequestV0 struct {
-	ProviderRef string   `json:"provider_ref,omitempty"`
-	EndpointRef string   `json:"endpoint_ref,omitempty"`
-	Model       string   `json:"model"`
-	KeepAlive   string   `json:"keep_alive,omitempty"`
-	Tags        []string `json:"tags,omitempty"`
-	Evidence    []string `json:"evidence_refs,omitempty"`
+	OperationRef string   `json:"operation_ref"`
+	ProviderRef  string   `json:"provider_ref,omitempty"`
+	EndpointRef  string   `json:"endpoint_ref,omitempty"`
+	Model        string   `json:"model"`
+	KeepAlive    string   `json:"keep_alive,omitempty"`
+	Tags         []string `json:"tags,omitempty"`
+	Evidence     []string `json:"evidence_refs,omitempty"`
 }
 
 type RuntimeModelListResultV0 struct {

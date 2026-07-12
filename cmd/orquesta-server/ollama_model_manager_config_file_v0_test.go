@@ -33,8 +33,9 @@ func TestOllamaModelManagerConfigFileV0LoadsTypedRuntimeModelsV0(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runtime models: %v", err)
 	}
-	manager, ok := port.(orquestaruntimeollama.OllamaModelManagerV0)
-	if !ok || manager.BaseURL != "http://127.0.0.1:11435" || manager.BearerToken != "file-token-should-not-leak" || manager.HTTPClient.Timeout != 17*time.Second {
+	governed, ok := port.(governedRuntimeModelManagerV0)
+	manager, innerOK := governed.inner.(orquestaruntimeollama.OllamaModelManagerV0)
+	if !ok || !innerOK || manager.BaseURL != "http://127.0.0.1:11435" || manager.BearerToken != "file-token-should-not-leak" || manager.HTTPClient.Timeout != 17*time.Second {
 		t.Fatalf("manager=%#v", port)
 	}
 	setting := effectiveSettingForTestV0(config.EffectiveConfig.Settings, envOllamaModelManagerBearerTokenV0)
@@ -66,7 +67,7 @@ func TestOllamaModelManagerConfigFileV0EnvOverridesAreDeprecatedV0(t *testing.T)
 	if err != nil {
 		t.Fatalf("runtime models: %v", err)
 	}
-	manager := port.(orquestaruntimeollama.OllamaModelManagerV0)
+	manager := port.(governedRuntimeModelManagerV0).inner.(orquestaruntimeollama.OllamaModelManagerV0)
 	if manager.BaseURL != "http://127.0.0.1:11436" || manager.HTTPClient.Timeout != 19*time.Second {
 		t.Fatalf("manager=%+v", manager)
 	}
