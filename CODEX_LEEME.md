@@ -220,6 +220,54 @@ Pido contraste expreso sobre el punto de enganche exacto y si dos reviews por
 entrega material son el mínimo correcto. No programaré H5 hasta tu visto bueno,
 como pediste.
 
+### 2026-07-12 — revisión H5 final: roles en caliente y paquete masticado
+
+La propuesta anterior queda parcialmente obsoleta: Sol/Terra/Luna son familias
+candidatas del routing actual, pero ningún modelo hereda rol y los miembros no
+hacen siempre las tres fases simétricamente. Los roles se calculan en cada
+convocatoria.
+
+`orquesta-capacity` ya define `QuotaSnapshotV0`, `AgentHomeV0` y usage
+observado, pero no encontré un puerto vivo consumible por el consejo. Propongo
+un `CouncilMemberCapacitySourcePortV0` en la capa de aplicación, adaptado a
+esos contratos existentes, que entrega por miembro/familia cuota fresca,
+presupuesto restante, capacidad y refs. Sin env nueva y fuera del core.
+
+Asignación determinista:
+
+- excluir al autor de REVISOR y ADVERSARIO;
+- REVISOR = elegible con mayor presupuesto fresco;
+- ADVERSARIO = familia distinta, presupuesto suficiente y mandato de buscar
+  el fallo;
+- CONSULTOR = capaz con menor presupuesto positivo; solo recibe material
+  masticado;
+- SEGURIDAD = mayor capacidad elegible solo ante criticidad sensible; puede
+  acumular rol, pero su `block` es veto;
+- cuota ausente/obsoleta o menos de dos familias independientes bloquea una
+  convocatoria material; nunca degrada en silencio.
+
+El receipt registra rol, familia, snapshot/ref de cuota, capacidad, regla y
+motivo. La web configura política/umbrales, nunca nombres de modelos.
+
+`CouncilConsultationPacketV0` tendrá máximo 16 KiB: `council_ref`,
+`decision_ref`, una pregunta, resumen acotado del revisor, máximo tres opciones
+con pros/contras/riesgos, códigos de guard/seguridad, estado de tests/
+atestación y refs. Prohibidos diff, transcript, logs crudos y secretos. El
+CONSULTOR decide sobre ese paquete; no relee código.
+
+Gate PLAN: una propuesta completa del REVISOR, alternativa/crítica del
+ADVERSARIO y decisión del CONSULTOR, conservando propuesta→crítica→voto pero no
+nueve tareas simétricas. Gate REVIEW H0c: dos reviews crudas por entrega
+material, REVISOR + ADVERSARIO; CONSULTOR solo ante decisión/disputa y SEGURIDAD
+solo en trabajo sensible. Presupuesto previo por app:
+`3 + 2*N_entregas_materiales + N_consultas + N_seguridad`, más máximo dos
+rondas. Si no cabe, pausa y operador.
+
+Todos los votos mantienen el mismo peso; el CONSULTOR no desempata con voto de
+calidad. Umbral <67 % abre rework; dos rondas escalan. SEGURIDAD conserva veto.
+Consejo y doble review no sustituyen atestación 208H. Pido aprobación final de
+este diseño dinámico antes del gate de creación.
+
 ### 2026-07-12 — H1b listo para acreditacion: seis tools reales y guard restaurado
 
 Se han aplicado las correcciones posteriores a `cc69899d6`, sin tocar modelos,
