@@ -87,19 +87,6 @@ func MCPArrancarDirectorAppDescriptorV0() MCPArrancarDirectorAppToolDescriptorV0
 	}
 }
 
-func NewMCPArrancarDirectorAppErrorResultV0(
-	input MCPArrancarDirectorAppToolInputV0,
-	code string,
-	field string,
-	message string,
-) MCPArrancarDirectorAppToolResultV0 {
-	return NewMCPArrancarDirectorAppIssuesResultV0(input, []MCPValidationIssueV0{{
-		Code:    strings.TrimSpace(code),
-		Field:   strings.TrimSpace(field),
-		Message: strings.TrimSpace(message),
-	}})
-}
-
 func NewMCPArrancarDirectorAppIssuesResultV0(
 	input MCPArrancarDirectorAppToolInputV0,
 	issues []MCPValidationIssueV0,

@@ -248,18 +248,6 @@ func markNoExecutionObservedAtForTestV0(runtime *RuntimeV0, now time.Time) {
 	}, now)
 }
 
-func resetNoExecutionWindowForTestV0(runtime *RuntimeV0) {
-	runtime.tracker.mu.Lock()
-	defer runtime.tracker.mu.Unlock()
-	runtime.tracker.supervisorNoExecutionSince = time.Time{}
-}
-
-func markNoExecutionWindowStartForTestV0(runtime *RuntimeV0, idleSince time.Time) {
-	runtime.tracker.MarkSupervisorV0(runtime.config.SupervisorCommand, orquestarunsupervisor.RunSupervisorResultV0{
-		StopReason: orquestarunsupervisor.RunSupervisorStopNoExecutionV0,
-	}, idleSince)
-}
-
 func waitRuntimeAsyncWorkForTestV0(t *testing.T, runtime *RuntimeV0) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)

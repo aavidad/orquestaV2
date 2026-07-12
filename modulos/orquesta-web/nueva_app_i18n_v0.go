@@ -54,10 +54,6 @@ func mergeI18nMessagesV0(dst map[string]string, src map[string]string) {
 	}
 }
 
-func NuevaAppI18nTextV0(locale, key string) (string, error) {
-	return NewNuevaAppI18nCatalogV0().Lookup(locale, key)
-}
-
 func NuevaAppI18nRequiredKeysV0() []string {
 	keys := append([]string{}, nuevaAppI18nRequiredKeysV0...)
 	keys = append(keys, nuevaAppHTMLHelpI18nKeysV0()...)

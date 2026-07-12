@@ -62,10 +62,6 @@ func (issue DirectorAgentDecisionBatchBudgetIssueV0) Error() string {
 	)
 }
 
-func DefaultDirectorAgentDecisionBatchBudgetV0() DirectorAgentDecisionBatchBudgetV0 {
-	return DirectorAgentDecisionBatchBudgetV0{}
-}
-
 func NormalizeDirectorAgentDecisionBatchBudgetV0(
 	budget DirectorAgentDecisionBatchBudgetV0,
 ) DirectorAgentDecisionBatchBudgetV0 {
