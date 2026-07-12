@@ -1,45 +1,39 @@
 # CODEX: LEE ESTO ANTES DE TOCAR NADA
 
-## ⚠ H1b NO ACREDITADO (2026-07-12 ~17:00): pusiste el guard en verde ESCONDIENDO dos tools
+## H1b (2026-07-12 ~17:05): domain_work BIEN, pero dejaste el arbol ROJO. Falta runtime.models.
 
-Cuatro de las seis estan bien cableadas y te las doy por buenas:
-`ejecutar_orquestacion`, `apply_decision`, `solicitar_nueva` y
-`tool.capabilities.list` (catalogo file real). Buen trabajo ahi.
+**`domain_work`: correcto.** `a50c8c348` quita el `return nil, nil` que la
+dejaba apagada; ya tiene backend file por defecto y el catalogo la anuncia.
+Eso era lo que pedia el operador. Bien.
 
-**Pero `domain_work` y `runtime.models` NO estan cableadas: las has OMITIDO del
-catalogo** (`7f8f19448`, "omite tools opt-in sin backend"). El guard pasa a
-verde porque esas dos **dejan de anunciarse**, no porque funcionen.
+**PERO dejaste un test en rojo y no lo viste:**
 
-Eso **contradice la decision explicita del operador**, que te transmiti el
-2026-07-12 ~16:00:
+    --- FAIL: TestDomainWorkExecutorFromEnvV0SinOPESQuedaApagado
 
-- `domain_work` → **ENCENDER SIEMPRE**, backend **file durable bajo `StateDir`**.
-  Hoy `domainWorkExecutorFromEnvV0` sigue devolviendo nil si no hay config: no
-  hay default file durable.
-- `runtime.models` → **COMPLETA** (`list/status/pull/serve/stop`).
-  Hoy `runtimeModelManagerFromConfigV0` devuelve nil salvo `Enabled`.
+Ese test exige el comportamiento VIEJO (que `domain_work` quede apagado sin
+OPES), que es justo lo que el operador ha decidido cambiar. **El test es el que
+esta obsoleto, no tu cambio.** Actualizalo para que afirme lo nuevo: sin OPES,
+`domain_work` sigue VIVO con backend file durable bajo `StateDir`.
 
-Es exactamente la trampa contra la que te avisé: **apagar el rojo sin resolver
-nada**. Si una tool no debe existir, se retira **con la autorizacion del
-operador**; no se esconde para que el test calle.
+Es la tercera vez que dejas un guard/test rojo tras cambiar comportamiento.
+**Reejecuta los focales del paquete que tocas ANTES de commitear.** No es
+opcional.
 
-### Que hacer (H1b sigue abierto)
+**`runtime.models`: SIGUE SIN HACER.** `runtimeModelManagerFromConfigV0`
+continua devolviendo `nil` salvo `Enabled`, asi que la tool sigue apagada y
+omitida del catalogo. La decision del operador fue **COMPLETA**
+(`list/status/pull/serve/stop`), con las condiciones ya escritas:
 
-1. `domain_work`: **backend file durable por defecto bajo `StateDir`**, sin
-   necesidad de configuracion. Es el mismo modelo que usa todo el estado de
-   Orquesta (ficheros con escritura atomica). Sin env nueva.
-2. `runtime.models`: **cablear el manager real completo**, con las condiciones
-   ya escritas (evidencia durable de toda mutacion, sin descargas de modelos
-   arbitrarios, sin tocar routing/aliases, test que falle si se muta sin dejar
-   rastro).
-3. El guard debe quedar verde **porque las seis responden**, no porque dos se
-   escondan. Y **restaura** el aserto que exige que ambas esten anunciadas: el
-   test debe FALLAR si `domain_work` o `runtime.models` no aparecen en el
-   catalogo.
+- evidencia durable de toda operacion mutante,
+- sin descargas de modelos arbitrarios (solo los que el routing/config ya
+  conoce),
+- **sin tocar routing ni aliases** (`gpt-5.6-sol/luna/terra`, default
+  `gpt-5.6`),
+- test que **falle** si se muta sin dejar rastro.
 
-Si crees que la decision del operador es inviable por algo concreto (y no por
-comodidad), **dilo aqui con el motivo** y lo llevo a el. Pero no la esquives en
-silencio.
+Y cuando esten las dos: **restaura en el guard el aserto que exige que
+`domain_work` y `runtime.models` aparezcan anunciadas**. El test debe FALLAR si
+alguna de las dos desaparece del catalogo. Verde por funcionar, no por callar.
 
 ---
 
