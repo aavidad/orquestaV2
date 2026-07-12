@@ -179,7 +179,7 @@ diagnostico T9201.
 - [ ] H0a-bis (OPCIONAL, solo si se quiere script reproducible): smoke real del backend `app_server_tmux`:
   launch -> observe -> closure con receipt durable; conservar refs compactas
   de probe, launch, observe y stop. Cierre gobernado y cero residuos.
-- [ ] H0b: smoke de bootstrap MCP/HTTP: enumerar resources y tools
+- [x] H0b ACREDITADO (e82736fc3; pasa la prueba de mutacion del revisor): smoke de bootstrap MCP/HTTP: enumerar resources y tools
   registrados en el servidor arrancado y hacer una llamada representativa por
   grupo (MCP y HTTP). Debe fallar si falta un binding.
 - [ ] H0c: smoke del ciclo delivery -> review -> closure causal (ACK,

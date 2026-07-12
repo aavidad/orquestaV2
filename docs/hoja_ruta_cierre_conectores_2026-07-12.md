@@ -41,7 +41,22 @@ en su frente de plataforma y pasa a la fase de app real.
 
 ---
 
-## H0b — Smoke de bootstrap MCP/HTTP (PRIORIDAD 1)
+## H0b — ACREDITADO por el revisor (2026-07-12 ~12:20, commit `e82736fc3`)
+
+Verificacion adversarial superada:
+- Test reejecutado por el revisor: verde real.
+- **Prueba de mutacion del revisor**: desactive `RunControl` (un binding
+  DISTINTO al que Codex probo) y el test se puso ROJO. No es decorativo:
+  caza bindings muertos de verdad.
+- Hace `tools/list` real por JSON-RPC contra `POST /mcp`, llamadas HTTP
+  reales por grupo, y **detecta `port_unavailable`** (la trampa exacta que
+  nos mordio con el canal de mensajes): registrado != cableado, probado.
+- Guard de envs (426) y suite completa de `cmd/orquesta-server`: verdes
+  reejecutados.
+
+Queda H0c. Enunciado original abajo, conservado como referencia.
+
+## H0b — Smoke de bootstrap MCP/HTTP (ACREDITADO, enunciado original)
 
 **Problema real que resuelve.** La superficie MCP/HTTP depende de que el
 bootstrap **inyecte cada binding**. Hoy nada garantiza que, en un servidor
