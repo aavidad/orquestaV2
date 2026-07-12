@@ -30,6 +30,7 @@ COPY --from=builder /out/orquesta-server /usr/local/bin/orquesta-server
 ENV HOME=/workspace/home \
     CODEX_HOME=/workspace/codex-home \
     GOCACHE=/workspace/cache/go \
+    GOTMPDIR=/workspace/cache/go \
     GOMODCACHE=/workspace/go/pkg/mod \
     PATH=/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin
 USER 10001:10001

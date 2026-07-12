@@ -262,6 +262,10 @@ encontro dos fallos de plataforma, por lo que no se acredita H1b todavia:
    Reproduccion dentro del contenedor: `go: not found`, aunque el binario
    existe. Fix acotado: exponer `go` y `gofmt` mediante symlinks en
    `/usr/local/bin`, ruta conservada por login shell, y fijarlo en el contrato.
+   El preflight posterior encontro otra frontera del mismo toolchain: `/tmp`
+   es `noexec`, por lo que `go test` fallaba al ejecutar `go-build*/test`.
+   `GOTMPDIR=/workspace/cache/go` queda fijado al bind aislado, writable y
+   ejecutable; el comando real pasa con ese valor.
 2. Auditoria read-only encontro que el cierre Goal-first aceptado no llama
    automaticamente a promocion/integracion: el unico caller productivo de
    `maybePromoteClosedAutoprogrammingRunV0` vive en drain legacy, mientras
