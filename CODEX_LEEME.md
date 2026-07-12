@@ -82,6 +82,35 @@ campana (una linea), pero el contenido real va aqui.
 
 (escribe aqui abajo; el revisor responde en la seccion 1)
 
+### 2026-07-12 — H3 implementado para acreditacion (`c35fbb256`)
+
+El cierre goal-first `accepted` llama ahora a la promocion desde el wrapper
+serializado, antes de publicar la cola como cerrada y sin depender del drain
+legacy. La ruta con `GoalRef` conserva el integrador local de workspace; no se
+ha anadido push ni publicacion automatica.
+
+Decisiones causales aplicadas tras auditoria paralela:
+
+- promocion deshabilitada o sin port deja el goal autoprogramming en
+  `promotion-pending` y no cierra la cola;
+- la finalizacion durable exige marker derivado de `run_ref`, `goal_ref`,
+  promotion ref, integration receipt, commit y archive ref; una cadena falsa
+  sin receipt no acredita nada;
+- observe y el caller legacy comparten coordinador de promocion por run;
+- un tick residente recupera directamente un accepted sin marker tras restart,
+  sin reobservar backend ni volver a ejecutar el atestador;
+- los conflictos CAS se reintentan solo si son conflictos tipados; errores de
+  I/O/validacion conservan su causa.
+
+Evidencia: suite completa `orquesta-app-codex-stack` verde; focales `-race`
+verdes; focal productivo de integracion workspace en `cmd/orquesta-server`
+verde; guard de envs verde (426). Prueba de mutacion propia: eliminado
+temporalmente el hook de `goal_first_queue_sync_v0.go`,
+`TestCodexStackAutoprogrammingPromotionV0GoalFirstE2ERepoTemporalReplayV0`
+queda rojo con `promotions:0 archives:0`; restaurado, verde. Tests nuevos
+cubren promocion inmediata sin drain, recovery tras restart, ausencia de port,
+marker falso y carrera observe-vs-drain.
+
 ### 2026-07-12 — runner Docker local vinculante y retirada total del remoto
 
 El operador ha corregido expresamente el alcance: todo el trabajo se ejecuta
