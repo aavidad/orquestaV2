@@ -12,7 +12,8 @@ import (
 
 func TestMaterialProgressGovernorV0WarningNoDetieneV0(t *testing.T) {
 	runtime, progress, stopper := materialProgressRuntimeForTestV0(orquestaautoprogramming.MaterialProgressClassNoneV0, nil, true)
-	result := runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(25, false))
+	_ = runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(80, false))
+	result := runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(105, false))
 
 	observation := result.Observations[0]
 	if observation.Terminal || stopper.uniqueStops != 0 || !materialProgressResultHasIssueForTestV0(observation.Result, materialProgressWarningCodeV0) {
@@ -23,9 +24,27 @@ func TestMaterialProgressGovernorV0WarningNoDetieneV0(t *testing.T) {
 	}
 }
 
-func TestMaterialProgressGovernorV0SinDiffConfirmadoNoRelanzaV0(t *testing.T) {
+func TestMaterialProgressGovernorV0PrimeraMuestraAltaFijaBaselineV0(t *testing.T) {
+	runtime, progress, stopper := materialProgressRuntimeForTestV0(orquestaautoprogramming.MaterialProgressClassNoneV0, nil, true)
+	result := runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(80, false))
+
+	observation := result.Observations[0]
+	if observation.Terminal || stopper.uniqueStops != 0 || progress.state.StoreVersion != 1 ||
+		progress.state.Segment.StartSequence != 1 || progress.state.Segment.StartTokensAccumulated != 80 ||
+		progress.state.LastCheckpoint.Sequence != 1 || progress.state.LastDecision.TokensWithoutMaterial != 0 ||
+		progress.state.LastDecision.Action != orquestaautoprogramming.MaterialProgressActionContinueV0 ||
+		progress.state.LastDecision.MaterialProgressed {
+		t.Fatalf("observation=%+v progress=%+v stopper=%+v", observation, progress.state, stopper)
+	}
+}
+
+func TestMaterialProgressGovernorV0SegundaMuestraSinDiffDetieneV0(t *testing.T) {
 	runtime, _, stopper := materialProgressRuntimeForTestV0(orquestaautoprogramming.MaterialProgressClassNoneV0, nil, true)
-	result := runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(50, false))
+	first := runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(50, false))
+	if first.Observations[0].Terminal || stopper.uniqueStops != 0 {
+		t.Fatalf("first=%+v stopper=%+v", first, stopper)
+	}
+	result := runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(100, false))
 
 	observation := result.Observations[0]
 	if !observation.Terminal || observation.NeedsRework || stopper.uniqueStops != 1 ||
@@ -37,7 +56,8 @@ func TestMaterialProgressGovernorV0SinDiffConfirmadoNoRelanzaV0(t *testing.T) {
 
 func TestMaterialProgressGovernorV0ReincidenciaExigeHardStopSinReworkV0(t *testing.T) {
 	runtime, _, stopper := materialProgressRuntimeForTestV0(orquestaautoprogramming.MaterialProgressClassNoneV0, nil, true)
-	result := runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(50, true))
+	_ = runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(50, true))
+	result := runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(100, true))
 
 	observation := result.Observations[0]
 	if !observation.Terminal || observation.NeedsRework || stopper.uniqueStops != 1 ||
@@ -63,7 +83,8 @@ func TestMaterialProgressGovernorV0DiffVerificadoRenuevaTramoV0(t *testing.T) {
 
 func TestMaterialProgressGovernorV0StopNoConfirmadoNoPublicaTerminalV0(t *testing.T) {
 	runtime, _, stopper := materialProgressRuntimeForTestV0(orquestaautoprogramming.MaterialProgressClassNoneV0, nil, false)
-	result := runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(50, false))
+	_ = runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(50, false))
+	result := runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(100, false))
 
 	observation := result.Observations[0]
 	if observation.Terminal || observation.State.Status != orquestagoal.GoalStatusRunningV0 || stopper.uniqueStops != 1 ||
@@ -74,7 +95,8 @@ func TestMaterialProgressGovernorV0StopNoConfirmadoNoPublicaTerminalV0(t *testin
 
 func TestMaterialProgressGovernorV0ReplayReutilizaIdempotenciaV0(t *testing.T) {
 	runtime, _, stopper := materialProgressRuntimeForTestV0(orquestaautoprogramming.MaterialProgressClassNoneV0, nil, false)
-	input := materialProgressActiveResultForTestV0(50, false)
+	_ = runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(50, false))
+	input := materialProgressActiveResultForTestV0(100, false)
 	first := runtime.reconcileMaterialProgressV0(context.Background(), input)
 	second := runtime.reconcileMaterialProgressV0(context.Background(), input)
 
@@ -96,8 +118,9 @@ func TestMaterialProgressGovernorV0SinUsoTipadoConservaFallbackV0(t *testing.T) 
 
 func TestMaterialProgressGovernorV0FalloPersistenciaGoalNoPublicaTerminalV0(t *testing.T) {
 	runtime, _, stopper := materialProgressRuntimeForTestV0(orquestaautoprogramming.MaterialProgressClassNoneV0, nil, true)
+	_ = runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(50, false))
 	runtime.goalStateStore.(*materialProgressGoalStoreForTestV0).saveErr = errors.New("save_failed")
-	result := runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(50, false))
+	result := runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(100, false))
 	observation := result.Observations[0]
 	if observation.Terminal || stopper.uniqueStops != 1 ||
 		!materialProgressResultHasIssueForTestV0(observation.Result, materialProgressNoDiffStopCodeV0+"_state_save_failed") {

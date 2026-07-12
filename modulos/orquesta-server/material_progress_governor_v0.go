@@ -86,8 +86,10 @@ func (runtime *RuntimeV0) nextMaterialProgressStateV0(
 ) (orquestaautoprogramming.MaterialProgressStateV0, uint64, bool) {
 	policy := materialProgressPolicyFromConfigV0(runtime.config, goalState.Spec)
 	segment := orquestaautoprogramming.MaterialProgressSegmentV0{
-		StartSequence: 1, ContextRevisionRef: strings.TrimSpace(evidence.ContextRevisionRef),
-		ReplansUsed: materialProgressReplansUsedV0(goalState.Spec),
+		StartSequence:          1,
+		StartTokensAccumulated: result.UsageObservation.TokensAccumulated,
+		ContextRevisionRef:     strings.TrimSpace(evidence.ContextRevisionRef),
+		ReplansUsed:            materialProgressReplansUsedV0(goalState.Spec),
 	}
 	expectedVersion := uint64(0)
 	sequence := int64(1)
