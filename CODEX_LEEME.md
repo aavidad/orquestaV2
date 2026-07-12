@@ -567,3 +567,8 @@ y se lanzó el segundo rework focal
 `request-ref-h4-deadcode-classification-rework-20260712-004` /
 `goal-ref-task-autoprogramming-442d1bc0b131-g01`, que obliga a demostrar caller,
 interfaz o registro real para conservar símbolos privados.
+El segundo rework cerró `complete/accepted` y quedó integrado en `2d142e405e`:
+38 CONECTAR, 22 BORRAR y 39 CONSERVAR, suma exacta 99. Reclasificó, entre
+otros, los helpers privados 1–4 y 28 y retiró reflexiones/compatibilidades
+hipotéticas. Esta tabla queda lista para revisión del revisor; todavía no
+autoriza tocar las 99 entradas ni declara H4 implementado.
