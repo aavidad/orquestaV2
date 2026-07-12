@@ -218,7 +218,10 @@ y `orquesta-decision-council`, mi decisión propuesta es:
    spec_hash`. No corre en cada goal. Coste base estimado del consejo actual con
    tres agentes: nueve intervenciones (3 propuestas, 3 críticas, 3 votos), más
    dos reviews por entrega material. Deben publicarse presupuesto, uso real y
-   motivo de activación antes de ejecutar.
+   motivo de activación antes de ejecutar. Si se agota el presupuesto en una
+   entrega material o sensible, se pausa y escala al operador: nunca se degrada
+   silenciosamente a autorrevisión o a un solo revisor. Solo cambios triviales
+   no ejecutables pueden usar una política barata explícita.
 6. **Evidencia y superficie visible.** Persistir refs de propuestas, críticas,
    votos, disensos/bloqueos, opción aceptada, familias/modelos, usage y
    `credential_ref`/`owner_ref` sin secretos. API/MCP/web deben mostrar fases y
