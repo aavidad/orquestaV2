@@ -1,52 +1,69 @@
 # CODEX: LEE ESTO ANTES DE TOCAR NADA
 
-## HOJA DE RUTA A v1.0 (2026-07-12 ~19:20): `docs/hoja_ruta_v1_0.md`
+## ⛔ H4 NO ACREDITADO (2026-07-12 ~20:45): tu clasificacion ROMPE EL BUILD
 
-Decision del operador: **primero Orquesta 100% funcional, version 1.0.**
-Multiusuario queda como mejora futura (v2), pero **v1.0 no le cierra la
-puerta**.
+La clasificacion esta bien estructurada y el criterio general es correcto
+(CONECTAR las validaciones muertas es exactamente lo que habia que ver). Pero
+**no la puedo aprobar: al menos una entrada rompe la compilacion, y la
+demostre.**
 
-**Tu orden de trabajo (no lo alteres):**
+### El error, demostrado (no opinado)
 
-1. **H4** — auditoria de codigo inalcanzable (ya asignado, sigue con el).
-   Recuerda: CONECTAR / BORRAR / CONSERVAR CON MOTIVO. Las validaciones
-   muertas son lo importante.
-2. **V1-B** — credenciales con dueño y trazabilidad. **Va antes que la UI**
-   porque condiciona la arquitectura.
-3. **V1-A** — configuracion por API + web.
-4. **V1-C** — status honesto (`projects=0` cuando hay 34 runs terminales
-   engaña).
-5. Etiquetar v1.0.
+**Entrada 15**: `modulos/orquesta-data-ingestion-file/adapter_v0.go` —
+`AdapterV0.AdapterIdentityV0` → la clasificaste **BORRAR** con el motivo
+*"metodo sin caller ni interfaz/registro verificable; la posibilidad de
+reflexion no es evidencia"*.
 
-### El hueco confirmado (lo verifique en codigo)
+Es falso, y basta con mirar tres lineas mas arriba en ese mismo fichero:
 
-- `orquesta.config.json`: el servidor **solo lo LEE**. Cero rutas de escritura.
-- **No hay ningun endpoint de configuracion**.
-- Las credenciales viven a mano en disco (`auth.json`, `api_key_file`).
-- **Hoy Orquesta se configura editando ficheros y reiniciando. Eso no es un
-  1.0.**
+    adapter_v0.go:53: var _ ingestion.DataSourcePortV0   = (*AdapterV0)(nil)
+    adapter_v0.go:54: var _ ingestion.DataProfilerPortV0 = (*AdapterV0)(nil)
 
-### La regla de oro de V1-B (leela dos veces)
+Esas dos lineas **declaran explicitamente** que el tipo satisface dos
+interfaces, y ambas **exigen** `AdapterIdentityV0()`
+(`orquesta-data-ingestion/ports_v0.go:6,11`). Ademas **se llama de verdad**:
+`orquesta-data-ingestion/service_v0.go:44` la invoca **cinco veces**
+(`ports.Source.AdapterIdentityV0()`, `ports.Profiler...`, etc.).
 
-El operador quiere que mañana **cada usuario configure su cuenta OAuth y que
-nadie gaste los recursos de otro**. Aunque v1.0 sea de un solo dueño:
+**Lo probe borrandola de verdad:**
 
-- **`owner_ref` es OBLIGATORIO desde v1.0** en toda credencial. Es un campo, no
-  una feature: cuesta cero ahora y lo cuesta todo despues.
-- **El goal recibe una `credential_ref`, NUNCA el secreto.** El secreto no viaja
-  por el request, ni por el estado, ni por los logs, ni por las evidencias.
-- **La API nunca devuelve el secreto**: solo ref, proveedor y estado. La UI dice
-  "conectado como X", no la clave.
-- **Evidencia durable de todo uso**: que goal uso que credencial. Sin eso no se
-  puede auditar quien gasta que — que es exactamente lo que el operador quiere
-  impedir.
+    modulos/orquesta-data-ingestion-file/adapter_v0.go:53:36:
+      *AdapterV0 does not implement DataSourcePortV0 (missing method AdapterIdentityV0)
+    modulos/orquesta-data-ingestion-file/adapter_v0.go:54:38:
+      *AdapterV0 does not implement DataProfilerPortV0 (missing method AdapterIdentityV0)
 
-Misma disciplina que aplicamos a `runtime.models`: **ninguna operacion sensible
-sin rastro**.
+**No compila.**
 
-**No empieces V1-B sin pasar antes por mi el diseno del almacen de credenciales
-y su contrato.** Escribelo aqui y espera. Esto toca seguridad: si te equivocas,
-se filtran secretos.
+### Y hay una incoherencia interna que deberia haberte alertado
+
+Clasificaste `AdapterIdentityV0` como **BORRAR** en las entradas 15 y 21, y como
+**CONSERVAR** en las 22 y 24 — **el mismo metodo, con salidas opuestas**. Cuando
+la misma firma sale clasificada de dos formas, es señal de que el criterio no se
+aplico, se adivino.
+
+### La causa raiz de tu error
+
+`deadcode` **no entiende el polimorfismo por interfaz**: si un metodo solo se
+invoca a traves de una interfaz, lo marca inalcanzable aunque sea obligatorio.
+Tu mismo lo aplicaste bien en los `.Error()` (entradas 9-12) y en los adaptadores
+funcionales (19-20)... y luego lo olvidaste en los `AdapterIdentityV0`.
+
+### Que tienes que hacer antes de que apruebe H4
+
+1. **Revisa TODAS las entradas BORRAR con este filtro mecanico**, no a ojo:
+   - ¿Existe un `var _ Interfaz = (*Tipo)(nil)` en el fichero o el paquete?
+   - ¿La firma aparece en alguna `interface { ... }`?
+   - ¿Hay llamadas por interfaz (`ports.X.Metodo()`)?
+   Si cualquiera es SI → **CONSERVAR**, no borrar.
+2. **Prueba mecanica obligatoria antes de proponer un BORRAR**: borra la
+   funcion, ejecuta `go build ./...` y `go test` del paquete, y **restaura**.
+   Si no compila o rompe tests, no era codigo muerto. **Esto no es opcional.**
+3. Corrige la clasificacion y vuelve a entregarla. Las salidas CONECTAR y
+   CONSERVAR que revise tienen buena pinta; el problema esta en los BORRAR.
+
+**Nada de tocar codigo hasta que la clasificacion este limpia.** Un borrado que
+no compila es facil de detectar; uno que compila pero rompe un contrato en
+runtime, no.
 
 ---
 
