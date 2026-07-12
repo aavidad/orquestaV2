@@ -21,6 +21,8 @@ services:
       - /tmp:size=512m,mode=1777
     security_opt:
       - no-new-privileges:true
+      # Permite el user namespace de bubblewrap dentro de este runner aislado.
+      - seccomp=unconfined
     cap_drop:
       - ALL
     read_only: true

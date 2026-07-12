@@ -56,6 +56,9 @@ func TestSelfProgrammingComposeV0IsRemoteSafe(t *testing.T) {
 	if !containsValueV0(yamlListValuesV0(compose, "security_opt"), "no-new-privileges:true") {
 		t.Fatalf("security_opt must include no-new-privileges:true")
 	}
+	if !containsValueV0(yamlListValuesV0(compose, "security_opt"), "seccomp=unconfined") {
+		t.Fatalf("security_opt must allow the isolated Codex bubblewrap user namespace")
+	}
 	if !containsValueV0(yamlListValuesV0(compose, "cap_drop"), "ALL") {
 		t.Fatalf("cap_drop must include ALL")
 	}

@@ -59,9 +59,15 @@ go test -count=1 ./deploy/self-programming
 
 La prueba debe fallar si el compose publica puertos fuera de
 `127.0.0.1:19039`, monta rutas fuera de `/srv/orquesta-self`, monta
-`/var/run/docker.sock`, pierde `no-new-privileges`, `cap_drop: ALL`,
+`/var/run/docker.sock`, pierde `no-new-privileges`, `seccomp=unconfined`, `cap_drop: ALL`,
 `read_only: true` o usuario `10001:10001`, o si el env de ejemplo activa
 produccion, OPES/DomainWork, promocion automatica o backends historicos/proxy.
+
+`seccomp=unconfined` se limita a este perfil aislado para que el sandbox
+`workspace-write` de Codex pueda crear su user namespace con bubblewrap. No
+anade capacidades Linux: se mantienen usuario no-root, `no-new-privileges`,
+`cap_drop: ALL`, rootfs de solo lectura, sin Docker socket y binds exclusivos
+de `/srv/orquesta-self`.
 
 ## Quien dirige
 
@@ -97,5 +103,5 @@ docker inspect orquesta-self-programming \
 Debe verse solo `/srv/orquesta-self/...` y el puerto publicado como
 `127.0.0.1:19039`. No debe aparecer `/home/berserk/deploy/opes`,
 `/var/run/docker.sock`, `uso-app` ni rutas de temarios. `ReadonlyRootfs` debe
-ser `true`, `SecurityOpt` debe incluir `no-new-privileges:true` y `CapDrop`
-debe incluir `ALL`.
+ser `true`, `SecurityOpt` debe incluir `no-new-privileges:true` y
+`seccomp=unconfined`, y `CapDrop` debe incluir `ALL`.
