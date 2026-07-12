@@ -81,6 +81,48 @@ campana (una linea), pero el contenido real va aqui.
 
 (escribe aqui abajo; el revisor responde en la seccion 1)
 
+### 2026-07-12 — H1b listo para acreditacion: seis tools reales y guard restaurado
+
+Se han aplicado las correcciones posteriores a `cc69899d6`, sin tocar modelos,
+aliases, routing, seguridad ni presupuestos:
+
+- `6afbcca64`: actualiza el test legado que aun exigia `domain_work` apagada;
+  sin OPES el executor file permanece vivo y el focal durable de `a50c8c348`
+  conserva el mismo `JobRef` tras reconstruccion.
+- `18d166e85`: compone `runtime.models` en el servidor canonico con las cinco
+  acciones `list/status/pull/serve/stop`. Las mutaciones exigen modelo en
+  `runtime_models.allowed_models` (matching exacto), `operation_ref` y evidencia.
+  Un receipt `intent_recorded` se persiste y sincroniza bajo
+  `StateDir/runtime-model-mutation-receipts` antes de tocar Ollama; si falla,
+  el backend recibe cero llamadas. El mismo `operation_ref` hace replay del
+  receipt aceptado y un payload distinto falla por conflicto. La allowlist
+  canonica vacia falla cerrado para mutaciones; no se copiaron a ella los
+  modelos GPT del operador porque no son imagenes Ollama.
+- `4381c174e` y `e097afde8`: el bootstrap vuelve a exigir el catalogo MCP
+  completo, independiente de bindings filtrados, y reconoce tambien catalogos
+  capabilities o executors de decision presentes pero inertes. Mutacion propia:
+  desactivar `runtime_models.enabled` pone el guard rojo con
+  `binding declarado sin tool registrada: orquesta.runtime.models.v0`; restaurado,
+  verde. Otra mutacion inyecta catalogo capabilities nil y el test exige
+  `tool_capability_catalog_unavailable`.
+- `2dd213515`: `apply_decision` usa `ports.RunStore`, `ports.EventSink` y
+  `ports.DirectorTaskStore`; ya no salta el wrapper gobernado de ACK/cleanup.
+  El test compara el EventSink efectivo del executor con el del stack.
+- `739e40f90`: acredita que `ejecutar_orquestacion` recibe RunStore, EventSink,
+  OutboxLedger, dispatchers y batch dispatchers reales; vaciar el mapper legacy
+  deja el test rojo. El executor MCP ya conserva sus pruebas funcionales de
+  bootstrap, completion y director autonomo.
+
+Evidencia reejecutada tras todos los cambios, en paralelo local:
+
+- `go test -count=1 ./modulos/orquesta-app-codex-stack` — verde (26.480 s);
+- `go test -count=1 ./cmd/orquesta-server` — verde (63.479 s);
+- runtime, runtime-ollama, MCP, capability-file y domain-work-file — verdes;
+- guard `TestEnvVarsBudgetMEJ106V0` — verde, presupuesto 426 sin ratchet.
+
+El arbol queda limpio. Solicito acreditacion H1b con pruebas de mutacion del
+revisor. No declaro cierre hasta esa acreditacion.
+
 ### 2026-07-12 — H3 implementado para acreditacion (`c35fbb256`)
 
 El cierre goal-first `accepted` llama ahora a la promocion desde el wrapper
