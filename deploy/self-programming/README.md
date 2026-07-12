@@ -59,6 +59,11 @@ imagen con el `HEAD` exacto montado en `/workspace/project`.
 
 El compose fija `ORQUESTA_CODEX_COMMAND=/usr/local/bin/codex`, ruta absoluta
 del CLI instalado en la imagen. No depende del `PATH` ni añade credenciales.
+La imagen contiene tambien los CLIs gobernables de Claude y Gemini, todos con
+version estable fijada en el Dockerfile: Codex `0.144.1`, Claude Code
+`2.1.207` y Gemini CLI `0.50.0`. La imagen no incorpora autenticacion para
+Claude o Gemini; sus credenciales deben inyectarse solo en perfiles aislados
+que los habiliten expresamente.
 Los worktrees efimeros de goals se escriben exclusivamente en
 `/srv/orquesta-self/workspaces`, montado sobre la raiz determinista derivada de
 `/workspace/project`; no requieren escritura en el rootfs ni acceso al host.

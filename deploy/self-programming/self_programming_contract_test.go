@@ -157,6 +157,12 @@ func TestSelfProgrammingImageV0IncludesPinnedIntegrationRuntime(t *testing.T) {
 		"GOTMPDIR=/workspace/cache/go",
 		"COPY modulos/orquesta-estado-vivo/testdeps/rapid ./modulos/orquesta-estado-vivo/testdeps/rapid",
 		"ca-certificates bash curl git iptables jq openssh-client procps python3 tmux",
+		"ARG CODEX_NPM_VERSION=0.144.1",
+		"ARG CLAUDE_CODE_NPM_VERSION=2.1.207",
+		"ARG GEMINI_CLI_NPM_VERSION=0.50.0",
+		`"@openai/codex@${CODEX_NPM_VERSION}"`,
+		`"@anthropic-ai/claude-code@${CLAUDE_CODE_NPM_VERSION}"`,
+		`"@google/gemini-cli@${GEMINI_CLI_NPM_VERSION}"`,
 	} {
 		if !strings.Contains(dockerfile, snippet) {
 			t.Fatalf("Dockerfile.self-programming must contain %q", snippet)

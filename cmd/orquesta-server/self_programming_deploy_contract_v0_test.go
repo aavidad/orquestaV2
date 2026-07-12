@@ -35,6 +35,18 @@ func TestSelfProgrammingDeployContractV0NoMontaProduccionNiExponePuertoPublicoV0
 		if strings.Contains(dockerfile, "/home/orquesta") {
 			t.Fatalf("Dockerfile activo contiene HOME no aislado en /workspace")
 		}
+		for _, pinnedCLI := range []string{
+			"ARG CODEX_NPM_VERSION=0.144.1",
+			"ARG CLAUDE_CODE_NPM_VERSION=2.1.207",
+			"ARG GEMINI_CLI_NPM_VERSION=0.50.0",
+			`"@openai/codex@${CODEX_NPM_VERSION}"`,
+			`"@anthropic-ai/claude-code@${CLAUDE_CODE_NPM_VERSION}"`,
+			`"@google/gemini-cli@${GEMINI_CLI_NPM_VERSION}"`,
+		} {
+			if !strings.Contains(dockerfile, pinnedCLI) {
+				t.Fatalf("Dockerfile activo no fija CLI %q", pinnedCLI)
+			}
+		}
 	}
 	for _, required := range []string{
 		"127.0.0.1:19039:19039",
