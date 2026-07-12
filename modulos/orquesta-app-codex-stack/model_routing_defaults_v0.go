@@ -26,7 +26,7 @@ func DefaultCodexModelRoutingConfigV0() CodexModelRoutingConfigV0 {
 			TrivialEffort: "low", NormalEffort: "medium", ComplexEffort: "high", CriticalEffort: "high",
 		},
 		ModelAlias: map[string]string{
-			codexModelRefLunaV0: "gpt-5.6-luna", codexModelRefTerraV0: "gpt-5.6-terra", codexModelRefSolV0: "gpt-5.6-sol",
+			codexModelRefLunaV0: "gpt-5.4-mini", codexModelRefTerraV0: "gpt-5.5", codexModelRefSolV0: "gpt-5.5",
 		},
 		TaskRoutes: map[string]orquestacapacity.ModelRoutingRequestV0{},
 	}

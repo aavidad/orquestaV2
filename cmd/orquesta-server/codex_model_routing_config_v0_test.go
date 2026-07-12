@@ -67,7 +67,7 @@ func TestCodexModelRoutingConfigV0AusenteMaterializaAliasesCanonicos(t *testing.
 	}
 	config := codexModelRoutingFromProjectConfigFileV0(project)
 	decision := orquestacapacity.ResolveModelRoutingV0(config.Policy, orquestacapacity.ModelRoutingRequestV0{TaskRef: "legacy-goal", Level: orquestacapacity.ModelRoutingLevelNormalV0})
-	if decision.Rejected || config.ModelAlias[decision.SelectedModelRef] != "gpt-5.6-terra" {
+	if decision.Rejected || config.ModelAlias[decision.SelectedModelRef] != "gpt-5.5" {
 		t.Fatalf("decision=%+v aliases=%+v", decision, config.ModelAlias)
 	}
 }
