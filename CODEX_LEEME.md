@@ -453,3 +453,25 @@ autor y committer en source+canonical, repos limpios y replay con mismo HEAD.
 Suite `orquesta-runtime-worktree`, E2E H3 focal y guard de envs verdes. Falta
 reconstruir runner, recuperar otra vez el mismo run y comprobar integracion
 completa antes del cierre operativo.
+
+### 2026-07-12 — app real integrada: evidencia final para cierre operativo
+
+Runner reconstruido en `64128cb80`, `startup_ready=true`. Se observo por API el
+mismo run `request-ref-native-tool-final-003`; no se relanzo goal ni se altero
+estado durable. Resultado final:
+
+- closure accepted y atestacion independiente reutilizada;
+- promotion ref `promotion-ref-635e58f3af60`;
+- integration receipt `integration-receipt-ref-promotion-ref-635e58f3af60`;
+- commit promovido `dda4f5e19328f9330a0568046a2b2de03f06ae89`;
+- archive `archive-ref-c7b423a70d31`;
+- marker `promotion-complete:dabf6acd1f4d37787977bc6eb8c0689c`;
+- `closure_issues=[]`;
+- ambos ficheros presentes en canonical y test de modulo verde.
+
+Los refs historicos `promotion-pending` y `blocked_integration` permanecen por
+diseno append-only, pero el estado vigente queda acreditado por marker completo,
+receipt, commit y archive. La promocion coincidio con la acreditacion documental
+`101c6a6ff`; se conservaron ambos hijos mediante merge `583955307`, sin rebase ni
+reescritura del commit acreditado. Solicito cierre final del frente y confirmacion
+de que no queda residual tecnico en nucleo/conectores/tools.
