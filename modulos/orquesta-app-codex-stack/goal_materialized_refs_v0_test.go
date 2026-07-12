@@ -12,6 +12,7 @@ import (
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestaruntimecodexgoal "orquesta/modulos/orquesta-runtime-codex-goal"
+	orquestaruntimeworktree "orquesta/modulos/orquesta-runtime-worktree"
 )
 
 func TestStackGoalMaterializedRefsSourceV0DetectaWorkDeliveryEnWriteSet(t *testing.T) {
@@ -929,6 +930,49 @@ func TestStackGoalMaterializedRefsSourceV0ReparaReceiptCanonicoFueraDeWriteSetBU
 	}
 	if !reflect.DeepEqual(persisted, replayed) {
 		t.Fatalf("replay reescribio state: before=%+v after=%+v", persisted, replayed)
+	}
+}
+
+func TestStackGoalMaterializedRefsSourceV0RecuperaReceiptDesdeWorkspaceFisicoTrasBackendGoneV0(t *testing.T) {
+	ctx := context.Background()
+	canonicalRoot := t.TempDir()
+	workspaceRoot := t.TempDir()
+	provisioner := &fakeGoalWorkspaceProvisionerForStackTestV0{root: workspaceRoot}
+	state := goalMaterializedRefsStateForTestV0(t, "run-goal-workspace-restart-001", "docs/tool.md")
+	state.Spec.RequestRef = state.RunRef
+	state.Spec.ProjectRef = "orquesta"
+	state.Spec.ContextRefs = []orquestagoal.GoalContextRefV0{
+		{Kind: "worktree", Ref: "worktree-ref-goal-workspace-restart-001"},
+		{Kind: "goal_workspace", Ref: "workspace-" + state.GoalRef, Required: true},
+	}
+	var err error
+	state, err = orquestagoal.NewGoalWorkStateV0(state)
+	if err != nil {
+		t.Fatalf("NewGoalWorkStateV0: %v", err)
+	}
+	workspace, issues := provisioner.ResolveGoalWorkspaceV0(ctx, orquestaruntimeworktree.GoalWorkspaceRequestV0{
+		RunRef: state.Spec.RequestRef, GoalRef: state.GoalRef, ProjectRef: state.Spec.ProjectRef,
+		WorktreeRef: "worktree-ref-goal-workspace-restart-001", SourceWorkDir: canonicalRoot, WorkspaceRoot: workspaceRoot,
+	})
+	if len(issues) > 0 {
+		t.Fatalf("ResolveGoalWorkspaceV0: %+v", issues)
+	}
+	goalMaterializedWriteCanonicalReceiptForTestV0(t, workspace.ProjectWorkDir, state, `{
+  "schema_version":"orquesta_goal_result.v0",
+  "goal_ref":"`+state.GoalRef+`",
+  "status":"complete",
+  "summary":"receipt durable en workspace fisico"
+}`)
+	source := stackGoalMaterializedRefsSourceV0{Config: ConfigV0{
+		Codex: CodexRuntimeConfigV0{ProjectWorkDir: canonicalRoot},
+		AutoprogrammingPromotion: AutoprogrammingPromotionConfigV0{
+			GoalWorkspaceProvisioner: provisioner,
+			GoalWorkspaceRoot:        workspaceRoot,
+		},
+	}}
+	result, ok, err := source.LoadTerminalGoalMaterializedResultV0(ctx, state)
+	if err != nil || !ok || result.Status != orquestagoal.GoalStatusCompleteV0 || result.Summary != "receipt durable en workspace fisico" {
+		t.Fatalf("receipt fisico no recuperado: ok=%v result=%+v err=%v", ok, result, err)
 	}
 }
 

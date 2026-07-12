@@ -75,12 +75,11 @@ func (source stackGoalMaterializedRefsSourceV0) ResolveDirectorGoalMaterializedR
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	projectRoot := strings.TrimSpace(source.Config.Codex.ProjectWorkDir)
-	if projectRoot == "" {
-		return orquestamcp.MCPDirectorGoalMaterializedRefsV0{}, false, nil
-	}
-	projectRoot, err := filepath.Abs(projectRoot)
+	projectRoot, ok, err := source.goalMaterializedProjectRootV0(ctx, state)
 	if err != nil {
+		return orquestamcp.MCPDirectorGoalMaterializedRefsV0{}, false, err
+	}
+	if !ok {
 		return orquestamcp.MCPDirectorGoalMaterializedRefsV0{}, false, nil
 	}
 	scan := goalMaterializedRefsScanV0{}
@@ -261,16 +260,16 @@ func (source stackGoalMaterializedRefsSourceV0) LoadTerminalGoalMaterializedResu
 	ctx context.Context,
 	state orquestagoal.GoalWorkStateV0,
 ) (orquestagoal.GoalWorkResultV0, bool, error) {
-	_ = ctx
-	projectRoot := strings.TrimSpace(source.Config.Codex.ProjectWorkDir)
-	if projectRoot == "" {
-		return orquestagoal.GoalWorkResultV0{}, false, nil
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	projectRoot, err := filepath.Abs(projectRoot)
+	projectRoot, ok, err := source.goalMaterializedProjectRootV0(ctx, state)
 	if err != nil {
+		return orquestagoal.GoalWorkResultV0{}, false, err
+	}
+	if !ok {
 		return orquestagoal.GoalWorkResultV0{}, false, nil
 	}
-	projectRoot = filepath.Clean(projectRoot)
 	canonical, err := source.scanCanonicalGoalMaterializedReceiptV0(projectRoot, state)
 	if err != nil {
 		return orquestagoal.GoalWorkResultV0{}, false, err
@@ -288,6 +287,33 @@ func (source stackGoalMaterializedRefsSourceV0) LoadTerminalGoalMaterializedResu
 		}
 	}
 	return orquestagoal.GoalWorkResultV0{}, false, nil
+}
+
+func (source stackGoalMaterializedRefsSourceV0) goalMaterializedProjectRootV0(
+	ctx context.Context,
+	state orquestagoal.GoalWorkStateV0,
+) (string, bool, error) {
+	workspaceRef := autoprogrammingPromotionGoalContextRefV0(state.Spec.ContextRefs, "goal_workspace", "")
+	if workspaceRef != "" {
+		stack := StackV0{
+			Codex:                    source.Config.Codex,
+			AutoprogrammingPromotion: source.Config.AutoprogrammingPromotion,
+		}
+		projectRoot, err := stack.autoprogrammingGoalProjectWorkDirV0(ctx, state)
+		if err != nil {
+			return "", false, err
+		}
+		return filepath.Clean(projectRoot), true, nil
+	}
+	projectRoot := strings.TrimSpace(source.Config.Codex.ProjectWorkDir)
+	if projectRoot == "" {
+		return "", false, nil
+	}
+	absRoot, err := filepath.Abs(projectRoot)
+	if err != nil {
+		return "", false, err
+	}
+	return filepath.Clean(absRoot), true, nil
 }
 
 func (source stackGoalMaterializedRefsSourceV0) loadTerminalGoalMaterializedResultFromScopeV0(
