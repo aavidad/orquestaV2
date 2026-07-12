@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
@@ -177,6 +178,18 @@ func TestCodexStackAutoprogrammingPromotionV0GoalFirstE2ERepoTemporalReplayV0(t 
 		observed.RunStatus != string(orquestacoreworkflow.OrchestrationRunStatusClosedV0) {
 		t.Fatalf("observed=%+v", observed)
 	}
+	// H3: la integracion nace del cierre goal-first; no depende de ejecutar
+	// despues el drain legacy.
+	if port.promotions != 1 || port.archives != 1 {
+		t.Fatalf("observe no promociono directamente: port=%+v", port)
+	}
+	if got := gitCommitCountForPromotionE2EV0(t, repo); got != baseCommits+1 {
+		t.Fatalf("commits tras observe=%d want %d", got, baseCommits+1)
+	}
+	persistedAfterObserve, err := goalStates.LoadGoalWorkStateV0(ctx, prepared.RunRef)
+	if err != nil || !autoprogrammingGoalFirstPromotionCompletionVerifiedV0(persistedAfterObserve, prepared.RunRef) {
+		t.Fatalf("promocion no acreditada en state: state=%+v err=%v", persistedAfterObserve, err)
+	}
 	run := mustLoadCodexStackRunForTestV0(t, stack, prepared.RunRef)
 	if len(run.Tasks) != 0 || len(run.ClosedTasks) != 0 {
 		t.Fatalf("goal-first run materializo tareas legacy: %+v", run)
@@ -254,6 +267,160 @@ func TestCodexStackAutoprogrammingPromotionV0GoalFirstBloqueaCambioFueraDeWriteS
 		if !codexStackStringInSetForTestV0(refs, "evidence-ref-codex-stack-autoprogramming-goal-first-worktree-verify-outside-write-set:daemon.go") {
 			t.Fatalf("attempt=%d evidence_refs=%v", attempt, refs)
 		}
+	}
+}
+
+func TestObserveActiveGoalWorksV0RecuperaPromocionAcceptedTrasRestartSinDrainV0(t *testing.T) {
+	ctx := context.Background()
+	projectDir := t.TempDir()
+	featurePath := filepath.Join(projectDir, "feature.md")
+	if err := os.WriteFile(featurePath, []byte("before\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	baseline := captureAutoprogrammingPromotionBaselineForTestV0(t, projectDir, "goal-first-recovery")
+	if err := os.WriteFile(featurePath, []byte("after\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	stack = withAutoprogrammingPromotionStoresForTestV0(stack)
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	stack.Ports.GoalStateStore = goalStates
+	stack.Stores.AppGoalStateStore = goalStates
+	stack.Codex.ProjectWorkDir = projectDir
+	port := &fakeAutoprogrammingPromotionPortV0{}
+	stack.AutoprogrammingPromotion = AutoprogrammingPromotionConfigV0{
+		Enabled: true, Port: port,
+		GoalFirstSnapshotStore: orquestaruntimeworktree.NewInMemoryWorktreeSnapshotStoreV0(baseline),
+	}
+	run := seedClosedGoalFirstAutoprogrammingPromotionForTestV0(t, ctx, stack, goalStates, baseline.SnapshotRef, "feature.md")
+
+	restarted := stack
+	restarted.goalObservationCoordinator = nil
+	restarted.goalPromotionCoordinator = nil
+	for tick := 0; tick < 2; tick++ {
+		if _, err := restarted.ObserveActiveGoalWorksV0(ctx, orquestagoal.GoalWorkObserveActiveRequestV0{
+			List: orquestagoal.GoalWorkStateListRequestV0{RunRefs: []string{run.RunID}},
+		}); err != nil {
+			t.Fatalf("tick=%d: %v", tick, err)
+		}
+	}
+	state, err := goalStates.LoadGoalWorkStateV0(ctx, run.RunID)
+	if err != nil || !autoprogrammingGoalFirstPromotionCompletionVerifiedV0(state, run.RunID) {
+		t.Fatalf("state=%+v err=%v", state, err)
+	}
+	if port.promotions != 1 || port.archives != 1 {
+		t.Fatalf("recovery no idempotente: port=%+v", port)
+	}
+}
+
+func TestMaybePromoteClosedAutoprogrammingRunV0SinPortQuedaPendingV0(t *testing.T) {
+	ctx := context.Background()
+	projectDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(projectDir, "feature.md"), []byte("before\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	baseline := captureAutoprogrammingPromotionBaselineForTestV0(t, projectDir, "goal-first-no-port")
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	stack = withAutoprogrammingPromotionStoresForTestV0(stack)
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	stack.Ports.GoalStateStore = goalStates
+	stack.Stores.AppGoalStateStore = goalStates
+	stack.Codex.ProjectWorkDir = projectDir
+	stack.AutoprogrammingPromotion = AutoprogrammingPromotionConfigV0{}
+	run := seedClosedGoalFirstAutoprogrammingPromotionForTestV0(t, ctx, stack, goalStates, baseline.SnapshotRef, "feature.md")
+
+	complete, refs, err := stack.maybePromoteClosedAutoprogrammingRunV0(ctx, run)
+	if err != nil || complete || !codexStackStringInSetForTestV0(refs, "evidence-ref-codex-stack-autoprogramming-promotion-port-unavailable") {
+		t.Fatalf("complete=%v refs=%v err=%v", complete, refs, err)
+	}
+	state, err := goalStates.LoadGoalWorkStateV0(ctx, run.RunID)
+	if err != nil || !goalFirstStringSliceContainsV0(state.EvidenceRefs, autoprogrammingGoalFirstPromotionPendingEvidenceV0) ||
+		autoprogrammingGoalFirstPromotionCompletionVerifiedV0(state, run.RunID) {
+		t.Fatalf("state=%+v err=%v", state, err)
+	}
+}
+
+func TestMaybePromoteClosedAutoprogrammingRunV0NoAceptaMarkerSinReceiptV0(t *testing.T) {
+	ctx := context.Background()
+	projectDir := t.TempDir()
+	featurePath := filepath.Join(projectDir, "feature.md")
+	if err := os.WriteFile(featurePath, []byte("before\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	baseline := captureAutoprogrammingPromotionBaselineForTestV0(t, projectDir, "goal-first-fake-marker")
+	if err := os.WriteFile(featurePath, []byte("after\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	stack = withAutoprogrammingPromotionStoresForTestV0(stack)
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	stack.Ports.GoalStateStore = goalStates
+	stack.Stores.AppGoalStateStore = goalStates
+	stack.Codex.ProjectWorkDir = projectDir
+	port := &fakeAutoprogrammingPromotionPortV0{}
+	stack.AutoprogrammingPromotion = AutoprogrammingPromotionConfigV0{
+		Enabled: true, Port: port,
+		GoalFirstSnapshotStore: orquestaruntimeworktree.NewInMemoryWorktreeSnapshotStoreV0(baseline),
+	}
+	run := seedClosedGoalFirstAutoprogrammingPromotionForTestV0(t, ctx, stack, goalStates, baseline.SnapshotRef, "feature.md")
+	state, _ := goalStates.LoadGoalWorkStateV0(ctx, run.RunID)
+	state.EvidenceRefs = append(state.EvidenceRefs, autoprogrammingGoalFirstPromotionCompleteEvidenceV0+"falso")
+	if err := goalStates.SaveGoalWorkStateV0(ctx, state); err != nil {
+		t.Fatal(err)
+	}
+	complete, _, err := stack.maybePromoteClosedAutoprogrammingRunV0(ctx, run)
+	if err != nil || !complete || port.promotions != 1 || port.archives != 1 {
+		t.Fatalf("marker falso salto integracion: complete=%v port=%+v err=%v", complete, port, err)
+	}
+}
+
+func TestMaybePromoteClosedAutoprogrammingRunV0SerializaObserveYDrainV0(t *testing.T) {
+	ctx := context.Background()
+	projectDir := t.TempDir()
+	featurePath := filepath.Join(projectDir, "feature.md")
+	if err := os.WriteFile(featurePath, []byte("before\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	baseline := captureAutoprogrammingPromotionBaselineForTestV0(t, projectDir, "goal-first-concurrent")
+	if err := os.WriteFile(featurePath, []byte("after\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	stack = withAutoprogrammingPromotionStoresForTestV0(stack)
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	stack.Ports.GoalStateStore = goalStates
+	stack.Stores.AppGoalStateStore = goalStates
+	stack.Codex.ProjectWorkDir = projectDir
+	port := &fakeAutoprogrammingPromotionPortV0{}
+	stack.AutoprogrammingPromotion = AutoprogrammingPromotionConfigV0{
+		Enabled: true, Port: port,
+		GoalFirstSnapshotStore: orquestaruntimeworktree.NewInMemoryWorktreeSnapshotStoreV0(baseline),
+	}
+	run := seedClosedGoalFirstAutoprogrammingPromotionForTestV0(t, ctx, stack, goalStates, baseline.SnapshotRef, "feature.md")
+
+	errorsByCaller := make(chan error, 2)
+	var wait sync.WaitGroup
+	for range 2 {
+		wait.Add(1)
+		go func() {
+			defer wait.Done()
+			complete, _, err := stack.maybePromoteClosedAutoprogrammingRunV0(ctx, run)
+			if err == nil && !complete {
+				err = errors.New("promotion incomplete")
+			}
+			errorsByCaller <- err
+		}()
+	}
+	wait.Wait()
+	close(errorsByCaller)
+	for err := range errorsByCaller {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if port.promotions != 1 || port.archives != 1 {
+		t.Fatalf("promocion concurrente duplicada: port=%+v", port)
 	}
 }
 

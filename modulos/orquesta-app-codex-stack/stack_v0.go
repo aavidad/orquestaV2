@@ -51,6 +51,7 @@ type StackV0 struct {
 	AllowLegacyExternalWorkRun            bool
 	GoalMaterializedResultWatcher         *GoalMaterializedResultWatcherV0
 	goalObservationCoordinator            *goalFirstObservationCoordinatorV0
+	goalPromotionCoordinator              *goalFirstObservationCoordinatorV0
 }
 
 func BuildStackV0(config ConfigV0) (StackV0, error) {
@@ -92,6 +93,7 @@ func BuildStackV0(config ConfigV0) (StackV0, error) {
 		AllowLegacyAutoprogrammingRun:         config.AllowLegacyAutoprogrammingRun,
 		AllowLegacyExternalWorkRun:            config.AllowLegacyExternalWorkRun,
 		goalObservationCoordinator:            newGoalFirstObservationCoordinatorV0(),
+		goalPromotionCoordinator:              newGoalFirstObservationCoordinatorV0(),
 	}
 	stack.MCPTransportBindings = buildStackMCPTransportBindingsV0(config, ports, queueConfig, &stack)
 	stack.Handler = buildStackHTTPHandlerV0(config, stack.MCPTransportBindings)

@@ -620,6 +620,11 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0BackendGoalCompletoMarcaGoalFir
 func TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaGoalFirstSinColaLegacy(t *testing.T) {
 	runtime := newFakeCodexStackRuntimeV0()
 	stack := mustBuildCodexStackForTestV0(t, runtime)
+	promotionPort := &fakeAutoprogrammingPromotionPortV0{}
+	stack.AutoprogrammingPromotion = AutoprogrammingPromotionConfigV0{
+		Enabled: true, Port: promotionPort,
+		GoalFirstSnapshotStore: orquestaruntimeworktree.NewInMemoryWorktreeSnapshotStoreV0(),
+	}
 	launcher := &goalFirstQueueLauncherForTestV0{}
 	observer := &goalFirstQueueObserverForTestV0{}
 	goalStates := newGoalFirstQueueStateStoreForTestV0()
@@ -782,6 +787,9 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaGoalFirstSinColaL
 		terminalQueue.Terminal[0].RunRef != prepared.RunRef ||
 		terminalQueue.Terminal[0].Status != "closed" {
 		t.Fatalf("terminalQueue=%+v", terminalQueue)
+	}
+	if promotionPort.promotions != 1 || promotionPort.archives != 1 {
+		t.Fatalf("promotion=%+v", promotionPort)
 	}
 }
 

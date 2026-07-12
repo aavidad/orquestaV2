@@ -90,3 +90,15 @@ func (stack *StackV0) goalFirstObservationCoordinatorV0() *goalFirstObservationC
 	}
 	return stack.goalObservationCoordinator
 }
+
+func (stack *StackV0) goalFirstPromotionCoordinatorV0() *goalFirstObservationCoordinatorV0 {
+	if stack == nil {
+		return nil
+	}
+	goalFirstObservationCoordinatorInitMuV0.Lock()
+	defer goalFirstObservationCoordinatorInitMuV0.Unlock()
+	if stack.goalPromotionCoordinator == nil {
+		stack.goalPromotionCoordinator = newGoalFirstObservationCoordinatorV0()
+	}
+	return stack.goalPromotionCoordinator
+}

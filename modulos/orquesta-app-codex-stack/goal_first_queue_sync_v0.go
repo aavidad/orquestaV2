@@ -43,6 +43,18 @@ func (stack *StackV0) observeAppDirectorGoalSerializedV0(
 			return result, err
 		}
 	}
+	if result.Run.Status == orquestacoreworkflow.OrchestrationRunStatusClosedV0 && result.Closure.Accepted {
+		promotionComplete, promotionRefs, promotionErr := stack.maybePromoteClosedAutoprogrammingRunV0(ctx, result.Run)
+		result.EvidenceRefs = compactStringsV0(append(result.EvidenceRefs, promotionRefs...))
+		if promotionErr != nil {
+			return result, promotionErr
+		}
+		if !promotionComplete {
+			// El cierre del goal es valido, pero la cola no puede publicarlo como
+			// cerrada hasta que la integracion local quede acreditada.
+			return result, nil
+		}
+	}
 	if err := stack.syncGoalFirstQueueAfterObservationV0(ctx, request, result); err != nil {
 		return result, err
 	}

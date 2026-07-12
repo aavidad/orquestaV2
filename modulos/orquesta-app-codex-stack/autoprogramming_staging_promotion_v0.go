@@ -2,6 +2,9 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -30,7 +33,30 @@ type AutoprogrammingPromotionConfigV0 struct {
 	CommitMessage              string
 }
 
-func (stack StackV0) maybePromoteClosedAutoprogrammingRunV0(
+const autoprogrammingGoalFirstPromotionCompleteEvidenceV0 = "evidence-ref-codex-stack-autoprogramming-goal-first-promotion-complete:"
+const autoprogrammingGoalFirstPromotionPendingEvidenceV0 = "evidence-ref-codex-stack-autoprogramming-goal-first-promotion-pending"
+const autoprogrammingGoalFirstPromotionRefEvidenceV0 = "evidence-ref-codex-stack-autoprogramming-goal-first-promotion-ref:"
+const autoprogrammingGoalFirstIntegrationReceiptEvidenceV0 = "evidence-ref-codex-stack-autoprogramming-goal-first-integration-receipt:"
+const autoprogrammingGoalFirstCommitEvidenceV0 = "evidence-ref-codex-stack-autoprogramming-goal-first-commit:"
+const autoprogrammingGoalFirstArchiveEvidenceV0 = "evidence-ref-codex-stack-autoprogramming-goal-first-archive:"
+
+func (stack *StackV0) maybePromoteClosedAutoprogrammingRunV0(
+	ctx context.Context,
+	run orquestacoreworkflow.OrchestrationRunV0,
+) (bool, []string, error) {
+	coordinator := stack.goalFirstPromotionCoordinatorV0()
+	if coordinator == nil {
+		return false, nil, fmt.Errorf("autoprogramming_goal_first_promotion_coordinator_unavailable")
+	}
+	release, err := coordinator.acquireV0(ctx, run.RunID)
+	if err != nil {
+		return false, nil, err
+	}
+	defer release()
+	return stack.maybePromoteClosedAutoprogrammingRunSerializedV0(ctx, run)
+}
+
+func (stack *StackV0) maybePromoteClosedAutoprogrammingRunSerializedV0(
 	ctx context.Context,
 	run orquestacoreworkflow.OrchestrationRunV0,
 ) (bool, []string, error) {
@@ -40,9 +66,31 @@ func (stack StackV0) maybePromoteClosedAutoprogrammingRunV0(
 			return complete, refs, err
 		}
 	}
+	if run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
+		return true, nil, nil
+	}
+	goalState, goalFirst, err := stack.autoprogrammingPromotionGoalStateV0(ctx, run)
+	if err != nil {
+		return false, nil, err
+	}
+	if goalFirst {
+		if autoprogrammingGoalFirstPromotionCompletionVerifiedV0(goalState, run.RunID) {
+			return true, compactStringsV0(goalState.EvidenceRefs), nil
+		}
+		if err := stack.persistAutoprogrammingGoalFirstPromotionEvidenceV0(ctx, run.RunID, []string{
+			autoprogrammingGoalFirstPromotionPendingEvidenceV0,
+		}); err != nil {
+			return false, nil, err
+		}
+	}
 	config := stack.AutoprogrammingPromotion
-	if !config.Enabled || config.Port == nil ||
-		run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
+	if !config.Enabled || config.Port == nil {
+		if goalFirst {
+			return false, []string{
+				autoprogrammingGoalFirstPromotionPendingEvidenceV0,
+				"evidence-ref-codex-stack-autoprogramming-promotion-port-unavailable",
+			}, nil
+		}
 		return true, nil, nil
 	}
 	request, ok, err := stack.autoprogrammingPromotionRequestV0(ctx, run)
@@ -55,15 +103,21 @@ func (stack StackV0) maybePromoteClosedAutoprogrammingRunV0(
 		}
 		return true, nil, nil
 	}
-	if state, goalFirst, err := stack.autoprogrammingPromotionGoalStateV0(ctx, run); err != nil {
-		return false, nil, err
-	} else if goalFirst {
-		if refs, verified := stack.autoprogrammingPromotionGoalFirstWriteSetVerifiedV0(ctx, state, request); !verified {
+	if goalFirst {
+		if refs, verified := stack.autoprogrammingPromotionGoalFirstWriteSetVerifiedV0(ctx, goalState, request); !verified {
+			if err := stack.persistAutoprogrammingGoalFirstPromotionEvidenceV0(ctx, run.RunID, append(refs, autoprogrammingGoalFirstPromotionPendingEvidenceV0)); err != nil {
+				return false, refs, err
+			}
 			return false, refs, nil
 		}
 	}
 	decision := orquestaautoprogramming.EvaluateAutoprogrammingStagingPromotionV0(request)
 	if !decision.Ready {
+		if goalFirst {
+			if err := stack.persistAutoprogrammingGoalFirstPromotionEvidenceV0(ctx, run.RunID, append(decision.EvidenceRefs, autoprogrammingGoalFirstPromotionPendingEvidenceV0)); err != nil {
+				return false, decision.EvidenceRefs, err
+			}
+		}
 		return false, decision.EvidenceRefs, nil
 	}
 	promoted, err := config.Port.PromoteAutoprogrammingStagingV0(ctx, decision.PromotionCommand)
@@ -73,6 +127,11 @@ func (stack StackV0) maybePromoteClosedAutoprogrammingRunV0(
 	promoted = autoprogrammingPromotionEffectWithIntegrationStatusV0(promoted)
 	refs := compactStringsV0(append(decision.EvidenceRefs, autoprogrammingPromotionEffectEvidenceRefsV0(promoted)...))
 	if !autoprogrammingPromotionEffectCompleteV0(promoted) {
+		if goalFirst {
+			if err := stack.persistAutoprogrammingGoalFirstPromotionEvidenceV0(ctx, run.RunID, append(refs, autoprogrammingGoalFirstPromotionPendingEvidenceV0)); err != nil {
+				return false, refs, err
+			}
+		}
 		return false, refs, nil
 	}
 	archived, err := config.Port.ArchiveAutoprogrammingStagingV0(ctx, decision.CleanupCommand)
@@ -80,7 +139,120 @@ func (stack StackV0) maybePromoteClosedAutoprogrammingRunV0(
 		return false, compactStringsV0(append(refs, archived.EvidenceRefs...)), err
 	}
 	refs = compactStringsV0(append(refs, archived.EvidenceRefs...))
-	return archived.Status == orquestaautoprogramming.AutoprogrammingStagingEffectArchivedV0, refs, nil
+	complete := archived.Status == orquestaautoprogramming.AutoprogrammingStagingEffectArchivedV0
+	if complete && goalFirst {
+		completionRefs := autoprogrammingGoalFirstPromotionCompletionEvidenceRefsV0(run.RunID, goalState.GoalRef, promoted, archived)
+		refs = compactStringsV0(append(refs, completionRefs...))
+		if err := stack.persistAutoprogrammingGoalFirstPromotionEvidenceV0(ctx, run.RunID, refs); err != nil {
+			return false, refs, err
+		}
+	}
+	return complete, refs, nil
+}
+
+func autoprogrammingGoalFirstPromotionCompletionEvidenceRefsV0(
+	runRef string,
+	goalRef string,
+	promoted orquestaautoprogramming.AutoprogrammingStagingEffectResultV0,
+	archived orquestaautoprogramming.AutoprogrammingStagingEffectResultV0,
+) []string {
+	promotionRef := strings.TrimSpace(promoted.PromotionRef)
+	integrationReceiptRef := strings.TrimSpace(promoted.IntegrationReceiptRef)
+	commitRef := strings.TrimSpace(promoted.CommitRef)
+	archiveRef := strings.TrimSpace(archived.ArchiveRef)
+	digest := sha256.Sum256([]byte(strings.Join([]string{
+		strings.TrimSpace(runRef), strings.TrimSpace(goalRef), promotionRef,
+		integrationReceiptRef, commitRef, archiveRef,
+	}, "\x00")))
+	return compactStringsV0([]string{
+		autoprogrammingGoalFirstPromotionRefEvidenceV0 + promotionRef,
+		autoprogrammingGoalFirstIntegrationReceiptEvidenceV0 + integrationReceiptRef,
+		autoprogrammingGoalFirstCommitEvidenceV0 + commitRef,
+		autoprogrammingGoalFirstArchiveEvidenceV0 + archiveRef,
+		autoprogrammingGoalFirstPromotionCompleteEvidenceV0 + hex.EncodeToString(digest[:16]),
+	})
+}
+
+func autoprogrammingGoalFirstPromotionCompletionVerifiedV0(
+	state orquestagoal.GoalWorkStateV0,
+	runRef string,
+) bool {
+	promotionRef := goalFirstEvidenceSuffixV0(state.EvidenceRefs, autoprogrammingGoalFirstPromotionRefEvidenceV0)
+	integrationReceiptRef := goalFirstEvidenceSuffixV0(state.EvidenceRefs, autoprogrammingGoalFirstIntegrationReceiptEvidenceV0)
+	commitRef := goalFirstEvidenceSuffixV0(state.EvidenceRefs, autoprogrammingGoalFirstCommitEvidenceV0)
+	archiveRef := goalFirstEvidenceSuffixV0(state.EvidenceRefs, autoprogrammingGoalFirstArchiveEvidenceV0)
+	if integrationReceiptRef == "" || archiveRef == "" {
+		return false
+	}
+	digest := sha256.Sum256([]byte(strings.Join([]string{
+		strings.TrimSpace(runRef), strings.TrimSpace(state.GoalRef), promotionRef,
+		integrationReceiptRef, commitRef, archiveRef,
+	}, "\x00")))
+	expectedMarker := hex.EncodeToString(digest[:16])
+	for _, ref := range state.EvidenceRefs {
+		if marker, ok := strings.CutPrefix(strings.TrimSpace(ref), autoprogrammingGoalFirstPromotionCompleteEvidenceV0); ok && strings.TrimSpace(marker) == expectedMarker {
+			return true
+		}
+	}
+	return false
+}
+
+func goalFirstEvidenceSuffixV0(refs []string, prefix string) string {
+	for _, ref := range refs {
+		if value, ok := strings.CutPrefix(strings.TrimSpace(ref), prefix); ok && strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func (stack *StackV0) persistAutoprogrammingGoalFirstPromotionEvidenceV0(
+	ctx context.Context,
+	runRef string,
+	refs []string,
+) error {
+	store := stack.Ports.GoalStateStore
+	if store == nil {
+		store = stack.Stores.AppGoalStateStore
+	}
+	if store == nil {
+		return fmt.Errorf("autoprogramming_goal_first_promotion_state_store_required")
+	}
+	for attempt := 0; attempt < 3; attempt++ {
+		state, err := store.LoadGoalWorkStateV0(ctx, runRef)
+		if err != nil {
+			return err
+		}
+		if autoprogrammingGoalFirstPromotionRefsContainedV0(state.EvidenceRefs, refs) {
+			return nil
+		}
+		state.EvidenceRefs = compactStringsV0(append(state.EvidenceRefs, refs...))
+		state, err = orquestagoal.NewGoalWorkStateV0(state)
+		if err != nil {
+			return err
+		}
+		if cas, ok := store.(orquestagoal.GoalWorkStateCASStorePortV0); ok {
+			if _, err = cas.CompareAndSwapGoalWorkStateV0(ctx, state.StoreVersion, state); err == nil {
+				return nil
+			}
+			var conflict orquestagoal.GoalWorkStateCASConflictErrorV0
+			if !errors.As(err, &conflict) {
+				return err
+			}
+			continue
+		}
+		return store.SaveGoalWorkStateV0(ctx, state)
+	}
+	return fmt.Errorf("autoprogramming_goal_first_promotion_state_conflict")
+}
+
+func autoprogrammingGoalFirstPromotionRefsContainedV0(current, required []string) bool {
+	for _, ref := range compactStringsV0(required) {
+		if !goalFirstStringSliceContainsV0(current, ref) {
+			return false
+		}
+	}
+	return true
 }
 
 func (stack StackV0) autoprogrammingPromotionGoalFirstWriteSetVerifiedV0(
