@@ -10,6 +10,9 @@
   "operator_director_mailbox": {
     "enabled": true
   },
+  "autoprogramming": {
+    "checkpoint_only_high_consumption_tokens": 450000
+  },
   "runtime_models": {
     "enabled": true,
     "allowed_models": []
