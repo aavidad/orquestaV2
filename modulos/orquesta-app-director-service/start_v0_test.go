@@ -996,6 +996,57 @@ func TestObserveAppDirectorGoalV0NoReobservaGoalTerminalPorForcedStopV0(t *testi
 	}
 }
 
+func TestObserveAppDirectorGoalV0NoReobservaCierreAcceptedTrasArchivarBackendV0(t *testing.T) {
+	store, sink, goalStates, launcher, started := serviceStartGoalFirstForObserveTestV0(t)
+	spec := launcher.specs[0]
+	state, err := goalStates.LoadGoalWorkStateV0(context.Background(), spec.RunRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	state.Status = orquestagoal.GoalStatusCompleteV0
+	state.LastResult = &orquestagoal.GoalWorkResultV0{
+		SchemaVersion:       orquestagoal.GoalWorkResultSchemaV0,
+		Status:              orquestagoal.GoalStatusCompleteV0,
+		GoalRef:             spec.GoalRef,
+		ExternalGoalRef:     started.ExternalGoalRef,
+		ArtifactRefs:        serviceRequiredArtifactRefsForGoalSpecV0(spec),
+		RequiredTestResults: serviceRequiredTestResultsForGoalSpecV0(spec, "evidence-ref-required-test-accepted-replay"),
+		EvidenceRefs:        append([]string(nil), spec.ClosurePolicy.RequiredEvidenceRefs...),
+	}
+	state.LastClosure = &orquestagoal.GoalClosureValidationV0{
+		Status:       orquestagoal.GoalStatusAcceptedV0,
+		Accepted:     true,
+		EvidenceRefs: []string{"evidence-ref-accepted-terminal-replay"},
+	}
+	state.EvidenceRefs = compactStartAppDirectorStringsV0(append(
+		append(state.EvidenceRefs, state.LastResult.EvidenceRefs...),
+		state.LastClosure.EvidenceRefs...,
+	))
+	if err := goalStates.SaveGoalWorkStateV0(context.Background(), state); err != nil {
+		t.Fatalf("SaveGoalWorkStateV0: %v", err)
+	}
+	observerCalls := 0
+
+	result, err := ObserveAppDirectorGoalV0(
+		context.Background(),
+		ObserveAppDirectorGoalRequestV0{RunRef: spec.RunRef},
+		StartAppDirectorPortsV0{
+			RunStore: store, EventSink: sink, GoalStateStore: goalStates,
+			GoalObserver:         serviceGoalObserverForTestV0{calls: &observerCalls},
+			GoalClosureValidator: orquestagoal.DefaultGoalWorkClosureValidatorV0{},
+		},
+	)
+	if err != nil {
+		t.Fatalf("ObserveAppDirectorGoalV0: %v", err)
+	}
+	if observerCalls != 0 ||
+		result.Status != orquestagoal.GoalStatusCompleteV0 ||
+		!result.Closure.Accepted ||
+		result.Run.Status != orquestacoreworkflow.OrchestrationRunStatusClosedV0 {
+		t.Fatalf("observerCalls=%d result=%+v", observerCalls, result)
+	}
+}
+
 func TestObserveAppDirectorGoalV0BloqueaRunSiClosureNoAcepta(t *testing.T) {
 	store, sink, goalStates, launcher, started := serviceStartGoalFirstForObserveTestV0(t)
 	spec := launcher.specs[0]

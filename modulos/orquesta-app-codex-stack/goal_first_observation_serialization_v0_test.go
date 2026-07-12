@@ -61,17 +61,16 @@ func TestObserveAppDirectorGoalV0SerializaLifecycleCompletoPorRunV0(t *testing.T
 	}
 	observer.mu.Lock()
 	defer observer.mu.Unlock()
-	if observer.maxActive != 1 || observer.calls != 2 {
+	if observer.maxActive != 1 || observer.calls != 1 {
 		t.Fatalf("calls=%d max_active=%d", observer.calls, observer.maxActive)
 	}
 	state, err := stack.Ports.GoalStateStore.LoadGoalWorkStateV0(context.Background(), started.Run.RunID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, ref := range []string{"evidence-ref-serialized-observation-1", "evidence-ref-serialized-observation-2"} {
-		if !codexStackStringInSetV0(state.EvidenceRefs, ref) {
-			t.Fatalf("evidence perdida %q: %+v", ref, state.EvidenceRefs)
-		}
+	if !codexStackStringInSetV0(state.EvidenceRefs, "evidence-ref-serialized-observation-1") ||
+		codexStackStringInSetV0(state.EvidenceRefs, "evidence-ref-serialized-observation-2") {
+		t.Fatalf("replay terminal reobservo backend: %+v", state.EvidenceRefs)
 	}
 }
 

@@ -271,7 +271,16 @@ func appDirectorForcedTerminalGoalStateObservationV0(
 }
 
 func appDirectorForcedTerminalGoalStateV0(state AppDirectorGoalStateV0) bool {
-	if strings.TrimSpace(state.Status) != orquestagoal.GoalStatusBlockedV0 {
+	status := strings.TrimSpace(state.Status)
+	if status == orquestagoal.GoalStatusCompleteV0 &&
+		state.LastResult != nil &&
+		state.LastClosure != nil &&
+		(state.LastClosure.Accepted || strings.TrimSpace(state.LastClosure.Status) == orquestagoal.GoalStatusAcceptedV0) {
+		// Un cierre durable accepted es autoridad terminal. Reobservar el
+		// backend tras archivar el workspace convierte un replay valido en 500.
+		return true
+	}
+	if status != orquestagoal.GoalStatusBlockedV0 {
 		return false
 	}
 	return appDirectorForcedTerminalGoalEvidenceV0(state.EvidenceRefs) ||

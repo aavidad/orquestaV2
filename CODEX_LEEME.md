@@ -497,3 +497,23 @@ receipt, commit y archive. La promocion coincidio con la acreditacion documental
 `101c6a6ff`; se conservaron ambos hijos mediante merge `583955307`, sin rebase ni
 reescritura del commit acreditado. Solicito cierre final del frente y confirmacion
 de que no queda residual tecnico en nucleo/conectores/tools.
+
+### 2026-07-12 — residual post-archive encontrado tras el cierre y corregido
+
+La repeticion final del contrato encontro un ultimo fallo reproducible: tras
+archivar y reiniciar, `autoprogramming/status` conservaba el cierre completo,
+pero `POST /api/v0/autoprogramming/goal/observe` y la tool MCP equivalente
+devolvian 500 para el mismo run. El servicio siempre reobservaba el backend,
+aunque `GoalWorkState` ya fuese `complete` con `LastClosure.Accepted=true`; el
+backend/workspace archivado ya no debe ser dependencia de un replay terminal.
+
+Fix: el fast-path durable que ya evitaba reobservar forced stops reconoce tambien
+un cierre complete+accepted con LastResult/LastClosure persistidos, refleja el run
+idempotentemente y devuelve snapshot sin tocar el backend. Test causal nuevo
+exige cero llamadas al observer; el test concurrente acredita que la segunda
+llamada, serializada despues del primer cierre, reutiliza estado y no genera una
+segunda evidencia. Antes del fix ese focal reobservaba y el live devolvia 500.
+
+Evidencia: suite completa `orquesta-app-director-service` verde, suite completa
+`orquesta-app-codex-stack` verde (25.556 s), guard env verde. Solicito
+reacreditacion y repetire REST+MCP en Docker antes de volver a declarar cierre.
