@@ -44,6 +44,7 @@ type MCPTransportBindingsV0 struct {
 	ExternalWorkDryRun                             MCPTransportExternalWorkDryRunExecutorV0
 	ExternalWorkRun                                MCPTransportExternalWorkRunExecutorV0
 	ToolCapabilities                               MCPTransportToolCapabilitiesListExecutorV0
+	DocumentTextExtract                            MCPTransportDocumentTextExtractExecutorV0
 	CodebaseQuery                                  MCPTransportCodebaseQueryExecutorV0
 	CodebaseStatus                                 MCPTransportCodebaseStatusExecutorV0
 	AppVCS                                         MCPAppVCSExecutorPortV0
@@ -129,6 +130,10 @@ type MCPTransportExternalWorkDryRunExecutorV0 interface {
 
 type MCPTransportToolCapabilitiesListExecutorV0 interface {
 	Execute(context.Context, MCPToolCapabilitiesListToolInputV0) (MCPToolCapabilitiesListToolResultV0, error)
+}
+
+type MCPTransportDocumentTextExtractExecutorV0 interface {
+	Execute(context.Context, MCPDocumentTextExtractToolInputV0) (MCPDocumentTextExtractToolResultV0, error)
 }
 
 type MCPTransportCodebaseQueryExecutorV0 interface {

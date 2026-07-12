@@ -71,6 +71,7 @@ type ConfigV0 struct {
 	CodeContextToolLeases                          orquestacontext.CodeContextToolLeaseListPortV0
 	RuntimeModels                                  orquestaruntime.RuntimeModelManagerPortV0
 	ToolCapabilities                               orquestatoolcapability.CapabilityCatalogPortV0
+	DocumentTextExtract                            orquestamcp.MCPDocumentTextExtractExtractorPortV0
 	DecisionCouncil                                DecisionCouncilConfigV0
 	DomainDelivery                                 DomainWorkDeliveryBridgeConfigV0
 	ExternalWorkRunGuard                           ExternalWorkRunProjectWorkDirGuardConfigV0

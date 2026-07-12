@@ -215,6 +215,9 @@ func buildStackMCPTransportBindingsV0(
 		ToolCapabilities: orquestamcp.MCPToolCapabilitiesListToolExecutorV0{
 			Catalog: config.ToolCapabilities,
 		},
+		DocumentTextExtract: orquestamcp.MCPDocumentTextExtractToolExecutorV0{
+			Extractor: config.DocumentTextExtract,
+		},
 		CodebaseQuery: orquestamcp.MCPCodebaseQueryToolExecutorV0{Broker: config.CodeContext},
 		CodebaseStatus: orquestamcp.MCPCodebaseStatusToolExecutorV0{
 			Leases: config.CodeContextToolLeases,

@@ -389,6 +389,16 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
+	// Raiz de ingesta documental: un inbox dedicado bajo el estado del servidor.
+	// No se monta HOME ni se acepta ruta del host, y no gasta env nueva.
+	documentInboxDir := filepath.Join(serverConfig.StateDir, "document-inbox")
+	if err := os.MkdirAll(documentInboxDir, 0o700); err != nil {
+		return orquestaappcodexstack.StackV0{}, err
+	}
+	documentTextExtract, err := newDocumentTextExtractExecutorV0(documentInboxDir)
+	if err != nil {
+		return orquestaappcodexstack.StackV0{}, err
+	}
 	stack, err := orquestaappcodexstack.BuildStackV0(orquestaappcodexstack.ConfigV0{
 		Enabled:        true,
 		Timeout:        30 * time.Second,
@@ -462,8 +472,9 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 			goalBackend,
 			autoprogrammingGoalBackend,
 		),
-		RuntimeModels:    runtimeModels,
-		ToolCapabilities: toolCapabilities,
+		RuntimeModels:       runtimeModels,
+		ToolCapabilities:    toolCapabilities,
+		DocumentTextExtract: documentTextExtract,
 		ReviewGate: orquestaappcodexstack.ReviewGateConfigV0{
 			FileEvidence:            orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},
 			StrictGoLineBudget:      boolEnvOrDefaultV0(envReviewGateStrictGoLineBudgetV0, false),

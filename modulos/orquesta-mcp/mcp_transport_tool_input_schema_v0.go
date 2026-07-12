@@ -95,6 +95,8 @@ func mcpTransportToolInputDTOByNameV0(name string) (any, bool) {
 		return MCPExternalWorkRunToolInputV0{}, true
 	case MCPToolCapabilitiesListToolNameV0:
 		return MCPToolCapabilitiesListToolInputV0{}, true
+	case MCPDocumentTextExtractToolNameV0:
+		return MCPDocumentTextExtractToolInputV0{}, true
 	case MCPCodebaseQueryToolNameV0:
 		return MCPCodebaseQueryToolInputV0{}, true
 	case MCPCodebaseStatusToolNameV0:
