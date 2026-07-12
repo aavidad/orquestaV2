@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	orquestafactory "orquesta/modulos/orquesta-factory"
@@ -117,6 +118,65 @@ func (executor councilGatedArrancarDirectorExecutorV0) Execute(
 			Field:   "app_spec_request.request_id",
 			Message: "el consejo debe aceptar la decision antes de programar la app",
 		}}), nil
+	}
+	return executor.inner.Execute(ctx, input)
+}
+
+// El gate no puede cubrir UNA ruta y dejar otra abierta: una puerta con una
+// ventana al lado no es una puerta. `ejecutar_orquestacion` tambien programa a
+// partir de una AppSpec, asi que tambien pasa por el consejo.
+func CouncilRefForOrchestrationV0(requestID string, spec orquestafactory.AppSpecV0) string {
+	ref := strings.TrimSpace(requestID)
+	if ref == "" {
+		return ""
+	}
+	return "council-orq-" + ref + "-" + appSpecFingerprintForOrchestrationV0(spec)
+}
+
+func appSpecFingerprintForOrchestrationV0(spec orquestafactory.AppSpecV0) string {
+	bytes, err := json.Marshal(spec)
+	if err != nil {
+		return "unhashable"
+	}
+	sum := sha256.Sum256(bytes)
+	return hex.EncodeToString(sum[:])[:16]
+}
+
+type councilGatedEjecutarOrquestacionExecutorV0 struct {
+	inner  orquestamcp.MCPTransportEjecutarOrquestacionAppExecutorV0
+	config CouncilGateConfigV0
+}
+
+var _ orquestamcp.MCPTransportEjecutarOrquestacionAppExecutorV0 = councilGatedEjecutarOrquestacionExecutorV0{}
+
+func newCouncilGatedEjecutarOrquestacionExecutorV0(
+	inner orquestamcp.MCPTransportEjecutarOrquestacionAppExecutorV0,
+	config CouncilGateConfigV0,
+) orquestamcp.MCPTransportEjecutarOrquestacionAppExecutorV0 {
+	if !config.Required {
+		return inner
+	}
+	return councilGatedEjecutarOrquestacionExecutorV0{inner: inner, config: config}
+}
+
+func (executor councilGatedEjecutarOrquestacionExecutorV0) Execute(
+	ctx context.Context,
+	input orquestamcp.MCPEjecutarOrquestacionAppToolInputV0,
+) (orquestamcp.MCPEjecutarOrquestacionAppToolResultV0, error) {
+	// Mismo fail-closed que la otra ruta: la mala configuracion cierra, no abre.
+	if executor.config.Decision == nil || executor.inner == nil {
+		return orquestamcp.MCPEjecutarOrquestacionAppToolResultV0{}, fmt.Errorf(
+			"%s: el gate del consejo esta exigido pero no hay puerto de decision cableado",
+			CouncilGateMisconfiguredCodeV0,
+		)
+	}
+	councilRef := CouncilRefForOrchestrationV0(input.RequestID, input.AppSpec)
+	accepted, err := executor.config.Decision.CouncilDecisionAcceptedV0(ctx, councilRef)
+	if err != nil || !accepted {
+		return orquestamcp.MCPEjecutarOrquestacionAppToolResultV0{}, fmt.Errorf(
+			"%s: el consejo debe aceptar la decision antes de orquestar la app",
+			CouncilGateDecisionRequiredCodeV0,
+		)
 	}
 	return executor.inner.Execute(ctx, input)
 }

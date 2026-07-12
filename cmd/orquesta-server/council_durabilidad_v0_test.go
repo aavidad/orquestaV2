@@ -15,7 +15,7 @@ import (
 // recibo tiene que sobrevivir al proceso, y reconvocar el mismo council_ref debe
 // devolver LO DECIDIDO, no un veredicto nuevo que podria contradecir al anterior.
 func TestCouncilDecisionEsDurableEIdempotenteV0(t *testing.T) {
-	stack := buildCanonicalMCPBootstrapStackForTestV0(t)
+	stack := stackConConsejoInyectableParaTestV0(t, buildCanonicalMCPBootstrapStackForTestV0(t))
 	handler, err := buildServerAppHandlerV0(stack)
 	if err != nil {
 		t.Fatalf("buildServerAppHandlerV0: %v", err)

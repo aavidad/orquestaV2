@@ -141,10 +141,15 @@ func (executor councilExecutorV0) ConveneCouncilV0(
 ) (orquestamcp.MCPCouncilToolResultV0, error) {
 	input.Overrides = mergeOverridesV0(executor.overridesPersistentesV0(), input.Overrides)
 
-	// Sin miembros en la peticion se OBSERVAN los reales y su cuota en caliente.
-	// Que el caller los aporte sirve para probar, pero no demuestra nada: quien
-	// llama podria inventarse los presupuestos y, con ellos, el reparto de roles.
-	if len(input.Members) == 0 && executor.members != nil {
+	// La fuente acreditada MANDA SIEMPRE. Antes solo se consultaba si la peticion
+	// no traia miembros, y eso dejaba la puerta abierta: bastaba con enviar
+	// miembros inventados, con presupuestos y capacidades falsos, para fabricar el
+	// reparto de roles y saltarse las metricas reales.
+	//
+	// Los miembros del input se IGNORAN cuando hay fuente. El operador manda en el
+	// reparto por la via del override, que si esta gobernada; no fabricando
+	// identidades.
+	if executor.members != nil {
 		observados, err := executor.members.ObserveCouncilMembersV0(ctx)
 		if err != nil {
 			return orquestamcp.MCPCouncilToolResultV0{}, err

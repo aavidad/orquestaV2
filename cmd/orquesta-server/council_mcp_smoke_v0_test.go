@@ -2,7 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"os"
 	"testing"
+
+	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
 
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 )
@@ -11,7 +14,7 @@ import (
 // salieron por presupuesto, FUERZA uno, y el consejo decide. Hasta hoy el consejo
 // existia solo en un .md y nunca se habia visto actuar.
 func TestMCPCouncilConvocaFuerzaRolYDecidePorTransporteV0(t *testing.T) {
-	stack := buildCanonicalMCPBootstrapStackForTestV0(t)
+	stack := stackConConsejoInyectableParaTestV0(t, buildCanonicalMCPBootstrapStackForTestV0(t))
 	handler, err := buildServerAppHandlerV0(stack)
 	if err != nil {
 		t.Fatalf("buildServerAppHandlerV0: %v", err)
@@ -136,4 +139,24 @@ func asientoMCPV0(t *testing.T, result orquestamcp.MCPCouncilToolResultV0, role 
 	}
 	t.Fatalf("el consejo no asigno el rol %s: %+v", role, result.Seats)
 	return orquestamcp.MCPCouncilSeatV0{}
+}
+
+// stackConConsejoInyectableParaTestV0 sustituye el consejo por un ejecutor SIN
+// fuente acreditada, para poder inyectar miembros desde el test. En produccion la
+// fuente manda siempre y los miembros del input se ignoran: permitir inyeccion
+// ahi seria el bypass que Codex encontro.
+func stackConConsejoInyectableParaTestV0(
+	t *testing.T,
+	stack orquestaappcodexstack.StackV0,
+) orquestaappcodexstack.StackV0 {
+	t.Helper()
+	executor, err := newCouncilExecutorV0(os.Getenv(envServerStateDirV0))
+	if err != nil {
+		t.Fatalf("newCouncilExecutorV0: %v", err)
+	}
+	stack.MCPTransportBindings.Council = orquestamcp.MCPCouncilToolExecutorV0{
+		Council:           executor,
+		ClassifyPublicErr: councilPublicErrorClassifierV0,
+	}
+	return stack
 }

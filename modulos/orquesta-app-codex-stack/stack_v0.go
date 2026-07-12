@@ -158,8 +158,11 @@ func buildStackMCPTransportBindingsV0(
 			stack,
 		),
 		RequestAppChange: orquestamcp.NewMCPRequestAppChangeToolExecutorV0(appChangePortsV0(config)),
-		EjecutarOrquestacion: orquestamcp.NewMCPEjecutarOrquestacionAppToolExecutorV0(
-			legacyAppRunnerPortsFromDirectorPortsV0(ports),
+		EjecutarOrquestacion: newCouncilGatedEjecutarOrquestacionExecutorV0(
+			orquestamcp.NewMCPEjecutarOrquestacionAppToolExecutorV0(
+				legacyAppRunnerPortsFromDirectorPortsV0(ports),
+			),
+			config.CouncilGate,
 		),
 		DirectorDecision: codexStackDirectorDecisionExecutorV0{
 			Inner: orquestamcp.NewMCPDirectorAgentDecisionToolExecutorV0(orquestadirectoragentworkflow.ApplyDirectorAgentDecisionPortsV0{

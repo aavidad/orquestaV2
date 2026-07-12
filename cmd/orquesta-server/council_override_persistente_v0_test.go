@@ -23,7 +23,7 @@ func miembrosConsejoParaTestV0() []map[string]any {
 // ajuste persistente que valga para todos los consejos hasta que lo cambie.
 // Precedencia: peticion > persistente > automatico.
 func TestCouncilOverridePersistenteYSuPrecedenciaV0(t *testing.T) {
-	stack := buildCanonicalMCPBootstrapStackForTestV0(t)
+	stack := stackConConsejoInyectableParaTestV0(t, buildCanonicalMCPBootstrapStackForTestV0(t))
 	handler, err := buildServerAppHandlerV0(stack)
 	if err != nil {
 		t.Fatalf("buildServerAppHandlerV0: %v", err)
@@ -66,7 +66,7 @@ func TestCouncilOverridePersistenteYSuPrecedenciaV0(t *testing.T) {
 // La superficie publica devuelve CODIGOS TIPADOS, nunca el texto interno del
 // error: volcar err.Error() al exterior es fuga de detalle.
 func TestCouncilNoFiltraTextoInternoEnLaSuperficieV0(t *testing.T) {
-	stack := buildCanonicalMCPBootstrapStackForTestV0(t)
+	stack := stackConConsejoInyectableParaTestV0(t, buildCanonicalMCPBootstrapStackForTestV0(t))
 	handler, err := buildServerAppHandlerV0(stack)
 	if err != nil {
 		t.Fatalf("buildServerAppHandlerV0: %v", err)

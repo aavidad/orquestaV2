@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	orquestaappcodexstack "orquesta/modulos/orquesta-app-codex-stack"
+	orquestamcp "orquesta/modulos/orquesta-mcp"
 )
 
 type usoFalsoV0 struct {
@@ -76,5 +77,46 @@ func TestCouncilMemberSourceFallaCerradoSinCuotaObservableV0(t *testing.T) {
 	sinProveedor := newCouncilMemberSourceV0(declaradosV0(), nil)
 	if _, err := sinProveedor.ObserveCouncilMembersV0(context.Background()); !errors.Is(err, ErrCouncilBudgetUnobservableV0) {
 		t.Fatal("sin proveedor de metricas no se puede repartir por presupuesto")
+	}
+}
+
+// BYPASS que Codex encontro: la fuente acreditada solo se consultaba si la
+// peticion no traia miembros. Bastaba con enviarlos inventados, con presupuestos
+// y capacidades falsos, para fabricar el reparto de roles. La fuente MANDA
+// SIEMPRE: los miembros del input se ignoran.
+func TestCouncilIgnoraLosMiembrosInyectadosCuandoHayFuenteV0(t *testing.T) {
+	base, err := newCouncilExecutorV0(t.TempDir())
+	if err != nil {
+		t.Fatalf("newCouncilExecutorV0: %v", err)
+	}
+	executor := base.withMemberSourceV0(newCouncilMemberSourceV0(declaradosV0(), usoFalsoV0{
+		metricas: []orquestaappcodexstack.CodexStackAgentUsageMetricV0{
+			{AgentRequestID: "agente-a", QuotaStatus: "available", QuotaRemaining: 900, QuotaLimit: 1000},
+			{AgentRequestID: "agente-b", QuotaStatus: "limited", QuotaRemaining: 500, QuotaLimit: 1000},
+			{AgentRequestID: "agente-c", QuotaStatus: "exhausted", QuotaRemaining: 10, QuotaLimit: 1000},
+		},
+	}))
+
+	// El caller intenta colar a un "amiguete" con cuota inventada al 100%.
+	result, err := executor.ConveneCouncilV0(context.Background(), orquestamcp.MCPCouncilToolInputV0{
+		Action:     orquestamcp.MCPCouncilActionAssignV0,
+		CouncilRef: "c",
+		AuthorRef:  "agente-a",
+		Members: []orquestamcp.MCPCouncilMemberV0{
+			{MemberRef: "agente-a", FamilyRef: "familia-a", BudgetRemaining: 1},
+			{MemberRef: "amiguete", FamilyRef: "familia-z", BudgetRemaining: 1, CapabilityRank: 99},
+			{MemberRef: "otro-amiguete", FamilyRef: "familia-z", BudgetRemaining: 1},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ConveneCouncilV0: %v", err)
+	}
+	for _, seat := range result.Seats {
+		if seat.MemberRef == "amiguete" || seat.MemberRef == "otro-amiguete" {
+			t.Fatalf("BYPASS: un miembro inventado por el caller se sento en el consejo: %+v", seat)
+		}
+	}
+	if len(result.Seats) == 0 {
+		t.Fatal("el consejo no se formo con los miembros acreditados")
 	}
 }
