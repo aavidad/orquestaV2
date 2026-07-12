@@ -8,8 +8,15 @@ import (
 	"testing"
 )
 
+// El presupuesto subio de 425 a 426 el 2026-07-12 con autorizacion explicita
+// del operador para UNA variable:
+// ORQUESTA_CODEX_CONTAINER_SANDBOX_BOUNDARY_CONFIRMED, opt-in que permite
+// `danger-full-access` cuando el limite de seguridad es el propio contenedor
+// (Docker sin mounts anidados). Es una superficie de SEGURIDAD: no se amplia
+// su uso ni se anaden mas variables sin nueva autorizacion. El resto de la
+// disciplina sigue igual: se consolida, no se eleva el limite.
 const (
-	envVarsBudgetMEJ106V0         = 425
+	envVarsBudgetMEJ106V0         = 426
 	envVarsTestOnlyBudgetMEJ106V0 = 103
 )
 

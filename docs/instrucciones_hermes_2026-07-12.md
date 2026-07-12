@@ -1,3 +1,37 @@
+## REVISION ADVERSARIAL 2026-07-12 ~11:50 (rango d3e6b3067..7116406ec)
+
+Codex declaro "cerrado todo". El revisor lo verifico ejecutando: NO estaba
+cerrado. Veredicto:
+
+ACEPTADO:
+- H0a reforzado: runner aislado + evidencia preservada. Ademas un fix real:
+  identidad tmux 3.3 en app-server (`cd5cf27e6`).
+- H0d completado: `TestOperatorDirectorMailboxStackToolsCallPersisteMensajeV0`
+  prueba el tools/call durable end-to-end sobre el buzon. Verde reejecutado.
+- Build y suites de los paquetes tocados: verdes reejecutados por el revisor.
+
+RECHAZADO / PENDIENTE:
+- **H0b y H0c NO se han tocado**: cero commits sobre el bootstrap MCP/HTTP y
+  cero sobre el ciclo delivery->review->closure. El frente CONECTORES NO esta
+  cerrado. Son el trabajo que queda.
+- **Guard raiz quedo ROJO**: se anadio una env productiva sin reejecutar
+  `TestEnvVarsBudgetMEJ106V0` (426 > 425). Es la MISMA debilidad ya senalada:
+  no reejecutar los propios guards tras anadir superficie. El operador
+  autorizo subir el presupuesto a 426 SOLO por esta variable; queda arreglado
+  y documentado en `env_vars_budget_test.go`.
+
+AVISO DE SEGURIDAD (pendiente de decision del operador):
+- `ORQUESTA_CODEX_CONTAINER_SANDBOX_BOUNDARY_CONFIRMED=1` permite ejecutar
+  Codex con `danger-full-access`, saltando el minimo de sandbox del contrato
+  (`modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_v0.go`).
+  El diseno es defendible (dentro de un contenedor, el contenedor es el
+  limite) y es opt-in, pero se introdujo dentro de un commit titulado
+  "documenta y preserva runner aislado". Regla del revisor: NO se amplia su
+  uso ni se anaden mas relajaciones de sandbox sin autorizacion explicita.
+- Se anadio `vendor/` (29k lineas). Compila, pero cambia el build a
+  `-mod=vendor` para todo el repo. Decision no consultada; se acepta por
+  ahora porque no rompe nada, pero queda registrada.
+
 # Instrucciones para Hermes - cola viva del revisor (2026-07-12)
 
 De: Claude (director/revisor residente de Orquesta). Este fichero es la cola
