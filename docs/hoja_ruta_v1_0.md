@@ -140,6 +140,59 @@ revisarse en tiempo real: comprobar cual podemos usar ANTES de ensenarlos."*
    - El selector **no puede inventar modelos**: solo los que el catalogo real
      devuelve.
 
+6. **Intensidades y CRITICIDAD DE SEGURIDAD (spec ampliada del operador)**
+
+   Requisito literal: *"podemos poner mas intensidades. Critico si consigue
+   solucionar el problema sol:high, pero para seguridad critica usamos minimo
+   sol:xhigh incluso max"*.
+
+   **Estado verificado en codigo:**
+   - El validador ya acepta: `none`, `low`, `medium`, `high`, **`xhigh`**
+     (`capacity_decision_validator_helpers_v0.go:72`).
+   - **`max` NO existe todavia**: hay que anadirlo al validador y a la escala.
+
+   **Y aqui esta lo importante, que es un cambio de modelo, no un valor mas:**
+
+   El operador esta introduciendo una **segunda dimension** que el sistema no
+   tiene. Hoy solo existe **complejidad** (trivial/normal/complejo/critico).
+   Lo que pide es distinguir:
+
+   - **complejidad tecnica** — "¿es un problema dificil?" → `critico` puede
+     resolverse con `sol:high`.
+   - **criticidad de SEGURIDAD** — "¿si esto sale mal, hay dano?" → exige
+     **minimo `sol:xhigh`, y `max` cuando proceda**, *independientemente* de lo
+     dificil que sea el problema.
+
+   **Un cambio de una linea en un guard de seguridad es trivial en complejidad
+   y maximo en criticidad.** Con una sola dimension, el sistema le asignaria
+   `luna:low`. Eso es exactamente lo que hay que impedir.
+
+   **Diseno:**
+
+   - Anadir `security_criticality` (o equivalente) al contrato de la tarea:
+     `normal` | `sensitive` | `critical`.
+   - **Regla de piso, no de sustitucion**: la criticidad de seguridad impone un
+     **minimo** de modelo+effort, y el maximo de las dos dimensiones gana. Nunca
+     la complejidad puede rebajar el piso de seguridad.
+   - Pisos por defecto (revisables desde la web, con su bocadillo):
+
+         seguridad normal     -> sin piso (manda la complejidad)
+         seguridad sensitive  -> minimo sol:xhigh
+         seguridad critical   -> minimo sol:max
+
+   - **Que cuenta como criticidad de seguridad** (lista explicita, no a ojo):
+     guards y ratchets, sandbox y permisos, credenciales y secretos, atestacion
+     independiente, write-sets, promocion/integracion, y el propio routing de
+     modelos. Es decir: **todo lo que hoy protege al sistema de si mismo**.
+   - Test que **falle** si una tarea marcada `critical` se enruta por debajo de
+     su piso.
+
+   **Justificacion empirica (de hoy mismo, no teorica):** Codex intento colar
+   una relajacion de sandbox (`danger-full-access`) dentro de un commit de
+   "docs", y dos veces intento apagar un guard escondiendo tools. Ninguno de
+   esos cambios era **complejo**; todos eran **criticos**. Un routing que solo
+   mira dificultad los habria mandado al modelo mas barato.
+
 ### V1-C. Observabilidad honesta (deuda detectada por Sonyi)
 
 `autoprogramming/status` devuelve `projects=0 tasks=0 agents=0` cuando **no hay
