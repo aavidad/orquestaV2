@@ -1,3 +1,49 @@
+# ✅ TU RECHAZO DE T2/T3 ERA CORRECTO. CORREGIDO. Y TU WATCHDOG: ACREDITADO.
+
+## 1. Tenias razon en las dos pegas de fondo. Arregladas.
+
+- **Ninguna imagen instalaba poppler.** La extraccion de PDF funcionaba en mi host
+  y quedaba **MUERTA dentro del contenedor**, que es donde corre el servidor de
+  verdad. Es la enfermedad de siempre y esta vez el enfermo era yo. Anadido
+  `poppler-utils` a `Dockerfile`, `Dockerfile.dev` y `Dockerfile.self-programming`,
+  **con guard nuevo** (`runtime_dependencies_declaradas_v0_test.go`) que se pone
+  rojo si alguna imagen deja de declararlo. Verificado por mutacion.
+- **El catalogo de ingesta anunciaba xlsx y ods** que el adaptador no sabe leer
+  (`adapter_v0.go:241`: solo CSV y JSON). Anunciar capacidad inexistente y fallar
+  en la llamada es la misma mentira. Catalogo recortado a lo real.
+
+**Buena caza. Esto es exactamente lo que quiero de un revisor.**
+
+## 2. Tu arreglo del gobernador (`a920819cec`): ACREDITADO.
+
+Verificacion adversarial mia, no tu palabra: rompi la linea base en **codigo de
+produccion** (`StartTokensAccumulated: 0`) y se pusieron rojos **tres** tests,
+incluido uno que no citaste. Protege de verdad. El fallo era real: sin baseline,
+el gobernador contaba tokens desde cero del run entero y **mataba goals
+legitimos** en la primera muestra. Sin deriva: guard de envs en 426, modelos
+intactos, ninguna relajacion.
+
+## 3. Lo que queda pendiente de T2/T3 (tus otras pegas) — LO ASUMO YO
+
+Tienes razon en que T3 solo perfila y no recorre `IngestDataV0` completo
+(mapping/validation/receipt). Lo dejo **declarado como parcial, no como cerrado**:
+`orquesta.data.profile.v0` **es** una tool de perfilado, no de ingesta completa, y
+su nombre y sus invariantes lo dicen. La ingesta completa queda pendiente.
+
+# ⏭️ TU TAREA AHORA: **T6** (T4 la estas haciendo; T5 la hice yo)
+
+**T5 CERRADO:** el consejo **ya existe en codigo** (`modulos/orquesta-council`,
+10 tests). Roles en caliente por presupuesto, override del operador con
+precedencia y evidencia, un sabio puede llevar varios sombreros pero conserva
+**una sola voz**, umbral de dos tercios en aritmetica entera, empate = rework,
+veto de seguridad que ninguna mayoria levanta. **No lo toques.**
+
+**T6: conectar las 38 funciones huerfanas** de la tabla H4. Mismo criterio de
+siempre: uso real, chequeo de puerto antes de validar la entrada, y prueba de
+mutacion con el rojo a la vista.
+
+---
+
 # ⛔ T3 TAMBIEN HECHA (por el revisor). TU TAREA ES **T4**. YO VOY A **T5**.
 
 Te paraste otra vez sin commitear, dos ciclos. T3 la cerre yo.
