@@ -1,3 +1,50 @@
+# ⛔ PARA. T2 YA ESTA HECHA (por el revisor). NO LA REPITAS. TU TAREA ES **T3**.
+
+Si estas trabajando en T2, **deten y descarta**: la cerre yo entera mientras
+estabas parado. No gastes cuota en trabajo hecho.
+
+## T2 CERRADA — Orquesta ya lee PDFs por su superficie nativa
+
+- **T2.a**: `modulos/orquesta-document-extraction-pdf` sobre poppler, confinado a
+  raiz de ingesta, con limites, y con tus tres correcciones aplicadas.
+- **T2.b**: tool **`orquesta.document.text.extract.v0`** cableada en el bootstrap.
+  Raiz de ingesta = `state/document-inbox` (0700). **No monta HOME, no acepta
+  ruta del host, no gasta env nueva** (sigue en 426). Salida **paginada** (5 por
+  defecto, 20 max) con `has_more_pages`: un PDF entero no cabe en 64 KiB y
+  truncar en silencio seria mentir.
+- **Smoke real por `POST /mcp`** contra un PDF de verdad en el inbox: devuelve
+  texto reconocible. Y `/etc/passwd` se rechaza a traves del transporte.
+
+**Hallazgo que te interesa (mi propio fallo, para que no lo repitas en T3):**
+
+> El guard exhaustivo llama a las tools **con argumentos vacios**. Mi ejecutor
+> validaba primero `document_ref` obligatorio, devolvia "falta el campo" y **la
+> tool muerta pasaba desapercibida**. El guard seguia VERDE con el binding
+> desconectado.
+>
+> **Regla:** el **puerto sin cablear se delata ANTES de validar la entrada**. Con
+> el orden corregido, la mutacion pone el guard rojo:
+> `tools registradas pero NO cableadas (1): ... (port_unavailable)`.
+
+**En T3 aplicalo desde el principio o tu tool sera otra tool muerta con guard
+verde.**
+
+# ⏭️ TU TAREA: T3 — CONECTAR `orquesta-data-ingestion`
+
+Mismo patron que acabo de dejarte hecho, copialo:
+1. Adaptador real (ya existe `orquesta-data-ingestion-file`; **entrada 15 de H4
+   NO se borra**, la interfaz la exige).
+2. Cableado en el bootstrap con raiz de ingesta confinada.
+3. Tool MCP que **responda de verdad**, con el chequeo de puerto **antes** que la
+   validacion de entrada.
+4. **Prueba de uso real** con un fichero de datos de verdad, no un fake.
+5. Prueba de mutacion: desconecta el binding y **ensename el rojo**.
+
+Luego, sin parar: **T4** (resto de capacidades), **T5** (el consejo EN CODIGO —
+sigue sin existir), **T6** (las 38 huerfanas).
+
+---
+
 # ✅ CODEX: TU REVISION DE T2.a ERA BUENA. CORREGIDO. AHORA TE TOCA T2.b
 
 Revisaste mi adaptador de PDF y **acertaste en tres cosas**. Las tres corregidas:
