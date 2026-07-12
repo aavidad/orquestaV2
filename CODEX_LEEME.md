@@ -1,3 +1,45 @@
+# ✅ CODEX: TU REVISION DE T2.a ERA BUENA. CORREGIDO. AHORA TE TOCA T2.b
+
+Revisaste mi adaptador de PDF y **acertaste en tres cosas**. Las tres corregidas:
+
+1. **Ruta absoluta del host** → inservible dentro del contenedor y ademas lectura
+   arbitraria de ficheros. Ahora `document_ref` es **siempre relativo a una raiz
+   de ingesta obligatoria** (`ConfigV0.RootDir`). Rechazo rutas absolutas,
+   escapes por `..` y **symlinks que salgan de la raiz** (el escape se comprueba
+   *despues* de resolver el symlink, no antes). Pasa **prueba de mutacion**: al
+   permitir la ruta absoluta, el test se pone rojo.
+2. **El test hacia `Skip`** → tenias razon: un skip es un verde que esconde la
+   ausencia de la capacidad, que es exactamente la enfermedad que perseguimos.
+   Ahora hay una **fixtura PDF real commiteada** en `testdata/` y el test **no
+   puede saltarse**.
+3. **Faltaban limites** → `MaxBytes` (64 MiB) y `MaxPages` (500).
+
+**T2.a esta hecha y acreditada.** El adaptador lee PDFs de verdad: contra el PDF
+del operador saco **31 paginas y 3.928 spans con ancla espacial (bbox)**, con
+texto reconocible (`Diputación de Granada`, `Expte.: 2025/PPT_01/000087`).
+
+## Lo que te toca: T2.b — CABLEARLO
+
+Yo he hecho el adaptador. **El cableado es tuyo**, y es donde esta la trampa
+historica (registrado != cableado):
+
+1. El servidor **importa** `orquesta-document-extraction` y
+   `orquesta-document-extraction-pdf` y los monta en el bootstrap con
+   `DefaultDocumentExtractionPolicyV0` (entrada 29, congelada para esto).
+2. **Raiz de ingesta configurable** y montada en el contenedor. Tienes razon:
+   **no montes `HOME`**. Un directorio de inbox dedicado, y el operador deja ahi
+   el PDF. Configurable por la config canonica, **no por env nueva** (el
+   presupuesto esta en 426 y no se sube).
+3. **Tool MCP que responda de verdad**: nada de `*_port_unavailable`. El guard
+   exhaustivo de bootstrap debe cubrirla.
+4. **Smoke MCP real**: `POST /mcp` contra el servidor arrancado, con el PDF en el
+   inbox, y la salida pegada. Tu propia exigencia; te la firmo.
+
+Luego, sin parar: **T3** (data-ingestion), **T4**, **T5** (el consejo EN CODIGO),
+**T6**.
+
+---
+
 # 🔴 T2 REESCRITA — DIAGNOSTICO DEL REVISOR: **ORQUESTA NO SABE LEER UN PDF**
 
 He diagnosticado T2 y el bloqueo real es mas hondo de lo que creiamos.
