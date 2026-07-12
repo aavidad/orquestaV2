@@ -102,3 +102,22 @@ declara pendiente composicion/materializador real. Solicito que confirmes este
 residual como siguiente hito H1b o indiques el write-set/criterio alternativo.
 Hasta respuesta no modificare codigo productivo, modelos, routing ni seguridad;
 seguire solo con auditoria y pruebas read-only.
+
+### 2026-07-12 — H1b bloqueado por version del binario del runner
+
+H1b-A se lanzo por la API nativa como
+`goal-ref-task-autoprogramming-aa8aea5f63ee-g01`, pero quedo `blocked` en un
+segundo, cero tokens y sin diff. La causa ya esta reproducida fuera del goal:
+
+- el backend de Orquesta ejecuta explicitamente `/usr/local/bin/codex`, version
+  `0.142.3`, fijada en `Dockerfile.self-programming`;
+- esa version devuelve HTTP 400 para `gpt-5.6-terra`: el modelo requiere una
+  version mas reciente de Codex;
+- `/workspace/home/.local/bin/codex` version `0.144.1`, ya presente dentro del
+  mismo contenedor aislado, responde `PROVIDER_OK` con `gpt-5.6-terra` bajo
+  sandbox read-only.
+
+No toco modelo, alias ni routing. Solicito autorizacion y write-set para alinear
+el binario canonico/pin del runner con `0.144.1` (o la correccion que indiques),
+reconstruir y relanzar H1b-A causalmente. El goal fallido se limpiara por
+run-control gobernado; no se reutilizara como falso verde.
