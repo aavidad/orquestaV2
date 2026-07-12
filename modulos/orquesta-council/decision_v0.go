@@ -118,6 +118,14 @@ func DecideV0(assignment AssignmentV0, ballots []BallotV0) (DecisionV0, error) {
 		)
 	}
 
+	// Ultima linea de defensa: aunque la asignacion llegara de otro sitio, un
+	// consejo con menos de dos identidades NO puede aceptar nada.
+	if len(rolesPorMiembro) < MinimoIdentidadesRevisorasV0 {
+		return DecisionV0{}, fmt.Errorf(
+			"%w: %d identidades en el consejo", ErrConsejoDeUnoV0, len(rolesPorMiembro),
+		)
+	}
+
 	decision.Total = len(rolesPorMiembro)
 	if decision.Total > 0 {
 		decision.ApprovalRatio = float64(decision.Approvals) / float64(decision.Total)

@@ -318,3 +318,51 @@ func votosV0(assignment council.AssignmentV0, votes ...council.VoteV0) []council
 	}
 	return ballots
 }
+
+// HALLAZGO CRITICO (Codex): contar FILAS en vez de IDENTIDADES permitia repetir
+// el mismo member_ref y fabricar un consejo de UNA sola persona que se aprobaba
+// a si misma: outcome=accepted, total=1, approvals=1.
+func TestConsejoDeUnoNoPuedeAprobarseASiMismoV0(t *testing.T) {
+	_, err := council.AssignRolesV0(council.ConvocationV0{
+		CouncilRef: "c", AuthorRef: "autor",
+		Members: []council.MemberV0{
+			{MemberRef: "autor", FamilyRef: "f", BudgetRemaining: 0.9},
+			{MemberRef: "x", FamilyRef: "g", BudgetRemaining: 0.5},
+			{MemberRef: "x", FamilyRef: "g", BudgetRemaining: 0.5},
+		},
+	})
+	if !errors.Is(err, council.ErrMiembroDuplicadoV0) {
+		t.Fatalf("un member_ref duplicado debe rechazarse: %v", err)
+	}
+
+	// Y sin duplicados, un solo revisor tampoco es un consejo.
+	_, err = council.AssignRolesV0(council.ConvocationV0{
+		CouncilRef: "c", AuthorRef: "autor",
+		Members: []council.MemberV0{
+			{MemberRef: "autor", FamilyRef: "f", BudgetRemaining: 0.9},
+			{MemberRef: "x", FamilyRef: "g", BudgetRemaining: 0.5},
+		},
+	})
+	if !errors.Is(err, council.ErrConsejoDeUnoV0) {
+		t.Fatalf("una sola identidad revisora no es un consejo: %v", err)
+	}
+}
+
+// Ultima linea de defensa: aunque la asignacion venga fabricada de fuera, un
+// consejo de uno no puede aceptar nada.
+func TestDecideRechazaUnConsejoDeUnaSolaIdentidadV0(t *testing.T) {
+	fabricado := council.AssignmentV0{
+		CouncilRef: "c",
+		Seats: []council.SeatV0{
+			{Role: council.RoleRevisorV0, MemberRef: "x"},
+			{Role: council.RoleConsultorV0, MemberRef: "x"},
+			{Role: council.RoleAdversarioV0, MemberRef: "x"},
+		},
+	}
+	_, err := council.DecideV0(fabricado, []council.BallotV0{
+		{MemberRef: "x", Vote: council.VoteApproveV0},
+	})
+	if !errors.Is(err, council.ErrConsejoDeUnoV0) {
+		t.Fatalf("un consejo de una identidad no puede decidir: %v", err)
+	}
+}

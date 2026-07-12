@@ -96,6 +96,14 @@ type MCPCouncilPortV0 interface {
 	ConveneCouncilV0(context.Context, MCPCouncilToolInputV0) (MCPCouncilToolResultV0, error)
 }
 
+// MCPCouncilMemberSourcePortV0 observa a los miembros REALES y su cuota EN ESE
+// MOMENTO. Que el caller aporte los miembros valia para probar, pero no demuestra
+// roles en caliente sobre agentes de verdad: el que llama podria inventarse los
+// presupuestos y, con ellos, el reparto de roles.
+type MCPCouncilMemberSourcePortV0 interface {
+	ObserveCouncilMembersV0(context.Context) ([]MCPCouncilMemberV0, error)
+}
+
 type MCPCouncilToolExecutorV0 struct {
 	Council           MCPCouncilPortV0
 	ClassifyPublicErr MCPCouncilPublicErrorClassifierV0

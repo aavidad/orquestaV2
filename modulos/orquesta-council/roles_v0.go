@@ -84,7 +84,14 @@ var (
 	ErrOverrideMiembroDesconocidoV0 = errors.New("council_override_miembro_desconocido")
 	ErrRolDesconocidoV0             = errors.New("council_rol_desconocido")
 	ErrSeguridadSinVetoV0           = errors.New("council_seguridad_no_puede_quedar_sin_asignar")
+	ErrMiembroDuplicadoV0           = errors.New("council_miembro_duplicado")
+	ErrConsejoDeUnoV0               = errors.New("council_identidades_revisoras_insuficientes")
 )
+
+// MinimoIdentidadesRevisorasV0 son las identidades DISTINTAS del autor que debe
+// haber para que esto sea un consejo y no una opinion. "Cuatro ojos" es dos
+// personas: con una sola, el autor esta pidiendo permiso a un espejo.
+const MinimoIdentidadesRevisorasV0 = 2
 
 const budgetWarningThresholdV0 = 0.10
 
@@ -98,9 +105,30 @@ const budgetWarningThresholdV0 = 0.10
 // dejar sin cubrir el rol de seguridad cuando la decision es critica.
 func AssignRolesV0(convocation ConvocationV0) (AssignmentV0, error) {
 	author := strings.TrimSpace(convocation.AuthorRef)
+
+	// Duplicados: contar FILAS en vez de IDENTIDADES permitia colar el mismo
+	// member_ref dos veces y fabricar un "consejo" de una sola persona que se
+	// aprobaba a si misma. Se rechaza explicitamente en vez de deduplicar en
+	// silencio: una convocatoria con duplicados esta mal construida y hay que
+	// saberlo.
+	vistos := map[string]bool{}
+	for _, member := range convocation.Members {
+		ref := strings.TrimSpace(member.MemberRef)
+		if ref == "" {
+			continue
+		}
+		if vistos[ref] {
+			return AssignmentV0{}, fmt.Errorf("%w: %s", ErrMiembroDuplicadoV0, ref)
+		}
+		vistos[ref] = true
+	}
+
 	candidates := elegiblesV0(convocation.Members, author)
-	if len(candidates) < 2 {
-		return AssignmentV0{}, fmt.Errorf("%w: hacen falta al menos dos miembros distintos del autor", ErrMiembrosInsuficientesV0)
+	if len(candidates) < MinimoIdentidadesRevisorasV0 {
+		return AssignmentV0{}, fmt.Errorf(
+			"%w: %d identidades distintas del autor, hacen falta %d",
+			ErrConsejoDeUnoV0, len(candidates), MinimoIdentidadesRevisorasV0,
+		)
 	}
 
 	roles := []RoleV0{RoleRevisorV0, RoleConsultorV0, RoleAdversarioV0}

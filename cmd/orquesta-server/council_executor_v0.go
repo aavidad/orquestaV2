@@ -33,6 +33,8 @@ type councilPersistentOverridesV0 struct {
 // interno al exterior.
 func councilPublicErrorClassifierV0(err error) (string, string, bool) {
 	switch {
+	case errors.Is(err, ErrCouncilBudgetUnobservableV0):
+		return "council_budget_unobservable", "members", true
 	case errors.Is(err, ErrCouncilReceiptConflictV0):
 		return "council_receipt_conflict", "council_ref", true
 	case errors.Is(err, ErrCouncilReceiptCorruptV0):
@@ -70,6 +72,7 @@ func councilPublicErrorClassifierV0(err error) (string, string, bool) {
 type councilExecutorV0 struct {
 	overridesPath string
 	receipts      councilReceiptStoreV0
+	members       orquestamcp.MCPCouncilMemberSourcePortV0
 }
 
 var _ orquestamcp.MCPCouncilPortV0 = councilExecutorV0{}
@@ -83,6 +86,13 @@ func newCouncilExecutorV0(stateDir string) (councilExecutorV0, error) {
 		overridesPath: filepath.Join(stateDir, councilOverridesFileNameV0),
 		receipts:      receipts,
 	}, nil
+}
+
+func (executor councilExecutorV0) withMemberSourceV0(
+	source orquestamcp.MCPCouncilMemberSourcePortV0,
+) councilExecutorV0 {
+	executor.members = source
+	return executor
 }
 
 // overridesPersistentesV0 lee los overrides durables del operador. Si no hay
@@ -126,10 +136,21 @@ func mergeOverridesV0(
 }
 
 func (executor councilExecutorV0) ConveneCouncilV0(
-	_ context.Context,
+	ctx context.Context,
 	input orquestamcp.MCPCouncilToolInputV0,
 ) (orquestamcp.MCPCouncilToolResultV0, error) {
 	input.Overrides = mergeOverridesV0(executor.overridesPersistentesV0(), input.Overrides)
+
+	// Sin miembros en la peticion se OBSERVAN los reales y su cuota en caliente.
+	// Que el caller los aporte sirve para probar, pero no demuestra nada: quien
+	// llama podria inventarse los presupuestos y, con ellos, el reparto de roles.
+	if len(input.Members) == 0 && executor.members != nil {
+		observados, err := executor.members.ObserveCouncilMembersV0(ctx)
+		if err != nil {
+			return orquestamcp.MCPCouncilToolResultV0{}, err
+		}
+		input.Members = observados
+	}
 
 	// Idempotencia: una decision ya tomada no se vuelve a tomar. Reconvocar el
 	// mismo council_ref devuelve el recibo durable, no un veredicto nuevo, que

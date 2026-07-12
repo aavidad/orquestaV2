@@ -8,5 +8,16 @@ package main
 // miembros el gate obligatorio bloquearia toda creacion. Se activa cuando esa
 // fuente exista.
 type serverProjectConfigCouncilV0 struct {
-	GateRequired bool `json:"gate_required,omitempty"`
+	GateRequired bool                                 `json:"gate_required,omitempty"`
+	Members      []serverProjectConfigCouncilMemberV0 `json:"members,omitempty"`
+}
+
+// serverProjectConfigCouncilMemberV0 declara QUIEN puede sentarse en el consejo y
+// con que familia. El PRESUPUESTO no se declara aqui: se observa en caliente. Si
+// se declarara, cualquiera podria fabricar el reparto de roles escribiendo un
+// numero en un fichero.
+type serverProjectConfigCouncilMemberV0 struct {
+	MemberRef      string `json:"member_ref"`
+	FamilyRef      string `json:"family_ref,omitempty"`
+	CapabilityRank int    `json:"capability_rank,omitempty"`
 }

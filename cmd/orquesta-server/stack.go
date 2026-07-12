@@ -411,6 +411,10 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
+	councilExecutor = councilExecutor.withMemberSourceV0(newCouncilMemberSourceV0(
+		projectConfig.Council.Members,
+		codexUsageMetricsFromProjectConfigV0(serverConfig.IdleSelfImprovementProjectWorkDir, receiptStore),
+	))
 	stack, err := orquestaappcodexstack.BuildStackV0(orquestaappcodexstack.ConfigV0{
 		Enabled:        true,
 		Timeout:        30 * time.Second,
