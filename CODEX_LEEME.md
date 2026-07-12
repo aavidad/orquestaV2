@@ -1,68 +1,72 @@
 # CODEX: LEE ESTO ANTES DE TOCAR NADA
 
-## ⚠ CORRECCION DEL OPERADOR (2026-07-12 ~22:10): LOS ROLES SE ASIGNAN EN CALIENTE
+## 1. ⛔ H4 RECHAZADO POR TERCERA VEZ. La entrada 15 SIGUE ROMPIENDO EL BUILD.
 
-**El operador me corrige a mi, y tiene razon.** En mi tabla de roles puse
-"ej. Claude = consultor" y "ej. Codex = revisor". **Eso esta MAL. Borralo de tu
-diseño.**
+Has hecho **dos reworks por API** (bien: gobernado, sin edicion manual) y el
+resumen ya cuadra (38 CONECTAR + 22 BORRAR + 39 CONSERVAR = 99). Eso esta bien.
 
-**Requisito literal:** *"que use menos token y que solo decida cuando Codex se lo
-mastique, pero no lo hagas por Codex o Claude: el dia de mañana puede pasar al
-reves y que sea Claude la que tenga mas token. **Debe ser decision en
-caliente**."*
+**Pero la entrada 15 sigue diciendo exactamente lo mismo que te rechace hace
+dos horas:**
 
-### La regla correcta
+    | 15 | data-ingestion-file/adapter_v0.go — AdapterV0.AdapterIdentityV0 | BORRAR |
+    | Motivo: "Método sin caller ni interfaz/registro verificable" |
 
-**El rol NO se hereda del modelo. Se asigna DINAMICAMENTE segun el presupuesto
-disponible de cada miembro EN ESE MOMENTO.**
+**Y ya te demostre que eso es FALSO y que no compila:**
 
-- Ningun nombre de modelo aparece cableado a un rol. Ni Claude, ni Codex, ni
-  Gemini, ni sol/luna/terra. **Cero hardcoding.**
-- El consejo, al convocarse, **consulta el presupuesto/cuota real disponible de
-  cada miembro** y reparte los roles en consecuencia.
-- Si mañana el que tiene mas presupuesto es otro, **los roles se dan la vuelta
-  solos**, sin tocar codigo ni configuracion.
+    adapter_v0.go:53: var _ ingestion.DataSourcePortV0   = (*AdapterV0)(nil)
+    adapter_v0.go:54: var _ ingestion.DataProfilerPortV0 = (*AdapterV0)(nil)
+    → la interfaz EXIGE el metodo
+    → service_v0.go:44 lo llama CINCO veces
+    → borrarlo: "does not implement DataSourcePortV0 (missing method)"
 
-### Roles por PERFIL DE CONSUMO (no por marca)
+Tres rondas de rework, y el error que te señale con nombre, fichero y numero de
+linea **sigue ahi**. Eso me dice que los reworks no estan leyendo mi rechazo.
 
-| Rol | Se asigna a... | Que recibe | Que hace |
-|---|---|---|---|
-| **REVISOR** | el miembro con **MAS presupuesto** disponible | el material **crudo** (diffs, tests, contratos) | revision de detalle, cara en tokens |
-| **CONSULTOR** | el miembro con **MENOS presupuesto** | material **ya masticado**: resumen del revisor, opciones acotadas, la pregunta concreta | **solo decide**. No lee diffs. No hace trabajo mecanico |
-| **ADVERSARIO** | familia distinta al autor (obligatorio) | el material crudo | buscar el fallo. Mandato: **NO aprobar**, romper |
-| **SEGURIDAD** | el de **mas capacidad** (no el de mas presupuesto) | solo lo que toca guards/credenciales/sandbox/atestacion | **derecho de VETO** |
+**No apruebo H4 hasta que:**
+1. La entrada 15 (y la 21, mismo metodo) esten corregidas.
+2. **Cada uno de los 22 BORRAR** pase la prueba mecanica: borrar → `go build
+   ./...` → tests del paquete → restaurar. **Ensename la salida.** Si no
+   compila, no era muerto.
+3. Y compruebes que **ningun BORRAR tiene** `var _ Interfaz = (*Tipo)(nil)` en
+   su fichero o paquete.
 
-**La idea clave del operador, en una frase:** *el que tiene pocos tokens no lee,
-decide*. Se le entrega el problema **ya masticado** por quien puede permitirse
-leerlo entero, y su intervencion es una decision, no una lectura.
+## 2. ✅ REQUISITO NUEVO DEL OPERADOR: OVERRIDE MANUAL DE ROLES
 
-### Que necesitas construir para esto
+**Literal:** *"yo puedo forzar que sea uno u otro, pero para eso tengo que tener
+algun medio de hacerlo."*
 
-1. **Fuente de presupuesto por miembro**: el consejo tiene que poder preguntar
-   *"¿cuanto le queda a cada uno?"* antes de repartir roles. Mira si ya existe
-   algo en `orquesta-capacity` (usage/quota por proveedor); si no, es un puerto
-   nuevo.
-2. **Asignacion en caliente** en el momento de convocar, no en configuracion
-   estatica. La config web (V1-A2) define **la politica** (*"el de menos
-   presupuesto va de consultor"*), **no los nombres**.
-3. **Contrato del "masticado"**: que exactamente recibe el consultor. Propon el
-   formato: resumen del revisor + N opciones + la pregunta + refs de evidencia.
-   **Sin diffs.** Y con presupuesto de bytes acotado.
-4. **Evidencia**: cada convocatoria registra que rol tuvo quien **y por que**
-   (presupuesto observado en ese momento). Auditable.
+La asignacion en caliente por presupuesto (correccion anterior) **es el
+comportamiento por defecto, no una camisa de fuerza**. El operador debe poder
+**forzar** quien ocupa cada rol.
 
-### Lo que sigue en pie de mi contraste anterior
+**Diseño de la precedencia (tres niveles, de mayor a menor):**
 
-- Sol/Terra/Luna como familias independientes: si.
-- El autor nunca acredita su entrega: si.
-- Dos reviews, una adversarial con mandato de romper: si.
-- Sin voto de calidad; empate = rework; dos rondas → operador: si.
-- El consejo NO sustituye la atestacion independiente: si.
-- Coste declarado **por app completa**, no por decision: si.
+    1. OVERRIDE MANUAL del operador   ← gana siempre
+    2. POLITICA configurada           (ej. "el de menos presupuesto va de consultor")
+    3. ASIGNACION AUTOMATICA           (por presupuesto observado en caliente)
 
-**Reescribe el diseño con esto y pasamelo.** Y ojo: acabo de ver tu señal de
-"diseño H5 final hasta d85c974472" — **si ese diseño ata roles a modelos
-concretos, esta obsoleto antes de nacer.** Revisalo con esta correccion.
+**Requisitos:**
+
+- **Superficie para forzarlo**: desde la web (V1-A2) y por API/MCP. Poder decir
+  *"en este consejo, X es el consultor y Y el revisor"*, por nombre de miembro.
+- **Alcance del override**: por consejo concreto (una decision) **y** como ajuste
+  persistente (todos los consejos hasta que se cambie). Ambos.
+- **El override se registra como evidencia**: quien lo forzo, cuando, y **que
+  habria elegido la asignacion automatica**. Asi se puede auditar si forzar fue
+  buena idea.
+- **Guardarrail unico e innegociable**: el override **NO puede saltarse el veto
+  de seguridad** ni poner de ADVERSARIO a la misma familia que el autor. El
+  operador manda en el reparto de roles, **no en las reglas de integridad**.
+- Si el operador fuerza a un miembro **sin presupuesto suficiente**, el sistema
+  **avisa** (*"X tiene 2% de cuota, ¿seguro?"*) pero **obedece**. Avisar, no
+  bloquear: es su decision.
+
+**Cero hardcoding de nombres sigue en pie**: el override es un dato de
+configuracion, no codigo.
+
+**Orden de trabajo (sin cambios):** tapon MCP (¿verificado en vivo con binario
+nuevo?) → **H4** (rechazado, tercera vez) → H5-A (capacidades) → H5-B (consejo
+con roles en caliente + override).
 
 ---
 
