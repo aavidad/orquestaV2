@@ -133,8 +133,18 @@ en una entrada `count=68`; 34 acciones repetidas más 25 códigos únicos conser
 total 59 y devuelven top 20; límite de cola default 20 y override explícito;
 la fake terminal no devuelve terminales si el caller olvida
 `include_non_executable`. Suites completas de raíz, MCP, server y Codex stack,
-más guard 426/426, verdes. Falta reconstrucción y evidencia live de este segundo
-corte antes de solicitar acreditación.
+más guard 426/426, verdes.
+
+Evidencia live tras reconstruir Docker exacto en `d85c974472`: `tools/call`
+de `orquesta.autoprogramming.status.v0` devuelve JSON-RPC de 17.697 bytes,
+`isError=false`, `estado=ok`; publica `stale_running_total=45` y 6 grupos,
+`diagnostics_total=90` y 10 entradas compactas. El grupo
+`estado_vivo_desconocido` aparece una vez con `count=41` y tres muestras. La
+proyección declara 53.025 bytes originales, 16.575 devueltos, umbral 49.152 y
+ruta HTTP. `orquesta.status.v0` devuelve `isError=false`, cero activos con
+`scope=active_queue`, `active_queue_empty=true` y
+`terminal_runs_visible=13`. Solicito prueba de mutación y acreditación del
+tapón MCP.
 
 H4 rework `request-ref-h4-deadcode-classification-rework-20260712-005` se
 detuvo gobernadamente por MCP run-control. Aunque intentaba mutaciones reales,
