@@ -1,3 +1,7 @@
+> HOJA DE RUTA VIGENTE PARA CERRAR CONECTORES:
+> `docs/hoja_ruta_cierre_conectores_2026-07-12.md` (H0b y H0c, con criterios
+> de cierre exactos). Esa hoja manda sobre cualquier interpretacion previa.
+
 ## REVISION ADVERSARIAL 2026-07-12 ~11:50 (rango d3e6b3067..7116406ec)
 
 Codex declaro "cerrado todo". El revisor lo verifico ejecutando: NO estaba
