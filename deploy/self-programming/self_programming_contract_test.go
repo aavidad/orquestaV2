@@ -152,6 +152,8 @@ func TestSelfProgrammingImageV0IncludesPinnedIntegrationRuntime(t *testing.T) {
 		"ARG ORQUESTA_BUILD_COMMIT",
 		"-X main.serverRuntimeBuildCommitOverrideV0=${ORQUESTA_BUILD_COMMIT}",
 		"COPY --from=golang:1.25.11-bookworm /usr/local/go /usr/local/go",
+		"ln -s /usr/local/go/bin/go /usr/local/bin/go",
+		"ln -s /usr/local/go/bin/gofmt /usr/local/bin/gofmt",
 		"COPY modulos/orquesta-estado-vivo/testdeps/rapid ./modulos/orquesta-estado-vivo/testdeps/rapid",
 		"ca-certificates bash curl git iptables jq openssh-client procps python3 tmux",
 	} {

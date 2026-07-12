@@ -234,3 +234,50 @@ la API ligada a loopback. Se mantienen y se gobernaran por
 `prepare-run/status/observe/runs-control/shutdown` o por las tools MCP
 equivalentes. No se integrara ningun diff leyendo o alterando directamente los
 worktrees del runner. El perfil Docker local duplicado no se levantara.
+
+### 2026-07-12 — dos fallos reales descubiertos por la ola H1b
+
+La ola gobernada por API materializo codigo util, pero Orquesta rechazo
+correctamente los cierres sin atestacion independiente. La investigacion
+encontro dos fallos de plataforma, por lo que no se acredita H1b todavia:
+
+1. La imagen declara `/usr/local/go/bin` en `ENV PATH`, pero los comandos de
+   agente usan login shell y `/etc/profile` reconstruye PATH sin esa ruta.
+   Reproduccion dentro del contenedor: `go: not found`, aunque el binario
+   existe. Fix acotado: exponer `go` y `gofmt` mediante symlinks en
+   `/usr/local/bin`, ruta conservada por login shell, y fijarlo en el contrato.
+2. Auditoria read-only encontro que el cierre Goal-first aceptado no llama
+   automaticamente a promocion/integracion: el unico caller productivo de
+   `maybePromoteClosedAutoprogrammingRunV0` vive en drain legacy, mientras
+   Goal-first hace short-circuit y `observe_goal` solo sincroniza/cierra cola.
+   Tras reparar el toolchain se abrira un goal causal separado para cablear
+   promocion desde el cierre Goal-first aceptado, con tests y sin push.
+
+Todas las runs afectadas fueron detenidas por `runs/control` y el servidor dio
+`shutdown_ready=true`. Sus diffs no se integran ni cuentan como verdes.
+
+### 2026-07-12 — mensaje urgente al revisor: carrera de atestacion Goal-first
+
+Auditoria read-only del cierre invalido identifica una tercera causa
+estructural, ademas del PATH:
+
+- El ciclo sano `ObserveGoalWorkV0` captura y congela snapshot, adquiere claim,
+  ejecuta/persiste attestations y solo despues valida cierre.
+- La reparacion `repairGoalFirstReceiptFromMaterializedRefsV0` /
+  `repairGoalFirstReceiptFromMaterializedResultV0` llama directamente al
+  `GoalClosureValidator`, sin capturar snapshot ni atestar. Eso produce
+  `goal_required_test_final_snapshot_missing` y persiste un terminal blocked.
+- Los endpoints REST de observe cancelan a los 2 s. Si cancelan despues de
+  adquirir claim, el fallo del claim usa el mismo `ctx` cancelado. El store no
+  tiene lease, expiracion ni reclaim de claim `pending`; otra observacion puede
+  saltar el test y validar como `required_test_attestation_missing`.
+- La observacion manual REST puede competir con el observer residente; el CAS
+  devuelve estado ganador sin fusionar receipts.
+
+Pido al revisor confirmar este frente causal. Propuesta de reparacion separada,
+para ejecutar con Orquesta una vez arreglado el PATH: (1) repair receipt debe
+delegar al lifecycle/capturar+atestar antes de validar; (2) claim con
+lease/owner/expiry y reclaim gobernado; (3) serializacion por run entre observer
+residente/manual; (4) HTTP observe desacoplado (`202` + poll/wakeup) para que el
+deadline no cancele trabajo durable. Hasta ese fix no repetire `observe` REST
+sobre cierres que esten atestando; usare MCP directo o successor causal.
