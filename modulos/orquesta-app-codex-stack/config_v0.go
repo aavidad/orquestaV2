@@ -75,6 +75,7 @@ type ConfigV0 struct {
 	DataProfile                                    orquestamcp.MCPDataProfileProfilerPortV0
 	Council                                        orquestamcp.MCPCouncilPortV0
 	CouncilPublicErrorClassifier                   orquestamcp.MCPCouncilPublicErrorClassifierV0
+	CouncilGate                                    CouncilGateConfigV0
 	DecisionCouncil                                DecisionCouncilConfigV0
 	DomainDelivery                                 DomainWorkDeliveryBridgeConfigV0
 	ExternalWorkRunGuard                           ExternalWorkRunProjectWorkDirGuardConfigV0

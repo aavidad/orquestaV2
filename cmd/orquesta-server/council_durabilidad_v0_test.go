@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	orquestamcp "orquesta/modulos/orquesta-mcp"
@@ -45,11 +48,22 @@ func TestCouncilDecisionEsDurableEIdempotenteV0(t *testing.T) {
 		t.Fatalf("la decision no quedo en disco: %v", err)
 	}
 
-	// Idempotencia: reconvocar el MISMO consejo con votos distintos NO cambia el
-	// veredicto. Lo decidido, decidido esta.
-	segunda := decidir("consejo-durable", "rework", "rework", "rework")
-	if segunda.Outcome != "council_decision_accepted" {
-		t.Fatalf("reconvocar no puede reabrir una decision tomada: %+v", segunda)
+	// Idempotencia de reintento: la MISMA convocatoria devuelve LO DECIDIDO, sin
+	// volver a votar.
+	reintento := decidir("consejo-durable", "approve", "approve", "approve")
+	if reintento.Outcome != "council_decision_accepted" {
+		t.Fatalf("un reintento identico debe devolver lo decidido: %+v", reintento)
+	}
+
+	// Pero reconvocar el mismo council_ref con OTROS VOTOS no es un reintento: es
+	// un choque. Devolver el veredicto viejo en silencio seria mentir, y aceptar
+	// el nuevo seria reabrir una decision cerrada.
+	choque := decidir("consejo-durable", "rework", "rework", "rework")
+	if choque.Estado != orquestamcp.MCPCouncilEstadoErrorV0 {
+		t.Fatalf("reutilizar el consejo con otra convocatoria debe chocar: %+v", choque)
+	}
+	if len(choque.ErroresPublicos) == 0 || choque.ErroresPublicos[0].Code != "council_receipt_conflict" {
+		t.Fatalf("el choque no trae codigo publico tipado: %+v", choque.ErroresPublicos)
 	}
 
 	// Y un consejo distinto sigue decidiendo de cero.
@@ -67,8 +81,106 @@ func TestCouncilRefNoEscapaDelDirectorioDeRecibosV0(t *testing.T) {
 		t.Fatalf("newCouncilReceiptStoreV0: %v", err)
 	}
 	for _, ref := range []string{"../fuera", "sub/dir", "..", ""} {
-		if err := store.SaveV0(councilReceiptV0{CouncilRef: ref, Outcome: "council_decision_accepted"}); err == nil {
+		if _, err := store.SaveV0(councilReceiptV0{CouncilRef: ref, Outcome: councilOutcomeAcceptedV0}); err == nil {
 			t.Fatalf("council_ref %q escapo del directorio de recibos", ref)
 		}
+	}
+}
+
+// Dos decisiones concurrentes sobre el mismo consejo no pueden pisarse: gana UNA
+// y la otra reconoce su veredicto. Un Rename que sobrescribe dejaria ganar al
+// ultimo en escribir, que es una decision distinta segun el reloj.
+func TestCouncilReceiptNoSePisaEnConcurrenciaV0(t *testing.T) {
+	store, err := newCouncilReceiptStoreV0(t.TempDir())
+	if err != nil {
+		t.Fatalf("newCouncilReceiptStoreV0: %v", err)
+	}
+
+	const escritores = 8
+	resultados := make(chan councilReceiptV0, escritores)
+	errores := make(chan error, escritores)
+	var arranque sync.WaitGroup
+	arranque.Add(1)
+	var fin sync.WaitGroup
+	for idx := 0; idx < escritores; idx++ {
+		fin.Add(1)
+		go func(idx int) {
+			defer fin.Done()
+			arranque.Wait()
+			guardado, err := store.SaveV0(councilReceiptV0{
+				CouncilRef:       "concurrente",
+				InputFingerprint: "sha256:misma-convocatoria",
+				Outcome:          councilOutcomeAcceptedV0,
+				Approvals:        idx,
+			})
+			if err != nil {
+				errores <- err
+				return
+			}
+			resultados <- guardado
+		}(idx)
+	}
+	arranque.Done()
+	fin.Wait()
+	close(resultados)
+	close(errores)
+
+	for err := range errores {
+		t.Fatalf("misma convocatoria concurrente no debe dar error: %v", err)
+	}
+	var ganador *councilReceiptV0
+	for receipt := range resultados {
+		if ganador == nil {
+			copia := receipt
+			ganador = &copia
+			continue
+		}
+		if receipt.Approvals != ganador.Approvals {
+			t.Fatalf("dos veredictos distintos sobrevivieron: %d y %d", ganador.Approvals, receipt.Approvals)
+		}
+	}
+	if ganador == nil {
+		t.Fatal("ningun escritor guardo la decision")
+	}
+}
+
+// Reutilizar el council_ref con OTRA convocatoria no es un reintento: es un
+// choque. Devolver el recibo viejo en silencio seria mentir.
+func TestCouncilReceiptRechazaMismoRefConOtraConvocatoriaV0(t *testing.T) {
+	store, err := newCouncilReceiptStoreV0(t.TempDir())
+	if err != nil {
+		t.Fatalf("newCouncilReceiptStoreV0: %v", err)
+	}
+	if _, err := store.SaveV0(councilReceiptV0{
+		CouncilRef: "c", InputFingerprint: "sha256:a", Outcome: councilOutcomeAcceptedV0,
+	}); err != nil {
+		t.Fatalf("primera decision: %v", err)
+	}
+	_, err = store.SaveV0(councilReceiptV0{
+		CouncilRef: "c", InputFingerprint: "sha256:DISTINTA", Outcome: "council_decision_rework",
+	})
+	if !errors.Is(err, ErrCouncilReceiptConflictV0) {
+		t.Fatalf("reutilizar el council_ref con otra convocatoria debe chocar: %v", err)
+	}
+}
+
+// Un recibo ilegible NO es "no existe": tratarlo asi seria fail-open y permitiria
+// abrir la puerta del gate rompiendo un fichero.
+func TestCouncilReceiptCorruptoNoAbreLaPuertaV0(t *testing.T) {
+	dir := t.TempDir()
+	store, err := newCouncilReceiptStoreV0(dir)
+	if err != nil {
+		t.Fatalf("newCouncilReceiptStoreV0: %v", err)
+	}
+	corrupto := filepath.Join(dir, councilReceiptsDirNameV0, "roto.json")
+	if err := os.WriteFile(corrupto, []byte("{no soy json"), 0o600); err != nil {
+		t.Fatalf("escribiendo recibo corrupto: %v", err)
+	}
+	if _, _, err := store.LoadV0("roto"); !errors.Is(err, ErrCouncilReceiptCorruptV0) {
+		t.Fatalf("un recibo corrupto debe fallar, no pasar por inexistente: %v", err)
+	}
+	aceptada, err := store.CouncilDecisionAcceptedV0(context.Background(), "roto")
+	if err == nil || aceptada {
+		t.Fatalf("el gate debe fallar CERRADO ante un recibo ilegible: aceptada=%v err=%v", aceptada, err)
 	}
 }

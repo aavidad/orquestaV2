@@ -48,6 +48,7 @@ type serverProjectConfigFileV0 struct {
 	HermesOperator          serverProjectConfigHermesOperatorV0          `json:"hermes_operator,omitempty"`
 	OperatorDirectorMailbox serverProjectConfigOperatorDirectorMailboxV0 `json:"operator_director_mailbox,omitempty"`
 	CodebaseBroker          serverProjectConfigCodebaseBrokerV0          `json:"codebase_broker,omitempty"`
+	Council                 serverProjectConfigCouncilV0                 `json:"council,omitempty"`
 	WizardBot               serverProjectConfigWizardBotV0               `json:"wizard_bot,omitempty"`
 	TelegramOperator        serverProjectConfigTelegramOperatorV0        `json:"telegram_operator,omitempty"`
 	DomainWork              serverProjectConfigDomainWorkV0              `json:"domain_work,omitempty"`

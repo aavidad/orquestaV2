@@ -152,7 +152,7 @@ func buildStackMCPTransportBindingsV0(
 		NuevaApp:          codexStackNuevaAppExecutorV0{Clock: config.Clock},
 		NuevaAppWizard:    NewCodexStackNuevaAppWizardExecutorV0(config.AppIntakeAssistant),
 		NuevaAppWizardBot: NewCodexStackNuevaAppWizardBotExecutorV0(config.WizardBotAssistant),
-		ArrancarDirector:  arrancar,
+		ArrancarDirector:  newCouncilGatedArrancarDirectorExecutorV0(arrancar, config.CouncilGate),
 		PreviewDirector:   orquestamcp.NewMCPPreviewDirectorAppToolExecutorV0(),
 		ObserveDirectorGoal: NewCodexStackObserveAppDirectorGoalExecutorV0(
 			stack,

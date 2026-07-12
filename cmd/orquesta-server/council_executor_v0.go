@@ -32,6 +32,10 @@ type councilPersistentOverridesV0 struct {
 // interno al exterior.
 func councilPublicErrorClassifierV0(err error) (string, string, bool) {
 	switch {
+	case errors.Is(err, ErrCouncilReceiptConflictV0):
+		return "council_receipt_conflict", "council_ref", true
+	case errors.Is(err, ErrCouncilReceiptCorruptV0):
+		return "council_receipt_corrupt", "council_ref", true
 	case errors.Is(err, council.ErrAutorNoSeRevisaV0):
 		return "council_autor_no_se_revisa_a_si_mismo", "overrides", true
 	case errors.Is(err, council.ErrAdversarioMismaFamiliaV0):
@@ -126,9 +130,21 @@ func (executor councilExecutorV0) ConveneCouncilV0(
 	// Idempotencia: una decision ya tomada no se vuelve a tomar. Reconvocar el
 	// mismo council_ref devuelve el recibo durable, no un veredicto nuevo, que
 	// podria contradecir al anterior.
+	fingerprint := councilInputFingerprintV0(input)
 	if input.Action == orquestamcp.MCPCouncilActionDecideV0 {
-		if receipt, ok := executor.receipts.LoadV0(input.CouncilRef); ok && receipt.Outcome != "" {
-			return resultFromReceiptV0(receipt), nil
+		receipt, ok, err := executor.receipts.LoadV0(input.CouncilRef)
+		if err != nil {
+			return orquestamcp.MCPCouncilToolResultV0{}, err
+		}
+		if ok && receipt.Outcome != "" {
+			// Mismo consejo y misma convocatoria: reintento, devuelve lo decidido.
+			if receipt.InputFingerprint == fingerprint {
+				return resultFromReceiptV0(receipt), nil
+			}
+			// Mismo nombre, convocatoria distinta: no es un reintento, es un choque.
+			return orquestamcp.MCPCouncilToolResultV0{}, fmt.Errorf(
+				"%w: %s", ErrCouncilReceiptConflictV0, input.CouncilRef,
+			)
 		}
 	}
 
@@ -159,22 +175,26 @@ func (executor councilExecutorV0) ConveneCouncilV0(
 		result.Rationale = decision.Rationale
 		// La decision se hace durable ANTES de devolverla: si el servidor cae
 		// justo despues, el recibo ya esta en disco.
-		if err := executor.receipts.SaveV0(councilReceiptV0{
-			CouncilRef: result.CouncilRef,
-			AuthorRef:  result.AuthorRef,
-			Seats:      result.Seats,
-			Warnings:   result.Warnings,
-			Outcome:    result.Outcome,
-			Approvals:  result.Approvals,
-			Reworks:    result.Reworks,
-			Blocks:     result.Blocks,
-			Total:      result.Total,
-			Rationale:  result.Rationale,
-			Overrides:  input.Overrides,
-		}); err != nil {
+		guardado, err := executor.receipts.SaveV0(councilReceiptV0{
+			CouncilRef:       result.CouncilRef,
+			AuthorRef:        result.AuthorRef,
+			InputFingerprint: fingerprint,
+			Seats:            result.Seats,
+			Warnings:         result.Warnings,
+			Outcome:          result.Outcome,
+			Approvals:        result.Approvals,
+			Reworks:          result.Reworks,
+			Blocks:           result.Blocks,
+			Total:            result.Total,
+			Rationale:        result.Rationale,
+			Overrides:        input.Overrides,
+		})
+		if err != nil {
 			return orquestamcp.MCPCouncilToolResultV0{}, err
 		}
-		return result, nil
+		// Si otro escritor gano la carrera con la MISMA convocatoria, el veredicto
+		// que vale es el suyo: uno solo, no dos.
+		return resultFromReceiptV0(guardado), nil
 	default:
 		return orquestamcp.MCPCouncilToolResultV0{}, fmt.Errorf("council_action_desconocida: %q", input.Action)
 	}
