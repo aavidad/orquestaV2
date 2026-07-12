@@ -37,6 +37,22 @@ func TestBuildStackV0CableaCompatibilidadLegacySinActivarlaEnGoalFirstV0(t *test
 	}
 }
 
+func TestBuildStackV0EjecutarOrquestacionRecibePuertosLegacyRealesV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	executor, ok := stack.MCPTransportBindings.EjecutarOrquestacion.(orquestamcp.MCPEjecutarOrquestacionAppToolExecutorV0)
+	if !ok {
+		t.Fatalf("executor=%T", stack.MCPTransportBindings.EjecutarOrquestacion)
+	}
+	if executor.Ports.RunStore == nil || executor.Ports.EventSink == nil || executor.Ports.OutboxLedger == nil ||
+		len(executor.Ports.Dispatchers) == 0 || len(executor.Ports.BatchDispatchers) == 0 {
+		t.Fatalf("ports legacy incompletos: %+v", executor.Ports)
+	}
+	if reflect.TypeOf(executor.Ports.EventSink) != reflect.TypeOf(stack.Ports.EventSink) ||
+		reflect.TypeOf(executor.Ports.RunStore) != reflect.TypeOf(stack.Ports.RunStore) {
+		t.Fatalf("ejecutar_orquestacion no usa ports del stack: executor=%+v stack=%+v", executor.Ports, stack.Ports)
+	}
+}
+
 func TestBuildStackV0CableaDecisionYCapabilitiesSinTransportUnboundV0(t *testing.T) {
 	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
 	if stack.MCPTransportBindings.DirectorDecision == nil || stack.MCPTransportBindings.ToolCapabilities == nil {
