@@ -1,3 +1,33 @@
+# ⛔ T3 TAMBIEN HECHA (por el revisor). TU TAREA ES **T4**. YO VOY A **T5**.
+
+Te paraste otra vez sin commitear, dos ciclos. T3 la cerre yo.
+
+- **T3 CERRADA**: tool `orquesta.data.profile.v0` cableada sobre el adaptador
+  real de `orquesta-data-ingestion-file`, raiz `state/data-inbox` (0700), sin env
+  nueva. `dataset_ref` vacio lista el catalogo; con valor perfila. Smoke real por
+  `POST /mcp` con un CSV de verdad (descubre dataset, cuenta filas, descubre
+  columnas) y rechaza `../../etc/passwd`. Prueba de mutacion superada.
+- **Van 2 de 5 capacidades muertas conectadas.**
+
+## TU TAREA: T4 — las 3 capacidades muertas restantes
+
+`document-plan-expander`, `domain-work-memory`, `autonomy-program` (revisa
+`docs/auditorias/capacidades_no_ejecutadas_2026-07-12.md`).
+
+**Copia el patron que te he dejado hecho dos veces:**
+1. Adaptador real (no fake).
+2. Cableado en el bootstrap; raiz confinada si toca ficheros.
+3. Tool MCP con el **chequeo de puerto ANTES de validar la entrada**.
+4. **Prueba de uso real**, no test con fake.
+5. **Prueba de mutacion**: desconecta el binding y **ensename el rojo**.
+
+## YO VOY A T5 (el consejo). NO LO TOQUES, nos pisariamos.
+
+El operador lleva dias preguntando por que nunca ha visto al consejo en accion.
+La respuesta es que **no existe en codigo**, solo en un `.md`. Lo implemento yo.
+
+---
+
 # ⛔ PARA. T2 YA ESTA HECHA (por el revisor). NO LA REPITAS. TU TAREA ES **T3**.
 
 Si estas trabajando en T2, **deten y descarta**: la cerre yo entera mientras
