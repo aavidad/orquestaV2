@@ -12,7 +12,7 @@ ARG CODEX_NPM_VERSION=0.144.1
 ARG CLAUDE_CODE_NPM_VERSION=2.1.207
 ARG GEMINI_CLI_NPM_VERSION=0.50.0
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates tmux \
+    && apt-get install -y --no-install-recommends ca-certificates poppler-utils tmux \
     && npm install -g "@openai/codex@${CODEX_NPM_VERSION}" "@anthropic-ai/claude-code@${CLAUDE_CODE_NPM_VERSION}" "@google/gemini-cli@${GEMINI_CLI_NPM_VERSION}" \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system --gid 10001 orquesta \

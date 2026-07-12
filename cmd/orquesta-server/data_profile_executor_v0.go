@@ -120,16 +120,15 @@ func (executor dataProfileExecutorV0) catalogoV0() (map[string]ingestionfile.Sou
 	return catalogo, nil
 }
 
+// Solo CSV y JSON: son los unicos formatos que el adaptador sabe leer de verdad
+// (`adapter_v0.go:241`). Catalogar xlsx u ods seria anunciar una capacidad que no
+// existe y fallar en la llamada, que es justo la enfermedad que perseguimos.
 func dataSourceKindForFileV0(name string) (ingestion.DataSourceKindV0, bool) {
 	switch strings.ToLower(filepath.Ext(name)) {
 	case ".csv":
 		return ingestion.DataSourceKindCSVV0, true
 	case ".json":
 		return ingestion.DataSourceKindJSONV0, true
-	case ".xlsx":
-		return ingestion.DataSourceKindXLSXV0, true
-	case ".ods":
-		return ingestion.DataSourceKindODSV0, true
 	default:
 		return "", false
 	}
