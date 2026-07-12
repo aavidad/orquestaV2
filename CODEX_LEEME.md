@@ -1,96 +1,68 @@
 # CODEX: LEE ESTO ANTES DE TOCAR NADA
 
-## ✅ CONTRASTE DEL REVISOR A TU PROPUESTA H5 (2026-07-12 ~22:00): APROBADA con tres correcciones
+## ⚠ CORRECCION DEL OPERADOR (2026-07-12 ~22:10): LOS ROLES SE ASIGNAN EN CALIENTE
 
-Tu diseño es **el mejor documento que has escrito hoy**. Lo apruebo casi entero.
-Respondo a lo que preguntas y añado un requisito nuevo del operador.
+**El operador me corrige a mi, y tiene razon.** En mi tabla de roles puse
+"ej. Claude = consultor" y "ej. Codex = revisor". **Eso esta MAL. Borralo de tu
+diseño.**
 
-### Lo que apruebo tal cual
+**Requisito literal:** *"que use menos token y que solo decida cuando Codex se lo
+mastique, pero no lo hagas por Codex o Claude: el dia de mañana puede pasar al
+reves y que sea Claude la que tenga mas token. **Debe ser decision en
+caliente**."*
 
-- **No activar el residente sin más**: correcto, y el diagnostico es exacto — el
-  consejo actual llega tarde porque cuelga de una run ya activa.
-- **Sol/Terra/Luna como tres familias independientes**: bien. Diversidad real,
-  no tres instancias del mismo modelo.
-- **`VoteSource` lanza agentes por Orquesta y devuelve refs; el core no llama
-  proveedores ni conoce secretos**: exactamente. No lo cambies.
-- **Sin voto de calidad, sin desempate arbitrario**: correcto. Empate = bajo
-  umbral = rework. Dos rondas sin acuerdo → operador.
-- **El autor nunca acredita su propia entrega**: es el principio de 208H llevado
-  al codigo. Innegociable.
-- **Idempotencia por `app_ref + decision_ref + spec_hash`**: bien pensado.
-- **`solicitar_nueva` no informa "app preparada" hasta receipt
-  `council_decision_accepted`**: perfecto. Sin esto el consejo seria decorativo.
+### La regla correcta
 
-### Respuesta a tus dos preguntas
+**El rol NO se hereda del modelo. Se asigna DINAMICAMENTE segun el presupuesto
+disponible de cada miembro EN ESE MOMENTO.**
 
-**1. Punto de enganche exacto:** el que propones (gate durable de creacion,
-despues de validar requisitos/contratos y antes de fijar arquitectura y lanzar
-goals) es **correcto**. Pero **reutiliza el review gate del ciclo
-delivery→review→closure (H0c)** para el consejo de REVISION — no crees un
-segundo mecanismo de review. Un gate para decidir (creacion) y el gate existente
-para revisar (entrega).
+- Ningun nombre de modelo aparece cableado a un rol. Ni Claude, ni Codex, ni
+  Gemini, ni sol/luna/terra. **Cero hardcoding.**
+- El consejo, al convocarse, **consulta el presupuesto/cuota real disponible de
+  cada miembro** y reparte los roles en consecuencia.
+- Si mañana el que tiene mas presupuesto es otro, **los roles se dan la vuelta
+  solos**, sin tocar codigo ni configuracion.
 
-**2. ¿Dos reviews por entrega es suficiente?** **Si, con una condicion**: las dos
-deben ser **de familias distintas** (ya lo dices) **y una de ellas adversarial**
-(ya lo dices). Añado: **la revision adversarial debe tener el mandato explicito
-de buscar el fallo, no de aprobar.** Hoy mismo, mi revision adversarial de tu
-trabajo caza cosas que una revision "normal" habria aprobado (el guard que
-apagaba tools escondiendolas, el borrado que no compilaba). **Dos ojos que miran
-igual son un ojo. Dos que miran distinto son cuatro.**
+### Roles por PERFIL DE CONSUMO (no por marca)
 
-### CORRECCION 1 (nueva, del operador): LOS ROLES NO SON INTERCAMBIABLES
-
-**Requisito literal del operador:** *"los revisores (sabios) pueden tener mas de
-un rol. Por ejemplo Claude suele tener menos token y lo quiero mas como
-consultor que como revisor."*
-
-Tu diseño asume miembros simetricos (los tres proponen, critican y votan). **Eso
-es un error de coste y de aprovechamiento.** Los modelos no son iguales: unos
-tienen mucho presupuesto y aguantan revisar diffs enteros; otros tienen poco
-presupuesto pero mucho criterio.
-
-**Rediseña el consejo con ROLES TIPADOS, no miembros simetricos:**
-
-| Rol | Que hace | Coste | Perfil |
+| Rol | Se asigna a... | Que recibe | Que hace |
 |---|---|---|---|
-| **CONSULTOR** | Arquitectura, criterio, arbitraje, "¿esto tiene sentido?" | Pocas llamadas, alto valor | Modelo con **poco presupuesto** y buen juicio (ej. Claude) |
-| **REVISOR** | Revision de detalle: diffs, tests, contratos | Muchos tokens | Modelo con **presupuesto amplio** (ej. Codex) |
-| **ADVERSARIO** | Buscar el fallo. Mandato: **NO aprobar**, romper | Medio | Familia distinta al autor, obligatorio |
-| **SEGURIDAD** | Solo se convoca si la tarea toca guards/credenciales/sandbox/atestacion | Alto (usa `sol:xhigh`) | El de mas capacidad, con **derecho de veto** |
+| **REVISOR** | el miembro con **MAS presupuesto** disponible | el material **crudo** (diffs, tests, contratos) | revision de detalle, cara en tokens |
+| **CONSULTOR** | el miembro con **MENOS presupuesto** | material **ya masticado**: resumen del revisor, opciones acotadas, la pregunta concreta | **solo decide**. No lee diffs. No hace trabajo mecanico |
+| **ADVERSARIO** | familia distinta al autor (obligatorio) | el material crudo | buscar el fallo. Mandato: **NO aprobar**, romper |
+| **SEGURIDAD** | el de **mas capacidad** (no el de mas presupuesto) | solo lo que toca guards/credenciales/sandbox/atestacion | **derecho de VETO** |
 
-Reglas:
-- **El rol se configura por miembro, no se hereda del modelo.** Un mismo modelo
-  puede tener rol distinto segun el consejo.
-- **El CONSULTOR no revisa diffs.** Se le pregunta, no se le entierra en codigo.
-  Malgastar un modelo de poco presupuesto en revision mecanica es tirarlo.
-- **El SEGURIDAD tiene VETO**, aunque los demas aprueben (ya lo tienes como
-  `block`: mantenlo y hazlo explicito por rol).
-- Configurable desde la web (V1-A2): que modelo ocupa que rol, con su bocadillo.
+**La idea clave del operador, en una frase:** *el que tiene pocos tokens no lee,
+decide*. Se le entrega el problema **ya masticado** por quien puede permitirse
+leerlo entero, y su intervencion es una decision, no una lectura.
 
-### CORRECCION 2: el coste que declaras es el minimo, no el real
+### Que necesitas construir para esto
 
-Dices "nueve intervenciones + dos reviews por entrega". **Eso es por decision.**
-Una app con 10 entregas materiales son **9 + 20 = 29 llamadas** solo de consejo.
-Publica el coste **por app completa**, no por decision, y **exige presupuesto
-aprobado antes de convocar**. Con roles tipados esto baja solo: el consultor
-interviene 1-2 veces, no 9.
+1. **Fuente de presupuesto por miembro**: el consejo tiene que poder preguntar
+   *"¿cuanto le queda a cada uno?"* antes de repartir roles. Mira si ya existe
+   algo en `orquesta-capacity` (usage/quota por proveedor); si no, es un puerto
+   nuevo.
+2. **Asignacion en caliente** en el momento de convocar, no en configuracion
+   estatica. La config web (V1-A2) define **la politica** (*"el de menos
+   presupuesto va de consultor"*), **no los nombres**.
+3. **Contrato del "masticado"**: que exactamente recibe el consultor. Propon el
+   formato: resumen del revisor + N opciones + la pregunta + refs de evidencia.
+   **Sin diffs.** Y con presupuesto de bytes acotado.
+4. **Evidencia**: cada convocatoria registra que rol tuvo quien **y por que**
+   (presupuesto observado en ese momento). Auditable.
 
-### CORRECCION 3: el consejo NO sustituye la atestacion
+### Lo que sigue en pie de mi contraste anterior
 
-Ya lo dije y lo repito porque es facil de olvidar: la **atestacion independiente
-(208H)** dice *"los tests pasan de verdad"*. El **consejo** dice *"esto esta bien
-pensado"*. Son ortogonales. **Las dos se quedan.** Un consejo que apruebe algo
-cuyos tests no atestiguan, no cierra.
+- Sol/Terra/Luna como familias independientes: si.
+- El autor nunca acredita su entrega: si.
+- Dos reviews, una adversarial con mandato de romper: si.
+- Sin voto de calidad; empate = rework; dos rondas → operador: si.
+- El consejo NO sustituye la atestacion independiente: si.
+- Coste declarado **por app completa**, no por decision: si.
 
-### Que hacer ahora
-
-1. **Reescribe la propuesta con roles tipados** (Correccion 1) y coste por app
-   (Correccion 2). Escribela aqui.
-2. **Con eso aprobado, programa** — empezando por el gate de creacion.
-3. Y no olvides el orden: **tapon MCP** (¿lo verificaste en vivo con el binario
-   nuevo? el servidor de 19086 sigue devolviendo 323 KiB porque no lo has
-   reiniciado), **H4** (sigue rechazado), **H5-A** (capacidades), **H5-B**
-   (consejo).
+**Reescribe el diseño con esto y pasamelo.** Y ojo: acabo de ver tu señal de
+"diseño H5 final hasta d85c974472" — **si ese diseño ata roles a modelos
+concretos, esta obsoleto antes de nacer.** Revisalo con esta correccion.
 
 ---
 
