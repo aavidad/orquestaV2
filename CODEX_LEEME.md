@@ -36,6 +36,56 @@ una referencia viva.
 
 ---
 
+## 0-ter. ⚠️ H4: EVIDENCIA ACEPTADA, PERO **CONGELO 2 BORRADOS** POR ORDEN DE SECUENCIA
+
+**Lo que apruebo.** La verificacion por simbolo en worktrees disjuntos es
+**valida y suficiente**. La contraste yo:
+- 55, 56 y 67 son CONSERVAR: correcto, rompen con `undefined`. Buena captura.
+- El matiz de los imports huerfanos (4 y 28) lo **acepto**: retirar la funcion y
+  su import es una sola mutacion mecanica, no una referencia viva.
+- Contraste propio: `go build ./...` **no compila los tests de otros paquetes**,
+  asi que tu prueba tenia ese hueco. Lo he tapado yo grepeando los exportados de
+  riesgo (`CliPublicErrorCodeKnownV0`, `DefaultDocumentExtractionPolicyV0`,
+  `NewMCPArrancarDirectorAppErrorResultV0`,
+  `DefaultDirectorAgentDecisionBatchBudgetV0`, `NuevaAppI18nTextV0`):
+  **cero usos, ni siquiera en `_test.go`**. Tu tabla aguanta.
+
+**Lo que CONGELO. Error de secuencia, no de metodo.**
+
+Dos de tus 17 BORRAR viven en **`orquesta-document-extraction`**:
+
+    | 28 | documentToolPublicErrorV0        | BORRAR |
+    | 29 | DefaultDocumentExtractionPolicyV0 | BORRAR |
+
+**Ese modulo es una de las capacidades muertas que H5-A va a CONECTAR**, y del
+que depende el informe del Baremador (leer PDFs). `DefaultDocumentExtractionPolicyV0`
+es *la politica por defecto de extraccion*: en cuanto cablees la capacidad, el
+conector la va a necesitar. Borrarla hoy para reescribirla el martes no es
+limpieza, es churn.
+
+**Orden del operador, literal:** *"no es borrar por borrar. Si hay funciones que
+no tienen conector pero si serian buenas, se programan."*
+
+Un simbolo sin caller **en un modulo que aun no esta enchufado** no es codigo
+muerto: es **codigo huerfano**. La diferencia importa. Muerto = nadie lo querra.
+Huerfano = nadie lo ha conectado *todavia*.
+
+### Instruccion vinculante
+
+1. **Autorizado a borrar YA: los 15 restantes.** Son duplicados y helpers de
+   `cmd/orquesta-server`, `orquesta-cli`, `orquesta-web`, `orquesta-mcp`,
+   `orquesta-director-agent-workflow`. Adelante, commit propio, guards verdes.
+2. **CONGELADOS 28 y 29** hasta que H5-A termine. Reparto: **38/15/46 = 99**,
+   con 28 y 29 en un cuarto cubo: **DIFERIDO (revisar tras H5-A)**.
+3. **Regla general que aplicas de ahora en adelante:** ningun BORRAR puede caer
+   en un modulo listado en `capacidades_no_ejecutadas_2026-07-12.md` mientras esa
+   capacidad siga sin conectar. Primero se conecta, **luego** se ve que sobra.
+   Aplica igual a `orquesta-data-ingestion` y al resto de capacidades muertas.
+4. **Siguiente frente: H5-A.** Empieza por `document-extraction` y
+   `data-ingestion` — son los que desbloquean el Baremador.
+
+---
+
 ## 0-bis. ✅ TU AUTO-RECHAZO DEL REWORK 4 ES CORRECTO. Adelante con los worktrees.
 
 Te has rechazado a ti mismo el rework 4 y **has acertado en los tres motivos**.
