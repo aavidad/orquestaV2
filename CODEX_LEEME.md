@@ -1,59 +1,94 @@
 # CODEX: LEE ESTO ANTES DE TOCAR NADA
 
-## 🔍 HALLAZGO DEL OPERADOR (2026-07-12 ~21:30): el CONSEJO DE DECISION nunca se ejecuta
+## 🎯 H5 AMPLIADO (2026-07-12 ~21:45): CABLEAR TODAS LAS CAPACIDADES MUERTAS + CONSEJO EN TIEMPO DE CREACION
 
-El operador pregunta: *"una de las fases de los agentes es crear un grupo de
-discusion para crear las apps, pero no los he visto nunca en accion. ¿Por que?"*
+**Decision del operador: LO QUIERE TODO.** Ninguna capacidad se retira; se
+cablean las siete. Y ademas, el consejo cambia de alcance (ver H5-B).
 
-**Tiene razon: el consejo existe en el codigo y NUNCA se ha ejecutado.** Lo
-investigue y son **dos causas apiladas**:
+Auditoria de referencia: `docs/auditorias/capacidades_no_ejecutadas_2026-07-12.md`.
 
-### Causa 1: el VoteSource nunca se construye en el servidor real
+### H5-A. Cablear las cinco capacidades que el servidor ni importa
 
-- El consejo vive en `modulos/orquesta-app-codex-stack/resident_director_council_v0.go`
-  y `resident_director_council_votes_v0.go`.
-- Se activa solo si `DecisionCouncilConfigV0.VoteSource != nil`.
-- **`grep -rn "VoteSource" cmd/orquesta-server/` → CERO resultados.**
-  Nadie lo construye nunca en la composicion real. Es un puerto **declarado y
-  jamas cableado**: exactamente el mismo patron que las seis tools muertas de
-  H1b y las validaciones muertas de H4.
+Estas cinco tienen codigo completo y tests propios, pero **la composicion real
+ni las importa**, asi que **jamas se han ejecutado**:
 
-### Causa 2: el consejo cuelga del DIRECTOR RESIDENTE, y el residente esta apagado
+| Modulo | Que hace |
+|---|---|
+| `orquesta-document-extraction` | Extraer campos tipados de documentos |
+| `orquesta-data-ingestion` | Ingesta de datos (CSV/JSON) con receipts |
+| `orquesta-presentation-extraction` | Extraccion de presentaciones |
+| `orquesta-autonomy-program` | Programa padre durable (DAG de goals/tareas) |
+| `orquesta-document-plan-expander` | Convierte plan documental en jobs de dominio |
 
-- El unico punto que lo invoca es
-  `resident_director_briefing_loop_v0.go:487` (`shouldMaterializeDecisionCouncilV0`),
-  dentro del **briefing loop del director residente**.
-- Y el residente estuvo **desactivado en las pruebas** que hemos hecho:
-  `ORQUESTA_SERVER_RESIDENT_DIRECTOR_ENABLED=false`.
-- **El consejo NO forma parte del ciclo del goal**: `grep Council` en
-  `orquesta-goal`, `orquesta-app-director-service` y `orquesta-autoprogramming`
-  → **cero**. Es decir, un goal normal (prepare-run → goal → cierre) **jamas
-  pasa por el consejo**, aunque el residente estuviera encendido.
+Para **cada una**, y en **commits separados**:
 
-**Resumen:** el consejo no es una fase del ciclo de creacion de apps. Es una
-rama del director residente que nadie cableo. Por eso el operador nunca lo vio:
-**no es que fallara, es que no existe en el camino de ejecucion.**
+1. **Tool MCP + endpoint HTTP** (contrato claro; ninguna tiene tool hoy).
+2. **Wiring real** en `orquesta-app-codex-stack` y `cmd/orquesta-server`.
+3. **Debe aparecer VIVA en el guard exhaustivo** del catalogo MCP: si se
+   registra, **responde**. Nada de puertos a `nil` (el pecado de H1b).
+4. **Prueba en vivo**, no solo unit: `tools/call` real que devuelva algo util.
+5. `orquesta-work-profiles` es un **placeholder sin codigo** (0 ficheros .go):
+   ese si, retiralo o dale contenido — dilo tu y lo decide el operador.
 
-### Hito H5 (asignado): resucitar el consejo de decision
+**Prioridad dentro de H5-A:** `document-extraction` + `data-ingestion` PRIMERO.
+Son exactamente lo que necesita el informe del Baremador que el operador tiene
+pendiente (extraer datos de un PDF de proceso selectivo). Es la capacidad con
+demanda real ya sobre la mesa.
 
-**Antes de programar nada, escribe aqui y espera mi visto bueno:**
+### H5-B. El consejo de sabios, TAMBIEN en tiempo de creacion (spec del operador)
 
-1. **Que hace hoy el consejo** leyendo el codigo (`resident_director_council_v0.go`):
-   quien vota, sobre que, como se resuelve el empate, que evidencia deja.
-2. **Donde deberia engancharse** para que el operador lo vea de verdad. Mi
-   hipotesis (verificala): la decision de **arquitectura/plan de una app nueva**,
-   ANTES de lanzar el goal — que es justo donde un debate aporta y donde el
-   operador espera verlo.
-3. **Que falta**: el `VoteSource` real (¿quien vota? ¿varios modelos? ¿director
-   + revisor?), y el cableado en `cmd/orquesta-server`.
-4. **Coste**: un consejo son N llamadas a modelo por decision. Propon cuando se
-   activa (¿solo en apps nuevas? ¿solo si la complejidad supera un umbral?) para
-   que no dispare el gasto en cada goal trivial.
+**Requisito literal:** *"el consejo de sabios tambien vendria bien en tiempo de
+creacion para ir revisando a pares el trabajo. Cuatro o seis ojos son mejores
+que dos."*
 
-**No lo cablees a lo bruto.** Un consejo que vota en cada goal es un incendio de
-cuota. Quiero el diseno primero.
+Esto **cambia el alcance** de H5. El consejo ya no es solo una decision previa
+(que app construir), sino **revision por pares DURANTE el trabajo**.
 
-**Prioridad:** despues del tapon MCP y de H4 (que sigue rechazado).
+**Diseno (escribelo aqui y espera mi visto bueno ANTES de programar):**
+
+1. **Dos momentos, no uno:**
+   - **Consejo de PLAN** (antes del goal): decide arquitectura/enfoque de la app.
+   - **Consejo de REVISION** (durante): revisa el trabajo producido por pares,
+     antes de que el cierre lo acepte.
+2. **Como encaja con lo que YA existe** (no reinventes):
+   - La **atestacion independiente** (208H) ya garantiza que los tests los
+     verifica un tercero. El consejo **no la sustituye**: la atestacion dice
+     *"los tests pasan de verdad"*; el consejo dice *"esto esta bien pensado"*.
+     Son cosas distintas y ambas deben quedar.
+   - El **review gate** del ciclo delivery→review→closure (H0c) ya es el punto
+     natural de enganche del consejo de revision. **Miralo antes de inventar
+     otro sitio.**
+3. **Quien vota** (propon y justifica): ¿modelos distintos? ¿el mismo modelo con
+   roles distintos (arquitecto / critico / seguridad)? ¿director + revisor?
+   **Cuatro o seis ojos, pero de quien.**
+4. **Como se resuelve el desacuerdo**: mayoria, veto de seguridad, o escalada al
+   operador. **Mi opinion: veto de seguridad.** Si un solo miembro dice "esto
+   relaja un guard / toca credenciales / rompe un contrato", **bloquea**, aunque
+   los demas aprueben. Hoy mismo hemos visto por que: un cambio "trivial" puede
+   ser critico.
+5. **COSTE — esto es lo que mas me preocupa.** Un consejo son N llamadas a modelo
+   por decision. Un consejo revisando **cada tramo de cada goal** es un incendio
+   de cuota. Propon:
+   - **cuando se convoca** (¿solo en apps nuevas? ¿solo si la tarea supera un
+     umbral de complejidad o de **criticidad de seguridad**?),
+   - **con que modelos** (usa el routing por criticidad que estamos disenando:
+     un consejo de seguridad critica va a `sol:xhigh`; uno rutinario, no),
+   - **presupuesto por goal**, y que hacer al agotarlo (¿degradar a un solo
+     revisor? ¿bloquear?).
+6. **Evidencia durable**: cada voto deja rastro (quien voto que y por que). Sin
+   eso no se puede auditar una decision del consejo, y seria un agujero nuevo.
+
+### Reglas que no cambian
+
+- Diseno primero, **aprobacion mia**, y luego codigo. Nada de cablear a lo bruto.
+- Commits pequenos, guards reejecutados, sin envs nuevas (426/426: **sin
+  margen**), sin tocar modelos/routing/seguridad sin anunciar.
+
+**Orden de trabajo actualizado:**
+1. **Tapon MCP** (bloquea el producto: status 323 KiB vs 64 KiB).
+2. **H4** (sigue RECHAZADO: la entrada 15 propone un borrado que no compila).
+3. **H5-A** (cablear capacidades; empezando por document-extraction + data-ingestion).
+4. **H5-B** (consejo: diseno primero).
 
 ---
 
