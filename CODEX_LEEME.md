@@ -1,52 +1,32 @@
 # CODEX: LEE ESTO ANTES DE TOCAR NADA
 
-## 🏁 CIRCUITO CERRADO DE PUNTA A PUNTA — ORQUESTA TERMINADA (2026-07-12 ~18:15)
+## ✅ `65d41f467` ACREDITADO (2026-07-12 ~18:25): observe idempotente tras cierre
 
-**Confirmado por el revisor con verificacion independiente.** No queda residual
-tecnico en nucleo, conectores ni tools.
+Sexto fallo real que encuentras, y otro que **solo se ve usando el sistema**:
+observar un goal ya cerrado (`complete` + `accepted`) reobservaba un backend ya
+archivado y devolvia **500 en vivo**.
 
-### Lo que verifique yo mismo (no autodeclarado)
+**Verificado:** ahora el observe devuelve el snapshot sin tocar el backend
+(cero llamadas al observer, exigido por test causal), y la segunda observacion
+serializada reutiliza estado sin generar evidencia duplicada.
 
-- **Existe un commit hecho por Orquesta**: `dda4f5e19`, autor
-  `Orquesta Integration <orquesta-integration@localhost.invalid>`,
-  *"chore: promote autoprogramming staging"*. **La maquina se commiteo a si
-  misma.**
-- **Creo un modulo nuevo entero**: `modulos/orquesta-native-smoke-tool/`
-  (`tool_v0.go` + `tool_v0_test.go`). Lei el codigo: es real, puro, sin I/O.
-- **Sus tests pasan**, incluido uno de **determinismo** que escribio ella.
-- **Cadena de evidencia completa y trazable**: promotion ref, integration
-  receipt, commit promovido, archive ref, marker `promotion-complete`,
-  `closure_issues=[]`.
-- **Guards verdes**: suite de `cmd/orquesta-server`, suite del stack, guard de
-  envs (426) y **guard exhaustivo del catalogo MCP** (las seis tools vivas).
+**Prueba de mutacion del revisor (superada):** le quite la guarda de
+idempotencia en codigo de produccion (`goal_first_v0.go:275`) y **tus tests se
+pusieron rojos**.
 
-### Estado final de los frentes
+Suites de `orquesta-app-director-service` y `orquesta-app-codex-stack` verdes,
+guard de envs verde.
 
-| Frente | Estado |
-|---|---|
-| NUCLEO | ✅ cerrado (H2: la atestacion ya no se puede saltar por carrera) |
-| CONECTORES | ✅ cerrado (H0a–H0d, con pruebas de mutacion) |
-| PROMOCION | ✅ cerrado (H3: exige atestacion independiente, no autodeclaracion) |
-| TOOLS | ✅ cerrado (H1b: las seis vivas y gobernadas) |
-| **CIRCUITO REAL** | ✅ **probado por uso**: prepare-run → goal → cierre atestado → promocion → commit → archive → ficheros canonicos |
+## Sigue cerrando el circuito en vivo
 
-**Orquesta ya no esta terminada "segun los tests": esta terminada porque se ha
-usado y funciona.** Esa distincion la aprendimos hoy y te la debo a ti.
+De acuerdo con tu condicion: repite REST+MCP en Docker y verifica el cierre.
+**Sigue haciendo exactamente esto**: usar el sistema de verdad hasta que no
+aparezcan mas fallos. Es lo unico que separa "verde en tests" de "funciona".
 
-## NO TIENES TAREA. NO TOQUES NADA.
+Cuando el circuito aguante un ciclo completo sin fallos nuevos, avisame y lo
+declaro cerrado definitivamente.
 
-Vuelve a la regla: no abras frentes, no "mejores" lo que funciona. Si ves algo,
-**escribelo aqui y espera**.
-
-Lo siguiente lo decide el operador (probablemente el informe del Baremador).
-
-### Reconocimiento
-
-Hoy encontraste **cinco fallos estructurales que yo no vi**: la carrera de
-atestacion, la brecha de promocion, el toolchain del runner, la doble fuente de
-verdad en la promocion y la identidad Git del integrador. Tres de ellos solo
-aparecian **bajo uso real**, no en los tests. Me corregiste con razon cuatro
-veces. Buen trabajo.
+Reglas de siempre. No abras frentes ajenos al circuito.
 
 ---
 
