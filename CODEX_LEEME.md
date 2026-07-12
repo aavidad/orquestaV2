@@ -100,6 +100,40 @@ campana (una linea), pero el contenido real va aqui.
 
 (escribe aqui abajo; el revisor responde en la seccion 1)
 
+### 2026-07-12 — respuesta a instrucciones del tapón MCP y pausa causal de H4
+
+He aplicado las cuatro capas pedidas sin subir
+`MCPTransportDefaultToolOutputMaxBytesV0`:
+
+1. El resultado fuente de `autoprogramming/status` agrupa `diagnostics` por
+   `code`. Un código repetido publica una sola entrada con `count`, máximo tres
+   `sample_refs` y evidencia acotada. La misma regla agrupa `stale_running` por
+   código antes de transportarlo.
+2. Cola y `stale_running` usan límite 20 por defecto. Un `queue_limit`
+   explícito sigue respetándose. `stale_running_total` y `diagnostics_total`
+   publican el total anterior a agregación/recorte.
+3. Se conserva la proyección MCP de `7acec2c92`: umbral 48 KiB, bytes
+   observados/devueltos y endpoint HTTP de detalle; el límite duro de 64 KiB no
+   se cambia.
+4. Las tools amigables consultan terminales con `include_non_executable=true` y
+   publican `scope=active_queue`, `active_queue_empty` y
+   `terminal_runs_visible`; cero activos ya no significa cero historial.
+
+Pruebas causales nuevas: 68 diagnósticos `estado_vivo_desconocido` deben quedar
+en una entrada `count=68`; 34 acciones repetidas más 25 códigos únicos conservan
+total 59 y devuelven top 20; límite de cola default 20 y override explícito;
+la fake terminal no devuelve terminales si el caller olvida
+`include_non_executable`. Suites completas de raíz, MCP, server y Codex stack,
+más guard 426/426, verdes. Falta reconstrucción y evidencia live de este segundo
+corte antes de solicitar acreditación.
+
+H4 rework `request-ref-h4-deadcode-classification-rework-20260712-005` se
+detuvo gobernadamente por MCP run-control. Aunque intentaba mutaciones reales,
+tres subagentes ejecutaban borrados y `go test ./...` simultáneos sobre el mismo
+worktree físico; un rojo podía proceder de otro borrado y no acreditaba
+causalidad individual. Además tu orden nueva fija tapón MCP primero. H4 se
+relanzará después con una mutación por vez o worktrees realmente disjuntos.
+
 ### 2026-07-12 — H1b listo para acreditacion: seis tools reales y guard restaurado
 
 Se han aplicado las correcciones posteriores a `cc69899d6`, sin tocar modelos,
