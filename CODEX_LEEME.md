@@ -1,71 +1,59 @@
 # CODEX: LEE ESTO ANTES DE TOCAR NADA
 
-## ⚠ RETRACTACION DEL "CIERRE DEFINITIVO" (2026-07-12 ~18:45)
+## 🧹 HITO H4 (asignado 2026-07-12 ~19:00): AUDITORIA DE CODIGO INALCANZABLE
 
-**Sonyi (Hermes) tenia razon y yo me equivoque.** Declare el cierre definitivo
-**sin ejecutar** un test que estaba en rojo. Lo retiro y lo cuento entero,
-porque la leccion importa mas que el cartel.
+**Orden del operador, literal: "no es borrar por borrar. Si hay funciones que
+no tienen conector pero si serian buenas, se programan."**
 
-### Lo que Sonyi encontro (correcto)
+Esto NO es una poda. Es una **auditoria con tres salidas posibles por funcion**.
 
-    GOPROXY=off go test -mod=vendor -count=1 . \
-      -run '^TestGoalFirstProcessBackendsE2EV0ReworkThenClose$'
-    FAIL: claude/gemini -> goal_work_lifecycle_invalid: ports.goal_state_cas_store
+### El dato (medido por el revisor con la herramienta oficial)
 
-Lo reproduje: **fallaba de verdad**. Su exigencia era la correcta: *"no acepto
-un cierre por documentacion"*. Es exactamente la disciplina de este proyecto.
+    go run golang.org/x/tools/cmd/deadcode@latest -test ./...
 
-### El diagnostico (verificado, no opinado)
+- **99 funciones inalcanzables**: **77 en produccion** + 22 en tests.
+- Listado completo: `docs/auditorias/codigo_inalcanzable_2026-07-12.txt`
+- Ademas: `env_vars_orquesta = 426/426` y `test_only = 103/103`. **Estamos
+  clavados en el tope**: la proxima env que alguien anada rompe el guard. No es
+  "limpio", es "justo".
 
-**No era un bug de producto. Era el test.**
+### Las tres salidas (clasifica CADA funcion, una por una)
 
-- **H2** (el arreglo de la carrera de atestacion) endurecio el lifecycle: ahora
-  exige un store con **CAS** para serializar observaciones por run.
-- El **store real de produccion** (`orquesta-state-file`) **ya implementa**
-  `CompareAndSwapGoalWorkStateV0`, con **6 tests propios verdes**.
-- El que NO lo implementaba era el **fake** de ese E2E. Es decir: el test
-  probaba **un store que no existe en produccion**, y el lifecycle lo rechazaba
-  con razon.
+1. **CONECTAR** — la funcion es buena y deberia estar en uso, pero nadie la
+   llama. **Se programa el conector.** Ejemplos que veo a simple vista y que
+   huelen a esto (verificalo tu):
+   - `ValidateStrictEventSequenceV0` (core-workflow/replay): validar la
+     secuencia estricta de eventos... y no se usa. ¿Por que no?
+   - `ValidateOrchestrationEventPayloadBudgetV0`: presupuesto de payload de
+     eventos, sin llamar.
+   - `DecodeAgentTimeoutAssessmentV0` y `AgentLeaseEvaluationInputV0.Validate`
+     (core-leases): evaluacion de timeouts/leases de agentes, muerta — y
+     acabamos de arreglar H2, que va justo de leases.
+   - `DirectorAgentDecisionValidV0`: validacion de decisiones del director.
+   **Estas son las importantes.** Codigo de validacion muerto = garantia que
+   creemos tener y no tenemos.
 
-La alarma sonaba en el simulador, no en el motor.
+2. **BORRAR** — muerto de verdad: wrappers, helpers duplicados, restos de
+   refactor. Bórralo. (Autorizacion permanente del operador, con git como red.)
 
-### El arreglo (`8a969a52b`)
+3. **CONSERVAR CON MOTIVO** — falso positivo (reflexion, interfaces,
+   `Error()` de tipos de error que sí se usan por la interfaz `error`, API
+   publica consumida desde fuera). **Documenta el motivo**; no lo borres ni lo
+   conectes.
 
-El fake implementa CAS **con versionado real y conflicto tipado**, NO un stub
-que diga "si" a todo. Un stub complaciente habria puesto el test verde
-ocultando el problema — que es justo lo que Sonyi teme, y con razon.
+### Como quiero el trabajo
 
-Resultado: **el E2E pasa y ahora prueba el mismo contrato que corre en
-produccion**, cosa que antes no hacia.
+- **Un fichero de clasificacion primero**: `docs/auditorias/clasificacion_codigo_inalcanzable_2026-07-12.md`
+  con las 99 y su salida (conectar/borrar/conservar + motivo). **Antes de tocar
+  codigo.** Lo reviso.
+- Luego, **un commit por grupo pequeno**, empezando por las de **CONECTAR**
+  (son las que importan: son garantias que no estan enchufadas).
+- Guards reejecutados antes de cada commit. Sin envs nuevas (no hay margen).
+- Sin tocar modelos, routing ni seguridad.
 
-### Segundo punto de Sonyi: `projects=0 tasks=0 runs=0` en MCP
-
-Tambien tiene fundamento, aunque no es un bug de correccion. Verificado en el
-servidor vivo:
-
-    estado: ok | projects: 0 | tasks: 0 | agents: 0
-    queue ranked: 0 | queue terminal: 34
-
-Es **coherente**: no hay trabajo activo (ranked=0), y projects/tasks/agents se
-proyectan desde runs activos. Los 34 runs terminales existen y estan ahi.
-
-**PERO es una carencia real de observabilidad**: un operador que abre el status
-ve `0/0/0` y concluye "esto esta vacio o roto", cuando en realidad hay 34 runs
-cerrados. Queda anotado como mejora (no bloqueante, no urgente): el status
-deberia distinguir *"no hay nada activo"* de *"no hay nada"*.
-
-### Estado real, sin adornos
-
-- El circuito funciona y esta probado por uso (hay un commit hecho por la propia
-  Orquesta integrando un modulo que ella escribio: `dda4f5e19`).
-- Los seis fallos de la tarde estan cerrados con pruebas de mutacion.
-- **Y aun asi, un test estaba rojo y yo no lo mire.** El sistema esta sano; mi
-  proceso de cierre no lo estaba.
-
-**Regla nueva, para mi el primero:** antes de declarar cualquier cierre, se
-ejecuta la suite completa del paquete raiz, no solo los focales de lo tocado.
-Un cierre sin ejecutar todo es un cartel bonito pegado sobre una alarma
-encendida — la frase es de Sonyi y me la quedo.
+**Ojo con el sesgo facil:** borrar es comodo y da la sensacion de progreso. Lo
+valioso aqui es **encontrar las validaciones muertas y enchufarlas**. Si una
+funcion de validacion lleva meses sin llamarse, tenemos un agujero, no basura.
 
 ---
 
