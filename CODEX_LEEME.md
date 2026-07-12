@@ -1,46 +1,31 @@
 # CODEX: LEE ESTO ANTES DE TOCAR NADA
 
-## ⚠ REENCAUZAMIENTO DEL REVISOR (2026-07-12 ~15:45): PARA DE PREPARAR Y ARREGLA H2
+## NOTA DEL REVISOR (2026-07-12 ~16:10): PARTE H2 EN COMMITS PEQUENOS
 
-Tu trabajo de hoy tiene valor real: H0b/H0c acreditados con tests que muerden,
-el runner reparado (pin, toolchain, GOTMPDIR) y **tres fallos estructurales
-que yo no vi** (H2, H3, toolchain). Eso es trabajo de primera.
+Veo que estas en H2 (bien: `goal_first_repair_receipt_v0.go`, wiring del stack,
+tests). Pero llevas **25 ficheros abiertos sin commitear**, 8 de ellos tests.
 
-**Pero llevas horas en infraestructura y los tres frentes que importan siguen
-a cero:** H2 sin empezar, H3 sin empezar, las seis tools siguen muertas (el
-guard sigue diciendo `NO cableadas (6)`).
+Un cambio de 25 ficheros de una pieza es dificil de revisar y facil de colar
+cosas sin querer. Partelo, en este orden natural (cada uno con su test):
 
-### El error de razonamiento que te esta bloqueando
+1. **Repair delega en el lifecycle** (la raiz): que `repairGoalFirstReceipt*`
+   capture snapshot y ateste antes de validar, en vez de llamar al validator a
+   pelo. Test: falla si el repair valida sin atestar.
+2. **Claim con lease/owner/expiry + reclaim**. Test: claim abandonado se
+   recupera sin dejar pasar un cierre sin atestacion.
+3. **Serializacion por run** (observer residente vs observe manual) con fusion
+   de receipts. Test de **carrera concurrente real**: falla si dos
+   observaciones simultaneas pierden receipts o dejan pasar un cierre.
+4. **Observe HTTP desacoplado** (202 + poll/wakeup).
 
-Estas esperando a tener el runner perfecto para atacar H2. **H2 NO NECESITA EL
-RUNNER.**
+Si ya lo tienes todo entrelazado y partirlo cuesta mas que cerrarlo, cierralo
+de una pieza — pero **avisame en este fichero** de que va todo junto, para que
+lo revise con mas cuidado. No lo hagas en silencio.
 
-H2 es codigo y tests puros:
-- que `repairGoalFirstReceipt*` delegue en el lifecycle (capturar snapshot +
-  atestar) en vez de llamar al validator a pelo;
-- lease/owner/expiry + reclaim en
-  `goal_required_test_attestation_store_v0.go`;
-- serializacion por run entre observer residente y observe manual;
-- HTTP observe desacoplado (202 + poll) para que el deadline no mate trabajo
-  durable.
-
-Todo eso se hace **en local, con `go test`**. Sin Docker, sin goals, sin API,
-sin runner. La ola de goals es una forma de trabajar, no un requisito.
-
-### Orden directa
-
-1. **Ataca H2 AHORA, en local, con tests.** Un test de carrera concurrente que
-   falle si dos observaciones dejan pasar un cierre sin atestacion. Un test de
-   claim abandonado que demuestre el reclaim. Un test que falle si el repair
-   valida sin atestar.
-2. Cuando H2 este verde y acreditado por mi (con prueba de mutacion), sigues
-   con H3, y luego H1b.
-3. **No mas infraestructura** salvo que un frente la exija de verdad. El taller
-   ya esta suficientemente montado.
-
-Si crees que me equivoco y H2 necesita el runner, dimelo con el motivo
-concreto. Pero no sigas preparando entorno mientras el nucleo tiene una
-carrera que puede acreditar mal los tests.
+Recordatorio de lo que verificare: prueba de mutacion propia (rompo un eslabon
+DISTINTO al que tu pruebes), guard de envs (426), sin envs nuevas sin
+reejecutar el guard, sin relajaciones de seguridad sin anunciar, sin tocar
+modelos ni routing.
 
 ---
 
