@@ -460,10 +460,14 @@ func (backend serverCodexAppServerTmuxBackendV0) waitForTmuxSocketV0(
 	socketPath := strings.TrimSpace(backend.SocketPath)
 	nextSessionCheck := time.Now()
 	var lastPreflightErr error
+	lastObservationIssue := ""
 	for {
 		if ctx.Err() != nil {
 			if lastPreflightErr != nil {
 				return lastPreflightErr
+			}
+			if lastObservationIssue != "" {
+				return codexAppServerCallErrorV0{Code: lastObservationIssue, Err: ctx.Err()}
 			}
 			return backend.tmuxStartupFailureV0("codex_app_server_tmux_socket_timeout", ctx.Err())
 		}
@@ -473,11 +477,21 @@ func (backend serverCodexAppServerTmuxBackendV0) waitForTmuxSocketV0(
 		}
 		if marker.SocketOwnerPID > 0 {
 			current, currentOK := backend.readTmuxOwnerMarkerV0()
+			if !currentOK {
+				lastObservationIssue = "codex_app_server_tmux_marker_observation_transient"
+			}
 			if currentOK && !reflect.DeepEqual(current, marker) {
 				return codexAppServerTmuxConflictErrorV0(codexAppServerTmuxGenerationConflictV0)
 			}
 			tmuxObservation := backend.observeRecordedTmuxGenerationV0(ctx, tmuxPath, marker)
 			appObservation := marker.observeAppServerV0(socketPath)
+			if tmuxObservation == codexAppServerTmuxGenerationTransientV0 {
+				lastObservationIssue = codexAppServerTmuxObservationTransientV0
+			} else if appObservation == codexAppServerTmuxGenerationTransientV0 {
+				lastObservationIssue = "codex_app_server_tmux_socket_owner_observation_transient"
+			} else if currentOK {
+				lastObservationIssue = ""
+			}
 			if tmuxObservation == codexAppServerTmuxGenerationContradictedV0 || appObservation == codexAppServerTmuxGenerationContradictedV0 {
 				return codexAppServerTmuxConflictErrorV0(codexAppServerTmuxGenerationConflictV0)
 			}
@@ -539,6 +553,9 @@ func (backend serverCodexAppServerTmuxBackendV0) waitForTmuxSocketV0(
 		case <-ctx.Done():
 			if lastPreflightErr != nil {
 				return lastPreflightErr
+			}
+			if lastObservationIssue != "" {
+				return codexAppServerCallErrorV0{Code: lastObservationIssue, Err: ctx.Err()}
 			}
 			return backend.tmuxStartupFailureV0("codex_app_server_tmux_socket_timeout", ctx.Err())
 		case <-time.After(codexAppServerTmuxSocketPollEveryV0):
