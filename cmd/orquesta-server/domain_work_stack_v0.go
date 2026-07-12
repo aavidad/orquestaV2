@@ -24,10 +24,10 @@ func domainWorkExecutorFromEnvV0(
 	baseURL := firstNonEmptyEnvV0(envOPESBaseURLV0, envOPESBaseURLLegacyV0)
 	httpBaseURL := strings.TrimSpace(domainWorkHTTPBaseURLFromProjectConfigFileV0(projectConfig))
 	fileDir := strings.TrimSpace(domainWorkFileDirFromProjectConfigFileV0(projectConfig))
-	fileEnabled := domainWorkFileEnabledFromProjectConfigFileV0(projectConfig) ||
+	explicitFileBackend := domainWorkFileEnabledFromProjectConfigFileV0(projectConfig) ||
 		fileDir != ""
 	configuredBackends := 0
-	for _, enabled := range []bool{baseURL != "", httpBaseURL != "", fileEnabled} {
+	for _, enabled := range []bool{baseURL != "", httpBaseURL != "", explicitFileBackend} {
 		if enabled {
 			configuredBackends++
 		}
@@ -65,9 +65,6 @@ func domainWorkExecutorFromEnvV0(
 			return nil, err
 		}
 		return orquestamcp.NewMCPDomainWorkToolExecutorV0(client, client), nil
-	}
-	if !fileEnabled {
-		return nil, nil
 	}
 	if fileDir == "" {
 		fileDir = filepath.Join(serverConfig.StateDir, "domain-work-jobs")

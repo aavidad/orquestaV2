@@ -214,7 +214,7 @@ func TestBuildStackFromEnvV0DirectorStatsExponeProgressSourceConfiguradoV0(t *te
 	}
 }
 
-func TestBuildStackFromEnvV0CableaDomainWorkFileOptIn(t *testing.T) {
+func TestBuildStackFromEnvV0CableaDomainWorkFileDurablePorDefecto(t *testing.T) {
 	projectDir := t.TempDir()
 	stateDir := t.TempDir()
 	t.Setenv("ORQUESTA_CODEX_PROJECT_WORKDIR", projectDir)
@@ -223,7 +223,8 @@ func TestBuildStackFromEnvV0CableaDomainWorkFileOptIn(t *testing.T) {
 	t.Setenv("ORQUESTA_CODEX_COMMAND", filepath.Join(projectDir, "codex-bin"))
 	t.Setenv("ORQUESTA_OPES_BASE_URL", "")
 	t.Setenv("OPES_BASE_URL", "")
-	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_ENABLED", "1")
+	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_ENABLED", "")
+	t.Setenv("ORQUESTA_DOMAIN_WORK_FILE_DIR", "")
 
 	config, err := serverConfigFromEnvV0()
 	if err != nil {
@@ -235,9 +236,6 @@ func TestBuildStackFromEnvV0CableaDomainWorkFileOptIn(t *testing.T) {
 	}
 	if stack.DomainWork == nil {
 		t.Fatalf("DomainWork file no cableado")
-	}
-	if !stack.DomainDelivery.Enabled {
-		t.Fatalf("DomainDelivery debe activarse con domain-work-file porque ya tiene submitter local")
 	}
 	result, err := stack.DomainWork.Execute(context.Background(), orquestamcp.MCPDomainWorkToolInputV0{
 		Action: orquestamcp.MCPDomainWorkActionCreateJobV0,
@@ -258,6 +256,25 @@ func TestBuildStackFromEnvV0CableaDomainWorkFileOptIn(t *testing.T) {
 		result.Job == nil ||
 		result.Job.JobRef == "" {
 		t.Fatalf("result=%+v", result)
+	}
+	restartedExecutor, err := domainWorkExecutorFromEnvV0(config)
+	if err != nil {
+		t.Fatalf("domainWorkExecutorFromEnvV0 restart: %v", err)
+	}
+	replayed, err := restartedExecutor.Execute(context.Background(), orquestamcp.MCPDomainWorkToolInputV0{
+		Action: orquestamcp.MCPDomainWorkActionCreateJobV0,
+		JobRequest: orquestadomainwork.DomainWorkJobRequestV0{
+			RequestID:      "request-ref-stack-file-001",
+			CorrelationID:  "corr-stack-file-001",
+			IdempotencyKey: "idem-stack-file-001",
+			RequestedBy:    "test",
+			DomainRef:      "dominio-demo",
+			WorkKind:       "generate_content_package",
+			Objective:      "crear job generico desde stack",
+		},
+	})
+	if err != nil || replayed.Job == nil || replayed.Job.JobRef != result.Job.JobRef {
+		t.Fatalf("domain_work no sobrevivio restart: replayed=%+v err=%v", replayed, err)
 	}
 	submitted, err := stack.DomainWork.Execute(context.Background(), orquestamcp.MCPDomainWorkToolInputV0{
 		Action: orquestamcp.MCPDomainWorkActionSubmitArtifactV0,
