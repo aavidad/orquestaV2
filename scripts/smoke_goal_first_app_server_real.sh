@@ -68,6 +68,7 @@ keep_dir="${ORQUESTA_KEEP_SMOKE_DIR:-0}"
 request_timeout="${ORQUESTA_GOAL_FIRST_SMOKE_REQUEST_TIMEOUT_SECONDS:-90}"
 polls="${ORQUESTA_GOAL_FIRST_SMOKE_POLLS:-120}"
 sleep_seconds="${ORQUESTA_GOAL_FIRST_SMOKE_SLEEP_SECONDS:-5}"
+initial_observe_delay_seconds="${ORQUESTA_GOAL_FIRST_SMOKE_INITIAL_OBSERVE_DELAY_SECONDS:-1}"
 goal_backend="${ORQUESTA_CODEX_GOAL_BACKEND:-app_server_tmux}"
 high_consumption_mode="${ORQUESTA_GOAL_FIRST_SMOKE_HIGH_CONSUMPTION_MODE:-0}"
 tool_output_policy_adversarial_mode="${ORQUESTA_GOAL_FIRST_SMOKE_TOOL_OUTPUT_POLICY_ADVERSARIAL_MODE:-0}"
@@ -1548,6 +1549,9 @@ echo "goal_ref=$goal_ref"
 echo "external_goal_ref=$external_goal_ref"
 
 terminal="0"
+if [[ "$initial_observe_delay_seconds" != "0" ]]; then
+  sleep "$initial_observe_delay_seconds"
+fi
 for i in $(seq 1 "$polls"); do
   cat >"$observe_payload" <<JSON
 {
