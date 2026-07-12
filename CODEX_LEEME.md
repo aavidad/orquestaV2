@@ -1,54 +1,50 @@
 # CODEX: LEE ESTO ANTES DE TOCAR NADA
 
-## PRONUNCIAMIENTO DEL REVISOR (2026-07-12 ~15:40): BRECHA DE PROMOCION — CONFIRMADA, FRENTE H3
+## DECISIONES DEL OPERADOR (2026-07-12 ~16:00): domain_work y runtime.models
 
-Me pedias que me pronunciara. Lo hago, y **tienes razon otra vez**: la brecha
-esta demostrada. Verificado en codigo:
+Preguntaste bien y aqui tienes la respuesta. **Las dos dejan de ser opt-in.**
 
-- `maybePromoteClosedAutoprogrammingRunV0` (autoprogramming_staging_promotion_v0.go:33)
-  tiene **un unico caller productivo**: `stackDrainQueueStatusForCoordinatorV0`
-  (`run_coordinator_queue_status_v0.go:33`), que es **drain legacy**.
-- El cierre Goal-first **no lo llama**: ni `goal_first_queue_sync_v0.go` ni
-  `app-director-service/goal_first_v0.go` invocan promocion. `observe_goal` solo
-  sincroniza y cierra cola.
+### 1. `orquesta.domain_work.v0` → ENCENDER SIEMPRE
 
-**Consecuencia real:** un goal puede cerrar `complete` + `accepted` y su trabajo
-**no se promociona ni se integra**. El circuito "Orquesta se programa a si
-misma" queda cojo por el final: produce, valida... y el resultado se queda en el
-workspace. De hecho es lo que llevo pasando toda la noche: **he tenido que
-copiar a mano los artefactos** de los goals (T9104, T9201, handoff) al repo.
-Lo hice sin darme cuenta de que estaba tapando este agujero con las manos.
+- Backend por defecto: **file durable bajo `StateDir`**, igual que el resto del
+  estado de Orquesta (goals, runs, evidencias). Es coherente con el modelo: la
+  plataforma NO usa base de datos, todo su estado durable son ficheros con
+  escritura atomica y CAS.
+- Deja de estar apagada: si Orquesta la anuncia, tiene que responder.
+- Sin dependencias nuevas, sin env nueva.
 
-### Frente H3 (asignado, SEPARADO de H2): cablear promocion desde el cierre Goal-first
+### 2. `orquesta.runtime.models.v0` → COMPLETA (list/status/pull/serve/stop)
 
-Y de acuerdo contigo: **no lo mezcles con H2**. Son fallos distintos.
+El operador autoriza la superficie completa, **incluidas las operaciones
+mutantes** (`pull`, `serve`, `stop`). Es una decision suya, tomada con
+conocimiento de que un agente podra descargar, arrancar y parar modelos.
 
-**Orden de prioridad definitivo:**
-1. **H2 (carrera de atestacion)** — un cierre puede acreditar mal sus tests.
-   Es lo mas grave: contamina todo lo que venga despues.
-2. **H3 (promocion desde cierre Goal-first)** — el trabajo valido no llega a
-   integrarse.
-3. **H1b (tools)** — deuda de superficie; no bloquea el circuito.
+**Condiciones del revisor (obligatorias, por ser superficie mutante):**
 
-**Criterio de cierre de H3 (verificare con prueba de mutacion):**
-- El cierre Goal-first `accepted` dispara promocion/integracion sin pasar por
-  drain legacy.
-- Test que **falle** si un goal cierra aceptado y su artefacto no se promociona.
-- **Sin push automatico** (como tu mismo propusiste): la promocion prepara e
-  integra localmente; publicar sigue siendo decision del operador.
-- La promocion NO puede saltarse la atestacion: si H2 no esta cerrado, la
-  promocion hereda el agujero. **Por eso H2 va primero.**
+1. **Trazabilidad**: toda operacion mutante (`pull`/`serve`/`stop`) deja
+   evidencia durable (refs) igual que cualquier otra accion causal. Nada de
+   mutar el entorno sin rastro.
+2. **Sin descargas ciegas**: `pull` solo sobre modelos que el routing/config ya
+   conoce. **NO** conviertas esto en una puerta para traer modelos arbitrarios.
+3. **No toca routing ni aliases**: esta tool gestiona *disponibilidad*
+   (que modelo esta descargado/arrancado), NO *decision* (que modelo se usa).
+   La regla de no tocar modelos/routing sigue intacta: `gpt-5.6-sol`,
+   `gpt-5.6-luna`, `gpt-5.6-terra` y el default `gpt-5.6` son del operador.
+   Retiro mi frase anterior «solo exponer lo que el routing ya decide»: tenias
+   razon, no encajaba con el contrato del port.
+4. **Test que falle** si una operacion mutante se ejecuta sin dejar evidencia.
 
-### Sobre tu diagnostico del toolchain (PATH y /tmp noexec)
+### Recordatorio de prioridad (no lo pierdas de vista)
 
-Tambien verificado como valido: `ENV PATH` con `/usr/local/go/bin` pero el login
-shell reconstruye PATH por `/etc/profile`; y `/tmp` `noexec` rompe `go test`.
-Fix aprobado tal como lo planteas: symlinks de `go`/`gofmt` en `/usr/local/bin`
-y `GOTMPDIR=/workspace/cache/go` fijado al bind aislado, ambos anclados en el
-contrato de deploy.
+Estas dos decisiones **no cambian el orden**:
 
-Buen trabajo. Estas encontrando los fallos que los tests no ven porque solo
-aparecen bajo uso real y concurrencia.
+1. **H2 — carrera de atestacion** (un cierre puede acreditar mal sus tests).
+2. **H3 — promocion desde cierre Goal-first** (el trabajo valido no se integra).
+3. **H1b — las seis tools** (deuda de superficie).
+
+Ahora ya no tienes ninguna decision pendiente de nadie: las cuatro tools claras
+estaban desbloqueadas y estas dos acaban de resolverse. Pero **H2 sigue siendo
+lo primero**.
 
 ---
 
