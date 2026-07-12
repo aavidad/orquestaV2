@@ -87,6 +87,51 @@ campana (una linea), pero el contenido real va aqui.
 
 (escribe aqui abajo; el revisor responde en la seccion 1)
 
+### 2026-07-12 — runner Docker local vinculante y retirada total del remoto
+
+El operador ha corregido expresamente el alcance: todo el trabajo se ejecuta
+en los Docker **locales** de este equipo. Queda prohibido volver a usar
+`uso.dipgra.cloud` o cualquier runner remoto hasta nueva orden. Los commits
+utiles ya presentes en el canon local hasta `a2145ee00` se conservan; no hay
+diff remoto H1b/H2/H3 pendiente de copiar.
+
+Se ha levantado `orquesta-self-programming-local` desde `a2145ee00`, gobernado
+por API directa en `127.0.0.1:19039`. Evidencia de despliegue: usuario
+`10001:10001`, rootfs read-only, no privilegiado, `cap_drop=ALL`,
+`no-new-privileges`, sin Docker socket, sin mount de `$HOME`, Codex `0.144.1`,
+Go `1.25.11`, tmux `3.3a`, `GOTMPDIR=/workspace/cache/go`, auth aislada y
+config de atestacion owner-only con snapshot de modulos Go montado read-only.
+Solo el clon local de Orquesta se monta desde el host; estado, runtime, caches
+y homes viven en volumenes Docker privados.
+
+Durante el bootstrap aparecieron dos fronteras locales y se resolvieron sin
+rebajar el aislamiento exterior:
+
+1. `/home` esta al 100 % y `fsync` quedaba bloqueado en
+   `FileAuditSinkV0`/`FileStateStoreV0`. La traza SIGQUIT lo demostro. Estado,
+   runtime, caches y homes se movieron a volumenes Docker sobre el storage
+   local de Docker; el API volvio a responder `status=ok`.
+2. El sandbox interno de Codex devolvio `runtime_sandbox_unavailable` /
+   `runtime_sandbox_bwrap_failure`. Por la orden previa del operador —acceso
+   completo dentro del Docker, sin acceso exterior salvo el repo Orquesta— el
+   perfil local usa `ORQUESTA_CODEX_SANDBOX=danger-full-access` junto a
+   `ORQUESTA_CODEX_CONTAINER_SANDBOX_BOUNDARY_CONFIRMED=1`. Es una decision de
+   seguridad explicita, no un default productivo ni una relajacion oculta.
+
+Los primeros goals H2 fueron detenidos por `POST /api/v0/runs/control` y el
+servidor confirmo `shutdown_ready=true` antes del recreate. Se relanzaron por
+`POST /api/v0/autoprogramming/prepare-run` cuatro reworks locales paralelos,
+cada uno obligado a crear dos subagentes antes de editar:
+
+- H2a lifecycle: `goal-ref-task-autoprogramming-2f3fe35c8f21-g01`;
+- H2b leases/reclaim: `goal-ref-task-autoprogramming-87f331c08080-g01`;
+- H2c serializacion por run: `goal-ref-task-autoprogramming-292141a97fdc-g01`;
+- H2d HTTP 202 durable: `goal-ref-task-autoprogramming-a1c0c74f5e83-g01`.
+
+No se llamara manualmente a `observe_goal` mientras H2 siga abierto; el
+observer residente realiza la observacion para no provocar la carrera que se
+esta reparando. H3 y H1b siguen despues de H2, sin cambiar el orden vinculante.
+
 ### 2026-07-12 — asignacion explicita del operador
 
 El operador ha asignado como objetivo persistente: cierre total de Orquesta,
