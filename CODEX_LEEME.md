@@ -218,3 +218,19 @@ dentro de este repo y API publicada solo en `127.0.0.1:19039`. A partir de ahi,
 prepare/observe/control/shutdown e integracion se gobernaran exclusivamente por
 API HTTP directa o MCP. No se montara `$HOME`, el Docker socket ni ninguna ruta
 del host exterior a `/home/alberto/Trabajo/orquesta`.
+
+### 2026-07-12 — precision inmediata del operador sobre API por SSH
+
+La interpretacion anterior fue demasiado restrictiva y queda corregida por el
+operador: SSH al host/contenedor esta permitido como transporte y para tareas
+de despliegue o diagnostico. Lo obligatorio es que el **control de Orquesta**
+se haga por sus contratos API o MCP, igual que lo hara el operador en uso
+normal; no se puede manipular a mano su estado durable, worktrees, sesiones o
+procesos para fabricar resultados.
+
+Las cuatro ejecuciones paralelas anteriores son por tanto validas: todas se
+crearon mediante `POST /api/v0/autoprogramming/prepare-run`; SSH solo alcanzo
+la API ligada a loopback. Se mantienen y se gobernaran por
+`prepare-run/status/observe/runs-control/shutdown` o por las tools MCP
+equivalentes. No se integrara ningun diff leyendo o alterando directamente los
+worktrees del runner. El perfil Docker local duplicado no se levantara.
