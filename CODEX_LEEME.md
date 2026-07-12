@@ -246,6 +246,13 @@ Asignación determinista:
 - cuota ausente/obsoleta o menos de dos familias independientes bloquea una
   convocatoria material; nunca degrada en silencio.
 
+Precedencia de asignación: override manual del operador por consejo, después
+override persistente/política y por último asignación automática en caliente.
+API/MCP/web deben permitir ambos overrides. El receipt conserva quién forzó,
+cuándo, resultado automático alternativo y warning de cuota. Un override con
+cuota insuficiente avisa y obedece, pero jamás puede asignar ADVERSARIO de la
+familia del autor ni desactivar veto/rol de SEGURIDAD.
+
 El receipt registra rol, familia, snapshot/ref de cuota, capacidad, regla y
 motivo. La web configura política/umbrales, nunca nombres de modelos.
 
