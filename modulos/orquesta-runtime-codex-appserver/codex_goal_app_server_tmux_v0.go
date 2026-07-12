@@ -459,8 +459,12 @@ func (backend serverCodexAppServerTmuxBackendV0) waitForTmuxSocketV0(
 ) error {
 	socketPath := strings.TrimSpace(backend.SocketPath)
 	nextSessionCheck := time.Now()
+	var lastPreflightErr error
 	for {
 		if ctx.Err() != nil {
+			if lastPreflightErr != nil {
+				return lastPreflightErr
+			}
 			return backend.tmuxStartupFailureV0("codex_app_server_tmux_socket_timeout", ctx.Err())
 		}
 		owner, ownerErr := codexAppServerTmuxSocketOwnerDescendantV0(socketPath, marker.TmuxPanePID)
@@ -479,10 +483,19 @@ func (backend serverCodexAppServerTmuxBackendV0) waitForTmuxSocketV0(
 			}
 			if currentOK && tmuxObservation == codexAppServerTmuxGenerationVerifiedV0 &&
 				appObservation == codexAppServerTmuxGenerationVerifiedV0 &&
-				backend.ensureTmuxSocketPrivateV0() == nil && preflight != nil && preflight.ProbeV0(ctx) == nil {
-				return nil
+				backend.ensureTmuxSocketPrivateV0() == nil && preflight != nil {
+				if probeErr := preflight.ProbeV0(ctx); probeErr == nil {
+					return nil
+				} else {
+					lastPreflightErr = probeErr
+				}
 			}
-		} else if ownerErr == nil && backend.ensureTmuxSocketPrivateV0() == nil && preflight != nil && preflight.ProbeV0(ctx) == nil {
+		} else if ownerErr == nil && backend.ensureTmuxSocketPrivateV0() == nil && preflight != nil {
+			probeErr := preflight.ProbeV0(ctx)
+			if probeErr != nil {
+				lastPreflightErr = probeErr
+				goto waitForNextObservation
+			}
 			tmuxObservation := backend.observeRecordedTmuxGenerationV0(ctx, tmuxPath, marker)
 			if tmuxObservation == codexAppServerTmuxGenerationContradictedV0 {
 				return codexAppServerTmuxConflictErrorV0(codexAppServerTmuxGenerationConflictV0)
@@ -524,6 +537,9 @@ func (backend serverCodexAppServerTmuxBackendV0) waitForTmuxSocketV0(
 	waitForNextObservation:
 		select {
 		case <-ctx.Done():
+			if lastPreflightErr != nil {
+				return lastPreflightErr
+			}
 			return backend.tmuxStartupFailureV0("codex_app_server_tmux_socket_timeout", ctx.Err())
 		case <-time.After(codexAppServerTmuxSocketPollEveryV0):
 		}
