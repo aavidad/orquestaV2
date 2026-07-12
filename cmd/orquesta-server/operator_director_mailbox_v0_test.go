@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	orquestamcp "orquesta/modulos/orquesta-mcp"
 	channel "orquesta/modulos/orquesta-operator-director-channel"
 	operator "orquesta/modulos/orquesta-operator-mcp"
 )
@@ -67,6 +68,79 @@ func TestOperatorDirectorChannelSinConectorEntregaEnBuzonDurableV0(t *testing.T)
 		entry.Body != "retoma el hito H0a" ||
 		strings.TrimSpace(entry.QueuedAt) == "" {
 		t.Fatalf("entry=%+v", entry)
+	}
+}
+
+// Prueba la composicion completa (stack -> registro MCP -> tools/call ->
+// fichero durable). Si el bootstrap deja de inyectar el dispatcher, vuelve a
+// aparecer operator_message_port_unavailable y este test falla.
+func TestOperatorDirectorMailboxStackToolsCallPersisteMensajeV0(t *testing.T) {
+	projectDir := t.TempDir()
+	stateDir := t.TempDir()
+	runtimeDir := filepath.Join(t.TempDir(), "runtime")
+	enabled := true
+
+	t.Setenv(envCodexProjectWorkDirV0, projectDir)
+	t.Setenv(envServerStateDirV0, stateDir)
+	t.Setenv(envCodexRuntimeWorkDirV0, runtimeDir)
+	t.Setenv(envCodexCommandV0, filepath.Join(projectDir, "codex-bin"))
+	t.Setenv(envOPESBaseURLV0, "")
+	t.Setenv("OPES_BASE_URL", "")
+	t.Setenv(envDomainWorkFileEnabledV0, "")
+	t.Setenv(envDomainWorkFileDirV0, "")
+	t.Setenv(envHermesEnabledV0, "false")
+
+	config, err := serverConfigFromEnvV0()
+	if err != nil {
+		t.Fatalf("serverConfigFromEnvV0: %v", err)
+	}
+	stack, err := buildStackFromProjectConfigV0(config, serverCodexGoalBackendV0{}, serverProjectConfigFileV0{
+		OperatorDirectorMailbox: serverProjectConfigOperatorDirectorMailboxV0{Enabled: &enabled},
+	})
+	if err != nil {
+		t.Fatalf("buildStackFromProjectConfigV0: %v", err)
+	}
+	handler, err := newMCPRealHTTPHandlerV0(stack.MCPTransportBindings)
+	if err != nil {
+		t.Fatalf("newMCPRealHTTPHandlerV0: %v", err)
+	}
+	server := newLocalHTTPServerForTestV0(t, handler)
+	defer server.Close()
+
+	var call mcpToolCallResultV0
+	callMCPJSONRPCTestV0(t, server.URL+mcpRealHTTPPathV0, "tools/call", map[string]any{
+		"name": channel.OperatorDirectorMessageToolNameV0,
+		"arguments": map[string]any{
+			"request_ref": "request-ref-h0d-tools-call-001",
+			"sender_ref":  "operator-ref-h0d-test",
+			"target_ref":  "agent-ref-hermes",
+			"intent":      channel.OperatorMessageIntentInstructionV0,
+			"body":        "valida el canal durable H0d",
+		},
+	}, &call)
+	if call.IsError || len(call.Content) != 1 {
+		t.Fatalf("tools/call fallo: %+v", call)
+	}
+	var result orquestamcp.MCPOperatorDirectorMessageToolResultV0
+	if err := json.Unmarshal([]byte(call.Content[0].Text), &result); err != nil {
+		t.Fatalf("decode tools/call: %v", err)
+	}
+	if result.Estado != orquestamcp.MCPOperatorDirectorMessageEstadoOKV0 ||
+		result.Response == nil || result.Response.Status != operatorDirectorMailboxStatusV0 {
+		t.Fatalf("respuesta sin binding durable: %+v", result)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(stateDir, operatorDirectorMailboxFileNameV0))
+	if err != nil {
+		t.Fatalf("tools/call no dejo registro durable: %v", err)
+	}
+	var entry operatorDirectorMailboxEntryV0
+	if err := json.Unmarshal([]byte(strings.TrimSpace(string(raw))), &entry); err != nil {
+		t.Fatalf("registro durable invalido: %v", err)
+	}
+	if entry.RequestRef != "request-ref-h0d-tools-call-001" ||
+		entry.TargetRef != "agent-ref-hermes" || entry.Body != "valida el canal durable H0d" {
+		t.Fatalf("registro durable inesperado: %+v", entry)
 	}
 }
 
