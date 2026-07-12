@@ -90,3 +90,23 @@ func TestCouncilGateDesactivadoNoSeInterponeV0(t *testing.T) {
 		t.Fatal("con el gate desactivado el arranque debe pasar tal cual")
 	}
 }
+
+// Un gate exigido al que le falta el puerto de decision NO puede desaparecer: una
+// puerta que se abre sola cuando la configuras mal no es una puerta.
+func TestCouncilGateExigidoSinPuertoFallaCerradoV0(t *testing.T) {
+	espia := &arranqueEspiaV0{}
+	gate := newCouncilGatedArrancarDirectorExecutorV0(espia, CouncilGateConfigV0{
+		Required: true, Decision: nil,
+	})
+
+	result, err := gate.Execute(context.Background(), entradaV0("req-4"))
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if espia.llamado {
+		t.Fatal("fail-open: el gate exigido sin puerto dejo arrancar la app")
+	}
+	if len(result.Errores) == 0 || result.Errores[0].Code != CouncilGateMisconfiguredCodeV0 {
+		t.Fatalf("no delato la mala configuracion: %+v", result.Errores)
+	}
+}

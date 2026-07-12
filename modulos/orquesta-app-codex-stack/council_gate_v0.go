@@ -29,6 +29,10 @@ type CouncilGateConfigV0 struct {
 // rechaza un arranque sin decision aceptada del consejo.
 const CouncilGateDecisionRequiredCodeV0 = "council_decision_required"
 
+// CouncilGateMisconfiguredCodeV0 delata un gate exigido sin puerto cableado. Es
+// un fallo de despliegue, y se resuelve cerrando la puerta, no abriendola.
+const CouncilGateMisconfiguredCodeV0 = "council_gate_misconfigured"
+
 // CouncilRefForAppRequestV0 deriva el consejo de la PETICION DE CREACION de forma
 // determinista: la misma peticion convoca siempre al mismo consejo, que es lo que
 // permite la idempotencia del recibo.
@@ -47,14 +51,20 @@ type councilGatedArrancarDirectorExecutorV0 struct {
 
 var _ orquestamcp.MCPTransportArrancarDirectorAppExecutorV0 = councilGatedArrancarDirectorExecutorV0{}
 
-// newCouncilGatedArrancarDirectorExecutorV0 envuelve el arranque real. Si el gate
-// no esta exigido, devuelve el ejecutor tal cual: cero coste y cero cambio de
-// comportamiento.
+// newCouncilGatedArrancarDirectorExecutorV0 envuelve el arranque real.
+//
+// Si el gate no esta exigido, devuelve el ejecutor tal cual: cero coste y cero
+// cambio de comportamiento.
+//
+// PERO si el gate SI esta exigido y falta el puerto de decision, NO se devuelve
+// el ejecutor desnudo: eso seria fail-open por mala configuracion, y una puerta
+// que desaparece cuando la configuras mal no es una puerta. Se devuelve un gate
+// que rechaza siempre: fail-closed.
 func newCouncilGatedArrancarDirectorExecutorV0(
 	inner orquestamcp.MCPTransportArrancarDirectorAppExecutorV0,
 	config CouncilGateConfigV0,
 ) orquestamcp.MCPTransportArrancarDirectorAppExecutorV0 {
-	if !config.Required || config.Decision == nil || inner == nil {
+	if !config.Required {
 		return inner
 	}
 	return councilGatedArrancarDirectorExecutorV0{inner: inner, config: config}
@@ -69,6 +79,17 @@ func (executor councilGatedArrancarDirectorExecutorV0) Execute(
 		requestID = strings.TrimSpace(input.RequestID)
 	}
 	councilRef := CouncilRefForAppRequestV0(requestID)
+
+	// Gate exigido sin puerto de decision: mala configuracion. Se cierra, no se
+	// abre. Un error de despliegue no puede desactivar un control.
+	if executor.config.Decision == nil || executor.inner == nil {
+		return orquestamcp.NewMCPArrancarDirectorAppIssuesResultV0(input, []orquestamcp.MCPValidationIssueV0{{
+			Code:    CouncilGateMisconfiguredCodeV0,
+			Field:   "council.gate_required",
+			Message: "el gate del consejo esta exigido pero no hay puerto de decision cableado",
+		}}), nil
+	}
+
 	accepted, err := executor.config.Decision.CouncilDecisionAcceptedV0(ctx, councilRef)
 	if err != nil || !accepted {
 		// Sin decision aceptada NO se programa. El consejo no es un tramite
