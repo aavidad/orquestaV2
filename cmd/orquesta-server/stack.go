@@ -407,6 +407,10 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
+	councilExecutor, err := newCouncilExecutorV0(serverConfig.StateDir)
+	if err != nil {
+		return orquestaappcodexstack.StackV0{}, err
+	}
 	stack, err := orquestaappcodexstack.BuildStackV0(orquestaappcodexstack.ConfigV0{
 		Enabled:        true,
 		Timeout:        30 * time.Second,
@@ -484,7 +488,7 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 		ToolCapabilities:             toolCapabilities,
 		DocumentTextExtract:          documentTextExtract,
 		DataProfile:                  dataProfile,
-		Council:                      newCouncilExecutorV0(serverConfig.StateDir),
+		Council:                      councilExecutor,
 		CouncilPublicErrorClassifier: councilPublicErrorClassifierV0,
 		ReviewGate: orquestaappcodexstack.ReviewGateConfigV0{
 			FileEvidence:            orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},

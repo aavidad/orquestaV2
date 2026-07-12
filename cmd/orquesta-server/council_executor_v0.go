@@ -64,12 +64,20 @@ func councilPublicErrorClassifierV0(err error) (string, string, bool) {
 // override, veto de seguridad, umbral) vive en el nucleo.
 type councilExecutorV0 struct {
 	overridesPath string
+	receipts      councilReceiptStoreV0
 }
 
 var _ orquestamcp.MCPCouncilPortV0 = councilExecutorV0{}
 
-func newCouncilExecutorV0(stateDir string) councilExecutorV0 {
-	return councilExecutorV0{overridesPath: filepath.Join(stateDir, councilOverridesFileNameV0)}
+func newCouncilExecutorV0(stateDir string) (councilExecutorV0, error) {
+	receipts, err := newCouncilReceiptStoreV0(stateDir)
+	if err != nil {
+		return councilExecutorV0{}, err
+	}
+	return councilExecutorV0{
+		overridesPath: filepath.Join(stateDir, councilOverridesFileNameV0),
+		receipts:      receipts,
+	}, nil
 }
 
 // overridesPersistentesV0 lee los overrides durables del operador. Si no hay
@@ -114,6 +122,16 @@ func (executor councilExecutorV0) ConveneCouncilV0(
 	input orquestamcp.MCPCouncilToolInputV0,
 ) (orquestamcp.MCPCouncilToolResultV0, error) {
 	input.Overrides = mergeOverridesV0(executor.overridesPersistentesV0(), input.Overrides)
+
+	// Idempotencia: una decision ya tomada no se vuelve a tomar. Reconvocar el
+	// mismo council_ref devuelve el recibo durable, no un veredicto nuevo, que
+	// podria contradecir al anterior.
+	if input.Action == orquestamcp.MCPCouncilActionDecideV0 {
+		if receipt, ok := executor.receipts.LoadV0(input.CouncilRef); ok && receipt.Outcome != "" {
+			return resultFromReceiptV0(receipt), nil
+		}
+	}
+
 	assignment, err := council.AssignRolesV0(convocationFromMCPV0(input))
 	if err != nil {
 		return orquestamcp.MCPCouncilToolResultV0{}, err
@@ -139,9 +157,41 @@ func (executor councilExecutorV0) ConveneCouncilV0(
 		result.Blocks = decision.Blocks
 		result.Total = decision.Total
 		result.Rationale = decision.Rationale
+		// La decision se hace durable ANTES de devolverla: si el servidor cae
+		// justo despues, el recibo ya esta en disco.
+		if err := executor.receipts.SaveV0(councilReceiptV0{
+			CouncilRef: result.CouncilRef,
+			AuthorRef:  result.AuthorRef,
+			Seats:      result.Seats,
+			Warnings:   result.Warnings,
+			Outcome:    result.Outcome,
+			Approvals:  result.Approvals,
+			Reworks:    result.Reworks,
+			Blocks:     result.Blocks,
+			Total:      result.Total,
+			Rationale:  result.Rationale,
+			Overrides:  input.Overrides,
+		}); err != nil {
+			return orquestamcp.MCPCouncilToolResultV0{}, err
+		}
 		return result, nil
 	default:
 		return orquestamcp.MCPCouncilToolResultV0{}, fmt.Errorf("council_action_desconocida: %q", input.Action)
+	}
+}
+
+func resultFromReceiptV0(receipt councilReceiptV0) orquestamcp.MCPCouncilToolResultV0 {
+	return orquestamcp.MCPCouncilToolResultV0{
+		CouncilRef: receipt.CouncilRef,
+		AuthorRef:  receipt.AuthorRef,
+		Seats:      receipt.Seats,
+		Warnings:   receipt.Warnings,
+		Outcome:    receipt.Outcome,
+		Approvals:  receipt.Approvals,
+		Reworks:    receipt.Reworks,
+		Blocks:     receipt.Blocks,
+		Total:      receipt.Total,
+		Rationale:  receipt.Rationale,
 	}
 }
 
