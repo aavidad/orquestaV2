@@ -78,6 +78,68 @@ desde ya**, o migrar a multiusuario despues sera una reescritura.
 rastro. Ya lo aplicamos a `runtime.models` (`pull/serve/stop` con receipt); las
 credenciales van igual.
 
+### V1-A2. Selector de modelos e intensidades desde la web (spec del operador)
+
+**Requisito literal del operador:** *"desde la web debemos poder elegir el
+modelo que queremos de director o de trabajadores, incluso sus intensidades.
+Que salga un listado con los posibles modelos, incluso los locales. Con el que
+elegimos por defecto y el porque (un bocadillo de ayuda que explique por que
+elegimos ese modelo). Los modelos locales de Ollama, vLLM o el que sea deben
+revisarse en tiempo real: comprobar cual podemos usar ANTES de ensenarlos."*
+
+**Buena noticia: media pieza ya existe.** Verificado en codigo:
+
+- El routing **ya es tipado por complejidad de tarea**, con modelo Y esfuerzo
+  por nivel (`model_routing_defaults_v0.go`):
+
+      trivial  -> luna  (effort: low)
+      normal   -> terra (effort: medium)
+      complejo -> (effort: high)
+      critico  -> sol   (effort: high)
+
+  Y hay `TaskRoutes` (rutas por tarea concreta), hoy vacio.
+- **`runtime.models` (la tool que acabamos de encender en H1b) ya sabe listar
+  modelos locales en vivo**: `ListRuntimeModelsV0` devuelve modelos con su
+  `Status`. Se cablo justo antes de que hiciera falta.
+
+**Lo que falta construir:**
+
+1. **Catalogo unificado de modelos**, que combine:
+   - **remotos** (los del routing: `gpt-5.6-sol/luna/terra`),
+   - **locales descubiertos EN VIVO** via `runtime.models` (Ollama y, por
+     contrato, cualquier otro proveedor local tipo vLLM).
+   Cada entrada: id, proveedor, **disponibilidad real comprobada ahora**
+   (`ready` / `not_pulled` / `unreachable`), y capacidades.
+
+2. **Comprobacion de disponibilidad ANTES de mostrar** (esto es lo que pide el
+   operador y es la parte fina): un modelo local **no se ofrece si no responde**.
+   - Si Ollama no esta arriba: se muestra el proveedor como `unreachable`, no
+     sus modelos como elegibles.
+   - Si el modelo no esta descargado: se muestra como `not_pulled` con la accion
+     "descargar" (que ya existe: `pull`, y **deja receipt** — regla de H1b).
+   - **Nunca ofrecer como elegible algo que fallara al lanzarse.** Esa es la
+     diferencia entre un selector util y una lista de promesas.
+
+3. **Seleccion por ROL y por INTENSIDAD** desde la web:
+   - rol: **director** vs **trabajadores** (hoy el routing es por complejidad,
+     no por rol: hay que anadir la dimension rol o mapearla),
+   - intensidad: el `reasoning effort` por nivel, ya modelado.
+
+4. **Defaults con explicacion (el "bocadillo")**: cada default trae un texto
+   corto de POR QUE. No es adorno: es la diferencia entre que el operador
+   confie en el default o lo cambie a ciegas. Ejemplos de la logica real que ya
+   aplicamos: *"terra por defecto en tareas normales: equilibrio coste/calidad;
+   sol solo en criticas porque es el mas caro; luna en triviales para no gastar
+   contexto caro en trabajo mecanico"*.
+
+5. **Guardarrailes (heredados del proyecto):**
+   - Cambiar el routing **es configuracion, y toda config deja evidencia**
+     (V1-A): quien cambio que modelo, cuando y valor anterior.
+   - **La tool `runtime.models` no decide routing, solo disponibilidad.** Esa
+     separacion ya esta escrita y no se rompe.
+   - El selector **no puede inventar modelos**: solo los que el catalogo real
+     devuelve.
+
 ### V1-C. Observabilidad honesta (deuda detectada por Sonyi)
 
 `autoprogramming/status` devuelve `projects=0 tasks=0 agents=0` cuando **no hay
@@ -99,7 +161,9 @@ Ademas: `env_vars = 426/426`, al tope exacto. Sin margen.
 
 Orquesta es 1.0 cuando un operador puede:
 
-1. **Instalarla y configurarla sin editar ficheros a mano** (V1-A).
+1. **Instalarla y configurarla sin editar ficheros a mano** (V1-A), incluido
+   **elegir modelos e intensidades por rol desde la web**, viendo solo los que
+   de verdad puede usar (V1-A2).
 2. **Conectar sus credenciales desde la app**, con dueño y trazabilidad, sin que
    el secreto viaje ni se filtre (V1-B).
 3. **Pedirle una app y recibirla**, con el circuito completo: goal → cierre
@@ -130,5 +194,7 @@ Registrado en `docs/decision_arquitectura_estado_2026-07-12.md` y aqui:
 2. **V1-B** — credenciales con dueño y trazabilidad (**es lo que condiciona la
    arquitectura**; va antes que la UI).
 3. **V1-A** — configuracion por API + web sobre el esquema canonico.
+   **V1-A2** — selector de modelos e intensidades (director/trabajadores), con
+   descubrimiento en vivo de modelos locales y defaults explicados.
 4. **V1-C** — status honesto.
 5. Etiquetar **v1.0**.
