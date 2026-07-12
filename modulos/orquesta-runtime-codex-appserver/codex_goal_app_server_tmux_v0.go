@@ -475,6 +475,16 @@ func (backend serverCodexAppServerTmuxBackendV0) waitForTmuxSocketV0(
 		if errors.Is(ownerErr, errCodexAppServerTmuxSocketOwnerOutsidePaneV0) {
 			return codexAppServerTmuxConflictErrorV0(codexAppServerTmuxGenerationConflictV0)
 		}
+		if marker.SocketOwnerPID == 0 && ownerErr != nil {
+			switch {
+			case errors.Is(ownerErr, errCodexAppServerTmuxSocketInodeNotObservedV0):
+				lastObservationIssue = "codex_app_server_tmux_socket_inode_not_observed"
+			case errors.Is(ownerErr, errCodexAppServerTmuxSocketOwnerAmbiguousV0):
+				lastObservationIssue = "codex_app_server_tmux_socket_owner_ambiguous"
+			default:
+				lastObservationIssue = "codex_app_server_tmux_socket_owner_unavailable"
+			}
+		}
 		if marker.SocketOwnerPID > 0 {
 			current, currentOK := backend.readTmuxOwnerMarkerV0()
 			if !currentOK {
