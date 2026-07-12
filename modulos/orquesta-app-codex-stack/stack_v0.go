@@ -11,6 +11,7 @@ import (
 	orquestaappgateway "orquesta/modulos/orquesta-app-gateway"
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacontext "orquesta/modulos/orquesta-context"
+	orquestadirectoragentworkflow "orquesta/modulos/orquesta-director-agent-workflow"
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
 	orquestaestadovivo "orquesta/modulos/orquesta-estado-vivo"
 	orquestafactoryhttp "orquesta/modulos/orquesta-factory-http"
@@ -52,6 +53,7 @@ type StackV0 struct {
 	GoalMaterializedResultWatcher         *GoalMaterializedResultWatcherV0
 	goalObservationCoordinator            *goalFirstObservationCoordinatorV0
 	goalPromotionCoordinator              *goalFirstObservationCoordinatorV0
+	directorDecisionCoordinator           *goalFirstObservationCoordinatorV0
 }
 
 func BuildStackV0(config ConfigV0) (StackV0, error) {
@@ -94,6 +96,7 @@ func BuildStackV0(config ConfigV0) (StackV0, error) {
 		AllowLegacyExternalWorkRun:            config.AllowLegacyExternalWorkRun,
 		goalObservationCoordinator:            newGoalFirstObservationCoordinatorV0(),
 		goalPromotionCoordinator:              newGoalFirstObservationCoordinatorV0(),
+		directorDecisionCoordinator:           newGoalFirstObservationCoordinatorV0(),
 	}
 	stack.MCPTransportBindings = buildStackMCPTransportBindingsV0(config, ports, queueConfig, &stack)
 	stack.Handler = buildStackHTTPHandlerV0(config, stack.MCPTransportBindings)
@@ -146,6 +149,7 @@ func buildStackMCPTransportBindingsV0(
 		},
 	}
 	bindings := orquestamcp.MCPTransportBindingsV0{
+		NuevaApp:          codexStackNuevaAppExecutorV0{Clock: config.Clock},
 		NuevaAppWizard:    NewCodexStackNuevaAppWizardExecutorV0(config.AppIntakeAssistant),
 		NuevaAppWizardBot: NewCodexStackNuevaAppWizardBotExecutorV0(config.WizardBotAssistant),
 		ArrancarDirector:  arrancar,
@@ -154,7 +158,16 @@ func buildStackMCPTransportBindingsV0(
 			stack,
 		),
 		RequestAppChange: orquestamcp.NewMCPRequestAppChangeToolExecutorV0(appChangePortsV0(config)),
-		DirectorStats:    directorStats,
+		EjecutarOrquestacion: orquestamcp.NewMCPEjecutarOrquestacionAppToolExecutorV0(
+			legacyAppRunnerPortsFromDirectorPortsV0(ports),
+		),
+		DirectorDecision: codexStackDirectorDecisionExecutorV0{
+			Inner: orquestamcp.NewMCPDirectorAgentDecisionToolExecutorV0(orquestadirectoragentworkflow.ApplyDirectorAgentDecisionPortsV0{
+				RunStore: config.Stores.RunStore, EventSink: config.Stores.EventSink, TaskStore: config.Stores.TaskStore,
+			}),
+			Coordinator: stack.directorDecisionCoordinator,
+		},
+		DirectorStats: directorStats,
 		RunControl: orquestamcp.MCPRunControlToolExecutorV0{
 			Port:                        runControlPort,
 			ExternalJobSource:           externalJobStatsSourceV0(config),
@@ -199,7 +212,10 @@ func buildStackMCPTransportBindingsV0(
 		AllowLegacyAutoprogrammingSupervisorActions:    config.AllowLegacyAutoprogrammingRun,
 		ServerShutdown: serverShutdownExecutorV0(config, stack),
 		DomainWork:     config.DomainWork,
-		CodebaseQuery:  orquestamcp.MCPCodebaseQueryToolExecutorV0{Broker: config.CodeContext},
+		ToolCapabilities: orquestamcp.MCPToolCapabilitiesListToolExecutorV0{
+			Catalog: config.ToolCapabilities,
+		},
+		CodebaseQuery: orquestamcp.MCPCodebaseQueryToolExecutorV0{Broker: config.CodeContext},
 		CodebaseStatus: orquestamcp.MCPCodebaseStatusToolExecutorV0{
 			Leases: config.CodeContextToolLeases,
 			Clock: func() time.Time {

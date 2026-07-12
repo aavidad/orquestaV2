@@ -2,6 +2,8 @@ package orquestamcp
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -52,6 +54,31 @@ func TestMCPDirectorAgentDecisionToolExecutorV0DevuelveIssuesPublicos(t *testing
 	if result.Estado != MCPDirectorAgentDecisionEstadoErrorV0 || len(result.Errores) == 0 {
 		t.Fatalf("result=%+v", result)
 	}
+}
+
+func TestMCPDirectorAgentDecisionToolExecutorV0NoExponeErrorInternoV0(t *testing.T) {
+	input := validMCPDirectorDecisionInputForTestV0("run-mcp-director-decision-secret-001")
+	result, err := NewMCPDirectorAgentDecisionToolExecutorV0(
+		orquestadirectoragentworkflow.ApplyDirectorAgentDecisionPortsV0{
+			RunStore:  directorDecisionFailingRunStoreForTestV0{},
+			EventSink: orquestacionnucleoapp.NewInMemoryEventSinkV0(),
+		},
+	).Execute(context.Background(), input)
+	if err != nil || result.Estado != MCPDirectorAgentDecisionEstadoErrorV0 || len(result.Errores) != 1 ||
+		result.Errores[0].Code != "director_agent_decision_error" ||
+		strings.Contains(result.Errores[0].Code, "token-secreto") {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+}
+
+type directorDecisionFailingRunStoreForTestV0 struct{}
+
+func (directorDecisionFailingRunStoreForTestV0) LoadRunV0(context.Context, string) (orquestacoreworkflow.OrchestrationRunV0, error) {
+	return orquestacoreworkflow.OrchestrationRunV0{}, errors.New("/home/private token-secreto")
+}
+
+func (directorDecisionFailingRunStoreForTestV0) SaveRunV0(context.Context, orquestacoreworkflow.OrchestrationRunV0) error {
+	return nil
 }
 
 func validMCPDirectorDecisionInputForTestV0(runRef string) MCPDirectorAgentDecisionToolInputV0 {

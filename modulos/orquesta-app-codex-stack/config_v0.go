@@ -23,6 +23,7 @@ import (
 	orquestaruntimecodex "orquesta/modulos/orquesta-runtime-codex"
 	orquestaruntimecodexdelivery "orquesta/modulos/orquesta-runtime-codex-delivery"
 	orquestaruntimeworktree "orquesta/modulos/orquesta-runtime-worktree"
+	orquestatoolcapability "orquesta/modulos/orquesta-tool-capability"
 	orquestaweb "orquesta/modulos/orquesta-web"
 )
 
@@ -69,6 +70,7 @@ type ConfigV0 struct {
 	CodeContext                                    orquestacontext.CodeContextQueryPortV0
 	CodeContextToolLeases                          orquestacontext.CodeContextToolLeaseListPortV0
 	RuntimeModels                                  orquestaruntime.RuntimeModelManagerPortV0
+	ToolCapabilities                               orquestatoolcapability.CapabilityCatalogPortV0
 	DecisionCouncil                                DecisionCouncilConfigV0
 	DomainDelivery                                 DomainWorkDeliveryBridgeConfigV0
 	ExternalWorkRunGuard                           ExternalWorkRunProjectWorkDirGuardConfigV0

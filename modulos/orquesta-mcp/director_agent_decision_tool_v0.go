@@ -101,7 +101,7 @@ func NewMCPDirectorAgentDecisionErrorV0(
 		RequestID:     strings.TrimSpace(input.RequestID),
 		CorrelationID: firstNonEmptyMCPV0(input.CorrelationID, input.Decision.DecisionRef),
 		Errores: []MCPDirectorAgentDecisionIssueV0{{
-			Code: strings.TrimSpace(err.Error()),
+			Code: "director_agent_decision_error",
 		}},
 	}
 }
