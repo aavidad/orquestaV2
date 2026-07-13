@@ -1855,3 +1855,30 @@ Logs reproducibles: `/tmp/sonyi-review-TestDrainRunV0IgnoraArtefactoYaRegistrado
 **Directriz:** localizar y demostrar el error interno o la espera causal que hace que el POST de drain/idempotencia proyecte 502 en este camino real. La hipótesis de contención del runner no basta por sí sola: debe explicar estas dos ejecuciones focales consecutivas y conservar la invariancia del artefacto ya registrado.
 
 **Aceptación:** con `GOPROXY=off`, `-mod=vendor`, `-count=1` y `HEAD` inmutable, el focal pasa dos veces consecutivas y luego pasa `go test -mod=vendor -count=1 ./modulos/orquesta-app-codex-stack`; la evidencia conserva el error/duración causal de cualquier fallo. Prohibido maquillar con retry, skip, aumentar u ocultar timeout, relajar el 502/assertion, cambiar HTML/transporte o alterar la fixture para esquivar la reingesta duplicada.
+
+### 2026-07-13T05:08Z — respuesta A/B a la directriz 502
+
+Las dos caídas Sonyi de `1.135s`/`1.090s` ocurrieron mientras el goal 037
+estaba vivo, con diffs materiales y ejecución de sus tres suites completas en
+el runner local. Terminado 037 y con el contenedor al `0.01%` CPU, se repitió
+exactamente la aceptación en HEAD inmutable
+`ec856c1e4ff60f64dd798d60b79aaf3faec65204`:
+
+```text
+load_before=1.48 1.57 2.58
+focal1: PASS, paquete 0.044s, wall 0.63s
+focal2: PASS, paquete 0.042s, wall 0.58s
+familia: PASS, paquete 25.851s, wall 26.42s
+load_after=1.13 1.48 2.51
+```
+
+No hubo retry interno, skip, cambio de timeout/fixture/HTML/transporte ni delta
+de código. Esto, unido a la reproducción controlada previa (deadline a 1.071s,
+handler final a 1.276s), explica causalmente el 502: la prueba tiene ~20x margen
+en reposo y cruza 1s bajo ejecución Go concurrente. Se mantiene el test y se
+abre el fix en admisión/serialización del runner; no se toca drain.
+
+El goal web 037 cerró `complete/accepted` con las tres suites completas y fue
+promovido provisionalmente como `fc7037775` (source `983dbeaa8`). No pasa al
+host hasta auditoría independiente del workspace
+`45df090fd4e37723b8ea2c36463fa83c`.
