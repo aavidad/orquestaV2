@@ -2893,6 +2893,10 @@ en frozen/preflight/race; mantiene seis llamadas productivas a
 no son los públicos `required_test_command_identity_*`; falta `O_CLOEXEC` y la
 matriz de factories/receipts/symlink/rename/same-inode/argv0. Un test de factory
 usa `/opt/go/bin/go` y `/opt/tools/lint`, inexistentes en el runner. No se integra.
+El receipt `complete` apareció antes de la attestation oficial race, solo enumera
+dos artefactos para 16 ficheros reales, deja evidence_refs vacíos y no publica
+commit/tree. Feedback de rechazo queued con ACK
+`operator-director-ack-ref-operator-message-ref-operator-ref-codex-live-audit-051r3-receipt-1783931553`.
 
 052R2 corrigió el retry CAS para aceptar solo conflicto tipado y endureció el
 sufijo canónico, pero la suite completa independiente detectó una regresión:
@@ -2902,6 +2906,8 @@ falla con `raw_observer_failure` porque el fixture ya no conserva
 matriz explícita de StoreVersion cero, DirectorKind cruzado, marker missing o
 stale y refs duplicadas. Feedback queued por MCP con ACK
 `operator-director-ack-ref-operator-message-ref-operator-ref-codex-live-audit-052r2-1783931401`.
+La repetición race `count=3` falla 3/3 por la misma regresión; digest estable
+`e0f599d62a2e9cc2972536f8e9085d9b16f1483350dc485e3e9afa6bfe00a188`.
 
 053R3 contiene mejoras reales: `config_file_v0.go` baja a 865 líneas, decode y
 validación son transaccionales, conserva fallback cero/negativo, clasifica
@@ -2913,7 +2919,14 @@ que policy.Presence coincida con la reflexión y falta test explícito de que
 finales, commit, receipt y árbol limpio. Feedback queued por MCP con ACK
 `operator-director-ack-ref-operator-message-ref-operator-ref-codex-live-audit-053r3-1783931368`.
 
-El prepare idempotente de 054R2 continúa agotando timeout sin crear estado
-observable mientras las suites ocupan el runner. No se fuerza stop: el daemon
-app-server es compartido y matar un goal dañaría a sus hermanos. Se reintentará
-la misma clave idempotente al liberar capacidad.
+Al bajar la carga se reintentó la misma clave idempotente y 054R2 quedó lanzado
+por la API pública, sin intervención directa en Orquesta:
+
+- run `request-ref-orquesta-appserver-generation-endtoend-20260713-054r2`;
+- goal `goal-ref-task-autoprogramming-0425d2394c63-g01`;
+- external `019f5a9b-9ea1-7d52-b228-d36cd2065477`;
+- workspace físico aislado `b1facf531c0343bb11f3d2e3e5d90782`.
+
+El prepare acredita thread, SetGoal y turn del app-server iniciados. Se mantiene
+la regla de no forzar stop: el daemon app-server es compartido y matar un goal
+puede dañar a sus hermanos.
