@@ -2517,6 +2517,27 @@ goal `goal-ref-task-autoprogramming-ec805763e45e-g01`, base `14bfa803953b`,
 write-set de dos archivos. Se lanzó en paralelo solo tras varios ciclos de 044
 rework-1 sin artefactos; los write-sets son disjuntos y se vigila contención.
 
+### 2026-07-13T07:28Z — 046 rechazado; 047 activo
+
+046 promovió `a83376c029` (source `6fc7008f40`) y pasó focal, paquete completo y
+race x3, pero auditoría independiente lo rechazó: la acreditación aceptaba solo
+sufijo `-rework-N`, sin refs padre/closure, spec/receipt, generación inmediata
+ni ausencia de LastResult/LastClosure; external ref missing-vs-present pasaba y
+el raw se descartaba sin diagnóstico. No entra al host.
+
+047 lanzado por API sobre `a83376c029`: run
+`request-ref-autoprogramming-observe-successor-causal-rework-20260713-047`, goal
+`goal-ref-task-autoprogramming-367301aa2721-g01`. Exige matriz fail-closed
+completa, sucesor inmediato, identidad state/spec/receipt, refs parent+closure,
+sin cierre/resultado heredado y diagnóstico raw interno redactado; sin sink
+fiable conserva el error.
+
+Auditoría global sobre `f9fbb0163` confirma que Orquesta no está terminada:
+además de observe/catálogo/T5/allowlist/T6 faltan V1-A configuración editable,
+V1-B credenciales/OAuth, V1-A2 catálogo/routing de modelos, cierres T2/T3/T4,
+certificación Docker y reconciliar 97 worktrees. Se conserva todo en el plan; no
+se redefine cierre como el subconjunto ya verde.
+
 ### 2026-07-13T06:32Z — decisión scope legacy y multiusuario
 
 Se acepta el hallazgo de Claude `871ccfb40c` como bloqueo de activación
