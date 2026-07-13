@@ -33,7 +33,7 @@ func serverEffectiveConfigFromEnvAndProjectConfigV0(
 	stackCapacity := codexStackCapacityEnvConfigFromProjectConfigFileV0(projectConfig)
 	directorWaveLimits := codexDirectorWaveLimitsFromProjectConfigFileV0(projectConfig)
 	egressSanitizer := egressSanitizerConfigFromProjectConfigFileV0(projectConfig)
-	worktreeSnapshotBudget := codexServerWorktreeSnapshotReadBudgetFromProjectConfigV0(config.ProjectWorkDir)
+	worktreeSnapshotBudget := codexServerWorktreeSnapshotReadBudgetFromConfigFileV0(projectConfig)
 	daemonEnvPolicy := serverDaemonStartEnvPolicyV0(os.Environ(), config)
 	goalProgressPolicy := serverAutoprogrammingGoalProgressPolicyFromConfigV0(config)
 	startupCleanup := startupCleanupConfigFromProjectConfigFileV0(projectConfig)
@@ -471,15 +471,15 @@ func serverEffectiveConfigFromEnvAndProjectConfigV0(
 		serverPositiveConfigSettingFromConfigV0(config, envCodexDirectorMaxSubagentsPerAgentV0, directorWaveLimits.MaxSubagentsPerAgent),
 		serverPositiveConfigSettingFromConfigV0(config, envCodexDirectorRecursiveAgentBudgetV0, directorWaveLimits.RecursiveAgentBudget),
 	}
-	settings = append(settings, codebaseBrokerEffectiveSettingsV0(config.ProjectWorkDir, projectConfig)...)
+	settings = append(settings, codebaseBrokerEffectiveSettingsV0(config, projectConfig)...)
 	settings = append(settings, geminiRuntimeEffectiveConfigSettingsV0(config, projectConfig)...)
 	settings = append(settings, requiredTestRunnerEffectiveConfigSettingsV0(projectConfig)...)
 	settings = append(settings, autoprogrammingPromotionEffectiveConfigSettingsV0(config, projectConfig)...)
 	settings = append(settings, telegramOperatorEffectiveConfigSettingsV0(config, projectConfig)...)
-	settings = append(settings, domainWorkEffectiveSettingsV0(config.ProjectWorkDir, projectConfig)...)
+	settings = append(settings, domainWorkEffectiveSettingsV0(config, projectConfig)...)
 	settings = append(settings, opesBridgeEffectiveConfigSettingsV0(config, projectConfig)...)
 	settings = append(settings, codexWaveEffectiveConfigSettingsV0(config, projectConfig)...)
-	settings = append(settings, codexServerWorktreeSnapshotBudgetSettingsV0(config.ProjectWorkDir, worktreeSnapshotBudget)...)
+	settings = append(settings, codexServerWorktreeSnapshotBudgetSettingsV0(config, worktreeSnapshotBudget)...)
 	settings = append(settings, hermesOperatorEffectiveConfigSettingsV0(config, projectConfig)...)
 	settings = append(settings, ollamaModelManagerEffectiveConfigSettingsV0(config, projectConfig)...)
 	settings = append(settings, opesRegistryFinalPkgEffectiveConfigSettingsV0(config, projectConfig)...)

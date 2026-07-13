@@ -1,9 +1,6 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -232,64 +229,51 @@ func loadServerProjectConfigFileV0(projectDir string) (serverProjectConfigFileV0
 	return loadServerProjectConfigPathV0(serverProjectConfigFilePathV0(projectDir))
 }
 
-func loadServerProjectConfigPathV0(path string) (serverProjectConfigFileV0, bool, error) {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return serverProjectConfigFileV0{}, false, nil
-	}
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		return serverProjectConfigFileV0{}, false, fmt.Errorf("%s: path", configFileInvalidPublicCodeV0)
-	}
-	raw, err := os.ReadFile(abs)
-	if errors.Is(err, os.ErrNotExist) {
-		return serverProjectConfigFileV0{}, false, nil
-	}
-	if err != nil {
-		return serverProjectConfigFileV0{}, false, fmt.Errorf("%s: read", configFileInvalidPublicCodeV0)
-	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	var config serverProjectConfigFileV0
-	if err := decoder.Decode(&config); err != nil {
-		return serverProjectConfigFileV0{}, false, fmt.Errorf("%s: json", configFileInvalidPublicCodeV0)
-	}
-	if strings.TrimSpace(config.SchemaVersion) != serverProjectConfigSchemaVersionV0 {
-		return serverProjectConfigFileV0{}, false, fmt.Errorf("%s: %s", configFileUnsupportedSchemaCodeV0, serverProjectConfigSchemaVersionV0)
-	}
-	return config, true, nil
-}
-
 func resolveServerProjectConfigV0(
 	projectDir string,
 	explicitPath string,
 ) (serverProjectConfigFileV0, string, error) {
+	loaded, path, err := resolveServerProjectConfigProductV0(projectDir, explicitPath)
+	return loaded.Config, path, err
+}
+
+func resolveServerProjectConfigProductV0(
+	projectDir string,
+	explicitPath string,
+) (serverProjectConfigLoadV0, string, error) {
 	explicitPath = strings.TrimSpace(explicitPath)
 	if explicitPath != "" {
 		abs, err := filepath.Abs(explicitPath)
 		if err != nil {
-			return serverProjectConfigFileV0{}, "", fmt.Errorf("%s: path", configFileInvalidPublicCodeV0)
+			return serverProjectConfigLoadV0{}, "", fmt.Errorf("%s: path", configFileInvalidPublicCodeV0)
 		}
-		config, ok, err := loadServerProjectConfigPathV0(abs)
+		loaded, ok, err := loadServerProjectConfigProductPathV0(abs)
 		if err != nil {
-			return serverProjectConfigFileV0{}, "", err
+			return serverProjectConfigLoadV0{}, "", err
 		}
 		if !ok {
-			return serverProjectConfigFileV0{}, "", fmt.Errorf("%s: read", configFileInvalidPublicCodeV0)
+			return serverProjectConfigLoadV0{}, "", fmt.Errorf("%s: read", configFileInvalidPublicCodeV0)
 		}
-		return config, abs, nil
+		return loaded, abs, nil
 	}
-	config, ok, err := loadServerProjectConfigFileV0(projectDir)
+	if strings.TrimSpace(projectDir) == "" {
+		return serverProjectConfigLoadV0{}, "", nil
+	}
+	path := serverProjectConfigFilePathV0(projectDir)
+	loaded, ok, err := loadServerProjectConfigProductPathV0(path)
 	if err != nil {
-		return serverProjectConfigFileV0{}, "", err
+		return serverProjectConfigLoadV0{}, "", err
 	}
 	if !ok {
-		return serverProjectConfigFileV0{}, "", nil
+		return serverProjectConfigLoadV0{}, "", nil
 	}
-	return config, serverProjectConfigFilePathV0(projectDir), nil
+	return loaded, path, nil
 }
 
 func projectConfigFromProjectDirBestEffortV0(projectDir string) serverProjectConfigFileV0 {
+	if loaded, ok := serverProjectConfigStartupLoadV0(projectDir, ""); ok {
+		return loaded.Config
+	}
 	config, _, err := loadServerProjectConfigFileV0(projectDir)
 	if err != nil {
 		return serverProjectConfigFileV0{}
@@ -299,6 +283,12 @@ func projectConfigFromProjectDirBestEffortV0(projectDir string) serverProjectCon
 
 func projectConfigFromServerConfigBestEffortV0(config orquestaserver.ConfigV0) serverProjectConfigFileV0 {
 	config = orquestaserver.NormalizeConfigV0(config)
+	if loaded, ok := serverProjectConfigStartupLoadV0(config.ProjectWorkDir, config.ProjectConfigFilePath, config.ProjectConfigRevision); ok {
+		return loaded.Config
+	}
+	if strings.TrimSpace(config.ProjectConfigRevision) != "" {
+		return serverProjectConfigFileV0{}
+	}
 	if strings.TrimSpace(config.ProjectConfigFilePath) != "" {
 		projectConfig, _, err := loadServerProjectConfigPathV0(config.ProjectConfigFilePath)
 		if err == nil {
@@ -437,8 +427,17 @@ func configSettingSourceFromEnvOrProjectConfigV0(projectDir string, key string) 
 	if strings.TrimSpace(os.Getenv(key)) != "" {
 		return "explicit"
 	}
-	fileConfig, ok, err := loadServerProjectConfigFileV0(projectDir)
-	if err != nil || !ok {
+	fileConfig := serverProjectConfigFileV0{}
+	ok := false
+	if loaded, cached := serverProjectConfigStartupLoadV0(projectDir, ""); cached {
+		fileConfig, ok = loaded.Config, true
+	} else {
+		loaded, loadedOK, err := loadServerProjectConfigFileV0(projectDir)
+		if err == nil {
+			fileConfig, ok = loaded, loadedOK
+		}
+	}
+	if !ok {
 		return "defaulted"
 	}
 	if serverProjectConfigHasEffectiveValueForEnvKeyV0(fileConfig, key) {
@@ -451,7 +450,11 @@ func configSettingSourceFromConfigOrProjectConfigV0(config orquestaserver.Config
 	config = orquestaserver.NormalizeConfigV0(config)
 	fileConfig := serverProjectConfigFileV0{}
 	ok := false
-	if strings.TrimSpace(config.ProjectConfigFilePath) != "" {
+	if loaded, cached := serverProjectConfigStartupLoadV0(config.ProjectWorkDir, config.ProjectConfigFilePath, config.ProjectConfigRevision); cached {
+		fileConfig, ok = loaded.Config, true
+	} else if strings.TrimSpace(config.ProjectConfigRevision) != "" {
+		ok = false
+	} else if strings.TrimSpace(config.ProjectConfigFilePath) != "" {
 		loaded, loadedOK, err := loadServerProjectConfigPathV0(config.ProjectConfigFilePath)
 		if err == nil {
 			fileConfig = loaded

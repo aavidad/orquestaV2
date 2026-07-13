@@ -18,8 +18,14 @@ import (
 
 func domainWorkExecutorFromEnvV0(
 	serverConfig orquestaserver.ConfigV0,
+	projectConfigs ...serverProjectConfigFileV0,
 ) (orquestamcp.MCPDomainWorkExecutorPortV0, error) {
-	projectConfig := projectConfigFromProjectDirBestEffortV0(serverConfig.ProjectWorkDir)
+	projectConfig := serverProjectConfigFileV0{}
+	if len(projectConfigs) > 0 {
+		projectConfig = projectConfigs[0]
+	} else {
+		projectConfig = projectConfigFromServerConfigBestEffortV0(serverConfig)
+	}
 	opesConfig := serverOPESConfigSnapshotFromProjectConfigFileV0(projectConfig)
 	baseURL := firstNonEmptyEnvV0(envOPESBaseURLV0, envOPESBaseURLLegacyV0)
 	httpBaseURL := strings.TrimSpace(domainWorkHTTPBaseURLFromProjectConfigFileV0(projectConfig))

@@ -106,12 +106,12 @@ func domainWorkDeliveryEnabledFromProjectConfigFileV0(config serverProjectConfig
 }
 
 func domainWorkEffectiveSettingsV0(
-	projectDir string,
+	serverConfig orquestaserver.ConfigV0,
 	config serverProjectConfigFileV0,
 ) []orquestaserver.ServerConfigSettingV0 {
-	baseURLSource := configSettingSourceFromEnvOrProjectConfigV0(projectDir, envDomainWorkHTTPBaseURLV0)
-	fileDirSource := configSettingSourceFromEnvOrProjectConfigV0(projectDir, envDomainWorkFileDirV0)
-	ledgerSource := configSettingSourceFromEnvOrProjectConfigV0(projectDir, envDomainDeliveryLedgerPathV0)
+	baseURLSource := configSettingSourceFromConfigOrProjectConfigV0(serverConfig, envDomainWorkHTTPBaseURLV0)
+	fileDirSource := configSettingSourceFromConfigOrProjectConfigV0(serverConfig, envDomainWorkFileDirV0)
+	ledgerSource := configSettingSourceFromConfigOrProjectConfigV0(serverConfig, envDomainDeliveryLedgerPathV0)
 	return []orquestaserver.ServerConfigSettingV0{
 		serverSensitiveConfigSettingFromRegistryWithSourceV0(
 			envDomainWorkHTTPBaseURLV0,
@@ -125,7 +125,7 @@ func domainWorkEffectiveSettingsV0(
 		serverConfigSettingFromRegistryWithSourceV0(
 			envDomainWorkHTTPDomainRefV0,
 			domainWorkHTTPDomainRefFromProjectConfigFileV0(config),
-			configSettingSourceFromEnvOrProjectConfigV0(projectDir, envDomainWorkHTTPDomainRefV0),
+			configSettingSourceFromConfigOrProjectConfigV0(serverConfig, envDomainWorkHTTPDomainRefV0),
 		),
 		serverSensitiveConfigSettingFromRegistryWithSourceV0(
 			envDomainWorkFileDirV0,
@@ -139,32 +139,32 @@ func domainWorkEffectiveSettingsV0(
 		serverConfigSettingFromRegistryWithSourceV0(
 			envDomainWorkFileEnabledV0,
 			strconv.FormatBool(domainWorkFileEnabledFromProjectConfigFileV0(config)),
-			configSettingSourceFromEnvOrProjectConfigV0(projectDir, envDomainWorkFileEnabledV0),
+			configSettingSourceFromConfigOrProjectConfigV0(serverConfig, envDomainWorkFileEnabledV0),
 		),
 		serverConfigSettingFromRegistryWithSourceV0(
 			envDomainWorkHTTPCreatePathV0,
 			domainWorkHTTPCreatePathFromProjectConfigFileV0(config),
-			configSettingSourceFromEnvOrProjectConfigV0(projectDir, envDomainWorkHTTPCreatePathV0),
+			configSettingSourceFromConfigOrProjectConfigV0(serverConfig, envDomainWorkHTTPCreatePathV0),
 		),
 		serverConfigSettingFromRegistryWithSourceV0(
 			envDomainWorkHTTPSubmitPathV0,
 			domainWorkHTTPSubmitPathFromProjectConfigFileV0(config),
-			configSettingSourceFromEnvOrProjectConfigV0(projectDir, envDomainWorkHTTPSubmitPathV0),
+			configSettingSourceFromConfigOrProjectConfigV0(serverConfig, envDomainWorkHTTPSubmitPathV0),
 		),
 		serverConfigSettingFromRegistryWithSourceV0(
 			envDomainWorkHTTPTimeoutSecondsV0,
 			strconv.Itoa(domainWorkHTTPTimeoutSecondsFromProjectConfigFileV0(config)),
-			configSettingSourceFromEnvOrProjectConfigV0(projectDir, envDomainWorkHTTPTimeoutSecondsV0),
+			configSettingSourceFromConfigOrProjectConfigV0(serverConfig, envDomainWorkHTTPTimeoutSecondsV0),
 		),
 		serverConfigSettingFromRegistryWithSourceV0(
 			envDomainWorkHTTPEgressModeV0,
 			domainWorkHTTPEgressModeFromProjectConfigFileV0(config),
-			configSettingSourceFromEnvOrProjectConfigV0(projectDir, envDomainWorkHTTPEgressModeV0),
+			configSettingSourceFromConfigOrProjectConfigV0(serverConfig, envDomainWorkHTTPEgressModeV0),
 		),
 		serverConfigSettingFromRegistryWithSourceV0(
 			envDomainWorkHTTPAllowedHostsV0,
 			strings.Join(domainWorkHTTPAllowedHostsFromProjectConfigFileV0(config), ","),
-			configSettingSourceFromEnvOrProjectConfigV0(projectDir, envDomainWorkHTTPAllowedHostsV0),
+			configSettingSourceFromConfigOrProjectConfigV0(serverConfig, envDomainWorkHTTPAllowedHostsV0),
 		),
 		serverSensitiveConfigSettingFromRegistryWithSourceV0(
 			envDomainDeliveryLedgerPathV0,

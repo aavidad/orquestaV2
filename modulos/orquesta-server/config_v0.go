@@ -75,6 +75,7 @@ type ConfigV0 struct {
 	RuntimeIdentity                   ServerRuntimeIdentityV0
 	ProjectWorkDir                    string
 	ProjectConfigFilePath             string
+	ProjectConfigRevision             string
 	RuntimeWorkDir                    string
 	IdleSelfImprovementProjectWorkDir string
 	ShutdownSignalPolicy              ShutdownSignalPolicyV0
@@ -164,6 +165,7 @@ func NormalizeConfigV0(config ConfigV0) ConfigV0 {
 	config.RuntimeIdentity = NormalizeServerRuntimeIdentityV0(config.RuntimeIdentity)
 	config.ProjectWorkDir = strings.TrimSpace(config.ProjectWorkDir)
 	config.ProjectConfigFilePath = strings.TrimSpace(config.ProjectConfigFilePath)
+	config.ProjectConfigRevision = strings.TrimSpace(config.ProjectConfigRevision)
 	config.RuntimeWorkDir = strings.TrimSpace(config.RuntimeWorkDir)
 	config.IdleSelfImprovementProjectWorkDir = strings.TrimSpace(config.IdleSelfImprovementProjectWorkDir)
 	if config.IdleSelfImprovementProjectWorkDir == "" {

@@ -6,6 +6,8 @@ import (
 	"io"
 	"strings"
 	"time"
+
+	orquestaserver "orquesta/modulos/orquesta-server"
 )
 
 type opesBridgeLoopConfigV0 struct {
@@ -19,13 +21,32 @@ func opesBridgeLoopConfigFromEnvV0(
 	orquestaBaseURLFallback string,
 ) (opesBridgeLoopConfigV0, error) {
 	projectConfig := opesProjectConfigFromEnvBestEffortV0()
+	return opesBridgeLoopConfigFromProjectConfigV0(projectConfig, "", orquestaBaseURLFallback)
+}
+
+func opesBridgeLoopConfigFromServerConfigV0(
+	serverConfig orquestaserver.ConfigV0,
+	orquestaBaseURLFallback string,
+) (opesBridgeLoopConfigV0, error) {
+	return opesBridgeLoopConfigFromProjectConfigV0(
+		projectConfigFromServerConfigBestEffortV0(serverConfig),
+		serverConfig.StateDir,
+		orquestaBaseURLFallback,
+	)
+}
+
+func opesBridgeLoopConfigFromProjectConfigV0(
+	projectConfig serverProjectConfigFileV0,
+	stateDir string,
+	orquestaBaseURLFallback string,
+) (opesBridgeLoopConfigV0, error) {
 	if !opesBridgeEnabledFromProjectConfigFileV0(projectConfig) {
 		return opesBridgeLoopConfigV0{}, nil
 	}
 	if !opesBridgeConfirmFromProjectConfigFileV0(projectConfig) {
 		return opesBridgeLoopConfigV0{}, fmt.Errorf("ORQUESTA_OPES_BRIDGE_CONFIRM requerido para opes bridge loop")
 	}
-	drainConfig, err := opesDrainConfigFromEnvWithBaseURLV0(orquestaBaseURLFallback)
+	drainConfig, err := opesDrainConfigFromProjectConfigV0(projectConfig, orquestaBaseURLFallback, stateDir)
 	if err != nil {
 		return opesBridgeLoopConfigV0{}, err
 	}

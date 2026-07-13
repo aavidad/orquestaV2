@@ -33,11 +33,16 @@ func startServerCommandV0(args []string, stdout io.Writer, stderr io.Writer) int
 		_, _ = fmt.Fprintf(stderr, "orquesta-server start: reason_code=%s\n", publicServerWorktreeIdentityReasonV0(preflight.Issue.Code))
 		return 1
 	}
+	return startServerCommandConfiguredV0(options, stdout, stderr)
+}
+
+func startServerCommandConfiguredV0(options serverCommandConfigOptionsV0, stdout io.Writer, stderr io.Writer) int {
 	config, err := serverConfigFromEnvWithProjectConfigPathV0(options.ConfigPath)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server start: %v\n", err)
 		return 1
 	}
+	defer releaseServerProjectConfigSnapshotV0(config)
 	if err := validateCodexCommandAvailableV0(); err != nil {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server start: %v\n", err)
 		return 1
@@ -117,13 +122,21 @@ func writeServerDaemonConfigSnapshotV0(config orquestaserver.ConfigV0) (string, 
 	if sourcePath == "" {
 		return "", nil
 	}
-	raw, err := os.ReadFile(sourcePath)
-	if err != nil {
-		return "", fmt.Errorf("%s: read", configFileInvalidPublicCodeV0)
+	loaded, ok := serverProjectConfigStartupLoadV0(config.ProjectWorkDir, sourcePath, config.ProjectConfigRevision)
+	if !ok && strings.TrimSpace(config.ProjectConfigRevision) == "" {
+		var err error
+		loaded, ok, err = loadServerProjectConfigProductPathV0(sourcePath)
+		if err != nil {
+			return "", err
+		}
 	}
-	if _, _, err := loadServerProjectConfigPathV0(sourcePath); err != nil {
+	if !ok {
+		return "", fmt.Errorf("server project config startup snapshot unavailable: %s", config.ProjectConfigRevision)
+	}
+	if err := validateServerProjectConfigLoadV0(loaded); err != nil {
 		return "", err
 	}
+	raw := append([]byte(nil), loaded.CanonicalBytes...)
 	stateDir := strings.TrimSpace(config.StateDir)
 	if stateDir == "" {
 		return "", fmt.Errorf("server_state_dir_unavailable")

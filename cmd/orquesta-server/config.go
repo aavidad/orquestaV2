@@ -31,10 +31,24 @@ func serverConfigFromEnvWithProjectConfigPathV0(projectConfigPath string) (orque
 	if err != nil {
 		return orquestaserver.ConfigV0{}, err
 	}
-	projectConfig, loadedProjectConfigPath, err := resolveServerProjectConfigV0(projectDir, projectConfigPath)
+	projectConfigLoad, loadedProjectConfigPath, err := resolveServerProjectConfigProductV0(projectDir, projectConfigPath)
 	if err != nil {
 		return orquestaserver.ConfigV0{}, err
 	}
+	if err := validateServerProjectConfigLoadV0(projectConfigLoad); err != nil && loadedProjectConfigPath != "" {
+		return orquestaserver.ConfigV0{}, err
+	}
+	startupLoadOwned := false
+	if loadedProjectConfigPath != "" {
+		rememberServerProjectConfigStartupLoadV0(projectDir, loadedProjectConfigPath, projectConfigLoad)
+		startupLoadOwned = true
+		defer func() {
+			if startupLoadOwned {
+				forgetServerProjectConfigStartupLoadV0(projectDir, loadedProjectConfigPath, projectConfigLoad.Revision)
+			}
+		}()
+	}
+	projectConfig := projectConfigLoad.Config
 	opesConfig := serverOPESConfigSnapshotFromProjectConfigFileV0(projectConfig)
 	opesAutomationContext := serverOPESAutomationContextFromSnapshotV0(opesConfig)
 	autoprogrammingGoalProgressPolicy := serverAutoprogrammingGoalProgressPolicyConfigFromProjectFileV0(projectConfig)
@@ -126,6 +140,7 @@ func serverConfigFromEnvWithProjectConfigPathV0(projectConfigPath string) (orque
 		RuntimeIdentity:                   serverRuntimeIdentityFromExecutableV0(),
 		ProjectWorkDir:                    projectDir,
 		ProjectConfigFilePath:             loadedProjectConfigPath,
+		ProjectConfigRevision:             projectConfigLoad.Revision,
 		RuntimeWorkDir:                    runtimeDir,
 		IdleSelfImprovementProjectWorkDir: idleSelfImprovementProjectDir,
 		ShutdownSignalPolicy:              serverShutdownSignalPolicyV0(),
@@ -199,7 +214,14 @@ func serverConfigFromEnvWithProjectConfigPathV0(projectConfigPath string) (orque
 		return orquestaserver.ConfigV0{}, err
 	}
 	config.EffectiveConfig = serverEffectiveConfigFromEnvAndProjectConfigV0(config, projectConfig)
-	return config, orquestaserver.ValidateConfigV0(config)
+	if err := orquestaserver.ValidateConfigV0(config); err != nil {
+		return orquestaserver.ConfigV0{}, err
+	}
+	// Ownership moves to the command boundary. That boundary keeps the immutable
+	// snapshot alive through composition and every resident loop configuration,
+	// then releases it exactly once when the command finishes.
+	startupLoadOwned = false
+	return config, nil
 }
 
 func defaultIdleSelfImprovementWriteSetV0() []string {

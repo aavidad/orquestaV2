@@ -98,31 +98,31 @@ func codebaseBrokerWatchdogOrphanMinAgeSecondsFromProjectConfigFileV0(config ser
 }
 
 func codebaseBrokerEffectiveSettingsV0(
-	projectDir string,
+	serverConfig orquestaserver.ConfigV0,
 	config serverProjectConfigFileV0,
 ) []orquestaserver.ServerConfigSettingV0 {
-	stateDirSource := configSettingSourceFromEnvOrProjectConfigV0(projectDir, envCodebaseBrokerStateDirV0)
-	commandSource := configSettingSourceFromEnvOrProjectConfigV0(projectDir, envCodebaseBrokerCommandV0)
+	stateDirSource := configSettingSourceFromConfigOrProjectConfigV0(serverConfig, envCodebaseBrokerStateDirV0)
+	commandSource := configSettingSourceFromConfigOrProjectConfigV0(serverConfig, envCodebaseBrokerCommandV0)
 	return []orquestaserver.ServerConfigSettingV0{
 		serverConfigSettingFromRegistryWithSourceV0(
 			envCodebaseBrokerProviderKindV0,
 			codebaseBrokerProviderKindFromProjectConfigFileV0(config),
-			configSettingSourceFromEnvOrProjectConfigV0(projectDir, envCodebaseBrokerProviderKindV0),
+			configSettingSourceFromConfigOrProjectConfigV0(serverConfig, envCodebaseBrokerProviderKindV0),
 		),
 		serverConfigSettingFromRegistryWithSourceV0(
 			envCodebaseBrokerExternalIndexerEnabledV0,
 			strconv.FormatBool(codebaseBrokerExternalIndexerEnabledFromProjectConfigFileV0(config)),
-			configSettingSourceFromEnvOrProjectConfigV0(projectDir, envCodebaseBrokerExternalIndexerEnabledV0),
+			configSettingSourceFromConfigOrProjectConfigV0(serverConfig, envCodebaseBrokerExternalIndexerEnabledV0),
 		),
 		serverConfigSettingFromRegistryWithSourceV0(
 			envCodebaseBrokerMaxConcurrentV0,
 			strconv.Itoa(codebaseBrokerMaxConcurrentFromProjectConfigFileV0(config)),
-			configSettingSourceFromEnvOrProjectConfigV0(projectDir, envCodebaseBrokerMaxConcurrentV0),
+			configSettingSourceFromConfigOrProjectConfigV0(serverConfig, envCodebaseBrokerMaxConcurrentV0),
 		),
 		serverConfigSettingFromRegistryWithSourceV0(
 			envCodebaseBrokerTimeoutMSV0,
 			strconv.Itoa(int(codebaseBrokerTimeoutFromProjectConfigFileV0(config)/time.Millisecond)),
-			configSettingSourceFromEnvOrProjectConfigV0(projectDir, envCodebaseBrokerTimeoutMSV0),
+			configSettingSourceFromConfigOrProjectConfigV0(serverConfig, envCodebaseBrokerTimeoutMSV0),
 		),
 		serverSensitiveConfigSettingFromRegistryWithSourceV0(
 			envCodebaseBrokerStateDirV0,
@@ -136,17 +136,17 @@ func codebaseBrokerEffectiveSettingsV0(
 		serverConfigSettingFromRegistryWithSourceV0(
 			envCodebaseBrokerWatchdogEnabledV0,
 			strconv.FormatBool(codebaseBrokerWatchdogEnabledFromProjectConfigFileV0(config)),
-			configSettingSourceFromEnvOrProjectConfigV0(projectDir, envCodebaseBrokerWatchdogEnabledV0),
+			configSettingSourceFromConfigOrProjectConfigV0(serverConfig, envCodebaseBrokerWatchdogEnabledV0),
 		),
 		serverConfigSettingFromRegistryWithSourceV0(
 			envCodebaseBrokerWatchdogStopOrphansV0,
 			strconv.FormatBool(codebaseBrokerWatchdogStopOrphansFromProjectConfigFileV0(config)),
-			configSettingSourceFromEnvOrProjectConfigV0(projectDir, envCodebaseBrokerWatchdogStopOrphansV0),
+			configSettingSourceFromConfigOrProjectConfigV0(serverConfig, envCodebaseBrokerWatchdogStopOrphansV0),
 		),
 		serverConfigSettingFromRegistryWithSourceV0(
 			envCodebaseBrokerWatchdogOrphanMinAgeSecondsV0,
 			strconv.Itoa(codebaseBrokerWatchdogOrphanMinAgeSecondsFromProjectConfigFileV0(config)),
-			configSettingSourceFromEnvOrProjectConfigV0(projectDir, envCodebaseBrokerWatchdogOrphanMinAgeSecondsV0),
+			configSettingSourceFromConfigOrProjectConfigV0(serverConfig, envCodebaseBrokerWatchdogOrphanMinAgeSecondsV0),
 		),
 		serverSensitiveConfigSettingFromRegistryWithSourceV0(
 			envCodebaseBrokerCommandV0,
@@ -160,7 +160,7 @@ func codebaseBrokerEffectiveSettingsV0(
 		serverConfigSettingFromRegistryWithSourceV0(
 			envCodebaseBrokerProjectNameV0,
 			codebaseBrokerProjectNameFromProjectConfigFileV0(config),
-			configSettingSourceFromEnvOrProjectConfigV0(projectDir, envCodebaseBrokerProjectNameV0),
+			configSettingSourceFromConfigOrProjectConfigV0(serverConfig, envCodebaseBrokerProjectNameV0),
 		),
 	}
 }

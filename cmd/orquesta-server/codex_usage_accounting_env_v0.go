@@ -22,10 +22,13 @@ func codexUsageMetricsFromProjectConfigV0(
 	projectDir string,
 	receiptStore orquestaappcodexstack.CodexReceiptStorePortV0,
 ) orquestaappcodexstack.CodexStackAgentUsageMetricsProviderPortV0 {
-	config, _, err := loadServerProjectConfigFileV0(projectDir)
-	if err != nil {
-		return codexUsageMetricsFromEnvV0(receiptStore)
-	}
+	return codexUsageMetricsFromProjectConfigFileV0(projectConfigFromProjectDirBestEffortV0(projectDir), receiptStore)
+}
+
+func codexUsageMetricsFromProjectConfigFileV0(
+	config serverProjectConfigFileV0,
+	receiptStore orquestaappcodexstack.CodexReceiptStorePortV0,
+) orquestaappcodexstack.CodexStackAgentUsageMetricsProviderPortV0 {
 	return codexUsageMetricsFromModeV0(
 		codexUsageAccountingModeFromProjectConfigFileV0(config),
 		codexUsageLogMaxBytesFromProjectConfigFileV0(config),

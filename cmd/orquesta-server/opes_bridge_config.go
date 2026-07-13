@@ -63,6 +63,14 @@ func opesDrainConfigFromEnvWithBaseURLV0(
 	orquestaBaseURLFallback string,
 ) (opesDrainConfigV0, error) {
 	projectConfig := opesProjectConfigFromEnvBestEffortV0()
+	return opesDrainConfigFromProjectConfigV0(projectConfig, orquestaBaseURLFallback, "")
+}
+
+func opesDrainConfigFromProjectConfigV0(
+	projectConfig serverProjectConfigFileV0,
+	orquestaBaseURLFallback string,
+	stateDir string,
+) (opesDrainConfigV0, error) {
 	opesBaseURL := opesBaseURLFromProjectConfigFileV0(projectConfig)
 	if opesBaseURL == "" {
 		return opesDrainConfigV0{}, fmt.Errorf("ORQUESTA_OPES_BASE_URL u OPES_BASE_URL requerido")
@@ -75,7 +83,7 @@ func opesDrainConfigFromEnvWithBaseURLV0(
 	if err != nil {
 		return opesDrainConfigV0{}, err
 	}
-	inputLedger, err := opesBridgeInputLedgerFromProjectConfigFileV0(projectConfig, dryRun)
+	inputLedger, err := opesBridgeInputLedgerFromProjectConfigFileV0(projectConfig, dryRun, stateDir)
 	if err != nil {
 		return opesDrainConfigV0{}, err
 	}
@@ -163,6 +171,7 @@ func orquestaBaseURLFromEnvOrStateOrFallbackV0(
 	if err != nil {
 		return "", err
 	}
+	defer releaseServerProjectConfigSnapshotV0(config)
 	state, err := loadStateV0(config)
 	if err != nil {
 		return "", fmt.Errorf("ORQUESTA_BASE_URL requerido si no hay estado de servidor")

@@ -19,11 +19,9 @@ func codexServerWorktreeSnapshotReadBudgetFromEnvV0() orquestaruntimeworktree.Wo
 func codexServerWorktreeSnapshotReadBudgetFromProjectConfigV0(
 	projectDir string,
 ) orquestaruntimeworktree.WorktreeSnapshotReadBudgetV0 {
-	config, _, err := loadServerProjectConfigFileV0(projectDir)
-	if err != nil {
-		return codexServerWorktreeSnapshotReadBudgetFromEnvV0()
-	}
-	return codexServerWorktreeSnapshotReadBudgetFromConfigFileV0(config)
+	return codexServerWorktreeSnapshotReadBudgetFromConfigFileV0(
+		projectConfigFromProjectDirBestEffortV0(projectDir),
+	)
 }
 
 func codexServerWorktreeSnapshotReadBudgetFromConfigFileV0(
@@ -50,24 +48,24 @@ func codexServerWorktreeSnapshotReadBudgetFromConfigFileV0(
 }
 
 func codexServerWorktreeSnapshotBudgetSettingsV0(
-	projectDir string,
+	serverConfig orquestaserver.ConfigV0,
 	budget orquestaruntimeworktree.WorktreeSnapshotReadBudgetV0,
 ) []orquestaserver.ServerConfigSettingV0 {
 	return []orquestaserver.ServerConfigSettingV0{
 		serverConfigSettingFromRegistryWithSourceV0(
 			envWorktreeSnapshotMaxFilesV0,
 			strconv.Itoa(budget.MaxFiles),
-			configSettingSourceFromEnvOrProjectConfigV0(projectDir, envWorktreeSnapshotMaxFilesV0),
+			configSettingSourceFromConfigOrProjectConfigV0(serverConfig, envWorktreeSnapshotMaxFilesV0),
 		),
 		serverConfigSettingFromRegistryWithSourceV0(
 			envWorktreeSnapshotMaxFileBytesV0,
 			strconv.FormatInt(budget.MaxFileBytes, 10),
-			configSettingSourceFromEnvOrProjectConfigV0(projectDir, envWorktreeSnapshotMaxFileBytesV0),
+			configSettingSourceFromConfigOrProjectConfigV0(serverConfig, envWorktreeSnapshotMaxFileBytesV0),
 		),
 		serverConfigSettingFromRegistryWithSourceV0(
 			envWorktreeSnapshotMaxTotalBytesV0,
 			strconv.FormatInt(budget.MaxTotalBytes, 10),
-			configSettingSourceFromEnvOrProjectConfigV0(projectDir, envWorktreeSnapshotMaxTotalBytesV0),
+			configSettingSourceFromConfigOrProjectConfigV0(serverConfig, envWorktreeSnapshotMaxTotalBytesV0),
 		),
 	}
 }

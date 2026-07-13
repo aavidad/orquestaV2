@@ -24,8 +24,16 @@ type codeContextBrokerWiringV0 struct {
 	ToolOwnerObserver serverCodeContextToolOwnerObserverV0
 }
 
-func codeContextBrokerWiringFromEnvV0(config orquestaserver.ConfigV0) codeContextBrokerWiringV0 {
-	projectConfig := projectConfigFromProjectDirBestEffortV0(config.ProjectWorkDir)
+func codeContextBrokerWiringFromEnvV0(
+	config orquestaserver.ConfigV0,
+	projectConfigs ...serverProjectConfigFileV0,
+) codeContextBrokerWiringV0 {
+	projectConfig := serverProjectConfigFileV0{}
+	if len(projectConfigs) > 0 {
+		projectConfig = projectConfigs[0]
+	} else {
+		projectConfig = projectConfigFromServerConfigBestEffortV0(config)
+	}
 	providerKind := stringProjectConfigOrEnvOrDefaultV0(
 		envCodebaseBrokerProviderKindV0,
 		projectConfig.CodebaseBroker.ProviderKind,

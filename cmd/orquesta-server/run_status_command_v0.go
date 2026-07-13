@@ -31,6 +31,7 @@ func runStatusCommandV0(args []string, stdout io.Writer, stderr io.Writer) int {
 		_, _ = fmt.Fprintf(stderr, "run-status: %v\n", err)
 		return 1
 	}
+	defer releaseServerProjectConfigSnapshotV0(config)
 	state, err := loadStateV0(config)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "run-status: %v\n", err)

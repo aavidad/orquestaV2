@@ -143,6 +143,7 @@ func runServerCommandV0(args []string, _ io.Writer, stderr io.Writer) int {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server: %v\n", err)
 		return 1
 	}
+	defer releaseServerProjectConfigSnapshotV0(serverConfig)
 	if err := applyServerDetailRailsRuntimeDefaultsV0(); err != nil {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server: detail_rails_env_default_failed: %v\n", err)
 		return 1
@@ -159,7 +160,7 @@ func runServerCommandV0(args []string, _ io.Writer, stderr io.Writer) int {
 	signalController := newServerSignalControllerV0(context.Background(), runtime)
 	defer signalController.stopNotificationsV0()
 	ctx := signalController.contextV0()
-	bridgeConfig, err := opesBridgeLoopConfigFromEnvV0("http://" + serverConfig.Addr)
+	bridgeConfig, err := opesBridgeLoopConfigFromServerConfigV0(serverConfig, "http://"+serverConfig.Addr)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server opes-bridge blocked: %v\n", err)
 		markExternalBridgeConfigBlockedV0(ctx, runtime, err)
@@ -173,7 +174,7 @@ func runServerCommandV0(args []string, _ io.Writer, stderr io.Writer) int {
 	} else {
 		registryFinalPkgConfig.Loop.Observer = externalBridgeRuntimeObserverV0(runtime)
 	}
-	codeContextWatchdogConfig, err := serverCodeContextToolWatchdogLoopConfigFromEnvV0()
+	codeContextWatchdogConfig, err := serverCodeContextToolWatchdogLoopConfigFromServerConfigV0(serverConfig)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server code-context-watchdog blocked: %v\n", err)
 	} else {
@@ -259,6 +260,7 @@ func statusServerCommandV0(args []string, stdout io.Writer, stderr io.Writer) in
 		_, _ = fmt.Fprintf(stderr, "orquesta-server status: %v\n", err)
 		return 1
 	}
+	defer releaseServerProjectConfigSnapshotV0(config)
 	state, err := loadStateV0(config)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server status: %v\n", err)
@@ -367,6 +369,7 @@ func stopServerCommandV0(args []string, stdout io.Writer, stderr io.Writer) int 
 		_, _ = fmt.Fprintf(stderr, "orquesta-server stop: %v\n", err)
 		return 1
 	}
+	defer releaseServerProjectConfigSnapshotV0(config)
 	state, err := loadStateV0(config)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server stop: %v\n", err)

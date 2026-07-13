@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	orquestaserver "orquesta/modulos/orquesta-server"
 )
 
 const (
@@ -32,6 +34,20 @@ func serverCodeContextToolWatchdogLoopConfigFromEnvV0() (serverCodeContextToolWa
 		return serverCodeContextToolWatchdogLoopConfigV0{}, err
 	}
 	projectConfig := projectConfigFromProjectDirBestEffortV0(projectDir)
+	return serverCodeContextToolWatchdogLoopConfigFromProjectConfigV0(projectConfig)
+}
+
+func serverCodeContextToolWatchdogLoopConfigFromServerConfigV0(
+	serverConfig orquestaserver.ConfigV0,
+) (serverCodeContextToolWatchdogLoopConfigV0, error) {
+	return serverCodeContextToolWatchdogLoopConfigFromProjectConfigV0(
+		projectConfigFromServerConfigBestEffortV0(serverConfig),
+	)
+}
+
+func serverCodeContextToolWatchdogLoopConfigFromProjectConfigV0(
+	projectConfig serverProjectConfigFileV0,
+) (serverCodeContextToolWatchdogLoopConfigV0, error) {
 	if !codebaseBrokerWatchdogEnabledFromProjectConfigFileV0(projectConfig) {
 		return serverCodeContextToolWatchdogLoopConfigV0{}, nil
 	}

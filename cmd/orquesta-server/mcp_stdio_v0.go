@@ -27,6 +27,7 @@ func mcpStdioCommandV0(args []string, stdin io.Reader, stdout io.Writer, stderr 
 		_, _ = fmt.Fprintf(stderr, "orquesta-server mcp-stdio: %v\n", err)
 		return 1
 	}
+	defer releaseServerProjectConfigSnapshotV0(config)
 	bindings, resourceHook, err := mcpStdioBindingsFromConfigV0(config)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server mcp-stdio: %v\n", err)

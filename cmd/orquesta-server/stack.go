@@ -301,7 +301,7 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
-	domainWorkExecutor, err := domainWorkExecutorFromEnvV0(serverConfig)
+	domainWorkExecutor, err := domainWorkExecutorFromEnvV0(serverConfig, projectConfig)
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
@@ -309,7 +309,7 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
-	requiredTestRunner, err := requiredTestRunnerFromEnvV0(serverConfig, stateStore)
+	requiredTestRunner, err := requiredTestRunnerFromEnvV0(serverConfig, stateStore, projectConfig)
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
@@ -391,7 +391,7 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 	receiptStorePort := orquestaappcodexstack.CodexReceiptStorePortV0(receiptStore)
 	appChangeStore := orquestaappchange.AppChangeRecordStorePortV0(runFileStore)
 	var appGoalStateStore orquestagoal.GoalWorkStateStorePortV0 = stateStore
-	domainDeliveryLedger := domainDeliveryLedgerFromEnvV0(serverConfig)
+	domainDeliveryLedger := domainDeliveryLedgerFromEnvV0(serverConfig, projectConfig)
 	goalStateChange := &serverGoalStateChangeRelayV0{}
 	if supervisorWakeup != nil {
 		runStore = serverWakeupRunStoreV0{inner: stateStore, wakeup: supervisorWakeup}
@@ -419,7 +419,7 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 			wakeup: supervisorWakeup,
 		}
 	}
-	codeContextWiring := codeContextBrokerWiringFromEnvV0(serverConfig)
+	codeContextWiring := codeContextBrokerWiringFromEnvV0(serverConfig, projectConfig)
 	toolCapabilities, err := orquestatoolcapabilityfile.NewToolCapabilityFileCatalogV0(
 		filepath.Join(serverConfig.StateDir, "tool-capabilities"),
 	)
@@ -450,7 +450,7 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 	}
 	councilExecutor = councilExecutor.withMemberSourceV0(newCouncilMemberSourceV0(
 		projectConfig.Council.Members,
-		codexUsageMetricsFromProjectConfigV0(serverConfig.IdleSelfImprovementProjectWorkDir, receiptStore),
+		codexUsageMetricsFromProjectConfigFileV0(projectConfig, receiptStore),
 	))
 	councilConvener, err := newCouncilConvenerV0(serverConfig.StateDir, councilExecutor)
 	if err != nil {
@@ -482,7 +482,7 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 		RunQueue: orquestaappcodexstack.RunQueueConfigV0{
 			QueueRef:       "global",
 			MaxRunsPerTick: serverConfig.SupervisorCommand.MaxRunsPerTick,
-			QueueLimit:     serverRunQueueLimitFromProjectConfigV0(serverConfig.ProjectWorkDir),
+			QueueLimit:     serverRunQueueLimitFromProjectConfigFileV0(projectConfig),
 			DefaultPriorityScore: intEnvOrDefaultV0(
 				envServerDefaultPriorityV0, defaultCodexServerDefaultPriorityV0,
 			),
@@ -494,13 +494,13 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 		Codex: codexRuntimeConfigV0(
 			serverConfig,
 			processRuntime,
-			codexUsageMetricsFromProjectConfigV0(serverConfig.ProjectWorkDir, receiptStorePort),
+			codexUsageMetricsFromProjectConfigFileV0(projectConfig, receiptStorePort),
 		),
 		Gemini:                   geminiRuntimeConfigV0(serverConfig),
 		Claude:                   claudeRuntimeConfigV0(serverConfig),
 		EgressSanitizer:          egressSanitizer,
 		WizardBotAssistant:       serverWizardBotLLMAssistantFromConfigV0(serverConfig.ProjectWorkDir, projectConfig, goalBackend),
-		Capacity:                 codexStackCapacityConfigFromProjectConfigV0(serverConfig.ProjectWorkDir),
+		Capacity:                 codexStackCapacityConfigFromProjectConfigFileV0(projectConfig),
 		AutonomousDirectorPolicy: orquestacionnucleoapp.HeuristicAutonomousDirectorPolicyV0{},
 		AppGoalLauncher: serverGoalWorkLauncherForAppAndAutoprogrammingV0(
 			goalBackend,
@@ -548,7 +548,7 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 			FileEvidence:            orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},
 			StrictGoLineBudget:      boolEnvOrDefaultV0(envReviewGateStrictGoLineBudgetV0, false),
 			LineBudgetSnapshotStore: worktreeSnapshotStore,
-			SnapshotReadBudget:      codexServerWorktreeSnapshotReadBudgetFromProjectConfigV0(serverConfig.ProjectWorkDir),
+			SnapshotReadBudget:      codexServerWorktreeSnapshotReadBudgetFromConfigFileV0(projectConfig),
 		},
 		RequiredTests:                    requiredTestRunner,
 		DomainTests:                      domainWorkRequiredTestConfigFromEnvV0(),
@@ -573,7 +573,7 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 			false,
 		),
 		DomainDelivery: orquestaappcodexstack.DomainWorkDeliveryBridgeConfigV0{
-			Enabled: domainWorkDeliveryEnabledFromProjectConfigV0(serverConfig.ProjectWorkDir),
+			Enabled: domainWorkDeliveryEnabledFromProjectConfigFileV0(projectConfig),
 			Ledger:  domainDeliveryLedger,
 		},
 	})
@@ -615,26 +615,45 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 	return stack, nil
 }
 
-// ConfigV0 intentionally does not carry composition-private project config.
-// Load it once per stack build and fail closed if the startup snapshot vanished
-// or became invalid; providers receive this same value rather than rereading it.
+// ConfigV0 carries the immutable revision, not the composition-private typed
+// document. Consume its retained snapshot and fail closed if it vanished or
+// became invalid; providers receive this same value rather than rereading it.
 func projectConfigForBuildStackV0(config orquestaserver.ConfigV0) (serverProjectConfigFileV0, error) {
 	config = orquestaserver.NormalizeConfigV0(config)
+	if loaded, ok := serverProjectConfigStartupLoadV0(config.ProjectWorkDir, config.ProjectConfigFilePath, config.ProjectConfigRevision); ok {
+		if err := validateServerProjectConfigLoadV0(loaded); err != nil {
+			return serverProjectConfigFileV0{}, err
+		}
+		return loaded.Config, nil
+	}
+	if strings.TrimSpace(config.ProjectConfigRevision) != "" {
+		return serverProjectConfigFileV0{}, fmt.Errorf("server project config startup snapshot unavailable: %s", config.ProjectConfigRevision)
+	}
 	if path := strings.TrimSpace(config.ProjectConfigFilePath); path != "" {
-		projectConfig, ok, err := loadServerProjectConfigPathV0(path)
+		loaded, ok, err := loadServerProjectConfigProductPathV0(path)
 		if err != nil || !ok {
 			return serverProjectConfigFileV0{}, fmt.Errorf("%s: read", configFileInvalidPublicCodeV0)
 		}
-		return projectConfig, nil
+		if err := validateServerProjectConfigLoadV0(loaded); err != nil {
+			return serverProjectConfigFileV0{}, err
+		}
+		return loaded.Config, nil
 	}
-	projectConfig, ok, err := loadServerProjectConfigFileV0(config.ProjectWorkDir)
+	if strings.TrimSpace(config.ProjectWorkDir) == "" {
+		return serverProjectConfigFileV0{}, nil
+	}
+	path := serverProjectConfigFilePathV0(config.ProjectWorkDir)
+	loaded, ok, err := loadServerProjectConfigProductPathV0(path)
 	if err != nil || !ok {
 		if err != nil {
 			return serverProjectConfigFileV0{}, err
 		}
 		return serverProjectConfigFileV0{}, nil
 	}
-	return projectConfig, nil
+	if err := validateServerProjectConfigLoadV0(loaded); err != nil {
+		return serverProjectConfigFileV0{}, err
+	}
+	return loaded.Config, nil
 }
 
 func serverConfigProjectionSettingsForMCPV0(
@@ -709,7 +728,11 @@ func codexStackCapacityConfigFromEnvV0() orquestaappcodexstack.CapacityConfigV0 
 }
 
 func codexStackCapacityConfigFromProjectConfigV0(projectDir string) orquestaappcodexstack.CapacityConfigV0 {
-	envConfig := codexStackCapacityEnvConfigFromProjectConfigV0(projectDir)
+	return codexStackCapacityConfigFromProjectConfigFileV0(projectConfigFromProjectDirBestEffortV0(projectDir))
+}
+
+func codexStackCapacityConfigFromProjectConfigFileV0(projectConfig serverProjectConfigFileV0) orquestaappcodexstack.CapacityConfigV0 {
+	envConfig := codexStackCapacityEnvConfigFromProjectConfigFileV0(projectConfig)
 	return orquestaappcodexstack.CapacityConfigV0{
 		Tier:            envConfig.Tier,
 		ReasoningEffort: envConfig.ReasoningEffort,
@@ -778,8 +801,14 @@ func capacityRecommendationEnvOrDefaultV0(
 
 func domainDeliveryLedgerFromEnvV0(
 	serverConfig orquestaserver.ConfigV0,
+	projectConfigs ...serverProjectConfigFileV0,
 ) orquestaappcodexstack.DomainWorkArtifactSubmissionLedgerPortV0 {
-	projectConfig := projectConfigFromProjectDirBestEffortV0(serverConfig.ProjectWorkDir)
+	projectConfig := serverProjectConfigFileV0{}
+	if len(projectConfigs) > 0 {
+		projectConfig = projectConfigs[0]
+	} else {
+		projectConfig = projectConfigFromServerConfigBestEffortV0(serverConfig)
+	}
 	path := strings.TrimSpace(domainWorkDeliveryLedgerPathFromProjectConfigFileV0(projectConfig))
 	if path == "" {
 		path = filepath.Join(serverConfig.StateDir, "domain-work-artifact-ledger.json")
