@@ -49,7 +49,7 @@ func NewRouteHandlersV0(config ConfigV0) orquestahttpgateway.RouteHandlersV0 {
 		NuevaAppGuide:                     orquestaweb.NewNuevaAppGuideWebEndpointV0(),
 		OpsDashboard:                      orquestaweb.NewOpsDashboardWebEndpointV0(),
 		OpsKanban:                         orquestaweb.NewOpsKanbanWebEndpointV0(),
-		AutoprogrammingPage:               orquestaweb.NewAutoprogrammingWebEndpointV0(),
+		AutoprogrammingPage:               orquestaweb.NewAutoprogrammingWebEndpointV0(newAutoprogrammingStatusClientV0(config, client)),
 		AppChangePage:                     changeEndpoint,
 		DirectorStatsPage:                 orquestaweb.NewDirectorStatsWebEndpointV0(newStatsClientV0(config, client)),
 		RunControlPage:                    orquestaweb.NewRunControlWebEndpointV0(newRunControlClientV0(config, client)),

@@ -84,3 +84,12 @@ func newAppChangeClientV0(
 	out.HTTPClient = client
 	return out
 }
+
+func newAutoprogrammingStatusClientV0(
+	config ConfigV0,
+	client *http.Client,
+) *orquestaweb.RESTAutoprogrammingPrepareRunClientV0 {
+	out := orquestaweb.NewRESTAutoprogrammingPrepareRunClientV0(InternalBaseURLV0, config.Timeout)
+	out.HTTPClient = client
+	return out
+}

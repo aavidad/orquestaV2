@@ -183,6 +183,44 @@ func TestRESTAutoprogrammingPrepareRunClientV0RespuestaInvalida(t *testing.T) {
 	}
 }
 
+func TestRESTAutoprogrammingPrepareRunClientV0ConsultaStatusNormalizaYDecodifica(t *testing.T) {
+	var got orquestamcp.MCPAutoprogrammingStatusToolInputV0
+	server := newWebHTTPTestServerV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != WebAutoprogrammingStatusInboundEndpointV0 {
+			t.Fatalf("request inesperada: %s %s", r.Method, r.URL.Path)
+		}
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		_ = json.NewEncoder(w).Encode(orquestamcp.MCPAutoprogrammingStatusToolResultV0{
+			Estado:   orquestamcp.MCPAutoprogrammingStatusEstadoOKV0,
+			RunRef:   "run-autoprog-status-001",
+			QueueRef: "queue-autoprog-status-001",
+		})
+	}))
+	defer server.Close()
+
+	client := NewRESTAutoprogrammingPrepareRunClientV0(server.URL, time.Second)
+	viewModel, err := client.ConsultarAutoprogrammingStatus(context.Background(), WebAutoprogrammingStatusQueryV0{
+		RequestID: " request-autoprog-status-001 ",
+		RunRef:    " run-autoprog-status-001 ",
+	})
+	if err != nil {
+		t.Fatalf("ConsultarAutoprogrammingStatus error: %v", err)
+	}
+	if got.RequestID != "request-autoprog-status-001" ||
+		got.CorrelationID != "request-autoprog-status-001" ||
+		got.RunRef != "run-autoprog-status-001" ||
+		!bool(got.IncludeAgentProgress) {
+		t.Fatalf("status input no normalizado: %+v", got)
+	}
+	if viewModel.Estado != WebAutoprogrammingPrepareRunEstadoOKV0 ||
+		viewModel.RunRef != "run-autoprog-status-001" ||
+		viewModel.QueueRef != "queue-autoprog-status-001" {
+		t.Fatalf("status viewmodel no decodificado: %+v", viewModel)
+	}
+}
+
 func validWebAutoprogrammingPrepareRunCommandV0() WebAutoprogrammingPrepareRunCommandV0 {
 	return WebAutoprogrammingPrepareRunCommandV0{
 		RequestID:     "request-ref-autoprog-web-001",

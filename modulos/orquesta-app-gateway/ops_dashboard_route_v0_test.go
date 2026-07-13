@@ -99,6 +99,19 @@ func TestAppGatewayAutoprogrammingPageRouteV0(t *testing.T) {
 	}
 }
 
+func TestAppGatewayAutoprogrammingPageRouteV0InyectaClienteStatus(t *testing.T) {
+	handler := NewHTTPHandlerV0(ConfigV0{Timeout: time.Second})
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/autoprogramming?run_ref=run-gateway-status-001", nil)
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code == http.StatusServiceUnavailable ||
+		!strings.Contains(rec.Body.String(), `"schema_version":"web_autoprogramming_status.v0"`) {
+		t.Fatalf("status client no inyectado status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestAppGatewayOpsAgentRuntimeDetailRouteInyectadaV0(t *testing.T) {
 	handler := NewHTTPHandlerV0(ConfigV0{
 		OpsAgentRuntimeDetail: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
