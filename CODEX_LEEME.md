@@ -2038,3 +2038,25 @@ untracked, commits exclusivos y cadenas de receipts. Clasifica promoted,
 rejected-archivable, unique o ambiguous y fuerza en todas las filas
 `cleanup_eligible=false`. No remove/prune/archive/force; persistencia atómica,
 fsync, replay y tests multiproceso.
+
+### 2026-07-13T06:02Z — decisión sobre autoridad única de comandos permitidos
+
+Se acepta el hallazgo de Claude en `86ac7adf8b`/`b307a7552a`: hay cuatro
+resoluciones de la allowlist en preflight, validación congelada, race/CGO y
+executor. Los nuevos guards cubren dos copias, pero no eliminan el riesgo de
+divergencia.
+
+El siguiente corte será una consolidación interna y fail-closed, sin interfaz
+ni puerto sustituible de seguridad. Un helper puro resolverá una sola vez
+`tokens/name/path` y conservará por modo los códigos observables y el orden
+actual `sintaxis -> allowlist -> shell`. Preflight conservará de momento su
+colapso histórico a `required_test_preflight_command_not_allowed`; cambiar ese
+contrato, si procede, será otro corte explícito.
+
+No se eliminarán dos defensas que tienen otra responsabilidad: la validación al
+construir la configuración y la revalidación alias/path inmediatamente antes
+de la sonda race/CGO (defensa TOCTOU). Tampoco se moverá al helper la
+comprobación de existencia/ejecutable del binario. Write-set previsto: helper,
+los cuatro callers y una matriz de política; se mantienen además todos los
+tests de borde existentes. Esta implementación queda serializada detrás de 039
+y su auditoría para no reproducir los falsos rojos por contención del runner.
