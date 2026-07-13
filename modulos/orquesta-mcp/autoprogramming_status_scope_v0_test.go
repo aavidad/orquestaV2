@@ -2,6 +2,11 @@ package orquestamcp
 
 import "testing"
 
+type statusScopeTypedPayloadV0 struct {
+	RunRef string                      `json:"run_ref"`
+	Nested []statusScopeTypedPayloadV0 `json:"nested"`
+}
+
 func TestMCPAutoprogrammingStatusScopeV0UsesExactOpaqueRunMembership(t *testing.T) {
 	allowed := "request-ref-opaque-allowed-001"
 	foreign := "request-ref-opaque-allowed-001-shadow"
@@ -49,5 +54,47 @@ func TestMCPAutoprogrammingStatusScopeV0FailClosedClearsDiscardedQueue(t *testin
 	}, MCPAutoprogrammingStatusToolInputV0{ScopeMode: MCPAutoprogrammingStatusScopeQueueV0, Scope: "queue-ref-other-001"})
 	if result.Queue != nil || result.QueueRef != "" {
 		t.Fatalf("cola fuera de scope debe desaparecer: %+v", result)
+	}
+}
+
+func TestMCPAutoprogrammingStatusScopeV0SanitizesNestedSemanticRefsAndAppAuthority(t *testing.T) {
+	allowed, foreign, app := "run-opaque-allowed", "run-opaque-foreign", "app-opaque-allowed"
+	result := MCPAutoprogrammingStatusToolResultV0{
+		Queue: &MCPRunQueuePriorityToolResultV0{QueueRef: "queue-opaque", Ranked: []MCPRunQueueRankedCandidateCompactV0{
+			{RunRef: allowed, AppRef: app, ParentRunRef: foreign, SupersedesRunRef: allowed, EvidenceRefs: []string{"evidence", foreign, allowed}},
+			{RunRef: foreign, AppRef: "app-opaque-foreign"},
+		}},
+		Tasks:        []MCPAutoprogrammingTaskV0{{RunRef: allowed, EvidenceRefs: []string{foreign, "task-evidence"}}},
+		Agents:       []MCPAutoprogrammingAgentV0{{RunRef: allowed, EvidenceRefs: []string{foreign, "agent-evidence"}}},
+		StaleRunning: []MCPAutoprogrammingActionableRunV0{{RunRef: allowed, EvidenceRefs: []string{foreign, "action-evidence"}}},
+		Diagnostics:  []MCPAutoprogrammingDiagnosticV0{{Scope: "run:" + allowed, SampleRefs: []string{foreign, "diagnostic"}, EvidenceRefs: []string{foreign, "diagnostic-evidence"}}},
+		Operator: &MCPAutoprogrammingOperatorV0{
+			ClosureBlockers: []MCPAutoprogrammingClosureBlockerV0{{RunRef: allowed, Evidence: []string{foreign, "blocker-evidence"}}},
+			SafeActions: []MCPAutoprogrammingSafeActionV0{
+				{RunRef: allowed, Payload: map[string]any{"typed": statusScopeTypedPayloadV0{RunRef: allowed, Nested: []statusScopeTypedPayloadV0{{RunRef: foreign}}}}},
+				{RunRef: allowed, Payload: map[string]any{"run_ref": foreign}},
+			},
+		},
+	}
+	scoped := scopeMCPAutoprogrammingStatusResultV0(result, MCPAutoprogrammingStatusToolInputV0{ScopeMode: MCPAutoprogrammingStatusScopeAppV0, Scope: app})
+	if scoped.Queue == nil || len(scoped.Queue.Ranked) != 1 || scoped.Queue.Ranked[0].ParentRunRef != "" || scoped.Queue.Ranked[0].SupersedesRunRef != allowed {
+		t.Fatalf("candidate no saneado: %+v", scoped.Queue)
+	}
+	if len(scoped.Tasks) != 1 || len(scoped.Tasks[0].EvidenceRefs) != 1 || len(scoped.Agents[0].EvidenceRefs) != 1 || len(scoped.StaleRunning[0].EvidenceRefs) != 1 || len(scoped.Diagnostics[0].EvidenceRefs) != 1 || len(scoped.Operator.ClosureBlockers[0].Evidence) != 1 {
+		t.Fatalf("evidencias ajenas filtradas de forma incompleta: %+v", scoped)
+	}
+	if len(scoped.Operator.SafeActions) != 0 {
+		t.Fatalf("payload recursivo extranjero debe descartar accion: %+v", scoped.Operator.SafeActions)
+	}
+}
+
+func TestMCPAutoprogrammingStatusScopeV0RejectsIncompleteAndInvalidSelector(t *testing.T) {
+	for _, input := range []MCPAutoprogrammingStatusToolInputV0{
+		{ScopeMode: MCPAutoprogrammingStatusScopeRunV0}, {ScopeMode: "unknown", Scope: "opaque"}, {Scope: "opaque"}, {ScopeMode: MCPAutoprogrammingStatusScopeLegacyV0, Scope: "opaque"},
+	} {
+		result, err := (MCPAutoprogrammingStatusToolExecutorV0{}).Execute(nil, input)
+		if err != nil || result.Estado != MCPAutoprogrammingStatusEstadoErrorV0 || len(result.Errores) != 1 || result.Errores[0].Code != "autoprogramming_status_scope_invalid" {
+			t.Fatalf("input=%+v result=%+v err=%v", input, result, err)
+		}
 	}
 }

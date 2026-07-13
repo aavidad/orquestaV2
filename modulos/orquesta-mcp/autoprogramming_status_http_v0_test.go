@@ -46,6 +46,16 @@ func TestMCPAutoprogrammingStatusHTTPHandlerV0ExecutorNil(t *testing.T) {
 	}
 }
 
+func TestMCPAutoprogrammingStatusHTTPHandlerV0RejectsInvalidScopeSelector(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, MCPAutoprogrammingStatusHTTPPathV0, bytes.NewBufferString(`{"scope_mode":"app"}`))
+	rec := httptest.NewRecorder()
+	NewMCPAutoprogrammingStatusHTTPHandlerV0(MCPAutoprogrammingStatusToolExecutorV0{}).ServeHTTP(rec, req)
+	var result MCPAutoprogrammingStatusToolResultV0
+	if err := json.NewDecoder(rec.Body).Decode(&result); err != nil || rec.Code != http.StatusBadRequest || result.Estado != MCPAutoprogrammingStatusEstadoErrorV0 || len(result.Errores) != 1 || result.Errores[0].Code != "autoprogramming_status_scope_invalid" {
+		t.Fatalf("status=%d result=%+v err=%v", rec.Code, result, err)
+	}
+}
+
 func TestMCPAutoprogrammingStatusHTTPHandlerV0TimeoutDevuelveJSONPublico(t *testing.T) {
 	executor := &fakeMCPAutoprogrammingStatusHTTPExecutorV0{waitForCancel: true}
 	req := httptest.NewRequest(http.MethodPost, MCPAutoprogrammingStatusHTTPPathV0, bytes.NewBufferString(`{"queue_ref":"global"}`))

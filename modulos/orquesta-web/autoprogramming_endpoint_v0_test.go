@@ -88,6 +88,15 @@ func TestAutoprogrammingWebEndpointV0ConsultaStatusConQueryPublica(t *testing.T)
 	}
 }
 
+func TestAutoprogrammingWebEndpointV0PreservaSelectorApp(t *testing.T) {
+	client := &recordingAutoprogrammingStatusClientV0{ViewModel: WebAutoprogrammingStatusViewModelV0{Estado: WebAutoprogrammingPrepareRunEstadoOKV0}}
+	rec := httptest.NewRecorder()
+	NewAutoprogrammingWebEndpointV0(client).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/autoprogramming?scope_mode=app&scope=app-web-opaque-001", nil))
+	if rec.Code != http.StatusOK || client.Query.ScopeMode != "app" || client.Query.Scope != "app-web-opaque-001" {
+		t.Fatalf("status=%d query=%+v", rec.Code, client.Query)
+	}
+}
+
 func TestAutoprogrammingWebEndpointV0NoPublicaErrorDeCliente(t *testing.T) {
 	endpoint := NewAutoprogrammingWebEndpointV0(&recordingAutoprogrammingStatusClientV0{Err: errAutoprogrammingStatusClientV0{}})
 	rec := httptest.NewRecorder()

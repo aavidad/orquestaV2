@@ -101,6 +101,8 @@ func strictMinimalMCPAutoprogrammingStatusTransportV0(
 		RunRef:           compactMCPAutoprogrammingStatusScalarV0(result.RunRef),
 		CausalVerdict:    compactMCPAutoprogrammingStatusScalarV0(result.CausalVerdict),
 		CausalReasonCode: compactMCPAutoprogrammingStatusScalarV0(result.CausalReasonCode),
+		ScopeMode:        compactMCPAutoprogrammingStatusScalarV0(result.ScopeMode),
+		Scope:            compactMCPAutoprogrammingStatusScalarV0(result.Scope),
 		QueueRef:         compactMCPAutoprogrammingStatusScalarV0(result.QueueRef),
 		Diagnostics: []MCPAutoprogrammingDiagnosticV0{{
 			Code:    "mcp_status_output_compacted",

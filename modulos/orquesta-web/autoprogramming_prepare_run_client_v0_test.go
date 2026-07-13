@@ -222,6 +222,19 @@ func TestRESTAutoprogrammingPrepareRunClientV0ConsultaStatusNormalizaYDecodifica
 	}
 }
 
+func TestRESTAutoprogrammingPrepareRunClientV0ConsultaStatusDefaultsToAppScope(t *testing.T) {
+	var got orquestamcp.MCPAutoprogrammingStatusToolInputV0
+	server := newWebHTTPTestServerV0(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&got)
+		_ = json.NewEncoder(w).Encode(orquestamcp.MCPAutoprogrammingStatusToolResultV0{Estado: orquestamcp.MCPAutoprogrammingStatusEstadoOKV0, ScopeMode: orquestamcp.MCPAutoprogrammingStatusScopeAppV0, Scope: "app-opaque-001"})
+	}))
+	defer server.Close()
+	_, err := NewRESTAutoprogrammingPrepareRunClientV0(server.URL, time.Second).ConsultarAutoprogrammingStatus(context.Background(), WebAutoprogrammingStatusQueryV0{AppRef: " app-opaque-001 "})
+	if err != nil || got.ScopeMode != orquestamcp.MCPAutoprogrammingStatusScopeAppV0 || got.Scope != "app-opaque-001" {
+		t.Fatalf("got=%+v err=%v", got, err)
+	}
+}
+
 func TestRESTAutoprogrammingStatusE2EV0FiltersOpaqueRunAcrossMCPHTTPAndWeb(t *testing.T) {
 	allowed := "request-ref-status-opaque-allowed-001"
 	foreign := "request-ref-status-opaque-allowed-001-shadow"

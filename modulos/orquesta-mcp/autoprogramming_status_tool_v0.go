@@ -123,7 +123,7 @@ func MCPAutoprogrammingStatusDescriptorV0() MCPAutoprogrammingStatusToolDescript
 	return MCPAutoprogrammingStatusToolDescriptorV0{
 		Name:        MCPAutoprogrammingStatusToolNameV0,
 		Version:     MCPAutoprogrammingStatusToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,app_ref?,external_job_ref?,queue_ref?,app_refs?,queue_limit?,occurred_at?,include_process_refs?,include_agent_progress?,include_agent_usage?,scope_mode?,scope?,telemetry_flags?,operator_advice?}",
+		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,app_ref?,external_job_ref?,queue_ref?,app_refs?,queue_limit?,occurred_at?,include_process_refs?,include_agent_progress?,include_agent_usage?,scope_mode?:legacy|run|queue|app,scope?,telemetry_flags?,operator_advice?}",
 		Output:      "ok:{scope_mode?,scope?,causal_verdict?,causal_reason_code?,queue?,run?,queue_health?,stale_running_total?,stale_running?[]{code,count?,sample_refs?,severity?,run_ref?,status?,goal_ref?,goal_status?,causal_verdict?,causal_reason_code?,context_budget_total_bytes?,static_prompt_bytes?,dynamic_context_bytes?,code_context_cache_status?,recommended_action?,evidence_refs?},projects?,tasks?,agents?,operator?,goal_progress_policy?,efficiency_summary?{schema_version,state,recommended_action?,reasons?},idle_self_improvement_budget?,ops_snapshot?,diagnostics_total?,diagnostics?[]{code,count?,sample_refs?,scope?,message?,evidence_refs?},evidence_refs?}|error:{errores_publicos,evidence_refs?,diagnostics?,operator_advice?,scope_mode?,scope?}",
 		ResourceURI: MCPAutoprogrammingStatusResourceURIV0,
 		Invariantes: []string{
@@ -150,6 +150,11 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 		ctx = context.Background()
 	}
 	result := newMCPAutoprogrammingStatusBaseV0(input)
+	if issue := mcpAutoprogrammingStatusScopeIssueV0(input); issue != nil {
+		result.Estado = MCPAutoprogrammingStatusEstadoErrorV0
+		result.Errores = []MCPValidationIssueV0{*issue}
+		return result, nil
+	}
 	goalProgressPolicy := NormalizeMCPAutoprogrammingGoalProgressPolicyV0(executor.GoalProgressPolicy)
 	result.GoalProgressPolicy = &goalProgressPolicy
 	result.Diagnostics = append(result.Diagnostics, mcpAutoprogrammingStatusConfiguredDiagnosticsV0(executor.StatusDiagnostics)...)
@@ -961,6 +966,8 @@ func newMCPAutoprogrammingStatusBaseV0(
 		RequestID:     strings.TrimSpace(input.RequestID),
 		CorrelationID: firstNonEmptyMCPV0(input.CorrelationID, input.RequestID),
 		RunRef:        strings.TrimSpace(input.RunRef),
+		ScopeMode:     strings.ToLower(strings.TrimSpace(input.ScopeMode)),
+		Scope:         strings.TrimSpace(input.Scope),
 		QueueRef:      strings.TrimSpace(input.QueueRef),
 		Diagnostics:   []MCPAutoprogrammingDiagnosticV0{},
 		Errores:       []MCPValidationIssueV0{},

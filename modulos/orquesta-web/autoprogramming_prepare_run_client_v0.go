@@ -201,6 +201,8 @@ func normalizeAutoprogrammingStatusQueryV0(query WebAutoprogrammingStatusQueryV0
 			query.ScopeMode, query.Scope = orquestamcp.MCPAutoprogrammingStatusScopeRunV0, query.RunRef
 		case query.QueueRef != "":
 			query.ScopeMode, query.Scope = orquestamcp.MCPAutoprogrammingStatusScopeQueueV0, query.QueueRef
+		case query.AppRef != "":
+			query.ScopeMode, query.Scope = orquestamcp.MCPAutoprogrammingStatusScopeAppV0, query.AppRef
 		default:
 			query.ScopeMode = orquestamcp.MCPAutoprogrammingStatusScopeLegacyV0
 		}
