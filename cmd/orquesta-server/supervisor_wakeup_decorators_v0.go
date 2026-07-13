@@ -384,10 +384,13 @@ type serverWakeupGoalStateStoreV0 struct {
 
 type serverWakeupGoalStateStorePortV0 interface {
 	orquestagoal.GoalWorkStateStorePortV0
+	orquestagoal.GoalWorkStateCASStorePortV0
 	orquestagoal.GoalWorkRunMarkerStorePortV0
 	orquestagoal.GoalWorkRunMarkerListPortV0
 	orquestagoal.GoalWorkStateListPortV0
 }
+
+var _ orquestagoal.GoalWorkStateCASStorePortV0 = serverWakeupGoalStateStoreV0{}
 
 // CompareAndSwapGoalWorkStateV0 SE REENVIA, y no es un detalle: el ciclo de vida
 // obtiene la autoridad CAS haciendo un type assert sobre ESTE MISMO store

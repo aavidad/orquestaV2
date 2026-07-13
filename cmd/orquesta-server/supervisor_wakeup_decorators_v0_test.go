@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
@@ -352,6 +353,121 @@ func TestServerWakeupGoalStateStoreV0DisparaSupervisorSoloConTerminalV0(t *testi
 	}
 }
 
+func TestServerWakeupGoalStateCASDisparaComoSaveV0(t *testing.T) {
+	ctx := context.Background()
+	var causes []string
+	var goalCauses []string
+	stateChanges := 0
+	store := serverWakeupGoalStateStoreV0{
+		inner: newFakeServerGoalStateStoreV0(),
+		wakeup: &serverSupervisorWakeupRelayV0{
+			request: func(cause string) bool {
+				causes = append(causes, cause)
+				return true
+			},
+			requestGoalObservation: func(cause string) bool {
+				goalCauses = append(goalCauses, cause)
+				return true
+			},
+		},
+		stateChange: &serverGoalStateChangeRelayV0{notify: func() bool {
+			stateChanges++
+			return true
+		}},
+	}
+
+	want := orquestagoal.GoalWorkStateV0{
+		RunRef:  "run-ref-goal-cas-wakeup-complete",
+		GoalRef: "goal-ref-goal-cas-wakeup-complete",
+		Status:  orquestagoal.GoalStatusCompleteV0,
+	}
+	saved, err := store.CompareAndSwapGoalWorkStateV0(ctx, 0, want)
+	if err != nil {
+		t.Fatalf("CompareAndSwapGoalWorkStateV0: %v", err)
+	}
+	if saved.RunRef != want.RunRef || saved.GoalRef != want.GoalRef || saved.Status != want.Status || saved.StoreVersion != 1 {
+		t.Fatalf("saved=%+v", saved)
+	}
+	if stateChanges != 1 {
+		t.Fatalf("stateChanges=%d want=1", stateChanges)
+	}
+	if !stringSlicesEqualV0(goalCauses, []string{"goal_state_saved"}) {
+		t.Fatalf("goalCauses=%v", goalCauses)
+	}
+	if !stringSlicesEqualV0(causes, []string{"goal_state_terminal"}) {
+		t.Fatalf("causes=%v", causes)
+	}
+}
+
+func TestServerWakeupGoalStateCASConflictOrErrorNoDespiertaV0(t *testing.T) {
+	ctx := context.Background()
+	casErr := errors.New("goal_state_cas_failed")
+	tests := []struct {
+		name    string
+		prepare func(*fakeServerGoalStateStoreV0)
+		wantErr error
+	}{
+		{
+			name: "conflict",
+			prepare: func(inner *fakeServerGoalStateStoreV0) {
+				inner.states["run-ref-goal-cas-wakeup-conflict"] = orquestagoal.GoalWorkStateV0{StoreVersion: 1}
+			},
+			wantErr: orquestagoal.GoalWorkStateCASConflictErrorV0{},
+		},
+		{
+			name: "error",
+			prepare: func(inner *fakeServerGoalStateStoreV0) {
+				inner.casErr = casErr
+			},
+			wantErr: casErr,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var causes []string
+			var goalCauses []string
+			stateChanges := 0
+			inner := newFakeServerGoalStateStoreV0()
+			test.prepare(inner)
+			store := serverWakeupGoalStateStoreV0{
+				inner: inner,
+				wakeup: &serverSupervisorWakeupRelayV0{
+					request: func(cause string) bool {
+						causes = append(causes, cause)
+						return true
+					},
+					requestGoalObservation: func(cause string) bool {
+						goalCauses = append(goalCauses, cause)
+						return true
+					},
+				},
+				stateChange: &serverGoalStateChangeRelayV0{notify: func() bool {
+					stateChanges++
+					return true
+				}},
+			}
+			_, err := store.CompareAndSwapGoalWorkStateV0(ctx, 0, orquestagoal.GoalWorkStateV0{
+				RunRef:  "run-ref-goal-cas-wakeup-" + test.name,
+				GoalRef: "goal-ref-goal-cas-wakeup-" + test.name,
+				Status:  orquestagoal.GoalStatusCompleteV0,
+			})
+			if err == nil {
+				t.Fatal("CompareAndSwapGoalWorkStateV0 error=nil")
+			}
+			var conflict orquestagoal.GoalWorkStateCASConflictErrorV0
+			if test.name == "conflict" && !errors.As(err, &conflict) {
+				t.Fatalf("err=%v, want CAS conflict", err)
+			}
+			if test.name == "error" && err != test.wantErr {
+				t.Fatalf("err=%v want=%v", err, test.wantErr)
+			}
+			if stateChanges != 0 || len(causes) != 0 || len(goalCauses) != 0 {
+				t.Fatalf("stateChanges=%d causes=%v goalCauses=%v", stateChanges, causes, goalCauses)
+			}
+		})
+	}
+}
+
 type fakeServerDirectorCycleOutboxLedgerV0 struct {
 	pending []orquestacoreworkflow.OutboxMessageV0
 }
@@ -422,6 +538,7 @@ func (store *fakeServerCodexReceiptStoreV0) RecordDirectorAgentDecisionFileConsu
 type fakeServerGoalStateStoreV0 struct {
 	states  map[string]orquestagoal.GoalWorkStateV0
 	markers map[string]orquestagoal.GoalWorkRunMarkerV0
+	casErr  error
 }
 
 func newFakeServerGoalStateStoreV0() *fakeServerGoalStateStoreV0 {
@@ -444,6 +561,27 @@ func (store *fakeServerGoalStateStoreV0) LoadGoalWorkStateV0(
 	runRef string,
 ) (orquestagoal.GoalWorkStateV0, error) {
 	return store.states[runRef], nil
+}
+
+func (store *fakeServerGoalStateStoreV0) CompareAndSwapGoalWorkStateV0(
+	_ context.Context,
+	expectedVersion uint64,
+	state orquestagoal.GoalWorkStateV0,
+) (orquestagoal.GoalWorkStateV0, error) {
+	if store.casErr != nil {
+		return orquestagoal.GoalWorkStateV0{}, store.casErr
+	}
+	current := store.states[state.RunRef]
+	if current.StoreVersion != expectedVersion {
+		return orquestagoal.GoalWorkStateV0{}, orquestagoal.GoalWorkStateCASConflictErrorV0{
+			RunRef:          state.RunRef,
+			ExpectedVersion: expectedVersion,
+			CurrentVersion:  current.StoreVersion,
+		}
+	}
+	state.StoreVersion = current.StoreVersion + 1
+	store.states[state.RunRef] = state
+	return state, nil
 }
 
 func (store *fakeServerGoalStateStoreV0) SaveGoalWorkRunMarkerV0(
