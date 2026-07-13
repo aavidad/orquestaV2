@@ -334,6 +334,29 @@ func newGoalWorkspaceIntegrationReposV0(t *testing.T) (string, string, string, s
 	return canonical, first, second, base
 }
 
+func TestGitGoalWorkspaceIntegrationConnectorV0RechazaWriteSetControlAntesDeEfectosV0(t *testing.T) {
+	root := t.TempDir()
+	receiptDir := filepath.Join(root, "receipts")
+	result, issues := (GitGoalWorkspaceIntegrationConnectorV0{}).IntegrateGoalWorkspaceV0(
+		context.Background(),
+		GoalWorkspaceIntegrationRequestV0{
+			IntegrationRef:     "integration-ref-control-write-set",
+			SourceWorkspaceDir: filepath.Join(root, "source"),
+			CanonicalWorkDir:   filepath.Join(root, "canonical"),
+			BaseRevision:       "base-revision-control-write-set",
+			WriteSet:           []string{".git"},
+			CommitMessage:      "test: rejected control write set",
+			ReceiptDir:         receiptDir,
+		},
+	)
+	if result.Status != GoalWorkspaceIntegrationStatusBlockedV0 || len(issues) != 1 || issues[0].Code != WorktreeIssueControlPathV0 {
+		t.Fatalf("result=%+v issues=%+v", result, issues)
+	}
+	if _, err := os.Stat(receiptDir); !os.IsNotExist(err) {
+		t.Fatalf("integration creó receipts: %v", err)
+	}
+}
+
 func goalWorkspaceIntegrationRequestForTestV0(integrationRef string, source string, canonical string, base string, writeSet []string, receiptDir string) GoalWorkspaceIntegrationRequestV0 {
 	return GoalWorkspaceIntegrationRequestV0{
 		IntegrationRef:         integrationRef,

@@ -206,6 +206,7 @@ func normalizeGoalWorkspaceIntegrationRequestV0(request GoalWorkspaceIntegration
 	request.ReceiptDir = strings.TrimSpace(request.ReceiptDir)
 	writeSet, issues := normalizeWorktreePathListV0(request.WriteSet, true)
 	request.WriteSet = writeSet
+	issues = append(issues, worktreeControlPathIssuesV0(request.WriteSet)...)
 	issues = append(issues, validateWorktreeOpaqueRefV0("integration_ref", request.IntegrationRef, true)...)
 	for _, item := range []struct{ field, value string }{
 		{"source_workspace_dir", request.SourceWorkspaceDir},

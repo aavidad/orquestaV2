@@ -81,6 +81,34 @@ func TestVerifyWorktreeWriteSetV0IgnoraControlConWriteSetRaizYRechazaAckControlV
 	}
 }
 
+func TestVerifyWorktreeWriteSetV0RechazaWriteSetDeControlAntesDeCapturaV0(t *testing.T) {
+	baseline := WorktreeSnapshotV0{
+		SchemaVersion: WorktreeSnapshotSchemaVersionV0,
+		SnapshotRef:   "snapshot-ref-control-write-set",
+	}
+	result, issues := VerifyWorktreeWriteSetV0(context.Background(), WorktreeVerifyRequestV0{
+		Baseline:       baseline,
+		ProjectWorkDir: filepath.Join(t.TempDir(), "missing-worktree"),
+		WriteSet:       []string{".git"},
+	})
+	if result.OK || len(issues) != 1 || issues[0].Code != WorktreeIssueControlPathV0 || issues[0].Field != ".git" {
+		t.Fatalf("result=%+v issues=%+v", result, issues)
+	}
+}
+
+func TestIsWorktreeControlPathV0ConservaRaizDeProductoV0(t *testing.T) {
+	for path, want := range map[string]bool{
+		".":                 false,
+		"README.md":         false,
+		".git":              true,
+		".orquesta-runtime": true,
+	} {
+		if got := IsWorktreeControlPathV0(path); got != want {
+			t.Fatalf("IsWorktreeControlPathV0(%q)=%t want=%t", path, got, want)
+		}
+	}
+}
+
 func worktreeReceiptCategoryForTestV0(
 	receipts []WorktreeLocalArtifactExclusionReceiptV0,
 	category string,

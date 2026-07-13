@@ -158,6 +158,7 @@ func validateStagingPromotionRequestV0(request StagingPromotionRequestV0, archiv
 	if len(request.WriteSet) == 0 {
 		issues = append(issues, worktreeIssueV0(WorktreeIssueInvalidRequestV0, "write_set"))
 	}
+	issues = append(issues, worktreeControlPathIssuesV0(request.WriteSet)...)
 	return issues
 }
 

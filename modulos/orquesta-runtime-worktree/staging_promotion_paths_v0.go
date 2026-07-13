@@ -8,7 +8,7 @@ func stagingPromotionProductEntriesV0(
 	product := make([]stagingPromotionGitStatusEntryV0, 0, len(entries))
 	var controlPaths []string
 	for _, entry := range entries {
-		if worktreeControlPathV0(entry.Path) {
+		if IsWorktreeControlPathV0(entry.Path) {
 			controlPaths = append(controlPaths, entry.Path)
 			continue
 		}
@@ -31,7 +31,7 @@ func stagingPromotionWriteSetIssuesV0(
 ) []WorktreeIssueV0 {
 	var issues []WorktreeIssueV0
 	for _, entry := range entries {
-		if worktreeControlPathV0(entry.Path) {
+		if IsWorktreeControlPathV0(entry.Path) {
 			continue
 		}
 		if strings.Contains(entry.Code, "D") {

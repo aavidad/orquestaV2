@@ -50,6 +50,9 @@ func DefaultWorktreeControlIgnorePrefixesV0() []string {
 }
 
 func IsWorktreeControlPathV0(value string) bool {
+	if strings.TrimSpace(value) == "." {
+		return false
+	}
 	return worktreeControlPathV0(value)
 }
 
@@ -71,7 +74,7 @@ func splitWorktreeProductAndControlPathsV0(values []string) ([]string, []string)
 		if !ok {
 			continue
 		}
-		if worktreeControlPathV0(pathValue) {
+		if IsWorktreeControlPathV0(pathValue) {
 			control = append(control, pathValue)
 			continue
 		}

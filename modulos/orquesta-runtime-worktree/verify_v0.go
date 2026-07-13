@@ -135,6 +135,7 @@ func normalizeWorktreeVerifyRequestV0(
 	var writeIssues []WorktreeIssueV0
 	request.WriteSet, writeIssues = normalizeWorktreePathListV0(request.WriteSet, true)
 	issues = append(issues, writeIssues...)
+	issues = append(issues, worktreeControlPathIssuesV0(request.WriteSet)...)
 	if len(request.AckFiles) > 0 {
 		var ackIssues []WorktreeIssueV0
 		request.AckFiles, ackIssues = normalizeWorktreePathListV0(request.AckFiles, false)
@@ -403,7 +404,7 @@ func worktreeSnapshotMapV0(
 	result := make(map[string]WorktreeSnapshotFileV0, len(snapshot.Files))
 	for _, file := range snapshot.Files {
 		if path, ok := normalizeWorktreeRelPathV0(file.Path, false); ok {
-			if worktreeControlPathV0(path) {
+			if IsWorktreeControlPathV0(path) {
 				continue
 			}
 			result[path] = file
