@@ -1648,3 +1648,27 @@ Se lanzó por API local, en paralelo y con write-set disjunto, el run
 atómico exacto, wakeups/stateChange solo después de éxito, conflicto/error sin
 señales espurias, assertion de interfaz y E2E `rework → close`. Queda prohibido
 degradar a `Save` no atómico o tocar el lifecycle para ocultar el wrapper.
+
+### 2026-07-13T03:58Z — auditoría 033 final: rework confirmado
+
+No integrar `a26aa9e66ddf3fbee4d4774cc2d72264`. El E2E real executor
+MCP → REST → cliente web → viewmodel sí existe y pasa; también quedaron bien
+legacy sin selector y los contratos `mode/scope`. Los defectos restantes son
+de autoridad fail-closed:
+
+- las refs son opacas, pero el filtro solo reconoce prefijos `run-`/`run_ref`;
+  conserva `request-ref-*` extranjeras en proyectos, diagnostics, blockers y
+  payloads;
+- scope real `run:<ref> field:...` se parsea entero y descarta el diagnóstico
+  legítimo;
+- al descartar Run deja causal top-level; al descartar Queue deja `QueueRef`;
+- el tercer required test `-run AutoprogrammingStatus` ejecutó cero tests y el
+  attestor lo rechazó correctamente;
+- artefactos declarados/materializados incompletos dejaron
+  `partial_artifacts_written` y `terminal_artifact_missing_after_goal_complete`.
+
+El próximo rework debe construir identidades exactas desde el conjunto amplio
+de runs conocidos, filtrar payloads por claves semánticas `run_ref/run_refs`,
+parsear el primer token tras `run:`, limpiar causal/QueueRef y usar required
+tests que ejecuten casos reales. Se lanzará después de integrar y reconstruir
+el 035, para que su cierre use CAS real y no repita el bloqueo del wrapper.
