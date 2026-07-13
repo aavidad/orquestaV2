@@ -103,8 +103,6 @@ func mcpTransportToolInputDTOByNameV0(name string) (any, bool) {
 		return MCPDataProfileToolInputV0{}, true
 	case MCPCouncilToolNameV0:
 		return MCPCouncilToolInputV0{}, true
-	case MCPAutonomyProgramToolNameV0:
-		return MCPAutonomyProgramToolInputV0{}, true
 	case MCPCodebaseQueryToolNameV0:
 		return MCPCodebaseQueryToolInputV0{}, true
 	case MCPCodebaseStatusToolNameV0:

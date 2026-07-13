@@ -224,9 +224,6 @@ func buildStackMCPTransportBindingsV0(
 		DataProfile: orquestamcp.MCPDataProfileToolExecutorV0{
 			Profiler: config.DataProfile,
 		},
-		AutonomyProgram: orquestamcp.MCPAutonomyProgramToolExecutorV0{
-			Program: config.AutonomyProgram,
-		},
 		Council: orquestamcp.MCPCouncilToolExecutorV0{
 			Council:           config.Council,
 			ClassifyPublicErr: config.CouncilPublicErrorClassifier,

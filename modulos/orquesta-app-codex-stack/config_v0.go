@@ -76,7 +76,6 @@ type ConfigV0 struct {
 	Council                                        orquestamcp.MCPCouncilPortV0
 	CouncilPublicErrorClassifier                   orquestamcp.MCPCouncilPublicErrorClassifierV0
 	CouncilGate                                    CouncilGateConfigV0
-	AutonomyProgram                                orquestamcp.MCPAutonomyProgramPortV0
 	CouncilDoubleReview                            CouncilDoubleReviewConfigV0
 	DecisionCouncil                                DecisionCouncilConfigV0
 	DomainDelivery                                 DomainWorkDeliveryBridgeConfigV0

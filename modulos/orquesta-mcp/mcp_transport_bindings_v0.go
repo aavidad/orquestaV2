@@ -49,7 +49,6 @@ type MCPTransportBindingsV0 struct {
 	DocumentTextExtract                            MCPTransportDocumentTextExtractExecutorV0
 	DataProfile                                    MCPTransportDataProfileExecutorV0
 	Council                                        MCPTransportCouncilExecutorV0
-	AutonomyProgram                                MCPTransportAutonomyProgramExecutorV0
 	CodebaseQuery                                  MCPTransportCodebaseQueryExecutorV0
 	CodebaseStatus                                 MCPTransportCodebaseStatusExecutorV0
 	AppVCS                                         MCPAppVCSExecutorPortV0
@@ -170,10 +169,6 @@ type MCPTransportDataProfileExecutorV0 interface {
 
 type MCPTransportCouncilExecutorV0 interface {
 	Execute(context.Context, MCPCouncilToolInputV0) (MCPCouncilToolResultV0, error)
-}
-
-type MCPTransportAutonomyProgramExecutorV0 interface {
-	Execute(context.Context, MCPAutonomyProgramToolInputV0) (MCPAutonomyProgramToolResultV0, error)
 }
 
 type MCPTransportCodebaseQueryExecutorV0 interface {
