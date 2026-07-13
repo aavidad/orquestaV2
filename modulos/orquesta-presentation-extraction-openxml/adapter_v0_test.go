@@ -4,10 +4,9 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	presentation "orquesta/modulos/orquesta-presentation-extraction"
@@ -17,12 +16,12 @@ func fixturePPTXV0(t *testing.T, external bool) []byte {
 	t.Helper()
 	var b bytes.Buffer
 	z := zip.NewWriter(&b)
-	files := []struct{ name, value string }{{"ppt/presentation.xml", `<p:presentation xmlns:p="p" xmlns:r="r"><p:sldSz cx="9144000" cy="5143500"/><p:sldIdLst><p:sldId r:id="rId2"/><p:sldId r:id="rId1"/></p:sldIdLst></p:presentation>`}, {"ppt/_rels/presentation.xml.rels", `<Relationships>` + func() string {
+	files := []struct{ name, value string }{{"ppt/presentation.xml", `<p:presentation xmlns:p="` + presentationMLNamespaceV0 + `" xmlns:r="` + officeRelationshipNamespaceV0 + `"><p:sldSz cx="9144000" cy="5143500"/><p:sldIdLst><p:sldId id="257" r:id="rId2"/><p:sldId id="256" r:id="rId1"/></p:sldIdLst></p:presentation>`}, {"ppt/_rels/presentation.xml.rels", `<Relationships xmlns="` + packageRelationshipNamespaceV0 + `">` + func() string {
 		if external {
-			return `<Relationship Id="rId1" Target="https://bad" TargetMode="External"/>`
+			return `<Relationship Id="rId1" Type="` + presentationSlideRelationshipTypeV0 + `" Target="https://bad" TargetMode="External"/>`
 		}
-		return `<Relationship Id="rId1" Target="slides/slide1.xml"/>`
-	}() + `<Relationship Id="rId2" Target="slides/slide2.xml"/></Relationships>`}, {"ppt/slides/slide1.xml", `<p:sld xmlns:p="p" xmlns:a="a"><a:t>uno</a:t></p:sld>`}, {"ppt/slides/slide2.xml", `<p:sld xmlns:p="p" xmlns:a="a"><a:t>dos</a:t></p:sld>`}}
+		return `<Relationship Id="rId1" Type="` + presentationSlideRelationshipTypeV0 + `" Target="slides/slide1.xml"/>`
+	}() + `<Relationship Id="rId2" Type="` + presentationSlideRelationshipTypeV0 + `" Target="slides/slide2.xml"/></Relationships>`}, {"ppt/slides/slide1.xml", `<p:sld xmlns:p="` + presentationMLNamespaceV0 + `" xmlns:a="` + drawingMLNamespaceV0 + `"><a:t>uno</a:t></p:sld>`}, {"ppt/slides/slide2.xml", `<p:sld xmlns:p="` + presentationMLNamespaceV0 + `" xmlns:a="` + drawingMLNamespaceV0 + `"><a:t>dos</a:t></p:sld>`}}
 	for _, file := range files {
 		w, err := z.Create(file.name)
 		if err != nil {
@@ -38,13 +37,6 @@ func fixturePPTXV0(t *testing.T, external bool) []byte {
 	return b.Bytes()
 }
 
-func TestTwoSlideFixtureIsStableV0(t *testing.T) {
-	fixture := fixturePPTXV0(t, false)
-	sum := sha256.Sum256(fixture)
-	if got := hex.EncodeToString(sum[:]); got != "0194a5abf17c5de801b413effbda0488c32891da0d427926ce3e08fcfe41006a" {
-		t.Fatalf("two-slide fixture hash = %s", got)
-	}
-}
 func adapterFixtureV0(t *testing.T) (*AdapterV0, string) {
 	t.Helper()
 	root := t.TempDir()
@@ -101,6 +93,42 @@ func TestAdapterV0RejectsSnapshotChangeV0(t *testing.T) {
 	}
 	if _, err := a.ProjectPresentationDocumentV0(context.Background(), source); err == nil {
 		t.Fatal("changed source accepted")
+	}
+}
+
+func TestAdapterV0RejectsFalseNamespacesAndUnsafeSlideRelationshipsV0(t *testing.T) {
+	base := securityPPTXEntriesV0("valid")
+	for _, test := range []struct {
+		name   string
+		mutate func([]securityPPTXEntryV0)
+	}{
+		{"presentation_namespace", func(entries []securityPPTXEntryV0) {
+			entries[0].value = strings.Replace(entries[0].value, presentationMLNamespaceV0, "urn:forged:presentation", 1)
+		}},
+		{"relationship_namespace", func(entries []securityPPTXEntryV0) {
+			entries[1].value = strings.Replace(entries[1].value, packageRelationshipNamespaceV0, "urn:forged:relationships", 1)
+		}},
+		{"slide_text_namespace", func(entries []securityPPTXEntryV0) {
+			entries[2].value = strings.Replace(entries[2].value, drawingMLNamespaceV0, "urn:forged:drawing", 1)
+		}},
+		{"relationship_attribute_namespace", func(entries []securityPPTXEntryV0) {
+			entries[0].value = strings.Replace(entries[0].value, officeRelationshipNamespaceV0, "urn:forged:relationship", 1)
+		}},
+		{"non_slide_relationship", func(entries []securityPPTXEntryV0) {
+			entries[1].value = strings.Replace(entries[1].value, presentationSlideRelationshipTypeV0, officeRelationshipNamespaceV0+"/theme", 1)
+		}},
+		{"slide_target_escape", func(entries []securityPPTXEntryV0) {
+			entries[1].value = strings.Replace(entries[1].value, "slides/slide1.xml", "../../outside.xml", 1)
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			entries := append([]securityPPTXEntryV0(nil), base...)
+			test.mutate(entries)
+			archive, _ := securityPPTXArchiveV0(t, entries)
+			if err := extractRejectedPPTXV0(t, archive, ConfigV0{}); err == nil {
+				t.Fatal("unsafe OOXML accepted")
+			}
+		})
 	}
 }
 

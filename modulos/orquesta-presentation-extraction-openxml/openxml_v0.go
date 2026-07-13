@@ -15,6 +15,14 @@ import (
 	presentation "orquesta/modulos/orquesta-presentation-extraction"
 )
 
+const (
+	presentationMLNamespaceV0           = "http://schemas.openxmlformats.org/presentationml/2006/main"
+	drawingMLNamespaceV0                = "http://schemas.openxmlformats.org/drawingml/2006/main"
+	officeRelationshipNamespaceV0       = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+	packageRelationshipNamespaceV0      = "http://schemas.openxmlformats.org/package/2006/relationships"
+	presentationSlideRelationshipTypeV0 = officeRelationshipNamespaceV0 + "/slide"
+)
+
 func (a *AdapterV0) projectPPTXV0(data []byte, source presentation.PresentationSourceMaterialV0) (document.DocumentV0, error) {
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
@@ -26,7 +34,13 @@ func (a *AdapterV0) projectPPTXV0(data []byte, source presentation.PresentationS
 	files := make(map[string]*zip.File, len(zr.File))
 	var expanded int64
 	for _, f := range zr.File {
-		if !safeZipNameV0(f.Name) || f.FileInfo().IsDir() {
+		if f.FileInfo().IsDir() {
+			if !safeRelativePathV0(strings.TrimSuffix(f.Name, "/")) {
+				return document.DocumentV0{}, ErrUnsafeArchiveV0
+			}
+			continue
+		}
+		if !safeZipNameV0(f.Name) {
 			return document.DocumentV0{}, ErrUnsafeArchiveV0
 		}
 		if f.UncompressedSize64 > uint64(a.limits.expanded-expanded) {
@@ -45,7 +59,7 @@ func (a *AdapterV0) projectPPTXV0(data []byte, source presentation.PresentationS
 			if int64(len(content)) > a.limits.xml || validateXMLV0(content, a.limits.depth) != nil {
 				return document.DocumentV0{}, ErrUnsafeArchiveV0
 			}
-			if strings.HasSuffix(f.Name, ".rels") && hasExternalRelationshipV0(content) {
+			if strings.HasSuffix(f.Name, ".rels") && validateRelationshipsV0(content) != nil {
 				return document.DocumentV0{}, ErrUnsafeArchiveV0
 			}
 		}
@@ -77,12 +91,12 @@ func (a *AdapterV0) projectPPTXV0(data []byte, source presentation.PresentationS
 	pages := make([]document.DocumentPageV0, 0, len(ids))
 	var totalText int64
 	for index, id := range ids {
-		target, ok := rels[id]
-		if !ok {
+		rel, ok := rels[id]
+		if !ok || rel.Type != presentationSlideRelationshipTypeV0 {
 			return document.DocumentV0{}, ErrUnsafeArchiveV0
 		}
-		slideName, ok := resolvePartV0("ppt/presentation.xml", target)
-		if !ok {
+		slideName, ok := resolvePartV0("ppt/presentation.xml", rel.Target)
+		if !ok || !isPresentationSlidePartV0(slideName) {
 			return document.DocumentV0{}, ErrUnsafeArchiveV0
 		}
 		slide, ok := files[slideName]
@@ -145,47 +159,76 @@ func validateXMLV0(b []byte, maxDepth int) error {
 			}
 		case xml.EndElement:
 			depth--
+		case xml.Directive:
+			return ErrUnsafeArchiveV0
 		}
 	}
-}
-
-type relationshipsDocumentV0 struct {
-	Relationships []relationshipV0 `xml:"Relationship"`
 }
 
 type relationshipV0 struct {
-	ID         string `xml:"Id,attr"`
-	Target     string `xml:"Target,attr"`
-	TargetMode string `xml:"TargetMode,attr"`
+	ID         string
+	Target     string
+	TargetMode string
+	Type       string
 }
 
-func hasExternalRelationshipV0(b []byte) bool {
-	var relationships relationshipsDocumentV0
-	if xml.Unmarshal(b, &relationships) != nil {
-		return false
-	}
-	for _, relationship := range relationships.Relationships {
-		if strings.EqualFold(relationship.TargetMode, "external") {
-			return true
+func validateRelationshipsV0(b []byte) error {
+	_, err := relationshipsV0(b)
+	return err
+}
+
+func relationshipsV0(b []byte) (map[string]relationshipV0, error) {
+	d := xml.NewDecoder(bytes.NewReader(b))
+	out := map[string]relationshipV0{}
+	seenRoot := false
+	for {
+		token, err := d.Token()
+		if err == io.EOF {
+			break
 		}
-	}
-	return false
-}
-
-func relationshipsV0(b []byte) (map[string]string, error) {
-	var relationships relationshipsDocumentV0
-	if err := xml.Unmarshal(b, &relationships); err != nil {
-		return nil, err
-	}
-	out := map[string]string{}
-	for _, rel := range relationships.Relationships {
-		if rel.ID == "" || rel.Target == "" || strings.EqualFold(rel.TargetMode, "external") {
+		if err != nil {
+			return nil, err
+		}
+		start, ok := token.(xml.StartElement)
+		if !ok {
+			continue
+		}
+		if !seenRoot {
+			if start.Name.Space != packageRelationshipNamespaceV0 || start.Name.Local != "Relationships" {
+				return nil, ErrUnsafeArchiveV0
+			}
+			seenRoot = true
+			continue
+		}
+		if start.Name.Space != packageRelationshipNamespaceV0 || start.Name.Local != "Relationship" {
+			return nil, ErrUnsafeArchiveV0
+		}
+		var rel relationshipV0
+		for _, attr := range start.Attr {
+			if attr.Name.Space != "" {
+				return nil, ErrUnsafeArchiveV0
+			}
+			switch attr.Name.Local {
+			case "Id":
+				rel.ID = attr.Value
+			case "Target":
+				rel.Target = attr.Value
+			case "TargetMode":
+				rel.TargetMode = attr.Value
+			case "Type":
+				rel.Type = attr.Value
+			}
+		}
+		if rel.ID == "" || rel.Target == "" || rel.Type == "" || strings.EqualFold(rel.TargetMode, "external") {
 			return nil, ErrUnsafeArchiveV0
 		}
 		if _, ok := out[rel.ID]; ok {
 			return nil, ErrUnsafeArchiveV0
 		}
-		out[rel.ID] = rel.Target
+		out[rel.ID] = rel
+	}
+	if !seenRoot {
+		return nil, ErrUnsafeArchiveV0
 	}
 	return out, nil
 }
@@ -196,10 +239,19 @@ func resolvePartV0(base, target string) (string, bool) {
 	result := path.Clean(path.Join(path.Dir(base), target))
 	return result, safeZipNameV0(result)
 }
+
+func isPresentationSlidePartV0(name string) bool {
+	return strings.HasPrefix(name, "ppt/slides/") && strings.HasSuffix(name, ".xml")
+}
+
 func slideIDsV0(b []byte) ([]string, float64, float64, error) {
 	d := xml.NewDecoder(bytes.NewReader(b))
 	ids := []string{}
 	width, height := 0.0, 0.0
+	seenRoot := false
+	seenSize := false
+	numericIDs := map[string]struct{}{}
+	relationshipIDs := map[string]struct{}{}
 	for {
 		t, err := d.Token()
 		if err == io.EOF {
@@ -212,24 +264,68 @@ func slideIDsV0(b []byte) ([]string, float64, float64, error) {
 		if !ok {
 			continue
 		}
+		if !seenRoot {
+			if start.Name.Space != presentationMLNamespaceV0 || start.Name.Local != "presentation" {
+				return nil, 0, 0, ErrUnsafeArchiveV0
+			}
+			seenRoot = true
+			continue
+		}
 		switch start.Name.Local {
 		case "sldId":
+			if start.Name.Space != presentationMLNamespaceV0 {
+				return nil, 0, 0, ErrUnsafeArchiveV0
+			}
+			var numericID, relationshipID string
 			for _, a := range start.Attr {
-				if a.Name.Local == "id" {
-					ids = append(ids, a.Value)
+				switch {
+				case a.Name.Space == "" && a.Name.Local == "id":
+					numericID = a.Value
+				case a.Name.Space == officeRelationshipNamespaceV0 && a.Name.Local == "id":
+					relationshipID = a.Value
+				case a.Name.Local == "id":
+					return nil, 0, 0, ErrUnsafeArchiveV0
 				}
 			}
+			if numericID == "" || relationshipID == "" {
+				return nil, 0, 0, ErrUnsafeArchiveV0
+			}
+			if _, err := strconv.ParseUint(numericID, 10, 32); err != nil {
+				return nil, 0, 0, ErrUnsafeArchiveV0
+			}
+			if _, exists := numericIDs[numericID]; exists {
+				return nil, 0, 0, ErrUnsafeArchiveV0
+			}
+			if _, exists := relationshipIDs[relationshipID]; exists {
+				return nil, 0, 0, ErrUnsafeArchiveV0
+			}
+			numericIDs[numericID] = struct{}{}
+			relationshipIDs[relationshipID] = struct{}{}
+			ids = append(ids, relationshipID)
 		case "sldSz":
+			if start.Name.Space != presentationMLNamespaceV0 {
+				return nil, 0, 0, ErrUnsafeArchiveV0
+			}
+			seenSize = true
 			for _, a := range start.Attr {
-				n, _ := strconv.ParseFloat(a.Value, 64)
+				if a.Name.Space != "" {
+					return nil, 0, 0, ErrUnsafeArchiveV0
+				}
+				n, err := strconv.ParseUint(a.Value, 10, 32)
+				if err != nil {
+					return nil, 0, 0, ErrUnsafeArchiveV0
+				}
 				if a.Name.Local == "cx" {
-					width = n
+					width = float64(n)
 				}
 				if a.Name.Local == "cy" {
-					height = n
+					height = float64(n)
 				}
 			}
 		}
+	}
+	if !seenRoot || !seenSize || width <= 0 || height <= 0 {
+		return nil, 0, 0, ErrUnsafeArchiveV0
 	}
 	return ids, width, height, nil
 }
@@ -239,6 +335,7 @@ func slideTextV0(b []byte, depth int) (string, error) {
 	}
 	d := xml.NewDecoder(bytes.NewReader(b))
 	parts := []string{}
+	seenRoot := false
 	for {
 		t, err := d.Token()
 		if err == io.EOF {
@@ -248,8 +345,21 @@ func slideTextV0(b []byte, depth int) (string, error) {
 			return "", err
 		}
 		start, ok := t.(xml.StartElement)
-		if !ok || start.Name.Local != "t" {
+		if !ok {
 			continue
+		}
+		if !seenRoot {
+			if start.Name.Space != presentationMLNamespaceV0 || start.Name.Local != "sld" {
+				return "", ErrUnsafeArchiveV0
+			}
+			seenRoot = true
+			continue
+		}
+		if start.Name.Local != "t" {
+			continue
+		}
+		if start.Name.Space != drawingMLNamespaceV0 {
+			return "", ErrUnsafeArchiveV0
 		}
 		var value string
 		if err := d.DecodeElement(&value, &start); err != nil {
@@ -258,6 +368,9 @@ func slideTextV0(b []byte, depth int) (string, error) {
 		if value != "" {
 			parts = append(parts, value)
 		}
+	}
+	if !seenRoot {
+		return "", ErrUnsafeArchiveV0
 	}
 	return strings.Join(parts, "\n"), nil
 }

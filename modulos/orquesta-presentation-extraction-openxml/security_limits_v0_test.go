@@ -98,19 +98,35 @@ func TestAdapterV0EnforcesSecurityLimitsThroughExtractionV0(t *testing.T) {
 	}
 }
 
+func TestAdapterV0AcceptsEverySecurityLimitAtItsBoundaryV0(t *testing.T) {
+	entries := securityPPTXEntriesV0("within")
+	archive, expanded := securityPPTXArchiveV0(t, entries)
+	if err := extractRejectedPPTXV0(t, archive, ConfigV0{
+		MaxArchiveBytes:  int64(len(archive)),
+		MaxZipEntries:    len(entries),
+		MaxXMLBytes:      int64(maxXMLSizeV0(entries)),
+		MaxExpandedBytes: expanded,
+		MaxSlides:        1,
+		MaxTextBytes:     int64(len("within")),
+		MaxXMLDepth:      3,
+	}); err != nil {
+		t.Fatalf("boundary archive rejected: %v", err)
+	}
+}
+
 func securityPPTXEntriesV0(texts ...string) []securityPPTXEntryV0 {
 	ids := make([]string, 0, len(texts))
 	rels := make([]string, 0, len(texts))
 	entries := []securityPPTXEntryV0{}
 	for index, text := range texts {
 		id := index + 1
-		ids = append(ids, `<p:sldId r:id="rId`+string(rune('0'+id))+`"/>`)
-		rels = append(rels, `<Relationship Id="rId`+string(rune('0'+id))+`" Target="slides/slide`+string(rune('0'+id))+`.xml"/>`)
-		entries = append(entries, securityPPTXEntryV0{name: "ppt/slides/slide" + string(rune('0'+id)) + ".xml", value: `<p:sld xmlns:p="p" xmlns:a="a"><a:t>` + text + `</a:t></p:sld>`})
+		ids = append(ids, `<p:sldId id="`+string(rune('0'+id))+`" r:id="rId`+string(rune('0'+id))+`"/>`)
+		rels = append(rels, `<Relationship Id="rId`+string(rune('0'+id))+`" Type="`+presentationSlideRelationshipTypeV0+`" Target="slides/slide`+string(rune('0'+id))+`.xml"/>`)
+		entries = append(entries, securityPPTXEntryV0{name: "ppt/slides/slide" + string(rune('0'+id)) + ".xml", value: `<p:sld xmlns:p="` + presentationMLNamespaceV0 + `" xmlns:a="` + drawingMLNamespaceV0 + `"><a:t>` + text + `</a:t></p:sld>`})
 	}
 	return append([]securityPPTXEntryV0{
-		{name: "ppt/presentation.xml", value: `<p:presentation xmlns:p="p" xmlns:r="r"><p:sldSz cx="1" cy="1"/><p:sldIdLst>` + strings.Join(ids, "") + `</p:sldIdLst></p:presentation>`},
-		{name: "ppt/_rels/presentation.xml.rels", value: `<Relationships>` + strings.Join(rels, "") + `</Relationships>`},
+		{name: "ppt/presentation.xml", value: `<p:presentation xmlns:p="` + presentationMLNamespaceV0 + `" xmlns:r="` + officeRelationshipNamespaceV0 + `"><p:sldSz cx="1" cy="1"/><p:sldIdLst>` + strings.Join(ids, "") + `</p:sldIdLst></p:presentation>`},
+		{name: "ppt/_rels/presentation.xml.rels", value: `<Relationships xmlns="` + packageRelationshipNamespaceV0 + `">` + strings.Join(rels, "") + `</Relationships>`},
 	}, entries...)
 }
 
