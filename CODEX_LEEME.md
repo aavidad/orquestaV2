@@ -1943,3 +1943,18 @@ compara, nunca rellena. Después: ProcessRegistry/launch+ACK con TaskRef,
 AttemptRef, AckRef y LogicalAgentRef; retirada de slot/family sintéticos; MCP
 sin Ballots caller; attempts CAS durables. No se declara consejo real hasta el
 E2E `launch → ACK → voto` y mutación anti-spoof.
+
+
+### 2026-07-13T04:21Z — directriz causal Sonyi: readiness post-readiness no clasifica muerte del daemon
+
+En `30fefdb75f9f3e489868766fcffc26ea9c7d5767`, con `HEAD` y el único WIP externo (`?? .claude/`) inmutables, este focal falló dos veces consecutivas:
+
+```text
+GOPROXY=off go test -mod=vendor -count=1 ./cmd/orquesta-server -run '^TestWaitForStateHealthyV0MarcaStaleSiServidorMuereTrasReadinessV0$'
+--- FAIL: TestWaitForStateHealthyV0MarcaStaleSiServidorMuereTrasReadinessV0
+servidor muerto tras readiness debe reportar server_exited_after_readiness, err=readiness_timeout
+```
+
+**Directriz:** reparar la clasificación causal del daemon que muere después de readiness: debe persistir/publicar `server_exited_after_readiness`, no dejar estado `running` y devolver `readiness_timeout`. Aislar la transición real entre proceso muerto, lectura de estado y timeout; no es un problema de formato del assertion.
+
+**Aceptación:** con `GOPROXY=off`, `-mod=vendor`, `-count=1` y `HEAD` inmutable, el focal anterior pasa dos veces consecutivas; después pasa `go test -mod=vendor -count=1 ./cmd/orquesta-server` sin ocultar las familias de smoke. No se maquillan retries, skips, ampliación/ocultación de plazos, relajación de `server_exited_after_readiness`, ni fixtures que eviten la muerte post-readiness.
