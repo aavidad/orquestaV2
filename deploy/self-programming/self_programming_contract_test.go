@@ -156,7 +156,7 @@ func TestSelfProgrammingImageV0IncludesPinnedIntegrationRuntime(t *testing.T) {
 		"ln -s /usr/local/go/bin/gofmt /usr/local/bin/gofmt",
 		"GOTMPDIR=/workspace/cache/go",
 		"COPY modulos/orquesta-estado-vivo/testdeps/rapid ./modulos/orquesta-estado-vivo/testdeps/rapid",
-		"ca-certificates bash curl git iptables jq openssh-client procps python3 tmux",
+		"ca-certificates bash curl git iptables jq openssh-client poppler-utils procps python3 tmux",
 		"ARG CODEX_NPM_VERSION=0.144.1",
 		"ARG CLAUDE_CODE_NPM_VERSION=2.1.207",
 		"ARG GEMINI_CLI_NPM_VERSION=0.50.0",
