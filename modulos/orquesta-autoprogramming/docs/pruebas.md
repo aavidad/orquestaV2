@@ -62,8 +62,8 @@ Cobertura actual:
   secundario cuando hay capacidad libre y la cola visible esta por debajo del
   objetivo;
 - planner de backlog salta tareas ya visibles en cola, filtra secciones
-  narrativas explicitas o implicitas por ausencia de `task_ref` y contrato
-  ejecutable, y puede crear una tarea scanner `Escaneo backlog nuevos` con
+  narrativas explicitas y cualquier entrada sin `task_ref`, aunque conserve
+  evidencia documental del scanner, y puede crear una tarea scanner `Escaneo backlog nuevos` con
   epoch, reservas, lineas y hashes de documentos; no duplica el scanner si ya
   esta visible por `task_ref` o por `section_ref`;
 - proyeccion publica de trabajo externo distingue `outbox_pending`,

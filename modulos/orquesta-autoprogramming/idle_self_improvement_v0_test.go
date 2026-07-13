@@ -174,6 +174,34 @@ func TestPlanAutoprogrammingBacklogSelfImprovementV0NoDuplicaScannerVisiblePorSe
 	}
 }
 
+func TestPlanAutoprogrammingBacklogSelfImprovementV0NoMaterializaSeccionSinTaskRefAunqueConserveEvidenciaScanner(t *testing.T) {
+	result := PlanAutoprogrammingBacklogSelfImprovementV0(AutoprogrammingBacklogPlannerInputV0{
+		Entries: []AutoprogrammingBacklogPlannerEntryV0{{
+			SectionRef:         "apg-003",
+			Area:               "autoprogramming",
+			Title:              "Contrato APG-003 ya documentado",
+			WriteSet:           []string{"modulos/orquesta-autoprogramming"},
+			RequiredTests:      []string{"go test -count=1 ./modulos/orquesta-autoprogramming"},
+			AcceptanceCriteria: []string{"preservar evidencia de entrada publica"},
+			ContextRefs: []string{
+				"backlog_scan_ref:scan-ref-backlog-5591c1722dcf",
+				"backlog_scan_epoch:backlog-scan-epoch-cd0b20695bc4",
+			},
+		}},
+	})
+
+	if len(result.Tasks) != 0 {
+		t.Fatalf("tasks=%+v", result.Tasks)
+	}
+	if !hasAutoprogrammingPlannerSkipSectionV0(
+		result.Skipped,
+		"apg-003",
+		AutoprogrammingBacklogPlannerSkipNarrativeSectionV0,
+	) {
+		t.Fatalf("skipped=%+v", result.Skipped)
+	}
+}
+
 func TestProjectAutoprogrammingExternalWorkV0DistingueEstadosPublicos(t *testing.T) {
 	cases := []struct {
 		name  string

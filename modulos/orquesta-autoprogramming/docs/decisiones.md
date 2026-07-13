@@ -148,16 +148,16 @@ subcadenas libres: solo por refs explicitas versionables.
 
 ## 2026-07-02: secciones de backlog no ejecutables no crean runs
 
-Decision: el planner de automejora idle trata como narrativa una entrada de
-backlog que solo trae `section_ref`/titulo y no declara `task_ref`, `write_set`,
-tests, criterios ni refs de contexto.
+Decision: el planner de automejora idle trata como narrativa toda entrada de
+backlog sin `task_ref`, incluso si el scanner le adjunta `write_set`, tests,
+criterios o refs de contexto como evidencia documental.
 
 Motivo: la evidencia APG-003 mostro que depender solo del booleano
 `narrative=true` dejaba que una proyeccion documental incompleta se convirtiera
-en trabajo ejecutable. La correccion usa estructura del contrato, no palabras
-del titulo o del contenido.
+en trabajo ejecutable. Las refs de scanner describen procedencia, no identidad
+causal de trabajo. La correccion usa estructura del contrato, no palabras del
+titulo o del contenido.
 
 Consecuencia: las secciones documentales quedan en `skipped` con razon
-`narrative_section`; los huecos ejecutables siguen necesitando una tarea
-concreta o contrato suficiente, y el scanner `Escaneo backlog nuevos` sigue
-siendo la via para descubrir huecos nuevos.
+`narrative_section`; los huecos ejecutables necesitan un `task_ref` concreto y
+el scanner `Escaneo backlog nuevos` sigue siendo la via para descubrirlos.

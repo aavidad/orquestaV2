@@ -448,11 +448,10 @@ func autoprogrammingBacklogPlannerEntryNarrativeV0(
 	if entry.Narrative {
 		return true
 	}
-	return entry.TaskRef == "" &&
-		len(entry.WriteSet) == 0 &&
-		len(entry.RequiredTests) == 0 &&
-		len(entry.AcceptanceCriteria) == 0 &&
-		len(entry.ContextRefs) == 0
+	// El scanner puede adjuntar refs de procedencia a una seccion documental.
+	// Esas refs no convierten la seccion en una tarea ejecutable: el contrato
+	// posterior exige un task_ref para conservar causalidad e idempotencia.
+	return entry.TaskRef == ""
 }
 
 func autoprogrammingScannerVisibleInQueueV0(
