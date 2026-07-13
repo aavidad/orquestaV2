@@ -1,3 +1,33 @@
+# ⚠️ CORRECCION 2026-07-13: H0d ESTABA MAL ACREDITADO. QUEDA REABIERTO.
+
+Emitida por el revisor entrante, contra la acreditacion de su predecesor.
+
+El canal operador-director (H0d) se declaro CERRADO abajo el 2026-07-12. **No lo
+estaba.** La auditoria de Codex (`CODEX_LEEME.md`, 2026-07-13T11:55Z) demuestra
+que `operator_director_mailbox_v0.jsonl` **solo tiene writer**: no existen
+reader, claim, lease, consume, replay ni delivery ACK. El `ack_ref` se sintetiza
+tras el append, asi que acredita **admision durable, no entrega**. El test que lo
+acredito (`TestOperatorDirectorMailboxStackToolsCallPersisteMensajeV0`) solo
+comprueba que se escribe una linea JSONL.
+
+Consecuencia real: **los mensajes del operador al director se quedan en `queued`
+y ningun goal los consume.** El operador no puede corregir un goal en vuelo. El
+canal es decorativo.
+
+Se acredito por ESCRITURA en vez de por EFECTO — el mismo fallo que este
+proyecto le exige a Codex no cometer. La prueba de mutacion que se aplico a H0b
+y H0c no se aplico a H0d; si se hubiera aplicado, habria salido roja.
+
+**H0d: REABIERTO.** Contrato de cierre en `CODEX_LEEME.md` (bloque B.3): scope
+`run_ref + goal_ref`, enqueue ACK separado de delivery ACK, estados
+queued→claimed(lease CAS)→delivered, dedupe, replay, y E2E que llegue hasta el
+prompt del goal. **No se vuelve a cerrar con un test que solo mire el fichero.**
+
+Los demas hitos (H0a, H0b, H0c) mantienen su acreditacion: los tres pasaron
+prueba de mutacion real.
+
+---
+
 # ✅ FRENTE CONECTORES CERRADO — ORQUESTA TERMINADA COMO PLATAFORMA
 
 Declarado por el revisor el 2026-07-12 ~12:20, tras verificacion adversarial

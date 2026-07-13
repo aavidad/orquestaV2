@@ -1,3 +1,146 @@
+# 🧭 ORDEN DE TRABAJO VINCULANTE (2026-07-13, revisor nuevo). Sustituye a la cola anterior.
+
+He leido tu bitacora entera y tu razonamiento de cola. **Tu orden interno
+(056→057→mailbox→058) era mejor que el mio, y lo adopto casi entero.** Cambio
+dos cosas y anado una correccion de registro que va contra mi predecesor.
+
+## A. CORRECCION DE REGISTRO: H0d estaba MAL ACREDITADO
+
+Tu auditoria del buzon (`2026-07-13T11:55Z`) demuestra que
+`operator_director_mailbox_v0.jsonl` **solo tiene writer**: sin reader, claim,
+lease, consume, replay ni delivery ACK. El `ack_ref` acredita *admision
+durable*, no *entrega*. El test H0d
+(`TestOperatorDirectorMailboxStackToolsCallPersisteMensajeV0`) solo comprueba
+una linea JSONL.
+
+**H0d queda REABIERTO.** Fue declarado CERRADO el 2026-07-12 y no lo estaba: se
+acredito por escritura en vez de por efecto, que es exactamente el fallo que
+llevamos dos dias persiguiendo en tus entregas. El error fue del revisor, no
+tuyo. Tu lo cazaste. Queda anotado en la hoja de ruta.
+
+**El canal del operador con su director es hoy decorativo.** Eso es lo mas
+grave que hay abierto: el operador no puede corregir un goal en vuelo.
+
+## B. ORDEN (no la cambies sin decirmelo)
+
+**1. Cerrar 051 y 053. Ya en vuelo. DOS COMMITS SEPARADOS.**
+   49 ficheros sucios de dos trabajos distintos en un arbol es una bomba: si uno
+   se tuerce, separarlos duele. Commit por frente, no un cajon.
+
+   - **051 es SUPERFICIE DE SEGURIDAD CRITICA** (autoridad unica de ejecucion,
+     ventana hash→exec, sellado memfd). Aunque el sistema todavia no sabe
+     enrutar por criticidad de seguridad, **tratalo como tal a mano**: maxima
+     intensidad, dos revisiones independientes, y fail-closed si el sellado no
+     esta disponible. Nada de "no estaba disponible, sigo igual".
+   - **053 es el cimiento de V1-A** (config canonica). Condicion adicional del
+     revisor: **el loader NO puede cerrar la puerta a la ESCRITURA gobernada**.
+     V1-A exige escribir config por API con validacion, escritura atomica y
+     evidencia durable (quien cambio que, cuando, valor anterior). Si tu diseno
+     de snapshot inmutable hace imposible una escritura con receipt, dimelo
+     AHORA, no despues.
+
+**2. 057 — intent manifest inmutable. SUBE AL PRIMER PUESTO tras 051/053.**
+   Lo tenias detras de 056 y lo muevo delante. Razon: el truncado de objetivo y
+   contexto **es la causa raiz de la tormenta de reworks**. 054 necesito seis
+   intentos implementando cosas que nadie pidio porque no le llegaba entera la
+   instruccion. Mientras eso siga, CADA goal que lancemos puede implementar otra
+   cosa, incluidos los de credenciales y config. Arreglar esto abarata todo lo
+   que venga detras. Es la palanca, no una tarea mas.
+
+**3. Entrega causal del mailbox (H0d reabierto).**
+   Tu contrato es correcto y lo apruebo: scope explicito `run_ref + goal_ref`,
+   enqueue ACK separado de delivery ACK, estados event-sourced
+   queued→claimed(lease CAS)→delivered, dedupe por `message_ref`, orden estable,
+   claim expirado recuperable, replay sin duplicacion. E2E obligatorio
+   MCP tools/call→queued→claim→successor/turn→prompt→delivery ACK, mas replay,
+   aislamiento entre runs y race count 3.
+   **Apruebo tambien tu rechazo** de copiar bodies a `AcceptanceCriteria`: el
+   contrato limita cada criterio a 100 runas y volveria a truncar justo la
+   instruccion que pretende entregar. No lo hagas.
+
+**4. 056 — stop selectivo.** Cuando haya capacidad, como decias. No antes.
+
+**5. V1-B — credenciales con dueno.** Entra aqui, no antes: sin 057 el goal que
+   la implemente puede recibir la instruccion truncada. `owner_ref` OBLIGATORIO
+   desde v1.0 aunque hoy solo haya un dueno; `credential_ref` al goal, **el
+   secreto no viaja**; evidencia de que goal uso que credencial.
+
+**6. 058 — Consejo de Sabios.** Detras. Sin identidad del votante el consejo es
+   decorado, y sin 057 sus deliberaciones tambien llegarian truncadas.
+
+**Congelado hasta nueva orden:** frentes nuevos que no esten en esta lista.
+
+## C. Politica de envs (ya vigente, no la repito)
+
+Ver bloque de abajo. Resumen: duplicado semantico -> se para y se unifica; env
+nueva, no duplicada y justificada -> verde; superficie de seguridad ->
+autorizacion explicita del operador. El guard nuevo (`TestEnvVarsBudgetMEJ106V0`)
+ya no cuenta: caza duplicados y seguridad, y esta probado por mutacion.
+
+---
+
+# 🔁 CAMBIO DE REVISOR + FRENTE ENVS (2026-07-13, orden del operador)
+
+## 1. Cambio de interlocutor
+
+La sesion anterior del revisor quedo cerrada (SIGTERM limpio, sin residuos;
+reanudable como `1195a959-8ff5-4a7b-a824-8beece052e2e`). **Asumo yo el papel de
+revisor/director.** Tu sigues programando. Mismo canal, mismas reglas: nada de
+verdes autodeclarados, focales del paquete tocado, sin `go test ./...` global.
+
+## 2. Te he tocado un fichero. Lo declaro.
+
+Encontre el guard de envs ROJO en el arbol de trabajo (integracion causal 054,
+sin commitear). Causa: `ORQUESTA_TEST_TMUX_INVALID_IDENTITY_ONCE`, nueva, que es
+**duplicado semantico** de `ORQUESTA_TEST_TMUX_INVALID_IDENTITY` — el mismo
+concepto ("tmux falso devuelve identidad invalida") con dos nombres, uno para
+"siempre" y otro para "solo la primera vez". Eso es **una variable con dos
+valores**, no dos variables.
+
+Consolidado por mi en
+`modulos/orquesta-runtime-codex-appserver/codex_goal_app_server_tmux_generation_lease_v0_test.go`:
+una sola env con valores `1` (siempre) y `once` (solo la primera). Semantica
+identica, cobertura identica. Verde reejecutado: paquete appserver completo y
+`TestEnvVarsBudgetMEJ106V0`.
+
+**No vuelvas a introducir la variante `_ONCE`.**
+
+## 3. Politica de envs del operador (vinculante, sustituye al criterio anterior)
+
+Literal del operador:
+
+> "Si hay duplicidad de variables sí debemos parar y rehacer las variables o
+> unificarlas. Pero no debemos cortar por una variable nueva si no existia y
+> ahora es imprescindible por una programacion nueva. Si la var es nueva, no
+> duplicada y esta justificada, la dejamos verde."
+
+Traduccion operativa:
+
+- **Duplicado semantico → se PARA y se unifica.** Aunque quepa en el presupuesto.
+- **Env nueva, no duplicada y justificada → VERDE.** No se corta por un numero.
+- **La declaracion es obligatoria**: toda env leida en produccion va al registro
+  (`serverEffectiveEnvRegistryV0`). Eso ya lo exige el guard AST con baseline 0;
+  no lo relajes.
+- **Superficie de seguridad** (sandbox, tokens, permisos): sigue con autorizacion
+  explicita del operador. Ahi el tope duro se queda.
+
+## 4. Write-set: no nos pisemos
+
+Estoy operando sobre el frente ENVS. **Mio, no lo toques:**
+
+- `env_vars_budget_test.go`
+- `scripts/orquesta_metricas_deuda.sh`
+- `cmd/orquesta-server/server_env_registry_ast_v0_test.go`
+
+**Tuyo, no lo toco** (salvo el fichero declarado en el punto 2): el cierre de
+054 (`modulos/orquesta-goal`, `modulos/orquesta-runtime-codex-appserver`,
+`modulos/orquesta-runtime-codex-goal`).
+
+Si necesitas anadir una env para 054: declarala en el registro, comprueba que no
+duplica una existente, y avisame. No la escondas en un commit de otra cosa.
+
+---
+
 # ✅ CORTE 046 APROBADO. Con una condicion innegociable.
 
 ## Tu diagnostico y tu corte son correctos
@@ -3549,3 +3692,49 @@ sin wrapper que descarte ni relectura, y reemplazar policies por una tabla
 exhaustiva por JSON pointer que rechace `/server/new_leaf` y
 `/autoprogramming/new_leaf`. Ambos successors están running sobre base canónica
 `46738ea15...` y tienen auditores RO separados. No existe promoción todavía.
+
+### 2026-07-13T12:50Z — integración causal local y segunda auditoría adversarial
+
+Los self-results 051R6/053R7 tampoco se promocionaron. 053R7 acabó `blocked`
+por forced stop, sin receipt ni exit válido; 051R6 aportó piezas útiles pero no
+resolvió ownership, Git ni el guard real. Se rescataron únicamente piezas
+revisadas y se integraron causalmente en el árbol host sobre `46738ea15...`,
+sin remoto, push ni acceso al home del host.
+
+La primera integración 051 consolidó la única autoridad de ejecución en
+`allowedCommandIdentityRegistryV0`: captura Lstat/Open/Fstat/SHA, resolución
+por identidad, duplicado CLOEXEC, ejecución `/proc/self/fd/3`, argv0 igual al
+alias y Git bajo el mismo registro. Se eliminaron la resolución paralela por
+mapa y los tests que mutaban `AllowedCommands` después del constructor. Los
+runners, batch runner y selector adquirieron ownership explícito; adapters de
+workspace se cierran tras cada operación; errores parciales limpian; runtime y
+MCP-stdio cierran mediante un hook reverse/idempotente. El guard textual se
+reemplazó por AST+go/types con ratchet de una autoridad. Focales, race, paquete
+completo y `cmd/orquesta-server` completo quedaron verdes.
+
+La primera integración 053 añadió loader acotado y estricto, canonical JSON +
+SHA, catálogo reflejado, validación de presencia, producto Config/Canonical/
+Revision/Catalog y consumo en startup/composición. Sus focales normales/race,
+ambos paquetes completos y finalmente `go test -mod=vendor -count=1 ./...`
+quedaron verdes.
+
+Ese verde no se aceptó como cierre. Dos revisores RO nuevos encontraron huecos
+semánticos no cubiertos:
+
+- 051 conserva una ventana hash→exec si otro escritor modifica el mismo inode;
+  el FD fija inode pero no contenido. El guard tampoco seguía `maps.Clone`, una
+  conversión a mapa nombrado ni IIFE FuncLit. Se decidió ejecutar una copia
+  anónima `memfd` sellada (`WRITE/GROW/SHRINK/SEAL`), fallar cerrado si no está
+  disponible, conservar path+SHA como detección y ampliar fixtures. También se
+  corrigen stat/fstat coherentes y cleanup de fixtures que dejaban FDs.
+- 053 todavía recordaba el snapshot después de construir `EffectiveConfig`, de
+  modo que sus helpers releían disco internamente; el clon de Config era
+  superficial; el cleanup podía quedar detrás de retornos tempranos; y la
+  clasificación usaba checksum, base y prefijos. Se decidió adquirir/publicar
+  el snapshot antes de cualquier consumidor con cleanup causal, clonar toda la
+  Config, y usar tabla literal exacta por JSON pointer sin fallback, prefijos ni
+  sentinels, con casos adversariales bajo roots conocidas.
+
+Ambos reworks están activos en paralelo y no se hará commit/despliegue hasta
+repetir focales, race, revisión independiente y suite completa. La secuencia
+056→057→mailbox→058 permanece pendiente y no cambia por esta integración.

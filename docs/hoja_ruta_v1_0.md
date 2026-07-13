@@ -241,13 +241,37 @@ Registrado en `docs/decision_arquitectura_estado_2026-07-12.md` y aqui:
 **Lo unico que v1.0 debe garantizar es no cerrarle la puerta**: por eso
 `owner_ref` en credenciales es obligatorio desde ya.
 
-## Orden de trabajo
+## Orden de trabajo (REVISADO 2026-07-13 por el revisor entrante)
 
-1. **H4** — higiene y validaciones desenchufadas (ya asignado a Codex).
-2. **V1-B** — credenciales con dueño y trazabilidad (**es lo que condiciona la
-   arquitectura**; va antes que la UI).
-3. **V1-A** — configuracion por API + web sobre el esquema canonico.
-   **V1-A2** — selector de modelos e intensidades (director/trabajadores), con
-   descubrimiento en vivo de modelos locales y defaults explicados.
-4. **V1-C** — status honesto.
-5. Etiquetar **v1.0**.
+El orden anterior ponia V1-B primero. **Se corrige**, por dos hechos que no se
+conocian al escribirlo:
+
+- **El pipeline TRUNCA objetivo y contexto** antes de construir el GoalSpec (057).
+  Es la causa raiz de la tormenta de reworks: 054 necesito seis intentos
+  implementando cosas que nadie pidio. Mientras siga, **cualquier** goal que
+  lancemos —incluido el de credenciales— puede implementar otra cosa. Arreglarlo
+  abarata todo lo demas: es la palanca.
+- **H0d (canal operador-director) estaba mal acreditado y queda REABIERTO**: el
+  buzon solo tiene writer, sin entrega. El operador no puede corregir un goal en
+  vuelo. Ver `docs/hoja_ruta_cierre_conectores_2026-07-12.md`.
+
+Orden vigente:
+
+1. **Cerrar 051 y 053** (en vuelo). 051 es superficie de seguridad critica
+   (autoridad unica de ejecucion): maxima intensidad y fail-closed. 053 es el
+   **cimiento de V1-A** (config canonica, TAREA-8.1): su loader no puede cerrar
+   la puerta a la escritura gobernada con receipt.
+2. **057** — intent manifest inmutable. La palanca. Antes que ningun frente nuevo.
+3. **H0d reabierto** — entrega causal del mailbox (no ACK de escritura: ACK de
+   entrega).
+4. **056** — stop selectivo, cuando haya capacidad.
+5. **V1-B** — credenciales con dueño y trazabilidad. Sigue siendo lo que
+   condiciona la arquitectura, y por eso va antes que la UI; pero **detras de
+   057**, porque su instruccion no debe llegar truncada.
+6. **V1-A** — escritura de configuracion por API + web sobre el loader de 053.
+   **V1-A2** — selector de modelos e intensidades por rol, con descubrimiento en
+   vivo y criticidad de seguridad como segunda dimension (regla de piso).
+7. **058** — Consejo de Sabios (necesita identidad del votante; sin 057 sus
+   deliberaciones tambien llegarian truncadas).
+8. **V1-C** — status honesto. **H4** — higiene y validaciones desenchufadas.
+9. Etiquetar **v1.0**.
