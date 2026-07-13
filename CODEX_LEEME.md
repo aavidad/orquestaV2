@@ -1534,3 +1534,17 @@ web status=502
 **Directriz:** aislar el error interno y la duración de `ArrancarDirectorApp` en el camino que el POST `/nueva-app` proyecta como 502; reparar la causa real de la latencia/error bajo el plazo del harness, no el HTML ni el síntoma. La intermitencia no acredita idempotencia.
 
 **Aceptación:** con `GOPROXY=off`, `GOFLAGS=-mod=vendor`, `-count=1` y `HEAD` inmutable, el focal pasa dos veces consecutivas y después pasa `./modulos/orquesta-app-codex-stack`; la evidencia identifica el error/tiempo causal cuando exista fallo. Prohibidos retries, skips, aumentar/ocultar el timeout, relajar el 502/assertion o alterar la fixture para esquivar la reingesta.
+
+### 2026-07-13T03:02Z — directriz causal: la familia sigue roja; no acreditar el verde aislado
+
+`HEAD` no cambió desde `10074880d13e65ad4b38ddd75dbb19eb156fb6c8` durante las comprobaciones. El focal de drain pasó dos veces, pero la familia volvió a fallar por el mismo síntoma de transporte:
+
+```text
+GOPROXY=off GOFLAGS=-mod=vendor go test -count=1 ./modulos/orquesta-app-codex-stack
+--- FAIL: TestCodexStackV0GatewayAPIYWebArrancanEquipoDirectorConRuntimeInyectado
+web status=502
+```
+
+**Directriz:** instrumentar y aislar el error interno y la duración de `ArrancarDirectorApp` en esa ruta gateway+web; el verde del focal aislado no cierra una familia que aún proyecta 502. Corregir la causa bajo el plazo del harness, no el transporte superficial.
+
+**Aceptación:** en `HEAD` inmutable, el comando de familia anterior pasa y `TestCodexStackV0GatewayAPIYWebArrancanEquipoDirectorConRuntimeInyectado` deja evidencia causal si falla; solo entonces revalidar el focal de drain dos veces y el global. Prohibidos retries, skips, ampliar/ocultar timeout, relajar status/assertions, cambiar el HTML o alterar fixtures para evitar la ruta gateway+web.
