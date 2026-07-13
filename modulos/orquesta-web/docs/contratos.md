@@ -705,11 +705,22 @@ Propietario: orquesta-web
 Consumidores: vistas web de autoprogramacion y operador
 Campos:
 - query: request_id, correlation_id, locale, run_ref?, app_ref?,
-  external_job_ref?, queue_ref?, app_refs?, queue_limit? y flags de telemetria.
+  external_job_ref?, queue_ref?, app_refs?, queue_limit?, scope_mode? y scope,
+  junto con flags de telemetria.
 - viewmodel: queue_live, run_live, queue_ref, run_ref, runs, agents,
-  queue_health con `agents_live`, ops_snapshot, diagnostics y errores_publicos.
+  queue_health con `agents_live`, ops_snapshot, diagnostics y errores_publicos;
+  conserva `scope_mode` y `scope` devueltos por el contrato MCP.
 Invariantes:
 - Consume `POST /api/v0/autoprogramming/status`.
+- Para una consulta scoped, transmite `scope_mode` y `scope` sin reinterpretar
+  refs. El conjunto `allowedRuns` es derivado interno del servidor y no se
+  infiere ni se amplifica en cliente a partir de evidencias, payloads, texto o
+  parentesco.
+- Selectores validos: `legacy` sin scope, o `run`, `queue` y `app` con scope
+  opaco no vacio. Un selector desconocido/incompleto o una respuesta que no
+  pueda demostrar una identidad semantica se trata fail-closed: la UI muestra
+  el error publico y no reutiliza datos de otra consulta. Acciones seguras con
+  refs ajenas o payload no inspeccionable no se presentan.
 - En `/ops`, consume tambien `POST /api/v0/queue/global-status` para fusionar
   `recommended_action`, `no_action_reason` y `needs_action` por `run_ref`;
   si falla, conserva `autoprogramming/status` como fallback parcial.

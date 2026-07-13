@@ -7,6 +7,17 @@ type statusScopeTypedPayloadV0 struct {
 	Nested []statusScopeTypedPayloadV0 `json:"nested"`
 }
 
+type statusScopeTypedContainersV0 struct {
+	Array      [1]statusScopeTypedPayloadV0         `json:"array"`
+	Slice      []statusScopeTypedPayloadV0          `json:"slice"`
+	Map        map[string]statusScopeTypedPayloadV0 `json:"map"`
+	NumericMap map[int]statusScopeTypedPayloadV0    `json:"numeric_map"`
+}
+
+type statusScopePrivatePayloadV0 struct {
+	runRef string `json:"run_ref"`
+}
+
 func TestMCPAutoprogrammingStatusScopeV0UsesExactOpaqueRunMembership(t *testing.T) {
 	allowed := "request-ref-opaque-allowed-001"
 	foreign := "request-ref-opaque-allowed-001-shadow"
@@ -96,5 +107,51 @@ func TestMCPAutoprogrammingStatusScopeV0RejectsIncompleteAndInvalidSelector(t *t
 		if err != nil || result.Estado != MCPAutoprogrammingStatusEstadoErrorV0 || len(result.Errores) != 1 || result.Errores[0].Code != "autoprogramming_status_scope_invalid" {
 			t.Fatalf("input=%+v result=%+v err=%v", input, result, err)
 		}
+	}
+}
+
+func TestMCPAutoprogrammingStatusScopeV0FiltersKnownBlockerRefOnly(t *testing.T) {
+	allowed, foreign, opaque := "run-opaque-allowed", "run-opaque-foreign", "blocker-opaque-external"
+	result := MCPAutoprogrammingStatusToolResultV0{
+		Queue: &MCPRunQueuePriorityToolResultV0{QueueRef: "queue-opaque", Ranked: []MCPRunQueueRankedCandidateCompactV0{{RunRef: allowed}, {RunRef: foreign}}},
+		Operator: &MCPAutoprogrammingOperatorV0{ClosureBlockers: []MCPAutoprogrammingClosureBlockerV0{
+			{RunRef: allowed, BlockerRef: foreign},
+			{RunRef: allowed, BlockerRef: opaque},
+		}},
+	}
+	scoped := scopeMCPAutoprogrammingStatusResultV0(result, MCPAutoprogrammingStatusToolInputV0{ScopeMode: MCPAutoprogrammingStatusScopeRunV0, Scope: allowed})
+	if got := scoped.Operator.ClosureBlockers; len(got) != 2 || got[0].BlockerRef != "" || got[1].BlockerRef != opaque {
+		t.Fatalf("blocker refs deben borrar solo run conocido extranjero: %+v", got)
+	}
+}
+
+func TestMCPAutoprogrammingStatusScopeV0RecursesTypedContainersAndFailsClosedPrivateFields(t *testing.T) {
+	allowed, foreign := "run-opaque-allowed", "run-opaque-foreign"
+	allowedContainers := statusScopeTypedContainersV0{
+		Array:      [1]statusScopeTypedPayloadV0{{RunRef: allowed}},
+		Slice:      []statusScopeTypedPayloadV0{{RunRef: allowed}},
+		Map:        map[string]statusScopeTypedPayloadV0{"item": {RunRef: allowed}},
+		NumericMap: map[int]statusScopeTypedPayloadV0{1: {RunRef: allowed}},
+	}
+	foreignArray, foreignSlice, foreignMap := allowedContainers, allowedContainers, allowedContainers
+	foreignArray.Array = [1]statusScopeTypedPayloadV0{{RunRef: foreign}}
+	foreignSlice.Slice = []statusScopeTypedPayloadV0{{RunRef: foreign}}
+	foreignMap.NumericMap = map[int]statusScopeTypedPayloadV0{1: {RunRef: foreign}}
+	result := MCPAutoprogrammingStatusToolResultV0{
+		Queue: &MCPRunQueuePriorityToolResultV0{QueueRef: "queue-opaque", Ranked: []MCPRunQueueRankedCandidateCompactV0{{RunRef: allowed}, {RunRef: foreign}}},
+		Operator: &MCPAutoprogrammingOperatorV0{SafeActions: []MCPAutoprogrammingSafeActionV0{
+			{RunRef: allowed, Payload: map[string]any{"typed": allowedContainers}},
+			{RunRef: allowed, Payload: map[string]any{"typed": foreignArray}},
+			{RunRef: allowed, Payload: map[string]any{"typed": foreignSlice}},
+			{RunRef: allowed, Payload: map[string]any{"typed": foreignMap}},
+			{RunRef: allowed, Payload: map[string]any{"private": statusScopePrivatePayloadV0{runRef: foreign}}},
+		}},
+	}
+	scoped := scopeMCPAutoprogrammingStatusResultV0(result, MCPAutoprogrammingStatusToolInputV0{ScopeMode: MCPAutoprogrammingStatusScopeRunV0, Scope: allowed})
+	if scoped.Operator == nil || len(scoped.Operator.SafeActions) != 1 {
+		t.Fatalf("contenedores extranjeros o campos privados deben descartar sin panic: %+v", scoped.Operator)
+	}
+	if _, ok := scoped.Operator.SafeActions[0].Payload["typed"].(statusScopeTypedContainersV0); !ok {
+		t.Fatalf("payload tipado permitido debe conservar su tipo: %+v", scoped.Operator.SafeActions[0].Payload)
 	}
 }

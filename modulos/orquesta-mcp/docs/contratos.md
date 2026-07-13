@@ -1782,7 +1782,12 @@ Campos:
     path: /api/v0/autoprogramming/status
   input:
     request_id, correlation_id, run_ref?, external_job_ref?, queue_ref?,
-    app_refs?, queue_limit?, telemetry_flags?
+    app_refs?, queue_limit?, telemetry_flags?, scope_mode?, scope?
+  scoped_output:
+    scope_mode: legacy|run|queue|app
+    scope: selector opaco requerido salvo `legacy`
+    allowedRuns: conjunto interno derivado exclusivamente de identidades de run
+      de primer nivel visibles; no se serializa como contrato publico
   rest_extension:
     operator_advice?: consejos humanos compactos; el bridge HTTP normaliza
       aliases reparables (`subject_ref`, `target`, `ref`, `run`, `task`,
@@ -1831,6 +1836,20 @@ Campos:
     diagnostics?: diagnostico publico, incluido consejo no bloqueante
 Invariantes:
   - Adaptador inbound fino.
+  - `scope_mode` vacio conserva `legacy`; `run`, `queue` y `app` exigen un
+    `scope` no vacio. Cualquier modo desconocido o selector incompleto devuelve
+    `autoprogramming_status_scope_invalid` y no proyecta una respuesta parcial.
+  - El selector deriva `allowedRuns` por igualdad exacta de refs opacas: `run`
+    solo admite la run visible seleccionada, `queue` sus candidatos visibles y
+    `app` sus runs visibles de esa app. Refs encontradas solo en evidencia,
+    payload, parentesco o texto no amplian autoridad.
+  - La proyeccion scoped falla cerrada: elimina referencias a runs conocidas que
+    no pertenezcan a `allowedRuns`, incluido `closure_blockers[].blocker_ref`;
+    una ref opaca no reconocida se conserva como opaca. `safe_actions` se omite
+    si su scope, run o una identidad semantica de `payload` no puede verificarse.
+    La inspeccion recursiva cubre maps, slices, arrays y structs Go tipados; un
+    campo privado/no accesible o no seteable no se lee, no se copia por
+    reflection y descarta la accion sin panic.
   - Delega cola en `run_queue.priority` y run en `director.stats`.
   - Si la composicion inyecta `GoalWorkStateStore` y la run pertenece a
     goal-first, recomienda observar el goal por

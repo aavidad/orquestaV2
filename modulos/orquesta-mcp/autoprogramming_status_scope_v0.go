@@ -291,6 +291,7 @@ func mcpAutoprogrammingScopedOperatorV0(operator *MCPAutoprogrammingOperatorV0, 
 	copy.ClosureBlockers = []MCPAutoprogrammingClosureBlockerV0{}
 	for _, item := range operator.ClosureBlockers {
 		if allowed[strings.TrimSpace(item.RunRef)] {
+			item.BlockerRef = mcpAutoprogrammingScopedOptionalRunRefV0(item.BlockerRef, allowed, known)
 			item.Evidence = mcpAutoprogrammingScopedSemanticRefsV0(item.Evidence, allowed, known)
 			copy.ClosureBlockers = append(copy.ClosureBlockers, item)
 		}
@@ -342,7 +343,7 @@ func mcpAutoprogrammingScopedSafeActionV0(action MCPAutoprogrammingSafeActionV0,
 // opaque rather than being guessed from a prefix.
 func mcpAutoprogrammingScopedPayloadV0(value any, allowed, known map[string]bool) (any, bool) {
 	out, ok := mcpAutoprogrammingScopedPayloadReflectV0(reflect.ValueOf(value), "", allowed, known)
-	if !ok {
+	if !ok || !out.IsValid() || !out.CanInterface() {
 		return nil, false
 	}
 	return out.Interface(), true
@@ -350,6 +351,12 @@ func mcpAutoprogrammingScopedPayloadV0(value any, allowed, known map[string]bool
 func mcpAutoprogrammingScopedPayloadReflectV0(value reflect.Value, key string, allowed, known map[string]bool) (reflect.Value, bool) {
 	if !value.IsValid() {
 		return value, true
+	}
+	// An inaccessible value cannot be inspected for a semantic identity. Do not
+	// try to copy it with Set or expose it through Interface: reject the entire
+	// action instead, so scoped output fails closed without a reflection panic.
+	if !value.CanInterface() {
+		return reflect.Value{}, false
 	}
 	if value.Kind() == reflect.Interface {
 		if value.IsNil() {
@@ -360,6 +367,9 @@ func mcpAutoprogrammingScopedPayloadReflectV0(value reflect.Value, key string, a
 			return reflect.Value{}, false
 		}
 		boxed := reflect.New(value.Type()).Elem()
+		if !boxed.CanSet() || !out.IsValid() || !out.CanInterface() || !out.Type().AssignableTo(value.Type()) {
+			return reflect.Value{}, false
+		}
 		boxed.Set(out)
 		return boxed, true
 	}
@@ -372,6 +382,9 @@ func mcpAutoprogrammingScopedPayloadReflectV0(value reflect.Value, key string, a
 			return reflect.Value{}, false
 		}
 		copy := reflect.New(value.Type().Elem())
+		if !copy.Elem().CanSet() || !out.IsValid() || !out.CanInterface() || !out.Type().AssignableTo(value.Type().Elem()) {
+			return reflect.Value{}, false
+		}
 		copy.Elem().Set(out)
 		return copy, true
 	}
@@ -380,7 +393,7 @@ func mcpAutoprogrammingScopedPayloadReflectV0(value reflect.Value, key string, a
 	for semantic.IsValid() && semantic.Kind() == reflect.Interface && !semantic.IsNil() {
 		semantic = semantic.Elem()
 	}
-	if normalized == "run_ref" && semantic.IsValid() && semantic.Kind() == reflect.String {
+	if normalized == "run_ref" && semantic.IsValid() && semantic.CanInterface() && semantic.Kind() == reflect.String {
 		if !allowed[strings.TrimSpace(semantic.String())] {
 			return reflect.Value{}, false
 		}
@@ -395,7 +408,7 @@ func mcpAutoprogrammingScopedPayloadReflectV0(value reflect.Value, key string, a
 			for item.IsValid() && item.Kind() == reflect.Interface && !item.IsNil() {
 				item = item.Elem()
 			}
-			if !item.IsValid() || item.Kind() != reflect.String || !allowed[strings.TrimSpace(item.String())] {
+			if !item.IsValid() || !item.CanInterface() || item.Kind() != reflect.String || !allowed[strings.TrimSpace(item.String())] {
 				return reflect.Value{}, false
 			}
 		}
@@ -403,24 +416,36 @@ func mcpAutoprogrammingScopedPayloadReflectV0(value reflect.Value, key string, a
 	}
 	switch value.Kind() {
 	case reflect.Map:
-		if value.Type().Key().Kind() != reflect.String {
-			return value, true
-		}
 		copy := reflect.MakeMapWithSize(value.Type(), value.Len())
 		it := value.MapRange()
 		for it.Next() {
-			out, ok := mcpAutoprogrammingScopedPayloadReflectV0(it.Value(), it.Key().String(), allowed, known)
+			mapKey := ""
+			if it.Key().Kind() == reflect.String {
+				mapKey = it.Key().String()
+			}
+			out, ok := mcpAutoprogrammingScopedPayloadReflectV0(it.Value(), mapKey, allowed, known)
 			if !ok {
+				return reflect.Value{}, false
+			}
+			if !out.IsValid() || !out.CanInterface() || !out.Type().AssignableTo(value.Type().Elem()) {
 				return reflect.Value{}, false
 			}
 			copy.SetMapIndex(it.Key(), out)
 		}
 		return copy, true
-	case reflect.Slice:
-		copy := reflect.MakeSlice(value.Type(), value.Len(), value.Len())
+	case reflect.Array, reflect.Slice:
+		var copy reflect.Value
+		if value.Kind() == reflect.Array {
+			copy = reflect.New(value.Type()).Elem()
+		} else {
+			copy = reflect.MakeSlice(value.Type(), value.Len(), value.Len())
+		}
 		for i := 0; i < value.Len(); i++ {
 			out, ok := mcpAutoprogrammingScopedPayloadReflectV0(value.Index(i), "", allowed, known)
 			if !ok {
+				return reflect.Value{}, false
+			}
+			if !copy.Index(i).CanSet() || !out.IsValid() || !out.CanInterface() || !out.Type().AssignableTo(value.Type().Elem()) {
 				return reflect.Value{}, false
 			}
 			copy.Index(i).Set(out)
@@ -428,18 +453,23 @@ func mcpAutoprogrammingScopedPayloadReflectV0(value reflect.Value, key string, a
 		return copy, true
 	case reflect.Struct:
 		copy := reflect.New(value.Type()).Elem()
+		if !copy.CanSet() {
+			return reflect.Value{}, false
+		}
 		for i := 0; i < value.NumField(); i++ {
 			field := value.Type().Field(i)
-			if !copy.Field(i).CanSet() {
-				copy.Field(i).Set(value.Field(i))
-				continue
-			}
 			name := strings.Split(field.Tag.Get("json"), ",")[0]
 			if name == "" {
 				name = field.Name
 			}
+			if field.PkgPath != "" || !copy.Field(i).CanSet() || !value.Field(i).CanInterface() {
+				return reflect.Value{}, false
+			}
 			out, ok := mcpAutoprogrammingScopedPayloadReflectV0(value.Field(i), name, allowed, known)
 			if !ok {
+				return reflect.Value{}, false
+			}
+			if !out.IsValid() || !out.CanInterface() || !out.Type().AssignableTo(field.Type) {
 				return reflect.Value{}, false
 			}
 			copy.Field(i).Set(out)
