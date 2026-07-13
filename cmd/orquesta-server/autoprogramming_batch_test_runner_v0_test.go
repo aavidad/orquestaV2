@@ -102,6 +102,9 @@ func TestBuildStackFromProjectConfigV0CableaBatchStoreRunnerYIntegradorV0(t *tes
 	if err != nil {
 		t.Fatalf("buildStackFromProjectConfigV0: %v", err)
 	}
+	t.Cleanup(func() {
+		_ = serverRequiredTestResourceShutdownHookFromStackV0(stack).ShutdownV0(context.Background())
+	})
 	if stack.Stores.AutoprogrammingBatchStore == nil || stack.AutoprogrammingPromotion.BatchTestRunner == nil ||
 		stack.AutoprogrammingPromotion.GoalWorkspaceIntegration == nil || stack.AutoprogrammingPromotion.BatchPromotionFinalizer == nil ||
 		stack.AutoprogrammingPromotion.BatchPromotionReconciler == nil || stack.AutoprogrammingPromotion.BatchPromotionReceiptDir != stack.AutoprogrammingPromotion.BatchIntegrationReceiptDir {
@@ -146,6 +149,7 @@ func serverAutoprogrammingBatchTestRunnerForTestV0(t *testing.T, projectDir stri
 	if err != nil || runner == nil {
 		t.Fatalf("autoprogrammingBatchTestRunnerFromConfigV0 runner=%T err=%v", runner, err)
 	}
+	t.Cleanup(func() { _ = runner.Close() })
 	return runner
 }
 

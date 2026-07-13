@@ -1,6 +1,7 @@
 package orquestaruntimerequiredtest
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -8,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -18,6 +18,8 @@ import (
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
+
+const goalRequiredTestGitCommandAliasV0 = "orquesta-attestation-git-v0"
 
 type LocalTrustedGoalRequiredTestIdentityPolicyV0 struct {
 	TrustPolicyRef           string
@@ -44,11 +46,14 @@ type LocalGoalRequiredTestAttestationConfigV0 struct {
 	Identity                 LocalTrustedGoalRequiredTestIdentityPolicyV0
 }
 
-// LocalGoalRequiredTestAttestationAdapterV0 is an external adapter. It derives
-// checkout metadata and write-set hashes from the configured worktree and runs
-// only frozen allowlisted commands without a shell or inherited environment.
+// LocalGoalRequiredTestAttestationAdapterV0 is an external adapter. Its public
+// factory resolves configured command symlinks once to canonical targets; the
+// internal registry rejects symlinks and freezes those targets. The adapter
+// derives checkout metadata and write-set hashes from the configured worktree
+// and runs only frozen allowlisted commands without a shell or inherited env.
 type LocalGoalRequiredTestAttestationAdapterV0 struct {
-	config LocalGoalRequiredTestAttestationConfigV0
+	config   LocalGoalRequiredTestAttestationConfigV0
+	commands *allowedCommandIdentityRegistryV0
 }
 
 func NewLocalGoalRequiredTestAttestationAdapterV0(
@@ -58,7 +63,27 @@ func NewLocalGoalRequiredTestAttestationAdapterV0(
 	if err != nil {
 		return nil, err
 	}
-	return &LocalGoalRequiredTestAttestationAdapterV0{config: normalized}, nil
+	registryCommands := make(map[string]string, len(normalized.AllowedCommands)+1)
+	for alias, path := range normalized.AllowedCommands {
+		registryCommands[alias] = path
+	}
+	if _, reserved := registryCommands[goalRequiredTestGitCommandAliasV0]; reserved {
+		return nil, fmt.Errorf("goal_required_test_allowed_command_reserved: %s", goalRequiredTestGitCommandAliasV0)
+	}
+	registryCommands[goalRequiredTestGitCommandAliasV0] = normalized.GitCommandPath
+	commands, err := newAllowedCommandIdentityRegistryV0(registryCommands)
+	if err != nil {
+		return nil, err
+	}
+	normalized.AllowedCommands = nil
+	return &LocalGoalRequiredTestAttestationAdapterV0{config: normalized, commands: commands}, nil
+}
+
+func (adapter *LocalGoalRequiredTestAttestationAdapterV0) Close() error {
+	if adapter == nil || adapter.commands == nil {
+		return nil
+	}
+	return adapter.commands.Close()
 }
 
 func (adapter *LocalGoalRequiredTestAttestationAdapterV0) BindGoalRequiredTestSpecV0(
@@ -272,16 +297,19 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) AttestGoalRequiredTest
 func (adapter *LocalGoalRequiredTestAttestationAdapterV0) validateFrozenRequiredTestCommandV0(
 	test orquestagoal.GoalRequiredTestV0,
 ) error {
-	tokens, err := splitCommandV0(test.Command)
+	if adapter.commands == nil {
+		return fmt.Errorf("required_test_command_identity_invalid")
+	}
+	resolved, err := adapter.commands.resolve(test.Command)
+	if resolved.executionFile != nil {
+		_ = resolved.executionFile.Close()
+	}
 	if err != nil {
+		if resolutionErr := commandAllowlistResolutionErrorV0Of(err); resolutionErr != nil &&
+			resolutionErr.Failure == commandAllowlistNotAllowedFailureV0 {
+			return fmt.Errorf("goal_required_test_command_not_allowed_before_launch: %s", resolutionErr.Command)
+		}
 		return fmt.Errorf("goal_required_test_command_invalid_before_launch: %w", err)
-	}
-	commandPath, ok := adapter.config.AllowedCommands[tokens[0]]
-	if !ok {
-		return fmt.Errorf("goal_required_test_command_not_allowed_before_launch: %s", tokens[0])
-	}
-	if commandIsShellV0(tokens[0]) || commandIsShellV0(commandPath) {
-		return fmt.Errorf("goal_required_test_command_shell_prohibited_before_launch")
 	}
 	return nil
 }
@@ -370,12 +398,11 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) runFrozenTestV0(
 	}
 	executionContext, cancel := context.WithTimeout(ctx, adapter.config.MaxRuntime)
 	defer cancel()
-	executor := LocalCommandExecutorV0{
+	executor := localCommandExecutorWithRegistryV0(LocalCommandExecutorV0{
 		ProjectWorkDir: adapter.config.ProjectWorkDir, OutputDir: outputDir,
-		AllowedCommands: adapter.config.AllowedCommands,
-		Env:             adapter.hermeticEnvironmentWithCGOV0(runDir, moduleCache, race),
-		MaxOutputBytes:  adapter.config.MaxOutputBytes, MaxArtifacts: adapter.config.MaxArtifacts,
-	}
+		Env:            adapter.hermeticEnvironmentWithCGOV0(runDir, moduleCache, race),
+		MaxOutputBytes: adapter.config.MaxOutputBytes, MaxArtifacts: adapter.config.MaxArtifacts,
+	}, adapter.commands)
 	return executor.RunRequiredTestCommandV0(executionContext, orquestacionnucleoapp.RequiredTestCommandExecutionRequestV0{
 		RunRef: request.RunRef, TaskRef: test.TestRef, TestCommand: test.Command,
 		CorrelationID: attestationRef, EvidenceRefs: []string{request.FinalSnapshot.SnapshotRef},
@@ -404,13 +431,19 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) observeCheckoutV0(ctx 
 
 func (adapter *LocalGoalRequiredTestAttestationAdapterV0) runGitV0(ctx context.Context, args ...string) (string, error) {
 	commandArgs := append([]string{"-C", adapter.config.ProjectWorkDir}, args...)
-	cmd := exec.CommandContext(ctx, adapter.config.GitCommandPath, commandArgs...)
-	cmd.Env = []string{"LC_ALL=C", "LANG=C"}
-	output, err := cmd.Output()
+	resolved, err := adapter.commands.resolveAlias(goalRequiredTestGitCommandAliasV0, commandArgs...)
 	if err != nil {
 		return "", fmt.Errorf("goal_required_test_git_observation_failed: %w", err)
 	}
-	return string(output), nil
+	defer resolved.executionFile.Close()
+	var output bytes.Buffer
+	cmd := execCommandContextFromResolutionV0(ctx, resolved, commandArgs...)
+	cmd.Env = []string{"LC_ALL=C", "LANG=C"}
+	cmd.Stdout = &output
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("goal_required_test_git_observation_failed: %w", err)
+	}
+	return output.String(), nil
 }
 
 func (adapter *LocalGoalRequiredTestAttestationAdapterV0) observeWriteSetHashesV0(
@@ -530,6 +563,10 @@ func normalizeLocalGoalRequiredTestAttestationConfigV0(
 	if !filepath.IsAbs(gitPath) || commandIsShellV0(gitPath) {
 		return config, fmt.Errorf("goal_required_test_git_command_invalid")
 	}
+	gitPath, err = filepath.EvalSymlinks(gitPath)
+	if err != nil {
+		return config, fmt.Errorf("goal_required_test_git_command_invalid")
+	}
 	if info, err := os.Stat(gitPath); err != nil || !info.Mode().IsRegular() || info.Mode()&0o111 == 0 {
 		return config, fmt.Errorf("goal_required_test_git_command_invalid")
 	}
@@ -540,8 +577,15 @@ func normalizeLocalGoalRequiredTestAttestationConfigV0(
 		if name == "" || strings.ContainsAny(name, `/\\`) || commandIsShellV0(name) || !filepath.IsAbs(path) || commandIsShellV0(path) {
 			return config, fmt.Errorf("goal_required_test_allowed_command_invalid: %s", name)
 		}
+		path, err = filepath.EvalSymlinks(path)
+		if err != nil {
+			return config, fmt.Errorf("goal_required_test_allowed_command_invalid: %s", name)
+		}
 		if info, err := os.Stat(path); err != nil || !info.Mode().IsRegular() || info.Mode()&0o111 == 0 {
 			return config, fmt.Errorf("goal_required_test_allowed_command_invalid: %s", name)
+		}
+		if _, duplicate := allowed[name]; duplicate {
+			return config, fmt.Errorf("goal_required_test_allowed_command_duplicate: %s", name)
 		}
 		allowed[name] = path
 	}

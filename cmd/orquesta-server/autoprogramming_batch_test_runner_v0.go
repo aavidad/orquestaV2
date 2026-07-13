@@ -40,6 +40,13 @@ type serverAutoprogrammingBatchTestReceiptV0 struct {
 var _ orquestaappcodexstack.AutoprogrammingBatchTestRunnerPortV0 = (*serverAutoprogrammingBatchTestRunnerV0)(nil)
 var _ orquestaappcodexstack.AutoprogrammingBatchTestClaimReconcilerPortV0 = (*serverAutoprogrammingBatchTestRunnerV0)(nil)
 
+func (runner *serverAutoprogrammingBatchTestRunnerV0) Close() error {
+	if runner == nil {
+		return nil
+	}
+	return runner.Executor.Close()
+}
+
 func autoprogrammingBatchTestRunnerFromConfigV0(
 	serverConfig orquestaserver.ConfigV0,
 	canonicalSelfProgrammingDir string,
@@ -64,15 +71,19 @@ func autoprogrammingBatchTestRunnerFromConfigV0(
 	if err != nil || strings.TrimSpace(canonicalSelfProgrammingDir) == "" {
 		return nil, fmt.Errorf("autoprogramming_batch_canonical_work_dir_invalid")
 	}
+	executor, err := orquestaruntimerequiredtest.NewLocalCommandExecutorV0(orquestaruntimerequiredtest.LocalCommandExecutorV0{
+		ProjectWorkDir:  filepath.Clean(workDir),
+		OutputDir:       outputDir,
+		AllowedCommands: allowed,
+		Env:             env,
+		MaxOutputBytes:  int64(intProjectConfigOrEnvOrDefaultV0(envRequiredTestMaxOutputBytesV0, projectConfig.RequiredTestRunner.MaxOutputBytes, 1024*1024)),
+		MaxArtifacts:    intProjectConfigOrEnvOrDefaultV0(envRequiredTestOutputMaxArtifactsV0, projectConfig.RequiredTestRunner.MaxArtifacts, 200),
+	})
+	if err != nil {
+		return nil, err
+	}
 	return &serverAutoprogrammingBatchTestRunnerV0{
-		Executor: orquestaruntimerequiredtest.LocalCommandExecutorV0{
-			ProjectWorkDir:  filepath.Clean(workDir),
-			OutputDir:       outputDir,
-			AllowedCommands: allowed,
-			Env:             env,
-			MaxOutputBytes:  int64(intProjectConfigOrEnvOrDefaultV0(envRequiredTestMaxOutputBytesV0, projectConfig.RequiredTestRunner.MaxOutputBytes, 1024*1024)),
-			MaxArtifacts:    intProjectConfigOrEnvOrDefaultV0(envRequiredTestOutputMaxArtifactsV0, projectConfig.RequiredTestRunner.MaxArtifacts, 200),
-		},
+		Executor:   executor,
 		ReceiptDir: filepath.Join(outputDir, "autoprogramming-batch-receipts-v0"),
 	}, nil
 }

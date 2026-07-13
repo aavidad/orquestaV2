@@ -404,7 +404,7 @@ func TestBuildStackFromEnvV0CableaRequiredTestRunnerOptIn(t *testing.T) {
 	t.Setenv("ORQUESTA_CODEX_RUNTIME_WORKDIR", filepath.Join(t.TempDir(), "runtime"))
 	t.Setenv("ORQUESTA_CODEX_COMMAND", filepath.Join(projectDir, "codex-bin"))
 	t.Setenv("ORQUESTA_REQUIRED_TEST_RUNNER_ENABLED", "1")
-	t.Setenv("ORQUESTA_REQUIRED_TEST_GO_COMMAND", filepath.Join(projectDir, "go-bin"))
+	t.Setenv("ORQUESTA_REQUIRED_TEST_GO_COMMAND", requiredTestExecutableForEnvTestV0(t))
 	t.Setenv("ORQUESTA_REQUIRED_TEST_OUTPUT_DIR", filepath.Join(t.TempDir(), "test-output"))
 	t.Setenv("ORQUESTA_REQUIRED_TEST_ENV", "")
 	t.Setenv("ORQUESTA_OPES_BASE_URL", "")
@@ -418,6 +418,9 @@ func TestBuildStackFromEnvV0CableaRequiredTestRunnerOptIn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildStackFromEnvV0: %v", err)
 	}
+	t.Cleanup(func() {
+		_ = serverRequiredTestResourceShutdownHookFromStackV0(stack).ShutdownV0(context.Background())
+	})
 	if stack.Ports.RequiredTestRunner == nil {
 		t.Fatalf("RequiredTestRunner opt-in no cableado")
 	}

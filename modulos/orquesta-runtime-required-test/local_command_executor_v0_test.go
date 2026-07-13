@@ -34,6 +34,60 @@ func TestLocalCommandExecutorV0EjecutaProcesoRealYGuardaArtefacto(t *testing.T) 
 	}
 }
 
+func TestNewLocalCommandExecutorV0CanonicalizesSymlinkAndFreezesTargetV0(t *testing.T) {
+	dir := t.TempDir()
+	original := filepath.Join(dir, "runner-original")
+	alternate := filepath.Join(dir, "runner-alternate")
+	link := filepath.Join(dir, "runner-link")
+	if err := os.WriteFile(original, []byte("#!/bin/sh\nprintf 'canonical-target-v0\\n'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(alternate, []byte("#!/bin/sh\nprintf 'retargeted-symlink-v0\\n'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(original, link); err != nil {
+		t.Fatal(err)
+	}
+	outputDir := t.TempDir()
+	executor := mustNewLocalCommandExecutorV0(t, LocalCommandExecutorV0{
+		ProjectWorkDir: dir,
+		OutputDir:      outputDir,
+		AllowedCommands: map[string]string{
+			"runner": link,
+		},
+		MaxOutputBytes: 4096,
+	})
+	if got := executor.registry.commands["runner"].path; got != original {
+		t.Fatalf("canonical target=%q want=%q", got, original)
+	}
+	if err := os.Remove(link); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(alternate, link); err != nil {
+		t.Fatal(err)
+	}
+	result, err := executor.RunRequiredTestCommandV0(context.Background(), commandRequestForTestV0("runner"))
+	if err != nil || result.Status != orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0 {
+		t.Fatalf("canonical frozen result=%+v err=%v", result, err)
+	}
+	content := outputArtifactForTestV0(t, outputDir, result.EvidenceRefs[0])
+	if !strings.Contains(content, "canonical-target-v0") || strings.Contains(content, "retargeted-symlink-v0") {
+		t.Fatalf("canonical frozen artifact=%q", content)
+	}
+}
+
+func TestLocalCommandExecutorV0PreservesAdmittedAliasAsArgv0V0(t *testing.T) {
+	executor := localCommandExecutorForTestV0(t, t.TempDir(), "argv0")
+	resolved, err := executor.registry.resolve("orquesta-test-bin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := runLocalCommandV0(context.Background(), executor, resolved, nil)
+	if err != nil || output.String() != "argv0=orquesta-test-bin\n" {
+		t.Fatalf("argv0 output=%q err=%v", output.String(), err)
+	}
+}
+
 func TestLocalCommandExecutorV0NonZeroEsEvidenciaFailed(t *testing.T) {
 	outputDir := t.TempDir()
 	executor := localCommandExecutorForTestV0(t, outputDir, "fail")
@@ -73,13 +127,12 @@ func TestLocalCommandExecutorV0ValidacionSinFicherosEscaneadosEsFailed(t *testin
 func TestLocalCommandExecutorV0RechazaShellYSintaxisDeShell(t *testing.T) {
 	outputDir := t.TempDir()
 	executor := localCommandExecutorForTestV0(t, outputDir, "pass")
-	executor.AllowedCommands["sh"] = "/bin/sh"
-
-	if _, err := executor.RunRequiredTestCommandV0(context.Background(), commandRequestForTestV0("sh -c echo")); err == nil ||
-		!strings.Contains(err.Error(), "shell") {
+	if _, err := NewLocalCommandExecutorV0(LocalCommandExecutorV0{
+		ProjectWorkDir: t.TempDir(), OutputDir: outputDir,
+		AllowedCommands: map[string]string{"sh": "/bin/sh"},
+	}); err == nil || !strings.Contains(err.Error(), "shell") {
 		t.Fatalf("err=%v, want shell prohibited", err)
 	}
-	delete(executor.AllowedCommands, "sh")
 	result, err := executor.RunRequiredTestCommandV0(context.Background(), commandRequestForTestV0("orquesta-test-bin; echo nope"))
 	if err != nil {
 		t.Fatalf("RunRequiredTestCommandV0 syntax: %v", err)
@@ -154,13 +207,17 @@ func TestLocalCommandExecutorV0NoHeredaEntornoPadre(t *testing.T) {
 	}
 	t.Setenv(childParentEnvLeakMarkerV0, "must-not-leak")
 	outputDir := t.TempDir()
-	executor := localCommandExecutorForTestV0(t, outputDir, "pass")
-	executor.AllowedCommands = map[string]string{"env": envPath}
-	executor.Env = nil
+	executor := mustNewLocalCommandExecutorV0(t, LocalCommandExecutorV0{
+		ProjectWorkDir: t.TempDir(), OutputDir: outputDir,
+		AllowedCommands: map[string]string{"env": envPath}, MaxOutputBytes: 4096,
+	})
 
 	result, err := executor.RunRequiredTestCommandV0(context.Background(), commandRequestForTestV0("env"))
 	if err != nil {
 		t.Fatalf("RunRequiredTestCommandV0: %v", err)
+	}
+	if result.Status != orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0 || len(result.EvidenceRefs) != 1 {
+		t.Fatalf("result=%+v", result)
 	}
 	content := outputArtifactForTestV0(t, outputDir, result.EvidenceRefs[0])
 	if strings.Contains(content, "parent-env-leak") || strings.Contains(content, "must-not-leak") {
@@ -186,21 +243,22 @@ func TestRequiredTestRunnerV0ConLocalCommandExecutorEjecutaGoTestReal(t *testing
 	projectDir := tinyGoModuleForRequiredTestV0(t)
 	outputDir := t.TempDir()
 	store := orquestacionnucleoapp.NewInMemoryRequiredTestEvidenceStoreV0()
-	runner := orquestacionnucleoapp.RequiredTestRunnerV0{
-		Executor: LocalCommandExecutorV0{
-			ProjectWorkDir: projectDir,
-			OutputDir:      outputDir,
-			AllowedCommands: map[string]string{
-				"go": goPath,
-			},
-			Env: []string{
-				"CGO_ENABLED=0",
-				"GOCACHE=" + filepath.Join(t.TempDir(), "go-build-cache"),
-				"GOPATH=" + filepath.Join(t.TempDir(), "go-path"),
-				"GOMODCACHE=" + filepath.Join(t.TempDir(), "go-mod-cache"),
-			},
-			MaxOutputBytes: 64 * 1024,
+	executor := mustNewLocalCommandExecutorV0(t, LocalCommandExecutorV0{
+		ProjectWorkDir: projectDir,
+		OutputDir:      outputDir,
+		AllowedCommands: map[string]string{
+			"go": goPath,
 		},
+		Env: []string{
+			"CGO_ENABLED=0",
+			"GOCACHE=" + filepath.Join(t.TempDir(), "go-build-cache"),
+			"GOPATH=" + filepath.Join(t.TempDir(), "go-path"),
+			"GOMODCACHE=" + filepath.Join(t.TempDir(), "go-mod-cache"),
+		},
+		MaxOutputBytes: 64 * 1024,
+	})
+	runner := orquestacionnucleoapp.RequiredTestRunnerV0{
+		Executor:       executor,
 		EvidenceWriter: store,
 	}
 
@@ -241,7 +299,7 @@ func TestLocalCommandExecutorV0GoTestSinTestsEsFailed(t *testing.T) {
 	}
 	projectDir := tinyGoModuleWithoutTestsForRequiredTestV0(t)
 	outputDir := t.TempDir()
-	executor := LocalCommandExecutorV0{
+	executor := mustNewLocalCommandExecutorV0(t, LocalCommandExecutorV0{
 		ProjectWorkDir: projectDir,
 		OutputDir:      outputDir,
 		AllowedCommands: map[string]string{
@@ -254,7 +312,7 @@ func TestLocalCommandExecutorV0GoTestSinTestsEsFailed(t *testing.T) {
 			"GOMODCACHE=" + filepath.Join(t.TempDir(), "go-mod-cache"),
 		},
 		MaxOutputBytes: 64 * 1024,
-	}
+	})
 
 	result, err := executor.RunRequiredTestCommandV0(context.Background(), commandRequestForTestV0("go test ./..."))
 	if err != nil {

@@ -104,22 +104,21 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) runHermeticCommandV0(
 	if err != nil {
 		return failedLocalCommandValidationResultV0(LocalCommandExecutorV0{OutputDir: outputDir, MaxOutputBytes: adapter.config.MaxOutputBytes, MaxArtifacts: adapter.config.MaxArtifacts}, request, "required_test_preflight_command_not_allowed")
 	}
-	executor := LocalCommandExecutorV0{
+	executor := localCommandExecutorWithRegistryV0(LocalCommandExecutorV0{
 		ProjectWorkDir: adapter.config.ProjectWorkDir, OutputDir: outputDir,
-		AllowedCommands: adapter.config.AllowedCommands, Env: adapter.hermeticEnvironmentWithCGOV0(runDir, moduleCache, race),
+		Env:            adapter.hermeticEnvironmentWithCGOV0(runDir, moduleCache, race),
 		MaxOutputBytes: adapter.config.MaxOutputBytes, MaxArtifacts: adapter.config.MaxArtifacts,
+	}, adapter.commands)
+	if adapter.commands == nil {
+		return failedLocalCommandValidationResultV0(executor, request, "required_test_preflight_command_not_allowed")
 	}
-	tokens, err := splitCommandV0(request.TestCommand)
+	resolved, err := adapter.commands.resolve(request.TestCommand)
 	if err != nil {
 		return failedLocalCommandValidationResultV0(executor, request, err.Error())
 	}
-	commandPath, ok := executor.AllowedCommands[tokens[0]]
-	if !ok || commandIsShellV0(tokens[0]) || commandIsShellV0(commandPath) {
-		return failedLocalCommandValidationResultV0(executor, request, "required_test_preflight_command_not_allowed")
-	}
 	executionContext, cancel := context.WithTimeout(ctx, adapter.config.MaxRuntime)
 	defer cancel()
-	output, runErr := runLocalCommandV0(executionContext, executor, commandPath, tokens[1:])
+	output, runErr := runLocalCommandV0(executionContext, executor, resolved, resolved.Tokens[1:])
 	status := orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0
 	if runErr != nil {
 		status = orquestacionnucleoapp.RequiredTestEvidenceStatusFailedV0
@@ -141,8 +140,10 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) hermeticEnvironmentFor
 
 func (adapter *LocalGoalRequiredTestAttestationAdapterV0) hermeticEnvironmentWithCGOV0(runDir string, modCache string, race bool) []string {
 	pathDirs := map[string]struct{}{}
-	for _, commandPath := range adapter.config.AllowedCommands {
-		pathDirs[filepath.Dir(commandPath)] = struct{}{}
+	if adapter.commands != nil {
+		for _, path := range adapter.commands.commandDirectoriesV0() {
+			pathDirs[path] = struct{}{}
+		}
 	}
 	pathDirs[filepath.Dir(adapter.config.GitCommandPath)] = struct{}{}
 	orderedPathDirs := make([]string, 0, len(pathDirs))

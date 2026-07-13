@@ -36,6 +36,9 @@ func TestMain(m *testing.M) {
 	case "wait":
 		recordRequiredTestChildInvocationV0()
 		requiredTestChildWaitV0()
+	case "argv0":
+		fmt.Fprintln(os.Stdout, "argv0="+os.Args[0])
+		os.Exit(0)
 	}
 	os.Exit(m.Run())
 }

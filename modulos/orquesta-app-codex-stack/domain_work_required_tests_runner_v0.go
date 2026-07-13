@@ -31,6 +31,11 @@ func (runner DomainWorkRequiredTestRunnerV0) RunRequiredTestsV0(
 	return runner.runDomainWorkRequiredTestsV0(ctx, request, plan)
 }
 
+// Close transfers resource ownership through the outer domain-policy wrapper.
+func (runner DomainWorkRequiredTestRunnerV0) Close() error {
+	return closeRequiredTestRunnerV0(runner.Inner)
+}
+
 func (runner DomainWorkRequiredTestRunnerV0) runInnerRequiredTestsV0(
 	ctx context.Context,
 	request orquestacionnucleoapp.RequiredTestExecutionRequestV0,

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,11 +13,43 @@ import (
 	orquestaserver "orquesta/modulos/orquesta-server"
 )
 
+// serverRequiredTestRunnerV0 keeps ownership of the executor descriptors while
+// exposing the existing required-test runner port to the application stack.
+type serverRequiredTestRunnerV0 struct {
+	orquestacionnucleoapp.RequiredTestRunnerV0
+	executor orquestaruntimerequiredtest.LocalCommandExecutorV0
+}
+
+func (runner *serverRequiredTestRunnerV0) RunRequiredTestsV0(
+	ctx context.Context,
+	request orquestacionnucleoapp.RequiredTestExecutionRequestV0,
+) (orquestacionnucleoapp.RequiredTestExecutionResultV0, error) {
+	if runner == nil {
+		return orquestacionnucleoapp.RequiredTestExecutionResultV0{}, fmt.Errorf("required_test_runner_unavailable")
+	}
+	return runner.RequiredTestRunnerV0.RunRequiredTestsV0(ctx, request)
+}
+
+func (runner *serverRequiredTestRunnerV0) Close() error {
+	if runner == nil {
+		return nil
+	}
+	return runner.executor.Close()
+}
+
+var _ orquestacionnucleoapp.RequiredTestRunnerPortV0 = (*serverRequiredTestRunnerV0)(nil)
+
 func requiredTestRunnerFromEnvV0(
 	serverConfig orquestaserver.ConfigV0,
 	evidenceWriter orquestacionnucleoapp.RequiredTestEvidenceWriterPortV0,
+	projectConfigs ...serverProjectConfigFileV0,
 ) (orquestacionnucleoapp.RequiredTestRunnerPortV0, error) {
-	projectConfig := projectConfigFromServerConfigBestEffortV0(serverConfig)
+	projectConfig := serverProjectConfigFileV0{}
+	if len(projectConfigs) > 0 {
+		projectConfig = projectConfigs[0]
+	} else {
+		projectConfig = projectConfigFromServerConfigBestEffortV0(serverConfig)
+	}
 	if !requiredTestRunnerEnabledFromProjectConfigV0(projectConfig) {
 		return nil, nil
 	}
@@ -35,16 +68,24 @@ func requiredTestRunnerFromEnvV0(
 	if err != nil {
 		return nil, err
 	}
-	return orquestacionnucleoapp.RequiredTestRunnerV0{
-		Executor: orquestaruntimerequiredtest.LocalCommandExecutorV0{
-			ProjectWorkDir:  serverConfig.ProjectWorkDir,
-			OutputDir:       absOutputDir,
-			AllowedCommands: allowed,
-			Env:             env,
-			MaxOutputBytes:  int64(intProjectConfigOrEnvOrDefaultV0(envRequiredTestMaxOutputBytesV0, projectConfig.RequiredTestRunner.MaxOutputBytes, 1024*1024)),
-			MaxArtifacts:    intProjectConfigOrEnvOrDefaultV0(envRequiredTestOutputMaxArtifactsV0, projectConfig.RequiredTestRunner.MaxArtifacts, 200),
-		},
+	executor, err := orquestaruntimerequiredtest.NewLocalCommandExecutorV0(orquestaruntimerequiredtest.LocalCommandExecutorV0{
+		ProjectWorkDir:  serverConfig.ProjectWorkDir,
+		OutputDir:       absOutputDir,
+		AllowedCommands: allowed,
+		Env:             env,
+		MaxOutputBytes:  int64(intProjectConfigOrEnvOrDefaultV0(envRequiredTestMaxOutputBytesV0, projectConfig.RequiredTestRunner.MaxOutputBytes, 1024*1024)),
+		MaxArtifacts:    intProjectConfigOrEnvOrDefaultV0(envRequiredTestOutputMaxArtifactsV0, projectConfig.RequiredTestRunner.MaxArtifacts, 200),
+	})
+	if err != nil {
+		return nil, err
+	}
+	coreRunner := orquestacionnucleoapp.RequiredTestRunnerV0{
+		Executor:       executor,
 		EvidenceWriter: evidenceWriter,
+	}
+	return &serverRequiredTestRunnerV0{
+		RequiredTestRunnerV0: coreRunner,
+		executor:             executor,
 	}, nil
 }
 

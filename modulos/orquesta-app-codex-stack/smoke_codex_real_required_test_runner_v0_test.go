@@ -804,6 +804,15 @@ func codexStackRealRequiredTestRunnerStackV0(
 	waitStore := orquestacionnucleoapp.NewInMemoryWorkflowTaskWaitStateStoreV0()
 	planStore := orquestacionnucleoapp.NewInMemoryOperationalDirectorPlanStateStoreV0()
 	runMemory := orquestarunmemory.NewRunMemoryStoreV0()
+	executor, err := orquestaruntimerequiredtest.NewLocalCommandExecutorV0(orquestaruntimerequiredtest.LocalCommandExecutorV0{
+		ProjectWorkDir: cfg.ProjectWorkDir, OutputDir: outputDir,
+		AllowedCommands: map[string]string{"go": goCommand},
+		Env:             []string{"CGO_ENABLED=0", "GOCACHE=" + filepath.Join(outputDir, "go-cache")}, MaxOutputBytes: 1024 * 1024,
+	})
+	if err != nil {
+		t.Fatalf("NewLocalCommandExecutorV0: %v", err)
+	}
+	t.Cleanup(func() { _ = executor.Close() })
 	stack, err := BuildStackV0(ConfigV0{
 		Enabled:                               true,
 		Timeout:                               cfg.Timeout,
@@ -869,15 +878,7 @@ func codexStackRealRequiredTestRunnerStackV0(
 			FileEvidence: orquestaruntimecodexdelivery.CodexReviewGateProjectFileEvidenceV0{},
 		},
 		RequiredTests: orquestacionnucleoapp.RequiredTestRunnerV0{
-			Executor: orquestaruntimerequiredtest.LocalCommandExecutorV0{
-				ProjectWorkDir: cfg.ProjectWorkDir,
-				OutputDir:      outputDir,
-				AllowedCommands: map[string]string{
-					"go": goCommand,
-				},
-				Env:            []string{"CGO_ENABLED=0", "GOCACHE=" + filepath.Join(outputDir, "go-cache")},
-				MaxOutputBytes: 1024 * 1024,
-			},
+			Executor:       executor,
 			EvidenceWriter: evidenceStore,
 		},
 	})

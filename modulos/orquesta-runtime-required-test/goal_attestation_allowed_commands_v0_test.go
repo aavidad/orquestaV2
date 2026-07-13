@@ -12,10 +12,16 @@ import (
 // correcta, y no la defendia ningun test: al quitar el rechazo, la suite seguia
 // verde. Un `if` no es un guard hasta que un test lo defiende.
 func TestAtestacionRechazaComandoFueraDeLaListaBlancaV0(t *testing.T) {
+	registry, err := newAllowedCommandIdentityRegistryV0(map[string]string{"go": "/usr/local/go/bin/go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer registry.Close()
 	adapter := &LocalGoalRequiredTestAttestationAdapterV0{
 		config: LocalGoalRequiredTestAttestationConfigV0{
 			AllowedCommands: map[string]string{"go": "/usr/local/go/bin/go"},
 		},
+		commands: registry,
 	}
 
 	// Un comando que NO esta autorizado debe rechazarse ANTES de lanzarse.
@@ -53,10 +59,16 @@ func TestAtestacionRechazaComandoFueraDeLaListaBlancaV0(t *testing.T) {
 // unico validador compartido: cuatro copias son cuatro sitios donde divergir, y ya
 // divergian en cobertura.
 func TestComandoCongeladoRechazaFueraDeLaListaBlancaV0(t *testing.T) {
+	registry, err := newAllowedCommandIdentityRegistryV0(map[string]string{"go": "/usr/local/go/bin/go"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer registry.Close()
 	adapter := &LocalGoalRequiredTestAttestationAdapterV0{
 		config: LocalGoalRequiredTestAttestationConfigV0{
 			AllowedCommands: map[string]string{"go": "/usr/local/go/bin/go"},
 		},
+		commands: registry,
 	}
 
 	for _, comando := range []string{

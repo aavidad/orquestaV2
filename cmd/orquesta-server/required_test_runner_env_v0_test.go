@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -35,7 +36,7 @@ func TestRequiredTestRunnerFromEnvV0GoCommandInyectaEntornoGoAcotado(t *testing.
 	stateDir := t.TempDir()
 	outputDir := filepath.Join(t.TempDir(), "required-test-output")
 	t.Setenv("ORQUESTA_REQUIRED_TEST_RUNNER_ENABLED", "1")
-	t.Setenv("ORQUESTA_REQUIRED_TEST_GO_COMMAND", filepath.Join(projectDir, "go-bin"))
+	t.Setenv("ORQUESTA_REQUIRED_TEST_GO_COMMAND", requiredTestExecutableForEnvTestV0(t))
 	t.Setenv("ORQUESTA_REQUIRED_TEST_OUTPUT_DIR", outputDir)
 	t.Setenv("ORQUESTA_REQUIRED_TEST_ENV", "")
 	t.Setenv("GOCACHE", "")
@@ -81,7 +82,7 @@ func TestRequiredTestRunnerFromEnvV0ReutilizaGoCachePadreExplicitoV0(t *testing.
 	outputDir := filepath.Join(t.TempDir(), "required-test-output")
 	parentGoCache := filepath.Join(t.TempDir(), "parent-go-cache")
 	t.Setenv("ORQUESTA_REQUIRED_TEST_RUNNER_ENABLED", "1")
-	t.Setenv("ORQUESTA_REQUIRED_TEST_GO_COMMAND", filepath.Join(projectDir, "go-bin"))
+	t.Setenv("ORQUESTA_REQUIRED_TEST_GO_COMMAND", requiredTestExecutableForEnvTestV0(t))
 	t.Setenv("ORQUESTA_REQUIRED_TEST_OUTPUT_DIR", outputDir)
 	t.Setenv("ORQUESTA_REQUIRED_TEST_ENV", "")
 	t.Setenv("GOCACHE", parentGoCache)
@@ -112,7 +113,7 @@ func TestRequiredTestRunnerFromEnvV0NoReutilizaGoCachePadreInseguroV0(t *testing
 	stateDir := t.TempDir()
 	outputDir := filepath.Join(t.TempDir(), "required-test-output")
 	t.Setenv("ORQUESTA_REQUIRED_TEST_RUNNER_ENABLED", "1")
-	t.Setenv("ORQUESTA_REQUIRED_TEST_GO_COMMAND", filepath.Join(projectDir, "go-bin"))
+	t.Setenv("ORQUESTA_REQUIRED_TEST_GO_COMMAND", requiredTestExecutableForEnvTestV0(t))
 	t.Setenv("ORQUESTA_REQUIRED_TEST_OUTPUT_DIR", outputDir)
 	t.Setenv("ORQUESTA_REQUIRED_TEST_ENV", "")
 	t.Setenv("GOCACHE", filepath.Join(t.TempDir(), "token-cache"))
@@ -147,7 +148,7 @@ func TestRequiredTestRunnerFromEnvV0PreservaEntornoGoExplicito(t *testing.T) {
 		"GOMODCACHE": filepath.Join(t.TempDir(), "custom-gomodcache"),
 	}
 	t.Setenv("ORQUESTA_REQUIRED_TEST_RUNNER_ENABLED", "1")
-	t.Setenv("ORQUESTA_REQUIRED_TEST_GO_COMMAND", filepath.Join(projectDir, "go-bin"))
+	t.Setenv("ORQUESTA_REQUIRED_TEST_GO_COMMAND", requiredTestExecutableForEnvTestV0(t))
 	t.Setenv("ORQUESTA_REQUIRED_TEST_OUTPUT_DIR", outputDir)
 	t.Setenv("ORQUESTA_REQUIRED_TEST_ENV",
 		"GOCACHE="+explicit["GOCACHE"]+","+
@@ -183,7 +184,7 @@ func TestRequiredTestRunnerFromEnvV0ConfiguraRetencionDeOutput(t *testing.T) {
 	projectDir := t.TempDir()
 	stateDir := t.TempDir()
 	t.Setenv("ORQUESTA_REQUIRED_TEST_RUNNER_ENABLED", "1")
-	t.Setenv("ORQUESTA_REQUIRED_TEST_GO_COMMAND", filepath.Join(projectDir, "go-bin"))
+	t.Setenv("ORQUESTA_REQUIRED_TEST_GO_COMMAND", requiredTestExecutableForEnvTestV0(t))
 	t.Setenv("ORQUESTA_REQUIRED_TEST_OUTPUT_MAX_ARTIFACTS", "7")
 	stateStore, err := orquestastatefile.NewStoreV0(orquestastatefile.ConfigV0{RootDir: filepath.Join(stateDir, "state")})
 	if err != nil {
@@ -212,12 +213,13 @@ func TestRequiredTestRunnerFromEnvV0ConfigFileCanonicoV0(t *testing.T) {
 		t.Fatalf("mkdir project: %v", err)
 	}
 	configPath := filepath.Join(projectDir, serverProjectConfigFileNameV0)
+	commandPath := requiredTestExecutableForEnvTestV0(t)
 	configFile := `{
 		"schema_version":"orquesta_config.v0",
 		"required_test_runner":{
 			"enabled":true,
-			"go_command":"/opt/go/bin/go",
-			"allowed_commands":{"lint":"/opt/tools/lint"},
+			"go_command":` + strconv.Quote(commandPath) + `,
+			"allowed_commands":{"lint":` + strconv.Quote(commandPath) + `},
 			"output_dir":"` + outputDir + `",
 			"environment":{"CUSTOM_FLAG":"enabled"},
 			"max_output_bytes":1234,
@@ -241,8 +243,7 @@ func TestRequiredTestRunnerFromEnvV0ConfigFileCanonicoV0(t *testing.T) {
 		t.Fatalf("requiredTestRunnerFromEnvV0: %v", err)
 	}
 	executor := requiredTestExecutorForEnvTestV0(t, runnerPort)
-	if executor.AllowedCommands["go"] != "/opt/go/bin/go" ||
-		executor.AllowedCommands["lint"] != "/opt/tools/lint" ||
+	if len(executor.AllowedCommands) != 0 ||
 		executor.OutputDir != outputDir ||
 		executor.MaxOutputBytes != 1234 ||
 		executor.MaxArtifacts != 9 {
@@ -303,8 +304,16 @@ func requiredTestExecutorForEnvTestV0(
 	runnerPort orquestacionnucleoapp.RequiredTestRunnerPortV0,
 ) orquestaruntimerequiredtest.LocalCommandExecutorV0 {
 	t.Helper()
-	runner, ok := runnerPort.(orquestacionnucleoapp.RequiredTestRunnerV0)
-	if !ok {
+	if closer, ok := runnerPort.(interface{ Close() error }); ok {
+		t.Cleanup(func() { _ = closer.Close() })
+	}
+	var runner orquestacionnucleoapp.RequiredTestRunnerV0
+	switch typed := runnerPort.(type) {
+	case orquestacionnucleoapp.RequiredTestRunnerV0:
+		runner = typed
+	case *serverRequiredTestRunnerV0:
+		runner = typed.RequiredTestRunnerV0
+	default:
 		t.Fatalf("RequiredTestRunner usa %T", runnerPort)
 	}
 	executor, ok := runner.Executor.(orquestaruntimerequiredtest.LocalCommandExecutorV0)
@@ -312,4 +321,17 @@ func requiredTestExecutorForEnvTestV0(
 		t.Fatalf("RequiredTest executor usa %T", runner.Executor)
 	}
 	return executor
+}
+
+func requiredTestExecutableForEnvTestV0(t *testing.T) string {
+	t.Helper()
+	path, err := os.Executable()
+	if err != nil {
+		t.Fatalf("os.Executable: %v", err)
+	}
+	path, err = filepath.EvalSymlinks(path)
+	if err != nil {
+		t.Fatalf("EvalSymlinks executable: %v", err)
+	}
+	return path
 }

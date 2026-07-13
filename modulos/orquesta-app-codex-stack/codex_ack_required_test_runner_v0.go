@@ -48,6 +48,20 @@ func (runner codexAckRequiredTestRunnerV0) RunRequiredTestsV0(
 	return result, nil
 }
 
+// Close preserves ownership of resources held by the wrapped runner after
+// stack composition replaces the original port with the ACK-aware adapter.
+func (runner codexAckRequiredTestRunnerV0) Close() error {
+	return closeRequiredTestRunnerV0(runner.Inner)
+}
+
+func closeRequiredTestRunnerV0(runner orquestacionnucleoapp.RequiredTestRunnerPortV0) error {
+	closer, ok := runner.(interface{ Close() error })
+	if !ok || closer == nil {
+		return nil
+	}
+	return closer.Close()
+}
+
 func (runner codexAckRequiredTestRunnerV0) runFromCodexAckReceiptsV0(
 	ctx context.Context,
 	request orquestacionnucleoapp.RequiredTestExecutionRequestV0,

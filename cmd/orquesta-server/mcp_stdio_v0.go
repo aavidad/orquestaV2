@@ -16,7 +16,7 @@ import (
 
 // mcpStdioCommandV0 serves one JSON-RPC request per input line. It deliberately
 // does not construct the HTTP application handler or start a listener.
-func mcpStdioCommandV0(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) int {
+func mcpStdioCommandV0(args []string, stdin io.Reader, stdout io.Writer, stderr io.Writer) (exitCode int) {
 	options, err := parseServerCommandConfigOptionsV0("mcp-stdio", args)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server mcp-stdio: %v\n", err)
@@ -27,20 +27,40 @@ func mcpStdioCommandV0(args []string, stdin io.Reader, stdout io.Writer, stderr 
 		_, _ = fmt.Fprintf(stderr, "orquesta-server mcp-stdio: %v\n", err)
 		return 1
 	}
-	bindings, err := mcpStdioBindingsFromConfigV0(config)
+	bindings, resourceHook, err := mcpStdioBindingsFromConfigV0(config)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "orquesta-server mcp-stdio: %v\n", err)
 		return 1
 	}
+	return serveMCPStdioWithRequiredTestResourcesV0(stdin, stdout, stderr, bindings, resourceHook)
+}
+
+func serveMCPStdioWithRequiredTestResourcesV0(
+	stdin io.Reader,
+	stdout io.Writer,
+	stderr io.Writer,
+	bindings orquestamcp.MCPTransportBindingsV0,
+	resourceHook *serverRequiredTestResourceShutdownHookV0,
+) (exitCode int) {
+	defer func() {
+		if closeErr := resourceHook.ShutdownV0(context.Background()); closeErr != nil {
+			_, _ = fmt.Fprintf(stderr, "orquesta-server mcp-stdio: required-test resources: %v\n", closeErr)
+			if exitCode == 0 {
+				exitCode = 1
+			}
+		}
+	}()
 	return serveMCPStdioV0(stdin, stdout, stderr, bindings)
 }
 
-func mcpStdioBindingsFromConfigV0(config orquestaserver.ConfigV0) (orquestamcp.MCPTransportBindingsV0, error) {
+func mcpStdioBindingsFromConfigV0(
+	config orquestaserver.ConfigV0,
+) (orquestamcp.MCPTransportBindingsV0, *serverRequiredTestResourceShutdownHookV0, error) {
 	stack, err := buildStackFromEnvV0(config)
 	if err != nil {
-		return orquestamcp.MCPTransportBindingsV0{}, err
+		return orquestamcp.MCPTransportBindingsV0{}, nil, err
 	}
-	return mcpStdioBindingsFromStackV0(stack), nil
+	return mcpStdioBindingsFromStackV0(stack), serverRequiredTestResourceShutdownHookFromStackV0(stack), nil
 }
 
 func mcpStdioBindingsFromStackV0(stack orquestaappcodexstack.StackV0) orquestamcp.MCPTransportBindingsV0 {

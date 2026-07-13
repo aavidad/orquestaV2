@@ -11,18 +11,34 @@ import (
 
 func localCommandExecutorForTestV0(t *testing.T, outputDir string, childMode string) LocalCommandExecutorV0 {
 	t.Helper()
-	if !filepath.IsAbs(os.Args[0]) {
+	path, err := filepath.EvalSymlinks(os.Args[0])
+	if err != nil || !filepath.IsAbs(path) {
 		t.Fatalf("test binary path no es absoluto: %q", os.Args[0])
 	}
-	return LocalCommandExecutorV0{
+	executor, err := NewLocalCommandExecutorV0(LocalCommandExecutorV0{
 		ProjectWorkDir: t.TempDir(),
 		OutputDir:      outputDir,
 		AllowedCommands: map[string]string{
-			"orquesta-test-bin": os.Args[0],
+			"orquesta-test-bin": path,
 		},
 		Env:            []string{childModeEnvV0 + "=" + childMode},
 		MaxOutputBytes: 4096,
+	})
+	if err != nil {
+		t.Fatalf("NewLocalCommandExecutorV0: %v", err)
 	}
+	t.Cleanup(func() { _ = executor.Close() })
+	return executor
+}
+
+func mustNewLocalCommandExecutorV0(t *testing.T, config LocalCommandExecutorV0) LocalCommandExecutorV0 {
+	t.Helper()
+	executor, err := NewLocalCommandExecutorV0(config)
+	if err != nil {
+		t.Fatalf("NewLocalCommandExecutorV0: %v", err)
+	}
+	t.Cleanup(func() { _ = executor.Close() })
+	return executor
 }
 
 func tinyGoModuleForRequiredTestV0(t *testing.T) string {

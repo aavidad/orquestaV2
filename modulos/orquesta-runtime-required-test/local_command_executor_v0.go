@@ -23,6 +23,65 @@ type LocalCommandExecutorV0 struct {
 	Env             []string
 	MaxOutputBytes  int64
 	MaxArtifacts    int
+	registry        *allowedCommandIdentityRegistryV0
+}
+
+// NewLocalCommandExecutorV0 accepts configured symlinks only at this public
+// factory boundary. It resolves each one once to a canonical regular target;
+// the registry then freezes that target and never follows the symlink again.
+// The lower-level identity registry deliberately rejects symlinks.
+func NewLocalCommandExecutorV0(executor LocalCommandExecutorV0) (LocalCommandExecutorV0, error) {
+	normalized := normalizeLocalCommandExecutorV0(executor)
+	allowed, err := canonicalAllowedCommandsV0(normalized.AllowedCommands)
+	if err != nil {
+		return LocalCommandExecutorV0{}, err
+	}
+	normalized.AllowedCommands = allowed
+	registry, err := newAllowedCommandIdentityRegistryV0(normalized.AllowedCommands)
+	if err != nil {
+		return LocalCommandExecutorV0{}, err
+	}
+	normalized.AllowedCommands = nil
+	normalized.registry = registry
+	if err := validateLocalCommandExecutorV0(normalized); err != nil {
+		_ = registry.Close()
+		return LocalCommandExecutorV0{}, err
+	}
+	return normalized, nil
+}
+
+func canonicalAllowedCommandsV0(allowed map[string]string) (map[string]string, error) {
+	canonical := make(map[string]string, len(allowed))
+	for alias, path := range allowed {
+		alias = strings.TrimSpace(alias)
+		path = strings.TrimSpace(path)
+		if _, duplicate := canonical[alias]; duplicate {
+			return nil, fmt.Errorf("required_test_command_alias_duplicate: %s", alias)
+		}
+		if filepath.IsAbs(path) {
+			resolved, err := filepath.EvalSymlinks(path)
+			if err != nil {
+				return nil, fmt.Errorf("required_test_command_identity_invalid: %s", alias)
+			}
+			path = resolved
+		}
+		canonical[alias] = path
+	}
+	return canonical, nil
+}
+
+func localCommandExecutorWithRegistryV0(executor LocalCommandExecutorV0, registry *allowedCommandIdentityRegistryV0) LocalCommandExecutorV0 {
+	executor = normalizeLocalCommandExecutorV0(executor)
+	executor.AllowedCommands = nil
+	executor.registry = registry
+	return executor
+}
+
+func (executor *LocalCommandExecutorV0) Close() error {
+	if executor == nil || executor.registry == nil {
+		return nil
+	}
+	return executor.registry.Close()
 }
 
 func (executor LocalCommandExecutorV0) RunRequiredTestCommandV0(
@@ -35,31 +94,25 @@ func (executor LocalCommandExecutorV0) RunRequiredTestCommandV0(
 	if err := ctx.Err(); err != nil {
 		return orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{}, err
 	}
-	normalized := normalizeLocalCommandExecutorV0(executor)
+	normalized := executor
 	if err := validateLocalCommandExecutorV0(normalized); err != nil {
 		return orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{}, err
 	}
-	tokens, err := splitCommandV0(request.TestCommand)
+	resolved, err := normalized.registry.resolve(request.TestCommand)
 	if err != nil {
-		return failedLocalCommandValidationResultV0(normalized, request, err.Error())
-	}
-	commandPath, ok := normalized.AllowedCommands[tokens[0]]
-	if !ok {
-		return failedLocalCommandValidationResultV0(
-			normalized,
-			request,
-			"required_test_command_not_allowed: "+tokens[0],
-		)
-	}
-	if commandIsShellV0(tokens[0]) || commandIsShellV0(commandPath) {
-		return failedLocalCommandValidationResultV0(
-			normalized,
-			request,
-			"required_test_command_shell_prohibited",
-		)
+		message := err.Error()
+		if resolutionErr := commandAllowlistResolutionErrorV0Of(err); resolutionErr != nil {
+			switch resolutionErr.Failure {
+			case commandAllowlistNotAllowedFailureV0:
+				message = "required_test_command_not_allowed: " + resolutionErr.Command
+			case commandAllowlistShellFailureV0:
+				message = "required_test_command_shell_prohibited"
+			}
+		}
+		return failedLocalCommandValidationResultV0(normalized, request, message)
 	}
 
-	output, runErr := runLocalCommandV0(ctx, normalized, commandPath, tokens[1:])
+	output, runErr := runLocalCommandV0(ctx, normalized, resolved, resolved.Tokens[1:])
 	status := orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0
 	if runErr != nil {
 		if ctx.Err() != nil {
@@ -72,7 +125,7 @@ func (executor LocalCommandExecutorV0) RunRequiredTestCommandV0(
 		status = orquestacionnucleoapp.RequiredTestEvidenceStatusFailedV0
 	}
 	if status == orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0 &&
-		localCommandGoTestWithoutExecutedTestsV0(tokens, output.String()) {
+		localCommandGoTestWithoutExecutedTestsV0(resolved.Tokens, output.String()) {
 		status = orquestacionnucleoapp.RequiredTestEvidenceStatusFailedV0
 		output = localCommandOutputWithDiagnosticV0(output, "required_test_go_no_tests_executed")
 	}
@@ -118,17 +171,14 @@ func failedLocalCommandValidationResultV0(
 }
 
 func normalizeLocalCommandExecutorV0(executor LocalCommandExecutorV0) LocalCommandExecutorV0 {
-	allowed := map[string]string{}
-	for name, path := range executor.AllowedCommands {
-		allowed[strings.TrimSpace(name)] = strings.TrimSpace(path)
-	}
 	return LocalCommandExecutorV0{
 		ProjectWorkDir:  strings.TrimSpace(executor.ProjectWorkDir),
 		OutputDir:       strings.TrimSpace(executor.OutputDir),
-		AllowedCommands: allowed,
+		AllowedCommands: executor.AllowedCommands,
 		Env:             append([]string(nil), executor.Env...),
 		MaxOutputBytes:  executor.MaxOutputBytes,
 		MaxArtifacts:    executor.MaxArtifacts,
+		registry:        executor.registry,
 	}
 }
 
@@ -139,19 +189,8 @@ func validateLocalCommandExecutorV0(executor LocalCommandExecutorV0) error {
 	if err := validateRuntimeDirV0("output_dir", executor.OutputDir, true); err != nil {
 		return err
 	}
-	if len(executor.AllowedCommands) == 0 {
-		return fmt.Errorf("required_test_allowed_commands_required")
-	}
-	for name, path := range executor.AllowedCommands {
-		if name == "" || strings.ContainsAny(name, `/\`) {
-			return fmt.Errorf("required_test_command_name_invalid: %s", name)
-		}
-		if commandIsShellV0(name) {
-			return fmt.Errorf("required_test_command_shell_prohibited")
-		}
-		if !filepath.IsAbs(path) || pathHasCredentialMarkerV0(path) || commandIsShellV0(path) {
-			return fmt.Errorf("required_test_command_path_invalid: %s", name)
-		}
+	if executor.registry == nil {
+		return fmt.Errorf("required_test_command_identity_invalid")
 	}
 	for i, item := range executor.Env {
 		if !envEntryAllowedV0(item) {
@@ -183,7 +222,7 @@ func validateRuntimeDirV0(field string, path string, create bool) error {
 func runLocalCommandV0(
 	ctx context.Context,
 	executor LocalCommandExecutorV0,
-	commandPath string,
+	resolved commandAllowlistResolutionV0,
 	args []string,
 ) (*outputBufferV0, error) {
 	limit := executor.MaxOutputBytes
@@ -191,13 +230,24 @@ func runLocalCommandV0(
 		limit = 1024 * 1024
 	}
 	output := newOutputBufferV0(limit)
-	cmd := exec.CommandContext(ctx, commandPath, args...)
+	if resolved.executionFile == nil || resolved.identity == nil {
+		return output, fmt.Errorf("required_test_command_identity_invalid")
+	}
+	defer resolved.executionFile.Close()
+	cmd := execCommandContextFromResolutionV0(ctx, resolved, args...)
 	cmd.Dir = executor.ProjectWorkDir
-	cmd.Env = isolatedLocalCommandEnvV0(executor.Env)
+	cmd.Env = isolatedLocalCommandEnvForResolutionV0(executor.Env, resolved)
 	cmd.Stdout = output
 	cmd.Stderr = output
 	err := cmd.Run()
 	return output, err
+}
+
+func execCommandContextFromResolutionV0(ctx context.Context, resolved commandAllowlistResolutionV0, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, "/proc/self/fd/3", args...)
+	cmd.Args = append([]string{resolved.identity.alias}, args...)
+	cmd.ExtraFiles = []*os.File{resolved.executionFile}
+	return cmd
 }
 
 func localCommandGoTestWithoutExecutedTestsV0(tokens []string, output string) bool {
@@ -258,6 +308,27 @@ func isolatedLocalCommandEnvV0(env []string) []string {
 		return []string{}
 	}
 	return append([]string(nil), env...)
+}
+
+func isolatedLocalCommandEnvForResolutionV0(env []string, resolved commandAllowlistResolutionV0) []string {
+	result := isolatedLocalCommandEnvV0(env)
+	if resolved.identity == nil || filepath.Base(strings.TrimSpace(resolved.identity.path)) != "go" {
+		return result
+	}
+	for _, item := range result {
+		if key, _, ok := strings.Cut(item, "="); ok && strings.EqualFold(strings.TrimSpace(key), "GOROOT") {
+			return result
+		}
+	}
+	// A sealed memfd deliberately hides the on-disk executable pathname from
+	// the child. Trimmed Go distributions need that pathname to recover GOROOT,
+	// so derive it from the already admitted canonical Go binary, never from
+	// ambient environment.
+	goRoot := filepath.Dir(filepath.Dir(resolved.identity.path))
+	if info, err := os.Stat(goRoot); err == nil && info.IsDir() {
+		result = append(result, "GOROOT="+goRoot)
+	}
+	return result
 }
 
 func outputArtifactRefV0(request orquestacionnucleoapp.RequiredTestCommandExecutionRequestV0) string {

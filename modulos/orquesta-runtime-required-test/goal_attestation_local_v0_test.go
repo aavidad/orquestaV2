@@ -119,6 +119,35 @@ func TestLocalGoalRequiredTestAttestationAdapterV0RejectsNonIndependentPolicy(t 
 	}
 }
 
+func TestLocalGoalRequiredTestAttestationAdapterV0RepeatedCloseDoesNotLeakFDs(t *testing.T) {
+	project, runtimeRoot, gitPath := localGoalAttestationGitRepoForTestV0(t)
+	testPath, err := exec.LookPath("test")
+	if err != nil {
+		t.Skip("test executable unavailable")
+	}
+	before, err := localGoalAttestationOpenFDCountForTestV0()
+	if err != nil {
+		t.Skipf("/proc fd accounting unavailable: %v", err)
+	}
+	config := localGoalAttestationConfigForTestV0(project, runtimeRoot, gitPath, map[string]string{"test": testPath})
+	for index := 0; index < 64; index++ {
+		adapter, err := NewLocalGoalRequiredTestAttestationAdapterV0(config)
+		if err != nil {
+			t.Fatalf("adapter %d: %v", index, err)
+		}
+		if err := adapter.Close(); err != nil {
+			t.Fatalf("close %d: %v", index, err)
+		}
+	}
+	after, err := localGoalAttestationOpenFDCountForTestV0()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after != before {
+		t.Fatalf("temporary adapter fd leak: before=%d after=%d", before, after)
+	}
+}
+
 func TestLocalGoalRequiredTestAttestationAdapterV0RejectsInvalidFrozenCommandBeforeLaunch(t *testing.T) {
 	project, runtimeRoot, gitPath := localGoalAttestationGitRepoForTestV0(t)
 	testPath, err := exec.LookPath("test")
@@ -144,6 +173,43 @@ func TestLocalGoalRequiredTestAttestationAdapterV0RejectsInvalidFrozenCommandBef
 		localGoalAttestationSpecForTestV0("test -n 'value|other'"),
 	); err != nil {
 		t.Fatalf("quoted argument must remain valid: %v", err)
+	}
+}
+
+func TestLocalGoalRequiredTestAttestationAdapterV0GitIdentityIsPinned(t *testing.T) {
+	actualGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	actualGit, err = filepath.EvalSymlinks(actualGit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, err := os.ReadFile(actualGit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	binDir := t.TempDir()
+	pinnedGit := filepath.Join(binDir, "git")
+	if err := os.WriteFile(pinnedGit, payload, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	project := t.TempDir()
+	config := localGoalAttestationConfigForTestV0(project, t.TempDir(), pinnedGit, map[string]string{"git": pinnedGit})
+	adapter, err := NewLocalGoalRequiredTestAttestationAdapterV0(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer adapter.Close()
+	replacement := filepath.Join(binDir, "replacement")
+	if err := os.WriteFile(replacement, []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(replacement, pinnedGit); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := adapter.runGitV0(context.Background(), "--version"); err == nil || !strings.Contains(err.Error(), "identity_changed") {
+		t.Fatalf("git replacement err=%v", err)
 	}
 }
 
@@ -394,7 +460,7 @@ func TestLocalGoalRequiredTestAttestationAdapterV0BindRaceProbeUsesExactRequired
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(log), globalGoPath) || !strings.Contains(string(log), targetGoPath+"|test -race -count=1 .") {
+	if strings.Contains(string(log), globalGoPath) || !strings.Contains(string(log), "/proc/self/fd/3|test -race -count=1 .") {
 		t.Fatalf("probe used a non-required Go alias: %q", log)
 	}
 	entries, err := os.ReadDir(filepath.Join(runtimeRoot, "race-cgo-probes"))
@@ -450,7 +516,7 @@ func TestLocalGoalRequiredTestAttestationAdapterV0AttestRaceProbeUsesExactRequir
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(log), globalGoPath) || strings.Count(string(log), targetGoPath+"|test -race -count=1 .") != 2 {
+	if strings.Contains(string(log), globalGoPath) || strings.Count(string(log), "/proc/self/fd/3|test -race -count=1 .") != 2 {
 		t.Fatalf("Bind and Attest must each probe the required alias: %q", log)
 	}
 }
@@ -751,7 +817,16 @@ func localGoalAttestationAdapterForTestV0(t *testing.T, project, runtimeRoot, gi
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = adapter.Close() })
 	return adapter
+}
+
+func localGoalAttestationOpenFDCountForTestV0() (int, error) {
+	entries, err := os.ReadDir("/proc/self/fd")
+	if err != nil {
+		return 0, err
+	}
+	return len(entries), nil
 }
 
 func localGoalAttestationReadOnlySnapshotForTestV0(t *testing.T) string {

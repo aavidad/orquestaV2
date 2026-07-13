@@ -80,6 +80,9 @@ func TestBuildStackFromEnvV0WiresCompleteGoalRequiredTestAttestationConfig(t *te
 	if err != nil {
 		t.Fatalf("buildStackFromEnvV0: %v", err)
 	}
+	t.Cleanup(func() {
+		_ = serverRequiredTestResourceShutdownHookFromStackV0(stack).ShutdownV0(context.Background())
+	})
 	if stack.Ports.GoalRequiredTestSpecBinder == nil || stack.Ports.GoalRequiredTestSnapshotObserver == nil ||
 		stack.Ports.GoalRequiredTestAttestor == nil || stack.Ports.GoalRequiredTestIdentityVerifier == nil {
 		t.Fatalf("attestation ports incomplete: %+v", stack.Ports)
@@ -113,6 +116,9 @@ func TestBuildStackFromEnvV0GoalRequiredTestAttestationExecutesIndependentReceip
 	if err != nil {
 		t.Fatalf("buildStackFromEnvV0: %v", err)
 	}
+	t.Cleanup(func() {
+		_ = serverRequiredTestResourceShutdownHookFromStackV0(stack).ShutdownV0(context.Background())
+	})
 	writeSet := []orquestagoal.GoalWriteScopeV0{{Path: "artifact.txt"}}
 	spec := orquestagoal.NormalizeGoalWorkSpecV0(orquestagoal.GoalWorkSpecV0{
 		RunRef: "run-ref-server-attestation-001", GoalRef: "goal-ref-server-attestation-001",

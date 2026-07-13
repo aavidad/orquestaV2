@@ -51,6 +51,9 @@ func TestBuildStackFromEnvV0RequiredTestRunnerEjecutaGoTestYPersisteEvidencia(t 
 	if err != nil {
 		t.Fatalf("buildStackFromEnvV0: %v", err)
 	}
+	t.Cleanup(func() {
+		_ = serverRequiredTestResourceShutdownHookFromStackV0(stack).ShutdownV0(context.Background())
+	})
 
 	run := serverRequiredTestRunV0(
 		runRef,

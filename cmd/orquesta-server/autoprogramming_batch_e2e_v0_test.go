@@ -212,6 +212,9 @@ func newServerAutoprogrammingBatchE2EV0(t *testing.T, dirtyAfterGate bool) *serv
 	if err != nil {
 		t.Fatalf("buildStackFromProjectConfigV0: %v", err)
 	}
+	t.Cleanup(func() {
+		_ = serverRequiredTestResourceShutdownHookFromStackV0(stack).ShutdownV0(context.Background())
+	})
 	store, ok := stack.Stores.AutoprogrammingBatchStore.(*orquestastatefile.StoreV0)
 	if !ok {
 		t.Fatalf("batch store no es StoreV0 real: %T", stack.Stores.AutoprogrammingBatchStore)

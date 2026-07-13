@@ -58,6 +58,7 @@ func goalRequiredTestAttestationAdapterFromConfigV0(
 		return nil, err
 	}
 	if err := adapter.PreflightGoalRequiredTestAttestationV0(context.Background()); err != nil {
+		_ = adapter.Close()
 		return nil, fmt.Errorf("goal_required_test_attestation_preflight_failed")
 	}
 	return adapter, nil
@@ -153,6 +154,7 @@ func goalRequiredTestAttestationWorkspaceSelectorFromConfigV0(
 		return nil, err
 	}
 	if err := canonical.PreflightGoalRequiredTestAttestationV0(context.Background()); err != nil {
+		_ = canonical.Close()
 		return nil, fmt.Errorf("goal_required_test_attestation_preflight_failed")
 	}
 	return &serverGoalRequiredTestAttestationWorkspaceSelectorV0{
@@ -160,6 +162,14 @@ func goalRequiredTestAttestationWorkspaceSelectorFromConfigV0(
 		RuntimeConfig:   runtimeConfig,
 		WorkspaceLookup: workspaceLookup,
 	}, nil
+}
+
+// Close releases the canonical admitted command descriptors during shutdown.
+func (selector *serverGoalRequiredTestAttestationWorkspaceSelectorV0) Close() error {
+	if selector == nil || selector.Canonical == nil {
+		return nil
+	}
+	return selector.Canonical.Close()
 }
 
 func (selector *serverGoalRequiredTestAttestationWorkspaceSelectorV0) BindGoalRequiredTestSpecV0(
@@ -180,6 +190,9 @@ func (selector *serverGoalRequiredTestAttestationWorkspaceSelectorV0) CaptureGoa
 	if err != nil {
 		return orquestagoal.GoalRequiredTestFinalSnapshotV0{}, err
 	}
+	if adapter != selector.Canonical {
+		defer adapter.Close()
+	}
 	return adapter.CaptureGoalRequiredTestFinalSnapshotV0(ctx, request)
 }
 
@@ -190,6 +203,9 @@ func (selector *serverGoalRequiredTestAttestationWorkspaceSelectorV0) AttestGoal
 	adapter, err := selector.adapterForGoalV0(ctx, request.GoalRef)
 	if err != nil {
 		return nil, err
+	}
+	if adapter != selector.Canonical {
+		defer adapter.Close()
 	}
 	return adapter.AttestGoalRequiredTestsV0(ctx, request)
 }
@@ -235,6 +251,7 @@ func (selector *serverGoalRequiredTestAttestationWorkspaceSelectorV0) adapterFor
 		return nil, err
 	}
 	if err := adapter.PreflightGoalRequiredTestAttestationV0(context.Background()); err != nil {
+		_ = adapter.Close()
 		return nil, fmt.Errorf("autoprogramming_goal_workspace_attestation_preflight_failed")
 	}
 	return adapter, nil

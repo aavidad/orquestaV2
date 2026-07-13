@@ -207,6 +207,98 @@ func TestGoalRequiredTestAttestationWorkspaceSelectorResolvesAfterRestartAndFail
 	}
 }
 
+func TestGoalRequiredTestAttestationWorkspaceSelectorRepeatedCaptureAttestDoesNotLeakFDsV0(t *testing.T) {
+	repo := newCodexGoalWorkspaceAdapterGitRepoV0(t)
+	workspaceRoot := codexGoalWorkspaceRootForSourceV0(repo)
+	t.Cleanup(func() { _ = os.RemoveAll(workspaceRoot) })
+	t.Setenv(
+		envGoalRequiredTestAttestationConfigFileV0,
+		writeCompleteGoalRequiredTestAttestationConfigForTestV0(t, repo, filepath.Join(t.TempDir(), "attestation-runtime")),
+	)
+	lookup := codexGoalWorkspaceAdapterV0{
+		SourceWorkDir: repo, WorkspaceRoot: workspaceRoot,
+		ProjectRefFallback: "project-ref-attestation-fd-cycle", WorktreeRefFallback: "worktree-ref-attestation-fd-cycle",
+	}
+	packet := orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		GoalRef: "goal-ref-attestation-fd-cycle", RequestRef: "run-ref-attestation-fd-cycle", ProjectRef: "project-ref-attestation-fd-cycle",
+	}
+	binding, err := lookup.PrepareCodexGoalWorkspaceV0(context.Background(), packet)
+	if err != nil {
+		t.Fatalf("prepare workspace: %v", err)
+	}
+	if filepath.Clean(binding.ProjectWorkDir) == filepath.Clean(repo) {
+		t.Fatalf("workspace lookup resolved canonical root: %q", binding.ProjectWorkDir)
+	}
+	if err := os.WriteFile(filepath.Join(binding.ProjectWorkDir, "workspace-only.txt"), []byte("workspace-only\n"), 0o600); err != nil {
+		t.Fatalf("write workspace fixture: %v", err)
+	}
+	selector, err := goalRequiredTestAttestationWorkspaceSelectorFromConfigV0(
+		orquestaserver.ConfigV0{ProjectWorkDir: repo},
+		serverProjectConfigFileV0{},
+		lookup,
+	)
+	if err != nil {
+		t.Fatalf("selector: %v", err)
+	}
+	t.Cleanup(func() { _ = selector.Close() })
+	writeSet := []orquestagoal.GoalWriteScopeV0{{Path: "workspace-only.txt"}}
+	bound, err := selector.BindGoalRequiredTestSpecV0(context.Background(), orquestagoal.NormalizeGoalWorkSpecV0(orquestagoal.GoalWorkSpecV0{
+		RunRef: packet.RequestRef, GoalRef: packet.GoalRef,
+		Objective: "Attest the isolated workspace without leaking command descriptors.", DirectorKind: orquestagoal.GoalDirectorKindRuntimeGoalV0,
+		WriteSet: writeSet, WriteSetSHA256: orquestagoal.GoalWriteSetSHA256V0(writeSet),
+		RequiredTests: []orquestagoal.GoalRequiredTestV0{orquestagoal.FreezeGoalRequiredTestV0(orquestagoal.GoalRequiredTestV0{
+			TestRef: "test-ref-attestation-fd-cycle", CommandRef: "command-ref-attestation-fd-cycle", Command: "test -f workspace-only.txt",
+		})},
+		ClosurePolicy: orquestagoal.GoalClosurePolicyV0{RequireRequiredTests: true, RequireIndependentRequiredTestAttestation: true},
+	}))
+	if err != nil {
+		t.Fatalf("bind: %v", err)
+	}
+	runCycle := func(cycle int) {
+		t.Helper()
+		snapshot, err := selector.CaptureGoalRequiredTestFinalSnapshotV0(context.Background(), orquestagoal.GoalRequiredTestFinalSnapshotRequestV0{
+			RunRef: bound.RunRef, GoalRef: bound.GoalRef, WriteSet: bound.WriteSet, WriteSetSHA256: bound.WriteSetSHA256,
+		})
+		if err != nil || len(snapshot.Hashes) != 1 {
+			t.Fatalf("capture cycle %d: snapshot=%+v err=%v", cycle, snapshot, err)
+		}
+		receipts, err := selector.AttestGoalRequiredTestsV0(context.Background(), orquestagoal.GoalRequiredTestAttestationRequestV0{
+			RunRef: bound.RunRef, GoalRef: bound.GoalRef,
+			ImplementerAgentRef: bound.ImplementerAgentRef, ImplementerCredentialRef: bound.ImplementerCredentialRef,
+			AttestorTrustPolicyRef: bound.ClosurePolicy.RequiredAttestorTrustPolicyRef,
+			FinalSnapshot:          snapshot, RequiredTests: bound.RequiredTests,
+		})
+		if err != nil || len(receipts) != 1 || receipts[0].Status != orquestagoal.GoalRequiredTestAttestationStatusPassedV0 || receipts[0].ExitCode != 0 {
+			t.Fatalf("attest cycle %d: receipts=%+v err=%v", cycle, receipts, err)
+		}
+	}
+
+	// Warm the real Git/preflight/test path before accounting descriptors.
+	runCycle(-1)
+	before, err := serverGoalRequiredTestOpenFDCountV0()
+	if err != nil {
+		t.Skipf("/proc fd accounting unavailable: %v", err)
+	}
+	for cycle := 0; cycle < 16; cycle++ {
+		runCycle(cycle)
+	}
+	after, err := serverGoalRequiredTestOpenFDCountV0()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after != before {
+		t.Fatalf("workspace Capture+Attest fd leak: before=%d after=%d", before, after)
+	}
+}
+
+func serverGoalRequiredTestOpenFDCountV0() (int, error) {
+	entries, err := os.ReadDir("/proc/self/fd")
+	if err != nil {
+		return 0, err
+	}
+	return len(entries), nil
+}
+
 func serverCodexGoalBackendForPrepareRunWorkspaceTestV0(
 	workDir string,
 	router orquestaruntimecodexappserver.GoalWorkspaceRouterPortV0,

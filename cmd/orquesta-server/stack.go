@@ -59,6 +59,13 @@ func buildRuntimeFromConfigV0(serverConfig orquestaserver.ConfigV0) (*orquestase
 	if err != nil {
 		return nil, err
 	}
+	requiredTestResourceHook := serverRequiredTestResourceShutdownHookFromStackV0(stack)
+	resourcesTransferred := false
+	defer func() {
+		if !resourcesTransferred {
+			_ = requiredTestResourceHook.ShutdownV0(context.Background())
+		}
+	}()
 	appHandler, err := buildServerAppHandlerV0(stack, serverConfig)
 	if err != nil {
 		return nil, err
@@ -81,11 +88,13 @@ func buildRuntimeFromConfigV0(serverConfig orquestaserver.ConfigV0) (*orquestase
 		residentDirector,
 		stack,
 		goalBackends,
+		requiredTestResourceHook,
 	))
 	if err != nil {
 		return nil, err
 	}
 	supervisorWakeup.bindRuntimeV0(runtime)
+	resourcesTransferred = true
 	return runtime, nil
 }
 
@@ -96,7 +105,22 @@ func serverRuntimeDepsFromStackV0(
 	residentDirector orquestaserver.ResidentDirectorPortV0,
 	stack orquestaappcodexstack.StackV0,
 	goalBackends serverCodexGoalBackendsV0,
+	requiredTestResourceHooks ...*serverRequiredTestResourceShutdownHookV0,
 ) orquestaserver.RuntimeDepsV0 {
+	shutdownHooks := serverGoalShutdownHooksFromBackendsV0(
+		goalBackends.AppGoal,
+		goalBackends.AutoprogrammingGoal,
+		goalBackends.IdleGoal,
+	)
+	var requiredTestResourceHook *serverRequiredTestResourceShutdownHookV0
+	if len(requiredTestResourceHooks) > 0 {
+		requiredTestResourceHook = requiredTestResourceHooks[0]
+	} else {
+		requiredTestResourceHook = serverRequiredTestResourceShutdownHookFromStackV0(stack)
+	}
+	if requiredTestResourceHook != nil {
+		shutdownHooks = append(shutdownHooks, requiredTestResourceHook)
+	}
 	return orquestaserver.RuntimeDepsV0{
 		AppHandler:                 appHandler,
 		Supervisor:                 supervisor,
@@ -114,7 +138,7 @@ func serverRuntimeDepsFromStackV0(
 		MaterialProgressEvidence: orquestaappcodexstack.CodexStackMaterialProgressEvidenceV0{Stack: &stack},
 		EstadoVivoSource:         stack.MCPTransportBindings.AutoprogrammingEstadoVivoSource,
 		ShutdownSnapshot:         serverShutdownSnapshotFromStackV0(stack, goalBackends),
-		ShutdownHooks:            serverGoalShutdownHooksFromBackendsV0(goalBackends.AppGoal, goalBackends.AutoprogrammingGoal, goalBackends.IdleGoal),
+		ShutdownHooks:            shutdownHooks,
 		BackgroundWorkers:        serverBackgroundWorkersFromStackV0(stack),
 		StartupCheck:             startupCheckFromEnvV0(stack, serverConfig),
 		SelfWatchdog: orquestaserver.NewProcessSelfWatchdogObserverV0(
@@ -289,11 +313,24 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
+	var goalRequiredTestAttestation *serverGoalRequiredTestAttestationWorkspaceSelectorV0
+	var batchTestRunner *serverAutoprogrammingBatchTestRunnerV0
+	resourcesTransferred := false
+	defer func() {
+		if !resourcesTransferred {
+			hook := newServerRequiredTestResourceShutdownHookV0(
+				requiredTestRunner,
+				goalRequiredTestAttestation,
+				batchTestRunner,
+			)
+			_ = hook.ShutdownV0(context.Background())
+		}
+	}()
 	idleBudgetSource, err := newServerAutoprogrammingIdleBudgetSourceV0(serverConfig)
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
-	goalRequiredTestAttestation, err := goalRequiredTestAttestationWorkspaceSelectorFromConfigV0(
+	goalRequiredTestAttestation, err = goalRequiredTestAttestationWorkspaceSelectorFromConfigV0(
 		serverConfig,
 		projectConfig,
 		serverCodexGoalWorkspaceLookupFromBackendV0(autoprogrammingGoalBackend),
@@ -329,7 +366,7 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 	autoprogrammingPromotion := autoprogrammingPromotionConfigFromEnvV0(serverConfig)
 	autoprogrammingPromotion.GoalFirstSnapshotStore = worktreeSnapshotStore
 	autoprogrammingPromotion.GoalWorkspaceIntegration = orquestaruntimeworktree.GitGoalWorkspaceIntegrationConnectorV0{}
-	batchTestRunner, err := autoprogrammingBatchTestRunnerFromConfigV0(serverConfig, canonicalSelfProgrammingDir)
+	batchTestRunner, err = autoprogrammingBatchTestRunnerFromConfigV0(serverConfig, canonicalSelfProgrammingDir)
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
@@ -574,6 +611,7 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 		nil,
 	)
 	stack.Handler = withFunctionContractRoutesV0(stack.Handler, stateStore)
+	resourcesTransferred = true
 	return stack, nil
 }
 
