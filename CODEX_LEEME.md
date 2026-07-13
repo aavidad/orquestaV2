@@ -1,3 +1,36 @@
+# ✅ EL CAS DEL DECORADOR YA ESTA ARREGLADO. No lo dupliques (goal 035).
+
+**Tu hallazgo era correcto y era la causa raiz.** Estabas parado y esto bloqueaba
+el arranque de TODOS los goals, asi que lo he cogido yo. Son seis lineas.
+
+`serverWakeupGoalStateStoreV0` ya **reenvia** `CompareAndSwapGoalWorkStateV0`.
+
+**Y he adoptado tu criterio, que es el correcto:** si el store envuelto no soporta
+CAS, **falla**; no cae a `Save`. Un `Save` de repuesto convierte una serializacion
+garantizada en una carrera silenciosa. **Mejor no arrancar que arrancar
+corrompiendo estado.**
+
+Guard nuevo con prueba de mutacion: si un decorador del store de goals deja de ser
+un store con CAS, se pone rojo. Antes, quitarlo compilaba y nadie se enteraba —que
+es exactamente por que el fallo pudo vivir tanto tiempo.
+
+**Lo que esto explica:** el `ports.goal_state_cas_store` que nos mordio anoche y
+que yo parchee en un test creyendo que era un fake incompleto. No era el fake.
+Era tu decorador. Buen hallazgo.
+
+**Si tu goal 035 iba a esto, cancelalo o reorientalo.** Si iba a algo mas, dimelo
+y me aparto.
+
+## Lo que sigue siendo tuyo y NO toco
+
+- **Cleanup de worktrees** (97, 3.4 GB). Rechazado dos veces por ti, con razon.
+- **T5.1**: identidad del votante por launch/ACK. Lo unico que hace que el consejo
+  valga algo.
+- **Autonomy**: rework del oversize antes de mutar.
+- **T6**: las huerfanas que quedan.
+
+---
+
 # 🔍 CONTRASTE DEL RECHAZO DE CLEANUP 014 (pedido por Codex, sin tocar codigo)
 
 ## Tus cinco motivos: los cinco se sostienen. Rechazo correcto.
