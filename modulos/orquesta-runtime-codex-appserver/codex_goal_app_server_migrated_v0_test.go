@@ -135,6 +135,90 @@ func TestServerCodexAppServerGoalBackendV0RechazaExternalGoalAjenoAntesDeObserve
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0ConservaAutoridadesConcurrentesPorThreadV0(t *testing.T) {
+	root := t.TempDir()
+	protocol := &fakeCodexAppServerProtocolV0{}
+	runtime := &serverCodexAppServerGoalRuntimeV0{}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol: protocol, CWD: root, Sandbox: "workspace-write", Runtime: runtime,
+	}
+	launch := func(goalRef, threadRef, writeSet, manifestHash string) (
+		orquestaruntimecodexgoal.CodexGoalStartPacketV0,
+		orquestaruntimecodexgoal.CodexGoalStartReceiptV0,
+	) {
+		t.Helper()
+		packet := codexAppServerRuntimeWriteSetGuardPacketForTestV0(goalRef, writeSet)
+		packet.IntentManifestRef = "intent-manifest-ref-" + goalRef
+		packet.IntentManifestSHA256 = strings.Repeat(manifestHash, 64)
+		packet.WorkspaceRef = orquestagoal.GoalWorkspaceRefForGoalV0(goalRef)
+		packet.ProviderRef = orquestaruntimecodexgoal.CodexGoalProviderRefV0
+		protocol.thread = serverCodexAppServerThreadV0{ID: threadRef}
+		protocol.goal = serverCodexAppServerThreadGoalV0{ThreadID: threadRef, Status: "active"}
+		protocol.turn = serverCodexAppServerTurnV0{ID: "turn-" + threadRef, Status: "inProgress"}
+		receipt, err := backend.StartCodexGoalV0(context.Background(), packet)
+		if err != nil {
+			t.Fatalf("launch %s: receipt=%+v err=%v", goalRef, receipt, err)
+		}
+		return packet, receipt
+	}
+	requestFor := func(
+		packet orquestaruntimecodexgoal.CodexGoalStartPacketV0,
+		receipt orquestaruntimecodexgoal.CodexGoalStartReceiptV0,
+	) orquestaruntimecodexgoal.CodexGoalObservationRequestV0 {
+		return orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+			GoalRef: packet.GoalRef, ExternalGoalRef: receipt.ExternalGoalRef,
+			IntentManifestRef: packet.IntentManifestRef, IntentManifestSHA256: packet.IntentManifestSHA256,
+			WorkspaceAuthoritySchemaVersion: orquestagoal.GoalWorkspaceAuthoritySchemaV0,
+			WorkspaceRef:                    packet.WorkspaceRef, ProviderRef: packet.ProviderRef,
+			RuntimeGenerationRef: receipt.RuntimeGenerationRef,
+		}
+	}
+
+	firstPacket, firstReceipt := launch(
+		"goal-ref-authority-concurrent-001", "thread-ref-authority-concurrent-001", "docs/first", "a",
+	)
+	firstBaseline, firstBaselineOK := runtime.writeSetBaselineForThreadV0(firstReceipt.ExternalGoalRef)
+	firstTimeout := runtime.timeoutForThreadV0(firstReceipt.ExternalGoalRef)
+	secondPacket, secondReceipt := launch(
+		"goal-ref-authority-concurrent-002", "thread-ref-authority-concurrent-002", "docs/second", "b",
+	)
+	if !firstBaselineOK || firstTimeout <= 0 || firstReceipt.RuntimeGenerationRef == secondReceipt.RuntimeGenerationRef {
+		t.Fatalf("first baseline=%+v ok=%v timeout=%v receipts=%+v/%+v", firstBaseline, firstBaselineOK, firstTimeout, firstReceipt, secondReceipt)
+	}
+	if baseline, ok := runtime.writeSetBaselineForThreadV0(firstReceipt.ExternalGoalRef); !ok ||
+		baseline.ProjectWorkDir != firstBaseline.ProjectWorkDir || runtime.timeoutForThreadV0(firstReceipt.ExternalGoalRef) != firstTimeout {
+		t.Fatalf("second launch invalidated first runtime state: baseline=%+v ok=%v timeout=%v", baseline, ok, runtime.timeoutForThreadV0(firstReceipt.ExternalGoalRef))
+	}
+	if _, ok := runtime.writeSetBaselineForThreadV0(secondReceipt.ExternalGoalRef); !ok || runtime.timeoutForThreadV0(secondReceipt.ExternalGoalRef) <= 0 {
+		t.Fatalf("second runtime state missing: ok=%v timeout=%v", ok, runtime.timeoutForThreadV0(secondReceipt.ExternalGoalRef))
+	}
+
+	for _, pair := range []struct {
+		packet  orquestaruntimecodexgoal.CodexGoalStartPacketV0
+		receipt orquestaruntimecodexgoal.CodexGoalStartReceiptV0
+	}{
+		{packet: firstPacket, receipt: firstReceipt},
+		{packet: secondPacket, receipt: secondReceipt},
+	} {
+		request := requestFor(pair.packet, pair.receipt)
+		protocol.observedGoal = &serverCodexAppServerThreadGoalV0{ThreadID: pair.receipt.ExternalGoalRef, Status: "active"}
+		observed, err := backend.ObserveCodexGoalV0(context.Background(), request)
+		if err != nil || observed.Status != orquestagoal.GoalStatusRunningV0 || protocol.getThreadID != pair.receipt.ExternalGoalRef {
+			t.Fatalf("observe %s: observed=%+v thread=%q err=%v", pair.packet.GoalRef, observed, protocol.getThreadID, err)
+		}
+		stopped, err := backend.StopCodexGoalV0(context.Background(), CodexGoalStopRequestV0{
+			GoalRef: request.GoalRef, ExternalGoalRef: request.ExternalGoalRef,
+			IntentManifestRef: request.IntentManifestRef, IntentManifestSHA256: request.IntentManifestSHA256,
+			WorkspaceAuthoritySchemaVersion: request.WorkspaceAuthoritySchemaVersion,
+			WorkspaceRef:                    request.WorkspaceRef, ProviderRef: request.ProviderRef,
+			RuntimeGenerationRef: request.RuntimeGenerationRef, Action: "stop", Forced: true,
+		})
+		if err != nil || !stopped.GoalStatusSet || protocol.setParams.ThreadID != pair.receipt.ExternalGoalRef {
+			t.Fatalf("stop %s: stopped=%+v thread=%q err=%v", pair.packet.GoalRef, stopped, protocol.setParams.ThreadID, err)
+		}
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0FallaCerradoSiNoActualizaSettingsAntesDeGoalV0(t *testing.T) {
 	updateErr := errors.New("settings update unavailable")
 	protocol := &fakeCodexAppServerProtocolV0{

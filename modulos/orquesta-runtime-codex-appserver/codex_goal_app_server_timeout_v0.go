@@ -32,14 +32,38 @@ func (runtime *serverCodexAppServerGoalRuntimeV0) bindThreadAuthorityV0(
 	}
 	runtime.mu.Lock()
 	defer runtime.mu.Unlock()
-	runtime.activateGenerationLockedV0(authority.RuntimeGenerationRef)
+	if runtime.threadGenerations == nil {
+		runtime.threadGenerations = map[string]string{}
+	}
+	if runtime.threadAuthorities == nil {
+		runtime.threadAuthorities = map[string]orquestagoal.GoalExecutionAuthorityV0{}
+	}
+	currentGeneration, generationBound := runtime.threadGenerations[threadID]
 	if current, found := runtime.threadAuthorities[threadID]; found &&
 		!orquestagoal.GoalExecutionAuthorityMatchesV0(current, authority) {
+		// Lazy tmux learns the physical process generation outside the inner
+		// protocol call. Permit only that exact generation refinement after
+		// bindThreadGenerationV0 has fenced it; every other authority mutation
+		// for an existing external thread remains rejected.
+		if !generationBound || currentGeneration != authority.RuntimeGenerationRef ||
+			!codexAppServerGoalAuthorityMatchesExceptGenerationV0(current, authority) {
+			return false
+		}
+	} else if generationBound && currentGeneration != authority.RuntimeGenerationRef {
 		return false
 	}
 	runtime.threadGenerations[threadID] = authority.RuntimeGenerationRef
 	runtime.threadAuthorities[threadID] = authority
 	return true
+}
+
+func codexAppServerGoalAuthorityMatchesExceptGenerationV0(
+	left orquestagoal.GoalExecutionAuthorityV0,
+	right orquestagoal.GoalExecutionAuthorityV0,
+) bool {
+	left.RuntimeGenerationRef = ""
+	right.RuntimeGenerationRef = ""
+	return orquestagoal.GoalExecutionAuthorityMatchesV0(left, right)
 }
 
 func (runtime *serverCodexAppServerGoalRuntimeV0) threadBoundToAuthorityV0(
@@ -54,7 +78,8 @@ func (runtime *serverCodexAppServerGoalRuntimeV0) threadBoundToAuthorityV0(
 	runtime.mu.Lock()
 	defer runtime.mu.Unlock()
 	current, found := runtime.threadAuthorities[threadID]
-	return found && runtime.generationRef == authority.RuntimeGenerationRef &&
+	return found && runtime.threadGenerations != nil &&
+		runtime.threadGenerations[threadID] == authority.RuntimeGenerationRef &&
 		orquestagoal.GoalExecutionAuthorityMatchesV0(current, authority)
 }
 
