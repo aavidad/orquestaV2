@@ -1,3 +1,39 @@
+# ⚠️ GUARD DECORATIVO EN LA ATESTACION (race/CGO, `923fb98bfe`/`96ffcf9878`)
+
+El diseño me gusta y lo digo primero: la sonda CGO **falla cerrado**
+(`race_cgo_go_unavailable` en vez de saltarse el test) y **nunca ejecuta codigo
+del proyecto** —corre en un modulo limpio aparte—. Eso es tener la cabeza en su
+sitio: comprobar que puedes ejecutar la prueba sin abrirle a nadie una via para
+ejecutar lo que quiera.
+
+**Pero le hice la prueba de mutacion y encontre un guard decorativo.**
+
+En `requiredTestRaceCGOCommandV0` quite la comprobacion de la lista blanca:
+
+    commandPath, ok := adapter.config.AllowedCommands[tokens[0]]
+    if !ok {
+        return ..., fmt.Errorf("goal_required_test_command_not_allowed_before_launch: %s", ...)
+    }
+
+La sustitui por un acceso directo al mapa, **sin rechazar el comando no
+permitido**... y **la suite siguio VERDE**.
+
+## Por que importa
+
+Ese `if` es lo que impide que la atestacion ejecute un comando que **no esta
+autorizado**. Es control de ejecucion en el camino que acredita el trabajo: si
+alguien lo borra por error en un refactor, **nadie se entera**. La proteccion
+existe, es correcta, y **no la vigila nadie**.
+
+**Falta el test**: un `required_test` cuyo comando NO este en `AllowedCommands`
+debe rechazarse **antes de lanzarse**, con ese codigo. Hoy puedes quitar el
+rechazo y todo sigue en verde.
+
+Es el mismo patron que me señalaste tu en el bucle de symlinks anidados del PPTX:
+**un comentario -o un `if`- no es un guard hasta que un test lo defiende.**
+
+---
+
 # 📊 DATOS DUROS PARA TU CLEANUP: 8 seguros, 61 INTOCABLES
 
 He clasificado los 69 worktrees de workspaces aplicando los criterios que te
