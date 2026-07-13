@@ -292,12 +292,15 @@ func TestLocalGoalRequiredTestAttestationAdapterV0BuildsMinimalDeterministicPath
 
 	runDir := t.TempDir()
 	env := adapter.hermeticEnvironmentV0(runDir, filepath.Join(runDir, "go-mod-cache-private"))
+	raceEnv := adapter.hermeticEnvironmentForRaceCGOV0(runDir, filepath.Join(runDir, "go-mod-cache-private"))
 	wantDirs := []string{filepath.Dir(commandPath), filepath.Dir(gitPath)}
 	sort.Strings(wantDirs)
 	wantPath := "PATH=" + strings.Join(wantDirs, string(os.PathListSeparator))
 	wantModuleCacheSeed := "ORQUESTA_ISOLATED_TEST_MODULE_CACHE_SEED=" + filepath.Join(runDir, "go-mod-cache-private")
 	count := 0
 	goFlags := 0
+	goEnvOff := 0
+	cgoDisabled := 0
 	moduleCacheSeed := 0
 	for _, item := range env {
 		if item == wantPath {
@@ -306,11 +309,17 @@ func TestLocalGoalRequiredTestAttestationAdapterV0BuildsMinimalDeterministicPath
 		if item == "GOFLAGS=-modcacherw" {
 			goFlags++
 		}
+		if item == "GOENV=off" {
+			goEnvOff++
+		}
+		if item == "CGO_ENABLED=0" {
+			cgoDisabled++
+		}
 		if item == wantModuleCacheSeed {
 			moduleCacheSeed++
 		}
 	}
-	if count != 1 || goFlags != 1 || moduleCacheSeed != 1 {
+	if count != 1 || goFlags != 1 || moduleCacheSeed != 1 || goEnvOff != 1 || cgoDisabled != 1 || !localGoalAttestationEnvContainsV0(raceEnv, "CGO_ENABLED=1") || localGoalAttestationEnvContainsV0(raceEnv, "CGO_ENABLED=0") {
 		t.Fatalf("env=%v, want exactly %q", env, wantPath)
 	}
 	for _, item := range env {
@@ -318,6 +327,81 @@ func TestLocalGoalRequiredTestAttestationAdapterV0BuildsMinimalDeterministicPath
 			t.Fatalf("parent PATH leaked: %v", env)
 		}
 	}
+}
+
+func TestGoalRequiredTestCommandRequiresRaceCGOV0HonorsArgumentBoundaries(t *testing.T) {
+	for _, test := range []struct {
+		command string
+		path    string
+		want    bool
+	}{
+		{"go test -race -count=1 ./...", "/toolchain/go", true},
+		{"go test -count=1 -race ./...", "/toolchain/go", true},
+		{"go test -args -race", "/toolchain/go", false},
+		{"go test -- -race", "/toolchain/go", false},
+		{"go test -race=true ./...", "/toolchain/go", false},
+		{"go test ./...", "/toolchain/go", false},
+		{"go-tool test -race ./...", "/toolchain/go-tool", false},
+		{"go build -race ./...", "/toolchain/go", false},
+	} {
+		if got := goalRequiredTestCommandRequiresRaceCGOV0(test.command, test.path); got != test.want {
+			t.Fatalf("command=%q path=%q got=%t want=%t", test.command, test.path, got, test.want)
+		}
+	}
+}
+
+func TestLocalGoalRequiredTestAttestationAdapterV0RaceCGOProbeFailureProducesDurableReceiptWithoutTest(t *testing.T) {
+	project, runtimeRoot, gitPath := localGoalAttestationGitRepoForTestV0(t)
+	modePath := filepath.Join(t.TempDir(), "probe-mode")
+	logPath := filepath.Join(t.TempDir(), "go-log")
+	if err := os.WriteFile(modePath, []byte("pass\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	goPath := filepath.Join(t.TempDir(), "go")
+	script := "#!/bin/sh\nset -eu\nprintf '%s|%s|%s\\n' \"$*\" \"${CGO_ENABLED:-}\" \"${GOENV:-}\" >> '" + logPath + "'\nmode=\nIFS= read -r mode < '" + modePath + "' || true\nif [ \"$1 $2 $3 $4\" = 'test -race -count=1 .' ] && [ \"$mode\" = fail ]; then exit 1; fi\n"
+	if err := os.WriteFile(goPath, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	config := localGoalAttestationConfigForTestV0(project, runtimeRoot, gitPath, map[string]string{"go": goPath})
+	config.DependencySnapshotPath = localGoalAttestationReadOnlySnapshotForTestV0(t)
+	config.PreflightCommands = []string{"git --version"}
+	adapter, err := NewLocalGoalRequiredTestAttestationAdapterV0(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bound, err := adapter.BindGoalRequiredTestSpecV0(context.Background(), localGoalAttestationSpecForTestV0("go test -race -count=1 ./..."))
+	if err != nil {
+		t.Fatalf("bind race spec: %v", err)
+	}
+	if err := os.WriteFile(modePath, []byte("fail\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	receipts, err := localGoalAttestationAttestForTestV0(context.Background(), adapter, bound)
+	if err != nil || len(receipts) != 1 || receipts[0].Status != orquestagoal.GoalRequiredTestAttestationStatusFailedV0 || receipts[0].FailureCode != orquestagoal.ErrGoalRequiredTestAttestorInfrastructureFailedV0 || !reflect.DeepEqual(receipts[0].HashesBefore, receipts[0].HashesAfter) {
+		t.Fatalf("receipts=%+v err=%v", receipts, err)
+	}
+	if !localGoalAttestationHasEvidencePrefixV0(receipts[0].EvidenceRefs, "required-test-output-") {
+		t.Fatalf("race probe evidence missing: %+v", receipts[0].EvidenceRefs)
+	}
+	if _, err := os.Stat(filepath.Join(runtimeRoot, "evidence", "commands")); !os.IsNotExist(err) {
+		t.Fatalf("required test must not execute after failed probe: %v", err)
+	}
+	log, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(log), "./...") || strings.Count(string(log), "test -race -count=1 .|1|off") != 2 {
+		t.Fatalf("expected bind and attest private race probes only, log=%q", log)
+	}
+}
+
+func localGoalAttestationEnvContainsV0(env []string, value string) bool {
+	for _, item := range env {
+		if item == value {
+			return true
+		}
+	}
+	return false
 }
 
 func TestLocalGoalRequiredTestAttestationAdapterV0FailedTestKeepsOrdinaryFailureCode(t *testing.T) {

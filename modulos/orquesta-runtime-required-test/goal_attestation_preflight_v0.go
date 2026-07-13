@@ -100,9 +100,13 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) runHermeticCommandV0(
 	outputDir string,
 	request orquestacionnucleoapp.RequiredTestCommandExecutionRequestV0,
 ) (orquestacionnucleoapp.RequiredTestCommandExecutionResultV0, error) {
+	race, err := adapter.requiredTestUsesRaceCGOV0(request.TestCommand)
+	if err != nil {
+		return failedLocalCommandValidationResultV0(LocalCommandExecutorV0{OutputDir: outputDir, MaxOutputBytes: adapter.config.MaxOutputBytes, MaxArtifacts: adapter.config.MaxArtifacts}, request, "required_test_preflight_command_not_allowed")
+	}
 	executor := LocalCommandExecutorV0{
 		ProjectWorkDir: adapter.config.ProjectWorkDir, OutputDir: outputDir,
-		AllowedCommands: adapter.config.AllowedCommands, Env: adapter.hermeticEnvironmentV0(runDir, moduleCache),
+		AllowedCommands: adapter.config.AllowedCommands, Env: adapter.hermeticEnvironmentWithCGOV0(runDir, moduleCache, race),
 		MaxOutputBytes: adapter.config.MaxOutputBytes, MaxArtifacts: adapter.config.MaxArtifacts,
 	}
 	tokens, err := splitCommandV0(request.TestCommand)
@@ -128,6 +132,14 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) runHermeticCommandV0(
 }
 
 func (adapter *LocalGoalRequiredTestAttestationAdapterV0) hermeticEnvironmentV0(runDir string, modCache string) []string {
+	return adapter.hermeticEnvironmentWithCGOV0(runDir, modCache, false)
+}
+
+func (adapter *LocalGoalRequiredTestAttestationAdapterV0) hermeticEnvironmentForRaceCGOV0(runDir string, modCache string) []string {
+	return adapter.hermeticEnvironmentWithCGOV0(runDir, modCache, true)
+}
+
+func (adapter *LocalGoalRequiredTestAttestationAdapterV0) hermeticEnvironmentWithCGOV0(runDir string, modCache string, race bool) []string {
 	pathDirs := map[string]struct{}{}
 	for _, commandPath := range adapter.config.AllowedCommands {
 		pathDirs[filepath.Dir(commandPath)] = struct{}{}
@@ -138,8 +150,12 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) hermeticEnvironmentV0(
 		orderedPathDirs = append(orderedPathDirs, dir)
 	}
 	sort.Strings(orderedPathDirs)
+	cgoEnabled := "CGO_ENABLED=0"
+	if race {
+		cgoEnabled = "CGO_ENABLED=1"
+	}
 	return []string{
-		"CGO_ENABLED=0", "GOWORK=off", "GOPROXY=off", "GOSUMDB=off", "GONOSUMDB=*", "GOTOOLCHAIN=local", "GOFLAGS=-modcacherw",
+		cgoEnabled, "GOENV=off", "GOWORK=off", "GOPROXY=off", "GOSUMDB=off", "GONOSUMDB=*", "GOTOOLCHAIN=local", "GOFLAGS=-modcacherw",
 		"GOCACHE=" + filepath.Join(runDir, "go-cache"), "GOMODCACHE=" + modCache,
 		"ORQUESTA_ISOLATED_TEST_MODULE_CACHE_SEED=" + modCache,
 		"GOPATH=" + filepath.Join(runDir, "go-path"), "GOTMPDIR=" + filepath.Join(runDir, "tmp"),

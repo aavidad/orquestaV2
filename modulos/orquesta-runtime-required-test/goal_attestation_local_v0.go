@@ -81,6 +81,16 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) BindGoalRequiredTestSp
 		if err := adapter.validateFrozenRequiredTestCommandV0(required); err != nil {
 			return orquestagoal.GoalWorkSpecV0{}, err
 		}
+		race, err := adapter.requiredTestUsesRaceCGOV0(required.Command)
+		if err != nil {
+			return orquestagoal.GoalWorkSpecV0{}, fmt.Errorf("goal_required_test_command_invalid_before_launch: %w", err)
+		}
+		if race {
+			probe, err := adapter.runRaceCGOProbeV0(ctx, spec.GoalRef+"-bind-"+required.TestRef)
+			if err != nil || probe.Status != orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0 {
+				return orquestagoal.GoalWorkSpecV0{}, fmt.Errorf("goal_required_test_race_cgo_probe_failed")
+			}
+		}
 	}
 	identity := adapter.config.Identity
 	for field, pair := range map[string][2]string{
@@ -158,6 +168,10 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) AttestGoalRequiredTest
 	if err := adapter.validateFrozenRequiredTestCommandV0(test); err != nil {
 		return nil, err
 	}
+	race, err := adapter.requiredTestUsesRaceCGOV0(test.Command)
+	if err != nil {
+		return nil, err
+	}
 	writeSet := make([]orquestagoal.GoalWriteScopeV0, 0, len(request.FinalSnapshot.Hashes))
 	for _, hash := range request.FinalSnapshot.Hashes {
 		writeSet = append(writeSet, orquestagoal.GoalWriteScopeV0{Path: hash.Ref})
@@ -180,6 +194,31 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) AttestGoalRequiredTest
 		attestation.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
 		attestation.AttestationRef = orquestagoal.GoalRequiredTestAttestationCanonicalRefV0(attestation)
 		return []orquestagoal.GoalRequiredTestAttestationV0{orquestagoal.NormalizeGoalRequiredTestAttestationV0(attestation)}, nil
+	}
+	if race {
+		attestation.AttestationRef = orquestagoal.GoalRequiredTestAttestationCanonicalRefV0(attestation)
+		probe, err := adapter.runRaceCGOProbeV0(ctx, attestation.AttestationRef+"-attest")
+		if err != nil {
+			return nil, err
+		}
+		attestation.EvidenceRefs = append(attestation.EvidenceRefs, probe.EvidenceRefs...)
+		if probe.Status != orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0 {
+			after, err := adapter.CaptureGoalRequiredTestFinalSnapshotV0(ctx, orquestagoal.GoalRequiredTestFinalSnapshotRequestV0{
+				RunRef: request.RunRef, GoalRef: request.GoalRef, WriteSet: writeSet,
+				WriteSetSHA256: request.FinalSnapshot.WriteSetSHA256,
+			})
+			if err != nil {
+				return nil, err
+			}
+			attestation.HashesAfter = append(attestation.HashesAfter, after.Hashes...)
+			attestation.EvidenceRefs = append(attestation.EvidenceRefs, after.EvidenceRefs...)
+			attestation.Status = orquestagoal.GoalRequiredTestAttestationStatusFailedV0
+			attestation.FailureCode = orquestagoal.ErrGoalRequiredTestAttestorInfrastructureFailedV0
+			attestation.ExitCode = 1
+			attestation.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
+			attestation.AttestationRef = orquestagoal.GoalRequiredTestAttestationCanonicalRefV0(attestation)
+			return []orquestagoal.GoalRequiredTestAttestationV0{orquestagoal.NormalizeGoalRequiredTestAttestationV0(attestation)}, nil
+		}
 	}
 
 	attestation.AttestationRef = orquestagoal.GoalRequiredTestAttestationCanonicalRefV0(attestation)
@@ -325,12 +364,16 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) runFrozenTestV0(
 	if err != nil {
 		return orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{}, err
 	}
+	race, err := adapter.requiredTestUsesRaceCGOV0(test.Command)
+	if err != nil {
+		return orquestacionnucleoapp.RequiredTestCommandExecutionResultV0{}, err
+	}
 	executionContext, cancel := context.WithTimeout(ctx, adapter.config.MaxRuntime)
 	defer cancel()
 	executor := LocalCommandExecutorV0{
 		ProjectWorkDir: adapter.config.ProjectWorkDir, OutputDir: outputDir,
 		AllowedCommands: adapter.config.AllowedCommands,
-		Env:             adapter.hermeticEnvironmentV0(runDir, moduleCache),
+		Env:             adapter.hermeticEnvironmentWithCGOV0(runDir, moduleCache, race),
 		MaxOutputBytes:  adapter.config.MaxOutputBytes, MaxArtifacts: adapter.config.MaxArtifacts,
 	}
 	return executor.RunRequiredTestCommandV0(executionContext, orquestacionnucleoapp.RequiredTestCommandExecutionRequestV0{
