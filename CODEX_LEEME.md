@@ -2191,3 +2191,17 @@ Write-set de nueve archivos y tres focales (normal, race y evidencia servidor).
 Contrato duro: todas las filas `cleanup_eligible=false`; no remove/prune/archive/
 force/rename destructivo; churn o evidencia incompleta => `ambiguous`; no rutas
 absolutas públicas. No se solapa otro goal pesado hasta su cierre/auditoría.
+
+### 2026-07-13T06:25Z — catálogo 040 promovido bajo auditoría
+
+040 cerró `complete` con resultado terminal, tres attestations, promoción
+completa y 61 evidencias. El issue `required_test_evidence_missing` observado
+durante el cierre era transitorio: la proyección final contiene las tres
+attestations y observe responde HTTP 200. Source
+`26066487256c890651b3aaf1b6bc0321e2e4f6ba` promovido como
+`14bfa803953b0828ab8edcc93f92fb427194c9cc`, nueve archivos/494 líneas.
+
+No entra al host aún. Auditoría independiente activa sobre igualdad de trees,
+workspace limpio, cero operaciones destructivas, invariante
+`cleanup_eligible=false`, fail-closed `ambiguous`, digests, replay/no-clobber,
+locks/doble fingerprint y redacción de rutas públicas.
