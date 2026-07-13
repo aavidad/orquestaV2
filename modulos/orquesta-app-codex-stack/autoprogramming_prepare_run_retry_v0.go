@@ -11,12 +11,19 @@ import (
 	orquestaruncontrol "orquesta/modulos/orquesta-run-control"
 )
 
-func (executor CodexStackAutoprogrammingPrepareRunExecutorV0) freshAttemptForStaleAutoprogrammingRunV0(
+type autoprogrammingPrepareRunRetryPlanV0 struct {
+	Input    orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0
+	StaleRun *orquestacoreworkflow.OrchestrationRunV0
+	Issues   []orquestamcp.MCPValidationIssueV0
+}
+
+func (executor CodexStackAutoprogrammingPrepareRunExecutorV0) planFreshAttemptForStaleAutoprogrammingRunV0(
 	ctx context.Context,
 	input orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0,
-) orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0 {
+) autoprogrammingPrepareRunRetryPlanV0 {
+	plan := autoprogrammingPrepareRunRetryPlanV0{Input: input}
 	if executor.Stack == nil || executor.Stack.Stores.RunStore == nil {
-		return input
+		return plan
 	}
 	requestRef := firstNonEmptyAutoprogrammingStackV0(
 		input.AutoprogrammingRequest.RequestRef,
@@ -24,20 +31,27 @@ func (executor CodexStackAutoprogrammingPrepareRunExecutorV0) freshAttemptForSta
 		input.CorrelationID,
 	)
 	if strings.TrimSpace(requestRef) == "" {
-		return input
+		return plan
 	}
 	run, err := executor.Stack.Stores.RunStore.LoadRunV0(ctx, requestRef)
 	if err != nil {
-		return input
+		return plan
 	}
 	if executor.autoprogrammingPrepareRunHasRegisteredLiveOrAmbiguousProcessV0(ctx, run) {
-		return input
+		return plan
 	}
 	if !autoprogrammingPrepareRunNeedsFreshAttemptWithRuntimeV0(run, executor.RuntimeWorkDir) &&
 		!executor.autoprogrammingPrepareRunControlNeedsFreshAttemptV0(ctx, run) {
-		return input
+		return plan
 	}
-	_ = executor.markStaleAutoprogrammingQueueCandidateV0(ctx, run)
+	if strings.TrimSpace(input.OccurredAt) == "" {
+		plan.Issues = []orquestamcp.MCPValidationIssueV0{{
+			Code:    "autoprogramming_prepare_run_retry_occurred_at_required",
+			Field:   "occurred_at",
+			Message: "autoprogramming_prepare_run_retry_occurred_at_required",
+		}}
+		return plan
+	}
 	nextAttempt := autoprogrammingPrepareRetryAttemptV0(requestRef) + 1
 	nextRef := autoprogrammingPrepareRetryRefV0(requestRef, input.OccurredAt, stackNowV0(executor.Clock))
 	input.RequestID = nextRef
@@ -52,7 +66,9 @@ func (executor CodexStackAutoprogrammingPrepareRunExecutorV0) freshAttemptForSta
 		strings.TrimSpace(input.CorrelationID) == requestRef {
 		input.CorrelationID = "corr-" + nextRef
 	}
-	return input
+	plan.Input = input
+	plan.StaleRun = &run
+	return plan
 }
 
 func (executor CodexStackAutoprogrammingPrepareRunExecutorV0) autoprogrammingPrepareRunControlNeedsFreshAttemptV0(

@@ -55,6 +55,10 @@ func TestGoalFirstRunControlPortV0ForcedStopBloqueaGoalDetieneBackendYCompletaCo
 		backend.last.RunRef != runRef ||
 		backend.last.GoalRef != goalRef ||
 		backend.last.ExternalGoalRef != externalRef ||
+		backend.last.WorkspaceAuthoritySchemaVersion != state.LaunchReceipt.WorkspaceAuthoritySchemaVersion ||
+		backend.last.WorkspaceRef != state.LaunchReceipt.WorkspaceRef ||
+		backend.last.ProviderRef != state.LaunchReceipt.ProviderRef ||
+		backend.last.RuntimeGenerationRef != state.LaunchReceipt.RuntimeGenerationRef ||
 		!backend.last.Forced {
 		t.Fatalf("backend calls=%d last=%+v", backend.calls, backend.last)
 	}
@@ -315,20 +319,21 @@ func goalFirstRunControlRunningStateForTestV0(
 	externalRef string,
 ) orquestagoal.GoalWorkStateV0 {
 	t.Helper()
+	spec := orquestagoal.GoalWorkSpecV0{
+		GoalRef:   goalRef,
+		RunRef:    runRef,
+		Objective: "probar forced stop goal-first",
+		WriteSet:  []orquestagoal.GoalWriteScopeV0{{Path: "docs/forced_stop_goal_first.md"}},
+	}
+	authority := orquestagoal.GoalExecutionAuthorityForProviderV0(spec, "provider-ref-test")
+	receipt := orquestagoal.ApplyGoalExecutionAuthorityToReceiptV0(orquestagoal.GoalLaunchReceiptV0{
+		GoalRef: goalRef, ExternalGoalRef: externalRef, Status: orquestagoal.GoalStatusRunningV0,
+	}, authority)
 	state, err := orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
-		RunRef: runRef,
-		Spec: orquestagoal.GoalWorkSpecV0{
-			GoalRef:   goalRef,
-			RunRef:    runRef,
-			Objective: "probar forced stop goal-first",
-			WriteSet:  []orquestagoal.GoalWriteScopeV0{{Path: "docs/forced_stop_goal_first.md"}},
-		},
-		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
-			GoalRef:         goalRef,
-			ExternalGoalRef: externalRef,
-			Status:          orquestagoal.GoalStatusRunningV0,
-		},
-		EvidenceRefs: []string{"evidence-ref-goal-first-running"},
+		RunRef:        runRef,
+		Spec:          spec,
+		LaunchReceipt: receipt,
+		EvidenceRefs:  []string{"evidence-ref-goal-first-running"},
 	})
 	if err != nil {
 		t.Fatalf("NewGoalWorkStateFromLaunchV0: %v", err)

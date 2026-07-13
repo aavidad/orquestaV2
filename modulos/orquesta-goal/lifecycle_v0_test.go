@@ -302,9 +302,12 @@ func TestStartGoalWorkV0ConservaConflictoGeneracionalComoRunningRetryableV0(t *t
 	launcher := &goalLifecycleLauncherForTestV0{
 		receipt: GoalLaunchReceiptV0{
 			Status: GoalStatusRunningV0, GoalRef: "goal-ref-generation-retryable-001",
-			ExternalGoalRef:      "thread-ref-generation-retryable-001",
-			RuntimeGenerationRef: "generation-ref-retryable-001",
-			Issues:               []GoalWorkIssueV0{{Code: "codex_app_server_tmux_generation_conflict_retryable"}},
+			ExternalGoalRef:                 "thread-ref-generation-retryable-001",
+			WorkspaceAuthoritySchemaVersion: GoalWorkspaceAuthoritySchemaV0,
+			WorkspaceRef:                    GoalWorkspaceRefForGoalV0("goal-ref-generation-retryable-001"),
+			ProviderRef:                     "provider-ref-codex",
+			RuntimeGenerationRef:            "generation-ref-retryable-001",
+			Issues:                          []GoalWorkIssueV0{{Code: "codex_app_server_tmux_generation_conflict_retryable"}},
 		},
 		err: launchErr,
 	}
@@ -333,9 +336,12 @@ func TestStartGoalWorkV0OtroFalloConGeneracionSigueFailClosedV0(t *testing.T) {
 	launcher := &goalLifecycleLauncherForTestV0{
 		receipt: GoalLaunchReceiptV0{
 			Status: GoalStatusRunningV0, GoalRef: "goal-ref-generation-other-error-001",
-			ExternalGoalRef:      "thread-ref-generation-other-error-001",
-			RuntimeGenerationRef: "generation-ref-other-error-001",
-			Issues:               []GoalWorkIssueV0{{Code: "codex_app_server_turn_start_failed"}},
+			ExternalGoalRef:                 "thread-ref-generation-other-error-001",
+			WorkspaceAuthoritySchemaVersion: GoalWorkspaceAuthoritySchemaV0,
+			WorkspaceRef:                    GoalWorkspaceRefForGoalV0("goal-ref-generation-other-error-001"),
+			ProviderRef:                     "provider-ref-codex",
+			RuntimeGenerationRef:            "generation-ref-other-error-001",
+			Issues:                          []GoalWorkIssueV0{{Code: "codex_app_server_turn_start_failed"}},
 		},
 		err: errors.New("turn_start_failed"),
 	}
@@ -356,6 +362,9 @@ func TestSaveGoalWorkStateV0CASSegundoConflictAceptaAvanceTerminalCompatibleV0(t
 	store := newGoalLifecycleStoreForTestV0()
 	desired := mustGoalLifecycleStateForTestV0(t)
 	desired.StoreVersion = 1
+	desired.LaunchReceipt.WorkspaceAuthoritySchemaVersion = GoalWorkspaceAuthoritySchemaV0
+	desired.LaunchReceipt.WorkspaceRef = GoalWorkspaceRefForGoalV0(desired.GoalRef)
+	desired.LaunchReceipt.ProviderRef = "provider-ref-codex"
 	desired.LaunchReceipt.RuntimeGenerationRef = "generation-ref-cas-terminal-001"
 	current := desired
 	current.StoreVersion = 2
@@ -388,6 +397,28 @@ func TestSaveGoalWorkStateV0CASSegundoConflictAceptaAvanceTerminalCompatibleV0(t
 	}
 }
 
+func TestSaveGoalWorkStateV0ReplayRunningConservaAutoridadVersionadaV0(t *testing.T) {
+	store := newGoalLifecycleStoreForTestV0()
+	desired := mustGoalLifecycleStateForTestV0(t)
+	desired.StoreVersion = 1
+	desired.LaunchReceipt.WorkspaceAuthoritySchemaVersion = GoalWorkspaceAuthoritySchemaV0
+	desired.LaunchReceipt.WorkspaceRef = GoalWorkspaceRefForGoalV0(desired.GoalRef)
+	desired.LaunchReceipt.ProviderRef = "provider-ref-codex"
+	desired.LaunchReceipt.RuntimeGenerationRef = "generation-ref-running-replay-001"
+	current := desired
+	current.StoreVersion = 2
+	store.states[current.RunRef] = current
+
+	saved, err := saveGoalWorkStateV0(context.Background(), store, desired)
+	if err != nil || saved.StoreVersion != 3 || saved.Status != GoalStatusRunningV0 ||
+		saved.LaunchReceipt.WorkspaceAuthoritySchemaVersion != GoalWorkspaceAuthoritySchemaV0 ||
+		saved.LaunchReceipt.WorkspaceRef != desired.LaunchReceipt.WorkspaceRef ||
+		saved.LaunchReceipt.ProviderRef != desired.LaunchReceipt.ProviderRef ||
+		saved.LaunchReceipt.RuntimeGenerationRef != desired.LaunchReceipt.RuntimeGenerationRef {
+		t.Fatalf("saved=%+v err=%v", saved, err)
+	}
+}
+
 func TestSaveGoalWorkStateV0TerminalCompatibleRechazaResultadoOCierreDistintoV0(t *testing.T) {
 	for _, test := range []struct {
 		name   string
@@ -402,6 +433,9 @@ func TestSaveGoalWorkStateV0TerminalCompatibleRechazaResultadoOCierreDistintoV0(
 			store := newGoalLifecycleStoreForTestV0()
 			desired := mustGoalLifecycleStateForTestV0(t)
 			desired.StoreVersion = 1
+			desired.LaunchReceipt.WorkspaceAuthoritySchemaVersion = GoalWorkspaceAuthoritySchemaV0
+			desired.LaunchReceipt.WorkspaceRef = GoalWorkspaceRefForGoalV0(desired.GoalRef)
+			desired.LaunchReceipt.ProviderRef = "provider-ref-codex"
 			desired.LaunchReceipt.RuntimeGenerationRef = "generation-ref-cas-terminal-exact-001"
 			desired.Status = GoalStatusCompleteV0
 			desired.LastResult = &GoalWorkResultV0{
@@ -437,6 +471,9 @@ func TestSaveGoalWorkStateV0CASSegundoConflictRechazaTerminalIncompatibleV0(t *t
 	store := newGoalLifecycleStoreForTestV0()
 	desired := mustGoalLifecycleStateForTestV0(t)
 	desired.StoreVersion = 1
+	desired.LaunchReceipt.WorkspaceAuthoritySchemaVersion = GoalWorkspaceAuthoritySchemaV0
+	desired.LaunchReceipt.WorkspaceRef = GoalWorkspaceRefForGoalV0(desired.GoalRef)
+	desired.LaunchReceipt.ProviderRef = "provider-ref-codex"
 	desired.LaunchReceipt.RuntimeGenerationRef = "generation-ref-cas2-incompatible-001"
 	desired.LastResult = &GoalWorkResultV0{
 		SchemaVersion: GoalWorkResultSchemaV0,

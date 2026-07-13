@@ -111,7 +111,7 @@ func (stack StackV0) resolveAutoprogrammingBatchWorkspaceV0(
 	}
 	workspace, issues := provisioner.ResolveGoalWorkspaceV0(ctx, orquestaruntimeworktree.GoalWorkspaceRequestV0{
 		RunRef: strings.TrimSpace(work.RequestRef), GoalRef: strings.TrimSpace(spec.GoalRef), ProjectRef: strings.TrimSpace(work.ProjectRef),
-		WorktreeRef: strings.TrimSpace(work.WorktreeRef), SourceWorkDir: strings.TrimSpace(stack.Codex.ProjectWorkDir),
+		WorktreeRef: strings.TrimSpace(work.WorktreeRef), SourceWorkDir: stack.autoprogrammingCanonicalWorkDirV0(),
 		WorkspaceRoot: strings.TrimSpace(stack.AutoprogrammingPromotion.GoalWorkspaceRoot),
 	})
 	if len(issues) > 0 || strings.TrimSpace(workspace.WorkspaceID) != workspaceRef || strings.TrimSpace(workspace.BaseRevision) == "" {

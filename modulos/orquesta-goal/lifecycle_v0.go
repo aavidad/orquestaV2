@@ -602,6 +602,11 @@ func goalWorkStateTerminalCompatibleV0(current, desired GoalWorkStateV0) bool {
 		!GoalWorkResultTerminalV0(current.Status) ||
 		current.RunRef != desired.RunRef || current.GoalRef != desired.GoalRef ||
 		current.ExternalGoalRef != desired.ExternalGoalRef || !reflect.DeepEqual(current.Spec, desired.Spec) ||
+		current.LaunchReceipt.IntentManifestRef != desired.LaunchReceipt.IntentManifestRef ||
+		current.LaunchReceipt.IntentManifestSHA256 != desired.LaunchReceipt.IntentManifestSHA256 ||
+		current.LaunchReceipt.WorkspaceAuthoritySchemaVersion != desired.LaunchReceipt.WorkspaceAuthoritySchemaVersion ||
+		current.LaunchReceipt.WorkspaceRef != desired.LaunchReceipt.WorkspaceRef ||
+		current.LaunchReceipt.ProviderRef != desired.LaunchReceipt.ProviderRef ||
 		current.LaunchReceipt.RuntimeGenerationRef != desired.LaunchReceipt.RuntimeGenerationRef ||
 		current.LastResult == nil || current.LastResult.Status != current.Status ||
 		current.LastResult.GoalRef != current.GoalRef || current.LastResult.ExternalGoalRef != current.ExternalGoalRef {
@@ -657,6 +662,9 @@ func NewGoalWorkStateFromLaunchV0(
 	if issues := ValidateGoalLaunchReceiptV0(receipt); len(issues) > 0 {
 		return GoalWorkStateV0{}, GoalWorkLifecycleIssueErrorV0{Field: "launch_receipt"}
 	}
+	if !goalNewLaunchReceiptMatchesSpecV0(receipt, spec) {
+		return GoalWorkStateV0{}, GoalWorkLifecycleIssueErrorV0{Field: "launch_receipt.intent_manifest_ref"}
+	}
 	state := GoalWorkStateV0{
 		SchemaVersion:   GoalWorkStateSchemaV0,
 		RunRef:          runRef,
@@ -682,6 +690,11 @@ func NormalizeGoalLaunchReceiptV0(receipt GoalLaunchReceiptV0) GoalLaunchReceipt
 	receipt.Status = strings.TrimSpace(receipt.Status)
 	receipt.GoalRef = strings.TrimSpace(receipt.GoalRef)
 	receipt.ExternalGoalRef = strings.TrimSpace(receipt.ExternalGoalRef)
+	receipt.IntentManifestRef = strings.TrimSpace(receipt.IntentManifestRef)
+	receipt.IntentManifestSHA256 = strings.TrimSpace(receipt.IntentManifestSHA256)
+	receipt.WorkspaceAuthoritySchemaVersion = strings.TrimSpace(receipt.WorkspaceAuthoritySchemaVersion)
+	receipt.WorkspaceRef = strings.TrimSpace(receipt.WorkspaceRef)
+	receipt.ProviderRef = strings.TrimSpace(receipt.ProviderRef)
 	receipt.RuntimeGenerationRef = strings.TrimSpace(receipt.RuntimeGenerationRef)
 	receipt.ContextBudget = NormalizeGoalContextBudgetV0(receipt.ContextBudget)
 	for i := range receipt.EvidenceRefs {
@@ -701,7 +714,15 @@ func ValidateGoalLaunchReceiptV0(receipt GoalLaunchReceiptV0) []GoalWorkIssueV0 
 	}
 	validateGoalRefsV0(&issues, "goal_ref", receipt.GoalRef)
 	validateGoalRefsV0(&issues, "external_goal_ref", receipt.ExternalGoalRef)
-	validateGoalRefsV0(&issues, "runtime_generation_ref", receipt.RuntimeGenerationRef)
+	validateGoalIntentManifestIdentityV0(&issues, receipt.IntentManifestRef, receipt.IntentManifestSHA256)
+	issues = append(issues, ValidateGoalWorkspaceAuthorityV0(
+		receipt.GoalRef,
+		receipt.WorkspaceAuthoritySchemaVersion,
+		receipt.WorkspaceRef,
+		receipt.ProviderRef,
+		receipt.RuntimeGenerationRef,
+		true,
+	)...)
 	for _, evidenceRef := range receipt.EvidenceRefs {
 		validateRequiredGoalRefV0(&issues, "evidence_refs", evidenceRef)
 	}
@@ -710,9 +731,14 @@ func ValidateGoalLaunchReceiptV0(receipt GoalLaunchReceiptV0) []GoalWorkIssueV0 
 
 func GoalObservationRequestFromStateV0(state GoalWorkStateV0) GoalObservationRequestV0 {
 	return NormalizeGoalObservationRequestV0(GoalObservationRequestV0{
-		GoalRef:              state.GoalRef,
-		ExternalGoalRef:      state.ExternalGoalRef,
-		RuntimeGenerationRef: state.LaunchReceipt.RuntimeGenerationRef,
+		GoalRef:                         state.GoalRef,
+		ExternalGoalRef:                 state.ExternalGoalRef,
+		IntentManifestRef:               state.LaunchReceipt.IntentManifestRef,
+		IntentManifestSHA256:            state.LaunchReceipt.IntentManifestSHA256,
+		WorkspaceAuthoritySchemaVersion: state.LaunchReceipt.WorkspaceAuthoritySchemaVersion,
+		WorkspaceRef:                    state.LaunchReceipt.WorkspaceRef,
+		ProviderRef:                     state.LaunchReceipt.ProviderRef,
+		RuntimeGenerationRef:            state.LaunchReceipt.RuntimeGenerationRef,
 	})
 }
 

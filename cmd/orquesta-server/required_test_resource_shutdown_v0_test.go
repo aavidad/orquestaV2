@@ -221,6 +221,7 @@ func TestGoalRequiredTestWorkspaceSelectorCloseReleasesCanonicalAdapterV0(t *tes
 		orquestaserver.ConfigV0{ProjectWorkDir: projectDir},
 		serverProjectConfigFileV0{},
 		nil,
+		nil,
 	)
 	if err != nil {
 		t.Fatalf("selector: %v", err)

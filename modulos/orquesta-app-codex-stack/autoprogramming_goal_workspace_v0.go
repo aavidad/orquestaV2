@@ -15,7 +15,7 @@ func (stack StackV0) autoprogrammingGoalProjectWorkDirV0(
 ) (string, error) {
 	provisioner := stack.AutoprogrammingPromotion.GoalWorkspaceProvisioner
 	if provisioner == nil {
-		projectDir := strings.TrimSpace(stack.Codex.ProjectWorkDir)
+		projectDir := stack.autoprogrammingCanonicalWorkDirV0()
 		if projectDir == "" {
 			return "", fmt.Errorf("autoprogramming_goal_project_work_dir_missing")
 		}
@@ -31,11 +31,18 @@ func (stack StackV0) autoprogrammingGoalProjectWorkDirV0(
 		GoalRef:       strings.TrimSpace(state.GoalRef),
 		ProjectRef:    strings.TrimSpace(state.Spec.ProjectRef),
 		WorktreeRef:   autoprogrammingPromotionGoalContextRefV0(state.Spec.ContextRefs, "worktree", "worktree_ref:"),
-		SourceWorkDir: strings.TrimSpace(stack.Codex.ProjectWorkDir),
+		SourceWorkDir: stack.autoprogrammingCanonicalWorkDirV0(),
 		WorkspaceRoot: strings.TrimSpace(stack.AutoprogrammingPromotion.GoalWorkspaceRoot),
 	})
 	if len(issues) > 0 || strings.TrimSpace(workspace.ProjectWorkDir) == "" || strings.TrimSpace(workspace.WorkspaceID) != workspaceRef {
 		return "", fmt.Errorf("autoprogramming_goal_workspace_unavailable")
 	}
 	return strings.TrimSpace(workspace.ProjectWorkDir), nil
+}
+
+func (stack StackV0) autoprogrammingCanonicalWorkDirV0() string {
+	if configured := strings.TrimSpace(stack.AutoprogrammingPromotion.CanonicalWorkDir); configured != "" {
+		return configured
+	}
+	return strings.TrimSpace(stack.Codex.ProjectWorkDir)
 }

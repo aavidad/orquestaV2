@@ -2,8 +2,10 @@ package orquestaruntimecodexgoal
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -14,6 +16,10 @@ func TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion(t *testing.T) {
 	packet, issues := BuildCodexGoalStartPacketV0(validCodexGoalSpecV0())
 	if len(issues) != 0 {
 		t.Fatalf("issues=%v", issues)
+	}
+	if packet.WorkspaceRef != orquestagoal.GoalWorkspaceRefForGoalV0(packet.GoalRef) ||
+		packet.ProviderRef != CodexGoalProviderRefV0 {
+		t.Fatalf("workspace authority=%+v", packet)
 	}
 	for _, expected := range []string{
 		"Director operativo interno",
@@ -45,7 +51,7 @@ func TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion(t *testing.T) {
 		CodexGoalResultMarkerV0,
 		CodexGoalResultSchemaV0,
 		CodexGoalResultFileNameForGoalRefV0("goal-ref-001"),
-		".orquesta-runtime/goal-receipts/goal-ref-001/orquesta_goal_result_goal-ref-001.json",
+		CodexGoalRuntimeReceiptRelativeDirV0("goal-ref-001") + "/" + CodexGoalResultFileNameForGoalRefV0("goal-ref-001"),
 		"goal_ref",
 		"schema_version",
 		"status/estado debe ser terminal explicito",
@@ -114,6 +120,19 @@ func TestBuildCodexGoalStartPacketV0IncluyeContratoDeDireccion(t *testing.T) {
 	}
 	if !hasGoalStringForTestV0(packet.DirectionContract.ToolOutputPolicy.BoundedCommandHints, "rg --max-count") {
 		t.Fatalf("direction_contract sin hints de comandos acotados: %+v", packet.DirectionContract.ToolOutputPolicy)
+	}
+}
+
+func TestBuildCodexGoalStartPacketV0PropagaIntentManifestV0(t *testing.T) {
+	spec := validCodexGoalSpecV0()
+	spec.IntentManifestRef = "intent-manifest-ref-request-ref-001"
+	spec.IntentManifestSHA256 = strings.Repeat("a", 64)
+	packet, issues := BuildCodexGoalStartPacketV0(spec)
+	if len(issues) != 0 || packet.IntentManifestRef != spec.IntentManifestRef || packet.IntentManifestSHA256 != spec.IntentManifestSHA256 {
+		t.Fatalf("packet=%+v issues=%+v", packet, issues)
+	}
+	if !strings.Contains(packet.Prompt, "intent_manifest_path: .orquesta-runtime/intent-manifests/intent-manifest-ref-request-ref-001.json") {
+		t.Fatalf("prompt missing manifest path: %s", packet.Prompt)
 	}
 }
 
@@ -338,8 +357,9 @@ func TestBuildCodexGoalStartPacketV0ProjectaPromptCacheKeyEstableV0(t *testing.T
 func TestCodexGoalPromptCacheProjectionV0SePropagaComoEvidenceRefV0(t *testing.T) {
 	launcher := CodexGoalLauncherV0{Starter: &recordingCodexGoalStarterV0{
 		receipt: CodexGoalStartReceiptV0{
-			Status:          orquestagoal.GoalStatusAcceptedV0,
-			ExternalGoalRef: "external-goal-ref-cache-001",
+			Status:               orquestagoal.GoalStatusAcceptedV0,
+			ExternalGoalRef:      "external-goal-ref-cache-001",
+			RuntimeGenerationRef: "generation-ref-cache-001",
 			PromptCache: CodexGoalPromptCacheProjectionV0{
 				CacheKey:          "provider-cache-key-hit-001",
 				CachedInputTokens: 2048,
@@ -558,11 +578,43 @@ func TestBuildCodexGoalPromptV0UsaResultadoRuntimeUnicoPorGoalRefV0(t *testing.T
 }
 
 func TestCodexGoalResultFileNameForGoalRefV0NormalizaNombreV0(t *testing.T) {
-	got := CodexGoalResultFileNameForGoalRefV0(" Goal Ref/APG 005: cierre ")
-	if got != "orquesta_goal_result_goal-ref-apg-005-cierre.json" ||
+	goalRef := " Goal Ref/APG 005: cierre "
+	digest := sha256.Sum256([]byte(goalRef))
+	want := "orquesta_goal_result_goal-ref-apg-00-" + fmt.Sprintf("%x", digest) + ".json"
+	got := CodexGoalResultFileNameForGoalRefV0(goalRef)
+	if got != want ||
 		!CodexGoalResultFileNameLooksValidV0(got) ||
 		!CodexGoalResultFileNameLooksValidV0(CodexGoalResultFileNameV0) {
-		t.Fatalf("got=%q", got)
+		t.Fatalf("got=%q want=%q", got, want)
+	}
+}
+
+func TestCodexGoalPhysicalNamesV0AreInjectiveAndBounded(t *testing.T) {
+	tests := []struct {
+		name        string
+		left, right string
+	}{
+		{name: "case", left: "Goal-Ref-001", right: "goal-ref-001"},
+		{name: "substitution", left: "goal/ref/001", right: "goal ref 001"},
+		{name: "truncation", left: strings.Repeat("a", 200) + "-left", right: strings.Repeat("a", 200) + "-right"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			left := codexGoalResultFileSafePartV0(test.left)
+			right := codexGoalResultFileSafePartV0(test.right)
+			leftDigest := sha256.Sum256([]byte(test.left))
+			rightDigest := sha256.Sum256([]byte(test.right))
+			if left == right || len(left) > codexGoalPhysicalNameMaxBytesV0 || len(right) > codexGoalPhysicalNameMaxBytesV0 ||
+				!strings.HasSuffix(left, fmt.Sprintf("%x", leftDigest)) ||
+				!strings.HasSuffix(right, fmt.Sprintf("%x", rightDigest)) {
+				t.Fatalf("left=%q right=%q", left, right)
+			}
+			leftDir := CodexGoalRuntimeReceiptRelativeDirV0(test.left)
+			rightDir := CodexGoalRuntimeReceiptRelativeDirV0(test.right)
+			if leftDir == rightDir || !strings.HasSuffix(leftDir, left) || !strings.HasSuffix(rightDir, right) {
+				t.Fatalf("left_dir=%q right_dir=%q", leftDir, rightDir)
+			}
+		})
 	}
 }
 
@@ -613,10 +665,45 @@ func TestCodexGoalLauncherV0LlamaStarterInyectado(t *testing.T) {
 	if receipt.RuntimeGenerationRef != "generation-ref-launch-propagation-001" {
 		t.Fatalf("runtime generation=%q", receipt.RuntimeGenerationRef)
 	}
+	if receipt.WorkspaceAuthoritySchemaVersion != orquestagoal.GoalWorkspaceAuthoritySchemaV0 ||
+		receipt.WorkspaceRef != orquestagoal.GoalWorkspaceRefForGoalV0(receipt.GoalRef) ||
+		receipt.ProviderRef != CodexGoalProviderRefV0 {
+		t.Fatalf("workspace authority=%+v", receipt)
+	}
 	if receipt.ContextBudget.ContextBudgetTotalBytes <= 0 ||
 		receipt.ContextBudget.StaticPromptBytes <= 0 ||
 		receipt.ContextBudget.DynamicContextBytes <= 0 {
 		t.Fatalf("receipt sin context budget: %+v", receipt.ContextBudget)
+	}
+}
+
+func TestCodexGoalLauncherV0FallaCerradoSiStartExitosoNoDevuelveGeneracionV0(t *testing.T) {
+	starter := &recordingCodexGoalStarterV0{receipt: CodexGoalStartReceiptV0{
+		Status: orquestagoal.GoalStatusAcceptedV0, ExternalGoalRef: "external-goal-ref-missing-generation",
+		EvidenceRefs: []string{"evidence-ref-start-without-generation"},
+	}}
+	receipt, err := (CodexGoalLauncherV0{Starter: starter}).LaunchGoalWorkV0(context.Background(), validCodexGoalSpecV0())
+	if err == nil || err.Error() != ErrCodexGoalRuntimeGenerationMissingV0 ||
+		receipt.Status != orquestagoal.GoalStatusInvalidV0 ||
+		receipt.WorkspaceAuthoritySchemaVersion != "" || receipt.WorkspaceRef != "" || receipt.ProviderRef != "" ||
+		receipt.RuntimeGenerationRef != "" || !hasGoalIssueCodeForTestV0(receipt.Issues, ErrCodexGoalRuntimeGenerationMissingV0) {
+		t.Fatalf("receipt=%+v err=%v", receipt, err)
+	}
+}
+
+func TestCodexGoalLauncherV0LigaManifestEnReceiptVersionadoV0(t *testing.T) {
+	spec := validCodexGoalSpecV0()
+	spec.RequestRef = "request-ref-codex-receipt-manifest-001"
+	spec.IntentManifestRef = "intent-manifest-ref-" + spec.RequestRef
+	spec.IntentManifestSHA256 = strings.Repeat("a", 64)
+	starter := &recordingCodexGoalStarterV0{receipt: CodexGoalStartReceiptV0{
+		Status: orquestagoal.GoalStatusAcceptedV0, ExternalGoalRef: "external-goal-ref-receipt-manifest-001",
+		RuntimeGenerationRef: "generation-ref-receipt-manifest-001",
+	}}
+	receipt, err := (CodexGoalLauncherV0{Starter: starter}).LaunchGoalWorkV0(context.Background(), spec)
+	if err != nil || receipt.WorkspaceAuthoritySchemaVersion != orquestagoal.GoalWorkspaceAuthoritySchemaV0 ||
+		receipt.IntentManifestRef != spec.IntentManifestRef || receipt.IntentManifestSHA256 != spec.IntentManifestSHA256 {
+		t.Fatalf("receipt=%+v err=%v", receipt, err)
 	}
 }
 
@@ -649,8 +736,9 @@ func TestCodexGoalLauncherGenerationConflictPersisteLifecycleRunningV0(t *testin
 func TestCodexGoalLauncherV0FusionaCacheStatusDelBackendV0(t *testing.T) {
 	starter := &recordingCodexGoalStarterV0{
 		receipt: CodexGoalStartReceiptV0{
-			Status:          orquestagoal.GoalStatusAcceptedV0,
-			ExternalGoalRef: "external-goal-ref-cache-001",
+			Status:               orquestagoal.GoalStatusAcceptedV0,
+			ExternalGoalRef:      "external-goal-ref-cache-001",
+			RuntimeGenerationRef: "generation-ref-cache-status-001",
 			ContextBudget: orquestagoal.GoalContextBudgetV0{
 				CodeContextCacheStatus: "hit",
 			},
@@ -732,9 +820,14 @@ Assertion failed: !(err != 0) || (err == -1 && (*__errno_location ()) == 1)`,
 
 func TestBuildCodexGoalObservationRequestV0ValidaRefs(t *testing.T) {
 	packet, issues := BuildCodexGoalObservationRequestV0(orquestagoal.GoalObservationRequestV0{
-		GoalRef:              "goal-ref-001",
-		ExternalGoalRef:      "external-goal-ref-001",
-		RuntimeGenerationRef: "generation-ref-build-observation-001",
+		GoalRef:                         "goal-ref-001",
+		ExternalGoalRef:                 "external-goal-ref-001",
+		IntentManifestRef:               "intent-manifest-ref-goal-ref-001",
+		IntentManifestSHA256:            strings.Repeat("a", 64),
+		WorkspaceAuthoritySchemaVersion: orquestagoal.GoalWorkspaceAuthoritySchemaV0,
+		WorkspaceRef:                    orquestagoal.GoalWorkspaceRefForGoalV0("goal-ref-001"),
+		ProviderRef:                     CodexGoalProviderRefV0,
+		RuntimeGenerationRef:            "generation-ref-build-observation-001",
 	})
 	if len(issues) != 0 {
 		t.Fatalf("issues=%v", issues)
@@ -742,6 +835,10 @@ func TestBuildCodexGoalObservationRequestV0ValidaRefs(t *testing.T) {
 	if packet.SchemaVersion != CodexGoalObservationRequestSchemaV0 ||
 		packet.GoalRef != "goal-ref-001" ||
 		packet.ExternalGoalRef != "external-goal-ref-001" ||
+		packet.IntentManifestRef != "intent-manifest-ref-goal-ref-001" ||
+		packet.IntentManifestSHA256 != strings.Repeat("a", 64) ||
+		packet.WorkspaceRef != orquestagoal.GoalWorkspaceRefForGoalV0("goal-ref-001") ||
+		packet.ProviderRef != CodexGoalProviderRefV0 ||
 		packet.RuntimeGenerationRef != "generation-ref-build-observation-001" {
 		t.Fatalf("packet=%+v", packet)
 	}
@@ -751,6 +848,15 @@ func TestBuildCodexGoalObservationRequestV0ValidaRefs(t *testing.T) {
 	})
 	if len(issues) == 0 {
 		t.Fatal("expected issues")
+	}
+
+	_, issues = BuildCodexGoalObservationRequestV0(orquestagoal.GoalObservationRequestV0{
+		GoalRef: "goal-ref-provider-mismatch-001", WorkspaceAuthoritySchemaVersion: orquestagoal.GoalWorkspaceAuthoritySchemaV0,
+		WorkspaceRef: orquestagoal.GoalWorkspaceRefForGoalV0("goal-ref-provider-mismatch-001"),
+		ProviderRef:  "provider-ref-other", RuntimeGenerationRef: "generation-ref-provider-mismatch-001",
+	})
+	if !hasGoalIssueCodeForTestV0(issues, orquestagoal.ErrGoalWorkspaceProviderMismatchV0) {
+		t.Fatalf("provider mismatch issues=%+v", issues)
 	}
 }
 
@@ -772,9 +878,14 @@ func TestCodexGoalObserverV0LlamaObserverInyectado(t *testing.T) {
 	observer := CodexGoalObserverV0{Observer: backend}
 
 	result, err := observer.ObserveGoalWorkV0(context.Background(), orquestagoal.GoalObservationRequestV0{
-		GoalRef:              "goal-ref-001",
-		ExternalGoalRef:      "external-goal-ref-001",
-		RuntimeGenerationRef: "generation-ref-observer-propagation-001",
+		GoalRef:                         "goal-ref-001",
+		ExternalGoalRef:                 "external-goal-ref-001",
+		IntentManifestRef:               "intent-manifest-ref-goal-ref-001",
+		IntentManifestSHA256:            strings.Repeat("a", 64),
+		WorkspaceAuthoritySchemaVersion: orquestagoal.GoalWorkspaceAuthoritySchemaV0,
+		WorkspaceRef:                    orquestagoal.GoalWorkspaceRefForGoalV0("goal-ref-001"),
+		ProviderRef:                     CodexGoalProviderRefV0,
+		RuntimeGenerationRef:            "generation-ref-observer-propagation-001",
 	})
 
 	if err != nil {
@@ -782,6 +893,8 @@ func TestCodexGoalObserverV0LlamaObserverInyectado(t *testing.T) {
 	}
 	if !backend.called ||
 		backend.lastRequest.GoalRef != "goal-ref-001" ||
+		backend.lastRequest.IntentManifestRef != "intent-manifest-ref-goal-ref-001" ||
+		backend.lastRequest.IntentManifestSHA256 != strings.Repeat("a", 64) ||
 		backend.lastRequest.RuntimeGenerationRef != "generation-ref-observer-propagation-001" ||
 		result.Status != orquestagoal.GoalStatusCompleteV0 ||
 		result.GoalRef != "goal-ref-001" ||
@@ -995,7 +1108,10 @@ func TestCodexGoalObserverV0GenerationConflictExactoEsRetryableSinIssuesV0(t *te
 	}
 	result, err := (CodexGoalObserverV0{Observer: backend}).ObserveGoalWorkV0(context.Background(), orquestagoal.GoalObservationRequestV0{
 		GoalRef: "goal-ref-generation-conflict-001", ExternalGoalRef: "thread-ref-generation-conflict-001",
-		RuntimeGenerationRef: "generation-ref-generation-conflict-001",
+		WorkspaceAuthoritySchemaVersion: orquestagoal.GoalWorkspaceAuthoritySchemaV0,
+		WorkspaceRef:                    orquestagoal.GoalWorkspaceRefForGoalV0("goal-ref-generation-conflict-001"),
+		ProviderRef:                     CodexGoalProviderRefV0,
+		RuntimeGenerationRef:            "generation-ref-generation-conflict-001",
 	})
 	if err == nil || result.Status != orquestagoal.GoalStatusRunningV0 || len(result.Issues) != 0 || result.ExternalGoalRef != "thread-ref-generation-conflict-001" {
 		t.Fatalf("result=%+v err=%v", result, err)

@@ -28,14 +28,15 @@ const (
 )
 
 type serverCodexGoalBackendV0 struct {
-	GoalLauncher  orquestagoal.GoalWorkLauncherPortV0
-	GoalObserver  orquestagoal.GoalWorkObservationPortV0
-	Starter       orquestaruntimecodexgoal.CodexGoalStarterPortV0
-	Observer      orquestaruntimecodexgoal.CodexGoalObserverPortV0
-	Controller    serverCodexGoalControllerV0
-	ClaudeControl serverClaudeGoalControllerV0
-	GeminiControl serverGeminiGoalControllerV0
-	ShutdownHook  orquestaserver.RuntimeShutdownHookPortV0
+	GoalLauncher    orquestagoal.GoalWorkLauncherPortV0
+	GoalObserver    orquestagoal.GoalWorkObservationPortV0
+	Starter         orquestaruntimecodexgoal.CodexGoalStarterPortV0
+	Observer        orquestaruntimecodexgoal.CodexGoalObserverPortV0
+	Controller      serverCodexGoalControllerV0
+	ClaudeControl   serverClaudeGoalControllerV0
+	GeminiControl   serverGeminiGoalControllerV0
+	WorkspaceLookup serverGoalWorkspaceBindingLookupV0
+	ShutdownHook    orquestaserver.RuntimeShutdownHookPortV0
 }
 
 type serverCodexAppServerGoalBackendV0 = orquestaruntimecodexappserver.GoalBackendV0
@@ -263,7 +264,7 @@ func serverGoalWorkObserverFromBackendV0(
 type serverAutoprogrammingGoalWorkspaceObserverV0 struct {
 	AppGoal             orquestagoal.GoalWorkObservationPortV0
 	AutoprogrammingGoal orquestagoal.GoalWorkObservationPortV0
-	WorkspaceLookup     serverCodexGoalWorkspaceBindingLookupV0
+	WorkspaceLookup     serverGoalWorkspaceBindingLookupV0
 }
 
 func serverGoalWorkObserverForAppAndAutoprogrammingV0(
@@ -322,7 +323,7 @@ func (observer serverAutoprogrammingGoalWorkspaceObserverV0) delegateForGoalV0(
 	if observer.WorkspaceLookup == nil {
 		return observer.AppGoal, nil
 	}
-	found, err := observer.WorkspaceLookup.HasCodexGoalWorkspaceBindingV0(ctx, goalRef)
+	found, err := observer.WorkspaceLookup.HasGoalWorkspaceBindingV0(ctx, goalRef)
 	if err != nil {
 		return nil, err
 	}
@@ -415,12 +416,15 @@ func serverAutoprogrammingGoalActiveShutdownWorkPortSeenV0(seen map[string]struc
 
 func serverCodexGoalWorkspaceLookupFromBackendV0(
 	backend serverCodexGoalBackendV0,
-) serverCodexGoalWorkspaceBindingLookupV0 {
+) serverGoalWorkspaceBindingLookupV0 {
+	if backend.WorkspaceLookup != nil {
+		return backend.WorkspaceLookup
+	}
 	client, ok := backend.Observer.(serverCodexAppServerGoalBackendV0)
 	if !ok || client.WorkspaceRouter == nil {
 		return nil
 	}
-	lookup, _ := client.WorkspaceRouter.(serverCodexGoalWorkspaceBindingLookupV0)
+	lookup, _ := client.WorkspaceRouter.(serverGoalWorkspaceBindingLookupV0)
 	return lookup
 }
 
@@ -428,20 +432,20 @@ func serverGoalObservationFingerprintFromBackendV0(
 	backend serverCodexGoalBackendV0,
 	enabled bool,
 ) orquestaserver.GoalObservationFingerprintPortV0 {
-	if !enabled || backend.Observer == nil {
+	if !enabled {
 		return nil
 	}
-	fingerprint, ok := backend.Observer.(orquestaserver.GoalObservationFingerprintPortV0)
-	if !ok {
-		return nil
+	if fingerprint, ok := backend.GoalObserver.(orquestaserver.GoalObservationFingerprintPortV0); ok {
+		return fingerprint
 	}
+	fingerprint, _ := backend.Observer.(orquestaserver.GoalObservationFingerprintPortV0)
 	return fingerprint
 }
 
 type serverAutoprogrammingGoalWorkspaceFingerprintV0 struct {
 	AppGoal             orquestaserver.GoalObservationFingerprintPortV0
 	AutoprogrammingGoal orquestaserver.GoalObservationFingerprintPortV0
-	WorkspaceLookup     serverCodexGoalWorkspaceBindingLookupV0
+	WorkspaceLookup     serverGoalWorkspaceBindingLookupV0
 }
 
 func serverGoalObservationFingerprintForAppAndAutoprogrammingV0(
@@ -466,7 +470,7 @@ func (fingerprint serverAutoprogrammingGoalWorkspaceFingerprintV0) FingerprintGo
 	ctx context.Context,
 	state orquestagoal.GoalWorkStateV0,
 ) (orquestagoal.GoalObservationFingerprintV0, bool, error) {
-	found, err := fingerprint.WorkspaceLookup.HasCodexGoalWorkspaceBindingV0(ctx, state.GoalRef)
+	found, err := fingerprint.WorkspaceLookup.HasGoalWorkspaceBindingV0(ctx, state.GoalRef)
 	if err != nil {
 		return orquestagoal.GoalObservationFingerprintV0{}, true, err
 	}

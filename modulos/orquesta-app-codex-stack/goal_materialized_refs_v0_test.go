@@ -267,7 +267,9 @@ func TestStackGoalMaterializedRefsSourceV0DetectaReceiptTerminalAusenteTrasQAPas
 		!containsStringV0(result.IssueCodes, "missing_terminal_receipt_after_artifacts_pass") ||
 		!containsStringV0(result.EvidenceRefs, "evidence-ref-goal-materialized-missing-terminal-receipt-after-artifacts-pass") ||
 		len(result.ExpectedReceiptRefs) != 3 ||
-		!containsStringV0(result.ExpectedReceiptRefs, "expected-terminal-receipt:orquesta-goal-result-goal-ref-run-goal-materialized-missing-receipt-001-json") {
+		!containsStringV0(result.ExpectedReceiptRefs, "expected-terminal-receipt:"+safeGoalMaterializedRefPartV0(
+			orquestaruntimecodexgoal.CodexGoalResultFileNameForGoalRefV0(state.GoalRef),
+		)) {
 		t.Fatalf("ok=%v result=%+v", ok, result)
 	}
 	if !containsStringPrefixForTestV0(result.EvidenceRefs, "evidence-ref-goal-materialized-qa-pass:") {

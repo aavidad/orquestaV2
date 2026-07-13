@@ -216,6 +216,18 @@ func (backend serverCodexAppServerTmuxBackendV0) ShutdownForcedStopV0(ctx contex
 	return cleanup.shutdownTmuxSessionWithOptionsV0(ctx, true, true)
 }
 
+// shutdownForcedStopGenerationV0 refuses to stop a runtime that rotated after
+// Goal selected its immutable generation. shutdownTmuxGenerationLeaseV0
+// rechecks this exact marker while holding the owner lease before kill/unlink.
+func (backend serverCodexAppServerTmuxBackendV0) shutdownForcedStopGenerationV0(ctx context.Context, expectedGenerationRef string) error {
+	expectedGenerationRef = strings.TrimSpace(expectedGenerationRef)
+	marker, ok := backend.readTmuxOwnerMarkerV0()
+	if !ok || !marker.generationMarkerV0() || strings.TrimSpace(marker.GenerationRef) != expectedGenerationRef {
+		return codexAppServerTmuxConflictErrorV0(codexAppServerTmuxGenerationConflictV0)
+	}
+	return backend.shutdownTmuxGenerationLeaseV0(ctx, marker, true)
+}
+
 func (backend serverCodexAppServerTmuxBackendV0) ShutdownConfiguredSessionAfterStartupFailureV0(ctx context.Context) error {
 	if marker, ok := backend.readTmuxOwnerMarkerV0(); ok && marker.generationMarkerV0() {
 		return backend.shutdownTmuxGenerationLeaseV0(ctx, marker, true)

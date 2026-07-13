@@ -40,7 +40,7 @@ func serverCodexGoalBackendsFromEnvV0(
 	}
 	autoprogrammingGoal, err := serverCodexGoalBackendFromEnvForWorkDirModeV0(
 		config,
-		config.ProjectWorkDir,
+		firstNonEmptyServerStackV0(config.IdleSelfImprovementProjectWorkDir, config.ProjectWorkDir),
 		true,
 	)
 	if err != nil {
@@ -207,24 +207,36 @@ func serverCodexGoalBackendFromEnvForWorkDirModeV0(
 		HighTokenUsageThreshold: int(goalProgressPolicy.CheckpointOnlyHighConsumptionTokens),
 		Runtime:                 &orquestaruntimecodexappserver.GoalRuntimeV0{},
 	}
+	var workspaceLookup serverGoalWorkspaceBindingLookupV0
 	if physicalGoalWorkspaces {
-		sourceWorkDir := firstNonEmptyServerStackV0(workDir, config.ProjectWorkDir)
-		client.WorkspaceRouter = codexGoalWorkspaceAdapterV0{
-			SourceWorkDir:       sourceWorkDir,
-			WorkspaceRoot:       codexGoalWorkspaceRootForSourceV0(sourceWorkDir),
-			ProjectRefFallback:  firstNonEmptyServerStackV0(config.IdleSelfImprovementProjectRef, "project-ref-orquesta-autoprogramming"),
-			WorktreeRefFallback: firstNonEmptyServerStackV0(config.IdleSelfImprovementWorktreeRef, "worktree-ref-orquesta-autoprogramming"),
-		}
+		adapter := serverPhysicalCodexGoalWorkspaceAdapterV0(config, workDir)
+		client.WorkspaceRouter = adapter
+		workspaceLookup = adapter
 	}
 	return serverCodexGoalBackendV0{
 		Starter: serverCodexGoalCostRoutingStarterV0{
 			Backend:      client,
 			ModelRouting: codexModelRoutingFromProjectConfigFileV0(projectConfig),
 		},
-		Observer:     client,
-		Controller:   client,
-		ShutdownHook: shutdownHook,
+		Observer:        client,
+		Controller:      client,
+		WorkspaceLookup: workspaceLookup,
+		ShutdownHook:    shutdownHook,
 	}, nil
+}
+
+func serverPhysicalCodexGoalWorkspaceAdapterV0(
+	config orquestaserver.ConfigV0,
+	workDir string,
+) codexGoalWorkspaceAdapterV0 {
+	sourceWorkDir := firstNonEmptyServerStackV0(workDir, config.ProjectWorkDir)
+	return codexGoalWorkspaceAdapterV0{
+		SourceWorkDir:       sourceWorkDir,
+		WorkspaceRoot:       codexGoalWorkspaceRootForSourceV0(sourceWorkDir),
+		ProjectRefFallback:  firstNonEmptyServerStackV0(config.IdleSelfImprovementProjectRef, "project-ref-orquesta-autoprogramming"),
+		WorktreeRefFallback: firstNonEmptyServerStackV0(config.IdleSelfImprovementWorktreeRef, "worktree-ref-orquesta-autoprogramming"),
+		IntentManifestStore: serverAutoprogrammingIntentManifestStoreV0{RootDir: filepath.Join(config.StateDir, "autoprogramming-intent-manifests")},
+	}
 }
 
 func codexAppServerConfigFromServerConfigV0(config orquestaserver.ConfigV0) orquestaruntimecodexappserver.ConfigV0 {

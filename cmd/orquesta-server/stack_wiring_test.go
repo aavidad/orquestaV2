@@ -542,10 +542,11 @@ func (starter *serverCodeContextGoalStarterForTestV0) StartCodexGoalV0(
 	starter.calls++
 	starter.packet = packet
 	return orquestaruntimecodexgoal.CodexGoalStartReceiptV0{
-		Status:          orquestagoal.GoalStatusRunningV0,
-		GoalRef:         packet.GoalRef,
-		ExternalGoalRef: "thread-ref-codebase-wiring-001",
-		EvidenceRefs:    []string{"evidence-ref-codebase-wiring-launch"},
+		Status:               orquestagoal.GoalStatusRunningV0,
+		GoalRef:              packet.GoalRef,
+		ExternalGoalRef:      "thread-ref-codebase-wiring-001",
+		RuntimeGenerationRef: codexGoalRuntimeGenerationForPacketForTestV0(packet),
+		EvidenceRefs:         []string{"evidence-ref-codebase-wiring-launch"},
 	}, nil
 }
 

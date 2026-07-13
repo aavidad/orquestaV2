@@ -1003,15 +1003,27 @@ func (backend *goalFirstHTTPBackendForTestV0) StartCodexGoalV0(
 	backend.startCalls++
 	backend.packet = packet
 	return orquestaruntimecodexgoal.CodexGoalStartReceiptV0{
-		Status:          orquestagoal.GoalStatusRunningV0,
-		GoalRef:         packet.GoalRef,
-		ExternalGoalRef: "thread-ref-http-goal-first-001",
+		Status:               orquestagoal.GoalStatusRunningV0,
+		GoalRef:              packet.GoalRef,
+		ExternalGoalRef:      "thread-ref-http-goal-first-001",
+		RuntimeGenerationRef: codexGoalRuntimeGenerationForPacketForTestV0(packet),
 		EvidenceRefs: []string{
 			"evidence-ref-http-goal-first-launch",
 			"evidence-ref-codex-app-server-turn-start-tool-output-policy-sent",
 			"evidence-ref-codex-app-server-turn-start-tool-output-policy-accepted",
 		},
 	}, nil
+}
+
+func codexGoalRuntimeGenerationForPacketForTestV0(packet orquestaruntimecodexgoal.CodexGoalStartPacketV0) string {
+	authority := orquestagoal.GoalExecutionAuthorityV0{
+		GoalRef: packet.GoalRef, IntentManifestRef: packet.IntentManifestRef,
+		IntentManifestSHA256:            packet.IntentManifestSHA256,
+		WorkspaceAuthoritySchemaVersion: orquestagoal.GoalWorkspaceAuthoritySchemaV0,
+		WorkspaceRef:                    packet.WorkspaceRef,
+		ProviderRef:                     packet.ProviderRef,
+	}
+	return orquestagoal.GoalRuntimeGenerationRefV0(authority)
 }
 
 func (backend *goalFirstHTTPBackendForTestV0) ObserveCodexGoalV0(

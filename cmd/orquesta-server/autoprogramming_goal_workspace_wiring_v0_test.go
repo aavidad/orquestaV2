@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
@@ -43,6 +45,7 @@ func TestServerPrepareRunBatchLaunchesGoalsInPhysicalWorkspacesV0(t *testing.T) 
 			WorkspaceRoot:       workspaceRoot,
 			ProjectRefFallback:  "project-ref-prepare-run-workspace",
 			WorktreeRefFallback: "worktree-ref-prepare-run-workspace",
+			IntentManifestStore: serverAutoprogrammingIntentManifestStoreV0{RootDir: filepath.Join(config.StateDir, "autoprogramming-intent-manifests")},
 		},
 		autoprogrammingProtocol,
 	)
@@ -59,7 +62,26 @@ func TestServerPrepareRunBatchLaunchesGoalsInPhysicalWorkspacesV0(t *testing.T) 
 	if err != nil {
 		t.Fatalf("build handler: %v", err)
 	}
-	payload, err := json.Marshal(serverPrepareRunBatchWorkspaceInputV0())
+	input := serverPrepareRunBatchWorkspaceInputV0()
+	for index := range input.AutoprogrammingRequest.Tasks {
+		input.AutoprogrammingRequest.Tasks[index].ContextRefs = []string{"source_surface:operator-request"}
+	}
+	input.AutoprogrammingRequest.Tasks[0].Context = []string{strings.Repeat("contexto-á漢🙂-", 1400)}
+	input.AutoprogrammingRequest.Tasks[0].AcceptanceCriteria = nil
+	for index := range 20 {
+		input.AutoprogrammingRequest.Tasks[0].AcceptanceCriteria = append(
+			input.AutoprogrammingRequest.Tasks[0].AcceptanceCriteria,
+			fmt.Sprintf("criterio original %02d á漢🙂", index+1),
+		)
+	}
+	wantManifest, manifestIssues := orquestaautoprogramming.BuildAutoprogrammingIntentManifestV0(input.AutoprogrammingRequest)
+	if len(manifestIssues) != 0 || len(wantManifest.RequestJSON) <= 14*1024 {
+		t.Fatalf("large manifest fixture invalid: bytes=%d issues=%+v", len(wantManifest.RequestJSON), manifestIssues)
+	}
+	if bytes.Contains(wantManifest.RequestJSON, []byte("goal_capability:")) {
+		t.Fatalf("fixture already contains runtime markers: %s", wantManifest.RequestJSON)
+	}
+	payload, err := json.Marshal(input)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
@@ -80,9 +102,34 @@ func TestServerPrepareRunBatchLaunchesGoalsInPhysicalWorkspacesV0(t *testing.T) 
 	if len(autoprogrammingProtocol.cwds) != 2 {
 		t.Fatalf("goals fisicos lanzados=%d cwds=%v", len(autoprogrammingProtocol.cwds), autoprogrammingProtocol.cwds)
 	}
+	durableManifest, err := (serverAutoprogrammingIntentManifestStoreV0{
+		RootDir: filepath.Join(config.StateDir, "autoprogramming-intent-manifests"),
+	}).LoadAutoprogrammingIntentManifestV0(context.Background(), input.AutoprogrammingRequest.RequestRef)
+	if err != nil {
+		t.Fatalf("load durable envelope manifest: %v", err)
+	}
 	for _, cwd := range autoprogrammingProtocol.cwds {
 		if filepath.Clean(cwd) == filepath.Clean(repo) || !serverWorktreeGitOKV0(context.Background(), cwd, "rev-parse", "--is-inside-work-tree") {
 			t.Fatalf("goal lanzado fuera de su worktree fisico: cwd=%q repo=%q", cwd, repo)
+		}
+		manifestPath := filepath.Join(cwd, ".orquesta-runtime", "intent-manifests", durableManifest.ManifestRef+".json")
+		raw, err := os.ReadFile(manifestPath)
+		if err != nil || !bytes.Equal(raw, durableManifest.RequestJSON) || bytes.Contains(raw, []byte("goal_capability:")) {
+			t.Fatalf("original intent lost in %q: bytes=%d durable_bytes=%d equal=%v runtime_markers=%v err=%v", manifestPath, len(raw), len(durableManifest.RequestJSON), bytes.Equal(raw, durableManifest.RequestJSON), bytes.Contains(raw, []byte("goal_capability:")), err)
+		}
+		info, err := os.Stat(manifestPath)
+		if err != nil || info.Mode().Perm() != 0o400 {
+			t.Fatalf("manifest mode in %q: info=%v err=%v", manifestPath, info, err)
+		}
+	}
+	if len(autoprogrammingProtocol.prompts) != 2 {
+		t.Fatalf("turn prompts=%d", len(autoprogrammingProtocol.prompts))
+	}
+	for _, prompt := range autoprogrammingProtocol.prompts {
+		for _, want := range []string{durableManifest.ManifestRef, durableManifest.RequestSHA256, ".orquesta-runtime/intent-manifests/" + durableManifest.ManifestRef + ".json"} {
+			if !strings.Contains(prompt, want) {
+				t.Fatalf("prompt missing %q: %s", want, prompt)
+			}
 		}
 	}
 	selector, ok := stack.Ports.GoalRequiredTestSnapshotObserver.(*serverGoalRequiredTestAttestationWorkspaceSelectorV0)
@@ -152,10 +199,12 @@ func TestGoalRequiredTestAttestationWorkspaceSelectorResolvesAfterRestartAndFail
 		SourceWorkDir: adapter.SourceWorkDir, WorkspaceRoot: adapter.WorkspaceRoot,
 		ProjectRefFallback: adapter.ProjectRefFallback, WorktreeRefFallback: adapter.WorktreeRefFallback,
 	}
+	state := serverAttestationGoalStateWithWorkspaceAuthorityForTestV0(packet.RequestRef, packet.GoalRef)
 	selector, err := goalRequiredTestAttestationWorkspaceSelectorFromConfigV0(
 		orquestaserver.ConfigV0{ProjectWorkDir: repo},
 		serverProjectConfigFileV0{},
 		restarted,
+		serverAttestationGoalStateStoreForAuthorityTestV0{state: state},
 	)
 	if err != nil {
 		t.Fatalf("selector: %v", err)
@@ -175,7 +224,7 @@ func TestGoalRequiredTestAttestationWorkspaceSelectorResolvesAfterRestartAndFail
 	}
 	resolvedRoot, err := resultRootResolver.ResolveGoalMaterializedResultProjectRootV0(
 		context.Background(),
-		orquestagoal.GoalWorkStateV0{GoalRef: packet.GoalRef},
+		state,
 	)
 	if err != nil || filepath.Clean(resolvedRoot) != filepath.Clean(binding.ProjectWorkDir) {
 		t.Fatalf("result watcher root=%q want=%q err=%v", resolvedRoot, binding.ProjectWorkDir, err)
@@ -196,7 +245,7 @@ func TestGoalRequiredTestAttestationWorkspaceSelectorResolvesAfterRestartAndFail
 	}
 	if _, err := resultRootResolver.ResolveGoalMaterializedResultProjectRootV0(
 		context.Background(),
-		orquestagoal.GoalWorkStateV0{GoalRef: packet.GoalRef},
+		state,
 	); err == nil {
 		t.Fatal("result watcher debe fallar si un indice persistido no resuelve su workspace")
 	}
@@ -205,6 +254,101 @@ func TestGoalRequiredTestAttestationWorkspaceSelectorResolvesAfterRestartAndFail
 	}); err == nil {
 		t.Fatal("attest debe fallar si un indice persistido no resuelve su workspace")
 	}
+}
+
+func TestGoalRequiredTestAttestationWorkspaceSelectorUsesPersistedExecutionAuthorityV0(t *testing.T) {
+	repo := newCodexGoalWorkspaceAdapterGitRepoV0(t)
+	t.Setenv(
+		envGoalRequiredTestAttestationConfigFileV0,
+		writeCompleteGoalRequiredTestAttestationConfigForTestV0(t, repo, filepath.Join(t.TempDir(), "attestation-runtime")),
+	)
+	state := orquestagoal.GoalWorkStateV0{
+		RunRef: "run-ref-attestation-authority-001", GoalRef: "goal-ref-attestation-authority-001",
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			ExternalGoalRef:                 "external-goal-ref-attestation-authority-001",
+			WorkspaceAuthoritySchemaVersion: orquestagoal.GoalWorkspaceAuthoritySchemaV0,
+			WorkspaceRef:                    orquestagoal.GoalWorkspaceRefForGoalV0("goal-ref-attestation-authority-001"),
+			ProviderRef:                     "provider-ref-codex",
+			RuntimeGenerationRef:            "runtime-generation-ref-attestation-authority-001",
+		},
+	}
+	lookup := &serverAttestationWorkspaceLookupForAuthorityTestV0{
+		binding: orquestagoal.GoalWorkspaceBindingV0{ProjectWorkDir: repo},
+	}
+	selector, err := goalRequiredTestAttestationWorkspaceSelectorFromConfigV0(
+		orquestaserver.ConfigV0{ProjectWorkDir: repo},
+		serverProjectConfigFileV0{},
+		lookup,
+		serverAttestationGoalStateStoreForAuthorityTestV0{state: state},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = selector.Close() })
+	adapter, err := selector.adapterForGoalV0(context.Background(), state.RunRef, state.GoalRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if adapter != selector.Canonical {
+		_ = adapter.Close()
+	}
+	want := orquestagoal.GoalObservationRequestFromStateV0(state)
+	got := lookup.request
+	if got.GoalRef != want.GoalRef || got.ExternalGoalRef != want.ExternalGoalRef ||
+		got.WorkspaceAuthoritySchemaVersion != want.WorkspaceAuthoritySchemaVersion ||
+		got.WorkspaceRef != want.WorkspaceRef || got.ProviderRef != want.ProviderRef ||
+		got.RuntimeGenerationRef != want.RuntimeGenerationRef {
+		t.Fatalf("authority lost: got=%+v want=%+v", got, want)
+	}
+
+	selector.GoalStateStore = serverAttestationGoalStateStoreForAuthorityTestV0{err: errors.New("state unavailable")}
+	lookup.request = orquestagoal.GoalObservationRequestV0{}
+	if _, err := selector.adapterForGoalV0(context.Background(), state.RunRef, state.GoalRef); err == nil {
+		t.Fatal("attestation accepted a workspace without persisted execution authority")
+	}
+	if lookup.request.GoalRef != "" {
+		t.Fatalf("workspace resolved before authority: %+v", lookup.request)
+	}
+}
+
+type serverAttestationGoalStateStoreForAuthorityTestV0 struct {
+	state orquestagoal.GoalWorkStateV0
+	err   error
+}
+
+func (store serverAttestationGoalStateStoreForAuthorityTestV0) SaveGoalWorkStateV0(context.Context, orquestagoal.GoalWorkStateV0) error {
+	return nil
+}
+
+func (store serverAttestationGoalStateStoreForAuthorityTestV0) LoadGoalWorkStateV0(context.Context, string) (orquestagoal.GoalWorkStateV0, error) {
+	return store.state, store.err
+}
+
+func serverAttestationGoalStateWithWorkspaceAuthorityForTestV0(runRef string, goalRef string) orquestagoal.GoalWorkStateV0 {
+	spec := orquestagoal.GoalWorkSpecV0{RunRef: runRef, GoalRef: goalRef}
+	authority := orquestagoal.GoalExecutionAuthorityForProviderV0(spec, "provider-ref-codex")
+	externalGoalRef := "external-" + goalRef
+	return orquestagoal.GoalWorkStateV0{
+		RunRef: runRef, GoalRef: goalRef, ExternalGoalRef: externalGoalRef, Spec: spec,
+		LaunchReceipt: orquestagoal.ApplyGoalExecutionAuthorityToReceiptV0(
+			orquestagoal.GoalLaunchReceiptV0{ExternalGoalRef: externalGoalRef},
+			authority,
+		),
+	}
+}
+
+type serverAttestationWorkspaceLookupForAuthorityTestV0 struct {
+	binding orquestagoal.GoalWorkspaceBindingV0
+	request orquestagoal.GoalObservationRequestV0
+}
+
+func (*serverAttestationWorkspaceLookupForAuthorityTestV0) HasGoalWorkspaceBindingV0(context.Context, string) (bool, error) {
+	return true, nil
+}
+
+func (lookup *serverAttestationWorkspaceLookupForAuthorityTestV0) ResolveGoalWorkspaceV0(_ context.Context, request orquestagoal.GoalObservationRequestV0) (orquestagoal.GoalWorkspaceBindingV0, error) {
+	lookup.request = request
+	return lookup.binding, nil
 }
 
 func TestGoalRequiredTestAttestationWorkspaceSelectorRepeatedCaptureAttestDoesNotLeakFDsV0(t *testing.T) {
@@ -236,6 +380,9 @@ func TestGoalRequiredTestAttestationWorkspaceSelectorRepeatedCaptureAttestDoesNo
 		orquestaserver.ConfigV0{ProjectWorkDir: repo},
 		serverProjectConfigFileV0{},
 		lookup,
+		serverAttestationGoalStateStoreForAuthorityTestV0{
+			state: serverAttestationGoalStateWithWorkspaceAuthorityForTestV0(packet.RequestRef, packet.GoalRef),
+		},
 	)
 	if err != nil {
 		t.Fatalf("selector: %v", err)
@@ -286,7 +433,9 @@ func TestGoalRequiredTestAttestationWorkspaceSelectorRepeatedCaptureAttestDoesNo
 	if err != nil {
 		t.Fatal(err)
 	}
-	if after != before {
+	// Subprocess fixtures from other package tests may finish closing inherited
+	// descriptors during this loop. Only growth is evidence of a leak here.
+	if after > before {
 		t.Fatalf("workspace Capture+Attest fd leak: before=%d after=%d", before, after)
 	}
 }
@@ -352,8 +501,9 @@ func serverPrepareRunWorkspaceTaskV0(suffix, path string) orquestaautoprogrammin
 }
 
 type serverPrepareRunWorkspaceProtocolV0 struct {
-	starts int
-	cwds   []string
+	starts  int
+	cwds    []string
+	prompts []string
 }
 
 func (protocol *serverPrepareRunWorkspaceProtocolV0) StartThreadV0(
@@ -383,6 +533,7 @@ func (protocol *serverPrepareRunWorkspaceProtocolV0) StartTurnV0(
 	_ context.Context,
 	params serverCodexAppServerTurnStartParamsV0,
 ) (serverCodexAppServerTurnV0, error) {
+	protocol.prompts = append(protocol.prompts, params.InputText)
 	return serverCodexAppServerTurnV0{ID: "turn-" + params.ThreadID, Status: "inProgress"}, nil
 }
 

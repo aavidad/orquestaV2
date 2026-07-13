@@ -40,6 +40,7 @@ func autoprogrammingPromotionConfigFromEnvV0(
 	workspaceSource := firstNonEmptyServerStackV0(config.IdleSelfImprovementProjectWorkDir, config.ProjectWorkDir)
 	result := orquestaappcodexstack.AutoprogrammingPromotionConfigV0{
 		GoalWorkspaceProvisioner: orquestaruntimeworktree.GitGoalWorkspaceProvisionerV0{},
+		CanonicalWorkDir:         strings.TrimSpace(workspaceSource),
 		GoalWorkspaceRoot:        codexGoalWorkspaceRootForSourceV0(workspaceSource),
 	}
 	if !autoprogrammingPromotionEnabledFromProjectConfigV0(promotion) {

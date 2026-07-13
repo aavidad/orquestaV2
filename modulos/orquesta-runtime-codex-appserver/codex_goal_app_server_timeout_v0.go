@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaruntimecodexgoal "orquesta/modulos/orquesta-runtime-codex-goal"
 	orquestaruntimeworktree "orquesta/modulos/orquesta-runtime-worktree"
 )
@@ -14,9 +15,47 @@ type serverCodexAppServerGoalRuntimeV0 struct {
 	mu                sync.Mutex
 	generationRef     string
 	threadGenerations map[string]string
+	threadAuthorities map[string]orquestagoal.GoalExecutionAuthorityV0
 	startedAt         map[string]time.Time
 	timeouts          map[string]time.Duration
 	writeSetBaselines map[string]codexAppServerRuntimeWriteSetBaselineV0
+}
+
+func (runtime *serverCodexAppServerGoalRuntimeV0) bindThreadAuthorityV0(
+	threadID string,
+	authority orquestagoal.GoalExecutionAuthorityV0,
+) bool {
+	threadID = strings.TrimSpace(threadID)
+	authority = orquestagoal.NormalizeGoalExecutionAuthorityV0(authority)
+	if runtime == nil || threadID == "" || len(orquestagoal.GoalExecutionAuthorityIssuesV0(authority, false)) != 0 {
+		return false
+	}
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	runtime.activateGenerationLockedV0(authority.RuntimeGenerationRef)
+	if current, found := runtime.threadAuthorities[threadID]; found &&
+		!orquestagoal.GoalExecutionAuthorityMatchesV0(current, authority) {
+		return false
+	}
+	runtime.threadGenerations[threadID] = authority.RuntimeGenerationRef
+	runtime.threadAuthorities[threadID] = authority
+	return true
+}
+
+func (runtime *serverCodexAppServerGoalRuntimeV0) threadBoundToAuthorityV0(
+	threadID string,
+	authority orquestagoal.GoalExecutionAuthorityV0,
+) bool {
+	threadID = strings.TrimSpace(threadID)
+	authority = orquestagoal.NormalizeGoalExecutionAuthorityV0(authority)
+	if runtime == nil || threadID == "" || len(orquestagoal.GoalExecutionAuthorityIssuesV0(authority, false)) != 0 {
+		return false
+	}
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	current, found := runtime.threadAuthorities[threadID]
+	return found && runtime.generationRef == authority.RuntimeGenerationRef &&
+		orquestagoal.GoalExecutionAuthorityMatchesV0(current, authority)
 }
 
 func (runtime *serverCodexAppServerGoalRuntimeV0) bindThreadGenerationV0(threadID, generationRef string) bool {
@@ -48,10 +87,14 @@ func (runtime *serverCodexAppServerGoalRuntimeV0) activateGenerationLockedV0(gen
 		runtime.timeouts = nil
 		runtime.writeSetBaselines = nil
 		runtime.threadGenerations = nil
+		runtime.threadAuthorities = nil
 	}
 	runtime.generationRef = generationRef
 	if runtime.threadGenerations == nil {
 		runtime.threadGenerations = map[string]string{}
+	}
+	if runtime.threadAuthorities == nil {
+		runtime.threadAuthorities = map[string]orquestagoal.GoalExecutionAuthorityV0{}
 	}
 }
 

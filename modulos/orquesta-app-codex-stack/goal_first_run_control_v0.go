@@ -17,13 +17,19 @@ const (
 )
 
 type GoalBackendControlRequestV0 struct {
-	RunRef          string   `json:"run_ref,omitempty"`
-	GoalRef         string   `json:"goal_ref,omitempty"`
-	ExternalGoalRef string   `json:"external_goal_ref,omitempty"`
-	Action          string   `json:"action,omitempty"`
-	Reason          string   `json:"reason,omitempty"`
-	Forced          bool     `json:"forced,omitempty"`
-	EvidenceRefs    []string `json:"evidence_refs,omitempty"`
+	RunRef                          string   `json:"run_ref,omitempty"`
+	GoalRef                         string   `json:"goal_ref,omitempty"`
+	ExternalGoalRef                 string   `json:"external_goal_ref,omitempty"`
+	IntentManifestRef               string   `json:"intent_manifest_ref,omitempty"`
+	IntentManifestSHA256            string   `json:"intent_manifest_sha256,omitempty"`
+	WorkspaceAuthoritySchemaVersion string   `json:"workspace_authority_schema_version,omitempty"`
+	WorkspaceRef                    string   `json:"workspace_ref,omitempty"`
+	ProviderRef                     string   `json:"provider_ref,omitempty"`
+	RuntimeGenerationRef            string   `json:"runtime_generation_ref,omitempty"`
+	Action                          string   `json:"action,omitempty"`
+	Reason                          string   `json:"reason,omitempty"`
+	Forced                          bool     `json:"forced,omitempty"`
+	EvidenceRefs                    []string `json:"evidence_refs,omitempty"`
 }
 
 type GoalBackendControlResultV0 struct {
@@ -258,13 +264,19 @@ func (port goalFirstRunControlPortV0) forceTerminalGoalFirstRunControlV0(
 		return fallback, fallbackErr
 	}
 	control, err := port.BackendControl.ControlGoalBackendV0(ctx, GoalBackendControlRequestV0{
-		RunRef:          state.RunRef,
-		GoalRef:         state.GoalRef,
-		ExternalGoalRef: state.ExternalGoalRef,
-		Action:          command.Action,
-		Reason:          command.Reason,
-		Forced:          true,
-		EvidenceRefs:    command.EvidenceRefs,
+		RunRef:                          state.RunRef,
+		GoalRef:                         state.GoalRef,
+		ExternalGoalRef:                 state.ExternalGoalRef,
+		IntentManifestRef:               state.LaunchReceipt.IntentManifestRef,
+		IntentManifestSHA256:            state.LaunchReceipt.IntentManifestSHA256,
+		WorkspaceAuthoritySchemaVersion: state.LaunchReceipt.WorkspaceAuthoritySchemaVersion,
+		WorkspaceRef:                    state.LaunchReceipt.WorkspaceRef,
+		ProviderRef:                     state.LaunchReceipt.ProviderRef,
+		RuntimeGenerationRef:            state.LaunchReceipt.RuntimeGenerationRef,
+		Action:                          command.Action,
+		Reason:                          command.Reason,
+		Forced:                          true,
+		EvidenceRefs:                    command.EvidenceRefs,
 	})
 	if err != nil || strings.TrimSpace(control.Status) != orquestagoal.GoalStatusBlockedV0 || !control.BackendStopped {
 		return fallback, fallbackErr

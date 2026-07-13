@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
@@ -63,10 +64,11 @@ func TestCodexStackAutoprogrammingPrepareRunV0ReintentaScannerParadoPorControlV0
 			DirectorTaskStore: taskStore,
 		},
 		Stores: StoresV0{
-			RunStore:   runStore,
-			TaskStore:  taskStore,
-			RunQueue:   queue,
-			RunControl: queue,
+			RunStore:                           runStore,
+			TaskStore:                          taskStore,
+			RunQueue:                           queue,
+			RunControl:                         queue,
+			AutoprogrammingIntentManifestStore: orquestaautoprogramming.NewInMemoryAutoprogrammingIntentManifestStoreV0(),
 		},
 		Codex:                         CodexRuntimeConfigV0{ProjectWorkDir: t.TempDir()},
 		RunQueue:                      RunQueueConfigV0{QueueRef: "queue-main", DefaultPriorityScore: 10},
@@ -131,9 +133,10 @@ func TestCodexStackAutoprogrammingPrepareRunV0ReencuadraRetryRepetido(t *testing
 			DirectorTaskStore: taskStore,
 		},
 		Stores: StoresV0{
-			RunStore:  runStore,
-			TaskStore: taskStore,
-			RunQueue:  queue,
+			RunStore:                           runStore,
+			TaskStore:                          taskStore,
+			RunQueue:                           queue,
+			AutoprogrammingIntentManifestStore: orquestaautoprogramming.NewInMemoryAutoprogrammingIntentManifestStoreV0(),
 		},
 		Codex:                         CodexRuntimeConfigV0{ProjectWorkDir: t.TempDir()},
 		RunQueue:                      RunQueueConfigV0{QueueRef: "queue-main", DefaultPriorityScore: 10},

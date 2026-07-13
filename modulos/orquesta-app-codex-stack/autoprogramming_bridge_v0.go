@@ -15,18 +15,19 @@ import (
 const AutoprogrammingBridgeResultSchemaVersionV0 = "autoprogramming_bridge_result.v0"
 
 type AutoprogrammingBridgeRequestV0 struct {
-	Request                          orquestaautoprogramming.AutoprogrammingRequestV0 `json:"request"`
-	OccurredAt                       string                                           `json:"occurred_at,omitempty"`
-	CorrelationID                    string                                           `json:"correlation_id,omitempty"`
-	RequestedBy                      string                                           `json:"requested_by,omitempty"`
-	DirectorExecutionMode            string                                           `json:"director_execution_mode,omitempty"`
-	AllowLegacyDirectorLoop          bool                                             `json:"allow_legacy_director_loop,omitempty"`
-	LegacyDirectorLoopOptInAvailable bool                                             `json:"legacy_director_loop_opt_in_available,omitempty"`
-	MaxBursts                        int                                              `json:"max_bursts,omitempty"`
-	MaxStepsPerBurst                 int                                              `json:"max_steps_per_burst,omitempty"`
-	MaxDispatchesPerWait             int                                              `json:"max_dispatches_per_wait,omitempty"`
-	MaxCommands                      int                                              `json:"max_commands,omitempty"`
-	MaxOutboxPerCycle                int                                              `json:"max_outbox_per_cycle,omitempty"`
+	Request                          orquestaautoprogramming.AutoprogrammingRequestV0             `json:"request"`
+	PrepareRunEnvelope               *orquestaautoprogramming.AutoprogrammingPrepareRunEnvelopeV0 `json:"prepare_run_envelope,omitempty"`
+	OccurredAt                       string                                                       `json:"occurred_at,omitempty"`
+	CorrelationID                    string                                                       `json:"correlation_id,omitempty"`
+	RequestedBy                      string                                                       `json:"requested_by,omitempty"`
+	DirectorExecutionMode            string                                                       `json:"director_execution_mode,omitempty"`
+	AllowLegacyDirectorLoop          bool                                                         `json:"allow_legacy_director_loop,omitempty"`
+	LegacyDirectorLoopOptInAvailable bool                                                         `json:"legacy_director_loop_opt_in_available,omitempty"`
+	MaxBursts                        int                                                          `json:"max_bursts,omitempty"`
+	MaxStepsPerBurst                 int                                                          `json:"max_steps_per_burst,omitempty"`
+	MaxDispatchesPerWait             int                                                          `json:"max_dispatches_per_wait,omitempty"`
+	MaxCommands                      int                                                          `json:"max_commands,omitempty"`
+	MaxOutboxPerCycle                int                                                          `json:"max_outbox_per_cycle,omitempty"`
 }
 
 type AutoprogrammingBridgeResultV0 struct {
@@ -52,6 +53,15 @@ func PrepareAutoprogrammingRunV0(
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	var authorityIssues []orquestaautoprogramming.AutoprogrammingRequestIssueV0
+	request, authorityIssues = autoprogrammingBridgeRequestFromEnvelopeAuthorityV0(request)
+	if len(authorityIssues) != 0 {
+		return AutoprogrammingBridgeResultV0{
+			SchemaVersion: AutoprogrammingBridgeResultSchemaVersionV0,
+			Accepted:      false,
+			Issues:        authorityIssues,
+		}, nil
+	}
 	request = normalizeAutoprogrammingBridgeRequestV0(request)
 	if err := validateAutoprogrammingBridgePortsV0(ports); err != nil {
 		return AutoprogrammingBridgeResultV0{}, err
@@ -59,6 +69,36 @@ func PrepareAutoprogrammingRunV0(
 	request = autoprogrammingBridgeRequestWithGoalFirstBackendMarkersV0(request, ports)
 	work := orquestaautoprogramming.BuildAutoprogrammingProgrammableWorkV0(request.Request)
 	return prepareAutoprogrammingRunWithWorkV0(ctx, request, ports, work)
+}
+
+func autoprogrammingBridgeRequestFromEnvelopeAuthorityV0(
+	request AutoprogrammingBridgeRequestV0,
+) (AutoprogrammingBridgeRequestV0, []orquestaautoprogramming.AutoprogrammingRequestIssueV0) {
+	if request.PrepareRunEnvelope == nil {
+		return request, nil
+	}
+	envelope, issues := orquestaautoprogramming.CanonicalAutoprogrammingPrepareRunEnvelopeV0(*request.PrepareRunEnvelope)
+	if len(issues) != 0 {
+		return AutoprogrammingBridgeRequestV0{}, issues
+	}
+	runtimeRequest, runtimeIssues := orquestaautoprogramming.CanonicalAutoprogrammingIntentRequestV0(envelope.AutoprogrammingRequest)
+	if len(runtimeIssues) != 0 {
+		return AutoprogrammingBridgeRequestV0{}, runtimeIssues
+	}
+	// Envelope fields are authoritative. Legacy bridge fields remain only for
+	// callers that do not send an envelope and cannot diverge from this command.
+	request.Request = runtimeRequest
+	request.OccurredAt = envelope.OccurredAt
+	request.CorrelationID = envelope.CorrelationID
+	request.RequestedBy = envelope.RequestedBy
+	request.DirectorExecutionMode = envelope.DirectorExecutionMode
+	request.MaxBursts = envelope.MaxBursts
+	request.MaxStepsPerBurst = envelope.MaxStepsPerBurst
+	request.MaxDispatchesPerWait = envelope.MaxDispatchesPerWait
+	request.MaxCommands = envelope.MaxCommands
+	request.MaxOutboxPerCycle = envelope.MaxOutboxPerCycle
+	request.PrepareRunEnvelope = &envelope
+	return request, nil
 }
 
 func prepareAutoprogrammingRunWithWorkV0(

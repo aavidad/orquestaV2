@@ -93,6 +93,113 @@ func TestPrepareAutoprogrammingRunFromStackV0PropagaValidacionDePuertos(t *testi
 	}
 }
 
+func TestPrepareAutoprogrammingRunFromStackV0GoalFirstFailsBeforeBackendWithoutIntentManifestV0(t *testing.T) {
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	stack.Stores.AutoprogrammingIntentManifestStore = nil
+	request := autoprogrammingBridgeRequestForTestV0()
+	request.Tasks[0].ContextRefs = []string{
+		"goal_migration:goal-first",
+		"goal_capability:starter",
+		"goal_capability:observer",
+		"goal_capability:closure-validator",
+	}
+	result, err := PrepareAutoprogrammingRunFromStackV0(context.Background(), stack, AutoprogrammingBridgeRequestV0{
+		Request: request, DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeGoalFirstV0,
+	})
+	if err != nil || result.Accepted || len(result.Issues) != 1 || result.Issues[0].Code != "intent_manifest_store_missing" {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+	if runtime.launchCountV0() != 0 {
+		t.Fatalf("backend invoked without manifest: %d", runtime.launchCountV0())
+	}
+}
+
+func TestPrepareAutoprogrammingRunFromStackV0LegacyDoesNotRequireIntentManifestV0(t *testing.T) {
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	stack.Stores.AutoprogrammingIntentManifestStore = nil
+	stack.AllowLegacyAutoprogrammingRun = true
+	request := autoprogrammingBridgeRequestForTestV0()
+	// Legacy accepted this typed identity before manifests existed; the
+	// goal-first manifest regex must not retroactively reject that path.
+	request.RequestRef = "AUTOPROGRAMMING-REQUEST-REF-LEGACY-UPPERCASE"
+	result, err := PrepareAutoprogrammingRunFromStackV0(context.Background(), stack, AutoprogrammingBridgeRequestV0{
+		Request:                 request,
+		DirectorExecutionMode:   orquestaappdirectorservice.AppDirectorExecutionModeLegacyDirectorLoopV0,
+		AllowLegacyDirectorLoop: true,
+	})
+	if err != nil || !result.Accepted {
+		t.Fatalf("legacy result=%+v err=%v", result, err)
+	}
+}
+
+func TestPrepareAutoprogrammingRunFromStackV0GoalFirstRejectsManifestIdentityBeforeLaunchV0(t *testing.T) {
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	request := autoprogrammingBridgeRequestForTestV0()
+	request.RequestRef = "AUTOPROGRAMMING-REQUEST-REF-GOAL-FIRST-UPPERCASE"
+	request.Tasks[0].ContextRefs = []string{
+		"goal_migration:goal-first",
+		"goal_capability:starter",
+		"goal_capability:observer",
+		"goal_capability:closure-validator",
+	}
+	result, err := PrepareAutoprogrammingRunFromStackV0(context.Background(), stack, AutoprogrammingBridgeRequestV0{
+		Request: request, DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeGoalFirstV0,
+	})
+	foundIdentityIssue := false
+	for _, issue := range result.Issues {
+		foundIdentityIssue = foundIdentityIssue || issue.Code == "intent_manifest_request_ref_invalid"
+	}
+	if err != nil || result.Accepted || !foundIdentityIssue {
+		t.Fatalf("goal-first invalid identity result=%+v err=%v", result, err)
+	}
+	if runtime.launchCountV0() != 0 {
+		t.Fatalf("backend invoked with invalid manifest identity: %d", runtime.launchCountV0())
+	}
+}
+
+func TestPrepareAutoprogrammingRunFromStackV0RejectsIntentManifestStoreSubstitutionBeforeLaunchV0(t *testing.T) {
+	runtime := newFakeCodexStackRuntimeV0()
+	stack := mustBuildCodexStackForTestV0(t, runtime)
+	replacementRequest := autoprogrammingBridgeRequestForTestV0()
+	replacementRequest.RequestRef = "request-ref-intent-manifest-substitution"
+	replacement, issues := orquestaautoprogramming.BuildAutoprogrammingIntentManifestV0(replacementRequest)
+	if len(issues) != 0 {
+		t.Fatal(issues)
+	}
+	stack.Stores.AutoprogrammingIntentManifestStore = substitutingAutoprogrammingIntentManifestStoreV0{Replacement: replacement}
+	request := autoprogrammingBridgeRequestForTestV0()
+	request.Tasks[0].ContextRefs = []string{
+		"goal_migration:goal-first",
+		"goal_capability:starter",
+		"goal_capability:observer",
+		"goal_capability:closure-validator",
+	}
+	result, err := PrepareAutoprogrammingRunFromStackV0(context.Background(), stack, AutoprogrammingBridgeRequestV0{
+		Request: request, DirectorExecutionMode: orquestaappdirectorservice.AppDirectorExecutionModeGoalFirstV0,
+	})
+	if err != nil || result.Accepted || len(result.Issues) != 1 || result.Issues[0].Code != "intent_manifest_store_substitution" {
+		t.Fatalf("substitution result=%+v err=%v", result, err)
+	}
+	if runtime.launchCountV0() != 0 {
+		t.Fatalf("backend invoked after store substitution: %d", runtime.launchCountV0())
+	}
+}
+
+type substitutingAutoprogrammingIntentManifestStoreV0 struct {
+	Replacement orquestaautoprogramming.AutoprogrammingIntentManifestV0
+}
+
+func (store substitutingAutoprogrammingIntentManifestStoreV0) CreateAutoprogrammingIntentManifestIfAbsentV0(context.Context, orquestaautoprogramming.AutoprogrammingIntentManifestV0) (orquestaautoprogramming.AutoprogrammingIntentManifestV0, error) {
+	return store.Replacement, nil
+}
+
+func (store substitutingAutoprogrammingIntentManifestStoreV0) LoadAutoprogrammingIntentManifestV0(context.Context, string) (orquestaautoprogramming.AutoprogrammingIntentManifestV0, error) {
+	return store.Replacement, nil
+}
+
 func TestCodexStackAutoprogrammingPrepareRunAPIV0PreparaRunYSupervisorArranca(t *testing.T) {
 	runtime := newFakeCodexStackRuntimeV0()
 	stack := mustBuildCodexStackForTestV0(t, runtime)
@@ -1019,6 +1126,9 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaBatchGoalsSinCola
 	stack.AutoprogrammingPromotion.GoalWorkspaceProvisioner = &fakeGoalWorkspaceProvisionerForStackTestV0{root: t.TempDir()}
 	stack.AutoprogrammingPromotion.GoalWorkspaceRoot = t.TempDir()
 	stack.Stores.AutoprogrammingBatchStore = newAutoprogrammingBatchStoreForTestV0()
+	// A request-only manifest from the failed preflight is immutable. The
+	// versioned prepare envelope therefore retries under a fresh request ref.
+	request.RequestRef = "run-autoprogramming-goal-first-batch-retry-001"
 
 	prepared, err := NewCodexStackAutoprogrammingPrepareRunExecutorV0(
 		&stack,
@@ -1040,8 +1150,8 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaBatchGoalsSinCola
 	}
 
 	wantRunRefs := []string{
-		"run-autoprogramming-goal-first-batch-001-goal-01",
-		"run-autoprogramming-goal-first-batch-001-goal-02",
+		"run-autoprogramming-goal-first-batch-retry-001-goal-01",
+		"run-autoprogramming-goal-first-batch-retry-001-goal-02",
 	}
 	if !prepared.Accepted ||
 		prepared.RunRef != wantRunRefs[0] ||
@@ -1086,13 +1196,15 @@ func TestCodexStackAutoprogrammingPrepareRunAPIV0GoalReadyLanzaBatchGoalsSinCola
 }
 
 type fakeGoalWorkspaceProvisionerForStackTestV0 struct {
-	root string
+	root        string
+	lastRequest orquestaruntimeworktree.GoalWorkspaceRequestV0
 }
 
 func (fake *fakeGoalWorkspaceProvisionerForStackTestV0) PrepareGoalWorkspaceV0(
 	_ context.Context,
 	request orquestaruntimeworktree.GoalWorkspaceRequestV0,
 ) (orquestaruntimeworktree.GoalWorkspaceV0, []orquestaruntimeworktree.WorktreeIssueV0) {
+	fake.lastRequest = request
 	dir := filepath.Join(fake.root, request.GoalRef)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return orquestaruntimeworktree.GoalWorkspaceV0{}, []orquestaruntimeworktree.WorktreeIssueV0{{Code: orquestaruntimeworktree.WorktreeIssueFilesystemV0}}

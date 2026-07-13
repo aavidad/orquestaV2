@@ -25,6 +25,7 @@ type AutoprogrammingPromotionConfigV0 struct {
 	BatchTestRunner            AutoprogrammingBatchTestRunnerPortV0
 	BatchPromotionFinalizer    AutoprogrammingBatchPromotionFinalizerPortV0
 	BatchPromotionReconciler   AutoprogrammingBatchPromotionClaimReconcilerPortV0
+	CanonicalWorkDir           string
 	GoalWorkspaceRoot          string
 	BatchIntegrationReceiptDir string
 	BatchPromotionReceiptDir   string

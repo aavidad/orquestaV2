@@ -27,41 +27,47 @@ const (
 	CodexGoalTaskCostClassDocV0         = "doc"
 	CodexGoalTaskCostClassCodeV0        = "code"
 	CodexGoalTaskCostClassMixedV0       = "mixed"
+	CodexGoalProviderRefV0              = "provider-ref-codex"
 
-	ErrCodexGoalStarterMissingV0      = "codex_goal_starter_missing"
-	ErrCodexGoalObserverMissingV0     = "codex_goal_observer_missing"
-	ErrCodexGoalSpecInvalidV0         = "codex_goal_spec_invalid"
-	ErrCodexGoalObservationInvalidV0  = "codex_goal_observation_invalid"
-	ErrCodexGoalStartRejectedV0       = "codex_goal_start_rejected"
-	ErrCodexGoalObservationRejectedV0 = "codex_goal_observation_rejected"
-	ErrCodexGoalPromptTooLargeV0      = "codex_goal_prompt_too_large"
-	ErrCodexGoalStartPacketTooLargeV0 = "codex_goal_start_packet_too_large"
+	ErrCodexGoalStarterMissingV0           = "codex_goal_starter_missing"
+	ErrCodexGoalObserverMissingV0          = "codex_goal_observer_missing"
+	ErrCodexGoalSpecInvalidV0              = "codex_goal_spec_invalid"
+	ErrCodexGoalObservationInvalidV0       = "codex_goal_observation_invalid"
+	ErrCodexGoalStartRejectedV0            = "codex_goal_start_rejected"
+	ErrCodexGoalObservationRejectedV0      = "codex_goal_observation_rejected"
+	ErrCodexGoalPromptTooLargeV0           = "codex_goal_prompt_too_large"
+	ErrCodexGoalStartPacketTooLargeV0      = "codex_goal_start_packet_too_large"
+	ErrCodexGoalRuntimeGenerationMissingV0 = "codex_goal_runtime_generation_missing"
 )
 
 type CodexGoalStartPacketV0 struct {
-	SchemaVersion      string                                `json:"schema_version"`
-	GoalRef            string                                `json:"goal_ref"`
-	RequestRef         string                                `json:"request_ref,omitempty"`
-	ProjectRef         string                                `json:"project_ref,omitempty"`
-	WorkKind           string                                `json:"work_kind,omitempty"`
-	WorkProfileKind    string                                `json:"work_profile_kind,omitempty"`
-	TaskCostClass      string                                `json:"task_cost_class,omitempty"`
-	Objective          string                                `json:"objective"`
-	Prompt             string                                `json:"prompt"`
-	PromptCache        CodexGoalPromptCacheProjectionV0      `json:"prompt_cache,omitempty"`
-	ContextRefs        []orquestagoal.GoalContextRefV0       `json:"context_refs,omitempty"`
-	RuleRefs           []orquestagoal.GoalRuleRefV0          `json:"rule_refs,omitempty"`
-	SkillRefs          []string                              `json:"skill_refs,omitempty"`
-	WriteSet           []orquestagoal.GoalWriteScopeV0       `json:"write_set,omitempty"`
-	RequiredTests      []orquestagoal.GoalRequiredTestV0     `json:"required_tests,omitempty"`
-	AcceptanceCriteria []string                              `json:"acceptance_criteria,omitempty"`
-	ArtifactContracts  []orquestagoal.GoalArtifactContractV0 `json:"artifact_contracts,omitempty"`
-	EvidenceRefs       []string                              `json:"evidence_refs,omitempty"`
-	Budget             orquestagoal.GoalBudgetV0             `json:"budget,omitempty"`
-	ContextBudget      orquestagoal.GoalContextBudgetV0      `json:"context_budget,omitempty"`
-	ClosurePolicy      orquestagoal.GoalClosurePolicyV0      `json:"closure_policy,omitempty"`
-	ReworkPolicy       orquestagoal.GoalReworkPolicyV0       `json:"rework_policy,omitempty"`
-	DirectionContract  CodexGoalDirectionContractV0          `json:"direction_contract,omitempty"`
+	SchemaVersion        string                                `json:"schema_version"`
+	GoalRef              string                                `json:"goal_ref"`
+	WorkspaceRef         string                                `json:"workspace_ref,omitempty"`
+	ProviderRef          string                                `json:"provider_ref,omitempty"`
+	RequestRef           string                                `json:"request_ref,omitempty"`
+	IntentManifestRef    string                                `json:"intent_manifest_ref,omitempty"`
+	IntentManifestSHA256 string                                `json:"intent_manifest_sha256,omitempty"`
+	ProjectRef           string                                `json:"project_ref,omitempty"`
+	WorkKind             string                                `json:"work_kind,omitempty"`
+	WorkProfileKind      string                                `json:"work_profile_kind,omitempty"`
+	TaskCostClass        string                                `json:"task_cost_class,omitempty"`
+	Objective            string                                `json:"objective"`
+	Prompt               string                                `json:"prompt"`
+	PromptCache          CodexGoalPromptCacheProjectionV0      `json:"prompt_cache,omitempty"`
+	ContextRefs          []orquestagoal.GoalContextRefV0       `json:"context_refs,omitempty"`
+	RuleRefs             []orquestagoal.GoalRuleRefV0          `json:"rule_refs,omitempty"`
+	SkillRefs            []string                              `json:"skill_refs,omitempty"`
+	WriteSet             []orquestagoal.GoalWriteScopeV0       `json:"write_set,omitempty"`
+	RequiredTests        []orquestagoal.GoalRequiredTestV0     `json:"required_tests,omitempty"`
+	AcceptanceCriteria   []string                              `json:"acceptance_criteria,omitempty"`
+	ArtifactContracts    []orquestagoal.GoalArtifactContractV0 `json:"artifact_contracts,omitempty"`
+	EvidenceRefs         []string                              `json:"evidence_refs,omitempty"`
+	Budget               orquestagoal.GoalBudgetV0             `json:"budget,omitempty"`
+	ContextBudget        orquestagoal.GoalContextBudgetV0      `json:"context_budget,omitempty"`
+	ClosurePolicy        orquestagoal.GoalClosurePolicyV0      `json:"closure_policy,omitempty"`
+	ReworkPolicy         orquestagoal.GoalReworkPolicyV0       `json:"rework_policy,omitempty"`
+	DirectionContract    CodexGoalDirectionContractV0          `json:"direction_contract,omitempty"`
 }
 
 type CodexGoalPromptCacheProjectionV0 struct {
@@ -104,10 +110,15 @@ type CodexGoalStartReceiptV0 struct {
 }
 
 type CodexGoalObservationRequestV0 struct {
-	SchemaVersion        string `json:"schema_version"`
-	GoalRef              string `json:"goal_ref"`
-	ExternalGoalRef      string `json:"external_goal_ref,omitempty"`
-	RuntimeGenerationRef string `json:"runtime_generation_ref,omitempty"`
+	SchemaVersion                   string `json:"schema_version"`
+	GoalRef                         string `json:"goal_ref"`
+	ExternalGoalRef                 string `json:"external_goal_ref,omitempty"`
+	IntentManifestRef               string `json:"intent_manifest_ref,omitempty"`
+	IntentManifestSHA256            string `json:"intent_manifest_sha256,omitempty"`
+	WorkspaceAuthoritySchemaVersion string `json:"workspace_authority_schema_version,omitempty"`
+	WorkspaceRef                    string `json:"workspace_ref,omitempty"`
+	ProviderRef                     string `json:"provider_ref,omitempty"`
+	RuntimeGenerationRef            string `json:"runtime_generation_ref,omitempty"`
 }
 
 type CodexGoalObservationReceiptV0 struct {
@@ -162,29 +173,33 @@ func BuildCodexGoalStartPacketV0(spec orquestagoal.GoalWorkSpecV0) (CodexGoalSta
 		}}
 	}
 	packet := CodexGoalStartPacketV0{
-		SchemaVersion:      CodexGoalStartPacketSchemaV0,
-		GoalRef:            spec.GoalRef,
-		RequestRef:         spec.RequestRef,
-		ProjectRef:         spec.ProjectRef,
-		WorkKind:           spec.WorkKind,
-		WorkProfileKind:    spec.WorkProfileKind,
-		TaskCostClass:      CodexGoalTaskCostClassForWriteSetV0(spec.WriteSet),
-		Objective:          spec.Objective,
-		Prompt:             prompt,
-		PromptCache:        promptParts.PromptCache,
-		ContextRefs:        append([]orquestagoal.GoalContextRefV0(nil), spec.ContextRefs...),
-		RuleRefs:           append([]orquestagoal.GoalRuleRefV0(nil), spec.RuleRefs...),
-		SkillRefs:          append([]string(nil), spec.SkillRefs...),
-		WriteSet:           append([]orquestagoal.GoalWriteScopeV0(nil), spec.WriteSet...),
-		RequiredTests:      append([]orquestagoal.GoalRequiredTestV0(nil), spec.RequiredTests...),
-		AcceptanceCriteria: append([]string(nil), spec.AcceptanceCriteria...),
-		ArtifactContracts:  append([]orquestagoal.GoalArtifactContractV0(nil), spec.ArtifactContracts...),
-		EvidenceRefs:       append([]string(nil), spec.EvidenceRefs...),
-		Budget:             spec.Budget,
-		ContextBudget:      contextBudget,
-		ClosurePolicy:      spec.ClosurePolicy,
-		ReworkPolicy:       spec.ReworkPolicy,
-		DirectionContract:  codexGoalDirectionContractV0(spec),
+		SchemaVersion:        CodexGoalStartPacketSchemaV0,
+		GoalRef:              spec.GoalRef,
+		WorkspaceRef:         orquestagoal.GoalWorkspaceRefForGoalV0(spec.GoalRef),
+		ProviderRef:          CodexGoalProviderRefV0,
+		RequestRef:           spec.RequestRef,
+		IntentManifestRef:    spec.IntentManifestRef,
+		IntentManifestSHA256: spec.IntentManifestSHA256,
+		ProjectRef:           spec.ProjectRef,
+		WorkKind:             spec.WorkKind,
+		WorkProfileKind:      spec.WorkProfileKind,
+		TaskCostClass:        CodexGoalTaskCostClassForWriteSetV0(spec.WriteSet),
+		Objective:            spec.Objective,
+		Prompt:               prompt,
+		PromptCache:          promptParts.PromptCache,
+		ContextRefs:          append([]orquestagoal.GoalContextRefV0(nil), spec.ContextRefs...),
+		RuleRefs:             append([]orquestagoal.GoalRuleRefV0(nil), spec.RuleRefs...),
+		SkillRefs:            append([]string(nil), spec.SkillRefs...),
+		WriteSet:             append([]orquestagoal.GoalWriteScopeV0(nil), spec.WriteSet...),
+		RequiredTests:        append([]orquestagoal.GoalRequiredTestV0(nil), spec.RequiredTests...),
+		AcceptanceCriteria:   append([]string(nil), spec.AcceptanceCriteria...),
+		ArtifactContracts:    append([]orquestagoal.GoalArtifactContractV0(nil), spec.ArtifactContracts...),
+		EvidenceRefs:         append([]string(nil), spec.EvidenceRefs...),
+		Budget:               spec.Budget,
+		ContextBudget:        contextBudget,
+		ClosurePolicy:        spec.ClosurePolicy,
+		ReworkPolicy:         spec.ReworkPolicy,
+		DirectionContract:    codexGoalDirectionContractV0(spec),
 	}
 	packetBytes, err := json.Marshal(packet)
 	if err != nil {
@@ -346,11 +361,22 @@ func BuildCodexGoalObservationRequestV0(
 	if issues := orquestagoal.ValidateGoalObservationRequestV0(request); len(issues) > 0 {
 		return CodexGoalObservationRequestV0{}, issues
 	}
+	if request.WorkspaceAuthoritySchemaVersion == orquestagoal.GoalWorkspaceAuthoritySchemaV0 &&
+		request.ProviderRef != CodexGoalProviderRefV0 {
+		return CodexGoalObservationRequestV0{}, []orquestagoal.GoalWorkIssueV0{{
+			Code: orquestagoal.ErrGoalWorkspaceProviderMismatchV0, Field: "provider_ref",
+		}}
+	}
 	return CodexGoalObservationRequestV0{
-		SchemaVersion:        CodexGoalObservationRequestSchemaV0,
-		GoalRef:              request.GoalRef,
-		ExternalGoalRef:      request.ExternalGoalRef,
-		RuntimeGenerationRef: request.RuntimeGenerationRef,
+		SchemaVersion:                   CodexGoalObservationRequestSchemaV0,
+		GoalRef:                         request.GoalRef,
+		ExternalGoalRef:                 request.ExternalGoalRef,
+		IntentManifestRef:               request.IntentManifestRef,
+		IntentManifestSHA256:            request.IntentManifestSHA256,
+		WorkspaceAuthoritySchemaVersion: request.WorkspaceAuthoritySchemaVersion,
+		WorkspaceRef:                    request.WorkspaceRef,
+		ProviderRef:                     request.ProviderRef,
+		RuntimeGenerationRef:            request.RuntimeGenerationRef,
 	}, nil
 }
 
@@ -391,6 +417,9 @@ func writeCodexGoalStablePromptPrefixV0(
 	b.WriteString("Eres el Director operativo interno de este Codex Goal.\n")
 	b.WriteString("Orquesta gobierna desde fuera: objetivo, reglas, write-set, tests, artefactos y cierre.\n")
 	b.WriteString("No intentes reactivar el loop historico de Orquesta; trabaja dentro del goal hasta complete o blocked.\n\n")
+	if strings.TrimSpace(spec.IntentManifestRef) != "" {
+		b.WriteString("Antes de markers o compactar, lee y verifica el intent manifest materializado: ruta, ref y SHA-256 deben coincidir con el paquete. No sustituyas ni reconstruyas su JSON.\n\n")
+	}
 	b.WriteString("Prefijo estable cacheable:\n")
 	b.WriteString("- Reglas estables, AGENTS/toolbelt y contratos van antes del contexto dinamico para cache del proveedor.\n")
 	b.WriteString("- Objetivo, write-set, estado vivo y refs variables quedan al final en el bloque dinamico.\n")
@@ -555,6 +584,15 @@ func writeCodexGoalDynamicPromptSuffixV0(
 		b.WriteString(spec.RequestRef)
 		b.WriteString("\n")
 	}
+	if spec.IntentManifestRef != "" {
+		b.WriteString("- intent_manifest_ref: ")
+		b.WriteString(spec.IntentManifestRef)
+		b.WriteString("\n- intent_manifest_sha256: ")
+		b.WriteString(spec.IntentManifestSHA256)
+		b.WriteString("\n- intent_manifest_path: .orquesta-runtime/intent-manifests/")
+		b.WriteString(spec.IntentManifestRef)
+		b.WriteString(".json (leer completo, calcular SHA-256 y compararlo con intent_manifest_sha256; verificar request_ref contra la identidad de intent_manifest_ref antes de trabajar)\n")
+	}
 	if spec.ProjectRef != "" {
 		b.WriteString("- project_ref: ")
 		b.WriteString(spec.ProjectRef)
@@ -705,7 +743,7 @@ func codexGoalPromptCacheProjectionForPartsV0(stablePrefix string, dynamicSuffix
 func codexGoalPromptCacheEvidenceRefsV0(caches ...CodexGoalPromptCacheProjectionV0) []string {
 	var refs []string
 	for _, cache := range caches {
-		if key := codexGoalResultFileSafePartV0(cache.CacheKey); key != "" {
+		if key := codexGoalReadableSlugV0(cache.CacheKey, codexGoalPhysicalNameMaxBytesV0); key != "" {
 			refs = append(refs, "evidence-ref-codex-goal-prompt-cache-key-"+key)
 		}
 		if hash := codexGoalPromptCacheHashRefPartV0(cache.StablePrefixSHA256); hash != "" {
@@ -757,6 +795,12 @@ func codexGoalResultFilePathV0(spec orquestagoal.GoalWorkSpecV0) string {
 }
 
 const codexGoalRuntimeReceiptRootV0 = ".orquesta-runtime/goal-receipts"
+
+const (
+	codexGoalPhysicalNameMaxBytesV0     = 80
+	codexGoalPhysicalNameDigestBytesV0  = sha256.Size * 2
+	codexGoalPhysicalNameSlugMaxBytesV0 = codexGoalPhysicalNameMaxBytesV0 - codexGoalPhysicalNameDigestBytesV0 - 1
+)
 
 // CodexGoalRuntimeReceiptRelativeDirV0 is intentionally Git-ignored runtime
 // state. It is not part of the product write-set or the public core contract.
@@ -811,6 +855,18 @@ func CodexGoalResultFileNameLooksValidV0(name string) bool {
 }
 
 func codexGoalResultFileSafePartV0(value string) string {
+	if value == "" {
+		return ""
+	}
+	out := codexGoalReadableSlugV0(value, codexGoalPhysicalNameSlugMaxBytesV0)
+	if out == "" {
+		out = "goal"
+	}
+	digest := sha256.Sum256([]byte(value))
+	return out + "-" + fmt.Sprintf("%x", digest)
+}
+
+func codexGoalReadableSlugV0(value string, maxBytes int) string {
 	value = strings.ToLower(strings.TrimSpace(value))
 	var b strings.Builder
 	lastDash := false
@@ -834,8 +890,8 @@ func codexGoalResultFileSafePartV0(value string) string {
 		}
 	}
 	out := strings.Trim(b.String(), "-")
-	if len(out) > 80 {
-		out = strings.Trim(out[:80], "-")
+	if maxBytes > 0 && len(out) > maxBytes {
+		out = strings.Trim(out[:maxBytes], "-")
 	}
 	return out
 }
@@ -885,6 +941,13 @@ func (launcher CodexGoalLauncherV0) LaunchGoalWorkV0(ctx context.Context, spec o
 			result.ExternalGoalRef = strings.TrimSpace(receipt.ExternalGoalRef)
 		}
 		result.RuntimeGenerationRef = strings.TrimSpace(receipt.RuntimeGenerationRef)
+		if result.RuntimeGenerationRef != "" {
+			result.WorkspaceAuthoritySchemaVersion = orquestagoal.GoalWorkspaceAuthoritySchemaV0
+			result.IntentManifestRef = packet.IntentManifestRef
+			result.IntentManifestSHA256 = packet.IntentManifestSHA256
+			result.WorkspaceRef = packet.WorkspaceRef
+			result.ProviderRef = packet.ProviderRef
+		}
 		if codexGoalGenerationConflictRetryableV0(receipt) && result.ExternalGoalRef != "" && result.RuntimeGenerationRef != "" {
 			result.Status = orquestagoal.GoalStatusRunningV0
 			result.Issues = []orquestagoal.GoalWorkIssueV0{{Code: "codex_app_server_tmux_generation_conflict_retryable"}}
@@ -899,6 +962,16 @@ func (launcher CodexGoalLauncherV0) LaunchGoalWorkV0(ctx context.Context, spec o
 	if status == "" {
 		status = orquestagoal.GoalStatusAcceptedV0
 	}
+	if strings.TrimSpace(receipt.RuntimeGenerationRef) == "" {
+		result := codexGoalLaunchInvalidReceiptV0(packet.GoalRef, ErrCodexGoalRuntimeGenerationMissingV0)
+		result.ExternalGoalRef = strings.TrimSpace(receipt.ExternalGoalRef)
+		result.ContextBudget = orquestagoal.MergeGoalContextBudgetV0(packet.ContextBudget, receipt.ContextBudget)
+		result.EvidenceRefs = codexGoalCompactStringsV0(append(
+			append([]string(nil), receipt.EvidenceRefs...),
+			codexGoalPromptCacheEvidenceRefsV0(packet.PromptCache, receipt.PromptCache)...,
+		))
+		return result, errors.New(ErrCodexGoalRuntimeGenerationMissingV0)
+	}
 	result := orquestagoal.GoalLaunchReceiptV0{
 		SchemaVersion:        orquestagoal.GoalWorkLaunchReceiptSchemaV0,
 		Status:               status,
@@ -910,6 +983,13 @@ func (launcher CodexGoalLauncherV0) LaunchGoalWorkV0(ctx context.Context, spec o
 			append([]string(nil), receipt.EvidenceRefs...),
 			codexGoalPromptCacheEvidenceRefsV0(packet.PromptCache, receipt.PromptCache)...,
 		)),
+	}
+	if strings.TrimSpace(result.RuntimeGenerationRef) != "" {
+		result.WorkspaceAuthoritySchemaVersion = orquestagoal.GoalWorkspaceAuthoritySchemaV0
+		result.IntentManifestRef = packet.IntentManifestRef
+		result.IntentManifestSHA256 = packet.IntentManifestSHA256
+		result.WorkspaceRef = packet.WorkspaceRef
+		result.ProviderRef = packet.ProviderRef
 	}
 	if receipt.IssueCode != "" {
 		result.Issues = append(result.Issues, orquestagoal.GoalWorkIssueV0{Code: receipt.IssueCode})

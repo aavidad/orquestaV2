@@ -52,21 +52,22 @@ func (backend serverCodexUnavailableGoalBackendV0) ObserveCodexGoalV0(
 }
 
 type serverCodexAppServerGoalBackendV0 struct {
-	Protocol                serverCodexAppServerProtocolPortV0
-	CWD                     string
-	DiagnosticLogPath       string
-	AuthIssueCode           string
-	Model                   string
-	ReasoningEffort         string
-	Sandbox                 string
-	ApprovalPolicy          string
-	ServiceTier             string
-	Timeout                 time.Duration
-	HighTokenUsageThreshold int
-	Runtime                 *serverCodexAppServerGoalRuntimeV0
-	BackendShutdown         BackendShutdownPortV0
-	WorkspaceRouter         GoalWorkspaceRouterPortV0
-	Now                     func() time.Time
+	Protocol                   serverCodexAppServerProtocolPortV0
+	CWD                        string
+	DiagnosticLogPath          string
+	AuthIssueCode              string
+	Model                      string
+	ReasoningEffort            string
+	Sandbox                    string
+	ApprovalPolicy             string
+	ServiceTier                string
+	Timeout                    time.Duration
+	HighTokenUsageThreshold    int
+	Runtime                    *serverCodexAppServerGoalRuntimeV0
+	BackendShutdown            BackendShutdownPortV0
+	WorkspaceRouter            GoalWorkspaceRouterPortV0
+	workspaceAuthorityVerified bool
+	Now                        func() time.Time
 }
 
 type serverCodexAppServerProtocolPortV0 interface {
@@ -85,6 +86,13 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 	if backend.WorkspaceRouter != nil {
 		return backend.startCodexGoalInResolvedWorkspaceV0(ctx, packet)
 	}
+	authority, hasAuthority, authorityErr := codexAppServerStartAuthorityV0(packet)
+	if authorityErr != nil {
+		return codexAppServerStartReceiptV0(packet, "", "codex_app_server_goal_authority_invalid"), authorityErr
+	}
+	if hasAuthority && backend.Runtime == nil {
+		return codexAppServerStartReceiptV0(packet, "", "codex_app_server_goal_authority_runtime_missing"), errors.New("codex_app_server_goal_authority_runtime_missing")
+	}
 	if lazy, ok := backend.Protocol.(serverCodexAppServerLazyTmuxProtocolV0); ok {
 		if backend.Runtime == nil {
 			return codexAppServerStartReceiptV0(packet, "", codexAppServerTmuxGenerationConflictV0), errors.New(codexAppServerTmuxGenerationConflictV0)
@@ -99,7 +107,13 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 			var err error
 			receipt, err = scoped.StartCodexGoalV0(ctx, packet)
 			if err == nil && strings.TrimSpace(receipt.ExternalGoalRef) != "" {
-				if !backend.Runtime.bindThreadGenerationV0(receipt.ExternalGoalRef, leasedGenerationRef) {
+				bound := backend.Runtime.bindThreadGenerationV0(receipt.ExternalGoalRef, leasedGenerationRef)
+				if hasAuthority {
+					leasedAuthority := authority
+					leasedAuthority.RuntimeGenerationRef = leasedGenerationRef
+					bound = backend.Runtime.bindThreadAuthorityV0(receipt.ExternalGoalRef, leasedAuthority)
+				}
+				if !bound {
 					return errors.New(codexAppServerTmuxGenerationConflictV0)
 				}
 				receipt.EvidenceRefs = compactServerStackStringsV0(append(receipt.EvidenceRefs, "evidence-ref-codex-app-server-thread-generation-bound"))
@@ -227,12 +241,22 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 	if earlyCheckpointEvidence != "" {
 		evidenceRefs = append(evidenceRefs, earlyCheckpointEvidence)
 	}
-	return orquestaruntimecodexgoal.CodexGoalStartReceiptV0{
+	receipt := orquestaruntimecodexgoal.CodexGoalStartReceiptV0{
 		Status:          orquestagoal.GoalStatusRunningV0,
 		GoalRef:         packet.GoalRef,
 		ExternalGoalRef: threadID,
 		EvidenceRefs:    compactServerStackStringsV0(evidenceRefs),
-	}, nil
+	}
+	if hasAuthority {
+		receipt.RuntimeGenerationRef = authority.RuntimeGenerationRef
+		if !backend.Runtime.bindThreadAuthorityV0(threadID, authority) {
+			_, _ = backend.Protocol.SetGoalV0(ctx, serverCodexAppServerThreadGoalSetParamsV0{ThreadID: threadID, Status: "blocked"})
+			receipt.IssueCode = "codex_app_server_goal_authority_conflict"
+			return receipt, errors.New(receipt.IssueCode)
+		}
+		receipt.EvidenceRefs = compactServerStackStringsV0(append(receipt.EvidenceRefs, "evidence-ref-codex-app-server-thread-authority-bound"))
+	}
+	return receipt, nil
 }
 
 func (backend serverCodexAppServerGoalBackendV0) materializeCodexAppServerEarlyCheckpointV0(
@@ -488,6 +512,29 @@ func (backend serverCodexAppServerGoalBackendV0) ObserveCodexGoalV0(
 	if backend.WorkspaceRouter != nil {
 		return backend.observeCodexGoalInResolvedWorkspaceV0(ctx, request)
 	}
+	_, lazyProtocol := backend.Protocol.(serverCodexAppServerLazyTmuxProtocolV0)
+	if err := codexAppServerObservationAuthorityV0(request, !lazyProtocol); err != nil {
+		return codexAppServerObservationReceiptV0(request, orquestagoal.GoalStatusInvalidV0, "codex_app_server_goal_authority_invalid"), err
+	}
+	authority, hasAuthority := codexAppServerExecutionAuthorityFromObservationV0(request)
+	if hasAuthority {
+		if backend.Runtime == nil {
+			code := "codex_app_server_goal_authority_runtime_missing"
+			receipt := codexAppServerObservationReceiptV0(request, orquestagoal.GoalStatusInvalidV0, code)
+			receipt.IssueCode = code
+			return receipt, errors.New(code)
+		}
+		bound := backend.Runtime.threadBoundToAuthorityV0(request.ExternalGoalRef, authority)
+		if !bound && backend.workspaceAuthorityVerified {
+			bound = backend.Runtime.bindThreadAuthorityV0(request.ExternalGoalRef, authority)
+		}
+		if !bound {
+			code := "codex_app_server_goal_thread_authority_mismatch"
+			receipt := codexAppServerObservationReceiptV0(request, orquestagoal.GoalStatusInvalidV0, code)
+			receipt.IssueCode = code
+			return receipt, errors.New(code)
+		}
+	}
 	if lazy, ok := backend.Protocol.(serverCodexAppServerLazyTmuxProtocolV0); ok {
 		if backend.Runtime == nil || strings.TrimSpace(request.RuntimeGenerationRef) == "" || strings.TrimSpace(request.ExternalGoalRef) == "" {
 			return codexAppServerObservationReceiptV0(request, orquestagoal.GoalStatusRunningV0, codexAppServerTmuxGenerationConflictV0), errors.New(codexAppServerTmuxGenerationConflictV0)
@@ -496,7 +543,11 @@ func (backend serverCodexAppServerGoalBackendV0) ObserveCodexGoalV0(
 		generationRef, generationErr := lazy.withVerifiedGenerationV0(ctx, request.RuntimeGenerationRef, func(protocol serverCodexAppServerProtocolPortV0, leasedGenerationRef string) error {
 			// Restart rehydrates this cache only after the durable generation has
 			// been checked under the same lease as the following RPCs.
-			if !backend.Runtime.bindThreadGenerationV0(request.ExternalGoalRef, leasedGenerationRef) {
+			bound := backend.Runtime.bindThreadGenerationV0(request.ExternalGoalRef, leasedGenerationRef)
+			if hasAuthority {
+				bound = backend.Runtime.threadBoundToAuthorityV0(request.ExternalGoalRef, authority)
+			}
+			if !bound {
 				return errors.New(codexAppServerTmuxGenerationConflictV0)
 			}
 			scoped := backend
@@ -511,7 +562,11 @@ func (backend serverCodexAppServerGoalBackendV0) ObserveCodexGoalV0(
 			}
 			return receipt, generationErr
 		}
-		if generationRef != request.RuntimeGenerationRef || !backend.Runtime.threadBoundToGenerationV0(request.ExternalGoalRef, request.RuntimeGenerationRef) {
+		bound := backend.Runtime.threadBoundToGenerationV0(request.ExternalGoalRef, request.RuntimeGenerationRef)
+		if hasAuthority {
+			bound = backend.Runtime.threadBoundToAuthorityV0(request.ExternalGoalRef, authority)
+		}
+		if generationRef != request.RuntimeGenerationRef || !bound {
 			return codexAppServerObservationReceiptV0(request, orquestagoal.GoalStatusRunningV0, codexAppServerTmuxGenerationConflictV0), errors.New(codexAppServerTmuxGenerationConflictV0)
 		}
 		return receipt, nil
@@ -571,6 +626,89 @@ func (backend serverCodexAppServerGoalBackendV0) ObserveCodexGoalV0(
 	return receipt, nil
 }
 
+func codexAppServerStartAuthorityV0(
+	packet orquestaruntimecodexgoal.CodexGoalStartPacketV0,
+) (orquestagoal.GoalExecutionAuthorityV0, bool, error) {
+	hasAuthority := strings.TrimSpace(packet.IntentManifestRef) != "" ||
+		strings.TrimSpace(packet.IntentManifestSHA256) != "" ||
+		strings.TrimSpace(packet.WorkspaceRef) != "" || strings.TrimSpace(packet.ProviderRef) != ""
+	if !hasAuthority {
+		return orquestagoal.GoalExecutionAuthorityV0{GoalRef: strings.TrimSpace(packet.GoalRef)}, false, nil
+	}
+	authority := orquestagoal.NormalizeGoalExecutionAuthorityV0(orquestagoal.GoalExecutionAuthorityV0{
+		GoalRef: packet.GoalRef, IntentManifestRef: packet.IntentManifestRef,
+		IntentManifestSHA256:            packet.IntentManifestSHA256,
+		WorkspaceAuthoritySchemaVersion: orquestagoal.GoalWorkspaceAuthoritySchemaV0,
+		WorkspaceRef:                    packet.WorkspaceRef,
+		ProviderRef:                     packet.ProviderRef,
+	})
+	if authority.ProviderRef != orquestaruntimecodexgoal.CodexGoalProviderRefV0 {
+		return authority, true, errors.New("codex_app_server_goal_provider_mismatch")
+	}
+	authority.RuntimeGenerationRef = orquestagoal.GoalRuntimeGenerationRefV0(authority)
+	if len(orquestagoal.GoalExecutionAuthorityIssuesV0(authority, false)) != 0 {
+		return authority, true, errors.New("codex_app_server_goal_authority_invalid")
+	}
+	return authority, true, nil
+}
+
+func codexAppServerObservationAuthorityV0(
+	request orquestaruntimecodexgoal.CodexGoalObservationRequestV0,
+	requireDeterministicGeneration bool,
+) error {
+	authority := orquestagoal.NormalizeGoalExecutionAuthorityV0(orquestagoal.GoalExecutionAuthorityV0{
+		GoalRef: request.GoalRef, IntentManifestRef: request.IntentManifestRef,
+		IntentManifestSHA256:            request.IntentManifestSHA256,
+		WorkspaceAuthoritySchemaVersion: request.WorkspaceAuthoritySchemaVersion,
+		WorkspaceRef:                    request.WorkspaceRef,
+		ProviderRef:                     request.ProviderRef,
+		RuntimeGenerationRef:            request.RuntimeGenerationRef,
+	})
+	return codexAppServerValidateExecutionAuthorityV0(authority, requireDeterministicGeneration)
+}
+
+func codexAppServerExecutionAuthorityFromObservationV0(
+	request orquestaruntimecodexgoal.CodexGoalObservationRequestV0,
+) (orquestagoal.GoalExecutionAuthorityV0, bool) {
+	authority := orquestagoal.NormalizeGoalExecutionAuthorityV0(orquestagoal.GoalExecutionAuthorityV0{
+		GoalRef: request.GoalRef, IntentManifestRef: request.IntentManifestRef,
+		IntentManifestSHA256:            request.IntentManifestSHA256,
+		WorkspaceAuthoritySchemaVersion: request.WorkspaceAuthoritySchemaVersion,
+		WorkspaceRef:                    request.WorkspaceRef, ProviderRef: request.ProviderRef,
+		RuntimeGenerationRef: request.RuntimeGenerationRef,
+	})
+	return authority, !codexAppServerExecutionAuthorityLegacyV0(authority)
+}
+
+func codexAppServerExecutionAuthorityLegacyV0(authority orquestagoal.GoalExecutionAuthorityV0) bool {
+	authority = orquestagoal.NormalizeGoalExecutionAuthorityV0(authority)
+	return authority.IntentManifestRef == "" && authority.IntentManifestSHA256 == "" &&
+		authority.WorkspaceAuthoritySchemaVersion == "" && authority.WorkspaceRef == "" &&
+		authority.ProviderRef == "" && authority.RuntimeGenerationRef == ""
+}
+
+func codexAppServerValidateExecutionAuthorityV0(
+	authority orquestagoal.GoalExecutionAuthorityV0,
+	requireDeterministicGeneration bool,
+) error {
+	authority = orquestagoal.NormalizeGoalExecutionAuthorityV0(authority)
+	if codexAppServerExecutionAuthorityLegacyV0(authority) {
+		return nil
+	}
+	if authority.ProviderRef != orquestaruntimecodexgoal.CodexGoalProviderRefV0 ||
+		len(orquestagoal.GoalExecutionAuthorityIssuesV0(authority, false)) != 0 {
+		return errors.New("codex_app_server_goal_authority_invalid")
+	}
+	if requireDeterministicGeneration {
+		expected := authority
+		expected.RuntimeGenerationRef = ""
+		if authority.RuntimeGenerationRef != orquestagoal.GoalRuntimeGenerationRefV0(expected) {
+			return errors.New("codex_app_server_goal_generation_mismatch")
+		}
+	}
+	return nil
+}
+
 func (backend serverCodexAppServerGoalBackendV0) codexAppServerActiveGoalTimeoutV0(
 	request orquestaruntimecodexgoal.CodexGoalObservationRequestV0,
 	goal *serverCodexAppServerThreadGoalV0,
@@ -608,8 +746,23 @@ func (backend serverCodexAppServerGoalBackendV0) FingerprintGoalObservationV0(
 	if backend.WorkspaceRouter != nil {
 		return backend.fingerprintCodexGoalInResolvedWorkspaceV0(ctx, state)
 	}
+	state = orquestagoal.NormalizeGoalWorkStateV0(state)
+	authority := orquestagoal.GoalExecutionAuthorityFromReceiptV0(state.LaunchReceipt)
+	hasAuthority := len(orquestagoal.GoalExecutionAuthorityIssuesV0(authority, false)) == 0
+	authorityThreadID := strings.TrimSpace(firstNonEmptyServerStackV0(state.ExternalGoalRef, state.LaunchReceipt.ExternalGoalRef))
+	if hasAuthority {
+		if backend.Runtime == nil || authorityThreadID == "" {
+			return orquestagoal.GoalObservationFingerprintV0{}, true, errors.New("codex_app_server_goal_authority_runtime_missing")
+		}
+		bound := backend.Runtime.threadBoundToAuthorityV0(authorityThreadID, authority)
+		if !bound && backend.workspaceAuthorityVerified {
+			bound = backend.Runtime.bindThreadAuthorityV0(authorityThreadID, authority)
+		}
+		if !bound {
+			return orquestagoal.GoalObservationFingerprintV0{}, true, errors.New("codex_app_server_goal_thread_authority_mismatch")
+		}
+	}
 	if lazy, ok := backend.Protocol.(serverCodexAppServerLazyTmuxProtocolV0); ok {
-		state = orquestagoal.NormalizeGoalWorkStateV0(state)
 		threadID := strings.TrimSpace(firstNonEmptyServerStackV0(state.ExternalGoalRef, state.LaunchReceipt.ExternalGoalRef))
 		generationRef := strings.TrimSpace(state.LaunchReceipt.RuntimeGenerationRef)
 		if backend.Runtime == nil || threadID == "" || generationRef == "" {
@@ -617,7 +770,11 @@ func (backend serverCodexAppServerGoalBackendV0) FingerprintGoalObservationV0(
 		}
 		var fingerprint orquestagoal.GoalObservationFingerprintV0
 		generation, err := lazy.withVerifiedGenerationV0(ctx, generationRef, func(protocol serverCodexAppServerProtocolPortV0, leasedGenerationRef string) error {
-			if !backend.Runtime.bindThreadGenerationV0(threadID, leasedGenerationRef) {
+			bound := backend.Runtime.bindThreadGenerationV0(threadID, leasedGenerationRef)
+			if hasAuthority {
+				bound = backend.Runtime.threadBoundToAuthorityV0(threadID, authority)
+			}
+			if !bound {
 				return errors.New(codexAppServerTmuxGenerationConflictV0)
 			}
 			goal, getErr := protocol.GetGoalV0(ctx, threadID)
@@ -641,7 +798,11 @@ func (backend serverCodexAppServerGoalBackendV0) FingerprintGoalObservationV0(
 		if err != nil {
 			return orquestagoal.GoalObservationFingerprintV0{}, true, err
 		}
-		if generation != generationRef || !backend.Runtime.threadBoundToGenerationV0(threadID, generationRef) {
+		bound := backend.Runtime.threadBoundToGenerationV0(threadID, generationRef)
+		if hasAuthority {
+			bound = backend.Runtime.threadBoundToAuthorityV0(threadID, authority)
+		}
+		if generation != generationRef || !bound {
 			return orquestagoal.GoalObservationFingerprintV0{}, true, errors.New(codexAppServerTmuxGenerationConflictV0)
 		}
 		return fingerprint, true, nil

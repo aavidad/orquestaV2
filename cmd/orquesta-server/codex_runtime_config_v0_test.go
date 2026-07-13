@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
@@ -11,9 +12,11 @@ import (
 )
 
 func TestMain(m *testing.M) {
+	previousUmask := syscall.Umask(0o077)
 	cleanup := configureServerPackageTestEnvV0()
 	code := m.Run()
 	cleanup()
+	syscall.Umask(previousUmask)
 	os.Exit(code)
 }
 

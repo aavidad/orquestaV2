@@ -24,6 +24,71 @@ func TestValidateGoalWorkSpecV0AceptaContratoGoalFirst(t *testing.T) {
 	}
 }
 
+func TestValidateGoalWorkSpecV0RejectsUppercaseIntentManifestSHA256V0(t *testing.T) {
+	spec := GoalWorkSpecV0{GoalRef: "goal-ref-intent-001", RequestRef: "request-001", Objective: "objetivo", DirectorKind: GoalDirectorKindCodexGoalV0, WriteSet: []GoalWriteScopeV0{{Path: "docs"}}, IntentManifestRef: "intent-manifest-ref-request-001", IntentManifestSHA256: strings.Repeat("A", 64)}
+	if !hasGoalIssueV0(ValidateGoalWorkSpecV0(spec), ErrGoalRefFieldInvalidV0) {
+		t.Fatal("uppercase manifest hash accepted")
+	}
+}
+
+func TestValidateGoalWorkSpecV0VinculaManifestConRequestRefV0(t *testing.T) {
+	base := GoalWorkSpecV0{
+		GoalRef: "goal-ref-intent-link-001", RequestRef: "request-ref-intent-link-001",
+		Objective: "objetivo", DirectorKind: GoalDirectorKindCodexGoalV0,
+		WriteSet:             []GoalWriteScopeV0{{Path: "docs"}},
+		IntentManifestRef:    "intent-manifest-ref-request-ref-intent-link-001",
+		IntentManifestSHA256: strings.Repeat("a", 64),
+	}
+	if issues := ValidateGoalWorkSpecV0(base); len(issues) != 0 {
+		t.Fatalf("valid manifest contract rejected: %v", issues)
+	}
+	cases := []GoalWorkSpecV0{base, base, base}
+	cases[0].RequestRef = ""
+	cases[1].IntentManifestRef = "intent-manifest-ref-request-ref-other"
+	cases[2].IntentManifestSHA256 = ""
+	for i, spec := range cases {
+		if !hasGoalIssueV0(ValidateGoalWorkSpecV0(spec), ErrGoalRefFieldInvalidV0) {
+			t.Fatalf("case %d accepted: %+v", i, spec)
+		}
+	}
+}
+
+func TestValidateGoalWorkSpecV0RechazaTraversalYRefsNoPortablesEnManifestV0(t *testing.T) {
+	base := GoalWorkSpecV0{
+		GoalRef: "goal-ref-intent-portable-001", RequestRef: "request-ref-intent-portable-001",
+		Objective: "objetivo", DirectorKind: GoalDirectorKindCodexGoalV0,
+		WriteSet:             []GoalWriteScopeV0{{Path: "docs"}},
+		IntentManifestRef:    "intent-manifest-ref-request-ref-intent-portable-001",
+		IntentManifestSHA256: strings.Repeat("a", 64),
+	}
+	for name, mutate := range map[string]func(*GoalWorkSpecV0){
+		"request traversal": func(spec *GoalWorkSpecV0) {
+			spec.RequestRef = "request-ref-a..b"
+			spec.IntentManifestRef = "intent-manifest-ref-" + spec.RequestRef
+		},
+		"manifest traversal": func(spec *GoalWorkSpecV0) {
+			spec.RequestRef = "../outside"
+			spec.IntentManifestRef = "intent-manifest-ref-../outside"
+		},
+		"uppercase": func(spec *GoalWorkSpecV0) {
+			spec.RequestRef = "REQUEST-REF-UPPER"
+			spec.IntentManifestRef = "intent-manifest-ref-" + spec.RequestRef
+		},
+		"too long": func(spec *GoalWorkSpecV0) {
+			spec.RequestRef = "request-ref-" + strings.Repeat("x", goalIntentManifestRequestRefMaxBytesV0)
+			spec.IntentManifestRef = "intent-manifest-ref-" + spec.RequestRef
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			spec := base
+			mutate(&spec)
+			if !hasGoalIssueV0(ValidateGoalWorkSpecV0(spec), ErrGoalRefFieldInvalidV0) {
+				t.Fatalf("manifest path identity accepted: %+v", spec)
+			}
+		})
+	}
+}
+
 func TestNormalizeGoalWorkSpecV0UsaRuntimeGoalPorDefecto(t *testing.T) {
 	spec := NormalizeGoalWorkSpecV0(GoalWorkSpecV0{
 		GoalRef:   "goal-ref-001",

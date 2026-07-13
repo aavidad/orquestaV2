@@ -713,13 +713,20 @@ func (launcher *goalFirstQueueLauncherForTestV0) LaunchGoalWorkV0(
 	if launcher.err != nil || launcher.receipt.Status != "" || launcher.receipt.GoalRef != "" {
 		return launcher.receipt, launcher.err
 	}
-	return orquestagoal.GoalLaunchReceiptV0{
+	receipt := orquestagoal.GoalLaunchReceiptV0{
 		SchemaVersion:   orquestagoal.GoalWorkLaunchReceiptSchemaV0,
 		Status:          orquestagoal.GoalStatusRunningV0,
 		GoalRef:         spec.GoalRef,
 		ExternalGoalRef: "thread-ref-goal-first-queue-sync-001",
 		EvidenceRefs:    []string{"evidence-ref-goal-first-queue-launch"},
-	}, nil
+	}
+	if spec.IntentManifestRef != "" || spec.IntentManifestSHA256 != "" {
+		receipt = orquestagoal.ApplyGoalExecutionAuthorityToReceiptV0(
+			receipt,
+			orquestagoal.GoalExecutionAuthorityForProviderV0(spec, "provider-ref-test-goal-first-queue"),
+		)
+	}
+	return receipt, nil
 }
 
 type goalFirstQueueObserverForTestV0 struct {

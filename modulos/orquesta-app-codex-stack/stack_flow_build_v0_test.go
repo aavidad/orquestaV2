@@ -9,6 +9,7 @@ import (
 
 	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
 	orquestaappchange "orquesta/modulos/orquesta-app-change"
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacapacity "orquesta/modulos/orquesta-capacity"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestagoal "orquesta/modulos/orquesta-goal"
@@ -116,17 +117,18 @@ func codexStackBaseConfigForTestV0(
 			MaxExternalWaits:     2,
 		},
 		Stores: StoresV0{
-			RunStore:        orquestacionnucleoapp.NewInMemoryRunStoreV0(),
-			EventSink:       orquestacionnucleoapp.NewInMemoryEventSinkV0(),
-			OutboxLedger:    orquestacionnucleoapp.NewInMemoryOutboxLedgerV0(),
-			TaskStore:       orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(),
-			WaitStateStore:  orquestacionnucleoapp.NewInMemoryWorkflowTaskWaitStateStoreV0(),
-			AppChangeStore:  orquestaappchange.NewInMemoryAppChangeStoreV0(),
-			ReceiptStore:    orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(),
-			ProgressState:   orquestaruntimecodexdelivery.NewInMemoryCodexProgressStateStoreV0(),
-			ProcessRegistry: orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0(),
-			RunControl:      runMemory,
-			RunQueue:        runMemory,
+			RunStore:                           orquestacionnucleoapp.NewInMemoryRunStoreV0(),
+			EventSink:                          orquestacionnucleoapp.NewInMemoryEventSinkV0(),
+			OutboxLedger:                       orquestacionnucleoapp.NewInMemoryOutboxLedgerV0(),
+			TaskStore:                          orquestacionnucleoapp.NewInMemoryWorkflowTaskStoreV0(),
+			WaitStateStore:                     orquestacionnucleoapp.NewInMemoryWorkflowTaskWaitStateStoreV0(),
+			AppChangeStore:                     orquestaappchange.NewInMemoryAppChangeStoreV0(),
+			ReceiptStore:                       orquestaruntimecodexdelivery.NewInMemoryCodexReceiptDescriptorStoreV0(),
+			ProgressState:                      orquestaruntimecodexdelivery.NewInMemoryCodexProgressStateStoreV0(),
+			ProcessRegistry:                    orquestaagentprocessregistrymemory.NewInMemoryAgentProcessRegistryV0(),
+			RunControl:                         runMemory,
+			RunQueue:                           runMemory,
+			AutoprogrammingIntentManifestStore: orquestaautoprogramming.NewInMemoryAutoprogrammingIntentManifestStoreV0(),
 		},
 		Codex: CodexRuntimeConfigV0{
 			CommandPath:    filepath.Join(projectDir, "codex-bin"),

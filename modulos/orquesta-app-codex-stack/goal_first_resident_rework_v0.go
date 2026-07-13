@@ -661,10 +661,15 @@ func goalFirstResidentReworkSpecV0(
 	spec := orquestagoal.NormalizeGoalWorkSpecV0(state.Spec)
 	spec.RunRef = sourceRunRef + "-rework-" + suffix
 	spec.GoalRef = sourceGoalRef + "-rework-" + suffix
-	if strings.TrimSpace(spec.RequestRef) != "" {
-		spec.RequestRef = strings.TrimSpace(spec.RequestRef) + "-rework-" + suffix
-	} else {
-		spec.RequestRef = spec.RunRef
+	// A manifest is append-only under the original request_ref. Rework gets a
+	// new run/goal identity, but must address exactly the same durable bytes.
+	// Legacy specs without a manifest keep their historical derived request ref.
+	if strings.TrimSpace(spec.IntentManifestRef) == "" && strings.TrimSpace(spec.IntentManifestSHA256) == "" {
+		if strings.TrimSpace(spec.RequestRef) != "" {
+			spec.RequestRef = strings.TrimSpace(spec.RequestRef) + "-rework-" + suffix
+		} else {
+			spec.RequestRef = spec.RunRef
+		}
 	}
 	spec.Objective = strings.TrimSpace(spec.Objective) + "\n\nRework acotado: continuar desde artefactos y checkpoints existentes, no repetir lecturas amplias, producir el siguiente artefacto o receipt verificable, o cerrar blocked con causa concreta."
 	spec.ContextRefs = append(spec.ContextRefs,

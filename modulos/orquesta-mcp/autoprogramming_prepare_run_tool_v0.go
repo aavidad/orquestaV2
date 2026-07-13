@@ -187,6 +187,100 @@ func normalizeMCPAutoprogrammingPrepareRunIdentityV0(
 	return input, identity.Issues
 }
 
+// CanonicalMCPAutoprogrammingPrepareRunEnvelopeV0 projects the public MCP
+// command into the provider-neutral receipt owned by autoprogramming. Setting
+// values are intentionally consumed only by config validation and never copied
+// into durable evidence.
+func CanonicalMCPAutoprogrammingPrepareRunEnvelopeV0(
+	input MCPAutoprogrammingPrepareRunToolInputV0,
+) (orquestaautoprogramming.AutoprogrammingPrepareRunEnvelopeV0, []MCPValidationIssueV0) {
+	request := input.AutoprogrammingRequest
+	if strings.TrimSpace(input.RequestID) == "" {
+		input.RequestID = strings.TrimSpace(request.RequestRef)
+	}
+	identity := NormalizeMCPPublicMutationIdentityV0(MCPPublicMutationIdentityInputV0{
+		RequestID:      input.RequestID,
+		CorrelationID:  input.CorrelationID,
+		IdempotencyKey: input.IdempotencyKey,
+		Mutating:       true,
+	})
+	if len(identity.Issues) != 0 {
+		return orquestaautoprogramming.AutoprogrammingPrepareRunEnvelopeV0{}, identity.Issues
+	}
+	input.RequestID = identity.RequestID
+	input.CorrelationID = identity.CorrelationID
+	input.IdempotencyKey = identity.IdempotencyKey
+	if strings.TrimSpace(request.RequestRef) == "" {
+		request.RequestRef = firstNonEmptyMCPV0(input.RequestID, input.CorrelationID)
+	}
+	settings := make([]orquestaautoprogramming.AutoprogrammingPrepareRunRequiredSettingV0, 0, len(input.RequiredSettings))
+	for _, setting := range input.RequiredSettings {
+		settings = append(settings, orquestaautoprogramming.AutoprogrammingPrepareRunRequiredSettingV0{Key: setting.Key})
+	}
+	envelope, issues := orquestaautoprogramming.CanonicalAutoprogrammingPrepareRunEnvelopeV0(
+		orquestaautoprogramming.AutoprogrammingPrepareRunEnvelopeV0{
+			SchemaVersion:          orquestaautoprogramming.AutoprogrammingPrepareRunEnvelopeSchemaV0,
+			RequestID:              input.RequestID,
+			CorrelationID:          input.CorrelationID,
+			IdempotencyKey:         input.IdempotencyKey,
+			OccurredAt:             input.OccurredAt,
+			RequestedBy:            input.RequestedBy,
+			DirectorExecutionMode:  input.DirectorExecutionMode,
+			AutoprogrammingRequest: request,
+			MaxBursts:              input.MaxBursts,
+			MaxStepsPerBurst:       input.MaxStepsPerBurst,
+			MaxDispatchesPerWait:   input.MaxDispatchesPerWait,
+			MaxCommands:            input.MaxCommands,
+			MaxOutboxPerCycle:      input.MaxOutboxPerCycle,
+			PriorityScore:          input.PriorityScore,
+			RequiredSettings:       settings,
+		},
+	)
+	if len(issues) == 0 {
+		return envelope, nil
+	}
+	out := make([]MCPValidationIssueV0, 0, len(issues))
+	for _, issue := range issues {
+		out = append(out, MCPValidationIssueV0{
+			Code:    issue.Code,
+			Field:   issue.Field,
+			Message: MCPAutoprogrammingPrepareRunIssueMessageV0(issue.Code, issue.Message),
+		})
+	}
+	return orquestaautoprogramming.AutoprogrammingPrepareRunEnvelopeV0{}, out
+}
+
+// MCPAutoprogrammingPrepareRunIssueMessageV0 localizes pure contract message
+// keys at the public adapter boundary.
+func MCPAutoprogrammingPrepareRunIssueMessageV0(code string, fallback string) string {
+	code = strings.TrimSpace(code)
+	messages := map[string]string{
+		"prepare_run_envelope_schema_invalid":          "schema de prepare_run no válido",
+		"prepare_run_envelope_request_id_invalid":      "request_id requerido y válido",
+		"prepare_run_envelope_correlation_id_invalid":  "correlation_id requerido y válido",
+		"prepare_run_envelope_idempotency_key_invalid": "idempotency_key requerida y válida",
+		"prepare_run_envelope_occurred_at_invalid":     "occurred_at debe usar RFC3339",
+		"prepare_run_envelope_requested_by_invalid":    "requested_by requerido y válido",
+		"prepare_run_envelope_execution_mode_invalid":  "director_execution_mode no válido",
+		"prepare_run_envelope_limit_invalid":           "límite de prepare_run no válido",
+		"prepare_run_required_setting_key_invalid":     "required_settings.key requerido y válido",
+		"prepare_run_required_settings_too_many":       "required_settings excede el límite",
+		"prepare_run_idempotency_claim_store_missing":  "store durable de idempotencia requerido",
+		"prepare_run_idempotency_claim_conflict":       "idempotency_key ya pertenece a otro comando",
+		"prepare_run_idempotency_claim_substitution":   "store de idempotencia devolvió otro claim",
+		"intent_manifest_store_missing":                "manifest durable requerido antes de preparar el trabajo",
+		"intent_manifest_store_substitution":           "store de manifests devolvió otra intención",
+		"intent_manifest_legacy_request_conflict":      "manifest legacy no coincide con la petición canónica",
+	}
+	if message := messages[code]; message != "" {
+		return message
+	}
+	if fallback = strings.TrimSpace(fallback); fallback != "" && fallback != code {
+		return fallback
+	}
+	return code
+}
+
 func NewMCPAutoprogrammingPrepareRunErrorResultV0(
 	input MCPAutoprogrammingPrepareRunToolInputV0,
 	code string,

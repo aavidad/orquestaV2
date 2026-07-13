@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 )
 
@@ -83,6 +84,38 @@ func TestValidateMCPRequiredSettingsProjectionV0DetectaMismatchSinValoresSensibl
 		strings.Contains(issues[0].Message, "450000") ||
 		strings.Contains(issues[0].Message, "123") {
 		t.Fatalf("issues=%+v", issues)
+	}
+}
+
+func TestCanonicalMCPAutoprogrammingPrepareRunEnvelopeV0OmitsRequiredSettingValuesV0(t *testing.T) {
+	const secret = "top-secret-config-value-057"
+	envelope, issues := CanonicalMCPAutoprogrammingPrepareRunEnvelopeV0(MCPAutoprogrammingPrepareRunToolInputV0{
+		RequestID:      "request-envelope-mcp-001",
+		CorrelationID:  "corr-envelope-mcp-001",
+		IdempotencyKey: "idem-envelope-mcp-001",
+		OccurredAt:     "2026-07-13T10:00:00Z",
+		RequestedBy:    "operator-ref-envelope-mcp-001",
+		AutoprogrammingRequest: orquestaautoprogramming.AutoprogrammingRequestV0{
+			RequestRef:       "request-envelope-mcp-001",
+			ProjectRef:       "project-ref-envelope-mcp",
+			WorktreeRef:      "worktree-ref-envelope-mcp",
+			WorktreeIsolated: true,
+			BranchRef:        "branch-ref-envelope-mcp",
+			Tasks:            []orquestaautoprogramming.AutoprogrammingTaskGroupCandidateV0{{TaskRef: "task-ref-envelope-mcp", Area: "mcp"}},
+			WriteSet:         []string{"modulos/orquesta-mcp/autoprogramming_prepare_run_tool_v0.go"},
+			RequiredTests:    []string{"go test ./modulos/orquesta-mcp"},
+		},
+		RequiredSettings: []MCPRequiredSettingV0{{Key: "ORQUESTA_PRIVATE_SETTING", Value: secret}},
+	})
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	raw, err := json.Marshal(envelope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "ORQUESTA_PRIVATE_SETTING") || strings.Contains(string(raw), secret) || strings.Contains(string(raw), `"value"`) {
+		t.Fatalf("unsafe envelope=%s", raw)
 	}
 }
 

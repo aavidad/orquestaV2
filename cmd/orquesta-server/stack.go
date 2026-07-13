@@ -334,6 +334,7 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 		serverConfig,
 		projectConfig,
 		serverCodexGoalWorkspaceLookupFromBackendV0(autoprogrammingGoalBackend),
+		stateStore,
 	)
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
@@ -456,28 +457,35 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
+	autoprogrammingIntentRoot := filepath.Join(serverConfig.StateDir, "autoprogramming-intent-manifests")
+	if err := os.MkdirAll(autoprogrammingIntentRoot, 0o700); err != nil {
+		return orquestaappcodexstack.StackV0{}, err
+	}
+	autoprogrammingIntentStore := serverAutoprogrammingIntentManifestStoreV0{RootDir: autoprogrammingIntentRoot}
 	stack, err := orquestaappcodexstack.BuildStackV0(orquestaappcodexstack.ConfigV0{
 		Enabled:        true,
 		Timeout:        30 * time.Second,
 		DirectorLimits: directorLimitsV0(),
 		Stores: orquestaappcodexstack.StoresV0{
-			RunStore:                         runStore,
-			EventSink:                        stateStore,
-			OutboxLedger:                     outboxLedgerPort,
-			TaskStore:                        stateStore,
-			WaitStateStore:                   stateStore,
-			OperationalPlanStateWriter:       stateStore,
-			OperationalPlanStateStore:        stateStore,
-			RequiredTestEvidenceStore:        stateStore,
-			AppChangeStore:                   appChangeStore,
-			ReceiptStore:                     receiptStorePort,
-			ProgressState:                    progressStore,
-			ProcessRegistry:                  stateStore,
-			RunControl:                       runControl,
-			RunQueue:                         runQueue,
-			AppGoalStateStore:                appGoalStateStore,
-			GoalRequiredTestAttestationStore: stateStore,
-			AutoprogrammingBatchStore:        stateStore,
+			RunStore:                           runStore,
+			EventSink:                          stateStore,
+			OutboxLedger:                       outboxLedgerPort,
+			TaskStore:                          stateStore,
+			WaitStateStore:                     stateStore,
+			OperationalPlanStateWriter:         stateStore,
+			OperationalPlanStateStore:          stateStore,
+			RequiredTestEvidenceStore:          stateStore,
+			AppChangeStore:                     appChangeStore,
+			ReceiptStore:                       receiptStorePort,
+			ProgressState:                      progressStore,
+			ProcessRegistry:                    stateStore,
+			RunControl:                         runControl,
+			RunQueue:                           runQueue,
+			AppGoalStateStore:                  appGoalStateStore,
+			GoalRequiredTestAttestationStore:   stateStore,
+			AutoprogrammingBatchStore:          stateStore,
+			AutoprogrammingIntentManifestStore: autoprogrammingIntentStore,
+			AutoprogrammingPrepareRunIdempotencyClaimStore: autoprogrammingIntentStore,
 		},
 		RunQueue: orquestaappcodexstack.RunQueueConfigV0{
 			QueueRef:       "global",
@@ -698,7 +706,7 @@ func serverGoalMaterializedResultWatcherFromStackV0(
 		!serverConfig.GoalObserverEnabled ||
 		stack.Stores.AppGoalStateStore == nil ||
 		strings.TrimSpace(stack.Codex.ProjectWorkDir) == "" ||
-		goalBackend.Observer == nil {
+		serverGoalWorkObserverFromBackendV0(goalBackend) == nil {
 		return nil
 	}
 	return orquestaappcodexstack.NewGoalMaterializedResultWatcherV0(

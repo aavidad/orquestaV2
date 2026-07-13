@@ -20,13 +20,24 @@ func reframeAutoprogrammingRequestAfterRepeatedRetriesV0(
 	previousRunRef string,
 	nextAttempt int,
 ) orquestaautoprogramming.AutoprogrammingRequestV0 {
-	if nextAttempt < 2 || len(request.Tasks) == 0 {
+	if len(request.Tasks) == 0 {
 		return request
 	}
 	out := request
 	out.Tasks = append([]orquestaautoprogramming.AutoprogrammingTaskGroupCandidateV0(nil), request.Tasks...)
-	strategyRef := fmt.Sprintf("retry_strategy:reframe-%02d", nextAttempt)
 	previousRef := "previous_run_ref:" + autoprogrammingPrepareRetrySafeRefV0(previousRunRef)
+	attemptRef := fmt.Sprintf("retry_attempt:%02d", nextAttempt)
+	for index := range out.Tasks {
+		out.Tasks[index].ContextRefs = compactStringsV0(append(
+			append([]string(nil), out.Tasks[index].ContextRefs...),
+			previousRef,
+			attemptRef,
+		))
+	}
+	if nextAttempt < 2 {
+		return out
+	}
+	strategyRef := fmt.Sprintf("retry_strategy:reframe-%02d", nextAttempt)
 	for index := range out.Tasks {
 		out.Tasks[index] = reframeAutoprogrammingTaskAfterRepeatedRetriesV0(
 			out.Tasks[index],

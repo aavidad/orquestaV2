@@ -2,11 +2,14 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	orquestaagentprocessregistrymemory "orquesta/modulos/orquesta-agent-process-registry-memory"
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
+	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestacoreworkflow "orquesta/modulos/orquesta-core-workflow"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
 	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
@@ -14,6 +17,23 @@ import (
 	orquestarunqueue "orquesta/modulos/orquesta-run-queue"
 	orquestaruntime "orquesta/modulos/orquesta-runtime"
 )
+
+type prepareRunAuthorityOrderingQueueWriterForTestV0 struct {
+	delegate            orquestarunqueue.RunQueuePriorityWriterPortV0
+	manifestStore       orquestaautoprogramming.AutoprogrammingIntentManifestStorePortV0
+	expectedManifestRef string
+	observedBeforeMark  bool
+}
+
+func (writer *prepareRunAuthorityOrderingQueueWriterForTestV0) SetRunPriorityV0(ctx context.Context, command orquestarunqueue.RunQueuePriorityCommandV0) (orquestarunqueue.RunSchedulingCandidateV0, error) {
+	if command.Reason == "autoprogramming_stale_run_retried" {
+		if _, err := writer.manifestStore.LoadAutoprogrammingIntentManifestV0(ctx, writer.expectedManifestRef); err != nil {
+			return orquestarunqueue.RunSchedulingCandidateV0{}, fmt.Errorf("stale mark before durable authority: %w", err)
+		}
+		writer.observedBeforeMark = true
+	}
+	return writer.delegate.SetRunPriorityV0(ctx, command)
+}
 
 func TestCodexStackAutoprogrammingPrepareRunV0CreaRetrySiRunPrevioEstaAtascado(t *testing.T) {
 	ctx := context.Background()
@@ -45,25 +65,32 @@ func TestCodexStackAutoprogrammingPrepareRunV0CreaRetrySiRunPrevioEstaAtascado(t
 	}); err != nil {
 		t.Fatalf("SetRunPriorityV0 stale: %v", err)
 	}
+	intentStore := orquestaautoprogramming.NewInMemoryAutoprogrammingIntentManifestStoreV0()
 	stack := &StackV0{
 		Ports: orquestaappdirectorservice.StartAppDirectorPortsV0{
 			RunStore:          runStore,
 			DirectorTaskStore: taskStore,
 		},
 		Stores: StoresV0{
-			RunStore:  runStore,
-			TaskStore: taskStore,
-			RunQueue:  queue,
+			RunStore:                           runStore,
+			TaskStore:                          taskStore,
+			RunQueue:                           queue,
+			AutoprogrammingIntentManifestStore: intentStore,
 		},
 		Codex:                         CodexRuntimeConfigV0{ProjectWorkDir: t.TempDir()},
 		RunQueue:                      RunQueueConfigV0{QueueRef: "queue-main", DefaultPriorityScore: 10},
 		AllowLegacyAutoprogrammingRun: true,
 	}
+	orderingWriter := &prepareRunAuthorityOrderingQueueWriterForTestV0{
+		delegate:            queue,
+		manifestStore:       intentStore,
+		expectedManifestRef: autoprogrammingPrepareRetryRefV0(request.RequestRef, "2026-05-24T01:40:00Z", time.Time{}),
+	}
 	executor := NewCodexStackAutoprogrammingPrepareRunExecutorV0(
 		stack,
 		"2026-05-24T01:40:00Z",
 		"orquesta-test",
-		queue,
+		orderingWriter,
 		stack.RunQueue,
 		nil,
 		"",
@@ -89,6 +116,19 @@ func TestCodexStackAutoprogrammingPrepareRunV0CreaRetrySiRunPrevioEstaAtascado(t
 		!strings.Contains(result.RunRef, "-retry-") {
 		t.Fatalf("result=%+v stale=%s", result, stale.RunID)
 	}
+	if !orderingWriter.observedBeforeMark {
+		t.Fatal("stale candidate marked before claim/manifest authority")
+	}
+	retryManifest, err := intentStore.LoadAutoprogrammingIntentManifestV0(ctx, result.RunRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	retryContent, retryIssues := orquestaautoprogramming.ProjectAutoprogrammingIntentManifestContentV0(retryManifest)
+	if len(retryIssues) != 0 || retryContent.PrepareRunEnvelope == nil ||
+		!autoprogrammingBridgeStringInSetForTestV0(retryContent.Request.Tasks[0].ContextRefs, "previous_run_ref:"+stale.RunID) ||
+		!autoprogrammingBridgeStringInSetForTestV0(retryContent.Request.Tasks[0].ContextRefs, "retry_attempt:01") {
+		t.Fatalf("retry content=%+v issues=%+v", retryContent, retryIssues)
+	}
 	if _, err := runStore.LoadRunV0(ctx, stale.RunID); err != nil {
 		t.Fatalf("run viejo debe conservarse: %v", err)
 	}
@@ -100,6 +140,29 @@ func TestCodexStackAutoprogrammingPrepareRunV0CreaRetrySiRunPrevioEstaAtascado(t
 		candidates[0].RunRef != result.RunRef ||
 		!autoprogrammingBridgeStringInSetForTestV0(candidates[0].EvidenceRefs, "evidence-ref-autoprogramming-prepare-run-enqueued") {
 		t.Fatalf("candidates=%+v result=%+v", candidates, result)
+	}
+}
+
+func TestAutoprogrammingPrepareRunRetryV0UsesStableNeutralPublicMessage(t *testing.T) {
+	ctx := context.Background()
+	runStore := orquestacionnucleoapp.NewInMemoryRunStoreV0()
+	request := autoprogrammingBridgeRequestForTestV0()
+	request.RequestRef = "run-autoprogramming-retry-message-001"
+	if err := runStore.SaveRunV0(ctx, orquestacoreworkflow.OrchestrationRunV0{
+		SchemaVersion: orquestacoreworkflow.OrchestrationRunSchemaVersionV0,
+		RunID:         request.RequestRef,
+		Status:        orquestacoreworkflow.OrchestrationRunStatusActiveV0,
+		FailedAgents:  []string{"agent-ref-autoprogramming-retry-message-001"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	executor := CodexStackAutoprogrammingPrepareRunExecutorV0{Stack: &StackV0{Stores: StoresV0{RunStore: runStore}}}
+	plan := executor.planFreshAttemptForStaleAutoprogrammingRunV0(ctx, orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+		RequestID: request.RequestRef, AutoprogrammingRequest: request,
+	})
+	const key = "autoprogramming_prepare_run_retry_occurred_at_required"
+	if len(plan.Issues) != 1 || plan.Issues[0].Code != key || plan.Issues[0].Message != key || plan.Issues[0].Field != "occurred_at" {
+		t.Fatalf("issues=%+v", plan.Issues)
 	}
 }
 
@@ -151,9 +214,10 @@ func TestCodexStackAutoprogrammingPrepareRunV0CreaRetrySiAssessmentTerminalQuedo
 			DirectorTaskStore: taskStore,
 		},
 		Stores: StoresV0{
-			RunStore:  runStore,
-			TaskStore: taskStore,
-			RunQueue:  queue,
+			RunStore:                           runStore,
+			TaskStore:                          taskStore,
+			RunQueue:                           queue,
+			AutoprogrammingIntentManifestStore: orquestaautoprogramming.NewInMemoryAutoprogrammingIntentManifestStoreV0(),
 		},
 		Codex:                         CodexRuntimeConfigV0{ProjectWorkDir: t.TempDir()},
 		RunQueue:                      RunQueueConfigV0{QueueRef: "queue-main", DefaultPriorityScore: 10},
@@ -233,9 +297,10 @@ func TestCodexStackAutoprogrammingPrepareRunV0CreaRetrySiLaunchFalloSinStartedAg
 			DirectorTaskStore: taskStore,
 		},
 		Stores: StoresV0{
-			RunStore:  runStore,
-			TaskStore: taskStore,
-			RunQueue:  queue,
+			RunStore:                           runStore,
+			TaskStore:                          taskStore,
+			RunQueue:                           queue,
+			AutoprogrammingIntentManifestStore: orquestaautoprogramming.NewInMemoryAutoprogrammingIntentManifestStoreV0(),
 		},
 		Codex:                         CodexRuntimeConfigV0{ProjectWorkDir: t.TempDir()},
 		RunQueue:                      RunQueueConfigV0{QueueRef: "queue-main", DefaultPriorityScore: 10},
@@ -295,10 +360,11 @@ func TestCodexStackAutoprogrammingPrepareRunV0NoCreaRetrySiHayProcesoVivoRegistr
 			DirectorTaskStore: taskStore,
 		},
 		Stores: StoresV0{
-			RunStore:        runStore,
-			TaskStore:       taskStore,
-			RunQueue:        queue,
-			ProcessRegistry: processRegistry,
+			RunStore:                           runStore,
+			TaskStore:                          taskStore,
+			RunQueue:                           queue,
+			ProcessRegistry:                    processRegistry,
+			AutoprogrammingIntentManifestStore: orquestaautoprogramming.NewInMemoryAutoprogrammingIntentManifestStoreV0(),
 		},
 		Codex:                         CodexRuntimeConfigV0{ProjectWorkDir: t.TempDir()},
 		CodexSnapshotSource:           runtime,

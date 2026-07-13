@@ -206,7 +206,7 @@ func (stack StackV0) integrateAutoprogrammingBatchMembersV0(
 		}
 		integrationRef := codexStackDeterministicRefV0("integration-ref-autoprogramming-batch-", batch.BatchRef, fmt.Sprint(batch.GateGeneration), member.TaskRef, parentRevision)
 		result, issues := config.GoalWorkspaceIntegration.IntegrateGoalWorkspaceV0(ctx, orquestaruntimeworktree.GoalWorkspaceIntegrationRequestV0{
-			IntegrationRef: integrationRef, SourceWorkspaceDir: workspaceDir, CanonicalWorkDir: strings.TrimSpace(stack.Codex.ProjectWorkDir),
+			IntegrationRef: integrationRef, SourceWorkspaceDir: workspaceDir, CanonicalWorkDir: stack.autoprogrammingCanonicalWorkDirV0(),
 			BaseRevision: batch.BaseRevision, ExpectedParentRevision: parentRevision,
 			WriteSet: member.WriteSet, CommitMessage: config.CommitMessage, ReceiptDir: receiptDir,
 		})
@@ -242,7 +242,7 @@ func (stack StackV0) runAutoprogrammingBatchGateV0(
 			continue
 		}
 		claimRef, claimed := autoprogrammingBatchClaimRefV0(batch, batch.GateGeneration, batch.IntegratedRevision, testHash)
-		request := AutoprogrammingBatchTestRunRequestV0{BatchRef: batch.BatchRef, GateGeneration: batch.GateGeneration, Revision: batch.IntegratedRevision, Test: test, TestHash: testHash, ClaimRef: claimRef, CanonicalWorkDir: strings.TrimSpace(stack.Codex.ProjectWorkDir)}
+		request := AutoprogrammingBatchTestRunRequestV0{BatchRef: batch.BatchRef, GateGeneration: batch.GateGeneration, Revision: batch.IntegratedRevision, Test: test, TestHash: testHash, ClaimRef: claimRef, CanonicalWorkDir: stack.autoprogrammingCanonicalWorkDirV0()}
 		if claimed {
 			reconciler, ok := runner.(AutoprogrammingBatchTestClaimReconcilerPortV0)
 			if !ok {
@@ -314,7 +314,7 @@ func (stack StackV0) promoteAutoprogrammingBatchV0(
 	if !claimed && config.BatchPromotionFinalizer == nil {
 		return stack.blockAutoprogrammingBatchV0(ctx, store, batch, "batch-block-ref-promotion-finalizer-missing", refs)
 	}
-	if strings.TrimSpace(stack.Codex.ProjectWorkDir) == "" || strings.TrimSpace(config.BatchPromotionReceiptDir) == "" {
+	if stack.autoprogrammingCanonicalWorkDirV0() == "" || strings.TrimSpace(config.BatchPromotionReceiptDir) == "" {
 		return stack.blockAutoprogrammingBatchV0(ctx, store, batch, "batch-block-ref-promotion-paths-missing", refs)
 	}
 	if !claimed {
@@ -329,7 +329,7 @@ func (stack StackV0) promoteAutoprogrammingBatchV0(
 	}
 	request := AutoprogrammingBatchPromotionRequestV0{
 		BatchRef: batch.BatchRef, GateGeneration: batch.GateGeneration, ClaimRef: claimRef,
-		IntegratedRevision: batch.IntegratedRevision, CanonicalWorkDir: strings.TrimSpace(stack.Codex.ProjectWorkDir),
+		IntegratedRevision: batch.IntegratedRevision, CanonicalWorkDir: stack.autoprogrammingCanonicalWorkDirV0(),
 		ReceiptDir: strings.TrimSpace(config.BatchPromotionReceiptDir), EvidenceRefs: compactStringsV0(append(refs, batch.IntegratedRevision)),
 	}
 	var result AutoprogrammingBatchPromotionResultV0

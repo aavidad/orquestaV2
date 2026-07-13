@@ -37,6 +37,8 @@ func TestRunSupervisorGoalFirstResidentPreparaReworkPorCheckpointHighConsumption
 		t.Fatalf("Bind source spec: %v", err)
 	}
 	source.Spec.WriteSetSHA256 = orquestagoal.GoalWriteSetSHA256V0(source.Spec.WriteSet)
+	source.Spec.IntentManifestRef = "intent-manifest-ref-request-ref-goal-first-resident-rework-source-001"
+	source.Spec.IntentManifestSHA256 = strings.Repeat("a", 64)
 	if err := store.SaveGoalWorkStateV0(ctx, source); err != nil {
 		t.Fatalf("SaveGoalWorkStateV0 source: %v", err)
 	}
@@ -66,6 +68,8 @@ func TestRunSupervisorGoalFirstResidentPreparaReworkPorCheckpointHighConsumption
 	if spec.RunRef != result.RepairRunRefs[0] ||
 		!strings.Contains(spec.Objective, "Rework acotado") ||
 		spec.ImplementerAgentRef != "agent-ref-goal-first-resident-rework-binder" ||
+		spec.RequestRef != source.Spec.RequestRef ||
+		spec.IntentManifestRef != source.Spec.IntentManifestRef || spec.IntentManifestSHA256 != source.Spec.IntentManifestSHA256 ||
 		!stringInSetV0(spec.EvidenceRefs, goalFirstResidentReworkPreparedEvidenceRefV0) {
 		t.Fatalf("spec rework incompleto: %+v result=%+v", spec, result)
 	}
@@ -91,6 +95,25 @@ func TestRunSupervisorGoalFirstResidentPreparaReworkPorCheckpointHighConsumption
 	}
 	if goalFirstResidentExistingReworkRunRefV0(persistedSource) != result.RepairRunRefs[0] {
 		t.Fatalf("source sin marca de rework: %+v", persistedSource.EvidenceRefs)
+	}
+}
+
+func TestGoalFirstResidentReworkSpecV0PreservaIdentidadManifestYDerivaLegacyV0(t *testing.T) {
+	manifestSource := goalFirstResidentReworkSourceStateForTestV0("run-ref-rework-manifest-001", "checkpoint_only_high_consumption")
+	manifestSource.Spec.IntentManifestRef = "intent-manifest-ref-" + manifestSource.Spec.RequestRef
+	manifestSource.Spec.IntentManifestSHA256 = strings.Repeat("a", 64)
+	manifestRework := goalFirstResidentReworkSpecV0(manifestSource, "checkpoint_only_high_consumption", nil)
+	if manifestRework.RequestRef != manifestSource.Spec.RequestRef ||
+		manifestRework.IntentManifestRef != manifestSource.Spec.IntentManifestRef ||
+		manifestRework.IntentManifestSHA256 != manifestSource.Spec.IntentManifestSHA256 {
+		t.Fatalf("manifest identity changed: source=%+v rework=%+v", manifestSource.Spec, manifestRework)
+	}
+
+	legacySource := goalFirstResidentReworkSourceStateForTestV0("run-ref-rework-legacy-001", "checkpoint_only_high_consumption")
+	legacyRework := goalFirstResidentReworkSpecV0(legacySource, "checkpoint_only_high_consumption", nil)
+	if legacyRework.RequestRef == legacySource.Spec.RequestRef ||
+		!strings.HasPrefix(legacyRework.RequestRef, legacySource.Spec.RequestRef+"-rework-") {
+		t.Fatalf("legacy request identity not derived: source=%q rework=%q", legacySource.Spec.RequestRef, legacyRework.RequestRef)
 	}
 }
 
@@ -1011,13 +1034,20 @@ func (launcher *goalFirstResidentReworkLauncherForTestV0) LaunchGoalWorkV0(
 ) (orquestagoal.GoalLaunchReceiptV0, error) {
 	launcher.calls++
 	launcher.specs = append(launcher.specs, spec)
-	return orquestagoal.GoalLaunchReceiptV0{
+	receipt := orquestagoal.GoalLaunchReceiptV0{
 		SchemaVersion:   orquestagoal.GoalWorkLaunchReceiptSchemaV0,
 		Status:          orquestagoal.GoalStatusRunningV0,
 		GoalRef:         spec.GoalRef,
 		ExternalGoalRef: "thread-ref-goal-first-resident-rework-test",
 		EvidenceRefs:    []string{"evidence-ref-goal-first-resident-rework-launch"},
-	}, nil
+	}
+	if spec.IntentManifestRef != "" || spec.IntentManifestSHA256 != "" {
+		receipt = orquestagoal.ApplyGoalExecutionAuthorityToReceiptV0(
+			receipt,
+			orquestagoal.GoalExecutionAuthorityForProviderV0(spec, "provider-ref-test-resident-rework"),
+		)
+	}
+	return receipt, nil
 }
 
 func TestRunSupervisorGoalFirstResidentReconciliaProcesoMuertoConVeredictoCausalV0(t *testing.T) {

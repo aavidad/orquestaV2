@@ -62,6 +62,79 @@ func TestServerCodexAppServerGoalBackendV0LanzaThreadGoalYTurnMigradoV0(t *testi
 	}
 }
 
+func TestServerCodexAppServerGoalBackendV0DevuelveGeneracionDeterministaParaAutoridadV0(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{
+		thread: serverCodexAppServerThreadV0{ID: "thread-ref-goal-authority-001"},
+		goal:   serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-goal-authority-001", Status: "active"},
+		turn:   serverCodexAppServerTurnV0{ID: "turn-ref-goal-authority-001", Status: "inProgress"},
+	}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol, Sandbox: "workspace-write", Runtime: &serverCodexAppServerGoalRuntimeV0{}}
+	goalRef := "goal-ref-authority-001"
+	packet := orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		GoalRef: goalRef, IntentManifestRef: "intent-manifest-ref-authority-001",
+		IntentManifestSHA256: strings.Repeat("a", 64),
+		WorkspaceRef:         orquestagoal.GoalWorkspaceRefForGoalV0(goalRef),
+		ProviderRef:          orquestaruntimecodexgoal.CodexGoalProviderRefV0,
+	}
+
+	receipt, err := backend.StartCodexGoalV0(context.Background(), packet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authority, _, err := codexAppServerStartAuthorityV0(packet)
+	if err != nil || receipt.RuntimeGenerationRef == "" || receipt.RuntimeGenerationRef != authority.RuntimeGenerationRef {
+		t.Fatalf("receipt=%+v authority=%+v err=%v", receipt, authority, err)
+	}
+}
+
+func TestServerCodexAppServerGoalBackendV0RechazaExternalGoalAjenoAntesDeObserveYStopV0(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{
+		thread:       serverCodexAppServerThreadV0{ID: "thread-ref-authority-owner-001"},
+		goal:         serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-authority-owner-001", Status: "active"},
+		turn:         serverCodexAppServerTurnV0{ID: "turn-ref-authority-owner-001", Status: "inProgress"},
+		observedGoal: &serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-authority-owner-001", Status: "active"},
+	}
+	runtime := &serverCodexAppServerGoalRuntimeV0{}
+	shutdown := &fakeCodexAppServerBackendShutdownV0{}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol: protocol, Sandbox: "workspace-write", Runtime: runtime, BackendShutdown: shutdown,
+	}
+	goalRef := "goal-ref-authority-owner-001"
+	packet := orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		GoalRef: goalRef, IntentManifestRef: "intent-manifest-ref-authority-owner-001",
+		IntentManifestSHA256: strings.Repeat("a", 64),
+		WorkspaceRef:         orquestagoal.GoalWorkspaceRefForGoalV0(goalRef),
+		ProviderRef:          orquestaruntimecodexgoal.CodexGoalProviderRefV0,
+	}
+	receipt, err := backend.StartCodexGoalV0(context.Background(), packet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := len(protocol.calls)
+	request := orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		GoalRef: goalRef, ExternalGoalRef: "thread-ref-authority-other-001",
+		IntentManifestRef: packet.IntentManifestRef, IntentManifestSHA256: packet.IntentManifestSHA256,
+		WorkspaceAuthoritySchemaVersion: orquestagoal.GoalWorkspaceAuthoritySchemaV0,
+		WorkspaceRef:                    packet.WorkspaceRef, ProviderRef: packet.ProviderRef,
+		RuntimeGenerationRef: receipt.RuntimeGenerationRef,
+	}
+	observed, err := backend.ObserveCodexGoalV0(context.Background(), request)
+	if err == nil || observed.IssueCode != "codex_app_server_goal_thread_authority_mismatch" || len(protocol.calls) != before {
+		t.Fatalf("observed=%+v err=%v calls=%v", observed, err, protocol.calls)
+	}
+	stopped, err := backend.StopCodexGoalV0(context.Background(), CodexGoalStopRequestV0{
+		GoalRef: request.GoalRef, ExternalGoalRef: request.ExternalGoalRef,
+		IntentManifestRef: request.IntentManifestRef, IntentManifestSHA256: request.IntentManifestSHA256,
+		WorkspaceAuthoritySchemaVersion: request.WorkspaceAuthoritySchemaVersion,
+		WorkspaceRef:                    request.WorkspaceRef, ProviderRef: request.ProviderRef,
+		RuntimeGenerationRef: request.RuntimeGenerationRef, Action: "stop", Forced: true,
+	})
+	if err == nil || stopped.IssueCode != "codex_app_server_goal_thread_authority_mismatch" ||
+		len(protocol.calls) != before || shutdown.calls != 0 || shutdown.forcedCalls != 0 {
+		t.Fatalf("stopped=%+v err=%v calls=%v shutdown=%+v", stopped, err, protocol.calls, shutdown)
+	}
+}
+
 func TestServerCodexAppServerGoalBackendV0FallaCerradoSiNoActualizaSettingsAntesDeGoalV0(t *testing.T) {
 	updateErr := errors.New("settings update unavailable")
 	protocol := &fakeCodexAppServerProtocolV0{
@@ -342,7 +415,7 @@ func TestServerCodexAppServerGoalBackendV0TurnStartToolOutputPolicyFallbackSoloS
 
 func TestServerCodexAppServerGoalBackendV0MaterializaCheckpointAntesDeTurnStartV0(t *testing.T) {
 	root := t.TempDir()
-	checkpointPath := filepath.Join(root, ".orquesta-runtime", "goal-receipts", "goal-ref-checkpoint-preturn-001", "checkpoint_started.txt")
+	checkpointPath := filepath.Join(root, filepath.FromSlash(orquestaruntimecodexgoal.CodexGoalRuntimeReceiptRelativeDirV0("goal-ref-checkpoint-preturn-001")), "checkpoint_started.txt")
 	protocol := &fakeCodexAppServerProtocolV0{
 		thread: serverCodexAppServerThreadV0{ID: "thread-ref-goal-checkpoint-preturn-001"},
 		goal:   serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-goal-checkpoint-preturn-001", Status: "active"},
@@ -380,9 +453,10 @@ func TestServerCodexAppServerGoalBackendV0MaterializaCheckpointAntesDeTurnStartV
 		t.Fatalf("read checkpoint: %v", readErr)
 	}
 	body := string(data)
+	checkpointRef := orquestaruntimecodexgoal.CodexGoalRuntimeReceiptRelativeDirV0(packet.GoalRef) + "/checkpoint_started.txt"
 	if receipt.Status != orquestagoal.GoalStatusRunningV0 ||
 		!containsStringMigratedTestV0(protocol.calls, "turn/start") ||
-		!containsStringPrefixMigratedTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-early-checkpoint-materialized:.orquesta-runtime/goal-receipts/goal-ref-checkpoint-preturn-001/checkpoint_started.txt") ||
+		!containsStringPrefixMigratedTestV0(receipt.EvidenceRefs, "evidence-ref-codex-app-server-early-checkpoint-materialized:"+checkpointRef) ||
 		!strings.Contains(body, "schema_version=orquesta.codex_app_server.early_checkpoint.v0") ||
 		!strings.Contains(body, "goal_ref=goal-ref-checkpoint-preturn-001") ||
 		!strings.Contains(body, "external_goal_ref=thread-ref-goal-checkpoint-preturn-001") {
@@ -392,7 +466,9 @@ func TestServerCodexAppServerGoalBackendV0MaterializaCheckpointAntesDeTurnStartV
 
 func TestServerCodexAppServerGoalBackendV0ObservaCheckpointStartedComoReasonCodeV0(t *testing.T) {
 	root := t.TempDir()
-	checkpointPath := filepath.Join(root, ".orquesta-runtime", "goal-receipts", "goal-ref-checkpoint-observe-001", "checkpoint_started.txt")
+	goalRef := "goal-ref-checkpoint-observe-001"
+	checkpointRef := orquestaruntimecodexgoal.CodexGoalRuntimeReceiptRelativeDirV0(goalRef) + "/checkpoint_started.txt"
+	checkpointPath := filepath.Join(root, filepath.FromSlash(checkpointRef))
 	protocol := &fakeCodexAppServerProtocolV0{
 		observedGoal: &serverCodexAppServerThreadGoalV0{
 			ThreadID: "thread-ref-goal-checkpoint-observe-001",
@@ -434,7 +510,7 @@ func TestServerCodexAppServerGoalBackendV0ObservaCheckpointStartedComoReasonCode
 	}
 	if receipt.Status != orquestagoal.GoalStatusRunningV0 ||
 		receipt.IssueCode != codexAppServerGoalResultCheckpointReasonCodeV0 ||
-		!containsStringMigratedTestV0(receipt.ArtifactPaths, ".orquesta-runtime/goal-receipts/goal-ref-checkpoint-observe-001/checkpoint_started.txt") ||
+		!containsStringMigratedTestV0(receipt.ArtifactPaths, checkpointRef) ||
 		!containsStringMigratedTestV0(receipt.EvidenceRefs, codexAppServerGoalResultCheckpointEvidenceRefV0) {
 		t.Fatalf("receipt=%+v", receipt)
 	}
@@ -487,6 +563,27 @@ func TestServerCodexAppServerGoalBackendV0StopForcedBloqueaGoalYApagaBackendV0(t
 		!containsStringMigratedTestV0(result.EvidenceRefs, codexAppServerGoalForcedStopSetEvidenceV0) ||
 		!containsStringMigratedTestV0(result.EvidenceRefs, codexAppServerGoalForcedStopTmuxStoppedV0) {
 		t.Fatalf("result=%+v set=%+v shutdown_calls=%d forced_calls=%d", result, protocol.setParams, shutdown.calls, shutdown.forcedCalls)
+	}
+}
+
+func TestServerCodexAppServerGoalBackendV0StopRechazaGeneracionAjenaAntesDeEfectosV0(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{}
+	shutdown := &fakeCodexAppServerBackendShutdownV0{}
+	backend := serverCodexAppServerGoalBackendV0{Protocol: protocol, BackendShutdown: shutdown}
+	goalRef := "goal-ref-stop-authority-001"
+
+	result, err := backend.StopCodexGoalV0(context.Background(), CodexGoalStopRequestV0{
+		GoalRef: goalRef, ExternalGoalRef: "thread-ref-stop-authority-001",
+		IntentManifestRef: "intent-manifest-ref-stop-authority-001", IntentManifestSHA256: strings.Repeat("a", 64),
+		WorkspaceAuthoritySchemaVersion: orquestagoal.GoalWorkspaceAuthoritySchemaV0,
+		WorkspaceRef:                    orquestagoal.GoalWorkspaceRefForGoalV0(goalRef),
+		ProviderRef:                     orquestaruntimecodexgoal.CodexGoalProviderRefV0,
+		RuntimeGenerationRef:            "runtime-generation-ref-other",
+		Action:                          "stop", Forced: true,
+	})
+	if err == nil || result.IssueCode != "codex_app_server_goal_stop_authority_invalid" ||
+		len(protocol.calls) != 0 || shutdown.calls != 0 || shutdown.forcedCalls != 0 {
+		t.Fatalf("result=%+v err=%v calls=%v shutdown=%+v", result, err, protocol.calls, shutdown)
 	}
 }
 

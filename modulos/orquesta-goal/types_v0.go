@@ -12,6 +12,7 @@ const (
 	GoalRequiredTestAttestationSchemaV0      = "orquesta_goal_required_test_attestation.v0"
 	GoalRequiredTestFinalSnapshotSchemaV0    = "orquesta_goal_required_test_final_snapshot.v0"
 	GoalRequiredTestAttestationClaimSchemaV0 = "orquesta_goal_required_test_attestation_claim.v0"
+	GoalWorkspaceAuthoritySchemaV0           = "orquesta_goal_workspace_authority.v0"
 
 	GoalDirectorKindRuntimeGoalV0 = "runtime_goal"
 	GoalDirectorKindCodexGoalV0   = "codex_goal"
@@ -69,6 +70,10 @@ const (
 	ErrGoalUsageObservationTimestampInvalidV0              = "goal_usage_observation_timestamp_invalid"
 	ErrGoalUsageObservationEvidenceRequiredV0              = "goal_usage_observation_evidence_required"
 	ErrGoalUsageObservationSourceRequiredV0                = "goal_usage_observation_source_required"
+	ErrGoalWorkspaceBindingInvalidV0                       = "goal_workspace_binding_invalid"
+	ErrGoalWorkspaceRefMismatchV0                          = "goal_workspace_ref_mismatch"
+	ErrGoalWorkspaceProviderMismatchV0                     = "goal_workspace_provider_mismatch"
+	ErrGoalWorkspaceRuntimeGenerationMismatchV0            = "goal_workspace_runtime_generation_mismatch"
 	GoalIssueRequiredTestsEnvironmentUnavailableV0         = "required_tests_environment_unavailable"
 )
 
@@ -78,12 +83,15 @@ const (
 	GoalWorkIssueDetailMaxBytesV0       = 4 * 1024
 	GoalWorkSpecMaxListItemsV0          = 512
 	GoalWorkSpecMaxProjectedJSONBytesV0 = 256 * 1024
+	GoalWorkspaceAuthorityRefMaxBytesV0 = 180
 )
 
 type GoalWorkSpecV0 struct {
 	SchemaVersion             string                                 `json:"schema_version"`
 	GoalRef                   string                                 `json:"goal_ref"`
 	RequestRef                string                                 `json:"request_ref,omitempty"`
+	IntentManifestRef         string                                 `json:"intent_manifest_ref,omitempty"`
+	IntentManifestSHA256      string                                 `json:"intent_manifest_sha256,omitempty"`
 	RunRef                    string                                 `json:"run_ref,omitempty"`
 	ImplementerAgentRef       string                                 `json:"implementer_agent_ref,omitempty"`
 	ImplementerCredentialRef  string                                 `json:"implementer_credential_ref,omitempty"`
@@ -194,14 +202,19 @@ type GoalWorkIssueV0 struct {
 }
 
 type GoalLaunchReceiptV0 struct {
-	SchemaVersion        string              `json:"schema_version"`
-	Status               string              `json:"status"`
-	GoalRef              string              `json:"goal_ref,omitempty"`
-	ExternalGoalRef      string              `json:"external_goal_ref,omitempty"`
-	RuntimeGenerationRef string              `json:"runtime_generation_ref,omitempty"`
-	ContextBudget        GoalContextBudgetV0 `json:"context_budget,omitempty"`
-	EvidenceRefs         []string            `json:"evidence_refs,omitempty"`
-	Issues               []GoalWorkIssueV0   `json:"issues,omitempty"`
+	SchemaVersion                   string              `json:"schema_version"`
+	Status                          string              `json:"status"`
+	GoalRef                         string              `json:"goal_ref,omitempty"`
+	ExternalGoalRef                 string              `json:"external_goal_ref,omitempty"`
+	IntentManifestRef               string              `json:"intent_manifest_ref,omitempty"`
+	IntentManifestSHA256            string              `json:"intent_manifest_sha256,omitempty"`
+	WorkspaceAuthoritySchemaVersion string              `json:"workspace_authority_schema_version,omitempty"`
+	WorkspaceRef                    string              `json:"workspace_ref,omitempty"`
+	ProviderRef                     string              `json:"provider_ref,omitempty"`
+	RuntimeGenerationRef            string              `json:"runtime_generation_ref,omitempty"`
+	ContextBudget                   GoalContextBudgetV0 `json:"context_budget,omitempty"`
+	EvidenceRefs                    []string            `json:"evidence_refs,omitempty"`
+	Issues                          []GoalWorkIssueV0   `json:"issues,omitempty"`
 }
 
 type GoalContextBudgetV0 struct {
@@ -464,9 +477,14 @@ type GoalRequiredTestAttestationClaimPolicyV0 struct {
 }
 
 type GoalObservationRequestV0 struct {
-	GoalRef              string `json:"goal_ref"`
-	ExternalGoalRef      string `json:"external_goal_ref,omitempty"`
-	RuntimeGenerationRef string `json:"runtime_generation_ref,omitempty"`
+	GoalRef                         string `json:"goal_ref"`
+	ExternalGoalRef                 string `json:"external_goal_ref,omitempty"`
+	IntentManifestRef               string `json:"intent_manifest_ref,omitempty"`
+	IntentManifestSHA256            string `json:"intent_manifest_sha256,omitempty"`
+	WorkspaceAuthoritySchemaVersion string `json:"workspace_authority_schema_version,omitempty"`
+	WorkspaceRef                    string `json:"workspace_ref,omitempty"`
+	ProviderRef                     string `json:"provider_ref,omitempty"`
+	RuntimeGenerationRef            string `json:"runtime_generation_ref,omitempty"`
 }
 
 type GoalClosureValidationV0 struct {

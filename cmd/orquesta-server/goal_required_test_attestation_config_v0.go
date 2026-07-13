@@ -14,12 +14,19 @@ import (
 	"time"
 
 	orquestagoal "orquesta/modulos/orquesta-goal"
-	orquestaruntimecodexgoal "orquesta/modulos/orquesta-runtime-codex-goal"
 	orquestaruntimerequiredtest "orquesta/modulos/orquesta-runtime-required-test"
 	orquestaserver "orquesta/modulos/orquesta-server"
 )
 
 const goalRequiredTestAttestationConfigSchemaV0 = "orquesta_goal_required_test_attestation_config.v0"
+
+type autoprogrammingGoalWorkspaceAttestationAuthorityUnavailableErrorV0 struct{}
+
+func (autoprogrammingGoalWorkspaceAttestationAuthorityUnavailableErrorV0) Error() string {
+	return "autoprogramming_goal_workspace_attestation_authority_unavailable"
+}
+
+var errAutoprogrammingGoalWorkspaceAttestationAuthorityUnavailableV0 error = autoprogrammingGoalWorkspaceAttestationAuthorityUnavailableErrorV0{}
 
 type serverGoalRequiredTestAttestationConfigFileV0 struct {
 	SchemaVersion       string                                          `json:"schema_version"`
@@ -137,13 +144,15 @@ func goalRequiredTestAttestationRuntimeConfigFromConfigV0(
 type serverGoalRequiredTestAttestationWorkspaceSelectorV0 struct {
 	Canonical       *orquestaruntimerequiredtest.LocalGoalRequiredTestAttestationAdapterV0
 	RuntimeConfig   orquestaruntimerequiredtest.LocalGoalRequiredTestAttestationConfigV0
-	WorkspaceLookup serverCodexGoalWorkspaceBindingLookupV0
+	WorkspaceLookup serverGoalWorkspaceBindingLookupV0
+	GoalStateStore  orquestagoal.GoalWorkStateStorePortV0
 }
 
 func goalRequiredTestAttestationWorkspaceSelectorFromConfigV0(
 	serverConfig orquestaserver.ConfigV0,
 	projectConfig serverProjectConfigFileV0,
-	workspaceLookup serverCodexGoalWorkspaceBindingLookupV0,
+	workspaceLookup serverGoalWorkspaceBindingLookupV0,
+	goalStateStore orquestagoal.GoalWorkStateStorePortV0,
 ) (*serverGoalRequiredTestAttestationWorkspaceSelectorV0, error) {
 	runtimeConfig, configured, err := goalRequiredTestAttestationRuntimeConfigFromConfigV0(serverConfig, projectConfig)
 	if err != nil || !configured {
@@ -161,6 +170,7 @@ func goalRequiredTestAttestationWorkspaceSelectorFromConfigV0(
 		Canonical:       canonical,
 		RuntimeConfig:   runtimeConfig,
 		WorkspaceLookup: workspaceLookup,
+		GoalStateStore:  goalStateStore,
 	}, nil
 }
 
@@ -186,7 +196,7 @@ func (selector *serverGoalRequiredTestAttestationWorkspaceSelectorV0) CaptureGoa
 	ctx context.Context,
 	request orquestagoal.GoalRequiredTestFinalSnapshotRequestV0,
 ) (orquestagoal.GoalRequiredTestFinalSnapshotV0, error) {
-	adapter, err := selector.adapterForGoalV0(ctx, request.GoalRef)
+	adapter, err := selector.adapterForGoalV0(ctx, request.RunRef, request.GoalRef)
 	if err != nil {
 		return orquestagoal.GoalRequiredTestFinalSnapshotV0{}, err
 	}
@@ -200,7 +210,7 @@ func (selector *serverGoalRequiredTestAttestationWorkspaceSelectorV0) AttestGoal
 	ctx context.Context,
 	request orquestagoal.GoalRequiredTestAttestationRequestV0,
 ) ([]orquestagoal.GoalRequiredTestAttestationV0, error) {
-	adapter, err := selector.adapterForGoalV0(ctx, request.GoalRef)
+	adapter, err := selector.adapterForGoalV0(ctx, request.RunRef, request.GoalRef)
 	if err != nil {
 		return nil, err
 	}
@@ -222,6 +232,7 @@ func (selector *serverGoalRequiredTestAttestationWorkspaceSelectorV0) VerifyGoal
 
 func (selector *serverGoalRequiredTestAttestationWorkspaceSelectorV0) adapterForGoalV0(
 	ctx context.Context,
+	runRef string,
 	goalRef string,
 ) (*orquestaruntimerequiredtest.LocalGoalRequiredTestAttestationAdapterV0, error) {
 	if selector == nil || selector.Canonical == nil {
@@ -230,16 +241,22 @@ func (selector *serverGoalRequiredTestAttestationWorkspaceSelectorV0) adapterFor
 	if selector.WorkspaceLookup == nil {
 		return selector.Canonical, nil
 	}
-	found, err := selector.WorkspaceLookup.HasCodexGoalWorkspaceBindingV0(ctx, goalRef)
+	found, err := selector.WorkspaceLookup.HasGoalWorkspaceBindingV0(ctx, goalRef)
 	if err != nil {
 		return nil, err
 	}
 	if !found {
 		return selector.Canonical, nil
 	}
-	binding, err := selector.WorkspaceLookup.ResolveCodexGoalWorkspaceV0(ctx, orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
-		GoalRef: strings.TrimSpace(goalRef),
-	})
+	if selector.GoalStateStore == nil {
+		return nil, errAutoprogrammingGoalWorkspaceAttestationAuthorityUnavailableV0
+	}
+	state, loadErr := selector.GoalStateStore.LoadGoalWorkStateV0(ctx, strings.TrimSpace(runRef))
+	if loadErr != nil || strings.TrimSpace(state.RunRef) != strings.TrimSpace(runRef) || strings.TrimSpace(state.GoalRef) != strings.TrimSpace(goalRef) {
+		return nil, errAutoprogrammingGoalWorkspaceAttestationAuthorityUnavailableV0
+	}
+	observation := orquestagoal.GoalObservationRequestFromStateV0(state)
+	binding, err := selector.WorkspaceLookup.ResolveGoalWorkspaceV0(ctx, observation)
 	if err != nil || strings.TrimSpace(binding.ProjectWorkDir) == "" {
 		return nil, fmt.Errorf("autoprogramming_goal_workspace_attestation_unavailable")
 	}

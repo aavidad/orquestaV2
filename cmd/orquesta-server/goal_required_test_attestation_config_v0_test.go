@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +12,19 @@ import (
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestaserver "orquesta/modulos/orquesta-server"
 )
+
+type goalRequiredTestAttestationExistingWorkspaceLookupV0 struct {
+	resolveCalls int
+}
+
+func (*goalRequiredTestAttestationExistingWorkspaceLookupV0) HasGoalWorkspaceBindingV0(context.Context, string) (bool, error) {
+	return true, nil
+}
+
+func (lookup *goalRequiredTestAttestationExistingWorkspaceLookupV0) ResolveGoalWorkspaceV0(context.Context, orquestagoal.GoalObservationRequestV0) (orquestagoal.GoalWorkspaceBindingV0, error) {
+	lookup.resolveCalls++
+	return orquestagoal.GoalWorkspaceBindingV0{ProjectWorkDir: "/should-not-resolve-without-authority"}, nil
+}
 
 func TestGoalRequiredTestAttestationConfigV0DisabledLeavesPortsNil(t *testing.T) {
 	withoutGoalRequiredTestAttestationEnvV0(t)
@@ -170,6 +184,28 @@ func TestGoalRequiredTestAttestationConfigV0ProjectJSONPathIsCanonicalFallback(t
 	adapter, err := goalRequiredTestAttestationAdapterFromConfigV0(orquestaserver.ConfigV0{ProjectWorkDir: projectDir}, projectConfig)
 	if err != nil || adapter == nil {
 		t.Fatalf("adapter=%T err=%v", adapter, err)
+	}
+}
+
+func TestGoalRequiredTestAttestationWorkspaceV0FailsClosedWithoutGoalStateStore(t *testing.T) {
+	projectDir := goalRequiredTestAttestationGitFixtureV0(t)
+	configPath := writeCompleteGoalRequiredTestAttestationConfigForTestV0(t, projectDir, filepath.Join(t.TempDir(), "attestation-runtime"))
+	t.Setenv(envGoalRequiredTestAttestationConfigFileV0, configPath)
+	lookup := &goalRequiredTestAttestationExistingWorkspaceLookupV0{}
+	selector, err := goalRequiredTestAttestationWorkspaceSelectorFromConfigV0(
+		orquestaserver.ConfigV0{ProjectWorkDir: projectDir},
+		serverProjectConfigFileV0{},
+		lookup,
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = selector.Close() })
+
+	_, err = selector.adapterForGoalV0(context.Background(), "run-ref-attestation-no-state", "goal-ref-attestation-no-state")
+	if !errors.Is(err, errAutoprogrammingGoalWorkspaceAttestationAuthorityUnavailableV0) || lookup.resolveCalls != 0 {
+		t.Fatalf("err=%v resolve_calls=%d", err, lookup.resolveCalls)
 	}
 }
 

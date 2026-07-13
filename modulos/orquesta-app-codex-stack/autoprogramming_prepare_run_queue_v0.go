@@ -221,23 +221,42 @@ func codexStackAutoprogrammingBridgeRequestFromMCPV0(
 	input orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0,
 	defaultOccurredAt string,
 	defaultRequestedBy string,
-) AutoprogrammingBridgeRequestV0 {
+) (AutoprogrammingBridgeRequestV0, []orquestamcp.MCPValidationIssueV0) {
 	request := input.AutoprogrammingRequest
 	if strings.TrimSpace(request.RequestRef) == "" {
 		request.RequestRef = firstNonEmptyAutoprogrammingStackV0(input.RequestID, input.CorrelationID)
 	}
-	return AutoprogrammingBridgeRequestV0{
-		Request:               request,
-		OccurredAt:            firstNonEmptyAutoprogrammingStackV0(input.OccurredAt, defaultOccurredAt),
-		CorrelationID:         firstNonEmptyAutoprogrammingStackV0(input.CorrelationID, input.RequestID, request.RequestRef),
-		RequestedBy:           firstNonEmptyAutoprogrammingStackV0(input.RequestedBy, defaultRequestedBy),
-		DirectorExecutionMode: strings.TrimSpace(input.DirectorExecutionMode),
-		MaxBursts:             input.MaxBursts,
-		MaxStepsPerBurst:      input.MaxStepsPerBurst,
-		MaxDispatchesPerWait:  input.MaxDispatchesPerWait,
-		MaxCommands:           input.MaxCommands,
-		MaxOutboxPerCycle:     input.MaxOutboxPerCycle,
+	input.AutoprogrammingRequest = request
+	input.OccurredAt = firstNonEmptyAutoprogrammingStackV0(input.OccurredAt, defaultOccurredAt)
+	input.CorrelationID = firstNonEmptyAutoprogrammingStackV0(input.CorrelationID, input.RequestID, request.RequestRef)
+	input.RequestedBy = firstNonEmptyAutoprogrammingStackV0(input.RequestedBy, defaultRequestedBy)
+	envelope, issues := orquestamcp.CanonicalMCPAutoprogrammingPrepareRunEnvelopeV0(input)
+	if len(issues) != 0 {
+		return AutoprogrammingBridgeRequestV0{}, issues
 	}
+	return AutoprogrammingBridgeRequestV0{
+		PrepareRunEnvelope: &envelope,
+	}, nil
+}
+
+func codexStackAutoprogrammingPrepareRunInputFromEnvelopeV0(
+	input orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0,
+	envelope orquestaautoprogramming.AutoprogrammingPrepareRunEnvelopeV0,
+) orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0 {
+	input.RequestID = envelope.RequestID
+	input.CorrelationID = envelope.CorrelationID
+	input.IdempotencyKey = envelope.IdempotencyKey
+	input.OccurredAt = envelope.OccurredAt
+	input.RequestedBy = envelope.RequestedBy
+	input.DirectorExecutionMode = envelope.DirectorExecutionMode
+	input.AutoprogrammingRequest = envelope.AutoprogrammingRequest
+	input.MaxBursts = envelope.MaxBursts
+	input.MaxStepsPerBurst = envelope.MaxStepsPerBurst
+	input.MaxDispatchesPerWait = envelope.MaxDispatchesPerWait
+	input.MaxCommands = envelope.MaxCommands
+	input.MaxOutboxPerCycle = envelope.MaxOutboxPerCycle
+	input.PriorityScore = envelope.PriorityScore
+	return input
 }
 
 func codexStackAutoprogrammingPrepareRunResultMCPV0(
@@ -385,7 +404,7 @@ func codexStackAutoprogrammingIssuesMCPV0(
 		out = append(out, orquestamcp.MCPValidationIssueV0{
 			Code:    strings.TrimSpace(issue.Code),
 			Field:   strings.TrimSpace(issue.Field),
-			Message: strings.TrimSpace(issue.Message),
+			Message: orquestamcp.MCPAutoprogrammingPrepareRunIssueMessageV0(issue.Code, issue.Message),
 		})
 	}
 	if out == nil {

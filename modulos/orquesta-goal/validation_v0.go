@@ -9,6 +9,11 @@ import (
 	"unicode"
 )
 
+var goalSHA256LowerHexPatternV0 = regexp.MustCompile(`^[0-9a-f]{64}$`)
+var goalIntentManifestRefTokenPatternV0 = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
+
+const goalIntentManifestRequestRefMaxBytesV0 = 180
+
 var (
 	goalWorkIssueAbsolutePathPatternV0 = regexp.MustCompile(`(^|[\s"'=:(])(/[^ \n\r\t"')]+)`)
 	goalWorkIssueWindowsPathPatternV0  = regexp.MustCompile(`(?i)(^|[\s"'=:(])([a-z]:\\[^ \n\r\t"')]+)`)
@@ -116,6 +121,9 @@ func NormalizeGoalWorkSpecV0(spec GoalWorkSpecV0) GoalWorkSpecV0 {
 	spec.SchemaVersion = GoalWorkSpecSchemaV0
 	spec.GoalRef = strings.TrimSpace(spec.GoalRef)
 	spec.RequestRef = strings.TrimSpace(spec.RequestRef)
+	spec.IntentManifestRef = strings.TrimSpace(spec.IntentManifestRef)
+	// Hash case is evidence and must not be repaired during normalization.
+	spec.IntentManifestSHA256 = strings.TrimSpace(spec.IntentManifestSHA256)
 	spec.RunRef = strings.TrimSpace(spec.RunRef)
 	spec.ImplementerAgentRef = strings.TrimSpace(spec.ImplementerAgentRef)
 	spec.ImplementerCredentialRef = strings.TrimSpace(spec.ImplementerCredentialRef)
@@ -359,6 +367,15 @@ func ValidateGoalWorkSpecV0(spec GoalWorkSpecV0) []GoalWorkIssueV0 {
 	} else if !validGoalRefTokenV0(spec.GoalRef) {
 		issues = append(issues, GoalWorkIssueV0{Code: ErrGoalRefInvalidV0, Field: "goal_ref"})
 	}
+	if spec.IntentManifestRef != "" || spec.IntentManifestSHA256 != "" {
+		validateGoalIntentManifestIdentityV0(&issues, spec.IntentManifestRef, spec.IntentManifestSHA256)
+		if !validGoalIntentManifestRequestRefV0(spec.RequestRef) {
+			issues = append(issues, GoalWorkIssueV0{Code: ErrGoalRefFieldInvalidV0, Field: "intent_manifest_ref"})
+		}
+		if spec.RequestRef == "" || spec.IntentManifestRef != "intent-manifest-ref-"+spec.RequestRef {
+			issues = append(issues, GoalWorkIssueV0{Code: ErrGoalRefFieldInvalidV0, Field: "intent_manifest_ref"})
+		}
+	}
 	if spec.Objective == "" {
 		issues = append(issues, GoalWorkIssueV0{Code: ErrGoalObjectiveRequiredV0, Field: "objective"})
 	}
@@ -442,6 +459,30 @@ func ValidateGoalWorkSpecV0(spec GoalWorkSpecV0) []GoalWorkIssueV0 {
 		validateRequiredGoalRefV0(&issues, "closure_policy.required_evidence_refs", evidenceRef)
 	}
 	return issues
+}
+
+func validateGoalIntentManifestIdentityV0(issues *[]GoalWorkIssueV0, manifestRef, manifestSHA256 string) {
+	manifestRef = strings.TrimSpace(manifestRef)
+	manifestSHA256 = strings.TrimSpace(manifestSHA256)
+	if manifestRef == "" && manifestSHA256 == "" {
+		return
+	}
+	validateRequiredGoalRefV0(issues, "intent_manifest_ref", manifestRef)
+	if !strings.HasPrefix(manifestRef, "intent-manifest-ref-") ||
+		!goalIntentManifestRefTokenPatternV0.MatchString(manifestRef) ||
+		strings.Contains(manifestRef, "..") ||
+		len([]byte(manifestRef)) > len("intent-manifest-ref-")+goalIntentManifestRequestRefMaxBytesV0 {
+		*issues = append(*issues, GoalWorkIssueV0{Code: ErrGoalRefFieldInvalidV0, Field: "intent_manifest_ref"})
+	}
+	if !goalSHA256LowerHexPatternV0.MatchString(manifestSHA256) {
+		*issues = append(*issues, GoalWorkIssueV0{Code: ErrGoalRefFieldInvalidV0, Field: "intent_manifest_sha256"})
+	}
+}
+
+func validGoalIntentManifestRequestRefV0(value string) bool {
+	return len(value) <= goalIntentManifestRequestRefMaxBytesV0 &&
+		goalIntentManifestRefTokenPatternV0.MatchString(value) &&
+		!strings.Contains(value, "..")
 }
 
 func goalRequiredAcceptanceCriterionCoveredByFrozenTestV0(criterionRef string, requiredTests []GoalRequiredTestV0) bool {
@@ -650,6 +691,11 @@ func NormalizeGoalObservationRequestV0(
 ) GoalObservationRequestV0 {
 	request.GoalRef = strings.TrimSpace(request.GoalRef)
 	request.ExternalGoalRef = strings.TrimSpace(request.ExternalGoalRef)
+	request.IntentManifestRef = strings.TrimSpace(request.IntentManifestRef)
+	request.IntentManifestSHA256 = strings.TrimSpace(request.IntentManifestSHA256)
+	request.WorkspaceAuthoritySchemaVersion = strings.TrimSpace(request.WorkspaceAuthoritySchemaVersion)
+	request.WorkspaceRef = strings.TrimSpace(request.WorkspaceRef)
+	request.ProviderRef = strings.TrimSpace(request.ProviderRef)
 	request.RuntimeGenerationRef = strings.TrimSpace(request.RuntimeGenerationRef)
 	return request
 }
@@ -704,6 +750,10 @@ func NewGoalWorkStateV0(state GoalWorkStateV0) (GoalWorkStateV0, error) {
 		issues = append(issues, GoalWorkIssueV0{Code: ErrGoalClosureInvalidV0, Field: "spec.goal_ref"})
 	}
 	issues = append(issues, ValidateGoalWorkSpecV0(state.Spec)...)
+	issues = append(issues, ValidateGoalLaunchReceiptV0(state.LaunchReceipt)...)
+	if !goalLaunchReceiptManifestMatchesSpecV0(state.LaunchReceipt, state.Spec) {
+		issues = append(issues, GoalWorkIssueV0{Code: ErrGoalClosureInvalidV0, Field: "launch_receipt.intent_manifest_ref"})
+	}
 	if state.LaunchReceipt.GoalRef != "" && state.LaunchReceipt.GoalRef != state.GoalRef {
 		issues = append(issues, GoalWorkIssueV0{Code: ErrGoalClosureInvalidV0, Field: "launch_receipt.goal_ref"})
 	}
@@ -720,6 +770,32 @@ func NewGoalWorkStateV0(state GoalWorkStateV0) (GoalWorkStateV0, error) {
 		return GoalWorkStateV0{}, GoalWorkStateInvalidErrorV0{Issues: issues}
 	}
 	return state, nil
+}
+
+func goalLaunchReceiptManifestMatchesSpecV0(receipt GoalLaunchReceiptV0, spec GoalWorkSpecV0) bool {
+	if receipt.WorkspaceAuthoritySchemaVersion == "" &&
+		receipt.IntentManifestRef == "" && receipt.IntentManifestSHA256 == "" {
+		return true
+	}
+	return receipt.IntentManifestRef == spec.IntentManifestRef &&
+		receipt.IntentManifestSHA256 == spec.IntentManifestSHA256
+}
+
+// goalNewLaunchReceiptMatchesSpecV0 is deliberately stricter than loading a
+// durable pre-057 state. A new launch carrying manifest authority may never
+// manufacture a legacy receipt and silently discard that authority.
+func goalNewLaunchReceiptMatchesSpecV0(receipt GoalLaunchReceiptV0, spec GoalWorkSpecV0) bool {
+	receipt = NormalizeGoalLaunchReceiptV0(receipt)
+	spec = NormalizeGoalWorkSpecV0(spec)
+	if receipt.GoalRef != spec.GoalRef ||
+		receipt.IntentManifestRef != spec.IntentManifestRef ||
+		receipt.IntentManifestSHA256 != spec.IntentManifestSHA256 {
+		return false
+	}
+	if spec.IntentManifestRef == "" && spec.IntentManifestSHA256 == "" {
+		return true
+	}
+	return len(GoalExecutionAuthorityIssuesV0(GoalExecutionAuthorityFromReceiptV0(receipt), false)) == 0
 }
 
 func NormalizeGoalWorkRunMarkerV0(marker GoalWorkRunMarkerV0) GoalWorkRunMarkerV0 {
@@ -805,7 +881,15 @@ func ValidateGoalObservationRequestV0(
 	var issues []GoalWorkIssueV0
 	validateRequiredGoalRefV0(&issues, "goal_ref", request.GoalRef)
 	validateGoalRefsV0(&issues, "external_goal_ref", request.ExternalGoalRef)
-	validateGoalRefsV0(&issues, "runtime_generation_ref", request.RuntimeGenerationRef)
+	validateGoalIntentManifestIdentityV0(&issues, request.IntentManifestRef, request.IntentManifestSHA256)
+	issues = append(issues, ValidateGoalWorkspaceAuthorityV0(
+		request.GoalRef,
+		request.WorkspaceAuthoritySchemaVersion,
+		request.WorkspaceRef,
+		request.ProviderRef,
+		request.RuntimeGenerationRef,
+		true,
+	)...)
 	return issues
 }
 
