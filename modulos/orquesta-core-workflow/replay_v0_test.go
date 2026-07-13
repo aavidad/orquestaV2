@@ -149,6 +149,43 @@ func TestReplayDurableEventsV0DuplicateWithDifferentMetadataFails(t *testing.T) 
 	assertReplayPublicErrorCodeV0(t, err, ErrEventoConflictivoV0)
 }
 
+func TestValidateStrictEventSequenceV0SharesReplayStructuralPreflight(t *testing.T) {
+	start := mustReplayRunStartedEventWithKeyV0(t, "evt-strict-start", 1, "idem-strict-start")
+	phase := mustReplayPhaseEventWithKeyV0(t, "evt-strict-phase", 2, "idem-strict-phase", OrchestrationPhaseProgramacionV0)
+
+	if err := ValidateStrictEventSequenceV0([]OrchestrationEventV0{start, phase, phase}); err != nil {
+		t.Fatalf("exact duplicate must remain idempotent: %v", err)
+	}
+
+	malformed := phase
+	malformed.EventType = "EventoInexistente"
+	assertReplayPublicErrorCodeV0(t, ValidateStrictEventSequenceV0([]OrchestrationEventV0{start, malformed}), ErrEventoNoSoportadoV0)
+
+	gap := phase
+	gap.Sequence = 3
+	assertReplayPublicErrorCodeV0(t, ValidateStrictEventSequenceV0([]OrchestrationEventV0{start, gap}), ErrSecuenciaInvalidaV0)
+
+	mixedRun := phase
+	mixedRun.RunID = "run-otro"
+	assertReplayPublicErrorCodeV0(t, ValidateStrictEventSequenceV0([]OrchestrationEventV0{start, mixedRun}), ErrSecuenciaInvalidaV0)
+
+	conflict := phase
+	conflict.EventID = "evt-strict-phase-conflict"
+	conflict.CausationID = "cmd-conflictivo"
+	assertReplayPublicErrorCodeV0(t, ValidateStrictEventSequenceV0([]OrchestrationEventV0{start, phase, conflict}), ErrEventoConflictivoV0)
+}
+
+func TestReplayDurableEventsV0RejectsStructuralHistoryBeforeApplyingReducers(t *testing.T) {
+	start := mustReplayRunStartedEventWithKeyV0(t, "evt-preflight-start", 1, "idem-preflight-start")
+	gap := mustReplayPhaseEventWithKeyV0(t, "evt-preflight-gap", 3, "idem-preflight-gap", OrchestrationPhaseProgramacionV0)
+
+	got, err := ReplayDurableEventsV0([]OrchestrationEventV0{start, gap})
+	assertReplayPublicErrorCodeV0(t, err, ErrSecuenciaInvalidaV0)
+	if !reflect.DeepEqual(got, OrchestrationRunV0{}) {
+		t.Fatalf("structural preflight must reject before reducers apply: %+v", got)
+	}
+}
+
 func assertReplayPublicErrorCodeV0(t *testing.T, err error, code string) {
 	t.Helper()
 	var publicErr OrchestrationEventErrorV0

@@ -82,3 +82,23 @@ func TestStoreV0LoadRunEventsV0RechazaRecordConRunInconsistente(t *testing.T) {
 		t.Fatal("expected inconsistent event ref error")
 	}
 }
+
+func TestStoreV0LoadRunEventsV0RechazaGapDeSecuenciaTrasReinicio(t *testing.T) {
+	store := mustStoreV0(t, t.TempDir())
+	start := mustRunStartedEventV0(t, "run-state-file-load-validation-gap")
+	gap := start
+	gap.EventID = "evt-run-started-state-file-gap"
+	gap.Sequence = 3
+	gap.OccurredAt = "2026-05-12T09:01:00Z"
+	if err := writeJSONAtomicV0(store.eventsPathV0(start.RunID), eventsDocumentV0{
+		SchemaVersion: eventDocumentSchemaV0,
+		RunRef:        start.RunID,
+		Events:        []orquestacoreworkflow.OrchestrationEventV0{start, gap},
+	}); err != nil {
+		t.Fatalf("write sequence gap: %v", err)
+	}
+
+	if _, err := store.LoadRunEventsV0(context.Background(), start.RunID); err == nil {
+		t.Fatal("expected corrupt sequence error")
+	}
+}

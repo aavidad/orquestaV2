@@ -62,6 +62,20 @@ func TestStoredWorkflowCommandPortV0RejectsNilEventStore(t *testing.T) {
 	}
 }
 
+func TestLoadWorkflowRunFromEventStoreV0RejectsCorruptSequence(t *testing.T) {
+	store, _, _ := newRunnerWorkflowEventStoreProgramacionV0(t)
+	store.events[1].Sequence = 3
+
+	_, err := LoadWorkflowRunFromEventStoreV0(context.Background(), store, runnerRunRefV0)
+	var eventErr orquestacoreworkflow.OrchestrationEventErrorV0
+	if !errors.As(err, &eventErr) {
+		t.Fatalf("expected strict replay error, got %T %v", err, err)
+	}
+	if eventErr.Code != orquestacoreworkflow.ErrSecuenciaInvalidaV0 || eventErr.Field != "sequence" {
+		t.Fatalf("unexpected event error: %+v", eventErr)
+	}
+}
+
 func newRunnerWorkflowEventStoreProgramacionV0(
 	t *testing.T,
 ) (*runnerMemoryWorkflowEventStoreV0, StoredWorkflowCommandPortV0, orquestacoreworkflow.OrchestrationRunV0) {

@@ -63,5 +63,27 @@ func validateLoadedRunEventsV0(
 		}
 		seen[eventID] = eventRecordRefV0(event, eventPayloadHashV0(compactRawMessageV0(event.Payload)))
 	}
+	if err := validateStrictWorkflowHistoryV0(events); err != nil {
+		return storeErrorV0("events.sequence", "event_history_invalid")
+	}
 	return nil
+}
+
+func validateStrictWorkflowHistoryV0(events []orquestacoreworkflow.OrchestrationEventV0) error {
+	if len(events) == 0 || events[0].EventType != orquestacoreworkflow.OrchestrationEventRunStartedV0 {
+		return nil
+	}
+	return orquestacoreworkflow.ValidateStrictEventSequenceV0(strictValidationEventsV0(events))
+}
+
+func strictValidationEventsV0(
+	events []orquestacoreworkflow.OrchestrationEventV0,
+) []orquestacoreworkflow.OrchestrationEventV0 {
+	validated := append([]orquestacoreworkflow.OrchestrationEventV0(nil), events...)
+	for index := range validated {
+		if strings.TrimSpace(validated[index].OccurredAt) == "" {
+			validated[index].OccurredAt = "state-file-legacy-event-time"
+		}
+	}
+	return validated
 }
