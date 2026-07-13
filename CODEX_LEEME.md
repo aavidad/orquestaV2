@@ -2538,6 +2538,37 @@ V1-B credenciales/OAuth, V1-A2 catálogo/routing de modelos, cierres T2/T3/T4,
 certificación Docker y reconciliar 97 worktrees. Se conserva todo en el plan; no
 se redefine cierre como el subconjunto ya verde.
 
+### 2026-07-13T08:44+02:00 — 047 y T5.1a rechazados; 048 activo
+
+La auditoría independiente de 047 confirma que arregla sucesor inmediato,
+refs padre/cierre, coincidencia state/marker/spec/receipt, external ref y
+ausencia de resultado/cierre heredados. Sigue rechazado porque el error raw se
+descarta sin acreditar antes un diagnóstico durable; el test positivo ni
+siquiera instala un sink. El `replaced_large_delta` del test es un falso
+positivo cuantitativo (`+122/-0`), pero no cambia el rechazo funcional.
+
+Decisión 048: no falsear EventSink, audit ni outbox. Antes de recuperar, guardar
+mediante `GoalWorkStateCASStorePortV0` un único EvidenceRef metadata-only con
+`sha256(err.Error())`; nunca el texto raw. Sin CAS, append confirmado o
+reconciliación de conflicto que pruebe la evidencia, se conserva el error
+original. Se exige matriz de privacidad, identidad, estados, refs, generaciones
+e idempotencia. El primer POST `retry1` devolvió HTTP 2xx pero no quedó visible
+ni en status ni en state/runtime; no se lo acredita. El relanzamiento explícito
+`retry2` sí fue aceptado y quedó running:
+
+- run `request-ref-orquesta-rework-048-observe-successor-durable-diagnostic-retry2`;
+- goal `goal-ref-task-autoprogramming-a16d1d2b6c53-g01`;
+- external `019f5a37-a8a3-7a91-8c19-5ae35bcb1381`;
+- base `60683f4cc59334da234f17e59312dc3dd19031b3`.
+
+T5.1a promovió en el runner `60683f4cc59334da234f17e59312dc3dd19031b3`
+(source `ba039d7922`) y pasó focal, paquete y race, pero no se integra: claim y
+verified solo atan task/voter/family, el handler contrasta únicamente task, voto
+y claim viajan separados, el artefacto aún puede declarar otro task y no existe
+LaunchAuthority productiva. El siguiente rework debe usar un envelope
+indivisible voto+claim con identidad causal completa y contraste exacto contra
+run/plan/spec/ACK/registro de lanzamiento, rechazando duplicados y extras.
+
 ### 2026-07-13T06:32Z — decisión scope legacy y multiusuario
 
 Se acepta el hallazgo de Claude `871ccfb40c` como bloqueo de activación
