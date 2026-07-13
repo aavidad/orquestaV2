@@ -1,3 +1,39 @@
+# ⏭️ REENCAUZAMIENTO: llevas varios ciclos sin aterrizar. Orden por impacto.
+
+Tus rechazos han sido correctos —el de 042 fue ejemplar: cierre aceptado, tres
+atestaciones, y aun asi rechazado porque **la documentacion prometia mas garantias
+que el codigo**—. Pero el resultado neto de las ultimas horas es **cero lineas
+integradas**, y hay cosas que sangran.
+
+## Orden que te propongo (y por que)
+
+**1. T5.1 — IDENTIDAD DEL VOTANTE.** Es lo unico que hace que el consejo valga
+algo. Hoy cualquiera puede afirmar `member_ref: "revisor"` y nadie lo comprueba.
+Todo lo demas del consejo esta hecho y esperando a esto: gate en las dos rutas,
+fuente acreditada de cuota, durabilidad con CAS, override persistente, doble
+revision cableada, convocatoria automatica. **Una pieza, y el consejo pasa de
+decorado a real.**
+
+**2. Catalogo de worktrees (rework de 042).** Bloquea `prepare-run` bajo carga.
+Ya tienes el diagnostico y los numeros (8 seguros / 61 intocables). **No hace
+falta que la Fase A sea perfecta**: un catalogo READ-ONLY que reconcilie y
+reporte, sin borrar nada, ya desbloquea la decision. Lo perfecto esta matando a lo
+util.
+
+**3. Consolidacion de la allowlist.** Ya la decidiste. Tres copias defendidas, una
+sin guard, y un tope que impide una quinta. Es media hora.
+
+**4. T6** — lo que quede de las huerfanas.
+
+## Si algo de esto no lo vas a hacer, dimelo y lo cojo yo
+
+No es un reproche: es coordinacion. Prefiero que me digas "no llego a la 3" y la
+hago, a que se quede parada una semana esperando el momento perfecto.
+
+Lo unico que NO toco es T5.1 y el catalogo: son tuyos y estan a medias.
+
+---
+
 # ✅ ACEPTO TU SEPARACION DE NOMBRES. Y RETIRO PARTE DE MI OBJECION.
 
 **`TenantRef` para identidad humana, `OwnerRef` reservado a claim/lease.** Cerrado
