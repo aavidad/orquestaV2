@@ -20,7 +20,17 @@ func TestLocalGoalRequiredTestAttestationAdapterV0RealCheckoutAndIsolatedProcess
 	if err != nil {
 		t.Fatal(err)
 	}
-	adapter := localGoalAttestationAdapterForTestV0(t, project, runtimeRoot, gitPath, map[string]string{"go": goPath})
+	config := localGoalAttestationConfigForTestV0(project, runtimeRoot, gitPath, map[string]string{"go": goPath})
+	config.DependencySnapshotPath = localGoalAttestationReadOnlySnapshotForTestV0(t)
+	config.PreflightCommands = []string{"go list -mod=readonly -deps ./..."}
+	// The isolated child Go process is real and intentionally remains covered
+	// under -race. Keep the production timeout unchanged while giving this
+	// instrumentation-heavy fixture its own explicit allowance.
+	config.MaxRuntime = 30 * time.Second
+	adapter, err := NewLocalGoalRequiredTestAttestationAdapterV0(config)
+	if err != nil {
+		t.Fatal(err)
+	}
 	spec := localGoalAttestationSpecForTestV0("go test -count=1 ./...")
 	bound, err := adapter.BindGoalRequiredTestSpecV0(context.Background(), spec)
 	if err != nil || bound.ImplementerCredentialRef != "credential-ref-implementer-local-001" {
@@ -339,7 +349,10 @@ func TestGoalRequiredTestCommandRequiresRaceCGOV0HonorsArgumentBoundaries(t *tes
 		{"go test -count=1 -race ./...", "/toolchain/go", true},
 		{"go test -args -race", "/toolchain/go", false},
 		{"go test -- -race", "/toolchain/go", false},
+		{"go test --race ./...", "/toolchain/go", false},
 		{"go test -race=true ./...", "/toolchain/go", false},
+		{"go test -raced ./...", "/toolchain/go", false},
+		{"go test -run Race ./...", "/toolchain/go", false},
 		{"go test ./...", "/toolchain/go", false},
 		{"go-tool test -race ./...", "/toolchain/go-tool", false},
 		{"go build -race ./...", "/toolchain/go", false},
@@ -347,6 +360,98 @@ func TestGoalRequiredTestCommandRequiresRaceCGOV0HonorsArgumentBoundaries(t *tes
 		if got := goalRequiredTestCommandRequiresRaceCGOV0(test.command, test.path); got != test.want {
 			t.Fatalf("command=%q path=%q got=%t want=%t", test.command, test.path, got, test.want)
 		}
+	}
+}
+
+func TestLocalGoalRequiredTestAttestationAdapterV0BindRaceProbeUsesExactRequiredAliasAndCleansUp(t *testing.T) {
+	project, runtimeRoot, gitPath := localGoalAttestationGitRepoForTestV0(t)
+	logPath := filepath.Join(t.TempDir(), "probe-log")
+	globalGoPath := filepath.Join(t.TempDir(), "global", "go")
+	targetGoPath := filepath.Join(t.TempDir(), "target", "go")
+	for path, exitCode := range map[string]string{globalGoPath: "0", targetGoPath: "1"} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		script := "#!/bin/sh\nset -eu\nprintf '%s|%s\\n' \"$0\" \"$*\" >> '" + logPath + "'\nexit " + exitCode + "\n"
+		if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	config := localGoalAttestationConfigForTestV0(project, runtimeRoot, gitPath, map[string]string{
+		"go": globalGoPath, "target-go": targetGoPath,
+	})
+	config.DependencySnapshotPath = localGoalAttestationReadOnlySnapshotForTestV0(t)
+	config.PreflightCommands = []string{"git --version"}
+	adapter, err := NewLocalGoalRequiredTestAttestationAdapterV0(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bound, err := adapter.BindGoalRequiredTestSpecV0(context.Background(), localGoalAttestationSpecForTestV0("target-go test -race -count=1 ./..."))
+	if err == nil || !strings.Contains(err.Error(), "goal_required_test_race_cgo_probe_failed") || bound.GoalRef != "" || bound.ImplementerAgentRef != "" || bound.ImplementerCredentialRef != "" {
+		t.Fatalf("Bind must fail before exposing implementer binding: bound=%+v err=%v", bound, err)
+	}
+	log, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(log), globalGoPath) || !strings.Contains(string(log), targetGoPath+"|test -race -count=1 .") {
+		t.Fatalf("probe used a non-required Go alias: %q", log)
+	}
+	entries, err := os.ReadDir(filepath.Join(runtimeRoot, "race-cgo-probes"))
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("race probe temporary directory retained: entries=%v err=%v", entries, err)
+	}
+}
+
+func TestLocalGoalRequiredTestAttestationAdapterV0AttestRaceProbeUsesExactRequiredAlias(t *testing.T) {
+	project, runtimeRoot, gitPath := localGoalAttestationGitRepoForTestV0(t)
+	modePath := filepath.Join(t.TempDir(), "probe-mode")
+	logPath := filepath.Join(t.TempDir(), "probe-log")
+	if err := os.WriteFile(modePath, []byte("pass\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	globalGoPath := filepath.Join(t.TempDir(), "global", "go")
+	targetGoPath := filepath.Join(t.TempDir(), "target", "go")
+	if err := os.MkdirAll(filepath.Dir(globalGoPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(targetGoPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	globalScript := "#!/bin/sh\nset -eu\nprintf '%s|%s\\n' \"$0\" \"$*\" >> '" + logPath + "'\n"
+	targetScript := globalScript + "mode=\nIFS= read -r mode < '" + modePath + "' || true\nif [ \"$1 $2 $3 $4\" = 'test -race -count=1 .' ] && [ \"$mode\" = fail ]; then exit 1; fi\n"
+	if err := os.WriteFile(globalGoPath, []byte(globalScript), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(targetGoPath, []byte(targetScript), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	config := localGoalAttestationConfigForTestV0(project, runtimeRoot, gitPath, map[string]string{
+		"go": globalGoPath, "target-go": targetGoPath,
+	})
+	config.DependencySnapshotPath = localGoalAttestationReadOnlySnapshotForTestV0(t)
+	config.PreflightCommands = []string{"git --version"}
+	adapter, err := NewLocalGoalRequiredTestAttestationAdapterV0(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bound, err := adapter.BindGoalRequiredTestSpecV0(context.Background(), localGoalAttestationSpecForTestV0("target-go test -race -count=1 ./..."))
+	if err != nil {
+		t.Fatalf("Bind must use the passing target alias: %v", err)
+	}
+	if err := os.WriteFile(modePath, []byte("fail\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	receipts, err := localGoalAttestationAttestForTestV0(context.Background(), adapter, bound)
+	if err != nil || len(receipts) != 1 || receipts[0].Status != orquestagoal.GoalRequiredTestAttestationStatusFailedV0 || receipts[0].FailureCode != orquestagoal.ErrGoalRequiredTestAttestorInfrastructureFailedV0 {
+		t.Fatalf("attest must fail through target alias: receipts=%+v err=%v", receipts, err)
+	}
+	log, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(log), globalGoPath) || strings.Count(string(log), targetGoPath+"|test -race -count=1 .") != 2 {
+		t.Fatalf("Bind and Attest must each probe the required alias: %q", log)
 	}
 }
 

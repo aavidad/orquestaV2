@@ -30,15 +30,27 @@ func goalRequiredTestCommandRequiresRaceCGOV0(command string, commandPath string
 }
 
 func (adapter *LocalGoalRequiredTestAttestationAdapterV0) requiredTestUsesRaceCGOV0(command string) (bool, error) {
+	_, _, race, err := adapter.requiredTestRaceCGOCommandV0(command)
+	return race, err
+}
+
+// requiredTestRaceCGOCommandV0 resolves the command exactly as the frozen
+// required test will run. In particular, a Go alias is part of the attested
+// command identity: a race probe must not silently substitute another
+// allowlisted Go binary.
+func (adapter *LocalGoalRequiredTestAttestationAdapterV0) requiredTestRaceCGOCommandV0(command string) (string, string, bool, error) {
 	tokens, err := splitCommandV0(command)
 	if err != nil {
-		return false, err
+		return "", "", false, err
+	}
+	if len(tokens) == 0 {
+		return "", "", false, fmt.Errorf("goal_required_test_command_invalid_before_launch")
 	}
 	commandPath, ok := adapter.config.AllowedCommands[tokens[0]]
 	if !ok {
-		return false, fmt.Errorf("goal_required_test_command_not_allowed_before_launch: %s", tokens[0])
+		return "", "", false, fmt.Errorf("goal_required_test_command_not_allowed_before_launch: %s", tokens[0])
 	}
-	return goalRequiredTestCommandRequiresRaceCGOV0(command, commandPath), nil
+	return tokens[0], commandPath, goalRequiredTestCommandRequiresRaceCGOV0(command, commandPath), nil
 }
 
 // runRaceCGOProbeV0 checks the only CGO-enabled execution path in a freshly
@@ -47,10 +59,10 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) requiredTestUsesRaceCG
 func (adapter *LocalGoalRequiredTestAttestationAdapterV0) runRaceCGOProbeV0(
 	ctx context.Context,
 	correlationID string,
+	goCommand string,
+	goPath string,
 ) (result orquestacionnucleoapp.RequiredTestCommandExecutionResultV0, resultErr error) {
-	goCommand := goalRequiredTestGoCommandV0(adapter.config.AllowedCommands)
-	goPath, ok := adapter.config.AllowedCommands[goCommand]
-	if !ok || filepath.Base(goPath) != "go" {
+	if strings.TrimSpace(goCommand) == "" || filepath.Base(strings.TrimSpace(goPath)) != "go" || adapter.config.AllowedCommands[goCommand] != goPath {
 		return result, fmt.Errorf("goal_required_test_race_cgo_go_unavailable")
 	}
 	if ctx == nil {
@@ -100,7 +112,7 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) runRaceCGOProbeV0(
 		status = orquestacionnucleoapp.RequiredTestEvidenceStatusFailedV0
 	}
 	ref, status, err := writeOutputArtifactV0(executor, orquestacionnucleoapp.RequiredTestCommandExecutionRequestV0{
-		RunRef: "goal-required-test-race-cgo-probe", TaskRef: "race-cgo-probe", TestCommand: "go test -race -count=1 .", CorrelationID: correlationID,
+		RunRef: "goal-required-test-race-cgo-probe", TaskRef: "race-cgo-probe", TestCommand: goCommand + " test -race -count=1 .", CorrelationID: correlationID,
 	}, status, output)
 	if err != nil {
 		return result, err

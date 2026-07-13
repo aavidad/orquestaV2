@@ -81,12 +81,12 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) BindGoalRequiredTestSp
 		if err := adapter.validateFrozenRequiredTestCommandV0(required); err != nil {
 			return orquestagoal.GoalWorkSpecV0{}, err
 		}
-		race, err := adapter.requiredTestUsesRaceCGOV0(required.Command)
+		goCommand, goPath, race, err := adapter.requiredTestRaceCGOCommandV0(required.Command)
 		if err != nil {
 			return orquestagoal.GoalWorkSpecV0{}, fmt.Errorf("goal_required_test_command_invalid_before_launch: %w", err)
 		}
 		if race {
-			probe, err := adapter.runRaceCGOProbeV0(ctx, spec.GoalRef+"-bind-"+required.TestRef)
+			probe, err := adapter.runRaceCGOProbeV0(ctx, spec.GoalRef+"-bind-"+required.TestRef, goCommand, goPath)
 			if err != nil || probe.Status != orquestacionnucleoapp.RequiredTestEvidenceStatusPassedV0 {
 				return orquestagoal.GoalWorkSpecV0{}, fmt.Errorf("goal_required_test_race_cgo_probe_failed")
 			}
@@ -168,7 +168,7 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) AttestGoalRequiredTest
 	if err := adapter.validateFrozenRequiredTestCommandV0(test); err != nil {
 		return nil, err
 	}
-	race, err := adapter.requiredTestUsesRaceCGOV0(test.Command)
+	goCommand, goPath, race, err := adapter.requiredTestRaceCGOCommandV0(test.Command)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +197,7 @@ func (adapter *LocalGoalRequiredTestAttestationAdapterV0) AttestGoalRequiredTest
 	}
 	if race {
 		attestation.AttestationRef = orquestagoal.GoalRequiredTestAttestationCanonicalRefV0(attestation)
-		probe, err := adapter.runRaceCGOProbeV0(ctx, attestation.AttestationRef+"-attest")
+		probe, err := adapter.runRaceCGOProbeV0(ctx, attestation.AttestationRef+"-attest", goCommand, goPath)
 		if err != nil {
 			return nil, err
 		}
