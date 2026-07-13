@@ -1632,3 +1632,19 @@ operación/resultado; no ampliar timeout ni devolver éxito tardío.
   exacto, prueba multi-alias adversarial, matriz negativa completa, fallo en
   Bind antes del implementer, cleanup y estabilidad race repetida sin cambiar
   timeout/default productivo, skips ni retries.
+
+### 2026-07-13T03:51Z — causa exacta de `ports.goal_state_cas_store`; goal 035
+
+El bloqueo 033 no procede del store durable: `modulos/orquesta-state-file.StoreV0`
+sí implementa `GoalWorkStateCASStorePortV0`. La interfaz se pierde en
+`serverWakeupGoalStateStoreV0`, que envuelve el store y expone Save/Load/List y
+markers, pero no reexpone `CompareAndSwapGoalWorkStateV0`. Un cierre aceptado
+simple como 032 no atraviesa esa rama; el rework/reconcile de 033 sí hace la
+type assertion y falla.
+
+Se lanzó por API local, en paralelo y con write-set disjunto, el run
+`request-ref-goal-state-cas-wakeup-wrapper-20260713-035`, goal
+`goal-ref-task-autoprogramming-4ce044e5e603-g01`. Criterio: forwarding CAS
+atómico exacto, wakeups/stateChange solo después de éxito, conflicto/error sin
+señales espurias, assertion de interfaz y E2E `rework → close`. Queda prohibido
+degradar a `Save` no atómico o tocar el lifecycle para ocultar el wrapper.
