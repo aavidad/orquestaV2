@@ -3,7 +3,6 @@ package orquestadocumentextraction
 import (
 	"context"
 	"fmt"
-	"strings"
 )
 
 // ExecuteDocumentToolV0 is the single asynchronous use case behind all
@@ -126,9 +125,4 @@ func validateDocumentToolEffectProfileV0(profile DocumentToolEffectProfileV0) er
 		return fmt.Errorf("document_tool_permission_mode_invalid")
 	}
 	return nil
-}
-
-func documentToolPublicErrorV0(code string, retryable bool) DocumentToolPublicErrorV0 {
-	code = strings.TrimSpace(code)
-	return DocumentToolPublicErrorV0{Code: code, MessageKey: code, Retryable: retryable}
 }
