@@ -40,26 +40,39 @@ func (backend serverCodexAppServerGoalBackendV0) startCodexGoalInResolvedWorkspa
 	resolved := backend
 	resolved.CWD = filepath.Clean(strings.TrimSpace(binding.ProjectWorkDir))
 	resolved.WorkspaceRouter = nil
+	_, hasAuthority, authorityErr := codexAppServerStartAuthorityV0(packet)
+	if authorityErr != nil {
+		return codexAppServerStartReceiptV0(packet, "", codexGoalWorkspaceUnavailableIssueV0), authorityErr
+	}
+	if hasAuthority {
+		binder, ok := backend.WorkspaceRouter.(GoalWorkspaceExecutionBinderPortV0)
+		if !ok {
+			return codexAppServerStartReceiptV0(packet, "", codexGoalWorkspaceUnavailableIssueV0), errors.New(codexGoalWorkspaceUnavailableIssueV0)
+		}
+		resolved.bindExecutionBeforeWork = func(
+			bindCtx context.Context,
+			externalGoalRef string,
+			authority orquestagoal.GoalExecutionAuthorityV0,
+		) error {
+			if strings.TrimSpace(externalGoalRef) == "" || strings.TrimSpace(authority.RuntimeGenerationRef) == "" {
+				return errors.New(codexGoalWorkspaceUnavailableIssueV0)
+			}
+			return binder.BindCodexGoalExecutionV0(bindCtx, orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+				SchemaVersion:                   orquestaruntimecodexgoal.CodexGoalObservationRequestSchemaV0,
+				GoalRef:                         authority.GoalRef,
+				ExternalGoalRef:                 externalGoalRef,
+				IntentManifestRef:               authority.IntentManifestRef,
+				IntentManifestSHA256:            authority.IntentManifestSHA256,
+				WorkspaceAuthoritySchemaVersion: authority.WorkspaceAuthoritySchemaVersion,
+				WorkspaceRef:                    authority.WorkspaceRef,
+				ProviderRef:                     authority.ProviderRef,
+				RuntimeGenerationRef:            authority.RuntimeGenerationRef,
+			})
+		}
+	}
 	receipt, err := resolved.StartCodexGoalV0(ctx, packet)
 	receipt.EvidenceRefs = compactServerStackStringsV0(append(receipt.EvidenceRefs, binding.EvidenceRefs...))
-	_, hasAuthority, authorityErr := codexAppServerStartAuthorityV0(packet)
-	if err == nil && authorityErr == nil && hasAuthority {
-		binder, ok := backend.WorkspaceRouter.(GoalWorkspaceExecutionBinderPortV0)
-		bindRequest := orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
-			SchemaVersion: orquestaruntimecodexgoal.CodexGoalObservationRequestSchemaV0,
-			GoalRef:       packet.GoalRef, ExternalGoalRef: receipt.ExternalGoalRef,
-			IntentManifestRef: packet.IntentManifestRef, IntentManifestSHA256: packet.IntentManifestSHA256,
-			WorkspaceAuthoritySchemaVersion: orquestagoal.GoalWorkspaceAuthoritySchemaV0,
-			WorkspaceRef:                    packet.WorkspaceRef, ProviderRef: packet.ProviderRef,
-			RuntimeGenerationRef: receipt.RuntimeGenerationRef,
-		}
-		if !ok || strings.TrimSpace(receipt.ExternalGoalRef) == "" || strings.TrimSpace(receipt.RuntimeGenerationRef) == "" || binder.BindCodexGoalExecutionV0(ctx, bindRequest) != nil {
-			if resolved.Protocol != nil && strings.TrimSpace(receipt.ExternalGoalRef) != "" {
-				_, _ = resolved.Protocol.SetGoalV0(ctx, serverCodexAppServerThreadGoalSetParamsV0{ThreadID: receipt.ExternalGoalRef, Status: "blocked"})
-			}
-			receipt.IssueCode = codexGoalWorkspaceUnavailableIssueV0
-			return receipt, errors.New(codexGoalWorkspaceUnavailableIssueV0)
-		}
+	if err == nil && hasAuthority {
 		receipt.EvidenceRefs = compactServerStackStringsV0(append(receipt.EvidenceRefs, "evidence-ref-codex-goal-execution-authority-bound"))
 	}
 	return receipt, err

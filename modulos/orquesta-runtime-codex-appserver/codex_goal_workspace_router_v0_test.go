@@ -84,6 +84,71 @@ func TestCodexGoalWorkspaceRouterV0BindsExternalGoalBeforeReturningAuthoritative
 	}
 }
 
+func TestCodexGoalWorkspaceRouterV0BindingFailureStopsBeforeGoalAndTurnV0(t *testing.T) {
+	workspace := t.TempDir()
+	goalRef := "goal-ref-workspace-authority-bind-failure-001"
+	generationRef := "runtime-generation-ref-workspace-authority-bind-failure-001"
+	router := &fakeCodexGoalWorkspaceRouterV0{
+		binding: GoalWorkspaceBindingV0{ProjectWorkDir: workspace},
+		bindErr: errors.New("durable binding unavailable"),
+	}
+	protocol := &fakeCodexAppServerProtocolV0{
+		thread: serverCodexAppServerThreadV0{ID: "thread-ref-workspace-authority-bind-failure-001"},
+		goal:   serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-workspace-authority-bind-failure-001", Status: "active"},
+		turn:   serverCodexAppServerTurnV0{ID: "turn-ref-workspace-authority-bind-failure-001", Status: "inProgress"},
+	}
+	packet := orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		GoalRef: goalRef, Objective: "do not work before durable binding",
+		WorkspaceRef:         orquestagoal.GoalWorkspaceRefForGoalV0(goalRef),
+		ProviderRef:          orquestaruntimecodexgoal.CodexGoalProviderRefV0,
+		IntentManifestRef:    "intent-manifest-ref-workspace-authority-bind-failure-001",
+		IntentManifestSHA256: strings.Repeat("b", 64),
+	}
+	receipt, err := (serverCodexAppServerGoalBackendV0{
+		Protocol: protocol, CWD: t.TempDir(), Runtime: &serverCodexAppServerGoalRuntimeV0{},
+		WorkspaceRouter: router, startRuntimeGenerationRef: generationRef,
+	}).StartCodexGoalV0(context.Background(), packet)
+	if err == nil || receipt.IssueCode != codexGoalWorkspaceUnavailableIssueV0 ||
+		receipt.ExternalGoalRef != protocol.thread.ID || receipt.RuntimeGenerationRef != "" {
+		t.Fatalf("receipt=%+v err=%v", receipt, err)
+	}
+	if router.bound != 1 || router.lastBound.ExternalGoalRef != protocol.thread.ID ||
+		router.lastBound.RuntimeGenerationRef != generationRef {
+		t.Fatalf("router=%+v", router)
+	}
+	if len(protocol.calls) != 1 || protocol.calls[0] != "thread/start" ||
+		protocol.setParams.ThreadID != "" || protocol.turnParams.ThreadID != "" {
+		t.Fatalf("work started before durable binding: calls=%v set=%+v turn=%+v", protocol.calls, protocol.setParams, protocol.turnParams)
+	}
+}
+
+func TestCodexGoalWorkspaceRouterV0PreservesDurableAuthorityOnLaterTurnFailureV0(t *testing.T) {
+	workspace := t.TempDir()
+	goalRef := "goal-ref-workspace-authority-turn-failure-001"
+	generationRef := "runtime-generation-ref-workspace-authority-turn-failure-001"
+	router := &fakeCodexGoalWorkspaceRouterV0{binding: GoalWorkspaceBindingV0{ProjectWorkDir: workspace}}
+	protocol := &fakeCodexAppServerProtocolV0{
+		thread:        serverCodexAppServerThreadV0{ID: "thread-ref-workspace-authority-turn-failure-001"},
+		goal:          serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-workspace-authority-turn-failure-001", Status: "active"},
+		startTurnErrs: []error{errors.New("turn unavailable")},
+	}
+	packet := orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		GoalRef: goalRef, Objective: "preserve durable authority after bind",
+		WorkspaceRef:         orquestagoal.GoalWorkspaceRefForGoalV0(goalRef),
+		ProviderRef:          orquestaruntimecodexgoal.CodexGoalProviderRefV0,
+		IntentManifestRef:    "intent-manifest-ref-workspace-authority-turn-failure-001",
+		IntentManifestSHA256: strings.Repeat("c", 64),
+	}
+	receipt, err := (serverCodexAppServerGoalBackendV0{
+		Protocol: protocol, CWD: t.TempDir(), Runtime: &serverCodexAppServerGoalRuntimeV0{},
+		WorkspaceRouter: router, startRuntimeGenerationRef: generationRef,
+	}).StartCodexGoalV0(context.Background(), packet)
+	if err == nil || router.bound != 1 || receipt.ExternalGoalRef != protocol.thread.ID ||
+		receipt.RuntimeGenerationRef != generationRef || router.lastBound.RuntimeGenerationRef != generationRef {
+		t.Fatalf("receipt=%+v router=%+v err=%v", receipt, router, err)
+	}
+}
+
 type fakeCodexGoalWorkspaceRouterV0 struct {
 	binding   GoalWorkspaceBindingV0
 	err       error

@@ -67,6 +67,8 @@ type serverCodexAppServerGoalBackendV0 struct {
 	BackendShutdown            BackendShutdownPortV0
 	WorkspaceRouter            GoalWorkspaceRouterPortV0
 	workspaceAuthorityVerified bool
+	startRuntimeGenerationRef  string
+	bindExecutionBeforeWork    func(context.Context, string, orquestagoal.GoalExecutionAuthorityV0) error
 	Now                        func() time.Time
 }
 
@@ -90,6 +92,12 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 	if authorityErr != nil {
 		return codexAppServerStartReceiptV0(packet, "", "codex_app_server_goal_authority_invalid"), authorityErr
 	}
+	if hasAuthority && strings.TrimSpace(backend.startRuntimeGenerationRef) != "" {
+		authority.RuntimeGenerationRef = strings.TrimSpace(backend.startRuntimeGenerationRef)
+		if len(orquestagoal.GoalExecutionAuthorityIssuesV0(authority, false)) != 0 {
+			return codexAppServerStartReceiptV0(packet, "", "codex_app_server_goal_authority_invalid"), errors.New("codex_app_server_goal_authority_invalid")
+		}
+	}
 	if hasAuthority && backend.Runtime == nil {
 		return codexAppServerStartReceiptV0(packet, "", "codex_app_server_goal_authority_runtime_missing"), errors.New("codex_app_server_goal_authority_runtime_missing")
 	}
@@ -104,6 +112,7 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 			}
 			scoped := backend
 			scoped.Protocol = protocol
+			scoped.startRuntimeGenerationRef = leasedGenerationRef
 			var err error
 			receipt, err = scoped.StartCodexGoalV0(ctx, packet)
 			if err == nil && strings.TrimSpace(receipt.ExternalGoalRef) != "" {
@@ -163,13 +172,27 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 	if threadID == "" {
 		return codexAppServerStartReceiptV0(packet, "", "codex_app_server_thread_id_missing"), errors.New("codex_app_server_thread_id_missing")
 	}
+	executionDurablyBound := false
+	if hasAuthority && backend.bindExecutionBeforeWork != nil {
+		if err := backend.bindExecutionBeforeWork(ctx, threadID, authority); err != nil {
+			return codexAppServerStartReceiptV0(packet, threadID, codexGoalWorkspaceUnavailableIssueV0), err
+		}
+		executionDurablyBound = true
+	}
+	boundFailureReceipt := func(code string) orquestaruntimecodexgoal.CodexGoalStartReceiptV0 {
+		receipt := codexAppServerStartReceiptV0(packet, threadID, code)
+		if executionDurablyBound {
+			receipt.RuntimeGenerationRef = authority.RuntimeGenerationRef
+		}
+		return receipt
+	}
 	if effort := strings.TrimSpace(backend.ReasoningEffort); effort != "" {
 		if err := backend.Protocol.UpdateThreadSettingsV0(ctx, serverCodexAppServerThreadSettingsUpdateParamsV0{
 			ThreadID: threadID,
 			Effort:   effort,
 		}); err != nil {
 			code := codexAppServerIssueCodeForErrorV0(err, "codex_app_server_thread_settings_update_failed")
-			return codexAppServerStartReceiptV0(packet, threadID, code), err
+			return boundFailureReceipt(code), err
 		}
 	}
 	if hasWriteSetBaseline {
@@ -179,7 +202,7 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 	if checkpointRef, materialized, err := backend.materializeCodexAppServerEarlyCheckpointV0(packet, threadID); err != nil {
 		code := "codex_app_server_early_checkpoint_write_failed"
 		detail := backend.codexAppServerLaunchIssueDetailV0(code, err)
-		return codexAppServerStartReceiptV0(packet, threadID, codexAppServerIssueCodeWithDetailV0(code, detail)), err
+		return boundFailureReceipt(codexAppServerIssueCodeWithDetailV0(code, detail)), err
 	} else if materialized {
 		earlyCheckpointEvidence = "evidence-ref-codex-app-server-early-checkpoint-materialized:" + checkpointRef
 	}
@@ -198,7 +221,7 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 			goalSetEvidence = "evidence-ref-codex-app-server-goal-set-unsupported"
 		} else {
 			code := codexAppServerIssueCodeForErrorV0(err, "codex_app_server_goal_set_failed")
-			return codexAppServerStartReceiptV0(packet, threadID, code), err
+			return boundFailureReceipt(code), err
 		}
 	}
 	turnParams := backend.turnStartParamsV0(threadID, packet)
@@ -208,12 +231,12 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 		if retryParams, ok := codexAppServerTurnStartWithoutToolOutputPolicyFallbackV0(turnParams, err); ok {
 			if _, retryErr := backend.Protocol.StartTurnV0(ctx, retryParams); retryErr != nil {
 				code := codexAppServerIssueCodeForErrorV0(retryErr, "codex_app_server_turn_start_failed")
-				return codexAppServerStartReceiptV0(packet, threadID, code), retryErr
+				return boundFailureReceipt(code), retryErr
 			}
 			turnStartPolicyFallback = true
 		} else {
 			code := codexAppServerIssueCodeForErrorV0(err, "codex_app_server_turn_start_failed")
-			return codexAppServerStartReceiptV0(packet, threadID, code), err
+			return boundFailureReceipt(code), err
 		}
 	}
 	turnStartEvidenceRefs := []string{"evidence-ref-codex-app-server-turn-started"}
@@ -226,6 +249,9 @@ func (backend serverCodexAppServerGoalBackendV0) StartCodexGoalV0(
 		turnStartEvidenceRefs = append(turnStartEvidenceRefs, codexAppServerTurnStartToolOutputPolicyAcceptedV0)
 	}
 	if receipt, limited := backend.codexAppServerStartImmediateLimitedReceiptV0(ctx, packet, threadID, goalSetEvidence, turnStartEvidenceRefs); limited {
+		if executionDurablyBound {
+			receipt.RuntimeGenerationRef = authority.RuntimeGenerationRef
+		}
 		return receipt, errors.New(receipt.IssueCode)
 	}
 	backend.recordCodexAppServerGoalRuntimeV0(
