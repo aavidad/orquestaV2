@@ -2442,6 +2442,23 @@ no repetir los falsos 502/readiness por suites Go concurrentes. 041 allowlist y
 043 legacy ratchet ya están preparados. No queda trabajo esperando un momento
 perfecto: queda serializado por evidencia de contención medida.
 
+### 2026-07-13T07:12Z — causa y corte 046 para observe de sucesor
+
+Diagnóstico RO: el sucesor 044 está correctamente persistido en GoalState y
+marker (`rework-1`, running, store version 46; marker 23 ms después del CAS).
+El 500 aparece porque `CodexStackAutoprogrammingObserveGoalExecutorV0` solo
+recupera snapshot durable ante timeout/error público ya tipado; un error raw se
+propaga, el handler lo sanitiza y descarta un sucesor que status sí conoce. No se
+conservó el `err.Error()` histórico, por lo que no se inventa si nació en marker,
+run-store o routing.
+
+Corte 046 preparado, dos archivos: ante error raw, solo devolver 200 parcial si
+el estado actual acredita mismo run, sucesor inmediato running/accepted,
+Spec/LaunchReceipt/State coherentes, refs parent+closure y ausencia de cierre/
+resultado heredado. Si no cumple, se conserva el error. Tests HTTP real, sucesor
+válido y control negativo. Prioridad: 046 → 045 T5.1a → 041 allowlist → 043
+legacy ratchet; todos esperan a que 044/rework-1 libere el runner.
+
 ### 2026-07-13T06:32Z — decisión scope legacy y multiusuario
 
 Se acepta el hallazgo de Claude `871ccfb40c` como bloqueo de activación
