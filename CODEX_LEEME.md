@@ -2308,6 +2308,26 @@ goal `goal-ref-task-autoprogramming-56bccef2beb6-g01`, base exacta
 nueve archivos y eleva el focal race a `-count=3`. No se lanza 041 mientras
 042 programe o atestigüe.
 
+### 2026-07-13T06:55Z — 042 retenido/rechazado; 044 activo
+
+042 cerró complete/accepted con tres attestations, pero Orquesta dejó promoción
+pending por `replaced_large_delta` en store/test. Auditoría independiente lo
+rechaza igualmente: mejoras reales en cleanup=false, inventario Git, digests y
+no-clobber, pero faltan locks, fingerprint de scan completo, confinement/identidad
+de manifests, clase `ambiguous`, equivalencia real de receipt y propagación de
+fsync-dir; docs sobreafirman garantías. El delta era aditivo (conserva 96,9% y
+98,9%), no rename/reemplazo, pero no se autoriza porque el código aún falla.
+
+No existe autoridad pública post-hoc: la spec es inmutable y observe/status/
+supervise/run-control no aceptan permisos. 042 y su workspace quedan preservados.
+
+Nuevo rework causal por prepare-run: run
+`request-ref-goal-workspace-reconciliation-catalog-phase-a-rework2-20260713-044`,
+goal `goal-ref-task-autoprogramming-b49443f55cc5-g01`, base `14bfa803953b`.
+Declara desde origen `destructive_authorizations kind=replace` solo para store y
+su test; exige manifests confinados, ambiguous, locks/fingerprint total, receipt
+por patch/tree y fsync-dir acreditado. 041/043 siguen congelados mientras corre.
+
 ### 2026-07-13T06:32Z — decisión scope legacy y multiusuario
 
 Se acepta el hallazgo de Claude `871ccfb40c` como bloqueo de activación
