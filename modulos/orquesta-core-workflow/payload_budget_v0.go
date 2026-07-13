@@ -18,6 +18,7 @@ func validateEventPayloadBudgetV0(event OrchestrationEventV0) error {
 	return nil
 }
 
+// ValidateOrchestrationEventPayloadBudgetV0 preserves the public event budget boundary.
 func ValidateOrchestrationEventPayloadBudgetV0(event OrchestrationEventV0) error {
 	return validateEventPayloadBudgetV0(event)
 }

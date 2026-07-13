@@ -47,7 +47,7 @@ type AgentTimeoutAssessmentV0 struct {
 }
 
 func EvaluateAgentLeaseV0(input AgentLeaseEvaluationInputV0) (AgentTimeoutAssessmentV0, error) {
-	if issues := ValidateAgentLeaseEvaluationInputV0(input); len(issues) > 0 {
+	if issues := input.Validate(); len(issues) > 0 {
 		return AgentTimeoutAssessmentV0{}, AgentLeaseValidationErrorV0{Issues: issues}
 	}
 
@@ -118,6 +118,11 @@ func EvaluateAgentLeaseV0(input AgentLeaseEvaluationInputV0) (AgentTimeoutAssess
 	return assessment, nil
 }
 
+// Validate preserves the public input validation boundary for lease evaluation.
+func (input AgentLeaseEvaluationInputV0) Validate() []AgentLeaseIssueV0 {
+	return ValidateAgentLeaseEvaluationInputV0(input)
+}
+
 func DecodeAgentTimeoutAssessmentV0(data []byte) (AgentTimeoutAssessmentV0, error) {
 	if issues := detectForbiddenAgentLeaseJSONDetailsV0(data); len(issues) > 0 {
 		return AgentTimeoutAssessmentV0{}, AgentLeaseValidationErrorV0{Issues: issues}
@@ -130,10 +135,6 @@ func DecodeAgentTimeoutAssessmentV0(data []byte) (AgentTimeoutAssessmentV0, erro
 		return AgentTimeoutAssessmentV0{}, AgentLeaseValidationErrorV0{Issues: issues}
 	}
 	return assessment, nil
-}
-
-func (input AgentLeaseEvaluationInputV0) Validate() []AgentLeaseIssueV0 {
-	return ValidateAgentLeaseEvaluationInputV0(input)
 }
 
 func (assessment AgentTimeoutAssessmentV0) Validate() []AgentLeaseIssueV0 {

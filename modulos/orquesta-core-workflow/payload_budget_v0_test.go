@@ -49,6 +49,22 @@ func TestValidateOrchestrationEventV0RejectsPayloadAboveBudgetV0(t *testing.T) {
 	}
 }
 
+func TestValidateOrchestrationEventPayloadBudgetV0RejectsPayloadAboveBudgetV0(t *testing.T) {
+	event := OrchestrationEventV0{
+		EventType: OrchestrationEventRunStartedV0,
+		Payload:   json.RawMessage(strings.Repeat("{", maxWorkflowCommandEventPayloadBytesV0+1)),
+	}
+
+	err := ValidateOrchestrationEventPayloadBudgetV0(event)
+	var publicErr OrchestrationEventErrorV0
+	if !errors.As(err, &publicErr) {
+		t.Fatalf("expected public event error, got %T %v", err, err)
+	}
+	if publicErr.Code != ErrPayloadInvalidoV0 || publicErr.Field != "payload" {
+		t.Fatalf("error=%+v, want %s payload", publicErr, ErrPayloadInvalidoV0)
+	}
+}
+
 func TestWorkflowPayloadBudgetUsesOutboxDefaultAndTypeOverridesV0(t *testing.T) {
 	if maxWorkflowCommandEventPayloadBytesV0 != maxOutboxPayloadBytesV0 {
 		t.Fatalf("workflow default budget=%d, want outbox budget=%d",

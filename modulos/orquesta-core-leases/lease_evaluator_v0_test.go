@@ -114,6 +114,18 @@ func TestEvaluateAgentLeaseV0EntradaInvalidaNoHacePanic(t *testing.T) {
 	requireAgentLeaseErrorCodeV0(t, err, ErrAgentLeaseObservedAtV0)
 }
 
+func TestAgentLeaseEvaluationInputV0ValidateMatchesEvaluationBoundary(t *testing.T) {
+	input := validAgentLeaseEvaluationInputV0()
+	input.NowObservedAt = "2026-02-31T10:15:00Z"
+
+	issues := input.Validate()
+	if len(issues) == 0 || issues[0].Code != ErrAgentLeaseObservedAtV0 {
+		t.Fatalf("input.Validate()=%#v, want observed_at issue", issues)
+	}
+	_, err := EvaluateAgentLeaseV0(input)
+	requireAgentLeaseErrorCodeV0(t, err, issues[0].Code)
+}
+
 func TestEvaluateAgentLeaseV0PropagaEvidenciaCompactaSinDuplicados(t *testing.T) {
 	input := validAgentLeaseEvaluationInputV0()
 	input.EvidenceRefs = []string{"evidence-input-lse-002", "evidence-lse-001"}

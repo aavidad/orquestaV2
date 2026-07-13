@@ -90,6 +90,7 @@ func NewDirectorQuestionRaisedEventV0(meta OrchestrationEventMetaV0, payload Dir
 	return newOrchestrationEventV0(meta, OrchestrationEventDirectorQuestionRaisedV0, normalizeQuestionRaisedPayloadV0(payload))
 }
 
+// ValidateDirectorQuestionRaisedEventV0 preserves the public question-event boundary.
 func ValidateDirectorQuestionRaisedEventV0(event OrchestrationEventV0) error {
 	return ValidateOrchestrationEventV0(event)
 }
