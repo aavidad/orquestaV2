@@ -3012,3 +3012,51 @@ válido. Reintrodujo Presence incorrecta y escribió otra vez el directorio
 inline lo corrigió, pero el receipt durable consumible sigue inválido; puede
 abrir rework-2. ACKs live: workspace `...1783932409`, Presence
 `...1783932526`, receipt loop `...1783932711`.
+
+### 2026-07-13T09:20Z — cuatro reworks causales; ninguno acreditado todavía
+
+Se lanzaron por la API pública, en worktrees aislados y sin intervención manual:
+
+- 051R4 `request-ref-orquesta-allowlist-fd-authority-final-20260713-051r4`,
+  goal `goal-ref-task-autoprogramming-79532d8ef098-g01`, workspace
+  `a80a7385cf9fe52ad18be308a409be1a`;
+- 052R4 `request-ref-orquesta-observe-successor-exact-preservation-20260713-052r4`,
+  goal `goal-ref-task-autoprogramming-412003881b95-g01`, workspace
+  `e47eeace6d4e3db82be5f2600fac059a`;
+- 053R4 `request-ref-orquesta-v1a-config-effective-projection-20260713-053r4`,
+  goal `goal-ref-task-autoprogramming-1544171fd5f1-g01`, workspace
+  `362ad9b7a5c9421f7e74acca46b140e6`;
+- 054R3 `request-ref-orquesta-appserver-generation-causal-final-20260713-054r3`,
+  goal `goal-ref-task-autoprogramming-5c6bd352e717-g01`, workspace
+  `0f6dc24d838962b8390ff75c17fb3c6e`.
+
+052R4 conserva el archivo productivo exacto, SHA-256 `3f55c55d...`, y sus
+suites full/race independientes pasan. Sigue REWORK: añade 30 líneas en vez de
+las 29 autorizadas, con un `StoreVersion = 1` extra cerca de la línea 116; no
+hay commit, quedan dos tracked dirty y el receipt no es consistente. Digest
+independiente `c6d2b88c...`. Se devolvió instrucción exacta por MCP.
+
+051R4 materializa registro compartido de identidades, `Lstat` frente a `Fstat`,
+master FD `O_NOFOLLOW|O_CLOEXEC`, SHA/dev/inode, Close idempotente y ejecución
+desde FD. Sigue rojo: `resolve` no revalida path ni SHA antes de cada Run y usa
+`syscall.Dup` en vez de `F_DUPFD_CLOEXEC`; faltan guard AST, matriz causal,
+full/race, commit y receipt. No se acredita.
+
+053R4 expuso además una pérdida de intención del núcleo: objetivo y criterios
+durables llegan truncados. La implementación marca `api_key_file` como secreto,
+modela mal `encoding/json`, no exige policy por hoja y vuelve a leer el fichero
+sin límite para metadata, con TOCTOU/fail-open. Su receipt `complete` se rechaza:
+publica el directorio `modulos/orquesta-config` fuera del write-set, inventa una
+evidencia común para cinco tests mientras siguen procesos duplicados activos,
+no tiene commit y el árbol sigue dirty. Se enviaron por MCP tanto la intención
+completa como el rechazo expreso.
+
+054R3 quedó lanzado correctamente en el primer POST; un retry de la misma clave
+devolvió `worktree_baseline_store_failed`, otro defecto de idempotencia a
+investigar. El goal está running y el worktree aún limpio: debe partir del diff
+RO `6122883b...` y cerrar lease/Fingerprint, transitorio generation-conflict y
+CAS sin lost update antes de cualquier acreditación.
+
+Decisión vigente: ningún receipt autodeclarado equivale a cierre. Solo se
+integrarán diffs mínimos auditados con tests independientes, commit real y árbol
+limpio. No usar forced stop mientras el daemon app-server siga compartido.
