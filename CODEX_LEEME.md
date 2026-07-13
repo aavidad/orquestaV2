@@ -2758,3 +2758,39 @@ el límite de 900 líneas; lectura bounded antes de materializar; documento real
 con Config/CanonicalBytes/Revision; catálogo reflection-complete y políticas
 sensitive/restart sobre `serverProjectConfigFileV0`; semántica pura con error
 candidate-invalid distinto de schema-unsupported; suite completa de servidor.
+
+### 2026-07-13T08:00Z — 051/052 rechazados y reworks limpios lanzados
+
+051 successor terminó con receipt `complete`, pero sin commit y con árbol dirty
+`f1ecb40d...` (digest `e4838f2a...`). Auditoría independiente: suite completa
+roja en los dos tests de alias exacto; no SHA-256, no detección same-inode, la
+identidad se recaptura tras admisión, faltan receipts/códigos coherentes y el
+guard permite fifth/indirect/helper. Solo son reutilizables Lstat/O_NOFOLLOW y
+la ejecución del mismo FD.
+
+052 original también terminó con receipt `complete` sin commit, árbol dirty
+`ef4a3ab...` (diff SHA-256 `86c2401d...`). Son válidos reload fresco,
+Spec/LaunchReceipt, no-CAS secuencial y StoreV0 reopen. Sigue rechazado por no
+tener retry CAS, aceptar StoreVersion cero, no cruzar DirectorKind, admitir refs
+duplicadas/no canónicas y declarar un regex race que no ejecuta FileStore.
+
+El primer preflight de los payloads correctivos falló de forma segura porque la
+allowlist actual solo admite alias `go`: rechazó prefijos `GOPROXY=off` y el
+comando `git`. No se crearon goals. Se regeneraron los payloads con required
+tests que empiezan por `go`; higiene git queda como criterio, no como comando
+prelaunch.
+
+Reworks nuevos, una sola tarea y base exacta `086f352f2d74`:
+
+- 051R2 run `request-ref-orquesta-allowlist-immutable-identity-20260713-051r2v2`,
+  goal `goal-ref-task-autoprogramming-3e7b6c8831c2-g01`, external
+  `019f5a73-da33-71f2-babb-cef407fdd0d0`;
+- 052R1 run `request-ref-orquesta-observe-successor-accreditation-20260713-052r1v2`,
+  goal `goal-ref-task-autoprogramming-ba1f7256e09e-g01`, external
+  `019f5a73-d9d8-7c53-9a3d-b52d182fc2b7`.
+
+Además se localizaron los worktrees reales de successors automáticos que los
+status timeout ocultaban: 054 rework-1 en `965881e5...` y 053 rework-1 en
+`dab999e7...`, ambos con receipt complete pero sin commit. Se auditan esos
+árboles exactos antes de decidir un nuevo rework; los receipts autodeclarados no
+son evidencia suficiente.
