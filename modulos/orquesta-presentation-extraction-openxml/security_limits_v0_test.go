@@ -114,6 +114,27 @@ func TestAdapterV0AcceptsEverySecurityLimitAtItsBoundaryV0(t *testing.T) {
 	}
 }
 
+func TestAdapterV0RejectsEachConfiguredLimitCausallyV0(t *testing.T) {
+	base := securityPPTXEntriesV0("within")
+	archive, expanded := securityPPTXArchiveV0(t, base)
+	for _, test := range []struct {
+		name   string
+		config ConfigV0
+		want   error
+	}{
+		{"archive", ConfigV0{MaxArchiveBytes: int64(len(archive) - 1)}, ErrLimitExceededV0},
+		{"entries", ConfigV0{MaxZipEntries: len(base) - 1}, ErrLimitExceededV0},
+		{"xml", ConfigV0{MaxXMLBytes: int64(maxXMLSizeV0(base) - 1)}, ErrUnsafeArchiveV0},
+		{"expanded", ConfigV0{MaxExpandedBytes: expanded - 1}, ErrLimitExceededV0},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if err := extractRejectedPPTXV0(t, archive, test.config); !errors.Is(err, test.want) {
+				t.Fatalf("configured %s limit error = %v, want %v", test.name, err, test.want)
+			}
+		})
+	}
+}
+
 func securityPPTXEntriesV0(texts ...string) []securityPPTXEntryV0 {
 	ids := make([]string, 0, len(texts))
 	rels := make([]string, 0, len(texts))

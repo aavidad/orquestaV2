@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,7 +17,7 @@ func fixturePPTXV0(t *testing.T, external bool) []byte {
 	t.Helper()
 	var b bytes.Buffer
 	z := zip.NewWriter(&b)
-	files := []struct{ name, value string }{{"ppt/presentation.xml", `<p:presentation xmlns:p="` + presentationMLNamespaceV0 + `" xmlns:r="` + officeRelationshipNamespaceV0 + `"><p:sldSz cx="9144000" cy="5143500"/><p:sldIdLst><p:sldId id="257" r:id="rId2"/><p:sldId id="256" r:id="rId1"/></p:sldIdLst></p:presentation>`}, {"ppt/_rels/presentation.xml.rels", `<Relationships xmlns="` + packageRelationshipNamespaceV0 + `">` + func() string {
+	files := []struct{ name, value string }{{"ppt/presentation.xml", `<p:presentation xmlns:p="` + presentationMLNamespaceV0 + `" xmlns:r="` + officeRelationshipNamespaceV0 + `"><p:sldSz cx="9144000" cy="6858000" type="screen4x3"/><p:sldIdLst><p:sldId id="257" r:id="rId2"/><p:sldId id="256" r:id="rId1"/></p:sldIdLst></p:presentation>`}, {"ppt/_rels/presentation.xml.rels", `<Relationships xmlns="` + packageRelationshipNamespaceV0 + `">` + func() string {
 		if external {
 			return `<Relationship Id="rId1" Type="` + presentationSlideRelationshipTypeV0 + `" Target="https://bad" TargetMode="External"/>`
 		}
@@ -66,8 +67,8 @@ func TestAdapterV0RejectsNestedSymlinkAndExternalRelationshipV0(t *testing.T) {
 	}
 	if err := os.Symlink("../fixture.pptx", filepath.Join(root, "nested", "file.pptx")); err == nil {
 		a.catalog["presentation:fixture"] = CatalogEntryV0{PresentationRef: "presentation:fixture", Path: "nested/file.pptx", SourceRef: "source:fixture"}
-		if _, err := a.ResolvePresentationV0(context.Background(), "presentation:fixture"); err == nil {
-			t.Fatal("symlink accepted")
+		if _, err := a.ResolvePresentationV0(context.Background(), "presentation:fixture"); !errors.Is(err, ErrUnsafeSymlinkV0) {
+			t.Fatalf("nested symlink error = %v, want %v", err, ErrUnsafeSymlinkV0)
 		}
 	}
 	if err := os.WriteFile(filepath.Join(root, "external.pptx"), fixturePPTXV0(t, true), 0600); err != nil {

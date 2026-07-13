@@ -308,17 +308,20 @@ func slideIDsV0(b []byte) ([]string, float64, float64, error) {
 			}
 			seenSize = true
 			for _, a := range start.Attr {
-				if a.Name.Space != "" {
-					return nil, 0, 0, ErrUnsafeArchiveV0
-				}
-				n, err := strconv.ParseUint(a.Value, 10, 32)
-				if err != nil {
-					return nil, 0, 0, ErrUnsafeArchiveV0
-				}
-				if a.Name.Local == "cx" {
+				// PresentationML permits non-numeric attributes such as
+				// type="screen4x3". Only the dimensions are numeric inputs.
+				switch {
+				case a.Name.Space == "" && a.Name.Local == "cx":
+					n, err := strconv.ParseUint(a.Value, 10, 32)
+					if err != nil {
+						return nil, 0, 0, ErrUnsafeArchiveV0
+					}
 					width = float64(n)
-				}
-				if a.Name.Local == "cy" {
+				case a.Name.Space == "" && a.Name.Local == "cy":
+					n, err := strconv.ParseUint(a.Value, 10, 32)
+					if err != nil {
+						return nil, 0, 0, ErrUnsafeArchiveV0
+					}
 					height = float64(n)
 				}
 			}
