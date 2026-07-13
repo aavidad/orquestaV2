@@ -2017,3 +2017,24 @@ El web 038 cerró `complete/accepted` y fue promovido provisionalmente como
 `fa834df39` (source `361bdedb5`) con ocho artefactos declarados. Sigue fuera del
 host hasta auditoría adversarial independiente del workspace
 `eeeb456f90a28c87b957963f5e3fbaab`.
+
+### 2026-07-13T05:47Z — 038 rework; 039 activo; cleanup Fase A congelada
+
+La auditoría 038 volvió a rechazar el cierre: `ClosureBlocker.BlockerRef`
+extranjero, arrays Go tipados nested no recorridos, panic de reflection ante
+campo privado y contratos Markdown ausentes. El resto de la matriz y los ocho
+artefactos sí pasan. 038 no entra al host.
+
+Rework 039 lanzado por API: run
+`request-ref-web-status-reflect-blocker-contract-rework-20260713-039`, goal
+`goal-ref-task-autoprogramming-6d7ae4d39b12-g01`, base `fa834df39`. Write-set
+de cuatro archivos; exige reflection sin panic/fail-closed, colecciones Go
+tipadas recursivas, BlockerRef exacto y contratos MCP/web completos.
+
+El siguiente goal cleanup está diseñado, pero espera a que terminen las suites
+web para no competir por CPU. Fase A solo catalogará los 69 workspaces;
+persistirá identidad, backend/huecos, HEAD/base/tree, status/digests, patch-id,
+untracked, commits exclusivos y cadenas de receipts. Clasifica promoted,
+rejected-archivable, unique o ambiguous y fuerza en todas las filas
+`cleanup_eligible=false`. No remove/prune/archive/force; persistencia atómica,
+fsync, replay y tests multiproceso.
