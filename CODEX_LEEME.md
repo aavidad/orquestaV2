@@ -3504,3 +3504,48 @@ reutilizando la infraestructura de 057. Por ello el orden queda 056 stop
 selectivo → 057 intent/document bundle → entrega mailbox causal → 058 Consejo.
 El E2E obligatorio será MCP tools/call→queued→claim→successor/turn→prompt y
 state→delivery ACK, más replay, aislamiento entre runs y race count 3.
+
+### 2026-07-13T12:10Z — successors explícitos 051R6 y 053R7
+
+El successor automático 051 rework-1 escribió complete antes de terminar sus
+tests y dejó un focal rojo: el test CLOEXEC inspeccionaba `call.Args[1]`, pero
+`F_DUPFD_CLOEXEC` está en `Args[2]` de `syscall.Syscall`. Además conservó el
+guard heurístico, no cableó Close y omitió casos runtime. Su observer quedó
+parcial con `observe_degraded_successor_recovered` y error backend sanitizado;
+no se fuerza stop ni se acepta el result. Se preservó su workspace RO
+`065d8fa58073362dfeb845f44ef2f99b`, digest de contenido
+`2c2142760a9c3025...`, con catorce paths válidos.
+
+Se lanzó por MCP un successor causal independiente 051R6:
+
+- run `request-ref-orquesta-allowlist-fd-causal-rework-20260713-051r6`;
+- goal `goal-ref-task-autoprogramming-8bf70d76829a-g01`;
+- external goal `019f5b5c-965d-7773-a6bf-28754b96297a`.
+
+El objetivo materializado llegó completo: guard real go/types, índice correcto
+CLOEXEC y flags del fd, symlink/argv0/Run-Close race, ownership Close, conservar
+revalidación y fail-closed, receipt/evidencias y espera de exit. Sus ocho
+criterios detallados volvieron a compactarse a refs opacas: prueba operativa
+adicional de que 057 es necesario. Required tests y write-set de veinte paths
+sí llegaron exactos; la acreditación detallada será externa.
+
+053R6 mejoró Presence, `api_key_file` y el snapshot single-read, pero quedó
+correctamente `blocked/replan`: producción descartaba Canonical/Revision/
+Catalog y el write-set no incluía `config.go`/`stack.go`; la policy por prefijo
+seguía aceptando una leaf nueva bajo raíz conocida. Se preservó workspace RO
+`16941b4274efc5ef8e7217cea73560cf`, digest
+`ad1d3e5ca2b8b077...`, diecisiete paths, y se esperó a que todos los tests
+redundantes terminaran antes del successor.
+
+Se lanzó por MCP 053R7:
+
+- run `request-ref-orquesta-config-foundation-final-rework-20260713-053r7`;
+- goal `goal-ref-task-autoprogramming-70b1c36f251a-g01`;
+- external goal `019f5b5f-8d58-7e13-a970-cb815049f884`;
+- write-set de diecinueve paths, ampliado solo con `config.go` y `stack.go`.
+
+053R7 debe hacer que startup consuma el snapshot completo de lectura única,
+sin wrapper que descarte ni relectura, y reemplazar policies por una tabla
+exhaustiva por JSON pointer que rechace `/server/new_leaf` y
+`/autoprogramming/new_leaf`. Ambos successors están running sobre base canónica
+`46738ea15...` y tienen auditores RO separados. No existe promoción todavía.
