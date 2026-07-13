@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	orquestaappdirectorservice "orquesta/modulos/orquesta-app-director-service"
@@ -104,6 +105,88 @@ func TestCodexStackPrepareRunHTTPV0PersistsEnvelopeGoalReplayAndConflictV0(t *te
 	conflict := postPrepareRunEnvelopeHTTPV0(t, handler, input)
 	if conflict.Accepted || conflict.Estado != orquestamcp.MCPAutoprogrammingPrepareRunEstadoErrorV0 || len(launcher.specs) != 1 {
 		t.Fatalf("conflict=%+v launches=%d", conflict, len(launcher.specs))
+	}
+}
+
+func TestCodexStackPrepareRunHTTPV0PersistsPreBindingLaunchFailureV0(t *testing.T) {
+	stack := mustBuildCodexStackForTestV0(t, newFakeCodexStackRuntimeV0())
+	launcher := &goalFirstQueueLauncherForTestV0{
+		receipt: orquestagoal.GoalLaunchReceiptV0{
+			Status: orquestagoal.GoalStatusInvalidV0,
+			Issues: []orquestagoal.GoalWorkIssueV0{{
+				Code:  "codex_goal_workspace_unavailable",
+				Field: "goal_launcher",
+			}},
+		},
+		err: errors.New("codex_goal_workspace_unavailable: /private/workspace"),
+	}
+	goalStates := newGoalFirstQueueStateStoreForTestV0()
+	stack.Ports.GoalLauncher = launcher
+	stack.Ports.GoalObserver = &goalFirstQueueObserverForTestV0{}
+	stack.Ports.GoalRequiredTestSpecBinder = independentSpecBinderForStackTestV0{}
+	stack.Ports.GoalClosureValidator = orquestagoal.DefaultGoalWorkClosureValidatorV0{}
+	stack.Ports.GoalStateStore = goalStates
+
+	executor := NewCodexStackAutoprogrammingPrepareRunExecutorV0(
+		&stack,
+		"2026-07-13T10:30:00Z",
+		"default-operator",
+		stack.Stores.RunQueue,
+		stack.RunQueue,
+		stack.Clock,
+		stack.Codex.RuntimeWorkDir,
+	)
+	handler := orquestamcp.NewMCPAutoprogrammingPrepareRunHTTPHandlerV0(executor)
+	request := autoprogrammingBridgeRequestForTestV0()
+	request.RequestRef = "request-ref-envelope-pre-binding-failure-001"
+	request.Tasks[0].TaskRef = "task-ref-envelope-pre-binding-failure-001"
+	input := orquestamcp.MCPAutoprogrammingPrepareRunToolInputV0{
+		RequestID:              "request-envelope-pre-binding-failure-001",
+		CorrelationID:          "corr-envelope-pre-binding-failure-001",
+		IdempotencyKey:         "idem-envelope-pre-binding-failure-001",
+		OccurredAt:             "2026-07-13T10:30:00Z",
+		RequestedBy:            "operator-ref-envelope-pre-binding-failure-001",
+		DirectorExecutionMode:  orquestaappdirectorservice.AppDirectorExecutionModeGoalFirstV0,
+		AutoprogrammingRequest: request,
+	}
+
+	result := postPrepareRunEnvelopeHTTPV0(t, handler, input)
+	if result.Accepted || result.Estado != orquestamcp.MCPAutoprogrammingPrepareRunEstadoErrorV0 ||
+		len(result.Errores) != 1 || result.Errores[0].Code != "autoprogramming_goal_launch_failed" ||
+		!strings.Contains(result.Errores[0].Message, "codex_goal_workspace_unavailable") ||
+		strings.Contains(result.Errores[0].Message, "/private/") {
+		t.Fatalf("result=%+v", result)
+	}
+	state, err := goalStates.LoadGoalWorkStateV0(context.Background(), request.RequestRef)
+	if err != nil {
+		t.Fatalf("LoadGoalWorkStateV0: %v", err)
+	}
+	if state.Status != orquestagoal.GoalStatusInvalidV0 ||
+		state.Spec.IntentManifestRef == "" || state.Spec.IntentManifestSHA256 == "" ||
+		state.ExternalGoalRef != "" || state.LaunchReceipt.ExternalGoalRef != "" ||
+		state.LaunchReceipt.IntentManifestRef != "" || state.LaunchReceipt.WorkspaceRef != "" ||
+		state.LaunchReceipt.ProviderRef != "" || state.LaunchReceipt.RuntimeGenerationRef != "" {
+		t.Fatalf("state=%+v", state)
+	}
+}
+
+func TestAutoprogrammingBridgeGoalLaunchIssueV0KeepsReasonWhenStatePersistenceFailsV0(t *testing.T) {
+	reason := autoprogrammingBridgeGoalLaunchFailureReasonV0(orquestagoal.GoalLaunchReceiptV0{
+		Issues: []orquestagoal.GoalWorkIssueV0{{
+			Code: "codex_goal_workspace_unavailable: /home/operator/private token=secret",
+		}},
+	}, errors.New("launcher failed at /home/operator/private token=secret"))
+	issue := autoprogrammingBridgeGoalLaunchIssueV0(
+		"run-ref-launch-and-state-failure-001",
+		reason,
+		errors.New("state store unavailable at /private/state"),
+	)
+	if reason != "codex_goal_workspace_unavailable" ||
+		!strings.Contains(issue.Message, "codex_goal_workspace_unavailable") ||
+		!strings.Contains(issue.Message, "state bloqueado no pudo persistirse") ||
+		strings.Contains(issue.Message, "/home/") || strings.Contains(issue.Message, "token=") ||
+		strings.Contains(issue.Message, "/private/") {
+		t.Fatalf("issue=%+v", issue)
 	}
 }
 

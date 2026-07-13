@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	orquestasecurefile "orquesta/modulos/orquesta-secure-file"
 )
 
 const GoalWorkspaceSchemaVersionV0 = "goal_workspace.v0"
@@ -53,6 +55,9 @@ func (connector GitGoalWorkspaceProvisionerV0) PrepareGoalWorkspaceV0(
 	if len(issues) > 0 {
 		return GoalWorkspaceV0{}, issues
 	}
+	if issue := openPrivateGoalWorkspaceDirectoryV0(filepath.Dir(goalWorkspaceManifestPathV0(request)), true); issue != nil {
+		return GoalWorkspaceV0{}, []WorktreeIssueV0{*issue}
+	}
 	base, issue := connector.resolveGoalWorkspaceBaseV0(ctx, request)
 	if issue != nil {
 		return GoalWorkspaceV0{}, []WorktreeIssueV0{*issue}
@@ -64,9 +69,6 @@ func (connector GitGoalWorkspaceProvisionerV0) PrepareGoalWorkspaceV0(
 			return GoalWorkspaceV0{}, loadIssues
 		}
 		return connector.validateExistingGoalWorkspaceV0(ctx, want, existing)
-	}
-	if err := os.MkdirAll(filepath.Dir(goalWorkspaceManifestPathV0(request)), 0o700); err != nil {
-		return GoalWorkspaceV0{}, []WorktreeIssueV0{goalWorkspaceFilesystemIssueV0("workspace_root")}
 	}
 	lock, err := os.OpenFile(goalWorkspaceLockPathV0(request), os.O_RDWR|os.O_CREATE, 0o600)
 	if err != nil {
@@ -90,11 +92,17 @@ func (connector GitGoalWorkspaceProvisionerV0) PrepareGoalWorkspaceV0(
 	if _, statErr := os.Stat(want.ProjectWorkDir); statErr == nil || !errors.Is(statErr, os.ErrNotExist) {
 		return GoalWorkspaceV0{}, []WorktreeIssueV0{worktreeIssueV0(WorktreeIssueWorkspaceConflictV0, "project_work_dir")}
 	}
-	if err := os.MkdirAll(filepath.Dir(want.ProjectWorkDir), 0o700); err != nil {
-		return GoalWorkspaceV0{}, []WorktreeIssueV0{goalWorkspaceFilesystemIssueV0("workspace_root")}
+	if issue := openPrivateGoalWorkspaceDirectoryV0(want.ProjectWorkDir, true); issue != nil {
+		return GoalWorkspaceV0{}, []WorktreeIssueV0{*issue}
 	}
 	if _, gitIssue := connector.VCS.gitOutputV0(ctx, request.SourceWorkDir, "worktree", "add", "--detach", want.ProjectWorkDir, want.BaseRevision); gitIssue != nil {
+		_, _ = connector.VCS.gitOutputV0(ctx, request.SourceWorkDir, "worktree", "remove", "--force", want.ProjectWorkDir)
+		_ = os.Remove(want.ProjectWorkDir)
 		return GoalWorkspaceV0{}, []WorktreeIssueV0{goalWorkspaceGitIssueV0("git.worktree_add", *gitIssue)}
+	}
+	if issue := ensurePrivateGoalWorkspaceRootV0(want.ProjectWorkDir); issue != nil {
+		_, _ = connector.VCS.gitOutputV0(ctx, request.SourceWorkDir, "worktree", "remove", "--force", want.ProjectWorkDir)
+		return GoalWorkspaceV0{}, []WorktreeIssueV0{*issue}
 	}
 	if writeIssues := writeGoalWorkspaceManifestV0(goalWorkspaceManifestPathV0(request), want); len(writeIssues) > 0 {
 		_, _ = connector.VCS.gitOutputV0(ctx, request.SourceWorkDir, "worktree", "remove", "--force", want.ProjectWorkDir)
@@ -110,6 +118,9 @@ func (connector GitGoalWorkspaceProvisionerV0) ResolveGoalWorkspaceV0(
 	request, issues := normalizeGoalWorkspaceRequestV0(request)
 	if len(issues) > 0 {
 		return GoalWorkspaceV0{}, issues
+	}
+	if issue := openPrivateGoalWorkspaceDirectoryV0(filepath.Dir(goalWorkspaceManifestPathV0(request)), false); issue != nil {
+		return GoalWorkspaceV0{}, []WorktreeIssueV0{*issue}
 	}
 	existing, found, loadIssues := loadGoalWorkspaceManifestV0(goalWorkspaceManifestPathV0(request))
 	if len(loadIssues) > 0 {
@@ -149,11 +160,76 @@ func (connector GitGoalWorkspaceProvisionerV0) validateExistingGoalWorkspaceV0(
 		(want.BaseRevision != "" && existing.BaseRevision != want.BaseRevision) {
 		return GoalWorkspaceV0{}, []WorktreeIssueV0{worktreeIssueV0(WorktreeIssueWorkspaceConflictV0, "goal_workspace_manifest")}
 	}
+	if issue := ensurePrivateGoalWorkspaceRootV0(existing.ProjectWorkDir); issue != nil {
+		return GoalWorkspaceV0{}, []WorktreeIssueV0{*issue}
+	}
 	head, issue := connector.VCS.gitOutputV0(ctx, existing.ProjectWorkDir, "rev-parse", "--verify", "HEAD^{commit}")
 	if issue != nil || strings.TrimSpace(head) == "" {
 		return GoalWorkspaceV0{}, []WorktreeIssueV0{worktreeIssueV0(WorktreeIssueWorkspaceConflictV0, "project_work_dir")}
 	}
 	return existing, nil
+}
+
+func ensurePrivateGoalWorkspaceRootV0(path string) *WorktreeIssueV0 {
+	parent, err := orquestasecurefile.OpenDirectoryV0(filepath.Dir(path), orquestasecurefile.DirectoryOptionsV0{FinalMode: 0o700})
+	if err != nil {
+		issue := goalWorkspaceFilesystemIssueV0("project_work_dir")
+		return &issue
+	}
+	defer parent.Close()
+	name := filepath.Base(path)
+	if name == "" || name == "." || name == ".." {
+		issue := goalWorkspaceFilesystemIssueV0("project_work_dir")
+		return &issue
+	}
+	fd, err := syscall.Openat(int(parent.Fd()), name, syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)
+	if err != nil {
+		issue := goalWorkspaceFilesystemIssueV0("project_work_dir")
+		return &issue
+	}
+	defer syscall.Close(fd)
+
+	var stat syscall.Stat_t
+	if err := syscall.Fstat(fd, &stat); err != nil ||
+		uint32(stat.Mode)&uint32(syscall.S_IFMT) != uint32(syscall.S_IFDIR) ||
+		uint32(stat.Uid) != uint32(os.Geteuid()) {
+		issue := goalWorkspaceFilesystemIssueV0("project_work_dir")
+		return &issue
+	}
+	if err := syscall.Fchmod(fd, 0o700); err != nil {
+		issue := goalWorkspaceFilesystemIssueV0("project_work_dir")
+		return &issue
+	}
+	if err := syscall.Fstat(fd, &stat); err != nil ||
+		uint32(stat.Mode)&uint32(syscall.S_IFMT) != uint32(syscall.S_IFDIR) ||
+		uint32(stat.Uid) != uint32(os.Geteuid()) ||
+		uint32(stat.Mode)&(uint32(0o777)|goalWorkspaceSpecialModeBitsV0()) != 0o700 {
+		issue := goalWorkspaceFilesystemIssueV0("project_work_dir")
+		return &issue
+	}
+	return nil
+}
+
+func openPrivateGoalWorkspaceDirectoryV0(path string, create bool) *WorktreeIssueV0 {
+	options := orquestasecurefile.DirectoryOptionsV0{FinalMode: 0o700}
+	if create {
+		options.Create = true
+		options.CreateMode = 0o700
+	}
+	dir, err := orquestasecurefile.OpenDirectoryV0(path, options)
+	if err != nil {
+		issue := goalWorkspaceFilesystemIssueV0("workspace_root")
+		return &issue
+	}
+	if err := dir.Close(); err != nil {
+		issue := goalWorkspaceFilesystemIssueV0("workspace_root")
+		return &issue
+	}
+	return nil
+}
+
+func goalWorkspaceSpecialModeBitsV0() uint32 {
+	return uint32(syscall.S_ISUID | syscall.S_ISGID | syscall.S_ISVTX)
 }
 
 func normalizeGoalWorkspaceRequestV0(request GoalWorkspaceRequestV0) (GoalWorkspaceRequestV0, []WorktreeIssueV0) {

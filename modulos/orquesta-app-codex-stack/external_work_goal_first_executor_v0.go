@@ -615,6 +615,8 @@ func externalWorkGoalFirstKnownLaunchFailureReasonV0(message string) string {
 		return "codex_goal_starter_missing"
 	case strings.Contains(normalized, "codex_goal_start_rejected"):
 		return "codex_goal_start_rejected"
+	case strings.Contains(normalized, "codex_goal_workspace_unavailable"):
+		return "codex_goal_workspace_unavailable"
 	default:
 		return ""
 	}

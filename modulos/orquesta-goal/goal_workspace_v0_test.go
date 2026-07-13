@@ -206,6 +206,50 @@ func TestNewGoalWorkStateFromLaunchV0LigaManifestConAutoridadVersionadaV0(t *tes
 	}
 }
 
+func TestNewGoalWorkStateFromLaunchV0PersisteFalloPrevioALigarAutoridadV0(t *testing.T) {
+	spec := validGoalLifecycleSpecForTestV0()
+	spec.RequestRef = "request-ref-state-pre-binding-failure-001"
+	spec.IntentManifestRef = "intent-manifest-ref-" + spec.RequestRef
+	spec.IntentManifestSHA256 = strings.Repeat("e", 64)
+	request := GoalWorkStateFromLaunchRequestV0{
+		RunRef: "run-ref-state-pre-binding-failure-001",
+		Spec:   spec,
+		LaunchReceipt: GoalLaunchReceiptV0{
+			Status: GoalStatusInvalidV0,
+			Issues: []GoalWorkIssueV0{{Code: "goal_workspace_unavailable", Field: "goal_launcher"}},
+		},
+	}
+	state, err := NewGoalWorkStateFromLaunchV0(request)
+	if err != nil {
+		t.Fatalf("pre-binding failure rejected: %v", err)
+	}
+	if state.Status != GoalStatusInvalidV0 || state.GoalRef != spec.GoalRef ||
+		state.ExternalGoalRef != "" || state.LaunchReceipt.ExternalGoalRef != "" ||
+		state.LaunchReceipt.IntentManifestRef != "" ||
+		state.LaunchReceipt.WorkspaceAuthoritySchemaVersion != "" ||
+		state.LaunchReceipt.WorkspaceRef != "" || state.LaunchReceipt.ProviderRef != "" ||
+		state.LaunchReceipt.RuntimeGenerationRef != "" {
+		t.Fatalf("pre-binding failure fabricated authority: %+v", state)
+	}
+
+	running := request
+	running.LaunchReceipt.Status = GoalStatusRunningV0
+	if _, err := NewGoalWorkStateFromLaunchV0(running); err == nil {
+		t.Fatal("running launch without manifest authority accepted")
+	}
+
+	partial := request
+	partial.LaunchReceipt.ProviderRef = "provider-ref-partial"
+	if _, err := NewGoalWorkStateFromLaunchV0(partial); err == nil {
+		t.Fatal("invalid launch with partial authority accepted as pre-binding failure")
+	}
+	divergent := request
+	divergent.LaunchReceipt.ExternalGoalRef = "external-goal-ref-divergent"
+	if _, err := NewGoalWorkStateFromLaunchV0(divergent); err == nil {
+		t.Fatal("invalid launch with external identity but no authority accepted")
+	}
+}
+
 func TestGoalObservationRequestFromStateV0ProyectaAutoridadInmutableV0(t *testing.T) {
 	goalRef := "goal-ref-workspace-authority-001"
 	state := GoalWorkStateV0{

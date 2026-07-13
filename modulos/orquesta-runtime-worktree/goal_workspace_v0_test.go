@@ -11,7 +11,7 @@ import (
 
 func TestGitGoalWorkspaceProvisionerV0CreatesPhysicalWorkspacesPerGoal(t *testing.T) {
 	repo := newGoalWorkspaceGitRepoForTestV0(t)
-	root := filepath.Join(t.TempDir(), "runtime")
+	root := newPrivateGoalWorkspaceRootForTestV0(t)
 	connector := GitGoalWorkspaceProvisionerV0{}
 	first, issues := connector.PrepareGoalWorkspaceV0(context.Background(), GoalWorkspaceRequestV0{
 		RunRef: "run-ref-batch-001", GoalRef: "goal-ref-001", ProjectRef: "project-ref-001",
@@ -40,7 +40,7 @@ func TestGitGoalWorkspaceProvisionerV0CreatesPhysicalWorkspacesPerGoal(t *testin
 
 func TestGitGoalWorkspaceProvisionerV0ReplayAndBaseConflict(t *testing.T) {
 	repo := newGoalWorkspaceGitRepoForTestV0(t)
-	root := filepath.Join(t.TempDir(), "runtime")
+	root := newPrivateGoalWorkspaceRootForTestV0(t)
 	request := GoalWorkspaceRequestV0{
 		RunRef: "run-ref-replay-001", GoalRef: "goal-ref-replay-001", ProjectRef: "project-ref-001",
 		WorktreeRef: "worktree-ref-001", SourceWorkDir: repo, WorkspaceRoot: root,
@@ -60,9 +60,40 @@ func TestGitGoalWorkspaceProvisionerV0ReplayAndBaseConflict(t *testing.T) {
 	}
 }
 
+func TestGitGoalWorkspaceProvisionerV0KeepsWorkspaceRootPrivateAcrossReplayAndResolve(t *testing.T) {
+	repo := newGoalWorkspaceGitRepoForTestV0(t)
+	root := newPrivateGoalWorkspaceRootForTestV0(t)
+	request := GoalWorkspaceRequestV0{
+		RunRef: "run-ref-private-001", GoalRef: "goal-ref-private-001", ProjectRef: "project-ref-001",
+		WorktreeRef: "worktree-ref-001", SourceWorkDir: repo, WorkspaceRoot: root,
+	}
+	connector := GitGoalWorkspaceProvisionerV0{}
+	workspace, issues := connector.PrepareGoalWorkspaceV0(context.Background(), request)
+	if len(issues) > 0 {
+		t.Fatalf("prepare issues=%+v", issues)
+	}
+	requireGoalWorkspaceModeV0(t, workspace.ProjectWorkDir, 0o700)
+
+	if err := os.Chmod(workspace.ProjectWorkDir, 0o775); err != nil {
+		t.Fatal(err)
+	}
+	if _, issues = connector.PrepareGoalWorkspaceV0(context.Background(), request); len(issues) > 0 {
+		t.Fatalf("replay issues=%+v", issues)
+	}
+	requireGoalWorkspaceModeV0(t, workspace.ProjectWorkDir, 0o700)
+
+	if err := os.Chmod(workspace.ProjectWorkDir, 0o775); err != nil {
+		t.Fatal(err)
+	}
+	if _, issues = connector.ResolveGoalWorkspaceV0(context.Background(), request); len(issues) > 0 {
+		t.Fatalf("resolve issues=%+v", issues)
+	}
+	requireGoalWorkspaceModeV0(t, workspace.ProjectWorkDir, 0o700)
+}
+
 func TestGitGoalWorkspaceProvisionerV0ConcurrentSameGoalDoesNotDuplicate(t *testing.T) {
 	repo := newGoalWorkspaceGitRepoForTestV0(t)
-	root := filepath.Join(t.TempDir(), "runtime")
+	root := newPrivateGoalWorkspaceRootForTestV0(t)
 	request := GoalWorkspaceRequestV0{
 		RunRef: "run-ref-concurrent-001", GoalRef: "goal-ref-concurrent-001", ProjectRef: "project-ref-001",
 		WorktreeRef: "worktree-ref-001", SourceWorkDir: repo, WorkspaceRoot: root,
@@ -111,6 +142,44 @@ func TestNormalizeGoalWorkspaceRequestV0RejectsRuntimeInsideSource(t *testing.T)
 	}
 }
 
+func TestGitGoalWorkspaceProvisionerV0RejectsUnsafeWorkspaceAncestorsV0(t *testing.T) {
+	repo := newGoalWorkspaceGitRepoForTestV0(t)
+	request := GoalWorkspaceRequestV0{
+		RunRef: "run-ref-unsafe-root-001", GoalRef: "goal-ref-unsafe-root-001", ProjectRef: "project-ref-001",
+		WorktreeRef: "worktree-ref-001", SourceWorkDir: repo,
+	}
+	t.Run("group writable ancestor", func(t *testing.T) {
+		unsafe := filepath.Join(t.TempDir(), "unsafe")
+		if err := os.Mkdir(unsafe, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(unsafe, 0o770); err != nil {
+			t.Fatal(err)
+		}
+		candidate := request
+		candidate.WorkspaceRoot = filepath.Join(unsafe, "runtime")
+		if _, issues := (GitGoalWorkspaceProvisionerV0{}).PrepareGoalWorkspaceV0(context.Background(), candidate); !goalWorkspaceHasIssueForTestV0(issues, WorktreeIssueFilesystemV0) {
+			t.Fatalf("issues=%+v", issues)
+		}
+	})
+	t.Run("symlink ancestor", func(t *testing.T) {
+		base := t.TempDir()
+		target := filepath.Join(base, "target")
+		if err := os.Mkdir(target, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		link := filepath.Join(base, "link")
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+		candidate := request
+		candidate.WorkspaceRoot = filepath.Join(link, "runtime")
+		if _, issues := (GitGoalWorkspaceProvisionerV0{}).PrepareGoalWorkspaceV0(context.Background(), candidate); !goalWorkspaceHasIssueForTestV0(issues, WorktreeIssueFilesystemV0) {
+			t.Fatalf("issues=%+v", issues)
+		}
+	})
+}
+
 func newGoalWorkspaceGitRepoForTestV0(t *testing.T) string {
 	t.Helper()
 	repo := filepath.Join(t.TempDir(), "source")
@@ -131,6 +200,15 @@ func newGoalWorkspaceGitRepoForTestV0(t *testing.T) string {
 	goalWorkspaceRunGitForTestV0(t, repo, "add", "second.txt")
 	goalWorkspaceRunGitForTestV0(t, repo, "commit", "-q", "-m", "second")
 	return repo
+}
+
+func newPrivateGoalWorkspaceRootForTestV0(t *testing.T) string {
+	t.Helper()
+	base := t.TempDir()
+	if err := os.Chmod(base, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return filepath.Join(base, "runtime")
 }
 
 func goalWorkspaceRunGitForTestV0(t *testing.T, repo string, args ...string) {
@@ -158,4 +236,15 @@ func goalWorkspaceHasIssueForTestV0(issues []WorktreeIssueV0, code WorktreeIssue
 		}
 	}
 	return false
+}
+
+func requireGoalWorkspaceModeV0(t *testing.T, path string, want os.FileMode) {
+	t.Helper()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != want {
+		t.Fatalf("workspace mode=%#o want=%#o", got, want)
+	}
 }

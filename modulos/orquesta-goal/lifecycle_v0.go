@@ -656,13 +656,14 @@ func NewGoalWorkStateFromLaunchV0(
 	if receipt.GoalRef == "" {
 		receipt.GoalRef = spec.GoalRef
 	}
-	if receipt.ExternalGoalRef == "" {
+	preBindingFailure := goalLaunchReceiptIsPreBindingFailureV0(receipt)
+	if receipt.ExternalGoalRef == "" && receipt.Status != GoalStatusInvalidV0 {
 		receipt.ExternalGoalRef = spec.GoalRef
 	}
 	if issues := ValidateGoalLaunchReceiptV0(receipt); len(issues) > 0 {
 		return GoalWorkStateV0{}, GoalWorkLifecycleIssueErrorV0{Field: "launch_receipt"}
 	}
-	if !goalNewLaunchReceiptMatchesSpecV0(receipt, spec) {
+	if !preBindingFailure && !goalNewLaunchReceiptMatchesSpecV0(receipt, spec) {
 		return GoalWorkStateV0{}, GoalWorkLifecycleIssueErrorV0{Field: "launch_receipt.intent_manifest_ref"}
 	}
 	state := GoalWorkStateV0{
@@ -680,6 +681,15 @@ func NewGoalWorkStateFromLaunchV0(
 		)),
 	}
 	return NewGoalWorkStateV0(state)
+}
+
+func goalLaunchReceiptIsPreBindingFailureV0(receipt GoalLaunchReceiptV0) bool {
+	receipt = NormalizeGoalLaunchReceiptV0(receipt)
+	return receipt.Status == GoalStatusInvalidV0 &&
+		receipt.ExternalGoalRef == "" &&
+		receipt.IntentManifestRef == "" && receipt.IntentManifestSHA256 == "" &&
+		receipt.WorkspaceAuthoritySchemaVersion == "" && receipt.WorkspaceRef == "" &&
+		receipt.ProviderRef == "" && receipt.RuntimeGenerationRef == ""
 }
 
 func NormalizeGoalLaunchReceiptV0(receipt GoalLaunchReceiptV0) GoalLaunchReceiptV0 {

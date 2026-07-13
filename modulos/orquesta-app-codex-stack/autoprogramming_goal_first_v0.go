@@ -339,7 +339,11 @@ func autoprogrammingBridgeGoalLaunchIssueV0(
 		message = "launcher goal-first no pudo lanzar el goal (" + reason + "); state bloqueado persistido y no se cae al loop legacy: " + strings.TrimSpace(runRef)
 	}
 	if stateErr != nil {
-		message = "launcher goal-first no pudo lanzar el goal y el state bloqueado no pudo persistirse; no se cae al loop legacy: " + strings.TrimSpace(runRef)
+		if reason != "" {
+			message = "launcher goal-first no pudo lanzar el goal (" + reason + ") y el state bloqueado no pudo persistirse; no se cae al loop legacy: " + strings.TrimSpace(runRef)
+		} else {
+			message = "launcher goal-first no pudo lanzar el goal y el state bloqueado no pudo persistirse; no se cae al loop legacy: " + strings.TrimSpace(runRef)
+		}
 	}
 	return orquestaautoprogramming.AutoprogrammingRequestIssueV0{
 		Code:    "autoprogramming_goal_launch_failed",
@@ -470,8 +474,9 @@ func autoprogrammingBridgeGoalLaunchFailureReasonV0(
 	receipt orquestagoal.GoalLaunchReceiptV0,
 	err error,
 ) string {
+	receipt = orquestagoal.NormalizeGoalLaunchReceiptV0(receipt)
 	for _, issue := range receipt.Issues {
-		if code := strings.TrimSpace(issue.Code); code != "" {
+		if code := externalWorkGoalFirstKnownLaunchFailureReasonV0(issue.Code); code != "" {
 			return code
 		}
 	}
