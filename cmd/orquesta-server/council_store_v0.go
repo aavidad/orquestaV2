@@ -23,20 +23,7 @@ import (
 // en silencio.
 const councilReceiptsDirNameV0 = "council-receipts"
 
-const (
-	councilOutcomeAcceptedV0 = "council_decision_accepted"
-	councilOutcomeReworkV0   = "council_decision_rework"
-	councilOutcomeBlockedV0  = "council_decision_blocked"
-)
-
-// Un veredicto de REWORK no sella el consejo: es una invitacion a volver con el
-// trabajo corregido. Sellarlo como si fuera terminal dejaba el trabajo atascado
-// para siempre -el autor corregia, la nueva convocatoria tenia otra huella, y
-// chocaba con el recibo viejo-. Aceptar y bloquear SI son terminales: lo aceptado
-// no se reabre y el veto de seguridad no se sortea reintentando.
-func councilOutcomeEsTerminalV0(outcome string) bool {
-	return outcome == councilOutcomeAcceptedV0 || outcome == councilOutcomeBlockedV0
-}
+const councilOutcomeAcceptedV0 = "council_decision_accepted"
 
 const councilReceiptSchemaVersionV0 = "orquesta_council_receipt.v0"
 
@@ -198,24 +185,8 @@ func (store councilReceiptStoreV0) SaveV0(receipt councilReceiptV0) (councilRece
 		if existente.InputFingerprint == receipt.InputFingerprint {
 			return existente, nil
 		}
-		// Convocatoria distinta sobre una decision TERMINAL: eso no es un reintento,
-		// es reabrir lo cerrado. Choca.
-		if councilOutcomeEsTerminalV0(existente.Outcome) {
-			return councilReceiptV0{}, fmt.Errorf("%w: %s", ErrCouncilReceiptConflictV0, receipt.CouncilRef)
-		}
-		// Convocatoria distinta sobre un REWORK: es justo lo que pedia el consejo.
-		// Se archiva el intento anterior -no se pierde evidencia- y se decide de
-		// nuevo.
-		if err := store.archivarIntentoV0(existente); err != nil {
-			return councilReceiptV0{}, err
-		}
-		if err := os.Remove(path); err != nil {
-			return councilReceiptV0{}, err
-		}
-		if err := os.Link(temporalPath, path); err != nil {
-			return councilReceiptV0{}, err
-		}
-		return receipt, nil
+		// Mismo nombre, convocatoria distinta: eso NO es un reintento.
+		return councilReceiptV0{}, fmt.Errorf("%w: %s", ErrCouncilReceiptConflictV0, receipt.CouncilRef)
 	}
 	return receipt, nil
 }
@@ -223,21 +194,6 @@ func (store councilReceiptStoreV0) SaveV0(receipt councilReceiptV0) (councilRece
 // councilInputFingerprintV0 resume la convocatoria: autor, criticidad, miembros,
 // overrides y votos. Reutilizar un council_ref con cualquiera de esos datos
 // cambiados produce una huella distinta y, por tanto, un conflicto.
-// archivarIntentoV0 conserva el recibo del intento anterior. Un rework superado no
-// borra su historia: se puede auditar que pidio el consejo y que se corrigio.
-func (store councilReceiptStoreV0) archivarIntentoV0(receipt councilReceiptV0) error {
-	bytes, err := json.MarshalIndent(receipt, "", "  ")
-	if err != nil {
-		return err
-	}
-	historial := filepath.Join(store.dir, "history")
-	if err := os.MkdirAll(historial, 0o700); err != nil {
-		return err
-	}
-	nombre := fmt.Sprintf("%s-%s.json", receipt.CouncilRef, time.Now().UTC().Format("20060102T150405.000000000Z"))
-	return os.WriteFile(filepath.Join(historial, nombre), bytes, 0o600)
-}
-
 func councilInputFingerprintV0(input orquestamcp.MCPCouncilToolInputV0) string {
 	// CANONICALIZACION: los overrides salen de un map y los miembros/votos pueden
 	// llegar en cualquier orden. Sin ordenarlos, la misma convocatoria produce
