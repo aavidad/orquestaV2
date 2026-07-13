@@ -2618,6 +2618,32 @@ generation como retryable/metadata-only, con concurrencia Stop(B)||Observe(A),
 race e integración de dos goals. No usar forced-stop por goal mientras 050 no
 quede promovido, auditado, integrado y desplegado.
 
+### 2026-07-13T09:28+02:00 — auditorías rechazan 041/048; reworks causales
+
+Auditoría independiente 041: REWORK pese a full/race verdes. La autoridad común
+sí tiene cuatro callers y conserva orden/alias, pero el guard AST solo cuenta
+`Ident[tokens[0]]`: no detecta `config.AllowedCommands[...]`, aliases, otro nombre
+de token ni helper encubierto. Además `os.Stat` sigue symlink y `exec.Command`
+vuelve a resolver la ruta; no hay identidad inmutable ni cierre del TOCTOU.
+Lanzado 051 sobre `086f352f2d`, goal
+`goal-ref-task-autoprogramming-42487127abe1-g01`, para guard adversarial e
+identidad descriptor/digest con ejecución del mismo objeto abierto.
+
+Auditoría independiente 048 recovery1: REWORK pese a focal/full/race verdes.
+Cada observe repite CAS aunque el digest ya exista; marker.Spec/LaunchReceipt
+pueden ser nil/divergentes y no se revalidan tras CAS; solo hay fake CAS memoria,
+sin prueba StoreV0/reopen. Preparado 052 con idempotencia secuencial/concurrente,
+par state+marker fresco y persistencia file-store real. No se lanza mientras 050
+posea el mismo paquete app-codex-stack.
+
+Hallazgo del propio 050: Orquesta agrupó dos tasks en un único Goal y redujo sus
+16 criterios a seis genéricos+hash; el objective materializado queda truncado
+tras el primer task (`Objetivo...`). El write-set conserva los 14 paths, pero el
+agente solo está modificando por ahora los cinco del stop thread-scoped. Esto
+debe auditarse como pérdida de intención del agrupador; si falta la generación
+transitoria, se lanzará como rework separado, nunca se dará por implementada por
+estar su path en el write-set.
+
 T5.1a promovió en el runner `60683f4cc59334da234f17e59312dc3dd19031b3`
 (source `ba039d7922`) y pasó focal, paquete y race, pero no se integra: claim y
 verified solo atan task/voter/family, el handler contrasta únicamente task, voto
