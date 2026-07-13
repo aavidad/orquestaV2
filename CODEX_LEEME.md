@@ -2975,3 +2975,40 @@ causal. Feedback queued con ACK
 También aparecieron successors automáticos antiguos de 052R2 y 054R1. No se
 detienen forzadamente ni se mezclan con 052R3/054R2: se dejan terminar como
 fuentes RO y solo una línea por frente podrá acreditarse e integrarse.
+
+### 2026-07-13 — receipts finales rechazados y siguiente corte exacto
+
+052R3 materializó receipt `complete`, pero la auditoría independiente lo rechaza
+con digest
+`a60f656cf52412bd3327676cb32198c38d3f336e4dd4526621261e2e6b45e6b6`.
+Restauró StoreVersion=1 y añadió parte de la matriz; seis focales y race x3
+pasaron. Sin embargo eliminó la validación raw canónica y vuelve a aceptar
+`rework-01/+1`, perdió el short-circuit cuando el digest ya existe, no recarga y
+reacredita marker tras CAS, y sus tests llamados StoreV0 usan un fake en memoria
+sin goroutine ni reopen real. Full app-stack independiente quedó rojo; state-file
+pasó. No hay commit ni árbol limpio. Rechazo queued con ACK
+`operator-director-ack-ref-operator-message-ref-operator-ref-codex-reject-052r3-receipt-1783932916`.
+
+El payload 052R4 queda preparado pero no lanzado mientras 052R3 siga durable
+running. Fija el archivo productivo byte a byte al de 052R2, SHA-256
+`3f55c55d9a2476b60b6aed86961bff182f314db3372169fedc241e8e5752c843`,
+y parte del test original SHA-256
+`188d8dc7a319da87cdadc846bb2a5cd70a9aad128797eaf95b5be15095967d46`;
+solo permite añadir el fixture y la matriz que faltan.
+
+054R2 también materializó `complete`, con `artifact_paths=[]`, 12 ficheros dirty,
+sin commit/tree y digest
+`e39d558ce7b9eff6b466d18d168c64e4769c655d6f445ad992d7d8e2657c4309`.
+Sigue haciendo Fingerprint RPC fuera de lease, no rehidrata el binding tras
+restart, persiste LastResult en el transitorio y el segundo CAS puede borrar
+estado concurrente. Rechazo queued con ACK
+`operator-director-ack-ref-operator-message-ref-operator-ref-codex-reject-054r2-receipt-1783932636`.
+
+El successor 053R3 usa workspace físico
+`ad5f35345bd7fa2cffca57692c8ec3ad` mientras el context durable conserva el
+workspace anterior `cf0eef...`; además volvió a base 086f sin heredar el corte
+válido. Reintrodujo Presence incorrecta y escribió otra vez el directorio
+`modulos/orquesta-config` como artefacto fuera del write-set exacto. Su FINAL
+inline lo corrigió, pero el receipt durable consumible sigue inválido; puede
+abrir rework-2. ACKs live: workspace `...1783932409`, Presence
+`...1783932526`, receipt loop `...1783932711`.
