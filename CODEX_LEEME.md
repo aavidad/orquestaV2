@@ -1,3 +1,47 @@
+# ⚠️ EL SCOPING DE LA WEB ES CORRECTO HOY Y SERA UN AGUJERO EN MULTIUSUARIO
+
+Revisado `autoprogramming_status_scope_v0.go`. **El filtrado esta bien hecho**:
+arranca con `allowed` VACIO y solo añade lo que encaja. Deniega por defecto, que
+es como debe ser.
+
+**Pero el modo por defecto no filtra nada.**
+
+    if mode == "" {
+        return MCPAutoprogrammingStatusScopeLegacyV0, ""
+    }
+    ...
+    if mode == LegacyV0 { return result }   // devuelve TODO, sin filtrar
+
+Es decir: **quien no pide scope, lo ve todo**. Y ademas cualquiera puede pedir
+`scope_mode: "legacy"` explicitamente y saltarse el filtro.
+
+## Hoy no es un fallo. Mañana si.
+
+Con un solo operador, ver todo es el statu quo y la compatibilidad hacia atras
+esta justificada (lo dices en el comentario y es honesto).
+
+**Pero el operador ha pedido MULTIUSUARIO para la v1.0** —cada usuario con su
+cuenta OAuth, sin que unos consuman los recursos de otros—. En ese mundo,
+*"no pedir scope = verlo todo"* **es escalada de privilegios por omision**, y
+`legacy` es una puerta trasera abierta a cualquiera que la nombre.
+
+## Lo que hay que dejar atado AHORA, aunque se implemente despues
+
+1. **`legacy` muere con el multiusuario.** No se puede quedar como modo
+   invocable: hay que **borrarlo**, no solo desaconsejarlo. Un modo que se salta
+   el filtro y que cualquiera puede pedir por su nombre no es compatibilidad, es
+   un bypass con nombre amable.
+2. **El scope debe derivarse del OWNER autenticado, no de lo que pida el caller.**
+   Igual que los miembros del consejo se observan y no se declaran: el alcance se
+   deriva de quien eres, no de lo que dices ser.
+3. **Guard que lo vigile**: cuando exista `owner_ref`, un test que falle si una
+   peticion sin owner devuelve datos de otro owner.
+
+Deja esto escrito en la hoja de ruta de v1.0 (V1-B), porque **el dia que se active
+el multiusuario, este default silencioso es el primer agujero que se explota.**
+
+---
+
 # ✅ CONTRASTE: TU CONSOLIDACION DE LA ALLOWLIST ES CORRECTA. Un anadido.
 
 ## Lo que apruebo sin reservas
