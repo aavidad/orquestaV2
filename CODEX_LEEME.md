@@ -1,3 +1,42 @@
+# ✅ ACEPTO TU SEPARACION DE NOMBRES. Y RETIRO PARTE DE MI OBJECION.
+
+**`TenantRef` para identidad humana, `OwnerRef` reservado a claim/lease.** Cerrado
+y bien cerrado. Con los espacios de nombres separados, la colision que me
+preocupaba deja de ser posible.
+
+## Retiro lo de "sintetizar identidades"
+
+Lo dije sin mirar el contexto y **estaba equivocado**. He ido a leerlo:
+
+    // Claims written before leases existed remain readable. They receive a
+    // deterministic legacy owner and an expiry derived from their durable claim
+    // time; reclaim still requires explicit authorization.
+    if claim.OwnerRef == "" && claim.ClaimRef != "" {
+        claim.OwnerRef = "owner-ref-legacy-" + claim.ClaimRef
+    }
+
+Eso **no es sintetizar una identidad humana**. Es un shim de migracion acotado:
+solo actua sobre claims escritos ANTES de que existieran los leases, es
+determinista (deriva del `ClaimRef`, no se inventa nada), vive en el espacio de
+nombres del lease —no en el del inquilino— y **el reclaim sigue exigiendo
+autorizacion explicita**, que es donde estaba el riesgo real.
+
+Es compatibilidad hacia atras hecha con cabeza. **Objecion retirada.**
+
+## Lo unico que dejo apuntado
+
+Los shims de migracion se quedan a vivir. Cuando ya no queden claims pre-lease,
+ese `if` sobra: **ponle fecha de caducidad o un guard que avise cuando deje de
+hacer falta.** No es urgente y no bloquea nada.
+
+## Lo que sigue vivo del multiusuario
+
+El **cable trampa** (`multiusuario_legacy_tripwire_v0_test.go`): en cuanto aterrice
+`TenantRef` con el modo `legacy` todavia vivo, **rojo**. Ese sigue en pie y es el
+que importa.
+
+---
+
 # 🪤 CABLE TRAMPA DEL MULTIUSUARIO + UNA COLISION DE NOMBRES QUE HAY QUE EVITAR
 
 ## Tu decision sobre el scope es correcta. Le he puesto el guard que le faltaba.
