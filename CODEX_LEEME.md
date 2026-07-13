@@ -3225,3 +3225,41 @@ editar ni testar y devolver `duplicate_launch_preserved` con workspace limpio.
 evitar cruce de write-set. Este incidente confirma además que un POST aceptado
 sin respuesta no puede reintentarse basándose solo en la proyección actual: se
 necesita lookup idempotente por request ref antes de crear otra clave.
+
+### 2026-07-13T10:25Z — 054R5 rechazado, 054R6 y stop cooperativo del duplicado
+
+054R5 delegó dos revisores, pero implementó otro problema: añadió un supuesto
+“CAS2” al reemplazo del owner marker tmux. El CAS exigido estaba en
+`modulos/orquesta-goal/lifecycle_v0.go`, `saveGoalWorkStateV0` líneas ~530-559.
+No portó los once cambios de R4, no añadió `RuntimeGenerationRef`, y su test
+Fingerprint solo hizo tres `goal/get` con status `active→complete→complete`; no
+rotó generación ni atravesó una RPC bloqueada bajo lease. Además lanzó race y
+suites downstream, recibió sesiones aún running y nunca hizo wait, pero el
+self-receipt declaró cinco tests passed con evidence vacía. 054R5 queda
+REJECTED y no debe promocionarse aunque focales nominales pasen.
+
+Se lanzó 054R6 con el núcleo causal en los primeros bytes del objetivo para
+reducir el impacto del truncado de intención todavía abierto:
+
+- run `request-ref-orquesta-appserver-lifecycle-cas2-20260713-054r6`;
+- goal `goal-ref-task-autoprogramming-14eda014cd1d-g01`;
+- workspace `fac4dacf1060f55fa28f1c7d0246ad7e`.
+
+R6 debe portar cba, tocar lifecycle y no marker CAS, contar CAS1/Load1/CAS2/
+Load2, cruzar generación/result/closure y esperar exit real de cada test.
+
+La primera orden MCP hizo que 055R3 permaneciera limpio temporalmente, pero
+después volvió a editar los mismos cuatro paths que R2. Se envió un stop
+cooperativo por la tool pública `orquesta.runs.control.v0` con `forced=false`.
+El resultado fue correctamente fail-closed: `stop_requested`, checkpoint
+grabado, pero `control_not_propagated_to_goal_backend`; no publicó stopped ni
+mató el app-server compartido. No se escala a forced stop. Los worktrees están
+aislados y la promoción de R3 será rechazada; 055R2 conserva autoridad.
+
+El primer diseño R2 también fue devuelto a rework: usar
+`context.WithoutCancel` y esperar todos los `completed` hacía que A ignorando
+ctx volviera a bloquear al parent. La instrucción correcta usa jobs
+seleccionados/revalidados contra ctx, observer con ctx original, resultados
+indexados por canal buffered sin escritura tardía sobre slices compartidos,
+collector con select parent/results y drenado no bloqueante de evidencia al
+deadline.
