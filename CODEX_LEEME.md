@@ -2223,6 +2223,13 @@ mutaciones explícitas para bytes untracked con igual nombre, escritor
 intercalado conflictivo, worktree sin manifest, churn entre fingerprints y
 receipt stale/forjado.
 
+042 activo por API: run
+`request-ref-goal-workspace-reconciliation-catalog-phase-a-rework-20260713-042`,
+goal `goal-ref-task-autoprogramming-56bccef2beb6-g01`, base exacta
+`14bfa803953b0828ab8edcc93f92fb427194c9cc`. Conserva el mismo write-set de
+nueve archivos y eleva el focal race a `-count=3`. No se lanza 041 mientras
+042 programe o atestigüe.
+
 ### 2026-07-13T06:32Z — decisión scope legacy y multiusuario
 
 Se acepta el hallazgo de Claude `871ccfb40c` como bloqueo de activación
