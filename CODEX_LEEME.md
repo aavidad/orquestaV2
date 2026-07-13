@@ -3175,3 +3175,53 @@ La corrección y los tests exactos fueron enviados por el MCP público.
 El observer global mantiene el patrón confirmado de timeouts de 15 minutos y
 `backend_call_in_flight`. No se fuerza stop del app-server compartido. Claude
 vigila el commit host y no ha emitido una instrucción nueva desde `41cc222c08`.
+
+### 2026-07-13T10:15Z — deploy local 052 y reworks 054R5/055R2
+
+La integración 052 quedó en host como `ea79030980` y en el canon montado del
+runner como `8c5b314275f5a38b74803aed4bd7abfa43a5d691`. Ambos conservan los hashes
+finales `3f55c55d...`/`ba536289...`; el canon Docker aplicó únicamente el diff
+086f→R5 y su focal volvió a pasar dentro del contenedor.
+
+Se limpiaron tres directorios runtime vacíos y owner-only creados bajo
+`cmd/`, que impedían enviar el contexto al builder. No contenían archivos ni
+eran paths tracked. La imagen local se reconstruyó con
+`ORQUESTA_BUILD_COMMIT=8c5b3142...`, SHA de imagen `f609fa9577e5...`. El primer
+arranque quedó correctamente fail-closed como `worktree_not_aligned`: HEAD
+local había avanzado respecto al remote-tracking local. Sin red, fetch, push ni
+cambio del remote GitHub, se alineó solo la referencia local
+`refs/remotes/origin/trabajo/plataforma-agentes` a HEAD, patrón ya documentado
+para este runner aislado, y se recreó. Resultado: `/api/status` `running`,
+`startup_ready=true`, `autoprogramming/status` `estado=ok`, MCP 48 tools, UID
+10001, rootfs/volúmenes y barreras Docker intactos.
+
+Se lanzó por API pública 054R5 sobre el canon nuevo:
+
+- run `request-ref-orquesta-appserver-cas2-fingerprint-20260713-054r5`;
+- goal `goal-ref-task-autoprogramming-c8c802dbc51b-g01`;
+- workspace `5f4415ddfd7ec2147f77e12536849368`.
+
+Su tarea exige dos revisiones delegadas, CAS1/Load1/CAS2/Load2 observable,
+compatibilidad terminal con generación y result/closure, fake Fingerprint que
+rota durante RPC/postcheck y restauración de los tests válidos R3.
+
+Para 055 ocurrió un fallo de idempotencia/proyección que debe conservarse como
+evidencia: el primer POST sí creó 055R2, pero la respuesta se perdió y
+`autoprogramming/status` no proyectó el run; repetir la misma clave devolvió
+`worktree_baseline_store_failed`. Al no aparecer, se lanzó 055R3 con refs
+nuevas y después el estado durable reveló ambos. No se usa forced stop porque
+el app-server sigue compartido.
+
+055R2 queda como único implementador autorizado:
+
+- run `request-ref-orquesta-observer-deadline-isolation-20260713-055r2`;
+- goal `goal-ref-task-autoprogramming-f8b1c8da31ed-g01`;
+- workspace `d6b9cae4883b8fb49a2042e61531d2ec`.
+
+055R3 (`goal-ref-task-autoprogramming-4e85415274fa-g01`, workspace
+`5b158ab09bc981a1953959669f9ae10e`) recibió por MCP instrucción expresa de no
+editar ni testar y devolver `duplicate_launch_preserved` con workspace limpio.
+055R2 recibió confirmación de exclusividad. Auditores RO vigilan ambos para
+evitar cruce de write-set. Este incidente confirma además que un POST aceptado
+sin respuesta no puede reintentarse basándose solo en la proyección actual: se
+necesita lookup idempotente por request ref antes de crear otra clave.
