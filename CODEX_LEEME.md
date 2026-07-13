@@ -3305,3 +3305,63 @@ Volvió a declarar consumidores pass sin esperar cells 38/39/41. La atestación
 oficial confirmó rojo, exit 1: `codex_app_server_tmux_has_session_failed` y
 `smoke_temp_root_blocked outside-allowed-temp-prefix`. Durable sigue running;
 self-receipt complete no acredita. Digest `5b915322...` preservado.
+
+### 2026-07-13T10:45Z — despliegue local 055 y decisión de integración 054
+
+El runner canónico había autopromocionado 055R2 como `f4a4f192b`, pese a que
+esa variante esperaba los hijos detached y podía retener el batch. Se
+sustituyó antes del rebuild por la implementación host acreditada, verificando
+hashes de los cuatro paths, focal normal y focal race en el runner. El commit
+canónico resultante es `37d25274a`; la imagen local se reconstruyó desde ese
+commit y el contenedor quedó `startup_ready=true` y `server_ready=true`.
+
+Evidencia operacional posterior: ticks `goal-observer-12178` a
+`goal-observer-12201` terminaron `status=ok` en 0–1 s; el último ya observó un
+goal real. No apareció un nuevo `goal_observer_timeout` ni
+`goal_observer_backend_call_in_flight` en esa ventana. Esto acredita el arreglo
+055 en runtime local, no solo por tests.
+
+Decisión para 054: no promocionar el worktree R6 completo ni aceptar su
+self-receipt. Se hará integración causal auditada en host: conservar
+propagación de `RuntimeGenerationRef`, lease pre/post RPC y secuencia
+CAS1→Load1→CAS2→Load2; completar compatibilidad terminal comparando el
+`LastResult` y `LastClosure` actuales con los deseados; forzar el segundo CAS
+también en el caso incompatible; y probar la API pública
+`FingerprintGoalObservationV0` con rotación generacional durante RPC y thread
+stale. Dos revisores independientes validan diff y pruebas antes de integrar.
+
+### 2026-07-13T11:05Z — integración causal 054 cerrada en host
+
+Se integró solo el núcleo válido de R6 y se corrigieron cuatro defectos que sus
+tests no cubrían:
+
+- `saveGoalWorkStateV0` ejecuta CAS1→Load1→CAS2→Load2, propaga el error del
+  load exacto y no acepta una escritura concurrente incompatible. El avance
+  terminal solo es compatible con misma identidad, spec y generación; si el
+  desired ya afirma result/closure/status terminal, exige igualdad. Además
+  `current.StoreVersion` debe ser estrictamente mayor: rollbacks en Load1 y
+  Load2 son fail-closed.
+- `RuntimeGenerationRef` viaja launch receipt→state→observation packet y se
+  valida como ref. Un conflicto generacional exacto con external thread y
+  generation queda durable `running` retryable; cualquier otro error conserva
+  el comportamiento previo `invalid` + `goal_launch_partial_error`. Existe
+  test compuesto starter→`CodexGoalLauncherV0`→lifecycle→store.
+- El runtime app-server activa/limpia la generación dentro del lease y antes
+  de Start. Después liga el thread dentro del mismo lease; no existe bind
+  post-lease. Así la rotación gen1→gen2 elimina caché vieja sin borrar el
+  baseline write-set ni timeout recién registrados para gen2.
+- El conflicto generacional postverify domina cualquier issue RPC anterior.
+  `FingerprintGoalObservationV0` se prueba por su API pública: gen1 válida,
+  rotación de marker/token durante `thread/goal/get`, conflicto postcheck,
+  reinicio generacional y rechazo de thread stale antes de otro RPC.
+
+Pruebas causales nuevas cubren CAS2 compatible e incompatible, divergencia de
+result/closure, rollback de versión en ambos loads, propagación/validación de
+generation, retryable exacto y negativo fail-closed, caché gen1→gen2,
+dominancia conflict sobre fallo RPC y Fingerprint stale.
+
+Evidencia final estable: focales normales verdes; focales race `count=3`
+verdes; E2E `TestGoalFirstProcessBackendsE2EV0ReworkThenClose` verde; paquetes
+goal, runtime-codex-goal y appserver verdes; `go test -mod=vendor -count=1
+./...` verde; `git diff --check` verde. Revisor lifecycle: PASS. Revisor
+app-server: PASS. Ningún cambio tangencial de fixture R6 fue conservado.

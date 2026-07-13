@@ -12,9 +12,57 @@ import (
 
 type serverCodexAppServerGoalRuntimeV0 struct {
 	mu                sync.Mutex
+	generationRef     string
+	threadGenerations map[string]string
 	startedAt         map[string]time.Time
 	timeouts          map[string]time.Duration
 	writeSetBaselines map[string]codexAppServerRuntimeWriteSetBaselineV0
+}
+
+func (runtime *serverCodexAppServerGoalRuntimeV0) bindThreadGenerationV0(threadID, generationRef string) bool {
+	threadID, generationRef = strings.TrimSpace(threadID), strings.TrimSpace(generationRef)
+	if runtime == nil || threadID == "" || generationRef == "" {
+		return false
+	}
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	runtime.activateGenerationLockedV0(generationRef)
+	runtime.threadGenerations[threadID] = generationRef
+	return true
+}
+
+func (runtime *serverCodexAppServerGoalRuntimeV0) activateGenerationV0(generationRef string) bool {
+	generationRef = strings.TrimSpace(generationRef)
+	if runtime == nil || generationRef == "" {
+		return false
+	}
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	runtime.activateGenerationLockedV0(generationRef)
+	return true
+}
+
+func (runtime *serverCodexAppServerGoalRuntimeV0) activateGenerationLockedV0(generationRef string) {
+	if runtime.generationRef != "" && runtime.generationRef != generationRef {
+		runtime.startedAt = nil
+		runtime.timeouts = nil
+		runtime.writeSetBaselines = nil
+		runtime.threadGenerations = nil
+	}
+	runtime.generationRef = generationRef
+	if runtime.threadGenerations == nil {
+		runtime.threadGenerations = map[string]string{}
+	}
+}
+
+func (runtime *serverCodexAppServerGoalRuntimeV0) threadBoundToGenerationV0(threadID, generationRef string) bool {
+	threadID, generationRef = strings.TrimSpace(threadID), strings.TrimSpace(generationRef)
+	if runtime == nil || threadID == "" || generationRef == "" {
+		return false
+	}
+	runtime.mu.Lock()
+	defer runtime.mu.Unlock()
+	return runtime.generationRef == generationRef && runtime.threadGenerations != nil && runtime.threadGenerations[threadID] == generationRef
 }
 
 type codexAppServerRuntimeWriteSetBaselineV0 struct {

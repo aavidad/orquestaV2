@@ -93,19 +93,21 @@ type CodexGoalToolOutputPolicyV0 struct {
 }
 
 type CodexGoalStartReceiptV0 struct {
-	Status          string                           `json:"status"`
-	GoalRef         string                           `json:"goal_ref,omitempty"`
-	ExternalGoalRef string                           `json:"external_goal_ref,omitempty"`
-	ContextBudget   orquestagoal.GoalContextBudgetV0 `json:"context_budget,omitempty"`
-	EvidenceRefs    []string                         `json:"evidence_refs,omitempty"`
-	IssueCode       string                           `json:"issue_code,omitempty"`
-	PromptCache     CodexGoalPromptCacheProjectionV0 `json:"prompt_cache,omitempty"`
+	Status               string                           `json:"status"`
+	GoalRef              string                           `json:"goal_ref,omitempty"`
+	ExternalGoalRef      string                           `json:"external_goal_ref,omitempty"`
+	RuntimeGenerationRef string                           `json:"runtime_generation_ref,omitempty"`
+	ContextBudget        orquestagoal.GoalContextBudgetV0 `json:"context_budget,omitempty"`
+	EvidenceRefs         []string                         `json:"evidence_refs,omitempty"`
+	IssueCode            string                           `json:"issue_code,omitempty"`
+	PromptCache          CodexGoalPromptCacheProjectionV0 `json:"prompt_cache,omitempty"`
 }
 
 type CodexGoalObservationRequestV0 struct {
-	SchemaVersion   string `json:"schema_version"`
-	GoalRef         string `json:"goal_ref"`
-	ExternalGoalRef string `json:"external_goal_ref,omitempty"`
+	SchemaVersion        string `json:"schema_version"`
+	GoalRef              string `json:"goal_ref"`
+	ExternalGoalRef      string `json:"external_goal_ref,omitempty"`
+	RuntimeGenerationRef string `json:"runtime_generation_ref,omitempty"`
 }
 
 type CodexGoalObservationReceiptV0 struct {
@@ -345,9 +347,10 @@ func BuildCodexGoalObservationRequestV0(
 		return CodexGoalObservationRequestV0{}, issues
 	}
 	return CodexGoalObservationRequestV0{
-		SchemaVersion:   CodexGoalObservationRequestSchemaV0,
-		GoalRef:         request.GoalRef,
-		ExternalGoalRef: request.ExternalGoalRef,
+		SchemaVersion:        CodexGoalObservationRequestSchemaV0,
+		GoalRef:              request.GoalRef,
+		ExternalGoalRef:      request.ExternalGoalRef,
+		RuntimeGenerationRef: request.RuntimeGenerationRef,
 	}, nil
 }
 
@@ -881,6 +884,11 @@ func (launcher CodexGoalLauncherV0) LaunchGoalWorkV0(ctx context.Context, spec o
 		if strings.TrimSpace(receipt.ExternalGoalRef) != "" {
 			result.ExternalGoalRef = strings.TrimSpace(receipt.ExternalGoalRef)
 		}
+		result.RuntimeGenerationRef = strings.TrimSpace(receipt.RuntimeGenerationRef)
+		if codexGoalGenerationConflictRetryableV0(receipt) && result.ExternalGoalRef != "" && result.RuntimeGenerationRef != "" {
+			result.Status = orquestagoal.GoalStatusRunningV0
+			result.Issues = []orquestagoal.GoalWorkIssueV0{{Code: "codex_app_server_tmux_generation_conflict_retryable"}}
+		}
 		result.EvidenceRefs = codexGoalCompactStringsV0(append(
 			append([]string(nil), receipt.EvidenceRefs...),
 			codexGoalPromptCacheEvidenceRefsV0(packet.PromptCache, receipt.PromptCache)...,
@@ -892,11 +900,12 @@ func (launcher CodexGoalLauncherV0) LaunchGoalWorkV0(ctx context.Context, spec o
 		status = orquestagoal.GoalStatusAcceptedV0
 	}
 	result := orquestagoal.GoalLaunchReceiptV0{
-		SchemaVersion:   orquestagoal.GoalWorkLaunchReceiptSchemaV0,
-		Status:          status,
-		GoalRef:         packet.GoalRef,
-		ExternalGoalRef: receipt.ExternalGoalRef,
-		ContextBudget:   orquestagoal.MergeGoalContextBudgetV0(packet.ContextBudget, receipt.ContextBudget),
+		SchemaVersion:        orquestagoal.GoalWorkLaunchReceiptSchemaV0,
+		Status:               status,
+		GoalRef:              packet.GoalRef,
+		ExternalGoalRef:      receipt.ExternalGoalRef,
+		RuntimeGenerationRef: receipt.RuntimeGenerationRef,
+		ContextBudget:        orquestagoal.MergeGoalContextBudgetV0(packet.ContextBudget, receipt.ContextBudget),
 		EvidenceRefs: codexGoalCompactStringsV0(append(
 			append([]string(nil), receipt.EvidenceRefs...),
 			codexGoalPromptCacheEvidenceRefsV0(packet.PromptCache, receipt.PromptCache)...,
@@ -906,6 +915,10 @@ func (launcher CodexGoalLauncherV0) LaunchGoalWorkV0(ctx context.Context, spec o
 		result.Issues = append(result.Issues, orquestagoal.GoalWorkIssueV0{Code: receipt.IssueCode})
 	}
 	return result, nil
+}
+
+func codexGoalGenerationConflictRetryableV0(receipt CodexGoalStartReceiptV0) bool {
+	return strings.TrimSpace(receipt.IssueCode) == "codex_app_server_tmux_generation_conflict"
 }
 
 func (observer CodexGoalObserverV0) ObserveGoalWorkV0(
@@ -927,6 +940,15 @@ func (observer CodexGoalObserverV0) ObserveGoalWorkV0(
 	}
 	receipt, err := observer.Observer.ObserveCodexGoalV0(ctx, packet)
 	if err != nil {
+		if strings.TrimSpace(receipt.IssueCode) == "codex_app_server_tmux_generation_conflict" &&
+			strings.TrimSpace(request.ExternalGoalRef) != "" && strings.TrimSpace(request.RuntimeGenerationRef) != "" {
+			return orquestagoal.GoalWorkResultV0{
+				SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+				Status:          orquestagoal.GoalStatusRunningV0,
+				GoalRef:         request.GoalRef,
+				ExternalGoalRef: request.ExternalGoalRef,
+			}, err
+		}
 		result := codexGoalObservationInvalidResultV0(request, ErrCodexGoalObservationRejectedV0)
 		if code := codexGoalBackendIssueCodeV0(receipt.IssueCode, err); code != "" {
 			result.Issues = []orquestagoal.GoalWorkIssueV0{{Code: code}}

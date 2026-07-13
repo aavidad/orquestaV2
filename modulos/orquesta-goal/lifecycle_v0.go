@@ -224,13 +224,17 @@ func persistPartialGoalLaunchStateV0(
 	if receipt.GoalRef == "" && receipt.ExternalGoalRef == "" {
 		return GoalWorkStartResultV0{}
 	}
-	if receipt.Status == "" || receipt.Status == GoalStatusAcceptedV0 || receipt.Status == GoalStatusRunningV0 {
+	retryableGeneration := goalLaunchGenerationConflictRetryableV0(receipt)
+	if !retryableGeneration &&
+		(receipt.Status == "" || receipt.Status == GoalStatusAcceptedV0 || receipt.Status == GoalStatusRunningV0) {
 		receipt.Status = GoalStatusInvalidV0
 	}
-	receipt.Issues = append(receipt.Issues, GoalWorkIssueV0{
-		Code:  "goal_launch_partial_error",
-		Field: "goal_launcher",
-	})
+	if !retryableGeneration {
+		receipt.Issues = append(receipt.Issues, GoalWorkIssueV0{
+			Code:  "goal_launch_partial_error",
+			Field: "goal_launcher",
+		})
+	}
 	state, err := NewGoalWorkStateFromLaunchV0(GoalWorkStateFromLaunchRequestV0{
 		RunRef:        runRef,
 		Spec:          spec,
@@ -251,6 +255,19 @@ func persistPartialGoalLaunchStateV0(
 		}
 	}
 	return result
+}
+
+func goalLaunchGenerationConflictRetryableV0(receipt GoalLaunchReceiptV0) bool {
+	if receipt.Status != GoalStatusRunningV0 ||
+		receipt.ExternalGoalRef == "" || receipt.RuntimeGenerationRef == "" {
+		return false
+	}
+	for _, issue := range receipt.Issues {
+		if strings.TrimSpace(issue.Code) == "codex_app_server_tmux_generation_conflict_retryable" {
+			return true
+		}
+	}
+	return false
 }
 
 func ObserveGoalWorkV0(
@@ -543,14 +560,77 @@ func saveGoalWorkStateV0(
 		}
 		current, loadErr := store.LoadGoalWorkStateV0(ctx, state.RunRef)
 		if loadErr != nil {
+			return GoalWorkStateV0{}, loadErr
+		}
+		current, normalizeErr := NewGoalWorkStateV0(current)
+		if normalizeErr != nil {
+			return GoalWorkStateV0{}, normalizeErr
+		}
+		if goalWorkStateTerminalCompatibleV0(current, state) {
+			return current, nil
+		}
+		if current.StoreVersion <= state.StoreVersion || !goalWorkStateEqualExceptStoreVersionV0(current, state) {
 			return GoalWorkStateV0{}, err
 		}
-		if !reflect.DeepEqual(current.Spec, state.Spec) || current.StoreVersion <= state.StoreVersion {
-			return GoalWorkStateV0{}, err
+		state.StoreVersion = current.StoreVersion
+		saved, retryErr := cas.CompareAndSwapGoalWorkStateV0(ctx, current.StoreVersion, state)
+		if retryErr == nil {
+			return saved, nil
 		}
-		return current, nil
+		var retryConflict GoalWorkStateCASConflictErrorV0
+		if !errors.As(retryErr, &retryConflict) {
+			return GoalWorkStateV0{}, retryErr
+		}
+		current, loadErr = store.LoadGoalWorkStateV0(ctx, state.RunRef)
+		if loadErr != nil {
+			return GoalWorkStateV0{}, loadErr
+		}
+		current, normalizeErr = NewGoalWorkStateV0(current)
+		if normalizeErr != nil {
+			return GoalWorkStateV0{}, normalizeErr
+		}
+		if goalWorkStateTerminalCompatibleV0(current, state) {
+			return current, nil
+		}
+		return GoalWorkStateV0{}, retryErr
 	}
 	return state, store.SaveGoalWorkStateV0(ctx, state)
+}
+
+func goalWorkStateTerminalCompatibleV0(current, desired GoalWorkStateV0) bool {
+	if current.StoreVersion <= desired.StoreVersion ||
+		!GoalWorkResultTerminalV0(current.Status) ||
+		current.RunRef != desired.RunRef || current.GoalRef != desired.GoalRef ||
+		current.ExternalGoalRef != desired.ExternalGoalRef || !reflect.DeepEqual(current.Spec, desired.Spec) ||
+		current.LaunchReceipt.RuntimeGenerationRef != desired.LaunchReceipt.RuntimeGenerationRef ||
+		current.LastResult == nil || current.LastResult.Status != current.Status ||
+		current.LastResult.GoalRef != current.GoalRef || current.LastResult.ExternalGoalRef != current.ExternalGoalRef {
+		return false
+	}
+	if GoalWorkResultTerminalV0(desired.Status) && current.Status != desired.Status {
+		return false
+	}
+	if desired.LastResult != nil && !reflect.DeepEqual(current.LastResult, desired.LastResult) {
+		return false
+	}
+	if desired.LastClosure != nil && !reflect.DeepEqual(current.LastClosure, desired.LastClosure) {
+		return false
+	}
+	if current.LastClosure == nil {
+		return true
+	}
+	closure := current.LastClosure
+	return (closure.Accepted && !closure.NeedsRework && closure.Status == GoalStatusAcceptedV0) ||
+		(!closure.Accepted && closure.NeedsRework && closure.Status == GoalStatusBlockedV0)
+}
+
+// goalWorkStateEqualExceptStoreVersionV0 permits a retry only when the
+// concurrent write carried no semantic change. Retrying a merely related state
+// would overwrite its result, closure or evidence.
+func goalWorkStateEqualExceptStoreVersionV0(current, desired GoalWorkStateV0) bool {
+	current.StoreVersion = 0
+	desired.StoreVersion = 0
+	return reflect.DeepEqual(current, desired)
 }
 
 func NewGoalWorkStateFromLaunchV0(
@@ -602,6 +682,7 @@ func NormalizeGoalLaunchReceiptV0(receipt GoalLaunchReceiptV0) GoalLaunchReceipt
 	receipt.Status = strings.TrimSpace(receipt.Status)
 	receipt.GoalRef = strings.TrimSpace(receipt.GoalRef)
 	receipt.ExternalGoalRef = strings.TrimSpace(receipt.ExternalGoalRef)
+	receipt.RuntimeGenerationRef = strings.TrimSpace(receipt.RuntimeGenerationRef)
 	receipt.ContextBudget = NormalizeGoalContextBudgetV0(receipt.ContextBudget)
 	for i := range receipt.EvidenceRefs {
 		receipt.EvidenceRefs[i] = strings.TrimSpace(receipt.EvidenceRefs[i])
@@ -620,6 +701,7 @@ func ValidateGoalLaunchReceiptV0(receipt GoalLaunchReceiptV0) []GoalWorkIssueV0 
 	}
 	validateGoalRefsV0(&issues, "goal_ref", receipt.GoalRef)
 	validateGoalRefsV0(&issues, "external_goal_ref", receipt.ExternalGoalRef)
+	validateGoalRefsV0(&issues, "runtime_generation_ref", receipt.RuntimeGenerationRef)
 	for _, evidenceRef := range receipt.EvidenceRefs {
 		validateRequiredGoalRefV0(&issues, "evidence_refs", evidenceRef)
 	}
@@ -628,8 +710,9 @@ func ValidateGoalLaunchReceiptV0(receipt GoalLaunchReceiptV0) []GoalWorkIssueV0 
 
 func GoalObservationRequestFromStateV0(state GoalWorkStateV0) GoalObservationRequestV0 {
 	return NormalizeGoalObservationRequestV0(GoalObservationRequestV0{
-		GoalRef:         state.GoalRef,
-		ExternalGoalRef: state.ExternalGoalRef,
+		GoalRef:              state.GoalRef,
+		ExternalGoalRef:      state.ExternalGoalRef,
+		RuntimeGenerationRef: state.LaunchReceipt.RuntimeGenerationRef,
 	})
 }
 

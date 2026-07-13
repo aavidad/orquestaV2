@@ -3,6 +3,7 @@ package orquestagoal
 import (
 	"context"
 	"errors"
+	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -293,6 +294,296 @@ func TestStartGoalWorkV0PersisteEstadoParcialSiLauncherFallaConExternalRefV0(t *
 		loaded.ExternalGoalRef != "thread-ref-lifecycle-partial-launch-error-001" ||
 		store.saves != 1 {
 		t.Fatalf("loaded=%+v saves=%d", loaded, store.saves)
+	}
+}
+
+func TestStartGoalWorkV0ConservaConflictoGeneracionalComoRunningRetryableV0(t *testing.T) {
+	launchErr := errors.New("codex_app_server_tmux_generation_conflict")
+	launcher := &goalLifecycleLauncherForTestV0{
+		receipt: GoalLaunchReceiptV0{
+			Status: GoalStatusRunningV0, GoalRef: "goal-ref-generation-retryable-001",
+			ExternalGoalRef:      "thread-ref-generation-retryable-001",
+			RuntimeGenerationRef: "generation-ref-retryable-001",
+			Issues:               []GoalWorkIssueV0{{Code: "codex_app_server_tmux_generation_conflict_retryable"}},
+		},
+		err: launchErr,
+	}
+	store := newGoalLifecycleStoreForTestV0()
+	spec := validGoalLifecycleSpecForTestV0()
+	spec.GoalRef = "goal-ref-generation-retryable-001"
+
+	result, err := StartGoalWorkV0(context.Background(), GoalWorkStartRequestV0{
+		RunRef: "run-ref-generation-retryable-001", Spec: spec,
+	}, GoalWorkLifecyclePortsV0{Launcher: launcher, StateStore: store})
+	if !errors.Is(err, launchErr) || result.State.Status != GoalStatusRunningV0 ||
+		result.Receipt.Status != GoalStatusRunningV0 ||
+		result.Receipt.RuntimeGenerationRef != "generation-ref-retryable-001" ||
+		!hasGoalIssueV0(result.Receipt.Issues, "codex_app_server_tmux_generation_conflict_retryable") ||
+		hasGoalIssueV0(result.Receipt.Issues, "goal_launch_partial_error") {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+	persisted := store.states[result.State.RunRef]
+	if persisted.Status != GoalStatusRunningV0 ||
+		persisted.LaunchReceipt.RuntimeGenerationRef != "generation-ref-retryable-001" {
+		t.Fatalf("persisted=%+v", persisted)
+	}
+}
+
+func TestStartGoalWorkV0OtroFalloConGeneracionSigueFailClosedV0(t *testing.T) {
+	launcher := &goalLifecycleLauncherForTestV0{
+		receipt: GoalLaunchReceiptV0{
+			Status: GoalStatusRunningV0, GoalRef: "goal-ref-generation-other-error-001",
+			ExternalGoalRef:      "thread-ref-generation-other-error-001",
+			RuntimeGenerationRef: "generation-ref-other-error-001",
+			Issues:               []GoalWorkIssueV0{{Code: "codex_app_server_turn_start_failed"}},
+		},
+		err: errors.New("turn_start_failed"),
+	}
+	store := newGoalLifecycleStoreForTestV0()
+	spec := validGoalLifecycleSpecForTestV0()
+	spec.GoalRef = "goal-ref-generation-other-error-001"
+	result, err := StartGoalWorkV0(context.Background(), GoalWorkStartRequestV0{
+		RunRef: "run-ref-generation-other-error-001", Spec: spec,
+	}, GoalWorkLifecyclePortsV0{Launcher: launcher, StateStore: store})
+	if err == nil || result.State.Status != GoalStatusInvalidV0 ||
+		result.Receipt.Status != GoalStatusInvalidV0 ||
+		!hasGoalIssueV0(result.Receipt.Issues, "goal_launch_partial_error") {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+}
+
+func TestSaveGoalWorkStateV0CASSegundoConflictAceptaAvanceTerminalCompatibleV0(t *testing.T) {
+	store := newGoalLifecycleStoreForTestV0()
+	desired := mustGoalLifecycleStateForTestV0(t)
+	desired.StoreVersion = 1
+	desired.LaunchReceipt.RuntimeGenerationRef = "generation-ref-cas-terminal-001"
+	current := desired
+	current.StoreVersion = 2
+	store.states[desired.RunRef] = current
+	store.casHook = func(store *goalLifecycleStoreForTestV0, expected uint64, state GoalWorkStateV0) {
+		if expected != 2 {
+			return
+		}
+		terminal := state
+		terminal.StoreVersion = 3
+		terminal.Status = GoalStatusCompleteV0
+		terminal.LastResult = &GoalWorkResultV0{
+			SchemaVersion: GoalWorkResultSchemaV0,
+			Status:        GoalStatusCompleteV0, GoalRef: terminal.GoalRef,
+			ExternalGoalRef: terminal.ExternalGoalRef, Summary: "delivery-compatible",
+		}
+		terminal.LastClosure = &GoalClosureValidationV0{
+			Status: GoalStatusAcceptedV0, Accepted: true,
+			EvidenceRefs: []string{"evidence-ref-closure-compatible"},
+		}
+		store.states[terminal.RunRef] = terminal
+		store.casHook = nil
+	}
+
+	saved, err := saveGoalWorkStateV0(context.Background(), store, desired)
+	if err != nil || saved.Status != GoalStatusCompleteV0 || saved.StoreVersion != 3 ||
+		store.saves != 2 || !reflect.DeepEqual(store.casExpectedVersions, []uint64{1, 2}) ||
+		!reflect.DeepEqual(store.loadedVersions, []uint64{2, 3}) {
+		t.Fatalf("saved=%+v err=%v saves=%d", saved, err, store.saves)
+	}
+}
+
+func TestSaveGoalWorkStateV0TerminalCompatibleRechazaResultadoOCierreDistintoV0(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		mutate func(*GoalWorkStateV0)
+	}{
+		{name: "result", mutate: func(state *GoalWorkStateV0) { state.LastResult.Summary = "delivery-crossed" }},
+		{name: "closure", mutate: func(state *GoalWorkStateV0) {
+			state.LastClosure.EvidenceRefs = []string{"evidence-ref-closure-crossed"}
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			store := newGoalLifecycleStoreForTestV0()
+			desired := mustGoalLifecycleStateForTestV0(t)
+			desired.StoreVersion = 1
+			desired.LaunchReceipt.RuntimeGenerationRef = "generation-ref-cas-terminal-exact-001"
+			desired.Status = GoalStatusCompleteV0
+			desired.LastResult = &GoalWorkResultV0{
+				SchemaVersion: GoalWorkResultSchemaV0,
+				Status:        GoalStatusCompleteV0, GoalRef: desired.GoalRef,
+				ExternalGoalRef: desired.ExternalGoalRef, Summary: "delivery-exact",
+			}
+			desired.LastClosure = &GoalClosureValidationV0{
+				Status: GoalStatusAcceptedV0, Accepted: true,
+				EvidenceRefs: []string{"evidence-ref-closure-exact"},
+			}
+			current := desired
+			current.StoreVersion = 2
+			result := *current.LastResult
+			closure := *current.LastClosure
+			current.LastResult, current.LastClosure = &result, &closure
+			test.mutate(&current)
+			store.states[current.RunRef] = current
+
+			_, err := saveGoalWorkStateV0(context.Background(), store, desired)
+			var conflict GoalWorkStateCASConflictErrorV0
+			if !errors.As(err, &conflict) || store.saves != 1 ||
+				!reflect.DeepEqual(store.casExpectedVersions, []uint64{1}) ||
+				!reflect.DeepEqual(store.loadedVersions, []uint64{2}) ||
+				!reflect.DeepEqual(store.states[current.RunRef], current) {
+				t.Fatalf("err=%v saves=%d state=%+v", err, store.saves, store.states[current.RunRef])
+			}
+		})
+	}
+}
+
+func TestSaveGoalWorkStateV0CASSegundoConflictRechazaTerminalIncompatibleV0(t *testing.T) {
+	store := newGoalLifecycleStoreForTestV0()
+	desired := mustGoalLifecycleStateForTestV0(t)
+	desired.StoreVersion = 1
+	desired.LaunchReceipt.RuntimeGenerationRef = "generation-ref-cas2-incompatible-001"
+	desired.LastResult = &GoalWorkResultV0{
+		SchemaVersion: GoalWorkResultSchemaV0,
+		Status:        GoalStatusRunningV0, GoalRef: desired.GoalRef,
+		ExternalGoalRef: desired.ExternalGoalRef, Summary: "delivery-expected",
+	}
+	normalized, normalizeErr := NewGoalWorkStateV0(desired)
+	if normalizeErr != nil {
+		t.Fatalf("normalizar desired: %v", normalizeErr)
+	}
+	desired = normalized
+	current := desired
+	current.StoreVersion = 2
+	store.states[desired.RunRef] = current
+	store.casHook = func(store *goalLifecycleStoreForTestV0, expected uint64, state GoalWorkStateV0) {
+		if expected != 2 {
+			return
+		}
+		terminal := state
+		terminal.StoreVersion = 3
+		terminal.Status = GoalStatusCompleteV0
+		terminal.LastResult = &GoalWorkResultV0{
+			SchemaVersion: GoalWorkResultSchemaV0,
+			Status:        GoalStatusCompleteV0, GoalRef: terminal.GoalRef,
+			ExternalGoalRef: terminal.ExternalGoalRef, Summary: "delivery-from-other-observer",
+		}
+		terminal.LastClosure = &GoalClosureValidationV0{
+			Status: GoalStatusAcceptedV0, Accepted: true,
+			EvidenceRefs: []string{"evidence-ref-other-observer"},
+		}
+		store.states[terminal.RunRef] = terminal
+		store.casHook = nil
+	}
+
+	_, err := saveGoalWorkStateV0(context.Background(), store, desired)
+	var conflict GoalWorkStateCASConflictErrorV0
+	if !errors.As(err, &conflict) || conflict.ExpectedVersion != 2 || conflict.CurrentVersion != 3 ||
+		store.saves != 2 || !reflect.DeepEqual(store.casExpectedVersions, []uint64{1, 2}) ||
+		!reflect.DeepEqual(store.loadedVersions, []uint64{2, 3}) {
+		t.Fatalf("err=%v saves=%d cas=%v loads=%v", err, store.saves, store.casExpectedVersions, store.loadedVersions)
+	}
+	preserved := store.states[desired.RunRef]
+	if preserved.StoreVersion != 3 || preserved.LastResult == nil ||
+		preserved.LastResult.Summary != "delivery-from-other-observer" ||
+		preserved.LastClosure == nil || !preserved.LastClosure.Accepted {
+		t.Fatalf("terminal concurrente no preservado: %+v", preserved)
+	}
+}
+
+func TestSaveGoalWorkStateV0RechazaRollbackTerminalEnLoad1V0(t *testing.T) {
+	store := newGoalLifecycleStoreForTestV0()
+	desired := mustGoalLifecycleStateForTestV0(t)
+	desired.StoreVersion = 5
+	desired.Status = GoalStatusCompleteV0
+	desired.LastResult = &GoalWorkResultV0{
+		SchemaVersion: GoalWorkResultSchemaV0,
+		Status:        GoalStatusCompleteV0, GoalRef: desired.GoalRef,
+		ExternalGoalRef: desired.ExternalGoalRef, Summary: "delivery-versioned",
+	}
+	desired.LastClosure = &GoalClosureValidationV0{Status: GoalStatusAcceptedV0, Accepted: true}
+	var normalizeErr error
+	desired, normalizeErr = NewGoalWorkStateV0(desired)
+	if normalizeErr != nil {
+		t.Fatalf("normalizar desired: %v", normalizeErr)
+	}
+	rollback := desired
+	rollback.StoreVersion = 4
+	store.states[desired.RunRef] = rollback
+
+	_, err := saveGoalWorkStateV0(context.Background(), store, desired)
+	var conflict GoalWorkStateCASConflictErrorV0
+	if !errors.As(err, &conflict) || store.saves != 1 ||
+		!reflect.DeepEqual(store.casExpectedVersions, []uint64{5}) ||
+		!reflect.DeepEqual(store.loadedVersions, []uint64{4}) {
+		t.Fatalf("err=%v saves=%d cas=%v loads=%v", err, store.saves, store.casExpectedVersions, store.loadedVersions)
+	}
+}
+
+func TestSaveGoalWorkStateV0RechazaRollbackTerminalEnLoad2V0(t *testing.T) {
+	store := newGoalLifecycleStoreForTestV0()
+	desired := mustGoalLifecycleStateForTestV0(t)
+	desired.StoreVersion = 1
+	current := desired
+	current.StoreVersion = 2
+	store.states[desired.RunRef] = current
+	store.casHook = func(store *goalLifecycleStoreForTestV0, expected uint64, state GoalWorkStateV0) {
+		if expected != 2 {
+			return
+		}
+		rollback := state
+		rollback.StoreVersion = 1
+		rollback.Status = GoalStatusCompleteV0
+		rollback.LastResult = &GoalWorkResultV0{
+			SchemaVersion: GoalWorkResultSchemaV0,
+			Status:        GoalStatusCompleteV0, GoalRef: rollback.GoalRef,
+			ExternalGoalRef: rollback.ExternalGoalRef, Summary: "delivery-rollback",
+		}
+		rollback.LastClosure = &GoalClosureValidationV0{Status: GoalStatusAcceptedV0, Accepted: true}
+		store.states[rollback.RunRef] = rollback
+		store.casHook = nil
+	}
+
+	_, err := saveGoalWorkStateV0(context.Background(), store, desired)
+	var conflict GoalWorkStateCASConflictErrorV0
+	if !errors.As(err, &conflict) || conflict.ExpectedVersion != 2 || conflict.CurrentVersion != 1 ||
+		!reflect.DeepEqual(store.casExpectedVersions, []uint64{1, 2}) ||
+		!reflect.DeepEqual(store.loadedVersions, []uint64{2, 1}) {
+		t.Fatalf("err=%v cas=%v loads=%v", err, store.casExpectedVersions, store.loadedVersions)
+	}
+}
+
+func TestSaveGoalWorkStateV0CASNoSobrescribeCambioSemanticoV0(t *testing.T) {
+	store := newGoalLifecycleStoreForTestV0()
+	desired := mustGoalLifecycleStateForTestV0(t)
+	desired.StoreVersion = 1
+	current := desired
+	current.StoreVersion = 2
+	current.EvidenceRefs = append(current.EvidenceRefs, "evidence-ref-concurrent-change")
+	store.states[current.RunRef] = current
+
+	_, err := saveGoalWorkStateV0(context.Background(), store, desired)
+	var conflict GoalWorkStateCASConflictErrorV0
+	if !errors.As(err, &conflict) || store.saves != 1 {
+		t.Fatalf("err=%v saves=%d", err, store.saves)
+	}
+	loaded, loadErr := store.LoadGoalWorkStateV0(context.Background(), current.RunRef)
+	if loadErr != nil || !goalLifecycleStringInSetForTestV0(loaded.EvidenceRefs, "evidence-ref-concurrent-change") {
+		t.Fatalf("loaded=%+v loadErr=%v", loaded, loadErr)
+	}
+}
+
+func TestObserveGoalWorkV0GenerationConflictNoPersisteResultadoNiClosureV0(t *testing.T) {
+	store := newGoalLifecycleStoreForTestV0()
+	state := mustGoalLifecycleStateForTestV0(t)
+	state.LaunchReceipt.RuntimeGenerationRef = "generation-ref-observe-conflict-001"
+	store.states[state.RunRef] = state
+	observer := &goalLifecycleObserverForTestV0{
+		result: GoalWorkResultV0{SchemaVersion: GoalWorkResultSchemaV0, Status: GoalStatusRunningV0, GoalRef: state.GoalRef, ExternalGoalRef: state.ExternalGoalRef},
+		err:    errors.New("codex_app_server_tmux_generation_conflict"),
+	}
+	_, err := ObserveGoalWorkV0(context.Background(), GoalWorkObserveRequestV0{RunRef: state.RunRef}, GoalWorkLifecyclePortsV0{StateStore: store, Observer: observer})
+	if err == nil {
+		t.Fatal("se esperaba conflicto retryable")
+	}
+	loaded, loadErr := store.LoadGoalWorkStateV0(context.Background(), state.RunRef)
+	if loadErr != nil || loaded.LastResult != nil || loaded.LastClosure != nil || loaded.Status != state.Status || store.saves != 0 {
+		t.Fatalf("loaded=%+v loadErr=%v saves=%d", loaded, loadErr, store.saves)
 	}
 }
 
@@ -876,9 +1167,12 @@ func (observer *goalLifecycleObserverByGoalForTestV0) ObserveGoalWorkV0(
 }
 
 type goalLifecycleStoreForTestV0 struct {
-	states  map[string]GoalWorkStateV0
-	saves   int
-	saveErr error
+	states              map[string]GoalWorkStateV0
+	saves               int
+	saveErr             error
+	casHook             func(*goalLifecycleStoreForTestV0, uint64, GoalWorkStateV0)
+	casExpectedVersions []uint64
+	loadedVersions      []uint64
 }
 
 func newGoalLifecycleStoreForTestV0() *goalLifecycleStoreForTestV0 {
@@ -909,6 +1203,7 @@ func (store *goalLifecycleStoreForTestV0) LoadGoalWorkStateV0(
 	if !ok {
 		return GoalWorkStateV0{}, errors.New("goal_state_not_found")
 	}
+	store.loadedVersions = append(store.loadedVersions, state.StoreVersion)
 	return state, nil
 }
 
@@ -918,8 +1213,12 @@ func (store *goalLifecycleStoreForTestV0) CompareAndSwapGoalWorkStateV0(
 	state GoalWorkStateV0,
 ) (GoalWorkStateV0, error) {
 	store.saves++
+	store.casExpectedVersions = append(store.casExpectedVersions, expectedVersion)
 	if store.saveErr != nil {
 		return GoalWorkStateV0{}, store.saveErr
+	}
+	if store.casHook != nil {
+		store.casHook(store, expectedVersion, state)
 	}
 	current, ok := store.states[state.RunRef]
 	if (!ok && expectedVersion != 0) || (ok && current.StoreVersion != expectedVersion) {

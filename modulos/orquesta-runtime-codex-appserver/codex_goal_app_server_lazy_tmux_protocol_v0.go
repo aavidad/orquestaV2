@@ -79,3 +79,30 @@ func (protocol serverCodexAppServerLazyTmuxProtocolV0) ReadThreadV0(
 func (protocol serverCodexAppServerLazyTmuxProtocolV0) ensureV0(ctx context.Context) error {
 	return protocol.Backend.EnsureV0(ctx, protocol.Preflight)
 }
+
+// withVerifiedGenerationV0 scopes all RPCs in call to one exact generation.
+// The postverify runs even after a RPC failure, so a caller never retains an
+// ID that crossed a runtime rotation.
+func (protocol serverCodexAppServerLazyTmuxProtocolV0) withVerifiedGenerationV0(
+	ctx context.Context,
+	expected string,
+	call func(serverCodexAppServerProtocolPortV0, string) error,
+) (string, error) {
+	if err := protocol.ensureV0(ctx); err != nil {
+		return "", err
+	}
+	lease, err := protocol.Backend.acquireTmuxLeaseGuardV0(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer lease.releaseV0()
+	marker, err := protocol.Backend.verifiedTmuxGenerationWithLeaseV0(ctx, lease, expected)
+	if err != nil {
+		return "", err
+	}
+	callErr := call(protocol.Inner, marker.GenerationRef)
+	if _, verifyErr := protocol.Backend.verifiedTmuxGenerationWithLeaseV0(ctx, lease, marker.GenerationRef); verifyErr != nil {
+		return marker.GenerationRef, verifyErr
+	}
+	return marker.GenerationRef, callErr
+}

@@ -1594,6 +1594,246 @@ func TestCodexAppServerWebSocketDefaultFrameBudgetConserva16MiBV0(t *testing.T) 
 	}
 }
 
+func TestFingerprintGoalObservationV0RechazaThreadStaleTrasRotacionRealV0(t *testing.T) {
+	tmuxBackend, tmuxLog := newGenerationLeaseBackendForTestV0(t)
+	rotateNextGoalGet := make(chan struct{}, 1)
+	var markerForRotation codexAppServerTmuxOwnerMarkerV0
+	socketPath, records := startCodexAppServerWebSocketScriptWithHookForTestV0(t, func(method string) error {
+		if method != "thread/goal/get" {
+			return nil
+		}
+		select {
+		case <-rotateNextGoalGet:
+			replacement := markerForRotation
+			replacement.GenerationRef += "-rotated-during-fingerprint"
+			raw, err := json.Marshal(replacement)
+			if err != nil {
+				return err
+			}
+			if err := os.WriteFile(tmuxBackend.tmuxOwnerMarkerPathV0(), raw, 0o600); err != nil {
+				return err
+			}
+			return os.WriteFile(tmuxLog+".generation", []byte(replacement.GenerationRef+"\n"), 0o600)
+		default:
+			return nil
+		}
+	})
+	websocket := serverCodexAppServerWebSocketProtocolV0{SocketPath: socketPath, Timeout: 2 * time.Second}
+	if err := tmuxBackend.EnsureV0(context.Background(), websocket); err != nil {
+		t.Fatalf("EnsureV0 generation 1: %v", err)
+	}
+	t.Cleanup(func() { _ = tmuxBackend.ShutdownV0(context.Background()) })
+	firstMarker, ok := tmuxBackend.readTmuxOwnerMarkerV0()
+	if !ok || strings.TrimSpace(firstMarker.GenerationRef) == "" {
+		t.Fatalf("marker generation 1=%+v ok=%v", firstMarker, ok)
+	}
+	drainMethods := func() []string {
+		var methods []string
+		for {
+			select {
+			case record := <-records:
+				methods = append(methods, record.Method)
+			default:
+				return methods
+			}
+		}
+	}
+	_ = drainMethods()
+	runtime := &serverCodexAppServerGoalRuntimeV0{}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol: serverCodexAppServerLazyTmuxProtocolV0{
+			Backend: tmuxBackend, Inner: websocket, Preflight: websocket,
+		},
+		Runtime: runtime,
+	}
+	state, err := orquestagoal.NewGoalWorkStateFromLaunchV0(orquestagoal.GoalWorkStateFromLaunchRequestV0{
+		RunRef: "run-ref-fingerprint-generation-001",
+		Spec: orquestagoal.GoalWorkSpecV0{
+			GoalRef: "goal-ref-fingerprint-generation-001", Objective: "verificar fencing generacional",
+			DirectorKind: orquestagoal.GoalDirectorKindRuntimeGoalV0,
+			WriteSet:     []orquestagoal.GoalWriteScopeV0{{Path: "docs"}},
+		},
+		LaunchReceipt: orquestagoal.GoalLaunchReceiptV0{
+			Status: orquestagoal.GoalStatusRunningV0, GoalRef: "goal-ref-fingerprint-generation-001",
+			ExternalGoalRef:      "thread-ref-websocket-direct-001",
+			RuntimeGenerationRef: firstMarker.GenerationRef,
+		},
+	})
+	if err != nil {
+		t.Fatalf("state generation 1: %v", err)
+	}
+	fingerprint, supported, err := backend.FingerprintGoalObservationV0(context.Background(), state)
+	if err != nil || !supported || fingerprint.RunRef != state.RunRef ||
+		fingerprint.GoalRef != state.GoalRef || fingerprint.LastStatus != orquestagoal.GoalStatusRunningV0 ||
+		strings.TrimSpace(fingerprint.EvidenceHash) == "" {
+		t.Fatalf("fingerprint generation 1=%+v supported=%v err=%v", fingerprint, supported, err)
+	}
+	if methods := drainMethods(); !containsStringMigratedTestV0(methods, "thread/goal/get") {
+		t.Fatalf("generation 1 methods=%v", methods)
+	}
+	markerForRotation = firstMarker
+	rotateNextGoalGet <- struct{}{}
+	rotatedFingerprint, rotatedSupported, rotatedErr := backend.FingerprintGoalObservationV0(context.Background(), state)
+	assertGenerationConflictTestV0(t, rotatedErr)
+	if !rotatedSupported || rotatedFingerprint != (orquestagoal.GoalObservationFingerprintV0{}) {
+		t.Fatalf("rotation-during-rpc fingerprint=%+v supported=%v err=%v", rotatedFingerprint, rotatedSupported, rotatedErr)
+	}
+	if methods := drainMethods(); !containsStringMigratedTestV0(methods, "thread/goal/get") {
+		t.Fatalf("rotacion no atraveso API publica: methods=%v", methods)
+	}
+
+	if err := tmuxBackend.ShutdownV0(context.Background()); err != nil {
+		t.Fatalf("ShutdownV0 generation 1: %v", err)
+	}
+	if err := tmuxBackend.EnsureV0(context.Background(), websocket); err != nil {
+		t.Fatalf("EnsureV0 generation 2: %v", err)
+	}
+	secondMarker, ok := tmuxBackend.readTmuxOwnerMarkerV0()
+	if !ok || secondMarker.GenerationRef == firstMarker.GenerationRef {
+		t.Fatalf("rotacion no efectiva: first=%+v second=%+v ok=%v", firstMarker, secondMarker, ok)
+	}
+	_ = drainMethods()
+	secondState := state
+	secondState.LaunchReceipt.RuntimeGenerationRef = secondMarker.GenerationRef
+	secondState, err = orquestagoal.NewGoalWorkStateV0(secondState)
+	if err != nil {
+		t.Fatalf("state generation 2: %v", err)
+	}
+	fingerprint, supported, err = backend.FingerprintGoalObservationV0(context.Background(), secondState)
+	if err != nil || !supported || strings.TrimSpace(fingerprint.EvidenceHash) == "" ||
+		!runtime.threadBoundToGenerationV0(secondState.ExternalGoalRef, secondMarker.GenerationRef) {
+		t.Fatalf("fingerprint generation 2=%+v supported=%v err=%v", fingerprint, supported, err)
+	}
+	if methods := drainMethods(); !containsStringMigratedTestV0(methods, "thread/goal/get") {
+		t.Fatalf("generation 2 methods=%v", methods)
+	}
+
+	staleFingerprint, staleSupported, staleErr := backend.FingerprintGoalObservationV0(context.Background(), state)
+	assertGenerationConflictTestV0(t, staleErr)
+	if !staleSupported || staleFingerprint != (orquestagoal.GoalObservationFingerprintV0{}) {
+		t.Fatalf("stale fingerprint=%+v supported=%v err=%v", staleFingerprint, staleSupported, staleErr)
+	}
+	staleMethods := drainMethods()
+	if containsStringMigratedTestV0(staleMethods, "thread/goal/get") {
+		t.Fatalf("thread stale cruzo RPC: methods=%v", staleMethods)
+	}
+	if !runtime.threadBoundToGenerationV0(secondState.ExternalGoalRef, secondMarker.GenerationRef) ||
+		runtime.threadBoundToGenerationV0(state.ExternalGoalRef, firstMarker.GenerationRef) {
+		t.Fatalf("binding runtime retrocedio a generacion stale")
+	}
+}
+
+func TestStartCodexGoalV0ActivaGeneracionAntesDeRegistrarGuardYTimeoutV0(t *testing.T) {
+	tmuxBackend, _ := newGenerationLeaseBackendForTestV0(t)
+	socketPath, records := startCodexAppServerWebSocketScriptForTestV0(t)
+	websocket := serverCodexAppServerWebSocketProtocolV0{SocketPath: socketPath, Timeout: 2 * time.Second}
+	runtime := &serverCodexAppServerGoalRuntimeV0{}
+	root := t.TempDir()
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol: serverCodexAppServerLazyTmuxProtocolV0{
+			Backend: tmuxBackend, Inner: websocket, Preflight: websocket,
+		},
+		CWD: root, Sandbox: "workspace-write", Runtime: runtime,
+	}
+	t.Cleanup(func() { _ = tmuxBackend.ShutdownV0(context.Background()) })
+	drain := func() {
+		for {
+			select {
+			case <-records:
+			default:
+				return
+			}
+		}
+	}
+	packet := codexAppServerRuntimeWriteSetGuardPacketForTestV0("goal-ref-start-generation-cache-001", "docs")
+	packet.Budget.MaxRuntimeSeconds = 1200
+	first, err := backend.StartCodexGoalV0(context.Background(), packet)
+	if err != nil || first.RuntimeGenerationRef == "" {
+		t.Fatalf("start generation 1 receipt=%+v err=%v", first, err)
+	}
+	drain()
+	firstBaseline, ok := runtime.writeSetBaselineForThreadV0(first.ExternalGoalRef)
+	if !ok || runtime.timeoutForThreadV0(first.ExternalGoalRef) != 20*time.Minute {
+		t.Fatalf("generation 1 baseline=%+v ok=%v timeout=%v", firstBaseline, ok, runtime.timeoutForThreadV0(first.ExternalGoalRef))
+	}
+	runtime.recordGoalRuntimeV0("thread-ref-old-generation-sentinel", time.Now().UTC(), time.Minute)
+	runtime.recordWriteSetBaselineV0("thread-ref-old-generation-sentinel", firstBaseline)
+
+	if err := tmuxBackend.ShutdownV0(context.Background()); err != nil {
+		t.Fatalf("shutdown generation 1: %v", err)
+	}
+	packet.GoalRef = "goal-ref-start-generation-cache-002"
+	second, err := backend.StartCodexGoalV0(context.Background(), packet)
+	if err != nil || second.RuntimeGenerationRef == "" || second.RuntimeGenerationRef == first.RuntimeGenerationRef {
+		t.Fatalf("start generation 2 receipt=%+v first=%+v err=%v", second, first, err)
+	}
+	drain()
+	if !runtime.threadBoundToGenerationV0(second.ExternalGoalRef, second.RuntimeGenerationRef) {
+		t.Fatalf("thread generation 2 no ligado: receipt=%+v", second)
+	}
+	if _, ok := runtime.writeSetBaselineForThreadV0(second.ExternalGoalRef); !ok ||
+		runtime.timeoutForThreadV0(second.ExternalGoalRef) != 20*time.Minute {
+		t.Fatalf("guard/timeout generation 2 perdido: ok=%v timeout=%v", ok, runtime.timeoutForThreadV0(second.ExternalGoalRef))
+	}
+	if _, ok := runtime.writeSetBaselineForThreadV0("thread-ref-old-generation-sentinel"); ok ||
+		runtime.timeoutForThreadV0("thread-ref-old-generation-sentinel") != 0 {
+		t.Fatal("cache de generation 1 sobrevivio a activacion generation 2")
+	}
+}
+
+var errCodexAppServerWebSocketHookExpectedV0 = errors.New("codex_app_server_websocket_hook_expected")
+
+func TestStartCodexGoalV0ConflictoGeneracionalDominaFalloRPCV0(t *testing.T) {
+	tmuxBackend, tmuxLog := newGenerationLeaseBackendForTestV0(t)
+	rotateOnTurn := make(chan struct{}, 1)
+	var marker codexAppServerTmuxOwnerMarkerV0
+	socketPath, _ := startCodexAppServerWebSocketScriptWithHookForTestV0(t, func(method string) error {
+		if method != "turn/start" {
+			return nil
+		}
+		select {
+		case <-rotateOnTurn:
+			replacement := marker
+			replacement.GenerationRef += "-rotated-with-rpc-failure"
+			raw, err := json.Marshal(replacement)
+			if err != nil {
+				return err
+			}
+			if err := os.WriteFile(tmuxBackend.tmuxOwnerMarkerPathV0(), raw, 0o600); err != nil {
+				return err
+			}
+			if err := os.WriteFile(tmuxLog+".generation", []byte(replacement.GenerationRef+"\n"), 0o600); err != nil {
+				return err
+			}
+			return fmt.Errorf("%w: turn/start", errCodexAppServerWebSocketHookExpectedV0)
+		default:
+			return nil
+		}
+	})
+	websocket := serverCodexAppServerWebSocketProtocolV0{SocketPath: socketPath, Timeout: 2 * time.Second}
+	if err := tmuxBackend.EnsureV0(context.Background(), websocket); err != nil {
+		t.Fatalf("EnsureV0: %v", err)
+	}
+	t.Cleanup(func() { _ = tmuxBackend.ShutdownV0(context.Background()) })
+	marker, _ = tmuxBackend.readTmuxOwnerMarkerV0()
+	rotateOnTurn <- struct{}{}
+	runtime := &serverCodexAppServerGoalRuntimeV0{}
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol: serverCodexAppServerLazyTmuxProtocolV0{
+			Backend: tmuxBackend, Inner: websocket, Preflight: websocket,
+		},
+		Runtime: runtime,
+	}
+	receipt, err := backend.StartCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		GoalRef: "goal-ref-start-conflict-dominates-001", Objective: "probar dominancia causal",
+	})
+	assertGenerationConflictTestV0(t, err)
+	if receipt.IssueCode != codexAppServerTmuxGenerationConflictV0 ||
+		runtime.threadBoundToGenerationV0(receipt.ExternalGoalRef, marker.GenerationRef) {
+		t.Fatalf("receipt=%+v err=%v", receipt, err)
+	}
+}
+
 func codexAppServerTestWebSocketFrameV0(payload []byte) []byte {
 	header := []byte{0x81}
 	switch size := len(payload); {
@@ -1618,6 +1858,13 @@ type codexAppServerWebSocketRecordForTestV0 struct {
 func startCodexAppServerWebSocketScriptForTestV0(
 	t *testing.T,
 ) (string, <-chan codexAppServerWebSocketRecordForTestV0) {
+	return startCodexAppServerWebSocketScriptWithHookForTestV0(t, nil)
+}
+
+func startCodexAppServerWebSocketScriptWithHookForTestV0(
+	t *testing.T,
+	hook func(string) error,
+) (string, <-chan codexAppServerWebSocketRecordForTestV0) {
 	t.Helper()
 	root := shortUnixSocketTestRootV0(t)
 	socketPath := filepath.Join(root, "codex-app-server.sock")
@@ -1640,7 +1887,7 @@ func startCodexAppServerWebSocketScriptForTestV0(
 			if err != nil {
 				return
 			}
-			if err := serveCodexAppServerWebSocketCallForTestV0(conn, records); err != nil {
+			if err := serveCodexAppServerWebSocketCallForTestV0(conn, records, hook); err != nil {
 				select {
 				case errs <- err:
 				default:
@@ -1653,7 +1900,8 @@ func startCodexAppServerWebSocketScriptForTestV0(
 		_ = listener.Close()
 		select {
 		case err := <-errs:
-			if codexAppServerWebSocketBenignCloseForTestV0(err) {
+			if codexAppServerWebSocketBenignCloseForTestV0(err) ||
+				errors.Is(err, errCodexAppServerWebSocketHookExpectedV0) {
 				return
 			}
 			t.Fatalf("fake websocket app-server: %v", err)
@@ -1673,6 +1921,7 @@ func codexAppServerWebSocketBenignCloseForTestV0(err error) bool {
 func serveCodexAppServerWebSocketCallForTestV0(
 	conn net.Conn,
 	records chan<- codexAppServerWebSocketRecordForTestV0,
+	hook func(string) error,
 ) error {
 	defer conn.Close()
 	reader := bufio.NewReader(conn)
@@ -1711,11 +1960,19 @@ func serveCodexAppServerWebSocketCallForTestV0(
 	}
 	call.Method = strings.TrimSpace(call.Method)
 	records <- codexAppServerWebSocketRecordForTestV0{Method: call.Method, Params: call.Params}
+	if hook != nil {
+		if err := hook(call.Method); err != nil {
+			return err
+		}
+	}
 	return writeCodexAppServerWebSocketScriptResponseForTestV0(conn, call.Method)
 }
 
 func writeCodexAppServerWebSocketScriptResponseForTestV0(conn net.Conn, method string) error {
 	switch strings.TrimSpace(method) {
+	case "thread/loaded/list":
+		_, err := conn.Write(codexAppServerTestWebSocketFrameV0([]byte(`{"id":2,"result":{"data":[]}}`)))
+		return err
 	case "thread/start":
 		_, err := conn.Write(codexAppServerTestWebSocketFrameV0([]byte(`{"id":2,"result":{"thread":{"id":"thread-ref-websocket-direct-001"}}}`)))
 		return err

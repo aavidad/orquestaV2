@@ -267,6 +267,23 @@ func (backend serverCodexAppServerTmuxBackendV0) observeRecordedTmuxGenerationV0
 	return backend.observeTmuxGenerationTokenV0(ctx, tmuxPath, marker.TmuxSessionID, marker.GenerationRef)
 }
 
+// verifiedTmuxGenerationWithLeaseV0 validates the exact durable generation
+// while owner.lease is held. App-server IDs may only be used after this check.
+func (backend serverCodexAppServerTmuxBackendV0) verifiedTmuxGenerationWithLeaseV0(ctx context.Context, lease *codexAppServerTmuxLeaseGuardV0, expected string) (codexAppServerTmuxOwnerMarkerV0, error) {
+	if err := backend.requireTmuxLeaseV0(lease); err != nil {
+		return codexAppServerTmuxOwnerMarkerV0{}, err
+	}
+	marker, ok := backend.readTmuxOwnerMarkerV0()
+	if !ok || !backend.tmuxGenerationMarkerMatchesBackendV0(marker) || !marker.leaseOwnedByCurrentProcessV0() || (strings.TrimSpace(expected) != "" && marker.GenerationRef != strings.TrimSpace(expected)) {
+		return codexAppServerTmuxOwnerMarkerV0{}, codexAppServerTmuxConflictErrorV0(codexAppServerTmuxGenerationConflictV0)
+	}
+	tmuxPath, err := codexAppServerTmuxCommandPathV0(backend.PathEnv)
+	if err != nil || backend.observeRecordedTmuxGenerationV0(ctx, tmuxPath, marker) != codexAppServerTmuxGenerationVerifiedV0 || marker.observeAppServerV0(backend.SocketPath) != codexAppServerTmuxGenerationVerifiedV0 || backend.ensureTmuxSocketPrivateV0() != nil {
+		return codexAppServerTmuxOwnerMarkerV0{}, codexAppServerTmuxConflictErrorV0(codexAppServerTmuxGenerationConflictV0)
+	}
+	return marker, nil
+}
+
 func (marker codexAppServerTmuxOwnerMarkerV0) tmuxIdentityV0() codexAppServerTmuxSessionIdentityV0 {
 	return codexAppServerTmuxSessionIdentityV0{
 		SessionID: marker.TmuxSessionID, SessionCreated: marker.TmuxSessionCreated,

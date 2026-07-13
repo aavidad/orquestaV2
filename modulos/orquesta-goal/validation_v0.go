@@ -650,6 +650,7 @@ func NormalizeGoalObservationRequestV0(
 ) GoalObservationRequestV0 {
 	request.GoalRef = strings.TrimSpace(request.GoalRef)
 	request.ExternalGoalRef = strings.TrimSpace(request.ExternalGoalRef)
+	request.RuntimeGenerationRef = strings.TrimSpace(request.RuntimeGenerationRef)
 	return request
 }
 
@@ -804,6 +805,7 @@ func ValidateGoalObservationRequestV0(
 	var issues []GoalWorkIssueV0
 	validateRequiredGoalRefV0(&issues, "goal_ref", request.GoalRef)
 	validateGoalRefsV0(&issues, "external_goal_ref", request.ExternalGoalRef)
+	validateGoalRefsV0(&issues, "runtime_generation_ref", request.RuntimeGenerationRef)
 	return issues
 }
 

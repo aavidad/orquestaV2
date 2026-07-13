@@ -544,12 +544,25 @@ func TestValidateGoalWorkClosureV0NoAceptaCompleteSinEvidencia(t *testing.T) {
 
 func TestValidateGoalObservationRequestV0RechazaRefsInvalidas(t *testing.T) {
 	issues := ValidateGoalObservationRequestV0(GoalObservationRequestV0{
-		GoalRef:         "",
-		ExternalGoalRef: "/tmp/external-goal",
+		GoalRef:              "",
+		ExternalGoalRef:      "/tmp/external-goal",
+		RuntimeGenerationRef: "/tmp/generation",
 	})
 
 	if !hasGoalIssueFieldV0(issues, "goal_ref") ||
-		!hasGoalIssueFieldV0(issues, "external_goal_ref") {
+		!hasGoalIssueFieldV0(issues, "external_goal_ref") ||
+		!hasGoalIssueFieldV0(issues, "runtime_generation_ref") {
+		t.Fatalf("issues=%v", issues)
+	}
+}
+
+func TestValidateGoalLaunchReceiptV0RechazaGeneracionInvalidaV0(t *testing.T) {
+	issues := ValidateGoalLaunchReceiptV0(GoalLaunchReceiptV0{
+		Status: GoalStatusRunningV0, GoalRef: "goal-ref-generation-validation-001",
+		ExternalGoalRef:      "thread-ref-generation-validation-001",
+		RuntimeGenerationRef: "/tmp/generation",
+	})
+	if !hasGoalIssueFieldV0(issues, "runtime_generation_ref") {
 		t.Fatalf("issues=%v", issues)
 	}
 }

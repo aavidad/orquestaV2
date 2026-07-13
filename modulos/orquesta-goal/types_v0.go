@@ -194,13 +194,14 @@ type GoalWorkIssueV0 struct {
 }
 
 type GoalLaunchReceiptV0 struct {
-	SchemaVersion   string              `json:"schema_version"`
-	Status          string              `json:"status"`
-	GoalRef         string              `json:"goal_ref,omitempty"`
-	ExternalGoalRef string              `json:"external_goal_ref,omitempty"`
-	ContextBudget   GoalContextBudgetV0 `json:"context_budget,omitempty"`
-	EvidenceRefs    []string            `json:"evidence_refs,omitempty"`
-	Issues          []GoalWorkIssueV0   `json:"issues,omitempty"`
+	SchemaVersion        string              `json:"schema_version"`
+	Status               string              `json:"status"`
+	GoalRef              string              `json:"goal_ref,omitempty"`
+	ExternalGoalRef      string              `json:"external_goal_ref,omitempty"`
+	RuntimeGenerationRef string              `json:"runtime_generation_ref,omitempty"`
+	ContextBudget        GoalContextBudgetV0 `json:"context_budget,omitempty"`
+	EvidenceRefs         []string            `json:"evidence_refs,omitempty"`
+	Issues               []GoalWorkIssueV0   `json:"issues,omitempty"`
 }
 
 type GoalContextBudgetV0 struct {
@@ -463,8 +464,9 @@ type GoalRequiredTestAttestationClaimPolicyV0 struct {
 }
 
 type GoalObservationRequestV0 struct {
-	GoalRef         string `json:"goal_ref"`
-	ExternalGoalRef string `json:"external_goal_ref,omitempty"`
+	GoalRef              string `json:"goal_ref"`
+	ExternalGoalRef      string `json:"external_goal_ref,omitempty"`
+	RuntimeGenerationRef string `json:"runtime_generation_ref,omitempty"`
 }
 
 type GoalClosureValidationV0 struct {

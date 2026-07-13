@@ -621,6 +621,32 @@ func TestEnsureV0ReintentaPredicadoPostCASTransitorioV0(t *testing.T) {
 	}
 }
 
+func TestWithVerifiedGenerationV0PostverifyRechazaRotacionAunqueRPCFalleV0(t *testing.T) {
+	backend, _ := newGenerationLeaseBackendForTestV0(t)
+	if err := backend.EnsureV0(context.Background(), fakeCodexAppServerProbeV0{}); err != nil {
+		t.Fatalf("EnsureV0: %v", err)
+	}
+	marker, ok := backend.readTmuxOwnerMarkerV0()
+	if !ok {
+		t.Fatal("marker ausente")
+	}
+	lazy := serverCodexAppServerLazyTmuxProtocolV0{Backend: backend}
+	_, err := lazy.withVerifiedGenerationV0(context.Background(), marker.GenerationRef, func(serverCodexAppServerProtocolPortV0, string) error {
+		// This hook is the blocked RPC while withVerifiedGenerationV0 owns the
+		// lease. A real generation rotation after the RPC must invalidate its
+		// thread ID even when the RPC itself failed.
+		replacement := marker
+		replacement.GenerationRef = "generation-ref-rotated-postverify"
+		writeGenerationMarkerTestV0(t, backend.tmuxOwnerMarkerPathV0(), replacement)
+		return errors.New("rpc blocked by test hook")
+	})
+	assertGenerationConflictTestV0(t, err)
+	writeGenerationMarkerTestV0(t, backend.tmuxOwnerMarkerPathV0(), marker)
+	if err := backend.ShutdownV0(context.Background()); err != nil {
+		t.Fatalf("shutdown: %v", err)
+	}
+}
+
 func TestSmokeGoalFirstHandoffPipelinePropagaFalloV0(t *testing.T) {
 	repoRoot, err := filepath.Abs(filepath.Join("..", ".."))
 	if err != nil {

@@ -592,7 +592,10 @@ func TestCodexGoalLauncherV0RechazaSpecInvalido(t *testing.T) {
 }
 
 func TestCodexGoalLauncherV0LlamaStarterInyectado(t *testing.T) {
-	starter := &recordingCodexGoalStarterV0{}
+	starter := &recordingCodexGoalStarterV0{receipt: CodexGoalStartReceiptV0{
+		Status: orquestagoal.GoalStatusAcceptedV0, ExternalGoalRef: "external-goal-ref-001",
+		RuntimeGenerationRef: "generation-ref-launch-propagation-001",
+	}}
 	launcher := CodexGoalLauncherV0{Starter: starter}
 	receipt, err := launcher.LaunchGoalWorkV0(context.Background(), validCodexGoalSpecV0())
 	if err != nil {
@@ -607,10 +610,39 @@ func TestCodexGoalLauncherV0LlamaStarterInyectado(t *testing.T) {
 	if receipt.ExternalGoalRef != "external-goal-ref-001" {
 		t.Fatalf("external=%q", receipt.ExternalGoalRef)
 	}
+	if receipt.RuntimeGenerationRef != "generation-ref-launch-propagation-001" {
+		t.Fatalf("runtime generation=%q", receipt.RuntimeGenerationRef)
+	}
 	if receipt.ContextBudget.ContextBudgetTotalBytes <= 0 ||
 		receipt.ContextBudget.StaticPromptBytes <= 0 ||
 		receipt.ContextBudget.DynamicContextBytes <= 0 {
 		t.Fatalf("receipt sin context budget: %+v", receipt.ContextBudget)
+	}
+}
+
+func TestCodexGoalLauncherGenerationConflictPersisteLifecycleRunningV0(t *testing.T) {
+	startErr := errors.New("codex_app_server_tmux_generation_conflict")
+	starter := &recordingCodexGoalStarterV0{
+		receipt: CodexGoalStartReceiptV0{
+			Status:               orquestagoal.GoalStatusRunningV0,
+			ExternalGoalRef:      "thread-ref-generation-lifecycle-001",
+			RuntimeGenerationRef: "generation-ref-lifecycle-001",
+			IssueCode:            "codex_app_server_tmux_generation_conflict",
+		},
+		err: startErr,
+	}
+	store := &recordingGoalStateStoreForGenerationTestV0{}
+	result, err := orquestagoal.StartGoalWorkV0(context.Background(), orquestagoal.GoalWorkStartRequestV0{
+		RunRef: "run-ref-generation-lifecycle-001", Spec: validCodexGoalSpecV0(),
+	}, orquestagoal.GoalWorkLifecyclePortsV0{
+		Launcher: CodexGoalLauncherV0{Starter: starter}, StateStore: store,
+	})
+	if !errors.Is(err, startErr) || !starter.called || store.saves != 1 ||
+		result.State.Status != orquestagoal.GoalStatusRunningV0 ||
+		result.State.LaunchReceipt.RuntimeGenerationRef != "generation-ref-lifecycle-001" ||
+		!hasGoalIssueCodeForTestV0(result.State.LaunchReceipt.Issues, "codex_app_server_tmux_generation_conflict_retryable") ||
+		hasGoalIssueCodeForTestV0(result.State.LaunchReceipt.Issues, "goal_launch_partial_error") {
+		t.Fatalf("result=%+v err=%v saves=%d", result, err, store.saves)
 	}
 }
 
@@ -700,15 +732,17 @@ Assertion failed: !(err != 0) || (err == -1 && (*__errno_location ()) == 1)`,
 
 func TestBuildCodexGoalObservationRequestV0ValidaRefs(t *testing.T) {
 	packet, issues := BuildCodexGoalObservationRequestV0(orquestagoal.GoalObservationRequestV0{
-		GoalRef:         "goal-ref-001",
-		ExternalGoalRef: "external-goal-ref-001",
+		GoalRef:              "goal-ref-001",
+		ExternalGoalRef:      "external-goal-ref-001",
+		RuntimeGenerationRef: "generation-ref-build-observation-001",
 	})
 	if len(issues) != 0 {
 		t.Fatalf("issues=%v", issues)
 	}
 	if packet.SchemaVersion != CodexGoalObservationRequestSchemaV0 ||
 		packet.GoalRef != "goal-ref-001" ||
-		packet.ExternalGoalRef != "external-goal-ref-001" {
+		packet.ExternalGoalRef != "external-goal-ref-001" ||
+		packet.RuntimeGenerationRef != "generation-ref-build-observation-001" {
 		t.Fatalf("packet=%+v", packet)
 	}
 
@@ -738,8 +772,9 @@ func TestCodexGoalObserverV0LlamaObserverInyectado(t *testing.T) {
 	observer := CodexGoalObserverV0{Observer: backend}
 
 	result, err := observer.ObserveGoalWorkV0(context.Background(), orquestagoal.GoalObservationRequestV0{
-		GoalRef:         "goal-ref-001",
-		ExternalGoalRef: "external-goal-ref-001",
+		GoalRef:              "goal-ref-001",
+		ExternalGoalRef:      "external-goal-ref-001",
+		RuntimeGenerationRef: "generation-ref-observer-propagation-001",
 	})
 
 	if err != nil {
@@ -747,6 +782,7 @@ func TestCodexGoalObserverV0LlamaObserverInyectado(t *testing.T) {
 	}
 	if !backend.called ||
 		backend.lastRequest.GoalRef != "goal-ref-001" ||
+		backend.lastRequest.RuntimeGenerationRef != "generation-ref-observer-propagation-001" ||
 		result.Status != orquestagoal.GoalStatusCompleteV0 ||
 		result.GoalRef != "goal-ref-001" ||
 		result.ExternalGoalRef != "external-goal-ref-001" ||
@@ -877,6 +913,34 @@ type recordingCodexGoalStarterV0 struct {
 	err     error
 }
 
+type recordingGoalStateStoreForGenerationTestV0 struct {
+	state orquestagoal.GoalWorkStateV0
+	saves int
+}
+
+func (store *recordingGoalStateStoreForGenerationTestV0) SaveGoalWorkStateV0(
+	_ context.Context,
+	state orquestagoal.GoalWorkStateV0,
+) error {
+	normalized, err := orquestagoal.NewGoalWorkStateV0(state)
+	if err != nil {
+		return err
+	}
+	store.state = normalized
+	store.saves++
+	return nil
+}
+
+func (store *recordingGoalStateStoreForGenerationTestV0) LoadGoalWorkStateV0(
+	_ context.Context,
+	runRef string,
+) (orquestagoal.GoalWorkStateV0, error) {
+	if store.state.RunRef != strings.TrimSpace(runRef) {
+		return orquestagoal.GoalWorkStateV0{}, errors.New("goal_state_not_found")
+	}
+	return store.state, nil
+}
+
 func (starter *recordingCodexGoalStarterV0) StartCodexGoalV0(context.Context, CodexGoalStartPacketV0) (CodexGoalStartReceiptV0, error) {
 	starter.called = true
 	if starter.err != nil {
@@ -920,6 +984,20 @@ func TestCodexGoalObserverV0PropagaErrorBackend(t *testing.T) {
 
 	if err == nil || result.Status != orquestagoal.GoalStatusInvalidV0 ||
 		!hasGoalIssueCodeForTestV0(result.Issues, ErrCodexGoalObservationRejectedV0) {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+}
+
+func TestCodexGoalObserverV0GenerationConflictExactoEsRetryableSinIssuesV0(t *testing.T) {
+	backend := &recordingCodexGoalObserverV0{
+		err:     errors.New("generation rotated"),
+		receipt: CodexGoalObservationReceiptV0{IssueCode: "codex_app_server_tmux_generation_conflict"},
+	}
+	result, err := (CodexGoalObserverV0{Observer: backend}).ObserveGoalWorkV0(context.Background(), orquestagoal.GoalObservationRequestV0{
+		GoalRef: "goal-ref-generation-conflict-001", ExternalGoalRef: "thread-ref-generation-conflict-001",
+		RuntimeGenerationRef: "generation-ref-generation-conflict-001",
+	})
+	if err == nil || result.Status != orquestagoal.GoalStatusRunningV0 || len(result.Issues) != 0 || result.ExternalGoalRef != "thread-ref-generation-conflict-001" {
 		t.Fatalf("result=%+v err=%v", result, err)
 	}
 }
