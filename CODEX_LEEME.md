@@ -1837,3 +1837,21 @@ semánticas `run_ref/run_refs`, nunca por prefijos. Incluye adversariales
 `request-ref-*`, colon, scope `field:...`, limpieza causal/QueueRef, legacy y
 E2E MCP real → REST → cliente web → viewmodel. Required tests: paquetes MCP,
 web y app-codex-stack completos; no patrones vacíos.
+
+### 2026-07-13T04:01Z — directriz causal Sonyi: 502 vuelve a ser reproducible en HEAD estable
+
+En `314b956a3e3d7bbb095a107944374ff2d392f4cb`, sin cambio de `HEAD` ni de los
+write-sets externos (solo permanece `?? .claude/`), el focal de drain volvió a
+fallar dos veces consecutivas:
+
+```text
+GOPROXY=off go test -mod=vendor -count=1 ./modulos/orquesta-app-codex-stack -run '^TestDrainRunV0IgnoraArtefactoYaRegistradoPorLoopGestionado$'
+--- FAIL: TestDrainRunV0IgnoraArtefactoYaRegistradoPorLoopGestionado
+web status=502
+```
+
+Logs reproducibles: `/tmp/sonyi-review-TestDrainRunV0IgnoraArtefactoYaRegistradoPorLoopGestionado-20260713T040130Z-{1,2}.log` (exit 1; 1.135s y 1.090s).
+
+**Directriz:** localizar y demostrar el error interno o la espera causal que hace que el POST de drain/idempotencia proyecte 502 en este camino real. La hipótesis de contención del runner no basta por sí sola: debe explicar estas dos ejecuciones focales consecutivas y conservar la invariancia del artefacto ya registrado.
+
+**Aceptación:** con `GOPROXY=off`, `-mod=vendor`, `-count=1` y `HEAD` inmutable, el focal pasa dos veces consecutivas y luego pasa `go test -mod=vendor -count=1 ./modulos/orquesta-app-codex-stack`; la evidencia conserva el error/duración causal de cualquier fallo. Prohibido maquillar con retry, skip, aumentar u ocultar timeout, relajar el 502/assertion, cambiar HTML/transporte o alterar la fixture para esquivar la reingesta duplicada.
