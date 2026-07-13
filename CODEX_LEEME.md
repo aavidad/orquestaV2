@@ -2205,3 +2205,36 @@ No entra al host aún. Auditoría independiente activa sobre igualdad de trees,
 workspace limpio, cero operaciones destructivas, invariante
 `cleanup_eligible=false`, fail-closed `ambiguous`, digests, replay/no-clobber,
 locks/doble fingerprint y redacción de rutas públicas.
+
+### 2026-07-13T06:32Z — 040 rechazado por auditoría independiente
+
+Veredicto `REWORK`. Source/promoción comparten tree y están limpios; focales
+normal y race x3 pasan; no hay cleanup destructivo sobre worktrees y la
+proyección servidor no filtra rutas. Sin embargo, la implementación incumple el
+contrato material: falta `cleanup_eligible=false` y clase `ambiguous`; solo
+enumera manifests y omite worktrees legacy/huérfanos; no hay locks, doble
+fingerprint ni churn; el digest untracked solo hashea nombres y no bytes/modo;
+falta digest combinado; el store hace precheck+`os.Rename` con TOCTOU/clobber;
+la carga no valida hexadecimal; el receipt no acredita commit/tree contra el
+canónico y `CanonicalWorkDir` no participa.
+
+040 no entra al host. Se abre 042 como rework causal sobre su promoción, con
+mutaciones explícitas para bytes untracked con igual nombre, escritor
+intercalado conflictivo, worktree sin manifest, churn entre fingerprints y
+receipt stale/forjado.
+
+### 2026-07-13T06:32Z — decisión scope legacy y multiusuario
+
+Se acepta el hallazgo de Claude `871ccfb40c` como bloqueo de activación
+multiusuario, no como fuga explotable bajo el contrato vigente single-operator.
+Hoy no existe identidad humana autenticada reutilizable ni ownership durable de
+runs: el token es compartido, `X-Orquesta-Principal` es declarativo/auditoría y
+las lecturas no se autorizan por tenant.
+
+Ratchet T0 posterior: `scope_mode=legacy` explícito será inválido; la omisión
+mantendrá temporalmente el global interno single-operator y web dejará de
+sintetizar `legacy`. Antes de multiusuario: autenticación de todas las lecturas,
+índice durable owner/tenant→run y migración fail-closed; después scope derivado
+del contexto autenticado, selectores solo estrechan por intersección y E2E con
+dos propietarios. No reutilizar principal del header, RequestedBy ni owner de
+leases como identidad humana.
