@@ -1705,3 +1705,23 @@ de runs conocidos, filtrar payloads por claves semánticas `run_ref/run_refs`,
 parsear el primer token tras `run:`, limpiar causal/QueueRef y usar required
 tests que ejecuten casos reales. Se lanzará después de integrar y reconstruir
 el 035, para que su cierre use CAS real y no repita el bloqueo del wrapper.
+
+### 2026-07-13T04:14Z — acreditación 034 y excepción bootstrap 035
+
+- **034 ACCEPTED:** source `dc95af2c`, promoción runner `e94bd264`. Auditoría
+  independiente normal verde; `-race -count=3` verde en `57.974s`; focales
+  server/app verdes. Alias exacto, matriz negativa, evidence y cleanup
+  verificados. Puede integrarse.
+- **035 integrable como bootstrap mínimo:** forwarding CAS correcto; conflicto
+  y error no despiertan; éxito notifica cambio/observación y solo despierta
+  supervisor global si el estado guardado es terminal. Focal normal y race
+  pasan manualmente; full `cmd/orquesta-server` y E2E pasaron en la atestación.
+  El único receipt rojo fue el focal CAS con log vacío y exit 1; no reproduce.
+  Se conserva ese receipt y se exige re-attestation tras reconstruir.
+
+Excepción causal documentada: el servidor vivo no puede auto-promover 035
+porque el wrapper viejo elimina precisamente la interfaz CAS que necesita el
+rework para cerrar. Se permite una única integración local del workspace ya
+producido y auditado, sin alterar código ni receipts; después se reconstruye el
+Docker y se reobserva/reacredita por API. No crea precedente para integrar
+otros goals bloqueados.
