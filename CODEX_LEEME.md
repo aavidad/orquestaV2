@@ -2505,6 +2505,12 @@ resultado heredado. Si no cumple, se conserva el error. Tests HTTP real, sucesor
 válido y control negativo. Prioridad: 046 → 045 T5.1a → 041 allowlist → 043
 legacy ratchet; todos esperan a que 044/rework-1 libere el runner.
 
+Condición añadida tras contraste Claude: el 200 parcial recuperado debe declarar
+inequívocamente `degraded/recovered_from_error`, `successor_ref` y evidencia del
+snapshot durable. El error raw se conserva en diagnóstico interno durable/log
+redactado, nunca en la superficie pública. No convertir un 500 opaco en 200
+mudo; el director ve a la vez el sucesor accionable y la degradación aguas arriba.
+
 ### 2026-07-13T06:32Z — decisión scope legacy y multiusuario
 
 Se acepta el hallazgo de Claude `871ccfb40c` como bloqueo de activación
