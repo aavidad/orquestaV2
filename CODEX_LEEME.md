@@ -2589,6 +2589,35 @@ usar forced-stop por goal con hermanos activos. El arreglo debe ser
 thread-scoped; shutdown de daemon solo global o cuando no haya hermanos, y un
 cambio de generación debe ser transient/retryable, nunca persistir `invalid`.
 
+### 2026-07-13T09:15+02:00 — 041/048 promovidos; stop compartido 050 activo
+
+041 allowlist cerró `complete/accepted` y promovió source `9925ea3838` a canon
+runner `da9d89b9fb`; ambos source/promotion comparten tree `36dd093756`. Cambia
+siete archivos (`+184/-65`) y declara focal/full/race pasados. No se integra aún
+al host: auditoría independiente verifica autoridad única, cuatro callers, guard
+AST real, códigos/orden, alias Go y defensa configuración/TOCTOU. El issue
+`required_test_evidence_missing` que aún aparece en status contradice la lista de
+attestations de closure y debe clasificarse como proyección stale o defecto real.
+
+048 recovery1 cerró `complete/accepted`, source `b468664b6b`, promoción combinada
+`086f352f2d`; conserva el trabajo de retry1 y declara CAS/digest/matriz completos.
+También queda sujeto a auditoría independiente antes de entrar al host. El canon
+runner `086f352f2d` ya contiene 041+048; el host sigue deliberadamente en
+`d442ac283e` hasta que ambas revisiones terminen.
+
+Sobre ese canon se lanzó 050 por API pública para corregir el bug de daemon
+compartido. Orquesta agrupó las dos subtareas en un único goal por su cruce
+arquitectónico:
+
+- run `request-ref-orquesta-shared-appserver-thread-stop-and-generation-20260713-050`;
+- goal `goal-ref-task-autoprogramming-004cd2567f78-g01`;
+- external `019f5a49-5b62-74b3-9ca2-2c8a8cede011`.
+
+050 debe separar stop thread-scoped de shutdown global y tratar el cambio de
+generation como retryable/metadata-only, con concurrencia Stop(B)||Observe(A),
+race e integración de dos goals. No usar forced-stop por goal mientras 050 no
+quede promovido, auditado, integrado y desplegado.
+
 T5.1a promovió en el runner `60683f4cc59334da234f17e59312dc3dd19031b3`
 (source `ba039d7922`) y pasó focal, paquete y race, pero no se integra: claim y
 verified solo atan task/voter/family, el handler contrasta únicamente task, voto
