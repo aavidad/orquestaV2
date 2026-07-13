@@ -143,7 +143,10 @@ func TestLocalGoalRequiredTestAttestationAdapterV0RepeatedCloseDoesNotLeakFDs(t 
 	if err != nil {
 		t.Fatal(err)
 	}
-	if after != before {
+	// Subprocess descriptors from the git fixture may be reaped asynchronously
+	// between samples. A lower count is therefore harmless; only growth proves
+	// that repeated adapter construction leaked descriptors.
+	if after > before {
 		t.Fatalf("temporary adapter fd leak: before=%d after=%d", before, after)
 	}
 }
