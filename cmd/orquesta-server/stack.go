@@ -419,6 +419,11 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 	if err != nil {
 		return orquestaappcodexstack.StackV0{}, err
 	}
+	autonomyProgramStore, err := newAutonomyProgramStoreV0(serverConfig.StateDir)
+	if err != nil {
+		return orquestaappcodexstack.StackV0{}, err
+	}
+	autonomyProgramExecutor := newAutonomyProgramExecutorV0(autonomyProgramStore)
 	stack, err := orquestaappcodexstack.BuildStackV0(orquestaappcodexstack.ConfigV0{
 		Enabled:        true,
 		Timeout:        30 * time.Second,
@@ -497,6 +502,7 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 		DocumentTextExtract: documentTextExtract,
 		DataProfile:         dataProfile,
 		Council:             councilExecutor,
+		AutonomyProgram:     autonomyProgramExecutor,
 		CouncilDoubleReview: orquestaappcodexstack.CouncilDoubleReviewConfigV0{
 			Required: projectConfig.Council.DoubleReviewRequired,
 			Reviews:  councilExecutor.reviews,

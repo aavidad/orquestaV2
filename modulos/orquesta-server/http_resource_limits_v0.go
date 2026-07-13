@@ -12,10 +12,10 @@ const (
 	DefaultHTTPReadHeaderTimeoutV0 = 5 * time.Second
 	DefaultHTTPReadTimeoutV0       = 20 * time.Second
 	// Control-plane requests can supervise real agents; 30s cuts valid work before ACK.
-	DefaultHTTPWriteTimeoutV0      = 10 * time.Minute
-	DefaultHTTPIdleTimeoutV0       = 60 * time.Second
-	DefaultHTTPMaxHeaderBytesV0    = 1 << 20
-	DefaultHTTPControlBodyBytesV0  = 256 << 10
+	DefaultHTTPWriteTimeoutV0     = 10 * time.Minute
+	DefaultHTTPIdleTimeoutV0      = 60 * time.Second
+	DefaultHTTPMaxHeaderBytesV0   = 1 << 20
+	DefaultHTTPControlBodyBytesV0 = 256 << 10
 )
 
 type HTTPResourceLimitsV0 struct {
