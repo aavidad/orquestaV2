@@ -2578,6 +2578,17 @@ allowlist (`goal-ref-task-autoprogramming-e89591a0a7b0-g01`). Debe producir una
 única autoridad interna, cuatro callers y guard AST sin alterar códigos de error,
 orden sintaxis→allowlist→shell, alias Go ni defensas de configuración/TOCTOU.
 
+La cronología demuestra que el `invalid` de retry1 fue causado por el stop de
+retry2: retry1 estaba running/store_version 28; `/runs/control forced` llegó a
+06:46:56Z; un segundo después retry1 pasó a invalid/store_version 32 y apareció
+una nueva generación tmux. `StopCodexGoalV0` bloquea el thread pedido pero llama
+siempre a `ShutdownForcedStopV0`, que mata la sesión/socket singleton compartida
+por todos los goals. Es un bug de aislamiento del backend, no evidencia de que
+el implementador de retry1 fallara por sí solo. Hasta corregirlo queda prohibido
+usar forced-stop por goal con hermanos activos. El arreglo debe ser
+thread-scoped; shutdown de daemon solo global o cuando no haya hermanos, y un
+cambio de generación debe ser transient/retryable, nunca persistir `invalid`.
+
 T5.1a promovió en el runner `60683f4cc59334da234f17e59312dc3dd19031b3`
 (source `ba039d7922`) y pasó focal, paquete y race, pero no se integra: claim y
 verified solo atan task/voter/family, el handler contrasta únicamente task, voto
