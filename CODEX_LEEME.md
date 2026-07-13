@@ -3422,3 +3422,51 @@ La inspección del backlog fijó el orden causal posterior:
 revisada. 057 debe preceder cualquier frente nuevo cuya intención extensa no
 quepa en el contrato actual. Claude no ha emitido una objeción nueva tras leer
 `9b62cf3b90`.
+
+### 2026-07-13T11:40Z — self-results 051/053 rechazados y reworks causales
+
+Las revisiones RO encontraron defectos antes de aceptar los resultados:
+
+- 051R5 dejó el guard real en una heurística AST eludible y puso `go/types` en
+  un test aislado que no ejecutaba esa lógica. Debilitó assertions de argv0,
+  omitió symlink/CLOEXEC/argv0/Run-Close race, no cableó `Close` desde las
+  factories y conservó un fallback de resolución sin autoridad FD. Su result
+  declaró complete con quince paths reales, solo dos artifact paths y seis
+  tests sin evidence refs. Se enviaron mensajes MCP `...051r5...-01/-02`; la
+  atestación/observer abrió el successor
+  `goal-ref-task-autoprogramming-c4f97f67dfd6-g01-rework-1`. Como empezó
+  parcial sin los hallazgos, recibió además
+  `message-ref-051r5-rework1-exact-20260713-02`. No se promociona el padre.
+- 053R5 construyó canonical/catalog mediante helpers solo llamados por tests;
+  no existía consumidor productivo single-read. `BuildCatalogV0` no comparaba
+  Presence contra reflection, una hoja desconocida heredaba una policy default
+  permisiva y faltaba el caso explícito `api_key_file` no sensible. El
+  self-result afirmó lo contrario con `test_receipts=null`, commit/tree nulos.
+  La atestación race independiente terminó exit 1 con conflicto de generación
+  y forced cleanup bajo estado compartido. El observer publicó
+  `closure_status=blocked`, artifact terminal faltante y replan. Los mensajes
+  MCP `...053r5...-01/-02/-03` preservan hallazgos y prueba roja.
+
+El supervisor legacy rechazó correctamente supervisar 053 goal-first y
+redirigió a `orquesta.apps.observe_director_goal.v0`; no se forzó stop ni se
+inventó terminal. Al no existir aún successor automático, se lanzó por
+`orquesta.autoprogramming.prepare_run.v0` un rework causal explícito:
+
+- run `request-ref-orquesta-config-foundation-causal-rework-20260713-053r6`;
+- goal `goal-ref-task-autoprogramming-03765ba1a394-g01`;
+- external goal `019f5b4a-fd8e-7d40-b4d4-cd9cd5776eda`;
+- fuente RO workspace `bd86be70e908cc40b92c165f7cf63db4`, digest de
+  contenido `e082a84a5acf629b...`, diecisiete paths.
+
+053R6 exige loader productivo de lectura única, Presence exacta, policy
+explícita fail-closed, `api_key_file` no sensible, fixtures de generación
+herméticas, receipt completo y dos revisores. Fue aceptado y está `running`
+sobre la base canónica `46738ea15...`; un auditor RO separado vigila el diff.
+
+También quedaron redactadas y medidas, pero no lanzadas, las solicitudes 056 y
+057. 056 ocupa siete paths y su intención proyectada usa 223/600 runas; prueba
+Stop(B)||Observe(A), target stopped + shared backend preserved y cero shutdown.
+057 ocupa veinte paths, 583/600 runas y doce criterios totales; crea el
+manifest completo durable, propaga ref/hash y verifica materialización RO
+antes de RPC. Sus BASE_SHA/BASE12 se fijarán solo tras integrar y desplegar los
+reworks actuales, evitando una base obsoleta.
