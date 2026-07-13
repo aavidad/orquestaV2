@@ -11,7 +11,7 @@ Fuente vinculante: `docs/auditorias/codigo_inalcanzable_2026-07-12.txt`, generad
 | 5 | `modulos/orquesta-app-planner/unit_lookup_v0.go` — `FindAppPlanUnitByTaskRefV0` | RETIRAR | Wrapper exportado sin caller; la búsqueda causal ya vive en `findAppPlanUnitByTaskRefV0`, usada por `WorkProfileForUnitV0` y resolvers. `WorkProfileForUnitV0` conserva la validación de `task_ref` y `delivery_ref`. |
 | 6 | `modulos/orquesta-cli/public_error_catalog_v0.go` — `CliPublicErrorCodeKnownV0` | BORRAR | Función sin caller verificable; ser exportada no demuestra consumidor externo ni contrato de puerto. |
 | 7 | `modulos/orquesta-core-leases/lease_evaluator_v0.go` — `AgentLeaseEvaluationInputV0.Validate` | CONECTAR | Validación de entrada de leases; dejarla sin caller permite evaluar expiraciones con datos inválidos y pierde la garantía H2. |
-| 8 | `modulos/orquesta-core-leases/lease_evaluator_v0.go` — `DecodeAgentTimeoutAssessmentV0` | CONECTAR | Decodificación de assessment de timeout; debe entrar en la ruta real de reclaim/lease para validar la decisión recibida. |
+| 8 | `modulos/orquesta-core-leases/lease_evaluator_v0.go` — `DecodeAgentTimeoutAssessmentV0` | RETIRAR | No existe frontera JSON de assessment: la ruta real produce el tipo validado en `EvaluateAgentLeaseV0`, lo transforma a `AgentLeaseExpiredV0` y valida ese contrato durable antes del replay. Serializar y decodificar internamente sería wiring cosmético. |
 | 9 | `modulos/orquesta-core/puertos_salida_events_v0.go` — `OrquestaEventPublishErrorV0.Error` | CONSERVAR | Método requerido por `error`; deadcode no ve necesariamente la invocación polimórfica. |
 | 10 | `modulos/orquesta-core/puertos_salida_governance_v0.go` — `GovernanceCatalogErrorV0.Error` | CONSERVAR | Implementación del contrato estándar `error`, consumible por callers externos. |
 | 11 | `modulos/orquesta-core/puertos_salida_persistence_v0.go` — `PersistenceRepositoryErrorV0.Error` | CONSERVAR | Método de interfaz `error`; eliminarlo rompería el contrato de errores tipados. |
@@ -106,8 +106,8 @@ Fuente vinculante: `docs/auditorias/codigo_inalcanzable_2026-07-12.txt`, generad
 
 ## Resumen
 
-- CONECTAR: 37 entradas.
-- BORRAR/RETIRAR: 23 entradas (1–6, 15, 18, 21, 28–29, 34, 55–56, 67, 73, 78–82, 98–99). Son símbolos sin caller ni contrato verificable; no se confunden con métodos de puerto ni errores tipados. La retirada de la fila 5 solo elimina el wrapper exportado: conserva el helper privado y su validación causal en los consumidores existentes.
+- CONECTAR: 36 entradas.
+- BORRAR/RETIRAR: 24 entradas (1–6, 8, 15, 18, 21, 28–29, 34, 55–56, 67, 73, 78–82, 98–99). Son símbolos sin caller ni contrato verificable; no se confunden con métodos de puerto ni errores tipados. La retirada de la fila 8 conserva la ruta tipada validada y el evento durable de expiración; la fila 5 conserva el helper privado y su validación causal en los consumidores existentes.
 - CONSERVAR: 39 entradas.
 
 ## Método de evidencia
