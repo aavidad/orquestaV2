@@ -2131,3 +2131,19 @@ git diff --check / status: limpio
 El frente de proyección status web/MCP queda acreditado. El siguiente orden es
 reconstruir/sincronizar el runner local y lanzar por API la Fase A de catálogo
 sin autoridad de cleanup; después, consolidación allowlist y T5.1a.
+
+### 2026-07-13T06:17Z — runner reconstruido y catálogo Fase A activo
+
+Imagen/servidor local reconstruidos sobre `a14c7f1933`; proyecto canónico
+sincronizado por bundle Git temporal porque el bind mount pertenece al UID
+aislado 10001 (no se relajaron permisos). Health verde; `readonly=true`,
+`privileged=false`, sin Docker socket y sin mounts nuevos.
+
+Fase A lanzada por `POST /api/v0/autoprogramming/prepare-run`, no por entrada
+interna: run
+`request-ref-goal-workspace-reconciliation-catalog-phase-a-20260713-040`, goal
+`goal-ref-task-autoprogramming-4694f57d0f73-g01`, base exacta `a14c7f1933`.
+Write-set de nueve archivos y tres focales (normal, race y evidencia servidor).
+Contrato duro: todas las filas `cleanup_eligible=false`; no remove/prune/archive/
+force/rename destructivo; churn o evidencia incompleta => `ambiguous`; no rutas
+absolutas públicas. No se solapa otro goal pesado hasta su cierre/auditoría.
