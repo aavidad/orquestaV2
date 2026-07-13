@@ -493,6 +493,10 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 		DocumentTextExtract: documentTextExtract,
 		DataProfile:         dataProfile,
 		Council:             councilExecutor,
+		CouncilDoubleReview: orquestaappcodexstack.CouncilDoubleReviewConfigV0{
+			Required: projectConfig.Council.DoubleReviewRequired,
+			Reviews:  councilExecutor.reviews,
+		},
 		CouncilGate: orquestaappcodexstack.CouncilGateConfigV0{
 			Required: projectConfig.Council.GateRequired,
 			Decision: councilExecutor.receipts,

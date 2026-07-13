@@ -16,6 +16,10 @@ const (
 
 	MCPCouncilActionAssignV0 = "assign"
 	MCPCouncilActionDecideV0 = "decide"
+	// MCPCouncilActionReviewV0 anota la revision de un par sobre una entrega
+	// material. Sin esta accion la doble revision seria inalcanzable: una regla
+	// que nadie puede satisfacer bloquea el trabajo en vez de protegerlo.
+	MCPCouncilActionReviewV0 = "review"
 
 	MCPCouncilErrPortUnavailableV0 = "council_port_unavailable"
 	MCPCouncilErrActionRequiredV0  = "council_action_required"
@@ -50,6 +54,16 @@ type MCPCouncilBallotV0 struct {
 	Reason    string `json:"reason,omitempty"`
 }
 
+type MCPCouncilReviewV0 struct {
+	RunRef       string `json:"run_ref"`
+	ReviewerRef  string `json:"reviewer_ref"`
+	FamilyRef    string `json:"family_ref,omitempty"`
+	Verdict      string `json:"verdict"`
+	EvidenceRef  string `json:"evidence_ref"`
+	AuthorRef    string `json:"author_ref"`
+	AuthorFamily string `json:"author_family,omitempty"`
+}
+
 type MCPCouncilToolInputV0 struct {
 	SchemaVersion    string                 `json:"schema_version,omitempty"`
 	RequestRef       string                 `json:"request_ref,omitempty"`
@@ -61,6 +75,7 @@ type MCPCouncilToolInputV0 struct {
 	Members          []MCPCouncilMemberV0   `json:"members,omitempty"`
 	Overrides        []MCPCouncilOverrideV0 `json:"overrides,omitempty"`
 	Ballots          []MCPCouncilBallotV0   `json:"ballots,omitempty"`
+	Review           *MCPCouncilReviewV0    `json:"review,omitempty"`
 }
 
 type MCPCouncilSeatV0 struct {
@@ -89,6 +104,7 @@ type MCPCouncilToolResultV0 struct {
 	Blocks          int                                    `json:"blocks,omitempty"`
 	Total           int                                    `json:"total,omitempty"`
 	Rationale       string                                 `json:"rationale,omitempty"`
+	ReviewsRecorded int                                    `json:"reviews_recorded,omitempty"`
 	ErroresPublicos []MCPToolCapabilitiesListPublicErrorV0 `json:"errores_publicos,omitempty"`
 }
 

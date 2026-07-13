@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	council "orquesta/modulos/orquesta-council"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
@@ -33,6 +34,14 @@ type councilPersistentOverridesV0 struct {
 // interno al exterior.
 func councilPublicErrorClassifierV0(err error) (string, string, bool) {
 	switch {
+	case errors.Is(err, council.ErrRevisionDelAutorV0):
+		return "council_revision_del_autor_no_acredita", "review", true
+	case errors.Is(err, council.ErrRevisionDuplicadaV0):
+		return "council_revision_duplicada", "review", true
+	case errors.Is(err, council.ErrRevisionSinEvidenciaV0):
+		return "council_revision_sin_evidencia", "review", true
+	case errors.Is(err, ErrCouncilReviewsCorruptV0):
+		return "council_reviews_corrupt", "review", true
 	case errors.Is(err, ErrCouncilBudgetUnobservableV0):
 		return "council_budget_unobservable", "members", true
 	case errors.Is(err, ErrCouncilReceiptConflictV0):
@@ -72,6 +81,7 @@ func councilPublicErrorClassifierV0(err error) (string, string, bool) {
 type councilExecutorV0 struct {
 	overridesPath string
 	receipts      councilReceiptStoreV0
+	reviews       councilReviewStoreV0
 	members       orquestamcp.MCPCouncilMemberSourcePortV0
 }
 
@@ -82,9 +92,14 @@ func newCouncilExecutorV0(stateDir string) (councilExecutorV0, error) {
 	if err != nil {
 		return councilExecutorV0{}, err
 	}
+	reviews, err := newCouncilReviewStoreV0(stateDir)
+	if err != nil {
+		return councilExecutorV0{}, err
+	}
 	return councilExecutorV0{
 		overridesPath: filepath.Join(stateDir, councilOverridesFileNameV0),
 		receipts:      receipts,
+		reviews:       reviews,
 	}, nil
 }
 
@@ -160,6 +175,12 @@ func (executor councilExecutorV0) ConveneCouncilV0(
 	// Idempotencia: una decision ya tomada no se vuelve a tomar. Reconvocar el
 	// mismo council_ref devuelve el recibo durable, no un veredicto nuevo, que
 	// podria contradecir al anterior.
+	// Anotar una revision de par sobre una entrega no convoca consejo ni reparte
+	// roles: es un acto distinto y se atiende antes.
+	if input.Action == orquestamcp.MCPCouncilActionReviewV0 {
+		return executor.recordReviewV0(input)
+	}
+
 	fingerprint := councilInputFingerprintV0(input)
 	if input.Action == orquestamcp.MCPCouncilActionDecideV0 {
 		receipt, ok, err := executor.receipts.LoadV0(input.CouncilRef)
@@ -228,6 +249,33 @@ func (executor councilExecutorV0) ConveneCouncilV0(
 	default:
 		return orquestamcp.MCPCouncilToolResultV0{}, fmt.Errorf("council_action_desconocida: %q", input.Action)
 	}
+}
+
+func (executor councilExecutorV0) recordReviewV0(
+	input orquestamcp.MCPCouncilToolInputV0,
+) (orquestamcp.MCPCouncilToolResultV0, error) {
+	if input.Review == nil {
+		return orquestamcp.MCPCouncilToolResultV0{}, fmt.Errorf("council_review_requerido")
+	}
+	review := *input.Review
+	if err := executor.reviews.RecordReviewV0(
+		review.RunRef,
+		review.AuthorRef,
+		review.AuthorFamily,
+		councilReviewReceiptRecordV0{
+			ReviewerRef: strings.TrimSpace(review.ReviewerRef),
+			FamilyRef:   strings.TrimSpace(review.FamilyRef),
+			Verdict:     strings.TrimSpace(review.Verdict),
+			EvidenceRef: strings.TrimSpace(review.EvidenceRef),
+		},
+	); err != nil {
+		return orquestamcp.MCPCouncilToolResultV0{}, err
+	}
+	_, _, reviews, err := executor.reviews.ObserveDeliveryReviewsV0(context.Background(), review.RunRef)
+	if err != nil {
+		return orquestamcp.MCPCouncilToolResultV0{}, err
+	}
+	return orquestamcp.MCPCouncilToolResultV0{ReviewsRecorded: len(reviews)}, nil
 }
 
 func resultFromReceiptV0(receipt councilReceiptV0) orquestamcp.MCPCouncilToolResultV0 {

@@ -8,8 +8,11 @@ package main
 // miembros el gate obligatorio bloquearia toda creacion. Se activa cuando esa
 // fuente exista.
 type serverProjectConfigCouncilV0 struct {
-	GateRequired bool                                 `json:"gate_required,omitempty"`
-	Members      []serverProjectConfigCouncilMemberV0 `json:"members,omitempty"`
+	GateRequired bool `json:"gate_required,omitempty"`
+	// DoubleReviewRequired exige dos revisiones independientes antes de cerrar una
+	// entrega material. Va aqui y NO en una env nueva: el presupuesto esta en 426.
+	DoubleReviewRequired bool                                 `json:"double_review_required,omitempty"`
+	Members              []serverProjectConfigCouncilMemberV0 `json:"members,omitempty"`
 }
 
 // serverProjectConfigCouncilMemberV0 declara QUIEN puede sentarse en el consejo y
