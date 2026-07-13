@@ -10,11 +10,13 @@ import (
 )
 
 const (
-	materialProgressGovernedEvidenceV0 = "evidence-ref-material-progress-governed-v0"
-	materialProgressWarningCodeV0      = "material_progress_warning"
-	materialProgressReplanCodeV0       = "material_progress_replan_required"
-	materialProgressHardStopCodeV0     = "material_progress_hard_stop_required"
-	materialProgressNoDiffStopCodeV0   = "material_progress_no_diff_stop_required"
+	materialProgressGovernedEvidenceV0   = "evidence-ref-material-progress-governed-v0"
+	materialProgressWarningCodeV0        = "material_progress_warning"
+	materialProgressReplanCodeV0         = "material_progress_replan_required"
+	materialProgressHardStopCodeV0       = "material_progress_hard_stop_required"
+	materialProgressNoDiffStopCodeV0     = "material_progress_no_diff_stop_required"
+	materialProgressContextMissingCodeV0 = "material_progress_context_unavailable"
+	materialProgressContextMissingRefV0  = "context-ref-material-progress-unavailable"
 )
 
 func (runtime *RuntimeV0) reconcileMaterialProgressV0(
@@ -63,16 +65,19 @@ func (runtime *RuntimeV0) governMaterialProgressObservationV0(
 		}
 	}
 	observation.EvidenceRefs = compactConfigStringsV0(append(observation.EvidenceRefs, materialProgressGovernedEvidenceV0, saved.LastCheckpointRef))
+	if strings.TrimSpace(evidence.ContextRevisionRef) == "" {
+		observation = materialProgressAdvisoryObservationV0(observation, saved, materialProgressContextMissingCodeV0)
+	}
 	switch saved.LastDecision.Action {
 	case orquestaautoprogramming.MaterialProgressActionWarningV0:
-		return materialProgressWarningObservationV0(observation, saved), true
+		return materialProgressAdvisoryObservationV0(observation, saved, materialProgressWarningCodeV0), true
 	case orquestaautoprogramming.MaterialProgressActionReplanRequiredV0:
 		if saved.LastCheckpoint.MaterialClass == orquestaautoprogramming.MaterialProgressClassNoneV0 {
-			return runtime.stopForMaterialProgressV0(ctx, observation, saved, materialProgressNoDiffStopCodeV0, false), true
+			return materialProgressAdvisoryObservationV0(observation, saved, materialProgressNoDiffStopCodeV0), true
 		}
-		return runtime.stopForMaterialProgressV0(ctx, observation, saved, materialProgressReplanCodeV0, true), true
+		return materialProgressAdvisoryObservationV0(observation, saved, materialProgressReplanCodeV0), true
 	case orquestaautoprogramming.MaterialProgressActionHardStopRequiredV0:
-		return runtime.stopForMaterialProgressV0(ctx, observation, saved, materialProgressHardStopCodeV0, false), true
+		return materialProgressAdvisoryObservationV0(observation, saved, materialProgressHardStopCodeV0), true
 	default:
 		return observation, true
 	}
@@ -88,7 +93,7 @@ func (runtime *RuntimeV0) nextMaterialProgressStateV0(
 	segment := orquestaautoprogramming.MaterialProgressSegmentV0{
 		StartSequence:          1,
 		StartTokensAccumulated: result.UsageObservation.TokensAccumulated,
-		ContextRevisionRef:     strings.TrimSpace(evidence.ContextRevisionRef),
+		ContextRevisionRef:     materialProgressContextRevisionRefV0(evidence.ContextRevisionRef),
 		ReplansUsed:            materialProgressReplansUsedV0(goalState.Spec),
 	}
 	expectedVersion := uint64(0)
@@ -101,9 +106,13 @@ func (runtime *RuntimeV0) nextMaterialProgressStateV0(
 		expectedVersion = current.StoreVersion
 		sequence = current.LastCheckpoint.Sequence + 1
 	}
+	contextRevisionRef := materialProgressContextRevisionRefV0(evidence.ContextRevisionRef)
+	if strings.TrimSpace(evidence.ContextRevisionRef) == "" && strings.TrimSpace(segment.ContextRevisionRef) != "" {
+		contextRevisionRef = segment.ContextRevisionRef
+	}
 	checkpoint := orquestaautoprogramming.MaterialProgressCheckpointV0{
 		Sequence: sequence, TokensAccumulated: result.UsageObservation.TokensAccumulated,
-		ContextRevisionRef: strings.TrimSpace(evidence.ContextRevisionRef),
+		ContextRevisionRef: contextRevisionRef,
 		MaterialClass:      evidence.MaterialClass, EvidenceRefs: compactConfigStringsV0(evidence.EvidenceRefs),
 	}
 	if expectedVersion > 0 && materialProgressCheckpointObservationEqualV0(current.LastCheckpoint, checkpoint) {
@@ -119,12 +128,19 @@ func (runtime *RuntimeV0) nextMaterialProgressStateV0(
 		RunRef:        goalState.RunRef, GoalRef: goalState.GoalRef, Policy: policy,
 		Segment: decision.Segment, LastCheckpoint: checkpoint, LastDecision: decision,
 		BaselineRef: strings.TrimSpace(evidence.BaselineRef), WriteSetSHA256: strings.TrimSpace(evidence.WriteSetSHA256),
-		ContextRevisionRef: strings.TrimSpace(evidence.ContextRevisionRef), ObservedAt: observedAt,
+		ContextRevisionRef: contextRevisionRef, ObservedAt: observedAt,
 		EvidenceRefs: compactConfigStringsV0(append(evidence.EvidenceRefs, result.UsageObservation.EvidenceRefs...)),
 	}
 	state.LastCheckpointRef = orquestaautoprogramming.MaterialProgressCheckpointRefV0(state.RunRef, state.GoalRef, state.BaselineRef, state.WriteSetSHA256, checkpoint)
 	state.LastActionIdempotencyKey = orquestaautoprogramming.MaterialProgressActionIdempotencyKeyV0(state.RunRef, state.GoalRef, state.LastCheckpointRef, decision.Action)
 	return state, expectedVersion, false
+}
+
+func materialProgressContextRevisionRefV0(ref string) string {
+	if ref = strings.TrimSpace(ref); ref != "" {
+		return ref
+	}
+	return materialProgressContextMissingRefV0
 }
 
 func materialProgressCheckpointObservationEqualV0(
@@ -180,8 +196,14 @@ func materialProgressReplansUsedV0(spec orquestagoal.GoalWorkSpecV0) int {
 	return used
 }
 
-func materialProgressWarningObservationV0(observation orquestagoal.GoalWorkObserveResultV0, state orquestaautoprogramming.MaterialProgressStateV0) orquestagoal.GoalWorkObserveResultV0 {
-	observation.Result.Issues = append(observation.Result.Issues, orquestagoal.GoalWorkIssueV0{Code: materialProgressWarningCodeV0, Field: "goal_progress"})
+func materialProgressAdvisoryObservationV0(
+	observation orquestagoal.GoalWorkObserveResultV0,
+	state orquestaautoprogramming.MaterialProgressStateV0,
+	code string,
+) orquestagoal.GoalWorkObserveResultV0 {
+	// Material progress is telemetry only. Its heuristics (diff, tokens and
+	// context) must never change a Goal's lifecycle or initiate rework.
+	observation.Result.Issues = append(observation.Result.Issues, orquestagoal.GoalWorkIssueV0{Code: code, Field: "goal_progress"})
 	observation.Result.EvidenceRefs = compactConfigStringsV0(append(observation.Result.EvidenceRefs, state.LastCheckpointRef))
 	return observation
 }

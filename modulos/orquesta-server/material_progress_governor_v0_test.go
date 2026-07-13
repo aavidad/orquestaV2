@@ -11,13 +11,13 @@ import (
 )
 
 func TestMaterialProgressGovernorV0WarningNoDetieneV0(t *testing.T) {
-	runtime, progress, stopper := materialProgressRuntimeForTestV0(orquestaautoprogramming.MaterialProgressClassNoneV0, nil, true)
+	runtime, progress := materialProgressRuntimeForTestV0(orquestaautoprogramming.MaterialProgressClassNoneV0, nil)
 	_ = runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(80, false))
 	result := runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(105, false))
 
 	observation := result.Observations[0]
-	if observation.Terminal || stopper.uniqueStops != 0 || !materialProgressResultHasIssueForTestV0(observation.Result, materialProgressWarningCodeV0) {
-		t.Fatalf("observation=%+v stopper=%+v", observation, stopper)
+	if observation.Terminal || observation.NeedsRework || !materialProgressResultHasIssueForTestV0(observation.Result, materialProgressWarningCodeV0) {
+		t.Fatalf("observation=%+v", observation)
 	}
 	if progress.state.LastDecision.Action != orquestaautoprogramming.MaterialProgressActionWarningV0 {
 		t.Fatalf("progress=%+v", progress.state)
@@ -25,106 +25,100 @@ func TestMaterialProgressGovernorV0WarningNoDetieneV0(t *testing.T) {
 }
 
 func TestMaterialProgressGovernorV0PrimeraMuestraAltaFijaBaselineV0(t *testing.T) {
-	runtime, progress, stopper := materialProgressRuntimeForTestV0(orquestaautoprogramming.MaterialProgressClassNoneV0, nil, true)
+	runtime, progress := materialProgressRuntimeForTestV0(orquestaautoprogramming.MaterialProgressClassNoneV0, nil)
 	result := runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(80, false))
 
 	observation := result.Observations[0]
-	if observation.Terminal || stopper.uniqueStops != 0 || progress.state.StoreVersion != 1 ||
+	if observation.Terminal || observation.NeedsRework || progress.state.StoreVersion != 1 ||
 		progress.state.Segment.StartSequence != 1 || progress.state.Segment.StartTokensAccumulated != 80 ||
 		progress.state.LastCheckpoint.Sequence != 1 || progress.state.LastDecision.TokensWithoutMaterial != 0 ||
 		progress.state.LastDecision.Action != orquestaautoprogramming.MaterialProgressActionContinueV0 ||
 		progress.state.LastDecision.MaterialProgressed {
-		t.Fatalf("observation=%+v progress=%+v stopper=%+v", observation, progress.state, stopper)
+		t.Fatalf("observation=%+v progress=%+v", observation, progress.state)
 	}
 }
 
-func TestMaterialProgressGovernorV0SegundaMuestraSinDiffDetieneV0(t *testing.T) {
-	runtime, _, stopper := materialProgressRuntimeForTestV0(orquestaautoprogramming.MaterialProgressClassNoneV0, nil, true)
+func TestMaterialProgressGovernorV0SegundaMuestraSinDiffSigueAdvisoryV0(t *testing.T) {
+	runtime, _ := materialProgressRuntimeForTestV0(orquestaautoprogramming.MaterialProgressClassNoneV0, nil)
 	first := runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(50, false))
-	if first.Observations[0].Terminal || stopper.uniqueStops != 0 {
-		t.Fatalf("first=%+v stopper=%+v", first, stopper)
+	if first.Observations[0].Terminal || first.Observations[0].NeedsRework {
+		t.Fatalf("first=%+v", first)
 	}
 	result := runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(100, false))
 
 	observation := result.Observations[0]
-	if !observation.Terminal || observation.NeedsRework || stopper.uniqueStops != 1 ||
-		observation.State.LastClosure == nil || observation.State.LastClosure.NeedsRework ||
+	if observation.Terminal || observation.NeedsRework || observation.State.Status != orquestagoal.GoalStatusRunningV0 ||
+		observation.State.LastClosure != nil ||
 		!materialProgressResultHasIssueForTestV0(observation.Result, materialProgressNoDiffStopCodeV0) {
-		t.Fatalf("observation=%+v stopper=%+v", observation, stopper)
+		t.Fatalf("observation=%+v", observation)
 	}
 }
 
-func TestMaterialProgressGovernorV0ReincidenciaExigeHardStopSinReworkV0(t *testing.T) {
-	runtime, _, stopper := materialProgressRuntimeForTestV0(orquestaautoprogramming.MaterialProgressClassNoneV0, nil, true)
-	_ = runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(50, true))
-	result := runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(100, true))
-
-	observation := result.Observations[0]
-	if !observation.Terminal || observation.NeedsRework || stopper.uniqueStops != 1 ||
-		observation.State.LastClosure == nil || observation.State.LastClosure.NeedsRework ||
-		!materialProgressResultHasIssueForTestV0(observation.Result, materialProgressHardStopCodeV0) {
-		t.Fatalf("observation=%+v stopper=%+v", observation, stopper)
+func TestMaterialProgressGovernorV0ContextoOmitidoSigueAdvisoryV0(t *testing.T) {
+	runtime, _ := materialProgressRuntimeForTestV0(orquestaautoprogramming.MaterialProgressClassNoneV0, nil)
+	runtime.materialProgressEvidence = materialProgressEvidenceForTestV0{
+		class: orquestaautoprogramming.MaterialProgressClassNoneV0, omitContext: true,
 	}
-}
-
-func TestMaterialProgressGovernorV0DiffVerificadoRenuevaTramoV0(t *testing.T) {
-	runtime, progress, stopper := materialProgressRuntimeForTestV0(
-		orquestaautoprogramming.MaterialProgressClassDiffV0,
-		[]string{"evidence-ref-diff-verified"},
-		true,
-	)
-	result := runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(80, false))
-
-	if result.Observations[0].Terminal || stopper.uniqueStops != 0 ||
-		!progress.state.LastDecision.MaterialProgressed || progress.state.Segment.StartTokensAccumulated != 80 {
-		t.Fatalf("result=%+v progress=%+v stopper=%+v", result, progress.state, stopper)
-	}
-}
-
-func TestMaterialProgressGovernorV0StopNoConfirmadoNoPublicaTerminalV0(t *testing.T) {
-	runtime, _, stopper := materialProgressRuntimeForTestV0(orquestaautoprogramming.MaterialProgressClassNoneV0, nil, false)
 	_ = runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(50, false))
 	result := runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(100, false))
 
 	observation := result.Observations[0]
-	if observation.Terminal || observation.State.Status != orquestagoal.GoalStatusRunningV0 || stopper.uniqueStops != 1 ||
-		!materialProgressResultHasIssueForTestV0(observation.Result, materialProgressNoDiffStopCodeV0+"_stop_unconfirmed") {
-		t.Fatalf("observation=%+v stopper=%+v", observation, stopper)
+	if observation.Terminal || observation.NeedsRework || observation.State.Status != orquestagoal.GoalStatusRunningV0 ||
+		observation.State.LastClosure != nil || !materialProgressResultHasIssueForTestV0(observation.Result, materialProgressNoDiffStopCodeV0) ||
+		!materialProgressResultHasIssueForTestV0(observation.Result, materialProgressContextMissingCodeV0) {
+		t.Fatalf("observation=%+v", observation)
 	}
 }
 
-func TestMaterialProgressGovernorV0ReplayReutilizaIdempotenciaV0(t *testing.T) {
-	runtime, _, stopper := materialProgressRuntimeForTestV0(orquestaautoprogramming.MaterialProgressClassNoneV0, nil, false)
+func TestMaterialProgressGovernorV0ReincidenciaSigueAdvisoryV0(t *testing.T) {
+	runtime, _ := materialProgressRuntimeForTestV0(orquestaautoprogramming.MaterialProgressClassNoneV0, nil)
+	_ = runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(50, true))
+	result := runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(100, true))
+
+	observation := result.Observations[0]
+	if observation.Terminal || observation.NeedsRework || observation.State.Status != orquestagoal.GoalStatusRunningV0 ||
+		observation.State.LastClosure != nil ||
+		!materialProgressResultHasIssueForTestV0(observation.Result, materialProgressHardStopCodeV0) {
+		t.Fatalf("observation=%+v", observation)
+	}
+}
+
+func TestMaterialProgressGovernorV0DiffVerificadoRenuevaTramoV0(t *testing.T) {
+	runtime, progress := materialProgressRuntimeForTestV0(
+		orquestaautoprogramming.MaterialProgressClassDiffV0,
+		[]string{"evidence-ref-diff-verified"},
+	)
+	result := runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(80, false))
+
+	if result.Observations[0].Terminal || result.Observations[0].NeedsRework ||
+		!progress.state.LastDecision.MaterialProgressed || progress.state.Segment.StartTokensAccumulated != 80 {
+		t.Fatalf("result=%+v progress=%+v", result, progress.state)
+	}
+}
+
+func TestMaterialProgressGovernorV0ReplayConservaTelemetriaAdvisoryV0(t *testing.T) {
+	runtime, _ := materialProgressRuntimeForTestV0(orquestaautoprogramming.MaterialProgressClassNoneV0, nil)
 	_ = runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(50, false))
 	input := materialProgressActiveResultForTestV0(100, false)
 	first := runtime.reconcileMaterialProgressV0(context.Background(), input)
 	second := runtime.reconcileMaterialProgressV0(context.Background(), input)
 
-	if first.Observations[0].Terminal || second.Observations[0].Terminal || stopper.uniqueStops != 1 || stopper.calls != 2 {
-		t.Fatalf("first=%+v second=%+v stopper=%+v", first, second, stopper)
+	if first.Observations[0].Terminal || second.Observations[0].Terminal ||
+		first.Observations[0].NeedsRework || second.Observations[0].NeedsRework ||
+		!materialProgressResultHasIssueForTestV0(first.Observations[0].Result, materialProgressNoDiffStopCodeV0) ||
+		!materialProgressResultHasIssueForTestV0(second.Observations[0].Result, materialProgressNoDiffStopCodeV0) {
+		t.Fatalf("first=%+v second=%+v", first, second)
 	}
 }
 
 func TestMaterialProgressGovernorV0SinUsoTipadoConservaFallbackV0(t *testing.T) {
-	runtime, progress, stopper := materialProgressRuntimeForTestV0(orquestaautoprogramming.MaterialProgressClassNoneV0, nil, true)
+	runtime, progress := materialProgressRuntimeForTestV0(orquestaautoprogramming.MaterialProgressClassNoneV0, nil)
 	input := materialProgressActiveResultForTestV0(0, false)
 	input.Observations[0].Result.UsageObservation = orquestagoal.GoalUsageObservationV0{}
 	result := runtime.reconcileMaterialProgressV0(context.Background(), input)
 	if goalObservationHasEvidenceV0(result.Observations[0], materialProgressGovernedEvidenceV0) ||
-		progress.state.StoreVersion != 0 || stopper.calls != 0 {
-		t.Fatalf("result=%+v progress=%+v stopper=%+v", result, progress.state, stopper)
-	}
-}
-
-func TestMaterialProgressGovernorV0FalloPersistenciaGoalNoPublicaTerminalV0(t *testing.T) {
-	runtime, _, stopper := materialProgressRuntimeForTestV0(orquestaautoprogramming.MaterialProgressClassNoneV0, nil, true)
-	_ = runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(50, false))
-	runtime.goalStateStore.(*materialProgressGoalStoreForTestV0).saveErr = errors.New("save_failed")
-	result := runtime.reconcileMaterialProgressV0(context.Background(), materialProgressActiveResultForTestV0(100, false))
-	observation := result.Observations[0]
-	if observation.Terminal || stopper.uniqueStops != 1 ||
-		!materialProgressResultHasIssueForTestV0(observation.Result, materialProgressNoDiffStopCodeV0+"_state_save_failed") {
-		t.Fatalf("observation=%+v stopper=%+v", observation, stopper)
+		progress.state.StoreVersion != 0 {
+		t.Fatalf("result=%+v progress=%+v", result, progress.state)
 	}
 }
 
@@ -149,21 +143,28 @@ func (store *materialProgressStoreForTestV0) CompareAndSwapMaterialProgressState
 }
 
 type materialProgressEvidenceForTestV0 struct {
-	class orquestaautoprogramming.MaterialProgressClassV0
-	refs  []string
+	class       orquestaautoprogramming.MaterialProgressClassV0
+	refs        []string
+	omitContext bool
 }
 
 func (source materialProgressEvidenceForTestV0) ClassifyMaterialProgressV0(context.Context, orquestaautoprogramming.MaterialProgressEvidenceRequestV0) (orquestaautoprogramming.MaterialProgressEvidenceV0, error) {
 	return orquestaautoprogramming.MaterialProgressEvidenceV0{
 		Verified: true, MaterialClass: source.class, EvidenceRefs: source.refs,
 		BaselineRef: "baseline-ref-material-progress", WriteSetSHA256: strings.Repeat("a", 64),
-		ContextRevisionRef: "context-ref-material-progress",
+		ContextRevisionRef: source.contextRevisionRef(),
 	}, nil
 }
 
+func (source materialProgressEvidenceForTestV0) contextRevisionRef() string {
+	if source.omitContext {
+		return ""
+	}
+	return "context-ref-material-progress"
+}
+
 type materialProgressGoalStoreForTestV0 struct {
-	state   orquestagoal.GoalWorkStateV0
-	saveErr error
+	state orquestagoal.GoalWorkStateV0
 }
 
 func (store *materialProgressGoalStoreForTestV0) LoadGoalWorkStateV0(context.Context, string) (orquestagoal.GoalWorkStateV0, error) {
@@ -171,38 +172,17 @@ func (store *materialProgressGoalStoreForTestV0) LoadGoalWorkStateV0(context.Con
 }
 
 func (store *materialProgressGoalStoreForTestV0) SaveGoalWorkStateV0(_ context.Context, state orquestagoal.GoalWorkStateV0) error {
-	if store.saveErr != nil {
-		return store.saveErr
-	}
 	store.state = state
 	return nil
 }
 
-type materialProgressStopperForTestV0 struct {
-	requested   bool
-	calls       int
-	uniqueStops int
-	keys        map[string]bool
-}
-
-func (stopper *materialProgressStopperForTestV0) RequestGoalCooperativeStopV0(_ context.Context, request GoalCooperativeStopRequestV0) (GoalCooperativeStopResultV0, error) {
-	stopper.calls++
-	if !stopper.keys[request.IdempotencyKey] {
-		stopper.keys[request.IdempotencyKey] = true
-		stopper.uniqueStops++
-	}
-	return GoalCooperativeStopResultV0{Requested: stopper.requested, EvidenceRefs: []string{"evidence-ref-stop-confirmed"}}, nil
-}
-
-func materialProgressRuntimeForTestV0(class orquestaautoprogramming.MaterialProgressClassV0, refs []string, stopConfirmed bool) (*RuntimeV0, *materialProgressStoreForTestV0, *materialProgressStopperForTestV0) {
+func materialProgressRuntimeForTestV0(class orquestaautoprogramming.MaterialProgressClassV0, refs []string) (*RuntimeV0, *materialProgressStoreForTestV0) {
 	progress := &materialProgressStoreForTestV0{}
-	goalStore := &materialProgressGoalStoreForTestV0{state: materialProgressGoalStateForTestV0(false)}
-	stopper := &materialProgressStopperForTestV0{requested: stopConfirmed, keys: map[string]bool{}}
 	return &RuntimeV0{
 		config:         ConfigV0{AutoprogrammingGoalProgressPolicy: AutoprogrammingGoalProgressPolicyConfigV0{CheckpointOnlyHighConsumptionTokens: 100}},
-		goalStateStore: goalStore, goalStopper: stopper, materialProgressStore: progress,
+		goalStateStore: &materialProgressGoalStoreForTestV0{state: materialProgressGoalStateForTestV0(false)}, materialProgressStore: progress,
 		materialProgressEvidence: materialProgressEvidenceForTestV0{class: class, refs: refs},
-	}, progress, stopper
+	}, progress
 }
 
 func materialProgressActiveResultForTestV0(tokens int64, rework bool) orquestagoal.GoalWorkObserveActiveResultV0 {
