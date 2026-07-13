@@ -3470,3 +3470,37 @@ Stop(B)||Observe(A), target stopped + shared backend preserved y cero shutdown.
 manifest completo durable, propaga ref/hash y verifica materialización RO
 antes de RPC. Sus BASE_SHA/BASE12 se fijarán solo tras integrar y desplegar los
 reworks actuales, evitando una base obsoleta.
+
+### 2026-07-13T11:55Z — frontera real del mailbox de operador
+
+La evidencia viva de 051/053 mostró que los mensajes MCP quedaban `queued`
+pero ningún implementador ni successor los consumía. La auditoría de código
+confirma la causa: `operator_director_mailbox_v0.jsonl` solo tiene writer. No
+existen reader, claim, lease, consume, replay ni delivery ACK. El `ack_ref`
+actual se sintetiza tras el append, por lo que acredita admisión durable, no
+entrega al Director/goal. El test H0d
+`TestOperatorDirectorMailboxStackToolsCallPersisteMensajeV0` solo comprueba una
+línea JSONL y no cubre la mitad de entrega.
+
+La correlación actual tampoco permite reparar leyendo heurísticamente: el
+`target_ref` siempre es `director-ref-orquesta`, `request_ref` se usa de forma
+inconsistente y el goal exacto aparece a veces solo dentro de body/evidence.
+No se parsearán esos campos. El contrato deberá añadir scope explícito
+`run_ref + goal_ref`, separar enqueue ACK de delivery ACK y mantener estados
+event-sourced queued→claimed(lease CAS)→delivered, con dedupe por message_ref,
+orden estable, claim expirado recuperable y replay sin duplicación.
+
+Para un goal app-server activo, la entrega real será un turn adicional bajo la
+misma `RuntimeGenerationRef`; el ACK de delivery nace solo tras StartTurn
+aceptado. Backends no interactivos conservan queued hasta successor. Para
+rework, el successor debe incorporar un bundle completo antes de su CAS de
+estado y confirmar delivery después del CAS.
+
+Se rechaza la solución provisional de copiar bodies a `AcceptanceCriteria`:
+el contrato actual limita cada criterio a 100 runas y el total a 14, por lo que
+volvería a truncar exactamente la instrucción que pretende entregar. El bundle
+será canónico, inmutable, ref+SHA, materializado RO y verificado antes de Start,
+reutilizando la infraestructura de 057. Por ello el orden queda 056 stop
+selectivo → 057 intent/document bundle → entrega mailbox causal → 058 Consejo.
+El E2E obligatorio será MCP tools/call→queued→claim→successor/turn→prompt y
+state→delivery ACK, más replay, aislamiento entre runs y race count 3.
