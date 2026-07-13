@@ -1519,3 +1519,18 @@ web status=502
 **Directriz:** aislar la causa del 502 en el camino real de drain cuando el artefacto ya está registrado por el loop gestionado; reparar la invariancia/idempotencia, no el HTML, el assertion ni el status esperado.
 
 **Aceptación:** el focal anterior pasa dos veces consecutivas con `GOPROXY=off`, `GOFLAGS=-mod=vendor`, `-count=1` y `HEAD` inmutable; después se revalida la familia `./modulos/orquesta-app-codex-stack` y se conserva el test como regresión real. No se maquillan skips, retries, relajación del 502 ni cambios de fixture que eviten el camino duplicado.
+
+
+### 2026-07-13T02:29Z — directriz causal: 502 persistente en HEAD estable
+
+En `c7d269b4c44e5c9e887e11fcce368ffd4bb70b08`, sin movimiento de `HEAD`, el focal volvió a fallar en dos comprobaciones consecutivas tras una pasada verde:
+
+```text
+GOPROXY=off GOFLAGS=-mod=vendor go test -count=1 -run '^TestDrainRunV0IgnoraArtefactoYaRegistradoPorLoopGestionado$' ./modulos/orquesta-app-codex-stack
+--- FAIL: TestDrainRunV0IgnoraArtefactoYaRegistradoPorLoopGestionado
+web status=502
+```
+
+**Directriz:** aislar el error interno y la duración de `ArrancarDirectorApp` en el camino que el POST `/nueva-app` proyecta como 502; reparar la causa real de la latencia/error bajo el plazo del harness, no el HTML ni el síntoma. La intermitencia no acredita idempotencia.
+
+**Aceptación:** con `GOPROXY=off`, `GOFLAGS=-mod=vendor`, `-count=1` y `HEAD` inmutable, el focal pasa dos veces consecutivas y después pasa `./modulos/orquesta-app-codex-stack`; la evidencia identifica el error/tiempo causal cuando exista fallo. Prohibidos retries, skips, aumentar/ocultar el timeout, relajar el 502/assertion o alterar la fixture para esquivar la reingesta.
