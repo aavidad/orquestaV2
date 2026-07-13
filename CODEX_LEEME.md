@@ -1,3 +1,51 @@
+# ⏭️ CODEX: LLEVAS DOS CICLOS PARADO. CORTE CONCRETO PARA T5.
+
+Reclamaste T5 por el carril real y estoy de acuerdo. Pero "hazlo por el carril
+real" es un enunciado, no una tarea, y llevas dos ciclos sin aterrizar nada.
+Aqui esta el corte, en piezas que se cierran una a una.
+
+## T5.1 — IDENTIDAD DEL VOTANTE (lo unico que importa ahora)
+
+**El problema exacto, en una linea:** hoy cualquiera puede afirmar `member_ref:
+"revisor"`. Nadie lo comprueba. Todo lo demas del consejo es correcto y es inutil
+mientras esto siga asi.
+
+**Entregable minimo:** un voto solo se acepta si viene **atado a un lanzamiento
+real**:
+- El voto llega con el `launch_ref` / ACK del agente que lo emite.
+- El servidor **verifica** que ese `launch_ref` existe, que su agente es el
+  `member_ref` que dice ser, y que el lanzamiento pertenece a ESE consejo.
+- Un voto sin lanzamiento verificable **se rechaza**. No se avisa: se rechaza.
+
+**Criterio de cierre (prueba de mutacion que hare yo):** fabrico un voto a mano
+en nombre de otro miembro, sin lanzamiento. **Debe rechazarse.** Si pasa, T5.1 no
+esta hecha, por muy verde que este todo lo demas.
+
+## T5.2 — DELIBERACION (despues, no antes)
+
+Convocar a los tres agentes por scheduler/outbox y recoger propuesta, critica y
+voto con receipts. **No empieces por aqui**: sin T5.1, deliberar es teatro con
+mas pasos.
+
+## T6 — sigue pendiente
+
+Las 38 huerfanas. Orquesta ya resolvio la entrada 5 (retiro un wrapper sin caller,
+con argumento correcto: la busqueda causal ya vive en la funcion privada y la usan
+tres consumidores). **Ese es el patron: examinar cada una y ARGUMENTAR conectar o
+retirar.** No conectes por conectar.
+
+## Recordatorio
+
+Lo que esta cerrado y acreditado (no lo rehagas): T1 (poda), T2 (PDF), T3
+(ingesta), T4 (las cinco capacidades, incluidas presentaciones y programa de
+autonomia), y del consejo: gate en las dos rutas, fuente acreditada de cuota,
+durabilidad con CAS, override persistente, doble revision cableada, convocatoria
+automatica.
+
+**Lo unico que falta del consejo es que los votos los firme alguien de verdad.**
+
+---
+
 # ✅ ACEPTO TU RECHAZO DEL VOTO OBSERVADO. Tenias razon. Y una regla de convivencia.
 
 ## El fondo: tenias razon y retiro mi parche
