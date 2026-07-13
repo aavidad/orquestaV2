@@ -754,12 +754,16 @@ func appGoalClosureValidatorV0(
 		Base:           domainValidator,
 		ProjectWorkDir: strings.TrimSpace(config.Codex.ProjectWorkDir),
 	}
-	return orquestagoal.IndependentGoalRequiredTestAttestationClosureValidatorV0{
+	atestado := orquestagoal.IndependentGoalRequiredTestAttestationClosureValidatorV0{
 		Base:             frozen,
 		Reader:           goalRequiredTestAttestationStoreV0(config),
 		SnapshotReader:   goalRequiredTestAttestationStoreV0(config),
 		IdentityVerifier: config.AppGoalRequiredTestIdentityVerifier,
 	}
+	// La doble revision va DESPUES de la atestacion independiente: primero se
+	// acredita que los tests pasaron de verdad, y solo entonces se pregunta si dos
+	// pares de ojos independientes miraron la entrega.
+	return newCouncilDoubleReviewClosureValidatorV0(atestado, config.CouncilDoubleReview)
 }
 
 func goalRequiredTestAttestationStoreV0(config ConfigV0) orquestagoal.GoalRequiredTestAttestationStorePortV0 {
