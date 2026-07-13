@@ -2652,6 +2652,37 @@ decoder bounded/strict, bytes canónicos+revision, catálogo reflection-complete
 por JSON Pointer y política fail-closed. Persistencia gobernada, API, web y E2E
 siguen como fases causales posteriores; no aceptar foundation como V1-A cerrado.
 
+### 2026-07-13T09:55+02:00 — 050 bloqueado; 051/053 rechazados; 052/054 activos
+
+050 terminó `complete` pero closure `blocked/needs_rework`: la attestation race
+falló y no hubo promoción. La auditoría además confirma que solo implementó el
+primer task: SetGoal(blocked) sin `turn/interrupt` ni observación terminal del
+turn, receipts `TargetGoalStopped/SharedBackendPreserved` más fuertes que la
+evidencia, cero prueba A/B; la generación transitoria no se tocó. El stop
+correcto debe bloquear nuevas turns, interrumpir cada turn activo por
+`turn/interrupt(threadId,turnId)`, reobservar terminal del target y demostrar
+que el sibling/daemon sigue vivo. Global shutdown permanece separado.
+
+051 allowlist security: REWORK pese a package/race verdes. Ejecuta el mismo FD
+abierto, pero solo fija dev+inode (sin SHA), acepta symlink inicial mediante
+EvalSymlinks, descarta la identidad capturada al guardar solo path y el guard AST
+sigue eludible por aliases/keys/calls indirectas. No entra al host.
+
+053 V1-A foundation: REWORK preliminar. El paquete nuevo funciona sobre modelos
+toy, pero no hay catálogo/policies para `serverProjectConfigFileV0`, revision
+canónica del config real ni lectura bounded (usa os.ReadFile antes del límite);
+la validación real solo schema/type y clasifica futuros errores como unsupported
+schema. No confundir scaffolding con foundation acreditada.
+
+Lanzados, como tasks únicos para evitar pérdida de intención:
+
+- 052 observe idempotente/state+marker/file-store: goal
+  `goal-ref-task-autoprogramming-639570679c95-g01`, external
+  `019f5a5d-791f-7cd0-b78a-e2d3a1314f63`.
+- 054 generation transient separado de 050: goal
+  `goal-ref-task-autoprogramming-0a464e31068f-g01`, external
+  `019f5a5e-6700-7bd2-80b5-871fcd4ccf92`.
+
 T5.1a promovió en el runner `60683f4cc59334da234f17e59312dc3dd19031b3`
 (source `ba039d7922`) y pasó focal, paquete y race, pero no se integra: claim y
 verified solo atan task/voter/family, el handler contrasta únicamente task, voto
