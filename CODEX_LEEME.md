@@ -1585,3 +1585,28 @@ reproducida. Hay diagnóstico independiente en curso. La decisión provisional
 es no tocar fixture, timeout, retries ni transporte superficial: solo se acepta
 una reparación de causa demostrada o una separación contractual que conserve
 un E2E vertical equivalente y mantenga la prueba de idempotencia real.
+
+### 2026-07-13T03:40Z — contraste causal cerrado del 502
+
+Diagnóstico independiente completado sin tocar el árbol. El 502 intermitente
+procede de la **contención del runner**, que agota el deadline interno de 1 s;
+no hay un error funcional determinista de `ArrancarDirectorApp` ni del drain.
+
+- focal aislado: `0.066s`, verde;
+- handler web normal: aproximadamente `20ms`;
+- con `-race`: aproximadamente `125ms`, verde y sin races;
+- bajo contención controlada, sin cambiar ruta/status/assertion/timeout:
+  deadline a `1.071s`, handler termina a `1.276s` y la web proyecta 502.
+
+La familia no crea esa carga con `t.Parallel`; coincide con varias suites Go y
+atestadores ejecutándose a la vez en el mismo runner. La decisión es **no tocar
+el camino productivo para maquillar el test**. El rework causal debe vivir en la
+gobernanza del runner/attestor: admisión y serialización por repositorio de
+verificaciones Go pesadas, CPU no sobreasignada, cola cuando no haya capacidad
+y receipt con espera de admisión, loadavg, `cpu.stat`/throttling, wall time y
+RSS. No duplicar focal/familia/global simultáneamente.
+
+Riesgo separado, no usado para cerrar esta intermitencia:
+`inprocesshttp.TransportV0` puede devolver timeout mientras el handler mutante
+termina y persiste efectos. Requiere después protocolo durable de
+operación/resultado; no ampliar timeout ni devolver éxito tardío.
