@@ -2364,6 +2364,15 @@ Declara desde origen `destructive_authorizations kind=replace` solo para store y
 su test; exige manifests confinados, ambiguous, locks/fingerprint total, receipt
 por patch/tree y fsync-dir acreditado. 041/043 siguen congelados mientras corre.
 
+044 produjo un sucesor automático causal
+`goal-ref-task-autoprogramming-b49443f55cc5-g01-rework-1`, mismo run/base y
+spec congelada (incluye las autorizaciones declaradas). El sucesor está running.
+El endpoint `autoprogramming/goal/observe` devuelve 500 genérico
+`autoprogramming_observe_goal_http_error` tanto para el goal previo como para el
+sucesor durante la transición, mientras `autoprogramming/status` sí publica el
+ref/estado correcto. Se observa por status sin relanzar; queda como gap de
+opacidad del observe, separado del trabajo del catálogo.
+
 ### 2026-07-13T06:32Z — decisión scope legacy y multiusuario
 
 Se acepta el hallazgo de Claude `871ccfb40c` como bloqueo de activación
