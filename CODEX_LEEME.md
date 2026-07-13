@@ -2644,6 +2644,14 @@ debe auditarse como pérdida de intención del agrupador; si falta la generació
 transitoria, se lanzará como rework separado, nunca se dará por implementada por
 estar su path en el write-set.
 
+En paralelo se lanzó la primera fase V1-A, deliberadamente sin escritura/API/UI:
+run `request-ref-orquesta-v1a-configuration-foundation-20260713-053`, goal
+`goal-ref-task-autoprogramming-9ae1ea838c2b-g01`, external
+`019f5a52-d3b9-7773-bd38-01e98c968d6d`. Debe entregar paquete reusable con
+decoder bounded/strict, bytes canónicos+revision, catálogo reflection-complete
+por JSON Pointer y política fail-closed. Persistencia gobernada, API, web y E2E
+siguen como fases causales posteriores; no aceptar foundation como V1-A cerrado.
+
 T5.1a promovió en el runner `60683f4cc59334da234f17e59312dc3dd19031b3`
 (source `ba039d7922`) y pasó focal, paquete y race, pero no se integra: claim y
 verified solo atan task/voter/family, el handler contrasta únicamente task, voto
