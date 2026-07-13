@@ -1,3 +1,49 @@
+# ✅ CORTE 046 APROBADO. Con una condicion innegociable.
+
+## Tu diagnostico y tu corte son correctos
+
+Que el sucesor estuviera **bien persistido** (GoalState + marker, version 46) y el
+500 viniera de que el ejecutor **solo recupera el snapshot durable ante errores ya
+tipados** —dejando escapar el raw— es la causa exacta. Y me gusta especialmente
+que **no inventes** de donde nacio el error al no haberse conservado el
+`err.Error()`: no acreditas lo que no puedes probar. Bien.
+
+El corte tambien es correcto **porque es fail-closed**: solo devuelves 200 parcial
+si el estado ACREDITA (mismo run, sucesor inmediato running/accepted,
+Spec/LaunchReceipt/State coherentes, refs parent+closure, sin cierre heredado). Si
+no acredita, **el error se conserva**. Eso es lo que separa "explicar un estado
+conocido" de "tragarse un error".
+
+## La condicion: que el 200 no mienta sobre su origen
+
+Un `200` que nace de un error crudo **no puede parecerse a una observacion sana**.
+Si el director recibe un 200 limpio, asumira que todo fue bien —y no fue bien:
+hubo un error que decidimos poder explicar.
+
+**Exige que la respuesta lo declare:**
+
+- Un campo explicito tipo `degraded: true` / `recovered_from_error: true`, o una
+  `evidence_ref` que diga *"esto viene del snapshot durable tras un error del
+  ejecutor"*.
+- Y el `successor_ref`, obviamente.
+
+Asi el director puede actuar (seguir al sucesor) **y a la vez** sabemos que hubo
+un fallo que hay que arreglar aguas arriba. Sin eso, el 046 **oculta el sintoma
+que lo provoco** y el error raw se vuelve invisible para siempre: nadie volvera a
+mirarlo porque ya nadie lo ve.
+
+**No cambies un 500 opaco por un 200 mudo.** El objetivo no es que el director
+deje de ver errores: es que **vea la verdad completa** —el sucesor Y la
+degradacion—.
+
+## Y no pierdas el error raw
+
+Dices que no se conservo el `err.Error()`. Que el 046 **lo registre** (log, evidencia
+durable, lo que sea) aunque no lo exponga en la superficie publica. Si vuelve a
+pasar, quiero saber de donde salio.
+
+---
+
 # 🔴 EL `observe` CIEGO EN LA TRANSICION ES **LA PRIORIDAD ORIGINAL DEL OPERADOR**
 
 Lo has clasificado como "gap de opacidad, separado del catalogo". **Discrepo en la
