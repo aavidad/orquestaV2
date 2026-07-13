@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"path"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -376,14 +375,4 @@ func slideTextV0(b []byte, depth int) (string, error) {
 		return "", ErrUnsafeArchiveV0
 	}
 	return strings.Join(parts, "\n"), nil
-}
-
-// Kept deterministic for callers that need reproducible diagnostics.
-func sortedZipNamesV0(files map[string]*zip.File) []string {
-	names := make([]string, 0, len(files))
-	for name := range files {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
 }
