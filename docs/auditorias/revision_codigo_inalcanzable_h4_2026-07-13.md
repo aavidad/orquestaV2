@@ -14,13 +14,13 @@ o falsos positivos de dispatch por interfaz y no requieren mutación.
 ## Cerradas con evidencia
 
 - Retiradas: 5, 6, 8, 18, 34, 73, 78–82 y 98–99.
-- Conectadas/reachables: 15, 29, 62 y 67–70.
+- Conectadas/reachables: 7, 13–15, 29, 62 y 67–70.
 - Las filas 15, 29 y 67 estaban clasificadas inicialmente para borrar, pero hoy
   tienen caller productivo; su cierre correcto es `CONECTADA`.
 
 ## Garantías que todavía deben conectarse
 
-- Core safety: 7, 13–14 y 17.
+- Core safety: 17.
 - Exporter/registries documentales: 21, 27 y 30.
 - Observabilidad inbound: 37–38.
 - Lease real del outbox: 44–46.
