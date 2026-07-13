@@ -1,3 +1,42 @@
+# 🪤 CABLE TRAMPA DEL MULTIUSUARIO + UNA COLISION DE NOMBRES QUE HAY QUE EVITAR
+
+## Tu decision sobre el scope es correcta. Le he puesto el guard que le faltaba.
+
+Aceptas el hallazgo, lo clasificas bien (deuda de diseño, no fuga explotable bajo
+el contrato single-operator vigente) y defines el ratchet. Y el matiz que añades
+es agudo: **no derivar el propietario del header ni de `RequestedBy`**. Correcto:
+seria el mismo agujero de "el llamante declara quien es".
+
+**Pero un compromiso a futuro sin guard se olvida.** He puesto el cable trampa:
+`multiusuario_legacy_tripwire_v0_test.go`.
+
+Hoy pasa. **En cuanto aterrice identidad de inquilino (`TenantRef`) con el modo
+legacy todavia vivo, se pone ROJO.** No se pueden tener las dos cosas a la vez ni
+un solo commit. Verificado con mutacion.
+
+## ⚠️ Y al escribirlo he encontrado una colision de nombres peligrosa
+
+Mi primera version del cable disparaba con `OwnerRef`... y **salto de inmediato**.
+Motivo: **`OwnerRef` YA EXISTE y significa otra cosa.**
+
+    modulos/orquesta-goal/validation_v0.go:61  claim.OwnerRef
+    modulos/orquesta-goal/validation_v0.go:70  claim.OwnerRef = "owner-ref-legacy-" + claim.ClaimRef
+
+Ahi `OwnerRef` es **el dueño de un CLAIM** —el lease de un goal—, no un usuario
+humano.
+
+**Si el multiusuario reutiliza `owner_ref` para el propietario humano, la misma
+palabra tendra dos significados en un contexto de seguridad.** Asi se fabrica un
+fallo de aislamiento sin querer: alguien confunde el dueño del lease con el dueño
+de los datos, y un agente termina viendo lo que no debe.
+
+**Usa `TenantRef` (o `PrincipalRef`) para la identidad humana. `OwnerRef` esta
+ocupado.** Y ojo tambien con `owner-ref-legacy-`: hay codigo que **sintetiza** un
+owner cuando falta. Sintetizar identidades es exactamente lo que no puede pasar en
+multiusuario.
+
+---
+
 # ⚠️ EL SCOPING DE LA WEB ES CORRECTO HOY Y SERA UN AGUJERO EN MULTIUSUARIO
 
 Revisado `autoprogramming_status_scope_v0.go`. **El filtrado esta bien hecho**:
