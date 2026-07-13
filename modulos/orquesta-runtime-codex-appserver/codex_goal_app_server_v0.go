@@ -52,24 +52,25 @@ func (backend serverCodexUnavailableGoalBackendV0) ObserveCodexGoalV0(
 }
 
 type serverCodexAppServerGoalBackendV0 struct {
-	Protocol                   serverCodexAppServerProtocolPortV0
-	CWD                        string
-	DiagnosticLogPath          string
-	AuthIssueCode              string
-	Model                      string
-	ReasoningEffort            string
-	Sandbox                    string
-	ApprovalPolicy             string
-	ServiceTier                string
-	Timeout                    time.Duration
-	HighTokenUsageThreshold    int
-	Runtime                    *serverCodexAppServerGoalRuntimeV0
-	BackendShutdown            BackendShutdownPortV0
-	WorkspaceRouter            GoalWorkspaceRouterPortV0
-	workspaceAuthorityVerified bool
-	startRuntimeGenerationRef  string
-	bindExecutionBeforeWork    func(context.Context, string, orquestagoal.GoalExecutionAuthorityV0) error
-	Now                        func() time.Time
+	Protocol                       serverCodexAppServerProtocolPortV0
+	CWD                            string
+	DiagnosticLogPath              string
+	AuthIssueCode                  string
+	Model                          string
+	ReasoningEffort                string
+	Sandbox                        string
+	ApprovalPolicy                 string
+	ServiceTier                    string
+	Timeout                        time.Duration
+	HighTokenUsageThreshold        int
+	Runtime                        *serverCodexAppServerGoalRuntimeV0
+	BackendShutdown                BackendShutdownPortV0
+	WorkspaceRouter                GoalWorkspaceRouterPortV0
+	workspaceAuthorityVerified     bool
+	runtimeGenerationLeaseVerified bool
+	startRuntimeGenerationRef      string
+	bindExecutionBeforeWork        func(context.Context, string, orquestagoal.GoalExecutionAuthorityV0) error
+	Now                            func() time.Time
 }
 
 type serverCodexAppServerProtocolPortV0 interface {
@@ -539,7 +540,8 @@ func (backend serverCodexAppServerGoalBackendV0) ObserveCodexGoalV0(
 		return backend.observeCodexGoalInResolvedWorkspaceV0(ctx, request)
 	}
 	_, lazyProtocol := backend.Protocol.(serverCodexAppServerLazyTmuxProtocolV0)
-	if err := codexAppServerObservationAuthorityV0(request, !lazyProtocol); err != nil {
+	requireDeterministicGeneration := !lazyProtocol && !backend.runtimeGenerationLeaseVerified
+	if err := codexAppServerObservationAuthorityV0(request, requireDeterministicGeneration); err != nil {
 		return codexAppServerObservationReceiptV0(request, orquestagoal.GoalStatusInvalidV0, "codex_app_server_goal_authority_invalid"), err
 	}
 	authority, hasAuthority := codexAppServerExecutionAuthorityFromObservationV0(request)
@@ -563,7 +565,7 @@ func (backend serverCodexAppServerGoalBackendV0) ObserveCodexGoalV0(
 	}
 	if lazy, ok := backend.Protocol.(serverCodexAppServerLazyTmuxProtocolV0); ok {
 		if backend.Runtime == nil || strings.TrimSpace(request.RuntimeGenerationRef) == "" || strings.TrimSpace(request.ExternalGoalRef) == "" {
-			return codexAppServerObservationReceiptV0(request, orquestagoal.GoalStatusRunningV0, codexAppServerTmuxGenerationConflictV0), errors.New(codexAppServerTmuxGenerationConflictV0)
+			return codexAppServerTmuxGenerationConflictObservationReceiptV0(request), errors.New(codexAppServerTmuxGenerationConflictV0)
 		}
 		var receipt orquestaruntimecodexgoal.CodexGoalObservationReceiptV0
 		generationRef, generationErr := lazy.withVerifiedGenerationV0(ctx, request.RuntimeGenerationRef, func(protocol serverCodexAppServerProtocolPortV0, leasedGenerationRef string) error {
@@ -578,13 +580,14 @@ func (backend serverCodexAppServerGoalBackendV0) ObserveCodexGoalV0(
 			}
 			scoped := backend
 			scoped.Protocol = protocol
+			scoped.runtimeGenerationLeaseVerified = true
 			var err error
 			receipt, err = scoped.ObserveCodexGoalV0(ctx, request)
 			return err
 		})
 		if generationErr != nil {
 			if codexAppServerTmuxIsGenerationConflictV0(generationErr) {
-				return codexAppServerObservationReceiptV0(request, orquestagoal.GoalStatusRunningV0, codexAppServerTmuxGenerationConflictV0), generationErr
+				return codexAppServerTmuxGenerationConflictObservationReceiptV0(request), generationErr
 			}
 			return receipt, generationErr
 		}
@@ -593,7 +596,7 @@ func (backend serverCodexAppServerGoalBackendV0) ObserveCodexGoalV0(
 			bound = backend.Runtime.threadBoundToAuthorityV0(request.ExternalGoalRef, authority)
 		}
 		if generationRef != request.RuntimeGenerationRef || !bound {
-			return codexAppServerObservationReceiptV0(request, orquestagoal.GoalStatusRunningV0, codexAppServerTmuxGenerationConflictV0), errors.New(codexAppServerTmuxGenerationConflictV0)
+			return codexAppServerTmuxGenerationConflictObservationReceiptV0(request), errors.New(codexAppServerTmuxGenerationConflictV0)
 		}
 		return receipt, nil
 	}
@@ -1346,6 +1349,18 @@ func codexAppServerObservationReceiptV0(
 		Summary:         summary,
 		EvidenceRefs:    []string{"evidence-ref-codex-app-server-goal-observed"},
 	}
+}
+
+func codexAppServerTmuxGenerationConflictObservationReceiptV0(
+	request orquestaruntimecodexgoal.CodexGoalObservationRequestV0,
+) orquestaruntimecodexgoal.CodexGoalObservationReceiptV0 {
+	receipt := codexAppServerObservationReceiptV0(
+		request,
+		orquestagoal.GoalStatusRunningV0,
+		codexAppServerTmuxGenerationConflictV0,
+	)
+	receipt.IssueCode = codexAppServerTmuxGenerationConflictV0
+	return receipt
 }
 
 func codexGoalWorkStatusIsTerminalV0(status string) bool {

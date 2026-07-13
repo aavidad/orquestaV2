@@ -15,6 +15,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -84,6 +85,93 @@ func TestServerCodexAppServerGoalBackendV0DevuelveGeneracionDeterministaParaAuto
 	authority, _, err := codexAppServerStartAuthorityV0(packet)
 	if err != nil || receipt.RuntimeGenerationRef == "" || receipt.RuntimeGenerationRef != authority.RuntimeGenerationRef {
 		t.Fatalf("receipt=%+v authority=%+v err=%v", receipt, authority, err)
+	}
+	before := len(protocol.calls)
+	invalidGeneration := orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		GoalRef: goalRef, ExternalGoalRef: receipt.ExternalGoalRef,
+		IntentManifestRef: packet.IntentManifestRef, IntentManifestSHA256: packet.IntentManifestSHA256,
+		WorkspaceAuthoritySchemaVersion: orquestagoal.GoalWorkspaceAuthoritySchemaV0,
+		WorkspaceRef:                    packet.WorkspaceRef, ProviderRef: packet.ProviderRef,
+		RuntimeGenerationRef: "generation-ref-direct-protocol-must-stay-deterministic",
+	}
+	if observed, observeErr := backend.ObserveCodexGoalV0(context.Background(), invalidGeneration); observeErr == nil ||
+		observeErr.Error() != "codex_app_server_goal_generation_mismatch" || len(protocol.calls) != before ||
+		observed.Status != orquestagoal.GoalStatusInvalidV0 {
+		t.Fatalf("direct observation accepted physical generation: observed=%+v err=%v calls=%+v", observed, observeErr, protocol.calls)
+	}
+}
+
+func TestServerCodexAppServerGoalBackendV0ObservaAutoridadCompletaBajoLeaseTmuxV0(t *testing.T) {
+	tmuxBackend, _ := newGenerationLeaseBackendForTestV0(t)
+	var terminal atomic.Bool
+	socketPath, records := startCodexAppServerWebSocketScriptWithResponderForTestV0(
+		t,
+		nil,
+		func(conn net.Conn, method string) error {
+			return writeCodexAppServerWebSocketLifecycleResponseForTestV0(conn, method, terminal.Load())
+		},
+	)
+	websocket := serverCodexAppServerWebSocketProtocolV0{SocketPath: socketPath, Timeout: 2 * time.Second}
+	runtime := &serverCodexAppServerGoalRuntimeV0{}
+	root := t.TempDir()
+	backend := serverCodexAppServerGoalBackendV0{
+		Protocol: serverCodexAppServerLazyTmuxProtocolV0{
+			Backend: tmuxBackend, Inner: websocket, Preflight: websocket,
+		},
+		CWD: root, Sandbox: "workspace-write", Runtime: runtime,
+	}
+	t.Cleanup(func() { _ = tmuxBackend.ShutdownV0(context.Background()) })
+	drainRecords := func() {
+		for {
+			select {
+			case <-records:
+			default:
+				return
+			}
+		}
+	}
+
+	goalRef := "goal-ref-lazy-authority-observe-001"
+	packet := orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		GoalRef: goalRef, Objective: "observar una autoridad completa bajo lease tmux",
+		IntentManifestRef:    "intent-manifest-ref-lazy-authority-observe-001",
+		IntentManifestSHA256: strings.Repeat("a", 64),
+		WorkspaceRef:         orquestagoal.GoalWorkspaceRefForGoalV0(goalRef),
+		ProviderRef:          orquestaruntimecodexgoal.CodexGoalProviderRefV0,
+	}
+	started, err := backend.StartCodexGoalV0(context.Background(), packet)
+	if err != nil || !strings.HasPrefix(started.RuntimeGenerationRef, "generation-ref-") {
+		t.Fatalf("start receipt=%+v err=%v", started, err)
+	}
+	drainRecords()
+	request := orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		GoalRef: goalRef, ExternalGoalRef: started.ExternalGoalRef,
+		IntentManifestRef: packet.IntentManifestRef, IntentManifestSHA256: packet.IntentManifestSHA256,
+		WorkspaceAuthoritySchemaVersion: orquestagoal.GoalWorkspaceAuthoritySchemaV0,
+		WorkspaceRef:                    packet.WorkspaceRef, ProviderRef: packet.ProviderRef,
+		RuntimeGenerationRef: started.RuntimeGenerationRef,
+	}
+	running, err := backend.ObserveCodexGoalV0(context.Background(), request)
+	if err != nil || running.Status != orquestagoal.GoalStatusRunningV0 {
+		t.Fatalf("running observation=%+v err=%v", running, err)
+	}
+	drainRecords()
+	runtimeDir := orquestaruntimecodexgoal.CodexGoalRuntimeReceiptRelativeDirV0(goalRef)
+	writeCodexAppServerGoalResultForTestV0(t, root, runtimeDir, goalRef, started.ExternalGoalRef)
+	terminal.Store(true)
+	complete, err := backend.ObserveCodexGoalV0(context.Background(), request)
+	if err != nil || complete.Status != orquestagoal.GoalStatusCompleteV0 {
+		t.Fatalf("complete observation=%+v err=%v", complete, err)
+	}
+
+	withoutRuntime := backend
+	withoutRuntime.Runtime = nil
+	conflict, err := withoutRuntime.ObserveCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalObservationRequestV0{
+		GoalRef: goalRef, ExternalGoalRef: started.ExternalGoalRef,
+	})
+	if err == nil || conflict.Status != orquestagoal.GoalStatusRunningV0 ||
+		conflict.IssueCode != codexAppServerTmuxGenerationConflictV0 {
+		t.Fatalf("generation conflict degraded: receipt=%+v err=%v", conflict, err)
 	}
 }
 
@@ -2046,6 +2134,18 @@ func startCodexAppServerWebSocketScriptWithHookForTestV0(
 	t *testing.T,
 	hook func(string) error,
 ) (string, <-chan codexAppServerWebSocketRecordForTestV0) {
+	return startCodexAppServerWebSocketScriptWithResponderForTestV0(
+		t,
+		hook,
+		writeCodexAppServerWebSocketScriptResponseForTestV0,
+	)
+}
+
+func startCodexAppServerWebSocketScriptWithResponderForTestV0(
+	t *testing.T,
+	hook func(string) error,
+	responder func(net.Conn, string) error,
+) (string, <-chan codexAppServerWebSocketRecordForTestV0) {
 	t.Helper()
 	root := shortUnixSocketTestRootV0(t)
 	socketPath := filepath.Join(root, "codex-app-server.sock")
@@ -2068,7 +2168,7 @@ func startCodexAppServerWebSocketScriptWithHookForTestV0(
 			if err != nil {
 				return
 			}
-			if err := serveCodexAppServerWebSocketCallForTestV0(conn, records, hook); err != nil {
+			if err := serveCodexAppServerWebSocketCallForTestV0(conn, records, hook, responder); err != nil {
 				select {
 				case errs <- err:
 				default:
@@ -2103,6 +2203,7 @@ func serveCodexAppServerWebSocketCallForTestV0(
 	conn net.Conn,
 	records chan<- codexAppServerWebSocketRecordForTestV0,
 	hook func(string) error,
+	responder func(net.Conn, string) error,
 ) error {
 	defer conn.Close()
 	reader := bufio.NewReader(conn)
@@ -2146,7 +2247,30 @@ func serveCodexAppServerWebSocketCallForTestV0(
 			return err
 		}
 	}
-	return writeCodexAppServerWebSocketScriptResponseForTestV0(conn, call.Method)
+	return responder(conn, call.Method)
+}
+
+func writeCodexAppServerWebSocketLifecycleResponseForTestV0(conn net.Conn, method string, terminal bool) error {
+	method = strings.TrimSpace(method)
+	if method == "thread/goal/get" {
+		status := "active"
+		if terminal {
+			status = "complete"
+		}
+		payload := fmt.Sprintf(`{"id":2,"result":{"goal":{"threadId":"thread-ref-websocket-direct-001","status":%q}}}`, status)
+		_, err := conn.Write(codexAppServerTestWebSocketFrameV0([]byte(payload)))
+		return err
+	}
+	if method == "thread/read" {
+		status := "running"
+		if terminal {
+			status = "completed"
+		}
+		payload := fmt.Sprintf(`{"id":2,"result":{"thread":{"id":"thread-ref-websocket-direct-001","status":%q,"turns":[]}}}`, status)
+		_, err := conn.Write(codexAppServerTestWebSocketFrameV0([]byte(payload)))
+		return err
+	}
+	return writeCodexAppServerWebSocketScriptResponseForTestV0(conn, method)
 }
 
 func writeCodexAppServerWebSocketScriptResponseForTestV0(conn net.Conn, method string) error {
