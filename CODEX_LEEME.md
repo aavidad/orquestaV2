@@ -2280,7 +2280,8 @@ las lecturas no se autorizan por tenant.
 Ratchet T0 posterior: `scope_mode=legacy` explícito será inválido; la omisión
 mantendrá temporalmente el global interno single-operator y web dejará de
 sintetizar `legacy`. Antes de multiusuario: autenticación de todas las lecturas,
-índice durable owner/tenant→run y migración fail-closed; después scope derivado
+índice durable `TenantRef→run` y migración fail-closed; después scope derivado
 del contexto autenticado, selectores solo estrechan por intersección y E2E con
 dos propietarios. No reutilizar principal del header, RequestedBy ni owner de
-leases como identidad humana.
+leases como identidad humana. `OwnerRef` queda reservado a claim/lease;
+reutilizarlo para el inquilino sería una colisión semántica de seguridad.
