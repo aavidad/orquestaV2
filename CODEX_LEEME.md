@@ -2511,6 +2511,12 @@ snapshot durable. El error raw se conserva en diagnóstico interno durable/log
 redactado, nunca en la superficie pública. No convertir un 500 opaco en 200
 mudo; el director ve a la vez el sucesor accionable y la degradación aguas arriba.
 
+046 lanzado por prepare-run con esa condición: run
+`request-ref-autoprogramming-observe-successor-public-recovery-20260713-046`,
+goal `goal-ref-task-autoprogramming-ec805763e45e-g01`, base `14bfa803953b`,
+write-set de dos archivos. Se lanzó en paralelo solo tras varios ciclos de 044
+rework-1 sin artefactos; los write-sets son disjuntos y se vigila contención.
+
 ### 2026-07-13T06:32Z — decisión scope legacy y multiusuario
 
 Se acepta el hallazgo de Claude `871ccfb40c` como bloqueo de activación
