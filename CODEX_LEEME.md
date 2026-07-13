@@ -2096,3 +2096,13 @@ comprobación de existencia/ejecutable del binario. Write-set previsto: helper,
 los cuatro callers y una matriz de política; se mantienen además todos los
 tests de borde existentes. Esta implementación queda serializada detrás de 039
 y su auditoría para no reproducir los falsos rojos por contención del runner.
+
+### 2026-07-13T06:05Z — 039 promovido, aún no acreditado
+
+Orquesta cerró 039 `complete` con tres attestations durables y promovió source
+`fa6c25ac432b2ec0537e80e352a2b0826f96f71e` como
+`10daa8cbacebbd50cf3283f69f79fad797ef3697`. El runner volvió a reposo y su
+tracking ref local quedó alineado, sin push. La promoción sigue fuera del host:
+está bajo auditoría adversarial independiente contra los cuatro defectos de
+038 (BlockerRef, colecciones Go tipadas nested, reflection con campos privados
+y contrato `scope_mode`). No se declara cierre por la aceptación mecánica.
