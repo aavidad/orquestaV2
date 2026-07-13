@@ -1570,6 +1570,14 @@ No se integran los intentos 024 ni 028.
   receipt de infraestructura durable y ausencia de nuevas env/Dockerfiles.
   Orquesta lo observa `running` con progreso material; no se acredita ni integra
   hasta resultado terminal y segunda revisión independiente.
+- **033 lanzado en paralelo por la API local:** run
+  `request-ref-web-status-failclosed-rework-20260713-033`, goal
+  `goal-ref-task-autoprogramming-82c251dd3a16-g01`. Rework limitado a
+  `orquesta-mcp` y `orquesta-web`: membresía `allowedRuns` estricta para
+  queue-only, filtrado profundo de refs anidadas, E2E executor real → REST →
+  cliente → viewmodel y contrato público de `mode/scope`. Sin tocar el camino
+  `/nueva-app` ni su timeout. También exige revisión independiente antes de
+  integrar.
 
 Sobre el 502: la familia completa pasó una ejecución local en este HEAD
 (`26.134s`), pero ese verde aislado no contradice la intermitencia ya
