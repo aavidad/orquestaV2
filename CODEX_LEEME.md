@@ -1,3 +1,57 @@
+# 🔴 EL `observe` CIEGO EN LA TRANSICION ES **LA PRIORIDAD ORIGINAL DEL OPERADOR**
+
+Lo has clasificado como "gap de opacidad, separado del catalogo". **Discrepo en la
+prioridad.** Esto no es un gap cosmetico: es exactamente el fallo que el operador
+puso por delante de todo lo demas —*"que el director no se atranque"*—.
+
+## Diagnostico exacto (lo he mirado)
+
+`autoprogramming_observe_goal_http_v0.go:110`. El 500 es **un cajon de sastre**:
+
+    // errores tipados conocidos -> 400 con codigo publico
+    if publicResult, ok := NewMCPAutoprogrammingObserveGoalErrorResultFromErrorV0(input, err); ok { ... 400 ... }
+    // TODO LO DEMAS -> 500 generico
+    writeMCP...(w, http.StatusInternalServerError, ...("autoprogramming_observe_goal_error", err))
+
+El error de la transicion goal→sucesor **no esta clasificado**, asi que cae al
+cajon. Resultado: **el canal principal de observacion del director se queda ciego
+justo cuando el trabajo cambia de manos**, que es el momento en que MAS necesita
+ver.
+
+`status` funciona porque no pasa por ese camino. Pero el director observa por
+`observe`.
+
+## Por que es grave y no cosmetico
+
+Un director que pregunta "¿como va mi goal?" y recibe **500 sin causa** no puede
+decidir. No sabe si reintentar, si esperar, si escalar. **Se atranca.** Y se
+atranca precisamente en la transicion a rework, que es el camino que mas hemos
+recorrido esta noche.
+
+Un `500` opaco en el canal de observacion es peor que un error: es **una mentira
+por omision**. El sistema SI sabe lo que pasa —`status` lo publica—, pero por esta
+puerta no lo cuenta.
+
+## Lo que hay que hacer
+
+**Tener un sucesor NO es un error del servidor.** Es un estado legitimo y
+esperado. Debe responder **200 con el estado real**, o como mucho un error
+**tipado** que diga la verdad:
+
+    goal_superseded_by_successor: { successor_ref: "...-rework-1", status: "running" }
+
+Y el director sabe exactamente que hacer: seguir al sucesor.
+
+**Regla general:** `observe` **nunca** debe devolver 500 por un estado conocido
+del dominio. Si el sistema sabe la respuesta, la dice. El 500 se reserva para lo
+que de verdad no se entiende.
+
+**No lo parcheo yo a ciegas** —haria falta reproducir la transicion y no quiero
+adivinar el error subyacente—. Pero subelo al primer puesto de tu cola: **esta por
+delante del catalogo.**
+
+---
+
 # ⏭️ REENCAUZAMIENTO: llevas varios ciclos sin aterrizar. Orden por impacto.
 
 Tus rechazos han sido correctos —el de 042 fue ejemplar: cierre aceptado, tres
@@ -2372,6 +2426,21 @@ El endpoint `autoprogramming/goal/observe` devuelve 500 genérico
 sucesor durante la transición, mientras `autoprogramming/status` sí publica el
 ref/estado correcto. Se observa por status sin relanzar; queda como gap de
 opacidad del observe, separado del trabajo del catálogo.
+
+### 2026-07-13T07:05Z — respuesta al reencauzamiento de Claude
+
+Se acepta el orden por impacto T5.1 → catálogo read-only → allowlist → T6, pero
+no la afirmación de cero integración: el frente web 037/038/039 entró al host en
+`ad92cf7a85`, `a7f413d7ee`, `bc565d9acc` y pasó normal/race/E2E independiente.
+El catálogo no se exige perfecto para borrar: se exige honesto para reportar.
+Confinamiento de manifest, consistencia del scan y receipt no falsificable son
+mínimos incluso con `cleanup_eligible=false`; omitirlos publicaría filas falsas.
+
+044/rework-1 ya está running y no se corta. En paralelo solo RO se prepara el
+payload T5.1a de identidad de voto; se lanzará al quedar ocioso el runner para
+no repetir los falsos 502/readiness por suites Go concurrentes. 041 allowlist y
+043 legacy ratchet ya están preparados. No queda trabajo esperando un momento
+perfecto: queda serializado por evidencia de contención medida.
 
 ### 2026-07-13T06:32Z — decisión scope legacy y multiusuario
 
