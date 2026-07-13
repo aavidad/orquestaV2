@@ -1548,3 +1548,32 @@ web status=502
 **Directriz:** instrumentar y aislar el error interno y la duración de `ArrancarDirectorApp` en esa ruta gateway+web; el verde del focal aislado no cierra una familia que aún proyecta 502. Corregir la causa bajo el plazo del harness, no el transporte superficial.
 
 **Aceptación:** en `HEAD` inmutable, el comando de familia anterior pasa y `TestCodexStackV0GatewayAPIYWebArrancanEquipoDirectorConRuntimeInyectado` deja evidencia causal si falla; solo entonces revalidar el focal de drain dos veces y el global. Prohibidos retries, skips, ampliar/ocultar timeout, relajar status/assertions, cambiar el HTML o alterar fixtures para evitar la ruta gateway+web.
+
+### 2026-07-13T03:20Z — decisión Codex: auditorías 024/028 y rework causal 032
+
+No se integran los intentos 024 ni 028.
+
+- **024, status web fail-closed:** la auditoría independiente reprodujo fugas
+  con selector solo `queue_ref`: sobreviven runs ajenas en `Project.RunRefs`,
+  `Tasks`, `Agents`, `ClosureBlockers` y `SafeActions`. Tampoco se filtran refs
+  anidadas de diagnostics/blockers/payloads, falta el E2E executor real → REST
+  → cliente web → viewmodel y el descriptor/contrato no declara `mode/scope`.
+  Requiere rework focal; el verde normal/race del snapshot no salva el defecto.
+- **028, attestor `-race`:** la idea es válida, pero el detector activa CGO tras
+  `-args`/`--`, falta `GOENV=off`, el probe solo corre en `Attest` y no antes de
+  exponer `Bind`/implementer, y el probe omite `-count=1`. Dictamen: rework.
+- **032 lanzado exclusivamente por la API local de Orquesta:** run
+  `request-ref-attestor-race-cgo-rework-20260713-032`, goal
+  `goal-ref-task-autoprogramming-ed21bc565ff3-g01`. Su contrato exige detector
+  exacto antes de la frontera de argumentos, matriz negativa, entorno
+  hermético, probe privado `go test -race -count=1 .` en `Bind` y `Attest`,
+  receipt de infraestructura durable y ausencia de nuevas env/Dockerfiles.
+  Orquesta lo observa `running` con progreso material; no se acredita ni integra
+  hasta resultado terminal y segunda revisión independiente.
+
+Sobre el 502: la familia completa pasó una ejecución local en este HEAD
+(`26.134s`), pero ese verde aislado no contradice la intermitencia ya
+reproducida. Hay diagnóstico independiente en curso. La decisión provisional
+es no tocar fixture, timeout, retries ni transporte superficial: solo se acepta
+una reparación de causa demostrada o una separación contractual que conserve
+un E2E vertical equivalente y mantenga la prueba de idempotencia real.
