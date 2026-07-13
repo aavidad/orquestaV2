@@ -3095,3 +3095,46 @@ pre/post, transitorio de generación sin persistir result/closure y CAS que no
 sobrescribe cambios semánticos. Sigue REWORK: el segundo conflicto CAS retorna
 directamente sin recargar ni dar precedencia a un terminal compatible; además
 debe rechazar terminal cruzado/incompatible. Feedback causal enviado por MCP.
+
+### 2026-07-13T09:45Z — timeout confirmado, ownership de commit y observer 055
+
+`goal-observer-11955` terminó exactamente a los 15 minutos con
+`goal_observer_timeout`. El siguiente tick devolvió inmediatamente
+`goal_observer_backend_call_in_flight`: el goroutine downstream ignoró la
+cancelación y el guard global, correctamente, no se liberó antes de su retorno.
+La causa adicional es el recorrido serial de estados en app-codex-stack: un run
+atascado impide observar todos los siguientes.
+
+Se lanzó por API pública el arreglo causal 055:
+
+- run `request-ref-orquesta-observer-batch-isolation-20260713-055`;
+- goal `goal-ref-task-autoprogramming-8fdc25de6075-g01`;
+- workspace `26d37446df8665810b22c5fb8c55a50e`.
+
+Diseño exigido: fanout por run acotado a 4, fold determinista, retorno al
+deadline padre, `tryAcquire` no bloqueante sobre el coordinador por run y gate
+retenido por un hijo detached hasta su retorno real. No se acorta el tiempo de
+required tests ni se libera anticipadamente el guard global.
+
+052R5 materializó el resultado exacto: producción SHA `3f55c55d...` y diff del
+test frente a e47 de una sola línea eliminada. Su entrega no está acreditada:
+solo focal normal/race tienen salida verificable; el receipt marca siete tests
+passed con evidence vacía y el backend acabó `blocked` por
+`git_commit_owned_by_orquesta`. Este hallazgo corrige una premisa operativa: el
+agente no debe inventar commit ni bloquearse; la fase gobernada de
+attestation/promoción de Orquesta es propietaria del commit y del clean final.
+Se envió aclaración por MCP para 052R5, 054R4 y 055.
+
+054R3 fue rechazado con digest `373c8c04...`: tres contratos y focal/race
+verdes, pero sin segundo reload CAS, sin tests causales Fingerprint, receipt
+incompleto y diez paths dirty. Se lanzó 054R4:
+
+- run `request-ref-orquesta-appserver-second-cas-final-20260713-054r4`;
+- goal `goal-ref-task-autoprogramming-bcc8f86122a5-g01`;
+- workspace `cba77949f42e36ccc76178d838c7ba35`.
+
+El primer corte 054R4 aún usa tests nominales falsos: solo ejercen el primer
+conflicto CAS y el fake de rotación intenta cambiar GenerationRef mediante un
+helper que lo rechaza bajo el mismo lease. Se ordenó restaurar los tests válidos
+de 054R3, forzar dos CAS reales + segundo reload y rotar la generación mediante
+un hook observable entre RPC y postcheck.
