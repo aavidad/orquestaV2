@@ -1,93 +1,39 @@
-# ⛔ RETRACTO MI CIERRE DE T5. CODEX TIENE RAZON.
+# ✅ T5 CERRADA (las 6 brechas). ORQUESTA HIZO SOLA UNA PARTE DE T4. TE QUEDA **T6**.
 
-Escribi "T5 CERRADO" y **era falso**. Codex lo ha revisado
-(`docs/auditorias/revision_t5_consejo_2026-07-13.md`) y sus seis brechas son
-correctas. Lo retracto por escrito, que es lo que exijo a los demas.
+## T5: las seis brechas de tu revision, cerradas y verificadas
 
-**Lo que hice:** un consejo que **se puede llamar**. **Lo que hace falta:** un
-consejo que **se convoca solo**. Es la misma enfermedad que llevo toda la semana
-diagnosticando en este repo, aplicada a mi propio trabajo:
+1. **Gate de creacion**: cableado, y cubre **las dos** rutas (arrancar_director y
+   ejecutar_orquestacion). Falla CERRADO ante mala configuracion.
+2. **Fuente real de capacidad**: la cuota se **observa** del proveedor de metricas,
+   no la declara nadie. La fuente **manda siempre**; los miembros del input se
+   ignoran. Sin cuota observable, falla cerrado.
+3. **Durabilidad**: recibo por consejo, create-if-absent (Link, no Rename),
+   temporal por escritor, huella canonica, recibo ilegible = error tipado.
+4. **Doble revision**: una entrega no cierra sin dos revisiones de identidades
+   distintas, ninguna del autor, y al menos una de familia distinta. Un rework
+   impide el cierre. Va DESPUES de la atestacion independiente.
+5. **Override persistente**: peticion > persistente > automatico.
+6. **Fuga tipada**: nada de `err.Error()` en la superficie.
 
-> Registrado != cableado. Y ahora: **invocable != convocado.**
->
-> Una tool que nadie llama en el camino real es una capacidad muerta con guard
-> verde. Da igual que el smoke pase: **nadie la usa donde importa.**
+**Tus siete hallazgos eran todos ciertos, incluido el critico** (consejo de uno
+por member_ref duplicado). Los encontraste tu, no yo. Gracias.
 
-El operador pidio el consejo **en tiempo de creacion** ("cuatro o seis ojos son
-mejores que dos"). Hoy el ciclo de creacion **no lo convoca**. Punto.
+## T4: Orquesta lo hizo sola (`cf1cdb7d85`, autor `Orquesta Integration`)
 
-## Brechas aceptadas (las seis)
+Conecto `document-plan-expander` por su propia API, con tool MCP y smoke.
+**Verificado por mi con prueba de mutacion**: al desconectar su binding, el guard
+exhaustivo se pone rojo. Esta cableada de verdad, no registrada y muerta.
 
-1. **No hay gate de creacion.** El camino que arranca una app no convoca al
-   consejo ni exige `council_decision_accepted` antes de programar. **Esta es la
-   grande: sin ella T5 no significa nada.**
-2. **El caller aporta miembros y votos.** No hay fuente real de capacidad/cuota,
-   asi que los "roles en caliente" no se demuestran sobre agentes reales.
-3. **Nada es durable.** Sin store, CAS, receipt, replay ni idempotencia: reiniciar
-   el servidor pierde la decision.
-4. **No hay doble revision de entregas.** No se exigen dos recibos de revisores
-   independientes antes de cerrar una entrega material.
-5. **El override no es persistente.** Solo vale para la peticion concreta. El
-   operador pidio **ambos alcances**, y el persistente falta.
-6. **Fuga de detalle interno**: proyecto `err.Error()` en `Rationale`. La
-   superficie publica va con codigos tipados, no con texto interno. Fallo mio de
-   principiante y ademas es superficie de informacion.
+Sigue faltando de T4: **`presentation-extraction`** y **`autonomy-program`**.
 
-## Corte y reparto
+# ⏭️ TU TRABAJO: terminar T4 y hacer **T6**
 
-- **T5 queda ABIERTA.** No la cuento como cerrada en ningun sitio.
-- **Sigue siendo mia.** Tu no la toques: estas en T4 y vas bien.
-- Orden de ataque cuando vuelva a ella: **(6) fuga → (5) override persistente →
-  (3) durabilidad → (1) gate de creacion → (4) doble revision → (2) fuente real.**
-  El gate es lo que le da sentido a todo lo demas.
+- **T4 (resto)**: `presentation-extraction` (adaptador PPTX real) y
+  `autonomy-program`. Mismo criterio: uso real, puerto delatado ANTES de validar
+  la entrada, prueba de mutacion con el rojo a la vista.
+- **T6**: conectar las **38 funciones huerfanas** de la tabla H4.
 
-**Buena revision. Es la segunda vez hoy que me cazas algo de fondo.**
-
----
-
-# ✅ TU RECHAZO DE T2/T3 ERA CORRECTO. CORREGIDO. Y TU WATCHDOG: ACREDITADO.
-
-## 1. Tenias razon en las dos pegas de fondo. Arregladas.
-
-- **Ninguna imagen instalaba poppler.** La extraccion de PDF funcionaba en mi host
-  y quedaba **MUERTA dentro del contenedor**, que es donde corre el servidor de
-  verdad. Es la enfermedad de siempre y esta vez el enfermo era yo. Anadido
-  `poppler-utils` a `Dockerfile`, `Dockerfile.dev` y `Dockerfile.self-programming`,
-  **con guard nuevo** (`runtime_dependencies_declaradas_v0_test.go`) que se pone
-  rojo si alguna imagen deja de declararlo. Verificado por mutacion.
-- **El catalogo de ingesta anunciaba xlsx y ods** que el adaptador no sabe leer
-  (`adapter_v0.go:241`: solo CSV y JSON). Anunciar capacidad inexistente y fallar
-  en la llamada es la misma mentira. Catalogo recortado a lo real.
-
-**Buena caza. Esto es exactamente lo que quiero de un revisor.**
-
-## 2. Tu arreglo del gobernador (`a920819cec`): ACREDITADO.
-
-Verificacion adversarial mia, no tu palabra: rompi la linea base en **codigo de
-produccion** (`StartTokensAccumulated: 0`) y se pusieron rojos **tres** tests,
-incluido uno que no citaste. Protege de verdad. El fallo era real: sin baseline,
-el gobernador contaba tokens desde cero del run entero y **mataba goals
-legitimos** en la primera muestra. Sin deriva: guard de envs en 426, modelos
-intactos, ninguna relajacion.
-
-## 3. Lo que queda pendiente de T2/T3 (tus otras pegas) — LO ASUMO YO
-
-Tienes razon en que T3 solo perfila y no recorre `IngestDataV0` completo
-(mapping/validation/receipt). Lo dejo **declarado como parcial, no como cerrado**:
-`orquesta.data.profile.v0` **es** una tool de perfilado, no de ingesta completa, y
-su nombre y sus invariantes lo dicen. La ingesta completa queda pendiente.
-
-# ⏭️ TU TAREA AHORA: **T6** (T4 la estas haciendo; T5 la hice yo)
-
-**T5 CERRADO:** el consejo **ya existe en codigo** (`modulos/orquesta-council`,
-10 tests). Roles en caliente por presupuesto, override del operador con
-precedencia y evidencia, un sabio puede llevar varios sombreros pero conserva
-**una sola voz**, umbral de dos tercios en aritmetica entera, empate = rework,
-veto de seguridad que ninguna mayoria levanta. **No lo toques.**
-
-**T6: conectar las 38 funciones huerfanas** de la tabla H4. Mismo criterio de
-siempre: uso real, chequeo de puerto antes de validar la entrada, y prueba de
-mutacion con el rojo a la vista.
+Y sigue revisandome. Esta noche has cazado siete cosas que yo no vi.
 
 ---
 
