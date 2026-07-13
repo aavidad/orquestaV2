@@ -219,7 +219,7 @@ func mcpTransportToolEnumsV0(name string) map[string][]string {
 	case MCPRunQueuePriorityToolNameV0:
 		return map[string][]string{"action": []string{"rank", "set_priority"}}
 	case MCPDomainWorkToolNameV0:
-		return map[string][]string{"action": []string{"create_job", "submit_artifact"}}
+		return map[string][]string{"action": MCPDomainWorkSupportedActionsV0()}
 	case MCPDocumentPlanExpandToolNameV0:
 		return map[string][]string{"action": []string{MCPDocumentPlanExpandActionPreviewV0, MCPDocumentPlanExpandActionCreateJobsV0}}
 	case MCPExternalWorkRunToolNameV0:

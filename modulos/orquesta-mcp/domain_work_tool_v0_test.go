@@ -24,6 +24,46 @@ func TestMCPDomainWorkDescriptorV0EsAdaptadorFino(t *testing.T) {
 	}
 }
 
+func TestMCPDomainWorkSupportedActionsV0MantieneParidadDeContrato(t *testing.T) {
+	want := MCPDomainWorkSupportedActionsV0()
+	descriptor := MCPDomainWorkDescriptorV0()
+	const actionPrefix = "action:"
+	actionStart := strings.Index(descriptor.InputSchema, actionPrefix)
+	if actionStart < 0 {
+		t.Fatalf("descriptor sin action: %q", descriptor.InputSchema)
+	}
+	descriptorActions := strings.Split(
+		strings.Split(descriptor.InputSchema[actionStart+len(actionPrefix):], ",")[0],
+		"|",
+	)
+	if strings.Join(descriptorActions, "|") != strings.Join(want, "|") {
+		t.Fatalf("descriptor actions=%q, want canonical=%q", descriptorActions, want)
+	}
+	fields, ok := MCPTransportToolInputFieldsV0(MCPDomainWorkToolNameV0)
+	if !ok {
+		t.Fatal("schema transport no encontrado")
+	}
+	var got []string
+	for _, field := range fields {
+		if field.Name == "action" {
+			got = field.Enum
+			break
+		}
+	}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("schema transport actions=%q, want canonical=%q", got, want)
+	}
+	for _, action := range want {
+		result, err := (MCPDomainWorkToolExecutorV0{}).Execute(context.Background(), MCPDomainWorkToolInputV0{Action: action})
+		if err != nil {
+			t.Fatalf("dispatcher action %q: %v", action, err)
+		}
+		if len(result.Errores) > 0 && result.Errores[0].Code == MCPDomainWorkActionUnsupportedV0 {
+			t.Fatalf("dispatcher rechaza action soportada %q", action)
+		}
+	}
+}
+
 func TestMCPDomainWorkExecutorV0CreateJobDelegaEnCreator(t *testing.T) {
 	creator := &fakeMCPDomainWorkCreatorV0{
 		job: orquestadomainwork.DomainWorkJobV0{

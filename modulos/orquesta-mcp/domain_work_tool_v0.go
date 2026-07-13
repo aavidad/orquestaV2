@@ -2,6 +2,7 @@ package orquestamcp
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	orquestadomainwork "orquesta/modulos/orquesta-domain-work"
@@ -63,11 +64,26 @@ type MCPDomainWorkExecutorPortV0 interface {
 	Execute(context.Context, MCPDomainWorkToolInputV0) (MCPDomainWorkToolResultV0, error)
 }
 
+// MCPDomainWorkSupportedActionsV0 is the canonical action surface for the
+// neutral DomainWork MCP contract. Transport projections and contract
+// descriptors must derive from it rather than maintaining their own lists.
+func MCPDomainWorkSupportedActionsV0() []string {
+	return []string{
+		MCPDomainWorkActionCreateJobV0,
+		MCPDomainWorkActionSubmitArtifactV0,
+		MCPDomainWorkActionEvaluateCapabilitiesV0,
+	}
+}
+
+func mcpDomainWorkActionSchemaV0() string {
+	return strings.Join(MCPDomainWorkSupportedActionsV0(), "|")
+}
+
 func MCPDomainWorkDescriptorV0() MCPDomainWorkToolDescriptorV0 {
 	return MCPDomainWorkToolDescriptorV0{
 		Name:        MCPDomainWorkToolNameV0,
 		Version:     MCPDomainWorkToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,action:create_job|submit_artifact|evaluate_external_capabilities,job_request?:DomainWorkJobRequestV0,artifact_submission?:DomainWorkArtifactSubmissionV0,external_capabilities?:DomainWorkExternalCapabilityV0[]}",
+		InputSchema: fmt.Sprintf("envelope:{request_id?,correlation_id?,action:%s,job_request?:DomainWorkJobRequestV0,artifact_submission?:DomainWorkArtifactSubmissionV0,external_capabilities?:DomainWorkExternalCapabilityV0[]}", mcpDomainWorkActionSchemaV0()),
 		Output:      "ok:{action,job?{job_ref,status,evidence_refs?},receipt?{receipt_ref,status,evidence_refs?},external_capability_evaluation?{ready,operational_reason?,matched_capabilities?[]{capability_ref,kind,evidence_refs?},missing_requirements?[]{capability_ref,kind,evidence_refs?}}}|error:{errores_publicos,external_capability_evaluation?{ready,operational_reason?,missing_requirements?[]{capability_ref,kind,evidence_refs?}}}",
 		ResourceURI: MCPDomainWorkResourceURIV0,
 		Invariantes: []string{
