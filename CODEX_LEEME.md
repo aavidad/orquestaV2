@@ -2794,3 +2794,41 @@ status timeout ocultaban: 054 rework-1 en `965881e5...` y 053 rework-1 en
 `dab999e7...`, ambos con receipt complete pero sin commit. Se auditan esos
 árboles exactos antes de decidir un nuevo rework; los receipts autodeclarados no
 son evidencia suficiente.
+
+### 2026-07-13T08:12Z — successors 053/054 rechazados; reworks acreditables activos
+
+Auditoría del worktree real 053 successor `dab999e7...`: REWORK. Quedó sin
+commit y con receipt complete contradictorio. `config_file_v0.go` pasa de 896 a
+907 líneas y rompe T90; continúa `os.ReadFile` antes del límite; canonical,
+revision y catálogo solo se prueban sobre fixtures; no hay policies completas
+del `serverProjectConfigFileV0`, presencia explícita de booleans ni semántica
+real. Digest tracked+untracked `b5401642...`.
+
+Se lanzó 053R2 limpio desde `086f352f`, task única:
+
+- run `request-ref-orquesta-v1a-configuration-foundation-rework-20260713-053r2`;
+- goal `goal-ref-task-autoprogramming-5332291a8520-g01`;
+- external `019f5a78-18f6-7fe2-b1ae-d6db1eebf890`.
+
+Exige reader max+1 antes de asignar, config_file <900, documento canónico y
+revision del modelo real, catálogo reflection-complete conforme a encoding/json,
+policies presence-aware por cada hoja y semantic validation pura; full server,
+env guard y race son required tests admitidos por la allowlist.
+
+Auditoría del worktree real 054 successor `965881e5...`: REWORK. Sin commit,
+digest `cd67bff3...`; focal normal verde pero suite race completa falla de forma
+reproducible mientras el receipt declara race passed. Sigue sin lease común para
+launch/observe multi-RPC, binding durable generation↔thread, invalidación de
+caches, revalidación efectiva de socket/PID/token ni segundo conflicto CAS
+fail-closed. El transitorio de ReadThread puede perderse y mezclarse con GetGoal
+de otra generación.
+
+Se lanzó 054R1 limpio desde `086f352f`, task única:
+
+- run `request-ref-orquesta-appserver-generation-scope-20260713-054r1`;
+- goal `goal-ref-task-autoprogramming-61a7f86bca08-g01`;
+- external `019f5a7a-11f2-7e12-ba44-573f5e8a2dd7`.
+
+Quedan por tanto cuatro reworks acreditables en paralelo: 051R2, 052R1, 053R2 y
+054R1. No lanzar 050A hasta que 052/054 liberen app-codex/appserver; su payload
+turn/interrupt ya está preparado. Ningún successor rechazado se integra.
