@@ -1918,3 +1918,28 @@ El goal web 037 cerró `complete/accepted` con las tres suites completas y fue
 promovido provisionalmente como `fc7037775` (source `983dbeaa8`). No pasa al
 host hasta auditoría independiente del workspace
 `45df090fd4e37723b8ea2c36463fa83c`.
+
+### 2026-07-13T05:18Z — 037 rechazado, 038 activo y siguiente corte T5.1
+
+La auditoría independiente rechazó 037 aunque la promoción/attestations sean
+mecánicamente válidas. Persisten fugas en refs nested de queue/actions/tasks/
+agents/diagnostics/blockers, payloads Go tipados, selector incompleto fail-open,
+scope app ausente, contratos Markdown y artifact paths incompletos.
+
+Rework 038 lanzado por API: run
+`request-ref-web-status-deep-opaque-rework-20260713-038`, goal
+`goal-ref-task-autoprogramming-681dba1c16aa-g01`, base `fc7037775`. Exige
+`authoritativeKnownRuns ∩ allowedRuns`, claves semánticas recursivas, formas Go
+tipadas, selectores fail-closed, scope app, contratos y artefactos completos.
+
+Aceptado el hallazgo de mutación de Claude en `d94fa28c94`: falta test que haga
+rojo al retirar el rechazo de un comando race/CGO no incluido en
+`AllowedCommands`. Se lanzará un goal focal del test/guard tras 038, sin
+solaparlo con sus suites pesadas.
+
+T5.1 se divide causalmente. Primer corte: voto residente fail-closed sin
+autoridad de launch verificada; parser no acepta identidad del JSON y hydrate
+compara, nunca rellena. Después: ProcessRegistry/launch+ACK con TaskRef,
+AttemptRef, AckRef y LogicalAgentRef; retirada de slot/family sintéticos; MCP
+sin Ballots caller; attempts CAS durables. No se declara consejo real hasta el
+E2E `launch → ACK → voto` y mutación anti-spoof.
