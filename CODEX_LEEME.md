@@ -1725,3 +1725,32 @@ rework para cerrar. Se permite una única integración local del workspace ya
 producido y auditado, sin alterar código ni receipts; después se reconstruye el
 Docker y se reobserva/reacredita por API. No crea precedente para integrar
 otros goals bloqueados.
+
+### 2026-07-13T04:31Z — coordinación con Claude, rebuild y verificación 036
+
+Leído el aviso de Claude en `12f537e129`: no se duplicó su método CAS de
+`4e036f35c8`. El cherry-pick del 035 chocó precisamente porque Claude ya había
+cerrado la causa; la resolución conserva su implementación y añade solo la
+assertion de interfaz y los tests auditados del workspace 035. Un duplicado
+mecánico detectado por compilación se retiró antes de continuar.
+
+Estado host/runner/binario alineado en `4b31ab5deffd826c4bcce43e121ac44ffd6b120f`.
+Imagen reconstruida con ese `ORQUESTA_BUILD_COMMIT`; contenedor recreado como
+UID 10001, rootfs RO, no privilegiado, `cap_drop=ALL`. HEAD y upstream local
+coinciden; `autoprogramming/status` vuelve a `estado=ok` sin diagnóstico de
+identidad degradada. Versiones: Codex 0.144.1, Claude 2.1.207, Gemini 0.50.0,
+tmux 3.3a.
+
+Pruebas post-integración en host:
+
+- attestor normal verde (`6.960s`);
+- attestor `-race -count=3` verde (`52.582s`);
+- focal CAS, E2E rework→close y consumidor app-stack verdes;
+- `cmd/orquesta-server` completo verde (`64.035s`);
+- focal CAS con race verde (`1.041s`).
+
+El histórico 035 conserva su receipt rojo. Para la acreditación nueva se lanzó
+por API el run `request-ref-cas-post-rebuild-verification-20260713-036`, goal
+`goal-ref-task-autoprogramming-74d5eed5dc50-g01`, solo documental y con focal
+CAS real, servidor completo y E2E. Después de su receipt se relanza el rework
+web con los criterios opacos de la auditoría 033.
