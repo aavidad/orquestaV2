@@ -3060,3 +3060,38 @@ CAS sin lost update antes de cualquier acreditación.
 Decisión vigente: ningún receipt autodeclarado equivale a cierre. Solo se
 integrarán diffs mínimos auditados con tests independientes, commit real y árbol
 limpio. No usar forced stop mientras el daemon app-server siga compartido.
+
+### 2026-07-13T09:30Z — receipts adelantados, observer serial bloqueado y 052R5
+
+051R4 publicó un self-receipt `complete` mientras `cmd/orquesta-server` seguía
+compilando. El receipt tiene `artifact_refs`, paths, materialized artifacts,
+checklist y evidence global vacíos; declara seis tests passed sin evidence,
+no hay commit/tree y el workspace sigue dirty. El código conserva además los
+fallos de revalidación por Run, `syscall.Dup` no atómico y guard textual no
+AST/types. Se rechazó por MCP y se llamó la observación HTTP oficial.
+
+La observación oficial no progresa: `goal-observer-11955` comenzó a las
+09:16:32Z y no publicó result/error. El timeout por defecto es 15 minutos y el
+loop serial mantiene todos los receipts posteriores sin acreditar durante esa
+ventana. Los POST directos de observe devuelven 202 timeout y dejan el trabajo
+continuando. No se reintentan en bucle ni se fuerza el daemon; este defecto de
+aislamiento/deadline del observer queda como bug de núcleo a cerrar.
+
+Como 052R4 no conserva proceso vivo ni consume feedback y el observer está
+bloqueado, se lanzó un rework limpio mínimo por la API pública:
+
+- run `request-ref-orquesta-observe-successor-one-line-final-20260713-052r5`;
+- goal `goal-ref-task-autoprogramming-e3410e659d63-g01`;
+- workspace `cbe118b9eaf4eac23ec5ceb130d977b2`.
+
+052R5 debe copiar los dos archivos exactos de e47, eliminar solo el
+`StoreVersion = 1` extra del fixture TimeoutSnapshot, conservar producción SHA
+`3f55c55d...`, el fixture histórico y los ocho casos Matrix, y cerrar con tres
+required tests, commit y clean. El objetivo durable fue comprobado completo al
+arrancar Terra.
+
+054R3 ya satisface en el corte live Fingerprint dentro de un único lease
+pre/post, transitorio de generación sin persistir result/closure y CAS que no
+sobrescribe cambios semánticos. Sigue REWORK: el segundo conflicto CAS retorna
+directamente sin recargar ni dar precedencia a un terminal compatible; además
+debe rechazar terminal cruzado/incompatible. Feedback causal enviado por MCP.
