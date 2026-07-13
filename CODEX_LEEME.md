@@ -3138,3 +3138,40 @@ conflicto CAS y el fake de rotación intenta cambiar GenerationRef mediante un
 helper que lo rechaza bajo el mismo lease. Se ordenó restaurar los tests válidos
 de 054R3, forzar dos CAS reales + segundo reload y rotar la generación mediante
 un hook observable entre RPC y postcheck.
+
+### 2026-07-13T10:05Z — 052 integrado; 054/055 siguen en rework causal
+
+052R5 alcanzó resultado durable `complete`, store version 4 y seis de seis
+required tests oficiales `passed`. La promoción automática no cerró: dejó
+`closure=null`, dos tracked dirty y `promotion-pending` por
+`worktree-verify-issue:replaced_large_delta`. No se aceptó ese estado como
+cierre. Una auditoría independiente reconstruyó la genealogía del cambio y
+comprobó que el hardening final queda aislado a dos archivos, sin dependencias
+productivas adicionales y sin borrar ninguna línea del host.
+
+Se integró al host el parche semántico atómico final, no un cherry-pick ni una
+copia ciega del worktree. Resultado: 706 líneas añadidas en los dos archivos
+autorizados; hashes finales `3f55c55d...` para producción y `ba536289...` para
+tests. Quedaron verdes el focal de seis casos, race count 3, paquete completo
+`orquesta-app-codex-stack`, `orquesta-state-file`, `cmd/orquesta-server` y
+`go test -mod=vendor -count=1 ./...`. La revisión independiente dio PASS a la
+semántica CAS/reload/marker, fail-closed y no fuga del error raw.
+
+054R4 continúa rechazado. El código aún retorna el segundo CAS sin capturar su
+conflicto ni hacer `Load2`; la compatibilidad terminal no cruza
+`RuntimeGenerationRef` ni coherencia de result/closure; sus tests de “segundo
+CAS” solo fuerzan el primero y no existe fake causal Fingerprint durante RPC.
+El goal sigue `running`, sin receipt ni acreditaciones. Se reinyectó por MCP la
+secuencia exacta CAS1/Load1/CAS2/Load2 y la matriz generacional requerida.
+
+055 produjo arquitectura base útil: fanout 4, slots indexados con fold estable,
+`tryAcquire` por run y gate retenido hasta retorno real. Sigue REWORK porque el
+worker itera la cola sin seleccionar/revalidar `ctx`: tras el deadline puede
+arrancar más observers que ignoren cancelación. Faltan además A bloqueado con B
+progresando, no-start-after-deadline y required test largo. El self-receipt no
+es cierre: durable continúa `running`; la acreditación oficial apenas empezó.
+La corrección y los tests exactos fueron enviados por el MCP público.
+
+El observer global mantiene el patrón confirmado de timeouts de 15 minutos y
+`backend_call_in_flight`. No se fuerza stop del app-server compartido. Claude
+vigila el commit host y no ha emitido una instrucción nueva desde `41cc222c08`.
