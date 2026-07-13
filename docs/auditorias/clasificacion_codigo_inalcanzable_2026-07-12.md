@@ -8,7 +8,7 @@ Fuente vinculante: `docs/auditorias/codigo_inalcanzable_2026-07-12.txt`, generad
 | 2 | `cmd/orquesta-server/codex_goal_app_server_v0.go` — `codexAppServerIssueCodeFromCommandFailureV0` | BORRAR | Símbolo privado; `rg` no encuentra caller ni contrato verificable. |
 | 3 | `cmd/orquesta-server/codex_goal_app_server_v0.go` — `codexAppServerIssueCodeFromLogFileV0` | BORRAR | Símbolo privado; `rg` no encuentra caller ni contrato verificable. |
 | 4 | `cmd/orquesta-server/codex_goal_app_server_v0.go` — `codexAppServerTmuxStartupTimeoutV0` | BORRAR | Símbolo privado; `rg` no encuentra caller ni contrato verificable. |
-| 5 | `modulos/orquesta-app-planner/unit_lookup_v0.go` — `FindAppPlanUnitByTaskRefV0` | CONECTAR | Búsqueda causal por task ref; debe usarse al resolver tareas del plan para no perder el vínculo entre intake y unidad. |
+| 5 | `modulos/orquesta-app-planner/unit_lookup_v0.go` — `FindAppPlanUnitByTaskRefV0` | RETIRAR | Wrapper exportado sin caller; la búsqueda causal ya vive en `findAppPlanUnitByTaskRefV0`, usada por `WorkProfileForUnitV0` y resolvers. `WorkProfileForUnitV0` conserva la validación de `task_ref` y `delivery_ref`. |
 | 6 | `modulos/orquesta-cli/public_error_catalog_v0.go` — `CliPublicErrorCodeKnownV0` | BORRAR | Función sin caller verificable; ser exportada no demuestra consumidor externo ni contrato de puerto. |
 | 7 | `modulos/orquesta-core-leases/lease_evaluator_v0.go` — `AgentLeaseEvaluationInputV0.Validate` | CONECTAR | Validación de entrada de leases; dejarla sin caller permite evaluar expiraciones con datos inválidos y pierde la garantía H2. |
 | 8 | `modulos/orquesta-core-leases/lease_evaluator_v0.go` — `DecodeAgentTimeoutAssessmentV0` | CONECTAR | Decodificación de assessment de timeout; debe entrar en la ruta real de reclaim/lease para validar la decisión recibida. |
@@ -106,12 +106,12 @@ Fuente vinculante: `docs/auditorias/codigo_inalcanzable_2026-07-12.txt`, generad
 
 ## Resumen
 
-- CONECTAR: 38 entradas.
-- BORRAR: 22 entradas (1–4, 6, 15, 18, 21, 28–29, 34, 55–56, 67, 73, 78–82, 98–99). Son símbolos sin caller ni contrato verificable; no se confunden con métodos de puerto ni errores tipados.
+- CONECTAR: 37 entradas.
+- BORRAR/RETIRAR: 23 entradas (1–6, 15, 18, 21, 28–29, 34, 55–56, 67, 73, 78–82, 98–99). Son símbolos sin caller ni contrato verificable; no se confunden con métodos de puerto ni errores tipados. La retirada de la fila 5 solo elimina el wrapper exportado: conserva el helper privado y su validación causal en los consumidores existentes.
 - CONSERVAR: 39 entradas.
 
 ## Método de evidencia
 
 La lista de entradas se cotejó literalmente con `codigo_inalcanzable_2026-07-12.txt` (99/99, sin duplicados). Para cada fila se revisó la declaración y las referencias exactas con `rg`; una conservación solo se mantiene cuando la propia firma implementa un contrato (`error` o puerto), o es un tipo/constante contractual verificable. Las filas BORRAR tienen únicamente la declaración como referencia verificable. No se usa posibilidad de reflexión, uso futuro, compatibilidad hipotética ni “escenarios futuros” como motivo.
 
-La prioridad de implementación posterior es conectar primero las garantías de validación (`ValidateStrictEventSequenceV0`, `ValidateOrchestrationEventPayloadBudgetV0`, leases, decisión del director y registries), y hacerlo en cambios separados con sus pruebas. Esta clasificación no autoriza esos cambios: el write-set H4 es únicamente este documento.
+La prioridad de implementación posterior es conectar primero las garantías de validación (`ValidateStrictEventSequenceV0`, `ValidateOrchestrationEventPayloadBudgetV0`, leases, decisión del director y registries), y hacerlo en cambios separados con sus pruebas. Esta clasificación no autoriza esos cambios. La única excepción ejecutada en H4 es la retirada mínima de la fila 5, limitada al wrapper exportado sin caller.
