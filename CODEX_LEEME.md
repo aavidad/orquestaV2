@@ -1610,3 +1610,25 @@ Riesgo separado, no usado para cerrar esta intermitencia:
 `inprocesshttp.TransportV0` puede devolver timeout mientras el handler mutante
 termina y persiste efectos. Requiere después protocolo durable de
 operación/resultado; no ampliar timeout ni devolver éxito tardío.
+
+### 2026-07-13T03:47Z — 032/033 no acreditados; rework 034
+
+- **032 queda en rework aunque Orquesta lo auto-promovió provisionalmente en el
+  runner como `b359b038`; no se ha copiado al host.** Corrige fronteras,
+  `GOENV=off`, CGO selectivo, probe en Bind/Attest y receipts, pero el probe
+  elige un alias Go global en vez del alias exacto del required test. Con dos
+  binarios allowlisted puede acreditar el toolchain equivocado. Además,
+  `go test -race -count=3` del paquete reprodujo 2/3 timeouts en el fixture de
+  10s; no hubo data race.
+- **033 terminó código pero cierre bloqueado:**
+  `ports.goal_state_cas_store`. Workspace exacto
+  `a26aa9e66ddf3fbee4d4774cc2d72264`; queda bajo auditoría y no se integra. La
+  inspección preliminar ya ve otra frontera sospechosa: reconoce refs anidadas
+  solo por prefijos `run-`/`run_ref`, mientras runs reales de esta composición
+  usan también `request-ref-*`.
+- **034 lanzado por API local sobre `b359b038`:** run
+  `request-ref-attestor-exact-alias-race-stability-20260713-034`, goal
+  `goal-ref-task-autoprogramming-15ef9e9b343c-g01`. Exige probe ligado al alias
+  exacto, prueba multi-alias adversarial, matriz negativa completa, fallo en
+  Bind antes del implementer, cleanup y estabilidad race repetida sin cambiar
+  timeout/default productivo, skips ni retries.
