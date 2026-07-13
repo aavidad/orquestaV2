@@ -242,3 +242,54 @@ func reciboValidoParaTestV0(councilRef string, fingerprint string, approvals int
 		},
 	}
 }
+
+// ATASCO que Codex encontro: un veredicto de rework sellaba el consejo para
+// siempre. El autor corregia, la nueva convocatoria tenia otra huella, y chocaba
+// con el recibo viejo: el trabajo no podia aceptarse NUNCA. Un rework es una
+// invitacion a volver, no una condena.
+func TestUnReworkNoSellaElConsejoParaSiempreV0(t *testing.T) {
+	store, err := newCouncilReceiptStoreV0(t.TempDir())
+	if err != nil {
+		t.Fatalf("newCouncilReceiptStoreV0: %v", err)
+	}
+
+	primero := reciboValidoParaTestV0("c", "sha256:intento-1", 1)
+	primero.Outcome = councilOutcomeReworkV0
+	if _, err := store.SaveV0(primero); err != nil {
+		t.Fatalf("primer veredicto (rework): %v", err)
+	}
+
+	// El autor corrige y vuelve: otra convocatoria, otra huella. DEBE poder
+	// decidirse de nuevo.
+	segundo := reciboValidoParaTestV0("c", "sha256:intento-2", 3)
+	guardado, err := store.SaveV0(segundo)
+	if err != nil {
+		t.Fatalf("tras un rework, el trabajo corregido debe poder decidirse: %v", err)
+	}
+	if guardado.Outcome != councilOutcomeAcceptedV0 {
+		t.Fatalf("el segundo intento no se acepto: %+v", guardado)
+	}
+
+	// Y lo aceptado SI sella: no se reabre con otra convocatoria.
+	tercero := reciboValidoParaTestV0("c", "sha256:intento-3", 3)
+	if _, err := store.SaveV0(tercero); !errors.Is(err, ErrCouncilReceiptConflictV0) {
+		t.Fatalf("una decision aceptada no puede reabrirse: %v", err)
+	}
+}
+
+// Un veto de seguridad tampoco se sortea reintentando: bloquear es terminal.
+func TestUnBloqueoNoSeSorteaReintentandoV0(t *testing.T) {
+	store, err := newCouncilReceiptStoreV0(t.TempDir())
+	if err != nil {
+		t.Fatalf("newCouncilReceiptStoreV0: %v", err)
+	}
+	bloqueado := reciboValidoParaTestV0("c", "sha256:v1", 0)
+	bloqueado.Outcome = councilOutcomeBlockedV0
+	if _, err := store.SaveV0(bloqueado); err != nil {
+		t.Fatalf("guardando el bloqueo: %v", err)
+	}
+	otro := reciboValidoParaTestV0("c", "sha256:v2", 3)
+	if _, err := store.SaveV0(otro); !errors.Is(err, ErrCouncilReceiptConflictV0) {
+		t.Fatalf("un veto de seguridad no se levanta reintentando: %v", err)
+	}
+}

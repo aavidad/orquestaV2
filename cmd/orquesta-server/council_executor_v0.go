@@ -192,10 +192,14 @@ func (executor councilExecutorV0) ConveneCouncilV0(
 			if receipt.InputFingerprint == fingerprint {
 				return resultFromReceiptV0(receipt), nil
 			}
-			// Mismo nombre, convocatoria distinta: no es un reintento, es un choque.
-			return orquestamcp.MCPCouncilToolResultV0{}, fmt.Errorf(
-				"%w: %s", ErrCouncilReceiptConflictV0, input.CouncilRef,
-			)
+			// Convocatoria distinta sobre una decision TERMINAL: reabrir lo cerrado.
+			// Sobre un REWORK, en cambio, volver con el trabajo corregido es
+			// exactamente lo que el consejo pidio: se deja pasar y se decide de nuevo.
+			if councilOutcomeEsTerminalV0(receipt.Outcome) {
+				return orquestamcp.MCPCouncilToolResultV0{}, fmt.Errorf(
+					"%w: %s", ErrCouncilReceiptConflictV0, input.CouncilRef,
+				)
+			}
 		}
 	}
 
