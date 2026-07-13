@@ -123,20 +123,6 @@ func (input AgentLeaseEvaluationInputV0) Validate() []AgentLeaseIssueV0 {
 	return ValidateAgentLeaseEvaluationInputV0(input)
 }
 
-func DecodeAgentTimeoutAssessmentV0(data []byte) (AgentTimeoutAssessmentV0, error) {
-	if issues := detectForbiddenAgentLeaseJSONDetailsV0(data); len(issues) > 0 {
-		return AgentTimeoutAssessmentV0{}, AgentLeaseValidationErrorV0{Issues: issues}
-	}
-	var assessment AgentTimeoutAssessmentV0
-	if err := decodeStrictAgentLeaseJSONV0(data, &assessment); err != nil {
-		return AgentTimeoutAssessmentV0{}, err
-	}
-	if issues := ValidateAgentTimeoutAssessmentV0(assessment); len(issues) > 0 {
-		return AgentTimeoutAssessmentV0{}, AgentLeaseValidationErrorV0{Issues: issues}
-	}
-	return assessment, nil
-}
-
 func (assessment AgentTimeoutAssessmentV0) Validate() []AgentLeaseIssueV0 {
 	return ValidateAgentTimeoutAssessmentV0(assessment)
 }

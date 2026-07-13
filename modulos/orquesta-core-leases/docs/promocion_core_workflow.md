@@ -12,6 +12,24 @@ Estado 2026-05-06: la promocion minima `RegisterAgentLeaseExpired -> AgentLeaseE
 
 LSE-006 valida el flujo puro completo para agente sin heartbeat: `EvaluateAgentLeaseV0` detecta launch timeout con `now_observed_at` externo, `AgentLeaseExpiredV0` conserva la recomendacion stop_agent/replan_task y `orquesta-core-workflow` solo registra `AgentLeaseExpired` sin outbox ni efectos operativos.
 
+## Cadena tipada y replay H4 (2026-07-13)
+
+La integración productiva no deserializa `AgentTimeoutAssessmentV0`. El bridge
+de progreso construye `AgentLeaseEvaluationInputV0` tipado y llama a
+`EvaluateAgentLeaseV0`; el provider de candidatos traduce el resultado con
+`AgentLeaseExpiredFromAssessmentV0`; el director emite el comando durable
+`RegisterAgentLeaseExpired`, que materializa `AgentLeaseExpired`. El replay
+acepta ese evento y conserva su proyección una sola vez incluso ante un duplicado
+exacto. Esta cadena conserva `run_ref`, `agent_request_id`, `lease_ref`,
+`observed_at`, acción recomendada y evidencias sin introducir una frontera JSON
+intermedia para assessments.
+
+La evidencia de integración reside en
+`orquesta-orchestration-core/TestProgressiveLoopV0StopsAgentFromLeaseAssessment`
+y `orquesta-core-workflow/TestReplayDurableEventsV0AcceptsAgentLeaseExpiredAndExactDuplicate`.
+Este módulo cubre la parte de contrato tipado con `EvaluateAgentLeaseV0` y
+`AgentLeaseExpiredFromAssessmentV0`.
+
 ## Comandos/eventos candidatos
 
 ```text

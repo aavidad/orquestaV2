@@ -39,3 +39,14 @@ Comando: go test -count=1 ./modulos/orquesta-core-leases ./modulos/orquesta-core
 Evidencia esperada: un agente solicitado sin heartbeat supera `launch_timeout_seconds`, produce assessment stop_agent o replan_task, se traduce a `AgentLeaseExpiredV0` y workflow registra `AgentLeaseExpired` sin outbox, parada, fallo ni replan automatico.
 Estado: validada para LSE-006 el 2026-05-06
 ```
+
+```text
+Caso: h4_assessment_tipado_hasta_replay
+Tipo: integration_contract
+Comando: go test -count=1 ./modulos/orquesta-core-leases
+Evidencia esperada: `EvaluateAgentLeaseV0` valida el assessment tipado y
+`AgentLeaseExpiredFromAssessmentV0` lo transforma en candidato solo si no es
+continue. La integración consumidora confirma después bridge -> candidato ->
+`AgentLeaseExpired` y replay idempotente, sin deserializar assessments.
+Estado: revalidada para H4-008 el 2026-07-13.
+```

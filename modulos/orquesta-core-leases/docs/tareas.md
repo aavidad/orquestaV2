@@ -74,3 +74,19 @@ Bloqueos: ninguno
 Estado: completada
 Resultado: `EvaluateAgentLeaseV0` sin heartbeat produce stop_agent/replan_task; `AgentLeaseExpiredV0` se registra en workflow como expiracion durable sin outbox, parada, fallo ni replan automatico.
 ```
+
+```text
+ID: H4-008
+Task ref: task-ref-h4-lease-decoder-reclassify-011
+Objetivo: Reclasificar `DecodeAgentTimeoutAssessmentV0` de CONECTAR a RETIRAR.
+Write-set: lease_evaluator_v0.go, docs/*
+Contrato: los assessments nacen tipados en `EvaluateAgentLeaseV0`, pasan por
+`AgentLeaseExpiredFromAssessmentV0` y no tienen frontera JSON productiva.
+Validacion: go test -count=1 ./modulos/orquesta-core-leases; inspeccion de la
+cadena bridge -> candidate -> RegisterAgentLeaseExpired -> AgentLeaseExpired -> replay.
+Estado: completada el 2026-07-13.
+Resultado: se retiró el decoder exportado sin callers ni pruebas exclusivas.
+`ValidateAgentTimeoutAssessmentV0`, `EvaluateAgentLeaseV0` y
+`AgentLeaseExpiredFromAssessmentV0` preservan las garantías tipadas; la
+frontera JSON durable permanece en `AgentLeaseExpiredV0`.
+```

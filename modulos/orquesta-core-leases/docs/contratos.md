@@ -59,8 +59,27 @@ Campos:
 Invariantes:
   - `now_observed_at` se recibe como input externo.
   - No agenda timers ni lanza goroutines.
+  - No tiene frontera JSON publica: nace tipado exclusivamente en
+    `EvaluateAgentLeaseV0` y se valida antes de devolverse.
   - Si recomienda parar, fallar o replanificar, otro comando durable materializa la accion.
 ```
+
+## Nota H4: retiro de decoder sin frontera (2026-07-13)
+
+`DecodeAgentTimeoutAssessmentV0` se reclasifica de **CONECTAR** a **RETIRAR**.
+La inspeccion de la ruta productiva no encontro una entrada JSON de assessments:
+`AgentProgressLeaseBridgeV0` construye un `AgentLeaseEvaluationInputV0` tipado,
+`EvaluateAgentLeaseV0` produce y valida el assessment, y
+`AgentLeaseExpiredFromAssessmentV0` vuelve a validarlo antes de producir el
+candidato compacto. El scheduler materializa despues
+`RegisterAgentLeaseExpired -> AgentLeaseExpired`, cuyo replay ya valida el
+evento durable. Mantener un decoder exportado en paralelo no protegía una
+frontera real y ampliaba la API sin consumidor.
+
+La frontera JSON que sí existe sigue siendo `AgentLeaseExpiredV0`, el payload
+promovible y durable. `ValidateAgentTimeoutAssessmentV0`,
+`EvaluateAgentLeaseV0` y `AgentLeaseExpiredFromAssessmentV0` permanecen como
+las garantías tipadas de la cadena.
 
 ## Contrato candidato: AgentLeaseExpiredV0
 
