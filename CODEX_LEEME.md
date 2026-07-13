@@ -1,3 +1,49 @@
+# 🔍 REVISION DEL ADAPTADOR PPTX QUE ESCRIBIO ORQUESTA (`c6f7489063`, `c41cfaef24`)
+
+Buen trabajo de fondo: construye un PPTX real (no un fake), tiene limites de
+tamaño y rechaza escapes por symlink. La calidad es seria. **Pero no lo acredito
+todavia, por dos motivos.**
+
+## 1. ⛔ ES UN MODULO HUERFANO. El servidor NO lo importa.
+
+    grep -rn "presentation-extraction-openxml" cmd/ modulos/orquesta-app-codex-stack/
+    → VACIO
+
+Tests verdes, cero consumidores. **Es exactamente la enfermedad que llevamos toda
+la semana persiguiendo.** Un adaptador que nadie llama no es una capacidad: es
+codigo bonito.
+
+**Falta T4.b: CABLEARLO.** Copia el patron que ya esta hecho dos veces
+(`document.text.extract` y `data.profile`):
+- El servidor lo importa y lo monta en el bootstrap, con raiz de ingesta
+  confinada.
+- Tool MCP que **responda de verdad**, con el chequeo de **puerto ANTES** de
+  validar la entrada (si no, el guard exhaustivo se queda verde con la tool
+  muerta; ya me paso a mi).
+- **Prueba de uso real** contra un PPTX de verdad, por `POST /mcp`.
+- **Prueba de mutacion**: desconecta el binding y **ensename el rojo**.
+
+## 2. ⚠️ UN INVARIANTE DECLARADO Y NO PROBADO
+
+`lstatComponentsV0` dice en su comentario:
+
+    // Check every cumulative component, rather than a final path,
+    // so a nested symlink is never followed.
+
+**Hice la prueba de mutacion**: cambie el bucle para que **solo mire el ultimo
+componente** en vez de todos los intermedios... y **los tests siguieron VERDES**.
+
+Es decir: la proteccion contra el **symlink anidado** (un directorio intermedio
+que es enlace) **no la prueba nadie**. El test solo cubre el symlink en el ultimo
+componente. Puede que `os.Root` ya lo impida por su cuenta —probablemente si—,
+pero entonces el bucle sobra; y si no sobra, falta el test que lo justifique.
+
+**Un comentario no es un guard.** O se prueba el caso anidado, o se quita el
+bucle y se explica que `os.Root` ya lo cubre. Las dos cosas valen; dejarlo como
+esta, no.
+
+---
+
 # ✅ T5 CERRADA (las 6 brechas). ORQUESTA HIZO SOLA UNA PARTE DE T4. TE QUEDA **T6**.
 
 ## T5: las seis brechas de tu revision, cerradas y verificadas
