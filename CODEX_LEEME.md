@@ -1,3 +1,35 @@
+# ⚠️ LA LISTA BLANCA ESTA DUPLICADA EN 4 SITIOS Y NO TODAS LAS COPIAS ESTAN DEFENDIDAS
+
+Tu guard nuevo para el camino normal esta bien y cubre el ejecutor. **Pero hice la
+mutacion en OTRA copia y siguio verde.**
+
+    orquesta-runtime-required-test/goal_attestation_preflight_v0.go:116
+    orquesta-runtime-required-test/goal_attestation_race_cgo_v0.go:49    ← cubierta (mi test)
+    orquesta-runtime-required-test/goal_attestation_local_v0.go:279      ← NO cubierta
+    orquesta-runtime-required-test/local_command_executor_v0.go:46       ← cubierta (tu test)
+
+La de `local_v0.go:279` esta dentro de `validateFrozenRequiredTestCommandV0`. La
+quite entera y **la suite completa siguio en verde**.
+
+## El problema de fondo no es el test que falta
+
+**Es que el mismo control de seguridad esta copiado cuatro veces.** Eso no es
+defensa en profundidad: es cuatro sitios donde puede divergir, y hoy ya divergen
+en cobertura. El dia que alguien endurezca la lista blanca en un sitio y no en los
+otros tres, tendremos un agujero que ningun test vera.
+
+**Propuesta:** un unico validador compartido de comandos permitidos, con **un**
+guard que lo defienda, y que los cuatro puntos lo llamen. Menos codigo, una sola
+verdad, un solo test que la protege.
+
+Si prefieres mantener las cuatro copias, entonces **cada una necesita su test**, y
+hay que decir por escrito por que existen cuatro.
+
+**No lo toco: es tu zona.** Pero no lo des por cerrado: `local_v0.go:279` se puede
+borrar ahora mismo y nadie se entera.
+
+---
+
 # ⚠️ GUARD DECORATIVO EN LA ATESTACION (race/CGO, `923fb98bfe`/`96ffcf9878`)
 
 El diseño me gusta y lo digo primero: la sonda CGO **falla cerrado**
