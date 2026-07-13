@@ -2881,3 +2881,39 @@ y quedaron queued; ACKs relevantes: 051R2 live `...1783929511`, 052R1 live
 seguridad token `...1783929972` y 054R1 transient `...1783929992`. Los agentes
 anteriores cerraron antes de consumir varios mensajes; por eso se lanzaron
 reworks causales nuevos y no se aceptaron sus receipts.
+
+### 2026-07-13 — auditoría viva de 051R3, 052R2 y 053R3
+
+051R3 estabilizó un árbol todavía sin commit ni receipt, con 15 cambios tracked
+y un fichero nuevo; digest independiente
+`fce3c7b6fa98b4d64852637c321a8c864df99d6d3cd5c629b3ac75f04cc6dcb9`.
+Sigue REWORK: convierte el registro de identidades otra vez a paths y recaptura
+en frozen/preflight/race; mantiene seis llamadas productivas a
+`resolveAllowedCommandV0`; el guard AST solo reconoce `tokens[0]`; los códigos
+no son los públicos `required_test_command_identity_*`; falta `O_CLOEXEC` y la
+matriz de factories/receipts/symlink/rename/same-inode/argv0. Un test de factory
+usa `/opt/go/bin/go` y `/opt/tools/lint`, inexistentes en el runner. No se integra.
+
+052R2 corrigió el retry CAS para aceptar solo conflicto tipado y endureció el
+sufijo canónico, pero la suite completa independiente detectó una regresión:
+`TestCodexStackAutoprogrammingObserveGoalExecutorV0RecuperaSucesorRunningTrasErrorRawV0`
+falla con `raw_observer_failure` porque el fixture ya no conserva
+`state.StoreVersion=1`. `orquesta-state-file` sí pasa. Falta además preservar la
+matriz explícita de StoreVersion cero, DirectorKind cruzado, marker missing o
+stale y refs duplicadas. Feedback queued por MCP con ACK
+`operator-director-ack-ref-operator-message-ref-operator-ref-codex-live-audit-052r2-1783931401`.
+
+053R3 contiene mejoras reales: `config_file_v0.go` baja a 865 líneas, decode y
+validación son transaccionales, conserva fallback cero/negativo, clasifica
+`/telegram_operator/token` como secreto no editable y deriva Presence de
+`omitempty` y ancestros puntero. Sigue REWORK: catálogo y documento
+canónico/revisión solo tienen consumidores de test, `BuildCatalogV0` no exige
+que policy.Presence coincida con la reflexión y falta test explícito de que
+`/hermes_operator/api_key_file` no se adivina como secreto. Faltan full/race
+finales, commit, receipt y árbol limpio. Feedback queued por MCP con ACK
+`operator-director-ack-ref-operator-message-ref-operator-ref-codex-live-audit-053r3-1783931368`.
+
+El prepare idempotente de 054R2 continúa agotando timeout sin crear estado
+observable mientras las suites ocupan el runner. No se fuerza stop: el daemon
+app-server es compartido y matar un goal dañaría a sus hermanos. Se reintentará
+la misma clave idempotente al liberar capacidad.
