@@ -42,7 +42,8 @@ documentacion.
   `/workspace/project` dentro del contenedor.
 - Contenedor: `orquesta-self-programming`.
 - Orquesta responde por tunel/loopback en `127.0.0.1:19039`.
-- La imagen incluye `codex`, `tmux`, `go`, `git`, `jq`, `python3`.
+- La imagen incluye `codex`, `tmux`, `go`, `gcc`, headers libc, `git`, `jq` y
+  `python3`; el runner aislado puede acreditar también suites Go con `-race`.
 - GitHub directo desde `berserk` no esta configurado: usar bundle o pedir
   deploy key limitada al repo `aavidad/orquestador`.
 
@@ -93,4 +94,3 @@ curl -fsS http://127.0.0.1:19039/api/v0/server/status | jq '.status,.startup_sta
   limitada y lo ha autorizado.
 - Responde al operador en castellano, con estado, pruebas, bloqueos y siguiente
   accion.
-

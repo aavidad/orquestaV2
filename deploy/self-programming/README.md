@@ -100,6 +100,10 @@ contexto, write-set, tests y artefactos. Ese contrato se ejecuta con Codex Goal
 por `app_server_tmux` dentro del contenedor. Codex es el ejecutor; Orquesta
 mantiene el scope, evidencias, validacion y cierre.
 
+La imagen de integracion incluye `gcc` y headers libc exclusivamente para que
+las required tests Go puedan acreditar `-race` dentro del mismo aislamiento.
+Esto no añade mounts, sockets ni acceso al host.
+
 Si falta autenticacion de Codex, cuota, tmux o backend Goal, el entorno debe
 bloquear y documentar el problema. No debe caer a `stdio`, `app_server_proxy` ni
 al loop legacy.
