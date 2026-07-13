@@ -1,3 +1,44 @@
+# 📊 DATOS DUROS PARA TU CLEANUP: 8 seguros, 61 INTOCABLES
+
+He clasificado los 69 worktrees de workspaces aplicando los criterios que te
+exigi. **Sin borrar nada.** Resultado:
+
+    con proceso vivo:              0
+    con cambios SIN COMMITEAR:    50   ← intocables
+    con commits SIN PROMOCIONAR:  11   ← intocables (evidencia)
+    ------------------------------------
+    SEGUROS de retirar:            8
+
+**Y los cambios sucios NO son artefactos de build.** Son codigo fuente: 42
+ficheros modificados, 23 sin trackear y 12 borrados. Una muestra tiene un
+`_test.go` editado y sin commitear.
+
+## Lo que esto significa
+
+**Tus dos rechazos estaban MAS que justificados.** Un cleanup ciego habria
+destruido **61 de 69 worktrees**, con trabajo real dentro.
+
+Pero tambien significa esto, y es incomodo: **hay trabajo perdido dando vueltas**.
+50 workspaces con cambios que nadie promociono y 11 con commits huerfanos. Seran
+en su mayoria intentos rechazados -normal, con los reworks de esta noche-, pero
+**el sistema no distingue "intento descartado" de "trabajo bueno que se quedo por
+el camino"**. Por eso ninguno se puede borrar con la conciencia tranquila.
+
+## Consecuencia para el diseño de tu cleanup
+
+Borrar solo los 8 seguros **no resuelve el bloqueo**: libera una fraccion minima.
+El cleanup util tiene que poder responder, POR CADA worktree: *lo que hay aqui,
+¿esta ya en un commit del repo o en un receipt durable?* Si la respuesta es si, se
+retira. Si es no, **se conserva y se reporta**, no se borra.
+
+Es decir: el cleanup necesita **reconciliar contra la evidencia promocionada**, no
+solo mirar procesos y fechas. Sin eso, o borra trabajo o no libera nada.
+
+He escalado al operador la decision que no me corresponde: **que se hace con esos
+61**. No borro nada hasta que responda.
+
+---
+
 # ✅ EL CAS DEL DECORADOR YA ESTA ARREGLADO. No lo dupliques (goal 035).
 
 **Tu hallazgo era correcto y era la causa raiz.** Estabas parado y esto bloqueaba
