@@ -4500,3 +4500,62 @@ conceptual sin refs exactas de los scripts ignorados; no se atribuye al tamano
 del contexto. Evidencia de cierre: smoke real de version/MCP/status/test Go y
 revision del runbook; request `request-ref-batch-fix-hermes-runbook-drift-20260711`.
 Solo se actualiza este inventario; no cambia otras incidencias.
+
+## Auditoría integral de diseño, bugs y simplificación del 2026-07-13
+
+La auditoría transversal queda registrada en
+[informe_auditoria_integral_orquesta_2026-07-13.md](informe_auditoria_integral_orquesta_2026-07-13.md).
+No sustituye las filas históricas: las clasifica contra una misma arquitectura,
+revisión y jerarquía de evidencia. Guía de reparación asociada:
+[guia_agentes_reparacion_y_simplificacion_orquesta_2026-07-13.md](guia_agentes_reparacion_y_simplificacion_orquesta_2026-07-13.md).
+
+| ID | Estado 2026-07-13 | Clasificación | Resumen y criterio pendiente |
+|---|---|---|---|
+| AUD-001 | abierto | diseño sistémico, P1 | Varias autoridades/generaciones; Goal debe quedar como autoridad productiva única. |
+| AUD-002 | cierre H0d revocado | falsa acreditación, P1 | El mailbox hace append sin entrega causal; falta consumer, lease, delivery receipt y replay. |
+| AUD-003 | cerrado en alcance vigente Codex; paridad aparcada | regresión/capacidad acotada | Contrato neutral y adaptador Codex acreditados por MCP real; Claude/Gemini/Ollama/local quedan aislados por orden del operador y no se consideran cerrados. |
+| AUD-004 | abierto | capacidad ausente, P1 | 056 no demuestra Stop(B) preservando Observe(A). |
+| AUD-005 | abierto | capacidad ausente, P1 | V1-B carece de store/resolve/use/revoke con owner y receipt redacted. |
+| AUD-006 | abierto | falsa acreditación, P1 | Consejo/reviews no prueban siempre identidad de launch independiente. |
+| AUD-007 | reproducido | bug de autorización, P1 | Shutdown decide por substrings de `requested_by`; debe usar principal/rol acreditado. |
+| AUD-008 | reproducido en imagen auditada | deuda operativa, P1 | CPU cuasi-idle/residuo y cleanup público incompleto; dirty backoff aún no acreditado. |
+| AUD-009 | reproducido | bug de contrato MCP, P2 | DomainWork soporta una acción ausente del schema público. |
+| AUD-010 | abierto | diseño sistémico de configuración, P1 | 513 nombres y lecturas env fuera del ingress; migrar a registro, CredentialStore y effective snapshot. |
+| AUD-011 | abierto | sobreprogramación, P2 | Primitivas filesystem/workspace duplicadas por provider; consolidar tras acreditar 057. |
+| AUD-012 | reproducido | falsa acreditación documental, P2 | Una fuente vigente declara H0d abierto y cerrado; crear ledger único. |
+| AUD-013 | abierto | capacidad no acreditada, P1 | Faltan dos E2E finales de creación de app sobre la misma revisión/imagen. |
+
+BUG `BUG-ORQ-20260713-271` (cerrado, workspace Goal inseguro por umask): el
+primer E2E Codex real creó el worktree físico con modo `0775`; el store seguro
+rechazó el manifest bajo un ancestro escribible por grupo. Además, el recibo
+pre-binding inválido no podía persistir el estado bloqueado porque la
+validación exigía una autoridad que todavía no existía. `c69b09b710` crea y
+reabre el workspace por descriptores, `O_NOFOLLOW`, propietario y modo `0700`,
+y permite solo el recibo inválido pre-binding totalmente vacío. Tests normales,
+`-race`, repetición bajo umask `0002`, negativos de symlink/ancestro y E2E real
+quedan verdes.
+
+BUG `BUG-ORQ-20260713-272` (cerrado, observe tmux convertía `running` en
+`invalid`): la rama lazy verificaba el lease físico `generation-ref-*` y la
+llamada interna volvía a exigir la generación determinista. El error quedaba
+además sin `IssueCode`, por lo que `CodexGoalObserverV0` lo degradaba a
+`codex_goal_observation_rejected`. `388c1bd09f` confina el bypass a la copia
+interna ejecutada dentro del lease verificado y conserva los conflictos reales
+como `running` retryable. El protocolo directo sigue fail-closed. El E2E
+`request-ref-e2e-057-004` probó un observe temprano `running`, el terminal
+`complete` y replay cerrado sin duplicados.
+
+BUG `BUG-ORQ-20260713-273` (cerrado, preparación del E2E): la raíz temporal
+final nació `0775` y el intent store devolvió correctamente
+`autoprogramming_intent_manifest_unavailable`. No era una regresión del
+producto: se corrigió el fixture a `0700` y la misma petición fue aceptada sin
+cambio de código. La evidencia confirma que la guarda de ancestros falla
+cerrada.
+
+BUG `BUG-ORQ-20260713-274` (cerrado, conflicto de instrucciones del fixture):
+`request-ref-e2e-057-003` pidió `probe_final_20260713.go`, mientras el
+`AGENTS.md` del proyecto temporal autorizaba únicamente
+`probe_20260713.go`. Codex conservó la intención, no escribió fuera del
+write-set y cerró `blocked`. El fixture alineado
+`request-ref-e2e-057-004` cerró `accepted` y promocionó exactamente un commit
+canónico `528170925320eab5e64055b810959b1bd894bbf9`.

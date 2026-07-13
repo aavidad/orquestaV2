@@ -352,3 +352,24 @@ evidencia focal propia.
   necesitan su propio puerto de checkpoint.
 - Uso/coste real necesita conector productivo de proveedor; hoy la cobertura
   offline prueba el contrato y la web/MCP, no el dato remoto.
+
+## Corte 2026-07-13: 057 Codex por API MCP real
+
+Por orden del operador, esta evidencia cubre solo contrato provider-neutral y
+adaptador Codex. Claude/Gemini/Ollama/local quedan aislados y fuera de esta
+acreditación.
+
+| Evidencia | Resultado |
+|---|---|
+| revisión/binario | `388c1bd09f696fa3938a66e49cf739525c7b44f5`; SHA-256 `b0a3ae16146db2f919d2ea845683395bc620cad70262c79913e51f1370fd745c` |
+| request/Goal | `request-ref-e2e-057-004`; `goal-ref-task-autoprogramming-74d17f9aaa0d-g01` |
+| observe en vuelo | `estado=ok`, `goal_status=running`, `observe_later` |
+| terminal | run `cerrada`, Goal `complete`, cierre `accepted`, `no_action_closed` |
+| required test | `test -s internal/e2e057/probe_20260713.go`, atestación independiente durable |
+| integración | commit canónico `528170925320eab5e64055b810959b1bd894bbf9`, un integration receipt y un archive |
+| replay | mismo cierre; cero commit/archive/receipt duplicados |
+| shutdown | API pública con `orquesta-director`: `shutdown_ready=true`, `cleanup_completed`, cero procesos propios |
+
+Focales verdes en la misma revisión: runtime Codex Goal, runtime Codex
+app-server, stack Codex y `cmd/orquesta-server`; además `-race` focal, `go vet`,
+frontera neutral y `git diff --check`.
