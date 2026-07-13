@@ -2106,3 +2106,28 @@ tracking ref local quedó alineado, sin push. La promoción sigue fuera del host
 está bajo auditoría adversarial independiente contra los cuatro defectos de
 038 (BlockerRef, colecciones Go tipadas nested, reflection con campos privados
 y contrato `scope_mode`). No se declara cierre por la aceptación mecánica.
+
+### 2026-07-13T06:12Z — web 039 acreditado e integrado localmente
+
+La auditoría independiente acreditó 039: source y promoción comparten tree
+`7e5f5248aca87472f7db051d9fa0884801ac763b`; workspace fuente y proyecto
+canónico limpios; focal adversarial BlockerRef/typed containers/private field,
+scope, E2E MCP→HTTP→web, suites normales y race verdes; cuatro artefactos
+declarados/materializados válidos.
+
+La cadena incremental 037→038→039 entró al host sin conflictos como
+`ad92cf7a85`, `a7f413d7ee`, `bc565d9acc`. Sobre el árbol combinado con los
+guards concurrentes de Claude se reejecutó en host:
+
+```text
+MCP normal: PASS 0.241s
+web normal: PASS 1.326s
+app-codex-stack normal: PASS 25.152s
+MCP race: PASS 2.266s
+web race: PASS 5.179s
+git diff --check / status: limpio
+```
+
+El frente de proyección status web/MCP queda acreditado. El siguiente orden es
+reconstruir/sincronizar el runner local y lanzar por API la Fase A de catálogo
+sin autoridad de cleanup; después, consolidación allowlist y T5.1a.
