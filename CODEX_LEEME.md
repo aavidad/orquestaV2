@@ -2707,3 +2707,54 @@ del contexto autenticado, selectores solo estrechan por intersección y E2E con
 dos propietarios. No reutilizar principal del header, RequestedBy ni owner de
 leases como identidad humana. `OwnerRef` queda reservado a claim/lease;
 reutilizarlo para el inquilino sería una colisión semántica de seguridad.
+
+### 2026-07-13T07:46Z — auditoría en curso y feedback por MCP, no por SSH
+
+El host permanece limpio en `f00a3fa71493`; el canon del runner continúa en
+`086f352f2d74`. Ningún diff de 051/052/053/054 se ha integrado al host. El
+contenedor local consume cerca de cuatro CPU completas ejecutando suites Go,
+incluidos E2E y race; los timeouts observados no justifican relanzar goals.
+
+La API pública `/api/v0/autoprogramming/status` está devolviendo
+`autoprogramming_status_timeout` bajo carga. La observación pública de 052/054
+acepta trabajo asíncrono (`202`), mientras los successors automáticos 051/053
+devuelven `500 observe_app_director_goal_error`. Este fallo del camino successor
+es parte del frente que 052 debe corregir; queda prohibido duplicar goals o usar
+forced-stop mientras el daemon app-server sea compartido.
+
+Auditoría RO provisional 051 successor: ya rechaza symlink final con
+`Lstat/O_NOFOLLOW` y puede ejecutar el FD abierto, pero la identidad sigue siendo
+solo dev+inode, no SHA-256; se descarta al terminar la admisión y cada `Run`
+recaptura el path. Por tanto no detecta overwrite del mismo inode y vuelve a
+confiar en una identidad nueva. El guard AST aún no cubre de forma completa
+invocación indirecta/taint interprocedural. Sigue REWORK.
+
+Auditoría RO provisional 052: mejora idempotencia, recarga state+marker tras CAS,
+compara Spec/LaunchReceipt y añade StoreV0 reabierto. Aún debe exigir
+`StoreVersion>0`, `DirectorKind=codex_goal` en state/marker, unicidad y validez
+exacta de refs padre+cierre y un único retry CAS causal tras conflicto. No se
+acredita mientras esas matrices falten.
+
+Auditoría RO provisional 054: corrigió un fallback CAS incondicional y los
+focales normales constan verdes, pero solo detecta rotación de generación
+durante una llamada GetGoal/ReadThread. Todavía puede reutilizar el thread ID
+viejo si la generación cambia antes de la observación o entre StartThread,
+UpdateSettings, SetGoal y StartTurn. Tampoco versiona/invalida `startedAt`,
+`timeouts` ni `writeSetBaselines`, ni revalida socket/proceso/token efectivo.
+Faltan fake bloqueable causal, launch multi-RPC, limpieza de caches, segundo
+conflicto CAS, `loadErr` correcto y race acreditado. Sigue REWORK.
+
+El feedback no se inyectó a mano en los worktrees. Se usó el MCP local real
+`POST /mcp`, tool `orquesta.operator.director.message.v0`, y los cuatro mensajes
+quedaron `queued` en el buzón durable del Director:
+
+- 051: `operator-director-ack-ref-operator-ref-codex-audit-051-1783928279-message`;
+- 052: `operator-director-ack-ref-operator-ref-codex-audit-052-1783928327-message`;
+- 053: `operator-director-ack-ref-operator-ref-codex-audit-053-1783928342-message`;
+- 054: `operator-director-ack-ref-operator-ref-codex-audit-054-1783928263-message`.
+
+Para 053 se reafirma el rechazo anterior: separar loader/validator para respetar
+el límite de 900 líneas; lectura bounded antes de materializar; documento real
+con Config/CanonicalBytes/Revision; catálogo reflection-complete y políticas
+sensitive/restart sobre `serverProjectConfigFileV0`; semántica pura con error
+candidate-invalid distinto de schema-unsupported; suite completa de servidor.
