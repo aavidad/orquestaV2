@@ -18,6 +18,14 @@ type CouncilGateDecisionPortV0 interface {
 	CouncilDecisionAcceptedV0(ctx context.Context, councilRef string) (bool, error)
 }
 
+// CouncilConvenerPortV0 CONVOCA al consejo cuando hace falta. Sin esto el gate
+// solo sabe decir "no": calcularia el consejo que toca y se quedaria esperando a
+// que alguien lo convocara a mano. Una puerta que no llama al portero deja el
+// trabajo parado, no protegido.
+type CouncilConvenerPortV0 interface {
+	ConveneCouncilForRefV0(ctx context.Context, councilRef string, authorRef string) error
+}
+
 // CouncilGateConfigV0 gobierna el gate de creacion. El operador pidio el consejo
 // "en tiempo de creacion": esta es la pieza que hace que el ciclo lo convoque de
 // verdad en vez de dejarlo como una tool que nadie llama.
@@ -28,6 +36,7 @@ type CouncilGateDecisionPortV0 interface {
 type CouncilGateConfigV0 struct {
 	Required bool
 	Decision CouncilGateDecisionPortV0
+	Convener CouncilConvenerPortV0
 }
 
 // CouncilGateDecisionRequiredCodeV0 es el codigo publico con el que el gate
@@ -113,10 +122,20 @@ func (executor councilGatedArrancarDirectorExecutorV0) Execute(
 	if err != nil || !accepted {
 		// Sin decision aceptada NO se programa. El consejo no es un tramite
 		// posterior: es la puerta.
+		//
+		// Pero el gate no se limita a decir "no": CONVOCA. Si solo rechazara,
+		// alguien tendria que acordarse de convocar a mano y el trabajo se quedaria
+		// esperando a nadie.
+		mensaje := "el consejo debe aceptar la decision antes de programar la app"
+		if executor.config.Convener != nil {
+			if convErr := executor.config.Convener.ConveneCouncilForRefV0(ctx, councilRef, input.AppSpecRequest.RequestID); convErr == nil {
+				mensaje = "el consejo ha sido convocado (" + councilRef + "); falta su decision antes de programar"
+			}
+		}
 		return orquestamcp.NewMCPArrancarDirectorAppIssuesResultV0(input, []orquestamcp.MCPValidationIssueV0{{
 			Code:    CouncilGateDecisionRequiredCodeV0,
 			Field:   "app_spec_request.request_id",
-			Message: "el consejo debe aceptar la decision antes de programar la app",
+			Message: mensaje,
 		}}), nil
 	}
 	return executor.inner.Execute(ctx, input)

@@ -415,6 +415,10 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 		projectConfig.Council.Members,
 		codexUsageMetricsFromProjectConfigV0(serverConfig.IdleSelfImprovementProjectWorkDir, receiptStore),
 	))
+	councilConvener, err := newCouncilConvenerV0(serverConfig.StateDir, councilExecutor)
+	if err != nil {
+		return orquestaappcodexstack.StackV0{}, err
+	}
 	stack, err := orquestaappcodexstack.BuildStackV0(orquestaappcodexstack.ConfigV0{
 		Enabled:        true,
 		Timeout:        30 * time.Second,
@@ -500,6 +504,7 @@ func buildStackFromProjectConfigWithGoalBackendsV0(
 		CouncilGate: orquestaappcodexstack.CouncilGateConfigV0{
 			Required: projectConfig.Council.GateRequired,
 			Decision: councilExecutor.receipts,
+			Convener: councilConvener,
 		},
 		CouncilPublicErrorClassifier: councilPublicErrorClassifierV0,
 		ReviewGate: orquestaappcodexstack.ReviewGateConfigV0{

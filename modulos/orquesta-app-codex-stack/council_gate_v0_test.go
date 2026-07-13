@@ -2,6 +2,7 @@ package orquestaappcodexstack
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	orquestafactory "orquesta/modulos/orquesta-factory"
@@ -149,5 +150,53 @@ func TestCouncilGateNoAceptaAppSpecMutadaConElMismoRequestIDV0(t *testing.T) {
 	}
 	if len(result.Errores) == 0 || result.Errores[0].Code != CouncilGateDecisionRequiredCodeV0 {
 		t.Fatalf("no rechazo la spec mutada: %+v", result.Errores)
+	}
+}
+
+type convocadorEspiaV0 struct {
+	convocados []string
+	err        error
+}
+
+func (espia *convocadorEspiaV0) ConveneCouncilForRefV0(_ context.Context, councilRef, _ string) error {
+	if espia.err != nil {
+		return espia.err
+	}
+	espia.convocados = append(espia.convocados, councilRef)
+	return nil
+}
+
+// El gate no se limita a decir "no": CONVOCA. Si solo rechazara, alguien tendria
+// que acordarse de convocar a mano y el trabajo se quedaria esperando a nadie.
+func TestCouncilGateConvocaAlConsejoCuandoFaltaLaDecisionV0(t *testing.T) {
+	espia := &arranqueEspiaV0{}
+	convocador := &convocadorEspiaV0{}
+	gate := newCouncilGatedArrancarDirectorExecutorV0(espia, CouncilGateConfigV0{
+		Required: true,
+		Decision: &decisionFalsaV0{aceptadas: map[string]bool{}},
+		Convener: convocador,
+	})
+
+	spec := orquestafactory.AppSpecRequestV0{RequestID: "req-conv", Objetivo: "una app"}
+	result, err := gate.Execute(context.Background(), orquestamcp.MCPArrancarDirectorAppToolInputV0{
+		AppSpecRequest: spec,
+	})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if espia.llamado {
+		t.Fatal("la app arranco sin decision del consejo")
+	}
+	if len(convocador.convocados) != 1 {
+		t.Fatalf("el gate no convoco al consejo: %+v", convocador.convocados)
+	}
+	if convocador.convocados[0] != CouncilRefForAppRequestV0("req-conv", spec) {
+		t.Fatalf("convoco al consejo equivocado: %q", convocador.convocados[0])
+	}
+	if len(result.Errores) == 0 || result.Errores[0].Code != CouncilGateDecisionRequiredCodeV0 {
+		t.Fatalf("no delato que falta la decision: %+v", result.Errores)
+	}
+	if !strings.Contains(result.Errores[0].Message, "convocado") {
+		t.Fatalf("el mensaje no dice que el consejo fue convocado: %q", result.Errores[0].Message)
 	}
 }

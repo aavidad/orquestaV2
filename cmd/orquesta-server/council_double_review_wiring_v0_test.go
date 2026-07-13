@@ -139,3 +139,20 @@ func TestElServidorPasaLaConfigDeDobleRevisionAlStackV0(t *testing.T) {
 		}
 	}
 }
+
+// Mismo guard, misma leccion: si stack.go deja de pasar el convocador, el gate
+// vuelve a saber solo decir "no" y nadie convoca al consejo.
+func TestElServidorPasaElConvocadorAlGateV0(t *testing.T) {
+	fuente, err := os.ReadFile("stack.go")
+	if err != nil {
+		t.Fatalf("leyendo stack.go: %v", err)
+	}
+	for _, esperado := range []string{"Convener:", "councilConvener"} {
+		if !strings.Contains(string(fuente), esperado) {
+			t.Fatalf(
+				"stack.go no cablea el convocador (falta %q): el gate rechazaria sin convocar y el trabajo se quedaria esperando a nadie",
+				esperado,
+			)
+		}
+	}
+}
