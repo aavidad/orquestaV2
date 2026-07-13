@@ -2832,3 +2832,52 @@ Se lanzó 054R1 limpio desde `086f352f`, task única:
 Quedan por tanto cuatro reworks acreditables en paralelo: 051R2, 052R1, 053R2 y
 054R1. No lanzar 050A hasta que 052/054 liberen app-codex/appserver; su payload
 turn/interrupt ya está preparado. Ningún successor rechazado se integra.
+
+### 2026-07-13T08:36Z — segunda auditoría: receipts contradictorios y reworks focales
+
+051R2 (`99ef6549...`) rechazado. Receipt complete afirma identidad inmutable y
+tests verdes, pero no hay commit; full independiente termina rojo bajo carga y
+el código recaptura SHA/dev/inode dentro de cada Run. Race vuelve a indexar
+AllowedCommands directamente; guard solo ve CallExpr; argv0 es path y se añadió
+`/bin/sh -c '. /proc/self/fd/3'`. Códigos no coinciden con identity_invalid /
+identity_changed. Lo rescatable queda limitado a Lstat/O_NOFOLLOW/SHA y mismo
+FD. Lanzado 051R3:
+
+- run `request-ref-orquesta-allowlist-registry-authority-20260713-051r3`;
+- goal `goal-ref-task-autoprogramming-9531ff1c4428-g01`;
+- external `019f5a85-8333-7bc2-894a-66f4a8be5428`.
+
+052R1 (`8b6bb95c...`) rechazado pese a focal/full/race realmente verdes: no hay
+commit y quedan dos fallos exactos. El bucle reintenta cualquier error CAS, no
+solo el conflicto tipado; `Atoi` acepta sufijo `rework-01` cuando el padre
+coincide. Lanzado 052R2 mínimo:
+
+- run `request-ref-orquesta-observe-successor-typed-cas-canonical-20260713-052r2`;
+- goal `goal-ref-task-autoprogramming-133de09446d3-g01`;
+- external `019f5a88-bda2-7a70-9837-4e74aab06dd4`.
+
+053R2 (`36d6ad...`) rechazado aunque sus cuatro required tests, incluido race,
+pasaron. `config_file_v0.go` queda en 913 líneas; token real
+`/telegram_operator/token` queda sensitive=false/editable=true por policy mal
+nombrada; Presence ignora omitempty/padres pointer; semantic validation rompe
+el fallback previo de cero/no positivo; canonical/catalog solo los usa test;
+setter `server.project_config.replace` no existe; DecodeAndValidate muta target
+antes del error. Lanzado 053R3:
+
+- run `request-ref-orquesta-v1a-config-security-semantics-20260713-053r3`;
+- goal `goal-ref-task-autoprogramming-840398d11ca2-g01`;
+- external `019f5a88-bdad-7981-9b32-14094f00814f`.
+
+054R1 sigue activo. Ya implementa scope multi-RPC bajo lease, revalidación real
+de marker/tmux token/PID/socket y propagación durable RuntimeGenerationRef con
+invalidez de caches por generación. Auditoría live detectó que el camino
+missing/mismatch aún devolvía receipt/result invalid; se envió feedback para que
+solo el código de generación conocido sea running+retryable y quede probado
+backend→packet→lifecycle.
+
+Todos los feedback live fueron por MCP `orquesta.operator.director.message.v0`
+y quedaron queued; ACKs relevantes: 051R2 live `...1783929511`, 052R1 live
+`...1783929755`, 053R2 guard `...1783929846`, semántica `...1783929862`,
+seguridad token `...1783929972` y 054R1 transient `...1783929992`. Los agentes
+anteriores cerraron antes de consumir varios mensajes; por eso se lanzaron
+reworks causales nuevos y no se aceptaron sus receipts.
