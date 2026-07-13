@@ -3365,3 +3365,60 @@ verdes; E2E `TestGoalFirstProcessBackendsE2EV0ReworkThenClose` verde; paquetes
 goal, runtime-codex-goal y appserver verdes; `go test -mod=vendor -count=1
 ./...` verde; `git diff --check` verde. Revisor lifecycle: PASS. Revisor
 app-server: PASS. Ningún cambio tangencial de fixture R6 fue conservado.
+
+### 2026-07-13T11:25Z — 054 desplegado; 051R5/053R5 en ejecución
+
+La integración 054 quedó en host como `9b62cf3b90` y en el runner canónico
+como `46738ea15ee8ea4125359b248514b122207f013e`. La imagen local se reconstruyó
+desde ese commit y el contenedor fue recreado sin acceso al home del host ni al
+socket Docker. El servidor local quedó `running`, `startup_ready=true`; los
+focales normales/race, E2E Claude/Gemini y la suite completa pasaron antes del
+despliegue. Tres revisiones independientes dieron PASS a lifecycle, app-server
+y consumidores. Los ticks posteriores no reprodujeron timeout ni backend call
+in-flight.
+
+Se lanzaron exclusivamente por la tool MCP pública
+`orquesta.autoprogramming.prepare_run.v0`, en paralelo y con workspaces
+aislados, los dos reworks siguientes:
+
+- 051R5: run
+  `request-ref-orquesta-allowlist-fd-causal-final-20260713-051r5`, goal
+  `goal-ref-task-autoprogramming-c4f97f67dfd6-g01`, base canónica
+  `46738ea15...`. Cierra revalidación dev/inode/SHA antes de cada Run, dup
+  atómico CLOEXEC, guard AST/types y wiring/factories reales.
+- 053R5: run
+  `request-ref-orquesta-config-foundation-exact-20260713-053r5`, goal
+  `goal-ref-task-autoprogramming-4121ef947a05-g01`, misma base. Cierra fuente
+  de configuración, secretos por referencia y proyección efectiva consumida
+  por producción.
+
+Ambos siguen `running`, con generación ligada, caché de contexto almacenada y
+progreso material durable. 051 ya modifica diez paths y ejecuta suites
+focales; 053 registra diff durable y artefactos de configuración. No existe
+receipt terminal ni cierre aceptado todavía: `checkpoint_started` y
+`partial_artifacts_written` significan trabajo en curso, no acreditación. Los
+diagnósticos agregados de runs históricos no se atribuyen a estos dos runs.
+Dos auditores RO separados revisan sus diffs y tests; no se integra por
+self-receipt ni se fuerza stop del daemon compartido.
+
+La inspección del backlog fijó el orden causal posterior:
+
+1. 056, stop selectivo por goal/thread y generación. El stop actual todavía
+   llama `Shutdown*` sobre el tmux singleton. Debe interrumpir y bloquear solo
+   el turno/goal objetivo bajo lease generacional, devolver target stopped +
+   shared backend preserved y demostrar que otro goal continúa observable.
+2. 057, intent manifest inmutable. El pipeline aún trunca objective/context y
+   limita criterios antes de construir el GoalSpec. Se exige manifest completo
+   canonizado, SHA-256, create-if-absent durable, ref/hash propagados, JSON RO
+   materializado y verificado antes de Start y reworks con la misma huella.
+3. 058, Consejo de Sabios real. El gate está desactivado para crear apps, la
+   convocatoria manual no tiene consumidor y ballots/reviews confían en
+   identidad declarada por caller. Se consolidará sobre el flujo residente:
+   Sol/Terra/Luna lanzados por Orquesta con receipt+ACK, consejo obligatorio
+   antes de arquitectura/backlog y dos revisiones independientes acreditadas
+   tras cada entrega. No se ampliará el carril manual solapado.
+
+056 no se lanzará hasta disponer de capacidad y una solicitud compacta
+revisada. 057 debe preceder cualquier frente nuevo cuya intención extensa no
+quepa en el contrato actual. Claude no ha emitido una objeción nueva tras leer
+`9b62cf3b90`.
