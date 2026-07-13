@@ -2552,14 +2552,31 @@ mediante `GoalWorkStateCASStorePortV0` un único EvidenceRef metadata-only con
 `sha256(err.Error())`; nunca el texto raw. Sin CAS, append confirmado o
 reconciliación de conflicto que pruebe la evidencia, se conserva el error
 original. Se exige matriz de privacidad, identidad, estados, refs, generaciones
-e idempotencia. El primer POST `retry1` devolvió HTTP 2xx pero no quedó visible
-ni en status ni en state/runtime; no se lo acredita. El relanzamiento explícito
-`retry2` sí fue aceptado y quedó running:
+e idempotencia.
 
-- run `request-ref-orquesta-rework-048-observe-successor-durable-diagnostic-retry2`;
-- goal `goal-ref-task-autoprogramming-a16d1d2b6c53-g01`;
-- external `019f5a37-a8a3-7a91-8c19-5ae35bcb1381`;
+Corrección operativa: `retry1` sí había persistido; la primera consulta status
+omitió `scope_mode=run` y `scope=<run_ref>` y produjo una falsa ausencia. El
+relanzamiento `retry2` creó un duplicado real. Se preservó la ejecución más
+antigua y se detuvo `retry2` por `/api/v0/runs/control` con `forced=true`:
+respuesta 200, `status=final_status=stopped`, backend `blocked`, señal confirmada
+y receipts de stop. No hubo tercer relanzamiento ciego.
+
+`retry1` terminó después `invalid/codex_goal_observation_rejected`, sin resultante,
+pero conserva un diff no committeado de 232 líneas en el worktree
+`2f3d1a49c25f07c80dd1f37e158f4954`. No se integra: le faltan el reintento CAS
+acotado, idempotencia sin escritura, respuesta desde el estado confirmado y la
+matriz completa. Se lanzó recuperación causal `recovery1`, instruida para
+inspeccionar ese worktree y reutilizar solo lo válido:
+
+- run `request-ref-orquesta-rework-048-observe-successor-durable-diagnostic-recovery1`;
+- goal `goal-ref-task-autoprogramming-c3d0dd853cbb-g01`;
+- external `019f5a3f-ec6b-7741-8d14-5efff35d2c2b`;
 - base `60683f4cc59334da234f17e59312dc3dd19031b3`.
+
+En paralelo, con write-set disjunto, quedó running la consolidación 041 de la
+allowlist (`goal-ref-task-autoprogramming-e89591a0a7b0-g01`). Debe producir una
+única autoridad interna, cuatro callers y guard AST sin alterar códigos de error,
+orden sintaxis→allowlist→shell, alias Go ni defensas de configuración/TOCTOU.
 
 T5.1a promovió en el runner `60683f4cc59334da234f17e59312dc3dd19031b3`
 (source `ba039d7922`) y pasó focal, paquete y race, pero no se integra: claim y
