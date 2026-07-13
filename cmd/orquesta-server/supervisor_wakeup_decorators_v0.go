@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 
@@ -386,6 +387,40 @@ type serverWakeupGoalStateStorePortV0 interface {
 	orquestagoal.GoalWorkRunMarkerStorePortV0
 	orquestagoal.GoalWorkRunMarkerListPortV0
 	orquestagoal.GoalWorkStateListPortV0
+}
+
+// CompareAndSwapGoalWorkStateV0 SE REENVIA, y no es un detalle: el ciclo de vida
+// obtiene la autoridad CAS haciendo un type assert sobre ESTE MISMO store
+// (`ports.StateStore.(GoalWorkStateCASStorePortV0)`). Un decorador que envuelve el
+// store y se deja el CAS por el camino le quita la capacidad sin decirlo: el
+// assert falla y NINGUN goal puede arrancar (`ports.goal_state_cas_store`).
+//
+// Y lo que NO se puede hacer nunca es caer a Save como repuesto: convertiria una
+// serializacion garantizada en una carrera silenciosa. Mejor que no arranque a que
+// arranque corrompiendo estado.
+func (store serverWakeupGoalStateStoreV0) CompareAndSwapGoalWorkStateV0(
+	ctx context.Context,
+	expectedVersion uint64,
+	state orquestagoal.GoalWorkStateV0,
+) (orquestagoal.GoalWorkStateV0, error) {
+	cas, ok := store.inner.(orquestagoal.GoalWorkStateCASStorePortV0)
+	if !ok {
+		return orquestagoal.GoalWorkStateV0{}, fmt.Errorf(
+			"serverWakeupGoalStateStore: el store envuelto no soporta CAS y no se degrada a Save",
+		)
+	}
+	saved, err := cas.CompareAndSwapGoalWorkStateV0(ctx, expectedVersion, state)
+	if err != nil {
+		return saved, err
+	}
+	if store.stateChange != nil {
+		store.stateChange.notifyV0()
+	}
+	store.wakeup.requestGoalObservationV0("goal_state_saved")
+	if orquestagoal.GoalWorkResultTerminalV0(saved.Status) {
+		store.wakeup.requestV0("goal_state_terminal")
+	}
+	return saved, nil
 }
 
 func (store serverWakeupGoalStateStoreV0) SaveGoalWorkStateV0(
