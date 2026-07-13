@@ -45,6 +45,8 @@ type MCPAutoprogrammingStatusToolInputV0 struct {
 	IncludeProcessRefs   mcpFlexibleBoolV0 `json:"include_process_refs,omitempty"`
 	IncludeAgentProgress mcpFlexibleBoolV0 `json:"include_agent_progress,omitempty"`
 	IncludeAgentUsage    mcpFlexibleBoolV0 `json:"include_agent_usage,omitempty"`
+	ScopeMode            string            `json:"scope_mode,omitempty"`
+	Scope                string            `json:"scope,omitempty"`
 }
 
 type MCPAutoprogrammingStatusToolResultV0 struct {
@@ -54,6 +56,8 @@ type MCPAutoprogrammingStatusToolResultV0 struct {
 	RunRef                    string                                                                      `json:"run_ref,omitempty"`
 	CausalVerdict             string                                                                      `json:"causal_verdict,omitempty"`
 	CausalReasonCode          string                                                                      `json:"causal_reason_code,omitempty"`
+	ScopeMode                 string                                                                      `json:"scope_mode,omitempty"`
+	Scope                     string                                                                      `json:"scope,omitempty"`
 	QueueRef                  string                                                                      `json:"queue_ref,omitempty"`
 	Queue                     *MCPRunQueuePriorityToolResultV0                                            `json:"queue,omitempty"`
 	Run                       *MCPDirectorStatsToolResultV0                                               `json:"run,omitempty"`
@@ -119,8 +123,8 @@ func MCPAutoprogrammingStatusDescriptorV0() MCPAutoprogrammingStatusToolDescript
 	return MCPAutoprogrammingStatusToolDescriptorV0{
 		Name:        MCPAutoprogrammingStatusToolNameV0,
 		Version:     MCPAutoprogrammingStatusToolVersionV0,
-		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,app_ref?,external_job_ref?,queue_ref?,app_refs?,queue_limit?,occurred_at?,include_process_refs?,include_agent_progress?,include_agent_usage?,telemetry_flags?,operator_advice?}",
-		Output:      "ok:{causal_verdict?,causal_reason_code?,queue?,run?,queue_health?,stale_running_total?,stale_running?[]{code,count?,sample_refs?,severity?,run_ref?,status?,goal_ref?,goal_status?,causal_verdict?,causal_reason_code?,context_budget_total_bytes?,static_prompt_bytes?,dynamic_context_bytes?,code_context_cache_status?,recommended_action?,evidence_refs?},projects?,tasks?,agents?,operator?,goal_progress_policy?,efficiency_summary?{schema_version,state,recommended_action?,reasons?},idle_self_improvement_budget?,ops_snapshot?,diagnostics_total?,diagnostics?[]{code,count?,sample_refs?,scope?,message?,evidence_refs?},evidence_refs?}|error:{errores_publicos,evidence_refs?,diagnostics?,operator_advice?}",
+		InputSchema: "envelope:{request_id?,correlation_id?,run_ref?,app_ref?,external_job_ref?,queue_ref?,app_refs?,queue_limit?,occurred_at?,include_process_refs?,include_agent_progress?,include_agent_usage?,scope_mode?,scope?,telemetry_flags?,operator_advice?}",
+		Output:      "ok:{scope_mode?,scope?,causal_verdict?,causal_reason_code?,queue?,run?,queue_health?,stale_running_total?,stale_running?[]{code,count?,sample_refs?,severity?,run_ref?,status?,goal_ref?,goal_status?,causal_verdict?,causal_reason_code?,context_budget_total_bytes?,static_prompt_bytes?,dynamic_context_bytes?,code_context_cache_status?,recommended_action?,evidence_refs?},projects?,tasks?,agents?,operator?,goal_progress_policy?,efficiency_summary?{schema_version,state,recommended_action?,reasons?},idle_self_improvement_budget?,ops_snapshot?,diagnostics_total?,diagnostics?[]{code,count?,sample_refs?,scope?,message?,evidence_refs?},evidence_refs?}|error:{errores_publicos,evidence_refs?,diagnostics?,operator_advice?,scope_mode?,scope?}",
 		ResourceURI: MCPAutoprogrammingStatusResourceURIV0,
 		Invariantes: []string{
 			"adaptador inbound fino",
@@ -384,6 +388,7 @@ func (executor MCPAutoprogrammingStatusToolExecutorV0) Execute(
 	)
 	result.OpsSnapshot = buildMCPAutoprogrammingOpsSnapshotV0(result.Queue, result.Run, result.Operator, result.StaleRunning, input.OccurredAt)
 	result = projectMCPAutoprogrammingStatusListsV0(result)
+	result = scopeMCPAutoprogrammingStatusResultV0(result, input)
 	return result, nil
 }
 

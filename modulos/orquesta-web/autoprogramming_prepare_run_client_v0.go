@@ -193,6 +193,18 @@ func normalizeAutoprogrammingStatusQueryV0(query WebAutoprogrammingStatusQueryV0
 	query.AppRef = trimV0(query.AppRef)
 	query.ExternalJobRef = trimV0(query.ExternalJobRef)
 	query.QueueRef = trimV0(query.QueueRef)
+	query.ScopeMode = strings.ToLower(trimV0(query.ScopeMode))
+	query.Scope = trimV0(query.Scope)
+	if query.ScopeMode == "" {
+		switch {
+		case query.RunRef != "":
+			query.ScopeMode, query.Scope = orquestamcp.MCPAutoprogrammingStatusScopeRunV0, query.RunRef
+		case query.QueueRef != "":
+			query.ScopeMode, query.Scope = orquestamcp.MCPAutoprogrammingStatusScopeQueueV0, query.QueueRef
+		default:
+			query.ScopeMode = orquestamcp.MCPAutoprogrammingStatusScopeLegacyV0
+		}
+	}
 	query.AppRefs = compactStringsV0(query.AppRefs)
 	if !query.IncludeProcessRefs && !query.IncludeAgentProgress && !query.IncludeAgentUsage {
 		query.IncludeAgentProgress = true
@@ -208,6 +220,8 @@ func autoprogrammingStatusToolInputV0(query WebAutoprogrammingStatusQueryV0) orq
 		OccurredAt: query.OccurredAt, IncludeProcessRefs: orquestamcp.MCPFlexibleBoolV0(query.IncludeProcessRefs),
 		IncludeAgentProgress: orquestamcp.MCPFlexibleBoolV0(query.IncludeAgentProgress),
 		IncludeAgentUsage:    orquestamcp.MCPFlexibleBoolV0(query.IncludeAgentUsage),
+		ScopeMode:            query.ScopeMode,
+		Scope:                query.Scope,
 	}
 }
 

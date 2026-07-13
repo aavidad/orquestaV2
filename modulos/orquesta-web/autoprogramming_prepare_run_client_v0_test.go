@@ -10,6 +10,7 @@ import (
 	orquestaautoprogramming "orquesta/modulos/orquesta-autoprogramming"
 	orquestagoal "orquesta/modulos/orquesta-goal"
 	orquestamcp "orquesta/modulos/orquesta-mcp"
+	orquestacionnucleoapp "orquesta/modulos/orquesta-orchestration-core"
 )
 
 func TestRESTAutoprogrammingPrepareRunClientV0PreservaWorktreeAisladaYRamaOpaca(t *testing.T) {
@@ -219,6 +220,40 @@ func TestRESTAutoprogrammingPrepareRunClientV0ConsultaStatusNormalizaYDecodifica
 		viewModel.QueueRef != "queue-autoprog-status-001" {
 		t.Fatalf("status viewmodel no decodificado: %+v", viewModel)
 	}
+}
+
+func TestRESTAutoprogrammingStatusE2EV0FiltersOpaqueRunAcrossMCPHTTPAndWeb(t *testing.T) {
+	allowed := "request-ref-status-opaque-allowed-001"
+	foreign := "request-ref-status-opaque-allowed-001-shadow"
+	server := newWebHTTPTestServerV0(t, orquestamcp.NewMCPAutoprogrammingStatusHTTPHandlerV0(
+		orquestamcp.MCPAutoprogrammingStatusToolExecutorV0{
+			Queue: webStatusScopeQueueV0{ranked: []orquestamcp.MCPRunQueueRankedCandidateCompactV0{{RunRef: allowed, Status: "running"}, {RunRef: foreign, Status: "running"}}},
+			Stats: webStatusScopeStatsV0{},
+		},
+	))
+	defer server.Close()
+
+	vm, err := NewRESTAutoprogrammingPrepareRunClientV0(server.URL, time.Second).ConsultarAutoprogrammingStatus(context.Background(), WebAutoprogrammingStatusQueryV0{RunRef: allowed})
+	if err != nil {
+		t.Fatalf("status e2e: %v", err)
+	}
+	if vm.ScopeMode != orquestamcp.MCPAutoprogrammingStatusScopeRunV0 || vm.Scope != allowed || len(vm.Runs) != 2 || vm.Runs[0].RunRef != allowed || vm.Runs[1].RunRef != allowed || len(vm.Agents) != 1 {
+		t.Fatalf("viewmodel debe ocultar run opaca ajena: %+v", vm)
+	}
+}
+
+type webStatusScopeQueueV0 struct {
+	ranked []orquestamcp.MCPRunQueueRankedCandidateCompactV0
+}
+
+func (fake webStatusScopeQueueV0) Execute(_ context.Context, input orquestamcp.MCPRunQueuePriorityToolInputV0) (orquestamcp.MCPRunQueuePriorityToolResultV0, error) {
+	return orquestamcp.MCPRunQueuePriorityToolResultV0{Estado: orquestamcp.MCPRunQueuePriorityEstadoOKV0, QueueRef: input.QueueRef, Ranked: fake.ranked}, nil
+}
+
+type webStatusScopeStatsV0 struct{}
+
+func (webStatusScopeStatsV0) Execute(_ context.Context, input orquestamcp.MCPDirectorStatsToolInputV0) (orquestamcp.MCPDirectorStatsToolResultV0, error) {
+	return orquestamcp.MCPDirectorStatsToolResultV0{Estado: orquestamcp.MCPDirectorStatsEstadoOKV0, RunRef: input.RunRef, Stats: &orquestacionnucleoapp.DirectorRunStatsV0{RunRef: input.RunRef, ProjectRef: "app-ref-status", Agents: []orquestacionnucleoapp.DirectorAgentStatsV0{{AgentRequestID: "agent-ref-status", InFlight: true}}}}, nil
 }
 
 func validWebAutoprogrammingPrepareRunCommandV0() WebAutoprogrammingPrepareRunCommandV0 {

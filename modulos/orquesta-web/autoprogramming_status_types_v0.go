@@ -20,6 +20,8 @@ type WebAutoprogrammingStatusQueryV0 struct {
 	IncludeProcessRefs   bool     `json:"include_process_refs,omitempty"`
 	IncludeAgentProgress bool     `json:"include_agent_progress,omitempty"`
 	IncludeAgentUsage    bool     `json:"include_agent_usage,omitempty"`
+	ScopeMode            string   `json:"scope_mode,omitempty"`
+	Scope                string   `json:"scope,omitempty"`
 }
 
 type WebAutoprogrammingStatusViewModelV0 struct {
@@ -30,6 +32,8 @@ type WebAutoprogrammingStatusViewModelV0 struct {
 	RunLive         bool                                        `json:"run_live"`
 	QueueRef        string                                      `json:"queue_ref,omitempty"`
 	RunRef          string                                      `json:"run_ref,omitempty"`
+	ScopeMode       string                                      `json:"scope_mode,omitempty"`
+	Scope           string                                      `json:"scope,omitempty"`
 	QueueHealth     *WebAutoprogrammingQueueHealthV0            `json:"queue_health,omitempty"`
 	StaleRunning    []WebAutoprogrammingActionableRunV0         `json:"stale_running,omitempty"`
 	SafeActions     []WebAutoprogrammingSafeActionV0            `json:"safe_actions,omitempty"`
@@ -127,6 +131,8 @@ func NewWebAutoprogrammingStatusViewModelV0(locale string, result orquestamcp.MC
 		Estado:          webAutoprogrammingPrepareRunEstadoV0(result.Estado),
 		QueueRef:        trimV0(result.QueueRef),
 		RunRef:          trimV0(result.RunRef),
+		ScopeMode:       trimV0(result.ScopeMode),
+		Scope:           trimV0(result.Scope),
 		StaleRunning:    webAutoprogrammingActionableRunsV0(result.StaleRunning),
 		Diagnostics:     webAutoprogrammingDiagnosticsV0(result.Diagnostics),
 		ErroresPublicos: webAutoprogrammingPrepareRunIssuesV0(result.Errores),

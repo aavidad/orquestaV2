@@ -75,6 +75,8 @@ func autoprogrammingStatusQueryFromURLV0(r *http.Request) WebAutoprogrammingStat
 		IncludeProcessRefs:   boolQueryValueV0(values.Get("include_process_refs")),
 		IncludeAgentProgress: boolQueryValueV0(values.Get("include_agent_progress")),
 		IncludeAgentUsage:    boolQueryValueV0(values.Get("include_agent_usage")),
+		ScopeMode:            values.Get("scope_mode"),
+		Scope:                values.Get("scope"),
 	}
 }
 
