@@ -60,6 +60,37 @@ func (coordinator *goalFirstObservationCoordinatorV0) acquireV0(
 	}
 }
 
+// tryAcquireV0 reserva un run sin esperar otro lifecycle que ya este en vuelo.
+// Asi un tick residente puede avanzar con otros runs cuando el backend ignora
+// la cancelacion del contexto padre.
+func (coordinator *goalFirstObservationCoordinatorV0) tryAcquireV0(runRef string) (func(), bool) {
+	runRef = strings.TrimSpace(runRef)
+	if coordinator == nil || runRef == "" {
+		return func() {}, true
+	}
+	coordinator.mu.Lock()
+	defer coordinator.mu.Unlock()
+	if coordinator.runs == nil {
+		coordinator.runs = map[string]*goalFirstObservationRunGateV0{}
+	}
+	gate := coordinator.runs[runRef]
+	if gate == nil {
+		gate = &goalFirstObservationRunGateV0{token: make(chan struct{}, 1)}
+		gate.token <- struct{}{}
+		coordinator.runs[runRef] = gate
+	}
+	select {
+	case <-gate.token:
+		gate.refs++
+		return func() {
+			gate.token <- struct{}{}
+			coordinator.releaseReferenceV0(runRef, gate)
+		}, true
+	default:
+		return nil, false
+	}
+}
+
 func (coordinator *goalFirstObservationCoordinatorV0) releaseReferenceV0(
 	runRef string,
 	gate *goalFirstObservationRunGateV0,

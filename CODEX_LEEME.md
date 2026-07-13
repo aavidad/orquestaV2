@@ -3263,3 +3263,45 @@ seleccionados/revalidados contra ctx, observer con ctx original, resultados
 indexados por canal buffered sin escritura tardía sobre slices compartidos,
 collector con select parent/results y drenado no bloqueante de evidencia al
 deadline.
+
+### 2026-07-13T10:40Z — 055 integrado causalmente; 054R6 rechazado
+
+055R2 y el duplicado R3 terminaron convergiendo en dos implementaciones
+distintas pero con el mismo defecto raíz: ambos esperaban a todos los hijos
+detached antes de retornar. Sus tests liberaban A antes de comprobar el retorno
+y daban falso verde. Ninguna rama se integró tal cual.
+
+Se realizó integración causal mínima en host usando solo la arquitectura útil
+producida por Orquesta: extracción del cuerpo por estado, fanout 4,
+`tryAcquire` por run y fold por índice. La corrección final usa jobs sin buffer,
+select/recheck de ctx antes de arrancar, observer con ctx padre, resultados
+indexados por canal buffered y escritura de `outcomes/received` exclusivamente
+en el parent. Al deadline drena completions ya disponibles, marca slots
+pendientes y devuelve resultado parcial más `ctx.Err`; workers tardíos nunca
+tocan memoria compartida. El issue busy exacto es
+`goal_observation_run_in_flight`; el gate vive hasta retorno real del backend.
+
+Pruebas causales añadidas:
+
+- A ignora ctx, B progresa/persiste y el batch retorna al deadline sin liberar
+  A;
+- tick siguiente no duplica A y publica el issue exacto;
+- cuatro workers bloqueados no arrancan un quinto job tras cancelación;
+- fanout máximo 4 y fold estable en orden de entrada;
+- observer largo que respeta ctx usa la ventana completa del parent, sin
+  timeout hijo artificial.
+
+Evidencia host: focal normal verde, focal `-race -count=3` verde, ventana larga
+`count=10` y race verdes, paquete completo app-stack+server normal y race
+verdes, `cmd/orquesta-server` verde y `go test -mod=vendor -count=1 ./...`
+verde. Auditor independiente no encontró data races, escrituras tardías ni
+reformat ajeno bloqueante y dio PASS. El archivo nuevo
+`goal_active_observation_v0_test.go` debe formar parte del commit.
+
+054R6 queda REJECTED pese a portar los once paths R4 y añadir un CAS2/Load2
+compatible. No fuerza el caso incompatible en CAS2, no compara result/closure
+current contra desired y no tiene test público Fingerprint con rotación real.
+Volvió a declarar consumidores pass sin esperar cells 38/39/41. La atestación
+oficial confirmó rojo, exit 1: `codex_app_server_tmux_has_session_failed` y
+`smoke_temp_root_blocked outside-allowed-temp-prefix`. Durable sigue running;
+self-receipt complete no acredita. Digest `5b915322...` preservado.

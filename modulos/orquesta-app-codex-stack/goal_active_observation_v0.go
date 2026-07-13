@@ -9,10 +9,26 @@ import (
 	orquestagoal "orquesta/modulos/orquesta-goal"
 )
 
-func (stack *StackV0) ObserveActiveGoalWorksV0(
-	ctx context.Context,
-	request orquestagoal.GoalWorkObserveActiveRequestV0,
-) (orquestagoal.GoalWorkObserveActiveResultV0, error) {
+const (
+	activeGoalObservationFanoutV0           = 4
+	activeGoalObservationDeadlineIssueV0    = "observe_goal_deadline_exceeded"
+	activeGoalObservationRunInFlightIssueV0 = "goal_observation_run_in_flight"
+)
+
+type activeGoalObservationOutcomeV0 struct {
+	observation *orquestagoal.GoalWorkObserveResultV0
+	issues      []orquestagoal.GoalWorkObserveActiveIssueV0
+}
+
+type activeGoalObservationIndexedOutcomeV0 struct {
+	index   int
+	outcome activeGoalObservationOutcomeV0
+}
+
+func (stack *StackV0) ObserveActiveGoalWorksV0(ctx context.Context, request orquestagoal.GoalWorkObserveActiveRequestV0) (orquestagoal.GoalWorkObserveActiveResultV0, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	if stack == nil {
 		return orquestagoal.GoalWorkObserveActiveResultV0{}, fmt.Errorf("stack requerido")
 	}
@@ -28,97 +44,162 @@ func (stack *StackV0) ObserveActiveGoalWorksV0(
 	if err != nil {
 		return orquestagoal.GoalWorkObserveActiveResultV0{}, err
 	}
-	out := orquestagoal.GoalWorkObserveActiveResultV0{}
-	for _, state := range states {
-		if repaired, ok, repairErr := orquestaappdirectorservice.ReconcileAppDirectorGoalReworkStateFromMarkerV0(ctx, state, stack.Ports); repairErr != nil {
-			out.Issues = append(out.Issues, orquestagoal.GoalWorkObserveActiveIssueV0{
-				RunRef: strings.TrimSpace(state.RunRef), GoalRef: strings.TrimSpace(state.GoalRef),
-				Code: "goal_rework_state_reconcile_failed", Field: "goal_state", Message: repairErr.Error(),
-			})
-			continue
-		} else if ok {
-			state = repaired
-		}
-		if stack.goalFirstAutoprogrammingPromotionRecoveryPendingV0(state) {
-			complete, err := stack.recoverGoalFirstAutoprogrammingPromotionV0(ctx, state)
-			if err != nil {
-				out.Issues = append(out.Issues, orquestagoal.GoalWorkObserveActiveIssueV0{
-					RunRef: strings.TrimSpace(state.RunRef), GoalRef: strings.TrimSpace(state.GoalRef),
-					Code: "goal_first_promotion_recovery_failed", Field: "autoprogramming_promotion", Message: err.Error(),
-				})
-				continue
-			}
-			if !complete {
-				out.Issues = append(out.Issues, orquestagoal.GoalWorkObserveActiveIssueV0{
-					RunRef: strings.TrimSpace(state.RunRef), GoalRef: strings.TrimSpace(state.GoalRef),
-					Code: "goal_first_promotion_recovery_pending", Field: "autoprogramming_promotion",
-				})
-			}
-			if refreshed, loadErr := stack.Ports.GoalStateStore.LoadGoalWorkStateV0(ctx, state.RunRef); loadErr == nil {
-				state = refreshed
-			}
-		}
-		if !orquestagoal.GoalWorkStatePendingObservationV0(state) {
-			if !orquestagoal.GoalWorkStateShouldReturnActiveSnapshotV0(state, listRequest) {
-				continue
-			}
-			observed, err := orquestagoal.GoalWorkObservationSnapshotFromStateV0(state)
-			if err != nil {
-				out.Issues = append(out.Issues, orquestagoal.GoalWorkObserveActiveIssueV0{
-					RunRef:  strings.TrimSpace(state.RunRef),
-					GoalRef: strings.TrimSpace(state.GoalRef),
-					Code:    "goal_state_snapshot_invalid",
-					Field:   "goal_state",
-					Message: err.Error(),
-				})
-				continue
-			}
-			out.Observations = append(out.Observations, observed)
-			out.EvidenceRefs = compactStringsV0(append(out.EvidenceRefs, observed.EvidenceRefs...))
-			continue
-		}
-		runRef := strings.TrimSpace(state.RunRef)
-		if runRef == "" {
-			out.Issues = append(out.Issues, orquestagoal.GoalWorkObserveActiveIssueV0{
-				GoalRef: strings.TrimSpace(state.GoalRef),
-				Code:    "goal_state_run_ref_missing",
-				Field:   "run_ref",
-			})
-			continue
-		}
-		observed, err := stack.ObserveAppDirectorGoalV0(
-			ctx,
-			orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0{
-				RunRef:      runRef,
-				RequestedBy: "orquesta-app-codex-stack-active-goal-observer",
-			},
-		)
-		if err != nil {
-			out.Issues = append(out.Issues, orquestagoal.GoalWorkObserveActiveIssueV0{
-				RunRef:  runRef,
-				GoalRef: strings.TrimSpace(state.GoalRef),
-				Code:    "observe_goal_failed",
-				Field:   "run_ref",
-				Message: err.Error(),
-			})
-			continue
-		}
-		persisted, loadErr := stack.Ports.GoalStateStore.LoadGoalWorkStateV0(ctx, runRef)
-		if loadErr != nil {
-			out.Issues = append(out.Issues, orquestagoal.GoalWorkObserveActiveIssueV0{
-				RunRef:  runRef,
-				GoalRef: strings.TrimSpace(observed.GoalRef),
-				Code:    "goal_state_load_after_observe_failed",
-				Field:   "run_ref",
-				Message: loadErr.Error(),
-			})
-			continue
-		}
-		observation := stackGoalActiveObservationFromAppDirectorV0(persisted, observed)
-		out.Observations = append(out.Observations, observation)
-		out.EvidenceRefs = compactStringsV0(append(out.EvidenceRefs, observation.EvidenceRefs...))
+	if len(states) == 0 {
+		return orquestagoal.GoalWorkObserveActiveResultV0{}, nil
 	}
-	return out, nil
+
+	outcomes := make([]activeGoalObservationOutcomeV0, len(states))
+	received := make([]bool, len(states))
+	jobs := make(chan int)
+	results := make(chan activeGoalObservationIndexedOutcomeV0, len(states))
+	workers := activeGoalObservationFanoutV0
+	if workers > len(states) {
+		workers = len(states)
+	}
+	for worker := 0; worker < workers; worker++ {
+		go func() {
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case index, ok := <-jobs:
+					if !ok {
+						return
+					}
+					if ctx.Err() != nil {
+						return
+					}
+					results <- activeGoalObservationIndexedOutcomeV0{
+						index:   index,
+						outcome: stack.observeActiveGoalWorkStateV0(ctx, states[index], listRequest),
+					}
+				}
+			}
+		}()
+	}
+	launched := 0
+scheduling:
+	for launched < len(states) {
+		select {
+		case <-ctx.Done():
+			break scheduling
+		case jobs <- launched:
+			launched++
+		}
+	}
+	close(jobs)
+	completed := 0
+	for completed < launched {
+		select {
+		case result := <-results:
+			if !received[result.index] {
+				outcomes[result.index] = result.outcome
+				received[result.index] = true
+				completed++
+			}
+		case <-ctx.Done():
+			for {
+				select {
+				case result := <-results:
+					if !received[result.index] {
+						outcomes[result.index] = result.outcome
+						received[result.index] = true
+						completed++
+					}
+				default:
+					for index := range states {
+						if !received[index] {
+							outcomes[index] = activeGoalObservationDeadlineOutcomeV0(states[index])
+						}
+					}
+					return foldActiveGoalObservationOutcomesV0(outcomes), ctx.Err()
+				}
+			}
+		}
+	}
+	return foldActiveGoalObservationOutcomesV0(outcomes), nil
+}
+
+func activeGoalObservationDeadlineOutcomeV0(state orquestagoal.GoalWorkStateV0) activeGoalObservationOutcomeV0 {
+	return activeGoalObservationOutcomeV0{issues: []orquestagoal.GoalWorkObserveActiveIssueV0{{
+		RunRef:  strings.TrimSpace(state.RunRef),
+		GoalRef: strings.TrimSpace(state.GoalRef),
+		Code:    activeGoalObservationDeadlineIssueV0,
+		Field:   "run_ref",
+	}}}
+}
+
+func foldActiveGoalObservationOutcomesV0(outcomes []activeGoalObservationOutcomeV0) orquestagoal.GoalWorkObserveActiveResultV0 {
+	out := orquestagoal.GoalWorkObserveActiveResultV0{}
+	for _, outcome := range outcomes {
+		out.Issues = append(out.Issues, outcome.issues...)
+		if outcome.observation == nil {
+			continue
+		}
+		out.Observations = append(out.Observations, *outcome.observation)
+		out.EvidenceRefs = compactStringsV0(append(out.EvidenceRefs, outcome.observation.EvidenceRefs...))
+	}
+	return out
+}
+
+func (stack *StackV0) observeActiveGoalWorkStateV0(ctx context.Context, state orquestagoal.GoalWorkStateV0, listRequest orquestagoal.GoalWorkStateListRequestV0) activeGoalObservationOutcomeV0 {
+	out := activeGoalObservationOutcomeV0{}
+	issue := func(code, field, message string) activeGoalObservationOutcomeV0 {
+		out.issues = append(out.issues, orquestagoal.GoalWorkObserveActiveIssueV0{RunRef: strings.TrimSpace(state.RunRef), GoalRef: strings.TrimSpace(state.GoalRef), Code: code, Field: field, Message: message})
+		return out
+	}
+	if repaired, ok, err := orquestaappdirectorservice.ReconcileAppDirectorGoalReworkStateFromMarkerV0(ctx, state, stack.Ports); err != nil {
+		return issue("goal_rework_state_reconcile_failed", "goal_state", err.Error())
+	} else if ok {
+		state = repaired
+	}
+	if stack.goalFirstAutoprogrammingPromotionRecoveryPendingV0(state) {
+		complete, err := stack.recoverGoalFirstAutoprogrammingPromotionV0(ctx, state)
+		if err != nil {
+			return issue("goal_first_promotion_recovery_failed", "autoprogramming_promotion", err.Error())
+		}
+		if !complete {
+			out.issues = append(out.issues, orquestagoal.GoalWorkObserveActiveIssueV0{RunRef: strings.TrimSpace(state.RunRef), GoalRef: strings.TrimSpace(state.GoalRef), Code: "goal_first_promotion_recovery_pending", Field: "autoprogramming_promotion"})
+		}
+		if refreshed, err := stack.Ports.GoalStateStore.LoadGoalWorkStateV0(ctx, state.RunRef); err == nil {
+			state = refreshed
+		}
+	}
+	if !orquestagoal.GoalWorkStatePendingObservationV0(state) {
+		if !orquestagoal.GoalWorkStateShouldReturnActiveSnapshotV0(state, listRequest) {
+			return out
+		}
+		observed, err := orquestagoal.GoalWorkObservationSnapshotFromStateV0(state)
+		if err != nil {
+			return issue("goal_state_snapshot_invalid", "goal_state", err.Error())
+		}
+		out.observation = &observed
+		return out
+	}
+	runRef := strings.TrimSpace(state.RunRef)
+	if runRef == "" {
+		return issue("goal_state_run_ref_missing", "run_ref", "")
+	}
+	coordinator := stack.goalFirstObservationCoordinatorV0()
+	if coordinator == nil {
+		return issue("goal_first_observation_coordinator_unavailable", "run_ref", "")
+	}
+	release, acquired := coordinator.tryAcquireV0(runRef)
+	if !acquired {
+		return issue(activeGoalObservationRunInFlightIssueV0, "run_ref", "")
+	}
+	defer release()
+	observed, err := stack.observeAppDirectorGoalSerializedV0(ctx, orquestaappdirectorservice.ObserveAppDirectorGoalRequestV0{RunRef: runRef, RequestedBy: "orquesta-app-codex-stack-active-goal-observer"})
+	if err != nil {
+		return issue("observe_goal_failed", "run_ref", err.Error())
+	}
+	persisted, err := stack.Ports.GoalStateStore.LoadGoalWorkStateV0(ctx, runRef)
+	if err != nil {
+		return issue("goal_state_load_after_observe_failed", "run_ref", err.Error())
+	}
+	observation := stackGoalActiveObservationFromAppDirectorV0(persisted, observed)
+	out.observation = &observation
+	return out
 }
 
 func (stack *StackV0) goalFirstAutoprogrammingPromotionRecoveryPendingV0(

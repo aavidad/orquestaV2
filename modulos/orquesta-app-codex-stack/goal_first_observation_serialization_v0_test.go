@@ -90,6 +90,88 @@ func TestGoalFirstObservationCoordinatorV0RunsDistintosNoSeBloqueanV0(t *testing
 	releaseB()
 }
 
+func TestGoalFirstObservationCoordinatorV0TryAcquireNoEsperaRunEnVueloV0(t *testing.T) {
+	coordinator := newGoalFirstObservationCoordinatorV0()
+	release, acquired := coordinator.tryAcquireV0("run-en-vuelo")
+	if !acquired {
+		t.Fatal("primera reserva no adquirida")
+	}
+	defer release()
+	if second, acquired := coordinator.tryAcquireV0("run-en-vuelo"); acquired || second != nil {
+		t.Fatalf("tryAcquire espero o duplico gate: acquired=%v", acquired)
+	}
+	if other, acquired := coordinator.tryAcquireV0("run-otro"); !acquired {
+		t.Fatal("run distinto no progreso")
+	} else {
+		other()
+	}
+}
+
+func TestObserveActiveGoalWorksV0CanceladoNoEsperaBackendDetachedNiDuplicaV0(t *testing.T) {
+	stack, _, launcher, started := startGoalFirstQueueSyncStackForTestV0(t)
+	spec := launcher.specs[0]
+	observer := &goalFirstIgnoringContextObserverV0{
+		entered: make(chan struct{}, 1),
+		release: make(chan struct{}),
+		result: orquestagoal.GoalWorkResultV0{
+			SchemaVersion:   orquestagoal.GoalWorkResultSchemaV0,
+			Status:          orquestagoal.GoalStatusCompleteV0,
+			GoalRef:         spec.GoalRef,
+			ExternalGoalRef: started.ExternalGoalRef,
+			ArtifactRefs:    goalFirstQueueRequiredArtifactRefsV0(spec),
+			ArtifactPaths:   goalFirstQueueTechnicalArtifactPathsV0(),
+			RequiredTestResults: goalFirstQueueRequiredTestResultsV0(spec,
+				"evidence-ref-observer-detached-required-test"),
+			EvidenceRefs: spec.ClosurePolicy.RequiredEvidenceRefs,
+		},
+	}
+	stack.Ports.GoalObserver = observer
+	ctx, cancel := context.WithCancel(context.Background())
+	returned := make(chan error, 1)
+	go func() {
+		_, err := stack.ObserveActiveGoalWorksV0(ctx, orquestagoal.GoalWorkObserveActiveRequestV0{})
+		returned <- err
+	}()
+	select {
+	case <-observer.entered:
+	case <-time.After(time.Second):
+		t.Fatal("observacion no entro al backend")
+	}
+	cancel()
+	select {
+	case err := <-returned:
+		if err != context.Canceled {
+			t.Fatalf("cancelacion=%v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("el tick espero al backend que ignora ctx")
+	}
+
+	second, err := stack.ObserveActiveGoalWorksV0(context.Background(), orquestagoal.GoalWorkObserveActiveRequestV0{})
+	if err != nil {
+		t.Fatalf("segunda observacion: %v", err)
+	}
+	observer.mu.Lock()
+	calls := observer.calls
+	observer.mu.Unlock()
+	if calls != 1 || len(second.Issues) != 1 || second.Issues[0].Code != activeGoalObservationRunInFlightIssueV0 {
+		t.Fatalf("calls=%d second=%+v", calls, second)
+	}
+	close(observer.release)
+	deadline := time.After(time.Second)
+	for {
+		if release, acquired := stack.goalFirstObservationCoordinatorV0().tryAcquireV0(started.Run.RunID); acquired {
+			release()
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("gate detached no se libero al retornar backend")
+		case <-time.After(time.Millisecond):
+		}
+	}
+}
+
 type goalFirstBlockingConcurrentObserverV0 struct {
 	mu        sync.Mutex
 	entered   chan struct{}
@@ -98,6 +180,23 @@ type goalFirstBlockingConcurrentObserverV0 struct {
 	calls     int
 	active    int
 	maxActive int
+}
+
+type goalFirstIgnoringContextObserverV0 struct {
+	mu      sync.Mutex
+	entered chan struct{}
+	release chan struct{}
+	result  orquestagoal.GoalWorkResultV0
+	calls   int
+}
+
+func (observer *goalFirstIgnoringContextObserverV0) ObserveGoalWorkV0(context.Context, orquestagoal.GoalObservationRequestV0) (orquestagoal.GoalWorkResultV0, error) {
+	observer.mu.Lock()
+	observer.calls++
+	observer.mu.Unlock()
+	observer.entered <- struct{}{}
+	<-observer.release
+	return observer.result, nil
 }
 
 func (observer *goalFirstBlockingConcurrentObserverV0) ObserveGoalWorkV0(
