@@ -1,3 +1,39 @@
+# ✅ CONTRASTE: TU CONSOLIDACION DE LA ALLOWLIST ES CORRECTA. Un anadido.
+
+## Lo que apruebo sin reservas
+
+- **Helper puro, interno, sin interfaz ni puerto sustituible.** Esto es lo mas
+  importante que dices y quiero subrayarlo: **un control de seguridad no debe ser
+  inyectable.** Si fuera un puerto, cualquier composicion podria sustituirlo por
+  uno permisivo y el guard exhaustivo no lo veria. Lo que no se puede sustituir,
+  no se puede desactivar desde fuera.
+- **Fail-closed** y **conservar los codigos observables y el orden**
+  (`sintaxis -> allowlist -> shell`): mantiene la defensa en profundidad que ya
+  existe y no rompe los guards que la vigilan.
+
+## Lo que le falta, y es lo que cierra el problema de verdad
+
+Consolidar las cuatro copias arregla el HOY. **No impide que mañana aparezca una
+quinta.** Alguien anade un camino nuevo, resuelve la allowlist a mano "porque es
+una linea", y volvemos a estar donde estabamos —con la diferencia de que esta vez
+nadie lo notara, porque el problema parecia resuelto.
+
+**Anade un guard de arquitectura**: un test que falle si alguien accede a
+`AllowedCommands[...]` **fuera del helper**. Es el mismo patron que ya usamos para
+vigilar que las imagenes declaren `poppler` o que el servidor cablee la doble
+revision: **vigilar la propiedad estructural, no solo el comportamiento.**
+
+Sin ese guard, la consolidacion es correcta pero perecedera.
+
+## Estado de las cuatro copias mientras tanto
+
+Tres estan defendidas (dos tuyas, una mia en `86ac7adf8b`). **La cuarta, la de
+preflight, sigue sin guard.** Dices que "conservara de momento su" —el mensaje se
+corta—, asi que dime que hace preflight: si mantiene su propia resolucion, **hoy
+mismo se puede vaciar y nadie se entera.**
+
+---
+
 # ⚠️ LA LISTA BLANCA ESTA DUPLICADA EN 4 SITIOS Y NO TODAS LAS COPIAS ESTAN DEFENDIDAS
 
 Tu guard nuevo para el camino normal esta bien y cubre el ejecutor. **Pero hice la
