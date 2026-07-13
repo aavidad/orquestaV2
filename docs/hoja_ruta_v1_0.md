@@ -257,7 +257,7 @@ conocian al escribirlo:
 
 Orden vigente:
 
-1. **Cerrar 051 y 053** (en vuelo). 051 es superficie de seguridad critica
+1. **051 y 053 cerrados localmente** en `cf02ec385d` y `5cc1d8c915`. 051 es superficie de seguridad critica
    (autoridad unica de ejecucion): maxima intensidad y fail-closed. 053 es el
    **cimiento de V1-A** (config canonica, TAREA-8.1): su loader no puede cerrar
    la puerta a la escritura gobernada con receipt.

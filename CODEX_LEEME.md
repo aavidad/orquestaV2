@@ -3738,3 +3738,32 @@ semánticos no cubiertos:
 Ambos reworks están activos en paralelo y no se hará commit/despliegue hasta
 repetir focales, race, revisión independiente y suite completa. La secuencia
 056→057→mailbox→058 permanece pendiente y no cambia por esta integración.
+
+### 2026-07-13T15:40+02:00 — 051 y 053 integrados en commits causales separados
+
+Se completó la segunda vuelta adversarial y se corrigieron todos sus hallazgos.
+051 quedó en `cf02ec385d` y 053 en `5cc1d8c915`, sin mezclar sus fronteras.
+
+051 ejecuta exclusivamente copias anónimas `memfd` selladas y falla cerrado si
+el kernel no puede ofrecer esa garantía. Conserva revalidación de path,
+dispositivo, inode, modo ejecutable y SHA antes de cada resolución; Git comparte
+la misma autoridad. El guard AST+`go/types` cubre aliases, wrappers, IIFE,
+conversiones, `maps.Clone`, iteradores y targets `range` no triviales. El
+ownership de runners/selector/batch atraviesa wrappers, limpia errores parciales
+y se cierra de forma reverse/idempotente tanto en runtime como en MCP-stdio. El
+E2E de stack real acredita que desaparecen los FD fuente y memfd al apagarlo.
+
+053 introduce un loader estricto, acotado y de una sola lectura cuyo producto
+une Config, JSON canónico, revisión SHA-256 y catálogo. Startup retiene el
+snapshot inmutable durante toda la vida del comando o loop y lo libera una vez
+en su frontera; no hay relecturas, fugas ni cruces entre revisiones. La tabla de
+333 JSON pointers es literal y fail-closed, sin prefijos, defaults, checksums ni
+sentinels. El clonado es profundo. Esta inmutabilidad es por revisión de startup
+y no bloquea V1-A: el mismo loader/validador puede preceder una futura escritura
+gobernada, atómica y con receipt durable.
+
+La revisión independiente final dio PASS conjunto sin P0/P1. Se ejecutaron y
+esperaron focales, `-race -count=3`, guard de envs y
+`go test -mod=vendor -count=1 ./...`; todos terminaron con exit 0. `diff
+--check` también quedó limpio. La cola vigente del relevo `67742df0bb` es ahora
+057 → H0d causal → 056 → V1-B → V1-A/V1-A2 → 058 → V1-C/H4.
