@@ -2930,3 +2930,48 @@ por la API pública, sin intervención directa en Orquesta:
 El prepare acredita thread, SetGoal y turn del app-server iniciados. Se mantiene
 la regla de no forzar stop: el daemon app-server es compartido y matar un goal
 puede dañar a sus hermanos.
+
+### 2026-07-13 — successors automáticos y auditoría live 051/052/053/054
+
+La attestation oficial de 051R3 confirmó REWORK: runtime normal y race pasaron,
+app-codex-stack pasó, pero `go test ./cmd/orquesta-server` falló siete tests con
+`required_test_identity_invalid: go`. Orquesta creó automáticamente el successor
+`goal-ref-task-autoprogramming-9531ff1c4428-g01-rework-1` en workspace
+`03d1d330b9a312cdf7c12c035dec1acd`; no se lanzó un 051R4 duplicado. Su corte
+intermedio mejora FD persistente/códigos/argv0, pero introdujo factories con
+campos inexistentes, función redeclarada, guard eludible por rename, falta
+`O_CLOEXEC`, comparación Lstat↔Fstat y disciplina de concurrencia/cierre. Feedback
+queued por MCP con ACK
+`operator-director-ack-ref-operator-message-ref-operator-ref-codex-live-audit-051-rework1-1783932103`.
+
+052R3 quedó lanzado por la API pública, limitado a los dos archivos del executor:
+
+- run `request-ref-orquesta-observe-successor-regression-matrix-20260713-052r3`;
+- goal `goal-ref-task-autoprogramming-91763a7bad88-g01`;
+- external `019f5aa0-b487-72d0-90d9-20bfaf9d2eb8`;
+- workspace `17dcf9c0163a0f01d49c8925b860df79`.
+
+Debe conservar el diff auditado 052R2 y corregir únicamente StoreVersion del
+fixture histórico más la matriz negativa. El primer corte dirty estaba
+eliminando canonicalidad raw, refs/Spec y tests CAS/StoreV0; se envió corrección
+live, ACK
+`operator-director-ack-ref-operator-message-ref-operator-ref-codex-live-audit-052r3-drift-1783932181`.
+
+053R3 es REWORK pese a full/race reportados verdes: los helpers de catálogo,
+canonical y revision no tienen caller productivo; BuildCatalog no cruza Presence
+de policy contra reflection; falta prueba explícita de `api_key_file`; receipt
+omite paths/evidencias y no existe commit/clean. El observer durable está
+serialmente atascado y aún no ha creado successor. Feedback final queued con ACK
+`operator-director-ack-ref-operator-message-ref-operator-ref-codex-final-audit-053r3-1783932040`.
+
+054R2 ya modificó ocho archivos y mejora postverificación RPC, propagación
+durable de RuntimeGenerationRef y caches de generación. Auditoría live mantiene
+REWORK: Fingerprint hace RPC fuera del lease; el mapa solo en memoria impide
+rehidratar tras restart; el conflicto transitorio escribe LastResult mediante
+`persistFailedGoalObservationV0`; y el CAS hace reload pero no segundo CAS
+causal. Feedback queued con ACK
+`operator-director-ack-ref-operator-message-ref-operator-ref-codex-live-audit-054r2-1783932027`.
+
+También aparecieron successors automáticos antiguos de 052R2 y 054R1. No se
+detienen forzadamente ni se mezclan con 052R3/054R2: se dejan terminar como
+fuentes RO y solo una línea por frente podrá acreditarse e integrarse.
