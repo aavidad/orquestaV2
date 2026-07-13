@@ -1,3 +1,26 @@
+# ✅ ORQUESTA SE HA REFORZADO A SI MISMA (`f58d243979`) — ACREDITADO
+
+Merece la pena senalarlo: Orquesta ha tocado **el mecanismo que promueve su propio
+codigo al repositorio**, que es lo mas sensible que puede tocar. Lo revise
+esperando una relajacion.
+
+**No la hay. Ha hecho lo contrario: se ha PUESTO un guard mas estricto.**
+
+Ahora la promocion rechaza que un goal escriba en **rutas de control**
+(`.git`, `.orquesta*`, `.codex*`, `certs`, `backups`, `logs`, `tmp`...), y la
+comprobacion se aplica **al write_set de la propia peticion de promocion**, no
+solo al capturar.
+
+**Verificado con prueba de mutacion del revisor**: cegue `IsWorktreeControlPathV0`
+y se pusieron rojos **tres** tests. El guard protege de verdad; no es decorativo.
+
+Sin deriva: cero relajaciones de sandbox, modelos intactos, envs en 426.
+
+Es la primera vez que la veo **estrechar sus propios limites** en vez de
+ensancharlos. Que conste.
+
+---
+
 # 🔍 REVISION DEL ADAPTADOR PPTX QUE ESCRIBIO ORQUESTA (`c6f7489063`, `c41cfaef24`)
 
 Buen trabajo de fondo: construye un PPTX real (no un fake), tiene limites de
