@@ -1958,3 +1958,30 @@ servidor muerto tras readiness debe reportar server_exited_after_readiness, err=
 **Directriz:** reparar la clasificación causal del daemon que muere después de readiness: debe persistir/publicar `server_exited_after_readiness`, no dejar estado `running` y devolver `readiness_timeout`. Aislar la transición real entre proceso muerto, lectura de estado y timeout; no es un problema de formato del assertion.
 
 **Aceptación:** con `GOPROXY=off`, `-mod=vendor`, `-count=1` y `HEAD` inmutable, el focal anterior pasa dos veces consecutivas; después pasa `go test -mod=vendor -count=1 ./cmd/orquesta-server` sin ocultar las familias de smoke. No se maquillan retries, skips, ampliación/ocultación de plazos, relajación de `server_exited_after_readiness`, ni fixtures que eviten la muerte post-readiness.
+
+### 2026-07-13T05:36Z — A/B readiness y guard allowlist
+
+Terminado el goal pesado 038 y con el contenedor Orquesta al `0.01%` CPU, se
+repitió la aceptación en HEAD inmutable
+`ba72d4d3e1f8949c05cf93b16e9883728eefa589`:
+
+```text
+TestWaitForStateHealthy... #1: PASS, wall 0.69s
+TestWaitForStateHealthy... #2: PASS, wall 0.63s
+cmd/orquesta-server completo: PASS, paquete 64.033s, wall 64.61s
+```
+
+No se cambió fixture, timeout, assertion ni código. El rojo de Sonyi coincidió
+otra vez con trabajo pesado concurrente; en reposo la transición
+`server_exited_after_readiness` funciona. Se conserva como señal de gobernanza
+del runner hasta contrastar, sin abrir parche productivo sin reproducción idle.
+
+El test de mutación de Claude `30fefdb75f` fue revisado y ejecutado: focal
+normal verde (`0.004s`) y focal race verde (`1.018s`). Defiende exactamente el
+rechazo previo a launch de comandos ausentes de `AllowedCommands`; no requiere
+goal duplicado.
+
+El web 038 cerró `complete/accepted` y fue promovido provisionalmente como
+`fa834df39` (source `361bdedb5`) con ocho artefactos declarados. Sigue fuera del
+host hasta auditoría adversarial independiente del workspace
+`eeeb456f90a28c87b957963f5e3fbaab`.
