@@ -1819,4 +1819,21 @@ El histórico 035 conserva su receipt rojo. Para la acreditación nueva se lanz�
 por API el run `request-ref-cas-post-rebuild-verification-20260713-036`, goal
 `goal-ref-task-autoprogramming-74d5eed5dc50-g01`, solo documental y con focal
 CAS real, servidor completo y E2E. Después de su receipt se relanza el rework
-web con los criterios opacos de la auditoría 033.
+  web con los criterios opacos de la auditoría 033.
+
+### 2026-07-13T04:51Z — 036 accepted; rework web 037
+
+El goal post-rebuild 036 cerró `complete/accepted`, con tres attestations
+independientes nuevas y promoción documental `de93b4cd`: focal CAS real,
+`cmd/orquesta-server` completo y E2E `rework→close`. El receipt rojo histórico
+035 permanece intacto. `ports.goal_state_cas_store` deja de aparecer.
+
+Se lanzó por API local el run
+`request-ref-web-status-opaque-failclosed-rework-20260713-037`, goal
+`goal-ref-task-autoprogramming-4597a924cc83-g01`, base `de93b4cd`. Regla de
+autoridad: refs de run opacas, `knownRuns` construido desde la respuesta amplia,
+`allowedRuns` exacto desde selector/queue y payloads filtrados por claves
+semánticas `run_ref/run_refs`, nunca por prefijos. Incluye adversariales
+`request-ref-*`, colon, scope `field:...`, limpieza causal/QueueRef, legacy y
+E2E MCP real → REST → cliente web → viewmodel. Required tests: paquetes MCP,
+web y app-codex-stack completos; no patrones vacíos.
