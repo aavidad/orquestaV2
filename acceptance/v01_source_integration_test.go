@@ -39,7 +39,7 @@ func TestAcceptanceV01SourceIntegrationReceipt(t *testing.T) {
 		OutputPath: "product/evidence/v01_source_integration.output.txt", FixturePath: v01SourceIntegrationFixturePath,
 		ReceiptPath: fixture.ReceiptPath, CandidateSubjects: fixture.CandidateSubjects,
 		ExecutedNotBefore: "2026-07-14T00:00:00+02:00",
-		ExpectedGitHead:   "a8bff609492f312fe2d6bf8ccccde02b6e5c8426",
+		ExpectedGitHead:   "a301a3bbacd80c1ea2d47422a2964339dcd70980",
 	})
 }
 

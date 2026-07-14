@@ -29,12 +29,15 @@ func TestTraceabilityRebuildBugLessons(t *testing.T) {
 		"BUG-REBUILD-20260714-019": "product_roadmap_test.go#TestProductRoadmapPlannedContractsAreNonRunnable",
 		"BUG-REBUILD-20260714-020": "acceptance/v01_source_integration_test.go#TestAcceptanceV01SourceIntegrationReceipt",
 		"BUG-REBUILD-20260714-021": "product_roadmap_test.go#TestProductRoadmapExecutableCommandsRunDeclaredTestPackage",
+		"BUG-REBUILD-20260714-022": "acceptance/v04_intent_appspec_test.go#TestV04CandidateSubjectsCoverCommittedDelta",
 		"BUG-REBUILD-20260714-023": "internal/application/amend_test.go#TestV04ProviderSpecHashMismatchCreatesNoEvidenceOrClosure",
 		"BUG-REBUILD-20260714-024": "internal/application/amend_test.go#TestV04SubmitRejectsCreatedSnapshotSubstitution",
 		"BUG-REBUILD-20260714-025": "internal/ports/agent_contract_test.go#TestAgentContractClassifiesReceiptSpecHashBeforeCausalMismatch",
 		"BUG-REBUILD-20260714-026": "internal/adapters/state/sqlite/app_specs_test.go#TestRepositoryPersistsAppSpecConfirmedByReviewerDifferentFromIntentActor",
 		"BUG-REBUILD-20260714-027": "internal/adapters/state/sqlite/app_specs_test.go#TestRepositoryDomainInvalidV2GoalRollsBackAppSpecMigration",
 		"BUG-REBUILD-20260714-028": "internal/application/amend_test.go#TestV04InitialAppSpecReasonMatchesAcceptanceContract",
+		"BUG-REBUILD-20260714-029": "acceptance/v04_intent_appspec_test.go#TestV04AcceptanceCommandRunsEachOwnedPackageBehavior",
+		"BUG-REBUILD-20260714-030": "acceptance/v04_intent_appspec_test.go#TestV04CandidateDeltaFreezesAtSealedHead",
 		"BUG-REBUILD-20260714-031": "internal/bootstrap/mcp_e2e_test.go#TestRealMCPAPIClosesDurableGoalThroughSQLiteAndArtifactStore",
 	}
 	baselineIDs := []string{
