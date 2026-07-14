@@ -5214,8 +5214,12 @@
       "acceptance_contracts": [
         "AC-V07-CONFIG"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v07_config_test.go",
+        "acceptance/fixtures/v07_config.json",
+        "product/evidence/v07_config.json"
+      ],
       "supersedes": []
     },
     {
@@ -5233,8 +5237,12 @@
       "acceptance_contracts": [
         "AC-V07-CONFIG"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v07_config_test.go",
+        "acceptance/fixtures/v07_config.json",
+        "product/evidence/v07_config.json"
+      ],
       "supersedes": []
     },
     {
@@ -5271,8 +5279,12 @@
       "acceptance_contracts": [
         "AC-V07-CONFIG"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v07_config_test.go",
+        "acceptance/fixtures/v07_config.json",
+        "product/evidence/v07_config.json"
+      ],
       "supersedes": []
     },
     {
@@ -5290,8 +5302,12 @@
       "acceptance_contracts": [
         "AC-V07-CONFIG"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v07_config_test.go",
+        "acceptance/fixtures/v07_config.json",
+        "product/evidence/v07_config.json"
+      ],
       "supersedes": []
     },
     {
@@ -5309,8 +5325,12 @@
       "acceptance_contracts": [
         "AC-V07-CONFIG"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v07_config_test.go",
+        "acceptance/fixtures/v07_config.json",
+        "product/evidence/v07_config.json"
+      ],
       "supersedes": []
     },
     {
@@ -5789,8 +5809,12 @@
       "acceptance_contracts": [
         "AC-V07-CONFIG"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v07_config_test.go",
+        "acceptance/fixtures/v07_config.json",
+        "product/evidence/v07_config.json"
+      ],
       "supersedes": [],
       "alias_of": "OPS-01"
     },
@@ -5809,8 +5833,12 @@
       "acceptance_contracts": [
         "AC-V07-CONFIG"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v07_config_test.go",
+        "acceptance/fixtures/v07_config.json",
+        "product/evidence/v07_config.json"
+      ],
       "supersedes": []
     },
     {
@@ -5828,8 +5856,12 @@
       "acceptance_contracts": [
         "AC-V07-CONFIG"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v07_config_test.go",
+        "acceptance/fixtures/v07_config.json",
+        "product/evidence/v07_config.json"
+      ],
       "supersedes": [],
       "alias_of": "OPS-06"
     },
@@ -5848,8 +5880,12 @@
       "acceptance_contracts": [
         "AC-V07-CONFIG"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v07_config_test.go",
+        "acceptance/fixtures/v07_config.json",
+        "product/evidence/v07_config.json"
+      ],
       "supersedes": []
     },
     {
@@ -5867,8 +5903,12 @@
       "acceptance_contracts": [
         "AC-V07-CONFIG"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v07_config_test.go",
+        "acceptance/fixtures/v07_config.json",
+        "product/evidence/v07_config.json"
+      ],
       "supersedes": []
     },
     {
