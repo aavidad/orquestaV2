@@ -16,6 +16,12 @@ const (
 	ErrorEffectiveWrite          ErrorCode = "config_effective_write_failed"
 	ErrorChildEnvironmentInvalid ErrorCode = "config_child_environment_invalid"
 	ErrorCrossValidation         ErrorCode = "config_cross_validation_failed"
+	ErrorManagerInvalid          ErrorCode = "config_manager_invalid"
+	ErrorUpdateInvalid           ErrorCode = "config_update_invalid"
+	ErrorUpdateConfirmation      ErrorCode = "config_update_confirmation_required"
+	ErrorUpdateNoChanges         ErrorCode = "config_update_no_changes"
+	ErrorDoctorInvalid           ErrorCode = "config_doctor_invalid"
+	ErrorStoreResultInvalid      ErrorCode = "config_store_result_invalid"
 )
 
 // Error carries a stable code and optional key. Translation belongs to the
