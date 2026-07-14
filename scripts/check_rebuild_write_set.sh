@@ -13,7 +13,7 @@ mapfile -t changed < <(
 invalid=()
 for path in "${changed[@]}"; do
   case "$path" in
-    AGENTS.md|go.mod|go.sum|vendor/*|architecture_rebuild_test.go|product_manifest_test.go|product_roadmap_test.go|internal/*|cmd/orquesta/*|config/*|product/*|docs/reconstruccion/*|scripts/check_rebuild_write_set.sh)
+    AGENTS.md|go.mod|go.sum|vendor/*|architecture_rebuild_test.go|product_manifest_test.go|product_roadmap_test.go|traceability_rebuild_test.go|internal/*|cmd/orquesta/*|config/*|product/*|docs/reconstruccion/*|scripts/check_rebuild_write_set.sh)
       ;;
     *)
       invalid+=("$path")

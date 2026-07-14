@@ -1,0 +1,485 @@
+{
+  "document_kind": "legacy_go_census",
+  "schema_version": 1,
+  "source_root": "modulos",
+  "source_policy": {
+    "include": "all_descendant_go_files_of_exact_module_paths",
+    "exclude_test_suffix": "_test.go",
+    "exact_exclusions": [
+      {
+        "path": "modulos/orquesta-estado-vivo/testdeps/rapid",
+        "kind": "subtree",
+        "reason": "Test dependency vendored only through a replace directive; not Orquesta production code."
+      },
+      {
+        "path": "modulos/orquesta-server/status_tracker_diagnostics_v0.go",
+        "kind": "file",
+        "reason": "Source is explicitly guarded with the build tag ignore and cannot enter a production build."
+      }
+    ],
+    "symbol_kinds": [
+      "const",
+      "var",
+      "type",
+      "func",
+      "method"
+    ]
+  },
+  "baseline": {
+    "module_count": 106,
+    "package_count": 109,
+    "production_file_count": 1945,
+    "symbol_count": 21393,
+    "module_set_sha256": "sha256:c6001cc289b992167c4fdbc435b97bbb2836bfa5c5efd1d63522560ea4a3b12a",
+    "census_sha256": "sha256:5e8f30dc3c6640c57f595e3757cc6e07ba4be6eb36a6bcdd094152a2967fddfc"
+  },
+  "module_rules": [
+    {
+      "id": "lifecycle_state_and_scheduler",
+      "paths": [
+        "modulos/orquesta-agent-progress",
+        "modulos/orquesta-core",
+        "modulos/orquesta-core-concurrency",
+        "modulos/orquesta-core-leases",
+        "modulos/orquesta-core-replanner",
+        "modulos/orquesta-core-workflow",
+        "modulos/orquesta-estado-vivo",
+        "modulos/orquesta-goal",
+        "modulos/orquesta-orchestration-core",
+        "modulos/orquesta-outbox-dispatch",
+        "modulos/orquesta-persistence",
+        "modulos/orquesta-run-control",
+        "modulos/orquesta-run-coordinator",
+        "modulos/orquesta-run-file",
+        "modulos/orquesta-run-memory",
+        "modulos/orquesta-run-queue",
+        "modulos/orquesta-run-supervisor",
+        "modulos/orquesta-state-file"
+      ],
+      "disposition": "supersede",
+      "capability_ids": [
+        "GOV-03",
+        "GOV-04",
+        "GOV-05",
+        "GOV-06",
+        "ORC-01",
+        "ORC-12",
+        "ORC-13",
+        "ORC-17",
+        "OPS-09"
+      ],
+      "reason": "One Goal lifecycle, application writer, DAG scheduler, atomic state and outbox supersede all historical state machines and stores.",
+      "characterization_required": true
+    },
+    {
+      "id": "agent_process_and_capacity",
+      "paths": [
+        "modulos/orquesta-agent-process-registry",
+        "modulos/orquesta-agent-process-registry-memory",
+        "modulos/orquesta-capacity",
+        "modulos/orquesta-orchestration-budget"
+      ],
+      "disposition": "supersede",
+      "capability_ids": [
+        "GOV-21",
+        "ORC-09",
+        "ORC-10",
+        "ORC-28"
+      ],
+      "reason": "Logical agents, processes, quotas and budgets move to neutral capacity and execution contracts without hidden global limits.",
+      "characterization_required": true
+    },
+    {
+      "id": "director_protocol",
+      "paths": [
+        "modulos/orquesta-app-director-intake",
+        "modulos/orquesta-app-director-service",
+        "modulos/orquesta-app-planner",
+        "modulos/orquesta-director",
+        "modulos/orquesta-director-agent",
+        "modulos/orquesta-director-agent-file-source",
+        "modulos/orquesta-director-agent-workflow",
+        "modulos/orquesta-director-candidates",
+        "modulos/orquesta-director-cycle",
+        "modulos/orquesta-director-cycle-outbox",
+        "modulos/orquesta-director-operativo",
+        "modulos/orquesta-director-runner",
+        "modulos/orquesta-director-scheduler",
+        "modulos/orquesta-director-supervised-burst",
+        "modulos/orquesta-director-supervisor",
+        "modulos/orquesta-director-tick-input"
+      ],
+      "disposition": "supersede",
+      "capability_ids": [
+        "GOV-08",
+        "GOV-09",
+        "GOV-10",
+        "ORC-02",
+        "ORC-03",
+        "ORC-04",
+        "ORC-05",
+        "ORC-06",
+        "ORC-24"
+      ],
+      "reason": "A replaceable director role with lease and fencing proposes work to the single Goal engine; historical resident loops are not retained.",
+      "characterization_required": true
+    },
+    {
+      "id": "application_change_and_self_change",
+      "paths": [
+        "modulos/orquesta-app-change",
+        "modulos/orquesta-app-change-director-source",
+        "modulos/orquesta-app-codex-stack",
+        "modulos/orquesta-app-gateway",
+        "modulos/orquesta-app-runner",
+        "modulos/orquesta-autonomy-program",
+        "modulos/orquesta-autoprogramming",
+        "modulos/orquesta-external-work-run"
+      ],
+      "disposition": "supersede",
+      "capability_ids": [
+        "GOV-01",
+        "GOV-18",
+        "AGT-03",
+        "EXT-02"
+      ],
+      "reason": "Application changes and self changes become ordinary domain work over neutral Goal and agent ports, never a privileged second engine.",
+      "characterization_required": true
+    },
+    {
+      "id": "configuration_credentials_and_filesystem_security",
+      "paths": [
+        "modulos/orquesta-config",
+        "modulos/orquesta-governance",
+        "modulos/orquesta-secure-file"
+      ],
+      "disposition": "supersede",
+      "capability_ids": [
+        "EVD-11",
+        "EVD-12",
+        "EVD-13",
+        "OPS-01",
+        "OPS-02",
+        "OPS-03",
+        "OPS-04",
+        "OPS-05",
+        "OPS-06",
+        "OPS-07",
+        "OPS-08"
+      ],
+      "reason": "Canonical typed configuration, CredentialStore and filesystem security contracts replace dispersed defaults, environment reads and local policy stores.",
+      "characterization_required": true
+    },
+    {
+      "id": "context_and_memory",
+      "paths": [
+        "modulos/orquesta-context"
+      ],
+      "disposition": "supersede",
+      "capability_ids": [
+        "ORC-19",
+        "ORC-20",
+        "ORC-21",
+        "ORC-22",
+        "CTX-01",
+        "CTX-02",
+        "CTX-04",
+        "CTX-06",
+        "CTX-08"
+      ],
+      "reason": "Compact context bundles, project memory and benchmarked retrieval replace ad hoc context materialization while keeping artifacts outside prompts.",
+      "characterization_required": true
+    },
+    {
+      "id": "council_and_decisions",
+      "paths": [
+        "modulos/orquesta-council",
+        "modulos/orquesta-decision-council"
+      ],
+      "disposition": "supersede",
+      "capability_ids": [
+        "GOV-11",
+        "GOV-12",
+        "GOV-13",
+        "GOV-14",
+        "EVD-07"
+      ],
+      "reason": "Council and independent review are accredited executions and decisions on one Goal generation, not standalone workflow engines.",
+      "characterization_required": true
+    },
+    {
+      "id": "data_ingestion",
+      "paths": [
+        "modulos/orquesta-data-ingestion",
+        "modulos/orquesta-data-ingestion-file",
+        "modulos/orquesta-data-ingestion-tool-capability"
+      ],
+      "disposition": "supersede",
+      "capability_ids": [
+        "EXT-05",
+        "EXT-16",
+        "EXT-17",
+        "TLS-01",
+        "TLS-05"
+      ],
+      "reason": "Data ingestion returns as DomainPlugin and Tool SDK adapters with explicit schemas, permissions, receipts and external data boundaries.",
+      "characterization_required": true
+    },
+    {
+      "id": "document_extraction",
+      "paths": [
+        "modulos/orquesta-document-extraction",
+        "modulos/orquesta-document-extraction-csv",
+        "modulos/orquesta-document-extraction-fake",
+        "modulos/orquesta-document-extraction-json",
+        "modulos/orquesta-document-extraction-pdf",
+        "modulos/orquesta-document-extraction-tool-capability"
+      ],
+      "disposition": "supersede",
+      "capability_ids": [
+        "EXT-04",
+        "EXT-16",
+        "EXT-18",
+        "TLS-01",
+        "TLS-05"
+      ],
+      "reason": "Document extraction is rebuilt as replaceable domain and tool adapters; the fake informs contract tests but no legacy implementation is copied.",
+      "characterization_required": true
+    },
+    {
+      "id": "presentation_extraction",
+      "paths": [
+        "modulos/orquesta-presentation-extraction",
+        "modulos/orquesta-presentation-extraction-openxml",
+        "modulos/orquesta-presentation-extraction-tool-capability"
+      ],
+      "disposition": "supersede",
+      "capability_ids": [
+        "EXT-06",
+        "EXT-19",
+        "TLS-01",
+        "TLS-05"
+      ],
+      "reason": "Structured presentation reading and export become plugin and Tool SDK capabilities outside the orchestration domain.",
+      "characterization_required": true
+    },
+    {
+      "id": "document_plan_expansion",
+      "paths": [
+        "modulos/orquesta-document-plan-expander"
+      ],
+      "disposition": "supersede",
+      "capability_ids": [
+        "EXT-01",
+        "EXT-07"
+      ],
+      "reason": "Plan expansion is a generic DomainPlugin operation materializing WorkItems in the canonical DAG, not a separate lifecycle.",
+      "characterization_required": true
+    },
+    {
+      "id": "domain_work_and_factory",
+      "paths": [
+        "modulos/orquesta-domain-work",
+        "modulos/orquesta-domain-work-file",
+        "modulos/orquesta-domain-work-http",
+        "modulos/orquesta-domain-work-memory",
+        "modulos/orquesta-domain-work-sql",
+        "modulos/orquesta-factory",
+        "modulos/orquesta-factory-http"
+      ],
+      "disposition": "supersede",
+      "capability_ids": [
+        "EXT-00",
+        "EXT-01",
+        "EXT-15",
+        "OPS-09"
+      ],
+      "reason": "Opaque domain contracts and process adapters replace filesystem, HTTP, memory and SQL implementations without sharing state with external applications.",
+      "characterization_required": true
+    },
+    {
+      "id": "tool_capabilities_and_profiles",
+      "paths": [
+        "modulos/orquesta-native-smoke-tool",
+        "modulos/orquesta-tool-capability",
+        "modulos/orquesta-tool-capability-file",
+        "modulos/orquesta-work-profiles"
+      ],
+      "disposition": "supersede",
+      "capability_ids": [
+        "ORC-06",
+        "OPS-20",
+        "TLS-01",
+        "TLS-05"
+      ],
+      "reason": "One governed tool registry and neutral SDK supersede bespoke tool capability stores, smoke binaries and profile modules.",
+      "characterization_required": true
+    },
+    {
+      "id": "deploy",
+      "paths": [
+        "modulos/orquesta-deploy"
+      ],
+      "disposition": "supersede",
+      "capability_ids": [
+        "STG-18",
+        "STG-19",
+        "EXT-14",
+        "OPS-22",
+        "OPS-23",
+        "OPS-24",
+        "OPS-25"
+      ],
+      "reason": "Deploy becomes an effect-governed connector family with preview, approval, promotion, rollback and immutable receipts.",
+      "characterization_required": true
+    },
+    {
+      "id": "public_interfaces_and_i18n",
+      "paths": [
+        "modulos/orquesta-cli",
+        "modulos/orquesta-http-gateway",
+        "modulos/orquesta-i18n-docs",
+        "modulos/orquesta-mcp",
+        "modulos/orquesta-web"
+      ],
+      "disposition": "supersede",
+      "capability_ids": [
+        "UI-01",
+        "UI-02",
+        "UI-03",
+        "UI-04",
+        "UI-18"
+      ],
+      "reason": "HTTP, MCP, CLI and web become thin views of one command registry and one i18n catalog instead of independent behavior surfaces.",
+      "characterization_required": true
+    },
+    {
+      "id": "server_observability_and_shutdown",
+      "paths": [
+        "modulos/orquesta-observability",
+        "modulos/orquesta-server",
+        "modulos/orquesta-server-shutdown"
+      ],
+      "disposition": "supersede",
+      "capability_ids": [
+        "UI-10",
+        "UI-13",
+        "UI-14",
+        "OPS-16",
+        "OPS-17",
+        "OPS-18",
+        "OPS-19",
+        "OPS-20"
+      ],
+      "reason": "One thin bootstrap, structured telemetry, honest health and cooperative shutdown replace server-local control loops and status projections.",
+      "characterization_required": true
+    },
+    {
+      "id": "operator_channels",
+      "paths": [
+        "modulos/orquesta-operator-director-channel",
+        "modulos/orquesta-operator-mcp",
+        "modulos/orquesta-operator-mcp-client",
+        "modulos/orquesta-operator-mcp-hermes",
+        "modulos/orquesta-operator-notifications",
+        "modulos/orquesta-operator-telegram"
+      ],
+      "disposition": "supersede",
+      "capability_ids": [
+        "GOV-09",
+        "AGT-04",
+        "UI-02",
+        "UI-15",
+        "UI-16"
+      ],
+      "reason": "Operator, Hermes, MCP and notification channels become authenticated adapters over shared commands, director protocol and effect governance.",
+      "characterization_required": true
+    },
+    {
+      "id": "opes_composition",
+      "paths": [
+        "modulos/orquesta-opes-bridge",
+        "modulos/orquesta-opes-connector",
+        "modulos/orquesta-opes-director",
+        "modulos/orquesta-opes-topic-registry"
+      ],
+      "disposition": "supersede",
+      "capability_ids": [
+        "EXT-00",
+        "EXT-01",
+        "OPE-01",
+        "OPE-02",
+        "OPE-10",
+        "OPE-18",
+        "OPE-19",
+        "OPE-20"
+      ],
+      "reason": "OPES returns only as an external DomainPlugin composition with opaque refs and temporary instances; no bridge, special director or shared storage survives.",
+      "characterization_required": true
+    },
+    {
+      "id": "provider_runtimes",
+      "paths": [
+        "modulos/orquesta-runtime",
+        "modulos/orquesta-runtime-claude",
+        "modulos/orquesta-runtime-codex",
+        "modulos/orquesta-runtime-codex-appserver",
+        "modulos/orquesta-runtime-codex-delivery",
+        "modulos/orquesta-runtime-codex-goal",
+        "modulos/orquesta-runtime-gemini",
+        "modulos/orquesta-runtime-ollama"
+      ],
+      "disposition": "supersede",
+      "capability_ids": [
+        "AGT-01",
+        "AGT-02",
+        "AGT-03",
+        "AGT-05",
+        "AGT-06",
+        "AGT-07",
+        "AGT-09"
+      ],
+      "reason": "A neutral launcher and observer contract plus provider adapters replace Goal-specific and delivery-specific runtime implementations.",
+      "characterization_required": true
+    },
+    {
+      "id": "independent_test_attestor",
+      "paths": [
+        "modulos/orquesta-runtime-required-test"
+      ],
+      "disposition": "supersede",
+      "capability_ids": [
+        "EVD-04",
+        "EVD-05"
+      ],
+      "reason": "Required tests become independent attestations bound to exact source, diff and generation rather than provider runtime state.",
+      "characterization_required": true
+    },
+    {
+      "id": "workspace_git",
+      "paths": [
+        "modulos/orquesta-runtime-worktree"
+      ],
+      "disposition": "supersede",
+      "capability_ids": [
+        "GOV-22",
+        "STG-02",
+        "EXT-10"
+      ],
+      "reason": "Workspace and Git operations become project-scoped ports with governed writes and collaboration receipts, not runtime-owned worktrees.",
+      "characterization_required": true
+    },
+    {
+      "id": "advisory_rails",
+      "paths": [
+        "modulos/orquesta-rails"
+      ],
+      "disposition": "supersede",
+      "capability_ids": [
+        "ORC-24"
+      ],
+      "reason": "Useful diagnostics are characterized as advisory review evidence; historical keyword vetoes and parallel policy authority are not ported.",
+      "characterization_required": true
+    }
+  ]
+}

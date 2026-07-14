@@ -1,0 +1,65 @@
+{
+  "document_kind": "pending_source_inventory",
+  "schema_version": 1,
+  "sources": [
+    {
+      "id": "historical_task_sources",
+      "kind": "task",
+      "status": "inventory_only_pending_disposition",
+      "exact_paths": [
+        "docs/autoprogramacion_orquesta_pendientes_2026-05-23.md",
+        "docs/backlog_piloto_autonomia_2026-07-10.md",
+        "docs/duplicaciones_railes_pendientes_2026-05-24.md",
+        "docs/inventario_pendientes_orquestacion_autonoma_2026-03-24.md",
+        "docs/tarea_codex_quota_auto_replan_2026-06-13.md",
+        "docs/tarea_opes_supuestos_validacion_schema_y_cobertura_2026-06-23.md"
+      ],
+      "path_patterns": [
+        "modulos/*/docs/tareas.md",
+        "docs/tareas/*.md",
+        "docs/historico/2026-06/TAREA_*.md"
+      ],
+      "expected_file_count": 102,
+      "manifest_sha256": "sha256:6a3fd9b5f26eca85af45170164d9695cecbe0c310fbb1412e4c6ca750c236180",
+      "next_gate": "Extract stable task IDs or source-locators and map every entry to accepted capability, supersession or retirement reason."
+    },
+    {
+      "id": "historical_bug_sources",
+      "kind": "bug",
+      "status": "inventory_only_pending_disposition",
+      "exact_paths": [
+        "docs/inventario_bugs_orquesta_2026-06-30.md"
+      ],
+      "path_patterns": [
+        "docs/incidencia_*.md",
+        "docs/incidencias/*.md",
+        "docs/runbooks/incidencia_*.md"
+      ],
+      "expected_file_count": 131,
+      "manifest_sha256": "sha256:3a999dc4ba53b2a83aa40786cfdbbaf8ada27f25d994333983d34f98ee5ff56c",
+      "next_gate": "Map every bug to architectural cause, restored invariant, accepted capability and executable lesson test without deleting resolved history."
+    },
+    {
+      "id": "historical_skill_sources",
+      "kind": "skill",
+      "status": "inventory_only_pending_disposition",
+      "exact_paths": [],
+      "path_patterns": [
+        "skills/*/SKILL.md"
+      ],
+      "expected_file_count": 19,
+      "manifest_sha256": "sha256:bd272340731b4bbb29480c6e0a339f9885ff1b38f67fab91a8d6645d2d814eaf",
+      "next_gate": "Assign each skill scope, hash, trust, activation test and disposition under TLS-06 through TLS-12 before any installation or reuse."
+    },
+    {
+      "id": "historical_rulepack_sources",
+      "kind": "rulepack",
+      "status": "absent_pending_contract",
+      "exact_paths": [],
+      "path_patterns": [],
+      "expected_file_count": 0,
+      "manifest_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "next_gate": "Define canonical rulepack layout and contract under TLS-13; AGENTS files and prose rails are not installable rulepacks."
+    }
+  ]
+}
