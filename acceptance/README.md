@@ -25,8 +25,13 @@ intento/proyección idempotente fuera del agregado `Goal` y el provider entra po
 Las capacidades V02 solo cuentan como `accredited` mientras
 `product/evidence/v02_authority_rules.json` sea válido. El receipt enumera los
 ficheros exactos del candidato, excluye el propio receipt y sella contenido y
-ruta con framing. El gate recalcula el hash del fixture y del candidato; cambiar
-AGENTS, contrato, gate, fixture, roadmap o esta guía invalida la acreditación.
+ruta con framing. El candidato estable contiene `AGENTS.md` y este paquete de
+aceptación —guía, fixture y test—. El gate recalcula sus hashes; cambiar
+autoridad, gate, fixture o guía invalida la acreditación.
+
+`product/roadmap.json` queda fuera deliberadamente: su gate causal valida por
+separado contrato, receipt y `evidence_refs`, y el progreso de V03+ no debe
+invalidar una V02 ya acreditada.
 
 Comando focal seguro:
 

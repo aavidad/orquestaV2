@@ -3,17 +3,14 @@
   "contract": "AC-V02-AUTHORITY-RULES",
   "result": "PASS",
   "command": "go test -mod=vendor -count=1 ./acceptance -run '^TestAcceptanceV02AuthorityRules$'",
-  "executed_at": "2026-07-14T06:06:35+02:00",
-  "fixture_sha256": "sha256:3887393145d65ee6b1407596fde5b0894e42ebb7f34d28ad4748952377eb9f87",
+  "executed_at": "2026-07-14T06:19:27+02:00",
+  "fixture_sha256": "sha256:3e874b43f38dfe9d9f9150ce4776a645d386594ef58e167ac839b325f0a2c0bf",
   "candidate_digest_algorithm": "sha256:length-framed-path-and-content:v1",
   "candidate_subjects": [
     "AGENTS.md",
     "acceptance/README.md",
     "acceptance/fixtures/v02_authority_rules.json",
-    "acceptance/v02_authority_rules_test.go",
-    "docs/reconstruccion/ruta_total_100.md",
-    "product/roadmap.json",
-    "product_roadmap_test.go"
+    "acceptance/v02_authority_rules_test.go"
   ],
-  "candidate_sha256": "sha256:acab4086de1f649b1c2d9efc1a9e0d57d12b5fbcd5db445dd8df3fcbf0be1184"
+  "candidate_sha256": "sha256:14ba10f1998ecbf7d184377bb2497acc0e3345ada8e87ef97a0b3aa59709401a"
 }

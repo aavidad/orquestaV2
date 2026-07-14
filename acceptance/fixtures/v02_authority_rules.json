@@ -7,10 +7,7 @@
     "AGENTS.md",
     "acceptance/README.md",
     "acceptance/fixtures/v02_authority_rules.json",
-    "acceptance/v02_authority_rules_test.go",
-    "docs/reconstruccion/ruta_total_100.md",
-    "product/roadmap.json",
-    "product_roadmap_test.go"
+    "acceptance/v02_authority_rules_test.go"
   ],
   "product_module": "orquesta",
   "product_roots": [
