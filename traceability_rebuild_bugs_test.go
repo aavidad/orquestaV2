@@ -28,6 +28,7 @@ func TestTraceabilityRebuildBugLessons(t *testing.T) {
 		"BUG-REBUILD-20260714-018": "product_roadmap_test.go#TestProductRoadmapAccreditationDoesNotExceedEvidence",
 		"BUG-REBUILD-20260714-019": "product_roadmap_test.go#TestProductRoadmapPlannedContractsAreNonRunnable",
 		"BUG-REBUILD-20260714-020": "acceptance/v01_source_integration_test.go#TestAcceptanceV01SourceIntegrationReceipt",
+		"BUG-REBUILD-20260714-021": "product_roadmap_test.go#TestProductRoadmapExecutableCommandsRunDeclaredTestPackage",
 	}
 	baselineIDs := []string{
 		"BUG-REBUILD-20260714-001",

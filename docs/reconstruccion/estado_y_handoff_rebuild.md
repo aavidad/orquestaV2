@@ -1,6 +1,6 @@
 # Estado y handoff vivo del rebuild
 
-Última actualización: 2026-07-14 11:26 Europe/Madrid.
+Última actualización: 2026-07-14 11:35 Europe/Madrid.
 
 Este documento permite continuar el rebuild sin reconstruir el contexto de la
 sesión. Es estado operativo, no evidencia de aceptación. Los estados canónicos
@@ -37,16 +37,21 @@ c89dff6c8f test: renovar E2E Codex real del DAG
 ba396a88ff test: desacoplar recibo V02 del roadmap vivo
 a8bff60949 test: unificar verificacion de recibos de aceptacion
 cc571a089f test: acreditar trazabilidad canónica y receipts V01-V03
+99eb627ce3 docs: registrar cierre V03 y relevo V04
+defdbb7a74 docs: congelar análisis y relevo de V04
 ```
 
-Checkpoint inmediato: V01, V02 y V03 tienen receipts V2 verificables y sus
-baterías normal, `vet` y `-race` están verdes. Una contrarrevisión detectó y
-cerró falsos verdes en receipts, evidencias Markdown, contrarrevisiones task,
-acreditaciones parciales, comandos planificados y la excepción sin receipt de
-V01. Los generadores temporales ya no existen. V03 quedó integrada en
-`cc571a089f42a19cbd5920acc823381ecc127653`; el worktree está limpio. Siguiente
-acción exacta: abrir V04 con su aceptación roja antes de modificar dominio o
-adaptadores. No regenerar los ledgers V03 salvo regresión reproducible.
+Checkpoint inmediato: el contrato V04 ya está activado y rojo antes de tocar
+código productivo. V02 conserva receipt V2 válido. Los receipts V01 y V03 eran
+válidos en `defdbb7a74`, pero roadmap, `product_roadmap_test.go` y el ledger de
+bugs cambiaron al abrir V04; por tanto quedan deliberadamente stale hasta el
+sellado de V04. No ejecutar su reemisión durante el rojo. Una contrarrevisión
+previa detectó y cerró falsos verdes en receipts, evidencias Markdown,
+contrarrevisiones task, acreditaciones parciales, comandos planificados y la
+excepción sin receipt de V01. Los generadores temporales ya no existen. V03
+quedó integrada en `cc571a089f42a19cbd5920acc823381ecc127653` y su relevo en
+`defdbb7a74`. Siguiente acción exacta: implementar dominio AppSpec y sus tests
+V04; no tocar SQLite/MCP hasta que el dominio quede verde.
 
 Contrarrevisión final: tres revisores independientes devolvieron `APPROVE`
 después de reabrir y cerrar sus bloqueos de circularidad V01, evidencia real
@@ -54,12 +59,17 @@ de `BUG-020` y write-set del handoff. No queda bloqueo conocido de V03.
 
 ## Progreso honesto
 
-- V01 catálogo ejecutable: receipt V2 válido; se reemite al cambiar roadmap.
+- V01 catálogo ejecutable: cerrado en el checkpoint previo; receipt V2 stale
+  por el cambio de roadmap V04 y pendiente de reemisión al sellar el corte.
 - V02 autoridad única del rebuild: receipt V2 válido.
-- V03 trazabilidad y lecciones: receipt V2 válido e integrada en Git.
-- V04–V34: pendientes. No contar código heredado o una prueba aislada como
+- V03 trazabilidad y lecciones: integrada en Git; receipt V2 stale porque V04
+  añadió `BUG-REBUILD-20260714-021` y cambió su gate candidato.
+- V04: contrato ejecutable y rojo; GOV-02 continúa `declared`.
+- V05–V34: pendientes. No contar código heredado o una prueba aislada como
   vertical cerrada.
-- progreso vertical mecánico: 3 de 34 receipts válidos, 8,8 % de la ruta;
+- progreso vertical cerrado previo: 3 de 34, 8,8 % de la ruta; receipts válidos
+  contra el candidato de trabajo actual: 1 de 4 ejecutables, deuda intencional
+  hasta reemitir V01/V03 y emitir V04;
 - progreso de capacidades: 3 de 257 en estado `accredited`, 1,17 %: `GOV-03`,
   `GOV-16` y `GOV-21`. No usar porcentajes subjetivos de “núcleo funcional”.
 
@@ -521,6 +531,57 @@ Excepción operativa: se usaron tres subagentes Codex directos para análisis
 solo lectura porque la autodirección del rebuild no queda acreditada hasta V22.
 Esto cumple el bootstrap documentado; no se interpreta como diseño final ni
 como sustituto de Orquesta.
+
+### Checkpoint rojo V04
+
+Ya existen el fixture y el gate estructural/contractual:
+
+```text
+acceptance/fixtures/v04_intent_appspec.json
+acceptance/v04_intent_appspec_test.go
+```
+
+`AC-V04-INTENT-APPSPEC` está ahora `executable`, declara receipt canónico pero
+GOV-02 sigue `declared`. El fixture liga inputs exactos, ocho invariantes y el
+write-set candidato. La parte reutilizable de Intent está verde: conserva bytes
+exactos, hash determinista y sensibilidad a cualquier cambio de entrada.
+
+Rojo reproducible ejecutado:
+
+```bash
+go test -mod=vendor -count=1 ./acceptance ./internal/goal ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/state/sqlite ./internal/interfaces/mcp -run '^(TestAcceptanceV04IntentAppSpec|TestV04.*)$'
+```
+
+Resultado: falla solo `TestAcceptanceV04IntentAppSpec`; los otros seis paquetes
+quedan verdes sin tests V04 todavía. Ausencias agrupadas: AppSpec/autoridad
+única de Goal; confirmación y amendment de aplicación; `SpecHash` en tres
+mensajes provider; migración 003; tool MCP amend y campos confirm/fencing. No
+hay fallo de compilación, JSON ni fixture.
+
+`BUG-REBUILD-20260714-021` queda registrado y cerrado: el comando planned V04
+omitía `./acceptance` y usaba un nombre genérico inexistente. El nuevo gate
+`TestProductRoadmapExecutableCommandsRunDeclaredTestPackage` exige que todo
+contrato ejecutable ejecute el paquete propietario de su `test_ref`. Estos
+gates están verdes:
+
+```bash
+go test -mod=vendor -count=1 . -run '^(TestProductRoadmap.*|TestTraceabilityRebuildBugLessons)$'
+```
+
+Revisiones operativas: dominio/aplicación y SQLite entregaron análisis
+solo-lectura; la tarea delegada del fixture se interrumpió sin cambios porque
+intentaba abarcar un harness demasiado grande. El integrador creó el contrato
+rojo mínimo y documentó la excepción; no se perdió ni mezcló ningún write-set.
+
+Siguiente write-set autorizado:
+
+```text
+internal/goal/{app_spec.go,app_spec_test.go,goal.go,goal_test.go,refs.go,restore.go,restore_test.go,snapshot.go}
+```
+
+Objetivo: AppSpec inicial/amend, hashes/generaciones, Goal sucesor vacío y
+snapshot tamper-proof. Tras verde focal de dominio, actualizar este handoff
+antes de abrir aplicación.
 
 ## Regla de actualización
 

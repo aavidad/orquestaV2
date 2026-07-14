@@ -561,14 +561,17 @@
     {
       "id": "AC-V04-INTENT-APPSPEC",
       "vertical": "intent_appspec",
-      "status": "planned",
-      "test_ref": "planned:acceptance/v04_intent_appspec_test.go",
-      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
-      "fixture": "planned:fixtures/v04_intent_appspec",
+      "status": "executable",
+      "test_ref": "acceptance/v04_intent_appspec_test.go",
+      "command": "go test -mod=vendor -count=1 ./acceptance ./internal/goal ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/state/sqlite ./internal/interfaces/mcp -run '^(TestAcceptanceV04IntentAppSpec|TestV04.*)$'",
+      "fixture": "acceptance/fixtures/v04_intent_appspec.json",
+      "receipt": "product/evidence/v04_intent_appspec.json",
       "assertions": [
-        "IntentManifest remains immutable",
-        "AppSpec amendments create a new causal generation",
-        "evidence from a different spec hash is rejected"
+        "IntentManifest preserves exact submitted bytes and AppSpec generation one binds its canonical hash after explicit confirmation",
+        "amendment atomically creates a new Intent AppSpec generation N+1 and successor Goal without mutating its terminal parent",
+        "active stale or cross-scope amendments fail without partial writes and replay keeps one successor",
+        "provider spec hash mismatch creates no artifact attestation or closure",
+        "SQLite restart and immutable triggers preserve the chain while MCP derives principal and time from trusted server dependencies"
       ]
     },
     {

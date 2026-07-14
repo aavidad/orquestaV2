@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"path"
 	"reflect"
 	"sort"
 	"strings"
@@ -331,6 +332,7 @@ func TestProductRoadmapExecutableContractsDeclareReceiptPaths(t *testing.T) {
 		"AC-V01-SOURCE-INTEGRATION": "product/evidence/v01_source_integration.json",
 		"AC-V02-AUTHORITY-RULES":    "product/evidence/v02_authority_rules.json",
 		"AC-V03-CANONICAL-LEDGERS":  "product/evidence/v03_canonical_ledgers.json",
+		"AC-V04-INTENT-APPSPEC":     "product/evidence/v04_intent_appspec.json",
 	}
 	gotExecutable := make(map[string]string)
 	for _, contract := range roadmap.AcceptanceContracts {
@@ -349,6 +351,33 @@ func TestProductRoadmapExecutableContractsDeclareReceiptPaths(t *testing.T) {
 	if !reflect.DeepEqual(gotExecutable, wantExecutable) {
 		t.Fatalf("executable receipt set = %#v, want %#v", gotExecutable, wantExecutable)
 	}
+}
+
+func TestProductRoadmapExecutableCommandsRunDeclaredTestPackage(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+	for _, contract := range roadmap.AcceptanceContracts {
+		if contract.Status != "executable" {
+			continue
+		}
+		directory := path.Dir(contract.TestRef)
+		packageArgument := "."
+		if directory != "." {
+			packageArgument = "./" + directory
+		}
+		if !roadmapCommandHasArgument(contract.Command, packageArgument) {
+			t.Errorf("executable contract %s command omits declared test package %q: %q", contract.ID, packageArgument, contract.Command)
+		}
+	}
+}
+
+func roadmapCommandHasArgument(command, wanted string) bool {
+	for _, argument := range strings.Fields(command) {
+		if argument == wanted {
+			return true
+		}
+	}
+	return false
 }
 
 func assertRoadmapEvidenceCoherent(t *testing.T, entry roadmapEntry, contract roadmapAcceptanceContract) {
