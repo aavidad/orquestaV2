@@ -643,6 +643,12 @@ artifacts y attestations. Rollback conserva V2, sin receipt 3 ni tablas staging.
 Mismo contrarrevisor dio ACCEPT; SQLite normal/race/vet verdes. Próximo frente:
 MCP create/amend y proyecciones AppSpec.
 
+Antes de abrir MCP, integrador detectó `BUG-REBUILD-20260714-028`: fixture
+declaraba motivo inicial `operator.initial_confirmation`, aplicación usaba
+`initial_confirmation` y aceptación no consumía el campo. Test rojo ya liga
+fixture a constante de aplicación. Ya cerrado: valor canónico namespaced y
+focal aceptación/aplicación verde. MCP avanza en write-set disjunto.
+
 Incidencia de disciplina: el agente de dominio tocó temporalmente
 `internal/goal/intent_test.go` para ampliar una tabla de refs sin pedir el
 write-set. El integrador lo detectó y el agente revirtió su hunk con

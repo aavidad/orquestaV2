@@ -12,6 +12,8 @@ import (
 	"orquesta/internal/goal"
 )
 
+const initialAppSpecReason = "operator.initial_confirmation"
+
 type SubmitRequest struct {
 	RequestRef          string
 	ActorRef            goal.ActorRef
@@ -60,7 +62,7 @@ func (orchestrator *Orchestrator) Submit(ctx context.Context, request SubmitRequ
 	}
 	appSpec, err := goal.NewInitialAppSpec(goal.AppSpecInput{
 		Ref: appSpecRef, Intent: intent, Objective: request.NormalizedObjective,
-		Reason: "initial_confirmation", ConfirmedBy: request.ActorRef, ConfirmedAt: now,
+		Reason: initialAppSpecReason, ConfirmedBy: request.ActorRef, ConfirmedAt: now,
 	})
 	if err != nil {
 		return SubmitResult{}, err

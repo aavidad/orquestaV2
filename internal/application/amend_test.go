@@ -115,7 +115,7 @@ func TestV04SubmitCreatesConfirmedRootAppSpecFromExactIntent(t *testing.T) {
 	intent := spec.Intent()
 	parentRef, hasParent := spec.ParentRef()
 	if !result.Created || intent.Statement() != request.Statement || spec.Generation() != 1 ||
-		spec.Objective() != "preserve this exact intent" || spec.Reason() != "initial_confirmation" ||
+		spec.Objective() != "preserve this exact intent" || spec.Reason() != initialAppSpecReason ||
 		spec.ConfirmedBy() != actor || spec.ConfirmedAt() != clock.now.UTC() || hasParent ||
 		parentRef.String() != "" || !goal.IsCanonicalAppSpecHash(spec.Hash()) || result.Record.Goal.SpecHash() != spec.Hash() {
 		t.Fatalf("invalid root AppSpec: created=%v intent=%q spec=%+v parent=%s/%v", result.Created, intent.Statement(), spec.Snapshot(), parentRef.String(), hasParent)
@@ -133,6 +133,12 @@ func TestV04SubmitCreatesConfirmedRootAppSpecFromExactIntent(t *testing.T) {
 	differentExactIntent.Statement = strings.TrimSpace(request.Statement)
 	if submissionFingerprint(request) == submissionFingerprint(differentExactIntent) {
 		t.Fatal("submission fingerprint lost exact Intent statement")
+	}
+}
+
+func TestV04InitialAppSpecReasonMatchesAcceptanceContract(t *testing.T) {
+	if initialAppSpecReason != "operator.initial_confirmation" {
+		t.Fatalf("initial AppSpec reason = %q", initialAppSpecReason)
 	}
 }
 

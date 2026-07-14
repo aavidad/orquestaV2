@@ -72,7 +72,7 @@ func validateCreatedRecord(request SubmitRequest, fingerprint string, record Goa
 		intent.Statement() != request.Statement || record.Goal.Actor() != request.ActorRef ||
 		record.Goal.Project() != request.ProjectRef || record.Goal.WorkItemCount() == 0 ||
 		appSpec.Generation() != 1 || appSpec.Objective() != normalizedObjective(request.Statement, request.NormalizedObjective) ||
-		appSpec.Reason() != "initial_confirmation" || appSpec.ConfirmedBy() != request.ActorRef {
+		appSpec.Reason() != initialAppSpecReason || appSpec.ConfirmedBy() != request.ActorRef {
 		return &StateError{Code: StateConflict}
 	}
 	if _, hasParent := appSpec.ParentRef(); hasParent {

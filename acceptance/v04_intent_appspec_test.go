@@ -115,6 +115,7 @@ func TestAcceptanceV04IntentAppSpec(t *testing.T) {
 		v04RequireFields(t, shape, "SubmitRequest", "Confirm", "NormalizedObjective")
 		v04RequireFields(t, shape, "AmendRequest", "Confirm", "ExpectedSourceRevision", "ExpectedSourceSpecHash", "NormalizedObjective", "Reason", "RequestRef", "SourceGoalRef", "Statement")
 		v04RequireMethods(t, shape, "Orchestrator", "Amend", "Submit")
+		v04RequireConstant(t, shape, "initialAppSpecReason", fixture.Initial.Reason)
 	})
 
 	t.Run("provider_boundary_echoes_spec_hash", func(t *testing.T) {
