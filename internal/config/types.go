@@ -1,7 +1,5 @@
 package config
 
-import "time"
-
 // Key is a generated canonical registry key.
 type Key string
 
@@ -14,81 +12,51 @@ const (
 	SourceEnv     Source = "env"
 )
 
-// CredentialRef is an opaque credential identifier, never a secret value.
+// CredentialRef is an opaque credential identifier, never secret material.
 type CredentialRef string
 
-type ServerConfig struct {
-	Listen          string
-	MCPPath         string
-	MaxRequestBytes int64
-	ReadTimeout     time.Duration
-	WriteTimeout    time.Duration
-	IdleTimeout     time.Duration
-	ShutdownTimeout time.Duration
+// AliasKind distinguishes human TOML aliases from bootstrap environment
+// aliases.
+type AliasKind string
+
+const (
+	AliasKindTOMLKey     AliasKind = "toml_key"
+	AliasKindEnvironment AliasKind = "environment"
+)
+
+// AliasDefinition describes a temporary input spelling and its bounded
+// migration to one canonical key.
+type AliasDefinition struct {
+	Kind                AliasKind
+	Name                string
+	Target              Key
+	IntroducedRevision  string
+	RemoveAfterRevision string
 }
 
-type SQLiteConfig struct {
-	Path               string
-	BusyTimeout        time.Duration
-	MaxOpenConnections int64
+// CrossValidatorDefinition declares one multi-key invariant. Execution is
+// selected by ID; the registry remains the only source of the dependency set.
+type CrossValidatorDefinition struct {
+	ID   string
+	Keys []Key
 }
 
-type StateConfig struct {
-	SQLite SQLiteConfig
-}
-
-type FilesystemArtifactConfig struct {
-	Root string
-}
-
-type ArtifactConfig struct {
-	Filesystem FilesystemArtifactConfig
-}
-
-type CodexRuntimeConfig struct {
-	Command                 string
-	Model                   string
-	Reasoning               string
-	Timeout                 time.Duration
-	ProcessPipeDrainDelay   time.Duration
-	MaxDiagnosticBytes      int64
-	MaxConcurrentExecutions int64
-	WorkRoot                string
-	EnvAllowlist            []string
-	CredentialRef           CredentialRef `json:"-"`
-}
-
-type RuntimeConfig struct {
-	Provider       string
-	MaxOutputBytes int64
-	Codex          CodexRuntimeConfig
-}
-
-type IdentityConfig struct {
-	LocalActor     string
-	LocalTokenPath string
-}
-
-type ProjectConfig struct {
-	Default string
-}
-
-type SchedulerConfig struct {
-	PollInterval         time.Duration
-	ObservationInterval  time.Duration
-	ClaimLease           time.Duration
-	MaxExecutionAttempts int64
-	ExecutionTimeout     time.Duration
-}
-
-type APIConfig struct {
-	MaxListLimit int64
-	Locale       string
-}
-
-type EffectiveConfig struct {
-	Path             string
-	MaxExistingBytes int64
+// KeyDefinition is a detached description of one canonical key. Slice and
+// pointer fields returned by this package are always cloned.
+type KeyDefinition struct {
+	Key             Key
+	GoName          string
+	SemanticRef     string
+	Type            string
+	Default         any
+	Sensitive       bool
+	Scope           string
+	RestartRequired bool
+	EnvAlias        string
+	ValidatorIDs    []string
+	AllowedValues   []string
+	Minimum         *int64
+	Maximum         *int64
 }
 
 // KeyMetadata describes provenance and operational behavior without exposing
@@ -96,32 +64,25 @@ type EffectiveConfig struct {
 type KeyMetadata struct {
 	Source          Source
 	Type            string
+	SemanticRef     string
 	Sensitive       bool
 	Scope           string
 	RestartRequired bool
 	EnvAlias        string
+	ValidatorIDs    []string
+	AllowedValues   []string
 	Minimum         *int64
 	Maximum         *int64
 }
 
-// Snapshot is the immutable-by-convention typed result consumed by bootstrap.
-// Hash covers registry revision, non-sensitive canonical values and winning
-// sources. Sensitive values contribute only the stable redaction marker.
+// Snapshot is an immutable resolved configuration. Its only state is the
+// private canonical entry set; generated getters return values or clones.
 type Snapshot struct {
-	SchemaVersion    int
-	RegistryRevision string
-	Hash             string
-	Server           ServerConfig
-	State            StateConfig
-	Artifact         ArtifactConfig
-	Runtime          RuntimeConfig
-	Identity         IdentityConfig
-	Project          ProjectConfig
-	Scheduler        SchedulerConfig
-	API              APIConfig
-	Effective        EffectiveConfig
-
-	entries []snapshotEntry
+	schemaVersion    int
+	registryRevision string
+	registryHash     string
+	hash             string
+	entries          []snapshotEntry
 }
 
 type snapshotEntry struct {
@@ -130,17 +91,44 @@ type snapshotEntry struct {
 	metadata KeyMetadata
 }
 
-// Metadata returns provenance and registry metadata for a generated key.
+// SchemaVersion returns the canonical registry schema version.
+func (s Snapshot) SchemaVersion() int { return s.schemaVersion }
+
+// RegistryRevision returns the human registry revision.
+func (s Snapshot) RegistryRevision() string { return s.registryRevision }
+
+// RegistryHash returns the semantic digest of the registry, independent of
+// JSON whitespace.
+func (s Snapshot) RegistryHash() string { return s.registryHash }
+
+// Hash returns the resolved and redacted snapshot digest.
+func (s Snapshot) Hash() string { return s.hash }
+
+// Metadata returns detached provenance and registry metadata.
 func (s Snapshot) Metadata(key Key) (KeyMetadata, bool) {
 	for _, entry := range s.entries {
 		if entry.key == key {
-			metadata := entry.metadata
-			metadata.Minimum = cloneInt64Pointer(metadata.Minimum)
-			metadata.Maximum = cloneInt64Pointer(metadata.Maximum)
-			return metadata, true
+			return cloneKeyMetadata(entry.metadata), true
 		}
 	}
 	return KeyMetadata{}, false
+}
+
+func (s Snapshot) value(key Key) (any, bool) {
+	for _, entry := range s.entries {
+		if entry.key == key {
+			return cloneValue(entry.value), true
+		}
+	}
+	return nil, false
+}
+
+func cloneKeyMetadata(metadata KeyMetadata) KeyMetadata {
+	metadata.ValidatorIDs = append([]string(nil), metadata.ValidatorIDs...)
+	metadata.AllowedValues = append([]string(nil), metadata.AllowedValues...)
+	metadata.Minimum = cloneInt64Pointer(metadata.Minimum)
+	metadata.Maximum = cloneInt64Pointer(metadata.Maximum)
+	return metadata
 }
 
 func cloneInt64Pointer(value *int64) *int64 {

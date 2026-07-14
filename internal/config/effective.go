@@ -22,16 +22,18 @@ type effectiveDocument struct {
 }
 
 type effectiveEntry struct {
-	Key             Key    `json:"key"`
-	Value           any    `json:"value"`
-	Source          Source `json:"source"`
-	Type            string `json:"type"`
-	Sensitive       bool   `json:"sensitive"`
-	Scope           string `json:"scope"`
-	RestartRequired bool   `json:"restart_required"`
-	EnvAlias        string `json:"env_alias"`
-	Minimum         *int64 `json:"minimum,omitempty"`
-	Maximum         *int64 `json:"maximum,omitempty"`
+	Key             Key      `json:"key"`
+	Value           any      `json:"value"`
+	Source          Source   `json:"source"`
+	Type            string   `json:"type"`
+	SemanticRef     string   `json:"semantic_ref"`
+	Sensitive       bool     `json:"sensitive"`
+	Scope           string   `json:"scope"`
+	RestartRequired bool     `json:"restart_required"`
+	EnvAlias        string   `json:"env_alias"`
+	ValidatorIDs    []string `json:"validator_ids"`
+	Minimum         *int64   `json:"minimum,omitempty"`
+	Maximum         *int64   `json:"maximum,omitempty"`
 }
 
 // EffectiveJSON returns deterministic, fully resolved and redacted output.
@@ -47,13 +49,13 @@ func (s Snapshot) EffectiveJSON() ([]byte, error) {
 func (s Snapshot) effectiveDocument() effectiveDocument {
 	document := effectiveDocument{
 		DocumentType:     effectiveDocumentType,
-		SchemaVersion:    s.SchemaVersion,
-		RegistryRevision: s.RegistryRevision,
-		SnapshotHash:     s.Hash,
+		SchemaVersion:    s.SchemaVersion(),
+		RegistryRevision: s.RegistryRevision(),
+		SnapshotHash:     s.Hash(),
 		Entries:          make([]effectiveEntry, 0, len(s.entries)),
 	}
 	for _, entry := range s.entries {
-		value := entry.value
+		value := canonicalValue(entry.value)
 		if entry.metadata.Sensitive {
 			value = redactedValue
 		}
@@ -62,10 +64,12 @@ func (s Snapshot) effectiveDocument() effectiveDocument {
 			Value:           value,
 			Source:          entry.metadata.Source,
 			Type:            entry.metadata.Type,
+			SemanticRef:     entry.metadata.SemanticRef,
 			Sensitive:       entry.metadata.Sensitive,
 			Scope:           entry.metadata.Scope,
 			RestartRequired: entry.metadata.RestartRequired,
 			EnvAlias:        entry.metadata.EnvAlias,
+			ValidatorIDs:    append([]string(nil), entry.metadata.ValidatorIDs...),
 			Minimum:         cloneInt64Pointer(entry.metadata.Minimum),
 			Maximum:         cloneInt64Pointer(entry.metadata.Maximum),
 		})
@@ -86,10 +90,11 @@ func (s Snapshot) WriteEffective() error {
 	if err != nil {
 		return err
 	}
-	if s.Effective.MaxExistingBytes <= 0 || int64(len(content)) > s.Effective.MaxExistingBytes {
+	maxExistingBytes := s.ConfigEffectiveMaxExistingBytes()
+	if maxExistingBytes <= 0 || int64(len(content)) > maxExistingBytes {
 		return &Error{Code: ErrorEffectiveWrite, Cause: errors.New("config.effective_output_exceeds_canonical_limit")}
 	}
-	path := s.Effective.Path
+	path := s.ConfigEffectivePath()
 	if path == "" {
 		return &Error{Code: ErrorEffectiveWrite}
 	}
@@ -97,7 +102,7 @@ func (s Snapshot) WriteEffective() error {
 	if err := ensureEffectiveDirectory(directory); err != nil {
 		return &Error{Code: ErrorEffectiveWrite, Cause: err}
 	}
-	if err := s.validateEffectiveDestination(path); err != nil {
+	if err := s.validateEffectiveDestination(path, maxExistingBytes); err != nil {
 		return err
 	}
 	temporary, err := os.CreateTemp(directory, ".effective-config-*")
@@ -112,10 +117,13 @@ func (s Snapshot) WriteEffective() error {
 			_ = os.Remove(temporaryPath)
 		}
 	}()
-	if err := temporary.Chmod(0o600); err != nil {
+	if _, err := temporary.Write(content); err != nil {
 		return &Error{Code: ErrorEffectiveWrite, Cause: err}
 	}
-	if _, err := temporary.Write(content); err != nil {
+	if err := temporary.Sync(); err != nil {
+		return &Error{Code: ErrorEffectiveWrite, Cause: err}
+	}
+	if err := temporary.Chmod(0o400); err != nil {
 		return &Error{Code: ErrorEffectiveWrite, Cause: err}
 	}
 	if err := temporary.Sync(); err != nil {
@@ -182,7 +190,7 @@ func syncEffectiveDirectory(directory string) error {
 	return opened.Sync()
 }
 
-func (s Snapshot) validateEffectiveDestination(path string) error {
+func (s Snapshot) validateEffectiveDestination(path string, maxExistingBytes int64) error {
 	info, err := os.Lstat(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -191,12 +199,17 @@ func (s Snapshot) validateEffectiveDestination(path string) error {
 		return &Error{Code: ErrorEffectiveWrite, Cause: err}
 	}
 	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 ||
-		info.Size() <= 0 || info.Size() > s.Effective.MaxExistingBytes {
+		info.Size() <= 0 || info.Size() > maxExistingBytes {
 		return &Error{Code: ErrorEffectiveWrite, Cause: errors.New("config.effective_destination_unrecognized")}
 	}
-	payload, err := os.ReadFile(path)
+	opened, err := os.Open(path)
 	if err != nil {
 		return &Error{Code: ErrorEffectiveWrite, Cause: err}
+	}
+	payload, err := io.ReadAll(io.LimitReader(opened, maxExistingBytes+1))
+	closeErr := opened.Close()
+	if err != nil || closeErr != nil || int64(len(payload)) > maxExistingBytes {
+		return &Error{Code: ErrorEffectiveWrite, Cause: errors.Join(err, closeErr, errors.New("config.effective_destination_unrecognized"))}
 	}
 	decoder := json.NewDecoder(bytes.NewReader(payload))
 	decoder.DisallowUnknownFields()
@@ -208,7 +221,7 @@ func (s Snapshot) validateEffectiveDestination(path string) error {
 	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
 		return &Error{Code: ErrorEffectiveWrite, Cause: errors.New("config.effective_destination_unrecognized")}
 	}
-	if previous.DocumentType != effectiveDocumentType || previous.SchemaVersion != s.SchemaVersion ||
+	if previous.DocumentType != effectiveDocumentType || previous.SchemaVersion != s.SchemaVersion() ||
 		strings.TrimSpace(previous.RegistryRevision) == "" || !strings.HasPrefix(previous.SnapshotHash, "sha256:") ||
 		len(previous.Entries) == 0 {
 		return &Error{Code: ErrorEffectiveWrite, Cause: errors.New("config.effective_destination_unrecognized")}

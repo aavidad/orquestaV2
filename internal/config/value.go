@@ -36,8 +36,8 @@ func parseFileValue(definition registryKeyDefinition, raw any) (any, error) {
 		return value, nil
 	case valueTypeCredentialRef:
 		value, ok := raw.(string)
-		if !ok {
-			return nil, fmt.Errorf("expected credential reference")
+		if !ok || !validCredentialRef(value) {
+			return nil, fmt.Errorf("expected canonical credential reference")
 		}
 		return CredentialRef(value), nil
 	case valueTypeDuration:
@@ -55,6 +55,28 @@ func parseFileValue(definition registryKeyDefinition, raw any) (any, error) {
 	default:
 		return nil, fmt.Errorf("unsupported value type")
 	}
+}
+
+func validCredentialRef(value string) bool {
+	if value == "" {
+		return true
+	}
+	const prefix = "credential:"
+	if !strings.HasPrefix(value, prefix) {
+		return false
+	}
+	identifier := strings.TrimPrefix(value, prefix)
+	if len(identifier) == 0 || len(identifier) > 128 {
+		return false
+	}
+	for index, character := range identifier {
+		if (character >= 'a' && character <= 'z') || (character >= '0' && character <= '9') ||
+			(index > 0 && (character == '.' || character == '_' || character == '-')) {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func parseEnvironmentValue(definition registryKeyDefinition, raw string) (any, error) {

@@ -1,0 +1,577 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:orquesta:config:2026-07-15.7",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "api": {
+      "additionalProperties": false,
+      "properties": {
+        "locale": {
+          "default": "es",
+          "enum": [
+            "es",
+            "en"
+          ],
+          "type": "string",
+          "x-env-alias": "ORQUESTA_API_LOCALE",
+          "x-restart-required": true,
+          "x-scope": "api",
+          "x-semantic-ref": "orquesta.config.api.locale",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "allowed_values"
+          ]
+        },
+        "max_list_limit": {
+          "default": 100,
+          "maximum": 10000,
+          "minimum": 1,
+          "type": "integer",
+          "x-env-alias": "ORQUESTA_API_MAX_LIST_LIMIT",
+          "x-restart-required": true,
+          "x-scope": "api",
+          "x-semantic-ref": "orquesta.config.api.max_list_limit",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "integer_bounds"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "artifact": {
+      "additionalProperties": false,
+      "properties": {
+        "filesystem": {
+          "additionalProperties": false,
+          "properties": {
+            "root": {
+              "default": "./var/artifacts",
+              "minLength": 1,
+              "type": "string",
+              "x-env-alias": "ORQUESTA_ARTIFACT_FILESYSTEM_ROOT",
+              "x-restart-required": true,
+              "x-scope": "artifact",
+              "x-semantic-ref": "orquesta.config.artifact.filesystem.root",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "non_empty_path"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "config": {
+      "additionalProperties": false,
+      "properties": {
+        "effective_max_existing_bytes": {
+          "default": 16777216,
+          "maximum": 1073741824,
+          "minimum": 1024,
+          "type": "integer",
+          "x-env-alias": "ORQUESTA_EFFECTIVE_CONFIG_MAX_EXISTING_BYTES",
+          "x-restart-required": true,
+          "x-scope": "config",
+          "x-semantic-ref": "orquesta.config.config.effective_max_existing_bytes",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "integer_bounds"
+          ]
+        },
+        "effective_path": {
+          "default": "./var/effective_config.json",
+          "minLength": 1,
+          "type": "string",
+          "x-env-alias": "ORQUESTA_EFFECTIVE_CONFIG_PATH",
+          "x-restart-required": true,
+          "x-scope": "config",
+          "x-semantic-ref": "orquesta.config.config.effective_path",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "non_empty_path"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "identity": {
+      "additionalProperties": false,
+      "properties": {
+        "local_actor": {
+          "default": "actor:local-owner",
+          "type": "string",
+          "x-env-alias": "ORQUESTA_IDENTITY_LOCAL_ACTOR",
+          "x-restart-required": true,
+          "x-scope": "identity",
+          "x-semantic-ref": "orquesta.config.identity.local_actor",
+          "x-sensitive": false,
+          "x-validator-ids": []
+        },
+        "local_token_path": {
+          "default": "./var/secrets/local-owner.token",
+          "minLength": 1,
+          "type": "string",
+          "x-env-alias": "ORQUESTA_IDENTITY_LOCAL_TOKEN_PATH",
+          "x-restart-required": true,
+          "x-scope": "identity",
+          "x-semantic-ref": "orquesta.config.identity.local_token_path",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "non_empty_path"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "project": {
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "default": "project:default",
+          "type": "string",
+          "x-env-alias": "ORQUESTA_PROJECT_DEFAULT",
+          "x-restart-required": true,
+          "x-scope": "project",
+          "x-semantic-ref": "orquesta.config.project.default",
+          "x-sensitive": false,
+          "x-validator-ids": []
+        }
+      },
+      "type": "object"
+    },
+    "runtime": {
+      "additionalProperties": false,
+      "properties": {
+        "codex": {
+          "additionalProperties": false,
+          "properties": {
+            "command": {
+              "default": "codex",
+              "type": "string",
+              "x-env-alias": "ORQUESTA_RUNTIME_CODEX_COMMAND",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.codex.command",
+              "x-sensitive": false,
+              "x-validator-ids": []
+            },
+            "credential_ref": {
+              "pattern": "^(|credential:[a-z0-9][a-z0-9._-]{0,127})$",
+              "type": "string",
+              "x-env-alias": "ORQUESTA_RUNTIME_CODEX_CREDENTIAL_REF",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.codex.credential_ref",
+              "x-sensitive": true,
+              "x-validator-ids": [
+                "credential_ref"
+              ]
+            },
+            "env_allowlist": {
+              "default": [
+                "PATH",
+                "HOME",
+                "CODEX_HOME"
+              ],
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array",
+              "uniqueItems": true,
+              "x-env-alias": "ORQUESTA_RUNTIME_CODEX_ENV_ALLOWLIST",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.codex.env_allowlist",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "unique_non_empty_string_list"
+              ]
+            },
+            "max_concurrent_executions": {
+              "default": 70,
+              "maximum": 4096,
+              "minimum": 1,
+              "type": "integer",
+              "x-env-alias": "ORQUESTA_RUNTIME_CODEX_MAX_CONCURRENT_EXECUTIONS",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.codex.max_concurrent_executions",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "integer_bounds"
+              ]
+            },
+            "max_diagnostic_bytes": {
+              "default": 65536,
+              "maximum": 67108864,
+              "minimum": 1,
+              "type": "integer",
+              "x-env-alias": "ORQUESTA_RUNTIME_CODEX_MAX_DIAGNOSTIC_BYTES",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.codex.max_diagnostic_bytes",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "integer_bounds"
+              ]
+            },
+            "model": {
+              "default": "",
+              "type": "string",
+              "x-env-alias": "ORQUESTA_RUNTIME_CODEX_MODEL",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.codex.model",
+              "x-sensitive": false,
+              "x-validator-ids": []
+            },
+            "process_pipe_drain_delay": {
+              "default": "250ms",
+              "pattern": "^[1-9][0-9]*(ns|us|µs|ms|s|m|h)([0-9].*)?$",
+              "type": "string",
+              "x-env-alias": "ORQUESTA_RUNTIME_CODEX_PROCESS_PIPE_DRAIN_DELAY",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.codex.process_pipe_drain_delay",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "positive_duration"
+              ]
+            },
+            "reasoning": {
+              "default": "medium",
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "xhigh"
+              ],
+              "type": "string",
+              "x-env-alias": "ORQUESTA_RUNTIME_CODEX_REASONING",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.codex.reasoning",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "allowed_values"
+              ]
+            },
+            "timeout": {
+              "default": "30m",
+              "pattern": "^[1-9][0-9]*(ns|us|µs|ms|s|m|h)([0-9].*)?$",
+              "type": "string",
+              "x-env-alias": "ORQUESTA_RUNTIME_CODEX_TIMEOUT",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.codex.timeout",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "positive_duration"
+              ]
+            },
+            "work_root": {
+              "default": "./var/work",
+              "minLength": 1,
+              "type": "string",
+              "x-env-alias": "ORQUESTA_RUNTIME_CODEX_WORK_ROOT",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.codex.work_root",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "non_empty_path"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "max_output_bytes": {
+          "default": 1048576,
+          "maximum": 1073741824,
+          "minimum": 1,
+          "type": "integer",
+          "x-env-alias": "ORQUESTA_RUNTIME_MAX_OUTPUT_BYTES",
+          "x-restart-required": true,
+          "x-scope": "runtime",
+          "x-semantic-ref": "orquesta.config.runtime.max_output_bytes",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "integer_bounds"
+          ]
+        },
+        "provider": {
+          "default": "codex",
+          "enum": [
+            "codex"
+          ],
+          "type": "string",
+          "x-env-alias": "ORQUESTA_RUNTIME_PROVIDER",
+          "x-restart-required": true,
+          "x-scope": "runtime",
+          "x-semantic-ref": "orquesta.config.runtime.provider",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "allowed_values"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "scheduler": {
+      "additionalProperties": false,
+      "properties": {
+        "claim_lease": {
+          "default": "2m",
+          "pattern": "^[1-9][0-9]*(ns|us|µs|ms|s|m|h)([0-9].*)?$",
+          "type": "string",
+          "x-env-alias": "ORQUESTA_SCHEDULER_CLAIM_LEASE",
+          "x-restart-required": true,
+          "x-scope": "scheduler",
+          "x-semantic-ref": "orquesta.config.scheduler.claim_lease",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "positive_duration"
+          ]
+        },
+        "execution_timeout": {
+          "default": "45m",
+          "pattern": "^[1-9][0-9]*(ns|us|µs|ms|s|m|h)([0-9].*)?$",
+          "type": "string",
+          "x-env-alias": "ORQUESTA_SCHEDULER_EXECUTION_TIMEOUT",
+          "x-restart-required": true,
+          "x-scope": "scheduler",
+          "x-semantic-ref": "orquesta.config.scheduler.execution_timeout",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "positive_duration"
+          ]
+        },
+        "max_execution_attempts": {
+          "default": 3,
+          "maximum": 1000,
+          "minimum": 1,
+          "type": "integer",
+          "x-env-alias": "ORQUESTA_SCHEDULER_MAX_EXECUTION_ATTEMPTS",
+          "x-restart-required": true,
+          "x-scope": "scheduler",
+          "x-semantic-ref": "orquesta.config.scheduler.max_execution_attempts",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "integer_bounds"
+          ]
+        },
+        "observation_interval": {
+          "default": "2s",
+          "pattern": "^[1-9][0-9]*(ns|us|µs|ms|s|m|h)([0-9].*)?$",
+          "type": "string",
+          "x-env-alias": "ORQUESTA_SCHEDULER_OBSERVATION_INTERVAL",
+          "x-restart-required": true,
+          "x-scope": "scheduler",
+          "x-semantic-ref": "orquesta.config.scheduler.observation_interval",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "positive_duration"
+          ]
+        },
+        "poll_interval": {
+          "default": "500ms",
+          "pattern": "^[1-9][0-9]*(ns|us|µs|ms|s|m|h)([0-9].*)?$",
+          "type": "string",
+          "x-env-alias": "ORQUESTA_SCHEDULER_POLL_INTERVAL",
+          "x-restart-required": true,
+          "x-scope": "scheduler",
+          "x-semantic-ref": "orquesta.config.scheduler.poll_interval",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "positive_duration"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "server": {
+      "additionalProperties": false,
+      "properties": {
+        "idle_timeout": {
+          "default": "60s",
+          "pattern": "^[1-9][0-9]*(ns|us|µs|ms|s|m|h)([0-9].*)?$",
+          "type": "string",
+          "x-env-alias": "ORQUESTA_SERVER_IDLE_TIMEOUT",
+          "x-restart-required": true,
+          "x-scope": "server",
+          "x-semantic-ref": "orquesta.config.server.idle_timeout",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "positive_duration"
+          ]
+        },
+        "listen": {
+          "default": "127.0.0.1:8080",
+          "type": "string",
+          "x-env-alias": "ORQUESTA_SERVER_LISTEN",
+          "x-restart-required": true,
+          "x-scope": "server",
+          "x-semantic-ref": "orquesta.config.server.listen",
+          "x-sensitive": false,
+          "x-validator-ids": []
+        },
+        "max_request_bytes": {
+          "default": 1048576,
+          "maximum": 1073741824,
+          "minimum": 1,
+          "type": "integer",
+          "x-env-alias": "ORQUESTA_SERVER_MAX_REQUEST_BYTES",
+          "x-restart-required": true,
+          "x-scope": "server",
+          "x-semantic-ref": "orquesta.config.server.max_request_bytes",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "integer_bounds"
+          ]
+        },
+        "mcp_path": {
+          "default": "/mcp",
+          "type": "string",
+          "x-env-alias": "ORQUESTA_SERVER_MCP_PATH",
+          "x-restart-required": true,
+          "x-scope": "server",
+          "x-semantic-ref": "orquesta.config.server.mcp_path",
+          "x-sensitive": false,
+          "x-validator-ids": []
+        },
+        "read_timeout": {
+          "default": "15s",
+          "pattern": "^[1-9][0-9]*(ns|us|µs|ms|s|m|h)([0-9].*)?$",
+          "type": "string",
+          "x-env-alias": "ORQUESTA_SERVER_READ_TIMEOUT",
+          "x-restart-required": true,
+          "x-scope": "server",
+          "x-semantic-ref": "orquesta.config.server.read_timeout",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "positive_duration"
+          ]
+        },
+        "shutdown_timeout": {
+          "default": "15s",
+          "pattern": "^[1-9][0-9]*(ns|us|µs|ms|s|m|h)([0-9].*)?$",
+          "type": "string",
+          "x-env-alias": "ORQUESTA_SERVER_SHUTDOWN_TIMEOUT",
+          "x-restart-required": true,
+          "x-scope": "server",
+          "x-semantic-ref": "orquesta.config.server.shutdown_timeout",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "positive_duration"
+          ]
+        },
+        "write_timeout": {
+          "default": "30s",
+          "pattern": "^[1-9][0-9]*(ns|us|µs|ms|s|m|h)([0-9].*)?$",
+          "type": "string",
+          "x-env-alias": "ORQUESTA_SERVER_WRITE_TIMEOUT",
+          "x-restart-required": true,
+          "x-scope": "server",
+          "x-semantic-ref": "orquesta.config.server.write_timeout",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "positive_duration"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "state": {
+      "additionalProperties": false,
+      "properties": {
+        "sqlite": {
+          "additionalProperties": false,
+          "properties": {
+            "busy_timeout": {
+              "default": "5s",
+              "pattern": "^[1-9][0-9]*(ns|us|µs|ms|s|m|h)([0-9].*)?$",
+              "type": "string",
+              "x-env-alias": "ORQUESTA_STATE_SQLITE_BUSY_TIMEOUT",
+              "x-restart-required": true,
+              "x-scope": "state",
+              "x-semantic-ref": "orquesta.config.state.sqlite.busy_timeout",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "positive_duration"
+              ]
+            },
+            "max_open_connections": {
+              "default": 8,
+              "maximum": 1024,
+              "minimum": 1,
+              "type": "integer",
+              "x-env-alias": "ORQUESTA_STATE_SQLITE_MAX_OPEN_CONNECTIONS",
+              "x-restart-required": true,
+              "x-scope": "state",
+              "x-semantic-ref": "orquesta.config.state.sqlite.max_open_connections",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "integer_bounds"
+              ]
+            },
+            "path": {
+              "default": "./var/state/orquesta.sqlite",
+              "minLength": 1,
+              "type": "string",
+              "x-env-alias": "ORQUESTA_STATE_SQLITE_PATH",
+              "x-restart-required": true,
+              "x-scope": "state",
+              "x-semantic-ref": "orquesta.config.state.sqlite.path",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "non_empty_path"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "x-registry-revision": "2026-07-15.7",
+  "x-registry-hash": "sha256:be3b5aa303cf1cb16725b02d03e90f14313e3cef3e5a84e005c1c43c83ea54d8",
+  "x-source-max-bytes": 1048576,
+  "x-aliases": [],
+  "x-cross-validators": [
+    {
+      "id": "runtime_codex_timeout_before_scheduler_execution_timeout",
+      "keys": [
+        "runtime.codex.timeout",
+        "scheduler.execution_timeout"
+      ]
+    },
+    {
+      "id": "server_listen_loopback",
+      "keys": [
+        "server.listen"
+      ]
+    },
+    {
+      "id": "server_mcp_path_literal",
+      "keys": [
+        "server.mcp_path"
+      ]
+    },
+    {
+      "id": "runtime_paths_disjoint",
+      "keys": [
+        "state.sqlite.path",
+        "artifact.filesystem.root",
+        "runtime.codex.work_root",
+        "config.effective_path",
+        "identity.local_token_path"
+      ]
+    }
+  ]
+}

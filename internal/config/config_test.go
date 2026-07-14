@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -15,84 +16,68 @@ import (
 	"time"
 )
 
-func TestLoadReturnsTypedCanonicalDefaults(t *testing.T) {
-	snapshot, err := loadWithEnvironment(LoadOptions{}, nil)
-	if err != nil {
-		t.Fatalf("load defaults: %v", err)
+func TestResolveReturnsImmutableTypedCanonicalDefaults(t *testing.T) {
+	snapshot := resolveTOML(t, "", nil)
+	if snapshot.ServerListen() != "127.0.0.1:8080" || snapshot.ServerMCPPath() != "/mcp" ||
+		snapshot.ServerMaxRequestBytes() != 1048576 || snapshot.StateSQLiteBusyTimeout() != 5*time.Second ||
+		snapshot.StateSQLiteMaxOpenConnections() != 8 {
+		t.Fatal("canonical server/state defaults missing")
 	}
-	if snapshot.Server.Listen != "127.0.0.1:8080" || snapshot.Server.MCPPath != "/mcp" {
-		t.Fatalf("unexpected server defaults: %+v", snapshot.Server)
+	if snapshot.IdentityLocalActor() != "actor:local-owner" ||
+		snapshot.IdentityLocalTokenPath() != "./var/secrets/local-owner.token" || snapshot.ProjectDefault() != "project:default" {
+		t.Fatal("identity/project defaults missing")
 	}
-	if snapshot.Server.MaxRequestBytes != 1048576 {
-		t.Fatalf("server max request bytes = %d, want 1048576", snapshot.Server.MaxRequestBytes)
+	if snapshot.RuntimeMaxOutputBytes() != 1048576 || snapshot.RuntimeCodexMaxDiagnosticBytes() != 65536 ||
+		snapshot.RuntimeCodexMaxConcurrentExecutions() != 70 || snapshot.RuntimeCodexProcessPipeDrainDelay() != 250*time.Millisecond {
+		t.Fatal("runtime defaults missing")
 	}
-	if snapshot.State.SQLite.BusyTimeout != 5*time.Second {
-		t.Fatalf("unexpected sqlite busy timeout: %s", snapshot.State.SQLite.BusyTimeout)
+	if snapshot.ConfigEffectiveMaxExistingBytes() != 16777216 || snapshot.SchedulerObservationInterval() != 2*time.Second ||
+		snapshot.SchedulerClaimLease() != 2*time.Minute || snapshot.SchedulerMaxExecutionAttempts() != 3 ||
+		snapshot.SchedulerExecutionTimeout() != 45*time.Minute || snapshot.APIMaxListLimit() != 100 || snapshot.APILocale() != "es" {
+		t.Fatal("scheduler/API/effective defaults missing")
 	}
-	if snapshot.State.SQLite.MaxOpenConnections != 8 {
-		t.Fatalf("sqlite max open connections = %d, want 8", snapshot.State.SQLite.MaxOpenConnections)
+	if !strings.HasPrefix(snapshot.Hash(), "sha256:") || len(snapshot.Hash()) != len("sha256:")+64 ||
+		snapshot.RegistryHash() != generatedRegistrySemanticSHA256 || snapshot.RegistryRevision() != generatedRegistryRevision ||
+		snapshot.SchemaVersion() != 2 {
+		t.Fatalf("snapshot identity invalid: %s %s %s %d", snapshot.Hash(), snapshot.RegistryHash(), snapshot.RegistryRevision(), snapshot.SchemaVersion())
 	}
-	if snapshot.Identity.LocalActor != "actor:local-owner" || snapshot.Identity.LocalTokenPath != "./var/secrets/local-owner.token" || snapshot.Project.Default != "project:default" {
-		t.Fatalf("identity/project refs missing: %+v %+v", snapshot.Identity, snapshot.Project)
+
+	beforeHash := snapshot.Hash()
+	beforeEffective, _ := snapshot.EffectiveJSON()
+	allowlist := snapshot.RuntimeCodexEnvAllowlist()
+	allowlist[0] = "MUTATED"
+	metadata, _ := snapshot.Metadata(KeyRuntimeCodexEnvAllowlist)
+	metadata.ValidatorIDs[0] = "mutated"
+	definition, _ := Definition(KeyRuntimeCodexEnvAllowlist)
+	definition.Default.([]string)[0] = "MUTATED"
+	if got := snapshot.RuntimeCodexEnvAllowlist()[0]; got != "PATH" || snapshot.Hash() != beforeHash {
+		t.Fatalf("returned slice mutated snapshot: %q %q", got, snapshot.Hash())
 	}
-	if snapshot.Runtime.MaxOutputBytes != 1048576 || snapshot.Runtime.Codex.MaxDiagnosticBytes != 65536 ||
-		snapshot.Runtime.Codex.MaxConcurrentExecutions != 70 || snapshot.Runtime.Codex.ProcessPipeDrainDelay != 250*time.Millisecond {
-		t.Fatalf("unexpected runtime limits: %+v", snapshot.Runtime)
-	}
-	if snapshot.Effective.MaxExistingBytes != 16777216 {
-		t.Fatalf("unexpected effective input limit: %+v", snapshot.Effective)
-	}
-	if snapshot.Scheduler.ObservationInterval != 2*time.Second ||
-		snapshot.Scheduler.ClaimLease != 2*time.Minute ||
-		snapshot.Scheduler.MaxExecutionAttempts != 3 ||
-		snapshot.Scheduler.ExecutionTimeout != 45*time.Minute {
-		t.Fatalf("unexpected scheduler defaults: %+v", snapshot.Scheduler)
-	}
-	if snapshot.API.MaxListLimit != 100 || snapshot.API.Locale != "es" {
-		t.Fatalf("unexpected API defaults: %+v", snapshot.API)
-	}
-	if !strings.HasPrefix(snapshot.Hash, "sha256:") || len(snapshot.Hash) != len("sha256:")+64 {
-		t.Fatalf("unexpected snapshot hash: %q", snapshot.Hash)
-	}
-	if snapshot.RegistryRevision != generatedRegistryRevision {
-		t.Fatalf("revision = %q, want %q", snapshot.RegistryRevision, generatedRegistryRevision)
-	}
-	if snapshot.SchemaVersion != 1 {
-		t.Fatalf("schema version = %d, want 1", snapshot.SchemaVersion)
+	afterEffective, _ := snapshot.EffectiveJSON()
+	if !bytes.Equal(beforeEffective, afterEffective) {
+		t.Fatal("detached values mutated effective projection")
 	}
 	for _, key := range allGeneratedKeys() {
 		metadata, found := snapshot.Metadata(key)
-		if !found {
-			t.Fatalf("generated key %q missing from snapshot", key)
-		}
-		if metadata.Source != SourceDefault {
-			t.Fatalf("source for %q = %q, want default", key, metadata.Source)
+		if !found || metadata.Source != SourceDefault {
+			t.Fatalf("metadata for %q = %+v/%v", key, metadata, found)
 		}
 	}
 }
 
-func TestLoadRejectsUnknownAndDuplicateTOML(t *testing.T) {
-	t.Run("unknown key", func(t *testing.T) {
-		path := writeTOML(t, "[server]\nunknown = true\n")
-		_, err := loadWithEnvironment(LoadOptions{FilePath: path}, nil)
-		assertConfigError(t, err, ErrorUnknownKey, Key("server.unknown"))
-	})
-
-	t.Run("unknown empty table", func(t *testing.T) {
-		path := writeTOML(t, "[runtime.unknown]\n")
-		_, err := loadWithEnvironment(LoadOptions{FilePath: path}, nil)
-		assertConfigError(t, err, ErrorUnknownKey, Key("runtime.unknown"))
-	})
-
-	t.Run("duplicate key", func(t *testing.T) {
-		path := writeTOML(t, "server.listen = \"first\"\nserver.listen = \"second\"\n")
-		_, err := loadWithEnvironment(LoadOptions{FilePath: path}, nil)
-		assertConfigError(t, err, ErrorFileInvalid, "")
-	})
+func TestParseExplicitRejectsUnknownDuplicateAndOversizeTOML(t *testing.T) {
+	_, err := ParseExplicit([]byte("[server]\nunknown = true\n"))
+	assertConfigError(t, err, ErrorUnknownKey, Key("server.unknown"))
+	_, err = ParseExplicit([]byte("[runtime.unknown]\n"))
+	assertConfigError(t, err, ErrorUnknownKey, Key("runtime.unknown"))
+	_, err = ParseExplicit([]byte("server.listen = \"first\"\nserver.listen = \"second\"\n"))
+	assertConfigError(t, err, ErrorFileInvalid, "")
+	_, err = ParseExplicit(bytes.Repeat([]byte{'#'}, int(SourceMaxBytes())+1))
+	assertConfigError(t, err, ErrorFileInvalid, "")
 }
 
-func TestLoadPrecedenceDefaultFileEnvironment(t *testing.T) {
-	path := writeTOML(t, `
+func TestResolvePrecedenceAndCapturedEnvironment(t *testing.T) {
+	snapshot := resolveTOML(t, `
 [server]
 listen = "127.0.0.1:9090"
 read_timeout = "21s"
@@ -100,49 +85,36 @@ read_timeout = "21s"
 [runtime.codex]
 model = "file-model"
 env_allowlist = ["FILE_ONLY"]
-`)
-	environment := map[string]string{
+`, map[string]string{
 		"ORQUESTA_SERVER_LISTEN":               "127.0.0.1:9191",
 		"ORQUESTA_RUNTIME_CODEX_ENV_ALLOWLIST": "PATH, CODEX_HOME, EXTRA_ALLOWED",
+	})
+	if snapshot.ServerListen() != "127.0.0.1:9191" || snapshot.ServerReadTimeout() != 21*time.Second ||
+		snapshot.RuntimeCodexModel() != "file-model" || snapshot.ProjectDefault() != "project:default" {
+		t.Fatal("default < file < env precedence failed")
 	}
-	snapshot, err := loadWithEnvironment(LoadOptions{FilePath: path}, mapEnvironment(environment))
-	if err != nil {
-		t.Fatalf("load layered config: %v", err)
-	}
-	if snapshot.Server.Listen != "127.0.0.1:9191" {
-		t.Fatalf("env did not win: %q", snapshot.Server.Listen)
-	}
-	if snapshot.Server.ReadTimeout != 21*time.Second || snapshot.Runtime.Codex.Model != "file-model" {
-		t.Fatalf("file values missing: %+v %+v", snapshot.Server, snapshot.Runtime.Codex)
-	}
-	if snapshot.Project.Default != "project:default" {
-		t.Fatalf("default missing: %q", snapshot.Project.Default)
-	}
-	if want := []string{"PATH", "CODEX_HOME", "EXTRA_ALLOWED"}; !reflect.DeepEqual(snapshot.Runtime.Codex.EnvAllowlist, want) {
-		t.Fatalf("env allowlist = %#v, want %#v", snapshot.Runtime.Codex.EnvAllowlist, want)
+	want := []string{"PATH", "CODEX_HOME", "EXTRA_ALLOWED"}
+	if !reflect.DeepEqual(snapshot.RuntimeCodexEnvAllowlist(), want) {
+		t.Fatalf("env allowlist = %#v, want %#v", snapshot.RuntimeCodexEnvAllowlist(), want)
 	}
 	assertSource(t, snapshot, KeyServerListen, SourceEnv)
 	assertSource(t, snapshot, KeyServerReadTimeout, SourceFile)
 	assertSource(t, snapshot, KeyProjectDefault, SourceDefault)
+	_, err := Resolve(ResolveOptions{Environment: map[string]string{"UNDECLARED": "value"}})
+	assertConfigError(t, err, ErrorUnknownKey, Key("UNDECLARED"))
 }
 
-func TestEffectiveConfigRedactsCredentialAndIsOutputOnly(t *testing.T) {
+func TestEffectiveConfigIsRedactedOutputOnlyAndOwnerReadOnly(t *testing.T) {
 	effectivePath := filepath.Join(t.TempDir(), "effective_config.json")
-	path := writeTOML(t, `
+	snapshot := resolveTOML(t, `
 [runtime.codex]
 credential_ref = "credential:must-not-leak"
 
 [config]
-effective_path = "`+effectivePath+`"
-`)
-	snapshot, err := loadWithEnvironment(LoadOptions{FilePath: path}, nil)
-	if err != nil {
-		t.Fatalf("load: %v", err)
-	}
-
+effective_path = `+strconv.Quote(effectivePath), nil)
 	effective, err := snapshot.EffectiveJSON()
 	if err != nil {
-		t.Fatalf("effective json: %v", err)
+		t.Fatalf("effective JSON: %v", err)
 	}
 	assertRedacted(t, effective)
 	marshaled, err := json.Marshal(snapshot)
@@ -151,217 +123,208 @@ effective_path = "`+effectivePath+`"
 	}
 	assertRedacted(t, marshaled)
 	if err := snapshot.WriteEffective(); err != nil {
-		t.Fatalf("write effective: %v cause=%v max=%d bytes=%d", err, errors.Unwrap(err), snapshot.Effective.MaxExistingBytes, len(effective))
+		t.Fatalf("write effective: %v cause=%v", err, errors.Unwrap(err))
 	}
 	if err := snapshot.WriteEffective(); err != nil {
-		t.Fatalf("rewrite recognized effective document: %v", err)
+		t.Fatalf("replace recognized effective: %v", err)
 	}
 	written, err := os.ReadFile(effectivePath)
 	if err != nil {
 		t.Fatalf("read effective: %v", err)
 	}
 	assertRedacted(t, written)
-	if !strings.Contains(string(written), `"document_type": "orquesta.effective_config"`) {
-		t.Fatalf("effective output lacks ownership marker: %s", written)
-	}
 	info, err := os.Stat(effectivePath)
 	if err != nil {
-		t.Fatalf("stat effective: %v", err)
+		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0o600 {
-		t.Fatalf("effective mode = %o, want 600", info.Mode().Perm())
+	if info.Mode().Perm() != 0o400 {
+		t.Fatalf("effective mode = %o, want 0400", info.Mode().Perm())
 	}
-
-	_, err = loadWithEnvironment(LoadOptions{FilePath: effectivePath}, nil)
+	_, err = ParseExplicit(written)
 	assertConfigError(t, err, ErrorEffectiveInputForbidden, "")
 }
 
-func TestSensitiveCredentialReferenceCannotBeGuessedThroughSnapshotHash(t *testing.T) {
-	firstPath := writeTOML(t, "[runtime.codex]\ncredential_ref = \"credential:short-one\"\n")
-	secondPath := writeTOML(t, "[runtime.codex]\ncredential_ref = \"credential:short-two\"\n")
-	first, err := loadWithEnvironment(LoadOptions{FilePath: firstPath}, nil)
-	if err != nil {
-		t.Fatalf("load first: %v", err)
-	}
-	second, err := loadWithEnvironment(LoadOptions{FilePath: secondPath}, nil)
-	if err != nil {
-		t.Fatalf("load second: %v", err)
-	}
-	if first.Runtime.Codex.CredentialRef == second.Runtime.Codex.CredentialRef {
-		t.Fatal("credential fixture did not differ")
-	}
-	if first.Hash != second.Hash {
-		t.Fatalf("public snapshot hash acts as sensitive-value oracle: %q != %q", first.Hash, second.Hash)
+func TestCredentialReferenceIsCanonicalAndCannotBecomeHashOracle(t *testing.T) {
+	first := resolveTOML(t, "[runtime.codex]\ncredential_ref = \"credential:short-one\"", nil)
+	second := resolveTOML(t, "[runtime.codex]\ncredential_ref = \"credential:short-two\"", nil)
+	if first.RuntimeCodexCredentialRef() == second.RuntimeCodexCredentialRef() || first.Hash() != second.Hash() {
+		t.Fatal("credential refs differ but redacted snapshot hash must not")
 	}
 	firstEffective, _ := first.EffectiveJSON()
 	secondEffective, _ := second.EffectiveJSON()
 	if !bytes.Equal(firstEffective, secondEffective) {
-		t.Fatal("redacted effective output differs by sensitive value")
+		t.Fatal("effective output acts as credential-reference oracle")
+	}
+	for _, invalid := range []string{"secret", "sk-live-value", "credential:", "credential:UPPER", "credential:.leading"} {
+		_, err := Resolve(ResolveOptions{TOML: []byte("[runtime.codex]\ncredential_ref = " + strconv.Quote(invalid))})
+		assertConfigError(t, err, ErrorValueInvalid, KeyRuntimeCodexCredentialRef)
 	}
 }
 
-func TestWriteEffectiveNeverReplacesUnknownOrSymlinkDestination(t *testing.T) {
+func TestWriteEffectiveRejectsUnknownSymlinkAndOversizeDestination(t *testing.T) {
 	t.Run("unknown private file", func(t *testing.T) {
 		root := t.TempDir()
-		destination := filepath.Join(root, "owned-by-someone-else.json")
+		destination := filepath.Join(root, "owned-by-other.json")
 		want := []byte(`{"owner":"other"}`)
 		if err := os.WriteFile(destination, want, 0o600); err != nil {
-			t.Fatalf("write sentinel: %v", err)
+			t.Fatal(err)
 		}
-		path := writeTOML(t, "[config]\neffective_path = "+strconv.Quote(destination)+"\n")
-		snapshot, err := loadWithEnvironment(LoadOptions{FilePath: path}, nil)
-		if err != nil {
-			t.Fatalf("load: %v", err)
-		}
+		snapshot := resolveTOML(t, "[config]\neffective_path = "+strconv.Quote(destination), nil)
 		if err := snapshot.WriteEffective(); err == nil {
-			t.Fatal("unknown destination was replaced")
+			t.Fatal("unknown destination replaced")
 		}
-		got, err := os.ReadFile(destination)
-		if err != nil || !bytes.Equal(got, want) {
-			t.Fatalf("sentinel changed: %q err=%v", got, err)
+		got, _ := os.ReadFile(destination)
+		if !bytes.Equal(got, want) {
+			t.Fatal("unknown destination changed")
 		}
 	})
-
 	t.Run("symlink", func(t *testing.T) {
 		root := t.TempDir()
-		target := filepath.Join(root, "target.json")
+		target, destination := filepath.Join(root, "target.json"), filepath.Join(root, "effective.json")
 		want := []byte(`{"owner":"target"}`)
 		if err := os.WriteFile(target, want, 0o600); err != nil {
-			t.Fatalf("write target: %v", err)
+			t.Fatal(err)
 		}
-		destination := filepath.Join(root, "effective.json")
 		if err := os.Symlink(target, destination); err != nil {
-			t.Skipf("symlink unsupported: %v", err)
+			t.Skip(err)
 		}
-		path := writeTOML(t, "[config]\neffective_path = "+strconv.Quote(destination)+"\n")
-		snapshot, err := loadWithEnvironment(LoadOptions{FilePath: path}, nil)
-		if err != nil {
-			t.Fatalf("load: %v", err)
-		}
+		snapshot := resolveTOML(t, "[config]\neffective_path = "+strconv.Quote(destination), nil)
 		if err := snapshot.WriteEffective(); err == nil {
-			t.Fatal("symlink destination was replaced")
+			t.Fatal("symlink replaced")
 		}
-		got, err := os.ReadFile(target)
-		if err != nil || !bytes.Equal(got, want) {
-			t.Fatalf("symlink target changed: %q err=%v", got, err)
+		got, _ := os.ReadFile(target)
+		if !bytes.Equal(got, want) {
+			t.Fatal("symlink target changed")
+		}
+	})
+	t.Run("projection limit", func(t *testing.T) {
+		destination := filepath.Join(t.TempDir(), "effective.json")
+		snapshot := resolveTOML(t, "[config]\neffective_path = "+strconv.Quote(destination)+"\neffective_max_existing_bytes = 1024", nil)
+		if err := snapshot.WriteEffective(); err == nil {
+			t.Fatal("oversize projection written")
+		}
+		if _, err := os.Lstat(destination); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("destination exists: %v", err)
 		}
 	})
 }
 
-func TestWriteEffectiveRejectsCanonicalLimitBelowGeneratedProjection(t *testing.T) {
-	root := t.TempDir()
-	destination := filepath.Join(root, "effective.json")
-	path := writeTOML(t, "[config]\neffective_path = "+strconv.Quote(destination)+"\neffective_max_existing_bytes = 1024\n")
-	snapshot, err := loadWithEnvironment(LoadOptions{FilePath: path}, nil)
+func TestRenderExplicitIsCanonicalAndSnapshotStable(t *testing.T) {
+	first := []byte("[server]\nlisten = \"127.0.0.1:7777\"\nread_timeout = \"22s\"\n[runtime.codex]\nmodel = \"stable-model\"\n")
+	second := []byte("[runtime.codex]\nmodel = \"stable-model\"\n[server]\nread_timeout = \"22s\"\nlisten = \"127.0.0.1:7777\"\n")
+	firstSnapshot, err := Resolve(ResolveOptions{TOML: first})
 	if err != nil {
-		t.Fatalf("load: %v", err)
+		t.Fatal(err)
 	}
-	if err := snapshot.WriteEffective(); err == nil {
-		t.Fatal("oversize generated effective projection was written")
-	}
-	if _, err := os.Lstat(destination); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("oversize destination exists: %v", err)
-	}
-}
-
-func TestSnapshotHashAndEffectiveJSONAreStable(t *testing.T) {
-	first := writeTOML(t, `
-[server]
-listen = "127.0.0.1:7777"
-read_timeout = "22s"
-
-[runtime.codex]
-model = "stable-model"
-`)
-	second := writeTOML(t, `
-[runtime.codex]
-model = "stable-model"
-
-[server]
-read_timeout = "22s"
-listen = "127.0.0.1:7777"
-`)
-	firstSnapshot, err := loadWithEnvironment(LoadOptions{FilePath: first}, nil)
+	secondSnapshot, err := Resolve(ResolveOptions{TOML: second})
 	if err != nil {
-		t.Fatalf("load first: %v", err)
+		t.Fatal(err)
 	}
-	secondSnapshot, err := loadWithEnvironment(LoadOptions{FilePath: second}, nil)
-	if err != nil {
-		t.Fatalf("load second: %v", err)
-	}
-	if firstSnapshot.Hash != secondSnapshot.Hash {
-		t.Fatalf("hash changed with TOML order: %q != %q", firstSnapshot.Hash, secondSnapshot.Hash)
+	if firstSnapshot.Hash() != secondSnapshot.Hash() {
+		t.Fatal("TOML order changed hash")
 	}
 	firstEffective, _ := firstSnapshot.EffectiveJSON()
 	secondEffective, _ := secondSnapshot.EffectiveJSON()
-	if !reflect.DeepEqual(firstEffective, secondEffective) {
-		t.Fatalf("effective config changed with TOML order")
+	if !bytes.Equal(firstEffective, secondEffective) {
+		t.Fatal("TOML order changed effective output")
+	}
+	values, err := ParseExplicit(second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered, err := RenderExplicit(values)
+	if err != nil {
+		t.Fatal(err)
+	}
+	valuesAgain, err := ParseExplicit(rendered)
+	if err != nil || !reflect.DeepEqual(values, valuesAgain) {
+		t.Fatalf("roundtrip = %#v/%v", valuesAgain, err)
+	}
+	renderedAgain, _ := RenderExplicit(valuesAgain)
+	if !bytes.Equal(rendered, renderedAgain) {
+		t.Fatal("render is not deterministic")
 	}
 }
 
-func TestCanonicalRegistryAndGeneratedKeysStaySynchronized(t *testing.T) {
+func TestCanonicalRegistryAndEveryGeneratedArtifactStaySynchronized(t *testing.T) {
 	registryPath := filepath.Join("..", "..", "config", "registry.json")
 	source, err := os.ReadFile(registryPath)
 	if err != nil {
-		t.Fatalf("read registry: %v", err)
+		t.Fatal(err)
 	}
 	digest := sha256.Sum256(source)
-	if got := hex.EncodeToString(digest[:]); got != generatedRegistrySourceSHA256 {
-		t.Fatalf("registry changed without go generate: got %s, generated %s", got, generatedRegistrySourceSHA256)
+	if got := hex.EncodeToString(digest[:]); got != generatedRegistrySourceSHA256 || string(source) != generatedRegistryJSON {
+		t.Fatalf("embedded registry drift: %s", got)
 	}
-	if string(source) != generatedRegistryJSON {
-		t.Fatalf("embedded generated registry differs from canonical registry")
-	}
-
 	registry, err := loadRegistry()
 	if err != nil {
-		t.Fatalf("load generated registry: %v", err)
+		t.Fatal(err)
 	}
-	generatedKeys := allGeneratedKeys()
-	if len(registry.keys) != len(generatedKeys) {
-		t.Fatalf("registry keys = %d, generated = %d", len(registry.keys), len(generatedKeys))
+	if len(registry.keys) != len(allGeneratedKeys()) {
+		t.Fatal("generated key count drift")
 	}
-	for index, definition := range registry.keys {
-		if definition.Key != generatedKeys[index] {
-			t.Fatalf("generated key %d = %q, want %q", index, generatedKeys[index], definition.Key)
+
+	temporary := t.TempDir()
+	outputs := map[string]string{
+		"keys_generated.go":     filepath.Join("keys_generated.go"),
+		"orquesta.schema.json":  filepath.Join("..", "..", "config", "orquesta.schema.json"),
+		"orquesta.ui.json":      filepath.Join("..", "..", "config", "orquesta.ui.json"),
+		"orquesta.toml.example": filepath.Join("..", "..", "config", "orquesta.toml.example"),
+		"orquesta.generated.md": filepath.Join("..", "..", "config", "orquesta.generated.md"),
+	}
+	command := exec.Command("go", "run", "-mod=vendor", "./cmd/configgen", "-registry", registryPath,
+		"-go-output", filepath.Join(temporary, "keys_generated.go"),
+		"-schema-output", filepath.Join(temporary, "orquesta.schema.json"),
+		"-ui-output", filepath.Join(temporary, "orquesta.ui.json"),
+		"-example-output", filepath.Join(temporary, "orquesta.toml.example"),
+		"-doc-output", filepath.Join(temporary, "orquesta.generated.md"))
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("configgen: %v: %s", err, output)
+	}
+	for generatedName, canonicalPath := range outputs {
+		want, err := os.ReadFile(canonicalPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := os.ReadFile(filepath.Join(temporary, generatedName))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(got, want) {
+			t.Fatalf("generated artifact drift: %s", canonicalPath)
 		}
 	}
 }
 
-func TestExampleIsCompleteAndContainsNoSecretValues(t *testing.T) {
+func TestExampleIsCompleteAndContainsNoSecretMaterial(t *testing.T) {
 	registry, err := loadRegistry()
 	if err != nil {
-		t.Fatalf("load registry: %v", err)
+		t.Fatal(err)
 	}
-	examplePath := filepath.Join("..", "..", "config", "orquesta.toml.example")
-	values, err := loadTOMLFile(examplePath, registry)
+	content, err := os.ReadFile(filepath.Join("..", "..", "config", "orquesta.toml.example"))
 	if err != nil {
-		t.Fatalf("load example: %v", err)
+		t.Fatal(err)
+	}
+	values, err := ParseExplicit(content)
+	if err != nil {
+		t.Fatal(err)
 	}
 	if len(values) != len(registry.keys) {
-		t.Fatalf("example has %d explicit keys, want %d", len(values), len(registry.keys))
+		t.Fatalf("example keys = %d, want %d", len(values), len(registry.keys))
 	}
-	for _, definition := range registry.keys {
-		if _, found := values[definition.Key]; !found {
-			t.Fatalf("example omits %q", definition.Key)
-		}
-		if definition.Sensitive && definition.Type != valueTypeCredentialRef {
-			t.Fatalf("sensitive key %q accepts secret material", definition.Key)
-		}
-	}
-	snapshot, err := loadWithEnvironment(LoadOptions{FilePath: examplePath}, nil)
+	snapshot, err := Resolve(ResolveOptions{TOML: content})
 	if err != nil {
-		t.Fatalf("resolve example: %v", err)
+		t.Fatal(err)
 	}
-	if snapshot.Runtime.Codex.Model != "" || snapshot.Runtime.Codex.CredentialRef != "" {
-		t.Fatalf("example must not invent model or credential selection")
+	if snapshot.RuntimeCodexModel() != "" || snapshot.RuntimeCodexCredentialRef() != "" {
+		t.Fatal("example invents provider identity")
 	}
 }
 
 func TestProcessEnvironmentReadLivesOnlyInDedicatedLoader(t *testing.T) {
 	files, err := filepath.Glob("*.go")
 	if err != nil {
-		t.Fatalf("glob: %v", err)
+		t.Fatal(err)
 	}
 	needle := "os." + "LookupEnv"
 	for _, path := range files {
@@ -370,7 +333,7 @@ func TestProcessEnvironmentReadLivesOnlyInDedicatedLoader(t *testing.T) {
 		}
 		content, err := os.ReadFile(path)
 		if err != nil {
-			t.Fatalf("read %s: %v", path, err)
+			t.Fatal(err)
 		}
 		if strings.Contains(string(content), needle) && filepath.Base(path) != "env_loader.go" {
 			t.Fatalf("process environment read outside env_loader.go: %s", path)
@@ -378,20 +341,21 @@ func TestProcessEnvironmentReadLivesOnlyInDedicatedLoader(t *testing.T) {
 	}
 }
 
-func writeTOML(t *testing.T, content string) string {
+func resolveTOML(t *testing.T, content string, environment map[string]string) Snapshot {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "orquesta.toml")
-	if err := os.WriteFile(path, []byte(strings.TrimSpace(content)+"\n"), 0o600); err != nil {
-		t.Fatalf("write TOML: %v", err)
+	var source []byte
+	if strings.TrimSpace(content) != "" {
+		source = []byte(strings.TrimSpace(content) + "\n")
 	}
-	return path
+	snapshot, err := Resolve(ResolveOptions{TOML: source, Environment: environment, SourcePath: "test://inline"})
+	if err != nil {
+		t.Fatalf("resolve: %v (%v)", err, errors.Unwrap(err))
+	}
+	return snapshot
 }
 
 func mapEnvironment(values map[string]string) environmentLookup {
-	return func(name string) (string, bool) {
-		value, found := values[name]
-		return value, found
-	}
+	return func(name string) (string, bool) { value, found := values[name]; return value, found }
 }
 
 func assertConfigError(t *testing.T, err error, code ErrorCode, key Key) {
@@ -401,7 +365,7 @@ func assertConfigError(t *testing.T, err error, code ErrorCode, key Key) {
 	}
 	var configError *Error
 	if !errors.As(err, &configError) {
-		t.Fatalf("error type = %T, want *config.Error: %v", err, err)
+		t.Fatalf("error type = %T: %v", err, err)
 	}
 	if configError.Code != code || configError.Key != key {
 		t.Fatalf("error = (%s, %s), want (%s, %s)", configError.Code, configError.Key, code, key)
@@ -411,20 +375,14 @@ func assertConfigError(t *testing.T, err error, code ErrorCode, key Key) {
 func assertSource(t *testing.T, snapshot Snapshot, key Key, want Source) {
 	t.Helper()
 	metadata, found := snapshot.Metadata(key)
-	if !found {
-		t.Fatalf("missing metadata for %q", key)
-	}
-	if metadata.Source != want {
-		t.Fatalf("source for %q = %q, want %q", key, metadata.Source, want)
+	if !found || metadata.Source != want {
+		t.Fatalf("source for %q = %+v/%v, want %q", key, metadata, found, want)
 	}
 }
 
 func assertRedacted(t *testing.T, content []byte) {
 	t.Helper()
-	if strings.Contains(string(content), "credential:must-not-leak") {
-		t.Fatalf("effective config leaked credential ref: %s", content)
-	}
-	if !strings.Contains(string(content), redactedValue) {
-		t.Fatalf("effective config lacks redaction marker: %s", content)
+	if strings.Contains(string(content), "credential:must-not-leak") || !strings.Contains(string(content), redactedValue) {
+		t.Fatalf("effective redaction failed: %s", content)
 	}
 }

@@ -6,7 +6,7 @@ import (
 )
 
 func TestIntegerConfigLoadsStrictFileAndEnvironmentValues(t *testing.T) {
-	path := writeTOML(t, `
+	snapshot := resolveTOML(t, `
 [server]
 max_request_bytes = 2048
 
@@ -26,22 +26,15 @@ locale = "en"
 
 [config]
 effective_max_existing_bytes = 32768
-`)
-	snapshot, err := loadWithEnvironment(LoadOptions{FilePath: path}, mapEnvironment(map[string]string{
+`, map[string]string{
 		"ORQUESTA_RUNTIME_MAX_OUTPUT_BYTES": "16384",
 		"ORQUESTA_API_MAX_LIST_LIMIT":       "75",
-	}))
-	if err != nil {
-		t.Fatalf("load integer config: %v", err)
-	}
-	if snapshot.Server.MaxRequestBytes != 2048 ||
-		snapshot.Runtime.MaxOutputBytes != 16384 ||
-		snapshot.Runtime.Codex.MaxDiagnosticBytes != 8192 ||
-		snapshot.Runtime.Codex.MaxConcurrentExecutions != 23 ||
-		snapshot.Scheduler.MaxExecutionAttempts != 5 ||
-		snapshot.API.MaxListLimit != 75 || snapshot.API.Locale != "en" ||
-		snapshot.Effective.MaxExistingBytes != 32768 {
-		t.Fatalf("unexpected typed snapshot: %+v %+v %+v %+v", snapshot.Server, snapshot.Runtime, snapshot.Scheduler, snapshot.API)
+	})
+	if snapshot.ServerMaxRequestBytes() != 2048 || snapshot.RuntimeMaxOutputBytes() != 16384 ||
+		snapshot.RuntimeCodexMaxDiagnosticBytes() != 8192 || snapshot.RuntimeCodexMaxConcurrentExecutions() != 23 ||
+		snapshot.SchedulerMaxExecutionAttempts() != 5 || snapshot.APIMaxListLimit() != 75 || snapshot.APILocale() != "en" ||
+		snapshot.ConfigEffectiveMaxExistingBytes() != 32768 {
+		t.Fatal("unexpected typed integer snapshot")
 	}
 	assertSource(t, snapshot, KeyServerMaxRequestBytes, SourceFile)
 	assertSource(t, snapshot, KeyRuntimeMaxOutputBytes, SourceEnv)
@@ -105,11 +98,11 @@ func TestIntegerConfigRejectsWrongTypeOverflowAndBounds(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			options := LoadOptions{}
+			var content []byte
 			if test.toml != "" {
-				options.FilePath = writeTOML(t, test.toml)
+				content = []byte(test.toml)
 			}
-			_, err := loadWithEnvironment(options, mapEnvironment(test.environment))
+			_, err := Resolve(ResolveOptions{TOML: content, Environment: test.environment})
 			assertConfigError(t, err, ErrorValueInvalid, test.key)
 		})
 	}
@@ -119,11 +112,13 @@ func TestIntegerRegistryBoundsAreOptionalAndCoherent(t *testing.T) {
 	definition := registryKeyDefinition{
 		Key:             "test.count",
 		GoName:          "TestCount",
+		SemanticRef:     "orquesta.config.test.count",
 		Type:            valueTypeInteger,
 		Default:         json.RawMessage("12"),
 		Scope:           "test",
 		RestartRequired: true,
 		EnvAlias:        "ORQUESTA_TEST_COUNT",
+		ValidatorIDs:    []string{"integer_bounds"},
 	}
 	if err := validateRegistryDefinition(definition); err != nil {
 		t.Fatalf("optional bounds rejected: %v", err)

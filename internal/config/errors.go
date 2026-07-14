@@ -15,6 +15,7 @@ const (
 	ErrorEffectiveInputForbidden ErrorCode = "config_effective_input_forbidden"
 	ErrorEffectiveWrite          ErrorCode = "config_effective_write_failed"
 	ErrorChildEnvironmentInvalid ErrorCode = "config_child_environment_invalid"
+	ErrorCrossValidation         ErrorCode = "config_cross_validation_failed"
 )
 
 // Error carries a stable code and optional key. Translation belongs to the

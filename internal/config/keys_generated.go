@@ -2,8 +2,11 @@
 
 package config
 
-const generatedRegistrySourceSHA256 = "3ecc2457b0af17b5824cfe7330befd077299ca5486504a7e3ecf85a802046c54"
-const generatedRegistryRevision = "2026-07-14.6"
+import "time"
+
+const generatedRegistrySourceSHA256 = "9b1128d98e904806882228894bf68e242eb2883a04e22b8f1c947f00fb3f447f"
+const generatedRegistryRevision = "2026-07-15.7"
+const generatedRegistrySemanticSHA256 = "sha256:be3b5aa303cf1cb16725b02d03e90f14313e3cef3e5a84e005c1c43c83ea54d8"
 
 const (
 	KeyServerListen                        Key = "server.listen"
@@ -83,133 +86,463 @@ func allGeneratedKeys() []Key {
 	}
 }
 
+// ServerListen returns server.listen.
+func (s Snapshot) ServerListen() string {
+	value, _ := s.value(KeyServerListen)
+	typed, _ := value.(string)
+	return typed
+}
+
+// ServerMCPPath returns server.mcp_path.
+func (s Snapshot) ServerMCPPath() string {
+	value, _ := s.value(KeyServerMCPPath)
+	typed, _ := value.(string)
+	return typed
+}
+
+// ServerMaxRequestBytes returns server.max_request_bytes.
+func (s Snapshot) ServerMaxRequestBytes() int64 {
+	value, _ := s.value(KeyServerMaxRequestBytes)
+	typed, _ := value.(int64)
+	return typed
+}
+
+// ServerReadTimeout returns server.read_timeout.
+func (s Snapshot) ServerReadTimeout() time.Duration {
+	value, _ := s.value(KeyServerReadTimeout)
+	typed, _ := value.(time.Duration)
+	return typed
+}
+
+// ServerWriteTimeout returns server.write_timeout.
+func (s Snapshot) ServerWriteTimeout() time.Duration {
+	value, _ := s.value(KeyServerWriteTimeout)
+	typed, _ := value.(time.Duration)
+	return typed
+}
+
+// ServerIdleTimeout returns server.idle_timeout.
+func (s Snapshot) ServerIdleTimeout() time.Duration {
+	value, _ := s.value(KeyServerIdleTimeout)
+	typed, _ := value.(time.Duration)
+	return typed
+}
+
+// ServerShutdownTimeout returns server.shutdown_timeout.
+func (s Snapshot) ServerShutdownTimeout() time.Duration {
+	value, _ := s.value(KeyServerShutdownTimeout)
+	typed, _ := value.(time.Duration)
+	return typed
+}
+
+// StateSQLitePath returns state.sqlite.path.
+func (s Snapshot) StateSQLitePath() string {
+	value, _ := s.value(KeyStateSQLitePath)
+	typed, _ := value.(string)
+	return typed
+}
+
+// StateSQLiteBusyTimeout returns state.sqlite.busy_timeout.
+func (s Snapshot) StateSQLiteBusyTimeout() time.Duration {
+	value, _ := s.value(KeyStateSQLiteBusyTimeout)
+	typed, _ := value.(time.Duration)
+	return typed
+}
+
+// StateSQLiteMaxOpenConnections returns state.sqlite.max_open_connections.
+func (s Snapshot) StateSQLiteMaxOpenConnections() int64 {
+	value, _ := s.value(KeyStateSQLiteMaxOpenConnections)
+	typed, _ := value.(int64)
+	return typed
+}
+
+// ArtifactFilesystemRoot returns artifact.filesystem.root.
+func (s Snapshot) ArtifactFilesystemRoot() string {
+	value, _ := s.value(KeyArtifactFilesystemRoot)
+	typed, _ := value.(string)
+	return typed
+}
+
+// RuntimeProvider returns runtime.provider.
+func (s Snapshot) RuntimeProvider() string {
+	value, _ := s.value(KeyRuntimeProvider)
+	typed, _ := value.(string)
+	return typed
+}
+
+// RuntimeMaxOutputBytes returns runtime.max_output_bytes.
+func (s Snapshot) RuntimeMaxOutputBytes() int64 {
+	value, _ := s.value(KeyRuntimeMaxOutputBytes)
+	typed, _ := value.(int64)
+	return typed
+}
+
+// RuntimeCodexCommand returns runtime.codex.command.
+func (s Snapshot) RuntimeCodexCommand() string {
+	value, _ := s.value(KeyRuntimeCodexCommand)
+	typed, _ := value.(string)
+	return typed
+}
+
+// RuntimeCodexModel returns runtime.codex.model.
+func (s Snapshot) RuntimeCodexModel() string {
+	value, _ := s.value(KeyRuntimeCodexModel)
+	typed, _ := value.(string)
+	return typed
+}
+
+// RuntimeCodexReasoning returns runtime.codex.reasoning.
+func (s Snapshot) RuntimeCodexReasoning() string {
+	value, _ := s.value(KeyRuntimeCodexReasoning)
+	typed, _ := value.(string)
+	return typed
+}
+
+// RuntimeCodexTimeout returns runtime.codex.timeout.
+func (s Snapshot) RuntimeCodexTimeout() time.Duration {
+	value, _ := s.value(KeyRuntimeCodexTimeout)
+	typed, _ := value.(time.Duration)
+	return typed
+}
+
+// RuntimeCodexProcessPipeDrainDelay returns runtime.codex.process_pipe_drain_delay.
+func (s Snapshot) RuntimeCodexProcessPipeDrainDelay() time.Duration {
+	value, _ := s.value(KeyRuntimeCodexProcessPipeDrainDelay)
+	typed, _ := value.(time.Duration)
+	return typed
+}
+
+// RuntimeCodexMaxDiagnosticBytes returns runtime.codex.max_diagnostic_bytes.
+func (s Snapshot) RuntimeCodexMaxDiagnosticBytes() int64 {
+	value, _ := s.value(KeyRuntimeCodexMaxDiagnosticBytes)
+	typed, _ := value.(int64)
+	return typed
+}
+
+// RuntimeCodexMaxConcurrentExecutions returns runtime.codex.max_concurrent_executions.
+func (s Snapshot) RuntimeCodexMaxConcurrentExecutions() int64 {
+	value, _ := s.value(KeyRuntimeCodexMaxConcurrentExecutions)
+	typed, _ := value.(int64)
+	return typed
+}
+
+// RuntimeCodexWorkRoot returns runtime.codex.work_root.
+func (s Snapshot) RuntimeCodexWorkRoot() string {
+	value, _ := s.value(KeyRuntimeCodexWorkRoot)
+	typed, _ := value.(string)
+	return typed
+}
+
+// RuntimeCodexEnvAllowlist returns runtime.codex.env_allowlist.
+func (s Snapshot) RuntimeCodexEnvAllowlist() []string {
+	value, _ := s.value(KeyRuntimeCodexEnvAllowlist)
+	typed, _ := value.([]string)
+	return append([]string(nil), typed...)
+}
+
+// RuntimeCodexCredentialRef returns runtime.codex.credential_ref.
+func (s Snapshot) RuntimeCodexCredentialRef() CredentialRef {
+	value, _ := s.value(KeyRuntimeCodexCredentialRef)
+	typed, _ := value.(CredentialRef)
+	return typed
+}
+
+// IdentityLocalActor returns identity.local_actor.
+func (s Snapshot) IdentityLocalActor() string {
+	value, _ := s.value(KeyIdentityLocalActor)
+	typed, _ := value.(string)
+	return typed
+}
+
+// IdentityLocalTokenPath returns identity.local_token_path.
+func (s Snapshot) IdentityLocalTokenPath() string {
+	value, _ := s.value(KeyIdentityLocalTokenPath)
+	typed, _ := value.(string)
+	return typed
+}
+
+// ProjectDefault returns project.default.
+func (s Snapshot) ProjectDefault() string {
+	value, _ := s.value(KeyProjectDefault)
+	typed, _ := value.(string)
+	return typed
+}
+
+// SchedulerPollInterval returns scheduler.poll_interval.
+func (s Snapshot) SchedulerPollInterval() time.Duration {
+	value, _ := s.value(KeySchedulerPollInterval)
+	typed, _ := value.(time.Duration)
+	return typed
+}
+
+// SchedulerObservationInterval returns scheduler.observation_interval.
+func (s Snapshot) SchedulerObservationInterval() time.Duration {
+	value, _ := s.value(KeySchedulerObservationInterval)
+	typed, _ := value.(time.Duration)
+	return typed
+}
+
+// SchedulerClaimLease returns scheduler.claim_lease.
+func (s Snapshot) SchedulerClaimLease() time.Duration {
+	value, _ := s.value(KeySchedulerClaimLease)
+	typed, _ := value.(time.Duration)
+	return typed
+}
+
+// SchedulerMaxExecutionAttempts returns scheduler.max_execution_attempts.
+func (s Snapshot) SchedulerMaxExecutionAttempts() int64 {
+	value, _ := s.value(KeySchedulerMaxExecutionAttempts)
+	typed, _ := value.(int64)
+	return typed
+}
+
+// SchedulerExecutionTimeout returns scheduler.execution_timeout.
+func (s Snapshot) SchedulerExecutionTimeout() time.Duration {
+	value, _ := s.value(KeySchedulerExecutionTimeout)
+	typed, _ := value.(time.Duration)
+	return typed
+}
+
+// APIMaxListLimit returns api.max_list_limit.
+func (s Snapshot) APIMaxListLimit() int64 {
+	value, _ := s.value(KeyAPIMaxListLimit)
+	typed, _ := value.(int64)
+	return typed
+}
+
+// APILocale returns api.locale.
+func (s Snapshot) APILocale() string {
+	value, _ := s.value(KeyAPILocale)
+	typed, _ := value.(string)
+	return typed
+}
+
+// ConfigEffectivePath returns config.effective_path.
+func (s Snapshot) ConfigEffectivePath() string {
+	value, _ := s.value(KeyConfigEffectivePath)
+	typed, _ := value.(string)
+	return typed
+}
+
+// ConfigEffectiveMaxExistingBytes returns config.effective_max_existing_bytes.
+func (s Snapshot) ConfigEffectiveMaxExistingBytes() int64 {
+	value, _ := s.value(KeyConfigEffectiveMaxExistingBytes)
+	typed, _ := value.(int64)
+	return typed
+}
+
 const generatedRegistryJSON = `{
-  "schema_version": 1,
-  "revision": "2026-07-14.6",
+  "schema_version": 2,
+  "revision": "2026-07-15.7",
+  "precedence": [
+    "default",
+    "file",
+    "env"
+  ],
+  "document_limits": {
+    "source_max_bytes": 1048576,
+    "audit_entry_max_bytes": 65536
+  },
+  "aliases": [],
+  "cross_validators": [
+    {
+      "id": "runtime_codex_timeout_before_scheduler_execution_timeout",
+      "keys": [
+        "runtime.codex.timeout",
+        "scheduler.execution_timeout"
+      ]
+    },
+    {
+      "id": "server_listen_loopback",
+      "keys": [
+        "server.listen"
+      ]
+    },
+    {
+      "id": "server_mcp_path_literal",
+      "keys": [
+        "server.mcp_path"
+      ]
+    },
+    {
+      "id": "runtime_paths_disjoint",
+      "keys": [
+        "state.sqlite.path",
+        "artifact.filesystem.root",
+        "runtime.codex.work_root",
+        "config.effective_path",
+        "identity.local_token_path"
+      ]
+    }
+  ],
   "keys": [
     {
       "key": "server.listen",
       "go_name": "ServerListen",
+      "semantic_ref": "orquesta.config.server.listen",
       "type": "string",
       "default": "127.0.0.1:8080",
       "sensitive": false,
       "scope": "server",
       "restart_required": true,
-      "env_alias": "ORQUESTA_SERVER_LISTEN"
+      "env_alias": "ORQUESTA_SERVER_LISTEN",
+      "validator_ids": []
     },
     {
       "key": "server.mcp_path",
       "go_name": "ServerMCPPath",
+      "semantic_ref": "orquesta.config.server.mcp_path",
       "type": "string",
       "default": "/mcp",
       "sensitive": false,
       "scope": "server",
       "restart_required": true,
-      "env_alias": "ORQUESTA_SERVER_MCP_PATH"
+      "env_alias": "ORQUESTA_SERVER_MCP_PATH",
+      "validator_ids": []
     },
     {
       "key": "server.max_request_bytes",
       "go_name": "ServerMaxRequestBytes",
+      "semantic_ref": "orquesta.config.server.max_request_bytes",
       "type": "integer",
       "default": 1048576,
       "sensitive": false,
       "scope": "server",
       "restart_required": true,
       "env_alias": "ORQUESTA_SERVER_MAX_REQUEST_BYTES",
+      "validator_ids": [
+        "integer_bounds"
+      ],
       "minimum": 1,
       "maximum": 1073741824
     },
     {
       "key": "server.read_timeout",
       "go_name": "ServerReadTimeout",
+      "semantic_ref": "orquesta.config.server.read_timeout",
       "type": "duration",
       "default": "15s",
       "sensitive": false,
       "scope": "server",
       "restart_required": true,
-      "env_alias": "ORQUESTA_SERVER_READ_TIMEOUT"
+      "env_alias": "ORQUESTA_SERVER_READ_TIMEOUT",
+      "validator_ids": [
+        "positive_duration"
+      ]
     },
     {
       "key": "server.write_timeout",
       "go_name": "ServerWriteTimeout",
+      "semantic_ref": "orquesta.config.server.write_timeout",
       "type": "duration",
       "default": "30s",
       "sensitive": false,
       "scope": "server",
       "restart_required": true,
-      "env_alias": "ORQUESTA_SERVER_WRITE_TIMEOUT"
+      "env_alias": "ORQUESTA_SERVER_WRITE_TIMEOUT",
+      "validator_ids": [
+        "positive_duration"
+      ]
     },
     {
       "key": "server.idle_timeout",
       "go_name": "ServerIdleTimeout",
+      "semantic_ref": "orquesta.config.server.idle_timeout",
       "type": "duration",
       "default": "60s",
       "sensitive": false,
       "scope": "server",
       "restart_required": true,
-      "env_alias": "ORQUESTA_SERVER_IDLE_TIMEOUT"
+      "env_alias": "ORQUESTA_SERVER_IDLE_TIMEOUT",
+      "validator_ids": [
+        "positive_duration"
+      ]
     },
     {
       "key": "server.shutdown_timeout",
       "go_name": "ServerShutdownTimeout",
+      "semantic_ref": "orquesta.config.server.shutdown_timeout",
       "type": "duration",
       "default": "15s",
       "sensitive": false,
       "scope": "server",
       "restart_required": true,
-      "env_alias": "ORQUESTA_SERVER_SHUTDOWN_TIMEOUT"
+      "env_alias": "ORQUESTA_SERVER_SHUTDOWN_TIMEOUT",
+      "validator_ids": [
+        "positive_duration"
+      ]
     },
     {
       "key": "state.sqlite.path",
       "go_name": "StateSQLitePath",
+      "semantic_ref": "orquesta.config.state.sqlite.path",
       "type": "path",
       "default": "./var/state/orquesta.sqlite",
       "sensitive": false,
       "scope": "state",
       "restart_required": true,
-      "env_alias": "ORQUESTA_STATE_SQLITE_PATH"
+      "env_alias": "ORQUESTA_STATE_SQLITE_PATH",
+      "validator_ids": [
+        "non_empty_path"
+      ]
     },
     {
       "key": "state.sqlite.busy_timeout",
       "go_name": "StateSQLiteBusyTimeout",
+      "semantic_ref": "orquesta.config.state.sqlite.busy_timeout",
       "type": "duration",
       "default": "5s",
       "sensitive": false,
       "scope": "state",
       "restart_required": true,
-      "env_alias": "ORQUESTA_STATE_SQLITE_BUSY_TIMEOUT"
+      "env_alias": "ORQUESTA_STATE_SQLITE_BUSY_TIMEOUT",
+      "validator_ids": [
+        "positive_duration"
+      ]
     },
     {
       "key": "state.sqlite.max_open_connections",
       "go_name": "StateSQLiteMaxOpenConnections",
+      "semantic_ref": "orquesta.config.state.sqlite.max_open_connections",
       "type": "integer",
       "default": 8,
       "sensitive": false,
       "scope": "state",
       "restart_required": true,
       "env_alias": "ORQUESTA_STATE_SQLITE_MAX_OPEN_CONNECTIONS",
+      "validator_ids": [
+        "integer_bounds"
+      ],
       "minimum": 1,
       "maximum": 1024
     },
     {
       "key": "artifact.filesystem.root",
       "go_name": "ArtifactFilesystemRoot",
+      "semantic_ref": "orquesta.config.artifact.filesystem.root",
       "type": "path",
       "default": "./var/artifacts",
       "sensitive": false,
       "scope": "artifact",
       "restart_required": true,
-      "env_alias": "ORQUESTA_ARTIFACT_FILESYSTEM_ROOT"
+      "env_alias": "ORQUESTA_ARTIFACT_FILESYSTEM_ROOT",
+      "validator_ids": [
+        "non_empty_path"
+      ]
     },
     {
       "key": "runtime.provider",
       "go_name": "RuntimeProvider",
+      "semantic_ref": "orquesta.config.runtime.provider",
       "type": "string",
       "default": "codex",
       "sensitive": false,
       "scope": "runtime",
       "restart_required": true,
       "env_alias": "ORQUESTA_RUNTIME_PROVIDER",
+      "validator_ids": [
+        "allowed_values"
+      ],
       "allowed_values": [
         "codex"
       ]
@@ -217,44 +550,56 @@ const generatedRegistryJSON = `{
     {
       "key": "runtime.max_output_bytes",
       "go_name": "RuntimeMaxOutputBytes",
+      "semantic_ref": "orquesta.config.runtime.max_output_bytes",
       "type": "integer",
       "default": 1048576,
       "sensitive": false,
       "scope": "runtime",
       "restart_required": true,
       "env_alias": "ORQUESTA_RUNTIME_MAX_OUTPUT_BYTES",
+      "validator_ids": [
+        "integer_bounds"
+      ],
       "minimum": 1,
       "maximum": 1073741824
     },
     {
       "key": "runtime.codex.command",
       "go_name": "RuntimeCodexCommand",
+      "semantic_ref": "orquesta.config.runtime.codex.command",
       "type": "string",
       "default": "codex",
       "sensitive": false,
       "scope": "runtime",
       "restart_required": true,
-      "env_alias": "ORQUESTA_RUNTIME_CODEX_COMMAND"
+      "env_alias": "ORQUESTA_RUNTIME_CODEX_COMMAND",
+      "validator_ids": []
     },
     {
       "key": "runtime.codex.model",
       "go_name": "RuntimeCodexModel",
+      "semantic_ref": "orquesta.config.runtime.codex.model",
       "type": "string",
       "default": "",
       "sensitive": false,
       "scope": "runtime",
       "restart_required": true,
-      "env_alias": "ORQUESTA_RUNTIME_CODEX_MODEL"
+      "env_alias": "ORQUESTA_RUNTIME_CODEX_MODEL",
+      "validator_ids": []
     },
     {
       "key": "runtime.codex.reasoning",
       "go_name": "RuntimeCodexReasoning",
+      "semantic_ref": "orquesta.config.runtime.codex.reasoning",
       "type": "string",
       "default": "medium",
       "sensitive": false,
       "scope": "runtime",
       "restart_required": true,
       "env_alias": "ORQUESTA_RUNTIME_CODEX_REASONING",
+      "validator_ids": [
+        "allowed_values"
+      ],
       "allowed_values": [
         "low",
         "medium",
@@ -265,60 +610,81 @@ const generatedRegistryJSON = `{
     {
       "key": "runtime.codex.timeout",
       "go_name": "RuntimeCodexTimeout",
+      "semantic_ref": "orquesta.config.runtime.codex.timeout",
       "type": "duration",
       "default": "30m",
       "sensitive": false,
       "scope": "runtime",
       "restart_required": true,
-      "env_alias": "ORQUESTA_RUNTIME_CODEX_TIMEOUT"
+      "env_alias": "ORQUESTA_RUNTIME_CODEX_TIMEOUT",
+      "validator_ids": [
+        "positive_duration"
+      ]
     },
     {
       "key": "runtime.codex.process_pipe_drain_delay",
       "go_name": "RuntimeCodexProcessPipeDrainDelay",
+      "semantic_ref": "orquesta.config.runtime.codex.process_pipe_drain_delay",
       "type": "duration",
       "default": "250ms",
       "sensitive": false,
       "scope": "runtime",
       "restart_required": true,
-      "env_alias": "ORQUESTA_RUNTIME_CODEX_PROCESS_PIPE_DRAIN_DELAY"
+      "env_alias": "ORQUESTA_RUNTIME_CODEX_PROCESS_PIPE_DRAIN_DELAY",
+      "validator_ids": [
+        "positive_duration"
+      ]
     },
     {
       "key": "runtime.codex.max_diagnostic_bytes",
       "go_name": "RuntimeCodexMaxDiagnosticBytes",
+      "semantic_ref": "orquesta.config.runtime.codex.max_diagnostic_bytes",
       "type": "integer",
       "default": 65536,
       "sensitive": false,
       "scope": "runtime",
       "restart_required": true,
       "env_alias": "ORQUESTA_RUNTIME_CODEX_MAX_DIAGNOSTIC_BYTES",
+      "validator_ids": [
+        "integer_bounds"
+      ],
       "minimum": 1,
       "maximum": 67108864
     },
     {
       "key": "runtime.codex.max_concurrent_executions",
       "go_name": "RuntimeCodexMaxConcurrentExecutions",
+      "semantic_ref": "orquesta.config.runtime.codex.max_concurrent_executions",
       "type": "integer",
       "default": 70,
       "sensitive": false,
       "scope": "runtime",
       "restart_required": true,
       "env_alias": "ORQUESTA_RUNTIME_CODEX_MAX_CONCURRENT_EXECUTIONS",
+      "validator_ids": [
+        "integer_bounds"
+      ],
       "minimum": 1,
       "maximum": 4096
     },
     {
       "key": "runtime.codex.work_root",
       "go_name": "RuntimeCodexWorkRoot",
+      "semantic_ref": "orquesta.config.runtime.codex.work_root",
       "type": "path",
       "default": "./var/work",
       "sensitive": false,
       "scope": "runtime",
       "restart_required": true,
-      "env_alias": "ORQUESTA_RUNTIME_CODEX_WORK_ROOT"
+      "env_alias": "ORQUESTA_RUNTIME_CODEX_WORK_ROOT",
+      "validator_ids": [
+        "non_empty_path"
+      ]
     },
     {
       "key": "runtime.codex.env_allowlist",
       "go_name": "RuntimeCodexEnvAllowlist",
+      "semantic_ref": "orquesta.config.runtime.codex.env_allowlist",
       "type": "string_list",
       "default": [
         "PATH",
@@ -328,121 +694,164 @@ const generatedRegistryJSON = `{
       "sensitive": false,
       "scope": "runtime",
       "restart_required": true,
-      "env_alias": "ORQUESTA_RUNTIME_CODEX_ENV_ALLOWLIST"
+      "env_alias": "ORQUESTA_RUNTIME_CODEX_ENV_ALLOWLIST",
+      "validator_ids": [
+        "unique_non_empty_string_list"
+      ]
     },
     {
       "key": "runtime.codex.credential_ref",
       "go_name": "RuntimeCodexCredentialRef",
+      "semantic_ref": "orquesta.config.runtime.codex.credential_ref",
       "type": "credential_ref",
       "default": "",
       "sensitive": true,
       "scope": "runtime",
       "restart_required": true,
-      "env_alias": "ORQUESTA_RUNTIME_CODEX_CREDENTIAL_REF"
+      "env_alias": "ORQUESTA_RUNTIME_CODEX_CREDENTIAL_REF",
+      "validator_ids": [
+        "credential_ref"
+      ]
     },
     {
       "key": "identity.local_actor",
       "go_name": "IdentityLocalActor",
+      "semantic_ref": "orquesta.config.identity.local_actor",
       "type": "string",
       "default": "actor:local-owner",
       "sensitive": false,
       "scope": "identity",
       "restart_required": true,
-      "env_alias": "ORQUESTA_IDENTITY_LOCAL_ACTOR"
+      "env_alias": "ORQUESTA_IDENTITY_LOCAL_ACTOR",
+      "validator_ids": []
     },
     {
       "key": "identity.local_token_path",
       "go_name": "IdentityLocalTokenPath",
+      "semantic_ref": "orquesta.config.identity.local_token_path",
       "type": "path",
       "default": "./var/secrets/local-owner.token",
       "sensitive": false,
       "scope": "identity",
       "restart_required": true,
-      "env_alias": "ORQUESTA_IDENTITY_LOCAL_TOKEN_PATH"
+      "env_alias": "ORQUESTA_IDENTITY_LOCAL_TOKEN_PATH",
+      "validator_ids": [
+        "non_empty_path"
+      ]
     },
     {
       "key": "project.default",
       "go_name": "ProjectDefault",
+      "semantic_ref": "orquesta.config.project.default",
       "type": "string",
       "default": "project:default",
       "sensitive": false,
       "scope": "project",
       "restart_required": true,
-      "env_alias": "ORQUESTA_PROJECT_DEFAULT"
+      "env_alias": "ORQUESTA_PROJECT_DEFAULT",
+      "validator_ids": []
     },
     {
       "key": "scheduler.poll_interval",
       "go_name": "SchedulerPollInterval",
+      "semantic_ref": "orquesta.config.scheduler.poll_interval",
       "type": "duration",
       "default": "500ms",
       "sensitive": false,
       "scope": "scheduler",
       "restart_required": true,
-      "env_alias": "ORQUESTA_SCHEDULER_POLL_INTERVAL"
+      "env_alias": "ORQUESTA_SCHEDULER_POLL_INTERVAL",
+      "validator_ids": [
+        "positive_duration"
+      ]
     },
     {
       "key": "scheduler.observation_interval",
       "go_name": "SchedulerObservationInterval",
+      "semantic_ref": "orquesta.config.scheduler.observation_interval",
       "type": "duration",
       "default": "2s",
       "sensitive": false,
       "scope": "scheduler",
       "restart_required": true,
-      "env_alias": "ORQUESTA_SCHEDULER_OBSERVATION_INTERVAL"
+      "env_alias": "ORQUESTA_SCHEDULER_OBSERVATION_INTERVAL",
+      "validator_ids": [
+        "positive_duration"
+      ]
     },
     {
       "key": "scheduler.claim_lease",
       "go_name": "SchedulerClaimLease",
+      "semantic_ref": "orquesta.config.scheduler.claim_lease",
       "type": "duration",
       "default": "2m",
       "sensitive": false,
       "scope": "scheduler",
       "restart_required": true,
-      "env_alias": "ORQUESTA_SCHEDULER_CLAIM_LEASE"
+      "env_alias": "ORQUESTA_SCHEDULER_CLAIM_LEASE",
+      "validator_ids": [
+        "positive_duration"
+      ]
     },
     {
       "key": "scheduler.max_execution_attempts",
       "go_name": "SchedulerMaxExecutionAttempts",
+      "semantic_ref": "orquesta.config.scheduler.max_execution_attempts",
       "type": "integer",
       "default": 3,
       "sensitive": false,
       "scope": "scheduler",
       "restart_required": true,
       "env_alias": "ORQUESTA_SCHEDULER_MAX_EXECUTION_ATTEMPTS",
+      "validator_ids": [
+        "integer_bounds"
+      ],
       "minimum": 1,
       "maximum": 1000
     },
     {
       "key": "scheduler.execution_timeout",
       "go_name": "SchedulerExecutionTimeout",
+      "semantic_ref": "orquesta.config.scheduler.execution_timeout",
       "type": "duration",
       "default": "45m",
       "sensitive": false,
       "scope": "scheduler",
       "restart_required": true,
-      "env_alias": "ORQUESTA_SCHEDULER_EXECUTION_TIMEOUT"
+      "env_alias": "ORQUESTA_SCHEDULER_EXECUTION_TIMEOUT",
+      "validator_ids": [
+        "positive_duration"
+      ]
     },
     {
       "key": "api.max_list_limit",
       "go_name": "APIMaxListLimit",
+      "semantic_ref": "orquesta.config.api.max_list_limit",
       "type": "integer",
       "default": 100,
       "sensitive": false,
       "scope": "api",
       "restart_required": true,
       "env_alias": "ORQUESTA_API_MAX_LIST_LIMIT",
+      "validator_ids": [
+        "integer_bounds"
+      ],
       "minimum": 1,
       "maximum": 10000
     },
     {
       "key": "api.locale",
       "go_name": "APILocale",
+      "semantic_ref": "orquesta.config.api.locale",
       "type": "string",
       "default": "es",
       "sensitive": false,
       "scope": "api",
       "restart_required": true,
       "env_alias": "ORQUESTA_API_LOCALE",
+      "validator_ids": [
+        "allowed_values"
+      ],
       "allowed_values": [
         "es",
         "en"
@@ -451,22 +860,30 @@ const generatedRegistryJSON = `{
     {
       "key": "config.effective_path",
       "go_name": "ConfigEffectivePath",
+      "semantic_ref": "orquesta.config.config.effective_path",
       "type": "path",
       "default": "./var/effective_config.json",
       "sensitive": false,
       "scope": "config",
       "restart_required": true,
-      "env_alias": "ORQUESTA_EFFECTIVE_CONFIG_PATH"
+      "env_alias": "ORQUESTA_EFFECTIVE_CONFIG_PATH",
+      "validator_ids": [
+        "non_empty_path"
+      ]
     },
     {
       "key": "config.effective_max_existing_bytes",
       "go_name": "ConfigEffectiveMaxExistingBytes",
+      "semantic_ref": "orquesta.config.config.effective_max_existing_bytes",
       "type": "integer",
       "default": 16777216,
       "sensitive": false,
       "scope": "config",
       "restart_required": true,
       "env_alias": "ORQUESTA_EFFECTIVE_CONFIG_MAX_EXISTING_BYTES",
+      "validator_ids": [
+        "integer_bounds"
+      ],
       "minimum": 1024,
       "maximum": 1073741824
     }

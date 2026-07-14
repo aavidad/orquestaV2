@@ -8,26 +8,52 @@ import (
 	"flag"
 	"fmt"
 	"go/format"
-	"go/token"
 	"os"
+	"strconv"
 	"strings"
+
+	configpkg "orquesta/internal/config"
 )
 
 type registryFile struct {
-	SchemaVersion int           `json:"schema_version"`
-	Revision      string        `json:"revision"`
-	Keys          []registryKey `json:"keys"`
+	SchemaVersion   int                                `json:"schema_version"`
+	Revision        string                             `json:"revision"`
+	Precedence      []string                           `json:"precedence"`
+	DocumentLimits  registryDocumentLimits             `json:"document_limits"`
+	Aliases         []registryAliasDefinition          `json:"aliases"`
+	CrossValidators []registryCrossValidatorDefinition `json:"cross_validators"`
+	Keys            []registryKey                      `json:"keys"`
+}
+
+type registryDocumentLimits struct {
+	SourceMaxBytes     int64 `json:"source_max_bytes"`
+	AuditEntryMaxBytes int64 `json:"audit_entry_max_bytes"`
+}
+
+type registryAliasDefinition struct {
+	Kind                string `json:"kind"`
+	Name                string `json:"name"`
+	Target              string `json:"target"`
+	IntroducedRevision  string `json:"introduced_revision"`
+	RemoveAfterRevision string `json:"remove_after_revision"`
+}
+
+type registryCrossValidatorDefinition struct {
+	ID   string   `json:"id"`
+	Keys []string `json:"keys"`
 }
 
 type registryKey struct {
 	Key             string          `json:"key"`
 	GoName          string          `json:"go_name"`
+	SemanticRef     string          `json:"semantic_ref"`
 	Type            string          `json:"type"`
 	Default         json.RawMessage `json:"default"`
 	Sensitive       bool            `json:"sensitive"`
 	Scope           string          `json:"scope"`
 	RestartRequired bool            `json:"restart_required"`
 	EnvAlias        string          `json:"env_alias"`
+	ValidatorIDs    []string        `json:"validator_ids"`
 	AllowedValues   []string        `json:"allowed_values,omitempty"`
 	Minimum         *int64          `json:"minimum,omitempty"`
 	Maximum         *int64          `json:"maximum,omitempty"`
@@ -35,92 +61,65 @@ type registryKey struct {
 
 func main() {
 	registryPath := flag.String("registry", "", "canonical registry path")
-	outputPath := flag.String("output", "", "generated Go output path")
+	goOutput := flag.String("go-output", "", "generated Go output path")
+	schemaOutput := flag.String("schema-output", "", "generated JSON schema path")
+	uiOutput := flag.String("ui-output", "", "generated UI descriptor path")
+	exampleOutput := flag.String("example-output", "", "generated TOML example path")
+	docOutput := flag.String("doc-output", "", "generated Markdown reference path")
 	flag.Parse()
 
-	if strings.TrimSpace(*registryPath) == "" || strings.TrimSpace(*outputPath) == "" {
-		fatalf("registry and output are required")
+	for name, value := range map[string]string{
+		"registry": *registryPath, "go-output": *goOutput, "schema-output": *schemaOutput,
+		"ui-output": *uiOutput, "example-output": *exampleOutput, "doc-output": *docOutput,
+	} {
+		if strings.TrimSpace(value) == "" {
+			fatalf("%s is required", name)
+		}
 	}
 	source, err := os.ReadFile(*registryPath)
 	if err != nil {
 		fatalf("read registry: %v", err)
 	}
-
+	if err := configpkg.ValidateRegistrySource(source); err != nil {
+		fatalf("validate registry: %v", err)
+	}
 	var registry registryFile
 	decoder := json.NewDecoder(bytes.NewReader(source))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&registry); err != nil {
 		fatalf("decode registry: %v", err)
 	}
-	if err := validateRegistry(registry); err != nil {
-		fatalf("validate registry: %v", err)
-	}
 
-	generated, err := render(registry, source)
+	semantic, err := json.Marshal(registry)
 	if err != nil {
-		fatalf("render registry: %v", err)
+		fatalf("semantic registry: %v", err)
 	}
-	if err := os.WriteFile(*outputPath, generated, 0o644); err != nil {
-		fatalf("write generated keys: %v", err)
+	semanticDigest := sha256.Sum256(semantic)
+	semanticHash := "sha256:" + hex.EncodeToString(semanticDigest[:])
+	outputs := []struct {
+		path    string
+		content []byte
+	}{
+		{*goOutput, mustRenderGo(registry, source, semanticHash)},
+		{*schemaOutput, mustRenderJSON(renderSchema(registry, semanticHash))},
+		{*uiOutput, mustRenderJSON(renderUI(registry, semanticHash))},
+		{*exampleOutput, renderExample(registry)},
+		{*docOutput, renderReference(registry, semanticHash)},
+	}
+	for _, output := range outputs {
+		if err := os.WriteFile(output.path, output.content, 0o644); err != nil {
+			fatalf("write %s: %v", output.path, err)
+		}
 	}
 }
 
-func validateRegistry(registry registryFile) error {
-	if registry.SchemaVersion < 1 {
-		return fmt.Errorf("schema_version must be positive")
-	}
-	if strings.TrimSpace(registry.Revision) == "" {
-		return fmt.Errorf("revision is required")
-	}
-	if len(registry.Keys) == 0 {
-		return fmt.Errorf("keys are required")
-	}
-
-	keys := make(map[string]struct{}, len(registry.Keys))
-	goNames := make(map[string]struct{}, len(registry.Keys))
-	envAliases := make(map[string]struct{}, len(registry.Keys))
-	for _, definition := range registry.Keys {
-		if strings.TrimSpace(definition.Key) == "" {
-			return fmt.Errorf("empty key")
-		}
-		if _, exists := keys[definition.Key]; exists {
-			return fmt.Errorf("duplicate key %q", definition.Key)
-		}
-		keys[definition.Key] = struct{}{}
-
-		if !token.IsIdentifier(definition.GoName) || !token.IsExported(definition.GoName) {
-			return fmt.Errorf("invalid exported go_name %q", definition.GoName)
-		}
-		if _, exists := goNames[definition.GoName]; exists {
-			return fmt.Errorf("duplicate go_name %q", definition.GoName)
-		}
-		goNames[definition.GoName] = struct{}{}
-
-		if strings.TrimSpace(definition.EnvAlias) == "" {
-			return fmt.Errorf("env_alias is required for %q", definition.Key)
-		}
-		if _, exists := envAliases[definition.EnvAlias]; exists {
-			return fmt.Errorf("duplicate env_alias %q", definition.EnvAlias)
-		}
-		envAliases[definition.EnvAlias] = struct{}{}
-
-		if definition.Type != "integer" && (definition.Minimum != nil || definition.Maximum != nil) {
-			return fmt.Errorf("bounds require integer type for %q", definition.Key)
-		}
-		if definition.Minimum != nil && definition.Maximum != nil && *definition.Minimum > *definition.Maximum {
-			return fmt.Errorf("minimum exceeds maximum for %q", definition.Key)
-		}
-	}
-	return nil
-}
-
-func render(registry registryFile, source []byte) ([]byte, error) {
+func mustRenderGo(registry registryFile, source []byte, semanticHash string) []byte {
 	digest := sha256.Sum256(source)
 	var output bytes.Buffer
-	output.WriteString("// Code generated by go generate; DO NOT EDIT.\n\n")
-	output.WriteString("package config\n\n")
+	output.WriteString("// Code generated by go generate; DO NOT EDIT.\n\npackage config\n\nimport \"time\"\n\n")
 	fmt.Fprintf(&output, "const generatedRegistrySourceSHA256 = %q\n", hex.EncodeToString(digest[:]))
-	fmt.Fprintf(&output, "const generatedRegistryRevision = %q\n\n", registry.Revision)
+	fmt.Fprintf(&output, "const generatedRegistryRevision = %q\n", registry.Revision)
+	fmt.Fprintf(&output, "const generatedRegistrySemanticSHA256 = %q\n\n", semanticHash)
 	output.WriteString("const (\n")
 	for _, definition := range registry.Keys {
 		fmt.Fprintf(&output, "\tKey%s Key = %q\n", definition.GoName, definition.Key)
@@ -131,18 +130,245 @@ func render(registry registryFile, source []byte) ([]byte, error) {
 		fmt.Fprintf(&output, "\t\tKey%s,\n", definition.GoName)
 	}
 	output.WriteString("\t}\n}\n\n")
+	for _, definition := range registry.Keys {
+		fmt.Fprintf(&output, "// %s returns %s.\n", definition.GoName, definition.Key)
+		fmt.Fprintf(&output, "func (s Snapshot) %s() %s {\n", definition.GoName, goType(definition.Type))
+		fmt.Fprintf(&output, "\tvalue, _ := s.value(Key%s)\n", definition.GoName)
+		fmt.Fprintf(&output, "\ttyped, _ := value.(%s)\n", goType(definition.Type))
+		if definition.Type == "string_list" {
+			output.WriteString("\treturn append([]string(nil), typed...)\n")
+		} else {
+			output.WriteString("\treturn typed\n")
+		}
+		output.WriteString("}\n\n")
+	}
 	output.WriteString("const generatedRegistryJSON = `")
 	output.Write(source)
 	if len(source) == 0 || source[len(source)-1] != '\n' {
 		output.WriteByte('\n')
 	}
 	output.WriteString("`\n")
-
 	formatted, err := format.Source(output.Bytes())
 	if err != nil {
-		return nil, err
+		fatalf("format generated Go: %v", err)
 	}
-	return formatted, nil
+	return formatted
+}
+
+func goType(valueType string) string {
+	switch valueType {
+	case "integer":
+		return "int64"
+	case "duration":
+		return "time.Duration"
+	case "string_list":
+		return "[]string"
+	case "credential_ref":
+		return "CredentialRef"
+	default:
+		return "string"
+	}
+}
+
+type schemaDocument struct {
+	Schema           string                             `json:"$schema"`
+	ID               string                             `json:"$id"`
+	Type             string                             `json:"type"`
+	Additional       bool                               `json:"additionalProperties"`
+	Properties       map[string]any                     `json:"properties"`
+	RegistryRevision string                             `json:"x-registry-revision"`
+	RegistryHash     string                             `json:"x-registry-hash"`
+	SourceMaxBytes   int64                              `json:"x-source-max-bytes"`
+	Aliases          []registryAliasDefinition          `json:"x-aliases"`
+	CrossValidators  []registryCrossValidatorDefinition `json:"x-cross-validators"`
+}
+
+func renderSchema(registry registryFile, semanticHash string) schemaDocument {
+	root := map[string]any{}
+	for _, definition := range registry.Keys {
+		insertSchema(root, strings.Split(definition.Key, "."), fieldSchema(definition))
+	}
+	return schemaDocument{
+		Schema: "https://json-schema.org/draft/2020-12/schema", ID: "urn:orquesta:config:" + registry.Revision,
+		Type: "object", Additional: false, Properties: root, RegistryRevision: registry.Revision,
+		RegistryHash: semanticHash, SourceMaxBytes: registry.DocumentLimits.SourceMaxBytes,
+		Aliases: registry.Aliases, CrossValidators: registry.CrossValidators,
+	}
+}
+
+func insertSchema(properties map[string]any, parts []string, leaf map[string]any) {
+	if len(parts) == 1 {
+		properties[parts[0]] = leaf
+		return
+	}
+	node, ok := properties[parts[0]].(map[string]any)
+	if !ok {
+		node = map[string]any{"type": "object", "additionalProperties": false, "properties": map[string]any{}}
+		properties[parts[0]] = node
+	}
+	insertSchema(node["properties"].(map[string]any), parts[1:], leaf)
+}
+
+func fieldSchema(definition registryKey) map[string]any {
+	result := map[string]any{
+		"x-semantic-ref": definition.SemanticRef, "x-sensitive": definition.Sensitive,
+		"x-scope": definition.Scope, "x-restart-required": definition.RestartRequired,
+		"x-env-alias": definition.EnvAlias, "x-validator-ids": definition.ValidatorIDs,
+	}
+	switch definition.Type {
+	case "integer":
+		result["type"] = "integer"
+		if definition.Minimum != nil {
+			result["minimum"] = *definition.Minimum
+		}
+		if definition.Maximum != nil {
+			result["maximum"] = *definition.Maximum
+		}
+	case "string_list":
+		result["type"] = "array"
+		result["uniqueItems"] = true
+		result["items"] = map[string]any{"type": "string", "minLength": 1}
+	default:
+		result["type"] = "string"
+		if definition.Type == "path" {
+			result["minLength"] = 1
+		}
+		if definition.Type == "duration" {
+			result["pattern"] = `^[1-9][0-9]*(ns|us|µs|ms|s|m|h)([0-9].*)?$`
+		}
+		if definition.Type == "credential_ref" {
+			result["pattern"] = `^(|credential:[a-z0-9][a-z0-9._-]{0,127})$`
+		}
+	}
+	if len(definition.AllowedValues) > 0 {
+		result["enum"] = definition.AllowedValues
+	}
+	if !definition.Sensitive {
+		var value any
+		if err := json.Unmarshal(definition.Default, &value); err == nil {
+			result["default"] = value
+		}
+	}
+	return result
+}
+
+type uiDocument struct {
+	DocumentType     string                             `json:"document_type"`
+	SchemaVersion    int                                `json:"schema_version"`
+	RegistryRevision string                             `json:"registry_revision"`
+	RegistryHash     string                             `json:"registry_hash"`
+	Aliases          []registryAliasDefinition          `json:"aliases"`
+	CrossValidators  []registryCrossValidatorDefinition `json:"cross_validators"`
+	Fields           []uiField                          `json:"fields"`
+}
+
+type uiField struct {
+	Key             string   `json:"key"`
+	SemanticRef     string   `json:"semantic_ref"`
+	LabelKey        string   `json:"label_key"`
+	Type            string   `json:"type"`
+	Sensitive       bool     `json:"sensitive"`
+	Scope           string   `json:"scope"`
+	RestartRequired bool     `json:"restart_required"`
+	ValidatorIDs    []string `json:"validator_ids"`
+	AllowedValues   []string `json:"allowed_values,omitempty"`
+	Minimum         *int64   `json:"minimum,omitempty"`
+	Maximum         *int64   `json:"maximum,omitempty"`
+}
+
+func renderUI(registry registryFile, semanticHash string) uiDocument {
+	result := uiDocument{DocumentType: "orquesta.config_ui", SchemaVersion: registry.SchemaVersion,
+		RegistryRevision: registry.Revision, RegistryHash: semanticHash, Aliases: registry.Aliases,
+		CrossValidators: registry.CrossValidators, Fields: make([]uiField, 0, len(registry.Keys))}
+	for _, definition := range registry.Keys {
+		result.Fields = append(result.Fields, uiField{
+			Key: definition.Key, SemanticRef: definition.SemanticRef, LabelKey: "config.field." + definition.Key,
+			Type: definition.Type, Sensitive: definition.Sensitive, Scope: definition.Scope,
+			RestartRequired: definition.RestartRequired, ValidatorIDs: definition.ValidatorIDs,
+			AllowedValues: definition.AllowedValues, Minimum: definition.Minimum, Maximum: definition.Maximum,
+		})
+	}
+	return result
+}
+
+func renderExample(registry registryFile) []byte {
+	var output strings.Builder
+	lastSection := ""
+	for _, definition := range registry.Keys {
+		dot := strings.LastIndexByte(definition.Key, '.')
+		section, name := definition.Key[:dot], definition.Key[dot+1:]
+		if section != lastSection {
+			if output.Len() > 0 {
+				output.WriteByte('\n')
+			}
+			fmt.Fprintf(&output, "[%s]\n", section)
+			lastSection = section
+		}
+		fmt.Fprintf(&output, "%s = %s\n", name, renderRawDefault(definition.Default))
+	}
+	return []byte(output.String())
+}
+
+func renderRawDefault(raw json.RawMessage) string {
+	var value any
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if err := decoder.Decode(&value); err != nil {
+		fatalf("decode default: %v", err)
+	}
+	switch typed := value.(type) {
+	case string:
+		return strconv.Quote(typed)
+	case json.Number:
+		return typed.String()
+	case []any:
+		parts := make([]string, len(typed))
+		for index, item := range typed {
+			parts[index] = strconv.Quote(item.(string))
+		}
+		return "[" + strings.Join(parts, ", ") + "]"
+	default:
+		fatalf("unsupported default type %T", value)
+	}
+	return ""
+}
+
+func renderReference(registry registryFile, semanticHash string) []byte {
+	var output strings.Builder
+	output.WriteString("<!-- Code generated by go generate; DO NOT EDIT. -->\n\n# Orquesta configuration registry\n\n")
+	fmt.Fprintf(&output, "Registry revision: `%s`  \nRegistry hash: `%s`  \nPrecedence: `%s`  \nSource limit: `%d` bytes\n\n",
+		registry.Revision, semanticHash, strings.Join(registry.Precedence, " < "), registry.DocumentLimits.SourceMaxBytes)
+	output.WriteString("| Key | Type | Default | Environment | Restart | Validators |\n|---|---|---|---|---|---|\n")
+	for _, definition := range registry.Keys {
+		shownDefault := string(definition.Default)
+		if definition.Sensitive {
+			shownDefault = `"[REDACTED]"`
+		}
+		fmt.Fprintf(&output, "| `%s` | `%s` | `%s` | `%s` | `%t` | `%s` |\n",
+			definition.Key, definition.Type, strings.ReplaceAll(shownDefault, "|", "\\|"), definition.EnvAlias,
+			definition.RestartRequired, strings.Join(definition.ValidatorIDs, ", "))
+	}
+	output.WriteString("\n## Cross validators\n\n")
+	for _, validator := range registry.CrossValidators {
+		fmt.Fprintf(&output, "- `%s`: `%s`\n", validator.ID, strings.Join(validator.Keys, "`, `"))
+	}
+	output.WriteString("\n## Temporary aliases\n\n")
+	if len(registry.Aliases) == 0 {
+		output.WriteString("None.\n")
+	}
+	for _, alias := range registry.Aliases {
+		fmt.Fprintf(&output, "- `%s` `%s` -> `%s` (%s..%s)\n", alias.Kind, alias.Name, alias.Target,
+			alias.IntroducedRevision, alias.RemoveAfterRevision)
+	}
+	return []byte(output.String())
+}
+
+func mustRenderJSON(value any) []byte {
+	content, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		fatalf("render JSON: %v", err)
+	}
+	return append(content, '\n')
 }
 
 func fatalf(format string, args ...any) {
