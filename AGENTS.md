@@ -298,6 +298,12 @@ implementación o auditorías acotadas como excepción bootstrap. Cada excepció
 - entrega cambios, tests, riesgos y siguiente dependencia en formato compacto;
 - no se convierte en arquitectura, API o workflow alternativo.
 
+El procedimiento operativo vigente para que un Codex externo dirija el DAG
+V06, recupere artefactos y aplique cambios sin atribuir a Orquesta capacidades
+de workspace/Git aún inexistentes está en
+`docs/reconstruccion/runbook_agente_director_v06.md`. Debe leerse completo antes
+de usar Orquesta sobre otro proyecto.
+
 En cuanto esas capacidades queden acreditadas, la nueva Orquesta pasa a ser la
 superficie de dirección por defecto. Codex directo queda limitado a observar,
 integrar o desbloquear una incidencia acotada y documentada.

@@ -1,6 +1,6 @@
 # Estado y handoff vivo del rebuild
 
-Última actualización: 2026-07-14 16:53 Europe/Madrid.
+Última actualización: 2026-07-14 17:19 Europe/Madrid.
 
 Este documento permite continuar el rebuild sin reconstruir el contexto de la
 sesión. Es estado operativo, no evidencia de aceptación. Los estados canónicos
@@ -91,6 +91,9 @@ transforma por sí sola una petición abierta en investigación, plan, subagente
 reviews, replan e integración: eso culmina en V22. V07–V15 construyen las capas
 operativas alrededor del núcleo; V16 inicia workspace/Git para programación
 externa y V22 acredita programación externa gobernada y autoservicio Codex.
+Hasta V16, el uso desde un agente director y la integración manual se rigen por
+`docs/reconstruccion/runbook_agente_director_v06.md`; `write_set`, skills y tools
+del worker son metadata, no acceso al repositorio ni permisos efectivos.
 
 ## Checkpoint histórico de V01–V05
 
