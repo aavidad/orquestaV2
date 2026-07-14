@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "receipt_schema_version": 3,
+  "contract_id": "AC-V06-ATOMIC-STATE-OUTBOX",
+  "trusted_base_git_commit_oid": "238ebc59025d3dd2bdd9593febd878650af6a660",
+  "product_delta_base_git_commit_oid": "238ebc59025d3dd2bdd9593febd878650af6a660",
+  "product_delta_sealed_git_commit_oid": "238ebc59025d3dd2bdd9593febd878650af6a660",
+  "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV06ScopeAndExecutableContract|TestAcceptanceV06AtomicStateOutbox|TestV06CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/interfaces/mcp ./internal/bootstrap ./cmd/orquesta'",
+  "execution_argv": [
+    "sh",
+    "-c",
+    "go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV06ScopeAndExecutableContract|TestAcceptanceV06AtomicStateOutbox|TestV06CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/interfaces/mcp ./internal/bootstrap ./cmd/orquesta"
+  ],
+  "output_path": "product/evidence/v06_atomic_state_outbox.output.txt",
+  "receipt_path": "product/evidence/v06_atomic_state_outbox.json",
+  "candidate_subjects": [
+    "acceptance/fixtures/v06_atomic_state_outbox.json",
+    "acceptance/v06_atomic_state_outbox_test.go",
+    "product/roadmap.json",
+    "product/traceability/rebuild_bugs.jsonl",
+    "product_roadmap_test.go"
+  ],
+  "owned_capability_ids": [
+    "EVD-02",
+    "GOV-05",
+    "GOV-06",
+    "OPS-09",
+    "OPS-10",
+    "OPS-12",
+    "ORC-12",
+    "ORC-13",
+    "ORC-17"
+  ],
+  "deferred_capabilities": [
+    {
+      "id": "EVD-01",
+      "owner": "test_attestor",
+      "acceptance_contract": "AC-V17-TEST-ATTESTOR"
+    },
+    {
+      "id": "GOV-17",
+      "owner": "command_registry",
+      "acceptance_contract": "AC-V20-COMMAND-REGISTRY"
+    },
+    {
+      "id": "OPS-13",
+      "owner": "postgres_s3_multihost",
+      "acceptance_contract": "AC-V31-POSTGRES-S3-MULTIHOST"
+    }
+  ],
+  "clock_and_retry": {
+    "base_time": "2026-07-14T18:00:00Z",
+    "claim_lease": "5s",
+    "observation_delay": "1s",
+    "execution_timeout": "1m",
+    "max_delivery_attempts": 3,
+    "max_execution_attempts": 2,
+    "claim_contenders": 8,
+    "launch_outcomes": [
+      "temporary_error",
+      "permanent_error",
+      "accepted"
+    ]
+  },
+  "opaque_requirements": {
+    "role_key": "role:v06-worker",
+    "skill_refs": [
+      "skill:v06-state"
+    ],
+    "tool_refs": [
+      "tool:v06-sqlite"
+    ],
+    "capability_refs": [
+      "capability:v06-fenced-claim"
+    ]
+  },
+  "launch_receipt_required_fields": [
+    "execution_ref",
+    "goal_ref",
+    "work_item_ref",
+    "plan_generation",
+    "app_spec_generation",
+    "execution_attempt",
+    "spec_hash",
+    "provider_ref",
+    "model_ref",
+    "agent_ref",
+    "external_ref",
+    "idempotency_key",
+    "accepted_at"
+  ],
+  "assertions": [
+    "Goal snapshot revision audit event and outbox action commit atomically and replay idempotently",
+    "agent execution attempts are one to many and distinct from outbox delivery retries while provider failure remains replaceable within policy",
+    "trusted repository time fences one active claim per WorkItem generation and race or crash reclaim increments its monotonic fence exactly once",
+    "every stale fencing token is rejected without a partial lifecycle event outbox or receipt write",
+    "successful or quarantined outbox consumption creates one immutable causal receipt and replay creates no duplicate effect",
+    "opaque worker capability matching selects durable work without provider routing policy or a private queue",
+    "launch receipt preserves provider model agent Goal WorkItem AppSpec generation plan generation attempt and spec hash after restart",
+    "restart never reexecutes terminal work and reclaims nonterminal work without duplicate execution",
+    "application receives exactly one StateRepository and projections events outbox or adapters cannot close a Goal"
+  ]
+}

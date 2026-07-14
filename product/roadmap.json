@@ -594,17 +594,21 @@
     {
       "id": "AC-V06-ATOMIC-STATE-OUTBOX",
       "vertical": "atomic_state_outbox",
-      "status": "planned",
-      "test_ref": "planned:acceptance/v06_atomic_state_outbox_test.go",
-      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
-      "fixture": "planned:fixtures/v06_atomic_state_outbox",
+      "status": "executable",
+      "test_ref": "acceptance/v06_atomic_state_outbox_test.go",
+      "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV06ScopeAndExecutableContract|TestAcceptanceV06AtomicStateOutbox|TestV06CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/interfaces/mcp ./internal/bootstrap ./cmd/orquesta'",
+      "fixture": "acceptance/fixtures/v06_atomic_state_outbox.json",
+      "receipt": "product/evidence/v06_atomic_state_outbox.json",
       "assertions": [
-        "snapshot event and outbox commit atomically",
-        "at most one active fenced claim exists per WorkItem generation",
-        "agent executions are replaceable attempts and provider failure remains retryable while policy permits",
-        "crashed claims are reclaimed once",
-        "stale fencing tokens are rejected",
-        "restart preserves terminal work without duplicate execution"
+        "Goal snapshot revision audit event and outbox action commit atomically and replay idempotently",
+        "agent execution attempts are one to many and distinct from outbox delivery retries while provider failure remains replaceable within policy",
+        "trusted repository time fences one active claim per WorkItem generation and race or crash reclaim increments its monotonic fence exactly once",
+        "every stale fencing token is rejected without a partial lifecycle event outbox or receipt write",
+        "successful or quarantined outbox consumption creates one immutable causal receipt and replay creates no duplicate effect",
+        "opaque worker capability matching selects durable work without provider routing policy or a private queue",
+        "launch receipt preserves provider model agent Goal WorkItem AppSpec generation plan generation attempt and spec hash after restart",
+        "restart never reexecutes terminal work and reclaims nonterminal work without duplicate execution",
+        "application receives exactly one StateRepository and projections events outbox or adapters cannot close a Goal"
       ]
     },
     {
@@ -1335,13 +1339,14 @@
       "kind": "governance",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "atomic_state_outbox",
+      "owner_context": "command_registry",
       "dependencies": [
-        "intent_appspec",
-        "goal_dag_phases"
+        "config",
+        "identity_projects_rbac",
+        "test_attestor"
       ],
       "acceptance_contracts": [
-        "AC-V06-ATOMIC-STATE-OUTBOX"
+        "AC-V20-COMMAND-REGISTRY"
       ],
       "status": "declared",
       "evidence_refs": [],
@@ -3131,13 +3136,15 @@
       "kind": "evidence",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "atomic_state_outbox",
+      "owner_context": "test_attestor",
       "dependencies": [
-        "intent_appspec",
-        "goal_dag_phases"
+        "atomic_state_outbox",
+        "recovery_backup",
+        "budgets_effects",
+        "workspace_git"
       ],
       "acceptance_contracts": [
-        "AC-V06-ATOMIC-STATE-OUTBOX"
+        "AC-V17-TEST-ATTESTOR"
       ],
       "status": "declared",
       "evidence_refs": [],
@@ -5404,13 +5411,20 @@
       "kind": "operations",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "atomic_state_outbox",
+      "owner_context": "postgres_s3_multihost",
       "dependencies": [
-        "intent_appspec",
-        "goal_dag_phases"
+        "atomic_state_outbox",
+        "recovery_backup",
+        "identity_projects_rbac",
+        "mailbox",
+        "controls",
+        "budgets_effects",
+        "workspace_git",
+        "test_attestor",
+        "codex_e2e"
       ],
       "acceptance_contracts": [
-        "AC-V06-ATOMIC-STATE-OUTBOX"
+        "AC-V31-POSTGRES-S3-MULTIHOST"
       ],
       "status": "declared",
       "evidence_refs": [],
