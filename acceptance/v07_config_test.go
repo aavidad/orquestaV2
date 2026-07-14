@@ -28,6 +28,8 @@ import (
 
 const v07FixturePath = "acceptance/fixtures/v07_config.json"
 const v07TrustedBaseGitCommitOID = "5ff9234d7ef1c8650c1f21ad21a288246c5d027c"
+const v07ProductDeltaBaseGitCommitOID = "5b38079cdd66f49a1eaed85b83b8fe89502b6985"
+const v07ProductDeltaSealedGitCommitOID = "2fc3b37dfa0c1e463e59431a19b5fc9e5ebc5fbd"
 
 type v07Fixture struct {
 	SchemaVersion                  int                     `json:"schema_version"`
@@ -222,8 +224,8 @@ func v07AssertFixtureHeader(t *testing.T, repositoryRoot string, fixture v07Fixt
 	}
 	if fixture.SchemaVersion != 1 || fixture.ReceiptSchemaVersion != 3 || fixture.ContractID != "AC-V07-CONFIG" ||
 		fixture.TrustedBaseGitCommitOID != v07TrustedBaseGitCommitOID ||
-		fixture.ProductDeltaBaseGitCommitOID != v07TrustedBaseGitCommitOID ||
-		fixture.ProductDeltaSealedGitCommitOID != v07TrustedBaseGitCommitOID ||
+		fixture.ProductDeltaBaseGitCommitOID != v07ProductDeltaBaseGitCommitOID ||
+		fixture.ProductDeltaSealedGitCommitOID != v07ProductDeltaSealedGitCommitOID ||
 		fixture.OutputPath != "product/evidence/v07_config.output.txt" ||
 		fixture.ReceiptPath != "product/evidence/v07_config.json" ||
 		!reflect.DeepEqual(fixture.OwnedCapabilityIDs, wantCapabilities) ||
