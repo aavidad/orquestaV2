@@ -1,9 +1,25 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
+  "evidence_kind": "reproducibility_descriptor",
   "contract": "AC-V02-AUTHORITY-RULES",
   "result": "PASS",
-  "command": "go test -mod=vendor -count=1 ./acceptance -run '^TestAcceptanceV02AuthorityRules$'",
-  "executed_at": "2026-07-14T06:32:34+02:00",
+  "validation_command": "go test -mod=vendor -count=1 ./acceptance -run '^TestAcceptanceV02AuthorityRules$'",
+  "executed_at": "2026-07-14T11:14:18+02:00",
+  "execution": {
+    "argv": [
+      "go",
+      "test",
+      "-mod=vendor",
+      "-count=1",
+      "./acceptance",
+      "-run",
+      "^TestAcceptanceV02AuthorityRules$"
+    ],
+    "exit_code": 0,
+    "combined_output_path": "product/evidence/v02_authority_rules.output.txt",
+    "combined_output_sha256": "sha256:bf68ecd029e8f45c0d5da7139d815491432ccd994a37e99fc92f12e600b2f7b4",
+    "go_version": "go1.25.11"
+  },
   "fixture_sha256": "sha256:96e39bfc0a0a039e9ac37e6bd39108f863e68e23aa1275803f3e9f5fc37984ea",
   "candidate_digest_algorithm": "sha256:length-framed-path-and-content:v1",
   "candidate_subjects": [
@@ -13,5 +29,10 @@
     "acceptance/fixtures/v02_authority_rules.json",
     "acceptance/v02_authority_rules_test.go"
   ],
-  "candidate_sha256": "sha256:1739f8caef101504cb4bc22f4bbcbd8cc149aa3368500e7413e45f5691ec6d0c"
+  "candidate_sha256": "sha256:31c8461d6de4b80d78c27073595ffe80c085faab4381e110982c4029639ad9b0",
+  "subject_source_tree": {
+    "identity_kind": "candidate_subject_set",
+    "sha256": "sha256:31c8461d6de4b80d78c27073595ffe80c085faab4381e110982c4029639ad9b0",
+    "git_head": "a8bff609492f312fe2d6bf8ccccde02b6e5c8426"
+  }
 }

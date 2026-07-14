@@ -517,8 +517,9 @@
       "vertical": "source_integration",
       "status": "executable",
       "test_ref": "product_roadmap_test.go",
-      "command": "go test -mod=vendor -count=1 . -run '^TestProductRoadmapIsExhaustiveAndCausal$'",
-      "fixture": "product/roadmap.json",
+      "command": "go test -mod=vendor -count=1 . -run '^TestProductRoadmap.*$'",
+      "fixture": "acceptance/fixtures/v01_source_integration.json",
+      "receipt": "product/evidence/v01_source_integration.json",
       "assertions": [
         "exactly 257 canonical IDs and 13 family counts",
         "all four source hashes match",
@@ -545,13 +546,16 @@
     {
       "id": "AC-V03-CANONICAL-LEDGERS",
       "vertical": "canonical_ledgers",
-      "status": "planned",
-      "test_ref": "planned:acceptance/v03_canonical_ledgers_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
-      "fixture": "planned:fixtures/v03_canonical_ledgers",
+      "status": "executable",
+      "test_ref": "acceptance/v03_canonical_ledgers_test.go",
+      "command": "go test -mod=vendor -count=1 . ./acceptance -run '^(TestTraceabilityRebuild.*|TestProductRoadmap.*|TestAcceptanceV03CanonicalLedgers)$'",
+      "fixture": "acceptance/fixtures/v03_canonical_ledgers.json",
+      "receipt": "product/evidence/v03_canonical_ledgers.json",
       "assertions": [
-        "every historical task bug meaningful symbol skill and rulepack has a disposition",
-        "every retirement has characterization evidence"
+        "829 legacy Markdown sources have a non-circular role census and 334 governed source dispositions",
+        "2108 task entries and 920 broad exclusions form an exact candidate partition with semantic review provenance",
+        "170 reviewed narrative blocks have exact TaskEntry coverage and no historical state infers rebuild closure",
+        "334 normalized historical bug IDs preserve exact occurrences and pending invariant lessons"
       ]
     },
     {
@@ -559,7 +563,7 @@
       "vertical": "intent_appspec",
       "status": "planned",
       "test_ref": "planned:acceptance/v04_intent_appspec_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v04_intent_appspec",
       "assertions": [
         "IntentManifest remains immutable",
@@ -572,7 +576,7 @@
       "vertical": "goal_dag_phases",
       "status": "planned",
       "test_ref": "planned:acceptance/v05_goal_dag_phases_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v05_goal_dag_phases",
       "assertions": [
         "unsatisfied_dependency_started equals zero",
@@ -586,7 +590,7 @@
       "vertical": "atomic_state_outbox",
       "status": "planned",
       "test_ref": "planned:acceptance/v06_atomic_state_outbox_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v06_atomic_state_outbox",
       "assertions": [
         "snapshot event and outbox commit atomically",
@@ -600,7 +604,7 @@
       "vertical": "config",
       "status": "planned",
       "test_ref": "planned:acceptance/v07_config_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v07_config",
       "assertions": [
         "all keys defaults aliases and environment names originate in registry",
@@ -613,7 +617,7 @@
       "vertical": "credentials",
       "status": "planned",
       "test_ref": "planned:acceptance/v08_credentials_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v08_credentials",
       "assertions": [
         "secret scope owner purpose version rotation and revocation are enforced",
@@ -625,7 +629,7 @@
       "vertical": "recovery_backup",
       "status": "planned",
       "test_ref": "planned:acceptance/v09_recovery_backup_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v09_recovery_backup",
       "assertions": [
         "SQLite repository contract is green",
@@ -638,7 +642,7 @@
       "vertical": "identity_projects_rbac",
       "status": "planned",
       "test_ref": "planned:acceptance/v10_identity_projects_rbac_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v10_identity_projects_rbac",
       "assertions": [
         "two projects are mutually isolated",
@@ -651,7 +655,7 @@
       "vertical": "oidc_ad",
       "status": "planned",
       "test_ref": "planned:acceptance/v11_oidc_ad_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v11_oidc_ad",
       "assertions": [
         "OIDC Authorization Code with PKCE state nonce and JWKS rotation passes",
@@ -664,7 +668,7 @@
       "vertical": "director_lease",
       "status": "planned",
       "test_ref": "planned:acceptance/v12_director_lease_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v12_director_lease",
       "assertions": [
         "expired director cannot write",
@@ -677,7 +681,7 @@
       "vertical": "mailbox",
       "status": "planned",
       "test_ref": "planned:acceptance/v13_mailbox_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v13_mailbox",
       "assertions": [
         "claim lease delivery consume ACK and replay are causal",
@@ -690,7 +694,7 @@
       "vertical": "controls",
       "status": "planned",
       "test_ref": "planned:acceptance/v14_controls_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v14_controls",
       "assertions": [
         "stopping B preserves A C and D before and after restart",
@@ -703,7 +707,7 @@
       "vertical": "budgets_effects",
       "status": "planned",
       "test_ref": "planned:acceptance/v15_budgets_effects_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v15_budgets_effects",
       "assertions": [
         "concurrent reservations never exceed envelope",
@@ -717,7 +721,7 @@
       "vertical": "workspace_git",
       "status": "planned",
       "test_ref": "planned:acceptance/v16_workspace_git_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v16_workspace_git",
       "assertions": [
         "one isolated workspace exists per execution",
@@ -730,7 +734,7 @@
       "vertical": "test_attestor",
       "status": "planned",
       "test_ref": "planned:acceptance/v17_test_attestor_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v17_test_attestor",
       "assertions": [
         "attestation is reproducible against exact tree and inputs",
@@ -743,7 +747,7 @@
       "vertical": "independent_reviews",
       "status": "planned",
       "test_ref": "planned:acceptance/v18_independent_reviews_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v18_independent_reviews",
       "assertions": [
         "author primary reviewer and adversarial reviewer use distinct launches",
@@ -756,7 +760,7 @@
       "vertical": "council",
       "status": "planned",
       "test_ref": "planned:acceptance/v19_council_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v19_council",
       "assertions": [
         "auto required and operator-skip policies have isolated E2Es",
@@ -769,7 +773,7 @@
       "vertical": "command_registry",
       "status": "planned",
       "test_ref": "planned:acceptance/v20_command_registry_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v20_command_registry",
       "assertions": [
         "one command definition generates HTTP MCP and CLI bindings",
@@ -782,7 +786,7 @@
       "vertical": "i18n",
       "status": "planned",
       "test_ref": "planned:acceptance/v21_i18n_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v21_i18n",
       "assertions": [
         "all public keys have locale parity and Spanish fallback",
@@ -795,7 +799,7 @@
       "vertical": "codex_e2e",
       "status": "planned",
       "test_ref": "planned:acceptance/v22_codex_e2e_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v22_codex_e2e",
       "assertions": [
         "public MCP drives plan DAG mailbox workspace tests reviews and close",
@@ -808,7 +812,7 @@
       "vertical": "wizard",
       "status": "planned",
       "test_ref": "planned:acceptance/v23_wizard_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v23_wizard",
       "assertions": [
         "chat and form mutate one versioned intake state",
@@ -821,7 +825,7 @@
       "vertical": "web_admin",
       "status": "planned",
       "test_ref": "planned:acceptance/v24_web_admin_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v24_web_admin",
       "assertions": [
         "WCAG 2.2 AA automated and keyboard matrix passes",
@@ -834,7 +838,7 @@
       "vertical": "provider_adapters",
       "status": "planned",
       "test_ref": "planned:acceptance/v25_provider_adapters_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v25_provider_adapters",
       "assertions": [
         "each accepted adapter passes neutral contract",
@@ -847,7 +851,7 @@
       "vertical": "tools_skills_sdk",
       "status": "planned",
       "test_ref": "planned:acceptance/v26_tools_skills_sdk_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v26_tools_skills_sdk",
       "assertions": [
         "unauthorized tool or skill cannot run",
@@ -860,7 +864,7 @@
       "vertical": "context_rag_evals",
       "status": "planned",
       "test_ref": "planned:acceptance/v27_context_rag_evals_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v27_context_rag_evals",
       "assertions": [
         "versioned eval dataset records quality cost latency and recall",
@@ -873,7 +877,7 @@
       "vertical": "domain_plugins",
       "status": "planned",
       "test_ref": "planned:acceptance/v28_domain_plugins_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v28_domain_plugins",
       "assertions": [
         "connectors use opaque refs and public contracts",
@@ -886,7 +890,7 @@
       "vertical": "deploy_notifications",
       "status": "planned",
       "test_ref": "planned:acceptance/v29_deploy_notifications_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v29_deploy_notifications",
       "assertions": [
         "preview approval execution receipt rollback and idempotency pass",
@@ -899,7 +903,7 @@
       "vertical": "opes",
       "status": "planned",
       "test_ref": "planned:acceptance/v30_opes_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v30_opes",
       "assertions": [
         "temporary OPES instance has separate DB and filesystem",
@@ -913,7 +917,7 @@
       "vertical": "postgres_s3_multihost",
       "status": "planned",
       "test_ref": "planned:acceptance/v31_postgres_s3_multihost_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v31_postgres_s3_multihost",
       "assertions": [
         "SQLite and PostgreSQL pass one repository contract",
@@ -926,7 +930,7 @@
       "vertical": "operations_telemetry",
       "status": "planned",
       "test_ref": "planned:acceptance/v32_operations_telemetry_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v32_operations_telemetry",
       "assertions": [
         "install doctor upgrade rollback restore idle and shutdown E2Es pass",
@@ -939,7 +943,7 @@
       "vertical": "generated_apps",
       "status": "planned",
       "test_ref": "planned:acceptance/v33_generated_apps_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v33_generated_apps",
       "assertions": [
         "one Go and one non-Go app pass APP-01 through APP-16",
@@ -952,7 +956,7 @@
       "vertical": "cutover_accreditation",
       "status": "planned",
       "test_ref": "planned:acceptance/v34_cutover_accreditation_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
       "fixture": "planned:fixtures/v34_cutover_accreditation",
       "assertions": [
         "all accepted capabilities are accredited against immutable candidate digests",
@@ -971,19 +975,23 @@
       "kind": "governance",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "authority_rules",
+      "owner_context": "generated_apps",
       "dependencies": [
-        "source_integration"
+        "wizard",
+        "web_admin",
+        "provider_adapters",
+        "tools_skills_sdk",
+        "context_rag_evals",
+        "domain_plugins",
+        "deploy_notifications",
+        "postgres_s3_multihost",
+        "operations_telemetry"
       ],
       "acceptance_contracts": [
-        "AC-V02-AUTHORITY-RULES"
+        "AC-V33-GENERATED-APPS"
       ],
-      "status": "accredited",
-      "evidence_refs": [
-        "acceptance/v02_authority_rules_test.go",
-        "acceptance/fixtures/v02_authority_rules.json",
-        "product/evidence/v02_authority_rules.json"
-      ],
+      "status": "declared",
+      "evidence_refs": [],
       "supersedes": []
     },
     {
@@ -1036,19 +1044,15 @@
       "kind": "governance",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "authority_rules",
+      "owner_context": "goal_dag_phases",
       "dependencies": [
-        "source_integration"
+        "intent_appspec"
       ],
       "acceptance_contracts": [
-        "AC-V02-AUTHORITY-RULES"
+        "AC-V05-GOAL-DAG-PHASES"
       ],
-      "status": "accredited",
-      "evidence_refs": [
-        "acceptance/v02_authority_rules_test.go",
-        "acceptance/fixtures/v02_authority_rules.json",
-        "product/evidence/v02_authority_rules.json"
-      ],
+      "status": "declared",
+      "evidence_refs": [],
       "supersedes": []
     },
     {
@@ -1059,19 +1063,15 @@
       "kind": "governance",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "authority_rules",
+      "owner_context": "goal_dag_phases",
       "dependencies": [
-        "source_integration"
+        "intent_appspec"
       ],
       "acceptance_contracts": [
-        "AC-V02-AUTHORITY-RULES"
+        "AC-V05-GOAL-DAG-PHASES"
       ],
-      "status": "accredited",
-      "evidence_refs": [
-        "acceptance/v02_authority_rules_test.go",
-        "acceptance/fixtures/v02_authority_rules.json",
-        "product/evidence/v02_authority_rules.json"
-      ],
+      "status": "declared",
+      "evidence_refs": [],
       "supersedes": []
     },
     {
@@ -1082,19 +1082,16 @@
       "kind": "governance",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "authority_rules",
+      "owner_context": "atomic_state_outbox",
       "dependencies": [
-        "source_integration"
+        "intent_appspec",
+        "goal_dag_phases"
       ],
       "acceptance_contracts": [
-        "AC-V02-AUTHORITY-RULES"
+        "AC-V06-ATOMIC-STATE-OUTBOX"
       ],
-      "status": "accredited",
-      "evidence_refs": [
-        "acceptance/v02_authority_rules_test.go",
-        "acceptance/fixtures/v02_authority_rules.json",
-        "product/evidence/v02_authority_rules.json"
-      ],
+      "status": "declared",
+      "evidence_refs": [],
       "supersedes": []
     },
     {
@@ -1304,8 +1301,12 @@
       "acceptance_contracts": [
         "AC-V03-CANONICAL-LEDGERS"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v03_canonical_ledgers_test.go",
+        "acceptance/fixtures/v03_canonical_ledgers.json",
+        "product/evidence/v03_canonical_ledgers.json"
+      ],
       "supersedes": []
     },
     {
@@ -2869,13 +2870,20 @@
       "kind": "orchestration",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "canonical_ledgers",
+      "owner_context": "operations_telemetry",
       "dependencies": [
-        "source_integration",
-        "authority_rules"
+        "config",
+        "credentials",
+        "recovery_backup",
+        "identity_projects_rbac",
+        "oidc_ad",
+        "codex_e2e",
+        "command_registry",
+        "deploy_notifications",
+        "postgres_s3_multihost"
       ],
       "acceptance_contracts": [
-        "AC-V03-CANONICAL-LEDGERS"
+        "AC-V32-OPERATIONS-TELEMETRY"
       ],
       "status": "declared",
       "evidence_refs": [],
@@ -3750,19 +3758,19 @@
       "kind": "extension",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "authority_rules",
+      "owner_context": "domain_plugins",
       "dependencies": [
-        "source_integration"
+        "workspace_git",
+        "test_attestor",
+        "command_registry",
+        "tools_skills_sdk",
+        "context_rag_evals"
       ],
       "acceptance_contracts": [
-        "AC-V02-AUTHORITY-RULES"
+        "AC-V28-DOMAIN-PLUGINS"
       ],
-      "status": "accredited",
-      "evidence_refs": [
-        "acceptance/v02_authority_rules_test.go",
-        "acceptance/fixtures/v02_authority_rules.json",
-        "product/evidence/v02_authority_rules.json"
-      ],
+      "status": "declared",
+      "evidence_refs": [],
       "supersedes": []
     },
     {

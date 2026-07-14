@@ -1,0 +1,221 @@
+{
+  "schema_version": 1,
+  "contract_id": "AC-V03-CANONICAL-LEDGERS",
+  "command": "go test -mod=vendor -count=1 . ./acceptance -run '^(TestTraceabilityRebuild.*|TestProductRoadmap.*|TestAcceptanceV03CanonicalLedgers)$'",
+  "receipt_path": "product/evidence/v03_canonical_ledgers.json",
+  "candidate_subjects": [
+    "acceptance/evidence_support_test.go",
+    "acceptance/fixtures/v03_canonical_ledgers.json",
+    "acceptance/v03_canonical_ledgers_test.go",
+    "product/traceability/README.md",
+    "product/traceability/disposition_reasons.json",
+    "product/traceability/fixtures/task_candidate_adversarial.md",
+    "product/traceability/fixtures/task_candidate_counterreview_broad_s2_s3.jsonl",
+    "product/traceability/fixtures/task_candidate_counterreview_original_outside_blocks.jsonl",
+    "product/traceability/historical_bug_extraction_policy.json",
+    "product/traceability/historical_bug_id_review_bindings.jsonl",
+    "product/traceability/historical_bug_id_reviews.jsonl",
+    "product/traceability/historical_bug_ids.jsonl",
+    "product/traceability/historical_bug_occurrences.jsonl",
+    "product/traceability/historical_bug_row_enrichments.jsonl",
+    "product/traceability/historical_bug_rows.jsonl",
+    "product/traceability/legacy_go.json",
+    "product/traceability/markdown_source_roles.jsonl",
+    "product/traceability/pending_sources.json",
+    "product/traceability/reviewed_task_blocks.jsonl",
+    "product/traceability/schema.json",
+    "product/traceability/source_dispositions.jsonl",
+    "product/traceability/task_candidate_exclusions.jsonl",
+    "product/traceability/task_candidate_review_provenance.json",
+    "product/traceability/task_entries.jsonl",
+    "product/traceability/task_extraction_policy.json",
+    "product/traceability/task_semantic_review_provenance.json",
+    "product_roadmap_test.go",
+    "scripts/check_rebuild_write_set.sh",
+    "traceability_historical_bug_ids_test.go",
+    "traceability_historical_bug_semantics_test.go",
+    "traceability_historical_bug_support_test.go",
+    "traceability_legacy_census_test.go",
+    "traceability_rebuild_bugs_test.go",
+    "traceability_reviewed_task_blocks_test.go",
+    "traceability_schema_test.go",
+    "traceability_source_dispositions_test.go",
+    "traceability_source_roles_test.go",
+    "traceability_task_candidate_review_provenance_test.go",
+    "traceability_task_candidate_review_test.go",
+    "traceability_task_review_provenance_test.go",
+    "traceability_tasks_v2_test.go",
+    "traceability_test_helpers_test.go",
+    "traceability_write_set_guard_test.go"
+  ],
+  "ledger_digests": [
+    {
+      "path": "product/traceability/disposition_reasons.json",
+      "sha256": "sha256:8e4a2296fe76a1fb8bf43fdd401727cfe88ca6eda0d12f706e021809334958a0"
+    },
+    {
+      "path": "product/traceability/historical_bug_extraction_policy.json",
+      "sha256": "sha256:6616f62325a24e27f5dce66b9426ad93e146331290c4ffe90864ab62ec97bfdd"
+    },
+    {
+      "path": "product/traceability/historical_bug_id_review_bindings.jsonl",
+      "sha256": "sha256:aada6c21eccb6319f114c1d56f9abb7df5cccd43e9da2956ff043cf962e6f0d7"
+    },
+    {
+      "path": "product/traceability/historical_bug_id_reviews.jsonl",
+      "sha256": "sha256:02fb0cd1dd56f7e70ea4f5ca7cdfac61e3f79bfbead3ea792935c4306aa6961a"
+    },
+    {
+      "path": "product/traceability/historical_bug_ids.jsonl",
+      "sha256": "sha256:0d903bf620d4a7131224f1734b4baceff50240cfd6600e8263562aa1ee302b3a"
+    },
+    {
+      "path": "product/traceability/historical_bug_occurrences.jsonl",
+      "sha256": "sha256:2a7c5a291bc339bfce0bd1808fd88dfcc9babbdf77701d42847903ba8be043f6"
+    },
+    {
+      "path": "product/traceability/historical_bug_row_enrichments.jsonl",
+      "sha256": "sha256:cb23222242a6902106a6d51267894827a633df9a74fa104404ef2011ea67010e"
+    },
+    {
+      "path": "product/traceability/historical_bug_rows.jsonl",
+      "sha256": "sha256:872c2543f754c251c20a8d627f49c0a767643f58aa6c83f4f24700f87a15cd35"
+    },
+    {
+      "path": "product/traceability/legacy_go.json",
+      "sha256": "sha256:abfe6728f88777e906f3d8dc779fa202b172a72d650195a01f138ccd84c80733"
+    },
+    {
+      "path": "product/traceability/markdown_source_roles.jsonl",
+      "sha256": "sha256:48549f1089f8b9aedfa4509cdbc0de14d67c4d778cccf27ff9bb2ff9304b1e2b"
+    },
+    {
+      "path": "product/traceability/pending_sources.json",
+      "sha256": "sha256:328d5728529552fd258c22080015189102ceeca439d1a549e936eca2b2f6ecf0"
+    },
+    {
+      "path": "product/traceability/reviewed_task_blocks.jsonl",
+      "sha256": "sha256:c1f75e95c7ec0020123b357eb8082c5ddb858b300b5db3e21b4b160ba1eccf9a"
+    },
+    {
+      "path": "product/traceability/schema.json",
+      "sha256": "sha256:4f4697d34fb413dee919f231024019f3d0e7bec0580f053cb7fad95a80b75927"
+    },
+    {
+      "path": "product/traceability/source_dispositions.jsonl",
+      "sha256": "sha256:b7bbdb6167bf6dab7114173a3ac79833ac1a513559b9d4fca1e0a53954a8904d"
+    },
+    {
+      "path": "product/traceability/task_candidate_exclusions.jsonl",
+      "sha256": "sha256:71ae8fcb238c994b1a89a5e45ba09ab0be0adf89092014a74a738f2fa9e8e19e"
+    },
+    {
+      "path": "product/traceability/task_candidate_review_provenance.json",
+      "sha256": "sha256:72f47f18fe2f486dc41cf353503c6b34f0de0543bc9b820ed73b796e41333f4b"
+    },
+    {
+      "path": "product/traceability/task_entries.jsonl",
+      "sha256": "sha256:83d79287bed48fa3f8c7746c985e6ff465be376da6be9491ac4b902c2c95d610"
+    },
+    {
+      "path": "product/traceability/task_extraction_policy.json",
+      "sha256": "sha256:d83e61086c5c8e51f0f20f764893f2cba57167b86ca2cebb8016f5cc65273acd"
+    },
+    {
+      "path": "product/traceability/task_semantic_review_provenance.json",
+      "sha256": "sha256:5fd957c642a32305e994fb48ca05963b5793431c792583a0b5c78903d23593b2"
+    }
+  ],
+  "prohibited_legacy_ledgers": [
+    "product/traceability/task_entry_semantic_reviews.jsonl",
+    "product/traceability/task_source_capability_map.jsonl"
+  ],
+  "source_dispositions": {
+    "total": 334,
+    "task": 164,
+    "bug": 151,
+    "skill": 19
+  },
+  "tasks": {
+    "source_count": 164,
+    "strict_candidate_count": 1919,
+    "broad_candidate_count": 1109,
+    "entry_count": 2108,
+    "excluded_broad_candidate_count": 920,
+    "independent_review_universe_count": 696,
+    "confirmed_count": 547,
+    "corrected_count": 149,
+    "pending_semantic_review_count": 0,
+    "candidate_review_pass_count": 11,
+    "candidate_review_input_count": 1571,
+    "candidate_review_entry_count": 706,
+    "candidate_review_exclusion_count": 865,
+    "reviewed_block_count": 170,
+    "reviewed_block_entry_count": 68
+  },
+  "bugs": {
+    "source_count": 159,
+    "rich_row_count": 239,
+    "occurrence_count": 1292,
+    "id_count": 334,
+    "row_covered_id_count": 197,
+    "narrative_only_id_count": 137
+  },
+  "closure_inferred_count": 0,
+  "rejected_task": {
+    "source_ref": "docs/historico/2026-06/TAREA_OPES_ORQUESTA_ROADMAP_MEJORAS_2026-06-27.md",
+    "source_entry_id": "T-6",
+    "capability_id": "ORC-18",
+    "capability_decision": "reject",
+    "replacement_capability_ids": [
+      "EVD-15",
+      "OPS-14"
+    ]
+  },
+  "delegated_group_b": {
+    "source_ref": "docs/historico/2026-06/TAREA_OPES_ORQUESTA_GRUPO_B_GOAL_FIRST_OBSERVE_Y_QA_MINIMOS_2026-07-01.md",
+    "excluded_candidate_count": 37,
+    "reason_code": "bug_or_incident_owned_by_bug_ledger",
+    "delegated_ledger_ref": "product/traceability/historical_bug_occurrences.jsonl"
+  },
+  "transformed_skill": {
+    "source_ref": "skills/orquesta-runtime-modelos/SKILL.md",
+    "decision": "conditional",
+    "capability_ids": [
+      "AGT-09",
+      "OPS-01",
+      "OPS-05",
+      "OPS-06",
+      "OPS-08",
+      "TLS-06",
+      "TLS-09"
+    ],
+    "transformation_note": "No reutilizar literals ORQUESTA_OLLAMA_*; toda clave entra primero en registro tipado y el adaptador consume accesores/credential_ref."
+  },
+  "critical_bug_mappings": [
+    {
+      "bug_id": "BUG-ORQ-20260710-208O",
+      "capability_ids": [
+        "AGT-03",
+        "GOV-21",
+        "TLS-01"
+      ]
+    },
+    {
+      "bug_id": "BUG-ORQ-20260711-208AF",
+      "capability_ids": [
+        "EVD-01",
+        "GOV-06",
+        "ORC-13"
+      ]
+    },
+    {
+      "bug_id": "BUG-ORQ-20260711-269",
+      "capability_ids": [
+        "GOV-06",
+        "ORC-17",
+        "ORC-23"
+      ]
+    }
+  ]
+}

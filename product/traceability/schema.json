@@ -8,6 +8,57 @@
     },
     {
       "$ref": "#/$defs/pendingSourceLedger"
+    },
+    {
+      "$ref": "#/$defs/dispositionReasonLedger"
+    },
+    {
+      "$ref": "#/$defs/sourceDisposition"
+    },
+    {
+      "$ref": "#/$defs/markdownSourceRole"
+    },
+    {
+      "$ref": "#/$defs/taskExtractionPolicy"
+    },
+    {
+      "$ref": "#/$defs/taskCandidateExclusion"
+    },
+    {
+      "$ref": "#/$defs/taskEntry"
+    },
+    {
+      "$ref": "#/$defs/taskSemanticReviewProvenance"
+    },
+    {
+      "$ref": "#/$defs/taskCandidateReviewProvenance"
+    },
+    {
+      "$ref": "#/$defs/reviewedTaskBlock"
+    },
+    {
+      "$ref": "#/$defs/rebuildBug"
+    },
+    {
+      "$ref": "#/$defs/historicalBugExtractionPolicy"
+    },
+    {
+      "$ref": "#/$defs/historicalBugRow"
+    },
+    {
+      "$ref": "#/$defs/historicalBugOccurrence"
+    },
+    {
+      "$ref": "#/$defs/historicalBugIDReview"
+    },
+    {
+      "$ref": "#/$defs/historicalBugIDReviewBinding"
+    },
+    {
+      "$ref": "#/$defs/historicalBugRowEnrichment"
+    },
+    {
+      "$ref": "#/$defs/historicalBugID"
     }
   ],
   "$defs": {
@@ -128,7 +179,18 @@
       "properties": {
         "id": {"type": "string", "pattern": "^[a-z][a-z0-9_]+$"},
         "kind": {"enum": ["task", "bug", "skill", "rulepack"]},
-        "status": {"enum": ["inventory_only_pending_disposition", "absent_pending_contract"]},
+        "additional_roles": {
+          "type": "array", "uniqueItems": true,
+          "items": {"enum": ["task", "bug", "skill"]}
+        },
+        "status": {
+          "enum": [
+            "entries_semantically_disposed_characterization_pending",
+            "entries_disposed_lesson_tests_pending",
+            "entries_disposed_governance_pending",
+            "absent_pending_contract"
+          ]
+        },
         "exact_paths": {
           "type": "array",
           "uniqueItems": true,
@@ -156,6 +218,826 @@
           "minItems": 4,
           "items": {"$ref": "#/$defs/sourceRange"}
         }
+      }
+    },
+    "dispositionReasonLedger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document_kind",
+        "schema_version",
+        "decision_vocabulary",
+        "evidence_protocol",
+        "reasons"
+      ],
+      "properties": {
+        "document_kind": {"const": "disposition_reasons"},
+        "schema_version": {"const": 1},
+        "decision_vocabulary": {
+          "const": ["accepted", "rejected", "conditional", "historical"]
+        },
+        "evidence_protocol": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["algorithm", "subject", "verification_test"],
+          "properties": {
+            "algorithm": {"const": "sha256"},
+            "subject": {"const": "exact_file_bytes_at_source_ref"},
+            "verification_test": {"const": "TestTraceabilityRebuildSourceDispositions"}
+          }
+        },
+        "reasons": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["decision", "evidence_state", "reason"],
+            "properties": {
+              "decision": {"enum": ["accepted", "rejected", "conditional", "historical"]},
+              "evidence_state": {"type": "string", "minLength": 10},
+              "reason": {"type": "string", "minLength": 40}
+            }
+          }
+        }
+      }
+    },
+    "sourceDisposition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "source_ref",
+        "source_sha256",
+        "decision",
+        "capability_ids",
+        "reason_code",
+        "evidence_state"
+      ],
+      "properties": {
+        "schema_version": {"const": 1},
+        "kind": {"enum": ["task", "bug", "skill", "rulepack"]},
+        "additional_roles": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"enum": ["bug"]}
+        },
+        "source_ref": {"type": "string", "minLength": 1},
+        "source_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "decision": {"enum": ["accepted", "rejected", "conditional", "historical"]},
+        "capability_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/capabilityId"}
+        },
+        "reason_code": {"type": "string", "pattern": "^[a-z][a-z0-9_]+$"},
+        "evidence_state": {"type": "string", "minLength": 10},
+        "lesson_id": {"type": "string"},
+        "invariant_test_ref": {"type": "string"},
+        "lesson_state": {"type": "string"},
+        "scope_ref": {"type": "string"},
+        "trust_ref": {"type": "string"},
+        "activation_test_ref": {"type": "string"},
+        "review_basis": {"enum": ["source_whole_document_review", "all_task_candidates_explicitly_excluded"]},
+        "review_note": {"type": "string", "minLength": 40},
+        "transformation_note": {"type": "string", "minLength": 40},
+        "delegated_ledger_ref": {"const": "product/traceability/historical_bug_occurrences.jsonl"}
+      }
+    },
+    "markdownSourceRole": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "source_ref", "source_sha256", "origin", "classification", "classification_basis", "roles"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "source_ref": {"type": "string", "minLength": 1},
+        "source_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "origin": {"enum": ["legacy_root_document", "legacy_module_document", "legacy_skill_document"]},
+        "classification": {"enum": ["bug_evidence", "decision", "historical_decision_evidence", "manual_mixed", "non_task_template", "reference", "skill_contract", "supporting_contract", "supporting_test", "task_delegated", "task_source"]},
+        "classification_basis": {"enum": ["manual_review", "mechanical_path_policy", "source_disposition"]},
+        "roles": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"enum": ["bug_evidence", "contract", "decision", "documentation", "reference", "skill_contract", "task_delegated", "task_source", "template", "test"]}
+        },
+        "review_evidence": {
+          "type": "array", "minItems": 1,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["review_ref", "classification", "reason"],
+            "properties": {
+              "review_ref": {"type": "string", "minLength": 20},
+              "classification": {"type": "string", "minLength": 3},
+              "reason": {"type": "string", "minLength": 24}
+            }
+          }
+        },
+        "adjudication_ref": {"type": "string", "minLength": 20},
+        "adjudication_reason": {"type": "string", "minLength": 24}
+      }
+    },
+    "taskExtractionPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document_kind",
+        "schema_version",
+        "sources_authority",
+        "entries_authority",
+        "exclusions_authority",
+        "semantic_review_provenance_authority",
+        "candidate_review_provenance_authority",
+        "reviewed_blocks_authority",
+        "capability_authority",
+        "fixture",
+        "precedence",
+        "line_forms",
+        "id_grammar",
+        "candidate_rule",
+        "subject_rule",
+        "hash_rule",
+        "source_history_values",
+        "capability_decision_values",
+        "disposition_rule",
+        "basis_codes",
+        "exclusion_reason_codes",
+        "closure_policy",
+        "baseline"
+      ],
+      "properties": {
+        "document_kind": {"const": "task_entry_extraction_policy"},
+        "schema_version": {"const": 2},
+        "sources_authority": {"const": "product/traceability/source_dispositions.jsonl#kind=task"},
+        "entries_authority": {"const": "product/traceability/task_entries.jsonl"},
+        "exclusions_authority": {"const": "product/traceability/task_candidate_exclusions.jsonl"},
+        "semantic_review_provenance_authority": {"const": "product/traceability/task_semantic_review_provenance.json"},
+        "candidate_review_provenance_authority": {"const": "product/traceability/task_candidate_review_provenance.json"},
+        "reviewed_blocks_authority": {"const": "product/traceability/reviewed_task_blocks.jsonl"},
+        "capability_authority": {"const": "product/roadmap.json#capability_entries"},
+        "fixture": {"const": "product/traceability/fixtures/task_candidate_adversarial.md"},
+        "precedence": {
+          "type": "array", "minItems": 8, "maxItems": 8, "uniqueItems": true,
+          "items": {"enum": ["checkbox", "id_field", "heading_id", "numbered_heading", "list_id", "list_candidate", "table_id", "table_checkbox_candidate"]}
+        },
+        "line_forms": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["checkbox", "id_field", "heading", "list", "table"],
+          "properties": {
+            "checkbox": {"type": "string", "minLength": 10},
+            "id_field": {"type": "string", "minLength": 10},
+            "heading": {"type": "string", "minLength": 10},
+            "list": {"type": "string", "minLength": 10},
+            "table": {"type": "string", "minLength": 10}
+          }
+        },
+        "id_grammar": {
+          "type": "object", "additionalProperties": false,
+          "required": ["strict_patterns", "structured_id_requires_digit_unless_prefix", "broad_patterns", "markup_prefixes_removed_before_first_token", "short_tokens_without_digit_are_not_ids"],
+          "properties": {
+            "strict_patterns": {"type": "array", "minItems": 3, "uniqueItems": true, "items": {"type": "string"}},
+            "structured_id_requires_digit_unless_prefix": {"const": "REQ-"},
+            "broad_patterns": {"type": "array", "minItems": 2, "uniqueItems": true, "items": {"type": "string"}},
+            "markup_prefixes_removed_before_first_token": {"type": "array", "minItems": 5, "uniqueItems": true, "items": {"type": "string"}},
+            "short_tokens_without_digit_are_not_ids": {"const": true}
+          }
+        },
+        "candidate_rule": {
+          "type": "object", "additionalProperties": false,
+          "required": ["strict", "broad", "generic_h2_is_candidate", "every_broad_candidate_requires_entry_or_exclusion", "strict_candidates_are_entries"],
+          "properties": {
+            "strict": {"type": "array", "minItems": 6, "uniqueItems": true, "items": {"enum": ["checkbox", "id_field", "heading_id", "list_id", "table_id", "reviewed_block"]}},
+            "broad": {"type": "array", "minItems": 3, "uniqueItems": true, "items": {"type": "string"}},
+            "generic_h2_is_candidate": {"const": false},
+            "every_broad_candidate_requires_entry_or_exclusion": {"const": true},
+            "strict_candidates_are_entries": {"const": true}
+          }
+        },
+        "subject_rule": {
+          "type": "object", "additionalProperties": false,
+          "required": ["heading", "fenced_id_field", "unfenced_id_field", "list_or_checkbox", "table", "reviewed_block", "line_range_hash_subject"],
+          "properties": {
+            "heading": {"type": "string"},
+            "fenced_id_field": {"type": "string"},
+            "unfenced_id_field": {"type": "string"},
+            "list_or_checkbox": {"type": "string"},
+            "table": {"const": "exact_table_row"},
+            "reviewed_block": {"const": "exact_reviewed_actionable_line_range"},
+            "line_range_hash_subject": {"const": "lines_joined_with_lf_without_terminal_lf"}
+          }
+        },
+        "hash_rule": {
+          "type": "object", "additionalProperties": false,
+          "required": ["algorithm", "marker_subject", "candidate_ref_subject", "entry_ref_subject", "exclusion_ref_subject", "semantic_review_ref_subject", "semantic_reviews_digest_subject", "candidate_review_ref_subject", "candidate_review_pass_ref_subject", "reviewed_block_ref_subject", "ledger_digest_subject"],
+          "properties": {
+            "algorithm": {"const": "sha256"},
+            "marker_subject": {"type": "string"},
+            "candidate_ref_subject": {"type": "string"},
+            "entry_ref_subject": {"type": "string"},
+            "exclusion_ref_subject": {"type": "string"},
+            "semantic_review_ref_subject": {"type": "string"},
+            "semantic_reviews_digest_subject": {"type": "string"},
+            "candidate_review_ref_subject": {"const": "canonical_json_array_entry_or_exclusion_review_v1_with_pass_ref_and_semantic_reason"},
+            "candidate_review_pass_ref_subject": {"const": "canonical_json_array_task_candidate_review_pass_v1_with_fixture_hashes_and_decision_digests"},
+            "reviewed_block_ref_subject": {"const": "source_ref_nul_first_line_nul_last_line_nul_block_sha256"},
+            "ledger_digest_subject": {"const": "exact_jsonl_file_bytes_including_terminal_lf"}
+          }
+        },
+        "source_history_values": {"const": ["current", "historical"]},
+        "capability_decision_values": {"const": ["accept", "reject", "conditional"]},
+        "disposition_rule": {
+          "type": "object", "additionalProperties": false,
+          "required": ["current_accept", "historical_accept", "reject", "conditional"],
+          "properties": {
+            "current_accept": {"const": "accepted_pending_reimplementation"},
+            "historical_accept": {"const": "historical_superseded_by_capability"},
+            "reject": {"const": "rejected_by_operator"},
+            "conditional": {"const": "conditional_deferred"}
+          }
+        },
+        "basis_codes": {
+          "type": "array", "minItems": 9, "uniqueItems": true,
+          "items": {"enum": ["legacy_exact_task_review", "legacy_exact_segment_review", "legacy_heading_objective_review", "legacy_focused_source_review", "task_id_reference_review", "explicit_task_semantic_review", "operator_roadmap_decision", "independent_semantic_review", "independent_candidate_semantic_review"]}
+        },
+        "exclusion_reason_codes": {
+          "type": "array", "minItems": 5, "uniqueItems": true,
+          "items": {"enum": ["reference_to_canonical_task", "summary_alias", "bug_or_incident_owned_by_bug_ledger", "document_reference", "markdown_false_positive", "inventory_or_evidence_note"]}
+        },
+        "closure_policy": {"const": "legacy_state_is_characterization_only_and_never_rebuild_closure"},
+        "baseline": {
+          "type": "object", "additionalProperties": false,
+          "required": ["source_count", "source_without_candidate_count", "source_without_entry_count", "strict_candidate_count", "broad_candidate_count", "included_broad_candidate_count", "excluded_broad_candidate_count", "entry_count", "independent_review_universe_count", "integrated_independent_review_count", "confirmed_count", "corrected_count", "semantic_reviews_sha256", "semantic_review_provenance_sha256", "pending_semantic_review_count", "entries_sha256", "exclusions_sha256", "candidate_review_pass_count", "candidate_review_input_count", "candidate_review_entry_count", "candidate_review_exclusion_count", "candidate_review_provenance_sha256", "reviewed_block_count", "reviewed_block_entry_count", "reviewed_blocks_sha256"],
+          "properties": {
+            "source_count": {"const": 164},
+            "source_without_candidate_count": {"type": "integer", "minimum": 0},
+            "source_without_entry_count": {"type": "integer", "minimum": 0},
+            "strict_candidate_count": {"type": "integer", "minimum": 1},
+            "broad_candidate_count": {"type": "integer", "minimum": 1},
+            "included_broad_candidate_count": {"type": "integer", "minimum": 0},
+            "excluded_broad_candidate_count": {"type": "integer", "minimum": 0},
+            "entry_count": {"type": "integer", "minimum": 1},
+            "independent_review_universe_count": {"const": 696},
+            "integrated_independent_review_count": {"type": "integer", "minimum": 0, "maximum": 696},
+            "confirmed_count": {"type": "integer", "minimum": 0, "maximum": 696},
+            "corrected_count": {"type": "integer", "minimum": 0, "maximum": 696},
+            "semantic_reviews_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+            "semantic_review_provenance_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+            "pending_semantic_review_count": {"type": "integer", "minimum": 0},
+            "entries_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+            "exclusions_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+            "candidate_review_pass_count": {"const": 11},
+            "candidate_review_input_count": {"const": 1571},
+            "candidate_review_entry_count": {"const": 706},
+            "candidate_review_exclusion_count": {"const": 865},
+            "candidate_review_provenance_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+            "reviewed_block_count": {"const": 170},
+            "reviewed_block_entry_count": {"const": 68},
+            "reviewed_blocks_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+          }
+        }
+      }
+    },
+    "taskEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version", "entry_ref", "candidate_ref", "source_ref", "source_sha256", "source_history",
+        "source_line", "detection_kind", "marker_sha256", "subject_first_line",
+        "subject_last_line", "subject_sha256", "original_state", "capability_id",
+        "capability_decision", "disposition", "basis_code", "semantic_review_state",
+        "semantic_reason", "decision_ref", "closure_evidence"
+      ],
+      "properties": {
+        "schema_version": {"const": 2},
+        "entry_ref": {"type": "string", "pattern": "^TASKENTRY-[a-f0-9]{24}$"},
+        "candidate_ref": {"type": "string", "pattern": "^TASKCAND-[a-f0-9]{24}$"},
+        "source_ref": {"type": "string", "minLength": 1},
+        "source_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "source_history": {"enum": ["current", "historical"]},
+        "source_line": {"type": "integer", "minimum": 1},
+        "detection_kind": {"enum": ["checkbox", "heading_id", "id_field", "list_id", "table_id", "numbered_heading", "list_candidate", "table_checkbox_candidate", "reviewed_block"]},
+        "source_entry_id": {"type": "string"},
+        "marker_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "subject_first_line": {"type": "integer", "minimum": 1},
+        "subject_last_line": {"type": "integer", "minimum": 1},
+        "subject_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "original_state": {"type": "string", "minLength": 1},
+        "capability_id": {"$ref": "#/$defs/capabilityId"},
+        "capability_decision": {"enum": ["accept", "reject", "conditional"]},
+        "disposition": {"enum": ["accepted_pending_reimplementation", "historical_superseded_by_capability", "rejected_by_operator", "conditional_deferred"]},
+        "basis_code": {"enum": ["legacy_exact_task_review", "legacy_exact_segment_review", "legacy_heading_objective_review", "legacy_focused_source_review", "task_id_reference_review", "explicit_task_semantic_review", "operator_roadmap_decision", "independent_semantic_review", "independent_candidate_semantic_review"]},
+        "semantic_review_state": {"enum": ["reviewed", "pending"]},
+        "semantic_reason": {"type": "string", "minLength": 10},
+        "semantic_review_pass_ref": {"type": "string", "pattern": "^TASKREVIEWPASS-[a-f0-9]{24}$"},
+        "semantic_review_ref": {"type": "string", "pattern": "^TASKREVIEW-[a-f0-9]{24}$"},
+        "semantic_review_verdict": {"enum": ["confirmed", "corrected", "assigned"]},
+        "previous_capability_id": {"$ref": "#/$defs/capabilityId"},
+        "replacement_capability_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/capabilityId"}},
+        "decision_ref": {"type": "string", "pattern": "^product/roadmap\\.json#capability_entries/(GOV|WIZ|STG|ORC|EVD|UI|AGT|EXT|OPE|OPS|TLS|CTX|APP)-[0-9]{2}$"},
+        "closure_evidence": {"const": "not_verified"}
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {"basis_code": {"const": "independent_semantic_review"}},
+            "required": ["basis_code"]
+          },
+          "then": {
+            "required": ["semantic_review_pass_ref", "semantic_review_ref", "semantic_review_verdict", "previous_capability_id"],
+            "properties": {
+              "semantic_review_state": {"const": "reviewed"},
+              "semantic_review_verdict": {"enum": ["confirmed", "corrected"]}
+            }
+          },
+          "else": {
+            "if": {
+              "properties": {"basis_code": {"const": "independent_candidate_semantic_review"}},
+              "required": ["basis_code"]
+            },
+            "then": {
+              "required": ["semantic_review_pass_ref", "semantic_review_ref", "semantic_review_verdict"],
+              "properties": {
+                "semantic_review_state": {"const": "reviewed"},
+                "semantic_review_verdict": {"const": "assigned"}
+              },
+              "not": {"required": ["previous_capability_id"]}
+            },
+            "else": {
+              "not": {
+                "anyOf": [
+                  {"required": ["semantic_review_pass_ref"]},
+                  {"required": ["semantic_review_ref"]},
+                  {"required": ["semantic_review_verdict"]},
+                  {"required": ["previous_capability_id"]}
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "taskSemanticReviewProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["document_kind", "schema_version", "entries_authority", "capability_authority", "bug_ref", "passes", "invalidations", "totals"],
+      "properties": {
+        "document_kind": {"const": "task_semantic_review_provenance"},
+        "schema_version": {"const": 1},
+        "entries_authority": {"const": "product/traceability/task_entries.jsonl#basis_code=independent_semantic_review"},
+        "capability_authority": {"const": "product/roadmap.json#capability_entries"},
+        "bug_ref": {"const": "product/traceability/rebuild_bugs.jsonl#BUG-REBUILD-20260714-008"},
+        "passes": {
+          "type": "array", "minItems": 4, "maxItems": 4,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["scope_code", "pass_ref", "reviewer_ref", "reviewer_role", "review_method", "entry_count", "input_scope_sha256", "confirmed_count", "corrected_count", "final_decisions_sha256"],
+            "properties": {
+              "scope_code": {"enum": ["original_corrected_all", "original_confirmed_shard_1", "original_confirmed_shard_2", "original_confirmed_shard_3"]},
+              "pass_ref": {"type": "string", "pattern": "^TASKREVIEWPASS-[a-f0-9]{24}$"},
+              "reviewer_ref": {"type": "string", "pattern": "^TRACE-REVIEWER-[a-f0-9]{24}$"},
+              "reviewer_role": {"const": "independent_semantic_counterreviewer"},
+              "review_method": {"const": "source_block_and_roadmap_read_per_entry"},
+              "entry_count": {"type": "integer", "minimum": 1},
+              "input_scope_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+              "confirmed_count": {"type": "integer", "minimum": 0},
+              "corrected_count": {"type": "integer", "minimum": 0},
+              "final_decisions_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+            }
+          }
+        },
+        "invalidations": {
+          "type": "array", "minItems": 2, "maxItems": 2,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["invalidation_ref", "scope_code", "affected_entry_count", "affected_input_scope_sha256", "reason_code", "detector_test_ref", "superseded_by_pass_ref"],
+            "properties": {
+              "invalidation_ref": {"type": "string", "pattern": "^TASKREVIEWINVALID-[a-f0-9]{24}$"},
+              "scope_code": {"enum": ["original_confirmed_shard_1", "original_confirmed_shard_3"]},
+              "affected_entry_count": {"type": "integer", "minimum": 1},
+              "affected_input_scope_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+              "reason_code": {"const": "generated_keep_current_fallback"},
+              "detector_test_ref": {"const": "traceability_tasks_v2_test.go#TestTraceabilityRebuildIndependentSemanticReviewsHaveNoGeneratedFallbacks"},
+              "superseded_by_pass_ref": {"type": "string", "pattern": "^TASKREVIEWPASS-[a-f0-9]{24}$"}
+            }
+          }
+        },
+        "totals": {
+          "type": "object", "additionalProperties": false,
+          "required": ["valid_pass_count", "entry_count", "confirmed_count", "corrected_count", "invalidated_pass_count", "invalidated_entry_count", "input_universe_sha256", "final_decisions_sha256"],
+          "properties": {
+            "valid_pass_count": {"const": 4},
+            "entry_count": {"const": 696},
+            "confirmed_count": {"const": 547},
+            "corrected_count": {"const": 149},
+            "invalidated_pass_count": {"const": 2},
+            "invalidated_entry_count": {"const": 450},
+            "input_universe_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+            "final_decisions_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+          }
+        }
+      }
+    },
+    "taskCandidateReviewProvenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["document_kind", "schema_version", "entries_authority", "exclusions_authority", "capability_authority", "passes", "counterreviews", "totals"],
+      "properties": {
+        "document_kind": {"const": "task_candidate_review_provenance"},
+        "schema_version": {"const": 1},
+        "entries_authority": {"const": "product/traceability/task_entries.jsonl#basis_code=independent_candidate_semantic_review"},
+        "exclusions_authority": {"const": "product/traceability/task_candidate_exclusions.jsonl#review_pass_ref"},
+        "capability_authority": {"const": "product/roadmap.json#capability_entries"},
+        "passes": {
+          "type": "array", "minItems": 11, "maxItems": 11,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["scope_code", "pass_ref", "reviewer_ref", "reviewer_role", "review_method", "input_fixture_ref", "input_fixture_sha256", "decision_fixture_ref", "decision_fixture_sha256", "input_count", "entry_count", "exclusion_count", "input_scope_sha256", "final_decisions_sha256"],
+            "properties": {
+              "scope_code": {"pattern": "^(broad_s[0-3]|followup|reviewed_blocks_s[01]|s[0-3])$"},
+              "pass_ref": {"type": "string", "pattern": "^TASKREVIEWPASS-[a-f0-9]{24}$"},
+              "reviewer_ref": {"type": "string", "pattern": "^TRACE-REVIEWER-[a-f0-9]{24}$"},
+              "reviewer_role": {"enum": ["independent_candidate_semantic_reviewer", "operator_integrator_semantic_reviewer"]},
+              "review_method": {"const": "source_block_and_roadmap_read_per_candidate"},
+              "input_fixture_ref": {"type": "string", "pattern": "^product/traceability/fixtures/task_candidate_input_[a-z0-9_]+\\.jsonl$"},
+              "input_fixture_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+              "decision_fixture_ref": {"type": "string", "pattern": "^product/traceability/fixtures/task_candidate_review_[a-z0-9_]+\\.jsonl$"},
+              "decision_fixture_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+              "input_count": {"type": "integer", "minimum": 1},
+              "entry_count": {"type": "integer", "minimum": 0},
+              "exclusion_count": {"type": "integer", "minimum": 0},
+              "input_scope_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+              "final_decisions_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+            }
+          }
+        },
+        "counterreviews": {
+          "type": "array", "minItems": 1, "maxItems": 1,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["scope_code", "counterreview_ref", "reviewer_ref", "reviewer_role", "review_method", "fixture_ref", "fixture_sha256", "row_count", "wave_counts", "transition_counts", "reason_changed_count", "policy_code_correction_count", "supersedes_provenance_sha256"],
+            "properties": {
+              "scope_code": {"const": "broad_s2_s3"},
+              "counterreview_ref": {"type": "string", "pattern": "^TASKCOUNTERREVIEW-[a-f0-9]{24}$"},
+              "reviewer_ref": {"type": "string", "pattern": "^TRACE-REVIEWER-[a-f0-9]{24}$"},
+              "reviewer_role": {"const": "independent_candidate_counterreviewer"},
+              "review_method": {"const": "source_block_policy_and_final_decision_read_per_candidate"},
+              "fixture_ref": {"const": "product/traceability/fixtures/task_candidate_counterreview_broad_s2_s3.jsonl"},
+              "fixture_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+              "row_count": {"const": 55},
+              "wave_counts": {
+                "type": "object", "additionalProperties": false,
+                "required": ["broad_s2", "broad_s3"],
+                "properties": {
+                  "broad_s2": {"const": 46},
+                  "broad_s3": {"const": 9}
+                }
+              },
+              "transition_counts": {
+                "type": "object", "additionalProperties": false,
+                "required": ["entry_to_exclude", "exclude_to_exclude"],
+                "properties": {
+                  "entry_to_exclude": {"const": 36},
+                  "exclude_to_exclude": {"const": 19}
+                }
+              },
+              "reason_changed_count": {"const": 45},
+              "policy_code_correction_count": {"const": 10},
+              "supersedes_provenance_sha256": {"const": "sha256:89d19a0ce9c68d0d2394ebe731d121779262bab10faf73fa51b3e0b02faf8b3b"}
+            }
+          }
+        },
+        "totals": {
+          "type": "object", "additionalProperties": false,
+          "required": ["pass_count", "input_count", "entry_count", "exclusion_count", "input_universe_sha256", "final_decisions_sha256"],
+          "properties": {
+            "pass_count": {"const": 11},
+            "input_count": {"const": 1571},
+            "entry_count": {"const": 706},
+            "exclusion_count": {"const": 865},
+            "input_universe_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+            "final_decisions_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+          }
+        }
+      }
+    },
+    "reviewedTaskBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "block_ref", "source_ref", "source_sha256", "first_line", "last_line", "block_sha256", "summary", "capability_hints", "review_refs", "coverage_kind", "candidate_refs"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "block_ref": {"type": "string", "pattern": "^TASKBLOCK-[a-f0-9]{24}$"},
+        "source_ref": {"type": "string", "minLength": 1},
+        "source_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "first_line": {"type": "integer", "minimum": 1},
+        "last_line": {"type": "integer", "minimum": 1},
+        "block_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "summary": {"type": "string", "minLength": 1},
+        "capability_hints": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"$ref": "#/$defs/capabilityId"}},
+        "review_refs": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 20}},
+        "coverage_kind": {"enum": ["scanner_entries", "reviewed_block_entry"]},
+        "candidate_refs": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^TASKCAND-[a-f0-9]{24}$"}}
+      }
+    },
+    "taskCandidateExclusion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version", "exclusion_ref", "candidate_ref", "source_ref", "source_sha256",
+        "source_line", "detection_kind", "marker_sha256", "subject_first_line",
+        "subject_last_line", "subject_sha256", "reason_code", "review_state"
+      ],
+      "properties": {
+        "schema_version": {"const": 2},
+        "exclusion_ref": {"type": "string", "pattern": "^TASKEXCL-[a-f0-9]{24}$"},
+        "candidate_ref": {"type": "string", "pattern": "^TASKCAND-[a-f0-9]{24}$"},
+        "source_ref": {"type": "string", "minLength": 1},
+        "source_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "source_line": {"type": "integer", "minimum": 1},
+        "detection_kind": {"enum": ["numbered_heading", "list_candidate", "table_checkbox_candidate"]},
+        "source_entry_id": {"type": "string"},
+        "marker_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "subject_first_line": {"type": "integer", "minimum": 1},
+        "subject_last_line": {"type": "integer", "minimum": 1},
+        "subject_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "reason_code": {"enum": ["reference_to_canonical_task", "summary_alias", "bug_or_incident_owned_by_bug_ledger", "document_reference", "markdown_false_positive", "inventory_or_evidence_note"]},
+        "review_state": {"const": "excluded_after_manual_semantic_review"},
+        "review_pass_ref": {"type": "string", "pattern": "^TASKREVIEWPASS-[a-f0-9]{24}$"},
+        "review_ref": {"type": "string", "pattern": "^TASKREVIEW-[a-f0-9]{24}$"},
+        "semantic_reason": {"type": "string", "minLength": 24}
+      },
+      "allOf": [
+        {
+          "if": {"required": ["review_pass_ref"]},
+          "then": {"required": ["review_ref", "semantic_reason"]},
+          "else": {
+            "not": {
+              "anyOf": [
+                {"required": ["review_ref"]},
+                {"required": ["semantic_reason"]}
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "rebuildBug": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "bug_id", "capability_ids", "cause", "invariant", "lesson_test_ref", "status", "evidence_ref"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "bug_id": {"type": "string", "pattern": "^BUG-REBUILD-[0-9]{8}-[0-9]{3}$"},
+        "capability_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/capabilityId"}
+        },
+        "cause": {"type": "string", "minLength": 40},
+        "invariant": {"type": "string", "minLength": 40},
+        "lesson_test_ref": {"type": "string"},
+        "status": {"enum": ["open", "closed"]},
+        "evidence_ref": {"type": "string"}
+      }
+    },
+    "historicalBugExtractionPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document_kind",
+        "schema_version",
+        "sources_authority",
+        "rich_rows_authority",
+        "occurrences_authority",
+        "narrative_reviews_authority",
+        "narrative_review_bindings_authority",
+        "rich_row_enrichments_authority",
+        "ids_authority",
+        "detection_rule",
+        "hash_rule",
+        "capability_authority",
+        "closure_policy",
+        "baseline"
+      ],
+      "properties": {
+        "document_kind": {"const": "historical_bug_id_extraction_policy"},
+        "schema_version": {"const": 1},
+        "sources_authority": {"const": "product/traceability/source_dispositions.jsonl"},
+        "rich_rows_authority": {"const": "product/traceability/historical_bug_rows.jsonl"},
+        "occurrences_authority": {"const": "product/traceability/historical_bug_occurrences.jsonl"},
+        "narrative_reviews_authority": {"const": "product/traceability/historical_bug_id_reviews.jsonl"},
+        "narrative_review_bindings_authority": {"const": "product/traceability/historical_bug_id_review_bindings.jsonl"},
+        "rich_row_enrichments_authority": {"const": "product/traceability/historical_bug_row_enrichments.jsonl"},
+        "ids_authority": {"const": "product/traceability/historical_bug_ids.jsonl"},
+        "detection_rule": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["base_pattern", "slash_component_pattern", "slash_expansion", "letter_suffix_expansion", "letter_range_expansion", "row_coverage", "rich_row_source_refs"],
+          "properties": {
+            "base_pattern": {"type": "string"},
+            "slash_component_pattern": {"type": "string"},
+            "slash_expansion": {"const": "reuse_everything_before_the_last_hyphen"},
+            "letter_suffix_expansion": {"const": "reuse_leading_digits_from_the_first_suffix"},
+            "letter_range_expansion": {"const": "expand_compact_same_numeric_prefix_inclusive_ascii_range"},
+            "row_coverage": {"const": "only_the_expanded_first_cell_id_of_a_reviewed_rich_inventory_row"},
+            "rich_row_source_refs": {
+              "type": "array", "minItems": 2, "maxItems": 2, "uniqueItems": true,
+              "items": {"type": "string", "minLength": 1}
+            }
+          }
+        },
+        "hash_rule": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["algorithm", "text_subject", "occurrence_ref_subject", "entry_ref_subject"],
+          "properties": {
+            "algorithm": {"const": "sha256"},
+            "text_subject": {"const": "exact_source_line_bytes_without_line_ending"},
+            "occurrence_ref_subject": {"type": "string"},
+            "entry_ref_subject": {"type": "string"}
+          }
+        },
+        "capability_authority": {"const": "product/roadmap.json#capability_entries"},
+        "closure_policy": {"const": "historical_status_and_cited_tests_never_imply_rebuild_closure"},
+        "baseline": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source_count",
+            "sources_with_explicit_id",
+            "sources_without_explicit_id",
+            "sources_without_id_lessons_sha256",
+            "rich_row_count",
+            "occurrence_count",
+            "id_count",
+            "row_covered_id_count",
+            "narrative_only_id_count",
+            "narrative_review_binding_count",
+            "rich_row_enrichment_count",
+            "rows_sha256",
+            "occurrences_sha256",
+            "narrative_review_bindings_sha256",
+            "rich_row_enrichments_sha256",
+            "ids_sha256"
+          ],
+          "properties": {
+            "source_count": {"type": "integer", "minimum": 1},
+            "sources_with_explicit_id": {"type": "integer", "minimum": 1},
+            "sources_without_explicit_id": {"type": "integer", "minimum": 1},
+            "sources_without_id_lessons_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+            "rich_row_count": {"type": "integer", "minimum": 1},
+            "occurrence_count": {"type": "integer", "minimum": 1},
+            "id_count": {"type": "integer", "minimum": 1},
+            "row_covered_id_count": {"type": "integer", "minimum": 1},
+            "narrative_only_id_count": {"type": "integer", "minimum": 1},
+            "narrative_review_binding_count": {"type": "integer", "minimum": 1},
+            "rich_row_enrichment_count": {"type": "integer", "minimum": 1},
+            "rows_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+            "occurrences_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+            "narrative_review_bindings_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+            "rich_row_enrichments_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+            "ids_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"}
+          }
+        }
+      }
+    },
+    "historicalBugRow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version", "entry_ref", "source_ref", "source_section", "source_line",
+        "detection_kind", "text_sha256", "source_bug_id", "reported_ids",
+        "duplicate_id_occurrence", "duplicate_id_count", "original_state", "area",
+        "symptom", "architectural_hypothesis", "action", "capability_ids", "disposition",
+        "lesson_test_ref", "cited_existing_test_refs", "closure_evidence", "review_note"
+      ],
+      "properties": {
+        "schema_version": {"const": 1},
+        "entry_ref": {"type": "string", "pattern": "^BUGENTRY-[a-f0-9]{24}$"},
+        "source_ref": {"type": "string", "minLength": 1},
+        "source_section": {"type": "string", "minLength": 1},
+        "source_line": {"type": "integer", "minimum": 1},
+        "detection_kind": {"const": "bug_table_row"},
+        "text_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "source_bug_id": {"type": "string", "pattern": "^BUG-ORQ(?:-[A-Z0-9]+)+(?:/[A-Z0-9]+)*$"},
+        "reported_ids": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^BUG-ORQ(?:-[A-Z0-9]+)+$"}
+        },
+        "duplicate_id_occurrence": {"type": "integer", "minimum": 1},
+        "duplicate_id_count": {"type": "integer", "minimum": 1},
+        "original_state": {"type": "string", "minLength": 1},
+        "area": {"type": "string", "minLength": 1},
+        "symptom": {"type": "string", "minLength": 1},
+        "architectural_hypothesis": {"type": "string", "minLength": 1},
+        "action": {"type": "string", "minLength": 1},
+        "capability_ids": {
+          "type": "array", "minItems": 1, "maxItems": 3, "uniqueItems": true,
+          "items": {"$ref": "#/$defs/capabilityId"}
+        },
+        "disposition": {"enum": ["historical_lesson_candidate", "historical_pending_lesson"]},
+        "lesson_test_ref": {"type": "string", "minLength": 1},
+        "cited_existing_test_refs": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+        "closure_evidence": {"const": "not_verified"},
+        "review_note": {"type": "string", "minLength": 40}
+      }
+    },
+    "historicalBugOccurrence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version", "occurrence_ref", "bug_id", "raw_bug_ref", "component_index",
+        "source_ref", "source_line", "source_column", "text_sha256", "coverage_kind"
+      ],
+      "properties": {
+        "schema_version": {"const": 1},
+        "occurrence_ref": {"type": "string", "pattern": "^BUGOCC-[a-f0-9]{24}$"},
+        "bug_id": {"type": "string", "pattern": "^BUG-ORQ(?:-[A-Z0-9]+)+$"},
+        "raw_bug_ref": {"type": "string", "pattern": "^BUG-ORQ(?:-[A-Z0-9]+)+(?:/[A-Z0-9]+)*$"},
+        "component_index": {"type": "integer", "minimum": 1},
+        "source_ref": {"type": "string", "minLength": 1},
+        "source_line": {"type": "integer", "minimum": 1},
+        "source_column": {"type": "integer", "minimum": 1},
+        "text_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "coverage_kind": {"enum": ["row_covered", "narrative_only"]}
+      }
+    },
+    "historicalBugIDReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "bug_id", "capability_ids", "review_note"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "bug_id": {"type": "string", "pattern": "^BUG-ORQ(?:-[A-Z0-9]+)+$"},
+        "capability_ids": {
+          "type": "array", "minItems": 1, "maxItems": 3, "uniqueItems": true,
+          "items": {"$ref": "#/$defs/capabilityId"}
+        },
+        "review_note": {"type": "string", "minLength": 40}
+      }
+    },
+    "historicalBugIDReviewBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "bug_id", "occurrence_refs", "occurrences_sha256", "capability_reasons"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "bug_id": {"type": "string", "pattern": "^BUG-ORQ(?:-[A-Z0-9]+)+$"},
+        "occurrence_refs": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^BUGOCC-[a-f0-9]{24}$"}
+        },
+        "occurrences_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "capability_reasons": {
+          "type": "array", "minItems": 1, "maxItems": 3,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["capability_id", "reason"],
+            "properties": {
+              "capability_id": {"$ref": "#/$defs/capabilityId"},
+              "reason": {"type": "string", "minLength": 24}
+            }
+          }
+        }
+      }
+    },
+    "historicalBugRowEnrichment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "entry_ref", "source_ref", "source_line", "source_sha256", "semantic_fields_sha256", "basis"],
+      "properties": {
+        "schema_version": {"const": 1},
+        "entry_ref": {"type": "string", "pattern": "^BUGENTRY-[a-f0-9]{24}$"},
+        "source_ref": {"type": "string", "minLength": 1},
+        "source_line": {"type": "integer", "minimum": 1},
+        "source_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "semantic_fields_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "basis": {"type": "string", "minLength": 24}
+      }
+    },
+    "historicalBugID": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version", "bug_id", "coverage_kind", "capability_ids", "disposition",
+        "lesson_test_ref", "lesson_state", "occurrence_count", "occurrences_sha256",
+        "closure_evidence", "review_note"
+      ],
+      "properties": {
+        "schema_version": {"const": 1},
+        "bug_id": {"type": "string", "pattern": "^BUG-ORQ(?:-[A-Z0-9]+)+$"},
+        "coverage_kind": {"enum": ["row_covered", "narrative_only"]},
+        "capability_ids": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"$ref": "#/$defs/capabilityId"}
+        },
+        "disposition": {"const": "historical_lesson_pending"},
+        "lesson_test_ref": {"type": "string", "minLength": 1},
+        "lesson_state": {"enum": ["pending_invariant_test", "candidate_not_accredited"]},
+        "occurrence_count": {"type": "integer", "minimum": 1},
+        "occurrences_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "closure_evidence": {"const": "not_verified"},
+        "review_note": {"type": "string", "minLength": 40}
       }
     }
   }

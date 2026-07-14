@@ -1,0 +1,87 @@
+{
+  "document_kind": "task_semantic_review_provenance",
+  "schema_version": 1,
+  "entries_authority": "product/traceability/task_entries.jsonl#basis_code=independent_semantic_review",
+  "capability_authority": "product/roadmap.json#capability_entries",
+  "bug_ref": "product/traceability/rebuild_bugs.jsonl#BUG-REBUILD-20260714-008",
+  "passes": [
+    {
+      "scope_code": "original_corrected_all",
+      "pass_ref": "TASKREVIEWPASS-22c698ed276682e8e2526c75",
+      "reviewer_ref": "TRACE-REVIEWER-527047f0c8ca8a94eae8eb5c",
+      "reviewer_role": "independent_semantic_counterreviewer",
+      "review_method": "source_block_and_roadmap_read_per_entry",
+      "entry_count": 82,
+      "input_scope_sha256": "sha256:39968b40da7eac81eb78e1e6004070c3a7ab8c9dccfcda3eb30fcf1a2598e0d9",
+      "confirmed_count": 7,
+      "corrected_count": 75,
+      "final_decisions_sha256": "sha256:c5d812fd8a5ed4bf2e7d8dba8e2e7bd64a681774920c437a5fe836eca37610f1"
+    },
+    {
+      "scope_code": "original_confirmed_shard_1",
+      "pass_ref": "TASKREVIEWPASS-59dfa23e332db6e629a7b1fd",
+      "reviewer_ref": "TRACE-REVIEWER-011b5d46ddcfdb025cd96c5e",
+      "reviewer_role": "independent_semantic_counterreviewer",
+      "review_method": "source_block_and_roadmap_read_per_entry",
+      "entry_count": 189,
+      "input_scope_sha256": "sha256:4ebb6d12a2c789015e907edc1a59a7343a3991e326efe33f936a641aeb860a0c",
+      "confirmed_count": 153,
+      "corrected_count": 36,
+      "final_decisions_sha256": "sha256:ff482e2c42062575a7887448c42f8ead9a50e2419b9d7b307b493855d0b89bce"
+    },
+    {
+      "scope_code": "original_confirmed_shard_2",
+      "pass_ref": "TASKREVIEWPASS-e6386d0de338b865cdc84c8d",
+      "reviewer_ref": "TRACE-REVIEWER-1da4d96663bfbbf879d04835",
+      "reviewer_role": "independent_semantic_counterreviewer",
+      "review_method": "source_block_and_roadmap_read_per_entry",
+      "entry_count": 164,
+      "input_scope_sha256": "sha256:089a9ef98bda00ff4fb0cef91a5e24261fb4183be681c27c279bd238bcfcb28b",
+      "confirmed_count": 151,
+      "corrected_count": 13,
+      "final_decisions_sha256": "sha256:43020bc36915225db4acafb960248082d698de7ab85a0fdc3f3fcfcfaeb88234"
+    },
+    {
+      "scope_code": "original_confirmed_shard_3",
+      "pass_ref": "TASKREVIEWPASS-a04e94d2bdef4474cac38a0e",
+      "reviewer_ref": "TRACE-REVIEWER-1da4d96663bfbbf879d04835",
+      "reviewer_role": "independent_semantic_counterreviewer",
+      "review_method": "source_block_and_roadmap_read_per_entry",
+      "entry_count": 261,
+      "input_scope_sha256": "sha256:3fec3d388aa9f38f869a09c718a75d6b430fccfe7b10ad7e14789de9948501db",
+      "confirmed_count": 236,
+      "corrected_count": 25,
+      "final_decisions_sha256": "sha256:06cc72005c949e28b836f44efe289e044449ab3382d496f5384ac728a59d5b69"
+    }
+  ],
+  "invalidations": [
+    {
+      "invalidation_ref": "TASKREVIEWINVALID-925ac236672f733bc56b1033",
+      "scope_code": "original_confirmed_shard_1",
+      "affected_entry_count": 189,
+      "affected_input_scope_sha256": "sha256:4ebb6d12a2c789015e907edc1a59a7343a3991e326efe33f936a641aeb860a0c",
+      "reason_code": "generated_keep_current_fallback",
+      "detector_test_ref": "traceability_tasks_v2_test.go#TestTraceabilityRebuildIndependentSemanticReviewsHaveNoGeneratedFallbacks",
+      "superseded_by_pass_ref": "TASKREVIEWPASS-59dfa23e332db6e629a7b1fd"
+    },
+    {
+      "invalidation_ref": "TASKREVIEWINVALID-64a1bbed9259eb2ee3760de9",
+      "scope_code": "original_confirmed_shard_3",
+      "affected_entry_count": 261,
+      "affected_input_scope_sha256": "sha256:3fec3d388aa9f38f869a09c718a75d6b430fccfe7b10ad7e14789de9948501db",
+      "reason_code": "generated_keep_current_fallback",
+      "detector_test_ref": "traceability_tasks_v2_test.go#TestTraceabilityRebuildIndependentSemanticReviewsHaveNoGeneratedFallbacks",
+      "superseded_by_pass_ref": "TASKREVIEWPASS-a04e94d2bdef4474cac38a0e"
+    }
+  ],
+  "totals": {
+    "valid_pass_count": 4,
+    "entry_count": 696,
+    "confirmed_count": 547,
+    "corrected_count": 149,
+    "invalidated_pass_count": 2,
+    "invalidated_entry_count": 450,
+    "input_universe_sha256": "sha256:6f28580895fd01662123dd41c7020479ecaa5fab1d4ebee3ac1fa5212aba70f4",
+    "final_decisions_sha256": "sha256:527ad100ffbb9ddc7fa69d78a86216f11ee248d516c29694ff92ce889aedc0aa"
+  }
+}

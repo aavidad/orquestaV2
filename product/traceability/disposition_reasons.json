@@ -1,0 +1,67 @@
+{
+  "document_kind": "disposition_reasons",
+  "schema_version": 1,
+  "decision_vocabulary": [
+    "accepted",
+    "rejected",
+    "conditional",
+    "historical"
+  ],
+  "evidence_protocol": {
+    "algorithm": "sha256",
+    "subject": "exact_file_bytes_at_source_ref",
+    "verification_test": "TestTraceabilityRebuildSourceDispositions"
+  },
+  "reasons": {
+    "active_or_mixed_task_source": {
+      "decision": "accepted",
+      "evidence_state": "semantic_mapping_review_pending",
+      "reason": "Task candidates are mechanically covered, but one or more inherited heading-level capability assignments still require an exact semantic override before this source is disposed."
+    },
+    "historical_task_source": {
+      "decision": "historical",
+      "evidence_state": "semantic_mapping_review_pending",
+      "reason": "Historical task candidates are mechanically covered, but one or more inherited heading-level capability assignments still require exact semantic review."
+    },
+    "active_task_entries_semantically_disposed": {
+      "decision": "accepted",
+      "evidence_state": "semantic_disposition_complete_characterization_pending",
+      "reason": "Every candidate in this current task source has an exact reviewed capability disposition; retained behavior still needs independent characterization before reimplementation."
+    },
+    "historical_task_entries_semantically_disposed": {
+      "decision": "historical",
+      "evidence_state": "semantic_disposition_complete_characterization_pending",
+      "reason": "Every candidate in this historical task source has an exact reviewed capability disposition; legacy state proves neither current need nor rebuild closure."
+    },
+    "active_task_source_level_disposition": {
+      "decision": "accepted",
+      "evidence_state": "source_level_semantic_disposition_complete_characterization_pending",
+      "reason": "This current source has no explicit or broad task marker; whole-source semantic review preserves its capability scope without inventing a TaskEntry."
+    },
+    "historical_task_source_level_disposition": {
+      "decision": "historical",
+      "evidence_state": "source_level_semantic_disposition_complete_characterization_pending",
+      "reason": "This historical source has no explicit or broad task marker; whole-source semantic review preserves its capability scope without inventing a TaskEntry."
+    },
+    "historical_task_candidates_delegated_to_bug_ledger": {
+      "decision": "historical",
+      "evidence_state": "exact_narrative_incident_dispositions_characterization_pending",
+      "reason": "Every detected heading in this historical incident narrative is explicitly excluded from TaskEntry authority with an exact source line and subject hash, then delegated to the historical bug evidence layer without inventing a task or closure."
+    },
+    "active_bug_ledger_source": {
+      "decision": "accepted",
+      "evidence_state": "entries_disposed_lesson_tests_pending",
+      "reason": "Bug ledger or explicit backlog source has exact ID and occurrence dispositions; no incident is considered fixed until its invariant and lesson test are independently verified."
+    },
+    "historical_bug_source": {
+      "decision": "historical",
+      "evidence_state": "historical_evidence_pending_lesson_test",
+      "reason": "Incident is preserved as historical evidence; resolution is not inferred and the mapped capability still requires an explicit invariant and reproducible lesson test."
+    },
+    "conditional_skill_source": {
+      "decision": "conditional",
+      "evidence_state": "pending_scope_trust_and_activation_test",
+      "reason": "Legacy skill may inform V26 but cannot activate until scope, content hash, trust, permissions, tests, revocation and rollback are independently decided."
+    }
+  }
+}

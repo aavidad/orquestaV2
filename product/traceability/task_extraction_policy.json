@@ -1,0 +1,151 @@
+{
+  "baseline": {
+    "broad_candidate_count": 1109,
+    "candidate_review_entry_count": 706,
+    "candidate_review_exclusion_count": 865,
+    "candidate_review_input_count": 1571,
+    "candidate_review_pass_count": 11,
+    "candidate_review_provenance_sha256": "sha256:72f47f18fe2f486dc41cf353503c6b34f0de0543bc9b820ed73b796e41333f4b",
+    "confirmed_count": 547,
+    "corrected_count": 149,
+    "entries_sha256": "sha256:83d79287bed48fa3f8c7746c985e6ff465be376da6be9491ac4b902c2c95d610",
+    "entry_count": 2108,
+    "excluded_broad_candidate_count": 920,
+    "exclusions_sha256": "sha256:71ae8fcb238c994b1a89a5e45ba09ab0be0adf89092014a74a738f2fa9e8e19e",
+    "included_broad_candidate_count": 189,
+    "independent_review_universe_count": 696,
+    "integrated_independent_review_count": 696,
+    "pending_semantic_review_count": 0,
+    "semantic_review_provenance_sha256": "sha256:5fd957c642a32305e994fb48ca05963b5793431c792583a0b5c78903d23593b2",
+    "semantic_reviews_sha256": "sha256:527ad100ffbb9ddc7fa69d78a86216f11ee248d516c29694ff92ce889aedc0aa",
+    "reviewed_block_count": 170,
+    "reviewed_block_entry_count": 68,
+    "reviewed_blocks_sha256": "sha256:c1f75e95c7ec0020123b357eb8082c5ddb858b300b5db3e21b4b160ba1eccf9a",
+    "source_count": 164,
+    "source_without_candidate_count": 33,
+    "source_without_entry_count": 34,
+    "strict_candidate_count": 1919
+  },
+  "basis_codes": [
+    "legacy_exact_task_review",
+    "legacy_exact_segment_review",
+    "legacy_heading_objective_review",
+    "legacy_focused_source_review",
+    "task_id_reference_review",
+    "explicit_task_semantic_review",
+    "operator_roadmap_decision",
+    "independent_semantic_review",
+    "independent_candidate_semantic_review"
+  ],
+  "candidate_rule": {
+    "broad": [
+      "numbered_heading",
+      "list_candidate",
+      "table_checkbox_candidate"
+    ],
+    "every_broad_candidate_requires_entry_or_exclusion": true,
+    "generic_h2_is_candidate": false,
+    "strict": [
+      "checkbox",
+      "id_field",
+      "heading_id",
+      "list_id",
+      "table_id",
+      "reviewed_block"
+    ],
+    "strict_candidates_are_entries": true
+  },
+  "capability_authority": "product/roadmap.json#capability_entries",
+  "candidate_review_provenance_authority": "product/traceability/task_candidate_review_provenance.json",
+  "capability_decision_values": [
+    "accept",
+    "reject",
+    "conditional"
+  ],
+  "closure_policy": "legacy_state_is_characterization_only_and_never_rebuild_closure",
+  "disposition_rule": {
+    "conditional": "conditional_deferred",
+    "current_accept": "accepted_pending_reimplementation",
+    "historical_accept": "historical_superseded_by_capability",
+    "reject": "rejected_by_operator"
+  },
+  "document_kind": "task_entry_extraction_policy",
+  "entries_authority": "product/traceability/task_entries.jsonl",
+  "exclusion_reason_codes": [
+    "reference_to_canonical_task",
+    "summary_alias",
+    "bug_or_incident_owned_by_bug_ledger",
+    "document_reference",
+    "markdown_false_positive",
+    "inventory_or_evidence_note"
+  ],
+  "exclusions_authority": "product/traceability/task_candidate_exclusions.jsonl",
+  "fixture": "product/traceability/fixtures/task_candidate_adversarial.md",
+  "hash_rule": {
+    "algorithm": "sha256",
+    "candidate_ref_subject": "source_ref_newline_source_line_newline_detection_kind_newline_marker_sha256",
+    "candidate_review_pass_ref_subject": "canonical_json_array_task_candidate_review_pass_v1_with_fixture_hashes_and_decision_digests",
+    "candidate_review_ref_subject": "canonical_json_array_entry_or_exclusion_review_v1_with_pass_ref_and_semantic_reason",
+    "entry_ref_subject": "source_ref_newline_source_line_newline_detection_kind_newline_marker_sha256",
+    "exclusion_ref_subject": "candidate_ref_newline_reason_code",
+    "ledger_digest_subject": "exact_jsonl_file_bytes_including_terminal_lf",
+    "marker_subject": "exact_source_line_bytes_without_line_ending",
+    "reviewed_block_ref_subject": "source_ref_nul_first_line_nul_last_line_nul_block_sha256",
+    "semantic_review_ref_subject": "canonical_json_array_[task_semantic_review_v3,entry_ref,source_ref,source_line,old_capability_id,verdict,capability_id,basis_code,semantic_review_pass_ref,reason]",
+    "semantic_reviews_digest_subject": "entries_sorted_by_entry_ref_each_line_json_array_[entry_ref,previous_capability_id,capability_id,verdict,semantic_review_pass_ref,semantic_review_ref,semantic_reason]_including_terminal_lf"
+  },
+  "id_grammar": {
+    "broad_patterns": [
+      "^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+$",
+      "^(?:T[0-9]+)(?:/T?[0-9]+)+$"
+    ],
+    "markup_prefixes_removed_before_first_token": [
+      "**",
+      "__",
+      "`",
+      "*",
+      "_"
+    ],
+    "short_tokens_without_digit_are_not_ids": true,
+    "strict_patterns": [
+      "^#[0-9]+$",
+      "^(?:[A-Z]{1,5}[0-9]+|[TWO]-[0-9]+[A-Za-z]?)$",
+      "^[A-Z][A-Z0-9]*(?:-[A-Z0-9]+)+$"
+    ],
+    "structured_id_requires_digit_unless_prefix": "REQ-"
+  },
+  "line_forms": {
+    "checkbox": "^[ \\t]*[-*+][ \\t]+\\[[ xX]\\][ \\t]+(.+)$",
+    "heading": "^[ \\t]{0,3}(#{2,6})[ \\t]+(.+)$",
+    "id_field": "^[ \\t]*(?:\\*\\*|__|`)?ID(?:\\*\\*|__|`)?[ \\t]*:[ \\t]*(.+)$",
+    "list": "^[ \\t]*(?:[-*+]|[0-9]+[.)])[ \\t]+(.+)$",
+    "table": "^[ \\t]*\\|.*\\|[ \\t]*$"
+  },
+  "precedence": [
+    "checkbox",
+    "id_field",
+    "heading_id",
+    "numbered_heading",
+    "list_id",
+    "list_candidate",
+    "table_id",
+    "table_checkbox_candidate"
+  ],
+  "schema_version": 2,
+  "semantic_review_provenance_authority": "product/traceability/task_semantic_review_provenance.json",
+  "reviewed_blocks_authority": "product/traceability/reviewed_task_blocks.jsonl",
+  "source_history_values": [
+    "current",
+    "historical"
+  ],
+  "sources_authority": "product/traceability/source_dispositions.jsonl#kind=task",
+  "subject_rule": {
+    "fenced_id_field": "enclosing_fence_including_fence_lines",
+    "heading": "marker_through_before_next_heading_of_same_or_shallower_level",
+    "line_range_hash_subject": "lines_joined_with_lf_without_terminal_lf",
+    "list_or_checkbox": "marker_and_continuations_through_before_next_sibling_or_heading",
+    "reviewed_block": "exact_reviewed_actionable_line_range",
+    "table": "exact_table_row",
+    "unfenced_id_field": "marker_through_before_next_id_field_or_heading"
+  }
+}

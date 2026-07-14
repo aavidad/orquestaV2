@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "contract_id": "AC-V01-SOURCE-INTEGRATION",
+  "command": "go test -mod=vendor -count=1 . -run '^TestProductRoadmap.*$'",
+  "receipt_path": "product/evidence/v01_source_integration.json",
+  "candidate_subjects": [
+    "acceptance/evidence_support_test.go",
+    "acceptance/fixtures/v01_source_integration.json",
+    "acceptance/v01_source_integration_test.go",
+    "product/roadmap.json",
+    "product_roadmap_test.go"
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "schema_version": 2,
+  "evidence_kind": "reproducibility_descriptor",
+  "contract": "AC-V01-SOURCE-INTEGRATION",
+  "result": "PASS",
+  "validation_command": "go test -mod=vendor -count=1 . -run '^TestProductRoadmap.*$'",
+  "executed_at": "2026-07-14T11:14:17+02:00",
+  "execution": {
+    "argv": [
+      "go",
+      "test",
+      "-mod=vendor",
+      "-count=1",
+      ".",
+      "-run",
+      "^TestProductRoadmap.*$"
+    ],
+    "exit_code": 0,
+    "combined_output_path": "product/evidence/v01_source_integration.output.txt",
+    "combined_output_sha256": "sha256:5bdbd566452d83272c4d9b9f11d919587cd94dba514ea1d68c68df2ed8d0ef7c",
+    "go_version": "go1.25.11"
+  },
+  "fixture_sha256": "sha256:8c8a7d6b1e7cfebabe7c380b8bdfe325620ff94e4bd1714b0851b524faa37e0f",
+  "candidate_digest_algorithm": "sha256:length-framed-path-and-content:v1",
+  "candidate_subjects": [
+    "acceptance/evidence_support_test.go",
+    "acceptance/fixtures/v01_source_integration.json",
+    "acceptance/v01_source_integration_test.go",
+    "product/roadmap.json",
+    "product_roadmap_test.go"
+  ],
+  "candidate_sha256": "sha256:5fef175ab2ab210c6597966fc491140376ca88f9f9b51a3b2cf807fc155a6187",
+  "subject_source_tree": {
+    "identity_kind": "candidate_subject_set",
+    "sha256": "sha256:5fef175ab2ab210c6597966fc491140376ca88f9f9b51a3b2cf807fc155a6187",
+    "git_head": "a8bff609492f312fe2d6bf8ccccde02b6e5c8426"
+  }
+}

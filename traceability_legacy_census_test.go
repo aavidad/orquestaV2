@@ -4,13 +4,11 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"go/ast"
 	"go/format"
 	"go/parser"
 	"go/token"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -56,30 +54,6 @@ type traceModuleRule struct {
 	CapabilityIDs            []string `json:"capability_ids"`
 	Reason                   string   `json:"reason"`
 	CharacterizationRequired bool     `json:"characterization_required"`
-}
-
-type tracePendingSourceLedger struct {
-	DocumentKind  string               `json:"document_kind"`
-	SchemaVersion int                  `json:"schema_version"`
-	Sources       []tracePendingSource `json:"sources"`
-}
-
-type tracePendingSource struct {
-	ID                string   `json:"id"`
-	Kind              string   `json:"kind"`
-	Status            string   `json:"status"`
-	ExactPaths        []string `json:"exact_paths"`
-	PathPatterns      []string `json:"path_patterns"`
-	ExpectedFileCount int      `json:"expected_file_count"`
-	ManifestSHA256    string   `json:"manifest_sha256"`
-	NextGate          string   `json:"next_gate"`
-}
-
-type traceRoadmap struct {
-	CapabilityEntries []struct {
-		ID       string `json:"id"`
-		Decision string `json:"decision"`
-	} `json:"capability_entries"`
 }
 
 type traceComputedCensus struct {
@@ -178,45 +152,6 @@ func TestTraceabilityRebuildLegacyGoCensus(t *testing.T) {
 		census.Baseline.SymbolCount,
 		census.Baseline.CensusSHA256,
 	)
-}
-
-func TestTraceabilityRebuildPendingSourceInventory(t *testing.T) {
-	var ledger tracePendingSourceLedger
-	traceDecodeStrict(t, "product/traceability/pending_sources.json", &ledger)
-	if ledger.DocumentKind != "pending_source_inventory" || ledger.SchemaVersion != 1 || len(ledger.Sources) != 4 {
-		t.Fatalf("invalid pending source ledger header: %#v", ledger)
-	}
-	wantKinds := map[string]string{
-		"historical_task_sources":     "task",
-		"historical_bug_sources":      "bug",
-		"historical_skill_sources":    "skill",
-		"historical_rulepack_sources": "rulepack",
-	}
-	seen := make(map[string]struct{})
-	for _, source := range ledger.Sources {
-		wantKind, ok := wantKinds[source.ID]
-		if !ok || source.Kind != wantKind || strings.TrimSpace(source.NextGate) == "" {
-			t.Fatalf("invalid pending source entry: %#v", source)
-		}
-		if _, duplicate := seen[source.ID]; duplicate {
-			t.Fatalf("duplicate pending source id %q", source.ID)
-		}
-		seen[source.ID] = struct{}{}
-		paths := traceExpandSourcePaths(t, source)
-		gotDigest := traceFileManifestDigest(t, paths)
-		if len(paths) != source.ExpectedFileCount || gotDigest != source.ManifestSHA256 {
-			t.Errorf("pending source %q drift: files=%d digest=%s, want files=%d digest=%s",
-				source.ID, len(paths), gotDigest, source.ExpectedFileCount, source.ManifestSHA256)
-		}
-		if source.Kind == "rulepack" {
-			if source.Status != "absent_pending_contract" || len(paths) != 0 {
-				t.Errorf("rulepack source must remain explicitly absent until TLS-13 contract exists")
-			}
-		} else if source.Status != "inventory_only_pending_disposition" || len(paths) == 0 {
-			t.Errorf("source %q must be non-empty inventory-only pending disposition", source.ID)
-		}
-	}
-	t.Log("pending source ranges frozen; entries remain intentionally undisposed")
 }
 
 func traceComputeLegacyGoCensus(t *testing.T, ledger traceLegacyGoLedger) traceComputedCensus {
@@ -348,102 +283,4 @@ func traceExcluded(path string, directory bool, exclusions []traceExactExclusion
 		}
 	}
 	return false
-}
-
-func traceAcceptedCapabilities(t *testing.T) map[string]struct{} {
-	t.Helper()
-	content, err := os.ReadFile("product/roadmap.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var roadmap traceRoadmap
-	if err := json.Unmarshal(content, &roadmap); err != nil {
-		t.Fatal(err)
-	}
-	accepted := make(map[string]struct{})
-	for _, entry := range roadmap.CapabilityEntries {
-		if entry.Decision == "accept" {
-			accepted[entry.ID] = struct{}{}
-		}
-	}
-	return accepted
-}
-
-func traceExpandSourcePaths(t *testing.T, source tracePendingSource) []string {
-	t.Helper()
-	unique := make(map[string]struct{})
-	for _, exactPath := range source.ExactPaths {
-		if _, err := os.Stat(exactPath); err != nil {
-			t.Fatalf("pending source %q exact path %q: %v", source.ID, exactPath, err)
-		}
-		unique[filepath.ToSlash(exactPath)] = struct{}{}
-	}
-	for _, pattern := range source.PathPatterns {
-		matches, err := filepath.Glob(filepath.FromSlash(pattern))
-		if err != nil {
-			t.Fatalf("pending source %q invalid pattern %q: %v", source.ID, pattern, err)
-		}
-		if len(matches) == 0 {
-			t.Fatalf("pending source %q pattern %q matches no files", source.ID, pattern)
-		}
-		for _, match := range matches {
-			info, err := os.Stat(match)
-			if err != nil || !info.Mode().IsRegular() {
-				t.Fatalf("pending source %q path %q is not a regular file", source.ID, match)
-			}
-			unique[filepath.ToSlash(match)] = struct{}{}
-		}
-	}
-	paths := make([]string, 0, len(unique))
-	for path := range unique {
-		paths = append(paths, path)
-	}
-	sort.Strings(paths)
-	return paths
-}
-
-func traceFileManifestDigest(t *testing.T, paths []string) string {
-	t.Helper()
-	lines := make([]string, 0, len(paths))
-	for _, path := range paths {
-		content, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		sum := sha256.Sum256(content)
-		lines = append(lines, path+"|sha256:"+hex.EncodeToString(sum[:]))
-	}
-	return traceStringsDigest(lines)
-}
-
-func traceStringsDigest(lines []string) string {
-	hash := sha256.New()
-	for _, line := range lines {
-		_, _ = io.WriteString(hash, line)
-		_, _ = io.WriteString(hash, "\n")
-	}
-	return "sha256:" + hex.EncodeToString(hash.Sum(nil))
-}
-
-func traceSortedContains(values []string, target string) bool {
-	index := sort.SearchStrings(values, target)
-	return index < len(values) && values[index] == target
-}
-
-func traceDecodeStrict(t *testing.T, path string, target any) {
-	t.Helper()
-	file, err := os.Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer file.Close()
-	decoder := json.NewDecoder(file)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
-		t.Fatalf("decode %s: %v", path, err)
-	}
-	var trailing any
-	if err := decoder.Decode(&trailing); err != io.EOF {
-		t.Fatalf("decode %s trailing content: %v", path, err)
-	}
 }

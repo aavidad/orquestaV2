@@ -134,14 +134,16 @@ func TestProductRoadmapIsExhaustiveAndCausal(t *testing.T) {
 		}
 		switch contract.Status {
 		case "executable":
+			if strings.HasPrefix(contract.Command, "planned:") ||
+				!strings.HasPrefix(contract.Receipt, "product/evidence/") || !strings.HasSuffix(contract.Receipt, ".json") {
+				t.Fatalf("executable contract %q lacks runnable command or receipt", contract.ID)
+			}
 			requireRepositoryFile(t, ".", contract.TestRef)
 			requireRepositoryFile(t, ".", contract.Fixture)
-			if contract.Receipt != "" {
-				requireRepositoryFile(t, ".", contract.Receipt)
-			}
 		case "planned":
 			if !strings.HasPrefix(contract.TestRef, "planned:acceptance/") ||
-				!strings.HasPrefix(contract.Fixture, "planned:fixtures/") || contract.Receipt != "" {
+				!strings.HasPrefix(contract.Fixture, "planned:fixtures/") ||
+				!strings.HasPrefix(contract.Command, "planned:go test -mod=vendor") || contract.Receipt != "" {
 				t.Fatalf("planned contract %q lacks explicit planned refs", contract.ID)
 			}
 		default:
@@ -268,6 +270,87 @@ func TestProductRoadmapIsExhaustiveAndCausal(t *testing.T) {
 	assertDeferredMappings(t, roadmap.DeferredMappings, entries)
 }
 
+func TestProductRoadmapAccreditationDoesNotExceedEvidence(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+	entries := make(map[string]roadmapEntry, len(roadmap.CapabilityEntries))
+	var accreditedIDs []string
+	for _, entry := range roadmap.CapabilityEntries {
+		entries[entry.ID] = entry
+		if entry.Status == "accredited" {
+			accreditedIDs = append(accreditedIDs, entry.ID)
+		}
+	}
+	sort.Strings(accreditedIDs)
+	wantAccreditedIDs := []string{"GOV-03", "GOV-16", "GOV-21"}
+	if !reflect.DeepEqual(accreditedIDs, wantAccreditedIDs) {
+		t.Fatalf("accredited capability IDs=%v, want exact evidence-backed set %v", accreditedIDs, wantAccreditedIDs)
+	}
+	for _, id := range wantAccreditedIDs {
+		if entry := entries[id]; entry.Status != "accredited" || len(entry.EvidenceRefs) == 0 {
+			t.Errorf("directly proven capability %s is not accredited with evidence: %#v", id, entry)
+		}
+	}
+	wantDeferredOwners := map[string]string{
+		"GOV-01": "generated_apps",
+		"GOV-04": "goal_dag_phases",
+		"GOV-05": "goal_dag_phases",
+		"GOV-06": "atomic_state_outbox",
+		"ORC-23": "operations_telemetry",
+		"EXT-00": "domain_plugins",
+	}
+	for id, owner := range wantDeferredOwners {
+		entry := entries[id]
+		if entry.Status != "declared" || entry.OwnerContext != owner || len(entry.EvidenceRefs) != 0 {
+			t.Errorf("partially evidenced capability %s is over-accredited or misrouted: %#v", id, entry)
+		}
+	}
+}
+
+func TestProductRoadmapPlannedContractsAreNonRunnable(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+	for _, contract := range roadmap.AcceptanceContracts {
+		switch contract.Status {
+		case "planned":
+			if !strings.HasPrefix(contract.Command, "planned:go test -mod=vendor") {
+				t.Errorf("planned contract %s exposes a deceptively runnable command %q", contract.ID, contract.Command)
+			}
+		case "executable":
+			if strings.HasPrefix(contract.Command, "planned:") {
+				t.Errorf("executable contract %s retains planned command %q", contract.ID, contract.Command)
+			}
+		}
+	}
+}
+
+func TestProductRoadmapExecutableContractsDeclareReceiptPaths(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+	wantExecutable := map[string]string{
+		"AC-V01-SOURCE-INTEGRATION": "product/evidence/v01_source_integration.json",
+		"AC-V02-AUTHORITY-RULES":    "product/evidence/v02_authority_rules.json",
+		"AC-V03-CANONICAL-LEDGERS":  "product/evidence/v03_canonical_ledgers.json",
+	}
+	gotExecutable := make(map[string]string)
+	for _, contract := range roadmap.AcceptanceContracts {
+		switch contract.Status {
+		case "executable":
+			if !strings.HasPrefix(contract.Receipt, "product/evidence/") || !strings.HasSuffix(contract.Receipt, ".json") {
+				t.Errorf("executable contract %s lacks canonical receipt path", contract.ID)
+			}
+			gotExecutable[contract.ID] = contract.Receipt
+		case "planned":
+			if contract.Receipt != "" {
+				t.Errorf("planned contract %s has premature receipt %q", contract.ID, contract.Receipt)
+			}
+		}
+	}
+	if !reflect.DeepEqual(gotExecutable, wantExecutable) {
+		t.Fatalf("executable receipt set = %#v, want %#v", gotExecutable, wantExecutable)
+	}
+}
+
 func assertRoadmapEvidenceCoherent(t *testing.T, entry roadmapEntry, contract roadmapAcceptanceContract) {
 	t.Helper()
 	if entry.Status == "declared" {
@@ -328,11 +411,11 @@ func assertRoadmapProgressCausality(
 			progressed[vertical.ID] = true
 		}
 		owned := ownedAccepted[vertical.ID]
-		if contract.Status != "executable" {
+		if contract.Status != "executable" || contract.Receipt == "" {
 			continue
 		}
 		if len(owned) == 0 {
-			accredited[vertical.ID] = vertical.ID == "source_integration"
+			accredited[vertical.ID] = true
 			continue
 		}
 		accredited[vertical.ID] = true

@@ -1,0 +1,49 @@
+{
+  "document_kind": "historical_bug_id_extraction_policy",
+  "schema_version": 1,
+  "sources_authority": "product/traceability/source_dispositions.jsonl",
+  "rich_rows_authority": "product/traceability/historical_bug_rows.jsonl",
+  "occurrences_authority": "product/traceability/historical_bug_occurrences.jsonl",
+  "narrative_reviews_authority": "product/traceability/historical_bug_id_reviews.jsonl",
+  "narrative_review_bindings_authority": "product/traceability/historical_bug_id_review_bindings.jsonl",
+  "rich_row_enrichments_authority": "product/traceability/historical_bug_row_enrichments.jsonl",
+  "ids_authority": "product/traceability/historical_bug_ids.jsonl",
+  "detection_rule": {
+    "base_pattern": "\\bBUG-ORQ(?:-[A-Z0-9]+)+",
+    "slash_component_pattern": "^/[A-Z0-9]+",
+    "slash_expansion": "reuse_everything_before_the_last_hyphen",
+    "letter_suffix_expansion": "reuse_leading_digits_from_the_first_suffix",
+    "letter_range_expansion": "expand_compact_same_numeric_prefix_inclusive_ascii_range",
+    "row_coverage": "only_the_expanded_first_cell_id_of_a_reviewed_rich_inventory_row",
+    "rich_row_source_refs": [
+      "docs/incidencias/incidencia_orquesta_invariantes_causales_nucleo_2026-07-11.md",
+      "docs/inventario_bugs_orquesta_2026-06-30.md"
+    ]
+  },
+  "hash_rule": {
+    "algorithm": "sha256",
+    "text_subject": "exact_source_line_bytes_without_line_ending",
+    "occurrence_ref_subject": "bug_id_newline_raw_bug_ref_newline_component_index_newline_source_ref_newline_source_line_newline_source_column_newline_text_sha256",
+    "entry_ref_subject": "source_ref_newline_source_line_newline_text_sha256"
+  },
+  "capability_authority": "product/roadmap.json#capability_entries",
+  "closure_policy": "historical_status_and_cited_tests_never_imply_rebuild_closure",
+  "baseline": {
+    "source_count": 159,
+    "sources_with_explicit_id": 79,
+    "sources_without_explicit_id": 80,
+    "sources_without_id_lessons_sha256": "sha256:38e96147b204ba570ac873771ee8969c6c24ed6a1bfdc900b0a78c3a578c1dd9",
+    "rich_row_count": 239,
+    "occurrence_count": 1292,
+    "id_count": 334,
+    "row_covered_id_count": 197,
+    "narrative_only_id_count": 137,
+    "narrative_review_binding_count": 137,
+    "rich_row_enrichment_count": 4,
+    "rows_sha256": "sha256:2ef08e63eabe4bce2755a3e669a6401f2e63703395789bbd69bba89736ebb824",
+    "occurrences_sha256": "sha256:2a7c5a291bc339bfce0bd1808fd88dfcc9babbdf77701d42847903ba8be043f6",
+    "narrative_review_bindings_sha256": "sha256:aada6c21eccb6319f114c1d56f9abb7df5cccd43e9da2956ff043cf962e6f0d7",
+    "rich_row_enrichments_sha256": "sha256:cb23222242a6902106a6d51267894827a633df9a74fa104404ef2011ea67010e",
+    "ids_sha256": "sha256:0d903bf620d4a7131224f1734b4baceff50240cfd6600e8263562aa1ee302b3a"
+  }
+}

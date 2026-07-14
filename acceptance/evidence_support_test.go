@@ -30,12 +30,53 @@ type evidenceReceiptV1 struct {
 	CandidateSHA256          string   `json:"candidate_sha256"`
 }
 
+type evidenceReceiptV2 struct {
+	SchemaVersion            int                         `json:"schema_version"`
+	EvidenceKind             string                      `json:"evidence_kind"`
+	Contract                 string                      `json:"contract"`
+	Result                   string                      `json:"result"`
+	ValidationCommand        string                      `json:"validation_command"`
+	ExecutedAt               string                      `json:"executed_at"`
+	Execution                evidenceReceiptExecutionV2  `json:"execution"`
+	FixtureSHA256            string                      `json:"fixture_sha256"`
+	CandidateDigestAlgorithm string                      `json:"candidate_digest_algorithm"`
+	CandidateSubjects        []string                    `json:"candidate_subjects"`
+	CandidateSHA256          string                      `json:"candidate_sha256"`
+	SubjectSourceTree        evidenceReceiptSourceTreeV2 `json:"subject_source_tree"`
+}
+
+type evidenceReceiptExecutionV2 struct {
+	Argv                 []string `json:"argv"`
+	ExitCode             int      `json:"exit_code"`
+	CombinedOutputPath   string   `json:"combined_output_path"`
+	CombinedOutputSHA256 string   `json:"combined_output_sha256"`
+	GoVersion            string   `json:"go_version"`
+}
+
+type evidenceReceiptSourceTreeV2 struct {
+	IdentityKind string `json:"identity_kind"`
+	SHA256       string `json:"sha256"`
+	GitHead      string `json:"git_head"`
+}
+
 type evidenceReceiptExpectation struct {
 	Contract          string
 	Command           string
 	FixturePath       string
 	ReceiptPath       string
 	CandidateSubjects []string
+}
+
+type evidenceReceiptV2Expectation struct {
+	Contract          string
+	ValidationCommand string
+	ExecutionArgv     []string
+	OutputPath        string
+	FixturePath       string
+	ReceiptPath       string
+	CandidateSubjects []string
+	ExecutedNotBefore string
+	ExpectedGitHead   string
 }
 
 func evidenceRepositoryRoot(t *testing.T) string {
@@ -101,6 +142,75 @@ func evidenceAssertReceiptV1(t *testing.T, repositoryRoot string, expected evide
 	candidateSHA := evidenceCandidateDigest(t, repositoryRoot, expected.CandidateSubjects)
 	if receipt.CandidateSHA256 != candidateSHA {
 		t.Fatalf("receipt candidate_sha256 = %q, want %q", receipt.CandidateSHA256, candidateSHA)
+	}
+}
+
+func evidenceAssertReceiptV2(t *testing.T, repositoryRoot string, expected evidenceReceiptV2Expectation) {
+	t.Helper()
+	if expected.Contract == "" || expected.ValidationCommand == "" || len(expected.ExecutionArgv) == 0 || expected.OutputPath == "" || expected.FixturePath == "" || expected.ReceiptPath == "" || len(expected.CandidateSubjects) == 0 || expected.ExecutedNotBefore == "" || expected.ExpectedGitHead == "" {
+		t.Fatal("V2 receipt expectation is incomplete")
+	}
+	receipt := evidenceDecodeStrictJSON[evidenceReceiptV2](t, filepath.Join(repositoryRoot, filepath.FromSlash(expected.ReceiptPath)))
+	if receipt.SchemaVersion != 2 || receipt.EvidenceKind != "reproducibility_descriptor" || receipt.Contract != expected.Contract || receipt.Result != "PASS" || receipt.ValidationCommand != expected.ValidationCommand {
+		t.Fatalf("invalid V2 receipt identity/result: %+v", receipt)
+	}
+	if !slices.Equal(receipt.Execution.Argv, expected.ExecutionArgv) {
+		t.Fatalf("receipt execution argv = %v, want %v", receipt.Execution.Argv, expected.ExecutionArgv)
+	}
+	if receipt.Execution.ExitCode != 0 {
+		t.Fatalf("receipt execution exit_code = %d, want 0", receipt.Execution.ExitCode)
+	}
+	if receipt.Execution.CombinedOutputPath != expected.OutputPath {
+		t.Fatalf("receipt combined output path = %q, want %q", receipt.Execution.CombinedOutputPath, expected.OutputPath)
+	}
+	if receipt.Execution.GoVersion == "" || strings.ContainsAny(receipt.Execution.GoVersion, "\r\n") {
+		t.Fatalf("invalid receipt Go version %q", receipt.Execution.GoVersion)
+	}
+	executedAt, err := time.Parse(time.RFC3339, receipt.ExecutedAt)
+	if err != nil {
+		t.Fatalf("invalid receipt executed_at %q: %v", receipt.ExecutedAt, err)
+	}
+	if executedAt.After(time.Now().Add(5 * time.Second)) {
+		t.Fatalf("receipt executed_at %q is in the future", receipt.ExecutedAt)
+	}
+	notBefore, err := time.Parse(time.RFC3339, expected.ExecutedNotBefore)
+	if err != nil {
+		t.Fatalf("invalid expected not-before %q: %v", expected.ExecutedNotBefore, err)
+	}
+	if executedAt.Before(notBefore) {
+		t.Fatalf("receipt executed_at %q predates release bound %q", receipt.ExecutedAt, expected.ExecutedNotBefore)
+	}
+	if receipt.CandidateDigestAlgorithm != evidenceCandidateDigestAlgorithmV1 {
+		t.Fatalf("candidate digest algorithm = %q, want %q", receipt.CandidateDigestAlgorithm, evidenceCandidateDigestAlgorithmV1)
+	}
+	if !slices.Equal(receipt.CandidateSubjects, expected.CandidateSubjects) {
+		t.Fatalf("receipt candidate subjects = %v, want %v", receipt.CandidateSubjects, expected.CandidateSubjects)
+	}
+	for _, subject := range expected.CandidateSubjects {
+		if subject == expected.ReceiptPath || subject == expected.OutputPath {
+			t.Fatalf("receipt/output %q/%q must stay outside candidate subjects", expected.ReceiptPath, expected.OutputPath)
+		}
+	}
+	fixtureSHA := evidenceFileSHA256(t, filepath.Join(repositoryRoot, filepath.FromSlash(expected.FixturePath)))
+	if receipt.FixtureSHA256 != fixtureSHA {
+		t.Fatalf("receipt fixture_sha256 = %q, want %q", receipt.FixtureSHA256, fixtureSHA)
+	}
+	candidateSHA := evidenceCandidateDigest(t, repositoryRoot, expected.CandidateSubjects)
+	if receipt.CandidateSHA256 != candidateSHA {
+		t.Fatalf("receipt candidate_sha256 = %q, want %q", receipt.CandidateSHA256, candidateSHA)
+	}
+	if receipt.SubjectSourceTree.IdentityKind != "candidate_subject_set" || receipt.SubjectSourceTree.SHA256 != candidateSHA {
+		t.Fatalf("invalid subject source-tree identity: %+v, want candidate %s", receipt.SubjectSourceTree, candidateSHA)
+	}
+	if receipt.SubjectSourceTree.GitHead != expected.ExpectedGitHead || len(receipt.SubjectSourceTree.GitHead) != 40 {
+		t.Fatalf("informational git_head %q, want %q", receipt.SubjectSourceTree.GitHead, expected.ExpectedGitHead)
+	}
+	if _, err := hex.DecodeString(receipt.SubjectSourceTree.GitHead); err != nil {
+		t.Fatalf("invalid informational git_head %q: %v", receipt.SubjectSourceTree.GitHead, err)
+	}
+	outputSHA := evidenceFileSHA256(t, filepath.Join(repositoryRoot, filepath.FromSlash(expected.OutputPath)))
+	if receipt.Execution.CombinedOutputSHA256 != outputSHA {
+		t.Fatalf("receipt combined output sha256 = %q, want %q", receipt.Execution.CombinedOutputSHA256, outputSHA)
 	}
 }
 

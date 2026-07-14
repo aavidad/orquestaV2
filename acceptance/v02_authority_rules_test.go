@@ -98,14 +98,6 @@ func TestAcceptanceV02AuthorityRules(t *testing.T) {
 		}
 	})
 
-	t.Run("receipt_attests_explicit_non_self_referential_candidate", func(t *testing.T) {
-		evidenceAssertReceiptV1(t, repositoryRoot, evidenceReceiptExpectation{
-			Contract: fixture.ContractID, Command: fixture.Command,
-			FixturePath: v02FixturePath, ReceiptPath: fixture.ReceiptPath,
-			CandidateSubjects: fixture.CandidateSubjects,
-		})
-	})
-
 	sources := v02LoadSources(t, repositoryRoot, fixture.ProductModule, fixture.ProductRoots)
 	t.Run("new_product_has_no_legacy_import", func(t *testing.T) {
 		for _, file := range sources.Files {
@@ -134,6 +126,21 @@ func TestAcceptanceV02AuthorityRules(t *testing.T) {
 
 	t.Run("application_orchestrator_is_the_only_writer_and_scheduler", func(t *testing.T) {
 		v02AssertSingleWriterAndScheduler(t, sources, fixture.Lifecycle)
+	})
+}
+
+func TestAcceptanceV02AuthorityRulesReceipt(t *testing.T) {
+	repositoryRoot := evidenceRepositoryRoot(t)
+	fixture := evidenceDecodeStrictJSON[v02Fixture](t, filepath.Join(repositoryRoot, filepath.FromSlash(v02FixturePath)))
+	evidenceAssertReceiptV2(t, repositoryRoot, evidenceReceiptV2Expectation{
+		Contract: fixture.ContractID, ValidationCommand: fixture.Command,
+		ExecutionArgv: []string{
+			"go", "test", "-mod=vendor", "-count=1", "./acceptance", "-run", "^TestAcceptanceV02AuthorityRules$",
+		},
+		OutputPath: "product/evidence/v02_authority_rules.output.txt", FixturePath: v02FixturePath,
+		ReceiptPath: fixture.ReceiptPath, CandidateSubjects: fixture.CandidateSubjects,
+		ExecutedNotBefore: "2026-07-14T00:00:00+02:00",
+		ExpectedGitHead:   "a8bff609492f312fe2d6bf8ccccde02b6e5c8426",
 	})
 }
 
