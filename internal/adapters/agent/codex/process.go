@@ -175,7 +175,7 @@ func (adapter *Adapter) buildTerminal(
 ) terminalRecord {
 	terminal := terminalRecord{
 		SchemaVersion:       stateSchemaVersion,
-		RequestHash:         state.requestHash,
+		RequestHash:         state.terminalRequestHash,
 		Status:              ports.AgentFailed,
 		ObservedAt:          adapter.terminalTime(state.receipt.AcceptedAt),
 		Diagnostic:          diagnostic,
@@ -225,7 +225,7 @@ func (adapter *Adapter) finishWithoutProcessLocked(state *executionState, code s
 func (adapter *Adapter) finishWithoutProcessLockedWithDiagnostic(state *executionState, code string, diagnostic []byte, truncated bool) {
 	terminal := terminalRecord{
 		SchemaVersion:       stateSchemaVersion,
-		RequestHash:         state.requestHash,
+		RequestHash:         state.terminalRequestHash,
 		Status:              ports.AgentFailed,
 		ErrorCode:           code,
 		ObservedAt:          adapter.terminalTime(state.receipt.AcceptedAt),

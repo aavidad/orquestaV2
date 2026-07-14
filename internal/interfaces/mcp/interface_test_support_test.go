@@ -76,7 +76,8 @@ func newTestInterface(t *testing.T, maxRequestBytes int64) (*Interface, *memoryS
 	orchestrator, err := application.New(application.Dependencies{
 		State: state, Launcher: inertAgent{}, Observer: inertAgent{}, Artifacts: artifacts,
 		Clock: clock, IDs: ids, MaxOutputBytes: 4096,
-		MaxActionAttempts: 3, ClaimLease: time.Minute, ObservationDelay: time.Second,
+		MaxExecutionAttempts: 3, AgentCapabilities: inertAgentCapabilities(),
+		ClaimLease: time.Minute, ObservationDelay: time.Second,
 		ExecutionTimeout: time.Hour,
 	})
 	if err != nil {
@@ -163,7 +164,13 @@ func (ids *sequentialIDs) Count() uint64 {
 type inertAgent struct{}
 
 func (inertAgent) Capabilities(context.Context) (ports.AgentCapabilities, error) {
-	return ports.AgentCapabilities{ProviderRef: "provider:test"}, nil
+	return inertAgentCapabilities(), nil
+}
+
+func inertAgentCapabilities() ports.AgentCapabilities {
+	return ports.AgentCapabilities{
+		ProviderRef: "provider:test", ModelRef: "model:test", AgentRef: "agent:test", Unrestricted: true,
+	}
 }
 
 func (inertAgent) Launch(context.Context, ports.AgentLaunchRequest) (ports.AgentLaunchReceipt, error) {
@@ -368,6 +375,10 @@ func (state *memoryState) RequeueAction(context.Context, application.ActionReque
 }
 
 func (state *memoryState) QuarantineAction(context.Context, application.ActionQuarantinedState) error {
+	return errors.New("test.state_write_not_used")
+}
+
+func (state *memoryState) RecordExecutionReplaced(context.Context, application.ExecutionReplacedState) error {
 	return errors.New("test.state_write_not_used")
 }
 

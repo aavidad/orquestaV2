@@ -12,6 +12,11 @@ import (
 	"orquesta/internal/ports"
 )
 
+const (
+	ModelRef = "fake-default"
+	AgentRef = "agent:fake"
+)
+
 type Config struct {
 	ProviderRef string
 	MediaType   string
@@ -31,7 +36,8 @@ type run struct {
 }
 
 func New(config Config) (*Adapter, error) {
-	if config.ProviderRef == "" || config.MediaType == "" || len(config.Content) == 0 || config.Now == nil {
+	if config.MediaType == "" || len(config.Content) == 0 || config.Now == nil ||
+		ports.ValidateAgentCapabilities(agentCapabilities(config.ProviderRef)) != nil {
 		return nil, errors.New("fake_agent.config_invalid")
 	}
 	return &Adapter{config: config, runs: make(map[goal.ExecutionRef]run)}, nil
@@ -41,7 +47,16 @@ func (adapter *Adapter) Capabilities(context.Context) (ports.AgentCapabilities, 
 	if adapter == nil {
 		return ports.AgentCapabilities{}, errors.New("fake_agent.unavailable")
 	}
-	return ports.AgentCapabilities{ProviderRef: adapter.config.ProviderRef}, nil
+	return agentCapabilities(adapter.config.ProviderRef), nil
+}
+
+func agentCapabilities(providerRef string) ports.AgentCapabilities {
+	return ports.AgentCapabilities{
+		ProviderRef:  providerRef,
+		ModelRef:     ModelRef,
+		AgentRef:     AgentRef,
+		Unrestricted: true,
+	}
 }
 
 func (adapter *Adapter) Launch(ctx context.Context, request ports.AgentLaunchRequest) (ports.AgentLaunchReceipt, error) {
@@ -63,12 +78,22 @@ func (adapter *Adapter) Launch(ctx context.Context, request ports.AgentLaunchReq
 		return existing.receipt, nil
 	}
 	receipt := ports.AgentLaunchReceipt{
-		ExecutionRef:   request.ExecutionRef,
-		SpecHash:       request.SpecHash,
-		ProviderRef:    adapter.config.ProviderRef,
-		ExternalRef:    "fake:" + request.ExecutionRef.String(),
-		IdempotencyKey: request.IdempotencyKey,
-		AcceptedAt:     adapter.config.Now(),
+		ExecutionRef:      request.ExecutionRef,
+		GoalRef:           request.GoalRef,
+		WorkItemRef:       request.WorkItemRef,
+		PlanGeneration:    request.PlanGeneration,
+		AppSpecGeneration: request.AppSpecGeneration,
+		ExecutionAttempt:  request.ExecutionAttempt,
+		SpecHash:          request.SpecHash,
+		ProviderRef:       adapter.config.ProviderRef,
+		ModelRef:          ModelRef,
+		AgentRef:          AgentRef,
+		ExternalRef:       "fake:" + request.ExecutionRef.String(),
+		IdempotencyKey:    request.IdempotencyKey,
+		AcceptedAt:        adapter.config.Now(),
+	}
+	if err := ports.ValidateAgentLaunchReceipt(request, receipt); err != nil {
+		return ports.AgentLaunchReceipt{}, err
 	}
 	adapter.runs[request.ExecutionRef] = run{request: request, receipt: receipt}
 	return receipt, nil

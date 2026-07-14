@@ -271,14 +271,23 @@ WHERE g.ref = ?`, goalValue).Scan(
 	if aggregate.PlanGeneration() > 0 && len(executions) == 0 {
 		return application.GoalRecord{}, invalid(fmt.Errorf("sqlite.executions_missing"))
 	}
-	return application.GoalRecord{
-		RequestRef:         requestRef,
-		RequestFingerprint: requestFingerprint,
-		Goal:               aggregate,
-		Executions:         executions,
-		Artifacts:          artifacts,
-		Attestations:       attestations,
-	}, nil
+	receipts, err := readConsumptionReceipts(ctx, source, goalValue)
+	if err != nil {
+		return application.GoalRecord{}, err
+	}
+	record := application.GoalRecord{
+		RequestRef:          requestRef,
+		RequestFingerprint:  requestFingerprint,
+		Goal:                aggregate,
+		Executions:          executions,
+		Artifacts:           artifacts,
+		Attestations:        attestations,
+		ConsumptionReceipts: receipts,
+	}
+	if err := validateGoalRecordConsistency(record, goalValue); err != nil {
+		return application.GoalRecord{}, invalid(err)
+	}
+	return record, nil
 }
 
 func readWorkItems(
@@ -384,12 +393,15 @@ WHERE goal_ref = ? AND work_item_ref = ? AND kind = ? ORDER BY position`, goalVa
 func readExecutions(ctx context.Context, source queryer, goalValue string) ([]application.ExecutionRecord, error) {
 	rows, err := source.QueryContext(ctx, `
 SELECT ref, goal_ref, work_item_ref, state, artifact_media_type, idempotency_key,
-       max_output_bytes, max_attempts, provider_ref, external_ref, created_at,
+       attempt_no, max_execution_attempts, replaces_execution_ref,
+       plan_generation, app_spec_generation, spec_hash,
+       max_output_bytes, provider_ref, model_ref, agent_ref,
+       external_ref, created_at,
        deadline_at, started_at, provider_accepted_at, last_observed_at,
        provider_observed_at, finished_at, failure_code
 FROM executions
 WHERE goal_ref = ?
-ORDER BY created_at, ref`, goalValue)
+ORDER BY work_item_ref, attempt_no, ref`, goalValue)
 	if err != nil {
 		return nil, mapDatabaseError(err)
 	}
@@ -400,7 +412,8 @@ ORDER BY created_at, ref`, goalValue)
 		var refValue, goalRefValue, workItemRefValue, state string
 		var createdAt int64
 		var deadlineAt, startedAt, providerAcceptedAt, observedAt, providerObservedAt, finishedAt sql.NullInt64
-		var maxAttempts int64
+		var replacesExecutionRef sql.NullString
+		var attemptNo, maxExecutionAttempts, planGeneration, appSpecGeneration int64
 		if err := rows.Scan(
 			&refValue,
 			&goalRefValue,
@@ -408,9 +421,16 @@ ORDER BY created_at, ref`, goalValue)
 			&state,
 			&record.ArtifactMediaType,
 			&record.IdempotencyKey,
+			&attemptNo,
+			&maxExecutionAttempts,
+			&replacesExecutionRef,
+			&planGeneration,
+			&appSpecGeneration,
+			&record.SpecHash,
 			&record.MaxOutputBytes,
-			&maxAttempts,
 			&record.ProviderRef,
+			&record.ModelRef,
+			&record.AgentRef,
 			&record.ExternalRef,
 			&createdAt,
 			&deadlineAt,
@@ -433,11 +453,19 @@ ORDER BY created_at, ref`, goalValue)
 		if record.WorkItemRef, refErr = goal.NewWorkItemRef(workItemRefValue); refErr != nil {
 			return nil, invalid(refErr)
 		}
-		record.State = application.ExecutionState(state)
-		if maxAttempts <= 0 {
-			return nil, invalid(fmt.Errorf("sqlite.max_attempts_invalid"))
+		if replacesExecutionRef.Valid {
+			if record.ReplacesExecutionRef, refErr = goal.NewExecutionRef(replacesExecutionRef.String); refErr != nil {
+				return nil, invalid(refErr)
+			}
 		}
-		record.MaxAttempts = uint64(maxAttempts)
+		record.State = application.ExecutionState(state)
+		if attemptNo <= 0 || maxExecutionAttempts <= 0 || planGeneration <= 0 || appSpecGeneration <= 0 {
+			return nil, invalid(fmt.Errorf("sqlite.execution_generation_invalid"))
+		}
+		record.AttemptNo = uint64(attemptNo)
+		record.MaxExecutionAttempts = uint64(maxExecutionAttempts)
+		record.PlanGeneration = goal.PlanGeneration(planGeneration)
+		record.AppSpecGeneration = goal.AppSpecGeneration(appSpecGeneration)
 		record.CreatedAt = time.Unix(0, createdAt).UTC()
 		record.DeadlineAt = restoredTime(deadlineAt)
 		record.StartedAt = restoredTime(startedAt)
@@ -451,6 +479,62 @@ ORDER BY created_at, ref`, goalValue)
 		return nil, mapDatabaseError(err)
 	}
 	return records, nil
+}
+
+func readConsumptionReceipts(
+	ctx context.Context,
+	source queryer,
+	goalValue string,
+) ([]application.ActionConsumptionReceipt, error) {
+	rows, err := source.QueryContext(ctx, `
+SELECT action_ref, kind, goal_ref, work_item_ref, execution_ref,
+       plan_generation, work_item_generation, fence, delivery_attempt,
+       claim_token, worker_ref, outcome, error_code, consumed_at
+FROM action_consumption_receipts
+WHERE goal_ref = ?
+ORDER BY consumed_at, action_ref`, goalValue)
+	if err != nil {
+		return nil, mapDatabaseError(err)
+	}
+	defer rows.Close()
+	var result []application.ActionConsumptionReceipt
+	for rows.Next() {
+		var receipt application.ActionConsumptionReceipt
+		var kind, goalRefValue, workItemRefValue, executionRefValue, outcome string
+		var planGeneration, itemGeneration, fence, deliveryAttempt, consumedAt int64
+		if err := rows.Scan(
+			&receipt.ActionRef, &kind, &goalRefValue, &workItemRefValue, &executionRefValue,
+			&planGeneration, &itemGeneration, &fence, &deliveryAttempt,
+			&receipt.ClaimToken, &receipt.WorkerRef, &outcome, &receipt.ErrorCode, &consumedAt,
+		); err != nil {
+			return nil, mapDatabaseError(err)
+		}
+		if planGeneration <= 0 || itemGeneration <= 0 || fence <= 0 || deliveryAttempt <= 0 {
+			return nil, invalid(errors.New("sqlite.receipt_generation_invalid"))
+		}
+		var refErr error
+		receipt.Kind = application.ActionKind(kind)
+		if receipt.GoalRef, refErr = goal.NewGoalRef(goalRefValue); refErr != nil {
+			return nil, invalid(refErr)
+		}
+		if receipt.WorkItemRef, refErr = goal.NewWorkItemRef(workItemRefValue); refErr != nil {
+			return nil, invalid(refErr)
+		}
+		if receipt.ExecutionRef, refErr = goal.NewExecutionRef(executionRefValue); refErr != nil {
+			return nil, invalid(refErr)
+		}
+		receipt.PlanGeneration = goal.PlanGeneration(planGeneration)
+		receipt.WorkItemGeneration = goal.Revision(itemGeneration)
+		receipt.Fence = uint64(fence)
+		receipt.DeliveryAttempt = uint64(deliveryAttempt)
+		receipt.Outcome = application.ActionConsumptionOutcome(outcome)
+		receipt.ConsumedAt = time.Unix(0, consumedAt).UTC()
+		result = append(result, receipt)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, mapDatabaseError(err)
+	}
+	return result, nil
 }
 
 func readPhases(ctx context.Context, source queryer, goalValue string) ([]goal.PhaseInstanceSnapshot, error) {

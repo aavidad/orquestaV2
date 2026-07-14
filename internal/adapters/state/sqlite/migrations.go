@@ -75,6 +75,11 @@ func applyMigrations(ctx context.Context, database *sql.DB) error {
 		if migration.version <= current {
 			continue
 		}
+		if migration.version == 5 {
+			if err := validateAtomicStateMigrationSource(ctx, transaction); err != nil {
+				return invalid(err)
+			}
+		}
 		if _, err := transaction.ExecContext(ctx, migration.preSQL); err != nil {
 			return mapDatabaseError(err)
 		}
@@ -130,6 +135,21 @@ func applyMigrations(ctx context.Context, database *sql.DB) error {
 		return invalid(fmt.Errorf("sqlite.foreign_keys_disabled"))
 	}
 	foreignKeysDisabled = false
+	return nil
+}
+
+func validateAtomicStateMigrationSource(ctx context.Context, transaction *sql.Tx) error {
+	var incomplete int
+	if err := transaction.QueryRowContext(ctx, `
+SELECT COUNT(*)
+FROM outbox
+WHERE completed_at IS NOT NULL
+  AND (claim_token IS NULL OR claimed_by IS NULL OR claimed_until IS NULL OR attempt <= 0)`).Scan(&incomplete); err != nil {
+		return err
+	}
+	if incomplete != 0 {
+		return fmt.Errorf("sqlite.legacy_completed_action_claim_missing")
+	}
 	return nil
 }
 

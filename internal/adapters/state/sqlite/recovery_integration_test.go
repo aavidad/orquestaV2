@@ -31,7 +31,10 @@ func TestArtifactPersistenceCrossingLeaseCannotCommitBackdatedSuccess(t *testing
 	orchestrator, err := application.New(application.Dependencies{
 		State: repository, Launcher: agent, Observer: agent,
 		Artifacts: leaseAdvancingArtifacts{clock: clock, advance: 2 * time.Second},
-		Clock:     clock, IDs: &restartIDs{}, MaxOutputBytes: 4096, MaxActionAttempts: 3,
+		Clock:     clock, IDs: &restartIDs{}, MaxOutputBytes: 4096, MaxExecutionAttempts: 3,
+		AgentCapabilities: ports.AgentCapabilities{
+			ProviderRef: "provider:lease-test", ModelRef: "model:lease-test", AgentRef: "agent:lease-test", Unrestricted: true,
+		},
 		ClaimLease: time.Second, ObservationDelay: time.Millisecond, ExecutionTimeout: time.Hour,
 	})
 	if err != nil {
@@ -74,6 +77,7 @@ func TestArtifactPersistenceCrossingLeaseCannotCommitBackdatedSuccess(t *testing
 func TestDispatchingLaunchRecoversAcrossRestartWithSameIdempotency(t *testing.T) {
 	repository, path := openTestRepository(t)
 	clock := &restartClock{now: time.Date(2026, 7, 14, 16, 0, 0, 0, time.UTC)}
+	repository.now = clock.Now
 	ids := &restartIDs{}
 	agent := &restartAgent{clock: clock, temporaryFirst: true}
 	orchestrator := newRestartOrchestrator(t, repository, clock, ids, agent)
@@ -128,6 +132,7 @@ func TestDispatchingLaunchRecoversAcrossRestartWithSameIdempotency(t *testing.T)
 func TestPreparedLaunchWithRetainedClaimRecoversAfterCrashAndLeaseExpiry(t *testing.T) {
 	repository, path := openTestRepository(t)
 	clock := &restartClock{now: time.Date(2026, 7, 14, 17, 0, 0, 0, time.UTC)}
+	repository.now = clock.Now
 	ids := &restartIDs{}
 	agent := &restartAgent{clock: clock}
 	orchestrator := newRestartOrchestrator(t, repository, clock, ids, agent)
@@ -141,9 +146,12 @@ func TestPreparedLaunchWithRetainedClaimRecoversAfterCrashAndLeaseExpiry(t *test
 		t.Fatalf("submit: %v", err)
 	}
 	claim, found, err := repository.ClaimNextAction(context.Background(), application.ClaimRequest{
-		WorkerRef: "worker:crashed", Token: "claim:crashed", Now: clock.Now(), LeaseDuration: time.Second,
+		WorkerRef: "worker:crashed", Token: "claim:crashed", LeaseDuration: time.Second,
+		Capabilities: ports.AgentCapabilities{
+			ProviderRef: "provider:restart", ModelRef: "model:restart", AgentRef: "agent:restart", Unrestricted: true,
+		},
 	})
-	if err != nil || !found || claim.Attempt != 1 {
+	if err != nil || !found || claim.DeliveryAttempt != 1 {
 		t.Fatalf("first claim = %+v found=%v err=%v", claim, found, err)
 	}
 	record, err := repository.GetGoal(context.Background(), submitted.Record.Goal.Ref())
@@ -172,7 +180,8 @@ func TestPreparedLaunchWithRetainedClaimRecoversAfterCrashAndLeaseExpiry(t *test
 	}
 	expectedRequest := ports.AgentLaunchRequest{
 		ExecutionRef: preparedExecution.Ref, GoalRef: preparedGoal.Ref(), WorkItemRef: item.Ref(),
-		SpecHash: preparedGoal.SpecHash(),
+		PlanGeneration: preparedGoal.PlanGeneration(), AppSpecGeneration: preparedGoal.AppSpec().Generation(),
+		ExecutionAttempt: preparedExecution.AttemptNo, SpecHash: preparedGoal.SpecHash(),
 		ActorRef: preparedGoal.Actor(), ProjectRef: preparedGoal.Project(), Objective: item.Objective(),
 		PhaseRef: preparedGoal.Phases()[0].Ref().String(), PhaseKey: item.Phase().String(),
 		PhaseTemplateRef: preparedGoal.Phases()[0].TemplateRef().String(),
@@ -204,7 +213,7 @@ func TestPreparedLaunchWithRetainedClaimRecoversAfterCrashAndLeaseExpiry(t *test
 	var attempt int
 	var completedAt sql.NullInt64
 	if err := repository.db.QueryRow(
-		"SELECT attempt, completed_at FROM outbox WHERE ref = ?", claim.Action.Ref,
+		"SELECT delivery_attempt, completed_at FROM outbox WHERE ref = ?", claim.Action.Ref,
 	).Scan(&attempt, &completedAt); err != nil || attempt != 2 || !completedAt.Valid {
 		t.Fatalf("recovered claim = attempt:%d completed:%+v err:%v", attempt, completedAt, err)
 	}
@@ -220,7 +229,10 @@ func newRestartOrchestrator(
 	t.Helper()
 	orchestrator, err := application.New(application.Dependencies{
 		State: repository, Launcher: agent, Observer: agent, Artifacts: restartArtifacts{},
-		Clock: clock, IDs: ids, MaxOutputBytes: 4096, MaxActionAttempts: 3,
+		Clock: clock, IDs: ids, MaxOutputBytes: 4096, MaxExecutionAttempts: 3,
+		AgentCapabilities: ports.AgentCapabilities{
+			ProviderRef: "provider:restart", ModelRef: "model:restart", AgentRef: "agent:restart", Unrestricted: true,
+		},
 		ClaimLease: time.Minute, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})
 	if err != nil {
@@ -275,7 +287,9 @@ type restartAgent struct {
 }
 
 func (agent *restartAgent) Capabilities(context.Context) (ports.AgentCapabilities, error) {
-	return ports.AgentCapabilities{ProviderRef: "provider:restart"}, nil
+	return ports.AgentCapabilities{
+		ProviderRef: "provider:restart", ModelRef: "model:restart", AgentRef: "agent:restart", Unrestricted: true,
+	}, nil
 }
 
 func (agent *restartAgent) Launch(ctx context.Context, request ports.AgentLaunchRequest) (ports.AgentLaunchReceipt, error) {
@@ -290,9 +304,11 @@ func (agent *restartAgent) Launch(ctx context.Context, request ports.AgentLaunch
 	agent.requests = append(agent.requests, request)
 	if len(agent.requests) == 1 {
 		agent.receipt = ports.AgentLaunchReceipt{
-			ExecutionRef: request.ExecutionRef, SpecHash: request.SpecHash, ProviderRef: "provider:restart",
-			ExternalRef: "external:" + request.ExecutionRef.String(), IdempotencyKey: request.IdempotencyKey,
-			AcceptedAt: agent.clock.Now(),
+			ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
+			PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
+			ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash, ProviderRef: "provider:restart",
+			ModelRef: "model:restart", AgentRef: "agent:restart",
+			ExternalRef: "external:" + request.ExecutionRef.String(), IdempotencyKey: request.IdempotencyKey, AcceptedAt: agent.clock.Now(),
 		}
 		if agent.temporaryFirst {
 			return ports.AgentLaunchReceipt{}, restartTemporaryError{}
@@ -333,7 +349,9 @@ type leaseCompletionAgent struct {
 }
 
 func (agent *leaseCompletionAgent) Capabilities(context.Context) (ports.AgentCapabilities, error) {
-	return ports.AgentCapabilities{ProviderRef: "provider:lease-test"}, nil
+	return ports.AgentCapabilities{
+		ProviderRef: "provider:lease-test", ModelRef: "model:lease-test", AgentRef: "agent:lease-test", Unrestricted: true,
+	}, nil
 }
 
 func (agent *leaseCompletionAgent) Launch(_ context.Context, request ports.AgentLaunchRequest) (ports.AgentLaunchReceipt, error) {
@@ -341,9 +359,11 @@ func (agent *leaseCompletionAgent) Launch(_ context.Context, request ports.Agent
 	agent.specHash = request.SpecHash
 	agent.mu.Unlock()
 	return ports.AgentLaunchReceipt{
-		ExecutionRef: request.ExecutionRef, SpecHash: request.SpecHash, ProviderRef: "provider:lease-test",
-		ExternalRef: "external:" + request.ExecutionRef.String(), IdempotencyKey: request.IdempotencyKey,
-		AcceptedAt: agent.clock.Now(),
+		ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
+		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
+		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash, ProviderRef: "provider:lease-test",
+		ModelRef: "model:lease-test", AgentRef: "agent:lease-test",
+		ExternalRef: "external:" + request.ExecutionRef.String(), IdempotencyKey: request.IdempotencyKey, AcceptedAt: agent.clock.Now(),
 	}, nil
 }
 

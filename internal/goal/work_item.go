@@ -191,6 +191,43 @@ func (item WorkItem) Start(expected Revision, execution ExecutionRef, at time.Ti
 	return updated, nil
 }
 
+// replaceExecution changes only the replaceable execution attempt bound to a
+// running WorkItem. WorkItem remains the lifecycle authority: replacement does
+// not restart work, move timestamps, or change state.
+func (item WorkItem) replaceExecution(
+	expected Revision,
+	current ExecutionRef,
+	replacement ExecutionRef,
+	at time.Time,
+) (WorkItem, error) {
+	if err := item.expectRevision(expected); err != nil {
+		return WorkItem{}, err
+	}
+	if item.state != WorkItemStateRunning {
+		return WorkItem{}, domainError(ErrorInvalidTransition, "work_item_state")
+	}
+	if !validExecutionRef(current) {
+		return WorkItem{}, domainError(ErrorInvalidRef, "current_execution_ref")
+	}
+	if !validExecutionRef(replacement) {
+		return WorkItem{}, domainError(ErrorInvalidRef, "replacement_execution_ref")
+	}
+	if current != item.execution {
+		return WorkItem{}, domainError(ErrorRevisionConflict, "current_execution_ref")
+	}
+	if replacement == current {
+		return WorkItem{}, domainError(ErrorInvalidArgument, "replacement_execution_ref")
+	}
+	if !validTransitionTime(at, item.startedAt) {
+		return WorkItem{}, domainError(ErrorInvalidArgument, "replacement_at")
+	}
+
+	updated := item.clone()
+	updated.revision++
+	updated.execution = replacement
+	return updated, nil
+}
+
 func (item WorkItem) Succeed(
 	expected Revision,
 	artifacts []ArtifactRef,

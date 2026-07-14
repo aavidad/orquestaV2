@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "revision": "2026-07-14.4",
+  "revision": "2026-07-14.6",
   "keys": [
     {
       "key": "server.listen",
@@ -316,16 +316,16 @@
       "env_alias": "ORQUESTA_SCHEDULER_CLAIM_LEASE"
     },
     {
-      "key": "scheduler.max_action_attempts",
-      "go_name": "SchedulerMaxActionAttempts",
+      "key": "scheduler.max_execution_attempts",
+      "go_name": "SchedulerMaxExecutionAttempts",
       "type": "integer",
-      "default": 1800,
+      "default": 3,
       "sensitive": false,
       "scope": "scheduler",
       "restart_required": true,
-      "env_alias": "ORQUESTA_SCHEDULER_MAX_ACTION_ATTEMPTS",
+      "env_alias": "ORQUESTA_SCHEDULER_MAX_EXECUTION_ATTEMPTS",
       "minimum": 1,
-      "maximum": 1000000
+      "maximum": 1000
     },
     {
       "key": "scheduler.execution_timeout",

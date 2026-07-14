@@ -42,7 +42,7 @@ default = "project:default"
 poll_interval = "500ms"
 observation_interval = "2s"
 claim_lease = "2m"
-max_action_attempts = 1800
+max_execution_attempts = 3
 execution_timeout = "45m"
 
 [api]

@@ -259,6 +259,28 @@ func (goal Goal) StartWorkItem(
 	return goal.withUpdatedWorkItem(item), nil
 }
 
+// ReplaceWorkItemExecution atomically replaces the attempt reference of one
+// running WorkItem under both Goal and WorkItem CAS. It never creates another
+// lifecycle: state and started_at remain owned by the existing WorkItem.
+func (goal Goal) ReplaceWorkItemExecution(
+	expectedGoal Revision,
+	expectedItem Revision,
+	ref WorkItemRef,
+	currentExecution ExecutionRef,
+	replacementExecution ExecutionRef,
+	at time.Time,
+) (Goal, error) {
+	item, err := goal.workItemForTransition(expectedGoal, ref, at)
+	if err != nil {
+		return Goal{}, err
+	}
+	item, err = item.replaceExecution(expectedItem, currentExecution, replacementExecution, at)
+	if err != nil {
+		return Goal{}, err
+	}
+	return goal.withUpdatedWorkItem(item), nil
+}
+
 // RunnableWorkItems returns dependency-ready pending work that does not
 // conflict with any running item. It intentionally does not choose a cohort.
 func (goal Goal) RunnableWorkItems() []WorkItem {

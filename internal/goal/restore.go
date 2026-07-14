@@ -194,7 +194,7 @@ func restoreWorkItem(snapshot WorkItemSnapshot) (WorkItem, error) {
 	if strings.TrimSpace(snapshot.Objective) == "" || !validWorkItemState(snapshot.State) {
 		return WorkItem{}, domainError(ErrorSnapshotInvalid, "work_item_header")
 	}
-	if snapshot.Revision != revisionForWorkItemState(snapshot.State) || snapshot.CreatedAt.IsZero() {
+	if !validRestoredWorkItemRevision(snapshot.State, snapshot.Revision) || snapshot.CreatedAt.IsZero() {
 		return WorkItem{}, domainError(ErrorSnapshotInvalid, "work_item_revision")
 	}
 	phase, err := NewPhaseKey(snapshot.PhaseKey)
@@ -411,6 +411,18 @@ func revisionForWorkItemState(state WorkItemState) Revision {
 	}
 }
 
+func validRestoredWorkItemRevision(state WorkItemState, revision Revision) bool {
+	minimum := revisionForWorkItemState(state)
+	switch state {
+	case WorkItemStatePending, WorkItemStateSkipped:
+		return minimum > 0 && revision == minimum
+	case WorkItemStateRunning, WorkItemStateSucceeded, WorkItemStateFailed:
+		return minimum > 0 && revision >= minimum
+	default:
+		return false
+	}
+}
+
 func revisionForGoalSnapshot(goal Goal) Revision {
 	revision := Revision(1) + Revision(goal.planGeneration)
 	if goal.state != GoalStatePending {
@@ -420,8 +432,14 @@ func revisionForGoalSnapshot(goal Goal) Revision {
 		switch item.state {
 		case WorkItemStateRunning:
 			revision++
+			if item.revision > 2 {
+				revision += item.revision - 2
+			}
 		case WorkItemStateSucceeded, WorkItemStateFailed:
 			revision += 2
+			if item.revision > 3 {
+				revision += item.revision - 3
+			}
 		}
 	}
 	if goal.state.Terminal() {

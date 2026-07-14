@@ -56,7 +56,6 @@ type v06ClockAndRetry struct {
 	ClaimLease           string   `json:"claim_lease"`
 	ObservationDelay     string   `json:"observation_delay"`
 	ExecutionTimeout     string   `json:"execution_timeout"`
-	MaxDeliveryAttempts  uint64   `json:"max_delivery_attempts"`
 	MaxExecutionAttempts uint64   `json:"max_execution_attempts"`
 	ClaimContenders      int      `json:"claim_contenders"`
 	LaunchOutcomes       []string `json:"launch_outcomes"`
@@ -164,7 +163,7 @@ func v06AssertFixtureHeader(t *testing.T, repositoryRoot string, fixture v06Fixt
 			t.Fatalf("invalid %s %q: %v", name, raw, err)
 		}
 	}
-	if fixture.ClockAndRetry.MaxDeliveryAttempts < 2 || fixture.ClockAndRetry.MaxExecutionAttempts < 2 ||
+	if fixture.ClockAndRetry.MaxExecutionAttempts < 2 ||
 		fixture.ClockAndRetry.ClaimContenders < 2 ||
 		!reflect.DeepEqual(fixture.ClockAndRetry.LaunchOutcomes, []string{"temporary_error", "permanent_error", "accepted"}) {
 		t.Fatalf("invalid V06 retry/race scenario: %+v", fixture.ClockAndRetry)
@@ -196,12 +195,21 @@ func v06AssertPublicContractShape(t *testing.T, fixture v06Fixture) {
 		"ModelRef":             reflect.TypeOf(""),
 		"AgentRef":             reflect.TypeOf(""),
 	})
+	if _, legacyLimit := reflect.TypeOf(application.ExecutionRecord{}).FieldByName("MaxAttempts"); legacyLimit {
+		t.Fatal("ExecutionRecord still carries the conflated legacy delivery limit")
+	}
 	v06RequireFields(t, reflect.TypeOf(application.ActionClaim{}), map[string]reflect.Type{
 		"DeliveryAttempt": reflect.TypeOf(uint64(0)),
 		"Fence":           reflect.TypeOf(uint64(0)),
 	})
 	if _, conflated := reflect.TypeOf(application.ActionClaim{}).FieldByName("Attempt"); conflated {
 		t.Fatal("ActionClaim still conflates delivery attempt with execution attempt")
+	}
+	v06RequireFields(t, reflect.TypeOf(application.ClaimRequest{}), map[string]reflect.Type{
+		"Capabilities": reflect.TypeOf(ports.AgentCapabilities{}),
+	})
+	if _, callerClock := reflect.TypeOf(application.ClaimRequest{}).FieldByName("Now"); callerClock {
+		t.Fatal("ClaimRequest lets callers control the repository lease clock")
 	}
 	v06RequireFields(t, reflect.TypeOf(application.ActionConsumptionReceipt{}), map[string]reflect.Type{
 		"PlanGeneration":     reflect.TypeOf(goal.PlanGeneration(0)),
@@ -221,6 +229,9 @@ func v06AssertPublicContractShape(t *testing.T, fixture v06Fixture) {
 	})
 	statePort := reflect.TypeOf((*application.StateRepository)(nil)).Elem()
 	dependencies := reflect.TypeOf(application.Dependencies{})
+	if _, deadLimit := dependencies.FieldByName("MaxActionAttempts"); deadLimit {
+		t.Fatal("application.Dependencies still exposes an ineffective delivery-attempt limit")
+	}
 	stateFields := 0
 	for index := 0; index < dependencies.NumField(); index++ {
 		if dependencies.Field(index).Type == statePort {
@@ -259,7 +270,7 @@ func v06AssertAtomicCreate(t *testing.T, fixture v06Fixture) {
 	t.Helper()
 	ctx := context.Background()
 	clock := v06ClockFromFixture(t, fixture)
-	databasePath := filepath.Join(t.TempDir(), "atomic.db")
+	databasePath := v06PrivateDatabasePath(t, "atomic.db")
 	repository := v06OpenSQLite(t, ctx, databasePath, clock)
 	defer repository.Close()
 	v06AssertSQLiteWAL(t, databasePath)
@@ -316,7 +327,7 @@ func v06AssertReplaceableAttemptsAndRestart(t *testing.T, fixture v06Fixture) {
 	t.Helper()
 	ctx := context.Background()
 	clock := v06ClockFromFixture(t, fixture)
-	databasePath := filepath.Join(t.TempDir(), "attempts.db")
+	databasePath := v06PrivateDatabasePath(t, "attempts.db")
 	repository := v06OpenSQLite(t, ctx, databasePath, clock)
 	ids := &v06IDs{}
 	artifacts := newV06ArtifactStore()
@@ -400,7 +411,7 @@ func v06AssertFencedClaimAndReceipt(t *testing.T, fixture v06Fixture) {
 	ctx := context.Background()
 	clock := v06ClockFromFixture(t, fixture)
 	lease := v06Duration(t, fixture.ClockAndRetry.ClaimLease)
-	databasePath := filepath.Join(t.TempDir(), "fence.db")
+	databasePath := v06PrivateDatabasePath(t, "fence.db")
 	first := v06OpenSQLite(t, ctx, databasePath, clock)
 	second := v06OpenSQLite(t, ctx, databasePath, clock)
 	agent := newV06Agent(clock, v06Capabilities(fixture.OpaqueRequirements, true), "accepted")
@@ -537,7 +548,7 @@ func v06AssertCapabilityMatchingAndNoPrivateQueue(t *testing.T, fixture v06Fixtu
 	t.Helper()
 	ctx := context.Background()
 	clock := v06ClockFromFixture(t, fixture)
-	databasePath := filepath.Join(t.TempDir(), "capability.db")
+	databasePath := v06PrivateDatabasePath(t, "capability.db")
 	repository := v06OpenSQLite(t, ctx, databasePath, clock)
 	ids := &v06IDs{}
 	artifacts := newV06ArtifactStore()
@@ -610,7 +621,7 @@ func v06NewOrchestrator(
 	t.Helper()
 	orchestrator, err := application.New(application.Dependencies{
 		State: repository, Launcher: agent, Observer: agent, Artifacts: artifacts, Clock: clock, IDs: ids,
-		MaxOutputBytes: 1 << 20, MaxActionAttempts: fixture.ClockAndRetry.MaxDeliveryAttempts,
+		MaxOutputBytes:       1 << 20,
 		MaxExecutionAttempts: fixture.ClockAndRetry.MaxExecutionAttempts,
 		ClaimLease:           v06Duration(t, fixture.ClockAndRetry.ClaimLease),
 		ObservationDelay:     v06Duration(t, fixture.ClockAndRetry.ObservationDelay),
@@ -629,9 +640,14 @@ func v06OpenSQLite(t *testing.T, ctx context.Context, path string, clock *v06Clo
 		Path: path, BusyTimeout: 5 * time.Second, MaxOpenConnections: 4, Now: clock.Now,
 	})
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("open V06 SQLite repository: %v: %v", err, errors.Unwrap(err))
 	}
 	return repository
+}
+
+func v06PrivateDatabasePath(t *testing.T, name string) string {
+	t.Helper()
+	return filepath.Join(t.TempDir(), "private-state", name)
 }
 
 func v06AssertSQLiteWAL(t *testing.T, path string) {

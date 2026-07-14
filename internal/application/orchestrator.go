@@ -3,6 +3,8 @@ package application
 import (
 	"errors"
 	"time"
+
+	"orquesta/internal/ports"
 )
 
 const (
@@ -11,31 +13,33 @@ const (
 )
 
 type Dependencies struct {
-	State             StateRepository
-	Launcher          AgentLauncher
-	Observer          AgentObserver
-	Artifacts         ArtifactStore
-	Clock             Clock
-	IDs               IDGenerator
-	MaxOutputBytes    int64
-	MaxActionAttempts uint64
-	ClaimLease        time.Duration
-	ObservationDelay  time.Duration
-	ExecutionTimeout  time.Duration
+	State                StateRepository
+	Launcher             AgentLauncher
+	Observer             AgentObserver
+	Artifacts            ArtifactStore
+	Clock                Clock
+	IDs                  IDGenerator
+	MaxOutputBytes       int64
+	MaxExecutionAttempts uint64
+	ClaimLease           time.Duration
+	ObservationDelay     time.Duration
+	ExecutionTimeout     time.Duration
+	AgentCapabilities    ports.AgentCapabilities
 }
 
 type Orchestrator struct {
-	state             StateRepository
-	launcher          AgentLauncher
-	observer          AgentObserver
-	artifacts         ArtifactStore
-	clock             Clock
-	ids               IDGenerator
-	maxOutputBytes    int64
-	maxActionAttempts uint64
-	claimLease        time.Duration
-	observationDelay  time.Duration
-	executionTimeout  time.Duration
+	state                StateRepository
+	launcher             AgentLauncher
+	observer             AgentObserver
+	artifacts            ArtifactStore
+	clock                Clock
+	ids                  IDGenerator
+	maxOutputBytes       int64
+	maxExecutionAttempts uint64
+	claimLease           time.Duration
+	observationDelay     time.Duration
+	executionTimeout     time.Duration
+	agentCapabilities    ports.AgentCapabilities
 }
 
 func New(dependencies Dependencies) (*Orchestrator, error) {
@@ -54,8 +58,10 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 		return nil, errors.New("application.ids_required")
 	case dependencies.MaxOutputBytes <= 0:
 		return nil, errors.New("application.max_output_bytes_invalid")
-	case dependencies.MaxActionAttempts == 0:
-		return nil, errors.New("application.max_action_attempts_invalid")
+	case dependencies.MaxExecutionAttempts == 0:
+		return nil, errors.New("application.max_execution_attempts_invalid")
+	case ports.ValidateAgentCapabilities(dependencies.AgentCapabilities) != nil:
+		return nil, errors.New("application.agent_capabilities_invalid")
 	case dependencies.ClaimLease <= 0:
 		return nil, errors.New("application.claim_lease_invalid")
 	case dependencies.ObservationDelay <= 0:
@@ -64,16 +70,25 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 		return nil, errors.New("application.execution_timeout_invalid")
 	}
 	return &Orchestrator{
-		state:             dependencies.State,
-		launcher:          dependencies.Launcher,
-		observer:          dependencies.Observer,
-		artifacts:         dependencies.Artifacts,
-		clock:             dependencies.Clock,
-		ids:               dependencies.IDs,
-		maxOutputBytes:    dependencies.MaxOutputBytes,
-		maxActionAttempts: dependencies.MaxActionAttempts,
-		claimLease:        dependencies.ClaimLease,
-		observationDelay:  dependencies.ObservationDelay,
-		executionTimeout:  dependencies.ExecutionTimeout,
+		state:                dependencies.State,
+		launcher:             dependencies.Launcher,
+		observer:             dependencies.Observer,
+		artifacts:            dependencies.Artifacts,
+		clock:                dependencies.Clock,
+		ids:                  dependencies.IDs,
+		maxOutputBytes:       dependencies.MaxOutputBytes,
+		maxExecutionAttempts: dependencies.MaxExecutionAttempts,
+		claimLease:           dependencies.ClaimLease,
+		observationDelay:     dependencies.ObservationDelay,
+		executionTimeout:     dependencies.ExecutionTimeout,
+		agentCapabilities:    cloneAgentCapabilities(dependencies.AgentCapabilities),
 	}, nil
+}
+
+func cloneAgentCapabilities(source ports.AgentCapabilities) ports.AgentCapabilities {
+	source.RoleKeys = append([]string(nil), source.RoleKeys...)
+	source.SkillRefs = append([]string(nil), source.SkillRefs...)
+	source.ToolRefs = append([]string(nil), source.ToolRefs...)
+	source.CapabilityRefs = append([]string(nil), source.CapabilityRefs...)
+	return source
 }

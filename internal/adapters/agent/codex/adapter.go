@@ -13,7 +13,13 @@ import (
 	"orquesta/internal/ports"
 )
 
-const ProviderRef = "provider:codex"
+const (
+	ProviderRef = "provider:codex"
+	// DefaultModelRef is a stable logical selector owned by the Codex adapter.
+	// It does not claim which physical model/version the provider resolves.
+	DefaultModelRef = "codex-default"
+	AgentRef        = "agent:codex"
+)
 
 const (
 	CodeUnavailable             = "codex.unavailable"
@@ -126,14 +132,15 @@ type Adapter struct {
 }
 
 type executionState struct {
-	requestHash     string
-	receipt         ports.AgentLaunchReceipt
-	maxOutput       int64
-	runPath         string
-	status          ports.AgentStatus
-	terminal        *terminalRecord
-	terminalDurable bool
-	cancel          context.CancelCauseFunc
+	requestHash         string
+	terminalRequestHash string
+	receipt             ports.AgentLaunchReceipt
+	maxOutput           int64
+	runPath             string
+	status              ports.AgentStatus
+	terminal            *terminalRecord
+	terminalDurable     bool
+	cancel              context.CancelCauseFunc
 }
 
 func New(config Config) (*Adapter, error) {
@@ -170,7 +177,19 @@ func (adapter *Adapter) Capabilities(ctx context.Context) (ports.AgentCapabiliti
 	if closed {
 		return ports.AgentCapabilities{}, &Error{Code: CodeUnavailable}
 	}
-	return ports.AgentCapabilities{ProviderRef: ProviderRef}, nil
+	return ports.AgentCapabilities{
+		ProviderRef:  ProviderRef,
+		ModelRef:     adapter.modelRef(),
+		AgentRef:     AgentRef,
+		Unrestricted: true,
+	}, nil
+}
+
+func (adapter *Adapter) modelRef() string {
+	if adapter.config.Model != "" {
+		return adapter.config.Model
+	}
+	return DefaultModelRef
 }
 
 func (adapter *Adapter) Launch(ctx context.Context, request ports.AgentLaunchRequest) (ports.AgentLaunchReceipt, error) {
@@ -231,7 +250,14 @@ func (adapter *Adapter) resumeLaunchRecordLocked(
 	recordCreated bool,
 ) (ports.AgentLaunchReceipt, error) {
 	executionKey := request.ExecutionRef.String()
-	if record.RequestHash != requestHash {
+	terminalRequestHash := record.RequestHash
+	if record.SchemaVersion == legacyStateSchemaVersion {
+		upgraded, err := adapter.bindLegacyLaunchRecord(runPath, record, request, requestHash)
+		if err != nil {
+			return ports.AgentLaunchReceipt{}, err
+		}
+		record = upgraded
+	} else if record.RequestHash != requestHash {
 		return ports.AgentLaunchReceipt{}, &Error{Code: CodeExecutionConflict}
 	}
 	receipt, err := record.receipt(request.ExecutionRef)
@@ -242,13 +268,14 @@ func (adapter *Adapter) resumeLaunchRecordLocked(
 		return ports.AgentLaunchReceipt{}, &Error{Code: CodeStateInvalid, Cause: err}
 	}
 	state := &executionState{
-		requestHash: requestHash,
-		receipt:     receipt,
-		maxOutput:   record.MaxOutputBytes,
-		runPath:     runPath,
-		status:      ports.AgentPending,
+		requestHash:         requestHash,
+		terminalRequestHash: terminalRequestHash,
+		receipt:             receipt,
+		maxOutput:           record.MaxOutputBytes,
+		runPath:             runPath,
+		status:              ports.AgentPending,
 	}
-	if terminal, found, loadErr := adapter.loadTerminal(runPath, requestHash, record.SpecHash, record.MaxOutputBytes); loadErr != nil {
+	if terminal, found, loadErr := adapter.loadTerminal(runPath, terminalRequestHash, record.SpecHash, record.MaxOutputBytes); loadErr != nil {
 		return ports.AgentLaunchReceipt{}, loadErr
 	} else if found {
 		state.status = terminal.Status
@@ -308,16 +335,17 @@ func (adapter *Adapter) Observe(ctx context.Context, executionRef goal.Execution
 	if !found {
 		return ports.AgentObservation{}, &Error{Code: CodeExecutionNotFound}
 	}
-	receipt, err := record.receipt(executionRef)
+	receipt, err := adapter.observationReceipt(record, executionRef)
 	if err != nil {
 		return ports.AgentObservation{}, err
 	}
 	state := &executionState{
-		requestHash: record.RequestHash,
-		receipt:     receipt,
-		maxOutput:   record.MaxOutputBytes,
-		runPath:     runPath,
-		status:      ports.AgentPending,
+		requestHash:         record.RequestHash,
+		terminalRequestHash: record.RequestHash,
+		receipt:             receipt,
+		maxOutput:           record.MaxOutputBytes,
+		runPath:             runPath,
+		status:              ports.AgentPending,
 	}
 	if terminal, terminalFound, loadErr := adapter.loadTerminal(runPath, record.RequestHash, record.SpecHash, record.MaxOutputBytes); loadErr != nil {
 		return ports.AgentObservation{}, loadErr
@@ -335,7 +363,7 @@ func (adapter *Adapter) Observe(ctx context.Context, executionRef goal.Execution
 func (adapter *Adapter) recoverInterruptedExecutionLocked(state *executionState) error {
 	terminal := terminalRecord{
 		SchemaVersion: stateSchemaVersion,
-		RequestHash:   state.requestHash,
+		RequestHash:   state.terminalRequestHash,
 		Status:        ports.AgentFailed,
 		ErrorCode:     CodeExecutionInterrupted,
 		ObservedAt:    adapter.terminalTime(state.receipt.AcceptedAt),

@@ -66,7 +66,8 @@ func TestV04ConfirmationFalseHasNoClockIDOrStateEffect(t *testing.T) {
 	artifacts := newMemoryArtifactStore()
 	orchestrator, err := New(Dependencies{
 		State: repository, Launcher: agent, Observer: agent, Artifacts: artifacts,
-		Clock: clock, IDs: ids, MaxOutputBytes: 1024, MaxActionAttempts: 2,
+		Clock: clock, IDs: ids, MaxOutputBytes: 1024,
+		MaxExecutionAttempts: 3, AgentCapabilities: testAgentCapabilities(),
 		ClaimLease: time.Minute, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})
 	if err != nil {
@@ -251,7 +252,8 @@ func TestV04AmendRejectsNonterminalStaleAndForeignSource(t *testing.T) {
 		agent := &scriptedAgent{now: clock.Now}
 		orchestrator, err := New(Dependencies{
 			State: repository, Launcher: agent, Observer: agent, Artifacts: newMemoryArtifactStore(),
-			Clock: clock, IDs: ids, MaxOutputBytes: 1024, MaxActionAttempts: 2,
+			Clock: clock, IDs: ids, MaxOutputBytes: 1024,
+			MaxExecutionAttempts: 3, AgentCapabilities: testAgentCapabilities(),
 			ClaimLease: time.Minute, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 		})
 		if err != nil {
@@ -508,7 +510,7 @@ func v04NewOrchestrator(
 	orchestrator, err := New(Dependencies{
 		State: state, Launcher: agent, Observer: agent, Artifacts: newMemoryArtifactStore(),
 		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1 << 20,
-		MaxActionAttempts: 10, ClaimLease: time.Minute,
+		MaxExecutionAttempts: 3, AgentCapabilities: testAgentCapabilities(), ClaimLease: time.Minute,
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})
 	if err != nil {

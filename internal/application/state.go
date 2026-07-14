@@ -54,24 +54,31 @@ const (
 )
 
 type ExecutionRecord struct {
-	Ref                goal.ExecutionRef
-	GoalRef            goal.GoalRef
-	WorkItemRef        goal.WorkItemRef
-	State              ExecutionState
-	ArtifactMediaType  string
-	IdempotencyKey     string
-	MaxOutputBytes     int64
-	MaxAttempts        uint64
-	ProviderRef        string
-	ExternalRef        string
-	CreatedAt          time.Time
-	DeadlineAt         time.Time
-	StartedAt          time.Time
-	ProviderAcceptedAt time.Time
-	LastObservedAt     time.Time
-	ProviderObservedAt time.Time
-	FinishedAt         time.Time
-	FailureCode        string
+	Ref                  goal.ExecutionRef
+	GoalRef              goal.GoalRef
+	WorkItemRef          goal.WorkItemRef
+	AttemptNo            uint64
+	MaxExecutionAttempts uint64
+	ReplacesExecutionRef goal.ExecutionRef
+	PlanGeneration       goal.PlanGeneration
+	AppSpecGeneration    goal.AppSpecGeneration
+	SpecHash             string
+	State                ExecutionState
+	ArtifactMediaType    string
+	IdempotencyKey       string
+	MaxOutputBytes       int64
+	ProviderRef          string
+	ModelRef             string
+	AgentRef             string
+	ExternalRef          string
+	CreatedAt            time.Time
+	DeadlineAt           time.Time
+	StartedAt            time.Time
+	ProviderAcceptedAt   time.Time
+	LastObservedAt       time.Time
+	ProviderObservedAt   time.Time
+	FinishedAt           time.Time
+	FailureCode          string
 }
 
 type ArtifactRecord struct {
@@ -108,36 +115,66 @@ const (
 )
 
 type ActionRecord struct {
-	Ref          string
-	Kind         ActionKind
-	GoalRef      goal.GoalRef
-	WorkItemRef  goal.WorkItemRef
-	ExecutionRef goal.ExecutionRef
-	AvailableAt  time.Time
+	Ref                string
+	Kind               ActionKind
+	GoalRef            goal.GoalRef
+	WorkItemRef        goal.WorkItemRef
+	ExecutionRef       goal.ExecutionRef
+	PlanGeneration     goal.PlanGeneration
+	WorkItemGeneration goal.Revision
+	AvailableAt        time.Time
 }
 
 type ActionClaim struct {
-	Action     ActionRecord
-	Token      string
-	WorkerRef  string
-	Attempt    uint64
-	LeaseUntil time.Time
+	Action          ActionRecord
+	Token           string
+	WorkerRef       string
+	DeliveryAttempt uint64
+	Fence           uint64
+	LeaseUntil      time.Time
 }
 
 type ClaimRequest struct {
 	WorkerRef     string
 	Token         string
-	Now           time.Time
 	LeaseDuration time.Duration
+	Capabilities  ports.AgentCapabilities
+}
+
+type ActionConsumptionOutcome string
+
+const (
+	ActionConsumedCompleted   ActionConsumptionOutcome = "completed"
+	ActionConsumedQuarantined ActionConsumptionOutcome = "quarantined"
+)
+
+// ActionConsumptionReceipt is the immutable proof that one fenced outbox
+// delivery was consumed. Requeue deliberately creates no receipt.
+type ActionConsumptionReceipt struct {
+	ActionRef          string
+	Kind               ActionKind
+	GoalRef            goal.GoalRef
+	WorkItemRef        goal.WorkItemRef
+	ExecutionRef       goal.ExecutionRef
+	PlanGeneration     goal.PlanGeneration
+	WorkItemGeneration goal.Revision
+	Fence              uint64
+	DeliveryAttempt    uint64
+	ClaimToken         string
+	WorkerRef          string
+	Outcome            ActionConsumptionOutcome
+	ErrorCode          string
+	ConsumedAt         time.Time
 }
 
 type GoalRecord struct {
-	RequestRef         string
-	RequestFingerprint string
-	Goal               goal.Goal
-	Executions         []ExecutionRecord
-	Artifacts          []ArtifactRecord
-	Attestations       []AttestationRecord
+	RequestRef          string
+	RequestFingerprint  string
+	Goal                goal.Goal
+	Executions          []ExecutionRecord
+	Artifacts           []ArtifactRecord
+	Attestations        []AttestationRecord
+	ConsumptionReceipts []ActionConsumptionReceipt
 }
 
 type GoalSummary struct {
@@ -221,6 +258,21 @@ type ActionQuarantinedState struct {
 	OperationAt time.Time
 }
 
+// ExecutionReplacedState atomically consumes the failed attempt's action,
+// rebinds the authoritative WorkItem and queues the next provider attempt.
+type ExecutionReplacedState struct {
+	Claim                ActionClaim
+	ExpectedGoalRevision goal.Revision
+	ExpectedItemRevision goal.Revision
+	Goal                 goal.Goal
+	FailedExecution      ExecutionRecord
+	ReplacementExecution ExecutionRecord
+	NextAction           ActionRecord
+	Events               []EventRecord
+	ErrorCode            string
+	OperationAt          time.Time
+}
+
 type GoalSucceededState struct {
 	Claim                ActionClaim
 	ExpectedGoalRevision goal.Revision
@@ -263,6 +315,7 @@ type StateRepository interface {
 	RecordLaunchAccepted(context.Context, LaunchAcceptedState) error
 	RequeueAction(context.Context, ActionRequeuedState) error
 	QuarantineAction(context.Context, ActionQuarantinedState) error
+	RecordExecutionReplaced(context.Context, ExecutionReplacedState) error
 	RecordGoalSucceeded(context.Context, GoalSucceededState) error
 	RecordGoalFailed(context.Context, GoalFailedState) error
 }

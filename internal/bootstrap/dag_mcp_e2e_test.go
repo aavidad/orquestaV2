@@ -251,22 +251,31 @@ func TestFailedRootSkipsDescendantsButIndependentWorkFinishesBeforeGoal(t *testi
 		},
 	})
 	harness.process(t, 3)
-	afterFailure := harness.get(t, created.GoalRef)
-	if afterFailure.State != string(goal.GoalStateRunning) {
-		t.Fatalf("Goal closed before independent work: %+v", afterFailure)
+	afterFirstFailure := harness.get(t, created.GoalRef)
+	if afterFirstFailure.State != string(goal.GoalStateRunning) || len(afterFirstFailure.Executions) != 3 {
+		t.Fatalf("replaceable provider failure did not preserve Goal: %+v", afterFirstFailure)
 	}
-	states := workStates(afterFailure.WorkItems)
-	if states["fail root"] != string(goal.WorkItemStateFailed) ||
-		states["child"] != string(goal.WorkItemStateSkipped) ||
-		states["grandchild"] != string(goal.WorkItemStateSkipped) ||
+	states := workStates(afterFirstFailure.WorkItems)
+	if states["fail root"] != string(goal.WorkItemStateRunning) ||
+		states["child"] != string(goal.WorkItemStatePending) ||
+		states["grandchild"] != string(goal.WorkItemStatePending) ||
 		states["independent"] != string(goal.WorkItemStateRunning) {
-		t.Fatalf("failure cascade = %+v", states)
+		t.Fatalf("first provider failure became terminal or changed unrelated work: %+v", states)
 	}
+
+	// Independent work closes while the failed provider execution follows its
+	// own bounded replacement policy. Backoff is one second, then two seconds.
 	harness.process(t, 1)
+	harness.clock.Advance(time.Second)
+	harness.process(t, 2)
+	harness.clock.Advance(2 * time.Second)
+	harness.process(t, 2)
 	closed := harness.get(t, created.GoalRef)
 	states = workStates(closed.WorkItems)
-	if closed.State != string(goal.GoalStateFailed) || states["independent"] != string(goal.WorkItemStateSucceeded) ||
-		len(closed.Executions) != 2 || len(closed.Artifacts) != 1 {
+	if closed.State != string(goal.GoalStateFailed) || states["fail root"] != string(goal.WorkItemStateFailed) ||
+		states["child"] != string(goal.WorkItemStateSkipped) || states["grandchild"] != string(goal.WorkItemStateSkipped) ||
+		states["independent"] != string(goal.WorkItemStateSucceeded) ||
+		len(closed.Executions) != 4 || len(closed.Artifacts) != 1 {
 		t.Fatalf("failed DAG closure = goal:%+v states:%+v", closed, states)
 	}
 }
@@ -323,7 +332,8 @@ func newDAGHarness(t *testing.T, failures map[string]bool) *dagHarness {
 	artifacts := newDAGArtifacts()
 	orchestrator, err := application.New(application.Dependencies{
 		State: repository, Launcher: agent, Observer: agent, Artifacts: artifacts,
-		Clock: clock, IDs: &dagSequentialIDs{}, MaxOutputBytes: 4096, MaxActionAttempts: 3,
+		Clock: clock, IDs: &dagSequentialIDs{}, MaxOutputBytes: 4096,
+		MaxExecutionAttempts: 3, AgentCapabilities: dagAgentCapabilities(),
 		ClaimLease: time.Minute, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})
 	if err != nil {
@@ -458,7 +468,13 @@ func newDAGAgent(clock *dagClock, failures map[string]bool) *dagAgent {
 }
 
 func (agent *dagAgent) Capabilities(context.Context) (ports.AgentCapabilities, error) {
-	return ports.AgentCapabilities{ProviderRef: "provider:dag-test"}, nil
+	return dagAgentCapabilities(), nil
+}
+
+func dagAgentCapabilities() ports.AgentCapabilities {
+	return ports.AgentCapabilities{
+		ProviderRef: "provider:dag-test", ModelRef: "model:dag-test", AgentRef: "agent:dag-test", Unrestricted: true,
+	}
 }
 
 func (agent *dagAgent) Launch(ctx context.Context, request ports.AgentLaunchRequest) (ports.AgentLaunchReceipt, error) {
@@ -477,7 +493,10 @@ func (agent *dagAgent) Launch(ctx context.Context, request ports.AgentLaunchRequ
 		return agent.receipts[request.ExecutionRef], nil
 	}
 	receipt := ports.AgentLaunchReceipt{
-		ExecutionRef: request.ExecutionRef, SpecHash: request.SpecHash, ProviderRef: "provider:dag-test",
+		ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
+		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
+		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash, ProviderRef: "provider:dag-test",
+		ModelRef: "model:dag-test", AgentRef: "agent:dag-test",
 		ExternalRef: "external:" + request.ExecutionRef.String(), IdempotencyKey: request.IdempotencyKey,
 		AcceptedAt: agent.clock.Now(),
 	}

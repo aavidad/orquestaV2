@@ -54,6 +54,11 @@ func TestAdapterSuccessfulExecutionUsesHardenedCommandAndPrivateTerminal(t *test
 	if receipt.SpecHash != request.SpecHash {
 		t.Fatalf("receipt spec hash = %q, want %q", receipt.SpecHash, request.SpecHash)
 	}
+	if receipt.GoalRef != request.GoalRef || receipt.WorkItemRef != request.WorkItemRef ||
+		receipt.PlanGeneration != request.PlanGeneration || receipt.AppSpecGeneration != request.AppSpecGeneration ||
+		receipt.ExecutionAttempt != request.ExecutionAttempt || receipt.ModelRef != DefaultModelRef || receipt.AgentRef != AgentRef {
+		t.Fatalf("receipt lost causal/provider identity: %+v", receipt)
+	}
 	observation := awaitTerminal(t, adapter, request.ExecutionRef)
 	if observation.Status != ports.AgentCompleted || observation.MediaType != request.ArtifactMediaType {
 		t.Fatalf("observation = %+v", observation)
@@ -174,12 +179,15 @@ func TestAdapterRejectsExecutionPayloadConflict(t *testing.T) {
 }
 
 func TestLaunchHashAndPromptCarryPlanMetadata(t *testing.T) {
-	if stateSchemaVersion != 3 {
-		t.Fatalf("launch metadata schema version = %d, want explicit V3 cut", stateSchemaVersion)
+	if stateSchemaVersion != 4 {
+		t.Fatalf("launch metadata schema version = %d, want explicit V4 cut", stateSchemaVersion)
 	}
 	request := testRequest(t, "plan-metadata", "helper:success", 1024)
 	baseHash := mustRequestHash(t, request)
 	mutations := map[string]func(*ports.AgentLaunchRequest){
+		"plan_generation":     func(value *ports.AgentLaunchRequest) { value.PlanGeneration++ },
+		"app_spec_generation": func(value *ports.AgentLaunchRequest) { value.AppSpecGeneration++ },
+		"execution_attempt":   func(value *ports.AgentLaunchRequest) { value.ExecutionAttempt++ },
 		"spec_hash": func(value *ports.AgentLaunchRequest) {
 			value.SpecHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 		},
@@ -318,6 +326,14 @@ func TestAdapterPassesModelOnlyWhenConfigured(t *testing.T) {
 	config := testConfig(t)
 	config.Model = "test-model"
 	adapter := openTestAdapter(t, config)
+	capabilities, err := adapter.Capabilities(context.Background())
+	if err != nil || capabilities.ProviderRef != ProviderRef || capabilities.ModelRef != config.Model ||
+		capabilities.AgentRef != AgentRef || !capabilities.Unrestricted {
+		t.Fatalf("configured capabilities = %+v error=%v", capabilities, err)
+	}
+	if err := ports.ValidateAgentCapabilities(capabilities); err != nil {
+		t.Fatalf("configured capabilities contract error = %v", err)
+	}
 	request := testRequest(t, "model", "helper:model", 1024)
 	if _, err := adapter.Launch(context.Background(), request); err != nil {
 		t.Fatalf("Launch() error = %v", err)
@@ -325,6 +341,23 @@ func TestAdapterPassesModelOnlyWhenConfigured(t *testing.T) {
 	observation := awaitTerminal(t, adapter, request.ExecutionRef)
 	if observation.Status != ports.AgentCompleted {
 		t.Fatalf("model observation = %+v", observation)
+	}
+}
+
+func TestAdapterCapabilitiesUseStableLogicalDefaultModelSelector(t *testing.T) {
+	adapter := openTestAdapter(t, testConfig(t))
+	capabilities, err := adapter.Capabilities(context.Background())
+	if err != nil {
+		t.Fatalf("Capabilities() error = %v", err)
+	}
+	if capabilities.ProviderRef != ProviderRef || capabilities.ModelRef != DefaultModelRef ||
+		capabilities.AgentRef != AgentRef || !capabilities.Unrestricted {
+		t.Fatalf("default capabilities = %+v", capabilities)
+	}
+	// The logical selector is durable identity metadata. With no explicit model,
+	// the process still receives no --model flag and the provider resolves it.
+	if err := ports.ValidateAgentCapabilities(capabilities); err != nil {
+		t.Fatalf("default capabilities contract error = %v", err)
 	}
 }
 
@@ -583,6 +616,9 @@ func testRequest(t *testing.T, suffix, objective string, maxOutput int64) ports.
 		ExecutionRef:       executionRef,
 		GoalRef:            goalRef,
 		WorkItemRef:        workItemRef,
+		PlanGeneration:     2,
+		AppSpecGeneration:  3,
+		ExecutionAttempt:   1,
 		SpecHash:           "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 		ActorRef:           actorRef,
 		ProjectRef:         projectRef,

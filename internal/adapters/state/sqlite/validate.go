@@ -62,6 +62,9 @@ func validateCreateState(state application.CreateGoalState) error {
 		}
 		if execution.State != application.ExecutionQueued || !ok || !isReady || item.State != goal.WorkItemStatePending ||
 			execution.GoalRef.String() != snapshot.Ref || !actionOK ||
+			execution.AttemptNo != 1 || execution.PlanGeneration != state.Goal.PlanGeneration() ||
+			execution.AppSpecGeneration != state.Goal.AppSpec().Generation() || execution.SpecHash != state.Goal.SpecHash() ||
+			action.PlanGeneration != state.Goal.PlanGeneration() || action.WorkItemGeneration != item.Revision ||
 			!actionMatches(action, snapshot.Ref, item.Ref, execution.Ref.String()) {
 			return errors.New("sqlite.create_execution_scope_invalid")
 		}
@@ -118,14 +121,26 @@ func validateExecution(execution application.ExecutionRecord) error {
 	if execution.Ref.String() == "" || execution.GoalRef.String() == "" || execution.WorkItemRef.String() == "" {
 		return errors.New("sqlite.execution_ref_invalid")
 	}
+	if execution.AttemptNo == 0 || execution.AttemptNo > maxSQLiteInteger ||
+		execution.MaxExecutionAttempts == 0 || execution.MaxExecutionAttempts > maxSQLiteInteger ||
+		execution.AttemptNo > execution.MaxExecutionAttempts || execution.PlanGeneration == 0 ||
+		uint64(execution.PlanGeneration) > maxSQLiteInteger || execution.AppSpecGeneration == 0 ||
+		uint64(execution.AppSpecGeneration) > maxSQLiteInteger || !validCanonicalHash(execution.SpecHash) {
+		return errors.New("sqlite.execution_generation_invalid")
+	}
+	if (execution.AttemptNo == 1 && execution.ReplacesExecutionRef.String() != "") ||
+		(execution.AttemptNo > 1 && execution.ReplacesExecutionRef.String() == "") {
+		return errors.New("sqlite.execution_replacement_invalid")
+	}
 	if !validText(execution.ArtifactMediaType) || !validText(execution.IdempotencyKey) ||
-		execution.MaxOutputBytes <= 0 || execution.MaxAttempts == 0 || execution.MaxAttempts > maxSQLiteInteger {
+		execution.MaxOutputBytes <= 0 {
 		return errors.New("sqlite.execution_policy_invalid")
 	}
 	if execution.CreatedAt.IsZero() {
 		return errors.New("sqlite.execution_time_invalid")
 	}
-	if !optionalText(execution.ProviderRef) || !optionalText(execution.ExternalRef) ||
+	if !optionalText(execution.ProviderRef) || !optionalText(execution.ModelRef) ||
+		!optionalText(execution.AgentRef) || !optionalText(execution.ExternalRef) ||
 		!optionalText(execution.FailureCode) {
 		return errors.New("sqlite.execution_text_invalid")
 	}
@@ -151,25 +166,29 @@ func validateExecution(execution application.ExecutionRecord) error {
 	}
 	switch execution.State {
 	case application.ExecutionQueued:
-		if execution.ProviderRef != "" || execution.ExternalRef != "" || !execution.StartedAt.IsZero() || !execution.DeadlineAt.IsZero() ||
+		if execution.ProviderRef != "" || execution.ModelRef != "" || execution.AgentRef != "" ||
+			execution.ExternalRef != "" || !execution.StartedAt.IsZero() || !execution.DeadlineAt.IsZero() ||
 			!execution.ProviderAcceptedAt.IsZero() || !execution.LastObservedAt.IsZero() ||
 			!execution.ProviderObservedAt.IsZero() || !execution.FinishedAt.IsZero() || execution.FailureCode != "" {
 			return errors.New("sqlite.execution_queued_fields_invalid")
 		}
 	case application.ExecutionRunning:
-		if !validText(execution.ProviderRef) || !validText(execution.ExternalRef) || execution.StartedAt.IsZero() ||
+		if !validText(execution.ProviderRef) || !validText(execution.ModelRef) ||
+			!validText(execution.AgentRef) || !validText(execution.ExternalRef) || execution.StartedAt.IsZero() ||
 			execution.DeadlineAt.IsZero() || execution.ProviderAcceptedAt.IsZero() ||
 			!execution.FinishedAt.IsZero() || execution.FailureCode != "" {
 			return errors.New("sqlite.execution_running_fields_invalid")
 		}
 	case application.ExecutionDispatching:
-		if execution.ProviderRef != "" || execution.ExternalRef != "" || !execution.StartedAt.IsZero() || !execution.DeadlineAt.IsZero() ||
+		if execution.ProviderRef != "" || execution.ModelRef != "" || execution.AgentRef != "" ||
+			execution.ExternalRef != "" || !execution.StartedAt.IsZero() || !execution.DeadlineAt.IsZero() ||
 			!execution.ProviderAcceptedAt.IsZero() || !execution.LastObservedAt.IsZero() ||
 			!execution.ProviderObservedAt.IsZero() || !execution.FinishedAt.IsZero() || execution.FailureCode != "" {
 			return errors.New("sqlite.execution_dispatching_fields_invalid")
 		}
 	case application.ExecutionSucceeded:
-		if !validText(execution.ProviderRef) || !validText(execution.ExternalRef) || execution.StartedAt.IsZero() ||
+		if !validText(execution.ProviderRef) || !validText(execution.ModelRef) ||
+			!validText(execution.AgentRef) || !validText(execution.ExternalRef) || execution.StartedAt.IsZero() ||
 			execution.DeadlineAt.IsZero() || execution.ProviderAcceptedAt.IsZero() ||
 			execution.FinishedAt.IsZero() || execution.FailureCode != "" {
 			return errors.New("sqlite.execution_succeeded_fields_invalid")
@@ -177,6 +196,8 @@ func validateExecution(execution application.ExecutionRecord) error {
 	case application.ExecutionFailed:
 		providerAccepted := execution.ProviderRef != ""
 		if execution.FinishedAt.IsZero() || !validText(execution.FailureCode) ||
+			(providerAccepted != (execution.ModelRef != "")) ||
+			(providerAccepted != (execution.AgentRef != "")) ||
 			(providerAccepted != (execution.ExternalRef != "")) ||
 			(providerAccepted && (execution.StartedAt.IsZero() || execution.DeadlineAt.IsZero() || execution.ProviderAcceptedAt.IsZero())) ||
 			(!providerAccepted && (!execution.StartedAt.IsZero() || !execution.DeadlineAt.IsZero() ||
@@ -221,28 +242,29 @@ func validateGoalRecordConsistency(record application.GoalRecord, expectedGoalRe
 		items[item.Ref()] = item
 	}
 	executions := make(map[goal.ExecutionRef]application.ExecutionRecord, len(record.Executions))
+	byItem := make(map[goal.WorkItemRef][]application.ExecutionRecord, len(items))
 	for _, execution := range record.Executions {
 		if err := validateExecution(execution); err != nil {
 			return err
 		}
-		item, found := items[execution.WorkItemRef]
+		_, found := items[execution.WorkItemRef]
 		if !found || execution.GoalRef != aggregate.Ref() {
 			return errors.New("sqlite.goal_record_execution_scope_invalid")
+		}
+		if execution.PlanGeneration > aggregate.PlanGeneration() ||
+			execution.AppSpecGeneration != aggregate.AppSpec().Generation() ||
+			execution.SpecHash != aggregate.SpecHash() {
+			return errors.New("sqlite.goal_record_execution_generation_invalid")
 		}
 		if _, duplicate := executions[execution.Ref]; duplicate {
 			return errors.New("sqlite.goal_record_execution_duplicate")
 		}
-		if !workItemExecutionStateMatches(item, execution) {
-			return errors.New("sqlite.goal_record_execution_binding_invalid")
-		}
 		executions[execution.Ref] = execution
+		byItem[execution.WorkItemRef] = append(byItem[execution.WorkItemRef], execution)
 	}
 	for _, item := range items {
-		if executionRef, hasBinding := item.Execution(); hasBinding {
-			execution, found := executions[executionRef]
-			if !found || execution.WorkItemRef != item.Ref() {
-				return errors.New("sqlite.goal_record_item_execution_invalid")
-			}
+		if err := validateWorkItemExecutionChain(item, byItem[item.Ref()]); err != nil {
+			return err
 		}
 	}
 
@@ -295,6 +317,130 @@ func validateGoalRecordConsistency(record application.GoalRecord, expectedGoalRe
 			}
 		}
 	}
+
+	seenActions := make(map[string]struct{}, len(record.ConsumptionReceipts))
+	seenTokens := make(map[string]struct{}, len(record.ConsumptionReceipts))
+	seenFences := make(map[string]struct{}, len(record.ConsumptionReceipts))
+	for _, receipt := range record.ConsumptionReceipts {
+		if err := validateConsumptionReceipt(receipt); err != nil {
+			return err
+		}
+		item, itemFound := items[receipt.WorkItemRef]
+		execution, executionFound := executions[receipt.ExecutionRef]
+		if !itemFound || !executionFound || receipt.GoalRef != aggregate.Ref() ||
+			execution.WorkItemRef != receipt.WorkItemRef ||
+			receipt.PlanGeneration != execution.PlanGeneration ||
+			receipt.WorkItemGeneration > item.Revision() {
+			return errors.New("sqlite.goal_record_receipt_scope_invalid")
+		}
+		fenceKey := receipt.WorkItemRef.String() + ":" + fmt.Sprint(receipt.Fence)
+		if _, duplicate := seenActions[receipt.ActionRef]; duplicate {
+			return errors.New("sqlite.goal_record_receipt_action_duplicate")
+		}
+		if _, duplicate := seenTokens[receipt.ClaimToken]; duplicate {
+			return errors.New("sqlite.goal_record_receipt_token_duplicate")
+		}
+		if _, duplicate := seenFences[fenceKey]; duplicate {
+			return errors.New("sqlite.goal_record_receipt_fence_duplicate")
+		}
+		seenActions[receipt.ActionRef] = struct{}{}
+		seenTokens[receipt.ClaimToken] = struct{}{}
+		seenFences[fenceKey] = struct{}{}
+	}
+	return nil
+}
+
+func validateWorkItemExecutionChain(item goal.WorkItem, records []application.ExecutionRecord) error {
+	bound, hasBinding := item.Execution()
+	if len(records) == 0 {
+		if hasBinding {
+			return errors.New("sqlite.goal_record_item_execution_invalid")
+		}
+		return nil
+	}
+	byAttempt := make(map[uint64]application.ExecutionRecord, len(records))
+	for _, execution := range records {
+		if _, duplicate := byAttempt[execution.AttemptNo]; duplicate {
+			return errors.New("sqlite.goal_record_execution_attempt_duplicate")
+		}
+		byAttempt[execution.AttemptNo] = execution
+	}
+	for attempt := uint64(1); attempt <= uint64(len(records)); attempt++ {
+		execution, found := byAttempt[attempt]
+		if !found {
+			return errors.New("sqlite.goal_record_execution_attempt_gap")
+		}
+		if attempt == 1 {
+			if execution.ReplacesExecutionRef.String() != "" {
+				return errors.New("sqlite.goal_record_execution_chain_invalid")
+			}
+			continue
+		}
+		previous := byAttempt[attempt-1]
+		if execution.ReplacesExecutionRef != previous.Ref || previous.State != application.ExecutionFailed ||
+			execution.MaxExecutionAttempts != previous.MaxExecutionAttempts ||
+			execution.PlanGeneration != previous.PlanGeneration ||
+			execution.AppSpecGeneration != previous.AppSpecGeneration || execution.SpecHash != previous.SpecHash ||
+			execution.CreatedAt.Before(previous.FinishedAt) {
+			return errors.New("sqlite.goal_record_execution_chain_invalid")
+		}
+	}
+	latest := byAttempt[uint64(len(records))]
+	for attempt := uint64(1); attempt < latest.AttemptNo; attempt++ {
+		if byAttempt[attempt].State != application.ExecutionFailed {
+			return errors.New("sqlite.goal_record_historical_execution_active")
+		}
+	}
+	switch item.State() {
+	case goal.WorkItemStatePending:
+		if hasBinding || latest.State != application.ExecutionQueued {
+			return errors.New("sqlite.goal_record_execution_binding_invalid")
+		}
+	case goal.WorkItemStateRunning:
+		if !hasBinding || bound != latest.Ref ||
+			(latest.State != application.ExecutionDispatching && latest.State != application.ExecutionRunning) {
+			return errors.New("sqlite.goal_record_execution_binding_invalid")
+		}
+	case goal.WorkItemStateSucceeded:
+		if !hasBinding || bound != latest.Ref || latest.State != application.ExecutionSucceeded {
+			return errors.New("sqlite.goal_record_execution_binding_invalid")
+		}
+	case goal.WorkItemStateFailed:
+		if !hasBinding || bound != latest.Ref || latest.State != application.ExecutionFailed {
+			return errors.New("sqlite.goal_record_execution_binding_invalid")
+		}
+	case goal.WorkItemStateSkipped:
+		return errors.New("sqlite.goal_record_skipped_execution_invalid")
+	default:
+		return errors.New("sqlite.goal_record_execution_binding_invalid")
+	}
+	return nil
+}
+
+func validateConsumptionReceipt(receipt application.ActionConsumptionReceipt) error {
+	if !validText(receipt.ActionRef) || receipt.GoalRef.String() == "" ||
+		receipt.WorkItemRef.String() == "" || receipt.ExecutionRef.String() == "" ||
+		receipt.PlanGeneration == 0 || uint64(receipt.PlanGeneration) > maxSQLiteInteger ||
+		receipt.WorkItemGeneration == 0 || uint64(receipt.WorkItemGeneration) > maxSQLiteInteger ||
+		receipt.Fence == 0 || receipt.Fence > maxSQLiteInteger || receipt.DeliveryAttempt == 0 ||
+		receipt.DeliveryAttempt > maxSQLiteInteger || !validText(receipt.ClaimToken) ||
+		!validText(receipt.WorkerRef) || !optionalText(receipt.ErrorCode) || receipt.ConsumedAt.IsZero() {
+		return errors.New("sqlite.consumption_receipt_invalid")
+	}
+	switch receipt.Kind {
+	case application.ActionLaunchAgent, application.ActionObserveAgent:
+	default:
+		return errors.New("sqlite.consumption_receipt_kind_invalid")
+	}
+	switch receipt.Outcome {
+	case application.ActionConsumedCompleted:
+	case application.ActionConsumedQuarantined:
+		if !validText(receipt.ErrorCode) {
+			return errors.New("sqlite.consumption_receipt_error_required")
+		}
+	default:
+		return errors.New("sqlite.consumption_receipt_outcome_invalid")
+	}
 	return nil
 }
 
@@ -305,25 +451,6 @@ func workItemHasArtifact(item goal.WorkItem, expected goal.ArtifactRef) bool {
 		}
 	}
 	return false
-}
-
-func workItemExecutionStateMatches(item goal.WorkItem, execution application.ExecutionRecord) bool {
-	bound, hasBinding := item.Execution()
-	switch item.State() {
-	case goal.WorkItemStatePending:
-		return !hasBinding && execution.State == application.ExecutionQueued
-	case goal.WorkItemStateRunning:
-		return hasBinding && bound == execution.Ref &&
-			(execution.State == application.ExecutionDispatching || execution.State == application.ExecutionRunning)
-	case goal.WorkItemStateSucceeded:
-		return hasBinding && bound == execution.Ref && execution.State == application.ExecutionSucceeded
-	case goal.WorkItemStateFailed:
-		return hasBinding && bound == execution.Ref && execution.State == application.ExecutionFailed
-	case goal.WorkItemStateSkipped:
-		return false
-	default:
-		return false
-	}
 }
 
 func workItemHasAttestation(item goal.WorkItem, expected goal.AttestationRef) bool {
@@ -337,7 +464,9 @@ func workItemHasAttestation(item goal.WorkItem, expected goal.AttestationRef) bo
 
 func validateAction(action application.ActionRecord) error {
 	if !validText(action.Ref) || action.GoalRef.String() == "" || action.WorkItemRef.String() == "" ||
-		action.ExecutionRef.String() == "" || action.AvailableAt.IsZero() {
+		action.ExecutionRef.String() == "" || action.PlanGeneration == 0 ||
+		uint64(action.PlanGeneration) > maxSQLiteInteger || action.WorkItemGeneration == 0 ||
+		uint64(action.WorkItemGeneration) > maxSQLiteInteger || action.AvailableAt.IsZero() {
 		return errors.New("sqlite.action_invalid")
 	}
 	switch action.Kind {
@@ -349,13 +478,12 @@ func validateAction(action application.ActionRecord) error {
 }
 
 func validateClaim(claim application.ActionClaim) error {
-	if !validText(claim.Token) || !validText(claim.WorkerRef) || claim.Attempt == 0 ||
-		claim.Attempt > maxSQLiteInteger || claim.LeaseUntil.IsZero() {
+	if !validText(claim.Token) || !validText(claim.WorkerRef) || claim.DeliveryAttempt == 0 ||
+		claim.DeliveryAttempt > maxSQLiteInteger || claim.Fence == 0 ||
+		claim.Fence > maxSQLiteInteger || claim.LeaseUntil.IsZero() {
 		return errors.New("sqlite.claim_invalid")
 	}
-	if !validText(claim.Action.Ref) || claim.Action.GoalRef.String() == "" ||
-		claim.Action.WorkItemRef.String() == "" || claim.Action.ExecutionRef.String() == "" ||
-		claim.Action.AvailableAt.IsZero() {
+	if err := validateAction(claim.Action); err != nil {
 		return errors.New("sqlite.claim_action_invalid")
 	}
 	return nil
@@ -393,6 +521,7 @@ func validateLaunchPrepared(state application.LaunchPreparedState) error {
 		return errors.New("sqlite.launch_prepare_invalid")
 	}
 	if err := validateEvent(state.Event); err != nil ||
+		state.Event.Kind != "execution.dispatching" ||
 		!eventMatches(state.Event, state.Goal.Ref().String(), item.Ref().String(), state.Execution.Ref.String()) {
 		return errors.New("sqlite.launch_prepare_event_invalid")
 	}
@@ -405,7 +534,8 @@ func validateLaunchAccepted(state application.LaunchAcceptedState) error {
 	}
 	if state.Claim.Action.Kind != application.ActionLaunchAgent || state.NextAction.Kind != application.ActionObserveAgent ||
 		state.Execution.State != application.ExecutionRunning || state.Execution.Ref != state.Claim.Action.ExecutionRef ||
-		state.Execution.GoalRef != state.Claim.Action.GoalRef || state.Execution.WorkItemRef != state.Claim.Action.WorkItemRef {
+		state.Execution.GoalRef != state.Claim.Action.GoalRef || state.Execution.WorkItemRef != state.Claim.Action.WorkItemRef ||
+		state.Execution.PlanGeneration != state.Claim.Action.PlanGeneration {
 		return errors.New("sqlite.launch_action_kind_invalid")
 	}
 	if err := validateExecution(state.Execution); err != nil {
@@ -422,8 +552,15 @@ func validateLaunchAccepted(state application.LaunchAcceptedState) error {
 	) {
 		return errors.New("sqlite.next_action_scope_mismatch")
 	}
+	if state.NextAction.PlanGeneration != state.Execution.PlanGeneration ||
+		state.NextAction.WorkItemGeneration < state.Claim.Action.WorkItemGeneration {
+		return errors.New("sqlite.next_action_generation_mismatch")
+	}
 	if err := validateEvent(state.Event); err != nil {
 		return err
+	}
+	if state.Event.Kind != "execution.accepted" {
+		return errors.New("sqlite.launch_accepted_event_kind_invalid")
 	}
 	if !eventMatches(state.Event, state.Execution.GoalRef.String(), state.Execution.WorkItemRef.String(), state.Execution.Ref.String()) {
 		return errors.New("sqlite.event_scope_mismatch")
@@ -471,6 +608,9 @@ func validateQuarantined(state application.ActionQuarantinedState) error {
 	if err := validateEvent(state.Event); err != nil {
 		return err
 	}
+	if state.Event.Kind != "action.quarantined" {
+		return errors.New("sqlite.quarantine_event_kind_invalid")
+	}
 	if !eventMatches(
 		state.Event,
 		state.Claim.Action.GoalRef.String(),
@@ -478,6 +618,66 @@ func validateQuarantined(state application.ActionQuarantinedState) error {
 		state.Claim.Action.ExecutionRef.String(),
 	) {
 		return errors.New("sqlite.quarantine_event_scope_mismatch")
+	}
+	return nil
+}
+
+func validateExecutionReplaced(state application.ExecutionReplacedState) error {
+	if err := validateClaim(state.Claim); err != nil {
+		return err
+	}
+	if state.ExpectedGoalRevision == 0 || state.ExpectedItemRevision == 0 ||
+		uint64(state.ExpectedGoalRevision) > maxSQLiteInteger || uint64(state.ExpectedItemRevision) > maxSQLiteInteger {
+		return errors.New("sqlite.expected_revision_invalid")
+	}
+	if _, err := goal.RestoreGoal(state.Goal.Snapshot()); err != nil {
+		return err
+	}
+	item, found := state.Goal.WorkItem(state.Claim.Action.WorkItemRef)
+	bound, hasBinding := item.Execution()
+	if !found || !hasBinding || bound != state.ReplacementExecution.Ref ||
+		state.Goal.Ref() != state.Claim.Action.GoalRef || state.Goal.Revision() <= state.ExpectedGoalRevision ||
+		item.Revision() <= state.ExpectedItemRevision || item.State() != goal.WorkItemStateRunning {
+		return errors.New("sqlite.execution_replacement_goal_invalid")
+	}
+	if err := validateExecution(state.FailedExecution); err != nil {
+		return err
+	}
+	if err := validateExecution(state.ReplacementExecution); err != nil {
+		return err
+	}
+	failed := state.FailedExecution
+	replacement := state.ReplacementExecution
+	if failed.Ref != state.Claim.Action.ExecutionRef || failed.GoalRef != state.Goal.Ref() ||
+		failed.WorkItemRef != item.Ref() || failed.State != application.ExecutionFailed ||
+		replacement.GoalRef != failed.GoalRef || replacement.WorkItemRef != failed.WorkItemRef ||
+		replacement.State != application.ExecutionDispatching || replacement.AttemptNo != failed.AttemptNo+1 ||
+		replacement.ReplacesExecutionRef != failed.Ref ||
+		replacement.MaxExecutionAttempts != failed.MaxExecutionAttempts ||
+		replacement.PlanGeneration != failed.PlanGeneration ||
+		replacement.AppSpecGeneration != failed.AppSpecGeneration || replacement.SpecHash != failed.SpecHash ||
+		replacement.ArtifactMediaType != failed.ArtifactMediaType ||
+		replacement.MaxOutputBytes != failed.MaxOutputBytes ||
+		replacement.CreatedAt.Before(failed.FinishedAt) ||
+		!validText(state.ErrorCode) || state.ErrorCode != failed.FailureCode || failed.FinishedAt.IsZero() {
+		return errors.New("sqlite.execution_replacement_invalid")
+	}
+	if err := validateAction(state.NextAction); err != nil || state.NextAction.Kind != application.ActionLaunchAgent ||
+		!actionMatches(state.NextAction, state.Goal.Ref().String(), item.Ref().String(), replacement.Ref.String()) ||
+		state.NextAction.PlanGeneration != state.Goal.PlanGeneration() ||
+		state.NextAction.WorkItemGeneration != item.Revision() {
+		return errors.New("sqlite.execution_replacement_action_invalid")
+	}
+	if err := validateExactMutationEvents(
+		state.Events,
+		state.Goal,
+		[]eventSemantic{
+			newEventSemantic("execution.failed", failed.WorkItemRef, failed.Ref),
+			newEventSemantic("execution.dispatching", replacement.WorkItemRef, replacement.Ref),
+		},
+		false,
+	); err != nil {
+		return err
 	}
 	return nil
 }
@@ -513,10 +713,24 @@ func validateSucceeded(state application.GoalSucceededState) (goal.WorkItem, err
 		state.Attestation.ArtifactRef != state.Artifact.Stored.Ref {
 		return goal.WorkItem{}, errors.New("sqlite.attestation_invalid")
 	}
-	if err := validateEvents(state.Events, state.Goal.Ref(), item.Ref(), state.Execution.Ref); err != nil {
+	if err := validateScheduled(state.Goal, state.NewExecutions, state.NewActions); err != nil {
 		return goal.WorkItem{}, err
 	}
-	if err := validateScheduled(state.Goal, state.NewExecutions, state.NewActions); err != nil {
+	requiredEvents := []eventSemantic{
+		newEventSemantic("work_item.succeeded", state.Execution.WorkItemRef, state.Execution.Ref),
+	}
+	for _, execution := range state.NewExecutions {
+		requiredEvents = append(requiredEvents, newEventSemantic("execution.queued", execution.WorkItemRef, execution.Ref))
+	}
+	if terminal, required := terminalGoalEvent(state.Goal); required {
+		requiredEvents = append(requiredEvents, terminal)
+	}
+	if err := validateExactMutationEvents(
+		state.Events,
+		state.Goal,
+		requiredEvents,
+		false,
+	); err != nil {
 		return goal.WorkItem{}, err
 	}
 	return item, nil
@@ -541,10 +755,24 @@ func validateFailed(state application.GoalFailedState) (goal.WorkItem, error) {
 	if item.State() != goal.WorkItemStateFailed {
 		return goal.WorkItem{}, errors.New("sqlite.failed_item_state_invalid")
 	}
-	if err := validateEvents(state.Events, state.Goal.Ref(), item.Ref(), state.Execution.Ref); err != nil {
+	if err := validateScheduled(state.Goal, state.NewExecutions, state.NewActions); err != nil {
 		return goal.WorkItem{}, err
 	}
-	if err := validateScheduled(state.Goal, state.NewExecutions, state.NewActions); err != nil {
+	requiredEvents := []eventSemantic{
+		newEventSemantic("work_item.failed", state.Execution.WorkItemRef, state.Execution.Ref),
+	}
+	for _, execution := range state.NewExecutions {
+		requiredEvents = append(requiredEvents, newEventSemantic("execution.queued", execution.WorkItemRef, execution.Ref))
+	}
+	if state.Goal.State() == goal.GoalStateFailed {
+		requiredEvents = append(requiredEvents, eventSemantic{kind: "goal.failed"})
+	}
+	if err := validateExactMutationEvents(
+		state.Events,
+		state.Goal,
+		requiredEvents,
+		true,
+	); err != nil {
 		return goal.WorkItem{}, err
 	}
 	return item, nil
@@ -580,28 +808,89 @@ func validateGoalMutation(
 		return goal.WorkItem{}, err
 	}
 	if execution.Ref != claim.Action.ExecutionRef || execution.GoalRef != aggregate.Ref() ||
-		execution.WorkItemRef != item.Ref() || aggregate.Ref() != claim.Action.GoalRef {
+		execution.WorkItemRef != item.Ref() || aggregate.Ref() != claim.Action.GoalRef ||
+		execution.PlanGeneration != aggregate.PlanGeneration() ||
+		execution.AppSpecGeneration != aggregate.AppSpec().Generation() || execution.SpecHash != aggregate.SpecHash() {
 		return goal.WorkItem{}, errors.New("sqlite.mutation_scope_invalid")
 	}
 	return item, nil
 }
 
-func validateEvents(events []application.EventRecord, goalRef goal.GoalRef, _ goal.WorkItemRef, _ goal.ExecutionRef) error {
+type eventSemantic struct {
+	kind         string
+	workItemRef  string
+	executionRef string
+}
+
+func newEventSemantic(kind string, workItemRef goal.WorkItemRef, executionRef goal.ExecutionRef) eventSemantic {
+	return eventSemantic{kind: kind, workItemRef: workItemRef.String(), executionRef: executionRef.String()}
+}
+
+func terminalGoalEvent(aggregate goal.Goal) (eventSemantic, bool) {
+	switch aggregate.State() {
+	case goal.GoalStateSucceeded:
+		return eventSemantic{kind: "goal.succeeded"}, true
+	case goal.GoalStateFailed:
+		return eventSemantic{kind: "goal.failed"}, true
+	default:
+		return eventSemantic{}, false
+	}
+}
+
+func validateExactMutationEvents(
+	events []application.EventRecord,
+	aggregate goal.Goal,
+	requiredEvents []eventSemantic,
+	allowSkipped bool,
+) error {
 	if len(events) == 0 {
 		return errors.New("sqlite.events_required")
 	}
+	required := make(map[eventSemantic]struct{}, len(requiredEvents))
+	for _, expected := range requiredEvents {
+		if !validText(expected.kind) {
+			return errors.New("sqlite.event_semantic_invalid")
+		}
+		if _, duplicate := required[expected]; duplicate {
+			return errors.New("sqlite.event_semantic_duplicate")
+		}
+		required[expected] = struct{}{}
+	}
 	seen := make(map[string]struct{}, len(events))
+	seenSemantics := make(map[eventSemantic]struct{}, len(events))
 	for _, event := range events {
 		if err := validateEvent(event); err != nil {
 			return err
 		}
-		if event.GoalRef != goalRef {
+		if event.GoalRef != aggregate.Ref() {
 			return errors.New("sqlite.event_scope_mismatch")
 		}
 		if _, duplicate := seen[event.Ref]; duplicate {
 			return errors.New("sqlite.event_duplicate")
 		}
 		seen[event.Ref] = struct{}{}
+		semantic := eventSemantic{
+			kind: event.Kind, workItemRef: event.WorkItemRef.String(), executionRef: event.ExecutionRef.String(),
+		}
+		if _, duplicate := seenSemantics[semantic]; duplicate {
+			return errors.New("sqlite.event_semantic_duplicate")
+		}
+		seenSemantics[semantic] = struct{}{}
+		if _, expected := required[semantic]; expected {
+			delete(required, semantic)
+			continue
+		}
+		if allowSkipped && semantic.kind == "work_item.skipped" && semantic.workItemRef != "" && semantic.executionRef == "" {
+			item, found := aggregate.WorkItem(event.WorkItemRef)
+			if !found || item.State() != goal.WorkItemStateSkipped {
+				return errors.New("sqlite.event_work_item_scope_invalid")
+			}
+			continue
+		}
+		return errors.New("sqlite.event_semantic_invalid")
+	}
+	if len(required) != 0 {
+		return errors.New("sqlite.event_semantic_missing")
 	}
 	return nil
 }
@@ -638,6 +927,9 @@ func validateScheduled(aggregate goal.Goal, executions []application.ExecutionRe
 		}
 		if !found || !isReady || item.State() != goal.WorkItemStatePending || execution.State != application.ExecutionQueued ||
 			execution.GoalRef != aggregate.Ref() || !actionFound ||
+			execution.AttemptNo != 1 || execution.PlanGeneration != aggregate.PlanGeneration() ||
+			execution.AppSpecGeneration != aggregate.AppSpec().Generation() || execution.SpecHash != aggregate.SpecHash() ||
+			action.PlanGeneration != aggregate.PlanGeneration() || action.WorkItemGeneration != item.Revision() ||
 			!actionMatches(action, aggregate.Ref().String(), item.Ref().String(), execution.Ref.String()) {
 			return errors.New("sqlite.scheduled_scope_invalid")
 		}

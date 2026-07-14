@@ -20,6 +20,17 @@ func TestAdapterLaunchIsIdempotentAndObservable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
+	capabilities, err := adapter.Capabilities(context.Background())
+	if err != nil {
+		t.Fatalf("Capabilities() error = %v", err)
+	}
+	if err := ports.ValidateAgentCapabilities(capabilities); err != nil {
+		t.Fatalf("capabilities contract error = %v", err)
+	}
+	if capabilities.ProviderRef != "provider:fake" || capabilities.ModelRef != ModelRef ||
+		capabilities.AgentRef != AgentRef || !capabilities.Unrestricted {
+		t.Fatalf("capabilities = %+v", capabilities)
+	}
 	request := validRequest(t)
 	first, err := adapter.Launch(context.Background(), request)
 	if err != nil {
@@ -34,6 +45,14 @@ func TestAdapterLaunchIsIdempotentAndObservable(t *testing.T) {
 	}
 	if first.SpecHash != request.SpecHash {
 		t.Fatalf("receipt spec hash = %q, want %q", first.SpecHash, request.SpecHash)
+	}
+	if err := ports.ValidateAgentLaunchReceipt(request, first); err != nil {
+		t.Fatalf("receipt contract error = %v", err)
+	}
+	if first.GoalRef != request.GoalRef || first.WorkItemRef != request.WorkItemRef ||
+		first.PlanGeneration != request.PlanGeneration || first.AppSpecGeneration != request.AppSpecGeneration ||
+		first.ExecutionAttempt != request.ExecutionAttempt || first.ModelRef != ModelRef || first.AgentRef != AgentRef {
+		t.Fatalf("receipt lost causal identity: %+v", first)
 	}
 	conflicting := request
 	conflicting.SpecHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -63,6 +82,9 @@ func validRequest(t *testing.T) ports.AgentLaunchRequest {
 		ExecutionRef:       executionRef,
 		GoalRef:            goalRef,
 		WorkItemRef:        workItemRef,
+		PlanGeneration:     2,
+		AppSpecGeneration:  3,
+		ExecutionAttempt:   1,
 		SpecHash:           "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 		ActorRef:           actorRef,
 		ProjectRef:         projectRef,

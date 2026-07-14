@@ -1092,8 +1092,12 @@
       "acceptance_contracts": [
         "AC-V06-ATOMIC-STATE-OUTBOX"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v06_atomic_state_outbox_test.go",
+        "acceptance/fixtures/v06_atomic_state_outbox.json",
+        "product/evidence/v06_atomic_state_outbox.json"
+      ],
       "supersedes": []
     },
     {
@@ -1112,8 +1116,12 @@
       "acceptance_contracts": [
         "AC-V06-ATOMIC-STATE-OUTBOX"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v06_atomic_state_outbox_test.go",
+        "acceptance/fixtures/v06_atomic_state_outbox.json",
+        "product/evidence/v06_atomic_state_outbox.json"
+      ],
       "supersedes": []
     },
     {
@@ -2743,8 +2751,12 @@
       "acceptance_contracts": [
         "AC-V06-ATOMIC-STATE-OUTBOX"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v06_atomic_state_outbox_test.go",
+        "acceptance/fixtures/v06_atomic_state_outbox.json",
+        "product/evidence/v06_atomic_state_outbox.json"
+      ],
       "supersedes": []
     },
     {
@@ -2763,8 +2775,12 @@
       "acceptance_contracts": [
         "AC-V06-ATOMIC-STATE-OUTBOX"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v06_atomic_state_outbox_test.go",
+        "acceptance/fixtures/v06_atomic_state_outbox.json",
+        "product/evidence/v06_atomic_state_outbox.json"
+      ],
       "supersedes": []
     },
     {
@@ -2845,8 +2861,12 @@
       "acceptance_contracts": [
         "AC-V06-ATOMIC-STATE-OUTBOX"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v06_atomic_state_outbox_test.go",
+        "acceptance/fixtures/v06_atomic_state_outbox.json",
+        "product/evidence/v06_atomic_state_outbox.json"
+      ],
       "supersedes": []
     },
     {
@@ -3166,8 +3186,12 @@
       "acceptance_contracts": [
         "AC-V06-ATOMIC-STATE-OUTBOX"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v06_atomic_state_outbox_test.go",
+        "acceptance/fixtures/v06_atomic_state_outbox.json",
+        "product/evidence/v06_atomic_state_outbox.json"
+      ],
       "supersedes": []
     },
     {
@@ -5332,8 +5356,12 @@
       "acceptance_contracts": [
         "AC-V06-ATOMIC-STATE-OUTBOX"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v06_atomic_state_outbox_test.go",
+        "acceptance/fixtures/v06_atomic_state_outbox.json",
+        "product/evidence/v06_atomic_state_outbox.json"
+      ],
       "supersedes": []
     },
     {
@@ -5352,8 +5380,12 @@
       "acceptance_contracts": [
         "AC-V06-ATOMIC-STATE-OUTBOX"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v06_atomic_state_outbox_test.go",
+        "acceptance/fixtures/v06_atomic_state_outbox.json",
+        "product/evidence/v06_atomic_state_outbox.json"
+      ],
       "supersedes": []
     },
     {
@@ -5399,8 +5431,12 @@
       "acceptance_contracts": [
         "AC-V06-ATOMIC-STATE-OUTBOX"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v06_atomic_state_outbox_test.go",
+        "acceptance/fixtures/v06_atomic_state_outbox.json",
+        "product/evidence/v06_atomic_state_outbox.json"
+      ],
       "supersedes": []
     },
     {

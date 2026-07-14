@@ -36,13 +36,18 @@ func (repository *Repository) RecordLaunchAccepted(ctx context.Context, state ap
 		if err := updateExecutionCAS(ctx, transaction, state.Execution, application.ExecutionDispatching); err != nil {
 			return err
 		}
+		// Consume first so the partial active-action index remains a hard
+		// invariant even while launch and observe share one WorkItem.
+		if err := completeClaim(ctx, transaction, state.Claim, state.Event.OccurredAt, "", false); err != nil {
+			return err
+		}
 		if err := insertAction(ctx, transaction, state.NextAction); err != nil {
 			return err
 		}
 		if err := insertEvent(ctx, transaction, state.Event); err != nil {
 			return err
 		}
-		return completeClaim(ctx, transaction, state.Claim, state.Event.OccurredAt, "", false)
+		return nil
 	})
 }
 
@@ -77,6 +82,45 @@ func (repository *Repository) QuarantineAction(ctx context.Context, state applic
 	})
 }
 
+func (repository *Repository) RecordExecutionReplaced(
+	ctx context.Context,
+	state application.ExecutionReplacedState,
+) error {
+	if err := validateExecutionReplaced(state); err != nil {
+		return invalid(err)
+	}
+	return repository.mutate(ctx, state.Claim, state.OperationAt, func(transaction *sql.Tx) error {
+		if err := updateGoalCAS(ctx, transaction, state.Goal, state.ExpectedGoalRevision); err != nil {
+			return err
+		}
+		item, _ := state.Goal.WorkItem(state.Claim.Action.WorkItemRef)
+		if err := updateWorkItemCAS(ctx, transaction, item, state.ExpectedItemRevision); err != nil {
+			return err
+		}
+		expectedExecutionState := application.ExecutionRunning
+		if state.Claim.Action.Kind == application.ActionLaunchAgent {
+			expectedExecutionState = application.ExecutionDispatching
+		}
+		// Retire the old active execution before inserting its replacement;
+		// the partial unique index then proves at most one active attempt.
+		if err := updateExecutionCAS(ctx, transaction, state.FailedExecution, expectedExecutionState); err != nil {
+			return err
+		}
+		if err := completeClaim(
+			ctx, transaction, state.Claim, state.OperationAt, state.ErrorCode, false,
+		); err != nil {
+			return err
+		}
+		if err := insertExecution(ctx, transaction, state.ReplacementExecution); err != nil {
+			return err
+		}
+		if err := insertAction(ctx, transaction, state.NextAction); err != nil {
+			return err
+		}
+		return insertEvents(ctx, transaction, state.Events)
+	})
+}
+
 func (repository *Repository) RecordGoalSucceeded(ctx context.Context, state application.GoalSucceededState) error {
 	if _, err := validateSucceeded(state); err != nil {
 		return invalid(err)
@@ -97,6 +141,9 @@ func (repository *Repository) RecordGoalSucceeded(ctx context.Context, state app
 		if err := insertAttestation(ctx, transaction, state.Attestation); err != nil {
 			return err
 		}
+		if err := completeClaim(ctx, transaction, state.Claim, state.Execution.FinishedAt, "", false); err != nil {
+			return err
+		}
 		if err := insertScheduled(ctx, transaction, state.NewExecutions, state.NewActions); err != nil {
 			return err
 		}
@@ -106,7 +153,7 @@ func (repository *Repository) RecordGoalSucceeded(ctx context.Context, state app
 		if err := insertEvents(ctx, transaction, state.Events); err != nil {
 			return err
 		}
-		return completeClaim(ctx, transaction, state.Claim, state.Execution.FinishedAt, "", false)
+		return nil
 	})
 }
 
@@ -128,6 +175,11 @@ func (repository *Repository) RecordGoalFailed(ctx context.Context, state applic
 		if err := updateExecutionCAS(ctx, transaction, state.Execution, expectedExecutionState); err != nil {
 			return err
 		}
+		if err := completeClaim(
+			ctx, transaction, state.Claim, state.Execution.FinishedAt, state.Execution.FailureCode, false,
+		); err != nil {
+			return err
+		}
 		if err := insertScheduled(ctx, transaction, state.NewExecutions, state.NewActions); err != nil {
 			return err
 		}
@@ -137,7 +189,7 @@ func (repository *Repository) RecordGoalFailed(ctx context.Context, state applic
 		if err := insertEvents(ctx, transaction, state.Events); err != nil {
 			return err
 		}
-		return completeClaim(ctx, transaction, state.Claim, state.Execution.FinishedAt, state.Execution.FailureCode, false)
+		return nil
 	})
 }
 
@@ -145,7 +197,10 @@ func requireReadyExecutions(ctx context.Context, transaction *sql.Tx, aggregate 
 	for _, item := range aggregate.ReadyWorkItems() {
 		var count int
 		if err := transaction.QueryRowContext(ctx, `
-SELECT COUNT(*) FROM executions WHERE goal_ref = ? AND work_item_ref = ?`,
+SELECT COUNT(*)
+FROM executions
+WHERE goal_ref = ? AND work_item_ref = ?
+  AND state IN ('queued', 'dispatching', 'running')`,
 			aggregate.Ref().String(), item.Ref().String(),
 		).Scan(&count); err != nil {
 			return mapDatabaseError(err)
@@ -185,10 +240,6 @@ func (repository *Repository) mutate(
 	if operationAt.IsZero() {
 		return invalid(errors.New("sqlite.operation_time_invalid"))
 	}
-	operationAt = operationAt.Round(0).UTC()
-	if !operationAt.Before(claim.LeaseUntil) {
-		return conflict(errors.New("sqlite.claim_lease_expired"))
-	}
 	transaction, err := beginTransaction(ctx, repository)
 	if err != nil {
 		return err
@@ -210,12 +261,9 @@ func (repository *Repository) mutate(
 }
 
 func (repository *Repository) requireLiveLease(claim application.ActionClaim) error {
-	if repository == nil || repository.now == nil {
-		return invalid(errors.New("sqlite.clock_unavailable"))
-	}
-	now := repository.now().Round(0).UTC()
-	if now.IsZero() {
-		return invalid(errors.New("sqlite.clock_invalid"))
+	now, err := repository.transactionTime()
+	if err != nil {
+		return err
 	}
 	if !now.Before(claim.LeaseUntil) {
 		return conflict(errors.New("sqlite.claim_lease_expired"))

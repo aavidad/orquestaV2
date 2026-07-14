@@ -214,15 +214,19 @@ func (orchestrator *Orchestrator) scheduleReady(
 		}
 		execution := ExecutionRecord{
 			Ref: executionRef, GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(),
-			State: ExecutionQueued, ArtifactMediaType: agentArtifactMediaType,
+			AttemptNo: 1, MaxExecutionAttempts: orchestrator.maxExecutionAttempts,
+			PlanGeneration: aggregate.PlanGeneration(), AppSpecGeneration: aggregate.AppSpec().Generation(),
+			SpecHash: aggregate.SpecHash(),
+			State:    ExecutionQueued, ArtifactMediaType: agentArtifactMediaType,
 			IdempotencyKey: "execution:" + executionRef.String(),
-			MaxOutputBytes: orchestrator.maxOutputBytes, MaxAttempts: orchestrator.maxActionAttempts,
-			CreatedAt: at,
+			MaxOutputBytes: orchestrator.maxOutputBytes,
+			CreatedAt:      at,
 		}
 		executions = append(executions, execution)
 		actions = append(actions, ActionRecord{
 			Ref: "action:launch:" + executionRef.String(), Kind: ActionLaunchAgent,
 			GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: executionRef,
+			PlanGeneration: aggregate.PlanGeneration(), WorkItemGeneration: item.Revision(),
 			AvailableAt: at,
 		})
 		events = append(events, EventRecord{

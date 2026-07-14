@@ -55,7 +55,7 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 	if err := repository.db.QueryRow("PRAGMA user_version").Scan(&userVersion); err != nil {
 		t.Fatalf("user_version: %v", err)
 	}
-	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != 4 {
+	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != 5 {
 		t.Fatalf("pragmas = fk:%d busy:%d version:%d", foreignKeys, busyTimeout, userVersion)
 	}
 
@@ -73,9 +73,9 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 		tables = append(tables, name)
 	}
 	wantTables := []string{
-		"app_specs", "artifacts", "attestations", "events", "executions", "goal_phase_contract_refs",
+		"action_consumption_receipts", "app_specs", "artifacts", "attestations", "events", "executions", "goal_phase_contract_refs",
 		"goal_phases", "goals", "intents", "outbox", "schema_migrations",
-		"work_item_dependencies", "work_item_requirement_refs", "work_item_write_scopes", "work_items",
+		"work_item_dependencies", "work_item_fences", "work_item_requirement_refs", "work_item_write_scopes", "work_items",
 	}
 	if !reflect.DeepEqual(tables, wantTables) {
 		t.Fatalf("tables = %#v, want %#v", tables, wantTables)
@@ -104,6 +104,12 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 	}
 	if migrationName != "004_phase_contracts.sql" {
 		t.Fatalf("phase contract migration name = %q", migrationName)
+	}
+	if err := repository.db.QueryRow("SELECT name FROM schema_migrations WHERE version = 5").Scan(&migrationName); err != nil {
+		t.Fatalf("atomic state migration receipt: %v", err)
+	}
+	if migrationName != "005_atomic_state_outbox.sql" {
+		t.Fatalf("atomic state migration name = %q", migrationName)
 	}
 	var appSpecColumns, intentColumns, foreignKeyViolations int
 	if err := repository.db.QueryRow(`
@@ -289,15 +295,25 @@ VALUES (?, ?, ?, ?, 'text/plain', ?, 1024, 3, ?, ?, ?, ?, ?, ?, ?, ?, ?, '')`, e
 	mustExec(`INSERT INTO events(ref, kind, goal_ref, work_item_ref, execution_ref, occurred_at) VALUES (?, 'goal.created', ?, ?, ?, ?)`,
 		"event:"+suffix, goalRef, itemRef, executionRef, requiredTime(base))
 	completedAt := any(nil)
+	claimToken, claimedBy, claimedUntil := any(nil), any(nil), any(nil)
+	attempt := 0
 	if withEvidence {
 		completedAt = requiredTime(base.Add(time.Second))
+		claimToken = "claim:migrated:" + suffix
+		claimedBy = "worker:migrated"
+		claimedUntil = requiredTime(base.Add(time.Hour))
+		attempt = 1
 		mustExec(`INSERT INTO artifacts(ref, goal_ref, work_item_ref, digest, media_type, size, created_at) VALUES (?, ?, ?, 'sha256:v1', 'text/plain', 2, ?)`,
 			"artifact:"+suffix, goalRef, itemRef, requiredTime(base.Add(time.Second)))
 		mustExec(`INSERT INTO attestations(ref, goal_ref, work_item_ref, execution_ref, artifact_ref, policy, accepted_at) VALUES (?, ?, ?, ?, ?, 'legacy', ?)`,
 			"attestation:"+suffix, goalRef, itemRef, executionRef, "artifact:"+suffix, requiredTime(base.Add(time.Second)))
 	}
-	mustExec(`INSERT INTO outbox(ref, kind, goal_ref, work_item_ref, execution_ref, available_at, completed_at) VALUES (?, 'launch_agent', ?, ?, ?, ?, ?)`,
-		"action:"+suffix, goalRef, itemRef, executionRef, requiredTime(base), completedAt)
+	mustExec(`INSERT INTO outbox(
+ref, kind, goal_ref, work_item_ref, execution_ref, available_at,
+claim_token, claimed_by, claimed_until, attempt, completed_at
+) VALUES (?, 'launch_agent', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"action:"+suffix, goalRef, itemRef, executionRef, requiredTime(base),
+		claimToken, claimedBy, claimedUntil, attempt, completedAt)
 }
 
 func TestRepositoryCreateGetListScopedIdempotencyAndRestart(t *testing.T) {
@@ -516,13 +532,17 @@ func TestRepositoryRejectsInvalidExecutionAndLifecycleContracts(t *testing.T) {
 	}
 	runningExecution := record.Executions[0]
 	runningExecution.State = application.ExecutionRunning
-	runningExecution.ProviderRef = "provider:test"
+	runningExecution.ProviderRef = "provider:codex"
+	runningExecution.ModelRef = "model:codex"
+	runningExecution.AgentRef = "agent:codex"
 	runningExecution.ExternalRef = "external:test"
 	runningExecution.StartedAt = launchAt
 	runningExecution.DeadlineAt = launchAt.Add(time.Hour)
 	runningExecution.ProviderAcceptedAt = launchAt
 	directRunning := invalidLaunch
 	directRunning.Execution = runningExecution
+	directRunning.NextAction.PlanGeneration = runningExecution.PlanGeneration
+	directRunning.NextAction.WorkItemGeneration = onlyItem(t, launchedGoal).Revision()
 	if err := repository.RecordLaunchAccepted(context.Background(), directRunning); !application.IsStateError(err, application.StateConflict) {
 		t.Fatalf("queued execution bypassed dispatching CAS = %v", err)
 	}
@@ -601,7 +621,8 @@ func TestRepositoryClaimIsAtomicRecoversExpiredLeaseAndQuarantines(t *testing.T)
 		t.Fatalf("create: %v", err)
 	}
 	now := state.Executions[0].CreatedAt.Add(time.Second)
-	const workers = 16
+	repository.now = func() time.Time { return now }
+	const workers = 32
 	start := make(chan struct{})
 	claims := make(chan application.ActionClaim, workers)
 	errorsByWorker := make(chan error, workers)
@@ -613,9 +634,9 @@ func TestRepositoryClaimIsAtomicRecoversExpiredLeaseAndQuarantines(t *testing.T)
 			defer wait.Done()
 			<-start
 			claim, found, err := repository.ClaimNextAction(context.Background(), application.ClaimRequest{
-				WorkerRef: "worker:" + testIndex(index),
-				Token:     "claim:" + testIndex(index),
-				Now:       now, LeaseDuration: 10 * time.Second,
+				WorkerRef:     "worker:" + testIndex(index),
+				Token:         "claim:" + testIndex(index),
+				LeaseDuration: 10 * time.Second, Capabilities: sqliteTestCapabilities(),
 			})
 			if err != nil {
 				errorsByWorker <- err
@@ -639,12 +660,13 @@ func TestRepositoryClaimIsAtomicRecoversExpiredLeaseAndQuarantines(t *testing.T)
 	for claim := range claims {
 		won = append(won, claim)
 	}
-	if len(won) != 1 || won[0].Attempt != 1 {
+	if len(won) != 1 || won[0].DeliveryAttempt != 1 || won[0].Fence != 1 {
 		t.Fatalf("winning claims = %#v", won)
 	}
 	oldClaim := won[0]
+	repository.now = func() time.Time { return now.Add(9 * time.Second) }
 	if _, found, err := repository.ClaimNextAction(context.Background(), application.ClaimRequest{
-		WorkerRef: "worker:early", Token: "claim:early", Now: now.Add(9 * time.Second), LeaseDuration: time.Second,
+		WorkerRef: "worker:early", Token: "claim:early", LeaseDuration: time.Second, Capabilities: sqliteTestCapabilities(),
 	}); err != nil || found {
 		t.Fatalf("claim before expiry = found:%v err:%v", found, err)
 	}
@@ -656,14 +678,16 @@ func TestRepositoryClaimIsAtomicRecoversExpiredLeaseAndQuarantines(t *testing.T)
 			OccurredAt: oldClaim.LeaseUntil,
 		},
 	}
+	repository.now = func() time.Time { return oldClaim.LeaseUntil }
 	if err := repository.QuarantineAction(context.Background(), boundary); !application.IsStateError(err, application.StateConflict) {
 		t.Fatalf("claim valid at exclusive lease boundary: %v", err)
 	}
+	repository.now = func() time.Time { return now.Add(10 * time.Second) }
 	recovered, found, err := repository.ClaimNextAction(context.Background(), application.ClaimRequest{
-		WorkerRef: "worker:recovery", Token: "claim:recovery", Now: now.Add(10 * time.Second), LeaseDuration: time.Second,
+		WorkerRef: "worker:recovery", Token: "claim:recovery", LeaseDuration: time.Second, Capabilities: sqliteTestCapabilities(),
 	})
-	if err != nil || !found || recovered.Attempt != 2 {
-		t.Fatalf("recovered claim = found:%v attempt:%d err:%v", found, recovered.Attempt, err)
+	if err != nil || !found || recovered.DeliveryAttempt != 2 || recovered.Fence != oldClaim.Fence+1 {
+		t.Fatalf("recovered claim = found:%v attempt:%d err:%v", found, recovered.DeliveryAttempt, err)
 	}
 	quarantineAt := recovered.LeaseUntil.Add(-time.Nanosecond)
 	quarantine := application.ActionQuarantinedState{
@@ -738,6 +762,8 @@ func TestRepositoryMutationsAreAtomicCASAndRestoreEvidence(t *testing.T) {
 	launchedExecution := preparedExecution
 	launchedExecution.State = application.ExecutionRunning
 	launchedExecution.ProviderRef = "provider:codex"
+	launchedExecution.ModelRef = "model:codex"
+	launchedExecution.AgentRef = "agent:codex"
 	launchedExecution.ExternalRef = "external:one"
 	launchedExecution.StartedAt = launchAt
 	launchedExecution.DeadlineAt = launchAt.Add(time.Hour)
@@ -745,6 +771,7 @@ func TestRepositoryMutationsAreAtomicCASAndRestoreEvidence(t *testing.T) {
 	observeAction := application.ActionRecord{
 		Ref: "action:observe:success", Kind: application.ActionObserveAgent,
 		GoalRef: launchedGoal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: launchedExecution.Ref,
+		PlanGeneration: launchedExecution.PlanGeneration, WorkItemGeneration: onlyItem(t, launchedGoal).Revision(),
 		AvailableAt: launchAt,
 	}
 	launchState := application.LaunchAcceptedState{
@@ -774,13 +801,13 @@ func TestRepositoryMutationsAreAtomicCASAndRestoreEvidence(t *testing.T) {
 		t.Fatalf("requeue: %v", err)
 	}
 	if _, found, err := repository.ClaimNextAction(context.Background(), application.ClaimRequest{
-		WorkerRef: "worker:too-early", Token: "claim:too-early", Now: retryAt.Add(-time.Nanosecond), LeaseDuration: time.Second,
+		WorkerRef: "worker:too-early", Token: "claim:too-early", LeaseDuration: time.Second, Capabilities: sqliteTestCapabilities(),
 	}); err != nil || found {
 		t.Fatalf("early retry claim = found:%v err:%v", found, err)
 	}
 	successClaim := mustClaim(t, repository, "worker:observe", "claim:observe:2", retryAt)
-	if successClaim.Attempt != 2 {
-		t.Fatalf("durable attempt = %d, want 2", successClaim.Attempt)
+	if successClaim.DeliveryAttempt != 2 {
+		t.Fatalf("durable attempt = %d, want 2", successClaim.DeliveryAttempt)
 	}
 	record, err = repository.GetGoal(context.Background(), state.Goal.Ref())
 	if err != nil {
@@ -818,7 +845,7 @@ func TestRepositoryMutationsAreAtomicCASAndRestoreEvidence(t *testing.T) {
 	}
 	validEvents := []application.EventRecord{
 		{Ref: "event:work-succeeded:success", Kind: "work_item.succeeded", GoalRef: succeededGoal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: succeededExecution.Ref, OccurredAt: succeededAt},
-		{Ref: "event:goal-succeeded:success", Kind: "goal.succeeded", GoalRef: succeededGoal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: succeededExecution.Ref, OccurredAt: succeededAt},
+		{Ref: "event:goal-succeeded:success", Kind: "goal.succeeded", GoalRef: succeededGoal.Ref(), OccurredAt: succeededAt},
 	}
 	successState := application.GoalSucceededState{
 		Claim: successClaim, ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: item.Revision(),
@@ -936,7 +963,7 @@ func TestRepositoryRecordsFailedGoalAtomically(t *testing.T) {
 		OperationAt: failedAt,
 		Events: []application.EventRecord{
 			{Ref: "event:work-failed:failed", Kind: "work_item.failed", GoalRef: failedGoal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: failedExecution.Ref, OccurredAt: failedAt},
-			{Ref: "event:goal-failed:failed", Kind: "goal.failed", GoalRef: failedGoal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: failedExecution.Ref, OccurredAt: failedAt},
+			{Ref: "event:goal-failed:failed", Kind: "goal.failed", GoalRef: failedGoal.Ref(), OccurredAt: failedAt},
 		},
 	}
 	if err := repository.RecordGoalFailed(context.Background(), failure); err != nil {
@@ -1077,12 +1104,15 @@ func newV05CreateFixture(t *testing.T) application.CreateGoalState {
 		executionRef := mustRef(t, fmt.Sprintf("execution:v05:%d", index), goal.NewExecutionRef)
 		executions = append(executions, application.ExecutionRecord{
 			Ref: executionRef, GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), State: application.ExecutionQueued,
+			AttemptNo: 1, MaxExecutionAttempts: 3, PlanGeneration: aggregate.PlanGeneration(),
+			AppSpecGeneration: aggregate.AppSpec().Generation(), SpecHash: aggregate.SpecHash(),
 			ArtifactMediaType: "text/plain", IdempotencyKey: "execution:" + executionRef.String(),
-			MaxOutputBytes: 1 << 20, MaxAttempts: 3, CreatedAt: aggregate.CreatedAt(),
+			MaxOutputBytes: 1 << 20, CreatedAt: aggregate.CreatedAt(),
 		})
 		actions = append(actions, application.ActionRecord{
 			Ref: "action:launch:" + executionRef.String(), Kind: application.ActionLaunchAgent,
 			GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: executionRef, AvailableAt: aggregate.CreatedAt(),
+			PlanGeneration: aggregate.PlanGeneration(), WorkItemGeneration: item.Revision(),
 		})
 		events = append(events, application.EventRecord{
 			Ref: "event:execution-queued:" + executionRef.String(), Kind: "execution.queued",
@@ -1133,7 +1163,9 @@ func TestRepositoryRollsBackSuccessWhenReadySuccessorsAreOmitted(t *testing.T) {
 	}
 	runningExecution := preparedExecution
 	runningExecution.State = application.ExecutionRunning
-	runningExecution.ProviderRef = "provider:test"
+	runningExecution.ProviderRef = "provider:codex"
+	runningExecution.ModelRef = "model:codex"
+	runningExecution.AgentRef = "agent:codex"
 	runningExecution.ExternalRef = "external:missing-successor"
 	runningExecution.StartedAt = launchAt
 	runningExecution.DeadlineAt = launchAt.Add(time.Hour)
@@ -1141,7 +1173,9 @@ func TestRepositoryRollsBackSuccessWhenReadySuccessorsAreOmitted(t *testing.T) {
 	observeAction := application.ActionRecord{
 		Ref: "action:observe:" + runningExecution.Ref.String(), Kind: application.ActionObserveAgent,
 		GoalRef: preparedGoal.Ref(), WorkItemRef: root.Ref(), ExecutionRef: runningExecution.Ref,
-		AvailableAt: launchAt,
+		PlanGeneration:     runningExecution.PlanGeneration,
+		WorkItemGeneration: func() goal.Revision { updated, _ := preparedGoal.WorkItem(root.Ref()); return updated.Revision() }(),
+		AvailableAt:        launchAt,
 	}
 	if err := repository.RecordLaunchAccepted(context.Background(), application.LaunchAcceptedState{
 		Claim: launchClaim, Execution: runningExecution, NextAction: observeAction, OperationAt: launchAt,
@@ -1252,8 +1286,10 @@ func newDAGCreateFixture(t *testing.T) application.CreateGoalState {
 	executionRef := mustRef(t, "execution:dag:a", goal.NewExecutionRef)
 	execution := application.ExecutionRecord{
 		Ref: executionRef, GoalRef: aggregate.Ref(), WorkItemRef: aRef, State: application.ExecutionQueued,
+		AttemptNo: 1, MaxExecutionAttempts: 3, PlanGeneration: aggregate.PlanGeneration(),
+		AppSpecGeneration: aggregate.AppSpec().Generation(), SpecHash: aggregate.SpecHash(),
 		ArtifactMediaType: "text/plain", IdempotencyKey: "execution:dag:a", MaxOutputBytes: 1 << 20,
-		MaxAttempts: 3, CreatedAt: aggregate.CreatedAt(),
+		CreatedAt: aggregate.CreatedAt(),
 	}
 	return application.CreateGoalState{
 		RequestRef: "request:dag", RequestFingerprint: "fingerprint:dag", Goal: aggregate,
@@ -1261,6 +1297,7 @@ func newDAGCreateFixture(t *testing.T) application.CreateGoalState {
 		Actions: []application.ActionRecord{{
 			Ref: "action:launch:dag:a", Kind: application.ActionLaunchAgent, GoalRef: aggregate.Ref(),
 			WorkItemRef: aRef, ExecutionRef: executionRef, AvailableAt: aggregate.CreatedAt(),
+			PlanGeneration: aggregate.PlanGeneration(), WorkItemGeneration: a.Revision(),
 		}},
 		Events: []application.EventRecord{
 			{Ref: "event:goal-created:dag", Kind: "goal.created", GoalRef: aggregate.Ref(), OccurredAt: aggregate.CreatedAt()},
@@ -1352,8 +1389,10 @@ func newCreateFixtureWithStatement(
 	executionRef := mustRef(t, "execution:"+suffix, goal.NewExecutionRef)
 	execution := application.ExecutionRecord{
 		Ref: executionRef, GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), State: application.ExecutionQueued,
+		AttemptNo: 1, MaxExecutionAttempts: 3, PlanGeneration: aggregate.PlanGeneration(),
+		AppSpecGeneration: aggregate.AppSpec().Generation(), SpecHash: aggregate.SpecHash(),
 		ArtifactMediaType: "text/plain", IdempotencyKey: "execution:" + suffix,
-		MaxOutputBytes: 1 << 20, MaxAttempts: 3, CreatedAt: base,
+		MaxOutputBytes: 1 << 20, CreatedAt: base,
 	}
 	return application.CreateGoalState{
 		RequestRef: requestRef, RequestFingerprint: fingerprint, Goal: aggregate,
@@ -1361,6 +1400,7 @@ func newCreateFixtureWithStatement(
 		Actions: []application.ActionRecord{{
 			Ref: "action:launch:" + suffix, Kind: application.ActionLaunchAgent,
 			GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: executionRef, AvailableAt: base,
+			PlanGeneration: aggregate.PlanGeneration(), WorkItemGeneration: item.Revision(),
 		}},
 		Events: []application.EventRecord{{
 			Ref: "event:goal-created:" + suffix, Kind: "goal.created",
@@ -1382,13 +1422,20 @@ func assertRecordMatchesCreate(t *testing.T, record application.GoalRecord, stat
 
 func mustClaim(t *testing.T, repository *Repository, worker, token string, now time.Time) application.ActionClaim {
 	t.Helper()
+	repository.now = func() time.Time { return now }
 	claim, found, err := repository.ClaimNextAction(context.Background(), application.ClaimRequest{
-		WorkerRef: worker, Token: token, Now: now, LeaseDuration: 30 * time.Second,
+		WorkerRef: worker, Token: token, LeaseDuration: 30 * time.Second, Capabilities: sqliteTestCapabilities(),
 	})
 	if err != nil || !found {
 		t.Fatalf("claim = found:%v err:%v", found, err)
 	}
 	return claim
+}
+
+func sqliteTestCapabilities() ports.AgentCapabilities {
+	return ports.AgentCapabilities{
+		ProviderRef: "provider:codex", ModelRef: "model:codex", AgentRef: "agent:codex", Unrestricted: true,
+	}
 }
 
 func onlyItem(t *testing.T, aggregate goal.Goal) goal.WorkItem {

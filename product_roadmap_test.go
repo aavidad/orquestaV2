@@ -425,11 +425,7 @@ func TestProductRoadmapV06ScopeAndExecutableContract(t *testing.T) {
 				t.Errorf("accredited V06 capability %s has wrong evidence: %v", id, entry.EvidenceRefs)
 			}
 		default:
-			for _, evidence := range entry.EvidenceRefs {
-				if !strings.Contains(evidence, "v06_atomic_state_outbox") {
-					t.Errorf("progressed V06 capability %s has foreign evidence %q", id, evidence)
-				}
-			}
+			t.Errorf("V06 capability %s has partial status %q; contract must remain declared or become fully accredited", id, entry.Status)
 		}
 	}
 

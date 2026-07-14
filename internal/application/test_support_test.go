@@ -22,14 +22,16 @@ type memoryRepository struct {
 	successors map[goal.AppSpecRef]goal.GoalRef
 	actions    map[string]memoryAction
 	events     []EventRecord
+	now        func() time.Time
 }
 
 type memoryAction struct {
-	record    ActionRecord
-	token     string
-	workerRef string
-	attempt   uint64
-	lease     time.Time
+	record          ActionRecord
+	token           string
+	workerRef       string
+	deliveryAttempt uint64
+	fence           uint64
+	lease           time.Time
 }
 
 func newMemoryRepository() *memoryRepository {
@@ -38,6 +40,7 @@ func newMemoryRepository() *memoryRepository {
 		requests:   make(map[string]goal.GoalRef),
 		successors: make(map[goal.AppSpecRef]goal.GoalRef),
 		actions:    make(map[string]memoryAction),
+		now:        time.Now,
 	}
 }
 
@@ -172,6 +175,7 @@ func (repository *memoryRepository) Status(context.Context) (RepositoryStatus, e
 func (repository *memoryRepository) ClaimNextAction(_ context.Context, request ClaimRequest) (ActionClaim, bool, error) {
 	repository.mu.Lock()
 	defer repository.mu.Unlock()
+	now := repository.now().UTC()
 	refs := make([]string, 0, len(repository.actions))
 	for ref := range repository.actions {
 		refs = append(refs, ref)
@@ -179,17 +183,26 @@ func (repository *memoryRepository) ClaimNextAction(_ context.Context, request C
 	sort.Strings(refs)
 	for _, ref := range refs {
 		action := repository.actions[ref]
-		if action.record.AvailableAt.After(request.Now) || (action.token != "" && action.lease.After(request.Now)) {
+		if action.record.AvailableAt.After(now) || (action.token != "" && action.lease.After(now)) {
+			continue
+		}
+		record := repository.records[action.record.GoalRef]
+		item, found := record.Goal.WorkItem(action.record.WorkItemRef)
+		if !found || !ports.MatchAgentCapabilities(request.Capabilities, ports.AgentRequirements{
+			RoleKey: item.Role().String(), SkillRefs: workItemRefs(item.SkillRefs()),
+			ToolRefs: workItemRefs(item.ToolRefs()), CapabilityRefs: workItemRefs(item.CapabilityRefs()),
+		}) {
 			continue
 		}
 		action.token = request.Token
 		action.workerRef = request.WorkerRef
-		action.attempt++
-		action.lease = request.Now.Add(request.LeaseDuration)
+		action.deliveryAttempt++
+		action.fence++
+		action.lease = now.Add(request.LeaseDuration)
 		repository.actions[ref] = action
 		return ActionClaim{
 			Action: action.record, Token: action.token, WorkerRef: action.workerRef,
-			Attempt: action.attempt, LeaseUntil: action.lease,
+			DeliveryAttempt: action.deliveryAttempt, Fence: action.fence, LeaseUntil: action.lease,
 		}, true, nil
 	}
 	return ActionClaim{}, false, nil
@@ -199,8 +212,7 @@ func (repository *memoryRepository) RecordLaunchPrepared(_ context.Context, stat
 	repository.mu.Lock()
 	defer repository.mu.Unlock()
 	action, ok := repository.actions[state.Claim.Action.Ref]
-	if !ok || action.token != state.Claim.Token || action.workerRef != state.Claim.WorkerRef ||
-		!state.OperationAt.Before(action.lease) {
+	if !ok || !memoryClaimMatches(action, state.Claim, state.OperationAt) {
 		return &StateError{Code: StateConflict}
 	}
 	record := repository.records[state.Goal.Ref()]
@@ -218,12 +230,12 @@ func (repository *memoryRepository) RecordLaunchAccepted(_ context.Context, stat
 	repository.mu.Lock()
 	defer repository.mu.Unlock()
 	action, ok := repository.actions[state.Claim.Action.Ref]
-	if !ok || action.token != state.Claim.Token || action.workerRef != state.Claim.WorkerRef ||
-		!state.OperationAt.Before(action.lease) {
+	if !ok || !memoryClaimMatches(action, state.Claim, state.OperationAt) {
 		return &StateError{Code: StateConflict}
 	}
 	record := repository.records[state.Claim.Action.GoalRef]
 	record.Executions = replaceExecution(record.Executions, state.Execution)
+	record.ConsumptionReceipts = append(record.ConsumptionReceipts, consumptionReceipt(state.Claim, ActionConsumedCompleted, "", state.OperationAt))
 	repository.records[record.Goal.Ref()] = record
 	delete(repository.actions, state.Claim.Action.Ref)
 	repository.actions[state.NextAction.Ref] = memoryAction{record: state.NextAction}
@@ -235,8 +247,7 @@ func (repository *memoryRepository) RequeueAction(_ context.Context, state Actio
 	repository.mu.Lock()
 	defer repository.mu.Unlock()
 	action, ok := repository.actions[state.Claim.Action.Ref]
-	if !ok || action.token != state.Claim.Token || action.workerRef != state.Claim.WorkerRef ||
-		!state.OperationAt.Before(action.lease) {
+	if !ok || !memoryClaimMatches(action, state.Claim, state.OperationAt) {
 		return &StateError{Code: StateConflict}
 	}
 	record, ok := repository.records[state.Claim.Action.GoalRef]
@@ -258,12 +269,32 @@ func (repository *memoryRepository) QuarantineAction(_ context.Context, state Ac
 	repository.mu.Lock()
 	defer repository.mu.Unlock()
 	action, ok := repository.actions[state.Claim.Action.Ref]
-	if !ok || action.token != state.Claim.Token || action.workerRef != state.Claim.WorkerRef ||
-		!state.OperationAt.Before(action.lease) {
+	if !ok || !memoryClaimMatches(action, state.Claim, state.OperationAt) {
 		return &StateError{Code: StateConflict}
 	}
+	record := repository.records[state.Claim.Action.GoalRef]
+	record.ConsumptionReceipts = append(record.ConsumptionReceipts, consumptionReceipt(state.Claim, ActionConsumedQuarantined, state.ErrorCode, state.OperationAt))
+	repository.records[record.Goal.Ref()] = record
 	delete(repository.actions, state.Claim.Action.Ref)
 	repository.events = append(repository.events, state.Event)
+	return nil
+}
+
+func (repository *memoryRepository) RecordExecutionReplaced(_ context.Context, state ExecutionReplacedState) error {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	if err := repository.validateMutation(state.Claim, state.OperationAt, state.ExpectedGoalRevision, state.ExpectedItemRevision); err != nil {
+		return err
+	}
+	record := repository.records[state.Goal.Ref()]
+	record.Goal = state.Goal
+	record.Executions = replaceExecution(record.Executions, state.FailedExecution)
+	record.Executions = append(record.Executions, state.ReplacementExecution)
+	record.ConsumptionReceipts = append(record.ConsumptionReceipts, consumptionReceipt(state.Claim, ActionConsumedCompleted, state.ErrorCode, state.OperationAt))
+	repository.records[state.Goal.Ref()] = record
+	delete(repository.actions, state.Claim.Action.Ref)
+	repository.actions[state.NextAction.Ref] = memoryAction{record: state.NextAction}
+	repository.events = append(repository.events, state.Events...)
 	return nil
 }
 
@@ -279,6 +310,7 @@ func (repository *memoryRepository) RecordGoalSucceeded(_ context.Context, state
 	record.Executions = append(record.Executions, state.NewExecutions...)
 	record.Artifacts = append(record.Artifacts, state.Artifact)
 	record.Attestations = append(record.Attestations, state.Attestation)
+	record.ConsumptionReceipts = append(record.ConsumptionReceipts, consumptionReceipt(state.Claim, ActionConsumedCompleted, "", state.OperationAt))
 	repository.records[state.Goal.Ref()] = record
 	delete(repository.actions, state.Claim.Action.Ref)
 	for _, action := range state.NewActions {
@@ -298,6 +330,7 @@ func (repository *memoryRepository) RecordGoalFailed(_ context.Context, state Go
 	record.Goal = state.Goal
 	record.Executions = replaceExecution(record.Executions, state.Execution)
 	record.Executions = append(record.Executions, state.NewExecutions...)
+	record.ConsumptionReceipts = append(record.ConsumptionReceipts, consumptionReceipt(state.Claim, ActionConsumedCompleted, state.Execution.FailureCode, state.OperationAt))
 	repository.records[state.Goal.Ref()] = record
 	delete(repository.actions, state.Claim.Action.Ref)
 	for _, action := range state.NewActions {
@@ -309,7 +342,7 @@ func (repository *memoryRepository) RecordGoalFailed(_ context.Context, state Go
 
 func (repository *memoryRepository) validateMutation(claim ActionClaim, operationAt time.Time, goalRevision, itemRevision goal.Revision) error {
 	action, ok := repository.actions[claim.Action.Ref]
-	if !ok || action.token != claim.Token || action.workerRef != claim.WorkerRef || !operationAt.Before(action.lease) {
+	if !ok || !memoryClaimMatches(action, claim, operationAt) {
 		return &StateError{Code: StateConflict}
 	}
 	record, ok := repository.records[claim.Action.GoalRef]
@@ -327,7 +360,25 @@ func cloneGoalRecord(record GoalRecord) GoalRecord {
 	record.Executions = append([]ExecutionRecord(nil), record.Executions...)
 	record.Artifacts = append([]ArtifactRecord(nil), record.Artifacts...)
 	record.Attestations = append([]AttestationRecord(nil), record.Attestations...)
+	record.ConsumptionReceipts = append([]ActionConsumptionReceipt(nil), record.ConsumptionReceipts...)
 	return record
+}
+
+func memoryClaimMatches(action memoryAction, claim ActionClaim, operationAt time.Time) bool {
+	return action.token == claim.Token && action.workerRef == claim.WorkerRef &&
+		action.deliveryAttempt == claim.DeliveryAttempt && action.fence == claim.Fence &&
+		action.lease.Equal(claim.LeaseUntil) && operationAt.Before(action.lease)
+}
+
+func consumptionReceipt(claim ActionClaim, outcome ActionConsumptionOutcome, code string, at time.Time) ActionConsumptionReceipt {
+	return ActionConsumptionReceipt{
+		ActionRef: claim.Action.Ref, Kind: claim.Action.Kind,
+		GoalRef: claim.Action.GoalRef, WorkItemRef: claim.Action.WorkItemRef,
+		ExecutionRef: claim.Action.ExecutionRef, PlanGeneration: claim.Action.PlanGeneration,
+		WorkItemGeneration: claim.Action.WorkItemGeneration, Fence: claim.Fence,
+		DeliveryAttempt: claim.DeliveryAttempt, ClaimToken: claim.Token,
+		WorkerRef: claim.WorkerRef, Outcome: outcome, ErrorCode: code, ConsumedAt: at.UTC(),
+	}
 }
 
 func onlyExecution(t *testing.T, record GoalRecord) ExecutionRecord {
@@ -423,7 +474,13 @@ type scriptedAgent struct {
 }
 
 func (agent *scriptedAgent) Capabilities(context.Context) (ports.AgentCapabilities, error) {
-	return ports.AgentCapabilities{ProviderRef: "provider:test"}, nil
+	return testAgentCapabilities(), nil
+}
+
+func testAgentCapabilities() ports.AgentCapabilities {
+	return ports.AgentCapabilities{
+		ProviderRef: "provider:test", ModelRef: "model:test", AgentRef: "agent:test", Unrestricted: true,
+	}
 }
 
 func (agent *scriptedAgent) Launch(_ context.Context, request ports.AgentLaunchRequest) (ports.AgentLaunchReceipt, error) {
@@ -456,7 +513,10 @@ func (agent *scriptedAgent) Launch(_ context.Context, request ports.AgentLaunchR
 		return ports.AgentLaunchReceipt{}, launchErr
 	}
 	return ports.AgentLaunchReceipt{
-		ExecutionRef: request.ExecutionRef, SpecHash: receiptSpecHash, ProviderRef: "provider:test",
+		ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
+		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
+		ExecutionAttempt: request.ExecutionAttempt, SpecHash: receiptSpecHash,
+		ProviderRef: "provider:test", ModelRef: "model:test", AgentRef: "agent:test",
 		ExternalRef:    "external:" + request.ExecutionRef.String(),
 		IdempotencyKey: request.IdempotencyKey, AcceptedAt: now(),
 	}, nil
@@ -482,11 +542,17 @@ func (agent *scriptedAgent) Observe(_ context.Context, execution goal.ExecutionR
 
 func newTestOrchestrator(t interface{ Fatalf(string, ...any) }, repository *memoryRepository, clock *mutableClock, agent *scriptedAgent) (*Orchestrator, *memoryArtifactStore) {
 	artifacts := newMemoryArtifactStore()
+	repository.now = clock.Now
+	capabilities, err := agent.Capabilities(context.Background())
+	if err != nil {
+		t.Fatalf("agent capabilities: %v", err)
+	}
 	orchestrator, err := New(Dependencies{
 		State: repository, Launcher: agent, Observer: agent, Artifacts: artifacts,
 		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1 << 20,
-		MaxActionAttempts: 10, ClaimLease: time.Minute,
+		MaxExecutionAttempts: 3, ClaimLease: time.Minute,
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
+		AgentCapabilities: capabilities,
 	})
 	if err != nil {
 		t.Fatalf("new orchestrator: %v", err)

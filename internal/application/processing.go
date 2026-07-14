@@ -28,9 +28,9 @@ func (orchestrator *Orchestrator) ProcessNext(ctx context.Context, workerRef str
 	if err != nil {
 		return ProcessResult{}, err
 	}
-	now := orchestrator.clock.Now()
 	claim, found, err := orchestrator.state.ClaimNextAction(ctx, ClaimRequest{
-		WorkerRef: workerRef, Token: token, Now: now, LeaseDuration: orchestrator.claimLease,
+		WorkerRef: workerRef, Token: token, LeaseDuration: orchestrator.claimLease,
+		Capabilities: orchestrator.agentCapabilities,
 	})
 	if err != nil || !found {
 		return ProcessResult{}, err
@@ -102,7 +102,9 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 		ExecutionRef: execution.Ref, GoalRef: record.Goal.Ref(),
 		WorkItemRef: item.Ref(), SpecHash: record.Goal.SpecHash(), ActorRef: record.Goal.Actor(),
 		ProjectRef: record.Goal.Project(), Objective: item.Objective(),
-		PhaseRef: phase.Ref().String(), PhaseKey: item.Phase().String(),
+		PlanGeneration: record.Goal.PlanGeneration(), AppSpecGeneration: record.Goal.AppSpec().Generation(),
+		ExecutionAttempt: execution.AttemptNo,
+		PhaseRef:         phase.Ref().String(), PhaseKey: item.Phase().String(),
 		PhaseTemplateRef: phase.TemplateRef().String(),
 		PhaseInputRefs:   workItemRefs(phase.InputRefs()), PhaseCriterionRefs: workItemRefs(phase.CriterionRefs()),
 		RoleKey:   item.Role().String(),
@@ -121,7 +123,7 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 		if isTemporaryAgentError(launchErr) {
 			return orchestrator.requeue(ctx, claim, execution, "agent.temporarily_unavailable")
 		}
-		return orchestrator.failGoal(ctx, claim, record, "agent.launch_failed")
+		return orchestrator.replaceExecutionAttempt(ctx, claim, record, "agent.launch_failed", orchestrator.clock.Now())
 	}
 	if err := ports.ValidateAgentLaunchReceipt(request, receipt); err != nil {
 		code := ports.AgentContractErrorCode(err)
@@ -130,9 +132,16 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 		}
 		return orchestrator.failGoal(ctx, claim, record, code)
 	}
+	if receipt.ProviderRef != orchestrator.agentCapabilities.ProviderRef ||
+		receipt.ModelRef != orchestrator.agentCapabilities.ModelRef ||
+		receipt.AgentRef != orchestrator.agentCapabilities.AgentRef {
+		return orchestrator.failGoal(ctx, claim, record, "agent.receipt_identity_mismatch")
+	}
 	transitionAt := lifecycleTime(orchestrator.clock.Now(), record.Goal, item)
 	execution.State = ExecutionRunning
 	execution.ProviderRef = receipt.ProviderRef
+	execution.ModelRef = receipt.ModelRef
+	execution.AgentRef = receipt.AgentRef
 	execution.ExternalRef = receipt.ExternalRef
 	execution.StartedAt = transitionAt
 	execution.DeadlineAt = transitionAt.Add(orchestrator.executionTimeout)
@@ -140,6 +149,7 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 	next := ActionRecord{
 		Ref: "action:observe:" + execution.Ref.String(), Kind: ActionObserveAgent,
 		GoalRef: record.Goal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref,
+		PlanGeneration: record.Goal.PlanGeneration(), WorkItemGeneration: item.Revision(),
 		AvailableAt: orchestrator.clock.Now(),
 	}
 	return orchestrator.state.RecordLaunchAccepted(ctx, LaunchAcceptedState{
@@ -172,7 +182,7 @@ func (orchestrator *Orchestrator) processObservation(ctx context.Context, claim 
 	observation, observeErr := orchestrator.observer.Observe(ctx, execution.Ref)
 	if observeErr != nil {
 		if orchestrator.executionExpired(execution, claim) {
-			return orchestrator.failGoal(ctx, claim, record, "application.execution_expired")
+			return orchestrator.replaceExecutionAttempt(ctx, claim, record, "application.execution_expired", orchestrator.clock.Now())
 		}
 		return orchestrator.requeue(ctx, claim, execution, "agent.observe_failed")
 	}
@@ -198,11 +208,11 @@ func (orchestrator *Orchestrator) processObservation(ctx context.Context, claim 
 	switch observation.Status {
 	case ports.AgentPending, ports.AgentRunning:
 		if orchestrator.executionExpired(execution, claim) {
-			return orchestrator.failGoalAt(ctx, claim, record, "application.execution_expired", transitionAt)
+			return orchestrator.replaceExecutionAttempt(ctx, claim, record, "application.execution_expired", transitionAt)
 		}
 		return orchestrator.requeue(ctx, claim, execution, "")
 	case ports.AgentFailed:
-		return orchestrator.failGoalAt(ctx, claim, record, observation.ErrorCode, transitionAt)
+		return orchestrator.replaceExecutionAttempt(ctx, claim, record, observation.ErrorCode, transitionAt)
 	case ports.AgentCompleted:
 		return orchestrator.succeedGoal(ctx, claim, record, execution, observation, transitionAt)
 	default:
@@ -365,6 +375,77 @@ func (orchestrator *Orchestrator) failGoalAt(
 	})
 }
 
+func (orchestrator *Orchestrator) replaceExecutionAttempt(
+	ctx context.Context,
+	claim ActionClaim,
+	record GoalRecord,
+	code string,
+	at time.Time,
+) error {
+	item, ok := record.Goal.WorkItem(claim.Action.WorkItemRef)
+	execution, found := executionForAction(record, claim.Action)
+	if !ok || !found || item.State() != goal.WorkItemStateRunning {
+		return &StateError{Code: StateConflict}
+	}
+	if execution.AttemptNo >= execution.MaxExecutionAttempts {
+		return orchestrator.failGoalAt(ctx, claim, record, code, at)
+	}
+	replacementRef, err := newExecutionRef(ctx, orchestrator.ids)
+	if err != nil {
+		return err
+	}
+	at = lifecycleTime(at, record.Goal, item)
+	aggregate, err := record.Goal.ReplaceWorkItemExecution(
+		record.Goal.Revision(), item.Revision(), item.Ref(), execution.Ref, replacementRef, at,
+	)
+	if err != nil {
+		return err
+	}
+	execution.State = ExecutionFailed
+	execution.FailureCode = stableFailureCode(code)
+	execution.FinishedAt = at.UTC()
+	replacement := ExecutionRecord{
+		Ref: replacementRef, GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(),
+		AttemptNo: execution.AttemptNo + 1, MaxExecutionAttempts: execution.MaxExecutionAttempts,
+		ReplacesExecutionRef: execution.Ref, PlanGeneration: execution.PlanGeneration,
+		AppSpecGeneration: execution.AppSpecGeneration, SpecHash: execution.SpecHash,
+		State: ExecutionDispatching, ArtifactMediaType: execution.ArtifactMediaType,
+		IdempotencyKey: "execution:" + replacementRef.String(),
+		MaxOutputBytes: execution.MaxOutputBytes,
+		CreatedAt:      at.UTC(),
+	}
+	updatedItem, _ := aggregate.WorkItem(item.Ref())
+	next := ActionRecord{
+		Ref: "action:launch:" + replacementRef.String(), Kind: ActionLaunchAgent,
+		GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: replacementRef,
+		PlanGeneration: aggregate.PlanGeneration(), WorkItemGeneration: updatedItem.Revision(),
+		AvailableAt: at.Add(executionRetryBackoff(orchestrator.observationDelay, execution.AttemptNo, orchestrator.executionTimeout)),
+	}
+	events := []EventRecord{
+		{Ref: "event:execution-failed:" + execution.Ref.String(), Kind: "execution.failed", GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref, OccurredAt: at},
+		{Ref: "event:execution-dispatching:" + replacement.Ref.String(), Kind: "execution.dispatching", GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: replacement.Ref, OccurredAt: at},
+	}
+	return orchestrator.state.RecordExecutionReplaced(ctx, ExecutionReplacedState{
+		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: item.Revision(),
+		Goal: aggregate, FailedExecution: execution, ReplacementExecution: replacement,
+		NextAction: next, Events: events, ErrorCode: execution.FailureCode, OperationAt: at,
+	})
+}
+
+func executionRetryBackoff(base time.Duration, completedAttempt uint64, ceiling time.Duration) time.Duration {
+	if base >= ceiling {
+		return ceiling
+	}
+	delay := base
+	for attempt := uint64(1); attempt < completedAttempt; attempt++ {
+		if delay > ceiling-delay {
+			return ceiling
+		}
+		delay += delay
+	}
+	return delay
+}
+
 func replaceExecution(records []ExecutionRecord, updated ExecutionRecord) []ExecutionRecord {
 	result := append([]ExecutionRecord(nil), records...)
 	for index := range result {
@@ -429,7 +510,8 @@ func (orchestrator *Orchestrator) requeue(
 }
 
 func (orchestrator *Orchestrator) executionExpired(execution ExecutionRecord, claim ActionClaim) bool {
-	return claim.Attempt >= execution.MaxAttempts || !orchestrator.clock.Now().Before(execution.DeadlineAt)
+	_ = claim // delivery retries never consume provider execution attempts.
+	return !orchestrator.clock.Now().Before(execution.DeadlineAt)
 }
 
 func (orchestrator *Orchestrator) quarantine(ctx context.Context, claim ActionClaim, code string) error {
@@ -438,7 +520,7 @@ func (orchestrator *Orchestrator) quarantine(ctx context.Context, claim ActionCl
 	err := orchestrator.state.QuarantineAction(ctx, ActionQuarantinedState{
 		Claim: claim, ErrorCode: code, OperationAt: now,
 		Event: EventRecord{
-			Ref:  fmt.Sprintf("event:action-quarantined:%s:%d", claim.Action.Ref, claim.Attempt),
+			Ref:  fmt.Sprintf("event:action-quarantined:%s:%d", claim.Action.Ref, claim.DeliveryAttempt),
 			Kind: "action.quarantined", GoalRef: claim.Action.GoalRef,
 			WorkItemRef: claim.Action.WorkItemRef, ExecutionRef: claim.Action.ExecutionRef,
 			OccurredAt: now,

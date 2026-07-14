@@ -2,12 +2,45 @@ package application
 
 import (
 	"context"
+	"reflect"
 	"testing"
 	"time"
 
 	"orquesta/internal/goal"
 	"orquesta/internal/ports"
 )
+
+func TestNewClonesAgentCapabilitySlices(t *testing.T) {
+	clock := &mutableClock{now: time.Date(2026, 7, 14, 19, 0, 0, 0, time.UTC)}
+	repository := newMemoryRepository()
+	agent := &scriptedAgent{now: clock.Now}
+	capabilities := ports.AgentCapabilities{
+		ProviderRef: "provider:test", ModelRef: "model:test", AgentRef: "agent:test",
+		RoleKeys: []string{"role:worker"}, SkillRefs: []string{"skill:test"},
+		ToolRefs: []string{"tool:test"}, CapabilityRefs: []string{"capability:test"},
+	}
+	orchestrator, err := New(Dependencies{
+		State: repository, Launcher: agent, Observer: agent, Artifacts: newMemoryArtifactStore(),
+		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1 << 20, MaxExecutionAttempts: 3,
+		ClaimLease: time.Minute, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
+		AgentCapabilities: capabilities,
+	})
+	if err != nil {
+		t.Fatalf("new orchestrator: %v", err)
+	}
+	capabilities.RoleKeys[0] = "role:mutated"
+	capabilities.SkillRefs[0] = "skill:mutated"
+	capabilities.ToolRefs[0] = "tool:mutated"
+	capabilities.CapabilityRefs[0] = "capability:mutated"
+	want := ports.AgentCapabilities{
+		ProviderRef: "provider:test", ModelRef: "model:test", AgentRef: "agent:test",
+		RoleKeys: []string{"role:worker"}, SkillRefs: []string{"skill:test"},
+		ToolRefs: []string{"tool:test"}, CapabilityRefs: []string{"capability:test"},
+	}
+	if !reflect.DeepEqual(orchestrator.agentCapabilities, want) {
+		t.Fatalf("caller mutated scheduler capabilities after New: got=%+v want=%+v", orchestrator.agentCapabilities, want)
+	}
+}
 
 func TestOrchestratorOwnsOneDurableLifecycleWriter(t *testing.T) {
 	ctx := context.Background()

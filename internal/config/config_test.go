@@ -44,7 +44,7 @@ func TestLoadReturnsTypedCanonicalDefaults(t *testing.T) {
 	}
 	if snapshot.Scheduler.ObservationInterval != 2*time.Second ||
 		snapshot.Scheduler.ClaimLease != 2*time.Minute ||
-		snapshot.Scheduler.MaxActionAttempts != 1800 ||
+		snapshot.Scheduler.MaxExecutionAttempts != 3 ||
 		snapshot.Scheduler.ExecutionTimeout != 45*time.Minute {
 		t.Fatalf("unexpected scheduler defaults: %+v", snapshot.Scheduler)
 	}

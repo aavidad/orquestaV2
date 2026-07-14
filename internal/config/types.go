@@ -74,11 +74,11 @@ type ProjectConfig struct {
 }
 
 type SchedulerConfig struct {
-	PollInterval        time.Duration
-	ObservationInterval time.Duration
-	ClaimLease          time.Duration
-	MaxActionAttempts   int64
-	ExecutionTimeout    time.Duration
+	PollInterval         time.Duration
+	ObservationInterval  time.Duration
+	ClaimLease           time.Duration
+	MaxExecutionAttempts int64
+	ExecutionTimeout     time.Duration
 }
 
 type APIConfig struct {

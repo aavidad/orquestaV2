@@ -19,13 +19,32 @@ const (
 )
 
 type AgentCapabilities struct {
-	ProviderRef string
+	ProviderRef    string
+	ModelRef       string
+	AgentRef       string
+	Unrestricted   bool
+	RoleKeys       []string
+	SkillRefs      []string
+	ToolRefs       []string
+	CapabilityRefs []string
+}
+
+// AgentRequirements describes the neutral capabilities required by one work
+// item. Provider/model selection remains an adapter/composition concern.
+type AgentRequirements struct {
+	RoleKey        string
+	SkillRefs      []string
+	ToolRefs       []string
+	CapabilityRefs []string
 }
 
 type AgentLaunchRequest struct {
 	ExecutionRef       goal.ExecutionRef
 	GoalRef            goal.GoalRef
 	WorkItemRef        goal.WorkItemRef
+	PlanGeneration     goal.PlanGeneration
+	AppSpecGeneration  goal.AppSpecGeneration
+	ExecutionAttempt   uint64
 	SpecHash           string
 	ActorRef           goal.ActorRef
 	ProjectRef         goal.ProjectRef
@@ -47,12 +66,19 @@ type AgentLaunchRequest struct {
 }
 
 type AgentLaunchReceipt struct {
-	ExecutionRef   goal.ExecutionRef
-	SpecHash       string
-	ProviderRef    string
-	ExternalRef    string
-	IdempotencyKey string
-	AcceptedAt     time.Time
+	ExecutionRef      goal.ExecutionRef
+	GoalRef           goal.GoalRef
+	WorkItemRef       goal.WorkItemRef
+	PlanGeneration    goal.PlanGeneration
+	AppSpecGeneration goal.AppSpecGeneration
+	ExecutionAttempt  uint64
+	SpecHash          string
+	ProviderRef       string
+	ModelRef          string
+	AgentRef          string
+	ExternalRef       string
+	IdempotencyKey    string
+	AcceptedAt        time.Time
 }
 
 type AgentObservation struct {
@@ -85,10 +111,40 @@ func AgentContractErrorCode(err error) string {
 }
 
 func ValidateAgentCapabilities(capabilities AgentCapabilities) error {
-	if strings.TrimSpace(capabilities.ProviderRef) == "" {
+	switch {
+	case !validAgentIdentityRef(capabilities.ProviderRef):
 		return &AgentContractError{Code: "agent.provider_ref_required"}
+	case !validAgentIdentityRef(capabilities.ModelRef):
+		return &AgentContractError{Code: "agent.model_ref_required"}
+	case !validAgentIdentityRef(capabilities.AgentRef):
+		return &AgentContractError{Code: "agent.agent_ref_required"}
+	case !validUniqueAgentRefs(capabilities.RoleKeys, validRoleKey):
+		return &AgentContractError{Code: "agent.role_keys_invalid"}
+	case !validSkillRefs(capabilities.SkillRefs):
+		return &AgentContractError{Code: "agent.skill_refs_invalid"}
+	case !validToolRefs(capabilities.ToolRefs):
+		return &AgentContractError{Code: "agent.tool_refs_invalid"}
+	case !validCapabilityRefs(capabilities.CapabilityRefs):
+		return &AgentContractError{Code: "agent.capability_refs_invalid"}
+	default:
+		return nil
 	}
-	return nil
+}
+
+// MatchAgentCapabilities applies subset matching without knowing any provider.
+// An unrestricted adapter accepts every valid requirement; restricted adapters
+// must explicitly advertise the requested role, skills, tools and capabilities.
+func MatchAgentCapabilities(capabilities AgentCapabilities, requirements AgentRequirements) bool {
+	if ValidateAgentCapabilities(capabilities) != nil || !validAgentRequirements(requirements) {
+		return false
+	}
+	if capabilities.Unrestricted {
+		return true
+	}
+	return containsAgentRef(capabilities.RoleKeys, requirements.RoleKey) &&
+		containsAllAgentRefs(capabilities.SkillRefs, requirements.SkillRefs) &&
+		containsAllAgentRefs(capabilities.ToolRefs, requirements.ToolRefs) &&
+		containsAllAgentRefs(capabilities.CapabilityRefs, requirements.CapabilityRefs)
 }
 
 func ValidateAgentLaunchRequest(request AgentLaunchRequest) error {
@@ -99,6 +155,12 @@ func ValidateAgentLaunchRequest(request AgentLaunchRequest) error {
 		return &AgentContractError{Code: "agent.goal_ref_required"}
 	case request.WorkItemRef.String() == "":
 		return &AgentContractError{Code: "agent.work_item_ref_required"}
+	case request.PlanGeneration == 0:
+		return &AgentContractError{Code: "agent.plan_generation_required"}
+	case request.AppSpecGeneration == 0:
+		return &AgentContractError{Code: "agent.app_spec_generation_required"}
+	case request.ExecutionAttempt == 0:
+		return &AgentContractError{Code: "agent.execution_attempt_required"}
 	case request.SpecHash == "":
 		return &AgentContractError{Code: "agent.spec_hash_required"}
 	case !goal.IsCanonicalAppSpecHash(request.SpecHash):
@@ -211,6 +273,35 @@ func validUniqueAgentRefs(values []string, valid func(string) bool) bool {
 	return true
 }
 
+func validAgentIdentityRef(value string) bool {
+	return value != "" && strings.TrimSpace(value) == value
+}
+
+func validAgentRequirements(requirements AgentRequirements) bool {
+	return validRoleKey(requirements.RoleKey) &&
+		validSkillRefs(requirements.SkillRefs) &&
+		validToolRefs(requirements.ToolRefs) &&
+		validCapabilityRefs(requirements.CapabilityRefs)
+}
+
+func containsAgentRef(values []string, wanted string) bool {
+	for _, value := range values {
+		if value == wanted {
+			return true
+		}
+	}
+	return false
+}
+
+func containsAllAgentRefs(available, required []string) bool {
+	for _, wanted := range required {
+		if !containsAgentRef(available, wanted) {
+			return false
+		}
+	}
+	return true
+}
+
 func validOutputContract(value string) bool {
 	contract, err := goal.NewOutputContract(goal.OutputContractKind(value))
 	return err == nil && string(contract.Kind()) == value
@@ -232,8 +323,41 @@ func validWriteSet(values []string) bool {
 }
 
 func ValidateAgentLaunchReceipt(request AgentLaunchRequest, receipt AgentLaunchReceipt) error {
+	if receipt.ExecutionRef.String() == "" {
+		return &AgentContractError{Code: "agent.receipt_execution_ref_required"}
+	}
 	if receipt.ExecutionRef != request.ExecutionRef {
 		return &AgentContractError{Code: "agent.receipt_execution_mismatch"}
+	}
+	if receipt.GoalRef.String() == "" {
+		return &AgentContractError{Code: "agent.receipt_goal_ref_required"}
+	}
+	if receipt.GoalRef != request.GoalRef {
+		return &AgentContractError{Code: "agent.receipt_goal_mismatch"}
+	}
+	if receipt.WorkItemRef.String() == "" {
+		return &AgentContractError{Code: "agent.receipt_work_item_ref_required"}
+	}
+	if receipt.WorkItemRef != request.WorkItemRef {
+		return &AgentContractError{Code: "agent.receipt_work_item_mismatch"}
+	}
+	if receipt.PlanGeneration == 0 {
+		return &AgentContractError{Code: "agent.receipt_plan_generation_required"}
+	}
+	if receipt.PlanGeneration != request.PlanGeneration {
+		return &AgentContractError{Code: "agent.receipt_plan_generation_mismatch"}
+	}
+	if receipt.AppSpecGeneration == 0 {
+		return &AgentContractError{Code: "agent.receipt_app_spec_generation_required"}
+	}
+	if receipt.AppSpecGeneration != request.AppSpecGeneration {
+		return &AgentContractError{Code: "agent.receipt_app_spec_generation_mismatch"}
+	}
+	if receipt.ExecutionAttempt == 0 {
+		return &AgentContractError{Code: "agent.receipt_execution_attempt_required"}
+	}
+	if receipt.ExecutionAttempt != request.ExecutionAttempt {
+		return &AgentContractError{Code: "agent.receipt_execution_attempt_mismatch"}
 	}
 	if receipt.SpecHash == "" {
 		return &AgentContractError{Code: "agent.receipt_spec_hash_required"}
@@ -244,11 +368,20 @@ func ValidateAgentLaunchReceipt(request AgentLaunchRequest, receipt AgentLaunchR
 	if receipt.SpecHash != request.SpecHash {
 		return &AgentContractError{Code: "agent.receipt_spec_hash_mismatch"}
 	}
+	if strings.TrimSpace(receipt.IdempotencyKey) == "" {
+		return &AgentContractError{Code: "agent.receipt_idempotency_key_required"}
+	}
 	if receipt.IdempotencyKey != request.IdempotencyKey {
 		return &AgentContractError{Code: "agent.receipt_idempotency_mismatch"}
 	}
-	if strings.TrimSpace(receipt.ProviderRef) == "" {
+	if !validAgentIdentityRef(receipt.ProviderRef) {
 		return &AgentContractError{Code: "agent.receipt_provider_ref_required"}
+	}
+	if !validAgentIdentityRef(receipt.ModelRef) {
+		return &AgentContractError{Code: "agent.receipt_model_ref_required"}
+	}
+	if !validAgentIdentityRef(receipt.AgentRef) {
+		return &AgentContractError{Code: "agent.receipt_agent_ref_required"}
 	}
 	if strings.TrimSpace(receipt.ExternalRef) == "" {
 		return &AgentContractError{Code: "agent.receipt_external_ref_required"}

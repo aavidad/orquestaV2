@@ -18,6 +18,9 @@ func validAgentLaunchRequest(t *testing.T) AgentLaunchRequest {
 		ExecutionRef:       executionRef,
 		GoalRef:            goalRef,
 		WorkItemRef:        workItemRef,
+		PlanGeneration:     2,
+		AppSpecGeneration:  3,
+		ExecutionAttempt:   1,
 		SpecHash:           "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 		ActorRef:           actorRef,
 		ProjectRef:         projectRef,
@@ -39,21 +42,99 @@ func validAgentLaunchRequest(t *testing.T) AgentLaunchRequest {
 	}
 }
 
+func validAgentLaunchReceipt(request AgentLaunchRequest) AgentLaunchReceipt {
+	return AgentLaunchReceipt{
+		ExecutionRef:      request.ExecutionRef,
+		GoalRef:           request.GoalRef,
+		WorkItemRef:       request.WorkItemRef,
+		PlanGeneration:    request.PlanGeneration,
+		AppSpecGeneration: request.AppSpecGeneration,
+		ExecutionAttempt:  request.ExecutionAttempt,
+		SpecHash:          request.SpecHash,
+		ProviderRef:       "provider:fake",
+		ModelRef:          "model:fake",
+		AgentRef:          "agent:fake",
+		ExternalRef:       "external:1",
+		IdempotencyKey:    request.IdempotencyKey,
+		AcceptedAt:        time.Unix(10, 0).UTC(),
+	}
+}
+
+func TestAgentCapabilitiesValidateAndMatchNeutralRequirements(t *testing.T) {
+	requirements := AgentRequirements{
+		RoleKey:        "role:worker",
+		SkillRefs:      []string{"skill:go"},
+		ToolRefs:       []string{"tool:go-test"},
+		CapabilityRefs: []string{"capability:patch"},
+	}
+	restricted := AgentCapabilities{
+		ProviderRef: "provider:fake", ModelRef: "model:fake", AgentRef: "agent:fake",
+		RoleKeys: []string{"role:worker", "role:reviewer"}, SkillRefs: []string{"skill:go"},
+		ToolRefs: []string{"tool:go-test"}, CapabilityRefs: []string{"capability:patch"},
+	}
+	if err := ValidateAgentCapabilities(restricted); err != nil {
+		t.Fatalf("ValidateAgentCapabilities() error = %v", err)
+	}
+	if !MatchAgentCapabilities(restricted, requirements) {
+		t.Fatal("matching restricted capabilities rejected")
+	}
+	restricted.ToolRefs = nil
+	if MatchAgentCapabilities(restricted, requirements) {
+		t.Fatal("missing required tool accepted")
+	}
+
+	unrestricted := AgentCapabilities{
+		ProviderRef: "provider:codex", ModelRef: "codex-default", AgentRef: "agent:codex", Unrestricted: true,
+	}
+	if !MatchAgentCapabilities(unrestricted, requirements) {
+		t.Fatal("valid requirements rejected by unrestricted adapter")
+	}
+}
+
+func TestAgentCapabilitiesRejectNonCanonicalOrDuplicateSets(t *testing.T) {
+	valid := AgentCapabilities{
+		ProviderRef: "provider:fake", ModelRef: "model:fake", AgentRef: "agent:fake",
+		RoleKeys: []string{"role:worker"}, SkillRefs: []string{"skill:go"},
+		ToolRefs: []string{"tool:test"}, CapabilityRefs: []string{"capability:patch"},
+	}
+	tests := map[string]func(*AgentCapabilities){
+		"provider":       func(value *AgentCapabilities) { value.ProviderRef = " provider:fake" },
+		"model":          func(value *AgentCapabilities) { value.ModelRef = "" },
+		"agent":          func(value *AgentCapabilities) { value.AgentRef = "agent:fake " },
+		"duplicate role": func(value *AgentCapabilities) { value.RoleKeys = []string{"role:worker", "role:worker"} },
+		"invalid skill":  func(value *AgentCapabilities) { value.SkillRefs = []string{" skill:go"} },
+		"duplicate tool": func(value *AgentCapabilities) { value.ToolRefs = []string{"tool:test", "tool:test"} },
+		"invalid cap":    func(value *AgentCapabilities) { value.CapabilityRefs = []string{""} },
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			candidate := valid
+			mutate(&candidate)
+			if ValidateAgentCapabilities(candidate) == nil {
+				t.Fatalf("invalid capabilities accepted: %+v", candidate)
+			}
+		})
+	}
+}
+
 func TestAgentContractRejectsInvalidPlanMetadata(t *testing.T) {
 	tests := map[string]func(*AgentLaunchRequest){
-		"missing phase ref":   func(request *AgentLaunchRequest) { request.PhaseRef = "" },
-		"missing phase":       func(request *AgentLaunchRequest) { request.PhaseKey = "" },
-		"missing template":    func(request *AgentLaunchRequest) { request.PhaseTemplateRef = "" },
-		"invalid input":       func(request *AgentLaunchRequest) { request.PhaseInputRefs = []string{" input:bad"} },
-		"duplicate criterion": func(request *AgentLaunchRequest) { request.PhaseCriterionRefs = []string{"criterion:a", "criterion:a"} },
-		"missing role":        func(request *AgentLaunchRequest) { request.RoleKey = "" },
-		"invalid skill":       func(request *AgentLaunchRequest) { request.SkillRefs = []string{" skill:go"} },
-		"duplicate tool":      func(request *AgentLaunchRequest) { request.ToolRefs = []string{"tool:test", "tool:test"} },
-		"invalid capability":  func(request *AgentLaunchRequest) { request.CapabilityRefs = []string{""} },
-		"unknown output":      func(request *AgentLaunchRequest) { request.OutputContract = "unknown" },
-		"empty write scope":   func(request *AgentLaunchRequest) { request.WriteSet = []string{""} },
-		"unclean write scope": func(request *AgentLaunchRequest) { request.WriteSet = []string{"internal/../ports"} },
-		"duplicate scope":     func(request *AgentLaunchRequest) { request.WriteSet = []string{"internal/ports", "internal/ports"} },
+		"missing plan generation": func(request *AgentLaunchRequest) { request.PlanGeneration = 0 },
+		"missing spec generation": func(request *AgentLaunchRequest) { request.AppSpecGeneration = 0 },
+		"missing attempt":         func(request *AgentLaunchRequest) { request.ExecutionAttempt = 0 },
+		"missing phase ref":       func(request *AgentLaunchRequest) { request.PhaseRef = "" },
+		"missing phase":           func(request *AgentLaunchRequest) { request.PhaseKey = "" },
+		"missing template":        func(request *AgentLaunchRequest) { request.PhaseTemplateRef = "" },
+		"invalid input":           func(request *AgentLaunchRequest) { request.PhaseInputRefs = []string{" input:bad"} },
+		"duplicate criterion":     func(request *AgentLaunchRequest) { request.PhaseCriterionRefs = []string{"criterion:a", "criterion:a"} },
+		"missing role":            func(request *AgentLaunchRequest) { request.RoleKey = "" },
+		"invalid skill":           func(request *AgentLaunchRequest) { request.SkillRefs = []string{" skill:go"} },
+		"duplicate tool":          func(request *AgentLaunchRequest) { request.ToolRefs = []string{"tool:test", "tool:test"} },
+		"invalid capability":      func(request *AgentLaunchRequest) { request.CapabilityRefs = []string{""} },
+		"unknown output":          func(request *AgentLaunchRequest) { request.OutputContract = "unknown" },
+		"empty write scope":       func(request *AgentLaunchRequest) { request.WriteSet = []string{""} },
+		"unclean write scope":     func(request *AgentLaunchRequest) { request.WriteSet = []string{"internal/../ports"} },
+		"duplicate scope":         func(request *AgentLaunchRequest) { request.WriteSet = []string{"internal/ports", "internal/ports"} },
 	}
 	for name, mutate := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -90,14 +171,7 @@ func TestAgentContractAcceptsCausalLaunchAndTerminalObservation(t *testing.T) {
 	if err := ValidateAgentLaunchRequest(request); err != nil {
 		t.Fatalf("ValidateAgentLaunchRequest() error = %v", err)
 	}
-	receipt := AgentLaunchReceipt{
-		ExecutionRef:   request.ExecutionRef,
-		SpecHash:       request.SpecHash,
-		ProviderRef:    "provider:fake",
-		ExternalRef:    "external:1",
-		IdempotencyKey: request.IdempotencyKey,
-		AcceptedAt:     time.Unix(10, 0).UTC(),
-	}
+	receipt := validAgentLaunchReceipt(request)
 	if err := ValidateAgentLaunchReceipt(request, receipt); err != nil {
 		t.Fatalf("ValidateAgentLaunchReceipt() error = %v", err)
 	}
@@ -117,14 +191,8 @@ func TestAgentContractAcceptsCausalLaunchAndTerminalObservation(t *testing.T) {
 func TestAgentContractRejectsIdentityMismatchAndFalseTerminalState(t *testing.T) {
 	request := validAgentLaunchRequest(t)
 	otherExecution, _ := goal.NewExecutionRef("execution:other")
-	receipt := AgentLaunchReceipt{
-		ExecutionRef:   otherExecution,
-		SpecHash:       request.SpecHash,
-		ProviderRef:    "provider:fake",
-		ExternalRef:    "external:1",
-		IdempotencyKey: request.IdempotencyKey,
-		AcceptedAt:     time.Unix(10, 0).UTC(),
-	}
+	receipt := validAgentLaunchReceipt(request)
+	receipt.ExecutionRef = otherExecution
 	if code := AgentContractErrorCode(ValidateAgentLaunchReceipt(request, receipt)); code != "agent.receipt_execution_mismatch" {
 		t.Fatalf("receipt error code = %q", code)
 	}
@@ -143,14 +211,8 @@ func TestAgentContractRejectsIdentityMismatchAndFalseTerminalState(t *testing.T)
 
 func TestAgentContractRejectsReceiptSpecHashMismatchAndInvalidObservationHash(t *testing.T) {
 	request := validAgentLaunchRequest(t)
-	receipt := AgentLaunchReceipt{
-		ExecutionRef:   request.ExecutionRef,
-		SpecHash:       "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		ProviderRef:    "provider:fake",
-		ExternalRef:    "external:1",
-		IdempotencyKey: request.IdempotencyKey,
-		AcceptedAt:     time.Unix(10, 0).UTC(),
-	}
+	receipt := validAgentLaunchReceipt(request)
+	receipt.SpecHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	if code := AgentContractErrorCode(ValidateAgentLaunchReceipt(request, receipt)); code != "agent.receipt_spec_hash_mismatch" {
 		t.Fatalf("receipt error code = %q", code)
 	}
@@ -178,13 +240,77 @@ func TestAgentContractClassifiesReceiptSpecHashBeforeCausalMismatch(t *testing.T
 		{name: "mismatch", specHash: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", wantCode: "agent.receipt_spec_hash_mismatch"},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
-			receipt := AgentLaunchReceipt{
-				ExecutionRef: request.ExecutionRef, SpecHash: testCase.specHash,
-				ProviderRef: "provider:fake", ExternalRef: "external:1",
-				IdempotencyKey: request.IdempotencyKey, AcceptedAt: time.Unix(10, 0).UTC(),
-			}
+			receipt := validAgentLaunchReceipt(request)
+			receipt.SpecHash = testCase.specHash
 			if code := AgentContractErrorCode(ValidateAgentLaunchReceipt(request, receipt)); code != testCase.wantCode {
 				t.Fatalf("receipt spec hash code = %q, want %q", code, testCase.wantCode)
+			}
+		})
+	}
+}
+
+func TestAgentReceiptRejectsEveryCausalAndAdapterIdentityMismatch(t *testing.T) {
+	request := validAgentLaunchRequest(t)
+	otherGoal, _ := goal.NewGoalRef("goal:other")
+	otherWorkItem, _ := goal.NewWorkItemRef("work:other")
+	tests := map[string]struct {
+		mutate   func(*AgentLaunchReceipt)
+		wantCode string
+	}{
+		"goal":      {func(value *AgentLaunchReceipt) { value.GoalRef = otherGoal }, "agent.receipt_goal_mismatch"},
+		"work item": {func(value *AgentLaunchReceipt) { value.WorkItemRef = otherWorkItem }, "agent.receipt_work_item_mismatch"},
+		"plan":      {func(value *AgentLaunchReceipt) { value.PlanGeneration++ }, "agent.receipt_plan_generation_mismatch"},
+		"app spec":  {func(value *AgentLaunchReceipt) { value.AppSpecGeneration++ }, "agent.receipt_app_spec_generation_mismatch"},
+		"attempt":   {func(value *AgentLaunchReceipt) { value.ExecutionAttempt++ }, "agent.receipt_execution_attempt_mismatch"},
+		"provider":  {func(value *AgentLaunchReceipt) { value.ProviderRef = "" }, "agent.receipt_provider_ref_required"},
+		"model":     {func(value *AgentLaunchReceipt) { value.ModelRef = "" }, "agent.receipt_model_ref_required"},
+		"agent":     {func(value *AgentLaunchReceipt) { value.AgentRef = "" }, "agent.receipt_agent_ref_required"},
+	}
+	for name, testCase := range tests {
+		t.Run(name, func(t *testing.T) {
+			receipt := validAgentLaunchReceipt(request)
+			testCase.mutate(&receipt)
+			if code := AgentContractErrorCode(ValidateAgentLaunchReceipt(request, receipt)); code != testCase.wantCode {
+				t.Fatalf("receipt error code = %q, want %q", code, testCase.wantCode)
+			}
+		})
+	}
+}
+
+func TestAgentReceiptRequiresCausalFieldsEvenWhenRequestIsInvalid(t *testing.T) {
+	tests := map[string]struct {
+		mutate   func(*AgentLaunchRequest, *AgentLaunchReceipt)
+		wantCode string
+	}{
+		"execution": {func(request *AgentLaunchRequest, receipt *AgentLaunchReceipt) {
+			request.ExecutionRef, receipt.ExecutionRef = goal.ExecutionRef{}, goal.ExecutionRef{}
+		}, "agent.receipt_execution_ref_required"},
+		"goal": {func(request *AgentLaunchRequest, receipt *AgentLaunchReceipt) {
+			request.GoalRef, receipt.GoalRef = goal.GoalRef{}, goal.GoalRef{}
+		}, "agent.receipt_goal_ref_required"},
+		"work item": {func(request *AgentLaunchRequest, receipt *AgentLaunchReceipt) {
+			request.WorkItemRef, receipt.WorkItemRef = goal.WorkItemRef{}, goal.WorkItemRef{}
+		}, "agent.receipt_work_item_ref_required"},
+		"plan": {func(request *AgentLaunchRequest, receipt *AgentLaunchReceipt) {
+			request.PlanGeneration, receipt.PlanGeneration = 0, 0
+		}, "agent.receipt_plan_generation_required"},
+		"app spec": {func(request *AgentLaunchRequest, receipt *AgentLaunchReceipt) {
+			request.AppSpecGeneration, receipt.AppSpecGeneration = 0, 0
+		}, "agent.receipt_app_spec_generation_required"},
+		"attempt": {func(request *AgentLaunchRequest, receipt *AgentLaunchReceipt) {
+			request.ExecutionAttempt, receipt.ExecutionAttempt = 0, 0
+		}, "agent.receipt_execution_attempt_required"},
+		"idempotency": {func(request *AgentLaunchRequest, receipt *AgentLaunchReceipt) {
+			request.IdempotencyKey, receipt.IdempotencyKey = "", ""
+		}, "agent.receipt_idempotency_key_required"},
+	}
+	for name, testCase := range tests {
+		t.Run(name, func(t *testing.T) {
+			request := validAgentLaunchRequest(t)
+			receipt := validAgentLaunchReceipt(request)
+			testCase.mutate(&request, &receipt)
+			if code := AgentContractErrorCode(ValidateAgentLaunchReceipt(request, receipt)); code != testCase.wantCode {
+				t.Fatalf("receipt required error code = %q, want %q", code, testCase.wantCode)
 			}
 		})
 	}

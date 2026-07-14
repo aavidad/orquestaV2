@@ -14,7 +14,7 @@ import (
 func validatePersistedCandidate(candidate goal.Goal, executions []ExecutionRecord, record GoalRecord) error {
 	if !reflect.DeepEqual(record.Goal.Snapshot(), candidate.Snapshot()) ||
 		!slices.Equal(record.Executions, executions) ||
-		len(record.Artifacts) != 0 || len(record.Attestations) != 0 {
+		len(record.Artifacts) != 0 || len(record.Attestations) != 0 || len(record.ConsumptionReceipts) != 0 {
 		return &StateError{Code: StateConflict}
 	}
 	return nil
@@ -24,8 +24,9 @@ func validateClaimedRecord(claim ActionClaim, record GoalRecord, kind ActionKind
 	execution, ok := executionForAction(record, claim.Action)
 	intent := record.Goal.AppSpec().Intent()
 	if claim.Token == "" || claim.WorkerRef == "" || claim.Action.Kind != kind ||
-		claim.Attempt == 0 || claim.LeaseUntil.IsZero() ||
+		claim.DeliveryAttempt == 0 || claim.Fence == 0 || claim.LeaseUntil.IsZero() ||
 		claim.Action.GoalRef != record.Goal.Ref() ||
+		claim.Action.PlanGeneration != record.Goal.PlanGeneration() || claim.Action.WorkItemGeneration == 0 ||
 		!ok || claim.Action.WorkItemRef != execution.WorkItemRef ||
 		claim.Action.ExecutionRef != execution.Ref || execution.GoalRef != record.Goal.Ref() ||
 		intent.Ref() != record.Goal.Intent() || intent.Hash() != record.Goal.IntentHash() ||
@@ -40,7 +41,10 @@ func validateClaimedRecord(claim ActionClaim, record GoalRecord, kind ActionKind
 		item.Project() != record.Goal.Project() || item.Ref() != execution.WorkItemRef {
 		return errors.New("application.claim_record_mismatch")
 	}
-	if execution.MaxOutputBytes <= 0 || execution.MaxAttempts == 0 ||
+	if execution.MaxOutputBytes <= 0 || execution.AttemptNo == 0 ||
+		execution.MaxExecutionAttempts == 0 || execution.AttemptNo > execution.MaxExecutionAttempts ||
+		execution.PlanGeneration != record.Goal.PlanGeneration() ||
+		execution.AppSpecGeneration != record.Goal.AppSpec().Generation() || execution.SpecHash != record.Goal.SpecHash() ||
 		strings.TrimSpace(execution.ArtifactMediaType) == "" ||
 		strings.TrimSpace(execution.IdempotencyKey) == "" || execution.CreatedAt.IsZero() ||
 		execution.Ref.String() == "" {
@@ -49,14 +53,18 @@ func validateClaimedRecord(claim ActionClaim, record GoalRecord, kind ActionKind
 	switch kind {
 	case ActionLaunchAgent:
 		if claim.Action.Ref != "action:launch:"+execution.Ref.String() ||
+			claim.Action.WorkItemGeneration > item.Revision() ||
 			!validLaunchClaimState(item, execution) || !execution.StartedAt.IsZero() ||
-			!execution.DeadlineAt.IsZero() || execution.ProviderRef != "" || execution.ExternalRef != "" {
+			!execution.DeadlineAt.IsZero() || execution.ProviderRef != "" || execution.ModelRef != "" ||
+			execution.AgentRef != "" || execution.ExternalRef != "" {
 			return errors.New("application.launch_state_invalid")
 		}
 	case ActionObserveAgent:
 		if claim.Action.Ref != "action:observe:"+execution.Ref.String() ||
+			claim.Action.WorkItemGeneration != item.Revision() ||
 			item.State() != goal.WorkItemStateRunning || execution.State != ExecutionRunning ||
-			execution.ProviderRef == "" || execution.ExternalRef == "" || execution.StartedAt.IsZero() ||
+			execution.ProviderRef == "" || execution.ModelRef == "" || execution.AgentRef == "" ||
+			execution.ExternalRef == "" || execution.StartedAt.IsZero() ||
 			execution.ProviderAcceptedAt.IsZero() || !execution.DeadlineAt.After(execution.StartedAt) {
 			return errors.New("application.observe_state_invalid")
 		}
@@ -102,6 +110,7 @@ func validateAmendedRecord(
 		record.Goal.Actor() != request.ActorRef || record.Goal.Project() != request.ProjectRef ||
 		record.Goal.State() != goal.GoalStatePending || record.Goal.WorkItemCount() != 0 ||
 		len(record.Executions) != 0 || len(record.Artifacts) != 0 || len(record.Attestations) != 0 ||
+		len(record.ConsumptionReceipts) != 0 ||
 		intent.Actor() != request.ActorRef || intent.Project() != request.ProjectRef ||
 		intent.Statement() != request.Statement ||
 		appSpec.Generation() != source.AppSpec().Generation()+1 || !hasParent ||

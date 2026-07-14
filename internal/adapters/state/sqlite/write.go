@@ -161,20 +161,29 @@ INSERT INTO app_specs(
 func insertExecution(ctx context.Context, transaction *sql.Tx, execution application.ExecutionRecord) error {
 	_, err := transaction.ExecContext(ctx, `
 INSERT INTO executions(
-    ref, goal_ref, work_item_ref, state, artifact_media_type, idempotency_key,
-    max_output_bytes, max_attempts, provider_ref, external_ref, created_at,
-    deadline_at, started_at, provider_accepted_at, last_observed_at,
-    provider_observed_at, finished_at, failure_code
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ref, goal_ref, work_item_ref, attempt_no, max_execution_attempts,
+    replaces_execution_ref, plan_generation, app_spec_generation, spec_hash,
+    state, artifact_media_type, idempotency_key, max_output_bytes,
+    provider_ref, model_ref, agent_ref, external_ref, created_at, deadline_at,
+    started_at, provider_accepted_at, last_observed_at, provider_observed_at,
+    finished_at, failure_code
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		execution.Ref.String(),
 		execution.GoalRef.String(),
 		execution.WorkItemRef.String(),
+		int64(execution.AttemptNo),
+		int64(execution.MaxExecutionAttempts),
+		nullableString(execution.ReplacesExecutionRef.String()),
+		int64(execution.PlanGeneration),
+		int64(execution.AppSpecGeneration),
+		execution.SpecHash,
 		string(execution.State),
 		execution.ArtifactMediaType,
 		execution.IdempotencyKey,
 		execution.MaxOutputBytes,
-		int64(execution.MaxAttempts),
 		execution.ProviderRef,
+		execution.ModelRef,
+		execution.AgentRef,
 		execution.ExternalRef,
 		requiredTime(execution.CreatedAt),
 		storedTime(execution.DeadlineAt),
@@ -194,21 +203,21 @@ func updateExecutionCAS(
 	execution application.ExecutionRecord,
 	expected application.ExecutionState,
 ) error {
+	if expected == application.ExecutionDispatching && execution.State == application.ExecutionRunning {
+		return acceptExecutionCAS(ctx, transaction, execution)
+	}
 	result, err := transaction.ExecContext(ctx, `
 UPDATE executions
-SET state = ?, artifact_media_type = ?, idempotency_key = ?, max_output_bytes = ?,
-    max_attempts = ?, provider_ref = ?, external_ref = ?, created_at = ?,
-    deadline_at = ?, started_at = ?, provider_accepted_at = ?, last_observed_at = ?,
+SET state = ?, deadline_at = ?, started_at = ?, provider_accepted_at = ?, last_observed_at = ?,
     provider_observed_at = ?, finished_at = ?, failure_code = ?
-WHERE ref = ? AND goal_ref = ? AND work_item_ref = ? AND state = ?`,
+WHERE ref = ? AND goal_ref = ? AND work_item_ref = ? AND state = ?
+  AND provider_ref = ? AND model_ref = ? AND agent_ref = ? AND external_ref = ?
+  AND attempt_no = ? AND max_execution_attempts = ?
+  AND replaces_execution_ref IS ?
+  AND plan_generation = ? AND app_spec_generation = ? AND spec_hash = ?
+  AND artifact_media_type = ? AND idempotency_key = ?
+  AND max_output_bytes = ? AND created_at = ?`,
 		string(execution.State),
-		execution.ArtifactMediaType,
-		execution.IdempotencyKey,
-		execution.MaxOutputBytes,
-		int64(execution.MaxAttempts),
-		execution.ProviderRef,
-		execution.ExternalRef,
-		requiredTime(execution.CreatedAt),
 		storedTime(execution.DeadlineAt),
 		storedTime(execution.StartedAt),
 		storedTime(execution.ProviderAcceptedAt),
@@ -220,6 +229,65 @@ WHERE ref = ? AND goal_ref = ? AND work_item_ref = ? AND state = ?`,
 		execution.GoalRef.String(),
 		execution.WorkItemRef.String(),
 		string(expected),
+		execution.ProviderRef,
+		execution.ModelRef,
+		execution.AgentRef,
+		execution.ExternalRef,
+		int64(execution.AttemptNo),
+		int64(execution.MaxExecutionAttempts),
+		nullableString(execution.ReplacesExecutionRef.String()),
+		int64(execution.PlanGeneration),
+		int64(execution.AppSpecGeneration),
+		execution.SpecHash,
+		execution.ArtifactMediaType,
+		execution.IdempotencyKey,
+		execution.MaxOutputBytes,
+		requiredTime(execution.CreatedAt),
+	)
+	if err != nil {
+		return mapDatabaseError(err)
+	}
+	return requireOneRow(result)
+}
+
+func acceptExecutionCAS(ctx context.Context, transaction *sql.Tx, execution application.ExecutionRecord) error {
+	result, err := transaction.ExecContext(ctx, `
+UPDATE executions
+SET state = ?, provider_ref = ?, model_ref = ?, agent_ref = ?, external_ref = ?,
+    deadline_at = ?, started_at = ?, provider_accepted_at = ?, last_observed_at = ?,
+    provider_observed_at = ?, finished_at = ?, failure_code = ?
+WHERE ref = ? AND goal_ref = ? AND work_item_ref = ? AND state = 'dispatching'
+  AND provider_ref = '' AND model_ref = '' AND agent_ref = '' AND external_ref = ''
+  AND attempt_no = ? AND max_execution_attempts = ?
+  AND replaces_execution_ref IS ?
+  AND plan_generation = ? AND app_spec_generation = ? AND spec_hash = ?
+  AND artifact_media_type = ? AND idempotency_key = ?
+  AND max_output_bytes = ? AND created_at = ?`,
+		string(execution.State),
+		execution.ProviderRef,
+		execution.ModelRef,
+		execution.AgentRef,
+		execution.ExternalRef,
+		storedTime(execution.DeadlineAt),
+		storedTime(execution.StartedAt),
+		storedTime(execution.ProviderAcceptedAt),
+		storedTime(execution.LastObservedAt),
+		storedTime(execution.ProviderObservedAt),
+		storedTime(execution.FinishedAt),
+		execution.FailureCode,
+		execution.Ref.String(),
+		execution.GoalRef.String(),
+		execution.WorkItemRef.String(),
+		int64(execution.AttemptNo),
+		int64(execution.MaxExecutionAttempts),
+		nullableString(execution.ReplacesExecutionRef.String()),
+		int64(execution.PlanGeneration),
+		int64(execution.AppSpecGeneration),
+		execution.SpecHash,
+		execution.ArtifactMediaType,
+		execution.IdempotencyKey,
+		execution.MaxOutputBytes,
+		requiredTime(execution.CreatedAt),
 	)
 	if err != nil {
 		return mapDatabaseError(err)
@@ -236,12 +304,13 @@ func updateGoalCAS(
 	snapshot := aggregate.Snapshot()
 	result, err := transaction.ExecContext(ctx, `
 UPDATE goals
-SET state = ?, revision = ?, started_at = ?, closed_at = ?
+SET state = ?, revision = ?, started_at = ?, closed_at = ?, plan_generation = ?
 WHERE ref = ? AND revision = ?`,
 		string(snapshot.State),
 		int64(snapshot.Revision),
 		storedTime(snapshot.StartedAt),
 		storedTime(snapshot.ClosedAt),
+		int64(snapshot.PlanGeneration),
 		snapshot.Ref,
 		int64(expected),
 	)
@@ -394,13 +463,18 @@ func writeScopeStrings(scopes []goal.WriteScope) []string {
 
 func insertAction(ctx context.Context, transaction *sql.Tx, action application.ActionRecord) error {
 	_, err := transaction.ExecContext(ctx, `
-INSERT INTO outbox(ref, kind, goal_ref, work_item_ref, execution_ref, available_at)
-VALUES (?, ?, ?, ?, ?, ?)`,
+INSERT INTO outbox(
+    ref, kind, goal_ref, work_item_ref, execution_ref,
+    plan_generation, work_item_generation, available_at
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		action.Ref,
 		string(action.Kind),
 		action.GoalRef.String(),
 		action.WorkItemRef.String(),
 		action.ExecutionRef.String(),
+		int64(action.PlanGeneration),
+		int64(action.WorkItemGeneration),
 		requiredTime(action.AvailableAt),
 	)
 	return mapDatabaseError(err)

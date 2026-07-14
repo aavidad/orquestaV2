@@ -18,7 +18,7 @@ max_diagnostic_bytes = 8192
 max_concurrent_executions = 23
 
 [scheduler]
-max_action_attempts = 7
+max_execution_attempts = 5
 
 [api]
 max_list_limit = 50
@@ -38,7 +38,7 @@ effective_max_existing_bytes = 32768
 		snapshot.Runtime.MaxOutputBytes != 16384 ||
 		snapshot.Runtime.Codex.MaxDiagnosticBytes != 8192 ||
 		snapshot.Runtime.Codex.MaxConcurrentExecutions != 23 ||
-		snapshot.Scheduler.MaxActionAttempts != 7 ||
+		snapshot.Scheduler.MaxExecutionAttempts != 5 ||
 		snapshot.API.MaxListLimit != 75 || snapshot.API.Locale != "en" ||
 		snapshot.Effective.MaxExistingBytes != 32768 {
 		t.Fatalf("unexpected typed snapshot: %+v %+v %+v %+v", snapshot.Server, snapshot.Runtime, snapshot.Scheduler, snapshot.API)
@@ -52,6 +52,26 @@ effective_max_existing_bytes = 32768
 	}
 	if *metadata.Minimum != 1 || *metadata.Maximum != 1073741824 {
 		t.Fatalf("integer bounds = %d..%d", *metadata.Minimum, *metadata.Maximum)
+	}
+}
+
+func TestSchedulerRegistryRetiresConflatedMaxActionAttempts(t *testing.T) {
+	registry, err := loadRegistry()
+	if err != nil {
+		t.Fatalf("load registry: %v", err)
+	}
+	foundExecutionPolicy := false
+	for _, definition := range registry.keys {
+		if definition.Key == "scheduler.max_action_attempts" ||
+			definition.EnvAlias == "ORQUESTA_SCHEDULER_MAX_ACTION_ATTEMPTS" {
+			t.Fatalf("conflated delivery/execution policy survived: %+v", definition)
+		}
+		if definition.Key == KeySchedulerMaxExecutionAttempts {
+			foundExecutionPolicy = definition.EnvAlias == "ORQUESTA_SCHEDULER_MAX_EXECUTION_ATTEMPTS"
+		}
+	}
+	if !foundExecutionPolicy {
+		t.Fatal("canonical execution-attempt policy missing or bound to wrong environment alias")
 	}
 }
 

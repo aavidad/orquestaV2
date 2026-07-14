@@ -63,7 +63,7 @@ func TestRepositoryMigratesPopulatedV2ToCanonicalAppSpecsAndSecondOpenIsStable(t
 	if err := repository.db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&receipts); err != nil {
 		t.Fatalf("migration receipts: %v", err)
 	}
-	if version != 4 || receipts != 4 {
+	if version != 5 || receipts != 5 {
 		t.Fatalf("migration state version=%d receipts=%d", version, receipts)
 	}
 }
@@ -180,6 +180,8 @@ func TestValidateGoalRecordConsistencyRejectsWorkItemExecutionStateMismatch(t *t
 	execution := &record.Executions[0]
 	execution.State = application.ExecutionSucceeded
 	execution.ProviderRef = "provider:state-mismatch"
+	execution.ModelRef = "model:state-mismatch"
+	execution.AgentRef = "agent:state-mismatch"
 	execution.ExternalRef = "external:state-mismatch"
 	execution.StartedAt = execution.CreatedAt
 	execution.DeadlineAt = execution.CreatedAt.Add(time.Hour)
@@ -461,7 +463,7 @@ func createFailedSourceForAmend(t *testing.T, repository *Repository, suffix str
 		Goal: failedGoal, Execution: failedExecution, OperationAt: failedAt,
 		Events: []application.EventRecord{
 			{Ref: "event:work-failed:" + suffix, Kind: "work_item.failed", GoalRef: failedGoal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: failedExecution.Ref, OccurredAt: failedAt},
-			{Ref: "event:goal-failed:" + suffix, Kind: "goal.failed", GoalRef: failedGoal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: failedExecution.Ref, OccurredAt: failedAt},
+			{Ref: "event:goal-failed:" + suffix, Kind: "goal.failed", GoalRef: failedGoal.Ref(), OccurredAt: failedAt},
 		},
 	}); err != nil {
 		t.Fatalf("persist amendment source failure: %v", err)

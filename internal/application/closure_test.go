@@ -25,10 +25,11 @@ func (invalidArtifactStore) Get(context.Context, goal.ArtifactRef, int64) (ports
 	return ports.ArtifactContent{}, errors.New("test.not_used")
 }
 
-func TestClosurePersistsExplicitAgentFailureWithoutFalseEvidence(t *testing.T) {
+func TestExplicitAgentFailureCreatesReplacementBeforeClosure(t *testing.T) {
 	ctx := context.Background()
 	clock := &mutableClock{now: time.Date(2026, 7, 14, 21, 0, 0, 0, time.UTC)}
 	repository := newMemoryRepository()
+	repository.now = clock.Now
 	agent := &scriptedAgent{now: clock.Now, observations: []ports.AgentObservation{{
 		Status: ports.AgentFailed, ErrorCode: "provider.execution_failed",
 	}}}
@@ -51,14 +52,79 @@ func TestClosurePersistsExplicitAgentFailureWithoutFalseEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if record.Goal.State() != goal.GoalStateFailed || onlyExecution(t, record).State != ExecutionFailed {
-		t.Fatalf("failure not terminal: goal=%s execution=%s", record.Goal.State(), onlyExecution(t, record).State)
+	if record.Goal.State() != goal.GoalStateRunning || len(record.Executions) != 2 ||
+		record.Executions[0].State != ExecutionFailed || record.Executions[1].State != ExecutionDispatching {
+		t.Fatalf("failure did not create replacement: goal=%s executions=%+v", record.Goal.State(), record.Executions)
 	}
-	if onlyExecution(t, record).FailureCode != "provider.execution_failed" {
-		t.Fatalf("failure code lost: %s", onlyExecution(t, record).FailureCode)
+	if record.Executions[0].FailureCode != "provider.execution_failed" ||
+		record.Executions[1].AttemptNo != 2 || record.Executions[1].ReplacesExecutionRef != record.Executions[0].Ref {
+		t.Fatalf("replacement chain lost: %+v", record.Executions)
 	}
 	if len(record.Artifacts) != 0 || len(record.Attestations) != 0 {
 		t.Fatalf("failed work received false evidence")
+	}
+	agent.mu.Lock()
+	agent.observations = append(agent.observations, ports.AgentObservation{
+		Status: ports.AgentCompleted, MediaType: "text/plain", Content: []byte("replacement succeeded"),
+	})
+	agent.mu.Unlock()
+	clock.Advance(time.Second)
+	if _, err := orchestrator.ProcessNext(ctx, "worker:test"); err != nil {
+		t.Fatalf("replacement launch: %v", err)
+	}
+	if _, err := orchestrator.ProcessNext(ctx, "worker:test"); err != nil {
+		t.Fatalf("replacement observe: %v", err)
+	}
+	record, err = repository.GetGoal(ctx, submitted.Record.Goal.Ref())
+	if err != nil || record.Goal.State() != goal.GoalStateSucceeded || record.Executions[1].State != ExecutionSucceeded {
+		t.Fatalf("replacement did not close once: record=%+v err=%v", record, err)
+	}
+}
+
+func TestExecutionAttemptPolicyFailsWorkItemOnlyAfterExhaustion(t *testing.T) {
+	ctx := context.Background()
+	clock := &mutableClock{now: time.Date(2026, 7, 14, 21, 15, 0, 0, time.UTC)}
+	repository := newMemoryRepository()
+	repository.now = clock.Now
+	agent := &scriptedAgent{now: clock.Now, observations: []ports.AgentObservation{
+		{Status: ports.AgentFailed, ErrorCode: "provider.failed.1"},
+		{Status: ports.AgentFailed, ErrorCode: "provider.failed.2"},
+		{Status: ports.AgentFailed, ErrorCode: "provider.failed.3"},
+	}}
+	orchestrator, _ := newTestOrchestrator(t, repository, clock, agent)
+	actor, project := testScope(t)
+	submitted, err := orchestrator.Submit(ctx, SubmitRequest{
+		RequestRef: "request:attempt-exhaustion", ActorRef: actor, ProjectRef: project,
+		Statement: "bounded provider retries", Confirm: true,
+	})
+	if err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	if _, err := orchestrator.ProcessNext(ctx, "worker:test"); err != nil {
+		t.Fatalf("launch attempt 1: %v", err)
+	}
+	for attempt := 1; attempt <= 3; attempt++ {
+		if _, err := orchestrator.ProcessNext(ctx, "worker:test"); err != nil {
+			t.Fatalf("observe attempt %d: %v", attempt, err)
+		}
+		if attempt < 3 {
+			clock.Advance(time.Duration(1<<(attempt-1)) * time.Second)
+			if _, err := orchestrator.ProcessNext(ctx, "worker:test"); err != nil {
+				t.Fatalf("launch attempt %d: %v", attempt+1, err)
+			}
+		}
+	}
+	record, err := repository.GetGoal(ctx, submitted.Record.Goal.Ref())
+	if err != nil || record.Goal.State() != goal.GoalStateFailed || len(record.Executions) != 3 {
+		t.Fatalf("attempt exhaustion did not close exactly once: record=%+v err=%v", record, err)
+	}
+	for index, execution := range record.Executions {
+		if execution.AttemptNo != uint64(index+1) || execution.State != ExecutionFailed {
+			t.Fatalf("attempt chain[%d] = %+v", index, execution)
+		}
+	}
+	if record.Executions[2].FailureCode != "provider.failed.3" || len(record.Artifacts) != 0 || len(record.Attestations) != 0 {
+		t.Fatalf("exhaustion evidence invalid: %+v", record)
 	}
 }
 
@@ -66,13 +132,14 @@ func TestInvalidArtifactAdapterCannotAccreditSuccessfulGoal(t *testing.T) {
 	ctx := context.Background()
 	clock := &mutableClock{now: time.Date(2026, 7, 14, 21, 30, 0, 0, time.UTC)}
 	repository := newMemoryRepository()
+	repository.now = clock.Now
 	agent := &scriptedAgent{now: clock.Now, observations: []ports.AgentObservation{{
 		Status: ports.AgentCompleted, MediaType: "text/plain", Content: []byte("real content"),
 	}}}
 	orchestrator, err := New(Dependencies{
 		State: repository, Launcher: agent, Observer: agent, Artifacts: invalidArtifactStore{},
 		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1024,
-		MaxActionAttempts: 3, ClaimLease: time.Minute,
+		MaxExecutionAttempts: 3, AgentCapabilities: testAgentCapabilities(), ClaimLease: time.Minute,
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})
 	if err != nil {
@@ -99,11 +166,14 @@ func TestInvalidArtifactAdapterCannotAccreditSuccessfulGoal(t *testing.T) {
 	}
 }
 
-func TestLaunchInfrastructureFailureClosesGoalDeterministically(t *testing.T) {
+func TestLaunchInfrastructureFailureCreatesReplaceableAttempt(t *testing.T) {
 	ctx := context.Background()
 	clock := &mutableClock{now: time.Date(2026, 7, 14, 22, 0, 0, 0, time.UTC)}
 	repository := newMemoryRepository()
-	agent := &scriptedAgent{now: clock.Now, launchErr: errors.New("missing executable")}
+	repository.now = clock.Now
+	agent := &scriptedAgent{now: clock.Now, launchErr: errors.New("missing executable"), observations: []ports.AgentObservation{{
+		Status: ports.AgentCompleted, MediaType: "text/plain", Content: []byte("recovered"),
+	}}}
 	orchestrator, _ := newTestOrchestrator(t, repository, clock, agent)
 	actor, project := testScope(t)
 	submitted, err := orchestrator.Submit(ctx, SubmitRequest{
@@ -119,8 +189,19 @@ func TestLaunchInfrastructureFailureClosesGoalDeterministically(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if record.Goal.State() != goal.GoalStateFailed || onlyExecution(t, record).FailureCode != "agent.launch_failed" {
-		t.Fatalf("unexpected terminal failure: goal=%s code=%s", record.Goal.State(), onlyExecution(t, record).FailureCode)
+	if record.Goal.State() != goal.GoalStateRunning || len(record.Executions) != 2 ||
+		record.Executions[0].FailureCode != "agent.launch_failed" || record.Executions[1].AttemptNo != 2 {
+		t.Fatalf("unexpected replacement: goal=%s executions=%+v", record.Goal.State(), record.Executions)
+	}
+	agent.mu.Lock()
+	agent.launchErr = nil
+	agent.mu.Unlock()
+	clock.Advance(time.Second)
+	if _, err := orchestrator.ProcessNext(ctx, "worker:test"); err != nil {
+		t.Fatalf("replacement launch: %v", err)
+	}
+	if _, err := orchestrator.ProcessNext(ctx, "worker:test"); err != nil {
+		t.Fatalf("replacement observe: %v", err)
 	}
 }
 
@@ -128,6 +209,7 @@ func TestTemporaryLaunchFailureRequeuesWithoutClosingGoal(t *testing.T) {
 	ctx := context.Background()
 	clock := &mutableClock{now: time.Date(2026, 7, 14, 22, 30, 0, 0, time.UTC)}
 	repository := newMemoryRepository()
+	repository.now = clock.Now
 	agent := &scriptedAgent{now: clock.Now, launchErr: temporaryAgentTestError{}, observations: []ports.AgentObservation{{
 		Status: ports.AgentCompleted, MediaType: "text/plain", Content: []byte("after capacity"),
 	}}}
@@ -169,13 +251,14 @@ func TestTemporaryLaunchCapacityWaitDoesNotConsumeExecutionAttemptBudget(t *test
 	ctx := context.Background()
 	clock := &mutableClock{now: time.Date(2026, 7, 14, 23, 0, 0, 0, time.UTC)}
 	repository := newMemoryRepository()
+	repository.now = clock.Now
 	agent := &scriptedAgent{now: clock.Now, launchErr: temporaryAgentTestError{}, observations: []ports.AgentObservation{{
 		Status: ports.AgentCompleted, MediaType: "text/plain", Content: []byte("capacity recovered"),
 	}}}
 	orchestrator, err := New(Dependencies{
 		State: repository, Launcher: agent, Observer: agent, Artifacts: newMemoryArtifactStore(),
 		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1024,
-		MaxActionAttempts: 2, ClaimLease: time.Minute,
+		MaxExecutionAttempts: 3, AgentCapabilities: testAgentCapabilities(), ClaimLease: time.Minute,
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})
 	if err != nil {
@@ -223,6 +306,7 @@ func TestPendingObservationHasDurableAttemptBoundary(t *testing.T) {
 	ctx := context.Background()
 	clock := &mutableClock{now: time.Date(2026, 7, 15, 1, 0, 0, 0, time.UTC)}
 	repository := newMemoryRepository()
+	repository.now = clock.Now
 	agent := &scriptedAgent{now: clock.Now, observations: []ports.AgentObservation{
 		{Status: ports.AgentPending}, {Status: ports.AgentRunning},
 	}}
@@ -230,7 +314,7 @@ func TestPendingObservationHasDurableAttemptBoundary(t *testing.T) {
 	orchestrator, err := New(Dependencies{
 		State: repository, Launcher: agent, Observer: agent, Artifacts: artifacts,
 		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1024,
-		MaxActionAttempts: 2, ClaimLease: time.Minute,
+		MaxExecutionAttempts: 3, AgentCapabilities: testAgentCapabilities(), ClaimLease: time.Minute,
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})
 	if err != nil {
@@ -254,7 +338,17 @@ func TestPendingObservationHasDurableAttemptBoundary(t *testing.T) {
 		t.Fatalf("terminal attempt: %v", err)
 	}
 	record, err := repository.GetGoal(ctx, submitted.Record.Goal.Ref())
-	if err != nil || record.Goal.State() != goal.GoalStateFailed || onlyExecution(t, record).FailureCode != "application.execution_expired" {
-		t.Fatalf("unbounded execution: state=%s code=%s err=%v", record.Goal.State(), onlyExecution(t, record).FailureCode, err)
+	if err != nil || record.Goal.State() != goal.GoalStateRunning || len(record.Executions) != 1 ||
+		record.Executions[0].State != ExecutionRunning {
+		t.Fatalf("delivery retry consumed execution attempt: record=%+v err=%v", record, err)
+	}
+	clock.Advance(time.Hour)
+	if _, err := orchestrator.ProcessNext(ctx, "worker:test"); err != nil {
+		t.Fatalf("expired execution replacement: %v", err)
+	}
+	record, err = repository.GetGoal(ctx, submitted.Record.Goal.Ref())
+	if err != nil || record.Goal.State() != goal.GoalStateRunning || len(record.Executions) != 2 ||
+		record.Executions[0].FailureCode != "application.execution_expired" || record.Executions[1].AttemptNo != 2 {
+		t.Fatalf("deadline did not create replacement: record=%+v err=%v", record, err)
 	}
 }

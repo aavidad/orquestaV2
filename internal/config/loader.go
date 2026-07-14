@@ -158,11 +158,11 @@ func buildSnapshot(registry registry, resolved map[Key]resolvedValue) (Snapshot,
 	}
 	snapshot.Project.Default = stringValue(resolved, KeyProjectDefault)
 	snapshot.Scheduler = SchedulerConfig{
-		PollInterval:        durationValue(resolved, KeySchedulerPollInterval),
-		ObservationInterval: durationValue(resolved, KeySchedulerObservationInterval),
-		ClaimLease:          durationValue(resolved, KeySchedulerClaimLease),
-		MaxActionAttempts:   int64Value(resolved, KeySchedulerMaxActionAttempts),
-		ExecutionTimeout:    durationValue(resolved, KeySchedulerExecutionTimeout),
+		PollInterval:         durationValue(resolved, KeySchedulerPollInterval),
+		ObservationInterval:  durationValue(resolved, KeySchedulerObservationInterval),
+		ClaimLease:           durationValue(resolved, KeySchedulerClaimLease),
+		MaxExecutionAttempts: int64Value(resolved, KeySchedulerMaxExecutionAttempts),
+		ExecutionTimeout:     durationValue(resolved, KeySchedulerExecutionTimeout),
 	}
 	snapshot.API = APIConfig{
 		MaxListLimit: int64Value(resolved, KeyAPIMaxListLimit),

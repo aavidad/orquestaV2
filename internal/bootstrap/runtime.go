@@ -153,11 +153,12 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	orchestrator, err := application.New(application.Dependencies{
 		State: repository, Launcher: agent, Observer: agent, Artifacts: artifacts,
 		Clock: clock, IDs: local.IDGenerator{},
-		MaxOutputBytes:    snapshot.Runtime.MaxOutputBytes,
-		MaxActionAttempts: uint64(snapshot.Scheduler.MaxActionAttempts),
-		ClaimLease:        snapshot.Scheduler.ClaimLease,
-		ObservationDelay:  snapshot.Scheduler.ObservationInterval,
-		ExecutionTimeout:  snapshot.Scheduler.ExecutionTimeout,
+		MaxOutputBytes:       snapshot.Runtime.MaxOutputBytes,
+		MaxExecutionAttempts: uint64(snapshot.Scheduler.MaxExecutionAttempts),
+		ClaimLease:           snapshot.Scheduler.ClaimLease,
+		ObservationDelay:     snapshot.Scheduler.ObservationInterval,
+		ExecutionTimeout:     snapshot.Scheduler.ExecutionTimeout,
+		AgentCapabilities:    capabilities,
 	})
 	if err != nil {
 		return nil, err

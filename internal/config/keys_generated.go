@@ -2,8 +2,8 @@
 
 package config
 
-const generatedRegistrySourceSHA256 = "4603d51e660782739b4ee38e2c6e9a46a154247ee6274820dd75c786eff74eb9"
-const generatedRegistryRevision = "2026-07-14.4"
+const generatedRegistrySourceSHA256 = "3ecc2457b0af17b5824cfe7330befd077299ca5486504a7e3ecf85a802046c54"
+const generatedRegistryRevision = "2026-07-14.6"
 
 const (
 	KeyServerListen                        Key = "server.listen"
@@ -35,7 +35,7 @@ const (
 	KeySchedulerPollInterval               Key = "scheduler.poll_interval"
 	KeySchedulerObservationInterval        Key = "scheduler.observation_interval"
 	KeySchedulerClaimLease                 Key = "scheduler.claim_lease"
-	KeySchedulerMaxActionAttempts          Key = "scheduler.max_action_attempts"
+	KeySchedulerMaxExecutionAttempts       Key = "scheduler.max_execution_attempts"
 	KeySchedulerExecutionTimeout           Key = "scheduler.execution_timeout"
 	KeyAPIMaxListLimit                     Key = "api.max_list_limit"
 	KeyAPILocale                           Key = "api.locale"
@@ -74,7 +74,7 @@ func allGeneratedKeys() []Key {
 		KeySchedulerPollInterval,
 		KeySchedulerObservationInterval,
 		KeySchedulerClaimLease,
-		KeySchedulerMaxActionAttempts,
+		KeySchedulerMaxExecutionAttempts,
 		KeySchedulerExecutionTimeout,
 		KeyAPIMaxListLimit,
 		KeyAPILocale,
@@ -85,7 +85,7 @@ func allGeneratedKeys() []Key {
 
 const generatedRegistryJSON = `{
   "schema_version": 1,
-  "revision": "2026-07-14.4",
+  "revision": "2026-07-14.6",
   "keys": [
     {
       "key": "server.listen",
@@ -401,16 +401,16 @@ const generatedRegistryJSON = `{
       "env_alias": "ORQUESTA_SCHEDULER_CLAIM_LEASE"
     },
     {
-      "key": "scheduler.max_action_attempts",
-      "go_name": "SchedulerMaxActionAttempts",
+      "key": "scheduler.max_execution_attempts",
+      "go_name": "SchedulerMaxExecutionAttempts",
       "type": "integer",
-      "default": 1800,
+      "default": 3,
       "sensitive": false,
       "scope": "scheduler",
       "restart_required": true,
-      "env_alias": "ORQUESTA_SCHEDULER_MAX_ACTION_ATTEMPTS",
+      "env_alias": "ORQUESTA_SCHEDULER_MAX_EXECUTION_ATTEMPTS",
       "minimum": 1,
-      "maximum": 1000000
+      "maximum": 1000
     },
     {
       "key": "scheduler.execution_timeout",

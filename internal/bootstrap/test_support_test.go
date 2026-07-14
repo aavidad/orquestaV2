@@ -75,7 +75,7 @@ local_token_path = %s
 poll_interval = "10ms"
 observation_interval = "10ms"
 claim_lease = "1s"
-max_action_attempts = 100
+max_execution_attempts = 3
 execution_timeout = "10s"
 
 [config]
@@ -103,7 +103,7 @@ func newCountingAgent(clock application.Clock, launches *atomic.Int64) *counting
 }
 
 func (agent *countingAgent) Capabilities(context.Context) (ports.AgentCapabilities, error) {
-	return ports.AgentCapabilities{ProviderRef: "provider:test"}, nil
+	return ports.AgentCapabilities{ProviderRef: "provider:test", ModelRef: "model:test", AgentRef: "agent:test", Unrestricted: true}, nil
 }
 
 func (agent *countingAgent) Launch(ctx context.Context, request ports.AgentLaunchRequest) (ports.AgentLaunchReceipt, error) {
@@ -127,7 +127,10 @@ func (agent *countingAgent) Launch(ctx context.Context, request ports.AgentLaunc
 		agent.launches.Add(1)
 	}
 	return ports.AgentLaunchReceipt{
-		ExecutionRef: request.ExecutionRef, SpecHash: request.SpecHash, ProviderRef: "provider:test",
+		ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
+		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
+		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash,
+		ProviderRef: "provider:test", ModelRef: "model:test", AgentRef: "agent:test",
 		ExternalRef:    "test:" + request.ExecutionRef.String(),
 		IdempotencyKey: request.IdempotencyKey, AcceptedAt: agent.now(),
 	}, nil
@@ -244,7 +247,7 @@ func newProcessAgent(clock application.Clock) *processAgent {
 }
 
 func (agent *processAgent) Capabilities(context.Context) (ports.AgentCapabilities, error) {
-	return ports.AgentCapabilities{ProviderRef: "provider:process-test"}, nil
+	return ports.AgentCapabilities{ProviderRef: "provider:process-test", ModelRef: "model:process-test", AgentRef: "agent:process-test", Unrestricted: true}, nil
 }
 
 func (agent *processAgent) Launch(_ context.Context, request ports.AgentLaunchRequest) (ports.AgentLaunchReceipt, error) {
@@ -279,7 +282,10 @@ func (agent *processAgent) Launch(_ context.Context, request ports.AgentLaunchRe
 
 func (agent *processAgent) receipt(request ports.AgentLaunchRequest) ports.AgentLaunchReceipt {
 	return ports.AgentLaunchReceipt{
-		ExecutionRef: request.ExecutionRef, SpecHash: request.SpecHash, ProviderRef: "provider:process-test",
+		ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
+		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
+		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash,
+		ProviderRef: "provider:process-test", ModelRef: "model:process-test", AgentRef: "agent:process-test",
 		ExternalRef: "pid-owned", IdempotencyKey: request.IdempotencyKey, AcceptedAt: agent.now(),
 	}
 }
