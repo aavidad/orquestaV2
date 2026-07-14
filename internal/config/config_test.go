@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"go/parser"
+	"go/token"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -104,14 +106,11 @@ env_allowlist = ["FILE_ONLY"]
 	assertConfigError(t, err, ErrorUnknownKey, Key("UNDECLARED"))
 }
 
-func TestEffectiveConfigIsRedactedOutputOnlyAndOwnerReadOnly(t *testing.T) {
-	effectivePath := filepath.Join(t.TempDir(), "effective_config.json")
+func TestEffectiveConfigProjectionIsPureRedactedAndOutputOnly(t *testing.T) {
 	snapshot := resolveTOML(t, `
 [runtime.codex]
 credential_ref = "credential:must-not-leak"
-
-[config]
-effective_path = `+strconv.Quote(effectivePath), nil)
+`, nil)
 	effective, err := snapshot.EffectiveJSON()
 	if err != nil {
 		t.Fatalf("effective JSON: %v", err)
@@ -122,25 +121,7 @@ effective_path = `+strconv.Quote(effectivePath), nil)
 		t.Fatalf("marshal snapshot: %v", err)
 	}
 	assertRedacted(t, marshaled)
-	if err := snapshot.WriteEffective(); err != nil {
-		t.Fatalf("write effective: %v cause=%v", err, errors.Unwrap(err))
-	}
-	if err := snapshot.WriteEffective(); err != nil {
-		t.Fatalf("replace recognized effective: %v", err)
-	}
-	written, err := os.ReadFile(effectivePath)
-	if err != nil {
-		t.Fatalf("read effective: %v", err)
-	}
-	assertRedacted(t, written)
-	info, err := os.Stat(effectivePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if info.Mode().Perm() != 0o400 {
-		t.Fatalf("effective mode = %o, want 0400", info.Mode().Perm())
-	}
-	_, err = ParseExplicit(written)
+	_, err = ParseExplicit(effective)
 	assertConfigError(t, err, ErrorEffectiveInputForbidden, "")
 }
 
@@ -159,54 +140,6 @@ func TestCredentialReferenceIsCanonicalAndCannotBecomeHashOracle(t *testing.T) {
 		_, err := Resolve(ResolveOptions{TOML: []byte("[runtime.codex]\ncredential_ref = " + strconv.Quote(invalid))})
 		assertConfigError(t, err, ErrorValueInvalid, KeyRuntimeCodexCredentialRef)
 	}
-}
-
-func TestWriteEffectiveRejectsUnknownSymlinkAndOversizeDestination(t *testing.T) {
-	t.Run("unknown private file", func(t *testing.T) {
-		root := t.TempDir()
-		destination := filepath.Join(root, "owned-by-other.json")
-		want := []byte(`{"owner":"other"}`)
-		if err := os.WriteFile(destination, want, 0o600); err != nil {
-			t.Fatal(err)
-		}
-		snapshot := resolveTOML(t, "[config]\neffective_path = "+strconv.Quote(destination), nil)
-		if err := snapshot.WriteEffective(); err == nil {
-			t.Fatal("unknown destination replaced")
-		}
-		got, _ := os.ReadFile(destination)
-		if !bytes.Equal(got, want) {
-			t.Fatal("unknown destination changed")
-		}
-	})
-	t.Run("symlink", func(t *testing.T) {
-		root := t.TempDir()
-		target, destination := filepath.Join(root, "target.json"), filepath.Join(root, "effective.json")
-		want := []byte(`{"owner":"target"}`)
-		if err := os.WriteFile(target, want, 0o600); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Symlink(target, destination); err != nil {
-			t.Skip(err)
-		}
-		snapshot := resolveTOML(t, "[config]\neffective_path = "+strconv.Quote(destination), nil)
-		if err := snapshot.WriteEffective(); err == nil {
-			t.Fatal("symlink replaced")
-		}
-		got, _ := os.ReadFile(target)
-		if !bytes.Equal(got, want) {
-			t.Fatal("symlink target changed")
-		}
-	})
-	t.Run("projection limit", func(t *testing.T) {
-		destination := filepath.Join(t.TempDir(), "effective.json")
-		snapshot := resolveTOML(t, "[config]\neffective_path = "+strconv.Quote(destination)+"\neffective_max_existing_bytes = 1024", nil)
-		if err := snapshot.WriteEffective(); err == nil {
-			t.Fatal("oversize projection written")
-		}
-		if _, err := os.Lstat(destination); !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("destination exists: %v", err)
-		}
-	})
 }
 
 func TestRenderExplicitIsCanonicalAndSnapshotStable(t *testing.T) {
@@ -337,6 +270,22 @@ func TestProcessEnvironmentReadLivesOnlyInDedicatedLoader(t *testing.T) {
 		}
 		if strings.Contains(string(content), needle) && filepath.Base(path) != "env_loader.go" {
 			t.Fatalf("process environment read outside env_loader.go: %s", path)
+		}
+	}
+}
+
+func TestEffectiveProjectionHasNoFilesystemDependency(t *testing.T) {
+	parsed, err := parser.ParseFile(token.NewFileSet(), "effective.go", nil, parser.ImportsOnly)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, imported := range parsed.Imports {
+		path, err := strconv.Unquote(imported.Path.Value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if path != "encoding/json" {
+			t.Fatalf("effective projection imports concrete dependency %q", path)
 		}
 	}
 }
