@@ -1,42 +1,41 @@
 # Estado y handoff vivo del rebuild
 
-Última actualización: 2026-07-14 13:28 Europe/Madrid.
+Última actualización: 2026-07-14 14:04 Europe/Madrid.
 
 Este documento permite continuar el rebuild sin reconstruir el contexto de la
 sesión. Es estado operativo, no evidencia de aceptación. Los estados canónicos
 de capacidades, verticales y contratos viven en `product/roadmap.json`; los
 verdes viven en receipts fuera de su propio candidato.
 
-## Incidencia activa antes de V05
+## Checkpoint vigente antes de V05
 
-V05 está pausado, sin write-set de producto abierto. La revisión previa detectó
-un defecto longitudinal en receipts V2: `evidenceAssertReceiptV2` vuelve a
-calcular `fixture_sha256` y `candidate_sha256` desde ficheros del worktree vivo,
-mientras `subject_source_tree.git_head` es solo informativo. Como V01 y V04
-incluyen ledgers/tests compartidos, un cambio legítimo de V05 puede invalidar
-retroactivamente evidencia ya emitida. `BUG-REBUILD-20260714-030` congeló el
-delta de rutas, pero no el contenido acreditado; por tanto no cubre este caso.
+La incidencia longitudinal de receipts quedó cerrada como
+`BUG-REBUILD-20260714-033`. V2 recalculaba fixture y candidato desde el worktree
+vivo y podía invalidar verticales anteriores al cambiar roadmap, tests o ledger.
+V3 liga ruta, modo y contenido de cada sujeto a blobs de un commit Git sellado;
+exige `base -> sealed -> HEAD`, tree/fixture/candidate hashes, commit de ejecución
+idéntico, timestamp posterior, checkout `detached_clean`, status vacío y
+receipt/salida regulares. El adversarial cubre drift vivo, downgrade, commit
+hermano, tree/blob/SHA, argv, modos, paths, symlinks y manipulación de salida.
 
-No continuar V05 ni tocar `product/roadmap.json`,
-`product/traceability/rebuild_bugs.jsonl` o tests compartidos hasta reparar el
-contrato de evidencia. Orden de reanudación exacto:
+Cadena de emisión cerrada:
 
-1. crear prueba adversarial única y migrar receipts a identidad por blobs Git
-   de un commit sellado autoritativo;
-2. exigir que el commit sellado exista, sea ancestro de `HEAD` y descienda del
-   mínimo confiable del contrato; leer fixture y sujetos mediante
-   `<sealed_head>:<path>`, no desde el worktree;
-3. registrar y cerrar `BUG-REBUILD-20260714-033` dentro del mismo candidato;
-4. commitear primero helper/tests/ledger sin receipts, usar ese commit como
-   cabeza sellada, reemitir después receipts V01–V04 y validar manipulación de
-   head, digest y rutas inexistentes;
-5. pedir contrarrevisión, actualizar este handoff y solo entonces reanudar el
-   preflight contractual V05.
+```text
+C candidato: e68ad92280e0b60a78bcb191909734fdc5d224e3
+tree C:      e6f30fa3d3b254414aeb001476ef36e1cc64e2df
+E evidencia: 70dbab89e3ad36d1e3b5d2226e1eac4f0b00ede3
+```
 
-El worktree estaba limpio al descubrirlo. Aún no se había modificado código,
-roadmap ni ledger para V05. Los tres subagentes bootstrap seguían en inventario
-V05 de solo lectura, sin `codebase-memory-mcp`; sus resultados deben conservarse
-para después de cerrar esta incidencia.
+Protocolo y argv V01–V04 se ejecutaron en worktree temporal detached, limpio y
+exactamente en `C`; el postflight conservó el mismo HEAD y status vacío. Los
+cuatro receipt tests, `./acceptance` completo, root focal, race focal, vet,
+diff-check y write-set quedaron verdes. Dos contrarrevisores independientes
+devolvieron `ACCEPT`. El delta `C..E` contiene solo siete artefactos de evidencia;
+la salida V01 no aparece porque la nueva ejecución produjo bytes idénticos al
+blob ya versionado.
+
+No hay código V05 abierto. Sus tres inventarios de solo lectura están resumidos
+en la sección de reanudación; no repetir el análisis ni reescribir el DAG base.
 
 ## Entorno que debe preservarse
 
@@ -81,13 +80,15 @@ e4c5f23074 test: separar cobertura MCP V04 por responsabilidad
 a301a3bbac fix: integrar cierre ejecutable V04
 33c0072b89 test: congelar candidato integral V04
 9a6d255a08 test: acreditar cadena integral V04
+3d6f1164ee docs: registrar bloqueo longitudinal de receipts
+e68ad92280 test: sellar receipts contra blobs Git
+70dbab89e3 test: emitir receipts V3 sellados
 ```
 
-Checkpoint vigente: `9a6d255a08` es el cierre atómico y seguro de V04. V01,
-V02, V03 y V04 tienen receipts V2 válidos contra sus candidatos. V04 acredita
-solo `GOV-02`; `GOV-01` continúa declarado y sin evidencia. No queda ningún
-cambio de producto pendiente de commit. Este handoff es el único cambio
-esperado después de `9a6d255a08` y debe commitearse por separado.
+Checkpoint vigente: `70dbab89e3` preserva el cierre funcional de V04 y migra
+V01–V04 a receipts V3 inmutables. V04 acredita solo `GOV-02`; `GOV-01`
+continúa declarado y sin evidencia. No queda cambio de producto ni evidencia
+pendiente de commit antes de V05; este handoff se integra por separado.
 
 Dos contrarrevisores finales independientes devolvieron `ACCEPT` sin editar:
 
@@ -96,7 +97,7 @@ Dos contrarrevisores finales independientes devolvieron `ACCEPT` sin editar:
 - comportamiento: cadena `IntentManifest -> AppSpec -> Goal`, fake, Codex,
   SQLite, MCP, i18n, bootstrap y E2E Codex real; normal, race sin filtro, vet,
   receipts, diff-check y write-set verdes;
-- bugs `BUG-REBUILD-20260714-022` a `032` cerrados con lección ejecutable;
+- bugs `BUG-REBUILD-20260714-022` a `033` cerrados con lección ejecutable;
 - ningún proceso del rebuild quedó vivo. El runtime temporal
   `.orquesta-runtime/v04-real-codex` se eliminó después de preservar el receipt;
 - existe un servidor legacy ajeno en la sesión tmux
@@ -106,19 +107,18 @@ Dos contrarrevisores finales independientes devolvieron `ACCEPT` sin editar:
 Digests de candidato acreditados:
 
 ```text
-V01  sha256:2bfabf2357b14d9ad6ff09edfeb54f9e2a9847699bf551a1d522aba901bfb1e4
-V02  sha256:31c8461d6de4b80d78c27073595ffe80c085faab4381e110982c4029639ad9b0
-V03  sha256:c4446c90244153635adaa69a212f6274c4b3b2dadba6080a82269c8e6ac2a9dd
-V04  sha256:07c5be895bf677e13c8240943f4b812686e51736f28ee8973b1ffb2f4863d383
+V01  sha256:1f1bd1813fc24e0b985f716bdc2da6dbb37b11fdf9ff477ccd67a1d3cfca2867
+V02  sha256:de30c14f63ecd32b35f7ee04e3a40af944c3b0966a984c5d877bcde948cb3567
+V03  sha256:c8d5ea1dafd28c04a69d0568ecdd283daa114a8dc57cdaead077d2b22e15de85
+V04  sha256:803f6182f2dda6d7b45f6289ce6d49a26202968c54baf69cc30016a9a9c7aabb
 ```
 
 Receipt V04: fixture
-`sha256:0fc917861acaf5e55b75494b610841118259d14efae22436fddc145b7a131ef7`,
+`sha256:def3544f2dc84744dffe54592565c373f00c54ade326ca61e0bd1c6319173e41`,
 output
-`sha256:4f57fd79f3ded9d751714710c171bded39ee190aab1bc1fe71d005ceb036d4cc`,
-ejecutado `2026-07-14T13:08:23+02:00`. El `git_head` informativo de los
-receipts es `a301a3bbac`; la identidad autoritativa es siempre el digest del
-candidato, no ese commit.
+`sha256:9ed9b3d5b36d7c3f2128a1bbd0ba92eb6ae2ac4bb8e834e6e4dc64877e5605bc`,
+ejecutado `2026-07-14T12:01:11.167Z`. Commit, tree y blobs de `C` son identidad
+autoritaria; no se recalculan desde el worktree actual.
 
 Verificación rápida sin atravesar superficies legacy:
 
@@ -130,10 +130,10 @@ scripts/check_rebuild_write_set.sh
 
 ## Progreso honesto
 
-- V01 catálogo ejecutable: cerrado; receipt V2 válido.
-- V02 autoridad única del rebuild: receipt V2 válido.
-- V03 trazabilidad y lecciones: cerrado; receipt V2 válido.
-- V04 intención, AppSpec y amendments: cerrado; receipt V2 válido; `GOV-02`
+- V01 catálogo ejecutable: cerrado; receipt V3 válido.
+- V02 autoridad única del rebuild: receipt V3 válido.
+- V03 trazabilidad y lecciones: cerrado; receipt V3 válido.
+- V04 intención, AppSpec y amendments: cerrado; receipt V3 válido; `GOV-02`
   acreditado con evidencia exacta.
 - V05–V34: pendientes. No contar código heredado o una prueba aislada como
   vertical cerrada.
@@ -143,27 +143,40 @@ scripts/check_rebuild_write_set.sh
   `GOV-02`, `GOV-03`, `GOV-16` y `GOV-21`. No usar porcentajes subjetivos de
   “núcleo funcional”.
 
-## Siguiente acción exacta: analizar V05 antes de programar
+## Siguiente acción exacta: cerrar V05 sin abrir V06
 
-V05 es `goal_dag_phases`, contrato `AC-V05-GOAL-DAG-PHASES`. Sigue `planned`.
-No cambiarlo a ejecutable ni abrir write-set de producto hasta completar un
-análisis acotado de lo ya existente. El rebuild ya contiene DAG y estado
-atómico previos; no asumir que eso acredita V05 ni reescribirlo por inercia.
+V05 es `goal_dag_phases`, contrato `AC-V05-GOAL-DAG-PHASES`; sigue `planned`.
+Tres inventarios independientes ya cerraron el análisis. Aproximadamente
+65–75 % de su semántica es reutilizable: Goal/CAS/transiciones, DAG/toposort,
+dependencias, write-sets, snapshots base, puertos y SQLite. No rehacer el núcleo.
 
-Orden de reanudación:
+Huecos P0 demostrados:
 
-1. verificar rama, `git status --short`, receipts V01-V04 y digest del árbol
-   antiguo;
-2. inventariar solo símbolos/tests actuales de Goal DAG, scheduler, write-set,
-   hijos contractuales y PhaseInstance mediante `rg` y lecturas acotadas;
-3. contrastar ese inventario con las cuatro aserciones de
-   `AC-V05-GOAL-DAG-PHASES`: ninguna dependencia insatisfecha arranca, roots
-   ready paralelos salvo conflicto de write-set, PhaseInstance no posee
-   lifecycle y ningún hijo contractual desaparece;
-4. documentar matriz `reutilizar / corregir / rehacer / aplazar`, frontera
-   hexagonal y write-sets disjuntos; mantener fuera outbox/claims de V06;
-5. pedir contrarrevisión del análisis y solo después abrir contrato rojo V05,
-   fixture, candidato y tests ejecutables.
+1. `PhaseInstance` solo guarda key; debe ser value object inmutable con ref,
+   template ref, entradas/criterios opacos y sin lifecycle propio;
+2. `ReadyWorkItems` devuelve roots conflictivos y la aplicación agenda todos;
+   debe derivar cohorte maximal determinista conflict-free;
+3. `RestoreGoal` acepta hijo activo con dependencia insatisfecha y dos running
+   con write-sets solapados;
+4. `ApplyPlan` sustituye el plan y puede borrar trabajo; debe evolucionar de
+   forma monotónica, conservar terminales/hijos y permitir split/replan causal;
+5. no existen parent/child contractuales ni guarda de cierre del padre;
+6. WorkItem posee una sola `ExecutionRef`, SQLite la hace casi 1:1 y fallo de
+   provider falla Goal: intentos reemplazables requieren historia 1:N fuera de
+   Goal, sin crear segundo lifecycle.
+
+Corregir roadmap antes del contrato rojo: AC-V05 no puede acreditar 26 IDs con
+cuatro assertions. Alcance revisado propuesto: `GOV-04`, `STG-00..07`,
+`STG-09..12`, `STG-16`, `STG-20`, `ORC-01..04` y `ORC-06`. Mover `GOV-05` y
+`ORC-12/13/17` a V06; `ORC-05` a V13; `ORC-18` permanece rechazado. Confirmar
+esta lista contra `ruta_total_100.md` antes de patch; no acreditar conducta
+concreta Wizard/web/deploy, solo templates/instancias neutrales.
+
+Orden de implementación: preflight roadmap/comando (el actual puede dar cero
+tests) -> contrato rojo/fixture -> dominio Goal -> application/attempts ->
+SQLite/snapshot -> MCP/bootstrap fake offline -> gates/race/vet -> candidato C
+sellado -> receipt V3 -> contrarrevisión. Mantener claims, leases, fencing,
+outbox y restart totalmente en V06. No ejecutar provider real para V05.
 
 Los subagentes directos siguen siendo bootstrap hasta V22: usarlos para
 inventarios/revisión con salida compacta, sin `codebase-memory-mcp`, y revisar
