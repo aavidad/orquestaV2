@@ -292,6 +292,34 @@ func TestStoreRecoversEveryDurableCrashBoundary(t *testing.T) {
 	}
 }
 
+func TestStoreRecoveryAfterReceiptSealClearsPendingJournal(t *testing.T) {
+	path := filepath.Join(privateTempDir(t), "orquesta.toml")
+	failed := false
+	store := openTestStore(t, path, func(point string) error {
+		if point == FailpointAfterReceiptSeal && !failed {
+			failed = true
+			return errors.New("simulated_crash")
+		}
+		return nil
+	})
+	empty, _ := store.Read(context.Background())
+	request := testCommitRequest(empty.Revision, []byte("api.locale = \"en\"\n"), "actor:seal", "request:seal")
+	_, err := store.Commit(context.Background(), request)
+	assertStoreCode(t, err, config.DocumentStoreIO)
+	assertMode(t, store.pendingPath, 0o400)
+
+	recovered := openTestStore(t, path, nil)
+	if _, err := recovered.Read(context.Background()); err != nil {
+		t.Fatalf("recover sealed receipt: %v", err)
+	}
+	assertAbsent(t, recovered.pendingPath)
+	assertMode(t, recovered.receiptPath(request.ActorRef, request.RequestRef), 0o400)
+	replay, err := recovered.Commit(context.Background(), request)
+	if err != nil || !replay.Replayed {
+		t.Fatalf("replay after sealed recovery = %#v, %v", replay, err)
+	}
+}
+
 func TestStoreDiscardsUnpublishedIntentStageAndReplacement(t *testing.T) {
 	path := filepath.Join(privateTempDir(t), "orquesta.toml")
 	store := openTestStore(t, path, nil)

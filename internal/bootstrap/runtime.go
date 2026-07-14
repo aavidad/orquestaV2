@@ -14,7 +14,6 @@ import (
 	"orquesta/internal/adapters/agent/codex"
 	"orquesta/internal/adapters/artifact/filesystem"
 	"orquesta/internal/adapters/auth/localtoken"
-	"orquesta/internal/adapters/config/effectivefile"
 	configtoml "orquesta/internal/adapters/config/toml"
 	statesqlite "orquesta/internal/adapters/state/sqlite"
 	"orquesta/internal/adapters/system/local"
@@ -440,11 +439,6 @@ func validateSnapshot(snapshot config.Snapshot, sourceConfigPath string) error {
 		return err
 	}
 	for _, reserved := range configtoml.ReservedPaths(sourceConfigPath) {
-		if err := validateRuntimePaths(snapshot, reserved); err != nil {
-			return err
-		}
-	}
-	for _, reserved := range effectivefile.ReservedPaths(snapshot.ConfigEffectivePath()) {
 		if err := validateRuntimePaths(snapshot, reserved); err != nil {
 			return err
 		}

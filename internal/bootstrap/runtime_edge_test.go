@@ -195,27 +195,6 @@ func TestBuildRejectsConfigStoreReservedPathCollisionsBeforeEffects(t *testing.T
 	}
 }
 
-func TestBuildRejectsEffectiveWriterLockCollisionBeforeEffects(t *testing.T) {
-	root := t.TempDir()
-	configPath := writeTestConfig(t, root)
-	effectivePath := filepath.Join(root, "effective", "effective_config.json")
-	replaceTestConfigValue(t, configPath,
-		"effective_path = "+strconv.Quote(filepath.Join(root, "effective_config.json")),
-		"effective_path = "+strconv.Quote(effectivePath),
-	)
-	replaceTestConfigValue(t, configPath,
-		"path = "+strconv.Quote(filepath.Join(root, "state", "orquesta.sqlite")),
-		"path = "+strconv.Quote(effectivePath+".lock"),
-	)
-	runtime, err := Build(context.Background(), Options{
-		ConfigPath: configPath, AgentFactory: countingFactory(&atomic.Int64{}),
-	})
-	if runtime != nil || err == nil || err.Error() != "bootstrap.runtime_paths_overlap" {
-		t.Fatalf("effective lock collision = %v, %v", runtime, err)
-	}
-	assertNoCompositionState(t, root)
-}
-
 func TestBuildRejectsServeMuxPatternSyntaxBeforeCreatingRuntimeState(t *testing.T) {
 	root := t.TempDir()
 	configPath := writeTestConfig(t, root)

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"syscall"
 	"time"
 )
@@ -77,25 +76,11 @@ func (directory *stableDirectory) sync() error {
 	return nil
 }
 
-func (directory *stableDirectory) withLock(ctx context.Context, name string, operation func() error) error {
-	descriptor, err := syscall.Openat(int(directory.handle.Fd()), name,
-		syscall.O_CREAT|syscall.O_RDWR|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0o600)
-	if err != nil {
-		return fmt.Errorf("%w: open lock: %v", ErrUnsafeFilesystem, err)
-	}
-	lock := os.NewFile(uintptr(descriptor), filepath.Join(directory.path, name))
-	defer lock.Close()
-	info, err := lock.Stat()
-	if err != nil {
-		return fmt.Errorf("%w: inspect lock", ErrUnsafeFilesystem)
-	}
-	identity, identityErr := identityFromInfo(info)
-	if identityErr != nil || !info.Mode().IsRegular() || info.Mode() != 0o600 || info.Size() != 0 ||
-		identity.uid != uint32(os.Geteuid()) || identity.links != 1 {
-		return fmt.Errorf("%w: invalid lock", ErrUnsafeFilesystem)
-	}
+func (directory *stableDirectory) withLock(ctx context.Context, operation func() error) error {
+	descriptor := int(directory.handle.Fd())
+	var err error
 	for {
-		err = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		err = syscall.Flock(descriptor, syscall.LOCK_EX|syscall.LOCK_NB)
 		if err == nil {
 			break
 		}
@@ -112,7 +97,7 @@ func (directory *stableDirectory) withLock(ctx context.Context, name string, ope
 		case <-timer.C:
 		}
 	}
-	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+	defer syscall.Flock(descriptor, syscall.LOCK_UN)
 	if err := directory.ensureStillNamed(); err != nil {
 		return err
 	}

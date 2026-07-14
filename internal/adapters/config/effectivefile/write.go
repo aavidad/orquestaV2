@@ -66,7 +66,7 @@ func Write(ctx context.Context, options Options) error {
 	}
 	defer directory.Close()
 	targetName := filepath.Base(cleanPath)
-	return directory.withLock(ctx, targetName+".lock", func() error {
+	return directory.withLock(ctx, func() error {
 		return writeLocked(ctx, directory, targetName, options)
 	})
 }
@@ -123,14 +123,6 @@ func writeLocked(ctx context.Context, directory *stableDirectory, targetName str
 	}
 	renamed = true
 	return directory.sync()
-}
-
-// ReservedPaths reports adapter-owned sidecars next to one effective output.
-func ReservedPaths(path string) []string {
-	if strings.TrimSpace(path) == "" {
-		return []string{}
-	}
-	return []string{path + ".lock"}
 }
 
 type effectiveEnvelope struct {

@@ -330,6 +330,39 @@ func TestManagerReplayDoesNotRevalidateCommandAgainstLaterState(t *testing.T) {
 	}
 }
 
+func TestManagerReplayDoesNotDependOnCurrentClock(t *testing.T) {
+	content := []byte("[api]\nlocale = \"es\"\n")
+	active := managerTestSnapshot(t, content)
+	store := newManagerFakeStore(content)
+	clockHealthy := true
+	manager, err := NewManager(ManagerOptions{
+		Store: store, Active: active,
+		Now: func() time.Time {
+			if !clockHealthy {
+				return time.Time{}
+			}
+			return time.Date(2035, 1, 2, 3, 4, 5, 0, time.UTC)
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	initial, _ := manager.View(context.Background())
+	request := UpdateRequest{
+		ActorRef: "actor:test", RequestRef: "request:clock-replay", ExpectedRevision: initial.SourceRevision, Confirm: true,
+		Changes: []Change{{Key: KeyAPILocale, Value: "en"}},
+	}
+	committed, err := manager.Update(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	clockHealthy = false
+	replayed, err := manager.Update(context.Background(), request)
+	if err != nil || !replayed.Replayed || !reflect.DeepEqual(replayed.Receipt, committed.Receipt) {
+		t.Fatalf("clock-independent replay = %#v, %v", replayed, err)
+	}
+}
+
 func TestManagerStaleReplayProbeCannotCommitAfterABA(t *testing.T) {
 	content := []byte("[api]\nlocale = \"es\"\n")
 	active := managerTestSnapshot(t, content)

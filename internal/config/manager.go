@@ -128,12 +128,15 @@ func (manager *Manager) commitUpdate(
 	pendingKeys []Key,
 	replayOnly bool,
 ) (UpdateResult, error) {
-	changedAt := manager.now().UTC()
-	if changedAt.IsZero() {
-		return UpdateResult{}, managerError(ErrorUpdateInvalid, errors.New("config_update_time_invalid"))
-	}
 	if err := manager.ready(ctx, ErrorUpdateInvalid); err != nil {
 		return UpdateResult{}, err
+	}
+	var changedAt time.Time
+	if !replayOnly {
+		changedAt = manager.now().UTC()
+		if changedAt.IsZero() {
+			return UpdateResult{}, managerError(ErrorUpdateInvalid, errors.New("config_update_time_invalid"))
+		}
 	}
 	commitRequest := CommitRequest{
 		ExpectedRevision:   request.ExpectedRevision,

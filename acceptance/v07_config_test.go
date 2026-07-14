@@ -154,7 +154,8 @@ func TestV07CrashProcessHelper(t *testing.T) {
 		t.Fatal(err)
 	}
 	manager, err := config.NewManager(config.ManagerOptions{
-		Store: store, Active: active, Now: func() time.Time { return baseTime },
+		Store: store, Active: active, SourcePath: path, ReservedPaths: tomlstore.ReservedPaths(path),
+		Now: func() time.Time { return baseTime },
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -599,7 +600,7 @@ func v07AssertDoctorChildEnvironmentAndScope(t *testing.T, repositoryRoot string
 	}
 	report, err := manager.Doctor(context.Background(), config.DoctorRequest{Proposals: []config.DoctorProposal{
 		{Key: "server.bind", TargetKey: config.KeyServerListen, SemanticRef: "orquesta.config.server.listen"},
-		{Key: "server.address", TargetKey: config.KeyServerListen, SemanticRef: "network.listen", Alias: "server.listen", RemoveAfterRevision: "2027-01-01"},
+		{Key: "server.address", TargetKey: config.KeyServerListen, SemanticRef: "network.listen", Alias: "server.listen", RemoveAfterRevision: "2027-01-01.0"},
 		{Key: "telemetry.sample_interval", SemanticRef: "telemetry.sample_interval", GoName: "TelemetrySampleInterval", EnvAlias: "ORQUESTA_TELEMETRY_SAMPLE_INTERVAL", Type: "duration", Scope: "telemetry"},
 	}})
 	if err != nil || len(report.Accepted) != 3 || len(report.Conflicts) != 0 ||
@@ -617,6 +618,21 @@ func v07AssertDoctorChildEnvironmentAndScope(t *testing.T, repositoryRoot string
 	after, err := manager.View(context.Background())
 	if err != nil || after.SourceRevision != before.SourceRevision {
 		t.Fatal("doctor mutated configuration")
+	}
+
+	beforeReservedChecks := v07DirectorySnapshot(t, root)
+	for index, reserved := range tomlstore.ReservedPaths(path) {
+		_, err := manager.Update(context.Background(), config.UpdateRequest{
+			ActorRef: "actor:v07", RequestRef: fmt.Sprintf("request:v07-reserved-%d", index),
+			ExpectedRevision: before.SourceRevision, Confirm: true,
+			Changes: []config.Change{{Key: config.KeyConfigEffectivePath, Value: reserved}},
+		})
+		if !config.HasErrorCode(err, config.ErrorCrossValidation) {
+			t.Fatalf("reserved store path %q accepted: %v", reserved, err)
+		}
+		if current := v07DirectorySnapshot(t, root); !reflect.DeepEqual(current, beforeReservedChecks) {
+			t.Fatalf("reserved path rejection %q mutated store", reserved)
+		}
 	}
 
 	const allowed = "V07_ALLOWED_CHILD_ENV"
@@ -675,7 +691,8 @@ func v07OpenManager(t *testing.T, path string, active config.Snapshot, environme
 		t.Fatal(err)
 	}
 	manager, err := config.NewManager(config.ManagerOptions{
-		Store: store, Active: active, Environment: environment, Now: func() time.Time { return baseTime },
+		Store: store, Active: active, Environment: environment, SourcePath: path,
+		ReservedPaths: tomlstore.ReservedPaths(path), Now: func() time.Time { return baseTime },
 	})
 	if err != nil {
 		t.Fatalf("new config Manager: %v", err)

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -126,7 +125,6 @@ func TestWriteSerializesConcurrentWritersAcrossSharedLock(t *testing.T) {
 		t.Fatalf("second writer: %v", err)
 	}
 	assertFile(t, path, second, 0o400)
-	assertFile(t, path+".lock", []byte{}, 0o600)
 }
 
 func TestWriteRejectsParentDirectoryReplacementBeforeRename(t *testing.T) {
@@ -171,15 +169,29 @@ func TestWriteRejectsParentDirectoryReplacementBeforeRename(t *testing.T) {
 	assertNoTemporaries(t, moved)
 }
 
-func TestReservedPathsAreExplicitAndDetached(t *testing.T) {
-	path := "/private/effective.json"
-	first := ReservedPaths(path)
-	if !reflect.DeepEqual(first, []string{path + ".lock"}) {
-		t.Fatalf("reserved paths = %#v", first)
+func TestArchitectureGuideDocumentsEffectiveSealedModeAndLock(t *testing.T) {
+	content, err := os.ReadFile("../../../../docs/reconstruccion/guia_arquitectura_operacion.md")
+	if err != nil {
+		t.Fatal(err)
 	}
-	first[0] = "mutated"
-	if ReservedPaths(path)[0] == "mutated" || len(ReservedPaths("")) != 0 {
-		t.Fatal("reserved path output shares state or accepts empty path")
+	text := string(content)
+	for _, required := range []string{"solo lectura `0400`", "lock exclusivo del directorio padre", "cuenta Unix propietaria"} {
+		if !strings.Contains(text, required) {
+			t.Fatalf("architecture guide omits %q", required)
+		}
+	}
+}
+
+func TestArchitectureGuideDefinesTrustedLocalUIDBoundary(t *testing.T) {
+	content, err := os.ReadFile("../../../../docs/reconstruccion/guia_arquitectura_operacion.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(content)
+	for _, required := range []string{"confían en la cuenta Unix", "código hostil ejecutado con el mismo UID"} {
+		if !strings.Contains(text, required) {
+			t.Fatalf("architecture guide omits local trust boundary %q", required)
+		}
 	}
 }
 

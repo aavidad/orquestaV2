@@ -73,6 +73,15 @@ procesos sin acceso al fichero invoquen MCP, pero no aísla procesos que corren
 con el mismo usuario del sistema operativo. Este corte tampoco incorpora
 autenticación remota, autorización multiusuario ni TLS.
 
+Los adaptadores locales confían en la cuenta Unix propietaria del proceso. Sus
+directorios `0700`, ficheros owner-only, `O_NOFOLLOW`, comprobaciones de inode y
+locks protegen frente a otros usuarios, formas inseguras y carreras
+cooperativas; no pretenden contener código hostil ejecutado con el mismo UID,
+que también podría leer memoria o matar el proceso. Un despliegue multiusuario
+no entrega acceso shell con ese UID: usa una identidad de servicio aislada y
+puertos de autenticación/autorización; la persistencia remota entra por sus
+adaptadores posteriores.
+
 ## Tres superficies de configuración y un almacén secreto
 
 La precedencia de resolución es `default < TOML < alias de entorno declarado`.
@@ -100,6 +109,12 @@ límites y selección de adaptadores sin introducir secretos. Las rutas relativa
 se resuelven desde el directorio de trabajo del proceso; en una instalación
 estable conviene usar rutas absolutas, privadas y distintas para estado,
 artefactos y trabajo de Codex.
+
+El TOML editable debe ser regular, single-link, owner-only `0600` y vivir bajo
+un directorio `0700`. Su adaptador reserva `<toml>.lock`, `<toml>.next` y
+`<toml>.receipts`: serializa escritores, aplica CAS por revisión, sella un
+recibo inmutable y recupera intents interrumpidos antes de leer. Esos paths no
+pueden reutilizarse para estado, artefactos, token ni salida efectiva.
 
 `runtime.codex.credential_ref` es una referencia, nunca el secreto. El corte
 actual aún no inyecta un resolvedor de credenciales y rechaza una referencia no
@@ -129,7 +144,9 @@ En cada arranque se escribe la proyección resuelta indicada por
 `config.effective_path`. Incluye revisión del registro, hash del snapshot,
 origen efectivo de cada valor y metadata operativa. Todo valor sensible aparece
 como `[REDACTED]`. La escritura es atómica y el fichero queda con modo de
-propietario `0600`.
+propietario de solo lectura `0400`. Escritores concurrentes se serializan con
+un lock exclusivo del directorio padre ya anclado, sin crear otro sidecar; el
+rename se rechaza si ese path padre cambia durante la operación.
 
 Es evidencia diagnóstica de salida, no una entrada reutilizable. El loader no
 acepta ese JSON como configuración. `config.effective_max_existing_bytes`
