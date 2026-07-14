@@ -59,24 +59,58 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 		return orchestrator.quarantine(ctx, claim, err.Error())
 	}
 	item, ok := record.Goal.WorkItem(claim.Action.WorkItemRef)
-	if !ok || item.State() != goal.WorkItemStatePending || record.Execution.State != ExecutionQueued {
+	execution, found := executionForAction(record, claim.Action)
+	if !ok || !found {
 		return &StateError{Code: StateConflict}
 	}
+	if execution.State == ExecutionQueued {
+		transitionAt := lifecycleTime(orchestrator.clock.Now(), record.Goal, item)
+		aggregate, startErr := record.Goal.StartWorkItem(
+			record.Goal.Revision(), item.Revision(), item.Ref(), execution.Ref, transitionAt,
+		)
+		if goal.ErrorCodeOf(startErr) == goal.ErrorWorkItemNotReady {
+			return orchestrator.requeue(ctx, claim, execution, "application.work_item_not_ready")
+		}
+		if startErr != nil {
+			return startErr
+		}
+		execution.State = ExecutionDispatching
+		if err := orchestrator.state.RecordLaunchPrepared(ctx, LaunchPreparedState{
+			Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), Goal: aggregate,
+			Execution: execution,
+			Event: EventRecord{
+				Ref: "event:execution-dispatching:" + execution.Ref.String(), Kind: "execution.dispatching",
+				GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref,
+				OccurredAt: transitionAt,
+			},
+			OperationAt: transitionAt,
+		}); err != nil {
+			if IsStateError(err, StateConflict) {
+				return orchestrator.requeue(ctx, claim, executionWithState(execution, ExecutionQueued), "state.conflict")
+			}
+			return err
+		}
+		record.Goal = aggregate
+		record.Executions = replaceExecution(record.Executions, execution)
+		item, _ = aggregate.WorkItem(item.Ref())
+	}
 	request := ports.AgentLaunchRequest{
-		ExecutionRef: record.Execution.Ref, GoalRef: record.Goal.Ref(),
+		ExecutionRef: execution.Ref, GoalRef: record.Goal.Ref(),
 		WorkItemRef: item.Ref(), ActorRef: record.Goal.Actor(),
 		ProjectRef: record.Goal.Project(), Objective: item.Objective(),
-		ArtifactMediaType: record.Execution.ArtifactMediaType,
-		IdempotencyKey:    record.Execution.IdempotencyKey,
-		MaxOutputBytes:    record.Execution.MaxOutputBytes,
+		PhaseKey: item.Phase().String(), RoleKey: item.Role().String(),
+		WriteSet: workItemWriteSet(item), OutputContract: string(item.OutputContract().Kind()),
+		ArtifactMediaType: execution.ArtifactMediaType,
+		IdempotencyKey:    execution.IdempotencyKey,
+		MaxOutputBytes:    execution.MaxOutputBytes,
 	}
 	receipt, launchErr := orchestrator.launcher.Launch(ctx, request)
 	if launchErr != nil {
 		if ctx.Err() != nil {
-			return orchestrator.requeue(ctx, claim, record.Execution, ctx.Err().Error())
+			return orchestrator.requeue(ctx, claim, execution, ctx.Err().Error())
 		}
 		if isTemporaryAgentError(launchErr) {
-			return orchestrator.requeue(ctx, claim, record.Execution, "agent.temporarily_unavailable")
+			return orchestrator.requeue(ctx, claim, execution, "agent.temporarily_unavailable")
 		}
 		return orchestrator.failGoal(ctx, claim, record, "agent.launch_failed")
 	}
@@ -84,13 +118,6 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 		return orchestrator.failGoal(ctx, claim, record, ports.AgentContractErrorCode(err))
 	}
 	transitionAt := lifecycleTime(orchestrator.clock.Now(), record.Goal, item)
-	aggregate, err := record.Goal.StartWorkItem(
-		record.Goal.Revision(), item.Revision(), item.Ref(), record.Execution.Ref, transitionAt,
-	)
-	if err != nil {
-		return err
-	}
-	execution := record.Execution
 	execution.State = ExecutionRunning
 	execution.ProviderRef = receipt.ProviderRef
 	execution.ExternalRef = receipt.ExternalRef
@@ -99,18 +126,17 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 	execution.ProviderAcceptedAt = receipt.AcceptedAt.UTC()
 	next := ActionRecord{
 		Ref: "action:observe:" + execution.Ref.String(), Kind: ActionObserveAgent,
-		GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref,
+		GoalRef: record.Goal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref,
 		AvailableAt: orchestrator.clock.Now(),
 	}
 	return orchestrator.state.RecordLaunchAccepted(ctx, LaunchAcceptedState{
-		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(),
-		ExpectedItemRevision: item.Revision(), Goal: aggregate, Execution: execution,
-		NextAction: next,
+		Claim: claim, Execution: execution, NextAction: next,
 		Event: EventRecord{
 			Ref: "event:execution-accepted:" + execution.Ref.String(), Kind: "execution.accepted",
-			GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref,
+			GoalRef: record.Goal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref,
 			OccurredAt: transitionAt,
 		},
+		OperationAt: transitionAt,
 	})
 }
 
@@ -126,26 +152,26 @@ func (orchestrator *Orchestrator) processObservation(ctx context.Context, claim 
 		return orchestrator.quarantine(ctx, claim, err.Error())
 	}
 	item, ok := record.Goal.WorkItem(claim.Action.WorkItemRef)
-	if !ok || item.State() != goal.WorkItemStateRunning || record.Execution.State != ExecutionRunning {
+	execution, found := executionForAction(record, claim.Action)
+	if !ok || !found || item.State() != goal.WorkItemStateRunning || execution.State != ExecutionRunning {
 		return &StateError{Code: StateConflict}
 	}
-	observation, observeErr := orchestrator.observer.Observe(ctx, record.Execution.Ref)
+	observation, observeErr := orchestrator.observer.Observe(ctx, execution.Ref)
 	if observeErr != nil {
-		if orchestrator.executionExpired(record.Execution, claim) {
+		if orchestrator.executionExpired(execution, claim) {
 			return orchestrator.failGoal(ctx, claim, record, "application.execution_expired")
 		}
-		return orchestrator.requeue(ctx, claim, record.Execution, "agent.observe_failed")
+		return orchestrator.requeue(ctx, claim, execution, "agent.observe_failed")
 	}
-	if observation.ExecutionRef != record.Execution.Ref {
+	if observation.ExecutionRef != execution.Ref {
 		return orchestrator.failGoal(ctx, claim, record, "agent.observation_execution_mismatch")
 	}
-	if err := ports.ValidateAgentObservation(observation, record.Execution.MaxOutputBytes); err != nil {
+	if err := ports.ValidateAgentObservation(observation, execution.MaxOutputBytes); err != nil {
 		return orchestrator.failGoal(ctx, claim, record, ports.AgentContractErrorCode(err))
 	}
-	if observation.Status == ports.AgentCompleted && !compatibleMediaType(record.Execution.ArtifactMediaType, observation.MediaType) {
+	if observation.Status == ports.AgentCompleted && !compatibleMediaType(execution.ArtifactMediaType, observation.MediaType) {
 		return orchestrator.failGoal(ctx, claim, record, "agent.observation_media_type_mismatch")
 	}
-	execution := record.Execution
 	transitionAt := lifecycleTime(orchestrator.clock.Now(), record.Goal, item)
 	execution.LastObservedAt = transitionAt
 	execution.ProviderObservedAt = observation.ObservedAt.UTC()
@@ -186,6 +212,9 @@ func (orchestrator *Orchestrator) succeedGoal(
 		return orchestrator.failGoalAt(ctx, claim, record, ports.ArtifactContractErrorCode(err), transitionAt)
 	}
 	item, _ := record.Goal.WorkItem(claim.Action.WorkItemRef)
+	// Artifact persistence may be slow. Lifecycle time and the repository's
+	// exclusive lease fence must observe the time after that external effect.
+	transitionAt = lifecycleTime(orchestrator.clock.Now(), record.Goal, item)
 	attestationRef, err := goal.NewAttestationRef("attestation:execution:" + execution.Ref.String())
 	if err != nil {
 		return err
@@ -197,9 +226,11 @@ func (orchestrator *Orchestrator) succeedGoal(
 	if err != nil {
 		return err
 	}
-	aggregate, err = aggregate.Close(aggregate.Revision(), goal.GoalOutcomeSucceeded, transitionAt)
-	if err != nil {
-		return err
+	if outcome, closable := aggregate.ClosableOutcome(); closable {
+		aggregate, err = aggregate.Close(aggregate.Revision(), outcome, transitionAt)
+		if err != nil {
+			return err
+		}
 	}
 	execution.State = ExecutionSucceeded
 	execution.FinishedAt = transitionAt
@@ -212,14 +243,24 @@ func (orchestrator *Orchestrator) succeedGoal(
 		ExecutionRef: execution.Ref, ArtifactRef: stored.Ref,
 		Policy: outputAttestationPolicy, AcceptedAt: transitionAt,
 	}
+	existing := replaceExecution(record.Executions, execution)
+	newExecutions, newActions, scheduledEvents, err := orchestrator.scheduleReady(ctx, aggregate, existing, transitionAt)
+	if err != nil {
+		return err
+	}
+	events := []EventRecord{{Ref: "event:work-succeeded:" + execution.Ref.String(), Kind: "work_item.succeeded", GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref, OccurredAt: transitionAt}}
+	if aggregate.State() == goal.GoalStateSucceeded {
+		events = append(events, EventRecord{Ref: "event:goal-succeeded:" + aggregate.Ref().String(), Kind: "goal.succeeded", GoalRef: aggregate.Ref(), OccurredAt: transitionAt})
+	} else if aggregate.State() == goal.GoalStateFailed {
+		events = append(events, EventRecord{Ref: "event:goal-failed:" + aggregate.Ref().String(), Kind: "goal.failed", GoalRef: aggregate.Ref(), OccurredAt: transitionAt})
+	}
+	events = append(events, scheduledEvents...)
 	return orchestrator.state.RecordGoalSucceeded(ctx, GoalSucceededState{
 		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(),
 		ExpectedItemRevision: item.Revision(), Goal: aggregate, Execution: execution,
 		Artifact: artifact, Attestation: attestation,
-		Events: []EventRecord{
-			{Ref: "event:work-succeeded:" + execution.Ref.String(), Kind: "work_item.succeeded", GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref, OccurredAt: transitionAt},
-			{Ref: "event:goal-succeeded:" + aggregate.Ref().String(), Kind: "goal.succeeded", GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref, OccurredAt: transitionAt},
-		},
+		NewExecutions: newExecutions, NewActions: newActions, Events: events,
+		OperationAt: transitionAt,
 	})
 }
 
@@ -247,41 +288,76 @@ func (orchestrator *Orchestrator) failGoalAt(
 	aggregate := record.Goal
 	expectedGoal := aggregate.Revision()
 	expectedItem := item.Revision()
-	var err error
-	if item.State() == goal.WorkItemStatePending {
-		aggregate, err = aggregate.StartWorkItem(
-			aggregate.Revision(), item.Revision(), item.Ref(), record.Execution.Ref, at,
-		)
-		if err != nil {
-			return err
-		}
-		item, _ = aggregate.WorkItem(item.Ref())
+	execution, found := executionForAction(record, claim.Action)
+	if !found || item.State() != goal.WorkItemStateRunning {
+		return &StateError{Code: StateConflict}
 	}
-	aggregate, err = aggregate.FailWorkItem(
+	aggregate, err := aggregate.FailWorkItem(
 		aggregate.Revision(), item.Revision(), item.Ref(), at,
 	)
 	if err != nil {
 		return err
 	}
-	aggregate, err = aggregate.Close(aggregate.Revision(), goal.GoalOutcomeFailed, at)
+	if outcome, closable := aggregate.ClosableOutcome(); closable {
+		aggregate, err = aggregate.Close(aggregate.Revision(), outcome, at)
+		if err != nil {
+			return err
+		}
+	}
+	execution.State = ExecutionFailed
+	execution.FailureCode = stableFailureCode(code)
+	execution.FinishedAt = at.UTC()
+	existing := replaceExecution(record.Executions, execution)
+	newExecutions, newActions, scheduledEvents, err := orchestrator.scheduleReady(ctx, aggregate, existing, at)
 	if err != nil {
 		return err
 	}
-	execution := record.Execution
-	execution.State = ExecutionFailed
-	if execution.StartedAt.IsZero() {
-		execution.StartedAt = at
+	events := []EventRecord{{Ref: "event:work-failed:" + execution.Ref.String(), Kind: "work_item.failed", GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref, OccurredAt: at}}
+	for _, after := range aggregate.WorkItems() {
+		before, existed := record.Goal.WorkItem(after.Ref())
+		if existed && before.State() != goal.WorkItemStateSkipped && after.State() == goal.WorkItemStateSkipped {
+			events = append(events, EventRecord{Ref: "event:work-skipped:" + after.Ref().String(), Kind: "work_item.skipped", GoalRef: aggregate.Ref(), WorkItemRef: after.Ref(), OccurredAt: at})
+		}
 	}
-	execution.FailureCode = stableFailureCode(code)
-	execution.FinishedAt = at.UTC()
+	if aggregate.State() == goal.GoalStateFailed {
+		events = append(events, EventRecord{Ref: "event:goal-failed:" + aggregate.Ref().String(), Kind: "goal.failed", GoalRef: aggregate.Ref(), OccurredAt: at})
+	}
+	events = append(events, scheduledEvents...)
 	return orchestrator.state.RecordGoalFailed(ctx, GoalFailedState{
 		Claim: claim, ExpectedGoalRevision: expectedGoal,
 		ExpectedItemRevision: expectedItem, Goal: aggregate, Execution: execution,
-		Events: []EventRecord{
-			{Ref: "event:work-failed:" + execution.Ref.String(), Kind: "work_item.failed", GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref, OccurredAt: at},
-			{Ref: "event:goal-failed:" + aggregate.Ref().String(), Kind: "goal.failed", GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref, OccurredAt: at},
-		},
+		NewExecutions: newExecutions, NewActions: newActions, Events: events,
+		OperationAt: at,
 	})
+}
+
+func replaceExecution(records []ExecutionRecord, updated ExecutionRecord) []ExecutionRecord {
+	result := append([]ExecutionRecord(nil), records...)
+	for index := range result {
+		if result[index].Ref == updated.Ref {
+			result[index] = updated
+			return result
+		}
+	}
+	return append(result, updated)
+}
+
+func executionWithState(execution ExecutionRecord, state ExecutionState) ExecutionRecord {
+	execution.State = state
+	if state == ExecutionQueued {
+		execution.StartedAt = time.Time{}
+		execution.DeadlineAt = time.Time{}
+	}
+	return execution
+}
+
+func workItemWriteSet(item goal.WorkItem) []string {
+	scopes := item.WriteSet()
+	result := make([]string, 0, len(scopes))
+	for _, scope := range scopes {
+		result = append(result, scope.String())
+	}
+	return result
 }
 
 func (orchestrator *Orchestrator) requeue(
@@ -290,10 +366,11 @@ func (orchestrator *Orchestrator) requeue(
 	execution ExecutionRecord,
 	code string,
 ) error {
+	now := orchestrator.clock.Now()
 	return orchestrator.state.RequeueAction(ctx, ActionRequeuedState{
 		Claim: claim, Execution: execution,
-		AvailableAt: orchestrator.clock.Now().Add(orchestrator.observationDelay),
-		ErrorCode:   stableFailureCode(code),
+		AvailableAt: now.Add(orchestrator.observationDelay), OperationAt: now,
+		ErrorCode: stableFailureCode(code),
 	})
 }
 
@@ -303,13 +380,14 @@ func (orchestrator *Orchestrator) executionExpired(execution ExecutionRecord, cl
 
 func (orchestrator *Orchestrator) quarantine(ctx context.Context, claim ActionClaim, code string) error {
 	code = stableFailureCode(code)
+	now := orchestrator.clock.Now()
 	err := orchestrator.state.QuarantineAction(ctx, ActionQuarantinedState{
-		Claim: claim, ErrorCode: code,
+		Claim: claim, ErrorCode: code, OperationAt: now,
 		Event: EventRecord{
 			Ref:  fmt.Sprintf("event:action-quarantined:%s:%d", claim.Action.Ref, claim.Attempt),
 			Kind: "action.quarantined", GoalRef: claim.Action.GoalRef,
 			WorkItemRef: claim.Action.WorkItemRef, ExecutionRef: claim.Action.ExecutionRef,
-			OccurredAt: orchestrator.clock.Now(),
+			OccurredAt: now,
 		},
 	})
 	if err != nil {

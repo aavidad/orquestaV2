@@ -43,7 +43,8 @@ func publicCode(err error) string {
 	}
 
 	switch goal.ErrorCodeOf(err) {
-	case goal.ErrorInvalidArgument, goal.ErrorInvalidRef:
+	case goal.ErrorInvalidArgument, goal.ErrorInvalidRef, goal.ErrorInvalidPlan,
+		goal.ErrorDuplicateWorkItem, goal.ErrorWorkItemsRequired:
 		return publicInvalidRequest
 	case goal.ErrorRevisionConflict, goal.ErrorInvalidTransition, goal.ErrorScopeConflict:
 		return publicConflict
@@ -57,6 +58,10 @@ func publicCode(err error) string {
 		"application.actor_ref_required",
 		"application.project_ref_required",
 		"application.statement_required",
+		"application.plan_required",
+		"application.plan_item_key_invalid",
+		"application.plan_item_key_duplicate",
+		"application.plan_dependency_unknown",
 		"application.query_invalid",
 		"artifact.ref_invalid":
 		return publicInvalidRequest

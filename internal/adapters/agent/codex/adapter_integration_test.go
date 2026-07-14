@@ -159,6 +159,33 @@ func TestAdapterRejectsExecutionPayloadConflict(t *testing.T) {
 	}
 }
 
+func TestLaunchHashAndPromptCarryPlanMetadata(t *testing.T) {
+	request := testRequest(t, "plan-metadata", "helper:success", 1024)
+	baseHash := mustRequestHash(t, request)
+	mutations := map[string]func(*ports.AgentLaunchRequest){
+		"phase":  func(value *ports.AgentLaunchRequest) { value.PhaseKey = "phase:review" },
+		"role":   func(value *ports.AgentLaunchRequest) { value.RoleKey = "role:reviewer" },
+		"writes": func(value *ports.AgentLaunchRequest) { value.WriteSet = []string{"internal/other"} },
+		"output": func(value *ports.AgentLaunchRequest) { value.OutputContract = string(goal.OutputContractArtifact) },
+	}
+	for name, mutate := range mutations {
+		t.Run(name, func(t *testing.T) {
+			changed := request
+			changed.WriteSet = append([]string(nil), request.WriteSet...)
+			mutate(&changed)
+			if got := mustRequestHash(t, changed); got == baseHash {
+				t.Fatalf("%s omitted from launch hash", name)
+			}
+		})
+	}
+	prompt := agentPrompt(request)
+	for _, value := range []string{request.PhaseKey, request.RoleKey, request.WriteSet[0], request.OutputContract} {
+		if !strings.Contains(prompt, value) {
+			t.Fatalf("plan metadata %q omitted from prompt: %q", value, prompt)
+		}
+	}
+}
+
 func TestAdapterRejectsOversizeResultBeforeParsing(t *testing.T) {
 	adapter := openTestAdapter(t, testConfig(t))
 	request := testRequest(t, "oversize", "helper:oversize", 128)
@@ -519,6 +546,10 @@ func testRequest(t *testing.T, suffix, objective string, maxOutput int64) ports.
 		ActorRef:          actorRef,
 		ProjectRef:        projectRef,
 		Objective:         objective,
+		PhaseKey:          "phase:build",
+		RoleKey:           "role:worker",
+		WriteSet:          []string{"internal/adapters/agent/codex"},
+		OutputContract:    string(goal.OutputContractEvidenceBundle),
 		ArtifactMediaType: "text/markdown",
 		IdempotencyKey:    "launch:" + suffix,
 		MaxOutputBytes:    maxOutput,

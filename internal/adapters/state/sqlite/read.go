@@ -140,14 +140,14 @@ func readGoalRecord(ctx context.Context, source queryer, goalValue string) (appl
 	var intent goal.IntentManifestSnapshot
 	var snapshot goal.GoalSnapshot
 	var state string
-	var revision int64
+	var revision, planGeneration int64
 	var submittedAt, createdAt int64
 	var startedAt, closedAt sql.NullInt64
 	err := source.QueryRowContext(ctx, `
 SELECT g.request_ref, g.request_fingerprint,
        i.ref, i.actor_ref, i.project_ref, i.statement, i.submitted_at, i.hash,
        g.ref, g.actor_ref, g.project_ref, g.state, g.revision,
-       g.created_at, g.started_at, g.closed_at
+       g.created_at, g.started_at, g.closed_at, g.plan_generation
 FROM goals g
 JOIN intents i ON i.ref = g.intent_ref
 WHERE g.ref = ?`, goalValue).Scan(
@@ -167,20 +167,27 @@ WHERE g.ref = ?`, goalValue).Scan(
 		&createdAt,
 		&startedAt,
 		&closedAt,
+		&planGeneration,
 	)
 	if err != nil {
 		return application.GoalRecord{}, mapDatabaseError(err)
 	}
-	if revision <= 0 {
+	if revision <= 0 || planGeneration <= 0 {
 		return application.GoalRecord{}, invalid(fmt.Errorf("sqlite.revision_invalid"))
 	}
 	intent.SubmittedAt = time.Unix(0, submittedAt).UTC()
 	snapshot.Intent = intent
+	snapshot.SchemaVersion = goal.GoalSnapshotSchemaVersion
 	snapshot.State = goal.GoalState(state)
 	snapshot.Revision = goal.Revision(revision)
 	snapshot.CreatedAt = time.Unix(0, createdAt).UTC()
 	snapshot.StartedAt = restoredTime(startedAt)
 	snapshot.ClosedAt = restoredTime(closedAt)
+	snapshot.PlanGeneration = goal.PlanGeneration(planGeneration)
+	snapshot.Phases, err = readPhases(ctx, source, goalValue)
+	if err != nil {
+		return application.GoalRecord{}, err
+	}
 
 	artifacts, artifactRefs, err := readArtifacts(ctx, source, goalValue)
 	if err != nil {
@@ -194,9 +201,6 @@ WHERE g.ref = ?`, goalValue).Scan(
 	if err != nil {
 		return application.GoalRecord{}, err
 	}
-	if len(items) != 1 {
-		return application.GoalRecord{}, invalid(fmt.Errorf("sqlite.one_work_item_required"))
-	}
 	if !validText(requestRef) || !validText(requestFingerprint) {
 		return application.GoalRecord{}, invalid(fmt.Errorf("sqlite.request_identity_invalid"))
 	}
@@ -209,7 +213,7 @@ WHERE g.ref = ?`, goalValue).Scan(
 	if err != nil {
 		return application.GoalRecord{}, invalid(err)
 	}
-	execution, err := readExecution(ctx, source, goalValue)
+	executions, err := readExecutions(ctx, source, goalValue)
 	if err != nil {
 		return application.GoalRecord{}, err
 	}
@@ -218,7 +222,7 @@ WHERE g.ref = ?`, goalValue).Scan(
 		RequestFingerprint: requestFingerprint,
 		Intent:             manifest,
 		Goal:               aggregate,
-		Execution:          execution,
+		Executions:         executions,
 		Artifacts:          artifacts,
 		Attestations:       attestations,
 	}, nil
@@ -233,6 +237,7 @@ func readWorkItems(
 ) ([]goal.WorkItemSnapshot, error) {
 	rows, err := source.QueryContext(ctx, `
 SELECT ref, goal_ref, actor_ref, project_ref, objective, state, revision,
+       phase_key, role_key, output_contract, skip_reason,
        created_at, started_at, finished_at, execution_ref
 FROM work_items
 WHERE goal_ref = ?
@@ -244,7 +249,7 @@ ORDER BY position`, goalValue)
 	var result []goal.WorkItemSnapshot
 	for rows.Next() {
 		var item goal.WorkItemSnapshot
-		var state string
+		var state, outputContract, skipReason string
 		var revision int64
 		var createdAt int64
 		var startedAt, finishedAt sql.NullInt64
@@ -257,6 +262,10 @@ ORDER BY position`, goalValue)
 			&item.Objective,
 			&state,
 			&revision,
+			&item.PhaseKey,
+			&item.RoleKey,
+			&outputContract,
+			&skipReason,
 			&createdAt,
 			&startedAt,
 			&finishedAt,
@@ -268,6 +277,8 @@ ORDER BY position`, goalValue)
 			return nil, invalid(fmt.Errorf("sqlite.revision_invalid"))
 		}
 		item.State = goal.WorkItemState(state)
+		item.OutputContract = goal.OutputContractKind(outputContract)
+		item.SkipReason = goal.WorkItemSkipReason(skipReason)
 		item.Revision = goal.Revision(revision)
 		item.CreatedAt = time.Unix(0, createdAt).UTC()
 		item.StartedAt = restoredTime(startedAt)
@@ -277,6 +288,16 @@ ORDER BY position`, goalValue)
 		}
 		item.ArtifactRefs = append([]string(nil), artifactRefs[item.Ref]...)
 		item.AttestationRefs = append([]string(nil), attestationRefs[item.Ref]...)
+		item.DependencyRefs, err = readOrderedStrings(ctx, source, `
+SELECT dependency_ref FROM work_item_dependencies WHERE work_item_ref = ? ORDER BY position`, item.Ref)
+		if err != nil {
+			return nil, err
+		}
+		item.WriteSet, err = readOrderedStrings(ctx, source, `
+SELECT scope FROM work_item_write_scopes WHERE work_item_ref = ? ORDER BY position`, item.Ref)
+		if err != nil {
+			return nil, err
+		}
 		result = append(result, item)
 	}
 	if err := rows.Err(); err != nil {
@@ -285,7 +306,7 @@ ORDER BY position`, goalValue)
 	return result, nil
 }
 
-func readExecution(ctx context.Context, source queryer, goalValue string) (application.ExecutionRecord, error) {
+func readExecutions(ctx context.Context, source queryer, goalValue string) ([]application.ExecutionRecord, error) {
 	rows, err := source.QueryContext(ctx, `
 SELECT ref, goal_ref, work_item_ref, state, artifact_media_type, idempotency_key,
        max_output_bytes, max_attempts, provider_ref, external_ref, created_at,
@@ -293,10 +314,9 @@ SELECT ref, goal_ref, work_item_ref, state, artifact_media_type, idempotency_key
        provider_observed_at, finished_at, failure_code
 FROM executions
 WHERE goal_ref = ?
-ORDER BY created_at, ref
-LIMIT 2`, goalValue)
+ORDER BY created_at, ref`, goalValue)
 	if err != nil {
-		return application.ExecutionRecord{}, mapDatabaseError(err)
+		return nil, mapDatabaseError(err)
 	}
 	defer rows.Close()
 	var records []application.ExecutionRecord
@@ -304,8 +324,7 @@ LIMIT 2`, goalValue)
 		var record application.ExecutionRecord
 		var refValue, goalRefValue, workItemRefValue, state string
 		var createdAt int64
-		var deadlineAt int64
-		var startedAt, providerAcceptedAt, observedAt, providerObservedAt, finishedAt sql.NullInt64
+		var deadlineAt, startedAt, providerAcceptedAt, observedAt, providerObservedAt, finishedAt sql.NullInt64
 		var maxAttempts int64
 		if err := rows.Scan(
 			&refValue,
@@ -327,25 +346,25 @@ LIMIT 2`, goalValue)
 			&finishedAt,
 			&record.FailureCode,
 		); err != nil {
-			return application.ExecutionRecord{}, mapDatabaseError(err)
+			return nil, mapDatabaseError(err)
 		}
 		var refErr error
 		if record.Ref, refErr = goal.NewExecutionRef(refValue); refErr != nil {
-			return application.ExecutionRecord{}, invalid(refErr)
+			return nil, invalid(refErr)
 		}
 		if record.GoalRef, refErr = goal.NewGoalRef(goalRefValue); refErr != nil {
-			return application.ExecutionRecord{}, invalid(refErr)
+			return nil, invalid(refErr)
 		}
 		if record.WorkItemRef, refErr = goal.NewWorkItemRef(workItemRefValue); refErr != nil {
-			return application.ExecutionRecord{}, invalid(refErr)
+			return nil, invalid(refErr)
 		}
 		record.State = application.ExecutionState(state)
 		if maxAttempts <= 0 {
-			return application.ExecutionRecord{}, invalid(fmt.Errorf("sqlite.max_attempts_invalid"))
+			return nil, invalid(fmt.Errorf("sqlite.max_attempts_invalid"))
 		}
 		record.MaxAttempts = uint64(maxAttempts)
 		record.CreatedAt = time.Unix(0, createdAt).UTC()
-		record.DeadlineAt = time.Unix(0, deadlineAt).UTC()
+		record.DeadlineAt = restoredTime(deadlineAt)
 		record.StartedAt = restoredTime(startedAt)
 		record.ProviderAcceptedAt = restoredTime(providerAcceptedAt)
 		record.LastObservedAt = restoredTime(observedAt)
@@ -354,15 +373,53 @@ LIMIT 2`, goalValue)
 		records = append(records, record)
 	}
 	if err := rows.Err(); err != nil {
-		return application.ExecutionRecord{}, mapDatabaseError(err)
+		return nil, mapDatabaseError(err)
 	}
 	if len(records) == 0 {
-		return application.ExecutionRecord{}, stateError(application.StateNotFound, sql.ErrNoRows)
+		return nil, stateError(application.StateNotFound, sql.ErrNoRows)
 	}
-	if len(records) != 1 {
-		return application.ExecutionRecord{}, invalid(fmt.Errorf("sqlite.execution_cardinality_invalid"))
+	return records, nil
+}
+
+func readPhases(ctx context.Context, source queryer, goalValue string) ([]goal.PhaseInstanceSnapshot, error) {
+	rows, err := source.QueryContext(ctx, `
+SELECT phase_key FROM goal_phases WHERE goal_ref = ? ORDER BY position`, goalValue)
+	if err != nil {
+		return nil, mapDatabaseError(err)
 	}
-	return records[0], nil
+	defer rows.Close()
+	var result []goal.PhaseInstanceSnapshot
+	for rows.Next() {
+		var phase goal.PhaseInstanceSnapshot
+		if err := rows.Scan(&phase.Key); err != nil {
+			return nil, mapDatabaseError(err)
+		}
+		result = append(result, phase)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, mapDatabaseError(err)
+	}
+	return result, nil
+}
+
+func readOrderedStrings(ctx context.Context, source queryer, query string, value string) ([]string, error) {
+	rows, err := source.QueryContext(ctx, query, value)
+	if err != nil {
+		return nil, mapDatabaseError(err)
+	}
+	defer rows.Close()
+	var result []string
+	for rows.Next() {
+		var item string
+		if err := rows.Scan(&item); err != nil {
+			return nil, mapDatabaseError(err)
+		}
+		result = append(result, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, mapDatabaseError(err)
+	}
+	return result, nil
 }
 
 func readArtifacts(

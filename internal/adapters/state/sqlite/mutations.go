@@ -3,23 +3,37 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"time"
 
 	"orquesta/internal/application"
+	"orquesta/internal/goal"
 )
 
-func (repository *Repository) RecordLaunchAccepted(ctx context.Context, state application.LaunchAcceptedState) error {
-	item, err := validateLaunchAccepted(state)
-	if err != nil {
+func (repository *Repository) RecordLaunchPrepared(ctx context.Context, state application.LaunchPreparedState) error {
+	if err := validateLaunchPrepared(state); err != nil {
 		return invalid(err)
 	}
-	return repository.mutate(ctx, state.Claim, func(transaction *sql.Tx) error {
+	return repository.mutate(ctx, state.Claim, state.OperationAt, func(transaction *sql.Tx) error {
 		if err := updateGoalCAS(ctx, transaction, state.Goal, state.ExpectedGoalRevision); err != nil {
 			return err
 		}
-		if err := updateWorkItemCAS(ctx, transaction, item, state.ExpectedItemRevision); err != nil {
+		if err := updateGoalWorkItems(ctx, transaction, state.Goal); err != nil {
 			return err
 		}
-		if err := updateExecution(ctx, transaction, state.Execution); err != nil {
+		if err := updateExecutionCAS(ctx, transaction, state.Execution, application.ExecutionQueued); err != nil {
+			return err
+		}
+		return insertEvent(ctx, transaction, state.Event)
+	})
+}
+
+func (repository *Repository) RecordLaunchAccepted(ctx context.Context, state application.LaunchAcceptedState) error {
+	if err := validateLaunchAccepted(state); err != nil {
+		return invalid(err)
+	}
+	return repository.mutate(ctx, state.Claim, state.OperationAt, func(transaction *sql.Tx) error {
+		if err := updateExecutionCAS(ctx, transaction, state.Execution, application.ExecutionDispatching); err != nil {
 			return err
 		}
 		if err := insertAction(ctx, transaction, state.NextAction); err != nil {
@@ -36,8 +50,8 @@ func (repository *Repository) RequeueAction(ctx context.Context, state applicati
 	if err := validateRequeued(state); err != nil {
 		return invalid(err)
 	}
-	return repository.mutate(ctx, state.Claim, func(transaction *sql.Tx) error {
-		if err := updateExecution(ctx, transaction, state.Execution); err != nil {
+	return repository.mutate(ctx, state.Claim, state.OperationAt, func(transaction *sql.Tx) error {
+		if err := updateExecutionCAS(ctx, transaction, state.Execution, state.Execution.State); err != nil {
 			return err
 		}
 		return releaseClaimForRetry(ctx, transaction, state)
@@ -48,7 +62,7 @@ func (repository *Repository) QuarantineAction(ctx context.Context, state applic
 	if err := validateQuarantined(state); err != nil {
 		return invalid(err)
 	}
-	return repository.mutate(ctx, state.Claim, func(transaction *sql.Tx) error {
+	return repository.mutate(ctx, state.Claim, state.OperationAt, func(transaction *sql.Tx) error {
 		if err := insertEvent(ctx, transaction, state.Event); err != nil {
 			return err
 		}
@@ -64,24 +78,29 @@ func (repository *Repository) QuarantineAction(ctx context.Context, state applic
 }
 
 func (repository *Repository) RecordGoalSucceeded(ctx context.Context, state application.GoalSucceededState) error {
-	item, err := validateSucceeded(state)
-	if err != nil {
+	if _, err := validateSucceeded(state); err != nil {
 		return invalid(err)
 	}
-	return repository.mutate(ctx, state.Claim, func(transaction *sql.Tx) error {
+	return repository.mutate(ctx, state.Claim, state.OperationAt, func(transaction *sql.Tx) error {
 		if err := updateGoalCAS(ctx, transaction, state.Goal, state.ExpectedGoalRevision); err != nil {
 			return err
 		}
-		if err := updateWorkItemCAS(ctx, transaction, item, state.ExpectedItemRevision); err != nil {
+		if err := updateGoalWorkItems(ctx, transaction, state.Goal); err != nil {
 			return err
 		}
-		if err := updateExecution(ctx, transaction, state.Execution); err != nil {
+		if err := updateExecutionCAS(ctx, transaction, state.Execution, application.ExecutionRunning); err != nil {
 			return err
 		}
 		if err := insertArtifact(ctx, transaction, state.Artifact); err != nil {
 			return err
 		}
 		if err := insertAttestation(ctx, transaction, state.Attestation); err != nil {
+			return err
+		}
+		if err := insertScheduled(ctx, transaction, state.NewExecutions, state.NewActions); err != nil {
+			return err
+		}
+		if err := requireReadyExecutions(ctx, transaction, state.Goal); err != nil {
 			return err
 		}
 		if err := insertEvents(ctx, transaction, state.Events); err != nil {
@@ -92,18 +111,27 @@ func (repository *Repository) RecordGoalSucceeded(ctx context.Context, state app
 }
 
 func (repository *Repository) RecordGoalFailed(ctx context.Context, state application.GoalFailedState) error {
-	item, err := validateFailed(state)
-	if err != nil {
+	if _, err := validateFailed(state); err != nil {
 		return invalid(err)
 	}
-	return repository.mutate(ctx, state.Claim, func(transaction *sql.Tx) error {
+	return repository.mutate(ctx, state.Claim, state.OperationAt, func(transaction *sql.Tx) error {
 		if err := updateGoalCAS(ctx, transaction, state.Goal, state.ExpectedGoalRevision); err != nil {
 			return err
 		}
-		if err := updateWorkItemCAS(ctx, transaction, item, state.ExpectedItemRevision); err != nil {
+		if err := updateGoalWorkItems(ctx, transaction, state.Goal); err != nil {
 			return err
 		}
-		if err := updateExecution(ctx, transaction, state.Execution); err != nil {
+		expectedExecutionState := application.ExecutionRunning
+		if state.Claim.Action.Kind == application.ActionLaunchAgent {
+			expectedExecutionState = application.ExecutionDispatching
+		}
+		if err := updateExecutionCAS(ctx, transaction, state.Execution, expectedExecutionState); err != nil {
+			return err
+		}
+		if err := insertScheduled(ctx, transaction, state.NewExecutions, state.NewActions); err != nil {
+			return err
+		}
+		if err := requireReadyExecutions(ctx, transaction, state.Goal); err != nil {
 			return err
 		}
 		if err := insertEvents(ctx, transaction, state.Events); err != nil {
@@ -113,21 +141,84 @@ func (repository *Repository) RecordGoalFailed(ctx context.Context, state applic
 	})
 }
 
+func requireReadyExecutions(ctx context.Context, transaction *sql.Tx, aggregate goal.Goal) error {
+	for _, item := range aggregate.ReadyWorkItems() {
+		var count int
+		if err := transaction.QueryRowContext(ctx, `
+SELECT COUNT(*) FROM executions WHERE goal_ref = ? AND work_item_ref = ?`,
+			aggregate.Ref().String(), item.Ref().String(),
+		).Scan(&count); err != nil {
+			return mapDatabaseError(err)
+		}
+		if count != 1 {
+			return conflict(errors.New("sqlite.ready_execution_missing"))
+		}
+	}
+	return nil
+}
+
+func insertScheduled(
+	ctx context.Context,
+	transaction *sql.Tx,
+	executions []application.ExecutionRecord,
+	actions []application.ActionRecord,
+) error {
+	for _, execution := range executions {
+		if err := insertExecution(ctx, transaction, execution); err != nil {
+			return err
+		}
+	}
+	for _, action := range actions {
+		if err := insertAction(ctx, transaction, action); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (repository *Repository) mutate(
 	ctx context.Context,
 	claim application.ActionClaim,
+	operationAt time.Time,
 	mutation func(*sql.Tx) error,
 ) error {
+	if operationAt.IsZero() {
+		return invalid(errors.New("sqlite.operation_time_invalid"))
+	}
+	operationAt = operationAt.Round(0).UTC()
+	if !operationAt.Before(claim.LeaseUntil) {
+		return conflict(errors.New("sqlite.claim_lease_expired"))
+	}
 	transaction, err := beginTransaction(ctx, repository)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = transaction.Rollback() }()
+	if err := repository.requireLiveLease(claim); err != nil {
+		return err
+	}
 	if err := requireClaim(ctx, transaction, claim); err != nil {
 		return err
 	}
 	if err := mutation(transaction); err != nil {
 		return err
 	}
+	if err := repository.requireLiveLease(claim); err != nil {
+		return err
+	}
 	return commit(transaction)
+}
+
+func (repository *Repository) requireLiveLease(claim application.ActionClaim) error {
+	if repository == nil || repository.now == nil {
+		return invalid(errors.New("sqlite.clock_unavailable"))
+	}
+	now := repository.now().Round(0).UTC()
+	if now.IsZero() {
+		return invalid(errors.New("sqlite.clock_invalid"))
+	}
+	if !now.Before(claim.LeaseUntil) {
+		return conflict(errors.New("sqlite.claim_lease_expired"))
+	}
+	return nil
 }

@@ -3,6 +3,7 @@ package fake
 import (
 	"context"
 	"errors"
+	"reflect"
 	"sync"
 	"time"
 
@@ -56,7 +57,7 @@ func (adapter *Adapter) Launch(ctx context.Context, request ports.AgentLaunchReq
 	adapter.mu.Lock()
 	defer adapter.mu.Unlock()
 	if existing, ok := adapter.runs[request.ExecutionRef]; ok {
-		if existing.request != request {
+		if !reflect.DeepEqual(existing.request, request) {
 			return ports.AgentLaunchReceipt{}, errors.New("fake_agent.execution_conflict")
 		}
 		return existing.receipt, nil

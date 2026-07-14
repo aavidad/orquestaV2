@@ -76,10 +76,14 @@ func TestOfficialClientListsExactToolsAndCallsGoalArtifactAndStatus(t *testing.T
 	}
 	if created.Goal.ProjectRef != "project:local" || created.Goal.ActorRef != "actor:local" ||
 		created.Goal.State != string(goal.GoalStateRunning) || created.Goal.Revision == 0 ||
-		created.Goal.CreatedAt.IsZero() || created.Goal.StartedAt == nil || len(created.Goal.WorkItems) != 1 {
+		created.Goal.PlanGeneration != 1 || created.Goal.CreatedAt.IsZero() || created.Goal.StartedAt == nil ||
+		len(created.Goal.Phases) != 1 || created.Goal.Phases[0].PhaseKey != goal.DefaultPhaseKey().String() ||
+		len(created.Goal.WorkItems) != 1 || len(created.Goal.Executions) != 1 || created.Goal.Executions[0].DeadlineAt != nil {
 		t.Fatalf("created Goal view = %+v", created.Goal)
 	}
-	if created.Goal.Artifacts == nil || created.Goal.Attestations == nil || created.Goal.WorkItems[0].ArtifactRefs == nil {
+	if created.Goal.Phases == nil || created.Goal.Executions == nil || created.Goal.Artifacts == nil ||
+		created.Goal.Attestations == nil || created.Goal.WorkItems[0].ArtifactRefs == nil ||
+		created.Goal.WorkItems[0].DependencyRefs == nil || created.Goal.WorkItems[0].WriteSet == nil {
 		t.Fatalf("evidence arrays are not typed empty arrays: %+v", created.Goal)
 	}
 
@@ -200,8 +204,8 @@ func TestFailedGoalProjectsStableFailureCodeWithoutProviderDiagnostic(t *testing
 	var output GetGoalOutput
 	decodeStructured(t, result, &output)
 	if result.IsError || output.Goal == nil || output.Goal.State != string(goal.GoalStateFailed) ||
-		output.Goal.Execution.State != string(application.ExecutionFailed) ||
-		output.Goal.Execution.FailureCode != "provider.stable_failure" ||
+		output.Goal.Executions[0].State != string(application.ExecutionFailed) ||
+		output.Goal.Executions[0].FailureCode != "provider.stable_failure" ||
 		len(output.Goal.Artifacts) != 0 || len(output.Goal.Attestations) != 0 {
 		t.Fatalf("failed Goal view = %+v result=%+v", output, result)
 	}
@@ -427,7 +431,8 @@ func (state *memoryState) CreateGoal(_ context.Context, input application.Create
 	}
 	record := application.GoalRecord{
 		RequestRef: input.RequestRef, RequestFingerprint: input.RequestFingerprint,
-		Intent: input.Intent, Goal: input.Goal, Execution: input.Execution,
+		Intent: input.Intent, Goal: input.Goal,
+		Executions: append([]application.ExecutionRecord(nil), input.Executions...),
 	}
 	state.byRef[input.Goal.Ref()] = record
 	state.byRequest[input.RequestRef] = input.Goal.Ref()
@@ -493,6 +498,10 @@ func (state *memoryState) RecordLaunchAccepted(context.Context, application.Laun
 	return errors.New("test.state_write_not_used")
 }
 
+func (state *memoryState) RecordLaunchPrepared(context.Context, application.LaunchPreparedState) error {
+	return errors.New("test.state_write_not_used")
+}
+
 func (state *memoryState) RequeueAction(context.Context, application.ActionRequeuedState) error {
 	return errors.New("test.state_write_not_used")
 }
@@ -518,7 +527,7 @@ func (state *memoryState) attachArtifact(t *testing.T, goalRef goal.GoalRef, art
 		t.Fatalf("Goal %s not found", goalRef.String())
 	}
 	artifact.GoalRef = goalRef
-	artifact.WorkItemRef = record.Execution.WorkItemRef
+	artifact.WorkItemRef = record.Executions[0].WorkItemRef
 	record.Artifacts = append(record.Artifacts, artifact)
 	state.byRef[goalRef] = record
 }
@@ -531,13 +540,13 @@ func (state *memoryState) failGoal(t *testing.T, goalRef goal.GoalRef, code stri
 	if !found {
 		t.Fatalf("Goal %s not found", goalRef.String())
 	}
-	item, found := record.Goal.WorkItem(record.Execution.WorkItemRef)
+	item, found := record.Goal.WorkItem(record.Executions[0].WorkItemRef)
 	if !found {
-		t.Fatalf("WorkItem %s not found", record.Execution.WorkItemRef.String())
+		t.Fatalf("WorkItem %s not found", record.Executions[0].WorkItemRef.String())
 	}
 	at := testNow().Add(time.Second)
 	aggregate, err := record.Goal.StartWorkItem(
-		record.Goal.Revision(), item.Revision(), item.Ref(), record.Execution.Ref, at,
+		record.Goal.Revision(), item.Revision(), item.Ref(), record.Executions[0].Ref, at,
 	)
 	if err != nil {
 		t.Fatalf("start WorkItem: %v", err)
@@ -552,14 +561,15 @@ func (state *memoryState) failGoal(t *testing.T, goalRef goal.GoalRef, code stri
 		t.Fatalf("close Goal: %v", err)
 	}
 	record.Goal = aggregate
-	record.Execution.State = application.ExecutionFailed
-	record.Execution.StartedAt = at
-	record.Execution.FinishedAt = at
-	record.Execution.FailureCode = code
+	record.Executions[0].State = application.ExecutionFailed
+	record.Executions[0].StartedAt = at
+	record.Executions[0].FinishedAt = at
+	record.Executions[0].FailureCode = code
 	state.byRef[goalRef] = record
 }
 
 func cloneGoalRecord(record application.GoalRecord) application.GoalRecord {
+	record.Executions = append([]application.ExecutionRecord(nil), record.Executions...)
 	record.Artifacts = append([]application.ArtifactRecord(nil), record.Artifacts...)
 	record.Attestations = append([]application.AttestationRecord(nil), record.Attestations...)
 	return record

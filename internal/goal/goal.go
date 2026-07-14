@@ -34,6 +34,8 @@ type Goal struct {
 	createdAt      time.Time
 	startedAt      time.Time
 	closedAt       time.Time
+	planGeneration PlanGeneration
+	phases         []PhaseInstance
 	items          map[WorkItemRef]WorkItem
 	itemOrder      []WorkItemRef
 }
@@ -61,16 +63,21 @@ func NewGoal(ref GoalRef, intent IntentManifest, createdAt time.Time) (Goal, err
 	}, nil
 }
 
-func (goal Goal) Ref() GoalRef         { return goal.ref }
-func (goal Goal) Actor() ActorRef      { return goal.actor }
-func (goal Goal) Project() ProjectRef  { return goal.project }
-func (goal Goal) Intent() IntentRef    { return goal.intentManifest.Ref() }
-func (goal Goal) IntentHash() string   { return goal.intentManifest.Hash() }
-func (goal Goal) State() GoalState     { return goal.state }
-func (goal Goal) Revision() Revision   { return goal.revision }
-func (goal Goal) CreatedAt() time.Time { return goal.createdAt }
-func (goal Goal) IsTerminal() bool     { return goal.state.Terminal() }
-func (goal Goal) WorkItemCount() int   { return len(goal.itemOrder) }
+func (goal Goal) Ref() GoalRef                   { return goal.ref }
+func (goal Goal) Actor() ActorRef                { return goal.actor }
+func (goal Goal) Project() ProjectRef            { return goal.project }
+func (goal Goal) Intent() IntentRef              { return goal.intentManifest.Ref() }
+func (goal Goal) IntentHash() string             { return goal.intentManifest.Hash() }
+func (goal Goal) State() GoalState               { return goal.state }
+func (goal Goal) Revision() Revision             { return goal.revision }
+func (goal Goal) CreatedAt() time.Time           { return goal.createdAt }
+func (goal Goal) IsTerminal() bool               { return goal.state.Terminal() }
+func (goal Goal) WorkItemCount() int             { return len(goal.itemOrder) }
+func (goal Goal) PlanGeneration() PlanGeneration { return goal.planGeneration }
+
+func (goal Goal) Phases() []PhaseInstance {
+	return clonePhases(goal.phases)
+}
 
 func (goal Goal) StartedAt() (time.Time, bool) {
 	return goal.startedAt, !goal.startedAt.IsZero()
@@ -93,32 +100,45 @@ func (goal Goal) WorkItems() []WorkItem {
 	return items
 }
 
-func (goal Goal) AddWorkItem(expected Revision, item WorkItem) (Goal, error) {
-	if err := goal.expectRevision(expected); err != nil {
+// ApplyPlan atomically replaces a pending Goal plan. Goal revision is the CAS;
+// the proposal generation must be exactly current+1. It never changes
+// lifecycle by itself.
+func (goal Goal) ApplyPlan(expectedGoal Revision, plan Plan) (Goal, error) {
+	if err := goal.expectRevision(expectedGoal); err != nil {
 		return Goal{}, err
 	}
 	if goal.state != GoalStatePending {
 		return Goal{}, domainError(ErrorInvalidTransition, "goal_state")
 	}
-	if !validWorkItemRef(item.ref) {
-		return Goal{}, domainError(ErrorInvalidRef, "work_item_ref")
+	nextGeneration, err := nextPlanGeneration(goal.planGeneration)
+	if err != nil {
+		return Goal{}, err
 	}
-	if item.goal != goal.ref || item.actor != goal.actor || item.project != goal.project {
-		return Goal{}, domainError(ErrorScopeConflict, "work_item_scope")
+	if plan.generation != nextGeneration {
+		return Goal{}, domainError(ErrorInvalidPlan, "plan_generation")
 	}
-	if item.state != WorkItemStatePending || item.revision != 1 {
-		return Goal{}, domainError(ErrorInvalidArgument, "work_item_snapshot")
+	if err := validatePlan(plan); err != nil {
+		return Goal{}, err
 	}
-	if item.createdAt.Before(goal.createdAt) {
-		return Goal{}, domainError(ErrorInvalidArgument, "work_item_created_at")
-	}
-	if _, exists := goal.items[item.ref]; exists {
-		return Goal{}, domainError(ErrorDuplicateWorkItem, "work_item_ref")
+
+	items := make(map[WorkItemRef]WorkItem, len(plan.items))
+	order := make([]WorkItemRef, 0, len(plan.items))
+	for _, item := range plan.items {
+		if item.goal != goal.ref || item.actor != goal.actor || item.project != goal.project {
+			return Goal{}, domainError(ErrorScopeConflict, "work_item_scope")
+		}
+		if item.createdAt.Before(goal.createdAt) {
+			return Goal{}, domainError(ErrorInvalidArgument, "work_item_created_at")
+		}
+		items[item.ref] = item.clone()
+		order = append(order, item.ref)
 	}
 
 	updated := goal.clone()
-	updated.items[item.ref] = item.clone()
-	updated.itemOrder = append(updated.itemOrder, item.ref)
+	updated.planGeneration = plan.generation
+	updated.phases = clonePhases(plan.phases)
+	updated.items = items
+	updated.itemOrder = order
 	updated.revision++
 	return updated, nil
 }
@@ -161,11 +181,44 @@ func (goal Goal) StartWorkItem(
 	if err != nil {
 		return Goal{}, err
 	}
+	if !goal.workItemReady(ref) {
+		return Goal{}, domainError(ErrorWorkItemNotReady, "work_item_ref")
+	}
 	item, err = item.Start(expectedItem, execution, at)
 	if err != nil {
 		return Goal{}, err
 	}
 	return goal.withUpdatedWorkItem(item), nil
+}
+
+// ReadyWorkItems derives every currently eligible item. It does not choose a
+// cohort: overlapping pending candidates remain visible until one is started
+// through Goal CAS, after which conflicts with that running item are excluded.
+func (goal Goal) ReadyWorkItems() []WorkItem {
+	if goal.state != GoalStateRunning {
+		return nil
+	}
+
+	runningWriteSets := make([][]WriteScope, 0)
+	for _, ref := range goal.itemOrder {
+		item := goal.items[ref]
+		if item.state == WorkItemStateRunning {
+			runningWriteSets = append(runningWriteSets, item.writeSet)
+		}
+	}
+
+	ready := make([]WorkItem, 0)
+	for _, ref := range goal.itemOrder {
+		item := goal.items[ref]
+		if item.state != WorkItemStatePending || !goal.dependenciesSucceeded(item) {
+			continue
+		}
+		if conflictsWithWriteSets(item.writeSet, runningWriteSets) {
+			continue
+		}
+		ready = append(ready, item.clone())
+	}
+	return ready
 }
 
 func (goal Goal) SucceedWorkItem(
@@ -201,7 +254,28 @@ func (goal Goal) FailWorkItem(
 	if err != nil {
 		return Goal{}, err
 	}
-	return goal.withUpdatedWorkItem(item), nil
+	updated := goal.clone()
+	updated.items[item.ref] = item
+	for {
+		changed := false
+		for _, candidateRef := range updated.itemOrder {
+			candidate := updated.items[candidateRef]
+			if candidate.state != WorkItemStatePending || !updated.hasFailedDependency(candidate) {
+				continue
+			}
+			candidate, err = candidate.skipDependencyFailed(candidate.revision, at)
+			if err != nil {
+				return Goal{}, err
+			}
+			updated.items[candidateRef] = candidate
+			changed = true
+		}
+		if !changed {
+			break
+		}
+	}
+	updated.revision++
+	return updated, nil
 }
 
 func (goal Goal) Close(expected Revision, outcome GoalOutcome, at time.Time) (Goal, error) {
@@ -215,28 +289,23 @@ func (goal Goal) Close(expected Revision, outcome GoalOutcome, at time.Time) (Go
 		return Goal{}, domainError(ErrorInvalidArgument, "goal_outcome")
 	}
 
-	allSucceeded := true
-	hasFailed := false
+	closableOutcome, closable := goal.ClosableOutcome()
+	if !closable {
+		for _, item := range goal.items {
+			if !item.IsTerminal() {
+				return Goal{}, domainError(ErrorWorkItemsNotTerminal, "work_items")
+			}
+		}
+		return Goal{}, domainError(ErrorOutcomeConflict, "goal_outcome")
+	}
+	if outcome != closableOutcome {
+		return Goal{}, domainError(ErrorOutcomeConflict, "goal_outcome")
+	}
 	latestFinishedAt := goal.startedAt
 	for _, item := range goal.items {
-		if !item.IsTerminal() {
-			return Goal{}, domainError(ErrorWorkItemsNotTerminal, "work_items")
-		}
-		if item.state != WorkItemStateSucceeded {
-			allSucceeded = false
-		}
-		if item.state == WorkItemStateFailed {
-			hasFailed = true
-		}
 		if item.finishedAt.After(latestFinishedAt) {
 			latestFinishedAt = item.finishedAt
 		}
-	}
-	if outcome == GoalOutcomeSucceeded && !allSucceeded {
-		return Goal{}, domainError(ErrorOutcomeConflict, "goal_outcome")
-	}
-	if outcome == GoalOutcomeFailed && !hasFailed {
-		return Goal{}, domainError(ErrorOutcomeConflict, "goal_outcome")
 	}
 	if !validTransitionTime(at, latestFinishedAt) {
 		return Goal{}, domainError(ErrorInvalidArgument, "closed_at")
@@ -251,6 +320,30 @@ func (goal Goal) Close(expected Revision, outcome GoalOutcome, at time.Time) (Go
 	updated.revision++
 	updated.closedAt = canonicalTime(at)
 	return updated, nil
+}
+
+// ClosableOutcome derives closure eligibility without duplicating lifecycle
+// rules in application or schedulers.
+func (goal Goal) ClosableOutcome() (GoalOutcome, bool) {
+	if goal.state != GoalStateRunning || len(goal.items) == 0 {
+		return "", false
+	}
+	allSucceeded := true
+	hasFailed := false
+	for _, item := range goal.items {
+		if !item.IsTerminal() {
+			return "", false
+		}
+		allSucceeded = allSucceeded && item.state == WorkItemStateSucceeded
+		hasFailed = hasFailed || item.state == WorkItemStateFailed
+	}
+	if allSucceeded {
+		return GoalOutcomeSucceeded, true
+	}
+	if hasFailed {
+		return GoalOutcomeFailed, true
+	}
+	return "", false
 }
 
 func (goal Goal) expectRevision(expected Revision) error {
@@ -291,12 +384,56 @@ func (goal Goal) withUpdatedWorkItem(item WorkItem) Goal {
 	return updated
 }
 
+func (goal Goal) workItemReady(ref WorkItemRef) bool {
+	item, exists := goal.items[ref]
+	if !exists || item.state != WorkItemStatePending || !goal.dependenciesSucceeded(item) {
+		return false
+	}
+	for _, runningRef := range goal.itemOrder {
+		running := goal.items[runningRef]
+		if running.state == WorkItemStateRunning && writeSetsOverlap(item.writeSet, running.writeSet) {
+			return false
+		}
+	}
+	return true
+}
+
+func (goal Goal) dependenciesSucceeded(item WorkItem) bool {
+	for _, dependency := range item.dependencies {
+		dependencyItem, exists := goal.items[dependency]
+		if !exists || dependencyItem.state != WorkItemStateSucceeded {
+			return false
+		}
+	}
+	return true
+}
+
+func (goal Goal) hasFailedDependency(item WorkItem) bool {
+	for _, dependency := range item.dependencies {
+		dependencyItem, exists := goal.items[dependency]
+		if exists && (dependencyItem.state == WorkItemStateFailed || dependencyItem.state == WorkItemStateSkipped) {
+			return true
+		}
+	}
+	return false
+}
+
+func conflictsWithWriteSets(candidate []WriteScope, others [][]WriteScope) bool {
+	for _, other := range others {
+		if writeSetsOverlap(candidate, other) {
+			return true
+		}
+	}
+	return false
+}
+
 func (goal Goal) clone() Goal {
 	items := make(map[WorkItemRef]WorkItem, len(goal.items))
 	for ref, item := range goal.items {
 		items[ref] = item.clone()
 	}
 	goal.items = items
+	goal.phases = clonePhases(goal.phases)
 	goal.itemOrder = append([]WorkItemRef(nil), goal.itemOrder...)
 	return goal
 }

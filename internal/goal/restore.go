@@ -5,8 +5,7 @@ import (
 	"time"
 )
 
-// RestoreIntentManifest validates persisted data and recomputes its hash before
-// returning a domain value. Persisted hashes are never trusted as constructors.
+// RestoreIntentManifest validates persisted data and recomputes its hash.
 func RestoreIntentManifest(snapshot IntentManifestSnapshot) (IntentManifest, error) {
 	ref, err := NewIntentRef(snapshot.Ref)
 	if err != nil {
@@ -21,11 +20,8 @@ func RestoreIntentManifest(snapshot IntentManifestSnapshot) (IntentManifest, err
 		return IntentManifest{}, err
 	}
 	manifest, err := NewIntentManifest(IntentManifestInput{
-		Ref:         ref,
-		Actor:       actor,
-		Project:     project,
-		Statement:   snapshot.Statement,
-		SubmittedAt: snapshot.SubmittedAt,
+		Ref: ref, Actor: actor, Project: project,
+		Statement: snapshot.Statement, SubmittedAt: snapshot.SubmittedAt,
 	})
 	if err != nil {
 		return IntentManifest{}, err
@@ -36,9 +32,12 @@ func RestoreIntentManifest(snapshot IntentManifestSnapshot) (IntentManifest, err
 	return manifest, nil
 }
 
-// RestoreGoal rehydrates a complete aggregate only after every persisted
-// invariant has been checked. It performs no I/O and depends on no adapter.
+// RestoreGoal accepts only the current complete schema. Adapters own durable
+// migrations before data reaches domain.
 func RestoreGoal(snapshot GoalSnapshot) (Goal, error) {
+	if snapshot.SchemaVersion != GoalSnapshotSchemaVersion {
+		return Goal{}, domainError(ErrorSnapshotInvalid, "schema_version")
+	}
 	intent, err := RestoreIntentManifest(snapshot.Intent)
 	if err != nil {
 		return Goal{}, err
@@ -58,28 +57,34 @@ func RestoreGoal(snapshot GoalSnapshot) (Goal, error) {
 	if actor != intent.Actor() || project != intent.Project() {
 		return Goal{}, domainError(ErrorScopeConflict, "goal_scope")
 	}
-	if snapshot.Revision < 1 {
-		return Goal{}, domainError(ErrorSnapshotInvalid, "goal_revision")
-	}
-	if !validGoalState(snapshot.State) {
-		return Goal{}, domainError(ErrorSnapshotInvalid, "goal_state")
+	if snapshot.Revision < 1 || !validGoalState(snapshot.State) {
+		return Goal{}, domainError(ErrorSnapshotInvalid, "goal_header")
 	}
 	if snapshot.CreatedAt.IsZero() || canonicalTime(snapshot.CreatedAt).Before(intent.SubmittedAt()) {
 		return Goal{}, domainError(ErrorSnapshotInvalid, "goal_created_at")
 	}
 
+	phases, err := restorePhases(snapshot.Phases)
+	if err != nil {
+		return Goal{}, err
+	}
+	if snapshot.PlanGeneration == 0 {
+		if len(phases) != 0 || len(snapshot.WorkItems) != 0 {
+			return Goal{}, domainError(ErrorSnapshotInvalid, "plan")
+		}
+	} else if len(phases) == 0 || len(snapshot.WorkItems) == 0 {
+		return Goal{}, domainError(ErrorSnapshotInvalid, "plan")
+	}
+
 	restored := Goal{
-		ref:            ref,
-		actor:          actor,
-		project:        project,
-		intentManifest: intent,
-		state:          snapshot.State,
-		revision:       snapshot.Revision,
+		ref: ref, actor: actor, project: project, intentManifest: intent,
+		state: snapshot.State, revision: snapshot.Revision,
 		createdAt:      canonicalTime(snapshot.CreatedAt),
 		startedAt:      canonicalOptionalTime(snapshot.StartedAt),
 		closedAt:       canonicalOptionalTime(snapshot.ClosedAt),
-		items:          make(map[WorkItemRef]WorkItem, len(snapshot.WorkItems)),
-		itemOrder:      make([]WorkItemRef, 0, len(snapshot.WorkItems)),
+		planGeneration: snapshot.PlanGeneration, phases: phases,
+		items:     make(map[WorkItemRef]WorkItem, len(snapshot.WorkItems)),
+		itemOrder: make([]WorkItemRef, 0, len(snapshot.WorkItems)),
 	}
 	for _, itemSnapshot := range snapshot.WorkItems {
 		item, restoreErr := restoreWorkItem(itemSnapshot)
@@ -97,6 +102,15 @@ func RestoreGoal(snapshot GoalSnapshot) (Goal, error) {
 		}
 		restored.items[item.ref] = item
 		restored.itemOrder = append(restored.itemOrder, item.ref)
+	}
+	if restored.planGeneration > 0 {
+		if err := validateRestoredPlan(Plan{
+			generation: restored.planGeneration,
+			phases:     restored.phases,
+			items:      restored.WorkItems(),
+		}); err != nil {
+			return Goal{}, err
+		}
 	}
 	if err := validateRestoredGoal(restored); err != nil {
 		return Goal{}, err
@@ -124,63 +138,58 @@ func restoreWorkItem(snapshot WorkItemSnapshot) (WorkItem, error) {
 	if err != nil {
 		return WorkItem{}, err
 	}
-	if strings.TrimSpace(snapshot.Objective) == "" {
-		return WorkItem{}, domainError(ErrorSnapshotInvalid, "work_item_objective")
+	if strings.TrimSpace(snapshot.Objective) == "" || !validWorkItemState(snapshot.State) {
+		return WorkItem{}, domainError(ErrorSnapshotInvalid, "work_item_header")
 	}
-	if !validWorkItemState(snapshot.State) {
-		return WorkItem{}, domainError(ErrorSnapshotInvalid, "work_item_state")
-	}
-	if snapshot.Revision != revisionForWorkItemState(snapshot.State) {
+	if snapshot.Revision != revisionForWorkItemState(snapshot.State) || snapshot.CreatedAt.IsZero() {
 		return WorkItem{}, domainError(ErrorSnapshotInvalid, "work_item_revision")
 	}
-	if snapshot.CreatedAt.IsZero() {
-		return WorkItem{}, domainError(ErrorSnapshotInvalid, "work_item_created_at")
-	}
-
-	var execution ExecutionRef
-	if snapshot.ExecutionRef != "" {
-		execution, err = NewExecutionRef(snapshot.ExecutionRef)
-		if err != nil {
-			return WorkItem{}, err
-		}
-	}
-	artifacts := make([]ArtifactRef, 0, len(snapshot.ArtifactRefs))
-	for _, value := range snapshot.ArtifactRefs {
-		artifact, artifactErr := NewArtifactRef(value)
-		if artifactErr != nil {
-			return WorkItem{}, artifactErr
-		}
-		artifacts = append(artifacts, artifact)
-	}
-	if err := validateArtifactRefs(artifacts); err != nil {
+	phase, err := NewPhaseKey(snapshot.PhaseKey)
+	if err != nil {
 		return WorkItem{}, err
 	}
-	attestations := make([]AttestationRef, 0, len(snapshot.AttestationRefs))
-	for _, value := range snapshot.AttestationRefs {
-		attestation, attestationErr := NewAttestationRef(value)
-		if attestationErr != nil {
-			return WorkItem{}, attestationErr
-		}
-		attestations = append(attestations, attestation)
+	role, err := NewRoleKey(snapshot.RoleKey)
+	if err != nil {
+		return WorkItem{}, err
 	}
-	if err := validateAttestationRefs(attestations); err != nil {
+	outputContract, err := NewOutputContract(snapshot.OutputContract)
+	if err != nil {
+		return WorkItem{}, err
+	}
+	dependencies, err := restoreWorkItemRefs(snapshot.DependencyRefs)
+	if err != nil {
+		return WorkItem{}, err
+	}
+	writeSet, err := restoreWriteSet(snapshot.WriteSet)
+	if err != nil {
+		return WorkItem{}, err
+	}
+	execution, err := restoreExecutionRef(snapshot.ExecutionRef)
+	if err != nil {
+		return WorkItem{}, err
+	}
+	artifacts, err := restoreArtifactRefs(snapshot.ArtifactRefs)
+	if err != nil {
+		return WorkItem{}, err
+	}
+	attestations, err := restoreAttestationRefs(snapshot.AttestationRefs)
+	if err != nil {
 		return WorkItem{}, err
 	}
 
 	restored := WorkItem{
-		ref:          ref,
-		goal:         goalRef,
-		actor:        actor,
-		project:      project,
-		objective:    snapshot.Objective,
-		state:        snapshot.State,
-		revision:     snapshot.Revision,
-		createdAt:    canonicalTime(snapshot.CreatedAt),
-		startedAt:    canonicalOptionalTime(snapshot.StartedAt),
-		finishedAt:   canonicalOptionalTime(snapshot.FinishedAt),
-		execution:    execution,
-		artifacts:    artifacts,
-		attestations: attestations,
+		ref: ref, goal: goalRef, actor: actor, project: project,
+		objective: snapshot.Objective, phase: phase, role: role,
+		dependencies: dependencies, writeSet: writeSet,
+		outputContract: outputContract, skipReason: snapshot.SkipReason,
+		state: snapshot.State, revision: snapshot.Revision,
+		createdAt:  canonicalTime(snapshot.CreatedAt),
+		startedAt:  canonicalOptionalTime(snapshot.StartedAt),
+		finishedAt: canonicalOptionalTime(snapshot.FinishedAt),
+		execution:  execution, artifacts: artifacts, attestations: attestations,
+	}
+	if err := validateWorkItemPlanMetadata(restored); err != nil {
+		return WorkItem{}, err
 	}
 	if err := validateRestoredWorkItem(restored); err != nil {
 		return WorkItem{}, err
@@ -194,6 +203,9 @@ func validateRestoredWorkItem(item WorkItem) error {
 	hasFinished := !item.finishedAt.IsZero()
 	hasArtifacts := len(item.artifacts) > 0
 	hasAttestations := len(item.attestations) > 0
+	if item.state != WorkItemStateSkipped && item.skipReason != "" {
+		return domainError(ErrorSnapshotInvalid, "skip_reason")
+	}
 
 	switch item.state {
 	case WorkItemStatePending:
@@ -201,19 +213,26 @@ func validateRestoredWorkItem(item WorkItem) error {
 			return domainError(ErrorSnapshotInvalid, "pending_work_item")
 		}
 	case WorkItemStateRunning:
-		if !hasExecution || !validTransitionTime(item.startedAt, item.createdAt) ||
-			hasFinished || hasArtifacts || hasAttestations {
+		if !hasExecution || !validTransitionTime(item.startedAt, item.createdAt) || hasFinished || hasArtifacts || hasAttestations {
 			return domainError(ErrorSnapshotInvalid, "running_work_item")
 		}
 	case WorkItemStateSucceeded:
+		requiresArtifacts := item.outputContract.kind != OutputContractAttestation
+		requiresAttestations := item.outputContract.kind != OutputContractArtifact
 		if !hasExecution || !validTransitionTime(item.startedAt, item.createdAt) ||
-			!validTransitionTime(item.finishedAt, item.startedAt) || !hasArtifacts || !hasAttestations {
+			!validTransitionTime(item.finishedAt, item.startedAt) ||
+			(requiresArtifacts && !hasArtifacts) || (requiresAttestations && !hasAttestations) {
 			return domainError(ErrorSnapshotInvalid, "succeeded_work_item")
 		}
 	case WorkItemStateFailed:
 		if !hasExecution || !validTransitionTime(item.startedAt, item.createdAt) ||
 			!validTransitionTime(item.finishedAt, item.startedAt) || hasArtifacts || hasAttestations {
 			return domainError(ErrorSnapshotInvalid, "failed_work_item")
+		}
+	case WorkItemStateSkipped:
+		if item.skipReason != WorkItemSkipReasonDependencyFailed || hasExecution || hasStarted ||
+			!validTransitionTime(item.finishedAt, item.createdAt) || hasArtifacts || hasAttestations {
+			return domainError(ErrorSnapshotInvalid, "skipped_work_item")
 		}
 	}
 	return nil
@@ -222,7 +241,6 @@ func validateRestoredWorkItem(item WorkItem) error {
 func validateRestoredGoal(goal Goal) error {
 	hasStarted := !goal.startedAt.IsZero()
 	hasClosed := !goal.closedAt.IsZero()
-
 	switch goal.state {
 	case GoalStatePending:
 		if hasStarted || hasClosed {
@@ -237,38 +255,40 @@ func validateRestoredGoal(goal Goal) error {
 		if len(goal.items) == 0 || !validTransitionTime(goal.startedAt, goal.createdAt) || hasClosed {
 			return domainError(ErrorSnapshotInvalid, "running_goal")
 		}
-		if err := validateStartedGoalWorkItems(goal, false); err != nil {
-			return err
-		}
-	case GoalStateSucceeded:
+	case GoalStateSucceeded, GoalStateFailed:
 		if len(goal.items) == 0 || !validTransitionTime(goal.startedAt, goal.createdAt) ||
 			!validTransitionTime(goal.closedAt, goal.startedAt) {
-			return domainError(ErrorSnapshotInvalid, "succeeded_goal")
+			return domainError(ErrorSnapshotInvalid, "closed_goal")
 		}
-		if err := validateStartedGoalWorkItems(goal, true); err != nil {
+	}
+	if goal.state != GoalStatePending {
+		if err := validateStartedGoalWorkItems(goal, goal.state.Terminal()); err != nil {
 			return err
 		}
+	}
+	if goal.state == GoalStateSucceeded {
 		for _, item := range goal.items {
 			if item.state != WorkItemStateSucceeded {
 				return domainError(ErrorOutcomeConflict, "succeeded_goal_work_items")
 			}
 		}
-	case GoalStateFailed:
-		if len(goal.items) == 0 || !validTransitionTime(goal.startedAt, goal.createdAt) ||
-			!validTransitionTime(goal.closedAt, goal.startedAt) {
-			return domainError(ErrorSnapshotInvalid, "failed_goal")
-		}
-		if err := validateStartedGoalWorkItems(goal, true); err != nil {
-			return err
-		}
+	}
+	if goal.state == GoalStateFailed {
 		hasFailed := false
 		for _, item := range goal.items {
-			if item.state == WorkItemStateFailed {
-				hasFailed = true
-			}
+			hasFailed = hasFailed || item.state == WorkItemStateFailed
 		}
 		if !hasFailed {
 			return domainError(ErrorOutcomeConflict, "failed_goal_work_items")
+		}
+	}
+	for _, item := range goal.items {
+		failedDependency := goal.hasFailedDependency(item)
+		if item.state == WorkItemStateSkipped && !failedDependency {
+			return domainError(ErrorSnapshotInvalid, "skipped_dependency")
+		}
+		if item.state == WorkItemStatePending && failedDependency {
+			return domainError(ErrorSnapshotInvalid, "uncascaded_dependency")
 		}
 	}
 	return nil
@@ -279,7 +299,11 @@ func validateStartedGoalWorkItems(goal Goal, requireTerminal bool) error {
 		if item.createdAt.After(goal.startedAt) {
 			return domainError(ErrorSnapshotInvalid, "goal_started_at")
 		}
-		if item.state != WorkItemStatePending && item.startedAt.Before(goal.startedAt) {
+		if item.state == WorkItemStateSkipped {
+			if item.finishedAt.Before(goal.startedAt) {
+				return domainError(ErrorSnapshotInvalid, "work_item_finished_at")
+			}
+		} else if item.state != WorkItemStatePending && item.startedAt.Before(goal.startedAt) {
 			return domainError(ErrorSnapshotInvalid, "work_item_started_at")
 		}
 		if requireTerminal {
@@ -300,14 +324,14 @@ func validGoalState(state GoalState) bool {
 
 func validWorkItemState(state WorkItemState) bool {
 	return state == WorkItemStatePending || state == WorkItemStateRunning ||
-		state == WorkItemStateSucceeded || state == WorkItemStateFailed
+		state == WorkItemStateSucceeded || state == WorkItemStateFailed || state == WorkItemStateSkipped
 }
 
 func revisionForWorkItemState(state WorkItemState) Revision {
 	switch state {
 	case WorkItemStatePending:
 		return 1
-	case WorkItemStateRunning:
+	case WorkItemStateRunning, WorkItemStateSkipped:
 		return 2
 	case WorkItemStateSucceeded, WorkItemStateFailed:
 		return 3
@@ -317,7 +341,7 @@ func revisionForWorkItemState(state WorkItemState) Revision {
 }
 
 func revisionForGoalSnapshot(goal Goal) Revision {
-	revision := Revision(1 + len(goal.items))
+	revision := Revision(1) + Revision(goal.planGeneration)
 	if goal.state != GoalStatePending {
 		revision++
 	}
@@ -333,6 +357,83 @@ func revisionForGoalSnapshot(goal Goal) Revision {
 		revision++
 	}
 	return revision
+}
+
+func restorePhases(snapshots []PhaseInstanceSnapshot) ([]PhaseInstance, error) {
+	phases := make([]PhaseInstance, 0, len(snapshots))
+	for _, snapshot := range snapshots {
+		key, err := NewPhaseKey(snapshot.Key)
+		if err != nil {
+			return nil, err
+		}
+		phase, err := NewPhaseInstance(key)
+		if err != nil {
+			return nil, err
+		}
+		phases = append(phases, phase)
+	}
+	return phases, nil
+}
+
+func restoreWorkItemRefs(values []string) ([]WorkItemRef, error) {
+	refs := make([]WorkItemRef, 0, len(values))
+	for _, value := range values {
+		ref, err := NewWorkItemRef(value)
+		if err != nil {
+			return nil, err
+		}
+		refs = append(refs, ref)
+	}
+	return refs, nil
+}
+
+func restoreWriteSet(values []string) ([]WriteScope, error) {
+	scopes := make([]WriteScope, 0, len(values))
+	for _, value := range values {
+		scope, err := NewWriteScope(value)
+		if err != nil {
+			return nil, err
+		}
+		scopes = append(scopes, scope)
+	}
+	return scopes, nil
+}
+
+func restoreExecutionRef(value string) (ExecutionRef, error) {
+	if value == "" {
+		return ExecutionRef{}, nil
+	}
+	return NewExecutionRef(value)
+}
+
+func restoreArtifactRefs(values []string) ([]ArtifactRef, error) {
+	refs := make([]ArtifactRef, 0, len(values))
+	for _, value := range values {
+		ref, err := NewArtifactRef(value)
+		if err != nil {
+			return nil, err
+		}
+		refs = append(refs, ref)
+	}
+	if err := validateArtifactRefs(refs); err != nil {
+		return nil, err
+	}
+	return refs, nil
+}
+
+func restoreAttestationRefs(values []string) ([]AttestationRef, error) {
+	refs := make([]AttestationRef, 0, len(values))
+	for _, value := range values {
+		ref, err := NewAttestationRef(value)
+		if err != nil {
+			return nil, err
+		}
+		refs = append(refs, ref)
+	}
+	if err := validateAttestationRefs(refs); err != nil {
+		return nil, err
+	}
+	return refs, nil
 }
 
 func canonicalOptionalTime(value time.Time) time.Time {

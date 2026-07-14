@@ -10,27 +10,39 @@ import (
 )
 
 type GoalView struct {
-	RequestRef   string                `json:"request_ref"`
-	GoalRef      string                `json:"goal_ref"`
-	IntentRef    string                `json:"intent_ref"`
-	IntentHash   string                `json:"intent_hash"`
-	ActorRef     string                `json:"actor_ref"`
-	ProjectRef   string                `json:"project_ref"`
-	Statement    string                `json:"statement"`
-	State        string                `json:"state"`
-	Revision     uint64                `json:"revision"`
-	CreatedAt    time.Time             `json:"created_at"`
-	StartedAt    *time.Time            `json:"started_at,omitempty"`
-	ClosedAt     *time.Time            `json:"closed_at,omitempty"`
-	WorkItems    []WorkItemView        `json:"work_items"`
-	Execution    ExecutionView         `json:"execution"`
-	Artifacts    []ArtifactEvidence    `json:"artifacts"`
-	Attestations []AttestationEvidence `json:"attestations"`
+	RequestRef     string                `json:"request_ref"`
+	GoalRef        string                `json:"goal_ref"`
+	IntentRef      string                `json:"intent_ref"`
+	IntentHash     string                `json:"intent_hash"`
+	ActorRef       string                `json:"actor_ref"`
+	ProjectRef     string                `json:"project_ref"`
+	Statement      string                `json:"statement"`
+	State          string                `json:"state"`
+	Revision       uint64                `json:"revision"`
+	PlanGeneration uint64                `json:"plan_generation"`
+	CreatedAt      time.Time             `json:"created_at"`
+	StartedAt      *time.Time            `json:"started_at,omitempty"`
+	ClosedAt       *time.Time            `json:"closed_at,omitempty"`
+	Phases         []PhaseView           `json:"phases"`
+	WorkItems      []WorkItemView        `json:"work_items"`
+	Executions     []ExecutionView       `json:"executions"`
+	Artifacts      []ArtifactEvidence    `json:"artifacts"`
+	Attestations   []AttestationEvidence `json:"attestations"`
+}
+
+type PhaseView struct {
+	PhaseKey string `json:"phase_key"`
 }
 
 type WorkItemView struct {
 	WorkItemRef     string     `json:"work_item_ref"`
 	Objective       string     `json:"objective"`
+	PhaseKey        string     `json:"phase_key"`
+	RoleKey         string     `json:"role_key"`
+	DependencyRefs  []string   `json:"dependency_refs"`
+	WriteSet        []string   `json:"write_set"`
+	OutputContract  string     `json:"output_contract"`
+	SkipReason      string     `json:"skip_reason,omitempty"`
 	State           string     `json:"state"`
 	Revision        uint64     `json:"revision"`
 	CreatedAt       time.Time  `json:"created_at"`
@@ -47,7 +59,7 @@ type ExecutionView struct {
 	State             string     `json:"state"`
 	ArtifactMediaType string     `json:"artifact_media_type"`
 	CreatedAt         time.Time  `json:"created_at"`
-	DeadlineAt        time.Time  `json:"deadline_at"`
+	DeadlineAt        *time.Time `json:"deadline_at,omitempty"`
 	StartedAt         *time.Time `json:"started_at,omitempty"`
 	ObservedAt        *time.Time `json:"observed_at,omitempty"`
 	FinishedAt        *time.Time `json:"finished_at,omitempty"`
@@ -97,11 +109,21 @@ type ArtifactView struct {
 
 func goalView(record application.GoalRecord) GoalView {
 	snapshot := record.Goal.Snapshot()
+	phases := make([]PhaseView, 0, len(snapshot.Phases))
+	for _, phase := range snapshot.Phases {
+		phases = append(phases, PhaseView{PhaseKey: phase.Key})
+	}
 	items := make([]WorkItemView, 0, len(snapshot.WorkItems))
 	for _, item := range snapshot.WorkItems {
 		items = append(items, WorkItemView{
 			WorkItemRef:     item.Ref,
 			Objective:       item.Objective,
+			PhaseKey:        item.PhaseKey,
+			RoleKey:         item.RoleKey,
+			DependencyRefs:  nonNilStrings(item.DependencyRefs),
+			WriteSet:        nonNilStrings(item.WriteSet),
+			OutputContract:  string(item.OutputContract),
+			SkipReason:      string(item.SkipReason),
 			State:           string(item.State),
 			Revision:        uint64(item.Revision),
 			CreatedAt:       item.CreatedAt,
@@ -134,23 +156,29 @@ func goalView(record application.GoalRecord) GoalView {
 			AcceptedAt:     attestation.AcceptedAt,
 		})
 	}
+	executions := make([]ExecutionView, 0, len(record.Executions))
+	for _, execution := range record.Executions {
+		executions = append(executions, executionView(execution))
+	}
 	return GoalView{
-		RequestRef:   record.RequestRef,
-		GoalRef:      snapshot.Ref,
-		IntentRef:    snapshot.Intent.Ref,
-		IntentHash:   snapshot.Intent.Hash,
-		ActorRef:     snapshot.ActorRef,
-		ProjectRef:   snapshot.ProjectRef,
-		Statement:    snapshot.Intent.Statement,
-		State:        string(snapshot.State),
-		Revision:     uint64(snapshot.Revision),
-		CreatedAt:    snapshot.CreatedAt,
-		StartedAt:    optionalTime(snapshot.StartedAt),
-		ClosedAt:     optionalTime(snapshot.ClosedAt),
-		WorkItems:    items,
-		Execution:    executionView(record.Execution),
-		Artifacts:    artifacts,
-		Attestations: attestations,
+		RequestRef:     record.RequestRef,
+		GoalRef:        snapshot.Ref,
+		IntentRef:      snapshot.Intent.Ref,
+		IntentHash:     snapshot.Intent.Hash,
+		ActorRef:       snapshot.ActorRef,
+		ProjectRef:     snapshot.ProjectRef,
+		Statement:      snapshot.Intent.Statement,
+		State:          string(snapshot.State),
+		Revision:       uint64(snapshot.Revision),
+		PlanGeneration: uint64(snapshot.PlanGeneration),
+		CreatedAt:      snapshot.CreatedAt,
+		StartedAt:      optionalTime(snapshot.StartedAt),
+		ClosedAt:       optionalTime(snapshot.ClosedAt),
+		Phases:         phases,
+		WorkItems:      items,
+		Executions:     executions,
+		Artifacts:      artifacts,
+		Attestations:   attestations,
 	}
 }
 
@@ -161,7 +189,7 @@ func executionView(execution application.ExecutionRecord) ExecutionView {
 		State:             string(execution.State),
 		ArtifactMediaType: execution.ArtifactMediaType,
 		CreatedAt:         execution.CreatedAt,
-		DeadlineAt:        execution.DeadlineAt,
+		DeadlineAt:        optionalTime(execution.DeadlineAt),
 		StartedAt:         optionalTime(execution.StartedAt),
 		ObservedAt:        optionalTime(execution.LastObservedAt),
 		FinishedAt:        optionalTime(execution.FinishedAt),

@@ -48,16 +48,20 @@ type terminalRecord struct {
 }
 
 type requestHashDocument struct {
-	SchemaVersion     int    `json:"schema_version"`
-	ExecutionRef      string `json:"execution_ref"`
-	GoalRef           string `json:"goal_ref"`
-	WorkItemRef       string `json:"work_item_ref"`
-	ActorRef          string `json:"actor_ref"`
-	ProjectRef        string `json:"project_ref"`
-	Objective         string `json:"objective"`
-	ArtifactMediaType string `json:"artifact_media_type"`
-	IdempotencyKey    string `json:"idempotency_key"`
-	MaxOutputBytes    int64  `json:"max_output_bytes"`
+	SchemaVersion     int      `json:"schema_version"`
+	ExecutionRef      string   `json:"execution_ref"`
+	GoalRef           string   `json:"goal_ref"`
+	WorkItemRef       string   `json:"work_item_ref"`
+	ActorRef          string   `json:"actor_ref"`
+	ProjectRef        string   `json:"project_ref"`
+	Objective         string   `json:"objective"`
+	PhaseKey          string   `json:"phase_key"`
+	RoleKey           string   `json:"role_key"`
+	WriteSet          []string `json:"write_set"`
+	OutputContract    string   `json:"output_contract"`
+	ArtifactMediaType string   `json:"artifact_media_type"`
+	IdempotencyKey    string   `json:"idempotency_key"`
+	MaxOutputBytes    int64    `json:"max_output_bytes"`
 }
 
 func hashLaunchRequest(request ports.AgentLaunchRequest) (string, error) {
@@ -69,6 +73,10 @@ func hashLaunchRequest(request ports.AgentLaunchRequest) (string, error) {
 		ActorRef:          request.ActorRef.String(),
 		ProjectRef:        request.ProjectRef.String(),
 		Objective:         request.Objective,
+		PhaseKey:          request.PhaseKey,
+		RoleKey:           request.RoleKey,
+		WriteSet:          append([]string(nil), request.WriteSet...),
+		OutputContract:    request.OutputContract,
 		ArtifactMediaType: request.ArtifactMediaType,
 		IdempotencyKey:    request.IdempotencyKey,
 		MaxOutputBytes:    request.MaxOutputBytes,

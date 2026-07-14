@@ -11,6 +11,7 @@ type ErrorCode string
 const (
 	ErrorInvalidArgument      ErrorCode = "goal.invalid_argument"
 	ErrorInvalidRef           ErrorCode = "goal.invalid_ref"
+	ErrorInvalidPlan          ErrorCode = "goal.invalid_plan"
 	ErrorInvalidTransition    ErrorCode = "goal.invalid_transition"
 	ErrorRevisionConflict     ErrorCode = "goal.revision_conflict"
 	ErrorDuplicateWorkItem    ErrorCode = "goal.duplicate_work_item"
@@ -23,6 +24,7 @@ const (
 	ErrorDuplicateEvidence    ErrorCode = "goal.duplicate_evidence"
 	ErrorSnapshotInvalid      ErrorCode = "goal.snapshot_invalid"
 	ErrorIntentHashMismatch   ErrorCode = "goal.intent_hash_mismatch"
+	ErrorWorkItemNotReady     ErrorCode = "goal.work_item_not_ready"
 )
 
 // DomainError carries no human-facing copy. Interfaces translate Code through

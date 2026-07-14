@@ -20,8 +20,24 @@ const (
 )
 
 type CreateGoalInput struct {
-	RequestRef string `json:"request_ref,omitempty" jsonschema:"caller-controlled idempotency reference"`
-	Statement  string `json:"statement,omitempty" jsonschema:"objective to coordinate as a durable Goal"`
+	RequestRef string     `json:"request_ref,omitempty" jsonschema:"caller-controlled idempotency reference"`
+	Statement  string     `json:"statement,omitempty" jsonschema:"objective to coordinate as a durable Goal"`
+	Plan       *PlanInput `json:"plan,omitempty" jsonschema:"optional typed DAG execution plan"`
+}
+
+type PlanInput struct {
+	Phases    []string        `json:"phases"`
+	WorkItems []WorkItemInput `json:"work_items"`
+}
+
+type WorkItemInput struct {
+	Key            string   `json:"key"`
+	Objective      string   `json:"objective"`
+	Phase          string   `json:"phase"`
+	Role           string   `json:"role"`
+	Dependencies   []string `json:"dependencies"`
+	WriteSet       []string `json:"write_set"`
+	OutputContract string   `json:"output_contract"`
 }
 
 type CreateGoalOutput struct {
@@ -124,6 +140,7 @@ func (server *Interface) createGoal(ctx context.Context, _ *sdkmcp.CallToolReque
 		ActorRef:   principal.ActorRef,
 		ProjectRef: principal.DefaultProjectRef,
 		Statement:  input.Statement,
+		Plan:       applicationPlan(input.Plan),
 	})
 	if err != nil {
 		result, public := server.toolError(publicCode(err))
@@ -131,6 +148,23 @@ func (server *Interface) createGoal(ctx context.Context, _ *sdkmcp.CallToolReque
 	}
 	view := goalView(submitted.Record)
 	return nil, CreateGoalOutput{Created: submitted.Created, Goal: &view}, nil
+}
+
+func applicationPlan(input *PlanInput) *application.PlanSpec {
+	if input == nil {
+		return nil
+	}
+	result := &application.PlanSpec{Phases: append([]string(nil), input.Phases...)}
+	result.WorkItems = make([]application.WorkItemSpec, 0, len(input.WorkItems))
+	for _, item := range input.WorkItems {
+		result.WorkItems = append(result.WorkItems, application.WorkItemSpec{
+			Key: item.Key, Objective: item.Objective, Phase: item.Phase, Role: item.Role,
+			Dependencies:   append([]string(nil), item.Dependencies...),
+			WriteSet:       append([]string(nil), item.WriteSet...),
+			OutputContract: goal.OutputContractKind(item.OutputContract),
+		})
+	}
+	return result
 }
 
 func (server *Interface) getGoal(ctx context.Context, _ *sdkmcp.CallToolRequest, input GetGoalInput) (*sdkmcp.CallToolResult, GetGoalOutput, error) {

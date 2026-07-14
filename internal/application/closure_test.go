@@ -51,11 +51,11 @@ func TestClosurePersistsExplicitAgentFailureWithoutFalseEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if record.Goal.State() != goal.GoalStateFailed || record.Execution.State != ExecutionFailed {
-		t.Fatalf("failure not terminal: goal=%s execution=%s", record.Goal.State(), record.Execution.State)
+	if record.Goal.State() != goal.GoalStateFailed || onlyExecution(t, record).State != ExecutionFailed {
+		t.Fatalf("failure not terminal: goal=%s execution=%s", record.Goal.State(), onlyExecution(t, record).State)
 	}
-	if record.Execution.FailureCode != "provider.execution_failed" {
-		t.Fatalf("failure code lost: %s", record.Execution.FailureCode)
+	if onlyExecution(t, record).FailureCode != "provider.execution_failed" {
+		t.Fatalf("failure code lost: %s", onlyExecution(t, record).FailureCode)
 	}
 	if len(record.Artifacts) != 0 || len(record.Attestations) != 0 {
 		t.Fatalf("failed work received false evidence")
@@ -93,7 +93,7 @@ func TestInvalidArtifactAdapterCannotAccreditSuccessfulGoal(t *testing.T) {
 	}
 	record, err := repository.GetGoal(ctx, submitted.Record.Goal.Ref())
 	if err != nil || record.Goal.State() != goal.GoalStateFailed ||
-		record.Execution.FailureCode != "artifact.stored_ref_mismatch" ||
+		onlyExecution(t, record).FailureCode != "artifact.stored_ref_mismatch" ||
 		len(record.Artifacts) != 0 || len(record.Attestations) != 0 {
 		t.Fatalf("invalid adapter produced evidence: record=%+v err=%v", record, err)
 	}
@@ -119,8 +119,8 @@ func TestLaunchInfrastructureFailureClosesGoalDeterministically(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	if record.Goal.State() != goal.GoalStateFailed || record.Execution.FailureCode != "agent.launch_failed" {
-		t.Fatalf("unexpected terminal failure: goal=%s code=%s", record.Goal.State(), record.Execution.FailureCode)
+	if record.Goal.State() != goal.GoalStateFailed || onlyExecution(t, record).FailureCode != "agent.launch_failed" {
+		t.Fatalf("unexpected terminal failure: goal=%s code=%s", record.Goal.State(), onlyExecution(t, record).FailureCode)
 	}
 }
 
@@ -143,7 +143,7 @@ func TestTemporaryLaunchFailureRequeuesWithoutClosingGoal(t *testing.T) {
 		t.Fatalf("temporary launch: %v", err)
 	}
 	record, err := repository.GetGoal(ctx, submitted.Record.Goal.Ref())
-	if err != nil || record.Goal.State() != goal.GoalStateRunning || record.Execution.State != ExecutionQueued {
+	if err != nil || record.Goal.State() != goal.GoalStateRunning || onlyExecution(t, record).State != ExecutionDispatching {
 		t.Fatalf("temporary failure changed lifecycle: record=%+v err=%v", record, err)
 	}
 	agent.mu.Lock()
@@ -200,7 +200,7 @@ func TestTemporaryLaunchCapacityWaitDoesNotConsumeExecutionAttemptBudget(t *test
 	}
 	record, err := repository.GetGoal(ctx, submitted.Record.Goal.Ref())
 	if err != nil || record.Goal.State() != goal.GoalStateRunning ||
-		record.Execution.State != ExecutionQueued || agent.launches != 4 {
+		onlyExecution(t, record).State != ExecutionDispatching || agent.launches != 4 {
 		t.Fatalf("capacity wait consumed execution budget: record=%+v launches=%d err=%v", record, agent.launches, err)
 	}
 	agent.mu.Lock()
@@ -254,7 +254,7 @@ func TestPendingObservationHasDurableAttemptBoundary(t *testing.T) {
 		t.Fatalf("terminal attempt: %v", err)
 	}
 	record, err := repository.GetGoal(ctx, submitted.Record.Goal.Ref())
-	if err != nil || record.Goal.State() != goal.GoalStateFailed || record.Execution.FailureCode != "application.execution_expired" {
-		t.Fatalf("unbounded execution: state=%s code=%s err=%v", record.Goal.State(), record.Execution.FailureCode, err)
+	if err != nil || record.Goal.State() != goal.GoalStateFailed || onlyExecution(t, record).FailureCode != "application.execution_expired" {
+		t.Fatalf("unbounded execution: state=%s code=%s err=%v", record.Goal.State(), onlyExecution(t, record).FailureCode, err)
 	}
 }

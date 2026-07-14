@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
@@ -53,7 +54,7 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 	if err := repository.db.QueryRow("PRAGMA user_version").Scan(&userVersion); err != nil {
 		t.Fatalf("user_version: %v", err)
 	}
-	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != 1 {
+	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != 2 {
 		t.Fatalf("pragmas = fk:%d busy:%d version:%d", foreignKeys, busyTimeout, userVersion)
 	}
 
@@ -71,8 +72,9 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 		tables = append(tables, name)
 	}
 	wantTables := []string{
-		"artifacts", "attestations", "events", "executions", "goals",
-		"intents", "outbox", "schema_migrations", "work_items",
+		"artifacts", "attestations", "events", "executions", "goal_phases",
+		"goals", "intents", "outbox", "schema_migrations",
+		"work_item_dependencies", "work_item_write_scopes", "work_items",
 	}
 	if !reflect.DeepEqual(tables, wantTables) {
 		t.Fatalf("tables = %#v, want %#v", tables, wantTables)
@@ -83,6 +85,12 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 	}
 	if migrationName != "001_initial.sql" {
 		t.Fatalf("migration name = %q", migrationName)
+	}
+	if err := repository.db.QueryRow("SELECT name FROM schema_migrations WHERE version = 2").Scan(&migrationName); err != nil {
+		t.Fatalf("DAG migration receipt: %v", err)
+	}
+	if migrationName != "002_dag.sql" {
+		t.Fatalf("DAG migration name = %q", migrationName)
 	}
 
 	_, err = repository.db.Exec(`
@@ -112,6 +120,156 @@ func TestRepositoryRejectsChangedAppliedMigration(t *testing.T) {
 	if !application.IsStateError(err, application.StateInvalid) {
 		t.Fatalf("tampered migration error = %v", err)
 	}
+}
+
+func TestRepositoryMigratesPopulatedV1StateToDAGSchema(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "legacy", "orquesta.sqlite")
+	seedPopulatedV1Database(t, path)
+	repository, err := Open(context.Background(), Options{
+		Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 8,
+	})
+	if err != nil {
+		t.Fatalf("migrate populated V1: %v", err)
+	}
+	t.Cleanup(func() { _ = repository.Close() })
+
+	runningRef := mustRef(t, "goal:v1-running", goal.NewGoalRef)
+	running, err := repository.GetGoal(context.Background(), runningRef)
+	if err != nil || running.Goal.Revision() != 3 || running.Goal.PlanGeneration() != 1 ||
+		len(running.Executions) != 1 || running.Executions[0].State != application.ExecutionQueued ||
+		!running.Executions[0].StartedAt.IsZero() || !running.Executions[0].DeadlineAt.IsZero() {
+		t.Fatalf("migrated running goal = %+v err=%v", running, err)
+	}
+	runningItem := onlyItem(t, running.Goal)
+	if runningItem.Phase() != goal.DefaultPhaseKey() || runningItem.Role() != goal.DefaultRoleKey() ||
+		runningItem.OutputContract().Kind() != goal.OutputContractEvidenceBundle {
+		t.Fatalf("legacy plan defaults lost: %+v", runningItem)
+	}
+
+	closedRef := mustRef(t, "goal:v1-closed", goal.NewGoalRef)
+	closed, err := repository.GetGoal(context.Background(), closedRef)
+	if err != nil || closed.Goal.Revision() != 6 || closed.Goal.State() != goal.GoalStateSucceeded ||
+		len(closed.Executions) != 1 || len(closed.Artifacts) != 1 || len(closed.Attestations) != 1 {
+		t.Fatalf("migrated closed goal = %+v err=%v", closed, err)
+	}
+	status, err := repository.Status(context.Background())
+	if err != nil || status.PendingActions != 1 || status.Goals != 2 {
+		t.Fatalf("migrated status = %+v err=%v", status, err)
+	}
+}
+
+func seedPopulatedV1Database(t *testing.T, path string) {
+	t.Helper()
+	if err := preparePrivateDatabase(path); err != nil {
+		t.Fatalf("prepare V1 path: %v", err)
+	}
+	database, err := sql.Open(driverName, buildDSN(path, testBusyTimeout.Milliseconds()))
+	if err != nil {
+		t.Fatalf("open V1 seed: %v", err)
+	}
+	defer database.Close()
+	migrations, err := loadMigrations()
+	if err != nil {
+		t.Fatalf("load migrations: %v", err)
+	}
+	transaction, err := database.Begin()
+	if err != nil {
+		t.Fatalf("begin V1 seed: %v", err)
+	}
+	defer transaction.Rollback()
+	if _, err := transaction.Exec(migrations[0].sql); err != nil {
+		t.Fatalf("apply V1 schema: %v", err)
+	}
+	if _, err := transaction.Exec(
+		"INSERT INTO schema_migrations(version, name, checksum) VALUES (1, ?, ?)",
+		migrations[0].name, migrations[0].checksum,
+	); err != nil {
+		t.Fatalf("record V1 migration: %v", err)
+	}
+	if _, err := transaction.Exec("PRAGMA user_version = 1"); err != nil {
+		t.Fatalf("set V1 user_version: %v", err)
+	}
+	base := time.Date(2026, 7, 14, 8, 0, 0, 0, time.UTC)
+	seedV1Goal(t, transaction, "v1-running", "running", 3, "pending", 1, "queued", base, false)
+	seedV1Goal(t, transaction, "v1-closed", "succeeded", 6, "succeeded", 3, "succeeded", base.Add(time.Minute), true)
+	if err := transaction.Commit(); err != nil {
+		t.Fatalf("commit V1 seed: %v", err)
+	}
+}
+
+func seedV1Goal(
+	t *testing.T,
+	transaction *sql.Tx,
+	suffix, goalState string,
+	goalRevision int,
+	itemState string,
+	itemRevision int,
+	executionState string,
+	base time.Time,
+	withEvidence bool,
+) {
+	t.Helper()
+	actor := mustRef(t, "actor:v1", goal.NewActorRef)
+	project := mustRef(t, "project:v1", goal.NewProjectRef)
+	intent, err := goal.NewIntentManifest(goal.IntentManifestInput{
+		Ref: mustRef(t, "intent:"+suffix, goal.NewIntentRef), Actor: actor, Project: project,
+		Statement: "legacy " + suffix, SubmittedAt: base,
+	})
+	if err != nil {
+		t.Fatalf("legacy intent: %v", err)
+	}
+	intentSnapshot := intent.Snapshot()
+	goalRef := "goal:" + suffix
+	itemRef := "work-item:" + suffix
+	executionRef := "execution:" + suffix
+	var closedAt, itemStartedAt, itemFinishedAt, executionStartedAt, providerAcceptedAt, observedAt, finishedAt any
+	providerRef, externalRef := "", ""
+	var itemExecutionRef any
+	if itemState != "pending" {
+		itemStartedAt = requiredTime(base)
+		executionStartedAt = requiredTime(base)
+		itemExecutionRef = executionRef
+	}
+	if withEvidence {
+		closedAt = requiredTime(base.Add(2 * time.Second))
+		itemFinishedAt = requiredTime(base.Add(time.Second))
+		providerAcceptedAt = requiredTime(base)
+		observedAt = requiredTime(base.Add(time.Second))
+		finishedAt = requiredTime(base.Add(time.Second))
+		providerRef, externalRef = "provider:v1", "external:v1"
+	}
+	mustExec := func(query string, arguments ...any) {
+		t.Helper()
+		if _, err := transaction.Exec(query, arguments...); err != nil {
+			t.Fatalf("seed V1 %s: %v", suffix, err)
+		}
+	}
+	mustExec(`INSERT INTO intents(ref, actor_ref, project_ref, statement, submitted_at, hash) VALUES (?, ?, ?, ?, ?, ?)`,
+		intentSnapshot.Ref, intentSnapshot.ActorRef, intentSnapshot.ProjectRef, intentSnapshot.Statement,
+		requiredTime(intentSnapshot.SubmittedAt), intentSnapshot.Hash)
+	mustExec(`INSERT INTO goals(ref, request_ref, request_fingerprint, intent_ref, actor_ref, project_ref, state, revision, created_at, started_at, closed_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, goalRef, "request:"+suffix, "fingerprint:"+suffix,
+		intentSnapshot.Ref, actor.String(), project.String(), goalState, goalRevision, requiredTime(base), requiredTime(base), closedAt)
+	mustExec(`INSERT INTO work_items(ref, goal_ref, actor_ref, project_ref, objective, state, revision, position, created_at, started_at, finished_at, execution_ref)
+VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)`, itemRef, goalRef, actor.String(), project.String(),
+		"legacy "+suffix, itemState, itemRevision, requiredTime(base), itemStartedAt, itemFinishedAt, itemExecutionRef)
+	mustExec(`INSERT INTO executions(ref, goal_ref, work_item_ref, state, artifact_media_type, idempotency_key, max_output_bytes, max_attempts,
+provider_ref, external_ref, created_at, deadline_at, started_at, provider_accepted_at, last_observed_at, provider_observed_at, finished_at, failure_code)
+VALUES (?, ?, ?, ?, 'text/plain', ?, 1024, 3, ?, ?, ?, ?, ?, ?, ?, ?, ?, '')`, executionRef, goalRef, itemRef,
+		executionState, "idempotency:"+suffix, providerRef, externalRef, requiredTime(base), requiredTime(base.Add(time.Hour)),
+		executionStartedAt, providerAcceptedAt, observedAt, observedAt, finishedAt)
+	mustExec(`INSERT INTO events(ref, kind, goal_ref, work_item_ref, execution_ref, occurred_at) VALUES (?, 'goal.created', ?, ?, ?, ?)`,
+		"event:"+suffix, goalRef, itemRef, executionRef, requiredTime(base))
+	completedAt := any(nil)
+	if withEvidence {
+		completedAt = requiredTime(base.Add(time.Second))
+		mustExec(`INSERT INTO artifacts(ref, goal_ref, work_item_ref, digest, media_type, size, created_at) VALUES (?, ?, ?, 'sha256:v1', 'text/plain', 2, ?)`,
+			"artifact:"+suffix, goalRef, itemRef, requiredTime(base.Add(time.Second)))
+		mustExec(`INSERT INTO attestations(ref, goal_ref, work_item_ref, execution_ref, artifact_ref, policy, accepted_at) VALUES (?, ?, ?, ?, ?, 'legacy', ?)`,
+			"attestation:"+suffix, goalRef, itemRef, executionRef, "artifact:"+suffix, requiredTime(base.Add(time.Second)))
+	}
+	mustExec(`INSERT INTO outbox(ref, kind, goal_ref, work_item_ref, execution_ref, available_at, completed_at) VALUES (?, 'launch_agent', ?, ?, ?, ?, ?)`,
+		"action:"+suffix, goalRef, itemRef, executionRef, requiredTime(base), completedAt)
 }
 
 func TestRepositoryCreateGetListScopedIdempotencyAndRestart(t *testing.T) {
@@ -259,20 +417,20 @@ func TestRepositoryRejectsInvalidExecutionAndLifecycleContracts(t *testing.T) {
 	repository, _ := openTestRepository(t)
 
 	deadline := newCreateFixture(t, "deadline", "request:deadline", "fingerprint:deadline", "actor:local-owner", "project:default")
-	deadline.Execution.DeadlineAt = deadline.Execution.CreatedAt
+	deadline.Executions[0].DeadlineAt = deadline.Executions[0].CreatedAt
 	if _, _, err := repository.CreateGoal(context.Background(), deadline); !application.IsStateError(err, application.StateInvalid) {
 		t.Fatalf("non-strict deadline = %v", err)
 	}
 
 	queuedProvider := newCreateFixture(t, "queued-provider", "request:queued-provider", "fingerprint:queued-provider", "actor:local-owner", "project:default")
-	queuedProvider.Execution.ProviderRef = "provider:unexpected"
-	queuedProvider.Execution.ExternalRef = "external:unexpected"
+	queuedProvider.Executions[0].ProviderRef = "provider:unexpected"
+	queuedProvider.Executions[0].ExternalRef = "external:unexpected"
 	if _, _, err := repository.CreateGoal(context.Background(), queuedProvider); !application.IsStateError(err, application.StateInvalid) {
 		t.Fatalf("queued provider fields = %v", err)
 	}
 
 	observeCreate := newCreateFixture(t, "observe-create", "request:observe-create", "fingerprint:observe-create", "actor:local-owner", "project:default")
-	observeCreate.Action.Kind = application.ActionObserveAgent
+	observeCreate.Actions[0].Kind = application.ActionObserveAgent
 	if _, _, err := repository.CreateGoal(context.Background(), observeCreate); !application.IsStateError(err, application.StateInvalid) {
 		t.Fatalf("observe action on create = %v", err)
 	}
@@ -295,50 +453,76 @@ func TestRepositoryRejectsInvalidExecutionAndLifecycleContracts(t *testing.T) {
 	if _, _, err := repository.CreateGoal(context.Background(), state); err != nil {
 		t.Fatalf("create valid lifecycle fixture: %v", err)
 	}
-	claim := mustClaim(t, repository, "worker:lifecycle", "claim:lifecycle", state.Execution.CreatedAt)
+	claim := mustClaim(t, repository, "worker:lifecycle", "claim:lifecycle", state.Executions[0].CreatedAt)
 	record, err := repository.GetGoal(context.Background(), state.Goal.Ref())
 	if err != nil {
 		t.Fatalf("get lifecycle fixture: %v", err)
 	}
 	item := onlyItem(t, record.Goal)
-	launchAt := state.Execution.CreatedAt.Add(time.Second)
+	launchAt := state.Executions[0].CreatedAt.Add(time.Second)
 	launchedGoal, err := record.Goal.StartWorkItem(
-		record.Goal.Revision(), item.Revision(), item.Ref(), record.Execution.Ref, launchAt,
+		record.Goal.Revision(), item.Revision(), item.Ref(), record.Executions[0].Ref, launchAt,
 	)
 	if err != nil {
 		t.Fatalf("start lifecycle item: %v", err)
 	}
 	invalidLaunch := application.LaunchAcceptedState{
-		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: item.Revision(),
-		Goal: launchedGoal, Execution: record.Execution,
+		Claim: claim, Execution: record.Executions[0], OperationAt: launchAt,
 		NextAction: application.ActionRecord{
 			Ref: "action:observe:lifecycle", Kind: application.ActionObserveAgent,
-			GoalRef: launchedGoal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: record.Execution.Ref,
+			GoalRef: launchedGoal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: record.Executions[0].Ref,
 			AvailableAt: launchAt,
 		},
 		Event: application.EventRecord{
 			Ref: "event:execution-accepted:lifecycle", Kind: "execution.accepted",
-			GoalRef: launchedGoal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: record.Execution.Ref,
+			GoalRef: launchedGoal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: record.Executions[0].Ref,
 			OccurredAt: launchAt,
 		},
 	}
 	if err := repository.RecordLaunchAccepted(context.Background(), invalidLaunch); !application.IsStateError(err, application.StateInvalid) {
 		t.Fatalf("launch with queued execution = %v", err)
 	}
-	runningExecution := record.Execution
+	runningExecution := record.Executions[0]
 	runningExecution.State = application.ExecutionRunning
 	runningExecution.ProviderRef = "provider:test"
 	runningExecution.ExternalRef = "external:test"
 	runningExecution.StartedAt = launchAt
+	runningExecution.DeadlineAt = launchAt.Add(time.Hour)
+	runningExecution.ProviderAcceptedAt = launchAt
+	directRunning := invalidLaunch
+	directRunning.Execution = runningExecution
+	if err := repository.RecordLaunchAccepted(context.Background(), directRunning); !application.IsStateError(err, application.StateConflict) {
+		t.Fatalf("queued execution bypassed dispatching CAS = %v", err)
+	}
 	if err := repository.RequeueAction(context.Background(), application.ActionRequeuedState{
-		Claim: claim, Execution: runningExecution, AvailableAt: launchAt.Add(time.Second),
+		Claim: claim, Execution: runningExecution, AvailableAt: launchAt.Add(time.Second), OperationAt: launchAt,
 	}); !application.IsStateError(err, application.StateInvalid) {
 		t.Fatalf("launch action requeued as running = %v", err)
+	}
+	preparedExecution := record.Executions[0]
+	preparedExecution.State = application.ExecutionDispatching
+	if err := repository.RecordLaunchPrepared(context.Background(), application.LaunchPreparedState{
+		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), Goal: launchedGoal,
+		Execution: preparedExecution, OperationAt: launchAt,
+		Event: application.EventRecord{
+			Ref: "event:execution-dispatching:lifecycle", Kind: "execution.dispatching",
+			GoalRef: launchedGoal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: preparedExecution.Ref,
+			OccurredAt: launchAt,
+		},
+	}); err != nil {
+		t.Fatalf("prepare lifecycle launch: %v", err)
+	}
+	queuedAgain := preparedExecution
+	queuedAgain.State = application.ExecutionQueued
+	if err := repository.RequeueAction(context.Background(), application.ActionRequeuedState{
+		Claim: claim, Execution: queuedAgain, AvailableAt: launchAt.Add(time.Second), OperationAt: launchAt,
+	}); !application.IsStateError(err, application.StateConflict) {
+		t.Fatalf("dispatching execution regressed to queued = %v", err)
 	}
 }
 
 func TestValidateExecutionRejectsIncoherentStates(t *testing.T) {
-	base := newCreateFixture(t, "execution-contract", "request:execution-contract", "fingerprint:execution-contract", "actor:local-owner", "project:default").Execution
+	base := newCreateFixture(t, "execution-contract", "request:execution-contract", "fingerprint:execution-contract", "actor:local-owner", "project:default").Executions[0]
 	tests := map[string]application.ExecutionRecord{}
 
 	deadline := base
@@ -360,9 +544,9 @@ func TestValidateExecutionRejectsIncoherentStates(t *testing.T) {
 
 	failed := base
 	failed.State = application.ExecutionFailed
-	failed.FinishedAt = failed.CreatedAt
+	failed.FinishedAt = failed.CreatedAt.Add(-time.Nanosecond)
 	failed.FailureCode = "agent.failed"
-	tests["failed without start"] = failed
+	tests["failed before create"] = failed
 
 	partialProvider := failed
 	partialProvider.StartedAt = partialProvider.CreatedAt
@@ -384,7 +568,7 @@ func TestRepositoryClaimIsAtomicRecoversExpiredLeaseAndQuarantines(t *testing.T)
 	if _, _, err := repository.CreateGoal(context.Background(), state); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	now := state.Execution.CreatedAt.Add(time.Second)
+	now := state.Executions[0].CreatedAt.Add(time.Second)
 	const workers = 16
 	start := make(chan struct{})
 	claims := make(chan application.ActionClaim, workers)
@@ -432,16 +616,27 @@ func TestRepositoryClaimIsAtomicRecoversExpiredLeaseAndQuarantines(t *testing.T)
 	}); err != nil || found {
 		t.Fatalf("claim before expiry = found:%v err:%v", found, err)
 	}
+	boundary := application.ActionQuarantinedState{
+		Claim: oldClaim, ErrorCode: "application.stale_boundary", OperationAt: oldClaim.LeaseUntil,
+		Event: application.EventRecord{
+			Ref: "event:stale-boundary", Kind: "action.quarantined", GoalRef: oldClaim.Action.GoalRef,
+			WorkItemRef: oldClaim.Action.WorkItemRef, ExecutionRef: oldClaim.Action.ExecutionRef,
+			OccurredAt: oldClaim.LeaseUntil,
+		},
+	}
+	if err := repository.QuarantineAction(context.Background(), boundary); !application.IsStateError(err, application.StateConflict) {
+		t.Fatalf("claim valid at exclusive lease boundary: %v", err)
+	}
 	recovered, found, err := repository.ClaimNextAction(context.Background(), application.ClaimRequest{
 		WorkerRef: "worker:recovery", Token: "claim:recovery", Now: now.Add(10 * time.Second), LeaseDuration: time.Second,
 	})
 	if err != nil || !found || recovered.Attempt != 2 {
 		t.Fatalf("recovered claim = found:%v attempt:%d err:%v", found, recovered.Attempt, err)
 	}
-	quarantineAt := recovered.LeaseUntil
+	quarantineAt := recovered.LeaseUntil.Add(-time.Nanosecond)
 	quarantine := application.ActionQuarantinedState{
 		Claim:     recovered,
-		ErrorCode: "application.action_invalid",
+		ErrorCode: "application.action_invalid", OperationAt: quarantineAt,
 		Event: application.EventRecord{
 			Ref: "event:action-quarantined:claim", Kind: "action.quarantined",
 			GoalRef: recovered.Action.GoalRef, WorkItemRef: recovered.Action.WorkItemRef,
@@ -483,24 +678,37 @@ func TestRepositoryMutationsAreAtomicCASAndRestoreEvidence(t *testing.T) {
 	if _, _, err := repository.CreateGoal(context.Background(), state); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	launchClaim := mustClaim(t, repository, "worker:launch", "claim:launch", state.Execution.CreatedAt)
+	launchClaim := mustClaim(t, repository, "worker:launch", "claim:launch", state.Executions[0].CreatedAt)
 	record, err := repository.GetGoal(context.Background(), state.Goal.Ref())
 	if err != nil {
 		t.Fatalf("get before launch: %v", err)
 	}
 	item := onlyItem(t, record.Goal)
-	launchAt := state.Execution.CreatedAt.Add(time.Second)
+	launchAt := state.Executions[0].CreatedAt.Add(time.Second)
 	launchedGoal, err := record.Goal.StartWorkItem(
-		record.Goal.Revision(), item.Revision(), item.Ref(), record.Execution.Ref, launchAt,
+		record.Goal.Revision(), item.Revision(), item.Ref(), record.Executions[0].Ref, launchAt,
 	)
 	if err != nil {
 		t.Fatalf("domain launch: %v", err)
 	}
-	launchedExecution := record.Execution
+	preparedExecution := record.Executions[0]
+	preparedExecution.State = application.ExecutionDispatching
+	if err := repository.RecordLaunchPrepared(context.Background(), application.LaunchPreparedState{
+		Claim: launchClaim, ExpectedGoalRevision: record.Goal.Revision(), Goal: launchedGoal,
+		Execution: preparedExecution, OperationAt: launchAt,
+		Event: application.EventRecord{
+			Ref: "event:execution-dispatching:success", Kind: "execution.dispatching",
+			GoalRef: launchedGoal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: preparedExecution.Ref, OccurredAt: launchAt,
+		},
+	}); err != nil {
+		t.Fatalf("prepare launch: %v", err)
+	}
+	launchedExecution := preparedExecution
 	launchedExecution.State = application.ExecutionRunning
 	launchedExecution.ProviderRef = "provider:codex"
 	launchedExecution.ExternalRef = "external:one"
 	launchedExecution.StartedAt = launchAt
+	launchedExecution.DeadlineAt = launchAt.Add(time.Hour)
 	launchedExecution.ProviderAcceptedAt = launchAt.Add(-10 * time.Minute)
 	observeAction := application.ActionRecord{
 		Ref: "action:observe:success", Kind: application.ActionObserveAgent,
@@ -508,8 +716,7 @@ func TestRepositoryMutationsAreAtomicCASAndRestoreEvidence(t *testing.T) {
 		AvailableAt: launchAt,
 	}
 	launchState := application.LaunchAcceptedState{
-		Claim: launchClaim, ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: item.Revision(),
-		Goal: launchedGoal, Execution: launchedExecution, NextAction: observeAction,
+		Claim: launchClaim, Execution: launchedExecution, NextAction: observeAction, OperationAt: launchAt,
 		Event: application.EventRecord{
 			Ref: "event:execution-accepted:success", Kind: "execution.accepted",
 			GoalRef: launchedGoal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: launchedExecution.Ref,
@@ -530,6 +737,7 @@ func TestRepositoryMutationsAreAtomicCASAndRestoreEvidence(t *testing.T) {
 	retryAt := launchAt.Add(5 * time.Second)
 	if err := repository.RequeueAction(context.Background(), application.ActionRequeuedState{
 		Claim: observeClaim, Execution: requeuedExecution, AvailableAt: retryAt, ErrorCode: "agent.pending",
+		OperationAt: launchAt.Add(time.Second),
 	}); err != nil {
 		t.Fatalf("requeue: %v", err)
 	}
@@ -561,7 +769,7 @@ func TestRepositoryMutationsAreAtomicCASAndRestoreEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("domain close: %v", err)
 	}
-	succeededExecution := record.Execution
+	succeededExecution := record.Executions[0]
 	succeededExecution.State = application.ExecutionSucceeded
 	succeededExecution.FinishedAt = succeededAt
 	artifact := application.ArtifactRecord{
@@ -583,7 +791,7 @@ func TestRepositoryMutationsAreAtomicCASAndRestoreEvidence(t *testing.T) {
 	successState := application.GoalSucceededState{
 		Claim: successClaim, ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: item.Revision(),
 		Goal: succeededGoal, Execution: succeededExecution, Artifact: artifact,
-		Attestation: attestation, Events: validEvents,
+		Attestation: attestation, Events: validEvents, OperationAt: succeededAt,
 	}
 	wrongCAS := successState
 	wrongCAS.ExpectedGoalRevision++
@@ -592,7 +800,7 @@ func TestRepositoryMutationsAreAtomicCASAndRestoreEvidence(t *testing.T) {
 	}
 	conflictingEvent := successState
 	conflictingEvent.Events = append([]application.EventRecord(nil), validEvents...)
-	conflictingEvent.Events[0].Ref = state.Event.Ref
+	conflictingEvent.Events[0].Ref = state.Events[0].Ref
 	if err := repository.RecordGoalSucceeded(context.Background(), conflictingEvent); !application.IsStateError(err, application.StateConflict) {
 		t.Fatalf("event conflict = %v", err)
 	}
@@ -600,7 +808,7 @@ func TestRepositoryMutationsAreAtomicCASAndRestoreEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get after rollback: %v", err)
 	}
-	if afterRollback.Goal.State() != goal.GoalStateRunning || len(afterRollback.Artifacts) != 0 || afterRollback.Execution.State != application.ExecutionRunning {
+	if afterRollback.Goal.State() != goal.GoalStateRunning || len(afterRollback.Artifacts) != 0 || afterRollback.Executions[0].State != application.ExecutionRunning {
 		t.Fatalf("partial mutation escaped rollback: %+v", afterRollback)
 	}
 	if err := repository.RecordGoalSucceeded(context.Background(), successState); err != nil {
@@ -610,7 +818,7 @@ func TestRepositoryMutationsAreAtomicCASAndRestoreEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get terminal: %v", err)
 	}
-	if terminal.Goal.State() != goal.GoalStateSucceeded || terminal.Execution.State != application.ExecutionSucceeded ||
+	if terminal.Goal.State() != goal.GoalStateSucceeded || terminal.Executions[0].State != application.ExecutionSucceeded ||
 		len(terminal.Artifacts) != 1 || len(terminal.Attestations) != 1 {
 		t.Fatalf("terminal record = %+v", terminal)
 	}
@@ -618,9 +826,9 @@ func TestRepositoryMutationsAreAtomicCASAndRestoreEvidence(t *testing.T) {
 	if len(terminalItem.Artifacts()) != 1 || len(terminalItem.Attestations()) != 1 {
 		t.Fatalf("evidence not restored into work item")
 	}
-	if !terminal.Execution.ProviderAcceptedAt.Equal(launchAt.Add(-10*time.Minute)) ||
-		!terminal.Execution.ProviderObservedAt.Equal(launchAt.Add(-time.Hour)) {
-		t.Fatalf("provider timestamps lost: %+v", terminal.Execution)
+	if !terminal.Executions[0].ProviderAcceptedAt.Equal(launchAt.Add(-10*time.Minute)) ||
+		!terminal.Executions[0].ProviderObservedAt.Equal(launchAt.Add(-time.Hour)) {
+		t.Fatalf("provider timestamps lost: %+v", terminal.Executions[0])
 	}
 
 	if err := repository.Close(); err != nil {
@@ -647,20 +855,35 @@ func TestRepositoryRecordsFailedGoalAtomically(t *testing.T) {
 	if _, _, err := repository.CreateGoal(context.Background(), state); err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	claim := mustClaim(t, repository, "worker:failed", "claim:failed", state.Execution.CreatedAt)
+	claim := mustClaim(t, repository, "worker:failed", "claim:failed", state.Executions[0].CreatedAt)
 	record, err := repository.GetGoal(context.Background(), state.Goal.Ref())
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
 	item := onlyItem(t, record.Goal)
-	failedAt := state.Execution.CreatedAt.Add(time.Second)
+	failedAt := state.Executions[0].CreatedAt.Add(time.Second)
 	failedGoal, err := record.Goal.StartWorkItem(
-		record.Goal.Revision(), item.Revision(), item.Ref(), record.Execution.Ref, failedAt,
+		record.Goal.Revision(), item.Revision(), item.Ref(), record.Executions[0].Ref, failedAt,
 	)
 	if err != nil {
 		t.Fatalf("start item: %v", err)
 	}
+	preparedExecution := record.Executions[0]
+	preparedExecution.State = application.ExecutionDispatching
+	if err := repository.RecordLaunchPrepared(context.Background(), application.LaunchPreparedState{
+		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), Goal: failedGoal,
+		Execution: preparedExecution, OperationAt: failedAt,
+		Event: application.EventRecord{
+			Ref: "event:execution-dispatching:failed", Kind: "execution.dispatching",
+			GoalRef: failedGoal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: preparedExecution.Ref,
+			OccurredAt: failedAt,
+		},
+	}); err != nil {
+		t.Fatalf("prepare failed launch: %v", err)
+	}
 	runningItem := onlyItem(t, failedGoal)
+	preparedGoalRevision := failedGoal.Revision()
+	preparedItemRevision := runningItem.Revision()
 	failedGoal, err = failedGoal.FailWorkItem(
 		failedGoal.Revision(), runningItem.Revision(), runningItem.Ref(), failedAt,
 	)
@@ -671,14 +894,14 @@ func TestRepositoryRecordsFailedGoalAtomically(t *testing.T) {
 	if err != nil {
 		t.Fatalf("close failed goal: %v", err)
 	}
-	failedExecution := record.Execution
+	failedExecution := preparedExecution
 	failedExecution.State = application.ExecutionFailed
-	failedExecution.StartedAt = failedAt
 	failedExecution.FinishedAt = failedAt
 	failedExecution.FailureCode = "agent.launch_failed"
 	failure := application.GoalFailedState{
-		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: item.Revision(),
+		Claim: claim, ExpectedGoalRevision: preparedGoalRevision, ExpectedItemRevision: preparedItemRevision,
 		Goal: failedGoal, Execution: failedExecution,
+		OperationAt: failedAt,
 		Events: []application.EventRecord{
 			{Ref: "event:work-failed:failed", Kind: "work_item.failed", GoalRef: failedGoal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: failedExecution.Ref, OccurredAt: failedAt},
 			{Ref: "event:goal-failed:failed", Kind: "goal.failed", GoalRef: failedGoal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: failedExecution.Ref, OccurredAt: failedAt},
@@ -688,70 +911,216 @@ func TestRepositoryRecordsFailedGoalAtomically(t *testing.T) {
 		t.Fatalf("record failed: %v", err)
 	}
 	terminal, err := repository.GetGoal(context.Background(), state.Goal.Ref())
-	if err != nil || terminal.Goal.State() != goal.GoalStateFailed || terminal.Execution.FailureCode != "agent.launch_failed" {
+	if err != nil || terminal.Goal.State() != goal.GoalStateFailed || terminal.Executions[0].FailureCode != "agent.launch_failed" {
 		t.Fatalf("failed terminal = %+v err:%v", terminal, err)
 	}
 }
 
-func TestRepositoryRejectsMultipleWorkItemsOnCreateAndRead(t *testing.T) {
-	repository, _ := openTestRepository(t)
-	state := newCreateFixture(t, "cardinality", "request:cardinality", "fingerprint:cardinality", "actor:local-owner", "project:default")
-	multiple := state
-	secondItem := mustWorkItem(t, goal.NewWorkItemInput{
-		Ref: mustRef(t, "work-item:extra:create", goal.NewWorkItemRef), Goal: state.Goal.Ref(),
-		Actor: state.Goal.Actor(), Project: state.Goal.Project(), Objective: "extra", CreatedAt: state.Goal.CreatedAt(),
-	})
-	pendingGoal, err := goal.NewGoal(mustRef(t, "goal:multiple", goal.NewGoalRef), state.Intent, state.Goal.CreatedAt())
+func TestRepositoryRoundTripsDAGPlanAndMultipleWorkItems(t *testing.T) {
+	repository, path := openTestRepository(t)
+	state := newDAGCreateFixture(t)
+	created, fresh, err := repository.CreateGoal(context.Background(), state)
+	if err != nil || !fresh {
+		t.Fatalf("create DAG = fresh:%v err:%v", fresh, err)
+	}
+	if !reflect.DeepEqual(created.Goal.Snapshot(), state.Goal.Snapshot()) ||
+		!reflect.DeepEqual(created.Executions, state.Executions) {
+		t.Fatalf("DAG round trip mismatch:\n got=%+v\nwant=%+v", created, state)
+	}
+	if err := repository.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+	repository, err = Open(context.Background(), Options{Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 8})
 	if err != nil {
-		t.Fatalf("new multiple goal: %v", err)
+		t.Fatalf("reopen DAG: %v", err)
 	}
-	firstItem := mustWorkItem(t, goal.NewWorkItemInput{
-		Ref: mustRef(t, "work-item:multiple:first", goal.NewWorkItemRef), Goal: pendingGoal.Ref(),
-		Actor: pendingGoal.Actor(), Project: pendingGoal.Project(), Objective: "first", CreatedAt: pendingGoal.CreatedAt(),
-	})
-	pendingGoal, _ = pendingGoal.AddWorkItem(pendingGoal.Revision(), firstItem)
-	secondItem = mustWorkItem(t, goal.NewWorkItemInput{
-		Ref: secondItem.Ref(), Goal: pendingGoal.Ref(), Actor: pendingGoal.Actor(), Project: pendingGoal.Project(),
-		Objective: secondItem.Objective(), CreatedAt: pendingGoal.CreatedAt(),
-	})
-	pendingGoal, _ = pendingGoal.AddWorkItem(pendingGoal.Revision(), secondItem)
-	pendingGoal, _ = pendingGoal.Start(pendingGoal.Revision(), pendingGoal.CreatedAt())
-	multiple.Goal = pendingGoal
-	multiple.Execution.GoalRef = pendingGoal.Ref()
-	multiple.Execution.WorkItemRef = firstItem.Ref()
-	multiple.Action.GoalRef = pendingGoal.Ref()
-	multiple.Action.WorkItemRef = firstItem.Ref()
-	multiple.Event.GoalRef = pendingGoal.Ref()
-	multiple.Event.WorkItemRef = firstItem.Ref()
-	if _, _, err := repository.CreateGoal(context.Background(), multiple); !application.IsStateError(err, application.StateInvalid) {
-		t.Fatalf("multiple create = %v", err)
+	t.Cleanup(func() { _ = repository.Close() })
+	restarted, err := repository.GetGoal(context.Background(), state.Goal.Ref())
+	if err != nil || !reflect.DeepEqual(restarted.Goal.Snapshot(), state.Goal.Snapshot()) {
+		t.Fatalf("DAG restart mismatch: record=%+v err=%v", restarted, err)
 	}
+}
 
+func TestRepositoryRollsBackSuccessWhenReadySuccessorsAreOmitted(t *testing.T) {
+	repository, _ := openTestRepository(t)
+	state := newDAGCreateFixture(t)
 	if _, _, err := repository.CreateGoal(context.Background(), state); err != nil {
-		t.Fatalf("create valid: %v", err)
+		t.Fatalf("create DAG: %v", err)
 	}
-	snapshot := state.Goal.Snapshot()
-	_, err = repository.db.Exec(`
-INSERT INTO work_items(
-    ref, goal_ref, actor_ref, project_ref, objective, state, revision, position,
-    created_at, started_at, finished_at, execution_ref
-) VALUES (?, ?, ?, ?, ?, 'pending', 1, 1, ?, NULL, NULL, NULL)`,
-		"work-item:extra:read", snapshot.Ref, snapshot.ActorRef, snapshot.ProjectRef,
-		"extra", requiredTime(snapshot.CreatedAt),
+	launchClaim := mustClaim(t, repository, "worker:missing-successor:launch", "claim:missing-successor:launch", state.Executions[0].CreatedAt)
+	record, err := repository.GetGoal(context.Background(), state.Goal.Ref())
+	if err != nil {
+		t.Fatalf("get queued DAG: %v", err)
+	}
+	root, found := workItemByObjective(record.Goal, "root")
+	if !found {
+		t.Fatal("root WorkItem not found")
+	}
+	launchAt := state.Executions[0].CreatedAt.Add(time.Second)
+	preparedGoal, err := record.Goal.StartWorkItem(
+		record.Goal.Revision(), root.Revision(), root.Ref(), record.Executions[0].Ref, launchAt,
 	)
 	if err != nil {
-		t.Fatalf("inject second item: %v", err)
+		t.Fatalf("start root: %v", err)
 	}
-	if _, err := repository.GetGoal(context.Background(), state.Goal.Ref()); !application.IsStateError(err, application.StateInvalid) {
-		t.Fatalf("multiple read = %v", err)
+	preparedExecution := record.Executions[0]
+	preparedExecution.State = application.ExecutionDispatching
+	if err := repository.RecordLaunchPrepared(context.Background(), application.LaunchPreparedState{
+		Claim: launchClaim, ExpectedGoalRevision: record.Goal.Revision(), Goal: preparedGoal,
+		Execution: preparedExecution, OperationAt: launchAt,
+		Event: application.EventRecord{
+			Ref: "event:execution-dispatching:missing-successor", Kind: "execution.dispatching",
+			GoalRef: preparedGoal.Ref(), WorkItemRef: root.Ref(), ExecutionRef: preparedExecution.Ref,
+			OccurredAt: launchAt,
+		},
+	}); err != nil {
+		t.Fatalf("prepare root: %v", err)
+	}
+	runningExecution := preparedExecution
+	runningExecution.State = application.ExecutionRunning
+	runningExecution.ProviderRef = "provider:test"
+	runningExecution.ExternalRef = "external:missing-successor"
+	runningExecution.StartedAt = launchAt
+	runningExecution.DeadlineAt = launchAt.Add(time.Hour)
+	runningExecution.ProviderAcceptedAt = launchAt
+	observeAction := application.ActionRecord{
+		Ref: "action:observe:" + runningExecution.Ref.String(), Kind: application.ActionObserveAgent,
+		GoalRef: preparedGoal.Ref(), WorkItemRef: root.Ref(), ExecutionRef: runningExecution.Ref,
+		AvailableAt: launchAt,
+	}
+	if err := repository.RecordLaunchAccepted(context.Background(), application.LaunchAcceptedState{
+		Claim: launchClaim, Execution: runningExecution, NextAction: observeAction, OperationAt: launchAt,
+		Event: application.EventRecord{
+			Ref: "event:execution-accepted:missing-successor", Kind: "execution.accepted",
+			GoalRef: preparedGoal.Ref(), WorkItemRef: root.Ref(), ExecutionRef: runningExecution.Ref,
+			OccurredAt: launchAt,
+		},
+	}); err != nil {
+		t.Fatalf("accept root: %v", err)
+	}
+
+	observeClaim := mustClaim(t, repository, "worker:missing-successor:observe", "claim:missing-successor:observe", launchAt)
+	record, err = repository.GetGoal(context.Background(), state.Goal.Ref())
+	if err != nil {
+		t.Fatalf("get running DAG: %v", err)
+	}
+	runningRoot, _ := workItemByObjective(record.Goal, "root")
+	finishedAt := launchAt.Add(time.Second)
+	artifactRef := mustRef(t, "artifact:missing-successor", goal.NewArtifactRef)
+	attestationRef := mustRef(t, "attestation:missing-successor", goal.NewAttestationRef)
+	succeededGoal, err := record.Goal.SucceedWorkItem(
+		record.Goal.Revision(), runningRoot.Revision(), runningRoot.Ref(),
+		[]goal.ArtifactRef{artifactRef}, []goal.AttestationRef{attestationRef}, finishedAt,
+	)
+	if err != nil {
+		t.Fatalf("succeed root: %v", err)
+	}
+	succeededExecution := record.Executions[0]
+	succeededExecution.State = application.ExecutionSucceeded
+	succeededExecution.LastObservedAt = finishedAt
+	succeededExecution.ProviderObservedAt = finishedAt
+	succeededExecution.FinishedAt = finishedAt
+	err = repository.RecordGoalSucceeded(context.Background(), application.GoalSucceededState{
+		Claim: observeClaim, ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: runningRoot.Revision(),
+		Goal: succeededGoal, Execution: succeededExecution, OperationAt: finishedAt,
+		Artifact: application.ArtifactRecord{
+			Stored:  ports.StoredArtifact{Ref: artifactRef, Digest: "digest:missing-successor", MediaType: "text/plain", Size: 1},
+			GoalRef: succeededGoal.Ref(), WorkItemRef: runningRoot.Ref(), CreatedAt: finishedAt,
+		},
+		Attestation: application.AttestationRecord{
+			Ref: attestationRef, GoalRef: succeededGoal.Ref(), WorkItemRef: runningRoot.Ref(),
+			ExecutionRef: succeededExecution.Ref, ArtifactRef: artifactRef, Policy: "test", AcceptedAt: finishedAt,
+		},
+		Events: []application.EventRecord{{
+			Ref: "event:work-succeeded:missing-successor", Kind: "work_item.succeeded",
+			GoalRef: succeededGoal.Ref(), WorkItemRef: runningRoot.Ref(), ExecutionRef: succeededExecution.Ref,
+			OccurredAt: finishedAt,
+		}},
+	})
+	if !application.IsStateError(err, application.StateConflict) {
+		t.Fatalf("omitted ready successors = %v", err)
+	}
+	after, err := repository.GetGoal(context.Background(), state.Goal.Ref())
+	afterRoot, _ := workItemByObjective(after.Goal, "root")
+	if err != nil || afterRoot.State() != goal.WorkItemStateRunning || after.Executions[0].State != application.ExecutionRunning ||
+		len(after.Artifacts) != 0 || tableCount(t, repository, "executions") != 1 {
+		t.Fatalf("partial omitted-successor mutation escaped: record=%+v err=%v", after, err)
+	}
+}
+
+func newDAGCreateFixture(t *testing.T) application.CreateGoalState {
+	t.Helper()
+	base := newCreateFixture(t, "dag", "request:dag", "fingerprint:dag", "actor:local-owner", "project:default")
+	pending, err := goal.NewGoal(mustRef(t, "goal:dag-plan", goal.NewGoalRef), base.Intent, base.Goal.CreatedAt())
+	if err != nil {
+		t.Fatalf("new DAG goal: %v", err)
+	}
+	phaseBuild, _ := goal.NewPhaseKey("phase:build")
+	phaseReview, _ := goal.NewPhaseKey("phase:review")
+	build, _ := goal.NewPhaseInstance(phaseBuild)
+	review, _ := goal.NewPhaseInstance(phaseReview)
+	worker, _ := goal.NewRoleKey("role:worker")
+	scopeA, _ := goal.NewWriteScope("internal/a")
+	scopeB, _ := goal.NewWriteScope("internal/b")
+	aRef := mustRef(t, "work-item:dag:a", goal.NewWorkItemRef)
+	bRef := mustRef(t, "work-item:dag:b", goal.NewWorkItemRef)
+	cRef := mustRef(t, "work-item:dag:c", goal.NewWorkItemRef)
+	a := mustWorkItem(t, goal.NewWorkItemInput{
+		Ref: aRef, Goal: pending.Ref(), Actor: pending.Actor(), Project: pending.Project(),
+		Objective: "root", CreatedAt: pending.CreatedAt(), Phase: phaseBuild, Role: worker,
+		WriteSet: []goal.WriteScope{scopeA}, OutputContract: goal.EvidenceBundleOutputContract(),
+	})
+	b := mustWorkItem(t, goal.NewWorkItemInput{
+		Ref: bRef, Goal: pending.Ref(), Actor: pending.Actor(), Project: pending.Project(),
+		Objective: "left", CreatedAt: pending.CreatedAt(), Phase: phaseReview, Role: worker,
+		Dependencies: []goal.WorkItemRef{aRef}, WriteSet: []goal.WriteScope{scopeB},
+		OutputContract: goal.EvidenceBundleOutputContract(),
+	})
+	c := mustWorkItem(t, goal.NewWorkItemInput{
+		Ref: cRef, Goal: pending.Ref(), Actor: pending.Actor(), Project: pending.Project(),
+		Objective: "right", CreatedAt: pending.CreatedAt(), Phase: phaseReview, Role: worker,
+		Dependencies: []goal.WorkItemRef{aRef}, OutputContract: goal.EvidenceBundleOutputContract(),
+	})
+	plan, err := goal.NewPlan(goal.PlanInput{
+		Generation: 1, Phases: []goal.PhaseInstance{build, review}, WorkItems: []goal.WorkItem{a, b, c},
+	})
+	if err != nil {
+		t.Fatalf("new DAG plan: %v", err)
+	}
+	aggregate, err := pending.ApplyPlan(pending.Revision(), plan)
+	if err == nil {
+		aggregate, err = aggregate.Start(aggregate.Revision(), aggregate.CreatedAt())
+	}
+	if err != nil {
+		t.Fatalf("start DAG: %v", err)
+	}
+	executionRef := mustRef(t, "execution:dag:a", goal.NewExecutionRef)
+	execution := application.ExecutionRecord{
+		Ref: executionRef, GoalRef: aggregate.Ref(), WorkItemRef: aRef, State: application.ExecutionQueued,
+		ArtifactMediaType: "text/plain", IdempotencyKey: "execution:dag:a", MaxOutputBytes: 1 << 20,
+		MaxAttempts: 3, CreatedAt: aggregate.CreatedAt(),
+	}
+	return application.CreateGoalState{
+		RequestRef: "request:dag", RequestFingerprint: "fingerprint:dag", Intent: base.Intent, Goal: aggregate,
+		Executions: []application.ExecutionRecord{execution},
+		Actions: []application.ActionRecord{{
+			Ref: "action:launch:dag:a", Kind: application.ActionLaunchAgent, GoalRef: aggregate.Ref(),
+			WorkItemRef: aRef, ExecutionRef: executionRef, AvailableAt: aggregate.CreatedAt(),
+		}},
+		Events: []application.EventRecord{
+			{Ref: "event:goal-created:dag", Kind: "goal.created", GoalRef: aggregate.Ref(), OccurredAt: aggregate.CreatedAt()},
+			{Ref: "event:execution-queued:dag:a", Kind: "execution.queued", GoalRef: aggregate.Ref(), WorkItemRef: aRef, ExecutionRef: executionRef, OccurredAt: aggregate.CreatedAt()},
+		},
 	}
 }
 
 func openTestRepository(t *testing.T) (*Repository, string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "private-state", "orquesta.sqlite")
+	now := time.Date(2026, 7, 14, 12, 0, 0, 123456789, time.UTC)
 	repository, err := Open(context.Background(), Options{
 		Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 8,
+		Now: func() time.Time { return now },
 	})
 	if err != nil {
 		t.Fatalf("open repository: %v", err)
@@ -802,9 +1171,17 @@ func newCreateFixtureWithStatement(
 		Ref: mustRef(t, "work-item:"+suffix, goal.NewWorkItemRef), Goal: aggregate.Ref(),
 		Actor: actor, Project: project, Objective: statement, CreatedAt: base,
 	})
-	aggregate, err = aggregate.AddWorkItem(aggregate.Revision(), item)
+	phase, err := goal.NewPhaseInstance(goal.DefaultPhaseKey())
 	if err != nil {
-		t.Fatalf("add item: %v", err)
+		t.Fatalf("new phase: %v", err)
+	}
+	plan, err := goal.NewPlan(goal.PlanInput{Generation: 1, Phases: []goal.PhaseInstance{phase}, WorkItems: []goal.WorkItem{item}})
+	if err != nil {
+		t.Fatalf("new plan: %v", err)
+	}
+	aggregate, err = aggregate.ApplyPlan(aggregate.Revision(), plan)
+	if err != nil {
+		t.Fatalf("apply plan: %v", err)
 	}
 	aggregate, err = aggregate.Start(aggregate.Revision(), base)
 	if err != nil {
@@ -814,19 +1191,19 @@ func newCreateFixtureWithStatement(
 	execution := application.ExecutionRecord{
 		Ref: executionRef, GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), State: application.ExecutionQueued,
 		ArtifactMediaType: "text/plain", IdempotencyKey: "execution:" + suffix,
-		MaxOutputBytes: 1 << 20, MaxAttempts: 3, CreatedAt: base, DeadlineAt: base.Add(time.Hour),
+		MaxOutputBytes: 1 << 20, MaxAttempts: 3, CreatedAt: base,
 	}
 	return application.CreateGoalState{
 		RequestRef: requestRef, RequestFingerprint: fingerprint, Intent: intent, Goal: aggregate,
-		Execution: execution,
-		Action: application.ActionRecord{
+		Executions: []application.ExecutionRecord{execution},
+		Actions: []application.ActionRecord{{
 			Ref: "action:launch:" + suffix, Kind: application.ActionLaunchAgent,
 			GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: executionRef, AvailableAt: base,
-		},
-		Event: application.EventRecord{
+		}},
+		Events: []application.EventRecord{{
 			Ref: "event:goal-created:" + suffix, Kind: "goal.created",
 			GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: executionRef, OccurredAt: base,
-		},
+		}},
 	}
 }
 
@@ -837,7 +1214,7 @@ func assertRecordMatchesCreate(t *testing.T, record application.GoalRecord, stat
 	}
 	if !reflect.DeepEqual(record.Intent.Snapshot(), state.Intent.Snapshot()) ||
 		!reflect.DeepEqual(record.Goal.Snapshot(), state.Goal.Snapshot()) ||
-		!reflect.DeepEqual(record.Execution, state.Execution) {
+		!reflect.DeepEqual(record.Executions, state.Executions) {
 		t.Fatalf("record round trip mismatch:\n got=%+v\nwant=%+v", record, state)
 	}
 }
@@ -860,6 +1237,15 @@ func onlyItem(t *testing.T, aggregate goal.Goal) goal.WorkItem {
 		t.Fatalf("work item count = %d, want 1", len(items))
 	}
 	return items[0]
+}
+
+func workItemByObjective(aggregate goal.Goal, objective string) (goal.WorkItem, bool) {
+	for _, item := range aggregate.WorkItems() {
+		if item.Objective() == objective {
+			return item, true
+		}
+	}
+	return goal.WorkItem{}, false
 }
 
 func mustWorkItem(t *testing.T, input goal.NewWorkItemInput) goal.WorkItem {

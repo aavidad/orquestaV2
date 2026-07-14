@@ -305,6 +305,7 @@ func failedGoalSnapshotFixture(t *testing.T) domain.Goal {
 
 func cloneGoalSnapshot(snapshot domain.GoalSnapshot) domain.GoalSnapshot {
 	cloned := snapshot
+	cloned.Phases = append([]domain.PhaseInstanceSnapshot(nil), snapshot.Phases...)
 	cloned.WorkItems = make([]domain.WorkItemSnapshot, len(snapshot.WorkItems))
 	for index, item := range snapshot.WorkItems {
 		cloned.WorkItems[index] = cloneWorkItemSnapshot(item)
@@ -314,6 +315,8 @@ func cloneGoalSnapshot(snapshot domain.GoalSnapshot) domain.GoalSnapshot {
 
 func cloneWorkItemSnapshot(snapshot domain.WorkItemSnapshot) domain.WorkItemSnapshot {
 	cloned := snapshot
+	cloned.DependencyRefs = append([]string(nil), snapshot.DependencyRefs...)
+	cloned.WriteSet = append([]string(nil), snapshot.WriteSet...)
 	cloned.ArtifactRefs = append([]string(nil), snapshot.ArtifactRefs...)
 	cloned.AttestationRefs = append([]string(nil), snapshot.AttestationRefs...)
 	return cloned

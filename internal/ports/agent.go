@@ -29,6 +29,10 @@ type AgentLaunchRequest struct {
 	ActorRef          goal.ActorRef
 	ProjectRef        goal.ProjectRef
 	Objective         string
+	PhaseKey          string
+	RoleKey           string
+	WriteSet          []string
+	OutputContract    string
 	ArtifactMediaType string
 	IdempotencyKey    string
 	MaxOutputBytes    int64
@@ -91,6 +95,14 @@ func ValidateAgentLaunchRequest(request AgentLaunchRequest) error {
 		return &AgentContractError{Code: "agent.project_ref_required"}
 	case strings.TrimSpace(request.Objective) == "":
 		return &AgentContractError{Code: "agent.objective_required"}
+	case !validPhaseKey(request.PhaseKey):
+		return &AgentContractError{Code: "agent.phase_key_invalid"}
+	case !validRoleKey(request.RoleKey):
+		return &AgentContractError{Code: "agent.role_key_invalid"}
+	case !validOutputContract(request.OutputContract):
+		return &AgentContractError{Code: "agent.output_contract_invalid"}
+	case !validWriteSet(request.WriteSet):
+		return &AgentContractError{Code: "agent.write_set_invalid"}
 	case strings.TrimSpace(request.ArtifactMediaType) == "":
 		return &AgentContractError{Code: "agent.artifact_media_type_required"}
 	case strings.TrimSpace(request.IdempotencyKey) == "":
@@ -100,6 +112,36 @@ func ValidateAgentLaunchRequest(request AgentLaunchRequest) error {
 	default:
 		return nil
 	}
+}
+
+func validPhaseKey(value string) bool {
+	key, err := goal.NewPhaseKey(value)
+	return err == nil && key.String() == value
+}
+
+func validRoleKey(value string) bool {
+	key, err := goal.NewRoleKey(value)
+	return err == nil && key.String() == value
+}
+
+func validOutputContract(value string) bool {
+	contract, err := goal.NewOutputContract(goal.OutputContractKind(value))
+	return err == nil && string(contract.Kind()) == value
+}
+
+func validWriteSet(values []string) bool {
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		scope, err := goal.NewWriteScope(value)
+		if err != nil || scope.String() != value {
+			return false
+		}
+		if _, duplicate := seen[value]; duplicate {
+			return false
+		}
+		seen[value] = struct{}{}
+	}
+	return true
 }
 
 func ValidateAgentLaunchReceipt(request AgentLaunchRequest, receipt AgentLaunchReceipt) error {

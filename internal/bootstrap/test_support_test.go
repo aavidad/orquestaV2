@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"reflect"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -118,7 +119,7 @@ func (agent *countingAgent) Launch(ctx context.Context, request ports.AgentLaunc
 		return ports.AgentLaunchReceipt{}, errors.New("test_agent.closed")
 	}
 	if existing, ok := agent.requests[request.ExecutionRef]; ok {
-		if existing != request {
+		if !reflect.DeepEqual(existing, request) {
 			return ports.AgentLaunchReceipt{}, errors.New("test_agent.conflict")
 		}
 	} else {

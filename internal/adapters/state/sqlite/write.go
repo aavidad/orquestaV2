@@ -27,8 +27,8 @@ VALUES (?, ?, ?, ?, ?, ?)`,
 	if _, err := transaction.ExecContext(ctx, `
 INSERT INTO goals(
     ref, request_ref, request_fingerprint, intent_ref, actor_ref, project_ref, state, revision,
-    created_at, started_at, closed_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    created_at, started_at, closed_at, plan_generation
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		snapshot.Ref,
 		state.RequestRef,
 		state.RequestFingerprint,
@@ -40,20 +40,34 @@ INSERT INTO goals(
 		requiredTime(snapshot.CreatedAt),
 		storedTime(snapshot.StartedAt),
 		storedTime(snapshot.ClosedAt),
+		int64(snapshot.PlanGeneration),
 	); err != nil {
 		return mapDatabaseError(err)
+	}
+	for position, phase := range snapshot.Phases {
+		if _, err := transaction.ExecContext(ctx, `
+INSERT INTO goal_phases(goal_ref, phase_key, position) VALUES (?, ?, ?)`,
+			snapshot.Ref, phase.Key, position,
+		); err != nil {
+			return mapDatabaseError(err)
+		}
 	}
 	for position, item := range snapshot.WorkItems {
 		if _, err := transaction.ExecContext(ctx, `
 INSERT INTO work_items(
-    ref, goal_ref, actor_ref, project_ref, objective, state, revision, position,
+    ref, goal_ref, actor_ref, project_ref, objective, phase_key, role_key,
+    output_contract, skip_reason, state, revision, position,
     created_at, started_at, finished_at, execution_ref
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			item.Ref,
 			item.GoalRef,
 			item.ActorRef,
 			item.ProjectRef,
 			item.Objective,
+			item.PhaseKey,
+			item.RoleKey,
+			string(item.OutputContract),
+			string(item.SkipReason),
 			string(item.State),
 			int64(item.Revision),
 			position,
@@ -64,14 +78,32 @@ INSERT INTO work_items(
 		); err != nil {
 			return mapDatabaseError(err)
 		}
+		for dependencyPosition, dependency := range item.DependencyRefs {
+			if _, err := transaction.ExecContext(ctx, `
+INSERT INTO work_item_dependencies(goal_ref, work_item_ref, dependency_ref, position)
+VALUES (?, ?, ?, ?)`, item.GoalRef, item.Ref, dependency, dependencyPosition); err != nil {
+				return mapDatabaseError(err)
+			}
+		}
+		for scopePosition, scope := range item.WriteSet {
+			if _, err := transaction.ExecContext(ctx, `
+INSERT INTO work_item_write_scopes(goal_ref, work_item_ref, scope, position)
+VALUES (?, ?, ?, ?)`, item.GoalRef, item.Ref, scope, scopePosition); err != nil {
+				return mapDatabaseError(err)
+			}
+		}
 	}
-	if err := insertExecution(ctx, transaction, state.Execution); err != nil {
-		return err
+	for _, execution := range state.Executions {
+		if err := insertExecution(ctx, transaction, execution); err != nil {
+			return err
+		}
 	}
-	if err := insertAction(ctx, transaction, state.Action); err != nil {
-		return err
+	for _, action := range state.Actions {
+		if err := insertAction(ctx, transaction, action); err != nil {
+			return err
+		}
 	}
-	return insertEvent(ctx, transaction, state.Event)
+	return insertEvents(ctx, transaction, state.Events)
 }
 
 func insertExecution(ctx context.Context, transaction *sql.Tx, execution application.ExecutionRecord) error {
@@ -93,7 +125,7 @@ INSERT INTO executions(
 		execution.ProviderRef,
 		execution.ExternalRef,
 		requiredTime(execution.CreatedAt),
-		requiredTime(execution.DeadlineAt),
+		storedTime(execution.DeadlineAt),
 		storedTime(execution.StartedAt),
 		storedTime(execution.ProviderAcceptedAt),
 		storedTime(execution.LastObservedAt),
@@ -104,14 +136,19 @@ INSERT INTO executions(
 	return mapDatabaseError(err)
 }
 
-func updateExecution(ctx context.Context, transaction *sql.Tx, execution application.ExecutionRecord) error {
+func updateExecutionCAS(
+	ctx context.Context,
+	transaction *sql.Tx,
+	execution application.ExecutionRecord,
+	expected application.ExecutionState,
+) error {
 	result, err := transaction.ExecContext(ctx, `
 UPDATE executions
 SET state = ?, artifact_media_type = ?, idempotency_key = ?, max_output_bytes = ?,
     max_attempts = ?, provider_ref = ?, external_ref = ?, created_at = ?,
     deadline_at = ?, started_at = ?, provider_accepted_at = ?, last_observed_at = ?,
     provider_observed_at = ?, finished_at = ?, failure_code = ?
-WHERE ref = ? AND goal_ref = ? AND work_item_ref = ?`,
+WHERE ref = ? AND goal_ref = ? AND work_item_ref = ? AND state = ?`,
 		string(execution.State),
 		execution.ArtifactMediaType,
 		execution.IdempotencyKey,
@@ -120,7 +157,7 @@ WHERE ref = ? AND goal_ref = ? AND work_item_ref = ?`,
 		execution.ProviderRef,
 		execution.ExternalRef,
 		requiredTime(execution.CreatedAt),
-		requiredTime(execution.DeadlineAt),
+		storedTime(execution.DeadlineAt),
 		storedTime(execution.StartedAt),
 		storedTime(execution.ProviderAcceptedAt),
 		storedTime(execution.LastObservedAt),
@@ -130,6 +167,7 @@ WHERE ref = ? AND goal_ref = ? AND work_item_ref = ?`,
 		execution.Ref.String(),
 		execution.GoalRef.String(),
 		execution.WorkItemRef.String(),
+		string(expected),
 	)
 	if err != nil {
 		return mapDatabaseError(err)
@@ -154,6 +192,30 @@ WHERE ref = ? AND revision = ?`,
 		storedTime(snapshot.ClosedAt),
 		snapshot.Ref,
 		int64(expected),
+	)
+	if err != nil {
+		return mapDatabaseError(err)
+	}
+	return requireOneRow(result)
+}
+
+func updateGoalWorkItems(ctx context.Context, transaction *sql.Tx, aggregate goal.Goal) error {
+	for _, item := range aggregate.WorkItems() {
+		if err := updateWorkItemSnapshot(ctx, transaction, itemSnapshot(item)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func updateWorkItemSnapshot(ctx context.Context, transaction *sql.Tx, snapshot goal.WorkItemSnapshot) error {
+	result, err := transaction.ExecContext(ctx, `
+UPDATE work_items
+SET state = ?, revision = ?, started_at = ?, finished_at = ?, execution_ref = ?, skip_reason = ?
+WHERE ref = ? AND goal_ref = ?`,
+		string(snapshot.State), int64(snapshot.Revision), storedTime(snapshot.StartedAt),
+		storedTime(snapshot.FinishedAt), nullableString(snapshot.ExecutionRef), string(snapshot.SkipReason),
+		snapshot.Ref, snapshot.GoalRef,
 	)
 	if err != nil {
 		return mapDatabaseError(err)
@@ -196,18 +258,43 @@ func itemSnapshot(item goal.WorkItem) goal.WorkItemSnapshot {
 		executionValue = executionRef.String()
 	}
 	return goal.WorkItemSnapshot{
-		Ref:          item.Ref().String(),
-		GoalRef:      item.Goal().String(),
-		ActorRef:     item.Actor().String(),
-		ProjectRef:   item.Project().String(),
-		Objective:    item.Objective(),
-		State:        item.State(),
-		Revision:     item.Revision(),
-		CreatedAt:    item.CreatedAt(),
-		StartedAt:    startedAt,
-		FinishedAt:   finishedAt,
-		ExecutionRef: executionValue,
+		Ref:            item.Ref().String(),
+		GoalRef:        item.Goal().String(),
+		ActorRef:       item.Actor().String(),
+		ProjectRef:     item.Project().String(),
+		Objective:      item.Objective(),
+		PhaseKey:       item.Phase().String(),
+		RoleKey:        item.Role().String(),
+		OutputContract: item.OutputContract().Kind(),
+		SkipReason: func() goal.WorkItemSkipReason {
+			reason, _ := item.SkipReason()
+			return reason
+		}(),
+		DependencyRefs: workItemRefStrings(item.Dependencies()),
+		WriteSet:       writeScopeStrings(item.WriteSet()),
+		State:          item.State(),
+		Revision:       item.Revision(),
+		CreatedAt:      item.CreatedAt(),
+		StartedAt:      startedAt,
+		FinishedAt:     finishedAt,
+		ExecutionRef:   executionValue,
 	}
+}
+
+func workItemRefStrings(refs []goal.WorkItemRef) []string {
+	values := make([]string, len(refs))
+	for index, ref := range refs {
+		values[index] = ref.String()
+	}
+	return values
+}
+
+func writeScopeStrings(scopes []goal.WriteScope) []string {
+	values := make([]string, len(scopes))
+	for index, scope := range scopes {
+		values[index] = scope.String()
+	}
+	return values
 }
 
 func insertAction(ctx context.Context, transaction *sql.Tx, action application.ActionRecord) error {
@@ -231,8 +318,8 @@ VALUES (?, ?, ?, ?, ?, ?)`,
 		event.Ref,
 		event.Kind,
 		event.GoalRef.String(),
-		event.WorkItemRef.String(),
-		event.ExecutionRef.String(),
+		nullableString(event.WorkItemRef.String()),
+		nullableString(event.ExecutionRef.String()),
 		requiredTime(event.OccurredAt),
 	)
 	return mapDatabaseError(err)

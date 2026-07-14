@@ -310,6 +310,10 @@ func (adapter *Adapter) commandArguments(runPath string) []string {
 func agentPrompt(request ports.AgentLaunchRequest) string {
 	return "Produce one artifact for the following objective.\n\n" +
 		"Objective:\n" + request.Objective + "\n\n" +
+		"Phase:\n" + request.PhaseKey + "\n\n" +
+		"Role:\n" + request.RoleKey + "\n\n" +
+		"Allowed write scopes:\n" + strings.Join(request.WriteSet, "\n") + "\n\n" +
+		"Output contract:\n" + request.OutputContract + "\n\n" +
 		"Artifact media type:\n" + request.ArtifactMediaType + "\n\n" +
 		"Return only the JSON object required by the supplied schema. " +
 		"Set artifact to the complete artifact content.\n"

@@ -21,9 +21,33 @@ func validAgentLaunchRequest(t *testing.T) AgentLaunchRequest {
 		ActorRef:          actorRef,
 		ProjectRef:        projectRef,
 		Objective:         "produce artifact",
+		PhaseKey:          "phase:build",
+		RoleKey:           "role:worker",
+		WriteSet:          []string{"internal/ports"},
+		OutputContract:    string(goal.OutputContractEvidenceBundle),
 		ArtifactMediaType: "text/markdown",
 		IdempotencyKey:    "launch:1",
 		MaxOutputBytes:    1024,
+	}
+}
+
+func TestAgentContractRejectsInvalidPlanMetadata(t *testing.T) {
+	tests := map[string]func(*AgentLaunchRequest){
+		"missing phase":       func(request *AgentLaunchRequest) { request.PhaseKey = "" },
+		"missing role":        func(request *AgentLaunchRequest) { request.RoleKey = "" },
+		"unknown output":      func(request *AgentLaunchRequest) { request.OutputContract = "unknown" },
+		"empty write scope":   func(request *AgentLaunchRequest) { request.WriteSet = []string{""} },
+		"unclean write scope": func(request *AgentLaunchRequest) { request.WriteSet = []string{"internal/../ports"} },
+		"duplicate scope":     func(request *AgentLaunchRequest) { request.WriteSet = []string{"internal/ports", "internal/ports"} },
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			request := validAgentLaunchRequest(t)
+			mutate(&request)
+			if code := AgentContractErrorCode(ValidateAgentLaunchRequest(request)); code == "" {
+				t.Fatalf("invalid metadata accepted: %+v", request)
+			}
+		})
 	}
 }
 

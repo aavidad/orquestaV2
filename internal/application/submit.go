@@ -16,6 +16,7 @@ type SubmitRequest struct {
 	ActorRef   goal.ActorRef
 	ProjectRef goal.ProjectRef
 	Statement  string
+	Plan       *PlanSpec
 }
 
 type SubmitResult struct {
@@ -39,15 +40,6 @@ func (orchestrator *Orchestrator) Submit(ctx context.Context, request SubmitRequ
 	if err != nil {
 		return SubmitResult{}, err
 	}
-	workItemRef, err := newWorkItemRef(ctx, orchestrator.ids)
-	if err != nil {
-		return SubmitResult{}, err
-	}
-	executionRef, err := newExecutionRef(ctx, orchestrator.ids)
-	if err != nil {
-		return SubmitResult{}, err
-	}
-
 	intent, err := goal.NewIntentManifest(goal.IntentManifestInput{
 		Ref: intentRef, Actor: request.ActorRef, Project: request.ProjectRef,
 		Statement: request.Statement, SubmittedAt: now,
@@ -59,14 +51,11 @@ func (orchestrator *Orchestrator) Submit(ctx context.Context, request SubmitRequ
 	if err != nil {
 		return SubmitResult{}, err
 	}
-	item, err := goal.NewWorkItem(goal.NewWorkItemInput{
-		Ref: workItemRef, Goal: goalRef, Actor: request.ActorRef,
-		Project: request.ProjectRef, Objective: request.Statement, CreatedAt: now,
-	})
+	plan, err := orchestrator.compilePlan(ctx, request, goalRef, now)
 	if err != nil {
 		return SubmitResult{}, err
 	}
-	aggregate, err = aggregate.AddWorkItem(aggregate.Revision(), item)
+	aggregate, err = aggregate.ApplyPlan(aggregate.Revision(), plan)
 	if err != nil {
 		return SubmitResult{}, err
 	}
@@ -75,29 +64,19 @@ func (orchestrator *Orchestrator) Submit(ctx context.Context, request SubmitRequ
 		return SubmitResult{}, err
 	}
 
-	execution := ExecutionRecord{
-		Ref: executionRef, GoalRef: goalRef, WorkItemRef: workItemRef,
-		State: ExecutionQueued, ArtifactMediaType: agentArtifactMediaType,
-		IdempotencyKey: "execution:" + executionRef.String(),
-		MaxOutputBytes: orchestrator.maxOutputBytes,
-		MaxAttempts:    orchestrator.maxActionAttempts,
-		CreatedAt:      now, DeadlineAt: now.Add(orchestrator.executionTimeout),
+	executions, actions, scheduledEvents, err := orchestrator.scheduleReady(ctx, aggregate, nil, now)
+	if err != nil {
+		return SubmitResult{}, err
 	}
-	action := ActionRecord{
-		Ref: "action:launch:" + executionRef.String(), Kind: ActionLaunchAgent,
-		GoalRef: goalRef, WorkItemRef: workItemRef, ExecutionRef: executionRef,
-		AvailableAt: now,
-	}
-	event := EventRecord{
+	events := append([]EventRecord{{
 		Ref: "event:goal-created:" + goalRef.String(), Kind: "goal.created",
-		GoalRef: goalRef, WorkItemRef: workItemRef, ExecutionRef: executionRef,
-		OccurredAt: now,
-	}
+		GoalRef: goalRef, OccurredAt: now,
+	}}, scheduledEvents...)
 	fingerprint := submissionFingerprint(request)
 	record, created, err := orchestrator.state.CreateGoal(ctx, CreateGoalState{
 		RequestRef: request.RequestRef, RequestFingerprint: fingerprint,
 		Intent: intent, Goal: aggregate,
-		Execution: execution, Action: action, Event: event,
+		Executions: executions, Actions: actions, Events: events,
 	})
 	if err != nil {
 		return SubmitResult{}, err
@@ -113,6 +92,7 @@ func submissionFingerprint(request SubmitRequest) string {
 	writeFingerprintField(digest, request.ActorRef.String())
 	writeFingerprintField(digest, request.ProjectRef.String())
 	writeFingerprintField(digest, request.Statement)
+	writePlanFingerprint(digest, request.Plan)
 	return hex.EncodeToString(digest.Sum(nil))
 }
 

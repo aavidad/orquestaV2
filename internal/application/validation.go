@@ -10,43 +10,43 @@ import (
 )
 
 func validateClaimedRecord(claim ActionClaim, record GoalRecord, kind ActionKind) error {
+	execution, ok := executionForAction(record, claim.Action)
 	if claim.Token == "" || claim.WorkerRef == "" || claim.Action.Kind != kind ||
 		claim.Attempt == 0 || claim.LeaseUntil.IsZero() ||
 		claim.Action.GoalRef != record.Goal.Ref() ||
-		claim.Action.WorkItemRef != record.Execution.WorkItemRef ||
-		claim.Action.ExecutionRef != record.Execution.Ref ||
-		record.Execution.GoalRef != record.Goal.Ref() ||
+		!ok || claim.Action.WorkItemRef != execution.WorkItemRef ||
+		claim.Action.ExecutionRef != execution.Ref || execution.GoalRef != record.Goal.Ref() ||
 		record.Intent.Ref() != record.Goal.Intent() ||
 		record.Intent.Hash() != record.Goal.IntentHash() ||
 		record.Intent.Actor() != record.Goal.Actor() ||
 		record.Intent.Project() != record.Goal.Project() ||
-		record.Goal.WorkItemCount() != 1 || record.Goal.State() != goal.GoalStateRunning ||
+		record.Goal.WorkItemCount() == 0 || record.Goal.State() != goal.GoalStateRunning ||
 		record.RequestFingerprint == "" {
 		return errors.New("application.claim_record_mismatch")
 	}
 	item, ok := record.Goal.WorkItem(claim.Action.WorkItemRef)
 	if !ok || item.Goal() != record.Goal.Ref() || item.Actor() != record.Goal.Actor() ||
-		item.Project() != record.Goal.Project() || item.Ref() != record.Execution.WorkItemRef {
+		item.Project() != record.Goal.Project() || item.Ref() != execution.WorkItemRef {
 		return errors.New("application.claim_record_mismatch")
 	}
-	if record.Execution.MaxOutputBytes <= 0 || record.Execution.MaxAttempts == 0 ||
-		strings.TrimSpace(record.Execution.ArtifactMediaType) == "" ||
-		strings.TrimSpace(record.Execution.IdempotencyKey) == "" ||
-		record.Execution.CreatedAt.IsZero() ||
-		!record.Execution.DeadlineAt.After(record.Execution.CreatedAt) {
+	if execution.MaxOutputBytes <= 0 || execution.MaxAttempts == 0 ||
+		strings.TrimSpace(execution.ArtifactMediaType) == "" ||
+		strings.TrimSpace(execution.IdempotencyKey) == "" || execution.CreatedAt.IsZero() ||
+		execution.Ref.String() == "" {
 		return errors.New("application.execution_record_invalid")
 	}
 	switch kind {
 	case ActionLaunchAgent:
-		if claim.Action.Ref != "action:launch:"+record.Execution.Ref.String() ||
-			item.State() != goal.WorkItemStatePending || record.Execution.State != ExecutionQueued {
+		if claim.Action.Ref != "action:launch:"+execution.Ref.String() ||
+			!validLaunchClaimState(item, execution) || !execution.StartedAt.IsZero() ||
+			!execution.DeadlineAt.IsZero() || execution.ProviderRef != "" || execution.ExternalRef != "" {
 			return errors.New("application.launch_state_invalid")
 		}
 	case ActionObserveAgent:
-		if claim.Action.Ref != "action:observe:"+record.Execution.Ref.String() ||
-			item.State() != goal.WorkItemStateRunning || record.Execution.State != ExecutionRunning ||
-			record.Execution.ProviderRef == "" || record.Execution.ExternalRef == "" ||
-			record.Execution.StartedAt.IsZero() {
+		if claim.Action.Ref != "action:observe:"+execution.Ref.String() ||
+			item.State() != goal.WorkItemStateRunning || execution.State != ExecutionRunning ||
+			execution.ProviderRef == "" || execution.ExternalRef == "" || execution.StartedAt.IsZero() ||
+			execution.ProviderAcceptedAt.IsZero() || !execution.DeadlineAt.After(execution.StartedAt) {
 			return errors.New("application.observe_state_invalid")
 		}
 	}
@@ -57,11 +57,32 @@ func validateCreatedRecord(request SubmitRequest, fingerprint string, record Goa
 	if record.RequestRef != request.RequestRef || record.RequestFingerprint != fingerprint ||
 		record.Intent.Actor() != request.ActorRef || record.Intent.Project() != request.ProjectRef ||
 		record.Intent.Statement() != request.Statement || record.Goal.Actor() != request.ActorRef ||
-		record.Goal.Project() != request.ProjectRef || record.Goal.WorkItemCount() != 1 ||
-		record.Execution.GoalRef != record.Goal.Ref() {
+		record.Goal.Project() != request.ProjectRef || record.Goal.WorkItemCount() == 0 {
 		return &StateError{Code: StateConflict}
 	}
+	if len(record.Executions) == 0 {
+		return &StateError{Code: StateConflict}
+	}
+	for _, execution := range record.Executions {
+		if execution.GoalRef != record.Goal.Ref() {
+			return &StateError{Code: StateConflict}
+		}
+	}
 	return nil
+}
+
+func executionForAction(record GoalRecord, action ActionRecord) (ExecutionRecord, bool) {
+	for _, execution := range record.Executions {
+		if execution.Ref == action.ExecutionRef && execution.WorkItemRef == action.WorkItemRef {
+			return execution, true
+		}
+	}
+	return ExecutionRecord{}, false
+}
+
+func validLaunchClaimState(item goal.WorkItem, execution ExecutionRecord) bool {
+	return (item.State() == goal.WorkItemStatePending && execution.State == ExecutionQueued) ||
+		(item.State() == goal.WorkItemStateRunning && execution.State == ExecutionDispatching)
 }
 
 func lifecycleTime(now time.Time, aggregate goal.Goal, item goal.WorkItem) time.Time {

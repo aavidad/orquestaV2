@@ -24,12 +24,16 @@ type Options struct {
 	Path               string
 	BusyTimeout        time.Duration
 	MaxOpenConnections int
+	// Now is the transaction clock used to fence expired outbox leases. It is
+	// injectable for deterministic tests; production defaults to time.Now.
+	Now func() time.Time
 }
 
 // Repository is the file-backed SQLite implementation of StateRepository.
 type Repository struct {
 	db   *sql.DB
 	path string
+	now  func() time.Time
 }
 
 var _ application.StateRepository = (*Repository)(nil)
@@ -49,7 +53,11 @@ func Open(ctx context.Context, options Options) (*Repository, error) {
 	}
 	database.SetMaxOpenConns(options.MaxOpenConnections)
 	database.SetMaxIdleConns(options.MaxOpenConnections)
-	repository := &Repository{db: database, path: path}
+	now := options.Now
+	if now == nil {
+		now = time.Now
+	}
+	repository := &Repository{db: database, path: path, now: now}
 	closeOnError := true
 	defer func() {
 		if closeOnError {

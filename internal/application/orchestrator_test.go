@@ -171,8 +171,8 @@ func TestProviderClockSkewCannotDriveLifecycle(t *testing.T) {
 	if err != nil || record.Goal.State() != goal.GoalStateSucceeded {
 		t.Fatalf("skew controlled lifecycle: state=%s err=%v", record.Goal.State(), err)
 	}
-	if !record.Execution.ProviderAcceptedAt.Equal(providerNow()) || !record.Execution.StartedAt.Equal(logicalNow) {
-		t.Fatalf("provider and lifecycle clocks were not separated: %+v", record.Execution)
+	if !onlyExecution(t, record).ProviderAcceptedAt.Equal(providerNow()) || !onlyExecution(t, record).StartedAt.Equal(logicalNow) {
+		t.Fatalf("provider and lifecycle clocks were not separated: %+v", onlyExecution(t, record))
 	}
 }
 
@@ -202,7 +202,7 @@ func TestCompletedObservationWithUnexpectedMediaTypeFailsWithoutEvidence(t *test
 		t.Fatalf("get: %v", err)
 	}
 	if record.Goal.State() != goal.GoalStateFailed || len(record.Artifacts) != 0 || len(record.Attestations) != 0 ||
-		record.Execution.FailureCode != "agent.observation_media_type_mismatch" {
+		onlyExecution(t, record).FailureCode != "agent.observation_media_type_mismatch" {
 		t.Fatalf("unexpected mismatch closure: %+v", record)
 	}
 }

@@ -84,9 +84,11 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		return nil, err
 	}
 
+	clock := local.Clock{}
 	repository, err := statesqlite.Open(ctx, statesqlite.Options{
 		Path: snapshot.State.SQLite.Path, BusyTimeout: snapshot.State.SQLite.BusyTimeout,
 		MaxOpenConnections: int(snapshot.State.SQLite.MaxOpenConnections),
+		Now:                clock.Now,
 	})
 	if err != nil {
 		return nil, err
@@ -121,7 +123,6 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
-	clock := local.Clock{}
 	factory := options.AgentFactory
 	if factory == nil {
 		factory = productionAgentFactory

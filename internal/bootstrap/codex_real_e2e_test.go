@@ -86,7 +86,7 @@ func TestRealCodexAdapterClosesGoalThroughProductionMCPServer(t *testing.T) {
 			t.Fatalf("get real Codex Goal: %+v result=%+v", output, result)
 		}
 		if output.Goal.State == string(goal.GoalStateFailed) {
-			t.Fatalf("real Codex Goal failed: %+v", output.Goal.Execution)
+			t.Fatalf("real Codex Goal failed: %+v", output.Goal.Executions)
 		}
 		if output.Goal.State == string(goal.GoalStateSucceeded) {
 			closed = *output.Goal

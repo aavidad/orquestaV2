@@ -46,10 +46,11 @@ func IsStateError(err error, code StateErrorCode) bool {
 type ExecutionState string
 
 const (
-	ExecutionQueued    ExecutionState = "queued"
-	ExecutionRunning   ExecutionState = "running"
-	ExecutionSucceeded ExecutionState = "succeeded"
-	ExecutionFailed    ExecutionState = "failed"
+	ExecutionQueued      ExecutionState = "queued"
+	ExecutionDispatching ExecutionState = "dispatching"
+	ExecutionRunning     ExecutionState = "running"
+	ExecutionSucceeded   ExecutionState = "succeeded"
+	ExecutionFailed      ExecutionState = "failed"
 )
 
 type ExecutionRecord struct {
@@ -135,7 +136,7 @@ type GoalRecord struct {
 	RequestFingerprint string
 	Intent             goal.IntentManifest
 	Goal               goal.Goal
-	Execution          ExecutionRecord
+	Executions         []ExecutionRecord
 	Artifacts          []ArtifactRecord
 	Attestations       []AttestationRecord
 }
@@ -165,19 +166,28 @@ type CreateGoalState struct {
 	RequestFingerprint string
 	Intent             goal.IntentManifest
 	Goal               goal.Goal
-	Execution          ExecutionRecord
-	Action             ActionRecord
-	Event              EventRecord
+	Executions         []ExecutionRecord
+	Actions            []ActionRecord
+	Events             []EventRecord
+}
+
+// LaunchPreparedState reserves the WorkItem in the aggregate before the
+// external provider effect. The launch claim deliberately remains open.
+type LaunchPreparedState struct {
+	Claim                ActionClaim
+	ExpectedGoalRevision goal.Revision
+	Goal                 goal.Goal
+	Execution            ExecutionRecord
+	Event                EventRecord
+	OperationAt          time.Time
 }
 
 type LaunchAcceptedState struct {
-	Claim                ActionClaim
-	ExpectedGoalRevision goal.Revision
-	ExpectedItemRevision goal.Revision
-	Goal                 goal.Goal
-	Execution            ExecutionRecord
-	NextAction           ActionRecord
-	Event                EventRecord
+	Claim       ActionClaim
+	Execution   ExecutionRecord
+	NextAction  ActionRecord
+	Event       EventRecord
+	OperationAt time.Time
 }
 
 type ActionRequeuedState struct {
@@ -185,12 +195,14 @@ type ActionRequeuedState struct {
 	Execution   ExecutionRecord
 	AvailableAt time.Time
 	ErrorCode   string
+	OperationAt time.Time
 }
 
 type ActionQuarantinedState struct {
-	Claim     ActionClaim
-	ErrorCode string
-	Event     EventRecord
+	Claim       ActionClaim
+	ErrorCode   string
+	Event       EventRecord
+	OperationAt time.Time
 }
 
 type GoalSucceededState struct {
@@ -201,7 +213,10 @@ type GoalSucceededState struct {
 	Execution            ExecutionRecord
 	Artifact             ArtifactRecord
 	Attestation          AttestationRecord
+	NewExecutions        []ExecutionRecord
+	NewActions           []ActionRecord
 	Events               []EventRecord
+	OperationAt          time.Time
 }
 
 type GoalFailedState struct {
@@ -210,17 +225,24 @@ type GoalFailedState struct {
 	ExpectedItemRevision goal.Revision
 	Goal                 goal.Goal
 	Execution            ExecutionRecord
+	NewExecutions        []ExecutionRecord
+	NewActions           []ActionRecord
 	Events               []EventRecord
+	OperationAt          time.Time
 }
 
 // StateRepository is the durable state port. Every mutation is an atomic
 // application-level operation; adapters never choose lifecycle transitions.
+// Mutations carrying ActionClaim must also fence the lease with the adapter's
+// trusted transaction clock immediately before commit. OperationAt is causal
+// lifecycle data and must never be accepted as proof that a lease is still live.
 type StateRepository interface {
 	CreateGoal(context.Context, CreateGoalState) (GoalRecord, bool, error)
 	GetGoal(context.Context, goal.GoalRef) (GoalRecord, error)
 	ListGoals(context.Context, goal.ActorRef, goal.ProjectRef, int) ([]GoalSummary, error)
 	Status(context.Context) (RepositoryStatus, error)
 	ClaimNextAction(context.Context, ClaimRequest) (ActionClaim, bool, error)
+	RecordLaunchPrepared(context.Context, LaunchPreparedState) error
 	RecordLaunchAccepted(context.Context, LaunchAcceptedState) error
 	RequeueAction(context.Context, ActionRequeuedState) error
 	QuarantineAction(context.Context, ActionQuarantinedState) error
