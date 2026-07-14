@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -69,25 +68,25 @@ type Runtime struct {
 }
 
 func Build(ctx context.Context, options Options) (*Runtime, error) {
-	snapshot, err := config.Load(config.LoadOptions{FilePath: options.ConfigPath})
+	snapshot, err := loadConfigSnapshot(ctx, options.ConfigPath)
 	if err != nil {
 		return nil, err
 	}
 	if err := validateSnapshot(snapshot, options.ConfigPath); err != nil {
 		return nil, err
 	}
-	authenticator, err := localtoken.Open(snapshot.Identity.LocalTokenPath)
+	authenticator, err := localtoken.Open(snapshot.IdentityLocalTokenPath())
 	if err != nil {
 		return nil, err
 	}
-	if err := snapshot.WriteEffective(); err != nil {
+	if err := writeEffectiveSnapshot(ctx, snapshot); err != nil {
 		return nil, err
 	}
 
 	clock := local.Clock{}
 	repository, err := statesqlite.Open(ctx, statesqlite.Options{
-		Path: snapshot.State.SQLite.Path, BusyTimeout: snapshot.State.SQLite.BusyTimeout,
-		MaxOpenConnections: int(snapshot.State.SQLite.MaxOpenConnections),
+		Path: snapshot.StateSQLitePath(), BusyTimeout: snapshot.StateSQLiteBusyTimeout(),
+		MaxOpenConnections: int(snapshot.StateSQLiteMaxOpenConnections()),
 		Now:                clock.Now,
 	})
 	if err != nil {
@@ -100,7 +99,7 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		}
 	}()
 
-	artifacts, err := filesystem.Open(snapshot.Artifact.Filesystem.Root)
+	artifacts, err := filesystem.Open(snapshot.ArtifactFilesystemRoot())
 	if err != nil {
 		return nil, err
 	}
@@ -111,11 +110,11 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		}
 	}()
 
-	actorRef, err := goal.NewActorRef(snapshot.Identity.LocalActor)
+	actorRef, err := goal.NewActorRef(snapshot.IdentityLocalActor())
 	if err != nil {
 		return nil, err
 	}
-	projectRef, err := goal.NewProjectRef(snapshot.Project.Default)
+	projectRef, err := goal.NewProjectRef(snapshot.ProjectDefault())
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +136,7 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	cleanupAgent := true
 	defer func() {
 		if cleanupAgent {
-			shutdownCtx, cancel := context.WithTimeout(context.Background(), snapshot.Server.ShutdownTimeout)
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), snapshot.ServerShutdownTimeout())
 			defer cancel()
 			_ = agent.Shutdown(shutdownCtx)
 		}
@@ -153,11 +152,11 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	orchestrator, err := application.New(application.Dependencies{
 		State: repository, Launcher: agent, Observer: agent, Artifacts: artifacts,
 		Clock: clock, IDs: local.IDGenerator{},
-		MaxOutputBytes:       snapshot.Runtime.MaxOutputBytes,
-		MaxExecutionAttempts: uint64(snapshot.Scheduler.MaxExecutionAttempts),
-		ClaimLease:           snapshot.Scheduler.ClaimLease,
-		ObservationDelay:     snapshot.Scheduler.ObservationInterval,
-		ExecutionTimeout:     snapshot.Scheduler.ExecutionTimeout,
+		MaxOutputBytes:       snapshot.RuntimeMaxOutputBytes(),
+		MaxExecutionAttempts: uint64(snapshot.SchedulerMaxExecutionAttempts()),
+		ClaimLease:           snapshot.SchedulerClaimLease(),
+		ObservationDelay:     snapshot.SchedulerObservationInterval(),
+		ExecutionTimeout:     snapshot.SchedulerExecutionTimeout(),
 		AgentCapabilities:    capabilities,
 	})
 	if err != nil {
@@ -173,15 +172,15 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	}
 	interfaceServer, err := mcpiface.New(mcpiface.Config{
 		Orchestrator: orchestrator, Identity: identityProvider, Catalog: catalog,
-		Locale: snapshot.API.Locale, MaxListLimit: int(snapshot.API.MaxListLimit),
-		MaxRequestBytes: snapshot.Server.MaxRequestBytes, Version: version,
+		Locale: snapshot.APILocale(), MaxListLimit: int(snapshot.APIMaxListLimit()),
+		MaxRequestBytes: snapshot.ServerMaxRequestBytes(), Version: version,
 	})
 	if err != nil {
 		return nil, err
 	}
 	listener := options.Listener
 	if listener == nil {
-		listener, err = net.Listen("tcp", snapshot.Server.Listen)
+		listener, err = net.Listen("tcp", snapshot.ServerListen())
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap.listen_failed: %w", err)
 		}
@@ -196,7 +195,7 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		return nil, err
 	}
 	mux := http.NewServeMux()
-	mux.Handle(snapshot.Server.MCPPath, authenticator.Middleware(interfaceServer.Handler()))
+	mux.Handle(snapshot.ServerMCPPath(), authenticator.Middleware(interfaceServer.Handler()))
 	lifecycleCtx, cancelLifecycle := context.WithCancel(context.Background())
 	cleanupLifecycle := true
 	defer func() {
@@ -205,8 +204,8 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		}
 	}()
 	httpServer := &http.Server{
-		Handler: mux, ReadTimeout: snapshot.Server.ReadTimeout,
-		WriteTimeout: snapshot.Server.WriteTimeout, IdleTimeout: snapshot.Server.IdleTimeout,
+		Handler: mux, ReadTimeout: snapshot.ServerReadTimeout(),
+		WriteTimeout: snapshot.ServerWriteTimeout(), IdleTimeout: snapshot.ServerIdleTimeout(),
 		BaseContext: func(net.Listener) context.Context { return lifecycleCtx },
 	}
 	workerRef, err := local.IDGenerator{}.NewID(ctx, "worker")
@@ -256,7 +255,7 @@ func (runtime *Runtime) Start(parent context.Context) error {
 		defer close(runtime.schedulerDone)
 		scheduler{
 			orchestrator: runtime.orchestrator, workerRef: runtime.workerRef,
-			pollInterval: runtime.config.Scheduler.PollInterval, report: runtime.reportError,
+			pollInterval: runtime.config.SchedulerPollInterval(), report: runtime.reportError,
 		}.run(schedulerCtx)
 	}()
 	go func() {
@@ -273,7 +272,7 @@ func (runtime *Runtime) Start(parent context.Context) error {
 	go func() {
 		select {
 		case <-parent.Done():
-			shutdownCtx, cancel := context.WithTimeout(context.Background(), runtime.config.Server.ShutdownTimeout)
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), runtime.config.ServerShutdownTimeout())
 			defer cancel()
 			_ = runtime.Shutdown(shutdownCtx)
 		case <-runtime.shutdownDone:
@@ -328,7 +327,7 @@ func (runtime *Runtime) performShutdown() {
 		runtime.mu.Unlock()
 		close(runtime.shutdownDone)
 	}()
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), runtime.config.Server.ShutdownTimeout)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), runtime.config.ServerShutdownTimeout())
 	defer cancel()
 	var failures []error
 	runtime.cancelLifecycle()
@@ -378,7 +377,7 @@ func (runtime *Runtime) MCPURL() string {
 	if runtime == nil {
 		return ""
 	}
-	return "http://" + runtime.Address() + runtime.config.Server.MCPPath
+	return "http://" + runtime.Address() + runtime.config.ServerMCPPath()
 }
 
 func (runtime *Runtime) Orchestrator() *application.Orchestrator {
@@ -394,76 +393,45 @@ func Run(ctx context.Context, options Options) error {
 		return err
 	}
 	if err := runtime.Start(ctx); err != nil {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), runtime.config.Server.ShutdownTimeout)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), runtime.config.ServerShutdownTimeout())
 		defer cancel()
 		return errors.Join(err, runtime.Shutdown(shutdownCtx))
 	}
 	serveErr := runtime.Wait()
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), runtime.config.Server.ShutdownTimeout)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), runtime.config.ServerShutdownTimeout())
 	defer cancel()
 	return errors.Join(serveErr, runtime.Shutdown(shutdownCtx))
 }
 
 func productionAgentFactory(snapshot config.Snapshot, clock application.Clock) (AgentAdapter, error) {
-	if snapshot.Runtime.Provider != "codex" {
+	if snapshot.RuntimeProvider() != "codex" {
 		return nil, errors.New("bootstrap.runtime_provider_unsupported")
 	}
-	if snapshot.Runtime.Codex.CredentialRef != "" {
+	if snapshot.RuntimeCodexCredentialRef() != "" {
 		return nil, errors.New("bootstrap.credential_resolver_unavailable")
 	}
-	environment, err := config.ResolveChildEnvironment(snapshot.Runtime.Codex.EnvAllowlist)
+	environment, err := config.ResolveChildEnvironment(snapshot.RuntimeCodexEnvAllowlist())
 	if err != nil {
 		return nil, err
 	}
 	return codex.New(codex.Config{
-		Command:                 snapshot.Runtime.Codex.Command,
-		WorkRoot:                snapshot.Runtime.Codex.WorkRoot,
-		Model:                   snapshot.Runtime.Codex.Model,
-		ReasoningEffort:         snapshot.Runtime.Codex.Reasoning,
-		Timeout:                 snapshot.Runtime.Codex.Timeout,
-		ProcessPipeDrainDelay:   snapshot.Runtime.Codex.ProcessPipeDrainDelay,
-		MaxDiagnosticBytes:      snapshot.Runtime.Codex.MaxDiagnosticBytes,
-		MaxConcurrentExecutions: int(snapshot.Runtime.Codex.MaxConcurrentExecutions),
+		Command:                 snapshot.RuntimeCodexCommand(),
+		WorkRoot:                snapshot.RuntimeCodexWorkRoot(),
+		Model:                   snapshot.RuntimeCodexModel(),
+		ReasoningEffort:         snapshot.RuntimeCodexReasoning(),
+		Timeout:                 snapshot.RuntimeCodexTimeout(),
+		ProcessPipeDrainDelay:   snapshot.RuntimeCodexProcessPipeDrainDelay(),
+		MaxDiagnosticBytes:      snapshot.RuntimeCodexMaxDiagnosticBytes(),
+		MaxConcurrentExecutions: int(snapshot.RuntimeCodexMaxConcurrentExecutions()),
 		Environment:             environment, Now: clock.Now,
 	})
 }
 
 func validateSnapshot(snapshot config.Snapshot, sourceConfigPath string) error {
-	host, _, err := net.SplitHostPort(snapshot.Server.Listen)
-	if err != nil {
-		return errors.New("bootstrap.listen_invalid")
-	}
-	ip := net.ParseIP(host)
-	if ip == nil || !ip.IsLoopback() {
-		return errors.New("bootstrap.listen_must_be_loopback")
-	}
-	if !isLiteralMCPPath(snapshot.Server.MCPPath) {
-		return errors.New("bootstrap.mcp_path_invalid")
-	}
-	if snapshot.Runtime.Codex.Timeout >= snapshot.Scheduler.ExecutionTimeout {
-		return errors.New("bootstrap.execution_timeout_invalid")
-	}
 	if err := validateRuntimePaths(snapshot, sourceConfigPath); err != nil {
 		return err
 	}
 	return nil
-}
-
-func isLiteralMCPPath(value string) bool {
-	if !strings.HasPrefix(value, "/") || value == "/" || path.Clean(value) != value {
-		return false
-	}
-	for _, character := range value {
-		switch {
-		case character >= 'a' && character <= 'z':
-		case character >= 'A' && character <= 'Z':
-		case character >= '0' && character <= '9':
-		case strings.ContainsRune("/-._~", character):
-		default:
-			return false
-		}
-	}
-	return true
 }
 
 func validateListener(listener net.Listener) error {
@@ -478,23 +446,23 @@ func validateListener(listener net.Listener) error {
 }
 
 func validateRuntimePaths(snapshot config.Snapshot, sourceConfigPath string) error {
-	statePath, err := canonicalRuntimePath(snapshot.State.SQLite.Path)
+	statePath, err := canonicalRuntimePath(snapshot.StateSQLitePath())
 	if err != nil {
 		return errors.New("bootstrap.state_path_invalid")
 	}
-	artifactRoot, err := canonicalRuntimePath(snapshot.Artifact.Filesystem.Root)
+	artifactRoot, err := canonicalRuntimePath(snapshot.ArtifactFilesystemRoot())
 	if err != nil {
 		return errors.New("bootstrap.artifact_path_invalid")
 	}
-	workRoot, err := canonicalRuntimePath(snapshot.Runtime.Codex.WorkRoot)
+	workRoot, err := canonicalRuntimePath(snapshot.RuntimeCodexWorkRoot())
 	if err != nil {
 		return errors.New("bootstrap.work_path_invalid")
 	}
-	effectivePath, err := canonicalRuntimePath(snapshot.Effective.Path)
+	effectivePath, err := canonicalRuntimePath(snapshot.ConfigEffectivePath())
 	if err != nil {
 		return errors.New("bootstrap.effective_path_invalid")
 	}
-	tokenPath, err := canonicalRuntimePath(snapshot.Identity.LocalTokenPath)
+	tokenPath, err := canonicalRuntimePath(snapshot.IdentityLocalTokenPath())
 	if err != nil {
 		return errors.New("bootstrap.local_token_path_invalid")
 	}

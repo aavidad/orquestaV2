@@ -137,7 +137,7 @@ func TestBuildRejectsServeMuxPatternSyntaxBeforeCreatingRuntimeState(t *testing.
 	runtime, err := Build(context.Background(), Options{
 		ConfigPath: configPath, AgentFactory: countingFactory(&atomic.Int64{}),
 	})
-	if runtime != nil || err == nil || err.Error() != "bootstrap.mcp_path_invalid" {
+	if runtime != nil || !config.HasErrorCode(err, config.ErrorCrossValidation) {
 		t.Fatalf("expected literal MCP path rejection, runtime=%v err=%v", runtime, err)
 	}
 	if _, statErr := os.Lstat(filepath.Join(root, "secrets", "local-owner.token")); !errors.Is(statErr, os.ErrNotExist) {
@@ -164,7 +164,7 @@ func TestBuildRejectsEffectiveStateCollisionWithoutOverwriting(t *testing.T) {
 	runtime, err := Build(context.Background(), Options{
 		ConfigPath: configPath, AgentFactory: countingFactory(&atomic.Int64{}),
 	})
-	if runtime != nil || err == nil || err.Error() != "bootstrap.runtime_paths_overlap" {
+	if runtime != nil || !config.HasErrorCode(err, config.ErrorCrossValidation) {
 		t.Fatalf("expected path collision, runtime=%v err=%v", runtime, err)
 	}
 	got, readErr := os.ReadFile(statePath)
@@ -188,7 +188,7 @@ func TestBuildRejectsEffectiveConfigSourceCollisionWithoutOverwriting(t *testing
 	runtime, buildErr := Build(context.Background(), Options{
 		ConfigPath: configPath, AgentFactory: countingFactory(&atomic.Int64{}),
 	})
-	if runtime != nil || buildErr == nil || buildErr.Error() != "bootstrap.runtime_paths_overlap" {
+	if runtime != nil || !config.HasErrorCode(buildErr, config.ErrorCrossValidation) {
 		t.Fatalf("expected source collision, runtime=%v err=%v", runtime, buildErr)
 	}
 	got, readErr := os.ReadFile(configPath)

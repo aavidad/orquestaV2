@@ -12,7 +12,6 @@ import (
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"orquesta/internal/config"
 	"orquesta/internal/goal"
 	mcpiface "orquesta/internal/interfaces/mcp"
 )
@@ -27,7 +26,7 @@ func TestRealCodexAdapterClosesGoalThroughProductionMCPServer(t *testing.T) {
 	if *realCodexConfig == "" {
 		t.Skip("real Codex E2E is opt-in")
 	}
-	snapshot, err := config.Load(config.LoadOptions{FilePath: *realCodexConfig})
+	snapshot, err := loadConfigSnapshot(context.Background(), *realCodexConfig)
 	if err != nil {
 		t.Fatalf("load production config: %v", err)
 	}
@@ -48,7 +47,7 @@ func TestRealCodexAdapterClosesGoalThroughProductionMCPServer(t *testing.T) {
 	defer cancel()
 	client := sdkmcp.NewClient(&sdkmcp.Implementation{Name: "codex-real-e2e", Version: "1"}, nil)
 	session, err := client.Connect(ctx, &sdkmcp.StreamableClientTransport{
-		Endpoint: runtime.MCPURL(), HTTPClient: authorizedHTTPClient(t, snapshot.Identity.LocalTokenPath),
+		Endpoint: runtime.MCPURL(), HTTPClient: authorizedHTTPClient(t, snapshot.IdentityLocalTokenPath()),
 	}, nil)
 	if err != nil {
 		t.Fatalf("connect official MCP client: %v", err)

@@ -685,6 +685,9 @@ func v07OpenManager(t *testing.T, path string, active config.Snapshot, environme
 
 func v07WriteSource(t *testing.T, root, body string) string {
 	t.Helper()
+	if err := os.Chmod(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	path := filepath.Join(root, "orquesta.toml")
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)

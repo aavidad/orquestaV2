@@ -47,6 +47,9 @@ func authorizedHTTPClient(t *testing.T, tokenPath string) *http.Client {
 
 func writeTestConfig(t *testing.T, root string) string {
 	t.Helper()
+	if err := os.Chmod(root, 0o700); err != nil {
+		t.Fatalf("make config directory private: %v", err)
+	}
 	configPath := root + "/orquesta.toml"
 	content := fmt.Sprintf(`[server]
 listen = "127.0.0.1:0"
