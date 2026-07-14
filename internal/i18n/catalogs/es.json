@@ -1,0 +1,13 @@
+{
+  "error.conflict": "El estado cambió mientras se procesaba la solicitud.",
+  "error.internal": "No se pudo completar la operación.",
+  "error.invalid_request": "La solicitud no es válida.",
+  "error.not_found": "No se encontró el recurso solicitado.",
+  "resource.goal.description": "Estado durable y evidencias de un Goal.",
+  "server.instructions": "Orquesta coordina Goals durables mediante herramientas tipadas.",
+  "tool.artifacts.read.description": "Lee un artefacto inmutable por su referencia.",
+  "tool.goals.create.description": "Crea un Goal durable para el proyecto indicado.",
+  "tool.goals.get.description": "Consulta el estado y las evidencias de un Goal.",
+  "tool.goals.list.description": "Lista los Goals visibles del proyecto.",
+  "tool.system.status.description": "Consulta salud, versión y trabajo pendiente del servidor."
+}

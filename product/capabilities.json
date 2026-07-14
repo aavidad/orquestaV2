@@ -1,0 +1,174 @@
+{
+  "schema_version": 1,
+  "product": "orquesta",
+  "release_target": "minimal_functional_cut",
+  "base_commit": "7576f60bd3b5424a6c1c19e4f319cb634b12f231",
+  "operator_decisions": {
+    "deployment": "single_operator_local",
+    "default_actor_ref": "actor:local-owner",
+    "default_project_ref": "project:default",
+    "state_adapter": "sqlite",
+    "artifact_adapter": "filesystem",
+    "first_real_agent_adapter": "codex",
+    "public_binding": "mcp_streamable_http",
+    "legacy_runtime": "read_only_and_stopped",
+    "supported_platform": "linux"
+  },
+  "capabilities": [
+    {
+      "id": "CORE-INTENT",
+      "status": "accepted",
+      "cutover_required": true,
+      "phase": "foundation",
+      "acceptance_ref": "internal/goal/intent_test.go"
+    },
+    {
+      "id": "CORE-GOAL",
+      "status": "accepted",
+      "cutover_required": true,
+      "phase": "foundation",
+      "acceptance_ref": "internal/goal/goal_test.go"
+    },
+    {
+      "id": "CORE-WORK-ITEM",
+      "status": "accepted",
+      "cutover_required": true,
+      "phase": "foundation",
+      "acceptance_ref": "internal/goal/work_item_test.go"
+    },
+    {
+      "id": "CORE-SINGLE-WRITER",
+      "status": "accepted",
+      "cutover_required": true,
+      "phase": "foundation",
+      "acceptance_ref": "internal/application/orchestrator_test.go"
+    },
+    {
+      "id": "CORE-EVIDENCE",
+      "status": "accepted",
+      "cutover_required": true,
+      "phase": "foundation",
+      "acceptance_ref": "internal/application/closure_test.go"
+    },
+    {
+      "id": "IDENTITY-LOCAL-OWNER",
+      "status": "accepted",
+      "cutover_required": false,
+      "phase": "foundation",
+      "acceptance_ref": "internal/identity/local_owner_test.go"
+    },
+    {
+      "id": "IDENTITY-LOCAL-TOKEN",
+      "status": "accepted",
+      "cutover_required": true,
+      "phase": "foundation",
+      "acceptance_ref": "internal/adapters/auth/localtoken/localtoken_test.go"
+    },
+    {
+      "id": "STATE-SQLITE",
+      "status": "accepted",
+      "cutover_required": true,
+      "phase": "adapters",
+      "acceptance_ref": "internal/adapters/state/sqlite/repository_test.go"
+    },
+    {
+      "id": "ARTIFACT-FILESYSTEM",
+      "status": "accepted",
+      "cutover_required": true,
+      "phase": "adapters",
+      "acceptance_ref": "internal/adapters/artifact/filesystem/store_test.go"
+    },
+    {
+      "id": "CONFIG-CANONICAL",
+      "status": "accepted",
+      "cutover_required": true,
+      "phase": "adapters",
+      "acceptance_ref": "internal/config/config_test.go"
+    },
+    {
+      "id": "AGENT-CONTRACT",
+      "status": "accepted",
+      "cutover_required": true,
+      "phase": "runtime",
+      "acceptance_ref": "internal/ports/agent_contract_test.go"
+    },
+    {
+      "id": "AGENT-CODEX",
+      "status": "accepted",
+      "cutover_required": true,
+      "phase": "runtime",
+      "acceptance_ref": "internal/bootstrap/codex_real_e2e_test.go",
+      "evidence_ref": "product/evidence/real_codex_mcp_e2e.json"
+    },
+    {
+      "id": "API-MCP",
+      "status": "accepted",
+      "cutover_required": true,
+      "phase": "interface",
+      "acceptance_ref": "internal/bootstrap/mcp_e2e_test.go"
+    },
+    {
+      "id": "OPS-RESTART-REPLAY",
+      "status": "accepted",
+      "cutover_required": true,
+      "phase": "verification",
+      "acceptance_ref": "internal/bootstrap/restart_e2e_test.go"
+    },
+    {
+      "id": "OPS-SHUTDOWN",
+      "status": "accepted",
+      "cutover_required": true,
+      "phase": "verification",
+      "acceptance_ref": "internal/bootstrap/shutdown_e2e_test.go"
+    },
+    {
+      "id": "ARCH-HEXAGONAL",
+      "status": "accepted",
+      "cutover_required": true,
+      "phase": "verification",
+      "acceptance_ref": "architecture_rebuild_test.go"
+    },
+    {
+      "id": "SURFACE-I18N",
+      "status": "accepted",
+      "cutover_required": false,
+      "phase": "interface",
+      "acceptance_ref": "internal/i18n/catalog_test.go"
+    }
+  ],
+  "deferred": [
+    "goal_dag_and_phase_templates",
+    "director_role_and_lease",
+    "pause_resume_cancel_and_replan",
+    "budgets_permissions_and_effect_governance",
+    "multiuser_accounts",
+    "rbac",
+    "active_directory",
+    "oidc",
+    "postgres_state_adapter",
+    "credential_store",
+    "workspace_and_git_adapters",
+    "forge",
+    "typed_http_api",
+    "web_admin",
+    "rich_wizard",
+    "application_factory",
+    "council",
+    "independent_human_reviewers",
+    "tool_registry_and_sdk",
+    "skill_registry_and_rulepacks",
+    "context_broker_and_domain_rag",
+    "token_cost_routing_and_evals",
+    "hermes_director",
+    "claude",
+    "gemini",
+    "ollama",
+    "local_openai_compatible_runtime",
+    "research_and_document_connectors",
+    "notifications",
+    "telemetry_and_idle_watchdog",
+    "backup_restore_and_migration",
+    "opes",
+    "deploy_plugins"
+  ]
+}
