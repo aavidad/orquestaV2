@@ -24,6 +24,8 @@ import (
 
 const v06FixturePath = "acceptance/fixtures/v06_atomic_state_outbox.json"
 const v06TrustedBaseGitCommitOID = "238ebc59025d3dd2bdd9593febd878650af6a660"
+const v06ProductDeltaBaseGitCommitOID = "00b760c5989300c205eda9d3a12e0a86d1f096c2"
+const v06ProductDeltaSealedGitCommitOID = "57ad1986255af99f60bca1a9c59d6da1772adf77"
 
 type v06Fixture struct {
 	SchemaVersion                  int                     `json:"schema_version"`
@@ -143,7 +145,8 @@ func v06AssertFixtureHeader(t *testing.T, repositoryRoot string, fixture v06Fixt
 	}
 	if fixture.SchemaVersion != 1 || fixture.ReceiptSchemaVersion != 3 ||
 		fixture.ContractID != "AC-V06-ATOMIC-STATE-OUTBOX" || fixture.TrustedBaseGitCommitOID != v06TrustedBaseGitCommitOID ||
-		fixture.ProductDeltaBaseGitCommitOID != v06TrustedBaseGitCommitOID ||
+		fixture.ProductDeltaBaseGitCommitOID != v06ProductDeltaBaseGitCommitOID ||
+		fixture.ProductDeltaSealedGitCommitOID != v06ProductDeltaSealedGitCommitOID ||
 		fixture.Command != wantCommand || !reflect.DeepEqual(fixture.ExecutionArgv, wantArgv) ||
 		fixture.OutputPath != "product/evidence/v06_atomic_state_outbox.output.txt" ||
 		fixture.ReceiptPath != "product/evidence/v06_atomic_state_outbox.json" ||
