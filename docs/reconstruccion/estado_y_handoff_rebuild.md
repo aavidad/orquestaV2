@@ -1,6 +1,6 @@
 # Estado y handoff vivo del rebuild
 
-Última actualización: 2026-07-14 12:23 Europe/Madrid.
+Última actualización: 2026-07-14 12:30 Europe/Madrid.
 
 Este documento permite continuar el rebuild sin reconstruir el contexto de la
 sesión. Es estado operativo, no evidencia de aceptación. Los estados canónicos
@@ -39,19 +39,22 @@ a8bff60949 test: unificar verificacion de recibos de aceptacion
 cc571a089f test: acreditar trazabilidad canónica y receipts V01-V03
 99eb627ce3 docs: registrar cierre V03 y relevo V04
 defdbb7a74 docs: congelar análisis y relevo de V04
+d313ae5183 test: abrir contrato rojo de intención y AppSpec
+cd674ab964 feat: materializar nucleo V04 AppSpec
+20e53d39f8 feat: persistir cadena AppSpec en SQLite
+4e204c44df docs: fijar handoff tras cierre SQLite V04
+56f1b30351 fix: vincular motivo inicial V04 al contrato
 ```
 
-Checkpoint inmediato: el contrato V04 ya está activado y rojo antes de tocar
-código productivo. V02 conserva receipt V2 válido. Los receipts V01 y V03 eran
-válidos en `defdbb7a74`, pero roadmap, `product_roadmap_test.go` y el ledger de
-bugs cambiaron al abrir V04; por tanto quedan deliberadamente stale hasta el
-sellado de V04. No ejecutar su reemisión durante el rojo. Una contrarrevisión
-previa detectó y cerró falsos verdes en receipts, evidencias Markdown,
-contrarrevisiones task, acreditaciones parciales, comandos planificados y la
-excepción sin receipt de V01. Los generadores temporales ya no existen. V03
-quedó integrada en `cc571a089f42a19cbd5920acc823381ecc127653` y su relevo en
-`defdbb7a74`. Siguiente acción exacta: implementar dominio AppSpec y sus tests
-V04; no tocar SQLite/MCP hasta que el dominio quede verde.
+Checkpoint vigente: `56f1b30351` es el último commit seguro. V04 ya tiene
+dominio, aplicación, puertos/provider, fake, Codex y SQLite cerrados con
+contrarrevisión. El único write-set vivo está en MCP/i18n y permanece sin
+commit mientras lo implementa un subagente bootstrap. V02 conserva receipt V2
+válido. V01 y V03 continúan deliberadamente stale hasta sellar V04; no
+reemitirlos durante el WIP. Siguiente acción exacta: recoger el agente MCP,
+ejecutar sus pruebas `TestV04*`, contrarrevisar el diff y solo entonces
+integrarlo. Después reconciliar exactamente el candidato V04, cerrar BUG-022 y
+emitir/reemitir receipts.
 
 Contrarrevisión final: tres revisores independientes devolvieron `APPROVE`
 después de reabrir y cerrar sus bloqueos de circularidad V01, evidencia real
@@ -64,7 +67,8 @@ de `BUG-020` y write-set del handoff. No queda bloqueo conocido de V03.
 - V02 autoridad única del rebuild: receipt V2 válido.
 - V03 trazabilidad y lecciones: integrada en Git; receipt V2 stale porque V04
   añadió `BUG-REBUILD-20260714-021` y cambió su gate candidato.
-- V04: contrato ejecutable y rojo; GOV-02 continúa `declared`.
+- V04: contrato ejecutable; núcleo y SQLite verdes, MCP/i18n en WIP. GOV-02
+  continúa `declared` hasta receipt propio.
 - V05–V34: pendientes. No contar código heredado o una prueba aislada como
   vertical cerrada.
 - progreso vertical cerrado previo: 3 de 34, 8,8 % de la ruta; receipts válidos
@@ -585,8 +589,8 @@ antes de abrir aplicación.
 
 ### V04 vivo posterior al contrato rojo
 
-Checkpoint seguro `20e53d39f82c` (`feat: persistir cadena AppSpec en SQLite`)
-contiene dominio, aplicación, ports, fake, Codex y SQLite, con bugs 023-027 y
+Checkpoint seguro `56f1b30351` (`fix: vincular motivo inicial V04 al contrato`)
+contiene dominio, aplicación, ports, fake, Codex y SQLite, con bugs 023-028 y
 contrarrevisiones cerrados:
 
 - dominio: AppSpec inmutable, hash framed, N+1 causal, Goal sucesor terminal,
@@ -659,12 +663,30 @@ sellar V04 esta desviación debe cerrarse como
 `d313ae5183` con el candidato V04; queda rojo de forma intencional mientras el
 delta esté abierto y debe cerrarse antes del receipt.
 
+El WIP MCP/i18n modifica únicamente:
+
+```text
+internal/interfaces/mcp/{errors.go,interface_integration_test.go,output.go,tools.go}
+internal/i18n/{catalog_test.go,catalogs/en.json,catalogs/es.json}
+```
+
+La auditoría previa exige tests runtime con prefijo `TestV04`, seis tools
+exactas con schemas cerrados, confirmación sin efectos, principal/proyecto y
+tiempo del servidor, replay/conflicto/carrera, amendment terminal con CAS y
+proyección completa. El fake de memoria debe indexar idempotencia por
+`(actor, project, request_ref)`, no solo por request. También debe probar el
+mismo request en scopes distintos y cero IDs/reloj/escrituras en todos los
+rechazos tempranos. El candidato V04 aún omite al menos `mcp/errors.go` y los
+tres ficheros i18n; no corregirlo hasta estabilizar todo el delta.
+
 Si la sesión termina durante este WIP: no regenerar receipts, no descartar
 cambios y no relanzar agentes a ciegas. Primero inspeccionar `git status`,
 recoger agentes vivos y ejecutar paquetes focales. El último checkpoint seguro
-committed es `20e53d39f82c`; V01/V03 continúan stale de forma intencional hasta
-el sellado V04. Próxima acción exacta: implementar MCP create/amend con
-confirmación, identidad/tiempo de servidor y proyecciones AppSpec.
+committed es `56f1b30351`; V01/V03 continúan stale de forma intencional hasta
+el sellado V04. Próxima acción exacta: recoger MCP, ejecutar
+`go test -mod=vendor -count=1 ./internal/interfaces/mcp ./internal/i18n`, luego
+`-race`/`go vet`, solicitar contrarrevisión del diff y corregir cualquier falso
+verde antes del commit.
 
 Digest de control del árbol antiguo comprobado de nuevo antes del checkpoint SQLite:
 `75577492db531e71f8a47f7b7fec115e79996aed45e26ce66426b4c120d42a80`.
