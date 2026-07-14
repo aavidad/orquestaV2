@@ -1,6 +1,6 @@
 # Estado y handoff vivo del rebuild
 
-Última actualización: 2026-07-14 11:16 Europe/Madrid.
+Última actualización: 2026-07-14 11:18 Europe/Madrid.
 
 Este documento permite continuar el rebuild sin reconstruir el contexto de la
 sesión. Es estado operativo, no evidencia de aceptación. Los estados canónicos
@@ -36,16 +36,17 @@ f6a053aca7 feat: incorporar DAG causal y estado atomico
 c89dff6c8f test: renovar E2E Codex real del DAG
 ba396a88ff test: desacoplar recibo V02 del roadmap vivo
 a8bff60949 test: unificar verificacion de recibos de aceptacion
+cc571a089f test: acreditar trazabilidad canónica y receipts V01-V03
 ```
 
 Checkpoint inmediato: V01, V02 y V03 tienen receipts V2 verificables y sus
 baterías normal, `vet` y `-race` están verdes. Una contrarrevisión detectó y
 cerró falsos verdes en receipts, evidencias Markdown, contrarrevisiones task,
 acreditaciones parciales, comandos planificados y la excepción sin receipt de
-V01. Los generadores temporales ya no existen. Falta revisar el índice final y
-commitear V03; después empieza V04. Hasta ese commit, `HEAD` sigue en
-`a8bff609492f312fe2d6bf8ccccde02b6e5c8426` y el worktree grande es esperado:
-no resetearlo ni regenerar los ledgers.
+V01. Los generadores temporales ya no existen. V03 quedó integrada en
+`cc571a089f42a19cbd5920acc823381ecc127653`; el worktree está limpio. Siguiente
+acción exacta: abrir V04 con su aceptación roja antes de modificar dominio o
+adaptadores. No regenerar los ledgers V03 salvo regresión reproducible.
 
 Contrarrevisión final: tres revisores independientes devolvieron `APPROVE`
 después de reabrir y cerrar sus bloqueos de circularidad V01, evidencia real
@@ -55,7 +56,7 @@ de `BUG-020` y write-set del handoff. No queda bloqueo conocido de V03.
 
 - V01 catálogo ejecutable: receipt V2 válido; se reemite al cambiar roadmap.
 - V02 autoridad única del rebuild: receipt V2 válido.
-- V03 trazabilidad y lecciones: receipt V2 válido; commit pendiente.
+- V03 trazabilidad y lecciones: receipt V2 válido e integrada en Git.
 - V04–V34: pendientes. No contar código heredado o una prueba aislada como
   vertical cerrada.
 - progreso vertical mecánico: 3 de 34 receipts válidos, 8,8 % de la ruta;
@@ -385,13 +386,16 @@ Nueve IDs históricos nuevos quedaron integrados y revisados:
 
 Orden inmediato de integración:
 
-1. contrarrevisar el diff final y los tres receipts sin editar candidatos;
-2. repetir `git diff --check` y guard de write-set si la revisión cambia algo;
-3. commitear V03 sin incluir generadores temporales;
-4. registrar aquí el SHA del commit en un checkpoint documental;
-5. comenzar V04 creando primero su test de aceptación rojo: `IntentManifest`
-   exacto, `AppSpec` normalizado, amendments
-   causales y nueva generación de Goal.
+1. crear `acceptance/fixtures/v04_intent_appspec.json` y
+   `acceptance/v04_intent_appspec_test.go` con fallos conductuales concretos;
+2. cambiar `AC-V04-INTENT-APPSPEC` de `planned` a `executable` solo cuando el
+   test y fixture existan; no acreditar capacidades ni emitir receipt todavía;
+3. implementar de dentro afuera `IntentManifest` y `AppSpec` inmutables,
+   generaciones/amendments causales y propagación de `spec_hash`;
+4. añadir persistencia/migración SQLite y superficies MCP como adaptadores,
+   manteniendo `internal/goal` y aplicación libres de HTTP, SQL y provider;
+5. cerrar V04 con receipt propio, contrarrevisión y actualización de este
+   handoff.
 
 No queda ningún `v03_*_tmp.go`. No regenerar ledgers ni reabrir revisiones salvo
 regresión reproducible.
