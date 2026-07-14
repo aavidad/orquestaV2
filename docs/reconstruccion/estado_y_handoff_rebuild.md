@@ -1,13 +1,73 @@
 # Estado y handoff vivo del rebuild
 
-Última actualización: 2026-07-14 14:04 Europe/Madrid.
+Última actualización: 2026-07-14 15:00 Europe/Madrid.
 
 Este documento permite continuar el rebuild sin reconstruir el contexto de la
 sesión. Es estado operativo, no evidencia de aceptación. Los estados canónicos
 de capacidades, verticales y contratos viven en `product/roadmap.json`; los
 verdes viven en receipts fuera de su propio candidato.
 
-## Checkpoint vigente antes de V05
+## Checkpoint vigente: V05 cerrado
+
+La sesión se detiene deliberadamente después de V05; no hay trabajo V06
+abierto. El próximo agente no debe reanalizar ni resellar V05 salvo regresión
+reproducible. La siguiente dependencia causal del rebuild es V06, pero solo se
+abre con una nueva orden del operador.
+
+V05 acredita exactamente cinco capacidades: `GOV-04`, `ORC-01`, `ORC-02`,
+`ORC-06` y `STG-00`. No acredita split/replan adaptativo, espera de hijos,
+recursión operativa ni fases concretas de producto: permanecen en sus verticales
+reales V13, V14 y posteriores. El total queda en 9/257 capacidades, 3,50 %, y
+5/34 verticales, 14,7 %.
+
+Resultado funcional:
+
+- `PhaseInstance` conserva ref, key, template, entradas y criterios como
+  metadata causal inmutable, sin lifecycle paralelo;
+- `WorkItem` conserva dependencias, write-set, lineage parent/child y requisitos
+  neutrales de role/skills/tools/capabilities;
+- el ready-set deriva una cohorte maximal, determinista y libre de conflictos;
+- restore rechaza dependencias activas insatisfechas y write-sets running
+  solapados;
+- `ApplyPlan` solo añade generación N+1: no borra ni muta el prefijo existente;
+- aplicación, puerto de agentes, fake, Codex, MCP y SQLite transportan el mismo
+  contrato; Codex incluye la metadata en prompt e identidad idempotente;
+- SQLite migró a schema 3, preserva orden y parent/child tras restart;
+- Goal no cierra hasta que todos los items quedan terminales, aunque V05 no
+  simula el mailbox durable que pertenece a V13.
+
+Cadena autoritativa final:
+
+```text
+base V05:       1a9ce60df7374fda0499379d04a97a5c1563ed7a
+candidato C:    fb38152787e0de748a9f8c53d3865c5e7aeaece1
+tree C:         fce9ffd73b7dba7a424382a497c637df05906bb8
+evidencia E:    51af2ed280ba9d7008f2d03e4f246cf3a8bd9a19
+candidate SHA:  sha256:952230df433d87f9f9285a7d6a5bc68cd3d4875f5d3ec5dd60adfbe3020709f7
+fixture SHA:    sha256:4c8f59609acc5040d7afe6cd7036953af8ca3a2169fd9129da6f14c139a9ae09
+output SHA:     sha256:6fab1a08fc253a05a9c14d2ac8b31cd9802af05bad97c717f014624c1565831c
+```
+
+El receipt V3 se emitió ejecutando el argv contractual en un checkout detached
+y limpio de `C`. El gate ahora incluye el test causal exhaustivo del roadmap;
+esto cierra el falso verde `BUG-REBUILD-20260714-041`. Los bugs V05 `034` a
+`042` permanecen en el ledger con causa, invariante y prueba de lección.
+
+El E2E real por API MCP se renovó después del cambio activo del adaptador Codex:
+source digest
+`sha256:a4087b72736c4a4760af205a60b27ba19b3dd6e3f3a12dfdc37ad100398f5cf3`
+y marcador `ORQUESTA_CODEX_E2E_OK_37748fbc126b5c271de04a90bd9c0f6f`.
+Normal, race, vet, diff-check, receipts V01–V05 y contrato exacto quedaron
+verdes. Dos revisores independientes devolvieron `ACCEPT` sobre `E`.
+
+Uso honesto actual: Orquesta puede ejecutar por MCP un plan DAG ya declarado,
+persistirlo en SQLite y lanzar Codex en paralelo cuando los write-sets son
+disjuntos. Todavía no convierte por sí sola una petición abierta en estudio,
+plan, subagentes, review, replan y cierre; la autodirección completa se acredita
+en V22. Hasta entonces, el plan debe prepararlo un operador/Codex o un consumidor
+externo. No presentar esta limitación como bug V05 ni afirmar producto total.
+
+## Checkpoint histórico antes de V05
 
 La incidencia longitudinal de receipts quedó cerrada como
 `BUG-REBUILD-20260714-033`. V2 recalculaba fixture y candidato desde el worktree
@@ -135,58 +195,33 @@ scripts/check_rebuild_write_set.sh
 - V03 trazabilidad y lecciones: cerrado; receipt V3 válido.
 - V04 intención, AppSpec y amendments: cerrado; receipt V3 válido; `GOV-02`
   acreditado con evidencia exacta.
-- V05–V34: pendientes. No contar código heredado o una prueba aislada como
-  vertical cerrada.
-- progreso vertical cerrado: 4 de 34, 11,8 % de la ruta; receipts válidos: 4
-  de 4 contratos ejecutables;
-- progreso de capacidades: 4 de 257 en estado `accredited`, 1,56 %:
-  `GOV-02`, `GOV-03`, `GOV-16` y `GOV-21`. No usar porcentajes subjetivos de
-  “núcleo funcional”.
+- V05 DAG y fases neutrales: cerrado; receipt V3 válido; acredita solo
+  `GOV-04`, `ORC-01`, `ORC-02`, `ORC-06` y `STG-00`.
+- V06–V34: pendientes. No contar groundwork V05, código heredado o una prueba
+  aislada como vertical posterior cerrada.
+- progreso vertical cerrado: 5 de 34, 14,7 % de la ruta; receipts válidos: 5
+  de 5 contratos ejecutables;
+- progreso de capacidades: 9 de 257 en estado `accredited`, 3,50 %:
+  `GOV-02`, `GOV-03`, `GOV-04`, `GOV-16`, `GOV-21`, `ORC-01`, `ORC-02`,
+  `ORC-06` y `STG-00`.
 
-## Siguiente acción exacta: cerrar V05 sin abrir V06
+## Siguiente acción exacta
 
-V05 es `goal_dag_phases`, contrato `AC-V05-GOAL-DAG-PHASES`; sigue `planned`.
-Tres inventarios independientes ya cerraron el análisis. Aproximadamente
-65–75 % de su semántica es reutilizable: Goal/CAS/transiciones, DAG/toposort,
-dependencias, write-sets, snapshots base, puertos y SQLite. No rehacer el núcleo.
+Parar: V05 está cerrado y el operador cambia de proyecto. No abrir V06 en esta
+sesión. Cuando el operador reanude el rebuild, empezar por el contrato rojo de
+V06 `atomic_state_outbox`; conservar la frontera: CAS/snapshot, evento y outbox
+atómicos, scheduler con claim/lease/fencing y múltiples intentos pertenecen a
+V06, no deben retrointroducir otro lifecycle en Goal.
 
-Huecos P0 demostrados:
-
-1. `PhaseInstance` solo guarda key; debe ser value object inmutable con ref,
-   template ref, entradas/criterios opacos y sin lifecycle propio;
-2. `ReadyWorkItems` devuelve roots conflictivos y la aplicación agenda todos;
-   debe derivar cohorte maximal determinista conflict-free;
-3. `RestoreGoal` acepta hijo activo con dependencia insatisfecha y dos running
-   con write-sets solapados;
-4. `ApplyPlan` sustituye el plan y puede borrar trabajo; debe evolucionar de
-   forma monotónica, conservar terminales/hijos y permitir split/replan causal;
-5. no existen parent/child contractuales ni guarda de cierre del padre;
-6. WorkItem posee una sola `ExecutionRef`, SQLite la hace casi 1:1 y fallo de
-   provider falla Goal: intentos reemplazables requieren historia 1:N fuera de
-   Goal, sin crear segundo lifecycle.
-
-Corregir roadmap antes del contrato rojo: AC-V05 no puede acreditar 26 IDs con
-cuatro assertions. Alcance revisado propuesto: `GOV-04`, `STG-00..07`,
-`STG-09..12`, `STG-16`, `STG-20`, `ORC-01..04` y `ORC-06`. Mover `GOV-05` y
-`ORC-12/13/17` a V06; `ORC-05` a V13; `ORC-18` permanece rechazado. Confirmar
-esta lista contra `ruta_total_100.md` antes de patch; no acreditar conducta
-concreta Wizard/web/deploy, solo templates/instancias neutrales.
-
-Orden de implementación: preflight roadmap/comando (el actual puede dar cero
-tests) -> contrato rojo/fixture -> dominio Goal -> application/attempts ->
-SQLite/snapshot -> MCP/bootstrap fake offline -> gates/race/vet -> candidato C
-sellado -> receipt V3 -> contrarrevisión. Mantener claims, leases, fencing,
-outbox y restart totalmente en V06. No ejecutar provider real para V05.
-
-Los subagentes directos siguen siendo bootstrap hasta V22: usarlos para
-inventarios/revisión con salida compacta, sin `codebase-memory-mcp`, y revisar
-cada resultado antes de integrarlo.
+Los subagentes directos siguen siendo bootstrap hasta V22: para otro proyecto,
+la nueva Orquesta solo puede coordinarlo hoy si el consumidor entrega un DAG
+declarado. Una petición abierta necesita todavía dirección externa.
 
 ## Historial de ejecución (no sustituye el checkpoint vigente)
 
 Las palabras “pendiente”, “siguiente” o “en curso” dentro del historial
 describen checkpoints pasados. No son órdenes de reanudación. La única acción
-vigente es el análisis V05 definido arriba.
+vigente es parar tras V05; V06 requiere nueva orden del operador.
 
 ## V03: trabajo ya realizado
 
