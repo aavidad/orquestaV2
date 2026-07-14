@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"go/ast"
 	"go/importer"
@@ -18,16 +17,13 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 )
 
 const v02FixturePath = "acceptance/fixtures/v02_authority_rules.json"
-const v02CandidateDigestAlgorithm = "sha256:length-framed-path-and-content:v1"
 
 type v02Fixture struct {
 	SchemaVersion        int                `json:"schema_version"`
@@ -69,18 +65,6 @@ type v02Lifecycle struct {
 	AllowedSchedulerTypes []string `json:"allowed_scheduler_types"`
 }
 
-type v02Receipt struct {
-	SchemaVersion            int      `json:"schema_version"`
-	Contract                 string   `json:"contract"`
-	Result                   string   `json:"result"`
-	Command                  string   `json:"command"`
-	ExecutedAt               string   `json:"executed_at"`
-	FixtureSHA256            string   `json:"fixture_sha256"`
-	CandidateDigestAlgorithm string   `json:"candidate_digest_algorithm"`
-	CandidateSubjects        []string `json:"candidate_subjects"`
-	CandidateSHA256          string   `json:"candidate_sha256"`
-}
-
 type v02GoFile struct {
 	Path        string
 	PackagePath string
@@ -98,8 +82,8 @@ type v02SourceSet struct {
 }
 
 func TestAcceptanceV02AuthorityRules(t *testing.T) {
-	repositoryRoot := v02RepositoryRoot(t)
-	fixture := v02ReadFixture(t, filepath.Join(repositoryRoot, filepath.FromSlash(v02FixturePath)))
+	repositoryRoot := evidenceRepositoryRoot(t)
+	fixture := evidenceDecodeStrictJSON[v02Fixture](t, filepath.Join(repositoryRoot, filepath.FromSlash(v02FixturePath)))
 	if fixture.SchemaVersion != 1 || fixture.ContractID != "AC-V02-AUTHORITY-RULES" ||
 		fixture.ProductModule != "orquesta" || len(fixture.ProductRoots) == 0 || len(fixture.CandidateSubjects) == 0 {
 		t.Fatalf("invalid V02 fixture header: %+v", fixture)
@@ -115,7 +99,11 @@ func TestAcceptanceV02AuthorityRules(t *testing.T) {
 	})
 
 	t.Run("receipt_attests_explicit_non_self_referential_candidate", func(t *testing.T) {
-		v02AssertReceipt(t, repositoryRoot, fixture)
+		evidenceAssertReceiptV1(t, repositoryRoot, evidenceReceiptExpectation{
+			Contract: fixture.ContractID, Command: fixture.Command,
+			FixturePath: v02FixturePath, ReceiptPath: fixture.ReceiptPath,
+			CandidateSubjects: fixture.CandidateSubjects,
+		})
 	})
 
 	sources := v02LoadSources(t, repositoryRoot, fixture.ProductModule, fixture.ProductRoots)
@@ -147,137 +135,6 @@ func TestAcceptanceV02AuthorityRules(t *testing.T) {
 	t.Run("application_orchestrator_is_the_only_writer_and_scheduler", func(t *testing.T) {
 		v02AssertSingleWriterAndScheduler(t, sources, fixture.Lifecycle)
 	})
-}
-
-func v02AssertReceipt(t *testing.T, repositoryRoot string, fixture v02Fixture) {
-	t.Helper()
-	receiptFile := filepath.Join(repositoryRoot, filepath.FromSlash(fixture.ReceiptPath))
-	receipt := v02ReadReceipt(t, receiptFile)
-	if receipt.SchemaVersion != 1 || receipt.Contract != fixture.ContractID || receipt.Result != "PASS" || receipt.Command != fixture.Command {
-		t.Fatalf("invalid V02 receipt identity/result: %+v", receipt)
-	}
-	if _, err := time.Parse(time.RFC3339, receipt.ExecutedAt); err != nil {
-		t.Fatalf("invalid V02 receipt executed_at %q: %v", receipt.ExecutedAt, err)
-	}
-	if receipt.CandidateDigestAlgorithm != v02CandidateDigestAlgorithm {
-		t.Fatalf("candidate digest algorithm = %q, want %q", receipt.CandidateDigestAlgorithm, v02CandidateDigestAlgorithm)
-	}
-	if !reflect.DeepEqual(receipt.CandidateSubjects, fixture.CandidateSubjects) {
-		t.Fatalf("receipt candidate subjects = %v, want fixture subjects %v", receipt.CandidateSubjects, fixture.CandidateSubjects)
-	}
-	for _, subject := range fixture.CandidateSubjects {
-		if subject == fixture.ReceiptPath {
-			t.Fatalf("receipt %q is self-referential candidate subject", fixture.ReceiptPath)
-		}
-	}
-	wantFixtureSHA := v02FileSHA256(t, filepath.Join(repositoryRoot, filepath.FromSlash(v02FixturePath)))
-	if receipt.FixtureSHA256 != wantFixtureSHA {
-		t.Fatalf("receipt fixture_sha256 = %q, want %q", receipt.FixtureSHA256, wantFixtureSHA)
-	}
-	wantCandidateSHA := v02CandidateDigest(t, repositoryRoot, fixture.CandidateSubjects)
-	if receipt.CandidateSHA256 != wantCandidateSHA {
-		t.Fatalf("receipt candidate_sha256 = %q, want %q", receipt.CandidateSHA256, wantCandidateSHA)
-	}
-}
-
-func v02RepositoryRoot(t *testing.T) string {
-	t.Helper()
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("cannot resolve acceptance source path")
-	}
-	root := filepath.Clean(filepath.Join(filepath.Dir(filename), ".."))
-	if _, err := os.Stat(filepath.Join(root, "go.mod")); err != nil {
-		t.Fatalf("resolve repository root %s: %v", root, err)
-	}
-	return root
-}
-
-func v02ReadFixture(t *testing.T, filename string) v02Fixture {
-	t.Helper()
-	handle, err := os.Open(filename)
-	if err != nil {
-		t.Fatalf("open V02 fixture: %v", err)
-	}
-	defer handle.Close()
-	decoder := json.NewDecoder(handle)
-	decoder.DisallowUnknownFields()
-	var fixture v02Fixture
-	if err := decoder.Decode(&fixture); err != nil {
-		t.Fatalf("decode V02 fixture: %v", err)
-	}
-	var trailing any
-	if err := decoder.Decode(&trailing); err != io.EOF {
-		t.Fatalf("decode trailing V02 fixture: %v", err)
-	}
-	return fixture
-}
-
-func v02ReadReceipt(t *testing.T, filename string) v02Receipt {
-	t.Helper()
-	handle, err := os.Open(filename)
-	if err != nil {
-		t.Fatalf("open V02 receipt: %v", err)
-	}
-	defer handle.Close()
-	decoder := json.NewDecoder(handle)
-	decoder.DisallowUnknownFields()
-	var receipt v02Receipt
-	if err := decoder.Decode(&receipt); err != nil {
-		t.Fatalf("decode V02 receipt: %v", err)
-	}
-	var trailing any
-	if err := decoder.Decode(&trailing); err != io.EOF {
-		t.Fatalf("decode trailing V02 receipt: %v", err)
-	}
-	return receipt
-}
-
-func v02FileSHA256(t *testing.T, filename string) string {
-	t.Helper()
-	handle, err := os.Open(filename)
-	if err != nil {
-		t.Fatalf("open digest subject %s: %v", filename, err)
-	}
-	defer handle.Close()
-	digest := sha256.New()
-	if _, err := io.Copy(digest, handle); err != nil {
-		t.Fatalf("digest subject %s: %v", filename, err)
-	}
-	return "sha256:" + hex.EncodeToString(digest.Sum(nil))
-}
-
-func v02CandidateDigest(t *testing.T, repositoryRoot string, subjects []string) string {
-	t.Helper()
-	if !sort.StringsAreSorted(subjects) {
-		t.Fatalf("candidate subjects must be sorted: %v", subjects)
-	}
-	digest := sha256.New()
-	seen := make(map[string]struct{}, len(subjects))
-	for _, subject := range subjects {
-		if subject == "" || path.Clean(subject) != subject || path.IsAbs(subject) || strings.HasPrefix(subject, "../") {
-			t.Fatalf("invalid candidate subject %q", subject)
-		}
-		if _, duplicate := seen[subject]; duplicate {
-			t.Fatalf("duplicate candidate subject %q", subject)
-		}
-		seen[subject] = struct{}{}
-		absolute := filepath.Join(repositoryRoot, filepath.FromSlash(subject))
-		info, err := os.Lstat(absolute)
-		if err != nil {
-			t.Fatalf("stat candidate subject %s: %v", subject, err)
-		}
-		if info.Mode()&fs.ModeSymlink != 0 || !info.Mode().IsRegular() {
-			t.Fatalf("candidate subject %s must be a regular non-symlink file", subject)
-		}
-		content, err := os.ReadFile(absolute)
-		if err != nil {
-			t.Fatalf("read candidate subject %s: %v", subject, err)
-		}
-		v02WriteFrame(t, digest, []byte(subject))
-		v02WriteFrame(t, digest, content)
-	}
-	return "sha256:" + hex.EncodeToString(digest.Sum(nil))
 }
 
 func v02SurfaceDigest(t *testing.T, repositoryRoot string, surface v02FrozenSurface) (int, string) {
@@ -330,12 +187,12 @@ func v02SurfaceDigest(t *testing.T, repositoryRoot string, surface v02FrozenSurf
 		if err != nil {
 			t.Fatalf("stat frozen file %s: %v", relative, err)
 		}
-		v02WriteFrame(t, digest, []byte(relative))
+		evidenceWriteFrame(t, digest, []byte(relative))
 		executable := byte(0)
 		if info.Mode()&0o111 != 0 {
 			executable = 1
 		}
-		v02WriteFrame(t, digest, []byte{executable})
+		evidenceWriteFrame(t, digest, []byte{executable})
 		handle, err := os.Open(absolute)
 		if err != nil {
 			t.Fatalf("open frozen file %s: %v", relative, err)
@@ -364,18 +221,6 @@ func v02PathExcluded(relative string, excluded map[string]struct{}) bool {
 		}
 	}
 	return false
-}
-
-func v02WriteFrame(t *testing.T, writer io.Writer, value []byte) {
-	t.Helper()
-	var size [8]byte
-	binary.BigEndian.PutUint64(size[:], uint64(len(value)))
-	if _, err := writer.Write(size[:]); err != nil {
-		t.Fatalf("hash frame size: %v", err)
-	}
-	if _, err := writer.Write(value); err != nil {
-		t.Fatalf("hash frame value: %v", err)
-	}
 }
 
 func v02LoadSources(t *testing.T, repositoryRoot, module string, roots []string) v02SourceSet {

@@ -3,14 +3,15 @@
   "contract": "AC-V02-AUTHORITY-RULES",
   "result": "PASS",
   "command": "go test -mod=vendor -count=1 ./acceptance -run '^TestAcceptanceV02AuthorityRules$'",
-  "executed_at": "2026-07-14T06:19:27+02:00",
-  "fixture_sha256": "sha256:3e874b43f38dfe9d9f9150ce4776a645d386594ef58e167ac839b325f0a2c0bf",
+  "executed_at": "2026-07-14T06:32:34+02:00",
+  "fixture_sha256": "sha256:96e39bfc0a0a039e9ac37e6bd39108f863e68e23aa1275803f3e9f5fc37984ea",
   "candidate_digest_algorithm": "sha256:length-framed-path-and-content:v1",
   "candidate_subjects": [
     "AGENTS.md",
     "acceptance/README.md",
+    "acceptance/evidence_support_test.go",
     "acceptance/fixtures/v02_authority_rules.json",
     "acceptance/v02_authority_rules_test.go"
   ],
-  "candidate_sha256": "sha256:14ba10f1998ecbf7d184377bb2497acc0e3345ada8e87ef97a0b3aa59709401a"
+  "candidate_sha256": "sha256:1739f8caef101504cb4bc22f4bbcbd8cc149aa3368500e7413e45f5691ec6d0c"
 }

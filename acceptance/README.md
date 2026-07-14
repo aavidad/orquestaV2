@@ -26,7 +26,7 @@ Las capacidades V02 solo cuentan como `accredited` mientras
 `product/evidence/v02_authority_rules.json` sea válido. El receipt enumera los
 ficheros exactos del candidato, excluye el propio receipt y sella contenido y
 ruta con framing. El candidato estable contiene `AGENTS.md` y este paquete de
-aceptación —guía, fixture y test—. El gate recalcula sus hashes; cambiar
+aceptación —guía, soporte común, fixture y test—. El gate recalcula sus hashes; cambiar
 autoridad, gate, fixture o guía invalida la acreditación.
 
 `product/roadmap.json` queda fuera deliberadamente: su gate causal valida por
