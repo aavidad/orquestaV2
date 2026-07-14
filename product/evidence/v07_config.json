@@ -1,1 +1,32 @@
-{}
+{
+  "schema_version": 3,
+  "evidence_kind": "reproducibility_descriptor",
+  "contract": "AC-V07-CONFIG",
+  "result": "PASS",
+  "validation_command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV07ScopeAndExecutableContract|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV07Config|TestV07CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/config ./internal/adapters/config/effectivefile ./internal/adapters/config/toml ./internal/bootstrap ./cmd/orquesta'",
+  "executed_at": "2026-07-15T01:51:05+02:00",
+  "execution": {
+    "argv": [
+      "sh",
+      "-c",
+      "go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV07ScopeAndExecutableContract|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV07Config|TestV07CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/config ./internal/adapters/config/effectivefile ./internal/adapters/config/toml ./internal/bootstrap ./cmd/orquesta"
+    ],
+    "source_git_commit_oid": "6d88f0f2d53c840686a93ed19f69f708dcbe7af3",
+    "source_worktree_state": "detached_clean",
+    "source_status_porcelain_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "exit_code": 0,
+    "combined_output_path": "product/evidence/v07_config.output.txt",
+    "combined_output_sha256": "sha256:dc6df3c226b568d1bf15c0f34a942fbd2f09230efc0bc552be35b472985f471b",
+    "go_version": "go1.25.11"
+  },
+  "fixture_sha256": "sha256:f3051ba04bd3f7b03555367bef6355e5c34d0dbfd5f061fc8c519c624c1e47f8",
+  "candidate_digest_algorithm": "sha256:length-framed-git-blob-set:v1",
+  "candidate_sha256": "sha256:222124a7d0554d17280b53ad566def2eec53d206c88d12237e86b89d7c518e5c",
+  "sealed_source": {
+    "identity_kind": "sealed_git_subject_set",
+    "git_commit_oid": "6d88f0f2d53c840686a93ed19f69f708dcbe7af3",
+    "git_tree_oid": "883202a4f8d12556cc02c6201c88f06c81df2a55",
+    "fixture_blob_oid": "68f643f00c55def0535a223531dbe659018086f3",
+    "sha256": "sha256:222124a7d0554d17280b53ad566def2eec53d206c88d12237e86b89d7c518e5c"
+  }
+}

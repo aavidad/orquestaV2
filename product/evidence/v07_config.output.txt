@@ -1,0 +1,8 @@
+go: downloading go1.25.11 (linux/amd64)
+ok  	orquesta	0.066s
+ok  	orquesta/acceptance	0.359s
+ok  	orquesta/internal/config	0.123s
+ok  	orquesta/internal/adapters/config/effectivefile	0.065s
+ok  	orquesta/internal/adapters/config/toml	0.027s
+ok  	orquesta/internal/bootstrap	0.580s
+ok  	orquesta/cmd/orquesta	0.003s
