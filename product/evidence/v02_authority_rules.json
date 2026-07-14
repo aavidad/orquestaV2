@@ -1,10 +1,10 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "evidence_kind": "reproducibility_descriptor",
   "contract": "AC-V02-AUTHORITY-RULES",
   "result": "PASS",
   "validation_command": "go test -mod=vendor -count=1 ./acceptance -run '^TestAcceptanceV02AuthorityRules$'",
-  "executed_at": "2026-07-14T11:14:18+02:00",
+  "executed_at": "2026-07-14T12:01:04.760Z",
   "execution": {
     "argv": [
       "go",
@@ -15,24 +15,22 @@
       "-run",
       "^TestAcceptanceV02AuthorityRules$"
     ],
+    "source_git_commit_oid": "e68ad92280e0b60a78bcb191909734fdc5d224e3",
+    "source_worktree_state": "detached_clean",
+    "source_status_porcelain_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "exit_code": 0,
     "combined_output_path": "product/evidence/v02_authority_rules.output.txt",
-    "combined_output_sha256": "sha256:bf68ecd029e8f45c0d5da7139d815491432ccd994a37e99fc92f12e600b2f7b4",
+    "combined_output_sha256": "sha256:8a712145f5280abaa31f712158272037b2253951395a255ea581ce23af6846eb",
     "go_version": "go1.25.11"
   },
-  "fixture_sha256": "sha256:96e39bfc0a0a039e9ac37e6bd39108f863e68e23aa1275803f3e9f5fc37984ea",
-  "candidate_digest_algorithm": "sha256:length-framed-path-and-content:v1",
-  "candidate_subjects": [
-    "AGENTS.md",
-    "acceptance/README.md",
-    "acceptance/evidence_support_test.go",
-    "acceptance/fixtures/v02_authority_rules.json",
-    "acceptance/v02_authority_rules_test.go"
-  ],
-  "candidate_sha256": "sha256:31c8461d6de4b80d78c27073595ffe80c085faab4381e110982c4029639ad9b0",
-  "subject_source_tree": {
-    "identity_kind": "candidate_subject_set",
-    "sha256": "sha256:31c8461d6de4b80d78c27073595ffe80c085faab4381e110982c4029639ad9b0",
-    "git_head": "a8bff609492f312fe2d6bf8ccccde02b6e5c8426"
+  "fixture_sha256": "sha256:d4e2d978761e274102e57c1395056c7e856908dfa97d33e24618c26f8ca334b9",
+  "candidate_digest_algorithm": "sha256:length-framed-git-blob-set:v1",
+  "candidate_sha256": "sha256:de30c14f63ecd32b35f7ee04e3a40af944c3b0966a984c5d877bcde948cb3567",
+  "sealed_source": {
+    "identity_kind": "sealed_git_subject_set",
+    "git_commit_oid": "e68ad92280e0b60a78bcb191909734fdc5d224e3",
+    "git_tree_oid": "e6f30fa3d3b254414aeb001476ef36e1cc64e2df",
+    "fixture_blob_oid": "73062716d7438ed4c5890523526e386a5d7c5daf",
+    "sha256": "sha256:de30c14f63ecd32b35f7ee04e3a40af944c3b0966a984c5d877bcde948cb3567"
   }
 }
