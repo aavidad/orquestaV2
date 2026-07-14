@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -35,7 +36,7 @@ func TestOfficialClientListsExactToolsAndCallsGoalArtifactAndStatus(t *testing.T
 	if err != nil {
 		t.Fatalf("ListTools() error = %v", err)
 	}
-	wantNames := []string{ToolArtifactsRead, ToolGoalsCreate, ToolGoalsGet, ToolGoalsList, ToolSystemStatus}
+	wantNames := []string{ToolArtifactsRead, ToolGoalsAmend, ToolGoalsCreate, ToolGoalsGet, ToolGoalsList, ToolSystemStatus}
 	gotNames := make([]string, 0, len(listed.Tools))
 	byName := make(map[string]*sdkmcp.Tool, len(listed.Tools))
 	for _, tool := range listed.Tools {
@@ -46,11 +47,13 @@ func TestOfficialClientListsExactToolsAndCallsGoalArtifactAndStatus(t *testing.T
 	if fmt.Sprint(gotNames) != fmt.Sprint(wantNames) {
 		t.Fatalf("tools = %v, want %v", gotNames, wantNames)
 	}
-	createAnnotations := byName[ToolGoalsCreate].Annotations
-	if createAnnotations == nil || createAnnotations.ReadOnlyHint || !createAnnotations.IdempotentHint ||
-		createAnnotations.DestructiveHint == nil || *createAnnotations.DestructiveHint ||
-		createAnnotations.OpenWorldHint == nil || *createAnnotations.OpenWorldHint {
-		t.Fatalf("create annotations = %+v", createAnnotations)
+	for _, name := range []string{ToolGoalsAmend, ToolGoalsCreate} {
+		annotations := byName[name].Annotations
+		if annotations == nil || annotations.ReadOnlyHint || !annotations.IdempotentHint ||
+			annotations.DestructiveHint == nil || *annotations.DestructiveHint ||
+			annotations.OpenWorldHint == nil || *annotations.OpenWorldHint {
+			t.Fatalf("%s annotations = %+v", name, annotations)
+		}
 	}
 	for _, name := range []string{ToolArtifactsRead, ToolGoalsGet, ToolGoalsList, ToolSystemStatus} {
 		annotations := byName[name].Annotations
@@ -67,7 +70,10 @@ func TestOfficialClientListsExactToolsAndCallsGoalArtifactAndStatus(t *testing.T
 		t.Fatalf("initial status = %+v result=%+v", status, statusResult)
 	}
 
-	createArguments := map[string]any{"request_ref": "request:test-1", "statement": "Produce a durable artifact"}
+	createArguments := map[string]any{
+		"request_ref": "request:test-1", "statement": "Produce a durable artifact",
+		"normalized_objective": "Produce durable artifact", "confirm": true,
+	}
 	createdResult := callTool(t, session, ToolGoalsCreate, createArguments)
 	var created CreateGoalOutput
 	decodeStructured(t, createdResult, &created)
@@ -80,6 +86,16 @@ func TestOfficialClientListsExactToolsAndCallsGoalArtifactAndStatus(t *testing.T
 		len(created.Goal.Phases) != 1 || created.Goal.Phases[0].PhaseKey != goal.DefaultPhaseKey().String() ||
 		len(created.Goal.WorkItems) != 1 || len(created.Goal.Executions) != 1 || created.Goal.Executions[0].DeadlineAt != nil {
 		t.Fatalf("created Goal view = %+v", created.Goal)
+	}
+	if created.Goal.AppSpec.Ref == "" || created.Goal.AppSpec.Generation != 1 || created.Goal.AppSpec.Hash == "" ||
+		created.Goal.AppSpec.ParentRef != "" || created.Goal.AppSpec.ParentHash != "" ||
+		created.Goal.AppSpec.Objective != "Produce durable artifact" ||
+		created.Goal.AppSpec.ConfirmedBy != "actor:local" || created.Goal.AppSpec.ConfirmedAt != testNow() ||
+		created.Goal.AppSpec.Intent.Ref != created.Goal.IntentRef ||
+		created.Goal.AppSpec.Intent.Hash != created.Goal.IntentHash ||
+		created.Goal.AppSpec.Intent.Statement != created.Goal.Statement ||
+		created.Goal.AppSpec.Intent.SubmittedAt != testNow() {
+		t.Fatalf("created AppSpec projection = %+v", created.Goal.AppSpec)
 	}
 	if created.Goal.Phases == nil || created.Goal.Executions == nil || created.Goal.Artifacts == nil ||
 		created.Goal.Attestations == nil || created.Goal.WorkItems[0].ArtifactRefs == nil ||
@@ -104,7 +120,9 @@ func TestOfficialClientListsExactToolsAndCallsGoalArtifactAndStatus(t *testing.T
 	listResult := callTool(t, session, ToolGoalsList, map[string]any{"limit": 1})
 	var list ListGoalsOutput
 	decodeStructured(t, listResult, &list)
-	if listResult.IsError || list.Count != 1 || len(list.Goals) != 1 || list.Goals[0].GoalRef != created.Goal.GoalRef {
+	if listResult.IsError || list.Count != 1 || len(list.Goals) != 1 || list.Goals[0].GoalRef != created.Goal.GoalRef ||
+		list.Goals[0].AppSpecRef != created.Goal.AppSpec.Ref || list.Goals[0].AppSpecGeneration != 1 ||
+		list.Goals[0].SpecHash != created.Goal.AppSpec.Hash {
 		t.Fatalf("list output = %+v result=%+v", list, listResult)
 	}
 
@@ -140,6 +158,501 @@ func TestOfficialClientListsExactToolsAndCallsGoalArtifactAndStatus(t *testing.T
 	}
 }
 
+func TestV04OfficialMCPToolsAreExactClosedWorldAndSafelyAnnotated(t *testing.T) {
+	server, _, _ := newTestInterface(t, 16*1024)
+	session := serveOfficialClient(t, server)
+	listed, err := session.ListTools(testContext(t), nil)
+	if err != nil {
+		t.Fatalf("ListTools() error = %v", err)
+	}
+	wantNames := []string{ToolArtifactsRead, ToolGoalsAmend, ToolGoalsCreate, ToolGoalsGet, ToolGoalsList, ToolSystemStatus}
+	gotNames := make([]string, 0, len(listed.Tools))
+	byName := make(map[string]*sdkmcp.Tool, len(listed.Tools))
+	for _, tool := range listed.Tools {
+		gotNames = append(gotNames, tool.Name)
+		byName[tool.Name] = tool
+	}
+	sort.Strings(gotNames)
+	if !reflect.DeepEqual(gotNames, wantNames) {
+		t.Fatalf("tools = %v, want %v", gotNames, wantNames)
+	}
+	assertClosedWorldProperties(t, byName[ToolGoalsCreate], []string{
+		"confirm", "normalized_objective", "plan", "request_ref", "statement",
+	})
+	assertClosedWorldProperties(t, byName[ToolGoalsAmend], []string{
+		"confirm", "expected_source_revision", "expected_source_spec_hash", "normalized_objective",
+		"reason", "request_ref", "source_goal_ref", "statement",
+	})
+	assertClosedWorldProperties(t, byName[ToolGoalsGet], []string{"goal_ref"})
+	assertClosedWorldProperties(t, byName[ToolGoalsList], []string{"limit"})
+	assertClosedWorldProperties(t, byName[ToolArtifactsRead], []string{"artifact_ref", "goal_ref"})
+	assertClosedWorldProperties(t, byName[ToolSystemStatus], []string{})
+	for _, name := range []string{ToolGoalsAmend, ToolGoalsCreate} {
+		annotations := byName[name].Annotations
+		if annotations == nil || annotations.ReadOnlyHint || !annotations.IdempotentHint ||
+			annotations.DestructiveHint == nil || *annotations.DestructiveHint ||
+			annotations.OpenWorldHint == nil || *annotations.OpenWorldHint {
+			t.Fatalf("%s annotations = %+v", name, annotations)
+		}
+	}
+	for _, name := range []string{ToolArtifactsRead, ToolGoalsGet, ToolGoalsList, ToolSystemStatus} {
+		annotations := byName[name].Annotations
+		if annotations == nil || !annotations.ReadOnlyHint || !annotations.IdempotentHint ||
+			annotations.OpenWorldHint == nil || *annotations.OpenWorldHint {
+			t.Fatalf("%s annotations = %+v", name, annotations)
+		}
+	}
+}
+
+func TestV04OfficialMCPCreateAndAmendAreCausalIdempotentAndServerOwned(t *testing.T) {
+	server, state, _ := newTestInterface(t, 16*1024)
+	session := serveOfficialClient(t, server)
+	statement := "  Preserve exact operator intent.  "
+	createArguments := map[string]any{
+		"request_ref": "request:v04-create", "statement": statement,
+		"normalized_objective": "Build maintained output", "confirm": true,
+	}
+	created := callCreateGoal(t, session, createArguments)
+	_, appSpecRefErr := goal.NewAppSpecRef(created.Goal.AppSpec.Ref)
+	_, intentRefErr := goal.NewIntentRef(created.Goal.AppSpec.Intent.Ref)
+	if !created.Created || created.Goal == nil || created.Goal.AppSpec.Generation != 1 ||
+		appSpecRefErr != nil || intentRefErr != nil || !goal.IsCanonicalAppSpecHash(created.Goal.AppSpec.Hash) ||
+		!canonicalSHA256(created.Goal.AppSpec.Intent.Hash) ||
+		created.Goal.AppSpec.Intent.Statement != statement || created.Goal.AppSpec.Objective != "Build maintained output" ||
+		created.Goal.AppSpec.Reason != "operator.initial_confirmation" ||
+		created.Goal.ActorRef != "actor:local" || created.Goal.ProjectRef != "project:local" ||
+		created.Goal.AppSpec.ConfirmedBy != "actor:local" || created.Goal.AppSpec.ConfirmedAt != testNow() ||
+		created.Goal.AppSpec.Intent.ActorRef != created.Goal.ActorRef ||
+		created.Goal.AppSpec.Intent.ProjectRef != created.Goal.ProjectRef ||
+		created.Goal.AppSpec.Intent.SubmittedAt != testNow() || created.Goal.IntentRef != created.Goal.AppSpec.Intent.Ref ||
+		created.Goal.IntentHash != created.Goal.AppSpec.Intent.Hash || created.Goal.Statement != statement {
+		t.Fatalf("created Goal = %+v", created)
+	}
+	replayedCreate := callCreateGoal(t, session, createArguments)
+	if replayedCreate.Created || replayedCreate.Goal == nil || replayedCreate.Goal.GoalRef != created.Goal.GoalRef {
+		t.Fatalf("create replay = %+v", replayedCreate)
+	}
+	createConflict := cloneArguments(createArguments)
+	createConflict["statement"] = "different exact intent"
+	assertPublicToolError(t, callTool(t, session, ToolGoalsCreate, createConflict), publicConflict)
+
+	sourceRef, _ := goal.NewGoalRef(created.Goal.GoalRef)
+	state.failGoal(t, sourceRef, "test.terminal_source")
+	sourceBefore, err := state.GetGoal(context.Background(), sourceRef)
+	if err != nil {
+		t.Fatalf("GetGoal(source) error = %v", err)
+	}
+	amendAt := state.clock.Now()
+	amendArguments := amendmentToolArguments(sourceBefore, "request:v04-amend")
+	amendArguments["statement"] = "  Exact amended intent.  "
+	amendArguments["normalized_objective"] = "  Add export safely  "
+	amendArguments["reason"] = "operator.scope_changed"
+	amended := callAmendGoal(t, session, amendArguments)
+	if !amended.Created || amended.Goal == nil || amended.Goal.State != string(goal.GoalStatePending) ||
+		amended.Goal.Revision != 1 || amended.Goal.PlanGeneration != 0 || len(amended.Goal.Phases) != 0 ||
+		len(amended.Goal.WorkItems) != 0 || len(amended.Goal.Executions) != 0 ||
+		len(amended.Goal.Artifacts) != 0 || len(amended.Goal.Attestations) != 0 {
+		t.Fatalf("amended Goal shell = %+v", amended)
+	}
+	appSpec := amended.Goal.AppSpec
+	_, amendedSpecRefErr := goal.NewAppSpecRef(appSpec.Ref)
+	_, amendedIntentRefErr := goal.NewIntentRef(appSpec.Intent.Ref)
+	if amendedSpecRefErr != nil || amendedIntentRefErr != nil || !goal.IsCanonicalAppSpecHash(appSpec.Hash) ||
+		!canonicalSHA256(appSpec.Intent.Hash) || appSpec.Ref == sourceBefore.Goal.AppSpec().Ref().String() ||
+		appSpec.Intent.Ref == sourceBefore.Goal.Intent().String() || appSpec.Generation != 2 ||
+		appSpec.ParentRef != sourceBefore.Goal.AppSpec().Ref().String() ||
+		appSpec.ParentHash != sourceBefore.Goal.SpecHash() || appSpec.Hash == sourceBefore.Goal.SpecHash() ||
+		appSpec.Objective != "Add export safely" || appSpec.Reason != "operator.scope_changed" ||
+		appSpec.ConfirmedBy != "actor:local" || appSpec.ConfirmedAt != amendAt ||
+		appSpec.Intent.ActorRef != "actor:local" || appSpec.Intent.ProjectRef != "project:local" ||
+		appSpec.Intent.Statement != "  Exact amended intent.  " || appSpec.Intent.SubmittedAt != amendAt ||
+		amended.Goal.CreatedAt != amendAt || amended.Goal.IntentRef != appSpec.Intent.Ref ||
+		amended.Goal.IntentHash != appSpec.Intent.Hash || amended.Goal.Statement != appSpec.Intent.Statement {
+		t.Fatalf("amended AppSpec = %+v goal=%+v", appSpec, amended.Goal)
+	}
+	if amended.Goal.Phases == nil || amended.Goal.WorkItems == nil || amended.Goal.Executions == nil ||
+		amended.Goal.Artifacts == nil || amended.Goal.Attestations == nil {
+		t.Fatalf("amended arrays must be typed empty arrays: %+v", amended.Goal)
+	}
+	sourceAfter, err := state.GetGoal(context.Background(), sourceRef)
+	if err != nil || !reflect.DeepEqual(sourceAfter.Goal.Snapshot(), sourceBefore.Goal.Snapshot()) ||
+		!reflect.DeepEqual(sourceAfter.Artifacts, sourceBefore.Artifacts) ||
+		!reflect.DeepEqual(sourceAfter.Attestations, sourceBefore.Attestations) {
+		t.Fatalf("source mutated: before=%+v after=%+v err=%v", sourceBefore, sourceAfter, err)
+	}
+	getResult := callTool(t, session, ToolGoalsGet, map[string]any{"goal_ref": amended.Goal.GoalRef})
+	var got GetGoalOutput
+	decodeStructured(t, getResult, &got)
+	if getResult.IsError || got.Goal == nil || !reflect.DeepEqual(got.Goal.AppSpec, amended.Goal.AppSpec) ||
+		got.Goal.IntentRef != amended.Goal.IntentRef || got.Goal.IntentHash != amended.Goal.IntentHash ||
+		got.Goal.Statement != amended.Goal.Statement || got.Goal.ActorRef != amended.Goal.ActorRef ||
+		got.Goal.ProjectRef != amended.Goal.ProjectRef {
+		t.Fatalf("get successor projection = %+v result=%+v", got, getResult)
+	}
+	listResult := callTool(t, session, ToolGoalsList, map[string]any{"limit": 10})
+	var listed ListGoalsOutput
+	decodeStructured(t, listResult, &listed)
+	var successorSummary *GoalSummaryView
+	for index := range listed.Goals {
+		if listed.Goals[index].GoalRef == amended.Goal.GoalRef {
+			successorSummary = &listed.Goals[index]
+			break
+		}
+	}
+	if listResult.IsError || listed.Count != 2 || successorSummary == nil ||
+		successorSummary.AppSpecRef != amended.Goal.AppSpec.Ref ||
+		successorSummary.AppSpecGeneration != amended.Goal.AppSpec.Generation ||
+		successorSummary.SpecHash != amended.Goal.AppSpec.Hash || successorSummary.IntentRef != amended.Goal.IntentRef {
+		t.Fatalf("list successor projection = %+v result=%+v", listed, listResult)
+	}
+	replayedAmend := callAmendGoal(t, session, amendArguments)
+	if replayedAmend.Created || replayedAmend.Goal == nil || replayedAmend.Goal.GoalRef != amended.Goal.GoalRef {
+		t.Fatalf("amend replay = %+v", replayedAmend)
+	}
+	amendConflict := cloneArguments(amendArguments)
+	amendConflict["statement"] = "different amendment"
+	assertPublicToolError(t, callTool(t, session, ToolGoalsAmend, amendConflict), publicConflict)
+	secondBranch := cloneArguments(amendArguments)
+	secondBranch["request_ref"] = "request:v04-second-branch"
+	assertPublicToolError(t, callTool(t, session, ToolGoalsAmend, secondBranch), publicConflict)
+	goals, requests, successors, _ := state.counts()
+	if goals != 2 || requests != 2 || successors != 1 {
+		t.Fatalf("amend durable counts = goals:%d requests:%d successors:%d", goals, requests, successors)
+	}
+}
+
+func TestV04OfficialMCPRejectsConfirmationAndAuthoritySpoofWithoutEffects(t *testing.T) {
+	server, state, _ := newTestInterface(t, 16*1024)
+	session := serveOfficialClient(t, server)
+	assertNoStateOrGeneratorChange(t, state, func() *sdkmcp.CallToolResult {
+		return callTool(t, session, ToolGoalsCreate, map[string]any{
+			"request_ref": "request:unconfirmed", "statement": "must not exist", "confirm": false,
+		})
+	}, publicInvalidRequest)
+	assertNoStateOrGeneratorChange(t, state, func() *sdkmcp.CallToolResult {
+		return callTool(t, session, ToolGoalsAmend, map[string]any{"confirm": false})
+	}, publicInvalidRequest)
+
+	spoofs := map[string]any{
+		"actor_ref": "actor:spoof", "project_ref": "project:spoof", "confirmed_by": "actor:spoof",
+		"submitted_at": "1999-01-01T00:00:00Z", "confirmed_at": "1999-01-01T00:00:00Z",
+		"intent_ref": "intent:spoof", "app_spec_ref": "app-spec:spoof", "goal_ref": "goal:spoof",
+	}
+	for field, value := range spoofs {
+		field, value := field, value
+		t.Run("create_"+field, func(t *testing.T) {
+			assertNoStateOrGeneratorChange(t, state, func() *sdkmcp.CallToolResult {
+				arguments := map[string]any{
+					"request_ref": "request:spoof-create-" + field, "statement": "trusted input", "confirm": true,
+					field: value,
+				}
+				return callTool(t, session, ToolGoalsCreate, arguments)
+			}, "")
+		})
+	}
+
+	created := callCreateGoal(t, session, map[string]any{
+		"request_ref": "request:spoof-source", "statement": "terminal source", "confirm": true,
+	})
+	sourceRef, _ := goal.NewGoalRef(created.Goal.GoalRef)
+	state.failGoal(t, sourceRef, "test.terminal_source")
+	source, _ := state.GetGoal(context.Background(), sourceRef)
+	for field, value := range spoofs {
+		field, value := field, value
+		t.Run("amend_"+field, func(t *testing.T) {
+			assertNoStateOrGeneratorChange(t, state, func() *sdkmcp.CallToolResult {
+				arguments := amendmentToolArguments(source, "request:spoof-amend-"+field)
+				arguments[field] = value
+				return callTool(t, session, ToolGoalsAmend, arguments)
+			}, "")
+		})
+	}
+}
+
+func TestV04OfficialMCPRejectsActiveStaleAndForeignAmendmentBeforeGenerators(t *testing.T) {
+	t.Run("active", func(t *testing.T) {
+		server, state, _ := newTestInterface(t, 16*1024)
+		session := serveOfficialClient(t, server)
+		created := callCreateGoal(t, session, map[string]any{
+			"request_ref": "request:active-source", "statement": "active source", "confirm": true,
+		})
+		sourceRef, _ := goal.NewGoalRef(created.Goal.GoalRef)
+		source, _ := state.GetGoal(context.Background(), sourceRef)
+		assertNoStateOrGeneratorChange(t, state, func() *sdkmcp.CallToolResult {
+			return callTool(t, session, ToolGoalsAmend, amendmentToolArguments(source, "request:active-amend"))
+		}, publicConflict)
+	})
+
+	for _, testCase := range []struct {
+		name   string
+		mutate func(map[string]any)
+	}{
+		{name: "stale_revision", mutate: func(input map[string]any) {
+			input["expected_source_revision"] = input["expected_source_revision"].(uint64) + 1
+		}},
+		{name: "stale_hash", mutate: func(input map[string]any) {
+			replacement := strings.Repeat("a", 64)
+			if input["expected_source_spec_hash"] == replacement {
+				replacement = strings.Repeat("b", 64)
+			}
+			input["expected_source_spec_hash"] = replacement
+		}},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			server, state, _ := newTestInterface(t, 16*1024)
+			session := serveOfficialClient(t, server)
+			created := callCreateGoal(t, session, map[string]any{
+				"request_ref": "request:" + testCase.name + "-source", "statement": "terminal source", "confirm": true,
+			})
+			sourceRef, _ := goal.NewGoalRef(created.Goal.GoalRef)
+			state.failGoal(t, sourceRef, "test.terminal_source")
+			source, _ := state.GetGoal(context.Background(), sourceRef)
+			input := amendmentToolArguments(source, "request:"+testCase.name+"-amend")
+			testCase.mutate(input)
+			assertNoStateOrGeneratorChange(t, state, func() *sdkmcp.CallToolResult {
+				return callTool(t, session, ToolGoalsAmend, input)
+			}, publicConflict)
+		})
+	}
+
+	t.Run("foreign", func(t *testing.T) {
+		server, state, _ := newTestInterface(t, 16*1024)
+		localSession := serveOfficialClient(t, server)
+		created := callCreateGoal(t, localSession, map[string]any{
+			"request_ref": "request:foreign-source", "statement": "terminal source", "confirm": true,
+		})
+		sourceRef, _ := goal.NewGoalRef(created.Goal.GoalRef)
+		state.failGoal(t, sourceRef, "test.terminal_source")
+		source, _ := state.GetGoal(context.Background(), sourceRef)
+		foreignServer := newTestInterfaceForPrincipal(t, state.orchestrator, "actor:foreign", "project:foreign", 16*1024)
+		foreignSession := serveOfficialClient(t, foreignServer)
+		assertNoStateOrGeneratorChange(t, state, func() *sdkmcp.CallToolResult {
+			return callTool(t, foreignSession, ToolGoalsAmend, amendmentToolArguments(source, "request:foreign-amend"))
+		}, publicNotFound)
+	})
+}
+
+func TestV04MemoryStateScopesRequestRefsAndSerializesConcurrentSuccessors(t *testing.T) {
+	t.Run("request scope", func(t *testing.T) {
+		server, state, _ := newTestInterface(t, 16*1024)
+		local := serveOfficialClient(t, server)
+		foreignServer := newTestInterfaceForPrincipal(t, state.orchestrator, "actor:other", "project:other", 16*1024)
+		foreign := serveOfficialClient(t, foreignServer)
+		arguments := map[string]any{"request_ref": "request:shared", "statement": "same request ref", "confirm": true}
+		first := callCreateGoal(t, local, arguments)
+		second := callCreateGoal(t, foreign, arguments)
+		if !first.Created || !second.Created || first.Goal == nil || second.Goal == nil ||
+			first.Goal.GoalRef == second.Goal.GoalRef || first.Goal.ActorRef != "actor:local" ||
+			second.Goal.ActorRef != "actor:other" || first.Goal.ProjectRef != "project:local" ||
+			second.Goal.ProjectRef != "project:other" {
+			t.Fatalf("scoped create: first=%+v second=%+v", first, second)
+		}
+		goals, requests, _, _ := state.counts()
+		if goals != 2 || requests != 2 {
+			t.Fatalf("scoped counts = goals:%d requests:%d", goals, requests)
+		}
+	})
+
+	t.Run("concurrent successor", func(t *testing.T) {
+		server, state, _ := newTestInterface(t, 16*1024)
+		session := serveOfficialClient(t, server)
+		created := callCreateGoal(t, session, map[string]any{
+			"request_ref": "request:concurrent-source", "statement": "terminal source", "confirm": true,
+		})
+		sourceRef, _ := goal.NewGoalRef(created.Goal.GoalRef)
+		state.failGoal(t, sourceRef, "test.terminal_source")
+		source, _ := state.GetGoal(context.Background(), sourceRef)
+		secondSession := serveOfficialClient(t, server)
+		type outcome struct {
+			result *sdkmcp.CallToolResult
+			err    error
+		}
+		start := make(chan struct{})
+		outcomes := make(chan outcome, 2)
+		calls := []struct {
+			session    *sdkmcp.ClientSession
+			requestRef string
+		}{
+			{session: session, requestRef: "request:concurrent-a"},
+			{session: secondSession, requestRef: "request:concurrent-b"},
+		}
+		for _, request := range calls {
+			request := request
+			go func() {
+				<-start
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				arguments := amendmentToolArguments(source, request.requestRef)
+				result, err := request.session.CallTool(ctx, &sdkmcp.CallToolParams{
+					Name: ToolGoalsAmend, Arguments: arguments,
+				})
+				outcomes <- outcome{result: result, err: err}
+			}()
+		}
+		close(start)
+		createdCount, conflictCount := 0, 0
+		for index := 0; index < 2; index++ {
+			outcome := <-outcomes
+			if outcome.err != nil || outcome.result == nil {
+				t.Fatalf("concurrent MCP call error: result=%+v err=%v", outcome.result, outcome.err)
+			}
+			payload, err := json.Marshal(outcome.result.StructuredContent)
+			if err != nil {
+				t.Fatalf("marshal concurrent output: %v", err)
+			}
+			if !outcome.result.IsError {
+				var output AmendGoalOutput
+				if err := json.Unmarshal(payload, &output); err != nil || !output.Created || output.Goal == nil {
+					t.Fatalf("concurrent success output=%+v payload=%s err=%v", output, payload, err)
+				}
+				createdCount++
+				continue
+			}
+			var output AmendGoalOutput
+			if err := json.Unmarshal(payload, &output); err != nil || output.Error == nil || output.Error.Code != publicConflict {
+				t.Fatalf("concurrent conflict output=%+v payload=%s err=%v", output, payload, err)
+			}
+			conflictCount++
+		}
+		goals, requests, successors, _ := state.counts()
+		if createdCount != 1 || conflictCount != 1 || goals != 2 || requests != 2 || successors != 1 {
+			t.Fatalf("concurrent successor = created:%d conflicts:%d goals:%d requests:%d successors:%d",
+				createdCount, conflictCount, goals, requests, successors)
+		}
+	})
+}
+
+func serveOfficialClient(t *testing.T, server *Interface) *sdkmcp.ClientSession {
+	t.Helper()
+	httpServer := httptest.NewServer(server.Handler())
+	t.Cleanup(httpServer.Close)
+	return connectOfficialClient(t, httpServer.URL)
+}
+
+func assertClosedWorldProperties(t *testing.T, tool *sdkmcp.Tool, expected []string) {
+	t.Helper()
+	if tool == nil {
+		t.Fatal("tool missing")
+	}
+	payload, err := json.Marshal(tool.InputSchema)
+	if err != nil {
+		t.Fatalf("Marshal(input schema) error = %v", err)
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(payload, &schema); err != nil {
+		t.Fatalf("Unmarshal(input schema=%s) error = %v", payload, err)
+	}
+	additional, ok := schema["additionalProperties"].(bool)
+	if !ok || additional {
+		t.Fatalf("input schema is not closed-world: %s", payload)
+	}
+	properties, ok := schema["properties"].(map[string]any)
+	if !ok {
+		if len(expected) == 0 {
+			return
+		}
+		t.Fatalf("input schema properties missing: %s", payload)
+	}
+	actual := make([]string, 0, len(properties))
+	for name := range properties {
+		actual = append(actual, name)
+	}
+	sort.Strings(actual)
+	if !reflect.DeepEqual(actual, expected) {
+		t.Fatalf("input properties = %v, want %v", actual, expected)
+	}
+}
+
+func callCreateGoal(t *testing.T, session *sdkmcp.ClientSession, arguments map[string]any) CreateGoalOutput {
+	t.Helper()
+	result := callTool(t, session, ToolGoalsCreate, arguments)
+	var output CreateGoalOutput
+	decodeStructured(t, result, &output)
+	if result.IsError || output.Error != nil || output.Goal == nil {
+		t.Fatalf("create output=%+v result=%+v", output, result)
+	}
+	return output
+}
+
+func callAmendGoal(t *testing.T, session *sdkmcp.ClientSession, arguments map[string]any) AmendGoalOutput {
+	t.Helper()
+	result := callTool(t, session, ToolGoalsAmend, arguments)
+	var output AmendGoalOutput
+	decodeStructured(t, result, &output)
+	if result.IsError || output.Error != nil || output.Goal == nil {
+		t.Fatalf("amend output=%+v result=%+v", output, result)
+	}
+	return output
+}
+
+func assertPublicToolError(t *testing.T, result *sdkmcp.CallToolResult, code string) {
+	t.Helper()
+	if !result.IsError {
+		t.Fatalf("tool result unexpectedly succeeded: %+v", result)
+	}
+	if code == "" {
+		return
+	}
+	payload, err := json.Marshal(result.StructuredContent)
+	if err != nil {
+		t.Fatalf("Marshal(error output) error = %v", err)
+	}
+	var output struct {
+		Error *ToolError `json:"error"`
+	}
+	if err := json.Unmarshal(payload, &output); err != nil || output.Error == nil || output.Error.Code != code {
+		t.Fatalf("public error = %+v payload=%s err=%v, want %s", output.Error, payload, err, code)
+	}
+}
+
+func amendmentToolArguments(source application.GoalRecord, requestRef string) map[string]any {
+	return map[string]any{
+		"request_ref": requestRef, "source_goal_ref": source.Goal.Ref().String(),
+		"expected_source_revision":  uint64(source.Goal.Revision()),
+		"expected_source_spec_hash": source.Goal.SpecHash(),
+		"statement":                 "amended exact intent", "normalized_objective": "amended objective",
+		"reason": "operator.amendment", "confirm": true,
+	}
+}
+
+func cloneArguments(arguments map[string]any) map[string]any {
+	clone := make(map[string]any, len(arguments))
+	for key, value := range arguments {
+		clone[key] = value
+	}
+	return clone
+}
+
+func canonicalSHA256(value string) bool {
+	if len(value) != 64 || strings.ToLower(value) != value {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	return err == nil
+}
+
+func assertNoStateOrGeneratorChange(
+	t *testing.T,
+	state *memoryState,
+	operation func() *sdkmcp.CallToolResult,
+	wantCode string,
+) {
+	t.Helper()
+	beforeGoals, beforeRequests, beforeSuccessors, beforePending := state.counts()
+	beforeIDs := state.ids.Count()
+	beforeClock := state.clock.Calls()
+	result := operation()
+	assertPublicToolError(t, result, wantCode)
+	afterGoals, afterRequests, afterSuccessors, afterPending := state.counts()
+	if afterGoals != beforeGoals || afterRequests != beforeRequests || afterSuccessors != beforeSuccessors ||
+		afterPending != beforePending || state.ids.Count() != beforeIDs || state.clock.Calls() != beforeClock {
+		t.Fatalf("rejected request caused effects: state %d/%d/%d/%d -> %d/%d/%d/%d ids %d->%d clock %d->%d",
+			beforeGoals, beforeRequests, beforeSuccessors, beforePending,
+			afterGoals, afterRequests, afterSuccessors, afterPending,
+			beforeIDs, state.ids.Count(), beforeClock, state.clock.Calls())
+	}
+}
+
 func TestToolErrorsAreTypedLocalizedAndDoNotLeakApplicationErrors(t *testing.T) {
 	server, _, _ := newTestInterface(t, 16*1024)
 	httpServer := httptest.NewServer(server.Handler())
@@ -170,7 +683,7 @@ func TestToolErrorsAreTypedLocalizedAndDoNotLeakApplicationErrors(t *testing.T) 
 		t.Fatalf("invalid limit output = %+v result=%+v", invalid, invalidLimit)
 	}
 
-	request := map[string]any{"request_ref": "request:conflict", "statement": "first statement"}
+	request := map[string]any{"request_ref": "request:conflict", "statement": "first statement", "confirm": true}
 	if result := callTool(t, session, ToolGoalsCreate, request); result.IsError {
 		t.Fatalf("initial conflict fixture failed: %+v", result)
 	}
@@ -190,7 +703,7 @@ func TestFailedGoalProjectsStableFailureCodeWithoutProviderDiagnostic(t *testing
 	session := connectOfficialClient(t, httpServer.URL)
 
 	createdResult := callTool(t, session, ToolGoalsCreate, map[string]any{
-		"request_ref": "request:failed-view", "statement": "fail safely",
+		"request_ref": "request:failed-view", "statement": "fail safely", "confirm": true,
 	})
 	var created CreateGoalOutput
 	decodeStructured(t, createdResult, &created)
@@ -318,21 +831,39 @@ func testContext(t *testing.T) context.Context {
 func newTestInterface(t *testing.T, maxRequestBytes int64) (*Interface, *memoryState, *memoryArtifacts) {
 	t.Helper()
 	state := &memoryState{
-		byRef:     make(map[goal.GoalRef]application.GoalRecord),
-		byRequest: make(map[string]goal.GoalRef),
+		byRef:        make(map[goal.GoalRef]application.GoalRecord),
+		byRequest:    make(map[memoryRequestKey]goal.GoalRef),
+		byParentSpec: make(map[goal.AppSpecRef]goal.GoalRef),
 	}
+	clock := &testClock{now: testNow()}
+	ids := &sequentialIDs{}
+	state.clock = clock
+	state.ids = ids
 	artifacts := &memoryArtifacts{content: make(map[goal.ArtifactRef]ports.ArtifactContent)}
 	orchestrator, err := application.New(application.Dependencies{
 		State: state, Launcher: inertAgent{}, Observer: inertAgent{}, Artifacts: artifacts,
-		Clock: fixedClock{}, IDs: &sequentialIDs{}, MaxOutputBytes: 4096,
+		Clock: clock, IDs: ids, MaxOutputBytes: 4096,
 		MaxActionAttempts: 3, ClaimLease: time.Minute, ObservationDelay: time.Second,
 		ExecutionTimeout: time.Hour,
 	})
 	if err != nil {
 		t.Fatalf("application.New() error = %v", err)
 	}
-	actorRef, _ := goal.NewActorRef("actor:local")
-	projectRef, _ := goal.NewProjectRef("project:local")
+	state.orchestrator = orchestrator
+	server := newTestInterfaceForPrincipal(t, orchestrator, "actor:local", "project:local", maxRequestBytes)
+	return server, state, artifacts
+}
+
+func newTestInterfaceForPrincipal(
+	t *testing.T,
+	orchestrator *application.Orchestrator,
+	actor string,
+	project string,
+	maxRequestBytes int64,
+) *Interface {
+	t.Helper()
+	actorRef, _ := goal.NewActorRef(actor)
+	projectRef, _ := goal.NewProjectRef(project)
 	provider, err := identity.NewLocalOwnerProvider(actorRef, projectRef)
 	if err != nil {
 		t.Fatalf("NewLocalOwnerProvider() error = %v", err)
@@ -348,12 +879,33 @@ func newTestInterface(t *testing.T, maxRequestBytes int64) (*Interface, *memoryS
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	return server, state, artifacts
+	return server
 }
 
-type fixedClock struct{}
+type testClock struct {
+	mu    sync.Mutex
+	now   time.Time
+	calls uint64
+}
 
-func (fixedClock) Now() time.Time { return testNow() }
+func (clock *testClock) Now() time.Time {
+	clock.mu.Lock()
+	defer clock.mu.Unlock()
+	clock.calls++
+	return clock.now
+}
+
+func (clock *testClock) Set(now time.Time) {
+	clock.mu.Lock()
+	defer clock.mu.Unlock()
+	clock.now = now.UTC()
+}
+
+func (clock *testClock) Calls() uint64 {
+	clock.mu.Lock()
+	defer clock.mu.Unlock()
+	return clock.calls
+}
 
 func testNow() time.Time { return time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC) }
 
@@ -367,6 +919,12 @@ func (ids *sequentialIDs) NewID(_ context.Context, namespace string) (string, er
 	defer ids.mu.Unlock()
 	ids.next++
 	return fmt.Sprintf("%s:test-%d", namespace, ids.next), nil
+}
+
+func (ids *sequentialIDs) Count() uint64 {
+	ids.mu.Lock()
+	defer ids.mu.Unlock()
+	return ids.next
 }
 
 type inertAgent struct{}
@@ -414,15 +972,31 @@ func (store *memoryArtifacts) set(content ports.ArtifactContent) {
 }
 
 type memoryState struct {
-	mu        sync.Mutex
-	byRef     map[goal.GoalRef]application.GoalRecord
-	byRequest map[string]goal.GoalRef
+	mu             sync.Mutex
+	byRef          map[goal.GoalRef]application.GoalRecord
+	byRequest      map[memoryRequestKey]goal.GoalRef
+	byParentSpec   map[goal.AppSpecRef]goal.GoalRef
+	pendingActions int64
+	orchestrator   *application.Orchestrator
+	clock          *testClock
+	ids            *sequentialIDs
+}
+
+type memoryRequestKey struct {
+	actor   goal.ActorRef
+	project goal.ProjectRef
+	ref     string
+}
+
+func requestKey(actor goal.ActorRef, project goal.ProjectRef, ref string) memoryRequestKey {
+	return memoryRequestKey{actor: actor, project: project, ref: ref}
 }
 
 func (state *memoryState) CreateGoal(_ context.Context, input application.CreateGoalState) (application.GoalRecord, bool, error) {
 	state.mu.Lock()
 	defer state.mu.Unlock()
-	if existingRef, found := state.byRequest[input.RequestRef]; found {
+	key := requestKey(input.Goal.Actor(), input.Goal.Project(), input.RequestRef)
+	if existingRef, found := state.byRequest[key]; found {
 		existing := state.byRef[existingRef]
 		if existing.RequestFingerprint != input.RequestFingerprint {
 			return application.GoalRecord{}, false, &application.StateError{Code: application.StateConflict}
@@ -431,11 +1005,63 @@ func (state *memoryState) CreateGoal(_ context.Context, input application.Create
 	}
 	record := application.GoalRecord{
 		RequestRef: input.RequestRef, RequestFingerprint: input.RequestFingerprint,
-		Intent: input.Intent, Goal: input.Goal,
+		Goal:       input.Goal,
 		Executions: append([]application.ExecutionRecord(nil), input.Executions...),
 	}
+	if _, exists := state.byRef[input.Goal.Ref()]; exists {
+		return application.GoalRecord{}, false, &application.StateError{Code: application.StateConflict}
+	}
 	state.byRef[input.Goal.Ref()] = record
-	state.byRequest[input.RequestRef] = input.Goal.Ref()
+	state.byRequest[key] = input.Goal.Ref()
+	state.pendingActions += int64(len(input.Actions))
+	return cloneGoalRecord(record), true, nil
+}
+
+func (state *memoryState) AmendGoal(_ context.Context, input application.AmendGoalState) (application.GoalRecord, bool, error) {
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	key := requestKey(input.ActorRef, input.ProjectRef, input.RequestRef)
+	if existingRef, found := state.byRequest[key]; found {
+		existing, exists := state.byRef[existingRef]
+		if !exists {
+			return application.GoalRecord{}, false, &application.StateError{Code: application.StateInvalid}
+		}
+		if existing.RequestFingerprint != input.RequestFingerprint {
+			return application.GoalRecord{}, false, &application.StateError{Code: application.StateConflict}
+		}
+		return cloneGoalRecord(existing), false, nil
+	}
+	source, found := state.byRef[input.SourceGoalRef]
+	if !found || source.Goal.Actor() != input.ActorRef || source.Goal.Project() != input.ProjectRef {
+		return application.GoalRecord{}, false, &application.StateError{Code: application.StateNotFound}
+	}
+	if source.Goal.Revision() != input.ExpectedSourceRevision || source.Goal.SpecHash() != input.ExpectedSourceSpecHash {
+		return application.GoalRecord{}, false, &application.StateError{Code: application.StateConflict}
+	}
+	if !source.Goal.IsTerminal() {
+		return application.GoalRecord{}, false, &application.StateError{Code: application.StateConflict}
+	}
+	successor := input.Successor
+	spec := successor.AppSpec()
+	parentRef, hasParent := spec.ParentRef()
+	if successor.Actor() != input.ActorRef || successor.Project() != input.ProjectRef ||
+		successor.State() != goal.GoalStatePending || successor.WorkItemCount() != 0 || !hasParent ||
+		parentRef != source.Goal.AppSpec().Ref() || spec.ParentHash() != source.Goal.SpecHash() ||
+		spec.Generation() != source.Goal.AppSpec().Generation()+1 {
+		return application.GoalRecord{}, false, &application.StateError{Code: application.StateInvalid}
+	}
+	if _, exists := state.byParentSpec[source.Goal.AppSpec().Ref()]; exists {
+		return application.GoalRecord{}, false, &application.StateError{Code: application.StateConflict}
+	}
+	if _, exists := state.byRef[successor.Ref()]; exists {
+		return application.GoalRecord{}, false, &application.StateError{Code: application.StateConflict}
+	}
+	record := application.GoalRecord{
+		RequestRef: input.RequestRef, RequestFingerprint: input.RequestFingerprint, Goal: successor,
+	}
+	state.byRef[successor.Ref()] = record
+	state.byRequest[key] = successor.Ref()
+	state.byParentSpec[source.Goal.AppSpec().Ref()] = successor.Ref()
 	return cloneGoalRecord(record), true, nil
 }
 
@@ -468,9 +1094,11 @@ func (state *memoryState) ListGoals(_ context.Context, actorRef goal.ActorRef, p
 	result := make([]application.GoalSummary, 0, len(refs))
 	for _, ref := range refs {
 		record := byString[ref]
+		appSpec := record.Goal.AppSpec()
 		result = append(result, application.GoalSummary{
-			Ref: record.Goal.Ref(), IntentRef: record.Goal.Intent(), ActorRef: record.Goal.Actor(),
-			ProjectRef: record.Goal.Project(), Statement: record.Intent.Statement(),
+			Ref: record.Goal.Ref(), IntentRef: record.Goal.Intent(), AppSpecRef: appSpec.Ref(),
+			AppSpecGeneration: appSpec.Generation(), SpecHash: appSpec.Hash(), ActorRef: record.Goal.Actor(),
+			ProjectRef: record.Goal.Project(), Statement: appSpec.Intent().Statement(),
 			State: record.Goal.State(), Revision: record.Goal.Revision(), CreatedAt: record.Goal.CreatedAt(),
 			ArtifactCount: len(record.Artifacts),
 		})
@@ -481,7 +1109,7 @@ func (state *memoryState) ListGoals(_ context.Context, actorRef goal.ActorRef, p
 func (state *memoryState) Status(context.Context) (application.RepositoryStatus, error) {
 	state.mu.Lock()
 	defer state.mu.Unlock()
-	status := application.RepositoryStatus{Goals: int64(len(state.byRef)), PendingActions: int64(len(state.byRef))}
+	status := application.RepositoryStatus{Goals: int64(len(state.byRef)), PendingActions: state.pendingActions}
 	for _, record := range state.byRef {
 		if record.Goal.State() == goal.GoalStateRunning {
 			status.RunningGoals++
@@ -566,6 +1194,7 @@ func (state *memoryState) failGoal(t *testing.T, goalRef goal.GoalRef, code stri
 	record.Executions[0].FinishedAt = at
 	record.Executions[0].FailureCode = code
 	state.byRef[goalRef] = record
+	state.clock.Set(at.Add(time.Second))
 }
 
 func cloneGoalRecord(record application.GoalRecord) application.GoalRecord {
@@ -573,4 +1202,10 @@ func cloneGoalRecord(record application.GoalRecord) application.GoalRecord {
 	record.Artifacts = append([]application.ArtifactRecord(nil), record.Artifacts...)
 	record.Attestations = append([]application.AttestationRecord(nil), record.Attestations...)
 	return record
+}
+
+func (state *memoryState) counts() (goals int, requests int, successors int, pendingActions int64) {
+	state.mu.Lock()
+	defer state.mu.Unlock()
+	return len(state.byRef), len(state.byRequest), len(state.byParentSpec), state.pendingActions
 }

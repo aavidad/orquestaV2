@@ -17,6 +17,7 @@ type GoalView struct {
 	ActorRef       string                `json:"actor_ref"`
 	ProjectRef     string                `json:"project_ref"`
 	Statement      string                `json:"statement"`
+	AppSpec        AppSpecView           `json:"app_spec"`
 	State          string                `json:"state"`
 	Revision       uint64                `json:"revision"`
 	PlanGeneration uint64                `json:"plan_generation"`
@@ -28,6 +29,28 @@ type GoalView struct {
 	Executions     []ExecutionView       `json:"executions"`
 	Artifacts      []ArtifactEvidence    `json:"artifacts"`
 	Attestations   []AttestationEvidence `json:"attestations"`
+}
+
+type AppSpecView struct {
+	Ref         string     `json:"ref"`
+	Generation  uint64     `json:"generation"`
+	Hash        string     `json:"hash"`
+	ParentRef   string     `json:"parent_ref,omitempty"`
+	ParentHash  string     `json:"parent_hash,omitempty"`
+	Objective   string     `json:"objective"`
+	Reason      string     `json:"reason"`
+	ConfirmedBy string     `json:"confirmed_by"`
+	ConfirmedAt time.Time  `json:"confirmed_at"`
+	Intent      IntentView `json:"intent"`
+}
+
+type IntentView struct {
+	Ref         string    `json:"ref"`
+	Hash        string    `json:"hash"`
+	ActorRef    string    `json:"actor_ref"`
+	ProjectRef  string    `json:"project_ref"`
+	Statement   string    `json:"statement"`
+	SubmittedAt time.Time `json:"submitted_at"`
 }
 
 type PhaseView struct {
@@ -85,16 +108,19 @@ type AttestationEvidence struct {
 }
 
 type GoalSummaryView struct {
-	GoalRef       string     `json:"goal_ref"`
-	IntentRef     string     `json:"intent_ref"`
-	ActorRef      string     `json:"actor_ref"`
-	ProjectRef    string     `json:"project_ref"`
-	Statement     string     `json:"statement"`
-	State         string     `json:"state"`
-	Revision      uint64     `json:"revision"`
-	CreatedAt     time.Time  `json:"created_at"`
-	ClosedAt      *time.Time `json:"closed_at,omitempty"`
-	ArtifactCount int        `json:"artifact_count"`
+	GoalRef           string     `json:"goal_ref"`
+	IntentRef         string     `json:"intent_ref"`
+	AppSpecRef        string     `json:"app_spec_ref"`
+	AppSpecGeneration uint64     `json:"app_spec_generation"`
+	SpecHash          string     `json:"spec_hash"`
+	ActorRef          string     `json:"actor_ref"`
+	ProjectRef        string     `json:"project_ref"`
+	Statement         string     `json:"statement"`
+	State             string     `json:"state"`
+	Revision          uint64     `json:"revision"`
+	CreatedAt         time.Time  `json:"created_at"`
+	ClosedAt          *time.Time `json:"closed_at,omitempty"`
+	ArtifactCount     int        `json:"artifact_count"`
 }
 
 type ArtifactView struct {
@@ -109,6 +135,18 @@ type ArtifactView struct {
 
 func goalView(record application.GoalRecord) GoalView {
 	snapshot := record.Goal.Snapshot()
+	intent := IntentView{
+		Ref: snapshot.AppSpec.Intent.Ref, Hash: snapshot.AppSpec.Intent.Hash,
+		ActorRef: snapshot.AppSpec.Intent.ActorRef, ProjectRef: snapshot.AppSpec.Intent.ProjectRef,
+		Statement: snapshot.AppSpec.Intent.Statement, SubmittedAt: snapshot.AppSpec.Intent.SubmittedAt,
+	}
+	appSpec := AppSpecView{
+		Ref: snapshot.AppSpec.Ref, Generation: uint64(snapshot.AppSpec.Generation), Hash: snapshot.AppSpec.Hash,
+		ParentRef: snapshot.AppSpec.ParentRef, ParentHash: snapshot.AppSpec.ParentHash,
+		Objective: snapshot.AppSpec.Objective, Reason: snapshot.AppSpec.Reason,
+		ConfirmedBy: snapshot.AppSpec.ConfirmedBy, ConfirmedAt: snapshot.AppSpec.ConfirmedAt,
+		Intent: intent,
+	}
 	phases := make([]PhaseView, 0, len(snapshot.Phases))
 	for _, phase := range snapshot.Phases {
 		phases = append(phases, PhaseView{PhaseKey: phase.Key})
@@ -163,11 +201,12 @@ func goalView(record application.GoalRecord) GoalView {
 	return GoalView{
 		RequestRef:     record.RequestRef,
 		GoalRef:        snapshot.Ref,
-		IntentRef:      snapshot.Intent.Ref,
-		IntentHash:     snapshot.Intent.Hash,
+		IntentRef:      intent.Ref,
+		IntentHash:     intent.Hash,
 		ActorRef:       snapshot.ActorRef,
 		ProjectRef:     snapshot.ProjectRef,
-		Statement:      snapshot.Intent.Statement,
+		Statement:      intent.Statement,
+		AppSpec:        appSpec,
 		State:          string(snapshot.State),
 		Revision:       uint64(snapshot.Revision),
 		PlanGeneration: uint64(snapshot.PlanGeneration),
@@ -199,16 +238,19 @@ func executionView(execution application.ExecutionRecord) ExecutionView {
 
 func goalSummaryView(summary application.GoalSummary) GoalSummaryView {
 	return GoalSummaryView{
-		GoalRef:       summary.Ref.String(),
-		IntentRef:     summary.IntentRef.String(),
-		ActorRef:      summary.ActorRef.String(),
-		ProjectRef:    summary.ProjectRef.String(),
-		Statement:     summary.Statement,
-		State:         string(summary.State),
-		Revision:      uint64(summary.Revision),
-		CreatedAt:     summary.CreatedAt,
-		ClosedAt:      optionalTime(summary.ClosedAt),
-		ArtifactCount: summary.ArtifactCount,
+		GoalRef:           summary.Ref.String(),
+		IntentRef:         summary.IntentRef.String(),
+		AppSpecRef:        summary.AppSpecRef.String(),
+		AppSpecGeneration: uint64(summary.AppSpecGeneration),
+		SpecHash:          summary.SpecHash,
+		ActorRef:          summary.ActorRef.String(),
+		ProjectRef:        summary.ProjectRef.String(),
+		Statement:         summary.Statement,
+		State:             string(summary.State),
+		Revision:          uint64(summary.Revision),
+		CreatedAt:         summary.CreatedAt,
+		ClosedAt:          optionalTime(summary.ClosedAt),
+		ArtifactCount:     summary.ArtifactCount,
 	}
 }
 

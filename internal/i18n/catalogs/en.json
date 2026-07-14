@@ -6,6 +6,7 @@
   "resource.goal.description": "Durable state and evidence for a Goal.",
   "server.instructions": "Orquesta coordinates durable Goals through typed tools.",
   "tool.artifacts.read.description": "Read an immutable artifact by reference.",
+  "tool.goals.amend.description": "Create a confirmed causal successor for a terminal Goal.",
   "tool.goals.create.description": "Create a durable Goal for the selected project.",
   "tool.goals.get.description": "Inspect the state and evidence of a Goal.",
   "tool.goals.list.description": "List Goals visible in the project.",

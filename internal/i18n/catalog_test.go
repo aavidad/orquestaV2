@@ -11,6 +11,12 @@ func TestBundledCatalogHasParityAndSpanishFallback(t *testing.T) {
 	if got := catalog.Text("en", "tool.goals.create.description"); got != "Create a durable Goal for the selected project." {
 		t.Fatalf("english text = %q", got)
 	}
+	if got := catalog.Text("es", "tool.goals.amend.description"); got != "Crea un sucesor causal confirmado para un Goal terminal." {
+		t.Fatalf("amendment text = %q", got)
+	}
+	if got := catalog.Text("en", "tool.goals.amend.description"); got != "Create a confirmed causal successor for a terminal Goal." {
+		t.Fatalf("english amendment text = %q", got)
+	}
 	if got := catalog.Text("gl", "error.not_found"); got != "No se encontró el recurso solicitado." {
 		t.Fatalf("fallback text = %q", got)
 	}

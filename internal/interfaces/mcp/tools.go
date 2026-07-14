@@ -12,6 +12,7 @@ import (
 )
 
 const (
+	ToolGoalsAmend    = "orquesta.goals.amend"
 	ToolGoalsCreate   = "orquesta.goals.create"
 	ToolGoalsGet      = "orquesta.goals.get"
 	ToolGoalsList     = "orquesta.goals.list"
@@ -20,9 +21,11 @@ const (
 )
 
 type CreateGoalInput struct {
-	RequestRef string     `json:"request_ref,omitempty" jsonschema:"caller-controlled idempotency reference"`
-	Statement  string     `json:"statement,omitempty" jsonschema:"objective to coordinate as a durable Goal"`
-	Plan       *PlanInput `json:"plan,omitempty" jsonschema:"optional typed DAG execution plan"`
+	RequestRef          string     `json:"request_ref,omitempty" jsonschema:"caller-controlled idempotency reference"`
+	Statement           string     `json:"statement,omitempty" jsonschema:"exact operator intent to preserve"`
+	NormalizedObjective string     `json:"normalized_objective,omitempty" jsonschema:"confirmed objective used for planning"`
+	Confirm             bool       `json:"confirm,omitempty" jsonschema:"explicit confirmation required before durable creation"`
+	Plan                *PlanInput `json:"plan,omitempty" jsonschema:"optional typed DAG execution plan"`
 }
 
 type PlanInput struct {
@@ -41,6 +44,23 @@ type WorkItemInput struct {
 }
 
 type CreateGoalOutput struct {
+	Created bool       `json:"created"`
+	Goal    *GoalView  `json:"goal,omitempty"`
+	Error   *ToolError `json:"error,omitempty"`
+}
+
+type AmendGoalInput struct {
+	RequestRef             string `json:"request_ref,omitempty" jsonschema:"caller-controlled idempotency reference"`
+	SourceGoalRef          string `json:"source_goal_ref,omitempty" jsonschema:"terminal Goal to amend"`
+	ExpectedSourceRevision uint64 `json:"expected_source_revision,omitempty" jsonschema:"source revision compare-and-swap fence"`
+	ExpectedSourceSpecHash string `json:"expected_source_spec_hash,omitempty" jsonschema:"source AppSpec hash compare-and-swap fence"`
+	Statement              string `json:"statement,omitempty" jsonschema:"exact amended operator intent to preserve"`
+	NormalizedObjective    string `json:"normalized_objective,omitempty" jsonschema:"confirmed amended objective"`
+	Reason                 string `json:"reason,omitempty" jsonschema:"reason for creating a causal successor"`
+	Confirm                bool   `json:"confirm,omitempty" jsonschema:"explicit confirmation required before durable amendment"`
+}
+
+type AmendGoalOutput struct {
 	Created bool       `json:"created"`
 	Goal    *GoalView  `json:"goal,omitempty"`
 	Error   *ToolError `json:"error,omitempty"`
@@ -90,15 +110,23 @@ type SystemStatusOutput struct {
 func (server *Interface) registerTools() {
 	closedWorld := false
 	nonDestructive := false
-	sdkmcp.AddTool(server.server, &sdkmcp.Tool{
-		Name:        ToolGoalsCreate,
-		Description: server.catalog.Text(server.locale, "tool.goals.create.description"),
-		Annotations: &sdkmcp.ToolAnnotations{
+	writeAnnotations := func() *sdkmcp.ToolAnnotations {
+		return &sdkmcp.ToolAnnotations{
 			DestructiveHint: &nonDestructive,
 			IdempotentHint:  true,
 			OpenWorldHint:   &closedWorld,
-		},
+		}
+	}
+	sdkmcp.AddTool(server.server, &sdkmcp.Tool{
+		Name:        ToolGoalsCreate,
+		Description: server.catalog.Text(server.locale, "tool.goals.create.description"),
+		Annotations: writeAnnotations(),
 	}, server.createGoal)
+	sdkmcp.AddTool(server.server, &sdkmcp.Tool{
+		Name:        ToolGoalsAmend,
+		Description: server.catalog.Text(server.locale, "tool.goals.amend.description"),
+		Annotations: writeAnnotations(),
+	}, server.amendGoal)
 
 	readOnlyAnnotations := func() *sdkmcp.ToolAnnotations {
 		return &sdkmcp.ToolAnnotations{
@@ -126,7 +154,7 @@ func (server *Interface) registerTools() {
 }
 
 func (server *Interface) createGoal(ctx context.Context, _ *sdkmcp.CallToolRequest, input CreateGoalInput) (*sdkmcp.CallToolResult, CreateGoalOutput, error) {
-	if strings.TrimSpace(input.RequestRef) == "" || strings.TrimSpace(input.RequestRef) != input.RequestRef || strings.TrimSpace(input.Statement) == "" {
+	if !input.Confirm || strings.TrimSpace(input.RequestRef) == "" || strings.TrimSpace(input.RequestRef) != input.RequestRef || strings.TrimSpace(input.Statement) == "" {
 		result, public := server.toolError(publicInvalidRequest)
 		return result, CreateGoalOutput{Error: public}, nil
 	}
@@ -136,11 +164,13 @@ func (server *Interface) createGoal(ctx context.Context, _ *sdkmcp.CallToolReque
 		return result, CreateGoalOutput{Error: public}, nil
 	}
 	submitted, err := server.orchestrator.Submit(ctx, application.SubmitRequest{
-		RequestRef: input.RequestRef,
-		ActorRef:   principal.ActorRef,
-		ProjectRef: principal.DefaultProjectRef,
-		Statement:  input.Statement,
-		Plan:       applicationPlan(input.Plan),
+		RequestRef:          input.RequestRef,
+		ActorRef:            principal.ActorRef,
+		ProjectRef:          principal.DefaultProjectRef,
+		Statement:           input.Statement,
+		NormalizedObjective: input.NormalizedObjective,
+		Confirm:             input.Confirm,
+		Plan:                applicationPlan(input.Plan),
 	})
 	if err != nil {
 		result, public := server.toolError(publicCode(err))
@@ -148,6 +178,44 @@ func (server *Interface) createGoal(ctx context.Context, _ *sdkmcp.CallToolReque
 	}
 	view := goalView(submitted.Record)
 	return nil, CreateGoalOutput{Created: submitted.Created, Goal: &view}, nil
+}
+
+func (server *Interface) amendGoal(ctx context.Context, _ *sdkmcp.CallToolRequest, input AmendGoalInput) (*sdkmcp.CallToolResult, AmendGoalOutput, error) {
+	if !input.Confirm || strings.TrimSpace(input.RequestRef) == "" ||
+		strings.TrimSpace(input.RequestRef) != input.RequestRef || strings.TrimSpace(input.Statement) == "" ||
+		input.ExpectedSourceRevision == 0 || !goal.IsCanonicalAppSpecHash(input.ExpectedSourceSpecHash) ||
+		strings.TrimSpace(input.Reason) == "" {
+		result, public := server.toolError(publicInvalidRequest)
+		return result, AmendGoalOutput{Error: public}, nil
+	}
+	sourceGoalRef, err := goal.NewGoalRef(input.SourceGoalRef)
+	if err != nil {
+		result, public := server.toolError(publicInvalidRequest)
+		return result, AmendGoalOutput{Error: public}, nil
+	}
+	principal, err := server.principal(ctx)
+	if err != nil {
+		result, public := server.toolError(publicCode(err))
+		return result, AmendGoalOutput{Error: public}, nil
+	}
+	amended, err := server.orchestrator.Amend(ctx, application.AmendRequest{
+		RequestRef:             input.RequestRef,
+		ActorRef:               principal.ActorRef,
+		ProjectRef:             principal.DefaultProjectRef,
+		SourceGoalRef:          sourceGoalRef,
+		ExpectedSourceRevision: goal.Revision(input.ExpectedSourceRevision),
+		ExpectedSourceSpecHash: input.ExpectedSourceSpecHash,
+		Statement:              input.Statement,
+		NormalizedObjective:    input.NormalizedObjective,
+		Reason:                 input.Reason,
+		Confirm:                input.Confirm,
+	})
+	if err != nil {
+		result, public := server.toolError(publicCode(err))
+		return result, AmendGoalOutput{Error: public}, nil
+	}
+	view := goalView(amended.Record)
+	return nil, AmendGoalOutput{Created: amended.Created, Goal: &view}, nil
 }
 
 func applicationPlan(input *PlanInput) *application.PlanSpec {

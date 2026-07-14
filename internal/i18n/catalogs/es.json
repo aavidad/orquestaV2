@@ -6,6 +6,7 @@
   "resource.goal.description": "Estado durable y evidencias de un Goal.",
   "server.instructions": "Orquesta coordina Goals durables mediante herramientas tipadas.",
   "tool.artifacts.read.description": "Lee un artefacto inmutable por su referencia.",
+  "tool.goals.amend.description": "Crea un sucesor causal confirmado para un Goal terminal.",
   "tool.goals.create.description": "Crea un Goal durable para el proyecto indicado.",
   "tool.goals.get.description": "Consulta el estado y las evidencias de un Goal.",
   "tool.goals.list.description": "Lista los Goals visibles del proyecto.",
