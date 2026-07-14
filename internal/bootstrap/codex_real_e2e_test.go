@@ -65,6 +65,7 @@ func TestRealCodexAdapterClosesGoalThroughProductionMCPServer(t *testing.T) {
 	createdResult := callMCPTool(t, ctx, session, mcpiface.ToolGoalsCreate, map[string]any{
 		"request_ref": requestRef,
 		"statement":   "Produce un artefacto de texto que contenga exactamente el marcador " + marker + ".",
+		"confirm":     true,
 	})
 	var created mcpiface.CreateGoalOutput
 	decodeMCPOutput(t, createdResult, &created)

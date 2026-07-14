@@ -127,7 +127,7 @@ func (agent *countingAgent) Launch(ctx context.Context, request ports.AgentLaunc
 		agent.launches.Add(1)
 	}
 	return ports.AgentLaunchReceipt{
-		ExecutionRef: request.ExecutionRef, ProviderRef: "provider:test",
+		ExecutionRef: request.ExecutionRef, SpecHash: request.SpecHash, ProviderRef: "provider:test",
 		ExternalRef:    "test:" + request.ExecutionRef.String(),
 		IdempotencyKey: request.IdempotencyKey, AcceptedAt: agent.now(),
 	}, nil
@@ -149,7 +149,7 @@ func (agent *countingAgent) Observe(ctx context.Context, executionRef goal.Execu
 		content = []byte("artifact:" + request.Objective)
 	}
 	return ports.AgentObservation{
-		ExecutionRef: executionRef, Status: ports.AgentCompleted,
+		ExecutionRef: executionRef, SpecHash: request.SpecHash, Status: ports.AgentCompleted,
 		MediaType: "text/plain", Content: append([]byte(nil), content...),
 		ObservedAt: agent.now(),
 	}, nil
@@ -182,6 +182,7 @@ func submitTestGoal(t *testing.T, runtime *Runtime, requestRef string) goal.Goal
 	project, _ := goal.NewProjectRef("project:default")
 	result, err := runtime.Orchestrator().Submit(context.Background(), application.SubmitRequest{
 		RequestRef: requestRef, ActorRef: actor, ProjectRef: project, Statement: "produce restart evidence",
+		Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("submit: %v", err)
@@ -278,14 +279,14 @@ func (agent *processAgent) Launch(_ context.Context, request ports.AgentLaunchRe
 
 func (agent *processAgent) receipt(request ports.AgentLaunchRequest) ports.AgentLaunchReceipt {
 	return ports.AgentLaunchReceipt{
-		ExecutionRef: request.ExecutionRef, ProviderRef: "provider:process-test",
+		ExecutionRef: request.ExecutionRef, SpecHash: request.SpecHash, ProviderRef: "provider:process-test",
 		ExternalRef: "pid-owned", IdempotencyKey: request.IdempotencyKey, AcceptedAt: agent.now(),
 	}
 }
 
 func (agent *processAgent) Observe(context.Context, goal.ExecutionRef) (ports.AgentObservation, error) {
 	return ports.AgentObservation{
-		ExecutionRef: agent.execution, Status: ports.AgentRunning, ObservedAt: agent.now(),
+		ExecutionRef: agent.execution, SpecHash: agent.request.SpecHash, Status: ports.AgentRunning, ObservedAt: agent.now(),
 	}, nil
 }
 

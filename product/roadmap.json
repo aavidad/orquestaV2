@@ -563,7 +563,7 @@
       "vertical": "intent_appspec",
       "status": "executable",
       "test_ref": "acceptance/v04_intent_appspec_test.go",
-      "command": "go test -mod=vendor -count=1 ./acceptance ./internal/goal ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/state/sqlite ./internal/interfaces/mcp -run '^(TestAcceptanceV04IntentAppSpec|TestV04.*)$'",
+      "command": "sh -c 'go test -mod=vendor -count=1 ./acceptance -run \"^(TestAcceptanceV04IntentAppSpec|TestV04.*)$\" && go test -mod=vendor -count=1 . ./internal/goal ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/interfaces/mcp ./internal/i18n ./internal/bootstrap ./cmd/orquesta'",
       "fixture": "acceptance/fixtures/v04_intent_appspec.json",
       "receipt": "product/evidence/v04_intent_appspec.json",
       "assertions": [

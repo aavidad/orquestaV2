@@ -32,9 +32,15 @@ importan SQLite, filesystem, MCP, Codex ni módulos legacy.
 El flujo acreditado es:
 
 ```text
-IntentManifest -> Goal + WorkItem -> Execution -> Artifact + Attestation
-              -> WorkItem terminal -> Goal terminal
+IntentManifest -> AppSpec confirmado -> Goal + WorkItem -> Execution
+                                      -> Artifact + Attestation
+                                      -> WorkItem terminal -> Goal terminal
 ```
+
+`IntentManifest` conserva la entrada exacta. `AppSpec` contiene la interpretación
+confirmada, su hash y su generación causal. Una modificación no reescribe el
+Goal anterior: crea un nuevo Intent, un AppSpec N+1 y un Goal sucesor pendiente;
+el padre terminal y sus evidencias permanecen inmutables.
 
 Las transiciones se deciden en dominio/aplicación y se persisten mediante
 operaciones atómicas del repositorio. El adaptador de agente solo lanza y
@@ -56,9 +62,11 @@ registros de ejecución son auditoría o proyecciones, no otra autoridad.
   único valor;
 - errores públicos y de puertos usan códigos estables; no exponen stderr del
   proveedor;
-- MCP publica `orquesta.goals.create`, `orquesta.goals.get`,
-  `orquesta.goals.list`, `orquesta.artifacts.read` y
-  `orquesta.system.status`.
+- MCP publica `orquesta.goals.create`, `orquesta.goals.amend`,
+  `orquesta.goals.get`, `orquesta.goals.list`, `orquesta.artifacts.read` y
+  `orquesta.system.status`. Create/amend exigen `confirm:true`; actor, proyecto,
+  refs generadas y tiempos proceden de dependencias de confianza del servidor,
+  no del cliente.
 
 No se debe abrir el listener a red pública: el token local evita que usuarios y
 procesos sin acceso al fichero invoquen MCP, pero no aísla procesos que corren

@@ -22,6 +22,7 @@ type v04Fixture struct {
 	SchemaVersion     int      `json:"schema_version"`
 	ContractID        string   `json:"contract_id"`
 	BaseGitHead       string   `json:"base_git_head"`
+	DeltaGitHead      string   `json:"delta_git_head"`
 	Command           string   `json:"command"`
 	ReceiptPath       string   `json:"receipt_path"`
 	CandidateSubjects []string `json:"candidate_subjects"`
@@ -57,10 +58,7 @@ func TestV04CandidateSubjectsCoverCommittedDelta(t *testing.T) {
 	for _, subject := range fixture.CandidateSubjects {
 		candidates[subject] = struct{}{}
 	}
-	changed := append(
-		v04GitPaths(t, repositoryRoot, "diff", "--name-only", fixture.BaseGitHead, "--"),
-		v04GitPaths(t, repositoryRoot, "ls-files", "--others", "--exclude-standard")...,
-	)
+	changed := v04CandidateChangedPaths(t, repositoryRoot, fixture)
 	seen := make(map[string]struct{}, len(changed))
 	for _, relative := range changed {
 		if relative == "" {
@@ -76,6 +74,52 @@ func TestV04CandidateSubjectsCoverCommittedDelta(t *testing.T) {
 		if _, declared := candidates[relative]; !declared {
 			t.Errorf("V04 delta path is outside candidate_subjects: %s", relative)
 		}
+	}
+}
+
+func TestV04AcceptanceCommandRunsEachOwnedPackageBehavior(t *testing.T) {
+	repositoryRoot := evidenceRepositoryRoot(t)
+	fixture := evidenceDecodeStrictJSON[v04Fixture](t, filepath.Join(repositoryRoot, filepath.FromSlash(v04FixturePath)))
+	want := "sh -c '" + v04ValidationShellBody() + "'"
+	if fixture.Command != want {
+		t.Fatalf("V04 command does not run the exact structural and unfiltered behavioral surfaces:\n got: %s\nwant: %s", fixture.Command, want)
+	}
+}
+
+func v04ValidationShellBody() string {
+	structural := "go test -mod=vendor -count=1 ./acceptance -run \"^(TestAcceptanceV04IntentAppSpec|TestV04.*)$\""
+	behaviorPackages := []string{
+		".",
+		"./internal/goal",
+		"./internal/application",
+		"./internal/ports",
+		"./internal/adapters/agent/fake",
+		"./internal/adapters/agent/codex",
+		"./internal/adapters/state/sqlite",
+		"./internal/interfaces/mcp",
+		"./internal/i18n",
+		"./internal/bootstrap",
+		"./cmd/orquesta",
+	}
+	return structural + " && go test -mod=vendor -count=1 " + strings.Join(behaviorPackages, " ")
+}
+
+func TestV04CandidateDeltaFreezesAtSealedHead(t *testing.T) {
+	repositoryRoot := evidenceRepositoryRoot(t)
+	fixture := evidenceDecodeStrictJSON[v04Fixture](t, filepath.Join(repositoryRoot, filepath.FromSlash(v04FixturePath)))
+	if len(fixture.DeltaGitHead) != 40 || fixture.DeltaGitHead == fixture.BaseGitHead {
+		t.Fatalf("invalid sealed V04 delta_git_head %q from base %q", fixture.DeltaGitHead, fixture.BaseGitHead)
+	}
+	command := exec.Command("git", "-C", repositoryRoot, "merge-base", "--is-ancestor", fixture.BaseGitHead, fixture.DeltaGitHead)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("V04 delta_git_head is not an existing descendant commit: %v: %s", err, output)
+	}
+	sealed := strings.Join(v04CandidateDiffArguments(fixture, true), "\x00")
+	wantSealed := strings.Join([]string{"diff", "--name-only", fixture.BaseGitHead, fixture.DeltaGitHead, "--"}, "\x00")
+	unsealed := strings.Join(v04CandidateDiffArguments(fixture, false), "\x00")
+	wantUnsealed := strings.Join([]string{"diff", "--name-only", fixture.BaseGitHead, "--"}, "\x00")
+	if sealed != wantSealed || unsealed != wantUnsealed {
+		t.Fatalf("V04 candidate diff arguments are not frozen/live as required: sealed=%q unsealed=%q", sealed, unsealed)
 	}
 }
 
@@ -131,6 +175,19 @@ func TestAcceptanceV04IntentAppSpec(t *testing.T) {
 		v04RequireConstant(t, shape, "ToolGoalsAmend", "orquesta.goals.amend")
 		v04RequireFields(t, shape, "CreateGoalInput", "Confirm", "NormalizedObjective")
 		v04RequireFields(t, shape, "AmendGoalInput", "Confirm", "ExpectedSourceRevision", "ExpectedSourceSpecHash", "NormalizedObjective", "Reason", "RequestRef", "SourceGoalRef", "Statement")
+	})
+}
+
+func TestAcceptanceV04IntentAppSpecReceipt(t *testing.T) {
+	repositoryRoot := evidenceRepositoryRoot(t)
+	fixture := evidenceDecodeStrictJSON[v04Fixture](t, filepath.Join(repositoryRoot, filepath.FromSlash(v04FixturePath)))
+	evidenceAssertReceiptV2(t, repositoryRoot, evidenceReceiptV2Expectation{
+		Contract: fixture.ContractID, ValidationCommand: fixture.Command,
+		ExecutionArgv: []string{"sh", "-c", v04ValidationShellBody()},
+		OutputPath:    "product/evidence/v04_intent_appspec.output.txt", FixturePath: v04FixturePath,
+		ReceiptPath: fixture.ReceiptPath, CandidateSubjects: fixture.CandidateSubjects,
+		ExecutedNotBefore: "2026-07-14T00:00:00+02:00",
+		ExpectedGitHead:   fixture.DeltaGitHead,
 	})
 }
 
@@ -353,6 +410,28 @@ func v04GitPaths(t *testing.T, repositoryRoot string, arguments ...string) []str
 		return nil
 	}
 	return strings.Split(text, "\n")
+}
+
+func v04CandidateChangedPaths(t *testing.T, repositoryRoot string, fixture v04Fixture) []string {
+	t.Helper()
+	receiptPath := filepath.Join(repositoryRoot, filepath.FromSlash(fixture.ReceiptPath))
+	_, err := os.Stat(receiptPath)
+	sealed := err == nil
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatalf("stat V04 receipt %s: %v", receiptPath, err)
+	}
+	changed := v04GitPaths(t, repositoryRoot, v04CandidateDiffArguments(fixture, sealed)...)
+	if !sealed {
+		changed = append(changed, v04GitPaths(t, repositoryRoot, "ls-files", "--others", "--exclude-standard")...)
+	}
+	return changed
+}
+
+func v04CandidateDiffArguments(fixture v04Fixture, sealed bool) []string {
+	if sealed {
+		return []string{"diff", "--name-only", fixture.BaseGitHead, fixture.DeltaGitHead, "--"}
+	}
+	return []string{"diff", "--name-only", fixture.BaseGitHead, "--"}
 }
 
 func v04AllowedOutsideCandidate(relative string) bool {

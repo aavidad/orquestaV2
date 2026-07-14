@@ -35,7 +35,7 @@ func TestTwoGoalsCanReferenceOneContentAddressedArtifact(t *testing.T) {
 	for index, statement := range []string{"first objective", "second objective"} {
 		result, submitErr := runtime.Orchestrator().Submit(context.Background(), application.SubmitRequest{
 			RequestRef: "request:shared-cas:" + string(rune('a'+index)),
-			ActorRef:   actor, ProjectRef: project, Statement: statement,
+			ActorRef:   actor, ProjectRef: project, Statement: statement, Confirm: true,
 		})
 		if submitErr != nil {
 			t.Fatalf("submit %d: %v", index, submitErr)

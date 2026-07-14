@@ -35,6 +35,7 @@ func TestTraceabilityRebuildBugLessons(t *testing.T) {
 		"BUG-REBUILD-20260714-026": "internal/adapters/state/sqlite/app_specs_test.go#TestRepositoryPersistsAppSpecConfirmedByReviewerDifferentFromIntentActor",
 		"BUG-REBUILD-20260714-027": "internal/adapters/state/sqlite/app_specs_test.go#TestRepositoryDomainInvalidV2GoalRollsBackAppSpecMigration",
 		"BUG-REBUILD-20260714-028": "internal/application/amend_test.go#TestV04InitialAppSpecReasonMatchesAcceptanceContract",
+		"BUG-REBUILD-20260714-031": "internal/bootstrap/mcp_e2e_test.go#TestRealMCPAPIClosesDurableGoalThroughSQLiteAndArtifactStore",
 	}
 	baselineIDs := []string{
 		"BUG-REBUILD-20260714-001",

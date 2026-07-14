@@ -71,7 +71,7 @@ func TestMCPCreatesAndExecutesDiamondDAGAtomically(t *testing.T) {
 func TestMCPRejectsMalformedTypedPlanAsInvalidRequest(t *testing.T) {
 	harness := newDAGHarness(t, nil)
 	result := callMCPTool(t, context.Background(), harness.clientSession, mcpiface.ToolGoalsCreate, map[string]any{
-		"request_ref": "request:mcp-invalid-plan", "statement": "invalid plan",
+		"request_ref": "request:mcp-invalid-plan", "statement": "invalid plan", "confirm": true,
 		"plan": map[string]any{"phases": []any{}, "work_items": []any{}},
 	})
 	var output mcpiface.CreateGoalOutput
@@ -208,7 +208,7 @@ func newDAGHarness(t *testing.T, failures map[string]bool) *dagHarness {
 func (harness *dagHarness) create(t *testing.T, requestRef, statement string, plan map[string]any) mcpiface.GoalView {
 	t.Helper()
 	result := callMCPTool(t, context.Background(), harness.clientSession, mcpiface.ToolGoalsCreate, map[string]any{
-		"request_ref": requestRef, "statement": statement, "plan": plan,
+		"request_ref": requestRef, "statement": statement, "confirm": true, "plan": plan,
 	})
 	var output mcpiface.CreateGoalOutput
 	decodeMCPOutput(t, result, &output)
@@ -331,7 +331,7 @@ func (agent *dagAgent) Launch(ctx context.Context, request ports.AgentLaunchRequ
 		return agent.receipts[request.ExecutionRef], nil
 	}
 	receipt := ports.AgentLaunchReceipt{
-		ExecutionRef: request.ExecutionRef, ProviderRef: "provider:dag-test",
+		ExecutionRef: request.ExecutionRef, SpecHash: request.SpecHash, ProviderRef: "provider:dag-test",
 		ExternalRef: "external:" + request.ExecutionRef.String(), IdempotencyKey: request.IdempotencyKey,
 		AcceptedAt: agent.clock.Now(),
 	}
@@ -358,12 +358,12 @@ func (agent *dagAgent) Observe(ctx context.Context, executionRef goal.ExecutionR
 	delete(agent.inFlight, executionRef)
 	if agent.failures[request.Objective] {
 		return ports.AgentObservation{
-			ExecutionRef: executionRef, Status: ports.AgentFailed,
+			ExecutionRef: executionRef, SpecHash: request.SpecHash, Status: ports.AgentFailed,
 			ErrorCode: "dag_agent.failed", ObservedAt: agent.clock.Now(),
 		}, nil
 	}
 	return ports.AgentObservation{
-		ExecutionRef: executionRef, Status: ports.AgentCompleted, MediaType: request.ArtifactMediaType,
+		ExecutionRef: executionRef, SpecHash: request.SpecHash, Status: ports.AgentCompleted, MediaType: request.ArtifactMediaType,
 		Content: []byte("artifact:" + executionRef.String()), ObservedAt: agent.clock.Now(),
 	}, nil
 }

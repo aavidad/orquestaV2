@@ -55,7 +55,7 @@ func TestRealMCPAPIClosesDurableGoalThroughSQLiteAndArtifactStore(t *testing.T) 
 	defer session.Close()
 
 	createdResult := callMCPTool(t, ctx, session, mcpiface.ToolGoalsCreate, map[string]any{
-		"request_ref": "request:mcp-e2e", "statement": "produce API evidence",
+		"request_ref": "request:mcp-e2e", "statement": "produce API evidence", "confirm": true,
 	})
 	var created mcpiface.CreateGoalOutput
 	decodeMCPOutput(t, createdResult, &created)
@@ -93,7 +93,7 @@ func TestRealMCPAPIClosesDurableGoalThroughSQLiteAndArtifactStore(t *testing.T) 
 	}
 
 	replayResult := callMCPTool(t, ctx, session, mcpiface.ToolGoalsCreate, map[string]any{
-		"request_ref": "request:mcp-e2e", "statement": "produce API evidence",
+		"request_ref": "request:mcp-e2e", "statement": "produce API evidence", "confirm": true,
 	})
 	var replay mcpiface.CreateGoalOutput
 	decodeMCPOutput(t, replayResult, &replay)
