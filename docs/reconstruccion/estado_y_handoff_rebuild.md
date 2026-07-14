@@ -1,6 +1,6 @@
 # Estado y handoff vivo del rebuild
 
-Última actualización: 2026-07-14 11:18 Europe/Madrid.
+Última actualización: 2026-07-14 11:26 Europe/Madrid.
 
 Este documento permite continuar el rebuild sin reconstruir el contexto de la
 sesión. Es estado operativo, no evidencia de aceptación. Los estados canónicos
@@ -459,12 +459,77 @@ V04 implementa solo `GOV-02` sobre el núcleo único:
 - SQLite migra con mapping único y triggers de inmutabilidad;
 - V04 no abre UI, multiusuario, Hermes ni proveedores aplazados.
 
+### Checkpoint de análisis V04 antes de programar
+
+Tres revisores independientes inspeccionaron dominio/aplicación, SQLite/MCP y
+aceptación/roadmap. Ninguno editó el árbol. Consenso integrado:
+
+- reutilizar `IntentManifest` actual; no crear otro manifest ni otro lifecycle;
+- añadir `AppSpec` inmutable con `ref`, generación, Intent ref/hash, parent
+  ref/hash, objetivo normalizado, motivo, principal/fecha de confirmación y
+  hash canónico;
+- Goal porta AppSpec y deriva desde él Intent/spec hash; `GoalRecord`,
+  WorkItem, Execution y Artifact no mantienen copias autoritativas;
+- primera versión de amendment acepta solo Goal fuente terminal. Un Goal
+  pendiente o activo se rechaza hasta que V14 aporte cancelación/supersesión;
+- amendment crea nuevo Intent, AppSpec N+1 y Goal sucesor vacío. El padre y
+  toda su evidencia quedan intactos;
+- `spec_hash` solo cruza la frontera provider en launch, receipt y observation;
+  un mismatch se rechaza antes de crear artefacto, atestación o cierre;
+- `confirm:false` no escribe nada. MCP toma principal y tiempo del servidor y
+  no acepta que el cliente los suplante;
+- SQLite debe persistir la cadena, sobrevivir restart y bloquear update/delete
+  directo de Intent/AppSpec. El backfill calcula hashes con código Go; no
+  inventa hashes en SQL;
+- V04 incluye fake provider, SQLite y MCP offline porque sin esos adaptadores no
+  puede acreditarse extremo a extremo. Codex real, UI, multiusuario, V05,
+  registry V20 y proveedores restantes siguen fuera.
+
+La discrepancia entre revisores quedó resuelta: una propuesta quería aplazar
+SQLite/MCP, pero eso solo permitiría marcar dominio `implemented`, no GOV-02
+`accredited`. Se conserva el alcance extremo a extremo ya fijado por el
+handoff y el roadmap.
+
+Contrato rojo acordado:
+
+```text
+acceptance/fixtures/v04_intent_appspec.json
+acceptance/v04_intent_appspec_test.go
+```
+
+Debe cubrir Intent exacto/hash, confirmación sin escritura, create/replay,
+conflicto idempotente, amendment causal, padre intacto, rechazo de fuente no
+terminal/CAS/scope, mismatch `spec_hash`, restart SQLite, triggers de
+inmutabilidad y MCP sin spoof de principal/tiempo.
+
+Comando focal seguro decidido:
+
+```bash
+go test -mod=vendor -count=1 ./acceptance ./internal/goal ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/state/sqlite ./internal/interfaces/mcp -run '^(TestAcceptanceV04IntentAppSpec|TestV04.*)$'
+```
+
+Estado exacto de relevo: V04 sigue sin empezar en código y GOV-02 permanece
+`declared`. Primera acción pendiente: crear fixture/test compilables y rojos;
+después cambiar `AC-V04-INTENT-APPSPEC` a `executable`, declarar su receipt
+canónico y mantener solo tres GOV acreditados. Orden de implementación:
+dominio AppSpec -> aplicación/amendment/fencing -> ports/fake -> SQLite -> MCP ->
+focal/race -> sellado/receipts -> contrarrevisión. Al cerrar V04 se emite V04 y
+se reemiten V01 y V03 porque roadmap y su gate cambian; V02 solo se reemite si
+cambia su candidato.
+
+Excepción operativa: se usaron tres subagentes Codex directos para análisis
+solo lectura porque la autodirección del rebuild no queda acreditada hasta V22.
+Esto cumple el bootstrap documentado; no se interpreta como diseño final ni
+como sustituto de Orquesta.
+
 ## Regla de actualización
 
-Actualizar este handoff al cerrar cada bloque material o antes de terminar una
-sesión. No copiar aquí recibos completos ni convertirlo en una segunda fuente
-de estado: resumir hecho, test, bloqueo y siguiente acción, y enlazar siempre
-al ledger/contrato canónico correspondiente.
+Actualizar este handoff al cerrar cada bloque material, antes de cambiar de
+write-set y antes de terminar una sesión. Si una sesión puede cerrarse durante
+un bloque largo, registrar también el último rojo/verde reproducible y la
+próxima acción exacta. No copiar aquí recibos completos ni convertirlo en una
+segunda fuente de estado: resumir hecho, test, bloqueo y siguiente acción, y
+enlazar siempre al ledger/contrato canónico correspondiente.
 
 ## Protocolo de relevo rápido
 
