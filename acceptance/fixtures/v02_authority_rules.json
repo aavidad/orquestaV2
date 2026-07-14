@@ -1,11 +1,24 @@
 {
   "schema_version": 1,
+  "receipt_schema_version": 3,
   "contract_id": "AC-V02-AUTHORITY-RULES",
+  "trusted_base_git_commit_oid": "a8bff609492f312fe2d6bf8ccccde02b6e5c8426",
   "command": "go test -mod=vendor -count=1 ./acceptance -run '^TestAcceptanceV02AuthorityRules$'",
+  "execution_argv": [
+    "go",
+    "test",
+    "-mod=vendor",
+    "-count=1",
+    "./acceptance",
+    "-run",
+    "^TestAcceptanceV02AuthorityRules$"
+  ],
+  "output_path": "product/evidence/v02_authority_rules.output.txt",
   "receipt_path": "product/evidence/v02_authority_rules.json",
   "candidate_subjects": [
     "AGENTS.md",
     "acceptance/README.md",
+    "acceptance/evidence_protocol_test.go",
     "acceptance/evidence_support_test.go",
     "acceptance/fixtures/v02_authority_rules.json",
     "acceptance/v02_authority_rules_test.go"

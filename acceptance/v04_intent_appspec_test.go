@@ -19,14 +19,18 @@ import (
 const v04FixturePath = "acceptance/fixtures/v04_intent_appspec.json"
 
 type v04Fixture struct {
-	SchemaVersion     int      `json:"schema_version"`
-	ContractID        string   `json:"contract_id"`
-	BaseGitHead       string   `json:"base_git_head"`
-	DeltaGitHead      string   `json:"delta_git_head"`
-	Command           string   `json:"command"`
-	ReceiptPath       string   `json:"receipt_path"`
-	CandidateSubjects []string `json:"candidate_subjects"`
-	Initial           struct {
+	SchemaVersion                  int      `json:"schema_version"`
+	ReceiptSchemaVersion           int      `json:"receipt_schema_version"`
+	ContractID                     string   `json:"contract_id"`
+	TrustedBaseGitCommitOID        string   `json:"trusted_base_git_commit_oid"`
+	ProductDeltaBaseGitCommitOID   string   `json:"product_delta_base_git_commit_oid"`
+	ProductDeltaSealedGitCommitOID string   `json:"product_delta_sealed_git_commit_oid"`
+	Command                        string   `json:"command"`
+	ExecutionArgv                  []string `json:"execution_argv"`
+	OutputPath                     string   `json:"output_path"`
+	ReceiptPath                    string   `json:"receipt_path"`
+	CandidateSubjects              []string `json:"candidate_subjects"`
+	Initial                        struct {
 		IntentRef           string    `json:"intent_ref"`
 		ActorRef            string    `json:"actor_ref"`
 		ProjectRef          string    `json:"project_ref"`
@@ -51,8 +55,8 @@ type v04Fixture struct {
 func TestV04CandidateSubjectsCoverCommittedDelta(t *testing.T) {
 	repositoryRoot := evidenceRepositoryRoot(t)
 	fixture := evidenceDecodeStrictJSON[v04Fixture](t, filepath.Join(repositoryRoot, filepath.FromSlash(v04FixturePath)))
-	if len(fixture.BaseGitHead) != 40 {
-		t.Fatalf("invalid V04 base_git_head %q", fixture.BaseGitHead)
+	if len(fixture.ProductDeltaBaseGitCommitOID) != 40 {
+		t.Fatalf("invalid V04 product delta base %q", fixture.ProductDeltaBaseGitCommitOID)
 	}
 	candidates := make(map[string]struct{}, len(fixture.CandidateSubjects))
 	for _, subject := range fixture.CandidateSubjects {
@@ -84,6 +88,10 @@ func TestV04AcceptanceCommandRunsEachOwnedPackageBehavior(t *testing.T) {
 	if fixture.Command != want {
 		t.Fatalf("V04 command does not run the exact structural and unfiltered behavioral surfaces:\n got: %s\nwant: %s", fixture.Command, want)
 	}
+	wantArgv := []string{"sh", "-c", v04ValidationShellBody()}
+	if !stringSlicesEqual(fixture.ExecutionArgv, wantArgv) {
+		t.Fatalf("V04 execution argv=%v, want exact gate %v", fixture.ExecutionArgv, wantArgv)
+	}
 }
 
 func v04ValidationShellBody() string {
@@ -107,19 +115,17 @@ func v04ValidationShellBody() string {
 func TestV04CandidateDeltaFreezesAtSealedHead(t *testing.T) {
 	repositoryRoot := evidenceRepositoryRoot(t)
 	fixture := evidenceDecodeStrictJSON[v04Fixture](t, filepath.Join(repositoryRoot, filepath.FromSlash(v04FixturePath)))
-	if len(fixture.DeltaGitHead) != 40 || fixture.DeltaGitHead == fixture.BaseGitHead {
-		t.Fatalf("invalid sealed V04 delta_git_head %q from base %q", fixture.DeltaGitHead, fixture.BaseGitHead)
+	if len(fixture.ProductDeltaSealedGitCommitOID) != 40 || fixture.ProductDeltaSealedGitCommitOID == fixture.ProductDeltaBaseGitCommitOID {
+		t.Fatalf("invalid sealed V04 product delta %q from base %q", fixture.ProductDeltaSealedGitCommitOID, fixture.ProductDeltaBaseGitCommitOID)
 	}
-	command := exec.Command("git", "-C", repositoryRoot, "merge-base", "--is-ancestor", fixture.BaseGitHead, fixture.DeltaGitHead)
+	command := exec.Command("git", "-C", repositoryRoot, "merge-base", "--is-ancestor", fixture.ProductDeltaBaseGitCommitOID, fixture.ProductDeltaSealedGitCommitOID)
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("V04 delta_git_head is not an existing descendant commit: %v: %s", err, output)
 	}
-	sealed := strings.Join(v04CandidateDiffArguments(fixture, true), "\x00")
-	wantSealed := strings.Join([]string{"diff", "--name-only", fixture.BaseGitHead, fixture.DeltaGitHead, "--"}, "\x00")
-	unsealed := strings.Join(v04CandidateDiffArguments(fixture, false), "\x00")
-	wantUnsealed := strings.Join([]string{"diff", "--name-only", fixture.BaseGitHead, "--"}, "\x00")
-	if sealed != wantSealed || unsealed != wantUnsealed {
-		t.Fatalf("V04 candidate diff arguments are not frozen/live as required: sealed=%q unsealed=%q", sealed, unsealed)
+	sealed := strings.Join(v04CandidateDiffArguments(fixture), "\x00")
+	wantSealed := strings.Join([]string{"diff", "--name-only", fixture.ProductDeltaBaseGitCommitOID, fixture.ProductDeltaSealedGitCommitOID, "--"}, "\x00")
+	if sealed != wantSealed {
+		t.Fatalf("V04 historical product delta arguments are not frozen: got=%q want=%q", sealed, wantSealed)
 	}
 }
 
@@ -134,8 +140,9 @@ type v04PackageShape struct {
 func TestAcceptanceV04IntentAppSpec(t *testing.T) {
 	repositoryRoot := evidenceRepositoryRoot(t)
 	fixture := evidenceDecodeStrictJSON[v04Fixture](t, filepath.Join(repositoryRoot, filepath.FromSlash(v04FixturePath)))
-	if fixture.SchemaVersion != 1 || fixture.ContractID != "AC-V04-INTENT-APPSPEC" ||
-		fixture.ReceiptPath != "product/evidence/v04_intent_appspec.json" || len(fixture.Assertions) != 8 {
+	if fixture.SchemaVersion != 1 || fixture.ReceiptSchemaVersion != 3 || fixture.ContractID != "AC-V04-INTENT-APPSPEC" ||
+		fixture.TrustedBaseGitCommitOID != "a301a3bbacd80c1ea2d47422a2964339dcd70980" || len(fixture.ExecutionArgv) != 3 ||
+		fixture.OutputPath != "product/evidence/v04_intent_appspec.output.txt" || fixture.ReceiptPath != "product/evidence/v04_intent_appspec.json" || len(fixture.Assertions) != 8 {
 		t.Fatalf("invalid V04 fixture header: %+v", fixture)
 	}
 	if !sort.StringsAreSorted(fixture.CandidateSubjects) || v04HasDuplicate(fixture.CandidateSubjects) {
@@ -180,14 +187,12 @@ func TestAcceptanceV04IntentAppSpec(t *testing.T) {
 
 func TestAcceptanceV04IntentAppSpecReceipt(t *testing.T) {
 	repositoryRoot := evidenceRepositoryRoot(t)
-	fixture := evidenceDecodeStrictJSON[v04Fixture](t, filepath.Join(repositoryRoot, filepath.FromSlash(v04FixturePath)))
-	evidenceAssertReceiptV2(t, repositoryRoot, evidenceReceiptV2Expectation{
-		Contract: fixture.ContractID, ValidationCommand: fixture.Command,
-		ExecutionArgv: []string{"sh", "-c", v04ValidationShellBody()},
-		OutputPath:    "product/evidence/v04_intent_appspec.output.txt", FixturePath: v04FixturePath,
-		ReceiptPath: fixture.ReceiptPath, CandidateSubjects: fixture.CandidateSubjects,
-		ExecutedNotBefore: "2026-07-14T00:00:00+02:00",
-		ExpectedGitHead:   fixture.DeltaGitHead,
+	evidenceAssertReceiptV3(t, repositoryRoot, evidenceReceiptV3Expectation{
+		Contract:                "AC-V04-INTENT-APPSPEC",
+		FixturePath:             v04FixturePath,
+		ReceiptPath:             "product/evidence/v04_intent_appspec.json",
+		ExecutedNotBefore:       "2026-07-14T00:00:00+02:00",
+		TrustedBaseGitCommitOID: "a301a3bbacd80c1ea2d47422a2964339dcd70980",
 	})
 }
 
@@ -414,24 +419,11 @@ func v04GitPaths(t *testing.T, repositoryRoot string, arguments ...string) []str
 
 func v04CandidateChangedPaths(t *testing.T, repositoryRoot string, fixture v04Fixture) []string {
 	t.Helper()
-	receiptPath := filepath.Join(repositoryRoot, filepath.FromSlash(fixture.ReceiptPath))
-	_, err := os.Stat(receiptPath)
-	sealed := err == nil
-	if err != nil && !os.IsNotExist(err) {
-		t.Fatalf("stat V04 receipt %s: %v", receiptPath, err)
-	}
-	changed := v04GitPaths(t, repositoryRoot, v04CandidateDiffArguments(fixture, sealed)...)
-	if !sealed {
-		changed = append(changed, v04GitPaths(t, repositoryRoot, "ls-files", "--others", "--exclude-standard")...)
-	}
-	return changed
+	return v04GitPaths(t, repositoryRoot, v04CandidateDiffArguments(fixture)...)
 }
 
-func v04CandidateDiffArguments(fixture v04Fixture, sealed bool) []string {
-	if sealed {
-		return []string{"diff", "--name-only", fixture.BaseGitHead, fixture.DeltaGitHead, "--"}
-	}
-	return []string{"diff", "--name-only", fixture.BaseGitHead, "--"}
+func v04CandidateDiffArguments(fixture v04Fixture) []string {
+	return []string{"diff", "--name-only", fixture.ProductDeltaBaseGitCommitOID, fixture.ProductDeltaSealedGitCommitOID, "--"}
 }
 
 func v04AllowedOutsideCandidate(relative string) bool {

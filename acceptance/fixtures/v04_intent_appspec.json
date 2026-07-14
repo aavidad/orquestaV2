@@ -1,11 +1,20 @@
 {
   "schema_version": 1,
+  "receipt_schema_version": 3,
   "contract_id": "AC-V04-INTENT-APPSPEC",
-  "base_git_head": "d313ae5183abb79eb882b0c0f171da4b9e74b1ff",
-  "delta_git_head": "a301a3bbacd80c1ea2d47422a2964339dcd70980",
+  "trusted_base_git_commit_oid": "a301a3bbacd80c1ea2d47422a2964339dcd70980",
+  "product_delta_base_git_commit_oid": "d313ae5183abb79eb882b0c0f171da4b9e74b1ff",
+  "product_delta_sealed_git_commit_oid": "a301a3bbacd80c1ea2d47422a2964339dcd70980",
   "command": "sh -c 'go test -mod=vendor -count=1 ./acceptance -run \"^(TestAcceptanceV04IntentAppSpec|TestV04.*)$\" && go test -mod=vendor -count=1 . ./internal/goal ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/interfaces/mcp ./internal/i18n ./internal/bootstrap ./cmd/orquesta'",
+  "execution_argv": [
+    "sh",
+    "-c",
+    "go test -mod=vendor -count=1 ./acceptance -run \"^(TestAcceptanceV04IntentAppSpec|TestV04.*)$\" && go test -mod=vendor -count=1 . ./internal/goal ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/interfaces/mcp ./internal/i18n ./internal/bootstrap ./cmd/orquesta"
+  ],
+  "output_path": "product/evidence/v04_intent_appspec.output.txt",
   "receipt_path": "product/evidence/v04_intent_appspec.json",
   "candidate_subjects": [
+    "acceptance/evidence_protocol_test.go",
     "acceptance/evidence_support_test.go",
     "acceptance/fixtures/v04_intent_appspec.json",
     "acceptance/v01_source_integration_test.go",

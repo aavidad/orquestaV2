@@ -1,9 +1,23 @@
 {
   "schema_version": 1,
+  "receipt_schema_version": 3,
   "contract_id": "AC-V03-CANONICAL-LEDGERS",
+  "trusted_base_git_commit_oid": "a301a3bbacd80c1ea2d47422a2964339dcd70980",
   "command": "go test -mod=vendor -count=1 . ./acceptance -run '^(TestTraceabilityRebuild.*|TestProductRoadmap.*|TestAcceptanceV03CanonicalLedgers)$'",
+  "execution_argv": [
+    "go",
+    "test",
+    "-mod=vendor",
+    "-count=1",
+    ".",
+    "./acceptance",
+    "-run",
+    "^(TestTraceabilityRebuild.*|TestProductRoadmap.*|TestAcceptanceV03CanonicalLedgers)$"
+  ],
+  "output_path": "product/evidence/v03_canonical_ledgers.output.txt",
   "receipt_path": "product/evidence/v03_canonical_ledgers.json",
   "candidate_subjects": [
+    "acceptance/evidence_protocol_test.go",
     "acceptance/evidence_support_test.go",
     "acceptance/fixtures/v03_canonical_ledgers.json",
     "acceptance/v03_canonical_ledgers_test.go",

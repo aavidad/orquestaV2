@@ -16,6 +16,7 @@ import (
 const v03FixturePath = "acceptance/fixtures/v03_canonical_ledgers.json"
 
 var v03RequiredCandidateSubjects = []string{
+	"acceptance/evidence_protocol_test.go",
 	"acceptance/evidence_support_test.go",
 	"acceptance/fixtures/v03_canonical_ledgers.json",
 	"acceptance/v03_canonical_ledgers_test.go",
@@ -85,8 +86,12 @@ var v03RequiredLedgerPaths = []string{
 
 type v03Fixture struct {
 	SchemaVersion           int                     `json:"schema_version"`
+	ReceiptSchemaVersion    int                     `json:"receipt_schema_version"`
 	ContractID              string                  `json:"contract_id"`
+	TrustedBaseGitCommitOID string                  `json:"trusted_base_git_commit_oid"`
 	Command                 string                  `json:"command"`
+	ExecutionArgv           []string                `json:"execution_argv"`
+	OutputPath              string                  `json:"output_path"`
 	ReceiptPath             string                  `json:"receipt_path"`
 	CandidateSubjects       []string                `json:"candidate_subjects"`
 	LedgerDigests           []v03LedgerDigest       `json:"ledger_digests"`
@@ -283,24 +288,21 @@ func TestAcceptanceV03CanonicalLedgers(t *testing.T) {
 
 func TestAcceptanceV03CanonicalLedgersReceipt(t *testing.T) {
 	repositoryRoot := evidenceRepositoryRoot(t)
-	fixture := evidenceDecodeStrictJSON[v03Fixture](t, filepath.Join(repositoryRoot, v03FixturePath))
-	v03ValidateFixture(t, fixture)
-	evidenceAssertReceiptV2(t, repositoryRoot, evidenceReceiptV2Expectation{
-		Contract: fixture.ContractID, ValidationCommand: fixture.Command,
-		ExecutionArgv: []string{
-			"go", "test", "-mod=vendor", "-count=1", ".", "./acceptance", "-run",
-			"^(TestTraceabilityRebuild.*|TestProductRoadmap.*|TestAcceptanceV03CanonicalLedgers)$",
-		},
-		OutputPath: "product/evidence/v03_canonical_ledgers.output.txt", FixturePath: v03FixturePath,
-		ReceiptPath: fixture.ReceiptPath, CandidateSubjects: fixture.CandidateSubjects,
-		ExecutedNotBefore: "2026-07-14T00:00:00+02:00",
-		ExpectedGitHead:   "a301a3bbacd80c1ea2d47422a2964339dcd70980",
+	evidenceAssertReceiptV3(t, repositoryRoot, evidenceReceiptV3Expectation{
+		Contract:                "AC-V03-CANONICAL-LEDGERS",
+		FixturePath:             v03FixturePath,
+		ReceiptPath:             "product/evidence/v03_canonical_ledgers.json",
+		ExecutedNotBefore:       "2026-07-14T00:00:00+02:00",
+		TrustedBaseGitCommitOID: "a301a3bbacd80c1ea2d47422a2964339dcd70980",
 	})
 }
 
 func v03ValidateFixture(t *testing.T, fixture v03Fixture) {
 	t.Helper()
-	if fixture.SchemaVersion != 1 || fixture.ContractID != "AC-V03-CANONICAL-LEDGERS" ||
+	if fixture.SchemaVersion != 1 || fixture.ReceiptSchemaVersion != 3 || fixture.ContractID != "AC-V03-CANONICAL-LEDGERS" ||
+		fixture.TrustedBaseGitCommitOID != "a301a3bbacd80c1ea2d47422a2964339dcd70980" ||
+		!stringSlicesEqual(fixture.ExecutionArgv, []string{"go", "test", "-mod=vendor", "-count=1", ".", "./acceptance", "-run", "^(TestTraceabilityRebuild.*|TestProductRoadmap.*|TestAcceptanceV03CanonicalLedgers)$"}) ||
+		fixture.OutputPath != "product/evidence/v03_canonical_ledgers.output.txt" ||
 		fixture.Command != "go test -mod=vendor -count=1 . ./acceptance -run '^(TestTraceabilityRebuild.*|TestProductRoadmap.*|TestAcceptanceV03CanonicalLedgers)$'" ||
 		fixture.ReceiptPath != "product/evidence/v03_canonical_ledgers.json" {
 		t.Fatalf("invalid V03 fixture identity: %+v", fixture)

@@ -26,16 +26,20 @@ import (
 const v02FixturePath = "acceptance/fixtures/v02_authority_rules.json"
 
 type v02Fixture struct {
-	SchemaVersion        int                `json:"schema_version"`
-	ContractID           string             `json:"contract_id"`
-	Command              string             `json:"command"`
-	ReceiptPath          string             `json:"receipt_path"`
-	CandidateSubjects    []string           `json:"candidate_subjects"`
-	ProductModule        string             `json:"product_module"`
-	ProductRoots         []string           `json:"product_roots"`
-	LegacyImportPrefixes []string           `json:"legacy_import_prefixes"`
-	FrozenSurfaces       []v02FrozenSurface `json:"frozen_surfaces"`
-	Lifecycle            v02Lifecycle       `json:"lifecycle"`
+	SchemaVersion           int                `json:"schema_version"`
+	ReceiptSchemaVersion    int                `json:"receipt_schema_version"`
+	ContractID              string             `json:"contract_id"`
+	TrustedBaseGitCommitOID string             `json:"trusted_base_git_commit_oid"`
+	Command                 string             `json:"command"`
+	ExecutionArgv           []string           `json:"execution_argv"`
+	OutputPath              string             `json:"output_path"`
+	ReceiptPath             string             `json:"receipt_path"`
+	CandidateSubjects       []string           `json:"candidate_subjects"`
+	ProductModule           string             `json:"product_module"`
+	ProductRoots            []string           `json:"product_roots"`
+	LegacyImportPrefixes    []string           `json:"legacy_import_prefixes"`
+	FrozenSurfaces          []v02FrozenSurface `json:"frozen_surfaces"`
+	Lifecycle               v02Lifecycle       `json:"lifecycle"`
 }
 
 type v02FrozenSurface struct {
@@ -84,7 +88,11 @@ type v02SourceSet struct {
 func TestAcceptanceV02AuthorityRules(t *testing.T) {
 	repositoryRoot := evidenceRepositoryRoot(t)
 	fixture := evidenceDecodeStrictJSON[v02Fixture](t, filepath.Join(repositoryRoot, filepath.FromSlash(v02FixturePath)))
-	if fixture.SchemaVersion != 1 || fixture.ContractID != "AC-V02-AUTHORITY-RULES" ||
+	if fixture.SchemaVersion != 1 || fixture.ReceiptSchemaVersion != 3 || fixture.ContractID != "AC-V02-AUTHORITY-RULES" ||
+		fixture.TrustedBaseGitCommitOID != "a8bff609492f312fe2d6bf8ccccde02b6e5c8426" ||
+		fixture.Command != "go test -mod=vendor -count=1 ./acceptance -run '^TestAcceptanceV02AuthorityRules$'" ||
+		!stringSlicesEqual(fixture.ExecutionArgv, []string{"go", "test", "-mod=vendor", "-count=1", "./acceptance", "-run", "^TestAcceptanceV02AuthorityRules$"}) ||
+		fixture.OutputPath != "product/evidence/v02_authority_rules.output.txt" || fixture.ReceiptPath != "product/evidence/v02_authority_rules.json" ||
 		fixture.ProductModule != "orquesta" || len(fixture.ProductRoots) == 0 || len(fixture.CandidateSubjects) == 0 {
 		t.Fatalf("invalid V02 fixture header: %+v", fixture)
 	}
@@ -131,16 +139,12 @@ func TestAcceptanceV02AuthorityRules(t *testing.T) {
 
 func TestAcceptanceV02AuthorityRulesReceipt(t *testing.T) {
 	repositoryRoot := evidenceRepositoryRoot(t)
-	fixture := evidenceDecodeStrictJSON[v02Fixture](t, filepath.Join(repositoryRoot, filepath.FromSlash(v02FixturePath)))
-	evidenceAssertReceiptV2(t, repositoryRoot, evidenceReceiptV2Expectation{
-		Contract: fixture.ContractID, ValidationCommand: fixture.Command,
-		ExecutionArgv: []string{
-			"go", "test", "-mod=vendor", "-count=1", "./acceptance", "-run", "^TestAcceptanceV02AuthorityRules$",
-		},
-		OutputPath: "product/evidence/v02_authority_rules.output.txt", FixturePath: v02FixturePath,
-		ReceiptPath: fixture.ReceiptPath, CandidateSubjects: fixture.CandidateSubjects,
-		ExecutedNotBefore: "2026-07-14T00:00:00+02:00",
-		ExpectedGitHead:   "a8bff609492f312fe2d6bf8ccccde02b6e5c8426",
+	evidenceAssertReceiptV3(t, repositoryRoot, evidenceReceiptV3Expectation{
+		Contract:                "AC-V02-AUTHORITY-RULES",
+		FixturePath:             v02FixturePath,
+		ReceiptPath:             "product/evidence/v02_authority_rules.json",
+		ExecutedNotBefore:       "2026-07-14T00:00:00+02:00",
+		TrustedBaseGitCommitOID: "a8bff609492f312fe2d6bf8ccccde02b6e5c8426",
 	})
 }
 

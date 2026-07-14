@@ -257,7 +257,7 @@ versiona después un índice de evidencia, ese índice apunta a
 Cada receipt de release incluye como mínimo:
 
 ```text
-subject source-tree digest + commit informativo
+subject source-tree digest + commit/tree Git sellados autoritativos
 binary/image digest
 binary digest
 config registry revision + effective config hash redactado
