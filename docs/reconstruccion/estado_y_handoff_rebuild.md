@@ -1,6 +1,6 @@
 # Estado y handoff vivo del rebuild
 
-Última actualización: 2026-07-14 12:13 Europe/Madrid.
+Última actualización: 2026-07-14 12:23 Europe/Madrid.
 
 Este documento permite continuar el rebuild sin reconstruir el contexto de la
 sesión. Es estado operativo, no evidencia de aceptación. Los estados canónicos
@@ -585,9 +585,9 @@ antes de abrir aplicación.
 
 ### V04 vivo posterior al contrato rojo
 
-Checkpoint seguro `cd674ab964` (`feat: materializar nucleo V04 AppSpec`) contiene
-dominio, aplicación, ports, fake, Codex, bugs 023-025 y contrarrevisión cerrada.
-SQLite ya está ACCEPT pero aún forma el delta sin commit:
+Checkpoint seguro `20e53d39f82c` (`feat: persistir cadena AppSpec en SQLite`)
+contiene dominio, aplicación, ports, fake, Codex y SQLite, con bugs 023-027 y
+contrarrevisiones cerrados:
 
 - dominio: AppSpec inmutable, hash framed, N+1 causal, Goal sucesor terminal,
   snapshot schema 2 y negativos de tamper/self-parent. Verde normal y `-race`
@@ -656,12 +656,11 @@ delta esté abierto y debe cerrarse antes del receipt.
 Si la sesión termina durante este WIP: no regenerar receipts, no descartar
 cambios y no relanzar agentes a ciegas. Primero inspeccionar `git status`,
 recoger agentes vivos y ejecutar paquetes focales. El último checkpoint seguro
-committed es `cd674ab964`; el delta SQLite no committed debe conservarse. V01/V03
-continúan stale de forma intencional hasta el sellado V04. Próxima acción exacta:
-crear checkpoint SQLite, después implementar MCP create/amend con confirmación,
-identidad/tiempo de servidor y proyecciones AppSpec.
+committed es `20e53d39f82c`; V01/V03 continúan stale de forma intencional hasta
+el sellado V04. Próxima acción exacta: implementar MCP create/amend con
+confirmación, identidad/tiempo de servidor y proyecciones AppSpec.
 
-Digest de control del árbol antiguo comprobado a las 12:04 CEST:
+Digest de control del árbol antiguo comprobado de nuevo antes del checkpoint SQLite:
 `75577492db531e71f8a47f7b7fec115e79996aed45e26ce66426b4c120d42a80`.
 
 ## Regla de actualización
