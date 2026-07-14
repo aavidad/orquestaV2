@@ -267,17 +267,17 @@ func TestCanonicalRegistryAndEveryGeneratedArtifactStaySynchronized(t *testing.T
 	temporary := t.TempDir()
 	outputs := map[string]string{
 		"keys_generated.go":     filepath.Join("keys_generated.go"),
-		"orquesta.schema.json":  filepath.Join("..", "..", "config", "orquesta.schema.json"),
-		"orquesta.ui.json":      filepath.Join("..", "..", "config", "orquesta.ui.json"),
+		"orquesta.schema.json":  filepath.Join("..", "..", "config", "generated", "orquesta.schema.json"),
+		"ui.json":               filepath.Join("..", "..", "config", "generated", "ui.json"),
 		"orquesta.toml.example": filepath.Join("..", "..", "config", "orquesta.toml.example"),
-		"orquesta.generated.md": filepath.Join("..", "..", "config", "orquesta.generated.md"),
+		"reference.md":          filepath.Join("..", "..", "config", "generated", "reference.md"),
 	}
 	command := exec.Command("go", "run", "-mod=vendor", "./cmd/configgen", "-registry", registryPath,
 		"-go-output", filepath.Join(temporary, "keys_generated.go"),
 		"-schema-output", filepath.Join(temporary, "orquesta.schema.json"),
-		"-ui-output", filepath.Join(temporary, "orquesta.ui.json"),
+		"-ui-output", filepath.Join(temporary, "ui.json"),
 		"-example-output", filepath.Join(temporary, "orquesta.toml.example"),
-		"-doc-output", filepath.Join(temporary, "orquesta.generated.md"))
+		"-doc-output", filepath.Join(temporary, "reference.md"))
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("configgen: %v: %s", err, output)
 	}
