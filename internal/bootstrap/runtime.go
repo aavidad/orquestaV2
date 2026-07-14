@@ -14,6 +14,7 @@ import (
 	"orquesta/internal/adapters/agent/codex"
 	"orquesta/internal/adapters/artifact/filesystem"
 	"orquesta/internal/adapters/auth/localtoken"
+	configtoml "orquesta/internal/adapters/config/toml"
 	statesqlite "orquesta/internal/adapters/state/sqlite"
 	"orquesta/internal/adapters/system/local"
 	"orquesta/internal/application"
@@ -430,6 +431,11 @@ func productionAgentFactory(snapshot config.Snapshot, clock application.Clock) (
 func validateSnapshot(snapshot config.Snapshot, sourceConfigPath string) error {
 	if err := validateRuntimePaths(snapshot, sourceConfigPath); err != nil {
 		return err
+	}
+	for _, reserved := range configtoml.ReservedPaths(sourceConfigPath) {
+		if err := validateRuntimePaths(snapshot, reserved); err != nil {
+			return err
+		}
 	}
 	return nil
 }

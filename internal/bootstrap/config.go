@@ -16,6 +16,7 @@ func loadConfigSnapshot(ctx context.Context, sourcePath string) (config.Snapshot
 		Path:            sourcePath,
 		MaxSourceBytes:  config.SourceMaxBytes(),
 		MaxReceiptBytes: config.AuditEntryMaxBytes(),
+		RequireExisting: sourcePath != "",
 	})
 	if err != nil {
 		return config.Snapshot{}, err

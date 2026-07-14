@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	configtoml "orquesta/internal/adapters/config/toml"
 	"orquesta/internal/application"
 	"orquesta/internal/config"
 )
@@ -126,6 +127,47 @@ func TestBuildRejectsNilAgentFactoryResult(t *testing.T) {
 	}
 	if err == nil || err.Error() != "bootstrap.agent_factory_returned_nil" {
 		t.Fatalf("expected nil agent rejection, got %v", err)
+	}
+}
+
+func TestBuildRequiresExplicitConfigWithoutCreatingFallbackSidecars(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Chmod(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, "missing.toml")
+	runtime, err := Build(context.Background(), Options{
+		ConfigPath: path, AgentFactory: countingFactory(&atomic.Int64{}),
+	})
+	if runtime != nil || !config.IsDocumentStoreError(err, config.DocumentStoreSourceRequired) {
+		t.Fatalf("explicit missing config = %v, %v", runtime, err)
+	}
+	for _, sidecar := range append([]string{path}, configtoml.ReservedPaths(path)...) {
+		if _, statErr := os.Lstat(sidecar); !errors.Is(statErr, os.ErrNotExist) {
+			t.Fatalf("missing config created %s: %v", sidecar, statErr)
+		}
+	}
+}
+
+func TestBuildRejectsConfigStoreReservedPathCollisionsBeforeEffects(t *testing.T) {
+	for _, suffix := range []string{".lock", ".next", ".receipts"} {
+		t.Run(suffix, func(t *testing.T) {
+			root := t.TempDir()
+			configPath := writeTestConfig(t, root)
+			replaceTestConfigValue(t, configPath,
+				"effective_path = "+strconv.Quote(filepath.Join(root, "effective_config.json")),
+				"effective_path = "+strconv.Quote(configPath+suffix),
+			)
+			runtime, err := Build(context.Background(), Options{
+				ConfigPath: configPath, AgentFactory: countingFactory(&atomic.Int64{}),
+			})
+			if runtime != nil || err == nil || err.Error() != "bootstrap.runtime_paths_overlap" {
+				t.Fatalf("reserved collision = %v, %v", runtime, err)
+			}
+			if _, statErr := os.Lstat(filepath.Join(root, "secrets", "local-owner.token")); !errors.Is(statErr, os.ErrNotExist) {
+				t.Fatalf("reserved collision created token: %v", statErr)
+			}
+		})
 	}
 }
 

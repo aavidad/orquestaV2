@@ -67,6 +67,9 @@ func (store *Store) readSource() (config.StoredDocument, error) {
 		return config.StoredDocument{}, err
 	}
 	if !found {
+		if store.requireExisting {
+			return config.StoredDocument{}, storeError(config.DocumentStoreSourceRequired, errors.New("toml_store_source_missing"))
+		}
 		return emptyDocument(), nil
 	}
 	return config.StoredDocument{Revision: revisionFor(content), Content: content}, nil
@@ -105,6 +108,11 @@ func readPrivateRegular(path string, maximum int64, mode requiredMode) ([]byte, 
 	}
 	if int64(len(content)) > maximum {
 		return nil, false, storeError(config.DocumentStoreSourceTooLarge, errors.New("toml_store_file_too_large"))
+	}
+	final, err := file.Stat()
+	if err != nil || !privateRegular(final, 0, mode) || !sameFileIdentity(after, final) ||
+		final.Size() != after.Size() || !final.ModTime().Equal(after.ModTime()) {
+		return nil, false, storeError(config.DocumentStoreSourceInvalid, errors.New("toml_store_file_changed_during_read"))
 	}
 	return content, true, nil
 }

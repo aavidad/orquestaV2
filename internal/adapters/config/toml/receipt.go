@@ -64,11 +64,7 @@ func (intent durableIntent) result(replacement []byte, replayed bool) config.Com
 func (intent durableIntent) matchesRequest(request config.CommitRequest) bool {
 	return intent.Receipt.ActorRef == request.ActorRef &&
 		intent.Receipt.RequestRef == request.RequestRef &&
-		intent.Receipt.Fingerprint == request.Fingerprint &&
-		intent.Receipt.BeforeRevision == request.ExpectedRevision &&
-		intent.Receipt.AfterRevision == revisionFor(request.Replacement) &&
-		reflect.DeepEqual(intent.Receipt.ChangedKeys, request.ChangedKeys) &&
-		reflect.DeepEqual(intent.Receipt.PendingRestartKeys, request.PendingRestartKeys)
+		intent.Receipt.Fingerprint == request.Fingerprint
 }
 
 func (store *Store) persistReplacement(revision config.Revision, replacement []byte) error {
@@ -88,7 +84,18 @@ func (store *Store) persistReplacement(revision config.Revision, replacement []b
 	return syncDirectory(filepath.Dir(store.nextPath))
 }
 
-func (store *Store) persistIntent(intent durableIntent) error {
+func (store *Store) prepareIntent(intent durableIntent) ([]byte, error) {
+	payload, err := marshalIntent(intent)
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(payload)) > store.maxReceiptBytes {
+		return nil, storeError(config.DocumentStoreReceiptTooLarge, errors.New("toml_store_receipt_too_large"))
+	}
+	return payload, nil
+}
+
+func (store *Store) persistIntent(payload []byte) error {
 	if err := ensureReceiptDirectory(store.receiptDirectory); err != nil {
 		return err
 	}
@@ -97,13 +104,6 @@ func (store *Store) persistIntent(intent durableIntent) error {
 	}
 	if _, err := os.Lstat(store.pendingStagePath); err == nil || !errors.Is(err, os.ErrNotExist) {
 		return storeError(config.DocumentStoreSourceInvalid, errors.New("toml_store_stale_intent_stage"))
-	}
-	payload, err := marshalIntent(intent)
-	if err != nil {
-		return err
-	}
-	if int64(len(payload)) > store.maxReceiptBytes {
-		return storeError(config.DocumentStoreSourceTooLarge, errors.New("toml_store_receipt_too_large"))
 	}
 	if err := writeExclusiveSynced(store.pendingStagePath, payload, 0o600); err != nil {
 		return err
@@ -328,7 +328,7 @@ func (store *Store) removePendingIfExact(intent durableIntent) error {
 	if err := os.Remove(store.pendingPath); err != nil {
 		return storeError(config.DocumentStoreIO, err)
 	}
-	return nil
+	return syncDirectory(store.receiptDirectory)
 }
 
 func (store *Store) readReceipt(actorRef, requestRef string) (durableIntent, bool, error) {

@@ -16,8 +16,9 @@ type StoredDocument struct {
 }
 
 // CommitRequest describes one causally identified replacement of the source
-// document. Fingerprint is caller-owned idempotency identity; the store binds
-// it to ActorRef and RequestRef.
+// document. Fingerprint is the caller-owned canonical command identity; the
+// store binds it to ActorRef and RequestRef. On replay, derived replacement
+// and metadata are ignored because active state may have advanced.
 type CommitRequest struct {
 	ExpectedRevision   Revision
 	Replacement        []byte
@@ -65,6 +66,7 @@ const (
 	DocumentStoreSourceRequired   DocumentStoreErrorCode = "config_source_required"
 	DocumentStoreSourceInvalid    DocumentStoreErrorCode = "config_source_invalid"
 	DocumentStoreSourceTooLarge   DocumentStoreErrorCode = "config_source_too_large"
+	DocumentStoreReceiptTooLarge  DocumentStoreErrorCode = "config_receipt_too_large"
 	DocumentStoreRequestInvalid   DocumentStoreErrorCode = "config_commit_request_invalid"
 	DocumentStoreRevisionConflict DocumentStoreErrorCode = "config_revision_conflict"
 	DocumentStoreReplayConflict   DocumentStoreErrorCode = "config_idempotency_conflict"

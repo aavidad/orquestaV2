@@ -84,11 +84,10 @@ func TestStoreCommitReadReplayCASAndDefensiveCopies(t *testing.T) {
 		t.Fatalf("caller mutation escaped: %q", stored.Content)
 	}
 
-	conflictingReplays := []struct {
+	derivedReplayDifferences := []struct {
 		name   string
 		mutate func(*config.CommitRequest)
 	}{
-		{name: "fingerprint", mutate: func(request *config.CommitRequest) { request.Fingerprint = string(revisionFor([]byte("different"))) }},
 		{name: "replacement", mutate: func(request *config.CommitRequest) { request.Replacement = []byte("api.locale = \"different\"\n") }},
 		{name: "expected revision", mutate: func(request *config.CommitRequest) { request.ExpectedRevision = revisionFor([]byte("different")) }},
 		{name: "changed keys", mutate: func(request *config.CommitRequest) { request.ChangedKeys = []config.Key{"server.listen"} }},
@@ -96,14 +95,20 @@ func TestStoreCommitReadReplayCASAndDefensiveCopies(t *testing.T) {
 			request.PendingRestartKeys = []config.Key{"api.locale", "server.listen"}
 		}},
 	}
-	for _, test := range conflictingReplays {
-		t.Run("replay conflict "+test.name, func(t *testing.T) {
-			conflicting := cloneRequest(replayRequest)
-			test.mutate(&conflicting)
-			_, err := store.Commit(context.Background(), conflicting)
-			assertStoreCode(t, err, config.DocumentStoreReplayConflict)
+	for _, test := range derivedReplayDifferences {
+		t.Run("replay ignores derived "+test.name, func(t *testing.T) {
+			candidate := cloneRequest(replayRequest)
+			test.mutate(&candidate)
+			got, err := store.Commit(context.Background(), candidate)
+			if err != nil || !got.Replayed || !reflect.DeepEqual(got, replayed) {
+				t.Fatalf("derived replay = %#v, %v; want %#v", got, err, replayed)
+			}
 		})
 	}
+	conflicting := cloneRequest(replayRequest)
+	conflicting.Fingerprint = string(revisionFor([]byte("different")))
+	_, err = store.Commit(context.Background(), conflicting)
+	assertStoreCode(t, err, config.DocumentStoreReplayConflict)
 
 	stale := testCommitRequest(empty.Revision, []byte("api.locale = \"en\"\n"), "actor:owner", "request:stale")
 	_, err = store.Commit(context.Background(), stale)
@@ -157,6 +162,35 @@ func TestStoreSerializesConcurrentCASAcrossInstances(t *testing.T) {
 	}
 	if !bytes.Equal(document.Content, requests[0].Replacement) && !bytes.Equal(document.Content, requests[1].Replacement) {
 		t.Fatalf("unexpected winner content: %q", document.Content)
+	}
+}
+
+func TestStoreReplayAfterStateAdvanceReturnsCurrentDocumentAndOriginalReceipt(t *testing.T) {
+	path := filepath.Join(privateTempDir(t), "orquesta.toml")
+	store := openTestStore(t, path, nil)
+	empty, _ := store.Read(context.Background())
+	firstRequest := testCommitRequest(empty.Revision, []byte("a = 1\n"), "actor:a", "request:first")
+	first, err := store.Commit(context.Background(), firstRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondRequest := testCommitRequest(first.Document.Revision, []byte("a = 1\nb = 2\n"), "actor:a", "request:second")
+	second, err := store.Commit(context.Background(), secondRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	retry := cloneRequest(firstRequest)
+	retry.Replacement = []byte("derived state is intentionally different\n")
+	retry.PendingRestartKeys = []config.Key{"server.listen"}
+	replayed, err := store.Commit(context.Background(), retry)
+	if err != nil || !replayed.Replayed || !reflect.DeepEqual(replayed.Document, second.Document) ||
+		!reflect.DeepEqual(replayed.Receipt, first.Receipt) {
+		t.Fatalf("advanced replay = %#v, %v; current=%#v receipt=%#v", replayed, err, second.Document, first.Receipt)
+	}
+	entries, err := os.ReadDir(store.receiptDirectory)
+	if err != nil || len(entries) != 2 {
+		t.Fatalf("advanced replay receipt count = %d, %v", len(entries), err)
 	}
 }
 
@@ -450,6 +484,23 @@ func TestStoreValidatesSourceRequirementRequestAndReceiptLimit(t *testing.T) {
 	_, err = emptyStore.Commit(context.Background(), testCommitRequest(document.Revision, []byte("x = 1\n"), "actor:a", "request:a"))
 	assertStoreCode(t, err, config.DocumentStoreSourceRequired)
 
+	missingPath := filepath.Join(privateTempDir(t), "missing.toml")
+	_, err = Open(Options{
+		Path: missingPath, MaxSourceBytes: testMaxSource, MaxReceiptBytes: testMaxReceipt, RequireExisting: true,
+	})
+	assertStoreCode(t, err, config.DocumentStoreSourceRequired)
+	assertAbsent(t, missingPath+".lock")
+	writeFile(t, missingPath, []byte{}, 0o600)
+	required, err := Open(Options{
+		Path: missingPath, MaxSourceBytes: testMaxSource, MaxReceiptBytes: testMaxReceipt, RequireExisting: true,
+	})
+	if err != nil {
+		t.Fatalf("open required existing source: %v", err)
+	}
+	if _, err := required.Read(context.Background()); err != nil {
+		t.Fatalf("read required existing source: %v", err)
+	}
+
 	path := filepath.Join(privateTempDir(t), "orquesta.toml")
 	store := openTestStore(t, path, nil)
 	empty, _ := store.Read(context.Background())
@@ -485,7 +536,23 @@ func TestStoreValidatesSourceRequirementRequestAndReceiptLimit(t *testing.T) {
 	}
 	empty, _ = tinyReceiptStore.Read(context.Background())
 	_, err = tinyReceiptStore.Commit(context.Background(), testCommitRequest(empty.Revision, []byte("api.locale = \"en\"\n"), "actor:a", "request:a"))
-	assertStoreCode(t, err, config.DocumentStoreSourceTooLarge)
+	assertStoreCode(t, err, config.DocumentStoreReceiptTooLarge)
+	assertAbsent(t, tinyReceiptStore.nextPath)
+	assertAbsent(t, tinyReceiptStore.pendingPath)
+}
+
+func TestReservedPathsAreExactDetachedAdapterNamespaces(t *testing.T) {
+	first := ReservedPaths("/private/orquesta.toml")
+	want := []string{
+		"/private/orquesta.toml.lock", "/private/orquesta.toml.next", "/private/orquesta.toml.receipts",
+	}
+	if !reflect.DeepEqual(first, want) || len(ReservedPaths("")) != 0 {
+		t.Fatalf("reserved paths = %#v", first)
+	}
+	first[0] = "tampered"
+	if got := ReservedPaths("/private/orquesta.toml"); !reflect.DeepEqual(got, want) {
+		t.Fatalf("reserved paths share caller storage: %#v", got)
+	}
 }
 
 func TestStoreKeepsLargeSourceOutOfBoundedReceipt(t *testing.T) {
@@ -551,7 +618,7 @@ func TestStoreAllowsPendingRestartKeysFromEarlierMutations(t *testing.T) {
 	}
 }
 
-func TestStoreReplayCannotMoveKeysBetweenMetadataSets(t *testing.T) {
+func TestStoreReplayFingerprintFencesChangedMetadata(t *testing.T) {
 	path := filepath.Join(privateTempDir(t), "orquesta.toml")
 	store := openTestStore(t, path, nil)
 	empty, _ := store.Read(context.Background())
@@ -564,6 +631,7 @@ func TestStoreReplayCannotMoveKeysBetweenMetadataSets(t *testing.T) {
 	conflict := cloneRequest(request)
 	conflict.ChangedKeys = []config.Key{"pending_restart"}
 	conflict.PendingRestartKeys = nil
+	conflict.Fingerprint = string(revisionFor([]byte("metadata-moved")))
 	_, err := store.Commit(context.Background(), conflict)
 	assertStoreCode(t, err, config.DocumentStoreReplayConflict)
 }

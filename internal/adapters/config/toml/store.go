@@ -40,6 +40,7 @@ type Options struct {
 	Path            string
 	MaxSourceBytes  int64
 	MaxReceiptBytes int64
+	RequireExisting bool
 	Failpoint       func(string) error
 }
 
@@ -53,7 +54,19 @@ type Store struct {
 	receiptDirectory string
 	maxSourceBytes   int64
 	maxReceiptBytes  int64
+	requireExisting  bool
 	failpoint        func(string) error
+}
+
+// ReservedPaths reports adapter-owned sidecar namespaces adjacent to source.
+// Composition passes these refs to neutral configuration validation; callers
+// must not place runtime state, artifacts, credentials, or effective output
+// at or below them.
+func ReservedPaths(source string) []string {
+	if strings.TrimSpace(source) == "" {
+		return []string{}
+	}
+	return []string{source + ".lock", source + ".next", source + ".receipts"}
 }
 
 // Open validates options without creating the configured source. Empty Path
@@ -73,6 +86,15 @@ func Open(options Options) (*Store, error) {
 			return nil, storeError(config.DocumentStoreSourceInvalid, errors.New("toml_store_path_invalid"))
 		}
 		path = absolute
+		if options.RequireExisting {
+			_, found, err := readPrivateRegular(path, options.MaxSourceBytes, privateWriteMode)
+			if err != nil {
+				return nil, err
+			}
+			if !found {
+				return nil, storeError(config.DocumentStoreSourceRequired, errors.New("toml_store_source_missing"))
+			}
+		}
 	}
 	receiptDirectory := path + ".receipts"
 	pendingPath := filepath.Join(receiptDirectory, ".pending")
@@ -85,6 +107,7 @@ func Open(options Options) (*Store, error) {
 		receiptDirectory: receiptDirectory,
 		maxSourceBytes:   options.MaxSourceBytes,
 		maxReceiptBytes:  options.MaxReceiptBytes,
+		requireExisting:  options.RequireExisting,
 		failpoint:        options.Failpoint,
 	}, nil
 }
@@ -145,7 +168,11 @@ func (store *Store) Commit(ctx context.Context, request config.CommitRequest) (c
 			if !persisted.matchesRequest(normalized) {
 				return storeError(config.DocumentStoreReplayConflict, errors.New("toml_store_fingerprint_conflict"))
 			}
-			result = persisted.result(normalized.Replacement, true)
+			current, err := store.readSource()
+			if err != nil {
+				return err
+			}
+			result = config.CommitResult{Document: current, Receipt: cloneReceipt(persisted.Receipt), Replayed: true}
 			return nil
 		}
 
@@ -157,13 +184,17 @@ func (store *Store) Commit(ctx context.Context, request config.CommitRequest) (c
 			return storeError(config.DocumentStoreRevisionConflict, fmt.Errorf("expected %s got %s", normalized.ExpectedRevision, current.Revision))
 		}
 		intent := newIntent(current, normalized)
+		intentPayload, err := store.prepareIntent(intent)
+		if err != nil {
+			return err
+		}
 		if err := store.persistReplacement(intent.Receipt.AfterRevision, normalized.Replacement); err != nil {
 			return err
 		}
 		if err := store.hit(FailpointAfterReplacementSync); err != nil {
 			return err
 		}
-		if err := store.persistIntent(intent); err != nil {
+		if err := store.persistIntent(intentPayload); err != nil {
 			return err
 		}
 		if err := store.hit(FailpointAfterIntentSync); err != nil {
