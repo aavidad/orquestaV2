@@ -614,14 +614,25 @@
     {
       "id": "AC-V07-CONFIG",
       "vertical": "config",
-      "status": "planned",
-      "test_ref": "planned:acceptance/v07_config_test.go",
-      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
-      "fixture": "planned:fixtures/v07_config",
+      "status": "executable",
+      "test_ref": "acceptance/v07_config_test.go",
+      "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV07ScopeAndExecutableContract|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV07Config|TestV07CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/config ./internal/adapters/config/effectivefile ./internal/adapters/config/toml ./internal/bootstrap ./cmd/orquesta'",
+      "fixture": "acceptance/fixtures/v07_config.json",
+      "receipt": "product/evidence/v07_config.json",
       "assertions": [
-        "all keys defaults aliases and environment names originate in registry",
-        "effective config is redacted and read-only",
-        "CAS replace and pending restart survive crash"
+        "one strict registry is the only source of keys types defaults validation sensitivity scope precedence aliases environment names and restart metadata",
+        "orquesta.toml remains the only human editable non-secret value document and contains explicit values or credential_ref but no schema defaults audit metadata or secret material",
+        "resolution is deterministic with default then TOML then only registry-declared bootstrap environment precedence",
+        "effective config is deterministic redacted output-only immutable input and written atomically with owner-read-only mode 0400",
+        "expected revision CAS admits one concurrent writer and idempotent replay returns the original immutable audit receipt without another write",
+        "journal intent replacement and receipt sidecar recover both pre-replace and post-replace crashes without partial TOML duplicate receipt or lost acknowledged mutation",
+        "restart-required changes preserve the active immutable snapshot expose exact pending_restart keys and clear only after bootstrap from the committed desired document",
+        "configuration mutation accepts only canonical opaque credential_ref values and never reads writes or leaks CredentialStore material",
+        "generated typed getters JSON schema reference documentation and transport-neutral UI descriptor are reproducible from the registry with no handwritten duplicate metadata",
+        "config doctor classifies reuse replace or new and reports semantic key Go name environment alias and retirement conflicts without mutating the registry",
+        "an AST architecture guard rejects environment reads canonical key literals aliases and typed configuration defaults outside the canonical config ingress",
+        "child processes receive only exact explicitly configured environment names and never a prefix-derived or ambient environment copy",
+        "config Manager depends only on a DocumentStore port and the TOML filesystem adapter owns replace fsync journal and receipt while CredentialStore public transports command registry and web remain outside V07"
       ]
     },
     {
@@ -5310,12 +5321,15 @@
       "kind": "operations",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "config",
+      "owner_context": "web_admin",
       "dependencies": [
-        "atomic_state_outbox"
+        "identity_projects_rbac",
+        "command_registry",
+        "i18n",
+        "wizard"
       ],
       "acceptance_contracts": [
-        "AC-V07-CONFIG"
+        "AC-V24-WEB-ADMIN"
       ],
       "status": "declared",
       "evidence_refs": [],

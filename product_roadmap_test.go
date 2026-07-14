@@ -464,6 +464,81 @@ func TestProductRoadmapV06ScopeAndExecutableContract(t *testing.T) {
 	}
 }
 
+func TestProductRoadmapV07ScopeAndExecutableContract(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+
+	entries := make(map[string]roadmapEntry, len(roadmap.CapabilityEntries))
+	verticals := make(map[string]roadmapVertical, len(roadmap.Verticals))
+	var ownedAccepted []string
+	for _, vertical := range roadmap.Verticals {
+		verticals[vertical.ID] = vertical
+	}
+	for _, entry := range roadmap.CapabilityEntries {
+		entries[entry.ID] = entry
+		if entry.OwnerContext == "config" && entry.Decision == "accept" {
+			ownedAccepted = append(ownedAccepted, entry.ID)
+		}
+	}
+	sort.Strings(ownedAccepted)
+	wantOwned := []string{
+		"OPS-01", "OPS-02", "OPS-04", "OPS-05", "OPS-06",
+		"OPS-26", "OPS-27", "OPS-28", "OPS-29", "OPS-30",
+	}
+	sort.Strings(wantOwned)
+	if !reflect.DeepEqual(ownedAccepted, wantOwned) {
+		t.Fatalf("V07 accepted ownership = %v, want exact %v", ownedAccepted, wantOwned)
+	}
+	wantV07Evidence := []string{
+		"acceptance/v07_config_test.go",
+		"acceptance/fixtures/v07_config.json",
+		"product/evidence/v07_config.json",
+	}
+	for _, id := range wantOwned {
+		entry := entries[id]
+		switch entry.Status {
+		case "declared":
+			if len(entry.EvidenceRefs) != 0 {
+				t.Errorf("declared V07 capability %s has premature evidence: %v", id, entry.EvidenceRefs)
+			}
+		case "accredited":
+			if !reflect.DeepEqual(entry.EvidenceRefs, wantV07Evidence) {
+				t.Errorf("accredited V07 capability %s has wrong evidence: %v", id, entry.EvidenceRefs)
+			}
+		default:
+			t.Errorf("V07 capability %s has partial status %q; contract must remain declared or become fully accredited", id, entry.Status)
+		}
+	}
+
+	deferred := entries["OPS-07"]
+	wantDeferredVertical := verticals["web_admin"]
+	if deferred.OwnerContext != "web_admin" ||
+		!reflect.DeepEqual(deferred.Dependencies, wantDeferredVertical.DependsOn) ||
+		!reflect.DeepEqual(deferred.AcceptanceContracts, wantDeferredVertical.AcceptanceContracts) ||
+		deferred.Status != "declared" || len(deferred.EvidenceRefs) != 0 {
+		t.Fatalf("OPS-07 must remain wholly deferred to V24 public bindings: %#v", deferred)
+	}
+
+	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV07ScopeAndExecutableContract|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV07Config|TestV07CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/config ./internal/adapters/config/effectivefile ./internal/adapters/config/toml ./internal/bootstrap ./cmd/orquesta'"
+	var contract roadmapAcceptanceContract
+	for _, candidate := range roadmap.AcceptanceContracts {
+		if candidate.ID == "AC-V07-CONFIG" {
+			contract = candidate
+			break
+		}
+	}
+	if contract.Status != "executable" || contract.TestRef != "acceptance/v07_config_test.go" ||
+		contract.Fixture != "acceptance/fixtures/v07_config.json" ||
+		contract.Receipt != "product/evidence/v07_config.json" || contract.Command != wantCommand ||
+		len(contract.Assertions) != 13 {
+		t.Fatalf("invalid V07 executable contract: %#v", contract)
+	}
+	if !roadmapCommandHasArgument(contract.Command, "./acceptance") || strings.Contains(contract.Command, "./...") ||
+		strings.Contains(contract.Command, "^TestAcceptance$") || strings.Contains(contract.Command, "./internal/interfaces/mcp") {
+		t.Fatalf("V07 command is broad, exposes premature public bindings, or can omit real gates: %q", contract.Command)
+	}
+}
+
 func TestV04AccreditsOnlyGOV02AndPreservesGOV01Deferred(t *testing.T) {
 	var roadmap roadmapDocument
 	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
@@ -512,6 +587,7 @@ func TestProductRoadmapExecutableContractsDeclareReceiptPaths(t *testing.T) {
 		"AC-V04-INTENT-APPSPEC":      "product/evidence/v04_intent_appspec.json",
 		"AC-V05-GOAL-DAG-PHASES":     "product/evidence/v05_goal_dag_phases.json",
 		"AC-V06-ATOMIC-STATE-OUTBOX": "product/evidence/v06_atomic_state_outbox.json",
+		"AC-V07-CONFIG":              "product/evidence/v07_config.json",
 	}
 	gotExecutable := make(map[string]string)
 	for _, contract := range roadmap.AcceptanceContracts {

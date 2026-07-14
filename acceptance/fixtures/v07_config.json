@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "receipt_schema_version": 3,
+  "contract_id": "AC-V07-CONFIG",
+  "trusted_base_git_commit_oid": "5ff9234d7ef1c8650c1f21ad21a288246c5d027c",
+  "product_delta_base_git_commit_oid": "5ff9234d7ef1c8650c1f21ad21a288246c5d027c",
+  "product_delta_sealed_git_commit_oid": "5ff9234d7ef1c8650c1f21ad21a288246c5d027c",
+  "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV07ScopeAndExecutableContract|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV07Config|TestV07CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/config ./internal/adapters/config/effectivefile ./internal/adapters/config/toml ./internal/bootstrap ./cmd/orquesta'",
+  "execution_argv": [
+    "sh",
+    "-c",
+    "go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV07ScopeAndExecutableContract|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV07Config|TestV07CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/config ./internal/adapters/config/effectivefile ./internal/adapters/config/toml ./internal/bootstrap ./cmd/orquesta"
+  ],
+  "output_path": "product/evidence/v07_config.output.txt",
+  "receipt_path": "product/evidence/v07_config.json",
+  "candidate_subjects": [
+    "acceptance/fixtures/v07_config.json",
+    "acceptance/v07_config_test.go",
+    "docs/reconstruccion/ruta_total_100.md",
+    "product/roadmap.json",
+    "product/traceability/rebuild_bugs.jsonl",
+    "product_roadmap_test.go"
+  ],
+  "owned_capability_ids": [
+    "OPS-01",
+    "OPS-02",
+    "OPS-04",
+    "OPS-05",
+    "OPS-06",
+    "OPS-26",
+    "OPS-27",
+    "OPS-28",
+    "OPS-29",
+    "OPS-30"
+  ],
+  "deferred_capabilities": [
+    {
+      "id": "OPS-07",
+      "owner": "web_admin",
+      "acceptance_contract": "AC-V24-WEB-ADMIN"
+    }
+  ],
+  "scenario": {
+    "base_time": "2026-07-15T01:00:00Z",
+    "concurrent_writers": 8,
+    "max_source_bytes": 1048576,
+    "max_receipt_bytes": 65536,
+    "source_mode": "0600",
+    "effective_mode": "0400",
+    "failpoints": [
+      "after_replacement_sync",
+      "after_intent_sync",
+      "after_source_rename",
+      "after_source_directory_sync",
+      "after_receipt_rename",
+      "after_receipt_directory_sync"
+    ]
+  },
+  "assertions": [
+    "one strict registry is the only source of keys types defaults validation sensitivity scope precedence aliases environment names and restart metadata",
+    "orquesta.toml remains the only human editable non-secret value document and contains explicit values or credential_ref but no schema defaults audit metadata or secret material",
+    "resolution is deterministic with default then TOML then only registry-declared bootstrap environment precedence",
+    "effective config is deterministic redacted output-only immutable input and written atomically with owner-read-only mode 0400",
+    "expected revision CAS admits one concurrent writer and idempotent replay returns the original immutable audit receipt without another write",
+    "journal intent replacement and receipt sidecar recover both pre-replace and post-replace crashes without partial TOML duplicate receipt or lost acknowledged mutation",
+    "restart-required changes preserve the active immutable snapshot expose exact pending_restart keys and clear only after bootstrap from the committed desired document",
+    "configuration mutation accepts only canonical opaque credential_ref values and never reads writes or leaks CredentialStore material",
+    "generated typed getters JSON schema reference documentation and transport-neutral UI descriptor are reproducible from the registry with no handwritten duplicate metadata",
+    "config doctor classifies reuse replace or new and reports semantic key Go name environment alias and retirement conflicts without mutating the registry",
+    "an AST architecture guard rejects environment reads canonical key literals aliases and typed configuration defaults outside the canonical config ingress",
+    "child processes receive only exact explicitly configured environment names and never a prefix-derived or ambient environment copy",
+    "config Manager depends only on a DocumentStore port and the TOML filesystem adapter owns replace fsync journal and receipt while CredentialStore public transports command registry and web remain outside V07"
+  ]
+}
