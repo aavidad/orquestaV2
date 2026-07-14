@@ -20,6 +20,8 @@ type v05Fixture struct {
 	ReceiptSchemaVersion             int            `json:"receipt_schema_version"`
 	ContractID                       string         `json:"contract_id"`
 	TrustedBaseGitCommitOID          string         `json:"trusted_base_git_commit_oid"`
+	ProductDeltaBaseGitCommitOID     string         `json:"product_delta_base_git_commit_oid"`
+	ProductDeltaSealedGitCommitOID   string         `json:"product_delta_sealed_git_commit_oid"`
 	Command                          string         `json:"command"`
 	ExecutionArgv                    []string       `json:"execution_argv"`
 	OutputPath                       string         `json:"output_path"`
@@ -59,7 +61,7 @@ func TestAcceptanceV05GoalDAGPhases(t *testing.T) {
 		v05AssertMetadataRoundTrip(t)
 	})
 
-	t.Run("contractual_parent_waits_for_real_child", func(t *testing.T) {
+	t.Run("contractual_lineage_keeps_goal_open_until_all_work_is_terminal", func(t *testing.T) {
 		v05AssertContractualLineageDoesNotCloseGoalEarly(t)
 	})
 
@@ -93,6 +95,32 @@ func TestAcceptanceV05GoalDAGPhasesReceipt(t *testing.T) {
 	})
 }
 
+func TestV05CandidateSubjectsCoverCommittedDelta(t *testing.T) {
+	repositoryRoot := evidenceRepositoryRoot(t)
+	fixture := evidenceDecodeStrictJSON[v05Fixture](t, filepath.Join(repositoryRoot, filepath.FromSlash(v05FixturePath)))
+	if err := evidenceValidateSealedCommit(
+		repositoryRoot, fixture.ProductDeltaBaseGitCommitOID, fixture.ProductDeltaSealedGitCommitOID,
+	); err != nil {
+		t.Fatal(err)
+	}
+	output, err := evidenceGit(
+		repositoryRoot, "diff", "--name-only",
+		fixture.ProductDeltaBaseGitCommitOID, fixture.ProductDeltaSealedGitCommitOID, "--",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := strings.TrimSpace(string(output))
+	var changed []string
+	if text != "" {
+		changed = strings.Split(text, "\n")
+	}
+	sort.Strings(changed)
+	if !reflect.DeepEqual(changed, fixture.CandidateSubjects) {
+		t.Fatalf("V05 candidate subjects differ from sealed product delta:\nchanged=%v\nfixture=%v", changed, fixture.CandidateSubjects)
+	}
+}
+
 func v05AssertFixtureHeader(t *testing.T, repositoryRoot string, fixture v05Fixture) {
 	t.Helper()
 	wantCommand := "sh -c '" + v05ValidationShellBody() + "'"
@@ -105,6 +133,8 @@ func v05AssertFixtureHeader(t *testing.T, repositoryRoot string, fixture v05Fixt
 	sort.Strings(wantCapabilities)
 	if fixture.SchemaVersion != 1 || fixture.ReceiptSchemaVersion != 3 ||
 		fixture.ContractID != "AC-V05-GOAL-DAG-PHASES" || fixture.TrustedBaseGitCommitOID != v05TrustedBaseGitCommitOID ||
+		fixture.ProductDeltaBaseGitCommitOID != v05TrustedBaseGitCommitOID ||
+		fixture.ProductDeltaSealedGitCommitOID != "a7d5774086a517674d2a56f9707f2ecfd4d73487" ||
 		fixture.Command != wantCommand || !reflect.DeepEqual(fixture.ExecutionArgv, wantArgv) ||
 		fixture.OutputPath != "product/evidence/v05_goal_dag_phases.output.txt" ||
 		fixture.ReceiptPath != "product/evidence/v05_goal_dag_phases.json" ||
@@ -123,7 +153,7 @@ func v05AssertFixtureHeader(t *testing.T, repositoryRoot string, fixture v05Fixt
 }
 
 func v05ValidationShellBody() string {
-	return "go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapV05ScopeAndExecutableContract|TestAcceptanceV05GoalDAGPhases)$\"" +
+	return "go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapV05ScopeAndExecutableContract|TestAcceptanceV05GoalDAGPhases|TestV05CandidateSubjectsCoverCommittedDelta)$\"" +
 		" && go test -mod=vendor -count=1 ./internal/goal ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/interfaces/mcp ./internal/bootstrap"
 }
 

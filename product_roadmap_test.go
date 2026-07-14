@@ -375,7 +375,7 @@ func TestProductRoadmapV05ScopeAndExecutableContract(t *testing.T) {
 		t.Fatalf("ORC-18 must remain rejected and outside cutover: %#v", entry)
 	}
 
-	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapV05ScopeAndExecutableContract|TestAcceptanceV05GoalDAGPhases)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/interfaces/mcp ./internal/bootstrap'"
+	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapV05ScopeAndExecutableContract|TestAcceptanceV05GoalDAGPhases|TestV05CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/interfaces/mcp ./internal/bootstrap'"
 	var contract roadmapAcceptanceContract
 	for _, candidate := range roadmap.AcceptanceContracts {
 		if candidate.ID == "AC-V05-GOAL-DAG-PHASES" {

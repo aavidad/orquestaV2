@@ -579,7 +579,7 @@
       "vertical": "goal_dag_phases",
       "status": "executable",
       "test_ref": "acceptance/v05_goal_dag_phases_test.go",
-      "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapV05ScopeAndExecutableContract|TestAcceptanceV05GoalDAGPhases)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/interfaces/mcp ./internal/bootstrap'",
+      "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapV05ScopeAndExecutableContract|TestAcceptanceV05GoalDAGPhases|TestV05CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/interfaces/mcp ./internal/bootstrap'",
       "fixture": "acceptance/fixtures/v05_goal_dag_phases.json",
       "receipt": "product/evidence/v05_goal_dag_phases.json",
       "assertions": [
