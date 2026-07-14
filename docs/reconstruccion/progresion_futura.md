@@ -2,6 +2,9 @@
 
 Fecha: 2026-07-14
 
+Estado: razonamiento histórico posterior al corte mínimo. La secuencia y el
+alcance vigentes están en `ruta_total_100.md` y `product/roadmap.json`.
+
 El corte local no es un prototipo desechable. `Goal`, `WorkItem`, sus refs y las
 operaciones de aplicación permanecen al añadir usuarios, PostgreSQL,
 autenticación, RBAC o proveedores. La progresión sustituye o añade adaptadores
@@ -90,9 +93,11 @@ paths de otro producto en ArtifactRef.
 
 ### 6. Escala, proyecciones y web
 
-Con PostgreSQL acreditado pueden ejecutarse varios schedulers/workers usando
-las mismas leases y CAS. Métricas, audit log, búsqueda y dashboard son
-proyecciones reconstruibles; no cierran Goals.
+PostgreSQL acreditado permite claims/CAS compartidos, pero no basta para
+multihost. Antes de ejecutar varios schedulers/workers se requieren además
+afinidad `worker_ref/host_ref`, fencing y recuperación de host, artefactos
+S3-compatible y workspaces clonables o forge remoto. Métricas, audit log,
+búsqueda y dashboard son proyecciones reconstruibles; no cierran Goals.
 
 Una web administrativa consume los mismos comandos/queries de aplicación que
 MCP y atraviesa auth/RBAC. No lee o escribe tablas directamente. La UI puede
@@ -116,12 +121,11 @@ valida antes de cambiar el adaptador activo.
 
 ## Catálogo posterior preservado
 
-El corte mínimo no sustituye el catálogo funcional estudiado ni convierte lo
-aplazado en descartado. La fuente exhaustiva permanece en el árbol de estudio
-como `docs/catalogo_decision_capacidades_orquesta_2026-07-14.md`, con SHA-256
-`351c2258562424fc5c0dab9e0dcce0b623f9eabf42f2485b6ae45432694d4fd3`.
-Antes de cada vertical se copia su capacidad y criterios al manifest de esta
-rama; no se copia su implementación legacy.
+El catálogo funcional quedó integrado de forma autocontenida en
+`product/roadmap.json`, con sus 257 IDs, cuatro hashes de fuente, decisiones,
+dependencias y contratos planificados. Ese ledger sustituye la práctica de
+copiar capacidad por capacidad desde el árbol antiguo; no copia implementación
+legacy.
 
 Los siguientes bloques siguen expresamente pendientes:
 

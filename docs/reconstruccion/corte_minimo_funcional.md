@@ -2,8 +2,9 @@
 
 Fecha: 2026-07-14
 
-Estado: cerrado al 100 % de la definición mínima funcional. La suite raíz, el
-E2E Codex real y todos los gates del árbol integrado pasaron el 2026-07-14.
+Estado: corte histórico cerrado de la definición mínima funcional. No es
+autoridad de la reconstrucción total; esa autoridad vive en
+`product/roadmap.json` y `ruta_total_100.md`.
 
 ## Resultado
 
@@ -86,7 +87,11 @@ posterior al corte, sin reescribir el núcleo, queda en
 
 ## Evidencia del 2026-07-14
 
-- `go test -mod=vendor -count=1 ./...`: `PASS` sobre todo el repositorio.
+- El corte registró `go test -mod=vendor -count=1 ./...` como `PASS`. La
+  auditoría posterior demostró que ese patrón enumera 131 paquetes, incluidos
+  runtime y smokes legacy; se conserva como hecho histórico, pero queda
+  revocado como gate vigente. El gate nuevo enumera solo raíz,
+  `internal/...` y `cmd/orquesta`.
 - E2E real Codex por servidor MCP de producción: `PASS` en 3,54 s, con request
   y marcador criptográficamente únicos, autenticación Bearer, SQLite, CAS,
   artefacto, atestación y cierre leídos de vuelta por el cliente MCP oficial.

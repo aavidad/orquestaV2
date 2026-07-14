@@ -2,6 +2,8 @@
 
 Fecha de corte: 2026-07-14
 
+Estado: evidencia histórica del corte mínimo. No gobierna el roadmap total.
+
 [`product/capabilities.json`](../../product/capabilities.json) es el manifest
 ejecutable del corte. `status: accepted` significa que la capacidad tiene un
 contrato verificable en su `acceptance_ref`; este documento explica qué cubre y
@@ -44,7 +46,7 @@ Evidencia focal adicional, sin sustituir los refs canónicos:
 
 | Fecha | Comando | Resultado | Alcance |
 |---|---|---|---|
-| 2026-07-14 | `go test -mod=vendor -count=1 ./...` | `PASS` | suite raíz completa, incluido receipt vigente; el E2E Codex opt-in se omite sin flag |
+| 2026-07-14 | `go test -mod=vendor -count=1 ./...` | `PASS` histórico; comando revocado | después se comprobó que `./...` enumera 131 paquetes y puede lanzar smokes legacy; no es gate vigente |
 | 2026-07-14 | `go test -mod=vendor -v -count=1 ./internal/bootstrap -run '^TestRealCodexAdapterClosesGoalThroughProductionMCPServer$' -args -orquesta-real-codex-config=<TOML temporal>` | `PASS` en 3,54 s | servidor de producción, Bearer local, cliente MCP oficial, Codex real, SQLite, CAS, artefacto y atestación |
 | 2026-07-14 | `go test -mod=vendor -race -count=1 ./internal/application ./internal/adapters/agent/codex ./internal/adapters/artifact/filesystem ./internal/adapters/auth/localtoken ./internal/adapters/state/sqlite ./internal/bootstrap ./internal/interfaces/mcp` | `PASS` | concurrencia en el vertical nuevo y sus adaptadores con estado |
 | 2026-07-14 | `GOFLAGS=-mod=vendor go vet ./internal/... ./cmd/orquesta` | `PASS` | análisis estático del producto nuevo |
@@ -62,22 +64,20 @@ vendorizadas, configuración y manifest del producto.
 
 ## Gates de integración
 
-Todos los gates de la tabla se ejecutaron sobre el árbol integrado final. La
-suite raíz también valida que el receipt E2E coincida con el digest vigente;
-una modificación posterior de código, dependencias, configuración o manifest
-lo deja rojo hasta repetir el E2E real.
+Los resultados de la tabla pertenecen al candidato mínimo. Para trabajo nuevo,
+la raíz valida manifest/receipt y los paquetes se enumeran de forma explícita;
+`./...` queda prohibido porque incluye superficies congeladas.
 
 Checklist reproducible:
 
 ```bash
 git diff --check
 scripts/check_rebuild_write_set.sh
-go test -mod=vendor -count=1 ./...
+go test -mod=vendor -count=1 .
+go test -mod=vendor -count=1 ./internal/... ./cmd/orquesta
 go test -mod=vendor -race -count=1 ./internal/application ./internal/adapters/agent/codex ./internal/adapters/artifact/filesystem ./internal/adapters/auth/localtoken ./internal/adapters/state/sqlite ./internal/bootstrap ./internal/interfaces/mcp
 GOFLAGS=-mod=vendor go vet ./internal/... ./cmd/orquesta
 ```
 
 El E2E Codex real se repite con el comando opt-in de la tabla y una instancia
 TOML aislada. No se apunta a estado, artifacts, work roots ni runtime legacy.
-Si se fija `TMPDIR` para la suite raíz, debe ser privado y corto: los smokes
-legacy con sockets Unix/tmux respetan el límite de longitud de `sockaddr_un`.
