@@ -1,0 +1,11 @@
+ok  	orquesta	0.008s
+ok  	orquesta/acceptance	0.115s
+ok  	orquesta/internal/goal	0.006s
+ok  	orquesta/internal/application	0.004s
+ok  	orquesta/internal/ports	0.002s
+ok  	orquesta/internal/adapters/agent/fake	0.002s
+ok  	orquesta/internal/adapters/agent/codex	0.364s
+ok  	orquesta/internal/adapters/state/sqlite	0.787s
+ok  	orquesta/internal/interfaces/mcp	0.099s
+ok  	orquesta/internal/bootstrap	0.589s
+ok  	orquesta/cmd/orquesta	0.003s

@@ -1,1 +1,32 @@
-{}
+{
+  "schema_version": 3,
+  "evidence_kind": "reproducibility_descriptor",
+  "contract": "AC-V06-ATOMIC-STATE-OUTBOX",
+  "result": "PASS",
+  "validation_command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV06ScopeAndExecutableContract|TestAcceptanceV06AtomicStateOutbox|TestV06CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/interfaces/mcp ./internal/bootstrap ./cmd/orquesta'",
+  "executed_at": "2026-07-14T16:52:17+02:00",
+  "execution": {
+    "argv": [
+      "sh",
+      "-c",
+      "go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV06ScopeAndExecutableContract|TestAcceptanceV06AtomicStateOutbox|TestV06CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/interfaces/mcp ./internal/bootstrap ./cmd/orquesta"
+    ],
+    "source_git_commit_oid": "dc54f283919da15195cf026bad76677f1cf418b2",
+    "source_worktree_state": "detached_clean",
+    "source_status_porcelain_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "exit_code": 0,
+    "combined_output_path": "product/evidence/v06_atomic_state_outbox.output.txt",
+    "combined_output_sha256": "sha256:448ac06eacfef2c5ab2288cdd47050f05b1b6eb6003d8ec1768a3a5b1966ea29",
+    "go_version": "go1.25.11"
+  },
+  "fixture_sha256": "sha256:b5da42272d6df06ebb3d3a1dd65d700a48a88c22b6cc6741af9d1a3807fb1678",
+  "candidate_digest_algorithm": "sha256:length-framed-git-blob-set:v1",
+  "candidate_sha256": "sha256:845ad6413a9d32794567bc7fc3c202ce01d1ab993812461ce5da250d9ca7da0c",
+  "sealed_source": {
+    "identity_kind": "sealed_git_subject_set",
+    "git_commit_oid": "dc54f283919da15195cf026bad76677f1cf418b2",
+    "git_tree_oid": "5a4d9e137497cb28cc23d84fa2741ab9424ccabd",
+    "fixture_blob_oid": "049299f046e12367b596f8ea5d120641bbc704d2",
+    "sha256": "sha256:845ad6413a9d32794567bc7fc3c202ce01d1ab993812461ce5da250d9ca7da0c"
+  }
+}
