@@ -1,11 +1,10 @@
-go: downloading go1.25.11 (linux/amd64)
-ok  	orquesta	0.006s
+ok  	orquesta	0.008s
 ok  	orquesta/acceptance	0.017s
-ok  	orquesta/internal/goal	0.006s
+ok  	orquesta/internal/goal	0.005s
 ok  	orquesta/internal/application	0.004s
-ok  	orquesta/internal/ports	0.003s
+ok  	orquesta/internal/ports	0.002s
 ok  	orquesta/internal/adapters/agent/fake	0.002s
-ok  	orquesta/internal/adapters/agent/codex	0.363s
-ok  	orquesta/internal/adapters/state/sqlite	0.373s
-ok  	orquesta/internal/interfaces/mcp	0.101s
-ok  	orquesta/internal/bootstrap	0.494s
+ok  	orquesta/internal/adapters/agent/codex	0.354s
+ok  	orquesta/internal/adapters/state/sqlite	0.362s
+ok  	orquesta/internal/interfaces/mcp	0.103s
+ok  	orquesta/internal/bootstrap	0.478s
