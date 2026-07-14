@@ -1012,8 +1012,12 @@
       "acceptance_contracts": [
         "AC-V04-INTENT-APPSPEC"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v04_intent_appspec_test.go",
+        "acceptance/fixtures/v04_intent_appspec.json",
+        "product/evidence/v04_intent_appspec.json"
+      ],
       "supersedes": []
     },
     {

@@ -283,7 +283,7 @@ func TestProductRoadmapAccreditationDoesNotExceedEvidence(t *testing.T) {
 		}
 	}
 	sort.Strings(accreditedIDs)
-	wantAccreditedIDs := []string{"GOV-03", "GOV-16", "GOV-21"}
+	wantAccreditedIDs := []string{"GOV-02", "GOV-03", "GOV-16", "GOV-21"}
 	if !reflect.DeepEqual(accreditedIDs, wantAccreditedIDs) {
 		t.Fatalf("accredited capability IDs=%v, want exact evidence-backed set %v", accreditedIDs, wantAccreditedIDs)
 	}
@@ -305,6 +305,27 @@ func TestProductRoadmapAccreditationDoesNotExceedEvidence(t *testing.T) {
 		if entry.Status != "declared" || entry.OwnerContext != owner || len(entry.EvidenceRefs) != 0 {
 			t.Errorf("partially evidenced capability %s is over-accredited or misrouted: %#v", id, entry)
 		}
+	}
+}
+
+func TestV04AccreditsOnlyGOV02AndPreservesGOV01Deferred(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+	entries := make(map[string]roadmapEntry, len(roadmap.CapabilityEntries))
+	for _, entry := range roadmap.CapabilityEntries {
+		entries[entry.ID] = entry
+	}
+
+	if entry := entries["GOV-01"]; entry.Status != "declared" || entry.OwnerContext != "generated_apps" || len(entry.EvidenceRefs) != 0 {
+		t.Fatalf("GOV-01 must remain deferred to generated_apps without V04 evidence: %#v", entry)
+	}
+	wantEvidence := []string{
+		"acceptance/v04_intent_appspec_test.go",
+		"acceptance/fixtures/v04_intent_appspec.json",
+		"product/evidence/v04_intent_appspec.json",
+	}
+	if entry := entries["GOV-02"]; entry.Status != "accredited" || !reflect.DeepEqual(entry.EvidenceRefs, wantEvidence) {
+		t.Fatalf("GOV-02 accreditation = %#v, want exact V04 evidence %v", entry, wantEvidence)
 	}
 }
 

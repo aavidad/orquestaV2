@@ -39,6 +39,7 @@ func TestTraceabilityRebuildBugLessons(t *testing.T) {
 		"BUG-REBUILD-20260714-029": "acceptance/v04_intent_appspec_test.go#TestV04AcceptanceCommandRunsEachOwnedPackageBehavior",
 		"BUG-REBUILD-20260714-030": "acceptance/v04_intent_appspec_test.go#TestV04CandidateDeltaFreezesAtSealedHead",
 		"BUG-REBUILD-20260714-031": "internal/bootstrap/mcp_e2e_test.go#TestRealMCPAPIClosesDurableGoalThroughSQLiteAndArtifactStore",
+		"BUG-REBUILD-20260714-032": "product_roadmap_test.go#TestV04AccreditsOnlyGOV02AndPreservesGOV01Deferred",
 	}
 	baselineIDs := []string{
 		"BUG-REBUILD-20260714-001",
