@@ -14,6 +14,7 @@ import (
 	"orquesta/internal/adapters/agent/codex"
 	"orquesta/internal/adapters/artifact/filesystem"
 	"orquesta/internal/adapters/auth/localtoken"
+	"orquesta/internal/adapters/config/effectivefile"
 	configtoml "orquesta/internal/adapters/config/toml"
 	statesqlite "orquesta/internal/adapters/state/sqlite"
 	"orquesta/internal/adapters/system/local"
@@ -76,41 +77,7 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	if err := validateSnapshot(snapshot, options.ConfigPath); err != nil {
 		return nil, err
 	}
-	authenticator, err := localtoken.Open(snapshot.IdentityLocalTokenPath())
-	if err != nil {
-		return nil, err
-	}
-	if err := writeEffectiveSnapshot(ctx, snapshot); err != nil {
-		return nil, err
-	}
-
 	clock := local.Clock{}
-	repository, err := statesqlite.Open(ctx, statesqlite.Options{
-		Path: snapshot.StateSQLitePath(), BusyTimeout: snapshot.StateSQLiteBusyTimeout(),
-		MaxOpenConnections: int(snapshot.StateSQLiteMaxOpenConnections()),
-		Now:                clock.Now,
-	})
-	if err != nil {
-		return nil, err
-	}
-	cleanupRepository := true
-	defer func() {
-		if cleanupRepository {
-			_ = repository.Close()
-		}
-	}()
-
-	artifacts, err := filesystem.Open(snapshot.ArtifactFilesystemRoot())
-	if err != nil {
-		return nil, err
-	}
-	cleanupArtifacts := true
-	defer func() {
-		if cleanupArtifacts {
-			_ = artifacts.Close()
-		}
-	}()
-
 	actorRef, err := goal.NewActorRef(snapshot.IdentityLocalActor())
 	if err != nil {
 		return nil, err
@@ -123,6 +90,37 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
+	catalog, err := i18n.LoadBundled()
+	if err != nil {
+		return nil, err
+	}
+	workerRef, err := local.IDGenerator{}.NewID(ctx, "worker")
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate or acquire the reversible network boundary before creating any
+	// durable composition state. Injected listeners remain owned by Build and
+	// are closed on every failed build.
+	listener := options.Listener
+	if listener == nil {
+		listener, err = net.Listen("tcp", snapshot.ServerListen())
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap.listen_failed: %w", err)
+		}
+	}
+	cleanupListener := true
+	defer func() {
+		if cleanupListener {
+			_ = listener.Close()
+		}
+	}()
+	if err := validateListener(listener); err != nil {
+		return nil, err
+	}
+
+	// Agent validation may inspect its executable and allocate its isolated
+	// work root, but it must succeed before token/config/state/artifact writes.
 	factory := options.AgentFactory
 	if factory == nil {
 		factory = productionAgentFactory
@@ -150,6 +148,40 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		return nil, err
 	}
 
+	authenticator, err := localtoken.Open(snapshot.IdentityLocalTokenPath())
+	if err != nil {
+		return nil, err
+	}
+	if err := writeEffectiveSnapshot(ctx, snapshot); err != nil {
+		return nil, err
+	}
+
+	repository, err := statesqlite.Open(ctx, statesqlite.Options{
+		Path: snapshot.StateSQLitePath(), BusyTimeout: snapshot.StateSQLiteBusyTimeout(),
+		MaxOpenConnections: int(snapshot.StateSQLiteMaxOpenConnections()),
+		Now:                clock.Now,
+	})
+	if err != nil {
+		return nil, err
+	}
+	cleanupRepository := true
+	defer func() {
+		if cleanupRepository {
+			_ = repository.Close()
+		}
+	}()
+
+	artifacts, err := filesystem.Open(snapshot.ArtifactFilesystemRoot())
+	if err != nil {
+		return nil, err
+	}
+	cleanupArtifacts := true
+	defer func() {
+		if cleanupArtifacts {
+			_ = artifacts.Close()
+		}
+	}()
+
 	orchestrator, err := application.New(application.Dependencies{
 		State: repository, Launcher: agent, Observer: agent, Artifacts: artifacts,
 		Clock: clock, IDs: local.IDGenerator{},
@@ -163,10 +195,6 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
-	catalog, err := i18n.LoadBundled()
-	if err != nil {
-		return nil, err
-	}
 	version := strings.TrimSpace(options.Version)
 	if version == "" {
 		version = "dev"
@@ -177,22 +205,6 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		MaxRequestBytes: snapshot.ServerMaxRequestBytes(), Version: version,
 	})
 	if err != nil {
-		return nil, err
-	}
-	listener := options.Listener
-	if listener == nil {
-		listener, err = net.Listen("tcp", snapshot.ServerListen())
-		if err != nil {
-			return nil, fmt.Errorf("bootstrap.listen_failed: %w", err)
-		}
-	}
-	cleanupListener := true
-	defer func() {
-		if cleanupListener {
-			_ = listener.Close()
-		}
-	}()
-	if err := validateListener(listener); err != nil {
 		return nil, err
 	}
 	mux := http.NewServeMux()
@@ -209,11 +221,6 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		WriteTimeout: snapshot.ServerWriteTimeout(), IdleTimeout: snapshot.ServerIdleTimeout(),
 		BaseContext: func(net.Listener) context.Context { return lifecycleCtx },
 	}
-	workerRef, err := local.IDGenerator{}.NewID(ctx, "worker")
-	if err != nil {
-		return nil, err
-	}
-
 	runtime := &Runtime{
 		config: snapshot, orchestrator: orchestrator, repository: repository,
 		artifacts: artifacts, agent: agent, listener: listener, httpServer: httpServer,
@@ -433,6 +440,11 @@ func validateSnapshot(snapshot config.Snapshot, sourceConfigPath string) error {
 		return err
 	}
 	for _, reserved := range configtoml.ReservedPaths(sourceConfigPath) {
+		if err := validateRuntimePaths(snapshot, reserved); err != nil {
+			return err
+		}
+	}
+	for _, reserved := range effectivefile.ReservedPaths(snapshot.ConfigEffectivePath()) {
 		if err := validateRuntimePaths(snapshot, reserved); err != nil {
 			return err
 		}

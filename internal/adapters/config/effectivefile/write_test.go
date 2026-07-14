@@ -6,8 +6,10 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"orquesta/internal/config"
 )
@@ -86,6 +88,99 @@ func TestWriteFailpointAndCancellationPreservePreviousDocument(t *testing.T) {
 		assertFile(t, path, previous, 0o400)
 		assertNoTemporaries(t, root)
 	})
+}
+
+func TestWriteSerializesConcurrentWritersAcrossSharedLock(t *testing.T) {
+	root := privateRoot(t)
+	path := filepath.Join(root, "effective.json")
+	first := effectiveContent(t, "127.0.0.1:8081")
+	second := effectiveContent(t, "127.0.0.1:8082")
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	firstDone := make(chan error, 1)
+	go func() {
+		firstDone <- Write(context.Background(), Options{
+			Path: path, Content: first, MaxExistingBytes: 1 << 20,
+			Failpoint: func(string) error {
+				close(entered)
+				<-release
+				return nil
+			},
+		})
+	}()
+	<-entered
+	secondDone := make(chan error, 1)
+	go func() {
+		secondDone <- Write(context.Background(), Options{Path: path, Content: second, MaxExistingBytes: 1 << 20})
+	}()
+	select {
+	case err := <-secondDone:
+		t.Fatalf("second writer bypassed lock: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	if err := <-firstDone; err != nil {
+		t.Fatalf("first writer: %v", err)
+	}
+	if err := <-secondDone; err != nil {
+		t.Fatalf("second writer: %v", err)
+	}
+	assertFile(t, path, second, 0o400)
+	assertFile(t, path+".lock", []byte{}, 0o600)
+}
+
+func TestWriteRejectsParentDirectoryReplacementBeforeRename(t *testing.T) {
+	root := privateRoot(t)
+	live := filepath.Join(root, "live")
+	path := filepath.Join(live, "effective.json")
+	previous := effectiveContent(t, "127.0.0.1:8080")
+	next := effectiveContent(t, "127.0.0.1:8181")
+	if err := Write(context.Background(), Options{Path: path, Content: previous, MaxExistingBytes: 1 << 20}); err != nil {
+		t.Fatal(err)
+	}
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		done <- Write(context.Background(), Options{
+			Path: path, Content: next, MaxExistingBytes: 1 << 20,
+			Failpoint: func(string) error {
+				close(entered)
+				<-release
+				return nil
+			},
+		})
+	}()
+	<-entered
+	moved := filepath.Join(root, "moved")
+	if err := os.Rename(live, moved); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(live, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	attacker := effectiveContent(t, "127.0.0.1:9999")
+	writeMode(t, path, attacker, 0o400)
+	close(release)
+	err := <-done
+	if !errors.Is(err, ErrUnsafeFilesystem) {
+		t.Fatalf("replaced directory accepted: %v", err)
+	}
+	assertFile(t, filepath.Join(moved, "effective.json"), previous, 0o400)
+	assertFile(t, path, attacker, 0o400)
+	assertNoTemporaries(t, moved)
+}
+
+func TestReservedPathsAreExplicitAndDetached(t *testing.T) {
+	path := "/private/effective.json"
+	first := ReservedPaths(path)
+	if !reflect.DeepEqual(first, []string{path + ".lock"}) {
+		t.Fatalf("reserved paths = %#v", first)
+	}
+	first[0] = "mutated"
+	if ReservedPaths(path)[0] == "mutated" || len(ReservedPaths("")) != 0 {
+		t.Fatal("reserved path output shares state or accepts empty path")
+	}
 }
 
 func TestWriteRejectsUnsafeDestinationWithoutChangingIt(t *testing.T) {

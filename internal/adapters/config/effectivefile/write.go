@@ -56,27 +56,37 @@ func Write(ctx context.Context, options Options) error {
 	if filepath.Base(cleanPath) == "." || filepath.Base(cleanPath) == string(filepath.Separator) {
 		return ErrInvalidOptions
 	}
-	directory, err := ensurePrivateDirectory(ctx, filepath.Dir(cleanPath))
+	directoryPath, err := ensurePrivateDirectory(ctx, filepath.Dir(cleanPath))
 	if err != nil {
 		return err
 	}
-	if err := validateDestination(ctx, cleanPath, options.MaxExistingBytes); err != nil {
+	directory, err := openStableDirectory(directoryPath)
+	if err != nil {
+		return err
+	}
+	defer directory.Close()
+	targetName := filepath.Base(cleanPath)
+	return directory.withLock(ctx, targetName+".lock", func() error {
+		return writeLocked(ctx, directory, targetName, options)
+	})
+}
+
+func writeLocked(ctx context.Context, directory *stableDirectory, targetName string, options Options) error {
+	if err := validateDestination(ctx, directory.root, targetName, options.MaxExistingBytes); err != nil {
 		return err
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-
-	temporary, err := os.CreateTemp(directory, ".effective-config-*")
+	temporary, temporaryName, err := directory.createTemporary()
 	if err != nil {
-		return fmt.Errorf("%w: create temporary: %v", ErrUnsafeFilesystem, err)
+		return err
 	}
-	temporaryPath := temporary.Name()
 	renamed := false
 	defer func() {
 		_ = temporary.Close()
 		if !renamed {
-			_ = os.Remove(temporaryPath)
+			_ = directory.root.Remove(temporaryName)
 		}
 	}()
 	if _, err := temporary.Write(options.Content); err != nil {
@@ -105,14 +115,22 @@ func Write(ctx context.Context, options Options) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	if err := os.Rename(temporaryPath, cleanPath); err != nil {
+	if err := directory.ensureStillNamed(); err != nil {
+		return err
+	}
+	if err := directory.root.Rename(temporaryName, targetName); err != nil {
 		return fmt.Errorf("%w: rename: %v", ErrUnsafeFilesystem, err)
 	}
 	renamed = true
-	if err := syncDirectory(directory); err != nil {
-		return fmt.Errorf("%w: sync directory: %v", ErrUnsafeFilesystem, err)
+	return directory.sync()
+}
+
+// ReservedPaths reports adapter-owned sidecars next to one effective output.
+func ReservedPaths(path string) []string {
+	if strings.TrimSpace(path) == "" {
+		return []string{}
 	}
-	return nil
+	return []string{path + ".lock"}
 }
 
 type effectiveEnvelope struct {
@@ -223,11 +241,11 @@ func rejectSymlinkComponents(ctx context.Context, absolute string) error {
 	return nil
 }
 
-func validateDestination(ctx context.Context, path string, maxBytes int64) error {
+func validateDestination(ctx context.Context, root *os.Root, name string, maxBytes int64) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	before, err := os.Lstat(path)
+	before, err := root.Lstat(name)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -237,7 +255,7 @@ func validateDestination(ctx context.Context, path string, maxBytes int64) error
 	if err := validateDestinationIdentity(before, maxBytes); err != nil {
 		return err
 	}
-	opened, err := os.Open(path)
+	opened, err := root.Open(name)
 	if err != nil {
 		return fmt.Errorf("%w: open destination", ErrUnsafeFilesystem)
 	}

@@ -18,6 +18,7 @@ import (
 )
 
 func TestBuildRejectsAndClosesInjectedNonLoopbackListener(t *testing.T) {
+	root := t.TempDir()
 	listener, err := net.Listen("tcp4", "0.0.0.0:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
@@ -27,10 +28,14 @@ func TestBuildRejectsAndClosesInjectedNonLoopbackListener(t *testing.T) {
 		t.Fatalf("set listener deadline: %v", err)
 	}
 
+	var factoryCalls atomic.Int64
 	runtime, err := Build(context.Background(), Options{
-		ConfigPath:   writeTestConfig(t, t.TempDir()),
-		Listener:     listener,
-		AgentFactory: countingFactory(&atomic.Int64{}),
+		ConfigPath: writeTestConfig(t, root),
+		Listener:   listener,
+		AgentFactory: func(snapshot config.Snapshot, clock application.Clock) (AgentAdapter, error) {
+			factoryCalls.Add(1)
+			return countingFactory(&atomic.Int64{})(snapshot, clock)
+		},
 	})
 	if runtime != nil {
 		t.Fatalf("expected no runtime, got %#v", runtime)
@@ -46,6 +51,25 @@ func TestBuildRejectsAndClosesInjectedNonLoopbackListener(t *testing.T) {
 	if !errors.Is(acceptErr, net.ErrClosed) {
 		t.Fatalf("expected injected listener to be closed, got %v", acceptErr)
 	}
+	if factoryCalls.Load() != 0 {
+		t.Fatalf("invalid listener reached agent factory %d times", factoryCalls.Load())
+	}
+	assertNoCompositionState(t, root)
+}
+
+func TestBuildAgentFactoryFailurePrecedesDurableCompositionState(t *testing.T) {
+	root := t.TempDir()
+	want := errors.New("factory_preflight_failed")
+	runtime, err := Build(context.Background(), Options{
+		ConfigPath: writeTestConfig(t, root),
+		AgentFactory: func(config.Snapshot, application.Clock) (AgentAdapter, error) {
+			return nil, want
+		},
+	})
+	if runtime != nil || !errors.Is(err, want) {
+		t.Fatalf("factory failure = %v, %v", runtime, err)
+	}
+	assertNoCompositionState(t, root)
 }
 
 func TestRuntimeRejectsStartAfterShutdown(t *testing.T) {
@@ -171,6 +195,27 @@ func TestBuildRejectsConfigStoreReservedPathCollisionsBeforeEffects(t *testing.T
 	}
 }
 
+func TestBuildRejectsEffectiveWriterLockCollisionBeforeEffects(t *testing.T) {
+	root := t.TempDir()
+	configPath := writeTestConfig(t, root)
+	effectivePath := filepath.Join(root, "effective", "effective_config.json")
+	replaceTestConfigValue(t, configPath,
+		"effective_path = "+strconv.Quote(filepath.Join(root, "effective_config.json")),
+		"effective_path = "+strconv.Quote(effectivePath),
+	)
+	replaceTestConfigValue(t, configPath,
+		"path = "+strconv.Quote(filepath.Join(root, "state", "orquesta.sqlite")),
+		"path = "+strconv.Quote(effectivePath+".lock"),
+	)
+	runtime, err := Build(context.Background(), Options{
+		ConfigPath: configPath, AgentFactory: countingFactory(&atomic.Int64{}),
+	})
+	if runtime != nil || err == nil || err.Error() != "bootstrap.runtime_paths_overlap" {
+		t.Fatalf("effective lock collision = %v, %v", runtime, err)
+	}
+	assertNoCompositionState(t, root)
+}
+
 func TestBuildRejectsServeMuxPatternSyntaxBeforeCreatingRuntimeState(t *testing.T) {
 	root := t.TempDir()
 	configPath := writeTestConfig(t, root)
@@ -279,6 +324,18 @@ func replaceTestConfigValue(t *testing.T, path, oldValue, newValue string) {
 	}
 	if err := os.WriteFile(path, []byte(updated), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)
+	}
+}
+
+func assertNoCompositionState(t *testing.T, root string) {
+	t.Helper()
+	for _, relative := range []string{
+		"state", "artifacts", "work", "secrets", "effective_config.json",
+	} {
+		path := filepath.Join(root, relative)
+		if _, err := os.Lstat(path); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("failed preflight created %s: %v", path, err)
+		}
 	}
 }
 
