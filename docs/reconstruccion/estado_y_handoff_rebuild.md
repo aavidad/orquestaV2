@@ -1,11 +1,42 @@
 # Estado y handoff vivo del rebuild
 
-Última actualización: 2026-07-14 13:17 Europe/Madrid.
+Última actualización: 2026-07-14 13:28 Europe/Madrid.
 
 Este documento permite continuar el rebuild sin reconstruir el contexto de la
 sesión. Es estado operativo, no evidencia de aceptación. Los estados canónicos
 de capacidades, verticales y contratos viven en `product/roadmap.json`; los
 verdes viven en receipts fuera de su propio candidato.
+
+## Incidencia activa antes de V05
+
+V05 está pausado, sin write-set de producto abierto. La revisión previa detectó
+un defecto longitudinal en receipts V2: `evidenceAssertReceiptV2` vuelve a
+calcular `fixture_sha256` y `candidate_sha256` desde ficheros del worktree vivo,
+mientras `subject_source_tree.git_head` es solo informativo. Como V01 y V04
+incluyen ledgers/tests compartidos, un cambio legítimo de V05 puede invalidar
+retroactivamente evidencia ya emitida. `BUG-REBUILD-20260714-030` congeló el
+delta de rutas, pero no el contenido acreditado; por tanto no cubre este caso.
+
+No continuar V05 ni tocar `product/roadmap.json`,
+`product/traceability/rebuild_bugs.jsonl` o tests compartidos hasta reparar el
+contrato de evidencia. Orden de reanudación exacto:
+
+1. crear prueba adversarial única y migrar receipts a identidad por blobs Git
+   de un commit sellado autoritativo;
+2. exigir que el commit sellado exista, sea ancestro de `HEAD` y descienda del
+   mínimo confiable del contrato; leer fixture y sujetos mediante
+   `<sealed_head>:<path>`, no desde el worktree;
+3. registrar y cerrar `BUG-REBUILD-20260714-033` dentro del mismo candidato;
+4. commitear primero helper/tests/ledger sin receipts, usar ese commit como
+   cabeza sellada, reemitir después receipts V01–V04 y validar manipulación de
+   head, digest y rutas inexistentes;
+5. pedir contrarrevisión, actualizar este handoff y solo entonces reanudar el
+   preflight contractual V05.
+
+El worktree estaba limpio al descubrirlo. Aún no se había modificado código,
+roadmap ni ledger para V05. Los tres subagentes bootstrap seguían en inventario
+V05 de solo lectura, sin `codebase-memory-mcp`; sus resultados deben conservarse
+para después de cerrar esta incidencia.
 
 ## Entorno que debe preservarse
 
