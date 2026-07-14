@@ -25,6 +25,15 @@ func TestRegistryRejectsSemanticEnvironmentValidatorAndCrossValidatorDrift(t *te
 		{name: "validator id invented", mutate: func(source *registryFile) {
 			source.Keys[0].ValidatorIDs = []string{"invented"}
 		}},
+		{name: "semantic validator wrong type", mutate: func(source *registryFile) {
+			source.Keys[2].ValidatorIDs = append(source.Keys[2].ValidatorIDs, "opaque_ref")
+		}},
+		{name: "semantic validator duplicated", mutate: func(source *registryFile) {
+			source.Keys[13].ValidatorIDs = []string{"trimmed_non_empty_string", "trimmed_non_empty_string"}
+		}},
+		{name: "semantic validators conflict", mutate: func(source *registryFile) {
+			source.Keys[13].ValidatorIDs = []string{"trimmed_non_empty_string", "trimmed_optional_string"}
+		}},
 		{name: "cross validator omitted", mutate: func(source *registryFile) {
 			source.CrossValidators = source.CrossValidators[1:]
 		}},
@@ -92,6 +101,60 @@ func TestRegistryAliasesAreTypedBoundedAndCanonicalized(t *testing.T) {
 				t.Fatalf("invalid alias accepted: %+v / %v", alias, err)
 			}
 		})
+	}
+
+	for _, alias := range []registryAliasDefinition{
+		{Kind: AliasKindTOMLKey, Name: "server.future", Target: KeyServerListen,
+			IntroducedRevision: "2026-07-15.9", RemoveAfterRevision: "2026-09-01.0"},
+		{Kind: AliasKindTOMLKey, Name: "server.expired", Target: KeyServerListen,
+			IntroducedRevision: "2026-07-15.7", RemoveAfterRevision: "2026-07-15.8"},
+	} {
+		candidate := decodedRegistry(t)
+		candidate.Aliases = []registryAliasDefinition{alias}
+		if _, err := parseRegistrySource(marshalRegistry(t, candidate)); !HasErrorCode(err, ErrorRegistryInvalid) {
+			t.Fatalf("inactive alias accepted: %+v / %v", alias, err)
+		}
+	}
+}
+
+func TestResolveExecutesDeclaredSemanticValidatorsBeforeBootstrapEffects(t *testing.T) {
+	tests := []struct {
+		name string
+		key  Key
+		toml string
+	}{
+		{name: "blank codex command", key: KeyRuntimeCodexCommand, toml: "[runtime.codex]\ncommand = \" \"\n"},
+		{name: "untrimmed optional model", key: KeyRuntimeCodexModel, toml: "[runtime.codex]\nmodel = \" xhigh \"\n"},
+		{name: "invalid child environment", key: KeyRuntimeCodexEnvAllowlist, toml: "[runtime.codex]\nenv_allowlist = [\"PATH\", \"BAD NAME\"]\n"},
+		{name: "blank actor ref", key: KeyIdentityLocalActor, toml: "[identity]\nlocal_actor = \" \"\n"},
+		{name: "untrimmed project ref", key: KeyProjectDefault, toml: "[project]\ndefault = \" project:default\"\n"},
+		{name: "untrimmed path", key: KeyStateSQLitePath, toml: "[state.sqlite]\npath = \" ./var/state.sqlite\"\n"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := Resolve(ResolveOptions{TOML: []byte(test.toml)})
+			assertConfigError(t, err, ErrorValueInvalid, test.key)
+		})
+	}
+
+	_, err := Resolve(ResolveOptions{Environment: map[string]string{
+		"ORQUESTA_RUNTIME_CODEX_ENV_ALLOWLIST": "PATH,bad_name",
+	}})
+	assertConfigError(t, err, ErrorValueInvalid, KeyRuntimeCodexEnvAllowlist)
+}
+
+func TestRegistryRevisionIsCanonicalAndNumericSequenceIsOrdered(t *testing.T) {
+	for _, revision := range []string{"", "2026-7-15.8", "2026-07-15.-1", "2026-07-15.08", "2026-07-15"} {
+		source := decodedRegistry(t)
+		source.Revision = revision
+		if _, err := parseRegistrySource(marshalRegistry(t, source)); !HasErrorCode(err, ErrorRegistryInvalid) {
+			t.Fatalf("invalid revision %q accepted: %v", revision, err)
+		}
+	}
+	before, _ := parseRegistryRevision("2026-07-15.9")
+	after, _ := parseRegistryRevision("2026-07-15.10")
+	if before.compare(after) >= 0 {
+		t.Fatal("numeric registry sequence ordered lexically")
 	}
 }
 

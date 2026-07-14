@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
+	"time"
 )
 
 type valueType string
@@ -134,6 +136,10 @@ func validateAndBuildRegistry(source registryFile) (registry, error) {
 	if strings.TrimSpace(source.Revision) == "" {
 		return fail(fmt.Errorf("revision is required"))
 	}
+	activeRevision, err := parseRegistryRevision(source.Revision)
+	if err != nil {
+		return fail(fmt.Errorf("revision is not canonical"))
+	}
 	if len(source.Keys) == 0 {
 		return fail(fmt.Errorf("registry has no keys"))
 	}
@@ -196,9 +202,13 @@ func validateAndBuildRegistry(source registryFile) (registry, error) {
 		if _, targetExists := result.byKey[alias.Target]; !targetExists {
 			return fail(fmt.Errorf("alias target is not canonical"))
 		}
-		if strings.TrimSpace(alias.IntroducedRevision) == "" || strings.TrimSpace(alias.RemoveAfterRevision) == "" ||
-			alias.IntroducedRevision >= alias.RemoveAfterRevision {
+		introduced, introducedErr := parseRegistryRevision(alias.IntroducedRevision)
+		removeAfter, removeErr := parseRegistryRevision(alias.RemoveAfterRevision)
+		if introducedErr != nil || removeErr != nil || introduced.compare(removeAfter) >= 0 {
 			return fail(fmt.Errorf("alias requires ordered introduction and removal revisions"))
+		}
+		if activeRevision.compare(introduced) < 0 || activeRevision.compare(removeAfter) >= 0 {
+			return fail(fmt.Errorf("alias is not active for registry revision"))
 		}
 		switch alias.Kind {
 		case AliasKindTOMLKey:
@@ -271,8 +281,8 @@ func validateRegistryDefinition(definition registryKeyDefinition) error {
 	if definition.Sensitive != (definition.Type == valueTypeCredentialRef) {
 		return fmt.Errorf("only credential references may be sensitive")
 	}
-	if !equalStrings(definition.ValidatorIDs, expectedValidatorIDs(definition)) {
-		return fmt.Errorf("validator_ids do not match type and constraints")
+	if err := validateValidatorIDs(definition); err != nil {
+		return err
 	}
 	seenAllowed := make(map[string]struct{}, len(definition.AllowedValues))
 	for _, allowed := range definition.AllowedValues {
@@ -291,7 +301,7 @@ func validateRegistryDefinition(definition registryKeyDefinition) error {
 	return validateAllowedValue(definition, value)
 }
 
-func expectedValidatorIDs(definition registryKeyDefinition) []string {
+func requiredValidatorIDs(definition registryKeyDefinition) []string {
 	result := make([]string, 0, 2)
 	switch definition.Type {
 	case valueTypeInteger:
@@ -311,16 +321,80 @@ func expectedValidatorIDs(definition registryKeyDefinition) []string {
 	return result
 }
 
-func equalStrings(left, right []string) bool {
-	if len(left) != len(right) {
-		return false
+func validateValidatorIDs(definition registryKeyDefinition) error {
+	required := requiredValidatorIDs(definition)
+	if len(definition.ValidatorIDs) < len(required) {
+		return fmt.Errorf("validator_ids omit required type constraint")
 	}
-	for index := range left {
-		if left[index] != right[index] {
-			return false
+	seen := make(map[string]struct{}, len(definition.ValidatorIDs))
+	for index, validator := range definition.ValidatorIDs {
+		if _, duplicate := seen[validator]; duplicate {
+			return fmt.Errorf("validator_ids contain duplicate")
+		}
+		seen[validator] = struct{}{}
+		if index < len(required) {
+			if validator != required[index] {
+				return fmt.Errorf("validator_ids do not match type and constraints")
+			}
+			continue
+		}
+		switch validator {
+		case "trimmed_non_empty_string", "trimmed_optional_string", "opaque_ref":
+			if definition.Type != valueTypeString {
+				return fmt.Errorf("string validator requires string type")
+			}
+		case "environment_name_list":
+			if definition.Type != valueTypeStringList {
+				return fmt.Errorf("environment_name_list requires string_list type")
+			}
+		default:
+			return fmt.Errorf("unsupported validator_id")
 		}
 	}
-	return true
+	if _, nonEmpty := seen["trimmed_non_empty_string"]; nonEmpty {
+		if _, optional := seen["trimmed_optional_string"]; optional {
+			return fmt.Errorf("conflicting string validators")
+		}
+	}
+	return nil
+}
+
+type registryRevision struct {
+	date     string
+	sequence int
+}
+
+func parseRegistryRevision(value string) (registryRevision, error) {
+	separator := strings.LastIndexByte(value, '.')
+	if separator <= 0 || separator == len(value)-1 {
+		return registryRevision{}, fmt.Errorf("invalid revision")
+	}
+	date := value[:separator]
+	if parsed, err := time.Parse("2006-01-02", date); err != nil || parsed.Format("2006-01-02") != date {
+		return registryRevision{}, fmt.Errorf("invalid revision date")
+	}
+	sequenceText := value[separator+1:]
+	sequence, err := strconv.Atoi(sequenceText)
+	if err != nil || sequence < 0 || strconv.Itoa(sequence) != sequenceText {
+		return registryRevision{}, fmt.Errorf("invalid revision sequence")
+	}
+	return registryRevision{date: date, sequence: sequence}, nil
+}
+
+func (revision registryRevision) compare(other registryRevision) int {
+	if revision.date < other.date {
+		return -1
+	}
+	if revision.date > other.date {
+		return 1
+	}
+	if revision.sequence < other.sequence {
+		return -1
+	}
+	if revision.sequence > other.sequence {
+		return 1
+	}
+	return 0
 }
 
 func validCanonicalKey(key string) bool {

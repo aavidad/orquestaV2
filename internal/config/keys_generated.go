@@ -4,9 +4,9 @@ package config
 
 import "time"
 
-const generatedRegistrySourceSHA256 = "9b1128d98e904806882228894bf68e242eb2883a04e22b8f1c947f00fb3f447f"
-const generatedRegistryRevision = "2026-07-15.7"
-const generatedRegistrySemanticSHA256 = "sha256:be3b5aa303cf1cb16725b02d03e90f14313e3cef3e5a84e005c1c43c83ea54d8"
+const generatedRegistrySourceSHA256 = "ca5171be06e0b51438638925a968abd06fe2b2110cccde0c15f3b61dab9d51d5"
+const generatedRegistryRevision = "2026-07-15.8"
+const generatedRegistrySemanticSHA256 = "sha256:42595d6c0d80e29bdb470826403f4e9beaca6915440e52796bdb0f94becb6708"
 
 const (
 	KeyServerListen                        Key = "server.listen"
@@ -333,7 +333,7 @@ func (s Snapshot) ConfigEffectiveMaxExistingBytes() int64 {
 
 const generatedRegistryJSON = `{
   "schema_version": 2,
-  "revision": "2026-07-15.7",
+  "revision": "2026-07-15.8",
   "precedence": [
     "default",
     "file",
@@ -573,7 +573,9 @@ const generatedRegistryJSON = `{
       "scope": "runtime",
       "restart_required": true,
       "env_alias": "ORQUESTA_RUNTIME_CODEX_COMMAND",
-      "validator_ids": []
+      "validator_ids": [
+        "trimmed_non_empty_string"
+      ]
     },
     {
       "key": "runtime.codex.model",
@@ -585,7 +587,9 @@ const generatedRegistryJSON = `{
       "scope": "runtime",
       "restart_required": true,
       "env_alias": "ORQUESTA_RUNTIME_CODEX_MODEL",
-      "validator_ids": []
+      "validator_ids": [
+        "trimmed_optional_string"
+      ]
     },
     {
       "key": "runtime.codex.reasoning",
@@ -696,7 +700,8 @@ const generatedRegistryJSON = `{
       "restart_required": true,
       "env_alias": "ORQUESTA_RUNTIME_CODEX_ENV_ALLOWLIST",
       "validator_ids": [
-        "unique_non_empty_string_list"
+        "unique_non_empty_string_list",
+        "environment_name_list"
       ]
     },
     {
@@ -723,7 +728,9 @@ const generatedRegistryJSON = `{
       "scope": "identity",
       "restart_required": true,
       "env_alias": "ORQUESTA_IDENTITY_LOCAL_ACTOR",
-      "validator_ids": []
+      "validator_ids": [
+        "opaque_ref"
+      ]
     },
     {
       "key": "identity.local_token_path",
@@ -749,7 +756,9 @@ const generatedRegistryJSON = `{
       "scope": "project",
       "restart_required": true,
       "env_alias": "ORQUESTA_PROJECT_DEFAULT",
-      "validator_ids": []
+      "validator_ids": [
+        "opaque_ref"
+      ]
     },
     {
       "key": "scheduler.poll_interval",

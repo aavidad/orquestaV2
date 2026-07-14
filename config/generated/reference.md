@@ -2,9 +2,12 @@
 
 # Orquesta configuration registry
 
-Registry revision: `2026-07-15.7`  
-Registry hash: `sha256:be3b5aa303cf1cb16725b02d03e90f14313e3cef3e5a84e005c1c43c83ea54d8`  
-Precedence: `default < file < env`  
+Registry revision: `2026-07-15.8`
+
+Registry hash: `sha256:42595d6c0d80e29bdb470826403f4e9beaca6915440e52796bdb0f94becb6708`
+
+Precedence: `default < file < env`
+
 Source limit: `1048576` bytes
 
 | Key | Type | Default | Environment | Restart | Validators |
@@ -22,8 +25,8 @@ Source limit: `1048576` bytes
 | `artifact.filesystem.root` | `path` | `"./var/artifacts"` | `ORQUESTA_ARTIFACT_FILESYSTEM_ROOT` | `true` | `non_empty_path` |
 | `runtime.provider` | `string` | `"codex"` | `ORQUESTA_RUNTIME_PROVIDER` | `true` | `allowed_values` |
 | `runtime.max_output_bytes` | `integer` | `1048576` | `ORQUESTA_RUNTIME_MAX_OUTPUT_BYTES` | `true` | `integer_bounds` |
-| `runtime.codex.command` | `string` | `"codex"` | `ORQUESTA_RUNTIME_CODEX_COMMAND` | `true` | `` |
-| `runtime.codex.model` | `string` | `""` | `ORQUESTA_RUNTIME_CODEX_MODEL` | `true` | `` |
+| `runtime.codex.command` | `string` | `"codex"` | `ORQUESTA_RUNTIME_CODEX_COMMAND` | `true` | `trimmed_non_empty_string` |
+| `runtime.codex.model` | `string` | `""` | `ORQUESTA_RUNTIME_CODEX_MODEL` | `true` | `trimmed_optional_string` |
 | `runtime.codex.reasoning` | `string` | `"medium"` | `ORQUESTA_RUNTIME_CODEX_REASONING` | `true` | `allowed_values` |
 | `runtime.codex.timeout` | `duration` | `"30m"` | `ORQUESTA_RUNTIME_CODEX_TIMEOUT` | `true` | `positive_duration` |
 | `runtime.codex.process_pipe_drain_delay` | `duration` | `"250ms"` | `ORQUESTA_RUNTIME_CODEX_PROCESS_PIPE_DRAIN_DELAY` | `true` | `positive_duration` |
@@ -34,11 +37,11 @@ Source limit: `1048576` bytes
         "PATH",
         "HOME",
         "CODEX_HOME"
-      ]` | `ORQUESTA_RUNTIME_CODEX_ENV_ALLOWLIST` | `true` | `unique_non_empty_string_list` |
+      ]` | `ORQUESTA_RUNTIME_CODEX_ENV_ALLOWLIST` | `true` | `unique_non_empty_string_list, environment_name_list` |
 | `runtime.codex.credential_ref` | `credential_ref` | `"[REDACTED]"` | `ORQUESTA_RUNTIME_CODEX_CREDENTIAL_REF` | `true` | `credential_ref` |
-| `identity.local_actor` | `string` | `"actor:local-owner"` | `ORQUESTA_IDENTITY_LOCAL_ACTOR` | `true` | `` |
+| `identity.local_actor` | `string` | `"actor:local-owner"` | `ORQUESTA_IDENTITY_LOCAL_ACTOR` | `true` | `opaque_ref` |
 | `identity.local_token_path` | `path` | `"./var/secrets/local-owner.token"` | `ORQUESTA_IDENTITY_LOCAL_TOKEN_PATH` | `true` | `non_empty_path` |
-| `project.default` | `string` | `"project:default"` | `ORQUESTA_PROJECT_DEFAULT` | `true` | `` |
+| `project.default` | `string` | `"project:default"` | `ORQUESTA_PROJECT_DEFAULT` | `true` | `opaque_ref` |
 | `scheduler.poll_interval` | `duration` | `"500ms"` | `ORQUESTA_SCHEDULER_POLL_INTERVAL` | `true` | `positive_duration` |
 | `scheduler.observation_interval` | `duration` | `"2s"` | `ORQUESTA_SCHEDULER_OBSERVATION_INTERVAL` | `true` | `positive_duration` |
 | `scheduler.claim_lease` | `duration` | `"2m"` | `ORQUESTA_SCHEDULER_CLAIM_LEASE` | `true` | `positive_duration` |

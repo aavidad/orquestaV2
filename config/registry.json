@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "revision": "2026-07-15.7",
+  "revision": "2026-07-15.8",
   "precedence": [
     "default",
     "file",
@@ -240,7 +240,9 @@
       "scope": "runtime",
       "restart_required": true,
       "env_alias": "ORQUESTA_RUNTIME_CODEX_COMMAND",
-      "validator_ids": []
+      "validator_ids": [
+        "trimmed_non_empty_string"
+      ]
     },
     {
       "key": "runtime.codex.model",
@@ -252,7 +254,9 @@
       "scope": "runtime",
       "restart_required": true,
       "env_alias": "ORQUESTA_RUNTIME_CODEX_MODEL",
-      "validator_ids": []
+      "validator_ids": [
+        "trimmed_optional_string"
+      ]
     },
     {
       "key": "runtime.codex.reasoning",
@@ -363,7 +367,8 @@
       "restart_required": true,
       "env_alias": "ORQUESTA_RUNTIME_CODEX_ENV_ALLOWLIST",
       "validator_ids": [
-        "unique_non_empty_string_list"
+        "unique_non_empty_string_list",
+        "environment_name_list"
       ]
     },
     {
@@ -390,7 +395,9 @@
       "scope": "identity",
       "restart_required": true,
       "env_alias": "ORQUESTA_IDENTITY_LOCAL_ACTOR",
-      "validator_ids": []
+      "validator_ids": [
+        "opaque_ref"
+      ]
     },
     {
       "key": "identity.local_token_path",
@@ -416,7 +423,9 @@
       "scope": "project",
       "restart_required": true,
       "env_alias": "ORQUESTA_PROJECT_DEFAULT",
-      "validator_ids": []
+      "validator_ids": [
+        "opaque_ref"
+      ]
     },
     {
       "key": "scheduler.poll_interval",

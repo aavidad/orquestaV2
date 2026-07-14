@@ -20,7 +20,11 @@ type StoredDocument struct {
 // store binds it to ActorRef and RequestRef. On replay, derived replacement
 // and metadata are ignored because active state may have advanced.
 type CommitRequest struct {
-	ExpectedRevision   Revision
+	ExpectedRevision Revision
+	// ReplayOnly probes durable idempotency after the caller observed stale
+	// state. The store may return an existing matching receipt, but must never
+	// use ExpectedRevision for CAS or create a new transaction.
+	ReplayOnly         bool
 	Replacement        []byte
 	ActorRef           string
 	RequestRef         string

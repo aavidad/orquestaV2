@@ -175,6 +175,9 @@ func (store *Store) Commit(ctx context.Context, request config.CommitRequest) (c
 			result = config.CommitResult{Document: current, Receipt: cloneReceipt(persisted.Receipt), Replayed: true}
 			return nil
 		}
+		if normalized.ReplayOnly {
+			return storeError(config.DocumentStoreRevisionConflict, errors.New("toml_store_replay_not_found"))
+		}
 
 		current, err := store.readSource()
 		if err != nil {
@@ -216,9 +219,20 @@ func (store *Store) Commit(ctx context.Context, request config.CommitRequest) (c
 }
 
 func (store *Store) normalizeRequest(request config.CommitRequest) (config.CommitRequest, error) {
-	if !validRevision(request.ExpectedRevision) || int64(len(request.Replacement)) > store.maxSourceBytes ||
-		!validIdentity(request.ActorRef) || !validIdentity(request.RequestRef) || !validRevision(config.Revision(request.Fingerprint)) ||
-		request.ChangedAt.IsZero() {
+	if !validRevision(request.ExpectedRevision) || !validIdentity(request.ActorRef) || !validIdentity(request.RequestRef) ||
+		!validRevision(config.Revision(request.Fingerprint)) {
+		return config.CommitRequest{}, storeError(config.DocumentStoreRequestInvalid, errors.New("toml_store_request_invalid"))
+	}
+	if request.ReplayOnly {
+		return config.CommitRequest{
+			ExpectedRevision: request.ExpectedRevision,
+			ReplayOnly:       true,
+			ActorRef:         request.ActorRef,
+			RequestRef:       request.RequestRef,
+			Fingerprint:      request.Fingerprint,
+		}, nil
+	}
+	if int64(len(request.Replacement)) > store.maxSourceBytes || request.ChangedAt.IsZero() {
 		code := config.DocumentStoreRequestInvalid
 		if int64(len(request.Replacement)) > store.maxSourceBytes {
 			code = config.DocumentStoreSourceTooLarge

@@ -9,7 +9,7 @@ func resolveChildEnvironment(names []string, lookup environmentLookup) (map[stri
 	result := make(map[string]string, len(names))
 	seen := make(map[string]struct{}, len(names))
 	for _, name := range names {
-		if name == "" || strings.TrimSpace(name) != name || strings.ContainsAny(name, "=\x00") {
+		if !validChildEnvironmentName(name) {
 			return nil, &Error{Code: ErrorChildEnvironmentInvalid, Cause: fmt.Errorf("invalid environment name")}
 		}
 		if _, duplicate := seen[name]; duplicate {
@@ -26,4 +26,8 @@ func resolveChildEnvironment(names []string, lookup environmentLookup) (map[stri
 		result[name] = value
 	}
 	return result, nil
+}
+
+func validChildEnvironmentName(name string) bool {
+	return validEnvironmentName(name) && strings.TrimSpace(name) == name && !strings.ContainsAny(name, "=\x00")
 }

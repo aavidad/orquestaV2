@@ -9,52 +9,98 @@ import (
 )
 
 func parseFileValue(definition registryKeyDefinition, raw any) (any, error) {
+	var value any
 	switch definition.Type {
 	case valueTypeString:
-		value, ok := raw.(string)
+		parsed, ok := raw.(string)
 		if !ok {
 			return nil, fmt.Errorf("expected string")
 		}
-		if err := validateAllowedValue(definition, value); err != nil {
+		if err := validateAllowedValue(definition, parsed); err != nil {
 			return nil, err
 		}
-		return value, nil
+		value = parsed
 	case valueTypeInteger:
-		value, err := parseInteger(raw)
+		parsed, err := parseInteger(raw)
 		if err != nil {
 			return nil, err
 		}
-		if err := validateIntegerBounds(definition, value); err != nil {
+		if err := validateIntegerBounds(definition, parsed); err != nil {
 			return nil, err
 		}
-		return value, nil
+		value = parsed
 	case valueTypePath:
-		value, ok := raw.(string)
-		if !ok || value == "" {
+		parsed, ok := raw.(string)
+		if !ok || parsed == "" || strings.TrimSpace(parsed) != parsed || strings.ContainsRune(parsed, '\x00') {
 			return nil, fmt.Errorf("expected non-empty path")
 		}
-		return value, nil
+		value = parsed
 	case valueTypeCredentialRef:
-		value, ok := raw.(string)
-		if !ok || !validCredentialRef(value) {
+		parsed, ok := raw.(string)
+		if !ok || !validCredentialRef(parsed) {
 			return nil, fmt.Errorf("expected canonical credential reference")
 		}
-		return CredentialRef(value), nil
+		value = CredentialRef(parsed)
 	case valueTypeDuration:
-		value, ok := raw.(string)
+		parsed, ok := raw.(string)
 		if !ok {
 			return nil, fmt.Errorf("expected duration string")
 		}
-		duration, err := time.ParseDuration(value)
+		duration, err := time.ParseDuration(parsed)
 		if err != nil || duration <= 0 {
 			return nil, fmt.Errorf("expected positive duration")
 		}
-		return duration, nil
+		value = duration
 	case valueTypeStringList:
-		return parseStringList(raw)
+		parsed, err := parseStringList(raw)
+		if err != nil {
+			return nil, err
+		}
+		value = parsed
 	default:
 		return nil, fmt.Errorf("unsupported value type")
 	}
+	if err := validateDeclaredValue(definition, value); err != nil {
+		return nil, err
+	}
+	return value, nil
+}
+
+func validateDeclaredValue(definition registryKeyDefinition, value any) error {
+	for _, validator := range definition.ValidatorIDs {
+		switch validator {
+		case "trimmed_non_empty_string":
+			text, ok := value.(string)
+			if !ok || text == "" || strings.TrimSpace(text) != text || strings.ContainsRune(text, '\x00') {
+				return fmt.Errorf("expected trimmed non-empty string")
+			}
+		case "trimmed_optional_string":
+			text, ok := value.(string)
+			if !ok || strings.TrimSpace(text) != text || strings.ContainsRune(text, '\x00') {
+				return fmt.Errorf("expected trimmed optional string")
+			}
+		case "environment_name_list":
+			names, ok := value.([]string)
+			if !ok {
+				return fmt.Errorf("expected environment name list")
+			}
+			for _, name := range names {
+				if !validChildEnvironmentName(name) {
+					return fmt.Errorf("invalid child environment name")
+				}
+			}
+		case "opaque_ref":
+			text, ok := value.(string)
+			if !ok || text == "" || strings.TrimSpace(text) != text || strings.ContainsRune(text, '\x00') {
+				return fmt.Errorf("expected opaque reference")
+			}
+		case "integer_bounds", "positive_duration", "non_empty_path", "unique_non_empty_string_list", "credential_ref", "allowed_values":
+			// Enforced by the typed parser before semantic validators run.
+		default:
+			return fmt.Errorf("unsupported declared validator")
+		}
+	}
+	return nil
 }
 
 func validCredentialRef(value string) bool {
@@ -101,7 +147,14 @@ func parseEnvironmentValue(definition registryKeyDefinition, raw string) (any, e
 	for _, part := range parts {
 		values = append(values, strings.TrimSpace(part))
 	}
-	return parseStringList(values)
+	parsed, err := parseStringList(values)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateDeclaredValue(definition, parsed); err != nil {
+		return nil, err
+	}
+	return parsed, nil
 }
 
 func parseInteger(raw any) (int64, error) {

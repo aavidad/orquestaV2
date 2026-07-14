@@ -194,6 +194,53 @@ func TestStoreReplayAfterStateAdvanceReturnsCurrentDocumentAndOriginalReceipt(t 
 	}
 }
 
+func TestStoreReplayOnlyCannotBecomeWriteAfterABA(t *testing.T) {
+	path := filepath.Join(privateTempDir(t), "orquesta.toml")
+	store := openTestStore(t, path, nil)
+	empty, _ := store.Read(context.Background())
+
+	probe := testCommitRequest(empty.Revision, []byte("must not be written\n"), "actor:a", "request:absent")
+	probe.ReplayOnly = true
+	probe.ChangedAt = time.Time{}
+	probe.Replacement = nil
+	probe.ChangedKeys = nil
+	probe.PendingRestartKeys = nil
+	_, err := store.Commit(context.Background(), probe)
+	assertStoreCode(t, err, config.DocumentStoreRevisionConflict)
+
+	after, err := store.Read(context.Background())
+	if err != nil || !reflect.DeepEqual(after, empty) {
+		t.Fatalf("replay-only mutated source: %#v, %v; want %#v", after, err, empty)
+	}
+	assertAbsent(t, path)
+	assertAbsent(t, store.nextPath)
+	assertAbsent(t, store.pendingPath)
+}
+
+func TestStoreReplayOnlyReturnsMatchingReceiptAndCurrentDocument(t *testing.T) {
+	path := filepath.Join(privateTempDir(t), "orquesta.toml")
+	store := openTestStore(t, path, nil)
+	empty, _ := store.Read(context.Background())
+	request := testCommitRequest(empty.Revision, []byte("a = 1\n"), "actor:a", "request:first")
+	committed, err := store.Commit(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	probe := config.CommitRequest{
+		ExpectedRevision: empty.Revision,
+		ReplayOnly:       true,
+		ActorRef:         request.ActorRef,
+		RequestRef:       request.RequestRef,
+		Fingerprint:      request.Fingerprint,
+	}
+	replayed, err := store.Commit(context.Background(), probe)
+	if err != nil || !replayed.Replayed || !reflect.DeepEqual(replayed.Document, committed.Document) ||
+		!reflect.DeepEqual(replayed.Receipt, committed.Receipt) {
+		t.Fatalf("replay-only = %#v, %v; want %#v", replayed, err, committed)
+	}
+}
+
 func TestStoreRecoversEveryDurableCrashBoundary(t *testing.T) {
 	points := []string{
 		FailpointAfterIntentSync,

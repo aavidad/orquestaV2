@@ -1,8 +1,8 @@
 {
   "document_type": "orquesta.config_ui",
   "schema_version": 2,
-  "registry_revision": "2026-07-15.7",
-  "registry_hash": "sha256:be3b5aa303cf1cb16725b02d03e90f14313e3cef3e5a84e005c1c43c83ea54d8",
+  "registry_revision": "2026-07-15.8",
+  "registry_hash": "sha256:42595d6c0d80e29bdb470826403f4e9beaca6915440e52796bdb0f94becb6708",
   "aliases": [],
   "cross_validators": [
     {
@@ -205,7 +205,9 @@
       "sensitive": false,
       "scope": "runtime",
       "restart_required": true,
-      "validator_ids": []
+      "validator_ids": [
+        "trimmed_non_empty_string"
+      ]
     },
     {
       "key": "runtime.codex.model",
@@ -215,7 +217,9 @@
       "sensitive": false,
       "scope": "runtime",
       "restart_required": true,
-      "validator_ids": []
+      "validator_ids": [
+        "trimmed_optional_string"
+      ]
     },
     {
       "key": "runtime.codex.reasoning",
@@ -308,7 +312,8 @@
       "scope": "runtime",
       "restart_required": true,
       "validator_ids": [
-        "unique_non_empty_string_list"
+        "unique_non_empty_string_list",
+        "environment_name_list"
       ]
     },
     {
@@ -331,7 +336,9 @@
       "sensitive": false,
       "scope": "identity",
       "restart_required": true,
-      "validator_ids": []
+      "validator_ids": [
+        "opaque_ref"
+      ]
     },
     {
       "key": "identity.local_token_path",
@@ -353,7 +360,9 @@
       "sensitive": false,
       "scope": "project",
       "restart_required": true,
-      "validator_ids": []
+      "validator_ids": [
+        "opaque_ref"
+      ]
     },
     {
       "key": "scheduler.poll_interval",
