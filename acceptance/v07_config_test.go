@@ -600,20 +600,46 @@ func v07AssertDoctorChildEnvironmentAndScope(t *testing.T, repositoryRoot string
 	}
 	report, err := manager.Doctor(context.Background(), config.DoctorRequest{Proposals: []config.DoctorProposal{
 		{Key: "server.bind", TargetKey: config.KeyServerListen, SemanticRef: "orquesta.config.server.listen"},
-		{Key: "server.address", TargetKey: config.KeyServerListen, SemanticRef: "network.listen", Alias: "server.listen", RemoveAfterRevision: "2027-01-01.0"},
-		{Key: "telemetry.sample_interval", SemanticRef: "telemetry.sample_interval", GoName: "TelemetrySampleInterval", EnvAlias: "ORQUESTA_TELEMETRY_SAMPLE_INTERVAL", Type: "duration", Scope: "telemetry"},
+		{Key: "api.language", TargetKey: config.KeyAPILocale, SemanticRef: "orquesta.config.api.language", Alias: "api.locale", RemoveAfterRevision: "2027-01-01.0"},
+		{Key: "telemetry.sample_interval", SemanticRef: "orquesta.config.telemetry.sample_interval", GoName: "TelemetrySampleInterval", EnvAlias: "ORQUESTA_TELEMETRY_SAMPLE_INTERVAL", Type: "duration", Scope: "telemetry"},
 	}})
 	if err != nil || len(report.Accepted) != 3 || len(report.Conflicts) != 0 ||
 		report.Accepted[0].Mode != config.DoctorReuse || report.Accepted[1].Mode != config.DoctorReplace ||
 		report.Accepted[2].Mode != config.DoctorNew {
 		t.Fatalf("doctor valid report = %+v err=%v", report, err)
 	}
+	target, found := config.Definition(config.KeyAPILocale)
+	replacement := report.Accepted[1]
+	if !found || replacement.GoName != target.GoName || replacement.EnvAlias != target.EnvAlias ||
+		replacement.Type != target.Type || replacement.Scope != target.Scope {
+		t.Fatalf("doctor replacement metadata = %+v target=%+v", replacement, target)
+	}
 	conflicts, err := manager.Doctor(context.Background(), config.DoctorRequest{Proposals: []config.DoctorProposal{
-		{Key: "server.other", SemanticRef: "other", GoName: "ServerListen", EnvAlias: "ORQUESTA_SERVER_LISTEN", Type: "string", Scope: "server"},
-		{Key: "server.old", TargetKey: config.KeyServerListen, SemanticRef: "network.listen", Alias: "server.listen"},
+		{Key: "server.other", SemanticRef: "orquesta.config.server.other", GoName: "ServerListen", EnvAlias: "ORQUESTA_SERVER_LISTEN", Type: "string", Scope: "server"},
+		{Key: "api.old", TargetKey: config.KeyAPILocale, SemanticRef: "orquesta.config.api.old", Alias: "api.locale"},
 	}})
 	if err != nil || len(conflicts.Conflicts) < 3 {
 		t.Fatalf("doctor failed to report generated-name/env/retirement conflicts: %+v err=%v", conflicts, err)
+	}
+	semanticConflicts, err := manager.Doctor(context.Background(), config.DoctorRequest{Proposals: []config.DoctorProposal{
+		{Key: "telemetry.semantic", SemanticRef: "telemetry.semantic", GoName: "TelemetrySemantic", EnvAlias: "ORQUESTA_TELEMETRY_SEMANTIC", Type: "string", Scope: "telemetry"},
+		{Key: "api.semantic", TargetKey: config.KeyAPILocale, SemanticRef: "network.api.semantic", Alias: "api.locale", RemoveAfterRevision: "2027-01-01.0"},
+	}})
+	if err != nil || len(semanticConflicts.Accepted) != 0 || len(semanticConflicts.Conflicts) != 2 {
+		t.Fatalf("doctor accepted non-canonical semantics: %+v err=%v", semanticConflicts, err)
+	}
+	for _, conflict := range semanticConflicts.Conflicts {
+		if conflict.Code != config.DoctorConflictSemantic {
+			t.Fatalf("doctor semantic conflict = %+v", semanticConflicts)
+		}
+	}
+	crossValidated, err := manager.Doctor(context.Background(), config.DoctorRequest{Proposals: []config.DoctorProposal{{
+		Key: "server.address", TargetKey: config.KeyServerListen, SemanticRef: "orquesta.config.server.address",
+		Alias: "server.listen", RemoveAfterRevision: "2027-01-01.0",
+	}}})
+	if err != nil || len(crossValidated.Accepted) != 0 || len(crossValidated.Conflicts) != 1 ||
+		crossValidated.Conflicts[0].Code != config.DoctorConflictShape {
+		t.Fatalf("doctor accepted replacement with closed cross-validator: %+v err=%v", crossValidated, err)
 	}
 	after, err := manager.View(context.Background())
 	if err != nil || after.SourceRevision != before.SourceRevision {

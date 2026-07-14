@@ -66,7 +66,7 @@
     "restart-required changes preserve the active immutable snapshot expose exact pending_restart keys and clear only after bootstrap from the committed desired document",
     "configuration mutation accepts only canonical opaque credential_ref values and never reads writes or leaks CredentialStore material",
     "generated typed getters JSON schema reference documentation and transport-neutral UI descriptor are reproducible from the registry with no handwritten duplicate metadata",
-    "config doctor classifies reuse replace or new and reports semantic key Go name environment alias and retirement conflicts without mutating the registry",
+    "config doctor classifies reuse replace or new, emits registry-applicable canonical semantic and inherited replacement metadata, and reports key Go name environment alias cross-validator and retirement conflicts without mutating the registry",
     "an AST architecture guard rejects environment reads canonical key literals aliases and typed configuration defaults outside the canonical config ingress",
     "child processes receive only exact explicitly configured environment names and never a prefix-derived or ambient environment copy",
     "config Manager depends only on a DocumentStore port and the TOML filesystem adapter owns replace fsync journal and receipt while CredentialStore public transports command registry and web remain outside V07"

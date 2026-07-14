@@ -21,6 +21,7 @@ func (manager *Manager) Doctor(ctx context.Context, request DoctorRequest) (Doct
 	state := newDoctorState(manager.registry)
 	report := DoctorReport{Accepted: []DoctorDecision{}, Conflicts: []DoctorConflict{}}
 	for index, proposal := range request.Proposals {
+		proposal = normalizeDoctorProposal(proposal, manager.registry)
 		mode, conflicts := state.classify(index, proposal, manager.registry)
 		if len(conflicts) != 0 {
 			report.Conflicts = append(report.Conflicts, conflicts...)
@@ -64,13 +65,7 @@ func newDoctorState(loaded registry) *doctorState {
 }
 
 func (state *doctorState) classify(index int, proposal DoctorProposal, loaded registry) (DoctorMode, []DoctorConflict) {
-	mode := DoctorNew
-	if proposal.TargetKey != "" {
-		mode = DoctorReuse
-		if proposal.Alias != "" || proposal.RemoveAfterRevision != "" {
-			mode = DoctorReplace
-		}
-	}
+	mode := doctorProposalMode(proposal)
 	conflicts := make([]DoctorConflict, 0)
 	add := func(field string, code DoctorConflictCode, existing Key) {
 		conflicts = append(conflicts, DoctorConflict{
@@ -132,12 +127,15 @@ func (state *doctorState) classify(index int, proposal DoctorProposal, loaded re
 		} else if existing, found := state.aliases[proposal.Alias]; found {
 			add("alias", DoctorConflictAlias, existing)
 		}
+		if targetFound && doctorTargetHasCrossValidator(loaded, target.Key) {
+			add("target_key", DoctorConflictShape, target.Key)
+		}
 		removeAfter, removeAfterErr := parseRegistryRevision(proposal.RemoveAfterRevision)
 		currentRevision, currentRevisionErr := parseRegistryRevision(loaded.revision)
 		if removeAfterErr != nil || currentRevisionErr != nil || removeAfter.compare(currentRevision) <= 0 {
 			add("remove_after_revision", DoctorConflictRetirement, proposal.TargetKey)
 		}
-		state.checkOptionalIdentity(proposal, add)
+		state.checkReplacementIdentity(proposal, target, targetFound, add)
 	case DoctorNew:
 		if existing, found := state.keys[proposal.Key]; found {
 			add("key", DoctorConflictKey, existing)
@@ -156,12 +154,80 @@ func (state *doctorState) classify(index int, proposal DoctorProposal, loaded re
 	return mode, conflicts
 }
 
-func (state *doctorState) checkOptionalIdentity(proposal DoctorProposal, add func(string, DoctorConflictCode, Key)) {
-	if strings.TrimSpace(proposal.SemanticRef) == "" {
-		add("semantic_ref", DoctorConflictSemantic, "")
-	} else if existing, found := state.semantics[proposal.SemanticRef]; found {
-		add("semantic_ref", DoctorConflictSemantic, existing)
+func doctorTargetHasCrossValidator(loaded registry, target Key) bool {
+	for _, validator := range loaded.crossValidators {
+		for _, key := range validator.Keys {
+			if key == target {
+				return true
+			}
+		}
 	}
+	return false
+}
+
+func doctorProposalMode(proposal DoctorProposal) DoctorMode {
+	if proposal.TargetKey == "" {
+		return DoctorNew
+	}
+	if proposal.Alias != "" || proposal.RemoveAfterRevision != "" {
+		return DoctorReplace
+	}
+	return DoctorReuse
+}
+
+func normalizeDoctorProposal(proposal DoctorProposal, loaded registry) DoctorProposal {
+	if doctorProposalMode(proposal) != DoctorReplace {
+		return proposal
+	}
+	target, found := loaded.definition(proposal.TargetKey)
+	if !found {
+		return proposal
+	}
+	if proposal.GoName == "" {
+		proposal.GoName = target.GoName
+	}
+	if proposal.EnvAlias == "" {
+		proposal.EnvAlias = target.EnvAlias
+	}
+	if proposal.Type == "" {
+		proposal.Type = string(target.Type)
+	}
+	if proposal.Scope == "" {
+		proposal.Scope = target.Scope
+	}
+	return proposal
+}
+
+func (state *doctorState) checkReplacementIdentity(
+	proposal DoctorProposal,
+	target registryKeyDefinition,
+	targetFound bool,
+	add func(string, DoctorConflictCode, Key),
+) {
+	state.checkCanonicalSemantic(proposal, add)
+	if !targetFound {
+		return
+	}
+	if proposal.GoName != target.GoName {
+		add("go_name", DoctorConflictGoName, target.Key)
+	} else if existing, found := state.goNames[proposal.GoName]; found && existing != target.Key {
+		add("go_name", DoctorConflictGoName, existing)
+	}
+	if proposal.EnvAlias != target.EnvAlias {
+		add("env_alias", DoctorConflictEnvAlias, target.Key)
+	} else if existing, found := state.environment[proposal.EnvAlias]; found && existing != target.Key {
+		add("env_alias", DoctorConflictEnvAlias, existing)
+	}
+	if proposal.Type != string(target.Type) {
+		add("type", DoctorConflictType, target.Key)
+	}
+	if proposal.Scope != target.Scope {
+		add("scope", DoctorConflictScope, target.Key)
+	}
+}
+
+func (state *doctorState) checkOptionalIdentity(proposal DoctorProposal, add func(string, DoctorConflictCode, Key)) {
+	state.checkCanonicalSemantic(proposal, add)
 	if proposal.GoName != "" {
 		if !validDoctorGoName(proposal.GoName) {
 			add("go_name", DoctorConflictGoName, "")
@@ -181,6 +247,15 @@ func (state *doctorState) checkOptionalIdentity(proposal DoctorProposal, add fun
 	}
 	if proposal.Scope != "" && strings.TrimSpace(proposal.Scope) != proposal.Scope {
 		add("scope", DoctorConflictScope, "")
+	}
+}
+
+func (state *doctorState) checkCanonicalSemantic(proposal DoctorProposal, add func(string, DoctorConflictCode, Key)) {
+	wantSemanticRef := "orquesta.config." + string(proposal.Key)
+	if proposal.SemanticRef != wantSemanticRef {
+		add("semantic_ref", DoctorConflictSemantic, "")
+	} else if existing, found := state.semantics[proposal.SemanticRef]; found {
+		add("semantic_ref", DoctorConflictSemantic, existing)
 	}
 }
 

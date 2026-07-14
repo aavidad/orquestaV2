@@ -560,8 +560,8 @@ func TestManagerDoctorClassifiesAndReportsConflictsWithoutStoreAccess(t *testing
 	manager := newTestManager(t, store, active, nil)
 	valid := DoctorRequest{Proposals: []DoctorProposal{
 		{Key: "server.bind", TargetKey: KeyServerListen, SemanticRef: "orquesta.config.server.listen"},
-		{Key: "server.address", TargetKey: KeyServerListen, SemanticRef: "network.listen", Alias: "server.listen", RemoveAfterRevision: "2027-01-01.0"},
-		{Key: "telemetry.sample_interval", SemanticRef: "telemetry.sample_interval", GoName: "TelemetrySampleInterval", EnvAlias: "ORQUESTA_TELEMETRY_SAMPLE_INTERVAL", Type: "duration", Scope: "telemetry"},
+		{Key: "api.language", TargetKey: KeyAPILocale, SemanticRef: "orquesta.config.api.language", Alias: "api.locale", RemoveAfterRevision: "2027-01-01.0"},
+		{Key: "telemetry.sample_interval", SemanticRef: "orquesta.config.telemetry.sample_interval", GoName: "TelemetrySampleInterval", EnvAlias: "ORQUESTA_TELEMETRY_SAMPLE_INTERVAL", Type: "duration", Scope: "telemetry"},
 	}}
 	beforeReads, beforeCommits := store.readCount(), store.commitCount()
 	report, err := manager.Doctor(context.Background(), valid)
@@ -572,10 +572,9 @@ func TestManagerDoctorClassifiesAndReportsConflictsWithoutStoreAccess(t *testing
 	if store.readCount() != beforeReads || store.commitCount() != beforeCommits {
 		t.Fatal("doctor accessed document store")
 	}
-
 	conflicts, err := manager.Doctor(context.Background(), DoctorRequest{Proposals: []DoctorProposal{
-		{Key: "server.other", SemanticRef: "other", GoName: "ServerListen", EnvAlias: "ORQUESTA_SERVER_LISTEN", Type: "string", Scope: "server"},
-		{Key: "server.old", TargetKey: KeyServerListen, SemanticRef: "network.listen", Alias: "server.listen"},
+		{Key: "server.other", SemanticRef: "orquesta.config.server.other", GoName: "ServerListen", EnvAlias: "ORQUESTA_SERVER_LISTEN", Type: "string", Scope: "server"},
+		{Key: "api.old", TargetKey: KeyAPILocale, SemanticRef: "orquesta.config.api.old", Alias: "api.locale"},
 	}})
 	if err != nil || len(conflicts.Conflicts) < 3 || len(conflicts.Accepted) != 0 {
 		t.Fatalf("doctor conflicts = %#v err=%v", conflicts, err)
@@ -597,22 +596,22 @@ func TestManagerDoctorClassifiesAndReportsConflictsWithoutStoreAccess(t *testing
 		t.Fatalf("duplicate reuse = %#v err=%v", duplicateReuse, err)
 	}
 	futureRevision, err := manager.Doctor(context.Background(), DoctorRequest{Proposals: []DoctorProposal{{
-		Key: "server.endpoint", TargetKey: KeyServerListen, SemanticRef: "network.endpoint",
-		Alias: "server.listen", RemoveAfterRevision: "2026-07-15.10",
+		Key: "api.language_future", TargetKey: KeyAPILocale, SemanticRef: "orquesta.config.api.language_future",
+		Alias: "api.locale", RemoveAfterRevision: "2026-07-15.10",
 	}}})
 	if err != nil || len(futureRevision.Accepted) != 1 || len(futureRevision.Conflicts) != 0 {
 		t.Fatalf("doctor future revision = %#v err=%v", futureRevision, err)
 	}
 	expiredRevision, err := manager.Doctor(context.Background(), DoctorRequest{Proposals: []DoctorProposal{{
-		Key: "server.expired", TargetKey: KeyServerListen, SemanticRef: "network.expired",
-		Alias: "server.listen", RemoveAfterRevision: "2026-07-15.7",
+		Key: "api.expired", TargetKey: KeyAPILocale, SemanticRef: "orquesta.config.api.expired",
+		Alias: "api.locale", RemoveAfterRevision: "2026-07-15.7",
 	}}})
 	if err != nil || len(expiredRevision.Accepted) != 0 || len(expiredRevision.Conflicts) != 1 ||
 		expiredRevision.Conflicts[0].Code != DoctorConflictRetirement {
 		t.Fatalf("doctor expired revision = %#v err=%v", expiredRevision, err)
 	}
 	badGoName, err := manager.Doctor(context.Background(), DoctorRequest{Proposals: []DoctorProposal{{
-		Key: "telemetry.bad", SemanticRef: "telemetry.bad", GoName: "bad name",
+		Key: "telemetry.bad", SemanticRef: "orquesta.config.telemetry.bad", GoName: "bad name",
 		EnvAlias: "ORQUESTA_TELEMETRY_BAD", Type: "duration", Scope: "telemetry",
 	}}})
 	if err != nil || len(badGoName.Accepted) != 0 || len(badGoName.Conflicts) != 1 ||
@@ -627,19 +626,108 @@ func TestManagerDoctorClassifiesAndReportsConflictsWithoutStoreAccess(t *testing
 		t.Fatalf("contradictory reuse metadata = %#v err=%v", reuseMetadata, err)
 	}
 	invalidKeys, err := manager.Doctor(context.Background(), DoctorRequest{Proposals: []DoctorProposal{
-		{Key: "telemetry", SemanticRef: "telemetry.root", GoName: "TelemetryRoot", EnvAlias: "ORQUESTA_TELEMETRY_ROOT", Type: "string", Scope: "telemetry"},
-		{Key: "server.listen.child", SemanticRef: "server.listen.child", GoName: "ServerListenChild", EnvAlias: "ORQUESTA_SERVER_LISTEN_CHILD", Type: "string", Scope: "server"},
-		{Key: "telemetry.sample", SemanticRef: "telemetry.sample", GoName: "TelemetrySample", EnvAlias: "ORQUESTA_TELEMETRY_SAMPLE", Type: "string", Scope: "telemetry"},
-		{Key: "telemetry.sample.child", SemanticRef: "telemetry.sample.child", GoName: "TelemetrySampleChild", EnvAlias: "ORQUESTA_TELEMETRY_SAMPLE_CHILD", Type: "string", Scope: "telemetry"},
+		{Key: "telemetry", SemanticRef: "orquesta.config.telemetry", GoName: "TelemetryRoot", EnvAlias: "ORQUESTA_TELEMETRY_ROOT", Type: "string", Scope: "telemetry"},
+		{Key: "server.listen.child", SemanticRef: "orquesta.config.server.listen.child", GoName: "ServerListenChild", EnvAlias: "ORQUESTA_SERVER_LISTEN_CHILD", Type: "string", Scope: "server"},
+		{Key: "telemetry.sample", SemanticRef: "orquesta.config.telemetry.sample", GoName: "TelemetrySample", EnvAlias: "ORQUESTA_TELEMETRY_SAMPLE", Type: "string", Scope: "telemetry"},
+		{Key: "telemetry.sample.child", SemanticRef: "orquesta.config.telemetry.sample.child", GoName: "TelemetrySampleChild", EnvAlias: "ORQUESTA_TELEMETRY_SAMPLE_CHILD", Type: "string", Scope: "telemetry"},
 	}})
 	if err != nil || len(invalidKeys.Accepted) != 1 || len(invalidKeys.Conflicts) != 3 {
 		t.Fatalf("invalid/prefix keys = %#v err=%v", invalidKeys, err)
 	}
-
 	report.Accepted[0].Key = "tampered"
 	again, err := manager.Doctor(context.Background(), valid)
 	if err != nil || again.Accepted[0].Key == "tampered" {
 		t.Fatalf("doctor result mutation escaped: %#v err=%v", again, err)
+	}
+}
+
+func TestManagerDoctorAcceptedReplacementMatchesCanonicalRegistry(t *testing.T) {
+	manager := newTestManager(t, newManagerFakeStore(nil), managerTestSnapshot(t, nil), nil)
+	report, err := manager.Doctor(context.Background(), DoctorRequest{Proposals: []DoctorProposal{{
+		Key: "api.language", TargetKey: KeyAPILocale, SemanticRef: "orquesta.config.api.language",
+		Alias: "api.locale", RemoveAfterRevision: "2027-01-01.0",
+	}}})
+	if err != nil || len(report.Accepted) != 1 || len(report.Conflicts) != 0 {
+		t.Fatalf("applicable replacement = %#v err=%v", report, err)
+	}
+	target, _ := manager.registry.definition(KeyAPILocale)
+	replacement := report.Accepted[0]
+	if replacement.GoName != target.GoName || replacement.EnvAlias != target.EnvAlias ||
+		replacement.Type != string(target.Type) || replacement.Scope != target.Scope {
+		t.Fatalf("replacement metadata not inherited from target: %+v target=%+v", replacement, target)
+	}
+	managerAssertDoctorReplacementApplies(t, replacement)
+
+	invalidSemantic, err := manager.Doctor(context.Background(), DoctorRequest{Proposals: []DoctorProposal{
+		{Key: "telemetry.semantic", SemanticRef: "telemetry.semantic", GoName: "TelemetrySemantic", EnvAlias: "ORQUESTA_TELEMETRY_SEMANTIC", Type: "string", Scope: "telemetry"},
+		{Key: "api.semantic", TargetKey: KeyAPILocale, SemanticRef: "network.api.semantic", Alias: "api.locale", RemoveAfterRevision: "2027-01-01.0"},
+	}})
+	if err != nil || len(invalidSemantic.Accepted) != 0 || len(invalidSemantic.Conflicts) != 2 {
+		t.Fatalf("non-canonical semantics = %#v err=%v", invalidSemantic, err)
+	}
+	for _, conflict := range invalidSemantic.Conflicts {
+		if conflict.Code != DoctorConflictSemantic {
+			t.Fatalf("non-canonical semantic produced %s: %#v", conflict.Code, invalidSemantic)
+		}
+	}
+
+	incompatible, err := manager.Doctor(context.Background(), DoctorRequest{Proposals: []DoctorProposal{{
+		Key: "api.incompatible", TargetKey: KeyAPILocale, SemanticRef: "orquesta.config.api.incompatible",
+		Alias: "api.locale", RemoveAfterRevision: "2027-01-01.0", Type: "duration", Scope: "runtime",
+	}}})
+	if err != nil || len(incompatible.Accepted) != 0 || len(incompatible.Conflicts) != 2 {
+		t.Fatalf("incompatible replacement = %#v err=%v", incompatible, err)
+	}
+
+	crossValidated, err := manager.Doctor(context.Background(), DoctorRequest{Proposals: []DoctorProposal{{
+		Key: "server.address", TargetKey: KeyServerListen, SemanticRef: "orquesta.config.server.address",
+		Alias: "server.listen", RemoveAfterRevision: "2027-01-01.0",
+	}}})
+	if err != nil || len(crossValidated.Accepted) != 0 || len(crossValidated.Conflicts) != 1 ||
+		crossValidated.Conflicts[0].Code != DoctorConflictShape {
+		t.Fatalf("cross-validated replacement = %#v err=%v", crossValidated, err)
+	}
+}
+
+func managerAssertDoctorReplacementApplies(t *testing.T, decision DoctorDecision) {
+	t.Helper()
+	var source registryFile
+	if err := json.Unmarshal([]byte(generatedRegistryJSON), &source); err != nil {
+		t.Fatalf("decode generated registry: %v", err)
+	}
+	found := false
+	for index := range source.Keys {
+		if source.Keys[index].Key != decision.TargetKey {
+			continue
+		}
+		found = true
+		source.Keys[index].Key = decision.Key
+		source.Keys[index].SemanticRef = decision.SemanticRef
+		source.Keys[index].GoName = decision.GoName
+		source.Keys[index].EnvAlias = decision.EnvAlias
+		source.Keys[index].Type = valueType(decision.Type)
+		source.Keys[index].Scope = decision.Scope
+	}
+	if !found {
+		t.Fatalf("replacement target %s not found", decision.TargetKey)
+	}
+	for validatorIndex := range source.CrossValidators {
+		for keyIndex := range source.CrossValidators[validatorIndex].Keys {
+			if source.CrossValidators[validatorIndex].Keys[keyIndex] == decision.TargetKey {
+				source.CrossValidators[validatorIndex].Keys[keyIndex] = decision.Key
+			}
+		}
+	}
+	source.Aliases = append(source.Aliases, registryAliasDefinition{
+		Kind: AliasKindTOMLKey, Name: decision.Alias, Target: decision.Key,
+		IntroducedRevision: source.Revision, RemoveAfterRevision: decision.RemoveAfterRevision,
+	})
+	payload, err := json.Marshal(source)
+	if err != nil {
+		t.Fatalf("encode replacement registry: %v", err)
+	}
+	if err := ValidateRegistrySource(payload); err != nil {
+		t.Fatalf("Doctor accepted replacement that registry rejects: %v: %v", err, errors.Unwrap(err))
 	}
 }
 
