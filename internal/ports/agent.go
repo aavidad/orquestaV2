@@ -23,20 +23,27 @@ type AgentCapabilities struct {
 }
 
 type AgentLaunchRequest struct {
-	ExecutionRef      goal.ExecutionRef
-	GoalRef           goal.GoalRef
-	WorkItemRef       goal.WorkItemRef
-	SpecHash          string
-	ActorRef          goal.ActorRef
-	ProjectRef        goal.ProjectRef
-	Objective         string
-	PhaseKey          string
-	RoleKey           string
-	WriteSet          []string
-	OutputContract    string
-	ArtifactMediaType string
-	IdempotencyKey    string
-	MaxOutputBytes    int64
+	ExecutionRef       goal.ExecutionRef
+	GoalRef            goal.GoalRef
+	WorkItemRef        goal.WorkItemRef
+	SpecHash           string
+	ActorRef           goal.ActorRef
+	ProjectRef         goal.ProjectRef
+	Objective          string
+	PhaseRef           string
+	PhaseKey           string
+	PhaseTemplateRef   string
+	PhaseInputRefs     []string
+	PhaseCriterionRefs []string
+	RoleKey            string
+	SkillRefs          []string
+	ToolRefs           []string
+	CapabilityRefs     []string
+	WriteSet           []string
+	OutputContract     string
+	ArtifactMediaType  string
+	IdempotencyKey     string
+	MaxOutputBytes     int64
 }
 
 type AgentLaunchReceipt struct {
@@ -102,10 +109,24 @@ func ValidateAgentLaunchRequest(request AgentLaunchRequest) error {
 		return &AgentContractError{Code: "agent.project_ref_required"}
 	case strings.TrimSpace(request.Objective) == "":
 		return &AgentContractError{Code: "agent.objective_required"}
+	case !validPhaseRefValue(request.PhaseRef):
+		return &AgentContractError{Code: "agent.phase_ref_invalid"}
 	case !validPhaseKey(request.PhaseKey):
 		return &AgentContractError{Code: "agent.phase_key_invalid"}
+	case !validPhaseTemplateRefValue(request.PhaseTemplateRef):
+		return &AgentContractError{Code: "agent.phase_template_ref_invalid"}
+	case !validInputRefs(request.PhaseInputRefs):
+		return &AgentContractError{Code: "agent.phase_input_refs_invalid"}
+	case !validCriterionRefs(request.PhaseCriterionRefs):
+		return &AgentContractError{Code: "agent.phase_criterion_refs_invalid"}
 	case !validRoleKey(request.RoleKey):
 		return &AgentContractError{Code: "agent.role_key_invalid"}
+	case !validSkillRefs(request.SkillRefs):
+		return &AgentContractError{Code: "agent.skill_refs_invalid"}
+	case !validToolRefs(request.ToolRefs):
+		return &AgentContractError{Code: "agent.tool_refs_invalid"}
+	case !validCapabilityRefs(request.CapabilityRefs):
+		return &AgentContractError{Code: "agent.capability_refs_invalid"}
 	case !validOutputContract(request.OutputContract):
 		return &AgentContractError{Code: "agent.output_contract_invalid"}
 	case !validWriteSet(request.WriteSet):
@@ -126,9 +147,68 @@ func validPhaseKey(value string) bool {
 	return err == nil && key.String() == value
 }
 
+func validPhaseRefValue(value string) bool {
+	ref, err := goal.NewPhaseRef(value)
+	return err == nil && ref.String() == value
+}
+
+func validPhaseTemplateRefValue(value string) bool {
+	ref, err := goal.NewPhaseTemplateRef(value)
+	return err == nil && ref.String() == value
+}
+
+func validInputRefs(values []string) bool {
+	return validUniqueAgentRefs(values, func(value string) bool {
+		ref, err := goal.NewInputRef(value)
+		return err == nil && ref.String() == value
+	})
+}
+
+func validCriterionRefs(values []string) bool {
+	return validUniqueAgentRefs(values, func(value string) bool {
+		ref, err := goal.NewCriterionRef(value)
+		return err == nil && ref.String() == value
+	})
+}
+
 func validRoleKey(value string) bool {
 	key, err := goal.NewRoleKey(value)
 	return err == nil && key.String() == value
+}
+
+func validSkillRefs(values []string) bool {
+	return validUniqueAgentRefs(values, func(value string) bool {
+		ref, err := goal.NewSkillRef(value)
+		return err == nil && ref.String() == value
+	})
+}
+
+func validToolRefs(values []string) bool {
+	return validUniqueAgentRefs(values, func(value string) bool {
+		ref, err := goal.NewToolRef(value)
+		return err == nil && ref.String() == value
+	})
+}
+
+func validCapabilityRefs(values []string) bool {
+	return validUniqueAgentRefs(values, func(value string) bool {
+		ref, err := goal.NewCapabilityRef(value)
+		return err == nil && ref.String() == value
+	})
+}
+
+func validUniqueAgentRefs(values []string, valid func(string) bool) bool {
+	seen := make(map[string]struct{}, len(values))
+	for _, value := range values {
+		if !valid(value) {
+			return false
+		}
+		if _, duplicate := seen[value]; duplicate {
+			return false
+		}
+		seen[value] = struct{}{}
+	}
+	return true
 }
 
 func validOutputContract(value string) bool {

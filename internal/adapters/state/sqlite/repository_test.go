@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -54,7 +55,7 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 	if err := repository.db.QueryRow("PRAGMA user_version").Scan(&userVersion); err != nil {
 		t.Fatalf("user_version: %v", err)
 	}
-	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != 3 {
+	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != 4 {
 		t.Fatalf("pragmas = fk:%d busy:%d version:%d", foreignKeys, busyTimeout, userVersion)
 	}
 
@@ -72,9 +73,9 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 		tables = append(tables, name)
 	}
 	wantTables := []string{
-		"app_specs", "artifacts", "attestations", "events", "executions", "goal_phases",
-		"goals", "intents", "outbox", "schema_migrations",
-		"work_item_dependencies", "work_item_write_scopes", "work_items",
+		"app_specs", "artifacts", "attestations", "events", "executions", "goal_phase_contract_refs",
+		"goal_phases", "goals", "intents", "outbox", "schema_migrations",
+		"work_item_dependencies", "work_item_requirement_refs", "work_item_write_scopes", "work_items",
 	}
 	if !reflect.DeepEqual(tables, wantTables) {
 		t.Fatalf("tables = %#v, want %#v", tables, wantTables)
@@ -97,6 +98,12 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 	}
 	if migrationName != "003_app_specs.sql" {
 		t.Fatalf("AppSpec migration name = %q", migrationName)
+	}
+	if err := repository.db.QueryRow("SELECT name FROM schema_migrations WHERE version = 4").Scan(&migrationName); err != nil {
+		t.Fatalf("phase contract migration receipt: %v", err)
+	}
+	if migrationName != "004_phase_contracts.sql" {
+		t.Fatalf("phase contract migration name = %q", migrationName)
 	}
 	var appSpecColumns, intentColumns, foreignKeyViolations int
 	if err := repository.db.QueryRow(`
@@ -963,6 +970,129 @@ func TestRepositoryRoundTripsDAGPlanAndMultipleWorkItems(t *testing.T) {
 	restarted, err := repository.GetGoal(context.Background(), state.Goal.Ref())
 	if err != nil || !reflect.DeepEqual(restarted.Goal.Snapshot(), state.Goal.Snapshot()) {
 		t.Fatalf("DAG restart mismatch: record=%+v err=%v", restarted, err)
+	}
+}
+
+func TestRepositoryRoundTripsPhaseContractsLineageAndRequirementsAfterRestart(t *testing.T) {
+	repository, path := openTestRepository(t)
+	state := newV05CreateFixture(t)
+	created, fresh, err := repository.CreateGoal(context.Background(), state)
+	if err != nil || !fresh {
+		t.Fatalf("create V05 state = fresh:%v err:%v", fresh, err)
+	}
+	if !reflect.DeepEqual(created.Goal.Snapshot(), state.Goal.Snapshot()) ||
+		!reflect.DeepEqual(created.Executions, state.Executions) {
+		t.Fatalf("V05 round trip mismatch:\n got=%+v\nwant=%+v", created, state)
+	}
+	if err := repository.Close(); err != nil {
+		t.Fatalf("close V05 state: %v", err)
+	}
+	repository, err = Open(context.Background(), Options{Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 8})
+	if err != nil {
+		t.Fatalf("reopen V05 state: %v", err)
+	}
+	t.Cleanup(func() { _ = repository.Close() })
+	restarted, err := repository.GetGoal(context.Background(), state.Goal.Ref())
+	if err != nil || !reflect.DeepEqual(restarted.Goal.Snapshot(), state.Goal.Snapshot()) ||
+		!reflect.DeepEqual(restarted.Executions, state.Executions) {
+		t.Fatalf("V05 restart mismatch: record=%+v err=%v", restarted, err)
+	}
+	parent, found := workItemByObjective(restarted.Goal, "parent")
+	if !found {
+		t.Fatal("restored parent not found")
+	}
+	children := restarted.Goal.ChildWorkItems(parent.Ref())
+	if len(children) != 1 || children[0].Objective() != "overlapping child" {
+		t.Fatalf("restored children = %+v", children)
+	}
+}
+
+func newV05CreateFixture(t *testing.T) application.CreateGoalState {
+	t.Helper()
+	base := newCreateFixture(t, "v05", "request:v05", "fingerprint:v05", "actor:local-owner", "project:default")
+	pending, err := goal.NewGoal(mustRef(t, "goal:v05-plan", goal.NewGoalRef), base.Goal.AppSpec(), base.Goal.CreatedAt())
+	if err != nil {
+		t.Fatalf("new V05 goal: %v", err)
+	}
+	phaseKey, _ := goal.NewPhaseKey("phase:build")
+	phase, err := goal.NewPhaseInstanceWithMetadata(goal.PhaseInstanceInput{
+		Ref: mustRef(t, "phase-instance:build", goal.NewPhaseRef), Key: phaseKey,
+		TemplateRef:   mustRef(t, "phase-template:program", goal.NewPhaseTemplateRef),
+		InputRefs:     []goal.InputRef{mustRef(t, "input:app-spec", goal.NewInputRef)},
+		CriterionRefs: []goal.CriterionRef{mustRef(t, "criterion:tests-green", goal.NewCriterionRef)},
+	})
+	if err != nil {
+		t.Fatalf("new V05 phase: %v", err)
+	}
+	role, _ := goal.NewRoleKey("role:worker")
+	parentRef := mustRef(t, "work-item:v05:parent", goal.NewWorkItemRef)
+	childRef := mustRef(t, "work-item:v05:child", goal.NewWorkItemRef)
+	freeRef := mustRef(t, "work-item:v05:free", goal.NewWorkItemRef)
+	shared, _ := goal.NewWriteScope("internal/shared")
+	overlap, _ := goal.NewWriteScope("internal/shared/file.go")
+	free, _ := goal.NewWriteScope("docs/free.md")
+	parent := mustWorkItem(t, goal.NewWorkItemInput{
+		Ref: parentRef, Goal: pending.Ref(), Actor: pending.Actor(), Project: pending.Project(),
+		Objective: "parent", CreatedAt: pending.CreatedAt(), Phase: phaseKey, Role: role,
+		WriteSet: []goal.WriteScope{shared}, SkillRefs: []goal.SkillRef{mustRef(t, "skill:go", goal.NewSkillRef)},
+		ToolRefs:       []goal.ToolRef{mustRef(t, "tool:test", goal.NewToolRef)},
+		CapabilityRefs: []goal.CapabilityRef{mustRef(t, "capability:patch", goal.NewCapabilityRef)},
+		OutputContract: goal.EvidenceBundleOutputContract(),
+	})
+	child := mustWorkItem(t, goal.NewWorkItemInput{
+		Ref: childRef, Goal: pending.Ref(), Actor: pending.Actor(), Project: pending.Project(),
+		Objective: "overlapping child", CreatedAt: pending.CreatedAt(), Phase: phaseKey, Role: role,
+		Parent: parentRef, WriteSet: []goal.WriteScope{overlap}, OutputContract: goal.EvidenceBundleOutputContract(),
+	})
+	independent := mustWorkItem(t, goal.NewWorkItemInput{
+		Ref: freeRef, Goal: pending.Ref(), Actor: pending.Actor(), Project: pending.Project(),
+		Objective: "independent", CreatedAt: pending.CreatedAt(), Phase: phaseKey, Role: role,
+		WriteSet: []goal.WriteScope{free}, OutputContract: goal.EvidenceBundleOutputContract(),
+	})
+	// Child-before-parent is valid plan ordering: lineage is not a dependency.
+	// The durable self-FK must therefore be deferred until the transaction has
+	// inserted the complete immutable plan. Generation two also proves the
+	// adapter round-trips the append-only result rather than assuming gen one.
+	plan, err := goal.NewPlan(goal.PlanInput{Generation: 1, Phases: []goal.PhaseInstance{phase}, WorkItems: []goal.WorkItem{child, parent}})
+	if err != nil {
+		t.Fatalf("new V05 plan: %v", err)
+	}
+	aggregate, err := pending.ApplyPlan(pending.Revision(), plan)
+	if err == nil {
+		plan, err = goal.NewPlan(goal.PlanInput{Generation: 2, Phases: []goal.PhaseInstance{phase}, WorkItems: []goal.WorkItem{child, parent, independent}})
+	}
+	if err == nil {
+		aggregate, err = aggregate.ApplyPlan(aggregate.Revision(), plan)
+	}
+	if err == nil {
+		aggregate, err = aggregate.Start(aggregate.Revision(), aggregate.CreatedAt())
+	}
+	if err != nil {
+		t.Fatalf("start V05 plan: %v", err)
+	}
+	var executions []application.ExecutionRecord
+	var actions []application.ActionRecord
+	var events []application.EventRecord
+	for index, item := range aggregate.ReadyWorkItems() {
+		executionRef := mustRef(t, fmt.Sprintf("execution:v05:%d", index), goal.NewExecutionRef)
+		executions = append(executions, application.ExecutionRecord{
+			Ref: executionRef, GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), State: application.ExecutionQueued,
+			ArtifactMediaType: "text/plain", IdempotencyKey: "execution:" + executionRef.String(),
+			MaxOutputBytes: 1 << 20, MaxAttempts: 3, CreatedAt: aggregate.CreatedAt(),
+		})
+		actions = append(actions, application.ActionRecord{
+			Ref: "action:launch:" + executionRef.String(), Kind: application.ActionLaunchAgent,
+			GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: executionRef, AvailableAt: aggregate.CreatedAt(),
+		})
+		events = append(events, application.EventRecord{
+			Ref: "event:execution-queued:" + executionRef.String(), Kind: "execution.queued",
+			GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: executionRef, OccurredAt: aggregate.CreatedAt(),
+		})
+	}
+	events = append([]application.EventRecord{{Ref: "event:goal-created:v05", Kind: "goal.created", GoalRef: aggregate.Ref(), OccurredAt: aggregate.CreatedAt()}}, events...)
+	return application.CreateGoalState{
+		RequestRef: "request:v05", RequestFingerprint: "fingerprint:v05", Goal: aggregate,
+		Executions: executions, Actions: actions, Events: events,
 	}
 }
 

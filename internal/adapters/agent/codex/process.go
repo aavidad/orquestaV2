@@ -310,8 +310,15 @@ func (adapter *Adapter) commandArguments(runPath string) []string {
 func agentPrompt(request ports.AgentLaunchRequest) string {
 	return "Produce one artifact for the following objective.\n\n" +
 		"Objective:\n" + request.Objective + "\n\n" +
-		"Phase:\n" + request.PhaseKey + "\n\n" +
+		"Phase instance:\n" + request.PhaseRef + "\n\n" +
+		"Phase key:\n" + request.PhaseKey + "\n\n" +
+		"Phase template:\n" + request.PhaseTemplateRef + "\n\n" +
+		"Phase inputs:\n" + strings.Join(request.PhaseInputRefs, "\n") + "\n\n" +
+		"Phase criteria:\n" + strings.Join(request.PhaseCriterionRefs, "\n") + "\n\n" +
 		"Role:\n" + request.RoleKey + "\n\n" +
+		"Skills:\n" + strings.Join(request.SkillRefs, "\n") + "\n\n" +
+		"Tools:\n" + strings.Join(request.ToolRefs, "\n") + "\n\n" +
+		"Capabilities:\n" + strings.Join(request.CapabilityRefs, "\n") + "\n\n" +
 		"Allowed write scopes:\n" + strings.Join(request.WriteSet, "\n") + "\n\n" +
 		"Output contract:\n" + request.OutputContract + "\n\n" +
 		"Artifact media type:\n" + request.ArtifactMediaType + "\n\n" +

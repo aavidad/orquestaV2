@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	stateSchemaVersion = 2
+	stateSchemaVersion = 3
 	requestFileName    = "request.json"
 	terminalFileName   = "terminal.json"
 )
@@ -49,40 +49,54 @@ type terminalRecord struct {
 }
 
 type requestHashDocument struct {
-	SchemaVersion     int      `json:"schema_version"`
-	ExecutionRef      string   `json:"execution_ref"`
-	GoalRef           string   `json:"goal_ref"`
-	WorkItemRef       string   `json:"work_item_ref"`
-	SpecHash          string   `json:"spec_hash"`
-	ActorRef          string   `json:"actor_ref"`
-	ProjectRef        string   `json:"project_ref"`
-	Objective         string   `json:"objective"`
-	PhaseKey          string   `json:"phase_key"`
-	RoleKey           string   `json:"role_key"`
-	WriteSet          []string `json:"write_set"`
-	OutputContract    string   `json:"output_contract"`
-	ArtifactMediaType string   `json:"artifact_media_type"`
-	IdempotencyKey    string   `json:"idempotency_key"`
-	MaxOutputBytes    int64    `json:"max_output_bytes"`
+	SchemaVersion      int      `json:"schema_version"`
+	ExecutionRef       string   `json:"execution_ref"`
+	GoalRef            string   `json:"goal_ref"`
+	WorkItemRef        string   `json:"work_item_ref"`
+	SpecHash           string   `json:"spec_hash"`
+	ActorRef           string   `json:"actor_ref"`
+	ProjectRef         string   `json:"project_ref"`
+	Objective          string   `json:"objective"`
+	PhaseRef           string   `json:"phase_ref"`
+	PhaseKey           string   `json:"phase_key"`
+	PhaseTemplateRef   string   `json:"phase_template_ref"`
+	PhaseInputRefs     []string `json:"phase_input_refs"`
+	PhaseCriterionRefs []string `json:"phase_criterion_refs"`
+	RoleKey            string   `json:"role_key"`
+	SkillRefs          []string `json:"skill_refs"`
+	ToolRefs           []string `json:"tool_refs"`
+	CapabilityRefs     []string `json:"capability_refs"`
+	WriteSet           []string `json:"write_set"`
+	OutputContract     string   `json:"output_contract"`
+	ArtifactMediaType  string   `json:"artifact_media_type"`
+	IdempotencyKey     string   `json:"idempotency_key"`
+	MaxOutputBytes     int64    `json:"max_output_bytes"`
 }
 
 func hashLaunchRequest(request ports.AgentLaunchRequest) (string, error) {
 	document := requestHashDocument{
-		SchemaVersion:     stateSchemaVersion,
-		ExecutionRef:      request.ExecutionRef.String(),
-		GoalRef:           request.GoalRef.String(),
-		WorkItemRef:       request.WorkItemRef.String(),
-		SpecHash:          request.SpecHash,
-		ActorRef:          request.ActorRef.String(),
-		ProjectRef:        request.ProjectRef.String(),
-		Objective:         request.Objective,
-		PhaseKey:          request.PhaseKey,
-		RoleKey:           request.RoleKey,
-		WriteSet:          append([]string(nil), request.WriteSet...),
-		OutputContract:    request.OutputContract,
-		ArtifactMediaType: request.ArtifactMediaType,
-		IdempotencyKey:    request.IdempotencyKey,
-		MaxOutputBytes:    request.MaxOutputBytes,
+		SchemaVersion:      stateSchemaVersion,
+		ExecutionRef:       request.ExecutionRef.String(),
+		GoalRef:            request.GoalRef.String(),
+		WorkItemRef:        request.WorkItemRef.String(),
+		SpecHash:           request.SpecHash,
+		ActorRef:           request.ActorRef.String(),
+		ProjectRef:         request.ProjectRef.String(),
+		Objective:          request.Objective,
+		PhaseRef:           request.PhaseRef,
+		PhaseKey:           request.PhaseKey,
+		PhaseTemplateRef:   request.PhaseTemplateRef,
+		PhaseInputRefs:     append([]string(nil), request.PhaseInputRefs...),
+		PhaseCriterionRefs: append([]string(nil), request.PhaseCriterionRefs...),
+		RoleKey:            request.RoleKey,
+		SkillRefs:          append([]string(nil), request.SkillRefs...),
+		ToolRefs:           append([]string(nil), request.ToolRefs...),
+		CapabilityRefs:     append([]string(nil), request.CapabilityRefs...),
+		WriteSet:           append([]string(nil), request.WriteSet...),
+		OutputContract:     request.OutputContract,
+		ArtifactMediaType:  request.ArtifactMediaType,
+		IdempotencyKey:     request.IdempotencyKey,
+		MaxOutputBytes:     request.MaxOutputBytes,
 	}
 	payload, err := json.Marshal(document)
 	if err != nil {

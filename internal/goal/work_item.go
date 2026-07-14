@@ -35,8 +35,12 @@ type NewWorkItemInput struct {
 	CreatedAt      time.Time
 	Phase          PhaseKey
 	Role           RoleKey
+	Parent         WorkItemRef
 	Dependencies   []WorkItemRef
 	WriteSet       []WriteScope
+	SkillRefs      []SkillRef
+	ToolRefs       []ToolRef
+	CapabilityRefs []CapabilityRef
 	OutputContract OutputContract
 }
 
@@ -49,8 +53,12 @@ type WorkItem struct {
 	objective      string
 	phase          PhaseKey
 	role           RoleKey
+	parent         WorkItemRef
 	dependencies   []WorkItemRef
 	writeSet       []WriteScope
+	skillRefs      []SkillRef
+	toolRefs       []ToolRef
+	capabilityRefs []CapabilityRef
 	outputContract OutputContract
 	skipReason     WorkItemSkipReason
 	state          WorkItemState
@@ -107,8 +115,12 @@ func NewWorkItem(input NewWorkItemInput) (WorkItem, error) {
 		objective:      input.Objective,
 		phase:          phase,
 		role:           role,
+		parent:         input.Parent,
 		dependencies:   append([]WorkItemRef(nil), input.Dependencies...),
 		writeSet:       append([]WriteScope(nil), input.WriteSet...),
+		skillRefs:      cloneRefs(input.SkillRefs),
+		toolRefs:       cloneRefs(input.ToolRefs),
+		capabilityRefs: cloneRefs(input.CapabilityRefs),
 		outputContract: outputContract,
 		state:          WorkItemStatePending,
 		revision:       1,
@@ -120,22 +132,26 @@ func NewWorkItem(input NewWorkItemInput) (WorkItem, error) {
 	return item, nil
 }
 
-func (item WorkItem) Ref() WorkItemRef               { return item.ref }
-func (item WorkItem) Goal() GoalRef                  { return item.goal }
-func (item WorkItem) Actor() ActorRef                { return item.actor }
-func (item WorkItem) Project() ProjectRef            { return item.project }
-func (item WorkItem) Objective() string              { return item.objective }
-func (item WorkItem) Phase() PhaseKey                { return item.phase }
-func (item WorkItem) Role() RoleKey                  { return item.role }
-func (item WorkItem) Dependencies() []WorkItemRef    { return cloneDependencies(item.dependencies) }
-func (item WorkItem) WriteSet() []WriteScope         { return cloneWriteSet(item.writeSet) }
-func (item WorkItem) OutputContract() OutputContract { return item.outputContract }
-func (item WorkItem) State() WorkItemState           { return item.state }
-func (item WorkItem) Revision() Revision             { return item.revision }
-func (item WorkItem) CreatedAt() time.Time           { return item.createdAt }
-func (item WorkItem) IsTerminal() bool               { return item.state.Terminal() }
-func (item WorkItem) Artifacts() []ArtifactRef       { return cloneArtifacts(item.artifacts) }
-func (item WorkItem) Attestations() []AttestationRef { return cloneAttestations(item.attestations) }
+func (item WorkItem) Ref() WorkItemRef                { return item.ref }
+func (item WorkItem) Goal() GoalRef                   { return item.goal }
+func (item WorkItem) Actor() ActorRef                 { return item.actor }
+func (item WorkItem) Project() ProjectRef             { return item.project }
+func (item WorkItem) Objective() string               { return item.objective }
+func (item WorkItem) Phase() PhaseKey                 { return item.phase }
+func (item WorkItem) Role() RoleKey                   { return item.role }
+func (item WorkItem) Parent() (WorkItemRef, bool)     { return item.parent, validWorkItemRef(item.parent) }
+func (item WorkItem) Dependencies() []WorkItemRef     { return cloneDependencies(item.dependencies) }
+func (item WorkItem) WriteSet() []WriteScope          { return cloneWriteSet(item.writeSet) }
+func (item WorkItem) SkillRefs() []SkillRef           { return cloneRefs(item.skillRefs) }
+func (item WorkItem) ToolRefs() []ToolRef             { return cloneRefs(item.toolRefs) }
+func (item WorkItem) CapabilityRefs() []CapabilityRef { return cloneRefs(item.capabilityRefs) }
+func (item WorkItem) OutputContract() OutputContract  { return item.outputContract }
+func (item WorkItem) State() WorkItemState            { return item.state }
+func (item WorkItem) Revision() Revision              { return item.revision }
+func (item WorkItem) CreatedAt() time.Time            { return item.createdAt }
+func (item WorkItem) IsTerminal() bool                { return item.state.Terminal() }
+func (item WorkItem) Artifacts() []ArtifactRef        { return cloneArtifacts(item.artifacts) }
+func (item WorkItem) Attestations() []AttestationRef  { return cloneAttestations(item.attestations) }
 
 func (item WorkItem) StartedAt() (time.Time, bool) {
 	return item.startedAt, !item.startedAt.IsZero()
@@ -261,9 +277,25 @@ func (item WorkItem) expectRevision(expected Revision) error {
 func (item WorkItem) clone() WorkItem {
 	item.dependencies = cloneDependencies(item.dependencies)
 	item.writeSet = cloneWriteSet(item.writeSet)
+	item.skillRefs = cloneRefs(item.skillRefs)
+	item.toolRefs = cloneRefs(item.toolRefs)
+	item.capabilityRefs = cloneRefs(item.capabilityRefs)
 	item.artifacts = cloneArtifacts(item.artifacts)
 	item.attestations = cloneAttestations(item.attestations)
 	return item
+}
+
+func equalWorkItems(left, right WorkItem) bool {
+	return left.ref == right.ref && left.goal == right.goal && left.actor == right.actor &&
+		left.project == right.project && left.objective == right.objective && left.phase == right.phase &&
+		left.role == right.role && left.parent == right.parent &&
+		refsEqual(left.dependencies, right.dependencies) && refsEqual(left.writeSet, right.writeSet) &&
+		refsEqual(left.skillRefs, right.skillRefs) && refsEqual(left.toolRefs, right.toolRefs) &&
+		refsEqual(left.capabilityRefs, right.capabilityRefs) && left.outputContract == right.outputContract &&
+		left.skipReason == right.skipReason && left.state == right.state && left.revision == right.revision &&
+		left.createdAt.Equal(right.createdAt) && left.startedAt.Equal(right.startedAt) &&
+		left.finishedAt.Equal(right.finishedAt) && left.execution == right.execution &&
+		refsEqual(left.artifacts, right.artifacts) && refsEqual(left.attestations, right.attestations)
 }
 
 func cloneDependencies(refs []WorkItemRef) []WorkItemRef {

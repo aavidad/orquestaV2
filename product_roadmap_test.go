@@ -283,7 +283,10 @@ func TestProductRoadmapAccreditationDoesNotExceedEvidence(t *testing.T) {
 		}
 	}
 	sort.Strings(accreditedIDs)
-	wantAccreditedIDs := []string{"GOV-02", "GOV-03", "GOV-16", "GOV-21"}
+	wantAccreditedIDs := []string{
+		"GOV-02", "GOV-03", "GOV-04", "GOV-16", "GOV-21",
+		"ORC-01", "ORC-02", "ORC-06", "STG-00",
+	}
 	if !reflect.DeepEqual(accreditedIDs, wantAccreditedIDs) {
 		t.Fatalf("accredited capability IDs=%v, want exact evidence-backed set %v", accreditedIDs, wantAccreditedIDs)
 	}
@@ -294,8 +297,7 @@ func TestProductRoadmapAccreditationDoesNotExceedEvidence(t *testing.T) {
 	}
 	wantDeferredOwners := map[string]string{
 		"GOV-01": "generated_apps",
-		"GOV-04": "goal_dag_phases",
-		"GOV-05": "goal_dag_phases",
+		"GOV-05": "atomic_state_outbox",
 		"GOV-06": "atomic_state_outbox",
 		"ORC-23": "operations_telemetry",
 		"EXT-00": "domain_plugins",
@@ -305,6 +307,89 @@ func TestProductRoadmapAccreditationDoesNotExceedEvidence(t *testing.T) {
 		if entry.Status != "declared" || entry.OwnerContext != owner || len(entry.EvidenceRefs) != 0 {
 			t.Errorf("partially evidenced capability %s is over-accredited or misrouted: %#v", id, entry)
 		}
+	}
+}
+
+func TestProductRoadmapV05ScopeAndExecutableContract(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+
+	entries := make(map[string]roadmapEntry, len(roadmap.CapabilityEntries))
+	var ownedAccepted []string
+	for _, entry := range roadmap.CapabilityEntries {
+		entries[entry.ID] = entry
+		if entry.OwnerContext == "goal_dag_phases" && entry.Decision == "accept" {
+			ownedAccepted = append(ownedAccepted, entry.ID)
+		}
+	}
+	sort.Strings(ownedAccepted)
+	wantAccepted := []string{
+		"GOV-04",
+		"ORC-01", "ORC-02", "ORC-06",
+		"STG-00",
+	}
+	sort.Strings(wantAccepted)
+	if !reflect.DeepEqual(ownedAccepted, wantAccepted) {
+		t.Fatalf("V05 accepted ownership = %v, want exact %v", ownedAccepted, wantAccepted)
+	}
+	wantEvidence := []string{
+		"acceptance/v05_goal_dag_phases_test.go",
+		"acceptance/fixtures/v05_goal_dag_phases.json",
+		"product/evidence/v05_goal_dag_phases.json",
+	}
+	for _, id := range wantAccepted {
+		entry := entries[id]
+		if entry.Status != "accredited" || !reflect.DeepEqual(entry.EvidenceRefs, wantEvidence) {
+			t.Errorf("V05 capability %s lacks exact accreditation evidence: %#v", id, entry)
+		}
+	}
+
+	wantMoved := map[string]string{
+		"GOV-05": "atomic_state_outbox",
+		"ORC-03": "controls",
+		"ORC-04": "mailbox",
+		"ORC-05": "mailbox",
+		"ORC-12": "atomic_state_outbox",
+		"ORC-13": "atomic_state_outbox",
+		"ORC-17": "atomic_state_outbox",
+		"STG-01": "wizard",
+		"STG-02": "workspace_git",
+		"STG-03": "wizard",
+		"STG-04": "tools_skills_sdk",
+		"STG-05": "context_rag_evals",
+		"STG-06": "council",
+		"STG-07": "wizard",
+		"STG-09": "budgets_effects",
+		"STG-10": "workspace_git",
+		"STG-11": "codex_e2e",
+		"STG-12": "tools_skills_sdk",
+		"STG-16": "independent_reviews",
+		"STG-20": "operations_telemetry",
+	}
+	for id, owner := range wantMoved {
+		if entry := entries[id]; entry.OwnerContext != owner || entry.Status != "declared" || len(entry.EvidenceRefs) != 0 {
+			t.Errorf("moved capability %s = %#v, want owner %s without V05 accreditation", id, entry, owner)
+		}
+	}
+	if entry := entries["ORC-18"]; entry.Decision != "reject" || entry.ReleaseTarget != "excluded" || entry.CutoverRequired {
+		t.Fatalf("ORC-18 must remain rejected and outside cutover: %#v", entry)
+	}
+
+	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapV05ScopeAndExecutableContract|TestAcceptanceV05GoalDAGPhases)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/interfaces/mcp ./internal/bootstrap'"
+	var contract roadmapAcceptanceContract
+	for _, candidate := range roadmap.AcceptanceContracts {
+		if candidate.ID == "AC-V05-GOAL-DAG-PHASES" {
+			contract = candidate
+			break
+		}
+	}
+	if contract.Status != "executable" || contract.TestRef != "acceptance/v05_goal_dag_phases_test.go" ||
+		contract.Fixture != "acceptance/fixtures/v05_goal_dag_phases.json" ||
+		contract.Receipt != "product/evidence/v05_goal_dag_phases.json" || contract.Command != wantCommand {
+		t.Fatalf("invalid V05 executable contract: %#v", contract)
+	}
+	if !roadmapCommandHasArgument(contract.Command, "./acceptance") || strings.Contains(contract.Command, "^TestAcceptance$") {
+		t.Fatalf("V05 command can omit real acceptance tests: %q", contract.Command)
 	}
 }
 
@@ -354,6 +439,7 @@ func TestProductRoadmapExecutableContractsDeclareReceiptPaths(t *testing.T) {
 		"AC-V02-AUTHORITY-RULES":    "product/evidence/v02_authority_rules.json",
 		"AC-V03-CANONICAL-LEDGERS":  "product/evidence/v03_canonical_ledgers.json",
 		"AC-V04-INTENT-APPSPEC":     "product/evidence/v04_intent_appspec.json",
+		"AC-V05-GOAL-DAG-PHASES":    "product/evidence/v05_goal_dag_phases.json",
 	}
 	gotExecutable := make(map[string]string)
 	for _, contract := range roadmap.AcceptanceContracts {

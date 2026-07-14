@@ -290,7 +290,7 @@ func readWorkItems(
 ) ([]goal.WorkItemSnapshot, error) {
 	rows, err := source.QueryContext(ctx, `
 SELECT ref, goal_ref, actor_ref, project_ref, objective, state, revision,
-       phase_key, role_key, output_contract, skip_reason,
+       phase_key, role_key, parent_ref, output_contract, skip_reason,
        created_at, started_at, finished_at, execution_ref
 FROM work_items
 WHERE goal_ref = ?
@@ -306,7 +306,7 @@ ORDER BY position`, goalValue)
 		var revision int64
 		var createdAt int64
 		var startedAt, finishedAt sql.NullInt64
-		var executionRef sql.NullString
+		var parentRef, executionRef sql.NullString
 		if err := rows.Scan(
 			&item.Ref,
 			&item.GoalRef,
@@ -317,6 +317,7 @@ ORDER BY position`, goalValue)
 			&revision,
 			&item.PhaseKey,
 			&item.RoleKey,
+			&parentRef,
 			&outputContract,
 			&skipReason,
 			&createdAt,
@@ -339,6 +340,9 @@ ORDER BY position`, goalValue)
 		if executionRef.Valid {
 			item.ExecutionRef = executionRef.String
 		}
+		if parentRef.Valid {
+			item.ParentRef = parentRef.String
+		}
 		item.ArtifactRefs = append([]string(nil), artifactRefs[item.Ref]...)
 		item.AttestationRefs = append([]string(nil), attestationRefs[item.Ref]...)
 		item.DependencyRefs, err = readOrderedStrings(ctx, source, `
@@ -348,6 +352,24 @@ SELECT dependency_ref FROM work_item_dependencies WHERE work_item_ref = ? ORDER 
 		}
 		item.WriteSet, err = readOrderedStrings(ctx, source, `
 SELECT scope FROM work_item_write_scopes WHERE work_item_ref = ? ORDER BY position`, item.Ref)
+		if err != nil {
+			return nil, err
+		}
+		item.SkillRefs, err = readContractRefs(ctx, source, `
+SELECT value FROM work_item_requirement_refs
+WHERE goal_ref = ? AND work_item_ref = ? AND kind = ? ORDER BY position`, goalValue, item.Ref, "skill")
+		if err != nil {
+			return nil, err
+		}
+		item.ToolRefs, err = readContractRefs(ctx, source, `
+SELECT value FROM work_item_requirement_refs
+WHERE goal_ref = ? AND work_item_ref = ? AND kind = ? ORDER BY position`, goalValue, item.Ref, "tool")
+		if err != nil {
+			return nil, err
+		}
+		item.CapabilityRefs, err = readContractRefs(ctx, source, `
+SELECT value FROM work_item_requirement_refs
+WHERE goal_ref = ? AND work_item_ref = ? AND kind = ? ORDER BY position`, goalValue, item.Ref, "capability")
 		if err != nil {
 			return nil, err
 		}
@@ -433,7 +455,7 @@ ORDER BY created_at, ref`, goalValue)
 
 func readPhases(ctx context.Context, source queryer, goalValue string) ([]goal.PhaseInstanceSnapshot, error) {
 	rows, err := source.QueryContext(ctx, `
-SELECT phase_key FROM goal_phases WHERE goal_ref = ? ORDER BY position`, goalValue)
+SELECT ref, phase_key, template_ref FROM goal_phases WHERE goal_ref = ? ORDER BY position`, goalValue)
 	if err != nil {
 		return nil, mapDatabaseError(err)
 	}
@@ -441,10 +463,42 @@ SELECT phase_key FROM goal_phases WHERE goal_ref = ? ORDER BY position`, goalVal
 	var result []goal.PhaseInstanceSnapshot
 	for rows.Next() {
 		var phase goal.PhaseInstanceSnapshot
-		if err := rows.Scan(&phase.Key); err != nil {
+		if err := rows.Scan(&phase.Ref, &phase.Key, &phase.TemplateRef); err != nil {
 			return nil, mapDatabaseError(err)
 		}
+		phase.InputRefs, err = readContractRefs(ctx, source, `
+SELECT value FROM goal_phase_contract_refs
+WHERE goal_ref = ? AND phase_ref = ? AND kind = ? ORDER BY position`, goalValue, phase.Ref, "input")
+		if err != nil {
+			return nil, err
+		}
+		phase.CriterionRefs, err = readContractRefs(ctx, source, `
+SELECT value FROM goal_phase_contract_refs
+WHERE goal_ref = ? AND phase_ref = ? AND kind = ? ORDER BY position`, goalValue, phase.Ref, "criterion")
+		if err != nil {
+			return nil, err
+		}
 		result = append(result, phase)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, mapDatabaseError(err)
+	}
+	return result, nil
+}
+
+func readContractRefs(ctx context.Context, source queryer, query string, args ...any) ([]string, error) {
+	rows, err := source.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, mapDatabaseError(err)
+	}
+	defer rows.Close()
+	var result []string
+	for rows.Next() {
+		var value string
+		if err := rows.Scan(&value); err != nil {
+			return nil, mapDatabaseError(err)
+		}
+		result = append(result, value)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, mapDatabaseError(err)

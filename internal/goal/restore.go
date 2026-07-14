@@ -217,6 +217,22 @@ func restoreWorkItem(snapshot WorkItemSnapshot) (WorkItem, error) {
 	if err != nil {
 		return WorkItem{}, err
 	}
+	parent, err := restoreOptionalWorkItemRef(snapshot.ParentRef)
+	if err != nil {
+		return WorkItem{}, err
+	}
+	skillRefs, err := restoreSkillRefs(snapshot.SkillRefs)
+	if err != nil {
+		return WorkItem{}, err
+	}
+	toolRefs, err := restoreToolRefs(snapshot.ToolRefs)
+	if err != nil {
+		return WorkItem{}, err
+	}
+	capabilityRefs, err := restoreCapabilityRefs(snapshot.CapabilityRefs)
+	if err != nil {
+		return WorkItem{}, err
+	}
 	execution, err := restoreExecutionRef(snapshot.ExecutionRef)
 	if err != nil {
 		return WorkItem{}, err
@@ -233,7 +249,8 @@ func restoreWorkItem(snapshot WorkItemSnapshot) (WorkItem, error) {
 	restored := WorkItem{
 		ref: ref, goal: goalRef, actor: actor, project: project,
 		objective: snapshot.Objective, phase: phase, role: role,
-		dependencies: dependencies, writeSet: writeSet,
+		parent: parent, dependencies: dependencies, writeSet: writeSet,
+		skillRefs: skillRefs, toolRefs: toolRefs, capabilityRefs: capabilityRefs,
 		outputContract: outputContract, skipReason: snapshot.SkipReason,
 		state: snapshot.State, revision: snapshot.Revision,
 		createdAt:  canonicalTime(snapshot.CreatedAt),
@@ -353,9 +370,6 @@ func validateRestoredGoal(goal Goal) error {
 
 func validateStartedGoalWorkItems(goal Goal, requireTerminal bool) error {
 	for _, item := range goal.items {
-		if item.createdAt.After(goal.startedAt) {
-			return domainError(ErrorSnapshotInvalid, "goal_started_at")
-		}
 		if item.state == WorkItemStateSkipped {
 			if item.finishedAt.Before(goal.startedAt) {
 				return domainError(ErrorSnapshotInvalid, "work_item_finished_at")
@@ -419,17 +433,103 @@ func revisionForGoalSnapshot(goal Goal) Revision {
 func restorePhases(snapshots []PhaseInstanceSnapshot) ([]PhaseInstance, error) {
 	phases := make([]PhaseInstance, 0, len(snapshots))
 	for _, snapshot := range snapshots {
+		ref, err := NewPhaseRef(snapshot.Ref)
+		if err != nil {
+			return nil, err
+		}
 		key, err := NewPhaseKey(snapshot.Key)
 		if err != nil {
 			return nil, err
 		}
-		phase, err := NewPhaseInstance(key)
+		templateRef, err := NewPhaseTemplateRef(snapshot.TemplateRef)
+		if err != nil {
+			return nil, err
+		}
+		inputRefs, err := restoreInputRefs(snapshot.InputRefs)
+		if err != nil {
+			return nil, err
+		}
+		criterionRefs, err := restoreCriterionRefs(snapshot.CriterionRefs)
+		if err != nil {
+			return nil, err
+		}
+		phase, err := NewPhaseInstanceWithMetadata(PhaseInstanceInput{
+			Ref: ref, Key: key, TemplateRef: templateRef,
+			InputRefs: inputRefs, CriterionRefs: criterionRefs,
+		})
 		if err != nil {
 			return nil, err
 		}
 		phases = append(phases, phase)
 	}
 	return phases, nil
+}
+
+func restoreOptionalWorkItemRef(value string) (WorkItemRef, error) {
+	if value == "" {
+		return WorkItemRef{}, nil
+	}
+	return NewWorkItemRef(value)
+}
+
+func restoreInputRefs(values []string) ([]InputRef, error) {
+	refs := make([]InputRef, 0, len(values))
+	for _, value := range values {
+		ref, err := NewInputRef(value)
+		if err != nil {
+			return nil, err
+		}
+		refs = append(refs, ref)
+	}
+	return refs, nil
+}
+
+func restoreCriterionRefs(values []string) ([]CriterionRef, error) {
+	refs := make([]CriterionRef, 0, len(values))
+	for _, value := range values {
+		ref, err := NewCriterionRef(value)
+		if err != nil {
+			return nil, err
+		}
+		refs = append(refs, ref)
+	}
+	return refs, nil
+}
+
+func restoreSkillRefs(values []string) ([]SkillRef, error) {
+	refs := make([]SkillRef, 0, len(values))
+	for _, value := range values {
+		ref, err := NewSkillRef(value)
+		if err != nil {
+			return nil, err
+		}
+		refs = append(refs, ref)
+	}
+	return refs, nil
+}
+
+func restoreToolRefs(values []string) ([]ToolRef, error) {
+	refs := make([]ToolRef, 0, len(values))
+	for _, value := range values {
+		ref, err := NewToolRef(value)
+		if err != nil {
+			return nil, err
+		}
+		refs = append(refs, ref)
+	}
+	return refs, nil
+}
+
+func restoreCapabilityRefs(values []string) ([]CapabilityRef, error) {
+	refs := make([]CapabilityRef, 0, len(values))
+	for _, value := range values {
+		ref, err := NewCapabilityRef(value)
+		if err != nil {
+			return nil, err
+		}
+		refs = append(refs, ref)
+	}
+	return refs, nil
 }
 
 func restoreWorkItemRefs(values []string) ([]WorkItemRef, error) {

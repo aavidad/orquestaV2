@@ -174,7 +174,9 @@ func TestPreparedLaunchWithRetainedClaimRecoversAfterCrashAndLeaseExpiry(t *test
 		ExecutionRef: preparedExecution.Ref, GoalRef: preparedGoal.Ref(), WorkItemRef: item.Ref(),
 		SpecHash: preparedGoal.SpecHash(),
 		ActorRef: preparedGoal.Actor(), ProjectRef: preparedGoal.Project(), Objective: item.Objective(),
-		PhaseKey: item.Phase().String(), RoleKey: item.Role().String(), WriteSet: []string{},
+		PhaseRef: preparedGoal.Phases()[0].Ref().String(), PhaseKey: item.Phase().String(),
+		PhaseTemplateRef: preparedGoal.Phases()[0].TemplateRef().String(),
+		RoleKey:          item.Role().String(), WriteSet: []string{},
 		OutputContract: string(item.OutputContract().Kind()), ArtifactMediaType: preparedExecution.ArtifactMediaType,
 		IdempotencyKey: preparedExecution.IdempotencyKey, MaxOutputBytes: preparedExecution.MaxOutputBytes,
 	}

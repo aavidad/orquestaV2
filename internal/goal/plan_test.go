@@ -87,7 +87,7 @@ func TestPlanRejectsInvalidDAGKeysDuplicatesAndWriteSets(t *testing.T) {
 	}
 }
 
-func TestApplyPlanUsesOnlyGoalCASAndNextGeneration(t *testing.T) {
+func TestApplyPlanUsesGoalCASNextGenerationAndMonotonicEvolution(t *testing.T) {
 	fixture := newPlanFixture(t)
 	phase := mustPhase(t, "phase:build")
 	first := fixture.item(t, mustRef(t, "work-item:first-plan", domain.NewWorkItemRef), phase.Key(), nil, nil)
@@ -107,26 +107,33 @@ func TestApplyPlanUsesOnlyGoalCASAndNextGeneration(t *testing.T) {
 		t.Fatalf("applied state/generation/revision = %q/%d/%d", applied.State(), applied.PlanGeneration(), applied.Revision())
 	}
 	second := fixture.item(t, mustRef(t, "work-item:second-plan", domain.NewWorkItemRef), phase.Key(), nil, nil)
-	replanned, err := applied.ApplyPlan(applied.Revision(), mustPlan(t, domain.PlanInput{
+	_, err = applied.ApplyPlan(applied.Revision(), mustPlan(t, domain.PlanInput{
 		Generation: 2, Phases: []domain.PhaseInstance{phase}, WorkItems: []domain.WorkItem{second},
+	}))
+	requireCode(t, err, domain.ErrorInvalidPlan)
+	replanned, err := applied.ApplyPlan(applied.Revision(), mustPlan(t, domain.PlanInput{
+		Generation: 2, Phases: []domain.PhaseInstance{phase}, WorkItems: []domain.WorkItem{first, second},
 	}))
 	if err != nil {
 		t.Fatalf("ApplyPlan(second) error = %v", err)
 	}
-	if replanned.PlanGeneration() != 2 || replanned.Revision() != 3 || replanned.WorkItemCount() != 1 {
+	if replanned.PlanGeneration() != 2 || replanned.Revision() != 3 || replanned.WorkItemCount() != 2 {
 		t.Fatalf("replanned generation/revision/items = %d/%d/%d", replanned.PlanGeneration(), replanned.Revision(), replanned.WorkItemCount())
 	}
 	running, err := replanned.Start(replanned.Revision(), baseTime().Add(3*time.Minute))
 	if err != nil {
 		t.Fatalf("Start() error = %v", err)
 	}
-	_, err = running.ApplyPlan(running.Revision(), mustPlan(t, domain.PlanInput{
-		Generation: 3, Phases: []domain.PhaseInstance{phase}, WorkItems: []domain.WorkItem{second},
+	third := fixture.item(t, mustRef(t, "work-item:third-plan", domain.NewWorkItemRef), phase.Key(), nil, nil)
+	running, err = running.ApplyPlan(running.Revision(), mustPlan(t, domain.PlanInput{
+		Generation: 3, Phases: []domain.PhaseInstance{phase}, WorkItems: append(running.WorkItems(), third),
 	}))
-	requireCode(t, err, domain.ErrorInvalidTransition)
+	if err != nil || running.PlanGeneration() != 3 || running.WorkItemCount() != 3 {
+		t.Fatalf("ApplyPlan(running append) = %d/%d/%v", running.PlanGeneration(), running.WorkItemCount(), err)
+	}
 }
 
-func TestReadyReturnsAllEligiblePendingAndStartSerializesRunningConflicts(t *testing.T) {
+func TestReadyReturnsDeterministicMaximalConflictFreeCohort(t *testing.T) {
 	fixture := newPlanFixture(t)
 	phase := mustPhase(t, "phase:work")
 	aRef := mustRef(t, "work-item:writer-a", domain.NewWorkItemRef)
@@ -140,7 +147,8 @@ func TestReadyReturnsAllEligiblePendingAndStartSerializesRunningConflicts(t *tes
 	running := applyAndStartPlan(t, fixture.goal, domain.PlanInput{
 		Generation: 1, Phases: []domain.PhaseInstance{phase}, WorkItems: []domain.WorkItem{a, b, c, d},
 	})
-	requireReadyRefs(t, running, aRef, bRef, cRef)
+	requireRunnableRefs(t, running, aRef, bRef, cRef)
+	requireReadyRefs(t, running, aRef, cRef)
 
 	dItem, _ := running.WorkItem(dRef)
 	_, err := running.StartWorkItem(
@@ -149,16 +157,17 @@ func TestReadyReturnsAllEligiblePendingAndStartSerializesRunningConflicts(t *tes
 	)
 	requireCode(t, err, domain.ErrorWorkItemNotReady)
 
-	running = startGoalItem(t, running, bRef, "execution:writer-b", baseTime().Add(4*time.Minute))
-	requireReadyRefs(t, running, cRef)
-	aItem, _ := running.WorkItem(aRef)
+	bItem, _ := running.WorkItem(bRef)
 	_, err = running.StartWorkItem(
-		running.Revision(), aItem.Revision(), aRef,
+		running.Revision(), bItem.Revision(), bRef,
 		mustRef(t, "execution:conflict", domain.NewExecutionRef), baseTime().Add(4*time.Minute),
 	)
 	requireCode(t, err, domain.ErrorWorkItemNotReady)
-	running = succeedGoalItem(t, running, bRef, "writer-b", baseTime().Add(5*time.Minute))
-	requireReadyRefs(t, running, aRef, cRef, dRef)
+	running = startGoalItem(t, running, aRef, "execution:writer-a", baseTime().Add(4*time.Minute))
+	requireRunnableRefs(t, running, cRef)
+	requireReadyRefs(t, running, cRef)
+	running = succeedGoalItem(t, running, aRef, "writer-a", baseTime().Add(5*time.Minute))
+	requireReadyRefs(t, running, bRef, cRef)
 }
 
 func TestPlannedSnapshotRoundTripAndMutationChecks(t *testing.T) {
@@ -277,8 +286,10 @@ func (fixture planFixture) newItem(overrides domain.NewWorkItemInput) (domain.Wo
 	return domain.NewWorkItem(domain.NewWorkItemInput{
 		Ref: overrides.Ref, Goal: fixture.goal.Ref(), Actor: fixture.actor, Project: fixture.project,
 		Objective: "execute " + overrides.Ref.String(), CreatedAt: baseTime().Add(2 * time.Minute),
-		Phase: overrides.Phase, Role: overrides.Role, Dependencies: overrides.Dependencies,
-		WriteSet: overrides.WriteSet, OutputContract: overrides.OutputContract,
+		Phase: overrides.Phase, Role: overrides.Role, Parent: overrides.Parent,
+		Dependencies: overrides.Dependencies, WriteSet: overrides.WriteSet,
+		SkillRefs: overrides.SkillRefs, ToolRefs: overrides.ToolRefs, CapabilityRefs: overrides.CapabilityRefs,
+		OutputContract: overrides.OutputContract,
 	})
 }
 
@@ -344,6 +355,19 @@ func requireReadyRefs(t *testing.T, aggregate domain.Goal, want ...domain.WorkIt
 	for index, item := range ready {
 		if item.Ref() != want[index] {
 			t.Fatalf("ReadyWorkItems[%d] = %q, want %q", index, item.Ref(), want[index])
+		}
+	}
+}
+
+func requireRunnableRefs(t *testing.T, aggregate domain.Goal, want ...domain.WorkItemRef) {
+	t.Helper()
+	runnable := aggregate.RunnableWorkItems()
+	if len(runnable) != len(want) {
+		t.Fatalf("RunnableWorkItems count = %d, want %d", len(runnable), len(want))
+	}
+	for index, item := range runnable {
+		if item.Ref() != want[index] {
+			t.Fatalf("RunnableWorkItems[%d] = %q, want %q", index, item.Ref(), want[index])
 		}
 	}
 }

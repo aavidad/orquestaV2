@@ -141,14 +141,15 @@ func (goal Goal) WorkItems() []WorkItem {
 	return items
 }
 
-// ApplyPlan atomically replaces a pending Goal plan. Goal revision is the CAS;
-// the proposal generation must be exactly current+1. It never changes
-// lifecycle by itself.
+// ApplyPlan evolves a pending or running Goal monotonically. Goal revision is
+// the CAS; the proposal generation must be exactly current+1. Existing phases
+// and WorkItems remain an exact ordered prefix and only pending work may be
+// appended. It never changes lifecycle by itself.
 func (goal Goal) ApplyPlan(expectedGoal Revision, plan Plan) (Goal, error) {
 	if err := goal.expectRevision(expectedGoal); err != nil {
 		return Goal{}, err
 	}
-	if goal.state != GoalStatePending {
+	if goal.state != GoalStatePending && goal.state != GoalStateRunning {
 		return Goal{}, domainError(ErrorInvalidTransition, "goal_state")
 	}
 	nextGeneration, err := nextPlanGeneration(goal.planGeneration)
@@ -160,6 +161,32 @@ func (goal Goal) ApplyPlan(expectedGoal Revision, plan Plan) (Goal, error) {
 	}
 	if err := validatePlan(plan); err != nil {
 		return Goal{}, err
+	}
+	if len(plan.phases) < len(goal.phases) || len(plan.items) < len(goal.itemOrder) {
+		return Goal{}, domainError(ErrorInvalidPlan, "non_monotonic_plan")
+	}
+	for index, existing := range goal.phases {
+		if !equalPhaseInstances(existing, plan.phases[index]) {
+			return Goal{}, domainError(ErrorInvalidPlan, "phase_changed")
+		}
+	}
+	for index, ref := range goal.itemOrder {
+		candidate := plan.items[index]
+		if candidate.ref != ref || !equalWorkItems(goal.items[ref], candidate) {
+			return Goal{}, domainError(ErrorInvalidPlan, "work_item_changed")
+		}
+	}
+	for _, item := range plan.items[len(goal.itemOrder):] {
+		if item.state != WorkItemStatePending || item.revision != 1 ||
+			!item.startedAt.IsZero() || !item.finishedAt.IsZero() || validExecutionRef(item.execution) ||
+			len(item.artifacts) != 0 || len(item.attestations) != 0 {
+			return Goal{}, domainError(ErrorInvalidPlan, "new_work_item_snapshot")
+		}
+		if validWorkItemRef(item.parent) {
+			if parent, existed := goal.items[item.parent]; existed && parent.IsTerminal() {
+				return Goal{}, domainError(ErrorInvalidPlan, "terminal_parent")
+			}
+		}
 	}
 
 	items := make(map[WorkItemRef]WorkItem, len(plan.items))
@@ -232,10 +259,9 @@ func (goal Goal) StartWorkItem(
 	return goal.withUpdatedWorkItem(item), nil
 }
 
-// ReadyWorkItems derives every currently eligible item. It does not choose a
-// cohort: overlapping pending candidates remain visible until one is started
-// through Goal CAS, after which conflicts with that running item are excluded.
-func (goal Goal) ReadyWorkItems() []WorkItem {
+// RunnableWorkItems returns dependency-ready pending work that does not
+// conflict with any running item. It intentionally does not choose a cohort.
+func (goal Goal) RunnableWorkItems() []WorkItem {
 	if goal.state != GoalStateRunning {
 		return nil
 	}
@@ -248,7 +274,7 @@ func (goal Goal) ReadyWorkItems() []WorkItem {
 		}
 	}
 
-	ready := make([]WorkItem, 0)
+	runnable := make([]WorkItem, 0)
 	for _, ref := range goal.itemOrder {
 		item := goal.items[ref]
 		if item.state != WorkItemStatePending || !goal.dependenciesSucceeded(item) {
@@ -257,9 +283,38 @@ func (goal Goal) ReadyWorkItems() []WorkItem {
 		if conflictsWithWriteSets(item.writeSet, runningWriteSets) {
 			continue
 		}
+		runnable = append(runnable, item.clone())
+	}
+	return runnable
+}
+
+// ReadyWorkItems greedily derives one deterministic maximal conflict-free
+// cohort in plan order, accounting for both running and already selected work.
+func (goal Goal) ReadyWorkItems() []WorkItem {
+	runnable := goal.RunnableWorkItems()
+	ready := make([]WorkItem, 0, len(runnable))
+	selectedWriteSets := make([][]WriteScope, 0, len(runnable))
+	for _, item := range runnable {
+		if conflictsWithWriteSets(item.writeSet, selectedWriteSets) {
+			continue
+		}
 		ready = append(ready, item.clone())
+		selectedWriteSets = append(selectedWriteSets, item.writeSet)
 	}
 	return ready
+}
+
+// ChildWorkItems derives contractual children independently from dependency
+// edges. Order is the authoritative plan order.
+func (goal Goal) ChildWorkItems(parent WorkItemRef) []WorkItem {
+	children := make([]WorkItem, 0)
+	for _, ref := range goal.itemOrder {
+		item := goal.items[ref]
+		if item.parent == parent {
+			children = append(children, item.clone())
+		}
+	}
+	return children
 }
 
 func (goal Goal) SucceedWorkItem(
@@ -273,6 +328,12 @@ func (goal Goal) SucceedWorkItem(
 	item, err := goal.workItemForTransition(expectedGoal, ref, at)
 	if err != nil {
 		return Goal{}, err
+	}
+	if err := item.expectRevision(expectedItem); err != nil {
+		return Goal{}, err
+	}
+	if item.state != WorkItemStateRunning {
+		return Goal{}, domainError(ErrorInvalidTransition, "work_item_state")
 	}
 	item, err = item.Succeed(expectedItem, artifacts, attestations, at)
 	if err != nil {
@@ -426,17 +487,12 @@ func (goal Goal) withUpdatedWorkItem(item WorkItem) Goal {
 }
 
 func (goal Goal) workItemReady(ref WorkItemRef) bool {
-	item, exists := goal.items[ref]
-	if !exists || item.state != WorkItemStatePending || !goal.dependenciesSucceeded(item) {
-		return false
-	}
-	for _, runningRef := range goal.itemOrder {
-		running := goal.items[runningRef]
-		if running.state == WorkItemStateRunning && writeSetsOverlap(item.writeSet, running.writeSet) {
-			return false
+	for _, item := range goal.ReadyWorkItems() {
+		if item.ref == ref {
+			return true
 		}
 	}
-	return true
+	return false
 }
 
 func (goal Goal) dependenciesSucceeded(item WorkItem) bool {

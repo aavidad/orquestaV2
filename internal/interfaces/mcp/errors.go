@@ -62,6 +62,7 @@ func publicCode(err error) string {
 		"application.plan_item_key_invalid",
 		"application.plan_item_key_duplicate",
 		"application.plan_dependency_unknown",
+		"application.plan_parent_unknown",
 		"application.query_invalid",
 		"artifact.ref_invalid":
 		return publicInvalidRequest

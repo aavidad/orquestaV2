@@ -54,20 +54,67 @@ func validWriteScopeValue(scope WriteScope) bool {
 	return scope.value != ""
 }
 
-// PhaseInstance is immutable plan metadata. It intentionally has no state or
-// lifecycle; phase progress is derived from its WorkItems.
-type PhaseInstance struct {
-	key PhaseKey
+// PhaseInstanceInput identifies one immutable use of a phase template. Inputs
+// and criteria are opaque references; their schemas and evaluation live behind
+// ports rather than in Goal lifecycle.
+type PhaseInstanceInput struct {
+	Ref           PhaseRef
+	Key           PhaseKey
+	TemplateRef   PhaseTemplateRef
+	InputRefs     []InputRef
+	CriterionRefs []CriterionRef
 }
 
+// PhaseInstance is immutable plan metadata. It intentionally has no state or
+// lifecycle; phase progress is derived from its WorkItems and evidence.
+type PhaseInstance struct {
+	ref           PhaseRef
+	key           PhaseKey
+	templateRef   PhaseTemplateRef
+	inputRefs     []InputRef
+	criterionRefs []CriterionRef
+}
+
+// NewPhaseInstance preserves the minimal V04 constructor. Its deterministic
+// refs make the default explicit without adding phase policy.
 func NewPhaseInstance(key PhaseKey) (PhaseInstance, error) {
 	if !validPhaseKey(key) {
 		return PhaseInstance{}, domainError(ErrorInvalidPlan, "phase_key")
 	}
-	return PhaseInstance{key: key}, nil
+	return NewPhaseInstanceWithMetadata(PhaseInstanceInput{
+		Ref:         PhaseRef{value: "phase-instance:" + key.value},
+		Key:         key,
+		TemplateRef: PhaseTemplateRef{value: "phase-template:" + key.value},
+	})
 }
 
-func (phase PhaseInstance) Key() PhaseKey { return phase.key }
+func NewPhaseInstanceWithMetadata(input PhaseInstanceInput) (PhaseInstance, error) {
+	if !validPhaseRef(input.Ref) {
+		return PhaseInstance{}, domainError(ErrorInvalidRef, "phase_ref")
+	}
+	if !validPhaseKey(input.Key) {
+		return PhaseInstance{}, domainError(ErrorInvalidPlan, "phase_key")
+	}
+	if !validPhaseTemplateRef(input.TemplateRef) {
+		return PhaseInstance{}, domainError(ErrorInvalidRef, "phase_template_ref")
+	}
+	if err := validateUniqueRefs(input.InputRefs, validInputRef, "input_ref"); err != nil {
+		return PhaseInstance{}, err
+	}
+	if err := validateUniqueRefs(input.CriterionRefs, validCriterionRef, "criterion_ref"); err != nil {
+		return PhaseInstance{}, err
+	}
+	return PhaseInstance{
+		ref: input.Ref, key: input.Key, templateRef: input.TemplateRef,
+		inputRefs: cloneRefs(input.InputRefs), criterionRefs: cloneRefs(input.CriterionRefs),
+	}, nil
+}
+
+func (phase PhaseInstance) Ref() PhaseRef                 { return phase.ref }
+func (phase PhaseInstance) Key() PhaseKey                 { return phase.key }
+func (phase PhaseInstance) TemplateRef() PhaseTemplateRef { return phase.templateRef }
+func (phase PhaseInstance) InputRefs() []InputRef         { return cloneRefs(phase.inputRefs) }
+func (phase PhaseInstance) CriterionRefs() []CriterionRef { return cloneRefs(phase.criterionRefs) }
 
 type OutputContractKind string
 
@@ -129,7 +176,7 @@ func (plan Plan) Phases() []PhaseInstance    { return clonePhases(plan.phases) }
 func (plan Plan) WorkItems() []WorkItem      { return cloneWorkItems(plan.items) }
 
 func validatePlan(plan Plan) error {
-	return validatePlanShape(plan, true)
+	return validatePlanShape(plan, false)
 }
 
 func validateRestoredPlan(plan Plan) error {
@@ -148,13 +195,24 @@ func validatePlanShape(plan Plan, requirePendingItems bool) error {
 	}
 
 	phases := make(map[PhaseKey]struct{}, len(plan.phases))
+	phaseRefs := make(map[PhaseRef]struct{}, len(plan.phases))
 	for _, phase := range plan.phases {
-		if !validPhaseKey(phase.key) {
+		if !validPhaseRef(phase.ref) || !validPhaseTemplateRef(phase.templateRef) || !validPhaseKey(phase.key) {
 			return domainError(ErrorInvalidPlan, "phase_key")
+		}
+		if err := validateUniqueRefs(phase.inputRefs, validInputRef, "input_ref"); err != nil {
+			return err
+		}
+		if err := validateUniqueRefs(phase.criterionRefs, validCriterionRef, "criterion_ref"); err != nil {
+			return err
+		}
+		if _, duplicate := phaseRefs[phase.ref]; duplicate {
+			return domainError(ErrorInvalidPlan, "duplicate_phase_ref")
 		}
 		if _, duplicate := phases[phase.key]; duplicate {
 			return domainError(ErrorInvalidPlan, "duplicate_phase")
 		}
+		phaseRefs[phase.ref] = struct{}{}
 		phases[phase.key] = struct{}{}
 	}
 
@@ -183,6 +241,11 @@ func validatePlanShape(plan Plan, requirePendingItems bool) error {
 		if err := validateWorkItemPlanMetadata(item); err != nil {
 			return err
 		}
+		if !requirePendingItems && item.state != WorkItemStatePending {
+			if err := validateRestoredWorkItem(item); err != nil {
+				return err
+			}
+		}
 		byRef[item.ref] = item
 	}
 
@@ -195,6 +258,13 @@ func validatePlanShape(plan Plan, requirePendingItems bool) error {
 			}
 			indegree[item.ref]++
 			dependents[dependency] = append(dependents[dependency], item.ref)
+		}
+		if validWorkItemRef(item.parent) {
+			if _, exists := byRef[item.parent]; !exists {
+				return domainError(ErrorInvalidPlan, "parent_ref")
+			}
+			indegree[item.ref]++
+			dependents[item.parent] = append(dependents[item.parent], item.ref)
 		}
 	}
 
@@ -217,12 +287,33 @@ func validatePlanShape(plan Plan, requirePendingItems bool) error {
 		}
 	}
 	if visited != len(plan.items) {
-		return domainError(ErrorInvalidPlan, "dependency_cycle")
+		return domainError(ErrorInvalidPlan, "dependency_or_parent_cycle")
+	}
+	for _, item := range plan.items {
+		if item.state != WorkItemStatePending && item.state != WorkItemStateSkipped && !dependenciesSucceededIn(item, byRef) {
+			return domainError(ErrorInvalidPlan, "active_dependency_state")
+		}
+		if item.state == WorkItemStatePending && hasFailedDependencyIn(item, byRef) {
+			return domainError(ErrorInvalidPlan, "pending_failed_dependency")
+		}
+	}
+	for leftIndex, left := range plan.items {
+		if left.state != WorkItemStateRunning {
+			continue
+		}
+		for _, right := range plan.items[leftIndex+1:] {
+			if right.state == WorkItemStateRunning && writeSetsOverlap(left.writeSet, right.writeSet) {
+				return domainError(ErrorInvalidPlan, "running_write_set_conflict")
+			}
+		}
 	}
 	return nil
 }
 
 func validateWorkItemPlanMetadata(item WorkItem) error {
+	if validWorkItemRef(item.parent) && item.parent == item.ref {
+		return domainError(ErrorInvalidPlan, "self_parent")
+	}
 	seenDependencies := make(map[WorkItemRef]struct{}, len(item.dependencies))
 	for _, ref := range item.dependencies {
 		if !validWorkItemRef(ref) {
@@ -245,6 +336,15 @@ func validateWorkItemPlanMetadata(item WorkItem) error {
 			return domainError(ErrorInvalidPlan, "duplicate_write_scope")
 		}
 		seenScopes[scope] = struct{}{}
+	}
+	if err := validateUniqueRefs(item.skillRefs, validSkillRef, "skill_ref"); err != nil {
+		return err
+	}
+	if err := validateUniqueRefs(item.toolRefs, validToolRef, "tool_ref"); err != nil {
+		return err
+	}
+	if err := validateUniqueRefs(item.capabilityRefs, validCapabilityRef, "capability_ref"); err != nil {
+		return err
 	}
 	return nil
 }
@@ -291,7 +391,11 @@ func nextPlanGeneration(current PlanGeneration) (PlanGeneration, error) {
 }
 
 func clonePhases(phases []PhaseInstance) []PhaseInstance {
-	return append([]PhaseInstance(nil), phases...)
+	cloned := make([]PhaseInstance, len(phases))
+	for index, phase := range phases {
+		cloned[index] = phase.clone()
+	}
+	return cloned
 }
 
 func cloneWorkItems(items []WorkItem) []WorkItem {
@@ -330,4 +434,64 @@ func writeScopesOverlap(first, second WriteScope) bool {
 
 func scopeSegments(scope WriteScope) []string {
 	return strings.Split(scope.value, "/")
+}
+
+func (phase PhaseInstance) clone() PhaseInstance {
+	phase.inputRefs = cloneRefs(phase.inputRefs)
+	phase.criterionRefs = cloneRefs(phase.criterionRefs)
+	return phase
+}
+
+func equalPhaseInstances(left, right PhaseInstance) bool {
+	return left.ref == right.ref && left.key == right.key && left.templateRef == right.templateRef &&
+		refsEqual(left.inputRefs, right.inputRefs) && refsEqual(left.criterionRefs, right.criterionRefs)
+}
+
+func validateUniqueRefs[T comparable](refs []T, valid func(T) bool, field string) error {
+	seen := make(map[T]struct{}, len(refs))
+	for _, ref := range refs {
+		if !valid(ref) {
+			return domainError(ErrorInvalidRef, field)
+		}
+		if _, duplicate := seen[ref]; duplicate {
+			return domainError(ErrorInvalidPlan, "duplicate_"+field)
+		}
+		seen[ref] = struct{}{}
+	}
+	return nil
+}
+
+func cloneRefs[T any](refs []T) []T {
+	return append([]T(nil), refs...)
+}
+
+func refsEqual[T comparable](left, right []T) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func dependenciesSucceededIn(item WorkItem, items map[WorkItemRef]WorkItem) bool {
+	for _, dependency := range item.dependencies {
+		if items[dependency].state != WorkItemStateSucceeded {
+			return false
+		}
+	}
+	return true
+}
+
+func hasFailedDependencyIn(item WorkItem, items map[WorkItemRef]WorkItem) bool {
+	for _, dependency := range item.dependencies {
+		state := items[dependency].state
+		if state == WorkItemStateFailed || state == WorkItemStateSkipped {
+			return true
+		}
+	}
+	return false
 }

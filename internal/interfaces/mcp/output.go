@@ -54,7 +54,11 @@ type IntentView struct {
 }
 
 type PhaseView struct {
-	PhaseKey string `json:"phase_key"`
+	PhaseRef      string   `json:"phase_ref"`
+	PhaseKey      string   `json:"phase_key"`
+	TemplateRef   string   `json:"template_ref"`
+	InputRefs     []string `json:"input_refs"`
+	CriterionRefs []string `json:"criterion_refs"`
 }
 
 type WorkItemView struct {
@@ -62,8 +66,13 @@ type WorkItemView struct {
 	Objective       string     `json:"objective"`
 	PhaseKey        string     `json:"phase_key"`
 	RoleKey         string     `json:"role_key"`
+	ParentRef       string     `json:"parent_ref,omitempty"`
+	ChildRefs       []string   `json:"child_refs"`
 	DependencyRefs  []string   `json:"dependency_refs"`
 	WriteSet        []string   `json:"write_set"`
+	SkillRefs       []string   `json:"skill_refs"`
+	ToolRefs        []string   `json:"tool_refs"`
+	CapabilityRefs  []string   `json:"capability_refs"`
 	OutputContract  string     `json:"output_contract"`
 	SkipReason      string     `json:"skip_reason,omitempty"`
 	State           string     `json:"state"`
@@ -149,7 +158,16 @@ func goalView(record application.GoalRecord) GoalView {
 	}
 	phases := make([]PhaseView, 0, len(snapshot.Phases))
 	for _, phase := range snapshot.Phases {
-		phases = append(phases, PhaseView{PhaseKey: phase.Key})
+		phases = append(phases, PhaseView{
+			PhaseRef: phase.Ref, PhaseKey: phase.Key, TemplateRef: phase.TemplateRef,
+			InputRefs: nonNilStrings(phase.InputRefs), CriterionRefs: nonNilStrings(phase.CriterionRefs),
+		})
+	}
+	childrenByParent := make(map[string][]string, len(snapshot.WorkItems))
+	for _, item := range snapshot.WorkItems {
+		if item.ParentRef != "" {
+			childrenByParent[item.ParentRef] = append(childrenByParent[item.ParentRef], item.Ref)
+		}
 	}
 	items := make([]WorkItemView, 0, len(snapshot.WorkItems))
 	for _, item := range snapshot.WorkItems {
@@ -158,8 +176,13 @@ func goalView(record application.GoalRecord) GoalView {
 			Objective:       item.Objective,
 			PhaseKey:        item.PhaseKey,
 			RoleKey:         item.RoleKey,
+			ParentRef:       item.ParentRef,
+			ChildRefs:       nonNilStrings(childrenByParent[item.Ref]),
 			DependencyRefs:  nonNilStrings(item.DependencyRefs),
 			WriteSet:        nonNilStrings(item.WriteSet),
+			SkillRefs:       nonNilStrings(item.SkillRefs),
+			ToolRefs:        nonNilStrings(item.ToolRefs),
+			CapabilityRefs:  nonNilStrings(item.CapabilityRefs),
 			OutputContract:  string(item.OutputContract),
 			SkipReason:      string(item.SkipReason),
 			State:           string(item.State),

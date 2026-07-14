@@ -174,20 +174,35 @@ func TestAdapterRejectsExecutionPayloadConflict(t *testing.T) {
 }
 
 func TestLaunchHashAndPromptCarryPlanMetadata(t *testing.T) {
+	if stateSchemaVersion != 3 {
+		t.Fatalf("launch metadata schema version = %d, want explicit V3 cut", stateSchemaVersion)
+	}
 	request := testRequest(t, "plan-metadata", "helper:success", 1024)
 	baseHash := mustRequestHash(t, request)
 	mutations := map[string]func(*ports.AgentLaunchRequest){
 		"spec_hash": func(value *ports.AgentLaunchRequest) {
 			value.SpecHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 		},
-		"phase":  func(value *ports.AgentLaunchRequest) { value.PhaseKey = "phase:review" },
-		"role":   func(value *ports.AgentLaunchRequest) { value.RoleKey = "role:reviewer" },
-		"writes": func(value *ports.AgentLaunchRequest) { value.WriteSet = []string{"internal/other"} },
-		"output": func(value *ports.AgentLaunchRequest) { value.OutputContract = string(goal.OutputContractArtifact) },
+		"phase_ref":      func(value *ports.AgentLaunchRequest) { value.PhaseRef = "phase-instance:review" },
+		"phase":          func(value *ports.AgentLaunchRequest) { value.PhaseKey = "phase:review" },
+		"phase_template": func(value *ports.AgentLaunchRequest) { value.PhaseTemplateRef = "phase-template:review" },
+		"phase_inputs":   func(value *ports.AgentLaunchRequest) { value.PhaseInputRefs = []string{"input:other"} },
+		"phase_criteria": func(value *ports.AgentLaunchRequest) { value.PhaseCriterionRefs = []string{"criterion:other"} },
+		"role":           func(value *ports.AgentLaunchRequest) { value.RoleKey = "role:reviewer" },
+		"skills":         func(value *ports.AgentLaunchRequest) { value.SkillRefs = []string{"skill:review"} },
+		"tools":          func(value *ports.AgentLaunchRequest) { value.ToolRefs = []string{"tool:review"} },
+		"capabilities":   func(value *ports.AgentLaunchRequest) { value.CapabilityRefs = []string{"capability:review"} },
+		"writes":         func(value *ports.AgentLaunchRequest) { value.WriteSet = []string{"internal/other"} },
+		"output":         func(value *ports.AgentLaunchRequest) { value.OutputContract = string(goal.OutputContractArtifact) },
 	}
 	for name, mutate := range mutations {
 		t.Run(name, func(t *testing.T) {
 			changed := request
+			changed.PhaseInputRefs = append([]string(nil), request.PhaseInputRefs...)
+			changed.PhaseCriterionRefs = append([]string(nil), request.PhaseCriterionRefs...)
+			changed.SkillRefs = append([]string(nil), request.SkillRefs...)
+			changed.ToolRefs = append([]string(nil), request.ToolRefs...)
+			changed.CapabilityRefs = append([]string(nil), request.CapabilityRefs...)
 			changed.WriteSet = append([]string(nil), request.WriteSet...)
 			mutate(&changed)
 			if got := mustRequestHash(t, changed); got == baseHash {
@@ -199,7 +214,12 @@ func TestLaunchHashAndPromptCarryPlanMetadata(t *testing.T) {
 	if strings.Contains(prompt, request.SpecHash) {
 		t.Fatal("spec hash leaked into model prompt")
 	}
-	for _, value := range []string{request.PhaseKey, request.RoleKey, request.WriteSet[0], request.OutputContract} {
+	for _, value := range []string{
+		request.PhaseRef, request.PhaseKey, request.PhaseTemplateRef,
+		request.PhaseInputRefs[0], request.PhaseCriterionRefs[0], request.RoleKey,
+		request.SkillRefs[0], request.ToolRefs[0], request.CapabilityRefs[0],
+		request.WriteSet[0], request.OutputContract,
+	} {
 		if !strings.Contains(prompt, value) {
 			t.Fatalf("plan metadata %q omitted from prompt: %q", value, prompt)
 		}
@@ -560,20 +580,27 @@ func testRequest(t *testing.T, suffix, objective string, maxOutput int64) ports.
 	actorRef, _ := goal.NewActorRef("actor:local-owner")
 	projectRef, _ := goal.NewProjectRef("project:default")
 	return ports.AgentLaunchRequest{
-		ExecutionRef:      executionRef,
-		GoalRef:           goalRef,
-		WorkItemRef:       workItemRef,
-		SpecHash:          "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-		ActorRef:          actorRef,
-		ProjectRef:        projectRef,
-		Objective:         objective,
-		PhaseKey:          "phase:build",
-		RoleKey:           "role:worker",
-		WriteSet:          []string{"internal/adapters/agent/codex"},
-		OutputContract:    string(goal.OutputContractEvidenceBundle),
-		ArtifactMediaType: "text/markdown",
-		IdempotencyKey:    "launch:" + suffix,
-		MaxOutputBytes:    maxOutput,
+		ExecutionRef:       executionRef,
+		GoalRef:            goalRef,
+		WorkItemRef:        workItemRef,
+		SpecHash:           "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		ActorRef:           actorRef,
+		ProjectRef:         projectRef,
+		Objective:          objective,
+		PhaseRef:           "phase-instance:build",
+		PhaseKey:           "phase:build",
+		PhaseTemplateRef:   "phase-template:program",
+		PhaseInputRefs:     []string{"input:app-spec"},
+		PhaseCriterionRefs: []string{"criterion:tests-green"},
+		RoleKey:            "role:worker",
+		SkillRefs:          []string{"skill:go"},
+		ToolRefs:           []string{"tool:go-test"},
+		CapabilityRefs:     []string{"capability:patch"},
+		WriteSet:           []string{"internal/adapters/agent/codex"},
+		OutputContract:     string(goal.OutputContractEvidenceBundle),
+		ArtifactMediaType:  "text/markdown",
+		IdempotencyKey:     "launch:" + suffix,
+		MaxOutputBytes:     maxOutput,
 	}
 }
 

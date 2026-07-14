@@ -14,8 +14,19 @@ import (
 // PlanSpec is an application input contract. Keys are local to the request;
 // durable opaque WorkItem refs are generated inside the application.
 type PlanSpec struct {
-	Phases    []string
+	Phases    []PhaseSpec
 	WorkItems []WorkItemSpec
+}
+
+// PhaseSpec is transport-neutral immutable metadata. References point to
+// definitions owned outside the Goal aggregate; application only validates
+// and carries them into the authoritative plan.
+type PhaseSpec struct {
+	Ref           string
+	Key           string
+	TemplateRef   string
+	InputRefs     []string
+	CriterionRefs []string
 }
 
 type WorkItemSpec struct {
@@ -23,8 +34,12 @@ type WorkItemSpec struct {
 	Objective      string
 	Phase          string
 	Role           string
+	Parent         string
 	Dependencies   []string
 	WriteSet       []string
+	SkillRefs      []string
+	ToolRefs       []string
+	CapabilityRefs []string
 	OutputContract goal.OutputContractKind
 }
 
@@ -37,7 +52,10 @@ func (orchestrator *Orchestrator) compilePlan(
 	spec := request.Plan
 	if spec == nil {
 		spec = &PlanSpec{
-			Phases: []string{goal.DefaultPhaseKey().String()},
+			Phases: []PhaseSpec{{
+				Ref: "phase-instance:" + goalRef.String() + ":default",
+				Key: goal.DefaultPhaseKey().String(), TemplateRef: "phase-template:default",
+			}},
 			WorkItems: []WorkItemSpec{{
 				Key: "work:default", Objective: normalizedObjective(request.Statement, request.NormalizedObjective),
 				Phase: goal.DefaultPhaseKey().String(), Role: goal.DefaultRoleKey().String(),
@@ -50,12 +68,31 @@ func (orchestrator *Orchestrator) compilePlan(
 	}
 
 	phases := make([]goal.PhaseInstance, 0, len(spec.Phases))
-	for _, raw := range spec.Phases {
-		key, err := goal.NewPhaseKey(raw)
+	for _, phaseSpec := range spec.Phases {
+		ref, err := goal.NewPhaseRef(phaseSpec.Ref)
 		if err != nil {
 			return goal.Plan{}, err
 		}
-		phase, err := goal.NewPhaseInstance(key)
+		key, err := goal.NewPhaseKey(phaseSpec.Key)
+		if err != nil {
+			return goal.Plan{}, err
+		}
+		templateRef, err := goal.NewPhaseTemplateRef(phaseSpec.TemplateRef)
+		if err != nil {
+			return goal.Plan{}, err
+		}
+		inputRefs, err := parsePlanRefs(phaseSpec.InputRefs, goal.NewInputRef)
+		if err != nil {
+			return goal.Plan{}, err
+		}
+		criterionRefs, err := parsePlanRefs(phaseSpec.CriterionRefs, goal.NewCriterionRef)
+		if err != nil {
+			return goal.Plan{}, err
+		}
+		phase, err := goal.NewPhaseInstanceWithMetadata(goal.PhaseInstanceInput{
+			Ref: ref, Key: key, TemplateRef: templateRef,
+			InputRefs: inputRefs, CriterionRefs: criterionRefs,
+		})
 		if err != nil {
 			return goal.Plan{}, err
 		}
@@ -99,6 +136,14 @@ func (orchestrator *Orchestrator) compilePlan(
 			}
 			dependencies = append(dependencies, ref)
 		}
+		var parent goal.WorkItemRef
+		if itemSpec.Parent != "" {
+			var ok bool
+			parent, ok = refs[itemSpec.Parent]
+			if !ok {
+				return goal.Plan{}, errors.New("application.plan_parent_unknown")
+			}
+		}
 		writeSet := make([]goal.WriteScope, 0, len(itemSpec.WriteSet))
 		for _, raw := range itemSpec.WriteSet {
 			scope, err := goal.NewWriteScope(raw)
@@ -107,11 +152,24 @@ func (orchestrator *Orchestrator) compilePlan(
 			}
 			writeSet = append(writeSet, scope)
 		}
+		skillRefs, err := parsePlanRefs(itemSpec.SkillRefs, goal.NewSkillRef)
+		if err != nil {
+			return goal.Plan{}, err
+		}
+		toolRefs, err := parsePlanRefs(itemSpec.ToolRefs, goal.NewToolRef)
+		if err != nil {
+			return goal.Plan{}, err
+		}
+		capabilityRefs, err := parsePlanRefs(itemSpec.CapabilityRefs, goal.NewCapabilityRef)
+		if err != nil {
+			return goal.Plan{}, err
+		}
 		item, err := goal.NewWorkItem(goal.NewWorkItemInput{
 			Ref: refs[itemSpec.Key], Goal: goalRef, Actor: request.ActorRef,
 			Project: request.ProjectRef, Objective: itemSpec.Objective, CreatedAt: at,
-			Phase: phaseKey, Role: roleKey, Dependencies: dependencies,
-			WriteSet: writeSet, OutputContract: contract,
+			Phase: phaseKey, Role: roleKey, Parent: parent, Dependencies: dependencies,
+			WriteSet: writeSet, SkillRefs: skillRefs, ToolRefs: toolRefs,
+			CapabilityRefs: capabilityRefs, OutputContract: contract,
 		})
 		if err != nil {
 			return goal.Plan{}, err
@@ -119,6 +177,18 @@ func (orchestrator *Orchestrator) compilePlan(
 		items = append(items, item)
 	}
 	return goal.NewPlan(goal.PlanInput{Generation: 1, Phases: phases, WorkItems: items})
+}
+
+func parsePlanRefs[T any](values []string, parse func(string) (T, error)) ([]T, error) {
+	refs := make([]T, 0, len(values))
+	for _, value := range values {
+		ref, err := parse(value)
+		if err != nil {
+			return nil, err
+		}
+		refs = append(refs, ref)
+	}
+	return refs, nil
 }
 
 func (orchestrator *Orchestrator) scheduleReady(
@@ -175,7 +245,12 @@ func writePlanFingerprint(digest hash.Hash, spec *PlanSpec) {
 	writeFingerprintField(digest, "phases")
 	writeFingerprintField(digest, strconv.Itoa(len(spec.Phases)))
 	for _, phase := range spec.Phases {
-		writeFingerprintField(digest, phase)
+		writeFingerprintField(digest, "phase")
+		writeFingerprintField(digest, phase.Ref)
+		writeFingerprintField(digest, phase.Key)
+		writeFingerprintField(digest, phase.TemplateRef)
+		writeFingerprintStrings(digest, "inputs", phase.InputRefs)
+		writeFingerprintStrings(digest, "criteria", phase.CriterionRefs)
 	}
 	writeFingerprintField(digest, "work_items")
 	writeFingerprintField(digest, strconv.Itoa(len(spec.WorkItems)))
@@ -185,16 +260,20 @@ func writePlanFingerprint(digest hash.Hash, spec *PlanSpec) {
 		writeFingerprintField(digest, item.Objective)
 		writeFingerprintField(digest, item.Phase)
 		writeFingerprintField(digest, item.Role)
+		writeFingerprintField(digest, item.Parent)
 		writeFingerprintField(digest, string(item.OutputContract))
-		writeFingerprintField(digest, "dependencies")
-		writeFingerprintField(digest, strconv.Itoa(len(item.Dependencies)))
-		for _, dependency := range item.Dependencies {
-			writeFingerprintField(digest, dependency)
-		}
-		writeFingerprintField(digest, "write_set")
-		writeFingerprintField(digest, strconv.Itoa(len(item.WriteSet)))
-		for _, scope := range item.WriteSet {
-			writeFingerprintField(digest, scope)
-		}
+		writeFingerprintStrings(digest, "dependencies", item.Dependencies)
+		writeFingerprintStrings(digest, "write_set", item.WriteSet)
+		writeFingerprintStrings(digest, "skills", item.SkillRefs)
+		writeFingerprintStrings(digest, "tools", item.ToolRefs)
+		writeFingerprintStrings(digest, "capabilities", item.CapabilityRefs)
+	}
+}
+
+func writeFingerprintStrings(digest hash.Hash, label string, values []string) {
+	writeFingerprintField(digest, label)
+	writeFingerprintField(digest, strconv.Itoa(len(values)))
+	for _, value := range values {
+		writeFingerprintField(digest, value)
 	}
 }

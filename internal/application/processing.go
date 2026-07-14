@@ -63,6 +63,10 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 	if !ok || !found {
 		return &StateError{Code: StateConflict}
 	}
+	phase, phaseFound := phaseForWorkItem(record.Goal, item)
+	if !phaseFound {
+		return &StateError{Code: StateConflict}
+	}
 	if execution.State == ExecutionQueued {
 		transitionAt := lifecycleTime(orchestrator.clock.Now(), record.Goal, item)
 		aggregate, startErr := record.Goal.StartWorkItem(
@@ -98,8 +102,13 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 		ExecutionRef: execution.Ref, GoalRef: record.Goal.Ref(),
 		WorkItemRef: item.Ref(), SpecHash: record.Goal.SpecHash(), ActorRef: record.Goal.Actor(),
 		ProjectRef: record.Goal.Project(), Objective: item.Objective(),
-		PhaseKey: item.Phase().String(), RoleKey: item.Role().String(),
-		WriteSet: workItemWriteSet(item), OutputContract: string(item.OutputContract().Kind()),
+		PhaseRef: phase.Ref().String(), PhaseKey: item.Phase().String(),
+		PhaseTemplateRef: phase.TemplateRef().String(),
+		PhaseInputRefs:   workItemRefs(phase.InputRefs()), PhaseCriterionRefs: workItemRefs(phase.CriterionRefs()),
+		RoleKey:   item.Role().String(),
+		SkillRefs: workItemRefs(item.SkillRefs()), ToolRefs: workItemRefs(item.ToolRefs()),
+		CapabilityRefs: workItemRefs(item.CapabilityRefs()),
+		WriteSet:       workItemWriteSet(item), OutputContract: string(item.OutputContract().Kind()),
 		ArtifactMediaType: execution.ArtifactMediaType,
 		IdempotencyKey:    execution.IdempotencyKey,
 		MaxOutputBytes:    execution.MaxOutputBytes,
@@ -381,6 +390,26 @@ func workItemWriteSet(item goal.WorkItem) []string {
 	result := make([]string, 0, len(scopes))
 	for _, scope := range scopes {
 		result = append(result, scope.String())
+	}
+	return result
+}
+
+func phaseForWorkItem(aggregate goal.Goal, item goal.WorkItem) (goal.PhaseInstance, bool) {
+	for _, phase := range aggregate.Phases() {
+		if phase.Key() == item.Phase() {
+			return phase, true
+		}
+	}
+	return goal.PhaseInstance{}, false
+}
+
+func workItemRefs[T interface{ String() string }](refs []T) []string {
+	if len(refs) == 0 {
+		return nil
+	}
+	result := make([]string, len(refs))
+	for index, ref := range refs {
+		result[index] = ref.String()
 	}
 	return result
 }

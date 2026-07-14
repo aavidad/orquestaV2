@@ -27,7 +27,10 @@ import (
 func TestMCPCreatesAndExecutesDiamondDAGAtomically(t *testing.T) {
 	harness := newDAGHarness(t, nil)
 	created := harness.create(t, "request:mcp-diamond", "execute diamond", map[string]any{
-		"phases": []any{"phase:build", "phase:review"},
+		"phases": []any{
+			planPhase("phase-instance:build", "phase:build", "phase-template:program", []string{"input:app-spec"}, []string{"criterion:build-green"}),
+			planPhase("phase-instance:review", "phase:review", "phase-template:review", []string{"input:build-artifacts"}, []string{"criterion:review-accepted"}),
+		},
 		"work_items": []any{
 			planItem("a", "root", "phase:build", nil, []string{"internal/root"}),
 			planItem("b", "left", "phase:review", []string{"a"}, []string{"internal/left"}),
@@ -81,19 +84,149 @@ func TestMCPRejectsMalformedTypedPlanAsInvalidRequest(t *testing.T) {
 	}
 }
 
+func TestMCPAllowsOmittedOptionalPhaseAndExecutionRefs(t *testing.T) {
+	harness := newDAGHarness(t, nil)
+	created := harness.create(t, "request:mcp-v05-optional-refs", "accept omitted optional refs", map[string]any{
+		"phases": []any{planPhase("phase-instance:work", "phase:work", "phase-template:program", nil, nil)},
+		"work_items": []any{
+			planItem("work", "work without optional refs", "phase:work", nil, nil),
+		},
+	})
+	if len(created.WorkItems) != 1 || len(created.Executions) != 1 {
+		t.Fatalf("optional execution refs changed plan admission: %+v", created)
+	}
+}
+
+func TestMCPRejectsUnknownContractualParentAsInvalidRequest(t *testing.T) {
+	harness := newDAGHarness(t, nil)
+	item := planItem("child", "invalid child", "phase:work", nil, nil)
+	item["parent"] = "missing"
+	result := callMCPTool(t, context.Background(), harness.clientSession, mcpiface.ToolGoalsCreate, map[string]any{
+		"request_ref": "request:mcp-v05-parent-invalid", "statement": "reject unknown parent", "confirm": true,
+		"plan": map[string]any{
+			"phases":     []any{planPhase("phase-instance:work", "phase:work", "phase-template:program", nil, nil)},
+			"work_items": []any{item},
+		},
+	})
+	var output mcpiface.CreateGoalOutput
+	decodeMCPOutput(t, result, &output)
+	if !result.IsError || output.Error == nil || output.Error.Code != "invalid_request" {
+		t.Fatalf("unknown parent output=%+v result=%+v", output, result)
+	}
+}
+
+func TestApplicationSQLiteCreatesMultiItemMaximalCohort(t *testing.T) {
+	harness := newDAGHarness(t, nil)
+	actor, _ := goal.NewActorRef("actor:local")
+	project, _ := goal.NewProjectRef("project:local")
+	result, err := harness.orchestrator.Submit(context.Background(), application.SubmitRequest{
+		RequestRef: "request:application-v05-multi", ActorRef: actor, ProjectRef: project,
+		Statement: "schedule maximal cohort", Confirm: true,
+		Plan: &application.PlanSpec{
+			Phases: []application.PhaseSpec{{
+				Ref: "phase-instance:work", Key: "phase:work", TemplateRef: "phase-template:program",
+			}},
+			WorkItems: []application.WorkItemSpec{
+				{Key: "a", Objective: "writer a", Phase: "phase:work", Role: "role:worker", WriteSet: []string{"internal/shared"}, OutputContract: goal.OutputContractEvidenceBundle},
+				{Key: "b", Objective: "writer b", Phase: "phase:work", Role: "role:worker", WriteSet: []string{"internal/shared/file.go"}, OutputContract: goal.OutputContractEvidenceBundle},
+				{Key: "c", Objective: "writer c", Phase: "phase:work", Role: "role:worker", WriteSet: []string{"docs/free.md"}, OutputContract: goal.OutputContractEvidenceBundle},
+			},
+		},
+	})
+	if err != nil {
+		var stateErr *application.StateError
+		if errors.As(err, &stateErr) {
+			t.Fatalf("submit multi-item state=%s cause=%v", stateErr.Code, stateErr.Cause)
+		}
+		t.Fatalf("submit multi-item: %T %v", err, err)
+	}
+	if len(result.Record.Executions) != 2 {
+		t.Fatalf("scheduled executions = %d, want deterministic maximal cohort of 2", len(result.Record.Executions))
+	}
+}
+
+func TestMCPRoundTripsPhaseMetadataAndExecutionRequirementsToAgent(t *testing.T) {
+	harness := newDAGHarness(t, nil)
+	item := planItem("research", "research exact sources", "phase:research", nil, []string{"docs/research"})
+	item["skill_refs"] = []string{"skill:web-research"}
+	item["tool_refs"] = []string{"tool:web-search"}
+	item["capability_refs"] = []string{"capability:cited-synthesis"}
+	created := harness.create(t, "request:mcp-v05-metadata", "preserve phase and work requirements", map[string]any{
+		"phases": []any{planPhase(
+			"phase-instance:research", "phase:research", "phase-template:research-web",
+			[]string{"input:app-spec"}, []string{"criterion:sources-cited"},
+		)},
+		"work_items": []any{item},
+	})
+
+	stored := harness.get(t, created.GoalRef)
+	if len(stored.Phases) != 1 || stored.Phases[0].PhaseRef != "phase-instance:research" ||
+		stored.Phases[0].TemplateRef != "phase-template:research-web" ||
+		!reflect.DeepEqual(stored.Phases[0].InputRefs, []string{"input:app-spec"}) ||
+		!reflect.DeepEqual(stored.Phases[0].CriterionRefs, []string{"criterion:sources-cited"}) {
+		t.Fatalf("phase metadata did not round trip through MCP/SQLite: %+v", stored.Phases)
+	}
+	if len(stored.WorkItems) != 1 || !reflect.DeepEqual(stored.WorkItems[0].SkillRefs, []string{"skill:web-research"}) ||
+		!reflect.DeepEqual(stored.WorkItems[0].ToolRefs, []string{"tool:web-search"}) ||
+		!reflect.DeepEqual(stored.WorkItems[0].CapabilityRefs, []string{"capability:cited-synthesis"}) {
+		t.Fatalf("work requirements did not round trip through MCP/SQLite: %+v", stored.WorkItems)
+	}
+
+	harness.process(t, 1)
+	request, ok := harness.agent.requestForObjective("research exact sources")
+	if !ok || request.PhaseRef != "phase-instance:research" || request.PhaseKey != "phase:research" ||
+		request.PhaseTemplateRef != "phase-template:research-web" ||
+		!reflect.DeepEqual(request.PhaseInputRefs, []string{"input:app-spec"}) ||
+		!reflect.DeepEqual(request.PhaseCriterionRefs, []string{"criterion:sources-cited"}) ||
+		!reflect.DeepEqual(request.SkillRefs, []string{"skill:web-research"}) ||
+		!reflect.DeepEqual(request.ToolRefs, []string{"tool:web-search"}) ||
+		!reflect.DeepEqual(request.CapabilityRefs, []string{"capability:cited-synthesis"}) {
+		t.Fatalf("execution requirements did not reach provider port: found=%v request=%+v", ok, request)
+	}
+}
+
+func TestMCPRoundTripsContractualParentChildRefs(t *testing.T) {
+	harness := newDAGHarness(t, nil)
+	parent := planItem("parent", "coordinate", "phase:work", nil, nil)
+	child := planItem("child", "implement", "phase:work", nil, []string{"internal/child"})
+	child["parent"] = "parent"
+	created := harness.create(t, "request:mcp-v05-parent-child", "preserve recursion lineage", map[string]any{
+		"phases":     []any{planPhase("phase-instance:work", "phase:work", "phase-template:program", nil, nil)},
+		"work_items": []any{parent, child},
+	})
+	stored := harness.get(t, created.GoalRef)
+	if len(stored.WorkItems) != 2 {
+		t.Fatalf("parent/child work items = %+v", stored.WorkItems)
+	}
+	byObjective := make(map[string]mcpiface.WorkItemView, len(stored.WorkItems))
+	for _, workItem := range stored.WorkItems {
+		byObjective[workItem.Objective] = workItem
+	}
+	parentView, childView := byObjective["coordinate"], byObjective["implement"]
+	if childView.ParentRef == "" || childView.ParentRef != parentView.WorkItemRef ||
+		!reflect.DeepEqual(parentView.ChildRefs, []string{childView.WorkItemRef}) || len(childView.ChildRefs) != 0 {
+		t.Fatalf("contractual lineage did not round trip: parent=%+v child=%+v", parentView, childView)
+	}
+	harness.process(t, 4)
+	closed := harness.get(t, created.GoalRef)
+	if closed.State != string(goal.GoalStateSucceeded) || len(closed.Artifacts) != 2 || len(closed.Attestations) != 2 {
+		t.Fatalf("static parent/child DAG did not close safely: %+v", closed)
+	}
+}
+
 func TestSchedulerSerializesOverlappingRootsBeforeProvider(t *testing.T) {
 	harness := newDAGHarness(t, nil)
 	created := harness.create(t, "request:mcp-overlap", "serialize conflicting writers", map[string]any{
-		"phases": []any{"phase:work"},
+		"phases": []any{planPhase("phase-instance:work", "phase:work", "phase-template:program", nil, nil)},
 		"work_items": []any{
 			planItem("a", "writer parent", "phase:work", nil, []string{"internal/shared"}),
 			planItem("b", "writer child", "phase:work", nil, []string{"internal/shared/file.go"}),
 		},
 	})
-	if len(created.Executions) != 2 {
+	if len(created.Executions) != 1 {
 		t.Fatalf("overlap roots not initially scheduled: %+v", created)
 	}
-	harness.process(t, 2)
+	harness.process(t, 1)
 	if harness.agent.launchCount() != 1 || harness.agent.concurrent() != 1 {
 		t.Fatalf("conflicting root reached provider: launches=%d concurrent=%d", harness.agent.launchCount(), harness.agent.concurrent())
 	}
@@ -109,7 +242,7 @@ func TestSchedulerSerializesOverlappingRootsBeforeProvider(t *testing.T) {
 func TestFailedRootSkipsDescendantsButIndependentWorkFinishesBeforeGoal(t *testing.T) {
 	harness := newDAGHarness(t, map[string]bool{"fail root": true})
 	created := harness.create(t, "request:mcp-failure-dag", "continue independent work", map[string]any{
-		"phases": []any{"phase:work"},
+		"phases": []any{planPhase("phase-instance:work", "phase:work", "phase-template:program", nil, nil)},
 		"work_items": []any{
 			planItem("a", "fail root", "phase:work", nil, []string{"internal/fail"}),
 			planItem("b", "child", "phase:work", []string{"a"}, []string{"internal/child"}),
@@ -144,6 +277,19 @@ func planItem(key, objective, phase string, dependencies, writeSet []string) map
 		"dependencies": dependencies, "write_set": writeSet,
 		"output_contract": string(goal.OutputContractEvidenceBundle),
 	}
+}
+
+func planPhase(ref, key, templateRef string, inputRefs, criterionRefs []string) map[string]any {
+	result := map[string]any{
+		"ref": ref, "key": key, "template_ref": templateRef,
+	}
+	if inputRefs != nil {
+		result["input_refs"] = inputRefs
+	}
+	if criterionRefs != nil {
+		result["criterion_refs"] = criterionRefs
+	}
+	return result
 }
 
 func workStates(items []mcpiface.WorkItemView) map[string]string {
@@ -378,6 +524,17 @@ func (agent *dagAgent) concurrent() int {
 	agent.mu.Lock()
 	defer agent.mu.Unlock()
 	return agent.maxConcurrent
+}
+
+func (agent *dagAgent) requestForObjective(objective string) (ports.AgentLaunchRequest, bool) {
+	agent.mu.Lock()
+	defer agent.mu.Unlock()
+	for _, request := range agent.requests {
+		if request.Objective == objective {
+			return request, true
+		}
+	}
+	return ports.AgentLaunchRequest{}, false
 }
 
 type dagArtifacts struct {

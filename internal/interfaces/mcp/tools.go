@@ -29,8 +29,16 @@ type CreateGoalInput struct {
 }
 
 type PlanInput struct {
-	Phases    []string        `json:"phases"`
+	Phases    []PhaseInput    `json:"phases"`
 	WorkItems []WorkItemInput `json:"work_items"`
+}
+
+type PhaseInput struct {
+	Ref           string   `json:"ref"`
+	Key           string   `json:"key"`
+	TemplateRef   string   `json:"template_ref"`
+	InputRefs     []string `json:"input_refs,omitempty"`
+	CriterionRefs []string `json:"criterion_refs,omitempty"`
 }
 
 type WorkItemInput struct {
@@ -38,8 +46,12 @@ type WorkItemInput struct {
 	Objective      string   `json:"objective"`
 	Phase          string   `json:"phase"`
 	Role           string   `json:"role"`
+	Parent         string   `json:"parent,omitempty"`
 	Dependencies   []string `json:"dependencies"`
 	WriteSet       []string `json:"write_set"`
+	SkillRefs      []string `json:"skill_refs,omitempty"`
+	ToolRefs       []string `json:"tool_refs,omitempty"`
+	CapabilityRefs []string `json:"capability_refs,omitempty"`
 	OutputContract string   `json:"output_contract"`
 }
 
@@ -222,13 +234,23 @@ func applicationPlan(input *PlanInput) *application.PlanSpec {
 	if input == nil {
 		return nil
 	}
-	result := &application.PlanSpec{Phases: append([]string(nil), input.Phases...)}
+	result := &application.PlanSpec{Phases: make([]application.PhaseSpec, 0, len(input.Phases))}
+	for _, phase := range input.Phases {
+		result.Phases = append(result.Phases, application.PhaseSpec{
+			Ref: phase.Ref, Key: phase.Key, TemplateRef: phase.TemplateRef,
+			InputRefs:     append([]string(nil), phase.InputRefs...),
+			CriterionRefs: append([]string(nil), phase.CriterionRefs...),
+		})
+	}
 	result.WorkItems = make([]application.WorkItemSpec, 0, len(input.WorkItems))
 	for _, item := range input.WorkItems {
 		result.WorkItems = append(result.WorkItems, application.WorkItemSpec{
-			Key: item.Key, Objective: item.Objective, Phase: item.Phase, Role: item.Role,
+			Key: item.Key, Objective: item.Objective, Phase: item.Phase, Role: item.Role, Parent: item.Parent,
 			Dependencies:   append([]string(nil), item.Dependencies...),
 			WriteSet:       append([]string(nil), item.WriteSet...),
+			SkillRefs:      append([]string(nil), item.SkillRefs...),
+			ToolRefs:       append([]string(nil), item.ToolRefs...),
+			CapabilityRefs: append([]string(nil), item.CapabilityRefs...),
 			OutputContract: goal.OutputContractKind(item.OutputContract),
 		})
 	}

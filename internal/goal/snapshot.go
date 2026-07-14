@@ -2,7 +2,7 @@ package goal
 
 import "time"
 
-const GoalSnapshotSchemaVersion uint32 = 2
+const GoalSnapshotSchemaVersion uint32 = 3
 
 // IntentManifestSnapshot is a persistence-neutral representation. Primitive
 // ref values keep adapters independent from domain internals.
@@ -31,7 +31,11 @@ type AppSpecSnapshot struct {
 
 // PhaseInstanceSnapshot contains immutable phase metadata only.
 type PhaseInstanceSnapshot struct {
-	Key string
+	Ref           string
+	Key           string
+	TemplateRef   string
+	InputRefs     []string
+	CriterionRefs []string
 }
 
 // WorkItemSnapshot is the complete immutable state required to rehydrate a
@@ -44,8 +48,12 @@ type WorkItemSnapshot struct {
 	Objective       string
 	PhaseKey        string
 	RoleKey         string
+	ParentRef       string
 	DependencyRefs  []string
 	WriteSet        []string
+	SkillRefs       []string
+	ToolRefs        []string
+	CapabilityRefs  []string
 	OutputContract  OutputContractKind
 	SkipReason      WorkItemSkipReason
 	State           WorkItemState
@@ -101,7 +109,10 @@ func (goal Goal) Snapshot() GoalSnapshot {
 	if len(goal.phases) > 0 {
 		phases = make([]PhaseInstanceSnapshot, len(goal.phases))
 		for index, phase := range goal.phases {
-			phases[index] = PhaseInstanceSnapshot{Key: phase.key.String()}
+			phases[index] = PhaseInstanceSnapshot{
+				Ref: phase.ref.String(), Key: phase.key.String(), TemplateRef: phase.templateRef.String(),
+				InputRefs: stringsFromRefs(phase.inputRefs), CriterionRefs: stringsFromRefs(phase.criterionRefs),
+			}
 		}
 	}
 	var items []WorkItemSnapshot
@@ -165,8 +176,12 @@ func snapshotWorkItem(item WorkItem) WorkItemSnapshot {
 		Objective:       item.objective,
 		PhaseKey:        item.phase.String(),
 		RoleKey:         item.role.String(),
+		ParentRef:       item.parent.String(),
 		DependencyRefs:  dependencies,
 		WriteSet:        writeSet,
+		SkillRefs:       stringsFromRefs(item.skillRefs),
+		ToolRefs:        stringsFromRefs(item.toolRefs),
+		CapabilityRefs:  stringsFromRefs(item.capabilityRefs),
 		OutputContract:  item.outputContract.kind,
 		SkipReason:      item.skipReason,
 		State:           item.state,
@@ -178,4 +193,15 @@ func snapshotWorkItem(item WorkItem) WorkItemSnapshot {
 		ArtifactRefs:    artifacts,
 		AttestationRefs: attestations,
 	}
+}
+
+func stringsFromRefs[T interface{ String() string }](refs []T) []string {
+	if len(refs) == 0 {
+		return nil
+	}
+	values := make([]string, len(refs))
+	for index, ref := range refs {
+		values[index] = ref.String()
+	}
+	return values
 }

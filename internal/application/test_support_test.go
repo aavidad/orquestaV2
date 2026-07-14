@@ -411,6 +411,7 @@ type scriptedAgent struct {
 	mu                               sync.Mutex
 	now                              func() time.Time
 	launches                         int
+	launchRequests                   []ports.AgentLaunchRequest
 	launchSpecHashes                 map[goal.ExecutionRef]string
 	receiptSpecHashOverride          string
 	preserveEmptyReceiptSpecHash     bool
@@ -428,6 +429,7 @@ func (agent *scriptedAgent) Capabilities(context.Context) (ports.AgentCapabiliti
 func (agent *scriptedAgent) Launch(_ context.Context, request ports.AgentLaunchRequest) (ports.AgentLaunchReceipt, error) {
 	agent.mu.Lock()
 	agent.launches++
+	agent.launchRequests = append(agent.launchRequests, request)
 	if agent.launchSpecHashes == nil {
 		agent.launchSpecHashes = make(map[goal.ExecutionRef]string)
 	}

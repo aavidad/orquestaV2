@@ -70,6 +70,7 @@ func applyMigrations(ctx context.Context, database *sql.DB) error {
 	if current > migrations[len(migrations)-1].version {
 		return invalid(fmt.Errorf("sqlite.schema_newer_than_binary"))
 	}
+	migrated := false
 	for _, migration := range migrations {
 		if migration.version <= current {
 			continue
@@ -87,11 +88,6 @@ func applyMigrations(ctx context.Context, database *sql.DB) error {
 				return mapDatabaseError(err)
 			}
 		}
-		if migration.backfill {
-			if err := validateMigratedGoalRecords(ctx, transaction); err != nil {
-				return invalid(fmt.Errorf("sqlite.migrated_goal_invalid: %w", err))
-			}
-		}
 		if _, err := transaction.ExecContext(
 			ctx,
 			"INSERT INTO schema_migrations(version, name, checksum) VALUES (?, ?, ?)",
@@ -105,6 +101,15 @@ func applyMigrations(ctx context.Context, database *sql.DB) error {
 			return mapDatabaseError(err)
 		}
 		current = migration.version
+		migrated = true
+	}
+	// Validate only after the complete schema chain. Domain snapshot readers
+	// intentionally understand the latest schema, not transient migration
+	// layouts such as V3 before phase contracts are added by V4.
+	if migrated {
+		if err := validateMigratedGoalRecords(ctx, transaction); err != nil {
+			return invalid(fmt.Errorf("sqlite.migrated_goal_invalid: %w", err))
+		}
 	}
 	if err := verifyAppliedMigrations(ctx, transaction, migrations, current); err != nil {
 		return err

@@ -577,15 +577,18 @@
     {
       "id": "AC-V05-GOAL-DAG-PHASES",
       "vertical": "goal_dag_phases",
-      "status": "planned",
-      "test_ref": "planned:acceptance/v05_goal_dag_phases_test.go",
-      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
-      "fixture": "planned:fixtures/v05_goal_dag_phases",
+      "status": "executable",
+      "test_ref": "acceptance/v05_goal_dag_phases_test.go",
+      "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapV05ScopeAndExecutableContract|TestAcceptanceV05GoalDAGPhases)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/interfaces/mcp ./internal/bootstrap'",
+      "fixture": "acceptance/fixtures/v05_goal_dag_phases.json",
+      "receipt": "product/evidence/v05_goal_dag_phases.json",
       "assertions": [
-        "unsatisfied_dependency_started equals zero",
-        "ready roots are maximally parallel subject to write-set conflicts",
-        "PhaseInstance never writes lifecycle",
-        "contractual children cannot disappear"
+        "unsatisfied dependencies never become active through live transitions or restore",
+        "ready roots form a deterministic maximal conflict-free cohort",
+        "PhaseInstance carries immutable identity template input and criteria metadata without lifecycle",
+        "append-only plan generations and parent child lineage primitives cannot erase prior work",
+        "parent child lineage is explicit and causally restorable without claiming operational recursion",
+        "work requirements preserve role skills tools and capabilities without provider policy"
       ]
     },
     {
@@ -598,8 +601,10 @@
       "assertions": [
         "snapshot event and outbox commit atomically",
         "at most one active fenced claim exists per WorkItem generation",
+        "agent executions are replaceable attempts and provider failure remains retryable while policy permits",
         "crashed claims are reclaimed once",
-        "stale fencing tokens are rejected"
+        "stale fencing tokens are rejected",
+        "restart preserves terminal work without duplicate execution"
       ]
     },
     {
@@ -689,7 +694,8 @@
       "assertions": [
         "claim lease delivery consume ACK and replay are causal",
         "wrong recipient cannot ACK",
-        "crash before ACK permits safe reclaim"
+        "crash before ACK permits safe reclaim",
+        "a contractual parent observes ACK delivery or explicit blockage for every child before closure"
       ]
     },
     {
@@ -1058,8 +1064,12 @@
       "acceptance_contracts": [
         "AC-V05-GOAL-DAG-PHASES"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v05_goal_dag_phases_test.go",
+        "acceptance/fixtures/v05_goal_dag_phases.json",
+        "product/evidence/v05_goal_dag_phases.json"
+      ],
       "supersedes": []
     },
     {
@@ -1070,12 +1080,13 @@
       "kind": "governance",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "goal_dag_phases",
+      "owner_context": "atomic_state_outbox",
       "dependencies": [
-        "intent_appspec"
+        "intent_appspec",
+        "goal_dag_phases"
       ],
       "acceptance_contracts": [
-        "AC-V05-GOAL-DAG-PHASES"
+        "AC-V06-ATOMIC-STATE-OUTBOX"
       ],
       "status": "declared",
       "evidence_refs": [],
@@ -2015,8 +2026,12 @@
       "acceptance_contracts": [
         "AC-V05-GOAL-DAG-PHASES"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v05_goal_dag_phases_test.go",
+        "acceptance/fixtures/v05_goal_dag_phases.json",
+        "product/evidence/v05_goal_dag_phases.json"
+      ],
       "supersedes": []
     },
     {
@@ -2027,12 +2042,15 @@
       "kind": "stage_template",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "goal_dag_phases",
+      "owner_context": "wizard",
       "dependencies": [
-        "intent_appspec"
+        "intent_appspec",
+        "goal_dag_phases",
+        "command_registry",
+        "i18n"
       ],
       "acceptance_contracts": [
-        "AC-V05-GOAL-DAG-PHASES"
+        "AC-V23-WIZARD"
       ],
       "status": "declared",
       "evidence_refs": [],
@@ -2046,12 +2064,14 @@
       "kind": "stage_template",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "goal_dag_phases",
+      "owner_context": "workspace_git",
       "dependencies": [
-        "intent_appspec"
+        "goal_dag_phases",
+        "config",
+        "credentials"
       ],
       "acceptance_contracts": [
-        "AC-V05-GOAL-DAG-PHASES"
+        "AC-V16-WORKSPACE-GIT"
       ],
       "status": "declared",
       "evidence_refs": [],
@@ -2065,12 +2085,15 @@
       "kind": "stage_template",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "goal_dag_phases",
+      "owner_context": "wizard",
       "dependencies": [
-        "intent_appspec"
+        "intent_appspec",
+        "goal_dag_phases",
+        "command_registry",
+        "i18n"
       ],
       "acceptance_contracts": [
-        "AC-V05-GOAL-DAG-PHASES"
+        "AC-V23-WIZARD"
       ],
       "status": "declared",
       "evidence_refs": [],
@@ -2084,12 +2107,15 @@
       "kind": "stage_template",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "goal_dag_phases",
+      "owner_context": "tools_skills_sdk",
       "dependencies": [
-        "intent_appspec"
+        "goal_dag_phases",
+        "credentials",
+        "command_registry",
+        "provider_adapters"
       ],
       "acceptance_contracts": [
-        "AC-V05-GOAL-DAG-PHASES"
+        "AC-V26-TOOLS-SKILLS-SDK"
       ],
       "status": "declared",
       "evidence_refs": [],
@@ -2103,12 +2129,14 @@
       "kind": "stage_template",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "goal_dag_phases",
+      "owner_context": "context_rag_evals",
       "dependencies": [
-        "intent_appspec"
+        "goal_dag_phases",
+        "provider_adapters",
+        "tools_skills_sdk"
       ],
       "acceptance_contracts": [
-        "AC-V05-GOAL-DAG-PHASES"
+        "AC-V27-CONTEXT-RAG-EVALS"
       ],
       "status": "declared",
       "evidence_refs": [],
@@ -2122,12 +2150,14 @@
       "kind": "stage_template",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "goal_dag_phases",
+      "owner_context": "council",
       "dependencies": [
-        "intent_appspec"
+        "director_lease",
+        "test_attestor",
+        "independent_reviews"
       ],
       "acceptance_contracts": [
-        "AC-V05-GOAL-DAG-PHASES"
+        "AC-V19-COUNCIL"
       ],
       "status": "declared",
       "evidence_refs": [],
@@ -2141,12 +2171,15 @@
       "kind": "stage_template",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "goal_dag_phases",
+      "owner_context": "wizard",
       "dependencies": [
-        "intent_appspec"
+        "intent_appspec",
+        "council",
+        "command_registry",
+        "i18n"
       ],
       "acceptance_contracts": [
-        "AC-V05-GOAL-DAG-PHASES"
+        "AC-V23-WIZARD"
       ],
       "status": "declared",
       "evidence_refs": [],
@@ -2181,12 +2214,14 @@
       "kind": "stage_template",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "goal_dag_phases",
+      "owner_context": "budgets_effects",
       "dependencies": [
-        "intent_appspec"
+        "goal_dag_phases",
+        "director_lease",
+        "mailbox"
       ],
       "acceptance_contracts": [
-        "AC-V05-GOAL-DAG-PHASES"
+        "AC-V15-BUDGETS-EFFECTS"
       ],
       "status": "declared",
       "evidence_refs": [],
@@ -2200,12 +2235,14 @@
       "kind": "stage_template",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "goal_dag_phases",
+      "owner_context": "workspace_git",
       "dependencies": [
-        "intent_appspec"
+        "goal_dag_phases",
+        "config",
+        "credentials"
       ],
       "acceptance_contracts": [
-        "AC-V05-GOAL-DAG-PHASES"
+        "AC-V16-WORKSPACE-GIT"
       ],
       "status": "declared",
       "evidence_refs": [],
@@ -2219,12 +2256,17 @@
       "kind": "stage_template",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "goal_dag_phases",
+      "owner_context": "codex_e2e",
       "dependencies": [
-        "intent_appspec"
+        "director_lease",
+        "mailbox",
+        "controls",
+        "workspace_git",
+        "test_attestor",
+        "i18n"
       ],
       "acceptance_contracts": [
-        "AC-V05-GOAL-DAG-PHASES"
+        "AC-V22-CODEX-E2E"
       ],
       "status": "declared",
       "evidence_refs": [],
@@ -2238,12 +2280,14 @@
       "kind": "stage_template",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "goal_dag_phases",
+      "owner_context": "tools_skills_sdk",
       "dependencies": [
-        "intent_appspec"
+        "command_registry",
+        "i18n",
+        "codex_e2e"
       ],
       "acceptance_contracts": [
-        "AC-V05-GOAL-DAG-PHASES"
+        "AC-V26-TOOLS-SKILLS-SDK"
       ],
       "status": "declared",
       "evidence_refs": [],
@@ -2321,12 +2365,14 @@
       "kind": "stage_template",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "goal_dag_phases",
+      "owner_context": "independent_reviews",
       "dependencies": [
-        "intent_appspec"
+        "controls",
+        "workspace_git",
+        "test_attestor"
       ],
       "acceptance_contracts": [
-        "AC-V05-GOAL-DAG-PHASES"
+        "AC-V18-INDEPENDENT-REVIEWS"
       ],
       "status": "declared",
       "evidence_refs": [],
@@ -2410,12 +2456,14 @@
       "kind": "stage_template",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "goal_dag_phases",
+      "owner_context": "operations_telemetry",
       "dependencies": [
-        "intent_appspec"
+        "controls",
+        "context_rag_evals",
+        "deploy_notifications"
       ],
       "acceptance_contracts": [
-        "AC-V05-GOAL-DAG-PHASES"
+        "AC-V32-OPERATIONS-TELEMETRY"
       ],
       "status": "declared",
       "evidence_refs": [],
@@ -2436,8 +2484,12 @@
       "acceptance_contracts": [
         "AC-V05-GOAL-DAG-PHASES"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v05_goal_dag_phases_test.go",
+        "acceptance/fixtures/v05_goal_dag_phases.json",
+        "product/evidence/v05_goal_dag_phases.json"
+      ],
       "supersedes": []
     },
     {
@@ -2455,8 +2507,12 @@
       "acceptance_contracts": [
         "AC-V05-GOAL-DAG-PHASES"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v05_goal_dag_phases_test.go",
+        "acceptance/fixtures/v05_goal_dag_phases.json",
+        "product/evidence/v05_goal_dag_phases.json"
+      ],
       "supersedes": []
     },
     {
@@ -2467,12 +2523,15 @@
       "kind": "orchestration",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "goal_dag_phases",
+      "owner_context": "controls",
       "dependencies": [
-        "intent_appspec"
+        "goal_dag_phases",
+        "atomic_state_outbox",
+        "director_lease",
+        "mailbox"
       ],
       "acceptance_contracts": [
-        "AC-V05-GOAL-DAG-PHASES"
+        "AC-V14-CONTROLS"
       ],
       "status": "declared",
       "evidence_refs": [],
@@ -2486,12 +2545,14 @@
       "kind": "orchestration",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "goal_dag_phases",
+      "owner_context": "mailbox",
       "dependencies": [
-        "intent_appspec"
+        "goal_dag_phases",
+        "atomic_state_outbox",
+        "director_lease"
       ],
       "acceptance_contracts": [
-        "AC-V05-GOAL-DAG-PHASES"
+        "AC-V13-MAILBOX"
       ],
       "status": "declared",
       "evidence_refs": [],
@@ -2505,12 +2566,13 @@
       "kind": "orchestration",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "goal_dag_phases",
+      "owner_context": "mailbox",
       "dependencies": [
-        "intent_appspec"
+        "atomic_state_outbox",
+        "director_lease"
       ],
       "acceptance_contracts": [
-        "AC-V05-GOAL-DAG-PHASES"
+        "AC-V13-MAILBOX"
       ],
       "status": "declared",
       "evidence_refs": [],
@@ -2531,8 +2593,12 @@
       "acceptance_contracts": [
         "AC-V05-GOAL-DAG-PHASES"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v05_goal_dag_phases_test.go",
+        "acceptance/fixtures/v05_goal_dag_phases.json",
+        "product/evidence/v05_goal_dag_phases.json"
+      ],
       "supersedes": []
     },
     {
@@ -2655,12 +2721,13 @@
       "kind": "orchestration",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "goal_dag_phases",
+      "owner_context": "atomic_state_outbox",
       "dependencies": [
-        "intent_appspec"
+        "intent_appspec",
+        "goal_dag_phases"
       ],
       "acceptance_contracts": [
-        "AC-V05-GOAL-DAG-PHASES"
+        "AC-V06-ATOMIC-STATE-OUTBOX"
       ],
       "status": "declared",
       "evidence_refs": [],
@@ -2674,12 +2741,13 @@
       "kind": "orchestration",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "goal_dag_phases",
+      "owner_context": "atomic_state_outbox",
       "dependencies": [
-        "intent_appspec"
+        "intent_appspec",
+        "goal_dag_phases"
       ],
       "acceptance_contracts": [
-        "AC-V05-GOAL-DAG-PHASES"
+        "AC-V06-ATOMIC-STATE-OUTBOX"
       ],
       "status": "declared",
       "evidence_refs": [],
@@ -2755,12 +2823,13 @@
       "kind": "orchestration",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "goal_dag_phases",
+      "owner_context": "atomic_state_outbox",
       "dependencies": [
-        "intent_appspec"
+        "intent_appspec",
+        "goal_dag_phases"
       ],
       "acceptance_contracts": [
-        "AC-V05-GOAL-DAG-PHASES"
+        "AC-V06-ATOMIC-STATE-OUTBOX"
       ],
       "status": "declared",
       "evidence_refs": [],

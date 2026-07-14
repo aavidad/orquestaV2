@@ -16,19 +16,25 @@ func insertCreateState(ctx context.Context, transaction *sql.Tx, state applicati
 	}
 	for position, phase := range snapshot.Phases {
 		if _, err := transaction.ExecContext(ctx, `
-INSERT INTO goal_phases(goal_ref, phase_key, position) VALUES (?, ?, ?)`,
-			snapshot.Ref, phase.Key, position,
+INSERT INTO goal_phases(goal_ref, ref, phase_key, template_ref, position) VALUES (?, ?, ?, ?, ?)`,
+			snapshot.Ref, phase.Ref, phase.Key, phase.TemplateRef, position,
 		); err != nil {
 			return mapDatabaseError(err)
+		}
+		if err := insertOrderedContractRefs(ctx, transaction, "goal_phase_contract_refs", snapshot.Ref, phase.Ref, "input", phase.InputRefs); err != nil {
+			return err
+		}
+		if err := insertOrderedContractRefs(ctx, transaction, "goal_phase_contract_refs", snapshot.Ref, phase.Ref, "criterion", phase.CriterionRefs); err != nil {
+			return err
 		}
 	}
 	for position, item := range snapshot.WorkItems {
 		if _, err := transaction.ExecContext(ctx, `
 INSERT INTO work_items(
-    ref, goal_ref, actor_ref, project_ref, objective, phase_key, role_key,
+    ref, goal_ref, actor_ref, project_ref, objective, phase_key, role_key, parent_ref,
     output_contract, skip_reason, state, revision, position,
     created_at, started_at, finished_at, execution_ref
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			item.Ref,
 			item.GoalRef,
 			item.ActorRef,
@@ -36,6 +42,7 @@ INSERT INTO work_items(
 			item.Objective,
 			item.PhaseKey,
 			item.RoleKey,
+			nullableString(item.ParentRef),
 			string(item.OutputContract),
 			string(item.SkipReason),
 			string(item.State),
@@ -61,6 +68,15 @@ INSERT INTO work_item_write_scopes(goal_ref, work_item_ref, scope, position)
 VALUES (?, ?, ?, ?)`, item.GoalRef, item.Ref, scope, scopePosition); err != nil {
 				return mapDatabaseError(err)
 			}
+		}
+		if err := insertOrderedContractRefs(ctx, transaction, "work_item_requirement_refs", item.GoalRef, item.Ref, "skill", item.SkillRefs); err != nil {
+			return err
+		}
+		if err := insertOrderedContractRefs(ctx, transaction, "work_item_requirement_refs", item.GoalRef, item.Ref, "tool", item.ToolRefs); err != nil {
+			return err
+		}
+		if err := insertOrderedContractRefs(ctx, transaction, "work_item_requirement_refs", item.GoalRef, item.Ref, "capability", item.CapabilityRefs); err != nil {
+			return err
 		}
 	}
 	for _, execution := range state.Executions {
@@ -293,6 +309,11 @@ func itemSnapshot(item goal.WorkItem) goal.WorkItemSnapshot {
 	if hasExecution {
 		executionValue = executionRef.String()
 	}
+	parent, hasParent := item.Parent()
+	var parentValue string
+	if hasParent {
+		parentValue = parent.String()
+	}
 	return goal.WorkItemSnapshot{
 		Ref:            item.Ref().String(),
 		GoalRef:        item.Goal().String(),
@@ -301,6 +322,7 @@ func itemSnapshot(item goal.WorkItem) goal.WorkItemSnapshot {
 		Objective:      item.Objective(),
 		PhaseKey:       item.Phase().String(),
 		RoleKey:        item.Role().String(),
+		ParentRef:      parentValue,
 		OutputContract: item.OutputContract().Kind(),
 		SkipReason: func() goal.WorkItemSkipReason {
 			reason, _ := item.SkipReason()
@@ -308,6 +330,9 @@ func itemSnapshot(item goal.WorkItem) goal.WorkItemSnapshot {
 		}(),
 		DependencyRefs: workItemRefStrings(item.Dependencies()),
 		WriteSet:       writeScopeStrings(item.WriteSet()),
+		SkillRefs:      refStrings(item.SkillRefs()),
+		ToolRefs:       refStrings(item.ToolRefs()),
+		CapabilityRefs: refStrings(item.CapabilityRefs()),
 		State:          item.State(),
 		Revision:       item.Revision(),
 		CreatedAt:      item.CreatedAt(),
@@ -315,6 +340,40 @@ func itemSnapshot(item goal.WorkItem) goal.WorkItemSnapshot {
 		FinishedAt:     finishedAt,
 		ExecutionRef:   executionValue,
 	}
+}
+
+func refStrings[T interface{ String() string }](refs []T) []string {
+	values := make([]string, len(refs))
+	for index, ref := range refs {
+		values[index] = ref.String()
+	}
+	return values
+}
+
+func insertOrderedContractRefs(
+	ctx context.Context,
+	transaction *sql.Tx,
+	table string,
+	ownerGoalRef string,
+	ownerRef string,
+	kind string,
+	values []string,
+) error {
+	var statement string
+	switch table {
+	case "goal_phase_contract_refs":
+		statement = `INSERT INTO goal_phase_contract_refs(goal_ref, phase_ref, kind, value, position) VALUES (?, ?, ?, ?, ?)`
+	case "work_item_requirement_refs":
+		statement = `INSERT INTO work_item_requirement_refs(goal_ref, work_item_ref, kind, value, position) VALUES (?, ?, ?, ?, ?)`
+	default:
+		return fmt.Errorf("sqlite.contract_ref_table_invalid")
+	}
+	for position, value := range values {
+		if _, err := transaction.ExecContext(ctx, statement, ownerGoalRef, ownerRef, kind, value, position); err != nil {
+			return mapDatabaseError(err)
+		}
+	}
+	return nil
 }
 
 func workItemRefStrings(refs []goal.WorkItemRef) []string {
