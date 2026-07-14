@@ -153,7 +153,7 @@ func v05AssertFixtureHeader(t *testing.T, repositoryRoot string, fixture v05Fixt
 }
 
 func v05ValidationShellBody() string {
-	return "go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapV05ScopeAndExecutableContract|TestAcceptanceV05GoalDAGPhases|TestV05CandidateSubjectsCoverCommittedDelta)$\"" +
+	return "go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV05ScopeAndExecutableContract|TestAcceptanceV05GoalDAGPhases|TestV05CandidateSubjectsCoverCommittedDelta)$\"" +
 		" && go test -mod=vendor -count=1 ./internal/goal ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/interfaces/mcp ./internal/bootstrap"
 }
 

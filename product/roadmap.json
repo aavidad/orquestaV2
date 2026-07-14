@@ -579,7 +579,7 @@
       "vertical": "goal_dag_phases",
       "status": "executable",
       "test_ref": "acceptance/v05_goal_dag_phases_test.go",
-      "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapV05ScopeAndExecutableContract|TestAcceptanceV05GoalDAGPhases|TestV05CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/interfaces/mcp ./internal/bootstrap'",
+      "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV05ScopeAndExecutableContract|TestAcceptanceV05GoalDAGPhases|TestV05CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/interfaces/mcp ./internal/bootstrap'",
       "fixture": "acceptance/fixtures/v05_goal_dag_phases.json",
       "receipt": "product/evidence/v05_goal_dag_phases.json",
       "assertions": [
@@ -2067,8 +2067,10 @@
       "owner_context": "workspace_git",
       "dependencies": [
         "goal_dag_phases",
-        "config",
-        "credentials"
+        "atomic_state_outbox",
+        "identity_projects_rbac",
+        "controls",
+        "budgets_effects"
       ],
       "acceptance_contracts": [
         "AC-V16-WORKSPACE-GIT"
@@ -2109,10 +2111,10 @@
       "cutover_required": true,
       "owner_context": "tools_skills_sdk",
       "dependencies": [
-        "goal_dag_phases",
         "credentials",
-        "command_registry",
-        "provider_adapters"
+        "identity_projects_rbac",
+        "budgets_effects",
+        "command_registry"
       ],
       "acceptance_contracts": [
         "AC-V26-TOOLS-SKILLS-SDK"
@@ -2131,7 +2133,7 @@
       "cutover_required": true,
       "owner_context": "context_rag_evals",
       "dependencies": [
-        "goal_dag_phases",
+        "test_attestor",
         "provider_adapters",
         "tools_skills_sdk"
       ],
@@ -2174,7 +2176,7 @@
       "owner_context": "wizard",
       "dependencies": [
         "intent_appspec",
-        "council",
+        "goal_dag_phases",
         "command_registry",
         "i18n"
       ],
@@ -2216,9 +2218,10 @@
       "cutover_required": true,
       "owner_context": "budgets_effects",
       "dependencies": [
-        "goal_dag_phases",
+        "atomic_state_outbox",
+        "identity_projects_rbac",
         "director_lease",
-        "mailbox"
+        "controls"
       ],
       "acceptance_contracts": [
         "AC-V15-BUDGETS-EFFECTS"
@@ -2238,8 +2241,10 @@
       "owner_context": "workspace_git",
       "dependencies": [
         "goal_dag_phases",
-        "config",
-        "credentials"
+        "atomic_state_outbox",
+        "identity_projects_rbac",
+        "controls",
+        "budgets_effects"
       ],
       "acceptance_contracts": [
         "AC-V16-WORKSPACE-GIT"
@@ -2258,11 +2263,9 @@
       "cutover_required": true,
       "owner_context": "codex_e2e",
       "dependencies": [
-        "director_lease",
-        "mailbox",
-        "controls",
-        "workspace_git",
-        "test_attestor",
+        "recovery_backup",
+        "council",
+        "command_registry",
         "i18n"
       ],
       "acceptance_contracts": [
@@ -2282,9 +2285,10 @@
       "cutover_required": true,
       "owner_context": "tools_skills_sdk",
       "dependencies": [
-        "command_registry",
-        "i18n",
-        "codex_e2e"
+        "credentials",
+        "identity_projects_rbac",
+        "budgets_effects",
+        "command_registry"
       ],
       "acceptance_contracts": [
         "AC-V26-TOOLS-SKILLS-SDK"
@@ -2458,9 +2462,15 @@
       "cutover_required": true,
       "owner_context": "operations_telemetry",
       "dependencies": [
-        "controls",
-        "context_rag_evals",
-        "deploy_notifications"
+        "config",
+        "credentials",
+        "recovery_backup",
+        "identity_projects_rbac",
+        "oidc_ad",
+        "codex_e2e",
+        "command_registry",
+        "deploy_notifications",
+        "postgres_s3_multihost"
       ],
       "acceptance_contracts": [
         "AC-V32-OPERATIONS-TELEMETRY"
@@ -2547,7 +2557,6 @@
       "cutover_required": true,
       "owner_context": "mailbox",
       "dependencies": [
-        "goal_dag_phases",
         "atomic_state_outbox",
         "director_lease"
       ],
