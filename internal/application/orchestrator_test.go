@@ -24,7 +24,7 @@ func TestOrchestratorOwnsOneDurableLifecycleWriter(t *testing.T) {
 
 	first, err := orchestrator.Submit(ctx, SubmitRequest{
 		RequestRef: "request:one", ActorRef: actor, ProjectRef: project,
-		Statement: "produce un resultado pequeño",
+		Statement: "produce un resultado pequeño", Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("submit: %v", err)
@@ -34,7 +34,7 @@ func TestOrchestratorOwnsOneDurableLifecycleWriter(t *testing.T) {
 	}
 	duplicate, err := orchestrator.Submit(ctx, SubmitRequest{
 		RequestRef: "request:one", ActorRef: actor, ProjectRef: project,
-		Statement: "produce un resultado pequeño",
+		Statement: "produce un resultado pequeño", Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("idempotent submit: %v", err)
@@ -96,10 +96,10 @@ func TestSubmitIdempotencyRejectsSemanticConflict(t *testing.T) {
 	agent := &scriptedAgent{now: clock.Now}
 	orchestrator, _ := newTestOrchestrator(t, repository, clock, agent)
 	actor, project := testScope(t)
-	if _, err := orchestrator.Submit(ctx, SubmitRequest{RequestRef: "request:same", ActorRef: actor, ProjectRef: project, Statement: "uno"}); err != nil {
+	if _, err := orchestrator.Submit(ctx, SubmitRequest{RequestRef: "request:same", ActorRef: actor, ProjectRef: project, Statement: "uno", Confirm: true}); err != nil {
 		t.Fatalf("first submit: %v", err)
 	}
-	_, err := orchestrator.Submit(ctx, SubmitRequest{RequestRef: "request:same", ActorRef: actor, ProjectRef: project, Statement: "dos"})
+	_, err := orchestrator.Submit(ctx, SubmitRequest{RequestRef: "request:same", ActorRef: actor, ProjectRef: project, Statement: "dos", Confirm: true})
 	if !IsStateError(err, StateConflict) {
 		t.Fatalf("expected conflict, got %v", err)
 	}
@@ -115,7 +115,7 @@ func TestArtifactReadRejectsCorruptAdapterContentAfterScopedLookup(t *testing.T)
 	orchestrator, artifacts := newTestOrchestrator(t, repository, clock, agent)
 	actor, project := testScope(t)
 	submitted, err := orchestrator.Submit(ctx, SubmitRequest{
-		RequestRef: "request:corrupt-read", ActorRef: actor, ProjectRef: project, Statement: "read safely",
+		RequestRef: "request:corrupt-read", ActorRef: actor, ProjectRef: project, Statement: "read safely", Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("submit: %v", err)
@@ -156,7 +156,7 @@ func TestProviderClockSkewCannotDriveLifecycle(t *testing.T) {
 	orchestrator, _ := newTestOrchestrator(t, repository, clock, agent)
 	actor, project := testScope(t)
 	submitted, err := orchestrator.Submit(ctx, SubmitRequest{
-		RequestRef: "request:clock-skew", ActorRef: actor, ProjectRef: project, Statement: "clock",
+		RequestRef: "request:clock-skew", ActorRef: actor, ProjectRef: project, Statement: "clock", Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("submit: %v", err)
@@ -186,7 +186,7 @@ func TestCompletedObservationWithUnexpectedMediaTypeFailsWithoutEvidence(t *test
 	orchestrator, _ := newTestOrchestrator(t, repository, clock, agent)
 	actor, project := testScope(t)
 	submitted, err := orchestrator.Submit(ctx, SubmitRequest{
-		RequestRef: "request:media-mismatch", ActorRef: actor, ProjectRef: project, Statement: "plain text",
+		RequestRef: "request:media-mismatch", ActorRef: actor, ProjectRef: project, Statement: "plain text", Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("submit: %v", err)
@@ -214,7 +214,7 @@ func TestClaimRecordMismatchIsQuarantinedBeforeAgentEffect(t *testing.T) {
 	agent := &scriptedAgent{now: clock.Now}
 	orchestrator, _ := newTestOrchestrator(t, repository, clock, agent)
 	actor, project := testScope(t)
-	if _, err := orchestrator.Submit(ctx, SubmitRequest{RequestRef: "request:bad-action", ActorRef: actor, ProjectRef: project, Statement: "safe"}); err != nil {
+	if _, err := orchestrator.Submit(ctx, SubmitRequest{RequestRef: "request:bad-action", ActorRef: actor, ProjectRef: project, Statement: "safe", Confirm: true}); err != nil {
 		t.Fatalf("submit: %v", err)
 	}
 	repository.mu.Lock()

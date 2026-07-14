@@ -1,6 +1,7 @@
 {
   "schema_version": 1,
   "contract_id": "AC-V04-INTENT-APPSPEC",
+  "base_git_head": "d313ae5183abb79eb882b0c0f171da4b9e74b1ff",
   "command": "go test -mod=vendor -count=1 ./acceptance ./internal/goal ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/state/sqlite ./internal/interfaces/mcp -run '^(TestAcceptanceV04IntentAppSpec|TestV04.*)$'",
   "receipt_path": "product/evidence/v04_intent_appspec.json",
   "candidate_subjects": [

@@ -1,6 +1,6 @@
 # Estado y handoff vivo del rebuild
 
-Última actualización: 2026-07-14 11:35 Europe/Madrid.
+Última actualización: 2026-07-14 12:13 Europe/Madrid.
 
 Este documento permite continuar el rebuild sin reconstruir el contexto de la
 sesión. Es estado operativo, no evidencia de aceptación. Los estados canónicos
@@ -582,6 +582,64 @@ internal/goal/{app_spec.go,app_spec_test.go,goal.go,goal_test.go,refs.go,restore
 Objetivo: AppSpec inicial/amend, hashes/generaciones, Goal sucesor vacío y
 snapshot tamper-proof. Tras verde focal de dominio, actualizar este handoff
 antes de abrir aplicación.
+
+### WIP vivo posterior al contrato rojo
+
+Este bloque está materializado pero todavía no tiene commit de integración:
+
+- dominio: AppSpec inmutable, hash framed, N+1 causal, Goal sucesor terminal,
+  snapshot schema 2 y negativos de tamper/self-parent. Verde normal y `-race`
+  en `./internal/goal`, revisado por el integrador;
+- provider: `SpecHash` obligatorio y canónico en launch/receipt/observation;
+  fake y Codex lo ecoan desde request durable. Codex sube su schema local de 1
+  a 2 y falla cerrado ante registros antiguos sin hash. Verde normal y `-race`
+  en ports/fake/Codex;
+- aplicación: Submit confirmado, GoalRecord sin Intent duplicado, amendment
+  atómico por nuevo método de repositorio y fencing antes de persistir
+  evidencia. Verde normal/race/vet; una contrarrevisión está añadiendo rechazo
+  pre-IDs de fuente no terminal, unicidad de sucesor y campos AppSpec de
+  `GoalSummary`;
+- SQLite: implementación en curso, write-set exclusivo
+  `internal/adapters/state/sqlite/**`; no se han abierto MCP ni bootstrap.
+
+Contrarrevisión independiente rechazó dos falsos verdes de aplicación. Ambos
+quedaron corregidos y registrados como `BUG-REBUILD-20260714-023` y
+`BUG-REBUILD-20260714-024`:
+
+- mismatch de `spec_hash` cerraba Goal como `failed`; ahora todo hash requerido,
+  inválido o distinto pone en cuarentena la acción, deja Goal no terminal y no
+  persiste artefacto, atestación ni cierre;
+- `created=true` del repositorio aceptaba un Goal semánticamente parecido pero
+  con ref/hash/tiempo/snapshot sustituido; create/amend comparan ahora snapshot
+  y executions contra el candidato exacto y exigen ausencia de evidencia
+  inesperada. Replay `created=false` conserva validación semántica.
+
+Los tres tests de cierre exigidos están verdes. También están verdes normal,
+`-race` y `go vet` sobre dominio, aplicación, ports, fake y Codex. Segunda
+contrarrevisión confirmó ambos arreglos y detectó
+`BUG-REBUILD-20260714-025`: validación de receipt clasificaba hash vacío o no
+canónico como mismatch por comprobar igualdad demasiado pronto. Ya está cerrado:
+orden `required -> invalid -> mismatch`, cobertura de cuarentena para las tres
+ramas y focal/race/vet verdes. No quedan bloqueos de esa contrarrevisión.
+
+Incidencia de disciplina: el agente de dominio tocó temporalmente
+`internal/goal/intent_test.go` para ampliar una tabla de refs sin pedir el
+write-set. El integrador lo detectó y el agente revirtió su hunk con
+`apply_patch`; el fichero está limpio. No hubo mezcla ni pérdida. Antes de
+sellar V04 esta desviación debe cerrarse como
+`BUG-REBUILD-20260714-022`. El gate
+`TestV04CandidateSubjectsCoverCommittedDelta` compara todo cambio desde
+`d313ae5183` con el candidato V04; queda rojo de forma intencional mientras el
+delta esté abierto y debe cerrarse antes del receipt.
+
+Si la sesión termina durante este WIP: no regenerar receipts, no descartar
+cambios y no relanzar agentes a ciegas. Primero inspeccionar `git status`,
+recoger agentes vivos y ejecutar paquetes focales. El último checkpoint seguro
+committed sigue siendo `d313ae5183`; V01/V03 continúan stale de forma
+intencional hasta el sellado V04.
+
+Digest de control del árbol antiguo comprobado a las 12:04 CEST:
+`75577492db531e71f8a47f7b7fec115e79996aed45e26ce66426b4c120d42a80`.
 
 ## Regla de actualización
 

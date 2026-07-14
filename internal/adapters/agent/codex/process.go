@@ -146,7 +146,7 @@ func (adapter *Adapter) waitForExecution(
 
 	adapter.mu.Lock()
 	defer adapter.mu.Unlock()
-	persisted, err := adapter.persistTerminal(state.runPath, terminal, state.maxOutput)
+	persisted, err := adapter.persistTerminal(state.runPath, terminal, state.receipt.SpecHash, state.maxOutput)
 	if err != nil {
 		terminal.Status = ports.AgentFailed
 		terminal.MediaType = ""
@@ -232,7 +232,7 @@ func (adapter *Adapter) finishWithoutProcessLockedWithDiagnostic(state *executio
 		Diagnostic:          append([]byte(nil), diagnostic...),
 		DiagnosticTruncated: truncated,
 	}
-	if persisted, err := adapter.persistTerminal(state.runPath, terminal, state.maxOutput); err == nil {
+	if persisted, err := adapter.persistTerminal(state.runPath, terminal, state.receipt.SpecHash, state.maxOutput); err == nil {
 		terminal = persisted
 		state.terminalDurable = true
 	} else {

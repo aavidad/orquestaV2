@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	stateSchemaVersion = 1
+	stateSchemaVersion = 2
 	requestFileName    = "request.json"
 	terminalFileName   = "terminal.json"
 )
@@ -28,6 +28,7 @@ type launchRecord struct {
 	SchemaVersion  int       `json:"schema_version"`
 	RequestHash    string    `json:"request_hash"`
 	ExecutionRef   string    `json:"execution_ref"`
+	SpecHash       string    `json:"spec_hash"`
 	ProviderRef    string    `json:"provider_ref"`
 	ExternalRef    string    `json:"external_ref"`
 	IdempotencyKey string    `json:"idempotency_key"`
@@ -52,6 +53,7 @@ type requestHashDocument struct {
 	ExecutionRef      string   `json:"execution_ref"`
 	GoalRef           string   `json:"goal_ref"`
 	WorkItemRef       string   `json:"work_item_ref"`
+	SpecHash          string   `json:"spec_hash"`
 	ActorRef          string   `json:"actor_ref"`
 	ProjectRef        string   `json:"project_ref"`
 	Objective         string   `json:"objective"`
@@ -70,6 +72,7 @@ func hashLaunchRequest(request ports.AgentLaunchRequest) (string, error) {
 		ExecutionRef:      request.ExecutionRef.String(),
 		GoalRef:           request.GoalRef.String(),
 		WorkItemRef:       request.WorkItemRef.String(),
+		SpecHash:          request.SpecHash,
 		ActorRef:          request.ActorRef.String(),
 		ProjectRef:        request.ProjectRef.String(),
 		Objective:         request.Objective,
@@ -110,6 +113,7 @@ func (adapter *Adapter) ensureLaunchRecord(request ports.AgentLaunchRequest, req
 		SchemaVersion:  stateSchemaVersion,
 		RequestHash:    requestHash,
 		ExecutionRef:   request.ExecutionRef.String(),
+		SpecHash:       request.SpecHash,
 		ProviderRef:    ProviderRef,
 		ExternalRef:    "codex:" + path.Base(runPath),
 		IdempotencyKey: request.IdempotencyKey,
@@ -163,6 +167,7 @@ func (adapter *Adapter) readLaunchRecord(runPath string) (launchRecord, bool, er
 	if record.SchemaVersion != stateSchemaVersion ||
 		record.RequestHash == "" ||
 		record.ExecutionRef == "" ||
+		record.SpecHash == "" ||
 		record.ProviderRef != ProviderRef ||
 		record.ExternalRef == "" ||
 		record.IdempotencyKey == "" ||
@@ -179,19 +184,24 @@ func (record launchRecord) receipt(executionRef goal.ExecutionRef) (ports.AgentL
 	}
 	receipt := ports.AgentLaunchReceipt{
 		ExecutionRef:   executionRef,
+		SpecHash:       record.SpecHash,
 		ProviderRef:    record.ProviderRef,
 		ExternalRef:    record.ExternalRef,
 		IdempotencyKey: record.IdempotencyKey,
 		AcceptedAt:     record.AcceptedAt,
 	}
-	request := ports.AgentLaunchRequest{ExecutionRef: executionRef, IdempotencyKey: record.IdempotencyKey}
-	if receipt.ExecutionRef != request.ExecutionRef || receipt.IdempotencyKey != request.IdempotencyKey || receipt.ProviderRef == "" || receipt.ExternalRef == "" || receipt.AcceptedAt.IsZero() {
+	request := ports.AgentLaunchRequest{
+		ExecutionRef:   executionRef,
+		SpecHash:       record.SpecHash,
+		IdempotencyKey: record.IdempotencyKey,
+	}
+	if err := ports.ValidateAgentLaunchReceipt(request, receipt); err != nil {
 		return ports.AgentLaunchReceipt{}, &Error{Code: CodeStateInvalid}
 	}
 	return receipt, nil
 }
 
-func (adapter *Adapter) persistTerminal(runPath string, terminal terminalRecord, maxOutput int64) (terminalRecord, error) {
+func (adapter *Adapter) persistTerminal(runPath string, terminal terminalRecord, specHash string, maxOutput int64) (terminalRecord, error) {
 	created, err := adapter.publishJSON(runPath, terminalFileName, terminal)
 	if err != nil {
 		return terminalRecord{}, err
@@ -199,7 +209,7 @@ func (adapter *Adapter) persistTerminal(runPath string, terminal terminalRecord,
 	if created {
 		return terminal, nil
 	}
-	existing, found, err := adapter.loadTerminal(runPath, terminal.RequestHash, maxOutput)
+	existing, found, err := adapter.loadTerminal(runPath, terminal.RequestHash, specHash, maxOutput)
 	if err != nil {
 		return terminalRecord{}, err
 	}
@@ -209,7 +219,7 @@ func (adapter *Adapter) persistTerminal(runPath string, terminal terminalRecord,
 	return existing, nil
 }
 
-func (adapter *Adapter) loadTerminal(runPath, requestHash string, maxOutput int64) (terminalRecord, bool, error) {
+func (adapter *Adapter) loadTerminal(runPath, requestHash, specHash string, maxOutput int64) (terminalRecord, bool, error) {
 	var terminal terminalRecord
 	found, err := adapter.readPrivateJSON(path.Join(runPath, terminalFileName), &terminal)
 	if err != nil || !found {
@@ -218,7 +228,7 @@ func (adapter *Adapter) loadTerminal(runPath, requestHash string, maxOutput int6
 	if terminal.SchemaVersion != stateSchemaVersion || terminal.RequestHash != requestHash || terminal.ObservedAt.IsZero() {
 		return terminalRecord{}, false, &Error{Code: CodeStateInvalid}
 	}
-	observation := terminal.observation(goal.ExecutionRef{})
+	observation := terminal.observation(goal.ExecutionRef{}, specHash)
 	observation.ExecutionRef, _ = goal.NewExecutionRef("execution:state-validation")
 	if err := ports.ValidateAgentObservation(observation, maxOutput); err != nil {
 		return terminalRecord{}, false, &Error{Code: CodeStateInvalid, Cause: err}
@@ -229,9 +239,10 @@ func (adapter *Adapter) loadTerminal(runPath, requestHash string, maxOutput int6
 	return terminal, true, nil
 }
 
-func (terminal terminalRecord) observation(executionRef goal.ExecutionRef) ports.AgentObservation {
+func (terminal terminalRecord) observation(executionRef goal.ExecutionRef, specHash string) ports.AgentObservation {
 	return ports.AgentObservation{
 		ExecutionRef: executionRef,
+		SpecHash:     specHash,
 		Status:       terminal.Status,
 		MediaType:    terminal.MediaType,
 		Content:      append([]byte(nil), []byte(terminal.Artifact)...),

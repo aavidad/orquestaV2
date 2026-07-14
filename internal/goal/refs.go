@@ -5,6 +5,7 @@ import "strings"
 type ActorRef struct{ value string }
 type ProjectRef struct{ value string }
 type IntentRef struct{ value string }
+type AppSpecRef struct{ value string }
 type GoalRef struct{ value string }
 type WorkItemRef struct{ value string }
 type ExecutionRef struct{ value string }
@@ -24,6 +25,11 @@ func NewProjectRef(value string) (ProjectRef, error) {
 func NewIntentRef(value string) (IntentRef, error) {
 	value, err := validOpaqueRef("intent_ref", value)
 	return IntentRef{value: value}, err
+}
+
+func NewAppSpecRef(value string) (AppSpecRef, error) {
+	value, err := validOpaqueRef("app_spec_ref", value)
+	return AppSpecRef{value: value}, err
 }
 
 func NewGoalRef(value string) (GoalRef, error) {
@@ -54,6 +60,7 @@ func NewAttestationRef(value string) (AttestationRef, error) {
 func (ref ActorRef) String() string       { return ref.value }
 func (ref ProjectRef) String() string     { return ref.value }
 func (ref IntentRef) String() string      { return ref.value }
+func (ref AppSpecRef) String() string     { return ref.value }
 func (ref GoalRef) String() string        { return ref.value }
 func (ref WorkItemRef) String() string    { return ref.value }
 func (ref ExecutionRef) String() string   { return ref.value }
@@ -70,6 +77,7 @@ func validOpaqueRef(field, value string) (string, error) {
 func validActorRef(ref ActorRef) bool             { return ref.value != "" }
 func validProjectRef(ref ProjectRef) bool         { return ref.value != "" }
 func validIntentRef(ref IntentRef) bool           { return ref.value != "" }
+func validAppSpecRef(ref AppSpecRef) bool         { return ref.value != "" }
 func validGoalRef(ref GoalRef) bool               { return ref.value != "" }
 func validWorkItemRef(ref WorkItemRef) bool       { return ref.value != "" }
 func validExecutionRef(ref ExecutionRef) bool     { return ref.value != "" }

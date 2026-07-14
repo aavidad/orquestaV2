@@ -16,11 +16,12 @@ import (
 )
 
 type memoryRepository struct {
-	mu       sync.Mutex
-	records  map[goal.GoalRef]GoalRecord
-	requests map[string]goal.GoalRef
-	actions  map[string]memoryAction
-	events   []EventRecord
+	mu         sync.Mutex
+	records    map[goal.GoalRef]GoalRecord
+	requests   map[string]goal.GoalRef
+	successors map[goal.AppSpecRef]goal.GoalRef
+	actions    map[string]memoryAction
+	events     []EventRecord
 }
 
 type memoryAction struct {
@@ -33,36 +34,81 @@ type memoryAction struct {
 
 func newMemoryRepository() *memoryRepository {
 	return &memoryRepository{
-		records:  make(map[goal.GoalRef]GoalRecord),
-		requests: make(map[string]goal.GoalRef),
-		actions:  make(map[string]memoryAction),
+		records:    make(map[goal.GoalRef]GoalRecord),
+		requests:   make(map[string]goal.GoalRef),
+		successors: make(map[goal.AppSpecRef]goal.GoalRef),
+		actions:    make(map[string]memoryAction),
 	}
 }
 
 func (repository *memoryRepository) CreateGoal(_ context.Context, state CreateGoalState) (GoalRecord, bool, error) {
 	repository.mu.Lock()
 	defer repository.mu.Unlock()
-	requestKey := state.Intent.Actor().String() + "\x00" + state.Intent.Project().String() + "\x00" + state.RequestRef
+	intent := state.Goal.AppSpec().Intent()
+	requestKey := state.Goal.Actor().String() + "\x00" + state.Goal.Project().String() + "\x00" + state.RequestRef
 	if ref, ok := repository.requests[requestKey]; ok {
 		record := repository.records[ref]
 		if record.RequestFingerprint != state.RequestFingerprint ||
-			record.Intent.Actor() != state.Intent.Actor() ||
-			record.Intent.Project() != state.Intent.Project() ||
-			record.Intent.Statement() != state.Intent.Statement() {
+			record.Goal.Actor() != state.Goal.Actor() ||
+			record.Goal.Project() != state.Goal.Project() ||
+			record.Goal.AppSpec().Intent().Statement() != intent.Statement() ||
+			record.Goal.AppSpec().Objective() != state.Goal.AppSpec().Objective() {
 			return GoalRecord{}, false, &StateError{Code: StateConflict}
 		}
 		return cloneGoalRecord(record), false, nil
 	}
 	record := GoalRecord{
 		RequestRef: state.RequestRef, RequestFingerprint: state.RequestFingerprint,
-		Intent: state.Intent,
-		Goal:   state.Goal, Executions: append([]ExecutionRecord(nil), state.Executions...),
+		Goal: state.Goal, Executions: append([]ExecutionRecord(nil), state.Executions...),
 	}
 	repository.requests[requestKey] = state.Goal.Ref()
 	repository.records[state.Goal.Ref()] = record
 	for _, action := range state.Actions {
 		repository.actions[action.Ref] = memoryAction{record: action}
 	}
+	repository.events = append(repository.events, state.Events...)
+	return cloneGoalRecord(record), true, nil
+}
+
+func (repository *memoryRepository) AmendGoal(_ context.Context, state AmendGoalState) (GoalRecord, bool, error) {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	requestKey := state.ActorRef.String() + "\x00" + state.ProjectRef.String() + "\x00" + state.RequestRef
+	if ref, ok := repository.requests[requestKey]; ok {
+		record := repository.records[ref]
+		if record.RequestFingerprint != state.RequestFingerprint {
+			return GoalRecord{}, false, &StateError{Code: StateConflict}
+		}
+		return cloneGoalRecord(record), false, nil
+	}
+	source, ok := repository.records[state.SourceGoalRef]
+	if !ok {
+		return GoalRecord{}, false, &StateError{Code: StateNotFound}
+	}
+	if source.Goal.Actor() != state.ActorRef || source.Goal.Project() != state.ProjectRef ||
+		source.Goal.Revision() != state.ExpectedSourceRevision ||
+		source.Goal.SpecHash() != state.ExpectedSourceSpecHash || !source.Goal.IsTerminal() {
+		return GoalRecord{}, false, &StateError{Code: StateConflict}
+	}
+	if _, exists := repository.successors[source.Goal.AppSpec().Ref()]; exists {
+		return GoalRecord{}, false, &StateError{Code: StateConflict}
+	}
+	successorSpec := state.Successor.AppSpec()
+	parentRef, hasParent := successorSpec.ParentRef()
+	if state.Successor.Actor() != state.ActorRef || state.Successor.Project() != state.ProjectRef ||
+		state.Successor.State() != goal.GoalStatePending || state.Successor.WorkItemCount() != 0 ||
+		!hasParent || parentRef != source.Goal.AppSpec().Ref() ||
+		successorSpec.ParentHash() != source.Goal.SpecHash() ||
+		successorSpec.Generation() != source.Goal.AppSpec().Generation()+1 {
+		return GoalRecord{}, false, &StateError{Code: StateConflict}
+	}
+	record := GoalRecord{
+		RequestRef: state.RequestRef, RequestFingerprint: state.RequestFingerprint,
+		Goal: state.Successor,
+	}
+	repository.requests[requestKey] = state.Successor.Ref()
+	repository.records[state.Successor.Ref()] = record
+	repository.successors[source.Goal.AppSpec().Ref()] = state.Successor.Ref()
 	repository.events = append(repository.events, state.Events...)
 	return cloneGoalRecord(record), true, nil
 }
@@ -86,10 +132,13 @@ func (repository *memoryRepository) ListGoals(_ context.Context, actor goal.Acto
 			continue
 		}
 		closedAt, _ := record.Goal.ClosedAt()
+		appSpec := record.Goal.AppSpec()
+		intent := appSpec.Intent()
 		result = append(result, GoalSummary{
-			Ref: record.Goal.Ref(), IntentRef: record.Intent.Ref(),
+			Ref: record.Goal.Ref(), IntentRef: intent.Ref(), AppSpecRef: appSpec.Ref(),
+			AppSpecGeneration: appSpec.Generation(), SpecHash: appSpec.Hash(),
 			ActorRef: record.Goal.Actor(), ProjectRef: record.Goal.Project(),
-			Statement: record.Intent.Statement(), State: record.Goal.State(),
+			Statement: intent.Statement(), State: record.Goal.State(),
 			Revision: record.Goal.Revision(), CreatedAt: record.Goal.CreatedAt(),
 			ClosedAt: closedAt, ArtifactCount: len(record.Artifacts),
 		})
@@ -359,13 +408,17 @@ func (store *memoryArtifactStore) Get(_ context.Context, ref goal.ArtifactRef, e
 }
 
 type scriptedAgent struct {
-	mu            sync.Mutex
-	now           func() time.Time
-	launches      int
-	observations  []ports.AgentObservation
-	launchErr     error
-	launchEntered chan struct{}
-	launchRelease <-chan struct{}
+	mu                               sync.Mutex
+	now                              func() time.Time
+	launches                         int
+	launchSpecHashes                 map[goal.ExecutionRef]string
+	receiptSpecHashOverride          string
+	preserveEmptyReceiptSpecHash     bool
+	preserveEmptyObservationSpecHash bool
+	observations                     []ports.AgentObservation
+	launchErr                        error
+	launchEntered                    chan struct{}
+	launchRelease                    <-chan struct{}
 }
 
 func (agent *scriptedAgent) Capabilities(context.Context) (ports.AgentCapabilities, error) {
@@ -375,10 +428,18 @@ func (agent *scriptedAgent) Capabilities(context.Context) (ports.AgentCapabiliti
 func (agent *scriptedAgent) Launch(_ context.Context, request ports.AgentLaunchRequest) (ports.AgentLaunchReceipt, error) {
 	agent.mu.Lock()
 	agent.launches++
+	if agent.launchSpecHashes == nil {
+		agent.launchSpecHashes = make(map[goal.ExecutionRef]string)
+	}
+	agent.launchSpecHashes[request.ExecutionRef] = request.SpecHash
 	entered := agent.launchEntered
 	release := agent.launchRelease
 	now := agent.now
 	launchErr := agent.launchErr
+	receiptSpecHash := agent.receiptSpecHashOverride
+	if receiptSpecHash == "" && !agent.preserveEmptyReceiptSpecHash {
+		receiptSpecHash = request.SpecHash
+	}
 	agent.mu.Unlock()
 	if entered != nil {
 		select {
@@ -393,7 +454,7 @@ func (agent *scriptedAgent) Launch(_ context.Context, request ports.AgentLaunchR
 		return ports.AgentLaunchReceipt{}, launchErr
 	}
 	return ports.AgentLaunchReceipt{
-		ExecutionRef: request.ExecutionRef, ProviderRef: "provider:test",
+		ExecutionRef: request.ExecutionRef, SpecHash: receiptSpecHash, ProviderRef: "provider:test",
 		ExternalRef:    "external:" + request.ExecutionRef.String(),
 		IdempotencyKey: request.IdempotencyKey, AcceptedAt: now(),
 	}, nil
@@ -408,6 +469,9 @@ func (agent *scriptedAgent) Observe(_ context.Context, execution goal.ExecutionR
 	observation := agent.observations[0]
 	agent.observations = agent.observations[1:]
 	observation.ExecutionRef = execution
+	if observation.SpecHash == "" && !agent.preserveEmptyObservationSpecHash {
+		observation.SpecHash = agent.launchSpecHashes[execution]
+	}
 	if observation.ObservedAt.IsZero() {
 		observation.ObservedAt = agent.now()
 	}

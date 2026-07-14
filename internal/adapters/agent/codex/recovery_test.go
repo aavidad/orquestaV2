@@ -2,6 +2,7 @@ package codex
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,34 @@ import (
 
 	"orquesta/internal/ports"
 )
+
+func TestAdapterRejectsPersistedSpecHashThatDoesNotEchoRequest(t *testing.T) {
+	config := testConfig(t)
+	request := testRequest(t, "tampered-spec-hash", "helper:success", 1024)
+	_, runPath := seedAcceptedExecution(t, config, request)
+	recordPath := filepath.Join(config.WorkRoot, filepath.FromSlash(runPath), requestFileName)
+	payload, err := os.ReadFile(recordPath)
+	if err != nil {
+		t.Fatalf("ReadFile(request record) error = %v", err)
+	}
+	var record launchRecord
+	if err := json.Unmarshal(payload, &record); err != nil {
+		t.Fatalf("Unmarshal(request record) error = %v", err)
+	}
+	record.SpecHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	payload, err = json.Marshal(record)
+	if err != nil {
+		t.Fatalf("Marshal(request record) error = %v", err)
+	}
+	if err := os.WriteFile(recordPath, payload, 0o600); err != nil {
+		t.Fatalf("WriteFile(request record) error = %v", err)
+	}
+
+	adapter := openTestAdapter(t, config)
+	if _, err := adapter.Launch(context.Background(), request); ErrorCode(err) != CodeStateInvalid {
+		t.Fatalf("Launch(tampered spec hash) error = %v, code = %q", err, ErrorCode(err))
+	}
+}
 
 func TestAdapterLaunchRecoversPersistedExecutionWithoutRelaunch(t *testing.T) {
 	config := testConfig(t)
@@ -35,6 +64,9 @@ func TestAdapterLaunchRecoversPersistedExecutionWithoutRelaunch(t *testing.T) {
 	observation := awaitTerminal(t, adapter, request.ExecutionRef)
 	if observation.Status != ports.AgentFailed || observation.ErrorCode != CodeExecutionInterrupted {
 		t.Fatalf("recovered observation = %+v", observation)
+	}
+	if gotReceipt.SpecHash != request.SpecHash || observation.SpecHash != request.SpecHash {
+		t.Fatalf("spec hash lost during launch recovery: receipt=%q observation=%q want=%q", gotReceipt.SpecHash, observation.SpecHash, request.SpecHash)
 	}
 
 	repeatedReceipt, err := adapter.Launch(context.Background(), request)
@@ -71,6 +103,9 @@ func TestAdapterObserveRecoversPersistedExecutionAsStableTerminal(t *testing.T) 
 	}
 	if firstObservation.Status != ports.AgentFailed || firstObservation.ErrorCode != CodeExecutionInterrupted {
 		t.Fatalf("first recovered observation = %+v", firstObservation)
+	}
+	if firstObservation.SpecHash != request.SpecHash {
+		t.Fatalf("first recovered spec hash = %q, want %q", firstObservation.SpecHash, request.SpecHash)
 	}
 	assertExecutionCacheSize(t, first, 0)
 	if err := first.Close(); err != nil {
@@ -112,7 +147,7 @@ func TestAdapterObserveEvictsManyDurableTerminalPayloads(t *testing.T) {
 			MediaType:     request.ArtifactMediaType,
 			Artifact:      payload,
 			ObservedAt:    config.Now(),
-		}, request.MaxOutputBytes)
+		}, request.SpecHash, request.MaxOutputBytes)
 		if err != nil {
 			t.Fatalf("persistTerminal(%d) error = %v", index, err)
 		}

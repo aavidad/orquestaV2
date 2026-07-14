@@ -35,7 +35,7 @@ func TestClosurePersistsExplicitAgentFailureWithoutFalseEvidence(t *testing.T) {
 	orchestrator, _ := newTestOrchestrator(t, repository, clock, agent)
 	actor, project := testScope(t)
 	submitted, err := orchestrator.Submit(ctx, SubmitRequest{
-		RequestRef: "request:failure", ActorRef: actor, ProjectRef: project, Statement: "tarea fallida",
+		RequestRef: "request:failure", ActorRef: actor, ProjectRef: project, Statement: "tarea fallida", Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("submit: %v", err)
@@ -80,7 +80,7 @@ func TestInvalidArtifactAdapterCannotAccreditSuccessfulGoal(t *testing.T) {
 	}
 	actor, project := testScope(t)
 	submitted, err := orchestrator.Submit(ctx, SubmitRequest{
-		RequestRef: "request:invalid-artifact-adapter", ActorRef: actor, ProjectRef: project, Statement: "must have real evidence",
+		RequestRef: "request:invalid-artifact-adapter", ActorRef: actor, ProjectRef: project, Statement: "must have real evidence", Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("submit: %v", err)
@@ -107,7 +107,7 @@ func TestLaunchInfrastructureFailureClosesGoalDeterministically(t *testing.T) {
 	orchestrator, _ := newTestOrchestrator(t, repository, clock, agent)
 	actor, project := testScope(t)
 	submitted, err := orchestrator.Submit(ctx, SubmitRequest{
-		RequestRef: "request:launch-failure", ActorRef: actor, ProjectRef: project, Statement: "tarea",
+		RequestRef: "request:launch-failure", ActorRef: actor, ProjectRef: project, Statement: "tarea", Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("submit: %v", err)
@@ -134,7 +134,7 @@ func TestTemporaryLaunchFailureRequeuesWithoutClosingGoal(t *testing.T) {
 	orchestrator, _ := newTestOrchestrator(t, repository, clock, agent)
 	actor, project := testScope(t)
 	submitted, err := orchestrator.Submit(ctx, SubmitRequest{
-		RequestRef: "request:temporary-launch", ActorRef: actor, ProjectRef: project, Statement: "wait safely",
+		RequestRef: "request:temporary-launch", ActorRef: actor, ProjectRef: project, Statement: "wait safely", Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("submit: %v", err)
@@ -183,7 +183,7 @@ func TestTemporaryLaunchCapacityWaitDoesNotConsumeExecutionAttemptBudget(t *test
 	}
 	actor, project := testScope(t)
 	submitted, err := orchestrator.Submit(ctx, SubmitRequest{
-		RequestRef: "request:capacity-boundary", ActorRef: actor, ProjectRef: project, Statement: "bounded capacity wait",
+		RequestRef: "request:capacity-boundary", ActorRef: actor, ProjectRef: project, Statement: "bounded capacity wait", Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("submit: %v", err)
@@ -238,7 +238,7 @@ func TestPendingObservationHasDurableAttemptBoundary(t *testing.T) {
 	}
 	actor, project := testScope(t)
 	submitted, err := orchestrator.Submit(ctx, SubmitRequest{
-		RequestRef: "request:bounded", ActorRef: actor, ProjectRef: project, Statement: "bounded",
+		RequestRef: "request:bounded", ActorRef: actor, ProjectRef: project, Statement: "bounded", Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("submit: %v", err)

@@ -58,8 +58,8 @@ func TestGoalSnapshotRoundTripPreservesStatesEvidenceAndOrder(t *testing.T) {
 			if got := restored.Snapshot(); !reflect.DeepEqual(got, snapshot) {
 				t.Fatalf("snapshot round trip differs:\n got: %#v\nwant: %#v", got, snapshot)
 			}
-			if restored.IntentHash() != snapshot.Intent.Hash {
-				t.Fatalf("IntentHash() = %q, want %q", restored.IntentHash(), snapshot.Intent.Hash)
+			if restored.IntentHash() != snapshot.AppSpec.Intent.Hash {
+				t.Fatalf("IntentHash() = %q, want %q", restored.IntentHash(), snapshot.AppSpec.Intent.Hash)
 			}
 			items := restored.WorkItems()
 			for index, item := range items {
@@ -76,7 +76,8 @@ func TestGoalSnapshotIsDetachedFromAggregate(t *testing.T) {
 	snapshot := aggregate.Snapshot()
 	original := aggregate.Snapshot()
 
-	snapshot.Intent.Statement = "mutated outside domain"
+	snapshot.AppSpec.Intent.Statement = "mutated outside domain"
+	snapshot.AppSpec.Objective = "mutated confirmed objective"
 	snapshot.WorkItems[0].Objective = "mutated outside domain"
 	snapshot.WorkItems[0].ArtifactRefs[0] = "artifact:mutated"
 	snapshot.WorkItems = append(snapshot.WorkItems, snapshot.WorkItems[0])
@@ -96,7 +97,7 @@ func TestRestoreGoalRejectsManipulatedOrIncoherentPayloads(t *testing.T) {
 		{
 			name: "tampered intent",
 			mutate: func(snapshot *domain.GoalSnapshot) {
-				snapshot.Intent.Statement += " tampered"
+				snapshot.AppSpec.Intent.Statement += " tampered"
 			},
 			code: domain.ErrorIntentHashMismatch,
 		},

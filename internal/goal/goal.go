@@ -28,7 +28,7 @@ type Goal struct {
 	ref            GoalRef
 	actor          ActorRef
 	project        ProjectRef
-	intentManifest IntentManifest
+	appSpec        AppSpec
 	state          GoalState
 	revision       Revision
 	createdAt      time.Time
@@ -40,34 +40,75 @@ type Goal struct {
 	itemOrder      []WorkItemRef
 }
 
-func NewGoal(ref GoalRef, intent IntentManifest, createdAt time.Time) (Goal, error) {
+func NewGoal(ref GoalRef, spec AppSpec, createdAt time.Time) (Goal, error) {
 	if !validGoalRef(ref) {
 		return Goal{}, domainError(ErrorInvalidRef, "goal_ref")
 	}
-	if !validIntentManifest(intent) {
-		return Goal{}, domainError(ErrorInvalidArgument, "intent_manifest")
+	if !validAppSpec(spec) || !spec.isRoot() {
+		return Goal{}, domainError(ErrorInvalidArgument, "app_spec")
 	}
-	if !validTransitionTime(createdAt, intent.SubmittedAt()) {
+	if !validTransitionTime(createdAt, spec.ConfirmedAt()) {
 		return Goal{}, domainError(ErrorInvalidArgument, "created_at")
 	}
 
 	return Goal{
-		ref:            ref,
-		actor:          intent.Actor(),
-		project:        intent.Project(),
-		intentManifest: intent,
-		state:          GoalStatePending,
-		revision:       1,
-		createdAt:      canonicalTime(createdAt),
-		items:          make(map[WorkItemRef]WorkItem),
+		ref:       ref,
+		actor:     spec.Intent().Actor(),
+		project:   spec.Intent().Project(),
+		appSpec:   spec,
+		state:     GoalStatePending,
+		revision:  1,
+		createdAt: canonicalTime(createdAt),
+		items:     make(map[WorkItemRef]WorkItem),
+	}, nil
+}
+
+// NewSuccessorGoal creates a fresh pending aggregate from an exact amendment.
+// Source is immutable and must already be terminal; no plan or evidence moves.
+func NewSuccessorGoal(ref GoalRef, source Goal, amended AppSpec, createdAt time.Time) (Goal, error) {
+	if !validGoalRef(ref) {
+		return Goal{}, domainError(ErrorInvalidRef, "goal_ref")
+	}
+	if ref == source.ref {
+		return Goal{}, domainError(ErrorInvalidArgument, "goal_ref")
+	}
+	if !validAppSpec(source.appSpec) || !validGoalRef(source.ref) || !source.IsTerminal() || source.closedAt.IsZero() {
+		return Goal{}, domainError(ErrorInvalidTransition, "source_goal")
+	}
+	if !validAppSpec(amended) || amended.isRoot() {
+		return Goal{}, domainError(ErrorInvalidArgument, "app_spec")
+	}
+	parentRef, hasParent := amended.ParentRef()
+	expectedGeneration, generationErr := nextAppSpecGeneration(source.appSpec.Generation())
+	if generationErr != nil {
+		return Goal{}, generationErr
+	}
+	if !hasParent || parentRef != source.appSpec.Ref() || amended.ParentHash() != source.SpecHash() ||
+		amended.Generation() != expectedGeneration {
+		return Goal{}, domainError(ErrorInvalidArgument, "app_spec_parent")
+	}
+	intent := amended.Intent()
+	if intent.Actor() != source.actor || intent.Project() != source.project {
+		return Goal{}, domainError(ErrorScopeConflict, "goal_scope")
+	}
+	if intent.SubmittedAt().Before(source.closedAt) || amended.ConfirmedAt().Before(source.closedAt) ||
+		!validTransitionTime(createdAt, amended.ConfirmedAt()) || canonicalTime(createdAt).Before(source.closedAt) {
+		return Goal{}, domainError(ErrorInvalidArgument, "created_at")
+	}
+	return Goal{
+		ref: ref, actor: intent.Actor(), project: intent.Project(), appSpec: amended,
+		state: GoalStatePending, revision: 1, createdAt: canonicalTime(createdAt),
+		items: make(map[WorkItemRef]WorkItem),
 	}, nil
 }
 
 func (goal Goal) Ref() GoalRef                   { return goal.ref }
 func (goal Goal) Actor() ActorRef                { return goal.actor }
 func (goal Goal) Project() ProjectRef            { return goal.project }
-func (goal Goal) Intent() IntentRef              { return goal.intentManifest.Ref() }
-func (goal Goal) IntentHash() string             { return goal.intentManifest.Hash() }
+func (goal Goal) AppSpec() AppSpec               { return goal.appSpec }
+func (goal Goal) SpecHash() string               { return goal.appSpec.Hash() }
+func (goal Goal) Intent() IntentRef              { return goal.appSpec.Intent().Ref() }
+func (goal Goal) IntentHash() string             { return goal.appSpec.Intent().Hash() }
 func (goal Goal) State() GoalState               { return goal.state }
 func (goal Goal) Revision() Revision             { return goal.revision }
 func (goal Goal) CreatedAt() time.Time           { return goal.createdAt }

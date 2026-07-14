@@ -24,6 +24,7 @@ const (
 	ErrorDuplicateEvidence    ErrorCode = "goal.duplicate_evidence"
 	ErrorSnapshotInvalid      ErrorCode = "goal.snapshot_invalid"
 	ErrorIntentHashMismatch   ErrorCode = "goal.intent_hash_mismatch"
+	ErrorAppSpecHashMismatch  ErrorCode = "goal.app_spec_hash_mismatch"
 	ErrorWorkItemNotReady     ErrorCode = "goal.work_item_not_ready"
 )
 

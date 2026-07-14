@@ -134,7 +134,6 @@ type ClaimRequest struct {
 type GoalRecord struct {
 	RequestRef         string
 	RequestFingerprint string
-	Intent             goal.IntentManifest
 	Goal               goal.Goal
 	Executions         []ExecutionRecord
 	Artifacts          []ArtifactRecord
@@ -142,16 +141,19 @@ type GoalRecord struct {
 }
 
 type GoalSummary struct {
-	Ref           goal.GoalRef
-	IntentRef     goal.IntentRef
-	ActorRef      goal.ActorRef
-	ProjectRef    goal.ProjectRef
-	Statement     string
-	State         goal.GoalState
-	Revision      goal.Revision
-	CreatedAt     time.Time
-	ClosedAt      time.Time
-	ArtifactCount int
+	Ref               goal.GoalRef
+	IntentRef         goal.IntentRef
+	AppSpecRef        goal.AppSpecRef
+	AppSpecGeneration goal.AppSpecGeneration
+	SpecHash          string
+	ActorRef          goal.ActorRef
+	ProjectRef        goal.ProjectRef
+	Statement         string
+	State             goal.GoalState
+	Revision          goal.Revision
+	CreatedAt         time.Time
+	ClosedAt          time.Time
+	ArtifactCount     int
 }
 
 type RepositoryStatus struct {
@@ -164,11 +166,25 @@ type RepositoryStatus struct {
 type CreateGoalState struct {
 	RequestRef         string
 	RequestFingerprint string
-	Intent             goal.IntentManifest
 	Goal               goal.Goal
 	Executions         []ExecutionRecord
 	Actions            []ActionRecord
 	Events             []EventRecord
+}
+
+// AmendGoalState carries a fully constructed successor plus the source fence
+// that the repository must revalidate atomically. Generated refs are not part
+// of idempotency: an equal replay returns the already persisted successor.
+type AmendGoalState struct {
+	RequestRef             string
+	RequestFingerprint     string
+	ActorRef               goal.ActorRef
+	ProjectRef             goal.ProjectRef
+	SourceGoalRef          goal.GoalRef
+	ExpectedSourceRevision goal.Revision
+	ExpectedSourceSpecHash string
+	Successor              goal.Goal
+	Events                 []EventRecord
 }
 
 // LaunchPreparedState reserves the WorkItem in the aggregate before the
@@ -238,6 +254,7 @@ type GoalFailedState struct {
 // lifecycle data and must never be accepted as proof that a lease is still live.
 type StateRepository interface {
 	CreateGoal(context.Context, CreateGoalState) (GoalRecord, bool, error)
+	AmendGoal(context.Context, AmendGoalState) (GoalRecord, bool, error)
 	GetGoal(context.Context, goal.GoalRef) (GoalRecord, error)
 	ListGoals(context.Context, goal.ActorRef, goal.ProjectRef, int) ([]GoalSummary, error)
 	Status(context.Context) (RepositoryStatus, error)

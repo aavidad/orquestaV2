@@ -5,6 +5,7 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -20,6 +21,7 @@ const v04FixturePath = "acceptance/fixtures/v04_intent_appspec.json"
 type v04Fixture struct {
 	SchemaVersion     int      `json:"schema_version"`
 	ContractID        string   `json:"contract_id"`
+	BaseGitHead       string   `json:"base_git_head"`
 	Command           string   `json:"command"`
 	ReceiptPath       string   `json:"receipt_path"`
 	CandidateSubjects []string `json:"candidate_subjects"`
@@ -43,6 +45,38 @@ type v04Fixture struct {
 		Confirm             bool   `json:"confirm"`
 	} `json:"amendment"`
 	Assertions []string `json:"assertions"`
+}
+
+func TestV04CandidateSubjectsCoverCommittedDelta(t *testing.T) {
+	repositoryRoot := evidenceRepositoryRoot(t)
+	fixture := evidenceDecodeStrictJSON[v04Fixture](t, filepath.Join(repositoryRoot, filepath.FromSlash(v04FixturePath)))
+	if len(fixture.BaseGitHead) != 40 {
+		t.Fatalf("invalid V04 base_git_head %q", fixture.BaseGitHead)
+	}
+	candidates := make(map[string]struct{}, len(fixture.CandidateSubjects))
+	for _, subject := range fixture.CandidateSubjects {
+		candidates[subject] = struct{}{}
+	}
+	changed := append(
+		v04GitPaths(t, repositoryRoot, "diff", "--name-only", fixture.BaseGitHead, "--"),
+		v04GitPaths(t, repositoryRoot, "ls-files", "--others", "--exclude-standard")...,
+	)
+	seen := make(map[string]struct{}, len(changed))
+	for _, relative := range changed {
+		if relative == "" {
+			continue
+		}
+		if _, duplicate := seen[relative]; duplicate {
+			continue
+		}
+		seen[relative] = struct{}{}
+		if v04AllowedOutsideCandidate(relative) {
+			continue
+		}
+		if _, declared := candidates[relative]; !declared {
+			t.Errorf("V04 delta path is outside candidate_subjects: %s", relative)
+		}
+	}
 }
 
 type v04PackageShape struct {
@@ -300,6 +334,36 @@ func v04AssertSQLiteMigration(t *testing.T, repositoryRoot string) {
 func v04HasDuplicate(values []string) bool {
 	for index := 1; index < len(values); index++ {
 		if values[index] == values[index-1] {
+			return true
+		}
+	}
+	return false
+}
+
+func v04GitPaths(t *testing.T, repositoryRoot string, arguments ...string) []string {
+	t.Helper()
+	command := exec.Command("git", append([]string{"-C", repositoryRoot}, arguments...)...)
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("git %s: %v", strings.Join(arguments, " "), err)
+	}
+	text := strings.TrimSpace(string(output))
+	if text == "" {
+		return nil
+	}
+	return strings.Split(text, "\n")
+}
+
+func v04AllowedOutsideCandidate(relative string) bool {
+	if relative == "docs/reconstruccion/estado_y_handoff_rebuild.md" {
+		return true
+	}
+	for _, prefix := range []string{
+		"product/evidence/v01_source_integration.",
+		"product/evidence/v03_canonical_ledgers.",
+		"product/evidence/v04_intent_appspec.",
+	} {
+		if strings.HasPrefix(relative, prefix) {
 			return true
 		}
 	}

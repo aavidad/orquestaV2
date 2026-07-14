@@ -32,12 +32,23 @@ func TestAdapterLaunchIsIdempotentAndObservable(t *testing.T) {
 	if first != second {
 		t.Fatalf("receipts differ: first=%+v second=%+v", first, second)
 	}
+	if first.SpecHash != request.SpecHash {
+		t.Fatalf("receipt spec hash = %q, want %q", first.SpecHash, request.SpecHash)
+	}
+	conflicting := request
+	conflicting.SpecHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	if _, err := adapter.Launch(context.Background(), conflicting); err == nil || err.Error() != "fake_agent.execution_conflict" {
+		t.Fatalf("spec hash conflict error = %v", err)
+	}
 	observation, err := adapter.Observe(context.Background(), request.ExecutionRef)
 	if err != nil {
 		t.Fatalf("Observe() error = %v", err)
 	}
 	if err := ports.ValidateAgentObservation(observation, request.MaxOutputBytes); err != nil {
 		t.Fatalf("observation contract error = %v", err)
+	}
+	if observation.SpecHash != request.SpecHash {
+		t.Fatalf("observation spec hash = %q, want %q", observation.SpecHash, request.SpecHash)
 	}
 }
 
@@ -52,6 +63,7 @@ func validRequest(t *testing.T) ports.AgentLaunchRequest {
 		ExecutionRef:      executionRef,
 		GoalRef:           goalRef,
 		WorkItemRef:       workItemRef,
+		SpecHash:          "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 		ActorRef:          actorRef,
 		ProjectRef:        projectRef,
 		Objective:         "produce artifact",

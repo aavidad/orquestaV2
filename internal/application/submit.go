@@ -7,16 +7,19 @@ import (
 	"encoding/hex"
 	"errors"
 	"hash"
+	"strings"
 
 	"orquesta/internal/goal"
 )
 
 type SubmitRequest struct {
-	RequestRef string
-	ActorRef   goal.ActorRef
-	ProjectRef goal.ProjectRef
-	Statement  string
-	Plan       *PlanSpec
+	RequestRef          string
+	ActorRef            goal.ActorRef
+	ProjectRef          goal.ProjectRef
+	Statement           string
+	NormalizedObjective string
+	Confirm             bool
+	Plan                *PlanSpec
 }
 
 type SubmitResult struct {
@@ -28,11 +31,19 @@ func (orchestrator *Orchestrator) Submit(ctx context.Context, request SubmitRequ
 	if orchestrator == nil {
 		return SubmitResult{}, errors.New("application.unavailable")
 	}
+	if !request.Confirm {
+		return SubmitResult{}, errors.New("application.confirmation_required")
+	}
 	if err := validateSubmitRequest(request); err != nil {
 		return SubmitResult{}, err
 	}
+	request.NormalizedObjective = normalizedObjective(request.Statement, request.NormalizedObjective)
 	now := orchestrator.clock.Now()
 	intentRef, err := newIntentRef(ctx, orchestrator.ids)
+	if err != nil {
+		return SubmitResult{}, err
+	}
+	appSpecRef, err := newAppSpecRef(ctx, orchestrator.ids)
 	if err != nil {
 		return SubmitResult{}, err
 	}
@@ -47,7 +58,14 @@ func (orchestrator *Orchestrator) Submit(ctx context.Context, request SubmitRequ
 	if err != nil {
 		return SubmitResult{}, err
 	}
-	aggregate, err := goal.NewGoal(goalRef, intent, now)
+	appSpec, err := goal.NewInitialAppSpec(goal.AppSpecInput{
+		Ref: appSpecRef, Intent: intent, Objective: request.NormalizedObjective,
+		Reason: "initial_confirmation", ConfirmedBy: request.ActorRef, ConfirmedAt: now,
+	})
+	if err != nil {
+		return SubmitResult{}, err
+	}
+	aggregate, err := goal.NewGoal(goalRef, appSpec, now)
 	if err != nil {
 		return SubmitResult{}, err
 	}
@@ -75,11 +93,16 @@ func (orchestrator *Orchestrator) Submit(ctx context.Context, request SubmitRequ
 	fingerprint := submissionFingerprint(request)
 	record, created, err := orchestrator.state.CreateGoal(ctx, CreateGoalState{
 		RequestRef: request.RequestRef, RequestFingerprint: fingerprint,
-		Intent: intent, Goal: aggregate,
+		Goal:       aggregate,
 		Executions: executions, Actions: actions, Events: events,
 	})
 	if err != nil {
 		return SubmitResult{}, err
+	}
+	if created {
+		if err := validatePersistedCandidate(aggregate, executions, record); err != nil {
+			return SubmitResult{}, err
+		}
 	}
 	if err := validateCreatedRecord(request, fingerprint, record); err != nil {
 		return SubmitResult{}, err
@@ -89,11 +112,20 @@ func (orchestrator *Orchestrator) Submit(ctx context.Context, request SubmitRequ
 
 func submissionFingerprint(request SubmitRequest) string {
 	digest := sha256.New()
+	writeFingerprintField(digest, "orquesta.submit.v2")
 	writeFingerprintField(digest, request.ActorRef.String())
 	writeFingerprintField(digest, request.ProjectRef.String())
 	writeFingerprintField(digest, request.Statement)
+	writeFingerprintField(digest, normalizedObjective(request.Statement, request.NormalizedObjective))
 	writePlanFingerprint(digest, request.Plan)
 	return hex.EncodeToString(digest.Sum(nil))
+}
+
+func normalizedObjective(statement, objective string) string {
+	if normalized := strings.TrimSpace(objective); normalized != "" {
+		return normalized
+	}
+	return strings.TrimSpace(statement)
 }
 
 func writeFingerprintField(digest hash.Hash, value string) {
@@ -109,6 +141,14 @@ func newIntentRef(ctx context.Context, ids IDGenerator) (goal.IntentRef, error) 
 		return goal.IntentRef{}, err
 	}
 	return goal.NewIntentRef(value)
+}
+
+func newAppSpecRef(ctx context.Context, ids IDGenerator) (goal.AppSpecRef, error) {
+	value, err := ids.NewID(ctx, "app-spec")
+	if err != nil {
+		return goal.AppSpecRef{}, err
+	}
+	return goal.NewAppSpecRef(value)
 }
 
 func newGoalRef(ctx context.Context, ids IDGenerator) (goal.GoalRef, error) {

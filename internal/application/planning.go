@@ -39,7 +39,7 @@ func (orchestrator *Orchestrator) compilePlan(
 		spec = &PlanSpec{
 			Phases: []string{goal.DefaultPhaseKey().String()},
 			WorkItems: []WorkItemSpec{{
-				Key: "work:default", Objective: request.Statement,
+				Key: "work:default", Objective: normalizedObjective(request.Statement, request.NormalizedObjective),
 				Phase: goal.DefaultPhaseKey().String(), Role: goal.DefaultRoleKey().String(),
 				OutputContract: goal.OutputContractEvidenceBundle,
 			}},

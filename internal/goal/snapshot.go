@@ -2,7 +2,7 @@ package goal
 
 import "time"
 
-const GoalSnapshotSchemaVersion uint32 = 1
+const GoalSnapshotSchemaVersion uint32 = 2
 
 // IntentManifestSnapshot is a persistence-neutral representation. Primitive
 // ref values keep adapters independent from domain internals.
@@ -12,6 +12,20 @@ type IntentManifestSnapshot struct {
 	ProjectRef  string
 	Statement   string
 	SubmittedAt time.Time
+	Hash        string
+}
+
+// AppSpecSnapshot nests its unique IntentManifest and complete causal binding.
+type AppSpecSnapshot struct {
+	Ref         string
+	Generation  AppSpecGeneration
+	Intent      IntentManifestSnapshot
+	ParentRef   string
+	ParentHash  string
+	Objective   string
+	Reason      string
+	ConfirmedBy string
+	ConfirmedAt time.Time
 	Hash        string
 }
 
@@ -51,7 +65,7 @@ type GoalSnapshot struct {
 	Ref            string
 	ActorRef       string
 	ProjectRef     string
-	Intent         IntentManifestSnapshot
+	AppSpec        AppSpecSnapshot
 	State          GoalState
 	Revision       Revision
 	CreatedAt      time.Time
@@ -70,6 +84,15 @@ func (manifest IntentManifest) Snapshot() IntentManifestSnapshot {
 		Statement:   manifest.statement,
 		SubmittedAt: manifest.submittedAt,
 		Hash:        manifest.hash,
+	}
+}
+
+func (spec AppSpec) Snapshot() AppSpecSnapshot {
+	return AppSpecSnapshot{
+		Ref: spec.ref.String(), Generation: spec.generation,
+		Intent: spec.intent.Snapshot(), ParentRef: spec.parentRef.String(), ParentHash: spec.parentHash,
+		Objective: spec.objective, Reason: spec.reason, ConfirmedBy: spec.confirmedBy.String(),
+		ConfirmedAt: spec.confirmedAt, Hash: spec.hash,
 	}
 }
 
@@ -93,7 +116,7 @@ func (goal Goal) Snapshot() GoalSnapshot {
 		Ref:            goal.ref.String(),
 		ActorRef:       goal.actor.String(),
 		ProjectRef:     goal.project.String(),
-		Intent:         goal.intentManifest.Snapshot(),
+		AppSpec:        goal.appSpec.Snapshot(),
 		State:          goal.state,
 		Revision:       goal.revision,
 		CreatedAt:      goal.createdAt,

@@ -9,7 +9,7 @@ import (
 func TestSubmissionFingerprintFramesPlanCollections(t *testing.T) {
 	actor, project := testScope(t)
 	base := SubmitRequest{
-		RequestRef: "request:fingerprint", ActorRef: actor, ProjectRef: project, Statement: "same",
+		RequestRef: "request:fingerprint", ActorRef: actor, ProjectRef: project, Statement: "same", Confirm: true,
 		Plan: &PlanSpec{Phases: []string{"phase:test"}, WorkItems: []WorkItemSpec{{
 			Key: "work:a", Objective: "same", Phase: "phase:test", Role: "role:test",
 			OutputContract: goal.OutputContractEvidenceBundle,

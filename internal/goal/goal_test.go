@@ -95,10 +95,11 @@ func TestFailureCascadesDependencySkippedAndFailedGoalCanClose(t *testing.T) {
 
 func TestGoalRejectsInvalidScopeTimesAndTransitions(t *testing.T) {
 	intent := newIntent(t)
-	_, err := domain.NewGoal(domain.GoalRef{}, intent, baseTime().Add(time.Minute))
+	spec := newInitialAppSpec(t, intent)
+	_, err := domain.NewGoal(domain.GoalRef{}, spec, baseTime().Add(time.Minute))
 	requireCode(t, err, domain.ErrorInvalidRef)
 	goalRef := mustRef(t, "goal:validation", domain.NewGoalRef)
-	aggregate, err := domain.NewGoal(goalRef, intent, baseTime().Add(time.Minute))
+	aggregate, err := domain.NewGoal(goalRef, spec, baseTime().Add(time.Minute))
 	if err != nil {
 		t.Fatalf("NewGoal() error = %v", err)
 	}
@@ -150,11 +151,28 @@ func newIntent(t *testing.T) domain.IntentManifest {
 	return manifest
 }
 
+func newInitialAppSpec(t *testing.T, intent domain.IntentManifest) domain.AppSpec {
+	t.Helper()
+	spec, err := domain.NewInitialAppSpec(domain.AppSpecInput{
+		Ref:         mustRef(t, "app-spec:goal-tests", domain.NewAppSpecRef),
+		Intent:      intent,
+		Objective:   "execute the durable goal",
+		Reason:      "initial confirmation",
+		ConfirmedBy: intent.Actor(),
+		ConfirmedAt: baseTime().Add(30 * time.Second),
+	})
+	if err != nil {
+		t.Fatalf("NewInitialAppSpec() error = %v", err)
+	}
+	return spec
+}
+
 func newGoalWithItems(t *testing.T, objectives ...string) (domain.Goal, []domain.WorkItemRef) {
 	t.Helper()
 	intent := newIntent(t)
+	spec := newInitialAppSpec(t, intent)
 	goalRef := mustRef(t, "goal:001", domain.NewGoalRef)
-	aggregate, err := domain.NewGoal(goalRef, intent, baseTime().Add(time.Minute))
+	aggregate, err := domain.NewGoal(goalRef, spec, baseTime().Add(time.Minute))
 	if err != nil {
 		t.Fatalf("NewGoal() error = %v", err)
 	}

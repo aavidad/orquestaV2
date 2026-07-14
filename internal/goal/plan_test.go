@@ -248,7 +248,9 @@ type planFixture struct {
 func newPlanFixture(t *testing.T) planFixture {
 	t.Helper()
 	intent := newIntent(t)
-	aggregate, err := domain.NewGoal(mustRef(t, "goal:plan-tests", domain.NewGoalRef), intent, baseTime().Add(time.Minute))
+	aggregate, err := domain.NewGoal(
+		mustRef(t, "goal:plan-tests", domain.NewGoalRef), newInitialAppSpec(t, intent), baseTime().Add(time.Minute),
+	)
 	if err != nil {
 		t.Fatalf("NewGoal() error = %v", err)
 	}

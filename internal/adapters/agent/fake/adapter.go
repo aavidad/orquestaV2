@@ -64,6 +64,7 @@ func (adapter *Adapter) Launch(ctx context.Context, request ports.AgentLaunchReq
 	}
 	receipt := ports.AgentLaunchReceipt{
 		ExecutionRef:   request.ExecutionRef,
+		SpecHash:       request.SpecHash,
 		ProviderRef:    adapter.config.ProviderRef,
 		ExternalRef:    "fake:" + request.ExecutionRef.String(),
 		IdempotencyKey: request.IdempotencyKey,
@@ -81,7 +82,7 @@ func (adapter *Adapter) Observe(ctx context.Context, executionRef goal.Execution
 		return ports.AgentObservation{}, err
 	}
 	adapter.mu.Lock()
-	_, ok := adapter.runs[executionRef]
+	run, ok := adapter.runs[executionRef]
 	adapter.mu.Unlock()
 	if !ok {
 		return ports.AgentObservation{}, errors.New("fake_agent.execution_not_found")
@@ -89,6 +90,7 @@ func (adapter *Adapter) Observe(ctx context.Context, executionRef goal.Execution
 	content := append([]byte(nil), adapter.config.Content...)
 	return ports.AgentObservation{
 		ExecutionRef: executionRef,
+		SpecHash:     run.request.SpecHash,
 		Status:       ports.AgentCompleted,
 		MediaType:    adapter.config.MediaType,
 		Content:      content,

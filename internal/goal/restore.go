@@ -32,16 +32,69 @@ func RestoreIntentManifest(snapshot IntentManifestSnapshot) (IntentManifest, err
 	return manifest, nil
 }
 
+// RestoreAppSpec accepts a complete immutable generation, recomputes both the
+// nested Intent hash and the AppSpec hash, and rejects altered persistence.
+func RestoreAppSpec(snapshot AppSpecSnapshot) (AppSpec, error) {
+	intent, err := RestoreIntentManifest(snapshot.Intent)
+	if err != nil {
+		return AppSpec{}, err
+	}
+	ref, err := NewAppSpecRef(snapshot.Ref)
+	if err != nil {
+		return AppSpec{}, err
+	}
+	confirmedBy, err := NewActorRef(snapshot.ConfirmedBy)
+	if err != nil {
+		return AppSpec{}, err
+	}
+	var parentRef AppSpecRef
+	if snapshot.ParentRef != "" {
+		parentRef, err = NewAppSpecRef(snapshot.ParentRef)
+		if err != nil {
+			return AppSpec{}, err
+		}
+	}
+	if snapshot.Generation == 0 {
+		return AppSpec{}, domainError(ErrorSnapshotInvalid, "app_spec_generation")
+	}
+	spec := AppSpec{
+		ref: ref, generation: snapshot.Generation, intent: intent,
+		parentRef: parentRef, parentHash: snapshot.ParentHash,
+		objective: snapshot.Objective, reason: snapshot.Reason,
+		confirmedBy: confirmedBy, confirmedAt: canonicalTime(snapshot.ConfirmedAt),
+	}
+	if err := validateAppSpecInput(AppSpecInput{
+		Ref: ref, Intent: intent, Objective: spec.objective, Reason: spec.reason,
+		ConfirmedBy: confirmedBy, ConfirmedAt: spec.confirmedAt,
+	}); err != nil {
+		return AppSpec{}, err
+	}
+	if spec.isRoot() {
+		if validAppSpecRef(parentRef) || snapshot.ParentHash != "" {
+			return AppSpec{}, domainError(ErrorSnapshotInvalid, "app_spec_parent")
+		}
+	} else if !validAppSpecRef(parentRef) || parentRef == ref || !validCanonicalSHA256(snapshot.ParentHash) {
+		return AppSpec{}, domainError(ErrorSnapshotInvalid, "app_spec_parent")
+	}
+	expectedHash := hashAppSpec(spec)
+	if snapshot.Hash != expectedHash {
+		return AppSpec{}, domainError(ErrorAppSpecHashMismatch, "app_spec_hash")
+	}
+	spec.hash = expectedHash
+	return spec, nil
+}
+
 // RestoreGoal accepts only the current complete schema. Adapters own durable
 // migrations before data reaches domain.
 func RestoreGoal(snapshot GoalSnapshot) (Goal, error) {
 	if snapshot.SchemaVersion != GoalSnapshotSchemaVersion {
 		return Goal{}, domainError(ErrorSnapshotInvalid, "schema_version")
 	}
-	intent, err := RestoreIntentManifest(snapshot.Intent)
+	spec, err := RestoreAppSpec(snapshot.AppSpec)
 	if err != nil {
 		return Goal{}, err
 	}
+	intent := spec.Intent()
 	ref, err := NewGoalRef(snapshot.Ref)
 	if err != nil {
 		return Goal{}, err
@@ -60,7 +113,7 @@ func RestoreGoal(snapshot GoalSnapshot) (Goal, error) {
 	if snapshot.Revision < 1 || !validGoalState(snapshot.State) {
 		return Goal{}, domainError(ErrorSnapshotInvalid, "goal_header")
 	}
-	if snapshot.CreatedAt.IsZero() || canonicalTime(snapshot.CreatedAt).Before(intent.SubmittedAt()) {
+	if snapshot.CreatedAt.IsZero() || canonicalTime(snapshot.CreatedAt).Before(spec.ConfirmedAt()) {
 		return Goal{}, domainError(ErrorSnapshotInvalid, "goal_created_at")
 	}
 
@@ -77,7 +130,7 @@ func RestoreGoal(snapshot GoalSnapshot) (Goal, error) {
 	}
 
 	restored := Goal{
-		ref: ref, actor: actor, project: project, intentManifest: intent,
+		ref: ref, actor: actor, project: project, appSpec: spec,
 		state: snapshot.State, revision: snapshot.Revision,
 		createdAt:      canonicalTime(snapshot.CreatedAt),
 		startedAt:      canonicalOptionalTime(snapshot.StartedAt),
@@ -239,6 +292,10 @@ func validateRestoredWorkItem(item WorkItem) error {
 }
 
 func validateRestoredGoal(goal Goal) error {
+	if !validAppSpec(goal.appSpec) || goal.actor != goal.appSpec.Intent().Actor() ||
+		goal.project != goal.appSpec.Intent().Project() {
+		return domainError(ErrorScopeConflict, "app_spec_scope")
+	}
 	hasStarted := !goal.startedAt.IsZero()
 	hasClosed := !goal.closedAt.IsZero()
 	switch goal.state {

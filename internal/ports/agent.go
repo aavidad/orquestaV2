@@ -26,6 +26,7 @@ type AgentLaunchRequest struct {
 	ExecutionRef      goal.ExecutionRef
 	GoalRef           goal.GoalRef
 	WorkItemRef       goal.WorkItemRef
+	SpecHash          string
 	ActorRef          goal.ActorRef
 	ProjectRef        goal.ProjectRef
 	Objective         string
@@ -40,6 +41,7 @@ type AgentLaunchRequest struct {
 
 type AgentLaunchReceipt struct {
 	ExecutionRef   goal.ExecutionRef
+	SpecHash       string
 	ProviderRef    string
 	ExternalRef    string
 	IdempotencyKey string
@@ -48,6 +50,7 @@ type AgentLaunchReceipt struct {
 
 type AgentObservation struct {
 	ExecutionRef goal.ExecutionRef
+	SpecHash     string
 	Status       AgentStatus
 	MediaType    string
 	Content      []byte
@@ -89,6 +92,10 @@ func ValidateAgentLaunchRequest(request AgentLaunchRequest) error {
 		return &AgentContractError{Code: "agent.goal_ref_required"}
 	case request.WorkItemRef.String() == "":
 		return &AgentContractError{Code: "agent.work_item_ref_required"}
+	case request.SpecHash == "":
+		return &AgentContractError{Code: "agent.spec_hash_required"}
+	case !goal.IsCanonicalAppSpecHash(request.SpecHash):
+		return &AgentContractError{Code: "agent.spec_hash_invalid"}
 	case request.ActorRef.String() == "":
 		return &AgentContractError{Code: "agent.actor_ref_required"}
 	case request.ProjectRef.String() == "":
@@ -148,6 +155,15 @@ func ValidateAgentLaunchReceipt(request AgentLaunchRequest, receipt AgentLaunchR
 	if receipt.ExecutionRef != request.ExecutionRef {
 		return &AgentContractError{Code: "agent.receipt_execution_mismatch"}
 	}
+	if receipt.SpecHash == "" {
+		return &AgentContractError{Code: "agent.receipt_spec_hash_required"}
+	}
+	if !goal.IsCanonicalAppSpecHash(receipt.SpecHash) {
+		return &AgentContractError{Code: "agent.receipt_spec_hash_invalid"}
+	}
+	if receipt.SpecHash != request.SpecHash {
+		return &AgentContractError{Code: "agent.receipt_spec_hash_mismatch"}
+	}
 	if receipt.IdempotencyKey != request.IdempotencyKey {
 		return &AgentContractError{Code: "agent.receipt_idempotency_mismatch"}
 	}
@@ -166,6 +182,12 @@ func ValidateAgentLaunchReceipt(request AgentLaunchRequest, receipt AgentLaunchR
 func ValidateAgentObservation(observation AgentObservation, maxOutputBytes int64) error {
 	if observation.ExecutionRef.String() == "" {
 		return &AgentContractError{Code: "agent.observation_execution_ref_required"}
+	}
+	if observation.SpecHash == "" {
+		return &AgentContractError{Code: "agent.observation_spec_hash_required"}
+	}
+	if !goal.IsCanonicalAppSpecHash(observation.SpecHash) {
+		return &AgentContractError{Code: "agent.observation_spec_hash_invalid"}
 	}
 	if observation.ObservedAt.IsZero() {
 		return &AgentContractError{Code: "agent.observation_observed_at_required"}

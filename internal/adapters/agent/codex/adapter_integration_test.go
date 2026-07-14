@@ -51,6 +51,9 @@ func TestAdapterSuccessfulExecutionUsesHardenedCommandAndPrivateTerminal(t *test
 	if err := ports.ValidateAgentLaunchReceipt(request, receipt); err != nil {
 		t.Fatalf("receipt contract error = %v", err)
 	}
+	if receipt.SpecHash != request.SpecHash {
+		t.Fatalf("receipt spec hash = %q, want %q", receipt.SpecHash, request.SpecHash)
+	}
 	observation := awaitTerminal(t, adapter, request.ExecutionRef)
 	if observation.Status != ports.AgentCompleted || observation.MediaType != request.ArtifactMediaType {
 		t.Fatalf("observation = %+v", observation)
@@ -60,6 +63,9 @@ func TestAdapterSuccessfulExecutionUsesHardenedCommandAndPrivateTerminal(t *test
 	}
 	if observation.ErrorCode != "" {
 		t.Fatalf("completed error code = %q", observation.ErrorCode)
+	}
+	if observation.SpecHash != request.SpecHash {
+		t.Fatalf("observation spec hash = %q, want %q", observation.SpecHash, request.SpecHash)
 	}
 
 	runDirectory := filepath.Join(config.WorkRoot, filepath.FromSlash(executionPath(request.ExecutionRef)))
@@ -135,6 +141,9 @@ func TestAdapterLaunchIsIdempotentAcrossRestart(t *testing.T) {
 	if observation.Status != ports.AgentCompleted || string(observation.Content) != "artifact:success" {
 		t.Fatalf("restarted observation = %+v", observation)
 	}
+	if secondReceipt.SpecHash != request.SpecHash || observation.SpecHash != request.SpecHash {
+		t.Fatalf("spec hash lost across restart: receipt=%q observation=%q want=%q", secondReceipt.SpecHash, observation.SpecHash, request.SpecHash)
+	}
 
 	invocationPath := filepath.Join(config.WorkRoot, filepath.FromSlash(executionPath(request.ExecutionRef)), "helper-invocations")
 	invocations, err := os.ReadFile(invocationPath)
@@ -157,12 +166,20 @@ func TestAdapterRejectsExecutionPayloadConflict(t *testing.T) {
 	if _, err := adapter.Launch(context.Background(), conflicting); ErrorCode(err) != CodeExecutionConflict {
 		t.Fatalf("conflicting Launch() error = %v, code = %q", err, ErrorCode(err))
 	}
+	conflicting = request
+	conflicting.SpecHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	if _, err := adapter.Launch(context.Background(), conflicting); ErrorCode(err) != CodeExecutionConflict {
+		t.Fatalf("conflicting spec hash Launch() error = %v, code = %q", err, ErrorCode(err))
+	}
 }
 
 func TestLaunchHashAndPromptCarryPlanMetadata(t *testing.T) {
 	request := testRequest(t, "plan-metadata", "helper:success", 1024)
 	baseHash := mustRequestHash(t, request)
 	mutations := map[string]func(*ports.AgentLaunchRequest){
+		"spec_hash": func(value *ports.AgentLaunchRequest) {
+			value.SpecHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+		},
 		"phase":  func(value *ports.AgentLaunchRequest) { value.PhaseKey = "phase:review" },
 		"role":   func(value *ports.AgentLaunchRequest) { value.RoleKey = "role:reviewer" },
 		"writes": func(value *ports.AgentLaunchRequest) { value.WriteSet = []string{"internal/other"} },
@@ -179,6 +196,9 @@ func TestLaunchHashAndPromptCarryPlanMetadata(t *testing.T) {
 		})
 	}
 	prompt := agentPrompt(request)
+	if strings.Contains(prompt, request.SpecHash) {
+		t.Fatal("spec hash leaked into model prompt")
+	}
 	for _, value := range []string{request.PhaseKey, request.RoleKey, request.WriteSet[0], request.OutputContract} {
 		if !strings.Contains(prompt, value) {
 			t.Fatalf("plan metadata %q omitted from prompt: %q", value, prompt)
@@ -211,7 +231,7 @@ func TestAdapterBoundsFailureDiagnosticAndReturnsOnlyTypedCode(t *testing.T) {
 		t.Fatalf("failure observation = %+v", observation)
 	}
 
-	terminal, found, err := adapter.loadTerminal(executionPath(request.ExecutionRef), mustRequestHash(t, request), request.MaxOutputBytes)
+	terminal, found, err := adapter.loadTerminal(executionPath(request.ExecutionRef), mustRequestHash(t, request), request.SpecHash, request.MaxOutputBytes)
 	if err != nil || !found {
 		t.Fatalf("loadTerminal() found=%v error=%v", found, err)
 	}
@@ -543,6 +563,7 @@ func testRequest(t *testing.T, suffix, objective string, maxOutput int64) ports.
 		ExecutionRef:      executionRef,
 		GoalRef:           goalRef,
 		WorkItemRef:       workItemRef,
+		SpecHash:          "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 		ActorRef:          actorRef,
 		ProjectRef:        projectRef,
 		Objective:         objective,

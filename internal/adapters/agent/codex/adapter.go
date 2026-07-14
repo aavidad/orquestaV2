@@ -238,6 +238,9 @@ func (adapter *Adapter) resumeLaunchRecordLocked(
 	if err != nil {
 		return ports.AgentLaunchReceipt{}, err
 	}
+	if err := ports.ValidateAgentLaunchReceipt(request, receipt); err != nil {
+		return ports.AgentLaunchReceipt{}, &Error{Code: CodeStateInvalid, Cause: err}
+	}
 	state := &executionState{
 		requestHash: requestHash,
 		receipt:     receipt,
@@ -245,7 +248,7 @@ func (adapter *Adapter) resumeLaunchRecordLocked(
 		runPath:     runPath,
 		status:      ports.AgentPending,
 	}
-	if terminal, found, loadErr := adapter.loadTerminal(runPath, requestHash, record.MaxOutputBytes); loadErr != nil {
+	if terminal, found, loadErr := adapter.loadTerminal(runPath, requestHash, record.SpecHash, record.MaxOutputBytes); loadErr != nil {
 		return ports.AgentLaunchReceipt{}, loadErr
 	} else if found {
 		state.status = terminal.Status
@@ -316,7 +319,7 @@ func (adapter *Adapter) Observe(ctx context.Context, executionRef goal.Execution
 		runPath:     runPath,
 		status:      ports.AgentPending,
 	}
-	if terminal, terminalFound, loadErr := adapter.loadTerminal(runPath, record.RequestHash, record.MaxOutputBytes); loadErr != nil {
+	if terminal, terminalFound, loadErr := adapter.loadTerminal(runPath, record.RequestHash, record.SpecHash, record.MaxOutputBytes); loadErr != nil {
 		return ports.AgentObservation{}, loadErr
 	} else if terminalFound {
 		state.status = terminal.Status
@@ -337,7 +340,7 @@ func (adapter *Adapter) recoverInterruptedExecutionLocked(state *executionState)
 		ErrorCode:     CodeExecutionInterrupted,
 		ObservedAt:    adapter.terminalTime(state.receipt.AcceptedAt),
 	}
-	persisted, err := adapter.persistTerminal(state.runPath, terminal, state.maxOutput)
+	persisted, err := adapter.persistTerminal(state.runPath, terminal, state.receipt.SpecHash, state.maxOutput)
 	if err != nil {
 		return err
 	}
@@ -349,7 +352,7 @@ func (adapter *Adapter) recoverInterruptedExecutionLocked(state *executionState)
 
 func (adapter *Adapter) observeStateLocked(executionKey string, executionRef goal.ExecutionRef, state *executionState) (ports.AgentObservation, error) {
 	if state.terminal != nil && !state.terminalDurable {
-		persisted, err := adapter.persistTerminal(state.runPath, *state.terminal, state.maxOutput)
+		persisted, err := adapter.persistTerminal(state.runPath, *state.terminal, state.receipt.SpecHash, state.maxOutput)
 		if err != nil {
 			return ports.AgentObservation{}, err
 		}
@@ -366,7 +369,7 @@ func (adapter *Adapter) observeStateLocked(executionKey string, executionRef goa
 
 func (adapter *Adapter) observationForState(executionRef goal.ExecutionRef, state *executionState) (ports.AgentObservation, error) {
 	if state.terminal != nil {
-		observation := state.terminal.observation(executionRef)
+		observation := state.terminal.observation(executionRef, state.receipt.SpecHash)
 		if err := ports.ValidateAgentObservation(observation, state.maxOutput); err != nil {
 			return ports.AgentObservation{}, &Error{Code: CodeStateInvalid, Cause: err}
 		}
@@ -378,6 +381,7 @@ func (adapter *Adapter) observationForState(executionRef goal.ExecutionRef, stat
 	}
 	return ports.AgentObservation{
 		ExecutionRef: executionRef,
+		SpecHash:     state.receipt.SpecHash,
 		Status:       state.status,
 		ObservedAt:   observedAt.UTC(),
 	}, nil

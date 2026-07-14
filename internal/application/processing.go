@@ -96,7 +96,7 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 	}
 	request := ports.AgentLaunchRequest{
 		ExecutionRef: execution.Ref, GoalRef: record.Goal.Ref(),
-		WorkItemRef: item.Ref(), ActorRef: record.Goal.Actor(),
+		WorkItemRef: item.Ref(), SpecHash: record.Goal.SpecHash(), ActorRef: record.Goal.Actor(),
 		ProjectRef: record.Goal.Project(), Objective: item.Objective(),
 		PhaseKey: item.Phase().String(), RoleKey: item.Role().String(),
 		WriteSet: workItemWriteSet(item), OutputContract: string(item.OutputContract().Kind()),
@@ -115,7 +115,11 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 		return orchestrator.failGoal(ctx, claim, record, "agent.launch_failed")
 	}
 	if err := ports.ValidateAgentLaunchReceipt(request, receipt); err != nil {
-		return orchestrator.failGoal(ctx, claim, record, ports.AgentContractErrorCode(err))
+		code := ports.AgentContractErrorCode(err)
+		if isSpecHashFenceCode(code) {
+			return orchestrator.quarantine(ctx, claim, code)
+		}
+		return orchestrator.failGoal(ctx, claim, record, code)
 	}
 	transitionAt := lifecycleTime(orchestrator.clock.Now(), record.Goal, item)
 	execution.State = ExecutionRunning
@@ -167,7 +171,14 @@ func (orchestrator *Orchestrator) processObservation(ctx context.Context, claim 
 		return orchestrator.failGoal(ctx, claim, record, "agent.observation_execution_mismatch")
 	}
 	if err := ports.ValidateAgentObservation(observation, execution.MaxOutputBytes); err != nil {
-		return orchestrator.failGoal(ctx, claim, record, ports.AgentContractErrorCode(err))
+		code := ports.AgentContractErrorCode(err)
+		if isSpecHashFenceCode(code) {
+			return orchestrator.quarantine(ctx, claim, code)
+		}
+		return orchestrator.failGoal(ctx, claim, record, code)
+	}
+	if observation.SpecHash != record.Goal.SpecHash() {
+		return orchestrator.quarantine(ctx, claim, "agent.observation_spec_hash_mismatch")
 	}
 	if observation.Status == ports.AgentCompleted && !compatibleMediaType(execution.ArtifactMediaType, observation.MediaType) {
 		return orchestrator.failGoal(ctx, claim, record, "agent.observation_media_type_mismatch")
@@ -187,6 +198,20 @@ func (orchestrator *Orchestrator) processObservation(ctx context.Context, claim 
 		return orchestrator.succeedGoal(ctx, claim, record, execution, observation, transitionAt)
 	default:
 		return orchestrator.failGoal(ctx, claim, record, "agent.observation_status_invalid")
+	}
+}
+
+func isSpecHashFenceCode(code string) bool {
+	switch code {
+	case "agent.receipt_spec_hash_required",
+		"agent.receipt_spec_hash_invalid",
+		"agent.receipt_spec_hash_mismatch",
+		"agent.observation_spec_hash_required",
+		"agent.observation_spec_hash_invalid",
+		"agent.observation_spec_hash_mismatch":
+		return true
+	default:
+		return false
 	}
 }
 
