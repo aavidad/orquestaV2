@@ -1,6 +1,6 @@
 # Estado y handoff vivo del rebuild
 
-Última actualización: 2026-07-14 12:30 Europe/Madrid.
+Última actualización: 2026-07-14 13:17 Europe/Madrid.
 
 Este documento permite continuar el rebuild sin reconstruir el contexto de la
 sesión. Es estado operativo, no evidencia de aceptación. Los estados canónicos
@@ -44,38 +44,105 @@ cd674ab964 feat: materializar nucleo V04 AppSpec
 20e53d39f8 feat: persistir cadena AppSpec en SQLite
 4e204c44df docs: fijar handoff tras cierre SQLite V04
 56f1b30351 fix: vincular motivo inicial V04 al contrato
+1a07ec4f3f docs: fijar relevo durante MCP V04
+dc0533caf6 feat: exponer cadena AppSpec por MCP
+e4c5f23074 test: separar cobertura MCP V04 por responsabilidad
+a301a3bbac fix: integrar cierre ejecutable V04
+33c0072b89 test: congelar candidato integral V04
+9a6d255a08 test: acreditar cadena integral V04
 ```
 
-Checkpoint vigente: `56f1b30351` es el último commit seguro. V04 ya tiene
-dominio, aplicación, puertos/provider, fake, Codex y SQLite cerrados con
-contrarrevisión. El único write-set vivo está en MCP/i18n y permanece sin
-commit mientras lo implementa un subagente bootstrap. V02 conserva receipt V2
-válido. V01 y V03 continúan deliberadamente stale hasta sellar V04; no
-reemitirlos durante el WIP. Siguiente acción exacta: recoger el agente MCP,
-ejecutar sus pruebas `TestV04*`, contrarrevisar el diff y solo entonces
-integrarlo. Después reconciliar exactamente el candidato V04, cerrar BUG-022 y
-emitir/reemitir receipts.
+Checkpoint vigente: `9a6d255a08` es el cierre atómico y seguro de V04. V01,
+V02, V03 y V04 tienen receipts V2 válidos contra sus candidatos. V04 acredita
+solo `GOV-02`; `GOV-01` continúa declarado y sin evidencia. No queda ningún
+cambio de producto pendiente de commit. Este handoff es el único cambio
+esperado después de `9a6d255a08` y debe commitearse por separado.
 
-Contrarrevisión final: tres revisores independientes devolvieron `APPROVE`
-después de reabrir y cerrar sus bloqueos de circularidad V01, evidencia real
-de `BUG-020` y write-set del handoff. No queda bloqueo conocido de V03.
+Dos contrarrevisores finales independientes devolvieron `ACCEPT` sin editar:
+
+- sellado: delta congelado `d313ae5183 -> a301a3bbac`, 60 rutas de delta y
+  cuatro extras contractuales, 64 sujetos exactos, cero faltantes;
+- comportamiento: cadena `IntentManifest -> AppSpec -> Goal`, fake, Codex,
+  SQLite, MCP, i18n, bootstrap y E2E Codex real; normal, race sin filtro, vet,
+  receipts, diff-check y write-set verdes;
+- bugs `BUG-REBUILD-20260714-022` a `032` cerrados con lección ejecutable;
+- ningún proceso del rebuild quedó vivo. El runtime temporal
+  `.orquesta-runtime/v04-real-codex` se eliminó después de preservar el receipt;
+- existe un servidor legacy ajeno en la sesión tmux
+  `orq-live-bug255-replay13`. Pertenece al árbol antiguo: no detener ni limpiar
+  desde este rebuild.
+
+Digests de candidato acreditados:
+
+```text
+V01  sha256:2bfabf2357b14d9ad6ff09edfeb54f9e2a9847699bf551a1d522aba901bfb1e4
+V02  sha256:31c8461d6de4b80d78c27073595ffe80c085faab4381e110982c4029639ad9b0
+V03  sha256:c4446c90244153635adaa69a212f6274c4b3b2dadba6080a82269c8e6ac2a9dd
+V04  sha256:07c5be895bf677e13c8240943f4b812686e51736f28ee8973b1ffb2f4863d383
+```
+
+Receipt V04: fixture
+`sha256:0fc917861acaf5e55b75494b610841118259d14efae22436fddc145b7a131ef7`,
+output
+`sha256:4f57fd79f3ded9d751714710c171bded39ee190aab1bc1fe71d005ceb036d4cc`,
+ejecutado `2026-07-14T13:08:23+02:00`. El `git_head` informativo de los
+receipts es `a301a3bbac`; la identidad autoritativa es siempre el digest del
+candidato, no ese commit.
+
+Verificación rápida sin atravesar superficies legacy:
+
+```bash
+go test -mod=vendor -count=1 ./acceptance -run '^(TestAcceptanceV01SourceIntegrationReceipt|TestAcceptanceV02AuthorityRulesReceipt|TestAcceptanceV03CanonicalLedgersReceipt|TestAcceptanceV04IntentAppSpecReceipt|TestV04CandidateSubjectsCoverCommittedDelta|TestV04CandidateDeltaFreezesAtSealedHead)$'
+git diff --check
+scripts/check_rebuild_write_set.sh
+```
 
 ## Progreso honesto
 
-- V01 catálogo ejecutable: cerrado en el checkpoint previo; receipt V2 stale
-  por el cambio de roadmap V04 y pendiente de reemisión al sellar el corte.
+- V01 catálogo ejecutable: cerrado; receipt V2 válido.
 - V02 autoridad única del rebuild: receipt V2 válido.
-- V03 trazabilidad y lecciones: integrada en Git; receipt V2 stale porque V04
-  añadió `BUG-REBUILD-20260714-021` y cambió su gate candidato.
-- V04: contrato ejecutable; núcleo y SQLite verdes, MCP/i18n en WIP. GOV-02
-  continúa `declared` hasta receipt propio.
+- V03 trazabilidad y lecciones: cerrado; receipt V2 válido.
+- V04 intención, AppSpec y amendments: cerrado; receipt V2 válido; `GOV-02`
+  acreditado con evidencia exacta.
 - V05–V34: pendientes. No contar código heredado o una prueba aislada como
   vertical cerrada.
-- progreso vertical cerrado previo: 3 de 34, 8,8 % de la ruta; receipts válidos
-  contra el candidato de trabajo actual: 1 de 4 ejecutables, deuda intencional
-  hasta reemitir V01/V03 y emitir V04;
-- progreso de capacidades: 3 de 257 en estado `accredited`, 1,17 %: `GOV-03`,
-  `GOV-16` y `GOV-21`. No usar porcentajes subjetivos de “núcleo funcional”.
+- progreso vertical cerrado: 4 de 34, 11,8 % de la ruta; receipts válidos: 4
+  de 4 contratos ejecutables;
+- progreso de capacidades: 4 de 257 en estado `accredited`, 1,56 %:
+  `GOV-02`, `GOV-03`, `GOV-16` y `GOV-21`. No usar porcentajes subjetivos de
+  “núcleo funcional”.
+
+## Siguiente acción exacta: analizar V05 antes de programar
+
+V05 es `goal_dag_phases`, contrato `AC-V05-GOAL-DAG-PHASES`. Sigue `planned`.
+No cambiarlo a ejecutable ni abrir write-set de producto hasta completar un
+análisis acotado de lo ya existente. El rebuild ya contiene DAG y estado
+atómico previos; no asumir que eso acredita V05 ni reescribirlo por inercia.
+
+Orden de reanudación:
+
+1. verificar rama, `git status --short`, receipts V01-V04 y digest del árbol
+   antiguo;
+2. inventariar solo símbolos/tests actuales de Goal DAG, scheduler, write-set,
+   hijos contractuales y PhaseInstance mediante `rg` y lecturas acotadas;
+3. contrastar ese inventario con las cuatro aserciones de
+   `AC-V05-GOAL-DAG-PHASES`: ninguna dependencia insatisfecha arranca, roots
+   ready paralelos salvo conflicto de write-set, PhaseInstance no posee
+   lifecycle y ningún hijo contractual desaparece;
+4. documentar matriz `reutilizar / corregir / rehacer / aplazar`, frontera
+   hexagonal y write-sets disjuntos; mantener fuera outbox/claims de V06;
+5. pedir contrarrevisión del análisis y solo después abrir contrato rojo V05,
+   fixture, candidato y tests ejecutables.
+
+Los subagentes directos siguen siendo bootstrap hasta V22: usarlos para
+inventarios/revisión con salida compacta, sin `codebase-memory-mcp`, y revisar
+cada resultado antes de integrarlo.
+
+## Historial de ejecución (no sustituye el checkpoint vigente)
+
+Las palabras “pendiente”, “siguiente” o “en curso” dentro del historial
+describen checkpoints pasados. No son órdenes de reanudación. La única acción
+vigente es el análisis V05 definido arriba.
 
 ## V03: trabajo ya realizado
 
@@ -327,9 +394,9 @@ fixture:          acceptance/fixtures/v03_canonical_ledgers.json
 receipt:          product/evidence/v03_canonical_ledgers.json
 output:           product/evidence/v03_canonical_ledgers.output.txt
 fixture sha256:   634cb498b2f972fea57812034870b4ed9e42b01c2c78ea5d2f9d3b4e5807f841
-candidate sha256: a73f772f0e0bac1ccc50609152648b626d715dfb220fcda232f5023ea1140c23
-output sha256:    14fd3c9ee0f05dd564c03eb032cd69d7f951994711040a2a78bab93909aee8dd
-executed_at:      2026-07-14T11:14:21+02:00
+candidate sha256: c4446c90244153635adaa69a212f6274c4b3b2dadba6080a82269c8e6ac2a9dd
+output sha256:    83c7c69f702f81a38f74a6f9feae09ad364927f85c813b5eb605df6178113780
+executed_at:      2026-07-14T13:09:29+02:00
 ```
 
 V02 fue reemitida después de documentar V03 en `acceptance/README.md`:
@@ -349,9 +416,9 @@ fixture:          acceptance/fixtures/v01_source_integration.json
 receipt:          product/evidence/v01_source_integration.json
 output:           product/evidence/v01_source_integration.output.txt
 fixture sha256:   8c8a7d6b1e7cfebabe7c380b8bdfe325620ff94e4bd1714b0851b524faa37e0f
-candidate sha256: 5fef175ab2ab210c6597966fc491140376ca88f9f9b51a3b2cf807fc155a6187
-output sha256:    5bdbd566452d83272c4d9b9f11d919587cd94dba514ea1d68c68df2ed8d0ef7c
-executed_at:      2026-07-14T11:14:17+02:00
+candidate sha256: 2bfabf2357b14d9ad6ff09edfeb54f9e2a9847699bf551a1d522aba901bfb1e4
+output sha256:    30f3bf6dc3248ee651b3877eb1ead1a4f62983d263b1080ec43e4c17de881df4
+executed_at:      2026-07-14T13:08:56+02:00
 ```
 
 El comando V01 también se ejecutó con su receipt retirado temporalmente y
@@ -663,32 +730,24 @@ sellar V04 esta desviación debe cerrarse como
 `d313ae5183` con el candidato V04; queda rojo de forma intencional mientras el
 delta esté abierto y debe cerrarse antes del receipt.
 
-El WIP MCP/i18n modifica únicamente:
+MCP/i18n quedó integrado en `dc0533caf6`; el split mecánico de tests en
+`e4c5f23074`; bootstrap/guía/E2E en `a301a3bbac`; candidato congelado en
+`33c0072b89`; receipts y acreditación en `9a6d255a08`. La superficie final son
+seis tools exactas, incluida `orquesta.goals.amend`.
 
-```text
-internal/interfaces/mcp/{errors.go,interface_integration_test.go,output.go,tools.go}
-internal/i18n/{catalog_test.go,catalogs/en.json,catalogs/es.json}
-```
+`BUG-REBUILD-20260714-029` cerró el falso verde de paquetes con
+`[no tests to run]`; el contrato final ejecuta aceptación focal y después todos
+los paquetes propietarios sin filtro. `BUG-REBUILD-20260714-030` congela el
+delta en `a301a3bbac`, de modo que V05 no invalida V04. `BUG-031` migró todos
+los callsites/bootstrap a confirmación y `spec_hash`; `BUG-032` impide acreditar
+la capacidad vecina por un parche sin contexto. Todos tienen tests de lección.
 
-La auditoría previa exige tests runtime con prefijo `TestV04`, seis tools
-exactas con schemas cerrados, confirmación sin efectos, principal/proyecto y
-tiempo del servidor, replay/conflicto/carrera, amendment terminal con CAS y
-proyección completa. El fake de memoria debe indexar idempotencia por
-`(actor, project, request_ref)`, no solo por request. También debe probar el
-mismo request en scopes distintos y cero IDs/reloj/escrituras en todos los
-rechazos tempranos. El candidato V04 aún omite al menos `mcp/errors.go` y los
-tres ficheros i18n; no corregirlo hasta estabilizar todo el delta.
+El E2E Codex real por API MCP cerró con marcador
+`ORQUESTA_CODEX_E2E_OK_333775d0eab63976d648f0f96bb8184d`; su descriptor
+durable vive en `product/evidence/real_codex_mcp_e2e.json`. El runtime temporal
+fue eliminado tras el sellado. No reabrir V04 salvo regresión reproducible.
 
-Si la sesión termina durante este WIP: no regenerar receipts, no descartar
-cambios y no relanzar agentes a ciegas. Primero inspeccionar `git status`,
-recoger agentes vivos y ejecutar paquetes focales. El último checkpoint seguro
-committed es `56f1b30351`; V01/V03 continúan stale de forma intencional hasta
-el sellado V04. Próxima acción exacta: recoger MCP, ejecutar
-`go test -mod=vendor -count=1 ./internal/interfaces/mcp ./internal/i18n`, luego
-`-race`/`go vet`, solicitar contrarrevisión del diff y corregir cualquier falso
-verde antes del commit.
-
-Digest de control del árbol antiguo comprobado de nuevo antes del checkpoint SQLite:
+Digest de control del árbol antiguo comprobado al cierre V04:
 `75577492db531e71f8a47f7b7fec115e79996aed45e26ce66426b4c120d42a80`.
 
 ## Regla de actualización
