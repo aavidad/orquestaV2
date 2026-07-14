@@ -583,9 +583,11 @@ Objetivo: AppSpec inicial/amend, hashes/generaciones, Goal sucesor vacío y
 snapshot tamper-proof. Tras verde focal de dominio, actualizar este handoff
 antes de abrir aplicación.
 
-### WIP vivo posterior al contrato rojo
+### V04 vivo posterior al contrato rojo
 
-Este bloque está materializado pero todavía no tiene commit de integración:
+Checkpoint seguro `cd674ab964` (`feat: materializar nucleo V04 AppSpec`) contiene
+dominio, aplicación, ports, fake, Codex, bugs 023-025 y contrarrevisión cerrada.
+SQLite ya está ACCEPT pero aún forma el delta sin commit:
 
 - dominio: AppSpec inmutable, hash framed, N+1 causal, Goal sucesor terminal,
   snapshot schema 2 y negativos de tamper/self-parent. Verde normal y `-race`
@@ -596,11 +598,11 @@ Este bloque está materializado pero todavía no tiene commit de integración:
   en ports/fake/Codex;
 - aplicación: Submit confirmado, GoalRecord sin Intent duplicado, amendment
   atómico por nuevo método de repositorio y fencing antes de persistir
-  evidencia. Verde normal/race/vet; una contrarrevisión está añadiendo rechazo
-  pre-IDs de fuente no terminal, unicidad de sucesor y campos AppSpec de
-  `GoalSummary`;
-- SQLite: implementación en curso, write-set exclusivo
-  `internal/adapters/state/sqlite/**`; no se han abierto MCP ni bootstrap.
+  evidencia. Verde normal/race/vet, rechazo pre-IDs de fuente no terminal,
+  unicidad de sucesor y campos AppSpec de `GoalSummary`;
+- SQLite: schema V3 `Intent -> AppSpec -> Goal`, backfill canónico, rollback,
+  inmutabilidad, amendment atómico y lectura/restart. Bugs 026/027 cerrados;
+  normal/race/vet y contrarrevisión verdes. No se han abierto MCP ni bootstrap.
 
 Contrarrevisión independiente rechazó dos falsos verdes de aplicación. Ambos
 quedaron corregidos y registrados como `BUG-REBUILD-20260714-023` y
@@ -622,6 +624,25 @@ canónico como mismatch por comprobar igualdad demasiado pronto. Ya está cerrad
 orden `required -> invalid -> mismatch`, cobertura de cuarentena para las tres
 ramas y focal/race/vet verdes. No quedan bloqueos de esa contrarrevisión.
 
+Revisión de integración SQLite detectó y cerró
+`BUG-REBUILD-20260714-026`: un trigger exigía `confirmed_by == Intent.actor`,
+contrato más estrecho que dominio y futuro rol revisor. El trigger conserva
+guarda temporal/integridad pero acepta revisor autenticado distinto; test de
+round-trip SQLite verde.
+
+Contrarrevisión SQLite completa rechazó el bloque por
+`BUG-REBUILD-20260714-027`: backfill V2 validaba Intent pero no restauraba el
+Goal completo antes de emitir receipt 3. Un Goal SQL-válido y dominio-inválido
+podía dejar `Open` verde y fallar en `GetGoal`. Corrección en curso con el mismo
+agente: rojo adversarial y reconstrucción canónica de cada agregado dentro de
+la transacción, antes de receipt/user_version; fallo debe restaurar V2 íntegro.
+Rojo reproducido por integrador: `Open` aceptó Goal `running` con `closed_at`.
+Ya está cerrado: test adversarial verde; validación post-swap/pre-receipt usa
+lector canónico + `goal.RestoreGoal` y comprueba bindings de executions,
+artifacts y attestations. Rollback conserva V2, sin receipt 3 ni tablas staging.
+Mismo contrarrevisor dio ACCEPT; SQLite normal/race/vet verdes. Próximo frente:
+MCP create/amend y proyecciones AppSpec.
+
 Incidencia de disciplina: el agente de dominio tocó temporalmente
 `internal/goal/intent_test.go` para ampliar una tabla de refs sin pedir el
 write-set. El integrador lo detectó y el agente revirtió su hunk con
@@ -635,8 +656,10 @@ delta esté abierto y debe cerrarse antes del receipt.
 Si la sesión termina durante este WIP: no regenerar receipts, no descartar
 cambios y no relanzar agentes a ciegas. Primero inspeccionar `git status`,
 recoger agentes vivos y ejecutar paquetes focales. El último checkpoint seguro
-committed sigue siendo `d313ae5183`; V01/V03 continúan stale de forma
-intencional hasta el sellado V04.
+committed es `cd674ab964`; el delta SQLite no committed debe conservarse. V01/V03
+continúan stale de forma intencional hasta el sellado V04. Próxima acción exacta:
+crear checkpoint SQLite, después implementar MCP create/amend con confirmación,
+identidad/tiempo de servidor y proyecciones AppSpec.
 
 Digest de control del árbol antiguo comprobado a las 12:04 CEST:
 `75577492db531e71f8a47f7b7fec115e79996aed45e26ce66426b4c120d42a80`.

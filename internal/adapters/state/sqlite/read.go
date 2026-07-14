@@ -71,11 +71,16 @@ func (repository *Repository) ListGoals(
 		return nil, err
 	}
 	rows, err := database.QueryContext(ctx, `
-SELECT g.ref, g.intent_ref, g.actor_ref, g.project_ref, i.statement,
+SELECT g.ref,
+       i.ref, i.actor_ref, i.project_ref, i.statement, i.submitted_at, i.hash,
+       spec.ref, spec.generation, spec.parent_ref, spec.parent_hash, spec.objective,
+       spec.reason, spec.confirmed_by, spec.confirmed_at, spec.hash,
+       g.actor_ref, g.project_ref,
        g.state, g.revision, g.created_at, g.closed_at,
        (SELECT COUNT(*) FROM artifacts a WHERE a.goal_ref = g.ref)
 FROM goals g
-JOIN intents i ON i.ref = g.intent_ref
+JOIN app_specs spec ON spec.ref = g.app_spec_ref
+JOIN intents i ON i.ref = spec.intent_ref
 WHERE g.actor_ref = ? AND g.project_ref = ?
 ORDER BY g.created_at DESC, g.ref DESC
 LIMIT ?`, actorRef.String(), projectRef.String(), limit)
@@ -87,17 +92,32 @@ LIMIT ?`, actorRef.String(), projectRef.String(), limit)
 	result := make([]application.GoalSummary, 0)
 	for rows.Next() {
 		var summary application.GoalSummary
-		var goalValue, intentValue, actorValue, projectValue string
+		var goalValue, goalActorValue, goalProjectValue string
+		var specSnapshot goal.AppSpecSnapshot
+		var parentRef, parentHash sql.NullString
 		var state string
-		var revision int64
-		var createdAt int64
+		var revision, generation int64
+		var submittedAt, confirmedAt, createdAt int64
 		var closedAt sql.NullInt64
 		if err := rows.Scan(
 			&goalValue,
-			&intentValue,
-			&actorValue,
-			&projectValue,
-			&summary.Statement,
+			&specSnapshot.Intent.Ref,
+			&specSnapshot.Intent.ActorRef,
+			&specSnapshot.Intent.ProjectRef,
+			&specSnapshot.Intent.Statement,
+			&submittedAt,
+			&specSnapshot.Intent.Hash,
+			&specSnapshot.Ref,
+			&generation,
+			&parentRef,
+			&parentHash,
+			&specSnapshot.Objective,
+			&specSnapshot.Reason,
+			&specSnapshot.ConfirmedBy,
+			&confirmedAt,
+			&specSnapshot.Hash,
+			&goalActorValue,
+			&goalProjectValue,
 			&state,
 			&revision,
 			&createdAt,
@@ -106,22 +126,36 @@ LIMIT ?`, actorRef.String(), projectRef.String(), limit)
 		); err != nil {
 			return nil, mapDatabaseError(err)
 		}
-		if revision <= 0 {
+		if revision <= 0 || generation <= 0 {
 			return nil, invalid(fmt.Errorf("sqlite.revision_invalid"))
+		}
+		specSnapshot.Intent.SubmittedAt = time.Unix(0, submittedAt).UTC()
+		specSnapshot.Generation = goal.AppSpecGeneration(generation)
+		if parentRef.Valid {
+			specSnapshot.ParentRef = parentRef.String
+		}
+		if parentHash.Valid {
+			specSnapshot.ParentHash = parentHash.String
+		}
+		specSnapshot.ConfirmedAt = time.Unix(0, confirmedAt).UTC()
+		spec, restoreErr := goal.RestoreAppSpec(specSnapshot)
+		if restoreErr != nil {
+			return nil, invalid(restoreErr)
+		}
+		if spec.Intent().Actor().String() != goalActorValue || spec.Intent().Project().String() != goalProjectValue {
+			return nil, invalid(fmt.Errorf("sqlite.goal_app_spec_invalid"))
 		}
 		var refErr error
 		if summary.Ref, refErr = goal.NewGoalRef(goalValue); refErr != nil {
 			return nil, invalid(refErr)
 		}
-		if summary.IntentRef, refErr = goal.NewIntentRef(intentValue); refErr != nil {
-			return nil, invalid(refErr)
-		}
-		if summary.ActorRef, refErr = goal.NewActorRef(actorValue); refErr != nil {
-			return nil, invalid(refErr)
-		}
-		if summary.ProjectRef, refErr = goal.NewProjectRef(projectValue); refErr != nil {
-			return nil, invalid(refErr)
-		}
+		summary.IntentRef = spec.Intent().Ref()
+		summary.AppSpecRef = spec.Ref()
+		summary.AppSpecGeneration = spec.Generation()
+		summary.SpecHash = spec.Hash()
+		summary.ActorRef = spec.Intent().Actor()
+		summary.ProjectRef = spec.Intent().Project()
+		summary.Statement = spec.Intent().Statement()
 		summary.State = goal.GoalState(state)
 		summary.Revision = goal.Revision(revision)
 		summary.CreatedAt = time.Unix(0, createdAt).UTC()
@@ -137,28 +171,41 @@ LIMIT ?`, actorRef.String(), projectRef.String(), limit)
 func readGoalRecord(ctx context.Context, source queryer, goalValue string) (application.GoalRecord, error) {
 	var requestRef string
 	var requestFingerprint string
-	var intent goal.IntentManifestSnapshot
+	var spec goal.AppSpecSnapshot
 	var snapshot goal.GoalSnapshot
 	var state string
-	var revision, planGeneration int64
-	var submittedAt, createdAt int64
+	var revision, planGeneration, generation int64
+	var submittedAt, confirmedAt, createdAt int64
+	var parentRef, parentHash sql.NullString
 	var startedAt, closedAt sql.NullInt64
 	err := source.QueryRowContext(ctx, `
 SELECT g.request_ref, g.request_fingerprint,
        i.ref, i.actor_ref, i.project_ref, i.statement, i.submitted_at, i.hash,
+       spec.ref, spec.generation, spec.parent_ref, spec.parent_hash, spec.objective,
+       spec.reason, spec.confirmed_by, spec.confirmed_at, spec.hash,
        g.ref, g.actor_ref, g.project_ref, g.state, g.revision,
        g.created_at, g.started_at, g.closed_at, g.plan_generation
 FROM goals g
-JOIN intents i ON i.ref = g.intent_ref
+JOIN app_specs spec ON spec.ref = g.app_spec_ref
+JOIN intents i ON i.ref = spec.intent_ref
 WHERE g.ref = ?`, goalValue).Scan(
 		&requestRef,
 		&requestFingerprint,
-		&intent.Ref,
-		&intent.ActorRef,
-		&intent.ProjectRef,
-		&intent.Statement,
+		&spec.Intent.Ref,
+		&spec.Intent.ActorRef,
+		&spec.Intent.ProjectRef,
+		&spec.Intent.Statement,
 		&submittedAt,
-		&intent.Hash,
+		&spec.Intent.Hash,
+		&spec.Ref,
+		&generation,
+		&parentRef,
+		&parentHash,
+		&spec.Objective,
+		&spec.Reason,
+		&spec.ConfirmedBy,
+		&confirmedAt,
+		&spec.Hash,
 		&snapshot.Ref,
 		&snapshot.ActorRef,
 		&snapshot.ProjectRef,
@@ -172,11 +219,19 @@ WHERE g.ref = ?`, goalValue).Scan(
 	if err != nil {
 		return application.GoalRecord{}, mapDatabaseError(err)
 	}
-	if revision <= 0 || planGeneration <= 0 {
+	if revision <= 0 || planGeneration < 0 || generation <= 0 {
 		return application.GoalRecord{}, invalid(fmt.Errorf("sqlite.revision_invalid"))
 	}
-	intent.SubmittedAt = time.Unix(0, submittedAt).UTC()
-	snapshot.Intent = intent
+	spec.Intent.SubmittedAt = time.Unix(0, submittedAt).UTC()
+	spec.Generation = goal.AppSpecGeneration(generation)
+	if parentRef.Valid {
+		spec.ParentRef = parentRef.String
+	}
+	if parentHash.Valid {
+		spec.ParentHash = parentHash.String
+	}
+	spec.ConfirmedAt = time.Unix(0, confirmedAt).UTC()
+	snapshot.AppSpec = spec
 	snapshot.SchemaVersion = goal.GoalSnapshotSchemaVersion
 	snapshot.State = goal.GoalState(state)
 	snapshot.Revision = goal.Revision(revision)
@@ -205,10 +260,6 @@ WHERE g.ref = ?`, goalValue).Scan(
 		return application.GoalRecord{}, invalid(fmt.Errorf("sqlite.request_identity_invalid"))
 	}
 	snapshot.WorkItems = items
-	manifest, err := goal.RestoreIntentManifest(intent)
-	if err != nil {
-		return application.GoalRecord{}, invalid(err)
-	}
 	aggregate, err := goal.RestoreGoal(snapshot)
 	if err != nil {
 		return application.GoalRecord{}, invalid(err)
@@ -217,10 +268,12 @@ WHERE g.ref = ?`, goalValue).Scan(
 	if err != nil {
 		return application.GoalRecord{}, err
 	}
+	if aggregate.PlanGeneration() > 0 && len(executions) == 0 {
+		return application.GoalRecord{}, invalid(fmt.Errorf("sqlite.executions_missing"))
+	}
 	return application.GoalRecord{
 		RequestRef:         requestRef,
 		RequestFingerprint: requestFingerprint,
-		Intent:             manifest,
 		Goal:               aggregate,
 		Executions:         executions,
 		Artifacts:          artifacts,
@@ -374,9 +427,6 @@ ORDER BY created_at, ref`, goalValue)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, mapDatabaseError(err)
-	}
-	if len(records) == 0 {
-		return nil, stateError(application.StateNotFound, sql.ErrNoRows)
 	}
 	return records, nil
 }

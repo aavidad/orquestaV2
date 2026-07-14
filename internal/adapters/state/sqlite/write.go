@@ -10,39 +10,9 @@ import (
 )
 
 func insertCreateState(ctx context.Context, transaction *sql.Tx, state application.CreateGoalState) error {
-	intent := state.Intent.Snapshot()
 	snapshot := state.Goal.Snapshot()
-	if _, err := transaction.ExecContext(ctx, `
-INSERT INTO intents(ref, actor_ref, project_ref, statement, submitted_at, hash)
-VALUES (?, ?, ?, ?, ?, ?)`,
-		intent.Ref,
-		intent.ActorRef,
-		intent.ProjectRef,
-		intent.Statement,
-		requiredTime(intent.SubmittedAt),
-		intent.Hash,
-	); err != nil {
-		return mapDatabaseError(err)
-	}
-	if _, err := transaction.ExecContext(ctx, `
-INSERT INTO goals(
-    ref, request_ref, request_fingerprint, intent_ref, actor_ref, project_ref, state, revision,
-    created_at, started_at, closed_at, plan_generation
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		snapshot.Ref,
-		state.RequestRef,
-		state.RequestFingerprint,
-		snapshot.Intent.Ref,
-		snapshot.ActorRef,
-		snapshot.ProjectRef,
-		string(snapshot.State),
-		int64(snapshot.Revision),
-		requiredTime(snapshot.CreatedAt),
-		storedTime(snapshot.StartedAt),
-		storedTime(snapshot.ClosedAt),
-		int64(snapshot.PlanGeneration),
-	); err != nil {
-		return mapDatabaseError(err)
+	if err := insertGoalHeader(ctx, transaction, state.RequestRef, state.RequestFingerprint, snapshot); err != nil {
+		return err
 	}
 	for position, phase := range snapshot.Phases {
 		if _, err := transaction.ExecContext(ctx, `
@@ -104,6 +74,72 @@ VALUES (?, ?, ?, ?)`, item.GoalRef, item.Ref, scope, scopePosition); err != nil 
 		}
 	}
 	return insertEvents(ctx, transaction, state.Events)
+}
+
+func insertGoalHeader(
+	ctx context.Context,
+	transaction *sql.Tx,
+	requestRef string,
+	requestFingerprint string,
+	snapshot goal.GoalSnapshot,
+) error {
+	intent := snapshot.AppSpec.Intent
+	if _, err := transaction.ExecContext(ctx, `
+INSERT INTO intents(ref, actor_ref, project_ref, statement, submitted_at, hash)
+VALUES (?, ?, ?, ?, ?, ?)`,
+		intent.Ref,
+		intent.ActorRef,
+		intent.ProjectRef,
+		intent.Statement,
+		requiredTime(intent.SubmittedAt),
+		intent.Hash,
+	); err != nil {
+		return mapDatabaseError(err)
+	}
+	if err := insertAppSpecSnapshot(ctx, transaction, snapshot.AppSpec); err != nil {
+		return err
+	}
+	if _, err := transaction.ExecContext(ctx, `
+INSERT INTO goals(
+    ref, request_ref, request_fingerprint, app_spec_ref, actor_ref, project_ref, state, revision,
+    created_at, started_at, closed_at, plan_generation
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		snapshot.Ref,
+		requestRef,
+		requestFingerprint,
+		snapshot.AppSpec.Ref,
+		snapshot.ActorRef,
+		snapshot.ProjectRef,
+		string(snapshot.State),
+		int64(snapshot.Revision),
+		requiredTime(snapshot.CreatedAt),
+		storedTime(snapshot.StartedAt),
+		storedTime(snapshot.ClosedAt),
+		int64(snapshot.PlanGeneration),
+	); err != nil {
+		return mapDatabaseError(err)
+	}
+	return nil
+}
+
+func insertAppSpecSnapshot(ctx context.Context, transaction *sql.Tx, snapshot goal.AppSpecSnapshot) error {
+	_, err := transaction.ExecContext(ctx, `
+INSERT INTO app_specs(
+    ref, intent_ref, generation, parent_ref, parent_hash, objective, reason,
+    confirmed_by, confirmed_at, hash
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		snapshot.Ref,
+		snapshot.Intent.Ref,
+		int64(snapshot.Generation),
+		nullableString(snapshot.ParentRef),
+		nullableString(snapshot.ParentHash),
+		snapshot.Objective,
+		snapshot.Reason,
+		snapshot.ConfirmedBy,
+		requiredTime(snapshot.ConfirmedAt),
+		snapshot.Hash,
+	)
+	return mapDatabaseError(err)
 }
 
 func insertExecution(ctx context.Context, transaction *sql.Tx, execution application.ExecutionRecord) error {

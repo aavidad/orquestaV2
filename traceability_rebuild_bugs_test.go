@@ -32,6 +32,8 @@ func TestTraceabilityRebuildBugLessons(t *testing.T) {
 		"BUG-REBUILD-20260714-023": "internal/application/amend_test.go#TestV04ProviderSpecHashMismatchCreatesNoEvidenceOrClosure",
 		"BUG-REBUILD-20260714-024": "internal/application/amend_test.go#TestV04SubmitRejectsCreatedSnapshotSubstitution",
 		"BUG-REBUILD-20260714-025": "internal/ports/agent_contract_test.go#TestAgentContractClassifiesReceiptSpecHashBeforeCausalMismatch",
+		"BUG-REBUILD-20260714-026": "internal/adapters/state/sqlite/app_specs_test.go#TestRepositoryPersistsAppSpecConfirmedByReviewerDifferentFromIntentActor",
+		"BUG-REBUILD-20260714-027": "internal/adapters/state/sqlite/app_specs_test.go#TestRepositoryDomainInvalidV2GoalRollsBackAppSpecMigration",
 	}
 	baselineIDs := []string{
 		"BUG-REBUILD-20260714-001",

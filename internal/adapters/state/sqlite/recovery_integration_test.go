@@ -41,7 +41,7 @@ func TestArtifactPersistenceCrossingLeaseCannotCommitBackdatedSuccess(t *testing
 	project, _ := goal.NewProjectRef("project:lease-fence")
 	submitted, err := orchestrator.Submit(context.Background(), application.SubmitRequest{
 		RequestRef: "request:lease-fence", ActorRef: actor, ProjectRef: project,
-		Statement: "persist completion within the claim lease",
+		Statement: "persist completion within the claim lease", Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("submit lease-fenced Goal: %v", err)
@@ -81,7 +81,7 @@ func TestDispatchingLaunchRecoversAcrossRestartWithSameIdempotency(t *testing.T)
 	project, _ := goal.NewProjectRef("project:restart")
 	submitted, err := orchestrator.Submit(context.Background(), application.SubmitRequest{
 		RequestRef: "request:dispatch-restart", ActorRef: actor, ProjectRef: project,
-		Statement: "recover durable dispatch",
+		Statement: "recover durable dispatch", Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("submit: %v", err)
@@ -135,7 +135,7 @@ func TestPreparedLaunchWithRetainedClaimRecoversAfterCrashAndLeaseExpiry(t *test
 	project, _ := goal.NewProjectRef("project:crash-restart")
 	submitted, err := orchestrator.Submit(context.Background(), application.SubmitRequest{
 		RequestRef: "request:prepared-crash", ActorRef: actor, ProjectRef: project,
-		Statement: "recover retained claim",
+		Statement: "recover retained claim", Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("submit: %v", err)
@@ -172,6 +172,7 @@ func TestPreparedLaunchWithRetainedClaimRecoversAfterCrashAndLeaseExpiry(t *test
 	}
 	expectedRequest := ports.AgentLaunchRequest{
 		ExecutionRef: preparedExecution.Ref, GoalRef: preparedGoal.Ref(), WorkItemRef: item.Ref(),
+		SpecHash: preparedGoal.SpecHash(),
 		ActorRef: preparedGoal.Actor(), ProjectRef: preparedGoal.Project(), Objective: item.Objective(),
 		PhaseKey: item.Phase().String(), RoleKey: item.Role().String(), WriteSet: []string{},
 		OutputContract: string(item.OutputContract().Kind()), ArtifactMediaType: preparedExecution.ArtifactMediaType,
@@ -287,7 +288,7 @@ func (agent *restartAgent) Launch(ctx context.Context, request ports.AgentLaunch
 	agent.requests = append(agent.requests, request)
 	if len(agent.requests) == 1 {
 		agent.receipt = ports.AgentLaunchReceipt{
-			ExecutionRef: request.ExecutionRef, ProviderRef: "provider:restart",
+			ExecutionRef: request.ExecutionRef, SpecHash: request.SpecHash, ProviderRef: "provider:restart",
 			ExternalRef: "external:" + request.ExecutionRef.String(), IdempotencyKey: request.IdempotencyKey,
 			AcceptedAt: agent.clock.Now(),
 		}
@@ -324,7 +325,9 @@ func (restartArtifacts) Get(context.Context, goal.ArtifactRef, int64) (ports.Art
 }
 
 type leaseCompletionAgent struct {
-	clock *restartClock
+	mu       sync.Mutex
+	clock    *restartClock
+	specHash string
 }
 
 func (agent *leaseCompletionAgent) Capabilities(context.Context) (ports.AgentCapabilities, error) {
@@ -332,16 +335,22 @@ func (agent *leaseCompletionAgent) Capabilities(context.Context) (ports.AgentCap
 }
 
 func (agent *leaseCompletionAgent) Launch(_ context.Context, request ports.AgentLaunchRequest) (ports.AgentLaunchReceipt, error) {
+	agent.mu.Lock()
+	agent.specHash = request.SpecHash
+	agent.mu.Unlock()
 	return ports.AgentLaunchReceipt{
-		ExecutionRef: request.ExecutionRef, ProviderRef: "provider:lease-test",
+		ExecutionRef: request.ExecutionRef, SpecHash: request.SpecHash, ProviderRef: "provider:lease-test",
 		ExternalRef: "external:" + request.ExecutionRef.String(), IdempotencyKey: request.IdempotencyKey,
 		AcceptedAt: agent.clock.Now(),
 	}, nil
 }
 
 func (agent *leaseCompletionAgent) Observe(_ context.Context, executionRef goal.ExecutionRef) (ports.AgentObservation, error) {
+	agent.mu.Lock()
+	specHash := agent.specHash
+	agent.mu.Unlock()
 	return ports.AgentObservation{
-		ExecutionRef: executionRef, Status: ports.AgentCompleted, MediaType: "text/plain",
+		ExecutionRef: executionRef, SpecHash: specHash, Status: ports.AgentCompleted, MediaType: "text/plain",
 		Content: []byte("lease-fenced artifact"), ObservedAt: agent.clock.Now(),
 	}, nil
 }

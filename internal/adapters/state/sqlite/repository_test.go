@@ -54,7 +54,7 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 	if err := repository.db.QueryRow("PRAGMA user_version").Scan(&userVersion); err != nil {
 		t.Fatalf("user_version: %v", err)
 	}
-	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != 2 {
+	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != 3 {
 		t.Fatalf("pragmas = fk:%d busy:%d version:%d", foreignKeys, busyTimeout, userVersion)
 	}
 
@@ -72,7 +72,7 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 		tables = append(tables, name)
 	}
 	wantTables := []string{
-		"artifacts", "attestations", "events", "executions", "goal_phases",
+		"app_specs", "artifacts", "attestations", "events", "executions", "goal_phases",
 		"goals", "intents", "outbox", "schema_migrations",
 		"work_item_dependencies", "work_item_write_scopes", "work_items",
 	}
@@ -91,6 +91,27 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 	}
 	if migrationName != "002_dag.sql" {
 		t.Fatalf("DAG migration name = %q", migrationName)
+	}
+	if err := repository.db.QueryRow("SELECT name FROM schema_migrations WHERE version = 3").Scan(&migrationName); err != nil {
+		t.Fatalf("AppSpec migration receipt: %v", err)
+	}
+	if migrationName != "003_app_specs.sql" {
+		t.Fatalf("AppSpec migration name = %q", migrationName)
+	}
+	var appSpecColumns, intentColumns, foreignKeyViolations int
+	if err := repository.db.QueryRow(`
+SELECT COUNT(*) FROM pragma_table_info('goals') WHERE name = 'app_spec_ref'`).Scan(&appSpecColumns); err != nil {
+		t.Fatalf("goals app_spec_ref column: %v", err)
+	}
+	if err := repository.db.QueryRow(`
+SELECT COUNT(*) FROM pragma_table_info('goals') WHERE name = 'intent_ref'`).Scan(&intentColumns); err != nil {
+		t.Fatalf("goals legacy intent_ref column: %v", err)
+	}
+	if err := repository.db.QueryRow("SELECT COUNT(*) FROM pragma_foreign_key_check").Scan(&foreignKeyViolations); err != nil {
+		t.Fatalf("foreign_key_check: %v", err)
+	}
+	if appSpecColumns != 1 || intentColumns != 0 || foreignKeyViolations != 0 {
+		t.Fatalf("Goal binding columns app_spec=%d intent=%d fk_violations=%d", appSpecColumns, intentColumns, foreignKeyViolations)
 	}
 
 	_, err = repository.db.Exec(`
@@ -287,7 +308,7 @@ func TestRepositoryCreateGetListScopedIdempotencyAndRestart(t *testing.T) {
 	}
 	freshReplay := newCreateFixtureWithStatement(
 		t, "first-retry", "request:shared", "fingerprint:first", "actor:local-owner", "project:default",
-		first.Intent.Statement(),
+		first.Goal.AppSpec().Intent().Statement(),
 	)
 	replayed, created, err = repository.CreateGoal(context.Background(), freshReplay)
 	if err != nil || created || replayed.Goal.Ref() != first.Goal.Ref() {
@@ -322,6 +343,10 @@ func TestRepositoryCreateGetListScopedIdempotencyAndRestart(t *testing.T) {
 	if len(listed) != 1 || listed[0].Ref != first.Goal.Ref() || listed[0].ArtifactCount != 0 {
 		t.Fatalf("listed = %#v", listed)
 	}
+	if listed[0].IntentRef != first.Goal.Intent() || listed[0].AppSpecRef != first.Goal.AppSpec().Ref() ||
+		listed[0].AppSpecGeneration != first.Goal.AppSpec().Generation() || listed[0].SpecHash != first.Goal.SpecHash() {
+		t.Fatalf("listed AppSpec binding = %#v", listed[0])
+	}
 	status, err := repository.Status(context.Background())
 	if err != nil {
 		t.Fatalf("status: %v", err)
@@ -348,7 +373,7 @@ func TestRepositoryCreateGetListScopedIdempotencyAndRestart(t *testing.T) {
 	if _, created, err := repository.CreateGoal(context.Background(), first); err != nil || created {
 		t.Fatalf("replay after restart = created:%v err:%v", created, err)
 	}
-	for table, want := range map[string]int{"goals": 2, "intents": 2, "executions": 2, "events": 2, "outbox": 2} {
+	for table, want := range map[string]int{"app_specs": 2, "goals": 2, "intents": 2, "executions": 2, "events": 2, "outbox": 2} {
 		if got := tableCount(t, repository, table); got != want {
 			t.Fatalf("%s rows = %d, want %d", table, got, want)
 		}
@@ -1051,7 +1076,7 @@ func TestRepositoryRollsBackSuccessWhenReadySuccessorsAreOmitted(t *testing.T) {
 func newDAGCreateFixture(t *testing.T) application.CreateGoalState {
 	t.Helper()
 	base := newCreateFixture(t, "dag", "request:dag", "fingerprint:dag", "actor:local-owner", "project:default")
-	pending, err := goal.NewGoal(mustRef(t, "goal:dag-plan", goal.NewGoalRef), base.Intent, base.Goal.CreatedAt())
+	pending, err := goal.NewGoal(mustRef(t, "goal:dag-plan", goal.NewGoalRef), base.Goal.AppSpec(), base.Goal.CreatedAt())
 	if err != nil {
 		t.Fatalf("new DAG goal: %v", err)
 	}
@@ -1101,7 +1126,7 @@ func newDAGCreateFixture(t *testing.T) application.CreateGoalState {
 		MaxAttempts: 3, CreatedAt: aggregate.CreatedAt(),
 	}
 	return application.CreateGoalState{
-		RequestRef: "request:dag", RequestFingerprint: "fingerprint:dag", Intent: base.Intent, Goal: aggregate,
+		RequestRef: "request:dag", RequestFingerprint: "fingerprint:dag", Goal: aggregate,
 		Executions: []application.ExecutionRecord{execution},
 		Actions: []application.ActionRecord{{
 			Ref: "action:launch:dag:a", Kind: application.ActionLaunchAgent, GoalRef: aggregate.Ref(),
@@ -1163,7 +1188,14 @@ func newCreateFixtureWithStatement(
 	if err != nil {
 		t.Fatalf("new intent: %v", err)
 	}
-	aggregate, err := goal.NewGoal(mustRef(t, "goal:"+suffix, goal.NewGoalRef), intent, base)
+	spec, err := goal.NewInitialAppSpec(goal.AppSpecInput{
+		Ref: mustRef(t, "app-spec:"+suffix, goal.NewAppSpecRef), Intent: intent,
+		Objective: statement, Reason: "initial_confirmation", ConfirmedBy: actor, ConfirmedAt: base,
+	})
+	if err != nil {
+		t.Fatalf("new app spec: %v", err)
+	}
+	aggregate, err := goal.NewGoal(mustRef(t, "goal:"+suffix, goal.NewGoalRef), spec, base)
 	if err != nil {
 		t.Fatalf("new goal: %v", err)
 	}
@@ -1194,7 +1226,7 @@ func newCreateFixtureWithStatement(
 		MaxOutputBytes: 1 << 20, MaxAttempts: 3, CreatedAt: base,
 	}
 	return application.CreateGoalState{
-		RequestRef: requestRef, RequestFingerprint: fingerprint, Intent: intent, Goal: aggregate,
+		RequestRef: requestRef, RequestFingerprint: fingerprint, Goal: aggregate,
 		Executions: []application.ExecutionRecord{execution},
 		Actions: []application.ActionRecord{{
 			Ref: "action:launch:" + suffix, Kind: application.ActionLaunchAgent,
@@ -1212,8 +1244,7 @@ func assertRecordMatchesCreate(t *testing.T, record application.GoalRecord, stat
 	if record.RequestRef != state.RequestRef || record.RequestFingerprint != state.RequestFingerprint {
 		t.Fatalf("request identity = %q/%q", record.RequestRef, record.RequestFingerprint)
 	}
-	if !reflect.DeepEqual(record.Intent.Snapshot(), state.Intent.Snapshot()) ||
-		!reflect.DeepEqual(record.Goal.Snapshot(), state.Goal.Snapshot()) ||
+	if !reflect.DeepEqual(record.Goal.Snapshot(), state.Goal.Snapshot()) ||
 		!reflect.DeepEqual(record.Executions, state.Executions) {
 		t.Fatalf("record round trip mismatch:\n got=%+v\nwant=%+v", record, state)
 	}
@@ -1268,7 +1299,7 @@ func mustRef[T any](t *testing.T, value string, constructor func(string) (T, err
 
 func tableCount(t *testing.T, repository *Repository, table string) int {
 	t.Helper()
-	allowed := []string{"events", "executions", "goals", "intents", "outbox"}
+	allowed := []string{"app_specs", "events", "executions", "goals", "intents", "outbox"}
 	index := sort.SearchStrings(allowed, table)
 	if index >= len(allowed) || allowed[index] != table {
 		t.Fatalf("table %q not allowed in test helper", table)

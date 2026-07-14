@@ -23,9 +23,8 @@ func validateCreateState(state application.CreateGoalState) error {
 	if len(snapshot.WorkItems) == 0 || snapshot.State != goal.GoalStateRunning {
 		return errors.New("sqlite.create_lifecycle_invalid")
 	}
-	intent := state.Intent.Snapshot()
-	if !sameIntentSnapshot(intent, snapshot.Intent) {
-		return errors.New("sqlite.intent_snapshot_mismatch")
+	if snapshot.AppSpec.Generation != 1 || snapshot.AppSpec.ParentRef != "" || snapshot.AppSpec.ParentHash != "" {
+		return errors.New("sqlite.create_app_spec_invalid")
 	}
 	items := make(map[string]goal.WorkItemSnapshot, len(snapshot.WorkItems))
 	for _, item := range snapshot.WorkItems {
@@ -73,6 +72,44 @@ func validateCreateState(state application.CreateGoalState) error {
 		if err := validateEvent(event); err != nil || event.GoalRef.String() != snapshot.Ref {
 			return errors.New("sqlite.create_event_invalid")
 		}
+	}
+	return nil
+}
+
+func validateAmendState(state application.AmendGoalState) error {
+	if !validText(state.RequestRef) || !validText(state.RequestFingerprint) ||
+		state.ActorRef.String() == "" || state.ProjectRef.String() == "" ||
+		state.SourceGoalRef.String() == "" || state.ExpectedSourceRevision == 0 ||
+		uint64(state.ExpectedSourceRevision) > maxSQLiteInteger || !validCanonicalHash(state.ExpectedSourceSpecHash) {
+		return errors.New("sqlite.amend_request_invalid")
+	}
+	snapshot := state.Successor.Snapshot()
+	if _, err := goal.RestoreGoal(snapshot); err != nil {
+		return err
+	}
+	parentRef, hasParent := state.Successor.AppSpec().ParentRef()
+	if state.Successor.Ref() == state.SourceGoalRef || state.Successor.Actor() != state.ActorRef ||
+		state.Successor.Project() != state.ProjectRef || state.Successor.State() != goal.GoalStatePending ||
+		state.Successor.Revision() != 1 || state.Successor.PlanGeneration() != 0 ||
+		state.Successor.WorkItemCount() != 0 || len(snapshot.Phases) != 0 ||
+		!hasParent || parentRef.String() == "" ||
+		state.Successor.AppSpec().ParentHash() != state.ExpectedSourceSpecHash ||
+		uint64(state.Successor.AppSpec().Generation()) > maxSQLiteInteger {
+		return errors.New("sqlite.amend_successor_invalid")
+	}
+	if len(state.Events) == 0 {
+		return errors.New("sqlite.amend_events_required")
+	}
+	seen := make(map[string]struct{}, len(state.Events))
+	for _, event := range state.Events {
+		if err := validateEvent(event); err != nil || event.GoalRef != state.Successor.Ref() ||
+			event.WorkItemRef.String() != "" || event.ExecutionRef.String() != "" {
+			return errors.New("sqlite.amend_event_invalid")
+		}
+		if _, duplicate := seen[event.Ref]; duplicate {
+			return errors.New("sqlite.amend_event_duplicate")
+		}
+		seen[event.Ref] = struct{}{}
 	}
 	return nil
 }
@@ -150,6 +187,152 @@ func validateExecution(execution application.ExecutionRecord) error {
 		return errors.New("sqlite.execution_state_invalid")
 	}
 	return nil
+}
+
+func validateArtifactRecord(artifact application.ArtifactRecord) error {
+	if artifact.Stored.Ref.String() == "" || !validText(artifact.Stored.Digest) ||
+		!validText(artifact.Stored.MediaType) || artifact.Stored.Size < 0 || artifact.CreatedAt.IsZero() ||
+		artifact.GoalRef.String() == "" || artifact.WorkItemRef.String() == "" {
+		return errors.New("sqlite.artifact_invalid")
+	}
+	return nil
+}
+
+func validateAttestationRecord(attestation application.AttestationRecord) error {
+	if attestation.Ref.String() == "" || attestation.GoalRef.String() == "" ||
+		attestation.WorkItemRef.String() == "" || attestation.ExecutionRef.String() == "" ||
+		attestation.ArtifactRef.String() == "" || !validText(attestation.Policy) ||
+		attestation.AcceptedAt.IsZero() {
+		return errors.New("sqlite.attestation_invalid")
+	}
+	return nil
+}
+
+// validateGoalRecordConsistency checks only relationships owned by the state
+// adapter. Aggregate lifecycle, phase, WorkItem and AppSpec rules remain in
+// goal.RestoreGoal, invoked by readGoalRecord before this function.
+func validateGoalRecordConsistency(record application.GoalRecord, expectedGoalRef string) error {
+	aggregate := record.Goal
+	if aggregate.Ref().String() != expectedGoalRef {
+		return errors.New("sqlite.goal_record_ref_invalid")
+	}
+	items := make(map[goal.WorkItemRef]goal.WorkItem, aggregate.WorkItemCount())
+	for _, item := range aggregate.WorkItems() {
+		items[item.Ref()] = item
+	}
+	executions := make(map[goal.ExecutionRef]application.ExecutionRecord, len(record.Executions))
+	for _, execution := range record.Executions {
+		if err := validateExecution(execution); err != nil {
+			return err
+		}
+		item, found := items[execution.WorkItemRef]
+		if !found || execution.GoalRef != aggregate.Ref() {
+			return errors.New("sqlite.goal_record_execution_scope_invalid")
+		}
+		if _, duplicate := executions[execution.Ref]; duplicate {
+			return errors.New("sqlite.goal_record_execution_duplicate")
+		}
+		if !workItemExecutionStateMatches(item, execution) {
+			return errors.New("sqlite.goal_record_execution_binding_invalid")
+		}
+		executions[execution.Ref] = execution
+	}
+	for _, item := range items {
+		if executionRef, hasBinding := item.Execution(); hasBinding {
+			execution, found := executions[executionRef]
+			if !found || execution.WorkItemRef != item.Ref() {
+				return errors.New("sqlite.goal_record_item_execution_invalid")
+			}
+		}
+	}
+
+	artifacts := make(map[goal.ArtifactRef]application.ArtifactRecord, len(record.Artifacts))
+	for _, artifact := range record.Artifacts {
+		if err := validateArtifactRecord(artifact); err != nil {
+			return err
+		}
+		item, found := items[artifact.WorkItemRef]
+		if !found || artifact.GoalRef != aggregate.Ref() || !workItemHasArtifact(item, artifact.Stored.Ref) {
+			return errors.New("sqlite.goal_record_artifact_scope_invalid")
+		}
+		if _, duplicate := artifacts[artifact.Stored.Ref]; duplicate {
+			return errors.New("sqlite.goal_record_artifact_duplicate")
+		}
+		artifacts[artifact.Stored.Ref] = artifact
+	}
+
+	attestations := make(map[goal.AttestationRef]application.AttestationRecord, len(record.Attestations))
+	for _, attestation := range record.Attestations {
+		if err := validateAttestationRecord(attestation); err != nil {
+			return err
+		}
+		item, itemFound := items[attestation.WorkItemRef]
+		execution, executionFound := executions[attestation.ExecutionRef]
+		artifact, artifactFound := artifacts[attestation.ArtifactRef]
+		boundExecution, hasBinding := item.Execution()
+		if !itemFound || !executionFound || !artifactFound || !hasBinding ||
+			attestation.GoalRef != aggregate.Ref() || boundExecution != attestation.ExecutionRef ||
+			execution.WorkItemRef != attestation.WorkItemRef || artifact.WorkItemRef != attestation.WorkItemRef ||
+			!workItemHasAttestation(item, attestation.Ref) {
+			return errors.New("sqlite.goal_record_attestation_scope_invalid")
+		}
+		if _, duplicate := attestations[attestation.Ref]; duplicate {
+			return errors.New("sqlite.goal_record_attestation_duplicate")
+		}
+		attestations[attestation.Ref] = attestation
+	}
+	for _, item := range items {
+		for _, ref := range item.Artifacts() {
+			artifact, found := artifacts[ref]
+			if !found || artifact.WorkItemRef != item.Ref() {
+				return errors.New("sqlite.goal_record_item_artifact_invalid")
+			}
+		}
+		for _, ref := range item.Attestations() {
+			attestation, found := attestations[ref]
+			if !found || attestation.WorkItemRef != item.Ref() {
+				return errors.New("sqlite.goal_record_item_attestation_invalid")
+			}
+		}
+	}
+	return nil
+}
+
+func workItemHasArtifact(item goal.WorkItem, expected goal.ArtifactRef) bool {
+	for _, ref := range item.Artifacts() {
+		if ref == expected {
+			return true
+		}
+	}
+	return false
+}
+
+func workItemExecutionStateMatches(item goal.WorkItem, execution application.ExecutionRecord) bool {
+	bound, hasBinding := item.Execution()
+	switch item.State() {
+	case goal.WorkItemStatePending:
+		return !hasBinding && execution.State == application.ExecutionQueued
+	case goal.WorkItemStateRunning:
+		return hasBinding && bound == execution.Ref &&
+			(execution.State == application.ExecutionDispatching || execution.State == application.ExecutionRunning)
+	case goal.WorkItemStateSucceeded:
+		return hasBinding && bound == execution.Ref && execution.State == application.ExecutionSucceeded
+	case goal.WorkItemStateFailed:
+		return hasBinding && bound == execution.Ref && execution.State == application.ExecutionFailed
+	case goal.WorkItemStateSkipped:
+		return false
+	default:
+		return false
+	}
+}
+
+func workItemHasAttestation(item goal.WorkItem, expected goal.AttestationRef) bool {
+	for _, ref := range item.Attestations() {
+		if ref == expected {
+			return true
+		}
+	}
+	return false
 }
 
 func validateAction(action application.ActionRecord) error {
@@ -321,15 +504,13 @@ func validateSucceeded(state application.GoalSucceededState) (goal.WorkItem, err
 	if state.Execution.FinishedAt.IsZero() {
 		return goal.WorkItem{}, errors.New("sqlite.execution_finished_at_required")
 	}
-	if state.Artifact.Stored.Ref.String() == "" || !validText(state.Artifact.Stored.Digest) ||
-		!validText(state.Artifact.Stored.MediaType) || state.Artifact.Stored.Size < 0 || state.Artifact.CreatedAt.IsZero() ||
+	if err := validateArtifactRecord(state.Artifact); err != nil ||
 		state.Artifact.GoalRef != state.Goal.Ref() || state.Artifact.WorkItemRef != item.Ref() {
 		return goal.WorkItem{}, errors.New("sqlite.artifact_invalid")
 	}
-	if state.Attestation.Ref.String() == "" || state.Attestation.GoalRef != state.Goal.Ref() ||
+	if err := validateAttestationRecord(state.Attestation); err != nil || state.Attestation.GoalRef != state.Goal.Ref() ||
 		state.Attestation.WorkItemRef != item.Ref() || state.Attestation.ExecutionRef != state.Execution.Ref ||
-		state.Attestation.ArtifactRef != state.Artifact.Stored.Ref || !validText(state.Attestation.Policy) ||
-		state.Attestation.AcceptedAt.IsZero() {
+		state.Attestation.ArtifactRef != state.Artifact.Stored.Ref {
 		return goal.WorkItem{}, errors.New("sqlite.attestation_invalid")
 	}
 	if err := validateEvents(state.Events, state.Goal.Ref(), item.Ref(), state.Execution.Ref); err != nil {
@@ -475,14 +656,21 @@ func readyWorkItemRefs(aggregate goal.Goal) map[goal.WorkItemRef]struct{} {
 	return result
 }
 
-func sameIntentSnapshot(left, right goal.IntentManifestSnapshot) bool {
-	return left.Ref == right.Ref && left.ActorRef == right.ActorRef && left.ProjectRef == right.ProjectRef &&
-		left.Statement == right.Statement && left.SubmittedAt.Equal(right.SubmittedAt) && left.Hash == right.Hash
-}
-
 func actionMatches(action application.ActionRecord, goalRef, itemRef, executionRef string) bool {
 	return action.GoalRef.String() == goalRef && action.WorkItemRef.String() == itemRef &&
 		action.ExecutionRef.String() == executionRef
+}
+
+func validCanonicalHash(value string) bool {
+	if len(value) != 64 {
+		return false
+	}
+	for _, character := range value {
+		if (character < '0' || character > '9') && (character < 'a' || character > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func eventMatches(event application.EventRecord, goalRef, itemRef, executionRef string) bool {

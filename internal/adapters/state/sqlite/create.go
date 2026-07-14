@@ -41,8 +41,14 @@ WHERE actor_ref = ? AND project_ref = ? AND request_ref = ?`,
 		if readErr != nil {
 			return application.GoalRecord{}, false, readErr
 		}
-		if record.Intent.Actor() != state.Intent.Actor() || record.Intent.Project() != state.Intent.Project() ||
-			record.Intent.Statement() != state.Intent.Statement() {
+		existingSpec := record.Goal.AppSpec()
+		candidateSpec := state.Goal.AppSpec()
+		existingIntent := existingSpec.Intent()
+		candidateIntent := candidateSpec.Intent()
+		if existingIntent.Actor() != candidateIntent.Actor() || existingIntent.Project() != candidateIntent.Project() ||
+			existingIntent.Statement() != candidateIntent.Statement() ||
+			existingSpec.Objective() != candidateSpec.Objective() || existingSpec.Reason() != candidateSpec.Reason() ||
+			existingSpec.ConfirmedBy() != candidateSpec.ConfirmedBy() {
 			return application.GoalRecord{}, false, conflict(errors.New("sqlite.request_semantic_conflict"))
 		}
 		if err := commit(transaction); err != nil {
