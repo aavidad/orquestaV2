@@ -1,8 +1,6 @@
 package orquesta_test
 
 import (
-	"encoding/json"
-	"fmt"
 	"go/ast"
 	"go/build"
 	"go/parser"
@@ -15,7 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
+
+	"orquesta/internal/config"
 )
 
 const rebuildArchitectureEnvLoader = "internal/config/env_loader.go"
@@ -34,36 +33,14 @@ type rebuildArchitectureGoFile struct {
 	dotOS     bool
 }
 
-type rebuildArchitectureConfigRegistry struct {
-	Aliases []struct {
-		Name string `json:"name"`
-	} `json:"aliases"`
-	Keys []rebuildArchitectureConfigRegistryKey `json:"keys"`
-}
-
-type rebuildArchitectureConfigRegistryKey struct {
-	Key      string          `json:"key"`
-	GoName   string          `json:"go_name"`
-	Type     string          `json:"type"`
-	Default  json.RawMessage `json:"default"`
-	EnvAlias string          `json:"env_alias"`
-}
-
 type rebuildArchitectureConfigLiteral struct {
 	kind string
 	key  string
 }
 
-type rebuildArchitectureConfigDefault struct {
-	key       string
-	goName    string
-	valueType string
-	value     any
-}
-
 type rebuildArchitectureConfigPolicy struct {
 	literals map[string]rebuildArchitectureConfigLiteral
-	defaults []rebuildArchitectureConfigDefault
+	defaults map[string]string
 }
 
 type rebuildArchitectureConfigViolation struct {
@@ -87,7 +64,7 @@ func TestRebuildArchitecture(t *testing.T) {
 	}
 
 	files := rebuildArchitectureLoadGoFiles(t, repoRoot, "internal", "cmd/orquesta", "cmd-orquesta")
-	configPolicy := rebuildArchitectureLoadConfigPolicy(t, repoRoot)
+	configPolicy := rebuildArchitectureLoadConfigPolicy(t)
 
 	t.Run("new_product_does_not_import_legacy_modules", func(t *testing.T) {
 		for _, file := range files {
@@ -312,131 +289,35 @@ func rebuildArchitectureLoadGoFiles(t *testing.T, repoRoot string, roots ...stri
 	return files
 }
 
-func rebuildArchitectureLoadConfigPolicy(t *testing.T, repoRoot string) rebuildArchitectureConfigPolicy {
+func rebuildArchitectureLoadConfigPolicy(t *testing.T) rebuildArchitectureConfigPolicy {
 	t.Helper()
-	path := filepath.Join(repoRoot, "config", "registry.json")
-	content, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read config registry: %v", err)
+	definitions, aliases := config.Definitions(), config.Aliases()
+	if len(definitions) == 0 {
+		t.Fatal("config registry has no definitions")
 	}
-	policy, err := rebuildArchitectureConfigPolicyFromJSON(content)
-	if err != nil {
-		t.Fatalf("build architecture policy from config/registry.json: %v", err)
-	}
-	return policy
-}
-
-func rebuildArchitectureConfigPolicyFromJSON(content []byte) (rebuildArchitectureConfigPolicy, error) {
-	var source rebuildArchitectureConfigRegistry
-	if err := json.Unmarshal(content, &source); err != nil {
-		return rebuildArchitectureConfigPolicy{}, err
-	}
-	if len(source.Keys) == 0 {
-		return rebuildArchitectureConfigPolicy{}, fmt.Errorf("registry has no keys")
-	}
-
 	policy := rebuildArchitectureConfigPolicy{
-		literals: make(map[string]rebuildArchitectureConfigLiteral, len(source.Keys)*2+len(source.Aliases)),
-		defaults: make([]rebuildArchitectureConfigDefault, 0, len(source.Keys)),
+		literals: make(map[string]rebuildArchitectureConfigLiteral, len(definitions)*2+len(aliases)),
+		defaults: make(map[string]string, len(definitions)),
 	}
-	addLiteral := func(value, kind string) error {
-		if strings.TrimSpace(value) == "" {
-			return fmt.Errorf("empty %s", kind)
-		}
+	addLiteral := func(value, kind string) {
 		if previous, exists := policy.literals[value]; exists {
-			return fmt.Errorf("literal %q is both %s and %s", value, previous.kind, kind)
+			t.Fatalf("config literal %q is both %s and %s", value, previous.kind, kind)
 		}
 		policy.literals[value] = rebuildArchitectureConfigLiteral{kind: kind, key: value}
-		return nil
 	}
-
-	goNames := make(map[string]string, len(source.Keys))
-	for _, key := range source.Keys {
-		if strings.TrimSpace(key.Key) == "" || strings.TrimSpace(key.GoName) == "" || strings.TrimSpace(key.Type) == "" {
-			return rebuildArchitectureConfigPolicy{}, fmt.Errorf("incomplete key definition for %q", key.Key)
+	for _, definition := range definitions {
+		normalizedGoName := rebuildArchitectureNormalizeIdentifier(definition.GoName)
+		if previous, exists := policy.defaults[normalizedGoName]; exists {
+			t.Fatalf("config go_name %q collides with %q", definition.GoName, previous)
 		}
-		normalizedGoName := rebuildArchitectureNormalizeIdentifier(key.GoName)
-		if normalizedGoName == "" {
-			return rebuildArchitectureConfigPolicy{}, fmt.Errorf("invalid go_name %q", key.GoName)
-		}
-		if previous, exists := goNames[normalizedGoName]; exists {
-			return rebuildArchitectureConfigPolicy{}, fmt.Errorf("go_name %q collides with %q", key.GoName, previous)
-		}
-		goNames[normalizedGoName] = key.GoName
-
-		if err := addLiteral(key.Key, rebuildArchitectureViolationCanonicalKey); err != nil {
-			return rebuildArchitectureConfigPolicy{}, err
-		}
-		if err := addLiteral(key.EnvAlias, rebuildArchitectureViolationEnvAlias); err != nil {
-			return rebuildArchitectureConfigPolicy{}, err
-		}
-		value, err := rebuildArchitectureDecodeConfigDefault(key.Type, key.Default)
-		if err != nil {
-			return rebuildArchitectureConfigPolicy{}, fmt.Errorf("default for %s: %w", key.Key, err)
-		}
-		policy.defaults = append(policy.defaults, rebuildArchitectureConfigDefault{
-			key:       key.Key,
-			goName:    key.GoName,
-			valueType: key.Type,
-			value:     value,
-		})
+		policy.defaults[normalizedGoName] = string(definition.Key)
+		addLiteral(string(definition.Key), rebuildArchitectureViolationCanonicalKey)
+		addLiteral(definition.EnvAlias, rebuildArchitectureViolationEnvAlias)
 	}
-	for _, alias := range source.Aliases {
-		if err := addLiteral(alias.Name, rebuildArchitectureViolationAlias); err != nil {
-			return rebuildArchitectureConfigPolicy{}, err
-		}
+	for _, alias := range aliases {
+		addLiteral(alias.Name, rebuildArchitectureViolationAlias)
 	}
-	return policy, nil
-}
-
-func rebuildArchitectureDecodeConfigDefault(valueType string, raw json.RawMessage) (any, error) {
-	if len(raw) == 0 {
-		return nil, fmt.Errorf("missing value")
-	}
-	switch valueType {
-	case "string", "path", "credential_ref":
-		var value string
-		if err := json.Unmarshal(raw, &value); err != nil {
-			return nil, err
-		}
-		return value, nil
-	case "integer":
-		decoder := json.NewDecoder(strings.NewReader(string(raw)))
-		decoder.UseNumber()
-		var value json.Number
-		if err := decoder.Decode(&value); err != nil {
-			return nil, err
-		}
-		integer, err := value.Int64()
-		if err != nil {
-			return nil, err
-		}
-		return integer, nil
-	case "duration":
-		var value string
-		if err := json.Unmarshal(raw, &value); err != nil {
-			return nil, err
-		}
-		duration, err := time.ParseDuration(value)
-		if err != nil {
-			return nil, err
-		}
-		return duration, nil
-	case "string_list":
-		var value []string
-		if err := json.Unmarshal(raw, &value); err != nil {
-			return nil, err
-		}
-		return value, nil
-	case "boolean":
-		var value bool
-		if err := json.Unmarshal(raw, &value); err != nil {
-			return nil, err
-		}
-		return value, nil
-	default:
-		return nil, fmt.Errorf("unsupported type %q", valueType)
-	}
+	return policy
 }
 
 func rebuildArchitecturePathUnder(path, root string) bool {
@@ -461,124 +342,36 @@ func rebuildArchitectureConfigGuardApplies(file rebuildArchitectureGoFile) bool 
 func rebuildArchitectureFindConfigViolations(file rebuildArchitectureGoFile, policy rebuildArchitectureConfigPolicy) []rebuildArchitectureConfigViolation {
 	violations := make([]rebuildArchitectureConfigViolation, 0)
 	ast.Inspect(file.syntax, func(node ast.Node) bool {
-		literal, ok := node.(*ast.BasicLit)
-		if !ok || literal.Kind != token.STRING {
-			return true
-		}
-		value, err := strconv.Unquote(literal.Value)
-		if err != nil {
-			return true
-		}
-		definition, forbidden := policy.literals[value]
-		if forbidden {
-			violations = append(violations, rebuildArchitectureConfigViolation{
-				kind: definition.kind, subject: definition.key, pos: literal.Pos(),
-			})
-		}
-		return true
-	})
-
-	type defaultOccurrence struct {
-		key string
-		pos token.Pos
-	}
-	seenDefaults := make(map[defaultOccurrence]struct{})
-	checkContext := func(name string, expressions ...ast.Expr) {
-		for _, definition := range policy.defaults {
-			if !rebuildArchitectureConfigContextMatches(name, definition.goName) {
-				continue
+		switch node := node.(type) {
+		case *ast.BasicLit:
+			if node.Kind != token.STRING {
+				return true
 			}
-			for _, expression := range expressions {
-				if expression == nil {
-					continue
-				}
-				position, found := rebuildArchitectureFindDefaultExpression(expression, definition)
-				if !found {
-					continue
-				}
-				occurrence := defaultOccurrence{key: definition.key, pos: position}
-				if _, duplicate := seenDefaults[occurrence]; duplicate {
-					continue
-				}
-				seenDefaults[occurrence] = struct{}{}
+			value, err := strconv.Unquote(node.Value)
+			definition, forbidden := policy.literals[value]
+			if err == nil && forbidden {
 				violations = append(violations, rebuildArchitectureConfigViolation{
-					kind: rebuildArchitectureViolationDefault, subject: definition.key, pos: position,
+					kind: definition.kind, subject: definition.key, pos: node.Pos(),
 				})
 			}
-		}
-	}
-
-	ast.Inspect(file.syntax, func(node ast.Node) bool {
-		switch node := node.(type) {
-		case *ast.ValueSpec:
-			for index, name := range node.Names {
-				expressions := node.Values
-				if len(node.Names) == len(node.Values) {
-					expressions = node.Values[index : index+1]
-				}
-				checkContext(name.Name, expressions...)
-			}
-		case *ast.AssignStmt:
-			for index, left := range node.Lhs {
-				name := rebuildArchitectureExpressionName(left)
-				if name == "" {
-					continue
-				}
-				expressions := node.Rhs
-				if len(node.Lhs) == len(node.Rhs) {
-					expressions = node.Rhs[index : index+1]
-				}
-				checkContext(name, expressions...)
-			}
-		case *ast.KeyValueExpr:
-			if name := rebuildArchitectureExpressionName(node.Key); name != "" {
-				checkContext(name, node.Value)
-			}
-		case *ast.CallExpr:
-			if name := rebuildArchitectureExpressionName(node.Fun); name != "" {
-				checkContext(name, node.Args...)
-			}
-		case *ast.FuncDecl:
-			if node.Body == nil {
-				break
-			}
-			ast.Inspect(node.Body, func(child ast.Node) bool {
-				result, ok := child.(*ast.ReturnStmt)
-				if ok {
-					checkContext(node.Name.Name, result.Results...)
-				}
+		case *ast.Ident:
+			name := rebuildArchitectureNormalizeIdentifier(node.Name)
+			if !strings.Contains(name, "default") {
 				return true
-			})
+			}
+			for goName, key := range policy.defaults {
+				index := strings.Index(name, goName)
+				if index >= 0 && strings.Contains(name[:index]+name[index+len(goName):], "default") {
+					violations = append(violations, rebuildArchitectureConfigViolation{
+						kind: rebuildArchitectureViolationDefault, subject: key, pos: node.Pos(),
+					})
+					break
+				}
+			}
 		}
 		return true
 	})
 	return violations
-}
-
-func rebuildArchitectureExpressionName(expression ast.Expr) string {
-	switch expression := expression.(type) {
-	case *ast.Ident:
-		return expression.Name
-	case *ast.SelectorExpr:
-		return expression.Sel.Name
-	case *ast.IndexExpr:
-		return rebuildArchitectureExpressionName(expression.X)
-	case *ast.IndexListExpr:
-		return rebuildArchitectureExpressionName(expression.X)
-	case *ast.ParenExpr:
-		return rebuildArchitectureExpressionName(expression.X)
-	default:
-		return ""
-	}
-}
-
-func rebuildArchitectureConfigContextMatches(name, goName string) bool {
-	name = rebuildArchitectureNormalizeIdentifier(name)
-	goName = rebuildArchitectureNormalizeIdentifier(goName)
-	if name == "" || goName == "" {
-		return false
-	}
-	return name == goName || strings.Contains(name, goName) && strings.Contains(name, "default")
 }
 
 func rebuildArchitectureNormalizeIdentifier(value string) string {
@@ -591,241 +384,15 @@ func rebuildArchitectureNormalizeIdentifier(value string) string {
 	return result.String()
 }
 
-func rebuildArchitectureFindDefaultExpression(expression ast.Expr, definition rebuildArchitectureConfigDefault) (token.Pos, bool) {
-	var position token.Pos
-	ast.Inspect(expression, func(node ast.Node) bool {
-		candidate, ok := node.(ast.Expr)
-		if !ok {
-			return true
-		}
-		value, ok := rebuildArchitectureEvaluateDefaultExpression(candidate, definition.valueType)
-		if !ok || !reflect.DeepEqual(value, definition.value) {
-			return true
-		}
-		position = candidate.Pos()
-		return false
-	})
-	return position, position.IsValid()
-}
-
-func rebuildArchitectureEvaluateDefaultExpression(expression ast.Expr, valueType string) (any, bool) {
-	switch valueType {
-	case "string", "path", "credential_ref":
-		return rebuildArchitectureEvaluateString(expression)
-	case "integer":
-		return rebuildArchitectureEvaluateInteger(expression)
-	case "duration":
-		return rebuildArchitectureEvaluateDuration(expression)
-	case "string_list":
-		return rebuildArchitectureEvaluateStringList(expression)
-	case "boolean":
-		identifier, ok := expression.(*ast.Ident)
-		if !ok || identifier.Name != "true" && identifier.Name != "false" {
-			return nil, false
-		}
-		return identifier.Name == "true", true
-	default:
-		return nil, false
-	}
-}
-
-func rebuildArchitectureEvaluateString(expression ast.Expr) (string, bool) {
-	switch expression := expression.(type) {
-	case *ast.BasicLit:
-		if expression.Kind != token.STRING {
-			return "", false
-		}
-		value, err := strconv.Unquote(expression.Value)
-		return value, err == nil
-	case *ast.ParenExpr:
-		return rebuildArchitectureEvaluateString(expression.X)
-	case *ast.BinaryExpr:
-		if expression.Op != token.ADD {
-			return "", false
-		}
-		left, leftOK := rebuildArchitectureEvaluateString(expression.X)
-		right, rightOK := rebuildArchitectureEvaluateString(expression.Y)
-		return left + right, leftOK && rightOK
-	default:
-		return "", false
-	}
-}
-
-func rebuildArchitectureEvaluateInteger(expression ast.Expr) (int64, bool) {
-	switch expression := expression.(type) {
-	case *ast.BasicLit:
-		if expression.Kind != token.INT {
-			return 0, false
-		}
-		value, err := strconv.ParseInt(expression.Value, 0, 64)
-		return value, err == nil
-	case *ast.ParenExpr:
-		return rebuildArchitectureEvaluateInteger(expression.X)
-	case *ast.UnaryExpr:
-		value, ok := rebuildArchitectureEvaluateInteger(expression.X)
-		if !ok {
-			return 0, false
-		}
-		switch expression.Op {
-		case token.ADD:
-			return value, true
-		case token.SUB:
-			return -value, true
-		default:
-			return 0, false
-		}
-	case *ast.BinaryExpr:
-		left, leftOK := rebuildArchitectureEvaluateInteger(expression.X)
-		right, rightOK := rebuildArchitectureEvaluateInteger(expression.Y)
-		if !leftOK || !rightOK {
-			return 0, false
-		}
-		switch expression.Op {
-		case token.ADD:
-			return left + right, true
-		case token.SUB:
-			return left - right, true
-		case token.MUL:
-			return left * right, true
-		case token.QUO:
-			if right != 0 {
-				return left / right, true
-			}
-		case token.REM:
-			if right != 0 {
-				return left % right, true
-			}
-		case token.SHL:
-			if right >= 0 && right < 64 {
-				return left << uint(right), true
-			}
-		case token.SHR:
-			if right >= 0 && right < 64 {
-				return left >> uint(right), true
-			}
-		}
-		return 0, false
-	default:
-		return 0, false
-	}
-}
-
-func rebuildArchitectureEvaluateDuration(expression ast.Expr) (time.Duration, bool) {
-	if value, ok := rebuildArchitectureEvaluateString(expression); ok {
-		duration, err := time.ParseDuration(value)
-		return duration, err == nil
-	}
-	switch expression := expression.(type) {
-	case *ast.BasicLit:
-		value, ok := rebuildArchitectureEvaluateInteger(expression)
-		return time.Duration(value), ok
-	case *ast.ParenExpr:
-		return rebuildArchitectureEvaluateDuration(expression.X)
-	case *ast.UnaryExpr:
-		value, ok := rebuildArchitectureEvaluateDuration(expression.X)
-		if !ok {
-			return 0, false
-		}
-		switch expression.Op {
-		case token.ADD:
-			return value, true
-		case token.SUB:
-			return -value, true
-		default:
-			return 0, false
-		}
-	case *ast.SelectorExpr:
-		switch expression.Sel.Name {
-		case "Nanosecond":
-			return time.Nanosecond, true
-		case "Microsecond":
-			return time.Microsecond, true
-		case "Millisecond":
-			return time.Millisecond, true
-		case "Second":
-			return time.Second, true
-		case "Minute":
-			return time.Minute, true
-		case "Hour":
-			return time.Hour, true
-		default:
-			return 0, false
-		}
-	case *ast.BinaryExpr:
-		switch expression.Op {
-		case token.ADD, token.SUB:
-			left, leftOK := rebuildArchitectureEvaluateDuration(expression.X)
-			right, rightOK := rebuildArchitectureEvaluateDuration(expression.Y)
-			if !leftOK || !rightOK {
-				return 0, false
-			}
-			if expression.Op == token.ADD {
-				return left + right, true
-			}
-			return left - right, true
-		case token.MUL:
-			if scalar, scalarOK := rebuildArchitectureEvaluateInteger(expression.X); scalarOK {
-				if duration, durationOK := rebuildArchitectureEvaluateDuration(expression.Y); durationOK {
-					return time.Duration(scalar) * duration, true
-				}
-			}
-			if duration, durationOK := rebuildArchitectureEvaluateDuration(expression.X); durationOK {
-				if scalar, scalarOK := rebuildArchitectureEvaluateInteger(expression.Y); scalarOK {
-					return duration * time.Duration(scalar), true
-				}
-			}
-		case token.QUO:
-			duration, durationOK := rebuildArchitectureEvaluateDuration(expression.X)
-			scalar, scalarOK := rebuildArchitectureEvaluateInteger(expression.Y)
-			if durationOK && scalarOK && scalar != 0 {
-				return duration / time.Duration(scalar), true
-			}
-		}
-		return 0, false
-	default:
-		return 0, false
-	}
-}
-
-func rebuildArchitectureEvaluateStringList(expression ast.Expr) ([]string, bool) {
-	composite, ok := expression.(*ast.CompositeLit)
-	if !ok {
-		if parenthesized, ok := expression.(*ast.ParenExpr); ok {
-			return rebuildArchitectureEvaluateStringList(parenthesized.X)
-		}
-		return nil, false
-	}
-	result := make([]string, 0, len(composite.Elts))
-	for _, element := range composite.Elts {
-		if keyed, ok := element.(*ast.KeyValueExpr); ok {
-			element = keyed.Value
-		}
-		expression, ok := element.(ast.Expr)
-		if !ok {
-			return nil, false
-		}
-		value, ok := rebuildArchitectureEvaluateString(expression)
-		if !ok {
-			return nil, false
-		}
-		result = append(result, value)
-	}
-	return result, true
-}
-
 func rebuildArchitectureAssertConfigGuardMutants(t *testing.T) {
 	t.Helper()
-	policy, err := rebuildArchitectureConfigPolicyFromJSON([]byte(`{
-		"aliases":[{"name":"server.bind"}],
-		"keys":[
-			{"key":"server.listen","go_name":"ServerListen","type":"string","default":"127.0.0.1:8080","env_alias":"ORQUESTA_SERVER_LISTEN"},
-			{"key":"api.locale","go_name":"APILocale","type":"string","default":"es","env_alias":"ORQUESTA_API_LOCALE"},
-			{"key":"runtime.codex.reasoning","go_name":"RuntimeCodexReasoning","type":"string","default":"medium","env_alias":"ORQUESTA_RUNTIME_CODEX_REASONING"},
-			{"key":"runtime.codex.env_allowlist","go_name":"RuntimeCodexEnvAllowlist","type":"string_list","default":["PATH"],"env_alias":"ORQUESTA_RUNTIME_CODEX_ENV_ALLOWLIST"}
-		]
-	}`))
-	if err != nil {
-		t.Fatal(err)
+	policy := rebuildArchitectureConfigPolicy{
+		literals: map[string]rebuildArchitectureConfigLiteral{
+			"server.listen":          {kind: rebuildArchitectureViolationCanonicalKey, key: "server.listen"},
+			"ORQUESTA_SERVER_LISTEN": {kind: rebuildArchitectureViolationEnvAlias, key: "ORQUESTA_SERVER_LISTEN"},
+			"server.bind":            {kind: rebuildArchitectureViolationAlias, key: "server.bind"},
+		},
+		defaults: map[string]string{"apilocale": "api.locale"},
 	}
 
 	mutant := rebuildArchitectureParseGoSource(t, "internal/adapters/mutant.go", `package mutant
