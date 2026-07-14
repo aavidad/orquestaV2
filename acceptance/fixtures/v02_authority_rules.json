@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "contract_id": "AC-V02-AUTHORITY-RULES",
+  "command": "go test -mod=vendor -count=1 ./acceptance -run '^TestAcceptanceV02AuthorityRules$'",
+  "receipt_path": "product/evidence/v02_authority_rules.json",
+  "candidate_subjects": [
+    "AGENTS.md",
+    "acceptance/README.md",
+    "acceptance/fixtures/v02_authority_rules.json",
+    "acceptance/v02_authority_rules_test.go",
+    "docs/reconstruccion/ruta_total_100.md",
+    "product/roadmap.json",
+    "product_roadmap_test.go"
+  ],
+  "product_module": "orquesta",
+  "product_roots": [
+    "internal",
+    "cmd/orquesta"
+  ],
+  "legacy_import_prefixes": [
+    "orquesta/modulos"
+  ],
+  "frozen_surfaces": [
+    {
+      "root": "modulos",
+      "exclude_prefixes": [],
+      "file_count": 3961,
+      "digest": "sha256:5466051a6a437f059301e603ddb343bc98a7a0b068b18bcbb391cb9f0c1c9721"
+    },
+    {
+      "root": "cmd",
+      "exclude_prefixes": [
+        "cmd/orquesta"
+      ],
+      "file_count": 546,
+      "digest": "sha256:544a804caf7b6f733e667d16eebaaaf151f68a4fce05bd4f2b786fcad649fb82"
+    }
+  ],
+  "lifecycle": {
+    "package": "orquesta/internal/goal",
+    "type": "Goal",
+    "state_type": "GoalState",
+    "work_item_type": "WorkItem",
+    "required_fields": [
+      "state",
+      "revision",
+      "planGeneration"
+    ],
+    "writer_package": "orquesta/internal/application",
+    "writer_type": "Orchestrator",
+    "execution_package": "orquesta/internal/application",
+    "execution_type": "ExecutionRecord",
+    "execution_required_fields": [
+      "Ref",
+      "GoalRef",
+      "WorkItemRef",
+      "State",
+      "IdempotencyKey",
+      "ProviderRef",
+      "ExternalRef"
+    ],
+    "agent_port_type": "AgentLauncher",
+    "forbidden_goal_field_terms": [
+      "provider",
+      "account",
+      "credential",
+      "process",
+      "session",
+      "database",
+      "filesystem"
+    ],
+    "mutation_methods": [
+      "ApplyPlan",
+      "Start",
+      "StartWorkItem",
+      "SucceedWorkItem",
+      "FailWorkItem",
+      "Close"
+    ],
+    "ready_method": "ReadyWorkItems",
+    "scheduler_method": "ProcessNext",
+    "claim_method": "ClaimNextAction",
+    "allowed_scheduler_types": [
+      "orquesta/internal/bootstrap.scheduler",
+      "orquesta/internal/config.SchedulerConfig"
+    ]
+  }
+}

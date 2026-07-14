@@ -40,6 +40,7 @@ type roadmapAcceptanceContract struct {
 	TestRef    string   `json:"test_ref"`
 	Command    string   `json:"command"`
 	Fixture    string   `json:"fixture"`
+	Receipt    string   `json:"receipt,omitempty"`
 	Assertions []string `json:"assertions"`
 }
 
@@ -120,7 +121,6 @@ func TestProductRoadmapIsExhaustiveAndCausal(t *testing.T) {
 	if len(roadmap.AcceptanceContracts) != 34 {
 		t.Fatalf("acceptance contract count = %d, want 34", len(roadmap.AcceptanceContracts))
 	}
-	executableContracts := 0
 	for _, contract := range roadmap.AcceptanceContracts {
 		if contract.ID == "" || contract.Vertical == "" || contract.Command == "" || contract.Fixture == "" ||
 			len(contract.Assertions) < 2 || !strings.Contains(contract.Command, "go test -mod=vendor") {
@@ -134,20 +134,20 @@ func TestProductRoadmapIsExhaustiveAndCausal(t *testing.T) {
 		}
 		switch contract.Status {
 		case "executable":
-			executableContracts++
 			requireRepositoryFile(t, ".", contract.TestRef)
+			requireRepositoryFile(t, ".", contract.Fixture)
+			if contract.Receipt != "" {
+				requireRepositoryFile(t, ".", contract.Receipt)
+			}
 		case "planned":
 			if !strings.HasPrefix(contract.TestRef, "planned:acceptance/") ||
-				!strings.HasPrefix(contract.Fixture, "planned:fixtures/") {
+				!strings.HasPrefix(contract.Fixture, "planned:fixtures/") || contract.Receipt != "" {
 				t.Fatalf("planned contract %q lacks explicit planned refs", contract.ID)
 			}
 		default:
 			t.Fatalf("contract %q has invalid status %q", contract.ID, contract.Status)
 		}
 		contracts[contract.ID] = contract
-	}
-	if executableContracts != 1 {
-		t.Fatalf("executable acceptance contracts = %d, want 1 for initial ledger cut", executableContracts)
 	}
 	for _, vertical := range roadmap.Verticals {
 		ref := vertical.AcceptanceContracts[0]
@@ -193,7 +193,7 @@ func TestProductRoadmapIsExhaustiveAndCausal(t *testing.T) {
 		_, kindValid := kinds[entry.Kind]
 		_, statusValid := statuses[entry.Status]
 		if strings.TrimSpace(entry.Title) == "" || strings.TrimSpace(entry.SourceProposal) == "" ||
-			!kindValid || !statusValid || entry.Status != "declared" || !verticalExists ||
+			!kindValid || !statusValid || !verticalExists ||
 			len(entry.AcceptanceContracts) != 1 || entry.AcceptanceContracts[0] != vertical.AcceptanceContracts[0] ||
 			!reflect.DeepEqual(entry.Dependencies, vertical.DependsOn) || entry.EvidenceRefs == nil ||
 			entry.Supersedes == nil {
@@ -215,6 +215,7 @@ func TestProductRoadmapIsExhaustiveAndCausal(t *testing.T) {
 		default:
 			t.Fatalf("capability %q has invalid decision %q", entry.ID, entry.Decision)
 		}
+		assertRoadmapEvidenceCoherent(t, entry, contracts[entry.AcceptanceContracts[0]])
 		counts[entry.Decision]++
 		entries[entry.ID] = entry
 	}
@@ -262,8 +263,101 @@ func TestProductRoadmapIsExhaustiveAndCausal(t *testing.T) {
 		}
 		return []string{entries[id].AliasOf}
 	})
+	assertRoadmapProgressCausality(t, roadmap.Verticals, verticals, contracts, entries)
 
 	assertDeferredMappings(t, roadmap.DeferredMappings, entries)
+}
+
+func assertRoadmapEvidenceCoherent(t *testing.T, entry roadmapEntry, contract roadmapAcceptanceContract) {
+	t.Helper()
+	if entry.Status == "declared" {
+		if len(entry.EvidenceRefs) != 0 {
+			t.Fatalf("declared capability %q has premature evidence %v", entry.ID, entry.EvidenceRefs)
+		}
+		return
+	}
+	if contract.Status != "executable" {
+		t.Fatalf("capability %q progressed to %q against %s contract %q", entry.ID, entry.Status, contract.Status, contract.ID)
+	}
+	if len(entry.EvidenceRefs) == 0 {
+		t.Fatalf("progressed capability %q lacks evidence", entry.ID)
+	}
+	seen := make(map[string]struct{}, len(entry.EvidenceRefs))
+	for _, evidence := range entry.EvidenceRefs {
+		if _, duplicate := seen[evidence]; duplicate {
+			t.Fatalf("capability %q duplicates evidence %q", entry.ID, evidence)
+		}
+		seen[evidence] = struct{}{}
+		requireRepositoryFile(t, ".", evidence)
+	}
+	if entry.Status != "accredited" {
+		return
+	}
+	if contract.Receipt == "" {
+		t.Fatalf("accredited capability %q lacks contract receipt", entry.ID)
+	}
+	for _, required := range []string{contract.TestRef, contract.Fixture, contract.Receipt} {
+		if _, exists := seen[required]; !exists {
+			t.Fatalf("accredited capability %q lacks contract evidence %q", entry.ID, required)
+		}
+	}
+}
+
+func assertRoadmapProgressCausality(
+	t *testing.T,
+	ordered []roadmapVertical,
+	verticals map[string]roadmapVertical,
+	contracts map[string]roadmapAcceptanceContract,
+	entries map[string]roadmapEntry,
+) {
+	t.Helper()
+	ownedAccepted := make(map[string][]roadmapEntry, len(verticals))
+	progressed := make(map[string]bool, len(verticals))
+	for _, entry := range entries {
+		if entry.Status != "declared" {
+			progressed[entry.OwnerContext] = true
+		}
+		if entry.Decision == "accept" {
+			ownedAccepted[entry.OwnerContext] = append(ownedAccepted[entry.OwnerContext], entry)
+		}
+	}
+	accredited := make(map[string]bool, len(verticals))
+	for _, vertical := range ordered {
+		contract := contracts[vertical.AcceptanceContracts[0]]
+		if contract.Status == "executable" {
+			progressed[vertical.ID] = true
+		}
+		owned := ownedAccepted[vertical.ID]
+		if contract.Status != "executable" {
+			continue
+		}
+		if len(owned) == 0 {
+			accredited[vertical.ID] = vertical.ID == "source_integration"
+			continue
+		}
+		accredited[vertical.ID] = true
+		for _, entry := range owned {
+			if entry.Status != "accredited" {
+				accredited[vertical.ID] = false
+				break
+			}
+		}
+	}
+	for _, vertical := range ordered {
+		if !progressed[vertical.ID] {
+			continue
+		}
+		for _, dependency := range vertical.DependsOn {
+			if !accredited[dependency] {
+				t.Fatalf("vertical %q progressed before dependency %q was accredited", vertical.ID, dependency)
+			}
+		}
+	}
+	for _, required := range []string{"source_integration", "authority_rules"} {
+		if !accredited[required] {
+			t.Fatalf("required foundation vertical %q is not causally accredited", required)
+		}
+	}
 }
 
 func assertRoadmapOperatorDecisions(t *testing.T, decisions map[string]json.RawMessage) {

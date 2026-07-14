@@ -529,14 +529,17 @@
     {
       "id": "AC-V02-AUTHORITY-RULES",
       "vertical": "authority_rules",
-      "status": "planned",
-      "test_ref": "planned:acceptance/v02_authority_rules_test.go",
-      "command": "go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
-      "fixture": "planned:fixtures/v02_authority_rules",
+      "status": "executable",
+      "test_ref": "acceptance/v02_authority_rules_test.go",
+      "command": "go test -mod=vendor -count=1 ./acceptance -run '^TestAcceptanceV02AuthorityRules$'",
+      "fixture": "acceptance/fixtures/v02_authority_rules.json",
+      "receipt": "product/evidence/v02_authority_rules.json",
       "assertions": [
         "new product imports no legacy package",
-        "legacy surfaces remain read-only until accredited cutover",
-        "one Goal lifecycle and one application writer"
+        "framed digests prove modulos and legacy cmd surfaces remain read-only until accredited cutover",
+        "Goal is the sole lifecycle aggregate and application Orchestrator is the sole writer and scheduler authority",
+        "ExecutionRecord is an idempotent provider attempt projection outside Goal; this gate does not claim multi-attempt rework",
+        "Goal and WorkItem contain no provider account credential process session database or filesystem concern and providers enter through AgentLauncher"
       ]
     },
     {
@@ -975,8 +978,12 @@
       "acceptance_contracts": [
         "AC-V02-AUTHORITY-RULES"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v02_authority_rules_test.go",
+        "acceptance/fixtures/v02_authority_rules.json",
+        "product/evidence/v02_authority_rules.json"
+      ],
       "supersedes": []
     },
     {
@@ -1013,8 +1020,12 @@
       "acceptance_contracts": [
         "AC-V02-AUTHORITY-RULES"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v02_authority_rules_test.go",
+        "acceptance/fixtures/v02_authority_rules.json",
+        "product/evidence/v02_authority_rules.json"
+      ],
       "supersedes": []
     },
     {
@@ -1032,8 +1043,12 @@
       "acceptance_contracts": [
         "AC-V02-AUTHORITY-RULES"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v02_authority_rules_test.go",
+        "acceptance/fixtures/v02_authority_rules.json",
+        "product/evidence/v02_authority_rules.json"
+      ],
       "supersedes": []
     },
     {
@@ -1051,8 +1066,12 @@
       "acceptance_contracts": [
         "AC-V02-AUTHORITY-RULES"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v02_authority_rules_test.go",
+        "acceptance/fixtures/v02_authority_rules.json",
+        "product/evidence/v02_authority_rules.json"
+      ],
       "supersedes": []
     },
     {
@@ -1070,8 +1089,12 @@
       "acceptance_contracts": [
         "AC-V02-AUTHORITY-RULES"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v02_authority_rules_test.go",
+        "acceptance/fixtures/v02_authority_rules.json",
+        "product/evidence/v02_authority_rules.json"
+      ],
       "supersedes": []
     },
     {
@@ -1389,8 +1412,12 @@
       "acceptance_contracts": [
         "AC-V02-AUTHORITY-RULES"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v02_authority_rules_test.go",
+        "acceptance/fixtures/v02_authority_rules.json",
+        "product/evidence/v02_authority_rules.json"
+      ],
       "supersedes": []
     },
     {
@@ -3730,8 +3757,12 @@
       "acceptance_contracts": [
         "AC-V02-AUTHORITY-RULES"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v02_authority_rules_test.go",
+        "acceptance/fixtures/v02_authority_rules.json",
+        "product/evidence/v02_authority_rules.json"
+      ],
       "supersedes": []
     },
     {
