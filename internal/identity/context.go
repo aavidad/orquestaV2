@@ -7,6 +7,10 @@ import (
 
 type principalContextKey struct{}
 
+type Provider interface {
+	Principal(context.Context) (Principal, error)
+}
+
 // BindPrincipal is the sole request-context ingress for authenticated identity.
 func BindPrincipal(ctx context.Context, principal Principal) (context.Context, error) {
 	if ctx == nil {
