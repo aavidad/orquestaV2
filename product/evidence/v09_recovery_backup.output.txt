@@ -1,0 +1,11 @@
+ok  	orquesta	0.075s
+ok  	orquesta/acceptance	12.868s
+ok  	orquesta/internal/application	0.005s
+ok  	orquesta/internal/ports	0.003s
+ok  	orquesta/internal/adapters/state/sqlite	86.937s
+ok  	orquesta/internal/adapters/artifact/filesystem	3.217s
+ok  	orquesta/internal/config	0.141s
+ok  	orquesta/internal/adapters/config/toml	28.031s
+ok  	orquesta/internal/adapters/config/jsonimport	0.034s
+ok  	orquesta/cmd/orquesta	0.004s
+ok  	orquesta/internal/bootstrap	46.796s
