@@ -428,7 +428,7 @@ func v02AssertExecutionAndProviderSeparation(t *testing.T, sources v02SourceSet,
 			if file.PackagePath != lifecycle.WriterPackage || !strings.HasPrefix(importPath, sources.Module+"/internal/") {
 				continue
 			}
-			if importPath == lifecycle.Package || importPath == sources.Module+"/internal/ports" {
+			if importPath == lifecycle.Package || importPath == sources.Module+"/internal/identity" || importPath == sources.Module+"/internal/ports" {
 				continue
 			}
 			position := sources.FileSet.Position(spec.Pos())

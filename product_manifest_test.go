@@ -94,7 +94,7 @@ func TestAcceptedProductCapabilitiesHaveExecutableEvidence(t *testing.T) {
 		"CORE-WORK-ITEM":       "internal/goal/work_item_test.go",
 		"CORE-SINGLE-WRITER":   "internal/application/orchestrator_test.go",
 		"CORE-EVIDENCE":        "internal/application/closure_test.go",
-		"IDENTITY-LOCAL-OWNER": "internal/identity/local_owner_test.go",
+		"IDENTITY-LOCAL-OWNER": "internal/identity/contracts_test.go",
 		"IDENTITY-LOCAL-TOKEN": "internal/adapters/auth/localtoken/localtoken_test.go",
 		"STATE-SQLITE":         "internal/adapters/state/sqlite/repository_test.go",
 		"ARTIFACT-FILESYSTEM":  "internal/adapters/artifact/filesystem/store_test.go",

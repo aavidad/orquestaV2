@@ -55,7 +55,7 @@
       "status": "accepted",
       "cutover_required": false,
       "phase": "foundation",
-      "acceptance_ref": "internal/identity/local_owner_test.go"
+      "acceptance_ref": "internal/identity/contracts_test.go"
     },
     {
       "id": "IDENTITY-LOCAL-TOKEN",

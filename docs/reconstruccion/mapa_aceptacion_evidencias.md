@@ -18,7 +18,7 @@ separa ese contrato de los resultados de una ejecución concreta.
 | `CORE-WORK-ITEM` | revisiones inmutables, terminalidad y rechazo de transiciones imposibles | `internal/goal/work_item_test.go` |
 | `CORE-SINGLE-WRITER` | aplicación como único escritor durable e idempotencia de submit | `internal/application/orchestrator_test.go` |
 | `CORE-EVIDENCE` | éxito con artefacto/atestación y fallo explícito sin falsa evidencia | `internal/application/closure_test.go` |
-| `IDENTITY-LOCAL-OWNER` | principal local estable con ActorRef y ProjectRef opacos | `internal/identity/local_owner_test.go` |
+| `IDENTITY-LOCAL-OWNER` | principal local estable, refs opacas y contexto de proyecto explícito | `internal/identity/contracts_test.go` |
 | `IDENTITY-LOCAL-TOKEN` | secreto local privado y estable, Bearer obligatorio y rechazo sin fuga | `internal/adapters/auth/localtoken/localtoken_test.go` |
 | `STATE-SQLITE` | migración, scope, idempotencia, leases, CAS atómico y restauración | `internal/adapters/state/sqlite/repository_test.go` |
 | `ARTIFACT-FILESYSTEM` | blobs CAS idempotentes, privados, íntegros y sin escape por symlink | `internal/adapters/artifact/filesystem/store_test.go` |
