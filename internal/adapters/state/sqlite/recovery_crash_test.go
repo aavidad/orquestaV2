@@ -41,9 +41,9 @@ func TestV09RecoverySurvivesProcessCrashAtEveryBoundary(t *testing.T) {
 			suffix := "v09-crash-" + strings.ReplaceAll(stage, "_", "-")
 
 			repository := openV09CrashRepository(t, databasePath, at)
-			created := newCreateFixture(
+			created := authorizeRecoveryCreate(t, repository, newCreateFixture(
 				t, suffix, "request:"+suffix, "fingerprint:"+suffix, "actor:v09-crash", "project:v09-crash",
-			)
+			))
 			if _, _, err := repository.CreateGoal(ctx, created); err != nil {
 				t.Fatalf("seed crash fixture: %v", err)
 			}

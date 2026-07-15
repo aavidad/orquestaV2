@@ -70,43 +70,9 @@ func applyMigrations(ctx context.Context, database *sql.DB) error {
 	if current > migrations[len(migrations)-1].version {
 		return invalid(fmt.Errorf("sqlite.schema_newer_than_binary"))
 	}
-	migrated := false
-	for _, migration := range migrations {
-		if migration.version <= current {
-			continue
-		}
-		if migration.version == 5 {
-			if err := validateAtomicStateMigrationSource(ctx, transaction); err != nil {
-				return invalid(err)
-			}
-		}
-		if _, err := transaction.ExecContext(ctx, migration.preSQL); err != nil {
-			return mapDatabaseError(err)
-		}
-		if migration.backfill {
-			if err := backfillAppSpecs(ctx, transaction); err != nil {
-				return invalid(err)
-			}
-		}
-		if strings.TrimSpace(migration.postSQL) != "" {
-			if _, err := transaction.ExecContext(ctx, migration.postSQL); err != nil {
-				return mapDatabaseError(err)
-			}
-		}
-		if _, err := transaction.ExecContext(
-			ctx,
-			"INSERT INTO schema_migrations(version, name, checksum) VALUES (?, ?, ?)",
-			migration.version,
-			migration.name,
-			migration.checksum,
-		); err != nil {
-			return mapDatabaseError(err)
-		}
-		if _, err := transaction.ExecContext(ctx, "PRAGMA user_version = "+strconv.Itoa(migration.version)); err != nil {
-			return mapDatabaseError(err)
-		}
-		current = migration.version
-		migrated = true
+	current, migrated, err := applyMigrationSteps(ctx, transaction, migrations, current)
+	if err != nil {
+		return err
 	}
 	// Validate only after the complete schema chain. Domain snapshot readers
 	// intentionally understand the latest schema, not transient migration
@@ -136,6 +102,53 @@ func applyMigrations(ctx context.Context, database *sql.DB) error {
 	}
 	foreignKeysDisabled = false
 	return nil
+}
+
+func applyMigrationSteps(
+	ctx context.Context,
+	transaction *sql.Tx,
+	migrations []migration,
+	current int,
+) (int, bool, error) {
+	migrated := false
+	for _, migration := range migrations {
+		if migration.version <= current {
+			continue
+		}
+		if migration.version == 5 {
+			if err := validateAtomicStateMigrationSource(ctx, transaction); err != nil {
+				return current, migrated, invalid(err)
+			}
+		}
+		if _, err := transaction.ExecContext(ctx, migration.preSQL); err != nil {
+			return current, migrated, mapDatabaseError(err)
+		}
+		if migration.backfill {
+			if err := backfillAppSpecs(ctx, transaction); err != nil {
+				return current, migrated, invalid(err)
+			}
+		}
+		if strings.TrimSpace(migration.postSQL) != "" {
+			if _, err := transaction.ExecContext(ctx, migration.postSQL); err != nil {
+				return current, migrated, mapDatabaseError(err)
+			}
+		}
+		if _, err := transaction.ExecContext(
+			ctx,
+			"INSERT INTO schema_migrations(version, name, checksum) VALUES (?, ?, ?)",
+			migration.version,
+			migration.name,
+			migration.checksum,
+		); err != nil {
+			return current, migrated, mapDatabaseError(err)
+		}
+		if _, err := transaction.ExecContext(ctx, "PRAGMA user_version = "+strconv.Itoa(migration.version)); err != nil {
+			return current, migrated, mapDatabaseError(err)
+		}
+		current = migration.version
+		migrated = true
+	}
+	return current, migrated, nil
 }
 
 func validateAtomicStateMigrationSource(ctx context.Context, transaction *sql.Tx) error {

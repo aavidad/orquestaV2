@@ -10,7 +10,6 @@ import (
 	"io"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"orquesta/internal/application"
@@ -31,10 +30,11 @@ func validateRecoveryDatabase(ctx context.Context, database *sql.DB) (string, st
 	if err := transaction.QueryRowContext(ctx, "PRAGMA user_version").Scan(&current); err != nil {
 		return "", "", mapDatabaseError(err)
 	}
-	if current != len(migrations) {
-		return "", "", invalid(errors.New("sqlite.recovery_schema_version_invalid"))
+	prefix, err := recoveryMigrationPrefix(migrations, current)
+	if err != nil {
+		return "", "", invalid(err)
 	}
-	if err := verifyAppliedMigrations(ctx, transaction, migrations, current); err != nil {
+	if err := verifyAppliedMigrations(ctx, transaction, prefix, current); err != nil {
 		return "", "", err
 	}
 	if err := verifyForeignKeys(ctx, transaction); err != nil {
@@ -44,7 +44,7 @@ func validateRecoveryDatabase(ctx context.Context, database *sql.DB) (string, st
 	if err != nil {
 		return "", "", invalid(err)
 	}
-	expectedSchema, err := canonicalSchemaInventoryDigest()
+	expectedSchema, err := canonicalSchemaInventoryDigest(current)
 	if err != nil || actualSchema != expectedSchema {
 		return "", "", invalid(errors.New("sqlite.recovery_schema_inventory_invalid"))
 	}
@@ -55,8 +55,18 @@ func validateRecoveryDatabase(ctx context.Context, database *sql.DB) (string, st
 	if integrity != "ok" {
 		return "", "", invalid(fmt.Errorf("sqlite.integrity_check_failed:%s", integrity))
 	}
-	if err := validateMigratedGoalRecords(ctx, transaction); err != nil {
-		return "", "", invalid(err)
+	switch current {
+	case recoverySchemaV09:
+		if err := validateRecoveryV09GoalRecords(ctx, transaction); err != nil {
+			return "", "", invalid(err)
+		}
+	case recoverySchemaV10:
+		if err := validateMigratedGoalRecords(ctx, transaction); err != nil {
+			return "", "", invalid(err)
+		}
+		if err := validateRecoveryV10Identity(ctx, transaction); err != nil {
+			return "", "", invalid(err)
+		}
 	}
 	if err := validateRecoveryEvents(ctx, transaction); err != nil {
 		return "", "", invalid(err)
@@ -67,7 +77,7 @@ func validateRecoveryDatabase(ctx context.Context, database *sql.DB) (string, st
 	if err := validateRecoveryReceiptBindings(ctx, transaction); err != nil {
 		return "", "", invalid(err)
 	}
-	schemaRef := migrationSchemaRef(migrations)
+	schemaRef := migrationSchemaRef(prefix)
 	logicalDigest, err := logicalStateDigest(ctx, transaction)
 	if err != nil {
 		return "", "", invalid(err)
@@ -76,39 +86,6 @@ func validateRecoveryDatabase(ctx context.Context, database *sql.DB) (string, st
 		return "", "", mapDatabaseError(err)
 	}
 	return schemaRef, logicalDigest, nil
-}
-
-func migrationSchemaRef(migrations []migration) string {
-	hash := sha256.New()
-	for _, migration := range migrations {
-		fmt.Fprintf(hash, "%d\x00%s\x00%s\n", migration.version, migration.name, migration.checksum)
-	}
-	return schemaRefPrefix + hex.EncodeToString(hash.Sum(nil))
-}
-
-var canonicalRecoverySchema struct {
-	once   sync.Once
-	digest string
-	err    error
-}
-
-func canonicalSchemaInventoryDigest() (string, error) {
-	canonicalRecoverySchema.once.Do(func() {
-		database, err := sql.Open(driverName, ":memory:")
-		if err != nil {
-			canonicalRecoverySchema.err = err
-			return
-		}
-		defer database.Close()
-		database.SetMaxOpenConns(1)
-		if err := applyMigrations(context.Background(), database); err != nil {
-			canonicalRecoverySchema.err = err
-			return
-		}
-		canonicalRecoverySchema.digest, canonicalRecoverySchema.err =
-			schemaInventoryDigest(context.Background(), database)
-	})
-	return canonicalRecoverySchema.digest, canonicalRecoverySchema.err
 }
 
 func schemaInventoryDigest(ctx context.Context, source queryer) (string, error) {

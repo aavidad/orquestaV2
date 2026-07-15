@@ -14,6 +14,7 @@ import (
 
 	"orquesta/internal/application"
 	"orquesta/internal/goal"
+	"orquesta/internal/identity"
 	"orquesta/internal/ports"
 )
 
@@ -29,7 +30,7 @@ func TestArtifactPersistenceCrossingLeaseCannotCommitBackdatedSuccess(t *testing
 	t.Cleanup(func() { _ = repository.Close() })
 	agent := &leaseCompletionAgent{clock: clock}
 	orchestrator, err := application.New(application.Dependencies{
-		State: repository, Launcher: agent, Observer: agent,
+		State: repository, Access: repository, Launcher: agent, Observer: agent,
 		Artifacts: leaseAdvancingArtifacts{clock: clock, advance: 2 * time.Second},
 		Clock:     clock, IDs: &restartIDs{}, MaxOutputBytes: 4096, MaxExecutionAttempts: 3,
 		AgentCapabilities: ports.AgentCapabilities{
@@ -42,9 +43,10 @@ func TestArtifactPersistenceCrossingLeaseCannotCommitBackdatedSuccess(t *testing
 	}
 	actor, _ := goal.NewActorRef("actor:lease-fence")
 	project, _ := goal.NewProjectRef("project:lease-fence")
-	submitted, err := orchestrator.Submit(context.Background(), application.SubmitRequest{
-		RequestRef: "request:lease-fence", ActorRef: actor, ProjectRef: project,
-		Statement: "persist completion within the claim lease", Confirm: true,
+	access := newRestartAccess(t, repository, actor, project, clock.Now())
+	submitted, err := orchestrator.Submit(context.Background(), access, application.SubmitRequest{
+		RequestRef: "request:lease-fence",
+		Statement:  "persist completion within the claim lease", Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("submit lease-fenced Goal: %v", err)
@@ -83,9 +85,10 @@ func TestDispatchingLaunchRecoversAcrossRestartWithSameIdempotency(t *testing.T)
 	orchestrator := newRestartOrchestrator(t, repository, clock, ids, agent)
 	actor, _ := goal.NewActorRef("actor:restart")
 	project, _ := goal.NewProjectRef("project:restart")
-	submitted, err := orchestrator.Submit(context.Background(), application.SubmitRequest{
-		RequestRef: "request:dispatch-restart", ActorRef: actor, ProjectRef: project,
-		Statement: "recover durable dispatch", Confirm: true,
+	access := newRestartAccess(t, repository, actor, project, clock.Now())
+	submitted, err := orchestrator.Submit(context.Background(), access, application.SubmitRequest{
+		RequestRef: "request:dispatch-restart",
+		Statement:  "recover durable dispatch", Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("submit: %v", err)
@@ -138,9 +141,10 @@ func TestPreparedLaunchWithRetainedClaimRecoversAfterCrashAndLeaseExpiry(t *test
 	orchestrator := newRestartOrchestrator(t, repository, clock, ids, agent)
 	actor, _ := goal.NewActorRef("actor:crash-restart")
 	project, _ := goal.NewProjectRef("project:crash-restart")
-	submitted, err := orchestrator.Submit(context.Background(), application.SubmitRequest{
-		RequestRef: "request:prepared-crash", ActorRef: actor, ProjectRef: project,
-		Statement: "recover retained claim", Confirm: true,
+	access := newRestartAccess(t, repository, actor, project, clock.Now())
+	submitted, err := orchestrator.Submit(context.Background(), access, application.SubmitRequest{
+		RequestRef: "request:prepared-crash",
+		Statement:  "recover retained claim", Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("submit: %v", err)
@@ -221,14 +225,14 @@ func TestPreparedLaunchWithRetainedClaimRecoversAfterCrashAndLeaseExpiry(t *test
 
 func newRestartOrchestrator(
 	t *testing.T,
-	repository application.StateRepository,
+	repository *Repository,
 	clock *restartClock,
 	ids *restartIDs,
 	agent *restartAgent,
 ) *application.Orchestrator {
 	t.Helper()
 	orchestrator, err := application.New(application.Dependencies{
-		State: repository, Launcher: agent, Observer: agent, Artifacts: restartArtifacts{},
+		State: repository, Access: repository, Launcher: agent, Observer: agent, Artifacts: restartArtifacts{},
 		Clock: clock, IDs: ids, MaxOutputBytes: 4096, MaxExecutionAttempts: 3,
 		AgentCapabilities: ports.AgentCapabilities{
 			ProviderRef: "provider:restart", ModelRef: "model:restart", AgentRef: "agent:restart", Unrestricted: true,
@@ -239,6 +243,30 @@ func newRestartOrchestrator(
 		t.Fatalf("new orchestrator: %v", err)
 	}
 	return orchestrator
+}
+
+func newRestartAccess(
+	t *testing.T,
+	repository *Repository,
+	actorRef goal.ActorRef,
+	projectRef goal.ProjectRef,
+	at time.Time,
+) application.Access {
+	t.Helper()
+	principalRef, err := identity.NewPrincipalRef(actorRef.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	principal, err := identity.NewPrincipal(principalRef, actorRef, identity.PrincipalKindHuman, "test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	provisionTestAccess(t, repository, principal, projectRef, identity.RoleProjectOwner, at)
+	access, err := application.NewAccess(principal, projectRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return access
 }
 
 type restartClock struct {

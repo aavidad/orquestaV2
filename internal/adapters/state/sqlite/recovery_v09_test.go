@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"orquesta/internal/application"
+	"orquesta/internal/identity"
 )
 
 func TestV09RecoveryRoundTripPreservesCausalTablesAndClaims(t *testing.T) {
@@ -72,11 +73,11 @@ func TestV09RecoveryRoundTripPreservesCausalTablesAndClaims(t *testing.T) {
 
 func TestV09RecoveryOnlineSnapshotContainsWholeConcurrentCommit(t *testing.T) {
 	repository, _ := openTestRepository(t)
-	initial := newCreateFixture(t, "v09-before", "request:v09-before", "fingerprint:v09-before", "actor:v09", "project:v09")
+	initial := authorizeRecoveryCreate(t, repository, newCreateFixture(t, "v09-before", "request:v09-before", "fingerprint:v09-before", "actor:v09", "project:v09"))
 	if _, _, err := repository.CreateGoal(context.Background(), initial); err != nil {
 		t.Fatal(err)
 	}
-	concurrent := newCreateFixture(t, "v09-concurrent", "request:v09-concurrent", "fingerprint:v09-concurrent", "actor:v09", "project:v09")
+	concurrent := authorizeRecoveryCreate(t, repository, newCreateFixture(t, "v09-concurrent", "request:v09-concurrent", "fingerprint:v09-concurrent", "actor:v09", "project:v09"))
 	var once sync.Once
 	var concurrentErr error
 	recovery, _, _ := newV09TestRecovery(t, repository, initial.Goal.CreatedAt(), func(stage string) error {
@@ -103,7 +104,7 @@ func TestV09RecoveryOnlineSnapshotContainsWholeConcurrentCommit(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer restored.Close()
-	status, err := restored.Status(context.Background())
+	status, err := restored.Status(context.Background(), concurrent.Goal.Project())
 	if err != nil || status.Goals < 1 || status.Goals > 2 {
 		t.Fatalf("snapshot status = %+v err=%v", status, err)
 	}
@@ -273,7 +274,7 @@ func TestV09SchemaRefChangesWithMigrationChecksumSet(t *testing.T) {
 func TestV09RecoveryValidationRejectsReceiptAndActiveFenceDivergence(t *testing.T) {
 	t.Run("virgin_action_without_fence", func(t *testing.T) {
 		repository, _ := openTestRepository(t)
-		state := newCreateFixture(t, "v09-virgin", "request:v09-virgin", "fingerprint:v09-virgin", "actor:v09", "project:v09")
+		state := authorizeRecoveryCreate(t, repository, newCreateFixture(t, "v09-virgin", "request:v09-virgin", "fingerprint:v09-virgin", "actor:v09", "project:v09"))
 		if _, _, err := repository.CreateGoal(context.Background(), state); err != nil {
 			t.Fatal(err)
 		}
@@ -311,7 +312,7 @@ UPDATE action_consumption_receipts SET worker_ref = 'worker:tampered';`); err !=
 		if err != nil {
 			t.Fatal(err)
 		}
-		expectedSchema, err := canonicalSchemaInventoryDigest()
+		expectedSchema, err := canonicalSchemaInventoryDigest(recoverySchemaV10)
 		if err != nil || actualSchema != expectedSchema {
 			t.Fatalf("test failed to restore canonical schema: actual=%s expected=%s err=%v", actualSchema, expectedSchema, err)
 		}
@@ -321,7 +322,7 @@ UPDATE action_consumption_receipts SET worker_ref = 'worker:tampered';`); err !=
 	})
 	t.Run("active_claim_fence", func(t *testing.T) {
 		repository, _ := openTestRepository(t)
-		state := newCreateFixture(t, "v09-fence-tamper", "request:v09-fence-tamper", "fingerprint:v09-fence-tamper", "actor:v09", "project:v09")
+		state := authorizeRecoveryCreate(t, repository, newCreateFixture(t, "v09-fence-tamper", "request:v09-fence-tamper", "fingerprint:v09-fence-tamper", "actor:v09", "project:v09"))
 		if _, _, err := repository.CreateGoal(context.Background(), state); err != nil {
 			t.Fatal(err)
 		}
@@ -337,7 +338,7 @@ WHERE goal_ref = ? AND work_item_ref = ?`, claim.Action.GoalRef.String(), claim.
 	})
 	t.Run("active_claim_missing_fence", func(t *testing.T) {
 		repository, _ := openTestRepository(t)
-		state := newCreateFixture(t, "v09-fence-missing", "request:v09-fence-missing", "fingerprint:v09-fence-missing", "actor:v09", "project:v09")
+		state := authorizeRecoveryCreate(t, repository, newCreateFixture(t, "v09-fence-missing", "request:v09-fence-missing", "fingerprint:v09-fence-missing", "actor:v09", "project:v09"))
 		if _, _, err := repository.CreateGoal(context.Background(), state); err != nil {
 			t.Fatal(err)
 		}
@@ -363,6 +364,7 @@ func TestV09RecoveryRejectsOutboxGenerationDivergenceFromExecution(t *testing.T)
 		"actor:v09",
 		"project:v09",
 	)
+	state = authorizeRecoveryCreate(t, repository, state)
 	if _, _, err := repository.CreateGoal(context.Background(), state); err != nil {
 		t.Fatal(err)
 	}
@@ -387,7 +389,7 @@ UPDATE outbox SET plan_generation = plan_generation + 1 WHERE goal_ref = ?`,
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectedSchema, err := canonicalSchemaInventoryDigest()
+	expectedSchema, err := canonicalSchemaInventoryDigest(recoverySchemaV10)
 	if err != nil || actualSchema != expectedSchema {
 		t.Fatalf("test failed to restore canonical schema: actual=%s expected=%s err=%v", actualSchema, expectedSchema, err)
 	}
@@ -420,7 +422,7 @@ WHERE kind = 'observe_agent' AND completed_at IS NULL`); err != nil {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectedSchema, err := canonicalSchemaInventoryDigest()
+	expectedSchema, err := canonicalSchemaInventoryDigest(recoverySchemaV10)
 	if err != nil || actualSchema != expectedSchema {
 		t.Fatalf("test failed to restore canonical schema: actual=%s expected=%s err=%v", actualSchema, expectedSchema, err)
 	}
@@ -439,6 +441,7 @@ func TestV09RecoveryBacksUpDispatchingLaunchBeforeAndAfterRequeue(t *testing.T) 
 		"actor:v09",
 		"project:v09",
 	)
+	state = authorizeRecoveryCreate(t, repository, state)
 	if _, _, err := repository.CreateGoal(context.Background(), state); err != nil {
 		t.Fatal(err)
 	}
@@ -1019,6 +1022,26 @@ func newV09TestRecovery(
 	}
 	t.Cleanup(func() { _ = recovery.Close() })
 	return recovery, backupRoot, restoreRoot
+}
+
+func authorizeRecoveryCreate(
+	t *testing.T,
+	repository *Repository,
+	state application.CreateGoalState,
+) application.CreateGoalState {
+	t.Helper()
+	principal := testPrincipal(
+		t, state.Goal.Actor().String(), state.Goal.Actor().String(), identity.PrincipalKindHuman,
+	)
+	provisionTestAccess(
+		t, repository, principal, state.Goal.Project(), identity.RoleProjectOwner, state.Goal.CreatedAt(),
+	)
+	state.RequestedBy = principal.Ref
+	state.AuthorizationReceipt = authorizeTest(
+		t, repository, principal, state.Goal.Project(), identity.PermissionGoalsCreate,
+		state.Goal.Project().String(), "authorization:"+state.RequestRef, state.Goal.CreatedAt(),
+	)
+	return state
 }
 
 func recoveryCausalTables(t *testing.T, database *sql.DB) map[string][]string {
