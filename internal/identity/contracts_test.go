@@ -134,6 +134,42 @@ func TestRoleAllowsUsesExactDefaultDenyMatrix(t *testing.T) {
 	}
 }
 
+func TestMembershipDelegationUsesOneExactDefaultDenyMatrix(t *testing.T) {
+	roles := []Role{
+		RolePlatformAdmin, RoleProjectOwner, RoleProjectAdmin, RoleContributor,
+		RoleReviewer, RoleOperator, RoleViewer,
+	}
+	want := map[Role]map[Role]bool{
+		RolePlatformAdmin: allowedRoles(
+			RoleProjectOwner, RoleProjectAdmin, RoleContributor, RoleReviewer, RoleOperator, RoleViewer,
+		),
+		RoleProjectOwner: allowedRoles(
+			RoleProjectOwner, RoleProjectAdmin, RoleContributor, RoleReviewer, RoleOperator, RoleViewer,
+		),
+		RoleProjectAdmin: allowedRoles(RoleContributor, RoleReviewer, RoleOperator, RoleViewer),
+	}
+	for _, grantor := range roles {
+		for _, target := range roles {
+			if got := CanDelegateMembershipRole(grantor, target); got != want[grantor][target] {
+				t.Errorf("CanDelegateMembershipRole(%q,%q)=%v want %v", grantor, target, got, want[grantor][target])
+			}
+		}
+	}
+	for _, pair := range [][2]Role{{"", RoleViewer}, {RoleProjectOwner, ""}, {"owner", RoleViewer}, {RoleProjectOwner, "read_only"}} {
+		if CanDelegateMembershipRole(pair[0], pair[1]) {
+			t.Errorf("unknown delegation pair allowed: %q/%q", pair[0], pair[1])
+		}
+	}
+	for _, test := range []struct {
+		role Role
+		want bool
+	}{{RolePlatformAdmin, true}, {RoleProjectOwner, true}, {RoleProjectAdmin, false}, {RoleViewer, false}, {"", false}} {
+		if got := IsProjectAuthority(test.role); got != test.want {
+			t.Errorf("IsProjectAuthority(%q)=%v want %v", test.role, got, test.want)
+		}
+	}
+}
+
 func TestRequestPrincipalContextRejectsMissingInvalidAndSpoofedValues(t *testing.T) {
 	human := testPrincipal(t, "human", PrincipalKindHuman)
 	service := testPrincipal(t, "service", PrincipalKindService)
@@ -404,6 +440,14 @@ func allowAll(permissions []Permission) map[Permission]bool {
 
 func allowed(permissions ...Permission) map[Permission]bool {
 	return allowAll(permissions)
+}
+
+func allowedRoles(roles ...Role) map[Role]bool {
+	result := make(map[Role]bool, len(roles))
+	for _, role := range roles {
+		result[role] = true
+	}
+	return result
 }
 
 func testPrincipal(t *testing.T, suffix string, kind PrincipalKind) Principal {

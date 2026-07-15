@@ -21,7 +21,7 @@ func (repository *Repository) ProvisionLocalAccess(
 	at time.Time,
 ) error {
 	if identity.ValidatePrincipal(principal) != nil || hierarchy.ProjectRef().String() == "" ||
-		identity.ValidateRole(role) != nil || !isProjectAuthority(role) || at.IsZero() {
+		identity.ValidateRole(role) != nil || !identity.IsProjectAuthority(role) || at.IsZero() {
 		return invalid(errors.New("sqlite.local_access_invalid"))
 	}
 	at = at.Round(0).UTC()

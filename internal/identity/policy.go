@@ -74,3 +74,25 @@ func RoleAllows(role Role, permission Permission) bool {
 		return false
 	}
 }
+
+// CanDelegateMembershipRole is the complete membership delegation policy.
+// Unknown roles and the platform-wide role are never valid project grants.
+func CanDelegateMembershipRole(grantor Role, target Role) bool {
+	if target == RolePlatformAdmin || ValidateRole(target) != nil {
+		return false
+	}
+	switch grantor {
+	case RolePlatformAdmin, RoleProjectOwner:
+		return true
+	case RoleProjectAdmin:
+		return target == RoleContributor || target == RoleReviewer ||
+			target == RoleOperator || target == RoleViewer
+	default:
+		return false
+	}
+}
+
+// IsProjectAuthority identifies roles that preserve project ownership.
+func IsProjectAuthority(role Role) bool {
+	return role == RolePlatformAdmin || role == RoleProjectOwner
+}

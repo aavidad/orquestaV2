@@ -45,7 +45,7 @@ func (repository *Repository) GrantMembership(
 	if err != nil {
 		return identity.Membership{}, identity.MembershipAuditReceipt{}, false, err
 	}
-	if !membershipDelegationAllowed(authority.Role(), request.Role()) {
+	if !identity.CanDelegateMembershipRole(authority.Role(), request.Role()) {
 		return identity.Membership{}, identity.MembershipAuditReceipt{}, false, conflict(errors.New("sqlite.membership_delegation_denied"))
 	}
 	if err := ensurePrincipal(ctx, transaction, state.Target); err != nil {
@@ -86,10 +86,10 @@ func (repository *Repository) GrantMembership(
 		if current.Revision() != request.ExpectedRevision() ||
 			request.RequestedAt().Before(current.GrantedAt()) ||
 			(!current.RevokedAt().IsZero() && request.RequestedAt().Before(current.RevokedAt())) ||
-			!membershipDelegationAllowed(authority.Role(), current.Role()) {
+			!identity.CanDelegateMembershipRole(authority.Role(), current.Role()) {
 			return identity.Membership{}, identity.MembershipAuditReceipt{}, false, conflict(errors.New("sqlite.membership_revision_conflict"))
 		}
-		if current.IsActive() && isProjectAuthority(current.Role()) && !isProjectAuthority(request.Role()) {
+		if current.IsActive() && identity.IsProjectAuthority(current.Role()) && !identity.IsProjectAuthority(request.Role()) {
 			if err := requireOtherProjectAuthority(ctx, transaction, request.ProjectRef().String(), request.TargetRef().String()); err != nil {
 				return identity.Membership{}, identity.MembershipAuditReceipt{}, false, err
 			}
@@ -201,10 +201,10 @@ func (repository *Repository) RevokeMembership(
 		return identity.Membership{}, identity.MembershipAuditReceipt{}, false, err
 	}
 	if !current.IsActive() || current.Revision() != request.ExpectedRevision() ||
-		request.RequestedAt().Before(current.GrantedAt()) || !membershipDelegationAllowed(authority.Role(), current.Role()) {
+		request.RequestedAt().Before(current.GrantedAt()) || !identity.CanDelegateMembershipRole(authority.Role(), current.Role()) {
 		return identity.Membership{}, identity.MembershipAuditReceipt{}, false, conflict(errors.New("sqlite.membership_revision_conflict"))
 	}
-	if isProjectAuthority(current.Role()) {
+	if identity.IsProjectAuthority(current.Role()) {
 		if err := requireOtherProjectAuthority(ctx, transaction, request.ProjectRef().String(), request.TargetRef().String()); err != nil {
 			return identity.Membership{}, identity.MembershipAuditReceipt{}, false, err
 		}
@@ -267,25 +267,6 @@ func validateMembershipRevokeState(state application.MembershipRevokeState) erro
 		return errors.New("sqlite.membership_revoke_invalid")
 	}
 	return nil
-}
-
-func membershipDelegationAllowed(grantor, target identity.Role) bool {
-	if target == identity.RolePlatformAdmin || identity.ValidateRole(target) != nil {
-		return false
-	}
-	switch grantor {
-	case identity.RolePlatformAdmin, identity.RoleProjectOwner:
-		return true
-	case identity.RoleProjectAdmin:
-		return target == identity.RoleContributor || target == identity.RoleReviewer ||
-			target == identity.RoleOperator || target == identity.RoleViewer
-	default:
-		return false
-	}
-}
-
-func isProjectAuthority(role identity.Role) bool {
-	return role == identity.RolePlatformAdmin || role == identity.RoleProjectOwner
 }
 
 func requireOtherProjectAuthority(

@@ -28,7 +28,7 @@ func (orchestrator *Orchestrator) GrantMembership(
 	if err != nil {
 		return identity.Membership{}, identity.MembershipAuditReceipt{}, false, err
 	}
-	if !membershipDelegationAllowed(receipt.Decision().Role(), request.Role()) {
+	if !identity.CanDelegateMembershipRole(receipt.Decision().Role(), request.Role()) {
 		return identity.Membership{}, identity.MembershipAuditReceipt{}, false, errForbidden
 	}
 	if request.ExpectedRevision() > 0 {
@@ -41,7 +41,7 @@ func (orchestrator *Orchestrator) GrantMembership(
 				(current.Revision() != request.ExpectedRevision()+1 || !current.IsActive() || current.Role() != request.Role())) {
 			return identity.Membership{}, identity.MembershipAuditReceipt{}, false, &StateError{Code: StateConflict}
 		}
-		if !membershipDelegationAllowed(receipt.Decision().Role(), current.Role()) {
+		if !identity.CanDelegateMembershipRole(receipt.Decision().Role(), current.Role()) {
 			return identity.Membership{}, identity.MembershipAuditReceipt{}, false, errForbidden
 		}
 	}
@@ -85,7 +85,7 @@ func (orchestrator *Orchestrator) RevokeMembership(
 			(current.Revision() == request.ExpectedRevision()+1 && current.Status() == identity.MembershipRevoked)) {
 		return identity.Membership{}, identity.MembershipAuditReceipt{}, false, &StateError{Code: StateConflict}
 	}
-	if !membershipDelegationAllowed(receipt.Decision().Role(), current.Role()) {
+	if !identity.CanDelegateMembershipRole(receipt.Decision().Role(), current.Role()) {
 		return identity.Membership{}, identity.MembershipAuditReceipt{}, false, errForbidden
 	}
 	membership, audit, revoked, err := orchestrator.access.RevokeMembership(ctx, MembershipRevokeState{
@@ -132,22 +132,4 @@ func validRevokeResult(
 		audit.ProjectRef() == request.ProjectRef() && audit.Role() == role &&
 		audit.PreviousRevision() == request.ExpectedRevision() && audit.Revision() == wantRevision &&
 		audit.OccurredAt().Equal(request.RequestedAt())
-}
-
-// Platform authority may assign every project role but is never itself a
-// project grant. Owners may delegate project ownership; project admins may
-// delegate only non-administrative roles.
-func membershipDelegationAllowed(grantor identity.Role, target identity.Role) bool {
-	if target == identity.RolePlatformAdmin || identity.ValidateRole(target) != nil {
-		return false
-	}
-	switch grantor {
-	case identity.RolePlatformAdmin, identity.RoleProjectOwner:
-		return true
-	case identity.RoleProjectAdmin:
-		return target == identity.RoleContributor || target == identity.RoleReviewer ||
-			target == identity.RoleOperator || target == identity.RoleViewer
-	default:
-		return false
-	}
 }
