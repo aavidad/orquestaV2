@@ -36,11 +36,22 @@ env_allowlist = ["PATH", "HOME", "CODEX_HOME"]
 credential_ref = ""
 
 [identity]
+provider = "local_token"
 local_actor = "actor:local-owner"
 local_token_path = "./var/secrets/local-owner.token"
 
+[identity.oidc]
+issuer = ""
+audience = ""
+required_groups = []
+clock_skew = "30s"
+upstream_timeout = "10s"
+
 [project]
 default = "project:default"
+
+[director]
+lease_duration = "2m"
 
 [scheduler]
 poll_interval = "500ms"

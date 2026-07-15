@@ -79,7 +79,7 @@ func newTestInterface(t *testing.T, maxRequestBytes int64) (*Interface, *memoryS
 		State: state, Access: state, Launcher: inertAgent{}, Observer: inertAgent{}, Artifacts: artifacts,
 		Clock: clock, IDs: ids, MaxOutputBytes: 4096,
 		MaxExecutionAttempts: 3, AgentCapabilities: inertAgentCapabilities(),
-		ClaimLease: time.Minute, ObservationDelay: time.Second,
+		ClaimLease: time.Minute, DirectorLeaseDuration: 2 * time.Minute, ObservationDelay: time.Second,
 		ExecutionTimeout: time.Hour,
 	})
 	if err != nil {
@@ -421,6 +421,35 @@ func (state *memoryState) Status(_ context.Context, projectRef goal.ProjectRef) 
 type memoryMembershipKey struct {
 	principal identity.PrincipalRef
 	project   goal.ProjectRef
+}
+
+func (*memoryState) DirectorReplay(
+	context.Context,
+	application.DirectorReplayRequest,
+) (application.DirectorReplayRecord, bool, error) {
+	return application.DirectorReplayRecord{}, false, nil
+}
+
+func (*memoryState) ClaimDirector(
+	context.Context,
+	application.ClaimDirectorState,
+) (application.DirectorLeaseRecord, bool, error) {
+	return application.DirectorLeaseRecord{}, false, errors.New("test_state.director_unsupported")
+}
+
+func (*memoryState) RenewDirector(
+	context.Context,
+	application.RenewDirectorState,
+) (application.DirectorLeaseRecord, bool, error) {
+	return application.DirectorLeaseRecord{}, false, errors.New("test_state.director_unsupported")
+}
+
+func (*memoryState) ApplyDirectorPlan(
+	context.Context,
+	application.ApplyDirectorPlanState,
+) (application.DirectorDecisionRecord, bool, error) {
+	return application.DirectorDecisionRecord{}, false,
+		errors.New("test_state.director_unsupported")
 }
 
 func (state *memoryState) grantTestMembership(

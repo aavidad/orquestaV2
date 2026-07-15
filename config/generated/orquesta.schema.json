@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:orquesta:config:2026-07-15.9",
+  "$id": "urn:orquesta:config:2026-07-15.11",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -137,6 +137,25 @@
       },
       "type": "object"
     },
+    "director": {
+      "additionalProperties": false,
+      "properties": {
+        "lease_duration": {
+          "default": "2m",
+          "pattern": "^[1-9][0-9]*(ns|us|µs|ms|s|m|h)([0-9].*)?$",
+          "type": "string",
+          "x-env-alias": "ORQUESTA_DIRECTOR_LEASE_DURATION",
+          "x-restart-required": true,
+          "x-scope": "director",
+          "x-semantic-ref": "orquesta.config.director.lease_duration",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "positive_duration"
+          ]
+        }
+      },
+      "type": "object"
+    },
     "identity": {
       "additionalProperties": false,
       "properties": {
@@ -163,6 +182,95 @@
           "x-sensitive": false,
           "x-validator-ids": [
             "non_empty_path"
+          ]
+        },
+        "oidc": {
+          "additionalProperties": false,
+          "properties": {
+            "audience": {
+              "default": "",
+              "type": "string",
+              "x-env-alias": "ORQUESTA_IDENTITY_OIDC_AUDIENCE",
+              "x-restart-required": true,
+              "x-scope": "identity",
+              "x-semantic-ref": "orquesta.config.identity.oidc.audience",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "trimmed_optional_string"
+              ]
+            },
+            "clock_skew": {
+              "default": "30s",
+              "pattern": "^[1-9][0-9]*(ns|us|µs|ms|s|m|h)([0-9].*)?$",
+              "type": "string",
+              "x-env-alias": "ORQUESTA_IDENTITY_OIDC_CLOCK_SKEW",
+              "x-restart-required": true,
+              "x-scope": "identity",
+              "x-semantic-ref": "orquesta.config.identity.oidc.clock_skew",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "positive_duration"
+              ]
+            },
+            "issuer": {
+              "default": "",
+              "type": "string",
+              "x-env-alias": "ORQUESTA_IDENTITY_OIDC_ISSUER",
+              "x-restart-required": true,
+              "x-scope": "identity",
+              "x-semantic-ref": "orquesta.config.identity.oidc.issuer",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "trimmed_optional_string"
+              ]
+            },
+            "required_groups": {
+              "default": [],
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array",
+              "uniqueItems": true,
+              "x-env-alias": "ORQUESTA_IDENTITY_OIDC_REQUIRED_GROUPS",
+              "x-restart-required": true,
+              "x-scope": "identity",
+              "x-semantic-ref": "orquesta.config.identity.oidc.required_groups",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "unique_non_empty_string_list"
+              ]
+            },
+            "upstream_timeout": {
+              "default": "10s",
+              "pattern": "^[1-9][0-9]*(ns|us|µs|ms|s|m|h)([0-9].*)?$",
+              "type": "string",
+              "x-env-alias": "ORQUESTA_IDENTITY_OIDC_UPSTREAM_TIMEOUT",
+              "x-restart-required": true,
+              "x-scope": "identity",
+              "x-semantic-ref": "orquesta.config.identity.oidc.upstream_timeout",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "positive_duration"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "provider": {
+          "default": "local_token",
+          "enum": [
+            "local_token",
+            "oidc"
+          ],
+          "type": "string",
+          "x-env-alias": "ORQUESTA_IDENTITY_PROVIDER",
+          "x-restart-required": true,
+          "x-scope": "identity",
+          "x-semantic-ref": "orquesta.config.identity.provider",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "allowed_values"
           ]
         }
       },
@@ -587,8 +695,8 @@
       "type": "object"
     }
   },
-  "x-registry-revision": "2026-07-15.9",
-  "x-registry-hash": "sha256:bc6babe6cae35fb6de7b7c459135ade5899ab3608bf07df3a3c941892878a533",
+  "x-registry-revision": "2026-07-15.11",
+  "x-registry-hash": "sha256:5b67d20f425e1883d80998ad29bd8ea4ea06e739b4c96a9f773c89f9eb175a8d",
   "x-source-max-bytes": 1048576,
   "x-aliases": [],
   "x-cross-validators": [
@@ -620,6 +728,16 @@
         "runtime.codex.work_root",
         "config.effective_path",
         "identity.local_token_path"
+      ]
+    },
+    {
+      "id": "identity_provider_requirements",
+      "keys": [
+        "identity.provider",
+        "identity.oidc.issuer",
+        "identity.oidc.audience",
+        "identity.oidc.clock_skew",
+        "identity.oidc.upstream_timeout"
       ]
     }
   ]

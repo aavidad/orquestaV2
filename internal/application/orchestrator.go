@@ -13,35 +13,37 @@ const (
 )
 
 type Dependencies struct {
-	State                StateRepository
-	Access               AccessRepository
-	Launcher             AgentLauncher
-	Observer             AgentObserver
-	Artifacts            ArtifactStore
-	Clock                Clock
-	IDs                  IDGenerator
-	MaxOutputBytes       int64
-	MaxExecutionAttempts uint64
-	ClaimLease           time.Duration
-	ObservationDelay     time.Duration
-	ExecutionTimeout     time.Duration
-	AgentCapabilities    ports.AgentCapabilities
+	State                 StateRepository
+	Access                AccessRepository
+	Launcher              AgentLauncher
+	Observer              AgentObserver
+	Artifacts             ArtifactStore
+	Clock                 Clock
+	IDs                   IDGenerator
+	MaxOutputBytes        int64
+	MaxExecutionAttempts  uint64
+	ClaimLease            time.Duration
+	DirectorLeaseDuration time.Duration
+	ObservationDelay      time.Duration
+	ExecutionTimeout      time.Duration
+	AgentCapabilities     ports.AgentCapabilities
 }
 
 type Orchestrator struct {
-	state                StateRepository
-	access               AccessRepository
-	launcher             AgentLauncher
-	observer             AgentObserver
-	artifacts            ArtifactStore
-	clock                Clock
-	ids                  IDGenerator
-	maxOutputBytes       int64
-	maxExecutionAttempts uint64
-	claimLease           time.Duration
-	observationDelay     time.Duration
-	executionTimeout     time.Duration
-	agentCapabilities    ports.AgentCapabilities
+	state                 StateRepository
+	access                AccessRepository
+	launcher              AgentLauncher
+	observer              AgentObserver
+	artifacts             ArtifactStore
+	clock                 Clock
+	ids                   IDGenerator
+	maxOutputBytes        int64
+	maxExecutionAttempts  uint64
+	claimLease            time.Duration
+	directorLeaseDuration time.Duration
+	observationDelay      time.Duration
+	executionTimeout      time.Duration
+	agentCapabilities     ports.AgentCapabilities
 }
 
 func New(dependencies Dependencies) (*Orchestrator, error) {
@@ -68,25 +70,28 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 		return nil, errors.New("application.agent_capabilities_invalid")
 	case dependencies.ClaimLease <= 0:
 		return nil, errors.New("application.claim_lease_invalid")
+	case dependencies.DirectorLeaseDuration <= 0:
+		return nil, errors.New("application.director_lease_duration_invalid")
 	case dependencies.ObservationDelay <= 0:
 		return nil, errors.New("application.observation_delay_invalid")
 	case dependencies.ExecutionTimeout <= 0:
 		return nil, errors.New("application.execution_timeout_invalid")
 	}
 	return &Orchestrator{
-		state:                dependencies.State,
-		access:               dependencies.Access,
-		launcher:             dependencies.Launcher,
-		observer:             dependencies.Observer,
-		artifacts:            dependencies.Artifacts,
-		clock:                dependencies.Clock,
-		ids:                  dependencies.IDs,
-		maxOutputBytes:       dependencies.MaxOutputBytes,
-		maxExecutionAttempts: dependencies.MaxExecutionAttempts,
-		claimLease:           dependencies.ClaimLease,
-		observationDelay:     dependencies.ObservationDelay,
-		executionTimeout:     dependencies.ExecutionTimeout,
-		agentCapabilities:    cloneAgentCapabilities(dependencies.AgentCapabilities),
+		state:                 dependencies.State,
+		access:                dependencies.Access,
+		launcher:              dependencies.Launcher,
+		observer:              dependencies.Observer,
+		artifacts:             dependencies.Artifacts,
+		clock:                 dependencies.Clock,
+		ids:                   dependencies.IDs,
+		maxOutputBytes:        dependencies.MaxOutputBytes,
+		maxExecutionAttempts:  dependencies.MaxExecutionAttempts,
+		claimLease:            dependencies.ClaimLease,
+		directorLeaseDuration: dependencies.DirectorLeaseDuration,
+		observationDelay:      dependencies.ObservationDelay,
+		executionTimeout:      dependencies.ExecutionTimeout,
+		agentCapabilities:     cloneAgentCapabilities(dependencies.AgentCapabilities),
 	}, nil
 }
 

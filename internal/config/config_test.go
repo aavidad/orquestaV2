@@ -25,8 +25,12 @@ func TestResolveReturnsImmutableTypedCanonicalDefaults(t *testing.T) {
 		snapshot.StateSQLiteMaxOpenConnections() != 8 {
 		t.Fatal("canonical server/state defaults missing")
 	}
-	if snapshot.IdentityLocalActor() != "actor:local-owner" ||
-		snapshot.IdentityLocalTokenPath() != "./var/secrets/local-owner.token" || snapshot.ProjectDefault() != "project:default" {
+	if snapshot.IdentityProvider() != "local_token" || snapshot.IdentityLocalActor() != "actor:local-owner" ||
+		snapshot.IdentityLocalTokenPath() != "./var/secrets/local-owner.token" ||
+		snapshot.IdentityOIDCIssuer() != "" || snapshot.IdentityOIDCAudience() != "" ||
+		len(snapshot.IdentityOIDCRequiredGroups()) != 0 || snapshot.IdentityOIDCClockSkew() != 30*time.Second ||
+		snapshot.IdentityOIDCUpstreamTimeout() != 10*time.Second ||
+		snapshot.ProjectDefault() != "project:default" || snapshot.DirectorLeaseDuration() != 2*time.Minute {
 		t.Fatal("identity/project defaults missing")
 	}
 	if snapshot.CredentialsLocalPath() != "./var/secrets/credentials.json" ||
@@ -108,6 +112,36 @@ env_allowlist = ["FILE_ONLY"]
 	assertSource(t, snapshot, KeyProjectDefault, SourceDefault)
 	_, err := Resolve(ResolveOptions{Environment: map[string]string{"UNDECLARED": "value"}})
 	assertConfigError(t, err, ErrorUnknownKey, Key("UNDECLARED"))
+}
+
+func TestOIDCAndDirectorSettingsResolveOnlyThroughCanonicalRegistry(t *testing.T) {
+	snapshot := resolveTOML(t, `
+[identity]
+provider = "oidc"
+
+[identity.oidc]
+issuer = "https://idp.example.test/tenant/v2.0"
+audience = "orquesta"
+required_groups = ["orquesta-users", "operators"]
+clock_skew = "45s"
+upstream_timeout = "12s"
+
+[director]
+lease_duration = "90s"
+`, nil)
+	if snapshot.IdentityProvider() != "oidc" ||
+		snapshot.IdentityOIDCIssuer() != "https://idp.example.test/tenant/v2.0" ||
+		snapshot.IdentityOIDCAudience() != "orquesta" || snapshot.IdentityOIDCClockSkew() != 45*time.Second ||
+		snapshot.IdentityOIDCUpstreamTimeout() != 12*time.Second ||
+		snapshot.DirectorLeaseDuration() != 90*time.Second ||
+		!reflect.DeepEqual(snapshot.IdentityOIDCRequiredGroups(), []string{"orquesta-users", "operators"}) {
+		t.Fatalf("OIDC/director canonical settings lost: %+v", snapshot)
+	}
+	groups := snapshot.IdentityOIDCRequiredGroups()
+	groups[0] = "mutated"
+	if snapshot.IdentityOIDCRequiredGroups()[0] != "orquesta-users" {
+		t.Fatal("OIDC group getter leaks mutable registry state")
+	}
 }
 
 func TestEffectiveConfigProjectionIsPureRedactedAndOutputOnly(t *testing.T) {

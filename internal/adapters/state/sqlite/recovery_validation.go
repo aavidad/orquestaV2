@@ -67,6 +67,16 @@ func validateRecoveryDatabase(ctx context.Context, database *sql.DB) (string, st
 		if err := validateRecoveryV10Identity(ctx, transaction); err != nil {
 			return "", "", invalid(err)
 		}
+	case recoverySchemaV12:
+		if err := validateMigratedGoalRecords(ctx, transaction); err != nil {
+			return "", "", invalid(err)
+		}
+		if err := validateRecoveryV10Identity(ctx, transaction); err != nil {
+			return "", "", invalid(err)
+		}
+		if err := validateRecoveryV12Director(ctx, transaction); err != nil {
+			return "", "", invalid(err)
+		}
 	}
 	if err := validateRecoveryEvents(ctx, transaction); err != nil {
 		return "", "", invalid(err)
@@ -286,7 +296,7 @@ func activeRecoveryActionState(
 	currentGoalPlanGeneration int64,
 	currentGoalState string,
 ) bool {
-	if planGeneration != currentGoalPlanGeneration || currentGoalState != "running" {
+	if planGeneration > currentGoalPlanGeneration || currentGoalState != "running" {
 		return false
 	}
 	switch kind {

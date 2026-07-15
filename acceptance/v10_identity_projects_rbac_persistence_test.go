@@ -31,7 +31,7 @@ func v10AssertSingleDatabaseAudit(
 	}
 	defer database.Close()
 	var schemaVersion int
-	if err := database.QueryRow(`PRAGMA user_version`).Scan(&schemaVersion); err != nil || schemaVersion != 6 {
+	if err := database.QueryRow(`PRAGMA user_version`).Scan(&schemaVersion); err != nil || schemaVersion < 6 {
 		t.Fatalf("V10 schema version=%d err=%v", schemaVersion, err)
 	}
 	wantCounts := map[string]int{

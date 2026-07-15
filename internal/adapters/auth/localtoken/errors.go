@@ -12,6 +12,8 @@ const (
 	CodeTokenFilePermissions ErrorCode = "localtoken.token_file_permissions"
 	CodeTokenInvalid         ErrorCode = "localtoken.token_invalid"
 	CodePrincipalInvalid     ErrorCode = "localtoken.principal_invalid"
+	CodeAuthenticationFailed ErrorCode = "localtoken.authentication_failed"
+	CodeContextInvalid       ErrorCode = "localtoken.context_invalid"
 	CodeRandomFailed         ErrorCode = "localtoken.random_failed"
 	CodePersistFailed        ErrorCode = "localtoken.persist_failed"
 )

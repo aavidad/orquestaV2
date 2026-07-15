@@ -60,7 +60,12 @@ func (repository *Repository) Authorize(
 		return identity.AuthorizationReceipt{}, err
 	}
 	if found {
-		receipt, restoreErr := restoreAuthorizationReceipt(request, fingerprint, stored)
+		storedRequest, restoreRequestErr := authorizationReplayRequest(request, stored)
+		if restoreRequestErr != nil {
+			return identity.AuthorizationReceipt{}, restoreRequestErr
+		}
+		fingerprint = authorizationRequestFingerprint(storedRequest)
+		receipt, restoreErr := restoreAuthorizationReceipt(storedRequest, fingerprint, stored)
 		if restoreErr != nil {
 			return identity.AuthorizationReceipt{}, restoreErr
 		}
@@ -111,6 +116,25 @@ INSERT INTO authorization_receipts(
 		return identity.AuthorizationReceipt{}, err
 	}
 	return receipt, nil
+}
+
+func authorizationReplayRequest(
+	request identity.AuthorizationRequest,
+	stored authorizationRow,
+) (identity.AuthorizationRequest, error) {
+	if stored.projectRef != request.ProjectRef().String() ||
+		stored.permission != string(request.Permission()) || stored.resourceRef != request.ResourceRef() {
+		return identity.AuthorizationRequest{}, conflict(errors.New("sqlite.authorization_request_conflict"))
+	}
+	restored, err := identity.NewAuthorizationRequest(identity.AuthorizationRequestInput{
+		RequestRef: request.RequestRef(), Principal: request.Principal(), ProjectRef: request.ProjectRef(),
+		Permission: request.Permission(), ResourceRef: request.ResourceRef(),
+		RequestedAt: time.Unix(0, stored.requestedAt).UTC(),
+	})
+	if err != nil {
+		return identity.AuthorizationRequest{}, invalid(err)
+	}
+	return restored, nil
 }
 
 func (repository *Repository) Membership(

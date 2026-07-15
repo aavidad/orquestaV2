@@ -2,9 +2,9 @@
 
 # Orquesta configuration registry
 
-Registry revision: `2026-07-15.9`
+Registry revision: `2026-07-15.11`
 
-Registry hash: `sha256:bc6babe6cae35fb6de7b7c459135ade5899ab3608bf07df3a3c941892878a533`
+Registry hash: `sha256:5b67d20f425e1883d80998ad29bd8ea4ea06e739b4c96a9f773c89f9eb175a8d`
 
 Precedence: `default < file < env`
 
@@ -41,9 +41,16 @@ Source limit: `1048576` bytes
         "CODEX_HOME"
       ]` | `ORQUESTA_RUNTIME_CODEX_ENV_ALLOWLIST` | `true` | `unique_non_empty_string_list, environment_name_list` |
 | `runtime.codex.credential_ref` | `credential_ref` | `"[REDACTED]"` | `ORQUESTA_RUNTIME_CODEX_CREDENTIAL_REF` | `true` | `credential_ref` |
+| `identity.provider` | `string` | `"local_token"` | `ORQUESTA_IDENTITY_PROVIDER` | `true` | `allowed_values` |
 | `identity.local_actor` | `string` | `"actor:local-owner"` | `ORQUESTA_IDENTITY_LOCAL_ACTOR` | `true` | `opaque_ref` |
 | `identity.local_token_path` | `path` | `"./var/secrets/local-owner.token"` | `ORQUESTA_IDENTITY_LOCAL_TOKEN_PATH` | `true` | `non_empty_path` |
+| `identity.oidc.issuer` | `string` | `""` | `ORQUESTA_IDENTITY_OIDC_ISSUER` | `true` | `trimmed_optional_string` |
+| `identity.oidc.audience` | `string` | `""` | `ORQUESTA_IDENTITY_OIDC_AUDIENCE` | `true` | `trimmed_optional_string` |
+| `identity.oidc.required_groups` | `string_list` | `[]` | `ORQUESTA_IDENTITY_OIDC_REQUIRED_GROUPS` | `true` | `unique_non_empty_string_list` |
+| `identity.oidc.clock_skew` | `duration` | `"30s"` | `ORQUESTA_IDENTITY_OIDC_CLOCK_SKEW` | `true` | `positive_duration` |
+| `identity.oidc.upstream_timeout` | `duration` | `"10s"` | `ORQUESTA_IDENTITY_OIDC_UPSTREAM_TIMEOUT` | `true` | `positive_duration` |
 | `project.default` | `string` | `"project:default"` | `ORQUESTA_PROJECT_DEFAULT` | `true` | `opaque_ref` |
+| `director.lease_duration` | `duration` | `"2m"` | `ORQUESTA_DIRECTOR_LEASE_DURATION` | `true` | `positive_duration` |
 | `scheduler.poll_interval` | `duration` | `"500ms"` | `ORQUESTA_SCHEDULER_POLL_INTERVAL` | `true` | `positive_duration` |
 | `scheduler.observation_interval` | `duration` | `"2s"` | `ORQUESTA_SCHEDULER_OBSERVATION_INTERVAL` | `true` | `positive_duration` |
 | `scheduler.claim_lease` | `duration` | `"2m"` | `ORQUESTA_SCHEDULER_CLAIM_LEASE` | `true` | `positive_duration` |
@@ -60,6 +67,7 @@ Source limit: `1048576` bytes
 - `server_listen_loopback`: `server.listen`
 - `server_mcp_path_literal`: `server.mcp_path`
 - `runtime_paths_disjoint`: `state.sqlite.path`, `artifact.filesystem.root`, `credentials.local.path`, `runtime.codex.work_root`, `config.effective_path`, `identity.local_token_path`
+- `identity_provider_requirements`: `identity.provider`, `identity.oidc.issuer`, `identity.oidc.audience`, `identity.oidc.clock_skew`, `identity.oidc.upstream_timeout`
 
 ## Temporary aliases
 

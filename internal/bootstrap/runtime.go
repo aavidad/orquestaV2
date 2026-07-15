@@ -13,7 +13,9 @@ import (
 
 	"orquesta/internal/adapters/agent/codex"
 	"orquesta/internal/adapters/artifact/filesystem"
+	"orquesta/internal/adapters/auth/bearer"
 	"orquesta/internal/adapters/auth/localtoken"
+	"orquesta/internal/adapters/auth/oidc"
 	configtoml "orquesta/internal/adapters/config/toml"
 	credentiallocal "orquesta/internal/adapters/credentials/local"
 	statesqlite "orquesta/internal/adapters/state/sqlite"
@@ -37,11 +39,19 @@ type AgentAdapter interface {
 type AgentFactory func(config.Snapshot, application.Clock) (AgentAdapter, error)
 
 type Options struct {
-	ConfigPath   string
-	Version      string
-	Listener     net.Listener
-	AgentFactory AgentFactory
-	ReportError  func(error)
+	ConfigPath         string
+	Version            string
+	Listener           net.Listener
+	AgentFactory       AgentFactory
+	IdentityHTTPClient *http.Client
+	ReportError        func(error)
+}
+
+type identityRuntimeComposition struct {
+	provider       identity.IdentityProvider
+	localPrincipal identity.Principal
+	localHierarchy identity.ProjectHierarchy
+	provisionLocal bool
 }
 
 type Runtime struct {
@@ -79,10 +89,6 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		return nil, err
 	}
 	clock := local.Clock{}
-	principal, hierarchy, err := localIdentityComposition(snapshot)
-	if err != nil {
-		return nil, err
-	}
 	catalog, err := i18n.LoadBundled()
 	if err != nil {
 		return nil, err
@@ -141,11 +147,11 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		return nil, err
 	}
 
-	credential, err := localtoken.Open(snapshot.IdentityLocalTokenPath())
+	identityComposition, err := composeIdentityRuntime(ctx, snapshot, options.IdentityHTTPClient)
 	if err != nil {
 		return nil, err
 	}
-	authenticator, err := credential.ForPrincipal(principal)
+	authenticator, err := bearer.New(identityComposition.provider)
 	if err != nil {
 		return nil, err
 	}
@@ -167,10 +173,13 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 			_ = repository.Close()
 		}
 	}()
-	if err := repository.ProvisionLocalAccess(
-		ctx, principal, hierarchy, identity.RoleProjectOwner, clock.Now(),
-	); err != nil {
-		return nil, err
+	if identityComposition.provisionLocal {
+		if err := repository.ProvisionLocalAccess(
+			ctx, identityComposition.localPrincipal, identityComposition.localHierarchy,
+			identity.RoleProjectOwner, clock.Now(),
+		); err != nil {
+			return nil, err
+		}
 	}
 
 	artifacts, err := filesystem.Open(snapshot.ArtifactFilesystemRoot())
@@ -188,12 +197,13 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		State: repository, Access: repository,
 		Launcher: agent, Observer: agent, Artifacts: artifacts,
 		Clock: clock, IDs: local.IDGenerator{},
-		MaxOutputBytes:       snapshot.RuntimeMaxOutputBytes(),
-		MaxExecutionAttempts: uint64(snapshot.SchedulerMaxExecutionAttempts()),
-		ClaimLease:           snapshot.SchedulerClaimLease(),
-		ObservationDelay:     snapshot.SchedulerObservationInterval(),
-		ExecutionTimeout:     snapshot.SchedulerExecutionTimeout(),
-		AgentCapabilities:    capabilities,
+		MaxOutputBytes:        snapshot.RuntimeMaxOutputBytes(),
+		MaxExecutionAttempts:  uint64(snapshot.SchedulerMaxExecutionAttempts()),
+		ClaimLease:            snapshot.SchedulerClaimLease(),
+		DirectorLeaseDuration: snapshot.DirectorLeaseDuration(),
+		ObservationDelay:      snapshot.SchedulerObservationInterval(),
+		ExecutionTimeout:      snapshot.SchedulerExecutionTimeout(),
+		AgentCapabilities:     capabilities,
 	})
 	if err != nil {
 		return nil, err
@@ -211,7 +221,7 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		return nil, err
 	}
 	mux := http.NewServeMux()
-	mux.Handle(snapshot.ServerMCPPath(), authenticator.Middleware(interfaceServer.Handler()))
+	mux.Handle(snapshot.ServerMCPPath(), authenticator.Wrap(interfaceServer.Handler()))
 	lifecycleCtx, cancelLifecycle := context.WithCancel(context.Background())
 	cleanupLifecycle := true
 	defer func() {
@@ -237,6 +247,43 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	cleanupListener = false
 	cleanupLifecycle = false
 	return runtime, nil
+}
+
+func composeIdentityRuntime(
+	ctx context.Context,
+	snapshot config.Snapshot,
+	httpClient *http.Client,
+) (identityRuntimeComposition, error) {
+	switch snapshot.IdentityProvider() {
+	case localtoken.AuthenticationMethod:
+		principal, hierarchy, err := localIdentityComposition(snapshot)
+		if err != nil {
+			return identityRuntimeComposition{}, err
+		}
+		credential, err := localtoken.Open(snapshot.IdentityLocalTokenPath())
+		if err != nil {
+			return identityRuntimeComposition{}, err
+		}
+		provider, err := credential.ForPrincipal(principal)
+		if err != nil {
+			return identityRuntimeComposition{}, err
+		}
+		return identityRuntimeComposition{
+			provider: provider, localPrincipal: principal, localHierarchy: hierarchy, provisionLocal: true,
+		}, nil
+	case oidc.AuthenticationMethod:
+		provider, err := oidc.New(ctx, oidc.Options{
+			Issuer: snapshot.IdentityOIDCIssuer(), Audience: snapshot.IdentityOIDCAudience(),
+			RequiredGroups: snapshot.IdentityOIDCRequiredGroups(), ClockSkew: snapshot.IdentityOIDCClockSkew(),
+			UpstreamTimeout: snapshot.IdentityOIDCUpstreamTimeout(), HTTPClient: httpClient,
+		})
+		if err != nil {
+			return identityRuntimeComposition{}, err
+		}
+		return identityRuntimeComposition{provider: provider}, nil
+	default:
+		return identityRuntimeComposition{}, errors.New("bootstrap.identity_provider_unsupported")
+	}
 }
 
 func localIdentityComposition(snapshot config.Snapshot) (identity.Principal, identity.ProjectHierarchy, error) {

@@ -597,7 +597,7 @@ func TestManagerDoctorClassifiesAndReportsConflictsWithoutStoreAccess(t *testing
 	}
 	futureRevision, err := manager.Doctor(context.Background(), DoctorRequest{Proposals: []DoctorProposal{{
 		Key: "api.language_future", TargetKey: KeyAPILocale, SemanticRef: "orquesta.config.api.language_future",
-		Alias: "api.locale", RemoveAfterRevision: "2026-07-15.10",
+		Alias: "api.locale", RemoveAfterRevision: "2099-01-01.0",
 	}}})
 	if err != nil || len(futureRevision.Accepted) != 1 || len(futureRevision.Conflicts) != 0 {
 		t.Fatalf("doctor future revision = %#v err=%v", futureRevision, err)

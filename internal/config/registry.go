@@ -434,6 +434,10 @@ func validateCrossValidators(definitions []registryCrossValidatorDefinition, key
 			KeyStateSQLitePath, KeyArtifactFilesystemRoot, KeyCredentialsLocalPath, KeyRuntimeCodexWorkRoot,
 			KeyConfigEffectivePath, KeyIdentityLocalTokenPath,
 		},
+		"identity_provider_requirements": {
+			KeyIdentityProvider, KeyIdentityOIDCIssuer, KeyIdentityOIDCAudience, KeyIdentityOIDCClockSkew,
+			KeyIdentityOIDCUpstreamTimeout,
+		},
 	}
 	if len(definitions) != len(expected) {
 		return fmt.Errorf("cross validators are incomplete")

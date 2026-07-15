@@ -55,7 +55,7 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 	if err := repository.db.QueryRow("PRAGMA user_version").Scan(&userVersion); err != nil {
 		t.Fatalf("user_version: %v", err)
 	}
-	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != 6 {
+	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != recoverySchemaV12 {
 		t.Fatalf("pragmas = fk:%d busy:%d version:%d", foreignKeys, busyTimeout, userVersion)
 	}
 
@@ -74,7 +74,8 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 	}
 	wantTables := []string{
 		"action_consumption_receipts", "app_specs", "artifacts", "attestations", "authorization_receipts",
-		"events", "executions", "goal_phase_contract_refs", "goal_phases", "goals", "groups", "intents",
+		"director_decisions", "director_lease_receipts", "director_leases", "events", "executions",
+		"goal_phase_contract_refs", "goal_phases", "goals", "groups", "intents",
 		"membership_audit_receipts", "outbox", "principals", "project_memberships", "projects", "repositories", "schema_migrations",
 		"work_item_dependencies", "work_item_fences", "work_item_requirement_refs", "work_item_write_scopes", "work_items",
 		"workspaces",

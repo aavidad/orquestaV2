@@ -69,7 +69,8 @@ func TestV04ConfirmationFalseHasNoClockIDOrStateEffect(t *testing.T) {
 		Launcher: agent, Observer: agent, Artifacts: artifacts,
 		Clock: clock, IDs: ids, MaxOutputBytes: 1024,
 		MaxExecutionAttempts: 3, AgentCapabilities: testAgentCapabilities(),
-		ClaimLease: time.Minute, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
+		ClaimLease: time.Minute, DirectorLeaseDuration: time.Minute,
+		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})
 	if err != nil {
 		t.Fatalf("new: %v", err)
@@ -261,7 +262,8 @@ func TestV04AmendRejectsNonterminalStaleAndForeignSource(t *testing.T) {
 			Launcher: agent, Observer: agent, Artifacts: newMemoryArtifactStore(),
 			Clock: clock, IDs: ids, MaxOutputBytes: 1024,
 			MaxExecutionAttempts: 3, AgentCapabilities: testAgentCapabilities(),
-			ClaimLease: time.Minute, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
+			ClaimLease: time.Minute, DirectorLeaseDuration: time.Minute,
+			ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 		})
 		if err != nil {
 			t.Fatalf("new: %v", err)
@@ -523,7 +525,8 @@ func v04NewOrchestrator(
 		Launcher: agent, Observer: agent, Artifacts: newMemoryArtifactStore(),
 		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1 << 20,
 		MaxExecutionAttempts: 3, AgentCapabilities: testAgentCapabilities(), ClaimLease: time.Minute,
-		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
+		DirectorLeaseDuration: time.Minute,
+		ObservationDelay:      time.Second, ExecutionTimeout: time.Hour,
 	})
 	if err != nil {
 		t.Fatalf("new orchestrator: %v", err)

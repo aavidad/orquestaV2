@@ -93,7 +93,7 @@ WHERE type = 'table' AND name IN ('principals', 'project_memberships', 'authoriz
 		t.Fatalf("Open did not migrate restored V09: %v", err)
 	}
 	defer migrated.Close()
-	assertRecoverySchemaVersion(t, migrated.db, recoverySchemaV10)
+	assertRecoverySchemaVersion(t, migrated.db, recoverySchemaV12)
 	var bound int
 	if err := migrated.db.QueryRow(`SELECT COUNT(*) FROM goals g
 JOIN app_specs spec ON spec.ref = g.app_spec_ref
@@ -129,8 +129,8 @@ func TestV10RecoveryRestoresExactV10IdentitySnapshot(t *testing.T) {
 		t.Fatalf("backup V10: %v", err)
 	}
 	migrations, _ := loadMigrations()
-	if receipt.SchemaRef != migrationSchemaRef(migrations[:recoverySchemaV10]) {
-		t.Fatalf("V10 schema ref = %s", receipt.SchemaRef)
+	if receipt.SchemaRef != migrationSchemaRef(migrations[:recoverySchemaV12]) {
+		t.Fatalf("V12 schema ref = %s", receipt.SchemaRef)
 	}
 	targetRef, _ := application.NewRecoveryTargetRef("recovery-target:v10-exact")
 	if _, err := recovery.RestoreBackup(ctx, receipt.Ref, targetRef); err != nil {
@@ -144,7 +144,7 @@ func TestV10RecoveryRestoresExactV10IdentitySnapshot(t *testing.T) {
 	}
 	raw := openRawV10TestDatabase(t, targetPath)
 	defer raw.Close()
-	assertRecoverySchemaVersion(t, raw, recoverySchemaV10)
+	assertRecoverySchemaVersion(t, raw, recoverySchemaV12)
 	if schemaRef, _, err := validateRecoveryDatabase(ctx, raw); err != nil || schemaRef != receipt.SchemaRef {
 		t.Fatalf("restored V10 semantics: schema=%s err=%v", schemaRef, err)
 	}
@@ -401,7 +401,7 @@ func TestV10RecoveryAcceptsContiguousMembershipLifecycle(t *testing.T) {
 	}
 }
 
-func TestV10RecoveryCanonicalInventoryAndSchemaRefAreVersioned(t *testing.T) {
+func TestRecoveryCanonicalInventoryAndSchemaRefAreVersioned(t *testing.T) {
 	v09, err := canonicalSchemaInventoryDigest(recoverySchemaV09)
 	if err != nil {
 		t.Fatal(err)
@@ -410,14 +410,23 @@ func TestV10RecoveryCanonicalInventoryAndSchemaRefAreVersioned(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v09 == v10 || !strings.HasPrefix(v09, "sha256:") || !strings.HasPrefix(v10, "sha256:") {
-		t.Fatalf("canonical inventories not versioned: V09=%s V10=%s", v09, v10)
+	v12, err := canonicalSchemaInventoryDigest(recoverySchemaV12)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v09 == v10 || v09 == v12 || v10 == v12 ||
+		!strings.HasPrefix(v09, "sha256:") || !strings.HasPrefix(v10, "sha256:") ||
+		!strings.HasPrefix(v12, "sha256:") {
+		t.Fatalf("canonical inventories not versioned: V09=%s V10=%s V12=%s", v09, v10, v12)
 	}
 	migrations, _ := loadMigrations()
 	v09Ref := migrationSchemaRef(migrations[:recoverySchemaV09])
 	v10Ref := migrationSchemaRef(migrations[:recoverySchemaV10])
-	if v09Ref == v10Ref || !strings.HasPrefix(v09Ref, schemaRefPrefix) || !strings.HasPrefix(v10Ref, schemaRefPrefix) {
-		t.Fatalf("schema refs not versioned: V09=%s V10=%s", v09Ref, v10Ref)
+	v12Ref := migrationSchemaRef(migrations[:recoverySchemaV12])
+	if v09Ref == v10Ref || v09Ref == v12Ref || v10Ref == v12Ref ||
+		!strings.HasPrefix(v09Ref, schemaRefPrefix) || !strings.HasPrefix(v10Ref, schemaRefPrefix) ||
+		!strings.HasPrefix(v12Ref, schemaRefPrefix) {
+		t.Fatalf("schema refs not versioned: V09=%s V10=%s V12=%s", v09Ref, v10Ref, v12Ref)
 	}
 }
 

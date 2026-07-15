@@ -17,7 +17,36 @@ func insertCreateState(ctx context.Context, transaction *sql.Tx, state applicati
 	); err != nil {
 		return err
 	}
-	for position, phase := range snapshot.Phases {
+	if err := insertGoalPhases(ctx, transaction, snapshot, 0); err != nil {
+		return err
+	}
+	if err := insertWorkItems(ctx, transaction, snapshot, 0); err != nil {
+		return err
+	}
+	for _, execution := range state.Executions {
+		if err := insertExecution(ctx, transaction, execution); err != nil {
+			return err
+		}
+	}
+	for _, action := range state.Actions {
+		if err := insertAction(ctx, transaction, action); err != nil {
+			return err
+		}
+	}
+	return insertEvents(ctx, transaction, state.Events)
+}
+
+func insertGoalPhases(
+	ctx context.Context,
+	transaction *sql.Tx,
+	snapshot goal.GoalSnapshot,
+	start int,
+) error {
+	if start < 0 || start > len(snapshot.Phases) {
+		return invalid(fmt.Errorf("sqlite.goal_phase_start_invalid:%d", start))
+	}
+	for position := start; position < len(snapshot.Phases); position++ {
+		phase := snapshot.Phases[position]
 		if _, err := transaction.ExecContext(ctx, `
 INSERT INTO goal_phases(goal_ref, ref, phase_key, template_ref, position) VALUES (?, ?, ?, ?, ?)`,
 			snapshot.Ref, phase.Ref, phase.Key, phase.TemplateRef, position,
@@ -31,7 +60,20 @@ INSERT INTO goal_phases(goal_ref, ref, phase_key, template_ref, position) VALUES
 			return err
 		}
 	}
-	for position, item := range snapshot.WorkItems {
+	return nil
+}
+
+func insertWorkItems(
+	ctx context.Context,
+	transaction *sql.Tx,
+	snapshot goal.GoalSnapshot,
+	start int,
+) error {
+	if start < 0 || start > len(snapshot.WorkItems) {
+		return invalid(fmt.Errorf("sqlite.work_item_start_invalid:%d", start))
+	}
+	for position := start; position < len(snapshot.WorkItems); position++ {
+		item := snapshot.WorkItems[position]
 		if _, err := transaction.ExecContext(ctx, `
 INSERT INTO work_items(
     ref, goal_ref, actor_ref, project_ref, objective, phase_key, role_key, parent_ref,
@@ -58,6 +100,8 @@ INSERT INTO work_items(
 		); err != nil {
 			return mapDatabaseError(err)
 		}
+	}
+	for _, item := range snapshot.WorkItems[start:] {
 		for dependencyPosition, dependency := range item.DependencyRefs {
 			if _, err := transaction.ExecContext(ctx, `
 INSERT INTO work_item_dependencies(goal_ref, work_item_ref, dependency_ref, position)
@@ -82,17 +126,7 @@ VALUES (?, ?, ?, ?)`, item.GoalRef, item.Ref, scope, scopePosition); err != nil 
 			return err
 		}
 	}
-	for _, execution := range state.Executions {
-		if err := insertExecution(ctx, transaction, execution); err != nil {
-			return err
-		}
-	}
-	for _, action := range state.Actions {
-		if err := insertAction(ctx, transaction, action); err != nil {
-			return err
-		}
-	}
-	return insertEvents(ctx, transaction, state.Events)
+	return nil
 }
 
 func insertGoalHeader(

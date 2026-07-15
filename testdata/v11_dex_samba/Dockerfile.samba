@@ -1,0 +1,21 @@
+FROM debian:bookworm-20260623-slim@sha256:60eac759739651111db372c07be67863818726f754804b8707c90979bda511df
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG SAMBA_PACKAGE_VERSION=2:4.17.12+dfsg-0+deb12u4
+
+RUN set -eu; \
+    printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d; \
+    chmod 0755 /usr/sbin/policy-rc.d; \
+    apt-get update; \
+    apt-get install --yes --no-install-recommends \
+        ca-certificates \
+        samba="${SAMBA_PACKAGE_VERSION}" \
+        samba-ad-provision="${SAMBA_PACKAGE_VERSION}" \
+        samba-dsdb-modules="${SAMBA_PACKAGE_VERSION}" \
+        samba-vfs-modules="${SAMBA_PACKAGE_VERSION}" \
+        winbind="${SAMBA_PACKAGE_VERSION}"; \
+    rm -rf /var/lib/apt/lists/*
+
+COPY samba-entrypoint.sh /usr/local/bin/v11-samba-entrypoint
+
+ENTRYPOINT ["/usr/local/bin/v11-samba-entrypoint"]

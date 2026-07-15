@@ -23,6 +23,7 @@ const (
 	PermissionGoalsAmend              Permission = "goals.amend"
 	PermissionGoalsGet                Permission = "goals.get"
 	PermissionGoalsList               Permission = "goals.list"
+	PermissionGoalsDirect             Permission = "goals.direct"
 	PermissionArtifactsRead           Permission = "artifacts.read"
 	PermissionProjectStatus           Permission = "project.status"
 )
@@ -41,7 +42,7 @@ func ValidatePermission(permission Permission) error {
 	switch permission {
 	case PermissionProjectHierarchyManage, PermissionProjectMembershipManage,
 		PermissionGoalsCreate, PermissionGoalsAmend, PermissionGoalsGet,
-		PermissionGoalsList, PermissionArtifactsRead, PermissionProjectStatus:
+		PermissionGoalsList, PermissionGoalsDirect, PermissionArtifactsRead, PermissionProjectStatus:
 		return nil
 	default:
 		return errors.New("identity.invalid_permission")
@@ -68,7 +69,8 @@ func RoleAllows(role Role, permission Permission) bool {
 			permission == PermissionArtifactsRead || permission == PermissionProjectStatus
 	case RoleOperator:
 		return permission == PermissionGoalsCreate || permission == PermissionGoalsGet ||
-			permission == PermissionGoalsList || permission == PermissionArtifactsRead ||
+			permission == PermissionGoalsList || permission == PermissionGoalsDirect ||
+			permission == PermissionArtifactsRead ||
 			permission == PermissionProjectStatus
 	default:
 		return false

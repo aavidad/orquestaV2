@@ -621,12 +621,13 @@ func v06NewOrchestrator(
 	t.Helper()
 	orchestrator, err := application.New(application.Dependencies{
 		State: repository, Access: repository, Launcher: agent, Observer: agent, Artifacts: artifacts, Clock: clock, IDs: ids,
-		MaxOutputBytes:       1 << 20,
-		MaxExecutionAttempts: fixture.ClockAndRetry.MaxExecutionAttempts,
-		ClaimLease:           v06Duration(t, fixture.ClockAndRetry.ClaimLease),
-		ObservationDelay:     v06Duration(t, fixture.ClockAndRetry.ObservationDelay),
-		ExecutionTimeout:     v06Duration(t, fixture.ClockAndRetry.ExecutionTimeout),
-		AgentCapabilities:    agent.capabilities,
+		MaxOutputBytes:        1 << 20,
+		MaxExecutionAttempts:  fixture.ClockAndRetry.MaxExecutionAttempts,
+		ClaimLease:            v06Duration(t, fixture.ClockAndRetry.ClaimLease),
+		DirectorLeaseDuration: 2 * time.Minute,
+		ObservationDelay:      v06Duration(t, fixture.ClockAndRetry.ObservationDelay),
+		ExecutionTimeout:      v06Duration(t, fixture.ClockAndRetry.ExecutionTimeout),
+		AgentCapabilities:     agent.capabilities,
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -105,7 +105,7 @@ func TestRegistryAliasesAreTypedBoundedAndCanonicalized(t *testing.T) {
 
 	for _, alias := range []registryAliasDefinition{
 		{Kind: AliasKindTOMLKey, Name: "server.future", Target: KeyServerListen,
-			IntroducedRevision: "2026-07-15.10", RemoveAfterRevision: "2026-09-01.0"},
+			IntroducedRevision: "2099-01-01.0", RemoveAfterRevision: "2099-02-01.0"},
 		{Kind: AliasKindTOMLKey, Name: "server.expired", Target: KeyServerListen,
 			IntroducedRevision: "2026-07-15.7", RemoveAfterRevision: "2026-07-15.8"},
 	} {
@@ -169,6 +169,12 @@ func TestResolveExecutesEveryDeclaredCrossValidator(t *testing.T) {
 		{name: "overlapping paths", toml: "[artifact.filesystem]\nroot = \"./var/state\""},
 		{name: "credential store equals local token", toml: "[credentials.local]\npath = \"./var/secrets/local-owner.token\""},
 		{name: "credential store inside artifacts", toml: "[credentials.local]\npath = \"./var/artifacts/credentials.json\""},
+		{name: "OIDC issuer missing", toml: "[identity]\nprovider = \"oidc\"\n[identity.oidc]\naudience = \"orquesta\""},
+		{name: "OIDC audience missing", toml: "[identity]\nprovider = \"oidc\"\n[identity.oidc]\nissuer = \"https://idp.example.test\""},
+		{name: "OIDC issuer not HTTPS", toml: "[identity]\nprovider = \"oidc\"\n[identity.oidc]\nissuer = \"http://idp.example.test\"\naudience = \"orquesta\""},
+		{name: "OIDC issuer uppercase host", toml: "[identity]\nprovider = \"oidc\"\n[identity.oidc]\nissuer = \"https://IDP.example.test\"\naudience = \"orquesta\""},
+		{name: "OIDC clock skew unbounded", toml: "[identity.oidc]\nclock_skew = \"6m\""},
+		{name: "OIDC upstream timeout unbounded", toml: "[identity.oidc]\nupstream_timeout = \"31s\""},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -176,7 +182,7 @@ func TestResolveExecutesEveryDeclaredCrossValidator(t *testing.T) {
 			assertConfigError(t, err, ErrorCrossValidation, "")
 		})
 	}
-	if got := CrossValidators(); len(got) != 4 {
+	if got := CrossValidators(); len(got) != 5 {
 		t.Fatalf("cross validator catalog = %+v", got)
 	} else {
 		got[0].Keys[0] = "mutated"

@@ -17,13 +17,15 @@ import (
 )
 
 type memoryRepository struct {
-	mu         sync.Mutex
-	records    map[goal.GoalRef]GoalRecord
-	requests   map[string]goal.GoalRef
-	successors map[goal.AppSpecRef]goal.GoalRef
-	actions    map[string]memoryAction
-	events     []EventRecord
-	now        func() time.Time
+	mu               sync.Mutex
+	records          map[goal.GoalRef]GoalRecord
+	requests         map[string]goal.GoalRef
+	successors       map[goal.AppSpecRef]goal.GoalRef
+	actions          map[string]memoryAction
+	events           []EventRecord
+	directorLeases   map[goal.GoalRef]DirectorLeaseRecord
+	directorRequests map[string]memoryDirectorMutation
+	now              func() time.Time
 }
 
 type memoryAction struct {
@@ -37,11 +39,13 @@ type memoryAction struct {
 
 func newMemoryRepository() *memoryRepository {
 	return &memoryRepository{
-		records:    make(map[goal.GoalRef]GoalRecord),
-		requests:   make(map[string]goal.GoalRef),
-		successors: make(map[goal.AppSpecRef]goal.GoalRef),
-		actions:    make(map[string]memoryAction),
-		now:        time.Now,
+		records:          make(map[goal.GoalRef]GoalRecord),
+		requests:         make(map[string]goal.GoalRef),
+		successors:       make(map[goal.AppSpecRef]goal.GoalRef),
+		actions:          make(map[string]memoryAction),
+		directorLeases:   make(map[goal.GoalRef]DirectorLeaseRecord),
+		directorRequests: make(map[string]memoryDirectorMutation),
+		now:              time.Now,
 	}
 }
 
@@ -600,7 +604,7 @@ func newTestOrchestratorWithAccess(
 		State: repository, Access: accessRepository,
 		Launcher: agent, Observer: agent, Artifacts: artifacts,
 		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1 << 20,
-		MaxExecutionAttempts: 3, ClaimLease: time.Minute,
+		MaxExecutionAttempts: 3, ClaimLease: time.Minute, DirectorLeaseDuration: time.Minute,
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 		AgentCapabilities: capabilities,
 	})

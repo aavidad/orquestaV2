@@ -239,7 +239,8 @@ func TestRepositoryV10ApplicationMembershipReplayAcceptsFreshAuthorizationReceip
 	orchestrator, err := application.New(application.Dependencies{
 		State: repository, Access: repository, Launcher: stub, Observer: stub, Artifacts: stub,
 		Clock: clock, IDs: ids, MaxOutputBytes: 1024, MaxExecutionAttempts: 2,
-		ClaimLease: time.Minute, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
+		ClaimLease: time.Minute, DirectorLeaseDuration: time.Minute,
+		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 		AgentCapabilities: sqliteTestCapabilities(),
 	})
 	if err != nil {

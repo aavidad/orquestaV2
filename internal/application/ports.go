@@ -44,5 +44,8 @@ type Clock interface {
 }
 
 type IDGenerator interface {
+	// NewID returns an opaque unique value. Namespaces carrying authority or
+	// secrets (for example *-token) require cryptographically unpredictable
+	// output; adapters must not substitute counters or timestamps there.
 	NewID(context.Context, string) (string, error)
 }

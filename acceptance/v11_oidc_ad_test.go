@@ -15,7 +15,7 @@ import (
 
 const v11FixturePath = "acceptance/fixtures/v11_oidc_ad.json"
 const v11TrustedBaseGitCommitOID = "3108caa7e7f3f0a7b693e3027ef7cb3e56f462d9"
-const v11ProductDeltaBaseGitCommitOID = "3108caa7e7f3f0a7b693e3027ef7cb3e56f462d9"
+const v11ProductDeltaBaseGitCommitOID = "89db75810a1250800b26cbc408befd2d8f44be62"
 const v11ProductDeltaSealedGitCommitOID = "0000000000000000000000000000000000000000"
 
 type v11Fixture struct {
@@ -92,12 +92,48 @@ func TestAcceptanceV11OIDCAD(t *testing.T) {
 	})
 }
 
+func TestAcceptanceV11OIDCADReceipt(t *testing.T) {
+	evidenceAssertReceiptV3(t, evidenceRepositoryRoot(t), evidenceReceiptV3Expectation{
+		Contract: "AC-V11-OIDC-AD", FixturePath: v11FixturePath,
+		ReceiptPath:       "product/evidence/v11_oidc_ad.json",
+		ExecutedNotBefore: "2026-07-15T00:00:00Z", TrustedBaseGitCommitOID: v11TrustedBaseGitCommitOID,
+	})
+}
+
+func TestV11CandidateSubjectsCoverCommittedDelta(t *testing.T) {
+	repositoryRoot := evidenceRepositoryRoot(t)
+	fixture := evidenceDecodeStrictJSON[v11Fixture](t, filepath.Join(repositoryRoot, filepath.FromSlash(v11FixturePath)))
+	if err := evidenceValidateSealedCommit(
+		repositoryRoot, fixture.ProductDeltaBaseGitCommitOID, fixture.ProductDeltaSealedGitCommitOID,
+	); err != nil {
+		t.Fatal(err)
+	}
+	output, err := evidenceGit(
+		repositoryRoot, "diff", "--name-only",
+		fixture.ProductDeltaBaseGitCommitOID, fixture.ProductDeltaSealedGitCommitOID, "--",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := strings.TrimSpace(string(output))
+	var changed []string
+	if text != "" {
+		changed = strings.Split(text, "\n")
+	}
+	sort.Strings(changed)
+	if !reflect.DeepEqual(changed, fixture.CandidateSubjects) {
+		t.Fatalf("V11 candidate subjects differ from sealed product delta:\nchanged=%v\nfixture=%v", changed, fixture.CandidateSubjects)
+	}
+}
+
 func v11AssertFixtureHeader(t *testing.T, repositoryRoot string, fixture v11Fixture) {
 	t.Helper()
 	wantDeferred := []string{
 		"automatic_external_group_to_rbac_mapping",
 		"direct_in_process_ldap_adapter",
+		"first_oidc_admin_membership_wizard",
 		"kerberos",
+		"remote_oidc_abuse_rate_limit",
 		"saml",
 		"server_side_oidc_login_session",
 	}
@@ -131,7 +167,8 @@ func v11AssertFixtureHeader(t *testing.T, repositoryRoot string, fixture v11Fixt
 
 func v11ValidationShellBody() string {
 	return "go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV11ScopeAndExecutableContract|TestV11OwnsNoCapabilityIDs|TestV11AcceptanceCommandRunsIdentityConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV11OIDCAD|TestV11CandidateSubjectsCoverCommittedDelta)$\"" +
-		" && go test -mod=vendor -count=1 ./internal/identity ./internal/config ./internal/adapters/auth/localtoken ./internal/adapters/auth/oidc ./internal/bootstrap ./cmd/orquesta"
+		" && go test -mod=vendor -count=1 ./internal/identity ./internal/config ./internal/adapters/auth/bearer ./internal/adapters/auth/localtoken ./internal/adapters/auth/oidc ./internal/bootstrap ./cmd/orquesta" +
+		" && ./scripts/smoke_v11_dex_samba_ad.sh"
 }
 
 func v11AssertProviderShape(t *testing.T, repositoryRoot string) {
@@ -189,13 +226,16 @@ func v11AssertOIDCShape(t *testing.T, repositoryRoot string) {
 	oidcSource := strings.ToLower(v11ReadProductionGo(t, filepath.Join(repositoryRoot, "internal", "adapters", "auth", "oidc"), true))
 	for _, required := range []string{
 		"issuer", "audience", "subject", "expiry", "notbefore", "issuedat", "clockskew",
-		"jwks", "kid", "signature", "algorithm", "unknownkid", "refresh",
+		"jwks", "kid", "signature", "algorithm", "unknownkid", "refresh", "upstreamtimeout", "proxy:",
 	} {
 		if !strings.Contains(oidcSource, required) {
 			t.Errorf("V11_RED OIDC verifier lacks %q contract", required)
 		}
 	}
-	for _, forbidden := range []string{"clientsecret", "refreshtoken", "authorizationcode", "pkceverifier", "sessioncookie"} {
+	for _, forbidden := range []string{
+		"clientsecret", "refreshtoken", "authorizationcode", "pkceverifier", "sessioncookie",
+		"proxyfromenvironment", "http.defaultclient", "http.defaulttransport",
+	} {
 		if strings.Contains(oidcSource, forbidden) {
 			t.Errorf("V11_RED resource server owns client/session concern %q", forbidden)
 		}

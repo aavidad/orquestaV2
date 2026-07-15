@@ -367,7 +367,8 @@ func newDAGHarness(t *testing.T, failures map[string]bool) *dagHarness {
 		Launcher: agent, Observer: agent, Artifacts: artifacts,
 		Clock: clock, IDs: &dagSequentialIDs{}, MaxOutputBytes: 4096,
 		MaxExecutionAttempts: 3, AgentCapabilities: dagAgentCapabilities(),
-		ClaimLease: time.Minute, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
+		ClaimLease: time.Minute, DirectorLeaseDuration: 2 * time.Minute,
+		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})
 	if err != nil {
 		t.Fatalf("new DAG orchestrator: %v", err)

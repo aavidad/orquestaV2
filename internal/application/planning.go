@@ -71,114 +71,252 @@ func (orchestrator *Orchestrator) compilePlan(
 
 	phases := make([]goal.PhaseInstance, 0, len(spec.Phases))
 	for _, phaseSpec := range spec.Phases {
-		ref, err := goal.NewPhaseRef(phaseSpec.Ref)
-		if err != nil {
-			return goal.Plan{}, err
-		}
-		key, err := goal.NewPhaseKey(phaseSpec.Key)
-		if err != nil {
-			return goal.Plan{}, err
-		}
-		templateRef, err := goal.NewPhaseTemplateRef(phaseSpec.TemplateRef)
-		if err != nil {
-			return goal.Plan{}, err
-		}
-		inputRefs, err := parsePlanRefs(phaseSpec.InputRefs, goal.NewInputRef)
-		if err != nil {
-			return goal.Plan{}, err
-		}
-		criterionRefs, err := parsePlanRefs(phaseSpec.CriterionRefs, goal.NewCriterionRef)
-		if err != nil {
-			return goal.Plan{}, err
-		}
-		phase, err := goal.NewPhaseInstanceWithMetadata(goal.PhaseInstanceInput{
-			Ref: ref, Key: key, TemplateRef: templateRef,
-			InputRefs: inputRefs, CriterionRefs: criterionRefs,
-		})
+		phase, err := compilePhaseSpec(phaseSpec)
 		if err != nil {
 			return goal.Plan{}, err
 		}
 		phases = append(phases, phase)
 	}
 
-	refs := make(map[string]goal.WorkItemRef, len(spec.WorkItems))
-	for _, itemSpec := range spec.WorkItems {
-		if strings.TrimSpace(itemSpec.Key) == "" || strings.TrimSpace(itemSpec.Key) != itemSpec.Key {
-			return goal.Plan{}, errors.New("application.plan_item_key_invalid")
-		}
-		if _, duplicate := refs[itemSpec.Key]; duplicate {
-			return goal.Plan{}, errors.New("application.plan_item_key_duplicate")
-		}
-		ref, err := newWorkItemRef(ctx, orchestrator.ids)
-		if err != nil {
-			return goal.Plan{}, err
-		}
-		refs[itemSpec.Key] = ref
+	refs, err := allocateWorkItemRefs(ctx, orchestrator.ids, spec.WorkItems, nil)
+	if err != nil {
+		return goal.Plan{}, err
 	}
 
+	resolver := workItemRefResolver{
+		requestLocal:  refs,
+		parentUnknown: "application.plan_parent_unknown",
+	}
+	scope := workItemCompileScope{
+		goalRef: goalRef, actorRef: actorRef, projectRef: projectRef, createdAt: at,
+	}
 	items := make([]goal.WorkItem, 0, len(spec.WorkItems))
 	for _, itemSpec := range spec.WorkItems {
-		phaseKey, err := goal.NewPhaseKey(itemSpec.Phase)
-		if err != nil {
-			return goal.Plan{}, err
-		}
-		roleKey, err := goal.NewRoleKey(itemSpec.Role)
-		if err != nil {
-			return goal.Plan{}, err
-		}
-		contract, err := goal.NewOutputContract(itemSpec.OutputContract)
-		if err != nil {
-			return goal.Plan{}, err
-		}
-		dependencies := make([]goal.WorkItemRef, 0, len(itemSpec.Dependencies))
-		for _, key := range itemSpec.Dependencies {
-			ref, ok := refs[key]
-			if !ok {
-				return goal.Plan{}, errors.New("application.plan_dependency_unknown")
-			}
-			dependencies = append(dependencies, ref)
-		}
-		var parent goal.WorkItemRef
-		if itemSpec.Parent != "" {
-			var ok bool
-			parent, ok = refs[itemSpec.Parent]
-			if !ok {
-				return goal.Plan{}, errors.New("application.plan_parent_unknown")
-			}
-		}
-		writeSet := make([]goal.WriteScope, 0, len(itemSpec.WriteSet))
-		for _, raw := range itemSpec.WriteSet {
-			scope, err := goal.NewWriteScope(raw)
-			if err != nil {
-				return goal.Plan{}, err
-			}
-			writeSet = append(writeSet, scope)
-		}
-		skillRefs, err := parsePlanRefs(itemSpec.SkillRefs, goal.NewSkillRef)
-		if err != nil {
-			return goal.Plan{}, err
-		}
-		toolRefs, err := parsePlanRefs(itemSpec.ToolRefs, goal.NewToolRef)
-		if err != nil {
-			return goal.Plan{}, err
-		}
-		capabilityRefs, err := parsePlanRefs(itemSpec.CapabilityRefs, goal.NewCapabilityRef)
-		if err != nil {
-			return goal.Plan{}, err
-		}
-		item, err := goal.NewWorkItem(goal.NewWorkItemInput{
-			Ref: refs[itemSpec.Key], Goal: goalRef, Actor: actorRef,
-			Project: projectRef, Objective: itemSpec.Objective, CreatedAt: at,
-			Phase: phaseKey, Role: roleKey, Parent: parent, Dependencies: dependencies,
-			WriteSet: writeSet, SkillRefs: skillRefs, ToolRefs: toolRefs,
-			CapabilityRefs: capabilityRefs, OutputContract: contract,
-		})
+		item, err := compileWorkItemSpec(itemSpec, refs[itemSpec.Key], scope, resolver)
 		if err != nil {
 			return goal.Plan{}, err
 		}
 		items = append(items, item)
 	}
 	return goal.NewPlan(goal.PlanInput{Generation: 1, Phases: phases, WorkItems: items})
+}
+
+// compilePlanExtension turns a Director PlanSpec into an append-only proposal.
+// Existing phases and WorkItems remain the exact prefix required by Goal.ApplyPlan.
+// Dependencies may name a new request-local key or an existing opaque WorkItem ref.
+func (orchestrator *Orchestrator) compilePlanExtension(
+	ctx context.Context,
+	aggregate goal.Goal,
+	spec PlanSpec,
+	at time.Time,
+) (goal.Plan, error) {
+	if len(spec.WorkItems) == 0 {
+		return goal.Plan{}, errors.New("application.director_plan_work_items_required")
+	}
+
+	phases := aggregate.Phases()
+	phaseKeys := make(map[string]struct{}, len(phases)+len(spec.Phases))
+	for _, phase := range phases {
+		phaseKeys[phase.Key().String()] = struct{}{}
+	}
+	for _, phaseSpec := range spec.Phases {
+		if _, duplicate := phaseKeys[phaseSpec.Key]; duplicate {
+			return goal.Plan{}, errors.New("application.plan_phase_duplicate")
+		}
+		phase, err := compilePhaseSpec(phaseSpec)
+		if err != nil {
+			return goal.Plan{}, err
+		}
+		phases = append(phases, phase)
+		phaseKeys[phase.Key().String()] = struct{}{}
+	}
+
+	existingRefs := indexWorkItemRefs(aggregate.WorkItems())
+	newRefs, err := allocateWorkItemRefs(ctx, orchestrator.ids, spec.WorkItems, existingRefs)
+	if err != nil {
+		return goal.Plan{}, err
+	}
+
+	resolver := workItemRefResolver{
+		requestLocal: newRefs,
+		existing:     existingRefs,
+		// Keep the existing Director error contract for an unknown parent.
+		parentUnknown: "application.plan_dependency_unknown",
+	}
+	scope := workItemCompileScope{
+		goalRef: aggregate.Ref(), actorRef: aggregate.Actor(), projectRef: aggregate.Project(), createdAt: at,
+	}
+	items := aggregate.WorkItems()
+	for _, itemSpec := range spec.WorkItems {
+		if _, exists := phaseKeys[itemSpec.Phase]; !exists {
+			return goal.Plan{}, errors.New("application.plan_phase_unknown")
+		}
+		item, err := compileWorkItemSpec(itemSpec, newRefs[itemSpec.Key], scope, resolver)
+		if err != nil {
+			return goal.Plan{}, err
+		}
+		items = append(items, item)
+	}
+
+	generation := aggregate.PlanGeneration() + 1
+	if generation == 0 {
+		return goal.Plan{}, errors.New("application.plan_generation_overflow")
+	}
+	return goal.NewPlan(goal.PlanInput{Generation: generation, Phases: phases, WorkItems: items})
+}
+
+func compilePhaseSpec(spec PhaseSpec) (goal.PhaseInstance, error) {
+	ref, err := goal.NewPhaseRef(spec.Ref)
+	if err != nil {
+		return goal.PhaseInstance{}, err
+	}
+	key, err := goal.NewPhaseKey(spec.Key)
+	if err != nil {
+		return goal.PhaseInstance{}, err
+	}
+	templateRef, err := goal.NewPhaseTemplateRef(spec.TemplateRef)
+	if err != nil {
+		return goal.PhaseInstance{}, err
+	}
+	inputRefs, err := parsePlanRefs(spec.InputRefs, goal.NewInputRef)
+	if err != nil {
+		return goal.PhaseInstance{}, err
+	}
+	criterionRefs, err := parsePlanRefs(spec.CriterionRefs, goal.NewCriterionRef)
+	if err != nil {
+		return goal.PhaseInstance{}, err
+	}
+	return goal.NewPhaseInstanceWithMetadata(goal.PhaseInstanceInput{
+		Ref: ref, Key: key, TemplateRef: templateRef,
+		InputRefs: inputRefs, CriterionRefs: criterionRefs,
+	})
+}
+
+func allocateWorkItemRefs(
+	ctx context.Context,
+	ids IDGenerator,
+	specs []WorkItemSpec,
+	existing map[string]goal.WorkItemRef,
+) (map[string]goal.WorkItemRef, error) {
+	refs := make(map[string]goal.WorkItemRef, len(specs))
+	for _, spec := range specs {
+		if strings.TrimSpace(spec.Key) == "" || strings.TrimSpace(spec.Key) != spec.Key {
+			return nil, errors.New("application.plan_item_key_invalid")
+		}
+		if _, duplicate := refs[spec.Key]; duplicate {
+			return nil, errors.New("application.plan_item_key_duplicate")
+		}
+		if _, collision := existing[spec.Key]; collision {
+			return nil, errors.New("application.plan_item_key_ref_collision")
+		}
+		ref, err := newWorkItemRef(ctx, ids)
+		if err != nil {
+			return nil, err
+		}
+		refs[spec.Key] = ref
+	}
+	return refs, nil
+}
+
+type workItemCompileScope struct {
+	goalRef    goal.GoalRef
+	actorRef   goal.ActorRef
+	projectRef goal.ProjectRef
+	createdAt  time.Time
+}
+
+type workItemRefResolver struct {
+	requestLocal  map[string]goal.WorkItemRef
+	existing      map[string]goal.WorkItemRef
+	parentUnknown string
+}
+
+func (resolver workItemRefResolver) dependency(value string) (goal.WorkItemRef, error) {
+	return resolver.resolve(value, "application.plan_dependency_unknown")
+}
+
+func (resolver workItemRefResolver) parent(value string) (goal.WorkItemRef, error) {
+	return resolver.resolve(value, resolver.parentUnknown)
+}
+
+func (resolver workItemRefResolver) resolve(value, unknown string) (goal.WorkItemRef, error) {
+	if ref, exists := resolver.requestLocal[value]; exists {
+		return ref, nil
+	}
+	if ref, exists := resolver.existing[value]; exists {
+		return ref, nil
+	}
+	return goal.WorkItemRef{}, errors.New(unknown)
+}
+
+func compileWorkItemSpec(
+	spec WorkItemSpec,
+	ref goal.WorkItemRef,
+	scope workItemCompileScope,
+	resolver workItemRefResolver,
+) (goal.WorkItem, error) {
+	phaseKey, err := goal.NewPhaseKey(spec.Phase)
+	if err != nil {
+		return goal.WorkItem{}, err
+	}
+	roleKey, err := goal.NewRoleKey(spec.Role)
+	if err != nil {
+		return goal.WorkItem{}, err
+	}
+	contract, err := goal.NewOutputContract(spec.OutputContract)
+	if err != nil {
+		return goal.WorkItem{}, err
+	}
+	dependencies := make([]goal.WorkItemRef, 0, len(spec.Dependencies))
+	for _, value := range spec.Dependencies {
+		dependency, err := resolver.dependency(value)
+		if err != nil {
+			return goal.WorkItem{}, err
+		}
+		dependencies = append(dependencies, dependency)
+	}
+	var parent goal.WorkItemRef
+	if spec.Parent != "" {
+		parent, err = resolver.parent(spec.Parent)
+		if err != nil {
+			return goal.WorkItem{}, err
+		}
+	}
+	writeSet := make([]goal.WriteScope, 0, len(spec.WriteSet))
+	for _, raw := range spec.WriteSet {
+		writeScope, err := goal.NewWriteScope(raw)
+		if err != nil {
+			return goal.WorkItem{}, err
+		}
+		writeSet = append(writeSet, writeScope)
+	}
+	skillRefs, err := parsePlanRefs(spec.SkillRefs, goal.NewSkillRef)
+	if err != nil {
+		return goal.WorkItem{}, err
+	}
+	toolRefs, err := parsePlanRefs(spec.ToolRefs, goal.NewToolRef)
+	if err != nil {
+		return goal.WorkItem{}, err
+	}
+	capabilityRefs, err := parsePlanRefs(spec.CapabilityRefs, goal.NewCapabilityRef)
+	if err != nil {
+		return goal.WorkItem{}, err
+	}
+	return goal.NewWorkItem(goal.NewWorkItemInput{
+		Ref: ref, Goal: scope.goalRef, Actor: scope.actorRef,
+		Project: scope.projectRef, Objective: spec.Objective, CreatedAt: scope.createdAt,
+		Phase: phaseKey, Role: roleKey, Parent: parent, Dependencies: dependencies,
+		WriteSet: writeSet, SkillRefs: skillRefs, ToolRefs: toolRefs,
+		CapabilityRefs: capabilityRefs, OutputContract: contract,
+	})
+}
+
+func indexWorkItemRefs(items []goal.WorkItem) map[string]goal.WorkItemRef {
+	refs := make(map[string]goal.WorkItemRef, len(items))
+	for _, item := range items {
+		refs[item.Ref().String()] = item.Ref()
+	}
+	return refs
 }
 
 func parsePlanRefs[T any](values []string, parse func(string) (T, error)) ([]T, error) {

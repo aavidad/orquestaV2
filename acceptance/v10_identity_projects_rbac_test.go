@@ -84,12 +84,13 @@ func TestAcceptanceV10IdentityProjectsRBAC(t *testing.T) {
 
 	t.Run("mcp_requires_explicit_project_and_request_principal", func(t *testing.T) {
 		tools := v10ReadFile(t, filepath.Join(repositoryRoot, "internal", "interfaces", "mcp", "tools.go"))
-		middleware := v10ReadFile(t, filepath.Join(repositoryRoot, "internal", "adapters", "auth", "localtoken", "middleware.go"))
+		middleware := v10ReadFile(t, filepath.Join(repositoryRoot, "internal", "adapters", "auth", "bearer", "middleware.go"))
+		localProvider := v10ReadFile(t, filepath.Join(repositoryRoot, "internal", "adapters", "auth", "localtoken", "provider.go"))
 		if !strings.Contains(tools, "ProjectRef string `json:\"project_ref") {
 			t.Error("V10_RED MCP inputs do not carry explicit project_ref")
 		}
-		if !strings.Contains(strings.ToLower(middleware), "principal") {
-			t.Error("V10_RED local token authenticates a bearer but does not bind a request principal")
+		if !strings.Contains(middleware, "BindPrincipal") || !strings.Contains(localProvider, "Authenticate") {
+			t.Error("V10_RED selected identity provider does not bind a bearer principal")
 		}
 	})
 

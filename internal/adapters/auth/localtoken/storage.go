@@ -69,7 +69,7 @@ func (authenticator *Authenticator) ForPrincipal(principal identity.Principal) (
 	if authenticator == nil || authenticator.token == "" {
 		return nil, &Error{Code: CodePrincipalInvalid}
 	}
-	if err := identity.ValidatePrincipal(principal); err != nil {
+	if err := identity.ValidatePrincipal(principal); err != nil || principal.Method != AuthenticationMethod {
 		return nil, &Error{Code: CodePrincipalInvalid, Cause: err}
 	}
 	if authenticator.hasPrincipal {

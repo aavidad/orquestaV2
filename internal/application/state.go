@@ -315,6 +315,10 @@ type StateRepository interface {
 	GetGoal(context.Context, goal.GoalRef) (GoalRecord, error)
 	ListGoals(context.Context, goal.ProjectRef, int) ([]GoalSummary, error)
 	Status(context.Context, goal.ProjectRef) (RepositoryStatus, error)
+	DirectorReplay(context.Context, DirectorReplayRequest) (DirectorReplayRecord, bool, error)
+	ClaimDirector(context.Context, ClaimDirectorState) (DirectorLeaseRecord, bool, error)
+	RenewDirector(context.Context, RenewDirectorState) (DirectorLeaseRecord, bool, error)
+	ApplyDirectorPlan(context.Context, ApplyDirectorPlanState) (DirectorDecisionRecord, bool, error)
 	ClaimNextAction(context.Context, ClaimRequest) (ActionClaim, bool, error)
 	RecordLaunchPrepared(context.Context, LaunchPreparedState) error
 	RecordLaunchAccepted(context.Context, LaunchAcceptedState) error

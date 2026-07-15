@@ -17,7 +17,7 @@ import (
 
 const v12FixturePath = "acceptance/fixtures/v12_director_lease.json"
 const v12TrustedBaseGitCommitOID = "3108caa7e7f3f0a7b693e3027ef7cb3e56f462d9"
-const v12ProductDeltaBaseGitCommitOID = "3108caa7e7f3f0a7b693e3027ef7cb3e56f462d9"
+const v12ProductDeltaBaseGitCommitOID = "89db75810a1250800b26cbc408befd2d8f44be62"
 const v12ProductDeltaSealedGitCommitOID = "0000000000000000000000000000000000000000"
 
 type v12Fixture struct {
@@ -227,6 +227,13 @@ func TestV12FixtureIsStrictJSON(t *testing.T) {
 func v12AssertFixtureHeader(t *testing.T, repositoryRoot string, fixture v12Fixture) {
 	t.Helper()
 	wantCapabilities := []string{"GOV-08", "GOV-09", "GOV-10", "ORC-24"}
+	wantDeferred := []v12DeferredCapability{
+		{ID: "ORC-14", Owner: "mailbox", AcceptanceContract: "AC-V13-MAILBOX"},
+		{ID: "ORC-09", Owner: "budgets_effects", AcceptanceContract: "AC-V15-BUDGETS-EFFECTS"},
+		{ID: "GOV-11", Owner: "council", AcceptanceContract: "AC-V19-COUNCIL"},
+		{ID: "GOV-12", Owner: "independent_reviews", AcceptanceContract: "AC-V18-INDEPENDENT-REVIEWS"},
+		{ID: "AGT-04", Owner: "provider_adapters", AcceptanceContract: "AC-V25-PROVIDER-ADAPTERS"},
+	}
 	wantAllowed := []string{"platform_admin", "project_owner", "project_admin", "operator"}
 	wantDenied := []string{"contributor", "reviewer", "viewer"}
 	if fixture.SchemaVersion != 1 || fixture.ReceiptSchemaVersion != 3 ||
@@ -237,6 +244,7 @@ func v12AssertFixtureHeader(t *testing.T, repositoryRoot string, fixture v12Fixt
 		fixture.OutputPath != "product/evidence/v12_director_lease.output.txt" ||
 		fixture.ReceiptPath != "product/evidence/v12_director_lease.json" ||
 		!reflect.DeepEqual(fixture.OwnedCapabilityIDs, wantCapabilities) ||
+		!reflect.DeepEqual(fixture.DeferredCapabilities, wantDeferred) ||
 		!reflect.DeepEqual(fixture.Scenario.AllowedRoles, wantAllowed) ||
 		!reflect.DeepEqual(fixture.Scenario.DeniedRoles, wantDenied) ||
 		fixture.Scenario.DirectorPermission != "goals.direct" || fixture.Scenario.FirstFence != 1 ||
@@ -305,9 +313,10 @@ func v12RequireDirectorLeaseResult(t *testing.T, result reflect.Type) {
 
 func v12RequireDirectorPlanResult(t *testing.T, result reflect.Type) {
 	t.Helper()
-	v12RequireFields(t, result, map[string]reflect.Type{
-		"Record": reflect.TypeOf(application.GoalRecord{}), "Created": reflect.TypeOf(false),
-	})
+	v12RequireFields(t, result, map[string]reflect.Type{"Created": reflect.TypeOf(false)})
+	if _, duplicated := result.FieldByName("Record"); duplicated {
+		t.Error("V12 DirectorPlanResult duplicates full Goal state; callers must use GetGoal")
+	}
 	field, ok := result.FieldByName("Decision")
 	if !ok {
 		t.Error("V12_RED DirectorPlanResult lacks Decision")

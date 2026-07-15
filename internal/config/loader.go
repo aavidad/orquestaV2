@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"orquesta/internal/identity"
 )
 
 // ResolveOptions contains captured inputs. Environment must contain only
@@ -127,11 +129,30 @@ func validateCrossRegistryValues(registry registry, values map[Key]resolvedValue
 			if !runtimePathsDisjoint(values, sourcePath) {
 				return fail(validator.ID)
 			}
+		case "identity_provider_requirements":
+			provider, providerOK := values[KeyIdentityProvider].value.(string)
+			issuer, issuerOK := values[KeyIdentityOIDCIssuer].value.(string)
+			audience, audienceOK := values[KeyIdentityOIDCAudience].value.(string)
+			clockSkew, skewOK := values[KeyIdentityOIDCClockSkew].value.(time.Duration)
+			upstreamTimeout, timeoutOK := values[KeyIdentityOIDCUpstreamTimeout].value.(time.Duration)
+			if !providerOK || !issuerOK || !audienceOK || !skewOK || !timeoutOK ||
+				clockSkew <= 0 || clockSkew > 5*time.Minute ||
+				upstreamTimeout <= 0 || upstreamTimeout > 30*time.Second {
+				return fail(validator.ID)
+			}
+			if provider == "oidc" && (!canonicalOIDCIssuer(issuer) || audience == "") {
+				return fail(validator.ID)
+			}
 		default:
 			return fail(validator.ID)
 		}
 	}
 	return nil
+}
+
+func canonicalOIDCIssuer(value string) bool {
+	canonical, err := identity.CanonicalIssuer(value)
+	return err == nil && canonical == value && strings.HasPrefix(canonical, "https://")
 }
 
 func literalMCPPath(value string) bool {

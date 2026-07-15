@@ -47,7 +47,11 @@ type MembershipRevokeState struct {
 }
 
 // AccessRepository is the only authority/membership port consumed by the
-// application. Adapters must apply membership CAS and audit atomically.
+// application. Authorize is causally idempotent by principal and request_ref:
+// an equal principal/project/permission/resource scope must return the original
+// immutable receipt even when a retry supplies a later requested_at; changing
+// that scope is a conflict. Adapters must apply membership CAS and audit
+// atomically.
 type AccessRepository interface {
 	Authorize(context.Context, identity.AuthorizationRequest) (identity.AuthorizationReceipt, error)
 	Membership(context.Context, identity.PrincipalRef, goal.ProjectRef) (identity.Membership, error)
@@ -62,11 +66,51 @@ func (orchestrator *Orchestrator) authorize(
 	resourceRef string,
 	requestedAt time.Time,
 ) (identity.AuthorizationReceipt, error) {
-	principal, projectRef, err := access.values()
+	requestRef, err := orchestrator.ids.NewID(ctx, "authorization-request")
 	if err != nil {
 		return identity.AuthorizationReceipt{}, err
 	}
-	requestRef, err := orchestrator.ids.NewID(ctx, "authorization-request")
+	return orchestrator.authorizeWithRequestRef(
+		ctx, access, permission, resourceRef, requestedAt, requestRef,
+	)
+}
+
+func (orchestrator *Orchestrator) authorizeWithRequestRef(
+	ctx context.Context,
+	access Access,
+	permission identity.Permission,
+	resourceRef string,
+	requestedAt time.Time,
+	requestRef string,
+) (identity.AuthorizationReceipt, error) {
+	return orchestrator.authorizeRequest(
+		ctx, access, permission, resourceRef, requestedAt, requestRef, true,
+	)
+}
+
+func (orchestrator *Orchestrator) authorizeIdempotentWithRequestRef(
+	ctx context.Context,
+	access Access,
+	permission identity.Permission,
+	resourceRef string,
+	requestedAt time.Time,
+	requestRef string,
+) (identity.AuthorizationReceipt, error) {
+	return orchestrator.authorizeRequest(
+		ctx, access, permission, resourceRef, requestedAt, requestRef, false,
+	)
+}
+
+func (orchestrator *Orchestrator) authorizeRequest(
+	ctx context.Context,
+	access Access,
+	permission identity.Permission,
+	resourceRef string,
+	requestedAt time.Time,
+	requestRef string,
+	matchRequestedAt bool,
+) (identity.AuthorizationReceipt, error) {
+	principal, projectRef, err := access.values()
 	if err != nil {
 		return identity.AuthorizationReceipt{}, err
 	}
@@ -81,7 +125,8 @@ func (orchestrator *Orchestrator) authorize(
 	if err != nil {
 		return identity.AuthorizationReceipt{}, err
 	}
-	if !authorizationReceiptMatches(receipt, request) {
+	if !authorizationReceiptScopeMatches(receipt, request) ||
+		(matchRequestedAt && !receipt.Decision().Request().RequestedAt().Equal(request.RequestedAt())) {
 		return identity.AuthorizationReceipt{}, errForbidden
 	}
 	decision := receipt.Decision()
@@ -98,6 +143,17 @@ func (orchestrator *Orchestrator) authorize(
 	return receipt, nil
 }
 
+func authorizationReceiptScopeMatches(
+	receipt identity.AuthorizationReceipt,
+	want identity.AuthorizationRequest,
+) bool {
+	got := receipt.Decision().Request()
+	return receipt.Ref() != "" && !got.RequestedAt().IsZero() &&
+		got.RequestRef() == want.RequestRef() && got.Principal() == want.Principal() &&
+		got.ProjectRef() == want.ProjectRef() && got.Permission() == want.Permission() &&
+		got.ResourceRef() == want.ResourceRef()
+}
+
 func (orchestrator *Orchestrator) authorizeRead(
 	ctx context.Context,
 	access Access,
@@ -111,10 +167,6 @@ func authorizationReceiptMatches(
 	receipt identity.AuthorizationReceipt,
 	want identity.AuthorizationRequest,
 ) bool {
-	decision := receipt.Decision()
-	got := decision.Request()
-	return receipt.Ref() != "" &&
-		got.RequestRef() == want.RequestRef() && got.Principal() == want.Principal() &&
-		got.ProjectRef() == want.ProjectRef() && got.Permission() == want.Permission() &&
-		got.ResourceRef() == want.ResourceRef() && got.RequestedAt().Equal(want.RequestedAt())
+	return authorizationReceiptScopeMatches(receipt, want) &&
+		receipt.Decision().Request().RequestedAt().Equal(want.RequestedAt())
 }

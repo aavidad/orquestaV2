@@ -1,8 +1,8 @@
 {
   "document_type": "orquesta.config_ui",
   "schema_version": 2,
-  "registry_revision": "2026-07-15.9",
-  "registry_hash": "sha256:bc6babe6cae35fb6de7b7c459135ade5899ab3608bf07df3a3c941892878a533",
+  "registry_revision": "2026-07-15.11",
+  "registry_hash": "sha256:5b67d20f425e1883d80998ad29bd8ea4ea06e739b4c96a9f773c89f9eb175a8d",
   "aliases": [],
   "cross_validators": [
     {
@@ -33,6 +33,16 @@
         "runtime.codex.work_root",
         "config.effective_path",
         "identity.local_token_path"
+      ]
+    },
+    {
+      "id": "identity_provider_requirements",
+      "keys": [
+        "identity.provider",
+        "identity.oidc.issuer",
+        "identity.oidc.audience",
+        "identity.oidc.clock_skew",
+        "identity.oidc.upstream_timeout"
       ]
     }
   ],
@@ -356,6 +366,22 @@
       ]
     },
     {
+      "key": "identity.provider",
+      "semantic_ref": "orquesta.config.identity.provider",
+      "label_key": "config.field.identity.provider",
+      "type": "string",
+      "sensitive": false,
+      "scope": "identity",
+      "restart_required": true,
+      "validator_ids": [
+        "allowed_values"
+      ],
+      "allowed_values": [
+        "local_token",
+        "oidc"
+      ]
+    },
+    {
       "key": "identity.local_actor",
       "semantic_ref": "orquesta.config.identity.local_actor",
       "label_key": "config.field.identity.local_actor",
@@ -380,6 +406,66 @@
       ]
     },
     {
+      "key": "identity.oidc.issuer",
+      "semantic_ref": "orquesta.config.identity.oidc.issuer",
+      "label_key": "config.field.identity.oidc.issuer",
+      "type": "string",
+      "sensitive": false,
+      "scope": "identity",
+      "restart_required": true,
+      "validator_ids": [
+        "trimmed_optional_string"
+      ]
+    },
+    {
+      "key": "identity.oidc.audience",
+      "semantic_ref": "orquesta.config.identity.oidc.audience",
+      "label_key": "config.field.identity.oidc.audience",
+      "type": "string",
+      "sensitive": false,
+      "scope": "identity",
+      "restart_required": true,
+      "validator_ids": [
+        "trimmed_optional_string"
+      ]
+    },
+    {
+      "key": "identity.oidc.required_groups",
+      "semantic_ref": "orquesta.config.identity.oidc.required_groups",
+      "label_key": "config.field.identity.oidc.required_groups",
+      "type": "string_list",
+      "sensitive": false,
+      "scope": "identity",
+      "restart_required": true,
+      "validator_ids": [
+        "unique_non_empty_string_list"
+      ]
+    },
+    {
+      "key": "identity.oidc.clock_skew",
+      "semantic_ref": "orquesta.config.identity.oidc.clock_skew",
+      "label_key": "config.field.identity.oidc.clock_skew",
+      "type": "duration",
+      "sensitive": false,
+      "scope": "identity",
+      "restart_required": true,
+      "validator_ids": [
+        "positive_duration"
+      ]
+    },
+    {
+      "key": "identity.oidc.upstream_timeout",
+      "semantic_ref": "orquesta.config.identity.oidc.upstream_timeout",
+      "label_key": "config.field.identity.oidc.upstream_timeout",
+      "type": "duration",
+      "sensitive": false,
+      "scope": "identity",
+      "restart_required": true,
+      "validator_ids": [
+        "positive_duration"
+      ]
+    },
+    {
       "key": "project.default",
       "semantic_ref": "orquesta.config.project.default",
       "label_key": "config.field.project.default",
@@ -389,6 +475,18 @@
       "restart_required": true,
       "validator_ids": [
         "opaque_ref"
+      ]
+    },
+    {
+      "key": "director.lease_duration",
+      "semantic_ref": "orquesta.config.director.lease_duration",
+      "label_key": "config.field.director.lease_duration",
+      "type": "duration",
+      "sensitive": false,
+      "scope": "director",
+      "restart_required": true,
+      "validator_ids": [
+        "positive_duration"
       ]
     },
     {

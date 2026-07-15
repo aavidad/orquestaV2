@@ -36,7 +36,8 @@ func TestArtifactPersistenceCrossingLeaseCannotCommitBackdatedSuccess(t *testing
 		AgentCapabilities: ports.AgentCapabilities{
 			ProviderRef: "provider:lease-test", ModelRef: "model:lease-test", AgentRef: "agent:lease-test", Unrestricted: true,
 		},
-		ClaimLease: time.Second, ObservationDelay: time.Millisecond, ExecutionTimeout: time.Hour,
+		ClaimLease: time.Second, DirectorLeaseDuration: time.Minute,
+		ObservationDelay: time.Millisecond, ExecutionTimeout: time.Hour,
 	})
 	if err != nil {
 		t.Fatalf("new lease-fenced orchestrator: %v", err)
@@ -237,7 +238,8 @@ func newRestartOrchestrator(
 		AgentCapabilities: ports.AgentCapabilities{
 			ProviderRef: "provider:restart", ModelRef: "model:restart", AgentRef: "agent:restart", Unrestricted: true,
 		},
-		ClaimLease: time.Minute, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
+		ClaimLease: time.Minute, DirectorLeaseDuration: time.Minute,
+		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})
 	if err != nil {
 		t.Fatalf("new orchestrator: %v", err)

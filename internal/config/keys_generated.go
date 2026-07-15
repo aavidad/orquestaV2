@@ -4,9 +4,9 @@ package config
 
 import "time"
 
-const generatedRegistrySourceSHA256 = "86f64ee196b2d4d2ca4077170803235b3036dc58805a17cd6ec30894e01592b5"
-const generatedRegistryRevision = "2026-07-15.9"
-const generatedRegistrySemanticSHA256 = "sha256:bc6babe6cae35fb6de7b7c459135ade5899ab3608bf07df3a3c941892878a533"
+const generatedRegistrySourceSHA256 = "a175bbbda9c81199c28cbcdd743a4036cfda6c3501b534dd3baa6476ae2c72a5"
+const generatedRegistryRevision = "2026-07-15.11"
+const generatedRegistrySemanticSHA256 = "sha256:5b67d20f425e1883d80998ad29bd8ea4ea06e739b4c96a9f773c89f9eb175a8d"
 
 const (
 	KeyServerListen                        Key = "server.listen"
@@ -34,9 +34,16 @@ const (
 	KeyRuntimeCodexWorkRoot                Key = "runtime.codex.work_root"
 	KeyRuntimeCodexEnvAllowlist            Key = "runtime.codex.env_allowlist"
 	KeyRuntimeCodexCredentialRef           Key = "runtime.codex.credential_ref"
+	KeyIdentityProvider                    Key = "identity.provider"
 	KeyIdentityLocalActor                  Key = "identity.local_actor"
 	KeyIdentityLocalTokenPath              Key = "identity.local_token_path"
+	KeyIdentityOIDCIssuer                  Key = "identity.oidc.issuer"
+	KeyIdentityOIDCAudience                Key = "identity.oidc.audience"
+	KeyIdentityOIDCRequiredGroups          Key = "identity.oidc.required_groups"
+	KeyIdentityOIDCClockSkew               Key = "identity.oidc.clock_skew"
+	KeyIdentityOIDCUpstreamTimeout         Key = "identity.oidc.upstream_timeout"
 	KeyProjectDefault                      Key = "project.default"
+	KeyDirectorLeaseDuration               Key = "director.lease_duration"
 	KeySchedulerPollInterval               Key = "scheduler.poll_interval"
 	KeySchedulerObservationInterval        Key = "scheduler.observation_interval"
 	KeySchedulerClaimLease                 Key = "scheduler.claim_lease"
@@ -75,9 +82,16 @@ func allGeneratedKeys() []Key {
 		KeyRuntimeCodexWorkRoot,
 		KeyRuntimeCodexEnvAllowlist,
 		KeyRuntimeCodexCredentialRef,
+		KeyIdentityProvider,
 		KeyIdentityLocalActor,
 		KeyIdentityLocalTokenPath,
+		KeyIdentityOIDCIssuer,
+		KeyIdentityOIDCAudience,
+		KeyIdentityOIDCRequiredGroups,
+		KeyIdentityOIDCClockSkew,
+		KeyIdentityOIDCUpstreamTimeout,
 		KeyProjectDefault,
+		KeyDirectorLeaseDuration,
 		KeySchedulerPollInterval,
 		KeySchedulerObservationInterval,
 		KeySchedulerClaimLease,
@@ -265,6 +279,13 @@ func (s Snapshot) RuntimeCodexCredentialRef() CredentialRef {
 	return typed
 }
 
+// IdentityProvider returns identity.provider.
+func (s Snapshot) IdentityProvider() string {
+	value, _ := s.value(KeyIdentityProvider)
+	typed, _ := value.(string)
+	return typed
+}
+
 // IdentityLocalActor returns identity.local_actor.
 func (s Snapshot) IdentityLocalActor() string {
 	value, _ := s.value(KeyIdentityLocalActor)
@@ -279,10 +300,52 @@ func (s Snapshot) IdentityLocalTokenPath() string {
 	return typed
 }
 
+// IdentityOIDCIssuer returns identity.oidc.issuer.
+func (s Snapshot) IdentityOIDCIssuer() string {
+	value, _ := s.value(KeyIdentityOIDCIssuer)
+	typed, _ := value.(string)
+	return typed
+}
+
+// IdentityOIDCAudience returns identity.oidc.audience.
+func (s Snapshot) IdentityOIDCAudience() string {
+	value, _ := s.value(KeyIdentityOIDCAudience)
+	typed, _ := value.(string)
+	return typed
+}
+
+// IdentityOIDCRequiredGroups returns identity.oidc.required_groups.
+func (s Snapshot) IdentityOIDCRequiredGroups() []string {
+	value, _ := s.value(KeyIdentityOIDCRequiredGroups)
+	typed, _ := value.([]string)
+	return append([]string(nil), typed...)
+}
+
+// IdentityOIDCClockSkew returns identity.oidc.clock_skew.
+func (s Snapshot) IdentityOIDCClockSkew() time.Duration {
+	value, _ := s.value(KeyIdentityOIDCClockSkew)
+	typed, _ := value.(time.Duration)
+	return typed
+}
+
+// IdentityOIDCUpstreamTimeout returns identity.oidc.upstream_timeout.
+func (s Snapshot) IdentityOIDCUpstreamTimeout() time.Duration {
+	value, _ := s.value(KeyIdentityOIDCUpstreamTimeout)
+	typed, _ := value.(time.Duration)
+	return typed
+}
+
 // ProjectDefault returns project.default.
 func (s Snapshot) ProjectDefault() string {
 	value, _ := s.value(KeyProjectDefault)
 	typed, _ := value.(string)
+	return typed
+}
+
+// DirectorLeaseDuration returns director.lease_duration.
+func (s Snapshot) DirectorLeaseDuration() time.Duration {
+	value, _ := s.value(KeyDirectorLeaseDuration)
+	typed, _ := value.(time.Duration)
 	return typed
 }
 
@@ -351,7 +414,7 @@ func (s Snapshot) ConfigEffectiveMaxExistingBytes() int64 {
 
 const generatedRegistryJSON = `{
   "schema_version": 2,
-  "revision": "2026-07-15.9",
+  "revision": "2026-07-15.11",
   "precedence": [
     "default",
     "file",
@@ -391,6 +454,16 @@ const generatedRegistryJSON = `{
         "runtime.codex.work_root",
         "config.effective_path",
         "identity.local_token_path"
+      ]
+    },
+    {
+      "id": "identity_provider_requirements",
+      "keys": [
+        "identity.provider",
+        "identity.oidc.issuer",
+        "identity.oidc.audience",
+        "identity.oidc.clock_skew",
+        "identity.oidc.upstream_timeout"
       ]
     }
   ],
@@ -768,6 +841,24 @@ const generatedRegistryJSON = `{
       ]
     },
     {
+      "key": "identity.provider",
+      "go_name": "IdentityProvider",
+      "semantic_ref": "orquesta.config.identity.provider",
+      "type": "string",
+      "default": "local_token",
+      "sensitive": false,
+      "scope": "identity",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_IDENTITY_PROVIDER",
+      "validator_ids": [
+        "allowed_values"
+      ],
+      "allowed_values": [
+        "local_token",
+        "oidc"
+      ]
+    },
+    {
       "key": "identity.local_actor",
       "go_name": "IdentityLocalActor",
       "semantic_ref": "orquesta.config.identity.local_actor",
@@ -796,6 +887,76 @@ const generatedRegistryJSON = `{
       ]
     },
     {
+      "key": "identity.oidc.issuer",
+      "go_name": "IdentityOIDCIssuer",
+      "semantic_ref": "orquesta.config.identity.oidc.issuer",
+      "type": "string",
+      "default": "",
+      "sensitive": false,
+      "scope": "identity",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_IDENTITY_OIDC_ISSUER",
+      "validator_ids": [
+        "trimmed_optional_string"
+      ]
+    },
+    {
+      "key": "identity.oidc.audience",
+      "go_name": "IdentityOIDCAudience",
+      "semantic_ref": "orquesta.config.identity.oidc.audience",
+      "type": "string",
+      "default": "",
+      "sensitive": false,
+      "scope": "identity",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_IDENTITY_OIDC_AUDIENCE",
+      "validator_ids": [
+        "trimmed_optional_string"
+      ]
+    },
+    {
+      "key": "identity.oidc.required_groups",
+      "go_name": "IdentityOIDCRequiredGroups",
+      "semantic_ref": "orquesta.config.identity.oidc.required_groups",
+      "type": "string_list",
+      "default": [],
+      "sensitive": false,
+      "scope": "identity",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_IDENTITY_OIDC_REQUIRED_GROUPS",
+      "validator_ids": [
+        "unique_non_empty_string_list"
+      ]
+    },
+    {
+      "key": "identity.oidc.clock_skew",
+      "go_name": "IdentityOIDCClockSkew",
+      "semantic_ref": "orquesta.config.identity.oidc.clock_skew",
+      "type": "duration",
+      "default": "30s",
+      "sensitive": false,
+      "scope": "identity",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_IDENTITY_OIDC_CLOCK_SKEW",
+      "validator_ids": [
+        "positive_duration"
+      ]
+    },
+    {
+      "key": "identity.oidc.upstream_timeout",
+      "go_name": "IdentityOIDCUpstreamTimeout",
+      "semantic_ref": "orquesta.config.identity.oidc.upstream_timeout",
+      "type": "duration",
+      "default": "10s",
+      "sensitive": false,
+      "scope": "identity",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_IDENTITY_OIDC_UPSTREAM_TIMEOUT",
+      "validator_ids": [
+        "positive_duration"
+      ]
+    },
+    {
       "key": "project.default",
       "go_name": "ProjectDefault",
       "semantic_ref": "orquesta.config.project.default",
@@ -807,6 +968,20 @@ const generatedRegistryJSON = `{
       "env_alias": "ORQUESTA_PROJECT_DEFAULT",
       "validator_ids": [
         "opaque_ref"
+      ]
+    },
+    {
+      "key": "director.lease_duration",
+      "go_name": "DirectorLeaseDuration",
+      "semantic_ref": "orquesta.config.director.lease_duration",
+      "type": "duration",
+      "default": "2m",
+      "sensitive": false,
+      "scope": "director",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_DIRECTOR_LEASE_DURATION",
+      "validator_ids": [
+        "positive_duration"
       ]
     },
     {

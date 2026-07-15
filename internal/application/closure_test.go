@@ -143,7 +143,8 @@ func TestInvalidArtifactAdapterCannotAccreditSuccessfulGoal(t *testing.T) {
 		Launcher: agent, Observer: agent, Artifacts: invalidArtifactStore{},
 		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1024,
 		MaxExecutionAttempts: 3, AgentCapabilities: testAgentCapabilities(), ClaimLease: time.Minute,
-		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
+		DirectorLeaseDuration: time.Minute,
+		ObservationDelay:      time.Second, ExecutionTimeout: time.Hour,
 	})
 	if err != nil {
 		t.Fatalf("new: %v", err)
@@ -266,7 +267,8 @@ func TestTemporaryLaunchCapacityWaitDoesNotConsumeExecutionAttemptBudget(t *test
 		Launcher: agent, Observer: agent, Artifacts: newMemoryArtifactStore(),
 		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1024,
 		MaxExecutionAttempts: 3, AgentCapabilities: testAgentCapabilities(), ClaimLease: time.Minute,
-		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
+		DirectorLeaseDuration: time.Minute,
+		ObservationDelay:      time.Second, ExecutionTimeout: time.Hour,
 	})
 	if err != nil {
 		t.Fatalf("new: %v", err)
@@ -324,7 +326,8 @@ func TestPendingObservationHasDurableAttemptBoundary(t *testing.T) {
 		Launcher: agent, Observer: agent, Artifacts: artifacts,
 		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1024,
 		MaxExecutionAttempts: 3, AgentCapabilities: testAgentCapabilities(), ClaimLease: time.Minute,
-		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
+		DirectorLeaseDuration: time.Minute,
+		ObservationDelay:      time.Second, ExecutionTimeout: time.Hour,
 	})
 	if err != nil {
 		t.Fatalf("new: %v", err)

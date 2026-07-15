@@ -23,7 +23,8 @@ func TestNewClonesAgentCapabilitySlices(t *testing.T) {
 		State: repository, Access: newMemoryAccessRepository(),
 		Launcher: agent, Observer: agent, Artifacts: newMemoryArtifactStore(),
 		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1 << 20, MaxExecutionAttempts: 3,
-		ClaimLease: time.Minute, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
+		ClaimLease: time.Minute, DirectorLeaseDuration: time.Minute,
+		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 		AgentCapabilities: capabilities,
 	})
 	if err != nil {

@@ -896,7 +896,7 @@ func TestProductRoadmapV11ScopeAndExecutableContract(t *testing.T) {
 			t.Fatalf("V11 is a transverse integration vertical and must not invent a capability ID: %#v", entry)
 		}
 	}
-	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV11ScopeAndExecutableContract|TestV11OwnsNoCapabilityIDs|TestV11AcceptanceCommandRunsIdentityConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV11OIDCAD|TestV11CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/identity ./internal/config ./internal/adapters/auth/localtoken ./internal/adapters/auth/oidc ./internal/bootstrap ./cmd/orquesta'"
+	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV11ScopeAndExecutableContract|TestV11OwnsNoCapabilityIDs|TestV11AcceptanceCommandRunsIdentityConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV11OIDCAD|TestV11CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/identity ./internal/config ./internal/adapters/auth/bearer ./internal/adapters/auth/localtoken ./internal/adapters/auth/oidc ./internal/bootstrap ./cmd/orquesta && ./scripts/smoke_v11_dex_samba_ad.sh'"
 	for _, contract := range roadmap.AcceptanceContracts {
 		if contract.ID != "AC-V11-OIDC-AD" {
 			continue
@@ -941,8 +941,9 @@ func TestV11AcceptanceCommandRunsIdentityConsumers(t *testing.T) {
 		}
 		for _, required := range []string{
 			"./acceptance", "./internal/identity", "./internal/config",
-			"./internal/adapters/auth/localtoken", "./internal/adapters/auth/oidc",
-			"./internal/bootstrap", "./cmd/orquesta",
+			"./internal/adapters/auth/bearer", "./internal/adapters/auth/localtoken",
+			"./internal/adapters/auth/oidc", "./internal/bootstrap", "./cmd/orquesta",
+			"./scripts/smoke_v11_dex_samba_ad.sh",
 		} {
 			if !roadmapCommandHasArgument(contract.Command, required) {
 				t.Errorf("V11 acceptance omits identity consumer package %q: %q", required, contract.Command)
