@@ -10,6 +10,7 @@ import (
 const (
 	publicInvalidRequest = "invalid_request"
 	publicNotFound       = "not_found"
+	publicForbidden      = "forbidden"
 	publicConflict       = "conflict"
 	publicInternal       = "internal"
 )
@@ -54,6 +55,8 @@ func publicCode(err error) string {
 	}
 
 	switch err.Error() {
+	case "application.forbidden":
+		return publicForbidden
 	case "application.request_ref_invalid",
 		"application.actor_ref_required",
 		"application.project_ref_required",

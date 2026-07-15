@@ -21,6 +21,7 @@ const (
 )
 
 type CreateGoalInput struct {
+	ProjectRef          string     `json:"project_ref" jsonschema:"explicit opaque project scope"`
 	RequestRef          string     `json:"request_ref,omitempty" jsonschema:"caller-controlled idempotency reference"`
 	Statement           string     `json:"statement,omitempty" jsonschema:"exact operator intent to preserve"`
 	NormalizedObjective string     `json:"normalized_objective,omitempty" jsonschema:"confirmed objective used for planning"`
@@ -62,6 +63,7 @@ type CreateGoalOutput struct {
 }
 
 type AmendGoalInput struct {
+	ProjectRef             string `json:"project_ref" jsonschema:"explicit opaque project scope"`
 	RequestRef             string `json:"request_ref,omitempty" jsonschema:"caller-controlled idempotency reference"`
 	SourceGoalRef          string `json:"source_goal_ref,omitempty" jsonschema:"terminal Goal to amend"`
 	ExpectedSourceRevision uint64 `json:"expected_source_revision,omitempty" jsonschema:"source revision compare-and-swap fence"`
@@ -79,7 +81,8 @@ type AmendGoalOutput struct {
 }
 
 type GetGoalInput struct {
-	GoalRef string `json:"goal_ref,omitempty" jsonschema:"opaque Goal reference"`
+	ProjectRef string `json:"project_ref" jsonschema:"explicit opaque project scope"`
+	GoalRef    string `json:"goal_ref,omitempty" jsonschema:"opaque Goal reference"`
 }
 
 type GetGoalOutput struct {
@@ -88,7 +91,8 @@ type GetGoalOutput struct {
 }
 
 type ListGoalsInput struct {
-	Limit int `json:"limit,omitempty" jsonschema:"maximum number of Goals to return"`
+	ProjectRef string `json:"project_ref" jsonschema:"explicit opaque project scope"`
+	Limit      int    `json:"limit,omitempty" jsonschema:"maximum number of Goals to return"`
 }
 
 type ListGoalsOutput struct {
@@ -98,6 +102,7 @@ type ListGoalsOutput struct {
 }
 
 type ReadArtifactInput struct {
+	ProjectRef  string `json:"project_ref" jsonschema:"explicit opaque project scope"`
 	GoalRef     string `json:"goal_ref,omitempty" jsonschema:"opaque Goal reference owning the artifact"`
 	ArtifactRef string `json:"artifact_ref,omitempty" jsonschema:"opaque immutable artifact reference"`
 }
@@ -107,7 +112,9 @@ type ReadArtifactOutput struct {
 	Error    *ToolError    `json:"error,omitempty"`
 }
 
-type SystemStatusInput struct{}
+type SystemStatusInput struct {
+	ProjectRef string `json:"project_ref" jsonschema:"explicit opaque project scope"`
+}
 
 type SystemStatusOutput struct {
 	Ready              bool       `json:"ready"`
@@ -170,15 +177,13 @@ func (server *Interface) createGoal(ctx context.Context, _ *sdkmcp.CallToolReque
 		result, public := server.toolError(publicInvalidRequest)
 		return result, CreateGoalOutput{Error: public}, nil
 	}
-	principal, err := server.principal(ctx)
+	access, err := server.access(ctx, input.ProjectRef)
 	if err != nil {
 		result, public := server.toolError(publicCode(err))
 		return result, CreateGoalOutput{Error: public}, nil
 	}
-	submitted, err := server.orchestrator.Submit(ctx, application.SubmitRequest{
+	submitted, err := server.orchestrator.Submit(ctx, access, application.SubmitRequest{
 		RequestRef:          input.RequestRef,
-		ActorRef:            principal.ActorRef,
-		ProjectRef:          principal.DefaultProjectRef,
 		Statement:           input.Statement,
 		NormalizedObjective: input.NormalizedObjective,
 		Confirm:             input.Confirm,
@@ -205,15 +210,13 @@ func (server *Interface) amendGoal(ctx context.Context, _ *sdkmcp.CallToolReques
 		result, public := server.toolError(publicInvalidRequest)
 		return result, AmendGoalOutput{Error: public}, nil
 	}
-	principal, err := server.principal(ctx)
+	access, err := server.access(ctx, input.ProjectRef)
 	if err != nil {
 		result, public := server.toolError(publicCode(err))
 		return result, AmendGoalOutput{Error: public}, nil
 	}
-	amended, err := server.orchestrator.Amend(ctx, application.AmendRequest{
+	amended, err := server.orchestrator.Amend(ctx, access, application.AmendRequest{
 		RequestRef:             input.RequestRef,
-		ActorRef:               principal.ActorRef,
-		ProjectRef:             principal.DefaultProjectRef,
 		SourceGoalRef:          sourceGoalRef,
 		ExpectedSourceRevision: goal.Revision(input.ExpectedSourceRevision),
 		ExpectedSourceSpecHash: input.ExpectedSourceSpecHash,
@@ -258,14 +261,12 @@ func applicationPlan(input *PlanInput) *application.PlanSpec {
 }
 
 func (server *Interface) getGoal(ctx context.Context, _ *sdkmcp.CallToolRequest, input GetGoalInput) (*sdkmcp.CallToolResult, GetGoalOutput, error) {
-	principal, goalRef, err := server.principalAndGoalRef(ctx, input.GoalRef)
+	access, goalRef, err := server.accessAndGoalRef(ctx, input.ProjectRef, input.GoalRef)
 	if err != nil {
 		result, public := server.toolError(publicCode(err))
 		return result, GetGoalOutput{Error: public}, nil
 	}
-	record, err := server.orchestrator.GetGoal(ctx, application.GoalQuery{
-		ActorRef: principal.ActorRef, ProjectRef: principal.DefaultProjectRef, GoalRef: goalRef,
-	})
+	record, err := server.orchestrator.GetGoal(ctx, access, goalRef)
 	if err != nil {
 		result, public := server.toolError(publicCode(err))
 		return result, GetGoalOutput{Error: public}, nil
@@ -283,12 +284,12 @@ func (server *Interface) listGoals(ctx context.Context, _ *sdkmcp.CallToolReques
 		result, public := server.toolError(publicInvalidRequest)
 		return result, ListGoalsOutput{Goals: []GoalSummaryView{}, Error: public}, nil
 	}
-	principal, err := server.principal(ctx)
+	access, err := server.access(ctx, input.ProjectRef)
 	if err != nil {
 		result, public := server.toolError(publicCode(err))
 		return result, ListGoalsOutput{Goals: []GoalSummaryView{}, Error: public}, nil
 	}
-	summaries, err := server.orchestrator.ListGoals(ctx, principal.ActorRef, principal.DefaultProjectRef, limit)
+	summaries, err := server.orchestrator.ListGoals(ctx, access, limit)
 	if err != nil {
 		result, public := server.toolError(publicCode(err))
 		return result, ListGoalsOutput{Goals: []GoalSummaryView{}, Error: public}, nil
@@ -301,7 +302,7 @@ func (server *Interface) listGoals(ctx context.Context, _ *sdkmcp.CallToolReques
 }
 
 func (server *Interface) readArtifact(ctx context.Context, _ *sdkmcp.CallToolRequest, input ReadArtifactInput) (*sdkmcp.CallToolResult, ReadArtifactOutput, error) {
-	principal, goalRef, err := server.principalAndGoalRef(ctx, input.GoalRef)
+	access, goalRef, err := server.accessAndGoalRef(ctx, input.ProjectRef, input.GoalRef)
 	if err != nil {
 		result, public := server.toolError(publicCode(err))
 		return result, ReadArtifactOutput{Error: public}, nil
@@ -311,10 +312,7 @@ func (server *Interface) readArtifact(ctx context.Context, _ *sdkmcp.CallToolReq
 		result, public := server.toolError(publicInvalidRequest)
 		return result, ReadArtifactOutput{Error: public}, nil
 	}
-	content, err := server.orchestrator.GetArtifact(ctx, application.ArtifactQuery{
-		ActorRef: principal.ActorRef, ProjectRef: principal.DefaultProjectRef,
-		GoalRef: goalRef, ArtifactRef: artifactRef,
-	})
+	content, err := server.orchestrator.GetArtifact(ctx, access, goalRef, artifactRef)
 	if err != nil {
 		result, public := server.toolError(publicCode(err))
 		return result, ReadArtifactOutput{Error: public}, nil
@@ -323,8 +321,13 @@ func (server *Interface) readArtifact(ctx context.Context, _ *sdkmcp.CallToolReq
 	return nil, ReadArtifactOutput{Artifact: &view}, nil
 }
 
-func (server *Interface) systemStatus(ctx context.Context, _ *sdkmcp.CallToolRequest, _ SystemStatusInput) (*sdkmcp.CallToolResult, SystemStatusOutput, error) {
-	status, err := server.orchestrator.Status(ctx)
+func (server *Interface) systemStatus(ctx context.Context, _ *sdkmcp.CallToolRequest, input SystemStatusInput) (*sdkmcp.CallToolResult, SystemStatusOutput, error) {
+	access, err := server.access(ctx, input.ProjectRef)
+	if err != nil {
+		result, public := server.toolError(publicCode(err))
+		return result, SystemStatusOutput{Version: server.version, Error: public}, nil
+	}
+	status, err := server.orchestrator.Status(ctx, access)
 	if err != nil {
 		result, public := server.toolError(publicCode(err))
 		return result, SystemStatusOutput{Version: server.version, Error: public}, nil
@@ -344,20 +347,36 @@ func (server *Interface) principal(ctx context.Context) (identity.Principal, err
 	if err != nil {
 		return identity.Principal{}, err
 	}
-	if principal.ActorRef.String() == "" || principal.DefaultProjectRef.String() == "" {
-		return identity.Principal{}, &goal.DomainError{Code: goal.ErrorInvalidRef}
+	if err := identity.ValidatePrincipal(principal); err != nil {
+		return identity.Principal{}, err
 	}
 	return principal, nil
 }
 
-func (server *Interface) principalAndGoalRef(ctx context.Context, rawGoalRef string) (identity.Principal, goal.GoalRef, error) {
-	goalRef, err := goal.NewGoalRef(rawGoalRef)
+func (server *Interface) access(ctx context.Context, rawProjectRef string) (application.Access, error) {
+	projectRef, err := goal.NewProjectRef(rawProjectRef)
 	if err != nil {
-		return identity.Principal{}, goal.GoalRef{}, err
+		return application.Access{}, err
 	}
 	principal, err := server.principal(ctx)
 	if err != nil {
-		return identity.Principal{}, goal.GoalRef{}, err
+		return application.Access{}, err
 	}
-	return principal, goalRef, nil
+	return application.NewAccess(principal, projectRef)
+}
+
+func (server *Interface) accessAndGoalRef(
+	ctx context.Context,
+	rawProjectRef string,
+	rawGoalRef string,
+) (application.Access, goal.GoalRef, error) {
+	goalRef, err := goal.NewGoalRef(rawGoalRef)
+	if err != nil {
+		return application.Access{}, goal.GoalRef{}, err
+	}
+	access, err := server.access(ctx, rawProjectRef)
+	if err != nil {
+		return application.Access{}, goal.GoalRef{}, err
+	}
+	return access, goalRef, nil
 }

@@ -1,5 +1,6 @@
 {
   "error.conflict": "State changed while the request was being processed.",
+  "error.forbidden": "You do not have permission to perform this operation.",
   "error.internal": "The operation could not be completed.",
   "error.invalid_request": "The request is invalid.",
   "error.not_found": "The requested resource was not found.",

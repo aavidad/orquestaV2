@@ -36,16 +36,16 @@ func TestV04OfficialMCPToolsAreExactClosedWorldAndSafelyAnnotated(t *testing.T) 
 		t.Fatalf("tools = %v, want %v", gotNames, wantNames)
 	}
 	assertClosedWorldProperties(t, byName[ToolGoalsCreate], []string{
-		"confirm", "normalized_objective", "plan", "request_ref", "statement",
+		"confirm", "normalized_objective", "plan", "project_ref", "request_ref", "statement",
 	})
 	assertClosedWorldProperties(t, byName[ToolGoalsAmend], []string{
 		"confirm", "expected_source_revision", "expected_source_spec_hash", "normalized_objective",
-		"reason", "request_ref", "source_goal_ref", "statement",
+		"project_ref", "reason", "request_ref", "source_goal_ref", "statement",
 	})
-	assertClosedWorldProperties(t, byName[ToolGoalsGet], []string{"goal_ref"})
-	assertClosedWorldProperties(t, byName[ToolGoalsList], []string{"limit"})
-	assertClosedWorldProperties(t, byName[ToolArtifactsRead], []string{"artifact_ref", "goal_ref"})
-	assertClosedWorldProperties(t, byName[ToolSystemStatus], []string{})
+	assertClosedWorldProperties(t, byName[ToolGoalsGet], []string{"goal_ref", "project_ref"})
+	assertClosedWorldProperties(t, byName[ToolGoalsList], []string{"limit", "project_ref"})
+	assertClosedWorldProperties(t, byName[ToolArtifactsRead], []string{"artifact_ref", "goal_ref", "project_ref"})
+	assertClosedWorldProperties(t, byName[ToolSystemStatus], []string{"project_ref"})
 	for _, name := range []string{ToolGoalsAmend, ToolGoalsCreate} {
 		annotations := byName[name].Annotations
 		if annotations == nil || annotations.ReadOnlyHint || !annotations.IdempotentHint ||
@@ -63,11 +63,65 @@ func TestV04OfficialMCPToolsAreExactClosedWorldAndSafelyAnnotated(t *testing.T) 
 	}
 }
 
+func TestV10OfficialMCPRequiresExplicitProjectAndExposesNoPrincipalSpoofFields(t *testing.T) {
+	server, _, _ := newTestInterface(t, 16*1024)
+	session := serveOfficialClient(t, server)
+	validHash := strings.Repeat("a", 64)
+	valid := map[string]map[string]any{
+		ToolGoalsCreate: {
+			"request_ref": "request:missing-project", "statement": "exact", "confirm": true,
+		},
+		ToolGoalsAmend: {
+			"request_ref": "request:missing-project", "source_goal_ref": "goal:source",
+			"expected_source_revision": uint64(1), "expected_source_spec_hash": validHash,
+			"statement": "exact", "reason": "operator.amendment", "confirm": true,
+		},
+		ToolGoalsGet:      {"goal_ref": "goal:source"},
+		ToolGoalsList:     {"limit": 1},
+		ToolArtifactsRead: {"goal_ref": "goal:source", "artifact_ref": "artifact:source"},
+		ToolSystemStatus:  {},
+	}
+	for name, arguments := range valid {
+		name, arguments := name, arguments
+		t.Run(name+"_missing", func(t *testing.T) {
+			result := callTool(t, session, name, arguments)
+			if !result.IsError {
+				t.Fatalf("missing required project unexpectedly succeeded: %+v", result)
+			}
+		})
+		t.Run(name+"_malformed", func(t *testing.T) {
+			malformed := cloneArguments(arguments)
+			malformed["project_ref"] = " project:local"
+			assertPublicToolError(t, callTool(t, session, name, malformed), publicInvalidRequest)
+		})
+	}
+
+	listed, err := session.ListTools(testContext(t), nil)
+	if err != nil {
+		t.Fatalf("ListTools() error = %v", err)
+	}
+	for _, tool := range listed.Tools {
+		payload, marshalErr := json.Marshal(tool.InputSchema)
+		if marshalErr != nil {
+			t.Fatalf("Marshal(%s schema): %v", tool.Name, marshalErr)
+		}
+		for _, forbidden := range []string{
+			"actor", "actor_ref", "confirmed_by", "default_project_ref", "kind",
+			"principal_kind", "principal_ref",
+		} {
+			if strings.Contains(string(payload), `"`+forbidden+`"`) {
+				t.Errorf("%s schema exposes trusted identity field %q: %s", tool.Name, forbidden, payload)
+			}
+		}
+	}
+}
+
 func TestV04OfficialMCPCreateAndAmendAreCausalIdempotentAndServerOwned(t *testing.T) {
 	server, state, _ := newTestInterface(t, 16*1024)
 	session := serveOfficialClient(t, server)
 	statement := "  Preserve exact operator intent.  "
 	createArguments := map[string]any{
+		"project_ref": "project:local",
 		"request_ref": "request:v04-create", "statement": statement,
 		"normalized_objective": "Build maintained output", "confirm": true,
 	}
@@ -139,7 +193,9 @@ func TestV04OfficialMCPCreateAndAmendAreCausalIdempotentAndServerOwned(t *testin
 		!reflect.DeepEqual(sourceAfter.Attestations, sourceBefore.Attestations) {
 		t.Fatalf("source mutated: before=%+v after=%+v err=%v", sourceBefore, sourceAfter, err)
 	}
-	getResult := callTool(t, session, ToolGoalsGet, map[string]any{"goal_ref": amended.Goal.GoalRef})
+	getResult := callTool(t, session, ToolGoalsGet, map[string]any{
+		"project_ref": "project:local", "goal_ref": amended.Goal.GoalRef,
+	})
 	var got GetGoalOutput
 	decodeStructured(t, getResult, &got)
 	if getResult.IsError || got.Goal == nil || !reflect.DeepEqual(got.Goal.AppSpec, amended.Goal.AppSpec) ||
@@ -148,7 +204,7 @@ func TestV04OfficialMCPCreateAndAmendAreCausalIdempotentAndServerOwned(t *testin
 		got.Goal.ProjectRef != amended.Goal.ProjectRef {
 		t.Fatalf("get successor projection = %+v result=%+v", got, getResult)
 	}
-	listResult := callTool(t, session, ToolGoalsList, map[string]any{"limit": 10})
+	listResult := callTool(t, session, ToolGoalsList, map[string]any{"project_ref": "project:local", "limit": 10})
 	var listed ListGoalsOutput
 	decodeStructured(t, listResult, &listed)
 	var successorSummary *GoalSummaryView
@@ -185,16 +241,18 @@ func TestV04OfficialMCPRejectsConfirmationAndAuthoritySpoofWithoutEffects(t *tes
 	session := serveOfficialClient(t, server)
 	assertNoStateOrGeneratorChange(t, state, func() *sdkmcp.CallToolResult {
 		return callTool(t, session, ToolGoalsCreate, map[string]any{
-			"request_ref": "request:unconfirmed", "statement": "must not exist", "confirm": false,
+			"project_ref": "project:local", "request_ref": "request:unconfirmed",
+			"statement": "must not exist", "confirm": false,
 		})
 	}, publicInvalidRequest)
 	assertNoStateOrGeneratorChange(t, state, func() *sdkmcp.CallToolResult {
-		return callTool(t, session, ToolGoalsAmend, map[string]any{"confirm": false})
+		return callTool(t, session, ToolGoalsAmend, map[string]any{"project_ref": "project:local", "confirm": false})
 	}, publicInvalidRequest)
 
 	spoofs := map[string]any{
-		"actor_ref": "actor:spoof", "project_ref": "project:spoof", "confirmed_by": "actor:spoof",
-		"submitted_at": "1999-01-01T00:00:00Z", "confirmed_at": "1999-01-01T00:00:00Z",
+		"actor_ref": "actor:spoof", "confirmed_by": "actor:spoof", "principal_ref": "principal:spoof",
+		"principal_kind": "service",
+		"submitted_at":   "1999-01-01T00:00:00Z", "confirmed_at": "1999-01-01T00:00:00Z",
 		"intent_ref": "intent:spoof", "app_spec_ref": "app-spec:spoof", "goal_ref": "goal:spoof",
 	}
 	for field, value := range spoofs {
@@ -202,7 +260,8 @@ func TestV04OfficialMCPRejectsConfirmationAndAuthoritySpoofWithoutEffects(t *tes
 		t.Run("create_"+field, func(t *testing.T) {
 			assertNoStateOrGeneratorChange(t, state, func() *sdkmcp.CallToolResult {
 				arguments := map[string]any{
-					"request_ref": "request:spoof-create-" + field, "statement": "trusted input", "confirm": true,
+					"project_ref": "project:local", "request_ref": "request:spoof-create-" + field,
+					"statement": "trusted input", "confirm": true,
 					field: value,
 				}
 				return callTool(t, session, ToolGoalsCreate, arguments)
@@ -211,7 +270,8 @@ func TestV04OfficialMCPRejectsConfirmationAndAuthoritySpoofWithoutEffects(t *tes
 	}
 
 	created := callCreateGoal(t, session, map[string]any{
-		"request_ref": "request:spoof-source", "statement": "terminal source", "confirm": true,
+		"project_ref": "project:local", "request_ref": "request:spoof-source",
+		"statement": "terminal source", "confirm": true,
 	})
 	sourceRef, _ := goal.NewGoalRef(created.Goal.GoalRef)
 	state.failGoal(t, sourceRef, "test.terminal_source")
@@ -233,11 +293,12 @@ func TestV04OfficialMCPRejectsActiveStaleAndForeignAmendmentBeforeGenerators(t *
 		server, state, _ := newTestInterface(t, 16*1024)
 		session := serveOfficialClient(t, server)
 		created := callCreateGoal(t, session, map[string]any{
-			"request_ref": "request:active-source", "statement": "active source", "confirm": true,
+			"project_ref": "project:local", "request_ref": "request:active-source",
+			"statement": "active source", "confirm": true,
 		})
 		sourceRef, _ := goal.NewGoalRef(created.Goal.GoalRef)
 		source, _ := state.GetGoal(context.Background(), sourceRef)
-		assertNoStateOrGeneratorChange(t, state, func() *sdkmcp.CallToolResult {
+		assertNoDurableStateChange(t, state, func() *sdkmcp.CallToolResult {
 			return callTool(t, session, ToolGoalsAmend, amendmentToolArguments(source, "request:active-amend"))
 		}, publicConflict)
 	})
@@ -261,14 +322,15 @@ func TestV04OfficialMCPRejectsActiveStaleAndForeignAmendmentBeforeGenerators(t *
 			server, state, _ := newTestInterface(t, 16*1024)
 			session := serveOfficialClient(t, server)
 			created := callCreateGoal(t, session, map[string]any{
-				"request_ref": "request:" + testCase.name + "-source", "statement": "terminal source", "confirm": true,
+				"project_ref": "project:local", "request_ref": "request:" + testCase.name + "-source",
+				"statement": "terminal source", "confirm": true,
 			})
 			sourceRef, _ := goal.NewGoalRef(created.Goal.GoalRef)
 			state.failGoal(t, sourceRef, "test.terminal_source")
 			source, _ := state.GetGoal(context.Background(), sourceRef)
 			input := amendmentToolArguments(source, "request:"+testCase.name+"-amend")
 			testCase.mutate(input)
-			assertNoStateOrGeneratorChange(t, state, func() *sdkmcp.CallToolResult {
+			assertNoDurableStateChange(t, state, func() *sdkmcp.CallToolResult {
 				return callTool(t, session, ToolGoalsAmend, input)
 			}, publicConflict)
 		})
@@ -278,16 +340,17 @@ func TestV04OfficialMCPRejectsActiveStaleAndForeignAmendmentBeforeGenerators(t *
 		server, state, _ := newTestInterface(t, 16*1024)
 		localSession := serveOfficialClient(t, server)
 		created := callCreateGoal(t, localSession, map[string]any{
-			"request_ref": "request:foreign-source", "statement": "terminal source", "confirm": true,
+			"project_ref": "project:local", "request_ref": "request:foreign-source",
+			"statement": "terminal source", "confirm": true,
 		})
 		sourceRef, _ := goal.NewGoalRef(created.Goal.GoalRef)
 		state.failGoal(t, sourceRef, "test.terminal_source")
 		source, _ := state.GetGoal(context.Background(), sourceRef)
-		foreignServer := newTestInterfaceForPrincipal(t, state.orchestrator, "actor:foreign", "project:foreign", 16*1024)
+		foreignServer := newTestInterfaceForPrincipal(t, state, "actor:foreign", "project:foreign", 16*1024)
 		foreignSession := serveOfficialClient(t, foreignServer)
-		assertNoStateOrGeneratorChange(t, state, func() *sdkmcp.CallToolResult {
+		assertNoDurableStateChange(t, state, func() *sdkmcp.CallToolResult {
 			return callTool(t, foreignSession, ToolGoalsAmend, amendmentToolArguments(source, "request:foreign-amend"))
-		}, publicNotFound)
+		}, publicForbidden)
 	})
 }
 
@@ -295,11 +358,16 @@ func TestV04MemoryStateScopesRequestRefsAndSerializesConcurrentSuccessors(t *tes
 	t.Run("request scope", func(t *testing.T) {
 		server, state, _ := newTestInterface(t, 16*1024)
 		local := serveOfficialClient(t, server)
-		foreignServer := newTestInterfaceForPrincipal(t, state.orchestrator, "actor:other", "project:other", 16*1024)
+		foreignServer := newTestInterfaceForPrincipal(t, state, "actor:other", "project:other", 16*1024)
 		foreign := serveOfficialClient(t, foreignServer)
-		arguments := map[string]any{"request_ref": "request:shared", "statement": "same request ref", "confirm": true}
+		arguments := map[string]any{
+			"project_ref": "project:local", "request_ref": "request:shared",
+			"statement": "same request ref", "confirm": true,
+		}
 		first := callCreateGoal(t, local, arguments)
-		second := callCreateGoal(t, foreign, arguments)
+		foreignArguments := cloneArguments(arguments)
+		foreignArguments["project_ref"] = "project:other"
+		second := callCreateGoal(t, foreign, foreignArguments)
 		if !first.Created || !second.Created || first.Goal == nil || second.Goal == nil ||
 			first.Goal.GoalRef == second.Goal.GoalRef || first.Goal.ActorRef != "actor:local" ||
 			second.Goal.ActorRef != "actor:other" || first.Goal.ProjectRef != "project:local" ||
@@ -316,7 +384,8 @@ func TestV04MemoryStateScopesRequestRefsAndSerializesConcurrentSuccessors(t *tes
 		server, state, _ := newTestInterface(t, 16*1024)
 		session := serveOfficialClient(t, server)
 		created := callCreateGoal(t, session, map[string]any{
-			"request_ref": "request:concurrent-source", "statement": "terminal source", "confirm": true,
+			"project_ref": "project:local", "request_ref": "request:concurrent-source",
+			"statement": "terminal source", "confirm": true,
 		})
 		sourceRef, _ := goal.NewGoalRef(created.Goal.GoalRef)
 		state.failGoal(t, sourceRef, "test.terminal_source")
@@ -420,6 +489,20 @@ func assertClosedWorldProperties(t *testing.T, tool *sdkmcp.Tool, expected []str
 	if !reflect.DeepEqual(actual, expected) {
 		t.Fatalf("input properties = %v, want %v", actual, expected)
 	}
+	requiredValues, ok := schema["required"].([]any)
+	if !ok {
+		t.Fatalf("input schema required fields missing: %s", payload)
+	}
+	projectRequired := false
+	for _, value := range requiredValues {
+		if value == "project_ref" {
+			projectRequired = true
+			break
+		}
+	}
+	if !projectRequired {
+		t.Fatalf("project_ref is not required: %s", payload)
+	}
 }
 
 func callCreateGoal(t *testing.T, session *sdkmcp.ClientSession, arguments map[string]any) CreateGoalOutput {
@@ -466,7 +549,8 @@ func assertPublicToolError(t *testing.T, result *sdkmcp.CallToolResult, code str
 
 func amendmentToolArguments(source application.GoalRecord, requestRef string) map[string]any {
 	return map[string]any{
-		"request_ref": requestRef, "source_goal_ref": source.Goal.Ref().String(),
+		"project_ref": source.Goal.Project().String(), "request_ref": requestRef,
+		"source_goal_ref":           source.Goal.Ref().String(),
 		"expected_source_revision":  uint64(source.Goal.Revision()),
 		"expected_source_spec_hash": source.Goal.SpecHash(),
 		"statement":                 "amended exact intent", "normalized_objective": "amended objective",
@@ -509,5 +593,24 @@ func assertNoStateOrGeneratorChange(
 			beforeGoals, beforeRequests, beforeSuccessors, beforePending,
 			afterGoals, afterRequests, afterSuccessors, afterPending,
 			beforeIDs, state.ids.Count(), beforeClock, state.clock.Calls())
+	}
+}
+
+func assertNoDurableStateChange(
+	t *testing.T,
+	state *memoryState,
+	operation func() *sdkmcp.CallToolResult,
+	wantCode string,
+) {
+	t.Helper()
+	beforeGoals, beforeRequests, beforeSuccessors, beforePending := state.counts()
+	result := operation()
+	assertPublicToolError(t, result, wantCode)
+	afterGoals, afterRequests, afterSuccessors, afterPending := state.counts()
+	if afterGoals != beforeGoals || afterRequests != beforeRequests || afterSuccessors != beforeSuccessors ||
+		afterPending != beforePending {
+		t.Fatalf("rejected request changed durable state: %d/%d/%d/%d -> %d/%d/%d/%d",
+			beforeGoals, beforeRequests, beforeSuccessors, beforePending,
+			afterGoals, afterRequests, afterSuccessors, afterPending)
 	}
 }

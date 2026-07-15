@@ -17,6 +17,7 @@ import (
 
 	"orquesta/internal/application"
 	"orquesta/internal/goal"
+	"orquesta/internal/identity"
 	"orquesta/internal/ports"
 )
 
@@ -57,7 +58,7 @@ func TestOfficialClientListsExactToolsAndCallsGoalArtifactAndStatus(t *testing.T
 		}
 	}
 
-	statusResult := callTool(t, session, ToolSystemStatus, map[string]any{})
+	statusResult := callTool(t, session, ToolSystemStatus, map[string]any{"project_ref": "project:local"})
 	var status SystemStatusOutput
 	decodeStructured(t, statusResult, &status)
 	if statusResult.IsError || !status.Ready || status.Version != "test-version" || status.Goals != 0 {
@@ -65,6 +66,7 @@ func TestOfficialClientListsExactToolsAndCallsGoalArtifactAndStatus(t *testing.T
 	}
 
 	createArguments := map[string]any{
+		"project_ref": "project:local",
 		"request_ref": "request:test-1", "statement": "Produce a durable artifact",
 		"normalized_objective": "Produce durable artifact", "confirm": true,
 	}
@@ -104,14 +106,16 @@ func TestOfficialClientListsExactToolsAndCallsGoalArtifactAndStatus(t *testing.T
 		t.Fatalf("idempotent create = %+v result=%+v", replayed, replayedResult)
 	}
 
-	getResult := callTool(t, session, ToolGoalsGet, map[string]any{"goal_ref": created.Goal.GoalRef})
+	getResult := callTool(t, session, ToolGoalsGet, map[string]any{
+		"project_ref": "project:local", "goal_ref": created.Goal.GoalRef,
+	})
 	var got GetGoalOutput
 	decodeStructured(t, getResult, &got)
 	if getResult.IsError || got.Goal == nil || got.Goal.IntentHash == "" || got.Goal.GoalRef != created.Goal.GoalRef {
 		t.Fatalf("get output = %+v result=%+v", got, getResult)
 	}
 
-	listResult := callTool(t, session, ToolGoalsList, map[string]any{"limit": 1})
+	listResult := callTool(t, session, ToolGoalsList, map[string]any{"project_ref": "project:local", "limit": 1})
 	var list ListGoalsOutput
 	decodeStructured(t, listResult, &list)
 	if listResult.IsError || list.Count != 1 || len(list.Goals) != 1 || list.Goals[0].GoalRef != created.Goal.GoalRef ||
@@ -135,7 +139,7 @@ func TestOfficialClientListsExactToolsAndCallsGoalArtifactAndStatus(t *testing.T
 		Ref: artifactRef, Digest: digestText, Size: int64(len(content)), Content: content,
 	})
 	artifactResult := callTool(t, session, ToolArtifactsRead, map[string]any{
-		"goal_ref": created.Goal.GoalRef, "artifact_ref": artifactRef.String(),
+		"project_ref": "project:local", "goal_ref": created.Goal.GoalRef, "artifact_ref": artifactRef.String(),
 	})
 	var artifact ReadArtifactOutput
 	decodeStructured(t, artifactResult, &artifact)
@@ -144,7 +148,7 @@ func TestOfficialClientListsExactToolsAndCallsGoalArtifactAndStatus(t *testing.T
 		t.Fatalf("artifact output = %+v result=%+v", artifact, artifactResult)
 	}
 
-	finalStatusResult := callTool(t, session, ToolSystemStatus, map[string]any{})
+	finalStatusResult := callTool(t, session, ToolSystemStatus, map[string]any{"project_ref": "project:local"})
 	var finalStatus SystemStatusOutput
 	decodeStructured(t, finalStatusResult, &finalStatus)
 	if finalStatus.Goals != 1 || finalStatus.RunningGoals != 1 || finalStatus.PendingActions != 1 {
@@ -158,7 +162,9 @@ func TestToolErrorsAreTypedLocalizedAndDoNotLeakApplicationErrors(t *testing.T) 
 	t.Cleanup(httpServer.Close)
 	session := connectOfficialClient(t, httpServer.URL)
 
-	result := callTool(t, session, ToolGoalsGet, map[string]any{"goal_ref": "goal:missing"})
+	result := callTool(t, session, ToolGoalsGet, map[string]any{
+		"project_ref": "project:local", "goal_ref": "goal:missing",
+	})
 	var output GetGoalOutput
 	decodeStructured(t, result, &output)
 	if !result.IsError || output.Error == nil || output.Error.Code != publicNotFound {
@@ -175,14 +181,17 @@ func TestToolErrorsAreTypedLocalizedAndDoNotLeakApplicationErrors(t *testing.T) 
 		t.Fatalf("internal error leaked: %s", contentJSON)
 	}
 
-	invalidLimit := callTool(t, session, ToolGoalsList, map[string]any{"limit": 999})
+	invalidLimit := callTool(t, session, ToolGoalsList, map[string]any{"project_ref": "project:local", "limit": 999})
 	var invalid ListGoalsOutput
 	decodeStructured(t, invalidLimit, &invalid)
 	if !invalidLimit.IsError || invalid.Error == nil || invalid.Error.Code != publicInvalidRequest {
 		t.Fatalf("invalid limit output = %+v result=%+v", invalid, invalidLimit)
 	}
 
-	request := map[string]any{"request_ref": "request:conflict", "statement": "first statement", "confirm": true}
+	request := map[string]any{
+		"project_ref": "project:local", "request_ref": "request:conflict",
+		"statement": "first statement", "confirm": true,
+	}
 	if result := callTool(t, session, ToolGoalsCreate, request); result.IsError {
 		t.Fatalf("initial conflict fixture failed: %+v", result)
 	}
@@ -195,6 +204,122 @@ func TestToolErrorsAreTypedLocalizedAndDoNotLeakApplicationErrors(t *testing.T) 
 	}
 }
 
+func TestV10MissingOrInvalidRequestPrincipalFailsBeforeProjectState(t *testing.T) {
+	_, state, _ := newTestInterface(t, 16*1024)
+	tests := []struct {
+		name     string
+		provider identity.Provider
+	}{
+		{name: "missing context principal", provider: identity.ContextProvider{}},
+		{name: "invalid provider principal", provider: staticIdentityProvider{principal: identity.Principal{}}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := newTestInterfaceForIdentity(t, state.orchestrator, test.provider, 16*1024)
+			session := serveOfficialClient(t, server)
+			beforeGoals, beforeRequests, beforeSuccessors, beforePending := state.counts()
+			result := callTool(t, session, ToolGoalsList, map[string]any{
+				"project_ref": "project:local", "limit": 1,
+			})
+			var output ListGoalsOutput
+			decodeStructured(t, result, &output)
+			if !result.IsError || output.Error == nil || output.Error.Code != publicInternal {
+				t.Fatalf("missing principal output=%+v result=%+v", output, result)
+			}
+			afterGoals, afterRequests, afterSuccessors, afterPending := state.counts()
+			if afterGoals != beforeGoals || afterRequests != beforeRequests ||
+				afterSuccessors != beforeSuccessors || afterPending != beforePending {
+				t.Fatal("missing principal changed project state")
+			}
+		})
+	}
+}
+
+func TestV10MCPProjectIsolationAndForbiddenAreStable(t *testing.T) {
+	localServer, state, _ := newTestInterface(t, 16*1024)
+	local := serveOfficialClient(t, localServer)
+	createdResult := callTool(t, local, ToolGoalsCreate, map[string]any{
+		"project_ref": "project:local", "request_ref": "request:v10-isolation",
+		"statement": "private project work", "confirm": true,
+	})
+	var created CreateGoalOutput
+	decodeStructured(t, createdResult, &created)
+	if createdResult.IsError || created.Goal == nil {
+		t.Fatalf("isolation fixture = %+v result=%+v", created, createdResult)
+	}
+
+	t.Run("same principal cannot cross an explicit project scope", func(t *testing.T) {
+		otherProjectServer := newTestInterfaceForPrincipal(
+			t, state, "actor:local", "project:other", 16*1024,
+		)
+		otherProject := serveOfficialClient(t, otherProjectServer)
+		assertPublicToolError(t, callTool(t, otherProject, ToolGoalsGet, map[string]any{
+			"project_ref": "project:other", "goal_ref": created.Goal.GoalRef,
+		}), publicNotFound)
+		assertPublicToolError(t, callTool(t, otherProject, ToolArtifactsRead, map[string]any{
+			"project_ref": "project:other", "goal_ref": created.Goal.GoalRef,
+			"artifact_ref": "artifact:hidden",
+		}), publicNotFound)
+		listResult := callTool(t, otherProject, ToolGoalsList, map[string]any{
+			"project_ref": "project:other", "limit": 10,
+		})
+		var list ListGoalsOutput
+		decodeStructured(t, listResult, &list)
+		if listResult.IsError || list.Count != 0 || len(list.Goals) != 0 {
+			t.Fatalf("other project leaked goals: %+v result=%+v", list, listResult)
+		}
+		statusResult := callTool(t, otherProject, ToolSystemStatus, map[string]any{
+			"project_ref": "project:other",
+		})
+		var status SystemStatusOutput
+		decodeStructured(t, statusResult, &status)
+		if statusResult.IsError || status.Goals != 0 || status.PendingActions != 0 {
+			t.Fatalf("other project leaked status: %+v result=%+v", status, statusResult)
+		}
+	})
+
+	t.Run("principal without project membership sees not found", func(t *testing.T) {
+		outsiderServer := newTestInterfaceForPrincipal(
+			t, state, "actor:outsider", "project:other", 16*1024,
+		)
+		outsider := serveOfficialClient(t, outsiderServer)
+		beforeGoals, beforeRequests, beforeSuccessors, beforePending := state.counts()
+		assertPublicToolError(t, callTool(t, outsider, ToolGoalsGet, map[string]any{
+			"project_ref": "project:local", "goal_ref": created.Goal.GoalRef,
+		}), publicNotFound)
+		assertPublicToolError(t, callTool(t, outsider, ToolArtifactsRead, map[string]any{
+			"project_ref": "project:local", "goal_ref": created.Goal.GoalRef,
+			"artifact_ref": "artifact:hidden",
+		}), publicNotFound)
+		assertPublicToolError(t, callTool(t, outsider, ToolGoalsCreate, map[string]any{
+			"project_ref": "project:local", "request_ref": "request:v10-cross-project-write",
+			"statement": "must not be created", "confirm": true,
+		}), publicForbidden)
+		afterGoals, afterRequests, afterSuccessors, afterPending := state.counts()
+		if afterGoals != beforeGoals || afterRequests != beforeRequests ||
+			afterSuccessors != beforeSuccessors || afterPending != beforePending {
+			t.Fatal("cross-project request changed durable state")
+		}
+	})
+
+	t.Run("known member without write permission receives localized forbidden", func(t *testing.T) {
+		viewerServer := newTestInterfaceForPrincipalRole(
+			t, state, "actor:viewer", "project:local", identity.RoleViewer, 16*1024,
+		)
+		viewer := serveOfficialClient(t, viewerServer)
+		result := callTool(t, viewer, ToolGoalsCreate, map[string]any{
+			"project_ref": "project:local", "request_ref": "request:v10-viewer-write",
+			"statement": "must be forbidden", "confirm": true,
+		})
+		var output CreateGoalOutput
+		decodeStructured(t, result, &output)
+		if !result.IsError || output.Error == nil || output.Error.Code != publicForbidden ||
+			output.Error.Message != "No tiene permiso para realizar esta operación." {
+			t.Fatalf("forbidden output=%+v result=%+v", output, result)
+		}
+	})
+}
+
 func TestFailedGoalProjectsStableFailureCodeWithoutProviderDiagnostic(t *testing.T) {
 	server, state, _ := newTestInterface(t, 16*1024)
 	httpServer := httptest.NewServer(server.Handler())
@@ -202,7 +327,8 @@ func TestFailedGoalProjectsStableFailureCodeWithoutProviderDiagnostic(t *testing
 	session := connectOfficialClient(t, httpServer.URL)
 
 	createdResult := callTool(t, session, ToolGoalsCreate, map[string]any{
-		"request_ref": "request:failed-view", "statement": "fail safely", "confirm": true,
+		"project_ref": "project:local", "request_ref": "request:failed-view",
+		"statement": "fail safely", "confirm": true,
 	})
 	var created CreateGoalOutput
 	decodeStructured(t, createdResult, &created)
@@ -212,7 +338,9 @@ func TestFailedGoalProjectsStableFailureCodeWithoutProviderDiagnostic(t *testing
 	goalRef, _ := goal.NewGoalRef(created.Goal.GoalRef)
 	state.failGoal(t, goalRef, "provider.stable_failure")
 
-	result := callTool(t, session, ToolGoalsGet, map[string]any{"goal_ref": goalRef.String()})
+	result := callTool(t, session, ToolGoalsGet, map[string]any{
+		"project_ref": "project:local", "goal_ref": goalRef.String(),
+	})
 	var output GetGoalOutput
 	decodeStructured(t, result, &output)
 	if result.IsError || output.Goal == nil || output.Goal.State != string(goal.GoalStateFailed) ||

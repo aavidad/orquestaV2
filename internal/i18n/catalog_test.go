@@ -23,6 +23,12 @@ func TestBundledCatalogHasParityAndSpanishFallback(t *testing.T) {
 	if got := catalog.Text("es-ES", "error.invalid_request"); got != "La solicitud no es válida." {
 		t.Fatalf("regional text = %q", got)
 	}
+	if got := catalog.Text("es", "error.forbidden"); got != "No tiene permiso para realizar esta operación." {
+		t.Fatalf("forbidden text = %q", got)
+	}
+	if got := catalog.Text("en", "error.forbidden"); got != "You do not have permission to perform this operation." {
+		t.Fatalf("english forbidden text = %q", got)
+	}
 	if got := catalog.Text("es", "missing.key"); got != "missing.key" {
 		t.Fatalf("missing key = %q", got)
 	}

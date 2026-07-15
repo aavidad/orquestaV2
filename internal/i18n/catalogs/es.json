@@ -1,5 +1,6 @@
 {
   "error.conflict": "El estado cambió mientras se procesaba la solicitud.",
+  "error.forbidden": "No tiene permiso para realizar esta operación.",
   "error.internal": "No se pudo completar la operación.",
   "error.invalid_request": "La solicitud no es válida.",
   "error.not_found": "No se encontró el recurso solicitado.",
