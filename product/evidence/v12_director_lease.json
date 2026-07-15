@@ -1,1 +1,32 @@
-{}
+{
+  "schema_version": 3,
+  "evidence_kind": "reproducibility_descriptor",
+  "contract": "AC-V12-DIRECTOR-LEASE",
+  "result": "PASS",
+  "validation_command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV12ScopeAndExecutableContract|TestV12EvidenceBelongsOnlyToDirectorCapabilities|TestV12AcceptanceCommandRunsDirectorConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV12DirectorLease|TestV12CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/application ./internal/config ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta'",
+  "executed_at": "2026-07-15T09:25:05+02:00",
+  "execution": {
+    "argv": [
+      "sh",
+      "-c",
+      "go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV12ScopeAndExecutableContract|TestV12EvidenceBelongsOnlyToDirectorCapabilities|TestV12AcceptanceCommandRunsDirectorConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV12DirectorLease|TestV12CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/application ./internal/config ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta"
+    ],
+    "source_git_commit_oid": "5e826de0e40c29d1e84f3dc5082e11667d045caa",
+    "source_worktree_state": "detached_clean",
+    "source_status_porcelain_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "exit_code": 0,
+    "combined_output_path": "product/evidence/v12_director_lease.output.txt",
+    "combined_output_sha256": "sha256:b9223951aeef9dc07d9a76a27d32a67f6da2e2689890f77f72057b48c8e3f554",
+    "go_version": "go1.25.11"
+  },
+  "fixture_sha256": "sha256:3764e5049b9271e6c7535ddf6e2175d23fa01e43c6d43c77384cb36eea0e7223",
+  "candidate_digest_algorithm": "sha256:length-framed-git-blob-set:v1",
+  "candidate_sha256": "sha256:957ed6f231adf3467a775faa48123d658785ba352bdf82c9ec85db0c8490137e",
+  "sealed_source": {
+    "identity_kind": "sealed_git_subject_set",
+    "git_commit_oid": "5e826de0e40c29d1e84f3dc5082e11667d045caa",
+    "git_tree_oid": "d02f323181440c35268f96e73fd329ddc2b0ca2f",
+    "fixture_blob_oid": "b7c6a6ac208ca5d51a00932724f6f16fce88956b",
+    "sha256": "sha256:957ed6f231adf3467a775faa48123d658785ba352bdf82c9ec85db0c8490137e"
+  }
+}

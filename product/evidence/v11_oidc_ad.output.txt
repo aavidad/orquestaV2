@@ -1,0 +1,19 @@
+ok  	orquesta	0.105s
+ok  	orquesta/acceptance	0.036s
+ok  	orquesta/internal/identity	0.003s
+ok  	orquesta/internal/config	0.168s
+ok  	orquesta/internal/adapters/auth/bearer	0.003s
+ok  	orquesta/internal/adapters/auth/localtoken	0.004s
+ok  	orquesta/internal/adapters/auth/oidc	1.125s
+ok  	orquesta/internal/bootstrap	0.791s
+ok  	orquesta/cmd/orquesta	0.003s
+PASS ldaps_valid_chain_and_invalid_ca_rejected
+PASS valid_login_and_required_group_admission
+PASS stable_subject_principal_and_actor
+PASS wrong_password_rejected
+PASS disabled_user_rejected
+PASS removed_group_rejects_new_token_old_token_lives_to_expiry
+V11_DEX_SAMBA_AD_SMOKE=PASS
+DEX_IMAGE=ghcr.io/dexidp/dex@sha256:8499afd690c437f52301efd2b05b2455da5bd2dfc20332cd697dc9937f808462
+SAMBA_BASE_IMAGE=debian@sha256:60eac759739651111db372c07be67863818726f754804b8707c90979bda511df
+PASS cleanup_no_container_network_or_runtime_residue
