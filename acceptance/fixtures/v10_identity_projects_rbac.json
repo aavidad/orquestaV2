@@ -4,7 +4,7 @@
   "contract_id": "AC-V10-IDENTITY-PROJECTS-RBAC",
   "trusted_base_git_commit_oid": "f48066832b3813e996bf990083cf13c78e98c506",
   "product_delta_base_git_commit_oid": "0a945a61c50f4c36167cf514749ee8ebf72333fd",
-  "product_delta_sealed_git_commit_oid": "6e3aaf82bd857d5c7cf5a4ff89e92afda55456be",
+  "product_delta_sealed_git_commit_oid": "d2e86f07be4574adc1f36912f3c12082024f4868",
   "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV10ScopeAndExecutableContract|TestV10EvidenceBelongsOnlyToIdentityCapabilities|TestV10AcceptanceCommandRunsIdentityConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV10IdentityProjectsRBAC|TestV10CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/application ./internal/config ./internal/i18n ./internal/adapters/auth/localtoken ./internal/adapters/state/sqlite ./internal/interfaces/mcp ./internal/bootstrap ./cmd/orquesta'",
   "execution_argv": [
     "sh",
@@ -14,6 +14,7 @@
   "output_path": "product/evidence/v10_identity_projects_rbac.output.txt",
   "receipt_path": "product/evidence/v10_identity_projects_rbac.json",
   "candidate_subjects": [
+    "acceptance/evidence_protocol_test.go",
     "acceptance/evidence_support_test.go",
     "acceptance/fixtures/v10_identity_projects_rbac.json",
     "acceptance/v02_authority_rules_test.go",
