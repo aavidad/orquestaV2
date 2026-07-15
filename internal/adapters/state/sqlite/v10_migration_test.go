@@ -57,6 +57,59 @@ func TestV10MigrationPreservesSealedV09StateAndReopensIdempotently(t *testing.T)
 	}
 }
 
+func TestV10MigrationBindsHistoricalRequesterToAppSpecConfirmer(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "reviewed-v09", "orquesta.sqlite")
+	seedV09DatabaseForV10(t, path)
+	raw := openRawV10TestDatabase(t, path)
+	var appSpecTriggerSQL, executionTriggerSQL string
+	if err := raw.QueryRow(`SELECT sql FROM sqlite_schema
+WHERE type = 'trigger' AND name = 'app_specs_immutable_update'`).Scan(&appSpecTriggerSQL); err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.QueryRow(`SELECT sql FROM sqlite_schema
+WHERE type = 'trigger' AND name = 'executions_identity_immutable'`).Scan(&executionTriggerSQL); err != nil {
+		t.Fatal(err)
+	}
+	record, err := readRecoveryV09GoalRecord(context.Background(), raw, "goal:v10-v09")
+	if err != nil {
+		t.Fatal(err)
+	}
+	original := record.Goal.AppSpec()
+	reviewer := mustRef(t, "actor:historical-reviewer", goal.NewActorRef)
+	reviewed, err := goal.NewInitialAppSpec(goal.AppSpecInput{
+		Ref: original.Ref(), Intent: original.Intent(), Objective: original.Objective(),
+		Reason: original.Reason(), ConfirmedBy: reviewer, ConfirmedAt: original.ConfirmedAt(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustV10Exec(t, raw, `DROP TRIGGER app_specs_immutable_update`)
+	mustV10Exec(t, raw, `DROP TRIGGER executions_identity_immutable`)
+	mustV10Exec(t, raw, `UPDATE app_specs SET confirmed_by = ?, hash = ?
+WHERE ref = (SELECT app_spec_ref FROM goals WHERE ref = 'goal:v10-v09')`, reviewer.String(), reviewed.Hash())
+	mustV10Exec(t, raw, `UPDATE executions SET spec_hash = ? WHERE goal_ref = 'goal:v10-v09'`, reviewed.Hash())
+	mustV10Exec(t, raw, appSpecTriggerSQL)
+	mustV10Exec(t, raw, executionTriggerSQL)
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	repository, err := Open(context.Background(), Options{
+		Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 4,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = repository.Close() })
+	var requestedBy string
+	if err := repository.db.QueryRow(`SELECT requested_by_ref FROM goals WHERE ref = 'goal:v10-v09'`).Scan(&requestedBy); err != nil {
+		t.Fatal(err)
+	}
+	if requestedBy != "migration:v09:actor:historical-reviewer" {
+		t.Fatalf("historical requested_by=%q", requestedBy)
+	}
+}
+
 func TestV10IdentitySchemaEnforcesHierarchyRolesCASAndAppendOnlyReceipts(t *testing.T) {
 	repository, _ := openTestRepository(t)
 	database := repository.db
@@ -308,9 +361,10 @@ WHERE ref = 'migration:v09:actor:v1' AND actor_ref = 'actor:v1'
 	if err := repository.db.QueryRow(`SELECT COUNT(*) FROM project_memberships`).Scan(&memberships); err != nil {
 		t.Fatal(err)
 	}
-	if err := repository.db.QueryRow(`SELECT COUNT(*) FROM goals
-WHERE ref = 'goal:v10-v09'
-  AND requested_by_ref = 'migration:v09:' || actor_ref`).Scan(&requestedBy); err != nil {
+	if err := repository.db.QueryRow(`SELECT COUNT(*) FROM goals g
+JOIN app_specs spec ON spec.ref = g.app_spec_ref
+WHERE g.ref = 'goal:v10-v09'
+  AND g.requested_by_ref = 'migration:v09:' || spec.confirmed_by`).Scan(&requestedBy); err != nil {
 		t.Fatal(err)
 	}
 	if err := repository.db.QueryRow(`SELECT COUNT(*) FROM pragma_foreign_key_check`).Scan(&violations); err != nil {

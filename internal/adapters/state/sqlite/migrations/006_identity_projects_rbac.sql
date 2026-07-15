@@ -293,10 +293,11 @@ INSERT INTO goals_v6(
     actor_ref, project_ref, state, revision, created_at, started_at, closed_at,
     plan_generation
 )
-SELECT ref, request_ref, request_fingerprint, 'migration:v09:' || actor_ref, app_spec_ref,
-       actor_ref, project_ref, state, revision, created_at, started_at, closed_at,
-       plan_generation
-FROM goals;
+SELECT g.ref, g.request_ref, g.request_fingerprint, 'migration:v09:' || spec.confirmed_by, g.app_spec_ref,
+       g.actor_ref, g.project_ref, g.state, g.revision, g.created_at, g.started_at, g.closed_at,
+       g.plan_generation
+FROM goals g
+JOIN app_specs spec ON spec.ref = g.app_spec_ref;
 
 DROP TABLE goals;
 ALTER TABLE goals_v6 RENAME TO goals;

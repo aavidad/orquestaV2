@@ -651,8 +651,9 @@ func TestRepositoryV10MigratedActorCanProvisionNewAuthenticationPrincipal(t *tes
 		{`SELECT COUNT(*) FROM principals
           WHERE ref = 'actor:v1' AND actor_ref = 'actor:v1'
             AND authentication_method = 'local_token'`, nil, &localPrincipals},
-		{`SELECT COUNT(*) FROM goals
-          WHERE requested_by_ref = 'migration:v09:' || actor_ref`, nil, &migratedGoals},
+		{`SELECT COUNT(*) FROM goals g
+          JOIN app_specs spec ON spec.ref = g.app_spec_ref
+          WHERE g.requested_by_ref = 'migration:v09:' || spec.confirmed_by`, nil, &migratedGoals},
 		{`SELECT COUNT(*) FROM project_memberships
           WHERE principal_ref = ? AND project_ref = ? AND status = 'active'`,
 			[]any{localPrincipal.Ref.String(), project.String()}, &memberships},
