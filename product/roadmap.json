@@ -683,14 +683,24 @@
     {
       "id": "AC-V10-IDENTITY-PROJECTS-RBAC",
       "vertical": "identity_projects_rbac",
-      "status": "planned",
-      "test_ref": "planned:acceptance/v10_identity_projects_rbac_test.go",
-      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
-      "fixture": "planned:fixtures/v10_identity_projects_rbac",
+      "status": "executable",
+      "test_ref": "acceptance/v10_identity_projects_rbac_test.go",
+      "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV10ScopeAndExecutableContract|TestV10EvidenceBelongsOnlyToIdentityCapabilities|TestV10AcceptanceCommandRunsIdentityConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV10IdentityProjectsRBAC|TestV10CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/application ./internal/config ./internal/i18n ./internal/adapters/auth/localtoken ./internal/adapters/state/sqlite ./internal/interfaces/mcp ./internal/bootstrap ./cmd/orquesta'",
+      "fixture": "acceptance/fixtures/v10_identity_projects_rbac.json",
+      "receipt": "product/evidence/v10_identity_projects_rbac.json",
       "assertions": [
-        "two projects are mutually isolated",
-        "two members of one project share authorized state",
-        "default deny and revocation are audited"
+        "one request-bound authenticated principal carries an opaque actor ref and human or service kind while every project scope is explicit and untrusted payload identity never grants authority",
+        "workspace group project and repository form one persisted logical hierarchy with opaque refs unique immutable parent edges and no filesystem path Git checkout branch diff merge or forge behavior",
+        "the exact roles platform_admin project_owner project_admin contributor reviewer operator and viewer use one canonical policy with default deny",
+        "application authorizes every public project membership Goal amendment list artifact and status command or query before domain or adapter effects",
+        "two projects remain mutually isolated across direct lookup listing artifacts status idempotency and audit visibility while cross-project probes do not enumerate hidden resources",
+        "two authorized members share project state and a collaborator may read list and amend another member's terminal Goal without changing the original creator attribution",
+        "a collaborative amendment preserves the creator actor and source lineage while confirmed_by and the durable authorization audit identify the acting collaborator",
+        "human and service principals use the same membership role revision authorization and revocation model without privileged agent bypass",
+        "membership grant and revocation use expected-revision CAS idempotency and immutable audit receipts and revocation denies every later authorization without mutating protected state",
+        "the active SQLite composition persists hierarchy memberships policy revisions and audit beside lifecycle state without a second database lifecycle scheduler queue or physical state authority",
+        "the sealed V09 schema and backup migrate once and idempotently while preserving exact refs revisions generations events outbox claims receipts attestations and terminality; the configured local pair becomes project_owner and every other historical pair requires explicit mapping or fails closed",
+        "the official MCP composition binds the persisted local token to its real principal requires explicit project scope and rejects missing project spoofed actor or unauthorized access without writes while OIDC AD LDAP fairness budgets effects physical workspace Git forge web PostgreSQL S3 and multihost remain deferred"
       ]
     },
     {
@@ -2753,14 +2763,15 @@
       "kind": "orchestration",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "identity_projects_rbac",
+      "owner_context": "budgets_effects",
       "dependencies": [
         "atomic_state_outbox",
-        "credentials",
-        "recovery_backup"
+        "identity_projects_rbac",
+        "director_lease",
+        "controls"
       ],
       "acceptance_contracts": [
-        "AC-V10-IDENTITY-PROJECTS-RBAC"
+        "AC-V15-BUDGETS-EFFECTS"
       ],
       "status": "declared",
       "evidence_refs": [],

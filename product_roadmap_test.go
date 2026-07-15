@@ -762,6 +762,133 @@ func TestV09AcceptanceCommandRunsRecoveryConsumers(t *testing.T) {
 	t.Fatal("AC-V09-RECOVERY-BACKUP missing")
 }
 
+func TestProductRoadmapV10ScopeAndExecutableContract(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+
+	entries := make(map[string]roadmapEntry, len(roadmap.CapabilityEntries))
+	verticals := make(map[string]roadmapVertical, len(roadmap.Verticals))
+	var ownedAccepted []string
+	for _, vertical := range roadmap.Verticals {
+		verticals[vertical.ID] = vertical
+	}
+	for _, entry := range roadmap.CapabilityEntries {
+		entries[entry.ID] = entry
+		if entry.OwnerContext == "identity_projects_rbac" && entry.Decision == "accept" {
+			ownedAccepted = append(ownedAccepted, entry.ID)
+		}
+	}
+	sort.Strings(ownedAccepted)
+	wantOwned := []string{"GOV-19", "GOV-20", "GOV-22"}
+	if !reflect.DeepEqual(ownedAccepted, wantOwned) {
+		t.Fatalf("V10 accepted ownership = %v, want exact %v", ownedAccepted, wantOwned)
+	}
+
+	wantV10Evidence := []string{
+		"acceptance/v10_identity_projects_rbac_test.go",
+		"acceptance/fixtures/v10_identity_projects_rbac.json",
+		"product/evidence/v10_identity_projects_rbac.json",
+	}
+	for _, id := range wantOwned {
+		entry := entries[id]
+		switch entry.Status {
+		case "declared":
+			if len(entry.EvidenceRefs) != 0 {
+				t.Errorf("declared V10 capability %s has premature evidence: %v", id, entry.EvidenceRefs)
+			}
+		case "accredited":
+			if !reflect.DeepEqual(entry.EvidenceRefs, wantV10Evidence) {
+				t.Errorf("accredited V10 capability %s has wrong evidence: %v", id, entry.EvidenceRefs)
+			}
+		default:
+			t.Errorf("V10 capability %s has partial status %q", id, entry.Status)
+		}
+	}
+
+	fairness := entries["ORC-11"]
+	wantV15 := verticals["budgets_effects"]
+	if fairness.OwnerContext != "budgets_effects" ||
+		!reflect.DeepEqual(fairness.Dependencies, wantV15.DependsOn) ||
+		!reflect.DeepEqual(fairness.AcceptanceContracts, wantV15.AcceptanceContracts) ||
+		fairness.Status != "declared" || len(fairness.EvidenceRefs) != 0 {
+		t.Fatalf("ORC-11 fairness must remain wholly deferred to V15: %#v", fairness)
+	}
+
+	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV10ScopeAndExecutableContract|TestV10EvidenceBelongsOnlyToIdentityCapabilities|TestV10AcceptanceCommandRunsIdentityConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV10IdentityProjectsRBAC|TestV10CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/application ./internal/config ./internal/i18n ./internal/adapters/auth/localtoken ./internal/adapters/state/sqlite ./internal/interfaces/mcp ./internal/bootstrap ./cmd/orquesta'"
+	var contract roadmapAcceptanceContract
+	for _, candidate := range roadmap.AcceptanceContracts {
+		if candidate.ID == "AC-V10-IDENTITY-PROJECTS-RBAC" {
+			contract = candidate
+			break
+		}
+	}
+	if contract.Status != "executable" || contract.TestRef != "acceptance/v10_identity_projects_rbac_test.go" ||
+		contract.Fixture != "acceptance/fixtures/v10_identity_projects_rbac.json" ||
+		contract.Receipt != "product/evidence/v10_identity_projects_rbac.json" || contract.Command != wantCommand ||
+		len(contract.Assertions) != 12 {
+		t.Fatalf("invalid V10 executable contract: %#v", contract)
+	}
+	for _, forbidden := range []string{
+		"./...", "^testacceptance$", "/codex", "oidc", "ldap", "workspace", "git", "budget",
+		"fairness", "/web", "postgres", "s3", "multihost",
+	} {
+		if strings.Contains(strings.ToLower(contract.Command), forbidden) {
+			t.Fatalf("V10 command opens a broad or deferred surface %q: %q", forbidden, contract.Command)
+		}
+	}
+}
+
+func TestV10EvidenceBelongsOnlyToIdentityCapabilities(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+
+	owned := map[string]bool{"GOV-19": true, "GOV-20": true, "GOV-22": true}
+	v10Evidence := map[string]bool{
+		"acceptance/v10_identity_projects_rbac_test.go":       true,
+		"acceptance/fixtures/v10_identity_projects_rbac.json": true,
+		"product/evidence/v10_identity_projects_rbac.json":    true,
+	}
+	for _, entry := range roadmap.CapabilityEntries {
+		if owned[entry.ID] {
+			continue
+		}
+		for _, evidenceRef := range entry.EvidenceRefs {
+			if v10Evidence[evidenceRef] {
+				t.Errorf("unowned capability %s claims V10 evidence %q", entry.ID, evidenceRef)
+			}
+		}
+	}
+}
+
+func TestV10AcceptanceCommandRunsIdentityConsumers(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+	for _, contract := range roadmap.AcceptanceContracts {
+		if contract.ID != "AC-V10-IDENTITY-PROJECTS-RBAC" {
+			continue
+		}
+		for _, required := range []string{
+			"./acceptance",
+			"./internal/goal",
+			"./internal/identity",
+			"./internal/application",
+			"./internal/config",
+			"./internal/i18n",
+			"./internal/adapters/auth/localtoken",
+			"./internal/adapters/state/sqlite",
+			"./internal/interfaces/mcp",
+			"./internal/bootstrap",
+			"./cmd/orquesta",
+		} {
+			if !roadmapCommandHasArgument(contract.Command, required) {
+				t.Errorf("V10 acceptance omits identity consumer package %q: %q", required, contract.Command)
+			}
+		}
+		return
+	}
+	t.Fatal("AC-V10-IDENTITY-PROJECTS-RBAC missing")
+}
+
 func TestV04AccreditsOnlyGOV02AndPreservesGOV01Deferred(t *testing.T) {
 	var roadmap roadmapDocument
 	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
