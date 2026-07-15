@@ -4559,3 +4559,12 @@ BUG `BUG-ORQ-20260713-274` (cerrado, conflicto de instrucciones del fixture):
 write-set y cerró `blocked`. El fixture alineado
 `request-ref-e2e-057-004` cerró `accepted` y promocionó exactamente un commit
 canónico `528170925320eab5e64055b810959b1bd894bbf9`.
+
+BUG `BUG-ORQ-20260715-275` (cerrado, falso rojo del guard de reconstrucción):
+`scripts/check_rebuild_write_set.sh` rechazaba seis rutas ya versionadas y
+acreditadas de V08/V11 porque su allowlist seguía limitada al corte anterior:
+el test raíz de compatibilidad de `credential_ref`, el smoke real Dex/Samba y
+sus cuatro fixtures exactos. La guarda conserva el mismo `base_ref` y no abre
+prefijos generales de `scripts/` ni `testdata/`; incorpora solo esas seis rutas
+canónicas. Evidencia: `scripts/check_rebuild_write_set.sh` devuelve
+`rebuild_write_set_ok` y `git diff --check` queda verde.
