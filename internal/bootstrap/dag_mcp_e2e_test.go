@@ -15,6 +15,7 @@ import (
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"orquesta/internal/adapters/auth/localtoken"
 	"orquesta/internal/adapters/state/sqlite"
 	"orquesta/internal/application"
 	"orquesta/internal/goal"
@@ -44,7 +45,7 @@ func TestMCPCreatesAndExecutesDiamondDAGAtomically(t *testing.T) {
 
 	harness.process(t, 2)
 	afterRoot := harness.get(t, created.GoalRef)
-	status, err := harness.repository.Status(context.Background())
+	status, err := harness.repository.Status(context.Background(), harness.projectRef)
 	if err != nil || len(afterRoot.Executions) != 3 || len(afterRoot.Artifacts) != 1 || status.PendingActions != 2 {
 		t.Fatalf("atomic fan-out = executions:%d artifacts:%d status:%+v err:%v", len(afterRoot.Executions), len(afterRoot.Artifacts), status, err)
 	}
@@ -74,7 +75,8 @@ func TestMCPCreatesAndExecutesDiamondDAGAtomically(t *testing.T) {
 func TestMCPRejectsMalformedTypedPlanAsInvalidRequest(t *testing.T) {
 	harness := newDAGHarness(t, nil)
 	result := callMCPTool(t, context.Background(), harness.clientSession, mcpiface.ToolGoalsCreate, map[string]any{
-		"request_ref": "request:mcp-invalid-plan", "statement": "invalid plan", "confirm": true,
+		"project_ref": harness.projectRef.String(), "request_ref": "request:mcp-invalid-plan",
+		"statement": "invalid plan", "confirm": true,
 		"plan": map[string]any{"phases": []any{}, "work_items": []any{}},
 	})
 	var output mcpiface.CreateGoalOutput
@@ -102,7 +104,8 @@ func TestMCPRejectsUnknownContractualParentAsInvalidRequest(t *testing.T) {
 	item := planItem("child", "invalid child", "phase:work", nil, nil)
 	item["parent"] = "missing"
 	result := callMCPTool(t, context.Background(), harness.clientSession, mcpiface.ToolGoalsCreate, map[string]any{
-		"request_ref": "request:mcp-v05-parent-invalid", "statement": "reject unknown parent", "confirm": true,
+		"project_ref": harness.projectRef.String(), "request_ref": "request:mcp-v05-parent-invalid",
+		"statement": "reject unknown parent", "confirm": true,
 		"plan": map[string]any{
 			"phases":     []any{planPhase("phase-instance:work", "phase:work", "phase-template:program", nil, nil)},
 			"work_items": []any{item},
@@ -117,11 +120,9 @@ func TestMCPRejectsUnknownContractualParentAsInvalidRequest(t *testing.T) {
 
 func TestApplicationSQLiteCreatesMultiItemMaximalCohort(t *testing.T) {
 	harness := newDAGHarness(t, nil)
-	actor, _ := goal.NewActorRef("actor:local")
-	project, _ := goal.NewProjectRef("project:local")
-	result, err := harness.orchestrator.Submit(context.Background(), application.SubmitRequest{
-		RequestRef: "request:application-v05-multi", ActorRef: actor, ProjectRef: project,
-		Statement: "schedule maximal cohort", Confirm: true,
+	result, err := harness.orchestrator.Submit(context.Background(), harness.access, application.SubmitRequest{
+		RequestRef: "request:application-v05-multi",
+		Statement:  "schedule maximal cohort", Confirm: true,
 		Plan: &application.PlanSpec{
 			Phases: []application.PhaseSpec{{
 				Ref: "phase-instance:work", Key: "phase:work", TemplateRef: "phase-template:program",
@@ -312,6 +313,8 @@ func workStates(items []mcpiface.WorkItemView) map[string]string {
 type dagHarness struct {
 	orchestrator  *application.Orchestrator
 	repository    *sqlite.Repository
+	access        application.Access
+	projectRef    goal.ProjectRef
 	clock         *dagClock
 	agent         *dagAgent
 	clientSession *sdkmcp.ClientSession
@@ -328,10 +331,40 @@ func newDAGHarness(t *testing.T, failures map[string]bool) *dagHarness {
 		t.Fatalf("open DAG state: %v", err)
 	}
 	t.Cleanup(func() { _ = repository.Close() })
+	actorRef, _ := goal.NewActorRef("actor:local")
+	projectRef, _ := goal.NewProjectRef("project:local")
+	principalRef, _ := identity.NewPrincipalRef(actorRef.String())
+	principal, err := identity.NewPrincipal(
+		principalRef, actorRef, identity.PrincipalKindHuman, localtoken.AuthenticationMethod,
+	)
+	if err != nil {
+		t.Fatalf("new DAG principal: %v", err)
+	}
+	workspaceRef, _ := identity.NewWorkspaceRef(projectRef.String())
+	groupRef, _ := identity.NewGroupRef(projectRef.String())
+	repositoryRef, _ := identity.NewRepositoryRef(projectRef.String())
+	hierarchy, err := identity.NewProjectHierarchy(identity.ProjectHierarchyInput{
+		WorkspaceRef: workspaceRef, GroupRef: groupRef, GroupParentWorkspaceRef: workspaceRef,
+		ProjectRef: projectRef, ProjectParentGroupRef: groupRef,
+		RepositoryRef: repositoryRef, RepositoryParentProjectRef: projectRef,
+	})
+	if err != nil {
+		t.Fatalf("new DAG hierarchy: %v", err)
+	}
+	if err := repository.ProvisionLocalAccess(
+		context.Background(), principal, hierarchy, identity.RoleProjectOwner, clock.Now(),
+	); err != nil {
+		t.Fatalf("provision DAG access: %v", err)
+	}
+	access, err := application.NewAccess(principal, projectRef)
+	if err != nil {
+		t.Fatalf("new DAG access: %v", err)
+	}
 	agent := newDAGAgent(clock, failures)
 	artifacts := newDAGArtifacts()
 	orchestrator, err := application.New(application.Dependencies{
-		State: repository, Launcher: agent, Observer: agent, Artifacts: artifacts,
+		State: repository, Access: repository,
+		Launcher: agent, Observer: agent, Artifacts: artifacts,
 		Clock: clock, IDs: &dagSequentialIDs{}, MaxOutputBytes: 4096,
 		MaxExecutionAttempts: 3, AgentCapabilities: dagAgentCapabilities(),
 		ClaimLease: time.Minute, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
@@ -339,24 +372,29 @@ func newDAGHarness(t *testing.T, failures map[string]bool) *dagHarness {
 	if err != nil {
 		t.Fatalf("new DAG orchestrator: %v", err)
 	}
-	actorRef, _ := goal.NewActorRef("actor:local")
-	projectRef, _ := goal.NewProjectRef("project:local")
-	provider, _ := identity.NewLocalOwnerProvider(actorRef, projectRef)
 	catalog, err := i18n.LoadBundled()
 	if err != nil {
 		t.Fatalf("load catalog: %v", err)
 	}
 	server, err := mcpiface.New(mcpiface.Config{
-		Orchestrator: orchestrator, Identity: provider, Catalog: catalog, Locale: "es",
+		Orchestrator: orchestrator, Identity: identity.ContextProvider{}, Catalog: catalog, Locale: "es",
 		MaxListLimit: 10, MaxRequestBytes: 64 * 1024, Version: "dag-test",
 	})
 	if err != nil {
 		t.Fatalf("new DAG MCP: %v", err)
 	}
-	httpServer := httptest.NewServer(server.Handler())
+	httpServer := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		bound, bindErr := identity.BindPrincipal(request.Context(), principal)
+		if bindErr != nil {
+			http.Error(writer, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
+			return
+		}
+		server.Handler().ServeHTTP(writer, request.WithContext(bound))
+	}))
 	t.Cleanup(httpServer.Close)
 	return &dagHarness{
-		orchestrator: orchestrator, repository: repository, clock: clock, agent: agent,
+		orchestrator: orchestrator, repository: repository, access: access, projectRef: projectRef,
+		clock: clock, agent: agent,
 		clientSession: connectDAGClient(t, httpServer.URL),
 	}
 }
@@ -364,7 +402,8 @@ func newDAGHarness(t *testing.T, failures map[string]bool) *dagHarness {
 func (harness *dagHarness) create(t *testing.T, requestRef, statement string, plan map[string]any) mcpiface.GoalView {
 	t.Helper()
 	result := callMCPTool(t, context.Background(), harness.clientSession, mcpiface.ToolGoalsCreate, map[string]any{
-		"request_ref": requestRef, "statement": statement, "confirm": true, "plan": plan,
+		"project_ref": harness.projectRef.String(), "request_ref": requestRef,
+		"statement": statement, "confirm": true, "plan": plan,
 	})
 	var output mcpiface.CreateGoalOutput
 	decodeMCPOutput(t, result, &output)
@@ -376,7 +415,9 @@ func (harness *dagHarness) create(t *testing.T, requestRef, statement string, pl
 
 func (harness *dagHarness) get(t *testing.T, goalRef string) mcpiface.GoalView {
 	t.Helper()
-	result := callMCPTool(t, context.Background(), harness.clientSession, mcpiface.ToolGoalsGet, map[string]any{"goal_ref": goalRef})
+	result := callMCPTool(t, context.Background(), harness.clientSession, mcpiface.ToolGoalsGet, map[string]any{
+		"project_ref": harness.projectRef.String(), "goal_ref": goalRef,
+	})
 	var output mcpiface.GetGoalOutput
 	decodeMCPOutput(t, result, &output)
 	if result.IsError || output.Goal == nil {
@@ -415,7 +456,7 @@ func (ids *dagSequentialIDs) NewID(ctx context.Context, namespace string) (strin
 	ids.mu.Lock()
 	defer ids.mu.Unlock()
 	ids.next++
-	return fmt.Sprintf("%s:dag-%d", namespace, ids.next), nil
+	return fmt.Sprintf("%s:dag-%06d", namespace, ids.next), nil
 }
 
 func (harness *dagHarness) process(t *testing.T, count int) {

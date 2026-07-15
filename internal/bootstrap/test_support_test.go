@@ -188,10 +188,9 @@ func constantContentFactory(launches *atomic.Int64, content []byte) AgentFactory
 
 func submitTestGoal(t *testing.T, runtime *Runtime, requestRef string) goal.GoalRef {
 	t.Helper()
-	actor, _ := goal.NewActorRef("actor:local-owner")
-	project, _ := goal.NewProjectRef("project:default")
-	result, err := runtime.Orchestrator().Submit(context.Background(), application.SubmitRequest{
-		RequestRef: requestRef, ActorRef: actor, ProjectRef: project, Statement: "produce restart evidence",
+	access := testRuntimeAccess(t, runtime)
+	result, err := runtime.Orchestrator().Submit(context.Background(), access, application.SubmitRequest{
+		RequestRef: requestRef, Statement: "produce restart evidence",
 		Confirm: true,
 	})
 	if err != nil {
@@ -202,13 +201,10 @@ func submitTestGoal(t *testing.T, runtime *Runtime, requestRef string) goal.Goal
 
 func waitTerminalGoal(t *testing.T, runtime *Runtime, ref goal.GoalRef) application.GoalRecord {
 	t.Helper()
-	actor, _ := goal.NewActorRef("actor:local-owner")
-	project, _ := goal.NewProjectRef("project:default")
+	access := testRuntimeAccess(t, runtime)
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		record, err := runtime.Orchestrator().GetGoal(context.Background(), application.GoalQuery{
-			ActorRef: actor, ProjectRef: project, GoalRef: ref,
-		})
+		record, err := runtime.Orchestrator().GetGoal(context.Background(), access, ref)
 		if err == nil && record.Goal.IsTerminal() {
 			return record
 		}
@@ -216,6 +212,19 @@ func waitTerminalGoal(t *testing.T, runtime *Runtime, ref goal.GoalRef) applicat
 	}
 	t.Fatalf("goal %s did not become terminal", ref.String())
 	return application.GoalRecord{}
+}
+
+func testRuntimeAccess(t *testing.T, runtime *Runtime) application.Access {
+	t.Helper()
+	principal, hierarchy, err := localIdentityComposition(runtime.config)
+	if err != nil {
+		t.Fatalf("compose runtime identity: %v", err)
+	}
+	access, err := application.NewAccess(principal, hierarchy.ProjectRef())
+	if err != nil {
+		t.Fatalf("compose runtime access: %v", err)
+	}
+	return access
 }
 
 const sleeperMarker = "bootstrap-helper-sleep"

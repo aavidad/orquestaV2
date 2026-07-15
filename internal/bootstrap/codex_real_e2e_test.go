@@ -62,6 +62,7 @@ func TestRealCodexAdapterClosesGoalThroughProductionMCPServer(t *testing.T) {
 	marker := "ORQUESTA_CODEX_E2E_OK_" + suffix
 	t.Logf("real Codex evidence request_ref=%s marker=%s", requestRef, marker)
 	createdResult := callMCPTool(t, ctx, session, mcpiface.ToolGoalsCreate, map[string]any{
+		"project_ref": snapshot.ProjectDefault(),
 		"request_ref": requestRef,
 		"statement":   "Produce un artefacto de texto que contenga exactamente el marcador " + marker + ".",
 		"confirm":     true,
@@ -79,7 +80,9 @@ func TestRealCodexAdapterClosesGoalThroughProductionMCPServer(t *testing.T) {
 			t.Fatalf("wait real Codex closure: %v", ctx.Err())
 		case <-time.After(250 * time.Millisecond):
 		}
-		result := callMCPTool(t, ctx, session, mcpiface.ToolGoalsGet, map[string]any{"goal_ref": created.Goal.GoalRef})
+		result := callMCPTool(t, ctx, session, mcpiface.ToolGoalsGet, map[string]any{
+			"project_ref": snapshot.ProjectDefault(), "goal_ref": created.Goal.GoalRef,
+		})
 		var output mcpiface.GetGoalOutput
 		decodeMCPOutput(t, result, &output)
 		if result.IsError || output.Goal == nil {
@@ -96,7 +99,8 @@ func TestRealCodexAdapterClosesGoalThroughProductionMCPServer(t *testing.T) {
 		t.Fatalf("real closure lacks evidence: %+v", closed)
 	}
 	artifactResult := callMCPTool(t, ctx, session, mcpiface.ToolArtifactsRead, map[string]any{
-		"goal_ref": closed.GoalRef, "artifact_ref": closed.Artifacts[0].ArtifactRef,
+		"project_ref": snapshot.ProjectDefault(), "goal_ref": closed.GoalRef,
+		"artifact_ref": closed.Artifacts[0].ArtifactRef,
 	})
 	var artifact mcpiface.ReadArtifactOutput
 	decodeMCPOutput(t, artifactResult, &artifact)

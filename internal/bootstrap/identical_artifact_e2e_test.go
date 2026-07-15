@@ -26,13 +26,12 @@ func TestTwoGoalsCanReferenceOneContentAddressedArtifact(t *testing.T) {
 		_ = runtime.Shutdown(ctx)
 	})
 
-	actor, _ := goal.NewActorRef("actor:local-owner")
-	project, _ := goal.NewProjectRef("project:default")
+	access := testRuntimeAccess(t, runtime)
 	refs := make([]goal.GoalRef, 0, 2)
 	for index, statement := range []string{"first objective", "second objective"} {
-		result, submitErr := runtime.Orchestrator().Submit(context.Background(), application.SubmitRequest{
+		result, submitErr := runtime.Orchestrator().Submit(context.Background(), access, application.SubmitRequest{
 			RequestRef: "request:shared-cas:" + string(rune('a'+index)),
-			ActorRef:   actor, ProjectRef: project, Statement: statement, Confirm: true,
+			Statement:  statement, Confirm: true,
 		})
 		if submitErr != nil {
 			t.Fatalf("submit %d: %v", index, submitErr)
@@ -51,9 +50,7 @@ func TestTwoGoalsCanReferenceOneContentAddressedArtifact(t *testing.T) {
 	}
 	records := make([]application.GoalRecord, 0, len(refs))
 	for _, ref := range refs {
-		record, getErr := runtime.Orchestrator().GetGoal(context.Background(), application.GoalQuery{
-			ActorRef: actor, ProjectRef: project, GoalRef: ref,
-		})
+		record, getErr := runtime.Orchestrator().GetGoal(context.Background(), access, ref)
 		if getErr != nil {
 			t.Fatalf("get goal %s: %v", ref.String(), getErr)
 		}

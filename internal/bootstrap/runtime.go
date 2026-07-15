@@ -79,15 +79,7 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		return nil, err
 	}
 	clock := local.Clock{}
-	actorRef, err := goal.NewActorRef(snapshot.IdentityLocalActor())
-	if err != nil {
-		return nil, err
-	}
-	projectRef, err := goal.NewProjectRef(snapshot.ProjectDefault())
-	if err != nil {
-		return nil, err
-	}
-	identityProvider, err := identity.NewLocalOwnerProvider(actorRef, projectRef)
+	principal, hierarchy, err := localIdentityComposition(snapshot)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +141,11 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		return nil, err
 	}
 
-	authenticator, err := localtoken.Open(snapshot.IdentityLocalTokenPath())
+	credential, err := localtoken.Open(snapshot.IdentityLocalTokenPath())
+	if err != nil {
+		return nil, err
+	}
+	authenticator, err := credential.ForPrincipal(principal)
 	if err != nil {
 		return nil, err
 	}
@@ -171,6 +167,11 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 			_ = repository.Close()
 		}
 	}()
+	if err := repository.ProvisionLocalAccess(
+		ctx, principal, hierarchy, identity.RoleProjectOwner, clock.Now(),
+	); err != nil {
+		return nil, err
+	}
 
 	artifacts, err := filesystem.Open(snapshot.ArtifactFilesystemRoot())
 	if err != nil {
@@ -184,7 +185,8 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	}()
 
 	orchestrator, err := application.New(application.Dependencies{
-		State: repository, Launcher: agent, Observer: agent, Artifacts: artifacts,
+		State: repository, Access: repository,
+		Launcher: agent, Observer: agent, Artifacts: artifacts,
 		Clock: clock, IDs: local.IDGenerator{},
 		MaxOutputBytes:       snapshot.RuntimeMaxOutputBytes(),
 		MaxExecutionAttempts: uint64(snapshot.SchedulerMaxExecutionAttempts()),
@@ -201,7 +203,7 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		version = "dev"
 	}
 	interfaceServer, err := mcpiface.New(mcpiface.Config{
-		Orchestrator: orchestrator, Identity: identityProvider, Catalog: catalog,
+		Orchestrator: orchestrator, Identity: identity.ContextProvider{}, Catalog: catalog,
 		Locale: snapshot.APILocale(), MaxListLimit: int(snapshot.APIMaxListLimit()),
 		MaxRequestBytes: snapshot.ServerMaxRequestBytes(), Version: version,
 	})
@@ -235,6 +237,50 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	cleanupListener = false
 	cleanupLifecycle = false
 	return runtime, nil
+}
+
+func localIdentityComposition(snapshot config.Snapshot) (identity.Principal, identity.ProjectHierarchy, error) {
+	actorRef, err := goal.NewActorRef(snapshot.IdentityLocalActor())
+	if err != nil {
+		return identity.Principal{}, identity.ProjectHierarchy{}, err
+	}
+	principalRef, err := identity.NewPrincipalRef(actorRef.String())
+	if err != nil {
+		return identity.Principal{}, identity.ProjectHierarchy{}, err
+	}
+	principal, err := identity.NewPrincipal(
+		principalRef, actorRef, identity.PrincipalKindHuman, localtoken.AuthenticationMethod,
+	)
+	if err != nil {
+		return identity.Principal{}, identity.ProjectHierarchy{}, err
+	}
+
+	projectValue := snapshot.ProjectDefault()
+	workspaceRef, err := identity.NewWorkspaceRef(projectValue)
+	if err != nil {
+		return identity.Principal{}, identity.ProjectHierarchy{}, err
+	}
+	groupRef, err := identity.NewGroupRef(projectValue)
+	if err != nil {
+		return identity.Principal{}, identity.ProjectHierarchy{}, err
+	}
+	projectRef, err := goal.NewProjectRef(projectValue)
+	if err != nil {
+		return identity.Principal{}, identity.ProjectHierarchy{}, err
+	}
+	repositoryRef, err := identity.NewRepositoryRef(projectValue)
+	if err != nil {
+		return identity.Principal{}, identity.ProjectHierarchy{}, err
+	}
+	hierarchy, err := identity.NewProjectHierarchy(identity.ProjectHierarchyInput{
+		WorkspaceRef: workspaceRef, GroupRef: groupRef, GroupParentWorkspaceRef: workspaceRef,
+		ProjectRef: projectRef, ProjectParentGroupRef: groupRef,
+		RepositoryRef: repositoryRef, RepositoryParentProjectRef: projectRef,
+	})
+	if err != nil {
+		return identity.Principal{}, identity.ProjectHierarchy{}, err
+	}
+	return principal, hierarchy, nil
 }
 
 func (runtime *Runtime) Start(parent context.Context) error {
