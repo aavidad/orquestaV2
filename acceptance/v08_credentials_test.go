@@ -192,8 +192,8 @@ func v08AssertFixtureHeader(t *testing.T, repositoryRoot string, fixture v08Fixt
 }
 
 func v08ValidationShellBody() string {
-	return "go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV08ScopeAndExecutableContract|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV08Credentials|TestV08CandidateSubjectsCoverCommittedDelta)$\"" +
-		" && go test -mod=vendor -count=1 ./internal/credentials ./internal/adapters/credentials/local ./internal/config ./internal/goal ./internal/bootstrap ./cmd/orquesta"
+	return "go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV08ScopeAndExecutableContract|TestV08AcceptanceCommandRunsCodexCredentialIntegration|TestCredentialRefsMatchConfigAndGoalOpaqueRefs|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV08Credentials|TestV08CandidateSubjectsCoverCommittedDelta)$\"" +
+		" && go test -mod=vendor -count=1 ./internal/credentials ./internal/adapters/credentials/local ./internal/adapters/agent/codex ./internal/config ./internal/goal ./internal/bootstrap ./cmd/orquesta"
 }
 
 func v08AssertPortAndScope(t *testing.T, fixture v08Fixture) {
@@ -604,7 +604,7 @@ func v08LocalOptions(path string, fixture v08Fixture, failpoint func(string) err
 		now = parsed
 	}
 	return credentiallocal.Options{
-		Path: path, OwnerUID: os.Getuid(), MaxStoreBytes: fixture.Scenario.MaxStoreBytes,
+		Path: path, OwnerUID: os.Geteuid(), MaxStoreBytes: fixture.Scenario.MaxStoreBytes,
 		Failpoint: failpoint, Now: func() time.Time { return now },
 	}
 }
@@ -734,8 +734,8 @@ func v08AssertPrivateStore(t *testing.T, root, sourcePath string, fixture v08Fix
 		t.Fatalf("credential source must be bounded regular 0600: %v %v", sourceInfo, err)
 	}
 	stat, ok := sourceInfo.Sys().(*syscall.Stat_t)
-	if !ok || stat.Uid != uint32(os.Getuid()) || stat.Nlink != 1 {
-		t.Fatalf("credential source owner/link count = %#v, want uid=%d nlink=1", stat, os.Getuid())
+	if !ok || stat.Uid != uint32(os.Geteuid()) || stat.Nlink != 1 {
+		t.Fatalf("credential source owner/link count = %#v, want uid=%d nlink=1", stat, os.Geteuid())
 	}
 	entries, err := os.ReadDir(root)
 	if err != nil || len(entries) != 1 || entries[0].Name() != filepath.Base(sourcePath) {

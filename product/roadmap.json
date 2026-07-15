@@ -640,7 +640,7 @@
       "vertical": "credentials",
       "status": "executable",
       "test_ref": "acceptance/v08_credentials_test.go",
-      "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV08ScopeAndExecutableContract|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV08Credentials|TestV08CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/credentials ./internal/adapters/credentials/local ./internal/config ./internal/goal ./internal/bootstrap ./cmd/orquesta'",
+      "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV08ScopeAndExecutableContract|TestV08AcceptanceCommandRunsCodexCredentialIntegration|TestCredentialRefsMatchConfigAndGoalOpaqueRefs|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV08Credentials|TestV08CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/credentials ./internal/adapters/credentials/local ./internal/adapters/agent/codex ./internal/config ./internal/goal ./internal/bootstrap ./cmd/orquesta'",
       "fixture": "acceptance/fixtures/v08_credentials.json",
       "receipt": "product/evidence/v08_credentials.json",
       "assertions": [

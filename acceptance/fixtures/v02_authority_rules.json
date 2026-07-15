@@ -84,6 +84,7 @@
       "ApplyPlan",
       "Start",
       "StartWorkItem",
+      "ReplaceWorkItemExecution",
       "SucceedWorkItem",
       "FailWorkItem",
       "Close"

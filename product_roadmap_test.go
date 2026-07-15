@@ -591,7 +591,7 @@ func TestProductRoadmapV08ScopeAndExecutableContract(t *testing.T) {
 		t.Fatalf("EVD-13 must remain wholly deferred to V17 real sandbox enforcement: %#v", deferred)
 	}
 
-	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV08ScopeAndExecutableContract|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV08Credentials|TestV08CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/credentials ./internal/adapters/credentials/local ./internal/config ./internal/goal ./internal/bootstrap ./cmd/orquesta'"
+	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV08ScopeAndExecutableContract|TestV08AcceptanceCommandRunsCodexCredentialIntegration|TestCredentialRefsMatchConfigAndGoalOpaqueRefs|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV08Credentials|TestV08CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/credentials ./internal/adapters/credentials/local ./internal/adapters/agent/codex ./internal/config ./internal/goal ./internal/bootstrap ./cmd/orquesta'"
 	var contract roadmapAcceptanceContract
 	for _, candidate := range roadmap.AcceptanceContracts {
 		if candidate.ID == "AC-V08-CREDENTIALS" {
@@ -612,9 +612,25 @@ func TestProductRoadmapV08ScopeAndExecutableContract(t *testing.T) {
 	}
 	if !roadmapCommandHasArgument(contract.Command, "./acceptance") ||
 		!roadmapCommandHasArgument(contract.Command, "./internal/credentials") ||
-		!roadmapCommandHasArgument(contract.Command, "./internal/adapters/credentials/local") {
+		!roadmapCommandHasArgument(contract.Command, "./internal/adapters/credentials/local") ||
+		!roadmapCommandHasArgument(contract.Command, "./internal/adapters/agent/codex") {
 		t.Fatalf("V08 command can omit contract or replaceable backend: %q", contract.Command)
 	}
+}
+
+func TestV08AcceptanceCommandRunsCodexCredentialIntegration(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+	for _, contract := range roadmap.AcceptanceContracts {
+		if contract.ID != "AC-V08-CREDENTIALS" {
+			continue
+		}
+		if !roadmapCommandHasArgument(contract.Command, "./internal/adapters/agent/codex") {
+			t.Fatalf("V08 acceptance omits the real credential consumer package: %q", contract.Command)
+		}
+		return
+	}
+	t.Fatal("AC-V08-CREDENTIALS missing")
 }
 
 func TestV04AccreditsOnlyGOV02AndPreservesGOV01Deferred(t *testing.T) {
