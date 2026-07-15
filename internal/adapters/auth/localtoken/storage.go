@@ -14,7 +14,12 @@ import (
 	"orquesta/internal/identity"
 )
 
-const tokenByteSize = 32
+const (
+	// AuthenticationMethod is the canonical persisted identifier for this
+	// adapter. Compositions use it instead of duplicating a string literal.
+	AuthenticationMethod = "local_token"
+	tokenByteSize        = 32
+)
 
 type Authenticator struct {
 	token        string

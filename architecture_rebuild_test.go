@@ -114,6 +114,7 @@ func TestRebuildArchitecture(t *testing.T) {
 				"orquesta/internal/application",
 				"orquesta/internal/credentials",
 				"orquesta/internal/goal",
+				"orquesta/internal/identity",
 				"orquesta/internal/ports",
 			}
 			if rebuildArchitecturePathUnder(file.path, "internal/adapters/config") {
@@ -568,8 +569,9 @@ func rebuildArchitectureApplicationImportReason(importPath string) string {
 	}
 	if strings.HasPrefix(importPath, "orquesta/internal/") &&
 		importPath != "orquesta/internal/goal" &&
+		importPath != "orquesta/internal/identity" &&
 		importPath != "orquesta/internal/ports" {
-		return "internal/application may depend only on internal/goal and internal/ports"
+		return "internal/application may depend only on internal/goal, internal/identity and internal/ports"
 	}
 	switch {
 	case importPath == "net/http" || strings.HasPrefix(importPath, "net/http/"):
