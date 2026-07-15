@@ -8,6 +8,7 @@ import (
 
 	"orquesta/internal/application"
 	"orquesta/internal/goal"
+	"orquesta/internal/identity"
 )
 
 const maxSQLiteInteger = uint64(1<<63 - 1)
@@ -20,6 +21,11 @@ func validateCreateState(state application.CreateGoalState) error {
 	snapshot := state.Goal.Snapshot()
 	if _, err := goal.RestoreGoal(snapshot); err != nil {
 		return err
+	}
+	principal := state.AuthorizationReceipt.Decision().Request().Principal()
+	if identity.ValidatePrincipal(principal) != nil || principal.Ref != state.RequestedBy ||
+		principal.ActorRef != state.Goal.Actor() || principal.ActorRef != state.Goal.AppSpec().ConfirmedBy() {
+		return errors.New("sqlite.create_principal_binding_invalid")
 	}
 	if len(snapshot.WorkItems) == 0 || snapshot.State != goal.GoalStateRunning {
 		return errors.New("sqlite.create_lifecycle_invalid")
@@ -91,6 +97,11 @@ func validateAmendState(state application.AmendGoalState) error {
 	snapshot := state.Successor.Snapshot()
 	if _, err := goal.RestoreGoal(snapshot); err != nil {
 		return err
+	}
+	principal := state.AuthorizationReceipt.Decision().Request().Principal()
+	if identity.ValidatePrincipal(principal) != nil || principal.Ref != state.RequestedBy ||
+		principal.ActorRef != state.Successor.AppSpec().ConfirmedBy() {
+		return errors.New("sqlite.amend_principal_binding_invalid")
 	}
 	parentRef, hasParent := state.Successor.AppSpec().ParentRef()
 	if state.Successor.Ref() == state.SourceGoalRef || state.Successor.Project() != state.ProjectRef ||

@@ -407,6 +407,7 @@ func TestRepositoryV10RevokedCollaboratorAndReceiptSubstitutionFenceAmend(t *tes
 		t, source, "v10-stale-amend", "request:v10-stale-amend", "fingerprint:v10-stale-amend",
 		"stale amendment", "authorization fence",
 	)
+	state.Successor = v10ReconfirmSuccessor(t, source, state, contributor.ActorRef)
 	at := state.Successor.CreatedAt()
 	grantTestMembership(t, repository, owner, contributor, source.Goal.Project(), identity.RoleContributor, "grant:stale-amender", at)
 	state.RequestedBy = contributor.Ref

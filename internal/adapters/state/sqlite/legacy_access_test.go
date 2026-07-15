@@ -36,7 +36,11 @@ func authorizeLegacyAmendState(
 	state application.AmendGoalState,
 ) application.AmendGoalState {
 	t.Helper()
-	principal := legacyTestPrincipal(t, state.RequestedBy, state.Successor.Actor())
+	confirmationActor := state.Successor.AppSpec().ConfirmedBy()
+	if confirmationActor != state.Successor.Actor() {
+		state.RequestedBy = identity.PrincipalRef{}
+	}
+	principal := legacyTestPrincipal(t, state.RequestedBy, confirmationActor)
 	ensureLegacyProjectAccess(t, repository, principal, state.ProjectRef, state.Successor.CreatedAt())
 	state.RequestedBy = principal.Ref
 	state.AuthorizationReceipt = authorizeTest(
