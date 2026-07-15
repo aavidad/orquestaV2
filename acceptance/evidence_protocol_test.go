@@ -267,6 +267,38 @@ func TestSealedGitReceiptIgnoresLiveCandidateDriftAndRejectsTampering(t *testing
 			t.Fatal("sealed commit older than trusted base passed")
 		}
 	})
+
+}
+
+func TestSealedGitCandidateDigestBindsExactDeletions(t *testing.T) {
+	repositoryRoot := t.TempDir()
+	evidenceTestGit(t, repositoryRoot, "init", "-q")
+	evidenceTestGit(t, repositoryRoot, "config", "user.name", "Orquesta Evidence Test")
+	evidenceTestGit(t, repositoryRoot, "config", "user.email", "evidence-test@orquesta.invalid")
+	deletedPath := "deleted.txt"
+	evidenceTestWriteFile(t, filepath.Join(repositoryRoot, deletedPath), []byte("remove cleanly\n"), 0o644)
+	evidenceTestGit(t, repositoryRoot, "add", deletedPath)
+	evidenceTestGit(t, repositoryRoot, "commit", "-q", "-m", "add deletion subject")
+	deletionBase := strings.TrimSpace(evidenceTestGit(t, repositoryRoot, "rev-parse", "HEAD"))
+	if err := os.Remove(filepath.Join(repositoryRoot, deletedPath)); err != nil {
+		t.Fatal(err)
+	}
+	evidenceTestGit(t, repositoryRoot, "add", "-u", "--", deletedPath)
+	evidenceTestGit(t, repositoryRoot, "commit", "-q", "-m", "delete subject")
+	deletionCommit := strings.TrimSpace(evidenceTestGit(t, repositoryRoot, "rev-parse", "HEAD"))
+	if _, err := evidenceGitCandidateDigest(
+		repositoryRoot, deletionCommit, []string{deletedPath}, deletionBase,
+	); err != nil {
+		t.Fatalf("exact deletion rejected: %v", err)
+	}
+	if _, err := evidenceGitCandidateDigest(repositoryRoot, deletionCommit, []string{deletedPath}); err == nil {
+		t.Fatal("deletion without its base passed")
+	}
+	if _, err := evidenceGitCandidateDigest(
+		repositoryRoot, deletionCommit, []string{"never-existed.txt"}, deletionBase,
+	); err == nil {
+		t.Fatal("absent non-deletion passed")
+	}
 }
 
 func evidenceTestGit(t *testing.T, repositoryRoot string, args ...string) string {

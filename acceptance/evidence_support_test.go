@@ -65,15 +65,16 @@ type evidenceReceiptV3Expectation struct {
 }
 
 type evidenceFixtureEnvelopeV3 struct {
-	SchemaVersion           int      `json:"schema_version"`
-	ReceiptSchemaVersion    int      `json:"receipt_schema_version"`
-	ContractID              string   `json:"contract_id"`
-	TrustedBaseGitCommitOID string   `json:"trusted_base_git_commit_oid"`
-	Command                 string   `json:"command"`
-	ExecutionArgv           []string `json:"execution_argv"`
-	OutputPath              string   `json:"output_path"`
-	ReceiptPath             string   `json:"receipt_path"`
-	CandidateSubjects       []string `json:"candidate_subjects"`
+	SchemaVersion                int      `json:"schema_version"`
+	ReceiptSchemaVersion         int      `json:"receipt_schema_version"`
+	ContractID                   string   `json:"contract_id"`
+	TrustedBaseGitCommitOID      string   `json:"trusted_base_git_commit_oid"`
+	ProductDeltaBaseGitCommitOID string   `json:"product_delta_base_git_commit_oid"`
+	Command                      string   `json:"command"`
+	ExecutionArgv                []string `json:"execution_argv"`
+	OutputPath                   string   `json:"output_path"`
+	ReceiptPath                  string   `json:"receipt_path"`
+	CandidateSubjects            []string `json:"candidate_subjects"`
 }
 
 type evidenceGitBlobEntry struct {
@@ -228,7 +229,9 @@ func evidenceValidateReceiptV3(repositoryRoot string, expected evidenceReceiptV3
 	if err := evidenceValidateCandidateSubjects(fixture.CandidateSubjects, expected.ReceiptPath, fixture.OutputPath); err != nil {
 		return err
 	}
-	candidateSHA, err := evidenceGitCandidateDigest(repositoryRoot, sealedCommit, fixture.CandidateSubjects)
+	candidateSHA, err := evidenceGitCandidateDigest(
+		repositoryRoot, sealedCommit, fixture.CandidateSubjects, fixture.ProductDeltaBaseGitCommitOID,
+	)
 	if err != nil {
 		return err
 	}
@@ -418,15 +421,33 @@ func evidenceGitCommitTime(repositoryRoot, commitOID string) (time.Time, error) 
 	return parsed, nil
 }
 
-func evidenceGitCandidateDigest(repositoryRoot, commitOID string, subjects []string) (string, error) {
+func evidenceGitCandidateDigest(
+	repositoryRoot, commitOID string,
+	subjects []string,
+	deletionBase ...string,
+) (string, error) {
 	if err := evidenceValidateCandidateSubjectSet(subjects); err != nil {
 		return "", err
+	}
+	if len(deletionBase) > 1 {
+		return "", fmt.Errorf("candidate digest accepts at most one deletion base")
+	}
+	baseCommit := ""
+	if len(deletionBase) == 1 {
+		baseCommit = deletionBase[0]
 	}
 	digest := sha256.New()
 	for _, subject := range subjects {
 		entry, err := evidenceGitBlobAt(repositoryRoot, commitOID, subject)
 		if err != nil {
-			return "", err
+			if baseCommit == "" {
+				return "", err
+			}
+			entry, err = evidenceGitDeletedBlobAtDelta(repositoryRoot, baseCommit, commitOID, subject)
+			if err != nil {
+				return "", err
+			}
+			entry.Mode = "deleted:" + entry.Mode
 		}
 		for _, value := range [][]byte{[]byte(subject), []byte(entry.Mode), entry.Content} {
 			if err := evidenceWriteFrameRaw(digest, value); err != nil {
@@ -435,6 +456,26 @@ func evidenceGitCandidateDigest(repositoryRoot, commitOID string, subjects []str
 		}
 	}
 	return "sha256:" + hex.EncodeToString(digest.Sum(nil)), nil
+}
+
+func evidenceGitDeletedBlobAtDelta(
+	repositoryRoot, baseCommit, sealedCommit, subject string,
+) (evidenceGitBlobEntry, error) {
+	output, err := evidenceGit(
+		repositoryRoot, "diff", "--no-renames", "--name-status",
+		baseCommit, sealedCommit, "--", subject,
+	)
+	if err != nil {
+		return evidenceGitBlobEntry{}, fmt.Errorf("resolve deleted candidate %s: %w", subject, err)
+	}
+	if strings.TrimSpace(string(output)) != "D\t"+subject {
+		return evidenceGitBlobEntry{}, fmt.Errorf("candidate %s is absent but not an exact sealed deletion", subject)
+	}
+	entry, err := evidenceGitBlobAt(repositoryRoot, baseCommit, subject)
+	if err != nil {
+		return evidenceGitBlobEntry{}, fmt.Errorf("read deleted candidate %s at base: %w", subject, err)
+	}
+	return entry, nil
 }
 
 func evidenceGitBlobAt(repositoryRoot, commitOID, subject string) (evidenceGitBlobEntry, error) {
