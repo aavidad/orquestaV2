@@ -638,13 +638,23 @@
     {
       "id": "AC-V08-CREDENTIALS",
       "vertical": "credentials",
-      "status": "planned",
-      "test_ref": "planned:acceptance/v08_credentials_test.go",
-      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
-      "fixture": "planned:fixtures/v08_credentials",
+      "status": "executable",
+      "test_ref": "acceptance/v08_credentials_test.go",
+      "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV08ScopeAndExecutableContract|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV08Credentials|TestV08CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/credentials ./internal/adapters/credentials/local ./internal/config ./internal/goal ./internal/bootstrap ./cmd/orquesta'",
+      "fixture": "acceptance/fixtures/v08_credentials.json",
+      "receipt": "product/evidence/v08_credentials.json",
       "assertions": [
-        "secret scope owner purpose version rotation and revocation are enforced",
-        "secret material never appears in config logs prompts artifacts events or receipts"
+        "one transport-neutral CredentialStore port owns create use rotate and revoke while the replaceable local backend keeps state idempotency and redacted receipts atomically in one private document",
+        "credential metadata carries only opaque ref exact owner scopes purpose monotonic version status and timestamps while material remains ephemeral",
+        "use requires exact owner scope purpose and current version and rejects prefix matching caller spoof stale versions and revoked credentials",
+        "rotation is expected-version idempotent and atomically replaces old material while revocation dominates replay and prevents every later use",
+        "the local backend rejects traversal symlink hardlink wrong owner and unsafe file or directory modes and recovers every fsync crash boundary",
+        "refs metadata errors receipts and JSON or string projections never contain secret material",
+        "leak guard redacts and detects material across Goal prompt result log artifact receipt and effective-config surfaces",
+        "Goals and durable execution inputs retain only opaque credential refs and never copy secret bytes",
+        "child delivery resolves only explicitly bound credential refs with exact owner scope purpose and version into a callback-scoped environment",
+        "child environment contains only explicitly supplied public names and credential bindings with no ambient inheritance prefix expansion or returned secret payload",
+        "V08 exposes no HTTP MCP web RBAC identity or process-sandbox surface and defers full sandbox enforcement EVD-13 to V17"
       ]
     },
     {
@@ -3429,12 +3439,15 @@
       "kind": "evidence",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "credentials",
+      "owner_context": "test_attestor",
       "dependencies": [
-        "config"
+        "atomic_state_outbox",
+        "recovery_backup",
+        "budgets_effects",
+        "workspace_git"
       ],
       "acceptance_contracts": [
-        "AC-V08-CREDENTIALS"
+        "AC-V17-TEST-ATTESTOR"
       ],
       "status": "declared",
       "evidence_refs": [],

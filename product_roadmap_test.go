@@ -539,6 +539,84 @@ func TestProductRoadmapV07ScopeAndExecutableContract(t *testing.T) {
 	}
 }
 
+func TestProductRoadmapV08ScopeAndExecutableContract(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+
+	entries := make(map[string]roadmapEntry, len(roadmap.CapabilityEntries))
+	verticals := make(map[string]roadmapVertical, len(roadmap.Verticals))
+	var ownedAccepted []string
+	for _, vertical := range roadmap.Verticals {
+		verticals[vertical.ID] = vertical
+	}
+	for _, entry := range roadmap.CapabilityEntries {
+		entries[entry.ID] = entry
+		if entry.OwnerContext == "credentials" && entry.Decision == "accept" {
+			ownedAccepted = append(ownedAccepted, entry.ID)
+		}
+	}
+	sort.Strings(ownedAccepted)
+	wantOwned := []string{"EVD-11", "EVD-12", "OPS-03", "OPS-08"}
+	sort.Strings(wantOwned)
+	if !reflect.DeepEqual(ownedAccepted, wantOwned) {
+		t.Fatalf("V08 accepted ownership = %v, want exact %v", ownedAccepted, wantOwned)
+	}
+	wantV08Evidence := []string{
+		"acceptance/v08_credentials_test.go",
+		"acceptance/fixtures/v08_credentials.json",
+		"product/evidence/v08_credentials.json",
+	}
+	for _, id := range wantOwned {
+		entry := entries[id]
+		switch entry.Status {
+		case "declared":
+			if len(entry.EvidenceRefs) != 0 {
+				t.Errorf("declared V08 capability %s has premature evidence: %v", id, entry.EvidenceRefs)
+			}
+		case "accredited":
+			if !reflect.DeepEqual(entry.EvidenceRefs, wantV08Evidence) {
+				t.Errorf("accredited V08 capability %s has wrong evidence: %v", id, entry.EvidenceRefs)
+			}
+		default:
+			t.Errorf("V08 capability %s has partial status %q; contract must remain declared or become fully accredited", id, entry.Status)
+		}
+	}
+
+	deferred := entries["EVD-13"]
+	wantDeferredVertical := verticals["test_attestor"]
+	if deferred.OwnerContext != "test_attestor" ||
+		!reflect.DeepEqual(deferred.Dependencies, wantDeferredVertical.DependsOn) ||
+		!reflect.DeepEqual(deferred.AcceptanceContracts, wantDeferredVertical.AcceptanceContracts) ||
+		deferred.Status != "declared" || len(deferred.EvidenceRefs) != 0 {
+		t.Fatalf("EVD-13 must remain wholly deferred to V17 real sandbox enforcement: %#v", deferred)
+	}
+
+	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV08ScopeAndExecutableContract|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV08Credentials|TestV08CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/credentials ./internal/adapters/credentials/local ./internal/config ./internal/goal ./internal/bootstrap ./cmd/orquesta'"
+	var contract roadmapAcceptanceContract
+	for _, candidate := range roadmap.AcceptanceContracts {
+		if candidate.ID == "AC-V08-CREDENTIALS" {
+			contract = candidate
+			break
+		}
+	}
+	if contract.Status != "executable" || contract.TestRef != "acceptance/v08_credentials_test.go" ||
+		contract.Fixture != "acceptance/fixtures/v08_credentials.json" ||
+		contract.Receipt != "product/evidence/v08_credentials.json" || contract.Command != wantCommand ||
+		len(contract.Assertions) != 11 {
+		t.Fatalf("invalid V08 executable contract: %#v", contract)
+	}
+	for _, forbidden := range []string{"./...", "^TestAcceptance$", "./internal/interfaces/mcp", "./internal/identity", "http", "web", "rbac"} {
+		if strings.Contains(strings.ToLower(contract.Command), forbidden) {
+			t.Fatalf("V08 command opens a broad or deferred surface %q: %q", forbidden, contract.Command)
+		}
+	}
+	if !roadmapCommandHasArgument(contract.Command, "./acceptance") ||
+		!roadmapCommandHasArgument(contract.Command, "./internal/credentials") ||
+		!roadmapCommandHasArgument(contract.Command, "./internal/adapters/credentials/local") {
+		t.Fatalf("V08 command can omit contract or replaceable backend: %q", contract.Command)
+	}
+}
+
 func TestV04AccreditsOnlyGOV02AndPreservesGOV01Deferred(t *testing.T) {
 	var roadmap roadmapDocument
 	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
