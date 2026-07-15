@@ -633,6 +633,110 @@ func TestV08AcceptanceCommandRunsCodexCredentialIntegration(t *testing.T) {
 	t.Fatal("AC-V08-CREDENTIALS missing")
 }
 
+func TestProductRoadmapV09ScopeAndExecutableContract(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+
+	entries := make(map[string]roadmapEntry, len(roadmap.CapabilityEntries))
+	verticals := make(map[string]roadmapVertical, len(roadmap.Verticals))
+	var ownedAccepted []string
+	for _, vertical := range roadmap.Verticals {
+		verticals[vertical.ID] = vertical
+	}
+	for _, entry := range roadmap.CapabilityEntries {
+		entries[entry.ID] = entry
+		if entry.OwnerContext == "recovery_backup" && entry.Decision == "accept" {
+			ownedAccepted = append(ownedAccepted, entry.ID)
+		}
+	}
+	sort.Strings(ownedAccepted)
+	wantOwned := []string{"EVD-15", "OPS-14"}
+	if !reflect.DeepEqual(ownedAccepted, wantOwned) {
+		t.Fatalf("V09 accepted ownership = %v, want exact %v", ownedAccepted, wantOwned)
+	}
+	wantV09Evidence := []string{
+		"acceptance/v09_recovery_backup_test.go",
+		"acceptance/fixtures/v09_recovery_backup.json",
+		"product/evidence/v09_recovery_backup.json",
+	}
+	for _, id := range wantOwned {
+		entry := entries[id]
+		switch entry.Status {
+		case "declared":
+			if len(entry.EvidenceRefs) != 0 {
+				t.Errorf("declared V09 capability %s has premature evidence: %v", id, entry.EvidenceRefs)
+			}
+		case "accredited":
+			if !reflect.DeepEqual(entry.EvidenceRefs, wantV09Evidence) {
+				t.Errorf("accredited V09 capability %s has wrong evidence: %v", id, entry.EvidenceRefs)
+			}
+		default:
+			t.Errorf("V09 capability %s has partial status %q; contract must remain declared or become fully accredited", id, entry.Status)
+		}
+	}
+
+	deferred := entries["OPS-15"]
+	wantDeferredVertical := verticals["operations_telemetry"]
+	if deferred.OwnerContext != "operations_telemetry" ||
+		!reflect.DeepEqual(deferred.Dependencies, wantDeferredVertical.DependsOn) ||
+		!reflect.DeepEqual(deferred.AcceptanceContracts, wantDeferredVertical.AcceptanceContracts) ||
+		deferred.Status != "declared" || len(deferred.EvidenceRefs) != 0 {
+		t.Fatalf("OPS-15 must remain wholly deferred to V32 operation and rollback: %#v", deferred)
+	}
+
+	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV09ScopeAndExecutableContract|TestV09AcceptanceCommandRunsRecoveryConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV09RecoveryBackup|TestV09CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/application ./internal/ports ./internal/adapters/state/sqlite ./internal/adapters/artifact/filesystem ./internal/config ./internal/adapters/config/toml ./internal/adapters/config/jsonimport ./cmd/orquesta ./internal/bootstrap'"
+	var contract roadmapAcceptanceContract
+	for _, candidate := range roadmap.AcceptanceContracts {
+		if candidate.ID == "AC-V09-RECOVERY-BACKUP" {
+			contract = candidate
+			break
+		}
+	}
+	if contract.Status != "executable" || contract.TestRef != "acceptance/v09_recovery_backup_test.go" ||
+		contract.Fixture != "acceptance/fixtures/v09_recovery_backup.json" ||
+		contract.Receipt != "product/evidence/v09_recovery_backup.json" || contract.Command != wantCommand ||
+		len(contract.Assertions) != 12 {
+		t.Fatalf("invalid V09 executable contract: %#v", contract)
+	}
+	for _, forbidden := range []string{
+		"./...", "^testacceptance$", "./internal/interfaces/mcp", "./internal/identity",
+		"./internal/credentials", "./internal/adapters/credentials", "codex", "http", "web", "rbac",
+		"postgres", "s3", "install", "update", "rollback",
+	} {
+		if strings.Contains(strings.ToLower(contract.Command), forbidden) {
+			t.Fatalf("V09 command opens a broad or deferred surface %q: %q", forbidden, contract.Command)
+		}
+	}
+}
+
+func TestV09AcceptanceCommandRunsRecoveryConsumers(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+	for _, contract := range roadmap.AcceptanceContracts {
+		if contract.ID != "AC-V09-RECOVERY-BACKUP" {
+			continue
+		}
+		for _, required := range []string{
+			"./acceptance",
+			"./internal/application",
+			"./internal/ports",
+			"./internal/adapters/state/sqlite",
+			"./internal/adapters/artifact/filesystem",
+			"./internal/config",
+			"./internal/adapters/config/toml",
+			"./internal/adapters/config/jsonimport",
+			"./internal/bootstrap",
+			"./cmd/orquesta",
+		} {
+			if !roadmapCommandHasArgument(contract.Command, required) {
+				t.Errorf("V09 acceptance omits recovery consumer package %q: %q", required, contract.Command)
+			}
+		}
+		return
+	}
+	t.Fatal("AC-V09-RECOVERY-BACKUP missing")
+}
+
 func TestV04AccreditsOnlyGOV02AndPreservesGOV01Deferred(t *testing.T) {
 	var roadmap roadmapDocument
 	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
@@ -724,7 +828,7 @@ func TestProductRoadmapExecutableCommandsRunDeclaredTestPackage(t *testing.T) {
 
 func roadmapCommandHasArgument(command, wanted string) bool {
 	for _, argument := range strings.Fields(command) {
-		if argument == wanted {
+		if strings.Trim(argument, "'\"") == wanted {
 			return true
 		}
 	}

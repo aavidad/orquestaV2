@@ -660,14 +660,24 @@
     {
       "id": "AC-V09-RECOVERY-BACKUP",
       "vertical": "recovery_backup",
-      "status": "planned",
-      "test_ref": "planned:acceptance/v09_recovery_backup_test.go",
-      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
-      "fixture": "planned:fixtures/v09_recovery_backup",
+      "status": "executable",
+      "test_ref": "acceptance/v09_recovery_backup_test.go",
+      "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV09ScopeAndExecutableContract|TestV09AcceptanceCommandRunsRecoveryConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV09RecoveryBackup|TestV09CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/application ./internal/ports ./internal/adapters/state/sqlite ./internal/adapters/artifact/filesystem ./internal/config ./internal/adapters/config/toml ./internal/adapters/config/jsonimport ./cmd/orquesta ./internal/bootstrap'",
+      "fixture": "acceptance/fixtures/v09_recovery_backup.json",
+      "receipt": "product/evidence/v09_recovery_backup.json",
       "assertions": [
-        "SQLite repository contract is green",
-        "backup and restore preserve refs revisions outbox evidence and terminality",
-        "shutdown leaves no owned residue"
+        "one transport-neutral StateRecovery port creates verifies and restores backups without extending StateRepository or creating another lifecycle state authority",
+        "SQLite uses its online backup API so a concurrent atomic write appears wholly before or wholly after the immutable snapshot and raw database WAL or SHM copying is forbidden",
+        "the backup is content addressed and its manifest is derivable from immutable artifact ref digest media type byte size schema and semantic inventory without becoming a second authority",
+        "restore targets only a new inactive private destination and rejects the active source same path existing target traversal symlink hardlink wrong owner and unsafe modes before effects",
+        "snapshot digest SQLite integrity foreign keys migration history and every reconstructed domain aggregate validate before the restored destination is published",
+        "restored state preserves exact Intent AppSpec Goal phase WorkItem execution event outbox claim receipt attestation and artifact metadata refs revisions generations hashes and terminality",
+        "replay after restore never reexecutes terminal work or redelivers consumed outbox actions while pending work remains reclaimable exactly once with fencing",
+        "corruption truncation digest mismatch cancellation and every injected backup or restore crash boundary leave no published partial target temporary sidecar or open owned handle",
+        "SQLite migrations remain versioned checksummed and transactional while non-mutating dry run belongs only to the one-shot JSON configuration importer and a failed effect preserves the previous schema data and receipts",
+        "the one-shot strict orquesta_config.v0 JSON to TOML importer uses one declarative legacy path to canonical key transform and disposition table accounts for every source leaf exactly once and never becomes a runtime bootstrap input",
+        "dry run blocks apply with zero writes when any leaf is unresolved or secret_required including the current full legacy shape which remains not_ready until V34 proves unresolved equals zero",
+        "a compatible orquesta_config.v0 fixture applies only through the V07 Manager with CAS idempotency and equivalent resolved effective configuration while CredentialStore material and artifact blobs remain outside state backup and public bindings install update rollback PostgreSQL S3 identity RBAC and global shutdown remain deferred"
       ]
     },
     {
@@ -5557,13 +5567,20 @@
       "kind": "operations",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "recovery_backup",
+      "owner_context": "operations_telemetry",
       "dependencies": [
-        "atomic_state_outbox",
-        "credentials"
+        "config",
+        "credentials",
+        "recovery_backup",
+        "identity_projects_rbac",
+        "oidc_ad",
+        "codex_e2e",
+        "command_registry",
+        "deploy_notifications",
+        "postgres_s3_multihost"
       ],
       "acceptance_contracts": [
-        "AC-V09-RECOVERY-BACKUP"
+        "AC-V32-OPERATIONS-TELEMETRY"
       ],
       "status": "declared",
       "evidence_refs": [],

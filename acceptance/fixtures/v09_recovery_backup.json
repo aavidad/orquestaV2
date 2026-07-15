@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "receipt_schema_version": 3,
+  "contract_id": "AC-V09-RECOVERY-BACKUP",
+  "trusted_base_git_commit_oid": "e198a02fd3b1f5c0d57f9fe2c427401af65ac1ee",
+  "product_delta_base_git_commit_oid": "0000000000000000000000000000000000000000",
+  "product_delta_sealed_git_commit_oid": "0000000000000000000000000000000000000000",
+  "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV09ScopeAndExecutableContract|TestV09AcceptanceCommandRunsRecoveryConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV09RecoveryBackup|TestV09CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/application ./internal/ports ./internal/adapters/state/sqlite ./internal/adapters/artifact/filesystem ./internal/config ./internal/adapters/config/toml ./internal/adapters/config/jsonimport ./cmd/orquesta ./internal/bootstrap'",
+  "execution_argv": [
+    "sh",
+    "-c",
+    "go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV09ScopeAndExecutableContract|TestV09AcceptanceCommandRunsRecoveryConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV09RecoveryBackup|TestV09CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/application ./internal/ports ./internal/adapters/state/sqlite ./internal/adapters/artifact/filesystem ./internal/config ./internal/adapters/config/toml ./internal/adapters/config/jsonimport ./cmd/orquesta ./internal/bootstrap"
+  ],
+  "output_path": "product/evidence/v09_recovery_backup.output.txt",
+  "receipt_path": "product/evidence/v09_recovery_backup.json",
+  "candidate_subjects": [],
+  "owned_capability_ids": [
+    "EVD-15",
+    "OPS-14"
+  ],
+  "deferred_capabilities": [
+    {"id": "OPS-11", "owner": "postgres_s3_multihost", "acceptance_contract": "AC-V31-POSTGRES-S3-MULTIHOST"},
+    {"id": "OPS-13", "owner": "postgres_s3_multihost", "acceptance_contract": "AC-V31-POSTGRES-S3-MULTIHOST"},
+    {"id": "OPS-15", "owner": "operations_telemetry", "acceptance_contract": "AC-V32-OPERATIONS-TELEMETRY"},
+    {"id": "OPS-16", "owner": "operations_telemetry", "acceptance_contract": "AC-V32-OPERATIONS-TELEMETRY"}
+  ],
+  "scenario": {
+    "base_time": "2026-07-15T04:00:00Z",
+    "backup_media_type": "application/vnd.sqlite3",
+    "schema_ref_prefix": "state-schema:sqlite:sha256:",
+    "backup_ref_prefix": "backup:sha256:",
+    "target_ref": "recovery-target:v09-restored",
+    "failpoints": [
+      "after_first_backup_step",
+      "after_backup_sync",
+      "after_backup_publish",
+      "after_restore_sync",
+      "after_restore_publish"
+    ],
+    "real_legacy_fixture": "acceptance/fixtures/v09_orquesta_config_v0_current_shape.json",
+    "real_legacy_fixture_sha256": "sha256:f0f2ba4ceba37f5b7e18227d10665bd04c7b84c819250c05c00436d595de0e8b",
+    "real_legacy_leaf_paths": [
+      "autoprogramming.checkpoint_only_high_consumption_tokens",
+      "operator_director_mailbox.enabled",
+      "runtime_models.enabled",
+      "schema_version",
+      "server.addr",
+      "server.state_dir"
+    ]
+  },
+  "assertions": [
+    "StateRecovery is a three-operation neutral port separate from StateRepository",
+    "SQLite online backup is transactionally consistent during a concurrent commit",
+    "backup is content-addressed and its minimal manifest is verified before publication",
+    "restore accepts only a new private offline target and re-verifies the snapshot",
+    "integrity foreign keys migration checksums and domain reconstruction fail closed",
+    "roundtrip preserves exact lifecycle rows refs revisions generations evidence and terminality",
+    "terminal work stays terminal and pending fenced work remains recoverable exactly once",
+    "corruption cancellation unsafe filesystem shapes and failpoints leave no partial publication",
+    "SQLite migrations remain versioned checksummed transactional and non-mutating during inspection",
+    "orquesta_config.v0 import accounts for every leaf through a declarative disposition table",
+    "supported import applies once through Manager while unresolved or secret input performs zero writes",
+    "credentials artifact blobs public bindings PostgreSQL identity and global operations remain deferred"
+  ]
+}
