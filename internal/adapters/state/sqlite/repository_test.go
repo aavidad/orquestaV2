@@ -55,7 +55,7 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 	if err := repository.db.QueryRow("PRAGMA user_version").Scan(&userVersion); err != nil {
 		t.Fatalf("user_version: %v", err)
 	}
-	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != 5 {
+	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != 6 {
 		t.Fatalf("pragmas = fk:%d busy:%d version:%d", foreignKeys, busyTimeout, userVersion)
 	}
 
@@ -73,9 +73,11 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 		tables = append(tables, name)
 	}
 	wantTables := []string{
-		"action_consumption_receipts", "app_specs", "artifacts", "attestations", "events", "executions", "goal_phase_contract_refs",
-		"goal_phases", "goals", "intents", "outbox", "schema_migrations",
+		"action_consumption_receipts", "app_specs", "artifacts", "attestations", "authorization_receipts",
+		"events", "executions", "goal_phase_contract_refs", "goal_phases", "goals", "groups", "intents",
+		"membership_audit_receipts", "outbox", "principals", "project_memberships", "projects", "repositories", "schema_migrations",
 		"work_item_dependencies", "work_item_fences", "work_item_requirement_refs", "work_item_write_scopes", "work_items",
+		"workspaces",
 	}
 	if !reflect.DeepEqual(tables, wantTables) {
 		t.Fatalf("tables = %#v, want %#v", tables, wantTables)
@@ -186,7 +188,7 @@ func TestRepositoryMigratesPopulatedV1StateToDAGSchema(t *testing.T) {
 		len(closed.Executions) != 1 || len(closed.Artifacts) != 1 || len(closed.Attestations) != 1 {
 		t.Fatalf("migrated closed goal = %+v err=%v", closed, err)
 	}
-	status, err := repository.Status(context.Background())
+	status, err := repository.Status(context.Background(), running.Goal.Project())
 	if err != nil || status.PendingActions != 1 || status.Goals != 2 {
 		t.Fatalf("migrated status = %+v err=%v", status, err)
 	}
@@ -319,13 +321,13 @@ claim_token, claimed_by, claimed_until, attempt, completed_at
 func TestRepositoryCreateGetListScopedIdempotencyAndRestart(t *testing.T) {
 	repository, path := openTestRepository(t)
 	first := newCreateFixture(t, "first", "request:shared", "fingerprint:first", "actor:local-owner", "project:default")
-	record, created, err := repository.CreateGoal(context.Background(), first)
+	record, created, err := createLegacyGoal(t, repository, first)
 	if err != nil || !created {
 		t.Fatalf("create first = created:%v err:%v", created, err)
 	}
 	assertRecordMatchesCreate(t, record, first)
 
-	replayed, created, err := repository.CreateGoal(context.Background(), first)
+	replayed, created, err := createLegacyGoal(t, repository, first)
 	if err != nil || created || replayed.Goal.Ref() != first.Goal.Ref() {
 		t.Fatalf("idempotent replay = created:%v ref:%s err:%v", created, replayed.Goal.Ref().String(), err)
 	}
@@ -333,7 +335,7 @@ func TestRepositoryCreateGetListScopedIdempotencyAndRestart(t *testing.T) {
 		t, "first-retry", "request:shared", "fingerprint:first", "actor:local-owner", "project:default",
 		first.Goal.AppSpec().Intent().Statement(),
 	)
-	replayed, created, err = repository.CreateGoal(context.Background(), freshReplay)
+	replayed, created, err = createLegacyGoal(t, repository, freshReplay)
 	if err != nil || created || replayed.Goal.Ref() != first.Goal.Ref() {
 		t.Fatalf("semantic replay with fresh refs = created:%v ref:%s err:%v", created, replayed.Goal.Ref().String(), err)
 	}
@@ -341,17 +343,17 @@ func TestRepositoryCreateGetListScopedIdempotencyAndRestart(t *testing.T) {
 		t, "first-conflict", "request:shared", "fingerprint:first", "actor:local-owner", "project:default",
 		"different statement with forged fingerprint",
 	)
-	if _, _, err := repository.CreateGoal(context.Background(), semanticConflict); !application.IsStateError(err, application.StateConflict) {
+	if _, _, err := createLegacyGoal(t, repository, semanticConflict); !application.IsStateError(err, application.StateConflict) {
 		t.Fatalf("semantic replay conflict = %v", err)
 	}
 	conflicting := first
 	conflicting.RequestFingerprint = "fingerprint:changed"
-	if _, _, err := repository.CreateGoal(context.Background(), conflicting); !application.IsStateError(err, application.StateConflict) {
+	if _, _, err := createLegacyGoal(t, repository, conflicting); !application.IsStateError(err, application.StateConflict) {
 		t.Fatalf("fingerprint conflict = %v", err)
 	}
 
 	second := newCreateFixture(t, "second", "request:shared", "fingerprint:second", "actor:local-owner", "project:other")
-	if _, created, err := repository.CreateGoal(context.Background(), second); err != nil || !created {
+	if _, created, err := createLegacyGoal(t, repository, second); err != nil || !created {
 		t.Fatalf("same request in other scope = created:%v err:%v", created, err)
 	}
 	got, err := repository.GetGoal(context.Background(), first.Goal.Ref())
@@ -359,7 +361,7 @@ func TestRepositoryCreateGetListScopedIdempotencyAndRestart(t *testing.T) {
 		t.Fatalf("get: %v", err)
 	}
 	assertRecordMatchesCreate(t, got, first)
-	listed, err := repository.ListGoals(context.Background(), first.Goal.Actor(), first.Goal.Project(), 10)
+	listed, err := repository.ListGoals(context.Background(), first.Goal.Project(), 10)
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -370,11 +372,11 @@ func TestRepositoryCreateGetListScopedIdempotencyAndRestart(t *testing.T) {
 		listed[0].AppSpecGeneration != first.Goal.AppSpec().Generation() || listed[0].SpecHash != first.Goal.SpecHash() {
 		t.Fatalf("listed AppSpec binding = %#v", listed[0])
 	}
-	status, err := repository.Status(context.Background())
+	status, err := repository.Status(context.Background(), first.Goal.Project())
 	if err != nil {
 		t.Fatalf("status: %v", err)
 	}
-	if status.Goals != 2 || status.RunningGoals != 2 || status.PendingActions != 2 || status.QuarantinedActions != 0 {
+	if status.Goals != 1 || status.RunningGoals != 1 || status.PendingActions != 1 || status.QuarantinedActions != 0 {
 		t.Fatalf("status before restart = %+v", status)
 	}
 
@@ -393,7 +395,7 @@ func TestRepositoryCreateGetListScopedIdempotencyAndRestart(t *testing.T) {
 		t.Fatalf("get after restart: %v", err)
 	}
 	assertRecordMatchesCreate(t, got, first)
-	if _, created, err := repository.CreateGoal(context.Background(), first); err != nil || created {
+	if _, created, err := createLegacyGoal(t, repository, first); err != nil || created {
 		t.Fatalf("replay after restart = created:%v err:%v", created, err)
 	}
 	for table, want := range map[string]int{"app_specs": 2, "goals": 2, "intents": 2, "executions": 2, "events": 2, "outbox": 2} {
@@ -403,28 +405,28 @@ func TestRepositoryCreateGetListScopedIdempotencyAndRestart(t *testing.T) {
 	}
 }
 
-func TestRepositoryListGoalsScopesActorBeforeLimit(t *testing.T) {
+func TestRepositoryListGoalsScopesProjectBeforeLimit(t *testing.T) {
 	repository, _ := openTestRepository(t)
 	owner := newCreateFixture(t, "a-owner", "request:owner", "fingerprint:owner", "actor:owner", "project:shared")
 	other := newCreateFixture(t, "z-other", "request:other", "fingerprint:other", "actor:other", "project:shared")
 	for _, state := range []application.CreateGoalState{owner, other} {
-		if _, created, err := repository.CreateGoal(context.Background(), state); err != nil || !created {
+		if _, created, err := createLegacyGoal(t, repository, state); err != nil || !created {
 			t.Fatalf("create %s = created:%v err:%v", state.Goal.Ref(), created, err)
 		}
 	}
 
-	listed, err := repository.ListGoals(context.Background(), owner.Goal.Actor(), owner.Goal.Project(), 1)
+	listed, err := repository.ListGoals(context.Background(), owner.Goal.Project(), 1)
 	if err != nil {
 		t.Fatalf("list owner: %v", err)
 	}
-	if len(listed) != 1 || listed[0].Ref != owner.Goal.Ref() {
-		t.Fatalf("actor-scoped list = %#v", listed)
+	if len(listed) != 1 || listed[0].Ref != other.Goal.Ref() {
+		t.Fatalf("project-scoped list = %#v", listed)
 	}
 }
 
 func TestRepositoryConcurrentCreateIsIdempotent(t *testing.T) {
 	repository, _ := openTestRepository(t)
-	state := newCreateFixture(t, "concurrent", "request:concurrent", "fingerprint:concurrent", "actor:local-owner", "project:default")
+	state := authorizeLegacyCreateState(t, repository, newCreateFixture(t, "concurrent", "request:concurrent", "fingerprint:concurrent", "actor:local-owner", "project:default"))
 	const callers = 12
 	start := make(chan struct{})
 	errorsByCall := make(chan error, callers)
@@ -466,20 +468,20 @@ func TestRepositoryRejectsInvalidExecutionAndLifecycleContracts(t *testing.T) {
 
 	deadline := newCreateFixture(t, "deadline", "request:deadline", "fingerprint:deadline", "actor:local-owner", "project:default")
 	deadline.Executions[0].DeadlineAt = deadline.Executions[0].CreatedAt
-	if _, _, err := repository.CreateGoal(context.Background(), deadline); !application.IsStateError(err, application.StateInvalid) {
+	if _, _, err := createLegacyGoal(t, repository, deadline); !application.IsStateError(err, application.StateInvalid) {
 		t.Fatalf("non-strict deadline = %v", err)
 	}
 
 	queuedProvider := newCreateFixture(t, "queued-provider", "request:queued-provider", "fingerprint:queued-provider", "actor:local-owner", "project:default")
 	queuedProvider.Executions[0].ProviderRef = "provider:unexpected"
 	queuedProvider.Executions[0].ExternalRef = "external:unexpected"
-	if _, _, err := repository.CreateGoal(context.Background(), queuedProvider); !application.IsStateError(err, application.StateInvalid) {
+	if _, _, err := createLegacyGoal(t, repository, queuedProvider); !application.IsStateError(err, application.StateInvalid) {
 		t.Fatalf("queued provider fields = %v", err)
 	}
 
 	observeCreate := newCreateFixture(t, "observe-create", "request:observe-create", "fingerprint:observe-create", "actor:local-owner", "project:default")
 	observeCreate.Actions[0].Kind = application.ActionObserveAgent
-	if _, _, err := repository.CreateGoal(context.Background(), observeCreate); !application.IsStateError(err, application.StateInvalid) {
+	if _, _, err := createLegacyGoal(t, repository, observeCreate); !application.IsStateError(err, application.StateInvalid) {
 		t.Fatalf("observe action on create = %v", err)
 	}
 
@@ -493,12 +495,12 @@ func TestRepositoryRejectsInvalidExecutionAndLifecycleContracts(t *testing.T) {
 		t.Fatalf("restore pending goal: %v", err)
 	}
 	pendingCreate.Goal = pendingGoal
-	if _, _, err := repository.CreateGoal(context.Background(), pendingCreate); !application.IsStateError(err, application.StateInvalid) {
+	if _, _, err := createLegacyGoal(t, repository, pendingCreate); !application.IsStateError(err, application.StateInvalid) {
 		t.Fatalf("pending goal on create = %v", err)
 	}
 
 	state := newCreateFixture(t, "lifecycle", "request:lifecycle", "fingerprint:lifecycle", "actor:local-owner", "project:default")
-	if _, _, err := repository.CreateGoal(context.Background(), state); err != nil {
+	if _, _, err := createLegacyGoal(t, repository, state); err != nil {
 		t.Fatalf("create valid lifecycle fixture: %v", err)
 	}
 	claim := mustClaim(t, repository, "worker:lifecycle", "claim:lifecycle", state.Executions[0].CreatedAt)
@@ -617,7 +619,7 @@ func TestValidateExecutionRejectsIncoherentStates(t *testing.T) {
 func TestRepositoryClaimIsAtomicRecoversExpiredLeaseAndQuarantines(t *testing.T) {
 	repository, path := openTestRepository(t)
 	state := newCreateFixture(t, "claim", "request:claim", "fingerprint:claim", "actor:local-owner", "project:default")
-	if _, _, err := repository.CreateGoal(context.Background(), state); err != nil {
+	if _, _, err := createLegacyGoal(t, repository, state); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	now := state.Executions[0].CreatedAt.Add(time.Second)
@@ -707,7 +709,7 @@ func TestRepositoryClaimIsAtomicRecoversExpiredLeaseAndQuarantines(t *testing.T)
 	if err := repository.QuarantineAction(context.Background(), quarantine); err != nil {
 		t.Fatalf("quarantine: %v", err)
 	}
-	status, err := repository.Status(context.Background())
+	status, err := repository.Status(context.Background(), state.Goal.Project())
 	if err != nil {
 		t.Fatalf("status: %v", err)
 	}
@@ -722,7 +724,7 @@ func TestRepositoryClaimIsAtomicRecoversExpiredLeaseAndQuarantines(t *testing.T)
 		t.Fatalf("reopen: %v", err)
 	}
 	t.Cleanup(func() { _ = repository.Close() })
-	status, err = repository.Status(context.Background())
+	status, err = repository.Status(context.Background(), state.Goal.Project())
 	if err != nil || status.QuarantinedActions != 1 {
 		t.Fatalf("quarantine after restart = %+v err:%v", status, err)
 	}
@@ -731,7 +733,7 @@ func TestRepositoryClaimIsAtomicRecoversExpiredLeaseAndQuarantines(t *testing.T)
 func TestRepositoryMutationsAreAtomicCASAndRestoreEvidence(t *testing.T) {
 	repository, path := openTestRepository(t)
 	state := newCreateFixture(t, "success", "request:success", "fingerprint:success", "actor:local-owner", "project:default")
-	if _, _, err := repository.CreateGoal(context.Background(), state); err != nil {
+	if _, _, err := createLegacyGoal(t, repository, state); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	launchClaim := mustClaim(t, repository, "worker:launch", "claim:launch", state.Executions[0].CreatedAt)
@@ -902,7 +904,7 @@ func TestRepositoryMutationsAreAtomicCASAndRestoreEvidence(t *testing.T) {
 	if err != nil || terminal.Goal.State() != goal.GoalStateSucceeded || len(terminal.Artifacts) != 1 {
 		t.Fatalf("terminal after restart = %+v err:%v", terminal, err)
 	}
-	status, err := repository.Status(context.Background())
+	status, err := repository.Status(context.Background(), state.Goal.Project())
 	if err != nil || status.RunningGoals != 0 || status.PendingActions != 0 {
 		t.Fatalf("terminal status = %+v err:%v", status, err)
 	}
@@ -911,7 +913,7 @@ func TestRepositoryMutationsAreAtomicCASAndRestoreEvidence(t *testing.T) {
 func TestRepositoryRecordsFailedGoalAtomically(t *testing.T) {
 	repository, _ := openTestRepository(t)
 	state := newCreateFixture(t, "failed", "request:failed", "fingerprint:failed", "actor:local-owner", "project:default")
-	if _, _, err := repository.CreateGoal(context.Background(), state); err != nil {
+	if _, _, err := createLegacyGoal(t, repository, state); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 	claim := mustClaim(t, repository, "worker:failed", "claim:failed", state.Executions[0].CreatedAt)
@@ -978,7 +980,7 @@ func TestRepositoryRecordsFailedGoalAtomically(t *testing.T) {
 func TestRepositoryRoundTripsDAGPlanAndMultipleWorkItems(t *testing.T) {
 	repository, path := openTestRepository(t)
 	state := newDAGCreateFixture(t)
-	created, fresh, err := repository.CreateGoal(context.Background(), state)
+	created, fresh, err := createLegacyGoal(t, repository, state)
 	if err != nil || !fresh {
 		t.Fatalf("create DAG = fresh:%v err:%v", fresh, err)
 	}
@@ -1003,7 +1005,7 @@ func TestRepositoryRoundTripsDAGPlanAndMultipleWorkItems(t *testing.T) {
 func TestRepositoryRoundTripsPhaseContractsLineageAndRequirementsAfterRestart(t *testing.T) {
 	repository, path := openTestRepository(t)
 	state := newV05CreateFixture(t)
-	created, fresh, err := repository.CreateGoal(context.Background(), state)
+	created, fresh, err := createLegacyGoal(t, repository, state)
 	if err != nil || !fresh {
 		t.Fatalf("create V05 state = fresh:%v err:%v", fresh, err)
 	}
@@ -1129,7 +1131,7 @@ func newV05CreateFixture(t *testing.T) application.CreateGoalState {
 func TestRepositoryRollsBackSuccessWhenReadySuccessorsAreOmitted(t *testing.T) {
 	repository, _ := openTestRepository(t)
 	state := newDAGCreateFixture(t)
-	if _, _, err := repository.CreateGoal(context.Background(), state); err != nil {
+	if _, _, err := createLegacyGoal(t, repository, state); err != nil {
 		t.Fatalf("create DAG: %v", err)
 	}
 	launchClaim := mustClaim(t, repository, "worker:missing-successor:launch", "claim:missing-successor:launch", state.Executions[0].CreatedAt)
@@ -1476,7 +1478,7 @@ func mustRef[T any](t *testing.T, value string, constructor func(string) (T, err
 
 func tableCount(t *testing.T, repository *Repository, table string) int {
 	t.Helper()
-	allowed := []string{"app_specs", "events", "executions", "goals", "intents", "outbox"}
+	allowed := []string{"app_specs", "events", "executions", "goals", "intents", "membership_audit_receipts", "outbox"}
 	index := sort.SearchStrings(allowed, table)
 	if index >= len(allowed) || allowed[index] != table {
 		t.Fatalf("table %q not allowed in test helper", table)

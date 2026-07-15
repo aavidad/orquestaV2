@@ -7,11 +7,14 @@ import (
 
 	"orquesta/internal/application"
 	"orquesta/internal/goal"
+	"orquesta/internal/identity"
 )
 
 func insertCreateState(ctx context.Context, transaction *sql.Tx, state application.CreateGoalState) error {
 	snapshot := state.Goal.Snapshot()
-	if err := insertGoalHeader(ctx, transaction, state.RequestRef, state.RequestFingerprint, snapshot); err != nil {
+	if err := insertGoalHeader(
+		ctx, transaction, state.RequestRef, state.RequestFingerprint, state.RequestedBy, snapshot,
+	); err != nil {
 		return err
 	}
 	for position, phase := range snapshot.Phases {
@@ -97,6 +100,7 @@ func insertGoalHeader(
 	transaction *sql.Tx,
 	requestRef string,
 	requestFingerprint string,
+	requestedBy identity.PrincipalRef,
 	snapshot goal.GoalSnapshot,
 ) error {
 	intent := snapshot.AppSpec.Intent
@@ -117,12 +121,13 @@ VALUES (?, ?, ?, ?, ?, ?)`,
 	}
 	if _, err := transaction.ExecContext(ctx, `
 INSERT INTO goals(
-    ref, request_ref, request_fingerprint, app_spec_ref, actor_ref, project_ref, state, revision,
+    ref, request_ref, request_fingerprint, requested_by_ref, app_spec_ref, actor_ref, project_ref, state, revision,
     created_at, started_at, closed_at, plan_generation
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		snapshot.Ref,
 		requestRef,
 		requestFingerprint,
+		requestedBy.String(),
 		snapshot.AppSpec.Ref,
 		snapshot.ActorRef,
 		snapshot.ProjectRef,

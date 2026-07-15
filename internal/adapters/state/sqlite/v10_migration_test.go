@@ -296,7 +296,7 @@ func assertV10MigrationState(t *testing.T, repository *Repository) {
 		t.Fatal(err)
 	}
 	if err := repository.db.QueryRow(`SELECT COUNT(*) FROM principals
-WHERE ref = 'actor:v1' AND actor_ref = 'actor:v1'
+WHERE ref = 'migration:v09:actor:v1' AND actor_ref = 'actor:v1'
   AND kind = 'human' AND authentication_method = 'migration.v09'`).Scan(&principals); err != nil {
 		t.Fatal(err)
 	}
@@ -309,7 +309,8 @@ WHERE ref = 'actor:v1' AND actor_ref = 'actor:v1'
 		t.Fatal(err)
 	}
 	if err := repository.db.QueryRow(`SELECT COUNT(*) FROM goals
-WHERE ref = 'goal:v10-v09' AND requested_by_ref = actor_ref`).Scan(&requestedBy); err != nil {
+WHERE ref = 'goal:v10-v09'
+  AND requested_by_ref = 'migration:v09:' || actor_ref`).Scan(&requestedBy); err != nil {
 		t.Fatal(err)
 	}
 	if err := repository.db.QueryRow(`SELECT COUNT(*) FROM pragma_foreign_key_check`).Scan(&violations); err != nil {

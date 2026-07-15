@@ -17,7 +17,7 @@ import (
 func TestV06ClaimUsesRepositoryClockAndOpaqueCapabilityMatching(t *testing.T) {
 	repository, _ := openTestRepository(t)
 	state := newCreateFixture(t, "v06-caps", "request:v06-caps", "fingerprint:v06-caps", "actor:v06", "project:v06")
-	if _, _, err := repository.CreateGoal(context.Background(), state); err != nil {
+	if _, _, err := createLegacyGoal(t, repository, state); err != nil {
 		t.Fatalf("create capability fixture: %v", err)
 	}
 	itemRef := state.Executions[0].WorkItemRef.String()
@@ -167,7 +167,7 @@ VALUES (?, ?, ?, ?, ?, ?)`, late.Ref, late.Kind, late.GoalRef.String(), late.Wor
 func TestV06GoalMutationRejectsEventFromDifferentExecutionAndRollsBack(t *testing.T) {
 	repository, _ := openTestRepository(t)
 	state := newV05CreateFixture(t)
-	if _, _, err := repository.CreateGoal(context.Background(), state); err != nil {
+	if _, _, err := createLegacyGoal(t, repository, state); err != nil {
 		t.Fatalf("create multi-execution Goal: %v", err)
 	}
 	claim := mustClaim(t, repository, "worker:v06-event-scope", "claim:v06-event-scope", state.Goal.CreatedAt())
@@ -456,7 +456,7 @@ func buildReplacementState(
 ) (application.ExecutionReplacedState, application.ActionClaim) {
 	t.Helper()
 	state := newCreateFixture(t, "v06-"+suffix, "request:v06-"+suffix, "fingerprint:v06-"+suffix, "actor:v06", "project:v06")
-	if _, _, err := repository.CreateGoal(context.Background(), state); err != nil {
+	if _, _, err := createLegacyGoal(t, repository, state); err != nil {
 		t.Fatalf("create replacement fixture: %v", err)
 	}
 	claim := mustClaim(t, repository, "worker:v06-"+suffix, "claim:v06-"+suffix, state.Executions[0].CreatedAt)
@@ -535,7 +535,7 @@ func createRunningV06Fixture(
 ) (application.GoalRecord, time.Time) {
 	t.Helper()
 	state := newCreateFixture(t, "v06-"+suffix, "request:v06-"+suffix, "fingerprint:v06-"+suffix, "actor:v06", "project:v06")
-	if _, _, err := repository.CreateGoal(context.Background(), state); err != nil {
+	if _, _, err := createLegacyGoal(t, repository, state); err != nil {
 		t.Fatalf("create running V6 fixture: %v", err)
 	}
 	claim := mustClaim(t, repository, "worker:v06-"+suffix, "claim:v06-"+suffix, state.Goal.CreatedAt())
@@ -664,7 +664,7 @@ SELECT COUNT(*) FROM pragma_table_info('executions') WHERE name = 'max_attempts'
 func TestV06ObserveClaimRequiresExactCurrentProviderModelAndAgent(t *testing.T) {
 	repository, _ := openTestRepository(t)
 	state := newCreateFixture(t, "v06-exact-observe", "request:v06-exact-observe", "fingerprint:v06-exact-observe", "actor:v06", "project:v06")
-	if _, _, err := repository.CreateGoal(context.Background(), state); err != nil {
+	if _, _, err := createLegacyGoal(t, repository, state); err != nil {
 		t.Fatalf("create V6 exact identity fixture: %v", err)
 	}
 	claim := mustClaim(t, repository, "worker:v06-launch", "claim:v06-launch", state.Goal.CreatedAt())
@@ -950,7 +950,7 @@ WHERE goal_ref = 'goal:v4-state' AND ref = 'action:v4-state'`); err != nil {
 func TestRepositoryRejectsIncoherentProjectionAfterRestart(t *testing.T) {
 	repository, path := openTestRepository(t)
 	state := newCreateFixture(t, "v06-incoherent", "request:v06-incoherent", "fingerprint:v06-incoherent", "actor:v06", "project:v06")
-	if _, _, err := repository.CreateGoal(context.Background(), state); err != nil {
+	if _, _, err := createLegacyGoal(t, repository, state); err != nil {
 		t.Fatalf("create incoherent fixture: %v", err)
 	}
 	// SQL shape permits dispatching while the authoritative WorkItem is still

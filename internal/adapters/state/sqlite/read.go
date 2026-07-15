@@ -9,6 +9,7 @@ import (
 
 	"orquesta/internal/application"
 	"orquesta/internal/goal"
+	"orquesta/internal/identity"
 )
 
 func (repository *Repository) GetGoal(ctx context.Context, goalRef goal.GoalRef) (application.GoalRecord, error) {
@@ -30,7 +31,13 @@ func (repository *Repository) GetGoal(ctx context.Context, goalRef goal.GoalRef)
 	return record, nil
 }
 
-func (repository *Repository) Status(ctx context.Context) (application.RepositoryStatus, error) {
+func (repository *Repository) Status(
+	ctx context.Context,
+	projectRef goal.ProjectRef,
+) (application.RepositoryStatus, error) {
+	if projectRef.String() == "" {
+		return application.RepositoryStatus{}, invalid(errors.New("sqlite.project_ref_invalid"))
+	}
 	transaction, err := beginReadTransaction(ctx, repository)
 	if err != nil {
 		return application.RepositoryStatus{}, err
@@ -39,10 +46,14 @@ func (repository *Repository) Status(ctx context.Context) (application.Repositor
 	var status application.RepositoryStatus
 	err = transaction.QueryRowContext(ctx, `
 SELECT
-    (SELECT COUNT(*) FROM goals),
-    (SELECT COUNT(*) FROM goals WHERE state = 'running'),
-    (SELECT COUNT(*) FROM outbox WHERE completed_at IS NULL AND quarantined_at IS NULL),
-    (SELECT COUNT(*) FROM outbox WHERE quarantined_at IS NOT NULL)`).Scan(
+	(SELECT COUNT(*) FROM goals WHERE project_ref = ?),
+	(SELECT COUNT(*) FROM goals WHERE project_ref = ? AND state = 'running'),
+	(SELECT COUNT(*) FROM outbox o JOIN goals g ON g.ref = o.goal_ref
+	 WHERE g.project_ref = ? AND o.completed_at IS NULL AND o.quarantined_at IS NULL),
+	(SELECT COUNT(*) FROM outbox o JOIN goals g ON g.ref = o.goal_ref
+	 WHERE g.project_ref = ? AND o.quarantined_at IS NOT NULL)`,
+		projectRef.String(), projectRef.String(), projectRef.String(), projectRef.String(),
+	).Scan(
 		&status.Goals,
 		&status.RunningGoals,
 		&status.PendingActions,
@@ -59,11 +70,10 @@ SELECT
 
 func (repository *Repository) ListGoals(
 	ctx context.Context,
-	actorRef goal.ActorRef,
 	projectRef goal.ProjectRef,
 	limit int,
 ) ([]application.GoalSummary, error) {
-	if actorRef.String() == "" || projectRef.String() == "" || limit <= 0 {
+	if projectRef.String() == "" || limit <= 0 {
 		return nil, invalid(errors.New("sqlite.list_query_invalid"))
 	}
 	database, err := repository.database()
@@ -81,9 +91,9 @@ SELECT g.ref,
 FROM goals g
 JOIN app_specs spec ON spec.ref = g.app_spec_ref
 JOIN intents i ON i.ref = spec.intent_ref
-WHERE g.actor_ref = ? AND g.project_ref = ?
+WHERE g.project_ref = ?
 ORDER BY g.created_at DESC, g.ref DESC
-LIMIT ?`, actorRef.String(), projectRef.String(), limit)
+LIMIT ?`, projectRef.String(), limit)
 	if err != nil {
 		return nil, mapDatabaseError(err)
 	}
@@ -171,6 +181,7 @@ LIMIT ?`, actorRef.String(), projectRef.String(), limit)
 func readGoalRecord(ctx context.Context, source queryer, goalValue string) (application.GoalRecord, error) {
 	var requestRef string
 	var requestFingerprint string
+	var requestedByValue string
 	var spec goal.AppSpecSnapshot
 	var snapshot goal.GoalSnapshot
 	var state string
@@ -179,7 +190,7 @@ func readGoalRecord(ctx context.Context, source queryer, goalValue string) (appl
 	var parentRef, parentHash sql.NullString
 	var startedAt, closedAt sql.NullInt64
 	err := source.QueryRowContext(ctx, `
-SELECT g.request_ref, g.request_fingerprint,
+SELECT g.request_ref, g.request_fingerprint, g.requested_by_ref,
        i.ref, i.actor_ref, i.project_ref, i.statement, i.submitted_at, i.hash,
        spec.ref, spec.generation, spec.parent_ref, spec.parent_hash, spec.objective,
        spec.reason, spec.confirmed_by, spec.confirmed_at, spec.hash,
@@ -191,6 +202,7 @@ JOIN intents i ON i.ref = spec.intent_ref
 WHERE g.ref = ?`, goalValue).Scan(
 		&requestRef,
 		&requestFingerprint,
+		&requestedByValue,
 		&spec.Intent.Ref,
 		&spec.Intent.ActorRef,
 		&spec.Intent.ProjectRef,
@@ -259,6 +271,10 @@ WHERE g.ref = ?`, goalValue).Scan(
 	if !validText(requestRef) || !validText(requestFingerprint) {
 		return application.GoalRecord{}, invalid(fmt.Errorf("sqlite.request_identity_invalid"))
 	}
+	requestedBy, err := identity.NewPrincipalRef(requestedByValue)
+	if err != nil {
+		return application.GoalRecord{}, invalid(err)
+	}
 	snapshot.WorkItems = items
 	aggregate, err := goal.RestoreGoal(snapshot)
 	if err != nil {
@@ -278,6 +294,7 @@ WHERE g.ref = ?`, goalValue).Scan(
 	record := application.GoalRecord{
 		RequestRef:          requestRef,
 		RequestFingerprint:  requestFingerprint,
+		RequestedBy:         requestedBy,
 		Goal:                aggregate,
 		Executions:          executions,
 		Artifacts:           artifacts,

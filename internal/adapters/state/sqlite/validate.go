@@ -13,7 +13,8 @@ import (
 const maxSQLiteInteger = uint64(1<<63 - 1)
 
 func validateCreateState(state application.CreateGoalState) error {
-	if !validText(state.RequestRef) || !validText(state.RequestFingerprint) {
+	if !validText(state.RequestRef) || !validText(state.RequestFingerprint) ||
+		state.RequestedBy.String() == "" || state.AuthorizationReceipt.Ref() == "" {
 		return errors.New("sqlite.request_identity_invalid")
 	}
 	snapshot := state.Goal.Snapshot()
@@ -81,7 +82,8 @@ func validateCreateState(state application.CreateGoalState) error {
 
 func validateAmendState(state application.AmendGoalState) error {
 	if !validText(state.RequestRef) || !validText(state.RequestFingerprint) ||
-		state.ActorRef.String() == "" || state.ProjectRef.String() == "" ||
+		state.RequestedBy.String() == "" || state.AuthorizationReceipt.Ref() == "" ||
+		state.ProjectRef.String() == "" ||
 		state.SourceGoalRef.String() == "" || state.ExpectedSourceRevision == 0 ||
 		uint64(state.ExpectedSourceRevision) > maxSQLiteInteger || !validCanonicalHash(state.ExpectedSourceSpecHash) {
 		return errors.New("sqlite.amend_request_invalid")
@@ -91,8 +93,8 @@ func validateAmendState(state application.AmendGoalState) error {
 		return err
 	}
 	parentRef, hasParent := state.Successor.AppSpec().ParentRef()
-	if state.Successor.Ref() == state.SourceGoalRef || state.Successor.Actor() != state.ActorRef ||
-		state.Successor.Project() != state.ProjectRef || state.Successor.State() != goal.GoalStatePending ||
+	if state.Successor.Ref() == state.SourceGoalRef || state.Successor.Project() != state.ProjectRef ||
+		state.Successor.State() != goal.GoalStatePending ||
 		state.Successor.Revision() != 1 || state.Successor.PlanGeneration() != 0 ||
 		state.Successor.WorkItemCount() != 0 || len(snapshot.Phases) != 0 ||
 		!hasParent || parentRef.String() == "" ||
@@ -234,7 +236,7 @@ func validateAttestationRecord(attestation application.AttestationRecord) error 
 // goal.RestoreGoal, invoked by readGoalRecord before this function.
 func validateGoalRecordConsistency(record application.GoalRecord, expectedGoalRef string) error {
 	aggregate := record.Goal
-	if aggregate.Ref().String() != expectedGoalRef {
+	if record.RequestedBy.String() == "" || aggregate.Ref().String() != expectedGoalRef {
 		return errors.New("sqlite.goal_record_ref_invalid")
 	}
 	items := make(map[goal.WorkItemRef]goal.WorkItem, aggregate.WorkItemCount())

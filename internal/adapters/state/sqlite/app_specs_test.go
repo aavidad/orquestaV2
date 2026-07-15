@@ -63,7 +63,7 @@ func TestRepositoryMigratesPopulatedV2ToCanonicalAppSpecsAndSecondOpenIsStable(t
 	if err := repository.db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&receipts); err != nil {
 		t.Fatalf("migration receipts: %v", err)
 	}
-	if version != 5 || receipts != 5 {
+	if version != 6 || receipts != 6 {
 		t.Fatalf("migration state version=%d receipts=%d", version, receipts)
 	}
 }
@@ -199,7 +199,7 @@ func TestValidateGoalRecordConsistencyRejectsWorkItemExecutionStateMismatch(t *t
 func TestRepositoryImmutableIntentAppSpecAndGoalBindingTriggers(t *testing.T) {
 	repository, _ := openTestRepository(t)
 	state := newCreateFixture(t, "immutable", "request:immutable", "fingerprint:immutable", "actor:owner", "project:immutable")
-	if _, _, err := repository.CreateGoal(context.Background(), state); err != nil {
+	if _, _, err := createLegacyGoal(t, repository, state); err != nil {
 		t.Fatalf("create immutable fixture: %v", err)
 	}
 	intentRef := state.Goal.Intent().String()
@@ -234,7 +234,7 @@ func TestRepositoryAmendGoalIsAtomicIdempotentAndRestartable(t *testing.T) {
 	source := createFailedSourceForAmend(t, repository, "amend-source")
 	sourceSnapshot := source.Goal.Snapshot()
 	state := newAmendFixture(t, source, "amend-one", "request:amend-one", "fingerprint:amend-one", "rebuild cleanly", "operator correction")
-	record, created, err := repository.AmendGoal(context.Background(), state)
+	record, created, err := amendLegacyGoal(t, repository, state)
 	if err != nil || !created {
 		t.Fatalf("AmendGoal() created=%v error=%v", created, err)
 	}
@@ -245,7 +245,7 @@ func TestRepositoryAmendGoalIsAtomicIdempotentAndRestartable(t *testing.T) {
 	}
 
 	replayState := newAmendFixture(t, source, "amend-replay", state.RequestRef, state.RequestFingerprint, "rebuild cleanly", "operator correction")
-	replayed, created, err := repository.AmendGoal(context.Background(), replayState)
+	replayed, created, err := amendLegacyGoal(t, repository, replayState)
 	if err != nil || created || replayed.Goal.Ref() != record.Goal.Ref() {
 		t.Fatalf("semantic amendment replay created=%v record=%+v err=%v", created, replayed, err)
 	}
@@ -261,7 +261,7 @@ func TestRepositoryAmendGoalIsAtomicIdempotentAndRestartable(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(restarted.Goal.Snapshot(), record.Goal.Snapshot()) {
 		t.Fatalf("amendment restart mismatch: record=%+v err=%v", restarted, err)
 	}
-	if _, created, err := repository.AmendGoal(context.Background(), replayState); err != nil || created {
+	if _, created, err := amendLegacyGoal(t, repository, replayState); err != nil || created {
 		t.Fatalf("amendment replay after restart created=%v err=%v", created, err)
 	}
 }
@@ -284,7 +284,7 @@ func TestRepositoryPersistsAppSpecConfirmedByReviewerDifferentFromIntentActor(t 
 		t.Fatalf("reviewer-confirmed successor: %v", err)
 	}
 	state.Successor = successor
-	record, created, err := repository.AmendGoal(context.Background(), state)
+	record, created, err := amendLegacyGoal(t, repository, state)
 	if err != nil || !created || record.Goal.AppSpec().ConfirmedBy() != reviewer {
 		t.Fatalf("reviewer confirmation created=%v confirmed_by=%s err=%v", created, record.Goal.AppSpec().ConfirmedBy(), err)
 	}
@@ -296,6 +296,9 @@ func TestRepositoryConcurrentSecondSuccessorAllowsOneAndRollsBackLoser(t *testin
 	states := []application.AmendGoalState{
 		newAmendFixture(t, source, "concurrent-amend-a", "request:concurrent-amend-a", "fingerprint:concurrent-amend-a", "option a", "reason a"),
 		newAmendFixture(t, source, "concurrent-amend-b", "request:concurrent-amend-b", "fingerprint:concurrent-amend-b", "option b", "reason b"),
+	}
+	for index := range states {
+		states[index] = authorizeLegacyAmendState(t, repository, states[index])
 	}
 	beforeIntents := tableCount(t, repository, "intents")
 	beforeSpecs := tableCount(t, repository, "app_specs")
@@ -348,7 +351,7 @@ func TestRepositoryAmendLateEventConflictRollsBackIntentSpecAndGoal(t *testing.T
 	beforeIntents := tableCount(t, repository, "intents")
 	beforeSpecs := tableCount(t, repository, "app_specs")
 	beforeGoals := tableCount(t, repository, "goals")
-	if _, _, err := repository.AmendGoal(context.Background(), state); !application.IsStateError(err, application.StateConflict) {
+	if _, _, err := amendLegacyGoal(t, repository, state); !application.IsStateError(err, application.StateConflict) {
 		t.Fatalf("late amendment conflict = %v", err)
 	}
 	if tableCount(t, repository, "intents") != beforeIntents ||
@@ -413,7 +416,7 @@ func seedPopulatedV2Database(t *testing.T, path string, corruptIntentHash bool) 
 func createFailedSourceForAmend(t *testing.T, repository *Repository, suffix string) application.GoalRecord {
 	t.Helper()
 	state := newCreateFixture(t, suffix, "request:"+suffix, "fingerprint:"+suffix, "actor:amend", "project:amend")
-	if _, _, err := repository.CreateGoal(context.Background(), state); err != nil {
+	if _, _, err := createLegacyGoal(t, repository, state); err != nil {
 		t.Fatalf("create amendment source: %v", err)
 	}
 	claim := mustClaim(t, repository, "worker:"+suffix, "claim:"+suffix, state.Executions[0].CreatedAt)
@@ -506,7 +509,7 @@ func newAmendFixture(
 	}
 	return application.AmendGoalState{
 		RequestRef: requestRef, RequestFingerprint: fingerprint,
-		ActorRef: source.Goal.Actor(), ProjectRef: source.Goal.Project(), SourceGoalRef: source.Goal.Ref(),
+		RequestedBy: source.RequestedBy, ProjectRef: source.Goal.Project(), SourceGoalRef: source.Goal.Ref(),
 		ExpectedSourceRevision: source.Goal.Revision(), ExpectedSourceSpecHash: source.Goal.SpecHash(),
 		Successor: successor,
 		Events: []application.EventRecord{{

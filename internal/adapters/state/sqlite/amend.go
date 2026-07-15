@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"orquesta/internal/application"
+	"orquesta/internal/identity"
 )
 
 func (repository *Repository) AmendGoal(
@@ -20,13 +21,19 @@ func (repository *Repository) AmendGoal(
 		return application.GoalRecord{}, false, err
 	}
 	defer func() { _ = transaction.Rollback() }()
+	if _, err := requirePersistedAuthorization(
+		ctx, transaction, state.AuthorizationReceipt, state.RequestedBy,
+		state.ProjectRef, identity.PermissionGoalsAmend, state.SourceGoalRef.String(),
+	); err != nil {
+		return application.GoalRecord{}, false, err
+	}
 
 	var existingGoalRef, existingFingerprint string
 	err = transaction.QueryRowContext(ctx, `
 SELECT ref, request_fingerprint
 FROM goals
-WHERE actor_ref = ? AND project_ref = ? AND request_ref = ?`,
-		state.ActorRef.String(), state.ProjectRef.String(), state.RequestRef,
+WHERE requested_by_ref = ? AND project_ref = ? AND request_ref = ?`,
+		state.RequestedBy.String(), state.ProjectRef.String(), state.RequestRef,
 	).Scan(&existingGoalRef, &existingFingerprint)
 	switch {
 	case err == nil:
@@ -64,7 +71,7 @@ WHERE g.ref = ?`, state.SourceGoalRef.String()).Scan(
 	if err != nil {
 		return application.GoalRecord{}, false, mapDatabaseError(err)
 	}
-	if sourceActor != state.ActorRef.String() || sourceProject != state.ProjectRef.String() {
+	if sourceActor != state.Successor.Actor().String() || sourceProject != state.ProjectRef.String() {
 		return application.GoalRecord{}, false, stateError(application.StateNotFound, sql.ErrNoRows)
 	}
 	if sourceRevision != int64(state.ExpectedSourceRevision) ||
@@ -83,7 +90,10 @@ WHERE g.ref = ?`, state.SourceGoalRef.String()).Scan(
 		return application.GoalRecord{}, false, conflict(errors.New("sqlite.amend_source_parent_conflict"))
 	}
 
-	if err := insertGoalHeader(ctx, transaction, state.RequestRef, state.RequestFingerprint, state.Successor.Snapshot()); err != nil {
+	if err := insertGoalHeader(
+		ctx, transaction, state.RequestRef, state.RequestFingerprint,
+		state.RequestedBy, state.Successor.Snapshot(),
+	); err != nil {
 		return application.GoalRecord{}, false, err
 	}
 	if err := insertEvents(ctx, transaction, state.Events); err != nil {
@@ -104,7 +114,8 @@ func sameAmendmentSemantics(record application.GoalRecord, state application.Ame
 	candidate := state.Successor.AppSpec()
 	existingParent, existingHasParent := existing.ParentRef()
 	candidateParent, candidateHasParent := candidate.ParentRef()
-	return existingHasParent && candidateHasParent && existingParent == candidateParent &&
+	return record.RequestedBy == state.RequestedBy &&
+		existingHasParent && candidateHasParent && existingParent == candidateParent &&
 		existing.ParentHash() == candidate.ParentHash() &&
 		existing.Generation() == candidate.Generation() &&
 		existing.Intent().Actor() == candidate.Intent().Actor() &&

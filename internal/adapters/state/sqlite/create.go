@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"orquesta/internal/application"
+	"orquesta/internal/identity"
 )
 
 func (repository *Repository) CreateGoal(
@@ -20,15 +21,21 @@ func (repository *Repository) CreateGoal(
 		return application.GoalRecord{}, false, err
 	}
 	defer func() { _ = transaction.Rollback() }()
+	snapshot := state.Goal.Snapshot()
+	if _, err := requirePersistedAuthorization(
+		ctx, transaction, state.AuthorizationReceipt, state.RequestedBy,
+		state.Goal.Project(), identity.PermissionGoalsCreate, state.Goal.Project().String(),
+	); err != nil {
+		return application.GoalRecord{}, false, err
+	}
 
 	var existingGoalRef, existingFingerprint string
-	snapshot := state.Goal.Snapshot()
 	err = transaction.QueryRowContext(
 		ctx,
 		`SELECT ref, request_fingerprint
 FROM goals
-WHERE actor_ref = ? AND project_ref = ? AND request_ref = ?`,
-		snapshot.ActorRef,
+WHERE requested_by_ref = ? AND project_ref = ? AND request_ref = ?`,
+		state.RequestedBy.String(),
 		snapshot.ProjectRef,
 		state.RequestRef,
 	).Scan(&existingGoalRef, &existingFingerprint)

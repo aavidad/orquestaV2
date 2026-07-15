@@ -37,6 +37,7 @@ type Repository struct {
 }
 
 var _ application.StateRepository = (*Repository)(nil)
+var _ application.AccessRepository = (*Repository)(nil)
 
 func Open(ctx context.Context, options Options) (*Repository, error) {
 	path, busyMilliseconds, err := validateOptions(options)

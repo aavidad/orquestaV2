@@ -21,7 +21,10 @@ CREATE TABLE principals (
 ) STRICT;
 
 INSERT INTO principals(ref, actor_ref, kind, authentication_method)
-SELECT historical.actor_ref, historical.actor_ref, 'human', 'migration.v09'
+SELECT 'migration:v09:' || historical.actor_ref,
+       historical.actor_ref,
+       'human',
+       'migration.v09'
 FROM (
     SELECT actor_ref FROM intents
     UNION
@@ -290,7 +293,7 @@ INSERT INTO goals_v6(
     actor_ref, project_ref, state, revision, created_at, started_at, closed_at,
     plan_generation
 )
-SELECT ref, request_ref, request_fingerprint, actor_ref, app_spec_ref,
+SELECT ref, request_ref, request_fingerprint, 'migration:v09:' || actor_ref, app_spec_ref,
        actor_ref, project_ref, state, revision, created_at, started_at, closed_at,
        plan_generation
 FROM goals;
