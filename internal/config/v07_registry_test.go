@@ -105,7 +105,7 @@ func TestRegistryAliasesAreTypedBoundedAndCanonicalized(t *testing.T) {
 
 	for _, alias := range []registryAliasDefinition{
 		{Kind: AliasKindTOMLKey, Name: "server.future", Target: KeyServerListen,
-			IntroducedRevision: "2026-07-15.9", RemoveAfterRevision: "2026-09-01.0"},
+			IntroducedRevision: "2026-07-15.10", RemoveAfterRevision: "2026-09-01.0"},
 		{Kind: AliasKindTOMLKey, Name: "server.expired", Target: KeyServerListen,
 			IntroducedRevision: "2026-07-15.7", RemoveAfterRevision: "2026-07-15.8"},
 	} {
@@ -167,6 +167,8 @@ func TestResolveExecutesEveryDeclaredCrossValidator(t *testing.T) {
 		{name: "non loopback", toml: "[server]\nlisten = \"0.0.0.0:8080\""},
 		{name: "non literal MCP path", toml: "[server]\nmcp_path = \"/mcp/../other\""},
 		{name: "overlapping paths", toml: "[artifact.filesystem]\nroot = \"./var/state\""},
+		{name: "credential store equals local token", toml: "[credentials.local]\npath = \"./var/secrets/local-owner.token\""},
+		{name: "credential store inside artifacts", toml: "[credentials.local]\npath = \"./var/artifacts/credentials.json\""},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

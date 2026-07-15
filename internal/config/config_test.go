@@ -29,6 +29,10 @@ func TestResolveReturnsImmutableTypedCanonicalDefaults(t *testing.T) {
 		snapshot.IdentityLocalTokenPath() != "./var/secrets/local-owner.token" || snapshot.ProjectDefault() != "project:default" {
 		t.Fatal("identity/project defaults missing")
 	}
+	if snapshot.CredentialsLocalPath() != "./var/secrets/credentials.json" ||
+		snapshot.CredentialsLocalMaxDocumentBytes() != 1048576 {
+		t.Fatal("credential-store defaults missing")
+	}
 	if snapshot.RuntimeMaxOutputBytes() != 1048576 || snapshot.RuntimeCodexMaxDiagnosticBytes() != 65536 ||
 		snapshot.RuntimeCodexMaxConcurrentExecutions() != 70 || snapshot.RuntimeCodexProcessPipeDrainDelay() != 250*time.Millisecond {
 		t.Fatal("runtime defaults missing")

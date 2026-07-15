@@ -4,9 +4,9 @@ package config
 
 import "time"
 
-const generatedRegistrySourceSHA256 = "ca5171be06e0b51438638925a968abd06fe2b2110cccde0c15f3b61dab9d51d5"
-const generatedRegistryRevision = "2026-07-15.8"
-const generatedRegistrySemanticSHA256 = "sha256:42595d6c0d80e29bdb470826403f4e9beaca6915440e52796bdb0f94becb6708"
+const generatedRegistrySourceSHA256 = "86f64ee196b2d4d2ca4077170803235b3036dc58805a17cd6ec30894e01592b5"
+const generatedRegistryRevision = "2026-07-15.9"
+const generatedRegistrySemanticSHA256 = "sha256:bc6babe6cae35fb6de7b7c459135ade5899ab3608bf07df3a3c941892878a533"
 
 const (
 	KeyServerListen                        Key = "server.listen"
@@ -20,6 +20,8 @@ const (
 	KeyStateSQLiteBusyTimeout              Key = "state.sqlite.busy_timeout"
 	KeyStateSQLiteMaxOpenConnections       Key = "state.sqlite.max_open_connections"
 	KeyArtifactFilesystemRoot              Key = "artifact.filesystem.root"
+	KeyCredentialsLocalPath                Key = "credentials.local.path"
+	KeyCredentialsLocalMaxDocumentBytes    Key = "credentials.local.max_document_bytes"
 	KeyRuntimeProvider                     Key = "runtime.provider"
 	KeyRuntimeMaxOutputBytes               Key = "runtime.max_output_bytes"
 	KeyRuntimeCodexCommand                 Key = "runtime.codex.command"
@@ -59,6 +61,8 @@ func allGeneratedKeys() []Key {
 		KeyStateSQLiteBusyTimeout,
 		KeyStateSQLiteMaxOpenConnections,
 		KeyArtifactFilesystemRoot,
+		KeyCredentialsLocalPath,
+		KeyCredentialsLocalMaxDocumentBytes,
 		KeyRuntimeProvider,
 		KeyRuntimeMaxOutputBytes,
 		KeyRuntimeCodexCommand,
@@ -160,6 +164,20 @@ func (s Snapshot) StateSQLiteMaxOpenConnections() int64 {
 func (s Snapshot) ArtifactFilesystemRoot() string {
 	value, _ := s.value(KeyArtifactFilesystemRoot)
 	typed, _ := value.(string)
+	return typed
+}
+
+// CredentialsLocalPath returns credentials.local.path.
+func (s Snapshot) CredentialsLocalPath() string {
+	value, _ := s.value(KeyCredentialsLocalPath)
+	typed, _ := value.(string)
+	return typed
+}
+
+// CredentialsLocalMaxDocumentBytes returns credentials.local.max_document_bytes.
+func (s Snapshot) CredentialsLocalMaxDocumentBytes() int64 {
+	value, _ := s.value(KeyCredentialsLocalMaxDocumentBytes)
+	typed, _ := value.(int64)
 	return typed
 }
 
@@ -333,7 +351,7 @@ func (s Snapshot) ConfigEffectiveMaxExistingBytes() int64 {
 
 const generatedRegistryJSON = `{
   "schema_version": 2,
-  "revision": "2026-07-15.8",
+  "revision": "2026-07-15.9",
   "precedence": [
     "default",
     "file",
@@ -369,6 +387,7 @@ const generatedRegistryJSON = `{
       "keys": [
         "state.sqlite.path",
         "artifact.filesystem.root",
+        "credentials.local.path",
         "runtime.codex.work_root",
         "config.effective_path",
         "identity.local_token_path"
@@ -529,6 +548,36 @@ const generatedRegistryJSON = `{
       "validator_ids": [
         "non_empty_path"
       ]
+    },
+    {
+      "key": "credentials.local.path",
+      "go_name": "CredentialsLocalPath",
+      "semantic_ref": "orquesta.config.credentials.local.path",
+      "type": "path",
+      "default": "./var/secrets/credentials.json",
+      "sensitive": false,
+      "scope": "credentials",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_CREDENTIALS_LOCAL_PATH",
+      "validator_ids": [
+        "non_empty_path"
+      ]
+    },
+    {
+      "key": "credentials.local.max_document_bytes",
+      "go_name": "CredentialsLocalMaxDocumentBytes",
+      "semantic_ref": "orquesta.config.credentials.local.max_document_bytes",
+      "type": "integer",
+      "default": 1048576,
+      "sensitive": false,
+      "scope": "credentials",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_CREDENTIALS_LOCAL_MAX_DOCUMENT_BYTES",
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1024,
+      "maximum": 16777216
     },
     {
       "key": "runtime.provider",

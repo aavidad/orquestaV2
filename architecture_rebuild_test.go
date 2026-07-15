@@ -112,6 +112,7 @@ func TestRebuildArchitecture(t *testing.T) {
 		for _, file := range rebuildArchitectureFilesUnder(files, "internal/adapters") {
 			allowed := []string{
 				"orquesta/internal/application",
+				"orquesta/internal/credentials",
 				"orquesta/internal/goal",
 				"orquesta/internal/ports",
 			}
@@ -121,6 +122,16 @@ func TestRebuildArchitecture(t *testing.T) {
 			for _, imported := range file.imports {
 				if reason := rebuildArchitectureOnlyInternalPackages(imported.path, allowed...); reason != "" {
 					rebuildArchitectureImportError(t, file, imported, "internal/adapters "+reason)
+				}
+			}
+		}
+	})
+
+	t.Run("credentials_contract_depends_only_inward", func(t *testing.T) {
+		for _, file := range rebuildArchitectureFilesUnder(files, "internal/credentials") {
+			for _, imported := range file.imports {
+				if reason := rebuildArchitectureOnlyInternalPackages(imported.path, "orquesta/internal/goal"); reason != "" {
+					rebuildArchitectureImportError(t, file, imported, "internal/credentials "+reason)
 				}
 			}
 		}

@@ -2,9 +2,9 @@
 
 # Orquesta configuration registry
 
-Registry revision: `2026-07-15.8`
+Registry revision: `2026-07-15.9`
 
-Registry hash: `sha256:42595d6c0d80e29bdb470826403f4e9beaca6915440e52796bdb0f94becb6708`
+Registry hash: `sha256:bc6babe6cae35fb6de7b7c459135ade5899ab3608bf07df3a3c941892878a533`
 
 Precedence: `default < file < env`
 
@@ -23,6 +23,8 @@ Source limit: `1048576` bytes
 | `state.sqlite.busy_timeout` | `duration` | `"5s"` | `ORQUESTA_STATE_SQLITE_BUSY_TIMEOUT` | `true` | `positive_duration` |
 | `state.sqlite.max_open_connections` | `integer` | `8` | `ORQUESTA_STATE_SQLITE_MAX_OPEN_CONNECTIONS` | `true` | `integer_bounds` |
 | `artifact.filesystem.root` | `path` | `"./var/artifacts"` | `ORQUESTA_ARTIFACT_FILESYSTEM_ROOT` | `true` | `non_empty_path` |
+| `credentials.local.path` | `path` | `"./var/secrets/credentials.json"` | `ORQUESTA_CREDENTIALS_LOCAL_PATH` | `true` | `non_empty_path` |
+| `credentials.local.max_document_bytes` | `integer` | `1048576` | `ORQUESTA_CREDENTIALS_LOCAL_MAX_DOCUMENT_BYTES` | `true` | `integer_bounds` |
 | `runtime.provider` | `string` | `"codex"` | `ORQUESTA_RUNTIME_PROVIDER` | `true` | `allowed_values` |
 | `runtime.max_output_bytes` | `integer` | `1048576` | `ORQUESTA_RUNTIME_MAX_OUTPUT_BYTES` | `true` | `integer_bounds` |
 | `runtime.codex.command` | `string` | `"codex"` | `ORQUESTA_RUNTIME_CODEX_COMMAND` | `true` | `trimmed_non_empty_string` |
@@ -57,7 +59,7 @@ Source limit: `1048576` bytes
 - `runtime_codex_timeout_before_scheduler_execution_timeout`: `runtime.codex.timeout`, `scheduler.execution_timeout`
 - `server_listen_loopback`: `server.listen`
 - `server_mcp_path_literal`: `server.mcp_path`
-- `runtime_paths_disjoint`: `state.sqlite.path`, `artifact.filesystem.root`, `runtime.codex.work_root`, `config.effective_path`, `identity.local_token_path`
+- `runtime_paths_disjoint`: `state.sqlite.path`, `artifact.filesystem.root`, `credentials.local.path`, `runtime.codex.work_root`, `config.effective_path`, `identity.local_token_path`
 
 ## Temporary aliases
 

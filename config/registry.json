@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "revision": "2026-07-15.8",
+  "revision": "2026-07-15.9",
   "precedence": [
     "default",
     "file",
@@ -36,6 +36,7 @@
       "keys": [
         "state.sqlite.path",
         "artifact.filesystem.root",
+        "credentials.local.path",
         "runtime.codex.work_root",
         "config.effective_path",
         "identity.local_token_path"
@@ -196,6 +197,36 @@
       "validator_ids": [
         "non_empty_path"
       ]
+    },
+    {
+      "key": "credentials.local.path",
+      "go_name": "CredentialsLocalPath",
+      "semantic_ref": "orquesta.config.credentials.local.path",
+      "type": "path",
+      "default": "./var/secrets/credentials.json",
+      "sensitive": false,
+      "scope": "credentials",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_CREDENTIALS_LOCAL_PATH",
+      "validator_ids": [
+        "non_empty_path"
+      ]
+    },
+    {
+      "key": "credentials.local.max_document_bytes",
+      "go_name": "CredentialsLocalMaxDocumentBytes",
+      "semantic_ref": "orquesta.config.credentials.local.max_document_bytes",
+      "type": "integer",
+      "default": 1048576,
+      "sensitive": false,
+      "scope": "credentials",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_CREDENTIALS_LOCAL_MAX_DOCUMENT_BYTES",
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1024,
+      "maximum": 16777216
     },
     {
       "key": "runtime.provider",

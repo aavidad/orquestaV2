@@ -1,8 +1,8 @@
 {
   "document_type": "orquesta.config_ui",
   "schema_version": 2,
-  "registry_revision": "2026-07-15.8",
-  "registry_hash": "sha256:42595d6c0d80e29bdb470826403f4e9beaca6915440e52796bdb0f94becb6708",
+  "registry_revision": "2026-07-15.9",
+  "registry_hash": "sha256:bc6babe6cae35fb6de7b7c459135ade5899ab3608bf07df3a3c941892878a533",
   "aliases": [],
   "cross_validators": [
     {
@@ -29,6 +29,7 @@
       "keys": [
         "state.sqlite.path",
         "artifact.filesystem.root",
+        "credentials.local.path",
         "runtime.codex.work_root",
         "config.effective_path",
         "identity.local_token_path"
@@ -167,6 +168,32 @@
       "validator_ids": [
         "non_empty_path"
       ]
+    },
+    {
+      "key": "credentials.local.path",
+      "semantic_ref": "orquesta.config.credentials.local.path",
+      "label_key": "config.field.credentials.local.path",
+      "type": "path",
+      "sensitive": false,
+      "scope": "credentials",
+      "restart_required": true,
+      "validator_ids": [
+        "non_empty_path"
+      ]
+    },
+    {
+      "key": "credentials.local.max_document_bytes",
+      "semantic_ref": "orquesta.config.credentials.local.max_document_bytes",
+      "label_key": "config.field.credentials.local.max_document_bytes",
+      "type": "integer",
+      "sensitive": false,
+      "scope": "credentials",
+      "restart_required": true,
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1024,
+      "maximum": 16777216
     },
     {
       "key": "runtime.provider",

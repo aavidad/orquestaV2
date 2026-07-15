@@ -431,7 +431,7 @@ func validateCrossValidators(definitions []registryCrossValidatorDefinition, key
 		"server_listen_loopback":  {KeyServerListen},
 		"server_mcp_path_literal": {KeyServerMCPPath},
 		"runtime_paths_disjoint": {
-			KeyStateSQLitePath, KeyArtifactFilesystemRoot, KeyRuntimeCodexWorkRoot,
+			KeyStateSQLitePath, KeyArtifactFilesystemRoot, KeyCredentialsLocalPath, KeyRuntimeCodexWorkRoot,
 			KeyConfigEffectivePath, KeyIdentityLocalTokenPath,
 		},
 	}

@@ -15,6 +15,10 @@ max_open_connections = 8
 [artifact.filesystem]
 root = "./var/artifacts"
 
+[credentials.local]
+path = "./var/secrets/credentials.json"
+max_document_bytes = 1048576
+
 [runtime]
 provider = "codex"
 max_output_bytes = 1048576

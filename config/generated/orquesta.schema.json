@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:orquesta:config:2026-07-15.8",
+  "$id": "urn:orquesta:config:2026-07-15.9",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -94,6 +94,45 @@
           "x-validator-ids": [
             "non_empty_path"
           ]
+        }
+      },
+      "type": "object"
+    },
+    "credentials": {
+      "additionalProperties": false,
+      "properties": {
+        "local": {
+          "additionalProperties": false,
+          "properties": {
+            "max_document_bytes": {
+              "default": 1048576,
+              "maximum": 16777216,
+              "minimum": 1024,
+              "type": "integer",
+              "x-env-alias": "ORQUESTA_CREDENTIALS_LOCAL_MAX_DOCUMENT_BYTES",
+              "x-restart-required": true,
+              "x-scope": "credentials",
+              "x-semantic-ref": "orquesta.config.credentials.local.max_document_bytes",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "integer_bounds"
+              ]
+            },
+            "path": {
+              "default": "./var/secrets/credentials.json",
+              "minLength": 1,
+              "type": "string",
+              "x-env-alias": "ORQUESTA_CREDENTIALS_LOCAL_PATH",
+              "x-restart-required": true,
+              "x-scope": "credentials",
+              "x-semantic-ref": "orquesta.config.credentials.local.path",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "non_empty_path"
+              ]
+            }
+          },
+          "type": "object"
         }
       },
       "type": "object"
@@ -548,8 +587,8 @@
       "type": "object"
     }
   },
-  "x-registry-revision": "2026-07-15.8",
-  "x-registry-hash": "sha256:42595d6c0d80e29bdb470826403f4e9beaca6915440e52796bdb0f94becb6708",
+  "x-registry-revision": "2026-07-15.9",
+  "x-registry-hash": "sha256:bc6babe6cae35fb6de7b7c459135ade5899ab3608bf07df3a3c941892878a533",
   "x-source-max-bytes": 1048576,
   "x-aliases": [],
   "x-cross-validators": [
@@ -577,6 +616,7 @@
       "keys": [
         "state.sqlite.path",
         "artifact.filesystem.root",
+        "credentials.local.path",
         "runtime.codex.work_root",
         "config.effective_path",
         "identity.local_token_path"
