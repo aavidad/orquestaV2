@@ -17,39 +17,51 @@ import (
 )
 
 func TestCanonicalMappingsAreCompleteDetachedAndProductOwned(t *testing.T) {
-	want := []string{
-		"autoprogramming.checkpoint_only_high_consumption_tokens",
-		"control_plane.token",
-		"operator_director_mailbox.enabled",
-		"runtime_models.enabled",
-		"schema_version",
-		"server.addr",
-		"server.state_dir",
+	want := []Mapping{
+		{
+			LegacyPath: "autoprogramming.checkpoint_only_high_consumption_tokens", SourceKind: SourceKindInteger,
+			Disposition: DispositionDeferred, Reason: "legacy_autoprogramming_policy_has_no_canonical_key",
+		},
+		{
+			LegacyPath: "control_plane.remote_access_opt_in", SourceKind: SourceKindBool,
+			Disposition: DispositionDeferred, Reason: "legacy_remote_access_policy_has_no_canonical_key",
+		},
+		{
+			LegacyPath: "control_plane.token", SourceKind: SourceKindString,
+			Disposition: DispositionSecretRequired, Reason: "secret_requires_credential_store_migration",
+		},
+		{
+			LegacyPath: "operator_director_mailbox.enabled", SourceKind: SourceKindBool,
+			Disposition: DispositionDeferred, Reason: "legacy_mailbox_switch_has_no_canonical_key",
+		},
+		{
+			LegacyPath: "runtime_models.allowed_models", SourceKind: SourceKindStringArray,
+			Disposition: DispositionDeferred, Reason: "legacy_runtime_allowed_models_has_no_canonical_key",
+		},
+		{
+			LegacyPath: "runtime_models.enabled", SourceKind: SourceKindBool,
+			Disposition: DispositionDeferred, Reason: "legacy_runtime_model_switch_has_no_canonical_key",
+		},
+		{
+			LegacyPath: "schema_version", SourceKind: SourceKindString,
+			Disposition: DispositionSchema, Reason: "legacy_document_schema_discriminator",
+		},
+		{
+			LegacyPath: "server.addr", SourceKind: SourceKindString, TargetKey: config.KeyServerListen,
+			Transform: transformIdentityString, Disposition: DispositionMapped,
+		},
+		{
+			LegacyPath: "server.state_dir", SourceKind: SourceKindString,
+			Disposition: DispositionDeferred, Reason: "legacy_state_directory_is_not_sqlite_database_path",
+		},
 	}
 	first := CanonicalMappings()
-	if len(first) != len(want) {
-		t.Fatalf("mapping count=%d want=%d", len(first), len(want))
-	}
-	for index, mapping := range first {
-		if mapping.LegacyPath != want[index] {
-			t.Fatalf("mapping[%d]=%q want=%q", index, mapping.LegacyPath, want[index])
-		}
-		switch mapping.Disposition {
-		case DispositionMapped:
-			if mapping.LegacyPath != "server.addr" || mapping.TargetKey != config.KeyServerListen ||
-				mapping.Transform != transformIdentityString || mapping.Reason != "" {
-				t.Fatalf("invalid mapped row: %+v", mapping)
-			}
-		case DispositionSchema, DispositionDeferred, DispositionSecretRequired:
-			if mapping.TargetKey != "" || mapping.Transform != "" || mapping.Reason == "" {
-				t.Fatalf("invalid accounting row: %+v", mapping)
-			}
-		default:
-			t.Fatalf("unknown disposition: %+v", mapping)
-		}
+	if !reflect.DeepEqual(first, want) {
+		t.Fatalf("canonical mapping table differs:\ngot=%+v\nwant=%+v", first, want)
 	}
 	first[0].LegacyPath = "mutated"
-	if CanonicalMappings()[0].LegacyPath != want[0] {
+	first[0].SourceKind = "mutated"
+	if CanonicalMappings()[0] != want[0] {
 		t.Fatal("caller mutated canonical mapping authority")
 	}
 	optionsType := reflect.TypeOf(Options{})
@@ -58,8 +70,46 @@ func TestCanonicalMappingsAreCompleteDetachedAndProductOwned(t *testing.T) {
 	}
 }
 
+func TestValidateLegacyValueUsesDeclarativeSourceKindAndRejectsUnknownKind(t *testing.T) {
+	tests := []struct {
+		name  string
+		kind  SourceKind
+		value any
+		code  ErrorCode
+	}{
+		{name: "string", kind: SourceKindString, value: "value"},
+		{name: "string_wrong", kind: SourceKindString, value: true, code: ErrorValueInvalid},
+		{name: "bool", kind: SourceKindBool, value: false},
+		{name: "bool_wrong", kind: SourceKindBool, value: "false", code: ErrorValueInvalid},
+		{name: "integer_positive", kind: SourceKindInteger, value: json.Number("450000")},
+		{name: "integer_zero", kind: SourceKindInteger, value: json.Number("0")},
+		{name: "integer_negative", kind: SourceKindInteger, value: json.Number("-1")},
+		{name: "integer_bool", kind: SourceKindInteger, value: true, code: ErrorValueInvalid},
+		{name: "integer_fraction", kind: SourceKindInteger, value: json.Number("1.5"), code: ErrorValueInvalid},
+		{name: "integer_exponent", kind: SourceKindInteger, value: json.Number("1e3"), code: ErrorValueInvalid},
+		{name: "integer_overflow", kind: SourceKindInteger, value: json.Number("9223372036854775808"), code: ErrorValueInvalid},
+		{name: "string_array_empty", kind: SourceKindStringArray, value: []any{}},
+		{name: "string_array", kind: SourceKindStringArray, value: []any{"codex", "gemini"}},
+		{name: "string_array_scalar", kind: SourceKindStringArray, value: "codex", code: ErrorValueInvalid},
+		{name: "string_array_non_string", kind: SourceKindStringArray, value: []any{"codex", json.Number("1")}, code: ErrorValueInvalid},
+		{name: "string_array_nested", kind: SourceKindStringArray, value: []any{[]any{"codex"}}, code: ErrorValueInvalid},
+		{name: "unknown", kind: SourceKind("invented_kind"), value: "value", code: ErrorMappingInvalid},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := validateLegacyValue(Mapping{LegacyPath: "arbitrary.path", SourceKind: test.kind}, test.value)
+			if test.code == "" && err != nil {
+				t.Fatalf("valid %s rejected: %v", test.kind, err)
+			}
+			if test.code != "" && !HasErrorCode(err, test.code) {
+				t.Fatalf("error=%v want code=%s", err, test.code)
+			}
+		})
+	}
+}
+
 func TestDeclaredTransformIsExecutedAndUnknownTransformFailsClosed(t *testing.T) {
-	mapping := Mapping{LegacyPath: "server.addr", Transform: transformIdentityString}
+	mapping := Mapping{LegacyPath: "server.addr", SourceKind: SourceKindString, Transform: transformIdentityString}
 	value, err := applyTransform(mapping, "127.0.0.1:19090")
 	if err != nil || value != "127.0.0.1:19090" {
 		t.Fatalf("identity transform=%v err=%v", value, err)
@@ -117,10 +167,11 @@ func TestPreviewBlocksCurrentShapeAndNeverProjectsSecretValue(t *testing.T) {
 	importer, _, store := openTestImporter(t)
 	current := []byte(`{
   "schema_version":"orquesta_config.v0",
-  "server":{"addr":"127.0.0.1:18080","state_dir":"./legacy-state"},
-  "runtime_models":{"enabled":true},
-  "operator_director_mailbox":{"enabled":false},
-  "autoprogramming":{"checkpoint_only_high_consumption_tokens":true}
+  "server":{"addr":"127.0.0.1:8787","state_dir":".orquesta/state"},
+  "control_plane":{"remote_access_opt_in":false},
+  "operator_director_mailbox":{"enabled":true},
+  "autoprogramming":{"checkpoint_only_high_consumption_tokens":450000},
+  "runtime_models":{"enabled":true,"allowed_models":[]}
 }`)
 	plan, err := importer.Preview(context.Background(), current)
 	if err != nil {
@@ -128,14 +179,17 @@ func TestPreviewBlocksCurrentShapeAndNeverProjectsSecretValue(t *testing.T) {
 	}
 	wantUnresolved := []string{
 		"autoprogramming.checkpoint_only_high_consumption_tokens",
+		"control_plane.remote_access_opt_in",
 		"operator_director_mailbox.enabled",
+		"runtime_models.allowed_models",
 		"runtime_models.enabled",
 		"server.state_dir",
 	}
 	if plan.Ready || !reflect.DeepEqual(plan.UnresolvedPaths, wantUnresolved) ||
 		!reflect.DeepEqual(entryPaths(plan.Entries), []string{
 			"autoprogramming.checkpoint_only_high_consumption_tokens",
-			"operator_director_mailbox.enabled", "runtime_models.enabled", "schema_version", "server.addr", "server.state_dir",
+			"control_plane.remote_access_opt_in", "operator_director_mailbox.enabled", "runtime_models.allowed_models",
+			"runtime_models.enabled", "schema_version", "server.addr", "server.state_dir",
 		}) {
 		t.Fatalf("current-shape plan false green: %+v", plan)
 	}
@@ -204,9 +258,20 @@ func TestPreviewRejectsAmbiguousMalformedAndUnaccountedJSON(t *testing.T) {
 		{"wrong_mapped_type", []byte(`{"schema_version":"orquesta_config.v0","server":{"addr":true}}`), ErrorValueInvalid},
 		{"mapped_value_fails_registry", []byte(`{"schema_version":"orquesta_config.v0","server":{"addr":"0.0.0.0:19090"}}`), ErrorValueInvalid},
 		{"wrong_deferred_type", []byte(`{"schema_version":"orquesta_config.v0","runtime_models":{"enabled":"true"}}`), ErrorValueInvalid},
+		{"wrong_integer_bool", []byte(`{"schema_version":"orquesta_config.v0","autoprogramming":{"checkpoint_only_high_consumption_tokens":true}}`), ErrorValueInvalid},
+		{"wrong_integer_fraction", []byte(`{"schema_version":"orquesta_config.v0","autoprogramming":{"checkpoint_only_high_consumption_tokens":1.5}}`), ErrorValueInvalid},
+		{"wrong_integer_range", []byte(`{"schema_version":"orquesta_config.v0","autoprogramming":{"checkpoint_only_high_consumption_tokens":9223372036854775808}}`), ErrorValueInvalid},
+		{"string_array_non_string", []byte(`{"schema_version":"orquesta_config.v0","runtime_models":{"allowed_models":["codex",1]}}`), ErrorValueInvalid},
+		{"string_array_nested", []byte(`{"schema_version":"orquesta_config.v0","runtime_models":{"allowed_models":[["codex"]]}}`), ErrorValueInvalid},
 		{"scalar_root", []byte(`true`), ErrorSourceInvalid},
 		{"null_root", []byte(`null`), ErrorSourceInvalid},
 		{"invalid_utf8", []byte{'{', '"', 0xff, '"', ':', '1', '}'}, ErrorSourceInvalid},
+	}
+	validArray, err := importer.Preview(context.Background(), []byte(
+		`{"schema_version":"orquesta_config.v0","runtime_models":{"allowed_models":["codex","gemini"]}}`,
+	))
+	if err != nil || validArray.Ready || !reflect.DeepEqual(validArray.UnresolvedPaths, []string{"runtime_models.allowed_models"}) {
+		t.Fatalf("valid deferred string array rejected or misaccounted: plan=%+v err=%v", validArray, err)
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {

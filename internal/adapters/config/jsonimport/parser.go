@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -95,40 +96,57 @@ func decodeJSONValue(ctx context.Context, decoder *json.Decoder, path string, de
 	if !composite {
 		return token, nil
 	}
-	if delimiter != '{' {
-		return nil, &Error{Code: ErrorSourceInvalid, Path: path, Cause: errors.New("legacy_json_arrays_not_supported")}
-	}
-	object := make(map[string]any)
-	for decoder.More() {
-		if err := readyContext(ctx); err != nil {
-			return nil, err
+	switch delimiter {
+	case '{':
+		object := make(map[string]any)
+		for decoder.More() {
+			if err := readyContext(ctx); err != nil {
+				return nil, err
+			}
+			keyToken, err := decoder.Token()
+			if err != nil {
+				return nil, &Error{Code: ErrorSourceInvalid, Path: path, Cause: err}
+			}
+			key, ok := keyToken.(string)
+			if !ok || !validLegacySegment(key) {
+				return nil, &Error{Code: ErrorSourceInvalid, Path: path, Cause: errors.New("legacy_json_key_invalid")}
+			}
+			childPath := key
+			if path != "" {
+				childPath = path + "." + key
+			}
+			if _, duplicate := object[key]; duplicate {
+				return nil, &Error{Code: ErrorSourceInvalid, Path: childPath, Cause: errors.New("legacy_json_duplicate_key")}
+			}
+			value, err := decodeJSONValue(ctx, decoder, childPath, depth+1)
+			if err != nil {
+				return nil, err
+			}
+			object[key] = value
 		}
-		keyToken, err := decoder.Token()
-		if err != nil {
+		closing, err := decoder.Token()
+		if err != nil || closing != json.Delim('}') {
 			return nil, &Error{Code: ErrorSourceInvalid, Path: path, Cause: err}
 		}
-		key, ok := keyToken.(string)
-		if !ok || !validLegacySegment(key) {
-			return nil, &Error{Code: ErrorSourceInvalid, Path: path, Cause: errors.New("legacy_json_key_invalid")}
+		return object, nil
+	case '[':
+		array := make([]any, 0)
+		for decoder.More() {
+			itemPath := path + "[" + strconv.Itoa(len(array)) + "]"
+			value, err := decodeJSONValue(ctx, decoder, itemPath, depth+1)
+			if err != nil {
+				return nil, err
+			}
+			array = append(array, value)
 		}
-		childPath := key
-		if path != "" {
-			childPath = path + "." + key
+		closing, err := decoder.Token()
+		if err != nil || closing != json.Delim(']') {
+			return nil, &Error{Code: ErrorSourceInvalid, Path: path, Cause: err}
 		}
-		if _, duplicate := object[key]; duplicate {
-			return nil, &Error{Code: ErrorSourceInvalid, Path: childPath, Cause: errors.New("legacy_json_duplicate_key")}
-		}
-		value, err := decodeJSONValue(ctx, decoder, childPath, depth+1)
-		if err != nil {
-			return nil, err
-		}
-		object[key] = value
+		return array, nil
+	default:
+		return nil, &Error{Code: ErrorSourceInvalid, Path: path, Cause: errors.New("legacy_json_delimiter_invalid")}
 	}
-	closing, err := decoder.Token()
-	if err != nil || closing != json.Delim('}') {
-		return nil, &Error{Code: ErrorSourceInvalid, Path: path, Cause: err}
-	}
-	return object, nil
 }
 
 func validLegacySegment(value string) bool {
@@ -175,6 +193,9 @@ func flattenLegacyObject(
 		}
 		mapping, known := index[path]
 		if !known {
+			if _, expectedObject := prefixes[path]; expectedObject {
+				return &Error{Code: ErrorSourceInvalid, Path: path, Cause: errors.New("legacy_json_object_required")}
+			}
 			return &Error{Code: ErrorUnknownPath, Path: path}
 		}
 		if err := validateLegacyValue(mapping, value); err != nil {
@@ -186,13 +207,34 @@ func flattenLegacyObject(
 }
 
 func validateLegacyValue(mapping Mapping, value any) error {
-	valid := false
-	switch mapping.LegacyPath {
-	case "schema_version", "server.addr", "server.state_dir", "control_plane.token":
+	valid := true
+	switch mapping.SourceKind {
+	case SourceKindString:
 		_, valid = value.(string)
-	case "autoprogramming.checkpoint_only_high_consumption_tokens",
-		"operator_director_mailbox.enabled", "runtime_models.enabled":
+	case SourceKindBool:
 		_, valid = value.(bool)
+	case SourceKindInteger:
+		number, ok := value.(json.Number)
+		if !ok {
+			valid = false
+			break
+		}
+		_, err := strconv.ParseInt(number.String(), 10, 64)
+		valid = err == nil
+	case SourceKindStringArray:
+		array, ok := value.([]any)
+		if !ok {
+			valid = false
+			break
+		}
+		for _, item := range array {
+			if _, ok := item.(string); !ok {
+				valid = false
+				break
+			}
+		}
+	default:
+		return &Error{Code: ErrorMappingInvalid, Path: mapping.LegacyPath, Cause: errors.New("legacy_source_kind_unknown")}
 	}
 	if !valid {
 		return &Error{Code: ErrorValueInvalid, Path: mapping.LegacyPath}

@@ -3,7 +3,7 @@
   "receipt_schema_version": 3,
   "contract_id": "AC-V09-RECOVERY-BACKUP",
   "trusted_base_git_commit_oid": "e198a02fd3b1f5c0d57f9fe2c427401af65ac1ee",
-  "product_delta_base_git_commit_oid": "0000000000000000000000000000000000000000",
+  "product_delta_base_git_commit_oid": "41c4702db97ca148109ce26aafca3bcf85c49c4a",
   "product_delta_sealed_git_commit_oid": "0000000000000000000000000000000000000000",
   "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV09ScopeAndExecutableContract|TestV09AcceptanceCommandRunsRecoveryConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV09RecoveryBackup|TestV09CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/application ./internal/ports ./internal/adapters/state/sqlite ./internal/adapters/artifact/filesystem ./internal/config ./internal/adapters/config/toml ./internal/adapters/config/jsonimport ./cmd/orquesta ./internal/bootstrap'",
   "execution_argv": [
@@ -13,7 +13,27 @@
   ],
   "output_path": "product/evidence/v09_recovery_backup.output.txt",
   "receipt_path": "product/evidence/v09_recovery_backup.json",
-  "candidate_subjects": [],
+  "candidate_subjects": [
+    "acceptance/fixtures/v09_orquesta_config_v0_current_shape.json",
+    "acceptance/fixtures/v09_recovery_backup.json",
+    "acceptance/v09_recovery_backup_test.go",
+    "internal/adapters/config/jsonimport/importer.go",
+    "internal/adapters/config/jsonimport/jsonimport_test.go",
+    "internal/adapters/config/jsonimport/mappings.go",
+    "internal/adapters/config/jsonimport/parser.go",
+    "internal/adapters/config/jsonimport/types.go",
+    "internal/adapters/state/sqlite/recovery.go",
+    "internal/adapters/state/sqlite/recovery_backup.go",
+    "internal/adapters/state/sqlite/recovery_files.go",
+    "internal/adapters/state/sqlite/recovery_restore.go",
+    "internal/adapters/state/sqlite/recovery_v09_test.go",
+    "internal/adapters/state/sqlite/recovery_validation.go",
+    "internal/adapters/state/sqlite/recovery_verify.go",
+    "internal/application/recovery.go",
+    "internal/application/recovery_test.go",
+    "product/roadmap.json",
+    "product/traceability/rebuild_bugs.jsonl"
+  ],
   "owned_capability_ids": [
     "EVD-15",
     "OPS-14"
@@ -38,10 +58,12 @@
       "after_restore_publish"
     ],
     "real_legacy_fixture": "acceptance/fixtures/v09_orquesta_config_v0_current_shape.json",
-    "real_legacy_fixture_sha256": "sha256:f0f2ba4ceba37f5b7e18227d10665bd04c7b84c819250c05c00436d595de0e8b",
+    "real_legacy_fixture_sha256": "sha256:491df37cdffa509d8a31cae5a7ec1416f7e35df8aac6af6d523f375439548538",
     "real_legacy_leaf_paths": [
       "autoprogramming.checkpoint_only_high_consumption_tokens",
+      "control_plane.remote_access_opt_in",
       "operator_director_mailbox.enabled",
+      "runtime_models.allowed_models",
       "runtime_models.enabled",
       "schema_version",
       "server.addr",

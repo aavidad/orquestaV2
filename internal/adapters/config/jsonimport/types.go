@@ -22,10 +22,23 @@ const (
 	DispositionSecretRequired Disposition = "secret_required"
 )
 
+// SourceKind declares the only accepted JSON shape for one legacy leaf. It is
+// part of the canonical mapping row so parsing has no second path-to-type
+// authority.
+type SourceKind string
+
+const (
+	SourceKindString      SourceKind = "string"
+	SourceKindBool        SourceKind = "bool"
+	SourceKindInteger     SourceKind = "integer"
+	SourceKindStringArray SourceKind = "string_array"
+)
+
 // Mapping is one immutable row in the canonical orquesta_config.v0 table.
 // TargetKey and Transform are populated only for directly supported values.
 type Mapping struct {
 	LegacyPath  string      `json:"legacy_path"`
+	SourceKind  SourceKind  `json:"source_kind"`
 	TargetKey   config.Key  `json:"target_key,omitempty"`
 	Transform   string      `json:"transform,omitempty"`
 	Disposition Disposition `json:"disposition"`

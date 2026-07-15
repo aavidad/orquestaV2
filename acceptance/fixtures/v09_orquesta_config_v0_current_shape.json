@@ -1,16 +1,20 @@
 {
   "schema_version": "orquesta_config.v0",
   "server": {
-    "addr": "127.0.0.1:18080",
-    "state_dir": "./legacy-state"
+    "addr": "127.0.0.1:8787",
+    "state_dir": ".orquesta/state"
   },
-  "runtime_models": {
-    "enabled": true
+  "control_plane": {
+    "remote_access_opt_in": false
   },
   "operator_director_mailbox": {
-    "enabled": false
+    "enabled": true
   },
   "autoprogramming": {
-    "checkpoint_only_high_consumption_tokens": true
+    "checkpoint_only_high_consumption_tokens": 450000
+  },
+  "runtime_models": {
+    "enabled": true,
+    "allowed_models": []
   }
 }

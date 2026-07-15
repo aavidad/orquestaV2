@@ -3,12 +3,14 @@ package acceptance_test
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -28,8 +30,9 @@ import (
 
 const v09FixturePath = "acceptance/fixtures/v09_recovery_backup.json"
 const v09TrustedBaseGitCommitOID = "e198a02fd3b1f5c0d57f9fe2c427401af65ac1ee"
-const v09ProductDeltaBaseGitCommitOID = "0000000000000000000000000000000000000000"
+const v09ProductDeltaBaseGitCommitOID = "41c4702db97ca148109ce26aafca3bcf85c49c4a"
 const v09ProductDeltaSealedGitCommitOID = "0000000000000000000000000000000000000000"
+const v09RealLegacyFixtureSHA256 = "sha256:491df37cdffa509d8a31cae5a7ec1416f7e35df8aac6af6d523f375439548538"
 
 type v09Fixture struct {
 	SchemaVersion                  int                     `json:"schema_version"`
@@ -164,6 +167,16 @@ func v09AssertFixtureHeader(t *testing.T, repositoryRoot string, fixture v09Fixt
 		{ID: "OPS-15", Owner: "operations_telemetry", AcceptanceContract: "AC-V32-OPERATIONS-TELEMETRY"},
 		{ID: "OPS-16", Owner: "operations_telemetry", AcceptanceContract: "AC-V32-OPERATIONS-TELEMETRY"},
 	}
+	wantLegacyPaths := []string{
+		"autoprogramming.checkpoint_only_high_consumption_tokens",
+		"control_plane.remote_access_opt_in",
+		"operator_director_mailbox.enabled",
+		"runtime_models.allowed_models",
+		"runtime_models.enabled",
+		"schema_version",
+		"server.addr",
+		"server.state_dir",
+	}
 	if fixture.SchemaVersion != 1 || fixture.ReceiptSchemaVersion != 3 ||
 		fixture.ContractID != "AC-V09-RECOVERY-BACKUP" || fixture.TrustedBaseGitCommitOID != v09TrustedBaseGitCommitOID ||
 		fixture.ProductDeltaBaseGitCommitOID != v09ProductDeltaBaseGitCommitOID ||
@@ -176,8 +189,8 @@ func v09AssertFixtureHeader(t *testing.T, repositoryRoot string, fixture v09Fixt
 		fixture.Scenario.SchemaRefPrefix != "state-schema:sqlite:sha256:" ||
 		fixture.Scenario.BackupRefPrefix != "backup:sha256:" || len(fixture.Scenario.Failpoints) != 5 ||
 		fixture.Scenario.RealLegacyFixture != "acceptance/fixtures/v09_orquesta_config_v0_current_shape.json" ||
-		!strings.HasPrefix(fixture.Scenario.RealLegacyFixtureSHA256, "sha256:") ||
-		!sort.StringsAreSorted(fixture.Scenario.RealLegacyLeafPaths) || len(fixture.Scenario.RealLegacyLeafPaths) != 6 {
+		fixture.Scenario.RealLegacyFixtureSHA256 != v09RealLegacyFixtureSHA256 ||
+		!reflect.DeepEqual(fixture.Scenario.RealLegacyLeafPaths, wantLegacyPaths) {
 		t.Fatalf("invalid V09 fixture header: %+v", fixture)
 	}
 	if _, err := time.Parse(time.RFC3339Nano, fixture.Scenario.BaseTime); err != nil {
@@ -376,6 +389,7 @@ func v09AssertBackupRestoreRoundTrip(t *testing.T, fixture v09Fixture) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	beforeLogicalState := v09SQLiteLogicalDump(t, state.databasePath)
 	credentialSentinel := []byte("v09-private-credential-material-7f6d")
 	credentialPath := filepath.Join(root, "secrets", "credentials.json")
 	if err := os.MkdirAll(filepath.Dir(credentialPath), 0o700); err != nil {
@@ -441,6 +455,7 @@ func v09AssertBackupRestoreRoundTrip(t *testing.T, fixture v09Fixture) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	afterLogicalState := v09SQLiteLogicalDump(t, restoredPath)
 	if !reflect.DeepEqual(beforeTerminal, afterTerminal) || !reflect.DeepEqual(beforePending, afterPending) {
 		t.Fatalf("restored semantic state differs:\nterminal=%+v\npending=%+v", afterTerminal, afterPending)
 	}
@@ -449,6 +464,9 @@ func v09AssertBackupRestoreRoundTrip(t *testing.T, fixture v09Fixture) {
 	}
 	if !reflect.DeepEqual(beforeStatus, afterStatus) {
 		t.Fatalf("repository status changed across restore: before=%+v after=%+v", beforeStatus, afterStatus)
+	}
+	if !bytes.Equal(beforeLogicalState, afterLogicalState) {
+		t.Fatalf("events, outbox, claims, receipts or lifecycle rows changed across restore:\nbefore=%s\nafter=%s", beforeLogicalState, afterLogicalState)
 	}
 	if len(afterTerminal.Artifacts) == 0 {
 		t.Fatal("terminal artifact metadata was lost")
@@ -486,6 +504,16 @@ func v09AssertBackupRestoreRoundTrip(t *testing.T, fixture v09Fixture) {
 	}
 	if _, err := recovery.CreateBackup(ctx); err == nil {
 		t.Fatal("closed recovery accepted a new operation")
+	}
+	if _, err := recovery.VerifyBackup(ctx, receipt.Ref); err == nil {
+		t.Fatal("closed recovery verified a backup")
+	}
+	closedTarget, err := application.NewRecoveryTargetRef("recovery-target:v09-after-close")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := recovery.RestoreBackup(ctx, receipt.Ref, closedTarget); err == nil {
+		t.Fatal("closed recovery restored a backup")
 	}
 	if err := recovery.Close(); err != nil {
 		t.Fatalf("idempotent recovery close: %v", err)
@@ -762,7 +790,7 @@ func v09AssertRecoveryFailpointCleanup(t *testing.T, fixture v09Fixture) {
 			if err := recovery.Close(); err != nil {
 				t.Fatal(err)
 			}
-			for _, suffix := range []string{".next", ".partial", "-wal", "-shm"} {
+			for _, suffix := range []string{".next", ".partial", ".tmp", "-wal", "-shm", "-journal"} {
 				files := append(v09FilesWithSuffix(t, backupRoot, suffix), v09FilesWithSuffix(t, restoreRoot, suffix)...)
 				if len(files) != 0 {
 					t.Errorf("failpoint %s left owned %s residue: %v", stage, suffix, files)
@@ -904,8 +932,7 @@ func v09AssertJSONImport(t *testing.T, repositoryRoot string, fixture v09Fixture
 	sourcePath := v07WriteSource(t, root, "")
 	active := v07Load(t, sourcePath)
 	v07 := evidenceDecodeStrictJSON[v07Fixture](t, filepath.Join(repositoryRoot, "acceptance/fixtures/v07_config.json"))
-	manager, store := v07OpenManager(t, sourcePath, active, nil, nil, v07)
-	defer store.Close()
+	manager, _ := v07OpenManager(t, sourcePath, active, nil, nil, v07)
 	mappings := jsonimport.CanonicalMappings()
 	v09AssertCanonicalJSONMappings(t, mappings)
 	importer, err := jsonimport.New(jsonimport.Options{Manager: manager})
@@ -973,11 +1000,21 @@ func v09AssertJSONImport(t *testing.T, repositoryRoot string, fixture v09Fixture
 	realPlan, err := importer.Preview(ctx, realShape)
 	wantUnresolved := []string{
 		"autoprogramming.checkpoint_only_high_consumption_tokens",
+		"control_plane.remote_access_opt_in",
 		"operator_director_mailbox.enabled",
+		"runtime_models.allowed_models",
 		"runtime_models.enabled",
 		"server.state_dir",
 	}
-	if err != nil || realPlan.Ready || !reflect.DeepEqual(realPlan.UnresolvedPaths, wantUnresolved) ||
+	resolved := 0
+	for _, entry := range realPlan.Entries {
+		if entry.Disposition == jsonimport.DispositionMapped || entry.Disposition == jsonimport.DispositionSchema {
+			resolved++
+		}
+	}
+	if err != nil || realPlan.Ready || realPlan.SourceSHA256 != fixture.Scenario.RealLegacyFixtureSHA256 ||
+		len(realPlan.Entries) != 8 || resolved != 2 || len(realPlan.SecretRequiredPaths) != 0 ||
+		!reflect.DeepEqual(realPlan.UnresolvedPaths, wantUnresolved) ||
 		!reflect.DeepEqual(v09PlanPaths(realPlan), fixture.Scenario.RealLegacyLeafPaths) {
 		t.Fatalf("real legacy shape was not exhaustively blocked: %+v err=%v", realPlan, err)
 	}
@@ -985,8 +1022,8 @@ func v09AssertJSONImport(t *testing.T, repositoryRoot string, fixture v09Fixture
 		Source: realShape, ExpectedPlanSHA256: realPlan.PlanSHA256,
 		ExpectedRevision: applied.Receipt.AfterRevision, ActorRef: "actor:v09-migrator",
 		RequestRef: "request:v09-migrate-not-ready", Confirm: true,
-	}); err == nil {
-		t.Fatal("not-ready legacy plan committed")
+	}); !jsonimport.HasErrorCode(err, jsonimport.ErrorPlanNotReady) {
+		t.Fatalf("not-ready legacy plan error=%v", err)
 	}
 	if after := v07DirectorySnapshot(t, root); !reflect.DeepEqual(before, after) {
 		t.Fatalf("blocked legacy apply wrote files: before=%v after=%v", before, after)
@@ -1009,13 +1046,37 @@ func v09AssertJSONImport(t *testing.T, repositoryRoot string, fixture v09Fixture
 			t.Errorf("strict legacy JSON accepted %q", invalid)
 		}
 	}
-	bootstrapConfig, err := os.ReadFile(filepath.Join(repositoryRoot, "internal/bootstrap/config.go"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, forbidden := range [][]byte{[]byte("orquesta.config.json"), []byte("jsonimport"), []byte("legacyjson")} {
-		if bytes.Contains(bootstrapConfig, forbidden) {
-			t.Errorf("runtime bootstrap reads legacy JSON authority %q", forbidden)
+	v09AssertNoLegacyJSONRuntimeWiring(t, repositoryRoot)
+}
+
+func v09AssertNoLegacyJSONRuntimeWiring(t *testing.T, repositoryRoot string) {
+	t.Helper()
+	for _, relativeRoot := range []string{"internal/bootstrap", "cmd/orquesta"} {
+		root := filepath.Join(repositoryRoot, filepath.FromSlash(relativeRoot))
+		err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+				return nil
+			}
+			content, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			for _, forbidden := range [][]byte{
+				[]byte("orquesta.config.json"),
+				[]byte("orquesta/internal/adapters/config/jsonimport"),
+				[]byte("legacyjson"),
+			} {
+				if bytes.Contains(content, forbidden) {
+					t.Errorf("runtime composition %s references one-shot legacy JSON authority %q", filepath.ToSlash(path), forbidden)
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("inspect runtime composition %s: %v", relativeRoot, err)
 		}
 	}
 }
@@ -1024,12 +1085,25 @@ func v09AssertCanonicalJSONMappings(t *testing.T, mappings []jsonimport.Mapping)
 	t.Helper()
 	wantPaths := []string{
 		"autoprogramming.checkpoint_only_high_consumption_tokens",
+		"control_plane.remote_access_opt_in",
 		"control_plane.token",
 		"operator_director_mailbox.enabled",
+		"runtime_models.allowed_models",
 		"runtime_models.enabled",
 		"schema_version",
 		"server.addr",
 		"server.state_dir",
+	}
+	wantKinds := map[string]jsonimport.SourceKind{
+		"autoprogramming.checkpoint_only_high_consumption_tokens": jsonimport.SourceKindInteger,
+		"control_plane.remote_access_opt_in":                      jsonimport.SourceKindBool,
+		"control_plane.token":                                     jsonimport.SourceKindString,
+		"operator_director_mailbox.enabled":                       jsonimport.SourceKindBool,
+		"runtime_models.allowed_models":                           jsonimport.SourceKindStringArray,
+		"runtime_models.enabled":                                  jsonimport.SourceKindBool,
+		"schema_version":                                          jsonimport.SourceKindString,
+		"server.addr":                                             jsonimport.SourceKindString,
+		"server.state_dir":                                        jsonimport.SourceKindString,
 	}
 	gotPaths := make([]string, 0, len(mappings))
 	seen := make(map[string]struct{}, len(mappings))
@@ -1039,6 +1113,9 @@ func v09AssertCanonicalJSONMappings(t *testing.T, mappings []jsonimport.Mapping)
 		}
 		seen[mapping.LegacyPath] = struct{}{}
 		gotPaths = append(gotPaths, mapping.LegacyPath)
+		if mapping.SourceKind != wantKinds[mapping.LegacyPath] {
+			t.Fatalf("legacy mapping source kind differs: %+v want=%q", mapping, wantKinds[mapping.LegacyPath])
+		}
 		switch mapping.Disposition {
 		case jsonimport.DispositionMapped:
 			if mapping.TargetKey == "" || mapping.Transform == "" {
@@ -1052,7 +1129,6 @@ func v09AssertCanonicalJSONMappings(t *testing.T, mappings []jsonimport.Mapping)
 			t.Fatalf("unsupported legacy disposition: %+v", mapping)
 		}
 	}
-	sort.Strings(gotPaths)
 	if !reflect.DeepEqual(gotPaths, wantPaths) {
 		t.Fatalf("canonical orquesta_config.v0 table paths=%v want=%v", gotPaths, wantPaths)
 	}
@@ -1086,7 +1162,7 @@ func v09FilesWithSuffix(t *testing.T, root, suffix string) []string {
 		if err != nil {
 			return err
 		}
-		if !entry.IsDir() && strings.HasSuffix(path, suffix) {
+		if path != root && strings.HasSuffix(path, suffix) {
 			result = append(result, path)
 		}
 		return nil
@@ -1098,15 +1174,111 @@ func v09FilesWithSuffix(t *testing.T, root, suffix string) []string {
 	return result
 }
 
-func TestV09FixtureIsStrictJSON(t *testing.T) {
-	content, err := os.ReadFile(v09FixturePath)
+type v09SQLiteTableDump struct {
+	Name    string   `json:"name"`
+	Columns []string `json:"columns"`
+	Rows    [][]any  `json:"rows"`
+}
+
+func v09SQLiteLogicalDump(t *testing.T, filename string) []byte {
+	t.Helper()
+	dsn := (&url.URL{Scheme: "file", Path: filename, RawQuery: "mode=ro&_pragma=query_only(1)"}).String()
+	database, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		t.Fatal(err)
 	}
-	decoder := json.NewDecoder(bytes.NewReader(content))
-	decoder.DisallowUnknownFields()
-	var fixture v09Fixture
-	if err := decoder.Decode(&fixture); err != nil {
+	defer database.Close()
+	tableRows, err := database.Query(`SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name`)
+	if err != nil {
 		t.Fatal(err)
 	}
+	var names []string
+	for tableRows.Next() {
+		var name string
+		if err := tableRows.Scan(&name); err != nil {
+			_ = tableRows.Close()
+			t.Fatal(err)
+		}
+		names = append(names, name)
+	}
+	if err := tableRows.Err(); err != nil {
+		_ = tableRows.Close()
+		t.Fatal(err)
+	}
+	if err := tableRows.Close(); err != nil {
+		t.Fatal(err)
+	}
+	dump := make([]v09SQLiteTableDump, 0, len(names))
+	for _, name := range names {
+		quotedTable := v09SQLiteQuoteIdentifier(name)
+		probe, err := database.Query("SELECT * FROM " + quotedTable + " LIMIT 0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		columns, err := probe.Columns()
+		closeErr := probe.Close()
+		if err != nil || closeErr != nil || len(columns) == 0 {
+			t.Fatalf("inspect SQLite table %s: columns=%v err=%v close=%v", name, columns, err, closeErr)
+		}
+		order := make([]string, len(columns))
+		for index, column := range columns {
+			order[index] = v09SQLiteQuoteIdentifier(column)
+		}
+		rows, err := database.Query("SELECT * FROM " + quotedTable + " ORDER BY " + strings.Join(order, ", "))
+		if err != nil {
+			t.Fatal(err)
+		}
+		table := v09SQLiteTableDump{Name: name, Columns: columns, Rows: make([][]any, 0)}
+		for rows.Next() {
+			values := make([]any, len(columns))
+			destinations := make([]any, len(columns))
+			for index := range values {
+				destinations[index] = &values[index]
+			}
+			if err := rows.Scan(destinations...); err != nil {
+				_ = rows.Close()
+				t.Fatal(err)
+			}
+			table.Rows = append(table.Rows, values)
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			t.Fatal(err)
+		}
+		if err := rows.Close(); err != nil {
+			t.Fatal(err)
+		}
+		dump = append(dump, table)
+	}
+	content, err := json.Marshal(dump)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return content
+}
+
+func v09SQLiteQuoteIdentifier(value string) string {
+	return `"` + strings.ReplaceAll(value, `"`, `""`) + `"`
+}
+
+func TestV09RecoveryResidueScannerIncludesDirectories(t *testing.T) {
+	root := t.TempDir()
+	orphan := filepath.Join(root, "orphan.next")
+	if err := os.Mkdir(orphan, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if got := v09FilesWithSuffix(t, root, ".next"); !reflect.DeepEqual(got, []string{orphan}) {
+		t.Fatalf("owned transient directory escaped residue scan: %v", got)
+	}
+}
+
+func TestV09JSONImportUsesManagerWithoutOwningStoreLifecycle(t *testing.T) {
+	repositoryRoot := evidenceRepositoryRoot(t)
+	fixture := evidenceDecodeStrictJSON[v09Fixture](t, filepath.Join(repositoryRoot, filepath.FromSlash(v09FixturePath)))
+	v09AssertJSONImport(t, repositoryRoot, fixture)
+}
+
+func TestV09FixtureIsStrictJSON(t *testing.T) {
+	filename := filepath.Join(evidenceRepositoryRoot(t), filepath.FromSlash(v09FixturePath))
+	_ = evidenceDecodeStrictJSON[v09Fixture](t, filename)
 }
