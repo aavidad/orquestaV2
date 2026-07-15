@@ -18,7 +18,7 @@ import (
 const v12FixturePath = "acceptance/fixtures/v12_director_lease.json"
 const v12TrustedBaseGitCommitOID = "3108caa7e7f3f0a7b693e3027ef7cb3e56f462d9"
 const v12ProductDeltaBaseGitCommitOID = "89db75810a1250800b26cbc408befd2d8f44be62"
-const v12ProductDeltaSealedGitCommitOID = "0000000000000000000000000000000000000000"
+const v12ProductDeltaSealedGitCommitOID = "a5f3a65270fd9877926b484f3a941429391a40f2"
 
 type v12Fixture struct {
 	SchemaVersion                  int                     `json:"schema_version"`

@@ -4,7 +4,7 @@
   "contract_id": "AC-V12-DIRECTOR-LEASE",
   "trusted_base_git_commit_oid": "3108caa7e7f3f0a7b693e3027ef7cb3e56f462d9",
   "product_delta_base_git_commit_oid": "89db75810a1250800b26cbc408befd2d8f44be62",
-  "product_delta_sealed_git_commit_oid": "0000000000000000000000000000000000000000",
+  "product_delta_sealed_git_commit_oid": "a5f3a65270fd9877926b484f3a941429391a40f2",
   "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV12ScopeAndExecutableContract|TestV12EvidenceBelongsOnlyToDirectorCapabilities|TestV12AcceptanceCommandRunsDirectorConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV12DirectorLease|TestV12CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/application ./internal/config ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta'",
   "execution_argv": [
     "sh",
