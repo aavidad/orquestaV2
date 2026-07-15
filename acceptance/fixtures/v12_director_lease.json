@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "receipt_schema_version": 3,
+  "contract_id": "AC-V12-DIRECTOR-LEASE",
+  "trusted_base_git_commit_oid": "3108caa7e7f3f0a7b693e3027ef7cb3e56f462d9",
+  "product_delta_base_git_commit_oid": "3108caa7e7f3f0a7b693e3027ef7cb3e56f462d9",
+  "product_delta_sealed_git_commit_oid": "0000000000000000000000000000000000000000",
+  "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV12ScopeAndExecutableContract|TestV12EvidenceBelongsOnlyToDirectorCapabilities|TestV12AcceptanceCommandRunsDirectorConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV12DirectorLease|TestV12CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/application ./internal/config ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta'",
+  "execution_argv": [
+    "sh",
+    "-c",
+    "go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV12ScopeAndExecutableContract|TestV12EvidenceBelongsOnlyToDirectorCapabilities|TestV12AcceptanceCommandRunsDirectorConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV12DirectorLease|TestV12CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/application ./internal/config ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta"
+  ],
+  "output_path": "product/evidence/v12_director_lease.output.txt",
+  "receipt_path": "product/evidence/v12_director_lease.json",
+  "candidate_subjects": [
+    "acceptance/fixtures/v12_director_lease.json",
+    "acceptance/v12_director_lease_test.go",
+    "product/roadmap.json",
+    "product/traceability/rebuild_bugs.jsonl",
+    "product_roadmap_test.go"
+  ],
+  "owned_capability_ids": [
+    "GOV-08",
+    "GOV-09",
+    "GOV-10",
+    "ORC-24"
+  ],
+  "deferred_capabilities": [
+    {
+      "id": "ORC-14",
+      "owner": "mailbox",
+      "acceptance_contract": "AC-V13-MAILBOX"
+    },
+    {
+      "id": "ORC-09",
+      "owner": "budgets_effects",
+      "acceptance_contract": "AC-V15-BUDGETS-EFFECTS"
+    },
+    {
+      "id": "GOV-11",
+      "owner": "council",
+      "acceptance_contract": "AC-V19-COUNCIL"
+    },
+    {
+      "id": "GOV-12",
+      "owner": "independent_reviews",
+      "acceptance_contract": "AC-V18-INDEPENDENT-REVIEWS"
+    },
+    {
+      "id": "AGT-04",
+      "owner": "provider_adapters",
+      "acceptance_contract": "AC-V25-PROVIDER-ADAPTERS"
+    }
+  ],
+  "deferred_surfaces": [
+    "mailbox_handoff",
+    "budgets_effects",
+    "council_reviews",
+    "provider_specific_director",
+    "resident_scheduler_daemon"
+  ],
+  "scenario": {
+    "base_time": "2026-07-15T10:00:00Z",
+    "lease_duration": "30s",
+    "renew_after": "10s",
+    "takeover_after": "31s",
+    "project_ref": "project:v12-director",
+    "goal_ref": "goal:v12-director",
+    "human_director_actor_ref": "actor:v12-human-director",
+    "service_director_actor_ref": "actor:v12-service-director",
+    "director_permission": "goals.direct",
+    "allowed_roles": [
+      "platform_admin",
+      "project_owner",
+      "project_admin",
+      "operator"
+    ],
+    "denied_roles": [
+      "contributor",
+      "reviewer",
+      "viewer"
+    ],
+    "first_fence": 1,
+    "takeover_fence": 2,
+    "advisory_reason": "web_application alias and docs/*.md are recoverable input; preserve and replan"
+  },
+  "assertions": [
+    "human operator and service agent claim the same transferable director protocol through authenticated project access",
+    "goals.direct is one default-deny permission allowed only to platform_admin project_owner project_admin and operator",
+    "one active Director lease is scoped to one Goal and records principal opaque token monotonic fence and trusted lease_until",
+    "claim and renewal are request-idempotent while renewal keeps principal token and fence and extends only a live lease",
+    "another Director cannot claim or write while the current lease is live",
+    "takeover after expiry preserves the Goal plan and increments the fence exactly once",
+    "expired token wrong token and stale fence cannot renew or propose and create no Goal event outbox execution or decision write",
+    "a proposal binds request proposal Goal principal source Goal revision source plan generation lease fence reason and PlanSpec",
+    "the application applies a valid proposal only through Goal.ApplyPlan and schedules ready WorkItems through the existing outbox",
+    "proposal replay returns the exact persisted Goal and decision without duplicate WorkItems executions actions events or audit",
+    "immutable Director decisions and authorization receipts preserve proposer attribution and causal before and after generations",
+    "restart preserves the active lease latest fence Goal plan decisions executions and outbox in the same SQLite authority",
+    "content aliases globs incomplete detail and recoverable formatting stay advisory and never become automatic vetoes",
+    "Director owns no private lifecycle store queue loop scheduler goroutine daemon database or provider-specific policy"
+  ]
+}

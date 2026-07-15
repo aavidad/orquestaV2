@@ -1,0 +1,84 @@
+{
+  "schema_version": 1,
+  "receipt_schema_version": 3,
+  "contract_id": "AC-V11-OIDC-AD",
+  "trusted_base_git_commit_oid": "3108caa7e7f3f0a7b693e3027ef7cb3e56f462d9",
+  "product_delta_base_git_commit_oid": "3108caa7e7f3f0a7b693e3027ef7cb3e56f462d9",
+  "product_delta_sealed_git_commit_oid": "0000000000000000000000000000000000000000",
+  "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV11ScopeAndExecutableContract|TestV11OwnsNoCapabilityIDs|TestV11AcceptanceCommandRunsIdentityConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV11OIDCAD|TestV11CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/identity ./internal/config ./internal/adapters/auth/localtoken ./internal/adapters/auth/oidc ./internal/bootstrap ./cmd/orquesta'",
+  "execution_argv": [
+    "sh",
+    "-c",
+    "go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV11ScopeAndExecutableContract|TestV11OwnsNoCapabilityIDs|TestV11AcceptanceCommandRunsIdentityConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV11OIDCAD|TestV11CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/identity ./internal/config ./internal/adapters/auth/localtoken ./internal/adapters/auth/oidc ./internal/bootstrap ./cmd/orquesta"
+  ],
+  "output_path": "product/evidence/v11_oidc_ad.output.txt",
+  "receipt_path": "product/evidence/v11_oidc_ad.json",
+  "candidate_subjects": [
+    "acceptance/fixtures/v11_oidc_ad.json",
+    "acceptance/v11_oidc_ad_test.go"
+  ],
+  "owned_capability_ids": [],
+  "deferred_surfaces": [
+    "automatic_external_group_to_rbac_mapping",
+    "direct_in_process_ldap_adapter",
+    "kerberos",
+    "saml",
+    "server_side_oidc_login_session"
+  ],
+  "scenario": {
+    "base_time": "2026-07-15T08:30:00Z",
+    "provider_config_key": "identity.provider",
+    "methods": [
+      "local_token",
+      "oidc"
+    ],
+    "oidc_issuer": "https://idp.v11.invalid",
+    "oidc_audience": "orquesta-v11",
+    "oidc_subject": "00u-v11-alice",
+    "principal_ref_algorithm": "sha256(method\\x00canonical_issuer\\x00subject)",
+    "expected_principal_ref": "principal:sha256:a8c85f0b46c9fb75a6acd64dc6aa4a0eafc5771fbff3c190b9f2dfe0e70f7477",
+    "expected_actor_ref": "actor:sha256:a8c85f0b46c9fb75a6acd64dc6aa4a0eafc5771fbff3c190b9f2dfe0e70f7477",
+    "pkce_method": "S256",
+    "state": "v11-state-single-use",
+    "nonce": "v11-nonce-single-use",
+    "jwks_kids": [
+      "v11-key-before",
+      "v11-key-after"
+    ],
+    "external_groups": [
+      "orquesta-users",
+      "project-admins"
+    ],
+    "required_groups": [
+      "orquesta-users"
+    ],
+    "dex_connector": "ldap",
+    "directory_transport": "ldaps",
+    "token_sentinel": "V11_TOKEN_MUST_NEVER_BE_DURABLE_7f0f3f3d",
+    "canonical_config_keys": [
+      "identity.oidc.audience",
+      "identity.oidc.clock_skew",
+      "identity.oidc.issuer",
+      "identity.oidc.required_groups",
+      "identity.provider"
+    ]
+  },
+  "assertions": [
+    "one transport-neutral IdentityProvider port authenticates ephemeral credentials and exactly one local_token or oidc adapter is selected by composition",
+    "local_token implements the same IdentityProvider contract without changing its private credential file or request-bound principal behavior",
+    "the OIDC resource-server adapter validates signed bearer tokens against exact issuer audience non-empty subject allowed algorithm expiry not-before issued-at and bounded clock skew",
+    "OIDC principal and actor refs are deterministic hashes of authentication method canonical issuer and exact subject while email display name and groups never participate in identity",
+    "Authorization Code is exercised by a public client with PKCE S256 single-use state and nonce while Orquesta stores no browser login session authorization code verifier or client secret",
+    "JWKS discovery cache refresh accepts a newly published kid and rejects unknown removed mismatched-algorithm and invalid-signature keys without trusting token-supplied URLs",
+    "wrong issuer audience subject times nonce state PKCE signature algorithm and malformed tokens fail closed before a principal is request-bound",
+    "external groups may only gate OIDC admission through required_groups and never create roles memberships permissions or project scope",
+    "all RBAC authority remains the persisted V10 membership policy and changing IdP groups cannot grant or revoke an Orquesta project role",
+    "access ID and refresh tokens authorization codes PKCE verifiers nonce and state never enter SQLite artifacts events outbox logs errors receipts prompts or effective configuration",
+    "the canonical registry owns only provider issuer audience required_groups and clock_skew OIDC settings and contains no client_secret password cookie session or LDAP bind material",
+    "Entra ID AD FS and any conforming issuer use the same OIDC adapter with no provider-specific lifecycle policy",
+    "classic Active Directory without OIDC is bridged outside Orquesta by replaceable Dex LDAP or LDAPS to OIDC and production Go contains no LDAP client or directory password handling",
+    "a real isolated Dex plus Samba AD LDAPS smoke proves valid login stable subject required-group admission TLS rejection wrong password disabled user and removal from the required group",
+    "remote user revocation rejects new authorization grants while an already issued stateless token remains valid only until its signed expiry; no immediate revocation or local session claim is made",
+    "direct in-process LDAP Kerberos SAML server-side sessions and automatic group-to-RBAC mapping remain absent and require a later explicit vertical decision"
+  ]
+}

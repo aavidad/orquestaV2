@@ -887,6 +887,163 @@ func TestV10AcceptanceCommandRunsIdentityConsumers(t *testing.T) {
 	t.Fatal("AC-V10-IDENTITY-PROJECTS-RBAC missing")
 }
 
+func TestProductRoadmapV11ScopeAndExecutableContract(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+
+	for _, entry := range roadmap.CapabilityEntries {
+		if entry.OwnerContext == "oidc_ad" {
+			t.Fatalf("V11 is a transverse integration vertical and must not invent a capability ID: %#v", entry)
+		}
+	}
+	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV11ScopeAndExecutableContract|TestV11OwnsNoCapabilityIDs|TestV11AcceptanceCommandRunsIdentityConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV11OIDCAD|TestV11CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/identity ./internal/config ./internal/adapters/auth/localtoken ./internal/adapters/auth/oidc ./internal/bootstrap ./cmd/orquesta'"
+	for _, contract := range roadmap.AcceptanceContracts {
+		if contract.ID != "AC-V11-OIDC-AD" {
+			continue
+		}
+		if contract.Status != "executable" || contract.TestRef != "acceptance/v11_oidc_ad_test.go" ||
+			contract.Fixture != "acceptance/fixtures/v11_oidc_ad.json" ||
+			contract.Receipt != "product/evidence/v11_oidc_ad.json" || contract.Command != wantCommand ||
+			len(contract.Assertions) != 16 {
+			t.Fatalf("invalid V11 executable contract: %#v", contract)
+		}
+		return
+	}
+	t.Fatal("AC-V11-OIDC-AD missing")
+}
+
+func TestV11OwnsNoCapabilityIDs(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+	v11Evidence := map[string]bool{
+		"acceptance/v11_oidc_ad_test.go":       true,
+		"acceptance/fixtures/v11_oidc_ad.json": true,
+		"product/evidence/v11_oidc_ad.json":    true,
+	}
+	for _, entry := range roadmap.CapabilityEntries {
+		if entry.OwnerContext == "oidc_ad" {
+			t.Errorf("capability %s is incorrectly owned by transverse V11", entry.ID)
+		}
+		for _, evidenceRef := range entry.EvidenceRefs {
+			if v11Evidence[evidenceRef] {
+				t.Errorf("capability %s incorrectly claims transverse V11 evidence %q", entry.ID, evidenceRef)
+			}
+		}
+	}
+}
+
+func TestV11AcceptanceCommandRunsIdentityConsumers(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+	for _, contract := range roadmap.AcceptanceContracts {
+		if contract.ID != "AC-V11-OIDC-AD" {
+			continue
+		}
+		for _, required := range []string{
+			"./acceptance", "./internal/identity", "./internal/config",
+			"./internal/adapters/auth/localtoken", "./internal/adapters/auth/oidc",
+			"./internal/bootstrap", "./cmd/orquesta",
+		} {
+			if !roadmapCommandHasArgument(contract.Command, required) {
+				t.Errorf("V11 acceptance omits identity consumer package %q: %q", required, contract.Command)
+			}
+		}
+		return
+	}
+	t.Fatal("AC-V11-OIDC-AD missing")
+}
+
+func TestProductRoadmapV12ScopeAndExecutableContract(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+	var owned []string
+	entries := make(map[string]roadmapEntry, len(roadmap.CapabilityEntries))
+	for _, entry := range roadmap.CapabilityEntries {
+		entries[entry.ID] = entry
+		if entry.OwnerContext == "director_lease" && entry.Decision == "accept" {
+			owned = append(owned, entry.ID)
+		}
+	}
+	sort.Strings(owned)
+	wantOwned := []string{"GOV-08", "GOV-09", "GOV-10", "ORC-24"}
+	if !reflect.DeepEqual(owned, wantOwned) {
+		t.Fatalf("V12 accepted ownership = %v, want exact %v", owned, wantOwned)
+	}
+	wantEvidence := []string{
+		"acceptance/v12_director_lease_test.go",
+		"acceptance/fixtures/v12_director_lease.json",
+		"product/evidence/v12_director_lease.json",
+	}
+	for _, id := range wantOwned {
+		entry := entries[id]
+		if entry.Status != "accredited" || !reflect.DeepEqual(entry.EvidenceRefs, wantEvidence) {
+			t.Errorf("V12 capability %s accreditation=%q evidence=%v", id, entry.Status, entry.EvidenceRefs)
+		}
+	}
+	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV12ScopeAndExecutableContract|TestV12EvidenceBelongsOnlyToDirectorCapabilities|TestV12AcceptanceCommandRunsDirectorConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV12DirectorLease|TestV12CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/application ./internal/config ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta'"
+	for _, contract := range roadmap.AcceptanceContracts {
+		if contract.ID != "AC-V12-DIRECTOR-LEASE" {
+			continue
+		}
+		if contract.Status != "executable" || contract.TestRef != "acceptance/v12_director_lease_test.go" ||
+			contract.Fixture != "acceptance/fixtures/v12_director_lease.json" ||
+			contract.Receipt != "product/evidence/v12_director_lease.json" || contract.Command != wantCommand ||
+			len(contract.Assertions) != 14 {
+			t.Fatalf("invalid V12 executable contract: %#v", contract)
+		}
+		return
+	}
+	t.Fatal("AC-V12-DIRECTOR-LEASE missing")
+}
+
+func TestV12EvidenceBelongsOnlyToDirectorCapabilities(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+	owned := map[string]bool{"GOV-08": true, "GOV-09": true, "GOV-10": true, "ORC-24": true}
+	wantEvidence := []string{
+		"acceptance/v12_director_lease_test.go",
+		"acceptance/fixtures/v12_director_lease.json",
+		"product/evidence/v12_director_lease.json",
+	}
+	v12Evidence := make(map[string]bool, len(wantEvidence))
+	for _, ref := range wantEvidence {
+		v12Evidence[ref] = true
+	}
+	for _, entry := range roadmap.CapabilityEntries {
+		if owned[entry.ID] {
+			if entry.Status != "accredited" || !reflect.DeepEqual(entry.EvidenceRefs, wantEvidence) {
+				t.Errorf("owned V12 capability %s lacks exact accreditation: status=%q evidence=%v", entry.ID, entry.Status, entry.EvidenceRefs)
+			}
+			continue
+		}
+		for _, evidenceRef := range entry.EvidenceRefs {
+			if v12Evidence[evidenceRef] {
+				t.Errorf("unowned capability %s claims V12 evidence %q", entry.ID, evidenceRef)
+			}
+		}
+	}
+}
+
+func TestV12AcceptanceCommandRunsDirectorConsumers(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+	for _, contract := range roadmap.AcceptanceContracts {
+		if contract.ID != "AC-V12-DIRECTOR-LEASE" {
+			continue
+		}
+		for _, required := range []string{
+			"./acceptance", "./internal/goal", "./internal/identity", "./internal/application",
+			"./internal/config", "./internal/adapters/state/sqlite", "./internal/bootstrap", "./cmd/orquesta",
+		} {
+			if !roadmapCommandHasArgument(contract.Command, required) {
+				t.Errorf("V12 acceptance omits Director consumer package %q: %q", required, contract.Command)
+			}
+		}
+		return
+	}
+	t.Fatal("AC-V12-DIRECTOR-LEASE missing")
+}
+
 func TestV04AccreditsOnlyGOV02AndPreservesGOV01Deferred(t *testing.T) {
 	var roadmap roadmapDocument
 	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
