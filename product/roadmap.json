@@ -3408,8 +3408,12 @@
       "acceptance_contracts": [
         "AC-V08-CREDENTIALS"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v08_credentials_test.go",
+        "acceptance/fixtures/v08_credentials.json",
+        "product/evidence/v08_credentials.json"
+      ],
       "supersedes": []
     },
     {
@@ -3427,8 +3431,12 @@
       "acceptance_contracts": [
         "AC-V08-CREDENTIALS"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v08_credentials_test.go",
+        "acceptance/fixtures/v08_credentials.json",
+        "product/evidence/v08_credentials.json"
+      ],
       "supersedes": []
     },
     {
@@ -5273,8 +5281,12 @@
       "acceptance_contracts": [
         "AC-V08-CREDENTIALS"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v08_credentials_test.go",
+        "acceptance/fixtures/v08_credentials.json",
+        "product/evidence/v08_credentials.json"
+      ],
       "supersedes": []
     },
     {
@@ -5383,8 +5395,12 @@
       "acceptance_contracts": [
         "AC-V08-CREDENTIALS"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v08_credentials_test.go",
+        "acceptance/fixtures/v08_credentials.json",
+        "product/evidence/v08_credentials.json"
+      ],
       "supersedes": []
     },
     {
