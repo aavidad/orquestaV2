@@ -1,84 +1,84 @@
 # Estado y handoff vivo del rebuild
 
-Última actualización: 2026-07-15 06:12 Europe/Madrid.
+Última actualización: 2026-07-15 07:54 Europe/Madrid.
 
 Este documento permite continuar el rebuild sin reconstruir el contexto de la
 sesión. Es estado operativo, no evidencia de aceptación. Los estados canónicos
 de capacidades, verticales y contratos viven en `product/roadmap.json`; los
 verdes viven en receipts fuera de su propio candidato.
 
-## Checkpoint vigente: V09 cerrado
+## Checkpoint vigente: V10 cerrado
 
-V09 está cerrado funcionalmente, contrarrevisado y con evidencia reproducible.
-V10 aún no está abierto. El próximo agente debe partir del `HEAD` que contiene
-este documento y no reanalizar, reimplementar ni resellar V01–V09 salvo
-regresión reproducible.
+V10 está cerrado funcionalmente, contrarrevisado y con evidencia reproducible.
+V11 y V12 pueden abrirse en paralelo porque ambas dependen ya del cierre V10 y
+no dependen entre sí. El próximo agente debe partir del `HEAD` que contiene este
+documento y no reanalizar, reimplementar ni resellar V01–V10 salvo regresión
+reproducible.
 
-V09 cierra exactamente `EVD-15` y `OPS-14`. Instalar/actualizar/rollback
-(`OPS-15`) permanece íntegramente en V32. El total queda en 34/257 capacidades,
-13,23 %, y 9/34 verticales, 26,5 %.
+V10 cierra exactamente `GOV-19`, `GOV-20` y `GOV-22`. `ORC-11` permanece
+íntegramente en V15. El total queda en 37/257 capacidades, 14,40 %, y 10/34
+verticales, 29,4 %.
 
-Resultado funcional V09:
+Resultado funcional V10:
 
-- `application.StateRecovery` expone solo `CreateBackup`, `VerifyBackup` y
-  `RestoreBackup`; no extiende `StateRepository` ni crea otra autoridad;
-- SQLite produce backup online, content-addressed y con manifiesto mínimo;
-  verifica integridad, foreign keys, migraciones, esquema y reconstrucción de
-  todos los agregados antes de publicar un restore en destino nuevo;
-- el roundtrip conserva todas las tablas causales, refs, revisiones,
-  generaciones, claims, fences, outbox, receipts y terminalidad; el replay no
-  reejecuta trabajo terminal y deja lo pendiente recuperable una sola vez;
-- locks e I/O quedan anclados al mismo inode mediante descriptores y `os.Root`;
-  traversal, symlink, hardlink, owner/modos inseguros, sustitución concurrente
-  de roots, corrupción y cinco crash boundaries fallan sin publicación parcial;
-- plataformas no Linux compilan y fallan antes de efectos con frontera
-  `unsupported` explícita;
-- el importador one-shot `orquesta_config.v0` usa tabla declarativa única,
-  fija los 402 bytes reales del legacy y sus ocho hojas, proyecta solo las dos
-  claves resolubles por el Manager V07 y hace cero escrituras ante secretos o
-  pendientes. No existe dual-read ni wiring de runtime para JSON;
-- V09 no añade PostgreSQL, identidad, RBAC, Git, UI ni operaciones globales.
+- un modelo único separa `PrincipalRef` autenticado de `ActorRef` de
+  procedencia y representa humanos/servicios, workspace, grupo, proyecto y
+  repositorio mediante refs opacas;
+- siete roles, ocho permisos, default deny, membresía CAS, revocación y
+  auditoría inmutable se aplican antes de todo efecto o enumeración;
+- la colaboración conserva el creador original y registra al colaborador que
+  confirma o solicita; `Goal.Actor` no concede autoridad;
+- las seis tools MCP exigen `project_ref`; la identidad procede solo del
+  contexto de transporte `localtoken` y no puede falsificarse en payload;
+- una sola autoridad SQLite persiste estado y acceso; la migración V09 es
+  idempotente, deriva `requested_by` del confirmador de `AppSpec` y conserva
+  todas las tuplas RBAC/auditoría/autorización en backup/restore;
+- bootstrap local es exacto, repetible y no abre una segunda vía para crear
+  propietarios; la última autoridad del proyecto no puede revocarse;
+- recovery acepta solo esquemas exactos V5/V6, restaura primero y migra por el
+  camino normal; no existe segunda base, store, cola ni identidad embebida;
+- V10 no añade OIDC/AD, cuotas, Git, web, PostgreSQL ni un Director privado.
 
-Cadena autoritativa V09:
+Cadena autoritativa V10:
 
 ```text
-base confiable V08:  e198a02fd3b1f5c0d57f9fe2c427401af65ac1ee
-contrato rojo B:     41c4702db97ca148109ce26aafca3bcf85c49c4a
-producto P:          5cc86a9b1b1153f381080e64afbc526d403df385
-sellado C:           70fb59e9fcdeb8cdeba2ba10273f409af0f27cfa
-tree C:              9738ffa1d4e00732c1fa91a959c515c6218815a0
-evidencia E:         6b4c83308b10396d418dcd31b8358cf344f8f778
-E2E Codex real:      5d4b66d1ec3f671ed17576d20229bfab7d1fd6a5
-candidate SHA:       sha256:60ddae7e2d52064377ceea0ac7301e449ed5612a02a7e7735fb2385dcec6b108
-fixture SHA:         sha256:9f8e585de7886d3b075c720835d89b09824225db94d75d5635c62d419208056a
-fixture blob C:      60b9e899dc8f5d6ad37a1cf177b9106294657a3f
-output SHA:          sha256:de089a17db0ce76a2e8308b6dd9bf2a6b7db3956c2d42a1c9045543d214f0311
+base confiable V09:  f48066832b3813e996bf990083cf13c78e98c506
+contrato rojo B:     0a945a61c50f4c36167cf514749ee8ebf72333fd
+producto P sellado:  d2e86f07be4574adc1f36912f3c12082024f4868
+sellado C:           c74b6d7664266ce7fccd5eb9366bc99fbe2ce7e0
+tree C:              ac572ee38cfd8ccbe0c31ef4ed346a8a43a90c8b
+evidencia E:         ad22343b8ddb3188d8efe6fa9af334537c1d8291
+E2E Codex real:      2c120923d9b503c6e2a5afff63af8e0c80199e38
+candidate SHA:       sha256:459698a5f6aa27c605a2fab6e93afe232655c01429e4ad5632c5e2b66978b592
+fixture SHA:         sha256:a70d00429a1e0ef074aa539c2efc32d4d6c72087c6db095dcd468c2fe01235f5
+fixture blob C:      8fec07ce88532a3b24c763362f6b083905dd60c8
+output SHA:          sha256:968c85aec1046ee6b2ac6132140fd4d4264f098f06c60e1e9d63905b8d21520f
 ```
 
 El receipt V3 ejecutó el argv contractual desde `C` en checkout detached,
-limpio y con status vacío. Los 28 sujetos coinciden exactamente con `B..P`;
-receipt y salida quedan fuera del candidato. Suite global, focales, `-race`,
-`vet`, aceptación, arquitectura, roadmap, trazabilidad, cross-builds y
-diff-check quedaron verdes. Las contrarrevisiones finales dejaron P0/P1 en
-cero.
+limpio y con status vacío. Sus 87 sujetos coinciden exactamente con `B..P`;
+la extensión de evidencia liga también las eliminaciones exactas sin alterar
+receipts históricos. Suite global, focales, `-race`, `vet`, aceptación,
+arquitectura, roadmap, trazabilidad y diff-check quedaron verdes.
 
-Los bugs `BUG-REBUILD-20260715-110` a `129` permanecen cerrados con causa,
-invariante y prueba única de lección. Incluyen scope prestado, aceptación no
-ejecutada, comparación incompleta del DB, crash simulado falso, schema drift,
-fixture legacy inventado, TOCTOU de roots, ownership de FD, frontera `!linux` y
-el timeout no causal de la prueba CAS.
+Los bugs `BUG-REBUILD-20260715-130` a `142` permanecen cerrados con causa,
+invariante y prueba de lección. Incluyen bootstrap reabrible, colisión de
+identidad migrada, receipt de autorización dentro del fingerprint, revocación
+de la última autoridad, recovery incompleto, política duplicada, actor
+falsificable, requester histórico incorrecto, regresión V09 y eliminaciones no
+ligadas por el digest del candidato.
 
 El E2E Codex real vigente está ligado a source digest
-`sha256:0474a270b34235630afb4f36d21d7220a54a8bdbe07a9c6944b4dd078e9e6b2b`
-y marcador `ORQUESTA_CODEX_E2E_OK_cabad508056c36f6fb0587e3ef76326b`.
+`sha256:d5b0ad4796f49ce0a1a3b0691ffd53bb7e8f1ea732c1c614a7532eb9bdebb73c`
+y marcador `ORQUESTA_CODEX_E2E_OK_59aab0fbb4d97b2329e593445b1e5ed1`.
 Cualquier cambio posterior en código activo invalida ese receipt y obliga a
 repetir el E2E.
 
 Uso honesto actual: Orquesta recibe por MCP un DAG declarado, lo persiste,
-resuelve credenciales por referencia, ejecuta con Codex real y puede verificar,
-respaldar y restaurar su estado SQLite. Identidad/proyectos/RBAC empiezan en
-V10; dirección autónoma de una petición abierta culmina en V22; workspace/Git
-empieza en V16.
+autoriza varios usuarios y servicios por proyecto, resuelve credenciales por
+referencia, ejecuta con Codex real y verifica, respalda y restaura SQLite.
+OIDC/AD empieza en V11, el Director neutral y transferible en V12, workspace/Git
+en V16 y la dirección autónoma completa de una petición abierta culmina en V22.
 
 ## Checkpoint histórico de V01–V05
 
@@ -263,48 +263,52 @@ scripts/check_rebuild_write_set.sh
   íntegra en V17.
 - V09 repositorio, backup y restore: cerrado; receipt V3 válido; acredita
   exactamente `EVD-15` y `OPS-14`; `OPS-15` permanece íntegra en V32.
-- V10–V34: pendientes. No contar código heredado, groundwork o una prueba
+- V10 proyectos, multiusuario, RBAC y auditoría: cerrado; receipt V3 válido;
+  acredita exactamente `GOV-19`, `GOV-20` y `GOV-22`; `ORC-11` permanece
+  íntegra en V15.
+- V11–V34: pendientes. No contar código heredado, groundwork o una prueba
   aislada como vertical posterior cerrada.
-- progreso vertical cerrado: 9 de 34, 26,5 % de la ruta; receipts válidos: 9
-  de 9 contratos ejecutables;
-- progreso de capacidades: 34 de 257 en estado `accredited`, 13,23 %:
+- progreso vertical cerrado: 10 de 34, 29,4 % de la ruta; receipts válidos: 10
+  de 10 contratos ejecutables;
+- progreso de capacidades: 37 de 257 en estado `accredited`, 14,40 %:
   `EVD-02`, `EVD-11`, `EVD-12`, `EVD-15`, `GOV-02`, `GOV-03`, `GOV-04`, `GOV-05`,
-  `GOV-06`, `GOV-16`, `GOV-21`, `OPS-01`, `OPS-02`, `OPS-03`, `OPS-04`,
+  `GOV-06`, `GOV-16`, `GOV-19`, `GOV-20`, `GOV-21`, `GOV-22`, `OPS-01`,
+  `OPS-02`, `OPS-03`, `OPS-04`,
   `OPS-05`, `OPS-06`, `OPS-08`, `OPS-09`, `OPS-10`, `OPS-12`, `OPS-14`, `OPS-26`,
   `OPS-27`, `OPS-28`, `OPS-29`, `OPS-30`, `ORC-01`, `ORC-02`, `ORC-06`,
   `ORC-12`, `ORC-13`, `ORC-17` y `STG-00`.
 
 ## Siguiente acción exacta
 
-Abrir solo el contrato rojo V10 `Proyectos, multiusuario, RBAC y auditoría`.
-Primero corregir el scope canónico: V10 acredita exactamente `GOV-19`, `GOV-20`
-y `GOV-22`; `ORC-11` (cuotas/fairness) pasa íntegramente a V15
-`budgets_effects`, con dependencias de estado atómico, identidad, lease del
-Director y controles, y aceptación `AC-V15-BUDGETS-EFFECTS`.
+Abrir V11 `OIDC/AD` y V12 `Director con lease` en paralelo con contratos rojos y
+write-sets de producto disjuntos. Serializar solamente los artefactos compartidos
+de roadmap, configuración, bootstrap, evidencia y este handoff.
 
-El corte mínimo V10 introduce principal autenticado, proyecto explícito,
-autorización de aplicación antes de todos los casos públicos, roles
-`platform_admin|project_owner|project_admin|contributor|reviewer|operator|viewer`,
-default deny, colaboración de dos miembros, aislamiento/no-enumeración,
-revocación CAS y auditoría durable. Humanos y servicios usan el mismo modelo de
-membresía; `Goal.Actor` conserva procedencia pero no concede autoridad. La
-jerarquía `workspace/group/project/repository` solo persiste refs opacas y sus
-aristas: paths, checkout, branch, diff, merge y forge pertenecen a V16.
+V11 no acredita IDs de capacidad: cierra una vertical transversal. Debe haber
+un único puerto de proveedor de identidad y dos adaptadores, `localtoken` y
+OIDC. Entra/ADFS pueden usar OIDC directo; Active Directory clásico se integra
+mediante un bridge libre externo Dex LDAP/LDAPS→OIDC. El core no conoce LDAP,
+passwords, sesiones, JWKS ni grupos externos. La identidad estable se deriva de
+`método + issuer canónico + sub`; email, nombre y grupos son atributos, no
+autoridad RBAC. No crear otra DB, daemon ni secreto de cliente en el servidor de
+recursos.
 
-V10 debe migrar idempotentemente un backup sellado V09 conservando refs,
-revisiones, outbox, claims y receipts. La identidad se toma de credenciales de
-transporte, nunca del payload. No añadir OIDC/AD/JWKS (V11), fairness (V15), Git
-(V16), web (V24) ni segunda base/store/cola.
+V12 acredita exactamente `GOV-08`, `GOV-09`, `GOV-10` y `ORC-24`. Debe extender
+el mismo `Orchestrator`, `Goal`, SQLite y outbox con `ClaimDirector`,
+`RenewDirector` y `ProposeDirectorPlan`: lease por Goal, token/fence, propuesta
+versionada y aplicación causal por el camino `Goal.ApplyPlan`. No crear
+`DirectorStore`, loop, scheduler, cola, goroutine ni lifecycle paralelo. Solo
+seguridad, causalidad, refs y fence pueden bloquear; heurísticas de texto no
+deciden.
 
-Los subagentes directos siguen siendo bootstrap hasta V22: para otro proyecto,
-la nueva Orquesta solo puede coordinarlo hoy si el consumidor entrega un DAG
-declarado. Una petición abierta necesita todavía dirección externa.
+Los subagentes directos siguen siendo bootstrap hasta V22. Hoy Orquesta puede
+coordinar un DAG declarado; una petición abierta aún necesita dirección externa.
 
 ## Historial de ejecución (no sustituye el checkpoint vigente)
 
 Las palabras “pendiente”, “siguiente” o “en curso” dentro del historial
-describen checkpoints pasados. No son órdenes de reanudación. La única acción
-vigente es abrir V10 desde el cierre acreditado V09.
+describen checkpoints pasados. No son órdenes de reanudación. La acción vigente
+es abrir V11 y V12 desde el cierre acreditado V10.
 
 ## V03: trabajo ya realizado
 
