@@ -10,13 +10,17 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"orquesta/internal/identity"
 )
 
 const tokenByteSize = 32
 
 type Authenticator struct {
-	token  string
-	digest [sha256.Size]byte
+	token        string
+	digest       [sha256.Size]byte
+	principal    identity.Principal
+	hasPrincipal bool
 }
 
 // Open loads the existing local token or creates it once with private
@@ -51,6 +55,27 @@ func (authenticator *Authenticator) Token() string {
 		return ""
 	}
 	return authenticator.token
+}
+
+// ForPrincipal returns an immutable request authenticator for one exact local
+// principal. Open deliberately returns credential storage without identity so
+// bootstrap must compose both authorities explicitly before serving traffic.
+func (authenticator *Authenticator) ForPrincipal(principal identity.Principal) (*Authenticator, error) {
+	if authenticator == nil || authenticator.token == "" {
+		return nil, &Error{Code: CodePrincipalInvalid}
+	}
+	if err := identity.ValidatePrincipal(principal); err != nil {
+		return nil, &Error{Code: CodePrincipalInvalid, Cause: err}
+	}
+	if authenticator.hasPrincipal {
+		return nil, &Error{Code: CodePrincipalInvalid}
+	}
+	return &Authenticator{
+		token:        authenticator.token,
+		digest:       authenticator.digest,
+		principal:    principal,
+		hasPrincipal: true,
+	}, nil
 }
 
 func normalizePath(configuredPath string) (string, error) {

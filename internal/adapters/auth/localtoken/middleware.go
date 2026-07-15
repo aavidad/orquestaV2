@@ -5,13 +5,20 @@ import (
 	"crypto/subtle"
 	"net/http"
 	"strings"
+
+	"orquesta/internal/identity"
 )
 
 // Middleware protects an HTTP handler with the persisted local Bearer token.
 func (authenticator *Authenticator) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if authenticator == nil || !authenticator.hasPrincipal ||
+			identity.ValidatePrincipal(authenticator.principal) != nil {
+			unavailable(writer)
+			return
+		}
 		candidate, present := requestBearerToken(request)
-		if authenticator == nil || !present || !authenticator.matches(candidate) {
+		if !present || !authenticator.matches(candidate) {
 			unauthorized(writer)
 			return
 		}
@@ -19,7 +26,12 @@ func (authenticator *Authenticator) Middleware(next http.Handler) http.Handler {
 			http.Error(writer, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
 			return
 		}
-		next.ServeHTTP(writer, request)
+		bound, err := identity.BindPrincipal(request.Context(), authenticator.principal)
+		if err != nil {
+			unavailable(writer)
+			return
+		}
+		next.ServeHTTP(writer, request.WithContext(bound))
 	})
 }
 
@@ -46,4 +58,8 @@ func (authenticator *Authenticator) matches(candidate string) bool {
 func unauthorized(writer http.ResponseWriter) {
 	writer.Header().Set("WWW-Authenticate", "Bearer")
 	http.Error(writer, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+}
+
+func unavailable(writer http.ResponseWriter) {
+	http.Error(writer, http.StatusText(http.StatusServiceUnavailable), http.StatusServiceUnavailable)
 }
