@@ -288,6 +288,30 @@ func evidenceValidateCandidateSubjects(subjects []string, receiptPath, outputPat
 	return nil
 }
 
+// evidenceValidateCandidateSubjectAtDelta accepts a readable subject or an
+// exact deletion in the sealed delta. Deletions are product changes too and
+// must stay in the candidate set even though no file exists at HEAD.
+func evidenceValidateCandidateSubjectAtDelta(
+	repositoryRoot, baseCommit, sealedCommit, subject string,
+) error {
+	if _, err := os.Stat(filepath.Join(repositoryRoot, filepath.FromSlash(subject))); err == nil {
+		return nil
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("candidate subject %q is not readable: %w", subject, err)
+	}
+	output, err := evidenceGit(
+		repositoryRoot, "diff", "--no-renames", "--name-status",
+		baseCommit, sealedCommit, "--", subject,
+	)
+	if err != nil {
+		return fmt.Errorf("resolve absent candidate subject %q: %w", subject, err)
+	}
+	if strings.TrimSpace(string(output)) != "D\t"+subject {
+		return fmt.Errorf("absent candidate subject %q is not an exact sealed deletion", subject)
+	}
+	return nil
+}
+
 func evidenceValidateCandidateSubjectSet(subjects []string) error {
 	if len(subjects) == 0 || !sort.StringsAreSorted(subjects) {
 		return fmt.Errorf("candidate subjects must be non-empty and sorted: %v", subjects)

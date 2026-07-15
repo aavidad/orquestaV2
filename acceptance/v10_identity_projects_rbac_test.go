@@ -198,8 +198,11 @@ func v10AssertFixtureHeader(t *testing.T, repositoryRoot string, fixture v10Fixt
 		t.Fatal(err)
 	}
 	for _, relative := range fixture.CandidateSubjects {
-		if _, err := os.Stat(filepath.Join(repositoryRoot, filepath.FromSlash(relative))); err != nil {
-			t.Errorf("candidate subject %q is not readable: %v", relative, err)
+		if err := evidenceValidateCandidateSubjectAtDelta(
+			repositoryRoot, fixture.ProductDeltaBaseGitCommitOID,
+			fixture.ProductDeltaSealedGitCommitOID, relative,
+		); err != nil {
+			t.Error(err)
 		}
 	}
 }
