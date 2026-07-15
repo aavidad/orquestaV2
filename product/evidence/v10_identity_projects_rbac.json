@@ -1,1 +1,32 @@
-{}
+{
+  "schema_version": 3,
+  "evidence_kind": "reproducibility_descriptor",
+  "contract": "AC-V10-IDENTITY-PROJECTS-RBAC",
+  "result": "PASS",
+  "validation_command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV10ScopeAndExecutableContract|TestV10EvidenceBelongsOnlyToIdentityCapabilities|TestV10AcceptanceCommandRunsIdentityConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV10IdentityProjectsRBAC|TestV10CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/application ./internal/config ./internal/i18n ./internal/adapters/auth/localtoken ./internal/adapters/state/sqlite ./internal/interfaces/mcp ./internal/bootstrap ./cmd/orquesta'",
+  "executed_at": "2026-07-15T07:43:04+02:00",
+  "execution": {
+    "argv": [
+      "sh",
+      "-c",
+      "go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV10ScopeAndExecutableContract|TestV10EvidenceBelongsOnlyToIdentityCapabilities|TestV10AcceptanceCommandRunsIdentityConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV10IdentityProjectsRBAC|TestV10CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/application ./internal/config ./internal/i18n ./internal/adapters/auth/localtoken ./internal/adapters/state/sqlite ./internal/interfaces/mcp ./internal/bootstrap ./cmd/orquesta"
+    ],
+    "source_git_commit_oid": "c74b6d7664266ce7fccd5eb9366bc99fbe2ce7e0",
+    "source_worktree_state": "detached_clean",
+    "source_status_porcelain_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "exit_code": 0,
+    "combined_output_path": "product/evidence/v10_identity_projects_rbac.output.txt",
+    "combined_output_sha256": "sha256:968c85aec1046ee6b2ac6132140fd4d4264f098f06c60e1e9d63905b8d21520f",
+    "go_version": "go1.25.11"
+  },
+  "fixture_sha256": "sha256:a70d00429a1e0ef074aa539c2efc32d4d6c72087c6db095dcd468c2fe01235f5",
+  "candidate_digest_algorithm": "sha256:length-framed-git-blob-set:v1",
+  "candidate_sha256": "sha256:459698a5f6aa27c605a2fab6e93afe232655c01429e4ad5632c5e2b66978b592",
+  "sealed_source": {
+    "identity_kind": "sealed_git_subject_set",
+    "git_commit_oid": "c74b6d7664266ce7fccd5eb9366bc99fbe2ce7e0",
+    "git_tree_oid": "ac572ee38cfd8ccbe0c31ef4ed346a8a43a90c8b",
+    "fixture_blob_oid": "8fec07ce88532a3b24c763362f6b083905dd60c8",
+    "sha256": "sha256:459698a5f6aa27c605a2fab6e93afe232655c01429e4ad5632c5e2b66978b592"
+  }
+}

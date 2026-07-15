@@ -1,0 +1,12 @@
+ok  	orquesta	0.085s
+ok  	orquesta/acceptance	0.070s
+ok  	orquesta/internal/goal	0.005s
+ok  	orquesta/internal/identity	0.002s
+ok  	orquesta/internal/application	0.005s
+ok  	orquesta/internal/config	0.254s
+ok  	orquesta/internal/i18n	0.002s
+ok  	orquesta/internal/adapters/auth/localtoken	0.004s
+ok  	orquesta/internal/adapters/state/sqlite	2.631s
+ok  	orquesta/internal/interfaces/mcp	0.157s
+ok  	orquesta/internal/bootstrap	0.662s
+ok  	orquesta/cmd/orquesta	0.003s
