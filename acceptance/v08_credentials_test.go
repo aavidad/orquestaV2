@@ -404,6 +404,9 @@ func v08AssertFilesystemAndRecovery(t *testing.T, fixture v08Fixture) {
 func v08AssertFsyncBoundaries(t *testing.T, fixture v08Fixture) {
 	t.Helper()
 	root := t.TempDir()
+	if err := os.Chmod(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	options := v08LocalOptions(filepath.Join(root, "credentials.json"), fixture, nil, time.Time{})
 	fsyncs := 0
 	options.Sync = func(file *os.File) error { fsyncs++; return file.Sync() }
@@ -420,13 +423,14 @@ func v08AssertFsyncBoundaries(t *testing.T, fixture v08Fixture) {
 	for _, stage := range fixture.Scenario.Failpoints {
 		t.Run(stage, func(t *testing.T) {
 			root := t.TempDir()
+			seed := v08OpenStore(t, root, fixture, nil, time.Time{})
+			v08Create(t, context.Background(), seed, fixture, "request:v08-fsync-create-"+stage)
 			failed := v08OpenStore(t, root, fixture, func(current string) error {
 				if current == stage {
 					return errors.New("simulated_interruption")
 				}
 				return nil
 			}, time.Time{})
-			v08Create(t, context.Background(), failed, fixture, "request:v08-fsync-create-"+stage)
 			request := v08RotateRequest(t, fixture, "request:v08-fsync-rotate-"+stage)
 			if _, err := failed.Rotate(context.Background(), request); err == nil {
 				t.Fatalf("fsync failpoint %s was not reached", stage)
