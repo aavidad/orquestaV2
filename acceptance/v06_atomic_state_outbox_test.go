@@ -19,6 +19,7 @@ import (
 	"orquesta/internal/adapters/state/sqlite"
 	"orquesta/internal/application"
 	"orquesta/internal/goal"
+	"orquesta/internal/identity"
 	"orquesta/internal/ports"
 )
 
@@ -294,7 +295,7 @@ END`); err != nil {
 	agent := newV06Agent(clock, v06Capabilities(fixture.OpaqueRequirements, true), "accepted")
 	orchestrator := v06NewOrchestrator(t, repository, clock, &v06IDs{}, agent, newV06ArtifactStore(), fixture)
 	request := v06SubmitRequest(t, "request:v06-atomic", nil)
-	if _, err := orchestrator.Submit(ctx, request); err == nil {
+	if _, err := orchestrator.Submit(ctx, v06Access(t), request); err == nil {
 		t.Fatal("event failpoint allowed partial Goal creation")
 	}
 	for _, table := range []string{"goals", "work_items", "executions", "events", "outbox"} {
@@ -305,7 +306,7 @@ END`); err != nil {
 	if _, err := raw.ExecContext(ctx, `DROP TRIGGER v06_abort_event`); err != nil {
 		t.Fatal(err)
 	}
-	created, err := orchestrator.Submit(ctx, request)
+	created, err := orchestrator.Submit(ctx, v06Access(t), request)
 	if err != nil || !created.Created {
 		t.Fatalf("create after rollback: created=%v err=%v", created.Created, err)
 	}
@@ -315,7 +316,7 @@ END`); err != nil {
 			t.Errorf("%s rows = %d, want %d", table, got, want)
 		}
 	}
-	replayed, err := orchestrator.Submit(ctx, request)
+	replayed, err := orchestrator.Submit(ctx, v06Access(t), request)
 	if err != nil || replayed.Created || replayed.Record.Goal.Ref() != created.Record.Goal.Ref() {
 		t.Fatalf("idempotent replay created another Goal: %+v err=%v", replayed, err)
 	}
@@ -337,7 +338,7 @@ func v06AssertReplaceableAttemptsAndRestart(t *testing.T, fixture v06Fixture) {
 	agent := newV06Agent(clock, v06Capabilities(fixture.OpaqueRequirements, true), fixture.ClockAndRetry.LaunchOutcomes...)
 	orchestrator := v06NewOrchestrator(t, repository, clock, ids, agent, artifacts, fixture)
 
-	created, err := orchestrator.Submit(ctx, v06SubmitRequest(t, "request:v06-attempts", nil))
+	created, err := orchestrator.Submit(ctx, v06Access(t), v06SubmitRequest(t, "request:v06-attempts", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -419,7 +420,7 @@ func v06AssertFencedClaimAndReceipt(t *testing.T, fixture v06Fixture) {
 	second := v06OpenSQLite(t, ctx, databasePath, clock)
 	agent := newV06Agent(clock, v06Capabilities(fixture.OpaqueRequirements, true), "accepted")
 	orchestrator := v06NewOrchestrator(t, first, clock, &v06IDs{}, agent, newV06ArtifactStore(), fixture)
-	created, err := orchestrator.Submit(ctx, v06SubmitRequest(t, "request:v06-fence", nil))
+	created, err := orchestrator.Submit(ctx, v06Access(t), v06SubmitRequest(t, "request:v06-fence", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -485,7 +486,7 @@ func v06AssertFencedClaimAndReceipt(t *testing.T, fixture v06Fixture) {
 	if receipts := v06GetGoal(t, first, created.Record.Goal.Ref()).ConsumptionReceipts; len(receipts) != 0 {
 		t.Fatalf("stale mutation wrote partial receipt: %+v", receipts)
 	}
-	if status, err := first.Status(ctx); err != nil || status.PendingActions != 1 || status.QuarantinedActions != 0 {
+	if status, err := first.Status(ctx, v06Project(t)); err != nil || status.PendingActions != 1 || status.QuarantinedActions != 0 {
 		t.Fatalf("stale mutation changed durable outbox: status=%+v err=%v", status, err)
 	}
 
@@ -558,7 +559,7 @@ func v06AssertCapabilityMatchingAndNoPrivateQueue(t *testing.T, fixture v06Fixtu
 	missingCapabilities := v06Capabilities(fixture.OpaqueRequirements, false)
 	missingAgent := newV06Agent(clock, missingCapabilities, "accepted")
 	orchestrator := v06NewOrchestrator(t, repository, clock, ids, missingAgent, artifacts, fixture)
-	created, err := orchestrator.Submit(ctx, v06SubmitRequest(t, "request:v06-capability", &fixture.OpaqueRequirements))
+	created, err := orchestrator.Submit(ctx, v06Access(t), v06SubmitRequest(t, "request:v06-capability", &fixture.OpaqueRequirements))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -585,17 +586,8 @@ func v06AssertCapabilityMatchingAndNoPrivateQueue(t *testing.T, fixture v06Fixtu
 
 func v06SubmitRequest(t *testing.T, requestRef string, requirements *v06OpaqueRequirements) application.SubmitRequest {
 	t.Helper()
-	actor, err := goal.NewActorRef("actor:v06")
-	if err != nil {
-		t.Fatal(err)
-	}
-	project, err := goal.NewProjectRef("project:v06")
-	if err != nil {
-		t.Fatal(err)
-	}
 	request := application.SubmitRequest{
-		RequestRef: requestRef, ActorRef: actor, ProjectRef: project,
-		Statement: "acreditar estado y outbox atómicos", Confirm: true,
+		RequestRef: requestRef, Statement: "acreditar estado y outbox atómicos", Confirm: true,
 	}
 	if requirements != nil {
 		request.Plan = &application.PlanSpec{
@@ -612,9 +604,14 @@ func v06SubmitRequest(t *testing.T, requestRef string, requirements *v06OpaqueRe
 	return request
 }
 
+type v06StateAccessRepository interface {
+	application.StateRepository
+	application.AccessRepository
+}
+
 func v06NewOrchestrator(
 	t *testing.T,
-	repository application.StateRepository,
+	repository v06StateAccessRepository,
 	clock *v06Clock,
 	ids *v06IDs,
 	agent *v06Agent,
@@ -623,7 +620,7 @@ func v06NewOrchestrator(
 ) *application.Orchestrator {
 	t.Helper()
 	orchestrator, err := application.New(application.Dependencies{
-		State: repository, Launcher: agent, Observer: agent, Artifacts: artifacts, Clock: clock, IDs: ids,
+		State: repository, Access: repository, Launcher: agent, Observer: agent, Artifacts: artifacts, Clock: clock, IDs: ids,
 		MaxOutputBytes:       1 << 20,
 		MaxExecutionAttempts: fixture.ClockAndRetry.MaxExecutionAttempts,
 		ClaimLease:           v06Duration(t, fixture.ClockAndRetry.ClaimLease),
@@ -645,7 +642,74 @@ func v06OpenSQLite(t *testing.T, ctx context.Context, path string, clock *v06Clo
 	if err != nil {
 		t.Fatalf("open V06 SQLite repository: %v: %v", err, errors.Unwrap(err))
 	}
+	if err := repository.ProvisionLocalAccess(
+		ctx, v06Principal(t), v06Hierarchy(t), identity.RoleProjectOwner, clock.Now(),
+	); err != nil {
+		_ = repository.Close()
+		t.Fatalf("provision V06 local access: %v", err)
+	}
 	return repository
+}
+
+func v06Access(t *testing.T) application.Access {
+	t.Helper()
+	access, err := application.NewAccess(v06Principal(t), v06Project(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return access
+}
+
+func v06Principal(t *testing.T) identity.Principal {
+	t.Helper()
+	principalRef, err := identity.NewPrincipalRef("principal:v06")
+	if err != nil {
+		t.Fatal(err)
+	}
+	actorRef, err := goal.NewActorRef("actor:v06")
+	if err != nil {
+		t.Fatal(err)
+	}
+	principal, err := identity.NewPrincipal(principalRef, actorRef, identity.PrincipalKindHuman, "acceptance")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return principal
+}
+
+func v06Project(t *testing.T) goal.ProjectRef {
+	t.Helper()
+	projectRef, err := goal.NewProjectRef("project:v06")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return projectRef
+}
+
+func v06Hierarchy(t *testing.T) identity.ProjectHierarchy {
+	t.Helper()
+	workspaceRef, err := identity.NewWorkspaceRef("workspace:v06")
+	if err != nil {
+		t.Fatal(err)
+	}
+	groupRef, err := identity.NewGroupRef("group:v06")
+	if err != nil {
+		t.Fatal(err)
+	}
+	repositoryRef, err := identity.NewRepositoryRef("repository:v06")
+	if err != nil {
+		t.Fatal(err)
+	}
+	projectRef := v06Project(t)
+	hierarchy, err := identity.NewProjectHierarchy(identity.ProjectHierarchyInput{
+		WorkspaceRef: workspaceRef, GroupRef: groupRef, GroupParentWorkspaceRef: workspaceRef,
+		ProjectRef: projectRef, ProjectParentGroupRef: groupRef,
+		RepositoryRef: repositoryRef, RepositoryParentProjectRef: projectRef,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return hierarchy
 }
 
 func v06PrivateDatabasePath(t *testing.T, name string) string {

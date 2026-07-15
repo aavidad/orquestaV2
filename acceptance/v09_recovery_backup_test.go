@@ -305,7 +305,7 @@ func v09CreateStateFixture(t *testing.T, fixture v09Fixture, root string) v09Sta
 		t.Fatal(err)
 	}
 	orchestrator := v09NewOrchestrator(t, repository, clock, artifacts, v06)
-	terminal, err := orchestrator.Submit(context.Background(), v06SubmitRequest(t, "request:v09-terminal", nil))
+	terminal, err := orchestrator.Submit(context.Background(), v06Access(t), v06SubmitRequest(t, "request:v09-terminal", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -316,7 +316,7 @@ func v09CreateStateFixture(t *testing.T, fixture v09Fixture, root string) v09Sta
 	if result, err := orchestrator.ProcessNext(context.Background(), "worker:v09"); err != nil || !result.Processed {
 		t.Fatalf("observe terminal fixture: result=%+v err=%v", result, err)
 	}
-	pending, err := orchestrator.Submit(context.Background(), v06SubmitRequest(t, "request:v09-pending", nil))
+	pending, err := orchestrator.Submit(context.Background(), v06Access(t), v06SubmitRequest(t, "request:v09-pending", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -337,7 +337,7 @@ func v09CreateStateFixture(t *testing.T, fixture v09Fixture, root string) v09Sta
 
 func v09NewOrchestrator(
 	t *testing.T,
-	repository application.StateRepository,
+	repository v06StateAccessRepository,
 	clock *v06Clock,
 	artifacts application.ArtifactStore,
 	fixture v06Fixture,
@@ -345,7 +345,7 @@ func v09NewOrchestrator(
 	t.Helper()
 	agent := newV06Agent(clock, v06Capabilities(fixture.OpaqueRequirements, true), "accepted")
 	orchestrator, err := application.New(application.Dependencies{
-		State: repository, Launcher: agent, Observer: agent, Artifacts: artifacts,
+		State: repository, Access: repository, Launcher: agent, Observer: agent, Artifacts: artifacts,
 		Clock: clock, IDs: &v06IDs{}, MaxOutputBytes: 1 << 20,
 		MaxExecutionAttempts: fixture.ClockAndRetry.MaxExecutionAttempts,
 		ClaimLease:           v06Duration(t, fixture.ClockAndRetry.ClaimLease),
@@ -385,7 +385,7 @@ func v09AssertBackupRestoreRoundTrip(t *testing.T, fixture v09Fixture) {
 
 	beforeTerminal := v06GetGoal(t, state.repository, state.terminalRef)
 	beforePending := v06GetGoal(t, state.repository, state.pendingRef)
-	beforeStatus, err := state.repository.Status(ctx)
+	beforeStatus, err := state.repository.Status(ctx, v06Project(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -451,7 +451,7 @@ func v09AssertBackupRestoreRoundTrip(t *testing.T, fixture v09Fixture) {
 	defer restoredRepository.Close()
 	afterTerminal := v06GetGoal(t, restoredRepository, state.terminalRef)
 	afterPending := v06GetGoal(t, restoredRepository, state.pendingRef)
-	afterStatus, err := restoredRepository.Status(ctx)
+	afterStatus, err := restoredRepository.Status(ctx, v06Project(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -537,7 +537,7 @@ func v09AssertConcurrentBackup(t *testing.T, fixture v09Fixture) {
 				return nil
 			}
 			once.Do(func() {
-				created, err := state.orchestrator.Submit(ctx, v06SubmitRequest(t, "request:v09-concurrent", nil))
+				created, err := state.orchestrator.Submit(ctx, v06Access(t), v06SubmitRequest(t, "request:v09-concurrent", nil))
 				concurrentErr = err
 				if err == nil {
 					concurrentRef = created.Record.Goal.Ref()
@@ -567,7 +567,7 @@ func v09AssertConcurrentBackup(t *testing.T, fixture v09Fixture) {
 	}
 	restored := v06OpenSQLite(t, ctx, targetPath, state.clock)
 	defer restored.Close()
-	status, err := restored.Status(ctx)
+	status, err := restored.Status(ctx, v06Project(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -834,7 +834,7 @@ func v09AssertRecoveryFailpointCleanup(t *testing.T, fixture v09Fixture) {
 				_, statErr := os.Stat(targetPath)
 				if statErr == nil {
 					restored := v06OpenSQLite(t, ctx, targetPath, state.clock)
-					status, err := restored.Status(ctx)
+					status, err := restored.Status(ctx, v06Project(t))
 					closeErr := restored.Close()
 					if err != nil || closeErr != nil || status.Goals != 2 {
 						t.Fatalf("failpoint %s published invalid restore: status=%+v err=%v close=%v", stage, status, err, closeErr)
