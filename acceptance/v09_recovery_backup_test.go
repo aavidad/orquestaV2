@@ -31,7 +31,7 @@ import (
 const v09FixturePath = "acceptance/fixtures/v09_recovery_backup.json"
 const v09TrustedBaseGitCommitOID = "e198a02fd3b1f5c0d57f9fe2c427401af65ac1ee"
 const v09ProductDeltaBaseGitCommitOID = "41c4702db97ca148109ce26aafca3bcf85c49c4a"
-const v09ProductDeltaSealedGitCommitOID = "55cceffecead3df625a6723610da04d026c1863f"
+const v09ProductDeltaSealedGitCommitOID = "5cc86a9b1b1153f381080e64afbc526d403df385"
 const v09RealLegacyFixtureSHA256 = "sha256:491df37cdffa509d8a31cae5a7ec1416f7e35df8aac6af6d523f375439548538"
 
 type v09Fixture struct {
