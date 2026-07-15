@@ -25,8 +25,8 @@ import (
 
 const v08FixturePath = "acceptance/fixtures/v08_credentials.json"
 const v08TrustedBaseGitCommitOID = "6b7bdd2002da73b11265f2c61e1046d6cd60b110"
-const v08ProductDeltaBaseGitCommitOID = "6b7bdd2002da73b11265f2c61e1046d6cd60b110"
-const v08ProductDeltaSealedGitCommitOID = "6b7bdd2002da73b11265f2c61e1046d6cd60b110"
+const v08ProductDeltaBaseGitCommitOID = "02838cd36d42803ee39ca2c3c17322fa7866a374"
+const v08ProductDeltaSealedGitCommitOID = "f9554897798de08d419645eeee13c3cdb055b279"
 
 type v08Fixture struct {
 	SchemaVersion                  int                     `json:"schema_version"`
