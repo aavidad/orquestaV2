@@ -791,17 +791,8 @@ func TestProductRoadmapV10ScopeAndExecutableContract(t *testing.T) {
 	}
 	for _, id := range wantOwned {
 		entry := entries[id]
-		switch entry.Status {
-		case "declared":
-			if len(entry.EvidenceRefs) != 0 {
-				t.Errorf("declared V10 capability %s has premature evidence: %v", id, entry.EvidenceRefs)
-			}
-		case "accredited":
-			if !reflect.DeepEqual(entry.EvidenceRefs, wantV10Evidence) {
-				t.Errorf("accredited V10 capability %s has wrong evidence: %v", id, entry.EvidenceRefs)
-			}
-		default:
-			t.Errorf("V10 capability %s has partial status %q", id, entry.Status)
+		if entry.Status != "accredited" || !reflect.DeepEqual(entry.EvidenceRefs, wantV10Evidence) {
+			t.Errorf("V10 capability %s accreditation=%q evidence=%v", id, entry.Status, entry.EvidenceRefs)
 		}
 	}
 
@@ -850,6 +841,13 @@ func TestV10EvidenceBelongsOnlyToIdentityCapabilities(t *testing.T) {
 	}
 	for _, entry := range roadmap.CapabilityEntries {
 		if owned[entry.ID] {
+			if entry.Status != "accredited" || !reflect.DeepEqual(entry.EvidenceRefs, []string{
+				"acceptance/v10_identity_projects_rbac_test.go",
+				"acceptance/fixtures/v10_identity_projects_rbac.json",
+				"product/evidence/v10_identity_projects_rbac.json",
+			}) {
+				t.Errorf("owned V10 capability %s lacks exact accreditation: status=%q evidence=%v", entry.ID, entry.Status, entry.EvidenceRefs)
+			}
 			continue
 		}
 		for _, evidenceRef := range entry.EvidenceRefs {

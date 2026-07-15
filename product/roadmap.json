@@ -1445,8 +1445,12 @@
       "acceptance_contracts": [
         "AC-V10-IDENTITY-PROJECTS-RBAC"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v10_identity_projects_rbac_test.go",
+        "acceptance/fixtures/v10_identity_projects_rbac.json",
+        "product/evidence/v10_identity_projects_rbac.json"
+      ],
       "supersedes": []
     },
     {
@@ -1466,8 +1470,12 @@
       "acceptance_contracts": [
         "AC-V10-IDENTITY-PROJECTS-RBAC"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v10_identity_projects_rbac_test.go",
+        "acceptance/fixtures/v10_identity_projects_rbac.json",
+        "product/evidence/v10_identity_projects_rbac.json"
+      ],
       "supersedes": []
     },
     {
@@ -1510,8 +1518,12 @@
       "acceptance_contracts": [
         "AC-V10-IDENTITY-PROJECTS-RBAC"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v10_identity_projects_rbac_test.go",
+        "acceptance/fixtures/v10_identity_projects_rbac.json",
+        "product/evidence/v10_identity_projects_rbac.json"
+      ],
       "supersedes": []
     },
     {
