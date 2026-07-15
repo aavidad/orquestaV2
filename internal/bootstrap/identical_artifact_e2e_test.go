@@ -20,9 +20,6 @@ func TestTwoGoalsCanReferenceOneContentAddressedArtifact(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
-	if err := runtime.Start(context.Background()); err != nil {
-		t.Fatalf("start: %v", err)
-	}
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -43,8 +40,29 @@ func TestTwoGoalsCanReferenceOneContentAddressedArtifact(t *testing.T) {
 		refs = append(refs, result.Record.Goal.Ref())
 	}
 
-	first := waitTerminalGoal(t, runtime, refs[0])
-	second := waitTerminalGoal(t, runtime, refs[1])
+	for {
+		result, processErr := runtime.Orchestrator().ProcessNext(context.Background(), runtime.workerRef)
+		if processErr != nil {
+			t.Fatalf("process action %s for goal %s: %v", result.Action, result.GoalRef.String(), processErr)
+		}
+		if !result.Processed {
+			break
+		}
+	}
+	records := make([]application.GoalRecord, 0, len(refs))
+	for _, ref := range refs {
+		record, getErr := runtime.Orchestrator().GetGoal(context.Background(), application.GoalQuery{
+			ActorRef: actor, ProjectRef: project, GoalRef: ref,
+		})
+		if getErr != nil {
+			t.Fatalf("get goal %s: %v", ref.String(), getErr)
+		}
+		if !record.Goal.IsTerminal() {
+			t.Fatalf("goal %s remained non-terminal after scheduler quiescence: %s", ref.String(), record.Goal.State())
+		}
+		records = append(records, record)
+	}
+	first, second := records[0], records[1]
 	if first.Goal.State() != goal.GoalStateSucceeded || second.Goal.State() != goal.GoalStateSucceeded {
 		t.Fatalf("terminal states = %s/%s", first.Goal.State(), second.Goal.State())
 	}
