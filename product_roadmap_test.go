@@ -684,7 +684,7 @@ func TestProductRoadmapV09ScopeAndExecutableContract(t *testing.T) {
 		t.Fatalf("OPS-15 must remain wholly deferred to V32 operation and rollback: %#v", deferred)
 	}
 
-	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV09ScopeAndExecutableContract|TestV09AcceptanceCommandRunsRecoveryConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV09RecoveryBackup|TestV09CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/application ./internal/ports ./internal/adapters/state/sqlite ./internal/adapters/artifact/filesystem ./internal/config ./internal/adapters/config/toml ./internal/adapters/config/jsonimport ./cmd/orquesta ./internal/bootstrap'"
+	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV09ScopeAndExecutableContract|TestV09EvidenceBelongsOnlyToRecoveryCapabilities|TestV09AcceptanceCommandRunsRecoveryConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV09RecoveryBackup|TestV09CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/application ./internal/ports ./internal/adapters/state/sqlite ./internal/adapters/artifact/filesystem ./internal/config ./internal/adapters/config/toml ./internal/adapters/config/jsonimport ./cmd/orquesta ./internal/bootstrap'"
 	var contract roadmapAcceptanceContract
 	for _, candidate := range roadmap.AcceptanceContracts {
 		if candidate.ID == "AC-V09-RECOVERY-BACKUP" {
@@ -705,6 +705,31 @@ func TestProductRoadmapV09ScopeAndExecutableContract(t *testing.T) {
 	} {
 		if strings.Contains(strings.ToLower(contract.Command), forbidden) {
 			t.Fatalf("V09 command opens a broad or deferred surface %q: %q", forbidden, contract.Command)
+		}
+	}
+}
+
+func TestV09EvidenceBelongsOnlyToRecoveryCapabilities(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+
+	owned := map[string]bool{"EVD-15": true, "OPS-14": true}
+	v09Evidence := map[string]bool{
+		"acceptance/v09_recovery_backup_test.go":       true,
+		"acceptance/fixtures/v09_recovery_backup.json": true,
+		"product/evidence/v09_recovery_backup.json":    true,
+	}
+	for _, entry := range roadmap.CapabilityEntries {
+		if owned[entry.ID] {
+			if entry.Status != "accredited" {
+				t.Errorf("owned V09 capability %s status=%q, want accredited", entry.ID, entry.Status)
+			}
+			continue
+		}
+		for _, evidenceRef := range entry.EvidenceRefs {
+			if v09Evidence[evidenceRef] {
+				t.Errorf("unowned capability %s claims V09 evidence %q", entry.ID, evidenceRef)
+			}
 		}
 	}
 }

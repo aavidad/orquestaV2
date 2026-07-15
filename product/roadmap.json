@@ -662,7 +662,7 @@
       "vertical": "recovery_backup",
       "status": "executable",
       "test_ref": "acceptance/v09_recovery_backup_test.go",
-      "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV09ScopeAndExecutableContract|TestV09AcceptanceCommandRunsRecoveryConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV09RecoveryBackup|TestV09CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/application ./internal/ports ./internal/adapters/state/sqlite ./internal/adapters/artifact/filesystem ./internal/config ./internal/adapters/config/toml ./internal/adapters/config/jsonimport ./cmd/orquesta ./internal/bootstrap'",
+      "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV09ScopeAndExecutableContract|TestV09EvidenceBelongsOnlyToRecoveryCapabilities|TestV09AcceptanceCommandRunsRecoveryConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV09RecoveryBackup|TestV09CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/application ./internal/ports ./internal/adapters/state/sqlite ./internal/adapters/artifact/filesystem ./internal/config ./internal/adapters/config/toml ./internal/adapters/config/jsonimport ./cmd/orquesta ./internal/bootstrap'",
       "fixture": "acceptance/fixtures/v09_recovery_backup.json",
       "receipt": "product/evidence/v09_recovery_backup.json",
       "assertions": [
@@ -3509,8 +3509,12 @@
       "acceptance_contracts": [
         "AC-V09-RECOVERY-BACKUP"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v09_recovery_backup_test.go",
+        "acceptance/fixtures/v09_recovery_backup.json",
+        "product/evidence/v09_recovery_backup.json"
+      ],
       "supersedes": []
     },
     {
@@ -5555,8 +5559,12 @@
       "acceptance_contracts": [
         "AC-V09-RECOVERY-BACKUP"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v09_recovery_backup_test.go",
+        "acceptance/fixtures/v09_recovery_backup.json",
+        "product/evidence/v09_recovery_backup.json"
+      ],
       "supersedes": []
     },
     {
