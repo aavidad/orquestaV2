@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -66,7 +67,7 @@ func (writer *cappedDiagnostic) snapshot() ([]byte, bool) {
 	return append([]byte(nil), writer.buffer.Bytes()...), writer.truncated
 }
 
-func (adapter *Adapter) startExecutionLocked(callerContext context.Context, request ports.AgentLaunchRequest, state *executionState) {
+func (adapter *Adapter) startExecutionLocked(callerContext context.Context, request ports.AgentLaunchRequest, state *executionState, environment []string) {
 	if err := adapter.prepareRuntimeFiles(state.runPath); err != nil {
 		adapter.finishWithoutProcessLocked(state, CodeStatePersistenceFailed, []byte(err.Error()))
 		return
@@ -92,7 +93,7 @@ func (adapter *Adapter) startExecutionLocked(callerContext context.Context, requ
 	command.WaitDelay = adapter.config.ProcessPipeDrainDelay
 	configureProcessGroup(command)
 	command.Dir = filepath.Join(adapter.rootPath, filepath.FromSlash(state.runPath))
-	command.Env = append([]string(nil), adapter.environment...)
+	command.Env = append([]string(nil), environment...)
 	if command.Env == nil {
 		command.Env = []string{}
 	}
@@ -100,11 +101,14 @@ func (adapter *Adapter) startExecutionLocked(callerContext context.Context, requ
 	command.Stdout = io.Discard
 	command.Stderr = diagnostic
 
-	if err := command.Start(); err != nil {
+	startErr := command.Start()
+	clearEnvironment(command.Env)
+	command.Env = nil
+	if startErr != nil {
 		timeout.Stop()
 		cancel(errExecutionFinished)
 		close(finished)
-		_, _ = diagnostic.Write([]byte(err.Error()))
+		_, _ = diagnostic.Write([]byte(startErr.Error()))
 		payload, truncated := diagnostic.snapshot()
 		adapter.finishWithoutProcessLockedWithDiagnostic(state, CodeProcessStartFailed, payload, truncated)
 		return
@@ -146,6 +150,15 @@ func (adapter *Adapter) waitForExecution(
 
 	adapter.mu.Lock()
 	defer adapter.mu.Unlock()
+	var gateErr error
+	terminal, gateErr = adapter.gateCredentialTerminalLocked(state, terminal)
+	if gateErr != nil {
+		state.terminal = &terminal
+		state.status = terminal.Status
+		state.terminalDurable = false
+		state.cancel = nil
+		return
+	}
 	persisted, err := adapter.persistTerminal(state.runPath, terminal, state.receipt.SpecHash, state.maxOutput)
 	if err != nil {
 		terminal.Status = ports.AgentFailed
@@ -232,6 +245,14 @@ func (adapter *Adapter) finishWithoutProcessLockedWithDiagnostic(state *executio
 		Diagnostic:          append([]byte(nil), diagnostic...),
 		DiagnosticTruncated: truncated,
 	}
+	var gateErr error
+	terminal, gateErr = adapter.gateCredentialTerminalLocked(state, terminal)
+	if gateErr != nil {
+		state.status = terminal.Status
+		state.terminal = &terminal
+		state.terminalDurable = false
+		return
+	}
 	if persisted, err := adapter.persistTerminal(state.runPath, terminal, state.receipt.SpecHash, state.maxOutput); err == nil {
 		terminal = persisted
 		state.terminalDurable = true
@@ -295,16 +316,38 @@ func (adapter *Adapter) commandArguments(runPath string) []string {
 		"--ephemeral",
 		"--ignore-user-config",
 		"--ignore-rules",
+		"--strict-config",
 		"--skip-git-repo-check",
 		"--sandbox", "read-only",
 		"--output-schema", schemaPath,
 		"--output-last-message", lastMessagePath,
 		"--config", fmt.Sprintf("model_reasoning_effort=%q", adapter.config.ReasoningEffort),
+		"--config", `shell_environment_policy.inherit="all"`,
+		"--config", shellEnvironmentIncludeOnly(adapter.config.Environment),
+		"--config", `shell_environment_policy.exclude=["CODEX_API_KEY","OPENAI_API_KEY"]`,
+		"--config", `shell_environment_policy.ignore_default_excludes=false`,
+		"--config", `shell_environment_policy.experimental_use_profile=false`,
 	}
 	if adapter.config.Model != "" {
 		arguments = append(arguments, "--model", adapter.config.Model)
 	}
 	return arguments
+}
+
+func shellEnvironmentIncludeOnly(environment map[string]string) string {
+	names := make([]string, 0, len(environment))
+	for name := range environment {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	payload, _ := json.Marshal(names)
+	return "shell_environment_policy.include_only=" + string(payload)
+}
+
+func clearEnvironment(environment []string) {
+	for index := range environment {
+		environment[index] = ""
+	}
 }
 
 func agentPrompt(request ports.AgentLaunchRequest) string {

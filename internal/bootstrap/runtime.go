@@ -15,10 +15,12 @@ import (
 	"orquesta/internal/adapters/artifact/filesystem"
 	"orquesta/internal/adapters/auth/localtoken"
 	configtoml "orquesta/internal/adapters/config/toml"
+	credentiallocal "orquesta/internal/adapters/credentials/local"
 	statesqlite "orquesta/internal/adapters/state/sqlite"
 	"orquesta/internal/adapters/system/local"
 	"orquesta/internal/application"
 	"orquesta/internal/config"
+	"orquesta/internal/credentials"
 	"orquesta/internal/goal"
 	"orquesta/internal/i18n"
 	"orquesta/internal/identity"
@@ -414,14 +416,11 @@ func productionAgentFactory(snapshot config.Snapshot, clock application.Clock) (
 	if snapshot.RuntimeProvider() != "codex" {
 		return nil, errors.New("bootstrap.runtime_provider_unsupported")
 	}
-	if snapshot.RuntimeCodexCredentialRef() != "" {
-		return nil, errors.New("bootstrap.credential_resolver_unavailable")
-	}
 	environment, err := config.ResolveChildEnvironment(snapshot.RuntimeCodexEnvAllowlist())
 	if err != nil {
 		return nil, err
 	}
-	return codex.New(codex.Config{
+	adapterConfig := codex.Config{
 		Command:                 snapshot.RuntimeCodexCommand(),
 		WorkRoot:                snapshot.RuntimeCodexWorkRoot(),
 		Model:                   snapshot.RuntimeCodexModel(),
@@ -431,7 +430,39 @@ func productionAgentFactory(snapshot config.Snapshot, clock application.Clock) (
 		MaxDiagnosticBytes:      snapshot.RuntimeCodexMaxDiagnosticBytes(),
 		MaxConcurrentExecutions: int(snapshot.RuntimeCodexMaxConcurrentExecutions()),
 		Environment:             environment, Now: clock.Now,
+	}
+	credentialRef := snapshot.RuntimeCodexCredentialRef()
+	if credentialRef == "" {
+		return codex.New(adapterConfig)
+	}
+	store, err := credentiallocal.Open(credentiallocal.Options{
+		Path: snapshot.CredentialsLocalPath(), OwnerUID: os.Geteuid(),
+		MaxStoreBytes: snapshot.CredentialsLocalMaxDocumentBytes(), Now: clock.Now,
 	})
+	if err != nil {
+		return nil, err
+	}
+	adapterConfig.CredentialStore = store
+	adapterConfig.CredentialRef = credentials.CredentialRef(credentialRef)
+	agent, err := codex.New(adapterConfig)
+	if err != nil {
+		_ = store.Close()
+		return nil, err
+	}
+	return &credentialAgent{AgentAdapter: agent, closeStore: store.Close}, nil
+}
+
+type credentialAgent struct {
+	AgentAdapter
+	closeStore func() error
+	closeOnce  sync.Once
+	closeErr   error
+}
+
+func (agent *credentialAgent) Shutdown(ctx context.Context) error {
+	agentErr := agent.AgentAdapter.Shutdown(ctx)
+	agent.closeOnce.Do(func() { agent.closeErr = agent.closeStore() })
+	return errors.Join(agentErr, agent.closeErr)
 }
 
 func validateSnapshot(snapshot config.Snapshot, sourceConfigPath string) error {
@@ -478,14 +509,37 @@ func validateRuntimePaths(snapshot config.Snapshot, sourceConfigPath string) err
 	if err != nil {
 		return errors.New("bootstrap.local_token_path_invalid")
 	}
+	credentialPath, err := canonicalRuntimePath(snapshot.CredentialsLocalPath())
+	if err != nil {
+		return errors.New("bootstrap.credential_path_invalid")
+	}
+	rawCredentialReservedPaths := credentiallocal.ReservedPaths(snapshot.CredentialsLocalPath())
+	credentialReservedPaths := make([]string, 0, len(rawCredentialReservedPaths))
+	for _, raw := range rawCredentialReservedPaths {
+		reservedPath, err := canonicalRuntimePath(raw)
+		if err != nil {
+			return errors.New("bootstrap.credential_path_invalid")
+		}
+		credentialReservedPaths = append(credentialReservedPaths, reservedPath)
+	}
 	tokenDirectory := filepath.Dir(tokenPath)
 	if pathsOverlap(filepath.Dir(statePath), artifactRoot) ||
 		pathsOverlap(filepath.Dir(statePath), workRoot) || pathsOverlap(artifactRoot, workRoot) ||
 		pathsOverlap(effectivePath, statePath) || pathsOverlap(effectivePath, artifactRoot) ||
 		pathsOverlap(effectivePath, workRoot) || pathsOverlap(tokenDirectory, filepath.Dir(statePath)) ||
 		pathsOverlap(tokenDirectory, artifactRoot) || pathsOverlap(tokenDirectory, workRoot) ||
-		pathsOverlap(tokenDirectory, effectivePath) {
+		pathsOverlap(tokenDirectory, effectivePath) ||
+		pathsOverlap(credentialPath, filepath.Dir(statePath)) || pathsOverlap(credentialPath, artifactRoot) ||
+		pathsOverlap(credentialPath, workRoot) || pathsOverlap(credentialPath, effectivePath) ||
+		pathsOverlap(credentialPath, tokenPath) {
 		return errors.New("bootstrap.runtime_paths_overlap")
+	}
+	for _, reservedPath := range credentialReservedPaths {
+		if pathsOverlap(reservedPath, filepath.Dir(statePath)) || pathsOverlap(reservedPath, artifactRoot) ||
+			pathsOverlap(reservedPath, workRoot) || pathsOverlap(reservedPath, effectivePath) ||
+			pathsOverlap(reservedPath, tokenPath) {
+			return errors.New("bootstrap.runtime_paths_overlap")
+		}
 	}
 	if strings.TrimSpace(sourceConfigPath) != "" {
 		configPath, err := canonicalRuntimePath(sourceConfigPath)
@@ -494,8 +548,13 @@ func validateRuntimePaths(snapshot config.Snapshot, sourceConfigPath string) err
 		}
 		if pathsOverlap(configPath, statePath) || pathsOverlap(configPath, artifactRoot) ||
 			pathsOverlap(configPath, workRoot) || pathsOverlap(configPath, effectivePath) ||
-			pathsOverlap(configPath, tokenDirectory) {
+			pathsOverlap(configPath, tokenDirectory) || pathsOverlap(configPath, credentialPath) {
 			return errors.New("bootstrap.runtime_paths_overlap")
+		}
+		for _, reservedPath := range credentialReservedPaths {
+			if pathsOverlap(configPath, reservedPath) {
+				return errors.New("bootstrap.runtime_paths_overlap")
+			}
 		}
 	}
 	return nil

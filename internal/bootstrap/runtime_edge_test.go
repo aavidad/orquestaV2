@@ -13,6 +13,7 @@ import (
 	"time"
 
 	configtoml "orquesta/internal/adapters/config/toml"
+	credentiallocal "orquesta/internal/adapters/credentials/local"
 	"orquesta/internal/application"
 	"orquesta/internal/config"
 )
@@ -288,6 +289,138 @@ func TestBuildDetectsRuntimeRootAliasesThroughSymlinkParent(t *testing.T) {
 	})
 	if runtime != nil || err == nil || err.Error() != "bootstrap.runtime_paths_overlap" {
 		t.Fatalf("expected canonical alias collision, runtime=%v err=%v", runtime, err)
+	}
+}
+
+func TestBuildRejectsCredentialRecoveryNamespaceCollisionsBeforeEffects(t *testing.T) {
+	tests := []struct {
+		name      string
+		configure func(*testing.T, string, string, string) string
+	}{
+		{name: "state directory", configure: func(t *testing.T, root, configPath, reservedPath string) string {
+			replaceTestConfigValue(t, configPath,
+				"path = "+strconv.Quote(filepath.Join(root, "state", "orquesta.sqlite")),
+				"path = "+strconv.Quote(filepath.Join(reservedPath, "orquesta.sqlite")),
+			)
+			return configPath
+		}},
+		{name: "artifact root", configure: func(t *testing.T, root, configPath, reservedPath string) string {
+			replaceTestConfigValue(t, configPath,
+				"root = "+strconv.Quote(filepath.Join(root, "artifacts")),
+				"root = "+strconv.Quote(reservedPath),
+			)
+			return configPath
+		}},
+		{name: "Codex work root", configure: func(t *testing.T, root, configPath, reservedPath string) string {
+			replaceTestConfigValue(t, configPath,
+				"work_root = "+strconv.Quote(filepath.Join(root, "work")),
+				"work_root = "+strconv.Quote(reservedPath),
+			)
+			return configPath
+		}},
+		{name: "effective config", configure: func(t *testing.T, root, configPath, reservedPath string) string {
+			replaceTestConfigValue(t, configPath,
+				"effective_path = "+strconv.Quote(filepath.Join(root, "effective_config.json")),
+				"effective_path = "+strconv.Quote(reservedPath),
+			)
+			return configPath
+		}},
+		{name: "local token", configure: func(t *testing.T, root, configPath, reservedPath string) string {
+			replaceTestConfigValue(t, configPath,
+				"local_token_path = "+strconv.Quote(filepath.Join(root, "secrets", "local-owner.token")),
+				"local_token_path = "+strconv.Quote(reservedPath),
+			)
+			return configPath
+		}},
+		{name: "config source", configure: func(t *testing.T, _ string, configPath, reservedPath string) string {
+			if err := os.MkdirAll(filepath.Dir(reservedPath), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Rename(configPath, reservedPath); err != nil {
+				t.Fatal(err)
+			}
+			return reservedPath
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := t.TempDir()
+			configPath := writeTestConfig(t, root)
+			credentialPath := filepath.Join(root, "credential-store", "credentials.json")
+			reservedPath := credentiallocal.ReservedPaths(credentialPath)[0]
+			replaceTestConfigValue(t, configPath,
+				"path = "+strconv.Quote(filepath.Join(root, "secrets", "credentials.json")),
+				"path = "+strconv.Quote(credentialPath),
+			)
+			configPath = test.configure(t, root, configPath, reservedPath)
+
+			var factoryCalls atomic.Int64
+			runtime, err := Build(context.Background(), Options{
+				ConfigPath: configPath,
+				AgentFactory: func(snapshot config.Snapshot, clock application.Clock) (AgentAdapter, error) {
+					factoryCalls.Add(1)
+					return countingFactory(&atomic.Int64{})(snapshot, clock)
+				},
+			})
+			if runtime != nil || err == nil || err.Error() != "bootstrap.runtime_paths_overlap" {
+				t.Fatalf("credential reserved path collision = %v, %v", runtime, err)
+			}
+			if factoryCalls.Load() != 0 {
+				t.Fatalf("credential reserved path collision reached agent factory %d times", factoryCalls.Load())
+			}
+			for _, path := range []string{
+				filepath.Join(root, "state"), filepath.Join(root, "artifacts"), filepath.Join(root, "work"),
+				filepath.Join(root, "effective_config.json"), filepath.Join(root, "secrets", "local-owner.token"),
+			} {
+				if _, statErr := os.Lstat(path); !errors.Is(statErr, os.ErrNotExist) {
+					t.Fatalf("credential reserved path collision created %s: %v", path, statErr)
+				}
+			}
+		})
+	}
+}
+
+func TestBuildRejectsCredentialRecoveryNamespaceAliasBeforeEffects(t *testing.T) {
+	root := t.TempDir()
+	configPath := writeTestConfig(t, root)
+	credentialPath := filepath.Join(root, "credential-store", "credentials.json")
+	reservedPath := credentiallocal.ReservedPaths(credentialPath)[0]
+	replaceTestConfigValue(t, configPath,
+		"path = "+strconv.Quote(filepath.Join(root, "secrets", "credentials.json")),
+		"path = "+strconv.Quote(credentialPath),
+	)
+	artifactRoot := filepath.Join(root, "artifacts")
+	if err := os.MkdirAll(filepath.Dir(reservedPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(artifactRoot, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(artifactRoot, reservedPath); err != nil {
+		t.Skipf("symlink unsupported: %v", err)
+	}
+
+	var factoryCalls atomic.Int64
+	runtime, err := Build(context.Background(), Options{
+		ConfigPath: configPath,
+		AgentFactory: func(snapshot config.Snapshot, clock application.Clock) (AgentAdapter, error) {
+			factoryCalls.Add(1)
+			return countingFactory(&atomic.Int64{})(snapshot, clock)
+		},
+	})
+	if runtime != nil || err == nil || err.Error() != "bootstrap.runtime_paths_overlap" {
+		t.Fatalf("credential reserved path alias = %v, %v", runtime, err)
+	}
+	if factoryCalls.Load() != 0 {
+		t.Fatalf("credential reserved path alias reached agent factory %d times", factoryCalls.Load())
+	}
+	for _, path := range []string{
+		filepath.Join(root, "state"), filepath.Join(root, "work"), filepath.Join(root, "effective_config.json"),
+		filepath.Join(root, "secrets", "local-owner.token"),
+	} {
+		if _, statErr := os.Lstat(path); !errors.Is(statErr, os.ErrNotExist) {
+			t.Fatalf("credential reserved path alias created %s: %v", path, statErr)
+		}
 	}
 }
 

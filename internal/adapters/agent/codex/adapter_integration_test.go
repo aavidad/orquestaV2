@@ -3,6 +3,7 @@ package codex
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,6 +26,8 @@ import (
 
 const (
 	helperExactEnvironment   = "CODEX_TEST_EXACT=present"
+	helperCredentialInitial  = "v08<credential>initial"
+	helperCredentialRotated  = "v08<credential>rotated"
 	backgroundSuccessPIDFile = "background-success.pid"
 )
 
@@ -415,8 +418,12 @@ func runCodexHelper(arguments []string) error {
 	if !strings.Contains(string(prompt), "Return only the JSON object required by the supplied schema") {
 		return fmt.Errorf("structured-output instruction missing")
 	}
-	if err := validateHelperEnvironment(); err != nil {
+	credentialMaterial, err := validateHelperEnvironment(string(prompt))
+	if err != nil {
 		return err
+	}
+	if credentialMaterial != "" && bytes.Contains(prompt, []byte(credentialMaterial)) {
+		return fmt.Errorf("credential appeared in prompt")
 	}
 	schema, err := os.ReadFile(options.schemaPath)
 	if err != nil {
@@ -457,6 +464,17 @@ func runCodexHelper(arguments []string) error {
 			return fmt.Errorf("model = %q, want test-model", options.model)
 		}
 		return writeHelperResult(options.outputPath, "artifact:model")
+	case strings.Contains(mode, "helper:credential-initial"):
+		return writeHelperResult(options.outputPath, "artifact:credential-initial")
+	case strings.Contains(mode, "helper:credential-rotated"):
+		return writeHelperResult(options.outputPath, "artifact:credential-rotated")
+	case strings.Contains(mode, "helper:encoded-secret-leak"):
+		return writeHelperResult(options.outputPath, base64.StdEncoding.EncodeToString([]byte(credentialMaterial)))
+	case strings.Contains(mode, "helper:secret-leak"):
+		_, _ = fmt.Fprint(os.Stderr, credentialMaterial)
+		return os.WriteFile(options.outputPath, []byte(`{"artifact":"`+credentialMaterial+`"}`), 0o600)
+	case strings.Contains(mode, "helper:artifact-secret-leak"):
+		return writeHelperResult(options.outputPath, credentialMaterial)
 	case strings.Contains(mode, "helper:success"):
 		if options.model != "" {
 			return fmt.Errorf("unexpected model %q", options.model)
@@ -482,6 +500,7 @@ type helperOptions struct {
 	schemaPath string
 	outputPath string
 	model      string
+	configs    []string
 }
 
 func parseCodexHelperArguments(arguments []string) (helperOptions, error) {
@@ -492,6 +511,7 @@ func parseCodexHelperArguments(arguments []string) (helperOptions, error) {
 		"--ephemeral":           false,
 		"--ignore-user-config":  false,
 		"--ignore-rules":        false,
+		"--strict-config":       false,
 		"--skip-git-repo-check": false,
 	}
 	var options helperOptions
@@ -508,7 +528,7 @@ func parseCodexHelperArguments(arguments []string) (helperOptions, error) {
 		if argument != "--sandbox" && argument != "--output-schema" && argument != "--output-last-message" && argument != "--config" && argument != "--model" {
 			return helperOptions{}, fmt.Errorf("unexpected argument %q", argument)
 		}
-		if seenPairs[argument] || index+1 >= len(arguments) {
+		if argument != "--config" && seenPairs[argument] || index+1 >= len(arguments) {
 			return helperOptions{}, fmt.Errorf("invalid paired flag %s", argument)
 		}
 		seenPairs[argument] = true
@@ -524,9 +544,7 @@ func parseCodexHelperArguments(arguments []string) (helperOptions, error) {
 		case "--output-last-message":
 			options.outputPath = value
 		case "--config":
-			if value != `model_reasoning_effort="medium"` {
-				return helperOptions{}, fmt.Errorf("reasoning config = %q", value)
-			}
+			options.configs = append(options.configs, value)
 		case "--model":
 			options.model = value
 		}
@@ -544,20 +562,47 @@ func parseCodexHelperArguments(arguments []string) (helperOptions, error) {
 	if !filepath.IsAbs(options.schemaPath) || !filepath.IsAbs(options.outputPath) {
 		return helperOptions{}, fmt.Errorf("runtime paths must be absolute")
 	}
+	sort.Strings(options.configs)
+	wantConfigs := []string{
+		`model_reasoning_effort="medium"`,
+		`shell_environment_policy.exclude=["CODEX_API_KEY","OPENAI_API_KEY"]`,
+		`shell_environment_policy.experimental_use_profile=false`,
+		`shell_environment_policy.ignore_default_excludes=false`,
+		`shell_environment_policy.include_only=["CODEX_TEST_EXACT"]`,
+		`shell_environment_policy.inherit="all"`,
+	}
+	sort.Strings(wantConfigs)
+	if !reflect.DeepEqual(options.configs, wantConfigs) {
+		return helperOptions{}, fmt.Errorf("shell environment policy mismatch")
+	}
 	return options, nil
 }
 
-func validateHelperEnvironment() error {
+func validateHelperEnvironment(mode string) (string, error) {
 	payload, err := os.ReadFile("/proc/self/environ")
 	if err != nil {
-		return fmt.Errorf("read exact environment: %w", err)
+		return "", fmt.Errorf("read exact environment: %w", err)
 	}
 	entries := strings.Split(strings.TrimSuffix(string(payload), "\x00"), "\x00")
 	sort.Strings(entries)
-	if want := []string{helperExactEnvironment}; !reflect.DeepEqual(entries, want) {
-		return fmt.Errorf("environment = %#v, want %#v", entries, want)
+	credential := ""
+	switch {
+	case strings.Contains(mode, "helper:credential-rotated"):
+		credential = helperCredentialRotated
+	case strings.Contains(mode, "helper:credential-initial"), strings.Contains(mode, "helper:secret-leak"),
+		strings.Contains(mode, "helper:encoded-secret-leak"),
+		strings.Contains(mode, "helper:artifact-secret-leak"):
+		credential = helperCredentialInitial
 	}
-	return nil
+	want := []string{helperExactEnvironment}
+	if credential != "" {
+		want = append(want, codexAPIKeyEnvironment+"="+credential)
+		sort.Strings(want)
+	}
+	if !reflect.DeepEqual(entries, want) {
+		return "", fmt.Errorf("exact helper environment mismatch")
+	}
+	return credential, nil
 }
 
 func writeHelperResult(outputPath, artifact string) error {

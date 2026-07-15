@@ -1,6 +1,7 @@
 package codex
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -11,8 +12,31 @@ import (
 	"testing"
 	"time"
 
+	"orquesta/internal/credentials"
 	"orquesta/internal/ports"
 )
+
+func TestCredentialRecoveryScrubsUntrustedLastMessage(t *testing.T) {
+	config := testConfig(t)
+	config.CredentialStore = &credentialTestStore{material: helperCredentialInitial, version: 1}
+	config.CredentialRef = credentials.CredentialRef("credential:codex-primary")
+	request := testRequest(t, "credential-interrupted-output", "helper:success", 1024)
+	_, runPath := seedAcceptedExecution(t, config, request)
+	lastMessagePath := filepath.Join(config.WorkRoot, filepath.FromSlash(runPath), lastMessageFileName)
+	if err := os.WriteFile(lastMessagePath, []byte(helperCredentialInitial), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	adapter := openTestAdapter(t, config)
+	observation, err := adapter.Observe(context.Background(), request.ExecutionRef)
+	if err != nil || observation.Status != ports.AgentFailed || observation.ErrorCode != CodeExecutionInterrupted {
+		t.Fatalf("recovery observation=%+v err=%v", observation, err)
+	}
+	payload, err := os.ReadFile(lastMessagePath)
+	if err != nil || bytes.Contains(payload, []byte(helperCredentialInitial)) || len(payload) != 0 {
+		t.Fatalf("interrupted credential output survived recovery: %q err=%v", payload, err)
+	}
+}
 
 func TestAdapterRejectsPersistedSpecHashThatDoesNotEchoRequest(t *testing.T) {
 	config := testConfig(t)

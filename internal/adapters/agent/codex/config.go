@@ -7,6 +7,13 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"orquesta/internal/credentials"
+)
+
+const (
+	codexAPIKeyEnvironment  = "CODEX_API_KEY"
+	openAIAPIKeyEnvironment = "OPENAI_API_KEY"
 )
 
 func prepareConfig(config Config) (Config, string, []string, string, *os.Root, error) {
@@ -36,6 +43,20 @@ func prepareConfig(config Config) (Config, string, []string, string, *os.Root, e
 	}
 	if config.Now == nil || config.Now().IsZero() {
 		return Config{}, "", nil, "", nil, &Error{Code: CodeClockInvalid}
+	}
+	if _, found := config.Environment[codexAPIKeyEnvironment]; found {
+		return Config{}, "", nil, "", nil, &Error{Code: CodeEnvironmentInvalid}
+	}
+	if _, found := config.Environment[openAIAPIKeyEnvironment]; found {
+		return Config{}, "", nil, "", nil, &Error{Code: CodeEnvironmentInvalid}
+	}
+	if (config.CredentialStore == nil) != (config.CredentialRef == "") {
+		return Config{}, "", nil, "", nil, &Error{Code: CodeCredentialInvalid}
+	}
+	if config.CredentialRef != "" {
+		if err := credentials.ValidateCredentialRef(config.CredentialRef); err != nil {
+			return Config{}, "", nil, "", nil, &Error{Code: CodeCredentialInvalid, Cause: err}
+		}
 	}
 
 	environment, err := exactEnvironment(config.Environment)

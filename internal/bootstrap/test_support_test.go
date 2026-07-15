@@ -63,6 +63,10 @@ max_open_connections = 4
 [artifact.filesystem]
 root = %s
 
+[credentials.local]
+path = %s
+max_document_bytes = 1048576
+
 [runtime]
 max_output_bytes = 65536
 
@@ -84,7 +88,7 @@ execution_timeout = "10s"
 [config]
 effective_path = %s
 `, strconv.Quote(root+"/state/orquesta.sqlite"), strconv.Quote(root+"/artifacts"),
-		strconv.Quote(root+"/work"), strconv.Quote(root+"/secrets/local-owner.token"),
+		strconv.Quote(root+"/secrets/credentials.json"), strconv.Quote(root+"/work"), strconv.Quote(root+"/secrets/local-owner.token"),
 		strconv.Quote(root+"/effective_config.json"))
 	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
 		t.Fatalf("write config: %v", err)

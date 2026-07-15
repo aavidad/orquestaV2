@@ -152,6 +152,7 @@ func hashLaunchRequest(request ports.AgentLaunchRequest) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	defer clearBytes(payload)
 	digest := sha256.Sum256(payload)
 	return "sha256:" + hex.EncodeToString(digest[:]), nil
 }
@@ -185,6 +186,7 @@ func hashLegacyLaunchRequest(request ports.AgentLaunchRequest) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	defer clearBytes(payload)
 	digest := sha256.Sum256(payload)
 	return "sha256:" + hex.EncodeToString(digest[:]), nil
 }

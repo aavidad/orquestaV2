@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"orquesta/internal/application"
+	"orquesta/internal/credentials"
 	"orquesta/internal/goal"
 	"orquesta/internal/ports"
 )
@@ -52,6 +53,9 @@ const (
 	CodeDiagnosticLimitInvalid  = "codex.max_diagnostic_bytes_invalid"
 	CodeMaxConcurrentInvalid    = "codex.max_concurrent_executions_invalid"
 	CodeEnvironmentInvalid      = "codex.environment_invalid"
+	CodeCredentialInvalid       = "codex.credential_invalid"
+	CodeCredentialUnavailable   = "codex.credential_unavailable"
+	CodeSecretLeak              = "codex.secret_leak"
 )
 
 var (
@@ -73,6 +77,8 @@ type Config struct {
 	MaxDiagnosticBytes      int64
 	MaxConcurrentExecutions int
 	Environment             map[string]string
+	CredentialStore         credentials.Store
+	CredentialRef           credentials.CredentialRef
 	Now                     func() time.Time
 }
 
@@ -112,15 +118,16 @@ func ErrorCode(err error) string {
 }
 
 type Adapter struct {
-	config          Config
-	command         string
-	environment     []string
-	rootPath        string
-	root            *os.Root
-	syncDirectoryFn func(*os.Root, string) error
-	processCleanup  func(*exec.Cmd) error
-	lifecycle       context.Context
-	cancelLifecycle context.CancelCauseFunc
+	config                Config
+	command               string
+	environment           []string
+	rootPath              string
+	root                  *os.Root
+	syncDirectoryFn       func(*os.Root, string) error
+	processCleanup        func(*exec.Cmd) error
+	credentialOutputScrub func(string) error
+	lifecycle             context.Context
+	cancelLifecycle       context.CancelCauseFunc
 
 	mu           sync.Mutex
 	closed       bool
@@ -141,6 +148,7 @@ type executionState struct {
 	terminal            *terminalRecord
 	terminalDurable     bool
 	cancel              context.CancelCauseFunc
+	credentialGuard     *credentials.LeakGuard
 }
 
 func New(config Config) (*Adapter, error) {
@@ -149,7 +157,7 @@ func New(config Config) (*Adapter, error) {
 		return nil, err
 	}
 	lifecycle, cancelLifecycle := context.WithCancelCause(context.Background())
-	return &Adapter{
+	adapter := &Adapter{
 		config:          validated,
 		command:         command,
 		environment:     environment,
@@ -161,7 +169,9 @@ func New(config Config) (*Adapter, error) {
 		cancelLifecycle: cancelLifecycle,
 		executions:      make(map[string]*executionState),
 		shutdownDone:    make(chan struct{}),
-	}, nil
+	}
+	adapter.credentialOutputScrub = adapter.scrubCredentialOutput
+	return adapter, nil
 }
 
 func (adapter *Adapter) Capabilities(ctx context.Context) (ports.AgentCapabilities, error) {
@@ -225,7 +235,7 @@ func (adapter *Adapter) Launch(ctx context.Context, request ports.AgentLaunchReq
 		return ports.AgentLaunchReceipt{}, err
 	}
 	if found {
-		return adapter.resumeLaunchRecordLocked(ctx, request, requestHash, record, runPath, false)
+		return adapter.resumeLaunchRecordLocked(ctx, request, requestHash, record, runPath, false, nil, nil)
 	}
 	if adapter.activeExecutionCountLocked() >= adapter.config.MaxConcurrentExecutions {
 		return ports.AgentLaunchReceipt{}, &Error{
@@ -234,11 +244,14 @@ func (adapter *Adapter) Launch(ctx context.Context, request ports.AgentLaunchReq
 		}
 	}
 
+	if adapter.config.CredentialStore != nil {
+		return adapter.launchWithCredentialLocked(ctx, request, requestHash)
+	}
 	record, runPath, recordCreated, err := adapter.ensureLaunchRecord(request, requestHash)
 	if err != nil {
 		return ports.AgentLaunchReceipt{}, err
 	}
-	return adapter.resumeLaunchRecordLocked(ctx, request, requestHash, record, runPath, recordCreated)
+	return adapter.resumeLaunchRecordLocked(ctx, request, requestHash, record, runPath, recordCreated, adapter.environment, nil)
 }
 
 func (adapter *Adapter) resumeLaunchRecordLocked(
@@ -248,7 +261,14 @@ func (adapter *Adapter) resumeLaunchRecordLocked(
 	record launchRecord,
 	runPath string,
 	recordCreated bool,
+	environment []string,
+	credentialGuard *credentials.LeakGuard,
 ) (ports.AgentLaunchReceipt, error) {
+	defer func() {
+		if credentialGuard != nil {
+			credentialGuard.Destroy()
+		}
+	}()
 	executionKey := request.ExecutionRef.String()
 	terminalRequestHash := record.RequestHash
 	if record.SchemaVersion == legacyStateSchemaVersion {
@@ -293,7 +313,9 @@ func (adapter *Adapter) resumeLaunchRecordLocked(
 	}
 
 	adapter.executions[executionKey] = state
-	adapter.startExecutionLocked(ctx, request, state)
+	state.credentialGuard = credentialGuard
+	credentialGuard = nil
+	adapter.startExecutionLocked(ctx, request, state, environment)
 	return receipt, nil
 }
 
@@ -361,6 +383,9 @@ func (adapter *Adapter) Observe(ctx context.Context, executionRef goal.Execution
 }
 
 func (adapter *Adapter) recoverInterruptedExecutionLocked(state *executionState) error {
+	if err := adapter.credentialOutputScrub(state.runPath); err != nil {
+		return err
+	}
 	terminal := terminalRecord{
 		SchemaVersion: stateSchemaVersion,
 		RequestHash:   state.terminalRequestHash,
@@ -380,6 +405,9 @@ func (adapter *Adapter) recoverInterruptedExecutionLocked(state *executionState)
 
 func (adapter *Adapter) observeStateLocked(executionKey string, executionRef goal.ExecutionRef, state *executionState) (ports.AgentObservation, error) {
 	if state.terminal != nil && !state.terminalDurable {
+		if err := adapter.credentialOutputScrub(state.runPath); err != nil {
+			return ports.AgentObservation{}, err
+		}
 		persisted, err := adapter.persistTerminal(state.runPath, *state.terminal, state.receipt.SpecHash, state.maxOutput)
 		if err != nil {
 			return ports.AgentObservation{}, err
