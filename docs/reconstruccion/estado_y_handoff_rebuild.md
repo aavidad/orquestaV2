@@ -1,19 +1,102 @@
 # Estado y handoff vivo del rebuild
 
-Última actualización: 2026-07-15 07:54 Europe/Madrid.
+Última actualización: 2026-07-15 09:57 Europe/Madrid.
 
 Este documento permite continuar el rebuild sin reconstruir el contexto de la
 sesión. Es estado operativo, no evidencia de aceptación. Los estados canónicos
 de capacidades, verticales y contratos viven en `product/roadmap.json`; los
 verdes viven en receipts fuera de su propio candidato.
 
-## Checkpoint vigente: V10 cerrado
+## Checkpoint vigente: V11 y V12 cerrados
 
-V10 está cerrado funcionalmente, contrarrevisado y con evidencia reproducible.
-V11 y V12 pueden abrirse en paralelo porque ambas dependen ya del cierre V10 y
-no dependen entre sí. El próximo agente debe partir del `HEAD` que contiene este
-documento y no reanalizar, reimplementar ni resellar V01–V10 salvo regresión
-reproducible.
+V11 y V12 están cerrados, contrarrevisados y ligados a receipts V3
+reproducibles. El hotfix posterior de contención SQLite también está integrado
+y el E2E Codex real por API MCP fue renovado sobre ese código. No reabrir ni
+resellar V01–V12 salvo regresión reproducible.
+
+El total canónico queda en 41/257 capacidades, 15,95 %, y 12/34 verticales,
+35,3 %. V11 es una vertical transversal y no acredita IDs nuevos. V12 acredita
+exactamente `GOV-08`, `GOV-09`, `GOV-10` y `ORC-24`.
+
+Resultado funcional V11:
+
+- un único contrato neutral de proveedor de identidad sirve a `local_token` y
+  OIDC; parsing Bearer y principal de request no se duplican por proveedor;
+- issuer, sujeto y principal estable tienen una sola normalización canónica;
+  email, nombre y grupos externos siguen siendo atributos, no autoridad RBAC;
+- OIDC valida issuer, audience, subject, tiempos y rotación JWKS mediante un
+  cliente HTTP propio, acotado y sin proxy heredado del entorno;
+- el smoke real aislado probó Dex `2.45.1` contra Samba AD `4.17.12` por LDAPS:
+  CA válida/inválida, login, grupo, sujeto estable, password erróneo,
+  usuario deshabilitado y retirada de grupo;
+- Active Directory clásico entra mediante Dex LDAP/LDAPS→OIDC; producción Go
+  no contiene cliente LDAP ni contraseñas de directorio.
+
+Resultado funcional V12:
+
+- operador humano y agente de servicio usan el mismo permiso `goals.direct` y
+  el mismo protocolo `ClaimDirector`, `RenewDirector` y
+  `ProposeDirectorPlan`;
+- un lease activo por Goal conserva principal, token opaco, fence monótono y
+  expiración de reloj confiable; renew, replay, takeover y revocación quedan
+  cercados causalmente;
+- las propuestas usan CAS de revisión/generación y el camino existente
+  `Goal.ApplyPlan` → scheduler/outbox; no existe `DirectorStore`, loop, cola,
+  goroutine, DB ni lifecycle paralelo;
+- decisiones y receipts son compactos e inmutables; el token vive solo en el
+  lease activo y `GetGoal` sigue siendo la única proyección completa;
+- restart, replay tardío, carreras de claim y recovery de SQLite quedaron
+  cubiertos con negativos de fence, causalidad y manipulación durable.
+
+Cadena autoritativa combinada V11/V12:
+
+```text
+contrato rojo B:     89db75810a1250800b26cbc408befd2d8f44be62
+producto P:          a5f3a65270fd9877926b484f3a941429391a40f2
+sellado C:           5e826de0e40c29d1e84f3dc5082e11667d045caa
+evidencia E:         78fe60378eb907d335c001b6d063541cb05fd17e
+hotfix SQLite:       44ce9697c792274717106fdad20ca1513d3a5f75
+candidate SHA:       sha256:957ed6f231adf3467a775faa48123d658785ba352bdf82c9ec85db0c8490137e
+```
+
+Los dos receipts ejecutaron sus argv exactos desde `C` en checkout detached,
+limpio y con status vacío. V11 ejecutó además el smoke Dex/Samba AD real. La
+evidencia reproducible vive en `product/evidence/v11_oidc_ad.json` y
+`product/evidence/v12_director_lease.json`.
+
+Tras emitir `E`, el E2E Codex real reprodujo
+`BUG-REBUILD-20260715-160`: polling MCP autenticado, scheduler y cierre usaban
+el mismo pool multiconexión para escrituras `BEGIN IMMEDIATE`; una contención
+SQLite podía escapar como `conflict` de negocio. El hotfix `44ce9697c7`
+conserva el pool WAL concurrente para lectores y pone todas las escrituras del
+control plane en una única cola `database/sql`. La prueba
+`TestRepositorySerializesWritersBeforeSQLiteBusyTimeout` y el E2E real cierran
+la incidencia sin retry ciego ni segunda autoridad.
+
+Receipt Codex real vigente tras el hotfix:
+
+```text
+source SHA: sha256:509738f39f206c4383059ad08c0798746cca6d1e31a3ac3152bfd949b3ad37b3
+marker:     ORQUESTA_CODEX_E2E_OK_ad48bf16fce187a7b799ab05b4962b22
+```
+
+`BUG-REBUILD-20260715-152` permanece diferido y asignado a V24: una instalación
+solo OIDC necesita el grant auditable y de un uso del primer administrador.
+`BUG-REBUILD-20260715-154` permanece diferido y asignado a V32: coalescing,
+límite y métricas por issuer frente a abuso de `kid` desconocido. No son falsos
+verdes de V11: ambos límites están declarados en fixture, roadmap y ledger.
+
+El procedimiento honesto para usar hoy este checkpoint desde un Codex externo
+está en
+[`uso_orquesta_con_agente_externo.md`](uso_orquesta_con_agente_externo.md).
+Orquesta ya ejecuta DAGs declarados por MCP; hasta V22, el agente externo sigue
+dirigiendo contexto, plan, revisión e integración.
+
+## Checkpoint histórico: V10 cerrado
+
+V10 quedó cerrado funcionalmente, contrarrevisado y con evidencia reproducible.
+Este bloque conserva su cadena y decisiones como referencia histórica; el
+checkpoint de reanudación ya es V11/V12.
 
 V10 cierra exactamente `GOV-19`, `GOV-20` y `GOV-22`. `ORC-11` permanece
 íntegramente en V15. El total queda en 37/257 capacidades, 14,40 %, y 10/34
@@ -68,17 +151,15 @@ de la última autoridad, recovery incompleto, política duplicada, actor
 falsificable, requester histórico incorrecto, regresión V09 y eliminaciones no
 ligadas por el digest del candidato.
 
-El E2E Codex real vigente está ligado a source digest
+El E2E Codex real emitido al cierre V10 estaba ligado a source digest
 `sha256:d5b0ad4796f49ce0a1a3b0691ffd53bb7e8f1ea732c1c614a7532eb9bdebb73c`
 y marcador `ORQUESTA_CODEX_E2E_OK_59aab0fbb4d97b2329e593445b1e5ed1`.
-Cualquier cambio posterior en código activo invalida ese receipt y obliga a
-repetir el E2E.
+El receipt vigente posterior al hotfix V12 figura en el checkpoint superior.
 
-Uso honesto actual: Orquesta recibe por MCP un DAG declarado, lo persiste,
-autoriza varios usuarios y servicios por proyecto, resuelve credenciales por
-referencia, ejecuta con Codex real y verifica, respalda y restaura SQLite.
-OIDC/AD empieza en V11, el Director neutral y transferible en V12, workspace/Git
-en V16 y la dirección autónoma completa de una petición abierta culmina en V22.
+Uso honesto en aquel corte: Orquesta recibía por MCP un DAG declarado, lo
+persistía, autorizaba varios usuarios y servicios por proyecto, resolvía
+credenciales por referencia, ejecutaba con Codex real y verificaba, respaldaba
+y restauraba SQLite. OIDC/AD y Director estaban aún pendientes.
 
 ## Checkpoint histórico de V01–V05
 
@@ -193,6 +274,11 @@ bd29930e4f test: sellar delta V09
 70fb59e9fc test: resellar delta V09
 6b4c83308b test: acreditar evidencia reproducible V09
 5d4b66d1ec test: renovar E2E Codex real tras V09
+89db75810a test: preparar receipt causal V12
+a5f3a65270 feat: integrar identidad OIDC y Director transferible V11 V12
+5e826de0e4 test: sellar delta combinado V11 V12
+78fe60378e test: acreditar evidencia reproducible V11 V12
+44ce9697c7 fix: serializar escritores SQLite del control plane
 ```
 
 Checkpoint histórico: `70dbab89e3` preservó el cierre funcional de V04 y migró
@@ -226,6 +312,9 @@ V06  sha256:845ad6413a9d32794567bc7fc3c202ce01d1ab993812461ce5da250d9ca7da0c
 V07  sha256:222124a7d0554d17280b53ad566def2eec53d206c88d12237e86b89d7c518e5c
 V08  sha256:1652380d287aec1a3eb942343f26b0123f1c8818f109ca3626bfbcf701bb8c42
 V09  sha256:60ddae7e2d52064377ceea0ac7301e449ed5612a02a7e7735fb2385dcec6b108
+V10  sha256:459698a5f6aa27c605a2fab6e93afe232655c01429e4ad5632c5e2b66978b592
+V11  sha256:957ed6f231adf3467a775faa48123d658785ba352bdf82c9ec85db0c8490137e
+V12  sha256:957ed6f231adf3467a775faa48123d658785ba352bdf82c9ec85db0c8490137e
 ```
 
 Receipt V04: fixture
@@ -238,7 +327,7 @@ autoritaria; no se recalculan desde el worktree actual.
 Verificación rápida sin atravesar superficies legacy:
 
 ```bash
-go test -mod=vendor -count=1 ./acceptance -run '^TestAcceptanceV0[1-9].*Receipt$'
+go test -mod=vendor -count=1 ./acceptance -run '^TestAcceptanceV(0[1-9]|1[0-2]).*Receipt$'
 git diff --check
 scripts/check_rebuild_write_set.sh
 ```
@@ -266,40 +355,34 @@ scripts/check_rebuild_write_set.sh
 - V10 proyectos, multiusuario, RBAC y auditoría: cerrado; receipt V3 válido;
   acredita exactamente `GOV-19`, `GOV-20` y `GOV-22`; `ORC-11` permanece
   íntegra en V15.
-- V11–V34: pendientes. No contar código heredado, groundwork o una prueba
+- V11 OIDC/AD: cerrado; receipt V3 válido; vertical transversal sin IDs nuevos;
+  `BUG-REBUILD-20260715-152` y `154` quedan asignados a V24 y V32.
+- V12 Director con lease y fencing: cerrado; receipt V3 válido; acredita
+  exactamente `GOV-08`, `GOV-09`, `GOV-10` y `ORC-24`.
+- V13–V34: pendientes. No contar código heredado, groundwork o una prueba
   aislada como vertical posterior cerrada.
-- progreso vertical cerrado: 10 de 34, 29,4 % de la ruta; receipts válidos: 10
-  de 10 contratos ejecutables;
-- progreso de capacidades: 37 de 257 en estado `accredited`, 14,40 %:
+- progreso vertical cerrado: 12 de 34, 35,3 % de la ruta; receipts válidos: 12
+  de 12 contratos ejecutables;
+- progreso de capacidades: 41 de 257 en estado `accredited`, 15,95 %:
   `EVD-02`, `EVD-11`, `EVD-12`, `EVD-15`, `GOV-02`, `GOV-03`, `GOV-04`, `GOV-05`,
-  `GOV-06`, `GOV-16`, `GOV-19`, `GOV-20`, `GOV-21`, `GOV-22`, `OPS-01`,
-  `OPS-02`, `OPS-03`, `OPS-04`,
+  `GOV-06`, `GOV-08`, `GOV-09`, `GOV-10`, `GOV-16`, `GOV-19`, `GOV-20`,
+  `GOV-21`, `GOV-22`, `OPS-01`, `OPS-02`, `OPS-03`, `OPS-04`,
   `OPS-05`, `OPS-06`, `OPS-08`, `OPS-09`, `OPS-10`, `OPS-12`, `OPS-14`, `OPS-26`,
   `OPS-27`, `OPS-28`, `OPS-29`, `OPS-30`, `ORC-01`, `ORC-02`, `ORC-06`,
-  `ORC-12`, `ORC-13`, `ORC-17` y `STG-00`.
+  `ORC-12`, `ORC-13`, `ORC-17`, `ORC-24` y `STG-00`.
 
 ## Siguiente acción exacta
 
-Abrir V11 `OIDC/AD` y V12 `Director con lease` en paralelo con contratos rojos y
-write-sets de producto disjuntos. Serializar solamente los artefactos compartidos
-de roadmap, configuración, bootstrap, evidencia y este handoff.
+Al reanudar, abrir V13 `Mailbox y handoff` desde `AC-V13-MAILBOX`. Debe
+acreditar `ORC-04`, `ORC-05`, `ORC-14` y `ORC-15` sobre V06+V12: admit, claim,
+lease, delivery, consume y ACK por destinatario exacto; mensajes y handoffs
+compactos; crash/reclaim sin pérdida; replay tras ACK sin redelivery; sucesor
+incapaz de suplantar al destinatario. Reutilizar state/outbox, clocks, fencing e
+identidad existentes; no crear cola, store, loop o lifecycle paralelo.
 
-V11 no acredita IDs de capacidad: cierra una vertical transversal. Debe haber
-un único puerto de proveedor de identidad y dos adaptadores, `localtoken` y
-OIDC. Entra/ADFS pueden usar OIDC directo; Active Directory clásico se integra
-mediante un bridge libre externo Dex LDAP/LDAPS→OIDC. El core no conoce LDAP,
-passwords, sesiones, JWKS ni grupos externos. La identidad estable se deriva de
-`método + issuer canónico + sub`; email, nombre y grupos son atributos, no
-autoridad RBAC. No crear otra DB, daemon ni secreto de cliente en el servidor de
-recursos.
-
-V12 acredita exactamente `GOV-08`, `GOV-09`, `GOV-10` y `ORC-24`. Debe extender
-el mismo `Orchestrator`, `Goal`, SQLite y outbox con `ClaimDirector`,
-`RenewDirector` y `ProposeDirectorPlan`: lease por Goal, token/fence, propuesta
-versionada y aplicación causal por el camino `Goal.ApplyPlan`. No crear
-`DirectorStore`, loop, scheduler, cola, goroutine ni lifecycle paralelo. Solo
-seguridad, causalidad, refs y fence pueden bloquear; heurísticas de texto no
-deciden.
+Instrucción de corte: no abrir V13 ni ningún otro frente en esta sesión. El
+próximo agente debe empezar por el contrato rojo V13 solo después de reanudar y
+confirmar este checkpoint.
 
 Los subagentes directos siguen siendo bootstrap hasta V22. Hoy Orquesta puede
 coordinar un DAG declarado; una petición abierta aún necesita dirección externa.
@@ -308,7 +391,8 @@ coordinar un DAG declarado; una petición abierta aún necesita dirección exter
 
 Las palabras “pendiente”, “siguiente” o “en curso” dentro del historial
 describen checkpoints pasados. No son órdenes de reanudación. La acción vigente
-es abrir V11 y V12 desde el cierre acreditado V10.
+al reanudar es abrir V13 desde el cierre acreditado V11/V12; en esta sesión no
+se abre ningún frente nuevo.
 
 ## V03: trabajo ya realizado
 
