@@ -4,7 +4,7 @@
   "contract_id": "AC-V09-RECOVERY-BACKUP",
   "trusted_base_git_commit_oid": "e198a02fd3b1f5c0d57f9fe2c427401af65ac1ee",
   "product_delta_base_git_commit_oid": "41c4702db97ca148109ce26aafca3bcf85c49c4a",
-  "product_delta_sealed_git_commit_oid": "0000000000000000000000000000000000000000",
+  "product_delta_sealed_git_commit_oid": "55cceffecead3df625a6723610da04d026c1863f",
   "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV09ScopeAndExecutableContract|TestV09EvidenceBelongsOnlyToRecoveryCapabilities|TestV09AcceptanceCommandRunsRecoveryConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV09RecoveryBackup|TestV09CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/application ./internal/ports ./internal/adapters/state/sqlite ./internal/adapters/artifact/filesystem ./internal/config ./internal/adapters/config/toml ./internal/adapters/config/jsonimport ./cmd/orquesta ./internal/bootstrap'",
   "execution_argv": [
     "sh",
@@ -24,7 +24,14 @@
     "internal/adapters/config/jsonimport/types.go",
     "internal/adapters/state/sqlite/recovery.go",
     "internal/adapters/state/sqlite/recovery_backup.go",
+    "internal/adapters/state/sqlite/recovery_crash_test.go",
+    "internal/adapters/state/sqlite/recovery_fileinfo_linux.go",
+    "internal/adapters/state/sqlite/recovery_fileinfo_unsupported.go",
     "internal/adapters/state/sqlite/recovery_files.go",
+    "internal/adapters/state/sqlite/recovery_lock_linux.go",
+    "internal/adapters/state/sqlite/recovery_lock_unsupported.go",
+    "internal/adapters/state/sqlite/recovery_publish_linux.go",
+    "internal/adapters/state/sqlite/recovery_publish_unsupported.go",
     "internal/adapters/state/sqlite/recovery_restore.go",
     "internal/adapters/state/sqlite/recovery_v09_test.go",
     "internal/adapters/state/sqlite/recovery_validation.go",
@@ -32,7 +39,8 @@
     "internal/application/recovery.go",
     "internal/application/recovery_test.go",
     "product/roadmap.json",
-    "product/traceability/rebuild_bugs.jsonl"
+    "product/traceability/rebuild_bugs.jsonl",
+    "product_roadmap_test.go"
   ],
   "owned_capability_ids": [
     "EVD-15",
