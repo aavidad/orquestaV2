@@ -12,7 +12,7 @@ type queryer interface {
 }
 
 func beginTransaction(ctx context.Context, repository *Repository) (*sql.Tx, error) {
-	database, err := repository.database()
+	database, err := repository.writerDatabase()
 	if err != nil {
 		return nil, err
 	}
@@ -21,6 +21,15 @@ func beginTransaction(ctx context.Context, repository *Repository) (*sql.Tx, err
 		return nil, mapDatabaseError(err)
 	}
 	return transaction, nil
+}
+
+func (repository *Repository) writerDatabase() (*sql.DB, error) {
+	if repository != nil && repository.writer != nil {
+		return repository.writer, nil
+	}
+	// Compatibility for migration fixtures built around an already-open raw
+	// handle. Open always supplies a dedicated writer pool.
+	return repository.database()
 }
 
 func beginReadTransaction(ctx context.Context, repository *Repository) (*sql.Tx, error) {

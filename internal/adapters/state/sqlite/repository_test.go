@@ -138,6 +138,81 @@ VALUES ('event:invalid-fk', 'invalid', 'goal:missing', 'work:missing', 'executio
 	}
 }
 
+func TestRepositorySerializesWritersBeforeSQLiteBusyTimeout(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "private-state", "orquesta.sqlite")
+	const busyTimeout = time.Millisecond
+	repository, err := Open(context.Background(), Options{
+		Path: path, BusyTimeout: busyTimeout, MaxOpenConnections: 4,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = repository.Close() })
+	if got := repository.writer.Stats().MaxOpenConnections; got != 1 {
+		t.Fatalf("writer max connections = %d, want 1", got)
+	}
+	if got := repository.db.Stats().MaxOpenConnections; got != 4 {
+		t.Fatalf("reader max connections = %d, want 4", got)
+	}
+
+	first, err := beginTransaction(context.Background(), repository)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Rollback()
+	if _, err := first.Exec(`INSERT INTO workspaces(ref) VALUES ('workspace:writer-first')`); err != nil {
+		t.Fatal(err)
+	}
+
+	type writeResult struct{ err error }
+	result := make(chan writeResult, 1)
+	started := make(chan struct{})
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	waitsBefore := repository.writer.Stats().WaitCount
+	go func() {
+		close(started)
+		second, beginErr := beginTransaction(ctx, repository)
+		if beginErr != nil {
+			result <- writeResult{err: beginErr}
+			return
+		}
+		defer second.Rollback()
+		if _, execErr := second.ExecContext(ctx, `INSERT INTO workspaces(ref) VALUES ('workspace:writer-second')`); execErr != nil {
+			result <- writeResult{err: execErr}
+			return
+		}
+		result <- writeResult{err: commit(second)}
+	}()
+	<-started
+	deadline := time.Now().Add(250 * time.Millisecond)
+	for repository.writer.Stats().WaitCount == waitsBefore && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if repository.writer.Stats().WaitCount == waitsBefore {
+		t.Fatal("second writer did not queue in dedicated pool")
+	}
+	time.Sleep(5 * busyTimeout)
+	select {
+	case got := <-result:
+		t.Fatalf("second writer escaped before first commit: %v", got.err)
+	default:
+	}
+	if err := commit(first); err != nil {
+		t.Fatal(err)
+	}
+	if got := <-result; got.err != nil {
+		t.Fatalf("queued writer failed after release: %v", got.err)
+	}
+	var count int
+	if err := repository.db.QueryRow(`SELECT COUNT(*) FROM workspaces WHERE ref LIKE 'workspace:writer-%'`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 2 {
+		t.Fatalf("committed writers = %d, want 2", count)
+	}
+}
+
 func TestRepositoryRejectsChangedAppliedMigration(t *testing.T) {
 	repository, path := openTestRepository(t)
 	if _, err := repository.db.Exec("UPDATE schema_migrations SET checksum = 'sha256:tampered' WHERE version = 1"); err != nil {

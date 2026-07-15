@@ -31,9 +31,10 @@ type Options struct {
 
 // Repository is the file-backed SQLite implementation of StateRepository.
 type Repository struct {
-	db   *sql.DB
-	path string
-	now  func() time.Time
+	db     *sql.DB
+	writer *sql.DB
+	path   string
+	now    func() time.Time
 }
 
 var _ application.StateRepository = (*Repository)(nil)
@@ -48,29 +49,44 @@ func Open(ctx context.Context, options Options) (*Repository, error) {
 		return nil, invalid(err)
 	}
 
-	database, err := sql.Open(driverName, buildDSN(path, busyMilliseconds))
+	dsn := buildDSN(path, busyMilliseconds)
+	database, err := sql.Open(driverName, dsn)
 	if err != nil {
 		return nil, invalid(err)
 	}
 	database.SetMaxOpenConns(options.MaxOpenConnections)
 	database.SetMaxIdleConns(options.MaxOpenConnections)
+	writer, err := sql.Open(driverName, dsn)
+	if err != nil {
+		_ = database.Close()
+		return nil, invalid(err)
+	}
+	// SQLite admits one writer at a time. Keep that queue in database/sql so
+	// concurrent application writes wait for the owned connection instead of
+	// racing BEGIN IMMEDIATE until busy_timeout and surfacing StateConflict.
+	writer.SetMaxOpenConns(1)
+	writer.SetMaxIdleConns(1)
 	now := options.Now
 	if now == nil {
 		now = time.Now
 	}
-	repository := &Repository{db: database, path: path, now: now}
+	repository := &Repository{db: database, writer: writer, path: path, now: now}
 	closeOnError := true
 	defer func() {
 		if closeOnError {
 			_ = database.Close()
+			_ = writer.Close()
 		}
 	}()
 
-	if err := database.PingContext(ctx); err != nil {
+	if err := writer.PingContext(ctx); err != nil {
 		return nil, mapDatabaseError(err)
 	}
-	if err := applyMigrations(ctx, database); err != nil {
+	if err := applyMigrations(ctx, writer); err != nil {
 		return nil, err
+	}
+	if err := database.PingContext(ctx); err != nil {
+		return nil, mapDatabaseError(err)
 	}
 	if err := enforceDatabaseMode(path); err != nil {
 		return nil, invalid(err)
@@ -83,10 +99,17 @@ func Open(ctx context.Context, options Options) (*Repository, error) {
 }
 
 func (repository *Repository) Close() error {
-	if repository == nil || repository.db == nil {
+	if repository == nil {
 		return nil
 	}
-	return mapDatabaseError(repository.db.Close())
+	var closeErrors []error
+	if repository.writer != nil && repository.writer != repository.db {
+		closeErrors = append(closeErrors, repository.writer.Close())
+	}
+	if repository.db != nil {
+		closeErrors = append(closeErrors, repository.db.Close())
+	}
+	return mapDatabaseError(errors.Join(closeErrors...))
 }
 
 func validateOptions(options Options) (string, int64, error) {
