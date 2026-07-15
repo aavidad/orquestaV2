@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"orquesta/internal/goal"
+	"orquesta/internal/identity"
 	"orquesta/internal/ports"
 )
 
@@ -48,7 +49,13 @@ func (repository *memoryRepository) CreateGoal(_ context.Context, state CreateGo
 	repository.mu.Lock()
 	defer repository.mu.Unlock()
 	intent := state.Goal.AppSpec().Intent()
-	requestKey := state.Goal.Actor().String() + "\x00" + state.Goal.Project().String() + "\x00" + state.RequestRef
+	if !memoryWriteAuthorizationValid(
+		state.AuthorizationReceipt, state.RequestedBy, state.Goal.Project(), identity.PermissionGoalsCreate,
+		state.Goal.Project().String(),
+	) {
+		return GoalRecord{}, false, &StateError{Code: StateInvalid}
+	}
+	requestKey := state.RequestedBy.String() + "\x00" + state.Goal.Project().String() + "\x00" + state.RequestRef
 	if ref, ok := repository.requests[requestKey]; ok {
 		record := repository.records[ref]
 		if record.RequestFingerprint != state.RequestFingerprint ||
@@ -62,7 +69,8 @@ func (repository *memoryRepository) CreateGoal(_ context.Context, state CreateGo
 	}
 	record := GoalRecord{
 		RequestRef: state.RequestRef, RequestFingerprint: state.RequestFingerprint,
-		Goal: state.Goal, Executions: append([]ExecutionRecord(nil), state.Executions...),
+		RequestedBy: state.RequestedBy,
+		Goal:        state.Goal, Executions: append([]ExecutionRecord(nil), state.Executions...),
 	}
 	repository.requests[requestKey] = state.Goal.Ref()
 	repository.records[state.Goal.Ref()] = record
@@ -76,7 +84,13 @@ func (repository *memoryRepository) CreateGoal(_ context.Context, state CreateGo
 func (repository *memoryRepository) AmendGoal(_ context.Context, state AmendGoalState) (GoalRecord, bool, error) {
 	repository.mu.Lock()
 	defer repository.mu.Unlock()
-	requestKey := state.ActorRef.String() + "\x00" + state.ProjectRef.String() + "\x00" + state.RequestRef
+	if !memoryWriteAuthorizationValid(
+		state.AuthorizationReceipt, state.RequestedBy, state.ProjectRef, identity.PermissionGoalsAmend,
+		state.SourceGoalRef.String(),
+	) {
+		return GoalRecord{}, false, &StateError{Code: StateInvalid}
+	}
+	requestKey := state.RequestedBy.String() + "\x00" + state.ProjectRef.String() + "\x00" + state.RequestRef
 	if ref, ok := repository.requests[requestKey]; ok {
 		record := repository.records[ref]
 		if record.RequestFingerprint != state.RequestFingerprint {
@@ -88,7 +102,7 @@ func (repository *memoryRepository) AmendGoal(_ context.Context, state AmendGoal
 	if !ok {
 		return GoalRecord{}, false, &StateError{Code: StateNotFound}
 	}
-	if source.Goal.Actor() != state.ActorRef || source.Goal.Project() != state.ProjectRef ||
+	if source.Goal.Project() != state.ProjectRef ||
 		source.Goal.Revision() != state.ExpectedSourceRevision ||
 		source.Goal.SpecHash() != state.ExpectedSourceSpecHash || !source.Goal.IsTerminal() {
 		return GoalRecord{}, false, &StateError{Code: StateConflict}
@@ -98,7 +112,7 @@ func (repository *memoryRepository) AmendGoal(_ context.Context, state AmendGoal
 	}
 	successorSpec := state.Successor.AppSpec()
 	parentRef, hasParent := successorSpec.ParentRef()
-	if state.Successor.Actor() != state.ActorRef || state.Successor.Project() != state.ProjectRef ||
+	if state.Successor.Actor() != source.Goal.Actor() || state.Successor.Project() != state.ProjectRef ||
 		state.Successor.State() != goal.GoalStatePending || state.Successor.WorkItemCount() != 0 ||
 		!hasParent || parentRef != source.Goal.AppSpec().Ref() ||
 		successorSpec.ParentHash() != source.Goal.SpecHash() ||
@@ -107,7 +121,8 @@ func (repository *memoryRepository) AmendGoal(_ context.Context, state AmendGoal
 	}
 	record := GoalRecord{
 		RequestRef: state.RequestRef, RequestFingerprint: state.RequestFingerprint,
-		Goal: state.Successor,
+		RequestedBy: state.RequestedBy,
+		Goal:        state.Successor,
 	}
 	repository.requests[requestKey] = state.Successor.Ref()
 	repository.records[state.Successor.Ref()] = record
@@ -126,12 +141,12 @@ func (repository *memoryRepository) GetGoal(_ context.Context, ref goal.GoalRef)
 	return cloneGoalRecord(record), nil
 }
 
-func (repository *memoryRepository) ListGoals(_ context.Context, actor goal.ActorRef, project goal.ProjectRef, limit int) ([]GoalSummary, error) {
+func (repository *memoryRepository) ListGoals(_ context.Context, project goal.ProjectRef, limit int) ([]GoalSummary, error) {
 	repository.mu.Lock()
 	defer repository.mu.Unlock()
 	result := make([]GoalSummary, 0, len(repository.records))
 	for _, record := range repository.records {
-		if record.Goal.Actor() != actor || record.Goal.Project() != project {
+		if record.Goal.Project() != project {
 			continue
 		}
 		closedAt, _ := record.Goal.ClosedAt()
@@ -155,17 +170,26 @@ func (repository *memoryRepository) ListGoals(_ context.Context, actor goal.Acto
 	return result, nil
 }
 
-func (repository *memoryRepository) Status(context.Context) (RepositoryStatus, error) {
+func (repository *memoryRepository) Status(_ context.Context, project goal.ProjectRef) (RepositoryStatus, error) {
 	repository.mu.Lock()
 	defer repository.mu.Unlock()
-	status := RepositoryStatus{Goals: int64(len(repository.records)), PendingActions: int64(len(repository.actions))}
+	status := RepositoryStatus{}
 	for _, record := range repository.records {
+		if record.Goal.Project() != project {
+			continue
+		}
+		status.Goals++
 		if record.Goal.State() == goal.GoalStateRunning {
 			status.RunningGoals++
 		}
 	}
+	for _, action := range repository.actions {
+		if record, ok := repository.records[action.record.GoalRef]; ok && record.Goal.Project() == project {
+			status.PendingActions++
+		}
+	}
 	for _, event := range repository.events {
-		if event.Kind == "action.quarantined" {
+		if record, ok := repository.records[event.GoalRef]; ok && record.Goal.Project() == project && event.Kind == "action.quarantined" {
 			status.QuarantinedActions++
 		}
 	}
@@ -364,6 +388,21 @@ func cloneGoalRecord(record GoalRecord) GoalRecord {
 	return record
 }
 
+func memoryWriteAuthorizationValid(
+	receipt identity.AuthorizationReceipt,
+	requestedBy identity.PrincipalRef,
+	projectRef goal.ProjectRef,
+	permission identity.Permission,
+	resourceRef string,
+) bool {
+	request := receipt.Decision().Request()
+	return receipt.Decision().Outcome() == identity.AuthorizationAllowed &&
+		identity.RoleAllows(receipt.Decision().Role(), permission) &&
+		request.RequestRef() != "" && request.Principal().Ref == requestedBy &&
+		request.ProjectRef() == projectRef && request.Permission() == permission &&
+		request.ResourceRef() == resourceRef
+}
+
 func memoryClaimMatches(action memoryAction, claim ActionClaim, operationAt time.Time) bool {
 	return action.token == claim.Token && action.workerRef == claim.WorkerRef &&
 		action.deliveryAttempt == claim.DeliveryAttempt && action.fence == claim.Fence &&
@@ -541,6 +580,16 @@ func (agent *scriptedAgent) Observe(_ context.Context, execution goal.ExecutionR
 }
 
 func newTestOrchestrator(t interface{ Fatalf(string, ...any) }, repository *memoryRepository, clock *mutableClock, agent *scriptedAgent) (*Orchestrator, *memoryArtifactStore) {
+	return newTestOrchestratorWithAccess(t, repository, newMemoryAccessRepository(), clock, agent)
+}
+
+func newTestOrchestratorWithAccess(
+	t interface{ Fatalf(string, ...any) },
+	repository *memoryRepository,
+	accessRepository AccessRepository,
+	clock *mutableClock,
+	agent *scriptedAgent,
+) (*Orchestrator, *memoryArtifactStore) {
 	artifacts := newMemoryArtifactStore()
 	repository.now = clock.Now
 	capabilities, err := agent.Capabilities(context.Background())
@@ -548,7 +597,8 @@ func newTestOrchestrator(t interface{ Fatalf(string, ...any) }, repository *memo
 		t.Fatalf("agent capabilities: %v", err)
 	}
 	orchestrator, err := New(Dependencies{
-		State: repository, Launcher: agent, Observer: agent, Artifacts: artifacts,
+		State: repository, Access: accessRepository,
+		Launcher: agent, Observer: agent, Artifacts: artifacts,
 		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1 << 20,
 		MaxExecutionAttempts: 3, ClaimLease: time.Minute,
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,

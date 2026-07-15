@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"orquesta/internal/goal"
+	"orquesta/internal/identity"
 	"orquesta/internal/ports"
 )
 
@@ -170,6 +171,7 @@ type ActionConsumptionReceipt struct {
 type GoalRecord struct {
 	RequestRef          string
 	RequestFingerprint  string
+	RequestedBy         identity.PrincipalRef
 	Goal                goal.Goal
 	Executions          []ExecutionRecord
 	Artifacts           []ArtifactRecord
@@ -201,12 +203,14 @@ type RepositoryStatus struct {
 }
 
 type CreateGoalState struct {
-	RequestRef         string
-	RequestFingerprint string
-	Goal               goal.Goal
-	Executions         []ExecutionRecord
-	Actions            []ActionRecord
-	Events             []EventRecord
+	RequestRef           string
+	RequestFingerprint   string
+	AuthorizationReceipt identity.AuthorizationReceipt
+	RequestedBy          identity.PrincipalRef
+	Goal                 goal.Goal
+	Executions           []ExecutionRecord
+	Actions              []ActionRecord
+	Events               []EventRecord
 }
 
 // AmendGoalState carries a fully constructed successor plus the source fence
@@ -215,7 +219,8 @@ type CreateGoalState struct {
 type AmendGoalState struct {
 	RequestRef             string
 	RequestFingerprint     string
-	ActorRef               goal.ActorRef
+	AuthorizationReceipt   identity.AuthorizationReceipt
+	RequestedBy            identity.PrincipalRef
 	ProjectRef             goal.ProjectRef
 	SourceGoalRef          goal.GoalRef
 	ExpectedSourceRevision goal.Revision
@@ -308,8 +313,8 @@ type StateRepository interface {
 	CreateGoal(context.Context, CreateGoalState) (GoalRecord, bool, error)
 	AmendGoal(context.Context, AmendGoalState) (GoalRecord, bool, error)
 	GetGoal(context.Context, goal.GoalRef) (GoalRecord, error)
-	ListGoals(context.Context, goal.ActorRef, goal.ProjectRef, int) ([]GoalSummary, error)
-	Status(context.Context) (RepositoryStatus, error)
+	ListGoals(context.Context, goal.ProjectRef, int) ([]GoalSummary, error)
+	Status(context.Context, goal.ProjectRef) (RepositoryStatus, error)
 	ClaimNextAction(context.Context, ClaimRequest) (ActionClaim, bool, error)
 	RecordLaunchPrepared(context.Context, LaunchPreparedState) error
 	RecordLaunchAccepted(context.Context, LaunchAcceptedState) error

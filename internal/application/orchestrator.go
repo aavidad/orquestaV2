@@ -14,6 +14,7 @@ const (
 
 type Dependencies struct {
 	State                StateRepository
+	Access               AccessRepository
 	Launcher             AgentLauncher
 	Observer             AgentObserver
 	Artifacts            ArtifactStore
@@ -29,6 +30,7 @@ type Dependencies struct {
 
 type Orchestrator struct {
 	state                StateRepository
+	access               AccessRepository
 	launcher             AgentLauncher
 	observer             AgentObserver
 	artifacts            ArtifactStore
@@ -46,6 +48,8 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 	switch {
 	case dependencies.State == nil:
 		return nil, errors.New("application.state_required")
+	case dependencies.Access == nil:
+		return nil, errors.New("application.access_required")
 	case dependencies.Launcher == nil:
 		return nil, errors.New("application.launcher_required")
 	case dependencies.Observer == nil:
@@ -71,6 +75,7 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 	}
 	return &Orchestrator{
 		state:                dependencies.State,
+		access:               dependencies.Access,
 		launcher:             dependencies.Launcher,
 		observer:             dependencies.Observer,
 		artifacts:            dependencies.Artifacts,

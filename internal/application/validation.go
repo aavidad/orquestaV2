@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"orquesta/internal/goal"
+	"orquesta/internal/identity"
 )
 
 func validatePersistedCandidate(candidate goal.Goal, executions []ExecutionRecord, record GoalRecord) error {
@@ -72,15 +73,22 @@ func validateClaimedRecord(claim ActionClaim, record GoalRecord, kind ActionKind
 	return nil
 }
 
-func validateCreatedRecord(request SubmitRequest, fingerprint string, record GoalRecord) error {
+func validateCreatedRecord(
+	request SubmitRequest,
+	fingerprint string,
+	principal identity.Principal,
+	projectRef goal.ProjectRef,
+	record GoalRecord,
+) error {
 	appSpec := record.Goal.AppSpec()
 	intent := appSpec.Intent()
 	if record.RequestRef != request.RequestRef || record.RequestFingerprint != fingerprint ||
-		intent.Actor() != request.ActorRef || intent.Project() != request.ProjectRef ||
-		intent.Statement() != request.Statement || record.Goal.Actor() != request.ActorRef ||
-		record.Goal.Project() != request.ProjectRef || record.Goal.WorkItemCount() == 0 ||
+		record.RequestedBy != principal.Ref ||
+		intent.Actor() != principal.ActorRef || intent.Project() != projectRef ||
+		intent.Statement() != request.Statement || record.Goal.Actor() != principal.ActorRef ||
+		record.Goal.Project() != projectRef || record.Goal.WorkItemCount() == 0 ||
 		appSpec.Generation() != 1 || appSpec.Objective() != normalizedObjective(request.Statement, request.NormalizedObjective) ||
-		appSpec.Reason() != initialAppSpecReason || appSpec.ConfirmedBy() != request.ActorRef {
+		appSpec.Reason() != initialAppSpecReason || appSpec.ConfirmedBy() != principal.ActorRef {
 		return &StateError{Code: StateConflict}
 	}
 	if _, hasParent := appSpec.ParentRef(); hasParent {
@@ -100,6 +108,8 @@ func validateCreatedRecord(request SubmitRequest, fingerprint string, record Goa
 func validateAmendedRecord(
 	request AmendRequest,
 	fingerprint string,
+	principal identity.Principal,
+	projectRef goal.ProjectRef,
 	source goal.Goal,
 	record GoalRecord,
 ) error {
@@ -107,16 +117,17 @@ func validateAmendedRecord(
 	intent := appSpec.Intent()
 	parentRef, hasParent := appSpec.ParentRef()
 	if record.RequestRef != request.RequestRef || record.RequestFingerprint != fingerprint ||
-		record.Goal.Actor() != request.ActorRef || record.Goal.Project() != request.ProjectRef ||
+		record.RequestedBy != principal.Ref ||
+		record.Goal.Actor() != source.Actor() || record.Goal.Project() != projectRef ||
 		record.Goal.State() != goal.GoalStatePending || record.Goal.WorkItemCount() != 0 ||
 		len(record.Executions) != 0 || len(record.Artifacts) != 0 || len(record.Attestations) != 0 ||
 		len(record.ConsumptionReceipts) != 0 ||
-		intent.Actor() != request.ActorRef || intent.Project() != request.ProjectRef ||
+		intent.Actor() != source.Actor() || intent.Project() != projectRef ||
 		intent.Statement() != request.Statement ||
 		appSpec.Generation() != source.AppSpec().Generation()+1 || !hasParent ||
 		parentRef != source.AppSpec().Ref() || appSpec.ParentHash() != source.SpecHash() ||
 		appSpec.Objective() != normalizedObjective(request.Statement, request.NormalizedObjective) ||
-		appSpec.Reason() != request.Reason || appSpec.ConfirmedBy() != request.ActorRef {
+		appSpec.Reason() != request.Reason || appSpec.ConfirmedBy() != principal.ActorRef {
 		return &StateError{Code: StateConflict}
 	}
 	return nil
@@ -158,10 +169,6 @@ func validateSubmitRequest(request SubmitRequest) error {
 	switch {
 	case strings.TrimSpace(request.RequestRef) == "" || strings.TrimSpace(request.RequestRef) != request.RequestRef:
 		return errors.New("application.request_ref_invalid")
-	case request.ActorRef.String() == "":
-		return errors.New("application.actor_ref_required")
-	case request.ProjectRef.String() == "":
-		return errors.New("application.project_ref_required")
 	case strings.TrimSpace(request.Statement) == "":
 		return errors.New("application.statement_required")
 	default:
@@ -173,10 +180,6 @@ func validateAmendRequest(request AmendRequest) error {
 	switch {
 	case strings.TrimSpace(request.RequestRef) == "" || strings.TrimSpace(request.RequestRef) != request.RequestRef:
 		return errors.New("application.request_ref_invalid")
-	case request.ActorRef.String() == "":
-		return errors.New("application.actor_ref_required")
-	case request.ProjectRef.String() == "":
-		return errors.New("application.project_ref_required")
 	case request.SourceGoalRef.String() == "":
 		return errors.New("application.source_goal_ref_required")
 	case request.ExpectedSourceRevision == 0:

@@ -12,8 +12,9 @@ import (
 
 func TestSubmissionFingerprintFramesPlanCollections(t *testing.T) {
 	actor, project := testScope(t)
+	access := accessForScope(t, actor, project)
 	base := SubmitRequest{
-		RequestRef: "request:fingerprint", ActorRef: actor, ProjectRef: project, Statement: "same", Confirm: true,
+		RequestRef: "request:fingerprint", Statement: "same", Confirm: true,
 		Plan: &PlanSpec{Phases: []PhaseSpec{{Ref: "phase-instance:test", Key: "phase:test", TemplateRef: "phase-template:test"}}, WorkItems: []WorkItemSpec{{
 			Key: "work:a", Objective: "same", Phase: "phase:test", Role: "role:test",
 			OutputContract: goal.OutputContractEvidenceBundle,
@@ -26,7 +27,7 @@ func TestSubmissionFingerprintFramesPlanCollections(t *testing.T) {
 	right := base
 	right.Plan = clonePlanSpec(base.Plan)
 	right.Plan.WorkItems[0].WriteSet = []string{"d", "w"}
-	if submissionFingerprint(left) == submissionFingerprint(right) {
+	if submissionFingerprint(access, left) == submissionFingerprint(access, right) {
 		t.Fatal("dependency/write-set boundary collision")
 	}
 }
@@ -37,9 +38,10 @@ func TestExplicitPlanPreservesContractsAndLaunchesMaximalSafeCohort(t *testing.T
 	agent := &scriptedAgent{now: clock.Now}
 	orchestrator, _ := newTestOrchestrator(t, repository, clock, agent)
 	actor, project := testScope(t)
-	result, err := orchestrator.Submit(context.Background(), SubmitRequest{
-		RequestRef: "request:v05-plan", ActorRef: actor, ProjectRef: project,
-		Statement: "run typed plan", Confirm: true,
+	access := accessForScope(t, actor, project)
+	result, err := orchestrator.Submit(context.Background(), access, SubmitRequest{
+		RequestRef: "request:v05-plan",
+		Statement:  "run typed plan", Confirm: true,
 		Plan: &PlanSpec{
 			Phases: []PhaseSpec{{
 				Ref: "phase-instance:build", Key: "phase:build", TemplateRef: "phase-template:program",

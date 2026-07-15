@@ -20,7 +20,8 @@ func TestNewClonesAgentCapabilitySlices(t *testing.T) {
 		ToolRefs: []string{"tool:test"}, CapabilityRefs: []string{"capability:test"},
 	}
 	orchestrator, err := New(Dependencies{
-		State: repository, Launcher: agent, Observer: agent, Artifacts: newMemoryArtifactStore(),
+		State: repository, Access: newMemoryAccessRepository(),
+		Launcher: agent, Observer: agent, Artifacts: newMemoryArtifactStore(),
 		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1 << 20, MaxExecutionAttempts: 3,
 		ClaimLease: time.Minute, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 		AgentCapabilities: capabilities,
@@ -54,10 +55,11 @@ func TestOrchestratorOwnsOneDurableLifecycleWriter(t *testing.T) {
 	}}, launchEntered: launchEntered, launchRelease: launchRelease}
 	orchestrator, artifacts := newTestOrchestrator(t, repository, clock, agent)
 	actor, project := testScope(t)
+	access := accessForScope(t, actor, project)
 
-	first, err := orchestrator.Submit(ctx, SubmitRequest{
-		RequestRef: "request:one", ActorRef: actor, ProjectRef: project,
-		Statement: "produce un resultado pequeño", Confirm: true,
+	first, err := orchestrator.Submit(ctx, access, SubmitRequest{
+		RequestRef: "request:one",
+		Statement:  "produce un resultado pequeño", Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("submit: %v", err)
@@ -65,9 +67,9 @@ func TestOrchestratorOwnsOneDurableLifecycleWriter(t *testing.T) {
 	if !first.Created || first.Record.Goal.State() != goal.GoalStateRunning {
 		t.Fatalf("unexpected creation: created=%v state=%s", first.Created, first.Record.Goal.State())
 	}
-	duplicate, err := orchestrator.Submit(ctx, SubmitRequest{
-		RequestRef: "request:one", ActorRef: actor, ProjectRef: project,
-		Statement: "produce un resultado pequeño", Confirm: true,
+	duplicate, err := orchestrator.Submit(ctx, access, SubmitRequest{
+		RequestRef: "request:one",
+		Statement:  "produce un resultado pequeño", Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("idempotent submit: %v", err)
@@ -99,17 +101,14 @@ func TestOrchestratorOwnsOneDurableLifecycleWriter(t *testing.T) {
 	if err != nil || !result.Processed || result.Action != ActionObserveAgent {
 		t.Fatalf("observe action: result=%+v err=%v", result, err)
 	}
-	record, err := orchestrator.GetGoal(ctx, GoalQuery{ActorRef: actor, ProjectRef: project, GoalRef: first.Record.Goal.Ref()})
+	record, err := orchestrator.GetGoal(ctx, access, first.Record.Goal.Ref())
 	if err != nil {
 		t.Fatalf("get closed goal: %v", err)
 	}
 	if record.Goal.State() != goal.GoalStateSucceeded || len(record.Artifacts) != 1 || len(record.Attestations) != 1 {
 		t.Fatalf("closure not accredited: state=%s artifacts=%d attestations=%d", record.Goal.State(), len(record.Artifacts), len(record.Attestations))
 	}
-	content, err := orchestrator.GetArtifact(ctx, ArtifactQuery{
-		ActorRef: actor, ProjectRef: project, GoalRef: record.Goal.Ref(),
-		ArtifactRef: record.Artifacts[0].Stored.Ref,
-	})
+	content, err := orchestrator.GetArtifact(ctx, access, record.Goal.Ref(), record.Artifacts[0].Stored.Ref)
 	if err != nil || string(content.Content) != "resultado acreditado" {
 		t.Fatalf("artifact mismatch: %q err=%v", content.Content, err)
 	}
@@ -129,10 +128,11 @@ func TestSubmitIdempotencyRejectsSemanticConflict(t *testing.T) {
 	agent := &scriptedAgent{now: clock.Now}
 	orchestrator, _ := newTestOrchestrator(t, repository, clock, agent)
 	actor, project := testScope(t)
-	if _, err := orchestrator.Submit(ctx, SubmitRequest{RequestRef: "request:same", ActorRef: actor, ProjectRef: project, Statement: "uno", Confirm: true}); err != nil {
+	access := accessForScope(t, actor, project)
+	if _, err := orchestrator.Submit(ctx, access, SubmitRequest{RequestRef: "request:same", Statement: "uno", Confirm: true}); err != nil {
 		t.Fatalf("first submit: %v", err)
 	}
-	_, err := orchestrator.Submit(ctx, SubmitRequest{RequestRef: "request:same", ActorRef: actor, ProjectRef: project, Statement: "dos", Confirm: true})
+	_, err := orchestrator.Submit(ctx, access, SubmitRequest{RequestRef: "request:same", Statement: "dos", Confirm: true})
 	if !IsStateError(err, StateConflict) {
 		t.Fatalf("expected conflict, got %v", err)
 	}
@@ -147,8 +147,9 @@ func TestArtifactReadRejectsCorruptAdapterContentAfterScopedLookup(t *testing.T)
 	}}}
 	orchestrator, artifacts := newTestOrchestrator(t, repository, clock, agent)
 	actor, project := testScope(t)
-	submitted, err := orchestrator.Submit(ctx, SubmitRequest{
-		RequestRef: "request:corrupt-read", ActorRef: actor, ProjectRef: project, Statement: "read safely", Confirm: true,
+	access := accessForScope(t, actor, project)
+	submitted, err := orchestrator.Submit(ctx, access, SubmitRequest{
+		RequestRef: "request:corrupt-read", Statement: "read safely", Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("submit: %v", err)
@@ -169,9 +170,7 @@ func TestArtifactReadRejectsCorruptAdapterContentAfterScopedLookup(t *testing.T)
 	corrupt.Content = []byte("substituted")
 	artifacts.content[ref] = corrupt
 	artifacts.mu.Unlock()
-	_, err = orchestrator.GetArtifact(ctx, ArtifactQuery{
-		ActorRef: actor, ProjectRef: project, GoalRef: record.Goal.Ref(), ArtifactRef: ref,
-	})
+	_, err = orchestrator.GetArtifact(ctx, access, record.Goal.Ref(), ref)
 	if err == nil || err.Error() != "artifact.content_contract_invalid" {
 		t.Fatalf("corrupt adapter content accepted: %v", err)
 	}
@@ -188,8 +187,9 @@ func TestProviderClockSkewCannotDriveLifecycle(t *testing.T) {
 	}}}
 	orchestrator, _ := newTestOrchestrator(t, repository, clock, agent)
 	actor, project := testScope(t)
-	submitted, err := orchestrator.Submit(ctx, SubmitRequest{
-		RequestRef: "request:clock-skew", ActorRef: actor, ProjectRef: project, Statement: "clock", Confirm: true,
+	access := accessForScope(t, actor, project)
+	submitted, err := orchestrator.Submit(ctx, access, SubmitRequest{
+		RequestRef: "request:clock-skew", Statement: "clock", Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("submit: %v", err)
@@ -218,8 +218,9 @@ func TestCompletedObservationWithUnexpectedMediaTypeFailsWithoutEvidence(t *test
 	}}}
 	orchestrator, _ := newTestOrchestrator(t, repository, clock, agent)
 	actor, project := testScope(t)
-	submitted, err := orchestrator.Submit(ctx, SubmitRequest{
-		RequestRef: "request:media-mismatch", ActorRef: actor, ProjectRef: project, Statement: "plain text", Confirm: true,
+	access := accessForScope(t, actor, project)
+	submitted, err := orchestrator.Submit(ctx, access, SubmitRequest{
+		RequestRef: "request:media-mismatch", Statement: "plain text", Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("submit: %v", err)
@@ -247,7 +248,8 @@ func TestClaimRecordMismatchIsQuarantinedBeforeAgentEffect(t *testing.T) {
 	agent := &scriptedAgent{now: clock.Now}
 	orchestrator, _ := newTestOrchestrator(t, repository, clock, agent)
 	actor, project := testScope(t)
-	if _, err := orchestrator.Submit(ctx, SubmitRequest{RequestRef: "request:bad-action", ActorRef: actor, ProjectRef: project, Statement: "safe", Confirm: true}); err != nil {
+	access := accessForScope(t, actor, project)
+	if _, err := orchestrator.Submit(ctx, access, SubmitRequest{RequestRef: "request:bad-action", Statement: "safe", Confirm: true}); err != nil {
 		t.Fatalf("submit: %v", err)
 	}
 	repository.mu.Lock()

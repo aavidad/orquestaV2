@@ -47,6 +47,8 @@ func (orchestrator *Orchestrator) compilePlan(
 	ctx context.Context,
 	request SubmitRequest,
 	goalRef goal.GoalRef,
+	actorRef goal.ActorRef,
+	projectRef goal.ProjectRef,
 	at time.Time,
 ) (goal.Plan, error) {
 	spec := request.Plan
@@ -165,8 +167,8 @@ func (orchestrator *Orchestrator) compilePlan(
 			return goal.Plan{}, err
 		}
 		item, err := goal.NewWorkItem(goal.NewWorkItemInput{
-			Ref: refs[itemSpec.Key], Goal: goalRef, Actor: request.ActorRef,
-			Project: request.ProjectRef, Objective: itemSpec.Objective, CreatedAt: at,
+			Ref: refs[itemSpec.Key], Goal: goalRef, Actor: actorRef,
+			Project: projectRef, Objective: itemSpec.Objective, CreatedAt: at,
 			Phase: phaseKey, Role: roleKey, Parent: parent, Dependencies: dependencies,
 			WriteSet: writeSet, SkillRefs: skillRefs, ToolRefs: toolRefs,
 			CapabilityRefs: capabilityRefs, OutputContract: contract,

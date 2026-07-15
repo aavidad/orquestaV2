@@ -65,7 +65,8 @@ func TestV04ConfirmationFalseHasNoClockIDOrStateEffect(t *testing.T) {
 	agent := &scriptedAgent{now: clock.Now}
 	artifacts := newMemoryArtifactStore()
 	orchestrator, err := New(Dependencies{
-		State: repository, Launcher: agent, Observer: agent, Artifacts: artifacts,
+		State: repository, Access: newMemoryAccessRepository(),
+		Launcher: agent, Observer: agent, Artifacts: artifacts,
 		Clock: clock, IDs: ids, MaxOutputBytes: 1024,
 		MaxExecutionAttempts: 3, AgentCapabilities: testAgentCapabilities(),
 		ClaimLease: time.Minute, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
@@ -74,14 +75,15 @@ func TestV04ConfirmationFalseHasNoClockIDOrStateEffect(t *testing.T) {
 		t.Fatalf("new: %v", err)
 	}
 	actor, project := testScope(t)
+	access := accessForScope(t, actor, project)
 
-	_, submitErr := orchestrator.Submit(ctx, SubmitRequest{
-		RequestRef: "request:not-confirmed", ActorRef: actor, ProjectRef: project,
-		Statement: "must not exist", Confirm: false,
+	_, submitErr := orchestrator.Submit(ctx, access, SubmitRequest{
+		RequestRef: "request:not-confirmed",
+		Statement:  "must not exist", Confirm: false,
 	})
-	_, amendErr := orchestrator.Amend(ctx, AmendRequest{
-		RequestRef: "request:amend-not-confirmed", ActorRef: actor, ProjectRef: project,
-		Statement: "must not exist either", Confirm: false,
+	_, amendErr := orchestrator.Amend(ctx, access, AmendRequest{
+		RequestRef: "request:amend-not-confirmed",
+		Statement:  "must not exist either", Confirm: false,
 	})
 	if submitErr == nil || submitErr.Error() != "application.confirmation_required" ||
 		amendErr == nil || amendErr.Error() != "application.confirmation_required" {
@@ -103,12 +105,13 @@ func TestV04SubmitCreatesConfirmedRootAppSpecFromExactIntent(t *testing.T) {
 	agent := &scriptedAgent{now: clock.Now}
 	orchestrator, _ := newTestOrchestrator(t, repository, clock, agent)
 	actor, project := testScope(t)
+	access := accessForScope(t, actor, project)
 	request := SubmitRequest{
-		RequestRef: "request:root-spec", ActorRef: actor, ProjectRef: project,
-		Statement: "  preserve this exact intent  ", Confirm: true,
+		RequestRef: "request:root-spec",
+		Statement:  "  preserve this exact intent  ", Confirm: true,
 	}
 
-	result, err := orchestrator.Submit(ctx, request)
+	result, err := orchestrator.Submit(ctx, access, request)
 	if err != nil {
 		t.Fatalf("submit: %v", err)
 	}
@@ -125,14 +128,14 @@ func TestV04SubmitCreatesConfirmedRootAppSpecFromExactIntent(t *testing.T) {
 	if len(items) != 1 || items[0].Objective() != spec.Objective() {
 		t.Fatalf("default work objective does not derive from AppSpec: %+v", items)
 	}
-	summaries, err := orchestrator.ListGoals(ctx, actor, project, 10)
+	summaries, err := orchestrator.ListGoals(ctx, access, 10)
 	if err != nil || len(summaries) != 1 || summaries[0].AppSpecRef != spec.Ref() ||
 		summaries[0].AppSpecGeneration != spec.Generation() || summaries[0].SpecHash != spec.Hash() {
 		t.Fatalf("GoalSummary lost AppSpec identity: summaries=%+v err=%v", summaries, err)
 	}
 	differentExactIntent := request
 	differentExactIntent.Statement = strings.TrimSpace(request.Statement)
-	if submissionFingerprint(request) == submissionFingerprint(differentExactIntent) {
+	if submissionFingerprint(access, request) == submissionFingerprint(access, differentExactIntent) {
 		t.Fatal("submission fingerprint lost exact Intent statement")
 	}
 }
@@ -152,9 +155,10 @@ func TestV04SubmitRejectsCreatedSnapshotSubstitution(t *testing.T) {
 	agent := &scriptedAgent{now: clock.Now}
 	orchestrator := v04NewOrchestrator(t, repository, clock, agent)
 	actor, project := testScope(t)
-	_, err := orchestrator.Submit(ctx, SubmitRequest{
-		RequestRef: "request:substituted-create", ActorRef: actor, ProjectRef: project,
-		Statement: "exact candidate only", Confirm: true,
+	access := accessForScope(t, actor, project)
+	_, err := orchestrator.Submit(ctx, access, SubmitRequest{
+		RequestRef: "request:substituted-create",
+		Statement:  "exact candidate only", Confirm: true,
 	})
 	if !IsStateError(err, StateConflict) {
 		t.Fatalf("created Goal snapshot substitution accepted: %v", err)
@@ -170,19 +174,20 @@ func TestV04AmendCreatesCausalPendingSuccessorAndReplayIsIdempotent(t *testing.T
 	}}}
 	orchestrator, _ := newTestOrchestrator(t, repository, clock, agent)
 	actor, project := testScope(t)
-	source := v04SubmitAndClose(t, ctx, orchestrator, clock, SubmitRequest{
-		RequestRef: "request:source", ActorRef: actor, ProjectRef: project,
-		Statement: "source exact", NormalizedObjective: "source normalized", Confirm: true,
+	access := accessForScope(t, actor, project)
+	source := v04SubmitAndClose(t, ctx, orchestrator, clock, access, SubmitRequest{
+		RequestRef: "request:source",
+		Statement:  "source exact", NormalizedObjective: "source normalized", Confirm: true,
 	})
 	sourceBefore := source.Goal.Snapshot()
 	request := AmendRequest{
-		RequestRef: "request:amend", ActorRef: actor, ProjectRef: project,
+		RequestRef:    "request:amend",
 		SourceGoalRef: source.Goal.Ref(), ExpectedSourceRevision: source.Goal.Revision(),
 		ExpectedSourceSpecHash: source.Goal.SpecHash(), Statement: "  amended exact  ",
 		NormalizedObjective: " amended normalized ", Reason: "operator clarified scope", Confirm: true,
 	}
 
-	amended, err := orchestrator.Amend(ctx, request)
+	amended, err := orchestrator.Amend(ctx, access, request)
 	if err != nil {
 		t.Fatalf("amend: %v", err)
 	}
@@ -203,18 +208,18 @@ func TestV04AmendCreatesCausalPendingSuccessorAndReplayIsIdempotent(t *testing.T
 		t.Fatalf("source history changed: before=%+v after=%+v err=%v", sourceBefore, sourceAfter, err)
 	}
 
-	replayed, err := orchestrator.Amend(ctx, request)
+	replayed, err := orchestrator.Amend(ctx, access, request)
 	if err != nil || replayed.Created || replayed.Record.Goal.Ref() != amended.Record.Goal.Ref() || len(repository.records) != 2 {
 		t.Fatalf("amend replay: created=%v ref=%s records=%d err=%v", replayed.Created, replayed.Record.Goal.Ref().String(), len(repository.records), err)
 	}
 	conflict := request
 	conflict.Statement = "different exact amendment"
-	if _, err := orchestrator.Amend(ctx, conflict); !IsStateError(err, StateConflict) || len(repository.records) != 2 {
+	if _, err := orchestrator.Amend(ctx, access, conflict); !IsStateError(err, StateConflict) || len(repository.records) != 2 {
 		t.Fatalf("amend semantic conflict: records=%d err=%v", len(repository.records), err)
 	}
 	secondSuccessor := request
 	secondSuccessor.RequestRef = "request:amend-branch"
-	if _, err := orchestrator.Amend(ctx, secondSuccessor); !IsStateError(err, StateConflict) ||
+	if _, err := orchestrator.Amend(ctx, access, secondSuccessor); !IsStateError(err, StateConflict) ||
 		len(repository.records) != 2 || len(repository.successors) != 1 {
 		t.Fatalf("second successor accepted: records=%d successors=%d err=%v", len(repository.records), len(repository.successors), err)
 	}
@@ -231,12 +236,13 @@ func TestV04AmendRejectsCreatedSnapshotSubstitution(t *testing.T) {
 	}}}
 	orchestrator := v04NewOrchestrator(t, repository, clock, agent)
 	actor, project := testScope(t)
-	source := v04SubmitAndClose(t, ctx, orchestrator, clock, SubmitRequest{
-		RequestRef: "request:substitution-source", ActorRef: actor, ProjectRef: project,
-		Statement: "source", Confirm: true,
+	access := accessForScope(t, actor, project)
+	source := v04SubmitAndClose(t, ctx, orchestrator, clock, access, SubmitRequest{
+		RequestRef: "request:substitution-source",
+		Statement:  "source", Confirm: true,
 	})
-	_, err := orchestrator.Amend(ctx, v04AmendRequest(
-		source.Goal, actor, project, "request:substituted-amend",
+	_, err := orchestrator.Amend(ctx, access, v04AmendRequest(
+		source.Goal, "request:substituted-amend",
 	))
 	if !IsStateError(err, StateConflict) {
 		t.Fatalf("created successor snapshot substitution accepted: %v", err)
@@ -251,7 +257,8 @@ func TestV04AmendRejectsNonterminalStaleAndForeignSource(t *testing.T) {
 		repository := newMemoryRepository()
 		agent := &scriptedAgent{now: clock.Now}
 		orchestrator, err := New(Dependencies{
-			State: repository, Launcher: agent, Observer: agent, Artifacts: newMemoryArtifactStore(),
+			State: repository, Access: newMemoryAccessRepository(),
+			Launcher: agent, Observer: agent, Artifacts: newMemoryArtifactStore(),
 			Clock: clock, IDs: ids, MaxOutputBytes: 1024,
 			MaxExecutionAttempts: 3, AgentCapabilities: testAgentCapabilities(),
 			ClaimLease: time.Minute, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
@@ -260,9 +267,10 @@ func TestV04AmendRejectsNonterminalStaleAndForeignSource(t *testing.T) {
 			t.Fatalf("new: %v", err)
 		}
 		actor, project := testScope(t)
-		source, err := orchestrator.Submit(ctx, SubmitRequest{
-			RequestRef: "request:running", ActorRef: actor, ProjectRef: project,
-			Statement: "still running", Confirm: true,
+		access := accessForScope(t, actor, project)
+		source, err := orchestrator.Submit(ctx, access, SubmitRequest{
+			RequestRef: "request:running",
+			Statement:  "still running", Confirm: true,
 		})
 		if err != nil {
 			t.Fatalf("submit: %v", err)
@@ -270,10 +278,10 @@ func TestV04AmendRejectsNonterminalStaleAndForeignSource(t *testing.T) {
 		clockCalls, idCalls := clock.calls, ids.next
 		records, requests := len(repository.records), len(repository.requests)
 		actions, events := len(repository.actions), len(repository.events)
-		_, err = orchestrator.Amend(ctx, v04AmendRequest(source.Record.Goal, actor, project, "request:running-amend"))
+		_, err = orchestrator.Amend(ctx, access, v04AmendRequest(source.Record.Goal, "request:running-amend"))
 		if goal.ErrorCodeOf(err) != goal.ErrorInvalidTransition || len(repository.records) != records ||
 			len(repository.requests) != requests || len(repository.actions) != actions || len(repository.events) != events ||
-			len(repository.successors) != 0 || clock.calls != clockCalls || ids.next != idCalls {
+			len(repository.successors) != 0 || clock.calls != clockCalls+1 || ids.next != idCalls+1 {
 			t.Fatalf("nonterminal amendment caused effects: err=%v records=%d/%d requests=%d/%d actions=%d/%d events=%d/%d successors=%d clock=%d/%d ids=%d/%d",
 				err, len(repository.records), records, len(repository.requests), requests,
 				len(repository.actions), actions, len(repository.events), events, len(repository.successors),
@@ -290,24 +298,26 @@ func TestV04AmendRejectsNonterminalStaleAndForeignSource(t *testing.T) {
 		}}}
 		orchestrator, _ := newTestOrchestrator(t, repository, clock, agent)
 		actor, project := testScope(t)
-		source := v04SubmitAndClose(t, ctx, orchestrator, clock, SubmitRequest{
-			RequestRef: "request:stale-source", ActorRef: actor, ProjectRef: project,
-			Statement: "closed", Confirm: true,
+		access := accessForScope(t, actor, project)
+		source := v04SubmitAndClose(t, ctx, orchestrator, clock, access, SubmitRequest{
+			RequestRef: "request:stale-source",
+			Statement:  "closed", Confirm: true,
 		})
-		staleRevision := v04AmendRequest(source.Goal, actor, project, "request:stale-revision")
+		staleRevision := v04AmendRequest(source.Goal, "request:stale-revision")
 		staleRevision.ExpectedSourceRevision++
-		if _, err := orchestrator.Amend(ctx, staleRevision); !IsStateError(err, StateConflict) {
+		if _, err := orchestrator.Amend(ctx, access, staleRevision); !IsStateError(err, StateConflict) {
 			t.Fatalf("stale revision accepted: %v", err)
 		}
-		staleHash := v04AmendRequest(source.Goal, actor, project, "request:stale-hash")
+		staleHash := v04AmendRequest(source.Goal, "request:stale-hash")
 		staleHash.ExpectedSourceSpecHash = v04DifferentSpecHash
-		if _, err := orchestrator.Amend(ctx, staleHash); !IsStateError(err, StateConflict) {
+		if _, err := orchestrator.Amend(ctx, access, staleHash); !IsStateError(err, StateConflict) {
 			t.Fatalf("stale spec hash accepted: %v", err)
 		}
 		foreignActor, _ := goal.NewActorRef("actor:foreign")
 		foreignProject, _ := goal.NewProjectRef("project:foreign")
-		foreign := v04AmendRequest(source.Goal, foreignActor, foreignProject, "request:foreign")
-		if _, err := orchestrator.Amend(ctx, foreign); !IsStateError(err, StateNotFound) {
+		foreignAccess := accessForScope(t, foreignActor, foreignProject)
+		foreign := v04AmendRequest(source.Goal, "request:foreign")
+		if _, err := orchestrator.Amend(ctx, foreignAccess, foreign); !IsStateError(err, StateNotFound) {
 			t.Fatalf("foreign scope leaked source: %v", err)
 		}
 		if len(repository.records) != 1 {
@@ -325,13 +335,14 @@ func TestV04ConcurrentAmendAllowsExactlyOneSuccessorPerSourceSpec(t *testing.T) 
 	}}}
 	orchestrator, _ := newTestOrchestrator(t, repository, clock, agent)
 	actor, project := testScope(t)
-	source := v04SubmitAndClose(t, ctx, orchestrator, clock, SubmitRequest{
-		RequestRef: "request:concurrent-source", ActorRef: actor, ProjectRef: project,
-		Statement: "closed source", Confirm: true,
+	access := accessForScope(t, actor, project)
+	source := v04SubmitAndClose(t, ctx, orchestrator, clock, access, SubmitRequest{
+		RequestRef: "request:concurrent-source",
+		Statement:  "closed source", Confirm: true,
 	})
 	requests := []AmendRequest{
-		v04AmendRequest(source.Goal, actor, project, "request:successor-a"),
-		v04AmendRequest(source.Goal, actor, project, "request:successor-b"),
+		v04AmendRequest(source.Goal, "request:successor-a"),
+		v04AmendRequest(source.Goal, "request:successor-b"),
 	}
 	start := make(chan struct{})
 	type outcome struct {
@@ -343,7 +354,7 @@ func TestV04ConcurrentAmendAllowsExactlyOneSuccessorPerSourceSpec(t *testing.T) 
 		request := request
 		go func() {
 			<-start
-			result, err := orchestrator.Amend(ctx, request)
+			result, err := orchestrator.Amend(ctx, access, request)
 			outcomes <- outcome{result: result, err: err}
 		}()
 	}
@@ -430,9 +441,10 @@ func TestV04ProviderSpecHashMismatchCreatesNoEvidenceOrClosure(t *testing.T) {
 			agent := testCase.agent(clock)
 			orchestrator, artifacts := newTestOrchestrator(t, repository, clock, agent)
 			actor, project := testScope(t)
-			submitted, err := orchestrator.Submit(ctx, SubmitRequest{
-				RequestRef: "request:mismatch-" + testCase.name, ActorRef: actor, ProjectRef: project,
-				Statement: "reject crossed evidence", Confirm: true,
+			access := accessForScope(t, actor, project)
+			submitted, err := orchestrator.Submit(ctx, access, SubmitRequest{
+				RequestRef: "request:mismatch-" + testCase.name,
+				Statement:  "reject crossed evidence", Confirm: true,
 			})
 			if err != nil {
 				t.Fatalf("submit: %v", err)
@@ -449,7 +461,7 @@ func TestV04ProviderSpecHashMismatchCreatesNoEvidenceOrClosure(t *testing.T) {
 				t.Fatalf("spec-hash fence result=%+v err=%v, want %s", result, processErr, testCase.wantError)
 			}
 			record, err := repository.GetGoal(ctx, submitted.Record.Goal.Ref())
-			status, statusErr := repository.Status(ctx)
+			status, statusErr := repository.Status(ctx, project)
 			if err != nil || statusErr != nil || record.Goal.IsTerminal() || record.Goal.State() != goal.GoalStateRunning ||
 				onlyExecution(t, record).FailureCode != "" || status.QuarantinedActions != 1 || status.PendingActions != 0 ||
 				len(record.Artifacts) != 0 || len(record.Attestations) != 0 || len(artifacts.content) != 0 {
@@ -468,10 +480,11 @@ func v04SubmitAndClose(
 	ctx context.Context,
 	orchestrator *Orchestrator,
 	clock *mutableClock,
+	access Access,
 	request SubmitRequest,
 ) GoalRecord {
 	t.Helper()
-	submitted, err := orchestrator.Submit(ctx, request)
+	submitted, err := orchestrator.Submit(ctx, access, request)
 	if err != nil {
 		t.Fatalf("submit source: %v", err)
 	}
@@ -482,18 +495,16 @@ func v04SubmitAndClose(
 	if _, err := orchestrator.ProcessNext(ctx, "worker:v04"); err != nil {
 		t.Fatalf("observe source: %v", err)
 	}
-	record, err := orchestrator.GetGoal(ctx, GoalQuery{
-		ActorRef: request.ActorRef, ProjectRef: request.ProjectRef, GoalRef: submitted.Record.Goal.Ref(),
-	})
+	record, err := orchestrator.GetGoal(ctx, access, submitted.Record.Goal.Ref())
 	if err != nil || !record.Goal.IsTerminal() {
 		t.Fatalf("source not terminal: state=%s err=%v", record.Goal.State(), err)
 	}
 	return record
 }
 
-func v04AmendRequest(source goal.Goal, actor goal.ActorRef, project goal.ProjectRef, requestRef string) AmendRequest {
+func v04AmendRequest(source goal.Goal, requestRef string) AmendRequest {
 	return AmendRequest{
-		RequestRef: requestRef, ActorRef: actor, ProjectRef: project,
+		RequestRef:    requestRef,
 		SourceGoalRef: source.Ref(), ExpectedSourceRevision: source.Revision(),
 		ExpectedSourceSpecHash: source.SpecHash(), Statement: "successor",
 		NormalizedObjective: "successor objective", Reason: "test amendment", Confirm: true,
@@ -508,7 +519,8 @@ func v04NewOrchestrator(
 ) *Orchestrator {
 	t.Helper()
 	orchestrator, err := New(Dependencies{
-		State: state, Launcher: agent, Observer: agent, Artifacts: newMemoryArtifactStore(),
+		State: state, Access: newMemoryAccessRepository(),
+		Launcher: agent, Observer: agent, Artifacts: newMemoryArtifactStore(),
 		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1 << 20,
 		MaxExecutionAttempts: 3, AgentCapabilities: testAgentCapabilities(), ClaimLease: time.Minute,
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,

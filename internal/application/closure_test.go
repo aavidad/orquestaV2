@@ -35,8 +35,9 @@ func TestExplicitAgentFailureCreatesReplacementBeforeClosure(t *testing.T) {
 	}}}
 	orchestrator, _ := newTestOrchestrator(t, repository, clock, agent)
 	actor, project := testScope(t)
-	submitted, err := orchestrator.Submit(ctx, SubmitRequest{
-		RequestRef: "request:failure", ActorRef: actor, ProjectRef: project, Statement: "tarea fallida", Confirm: true,
+	access := accessForScope(t, actor, project)
+	submitted, err := orchestrator.Submit(ctx, access, SubmitRequest{
+		RequestRef: "request:failure", Statement: "tarea fallida", Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("submit: %v", err)
@@ -93,9 +94,10 @@ func TestExecutionAttemptPolicyFailsWorkItemOnlyAfterExhaustion(t *testing.T) {
 	}}
 	orchestrator, _ := newTestOrchestrator(t, repository, clock, agent)
 	actor, project := testScope(t)
-	submitted, err := orchestrator.Submit(ctx, SubmitRequest{
-		RequestRef: "request:attempt-exhaustion", ActorRef: actor, ProjectRef: project,
-		Statement: "bounded provider retries", Confirm: true,
+	access := accessForScope(t, actor, project)
+	submitted, err := orchestrator.Submit(ctx, access, SubmitRequest{
+		RequestRef: "request:attempt-exhaustion",
+		Statement:  "bounded provider retries", Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("submit: %v", err)
@@ -137,7 +139,8 @@ func TestInvalidArtifactAdapterCannotAccreditSuccessfulGoal(t *testing.T) {
 		Status: ports.AgentCompleted, MediaType: "text/plain", Content: []byte("real content"),
 	}}}
 	orchestrator, err := New(Dependencies{
-		State: repository, Launcher: agent, Observer: agent, Artifacts: invalidArtifactStore{},
+		State: repository, Access: newMemoryAccessRepository(),
+		Launcher: agent, Observer: agent, Artifacts: invalidArtifactStore{},
 		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1024,
 		MaxExecutionAttempts: 3, AgentCapabilities: testAgentCapabilities(), ClaimLease: time.Minute,
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
@@ -146,8 +149,9 @@ func TestInvalidArtifactAdapterCannotAccreditSuccessfulGoal(t *testing.T) {
 		t.Fatalf("new: %v", err)
 	}
 	actor, project := testScope(t)
-	submitted, err := orchestrator.Submit(ctx, SubmitRequest{
-		RequestRef: "request:invalid-artifact-adapter", ActorRef: actor, ProjectRef: project, Statement: "must have real evidence", Confirm: true,
+	access := accessForScope(t, actor, project)
+	submitted, err := orchestrator.Submit(ctx, access, SubmitRequest{
+		RequestRef: "request:invalid-artifact-adapter", Statement: "must have real evidence", Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("submit: %v", err)
@@ -176,8 +180,9 @@ func TestLaunchInfrastructureFailureCreatesReplaceableAttempt(t *testing.T) {
 	}}}
 	orchestrator, _ := newTestOrchestrator(t, repository, clock, agent)
 	actor, project := testScope(t)
-	submitted, err := orchestrator.Submit(ctx, SubmitRequest{
-		RequestRef: "request:launch-failure", ActorRef: actor, ProjectRef: project, Statement: "tarea", Confirm: true,
+	access := accessForScope(t, actor, project)
+	submitted, err := orchestrator.Submit(ctx, access, SubmitRequest{
+		RequestRef: "request:launch-failure", Statement: "tarea", Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("submit: %v", err)
@@ -215,8 +220,9 @@ func TestTemporaryLaunchFailureRequeuesWithoutClosingGoal(t *testing.T) {
 	}}}
 	orchestrator, _ := newTestOrchestrator(t, repository, clock, agent)
 	actor, project := testScope(t)
-	submitted, err := orchestrator.Submit(ctx, SubmitRequest{
-		RequestRef: "request:temporary-launch", ActorRef: actor, ProjectRef: project, Statement: "wait safely", Confirm: true,
+	access := accessForScope(t, actor, project)
+	submitted, err := orchestrator.Submit(ctx, access, SubmitRequest{
+		RequestRef: "request:temporary-launch", Statement: "wait safely", Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("submit: %v", err)
@@ -256,7 +262,8 @@ func TestTemporaryLaunchCapacityWaitDoesNotConsumeExecutionAttemptBudget(t *test
 		Status: ports.AgentCompleted, MediaType: "text/plain", Content: []byte("capacity recovered"),
 	}}}
 	orchestrator, err := New(Dependencies{
-		State: repository, Launcher: agent, Observer: agent, Artifacts: newMemoryArtifactStore(),
+		State: repository, Access: newMemoryAccessRepository(),
+		Launcher: agent, Observer: agent, Artifacts: newMemoryArtifactStore(),
 		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1024,
 		MaxExecutionAttempts: 3, AgentCapabilities: testAgentCapabilities(), ClaimLease: time.Minute,
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
@@ -265,8 +272,9 @@ func TestTemporaryLaunchCapacityWaitDoesNotConsumeExecutionAttemptBudget(t *test
 		t.Fatalf("new: %v", err)
 	}
 	actor, project := testScope(t)
-	submitted, err := orchestrator.Submit(ctx, SubmitRequest{
-		RequestRef: "request:capacity-boundary", ActorRef: actor, ProjectRef: project, Statement: "bounded capacity wait", Confirm: true,
+	access := accessForScope(t, actor, project)
+	submitted, err := orchestrator.Submit(ctx, access, SubmitRequest{
+		RequestRef: "request:capacity-boundary", Statement: "bounded capacity wait", Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("submit: %v", err)
@@ -312,7 +320,8 @@ func TestPendingObservationHasDurableAttemptBoundary(t *testing.T) {
 	}}
 	artifacts := newMemoryArtifactStore()
 	orchestrator, err := New(Dependencies{
-		State: repository, Launcher: agent, Observer: agent, Artifacts: artifacts,
+		State: repository, Access: newMemoryAccessRepository(),
+		Launcher: agent, Observer: agent, Artifacts: artifacts,
 		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1024,
 		MaxExecutionAttempts: 3, AgentCapabilities: testAgentCapabilities(), ClaimLease: time.Minute,
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
@@ -321,8 +330,9 @@ func TestPendingObservationHasDurableAttemptBoundary(t *testing.T) {
 		t.Fatalf("new: %v", err)
 	}
 	actor, project := testScope(t)
-	submitted, err := orchestrator.Submit(ctx, SubmitRequest{
-		RequestRef: "request:bounded", ActorRef: actor, ProjectRef: project, Statement: "bounded", Confirm: true,
+	access := accessForScope(t, actor, project)
+	submitted, err := orchestrator.Submit(ctx, access, SubmitRequest{
+		RequestRef: "request:bounded", Statement: "bounded", Confirm: true,
 	})
 	if err != nil {
 		t.Fatalf("submit: %v", err)

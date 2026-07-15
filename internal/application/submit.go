@@ -10,14 +10,13 @@ import (
 	"strings"
 
 	"orquesta/internal/goal"
+	"orquesta/internal/identity"
 )
 
 const initialAppSpecReason = "operator.initial_confirmation"
 
 type SubmitRequest struct {
 	RequestRef          string
-	ActorRef            goal.ActorRef
-	ProjectRef          goal.ProjectRef
 	Statement           string
 	NormalizedObjective string
 	Confirm             bool
@@ -29,7 +28,7 @@ type SubmitResult struct {
 	Created bool
 }
 
-func (orchestrator *Orchestrator) Submit(ctx context.Context, request SubmitRequest) (SubmitResult, error) {
+func (orchestrator *Orchestrator) Submit(ctx context.Context, access Access, request SubmitRequest) (SubmitResult, error) {
 	if orchestrator == nil {
 		return SubmitResult{}, errors.New("application.unavailable")
 	}
@@ -39,8 +38,18 @@ func (orchestrator *Orchestrator) Submit(ctx context.Context, request SubmitRequ
 	if err := validateSubmitRequest(request); err != nil {
 		return SubmitResult{}, err
 	}
+	principal, projectRef, err := access.values()
+	if err != nil {
+		return SubmitResult{}, err
+	}
 	request.NormalizedObjective = normalizedObjective(request.Statement, request.NormalizedObjective)
 	now := orchestrator.clock.Now()
+	authorizationReceipt, err := orchestrator.authorize(
+		ctx, access, identity.PermissionGoalsCreate, projectRef.String(), now,
+	)
+	if err != nil {
+		return SubmitResult{}, err
+	}
 	intentRef, err := newIntentRef(ctx, orchestrator.ids)
 	if err != nil {
 		return SubmitResult{}, err
@@ -54,7 +63,7 @@ func (orchestrator *Orchestrator) Submit(ctx context.Context, request SubmitRequ
 		return SubmitResult{}, err
 	}
 	intent, err := goal.NewIntentManifest(goal.IntentManifestInput{
-		Ref: intentRef, Actor: request.ActorRef, Project: request.ProjectRef,
+		Ref: intentRef, Actor: principal.ActorRef, Project: projectRef,
 		Statement: request.Statement, SubmittedAt: now,
 	})
 	if err != nil {
@@ -62,7 +71,7 @@ func (orchestrator *Orchestrator) Submit(ctx context.Context, request SubmitRequ
 	}
 	appSpec, err := goal.NewInitialAppSpec(goal.AppSpecInput{
 		Ref: appSpecRef, Intent: intent, Objective: request.NormalizedObjective,
-		Reason: initialAppSpecReason, ConfirmedBy: request.ActorRef, ConfirmedAt: now,
+		Reason: initialAppSpecReason, ConfirmedBy: principal.ActorRef, ConfirmedAt: now,
 	})
 	if err != nil {
 		return SubmitResult{}, err
@@ -71,7 +80,7 @@ func (orchestrator *Orchestrator) Submit(ctx context.Context, request SubmitRequ
 	if err != nil {
 		return SubmitResult{}, err
 	}
-	plan, err := orchestrator.compilePlan(ctx, request, goalRef, now)
+	plan, err := orchestrator.compilePlan(ctx, request, goalRef, principal.ActorRef, projectRef, now)
 	if err != nil {
 		return SubmitResult{}, err
 	}
@@ -92,9 +101,10 @@ func (orchestrator *Orchestrator) Submit(ctx context.Context, request SubmitRequ
 		Ref: "event:goal-created:" + goalRef.String(), Kind: "goal.created",
 		GoalRef: goalRef, OccurredAt: now,
 	}}, scheduledEvents...)
-	fingerprint := submissionFingerprint(request)
+	fingerprint := submissionFingerprint(access, request)
 	record, created, err := orchestrator.state.CreateGoal(ctx, CreateGoalState{
 		RequestRef: request.RequestRef, RequestFingerprint: fingerprint,
+		AuthorizationReceipt: authorizationReceipt, RequestedBy: principal.Ref,
 		Goal:       aggregate,
 		Executions: executions, Actions: actions, Events: events,
 	})
@@ -106,17 +116,17 @@ func (orchestrator *Orchestrator) Submit(ctx context.Context, request SubmitRequ
 			return SubmitResult{}, err
 		}
 	}
-	if err := validateCreatedRecord(request, fingerprint, record); err != nil {
+	if err := validateCreatedRecord(request, fingerprint, principal, projectRef, record); err != nil {
 		return SubmitResult{}, err
 	}
 	return SubmitResult{Record: record, Created: created}, nil
 }
 
-func submissionFingerprint(request SubmitRequest) string {
+func submissionFingerprint(access Access, request SubmitRequest) string {
 	digest := sha256.New()
 	writeFingerprintField(digest, "orquesta.submit.v2")
-	writeFingerprintField(digest, request.ActorRef.String())
-	writeFingerprintField(digest, request.ProjectRef.String())
+	writeFingerprintField(digest, access.principal.Ref.String())
+	writeFingerprintField(digest, access.projectRef.String())
 	writeFingerprintField(digest, request.Statement)
 	writeFingerprintField(digest, normalizedObjective(request.Statement, request.NormalizedObjective))
 	writePlanFingerprint(digest, request.Plan)
