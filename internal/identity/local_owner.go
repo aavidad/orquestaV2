@@ -9,12 +9,6 @@ import (
 
 const LocalOwnerMethod = "local_owner"
 
-type Principal struct {
-	ActorRef          goal.ActorRef
-	DefaultProjectRef goal.ProjectRef
-	Method            string
-}
-
 type Provider interface {
 	Principal(context.Context) (Principal, error)
 }
@@ -30,11 +24,21 @@ func NewLocalOwnerProvider(actorRef goal.ActorRef, projectRef goal.ProjectRef) (
 	if projectRef.String() == "" {
 		return nil, errors.New("identity.invalid_project_ref")
 	}
-	return &LocalOwnerProvider{principal: Principal{
-		ActorRef:          actorRef,
-		DefaultProjectRef: projectRef,
-		Method:            LocalOwnerMethod,
-	}}, nil
+	principalRef, err := NewPrincipalRef(actorRef.String())
+	if err != nil {
+		return nil, err
+	}
+	principal, err := NewPrincipalWithDefaultProject(
+		principalRef,
+		actorRef,
+		PrincipalKindHuman,
+		LocalOwnerMethod,
+		projectRef,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &LocalOwnerProvider{principal: principal}, nil
 }
 
 func (provider *LocalOwnerProvider) Principal(context.Context) (Principal, error) {

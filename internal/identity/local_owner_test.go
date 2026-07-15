@@ -32,11 +32,12 @@ func TestLocalOwnerProviderReturnsStableOpaqueRefs(t *testing.T) {
 	if first != second {
 		t.Fatalf("principal changed: first=%+v second=%+v", first, second)
 	}
-	if first.ActorRef.String() != "actor:local-owner" || first.DefaultProjectRef.String() != "project:default" {
+	if first.Ref.String() != "actor:local-owner" || first.ActorRef.String() != "actor:local-owner" ||
+		first.DefaultProjectRef.String() != "project:default" {
 		t.Fatalf("unexpected principal: %+v", first)
 	}
-	if first.Method != LocalOwnerMethod {
-		t.Fatalf("method = %q", first.Method)
+	if first.Kind != PrincipalKindHuman || first.Method != LocalOwnerMethod {
+		t.Fatalf("kind/method = %q/%q", first.Kind, first.Method)
 	}
 }
 
