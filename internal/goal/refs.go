@@ -117,7 +117,7 @@ func (ref ArtifactRef) String() string      { return ref.value }
 func (ref AttestationRef) String() string   { return ref.value }
 
 func validOpaqueRef(field, value string) (string, error) {
-	if value == "" || strings.TrimSpace(value) != value {
+	if value == "" || strings.TrimSpace(value) != value || strings.ContainsRune(value, '\x00') {
 		return "", domainError(ErrorInvalidRef, field)
 	}
 	return value, nil
