@@ -13,7 +13,7 @@ import (
 const v10FixturePath = "acceptance/fixtures/v10_identity_projects_rbac.json"
 const v10TrustedBaseGitCommitOID = "f48066832b3813e996bf990083cf13c78e98c506"
 const v10ProductDeltaBaseGitCommitOID = "0a945a61c50f4c36167cf514749ee8ebf72333fd"
-const v10ProductDeltaSealedGitCommitOID = "0000000000000000000000000000000000000000"
+const v10ProductDeltaSealedGitCommitOID = "6e3aaf82bd857d5c7cf5a4ff89e92afda55456be"
 
 type v10Fixture struct {
 	SchemaVersion                  int                     `json:"schema_version"`
