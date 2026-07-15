@@ -1,78 +1,79 @@
 # Estado y handoff vivo del rebuild
 
-Última actualización: 2026-07-15 01:52 Europe/Madrid.
+Última actualización: 2026-07-15 03:48 Europe/Madrid.
 
 Este documento permite continuar el rebuild sin reconstruir el contexto de la
 sesión. Es estado operativo, no evidencia de aceptación. Los estados canónicos
 de capacidades, verticales y contratos viven en `product/roadmap.json`; los
 verdes viven en receipts fuera de su propio candidato.
 
-## Checkpoint vigente: V07 cerrado
+## Checkpoint vigente: V08 cerrado
 
-V07 está cerrado funcionalmente y con evidencia reproducible. V08 aún no está
-abierto en este checkpoint. El próximo agente debe partir del `HEAD` que
-contiene este documento y no reanalizar, reimplementar ni resellar V01–V07 salvo
+V08 está cerrado funcionalmente, contrarrevisado y con evidencia reproducible.
+V09 aún no está abierto. El próximo agente debe partir del `HEAD` que contiene
+este documento y no reanalizar, reimplementar ni resellar V01–V08 salvo
 regresión reproducible.
 
-V07 cierra exactamente diez capacidades de configuración: `OPS-01`, `OPS-02`,
-`OPS-04`, `OPS-05`, `OPS-06`, `OPS-26`, `OPS-27`, `OPS-28`, `OPS-29` y
-`OPS-30`. `OPS-07` sigue íntegramente diferida a V24; credenciales pertenecen a
-V08. El total queda en 28/257 capacidades, 10,89 %, y 7/34 verticales, 20,6 %.
+V08 cierra exactamente `EVD-11`, `EVD-12`, `OPS-03` y `OPS-08`. `EVD-13`
+permanece íntegramente declarada para el sandbox real de V17. El total queda en
+32/257 capacidades, 12,45 %, y 8/34 verticales, 23,5 %.
 
-Resultado funcional V07:
+Resultado funcional V08:
 
-- `config/registry.json` es la única definición de keys, tipos, defaults,
-  validadores, sensibilidad, alcance, entorno, aliases y reinicio;
-- getters, schema JSON, referencia y descriptor UI se generan y se comprueban
-  contra el registro; guards AST impiden `Getenv`, keys o defaults ad hoc;
-- `orquesta.toml` contiene solo valores editables y `credential_ref`; el
-  `DocumentStore` TOML aplica CAS, journal, replace+fsync, replay ABA-safe y
-  receipts privados e inmutables;
-- `effective_config` es salida redactada, atómica, `0400`, serializada y segura
-  frente a reemplazo concurrente del directorio;
-- `Manager` depende de un puerto neutral, mantiene snapshot activo inmutable,
-  desired state y `pending_restart`; `Doctor` produce reuse/replace/new
-  aplicables por el mismo validador canónico;
-- bootstrap hace preflight determinista antes de token, SQLite, artefactos o
-  escritura efectiva; los hijos reciben solo allowlist exacta de entorno;
-- el adaptador local confía en su UID de servicio. Multiusuario hostil requiere
-  aislamiento por cuenta/contenedor, no más locks dentro del mismo proceso.
+- `internal/credentials` define un único puerto neutral
+  `Create|Use|Rotate|Revoke`, refs opacas tipadas, secretos callback-scoped,
+  entorno hijo exacto y un leak guard compartido;
+- el adaptador local mantiene un único documento privado con owner, scopes,
+  propósito, versión, rotación, revocación, CAS, idempotencia, lock cancelable,
+  replace+fsync y recuperación causal por `.next`;
+- traversal, symlink, hardlink, UID efectiva, modos inseguros, colisiones del
+  namespace transaccional y contaminación durable fallan antes de efectos;
+- material raw, Base64/base64url y hexadecimal se bloquea en inputs, errores,
+  resultados, diagnósticos, artefactos, receipts y proyecciones durables;
+- Goals y requests durables conservan solo `credential_ref`; Codex resuelve la
+  versión vigente justo antes del launch, recibe entorno mínimo, bloquea
+  revocados y limpia salida no verificable antes de persistir terminalidad;
+- bootstrap conserva compatibilidad sin credential ref y posee/cierra el store
+  configurado. El seam real local→Codex prueba v1, rotación v2 y revocación;
+- V08 no añade HTTP, web, identidad, RBAC, vault remoto ni sandbox hostil.
 
-Cadena autoritativa V07:
+Cadena autoritativa V08:
 
 ```text
-base confiable V06: 5ff9234d7ef1c8650c1f21ad21a288246c5d027c
-contrato rojo B:     5b38079cdd66f49a1eaed85b83b8fe89502b6985
-producto P:          2fc3b37dfa0c1e463e59431a19b5fc9e5ebc5fbd
-sellado C:           6d88f0f2d53c840686a93ed19f69f708dcbe7af3
-tree C:              883202a4f8d12556cc02c6201c88f06c81df2a55
-evidencia E:         410d431209729e4ad958bbf95fa8b13b62f5e698
-candidate SHA:       sha256:222124a7d0554d17280b53ad566def2eec53d206c88d12237e86b89d7c518e5c
-fixture SHA:         sha256:f3051ba04bd3f7b03555367bef6355e5c34d0dbfd5f061fc8c519c624c1e47f8
-output SHA:          sha256:dc6df3c226b568d1bf15c0f34a942fbd2f09230efc0bc552be35b472985f471b
+base confiable V07:  6b7bdd2002da73b11265f2c61e1046d6cd60b110
+contrato rojo B:     02838cd36d42803ee39ca2c3c17322fa7866a374
+producto P:          f9554897798de08d419645eeee13c3cdb055b279
+sellado C:           afb7857ed37c20f8863e95a1bab2485d757e5e2d
+tree C:              817d165878368a20ca5d4182abcd64dc549099ff
+evidencia E:         dcd05a3b515146e251864e8970c050fb7c686e38
+E2E Codex real:      86adc431bf48358343237cd6022ed2dd3ea4b797
+candidate SHA:       sha256:1652380d287aec1a3eb942343f26b0123f1c8818f109ca3626bfbcf701bb8c42
+fixture SHA:         sha256:dae0140456ee7427b41ae8b0d6af80cb2f5df71d4f4e6e915d52e32377d1bc77
+output SHA:          sha256:943ddc0849a09ab5bdf93843f0478ed2d9e3d4cc65d68b26d96256917b46a1d7
 ```
 
-El receipt V3 se emitió ejecutando el argv contractual desde `C` en checkout
-detached, limpio y con status vacío. Los 42 sujetos coinciden exactamente con
-el delta `B..P`; receipt y salida quedan fuera del candidato. Normal, `-race`,
-`vet`, aceptación, arquitectura, roadmap y lecciones quedaron verdes.
+El receipt V3 ejecutó el argv contractual desde `C` en checkout detached,
+limpio y con status vacío. Los 40 sujetos coinciden exactamente con `B..P`;
+receipt y salida quedan fuera del candidato. Suite global `./...`, focales,
+`-race`, `vet`, aceptación, arquitectura, roadmap, trace y diff-check quedaron
+verdes. Tres contrarrevisores devolvieron `ACCEPT`; P0/P1 conocidos: cero.
 
-Los bugs `BUG-REBUILD-20260714-059` a `081` y
-`BUG-REBUILD-20260715-082` permanecen cerrados con causa, invariante y prueba.
-La contrarrevisión encontró y cerró un único P1 final: Doctor recomendaba
-semantic refs y reemplazos que el propio registro rechazaba. No quedan P0/P1
-conocidos en Registry, Manager, TOML, effectivefile o bootstrap.
+Los bugs `BUG-REBUILD-20260715-083` a `109` permanecen cerrados con causa,
+invariante y prueba única de lección. Incluyen los falsos verdes de consumer no
+ejecutado, causas ocultas, buffers, proyección durable completa, sidecar `.next`,
+UID efectiva y seam local→Codex.
 
 El E2E Codex real vigente está ligado a source digest
-`sha256:6d5f864f4785bc521cf9bfb6fa773e2195589ac9327f267c4d7fc53bd457dbc5`
-y marcador `ORQUESTA_CODEX_E2E_OK_5ff427697450194f8b8b24532af8fde2`.
+`sha256:8a2458209d67ba85256e20ad4264de16db7571b0d747448e1f6fe7e8ae99a1dd`
+y marcador `ORQUESTA_CODEX_E2E_OK_9db75e6d6b5639cd41eb8f12c74f3ecd`.
 Cualquier cambio posterior en código activo invalida ese receipt y obliga a
 repetir el E2E.
 
-Uso honesto actual: Orquesta recibe por MCP un DAG declarado, lo persiste y
-ejecuta con Codex real bajo configuración canónica. Todavía no guarda ni
-resuelve secretos: V08 añade `CredentialStore`. La dirección autónoma de una
-petición abierta culmina en V22; workspace/Git empieza en V16.
+Uso honesto actual: Orquesta recibe por MCP un DAG declarado, lo persiste,
+resuelve credenciales por referencia y ejecuta con Codex real bajo configuración
+canónica. Backup/restore verificable empieza en V09; identidad multiusuario en
+V10; dirección autónoma de una petición abierta culmina en V22; workspace/Git
+empieza en V16.
 
 ## Checkpoint histórico de V01–V05
 
@@ -114,8 +115,8 @@ en la sección de reanudación; no repetir el análisis ni reescribir el DAG bas
 - hasta que V22 acredite autodirección, los subagentes Codex directos son una
   excepción bootstrap y el integrador revisa cada entrega;
 - no usar `codebase-memory-mcp` para este frente;
-- no ejecutar `go test ./...`: atraviesa superficies legacy y puede lanzar
-  smokes reales. Usar paquetes nuevos explícitos.
+- durante desarrollo usar paquetes nuevos explícitos; `go test ./...` se reserva
+  al gate de cierre controlado porque también atraviesa superficies legacy.
 
 Snapshot de control del árbol antiguo al último checkpoint: SHA-256 de
 `git status --porcelain=v1` =
@@ -165,6 +166,17 @@ d912719a28 test: acreditar evidencia reproducible V06
 2fc3b37dfa feat: acreditar configuracion V07
 6d88f0f2d5 test: sellar delta V07
 410d431209 test: acreditar evidencia reproducible V07
+6b7bdd2002 docs: registrar cierre y relevo V07
+02838cd36d test: fijar contrato ejecutable V08
+7ed5f44382 feat: registrar configuracion de credenciales V08
+0315cfe3ac fix: cerrar falsos verdes del contrato V08
+e02ebbbe72 feat: añadir núcleo y store de credenciales V08
+33a0634efd feat: integrar credenciales con Codex V08
+280a5e0df0 test: cerrar contrato y lecciones V08
+f955489779 feat: acreditar credenciales V08
+afb7857ed3 test: sellar delta V08
+dcd05a3b51 test: acreditar evidencia reproducible V08
+86adc431bf test: renovar E2E Codex real tras V08
 ```
 
 Checkpoint histórico: `70dbab89e3` preservó el cierre funcional de V04 y migró
@@ -196,6 +208,7 @@ V04  sha256:803f6182f2dda6d7b45f6289ce6d49a26202968c54baf69cc30016a9a9c7aabb
 V05  sha256:952230df433d87f9f9285a7d6a5bc68cd3d4875f5d3ec5dd60adfbe3020709f7
 V06  sha256:845ad6413a9d32794567bc7fc3c202ce01d1ab993812461ce5da250d9ca7da0c
 V07  sha256:222124a7d0554d17280b53ad566def2eec53d206c88d12237e86b89d7c518e5c
+V08  sha256:1652380d287aec1a3eb942343f26b0123f1c8818f109ca3626bfbcf701bb8c42
 ```
 
 Receipt V04: fixture
@@ -208,7 +221,7 @@ autoritaria; no se recalculan desde el worktree actual.
 Verificación rápida sin atravesar superficies legacy:
 
 ```bash
-go test -mod=vendor -count=1 ./acceptance -run '^TestAcceptanceV0[1-7].*Receipt$'
+go test -mod=vendor -count=1 ./acceptance -run '^TestAcceptanceV0[1-8].*Receipt$'
 git diff --check
 scripts/check_rebuild_write_set.sh
 ```
@@ -228,24 +241,31 @@ scripts/check_rebuild_write_set.sh
 - V07 configuración canónica y mutable: cerrado; receipt V3 válido; acredita
   exactamente `OPS-01`, `OPS-02`, `OPS-04`, `OPS-05`, `OPS-06`, `OPS-26`,
   `OPS-27`, `OPS-28`, `OPS-29` y `OPS-30`; `OPS-07` permanece en V24.
-- V08–V34: pendientes. No contar código heredado, groundwork o una prueba
+- V08 credenciales por referencia: cerrado; receipt V3 válido; acredita
+  exactamente `EVD-11`, `EVD-12`, `OPS-03` y `OPS-08`; `EVD-13` permanece
+  íntegra en V17.
+- V09–V34: pendientes. No contar código heredado, groundwork o una prueba
   aislada como vertical posterior cerrada.
-- progreso vertical cerrado: 7 de 34, 20,6 % de la ruta; receipts válidos: 7
-  de 7 contratos ejecutables;
-- progreso de capacidades: 28 de 257 en estado `accredited`, 10,89 %:
-  `EVD-02`, `GOV-02`, `GOV-03`, `GOV-04`, `GOV-05`, `GOV-06`, `GOV-16`,
-  `GOV-21`, `OPS-01`, `OPS-02`, `OPS-04`, `OPS-05`, `OPS-06`, `OPS-09`,
-  `OPS-10`, `OPS-12`, `OPS-26`, `OPS-27`, `OPS-28`, `OPS-29`, `OPS-30`,
-  `ORC-01`, `ORC-02`, `ORC-06`, `ORC-12`, `ORC-13`, `ORC-17` y `STG-00`.
+- progreso vertical cerrado: 8 de 34, 23,5 % de la ruta; receipts válidos: 8
+  de 8 contratos ejecutables;
+- progreso de capacidades: 32 de 257 en estado `accredited`, 12,45 %:
+  `EVD-02`, `EVD-11`, `EVD-12`, `GOV-02`, `GOV-03`, `GOV-04`, `GOV-05`,
+  `GOV-06`, `GOV-16`, `GOV-21`, `OPS-01`, `OPS-02`, `OPS-03`, `OPS-04`,
+  `OPS-05`, `OPS-06`, `OPS-08`, `OPS-09`, `OPS-10`, `OPS-12`, `OPS-26`,
+  `OPS-27`, `OPS-28`, `OPS-29`, `OPS-30`, `ORC-01`, `ORC-02`, `ORC-06`,
+  `ORC-12`, `ORC-13`, `ORC-17` y `STG-00`.
 
 ## Siguiente acción exacta
 
-Abrir solo el contrato rojo V08 `CredentialStore`. Debe depender de V07 y
-acreditar `EVD-11`, `EVD-12`, `EVD-13`, `OPS-03` y `OPS-08`: puerto neutral,
-backend local privado, owner/scope/version/use/rotate/revoke, resolución por
-referencia y leak scan. Goals conservan refs opacas, nunca secreto. No añadir
-identidad multiusuario, HTTP/web pública ni vault remoto: pertenecen a V10,
-V11 y adaptadores posteriores.
+Abrir solo el contrato rojo V09 `Repositorio, backup y restore`. Primero
+corregir el scope del roadmap: V09 acredita exactamente `EVD-15` y `OPS-14`;
+`OPS-15` (install, doctor, update y rollback) pertenece íntegramente a V32 y no
+puede obtener evidencia prestada desde backup. Caracterizar el puerto de
+snapshot/restore sobre la autoridad SQLite existente, backup online consistente,
+restore verificado a destino nuevo/offline, replay y migración one-shot
+JSON→TOML mediante el Manager V07, sin dual read/write. Artefactos viajan por
+ref/hash; credenciales quedan en recovery separado y nunca entran en el backup
+general. No añadir PostgreSQL productivo, multihost, identidad o UI.
 
 Los subagentes directos siguen siendo bootstrap hasta V22: para otro proyecto,
 la nueva Orquesta solo puede coordinarlo hoy si el consumidor entrega un DAG
@@ -255,7 +275,7 @@ declarado. Una petición abierta necesita todavía dirección externa.
 
 Las palabras “pendiente”, “siguiente” o “en curso” dentro del historial
 describen checkpoints pasados. No son órdenes de reanudación. La única acción
-vigente es abrir V08 desde el cierre acreditado V07.
+vigente es abrir V09 desde el cierre acreditado V08.
 
 ## V03: trabajo ya realizado
 
