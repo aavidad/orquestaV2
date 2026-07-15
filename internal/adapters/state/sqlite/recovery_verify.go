@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -29,6 +30,13 @@ func (recovery *Recovery) VerifyBackup(
 	if err != nil {
 		return application.BackupVerification{}, err
 	}
+	defer inspected.Close()
+	if err := inspected.Close(); err != nil {
+		return application.BackupVerification{}, invalid(err)
+	}
+	if err := recovery.rootLocks.verify(recovery.backupRoot, recovery.restoreRoot); err != nil {
+		return application.BackupVerification{}, invalid(err)
+	}
 	return application.BackupVerification{
 		BackupRef: backupRef, ManifestSHA256: inspected.manifestDigest,
 		SchemaRef: inspected.manifest.SchemaRef, VerifiedAt: recovery.now().UTC(),
@@ -41,17 +49,26 @@ func (recovery *Recovery) inspectBackup(ctx context.Context, backupRef applicati
 		return inspectedBackup{}, invalid(errors.New("sqlite.backup_ref_invalid"))
 	}
 	digest := strings.TrimPrefix(backupRef.String(), backupRefPrefix)
-	directoryPath := filepath.Join(recovery.backupRoot, digest)
-	if err := validatePrivateDirectory(directoryPath); err != nil {
-		return inspectedBackup{}, invalid(err)
-	}
-	payloadPath := filepath.Join(directoryPath, recoveryPayloadName)
-	manifestPath := filepath.Join(directoryPath, recoveryManifestName)
-	payloadInfo, err := validatePrivateRegularFile(payloadPath)
+	root, err := recovery.rootLocks.openedRoot(recovery.backupRoot)
 	if err != nil {
 		return inspectedBackup{}, invalid(err)
 	}
-	manifestContent, err := readPrivateFile(manifestPath, 64*1024)
+	if _, err := validatePrivateDirectoryAt(root, digest); err != nil {
+		return inspectedBackup{}, invalid(err)
+	}
+	payloadName := filepath.Join(digest, recoveryPayloadName)
+	manifestName := filepath.Join(digest, recoveryManifestName)
+	payload, payloadInfo, err := openPrivateRegularFile(root, payloadName, os.O_RDONLY)
+	if err != nil {
+		return inspectedBackup{}, invalid(err)
+	}
+	keepPayload := false
+	defer func() {
+		if !keepPayload {
+			_ = payload.Close()
+		}
+	}()
+	manifestContent, err := readPrivateFile(root, manifestName, 64*1024)
 	if err != nil {
 		return inspectedBackup{}, invalid(err)
 	}
@@ -59,8 +76,11 @@ func (recovery *Recovery) inspectBackup(ctx context.Context, backupRef applicati
 	if err != nil {
 		return inspectedBackup{}, invalid(err)
 	}
-	payloadDigest, err := fileSHA256(ctx, payloadPath)
+	payloadDigest, err := fileSHA256FromFile(ctx, payload, payloadInfo)
 	if err != nil {
+		return inspectedBackup{}, invalid(err)
+	}
+	if err := verifyOpenPrivateRegularFile(root, payloadName, payload, payloadInfo); err != nil {
 		return inspectedBackup{}, invalid(err)
 	}
 	if manifest.SchemaVersion != 1 || manifest.BackupRef != backupRef.String() ||
@@ -70,7 +90,7 @@ func (recovery *Recovery) inspectBackup(ctx context.Context, backupRef applicati
 		manifest.CredentialsIncluded || manifest.ArtifactBlobsIncluded {
 		return inspectedBackup{}, invalid(errors.New("sqlite.backup_manifest_binding_invalid"))
 	}
-	database, err := openRecoveryDatabase(payloadPath)
+	database, err := openRecoveryDatabase(payload)
 	if err != nil {
 		return inspectedBackup{}, invalid(err)
 	}
@@ -82,15 +102,29 @@ func (recovery *Recovery) inspectBackup(ctx context.Context, backupRef applicati
 	if closeErr != nil {
 		return inspectedBackup{}, invalid(closeErr)
 	}
-	secondDigest, err := fileSHA256(ctx, payloadPath)
+	secondDigest, err := fileSHA256FromFile(ctx, payload, payloadInfo)
 	if err != nil || secondDigest != payloadDigest {
 		return inspectedBackup{}, invalid(errors.New("sqlite.backup_changed_during_verification"))
+	}
+	if err := verifyOpenPrivateRegularFile(root, payloadName, payload, payloadInfo); err != nil {
+		return inspectedBackup{}, invalid(err)
 	}
 	if schemaRef != manifest.SchemaRef || logicalDigest != manifest.LogicalSHA256 {
 		return inspectedBackup{}, invalid(errors.New("sqlite.backup_semantics_invalid"))
 	}
+	if err := recovery.hit("after_backup_read"); err != nil {
+		return inspectedBackup{}, err
+	}
+	if err := recovery.rootLocks.verify(recovery.backupRoot); err != nil {
+		return inspectedBackup{}, invalid(err)
+	}
+	if err := recovery.hit("after_backup_inspection"); err != nil {
+		return inspectedBackup{}, err
+	}
+	keepPayload = true
 	return inspectedBackup{
-		manifest: manifest, manifestDigest: bytesSHA256(manifestContent), payloadPath: payloadPath,
+		manifest: manifest, manifestDigest: bytesSHA256(manifestContent), payloadRoot: root,
+		payloadName: payloadName, payload: payload, payloadInfo: payloadInfo,
 	}, nil
 }
 
@@ -102,6 +136,13 @@ func (recovery *Recovery) receiptForExisting(ctx context.Context, refValue strin
 	inspected, err := recovery.inspectBackup(ctx, ref)
 	if err != nil {
 		return application.BackupReceipt{}, err
+	}
+	defer inspected.Close()
+	if err := inspected.Close(); err != nil {
+		return application.BackupReceipt{}, invalid(err)
+	}
+	if err := recovery.rootLocks.verify(recovery.backupRoot, recovery.restoreRoot); err != nil {
+		return application.BackupReceipt{}, invalid(err)
 	}
 	return application.BackupReceipt{
 		Ref: ref, ManifestSHA256: inspected.manifestDigest, MediaType: inspected.manifest.MediaType,

@@ -24,12 +24,8 @@ func (recovery *Recovery) CreateBackup(ctx context.Context) (application.BackupR
 		return application.BackupReceipt{}, err
 	}
 
-	root, err := os.OpenRoot(recovery.backupRoot)
+	root, err := recovery.rootLocks.openedRoot(recovery.backupRoot)
 	if err != nil {
-		return application.BackupReceipt{}, invalid(err)
-	}
-	defer root.Close()
-	if err := recovery.rootLocks.verify(recovery.backupRoot); err != nil {
 		return application.BackupReceipt{}, invalid(err)
 	}
 	recovery.sequence++
@@ -44,34 +40,43 @@ func (recovery *Recovery) CreateBackup(ctx context.Context) (application.BackupR
 			_ = root.RemoveAll(stageName)
 		}
 	}()
-	stagePath := filepath.Join(recovery.backupRoot, stageName)
-	payloadPath := filepath.Join(stagePath, recoveryPayloadName)
-	file, err := root.OpenFile(filepath.Join(stageName, recoveryPayloadName), os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o600)
+	payloadName := filepath.Join(stageName, recoveryPayloadName)
+	file, err := root.OpenFile(payloadName, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o600)
 	if err != nil {
 		return application.BackupReceipt{}, invalid(err)
+	}
+	fileOpen := true
+	defer func() {
+		if fileOpen {
+			_ = file.Close()
+		}
+	}()
+	if err := recovery.onlineBackup(ctx, file); err != nil {
+		return application.BackupReceipt{}, err
+	}
+	if err := file.Sync(); err != nil {
+		return application.BackupReceipt{}, invalid(err)
+	}
+	payloadInfo, err := bindOpenPrivateRegularFile(root, payloadName, file)
+	if err != nil {
+		return application.BackupReceipt{}, invalid(err)
+	}
+	manifest, payloadDigest, err := recovery.buildManifest(ctx, root, payloadName, file, payloadInfo)
+	if err != nil {
+		return application.BackupReceipt{}, err
 	}
 	if err := file.Close(); err != nil {
 		return application.BackupReceipt{}, invalid(err)
 	}
-
-	if err := recovery.onlineBackup(ctx, payloadPath); err != nil {
-		return application.BackupReceipt{}, err
-	}
-	if err := syncPrivateFile(payloadPath); err != nil {
-		return application.BackupReceipt{}, invalid(err)
-	}
-	manifest, payloadDigest, err := recovery.buildManifest(ctx, payloadPath)
-	if err != nil {
-		return application.BackupReceipt{}, err
-	}
+	fileOpen = false
 	manifestContent, err := json.Marshal(manifest)
 	if err != nil {
 		return application.BackupReceipt{}, invalid(err)
 	}
-	if err := writeExclusiveSynced(filepath.Join(stagePath, recoveryManifestName), manifestContent, 0o600); err != nil {
+	if err := writeExclusiveSynced(root, filepath.Join(stageName, recoveryManifestName), manifestContent, 0o600); err != nil {
 		return application.BackupReceipt{}, invalid(err)
 	}
-	if err := syncSQLiteDirectory(stagePath); err != nil {
+	if err := syncPrivateDirectory(root, stageName); err != nil {
 		return application.BackupReceipt{}, invalid(err)
 	}
 	if err := recovery.hit("after_backup_sync"); err != nil {
@@ -96,6 +101,10 @@ func (recovery *Recovery) CreateBackup(ctx context.Context) (application.BackupR
 		recovery.removePrivateTree(root, finalName, recovery.backupRoot)
 		return application.BackupReceipt{}, err
 	}
+	if err := recovery.rootLocks.verify(recovery.backupRoot, recovery.restoreRoot); err != nil {
+		recovery.removePrivateTree(root, finalName, recovery.backupRoot)
+		return application.BackupReceipt{}, invalid(err)
+	}
 	return application.BackupReceipt{
 		Ref: mustBackupRef(manifest.BackupRef), ManifestSHA256: bytesSHA256(manifestContent),
 		MediaType: manifest.MediaType, Size: manifest.Size, SchemaRef: manifest.SchemaRef,
@@ -105,7 +114,7 @@ func (recovery *Recovery) CreateBackup(ctx context.Context) (application.BackupR
 
 // onlineBackup keeps modernc's driver connection and Backup object entirely
 // inside one Raw callback. Finish always runs there; Commit is never used.
-func (recovery *Recovery) onlineBackup(ctx context.Context, destinationPath string) error {
+func (recovery *Recovery) onlineBackup(ctx context.Context, destination *os.File) error {
 	database, err := recovery.repository.database()
 	if err != nil {
 		return err
@@ -115,6 +124,10 @@ func (recovery *Recovery) onlineBackup(ctx context.Context, destinationPath stri
 		return mapDatabaseError(err)
 	}
 	defer connection.Close()
+	destinationPath, err := recoveryDescriptorPath(destination)
+	if err != nil {
+		return invalid(err)
+	}
 	destinationURI := sqliteFileURI(destinationPath, false)
 	return mapDatabaseError(connection.Raw(func(driverConnection any) (finalErr error) {
 		provider, ok := driverConnection.(interface {
@@ -154,23 +167,34 @@ func (recovery *Recovery) onlineBackup(ctx context.Context, destinationPath stri
 	}))
 }
 
-func (recovery *Recovery) buildManifest(ctx context.Context, payloadPath string) (backupManifest, string, error) {
-	info, err := validatePrivateRegularFile(payloadPath)
+func (recovery *Recovery) buildManifest(
+	ctx context.Context,
+	root *os.Root,
+	payloadName string,
+	payload *os.File,
+	info os.FileInfo,
+) (backupManifest, string, error) {
+	payloadDigest, err := fileSHA256FromFile(ctx, payload, info)
 	if err != nil {
 		return backupManifest{}, "", invalid(err)
 	}
-	payloadDigest, err := fileSHA256(ctx, payloadPath)
+	if err := verifyOpenPrivateRegularFile(root, payloadName, payload, info); err != nil {
+		return backupManifest{}, "", invalid(err)
+	}
+	database, err := openRecoveryDatabase(payload)
 	if err != nil {
 		return backupManifest{}, "", invalid(err)
 	}
-	database, err := openRecoveryDatabase(payloadPath)
-	if err != nil {
-		return backupManifest{}, "", invalid(err)
-	}
-	defer database.Close()
 	schemaRef, logicalDigest, err := validateRecoveryDatabase(ctx, database)
+	closeErr := database.Close()
 	if err != nil {
 		return backupManifest{}, "", err
+	}
+	if closeErr != nil {
+		return backupManifest{}, "", invalid(closeErr)
+	}
+	if err := verifyOpenPrivateRegularFile(root, payloadName, payload, info); err != nil {
+		return backupManifest{}, "", invalid(err)
 	}
 	createdAt := recovery.now().UTC()
 	return backupManifest{

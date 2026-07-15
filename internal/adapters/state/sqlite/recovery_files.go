@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 
 	"orquesta/internal/application"
 )
@@ -42,8 +41,12 @@ func sqliteFileURI(path string, readOnly bool) string {
 	return uri.String()
 }
 
-func openRecoveryDatabase(path string) (*sql.DB, error) {
-	database, err := sql.Open(driverName, sqliteFileURI(path, true))
+func openRecoveryDatabase(file *os.File) (*sql.DB, error) {
+	descriptorPath, err := recoveryDescriptorPath(file)
+	if err != nil {
+		return nil, err
+	}
+	database, err := sql.Open(driverName, sqliteFileURI(descriptorPath, true))
 	if err != nil {
 		return nil, err
 	}
@@ -61,19 +64,9 @@ func bytesSHA256(content []byte) string {
 	return "sha256:" + hex.EncodeToString(digest[:])
 }
 
-func fileSHA256(ctx context.Context, path string) (string, error) {
-	before, err := validatePrivateRegularFile(path)
-	if err != nil {
+func fileSHA256FromFile(ctx context.Context, file *os.File, before os.FileInfo) (string, error) {
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
 		return "", err
-	}
-	file, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-	opened, err := file.Stat()
-	if err != nil || !os.SameFile(before, opened) {
-		return "", errors.New("sqlite.recovery_file_replaced")
 	}
 	hash := sha256.New()
 	buffer := make([]byte, 128*1024)
@@ -98,104 +91,88 @@ func fileSHA256(ctx context.Context, path string) (string, error) {
 	if err != nil || after.Size() != before.Size() || !os.SameFile(before, after) {
 		return "", errors.New("sqlite.recovery_file_changed")
 	}
-	current, err := os.Lstat(path)
-	if err != nil || !os.SameFile(before, current) {
-		return "", errors.New("sqlite.recovery_file_replaced")
-	}
 	return "sha256:" + hex.EncodeToString(hash.Sum(nil)), nil
 }
 
-func readPrivateFile(path string, maximum int64) ([]byte, error) {
-	before, err := validatePrivateRegularFile(path)
-	if err != nil {
-		return nil, err
-	}
-	if before.Size() < 0 || before.Size() > maximum {
-		return nil, errors.New("sqlite.recovery_file_size_invalid")
-	}
-	file, err := os.Open(path)
+func readPrivateFile(root *os.Root, name string, maximum int64) ([]byte, error) {
+	file, before, err := openPrivateRegularFile(root, name, os.O_RDONLY)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
-	opened, err := file.Stat()
-	if err != nil || !os.SameFile(before, opened) {
-		return nil, errors.New("sqlite.recovery_file_replaced")
+	if before.Size() < 0 || before.Size() > maximum {
+		return nil, errors.New("sqlite.recovery_file_size_invalid")
 	}
 	content, err := io.ReadAll(io.LimitReader(file, maximum+1))
 	if err != nil || int64(len(content)) != before.Size() {
 		return nil, errors.New("sqlite.recovery_file_changed")
 	}
-	current, err := os.Lstat(path)
-	if err != nil || !os.SameFile(before, current) {
-		return nil, errors.New("sqlite.recovery_file_replaced")
+	if err := verifyOpenPrivateRegularFile(root, name, file, before); err != nil {
+		return nil, err
 	}
 	return content, nil
 }
 
-func copyExclusive(ctx context.Context, sourcePath, destinationPath string) error {
-	sourceInfo, err := validatePrivateRegularFile(sourcePath)
-	if err != nil {
-		return invalid(err)
+func copyExclusive(
+	ctx context.Context,
+	sourceRoot *os.Root,
+	sourceName string,
+	source *os.File,
+	sourceInfo os.FileInfo,
+	destinationRoot *os.Root,
+	destinationName string,
+) (*os.File, os.FileInfo, error) {
+	if source == nil || sourceInfo == nil {
+		return nil, nil, invalid(errors.New("sqlite.recovery_source_handle_required"))
 	}
-	source, err := os.Open(sourcePath)
-	if err != nil {
-		return invalid(err)
+	if _, err := source.Seek(0, io.SeekStart); err != nil {
+		return nil, nil, invalid(err)
 	}
-	defer source.Close()
-	openedSource, err := source.Stat()
-	if err != nil || !os.SameFile(sourceInfo, openedSource) {
-		return invalid(errors.New("sqlite.recovery_file_replaced"))
-	}
-	destination, err := os.OpenFile(destinationPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	destination, err := destinationRoot.OpenFile(destinationName, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0o600)
 	if err != nil {
-		return invalid(err)
+		return nil, nil, invalid(err)
 	}
 	remove := true
 	defer func() {
-		_ = destination.Close()
 		if remove {
-			_ = os.Remove(destinationPath)
+			_ = destination.Close()
+			_ = destinationRoot.Remove(destinationName)
 		}
 	}()
 	buffer := make([]byte, 64*1024)
 	for {
 		if err := ctx.Err(); err != nil {
-			return err
+			return nil, nil, err
 		}
 		read, readErr := source.Read(buffer)
 		if read > 0 {
 			if _, err := destination.Write(buffer[:read]); err != nil {
-				return invalid(err)
+				return nil, nil, invalid(err)
 			}
 		}
 		if errors.Is(readErr, io.EOF) {
 			break
 		}
 		if readErr != nil {
-			return invalid(readErr)
+			return nil, nil, invalid(readErr)
 		}
 	}
 	if err := destination.Sync(); err != nil {
-		return invalid(err)
+		return nil, nil, invalid(err)
 	}
-	if err := destination.Close(); err != nil {
-		return invalid(err)
+	if err := verifyOpenPrivateRegularFile(sourceRoot, sourceName, source, sourceInfo); err != nil {
+		return nil, nil, invalid(err)
 	}
-	finalSource, err := source.Stat()
-	if err != nil || finalSource.Size() != sourceInfo.Size() || !os.SameFile(sourceInfo, finalSource) {
-		return invalid(errors.New("sqlite.recovery_file_changed"))
-	}
-	currentSource, err := os.Lstat(sourcePath)
-	if err != nil || !os.SameFile(sourceInfo, currentSource) {
-		return invalid(errors.New("sqlite.recovery_file_replaced"))
+	destinationInfo, err := bindOpenPrivateRegularFile(destinationRoot, destinationName, destination)
+	if err != nil {
+		return nil, nil, invalid(err)
 	}
 	remove = false
-	return nil
+	return destination, destinationInfo, nil
 }
 
-func writeExclusiveSynced(path string, content []byte, mode os.FileMode) error {
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
+func writeExclusiveSynced(root *os.Root, name string, content []byte, mode os.FileMode) error {
+	file, err := root.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_WRONLY, mode)
 	if err != nil {
 		return err
 	}
@@ -203,7 +180,7 @@ func writeExclusiveSynced(path string, content []byte, mode os.FileMode) error {
 	defer func() {
 		_ = file.Close()
 		if remove {
-			_ = os.Remove(path)
+			_ = root.Remove(name)
 		}
 	}()
 	if _, err := file.Write(content); err != nil {
@@ -212,23 +189,14 @@ func writeExclusiveSynced(path string, content []byte, mode os.FileMode) error {
 	if err := file.Sync(); err != nil {
 		return err
 	}
+	if _, err := bindOpenPrivateRegularFile(root, name, file); err != nil {
+		return err
+	}
 	if err := file.Close(); err != nil {
 		return err
 	}
 	remove = false
 	return nil
-}
-
-func syncPrivateFile(path string) error {
-	if _, err := validatePrivateRegularFile(path); err != nil {
-		return err
-	}
-	file, err := os.OpenFile(path, os.O_RDWR, 0)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	return file.Sync()
 }
 
 func preflightRecoveryRoot(value string) (string, error) {
@@ -266,49 +234,168 @@ func validatePrivateDirectory(path string) error {
 	return validateOwner(info)
 }
 
-func validatePrivateRegularFile(path string) (os.FileInfo, error) {
-	lstat, err := os.Lstat(path)
+func validatePrivateDirectoryAt(root *os.Root, name string) (os.FileInfo, error) {
+	directory, info, err := openPrivateDirectory(root, name)
 	if err != nil {
 		return nil, err
 	}
-	if lstat.Mode() != 0o600 {
-		return nil, errors.New("sqlite.recovery_file_invalid")
-	}
-	if err := validateOwner(lstat); err != nil {
+	defer directory.Close()
+	if err := verifyOpenPrivateDirectory(root, name, directory, info); err != nil {
 		return nil, err
 	}
-	if links, ok := linkCount(lstat); !ok || links != 1 {
-		return nil, errors.New("sqlite.recovery_file_links_invalid")
-	}
-	opened, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer opened.Close()
-	stat, err := opened.Stat()
-	if err != nil {
-		return nil, err
-	}
-	if !os.SameFile(lstat, stat) {
-		return nil, errors.New("sqlite.recovery_file_replaced")
-	}
-	return stat, nil
+	return info, nil
 }
 
-func validateOwner(info os.FileInfo) error {
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok || int(stat.Uid) != os.Geteuid() {
-		return errors.New("sqlite.recovery_owner_invalid")
+func openPrivateDirectory(root *os.Root, name string) (*os.File, os.FileInfo, error) {
+	if root == nil {
+		return nil, nil, errors.New("sqlite.recovery_root_handle_required")
+	}
+	info, err := root.Lstat(name)
+	if err != nil {
+		return nil, nil, err
+	}
+	if info.Mode() != os.ModeDir|0o700 {
+		return nil, nil, errors.New("sqlite.recovery_directory_not_private")
+	}
+	if err := validateOwner(info); err != nil {
+		return nil, nil, err
+	}
+	directory, err := root.Open(name)
+	if err != nil {
+		return nil, nil, err
+	}
+	opened, err := directory.Stat()
+	if err != nil || !os.SameFile(info, opened) {
+		_ = directory.Close()
+		return nil, nil, errors.New("sqlite.recovery_directory_replaced")
+	}
+	return directory, info, nil
+}
+
+func verifyOpenPrivateDirectory(root *os.Root, name string, directory *os.File, before os.FileInfo) error {
+	opened, err := directory.Stat()
+	if err != nil || !os.SameFile(before, opened) || opened.Mode() != os.ModeDir|0o700 {
+		return errors.New("sqlite.recovery_directory_changed")
+	}
+	if err := validateOwner(opened); err != nil {
+		return err
+	}
+	current, err := root.Lstat(name)
+	if err != nil || !os.SameFile(before, current) {
+		return errors.New("sqlite.recovery_directory_replaced")
+	}
+	if current.Mode() != os.ModeDir|0o700 {
+		return errors.New("sqlite.recovery_directory_not_private")
+	}
+	return validateOwner(current)
+}
+
+func readPrivateDirectory(root *os.Root, name string) ([]os.DirEntry, error) {
+	directory, info, err := openPrivateDirectory(root, name)
+	if err != nil {
+		return nil, err
+	}
+	defer directory.Close()
+	entries, err := directory.ReadDir(-1)
+	if err != nil {
+		return nil, err
+	}
+	if err := verifyOpenPrivateDirectory(root, name, directory, info); err != nil {
+		return nil, err
+	}
+	return entries, nil
+}
+
+func syncPrivateDirectory(root *os.Root, name string) error {
+	directory, info, err := openPrivateDirectory(root, name)
+	if err != nil {
+		return err
+	}
+	defer directory.Close()
+	if err := directory.Sync(); err != nil {
+		return err
+	}
+	return verifyOpenPrivateDirectory(root, name, directory, info)
+}
+
+func validatePrivateRegularFileAt(root *os.Root, name string) (os.FileInfo, error) {
+	file, info, err := openPrivateRegularFile(root, name, os.O_RDONLY)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	if err := verifyOpenPrivateRegularFile(root, name, file, info); err != nil {
+		return nil, err
+	}
+	return info, nil
+}
+
+func openPrivateRegularFile(root *os.Root, name string, flag int) (*os.File, os.FileInfo, error) {
+	if root == nil {
+		return nil, nil, errors.New("sqlite.recovery_root_handle_required")
+	}
+	info, err := root.Lstat(name)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := validatePrivateRegularFileInfo(info); err != nil {
+		return nil, nil, err
+	}
+	file, err := root.OpenFile(name, flag, 0)
+	if err != nil {
+		return nil, nil, err
+	}
+	opened, err := file.Stat()
+	if err != nil || !os.SameFile(info, opened) {
+		_ = file.Close()
+		return nil, nil, errors.New("sqlite.recovery_file_replaced")
+	}
+	return file, info, nil
+}
+
+func verifyOpenPrivateRegularFile(root *os.Root, name string, file *os.File, before os.FileInfo) error {
+	opened, err := bindOpenPrivateRegularFile(root, name, file)
+	if err != nil {
+		return err
+	}
+	if opened.Size() != before.Size() || !os.SameFile(before, opened) {
+		return errors.New("sqlite.recovery_file_changed")
 	}
 	return nil
 }
 
-func linkCount(info os.FileInfo) (uint64, bool) {
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !ok {
-		return 0, false
+func bindOpenPrivateRegularFile(root *os.Root, name string, file *os.File) (os.FileInfo, error) {
+	if root == nil || file == nil {
+		return nil, errors.New("sqlite.recovery_file_handle_required")
 	}
-	return uint64(stat.Nlink), true
+	opened, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if err := validatePrivateRegularFileInfo(opened); err != nil {
+		return nil, err
+	}
+	current, err := root.Lstat(name)
+	if err != nil || !os.SameFile(opened, current) {
+		return nil, errors.New("sqlite.recovery_file_replaced")
+	}
+	if err := validatePrivateRegularFileInfo(current); err != nil {
+		return nil, err
+	}
+	return opened, nil
+}
+
+func validatePrivateRegularFileInfo(info os.FileInfo) error {
+	if info.Mode() != 0o600 {
+		return errors.New("sqlite.recovery_file_invalid")
+	}
+	if err := validateOwner(info); err != nil {
+		return err
+	}
+	if links, ok := linkCount(info); !ok || links != 1 {
+		return errors.New("sqlite.recovery_file_links_invalid")
+	}
+	return nil
 }
 
 func rejectSymlinkComponents(path string) error {
@@ -352,12 +439,11 @@ func cleanupRecoveryStages(locks *recoveryRootLocks, backupRoot, restoreRoot str
 	if err := locks.verify(backupRoot, restoreRoot); err != nil {
 		return err
 	}
-	backup, err := os.OpenRoot(backupRoot)
+	backup, err := locks.openedRoot(backupRoot)
 	if err != nil {
 		return err
 	}
-	defer backup.Close()
-	backupEntries, err := os.ReadDir(backupRoot)
+	backupEntries, err := readPrivateDirectory(backup, ".")
 	if err != nil {
 		return err
 	}
@@ -366,11 +452,7 @@ func cleanupRecoveryStages(locks *recoveryRootLocks, backupRoot, restoreRoot str
 		if !isBackupStageName(entry.Name()) {
 			continue
 		}
-		path := filepath.Join(backupRoot, entry.Name())
-		if err := locks.verify(backupRoot); err != nil {
-			return err
-		}
-		if err := validatePrivateDirectory(path); err != nil {
+		if _, err := validatePrivateDirectoryAt(backup, entry.Name()); err != nil {
 			return err
 		}
 		if err := backup.RemoveAll(entry.Name()); err != nil {
@@ -384,12 +466,11 @@ func cleanupRecoveryStages(locks *recoveryRootLocks, backupRoot, restoreRoot str
 		}
 	}
 
-	restore, err := os.OpenRoot(restoreRoot)
+	restore, err := locks.openedRoot(restoreRoot)
 	if err != nil {
 		return err
 	}
-	defer restore.Close()
-	restoreEntries, err := os.ReadDir(restoreRoot)
+	restoreEntries, err := readPrivateDirectory(restore, ".")
 	if err != nil {
 		return err
 	}
@@ -398,11 +479,7 @@ func cleanupRecoveryStages(locks *recoveryRootLocks, backupRoot, restoreRoot str
 		if !isRestoreStageName(entry.Name()) {
 			continue
 		}
-		path := filepath.Join(restoreRoot, entry.Name())
-		if err := locks.verify(restoreRoot); err != nil {
-			return err
-		}
-		if _, err := validatePrivateRegularFile(path); err != nil {
+		if _, err := validatePrivateRegularFileAt(restore, entry.Name()); err != nil {
 			return err
 		}
 		if err := restore.Remove(entry.Name()); err != nil {
@@ -413,7 +490,7 @@ func cleanupRecoveryStages(locks *recoveryRootLocks, backupRoot, restoreRoot str
 	if restoreChanged {
 		return locks.sync(restoreRoot)
 	}
-	return nil
+	return locks.verify(backupRoot, restoreRoot)
 }
 
 func isBackupStageName(name string) bool {

@@ -644,6 +644,363 @@ func TestV09RecoveryRejectsRootPathReplacementAfterLock(t *testing.T) {
 	})
 }
 
+func TestV09RecoveryUnsupportedPlatformsRemainExplicitAndBuildable(t *testing.T) {
+	read := func(name string) string {
+		t.Helper()
+		content, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(content)
+	}
+	common := read("recovery_files.go")
+	if strings.Contains(common, "syscall.Stat_t") {
+		t.Fatal("common recovery files retain Linux-only file metadata")
+	}
+	linux := read("recovery_fileinfo_linux.go")
+	for _, required := range []string{
+		"//go:build linux", "func validateOwner", "func linkCount", "*syscall.Stat_t",
+	} {
+		if !strings.Contains(linux, required) {
+			t.Fatalf("Linux file metadata contract missing %q", required)
+		}
+	}
+	unsupported := read("recovery_fileinfo_unsupported.go")
+	for _, required := range []string{
+		"//go:build !linux", "sqlite.recovery_owner_metadata_unsupported", "return 0, false",
+	} {
+		if !strings.Contains(unsupported, required) {
+			t.Fatalf("unsupported file metadata contract missing %q", required)
+		}
+	}
+	constructor := read("recovery.go")
+	support := strings.Index(constructor, "recoveryRootLockSupportError()")
+	preflight := strings.Index(constructor, "preflightRecoveryRoot(options.BackupRoot)")
+	create := strings.Index(constructor, "createPrivateSQLiteDirectoryChain(backupRoot)")
+	if support < 0 || preflight < 0 || create < 0 || support > preflight || support > create {
+		t.Fatalf("unsupported guard order invalid: support=%d preflight=%d create=%d", support, preflight, create)
+	}
+	lockUnsupported := read("recovery_lock_unsupported.go")
+	if !strings.Contains(lockUnsupported, "//go:build !linux") ||
+		!strings.Contains(lockUnsupported, "sqlite.recovery_root_lock_unsupported") {
+		t.Fatal("unsupported root-lock contract is not explicit")
+	}
+}
+
+func TestV09RecoveryRejectsRootReplacementBetweenVerificationAndIO(t *testing.T) {
+	t.Run("backup_stage_collision_in_substitute", func(t *testing.T) {
+		repository, _ := openTestRepository(t)
+		base := t.TempDir()
+		backupRoot := filepath.Join(base, "backups")
+		restoreRoot := filepath.Join(base, "restores")
+		lockedRoot := backupRoot + ".locked"
+		now := time.Unix(1_720_000_000, 123).UTC()
+		stageName := ".backup-" + fmt.Sprint(now.UnixNano()) + "-1.next"
+		sentinel := []byte("substitute-stage-must-remain-untouched")
+		var substituteBefore map[string]v09RecoveryTreeEntry
+		swapped := false
+		reachedBackupStep := false
+		recovery, err := NewRecovery(RecoveryOptions{
+			Repository: repository, BackupRoot: backupRoot, RestoreRoot: restoreRoot,
+			Now: func() time.Time { return now },
+			Failpoint: func(stage string) error {
+				switch stage {
+				case "after_recovery_root_verify":
+					if swapped {
+						return nil
+					}
+					swapped = true
+					if err := os.Rename(backupRoot, lockedRoot); err != nil {
+						return err
+					}
+					if err := os.MkdirAll(filepath.Join(backupRoot, stageName), 0o700); err != nil {
+						return err
+					}
+					if err := os.WriteFile(filepath.Join(backupRoot, stageName, "sentinel"), sentinel, 0o600); err != nil {
+						return err
+					}
+					var err error
+					substituteBefore, err = snapshotV09RecoveryTree(backupRoot)
+					return err
+				case "after_first_backup_step":
+					reachedBackupStep = true
+				}
+				return nil
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer recovery.Close()
+		if _, err := recovery.CreateBackup(context.Background()); err == nil {
+			t.Fatal("backup accepted root replaced after initial verification")
+		}
+		if !swapped {
+			t.Fatal("root-replacement failpoint did not run")
+		}
+		if !reachedBackupStep {
+			t.Fatal("backup did not continue through locked root after pathname replacement")
+		}
+		after, err := snapshotV09RecoveryTree(backupRoot)
+		if err != nil || !reflect.DeepEqual(after, substituteBefore) {
+			t.Fatalf("substitute backup root changed: err=%v\nbefore=%v\nafter=%v", err, substituteBefore, after)
+		}
+		assertV09DirectoryEmpty(t, lockedRoot)
+	})
+
+	t.Run("verify_rejects_byte_identical_invalid_mode_substitute", func(t *testing.T) {
+		repository, _ := openTestRepository(t)
+		stable, backupRoot, restoreRoot := newV09TestRecovery(t, repository, time.Now().UTC(), nil)
+		receipt, err := stable.CreateBackup(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := stable.Close(); err != nil {
+			t.Fatal(err)
+		}
+		before, err := snapshotV09RecoveryTree(backupRoot)
+		if err != nil {
+			t.Fatal(err)
+		}
+		lockedRoot := backupRoot + ".locked"
+		swapped := false
+		reachedBackupRead := false
+		var substituteBefore map[string]v09RecoveryTreeEntry
+		digest := strings.TrimPrefix(receipt.Ref.String(), backupRefPrefix)
+		recovery, err := NewRecovery(RecoveryOptions{
+			Repository: repository, BackupRoot: backupRoot, RestoreRoot: restoreRoot,
+			Failpoint: func(stage string) error {
+				switch stage {
+				case "after_recovery_root_verify":
+					if swapped {
+						return nil
+					}
+					swapped = true
+					if err := os.Rename(backupRoot, lockedRoot); err != nil {
+						return err
+					}
+					if err := cloneV09RecoveryTree(lockedRoot, backupRoot); err != nil {
+						return err
+					}
+					if err := os.Chmod(filepath.Join(backupRoot, digest, recoveryPayloadName), 0o400); err != nil {
+						return err
+					}
+					var err error
+					substituteBefore, err = snapshotV09RecoveryTree(backupRoot)
+					return err
+				case "after_backup_read":
+					reachedBackupRead = true
+				}
+				return nil
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer recovery.Close()
+		if _, err := recovery.VerifyBackup(context.Background(), receipt.Ref); err == nil {
+			t.Fatal("verification accepted byte-identical replacement root")
+		}
+		if !reachedBackupRead {
+			t.Fatal("verification reopened invalid substitute instead of reading locked root")
+		}
+		after, err := snapshotV09RecoveryTree(backupRoot)
+		if err != nil || !reflect.DeepEqual(after, substituteBefore) {
+			t.Fatalf("substitute backup tree changed: err=%v\nbefore=%v\nafter=%v", err, substituteBefore, after)
+		}
+		after, err = snapshotV09RecoveryTree(lockedRoot)
+		if err != nil || !reflect.DeepEqual(after, before) {
+			t.Fatalf("locked backup tree changed: err=%v\nbefore=%v\nafter=%v", err, before, after)
+		}
+	})
+
+	t.Run("restore_stage_collision_in_substitute", func(t *testing.T) {
+		repository, _ := openTestRepository(t)
+		stable, backupRoot, restoreRoot := newV09TestRecovery(t, repository, time.Now().UTC(), nil)
+		receipt, err := stable.CreateBackup(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := stable.Close(); err != nil {
+			t.Fatal(err)
+		}
+		lockedRoot := restoreRoot + ".locked"
+		target, _ := application.NewRecoveryTargetRef("recovery-target:v09-root-swap-sentinel")
+		stageName := "." + strings.TrimSuffix(recoveryTargetName(target), ".sqlite") + ".partial"
+		sentinel := []byte("root-substitute-must-remain-untouched")
+		var substituteBefore map[string]v09RecoveryTreeEntry
+		swapped := false
+		reachedRestoreSync := false
+		recovery, err := NewRecovery(RecoveryOptions{
+			Repository: repository, BackupRoot: backupRoot, RestoreRoot: restoreRoot,
+			Failpoint: func(stage string) error {
+				switch stage {
+				case "after_recovery_root_verify":
+					if swapped {
+						return nil
+					}
+					swapped = true
+					if err := os.Rename(restoreRoot, lockedRoot); err != nil {
+						return err
+					}
+					if err := os.Mkdir(restoreRoot, 0o700); err != nil {
+						return err
+					}
+					if err := os.WriteFile(filepath.Join(restoreRoot, stageName), sentinel, 0o600); err != nil {
+						return err
+					}
+					var err error
+					substituteBefore, err = snapshotV09RecoveryTree(restoreRoot)
+					return err
+				case "after_restore_sync":
+					reachedRestoreSync = true
+				}
+				return nil
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer recovery.Close()
+		_, restoreErr := recovery.RestoreBackup(context.Background(), receipt.Ref, target)
+		if restoreErr == nil {
+			t.Fatal("restore accepted root replaced after initial verification")
+		}
+		if !reachedRestoreSync {
+			t.Fatalf("restore reopened colliding substitute instead of using locked root: %v cause=%v", restoreErr, errors.Unwrap(restoreErr))
+		}
+		after, err := snapshotV09RecoveryTree(restoreRoot)
+		if err != nil || !reflect.DeepEqual(after, substituteBefore) {
+			t.Fatalf("replacement restore root changed: err=%v\nbefore=%v\nafter=%v", err, substituteBefore, after)
+		}
+		assertV09DirectoryEmpty(t, lockedRoot)
+	})
+}
+
+func TestV09RestoreRetainsInspectedPayloadHandleAcrossRootSwap(t *testing.T) {
+	repository, _ := openTestRepository(t)
+	stable, backupRoot, restoreRoot := newV09TestRecovery(t, repository, time.Now().UTC(), nil)
+	receipt, err := stable.CreateBackup(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := stable.Close(); err != nil {
+		t.Fatal(err)
+	}
+	before, err := snapshotV09RecoveryTree(backupRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lockedRoot := backupRoot + ".locked"
+	swapped := false
+	reachedRestoreSync := false
+	recovery, err := NewRecovery(RecoveryOptions{
+		Repository: repository, BackupRoot: backupRoot, RestoreRoot: restoreRoot,
+		Failpoint: func(stage string) error {
+			switch stage {
+			case "after_backup_inspection":
+				if swapped {
+					return nil
+				}
+				swapped = true
+				if err := os.Rename(backupRoot, lockedRoot); err != nil {
+					return err
+				}
+				return os.Mkdir(backupRoot, 0o700)
+			case "after_restore_sync":
+				reachedRestoreSync = true
+			}
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer recovery.Close()
+	target, _ := application.NewRecoveryTargetRef("recovery-target:v09-inspected-handle")
+	_, restoreErr := recovery.RestoreBackup(context.Background(), receipt.Ref, target)
+	if restoreErr == nil {
+		t.Fatal("restore accepted backup root replaced after inspection")
+	}
+	if !reachedRestoreSync {
+		t.Fatalf("restore reopened substitute instead of copying retained inspected payload handle: %v cause=%v", restoreErr, errors.Unwrap(restoreErr))
+	}
+	assertV09DirectoryEmpty(t, backupRoot)
+	assertV09DirectoryEmpty(t, restoreRoot)
+	after, err := snapshotV09RecoveryTree(lockedRoot)
+	if err != nil || !reflect.DeepEqual(after, before) {
+		t.Fatalf("inspected backup changed: err=%v\nbefore=%v\nafter=%v", err, before, after)
+	}
+}
+
+type v09RecoveryTreeEntry struct {
+	Mode    os.FileMode
+	Content []byte
+}
+
+func snapshotV09RecoveryTree(root string) (map[string]v09RecoveryTreeEntry, error) {
+	result := make(map[string]v09RecoveryTreeEntry)
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		record := v09RecoveryTreeEntry{Mode: info.Mode()}
+		if info.Mode().IsRegular() {
+			record.Content, err = os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+		}
+		result[relative] = record
+		return nil
+	})
+	return result, err
+}
+
+func cloneV09RecoveryTree(sourceRoot, destinationRoot string) error {
+	return filepath.WalkDir(sourceRoot, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		relative, err := filepath.Rel(sourceRoot, path)
+		if err != nil {
+			return err
+		}
+		destination := filepath.Join(destinationRoot, relative)
+		if entry.IsDir() {
+			return os.Mkdir(destination, info.Mode().Perm())
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("unsupported recovery tree entry %s", relative)
+		}
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(destination, content, info.Mode().Perm())
+	})
+}
+
+func assertV09DirectoryEmpty(t *testing.T, root string) {
+	t.Helper()
+	entries, err := os.ReadDir(root)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("directory not empty: root=%s entries=%v err=%v", root, entries, err)
+	}
+}
+
 func newV09TestRecovery(
 	t *testing.T,
 	repository *Repository,

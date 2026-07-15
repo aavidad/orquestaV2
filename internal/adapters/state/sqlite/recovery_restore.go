@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"orquesta/internal/application"
@@ -31,12 +30,9 @@ func (recovery *Recovery) RestoreBackup(
 	if err != nil {
 		return application.RestoreReceipt{}, err
 	}
-	root, err := os.OpenRoot(recovery.restoreRoot)
+	defer inspected.Close()
+	root, err := recovery.rootLocks.openedRoot(recovery.restoreRoot)
 	if err != nil {
-		return application.RestoreReceipt{}, invalid(err)
-	}
-	defer root.Close()
-	if err := recovery.rootLocks.verify(recovery.restoreRoot); err != nil {
 		return application.RestoreReceipt{}, invalid(err)
 	}
 	targetName := recoveryTargetName(targetRef)
@@ -51,8 +47,16 @@ func (recovery *Recovery) RestoreBackup(
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return application.RestoreReceipt{}, invalid(err)
 	}
-	stagePath := filepath.Join(recovery.restoreRoot, stageName)
-	if err := copyExclusive(ctx, inspected.payloadPath, stagePath); err != nil {
+	stage, stageInfo, err := copyExclusive(
+		ctx,
+		inspected.payloadRoot,
+		inspected.payloadName,
+		inspected.payload,
+		inspected.payloadInfo,
+		root,
+		stageName,
+	)
+	if err != nil {
 		return application.RestoreReceipt{}, err
 	}
 	published := false
@@ -61,14 +65,23 @@ func (recovery *Recovery) RestoreBackup(
 			_ = root.Remove(stageName)
 		}
 	}()
-	digest, err := fileSHA256(ctx, stagePath)
+	stageOpen := true
+	defer func() {
+		if stageOpen {
+			_ = stage.Close()
+		}
+	}()
+	digest, err := fileSHA256FromFile(ctx, stage, stageInfo)
 	if err != nil {
+		return application.RestoreReceipt{}, invalid(fmt.Errorf("sqlite.restore_copy_invalid: %w", err))
+	}
+	if err := verifyOpenPrivateRegularFile(root, stageName, stage, stageInfo); err != nil {
 		return application.RestoreReceipt{}, invalid(fmt.Errorf("sqlite.restore_copy_invalid: %w", err))
 	}
 	if digest != inspected.manifest.PayloadSHA256 {
 		return application.RestoreReceipt{}, invalid(errors.New("sqlite.restore_copy_digest_invalid"))
 	}
-	database, err := openRecoveryDatabase(stagePath)
+	database, err := openRecoveryDatabase(stage)
 	if err != nil {
 		return application.RestoreReceipt{}, invalid(err)
 	}
@@ -80,12 +93,19 @@ func (recovery *Recovery) RestoreBackup(
 	if closeErr != nil {
 		return application.RestoreReceipt{}, invalid(closeErr)
 	}
+	if err := verifyOpenPrivateRegularFile(root, stageName, stage, stageInfo); err != nil {
+		return application.RestoreReceipt{}, invalid(err)
+	}
 	if schemaRef != inspected.manifest.SchemaRef || logicalDigest != inspected.manifest.LogicalSHA256 {
 		return application.RestoreReceipt{}, invalid(errors.New("sqlite.restore_semantics_changed"))
 	}
 	if err := recovery.hit("after_restore_sync"); err != nil {
 		return application.RestoreReceipt{}, err
 	}
+	if err := stage.Close(); err != nil {
+		return application.RestoreReceipt{}, invalid(err)
+	}
+	stageOpen = false
 	if err := recovery.rootLocks.publishNoReplace(recovery.restoreRoot, stageName, targetName); err != nil {
 		return application.RestoreReceipt{}, invalid(err)
 	}
@@ -97,6 +117,14 @@ func (recovery *Recovery) RestoreBackup(
 	if err := recovery.hit("after_restore_publish"); err != nil {
 		recovery.removePrivateTree(root, targetName, recovery.restoreRoot)
 		return application.RestoreReceipt{}, err
+	}
+	if err := inspected.Close(); err != nil {
+		recovery.removePrivateTree(root, targetName, recovery.restoreRoot)
+		return application.RestoreReceipt{}, invalid(err)
+	}
+	if err := recovery.rootLocks.verify(recovery.backupRoot, recovery.restoreRoot); err != nil {
+		recovery.removePrivateTree(root, targetName, recovery.restoreRoot)
+		return application.RestoreReceipt{}, invalid(err)
 	}
 	return application.RestoreReceipt{
 		BackupRef: backupRef, TargetRef: targetRef, ManifestSHA256: inspected.manifestDigest,

@@ -58,7 +58,19 @@ type backupManifest struct {
 type inspectedBackup struct {
 	manifest       backupManifest
 	manifestDigest string
-	payloadPath    string
+	payloadRoot    *os.Root
+	payloadName    string
+	payload        *os.File
+	payloadInfo    os.FileInfo
+}
+
+func (inspected *inspectedBackup) Close() error {
+	if inspected == nil || inspected.payload == nil {
+		return nil
+	}
+	err := inspected.payload.Close()
+	inspected.payload = nil
+	return err
 }
 
 func NewRecovery(options RecoveryOptions) (*Recovery, error) {
@@ -67,6 +79,9 @@ func NewRecovery(options RecoveryOptions) (*Recovery, error) {
 	}
 	if _, err := options.Repository.database(); err != nil {
 		return nil, err
+	}
+	if err := recoveryRootLockSupportError(); err != nil {
+		return nil, conflict(fmt.Errorf("sqlite.recovery_root_locked: %w", err))
 	}
 	// Preflight both roots before creating either, avoiding partial setup when
 	// one supplied namespace is unsafe.
@@ -164,7 +179,7 @@ func (recovery *Recovery) beginOperation(ctx context.Context) error {
 	if err := recovery.rootLocks.verify(recovery.backupRoot, recovery.restoreRoot); err != nil {
 		return invalid(err)
 	}
-	return nil
+	return recovery.hit("after_recovery_root_verify")
 }
 
 func (recovery *Recovery) hit(stage string) error {
