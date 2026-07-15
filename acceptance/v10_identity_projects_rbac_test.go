@@ -103,6 +103,10 @@ func TestAcceptanceV10IdentityProjectsRBAC(t *testing.T) {
 			t.Error("V10_RED recovery rejects the sealed V09 predecessor solely because it is not the latest schema")
 		}
 	})
+
+	t.Run("sqlite_and_application_enforce_real_collaborative_rbac", func(t *testing.T) {
+		v10AssertRealCollaborativeRBAC(t, fixture)
+	})
 }
 
 func TestAcceptanceV10IdentityProjectsRBACReceipt(t *testing.T) {
