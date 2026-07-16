@@ -18,7 +18,7 @@ import (
 const v14FixturePath = "acceptance/fixtures/v14_controls.json"
 const v14ContractBaseGitCommitOID = "df695543b6486dae51f7eab40417543b48d71de7"
 const v14ProductDeltaBaseGitCommitOID = "b7a4672a251b85904d213b7b147a0442a6d906a8"
-const v14ProductDeltaSealedGitCommitOID = "0000000000000000000000000000000000000000"
+const v14ProductDeltaSealedGitCommitOID = "6dbc0d808de63973305914b002c3bc2b8a806bb0"
 
 type v14Fixture struct {
 	SchemaVersion                  int                     `json:"schema_version"`
