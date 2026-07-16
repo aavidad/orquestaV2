@@ -1179,6 +1179,146 @@ func roadmapV13Assertions() []string {
 	}
 }
 
+func TestProductRoadmapV14ScopeAndExecutableContract(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+	verticals := make(map[string]roadmapVertical, len(roadmap.Verticals))
+	entries := make(map[string]roadmapEntry, len(roadmap.CapabilityEntries))
+	contracts := make(map[string]roadmapAcceptanceContract, len(roadmap.AcceptanceContracts))
+	var owned []string
+	for _, vertical := range roadmap.Verticals {
+		verticals[vertical.ID] = vertical
+	}
+	for _, entry := range roadmap.CapabilityEntries {
+		entries[entry.ID] = entry
+		if entry.OwnerContext == "controls" && entry.Decision == "accept" {
+			owned = append(owned, entry.ID)
+		}
+	}
+	for _, contract := range roadmap.AcceptanceContracts {
+		contracts[contract.ID] = contract
+	}
+	sort.Strings(owned)
+	wantOwned := []string{"GOV-07", "ORC-03", "ORC-16", "STG-15"}
+	if !reflect.DeepEqual(owned, wantOwned) {
+		t.Fatalf("V14 accepted ownership = %v, want exact %v", owned, wantOwned)
+	}
+	wantVertical := verticals["controls"]
+	for _, id := range wantOwned {
+		entry := entries[id]
+		if entry.Status != "declared" || len(entry.EvidenceRefs) != 0 ||
+			!reflect.DeepEqual(entry.Dependencies, wantVertical.DependsOn) ||
+			!reflect.DeepEqual(entry.AcceptanceContracts, wantVertical.AcceptanceContracts) {
+			t.Errorf("V14 capability %s must remain declared without evidence during contract red: %#v", id, entry)
+		}
+	}
+
+	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV14ScopeAndExecutableContract|TestV14EvidenceBelongsOnlyToControlCapabilities|TestV14AcceptanceCommandRunsControlConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV14Controls|TestV14CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/config ./internal/credentials ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta'"
+	contract := contracts["AC-V14-CONTROLS"]
+	if contract.Status != "executable" || contract.TestRef != "acceptance/v14_controls_test.go" ||
+		contract.Fixture != "acceptance/fixtures/v14_controls.json" ||
+		contract.Receipt != "product/evidence/v14_controls.json" || contract.Command != wantCommand ||
+		!reflect.DeepEqual(contract.Assertions, roadmapV14Assertions()) {
+		t.Fatalf("invalid V14 executable contract: %#v", contract)
+	}
+	for _, forbidden := range []string{
+		"./...", "./internal/interfaces/mcp", "oidc", "ldap", "workspace", "git", "budget",
+		"fairness", "effects", "/web", "postgres", "s3", "multihost", "claude", "gemini",
+		"ollama", "hermes",
+	} {
+		if strings.Contains(strings.ToLower(contract.Command), forbidden) {
+			t.Fatalf("V14 command opens broad or deferred surface %q: %q", forbidden, contract.Command)
+		}
+	}
+	for _, id := range []string{"AC-V15-BUDGETS-EFFECTS", "AC-V20-COMMAND-REGISTRY", "AC-V31-POSTGRES-S3-MULTIHOST"} {
+		if deferred := contracts[id]; deferred.Status != "planned" || deferred.Receipt != "" {
+			t.Fatalf("V14 prematurely opens deferred contract %s: %#v", id, deferred)
+		}
+	}
+}
+
+func TestV14EvidenceBelongsOnlyToControlCapabilities(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+	owned := map[string]bool{"GOV-07": true, "STG-15": true, "ORC-03": true, "ORC-16": true}
+	v14Evidence := map[string]bool{
+		"acceptance/v14_controls_test.go":          true,
+		"acceptance/fixtures/v14_controls.json":    true,
+		"product/evidence/v14_controls.json":       true,
+		"product/evidence/v14_controls.output.txt": true,
+	}
+	for _, entry := range roadmap.CapabilityEntries {
+		if owned[entry.ID] {
+			if entry.Status != "declared" || len(entry.EvidenceRefs) != 0 {
+				t.Errorf("owned V14 capability %s has premature accreditation: status=%q evidence=%v",
+					entry.ID, entry.Status, entry.EvidenceRefs)
+			}
+			continue
+		}
+		for _, evidenceRef := range entry.EvidenceRefs {
+			if v14Evidence[evidenceRef] {
+				t.Errorf("unowned capability %s claims V14 evidence %q", entry.ID, evidenceRef)
+			}
+		}
+	}
+}
+
+func TestV14AcceptanceCommandRunsControlConsumers(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+	for _, contract := range roadmap.AcceptanceContracts {
+		if contract.ID != "AC-V14-CONTROLS" {
+			continue
+		}
+		for _, required := range []string{
+			"./acceptance", "./internal/goal", "./internal/identity", "./internal/config",
+			"./internal/credentials", "./internal/application", "./internal/ports",
+			"./internal/adapters/agent/fake", "./internal/adapters/agent/codex",
+			"./internal/adapters/state/sqlite", "./internal/bootstrap", "./cmd/orquesta",
+		} {
+			if !roadmapCommandHasArgument(contract.Command, required) {
+				t.Errorf("V14 acceptance omits control consumer package %q: %q", required, contract.Command)
+			}
+		}
+		if !strings.Contains(contract.Command, "TestV14CandidateSubjectsCoverCommittedDelta") {
+			t.Errorf("V14 acceptance omits candidate delta gate: %q", contract.Command)
+		}
+		return
+	}
+	t.Fatal("AC-V14-CONTROLS missing")
+}
+
+func roadmapV14Assertions() []string {
+	return []string{
+		"controls are authenticated request-idempotent application mutations bound to exact project Goal AppSpec generation and hash PlanGeneration WorkItem revision Execution attempt request ref and fingerprint",
+		"pause and resume are reversible Goal or WorkItem dispatch gates whose effective union blocks new launch_agent claims while observe_agent mailbox and in-flight work continue",
+		"pause before RecordLaunchPrepared invalidates the launch claim while a durable prepared launch remains in flight and records its exact acceptance or rejection before stop can claim",
+		"resume reclaims the existing pending action without creating another Execution outbox action or effect",
+		"stop targets one exact Execution and generation through the existing outbox scheduler and AgentController and separates stop requested from exact stop confirmed",
+		"cooperative and forced stop execute only when adapter capabilities advertise them and unsupported never becomes stopped or invokes global Shutdown",
+		"four disjoint A B C D executions prove that stopping B preserves A C D processes state and progress before and after crash restart without global Shutdown",
+		"stop requested permits late V13 delivery consume and acknowledgement until confirmation; confirmation retires only unresolved exact-recipient mailbox without readdress synthetic ACK or ChildHandoffResolution",
+		"completion and stop race through one CAS; already completed is observed rather than falsified as stopped and every terminal Execution remains immutable and never restarts",
+		"execution retry after confirmed stop creates a new Execution ref idempotency key and attempt with replaces_execution_ref while terminal Goal retired mailbox or exhausted attempt policy rejects without effects",
+		"V14 execution retry preserves V06 attempt receipts fences and idempotency but does not claim V15 external-effect retry approvals budgets quotas or fairness",
+		"cancel is irreversible at Goal or WorkItem scope, blocks new launches and delivery claims after its CAS, cancels queued work locally and stops every exact prepared or running Execution before terminal publication",
+		"Goal and WorkItem cancel race with completion by CAS and preserve exact terminal Execution evidence without converting it into another terminal state or leaving an orphan process or launch",
+		"WorkItem cancel preserves independent work, derives dependency_canceled skips, fails the resolved Goal, and treats a canceled HandoffRequired endpoint as a causal failure without synthetic resolution",
+		"ProposeDirectorPlan remains the only replan entry and requires live Director lease token fence authenticated principal exact revisions generations source WorkItem and causal Execution or assessment evidence",
+		"split_pending atomically cancels the queued Execution consumes its launch marks the source superseded and appends one or more successors without a reclaimable source action",
+		"exhausted execution attempts leave the last Execution failed and the WorkItem interrupted with cause execution_failed while the Goal stays open and dependents stay pending for replan or cancel",
+		"append-only replan records only successor rework_of source relations and recursively derives logical source success or failure across nested successors without rewriting history",
+		"replan rejects stale or revoked authority invalid target pairs cycles write-set conflicts already skipped descendants and every HandoffRequired endpoint with zero partial snapshot event outbox receipt or effect",
+		"one StateRepository transaction persists control snapshot audit event outbox consumption and receipt while replay returns the same frontier and conflicting request semantics fail",
+		"SQLite restart backup restore and races at pause claim cancel launch stop completion retry and replan preserve one fenced WorkItem lease and never repeat a terminal effect",
+		"the neutral AgentController contract passes one fake suite and Codex proves exact process-tree stop crash adoption and PID PGID birth-identity checks while clean Shutdown remains separate",
+		"Codex persists process identity only in its existing private WorkRoot journal behind an FD3 launch gate holds one CLOEXEC owner.lock and binds local runtime scope to non-backup-clonable StateRepository file identity while distributed ownership remains V31",
+		"control receipts expose opaque identities without PID argv environment prompt or secrets and V14 adds no undeclared configuration key",
+		"V14 preserves the V02 single writer V05 DAG and dependency rules V06 atomic retries and receipts V07 config V08 credentials V09 recovery V10 RBAC V12 Director and V13 mailbox ratchets without another store scheduler loop daemon database or lifecycle",
+		"V14 exposes application use cases only; HTTP MCP CLI command registry and full i18n bindings remain V20 and V21 while budgets effects workspace reviews provider parity generic messages UI and later surfaces remain deferred",
+	}
+}
+
 func TestV04AccreditsOnlyGOV02AndPreservesGOV01Deferred(t *testing.T) {
 	var roadmap roadmapDocument
 	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)

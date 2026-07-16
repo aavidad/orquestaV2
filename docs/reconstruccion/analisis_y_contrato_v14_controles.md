@@ -291,15 +291,31 @@ rechazar PID/PGID reutilizado; la evidencia pública permanece opaca. Si el
 adaptador no puede confirmar ausencia real, devuelve pending/error y Goal no
 cierra.
 
-El descriptor privado durable enlaza como mínimo ExecutionRef, owner del
-runtime, PID, PGID y marca de nacimiento del proceso. Vive en el mismo SQLite
-transaccional como estado opaco del adaptador; no crea otra autoridad. En
-bootstrap, una instancia nueva adopta solo descriptores cuya identidad completa
-sigue coincidiendo. El E2E de crash mata el servidor sin invocar `Shutdown`,
-deja vivos los hijos A/C/D y demuestra que el nuevo adaptador adopta y controla
-B sin tocarlos. El cierre limpio sí conserva su contrato distinto: `Shutdown`
-detiene todos los procesos propios aún vivos. Nunca se simula un crash mediante
-ese shutdown cooperativo.
+El descriptor privado durable enlaza como mínimo ExecutionRef, request hash,
+runtime scope opaco, PID, PGID, boot ID y marca de nacimiento del proceso. Se
+publica con fsync en el WorkRoot privado que el adaptador Codex ya usa para
+`request.json` y terminales; ampliar ese journal operativo no crea otra
+autoridad de lifecycle ni otro store de application. Un `owner.lock` local
+exclusivo impide que dos instancias observen o señalicen el mismo proceso.
+
+El arranque usa una compuerta heredada por descriptor: primero nace un wrapper
+bloqueado, después se publica identidad+ownership y solo entonces el wrapper
+hace `exec` de Codex conservando PID/PGID. Si el servidor muere antes de liberar
+la compuerta, EOF termina el wrapper y no queda huérfano. Bootstrap deriva el
+runtime scope de una identidad local no clonable por backup —ruta canónica y
+dispositivo/inodo del fichero SQLite activo, o garantía equivalente— y lo
+entrega como dato opaco. Un UUID almacenado dentro de la DB no sirve porque
+viajaría con la copia. Un backup restaurado en otro fichero no adopta procesos
+del origen y SQLite no copia ownership local.
+
+Tras restart, una instancia nueva adopta solo si gana el lock y coinciden todos
+los marcadores inmediatamente antes de observar o señalizar. El E2E de crash
+mata el servidor sin invocar `Shutdown`, deja vivos los hijos A/C/D y demuestra
+que el nuevo adaptador adopta y controla B sin tocarlos. El cierre limpio
+conserva su contrato distinto: `Shutdown` detiene todos los procesos propios
+aún vivos. En plataformas sin lock, grupo y marcadores fiables, esa capability
+se anuncia unsupported; nunca se simula. Tampoco se simula un crash mediante
+shutdown cooperativo.
 
 No se añade configuración V14 salvo necesidad demostrada por un adaptador. En
 particular, forced stop no necesita un default nuevo. Si un futuro conector
@@ -321,11 +337,14 @@ Debe cubrir:
   launch/observe que aún tiene lease vivo;
 - prioridad durable de stop tras completar un launch prepared; stop pendiente
   impide nuevos observe claims pero respeta el observe ya leased;
-- descriptor opaco de adopción Codex y verificación anti-reuso de PID/PGID;
 - retiro exacto de mailbox al terminal controlado y marca que prohíbe retry si
   había inbox sin resolver;
 - replay, backup, restore y validación de cada frontera;
 - ningún índice, trigger o adapter decide lifecycle por su cuenta.
+
+La migración 009 no contiene PID, PGID ni ownership Codex. Backup/restore cubre
+la autoridad neutral; la adopción local se prueba por separado contra el journal
+privado y su runtime scope.
 
 Carreras obligatorias: pause/claim, cancel/launch, stop/completion,
 stop/retry, cancel/replan y dos controles con la misma revisión. En cada una un
@@ -401,6 +420,7 @@ reusar una Execution terminal o omitir cualquier fence exacto.
 - UI: V24;
 - paridad Claude/Gemini/Ollama/Hermes y backends compartidos específicos: V25;
 - mensajes genéricos/sesiones/handoff de provider: V27.
+- ownership distribuido, PostgreSQL y adopción multihost: V31.
 
 V14 expone casos de uso application reales; no añade tools MCP ad hoc antes del
 registro único V20. Esto acredita el fragmento `GOV-07` de la lección histórica
