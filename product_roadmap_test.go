@@ -1045,6 +1045,121 @@ func TestV12AcceptanceCommandRunsDirectorConsumers(t *testing.T) {
 	t.Fatal("AC-V12-DIRECTOR-LEASE missing")
 }
 
+func TestProductRoadmapV13ScopeAndExecutableContract(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+	verticals := make(map[string]roadmapVertical, len(roadmap.Verticals))
+	entries := make(map[string]roadmapEntry, len(roadmap.CapabilityEntries))
+	var owned []string
+	for _, vertical := range roadmap.Verticals {
+		verticals[vertical.ID] = vertical
+	}
+	for _, entry := range roadmap.CapabilityEntries {
+		entries[entry.ID] = entry
+		if entry.OwnerContext == "mailbox" && entry.Decision == "accept" {
+			owned = append(owned, entry.ID)
+		}
+	}
+	sort.Strings(owned)
+	wantOwned := []string{"ORC-04", "ORC-05", "ORC-14", "ORC-15"}
+	if !reflect.DeepEqual(owned, wantOwned) {
+		t.Fatalf("V13 accepted ownership = %v, want exact %v", owned, wantOwned)
+	}
+	wantVertical := verticals["mailbox"]
+	for _, id := range wantOwned {
+		entry := entries[id]
+		if entry.Status != "declared" || len(entry.EvidenceRefs) != 0 ||
+			!reflect.DeepEqual(entry.Dependencies, wantVertical.DependsOn) ||
+			!reflect.DeepEqual(entry.AcceptanceContracts, wantVertical.AcceptanceContracts) {
+			t.Errorf("V13 red capability %s progressed prematurely or lost causality: %#v", id, entry)
+		}
+	}
+
+	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV13ScopeAndExecutableContract|TestV13EvidenceBelongsOnlyToMailboxCapabilities|TestV13AcceptanceCommandRunsMailboxConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV13Mailbox|TestV13CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/application ./internal/ports ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta'"
+	for _, contract := range roadmap.AcceptanceContracts {
+		if contract.ID != "AC-V13-MAILBOX" {
+			continue
+		}
+		if contract.Status != "executable" || contract.TestRef != "acceptance/v13_mailbox_test.go" ||
+			contract.Fixture != "acceptance/fixtures/v13_mailbox.json" ||
+			contract.Receipt != "product/evidence/v13_mailbox.json" || contract.Command != wantCommand ||
+			!reflect.DeepEqual(contract.Assertions, roadmapV13Assertions()) {
+			t.Fatalf("invalid V13 executable contract: %#v", contract)
+		}
+		for _, forbidden := range []string{
+			"./...", "/codex", "oidc", "ldap", "workspace", "git", "budget", "fairness",
+			"/web", "postgres", "s3", "multihost", "pause", "resume", "cancel", "stop",
+		} {
+			if strings.Contains(strings.ToLower(contract.Command), forbidden) {
+				t.Fatalf("V13 command opens broad or deferred surface %q: %q", forbidden, contract.Command)
+			}
+		}
+		return
+	}
+	t.Fatal("AC-V13-MAILBOX missing")
+}
+
+func TestV13EvidenceBelongsOnlyToMailboxCapabilities(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+	owned := map[string]bool{"ORC-04": true, "ORC-05": true, "ORC-14": true, "ORC-15": true}
+	v13Evidence := map[string]bool{
+		"acceptance/v13_mailbox_test.go":       true,
+		"acceptance/fixtures/v13_mailbox.json": true,
+		"product/evidence/v13_mailbox.json":    true,
+	}
+	for _, entry := range roadmap.CapabilityEntries {
+		if owned[entry.ID] && (entry.Status != "declared" || len(entry.EvidenceRefs) != 0) {
+			t.Errorf("V13 red capability %s has premature accreditation: status=%q evidence=%v",
+				entry.ID, entry.Status, entry.EvidenceRefs)
+		}
+		for _, evidenceRef := range entry.EvidenceRefs {
+			if v13Evidence[evidenceRef] {
+				t.Errorf("capability %s claims unissued V13 evidence %q", entry.ID, evidenceRef)
+			}
+		}
+	}
+}
+
+func TestV13AcceptanceCommandRunsMailboxConsumers(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+	for _, contract := range roadmap.AcceptanceContracts {
+		if contract.ID != "AC-V13-MAILBOX" {
+			continue
+		}
+		for _, required := range []string{
+			"./acceptance", "./internal/goal", "./internal/identity", "./internal/application",
+			"./internal/ports", "./internal/adapters/state/sqlite", "./internal/bootstrap", "./cmd/orquesta",
+		} {
+			if !roadmapCommandHasArgument(contract.Command, required) {
+				t.Errorf("V13 acceptance omits mailbox consumer package %q: %q", required, contract.Command)
+			}
+		}
+		return
+	}
+	t.Fatal("AC-V13-MAILBOX missing")
+}
+
+func roadmapV13Assertions() []string {
+	return []string{
+		"admission is request-idempotent and atomically binds one immutable envelope to one action in the existing outbox without treating admission as delivery",
+		"the envelope binds exact project Goal plan generation parent and child WorkItems plus source and recipient principal WorkItem and execution identities",
+		"admitted claimed delivered consumed and acknowledged or blocked are separate causal facts with trusted timestamps and no text-derived lifecycle",
+		"concurrent exact-recipient claims have one winner and use transaction-clock lease opaque token monotonic fence and delivery attempt rather than caller time",
+		"wrong project Goal generation principal WorkItem execution sibling or successor cannot claim deliver consume acknowledge block or enumerate the message",
+		"expired lease wrong token and stale fence cannot mutate while a post-expiry reclaim preserves the envelope and increments fence and attempt exactly once",
+		"a crash after claim and before terminal recipient resolution permits safe reclaim after restart without message loss or partial acknowledgement",
+		"delivery consumption and recipient acknowledgement have distinct immutable receipts and an outbox consumption receipt alone is not recipient evidence",
+		"exact acknowledgement replay returns the same receipt and acknowledged or blocked messages are never redelivered by outbox replay restart or another execution",
+		"a successor execution cannot acknowledge a message addressed to its predecessor even when both executions use the same principal",
+		"a contractual parent cannot succeed or close its Goal until every direct child has one acknowledged delivery or explicit blocked resolution addressed to that parent execution",
+		"an unrelated child terminal WorkItem admission ACK or delivery without recipient acknowledgement does not satisfy the parent closure barrier",
+		"message handoff and child_delivery are typed compact envelopes using summaries and artifact refs while rich context resumable sessions and preventive provider handoff stay deferred",
+		"Goal and application remain the only lifecycle authority and mailbox adds no private store database queue scheduler loop goroutine daemon provider policy or parallel lifecycle",
+	}
+}
+
 func TestV04AccreditsOnlyGOV02AndPreservesGOV01Deferred(t *testing.T) {
 	var roadmap roadmapDocument
 	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)

@@ -1,0 +1,137 @@
+{
+  "schema_version": 1,
+  "receipt_schema_version": 3,
+  "contract_id": "AC-V13-MAILBOX",
+  "trusted_base_git_commit_oid": "ed2375ec0731864514a8e6f94938c18bfbaedadf",
+  "product_delta_base_git_commit_oid": "ed2375ec0731864514a8e6f94938c18bfbaedadf",
+  "product_delta_sealed_git_commit_oid": "0000000000000000000000000000000000000000",
+  "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV13ScopeAndExecutableContract|TestV13EvidenceBelongsOnlyToMailboxCapabilities|TestV13AcceptanceCommandRunsMailboxConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV13Mailbox|TestV13CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/application ./internal/ports ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta'",
+  "execution_argv": [
+    "sh",
+    "-c",
+    "go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV13ScopeAndExecutableContract|TestV13EvidenceBelongsOnlyToMailboxCapabilities|TestV13AcceptanceCommandRunsMailboxConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV13Mailbox|TestV13CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/application ./internal/ports ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta"
+  ],
+  "output_path": "product/evidence/v13_mailbox.output.txt",
+  "receipt_path": "product/evidence/v13_mailbox.json",
+  "candidate_subjects": [
+    "acceptance/fixtures/v13_mailbox.json",
+    "acceptance/v13_mailbox_test.go",
+    "product/roadmap.json",
+    "product_roadmap_test.go"
+  ],
+  "owned_capability_ids": [
+    "ORC-04",
+    "ORC-05",
+    "ORC-14",
+    "ORC-15"
+  ],
+  "deferred_capabilities": [
+    {
+      "id": "ORC-29",
+      "owner": "provider_adapters",
+      "acceptance_contract": "AC-V25-PROVIDER-ADAPTERS"
+    },
+    {
+      "id": "CTX-02",
+      "owner": "context_rag_evals",
+      "acceptance_contract": "AC-V27-CONTEXT-RAG-EVALS"
+    },
+    {
+      "id": "ORC-22",
+      "owner": "context_rag_evals",
+      "acceptance_contract": "AC-V27-CONTEXT-RAG-EVALS"
+    }
+  ],
+  "deferred_surfaces": [
+    "provider_specific_delivery",
+    "preventive_budget_or_heartbeat_handoff",
+    "rich_context_bundle_and_resumable_session",
+    "public_mailbox_bindings"
+  ],
+  "required_use_cases": [
+    "AdmitMailbox",
+    "ClaimMailbox",
+    "MarkMailboxDelivered",
+    "ConsumeMailbox",
+    "AcknowledgeMailbox",
+    "BlockMailbox",
+    "GetMailbox",
+    "ListMailbox"
+  ],
+  "required_repository_methods": [
+    "MailboxReplay",
+    "AdmitMailbox",
+    "ClaimMailbox",
+    "MarkMailboxDelivered",
+    "ConsumeMailbox",
+    "AcknowledgeMailbox",
+    "BlockMailbox",
+    "GetMailbox",
+    "ListMailbox"
+  ],
+  "forbidden_private_authorities": [
+    "MailboxStore",
+    "MailboxDatabase",
+    "MailboxQueue",
+    "MailboxLoop",
+    "MailboxScheduler",
+    "MailboxLifecycle",
+    "mailbox_outbox"
+  ],
+  "scenario": {
+    "base_time": "2026-07-16T08:00:00Z",
+    "claim_lease": "30s",
+    "reclaim_after": "31s",
+    "project_ref": "project:v13-mailbox",
+    "goal_ref": "goal:v13-mailbox",
+    "plan_generation": 1,
+    "parent_work_item_ref": "work-item:v13-parent",
+    "child_work_item_refs": [
+      "work-item:v13-child-a",
+      "work-item:v13-child-b"
+    ],
+    "source_principal_ref": "principal:v13-child",
+    "source_work_item_ref": "work-item:v13-child-a",
+    "source_execution_ref": "execution:v13-child-a",
+    "recipient_principal_ref": "principal:v13-parent",
+    "recipient_work_item_ref": "work-item:v13-parent",
+    "recipient_execution_ref": "execution:v13-parent-original",
+    "successor_execution_ref": "execution:v13-parent-successor",
+    "message_kinds": [
+      "message",
+      "handoff",
+      "child_delivery"
+    ],
+    "lifecycle": [
+      "admitted",
+      "claimed",
+      "delivered",
+      "consumed"
+    ],
+    "terminal_resolutions": [
+      "acknowledged",
+      "blocked"
+    ],
+    "summary": "child complete; facts and large content remain behind refs",
+    "artifact_refs": [
+      "artifact:v13-child-output"
+    ],
+    "claim_contenders": 3
+  },
+  "assertions": [
+    "admission is request-idempotent and atomically binds one immutable envelope to one action in the existing outbox without treating admission as delivery",
+    "the envelope binds exact project Goal plan generation parent and child WorkItems plus source and recipient principal WorkItem and execution identities",
+    "admitted claimed delivered consumed and acknowledged or blocked are separate causal facts with trusted timestamps and no text-derived lifecycle",
+    "concurrent exact-recipient claims have one winner and use transaction-clock lease opaque token monotonic fence and delivery attempt rather than caller time",
+    "wrong project Goal generation principal WorkItem execution sibling or successor cannot claim deliver consume acknowledge block or enumerate the message",
+    "expired lease wrong token and stale fence cannot mutate while a post-expiry reclaim preserves the envelope and increments fence and attempt exactly once",
+    "a crash after claim and before terminal recipient resolution permits safe reclaim after restart without message loss or partial acknowledgement",
+    "delivery consumption and recipient acknowledgement have distinct immutable receipts and an outbox consumption receipt alone is not recipient evidence",
+    "exact acknowledgement replay returns the same receipt and acknowledged or blocked messages are never redelivered by outbox replay restart or another execution",
+    "a successor execution cannot acknowledge a message addressed to its predecessor even when both executions use the same principal",
+    "a contractual parent cannot succeed or close its Goal until every direct child has one acknowledged delivery or explicit blocked resolution addressed to that parent execution",
+    "an unrelated child terminal WorkItem admission ACK or delivery without recipient acknowledgement does not satisfy the parent closure barrier",
+    "message handoff and child_delivery are typed compact envelopes using summaries and artifact refs while rich context resumable sessions and preventive provider handoff stay deferred",
+    "Goal and application remain the only lifecycle authority and mailbox adds no private store database queue scheduler loop goroutine daemon provider policy or parallel lifecycle"
+  ]
+}
