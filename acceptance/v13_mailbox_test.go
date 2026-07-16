@@ -19,7 +19,7 @@ import (
 const v13FixturePath = "acceptance/fixtures/v13_mailbox.json"
 const v13TrustedBaseGitCommitOID = "ed2375ec0731864514a8e6f94938c18bfbaedadf"
 const v13ProductDeltaBaseGitCommitOID = "b2af1e78f7a024d29a747e4485e619464b5dd12e"
-const v13ProductDeltaSealedGitCommitOID = "0000000000000000000000000000000000000000"
+const v13ProductDeltaSealedGitCommitOID = "a8bf28a2acb3a246d8c1a3c1cedea38d240f370a"
 
 type v13Fixture struct {
 	SchemaVersion                  int                     `json:"schema_version"`

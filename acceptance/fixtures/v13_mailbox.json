@@ -4,7 +4,7 @@
   "contract_id": "AC-V13-MAILBOX",
   "trusted_base_git_commit_oid": "ed2375ec0731864514a8e6f94938c18bfbaedadf",
   "product_delta_base_git_commit_oid": "b2af1e78f7a024d29a747e4485e619464b5dd12e",
-  "product_delta_sealed_git_commit_oid": "0000000000000000000000000000000000000000",
+  "product_delta_sealed_git_commit_oid": "a8bf28a2acb3a246d8c1a3c1cedea38d240f370a",
   "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV13ScopeAndExecutableContract|TestV13EvidenceBelongsOnlyToMailboxCapabilities|TestV13AcceptanceCommandRunsMailboxConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV13Mailbox|TestV13CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/config ./internal/application ./internal/ports ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta'",
   "execution_argv": [
     "sh",
