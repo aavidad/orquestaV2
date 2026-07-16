@@ -424,7 +424,9 @@ executions/artifacts, tests, riesgos y bloqueos.
   opt-in ni permiten claim, deliver, consume o ACK. Por tanto el DAG V05
   público conserva `false` y cierra sin mailbox/requeue. Mensajes genéricos,
   sesiones reanudables y handoff entre proveedores (`ORC-15`) quedan en V27.
-- V14: faltan pausa, resume, cancel, stop, retry y replan públicos.
+- V14: faltan los casos de aplicación de pausa, resume, cancel, stop, retry y
+  replan. Sus bindings HTTP/MCP/CLI públicos se incorporarán mediante el
+  registro único de V20; V14 no añadirá tools ad hoc.
 - V15: faltan presupuestos completos, fairness, riesgo y effects/approvals.
 - V16: faltan workspace, worktree, aplicación de patch y receipts Git; los
   workers actuales no editan el proyecto objetivo.
