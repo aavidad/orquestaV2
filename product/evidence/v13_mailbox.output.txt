@@ -1,0 +1,10 @@
+ok  	orquesta	0.109s
+ok  	orquesta/acceptance	1.194s
+ok  	orquesta/internal/goal	0.005s
+ok  	orquesta/internal/identity	0.003s
+ok  	orquesta/internal/config	0.288s
+ok  	orquesta/internal/application	0.013s
+ok  	orquesta/internal/ports	0.002s
+ok  	orquesta/internal/adapters/state/sqlite	5.610s
+ok  	orquesta/internal/bootstrap	1.029s
+ok  	orquesta/cmd/orquesta	0.003s

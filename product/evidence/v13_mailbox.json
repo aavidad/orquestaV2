@@ -1,1 +1,32 @@
-{}
+{
+  "schema_version": 3,
+  "evidence_kind": "reproducibility_descriptor",
+  "contract": "AC-V13-MAILBOX",
+  "result": "PASS",
+  "validation_command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV13ScopeAndExecutableContract|TestV13EvidenceBelongsOnlyToMailboxCapabilities|TestV13AcceptanceCommandRunsMailboxConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV13Mailbox|TestV13CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/config ./internal/application ./internal/ports ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta'",
+  "executed_at": "2026-07-16T12:23:11+02:00",
+  "execution": {
+    "argv": [
+      "sh",
+      "-c",
+      "go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV13ScopeAndExecutableContract|TestV13EvidenceBelongsOnlyToMailboxCapabilities|TestV13AcceptanceCommandRunsMailboxConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV13Mailbox|TestV13CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/config ./internal/application ./internal/ports ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta"
+    ],
+    "source_git_commit_oid": "5daf174bde3ec5d9a98f387de05491f258634264",
+    "source_worktree_state": "detached_clean",
+    "source_status_porcelain_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "exit_code": 0,
+    "combined_output_path": "product/evidence/v13_mailbox.output.txt",
+    "combined_output_sha256": "sha256:b750a94e24755f4b287e85c6304d5bad86ce9e9397153ca15a178f8fd187e34e",
+    "go_version": "go1.25.11"
+  },
+  "fixture_sha256": "sha256:6baf955da8eb80aae513c8fcfc97f8ac7d1901bc5f82b00d179f2aefffe58378",
+  "candidate_digest_algorithm": "sha256:length-framed-git-blob-set:v1",
+  "candidate_sha256": "sha256:3fdd094fee1504b5c246d02687552a0c563b905e992ef532f3d4a820dfd7e435",
+  "sealed_source": {
+    "identity_kind": "sealed_git_subject_set",
+    "git_commit_oid": "5daf174bde3ec5d9a98f387de05491f258634264",
+    "git_tree_oid": "38e623f05ab91e22bc76a3315187d6e1e49fd304",
+    "fixture_blob_oid": "30685f7fe1bab8690169258b43b46227c4e76124",
+    "sha256": "sha256:3fdd094fee1504b5c246d02687552a0c563b905e992ef532f3d4a820dfd7e435"
+  }
+}
