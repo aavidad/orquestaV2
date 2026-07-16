@@ -199,6 +199,11 @@ Nota de evidencia V13: un E2E Codex real que recorra composición, MCP, SQLite
 y CAS pero no active `HandoffRequired` sirve como gate de no regresión. No
 sustituye `AC-V13-MAILBOX` ni acredita mailbox o bindings públicos.
 
+Corte vigente 2026-07-16: V13 está acreditado por su receipt V3 propio sobre el
+candidato sellado `5daf174bde3ec5d9a98f387de05491f258634264`. El progreso es
+44/257 capacidades, 17,12 %, y 13/34 verticales, 38,24 %, con 13/13 receipts
+válidos. V14 no forma parte de ese cierre.
+
 ## 6. Olas y transición a auto-orquestación
 
 Dependencias anteriores forman el DAG; una numeración no obliga a cola lineal.

@@ -1,25 +1,39 @@
 # Estado y handoff vivo del rebuild
 
-Última actualización: 2026-07-16 12:15 Europe/Madrid.
+Última actualización: 2026-07-16 12:27 Europe/Madrid.
 
 Este documento permite continuar el rebuild sin reconstruir el contexto de la
 sesión. Es estado operativo, no evidencia de aceptación. Los estados canónicos
 de capacidades, verticales y contratos viven en `product/roadmap.json`; los
 verdes viven en receipts fuera de su propio candidato.
 
-## Candidato vigente: V13 implementado, receipt pendiente
+## Checkpoint vigente: V13 cerrado
 
-El candidato V13 materializa `AC-V13-MAILBOX` sin abrir V14. Todavía no debe
-contarse como acreditado: `product/evidence/v13_mailbox.json` sigue siendo un
-placeholder y faltan producto sellado, ejecución detached limpia y receipt V3.
-Las cifras canónicas continúan por tanto en el último checkpoint acreditado
-V12. Una vez emitido el receipt V13, el total mecánico pasará a 44/257
-capacidades, 17,12 %, y 13/34 verticales, 38,24 %.
+V13 está cerrado, contrarrevisado y ligado a un receipt V3 reproducible. El
+argv contractual pasó desde `C` en checkout detached limpio y acreditó
+exactamente `ORC-04`, `ORC-05` y `ORC-14`. No se abrió V14.
 
-Alcance funcional del candidato V13:
+El total canónico queda en 44/257 capacidades, 17,12 %, y 13/34 verticales,
+38,24 %, con 13/13 receipts válidos.
+
+Cadena autoritativa V13:
+
+```text
+producto P:          a8bf28a2acb3a246d8c1a3c1cedea38d240f370a
+sellado C:           5daf174bde3ec5d9a98f387de05491f258634264
+evidencia E:         93b3c44f37869d72ea77db24fa5185dc29d62d32
+candidate SHA:       sha256:3fdd094fee1504b5c246d02687552a0c563b905e992ef532f3d4a820dfd7e435
+output SHA:          sha256:b750a94e24755f4b287e85c6304d5bad86ce9e9397153ca15a178f8fd187e34e
+source worktree:     detached_clean
+```
+
+La evidencia reproducible vive en `product/evidence/v13_mailbox.json`; la
+salida capturada vive en `product/evidence/v13_mailbox.output.txt`.
+
+Resultado funcional V13:
 
 - cubre solo `ORC-04`, `ORC-05` y `ORC-14`; `ORC-15`, mensajería genérica,
-  sesiones reanudables y handoff entre proveedores permanece completo en V27;
+  sesiones reanudables y handoff entre proveedores permanecen diferidos en V27;
 - `Parent` conserva solo linaje. `HandoffRequired` es una decisión separada,
   explícita y `false` por defecto; `true` sin `Parent` es un plan inválido;
 - admite únicamente el envelope tipado `child_delivery` para una arista
@@ -53,15 +67,15 @@ pendientes. V12 sigue siendo un coordinador operativo limitado; V22 continúa
 siendo el primer MVP de programación real extremo a extremo y V34 el cierre
 total de la aplicación.
 
-## Último checkpoint acreditado: V11 y V12 cerrados
+## Checkpoint histórico: V11 y V12 cerrados
 
 V11 y V12 están cerrados, contrarrevisados y ligados a receipts V3
 reproducibles. El hotfix posterior de contención SQLite también está integrado
 y el E2E Codex real por API MCP fue renovado sobre ese código. No reabrir ni
 resellar V01–V12 salvo regresión reproducible.
 
-El total canónico queda en 41/257 capacidades, 15,95 %, y 12/34 verticales,
-35,3 %. V11 es una vertical transversal y no acredita IDs nuevos. V12 acredita
+En ese corte, el total canónico quedó en 41/257 capacidades, 15,95 %, y 12/34
+verticales, 35,3 %. V11 es una vertical transversal y no acredita IDs nuevos. V12 acredita
 exactamente `GOV-08`, `GOV-09`, `GOV-10` y `ORC-24`.
 
 Resultado funcional V11:
@@ -119,8 +133,7 @@ control plane en una única cola `database/sql`. La prueba
 `TestRepositorySerializesWritersBeforeSQLiteBusyTimeout` y el E2E real cierran
 la incidencia sin retry ciego ni segunda autoridad.
 
-Último smoke Codex real, renovado sobre las fuentes actuales del candidato
-V13:
+Último smoke Codex real, renovado durante el cierre V13:
 
 ```text
 source SHA: sha256:d3bac625fa52b76fdc2c0007292577751ca8931a6ca890ecd2751a8976fa8d36
@@ -133,7 +146,8 @@ config:     /home/alberto/Trabajo/.orquesta-rebuild-real-e2e-v13-20260716T115042
 El `PASS` recorre composición productiva, API MCP, Codex real, SQLite y CAS y
 demuestra que V13 no regresó ese vertical. No activa `HandoffRequired`, no usa
 bindings mailbox y no acredita `AC-V13-MAILBOX`, `ORC-04`, `ORC-05` ni
-`ORC-14`. Esa acreditación sigue dependiendo del receipt V3 propio.
+`ORC-14` por sí mismo. Esas capacidades quedaron acreditadas por el receipt V3
+V13 separado, no por el smoke del proveedor.
 
 `BUG-REBUILD-20260715-152` permanece diferido y asignado a V24: una instalación
 solo OIDC necesita el grant auditable y de un uso del primer administrador.
@@ -334,6 +348,9 @@ a5f3a65270 feat: integrar identidad OIDC y Director transferible V11 V12
 5e826de0e4 test: sellar delta combinado V11 V12
 78fe60378e test: acreditar evidencia reproducible V11 V12
 44ce9697c7 fix: serializar escritores SQLite del control plane
+a8bf28a2ac feat: integrar mailbox causal V13
+5daf174bde test: sellar delta V13 mailbox
+93b3c44f37 test: acreditar evidencia reproducible V13
 ```
 
 Checkpoint histórico: `70dbab89e3` preservó el cierre funcional de V04 y migró
@@ -370,6 +387,7 @@ V09  sha256:60ddae7e2d52064377ceea0ac7301e449ed5612a02a7e7735fb2385dcec6b108
 V10  sha256:459698a5f6aa27c605a2fab6e93afe232655c01429e4ad5632c5e2b66978b592
 V11  sha256:957ed6f231adf3467a775faa48123d658785ba352bdf82c9ec85db0c8490137e
 V12  sha256:957ed6f231adf3467a775faa48123d658785ba352bdf82c9ec85db0c8490137e
+V13  sha256:3fdd094fee1504b5c246d02687552a0c563b905e992ef532f3d4a820dfd7e435
 ```
 
 Receipt V04: fixture
@@ -382,7 +400,7 @@ autoritaria; no se recalculan desde el worktree actual.
 Verificación rápida sin atravesar superficies legacy:
 
 ```bash
-go test -mod=vendor -count=1 ./acceptance -run '^TestAcceptanceV(0[1-9]|1[0-2]).*Receipt$'
+go test -mod=vendor -count=1 ./acceptance -run '^TestAcceptanceV(0[1-9]|1[0-3]).*Receipt$'
 git diff --check
 scripts/check_rebuild_write_set.sh
 ```
@@ -414,31 +432,29 @@ scripts/check_rebuild_write_set.sh
   `BUG-REBUILD-20260715-152` y `154` quedan asignados a V24 y V32.
 - V12 Director con lease y fencing: cerrado; receipt V3 válido; acredita
   exactamente `GOV-08`, `GOV-09`, `GOV-10` y `ORC-24`.
-- V13 mailbox `child_delivery`: candidato implementado para `ORC-04`, `ORC-05`
-  y `ORC-14`; reachability productiva verde con handoff opt-in, pendiente de
-  contrarrevisión, sellado y receipt V3. No acreditado todavía. `ORC-15` sigue
-  en V27.
+- V13 mailbox `child_delivery`: cerrado; receipt V3 válido; acredita
+  exactamente `ORC-04`, `ORC-05` y `ORC-14`. La compatibilidad productiva V05
+  queda verde; el handoff sigue opt-in interno. `ORC-15` permanece en V27 y
+  los bindings públicos en V20–V22.
 - V14–V34: pendientes. No contar código heredado, groundwork o una prueba
   aislada como vertical posterior cerrada.
-- progreso vertical cerrado: 12 de 34, 35,3 % de la ruta; receipts válidos: 12
-  de 12 contratos ejecutables;
-- progreso de capacidades: 41 de 257 en estado `accredited`, 15,95 %:
+- progreso vertical cerrado: 13 de 34, 38,24 % de la ruta; receipts válidos:
+  13 de 13 contratos ejecutables;
+- progreso de capacidades: 44 de 257 en estado `accredited`, 17,12 %:
   `EVD-02`, `EVD-11`, `EVD-12`, `EVD-15`, `GOV-02`, `GOV-03`, `GOV-04`, `GOV-05`,
   `GOV-06`, `GOV-08`, `GOV-09`, `GOV-10`, `GOV-16`, `GOV-19`, `GOV-20`,
   `GOV-21`, `GOV-22`, `OPS-01`, `OPS-02`, `OPS-03`, `OPS-04`,
   `OPS-05`, `OPS-06`, `OPS-08`, `OPS-09`, `OPS-10`, `OPS-12`, `OPS-14`, `OPS-26`,
-  `OPS-27`, `OPS-28`, `OPS-29`, `OPS-30`, `ORC-01`, `ORC-02`, `ORC-06`,
-  `ORC-12`, `ORC-13`, `ORC-17`, `ORC-24` y `STG-00`.
-- progreso post-V13, solo después del receipt válido: 13 de 34 verticales,
-  38,24 %, y 44 de 257 capacidades, 17,12 %, al sumar exactamente `ORC-04`,
-  `ORC-05` y `ORC-14`.
+  `OPS-27`, `OPS-28`, `OPS-29`, `OPS-30`, `ORC-01`, `ORC-02`, `ORC-04`,
+  `ORC-05`, `ORC-06`, `ORC-12`, `ORC-13`, `ORC-14`, `ORC-17`, `ORC-24` y
+  `STG-00`.
 
 ## Siguiente acción exacta
 
-Cerrar V13 sin abrir V14: repetir contrarrevisión y gates focales/race/vet;
-congelar producto, sellar fixture, ejecutar el argv exacto desde checkout
-detached limpio y emitir receipt V3. No atribuir `ORC-15` ni bindings públicos
-a este cierre.
+No abrir V14 en este cierre. En la próxima fase, hacer solo su análisis
+dependencial y contrato rojo `AC-V14-CONTROLS`; revisar el alcance antes de
+programar pausa, resume, cancel, stop, retry o replan. Partir de V13 sellado y
+no atribuir a V14 `ORC-15` ni bindings mailbox públicos.
 
 Los subagentes directos siguen siendo bootstrap hasta V22. Hoy Orquesta puede
 coordinar un DAG declarado; una petición abierta aún necesita dirección externa.
@@ -447,8 +463,8 @@ coordinar un DAG declarado; una petición abierta aún necesita dirección exter
 
 Las palabras “pendiente”, “siguiente” o “en curso” dentro del historial
 describen checkpoints pasados. No son órdenes de reanudación. La acción vigente
-es cerrar el candidato V13 desde el checkpoint acreditado V11/V12, sin abrir
-V14 ni otro frente.
+en la próxima fase es analizar y abrir solo el contrato rojo V14 desde el cierre
+acreditado V13.
 
 ## V03: trabajo ya realizado
 

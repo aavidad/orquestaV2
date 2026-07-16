@@ -2,7 +2,8 @@
 
 Fecha de corte: 2026-07-16
 
-Estado: evidencia histórica del corte mínimo. No gobierna el roadmap total.
+Estado: mapa explicativo del corte mínimo y de V13. No gobierna el roadmap
+total ni sustituye los receipts estructurados.
 
 [`product/capabilities.json`](../../product/capabilities.json) es el manifest
 ejecutable del corte. `status: accepted` significa que la capacidad tiene un
@@ -42,23 +43,33 @@ Evidencia focal adicional, sin sustituir los refs canónicos:
 - Restore: `internal/goal/snapshot_test.go` prueba round-trip, separación de
   snapshots y rechazo de manipulación o revisiones incoherentes.
 
-## Candidato V13: contrato presente, acreditación pendiente
+## V13: mailbox acreditado
 
-`AC-V13-MAILBOX` está implementado como candidato interno. No forma parte de
-la evidencia histórica de la tabla anterior y no cuenta todavía como vertical
-cerrada: `product/evidence/v13_mailbox.json` contiene solo `{}` hasta que exista
-sellado, ejecución detached limpia y receipt V3.
+`AC-V13-MAILBOX` está cerrado con receipt V3 `PASS`. La ejecución contractual
+partió del commit sellado `5daf174bde3ec5d9a98f387de05491f258634264`
+en checkout `detached_clean` y acredita exactamente `ORC-04`, `ORC-05` y
+`ORC-14`.
 
-| IDs candidatos | Contrato ejecutable | Alcance exacto |
+| IDs acreditados | Contrato acreditado | Alcance exacto |
 |---|---|---|
 | `ORC-04`, `ORC-05`, `ORC-14` | `acceptance/v13_mailbox_test.go`; `internal/application/mailbox*_test.go`; `internal/adapters/state/sqlite/mailbox*_test.go` | Solo `child_delivery` contractual: destinatario exacto, lifecycle `admitted → claimed → delivered → consumed → acknowledged|blocked`, retiro sistémico, replay/fencing, barrera causal padre/hijo y recovery SQLite sobre la misma autoridad |
 
-El candidato conserva un único writer de Goal, `StateRepository`, outbox y
+El cierre conserva un único writer de Goal, `StateRepository`, outbox y
 `Fence`. `BuildMailboxResolutionGoal` es helper puro; SQLite valida el mismo
 resultado y no muta Goal por una ruta lateral. `mailbox.max_envelope_bytes`
 entra por el registro canónico. Los ratchets V02, V05, V06, V09 y V10 forman
 parte de `TestAcceptanceV13Mailbox`. `ORC-15` y los bindings públicos de mailbox
 no pertenecen a esta acreditación.
+
+Cadena V13:
+
+```text
+producto P:    a8bf28a2acb3a246d8c1a3c1cedea38d240f370a
+sellado C:     5daf174bde3ec5d9a98f387de05491f258634264
+evidencia E:   93b3c44f37869d72ea77db24fa5185dc29d62d32
+candidate SHA: sha256:3fdd094fee1504b5c246d02687552a0c563b905e992ef532f3d4a820dfd7e435
+output SHA:    sha256:b750a94e24755f4b287e85c6304d5bad86ce9e9397153ca15a178f8fd187e34e
+```
 
 Reachability queda separada de la semántica de linaje: `Parent` no implica
 handoff, `HandoffRequired` es explícito y `false` por defecto, y `true` sin
@@ -71,6 +82,7 @@ V20–V22.
 
 | Fecha | Comando | Resultado | Alcance |
 |---|---|---|---|
+| 2026-07-16 | argv exacto de `AC-V13-MAILBOX`, registrado en `product/evidence/v13_mailbox.json` | `PASS`, `detached_clean` | contrato mailbox, guards de arquitectura/trazabilidad y paquetes Goal, identidad, config, aplicación, puertos, SQLite, bootstrap y cmd sobre el candidato sellado |
 | 2026-07-16 | `go test -mod=vendor -v -count=1 ./internal/bootstrap -run '^TestRealCodexAdapterClosesGoalThroughProductionMCPServer$' -args -orquesta-real-codex-config=/home/alberto/Trabajo/.orquesta-rebuild-real-e2e-v13-20260716T115042/orquesta.toml` | `PASS` en `6.15s` | composición productiva, Bearer local, MCP, Codex real, SQLite y CAS sobre fuentes V13; smoke de no regresión, no contrato mailbox |
 | 2026-07-14 | `go test -mod=vendor -count=1 ./...` | `PASS` histórico; comando revocado | después se comprobó que `./...` enumera 131 paquetes y puede lanzar smokes legacy; no es gate vigente |
 | 2026-07-14 | `go test -mod=vendor -v -count=1 ./internal/bootstrap -run '^TestRealCodexAdapterClosesGoalThroughProductionMCPServer$' -args -orquesta-real-codex-config=<TOML temporal>` | `PASS` en 3,54 s | servidor de producción, Bearer local, cliente MCP oficial, Codex real, SQLite, CAS, artefacto y atestación |
@@ -89,7 +101,8 @@ liga comando, `2026-07-16T12:12:56+02:00` y source digest
 
 Este `PASS` demuestra ausencia de regresión en composición productiva, MCP,
 Codex, SQLite y CAS. No activa `HandoffRequired`, no recorre bindings mailbox y
-no acredita `AC-V13-MAILBOX` ni sus tres capabilities candidatas.
+no acredita por sí solo `AC-V13-MAILBOX`. El receipt V3 V13 separado sí
+acredita sus tres capabilities internas; no acredita bindings públicos.
 
 ## Gates de integración
 
