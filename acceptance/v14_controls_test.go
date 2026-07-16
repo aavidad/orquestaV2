@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +17,7 @@ import (
 
 const v14FixturePath = "acceptance/fixtures/v14_controls.json"
 const v14ContractBaseGitCommitOID = "df695543b6486dae51f7eab40417543b48d71de7"
+const v14ProductDeltaBaseGitCommitOID = "b7a4672a251b85904d213b7b147a0442a6d906a8"
 const v14ProductDeltaSealedGitCommitOID = "0000000000000000000000000000000000000000"
 
 type v14Fixture struct {
@@ -68,6 +70,78 @@ func TestV14CandidateSubjectsCoverCommittedDelta(t *testing.T) {
 	if !reflect.DeepEqual(changed, fixture.CandidateSubjects) {
 		t.Fatalf("V14 candidate subjects differ from sealed product delta:\nchanged=%v\nfixture=%v", changed, fixture.CandidateSubjects)
 	}
+	numstat, err := evidenceGit(
+		repositoryRoot, "diff", "--numstat",
+		fixture.ProductDeltaBaseGitCommitOID, fixture.ProductDeltaSealedGitCommitOID, "--",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v14AssertSimplicityBudget(t, numstat)
+}
+
+func v14AssertSimplicityBudget(t *testing.T, numstat []byte) {
+	t.Helper()
+	type limit struct {
+		name string
+		max  int
+		net  int
+	}
+	limits := map[string]*limit{
+		"core":      {name: "domain/application/ports production", max: 2500},
+		"adapters":  {name: "adapters/bootstrap production", max: 4700},
+		"vendor":    {name: "modernc SQLite patch", max: 160},
+		"migration": {name: "SQLite migration", max: 825},
+		"tests":     {name: "tests/acceptance", max: 8600},
+	}
+	for _, row := range strings.Split(strings.TrimSpace(string(numstat)), "\n") {
+		if row == "" {
+			continue
+		}
+		fields := strings.SplitN(row, "\t", 3)
+		if len(fields) != 3 || fields[0] == "-" || fields[1] == "-" {
+			t.Fatalf("V14 simplicity budget cannot classify numstat row %q", row)
+		}
+		added, addErr := strconv.Atoi(fields[0])
+		deleted, deleteErr := strconv.Atoi(fields[1])
+		if addErr != nil || deleteErr != nil {
+			t.Fatalf("V14 simplicity budget invalid numstat row %q", row)
+		}
+		if class := v14SimplicityClass(fields[2]); class != "" {
+			limits[class].net += added - deleted
+		}
+	}
+	for _, class := range []string{"core", "adapters", "vendor", "migration", "tests"} {
+		budget := limits[class]
+		if budget.net > budget.max {
+			t.Errorf("V14 simplicity budget %s net LOC=%d, max=%d", budget.name, budget.net, budget.max)
+		}
+	}
+}
+
+func v14SimplicityClass(relative string) string {
+	switch {
+	case strings.HasSuffix(relative, ".sql"):
+		return "migration"
+	case strings.HasSuffix(relative, "_test.go"), strings.HasPrefix(relative, "acceptance/"):
+		return "tests"
+	case strings.HasPrefix(relative, "internal/goal/"),
+		strings.HasPrefix(relative, "internal/application/"),
+		strings.HasPrefix(relative, "internal/ports/"):
+		if strings.HasSuffix(relative, ".go") {
+			return "core"
+		}
+	case strings.HasPrefix(relative, "internal/adapters/"),
+		strings.HasPrefix(relative, "internal/bootstrap/"):
+		if strings.HasSuffix(relative, ".go") {
+			return "adapters"
+		}
+	case strings.HasPrefix(relative, "vendor/modernc.org/sqlite/"):
+		if strings.HasSuffix(relative, ".go") {
+			return "vendor"
+		}
+	}
+	return ""
 }
 
 type v14DeferredCapability struct {
@@ -138,16 +212,16 @@ func TestAcceptanceV14Controls(t *testing.T) {
 		v14RequireProductionFields(t, applicationDirectory, "ControlRecord", []string{
 			"Ref", "RequestRef", "RequestFingerprint", "PrincipalRef", "ProjectRef", "GoalRef",
 			"WorkItemRef", "WorkItemRevision", "ExecutionRef", "ExecutionAttempt", "Operation", "Target", "Mode",
-			"PlanGeneration", "AppSpecGeneration", "SpecHash", "Status", "RequestedAt", "ConfirmedAt",
-			"ReceiptRef", "AuthorizationReceipt",
+			"Reason", "GoalRevision", "PlanGeneration", "AppSpecGeneration", "SpecHash", "Status", "RequestedAt", "ConfirmedAt",
+			"ReceiptRef", "SupersedesControlRef", "SupersededAt", "SupersededByControlRef", "AuthorizationReceipt",
 		})
 		v14RequireProductionFields(t, applicationDirectory, "ControlResult", []string{"Control", "Created"})
 
 		applicationSource := v10ReadProductionGo(t, applicationDirectory)
 		goalSource := v10ReadProductionGo(t, filepath.Join(repositoryRoot, "internal", "goal"))
 		for _, required := range []string{
-			`"pause"`, `"resume"`, `"cancel"`, `"stop"`, `"retry"`, `"replan"`,
-			`"stop_agent"`, "ActionStopAgent", "ControlSequence", "ReworkOf",
+			`"pause"`, `"resume"`, `"cancel"`, `"stop"`, `"retry"`,
+			`"stop_agent"`, "ActionStopAgent", "ControlSequence", "ReworkOf", "ReplanCause",
 		} {
 			if !strings.Contains(applicationSource+goalSource, required) {
 				t.Errorf("V14_RED causal control contract lacks %q", required)
@@ -262,6 +336,7 @@ func TestAcceptanceV14Controls(t *testing.T) {
 
 	t.Run("races_restart_mailbox_and_real_codex_are_executable", func(t *testing.T) {
 		testSource := v13ReadGoTests(t,
+			repositoryRoot,
 			filepath.Join(repositoryRoot, "internal", "goal"),
 			filepath.Join(repositoryRoot, "internal", "application"),
 			filepath.Join(repositoryRoot, "internal", "ports"),
@@ -304,6 +379,14 @@ func TestAcceptanceV14Controls(t *testing.T) {
 	})
 }
 
+func TestAcceptanceV14ControlsReceipt(t *testing.T) {
+	evidenceAssertReceiptV3(t, evidenceRepositoryRoot(t), evidenceReceiptV3Expectation{
+		Contract: "AC-V14-CONTROLS", FixturePath: v14FixturePath,
+		ReceiptPath:       "product/evidence/v14_controls.json",
+		ExecutedNotBefore: "2026-07-16T00:00:00Z", TrustedBaseGitCommitOID: v14ContractBaseGitCommitOID,
+	})
+}
+
 func v14AssertFixtureHeader(t *testing.T, repositoryRoot string, fixture v14Fixture) {
 	t.Helper()
 	wantDeferred := []v14DeferredCapability{
@@ -320,7 +403,7 @@ func v14AssertFixtureHeader(t *testing.T, repositoryRoot string, fixture v14Fixt
 	if fixture.SchemaVersion != 1 || fixture.ReceiptSchemaVersion != 3 ||
 		fixture.ContractID != "AC-V14-CONTROLS" ||
 		fixture.TrustedBaseGitCommitOID != v14ContractBaseGitCommitOID ||
-		fixture.ProductDeltaBaseGitCommitOID != v14ContractBaseGitCommitOID ||
+		fixture.ProductDeltaBaseGitCommitOID != v14ProductDeltaBaseGitCommitOID ||
 		fixture.ProductDeltaSealedGitCommitOID != v14ProductDeltaSealedGitCommitOID ||
 		fixture.OutputPath != "product/evidence/v14_controls.output.txt" ||
 		fixture.ReceiptPath != "product/evidence/v14_controls.json" ||
@@ -359,6 +442,7 @@ func v14AssertFixtureHeader(t *testing.T, repositoryRoot string, fixture v14Fixt
 		!reflect.DeepEqual(fixture.ExecutionArgv, []string{"sh", "-c", v14ValidationShellBody()}) {
 		t.Fatalf("invalid V14 command/argv: %q %#v", fixture.Command, fixture.ExecutionArgv)
 	}
+	v14AssertRaceGate(t, v14ValidationShellBody())
 	if _, err := evidenceGitCanonicalCommit(repositoryRoot, fixture.TrustedBaseGitCommitOID); err != nil {
 		t.Fatalf("invalid V14 real contract base: %v", err)
 	}
@@ -374,7 +458,34 @@ func v14AssertFixtureHeader(t *testing.T, repositoryRoot string, fixture v14Fixt
 
 func v14ValidationShellBody() string {
 	return "go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV14ScopeAndExecutableContract|TestV14EvidenceBelongsOnlyToControlCapabilities|TestV14AcceptanceCommandRunsControlConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV14Controls|TestV14CandidateSubjectsCoverCommittedDelta)$\"" +
-		" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/config ./internal/credentials ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta"
+		" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/config ./internal/credentials ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta" +
+		" && " + v14RaceValidationShellBody()
+}
+
+func v14RaceValidationShellBody() string {
+	return "go test -mod=vendor -race -count=1 ./internal/application ./internal/adapters/state/sqlite ./internal/adapters/agent/codex ./internal/bootstrap" +
+		" -run \"^(TestConcurrentIdenticalControlCASLoserReturnsExactReplay|TestControlsGoalAndWorkItemCancelCompletionCASBothOrders|TestControlsStopCompletionCASAndUnsupportedMode|TestControlsStopCrashReplayConvergesWithoutDuplicateEffect|TestClaimedRetryRevalidatesPauseBeforeLaunchPreparation|TestClaimedAutomaticReplacementRevalidatesPauseBeforeLaunchPreparation|TestSQLiteControlsRestartAndConcurrentCAS|TestSQLiteForcedStopSupersessionIsAtomicConcurrentAndRestartSafe|TestSQLiteTerminalStopSettlesAfterRestartWithReplacementAgentRouting|TestV14RecoveryAcceptsClaimedTerminalStopThenReclaimsAndSettlesOnce|TestCodexSelectiveStopPreservesSiblingProcessTrees|TestCodexSelectiveStopAdoptsAfterCrashAndRejectsReusedPID|TestCodexLaunchGateCrashNeverOrphansProcess|TestCodexOwnerLockIsExclusiveAndCLOEXEC|TestCodexRestoredDatabaseCannotAdoptSourceProcess|TestBuildBindsAgentToOpenedRepositoryIdentity|TestRealCodexControlsThroughProductionComposition|TestRealCodexCooperativeStopLeavesResidentSchedulerLive)$\""
+}
+
+func v14AssertRaceGate(t *testing.T, command string) {
+	t.Helper()
+	const requiredPrefix = "go test -mod=vendor -race -count=1"
+	if !strings.Contains(command, " && "+requiredPrefix) {
+		t.Fatalf("V14 acceptance command omits race detector gate: %q", command)
+	}
+	for _, required := range []string{
+		"./internal/application", "./internal/adapters/state/sqlite",
+		"./internal/adapters/agent/codex", "./internal/bootstrap",
+		"TestConcurrentIdenticalControlCASLoserReturnsExactReplay",
+		"TestSQLiteForcedStopSupersessionIsAtomicConcurrentAndRestartSafe",
+		"TestCodexSelectiveStopAdoptsAfterCrashAndRejectsReusedPID",
+		"TestRealCodexControlsThroughProductionComposition",
+		"TestRealCodexCooperativeStopLeavesResidentSchedulerLive",
+	} {
+		if !strings.Contains(v14RaceValidationShellBody(), required) {
+			t.Errorf("V14 race gate omits %q: %q", required, v14RaceValidationShellBody())
+		}
+	}
 }
 
 func v14RequireUseCase(t *testing.T, owner reflect.Type, name, requestName, resultName string) (reflect.Method, bool) {
@@ -422,10 +533,17 @@ func v14ExpectedBehaviorTests() []string {
 	return []string{
 		"TestControlsPauseBeforeAndAfterLaunchPrepared",
 		"TestControlsEffectivePauseRequiresBothScopesResumed",
+		"TestPauseGatesRetryUntilRecordLaunchPrepared",
+		"TestPauseGatesAutomaticReplacementThroughoutBackoff",
+		"TestClaimedRetryRevalidatesPauseBeforeLaunchPreparation",
+		"TestClaimedAutomaticReplacementRevalidatesPauseBeforeLaunchPreparation",
 		"TestControlsReplayAndSemanticConflict",
+		"TestConcurrentIdenticalControlCASLoserReturnsExactReplay",
 		"TestControlsCancelBeforeAndAfterLaunchPrepared",
 		"TestControlsGoalAndWorkItemCancelCompletionCASBothOrders",
 		"TestControlsStopCompletionCASAndUnsupportedMode",
+		"TestControlsForcedStopSupersedesOnlyExactPendingCooperativeStop",
+		"TestControlsForcedEscalationSettlesWhenCooperativeAlreadyStoppedTarget",
 		"TestControlsRetryCreatesFreshExecutionAndPreservesStoppedAttempt",
 		"TestControlsRetryRejectsTerminalGoalRetiredMailboxAndAttemptLimit",
 		"TestControlsReplanSplitStoppedAndFailedSources",
@@ -435,6 +553,13 @@ func v14ExpectedBehaviorTests() []string {
 		"TestControlsExecutionExhaustionInterruptsWithoutClosingGoal",
 		"TestControlsExactFencesAndInvalidTargetPairsLeaveNoEffects",
 		"TestSQLiteControlsRestartAndConcurrentCAS",
+		"TestSQLitePauseGatesQueuedRetryAcrossRestart",
+		"TestSQLitePauseGatesAutomaticReplacementBackoffAcrossRestart",
+		"TestSQLiteForcedStopSupersessionIsAtomicConcurrentAndRestartSafe",
+		"TestSQLiteForcedStopRejectsQuarantinedCooperativeOwnerWithoutPartialWrite",
+		"TestSQLiteTerminalStopSettlesAfterRestartWithReplacementAgentRouting",
+		"TestV14RecoveryAndBackupRejectStopSupersessionTampering",
+		"TestV14RecoveryRejectsStopActionAndEffectReceiptCausalTampering",
 		"TestControlsStopCrashReplayConvergesWithoutDuplicateEffect",
 		"TestCodexSelectiveStopPreservesSiblingProcessTrees",
 		"TestCodexSelectiveStopAdoptsAfterCrashAndRejectsReusedPID",
@@ -442,6 +567,12 @@ func v14ExpectedBehaviorTests() []string {
 		"TestCodexOwnerLockIsExclusiveAndCLOEXEC",
 		"TestCodexRestoredDatabaseCannotAdoptSourceProcess",
 		"TestSQLiteBackupExcludesCodexPrivateProcessJournal",
+		"TestLocalStateConnectorRejectsConnectionOpenedAcrossABASwap",
+		"TestLocalStateConnectorDoesNotCreateMissingCapturedPath",
+		"TestLocalStateConnectorRejectsLazyConnectionAfterReplacement",
+		"TestLocalStateConnectorKeepsOneCanonicalWALNamespace",
+		"TestModerncSQLiteRuntimeScopePatchIsReproducible",
+		"TestRealCodexCooperativeStopLeavesResidentSchedulerLive",
 		"TestRealCodexControlsThroughProductionComposition",
 	}
 }
@@ -454,6 +585,7 @@ func v14ExpectedAssertions() []string {
 		"resume reclaims the existing pending action without creating another Execution outbox action or effect",
 		"stop targets one exact Execution and generation through the existing outbox scheduler and AgentController and separates stop requested from exact stop confirmed",
 		"cooperative and forced stop execute only when adapter capabilities advertise them and unsupported never becomes stopped or invokes global Shutdown",
+		"forced stop supersedes only the exact still-active cooperative stop for the same Execution; atomic lineage retires the old action before the new one while completed retired or quarantined owners reject without partial writes",
 		"four disjoint A B C D executions prove that stopping B preserves A C D processes state and progress before and after crash restart without global Shutdown",
 		"stop requested permits late V13 delivery consume and acknowledgement until confirmation; confirmation retires only unresolved exact-recipient mailbox without readdress synthetic ACK or ChildHandoffResolution",
 		"completion and stop race through one CAS; already completed is observed rather than falsified as stopped and every terminal Execution remains immutable and never restarts",
@@ -471,6 +603,7 @@ func v14ExpectedAssertions() []string {
 		"SQLite restart backup restore and races at pause claim cancel launch stop completion retry and replan preserve one fenced WorkItem lease and never repeat a terminal effect",
 		"the neutral AgentController contract passes one fake suite and Codex proves exact process-tree stop crash adoption and PID PGID birth-identity checks while clean Shutdown remains separate",
 		"Codex persists process identity only in its existing private WorkRoot journal behind an FD3 launch gate holds one CLOEXEC owner.lock and binds local runtime scope to non-backup-clonable StateRepository file identity while distributed ownership remains V31",
+		"every SQLite physical connection validates the retained local file identity before configuration so path replacement lazy open missing-path recreation and alternate WAL namespaces fail closed",
 		"control receipts expose opaque identities without PID argv environment prompt or secrets and V14 adds no undeclared configuration key",
 		"V14 preserves the V02 single writer V05 DAG and dependency rules V06 atomic retries and receipts V07 config V08 credentials V09 recovery V10 RBAC V12 Director and V13 mailbox ratchets without another store scheduler loop daemon database or lifecycle",
 		"V14 exposes application use cases only; HTTP MCP CLI command registry and full i18n bindings remain V20 and V21 while budgets effects workspace reviews provider parity generic messages UI and later surfaces remain deferred",

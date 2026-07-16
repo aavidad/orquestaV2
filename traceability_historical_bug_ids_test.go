@@ -100,17 +100,19 @@ type traceHistoricalBugOccurrence struct {
 }
 
 type traceHistoricalBugID struct {
-	SchemaVersion     int      `json:"schema_version"`
-	BugID             string   `json:"bug_id"`
-	CoverageKind      string   `json:"coverage_kind"`
-	CapabilityIDs     []string `json:"capability_ids"`
-	Disposition       string   `json:"disposition"`
-	LessonTestRef     string   `json:"lesson_test_ref"`
-	LessonState       string   `json:"lesson_state"`
-	OccurrenceCount   int      `json:"occurrence_count"`
-	OccurrencesSHA256 string   `json:"occurrences_sha256"`
-	ClosureEvidence   string   `json:"closure_evidence"`
-	ReviewNote        string   `json:"review_note"`
+	SchemaVersion         int      `json:"schema_version"`
+	BugID                 string   `json:"bug_id"`
+	CoverageKind          string   `json:"coverage_kind"`
+	CapabilityIDs         []string `json:"capability_ids"`
+	VerifiedCapabilityIDs []string `json:"verified_capability_ids,omitempty"`
+	RebuildEvidenceRefs   []string `json:"rebuild_evidence_refs,omitempty"`
+	Disposition           string   `json:"disposition"`
+	LessonTestRef         string   `json:"lesson_test_ref"`
+	LessonState           string   `json:"lesson_state"`
+	OccurrenceCount       int      `json:"occurrence_count"`
+	OccurrencesSHA256     string   `json:"occurrences_sha256"`
+	ClosureEvidence       string   `json:"closure_evidence"`
+	ReviewNote            string   `json:"review_note"`
 }
 
 type traceHistoricalBugIDReview struct {
@@ -277,7 +279,11 @@ func TestTraceabilityRebuildHistoricalBugIDs(t *testing.T) {
 			t.Fatalf("narrative-only bug %q lacks exact capability review", bugID)
 		}
 	}
-	generatedIDs := traceBuildHistoricalBugIDs(occurrencesByID, rowCapabilities, rowLessonRefs, reviewsByID)
+	bindingsByID := make(map[string]traceHistoricalBugIDReviewBinding)
+	for _, binding := range traceReadHistoricalBugIDReviewBindings(t, policy.NarrativeReviewBindingsAuthority) {
+		bindingsByID[binding.BugID] = binding
+	}
+	generatedIDs := traceBuildHistoricalBugIDs(occurrencesByID, rowCapabilities, rowLessonRefs, reviewsByID, bindingsByID)
 	if os.Getenv("ORQUESTA_TRACEABILITY_EMIT_HISTORICAL_BUG_IDS") == "1" {
 		encoder := json.NewEncoder(os.Stdout)
 		for _, entry := range generatedIDs {
@@ -294,10 +300,11 @@ func TestTraceabilityRebuildHistoricalBugIDs(t *testing.T) {
 	coverageCounts := map[string]int{}
 	for _, entry := range ids {
 		if entry.SchemaVersion != 1 || entry.BugID <= previousID || strings.TrimSpace(entry.ReviewNote) == "" ||
-			entry.Disposition != "historical_lesson_pending" || entry.ClosureEvidence != "not_verified" ||
+			entry.Disposition != "historical_lesson_pending" ||
 			len(entry.CapabilityIDs) == 0 || !sort.StringsAreSorted(entry.CapabilityIDs) {
 			t.Fatalf("invalid or unordered historical bug ID: %#v", entry)
 		}
+		traceValidateHistoricalBugRebuildEvidence(t, entry)
 		previousID = entry.BugID
 		for index, capabilityID := range entry.CapabilityIDs {
 			if index > 0 && capabilityID == entry.CapabilityIDs[index-1] {

@@ -5,7 +5,9 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"orquesta/internal/application"
@@ -29,6 +31,7 @@ const (
 	CodeExecutionNotFound       = "codex.execution_not_found"
 	CodeExecutionInterrupted    = "codex.execution_interrupted"
 	CodeExecutionCanceled       = "codex.execution_canceled"
+	CodeExecutionStopped        = "codex.execution_stopped"
 	CodeExecutionTimeout        = "codex.execution_timeout"
 	CodeProcessStartFailed      = "codex.process_start_failed"
 	CodeProcessFailed           = "codex.process_failed"
@@ -47,6 +50,7 @@ const (
 	CodeWorkRootInvalid         = "codex.work_root_invalid"
 	CodeWorkRootPermissions     = "codex.work_root_permissions"
 	CodeWorkRootOpenFailed      = "codex.work_root_open_failed"
+	CodeRuntimeScopeInvalid     = "codex.runtime_scope_invalid"
 	CodeReasoningEffortInvalid  = "codex.reasoning_effort_invalid"
 	CodeTimeoutInvalid          = "codex.timeout_invalid"
 	CodeProcessPipeDrainInvalid = "codex.process_pipe_drain_delay_invalid"
@@ -56,20 +60,32 @@ const (
 	CodeCredentialInvalid       = "codex.credential_invalid"
 	CodeCredentialUnavailable   = "codex.credential_unavailable"
 	CodeSecretLeak              = "codex.secret_leak"
+	CodeControlUnsupported      = "codex.control_unsupported"
+	CodeProcessOwnershipBusy    = "codex.process_ownership_busy"
+	CodeProcessOwnershipInvalid = "codex.process_ownership_invalid"
+	CodeProcessIdentityMismatch = "codex.process_identity_mismatch"
+	CodeProcessInspectionFailed = "codex.process_inspection_failed"
+	CodeProcessSignalFailed     = "codex.process_signal_failed"
+	CodeStopConflict            = "codex.stop_conflict"
 )
 
 var (
-	errExecutionTimeout  = errors.New(CodeExecutionTimeout)
-	errExecutionCanceled = errors.New(CodeExecutionCanceled)
-	errAdapterShutdown   = errors.New("codex.adapter_shutdown")
-	errExecutionFinished = errors.New("codex.execution_finished")
+	errExecutionTimeout            = errors.New(CodeExecutionTimeout)
+	errExecutionCanceled           = errors.New(CodeExecutionCanceled)
+	errExecutionStoppedCooperative = errors.New(CodeExecutionStopped + ".cooperative")
+	errExecutionStoppedForced      = errors.New(CodeExecutionStopped + ".forced")
+	errAdapterShutdown             = errors.New("codex.adapter_shutdown")
+	errExecutionFinished           = errors.New("codex.execution_finished")
 )
 
 // Config is fully resolved by the composition root. Environment is the exact
 // child-process environment; it is never merged with the parent environment.
 type Config struct {
-	Command                 string
-	WorkRoot                string
+	Command  string
+	WorkRoot string
+	// RuntimeScope is an opaque, host-local identity supplied by bootstrap. It
+	// must not be stored in the application database or copied by its backup.
+	RuntimeScope            string
 	Model                   string
 	ReasoningEffort         string
 	Timeout                 time.Duration
@@ -149,6 +165,10 @@ type executionState struct {
 	terminalDurable     bool
 	cancel              context.CancelCauseFunc
 	credentialGuard     *credentials.LeakGuard
+	process             *processRecord
+	ownerLock           *os.File
+	settled             chan struct{}
+	stopProof           atomic.Pointer[stopSignalProof]
 }
 
 func New(config Config) (*Adapter, error) {
@@ -172,6 +192,32 @@ func New(config Config) (*Adapter, error) {
 	}
 	adapter.credentialOutputScrub = adapter.scrubCredentialOutput
 	return adapter, nil
+}
+
+// BindRuntimeScope completes the host-local process-control identity after the
+// composition root has opened its durable state file. Construction deliberately
+// permits an empty scope so executable/work-root preflight can still happen
+// before any durable composition state is created.
+func (adapter *Adapter) BindRuntimeScope(scope string) error {
+	if adapter == nil {
+		return &Error{Code: CodeUnavailable}
+	}
+	if scope == "" || strings.TrimSpace(scope) != scope || strings.ContainsRune(scope, '\x00') {
+		return &Error{Code: CodeRuntimeScopeInvalid}
+	}
+	adapter.mu.Lock()
+	defer adapter.mu.Unlock()
+	if adapter.closed {
+		return &Error{Code: CodeUnavailable}
+	}
+	if adapter.config.RuntimeScope == scope {
+		return nil
+	}
+	if adapter.config.RuntimeScope != "" || len(adapter.executions) != 0 {
+		return &Error{Code: CodeRuntimeScopeInvalid}
+	}
+	adapter.config.RuntimeScope = scope
+	return nil
 }
 
 func (adapter *Adapter) Capabilities(ctx context.Context) (ports.AgentCapabilities, error) {
@@ -295,7 +341,7 @@ func (adapter *Adapter) resumeLaunchRecordLocked(
 		runPath:             runPath,
 		status:              ports.AgentPending,
 	}
-	if terminal, found, loadErr := adapter.loadTerminal(runPath, terminalRequestHash, record.SpecHash, record.MaxOutputBytes); loadErr != nil {
+	if terminal, found, loadErr := adapter.loadCausalTerminal(runPath, terminalRequestHash, record.SpecHash, record.MaxOutputBytes); loadErr != nil {
 		return ports.AgentLaunchReceipt{}, loadErr
 	} else if found {
 		state.status = terminal.Status
@@ -305,6 +351,14 @@ func (adapter *Adapter) resumeLaunchRecordLocked(
 		return receipt, nil
 	}
 	if !recordCreated {
+		adopted, adoptErr := adapter.adoptPersistedProcessLocked(state)
+		if adoptErr != nil {
+			return ports.AgentLaunchReceipt{}, adoptErr
+		}
+		if adopted || state.terminal != nil {
+			adapter.executions[executionKey] = state
+			return receipt, nil
+		}
 		if err := adapter.recoverInterruptedExecutionLocked(state); err != nil {
 			return ports.AgentLaunchReceipt{}, err
 		}
@@ -369,14 +423,22 @@ func (adapter *Adapter) Observe(ctx context.Context, executionRef goal.Execution
 		runPath:             runPath,
 		status:              ports.AgentPending,
 	}
-	if terminal, terminalFound, loadErr := adapter.loadTerminal(runPath, record.RequestHash, record.SpecHash, record.MaxOutputBytes); loadErr != nil {
+	if terminal, terminalFound, loadErr := adapter.loadCausalTerminal(runPath, record.RequestHash, record.SpecHash, record.MaxOutputBytes); loadErr != nil {
 		return ports.AgentObservation{}, loadErr
 	} else if terminalFound {
 		state.status = terminal.Status
 		state.terminal = &terminal
 		state.terminalDurable = true
-	} else if recoveryErr := adapter.recoverInterruptedExecutionLocked(state); recoveryErr != nil {
-		return ports.AgentObservation{}, recoveryErr
+	} else {
+		adopted, adoptErr := adapter.adoptPersistedProcessLocked(state)
+		if adoptErr != nil {
+			return ports.AgentObservation{}, adoptErr
+		}
+		if !adopted && state.terminal == nil {
+			if recoveryErr := adapter.recoverInterruptedExecutionLocked(state); recoveryErr != nil {
+				return ports.AgentObservation{}, recoveryErr
+			}
+		}
 	}
 	adapter.executions[executionKey] = state
 	return adapter.observeStateLocked(executionKey, executionRef, state)
@@ -400,10 +462,33 @@ func (adapter *Adapter) recoverInterruptedExecutionLocked(state *executionState)
 	state.status = persisted.Status
 	state.terminal = &persisted
 	state.terminalDurable = true
+	adapter.releaseProcessOwnershipLocked(state)
 	return nil
 }
 
 func (adapter *Adapter) observeStateLocked(executionKey string, executionRef goal.ExecutionRef, state *executionState) (ports.AgentObservation, error) {
+	if state.terminal == nil && state.process != nil && state.cancel == nil {
+		treeGone, err := inspectProcessTree(*state.process)
+		if err != nil {
+			return ports.AgentObservation{}, err
+		}
+		if treeGone {
+			if proof := state.stopProof.Load(); proof != nil {
+				if err := adapter.finishStoppedProcessLocked(state, *proof); err != nil {
+					return ports.AgentObservation{}, err
+				}
+			} else {
+				// A durable request only proves intent. Read it so journal I/O
+				// failures remain visible, then recover the unknowable exit.
+				if _, err := adapter.hasDurableStopRequest(state.runPath); err != nil {
+					return ports.AgentObservation{}, err
+				}
+				if err := adapter.recoverInterruptedExecutionLocked(state); err != nil {
+					return ports.AgentObservation{}, err
+				}
+			}
+		}
+	}
 	if state.terminal != nil && !state.terminalDurable {
 		if err := adapter.credentialOutputScrub(state.runPath); err != nil {
 			return ports.AgentObservation{}, err
@@ -453,9 +538,11 @@ func (adapter *Adapter) Shutdown(ctx context.Context) error {
 		adapter.cancelLifecycle(errAdapterShutdown)
 	}
 	adapter.shutdownOnce.Do(func() {
+		adopted, discoveryErr := adapter.adoptedProcessesLocked()
 		go func() {
+			adoptedErr := adapter.stopAdoptedProcesses(adopted)
 			adapter.waitGroup.Wait()
-			adapter.shutdownErr = adapter.root.Close()
+			adapter.shutdownErr = errors.Join(discoveryErr, adoptedErr, adapter.root.Close())
 			close(adapter.shutdownDone)
 		}()
 	})
@@ -470,9 +557,51 @@ func (adapter *Adapter) Shutdown(ctx context.Context) error {
 	}
 }
 
+type adoptedProcess struct {
+	state  *executionState
+	record processRecord
+}
+
+func (adapter *Adapter) adoptedProcessesLocked() ([]adoptedProcess, error) {
+	discoveryErr := adapter.discoverPersistedProcessesLocked()
+	processes := make([]adoptedProcess, 0)
+	for _, state := range adapter.executions {
+		if state.process == nil || state.ownerLock == nil || state.cancel != nil {
+			continue
+		}
+		processes = append(processes, adoptedProcess{state: state, record: *state.process})
+	}
+	return processes, discoveryErr
+}
+
+func (adapter *Adapter) stopAdoptedProcesses(processes []adoptedProcess) error {
+	errorsByProcess := make([]error, len(processes))
+	for index, process := range processes {
+		err := signalProcessTree(process.record, ports.AgentStopForced)
+		if err != nil && !errors.Is(err, os.ErrProcessDone) {
+			errorsByProcess[index] = err
+		}
+	}
+	for index, process := range processes {
+		observedGone := false
+		if errorsByProcess[index] == nil {
+			observedGone, errorsByProcess[index] = waitForExactProcess(context.Background(), process.record, nil)
+		}
+		if observedGone {
+			adapter.mu.Lock()
+			if process.state.process != nil && *process.state.process == process.record {
+				adapter.releaseProcessOwnershipLocked(process.state)
+			}
+			adapter.mu.Unlock()
+		}
+	}
+	return errors.Join(errorsByProcess...)
+}
+
 func (adapter *Adapter) Close() error {
 	return adapter.Shutdown(context.Background())
 }
 
 var _ application.AgentLauncher = (*Adapter)(nil)
 var _ application.AgentObserver = (*Adapter)(nil)
+var _ application.AgentController = (*Adapter)(nil)

@@ -16,11 +16,13 @@ type traceHistoricalBugCapabilityReason struct {
 }
 
 type traceHistoricalBugIDReviewBinding struct {
-	SchemaVersion     int                                  `json:"schema_version"`
-	BugID             string                               `json:"bug_id"`
-	OccurrenceRefs    []string                             `json:"occurrence_refs"`
-	OccurrencesSHA256 string                               `json:"occurrences_sha256"`
-	CapabilityReasons []traceHistoricalBugCapabilityReason `json:"capability_reasons"`
+	SchemaVersion         int                                  `json:"schema_version"`
+	BugID                 string                               `json:"bug_id"`
+	OccurrenceRefs        []string                             `json:"occurrence_refs"`
+	OccurrencesSHA256     string                               `json:"occurrences_sha256"`
+	CapabilityReasons     []traceHistoricalBugCapabilityReason `json:"capability_reasons"`
+	VerifiedCapabilityIDs []string                             `json:"verified_capability_ids,omitempty"`
+	RebuildEvidenceRefs   []string                             `json:"rebuild_evidence_refs,omitempty"`
 }
 
 type traceHistoricalBugRowEnrichment struct {
@@ -104,11 +106,47 @@ func TestTraceabilityRebuildHistoricalBugReviewBindings(t *testing.T) {
 			}
 			seenReasons[reason] = struct{}{}
 		}
+		traceValidateHistoricalBugBindingEvidence(t, binding, review.CapabilityIDs)
 	}
 
 	traceRequireHistoricalBugCapabilities(t, reviews, "BUG-ORQ-20260710-208O", []string{"AGT-03", "GOV-21", "TLS-01"})
 	traceRequireHistoricalBugCapabilities(t, reviews, "BUG-ORQ-20260711-208AF", []string{"EVD-01", "GOV-06", "ORC-13"})
 	traceRequireHistoricalBugCapabilities(t, reviews, "BUG-ORQ-20260711-269", []string{"GOV-06", "ORC-17", "ORC-23"})
+}
+
+func traceValidateHistoricalBugBindingEvidence(t *testing.T, binding traceHistoricalBugIDReviewBinding, capabilityIDs []string) {
+	t.Helper()
+	if len(binding.VerifiedCapabilityIDs) == 0 || len(binding.RebuildEvidenceRefs) == 0 {
+		if len(binding.VerifiedCapabilityIDs) != 0 || len(binding.RebuildEvidenceRefs) != 0 {
+			t.Fatalf("historical bug binding %q has incomplete rebuild evidence", binding.BugID)
+		}
+		return
+	}
+	if !sort.StringsAreSorted(binding.VerifiedCapabilityIDs) {
+		t.Fatalf("historical bug binding %q verified capabilities are unordered", binding.BugID)
+	}
+	capabilities := make(map[string]struct{}, len(capabilityIDs))
+	for _, capabilityID := range capabilityIDs {
+		capabilities[capabilityID] = struct{}{}
+	}
+	for index, capabilityID := range binding.VerifiedCapabilityIDs {
+		if index > 0 && capabilityID == binding.VerifiedCapabilityIDs[index-1] {
+			t.Fatalf("historical bug binding %q repeats verified capability %q", binding.BugID, capabilityID)
+		}
+		if _, exists := capabilities[capabilityID]; !exists {
+			t.Fatalf("historical bug binding %q verifies unrelated capability %q", binding.BugID, capabilityID)
+		}
+	}
+	seenEvidence := make(map[string]struct{}, len(binding.RebuildEvidenceRefs))
+	for _, evidenceRef := range binding.RebuildEvidenceRefs {
+		if strings.TrimSpace(evidenceRef) == "" {
+			t.Fatalf("historical bug binding %q has empty rebuild evidence", binding.BugID)
+		}
+		if _, duplicate := seenEvidence[evidenceRef]; duplicate {
+			t.Fatalf("historical bug binding %q repeats rebuild evidence %q", binding.BugID, evidenceRef)
+		}
+		seenEvidence[evidenceRef] = struct{}{}
+	}
 }
 
 func TestTraceabilityRebuildHistoricalBugRowProvenance(t *testing.T) {

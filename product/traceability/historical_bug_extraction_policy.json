@@ -42,8 +42,8 @@
     "rich_row_enrichment_count": 4,
     "rows_sha256": "sha256:2ef08e63eabe4bce2755a3e669a6401f2e63703395789bbd69bba89736ebb824",
     "occurrences_sha256": "sha256:5a0caec58be4bf0f8f1ac3b6ddf3883567134d4da8741b9c877c78c9aa24f108",
-    "narrative_review_bindings_sha256": "sha256:5bd7e891a17cab68906b9a5fe3f2dc62e94ed123c0b92f38200be83b95629b6d",
+    "narrative_review_bindings_sha256": "sha256:5017f4759d3a61391336c36217d5cf2530cee8fadb99e9f620a2df4ebbf1cc1a",
     "rich_row_enrichments_sha256": "sha256:cb23222242a6902106a6d51267894827a633df9a74fa104404ef2011ea67010e",
-    "ids_sha256": "sha256:2c0f82296c19dde547c6bb35f09e40243fb2cc0eb40f8f97a4b3ebb378b24656"
+    "ids_sha256": "sha256:cbe1e62c26b5febb557e6afb236df3b27c463cd8773f7f9e6bdbf22800bfa2ca"
   }
 }

@@ -18,21 +18,26 @@ const (
 )
 
 type Config struct {
-	ProviderRef string
-	MediaType   string
-	Content     []byte
-	Now         func() time.Time
+	ProviderRef         string
+	MediaType           string
+	Content             []byte
+	Now                 func() time.Time
+	ControlCapabilities *ports.AgentControlCapabilities
 }
 
 type Adapter struct {
-	config Config
-	mu     sync.Mutex
-	runs   map[goal.ExecutionRef]run
+	config              Config
+	controlCapabilities ports.AgentControlCapabilities
+	mu                  sync.Mutex
+	runs                map[goal.ExecutionRef]run
 }
 
 type run struct {
-	request ports.AgentLaunchRequest
-	receipt ports.AgentLaunchReceipt
+	request  ports.AgentLaunchRequest
+	receipt  ports.AgentLaunchReceipt
+	terminal ports.AgentStatus
+	stopped  bool
+	stops    map[string]stopRecord
 }
 
 func New(config Config) (*Adapter, error) {
@@ -40,7 +45,11 @@ func New(config Config) (*Adapter, error) {
 		ports.ValidateAgentCapabilities(agentCapabilities(config.ProviderRef)) != nil {
 		return nil, errors.New("fake_agent.config_invalid")
 	}
-	return &Adapter{config: config, runs: make(map[goal.ExecutionRef]run)}, nil
+	controls := ports.AgentControlCapabilities{CooperativeStop: true, ForcedStop: true}
+	if config.ControlCapabilities != nil {
+		controls = *config.ControlCapabilities
+	}
+	return &Adapter{config: config, controlCapabilities: controls, runs: make(map[goal.ExecutionRef]run)}, nil
 }
 
 func (adapter *Adapter) Capabilities(context.Context) (ports.AgentCapabilities, error) {
@@ -108,10 +117,17 @@ func (adapter *Adapter) Observe(ctx context.Context, executionRef goal.Execution
 	}
 	adapter.mu.Lock()
 	run, ok := adapter.runs[executionRef]
-	adapter.mu.Unlock()
 	if !ok {
+		adapter.mu.Unlock()
 		return ports.AgentObservation{}, errors.New("fake_agent.execution_not_found")
 	}
+	if run.stopped {
+		adapter.mu.Unlock()
+		return ports.AgentObservation{}, errors.New("fake_agent.execution_stopped")
+	}
+	run.terminal = ports.AgentCompleted
+	adapter.runs[executionRef] = run
+	adapter.mu.Unlock()
 	content := append([]byte(nil), adapter.config.Content...)
 	return ports.AgentObservation{
 		ExecutionRef: executionRef,
@@ -125,3 +141,4 @@ func (adapter *Adapter) Observe(ctx context.Context, executionRef goal.Execution
 
 var _ application.AgentLauncher = (*Adapter)(nil)
 var _ application.AgentObserver = (*Adapter)(nil)
+var _ application.AgentController = (*Adapter)(nil)

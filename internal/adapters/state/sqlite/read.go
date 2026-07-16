@@ -185,16 +185,25 @@ func readGoalRecord(ctx context.Context, source queryer, goalValue string) (appl
 	var spec goal.AppSpecSnapshot
 	var snapshot goal.GoalSnapshot
 	var state string
-	var revision, planGeneration, generation int64
+	var revision, planGeneration, generation, paused, cancelRequested, controlSequence int64
 	var submittedAt, confirmedAt, createdAt int64
 	var parentRef, parentHash sql.NullString
 	var startedAt, closedAt sql.NullInt64
-	err := source.QueryRowContext(ctx, `
+	controlsPersisted, err := sqliteTableHasColumn(ctx, source, "goals", "control_sequence")
+	if err != nil {
+		return application.GoalRecord{}, mapDatabaseError(err)
+	}
+	controlProjection := "0, 0, 0"
+	if controlsPersisted {
+		controlProjection = "g.paused, g.cancel_requested, g.control_sequence"
+	}
+	err = source.QueryRowContext(ctx, `
 SELECT g.request_ref, g.request_fingerprint, g.requested_by_ref,
        i.ref, i.actor_ref, i.project_ref, i.statement, i.submitted_at, i.hash,
        spec.ref, spec.generation, spec.parent_ref, spec.parent_hash, spec.objective,
        spec.reason, spec.confirmed_by, spec.confirmed_at, spec.hash,
        g.ref, g.actor_ref, g.project_ref, g.state, g.revision,
+       `+controlProjection+`,
        g.created_at, g.started_at, g.closed_at, g.plan_generation
 FROM goals g
 JOIN app_specs spec ON spec.ref = g.app_spec_ref
@@ -223,6 +232,9 @@ WHERE g.ref = ?`, goalValue).Scan(
 		&snapshot.ProjectRef,
 		&state,
 		&revision,
+		&paused,
+		&cancelRequested,
+		&controlSequence,
 		&createdAt,
 		&startedAt,
 		&closedAt,
@@ -231,7 +243,8 @@ WHERE g.ref = ?`, goalValue).Scan(
 	if err != nil {
 		return application.GoalRecord{}, mapDatabaseError(err)
 	}
-	if revision <= 0 || planGeneration < 0 || generation <= 0 {
+	if revision <= 0 || planGeneration < 0 || generation <= 0 ||
+		(paused != 0 && paused != 1) || (cancelRequested != 0 && cancelRequested != 1) || controlSequence < 0 {
 		return application.GoalRecord{}, invalid(fmt.Errorf("sqlite.revision_invalid"))
 	}
 	spec.Intent.SubmittedAt = time.Unix(0, submittedAt).UTC()
@@ -247,6 +260,9 @@ WHERE g.ref = ?`, goalValue).Scan(
 	snapshot.SchemaVersion = goal.GoalSnapshotSchemaVersion
 	snapshot.State = goal.GoalState(state)
 	snapshot.Revision = goal.Revision(revision)
+	snapshot.Paused = paused == 1
+	snapshot.CancelRequested = cancelRequested == 1
+	snapshot.ControlSequence = uint64(controlSequence)
 	snapshot.CreatedAt = time.Unix(0, createdAt).UTC()
 	snapshot.StartedAt = restoredTime(startedAt)
 	snapshot.ClosedAt = restoredTime(closedAt)
@@ -295,6 +311,10 @@ WHERE g.ref = ?`, goalValue).Scan(
 	if err != nil {
 		return application.GoalRecord{}, err
 	}
+	controls, err := readControls(ctx, source, goalValue)
+	if err != nil {
+		return application.GoalRecord{}, err
+	}
 	record := application.GoalRecord{
 		RequestRef:          requestRef,
 		RequestFingerprint:  requestFingerprint,
@@ -303,6 +323,7 @@ WHERE g.ref = ?`, goalValue).Scan(
 		Executions:          executions,
 		Artifacts:           artifacts,
 		Attestations:        attestations,
+		Controls:            controls,
 		ConsumptionReceipts: receipts,
 	}
 	if err := validateGoalRecordConsistency(record, goalValue); err != nil {
@@ -331,10 +352,20 @@ SELECT COUNT(*) FROM pragma_table_info('work_items') WHERE name = 'handoff_requi
 	if handoffColumns == 1 {
 		handoffProjection = "handoff_required"
 	}
+	controlsPersisted, err := sqliteTableHasColumn(ctx, source, "work_items", "control_sequence")
+	if err != nil {
+		return nil, mapDatabaseError(err)
+	}
+	controlProjection := "'', NULL, 0, 0, 0"
+	interruptedProjection := "NULL"
+	if controlsPersisted {
+		controlProjection = "interrupt_cause, rework_of, paused, cancel_requested, control_sequence"
+		interruptedProjection = "interrupted_at"
+	}
 	rows, err := source.QueryContext(ctx, `
 SELECT ref, goal_ref, actor_ref, project_ref, objective, state, revision,
        phase_key, role_key, parent_ref, `+handoffProjection+`, output_contract, skip_reason,
-       created_at, started_at, finished_at, execution_ref
+	       `+controlProjection+`, created_at, started_at, `+interruptedProjection+`, finished_at, execution_ref
 FROM work_items
 WHERE goal_ref = ?
 ORDER BY position`, goalValue)
@@ -346,10 +377,11 @@ ORDER BY position`, goalValue)
 	for rows.Next() {
 		var item goal.WorkItemSnapshot
 		var state, outputContract, skipReason string
-		var revision, handoffRequired int64
+		var revision, handoffRequired, paused, cancelRequested, controlSequence int64
 		var createdAt int64
-		var startedAt, finishedAt sql.NullInt64
-		var parentRef, executionRef sql.NullString
+		var startedAt, interruptedAt, finishedAt sql.NullInt64
+		var parentRef, reworkOf, executionRef sql.NullString
+		var interruptCause string
 		if err := rows.Scan(
 			&item.Ref,
 			&item.GoalRef,
@@ -364,14 +396,21 @@ ORDER BY position`, goalValue)
 			&handoffRequired,
 			&outputContract,
 			&skipReason,
+			&interruptCause,
+			&reworkOf,
+			&paused,
+			&cancelRequested,
+			&controlSequence,
 			&createdAt,
 			&startedAt,
+			&interruptedAt,
 			&finishedAt,
 			&executionRef,
 		); err != nil {
 			return nil, mapDatabaseError(err)
 		}
-		if revision <= 0 {
+		if revision <= 0 || (paused != 0 && paused != 1) ||
+			(cancelRequested != 0 && cancelRequested != 1) || controlSequence < 0 {
 			return nil, invalid(fmt.Errorf("sqlite.revision_invalid"))
 		}
 		if handoffRequired != 0 && handoffRequired != 1 {
@@ -382,9 +421,17 @@ ORDER BY position`, goalValue)
 		item.State = goal.WorkItemState(state)
 		item.OutputContract = goal.OutputContractKind(outputContract)
 		item.SkipReason = goal.WorkItemSkipReason(skipReason)
+		item.InterruptCause = goal.WorkItemInterruptCause(interruptCause)
+		if reworkOf.Valid {
+			item.ReworkOf = reworkOf.String
+		}
 		item.Revision = goal.Revision(revision)
+		item.Paused = paused == 1
+		item.CancelRequested = cancelRequested == 1
+		item.ControlSequence = uint64(controlSequence)
 		item.CreatedAt = time.Unix(0, createdAt).UTC()
 		item.StartedAt = restoredTime(startedAt)
+		item.InterruptedAt = restoredTime(interruptedAt)
 		item.FinishedAt = restoredTime(finishedAt)
 		if executionRef.Valid {
 			item.ExecutionRef = executionRef.String
@@ -431,6 +478,14 @@ WHERE goal_ref = ? AND work_item_ref = ? AND kind = ? ORDER BY position`, goalVa
 }
 
 func readExecutions(ctx context.Context, source queryer, goalValue string) ([]application.ExecutionRecord, error) {
+	markerPersisted, err := sqliteTableHasColumn(ctx, source, "executions", "recipient_mailbox_retired")
+	if err != nil {
+		return nil, mapDatabaseError(err)
+	}
+	markerProjection := "0"
+	if markerPersisted {
+		markerProjection = "recipient_mailbox_retired"
+	}
 	rows, err := source.QueryContext(ctx, `
 SELECT ref, goal_ref, work_item_ref, state, artifact_media_type, idempotency_key,
        attempt_no, max_execution_attempts, replaces_execution_ref,
@@ -438,7 +493,7 @@ SELECT ref, goal_ref, work_item_ref, state, artifact_media_type, idempotency_key
        max_output_bytes, provider_ref, model_ref, agent_ref,
        external_ref, created_at,
        deadline_at, started_at, provider_accepted_at, last_observed_at,
-       provider_observed_at, finished_at, failure_code
+       provider_observed_at, finished_at, failure_code, `+markerProjection+`
 FROM executions
 WHERE goal_ref = ?
 ORDER BY work_item_ref, attempt_no, ref`, goalValue)
@@ -453,7 +508,7 @@ ORDER BY work_item_ref, attempt_no, ref`, goalValue)
 		var createdAt int64
 		var deadlineAt, startedAt, providerAcceptedAt, observedAt, providerObservedAt, finishedAt sql.NullInt64
 		var replacesExecutionRef sql.NullString
-		var attemptNo, maxExecutionAttempts, planGeneration, appSpecGeneration int64
+		var attemptNo, maxExecutionAttempts, planGeneration, appSpecGeneration, mailboxRetired int64
 		if err := rows.Scan(
 			&refValue,
 			&goalRefValue,
@@ -480,6 +535,7 @@ ORDER BY work_item_ref, attempt_no, ref`, goalValue)
 			&providerObservedAt,
 			&finishedAt,
 			&record.FailureCode,
+			&mailboxRetired,
 		); err != nil {
 			return nil, mapDatabaseError(err)
 		}
@@ -499,7 +555,8 @@ ORDER BY work_item_ref, attempt_no, ref`, goalValue)
 			}
 		}
 		record.State = application.ExecutionState(state)
-		if attemptNo <= 0 || maxExecutionAttempts <= 0 || planGeneration <= 0 || appSpecGeneration <= 0 {
+		if attemptNo <= 0 || maxExecutionAttempts <= 0 || planGeneration <= 0 || appSpecGeneration <= 0 ||
+			(mailboxRetired != 0 && mailboxRetired != 1) {
 			return nil, invalid(fmt.Errorf("sqlite.execution_generation_invalid"))
 		}
 		record.AttemptNo = uint64(attemptNo)
@@ -513,6 +570,7 @@ ORDER BY work_item_ref, attempt_no, ref`, goalValue)
 		record.LastObservedAt = restoredTime(observedAt)
 		record.ProviderObservedAt = restoredTime(providerObservedAt)
 		record.FinishedAt = restoredTime(finishedAt)
+		record.RecipientMailboxRetired = mailboxRetired == 1
 		records = append(records, record)
 	}
 	if err := rows.Err(); err != nil {
@@ -534,10 +592,18 @@ func readConsumptionReceipts(
 	if hasMailbox {
 		mailboxColumn = "mailbox_message_ref"
 	}
+	hasEffect, err := sqliteTableHasColumn(ctx, source, "action_consumption_receipts", "effect_receipt_ref")
+	if err != nil {
+		return nil, mapDatabaseError(err)
+	}
+	effectColumns := "NULL, NULL, NULL"
+	if hasEffect {
+		effectColumns = "effect_receipt_ref, effect_status, effect_confirmed_at"
+	}
 	query := `
 SELECT action_ref, kind, goal_ref, work_item_ref, execution_ref,
        ` + mailboxColumn + `, plan_generation, work_item_generation, fence, delivery_attempt,
-       claim_token, worker_ref, outcome, error_code, consumed_at
+       claim_token, worker_ref, outcome, error_code, ` + effectColumns + `, consumed_at
 FROM action_consumption_receipts
 WHERE goal_ref = ?
 ORDER BY consumed_at, action_ref`
@@ -551,12 +617,15 @@ ORDER BY consumed_at, action_ref`
 		var receipt application.ActionConsumptionReceipt
 		var kind, goalRefValue, workItemRefValue, executionRefValue, outcome string
 		var mailboxMessageValue sql.NullString
+		var effectReceipt, effectStatus sql.NullString
+		var effectConfirmedAt sql.NullInt64
 		var planGeneration, itemGeneration, fence, deliveryAttempt, consumedAt int64
 		if err := rows.Scan(
 			&receipt.ActionRef, &kind, &goalRefValue, &workItemRefValue, &executionRefValue,
 			&mailboxMessageValue,
 			&planGeneration, &itemGeneration, &fence, &deliveryAttempt,
-			&receipt.ClaimToken, &receipt.WorkerRef, &outcome, &receipt.ErrorCode, &consumedAt,
+			&receipt.ClaimToken, &receipt.WorkerRef, &outcome, &receipt.ErrorCode,
+			&effectReceipt, &effectStatus, &effectConfirmedAt, &consumedAt,
 		); err != nil {
 			return nil, mapDatabaseError(err)
 		}
@@ -585,6 +654,13 @@ ORDER BY consumed_at, action_ref`
 		receipt.Fence = uint64(fence)
 		receipt.DeliveryAttempt = uint64(deliveryAttempt)
 		receipt.Outcome = application.ActionConsumptionOutcome(outcome)
+		if effectReceipt.Valid {
+			receipt.EffectReceiptRef = effectReceipt.String
+		}
+		if effectStatus.Valid {
+			receipt.EffectStatus = effectStatus.String
+		}
+		receipt.EffectConfirmedAt = restoredTime(effectConfirmedAt)
 		receipt.ConsumedAt = time.Unix(0, consumedAt).UTC()
 		result = append(result, receipt)
 	}

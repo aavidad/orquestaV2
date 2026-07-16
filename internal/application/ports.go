@@ -33,6 +33,36 @@ type AgentObserver interface {
 	Observe(context.Context, goal.ExecutionRef) (ports.AgentObservation, error)
 }
 
+// AgentController stops one exact execution. Global adapter shutdown remains a
+// separate composition concern and is intentionally absent from this port.
+type AgentController interface {
+	ControlCapabilities(context.Context) (ports.AgentControlCapabilities, error)
+	Stop(context.Context, ports.AgentStopRequest) (ports.AgentStopReceipt, error)
+}
+
+// unsupportedAgentController is the null adapter used by compositions that
+// have not opted into process control. It never performs an external effect;
+// real compositions inject their provider-specific controller explicitly.
+type unsupportedAgentController struct{}
+
+func (unsupportedAgentController) ControlCapabilities(context.Context) (ports.AgentControlCapabilities, error) {
+	return ports.AgentControlCapabilities{}, nil
+}
+
+func (unsupportedAgentController) Stop(
+	_ context.Context,
+	request ports.AgentStopRequest,
+) (ports.AgentStopReceipt, error) {
+	return ports.AgentStopReceipt{
+		ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
+		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
+		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash,
+		ProviderRef: request.ProviderRef, ModelRef: request.ModelRef, AgentRef: request.AgentRef,
+		ExternalRef: request.ExternalRef, Mode: request.Mode, IdempotencyKey: request.IdempotencyKey,
+		Status: ports.AgentStopUnsupported,
+	}, nil
+}
+
 // ArtifactStore persists and reads immutable content-addressed blobs.
 type ArtifactStore interface {
 	Put(context.Context, ports.PutArtifactRequest) (ports.StoredArtifact, error)

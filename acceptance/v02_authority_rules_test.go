@@ -525,7 +525,8 @@ func v02AssertSingleWriterAndScheduler(t *testing.T, sources v02SourceSet, lifec
 				}
 			case *ast.FuncDecl:
 				receiver := v02ReceiverName(info, typed)
-				if file.PackagePath == lifecycle.Package && receiver == lifecycle.Type && v02ReturnsGoalAndError(typed, lifecycle.Type) {
+				if file.PackagePath == lifecycle.Package && receiver == lifecycle.Type &&
+					ast.IsExported(typed.Name.Name) && v02ReturnsGoalAndError(typed, lifecycle.Type) {
 					declaredMutations[typed.Name.Name] = struct{}{}
 				}
 				if typed.Name.Name == lifecycle.SchedulerMethod {

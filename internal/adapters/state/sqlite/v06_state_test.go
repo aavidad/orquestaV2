@@ -76,7 +76,7 @@ func TestV06ExecutionReplacementRoundTripsReceiptFenceAndRestart(t *testing.T) {
 		t.Fatalf("read replacement: %v", err)
 	}
 	if len(record.Executions) != 2 || record.Executions[0].State != application.ExecutionFailed ||
-		record.Executions[1].State != application.ExecutionDispatching ||
+		record.Executions[1].State != application.ExecutionQueued ||
 		record.Executions[1].AttemptNo != 2 || record.Executions[1].ReplacesExecutionRef != record.Executions[0].Ref ||
 		len(record.ConsumptionReceipts) != 1 {
 		t.Fatalf("replacement round trip = %+v", record)
@@ -325,9 +325,9 @@ func TestV06MutationEventKindsMustMatchTransitions(t *testing.T) {
 
 	repository, _ := openTestRepository(t)
 	replacement, _ := buildReplacementState(t, repository, "wrong-event-kind")
-	replacement.Events[1].Kind = "execution.queued"
+	replacement.Events[1].Kind = "execution.dispatching"
 	if err := validateExecutionReplaced(replacement); err == nil {
-		t.Fatal("execution replacement accepted execution.queued event")
+		t.Fatal("execution replacement accepted execution.dispatching event")
 	}
 
 	scheduled := state.Executions[0]
@@ -439,7 +439,7 @@ INSERT INTO executions(
 )
 SELECT ?, goal_ref, work_item_ref, attempt_no + 1, max_execution_attempts,
        ref, plan_generation, app_spec_generation, spec_hash,
-       'dispatching', artifact_media_type, ?, max_output_bytes,
+	       'queued', artifact_media_type, ?, max_output_bytes,
        '', '', '', '', ?, NULL, NULL, NULL, NULL, NULL, NULL, ''
 FROM executions WHERE ref = ?`,
 		badRef, "execution:"+badRef, requiredTime(replacement.ReplacementExecution.CreatedAt), failed.Ref.String(),
@@ -506,7 +506,7 @@ func buildReplacementState(
 	replacement.Ref = replacementRef
 	replacement.AttemptNo++
 	replacement.ReplacesExecutionRef = failed.Ref
-	replacement.State = application.ExecutionDispatching
+	replacement.State = application.ExecutionQueued
 	replacement.IdempotencyKey = "execution:" + replacementRef.String()
 	replacement.CreatedAt = replacedAt
 	replacement.FinishedAt = time.Time{}
@@ -523,7 +523,7 @@ func buildReplacementState(
 		NextAction: next, ErrorCode: failed.FailureCode, OperationAt: replacedAt,
 		Events: []application.EventRecord{
 			{Ref: "event:v06-failed:" + suffix, Kind: "execution.failed", GoalRef: replacedGoal.Ref(), WorkItemRef: updatedItem.Ref(), ExecutionRef: failed.Ref, OccurredAt: replacedAt},
-			{Ref: "event:v06-dispatching:" + suffix, Kind: "execution.dispatching", GoalRef: replacedGoal.Ref(), WorkItemRef: updatedItem.Ref(), ExecutionRef: replacement.Ref, OccurredAt: replacedAt},
+			{Ref: "event:v06-queued:" + suffix, Kind: "execution.queued", GoalRef: replacedGoal.Ref(), WorkItemRef: updatedItem.Ref(), ExecutionRef: replacement.Ref, OccurredAt: replacedAt},
 		},
 	}, claim
 }

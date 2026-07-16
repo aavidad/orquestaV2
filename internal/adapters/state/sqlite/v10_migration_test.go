@@ -370,7 +370,7 @@ WHERE g.ref = 'goal:v10-v09'
 	if err := repository.db.QueryRow(`SELECT COUNT(*) FROM pragma_foreign_key_check`).Scan(&violations); err != nil {
 		t.Fatal(err)
 	}
-	if version != recoverySchemaV13 || receipts != recoverySchemaV13 || principals != 1 || hierarchyRows != 0 ||
+	if version != recoverySchemaV14 || receipts != recoverySchemaV14 || principals != 1 || hierarchyRows != 0 ||
 		memberships != 0 || requestedBy != 1 || violations != 0 {
 		t.Fatalf("V10 migration state invalid: version=%d receipts=%d principals=%d hierarchy=%d memberships=%d requested_by=%d fk=%d",
 			version, receipts, principals, hierarchyRows, memberships, requestedBy, violations)
@@ -391,10 +391,15 @@ position, created_at, started_at, finished_at, execution_ref FROM work_items`,
 		"work_item_dependencies":     `SELECT * FROM work_item_dependencies`,
 		"work_item_write_scopes":     `SELECT * FROM work_item_write_scopes`,
 		"work_item_requirement_refs": `SELECT * FROM work_item_requirement_refs`,
-		"executions":                 `SELECT * FROM executions`,
-		"artifacts":                  `SELECT * FROM artifacts`,
-		"attestations":               `SELECT * FROM attestations`,
-		"events":                     `SELECT * FROM events`,
+		"executions": `SELECT ref, goal_ref, work_item_ref, attempt_no,
+max_execution_attempts, replaces_execution_ref, plan_generation,
+app_spec_generation, spec_hash, state, artifact_media_type, idempotency_key,
+max_output_bytes, provider_ref, model_ref, agent_ref, external_ref, created_at,
+deadline_at, started_at, provider_accepted_at, last_observed_at,
+provider_observed_at, finished_at, failure_code FROM executions`,
+		"artifacts":    `SELECT * FROM artifacts`,
+		"attestations": `SELECT * FROM attestations`,
+		"events":       `SELECT * FROM events`,
 		"outbox": `SELECT ref, kind, goal_ref, work_item_ref, execution_ref,
 plan_generation, work_item_generation, available_at, claim_token, claimed_by,
 claimed_until, delivery_attempt, fence, completed_at, quarantined_at, last_error_code

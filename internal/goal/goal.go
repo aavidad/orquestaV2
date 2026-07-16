@@ -12,10 +12,11 @@ const (
 	GoalStateRunning   GoalState = "running"
 	GoalStateSucceeded GoalState = "succeeded"
 	GoalStateFailed    GoalState = "failed"
+	GoalStateCanceled  GoalState = "canceled"
 )
 
 func (state GoalState) Terminal() bool {
-	return state == GoalStateSucceeded || state == GoalStateFailed
+	return state == GoalStateSucceeded || state == GoalStateFailed || state == GoalStateCanceled
 }
 
 type GoalOutcome string
@@ -57,20 +58,23 @@ func (resolution ChildHandoffResolution) ResolvedAt() time.Time        { return 
 // Goal is an immutable aggregate snapshot and the consistency boundary for its
 // WorkItems. All aggregate mutations require the caller's expected revision.
 type Goal struct {
-	ref            GoalRef
-	actor          ActorRef
-	project        ProjectRef
-	appSpec        AppSpec
-	state          GoalState
-	revision       Revision
-	createdAt      time.Time
-	startedAt      time.Time
-	closedAt       time.Time
-	planGeneration PlanGeneration
-	phases         []PhaseInstance
-	items          map[WorkItemRef]WorkItem
-	itemOrder      []WorkItemRef
-	childHandoffs  []ChildHandoffResolution
+	ref             GoalRef
+	actor           ActorRef
+	project         ProjectRef
+	appSpec         AppSpec
+	state           GoalState
+	revision        Revision
+	paused          bool
+	cancelRequested bool
+	controlSequence uint64
+	createdAt       time.Time
+	startedAt       time.Time
+	closedAt        time.Time
+	planGeneration  PlanGeneration
+	phases          []PhaseInstance
+	items           map[WorkItemRef]WorkItem
+	itemOrder       []WorkItemRef
+	childHandoffs   []ChildHandoffResolution
 }
 
 func NewGoal(ref GoalRef, spec AppSpec, createdAt time.Time) (Goal, error) {
@@ -189,6 +193,9 @@ func (goal Goal) ApplyPlan(expectedGoal Revision, plan Plan) (Goal, error) {
 	if goal.state != GoalStatePending && goal.state != GoalStateRunning {
 		return Goal{}, domainError(ErrorInvalidTransition, "goal_state")
 	}
+	if goal.cancelRequested {
+		return Goal{}, domainError(ErrorInvalidTransition, "goal_cancel_requested")
+	}
 	nextGeneration, err := nextPlanGeneration(goal.planGeneration)
 	if err != nil {
 		return Goal{}, err
@@ -216,7 +223,9 @@ func (goal Goal) ApplyPlan(expectedGoal Revision, plan Plan) (Goal, error) {
 	for _, item := range plan.items[len(goal.itemOrder):] {
 		if item.state != WorkItemStatePending || item.revision != 1 ||
 			!item.startedAt.IsZero() || !item.finishedAt.IsZero() || validExecutionRef(item.execution) ||
-			len(item.artifacts) != 0 || len(item.attestations) != 0 {
+			len(item.artifacts) != 0 || len(item.attestations) != 0 || item.paused || item.cancelRequested ||
+			item.controlSequence != 0 || item.interruptCause != "" || !item.interruptedAt.IsZero() ||
+			validWorkItemRef(item.reworkOf) {
 			return Goal{}, domainError(ErrorInvalidPlan, "new_work_item_snapshot")
 		}
 		if validWorkItemRef(item.parent) {
@@ -254,6 +263,9 @@ func (goal Goal) Start(expected Revision, at time.Time) (Goal, error) {
 	}
 	if goal.state != GoalStatePending {
 		return Goal{}, domainError(ErrorInvalidTransition, "goal_state")
+	}
+	if goal.cancelRequested {
+		return Goal{}, domainError(ErrorInvalidTransition, "goal_cancel_requested")
 	}
 	if len(goal.itemOrder) == 0 {
 		return Goal{}, domainError(ErrorWorkItemsRequired, "work_items")
@@ -321,7 +333,7 @@ func (goal Goal) ReplaceWorkItemExecution(
 // RunnableWorkItems returns dependency-ready pending work that does not
 // conflict with any running item. It intentionally does not choose a cohort.
 func (goal Goal) RunnableWorkItems() []WorkItem {
-	if goal.state != GoalStateRunning {
+	if goal.state != GoalStateRunning || goal.paused || goal.cancelRequested {
 		return nil
 	}
 
@@ -336,7 +348,7 @@ func (goal Goal) RunnableWorkItems() []WorkItem {
 	runnable := make([]WorkItem, 0)
 	for _, ref := range goal.itemOrder {
 		item := goal.items[ref]
-		if item.state != WorkItemStatePending || !goal.dependenciesSucceeded(item) {
+		if item.state != WorkItemStatePending || item.paused || item.cancelRequested || !goal.dependenciesSucceeded(item) {
 			continue
 		}
 		if conflictsWithWriteSets(item.writeSet, runningWriteSets) {
@@ -483,23 +495,8 @@ func (goal Goal) FailWorkItem(
 	}
 	updated := goal.clone()
 	updated.items[item.ref] = item
-	for {
-		changed := false
-		for _, candidateRef := range updated.itemOrder {
-			candidate := updated.items[candidateRef]
-			if candidate.state != WorkItemStatePending || !updated.hasFailedDependency(candidate) {
-				continue
-			}
-			candidate, err = candidate.skipDependencyFailed(candidate.revision, at)
-			if err != nil {
-				return Goal{}, err
-			}
-			updated.items[candidateRef] = candidate
-			changed = true
-		}
-		if !changed {
-			break
-		}
+	if err := updated.cascadeDependencySkips(at); err != nil {
+		return Goal{}, err
 	}
 	updated.revision++
 	return updated, nil
@@ -514,6 +511,9 @@ func (goal Goal) Close(expected Revision, outcome GoalOutcome, at time.Time) (Go
 	}
 	if outcome != GoalOutcomeSucceeded && outcome != GoalOutcomeFailed {
 		return Goal{}, domainError(ErrorInvalidArgument, "goal_outcome")
+	}
+	if goal.cancelRequested {
+		return Goal{}, domainError(ErrorInvalidTransition, "goal_cancel_requested")
 	}
 	if !goal.allChildHandoffsResolved() {
 		return Goal{}, domainError(ErrorChildHandoffsPending, "child_handoffs")
@@ -547,6 +547,7 @@ func (goal Goal) Close(expected Revision, outcome GoalOutcome, at time.Time) (Go
 	} else {
 		updated.state = GoalStateFailed
 	}
+	updated.paused = false
 	updated.revision++
 	updated.closedAt = canonicalTime(at)
 	return updated, nil
@@ -560,12 +561,13 @@ func (goal Goal) ClosableOutcome() (GoalOutcome, bool) {
 	}
 	allSucceeded := true
 	hasFailed := false
-	for _, item := range goal.items {
-		if !item.IsTerminal() {
+	for ref := range goal.items {
+		logical, resolved := goal.LogicalWorkItemOutcome(ref)
+		if !resolved {
 			return "", false
 		}
-		allSucceeded = allSucceeded && item.state == WorkItemStateSucceeded
-		hasFailed = hasFailed || item.state == WorkItemStateFailed
+		allSucceeded = allSucceeded && logical == WorkItemLogicalSucceeded
+		hasFailed = hasFailed || logical == WorkItemLogicalFailed
 	}
 	if allSucceeded {
 		return GoalOutcomeSucceeded, true
@@ -625,8 +627,8 @@ func (goal Goal) workItemReady(ref WorkItemRef) bool {
 
 func (goal Goal) dependenciesSucceeded(item WorkItem) bool {
 	for _, dependency := range item.dependencies {
-		dependencyItem, exists := goal.items[dependency]
-		if !exists || dependencyItem.state != WorkItemStateSucceeded {
+		outcome, resolved := goal.LogicalWorkItemOutcome(dependency)
+		if !resolved || outcome != WorkItemLogicalSucceeded {
 			return false
 		}
 	}
@@ -635,8 +637,8 @@ func (goal Goal) dependenciesSucceeded(item WorkItem) bool {
 
 func (goal Goal) hasFailedDependency(item WorkItem) bool {
 	for _, dependency := range item.dependencies {
-		dependencyItem, exists := goal.items[dependency]
-		if exists && (dependencyItem.state == WorkItemStateFailed || dependencyItem.state == WorkItemStateSkipped) {
+		outcome, resolved := goal.LogicalWorkItemOutcome(dependency)
+		if resolved && outcome == WorkItemLogicalFailed {
 			return true
 		}
 	}

@@ -82,6 +82,10 @@ SELECT COUNT(*) FROM pragma_table_info('work_items') WHERE name = 'handoff_requi
 		return invalid(fmt.Errorf("sqlite.work_item_handoff_schema_invalid"))
 	}
 	handoffPersisted := handoffColumns == 1
+	controlsPersisted, err := sqliteTableHasColumn(ctx, transaction, "work_items", "control_sequence")
+	if err != nil {
+		return mapDatabaseError(err)
+	}
 	for position := start; position < len(snapshot.WorkItems); position++ {
 		item := snapshot.WorkItems[position]
 		if item.HandoffRequired == nil {
@@ -93,9 +97,10 @@ SELECT COUNT(*) FROM pragma_table_info('work_items') WHERE name = 'handoff_requi
 		query := `
 INSERT INTO work_items(
     ref, goal_ref, actor_ref, project_ref, objective, phase_key, role_key, parent_ref,
-    output_contract, skip_reason, state, revision, position,
-    created_at, started_at, finished_at, execution_ref
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    output_contract, skip_reason, interrupt_cause, rework_of, state, revision,
+    paused, cancel_requested, control_sequence, position,
+    created_at, started_at, interrupted_at, finished_at, execution_ref
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 		arguments := []any{
 			item.Ref,
 			item.GoalRef,
@@ -107,21 +112,52 @@ INSERT INTO work_items(
 			nullableString(item.ParentRef),
 			string(item.OutputContract),
 			string(item.SkipReason),
+			string(item.InterruptCause),
+			nullableString(item.ReworkOf),
 			string(item.State),
 			int64(item.Revision),
+			storedBool(item.Paused),
+			storedBool(item.CancelRequested),
+			int64(item.ControlSequence),
 			position,
 			requiredTime(item.CreatedAt),
 			storedTime(item.StartedAt),
+			storedTime(item.InterruptedAt),
 			storedTime(item.FinishedAt),
 			nullableString(item.ExecutionRef),
 		}
-		if handoffPersisted {
+		if !controlsPersisted {
 			query = `
+INSERT INTO work_items(
+    ref, goal_ref, actor_ref, project_ref, objective, phase_key, role_key, parent_ref,
+    output_contract, skip_reason, state, revision, position,
+    created_at, started_at, finished_at, execution_ref
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+			arguments = []any{
+				item.Ref, item.GoalRef, item.ActorRef, item.ProjectRef, item.Objective,
+				item.PhaseKey, item.RoleKey, nullableString(item.ParentRef), string(item.OutputContract),
+				string(item.SkipReason), string(item.State), int64(item.Revision), position,
+				requiredTime(item.CreatedAt), storedTime(item.StartedAt), storedTime(item.FinishedAt),
+				nullableString(item.ExecutionRef),
+			}
+		}
+		if handoffPersisted {
+			if controlsPersisted {
+				query = `
+INSERT INTO work_items(
+    ref, goal_ref, actor_ref, project_ref, objective, phase_key, role_key, parent_ref,
+    output_contract, skip_reason, interrupt_cause, rework_of, state, revision,
+    paused, cancel_requested, control_sequence, position,
+    created_at, started_at, interrupted_at, finished_at, execution_ref, handoff_required
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+			} else {
+				query = `
 INSERT INTO work_items(
     ref, goal_ref, actor_ref, project_ref, objective, phase_key, role_key, parent_ref,
     output_contract, skip_reason, state, revision, position,
     created_at, started_at, finished_at, execution_ref, handoff_required
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+			}
 			arguments = append(arguments, storedBool(*item.HandoffRequired))
 		}
 		if _, err := transaction.ExecContext(ctx, query, arguments...); err != nil {
@@ -180,11 +216,16 @@ VALUES (?, ?, ?, ?, ?, ?)`,
 	if err := insertAppSpecSnapshot(ctx, transaction, snapshot.AppSpec); err != nil {
 		return err
 	}
-	if _, err := transaction.ExecContext(ctx, `
+	controlsPersisted, err := sqliteTableHasColumn(ctx, transaction, "goals", "control_sequence")
+	if err != nil {
+		return mapDatabaseError(err)
+	}
+	query := `
 INSERT INTO goals(
     ref, request_ref, request_fingerprint, requested_by_ref, app_spec_ref, actor_ref, project_ref, state, revision,
-    created_at, started_at, closed_at, plan_generation
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    paused, cancel_requested, control_sequence, created_at, started_at, closed_at, plan_generation
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	arguments := []any{
 		snapshot.Ref,
 		requestRef,
 		requestFingerprint,
@@ -194,11 +235,28 @@ INSERT INTO goals(
 		snapshot.ProjectRef,
 		string(snapshot.State),
 		int64(snapshot.Revision),
+		storedBool(snapshot.Paused),
+		storedBool(snapshot.CancelRequested),
+		int64(snapshot.ControlSequence),
 		requiredTime(snapshot.CreatedAt),
 		storedTime(snapshot.StartedAt),
 		storedTime(snapshot.ClosedAt),
 		int64(snapshot.PlanGeneration),
-	); err != nil {
+	}
+	if !controlsPersisted {
+		query = `
+INSERT INTO goals(
+    ref, request_ref, request_fingerprint, requested_by_ref, app_spec_ref,
+    actor_ref, project_ref, state, revision, created_at, started_at, closed_at, plan_generation
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		arguments = []any{
+			snapshot.Ref, requestRef, requestFingerprint, requestedBy.String(), snapshot.AppSpec.Ref,
+			snapshot.ActorRef, snapshot.ProjectRef, string(snapshot.State), int64(snapshot.Revision),
+			requiredTime(snapshot.CreatedAt), storedTime(snapshot.StartedAt), storedTime(snapshot.ClosedAt),
+			int64(snapshot.PlanGeneration),
+		}
+	}
+	if _, err := transaction.ExecContext(ctx, query, arguments...); err != nil {
 		return mapDatabaseError(err)
 	}
 	return nil
@@ -225,15 +283,20 @@ INSERT INTO app_specs(
 }
 
 func insertExecution(ctx context.Context, transaction *sql.Tx, execution application.ExecutionRecord) error {
-	_, err := transaction.ExecContext(ctx, `
+	mailboxMarker, err := sqliteTableHasColumn(ctx, transaction, "executions", "recipient_mailbox_retired")
+	if err != nil {
+		return mapDatabaseError(err)
+	}
+	query := `
 INSERT INTO executions(
     ref, goal_ref, work_item_ref, attempt_no, max_execution_attempts,
     replaces_execution_ref, plan_generation, app_spec_generation, spec_hash,
     state, artifact_media_type, idempotency_key, max_output_bytes,
     provider_ref, model_ref, agent_ref, external_ref, created_at, deadline_at,
     started_at, provider_accepted_at, last_observed_at, provider_observed_at,
-    finished_at, failure_code
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    finished_at, failure_code, recipient_mailbox_retired
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	arguments := []any{
 		execution.Ref.String(),
 		execution.GoalRef.String(),
 		execution.WorkItemRef.String(),
@@ -259,7 +322,21 @@ INSERT INTO executions(
 		storedTime(execution.ProviderObservedAt),
 		storedTime(execution.FinishedAt),
 		execution.FailureCode,
-	)
+		storedBool(execution.RecipientMailboxRetired),
+	}
+	if !mailboxMarker {
+		query = `
+INSERT INTO executions(
+    ref, goal_ref, work_item_ref, attempt_no, max_execution_attempts,
+    replaces_execution_ref, plan_generation, app_spec_generation, spec_hash,
+    state, artifact_media_type, idempotency_key, max_output_bytes,
+    provider_ref, model_ref, agent_ref, external_ref, created_at, deadline_at,
+    started_at, provider_accepted_at, last_observed_at, provider_observed_at,
+    finished_at, failure_code
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		arguments = arguments[:len(arguments)-1]
+	}
+	_, err = transaction.ExecContext(ctx, query, arguments...)
 	return mapDatabaseError(err)
 }
 
@@ -275,7 +352,7 @@ func updateExecutionCAS(
 	result, err := transaction.ExecContext(ctx, `
 UPDATE executions
 SET state = ?, deadline_at = ?, started_at = ?, provider_accepted_at = ?, last_observed_at = ?,
-    provider_observed_at = ?, finished_at = ?, failure_code = ?
+    provider_observed_at = ?, finished_at = ?, failure_code = ?, recipient_mailbox_retired = ?
 WHERE ref = ? AND goal_ref = ? AND work_item_ref = ? AND state = ?
   AND provider_ref = ? AND model_ref = ? AND agent_ref = ? AND external_ref = ?
   AND attempt_no = ? AND max_execution_attempts = ?
@@ -291,6 +368,7 @@ WHERE ref = ? AND goal_ref = ? AND work_item_ref = ? AND state = ?
 		storedTime(execution.ProviderObservedAt),
 		storedTime(execution.FinishedAt),
 		execution.FailureCode,
+		storedBool(execution.RecipientMailboxRetired),
 		execution.Ref.String(),
 		execution.GoalRef.String(),
 		execution.WorkItemRef.String(),
@@ -321,7 +399,7 @@ func acceptExecutionCAS(ctx context.Context, transaction *sql.Tx, execution appl
 UPDATE executions
 SET state = ?, provider_ref = ?, model_ref = ?, agent_ref = ?, external_ref = ?,
     deadline_at = ?, started_at = ?, provider_accepted_at = ?, last_observed_at = ?,
-    provider_observed_at = ?, finished_at = ?, failure_code = ?
+    provider_observed_at = ?, finished_at = ?, failure_code = ?, recipient_mailbox_retired = ?
 WHERE ref = ? AND goal_ref = ? AND work_item_ref = ? AND state = 'dispatching'
   AND provider_ref = '' AND model_ref = '' AND agent_ref = '' AND external_ref = ''
   AND attempt_no = ? AND max_execution_attempts = ?
@@ -341,6 +419,7 @@ WHERE ref = ? AND goal_ref = ? AND work_item_ref = ? AND state = 'dispatching'
 		storedTime(execution.ProviderObservedAt),
 		storedTime(execution.FinishedAt),
 		execution.FailureCode,
+		storedBool(execution.RecipientMailboxRetired),
 		execution.Ref.String(),
 		execution.GoalRef.String(),
 		execution.WorkItemRef.String(),
@@ -370,10 +449,14 @@ func updateGoalCAS(
 	snapshot := aggregate.Snapshot()
 	result, err := transaction.ExecContext(ctx, `
 UPDATE goals
-SET state = ?, revision = ?, started_at = ?, closed_at = ?, plan_generation = ?
+SET state = ?, revision = ?, paused = ?, cancel_requested = ?, control_sequence = ?,
+    started_at = ?, closed_at = ?, plan_generation = ?
 WHERE ref = ? AND revision = ?`,
 		string(snapshot.State),
 		int64(snapshot.Revision),
+		storedBool(snapshot.Paused),
+		storedBool(snapshot.CancelRequested),
+		int64(snapshot.ControlSequence),
 		storedTime(snapshot.StartedAt),
 		storedTime(snapshot.ClosedAt),
 		int64(snapshot.PlanGeneration),
@@ -398,10 +481,14 @@ func updateGoalWorkItems(ctx context.Context, transaction *sql.Tx, aggregate goa
 func updateWorkItemSnapshot(ctx context.Context, transaction *sql.Tx, snapshot goal.WorkItemSnapshot) error {
 	result, err := transaction.ExecContext(ctx, `
 UPDATE work_items
-SET state = ?, revision = ?, started_at = ?, finished_at = ?, execution_ref = ?, skip_reason = ?
+SET state = ?, revision = ?, paused = ?, cancel_requested = ?, control_sequence = ?,
+    started_at = ?, interrupted_at = ?, finished_at = ?, execution_ref = ?,
+    skip_reason = ?, interrupt_cause = ?, rework_of = ?
 WHERE ref = ? AND goal_ref = ?`,
-		string(snapshot.State), int64(snapshot.Revision), storedTime(snapshot.StartedAt),
-		storedTime(snapshot.FinishedAt), nullableString(snapshot.ExecutionRef), string(snapshot.SkipReason),
+		string(snapshot.State), int64(snapshot.Revision), storedBool(snapshot.Paused),
+		storedBool(snapshot.CancelRequested), int64(snapshot.ControlSequence), storedTime(snapshot.StartedAt),
+		storedTime(snapshot.InterruptedAt), storedTime(snapshot.FinishedAt), nullableString(snapshot.ExecutionRef),
+		string(snapshot.SkipReason), string(snapshot.InterruptCause), nullableString(snapshot.ReworkOf),
 		snapshot.Ref, snapshot.GoalRef,
 	)
 	if err != nil {
@@ -419,13 +506,22 @@ func updateWorkItemCAS(
 	snapshot := itemSnapshot(item)
 	result, err := transaction.ExecContext(ctx, `
 UPDATE work_items
-SET state = ?, revision = ?, started_at = ?, finished_at = ?, execution_ref = ?
+SET state = ?, revision = ?, paused = ?, cancel_requested = ?, control_sequence = ?,
+    started_at = ?, interrupted_at = ?, finished_at = ?, execution_ref = ?,
+    skip_reason = ?, interrupt_cause = ?, rework_of = ?
 WHERE ref = ? AND goal_ref = ? AND revision = ?`,
 		string(snapshot.State),
 		int64(snapshot.Revision),
+		storedBool(snapshot.Paused),
+		storedBool(snapshot.CancelRequested),
+		int64(snapshot.ControlSequence),
 		storedTime(snapshot.StartedAt),
+		storedTime(snapshot.InterruptedAt),
 		storedTime(snapshot.FinishedAt),
 		nullableString(snapshot.ExecutionRef),
+		string(snapshot.SkipReason),
+		string(snapshot.InterruptCause),
+		nullableString(snapshot.ReworkOf),
 		snapshot.Ref,
 		snapshot.GoalRef,
 		int64(expected),
@@ -438,6 +534,7 @@ WHERE ref = ? AND goal_ref = ? AND revision = ?`,
 
 func itemSnapshot(item goal.WorkItem) goal.WorkItemSnapshot {
 	startedAt, _ := item.StartedAt()
+	interruptedAt, _ := item.InterruptedAt()
 	finishedAt, _ := item.FinishedAt()
 	executionRef, hasExecution := item.Execution()
 	var executionValue string
@@ -450,6 +547,12 @@ func itemSnapshot(item goal.WorkItem) goal.WorkItemSnapshot {
 		parentValue = parent.String()
 	}
 	handoffRequired := item.HandoffRequired()
+	interruptCause, _ := item.InterruptCause()
+	reworkOf, hasRework := item.ReworkOf()
+	var reworkValue string
+	if hasRework {
+		reworkValue = reworkOf.String()
+	}
 	return goal.WorkItemSnapshot{
 		Ref:             item.Ref().String(),
 		GoalRef:         item.Goal().String(),
@@ -465,17 +568,23 @@ func itemSnapshot(item goal.WorkItem) goal.WorkItemSnapshot {
 			reason, _ := item.SkipReason()
 			return reason
 		}(),
-		DependencyRefs: workItemRefStrings(item.Dependencies()),
-		WriteSet:       writeScopeStrings(item.WriteSet()),
-		SkillRefs:      refStrings(item.SkillRefs()),
-		ToolRefs:       refStrings(item.ToolRefs()),
-		CapabilityRefs: refStrings(item.CapabilityRefs()),
-		State:          item.State(),
-		Revision:       item.Revision(),
-		CreatedAt:      item.CreatedAt(),
-		StartedAt:      startedAt,
-		FinishedAt:     finishedAt,
-		ExecutionRef:   executionValue,
+		InterruptCause:  interruptCause,
+		ReworkOf:        reworkValue,
+		DependencyRefs:  workItemRefStrings(item.Dependencies()),
+		WriteSet:        writeScopeStrings(item.WriteSet()),
+		SkillRefs:       refStrings(item.SkillRefs()),
+		ToolRefs:        refStrings(item.ToolRefs()),
+		CapabilityRefs:  refStrings(item.CapabilityRefs()),
+		State:           item.State(),
+		Revision:        item.Revision(),
+		Paused:          item.Paused(),
+		CancelRequested: item.CancelRequested(),
+		ControlSequence: item.ControlSequence(),
+		CreatedAt:       item.CreatedAt(),
+		StartedAt:       startedAt,
+		InterruptedAt:   interruptedAt,
+		FinishedAt:      finishedAt,
+		ExecutionRef:    executionValue,
 	}
 }
 
@@ -537,17 +646,37 @@ func writeScopeStrings(scopes []goal.WriteScope) []string {
 }
 
 func insertAction(ctx context.Context, transaction *sql.Tx, action application.ActionRecord) error {
-	_, err := transaction.ExecContext(ctx, `
+	controlColumn, err := sqliteTableHasColumn(ctx, transaction, "outbox", "control_ref")
+	if err != nil {
+		return mapDatabaseError(err)
+	}
+	if !controlColumn {
+		if action.ControlRef != "" {
+			return invalid(fmt.Errorf("sqlite.action_control_schema_unsupported"))
+		}
+		_, err = transaction.ExecContext(ctx, `
 INSERT INTO outbox(
     ref, kind, goal_ref, work_item_ref, execution_ref,
     plan_generation, work_item_generation, available_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+			action.Ref, string(action.Kind), action.GoalRef.String(), action.WorkItemRef.String(),
+			action.ExecutionRef.String(), int64(action.PlanGeneration),
+			int64(action.WorkItemGeneration), requiredTime(action.AvailableAt),
+		)
+		return mapDatabaseError(err)
+	}
+	_, err = transaction.ExecContext(ctx, `
+INSERT INTO outbox(
+    ref, kind, goal_ref, work_item_ref, execution_ref, control_ref,
+    plan_generation, work_item_generation, available_at
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		action.Ref,
 		string(action.Kind),
 		action.GoalRef.String(),
 		action.WorkItemRef.String(),
 		action.ExecutionRef.String(),
+		nullableString(action.ControlRef),
 		int64(action.PlanGeneration),
 		int64(action.WorkItemGeneration),
 		requiredTime(action.AvailableAt),

@@ -28,19 +28,24 @@ type DirectorLeaseRecord struct {
 // DirectorDecisionRecord is immutable causal audit for one accepted plan
 // proposal. Lease tokens are deliberately absent from durable audit.
 type DirectorDecisionRecord struct {
-	Ref                   string
-	RequestRef            string
-	RequestFingerprint    string
-	GoalRef               goal.GoalRef
-	PrincipalRef          identity.PrincipalRef
-	LeaseFence            uint64
-	SourceGoalRevision    goal.Revision
-	SourcePlanGeneration  goal.PlanGeneration
-	AppliedGoalRevision   goal.Revision
-	AppliedPlanGeneration goal.PlanGeneration
-	Reason                string
-	DecidedAt             time.Time
-	AuthorizationReceipt  identity.AuthorizationReceipt
+	Ref                    string
+	RequestRef             string
+	RequestFingerprint     string
+	GoalRef                goal.GoalRef
+	PrincipalRef           identity.PrincipalRef
+	LeaseFence             uint64
+	SourceGoalRevision     goal.Revision
+	SourcePlanGeneration   goal.PlanGeneration
+	Cause                  goal.ReplanCause
+	SourceWorkItemRef      goal.WorkItemRef
+	SourceWorkItemRevision goal.Revision
+	SourceExecutionRef     goal.ExecutionRef
+	SourceExecutionAttempt uint64
+	AppliedGoalRevision    goal.Revision
+	AppliedPlanGeneration  goal.PlanGeneration
+	Reason                 string
+	DecidedAt              time.Time
+	AuthorizationReceipt   identity.AuthorizationReceipt
 }
 
 // DirectorReplayRequest performs a read-only idempotency lookup before a new
@@ -93,20 +98,23 @@ type RenewDirectorState struct {
 // schedule, outbox write and immutable Director decision. The compact decision
 // is the idempotent response; GetGoal remains the only full-state projection.
 type ApplyDirectorPlanState struct {
-	RequestRef             string
-	RequestFingerprint     string
-	AuthorizationReceipt   identity.AuthorizationReceipt
-	PrincipalRef           identity.PrincipalRef
-	ProjectRef             goal.ProjectRef
-	GoalRef                goal.GoalRef
-	LeaseToken             string
-	LeaseFence             uint64
-	ExpectedGoalRevision   goal.Revision
-	ExpectedPlanGeneration goal.PlanGeneration
-	Goal                   goal.Goal
-	NewExecutions          []ExecutionRecord
-	NewActions             []ActionRecord
-	Events                 []EventRecord
-	Decision               DirectorDecisionRecord
-	OperationAt            time.Time
+	RequestRef               string
+	RequestFingerprint       string
+	AuthorizationReceipt     identity.AuthorizationReceipt
+	PrincipalRef             identity.PrincipalRef
+	ProjectRef               goal.ProjectRef
+	GoalRef                  goal.GoalRef
+	LeaseToken               string
+	LeaseFence               uint64
+	ExpectedGoalRevision     goal.Revision
+	ExpectedPlanGeneration   goal.PlanGeneration
+	ExpectedWorkItemRevision goal.Revision
+	Goal                     goal.Goal
+	UpdatedExecutions        []ExecutionRecord
+	NewExecutions            []ExecutionRecord
+	NewActions               []ActionRecord
+	RetireActionRefs         []string
+	Events                   []EventRecord
+	Decision                 DirectorDecisionRecord
+	OperationAt              time.Time
 }

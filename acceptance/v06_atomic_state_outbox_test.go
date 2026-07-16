@@ -360,7 +360,7 @@ func v06AssertReplaceableAttemptsAndRestart(t *testing.T, fixture v06Fixture) {
 	record = v06GetGoal(t, repository, goalRef)
 	executions := v06ExecutionsByAttempt(record.Executions)
 	if len(executions) != 2 || executions[0].AttemptNo != 1 || executions[1].AttemptNo != 2 ||
-		executions[0].State != application.ExecutionFailed || executions[1].State != application.ExecutionDispatching ||
+		executions[0].State != application.ExecutionFailed || executions[1].State != application.ExecutionQueued ||
 		executions[1].ReplacesExecutionRef != executions[0].Ref || record.Goal.IsTerminal() {
 		t.Fatalf("provider failure did not create replaceable attempt: goal=%s executions=%+v", record.Goal.State(), executions)
 	}

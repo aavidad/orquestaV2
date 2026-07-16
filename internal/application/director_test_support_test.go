@@ -176,10 +176,18 @@ func (repository *memoryRepository) ApplyDirectorPlan(
 	}
 	if current.Goal.Revision() != state.ExpectedGoalRevision ||
 		current.Goal.PlanGeneration() != state.ExpectedPlanGeneration ||
-		!memoryDirectorSuccessorValid(current.Goal, state.Goal) ||
+		!memoryDirectorSuccessorValid(current.Goal, state.Goal, state.Decision) ||
 		!memoryDirectorDecisionValid(state) ||
 		!memoryDirectorScheduleValid(state) {
 		return DirectorDecisionRecord{}, false, &StateError{Code: StateConflict}
+	}
+	if state.Decision.Cause != "" {
+		source, found := current.Goal.WorkItem(state.Decision.SourceWorkItemRef)
+		execution, executionFound := executionByRef(current.Executions, state.Decision.SourceExecutionRef)
+		if !found || source.Revision() != state.ExpectedWorkItemRevision || !executionFound ||
+			execution.WorkItemRef != source.Ref() || execution.AttemptNo != state.Decision.SourceExecutionAttempt {
+			return DirectorDecisionRecord{}, false, &StateError{Code: StateConflict}
+		}
 	}
 	newActionRefs := make(map[string]struct{}, len(state.NewActions))
 	for _, action := range state.NewActions {
@@ -193,11 +201,22 @@ func (repository *memoryRepository) ApplyDirectorPlan(
 	}
 	updated := cloneGoalRecord(current)
 	updated.Goal = state.Goal
+	for _, execution := range state.UpdatedExecutions {
+		updated.Executions = replaceExecution(updated.Executions, execution)
+	}
 	updated.Executions = append(updated.Executions, state.NewExecutions...)
-	repository.records[state.GoalRef] = updated
 	for _, action := range state.NewActions {
 		repository.actions[action.Ref] = memoryAction{record: action}
 	}
+	for _, actionRef := range state.RetireActionRefs {
+		if receipt, retired := repository.retireActionLocked(
+			actionRef, "director-retire:"+state.Decision.Ref,
+			state.PrincipalRef.String(), state.OperationAt,
+		); retired {
+			updated.ConsumptionReceipts = append(updated.ConsumptionReceipts, receipt)
+		}
+	}
+	repository.records[state.GoalRef] = updated
 	repository.events = append(repository.events, state.Events...)
 	repository.directorRequests[key] = memoryDirectorMutation{
 		fingerprint: state.RequestFingerprint, decision: state.Decision,
@@ -205,7 +224,7 @@ func (repository *memoryRepository) ApplyDirectorPlan(
 	return state.Decision, true, nil
 }
 
-func memoryDirectorSuccessorValid(current, candidate goal.Goal) bool {
+func memoryDirectorSuccessorValid(current, candidate goal.Goal, decision DirectorDecisionRecord) bool {
 	if candidate.Ref() != current.Ref() || candidate.Actor() != current.Actor() ||
 		candidate.Project() != current.Project() || candidate.State() != current.State() ||
 		candidate.Revision() != current.Revision()+1 ||
@@ -215,25 +234,64 @@ func memoryDirectorSuccessorValid(current, candidate goal.Goal) bool {
 	}
 	currentPhases, candidatePhases := current.Phases(), candidate.Phases()
 	currentItems, candidateItems := current.WorkItems(), candidate.WorkItems()
-	return len(candidatePhases) >= len(currentPhases) && len(candidateItems) > len(currentItems) &&
-		reflect.DeepEqual(candidatePhases[:len(currentPhases)], currentPhases) &&
-		reflect.DeepEqual(candidateItems[:len(currentItems)], currentItems)
+	if len(candidatePhases) < len(currentPhases) || len(candidateItems) <= len(currentItems) ||
+		!reflect.DeepEqual(candidatePhases[:len(currentPhases)], currentPhases) {
+		return false
+	}
+	if decision.Cause == "" {
+		return reflect.DeepEqual(candidateItems[:len(currentItems)], currentItems)
+	}
+	for index, existing := range currentItems {
+		if existing.Ref() == decision.SourceWorkItemRef {
+			if candidateItems[index].State() != goal.WorkItemStateSuperseded ||
+				candidateItems[index].Revision() != existing.Revision()+1 {
+				return false
+			}
+			continue
+		}
+		if !reflect.DeepEqual(candidateItems[index], existing) {
+			return false
+		}
+	}
+	return true
 }
 
 func memoryDirectorDecisionValid(state ApplyDirectorPlanState) bool {
 	decision := state.Decision
-	return decision.Ref != "" && decision.RequestRef == state.RequestRef &&
+	baseValid := decision.Ref != "" && decision.RequestRef == state.RequestRef &&
 		decision.RequestFingerprint == state.RequestFingerprint && decision.GoalRef == state.GoalRef &&
 		decision.PrincipalRef == state.PrincipalRef && decision.LeaseFence == state.LeaseFence &&
 		decision.SourceGoalRevision == state.ExpectedGoalRevision &&
 		decision.SourcePlanGeneration == state.ExpectedPlanGeneration &&
+		decision.SourceWorkItemRevision == state.ExpectedWorkItemRevision &&
 		decision.AppliedGoalRevision == state.Goal.Revision() &&
 		decision.AppliedPlanGeneration == state.Goal.PlanGeneration() &&
 		decision.Reason != "" && !decision.DecidedAt.IsZero() &&
 		decision.AuthorizationReceipt.Ref() == state.AuthorizationReceipt.Ref()
+	if !baseValid {
+		return false
+	}
+	if decision.Cause == "" {
+		return decision.SourceWorkItemRef.String() == "" && decision.SourceWorkItemRevision == 0 &&
+			decision.SourceExecutionRef.String() == "" && decision.SourceExecutionAttempt == 0
+	}
+	return (decision.Cause == goal.ReplanCauseSplitPending ||
+		decision.Cause == goal.ReplanCauseExecutionStopped ||
+		decision.Cause == goal.ReplanCauseExecutionFailed) &&
+		decision.SourceWorkItemRef.String() != "" && decision.SourceWorkItemRevision != 0 &&
+		decision.SourceExecutionRef.String() != "" && decision.SourceExecutionAttempt != 0
 }
 
 func memoryDirectorScheduleValid(state ApplyDirectorPlanState) bool {
+	if state.Decision.Cause == goal.ReplanCauseSplitPending {
+		if len(state.UpdatedExecutions) != 1 || len(state.RetireActionRefs) != 1 ||
+			state.UpdatedExecutions[0].Ref != state.Decision.SourceExecutionRef ||
+			state.UpdatedExecutions[0].State != ExecutionCanceled {
+			return false
+		}
+	} else if len(state.UpdatedExecutions) != 0 || len(state.RetireActionRefs) != 0 {
+		return false
+	}
 	seenExecutions := make(map[goal.ExecutionRef]struct{}, len(state.NewExecutions))
 	for _, execution := range state.NewExecutions {
 		if execution.Ref.String() == "" || execution.GoalRef != state.GoalRef ||

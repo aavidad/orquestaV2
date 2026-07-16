@@ -17,6 +17,7 @@ type Dependencies struct {
 	Access                  AccessRepository
 	Launcher                AgentLauncher
 	Observer                AgentObserver
+	Controller              AgentController
 	Artifacts               ArtifactStore
 	Clock                   Clock
 	IDs                     IDGenerator
@@ -35,6 +36,7 @@ type Orchestrator struct {
 	access                  AccessRepository
 	launcher                AgentLauncher
 	observer                AgentObserver
+	controller              AgentController
 	artifacts               ArtifactStore
 	clock                   Clock
 	ids                     IDGenerator
@@ -81,11 +83,16 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 	case dependencies.ExecutionTimeout <= 0:
 		return nil, errors.New("application.execution_timeout_invalid")
 	}
+	controller := dependencies.Controller
+	if controller == nil {
+		controller = unsupportedAgentController{}
+	}
 	return &Orchestrator{
 		state:                   dependencies.State,
 		access:                  dependencies.Access,
 		launcher:                dependencies.Launcher,
 		observer:                dependencies.Observer,
+		controller:              controller,
 		artifacts:               dependencies.Artifacts,
 		clock:                   dependencies.Clock,
 		ids:                     dependencies.IDs,

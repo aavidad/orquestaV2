@@ -59,7 +59,7 @@
 {"schema_version":1,"bug_id":"BUG-ORQ-20260710-208","capability_ids":["EVD-01","ORC-16","ORC-23"],"review_note":"Goal remoto mezcló checkpoint, resultado, running y control no propagado sin reconciliación causal."}
 {"schema_version":1,"bug_id":"BUG-ORQ-20260710-208A","capability_ids":["EXT-10","OPS-17","ORC-17"],"review_note":"Servidor siguió vivo apuntando a worktree retirado tras limpieza operativa."}
 {"schema_version":1,"bug_id":"BUG-ORQ-20260710-208B","capability_ids":["EVD-01","ORC-23"],"review_note":"API mantuvo running frente a checkpoint/resultado bloqueado y timeout parcial contradictorio."}
-{"schema_version":1,"bug_id":"BUG-ORQ-20260710-208C","capability_ids":["ORC-16"],"review_note":"Runs/control no detuvo ni confirmó stop del backend goal-first, incluso forzado."}
+{"schema_version":1,"bug_id":"BUG-ORQ-20260710-208C","capability_ids":["ORC-16","UI-02"],"review_note":"Runs/control no detuvo ni confirmó stop del backend goal-first, incluso forzado."}
 {"schema_version":1,"bug_id":"BUG-ORQ-20260710-208D","capability_ids":["ORC-02","STG-09"],"review_note":"Batch lanzó en paralelo tareas con write-set scripts solapado."}
 {"schema_version":1,"bug_id":"BUG-ORQ-20260710-208E","capability_ids":["OPS-16","STG-13"],"review_note":"Suites amplias se ejecutaron contra procesos residentes vivos sin aislamiento o drain gobernado."}
 {"schema_version":1,"bug_id":"BUG-ORQ-20260710-208H","capability_ids":["EVD-04"],"review_note":"Cierre exigía atestador independiente real para required tests, no resultado del implementador."}

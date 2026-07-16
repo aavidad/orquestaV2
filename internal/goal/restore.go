@@ -132,10 +132,12 @@ func RestoreGoal(snapshot GoalSnapshot) (Goal, error) {
 	restored := Goal{
 		ref: ref, actor: actor, project: project, appSpec: spec,
 		state: snapshot.State, revision: snapshot.Revision,
-		createdAt:      canonicalTime(snapshot.CreatedAt),
-		startedAt:      canonicalOptionalTime(snapshot.StartedAt),
-		closedAt:       canonicalOptionalTime(snapshot.ClosedAt),
-		planGeneration: snapshot.PlanGeneration, phases: phases,
+		paused: snapshot.Paused, cancelRequested: snapshot.CancelRequested,
+		controlSequence: snapshot.ControlSequence,
+		createdAt:       canonicalTime(snapshot.CreatedAt),
+		startedAt:       canonicalOptionalTime(snapshot.StartedAt),
+		closedAt:        canonicalOptionalTime(snapshot.ClosedAt),
+		planGeneration:  snapshot.PlanGeneration, phases: phases,
 		items:     make(map[WorkItemRef]WorkItem, len(snapshot.WorkItems)),
 		itemOrder: make([]WorkItemRef, 0, len(snapshot.WorkItems)),
 	}
@@ -199,7 +201,7 @@ func restoreWorkItem(snapshot WorkItemSnapshot) (WorkItem, error) {
 	if strings.TrimSpace(snapshot.Objective) == "" || !validWorkItemState(snapshot.State) {
 		return WorkItem{}, domainError(ErrorSnapshotInvalid, "work_item_header")
 	}
-	if !validRestoredWorkItemRevision(snapshot.State, snapshot.Revision) || snapshot.CreatedAt.IsZero() {
+	if !validRestoredWorkItemRevision(snapshot.State, snapshot.Revision, snapshot.ControlSequence) || snapshot.CreatedAt.IsZero() {
 		return WorkItem{}, domainError(ErrorSnapshotInvalid, "work_item_revision")
 	}
 	phase, err := NewPhaseKey(snapshot.PhaseKey)
@@ -249,6 +251,10 @@ func restoreWorkItem(snapshot WorkItemSnapshot) (WorkItem, error) {
 	if err != nil {
 		return WorkItem{}, err
 	}
+	reworkOf, err := restoreOptionalWorkItemRef(snapshot.ReworkOf)
+	if err != nil {
+		return WorkItem{}, err
+	}
 	artifacts, err := restoreArtifactRefs(snapshot.ArtifactRefs)
 	if err != nil {
 		return WorkItem{}, err
@@ -265,11 +271,15 @@ func restoreWorkItem(snapshot WorkItemSnapshot) (WorkItem, error) {
 		dependencies: dependencies, writeSet: writeSet,
 		skillRefs: skillRefs, toolRefs: toolRefs, capabilityRefs: capabilityRefs,
 		outputContract: outputContract, skipReason: snapshot.SkipReason,
+		interruptCause: snapshot.InterruptCause, reworkOf: reworkOf,
 		state: snapshot.State, revision: snapshot.Revision,
-		createdAt:  canonicalTime(snapshot.CreatedAt),
-		startedAt:  canonicalOptionalTime(snapshot.StartedAt),
-		finishedAt: canonicalOptionalTime(snapshot.FinishedAt),
-		execution:  execution, artifacts: artifacts, attestations: attestations,
+		paused: snapshot.Paused, cancelRequested: snapshot.CancelRequested,
+		controlSequence: snapshot.ControlSequence,
+		createdAt:       canonicalTime(snapshot.CreatedAt),
+		startedAt:       canonicalOptionalTime(snapshot.StartedAt),
+		interruptedAt:   canonicalOptionalTime(snapshot.InterruptedAt),
+		finishedAt:      canonicalOptionalTime(snapshot.FinishedAt),
+		execution:       execution, artifacts: artifacts, attestations: attestations,
 	}
 	if err := validateWorkItemPlanMetadata(restored); err != nil {
 		return WorkItem{}, err
@@ -284,19 +294,30 @@ func validateRestoredWorkItem(item WorkItem) error {
 	hasExecution := validExecutionRef(item.execution)
 	hasStarted := !item.startedAt.IsZero()
 	hasFinished := !item.finishedAt.IsZero()
+	hasInterrupted := !item.interruptedAt.IsZero()
 	hasArtifacts := len(item.artifacts) > 0
 	hasAttestations := len(item.attestations) > 0
 	if item.state != WorkItemStateSkipped && item.skipReason != "" {
 		return domainError(ErrorSnapshotInvalid, "skip_reason")
 	}
+	if (item.paused || item.cancelRequested) && item.controlSequence == 0 ||
+		item.paused && (item.cancelRequested || item.IsTerminal()) {
+		return domainError(ErrorSnapshotInvalid, "work_item_control")
+	}
+	if item.state != WorkItemStateInterrupted && item.state != WorkItemStateSuperseded &&
+		item.state != WorkItemStateCanceled && (item.interruptCause != "" || hasInterrupted) {
+		return domainError(ErrorSnapshotInvalid, "interrupt_cause")
+	}
 
 	switch item.state {
 	case WorkItemStatePending:
-		if hasExecution || hasStarted || hasFinished || hasArtifacts || hasAttestations {
+		if hasExecution || hasStarted || hasInterrupted || hasFinished || hasArtifacts || hasAttestations ||
+			item.cancelRequested {
 			return domainError(ErrorSnapshotInvalid, "pending_work_item")
 		}
 	case WorkItemStateRunning:
-		if !hasExecution || !validTransitionTime(item.startedAt, item.createdAt) || hasFinished || hasArtifacts || hasAttestations {
+		if !hasExecution || !validTransitionTime(item.startedAt, item.createdAt) || hasInterrupted ||
+			hasFinished || hasArtifacts || hasAttestations {
 			return domainError(ErrorSnapshotInvalid, "running_work_item")
 		}
 	case WorkItemStateSucceeded:
@@ -304,18 +325,44 @@ func validateRestoredWorkItem(item WorkItem) error {
 		requiresAttestations := item.outputContract.kind != OutputContractArtifact
 		if !hasExecution || !validTransitionTime(item.startedAt, item.createdAt) ||
 			!validTransitionTime(item.finishedAt, item.startedAt) ||
-			(requiresArtifacts && !hasArtifacts) || (requiresAttestations && !hasAttestations) {
+			(requiresArtifacts && !hasArtifacts) || (requiresAttestations && !hasAttestations) ||
+			item.cancelRequested {
 			return domainError(ErrorSnapshotInvalid, "succeeded_work_item")
 		}
 	case WorkItemStateFailed:
 		if !hasExecution || !validTransitionTime(item.startedAt, item.createdAt) ||
-			!validTransitionTime(item.finishedAt, item.startedAt) || hasArtifacts || hasAttestations {
+			!validTransitionTime(item.finishedAt, item.startedAt) || hasArtifacts || hasAttestations ||
+			item.cancelRequested {
 			return domainError(ErrorSnapshotInvalid, "failed_work_item")
 		}
 	case WorkItemStateSkipped:
-		if item.skipReason != WorkItemSkipReasonDependencyFailed || hasExecution || hasStarted ||
-			!validTransitionTime(item.finishedAt, item.createdAt) || hasArtifacts || hasAttestations {
+		if (item.skipReason != WorkItemSkipReasonDependencyFailed && item.skipReason != WorkItemSkipReasonDependencyCanceled) ||
+			hasExecution || hasStarted || hasInterrupted || !validTransitionTime(item.finishedAt, item.createdAt) ||
+			hasArtifacts || hasAttestations || item.cancelRequested {
 			return domainError(ErrorSnapshotInvalid, "skipped_work_item")
+		}
+	case WorkItemStateInterrupted:
+		if !hasExecution || !validTransitionTime(item.startedAt, item.createdAt) ||
+			!validTransitionTime(item.interruptedAt, item.startedAt) || hasFinished || hasArtifacts || hasAttestations ||
+			!validInterruptCause(item.interruptCause) || item.cancelRequested ||
+			item.controlSequence == 0 {
+			return domainError(ErrorSnapshotInvalid, "interrupted_work_item")
+		}
+	case WorkItemStateCanceled:
+		if !item.cancelRequested || !hasFinished || hasArtifacts || hasAttestations ||
+			(hasStarted != hasExecution) || (hasStarted && !validTransitionTime(item.startedAt, item.createdAt)) ||
+			!validTransitionTime(item.finishedAt, chooseWorkItemNotBefore(item)) ||
+			(hasInterrupted != (item.interruptCause != "")) || (hasInterrupted && !validInterruptCause(item.interruptCause)) ||
+			item.controlSequence == 0 {
+			return domainError(ErrorSnapshotInvalid, "canceled_work_item")
+		}
+	case WorkItemStateSuperseded:
+		if !hasFinished || item.cancelRequested || hasArtifacts || hasAttestations ||
+			(hasStarted != hasExecution) || (hasStarted && !validTransitionTime(item.startedAt, item.createdAt)) ||
+			!validTransitionTime(item.finishedAt, chooseWorkItemNotBefore(item)) ||
+			(hasInterrupted != (item.interruptCause != "")) || (hasInterrupted && !validInterruptCause(item.interruptCause)) ||
+			item.controlSequence == 0 {
+			return domainError(ErrorSnapshotInvalid, "superseded_work_item")
 		}
 	}
 	return nil
@@ -328,13 +375,16 @@ func validateRestoredGoal(goal Goal) error {
 	}
 	hasStarted := !goal.startedAt.IsZero()
 	hasClosed := !goal.closedAt.IsZero()
+	if (goal.paused || goal.cancelRequested) && goal.controlSequence == 0 || goal.paused && goal.cancelRequested {
+		return domainError(ErrorSnapshotInvalid, "goal_control")
+	}
 	switch goal.state {
 	case GoalStatePending:
 		if hasStarted || hasClosed {
 			return domainError(ErrorSnapshotInvalid, "pending_goal")
 		}
 		for _, item := range goal.items {
-			if item.state != WorkItemStatePending {
+			if item.state != WorkItemStatePending && !(goal.cancelRequested && item.state == WorkItemStateCanceled) {
 				return domainError(ErrorSnapshotInvalid, "pending_goal_work_items")
 			}
 		}
@@ -344,11 +394,15 @@ func validateRestoredGoal(goal Goal) error {
 		}
 	case GoalStateSucceeded, GoalStateFailed:
 		if len(goal.items) == 0 || !validTransitionTime(goal.startedAt, goal.createdAt) ||
-			!validTransitionTime(goal.closedAt, goal.startedAt) {
+			!validTransitionTime(goal.closedAt, goal.startedAt) || goal.paused || goal.cancelRequested {
 			return domainError(ErrorSnapshotInvalid, "closed_goal")
 		}
+	case GoalStateCanceled:
+		if !goal.cancelRequested || goal.controlSequence < 2 || !validTransitionTime(goal.closedAt, goal.createdAt) {
+			return domainError(ErrorSnapshotInvalid, "canceled_goal")
+		}
 	}
-	if goal.state != GoalStatePending {
+	if goal.state != GoalStatePending && (goal.state != GoalStateCanceled || hasStarted) {
 		if err := validateStartedGoalWorkItems(goal, goal.state.Terminal()); err != nil {
 			return err
 		}
@@ -357,22 +411,41 @@ func validateRestoredGoal(goal Goal) error {
 		return err
 	}
 	if goal.state == GoalStateSucceeded {
-		for _, item := range goal.items {
-			if item.state != WorkItemStateSucceeded {
+		for ref := range goal.items {
+			outcome, resolved := goal.LogicalWorkItemOutcome(ref)
+			if !resolved || outcome != WorkItemLogicalSucceeded {
 				return domainError(ErrorOutcomeConflict, "succeeded_goal_work_items")
 			}
 		}
 	}
 	if goal.state == GoalStateFailed {
 		hasFailed := false
-		for _, item := range goal.items {
-			hasFailed = hasFailed || item.state == WorkItemStateFailed
+		for ref := range goal.items {
+			outcome, resolved := goal.LogicalWorkItemOutcome(ref)
+			hasFailed = hasFailed || (resolved && outcome == WorkItemLogicalFailed)
 		}
 		if !hasFailed {
 			return domainError(ErrorOutcomeConflict, "failed_goal_work_items")
 		}
 	}
+	if goal.state == GoalStateCanceled {
+		for _, item := range goal.items {
+			if !item.IsTerminal() || item.finishedAt.After(goal.closedAt) {
+				return domainError(ErrorWorkItemsNotTerminal, "work_items")
+			}
+		}
+	}
+	if goal.controlSequence > uint64(goal.revision) {
+		return domainError(ErrorSnapshotInvalid, "control_sequence")
+	}
 	for _, item := range goal.items {
+		if item.controlSequence > goal.controlSequence {
+			return domainError(ErrorSnapshotInvalid, "work_item_control_sequence")
+		}
+		if goal.cancelRequested && !item.IsTerminal() &&
+			(item.state != WorkItemStateRunning || !item.cancelRequested) {
+			return domainError(ErrorSnapshotInvalid, "uncascaded_cancel")
+		}
 		failedDependency := goal.hasFailedDependency(item)
 		if item.state == WorkItemStateSkipped && !failedDependency {
 			return domainError(ErrorSnapshotInvalid, "skipped_dependency")
@@ -380,13 +453,20 @@ func validateRestoredGoal(goal Goal) error {
 		if item.state == WorkItemStatePending && failedDependency {
 			return domainError(ErrorSnapshotInvalid, "uncascaded_dependency")
 		}
+		if item.state == WorkItemStateSkipped {
+			reason, blocked := dependencySkipReasonIn(goal.items, item)
+			if !blocked || reason != item.skipReason {
+				return domainError(ErrorSnapshotInvalid, "skip_reason")
+			}
+		}
 	}
 	return nil
 }
 
 func validateStartedGoalWorkItems(goal Goal, requireTerminal bool) error {
 	for _, item := range goal.items {
-		if item.state == WorkItemStateSkipped {
+		if item.state == WorkItemStateSkipped ||
+			((item.state == WorkItemStateCanceled || item.state == WorkItemStateSuperseded) && item.startedAt.IsZero()) {
 			if item.finishedAt.Before(goal.startedAt) {
 				return domainError(ErrorSnapshotInvalid, "work_item_finished_at")
 			}
@@ -405,13 +485,25 @@ func validateStartedGoalWorkItems(goal Goal, requireTerminal bool) error {
 	return nil
 }
 
+func chooseWorkItemNotBefore(item WorkItem) time.Time {
+	if !item.interruptedAt.IsZero() {
+		return item.interruptedAt
+	}
+	if !item.startedAt.IsZero() {
+		return item.startedAt
+	}
+	return item.createdAt
+}
+
 func validGoalState(state GoalState) bool {
-	return state == GoalStatePending || state == GoalStateRunning || state == GoalStateSucceeded || state == GoalStateFailed
+	return state == GoalStatePending || state == GoalStateRunning || state == GoalStateSucceeded ||
+		state == GoalStateFailed || state == GoalStateCanceled
 }
 
 func validWorkItemState(state WorkItemState) bool {
 	return state == WorkItemStatePending || state == WorkItemStateRunning ||
-		state == WorkItemStateSucceeded || state == WorkItemStateFailed || state == WorkItemStateSkipped
+		state == WorkItemStateSucceeded || state == WorkItemStateFailed || state == WorkItemStateSkipped ||
+		state == WorkItemStateInterrupted || state == WorkItemStateCanceled || state == WorkItemStateSuperseded
 }
 
 func revisionForWorkItemState(state WorkItemState) Revision {
@@ -427,13 +519,25 @@ func revisionForWorkItemState(state WorkItemState) Revision {
 	}
 }
 
-func validRestoredWorkItemRevision(state WorkItemState, revision Revision) bool {
+func validRestoredWorkItemRevision(state WorkItemState, revision Revision, controlSequence ...uint64) bool {
+	sequence := uint64(0)
+	if len(controlSequence) > 0 {
+		sequence = controlSequence[0]
+	}
+	if revision < 1 || sequence > uint64(revision-1) {
+		return false
+	}
+	effective := revision - Revision(sequence)
 	minimum := revisionForWorkItemState(state)
 	switch state {
 	case WorkItemStatePending, WorkItemStateSkipped:
-		return minimum > 0 && revision == minimum
+		return minimum > 0 && effective == minimum
 	case WorkItemStateRunning, WorkItemStateSucceeded, WorkItemStateFailed:
-		return minimum > 0 && revision >= minimum
+		return minimum > 0 && effective >= minimum
+	case WorkItemStateInterrupted:
+		return effective >= 2
+	case WorkItemStateCanceled, WorkItemStateSuperseded:
+		return effective >= 1
 	default:
 		return false
 	}
@@ -441,24 +545,26 @@ func validRestoredWorkItemRevision(state WorkItemState, revision Revision) bool 
 
 func revisionForGoalSnapshot(goal Goal) Revision {
 	revision := Revision(1) + Revision(goal.planGeneration)
-	if goal.state != GoalStatePending {
+	if !goal.startedAt.IsZero() {
 		revision++
 	}
+	revision += Revision(goal.controlSequence)
+	superseded := Revision(0)
 	for _, item := range goal.items {
+		effectiveRevision := item.revision - Revision(item.controlSequence)
 		switch item.state {
-		case WorkItemStateRunning:
-			revision++
-			if item.revision > 2 {
-				revision += item.revision - 2
-			}
-		case WorkItemStateSucceeded, WorkItemStateFailed:
-			revision += 2
-			if item.revision > 3 {
-				revision += item.revision - 3
+		case WorkItemStateRunning, WorkItemStateSucceeded, WorkItemStateFailed,
+			WorkItemStateInterrupted, WorkItemStateCanceled, WorkItemStateSuperseded:
+			if effectiveRevision > 1 {
+				revision += effectiveRevision - 1
 			}
 		}
+		if item.state == WorkItemStateSuperseded {
+			superseded++
+		}
 	}
-	if goal.state.Terminal() {
+	revision -= superseded
+	if goal.state == GoalStateSucceeded || goal.state == GoalStateFailed {
 		revision++
 	}
 	revision += Revision(len(goal.childHandoffs))
@@ -521,7 +627,7 @@ func validateRestoredChildHandoffs(goal Goal) error {
 			return domainError(ErrorSnapshotInvalid, "succeeded_parent_child_handoffs")
 		}
 	}
-	if goal.state.Terminal() && !goal.allChildHandoffsResolved() {
+	if (goal.state == GoalStateSucceeded || goal.state == GoalStateFailed) && !goal.allChildHandoffsResolved() {
 		return domainError(ErrorSnapshotInvalid, "closed_goal_child_handoffs")
 	}
 	return nil

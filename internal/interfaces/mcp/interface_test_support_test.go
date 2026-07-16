@@ -452,6 +452,20 @@ func (*memoryState) ApplyDirectorPlan(
 		errors.New("test_state.director_unsupported")
 }
 
+func (*memoryState) ControlReplay(
+	context.Context,
+	application.ControlReplayRequest,
+) (application.ControlRecord, bool, error) {
+	return application.ControlRecord{}, false, errors.New("test_state.control_unsupported")
+}
+
+func (*memoryState) ApplyControl(
+	context.Context,
+	application.ApplyControlState,
+) (application.ControlRecord, bool, error) {
+	return application.ControlRecord{}, false, errors.New("test_state.control_unsupported")
+}
+
 func (*memoryState) MailboxReplay(
 	context.Context,
 	application.MailboxReplayRequest,
@@ -643,6 +657,13 @@ func (state *memoryState) QuarantineAction(context.Context, application.ActionQu
 
 func (state *memoryState) RecordExecutionReplaced(context.Context, application.ExecutionReplacedState) error {
 	return errors.New("test.state_write_not_used")
+}
+
+func (*memoryState) RecordExecutionInterrupted(
+	context.Context,
+	application.ExecutionInterruptedState,
+) error {
+	return errors.New("test_state.control_unsupported")
 }
 
 func (state *memoryState) RecordGoalSucceeded(context.Context, application.GoalSucceededState) error {

@@ -21,6 +21,10 @@ type FileControl interface {
 	// See
 	// https://www.sqlite.org/c3ref/c_fcntl_begin_atomic_write.html#sqlitefcntldataversion.
 	FileControlDataVersion(dbName string) (uint32, error)
+	// FileControlFileDescriptor returns the borrowed operating-system file
+	// descriptor for dbName. The descriptor is owned by SQLite and is valid
+	// only while the raw driver connection remains borrowed by database/sql.
+	FileControlFileDescriptor(dbName string) (int, error)
 }
 
 var _ FileControl = (*conn)(nil)

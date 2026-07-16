@@ -1,0 +1,216 @@
+diff --git a/vendor/modernc.org/sqlite/conn.go b/vendor/modernc.org/sqlite/conn.go
+index 2294a73538..a81703c435 100644
+--- a/vendor/modernc.org/sqlite/conn.go
++++ b/vendor/modernc.org/sqlite/conn.go
+@@ -54,6 +54,26 @@ type conn struct {
+ }
+ 
+ func newConn(dsn string) (*conn, error) {
++	return newConnWithOptions(
++		dsn,
++		sqlite3.SQLITE_OPEN_READWRITE|sqlite3.SQLITE_OPEN_CREATE|
++			sqlite3.SQLITE_OPEN_FULLMUTEX|sqlite3.SQLITE_OPEN_URI,
++		nil,
++	)
++}
++
++// newValidatedConn opens an existing database without SQLITE_OPEN_CREATE and
++// validates its active sqlite3_file before any DQS setting or DSN _pragma can
++// run on that connection.
++func newValidatedConn(dsn string, validate func(FileControl) error) (*conn, error) {
++	return newConnWithOptions(
++		dsn,
++		sqlite3.SQLITE_OPEN_READWRITE|sqlite3.SQLITE_OPEN_FULLMUTEX|sqlite3.SQLITE_OPEN_URI,
++		validate,
++	)
++}
++
++func newConnWithOptions(dsn string, openFlags int32, validate func(FileControl) error) (*conn, error) {
+ 	var query, vfsName string
+ 
+ 	// Parse the query parameters from the dsn and them from the dsn if not prefixed by file:
+@@ -95,9 +115,7 @@ func newConn(dsn string) (*conn, error) {
+ 		db, err = c.openV2(
+ 			dsn,
+ 			vfsName,
+-			sqlite3.SQLITE_OPEN_READWRITE|sqlite3.SQLITE_OPEN_CREATE|
+-				sqlite3.SQLITE_OPEN_FULLMUTEX|
+-				sqlite3.SQLITE_OPEN_URI,
++			openFlags,
+ 		)
+ 		return err
+ 	}); gateErr != nil {
+@@ -122,6 +140,12 @@ func newConn(dsn string) (*conn, error) {
+ 	}
+ 	defer libc.Xfree(c.tls, zMain)
+ 	c.inMemory = libc.GoString(sqlite3.Xsqlite3_db_filename(c.tls, c.db, zMain)) == ""
++	if validate != nil {
++		if err = validate(c); err != nil {
++			c.Close()
++			return nil, err
++		}
++	}
+ 
+ 	// _dqs is applied before applyQueryParams because the SQLite contract
+ 	// requires sqlite3_db_config(SQLITE_DBCONFIG_DQS_*) to be set before
+diff --git a/vendor/modernc.org/sqlite/fcntl.go b/vendor/modernc.org/sqlite/fcntl.go
+index ffbe222853..40480fb5e4 100644
+--- a/vendor/modernc.org/sqlite/fcntl.go
++++ b/vendor/modernc.org/sqlite/fcntl.go
+@@ -21,6 +21,10 @@ type FileControl interface {
+ 	// See
+ 	// https://www.sqlite.org/c3ref/c_fcntl_begin_atomic_write.html#sqlitefcntldataversion.
+ 	FileControlDataVersion(dbName string) (uint32, error)
++	// FileControlFileDescriptor returns the borrowed operating-system file
++	// descriptor for dbName. The descriptor is owned by SQLite and is valid
++	// only while the raw driver connection remains borrowed by database/sql.
++	FileControlFileDescriptor(dbName string) (int, error)
+ }
+ 
+ var _ FileControl = (*conn)(nil)
+diff --git a/vendor/modernc.org/sqlite/connector.go b/vendor/modernc.org/sqlite/connector.go
+new file mode 100644
+index 0000000000..b8b79a85fe
+--- /dev/null
++++ b/vendor/modernc.org/sqlite/connector.go
+@@ -0,0 +1,86 @@
++package sqlite
++
++import (
++	"context"
++	"database/sql/driver"
++	"fmt"
++)
++
++// NewConnector returns a database/sql connector backed by the package's
++// canonical driver. It preserves globally registered functions, collations,
++// hooks and virtual-table modules while allowing callers to validate each
++// physical connection before database/sql admits it to a pool.
++func NewConnector(name string) driver.Connector {
++	return &connector{name: name, driver: d}
++}
++
++// NewValidatedConnector returns a connector that validates the physical main
++// database connection before any DSN _pragma or globally registered connection
++// hook can run. The validator receives the same connection that is admitted to
++// database/sql; returning an error closes it.
++//
++// Validation necessarily happens after sqlite3_open_v2, because SQLite exposes
++// the active sqlite3_file only through that open connection. It happens before
++// SQL is prepared or executed on the connection.
++func NewValidatedConnector(name string, validate func(FileControl) error) driver.Connector {
++	return &connector{name: name, driver: d, validate: validate}
++}
++
++type connector struct {
++	name     string
++	driver   *Driver
++	validate func(FileControl) error
++}
++
++func (c *connector) Connect(ctx context.Context) (driver.Conn, error) {
++	if err := ctx.Err(); err != nil {
++		return nil, err
++	}
++	if c.validate == nil {
++		return c.driver.Open(c.name)
++	}
++	return c.openValidated(ctx)
++}
++
++func (c *connector) Driver() driver.Driver {
++	return c.driver
++}
++
++func (c *connector) openValidated(ctx context.Context) (driver.Conn, error) {
++	connection, err := newValidatedConn(c.name, c.validate)
++	if err != nil {
++		return nil, err
++	}
++	closeOnError := true
++	defer func() {
++		if closeOnError {
++			_ = connection.Close()
++		}
++	}()
++	if err := ctx.Err(); err != nil {
++		return nil, err
++	}
++	for _, udf := range c.driver.udfs {
++		if err := connection.createFunctionInternal(udf); err != nil {
++			return nil, err
++		}
++	}
++	for _, collation := range c.driver.collations {
++		if err := connection.createCollationInternal(collation); err != nil {
++			return nil, err
++		}
++	}
++	for _, hook := range c.driver.connectionHooks {
++		if err := hook(connection, c.name); err != nil {
++			return nil, fmt.Errorf("connection hook: %w", err)
++		}
++	}
++	if err := connection.registerModules(); err != nil {
++		return nil, err
++	}
++	if err := ctx.Err(); err != nil {
++		return nil, err
++	}
++	closeOnError = false
++	return connection, nil
++}
+diff --git a/vendor/modernc.org/sqlite/fcntl_descriptor_unix.go b/vendor/modernc.org/sqlite/fcntl_descriptor_unix.go
+new file mode 100644
+index 0000000000..cff28950f9
+--- /dev/null
++++ b/vendor/modernc.org/sqlite/fcntl_descriptor_unix.go
+@@ -0,0 +1,32 @@
++//go:build unix
++
++package sqlite
++
++import (
++	"errors"
++	"unsafe"
++
++	sqlite3 "modernc.org/sqlite/lib"
++)
++
++// FileControlFileDescriptor exposes SQLite's borrowed main-file descriptor so
++// callers inside database/sql.Conn.Raw can bind security decisions to the file
++// that the active connection actually opened.
++func (c *conn) FileControlFileDescriptor(dbName string) (int, error) {
++	pointerSlot := c.tls.Alloc(int(unsafe.Sizeof(uintptr(0))))
++	defer c.tls.Free(int(unsafe.Sizeof(uintptr(0))))
++
++	*(*uintptr)(unsafe.Pointer(pointerSlot)) = 0
++	if err := c.fileControl(dbName, sqlite3.SQLITE_FCNTL_FILE_POINTER, pointerSlot); err != nil {
++		return -1, err
++	}
++	filePointer := *(*uintptr)(unsafe.Pointer(pointerSlot))
++	if filePointer == 0 {
++		return -1, errors.New("sqlite: file descriptor unavailable")
++	}
++	descriptor := (*sqlite3.TunixFile)(unsafe.Pointer(filePointer)).Fh
++	if descriptor < 0 {
++		return -1, errors.New("sqlite: file descriptor unavailable")
++	}
++	return int(descriptor), nil
++}
+diff --git a/vendor/modernc.org/sqlite/fcntl_descriptor_other.go b/vendor/modernc.org/sqlite/fcntl_descriptor_other.go
+new file mode 100644
+index 0000000000..e538d0fdc7
+--- /dev/null
++++ b/vendor/modernc.org/sqlite/fcntl_descriptor_other.go
+@@ -0,0 +1,9 @@
++//go:build !unix
++
++package sqlite
++
++import "errors"
++
++func (c *conn) FileControlFileDescriptor(string) (int, error) {
++	return -1, errors.New("sqlite: file descriptor unsupported")
++}
+

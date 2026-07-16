@@ -25,14 +25,19 @@ type RenewDirectorRequest struct {
 }
 
 type ProposeDirectorPlanRequest struct {
-	RequestRef             string
-	GoalRef                goal.GoalRef
-	ExpectedGoalRevision   goal.Revision
-	ExpectedPlanGeneration goal.PlanGeneration
-	LeaseToken             string
-	LeaseFence             uint64
-	Reason                 string
-	Plan                   PlanSpec
+	RequestRef               string
+	GoalRef                  goal.GoalRef
+	ExpectedGoalRevision     goal.Revision
+	ExpectedPlanGeneration   goal.PlanGeneration
+	LeaseToken               string
+	LeaseFence               uint64
+	Cause                    goal.ReplanCause
+	SourceWorkItemRef        goal.WorkItemRef
+	ExpectedWorkItemRevision goal.Revision
+	SourceExecutionRef       goal.ExecutionRef
+	SourceExecutionAttempt   uint64
+	Reason                   string
+	Plan                     PlanSpec
 }
 
 type DirectorLeaseResult struct {
@@ -222,7 +227,7 @@ func (orchestrator *Orchestrator) ProposeDirectorPlan(
 	if err != nil {
 		return DirectorPlanResult{}, err
 	}
-	updated, err := current.Goal.ApplyPlan(request.ExpectedGoalRevision, plan)
+	updated, updatedExecutions, retireActionRefs, proposalEvents, err := orchestrator.applyDirectorProposal(current, request, plan, now)
 	if err != nil {
 		return DirectorPlanResult{}, err
 	}
@@ -241,21 +246,27 @@ func (orchestrator *Orchestrator) ProposeDirectorPlan(
 		GoalRef: request.GoalRef, PrincipalRef: principal.Ref, LeaseFence: request.LeaseFence,
 		SourceGoalRevision:   request.ExpectedGoalRevision,
 		SourcePlanGeneration: request.ExpectedPlanGeneration,
-		AppliedGoalRevision:  updated.Revision(), AppliedPlanGeneration: updated.PlanGeneration(),
+		Cause:                request.Cause, SourceWorkItemRef: request.SourceWorkItemRef,
+		SourceWorkItemRevision: request.ExpectedWorkItemRevision,
+		SourceExecutionRef:     request.SourceExecutionRef, SourceExecutionAttempt: request.SourceExecutionAttempt,
+		AppliedGoalRevision: updated.Revision(), AppliedPlanGeneration: updated.PlanGeneration(),
 		Reason: request.Reason, DecidedAt: now, AuthorizationReceipt: authorization,
 	}
 	events := append([]EventRecord{{
 		Ref: "event:director-plan-applied:" + decisionRef, Kind: "director.plan_applied",
 		GoalRef: request.GoalRef, OccurredAt: now,
-	}}, scheduledEvents...)
+	}}, proposalEvents...)
+	events = append(events, scheduledEvents...)
 	persistedDecision, created, err := orchestrator.state.ApplyDirectorPlan(ctx, ApplyDirectorPlanState{
 		RequestRef: request.RequestRef, RequestFingerprint: fingerprint,
 		AuthorizationReceipt: authorization, PrincipalRef: principal.Ref,
 		ProjectRef: projectRef, GoalRef: request.GoalRef,
 		LeaseToken: request.LeaseToken, LeaseFence: request.LeaseFence,
-		ExpectedGoalRevision:   request.ExpectedGoalRevision,
-		ExpectedPlanGeneration: request.ExpectedPlanGeneration,
-		Goal:                   updated, NewExecutions: newExecutions, NewActions: newActions,
+		ExpectedGoalRevision:     request.ExpectedGoalRevision,
+		ExpectedPlanGeneration:   request.ExpectedPlanGeneration,
+		ExpectedWorkItemRevision: request.ExpectedWorkItemRevision,
+		Goal:                     updated, UpdatedExecutions: updatedExecutions,
+		NewExecutions: newExecutions, NewActions: newActions, RetireActionRefs: retireActionRefs,
 		Events: events, Decision: decision, OperationAt: now,
 	})
 	if err != nil {
@@ -332,6 +343,19 @@ func validateProposeDirectorPlanRequest(request ProposeDirectorPlanRequest) erro
 	if len(request.Plan.WorkItems) == 0 {
 		return errors.New("application.director_plan_work_items_required")
 	}
+	if request.Cause == "" {
+		if request.SourceWorkItemRef.String() != "" || request.ExpectedWorkItemRevision != 0 ||
+			request.SourceExecutionRef.String() != "" || request.SourceExecutionAttempt != 0 {
+			return errors.New("application.director_plan_replan_fence_unexpected")
+		}
+		return nil
+	}
+	if request.SourceWorkItemRef.String() == "" || request.ExpectedWorkItemRevision == 0 ||
+		request.SourceExecutionRef.String() == "" || request.SourceExecutionAttempt == 0 ||
+		(request.Cause != goal.ReplanCauseSplitPending && request.Cause != goal.ReplanCauseExecutionStopped &&
+			request.Cause != goal.ReplanCauseExecutionFailed) || len(request.Plan.Phases) != 0 {
+		return errors.New("application.director_plan_replan_fence_invalid")
+	}
 	return nil
 }
 
@@ -369,6 +393,10 @@ func validateDirectorDecision(
 		decision.PrincipalRef != principal || decision.LeaseFence != request.LeaseFence ||
 		decision.SourceGoalRevision != request.ExpectedGoalRevision ||
 		decision.SourcePlanGeneration != request.ExpectedPlanGeneration ||
+		decision.Cause != request.Cause || decision.SourceWorkItemRef != request.SourceWorkItemRef ||
+		decision.SourceWorkItemRevision != request.ExpectedWorkItemRevision ||
+		decision.SourceExecutionRef != request.SourceExecutionRef ||
+		decision.SourceExecutionAttempt != request.SourceExecutionAttempt ||
 		decision.AppliedGoalRevision != request.ExpectedGoalRevision+1 ||
 		decision.AppliedPlanGeneration != request.ExpectedPlanGeneration+1 ||
 		decision.Reason != request.Reason || decision.DecidedAt.IsZero() ||
@@ -433,6 +461,11 @@ func directorPlanFingerprint(
 	writeFingerprintField(digest, strconv.FormatUint(uint64(request.ExpectedPlanGeneration), 10))
 	writeFingerprintField(digest, request.LeaseToken)
 	writeFingerprintField(digest, strconv.FormatUint(request.LeaseFence, 10))
+	writeFingerprintField(digest, string(request.Cause))
+	writeFingerprintField(digest, request.SourceWorkItemRef.String())
+	writeFingerprintField(digest, strconv.FormatUint(uint64(request.ExpectedWorkItemRevision), 10))
+	writeFingerprintField(digest, request.SourceExecutionRef.String())
+	writeFingerprintField(digest, strconv.FormatUint(request.SourceExecutionAttempt, 10))
 	writeFingerprintField(digest, request.Reason)
 	writePlanFingerprint(digest, &request.Plan)
 	return hex.EncodeToString(digest.Sum(nil))

@@ -11,20 +11,34 @@ type Revision uint64
 type WorkItemState string
 
 const (
-	WorkItemStatePending   WorkItemState = "pending"
-	WorkItemStateRunning   WorkItemState = "running"
-	WorkItemStateSucceeded WorkItemState = "succeeded"
-	WorkItemStateFailed    WorkItemState = "failed"
-	WorkItemStateSkipped   WorkItemState = "skipped"
+	WorkItemStatePending     WorkItemState = "pending"
+	WorkItemStateRunning     WorkItemState = "running"
+	WorkItemStateSucceeded   WorkItemState = "succeeded"
+	WorkItemStateFailed      WorkItemState = "failed"
+	WorkItemStateSkipped     WorkItemState = "skipped"
+	WorkItemStateInterrupted WorkItemState = "interrupted"
+	WorkItemStateCanceled    WorkItemState = "canceled"
+	WorkItemStateSuperseded  WorkItemState = "superseded"
 )
 
 func (state WorkItemState) Terminal() bool {
-	return state == WorkItemStateSucceeded || state == WorkItemStateFailed || state == WorkItemStateSkipped
+	return state == WorkItemStateSucceeded || state == WorkItemStateFailed || state == WorkItemStateSkipped ||
+		state == WorkItemStateCanceled || state == WorkItemStateSuperseded
 }
 
 type WorkItemSkipReason string
 
-const WorkItemSkipReasonDependencyFailed WorkItemSkipReason = "dependency_failed"
+const (
+	WorkItemSkipReasonDependencyFailed   WorkItemSkipReason = "dependency_failed"
+	WorkItemSkipReasonDependencyCanceled WorkItemSkipReason = "dependency_canceled"
+)
+
+type WorkItemInterruptCause string
+
+const (
+	WorkItemInterruptExecutionStopped WorkItemInterruptCause = "execution_stopped"
+	WorkItemInterruptExecutionFailed  WorkItemInterruptCause = "execution_failed"
+)
 
 type NewWorkItemInput struct {
 	Ref             WorkItemRef
@@ -63,10 +77,16 @@ type WorkItem struct {
 	capabilityRefs  []CapabilityRef
 	outputContract  OutputContract
 	skipReason      WorkItemSkipReason
+	interruptCause  WorkItemInterruptCause
+	reworkOf        WorkItemRef
 	state           WorkItemState
 	revision        Revision
+	paused          bool
+	cancelRequested bool
+	controlSequence uint64
 	createdAt       time.Time
 	startedAt       time.Time
+	interruptedAt   time.Time
 	finishedAt      time.Time
 	execution       ExecutionRef
 	artifacts       []ArtifactRef
@@ -159,6 +179,17 @@ func (item WorkItem) CreatedAt() time.Time            { return item.createdAt }
 func (item WorkItem) IsTerminal() bool                { return item.state.Terminal() }
 func (item WorkItem) Artifacts() []ArtifactRef        { return cloneArtifacts(item.artifacts) }
 func (item WorkItem) Attestations() []AttestationRef  { return cloneAttestations(item.attestations) }
+func (item WorkItem) Paused() bool                    { return item.paused }
+func (item WorkItem) CancelRequested() bool           { return item.cancelRequested }
+func (item WorkItem) ControlSequence() uint64         { return item.controlSequence }
+
+func (item WorkItem) InterruptCause() (WorkItemInterruptCause, bool) {
+	return item.interruptCause, item.interruptCause != ""
+}
+
+func (item WorkItem) ReworkOf() (WorkItemRef, bool) {
+	return item.reworkOf, validWorkItemRef(item.reworkOf)
+}
 
 func (item WorkItem) StartedAt() (time.Time, bool) {
 	return item.startedAt, !item.startedAt.IsZero()
@@ -166,6 +197,10 @@ func (item WorkItem) StartedAt() (time.Time, bool) {
 
 func (item WorkItem) FinishedAt() (time.Time, bool) {
 	return item.finishedAt, !item.finishedAt.IsZero()
+}
+
+func (item WorkItem) InterruptedAt() (time.Time, bool) {
+	return item.interruptedAt, !item.interruptedAt.IsZero()
 }
 
 func (item WorkItem) Execution() (ExecutionRef, bool) {
@@ -177,7 +212,8 @@ func (item WorkItem) SkipReason() (WorkItemSkipReason, bool) {
 }
 
 func (item WorkItem) handoffBlockedByOwnOutcome() bool {
-	return item.state == WorkItemStateFailed || item.state == WorkItemStateSkipped
+	return item.state == WorkItemStateFailed || item.state == WorkItemStateSkipped ||
+		item.state == WorkItemStateCanceled || item.state == WorkItemStateSuperseded
 }
 
 func (item WorkItem) Start(expected Revision, execution ExecutionRef, at time.Time) (WorkItem, error) {
@@ -186,6 +222,9 @@ func (item WorkItem) Start(expected Revision, execution ExecutionRef, at time.Ti
 	}
 	if item.state != WorkItemStatePending {
 		return WorkItem{}, domainError(ErrorInvalidTransition, "work_item_state")
+	}
+	if item.paused || item.cancelRequested {
+		return WorkItem{}, domainError(ErrorInvalidTransition, "work_item_control")
 	}
 	if !validExecutionRef(execution) {
 		return WorkItem{}, domainError(ErrorInvalidRef, "execution_ref")
@@ -216,6 +255,9 @@ func (item WorkItem) replaceExecution(
 	}
 	if item.state != WorkItemStateRunning {
 		return WorkItem{}, domainError(ErrorInvalidTransition, "work_item_state")
+	}
+	if item.cancelRequested {
+		return WorkItem{}, domainError(ErrorInvalidTransition, "work_item_cancel_requested")
 	}
 	if !validExecutionRef(current) {
 		return WorkItem{}, domainError(ErrorInvalidRef, "current_execution_ref")
@@ -251,6 +293,9 @@ func (item WorkItem) Succeed(
 	if item.state != WorkItemStateRunning {
 		return WorkItem{}, domainError(ErrorInvalidTransition, "work_item_state")
 	}
+	if item.cancelRequested {
+		return WorkItem{}, domainError(ErrorInvalidTransition, "work_item_cancel_requested")
+	}
 	if item.outputContract.kind != OutputContractAttestation && len(artifacts) == 0 {
 		return WorkItem{}, domainError(ErrorEvidenceRequired, "artifact_refs")
 	}
@@ -269,6 +314,7 @@ func (item WorkItem) Succeed(
 
 	updated := item.clone()
 	updated.state = WorkItemStateSucceeded
+	updated.paused = false
 	updated.revision++
 	updated.finishedAt = canonicalTime(at)
 	updated.artifacts = cloneArtifacts(artifacts)
@@ -285,23 +331,30 @@ func (item WorkItem) Fail(expected Revision, at time.Time) (WorkItem, error) {
 	if item.state != WorkItemStateRunning {
 		return WorkItem{}, domainError(ErrorInvalidTransition, "work_item_state")
 	}
+	if item.cancelRequested {
+		return WorkItem{}, domainError(ErrorInvalidTransition, "work_item_cancel_requested")
+	}
 	if !validTransitionTime(at, item.startedAt) {
 		return WorkItem{}, domainError(ErrorInvalidArgument, "finished_at")
 	}
 
 	updated := item.clone()
 	updated.state = WorkItemStateFailed
+	updated.paused = false
 	updated.revision++
 	updated.finishedAt = canonicalTime(at)
 	return updated, nil
 }
 
-func (item WorkItem) skipDependencyFailed(expected Revision, at time.Time) (WorkItem, error) {
+func (item WorkItem) skipDependency(expected Revision, reason WorkItemSkipReason, at time.Time) (WorkItem, error) {
 	if err := item.expectRevision(expected); err != nil {
 		return WorkItem{}, err
 	}
 	if item.state != WorkItemStatePending {
 		return WorkItem{}, domainError(ErrorInvalidTransition, "work_item_state")
+	}
+	if reason != WorkItemSkipReasonDependencyFailed && reason != WorkItemSkipReasonDependencyCanceled {
+		return WorkItem{}, domainError(ErrorInvalidArgument, "skip_reason")
 	}
 	if !validTransitionTime(at, item.createdAt) {
 		return WorkItem{}, domainError(ErrorInvalidArgument, "finished_at")
@@ -309,9 +362,10 @@ func (item WorkItem) skipDependencyFailed(expected Revision, at time.Time) (Work
 
 	updated := item.clone()
 	updated.state = WorkItemStateSkipped
+	updated.paused = false
 	updated.revision++
 	updated.finishedAt = canonicalTime(at)
-	updated.skipReason = WorkItemSkipReasonDependencyFailed
+	updated.skipReason = reason
 	return updated, nil
 }
 
@@ -341,8 +395,11 @@ func equalWorkItems(left, right WorkItem) bool {
 		refsEqual(left.skillRefs, right.skillRefs) && refsEqual(left.toolRefs, right.toolRefs) &&
 		refsEqual(left.capabilityRefs, right.capabilityRefs) && left.outputContract == right.outputContract &&
 		left.skipReason == right.skipReason && left.state == right.state && left.revision == right.revision &&
+		left.interruptCause == right.interruptCause && left.reworkOf == right.reworkOf &&
+		left.paused == right.paused && left.cancelRequested == right.cancelRequested &&
+		left.controlSequence == right.controlSequence &&
 		left.createdAt.Equal(right.createdAt) && left.startedAt.Equal(right.startedAt) &&
-		left.finishedAt.Equal(right.finishedAt) && left.execution == right.execution &&
+		left.interruptedAt.Equal(right.interruptedAt) && left.finishedAt.Equal(right.finishedAt) && left.execution == right.execution &&
 		refsEqual(left.artifacts, right.artifacts) && refsEqual(left.attestations, right.attestations)
 }
 

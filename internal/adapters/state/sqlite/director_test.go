@@ -459,7 +459,7 @@ func TestRepositoryV12MigratesPopulatedV6ToV7(t *testing.T) {
 		t.Fatalf("migrate V6 to V7: %v", err)
 	}
 	t.Cleanup(func() { _ = migrated.Close() })
-	assertRecoverySchemaVersion(t, migrated.db, recoverySchemaV13)
+	assertRecoverySchemaVersion(t, migrated.db, recoverySchemaV14)
 	if _, err := migrated.GetGoal(ctx, state.Goal.Ref()); err != nil {
 		t.Fatalf("migrated Goal: %v", err)
 	}
@@ -678,6 +678,85 @@ func seedSQLiteDirectorDecision(t *testing.T) (*sqliteDirectorSystem, applicatio
 		t.Fatalf("seed Director decision=%+v err=%v", decision, err)
 	}
 	return system, decision
+}
+
+func TestRepositoryV14DirectorSplitReplanSurvivesRestart(t *testing.T) {
+	ctx := context.Background()
+	system := newSQLiteDirectorSystem(t)
+	claim, err := system.orchestrator.ClaimDirector(ctx, system.ownerAccess, application.ClaimDirectorRequest{
+		RequestRef: "director-claim:v14-split", GoalRef: system.goal.Goal.Ref(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := system.repository.GetGoal(ctx, system.goal.Goal.Ref())
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := current.Goal.WorkItems()[0]
+	if len(current.Executions) != 1 || current.Executions[0].State != application.ExecutionQueued {
+		t.Fatalf("split source projection=%+v", current.Executions)
+	}
+	execution := current.Executions[0]
+	request := application.ProposeDirectorPlanRequest{
+		RequestRef: "director-plan:v14-split", GoalRef: current.Goal.Ref(),
+		ExpectedGoalRevision: current.Goal.Revision(), ExpectedPlanGeneration: current.Goal.PlanGeneration(),
+		LeaseToken: claim.Lease.Token, LeaseFence: claim.Lease.Fence,
+		Cause: goal.ReplanCauseSplitPending, SourceWorkItemRef: source.Ref(),
+		ExpectedWorkItemRevision: source.Revision(), SourceExecutionRef: execution.Ref,
+		SourceExecutionAttempt: execution.AttemptNo, Reason: "persist exact split replan",
+		Plan: application.PlanSpec{WorkItems: []application.WorkItemSpec{{
+			Key: "successor", Objective: "sqlite split successor", Phase: source.Phase().String(),
+			Role: source.Role().String(), OutputContract: goal.OutputContractEvidenceBundle,
+		}}},
+	}
+	decision, err := system.orchestrator.ProposeDirectorPlan(ctx, system.ownerAccess, request)
+	if err != nil || !decision.Created {
+		t.Fatalf("split replan: result=%+v err=%v", decision, err)
+	}
+
+	restarted := reopenSQLiteDirectorSystem(t, system)
+	persisted, err := restarted.repository.GetGoal(ctx, current.Goal.Ref())
+	if err != nil {
+		t.Fatal(err)
+	}
+	persistedSource, _ := persisted.Goal.WorkItem(source.Ref())
+	if persistedSource.State() != goal.WorkItemStateSuperseded || len(persisted.Goal.WorkItems()) != 2 {
+		t.Fatalf("restart source/items=%s/%d", persistedSource.State(), len(persisted.Goal.WorkItems()))
+	}
+	successor := persisted.Goal.WorkItems()[1]
+	reworkOf, linked := successor.ReworkOf()
+	oldExecution, oldFound := sqliteExecutionByRef(persisted.Executions, execution.Ref)
+	var successorExecution application.ExecutionRecord
+	for _, candidate := range persisted.Executions {
+		if candidate.WorkItemRef == successor.Ref() {
+			successorExecution = candidate
+		}
+	}
+	if !linked || reworkOf != source.Ref() || !oldFound || oldExecution.State != application.ExecutionCanceled ||
+		successorExecution.Ref.String() == "" || successorExecution.State != application.ExecutionQueued {
+		t.Fatalf("restart causal projection: source=%s old=%+v successor=%+v", reworkOf, oldExecution, successorExecution)
+	}
+	var activeActions int
+	if err := restarted.repository.db.QueryRow(`
+SELECT COUNT(*) FROM outbox
+WHERE completed_at IS NULL AND retired_at IS NULL AND quarantined_at IS NULL`).Scan(&activeActions); err != nil {
+		t.Fatal(err)
+	}
+	if activeActions != 1 {
+		t.Fatalf("restart active actions=%d", activeActions)
+	}
+	before := sqliteDirectorPersistentCounts(t, restarted.repository)
+	replay, err := restarted.orchestrator.ProposeDirectorPlan(ctx, restarted.ownerAccess, request)
+	if err != nil || replay.Created || replay.Decision.Ref != decision.Decision.Ref {
+		t.Fatalf("restart split replay: result=%+v err=%v", replay, err)
+	}
+	if after := sqliteDirectorPersistentCounts(t, restarted.repository); after != before {
+		t.Fatalf("restart replay mutated state: before=%v after=%v", before, after)
+	}
+	if _, _, err := validateRecoveryDatabase(ctx, restarted.repository.db); err != nil {
+		t.Fatalf("recovery rejected V14 split replan: %v", err)
+	}
 }
 
 func newSQLiteDirectorSystem(t *testing.T) *sqliteDirectorSystem {

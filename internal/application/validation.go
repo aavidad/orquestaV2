@@ -15,7 +15,8 @@ import (
 func validatePersistedCandidate(candidate goal.Goal, executions []ExecutionRecord, record GoalRecord) error {
 	if !reflect.DeepEqual(record.Goal.Snapshot(), candidate.Snapshot()) ||
 		!slices.Equal(record.Executions, executions) ||
-		len(record.Artifacts) != 0 || len(record.Attestations) != 0 || len(record.ConsumptionReceipts) != 0 {
+		len(record.Artifacts) != 0 || len(record.Attestations) != 0 || len(record.Controls) != 0 ||
+		len(record.ConsumptionReceipts) != 0 {
 		return &StateError{Code: StateConflict}
 	}
 	return nil
@@ -63,7 +64,7 @@ func validateClaimedRecord(claim ActionClaim, record GoalRecord, kind ActionKind
 		}
 	case ActionObserveAgent:
 		if claim.Action.Ref != "action:observe:"+execution.Ref.String() ||
-			claim.Action.WorkItemGeneration != item.Revision() ||
+			claim.Action.WorkItemGeneration > item.Revision() ||
 			item.State() != goal.WorkItemStateRunning || execution.State != ExecutionRunning ||
 			execution.ProviderRef == "" || execution.ModelRef == "" || execution.AgentRef == "" ||
 			execution.ExternalRef == "" || execution.StartedAt.IsZero() ||
@@ -122,7 +123,7 @@ func validateAmendedRecord(
 		record.Goal.Actor() != source.Actor() || record.Goal.Project() != projectRef ||
 		record.Goal.State() != goal.GoalStatePending || record.Goal.WorkItemCount() != 0 ||
 		len(record.Executions) != 0 || len(record.Artifacts) != 0 || len(record.Attestations) != 0 ||
-		len(record.ConsumptionReceipts) != 0 ||
+		len(record.Controls) != 0 || len(record.ConsumptionReceipts) != 0 ||
 		intent.Actor() != source.Actor() || intent.Project() != projectRef ||
 		intent.Statement() != request.Statement ||
 		appSpec.Generation() != source.AppSpec().Generation()+1 || !hasParent ||
@@ -145,6 +146,7 @@ func executionForAction(record GoalRecord, action ActionRecord) (ExecutionRecord
 
 func validLaunchClaimState(item goal.WorkItem, execution ExecutionRecord) bool {
 	return (item.State() == goal.WorkItemStatePending && execution.State == ExecutionQueued) ||
+		(item.State() == goal.WorkItemStateRunning && execution.State == ExecutionQueued) ||
 		(item.State() == goal.WorkItemStateRunning && execution.State == ExecutionDispatching)
 }
 

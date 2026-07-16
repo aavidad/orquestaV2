@@ -1322,7 +1322,7 @@ func buildMailboxReplacementState(
 		AttemptNo: execution.AttemptNo + 1, MaxExecutionAttempts: execution.MaxExecutionAttempts,
 		ReplacesExecutionRef: execution.Ref, PlanGeneration: execution.PlanGeneration,
 		AppSpecGeneration: execution.AppSpecGeneration, SpecHash: execution.SpecHash,
-		State: application.ExecutionDispatching, ArtifactMediaType: execution.ArtifactMediaType,
+		State: application.ExecutionQueued, ArtifactMediaType: execution.ArtifactMediaType,
 		IdempotencyKey: "execution:" + replacementRef.String(), MaxOutputBytes: execution.MaxOutputBytes,
 		CreatedAt: at,
 	}
@@ -1339,7 +1339,7 @@ func buildMailboxReplacementState(
 		NextAction: next, ErrorCode: failureCode, OperationAt: at,
 		Events: []application.EventRecord{
 			{Ref: "event:" + suffix + ":failed", Kind: "execution.failed", GoalRef: record.Goal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref, OccurredAt: at},
-			{Ref: "event:" + suffix + ":dispatching", Kind: "execution.dispatching", GoalRef: record.Goal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: replacementRef, OccurredAt: at},
+			{Ref: "event:" + suffix + ":queued", Kind: "execution.queued", GoalRef: record.Goal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: replacementRef, OccurredAt: at},
 		},
 	}
 }
@@ -1412,7 +1412,7 @@ SELECT plan_generation, retired_at FROM outbox WHERE ref = ?`, state.NextAction.
 		t.Fatalf("replacement launch action plan=%d retired=%v err=%v", planGeneration, retiredAt, err)
 	}
 	if _, _, err := validateRecoveryDatabase(ctx, repository.db); err != nil {
-		t.Fatalf("recovery rejected birth-generation replacement: %v", err)
+		t.Fatalf("recovery rejected birth-generation replacement: %v cause=%v", err, errors.Unwrap(err))
 	}
 }
 

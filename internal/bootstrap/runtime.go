@@ -146,6 +146,7 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	if err := ports.ValidateAgentCapabilities(capabilities); err != nil {
 		return nil, err
 	}
+	controller, _ := agent.(application.AgentController)
 
 	identityComposition, err := composeIdentityRuntime(ctx, snapshot, options.IdentityHTTPClient)
 	if err != nil {
@@ -173,6 +174,9 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 			_ = repository.Close()
 		}
 	}()
+	if err := bindAgentRuntimeScope(agent, repository); err != nil {
+		return nil, err
+	}
 	if identityComposition.provisionLocal {
 		if err := repository.ProvisionLocalAccess(
 			ctx, identityComposition.localPrincipal, identityComposition.localHierarchy,
@@ -195,7 +199,7 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 
 	orchestrator, err := application.New(application.Dependencies{
 		State: repository, Access: repository,
-		Launcher: agent, Observer: agent, Artifacts: artifacts,
+		Launcher: agent, Observer: agent, Controller: controller, Artifacts: artifacts,
 		Clock: clock, IDs: local.IDGenerator{},
 		MaxOutputBytes:          snapshot.RuntimeMaxOutputBytes(),
 		MaxMailboxEnvelopeBytes: snapshot.MailboxMaxEnvelopeBytes(),
@@ -551,6 +555,30 @@ type credentialAgent struct {
 	closeStore func() error
 	closeOnce  sync.Once
 	closeErr   error
+}
+
+func (agent *credentialAgent) BindRuntimeScope(scope string) error {
+	binder, ok := agent.AgentAdapter.(runtimeScopeBinder)
+	if !ok {
+		return errors.New("bootstrap.agent_runtime_scope_unsupported")
+	}
+	return binder.BindRuntimeScope(scope)
+}
+
+func (agent *credentialAgent) ControlCapabilities(ctx context.Context) (ports.AgentControlCapabilities, error) {
+	controller, ok := agent.AgentAdapter.(application.AgentController)
+	if !ok {
+		return ports.AgentControlCapabilities{}, errors.New("bootstrap.agent_controller_unavailable")
+	}
+	return controller.ControlCapabilities(ctx)
+}
+
+func (agent *credentialAgent) Stop(ctx context.Context, request ports.AgentStopRequest) (ports.AgentStopReceipt, error) {
+	controller, ok := agent.AgentAdapter.(application.AgentController)
+	if !ok {
+		return ports.AgentStopReceipt{}, errors.New("bootstrap.agent_controller_unavailable")
+	}
+	return controller.Stop(ctx, request)
 }
 
 func (agent *credentialAgent) Shutdown(ctx context.Context) error {

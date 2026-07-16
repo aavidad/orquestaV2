@@ -11,11 +11,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"orquesta/internal/application"
-
-	_ "modernc.org/sqlite"
 )
 
 const driverName = "sqlite"
@@ -35,6 +34,11 @@ type Repository struct {
 	writer *sql.DB
 	path   string
 	now    func() time.Time
+
+	localIdentityMu        sync.Mutex
+	localIdentityHandle    *os.File
+	localIdentity          string
+	localIdentitySupported bool
 }
 
 var _ application.StateRepository = (*Repository)(nil)
@@ -48,19 +52,30 @@ func Open(ctx context.Context, options Options) (*Repository, error) {
 	if err := preparePrivateDatabase(path); err != nil {
 		return nil, invalid(err)
 	}
-
-	dsn := buildDSN(path, busyMilliseconds)
-	database, err := sql.Open(driverName, dsn)
+	identityHandle, localIdentity, identitySupported, err := captureLocalStateIdentity(path)
 	if err != nil {
 		return nil, invalid(err)
 	}
+	closeIdentityOnError := true
+	defer func() {
+		if closeIdentityOnError {
+			_ = identityHandle.Close()
+		}
+	}()
+
+	// Keep SQLite on the canonical pathname so every connection uses one WAL
+	// and shared-memory namespace. The per-repository connector validates the
+	// descriptor opened by every physical connection against the retained
+	// identity witness before database/sql can admit that connection.
+	dsn := buildDSN(path, busyMilliseconds)
+	connector, err := newLocalStateConnector(dsn, identityHandle, identitySupported)
+	if err != nil {
+		return nil, invalid(err)
+	}
+	database := sql.OpenDB(connector)
 	database.SetMaxOpenConns(options.MaxOpenConnections)
 	database.SetMaxIdleConns(options.MaxOpenConnections)
-	writer, err := sql.Open(driverName, dsn)
-	if err != nil {
-		_ = database.Close()
-		return nil, invalid(err)
-	}
+	writer := sql.OpenDB(connector)
 	// SQLite admits one writer at a time. Keep that queue in database/sql so
 	// concurrent application writes wait for the owned connection instead of
 	// racing BEGIN IMMEDIATE until busy_timeout and surfacing StateConflict.
@@ -70,7 +85,11 @@ func Open(ctx context.Context, options Options) (*Repository, error) {
 	if now == nil {
 		now = time.Now
 	}
-	repository := &Repository{db: database, writer: writer, path: path, now: now}
+	repository := &Repository{
+		db: database, writer: writer, path: path, now: now,
+		localIdentityHandle: identityHandle, localIdentity: localIdentity,
+		localIdentitySupported: identitySupported,
+	}
 	closeOnError := true
 	defer func() {
 		if closeOnError {
@@ -94,7 +113,11 @@ func Open(ctx context.Context, options Options) (*Repository, error) {
 	if err := syncSQLiteDirectory(filepath.Dir(path)); err != nil {
 		return nil, invalid(err)
 	}
+	if err := verifyLocalStateIdentity(identityHandle, path, localIdentity, identitySupported); err != nil {
+		return nil, invalid(err)
+	}
 	closeOnError = false
+	closeIdentityOnError = false
 	return repository, nil
 }
 
@@ -108,6 +131,13 @@ func (repository *Repository) Close() error {
 	}
 	if repository.db != nil {
 		closeErrors = append(closeErrors, repository.db.Close())
+	}
+	repository.localIdentityMu.Lock()
+	identityHandle := repository.localIdentityHandle
+	repository.localIdentityHandle = nil
+	repository.localIdentityMu.Unlock()
+	if identityHandle != nil {
+		closeErrors = append(closeErrors, identityHandle.Close())
 	}
 	return mapDatabaseError(errors.Join(closeErrors...))
 }

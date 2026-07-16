@@ -81,13 +81,23 @@
       "filesystem"
     ],
     "mutation_methods": [
+      "AdvanceControl",
       "ApplyPlan",
+      "ApplyReplan",
       "Start",
       "StartWorkItem",
       "ReplaceWorkItemExecution",
       "ResolveChildHandoff",
       "SucceedWorkItem",
       "FailWorkItem",
+      "InterruptWorkItem",
+      "RequestCancel",
+      "RequestWorkItemCancel",
+      "CompleteCancel",
+      "CompleteWorkItemCancel",
+      "RetryWorkItem",
+      "SetPaused",
+      "SetWorkItemPaused",
       "Close"
     ],
     "pure_transition_helpers": [

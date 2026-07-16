@@ -2,10 +2,10 @@
 
 Fecha de decisión: 2026-07-16.
 
-Estado: arquitectura aceptada; implementación todavía no iniciada. La
-contrarrevisión independiente de dominio, persistencia/concurrencia y
-alcance/trazabilidad terminó en `ACCEPT`; queda autorizado abrir el contrato
-rojo `AC-V14-CONTROLS`.
+Estado: implementación integrada y en cierre de acreditación. Dominio,
+application, SQLite, fake, Codex, bootstrap y el E2E de controles están verdes;
+falta fijar el candidato Git, ejecutar el gate desde checkout limpio y emitir
+el receipt V3. V15 sigue cerrado.
 
 ## Resultado del estudio
 
@@ -149,6 +149,15 @@ el receipt terminal quede persistido. Si ya estaba persistido, no nace otra.
 Una ejecución terminal no recibe launch, stop destructivo ni transición de
 estado posterior.
 
+Una parada forzada puede reemplazar una parada cooperativa pendiente solo para
+la misma Execution e identidad causal. La transacción marca el control anterior
+`superseded`, conserva lineage bidireccional, retira su acción todavía activa y
+crea la nueva acción forzada. Si la acción vieja ya está completada, retirada o
+cuarentenada, se rechaza sin control, evento ni acción parcial. Si la parada
+cooperativa ya detuvo físicamente el proceso, Codex devuelve `already_stopped`:
+application cierra la Execution sin atribuir falsamente el efecto a la orden
+forzada.
+
 Retry solo es válido si la última Execution exacta está `stopped`, el Goal no es
 terminal, el WorkItem sigue `interrupted`, no quedaron mensajes de destinatario
 retirados por ese stop y `AttemptNo < MaxExecutionAttempts`. Superar el límite
@@ -284,7 +293,7 @@ El contrato transporta refs/generaciones/hash/intento e identidad externa
 exactos, modo e idempotency key. Capabilities declaran cooperative y forced por
 separado. `unsupported` nunca se convierte en `stopped` ni llama a `Shutdown`.
 
-Fake implementa ambos modos y la suite contractual. Codex implementará stop
+Fake implementa ambos modos y la suite contractual. Codex implementa stop
 selectivo por ejecución y grupo de procesos, sin usar shutdown global. Su
 descriptor privado debe poder demostrar ownership e identidad tras restart y
 rechazar PID/PGID reutilizado; la evidencia pública permanece opaca. Si el
@@ -317,6 +326,14 @@ aún vivos. En plataformas sin lock, grupo y marcadores fiables, esa capability
 se anuncia unsupported; nunca se simula. Tampoco se simula un crash mediante
 shutdown cooperativo.
 
+La identidad local retenida no se comprueba solo con `stat(path)`. El conector
+SQLite valida dispositivo/inodo del descriptor que cada conexión física abrió,
+antes de pragmas, hooks o admisión al pool, y abre sin `CREATE`. Sustitución ABA,
+open perezoso tras reemplazo y ruta desaparecida fallan cerrados. No se usa
+`/proc/self/fd` como DSN porque crearía otro nombre de fichero y otro namespace
+WAL/SHM. Como upstream no expone aún ambas primitivas, el parche mínimo y su
+roundtrip reproducible viven en `third_party/patches/` y tienen gate propio.
+
 No se añade configuración V14 salvo necesidad demostrada por un adaptador. En
 particular, forced stop no necesita un default nuevo. Si un futuro conector
 requiere gracia cooperativa configurable, la clave deberá nacer primero en
@@ -324,9 +341,9 @@ requiere gracia cooperativa configurable, la clave deberá nacer primero en
 
 ## Persistencia y concurrencia
 
-Migración SQLite siguiente: `009_controls.sql`.
+La migración SQLite V14 es `009_controls.sql`.
 
-Debe cubrir:
+Cubre:
 
 - modo/secuencia de control en snapshot de Goal/WorkItem;
 - estados nuevos y relación causal de replan;
@@ -361,10 +378,10 @@ replan o cancel. La prueba V06 se actualizará en el mismo candidato V14 y sus
 demás invariantes seguirán verdes. Esto es evolución versionada del contrato,
 no reapertura de una Execution ni regresión encubierta.
 
-## Contrato rojo obligatorio
+## Contrato de aceptación ejecutable
 
-El `AC-V14-CONTROLS` actual es insuficiente y se ampliará antes de producción.
-Fixture mínimo:
+`AC-V14-CONTROLS` materializa estos gates y enumera las pruebas de conducta
+requeridas en el fixture; no basta con que existan suites no enlazadas:
 
 1. Cuatro WorkItems disjuntos A/B/C/D, cada uno con Execution de proceso real;
    stop de la Execution B preserva procesos, estado y progreso de A/C/D antes y
@@ -427,17 +444,41 @@ registro único V20. Esto acredita el fragmento `GOV-07` de la lección históri
 “tool registrada sin puerto real”; `UI-02` y el cierre global esperan al registro
 de V20.
 
-## Presupuesto de simplicidad
+## Presupuesto de simplicidad revisado antes del sello
 
-- cero stores, schedulers, loops, daemons o DB adicionales;
-- una interfaz externa nueva (`AgentController`);
-- una migración;
-- una entrada application genérica de control y la ampliación del Director;
-- objetivo máximo: 2.500 LOC de producción no generada y 4.000 LOC de tests,
-  fixtures y migración;
-- fichero de producción preferente menor de 400 líneas y función menor de 80;
-- superar el presupuesto exige parar, justificar la responsabilidad nueva y
-  retirar complejidad equivalente antes de continuar.
+La implementación se detuvo al superar el presupuesto inicial de 2.500 LOC de
+producción total y 4.000 de pruebas. La contrarrevisión confirmó que el límite
+mezclaba dos responsabilidades muy distintas: el contrato neutral cabe en el
+techo, pero recuperación SQLite y ownership/parada crash-safe de procesos no
+podían entrar sin retirar garantías expresamente exigidas por el mismo contrato.
+No se cambió el alcance ni se ocultó la desviación.
+
+Ratchets netos sobre el commit base V14, ejecutados por
+`TestV14CandidateSubjectsCoverCommittedDelta`:
+
+| Responsabilidad | Candidato medido antes del sello | Máximo |
+|---|---:|---:|
+| dominio + application + ports | 2.498 LOC | 2.500 |
+| adaptadores + bootstrap | 4.677 LOC | 4.700 |
+| parche reproducible `modernc/sqlite` | 155 LOC | 160 |
+| migración SQLite | 822 LOC | 825 |
+| pruebas + aceptación | 8.179 LOC | 8.600 |
+
+La revisión retiró la superficie fantasma `ControlReplan`: replan entra solo
+por `ProposeDirectorPlan`. Después separó responsabilidades sin cambiar
+contratos: `Control` bajó de 102 a 44 líneas, `settleStopped` de 83 a 60,
+`ApplyControl` de 188 a 40 y Codex `Stop` a 54. Ningún fichero productivo nuevo
+queda por encima de 400 líneas; ninguna función nueva de los splits supera 80.
+Los seams de fichero aumentan LOC física, pero eliminan controladores mixtos y
+dejan fronteras comprobables.
+
+Resultado arquitectónico: cero stores, schedulers, loops o DB **de
+orquestación/lifecycle** adicionales; una interfaz externa (`AgentController`),
+una migración y el mismo `StateRepository`/outbox. El journal Codex conserva
+solo evidencia privada del efecto y su espera es polling acotado a una petición,
+no otra autoridad ni un Director residente. Los límites anteriores quedan
+sellados como máximos, no como estimaciones que futuros cambios puedan ampliar
+sin otro contrato.
 
 ## Lecciones históricas convertidas en invariantes
 
@@ -457,6 +498,10 @@ test V14 se enlaza como evidencia parcial; `closure_evidence=not_verified` se
 mantiene hasta que todas sus capacidades propietarias posteriores estén
 acreditadas. Solo los bugs cuya totalidad pertenezca a V14 podrán cerrarse en
 este vertical.
+
+`BUG-ORQ-20260710-208C` conserva `ORC-16` como fragmento verificado por
+V14, pero sigue `not_verified`: el síntoma original atravesaba la ruta pública
+`runs/control`, cuya capacidad `UI-02` pertenece a V20.
 
 ## Write-set previsto
 

@@ -407,6 +407,7 @@ func traceBuildHistoricalBugIDs(
 	rowCapabilities map[string][]string,
 	rowLessonRefs map[string][]string,
 	reviews map[string]traceHistoricalBugIDReview,
+	bindings map[string]traceHistoricalBugIDReviewBinding,
 ) []traceHistoricalBugID {
 	bugIDs := make([]string, 0, len(occurrencesByID))
 	for bugID := range occurrencesByID {
@@ -446,9 +447,58 @@ func traceBuildHistoricalBugIDs(
 		if strings.HasPrefix(entry.LessonTestRef, "planned:") {
 			entry.LessonState = "pending_invariant_test"
 		}
+		if binding, exists := bindings[bugID]; exists {
+			entry.VerifiedCapabilityIDs = append([]string(nil), binding.VerifiedCapabilityIDs...)
+			entry.RebuildEvidenceRefs = append([]string(nil), binding.RebuildEvidenceRefs...)
+			if len(entry.VerifiedCapabilityIDs) > 0 && reflect.DeepEqual(entry.VerifiedCapabilityIDs, entry.CapabilityIDs) {
+				entry.ClosureEvidence = "verified"
+			}
+		}
 		entries = append(entries, entry)
 	}
 	return entries
+}
+
+func traceValidateHistoricalBugRebuildEvidence(t *testing.T, entry traceHistoricalBugID) {
+	t.Helper()
+	if len(entry.VerifiedCapabilityIDs) == 0 {
+		if len(entry.RebuildEvidenceRefs) != 0 || entry.ClosureEvidence != "not_verified" {
+			t.Fatalf("historical bug %q has closure without verified capability evidence: %#v", entry.BugID, entry)
+		}
+		return
+	}
+	if !sort.StringsAreSorted(entry.VerifiedCapabilityIDs) || len(entry.RebuildEvidenceRefs) == 0 {
+		t.Fatalf("historical bug %q has invalid rebuild evidence: %#v", entry.BugID, entry)
+	}
+	capabilities := make(map[string]struct{}, len(entry.CapabilityIDs))
+	for _, capabilityID := range entry.CapabilityIDs {
+		capabilities[capabilityID] = struct{}{}
+	}
+	for index, capabilityID := range entry.VerifiedCapabilityIDs {
+		if index > 0 && capabilityID == entry.VerifiedCapabilityIDs[index-1] {
+			t.Fatalf("historical bug %q repeats verified capability %q", entry.BugID, capabilityID)
+		}
+		if _, exists := capabilities[capabilityID]; !exists {
+			t.Fatalf("historical bug %q verifies unrelated capability %q", entry.BugID, capabilityID)
+		}
+	}
+	seenEvidence := make(map[string]struct{}, len(entry.RebuildEvidenceRefs))
+	for _, evidenceRef := range entry.RebuildEvidenceRefs {
+		if strings.TrimSpace(evidenceRef) == "" {
+			t.Fatalf("historical bug %q has empty rebuild evidence", entry.BugID)
+		}
+		if _, duplicate := seenEvidence[evidenceRef]; duplicate {
+			t.Fatalf("historical bug %q repeats rebuild evidence %q", entry.BugID, evidenceRef)
+		}
+		seenEvidence[evidenceRef] = struct{}{}
+	}
+	wantClosure := "not_verified"
+	if reflect.DeepEqual(entry.VerifiedCapabilityIDs, entry.CapabilityIDs) {
+		wantClosure = "verified"
+	}
+	if entry.ClosureEvidence != wantClosure {
+		t.Fatalf("historical bug %q closure=%q, want %q from capability coverage", entry.BugID, entry.ClosureEvidence, wantClosure)
+	}
 }
 
 func traceHistoricalBugPrimaryLesson(refs []string) string {

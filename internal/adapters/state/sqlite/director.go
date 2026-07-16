@@ -400,8 +400,26 @@ func (repository *Repository) ApplyDirectorPlan(
 	if err := updateGoalCAS(ctx, transaction, state.Goal, state.ExpectedGoalRevision); err != nil {
 		return application.DirectorDecisionRecord{}, false, err
 	}
+	if err := updateDirectorExistingWorkItems(ctx, transaction, current.Goal, state.Goal); err != nil {
+		return application.DirectorDecisionRecord{}, false, err
+	}
 	if err := insertDirectorPlanDelta(ctx, transaction, current.Goal, state.Goal); err != nil {
 		return application.DirectorDecisionRecord{}, false, err
+	}
+	for _, execution := range state.UpdatedExecutions {
+		stored, found := sqliteExecutionByRef(current.Executions, execution.Ref)
+		if !found {
+			return application.DirectorDecisionRecord{}, false,
+				conflict(errors.New("sqlite.director_execution_missing"))
+		}
+		if err := updateExecutionCAS(ctx, transaction, execution, stored.State); err != nil {
+			return application.DirectorDecisionRecord{}, false, err
+		}
+	}
+	for _, actionRef := range state.RetireActionRefs {
+		if err := consumeRetiredAction(ctx, transaction, actionRef, state.Decision.Ref, state.OperationAt); err != nil {
+			return application.DirectorDecisionRecord{}, false, err
+		}
 	}
 	if err := insertScheduled(ctx, transaction, state.NewExecutions, state.NewActions); err != nil {
 		return application.DirectorDecisionRecord{}, false, err
@@ -489,11 +507,25 @@ func validateApplyDirectorPlanState(state application.ApplyDirectorPlanState) er
 		decision.PrincipalRef != state.PrincipalRef || decision.LeaseFence != state.LeaseFence ||
 		decision.SourceGoalRevision != state.ExpectedGoalRevision ||
 		decision.SourcePlanGeneration != state.ExpectedPlanGeneration ||
+		decision.SourceWorkItemRevision != state.ExpectedWorkItemRevision ||
 		decision.AppliedGoalRevision != state.Goal.Revision() ||
 		decision.AppliedPlanGeneration != state.Goal.PlanGeneration() || !validText(decision.Reason) ||
 		decision.DecidedAt.IsZero() || !decision.DecidedAt.Equal(state.OperationAt) ||
 		!sameAuthorizationReceipt(decision.AuthorizationReceipt, state.AuthorizationReceipt) {
 		return errors.New("sqlite.director_decision_invalid")
+	}
+	if decision.Cause == "" {
+		if decision.SourceWorkItemRef.String() != "" || decision.SourceWorkItemRevision != 0 ||
+			decision.SourceExecutionRef.String() != "" || decision.SourceExecutionAttempt != 0 ||
+			len(state.UpdatedExecutions) != 0 || len(state.RetireActionRefs) != 0 {
+			return errors.New("sqlite.director_extension_source_invalid")
+		}
+	} else if decision.SourceWorkItemRef.String() == "" || decision.SourceExecutionRef.String() == "" ||
+		decision.SourceExecutionAttempt == 0 || state.ExpectedWorkItemRevision == 0 {
+		return errors.New("sqlite.director_replan_source_invalid")
+	}
+	if err := validateDirectorReplanDelta(state); err != nil {
+		return err
 	}
 	request := state.AuthorizationReceipt.Decision().Request()
 	if request.Principal().Ref != state.PrincipalRef || request.ProjectRef() != state.ProjectRef ||
@@ -513,6 +545,32 @@ func validateApplyDirectorPlanState(state application.ApplyDirectorPlanState) er
 			return errors.New("sqlite.director_event_duplicate")
 		}
 		seen[event.Ref] = struct{}{}
+	}
+	return nil
+}
+
+func validateDirectorReplanDelta(state application.ApplyDirectorPlanState) error {
+	switch state.Decision.Cause {
+	case "", goal.ReplanCauseExecutionStopped, goal.ReplanCauseExecutionFailed:
+		if len(state.UpdatedExecutions) != 0 || len(state.RetireActionRefs) != 0 {
+			return errors.New("sqlite.director_replan_delta_unexpected")
+		}
+	case goal.ReplanCauseSplitPending:
+		if len(state.UpdatedExecutions) != 1 || len(state.RetireActionRefs) != 1 {
+			return errors.New("sqlite.director_split_delta_invalid")
+		}
+		execution := state.UpdatedExecutions[0]
+		if execution.Ref != state.Decision.SourceExecutionRef ||
+			execution.WorkItemRef != state.Decision.SourceWorkItemRef ||
+			execution.AttemptNo != state.Decision.SourceExecutionAttempt ||
+			execution.State != application.ExecutionCanceled ||
+			execution.FailureCode != "application.execution_superseded" ||
+			!execution.FinishedAt.Equal(state.OperationAt) ||
+			state.RetireActionRefs[0] != "action:launch:"+execution.Ref.String() {
+			return errors.New("sqlite.director_split_delta_invalid")
+		}
+	default:
+		return errors.New("sqlite.director_replan_cause_invalid")
 	}
 	return nil
 }
@@ -706,9 +764,73 @@ func validateDirectorPlanTransition(
 		!after.ClosedAt.Equal(before.ClosedAt) || after.Revision != before.Revision+1 ||
 		after.PlanGeneration != before.PlanGeneration+1 || len(after.Phases) < len(before.Phases) ||
 		len(after.WorkItems) < len(before.WorkItems) ||
-		!reflect.DeepEqual(after.Phases[:len(before.Phases)], before.Phases) ||
-		!reflect.DeepEqual(after.WorkItems[:len(before.WorkItems)], before.WorkItems) {
+		!reflect.DeepEqual(after.Phases[:len(before.Phases)], before.Phases) {
 		return errors.New("sqlite.director_plan_cas_conflict")
+	}
+	if state.Decision.Cause == "" {
+		if !reflect.DeepEqual(after.WorkItems[:len(before.WorkItems)], before.WorkItems) {
+			return errors.New("sqlite.director_plan_cas_conflict")
+		}
+		return nil
+	}
+	beforeSource, found := current.Goal.WorkItem(state.Decision.SourceWorkItemRef)
+	if !found || beforeSource.Revision() != state.ExpectedWorkItemRevision {
+		return errors.New("sqlite.director_replan_item_conflict")
+	}
+	afterSource, found := state.Goal.WorkItem(state.Decision.SourceWorkItemRef)
+	if !found || afterSource.State() != goal.WorkItemStateSuperseded ||
+		afterSource.Revision() != beforeSource.Revision()+1 {
+		return errors.New("sqlite.director_replan_transition_invalid")
+	}
+	causalExecution, found := sqliteExecutionByRef(current.Executions, state.Decision.SourceExecutionRef)
+	if !found || causalExecution.WorkItemRef != beforeSource.Ref() ||
+		causalExecution.AttemptNo != state.Decision.SourceExecutionAttempt {
+		return errors.New("sqlite.director_replan_execution_conflict")
+	}
+	switch state.Decision.Cause {
+	case goal.ReplanCauseSplitPending:
+		if causalExecution.State != application.ExecutionQueued {
+			return errors.New("sqlite.director_replan_execution_conflict")
+		}
+	case goal.ReplanCauseExecutionStopped:
+		if causalExecution.State != application.ExecutionStopped {
+			return errors.New("sqlite.director_replan_execution_conflict")
+		}
+	case goal.ReplanCauseExecutionFailed:
+		if causalExecution.State != application.ExecutionFailed {
+			return errors.New("sqlite.director_replan_execution_conflict")
+		}
+	default:
+		return errors.New("sqlite.director_replan_cause_invalid")
+	}
+	for index := range before.WorkItems {
+		if before.WorkItems[index].Ref == state.Decision.SourceWorkItemRef.String() {
+			continue
+		}
+		if !reflect.DeepEqual(after.WorkItems[index], before.WorkItems[index]) {
+			return errors.New("sqlite.director_replan_unrelated_mutation")
+		}
+	}
+	return nil
+}
+
+func updateDirectorExistingWorkItems(
+	ctx context.Context,
+	transaction *sql.Tx,
+	before goal.Goal,
+	after goal.Goal,
+) error {
+	for _, previous := range before.WorkItems() {
+		current, found := after.WorkItem(previous.Ref())
+		if !found {
+			return conflict(errors.New("sqlite.director_work_item_removed"))
+		}
+		if current.Revision() == previous.Revision() {
+			continue
+		}
+		if err := updateWorkItemCAS(ctx, transaction, current, previous.Revision()); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -737,13 +859,18 @@ func insertDirectorDecision(
 INSERT INTO director_decisions(
     ref, request_ref, request_fingerprint, authorization_receipt_ref,
     goal_ref, project_ref, principal_ref, lease_fence,
-    source_goal_revision, source_plan_generation,
+    source_goal_revision, source_plan_generation, cause,
+    source_work_item_ref, source_work_item_revision,
+    source_execution_ref, source_execution_attempt,
     applied_goal_revision, applied_plan_generation, reason, decided_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		decision.Ref, decision.RequestRef, decision.RequestFingerprint,
 		decision.AuthorizationReceipt.Ref(), decision.GoalRef.String(), projectRef.String(),
 		decision.PrincipalRef.String(), int64(decision.LeaseFence),
 		int64(decision.SourceGoalRevision), int64(decision.SourcePlanGeneration),
+		string(decision.Cause), nullableString(decision.SourceWorkItemRef.String()),
+		int64(decision.SourceWorkItemRevision), nullableString(decision.SourceExecutionRef.String()),
+		int64(decision.SourceExecutionAttempt),
 		int64(decision.AppliedGoalRevision), int64(decision.AppliedPlanGeneration),
 		decision.Reason, requiredTime(decision.DecidedAt),
 	)
@@ -760,11 +887,16 @@ func readDirectorDecisionByRequest(
 ) (application.DirectorDecisionRecord, bool, error) {
 	var decision application.DirectorDecisionRecord
 	var goalValue, principalValue, authorizationRef string
-	var fence, sourceRevision, sourceGeneration, appliedRevision, appliedGeneration, decidedAt int64
+	var fence, sourceRevision, sourceGeneration, sourceItemRevision, sourceExecutionAttempt int64
+	var appliedRevision, appliedGeneration, decidedAt int64
+	var cause string
+	var sourceItem, sourceExecution sql.NullString
 	err := source.QueryRowContext(ctx, `
 SELECT ref, request_ref, request_fingerprint, authorization_receipt_ref,
        goal_ref, principal_ref, lease_fence,
-       source_goal_revision, source_plan_generation,
+       source_goal_revision, source_plan_generation, cause,
+       source_work_item_ref, source_work_item_revision,
+       source_execution_ref, source_execution_attempt,
        applied_goal_revision, applied_plan_generation, reason, decided_at
 FROM director_decisions
 WHERE principal_ref = ? AND project_ref = ? AND goal_ref = ? AND request_ref = ?`,
@@ -772,6 +904,7 @@ WHERE principal_ref = ? AND project_ref = ? AND goal_ref = ? AND request_ref = ?
 	).Scan(
 		&decision.Ref, &decision.RequestRef, &decision.RequestFingerprint, &authorizationRef,
 		&goalValue, &principalValue, &fence, &sourceRevision, &sourceGeneration,
+		&cause, &sourceItem, &sourceItemRevision, &sourceExecution, &sourceExecutionAttempt,
 		&appliedRevision, &appliedGeneration, &decision.Reason, &decidedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -792,6 +925,19 @@ WHERE principal_ref = ? AND project_ref = ? AND goal_ref = ? AND request_ref = ?
 	decision.LeaseFence = uint64(fence)
 	decision.SourceGoalRevision = goal.Revision(sourceRevision)
 	decision.SourcePlanGeneration = goal.PlanGeneration(sourceGeneration)
+	decision.Cause = goal.ReplanCause(cause)
+	decision.SourceWorkItemRevision = goal.Revision(sourceItemRevision)
+	decision.SourceExecutionAttempt = uint64(sourceExecutionAttempt)
+	if sourceItem.Valid {
+		if decision.SourceWorkItemRef, err = goal.NewWorkItemRef(sourceItem.String); err != nil {
+			return application.DirectorDecisionRecord{}, false, invalid(err)
+		}
+	}
+	if sourceExecution.Valid {
+		if decision.SourceExecutionRef, err = goal.NewExecutionRef(sourceExecution.String); err != nil {
+			return application.DirectorDecisionRecord{}, false, invalid(err)
+		}
+	}
 	decision.AppliedGoalRevision = goal.Revision(appliedRevision)
 	decision.AppliedPlanGeneration = goal.PlanGeneration(appliedGeneration)
 	decision.DecidedAt = time.Unix(0, decidedAt).UTC()
@@ -874,6 +1020,10 @@ func directorDecisionReplays(
 		stored.GoalRef == state.GoalRef && stored.PrincipalRef == state.PrincipalRef &&
 		stored.LeaseFence == state.LeaseFence && stored.SourceGoalRevision == state.ExpectedGoalRevision &&
 		stored.SourcePlanGeneration == state.ExpectedPlanGeneration &&
+		stored.Cause == state.Decision.Cause && stored.SourceWorkItemRef == state.Decision.SourceWorkItemRef &&
+		stored.SourceWorkItemRevision == state.ExpectedWorkItemRevision &&
+		stored.SourceExecutionRef == state.Decision.SourceExecutionRef &&
+		stored.SourceExecutionAttempt == state.Decision.SourceExecutionAttempt &&
 		stored.AppliedGoalRevision == state.Goal.Revision() &&
 		stored.AppliedPlanGeneration == state.Goal.PlanGeneration() &&
 		stored.Reason == state.Decision.Reason

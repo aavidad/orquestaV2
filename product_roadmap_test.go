@@ -1203,17 +1203,22 @@ func TestProductRoadmapV14ScopeAndExecutableContract(t *testing.T) {
 	if !reflect.DeepEqual(owned, wantOwned) {
 		t.Fatalf("V14 accepted ownership = %v, want exact %v", owned, wantOwned)
 	}
+	wantEvidence := []string{
+		"acceptance/v14_controls_test.go",
+		"acceptance/fixtures/v14_controls.json",
+		"product/evidence/v14_controls.json",
+	}
 	wantVertical := verticals["controls"]
 	for _, id := range wantOwned {
 		entry := entries[id]
-		if entry.Status != "declared" || len(entry.EvidenceRefs) != 0 ||
+		if entry.Status != "accredited" || !reflect.DeepEqual(entry.EvidenceRefs, wantEvidence) ||
 			!reflect.DeepEqual(entry.Dependencies, wantVertical.DependsOn) ||
 			!reflect.DeepEqual(entry.AcceptanceContracts, wantVertical.AcceptanceContracts) {
-			t.Errorf("V14 capability %s must remain declared without evidence during contract red: %#v", id, entry)
+			t.Errorf("V14 capability %s lacks exact accreditation: %#v", id, entry)
 		}
 	}
 
-	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV14ScopeAndExecutableContract|TestV14EvidenceBelongsOnlyToControlCapabilities|TestV14AcceptanceCommandRunsControlConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV14Controls|TestV14CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/config ./internal/credentials ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta'"
+	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV14ScopeAndExecutableContract|TestV14EvidenceBelongsOnlyToControlCapabilities|TestV14AcceptanceCommandRunsControlConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV14Controls|TestV14CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/config ./internal/credentials ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta && go test -mod=vendor -race -count=1 ./internal/application ./internal/adapters/state/sqlite ./internal/adapters/agent/codex ./internal/bootstrap -run \"^(TestConcurrentIdenticalControlCASLoserReturnsExactReplay|TestControlsGoalAndWorkItemCancelCompletionCASBothOrders|TestControlsStopCompletionCASAndUnsupportedMode|TestControlsStopCrashReplayConvergesWithoutDuplicateEffect|TestClaimedRetryRevalidatesPauseBeforeLaunchPreparation|TestClaimedAutomaticReplacementRevalidatesPauseBeforeLaunchPreparation|TestSQLiteControlsRestartAndConcurrentCAS|TestSQLiteForcedStopSupersessionIsAtomicConcurrentAndRestartSafe|TestSQLiteTerminalStopSettlesAfterRestartWithReplacementAgentRouting|TestV14RecoveryAcceptsClaimedTerminalStopThenReclaimsAndSettlesOnce|TestCodexSelectiveStopPreservesSiblingProcessTrees|TestCodexSelectiveStopAdoptsAfterCrashAndRejectsReusedPID|TestCodexLaunchGateCrashNeverOrphansProcess|TestCodexOwnerLockIsExclusiveAndCLOEXEC|TestCodexRestoredDatabaseCannotAdoptSourceProcess|TestBuildBindsAgentToOpenedRepositoryIdentity|TestRealCodexControlsThroughProductionComposition|TestRealCodexCooperativeStopLeavesResidentSchedulerLive)$\"'"
 	contract := contracts["AC-V14-CONTROLS"]
 	if contract.Status != "executable" || contract.TestRef != "acceptance/v14_controls_test.go" ||
 		contract.Fixture != "acceptance/fixtures/v14_controls.json" ||
@@ -1247,10 +1252,15 @@ func TestV14EvidenceBelongsOnlyToControlCapabilities(t *testing.T) {
 		"product/evidence/v14_controls.json":       true,
 		"product/evidence/v14_controls.output.txt": true,
 	}
+	wantEvidence := []string{
+		"acceptance/v14_controls_test.go",
+		"acceptance/fixtures/v14_controls.json",
+		"product/evidence/v14_controls.json",
+	}
 	for _, entry := range roadmap.CapabilityEntries {
 		if owned[entry.ID] {
-			if entry.Status != "declared" || len(entry.EvidenceRefs) != 0 {
-				t.Errorf("owned V14 capability %s has premature accreditation: status=%q evidence=%v",
+			if entry.Status != "accredited" || !reflect.DeepEqual(entry.EvidenceRefs, wantEvidence) {
+				t.Errorf("owned V14 capability %s lacks exact accreditation: status=%q evidence=%v",
 					entry.ID, entry.Status, entry.EvidenceRefs)
 			}
 			continue
@@ -1260,6 +1270,43 @@ func TestV14EvidenceBelongsOnlyToControlCapabilities(t *testing.T) {
 				t.Errorf("unowned capability %s claims V14 evidence %q", entry.ID, evidenceRef)
 			}
 		}
+	}
+	wantHistoricalCapabilities := map[string][]string{
+		"BUG-ORQ-20260705-197":  {"GOV-07"},
+		"BUG-ORQ-20260709-198":  {"STG-15"},
+		"BUG-ORQ-20260710-208":  {"ORC-16"},
+		"BUG-ORQ-20260710-208C": {"ORC-16"},
+		"BUG-ORQ-20260710-208S": {"ORC-03"},
+		"BUG-ORQ-20260711-208Z": {"GOV-07"},
+		"BUG-ORQ-20260711-239":  {"STG-15"},
+		"BUG-ORQ-20260711-240":  {"STG-15"},
+		"BUG-ORQ-20260711-243":  {"STG-15"},
+		"BUG-ORQ-20260711-260":  {"STG-15"},
+		"BUG-ORQ-20260711-261":  {"ORC-16"},
+		"BUG-ORQ-20260711-267":  {"ORC-16"},
+		"BUG-ORQ-20260711-270":  {"STG-15"},
+	}
+	for _, bug := range traceReadHistoricalBugIDs(t, "product/traceability/historical_bug_ids.jsonl") {
+		wantCapabilities, belongsToV14 := wantHistoricalCapabilities[bug.BugID]
+		if !belongsToV14 {
+			for _, evidenceRef := range bug.RebuildEvidenceRefs {
+				if v14Evidence[evidenceRef] {
+					t.Errorf("unowned historical bug %s claims V14 evidence %q", bug.BugID, evidenceRef)
+				}
+			}
+			continue
+		}
+		wantClosure := "not_verified"
+		if !reflect.DeepEqual(bug.VerifiedCapabilityIDs, wantCapabilities) ||
+			!reflect.DeepEqual(bug.RebuildEvidenceRefs, wantEvidence) || bug.ClosureEvidence != wantClosure {
+			t.Errorf("historical bug %s V14 evidence=%v/%v closure=%q, want %v/%v/%q",
+				bug.BugID, bug.VerifiedCapabilityIDs, bug.RebuildEvidenceRefs, bug.ClosureEvidence,
+				wantCapabilities, wantEvidence, wantClosure)
+		}
+		delete(wantHistoricalCapabilities, bug.BugID)
+	}
+	if len(wantHistoricalCapabilities) != 0 {
+		t.Fatalf("historical V14 bugs missing evidence: %v", wantHistoricalCapabilities)
 	}
 }
 
@@ -1296,6 +1343,7 @@ func roadmapV14Assertions() []string {
 		"resume reclaims the existing pending action without creating another Execution outbox action or effect",
 		"stop targets one exact Execution and generation through the existing outbox scheduler and AgentController and separates stop requested from exact stop confirmed",
 		"cooperative and forced stop execute only when adapter capabilities advertise them and unsupported never becomes stopped or invokes global Shutdown",
+		"forced stop supersedes only the exact still-active cooperative stop for the same Execution; atomic lineage retires the old action before the new one while completed retired or quarantined owners reject without partial writes",
 		"four disjoint A B C D executions prove that stopping B preserves A C D processes state and progress before and after crash restart without global Shutdown",
 		"stop requested permits late V13 delivery consume and acknowledgement until confirmation; confirmation retires only unresolved exact-recipient mailbox without readdress synthetic ACK or ChildHandoffResolution",
 		"completion and stop race through one CAS; already completed is observed rather than falsified as stopped and every terminal Execution remains immutable and never restarts",
@@ -1313,6 +1361,7 @@ func roadmapV14Assertions() []string {
 		"SQLite restart backup restore and races at pause claim cancel launch stop completion retry and replan preserve one fenced WorkItem lease and never repeat a terminal effect",
 		"the neutral AgentController contract passes one fake suite and Codex proves exact process-tree stop crash adoption and PID PGID birth-identity checks while clean Shutdown remains separate",
 		"Codex persists process identity only in its existing private WorkRoot journal behind an FD3 launch gate holds one CLOEXEC owner.lock and binds local runtime scope to non-backup-clonable StateRepository file identity while distributed ownership remains V31",
+		"every SQLite physical connection validates the retained local file identity before configuration so path replacement lazy open missing-path recreation and alternate WAL namespaces fail closed",
 		"control receipts expose opaque identities without PID argv environment prompt or secrets and V14 adds no undeclared configuration key",
 		"V14 preserves the V02 single writer V05 DAG and dependency rules V06 atomic retries and receipts V07 config V08 credentials V09 recovery V10 RBAC V12 Director and V13 mailbox ratchets without another store scheduler loop daemon database or lifecycle",
 		"V14 exposes application use cases only; HTTP MCP CLI command registry and full i18n bindings remain V20 and V21 while budgets effects workspace reviews provider parity generic messages UI and later surfaces remain deferred",

@@ -230,8 +230,25 @@ WHERE execution.ref = ?
 	}
 	if record.Retirement != nil {
 		retirement := record.Retirement
-		if executionState != string(application.ExecutionFailed) || !finishedAt.Valid ||
-			failureCode != retirement.FailureCode || finishedAt.Int64 != retirement.RetiredAt.UnixNano() {
+		controlledSuccess := false
+		if executionState == string(application.ExecutionSucceeded) &&
+			retirement.FailureCode == controlledMailboxCancellationCode {
+			var controls int
+			if err := source.QueryRowContext(ctx, `
+SELECT COUNT(*) FROM controls
+WHERE goal_ref = ? AND operation = 'cancel' AND requested_at <= ?
+  AND (target = 'goal' OR (target = 'work_item' AND work_item_ref = ?))`,
+				record.Envelope.GoalRef.String(), requiredTime(retirement.RetiredAt),
+				record.Envelope.ParentWorkItemRef.String(),
+			).Scan(&controls); err == nil {
+				controlledSuccess = controls > 0
+			}
+		}
+		if (!controlledSuccess && executionState != string(application.ExecutionFailed) &&
+			executionState != string(application.ExecutionStopped) &&
+			executionState != string(application.ExecutionCanceled)) || !finishedAt.Valid ||
+			(!controlledSuccess && failureCode != retirement.FailureCode) ||
+			finishedAt.Int64 != retirement.RetiredAt.UnixNano() {
 			return errors.New("sqlite.recovery_mailbox_retirement_cause_invalid")
 		}
 		return nil

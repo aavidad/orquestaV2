@@ -90,6 +90,22 @@ func validateRecoveryDatabase(ctx context.Context, database *sql.DB) (string, st
 		if err := validateRecoveryV13Mailbox(ctx, transaction); err != nil {
 			return "", "", invalid(err)
 		}
+	case recoverySchemaV14:
+		if err := validateMigratedGoalRecords(ctx, transaction); err != nil {
+			return "", "", invalid(err)
+		}
+		if err := validateRecoveryV10Identity(ctx, transaction); err != nil {
+			return "", "", invalid(err)
+		}
+		if err := validateRecoveryV12Director(ctx, transaction); err != nil {
+			return "", "", invalid(err)
+		}
+		if err := validateRecoveryV13Mailbox(ctx, transaction); err != nil {
+			return "", "", invalid(err)
+		}
+		if err := validateRecoveryV14Controls(ctx, transaction); err != nil {
+			return "", "", invalid(err)
+		}
 	}
 	if err := validateRecoveryEvents(ctx, transaction); err != nil {
 		return "", "", invalid(err)
@@ -327,14 +343,16 @@ func activeRecoveryActionState(
 	switch kind {
 	case application.ActionLaunchAgent:
 		if executionState == "queued" {
-			return currentItemState == "pending" && itemGeneration == currentItemRevision
+			initial := currentItemState == "pending" && !currentExecutionRef.Valid
+			replacement := currentItemState == "running" && currentExecutionRef.Valid &&
+				currentExecutionRef.String == executionRef
+			return itemGeneration <= currentItemRevision && (initial || replacement)
 		}
 		if executionState != "dispatching" || currentItemState != "running" ||
 			!currentExecutionRef.Valid || currentExecutionRef.String != executionRef {
 			return false
 		}
-		return itemGeneration == currentItemRevision ||
-			(executionAttempt == 1 && itemGeneration+1 == currentItemRevision)
+		return itemGeneration <= currentItemRevision
 	case application.ActionObserveAgent:
 		return executionState == "running" && currentItemState == "running" &&
 			currentExecutionRef.Valid && currentExecutionRef.String == executionRef &&

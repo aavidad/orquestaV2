@@ -2,7 +2,7 @@ package goal
 
 import "time"
 
-const GoalSnapshotSchemaVersion uint32 = 4
+const GoalSnapshotSchemaVersion uint32 = 5
 
 // IntentManifestSnapshot is a persistence-neutral representation. Primitive
 // ref values keep adapters independent from domain internals.
@@ -57,10 +57,16 @@ type WorkItemSnapshot struct {
 	CapabilityRefs  []string
 	OutputContract  OutputContractKind
 	SkipReason      WorkItemSkipReason
+	InterruptCause  WorkItemInterruptCause
+	ReworkOf        string
 	State           WorkItemState
 	Revision        Revision
+	Paused          bool
+	CancelRequested bool
+	ControlSequence uint64
 	CreatedAt       time.Time
 	StartedAt       time.Time
+	InterruptedAt   time.Time
 	FinishedAt      time.Time
 	ExecutionRef    string
 	ArtifactRefs    []string
@@ -88,6 +94,9 @@ type GoalSnapshot struct {
 	AppSpec                 AppSpecSnapshot
 	State                   GoalState
 	Revision                Revision
+	Paused                  bool
+	CancelRequested         bool
+	ControlSequence         uint64
 	CreatedAt               time.Time
 	StartedAt               time.Time
 	ClosedAt                time.Time
@@ -154,6 +163,9 @@ func (goal Goal) Snapshot() GoalSnapshot {
 		AppSpec:                 goal.appSpec.Snapshot(),
 		State:                   goal.state,
 		Revision:                goal.revision,
+		Paused:                  goal.paused,
+		CancelRequested:         goal.cancelRequested,
+		ControlSequence:         goal.controlSequence,
 		CreatedAt:               goal.createdAt,
 		StartedAt:               goal.startedAt,
 		ClosedAt:                goal.closedAt,
@@ -211,10 +223,16 @@ func snapshotWorkItem(item WorkItem) WorkItemSnapshot {
 		CapabilityRefs:  stringsFromRefs(item.capabilityRefs),
 		OutputContract:  item.outputContract.kind,
 		SkipReason:      item.skipReason,
+		InterruptCause:  item.interruptCause,
+		ReworkOf:        item.reworkOf.String(),
 		State:           item.state,
 		Revision:        item.revision,
+		Paused:          item.paused,
+		CancelRequested: item.cancelRequested,
+		ControlSequence: item.controlSequence,
 		CreatedAt:       item.createdAt,
 		StartedAt:       item.startedAt,
+		InterruptedAt:   item.interruptedAt,
 		FinishedAt:      item.finishedAt,
 		ExecutionRef:    item.execution.String(),
 		ArtifactRefs:    artifacts,

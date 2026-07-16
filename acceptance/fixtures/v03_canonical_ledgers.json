@@ -69,19 +69,19 @@
     },
     {
       "path": "product/traceability/historical_bug_extraction_policy.json",
-      "sha256": "sha256:695bc673f01acf754c4ff780c8e99f05a19cb22552466d77a3602ac45f41f129"
+      "sha256": "sha256:0c0e604d38089bbe74cb939850ca1cee23ee7d9d25cd2cc4c3ada8b1edb26ff9"
     },
     {
       "path": "product/traceability/historical_bug_id_review_bindings.jsonl",
-      "sha256": "sha256:5bd7e891a17cab68906b9a5fe3f2dc62e94ed123c0b92f38200be83b95629b6d"
+      "sha256": "sha256:5017f4759d3a61391336c36217d5cf2530cee8fadb99e9f620a2df4ebbf1cc1a"
     },
     {
       "path": "product/traceability/historical_bug_id_reviews.jsonl",
-      "sha256": "sha256:fb96251bcb52794894c496fcb0fca01727f54dedeed2e7fb177b409a515506bf"
+      "sha256": "sha256:1b5839a2e0f4f5366bb25ff3f9f7f904054a3dbe029557dd315733308771f5d0"
     },
     {
       "path": "product/traceability/historical_bug_ids.jsonl",
-      "sha256": "sha256:2c0f82296c19dde547c6bb35f09e40243fb2cc0eb40f8f97a4b3ebb378b24656"
+      "sha256": "sha256:0f5517b6a3545335197a9117f5345ece76e5fad3eab3ed659517ed7be1092663"
     },
     {
       "path": "product/traceability/historical_bug_occurrences.jsonl",
@@ -113,7 +113,7 @@
     },
     {
       "path": "product/traceability/schema.json",
-      "sha256": "sha256:4f4697d34fb413dee919f231024019f3d0e7bec0580f053cb7fad95a80b75927"
+      "sha256": "sha256:cf9dcd9a8782d2cc70a4f4d459b111cd9b23ee53e8fd8fdf23f6f0e27d944e68"
     },
     {
       "path": "product/traceability/source_dispositions.jsonl",

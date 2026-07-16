@@ -271,7 +271,7 @@ func TestSchedulerSerializesOverlappingRootsBeforeProvider(t *testing.T) {
 	}
 }
 
-func TestFailedRootSkipsDescendantsButIndependentWorkFinishesBeforeGoal(t *testing.T) {
+func TestExhaustedRootInterruptsAndKeepsGoalOpenForDirectorReplan(t *testing.T) {
 	harness := newDAGHarness(t, map[string]bool{"fail root": true})
 	created := harness.create(t, "request:mcp-failure-dag", "continue independent work", map[string]any{
 		"phases": []any{planPhase("phase-instance:work", "phase:work", "phase-template:program", nil, nil)},
@@ -297,18 +297,39 @@ func TestFailedRootSkipsDescendantsButIndependentWorkFinishesBeforeGoal(t *testi
 
 	// Independent work closes while the failed provider execution follows its
 	// own bounded replacement policy. Backoff is one second, then two seconds.
+	// Exhaustion interrupts its WorkItem but leaves Goal and dependants open for
+	// an explicit Director replan; scheduler must not invent terminal skips.
 	harness.process(t, 1)
 	harness.clock.Advance(time.Second)
 	harness.process(t, 2)
 	harness.clock.Advance(2 * time.Second)
 	harness.process(t, 2)
-	closed := harness.get(t, created.GoalRef)
-	states = workStates(closed.WorkItems)
-	if closed.State != string(goal.GoalStateFailed) || states["fail root"] != string(goal.WorkItemStateFailed) ||
-		states["child"] != string(goal.WorkItemStateSkipped) || states["grandchild"] != string(goal.WorkItemStateSkipped) ||
+	open := harness.get(t, created.GoalRef)
+	states = workStates(open.WorkItems)
+	if open.State != string(goal.GoalStateRunning) || open.ClosedAt != nil ||
+		states["fail root"] != string(goal.WorkItemStateInterrupted) ||
+		states["child"] != string(goal.WorkItemStatePending) ||
+		states["grandchild"] != string(goal.WorkItemStatePending) ||
 		states["independent"] != string(goal.WorkItemStateSucceeded) ||
-		len(closed.Executions) != 4 || len(closed.Artifacts) != 1 {
-		t.Fatalf("failed DAG closure = goal:%+v states:%+v", closed, states)
+		len(open.Executions) != 4 || len(open.Artifacts) != 1 {
+		t.Fatalf("exhausted DAG did not remain open for replan = goal:%+v states:%+v", open, states)
+	}
+	record, err := harness.orchestrator.GetGoal(
+		context.Background(), harness.access, mustDAGRef(t, created.GoalRef, goal.NewGoalRef),
+	)
+	if err != nil {
+		t.Fatalf("read durable interrupted DAG: %v", err)
+	}
+	var root goal.WorkItem
+	for _, item := range record.Goal.WorkItems() {
+		if item.Objective() == "fail root" {
+			root = item
+			break
+		}
+	}
+	cause, interrupted := root.InterruptCause()
+	if root.Ref().String() == "" || !interrupted || cause != goal.WorkItemInterruptExecutionFailed {
+		t.Fatalf("exhausted root interrupt cause=%q interrupted=%v item=%+v", cause, interrupted, root)
 	}
 }
 

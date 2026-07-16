@@ -57,6 +57,8 @@ const (
 	ExecutionRunning     ExecutionState = "running"
 	ExecutionSucceeded   ExecutionState = "succeeded"
 	ExecutionFailed      ExecutionState = "failed"
+	ExecutionCanceled    ExecutionState = "canceled"
+	ExecutionStopped     ExecutionState = "stopped"
 )
 
 type ExecutionRecord struct {
@@ -85,6 +87,10 @@ type ExecutionRecord struct {
 	ProviderObservedAt   time.Time
 	FinishedAt           time.Time
 	FailureCode          string
+	// RecipientMailboxRetired is durable evidence that stopping or canceling
+	// this exact recipient retired at least one unresolved V13 envelope. A
+	// later execution retry must reject instead of readdressing that evidence.
+	RecipientMailboxRetired bool
 }
 
 type ArtifactRecord struct {
@@ -118,6 +124,7 @@ type ActionKind string
 const (
 	ActionLaunchAgent    ActionKind = "launch_agent"
 	ActionObserveAgent   ActionKind = "observe_agent"
+	ActionStopAgent      ActionKind = "stop_agent"
 	ActionDeliverMailbox ActionKind = "deliver_mailbox"
 )
 
@@ -127,6 +134,7 @@ type ActionRecord struct {
 	GoalRef            goal.GoalRef
 	WorkItemRef        goal.WorkItemRef
 	ExecutionRef       goal.ExecutionRef
+	ControlRef         string
 	PlanGeneration     goal.PlanGeneration
 	WorkItemGeneration goal.Revision
 	AvailableAt        time.Time
@@ -172,7 +180,13 @@ type ActionConsumptionReceipt struct {
 	WorkerRef          string
 	Outcome            ActionConsumptionOutcome
 	ErrorCode          string
-	ConsumedAt         time.Time
+	// Effect* is optional provider evidence for an externally confirmed
+	// action. V14 uses it only for stop_agent; local retirements and all other
+	// action kinds leave the triplet empty.
+	EffectReceiptRef  string
+	EffectStatus      string
+	EffectConfirmedAt time.Time
+	ConsumedAt        time.Time
 }
 
 type GoalRecord struct {
@@ -183,6 +197,7 @@ type GoalRecord struct {
 	Executions          []ExecutionRecord
 	Artifacts           []ArtifactRecord
 	Attestations        []AttestationRecord
+	Controls            []ControlRecord
 	ConsumptionReceipts []ActionConsumptionReceipt
 }
 
@@ -236,8 +251,11 @@ type AmendGoalState struct {
 	Events                 []EventRecord
 }
 
-// LaunchPreparedState reserves the WorkItem in the aggregate before the
-// external provider effect. The launch claim deliberately remains open.
+// LaunchPreparedState is the only durable transition from queued to
+// dispatching before an external provider effect. For an initial attempt it
+// also starts the pending WorkItem; retry/replacement attempts keep their
+// already-running WorkItem and only cross the execution frontier. The launch
+// claim deliberately remains open.
 type LaunchPreparedState struct {
 	Claim                ActionClaim
 	ExpectedGoalRevision goal.Revision
@@ -285,6 +303,20 @@ type ExecutionReplacedState struct {
 	OperationAt          time.Time
 }
 
+// ExecutionInterruptedState consumes an exhausted provider attempt without
+// closing the Goal. The Director may causally replan the interrupted WorkItem.
+type ExecutionInterruptedState struct {
+	Claim                ActionClaim
+	ExpectedGoalRevision goal.Revision
+	ExpectedItemRevision goal.Revision
+	Goal                 goal.Goal
+	Execution            ExecutionRecord
+	NewExecutions        []ExecutionRecord
+	NewActions           []ActionRecord
+	Events               []EventRecord
+	OperationAt          time.Time
+}
+
 type GoalSucceededState struct {
 	Claim                ActionClaim
 	ExpectedGoalRevision goal.Revision
@@ -326,6 +358,8 @@ type StateRepository interface {
 	ClaimDirector(context.Context, ClaimDirectorState) (DirectorLeaseRecord, bool, error)
 	RenewDirector(context.Context, RenewDirectorState) (DirectorLeaseRecord, bool, error)
 	ApplyDirectorPlan(context.Context, ApplyDirectorPlanState) (DirectorDecisionRecord, bool, error)
+	ControlReplay(context.Context, ControlReplayRequest) (ControlRecord, bool, error)
+	ApplyControl(context.Context, ApplyControlState) (ControlRecord, bool, error)
 	MailboxReplay(context.Context, MailboxReplayRequest) (MailboxReplayRecord, bool, error)
 	AdmitMailbox(context.Context, AdmitMailboxState) (MailboxRecord, bool, error)
 	ClaimMailbox(context.Context, ClaimMailboxState) (MailboxClaim, bool, error)
@@ -341,6 +375,7 @@ type StateRepository interface {
 	RequeueAction(context.Context, ActionRequeuedState) error
 	QuarantineAction(context.Context, ActionQuarantinedState) error
 	RecordExecutionReplaced(context.Context, ExecutionReplacedState) error
+	RecordExecutionInterrupted(context.Context, ExecutionInterruptedState) error
 	RecordGoalSucceeded(context.Context, GoalSucceededState) error
 	RecordGoalFailed(context.Context, GoalFailedState) error
 }

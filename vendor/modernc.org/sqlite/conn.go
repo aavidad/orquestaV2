@@ -54,6 +54,26 @@ type conn struct {
 }
 
 func newConn(dsn string) (*conn, error) {
+	return newConnWithOptions(
+		dsn,
+		sqlite3.SQLITE_OPEN_READWRITE|sqlite3.SQLITE_OPEN_CREATE|
+			sqlite3.SQLITE_OPEN_FULLMUTEX|sqlite3.SQLITE_OPEN_URI,
+		nil,
+	)
+}
+
+// newValidatedConn opens an existing database without SQLITE_OPEN_CREATE and
+// validates its active sqlite3_file before any DQS setting or DSN _pragma can
+// run on that connection.
+func newValidatedConn(dsn string, validate func(FileControl) error) (*conn, error) {
+	return newConnWithOptions(
+		dsn,
+		sqlite3.SQLITE_OPEN_READWRITE|sqlite3.SQLITE_OPEN_FULLMUTEX|sqlite3.SQLITE_OPEN_URI,
+		validate,
+	)
+}
+
+func newConnWithOptions(dsn string, openFlags int32, validate func(FileControl) error) (*conn, error) {
 	var query, vfsName string
 
 	// Parse the query parameters from the dsn and them from the dsn if not prefixed by file:
@@ -95,9 +115,7 @@ func newConn(dsn string) (*conn, error) {
 		db, err = c.openV2(
 			dsn,
 			vfsName,
-			sqlite3.SQLITE_OPEN_READWRITE|sqlite3.SQLITE_OPEN_CREATE|
-				sqlite3.SQLITE_OPEN_FULLMUTEX|
-				sqlite3.SQLITE_OPEN_URI,
+			openFlags,
 		)
 		return err
 	}); gateErr != nil {
@@ -122,6 +140,12 @@ func newConn(dsn string) (*conn, error) {
 	}
 	defer libc.Xfree(c.tls, zMain)
 	c.inMemory = libc.GoString(sqlite3.Xsqlite3_db_filename(c.tls, c.db, zMain)) == ""
+	if validate != nil {
+		if err = validate(c); err != nil {
+			c.Close()
+			return nil, err
+		}
+	}
 
 	// _dqs is applied before applyQueryParams because the SQLite contract
 	// requires sqlite3_db_config(SQLITE_DBCONFIG_DQS_*) to be set before

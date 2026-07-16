@@ -89,9 +89,16 @@ func (adapter *Adapter) startExecutionLocked(callerContext context.Context, requ
 	}
 
 	diagnostic := &cappedDiagnostic{maximum: adapter.config.MaxDiagnosticBytes}
-	command := exec.CommandContext(runContext, adapter.command, adapter.commandArguments(state.runPath)...)
+	command, gateReader, gateWriter, commandErr := adapter.executionCommand(runContext, state.runPath)
+	if commandErr != nil {
+		timeout.Stop()
+		cancel(errExecutionFinished)
+		close(finished)
+		adapter.finishWithoutProcessLocked(state, CodeProcessStartFailed, []byte(commandErr.Error()))
+		return
+	}
 	command.WaitDelay = adapter.config.ProcessPipeDrainDelay
-	configureProcessGroup(command)
+	configureProcessGroup(command, func() error { return context.Cause(runContext) })
 	command.Dir = filepath.Join(adapter.rootPath, filepath.FromSlash(state.runPath))
 	command.Env = append([]string(nil), environment...)
 	if command.Env == nil {
@@ -101,10 +108,30 @@ func (adapter *Adapter) startExecutionLocked(callerContext context.Context, requ
 	command.Stdout = io.Discard
 	command.Stderr = diagnostic
 
+	var ownerLock *os.File
+	if adapter.processControlsEnabled() {
+		ownerLock, commandErr = adapter.acquireOwnerLock(state.runPath)
+		if commandErr != nil {
+			_ = gateReader.Close()
+			_ = gateWriter.Close()
+			timeout.Stop()
+			cancel(errExecutionFinished)
+			close(finished)
+			adapter.finishWithoutProcessLocked(state, CodeProcessStartFailed, []byte(commandErr.Error()))
+			return
+		}
+	}
 	startErr := command.Start()
 	clearEnvironment(command.Env)
 	command.Env = nil
+	if gateReader != nil {
+		_ = gateReader.Close()
+	}
 	if startErr != nil {
+		if gateWriter != nil {
+			_ = gateWriter.Close()
+		}
+		releaseOwnerLock(ownerLock)
 		timeout.Stop()
 		cancel(errExecutionFinished)
 		close(finished)
@@ -113,10 +140,80 @@ func (adapter *Adapter) startExecutionLocked(callerContext context.Context, requ
 		adapter.finishWithoutProcessLockedWithDiagnostic(state, CodeProcessStartFailed, payload, truncated)
 		return
 	}
+	if adapter.processControlsEnabled() {
+		pgid, bootID, birthMarker, identityErr := platformCaptureProcess(command.Process.Pid)
+		record := processRecord{
+			SchemaVersion: processSchemaVersion, ExecutionRef: request.ExecutionRef.String(),
+			RequestHash: state.requestHash, RuntimeScope: adapter.config.RuntimeScope,
+			PID: command.Process.Pid, PGID: pgid, BootID: bootID, BirthMarker: birthMarker,
+		}
+		if identityErr != nil {
+			adapter.abortGatedStartLocked(command, gateWriter, ownerLock, timeout, cancel, finished, state, identityErr)
+			return
+		}
+		if persistErr := adapter.persistProcessRecord(state.runPath, record); persistErr != nil {
+			adapter.abortGatedStartLocked(command, gateWriter, ownerLock, timeout, cancel, finished, state, persistErr)
+			return
+		}
+		state.process, state.ownerLock = &record, ownerLock
+		if _, releaseErr := gateWriter.Write([]byte("run\n")); releaseErr != nil {
+			adapter.abortGatedStartLocked(command, gateWriter, ownerLock, timeout, cancel, finished, state, releaseErr)
+			return
+		}
+		if releaseErr := gateWriter.Close(); releaseErr != nil {
+			adapter.abortGatedStartLocked(command, nil, ownerLock, timeout, cancel, finished, state, releaseErr)
+			return
+		}
+	}
 	state.status = ports.AgentRunning
 	state.cancel = cancel
+	state.settled = make(chan struct{})
 	adapter.waitGroup.Add(1)
 	go adapter.waitForExecution(command, runContext, cancel, timeout, finished, request, state, diagnostic)
+}
+
+func (adapter *Adapter) executionCommand(runContext context.Context, runPath string) (*exec.Cmd, *os.File, *os.File, error) {
+	arguments := adapter.commandArguments(runPath)
+	if !adapter.processControlsEnabled() {
+		return exec.CommandContext(runContext, adapter.command, arguments...), nil, nil, nil
+	}
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	script := `unset PWD; if IFS= read -r gate <&3; then [ "$gate" = run ] && exec 3<&- && exec "$@"; fi; exit 0`
+	commandArguments := []string{"-c", script, "orquesta-codex-gate", adapter.command}
+	if configuredPWD, found := adapter.config.Environment["PWD"]; found {
+		script = `saved_pwd=$1; shift; PWD=$saved_pwd; export PWD; if IFS= read -r gate <&3; then [ "$gate" = run ] && exec 3<&- && exec "$@"; fi; exit 0`
+		commandArguments = []string{"-c", script, "orquesta-codex-gate", configuredPWD, adapter.command}
+	}
+	commandArguments = append(commandArguments, arguments...)
+	command := exec.CommandContext(runContext, "/bin/sh", commandArguments...)
+	command.ExtraFiles = []*os.File{reader}
+	return command, reader, writer, nil
+}
+
+func (adapter *Adapter) abortGatedStartLocked(
+	command *exec.Cmd,
+	gateWriter *os.File,
+	ownerLock *os.File,
+	timeout *time.Timer,
+	cancel context.CancelCauseFunc,
+	finished chan struct{},
+	state *executionState,
+	cause error,
+) {
+	if gateWriter != nil {
+		_ = gateWriter.Close()
+	}
+	cancel(errExecutionCanceled)
+	_ = command.Wait()
+	_ = cleanupProcessGroup(command)
+	timeout.Stop()
+	close(finished)
+	releaseOwnerLock(ownerLock)
+	state.process, state.ownerLock = nil, nil
+	adapter.finishWithoutProcessLocked(state, CodeStatePersistenceFailed, []byte(cause.Error()))
 }
 
 func (adapter *Adapter) waitForExecution(
@@ -134,22 +231,90 @@ func (adapter *Adapter) waitForExecution(
 	if errors.Is(waitErr, exec.ErrWaitDelay) && command.ProcessState != nil && command.ProcessState.Success() {
 		waitErr = nil
 	}
-	cleanupErr := errors.New(CodeProcessCleanupFailed)
-	if adapter.processCleanup != nil {
-		cleanupErr = adapter.processCleanup(command)
-	}
 	timeout.Stop()
 	cause := context.Cause(runContext)
 	cancel(errExecutionFinished)
 	close(finished)
+	// Stop persists its post-signal proof while holding adapter.mu. Snapshot
+	// under the same mutex so a fast exit cannot publish a terminal first.
+	adapter.mu.Lock()
+	proof := state.stopProof.Load()
+	adapter.mu.Unlock()
+	var cleanupErr error
+	if proof != nil && proof.Mode == ports.AgentStopCooperative && cause == nil {
+		groupGone, inspectErr := inspectProcessTree(*state.process)
+		if inspectErr != nil {
+			cleanupErr = inspectErr
+		} else {
+			adapter.mu.Lock()
+			currentProof := state.stopProof.Load()
+			if equalStopSignalProof(proof, currentProof) {
+				if !groupGone {
+					// The cooperative effect ended the leader but not the tree.
+					// Keep ownership and leave escalation to an explicit forced
+					// request; neither WaitDelay nor cleanup may smuggle SIGKILL.
+					state.cancel = nil
+					state.status = ports.AgentRunning
+					adapter.settleExecutionLocked(state)
+					adapter.mu.Unlock()
+					return
+				}
+				diagnosticPayload, diagnosticTruncated := diagnostic.snapshot()
+				adapter.completeExecutionLocked(request, state, proof, waitErr, nil, cause, diagnosticPayload, diagnosticTruncated)
+				adapter.mu.Unlock()
+				return
+			}
+			// A forced proof superseded the cooperative snapshot while its
+			// leader was settling. Re-evaluate as forced and run the normal
+			// cleanup path so cleanup failures still outrank stopped.
+			proof = currentProof
+			adapter.mu.Unlock()
+		}
+	}
+	if cleanupErr == nil {
+		cleanupErr = errors.New(CodeProcessCleanupFailed)
+		if adapter.processCleanup != nil {
+			cleanupErr = adapter.processCleanup(command)
+		}
+	}
 	if cleanupErr != nil {
 		_, _ = diagnostic.Write([]byte("process group cleanup: " + cleanupErr.Error()))
 	}
 	diagnosticPayload, diagnosticTruncated := diagnostic.snapshot()
-	terminal := adapter.buildTerminal(request, state, waitErr, cleanupErr, cause, diagnosticPayload, diagnosticTruncated)
-
 	adapter.mu.Lock()
-	defer adapter.mu.Unlock()
+	proof = state.stopProof.Load()
+	adapter.completeExecutionLocked(request, state, proof, waitErr, cleanupErr, cause, diagnosticPayload, diagnosticTruncated)
+	adapter.mu.Unlock()
+}
+
+func equalStopSignalProof(left, right *stopSignalProof) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	return *left == *right
+}
+
+func (adapter *Adapter) completeExecutionLocked(
+	request ports.AgentLaunchRequest,
+	state *executionState,
+	proof *stopSignalProof,
+	waitErr error,
+	cleanupErr error,
+	cause error,
+	diagnosticPayload []byte,
+	diagnosticTruncated bool,
+) {
+	terminal := adapter.buildTerminal(request, state, proof, waitErr, cleanupErr, cause, diagnosticPayload, diagnosticTruncated)
+	if terminal.ErrorCode == CodeExecutionStopped {
+		if proof != nil {
+			if err := adapter.finishStoppedProcessLocked(state, *proof); err == nil {
+				state.cancel = nil
+				adapter.settleExecutionLocked(state)
+				return
+			}
+		}
+		terminal.ErrorCode = CodeStatePersistenceFailed
+	}
 	var gateErr error
 	terminal, gateErr = adapter.gateCredentialTerminalLocked(state, terminal)
 	if gateErr != nil {
@@ -157,6 +322,8 @@ func (adapter *Adapter) waitForExecution(
 		state.status = terminal.Status
 		state.terminalDurable = false
 		state.cancel = nil
+		adapter.releaseProcessOwnershipLocked(state)
+		adapter.settleExecutionLocked(state)
 		return
 	}
 	persisted, err := adapter.persistTerminal(state.runPath, terminal, state.receipt.SpecHash, state.maxOutput)
@@ -169,17 +336,29 @@ func (adapter *Adapter) waitForExecution(
 		state.status = ports.AgentFailed
 		state.terminalDurable = false
 		state.cancel = nil
+		adapter.releaseProcessOwnershipLocked(state)
+		adapter.settleExecutionLocked(state)
 		return
 	}
 	state.terminal = &persisted
 	state.status = persisted.Status
 	state.terminalDurable = true
 	state.cancel = nil
+	adapter.releaseProcessOwnershipLocked(state)
+	adapter.settleExecutionLocked(state)
+}
+
+func (adapter *Adapter) settleExecutionLocked(state *executionState) {
+	if state.settled != nil {
+		close(state.settled)
+		state.settled = nil
+	}
 }
 
 func (adapter *Adapter) buildTerminal(
 	request ports.AgentLaunchRequest,
 	state *executionState,
+	proof *stopSignalProof,
 	waitErr error,
 	cleanupErr error,
 	cause error,
@@ -201,11 +380,14 @@ func (adapter *Adapter) buildTerminal(
 	case errors.Is(cause, errExecutionCanceled), errors.Is(cause, errAdapterShutdown):
 		terminal.ErrorCode = CodeExecutionCanceled
 		return terminal
-	case waitErr != nil:
-		terminal.ErrorCode = CodeProcessFailed
-		return terminal
 	case cleanupErr != nil:
 		terminal.ErrorCode = CodeProcessCleanupFailed
+		return terminal
+	case proof != nil:
+		terminal.ErrorCode = CodeExecutionStopped
+		return terminal
+	case waitErr != nil:
+		terminal.ErrorCode = CodeProcessFailed
 		return terminal
 	}
 

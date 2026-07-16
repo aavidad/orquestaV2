@@ -626,6 +626,7 @@ func testConfig(t *testing.T) Config {
 	return Config{
 		Command:                 executable,
 		WorkRoot:                workRoot,
+		RuntimeScope:            "runtime-scope:test",
 		ReasoningEffort:         "medium",
 		Timeout:                 5 * time.Second,
 		ProcessPipeDrainDelay:   250 * time.Millisecond,

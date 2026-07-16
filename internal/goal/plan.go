@@ -235,7 +235,9 @@ func validatePlanShape(plan Plan, requirePendingItems bool) error {
 		}
 		if requirePendingItems && (item.state != WorkItemStatePending || item.revision != 1 ||
 			!item.startedAt.IsZero() || !item.finishedAt.IsZero() ||
-			validExecutionRef(item.execution) || len(item.artifacts) != 0 || len(item.attestations) != 0) {
+			validExecutionRef(item.execution) || len(item.artifacts) != 0 || len(item.attestations) != 0 ||
+			item.paused || item.cancelRequested || item.controlSequence != 0 || item.interruptCause != "" ||
+			!item.interruptedAt.IsZero() || validWorkItemRef(item.reworkOf)) {
 			return domainError(ErrorInvalidPlan, "work_item_snapshot")
 		}
 		if err := validateWorkItemPlanMetadata(item); err != nil {
@@ -266,6 +268,16 @@ func validatePlanShape(plan Plan, requirePendingItems bool) error {
 			indegree[item.ref]++
 			dependents[item.parent] = append(dependents[item.parent], item.ref)
 		}
+		if validWorkItemRef(item.reworkOf) {
+			source, exists := byRef[item.reworkOf]
+			if !exists || source.state != WorkItemStateSuperseded || item.reworkOf == item.ref ||
+				reworkSourceTouchesHandoffIn(item.reworkOf, byRef) {
+				return domainError(ErrorInvalidPlan, "rework_of")
+			}
+			// A superseded source waits for every successor's logical outcome.
+			indegree[item.reworkOf]++
+			dependents[item.ref] = append(dependents[item.ref], item.reworkOf)
+		}
 	}
 
 	queue := make([]WorkItemRef, 0, len(plan.items))
@@ -290,7 +302,12 @@ func validatePlanShape(plan Plan, requirePendingItems bool) error {
 		return domainError(ErrorInvalidPlan, "dependency_or_parent_cycle")
 	}
 	for _, item := range plan.items {
-		if item.state != WorkItemStatePending && item.state != WorkItemStateSkipped && !dependenciesSucceededIn(item, byRef) {
+		if item.state == WorkItemStateSuperseded && !hasReworkSuccessorIn(item.ref, byRef) {
+			return domainError(ErrorInvalidPlan, "superseded_without_successor")
+		}
+		if item.state != WorkItemStatePending && item.state != WorkItemStateSkipped &&
+			item.state != WorkItemStateCanceled && item.state != WorkItemStateSuperseded &&
+			!dependenciesSucceededIn(item, byRef) {
 			return domainError(ErrorInvalidPlan, "active_dependency_state")
 		}
 		if item.state == WorkItemStatePending && hasFailedDependencyIn(item, byRef) {
@@ -482,7 +499,8 @@ func refsEqual[T comparable](left, right []T) bool {
 
 func dependenciesSucceededIn(item WorkItem, items map[WorkItemRef]WorkItem) bool {
 	for _, dependency := range item.dependencies {
-		if items[dependency].state != WorkItemStateSucceeded {
+		outcome, resolved := logicalWorkItemOutcomeIn(items, dependency, make(map[WorkItemRef]bool))
+		if !resolved || outcome != WorkItemLogicalSucceeded {
 			return false
 		}
 	}
@@ -491,8 +509,29 @@ func dependenciesSucceededIn(item WorkItem, items map[WorkItemRef]WorkItem) bool
 
 func hasFailedDependencyIn(item WorkItem, items map[WorkItemRef]WorkItem) bool {
 	for _, dependency := range item.dependencies {
-		state := items[dependency].state
-		if state == WorkItemStateFailed || state == WorkItemStateSkipped {
+		outcome, resolved := logicalWorkItemOutcomeIn(items, dependency, make(map[WorkItemRef]bool))
+		if resolved && outcome == WorkItemLogicalFailed {
+			return true
+		}
+	}
+	return false
+}
+
+func hasReworkSuccessorIn(source WorkItemRef, items map[WorkItemRef]WorkItem) bool {
+	for _, item := range items {
+		if item.reworkOf == source {
+			return true
+		}
+	}
+	return false
+}
+
+func reworkSourceTouchesHandoffIn(source WorkItemRef, items map[WorkItemRef]WorkItem) bool {
+	if items[source].handoffRequired {
+		return true
+	}
+	for _, item := range items {
+		if item.parent == source && item.handoffRequired {
 			return true
 		}
 	}

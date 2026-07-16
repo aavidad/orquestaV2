@@ -54,7 +54,7 @@ func TestExplicitAgentFailureCreatesReplacementBeforeClosure(t *testing.T) {
 		t.Fatalf("load: %v", err)
 	}
 	if record.Goal.State() != goal.GoalStateRunning || len(record.Executions) != 2 ||
-		record.Executions[0].State != ExecutionFailed || record.Executions[1].State != ExecutionDispatching {
+		record.Executions[0].State != ExecutionFailed || record.Executions[1].State != ExecutionQueued {
 		t.Fatalf("failure did not create replacement: goal=%s executions=%+v", record.Goal.State(), record.Executions)
 	}
 	if record.Executions[0].FailureCode != "provider.execution_failed" ||
@@ -82,7 +82,7 @@ func TestExplicitAgentFailureCreatesReplacementBeforeClosure(t *testing.T) {
 	}
 }
 
-func TestExecutionAttemptPolicyFailsWorkItemOnlyAfterExhaustion(t *testing.T) {
+func TestControlsExecutionExhaustionInterruptsWithoutClosingGoal(t *testing.T) {
 	ctx := context.Background()
 	clock := &mutableClock{now: time.Date(2026, 7, 14, 21, 15, 0, 0, time.UTC)}
 	repository := newMemoryRepository()
@@ -117,8 +117,16 @@ func TestExecutionAttemptPolicyFailsWorkItemOnlyAfterExhaustion(t *testing.T) {
 		}
 	}
 	record, err := repository.GetGoal(ctx, submitted.Record.Goal.Ref())
-	if err != nil || record.Goal.State() != goal.GoalStateFailed || len(record.Executions) != 3 {
-		t.Fatalf("attempt exhaustion did not close exactly once: record=%+v err=%v", record, err)
+	items := record.Goal.WorkItems()
+	if len(items) != 1 {
+		t.Fatalf("attempt exhaustion item count=%d", len(items))
+	}
+	item := items[0]
+	cause, interrupted := item.InterruptCause()
+	if err != nil || record.Goal.State() != goal.GoalStateRunning || len(record.Executions) != 3 ||
+		item.State() != goal.WorkItemStateInterrupted || !interrupted ||
+		cause != goal.WorkItemInterruptExecutionFailed {
+		t.Fatalf("attempt exhaustion did not remain replanable: record=%+v err=%v", record, err)
 	}
 	for index, execution := range record.Executions {
 		if execution.AttemptNo != uint64(index+1) || execution.State != ExecutionFailed {

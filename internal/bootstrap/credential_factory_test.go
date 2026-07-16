@@ -265,6 +265,10 @@ func runBootstrapCredentialCodexHelper(arguments []string) error {
 	if err != nil {
 		return fmt.Errorf("read credential helper prompt: %w", err)
 	}
+	if bytes.Contains(prompt, []byte("bootstrap-helper:block")) {
+		time.Sleep(30 * time.Second)
+		return errors.New("bootstrap control helper was not stopped")
+	}
 	environment, err := os.ReadFile("/proc/self/environ")
 	if err != nil {
 		return fmt.Errorf("read credential helper environment: %w", err)

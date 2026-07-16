@@ -249,7 +249,9 @@ type v03HistoricalBugReview struct {
 }
 
 type v03ClosureRecord struct {
-	ClosureEvidence string `json:"closure_evidence"`
+	ClosureEvidence       string   `json:"closure_evidence"`
+	VerifiedCapabilityIDs []string `json:"verified_capability_ids"`
+	RebuildEvidenceRefs   []string `json:"rebuild_evidence_refs"`
 }
 
 func TestAcceptanceV03CanonicalLedgers(t *testing.T) {
@@ -509,7 +511,8 @@ func v03AssertNoInferredClosure(t *testing.T, repositoryRoot string, want int) {
 		"product/traceability/historical_bug_ids.jsonl",
 	} {
 		for _, record := range v03ReadJSONL[v03ClosureRecord](t, filepath.Join(repositoryRoot, relative)) {
-			if record.ClosureEvidence != "not_verified" {
+			if record.ClosureEvidence != "not_verified" &&
+				!(record.ClosureEvidence == "verified" && len(record.VerifiedCapabilityIDs) > 0 && len(record.RebuildEvidenceRefs) > 0) {
 				inferred++
 			}
 		}

@@ -15,6 +15,9 @@ func (repository *Repository) RecordLaunchPrepared(ctx context.Context, state ap
 		return invalid(err)
 	}
 	return repository.mutate(ctx, state.Claim, state.OperationAt, func(transaction *sql.Tx) error {
+		// Initial launches advance Goal/WorkItem revisions. Retry/replacement
+		// launches keep those revisions, but this same-revision CAS still proves
+		// no pause/cancel mutation won before the preparation frontier.
 		if err := updateGoalCAS(ctx, transaction, state.Goal, state.ExpectedGoalRevision); err != nil {
 			return err
 		}
@@ -126,6 +129,55 @@ func (repository *Repository) RecordExecutionReplaced(
 	})
 }
 
+func (repository *Repository) RecordExecutionInterrupted(
+	ctx context.Context,
+	state application.ExecutionInterruptedState,
+) error {
+	if err := validateExecutionInterrupted(state); err != nil {
+		return invalid(err)
+	}
+	return repository.mutate(ctx, state.Claim, state.OperationAt, func(transaction *sql.Tx) error {
+		if err := updateGoalCAS(ctx, transaction, state.Goal, state.ExpectedGoalRevision); err != nil {
+			return err
+		}
+		item, _ := state.Goal.WorkItem(state.Claim.Action.WorkItemRef)
+		if err := updateWorkItemCAS(ctx, transaction, item, state.ExpectedItemRevision); err != nil {
+			return err
+		}
+		expected := application.ExecutionRunning
+		if state.Claim.Action.Kind == application.ActionLaunchAgent {
+			expected = application.ExecutionDispatching
+		}
+		if err := updateExecutionCAS(ctx, transaction, state.Execution, expected); err != nil {
+			return err
+		}
+		retired, err := retireControlledRecipientMailboxes(
+			ctx, transaction, state.Execution.Ref, state.Execution.FinishedAt,
+		)
+		if err != nil {
+			return err
+		}
+		if retired {
+			if _, err := transaction.ExecContext(ctx, `
+UPDATE executions SET recipient_mailbox_retired = 1 WHERE ref = ?`, state.Execution.Ref.String()); err != nil {
+				return mapDatabaseError(err)
+			}
+		}
+		if err := completeClaim(
+			ctx, transaction, state.Claim, state.OperationAt, state.Execution.FailureCode, false,
+		); err != nil {
+			return err
+		}
+		if err := insertScheduled(ctx, transaction, state.NewExecutions, state.NewActions); err != nil {
+			return err
+		}
+		if err := requireReadyExecutions(ctx, transaction, state.Goal); err != nil {
+			return err
+		}
+		return insertEvents(ctx, transaction, state.Events)
+	})
+}
+
 func (repository *Repository) RecordGoalSucceeded(ctx context.Context, state application.GoalSucceededState) error {
 	if _, err := validateSucceeded(state); err != nil {
 		return invalid(err)
@@ -180,8 +232,17 @@ func (repository *Repository) RecordGoalFailed(ctx context.Context, state applic
 		if err := updateExecutionCAS(ctx, transaction, state.Execution, expectedExecutionState); err != nil {
 			return err
 		}
-		if err := retireFailedRecipientMailboxes(ctx, transaction, state.Execution); err != nil {
+		retired, err := retireControlledRecipientMailboxes(
+			ctx, transaction, state.Execution.Ref, state.Execution.FinishedAt,
+		)
+		if err != nil {
 			return err
+		}
+		if retired {
+			if _, err := transaction.ExecContext(ctx, `
+UPDATE executions SET recipient_mailbox_retired = 1 WHERE ref = ?`, state.Execution.Ref.String()); err != nil {
+				return mapDatabaseError(err)
+			}
 		}
 		if err := completeClaim(
 			ctx, transaction, state.Claim, state.Execution.FinishedAt, state.Execution.FailureCode, false,

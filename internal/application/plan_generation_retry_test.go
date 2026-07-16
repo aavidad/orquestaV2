@@ -56,7 +56,7 @@ func TestDirectorAppendPreservesBirthGenerationAcrossExecutionRetry(t *testing.T
 	}
 	if retried.Goal.PlanGeneration() != 2 || len(retried.Executions) != 2 ||
 		retried.Executions[0].State != ExecutionFailed || retried.Executions[0].PlanGeneration != 1 ||
-		retried.Executions[1].State != ExecutionDispatching || retried.Executions[1].PlanGeneration != 1 {
+		retried.Executions[1].State != ExecutionQueued || retried.Executions[1].PlanGeneration != 1 {
 		t.Fatalf("replacement changed birth generation: goal=%d executions=%+v",
 			retried.Goal.PlanGeneration(), retried.Executions)
 	}

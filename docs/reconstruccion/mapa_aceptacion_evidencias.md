@@ -2,8 +2,8 @@
 
 Fecha de corte: 2026-07-16
 
-Estado: mapa explicativo del corte mínimo y de V13. No gobierna el roadmap
-total ni sustituye los receipts estructurados.
+Estado: mapa explicativo del corte acreditado V13 y del candidato V14. No
+gobierna el roadmap total ni sustituye los receipts estructurados.
 
 [`product/capabilities.json`](../../product/capabilities.json) es el manifest
 ejecutable del corte. `status: accepted` significa que la capacidad tiene un
@@ -78,6 +78,49 @@ que V13 no expone ese opt-in en `WorkItemInput` público y que el DAG V05 cierra
 sin mailbox, requeue ni acciones pendientes mientras llegan los bindings de
 V20–V22.
 
+## V14: controles candidatos a acreditación
+
+`AC-V14-CONTROLS` tiene implementación y composición verdes, pero aún no está
+acreditado: falta fijar el commit de producto, sellar el candidato, ejecutar el
+argv exacto desde checkout `detached_clean` y emitir
+`product/evidence/v14_controls.json` como receipt V3 `PASS`. Hasta entonces el
+conteo canónico sigue en V13.
+
+| IDs candidatos | Contrato candidato | Alcance exacto |
+|---|---|---|
+| `GOV-07`, `STG-15`, `ORC-03`, `ORC-16` | `acceptance/v14_controls_test.go`; `internal/application/control*_test.go`; `internal/adapters/state/sqlite/*control*_test.go`; `internal/bootstrap/controls_e2e_test.go` | Pause/resume, cancel, stop cooperativo/forzado, retry de Execution y replan causal sobre el mismo Goal, CAS, outbox y `StateRepository` |
+
+Garantías del candidato:
+
+- controles autenticados, idempotentes y cercados por proyecto, Goal, AppSpec,
+  PlanGeneration, revisión de WorkItem, intento de Execution y fingerprint;
+- pausa Goal/WorkItem bloquea solo nuevos launches; observación, mailbox y
+  trabajo in-flight continúan; resume reutiliza la acción existente;
+- stop apunta a una Execution exacta, requiere capability y receipt exactos,
+  separa request/confirmation y nunca sustituye el shutdown del runtime;
+- stop forzado solo puede superseder el cooperativo activo del mismo intento;
+  A/B/C/D, crash/restart, PID/PGID, owner lock y launch gate prueban aislamiento
+  y convergencia sin proceso huérfano ni efecto terminal duplicado;
+- cancel, completion, retry y replan compiten por el mismo CAS; terminales no
+  se reabren, retry crea un intento nuevo y replan conserva historia append-only;
+- SQLite, backup/recovery y validación física preservan fences, receipts,
+  outbox, mailbox V13 y una sola autoridad;
+- `TestRealCodexControlsThroughProductionComposition` recorre bootstrap
+  productivo, proceso controlable, stop forzado selectivo y receipt durable,
+  dejando Goal abierto, WorkItem `interrupted` y Execution `stopped`.
+
+V14 solo añade casos de uso internos de aplicación. No añade bindings HTTP,
+MCP o CLI ni otra tool; el registro único y esos bindings son V20, y la paridad
+i18n completa es V21. Tampoco acredita presupuestos, approvals, fairness o
+retry de efectos: V15 sigue sin abrir.
+
+Estado contable:
+
+```text
+antes del receipt V14: 44/257 = 17,12 %; 13/34 = 38,24 %; 13/13 receipts
+tras receipt V3 PASS:   48/257 = 18,68 %; 14/34 = 41,18 %; 14/14 receipts
+```
+
 ## Ejecuciones finales registradas
 
 | Fecha | Comando | Resultado | Alcance |
@@ -109,6 +152,11 @@ acredita sus tres capabilities internas; no acredita bindings públicos.
 Los resultados de la tabla pertenecen al candidato mínimo. Para trabajo nuevo,
 la raíz valida manifest/receipt y los paquetes se enumeran de forma explícita;
 `./...` queda prohibido porque incluye superficies congeladas.
+
+El cierre V14 debe ejecutar literalmente `execution_argv` de
+`acceptance/fixtures/v14_controls.json` desde su candidato sellado. Un verde
+del worktree, incluido el E2E de composición, prepara el candidato pero no
+sustituye ese receipt.
 
 Checklist reproducible:
 

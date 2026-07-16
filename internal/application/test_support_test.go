@@ -26,6 +26,8 @@ type memoryRepository struct {
 	events              []EventRecord
 	directorLeases      map[goal.GoalRef]DirectorLeaseRecord
 	directorRequests    map[string]memoryDirectorMutation
+	controlRequests     map[string]ControlReplayRequest
+	controlRefs         map[string]string
 	mailboxes           map[MailboxMessageRef]MailboxRecord
 	mailboxRequests     map[string]memoryMailboxMutation
 	mailboxAdmits       int
@@ -58,6 +60,8 @@ func newMemoryRepository() *memoryRepository {
 		actions:          make(map[string]memoryAction),
 		directorLeases:   make(map[goal.GoalRef]DirectorLeaseRecord),
 		directorRequests: make(map[string]memoryDirectorMutation),
+		controlRequests:  make(map[string]ControlReplayRequest),
+		controlRefs:      make(map[string]string),
 		mailboxes:        make(map[MailboxMessageRef]MailboxRecord),
 		mailboxRequests:  make(map[string]memoryMailboxMutation),
 		now:              time.Now,
@@ -158,6 +162,198 @@ func (repository *memoryRepository) GetGoal(_ context.Context, ref goal.GoalRef)
 		return GoalRecord{}, &StateError{Code: StateNotFound}
 	}
 	return cloneGoalRecord(record), nil
+}
+
+func (repository *memoryRepository) ControlReplay(
+	_ context.Context,
+	request ControlReplayRequest,
+) (ControlRecord, bool, error) {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	key := memoryControlRequestKey(request.PrincipalRef, request.ProjectRef, request.RequestRef)
+	stored, found := repository.controlRequests[key]
+	if !found {
+		return ControlRecord{}, false, nil
+	}
+	if stored != request {
+		return ControlRecord{}, false, &StateError{Code: StateConflict}
+	}
+	control, found := repository.controlLocked(repository.controlRefs[key])
+	if !found {
+		return ControlRecord{}, false, &StateError{Code: StateConflict}
+	}
+	return control, true, nil
+}
+
+func (repository *memoryRepository) ApplyControl(
+	_ context.Context,
+	state ApplyControlState,
+) (ControlRecord, bool, error) {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	request := ControlReplayRequest{
+		RequestRef: state.RequestRef, RequestFingerprint: state.RequestFingerprint,
+		PrincipalRef: state.PrincipalRef, ProjectRef: state.ProjectRef, GoalRef: state.GoalRef,
+	}
+	key := memoryControlRequestKey(state.PrincipalRef, state.ProjectRef, state.RequestRef)
+	if stored, found := repository.controlRequests[key]; found && state.ExpectedControlStatus == "" {
+		if stored != request {
+			return ControlRecord{}, false, &StateError{Code: StateConflict}
+		}
+		control, ok := repository.controlLocked(repository.controlRefs[key])
+		if !ok {
+			return ControlRecord{}, false, &StateError{Code: StateConflict}
+		}
+		return control, false, nil
+	}
+	if !memoryWriteAuthorizationValid(
+		state.AuthorizationReceipt, state.PrincipalRef, state.ProjectRef,
+		identity.PermissionGoalsDirect, state.GoalRef.String(),
+	) || state.OperationAt.IsZero() {
+		return ControlRecord{}, false, &StateError{Code: StateInvalid}
+	}
+	current, found := repository.records[state.GoalRef]
+	if !found || current.Goal.Project() != state.ProjectRef ||
+		current.Goal.Revision() != state.ExpectedGoalRevision ||
+		current.Goal.PlanGeneration() != state.ExpectedPlanGeneration {
+		return ControlRecord{}, false, &StateError{Code: StateConflict}
+	}
+	if state.ExpectedWorkItemRevision != 0 {
+		workItemRef := state.Control.WorkItemRef
+		if state.Claim.Action.WorkItemRef.String() != "" {
+			workItemRef = state.Claim.Action.WorkItemRef
+		}
+		item, ok := current.Goal.WorkItem(workItemRef)
+		if !ok || item.Revision() != state.ExpectedWorkItemRevision {
+			return ControlRecord{}, false, &StateError{Code: StateConflict}
+		}
+	}
+	if state.ExpectedExecutionState != "" {
+		executionRef := state.Control.ExecutionRef
+		if executionRef.String() == "" {
+			executionRef = state.Claim.Action.ExecutionRef
+		}
+		execution, ok := executionByRef(current.Executions, executionRef)
+		if !ok || execution.State != state.ExpectedExecutionState {
+			return ControlRecord{}, false, &StateError{Code: StateConflict}
+		}
+	}
+	created := state.ExpectedControlStatus == ""
+	if created {
+		if state.Control.Status != ControlRequested && state.Control.Status != ControlConfirmed {
+			return ControlRecord{}, false, &StateError{Code: StateInvalid}
+		}
+	} else {
+		existing, ok := repository.controlLocked(state.Control.Ref)
+		if !ok || existing.Status != state.ExpectedControlStatus ||
+			existing.RequestFingerprint != state.RequestFingerprint {
+			return ControlRecord{}, false, &StateError{Code: StateConflict}
+		}
+	}
+	preRetiredAction := ""
+	if state.SupersededControl != nil {
+		old := *state.SupersededControl
+		original := old
+		original.Status = ControlRequested
+		original.SupersededAt = time.Time{}
+		original.SupersededByControlRef = ""
+		existing, ok := repository.controlLocked(old.Ref)
+		wantOldAction := "action:stop:" + old.Ref + ":" + old.ExecutionRef.String()
+		wantNewAction := "action:stop:" + state.Control.Ref + ":" + state.Control.ExecutionRef.String()
+		if !created || !ok || !reflect.DeepEqual(existing, original) ||
+			old.Status != ControlSuperseded || old.Mode != ports.AgentStopCooperative ||
+			old.SupersededByControlRef != state.Control.Ref ||
+			!old.SupersededAt.Equal(state.OperationAt) ||
+			state.Control.Mode != ports.AgentStopForced || state.Control.SupersedesControlRef != old.Ref ||
+			old.ExecutionRef != state.Control.ExecutionRef || old.ExecutionAttempt != state.Control.ExecutionAttempt ||
+			old.GoalRevision >= state.Control.GoalRevision || old.WorkItemRevision > state.Control.WorkItemRevision ||
+			len(state.RetireActionRefs) != 1 || state.RetireActionRefs[0] != wantOldAction ||
+			len(state.NewActions) != 1 || state.NewActions[0].Ref != wantNewAction {
+			return ControlRecord{}, false, &StateError{Code: StateInvalid}
+		}
+		current.Controls = replaceControl(current.Controls, old)
+		if receipt, retired := repository.retireActionLocked(
+			wantOldAction, "control-retire:"+state.Control.Ref,
+			state.Control.PrincipalRef.String(), state.OperationAt,
+		); retired {
+			current.ConsumptionReceipts = append(current.ConsumptionReceipts, receipt)
+		} else {
+			return ControlRecord{}, false, &StateError{Code: StateConflict}
+		}
+		preRetiredAction = wantOldAction
+	} else if created && state.Control.SupersedesControlRef != "" {
+		return ControlRecord{}, false, &StateError{Code: StateInvalid}
+	}
+	if state.Claim.Token != "" {
+		action, ok := repository.actions[state.Claim.Action.Ref]
+		if !ok || !memoryClaimMatches(action, state.Claim, state.OperationAt) {
+			return ControlRecord{}, false, &StateError{Code: StateConflict}
+		}
+	}
+	if state.RequireMailboxClearForExecutionRef.String() != "" &&
+		repository.hasRetiredMailboxRecipientLocked(state.RequireMailboxClearForExecutionRef) {
+		return ControlRecord{}, false, &StateError{Code: StateRecipientMailboxActive}
+	}
+	if state.StopReceipt != nil {
+		execution, ok := executionByRef(current.Executions, state.StopReceipt.ExecutionRef)
+		if !ok || ports.ValidateAgentStopReceipt(stopRequest(state.Control, execution), *state.StopReceipt) != nil {
+			return ControlRecord{}, false, &StateError{Code: StateInvalid}
+		}
+	}
+	for _, action := range state.NewActions {
+		if _, duplicate := repository.actions[action.Ref]; duplicate {
+			return ControlRecord{}, false, &StateError{Code: StateConflict}
+		}
+	}
+	current.Goal = state.Goal
+	for _, execution := range state.Executions {
+		current.Executions = replaceExecution(current.Executions, execution)
+	}
+	if created {
+		current.Controls = append(current.Controls, state.Control)
+	} else {
+		current.Controls = replaceControl(current.Controls, state.Control)
+	}
+	if state.Claim.Token != "" {
+		receipt := consumptionReceipt(state.Claim, ActionConsumedCompleted, "", state.OperationAt)
+		if state.StopReceipt != nil {
+			receipt.EffectReceiptRef = state.StopReceipt.ReceiptRef
+			receipt.EffectStatus = string(state.StopReceipt.Status)
+			receipt.EffectConfirmedAt = state.StopReceipt.ConfirmedAt.UTC()
+		}
+		current.ConsumptionReceipts = append(current.ConsumptionReceipts, receipt)
+		delete(repository.actions, state.Claim.Action.Ref)
+	}
+	for _, ref := range state.RetireActionRefs {
+		if ref == preRetiredAction {
+			continue
+		}
+		if receipt, retired := repository.retireActionLocked(
+			ref, "control-retire:"+state.Control.Ref, state.Control.PrincipalRef.String(), state.OperationAt,
+		); retired {
+			current.ConsumptionReceipts = append(current.ConsumptionReceipts, receipt)
+		}
+	}
+	for _, action := range state.NewActions {
+		repository.actions[action.Ref] = memoryAction{record: action}
+	}
+	if state.RetireMailboxForExecutionRef.String() != "" {
+		retired := repository.retireControlledMailboxLocked(
+			state.RetireMailboxForExecutionRef, state.OperationAt,
+		)
+		if retired {
+			for index := range current.Executions {
+				if current.Executions[index].Ref == state.RetireMailboxForExecutionRef {
+					current.Executions[index].RecipientMailboxRetired = true
+				}
+			}
+		}
+	}
+	repository.records[state.GoalRef] = current
+	repository.events = append(repository.events, state.Events...)
+	repository.controlRequests[key] = request
+	repository.controlRefs[key] = state.Control.Ref
+	return state.Control, created, nil
 }
 
 func (repository *memoryRepository) ListGoals(_ context.Context, project goal.ProjectRef, limit int) ([]GoalSummary, error) {
@@ -738,7 +934,7 @@ func (repository *memoryRepository) mailboxCurrentRecipientLocked(record Mailbox
 	parent, exists := current.Goal.WorkItem(record.Envelope.ParentWorkItemRef)
 	executionRef, hasExecution := parent.Execution()
 	if !exists || !hasExecution || executionRef != record.Envelope.Recipient.ExecutionRef ||
-		parent.State() != goal.WorkItemStateRunning {
+		parent.State() != goal.WorkItemStateRunning || current.Goal.CancelRequested() || parent.CancelRequested() {
 		return &StateError{Code: StateConflict}
 	}
 	return nil
@@ -788,7 +984,16 @@ func (repository *memoryRepository) ClaimNextAction(_ context.Context, request C
 	for ref := range repository.actions {
 		refs = append(refs, ref)
 	}
-	sort.Strings(refs)
+	sort.Slice(refs, func(left, right int) bool {
+		leftAction := repository.actions[refs[left]].record
+		rightAction := repository.actions[refs[right]].record
+		leftPriority := memoryActionPriority(leftAction)
+		rightPriority := memoryActionPriority(rightAction)
+		if leftPriority != rightPriority {
+			return leftPriority < rightPriority
+		}
+		return refs[left] < refs[right]
+	})
 	for _, ref := range refs {
 		action := repository.actions[ref]
 		if action.record.Kind == ActionDeliverMailbox || action.record.AvailableAt.After(now) ||
@@ -797,10 +1002,33 @@ func (repository *memoryRepository) ClaimNextAction(_ context.Context, request C
 		}
 		record := repository.records[action.record.GoalRef]
 		item, found := record.Goal.WorkItem(action.record.WorkItemRef)
-		if !found || !ports.MatchAgentCapabilities(request.Capabilities, ports.AgentRequirements{
+		if !found || repository.workItemLeaseActiveLocked(action.record, now) {
+			continue
+		}
+		if action.record.Kind == ActionLaunchAgent {
+			paused, _ := record.Goal.EffectivePause(item.Ref())
+			if paused || record.Goal.CancelRequested() || item.CancelRequested() {
+				continue
+			}
+		}
+		execution, executionFound := executionForAction(record, action.record)
+		if executionFound && action.record.Kind == ActionStopAgent && execution.State == ExecutionDispatching &&
+			execution.ExternalRef == "" {
+			continue
+		}
+		if action.record.Kind == ActionObserveAgent && repository.stopPendingLocked(action.record) {
+			continue
+		}
+		if !ports.MatchAgentCapabilities(request.Capabilities, ports.AgentRequirements{
 			RoleKey: item.Role().String(), SkillRefs: workItemRefs(item.SkillRefs()),
 			ToolRefs: workItemRefs(item.ToolRefs()), CapabilityRefs: workItemRefs(item.CapabilityRefs()),
 		}) {
+			continue
+		}
+		if executionFound && (action.record.Kind == ActionObserveAgent || action.record.Kind == ActionStopAgent) &&
+			(execution.ProviderRef != request.Capabilities.ProviderRef ||
+				execution.ModelRef != request.Capabilities.ModelRef ||
+				execution.AgentRef != request.Capabilities.AgentRef) {
 			continue
 		}
 		action.token = request.Token
@@ -815,6 +1043,63 @@ func (repository *memoryRepository) ClaimNextAction(_ context.Context, request C
 		}, true, nil
 	}
 	return ActionClaim{}, false, nil
+}
+
+func memoryActionPriority(action ActionRecord) int {
+	switch action.Kind {
+	case ActionStopAgent:
+		return 0
+	case ActionLaunchAgent:
+		return 1
+	case ActionObserveAgent:
+		return 2
+	default:
+		return 3
+	}
+}
+
+func (repository *memoryRepository) workItemLeaseActiveLocked(candidate ActionRecord, now time.Time) bool {
+	for _, action := range repository.actions {
+		if action.record.Ref != candidate.Ref && action.record.GoalRef == candidate.GoalRef &&
+			action.record.WorkItemRef == candidate.WorkItemRef && action.token != "" && action.lease.After(now) {
+			return true
+		}
+	}
+	return false
+}
+
+func (repository *memoryRepository) stopPendingLocked(candidate ActionRecord) bool {
+	for _, action := range repository.actions {
+		if action.record.Kind == ActionStopAgent && action.record.GoalRef == candidate.GoalRef &&
+			action.record.WorkItemRef == candidate.WorkItemRef {
+			return true
+		}
+	}
+	return false
+}
+
+func (repository *memoryRepository) retireActionLocked(
+	ref string,
+	tokenPrefix string,
+	workerRef string,
+	at time.Time,
+) (ActionConsumptionReceipt, bool) {
+	action, found := repository.actions[ref]
+	if !found {
+		return ActionConsumptionReceipt{}, false
+	}
+	if action.token == "" {
+		action.token = tokenPrefix + ":" + ref
+		action.workerRef = workerRef
+		action.deliveryAttempt++
+		action.fence++
+	}
+	claim := ActionClaim{
+		Action: action.record, Token: action.token, WorkerRef: action.workerRef,
+		DeliveryAttempt: action.deliveryAttempt, Fence: action.fence, LeaseUntil: at.Add(time.Nanosecond),
+	}
+	delete(repository.actions, ref)
+	return consumptionReceipt(claim, ActionConsumedCompleted, "", at), true
 }
 
 func (repository *memoryRepository) RecordLaunchPrepared(_ context.Context, state LaunchPreparedState) error {
@@ -910,6 +1195,35 @@ func (repository *memoryRepository) RecordExecutionReplaced(_ context.Context, s
 	return nil
 }
 
+func (repository *memoryRepository) RecordExecutionInterrupted(
+	_ context.Context,
+	state ExecutionInterruptedState,
+) error {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	if err := repository.validateMutation(
+		state.Claim, state.OperationAt, state.ExpectedGoalRevision, state.ExpectedItemRevision,
+	); err != nil {
+		return err
+	}
+	if repository.retireControlledMailboxLocked(state.Execution.Ref, state.OperationAt) {
+		state.Execution.RecipientMailboxRetired = true
+	}
+	record := repository.records[state.Goal.Ref()]
+	record.Goal = state.Goal
+	record.Executions = replaceExecution(record.Executions, state.Execution)
+	record.Executions = append(record.Executions, state.NewExecutions...)
+	record.ConsumptionReceipts = append(record.ConsumptionReceipts,
+		consumptionReceipt(state.Claim, ActionConsumedCompleted, state.Execution.FailureCode, state.OperationAt))
+	repository.records[state.Goal.Ref()] = record
+	delete(repository.actions, state.Claim.Action.Ref)
+	for _, action := range state.NewActions {
+		repository.actions[action.Ref] = memoryAction{record: action}
+	}
+	repository.events = append(repository.events, state.Events...)
+	return nil
+}
+
 func (repository *memoryRepository) RecordGoalSucceeded(_ context.Context, state GoalSucceededState) error {
 	repository.mu.Lock()
 	defer repository.mu.Unlock()
@@ -981,6 +1295,39 @@ func (repository *memoryRepository) hasUnresolvedMailboxRecipientLocked(executio
 	return false
 }
 
+func (repository *memoryRepository) hasRetiredMailboxRecipientLocked(executionRef goal.ExecutionRef) bool {
+	for _, mailbox := range repository.mailboxes {
+		if mailbox.Envelope.Recipient.ExecutionRef == executionRef && mailbox.Retirement != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func (repository *memoryRepository) retireControlledMailboxLocked(
+	executionRef goal.ExecutionRef,
+	at time.Time,
+) bool {
+	retired := false
+	for messageRef, mailbox := range repository.mailboxes {
+		if mailbox.Envelope.Recipient.ExecutionRef != executionRef ||
+			mailbox.Acknowledgement != nil || mailbox.Retirement != nil {
+			continue
+		}
+		retirement := MailboxRetirement{
+			MessageRef: mailbox.Envelope.Ref, ActionRef: mailbox.Action.Ref,
+			RecipientExecutionRef: executionRef,
+			FailureCode:           "application.recipient_controlled_terminal", RetiredAt: at.UTC(),
+		}
+		mailbox.Retirement = &retirement
+		mailbox.State = MailboxStateRetired
+		repository.mailboxes[messageRef] = cloneMailboxRecord(mailbox)
+		delete(repository.actions, mailbox.Action.Ref)
+		retired = true
+	}
+	return retired
+}
+
 func (repository *memoryRepository) validateMutation(claim ActionClaim, operationAt time.Time, goalRevision, itemRevision goal.Revision) error {
 	action, ok := repository.actions[claim.Action.Ref]
 	if !ok || !memoryClaimMatches(action, claim, operationAt) {
@@ -1001,8 +1348,39 @@ func cloneGoalRecord(record GoalRecord) GoalRecord {
 	record.Executions = append([]ExecutionRecord(nil), record.Executions...)
 	record.Artifacts = append([]ArtifactRecord(nil), record.Artifacts...)
 	record.Attestations = append([]AttestationRecord(nil), record.Attestations...)
+	record.Controls = append([]ControlRecord(nil), record.Controls...)
 	record.ConsumptionReceipts = append([]ActionConsumptionReceipt(nil), record.ConsumptionReceipts...)
 	return record
+}
+
+func memoryControlRequestKey(
+	principal identity.PrincipalRef,
+	project goal.ProjectRef,
+	requestRef string,
+) string {
+	return principal.String() + "\x00" + project.String() + "\x00" + requestRef
+}
+
+func (repository *memoryRepository) controlLocked(ref string) (ControlRecord, bool) {
+	for _, record := range repository.records {
+		for _, control := range record.Controls {
+			if control.Ref == ref {
+				return control, true
+			}
+		}
+	}
+	return ControlRecord{}, false
+}
+
+func replaceControl(records []ControlRecord, updated ControlRecord) []ControlRecord {
+	result := append([]ControlRecord(nil), records...)
+	for index := range result {
+		if result[index].Ref == updated.Ref {
+			result[index] = updated
+			return result
+		}
+	}
+	return append(result, updated)
 }
 
 func memoryWriteAuthorizationValid(
@@ -1128,6 +1506,45 @@ type scriptedAgent struct {
 	launchErr                        error
 	launchEntered                    chan struct{}
 	launchRelease                    <-chan struct{}
+	controlCapabilities              *ports.AgentControlCapabilities
+	stopStatus                       ports.AgentStopStatus
+	stopCalls                        int
+	stopRequests                     []ports.AgentStopRequest
+}
+
+func (agent *scriptedAgent) ControlCapabilities(context.Context) (ports.AgentControlCapabilities, error) {
+	if agent.controlCapabilities != nil {
+		return *agent.controlCapabilities, nil
+	}
+	return ports.AgentControlCapabilities{CooperativeStop: true, ForcedStop: true}, nil
+}
+
+func (agent *scriptedAgent) Stop(
+	_ context.Context,
+	request ports.AgentStopRequest,
+) (ports.AgentStopReceipt, error) {
+	agent.mu.Lock()
+	defer agent.mu.Unlock()
+	agent.stopCalls++
+	agent.stopRequests = append(agent.stopRequests, request)
+	status := agent.stopStatus
+	if status == "" {
+		status = ports.AgentStopped
+	}
+	receipt := ports.AgentStopReceipt{
+		ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
+		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
+		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash,
+		ProviderRef: request.ProviderRef, ModelRef: request.ModelRef, AgentRef: request.AgentRef,
+		ExternalRef: request.ExternalRef, Mode: request.Mode, IdempotencyKey: request.IdempotencyKey,
+		Status: status,
+	}
+	if status == ports.AgentStopped || status == ports.AgentStopAlreadyCompleted ||
+		status == ports.AgentStopAlreadyFailed {
+		receipt.ReceiptRef = "receipt:stop:" + request.ExecutionRef.String()
+		receipt.ConfirmedAt = agent.now().UTC()
+	}
+	return receipt, nil
 }
 
 func (agent *scriptedAgent) Capabilities(context.Context) (ports.AgentCapabilities, error) {
@@ -1217,7 +1634,7 @@ func newTestOrchestratorWithAccess(
 	}
 	orchestrator, err := New(Dependencies{
 		State: repository, Access: accessRepository,
-		Launcher: agent, Observer: agent, Artifacts: artifacts,
+		Launcher: agent, Observer: agent, Controller: agent, Artifacts: artifacts,
 		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1 << 20,
 		MaxMailboxEnvelopeBytes: 64 << 10,
 		MaxExecutionAttempts:    3, ClaimLease: time.Minute, DirectorLeaseDuration: time.Minute,

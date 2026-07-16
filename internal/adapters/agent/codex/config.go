@@ -23,6 +23,9 @@ func prepareConfig(config Config) (Config, string, []string, string, *os.Root, e
 	if config.WorkRoot == "" || strings.TrimSpace(config.WorkRoot) != config.WorkRoot {
 		return Config{}, "", nil, "", nil, &Error{Code: CodeWorkRootRequired}
 	}
+	if strings.TrimSpace(config.RuntimeScope) != config.RuntimeScope || strings.ContainsRune(config.RuntimeScope, '\x00') {
+		return Config{}, "", nil, "", nil, &Error{Code: CodeRuntimeScopeInvalid}
+	}
 	if config.Model != "" && strings.TrimSpace(config.Model) != config.Model {
 		return Config{}, "", nil, "", nil, &Error{Code: CodeCommandInvalid}
 	}
