@@ -447,7 +447,7 @@ func TestRepositoryV12MigratesPopulatedV6ToV7(t *testing.T) {
 		project.String(), "authorization:v6-v7:create", at,
 	)
 	if _, created, err := repository.CreateGoal(ctx, state); err != nil || !created {
-		t.Fatalf("seed V6 goal created=%v err=%v", created, err)
+		t.Fatalf("seed V6 goal created=%v err=%v cause=%v", created, err, errors.Unwrap(err))
 	}
 	if err := database.Close(); err != nil {
 		t.Fatal(err)
@@ -459,7 +459,7 @@ func TestRepositoryV12MigratesPopulatedV6ToV7(t *testing.T) {
 		t.Fatalf("migrate V6 to V7: %v", err)
 	}
 	t.Cleanup(func() { _ = migrated.Close() })
-	assertRecoverySchemaVersion(t, migrated.db, recoverySchemaV12)
+	assertRecoverySchemaVersion(t, migrated.db, recoverySchemaV13)
 	if _, err := migrated.GetGoal(ctx, state.Goal.Ref()); err != nil {
 		t.Fatalf("migrated Goal: %v", err)
 	}
@@ -723,7 +723,8 @@ func newSQLiteDirectorOrchestrator(
 	stub := sqliteMembershipExternalStub{}
 	orchestrator, err := application.New(application.Dependencies{
 		State: repository, Access: repository, Launcher: stub, Observer: stub, Artifacts: stub,
-		Clock: clock, IDs: ids, MaxOutputBytes: 1024, MaxExecutionAttempts: 3,
+		Clock: clock, IDs: ids, MaxOutputBytes: 1024,
+		MaxMailboxEnvelopeBytes: 64 << 10, MaxExecutionAttempts: 3,
 		ClaimLease: time.Minute, DirectorLeaseDuration: 30 * time.Second,
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 		AgentCapabilities: sqliteTestCapabilities(),

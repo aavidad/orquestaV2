@@ -99,7 +99,7 @@ func TestMCPAllowsOmittedOptionalPhaseAndExecutionRefs(t *testing.T) {
 	}
 }
 
-func TestMCPRejectsUnknownContractualParentAsInvalidRequest(t *testing.T) {
+func TestMCPRejectsUnknownParentMetadataAsInvalidRequest(t *testing.T) {
 	harness := newDAGHarness(t, nil)
 	item := planItem("child", "invalid child", "phase:work", nil, nil)
 	item["parent"] = "missing"
@@ -186,8 +186,12 @@ func TestMCPRoundTripsPhaseMetadataAndExecutionRequirementsToAgent(t *testing.T)
 	}
 }
 
-func TestMCPRoundTripsContractualParentChildRefs(t *testing.T) {
+func TestMCPParentMetadataClosesWithoutMailboxOrRequeue(t *testing.T) {
+	ctx := context.Background()
 	harness := newDAGHarness(t, nil)
+	if _, exposed := reflect.TypeOf(mcpiface.WorkItemInput{}).FieldByName("HandoffRequired"); exposed {
+		t.Fatal("public MCP WorkItemInput exposes the internal handoff policy")
+	}
 	parent := planItem("parent", "coordinate", "phase:work", nil, nil)
 	child := planItem("child", "implement", "phase:work", nil, []string{"internal/child"})
 	child["parent"] = "parent"
@@ -206,12 +210,39 @@ func TestMCPRoundTripsContractualParentChildRefs(t *testing.T) {
 	parentView, childView := byObjective["coordinate"], byObjective["implement"]
 	if childView.ParentRef == "" || childView.ParentRef != parentView.WorkItemRef ||
 		!reflect.DeepEqual(parentView.ChildRefs, []string{childView.WorkItemRef}) || len(childView.ChildRefs) != 0 {
-		t.Fatalf("contractual lineage did not round trip: parent=%+v child=%+v", parentView, childView)
+		t.Fatalf("parent lineage did not round trip: parent=%+v child=%+v", parentView, childView)
 	}
+	record, err := harness.orchestrator.GetGoal(ctx, harness.access, mustDAGRef(t, created.GoalRef, goal.NewGoalRef))
+	if err != nil {
+		t.Fatalf("get parent metadata Goal: %v", err)
+	}
+	var parentItem, childItem goal.WorkItem
+	for _, item := range record.Goal.WorkItems() {
+		switch item.Objective() {
+		case "coordinate":
+			parentItem = item
+		case "implement":
+			childItem = item
+		}
+	}
+	if parentItem.HandoffRequired() || childItem.HandoffRequired() {
+		t.Fatalf("public parent metadata activated handoff: parent=%v child=%v",
+			parentItem.HandoffRequired(), childItem.HandoffRequired())
+	}
+
 	harness.process(t, 4)
 	closed := harness.get(t, created.GoalRef)
-	if closed.State != string(goal.GoalStateSucceeded) || len(closed.Artifacts) != 2 || len(closed.Attestations) != 2 {
-		t.Fatalf("static parent/child DAG did not close safely: %+v", closed)
+	states := workStates(closed.WorkItems)
+	status, statusErr := harness.repository.Status(ctx, harness.projectRef)
+	idle, idleErr := harness.orchestrator.ProcessNext(ctx, "worker:dag:idle-parent-metadata")
+	if closed.State != string(goal.GoalStateSucceeded) ||
+		states["coordinate"] != string(goal.WorkItemStateSucceeded) ||
+		states["implement"] != string(goal.WorkItemStateSucceeded) ||
+		len(closed.Artifacts) != 2 || len(closed.Attestations) != 2 ||
+		len(closed.Executions) != 2 || harness.agent.launchCount() != 2 ||
+		statusErr != nil || status.PendingActions != 0 || idleErr != nil || idle.Processed {
+		t.Fatalf("public parent metadata did not close without requeue: goal=%+v status=%+v/%v idle=%+v/%v launches=%d",
+			closed, status, statusErr, idle, idleErr, harness.agent.launchCount())
 	}
 }
 
@@ -366,7 +397,8 @@ func newDAGHarness(t *testing.T, failures map[string]bool) *dagHarness {
 		State: repository, Access: repository,
 		Launcher: agent, Observer: agent, Artifacts: artifacts,
 		Clock: clock, IDs: &dagSequentialIDs{}, MaxOutputBytes: 4096,
-		MaxExecutionAttempts: 3, AgentCapabilities: dagAgentCapabilities(),
+		MaxMailboxEnvelopeBytes: 64 << 10,
+		MaxExecutionAttempts:    3, AgentCapabilities: dagAgentCapabilities(),
 		ClaimLease: time.Minute, DirectorLeaseDuration: 2 * time.Minute,
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})
@@ -398,6 +430,15 @@ func newDAGHarness(t *testing.T, failures map[string]bool) *dagHarness {
 		clock: clock, agent: agent,
 		clientSession: connectDAGClient(t, httpServer.URL),
 	}
+}
+
+func mustDAGRef[T any](t *testing.T, value string, constructor func(string) (T, error)) T {
+	t.Helper()
+	ref, err := constructor(value)
+	if err != nil {
+		t.Fatalf("parse DAG ref %q: %v", value, err)
+	}
+	return ref
 }
 
 func (harness *dagHarness) create(t *testing.T, requestRef, statement string, plan map[string]any) mcpiface.GoalView {

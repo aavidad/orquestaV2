@@ -135,3 +135,4 @@
 {"schema_version":1,"bug_id":"BUG-ORQ-20260713-272","capability_ids":["ORC-12","ORC-23"],"review_note":"Observe verificaba lease físico y después reexigía generación determinista, degradando running a invalid."}
 {"schema_version":1,"bug_id":"BUG-ORQ-20260713-273","capability_ids":["APP-11","EVD-11"],"review_note":"Fixture E2E creó raíz 0775 y activó correctamente fail-closed de seguridad."}
 {"schema_version":1,"bug_id":"BUG-ORQ-20260713-274","capability_ids":["APP-11","STG-09"],"review_note":"Fixture pidió un fichero distinto del autorizado por AGENTS/write-set y Goal bloqueó correctamente."}
+{"schema_version":1,"bug_id":"BUG-ORQ-20260715-275","capability_ids":["GOV-16","STG-09"],"review_note":"Guard de write-set conservaba una allowlist anterior y rechazaba seis rutas V08/V11 ya versionadas y acreditadas."}

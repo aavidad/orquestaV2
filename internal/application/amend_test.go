@@ -67,7 +67,7 @@ func TestV04ConfirmationFalseHasNoClockIDOrStateEffect(t *testing.T) {
 	orchestrator, err := New(Dependencies{
 		State: repository, Access: newMemoryAccessRepository(),
 		Launcher: agent, Observer: agent, Artifacts: artifacts,
-		Clock: clock, IDs: ids, MaxOutputBytes: 1024,
+		Clock: clock, IDs: ids, MaxOutputBytes: 1024, MaxMailboxEnvelopeBytes: 64 << 10,
 		MaxExecutionAttempts: 3, AgentCapabilities: testAgentCapabilities(),
 		ClaimLease: time.Minute, DirectorLeaseDuration: time.Minute,
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
@@ -260,7 +260,7 @@ func TestV04AmendRejectsNonterminalStaleAndForeignSource(t *testing.T) {
 		orchestrator, err := New(Dependencies{
 			State: repository, Access: newMemoryAccessRepository(),
 			Launcher: agent, Observer: agent, Artifacts: newMemoryArtifactStore(),
-			Clock: clock, IDs: ids, MaxOutputBytes: 1024,
+			Clock: clock, IDs: ids, MaxOutputBytes: 1024, MaxMailboxEnvelopeBytes: 64 << 10,
 			MaxExecutionAttempts: 3, AgentCapabilities: testAgentCapabilities(),
 			ClaimLease: time.Minute, DirectorLeaseDuration: time.Minute,
 			ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
@@ -523,7 +523,7 @@ func v04NewOrchestrator(
 	orchestrator, err := New(Dependencies{
 		State: state, Access: newMemoryAccessRepository(),
 		Launcher: agent, Observer: agent, Artifacts: newMemoryArtifactStore(),
-		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1 << 20,
+		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1 << 20, MaxMailboxEnvelopeBytes: 64 << 10,
 		MaxExecutionAttempts: 3, AgentCapabilities: testAgentCapabilities(), ClaimLease: time.Minute,
 		DirectorLeaseDuration: time.Minute,
 		ObservationDelay:      time.Second, ExecutionTimeout: time.Hour,

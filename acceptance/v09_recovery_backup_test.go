@@ -347,12 +347,13 @@ func v09NewOrchestrator(
 	orchestrator, err := application.New(application.Dependencies{
 		State: repository, Access: repository, Launcher: agent, Observer: agent, Artifacts: artifacts,
 		Clock: clock, IDs: &v06IDs{}, MaxOutputBytes: 1 << 20,
-		MaxExecutionAttempts:  fixture.ClockAndRetry.MaxExecutionAttempts,
-		ClaimLease:            v06Duration(t, fixture.ClockAndRetry.ClaimLease),
-		DirectorLeaseDuration: 2 * time.Minute,
-		ObservationDelay:      v06Duration(t, fixture.ClockAndRetry.ObservationDelay),
-		ExecutionTimeout:      v06Duration(t, fixture.ClockAndRetry.ExecutionTimeout),
-		AgentCapabilities:     agent.capabilities,
+		MaxMailboxEnvelopeBytes: 64 << 10,
+		MaxExecutionAttempts:    fixture.ClockAndRetry.MaxExecutionAttempts,
+		ClaimLease:              v06Duration(t, fixture.ClockAndRetry.ClaimLease),
+		DirectorLeaseDuration:   2 * time.Minute,
+		ObservationDelay:        v06Duration(t, fixture.ClockAndRetry.ObservationDelay),
+		ExecutionTimeout:        v06Duration(t, fixture.ClockAndRetry.ExecutionTimeout),
+		AgentCapabilities:       agent.capabilities,
 	})
 	if err != nil {
 		t.Fatal(err)

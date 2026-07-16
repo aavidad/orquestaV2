@@ -26,6 +26,9 @@ const (
 	ErrorIntentHashMismatch   ErrorCode = "goal.intent_hash_mismatch"
 	ErrorAppSpecHashMismatch  ErrorCode = "goal.app_spec_hash_mismatch"
 	ErrorWorkItemNotReady     ErrorCode = "goal.work_item_not_ready"
+	ErrorChildHandoffsPending ErrorCode = "goal.child_handoffs_pending"
+	ErrorChildHandoffInvalid  ErrorCode = "goal.child_handoff_invalid"
+	ErrorChildHandoffConflict ErrorCode = "goal.child_handoff_conflict"
 )
 
 // DomainError carries no human-facing copy. Interfaces translate Code through

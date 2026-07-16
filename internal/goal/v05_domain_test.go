@@ -93,7 +93,7 @@ func TestV05ContractualChildrenAreSeparateFromDependenciesAndKeepGoalOpen(t *tes
 	childRef := mustRef(t, "work-item:child", domain.NewWorkItemRef)
 	parent := fixture.item(t, parentRef, phase.Key(), nil, []domain.WriteScope{mustScope(t, "internal/parent")})
 	child, err := fixture.newItem(domain.NewWorkItemInput{
-		Ref: childRef, Phase: phase.Key(), Parent: parentRef,
+		Ref: childRef, Phase: phase.Key(), Parent: parentRef, HandoffRequired: true,
 		WriteSet: []domain.WriteScope{mustScope(t, "internal/child")},
 	})
 	if err != nil {
@@ -120,18 +120,38 @@ func TestV05ContractualChildrenAreSeparateFromDependenciesAndKeepGoalOpen(t *tes
 		baseTime().Add(5*time.Minute),
 	)
 	requireCode(t, err, domain.ErrorRevisionConflict)
-	running, err = running.SucceedWorkItem(
+	_, err = running.SucceedWorkItem(
 		running.Revision(), parentRunning.Revision(), parentRef,
 		[]domain.ArtifactRef{mustRef(t, "artifact:parent", domain.NewArtifactRef)},
 		[]domain.AttestationRef{mustRef(t, "attestation:parent", domain.NewAttestationRef)},
 		baseTime().Add(5*time.Minute),
 	)
-	if err != nil {
-		t.Fatalf("SucceedWorkItem(parent) error = %v", err)
-	}
+	requireCode(t, err, domain.ErrorChildHandoffsPending)
 	_, err = running.Close(running.Revision(), domain.GoalOutcomeSucceeded, baseTime().Add(6*time.Minute))
-	requireCode(t, err, domain.ErrorWorkItemsNotTerminal)
+	requireCode(t, err, domain.ErrorChildHandoffsPending)
 	running = succeedGoalItem(t, running, childRef, "child", baseTime().Add(5*time.Minute))
+	_, err = running.Close(running.Revision(), domain.GoalOutcomeSucceeded, baseTime().Add(6*time.Minute))
+	requireCode(t, err, domain.ErrorChildHandoffsPending)
+	running, err = running.ResolveChildHandoff(
+		running.Revision(), parentRef, childRef, "message:child-to-parent",
+		domain.ChildHandoffAcknowledged, "receipt:child-to-parent", baseTime().Add(6*time.Minute),
+	)
+	if err != nil {
+		t.Fatalf("ResolveChildHandoff() error = %v", err)
+	}
+	running, err = running.SucceedWorkItem(
+		running.Revision(), parentRunning.Revision(), parentRef,
+		[]domain.ArtifactRef{mustRef(t, "artifact:parent", domain.NewArtifactRef)},
+		[]domain.AttestationRef{mustRef(t, "attestation:parent", domain.NewAttestationRef)},
+		baseTime().Add(7*time.Minute),
+	)
+	if err != nil {
+		t.Fatalf("SucceedWorkItem(parent after ACK) error = %v", err)
+	}
+	running, err = running.Close(running.Revision(), domain.GoalOutcomeSucceeded, baseTime().Add(8*time.Minute))
+	if err != nil {
+		t.Fatalf("Close(parent/child) error = %v", err)
+	}
 	if _, err := domain.RestoreGoal(running.Snapshot()); err != nil {
 		t.Fatalf("RestoreGoal(parent/child) error = %v", err)
 	}
@@ -154,6 +174,48 @@ func TestV05ContractualChildrenAreSeparateFromDependenciesAndKeepGoalOpen(t *tes
 	b, _ := fixture.newItem(domain.NewWorkItemInput{Ref: bRef, Phase: phase.Key(), Parent: aRef})
 	_, err = domain.NewPlan(domain.PlanInput{
 		Generation: 1, Phases: []domain.PhaseInstance{phase}, WorkItems: []domain.WorkItem{a, b},
+	})
+	requireCode(t, err, domain.ErrorInvalidPlan)
+}
+
+func TestV05ParentMetadataDoesNotCreateHandoffBarrier(t *testing.T) {
+	fixture := newPlanFixture(t)
+	phase := mustPhase(t, "phase:parent-metadata")
+	parentRef := mustRef(t, "work-item:metadata-parent", domain.NewWorkItemRef)
+	childRef := mustRef(t, "work-item:metadata-child", domain.NewWorkItemRef)
+	parent := fixture.item(t, parentRef, phase.Key(), nil, nil)
+	child, err := fixture.newItem(domain.NewWorkItemInput{
+		Ref: childRef, Phase: phase.Key(), Parent: parentRef, HandoffRequired: false,
+	})
+	if err != nil {
+		t.Fatalf("NewWorkItem(parent metadata) error = %v", err)
+	}
+	if got, ok := child.Parent(); !ok || got != parentRef || child.HandoffRequired() {
+		t.Fatalf("parent metadata = %q/%v handoff=%v", got, ok, child.HandoffRequired())
+	}
+
+	running := applyAndStartPlan(t, fixture.goal, domain.PlanInput{
+		Generation: 1, Phases: []domain.PhaseInstance{phase},
+		WorkItems: []domain.WorkItem{parent, child},
+	})
+	running = startGoalItem(t, running, parentRef, "execution:metadata-parent", baseTime().Add(4*time.Minute))
+	running = startGoalItem(t, running, childRef, "execution:metadata-child", baseTime().Add(4*time.Minute))
+	running = succeedGoalItem(t, running, childRef, "metadata-child", baseTime().Add(5*time.Minute))
+	_, err = running.ResolveChildHandoff(
+		running.Revision(), parentRef, childRef, "message:metadata-child",
+		domain.ChildHandoffAcknowledged, "receipt:metadata-child", baseTime().Add(6*time.Minute),
+	)
+	requireCode(t, err, domain.ErrorChildHandoffInvalid)
+	running = succeedGoalItem(t, running, parentRef, "metadata-parent", baseTime().Add(6*time.Minute))
+	closed, err := running.Close(running.Revision(), domain.GoalOutcomeSucceeded, baseTime().Add(7*time.Minute))
+	if err != nil || closed.State() != domain.GoalStateSucceeded || len(closed.ChildHandoffResolutions()) != 0 {
+		t.Fatalf("parent metadata closure state=%q resolutions=%v err=%v",
+			closed.State(), closed.ChildHandoffResolutions(), err)
+	}
+
+	_, err = fixture.newItem(domain.NewWorkItemInput{
+		Ref:   mustRef(t, "work-item:handoff-without-parent", domain.NewWorkItemRef),
+		Phase: phase.Key(), HandoffRequired: true,
 	})
 	requireCode(t, err, domain.ErrorInvalidPlan)
 }

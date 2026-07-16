@@ -187,7 +187,7 @@
     },
     {
       "id": "mailbox",
-      "title": "Mailbox y handoff",
+      "title": "Mailbox causal hijo a padre",
       "sequence": 13,
       "depends_on": [
         "atomic_state_outbox",
@@ -760,23 +760,30 @@
       "vertical": "mailbox",
       "status": "executable",
       "test_ref": "acceptance/v13_mailbox_test.go",
-      "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV13ScopeAndExecutableContract|TestV13EvidenceBelongsOnlyToMailboxCapabilities|TestV13AcceptanceCommandRunsMailboxConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV13Mailbox|TestV13CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/application ./internal/ports ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta'",
+      "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV13ScopeAndExecutableContract|TestV13EvidenceBelongsOnlyToMailboxCapabilities|TestV13AcceptanceCommandRunsMailboxConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV13Mailbox|TestV13CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/config ./internal/application ./internal/ports ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta'",
       "fixture": "acceptance/fixtures/v13_mailbox.json",
       "receipt": "product/evidence/v13_mailbox.json",
       "assertions": [
         "admission is request-idempotent and atomically binds one immutable envelope to one action in the existing outbox without treating admission as delivery",
         "the envelope binds exact project Goal plan generation parent and child WorkItems plus source and recipient principal WorkItem and execution identities",
         "admitted claimed delivered consumed and acknowledged or blocked are separate causal facts with trusted timestamps and no text-derived lifecycle",
-        "concurrent exact-recipient claims have one winner and use transaction-clock lease opaque token monotonic fence and delivery attempt rather than caller time",
+        "concurrent exact-recipient claims have one winner and use transaction-clock lease opaque token and one monotonic fence as the delivery-attempt ordinal rather than caller time",
         "wrong project Goal generation principal WorkItem execution sibling or successor cannot claim deliver consume acknowledge block or enumerate the message",
-        "expired lease wrong token and stale fence cannot mutate while a post-expiry reclaim preserves the envelope and increments fence and attempt exactly once",
+        "expired lease wrong token and stale fence cannot mutate while a post-expiry reclaim preserves the envelope and increments the single fence exactly once",
         "a crash after claim and before terminal recipient resolution permits safe reclaim after restart without message loss or partial acknowledgement",
+        "exact claim replay returns the original claimed frontier without renewing its lease after expiry delivery or consumption and conflicts after a superseding fence or terminal mailbox",
+        "exact delivery and consumption replay returns the original historical frontier after terminal state or a later fence without authorizing another mutation",
+        "recipient mailbox listing is deterministic causal FIFO by admitted_at then message ref and applies its limit after exact recipient scope",
         "delivery consumption and recipient acknowledgement have distinct immutable receipts and an outbox consumption receipt alone is not recipient evidence",
         "exact acknowledgement replay returns the same receipt and acknowledged or blocked messages are never redelivered by outbox replay restart or another execution",
         "a successor execution cannot acknowledge a message addressed to its predecessor even when both executions use the same principal",
-        "a contractual parent cannot succeed or close its Goal until every direct child has one acknowledged delivery or explicit blocked resolution addressed to that parent execution",
+        "if the exact recipient execution fails before resolution the mailbox becomes retired in the same Goal failure transaction without replacement readdress ACK authorization or ChildHandoffResolution",
+        "a contractual parent cannot succeed until every successful direct child has one acknowledged delivery or explicit recipient block; failed and dependency_failed skipped children are durable causal blocks",
         "an unrelated child terminal WorkItem admission ACK or delivery without recipient acknowledgement does not satisfy the parent closure barrier",
-        "message handoff and child_delivery are typed compact envelopes using summaries and artifact refs while rich context resumable sessions and preventive provider handoff stay deferred",
+        "parent lineage is noncontractual by default and only an explicit HandoffRequired true edge activates the mailbox barrier so public V05 DAGs remain operable while public mailbox bindings are deferred",
+        "child_delivery is the only V13 causal envelope; canonical mailbox.max_envelope_bytes bounds its summary and artifact refs while generic messages rich context resumable sessions and provider handoff stay deferred",
+        "the existing outbox fence is the single mailbox attempt ordinal; mailbox adds no second delivery counter or private fence store",
+        "V13 preserves the V02 application-only Goal writer the V05 contractual lineage gate and the V06 V09 V10 acceptance harness wiring",
         "Goal and application remain the only lifecycle authority and mailbox adds no private store database queue scheduler loop goroutine daemon provider policy or parallel lifecycle"
       ]
     },
@@ -2678,13 +2685,17 @@
       "acceptance_contracts": [
         "AC-V13-MAILBOX"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v13_mailbox_test.go",
+        "acceptance/fixtures/v13_mailbox.json",
+        "product/evidence/v13_mailbox.json"
+      ],
       "supersedes": []
     },
     {
       "id": "ORC-05",
-      "title": "El padre espera ACK/entrega/bloqueo de cada hijo contractual",
+      "title": "El padre espera ACK o bloqueo de cada hijo contractual exitoso; failed/skipped bloquean por estado",
       "source_proposal": "MANTENER",
       "decision": "accept",
       "kind": "orchestration",
@@ -2698,8 +2709,12 @@
       "acceptance_contracts": [
         "AC-V13-MAILBOX"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v13_mailbox_test.go",
+        "acceptance/fixtures/v13_mailbox.json",
+        "product/evidence/v13_mailbox.json"
+      ],
       "supersedes": []
     },
     {
@@ -2902,8 +2917,12 @@
       "acceptance_contracts": [
         "AC-V13-MAILBOX"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v13_mailbox_test.go",
+        "acceptance/fixtures/v13_mailbox.json",
+        "product/evidence/v13_mailbox.json"
+      ],
       "supersedes": []
     },
     {
@@ -2914,13 +2933,14 @@
       "kind": "orchestration",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "mailbox",
+      "owner_context": "context_rag_evals",
       "dependencies": [
-        "atomic_state_outbox",
-        "director_lease"
+        "test_attestor",
+        "provider_adapters",
+        "tools_skills_sdk"
       ],
       "acceptance_contracts": [
-        "AC-V13-MAILBOX"
+        "AC-V27-CONTEXT-RAG-EVALS"
       ],
       "status": "declared",
       "evidence_refs": [],

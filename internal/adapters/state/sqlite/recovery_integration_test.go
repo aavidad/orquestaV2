@@ -32,7 +32,8 @@ func TestArtifactPersistenceCrossingLeaseCannotCommitBackdatedSuccess(t *testing
 	orchestrator, err := application.New(application.Dependencies{
 		State: repository, Access: repository, Launcher: agent, Observer: agent,
 		Artifacts: leaseAdvancingArtifacts{clock: clock, advance: 2 * time.Second},
-		Clock:     clock, IDs: &restartIDs{}, MaxOutputBytes: 4096, MaxExecutionAttempts: 3,
+		Clock:     clock, IDs: &restartIDs{}, MaxOutputBytes: 4096,
+		MaxMailboxEnvelopeBytes: 64 << 10, MaxExecutionAttempts: 3,
 		AgentCapabilities: ports.AgentCapabilities{
 			ProviderRef: "provider:lease-test", ModelRef: "model:lease-test", AgentRef: "agent:lease-test", Unrestricted: true,
 		},
@@ -234,7 +235,8 @@ func newRestartOrchestrator(
 	t.Helper()
 	orchestrator, err := application.New(application.Dependencies{
 		State: repository, Access: repository, Launcher: agent, Observer: agent, Artifacts: restartArtifacts{},
-		Clock: clock, IDs: ids, MaxOutputBytes: 4096, MaxExecutionAttempts: 3,
+		Clock: clock, IDs: ids, MaxOutputBytes: 4096,
+		MaxMailboxEnvelopeBytes: 64 << 10, MaxExecutionAttempts: 3,
 		AgentCapabilities: ports.AgentCapabilities{
 			ProviderRef: "provider:restart", ModelRef: "model:restart", AgentRef: "agent:restart", Unrestricted: true,
 		},

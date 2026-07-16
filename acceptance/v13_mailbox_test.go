@@ -18,7 +18,7 @@ import (
 
 const v13FixturePath = "acceptance/fixtures/v13_mailbox.json"
 const v13TrustedBaseGitCommitOID = "ed2375ec0731864514a8e6f94938c18bfbaedadf"
-const v13ProductDeltaBaseGitCommitOID = "ed2375ec0731864514a8e6f94938c18bfbaedadf"
+const v13ProductDeltaBaseGitCommitOID = "b2af1e78f7a024d29a747e4485e619464b5dd12e"
 const v13ProductDeltaSealedGitCommitOID = "0000000000000000000000000000000000000000"
 
 type v13Fixture struct {
@@ -112,11 +112,37 @@ func TestAcceptanceV13Mailbox(t *testing.T) {
 		}
 	})
 
+	t.Run("prior_vertical_ratchets_remain_green", func(t *testing.T) {
+		authorityFixture := evidenceDecodeStrictJSON[v02Fixture](
+			t, filepath.Join(repositoryRoot, filepath.FromSlash(v02FixturePath)),
+		)
+		v02AssertSingleWriterAndScheduler(
+			t, v02LoadSources(t, repositoryRoot, authorityFixture.ProductModule, authorityFixture.ProductRoots),
+			authorityFixture.Lifecycle,
+		)
+		v05AssertContractualLineageDoesNotCloseGoalEarly(t)
+		for _, relative := range []string{
+			"acceptance/v06_atomic_state_outbox_test.go",
+			"acceptance/v09_recovery_backup_test.go",
+		} {
+			content, err := os.ReadFile(filepath.Join(repositoryRoot, filepath.FromSlash(relative)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			text := string(content)
+			if strings.Count(text, "application.New(application.Dependencies{") != 1 ||
+				strings.Count(text, "MaxMailboxEnvelopeBytes:") != 1 {
+				t.Errorf("%s does not wire the one canonical mailbox envelope limit", relative)
+			}
+		}
+	})
+
 	t.Run("causal_states_use_existing_outbox_and_trusted_fencing", func(t *testing.T) {
 		applicationSource := v10ReadProductionGo(t, filepath.Join(repositoryRoot, "internal", "application"))
 		for _, required := range []string{
 			`"deliver_mailbox"`, `"admitted"`, `"claimed"`, `"delivered"`, `"consumed"`,
-			`"acknowledged"`, `"blocked"`, "DeliveryAttempt", "Fence", "LeaseUntil",
+			`"acknowledged"`, `"blocked"`, `"retired"`, "MailboxRetirement",
+			"Fence", "LeaseUntil",
 		} {
 			if !strings.Contains(applicationSource, required) {
 				t.Errorf("V13_RED mailbox causal contract lacks %q", required)
@@ -125,6 +151,17 @@ func TestAcceptanceV13Mailbox(t *testing.T) {
 		for _, forbidden := range fixture.ForbiddenPrivateAuthorities {
 			if strings.Contains(strings.ToLower(applicationSource), strings.ToLower(forbidden)) {
 				t.Errorf("V13 mailbox adds private authority %q", forbidden)
+			}
+		}
+		for _, typeName := range []string{
+			"MarkMailboxDeliveredRequest", "ConsumeMailboxRequest", "ResolveMailboxRequest",
+			"MailboxDeliveryAttempt", "MailboxAcknowledgement",
+		} {
+			fields, found := v13ProductionTypeFields(t, filepath.Join(repositoryRoot, "internal", "application"), typeName)
+			if !found {
+				t.Errorf("V13_RED production type %s missing", typeName)
+			} else if fields["DeliveryAttempt"] {
+				t.Errorf("V13 mailbox duplicates Fence as %s.DeliveryAttempt", typeName)
 			}
 		}
 	})
@@ -137,7 +174,8 @@ func TestAcceptanceV13Mailbox(t *testing.T) {
 		} else {
 			text := strings.ToLower(string(migration))
 			for _, required := range []string{
-				"mailbox_envelopes", "mailbox_admission_receipts", "mailbox_delivery_acks", "mailbox_fences", "outbox",
+				"mailbox_envelopes", "mailbox_admission_receipts", "mailbox_delivery_acks",
+				"mailbox_delivery_attempts", "mailbox_retirements", "outbox",
 			} {
 				if !strings.Contains(text, required) {
 					t.Errorf("V13_RED migration lacks %s", required)
@@ -146,9 +184,14 @@ func TestAcceptanceV13Mailbox(t *testing.T) {
 			if strings.Contains(text, "mailbox_outbox") {
 				t.Error("V13 migration creates private mailbox_outbox")
 			}
+			if strings.Contains(text, "create table mailbox_fences") {
+				t.Error("V13 migration creates a second fence authority")
+			}
 		}
 		recovery := v10ReadProductionGo(t, filepath.Join(repositoryRoot, "internal", "adapters", "state", "sqlite"))
-		for _, required := range []string{"mailbox_envelopes", "mailbox_delivery_acks", "mailbox_fences"} {
+		for _, required := range []string{
+			"mailbox_envelopes", "mailbox_delivery_attempts", "mailbox_delivery_acks", "mailbox_retirements",
+		} {
 			if !strings.Contains(recovery, required) {
 				t.Errorf("V13_RED SQLite recovery does not validate %s", required)
 			}
@@ -157,18 +200,30 @@ func TestAcceptanceV13Mailbox(t *testing.T) {
 
 	t.Run("behavioral_negatives_and_restart_are_executable_tests", func(t *testing.T) {
 		testSource := v13ReadGoTests(t,
+			filepath.Join(repositoryRoot, "internal", "goal"),
 			filepath.Join(repositoryRoot, "internal", "application"),
 			filepath.Join(repositoryRoot, "internal", "adapters", "state", "sqlite"),
+			filepath.Join(repositoryRoot, "internal", "bootstrap"),
 		)
 		for _, required := range []string{
 			"TestMailboxAdmissionIsAtomicAndRequestIdempotent",
+			"TestMailboxRejectsDuplicateChildDeliveryRelation",
+			"TestMailboxEnvelopeLimitRejectsBeforeIdentityOrStateEffects",
 			"TestMailboxConcurrentClaimHasOneExactRecipientWinner",
+			"TestMailboxClaimReplayPreservesHistoricalFrontierWithoutRenewal",
+			"TestMailboxMutationReplayPreservesHistoricalFrontiersAfterTerminalState",
+			"TestMailboxListUsesDeterministicFIFOOrder",
+			"TestMailboxRejectsNonContractualChildEdgeBeforeEffects",
+			"TestV05ParentMetadataDoesNotCreateHandoffBarrier",
+			"TestMCPParentMetadataClosesWithoutMailboxOrRequeue",
 			"TestMailboxRejectsWrongRecipientAndSuccessorExecution",
 			"TestMailboxExpiredClaimReclaimsAfterCrash",
 			"TestMailboxAcknowledgementReplayNeverRedelivers",
+			"TestMailboxHandoffRequirementSurvivesRestartAndGatesAdmission",
 			"TestMailboxRestartPreservesEveryCausalFrontier",
 			"TestMailboxParentClosureRequiresEveryChildResolution",
 			"TestMailboxAcknowledgedAndBlockedReceiptsAreImmutable",
+			"TestMailboxRecipientFailureRetiresWithoutReplacementOrForgedResolution",
 		} {
 			if !strings.Contains(testSource, "func "+required+"(") {
 				t.Errorf("V13_RED executable behavior test missing: %s", required)
@@ -234,6 +289,7 @@ func TestV13FixtureIsStrictJSON(t *testing.T) {
 func v13AssertFixtureHeader(t *testing.T, repositoryRoot string, fixture v13Fixture) {
 	t.Helper()
 	wantDeferred := []v13DeferredCapability{
+		{ID: "ORC-15", Owner: "context_rag_evals", AcceptanceContract: "AC-V27-CONTEXT-RAG-EVALS"},
 		{ID: "ORC-29", Owner: "provider_adapters", AcceptanceContract: "AC-V25-PROVIDER-ADAPTERS"},
 		{ID: "CTX-02", Owner: "context_rag_evals", AcceptanceContract: "AC-V27-CONTEXT-RAG-EVALS"},
 		{ID: "ORC-22", Owner: "context_rag_evals", AcceptanceContract: "AC-V27-CONTEXT-RAG-EVALS"},
@@ -245,7 +301,7 @@ func v13AssertFixtureHeader(t *testing.T, repositoryRoot string, fixture v13Fixt
 		fixture.ProductDeltaSealedGitCommitOID != v13ProductDeltaSealedGitCommitOID ||
 		fixture.OutputPath != "product/evidence/v13_mailbox.output.txt" ||
 		fixture.ReceiptPath != "product/evidence/v13_mailbox.json" ||
-		!reflect.DeepEqual(fixture.OwnedCapabilityIDs, []string{"ORC-04", "ORC-05", "ORC-14", "ORC-15"}) ||
+		!reflect.DeepEqual(fixture.OwnedCapabilityIDs, []string{"ORC-04", "ORC-05", "ORC-14"}) ||
 		!reflect.DeepEqual(fixture.DeferredCapabilities, wantDeferred) ||
 		!reflect.DeepEqual(fixture.RequiredUseCases, []string{
 			"AdmitMailbox", "ClaimMailbox", "MarkMailboxDelivered", "ConsumeMailbox",
@@ -263,8 +319,8 @@ func v13AssertFixtureHeader(t *testing.T, repositoryRoot string, fixture v13Fixt
 	reclaim := v13PositiveDuration(t, "reclaim_after", fixture.Scenario.ReclaimAfter)
 	if reclaim <= lease || fixture.Scenario.PlanGeneration == 0 || fixture.Scenario.ClaimContenders < 2 ||
 		len(fixture.Scenario.ChildWorkItemRefs) != 2 ||
-		!reflect.DeepEqual(fixture.Scenario.MessageKinds, []string{"message", "handoff", "child_delivery"}) ||
-		!reflect.DeepEqual(fixture.Scenario.Lifecycle, []string{"admitted", "claimed", "delivered", "consumed"}) ||
+		!reflect.DeepEqual(fixture.Scenario.MessageKinds, []string{"child_delivery"}) ||
+		!reflect.DeepEqual(fixture.Scenario.Lifecycle, []string{"admitted", "claimed", "delivered", "consumed", "retired"}) ||
 		!reflect.DeepEqual(fixture.Scenario.TerminalResolutions, []string{"acknowledged", "blocked"}) ||
 		fixture.Scenario.RecipientExecutionRef == fixture.Scenario.SuccessorExecutionRef {
 		t.Fatalf("invalid V13 scenario: %+v", fixture.Scenario)
@@ -285,7 +341,7 @@ func v13AssertFixtureHeader(t *testing.T, repositoryRoot string, fixture v13Fixt
 
 func v13ValidationShellBody() string {
 	return "go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV13ScopeAndExecutableContract|TestV13EvidenceBelongsOnlyToMailboxCapabilities|TestV13AcceptanceCommandRunsMailboxConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV13Mailbox|TestV13CandidateSubjectsCoverCommittedDelta)$\"" +
-		" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/application ./internal/ports ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta"
+		" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/config ./internal/application ./internal/ports ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta"
 }
 
 func v13ExpectedAssertions() []string {
@@ -293,16 +349,23 @@ func v13ExpectedAssertions() []string {
 		"admission is request-idempotent and atomically binds one immutable envelope to one action in the existing outbox without treating admission as delivery",
 		"the envelope binds exact project Goal plan generation parent and child WorkItems plus source and recipient principal WorkItem and execution identities",
 		"admitted claimed delivered consumed and acknowledged or blocked are separate causal facts with trusted timestamps and no text-derived lifecycle",
-		"concurrent exact-recipient claims have one winner and use transaction-clock lease opaque token monotonic fence and delivery attempt rather than caller time",
+		"concurrent exact-recipient claims have one winner and use transaction-clock lease opaque token and one monotonic fence as the delivery-attempt ordinal rather than caller time",
 		"wrong project Goal generation principal WorkItem execution sibling or successor cannot claim deliver consume acknowledge block or enumerate the message",
-		"expired lease wrong token and stale fence cannot mutate while a post-expiry reclaim preserves the envelope and increments fence and attempt exactly once",
+		"expired lease wrong token and stale fence cannot mutate while a post-expiry reclaim preserves the envelope and increments the single fence exactly once",
 		"a crash after claim and before terminal recipient resolution permits safe reclaim after restart without message loss or partial acknowledgement",
+		"exact claim replay returns the original claimed frontier without renewing its lease after expiry delivery or consumption and conflicts after a superseding fence or terminal mailbox",
+		"exact delivery and consumption replay returns the original historical frontier after terminal state or a later fence without authorizing another mutation",
+		"recipient mailbox listing is deterministic causal FIFO by admitted_at then message ref and applies its limit after exact recipient scope",
 		"delivery consumption and recipient acknowledgement have distinct immutable receipts and an outbox consumption receipt alone is not recipient evidence",
 		"exact acknowledgement replay returns the same receipt and acknowledged or blocked messages are never redelivered by outbox replay restart or another execution",
 		"a successor execution cannot acknowledge a message addressed to its predecessor even when both executions use the same principal",
-		"a contractual parent cannot succeed or close its Goal until every direct child has one acknowledged delivery or explicit blocked resolution addressed to that parent execution",
+		"if the exact recipient execution fails before resolution the mailbox becomes retired in the same Goal failure transaction without replacement readdress ACK authorization or ChildHandoffResolution",
+		"a contractual parent cannot succeed until every successful direct child has one acknowledged delivery or explicit recipient block; failed and dependency_failed skipped children are durable causal blocks",
 		"an unrelated child terminal WorkItem admission ACK or delivery without recipient acknowledgement does not satisfy the parent closure barrier",
-		"message handoff and child_delivery are typed compact envelopes using summaries and artifact refs while rich context resumable sessions and preventive provider handoff stay deferred",
+		"parent lineage is noncontractual by default and only an explicit HandoffRequired true edge activates the mailbox barrier so public V05 DAGs remain operable while public mailbox bindings are deferred",
+		"child_delivery is the only V13 causal envelope; canonical mailbox.max_envelope_bytes bounds its summary and artifact refs while generic messages rich context resumable sessions and provider handoff stay deferred",
+		"the existing outbox fence is the single mailbox attempt ordinal; mailbox adds no second delivery counter or private fence store",
+		"V13 preserves the V02 application-only Goal writer the V05 contractual lineage gate and the V06 V09 V10 acceptance harness wiring",
 		"Goal and application remain the only lifecycle authority and mailbox adds no private store database queue scheduler loop goroutine daemon provider policy or parallel lifecycle",
 	}
 }

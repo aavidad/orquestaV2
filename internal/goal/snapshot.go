@@ -2,7 +2,7 @@ package goal
 
 import "time"
 
-const GoalSnapshotSchemaVersion uint32 = 3
+const GoalSnapshotSchemaVersion uint32 = 4
 
 // IntentManifestSnapshot is a persistence-neutral representation. Primitive
 // ref values keep adapters independent from domain internals.
@@ -49,6 +49,7 @@ type WorkItemSnapshot struct {
 	PhaseKey        string
 	RoleKey         string
 	ParentRef       string
+	HandoffRequired *bool
 	DependencyRefs  []string
 	WriteSet        []string
 	SkillRefs       []string
@@ -66,22 +67,34 @@ type WorkItemSnapshot struct {
 	AttestationRefs []string
 }
 
+// ChildHandoffResolutionSnapshot persists only the closure-relevant fact.
+// Mailbox delivery attempts, claim tokens and leases never enter Goal.
+type ChildHandoffResolutionSnapshot struct {
+	ParentRef  string
+	ChildRef   string
+	MessageRef string
+	Outcome    ChildHandoffOutcome
+	ReceiptRef string
+	ResolvedAt time.Time
+}
+
 // GoalSnapshot contains the intent and ordered WorkItem snapshots needed for
 // a lossless aggregate round trip.
 type GoalSnapshot struct {
-	SchemaVersion  uint32
-	Ref            string
-	ActorRef       string
-	ProjectRef     string
-	AppSpec        AppSpecSnapshot
-	State          GoalState
-	Revision       Revision
-	CreatedAt      time.Time
-	StartedAt      time.Time
-	ClosedAt       time.Time
-	PlanGeneration PlanGeneration
-	Phases         []PhaseInstanceSnapshot
-	WorkItems      []WorkItemSnapshot
+	SchemaVersion           uint32
+	Ref                     string
+	ActorRef                string
+	ProjectRef              string
+	AppSpec                 AppSpecSnapshot
+	State                   GoalState
+	Revision                Revision
+	CreatedAt               time.Time
+	StartedAt               time.Time
+	ClosedAt                time.Time
+	PlanGeneration          PlanGeneration
+	Phases                  []PhaseInstanceSnapshot
+	WorkItems               []WorkItemSnapshot
+	ChildHandoffResolutions []ChildHandoffResolutionSnapshot
 }
 
 func (manifest IntentManifest) Snapshot() IntentManifestSnapshot {
@@ -122,24 +135,37 @@ func (goal Goal) Snapshot() GoalSnapshot {
 			items = append(items, snapshotWorkItem(goal.items[ref]))
 		}
 	}
+	var childHandoffs []ChildHandoffResolutionSnapshot
+	if len(goal.childHandoffs) > 0 {
+		childHandoffs = make([]ChildHandoffResolutionSnapshot, len(goal.childHandoffs))
+		for index, resolution := range goal.childHandoffs {
+			childHandoffs[index] = ChildHandoffResolutionSnapshot{
+				ParentRef: resolution.parentRef.String(), ChildRef: resolution.childRef.String(),
+				MessageRef: resolution.messageRef, Outcome: resolution.outcome,
+				ReceiptRef: resolution.receiptRef, ResolvedAt: resolution.resolvedAt,
+			}
+		}
+	}
 	return GoalSnapshot{
-		SchemaVersion:  GoalSnapshotSchemaVersion,
-		Ref:            goal.ref.String(),
-		ActorRef:       goal.actor.String(),
-		ProjectRef:     goal.project.String(),
-		AppSpec:        goal.appSpec.Snapshot(),
-		State:          goal.state,
-		Revision:       goal.revision,
-		CreatedAt:      goal.createdAt,
-		StartedAt:      goal.startedAt,
-		ClosedAt:       goal.closedAt,
-		PlanGeneration: goal.planGeneration,
-		Phases:         phases,
-		WorkItems:      items,
+		SchemaVersion:           GoalSnapshotSchemaVersion,
+		Ref:                     goal.ref.String(),
+		ActorRef:                goal.actor.String(),
+		ProjectRef:              goal.project.String(),
+		AppSpec:                 goal.appSpec.Snapshot(),
+		State:                   goal.state,
+		Revision:                goal.revision,
+		CreatedAt:               goal.createdAt,
+		StartedAt:               goal.startedAt,
+		ClosedAt:                goal.closedAt,
+		PlanGeneration:          goal.planGeneration,
+		Phases:                  phases,
+		WorkItems:               items,
+		ChildHandoffResolutions: childHandoffs,
 	}
 }
 
 func snapshotWorkItem(item WorkItem) WorkItemSnapshot {
+	handoffRequired := item.handoffRequired
 	var dependencies []string
 	if len(item.dependencies) > 0 {
 		dependencies = make([]string, len(item.dependencies))
@@ -177,6 +203,7 @@ func snapshotWorkItem(item WorkItem) WorkItemSnapshot {
 		PhaseKey:        item.phase.String(),
 		RoleKey:         item.role.String(),
 		ParentRef:       item.parent.String(),
+		HandoffRequired: &handoffRequired,
 		DependencyRefs:  dependencies,
 		WriteSet:        writeSet,
 		SkillRefs:       stringsFromRefs(item.skillRefs),

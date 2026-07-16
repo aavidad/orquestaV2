@@ -27,48 +27,50 @@ type WorkItemSkipReason string
 const WorkItemSkipReasonDependencyFailed WorkItemSkipReason = "dependency_failed"
 
 type NewWorkItemInput struct {
-	Ref            WorkItemRef
-	Goal           GoalRef
-	Actor          ActorRef
-	Project        ProjectRef
-	Objective      string
-	CreatedAt      time.Time
-	Phase          PhaseKey
-	Role           RoleKey
-	Parent         WorkItemRef
-	Dependencies   []WorkItemRef
-	WriteSet       []WriteScope
-	SkillRefs      []SkillRef
-	ToolRefs       []ToolRef
-	CapabilityRefs []CapabilityRef
-	OutputContract OutputContract
+	Ref             WorkItemRef
+	Goal            GoalRef
+	Actor           ActorRef
+	Project         ProjectRef
+	Objective       string
+	CreatedAt       time.Time
+	Phase           PhaseKey
+	Role            RoleKey
+	Parent          WorkItemRef
+	HandoffRequired bool
+	Dependencies    []WorkItemRef
+	WriteSet        []WriteScope
+	SkillRefs       []SkillRef
+	ToolRefs        []ToolRef
+	CapabilityRefs  []CapabilityRef
+	OutputContract  OutputContract
 }
 
 // WorkItem is an immutable execution-unit snapshot.
 type WorkItem struct {
-	ref            WorkItemRef
-	goal           GoalRef
-	actor          ActorRef
-	project        ProjectRef
-	objective      string
-	phase          PhaseKey
-	role           RoleKey
-	parent         WorkItemRef
-	dependencies   []WorkItemRef
-	writeSet       []WriteScope
-	skillRefs      []SkillRef
-	toolRefs       []ToolRef
-	capabilityRefs []CapabilityRef
-	outputContract OutputContract
-	skipReason     WorkItemSkipReason
-	state          WorkItemState
-	revision       Revision
-	createdAt      time.Time
-	startedAt      time.Time
-	finishedAt     time.Time
-	execution      ExecutionRef
-	artifacts      []ArtifactRef
-	attestations   []AttestationRef
+	ref             WorkItemRef
+	goal            GoalRef
+	actor           ActorRef
+	project         ProjectRef
+	objective       string
+	phase           PhaseKey
+	role            RoleKey
+	parent          WorkItemRef
+	handoffRequired bool
+	dependencies    []WorkItemRef
+	writeSet        []WriteScope
+	skillRefs       []SkillRef
+	toolRefs        []ToolRef
+	capabilityRefs  []CapabilityRef
+	outputContract  OutputContract
+	skipReason      WorkItemSkipReason
+	state           WorkItemState
+	revision        Revision
+	createdAt       time.Time
+	startedAt       time.Time
+	finishedAt      time.Time
+	execution       ExecutionRef
+	artifacts       []ArtifactRef
+	attestations    []AttestationRef
 }
 
 func NewWorkItem(input NewWorkItemInput) (WorkItem, error) {
@@ -90,6 +92,9 @@ func NewWorkItem(input NewWorkItemInput) (WorkItem, error) {
 	if input.CreatedAt.IsZero() {
 		return WorkItem{}, domainError(ErrorInvalidArgument, "created_at")
 	}
+	if input.HandoffRequired && !validWorkItemRef(input.Parent) {
+		return WorkItem{}, domainError(ErrorInvalidPlan, "handoff_parent")
+	}
 
 	phase := input.Phase
 	if !validPhaseKey(phase) {
@@ -108,23 +113,24 @@ func NewWorkItem(input NewWorkItemInput) (WorkItem, error) {
 	}
 
 	item := WorkItem{
-		ref:            input.Ref,
-		goal:           input.Goal,
-		actor:          input.Actor,
-		project:        input.Project,
-		objective:      input.Objective,
-		phase:          phase,
-		role:           role,
-		parent:         input.Parent,
-		dependencies:   append([]WorkItemRef(nil), input.Dependencies...),
-		writeSet:       append([]WriteScope(nil), input.WriteSet...),
-		skillRefs:      cloneRefs(input.SkillRefs),
-		toolRefs:       cloneRefs(input.ToolRefs),
-		capabilityRefs: cloneRefs(input.CapabilityRefs),
-		outputContract: outputContract,
-		state:          WorkItemStatePending,
-		revision:       1,
-		createdAt:      canonicalTime(input.CreatedAt),
+		ref:             input.Ref,
+		goal:            input.Goal,
+		actor:           input.Actor,
+		project:         input.Project,
+		objective:       input.Objective,
+		phase:           phase,
+		role:            role,
+		parent:          input.Parent,
+		handoffRequired: input.HandoffRequired,
+		dependencies:    append([]WorkItemRef(nil), input.Dependencies...),
+		writeSet:        append([]WriteScope(nil), input.WriteSet...),
+		skillRefs:       cloneRefs(input.SkillRefs),
+		toolRefs:        cloneRefs(input.ToolRefs),
+		capabilityRefs:  cloneRefs(input.CapabilityRefs),
+		outputContract:  outputContract,
+		state:           WorkItemStatePending,
+		revision:        1,
+		createdAt:       canonicalTime(input.CreatedAt),
 	}
 	if err := validateWorkItemPlanMetadata(item); err != nil {
 		return WorkItem{}, err
@@ -140,6 +146,7 @@ func (item WorkItem) Objective() string               { return item.objective }
 func (item WorkItem) Phase() PhaseKey                 { return item.phase }
 func (item WorkItem) Role() RoleKey                   { return item.role }
 func (item WorkItem) Parent() (WorkItemRef, bool)     { return item.parent, validWorkItemRef(item.parent) }
+func (item WorkItem) HandoffRequired() bool           { return item.handoffRequired }
 func (item WorkItem) Dependencies() []WorkItemRef     { return cloneDependencies(item.dependencies) }
 func (item WorkItem) WriteSet() []WriteScope          { return cloneWriteSet(item.writeSet) }
 func (item WorkItem) SkillRefs() []SkillRef           { return cloneRefs(item.skillRefs) }
@@ -167,6 +174,10 @@ func (item WorkItem) Execution() (ExecutionRef, bool) {
 
 func (item WorkItem) SkipReason() (WorkItemSkipReason, bool) {
 	return item.skipReason, item.state == WorkItemStateSkipped
+}
+
+func (item WorkItem) handoffBlockedByOwnOutcome() bool {
+	return item.state == WorkItemStateFailed || item.state == WorkItemStateSkipped
 }
 
 func (item WorkItem) Start(expected Revision, execution ExecutionRef, at time.Time) (WorkItem, error) {
@@ -325,7 +336,7 @@ func (item WorkItem) clone() WorkItem {
 func equalWorkItems(left, right WorkItem) bool {
 	return left.ref == right.ref && left.goal == right.goal && left.actor == right.actor &&
 		left.project == right.project && left.objective == right.objective && left.phase == right.phase &&
-		left.role == right.role && left.parent == right.parent &&
+		left.role == right.role && left.parent == right.parent && left.handoffRequired == right.handoffRequired &&
 		refsEqual(left.dependencies, right.dependencies) && refsEqual(left.writeSet, right.writeSet) &&
 		refsEqual(left.skillRefs, right.skillRefs) && refsEqual(left.toolRefs, right.toolRefs) &&
 		refsEqual(left.capabilityRefs, right.capabilityRefs) && left.outputContract == right.outputContract &&

@@ -346,7 +346,11 @@ func validateGoalRecordConsistency(record application.GoalRecord, expectedGoalRe
 			receipt.WorkItemGeneration > item.Revision() {
 			return errors.New("sqlite.goal_record_receipt_scope_invalid")
 		}
-		fenceKey := receipt.WorkItemRef.String() + ":" + fmt.Sprint(receipt.Fence)
+		fenceScope := receipt.WorkItemRef.String()
+		if receipt.Kind == application.ActionDeliverMailbox {
+			fenceScope = receipt.MailboxMessageRef.String()
+		}
+		fenceKey := string(receipt.Kind) + ":" + fenceScope + ":" + fmt.Sprint(receipt.Fence)
 		if _, duplicate := seenActions[receipt.ActionRef]; duplicate {
 			return errors.New("sqlite.goal_record_receipt_action_duplicate")
 		}
@@ -442,6 +446,13 @@ func validateConsumptionReceipt(receipt application.ActionConsumptionReceipt) er
 	}
 	switch receipt.Kind {
 	case application.ActionLaunchAgent, application.ActionObserveAgent:
+		if receipt.MailboxMessageRef.String() != "" {
+			return errors.New("sqlite.consumption_receipt_mailbox_unexpected")
+		}
+	case application.ActionDeliverMailbox:
+		if receipt.MailboxMessageRef.String() == "" || receipt.Outcome != application.ActionConsumedCompleted || receipt.ErrorCode != "" {
+			return errors.New("sqlite.consumption_receipt_mailbox_invalid")
+		}
 	default:
 		return errors.New("sqlite.consumption_receipt_kind_invalid")
 	}
@@ -483,7 +494,7 @@ func validateAction(action application.ActionRecord) error {
 		return errors.New("sqlite.action_invalid")
 	}
 	switch action.Kind {
-	case application.ActionLaunchAgent, application.ActionObserveAgent:
+	case application.ActionLaunchAgent, application.ActionObserveAgent, application.ActionDeliverMailbox:
 		return nil
 	default:
 		return errors.New("sqlite.action_kind_invalid")
@@ -677,7 +688,9 @@ func validateExecutionReplaced(state application.ExecutionReplacedState) error {
 	}
 	if err := validateAction(state.NextAction); err != nil || state.NextAction.Kind != application.ActionLaunchAgent ||
 		!actionMatches(state.NextAction, state.Goal.Ref().String(), item.Ref().String(), replacement.Ref.String()) ||
-		state.NextAction.PlanGeneration != state.Goal.PlanGeneration() ||
+		state.NextAction.PlanGeneration != replacement.PlanGeneration ||
+		state.NextAction.PlanGeneration == 0 ||
+		state.NextAction.PlanGeneration > state.Goal.PlanGeneration() ||
 		state.NextAction.WorkItemGeneration != item.Revision() {
 		return errors.New("sqlite.execution_replacement_action_invalid")
 	}
@@ -822,7 +835,8 @@ func validateGoalMutation(
 	}
 	if execution.Ref != claim.Action.ExecutionRef || execution.GoalRef != aggregate.Ref() ||
 		execution.WorkItemRef != item.Ref() || aggregate.Ref() != claim.Action.GoalRef ||
-		execution.PlanGeneration != aggregate.PlanGeneration() ||
+		execution.PlanGeneration == 0 || execution.PlanGeneration > aggregate.PlanGeneration() ||
+		claim.Action.PlanGeneration != execution.PlanGeneration ||
 		execution.AppSpecGeneration != aggregate.AppSpec().Generation() || execution.SpecHash != aggregate.SpecHash() {
 		return goal.WorkItem{}, errors.New("sqlite.mutation_scope_invalid")
 	}

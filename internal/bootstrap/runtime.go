@@ -197,13 +197,14 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		State: repository, Access: repository,
 		Launcher: agent, Observer: agent, Artifacts: artifacts,
 		Clock: clock, IDs: local.IDGenerator{},
-		MaxOutputBytes:        snapshot.RuntimeMaxOutputBytes(),
-		MaxExecutionAttempts:  uint64(snapshot.SchedulerMaxExecutionAttempts()),
-		ClaimLease:            snapshot.SchedulerClaimLease(),
-		DirectorLeaseDuration: snapshot.DirectorLeaseDuration(),
-		ObservationDelay:      snapshot.SchedulerObservationInterval(),
-		ExecutionTimeout:      snapshot.SchedulerExecutionTimeout(),
-		AgentCapabilities:     capabilities,
+		MaxOutputBytes:          snapshot.RuntimeMaxOutputBytes(),
+		MaxMailboxEnvelopeBytes: snapshot.MailboxMaxEnvelopeBytes(),
+		MaxExecutionAttempts:    uint64(snapshot.SchedulerMaxExecutionAttempts()),
+		ClaimLease:              snapshot.SchedulerClaimLease(),
+		DirectorLeaseDuration:   snapshot.DirectorLeaseDuration(),
+		ObservationDelay:        snapshot.SchedulerObservationInterval(),
+		ExecutionTimeout:        snapshot.SchedulerExecutionTimeout(),
+		AgentCapabilities:       capabilities,
 	})
 	if err != nil {
 		return nil, err

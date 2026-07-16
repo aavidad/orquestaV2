@@ -141,7 +141,7 @@ func TestInvalidArtifactAdapterCannotAccreditSuccessfulGoal(t *testing.T) {
 	orchestrator, err := New(Dependencies{
 		State: repository, Access: newMemoryAccessRepository(),
 		Launcher: agent, Observer: agent, Artifacts: invalidArtifactStore{},
-		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1024,
+		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1024, MaxMailboxEnvelopeBytes: 64 << 10,
 		MaxExecutionAttempts: 3, AgentCapabilities: testAgentCapabilities(), ClaimLease: time.Minute,
 		DirectorLeaseDuration: time.Minute,
 		ObservationDelay:      time.Second, ExecutionTimeout: time.Hour,
@@ -265,7 +265,7 @@ func TestTemporaryLaunchCapacityWaitDoesNotConsumeExecutionAttemptBudget(t *test
 	orchestrator, err := New(Dependencies{
 		State: repository, Access: newMemoryAccessRepository(),
 		Launcher: agent, Observer: agent, Artifacts: newMemoryArtifactStore(),
-		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1024,
+		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1024, MaxMailboxEnvelopeBytes: 64 << 10,
 		MaxExecutionAttempts: 3, AgentCapabilities: testAgentCapabilities(), ClaimLease: time.Minute,
 		DirectorLeaseDuration: time.Minute,
 		ObservationDelay:      time.Second, ExecutionTimeout: time.Hour,
@@ -324,7 +324,7 @@ func TestPendingObservationHasDurableAttemptBoundary(t *testing.T) {
 	orchestrator, err := New(Dependencies{
 		State: repository, Access: newMemoryAccessRepository(),
 		Launcher: agent, Observer: agent, Artifacts: artifacts,
-		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1024,
+		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1024, MaxMailboxEnvelopeBytes: 64 << 10,
 		MaxExecutionAttempts: 3, AgentCapabilities: testAgentCapabilities(), ClaimLease: time.Minute,
 		DirectorLeaseDuration: time.Minute,
 		ObservationDelay:      time.Second, ExecutionTimeout: time.Hour,

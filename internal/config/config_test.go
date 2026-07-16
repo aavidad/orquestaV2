@@ -43,7 +43,8 @@ func TestResolveReturnsImmutableTypedCanonicalDefaults(t *testing.T) {
 	}
 	if snapshot.ConfigEffectiveMaxExistingBytes() != 16777216 || snapshot.SchedulerObservationInterval() != 2*time.Second ||
 		snapshot.SchedulerClaimLease() != 2*time.Minute || snapshot.SchedulerMaxExecutionAttempts() != 3 ||
-		snapshot.SchedulerExecutionTimeout() != 45*time.Minute || snapshot.APIMaxListLimit() != 100 || snapshot.APILocale() != "es" {
+		snapshot.SchedulerExecutionTimeout() != 45*time.Minute || snapshot.MailboxMaxEnvelopeBytes() != 65536 ||
+		snapshot.APIMaxListLimit() != 100 || snapshot.APILocale() != "es" {
 		t.Fatal("scheduler/API/effective defaults missing")
 	}
 	if !strings.HasPrefix(snapshot.Hash(), "sha256:") || len(snapshot.Hash()) != len("sha256:")+64 ||

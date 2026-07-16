@@ -53,6 +53,9 @@ default = "project:default"
 [director]
 lease_duration = "2m"
 
+[mailbox]
+max_envelope_bytes = 65536
+
 [scheduler]
 poll_interval = "500ms"
 observation_interval = "2s"

@@ -124,6 +124,7 @@ UPDATE outbox
 SET claim_token = ?, claimed_by = ?, claimed_until = ?, delivery_attempt = ?, fence = ?
 WHERE ref = ?
   AND completed_at IS NULL
+  AND retired_at IS NULL
   AND quarantined_at IS NULL
   AND available_at <= ?
   AND (claim_token IS NULL OR claimed_until <= ?)`,
@@ -177,7 +178,9 @@ JOIN work_items wi ON wi.goal_ref = o.goal_ref AND wi.ref = o.work_item_ref
 JOIN executions e
   ON e.goal_ref = o.goal_ref AND e.work_item_ref = o.work_item_ref AND e.ref = o.execution_ref
 WHERE o.completed_at IS NULL
+  AND o.retired_at IS NULL
   AND o.quarantined_at IS NULL
+  AND o.kind IN ('launch_agent', 'observe_agent')
   AND o.available_at <= ?
   AND (o.claim_token IS NULL OR o.claimed_until <= ?)
 ORDER BY o.available_at, o.ref`, requiredTime(now), requiredTime(now))
@@ -323,7 +326,7 @@ UPDATE outbox
 SET completed_at = ?, quarantined_at = ?, last_error_code = ?
 WHERE ref = ? AND claim_token = ? AND claimed_by = ? AND claimed_until = ?
   AND delivery_attempt = ? AND fence = ?
-  AND completed_at IS NULL AND quarantined_at IS NULL`,
+  AND completed_at IS NULL AND retired_at IS NULL AND quarantined_at IS NULL`,
 		requiredTime(at), quarantineAt, errorCode,
 		claim.Action.Ref, claim.Token, claim.WorkerRef, requiredTime(claim.LeaseUntil),
 		int64(claim.DeliveryAttempt), int64(claim.Fence),
@@ -360,7 +363,7 @@ SET available_at = ?, claim_token = NULL, claimed_by = NULL, claimed_until = NUL
     last_error_code = ?
 WHERE ref = ? AND claim_token = ? AND claimed_by = ? AND claimed_until = ?
   AND delivery_attempt = ? AND fence = ?
-  AND completed_at IS NULL AND quarantined_at IS NULL`,
+  AND completed_at IS NULL AND retired_at IS NULL AND quarantined_at IS NULL`,
 		requiredTime(state.AvailableAt), state.ErrorCode,
 		state.Claim.Action.Ref, state.Claim.Token, state.Claim.WorkerRef,
 		requiredTime(state.Claim.LeaseUntil), int64(state.Claim.DeliveryAttempt), int64(state.Claim.Fence),

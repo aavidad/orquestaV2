@@ -1,6 +1,6 @@
 # Mapa de aceptación y evidencias
 
-Fecha de corte: 2026-07-14
+Fecha de corte: 2026-07-16
 
 Estado: evidencia histórica del corte mínimo. No gobierna el roadmap total.
 
@@ -42,25 +42,54 @@ Evidencia focal adicional, sin sustituir los refs canónicos:
 - Restore: `internal/goal/snapshot_test.go` prueba round-trip, separación de
   snapshots y rechazo de manipulación o revisiones incoherentes.
 
+## Candidato V13: contrato presente, acreditación pendiente
+
+`AC-V13-MAILBOX` está implementado como candidato interno. No forma parte de
+la evidencia histórica de la tabla anterior y no cuenta todavía como vertical
+cerrada: `product/evidence/v13_mailbox.json` contiene solo `{}` hasta que exista
+sellado, ejecución detached limpia y receipt V3.
+
+| IDs candidatos | Contrato ejecutable | Alcance exacto |
+|---|---|---|
+| `ORC-04`, `ORC-05`, `ORC-14` | `acceptance/v13_mailbox_test.go`; `internal/application/mailbox*_test.go`; `internal/adapters/state/sqlite/mailbox*_test.go` | Solo `child_delivery` contractual: destinatario exacto, lifecycle `admitted → claimed → delivered → consumed → acknowledged|blocked`, retiro sistémico, replay/fencing, barrera causal padre/hijo y recovery SQLite sobre la misma autoridad |
+
+El candidato conserva un único writer de Goal, `StateRepository`, outbox y
+`Fence`. `BuildMailboxResolutionGoal` es helper puro; SQLite valida el mismo
+resultado y no muta Goal por una ruta lateral. `mailbox.max_envelope_bytes`
+entra por el registro canónico. Los ratchets V02, V05, V06, V09 y V10 forman
+parte de `TestAcceptanceV13Mailbox`. `ORC-15` y los bindings públicos de mailbox
+no pertenecen a esta acreditación.
+
+Reachability queda separada de la semántica de linaje: `Parent` no implica
+handoff, `HandoffRequired` es explícito y `false` por defecto, y `true` sin
+padre se rechaza. `TestMCPParentMetadataClosesWithoutMailboxOrRequeue` acredita
+que V13 no expone ese opt-in en `WorkItemInput` público y que el DAG V05 cierra
+sin mailbox, requeue ni acciones pendientes mientras llegan los bindings de
+V20–V22.
+
 ## Ejecuciones finales registradas
 
 | Fecha | Comando | Resultado | Alcance |
 |---|---|---|---|
+| 2026-07-16 | `go test -mod=vendor -v -count=1 ./internal/bootstrap -run '^TestRealCodexAdapterClosesGoalThroughProductionMCPServer$' -args -orquesta-real-codex-config=/home/alberto/Trabajo/.orquesta-rebuild-real-e2e-v13-20260716T115042/orquesta.toml` | `PASS` en `6.15s` | composición productiva, Bearer local, MCP, Codex real, SQLite y CAS sobre fuentes V13; smoke de no regresión, no contrato mailbox |
 | 2026-07-14 | `go test -mod=vendor -count=1 ./...` | `PASS` histórico; comando revocado | después se comprobó que `./...` enumera 131 paquetes y puede lanzar smokes legacy; no es gate vigente |
 | 2026-07-14 | `go test -mod=vendor -v -count=1 ./internal/bootstrap -run '^TestRealCodexAdapterClosesGoalThroughProductionMCPServer$' -args -orquesta-real-codex-config=<TOML temporal>` | `PASS` en 3,54 s | servidor de producción, Bearer local, cliente MCP oficial, Codex real, SQLite, CAS, artefacto y atestación |
 | 2026-07-14 | `go test -mod=vendor -race -count=1 ./internal/application ./internal/adapters/agent/codex ./internal/adapters/artifact/filesystem ./internal/adapters/auth/localtoken ./internal/adapters/state/sqlite ./internal/bootstrap ./internal/interfaces/mcp` | `PASS` | concurrencia en el vertical nuevo y sus adaptadores con estado |
 | 2026-07-14 | `GOFLAGS=-mod=vendor go vet ./internal/... ./cmd/orquesta` | `PASS` | análisis estático del producto nuevo |
 | 2026-07-14 | `git diff --check` y `scripts/check_rebuild_write_set.sh` | `PASS` | higiene del diff y aislamiento frente al árbol legacy; 2332 rutas autorizadas, incluido vendor |
 
-El placeholder `<TOML temporal>` es intencional: la ruta efímera usada por la
-prueba no es contrato operativo ni se conserva como configuración. La prueba
-creó un request nuevo, verificó un único artefacto, una única atestación y el
-marcador único
-`ORQUESTA_CODEX_E2E_OK_a30b46e51709ad4243f6927aba07f9e7` leído de vuelta por
-MCP. El recibo durable
+El placeholder `<TOML temporal>` de 2026-07-14 era intencional y esa ejecución
+queda como evidencia histórica. La renovación del 2026-07-16 usó una
+configuración aislada, creó un request nuevo, cerró el Goal por el servidor MCP
+productivo y leyó de vuelta el marcador
+`ORQUESTA_CODEX_E2E_OK_70c61a97f86425f3464a7e12e9b9829a`. El receipt durable
 [`product/evidence/real_codex_mcp_e2e.json`](../../product/evidence/real_codex_mcp_e2e.json)
-liga marcador, comando y fecha al SHA-256 exacto de las fuentes, dependencias
-vendorizadas, configuración y manifest del producto.
+liga comando, `2026-07-16T12:12:56+02:00` y source digest
+`sha256:d3bac625fa52b76fdc2c0007292577751ca8931a6ca890ecd2751a8976fa8d36`.
+
+Este `PASS` demuestra ausencia de regresión en composición productiva, MCP,
+Codex, SQLite y CAS. No activa `HandoffRequired`, no recorre bindings mailbox y
+no acredita `AC-V13-MAILBOX` ni sus tres capabilities candidatas.
 
 ## Gates de integración
 

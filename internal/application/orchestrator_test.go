@@ -22,7 +22,8 @@ func TestNewClonesAgentCapabilitySlices(t *testing.T) {
 	orchestrator, err := New(Dependencies{
 		State: repository, Access: newMemoryAccessRepository(),
 		Launcher: agent, Observer: agent, Artifacts: newMemoryArtifactStore(),
-		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1 << 20, MaxExecutionAttempts: 3,
+		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1 << 20,
+		MaxMailboxEnvelopeBytes: 64 << 10, MaxExecutionAttempts: 3,
 		ClaimLease: time.Minute, DirectorLeaseDuration: time.Minute,
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 		AgentCapabilities: capabilities,

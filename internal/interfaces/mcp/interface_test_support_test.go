@@ -77,7 +77,7 @@ func newTestInterface(t *testing.T, maxRequestBytes int64) (*Interface, *memoryS
 	artifacts := &memoryArtifacts{content: make(map[goal.ArtifactRef]ports.ArtifactContent)}
 	orchestrator, err := application.New(application.Dependencies{
 		State: state, Access: state, Launcher: inertAgent{}, Observer: inertAgent{}, Artifacts: artifacts,
-		Clock: clock, IDs: ids, MaxOutputBytes: 4096,
+		Clock: clock, IDs: ids, MaxOutputBytes: 4096, MaxMailboxEnvelopeBytes: 64 << 10,
 		MaxExecutionAttempts: 3, AgentCapabilities: inertAgentCapabilities(),
 		ClaimLease: time.Minute, DirectorLeaseDuration: 2 * time.Minute, ObservationDelay: time.Second,
 		ExecutionTimeout: time.Hour,
@@ -450,6 +450,75 @@ func (*memoryState) ApplyDirectorPlan(
 ) (application.DirectorDecisionRecord, bool, error) {
 	return application.DirectorDecisionRecord{}, false,
 		errors.New("test_state.director_unsupported")
+}
+
+func (*memoryState) MailboxReplay(
+	context.Context,
+	application.MailboxReplayRequest,
+) (application.MailboxReplayRecord, bool, error) {
+	return application.MailboxReplayRecord{}, false, nil
+}
+
+func (*memoryState) AdmitMailbox(
+	context.Context,
+	application.AdmitMailboxState,
+) (application.MailboxRecord, bool, error) {
+	return application.MailboxRecord{}, false, errors.New("test_state.mailbox_unsupported")
+}
+
+func (*memoryState) ClaimMailbox(
+	context.Context,
+	application.ClaimMailboxState,
+) (application.MailboxClaim, bool, error) {
+	return application.MailboxClaim{}, false, errors.New("test_state.mailbox_unsupported")
+}
+
+func (*memoryState) MarkMailboxDelivered(
+	context.Context,
+	application.MarkMailboxDeliveredState,
+) (application.MailboxRecord, bool, error) {
+	return application.MailboxRecord{}, false, errors.New("test_state.mailbox_unsupported")
+}
+
+func (*memoryState) ConsumeMailbox(
+	context.Context,
+	application.ConsumeMailboxState,
+) (application.MailboxRecord, bool, error) {
+	return application.MailboxRecord{}, false, errors.New("test_state.mailbox_unsupported")
+}
+
+func (*memoryState) AcknowledgeMailbox(
+	context.Context,
+	application.ResolveMailboxState,
+) (application.MailboxAcknowledgement, bool, error) {
+	return application.MailboxAcknowledgement{}, false, errors.New("test_state.mailbox_unsupported")
+}
+
+func (*memoryState) BlockMailbox(
+	context.Context,
+	application.ResolveMailboxState,
+) (application.MailboxAcknowledgement, bool, error) {
+	return application.MailboxAcknowledgement{}, false, errors.New("test_state.mailbox_unsupported")
+}
+
+func (*memoryState) GetMailbox(
+	context.Context,
+	goal.ProjectRef,
+	goal.GoalRef,
+	application.MailboxMessageRef,
+	application.MailboxEndpoint,
+) (application.MailboxRecord, error) {
+	return application.MailboxRecord{}, &application.StateError{Code: application.StateNotFound}
+}
+
+func (*memoryState) ListMailbox(
+	context.Context,
+	goal.ProjectRef,
+	goal.GoalRef,
+	application.MailboxEndpoint,
+	int,
+) ([]application.MailboxRecord, error) {
+	return nil, nil
 }
 
 func (state *memoryState) grantTestMembership(

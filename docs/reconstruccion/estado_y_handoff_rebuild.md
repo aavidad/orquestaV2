@@ -1,13 +1,59 @@
 # Estado y handoff vivo del rebuild
 
-Última actualización: 2026-07-15 09:57 Europe/Madrid.
+Última actualización: 2026-07-16 12:15 Europe/Madrid.
 
 Este documento permite continuar el rebuild sin reconstruir el contexto de la
 sesión. Es estado operativo, no evidencia de aceptación. Los estados canónicos
 de capacidades, verticales y contratos viven en `product/roadmap.json`; los
 verdes viven en receipts fuera de su propio candidato.
 
-## Checkpoint vigente: V11 y V12 cerrados
+## Candidato vigente: V13 implementado, receipt pendiente
+
+El candidato V13 materializa `AC-V13-MAILBOX` sin abrir V14. Todavía no debe
+contarse como acreditado: `product/evidence/v13_mailbox.json` sigue siendo un
+placeholder y faltan producto sellado, ejecución detached limpia y receipt V3.
+Las cifras canónicas continúan por tanto en el último checkpoint acreditado
+V12. Una vez emitido el receipt V13, el total mecánico pasará a 44/257
+capacidades, 17,12 %, y 13/34 verticales, 38,24 %.
+
+Alcance funcional del candidato V13:
+
+- cubre solo `ORC-04`, `ORC-05` y `ORC-14`; `ORC-15`, mensajería genérica,
+  sesiones reanudables y handoff entre proveedores permanece completo en V27;
+- `Parent` conserva solo linaje. `HandoffRequired` es una decisión separada,
+  explícita y `false` por defecto; `true` sin `Parent` es un plan inválido;
+- admite únicamente el envelope tipado `child_delivery` para una arista
+  contractual `HandoffRequired=true`, ligado a proyecto, Goal, generación,
+  padre/hijo, principal, WorkItem y Execution exactos;
+- conserva hechos separados `admitted → claimed → delivered → consumed →
+  acknowledged|blocked`; `retired` es la salida sistémica cuando falla el
+  destinatario exacto antes de resolver, sin reemplazo, readdress ni ACK falso;
+- reutiliza `StateRepository`, transacción y outbox existentes. `outbox.fence`
+  es el único ordinal de intento: no hay segunda cola, store, fence, contador,
+  scheduler, loop ni lifecycle;
+- `BuildMailboxResolutionGoal` es helper puro. El Orchestrator de aplicación
+  sigue siendo el único writer de Goal y persiste resolución, posible cierre,
+  eventos, receipts y outbox en la misma transacción CAS;
+- SQLite implementa el mismo contrato y reconstruye lo derivable desde
+  envelope, outbox y receipts; no introduce autoridad ni proyección privada;
+- `mailbox.max_envelope_bytes`, default `65536`, vive en el registro canónico
+  con alias de ingress `ORQUESTA_MAILBOX_MAX_ENVELOPE_BYTES`; no hay lecturas de
+  entorno ni defaults dispersos;
+- replay de claim/delivery/consume devuelve su frontera histórica sin renovar
+  lease ni autorizar otra mutación; el listado aplica FIFO determinista por
+  `admitted_at` y ref dentro del destinatario exacto;
+- los ratchets ejecutables preservan V02, V05, V06, V09 y V10: writer único,
+  barrera causal del padre y wiring canónico de configuración/recovery/RBAC.
+
+V13 permanece interno a aplicación y composición. No añade bindings públicos de
+mailbox a las seis tools MCP actuales ni expone `HandoffRequired` en
+`WorkItemInput`. Por eso el DAG público V05 con metadata `Parent` conserva
+`false`, completa ambos WorkItems y cierra sin mailbox, requeue ni acciones
+pendientes. V12 sigue siendo un coordinador operativo limitado; V22 continúa
+siendo el primer MVP de programación real extremo a extremo y V34 el cierre
+total de la aplicación.
+
+## Último checkpoint acreditado: V11 y V12 cerrados
 
 V11 y V12 están cerrados, contrarrevisados y ligados a receipts V3
 reproducibles. El hotfix posterior de contención SQLite también está integrado
@@ -73,12 +119,21 @@ control plane en una única cola `database/sql`. La prueba
 `TestRepositorySerializesWritersBeforeSQLiteBusyTimeout` y el E2E real cierran
 la incidencia sin retry ciego ni segunda autoridad.
 
-Receipt Codex real vigente tras el hotfix:
+Último smoke Codex real, renovado sobre las fuentes actuales del candidato
+V13:
 
 ```text
-source SHA: sha256:509738f39f206c4383059ad08c0798746cca6d1e31a3ac3152bfd949b3ad37b3
-marker:     ORQUESTA_CODEX_E2E_OK_ad48bf16fce187a7b799ab05b4962b22
+source SHA: sha256:d3bac625fa52b76fdc2c0007292577751ca8931a6ca890ecd2751a8976fa8d36
+marker:     ORQUESTA_CODEX_E2E_OK_70c61a97f86425f3464a7e12e9b9829a
+ejecutado:  2026-07-16T12:12:56+02:00
+duración:   6.15s
+config:     /home/alberto/Trabajo/.orquesta-rebuild-real-e2e-v13-20260716T115042/orquesta.toml
 ```
+
+El `PASS` recorre composición productiva, API MCP, Codex real, SQLite y CAS y
+demuestra que V13 no regresó ese vertical. No activa `HandoffRequired`, no usa
+bindings mailbox y no acredita `AC-V13-MAILBOX`, `ORC-04`, `ORC-05` ni
+`ORC-14`. Esa acreditación sigue dependiendo del receipt V3 propio.
 
 `BUG-REBUILD-20260715-152` permanece diferido y asignado a V24: una instalación
 solo OIDC necesita el grant auditable y de un uso del primer administrador.
@@ -359,7 +414,11 @@ scripts/check_rebuild_write_set.sh
   `BUG-REBUILD-20260715-152` y `154` quedan asignados a V24 y V32.
 - V12 Director con lease y fencing: cerrado; receipt V3 válido; acredita
   exactamente `GOV-08`, `GOV-09`, `GOV-10` y `ORC-24`.
-- V13–V34: pendientes. No contar código heredado, groundwork o una prueba
+- V13 mailbox `child_delivery`: candidato implementado para `ORC-04`, `ORC-05`
+  y `ORC-14`; reachability productiva verde con handoff opt-in, pendiente de
+  contrarrevisión, sellado y receipt V3. No acreditado todavía. `ORC-15` sigue
+  en V27.
+- V14–V34: pendientes. No contar código heredado, groundwork o una prueba
   aislada como vertical posterior cerrada.
 - progreso vertical cerrado: 12 de 34, 35,3 % de la ruta; receipts válidos: 12
   de 12 contratos ejecutables;
@@ -370,19 +429,16 @@ scripts/check_rebuild_write_set.sh
   `OPS-05`, `OPS-06`, `OPS-08`, `OPS-09`, `OPS-10`, `OPS-12`, `OPS-14`, `OPS-26`,
   `OPS-27`, `OPS-28`, `OPS-29`, `OPS-30`, `ORC-01`, `ORC-02`, `ORC-06`,
   `ORC-12`, `ORC-13`, `ORC-17`, `ORC-24` y `STG-00`.
+- progreso post-V13, solo después del receipt válido: 13 de 34 verticales,
+  38,24 %, y 44 de 257 capacidades, 17,12 %, al sumar exactamente `ORC-04`,
+  `ORC-05` y `ORC-14`.
 
 ## Siguiente acción exacta
 
-Al reanudar, abrir V13 `Mailbox y handoff` desde `AC-V13-MAILBOX`. Debe
-acreditar `ORC-04`, `ORC-05`, `ORC-14` y `ORC-15` sobre V06+V12: admit, claim,
-lease, delivery, consume y ACK por destinatario exacto; mensajes y handoffs
-compactos; crash/reclaim sin pérdida; replay tras ACK sin redelivery; sucesor
-incapaz de suplantar al destinatario. Reutilizar state/outbox, clocks, fencing e
-identidad existentes; no crear cola, store, loop o lifecycle paralelo.
-
-Instrucción de corte: no abrir V13 ni ningún otro frente en esta sesión. El
-próximo agente debe empezar por el contrato rojo V13 solo después de reanudar y
-confirmar este checkpoint.
+Cerrar V13 sin abrir V14: repetir contrarrevisión y gates focales/race/vet;
+congelar producto, sellar fixture, ejecutar el argv exacto desde checkout
+detached limpio y emitir receipt V3. No atribuir `ORC-15` ni bindings públicos
+a este cierre.
 
 Los subagentes directos siguen siendo bootstrap hasta V22. Hoy Orquesta puede
 coordinar un DAG declarado; una petición abierta aún necesita dirección externa.
@@ -391,8 +447,8 @@ coordinar un DAG declarado; una petición abierta aún necesita dirección exter
 
 Las palabras “pendiente”, “siguiente” o “en curso” dentro del historial
 describen checkpoints pasados. No son órdenes de reanudación. La acción vigente
-al reanudar es abrir V13 desde el cierre acreditado V11/V12; en esta sesión no
-se abre ningún frente nuevo.
+es cerrar el candidato V13 desde el checkpoint acreditado V11/V12, sin abrir
+V14 ni otro frente.
 
 ## V03: trabajo ya realizado
 

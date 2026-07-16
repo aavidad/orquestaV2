@@ -85,9 +85,13 @@
       "Start",
       "StartWorkItem",
       "ReplaceWorkItemExecution",
+      "ResolveChildHandoff",
       "SucceedWorkItem",
       "FailWorkItem",
       "Close"
+    ],
+    "pure_transition_helpers": [
+      "orquesta/internal/application.BuildMailboxResolutionGoal"
     ],
     "ready_method": "ReadyWorkItems",
     "scheduler_method": "ProcessNext",

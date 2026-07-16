@@ -85,7 +85,7 @@ func RestoreAppSpec(snapshot AppSpecSnapshot) (AppSpec, error) {
 }
 
 // RestoreGoal accepts only the current complete schema. Adapters own durable
-// migrations before data reaches domain.
+// migrations before data reaches the domain.
 func RestoreGoal(snapshot GoalSnapshot) (Goal, error) {
 	if snapshot.SchemaVersion != GoalSnapshotSchemaVersion {
 		return Goal{}, domainError(ErrorSnapshotInvalid, "schema_version")
@@ -156,6 +156,11 @@ func RestoreGoal(snapshot GoalSnapshot) (Goal, error) {
 		restored.items[item.ref] = item
 		restored.itemOrder = append(restored.itemOrder, item.ref)
 	}
+	childHandoffs, err := restoreChildHandoffResolutions(snapshot.ChildHandoffResolutions)
+	if err != nil {
+		return Goal{}, err
+	}
+	restored.childHandoffs = childHandoffs
 	if restored.planGeneration > 0 {
 		if err := validateRestoredPlan(Plan{
 			generation: restored.planGeneration,
@@ -221,6 +226,13 @@ func restoreWorkItem(snapshot WorkItemSnapshot) (WorkItem, error) {
 	if err != nil {
 		return WorkItem{}, err
 	}
+	if snapshot.HandoffRequired == nil {
+		return WorkItem{}, domainError(ErrorSnapshotInvalid, "handoff_required")
+	}
+	handoffRequired := *snapshot.HandoffRequired
+	if handoffRequired && !validWorkItemRef(parent) {
+		return WorkItem{}, domainError(ErrorSnapshotInvalid, "handoff_parent")
+	}
 	skillRefs, err := restoreSkillRefs(snapshot.SkillRefs)
 	if err != nil {
 		return WorkItem{}, err
@@ -249,7 +261,8 @@ func restoreWorkItem(snapshot WorkItemSnapshot) (WorkItem, error) {
 	restored := WorkItem{
 		ref: ref, goal: goalRef, actor: actor, project: project,
 		objective: snapshot.Objective, phase: phase, role: role,
-		parent: parent, dependencies: dependencies, writeSet: writeSet,
+		parent: parent, handoffRequired: handoffRequired,
+		dependencies: dependencies, writeSet: writeSet,
 		skillRefs: skillRefs, toolRefs: toolRefs, capabilityRefs: capabilityRefs,
 		outputContract: outputContract, skipReason: snapshot.SkipReason,
 		state: snapshot.State, revision: snapshot.Revision,
@@ -339,6 +352,9 @@ func validateRestoredGoal(goal Goal) error {
 		if err := validateStartedGoalWorkItems(goal, goal.state.Terminal()); err != nil {
 			return err
 		}
+	}
+	if err := validateRestoredChildHandoffs(goal); err != nil {
+		return err
 	}
 	if goal.state == GoalStateSucceeded {
 		for _, item := range goal.items {
@@ -445,7 +461,70 @@ func revisionForGoalSnapshot(goal Goal) Revision {
 	if goal.state.Terminal() {
 		revision++
 	}
+	revision += Revision(len(goal.childHandoffs))
 	return revision
+}
+
+func restoreChildHandoffResolutions(
+	snapshots []ChildHandoffResolutionSnapshot,
+) ([]ChildHandoffResolution, error) {
+	resolutions := make([]ChildHandoffResolution, 0, len(snapshots))
+	for _, snapshot := range snapshots {
+		parentRef, err := NewWorkItemRef(snapshot.ParentRef)
+		if err != nil {
+			return nil, err
+		}
+		childRef, err := NewWorkItemRef(snapshot.ChildRef)
+		if err != nil {
+			return nil, err
+		}
+		if !validChildHandoffRecordRef(snapshot.MessageRef) ||
+			!validChildHandoffOutcome(snapshot.Outcome) ||
+			!validChildHandoffRecordRef(snapshot.ReceiptRef) || snapshot.ResolvedAt.IsZero() {
+			return nil, domainError(ErrorSnapshotInvalid, "child_handoff")
+		}
+		resolutions = append(resolutions, ChildHandoffResolution{
+			parentRef: parentRef, childRef: childRef, messageRef: snapshot.MessageRef,
+			outcome: snapshot.Outcome, receiptRef: snapshot.ReceiptRef,
+			resolvedAt: canonicalTime(snapshot.ResolvedAt),
+		})
+	}
+	return resolutions, nil
+}
+
+func validateRestoredChildHandoffs(goal Goal) error {
+	type relation struct {
+		parent WorkItemRef
+		child  WorkItemRef
+	}
+	seen := make(map[relation]struct{}, len(goal.childHandoffs))
+	for _, resolution := range goal.childHandoffs {
+		key := relation{parent: resolution.parentRef, child: resolution.childRef}
+		if _, duplicate := seen[key]; duplicate {
+			return domainError(ErrorSnapshotInvalid, "duplicate_child_handoff")
+		}
+		parent, parentExists := goal.items[resolution.parentRef]
+		child, childExists := goal.items[resolution.childRef]
+		if !parentExists || !childExists || child.parent != parent.ref || !child.handoffRequired ||
+			child.state != WorkItemStateSucceeded ||
+			!validTransitionTime(resolution.resolvedAt, child.finishedAt) {
+			return domainError(ErrorSnapshotInvalid, "child_handoff_relation")
+		}
+		if goal.state.Terminal() && resolution.resolvedAt.After(goal.closedAt) {
+			return domainError(ErrorSnapshotInvalid, "child_handoff_resolved_at")
+		}
+		seen[key] = struct{}{}
+	}
+	for _, parentRef := range goal.itemOrder {
+		parent := goal.items[parentRef]
+		if parent.state == WorkItemStateSucceeded && !goal.childHandoffsResolvedForParent(parentRef) {
+			return domainError(ErrorSnapshotInvalid, "succeeded_parent_child_handoffs")
+		}
+	}
+	if goal.state.Terminal() && !goal.allChildHandoffsResolved() {
+		return domainError(ErrorSnapshotInvalid, "closed_goal_child_handoffs")
+	}
+	return nil
 }
 
 func restorePhases(snapshots []PhaseInstanceSnapshot) ([]PhaseInstance, error) {

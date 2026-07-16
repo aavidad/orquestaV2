@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:orquesta:config:2026-07-15.11",
+  "$id": "urn:orquesta:config:2026-07-16.12",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -271,6 +271,26 @@
           "x-sensitive": false,
           "x-validator-ids": [
             "allowed_values"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "mailbox": {
+      "additionalProperties": false,
+      "properties": {
+        "max_envelope_bytes": {
+          "default": 65536,
+          "maximum": 16777216,
+          "minimum": 1024,
+          "type": "integer",
+          "x-env-alias": "ORQUESTA_MAILBOX_MAX_ENVELOPE_BYTES",
+          "x-restart-required": true,
+          "x-scope": "mailbox",
+          "x-semantic-ref": "orquesta.config.mailbox.max_envelope_bytes",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "integer_bounds"
           ]
         }
       },
@@ -695,8 +715,8 @@
       "type": "object"
     }
   },
-  "x-registry-revision": "2026-07-15.11",
-  "x-registry-hash": "sha256:5b67d20f425e1883d80998ad29bd8ea4ea06e739b4c96a9f773c89f9eb175a8d",
+  "x-registry-revision": "2026-07-16.12",
+  "x-registry-hash": "sha256:c3da7e8c380be52f5708c4025e61164c760f698b16ff516203901d3ab77151f2",
   "x-source-max-bytes": 1048576,
   "x-aliases": [],
   "x-cross-validators": [

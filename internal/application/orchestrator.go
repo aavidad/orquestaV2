@@ -13,37 +13,39 @@ const (
 )
 
 type Dependencies struct {
-	State                 StateRepository
-	Access                AccessRepository
-	Launcher              AgentLauncher
-	Observer              AgentObserver
-	Artifacts             ArtifactStore
-	Clock                 Clock
-	IDs                   IDGenerator
-	MaxOutputBytes        int64
-	MaxExecutionAttempts  uint64
-	ClaimLease            time.Duration
-	DirectorLeaseDuration time.Duration
-	ObservationDelay      time.Duration
-	ExecutionTimeout      time.Duration
-	AgentCapabilities     ports.AgentCapabilities
+	State                   StateRepository
+	Access                  AccessRepository
+	Launcher                AgentLauncher
+	Observer                AgentObserver
+	Artifacts               ArtifactStore
+	Clock                   Clock
+	IDs                     IDGenerator
+	MaxOutputBytes          int64
+	MaxMailboxEnvelopeBytes int64
+	MaxExecutionAttempts    uint64
+	ClaimLease              time.Duration
+	DirectorLeaseDuration   time.Duration
+	ObservationDelay        time.Duration
+	ExecutionTimeout        time.Duration
+	AgentCapabilities       ports.AgentCapabilities
 }
 
 type Orchestrator struct {
-	state                 StateRepository
-	access                AccessRepository
-	launcher              AgentLauncher
-	observer              AgentObserver
-	artifacts             ArtifactStore
-	clock                 Clock
-	ids                   IDGenerator
-	maxOutputBytes        int64
-	maxExecutionAttempts  uint64
-	claimLease            time.Duration
-	directorLeaseDuration time.Duration
-	observationDelay      time.Duration
-	executionTimeout      time.Duration
-	agentCapabilities     ports.AgentCapabilities
+	state                   StateRepository
+	access                  AccessRepository
+	launcher                AgentLauncher
+	observer                AgentObserver
+	artifacts               ArtifactStore
+	clock                   Clock
+	ids                     IDGenerator
+	maxOutputBytes          int64
+	maxMailboxEnvelopeBytes int64
+	maxExecutionAttempts    uint64
+	claimLease              time.Duration
+	directorLeaseDuration   time.Duration
+	observationDelay        time.Duration
+	executionTimeout        time.Duration
+	agentCapabilities       ports.AgentCapabilities
 }
 
 func New(dependencies Dependencies) (*Orchestrator, error) {
@@ -64,6 +66,8 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 		return nil, errors.New("application.ids_required")
 	case dependencies.MaxOutputBytes <= 0:
 		return nil, errors.New("application.max_output_bytes_invalid")
+	case dependencies.MaxMailboxEnvelopeBytes <= 0:
+		return nil, errors.New("application.max_mailbox_envelope_bytes_invalid")
 	case dependencies.MaxExecutionAttempts == 0:
 		return nil, errors.New("application.max_execution_attempts_invalid")
 	case ports.ValidateAgentCapabilities(dependencies.AgentCapabilities) != nil:
@@ -78,20 +82,21 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 		return nil, errors.New("application.execution_timeout_invalid")
 	}
 	return &Orchestrator{
-		state:                 dependencies.State,
-		access:                dependencies.Access,
-		launcher:              dependencies.Launcher,
-		observer:              dependencies.Observer,
-		artifacts:             dependencies.Artifacts,
-		clock:                 dependencies.Clock,
-		ids:                   dependencies.IDs,
-		maxOutputBytes:        dependencies.MaxOutputBytes,
-		maxExecutionAttempts:  dependencies.MaxExecutionAttempts,
-		claimLease:            dependencies.ClaimLease,
-		directorLeaseDuration: dependencies.DirectorLeaseDuration,
-		observationDelay:      dependencies.ObservationDelay,
-		executionTimeout:      dependencies.ExecutionTimeout,
-		agentCapabilities:     cloneAgentCapabilities(dependencies.AgentCapabilities),
+		state:                   dependencies.State,
+		access:                  dependencies.Access,
+		launcher:                dependencies.Launcher,
+		observer:                dependencies.Observer,
+		artifacts:               dependencies.Artifacts,
+		clock:                   dependencies.Clock,
+		ids:                     dependencies.IDs,
+		maxOutputBytes:          dependencies.MaxOutputBytes,
+		maxMailboxEnvelopeBytes: dependencies.MaxMailboxEnvelopeBytes,
+		maxExecutionAttempts:    dependencies.MaxExecutionAttempts,
+		claimLease:              dependencies.ClaimLease,
+		directorLeaseDuration:   dependencies.DirectorLeaseDuration,
+		observationDelay:        dependencies.ObservationDelay,
+		executionTimeout:        dependencies.ExecutionTimeout,
+		agentCapabilities:       cloneAgentCapabilities(dependencies.AgentCapabilities),
 	}, nil
 }
 

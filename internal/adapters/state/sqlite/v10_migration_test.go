@@ -370,7 +370,7 @@ WHERE g.ref = 'goal:v10-v09'
 	if err := repository.db.QueryRow(`SELECT COUNT(*) FROM pragma_foreign_key_check`).Scan(&violations); err != nil {
 		t.Fatal(err)
 	}
-	if version != recoverySchemaV12 || receipts != recoverySchemaV12 || principals != 1 || hierarchyRows != 0 ||
+	if version != recoverySchemaV13 || receipts != recoverySchemaV13 || principals != 1 || hierarchyRows != 0 ||
 		memberships != 0 || requestedBy != 1 || violations != 0 {
 		t.Fatalf("V10 migration state invalid: version=%d receipts=%d principals=%d hierarchy=%d memberships=%d requested_by=%d fk=%d",
 			version, receipts, principals, hierarchyRows, memberships, requestedBy, violations)
@@ -380,22 +380,30 @@ WHERE g.ref = 'goal:v10-v09'
 func v10LegacyRows(t *testing.T, database *sql.DB) map[string][]string {
 	t.Helper()
 	queries := map[string]string{
-		"intents":                     `SELECT * FROM intents`,
-		"app_specs":                   `SELECT * FROM app_specs`,
-		"goals":                       `SELECT ref, request_ref, request_fingerprint, app_spec_ref, actor_ref, project_ref, state, revision, created_at, started_at, closed_at, plan_generation FROM goals`,
-		"goal_phases":                 `SELECT * FROM goal_phases`,
-		"goal_phase_contract_refs":    `SELECT * FROM goal_phase_contract_refs`,
-		"work_items":                  `SELECT * FROM work_items`,
-		"work_item_dependencies":      `SELECT * FROM work_item_dependencies`,
-		"work_item_write_scopes":      `SELECT * FROM work_item_write_scopes`,
-		"work_item_requirement_refs":  `SELECT * FROM work_item_requirement_refs`,
-		"executions":                  `SELECT * FROM executions`,
-		"artifacts":                   `SELECT * FROM artifacts`,
-		"attestations":                `SELECT * FROM attestations`,
-		"events":                      `SELECT * FROM events`,
-		"outbox":                      `SELECT * FROM outbox`,
-		"work_item_fences":            `SELECT * FROM work_item_fences`,
-		"action_consumption_receipts": `SELECT * FROM action_consumption_receipts`,
+		"intents":                  `SELECT * FROM intents`,
+		"app_specs":                `SELECT * FROM app_specs`,
+		"goals":                    `SELECT ref, request_ref, request_fingerprint, app_spec_ref, actor_ref, project_ref, state, revision, created_at, started_at, closed_at, plan_generation FROM goals`,
+		"goal_phases":              `SELECT * FROM goal_phases`,
+		"goal_phase_contract_refs": `SELECT * FROM goal_phase_contract_refs`,
+		"work_items": `SELECT ref, goal_ref, actor_ref, project_ref, objective,
+phase_key, role_key, parent_ref, output_contract, skip_reason, state, revision,
+position, created_at, started_at, finished_at, execution_ref FROM work_items`,
+		"work_item_dependencies":     `SELECT * FROM work_item_dependencies`,
+		"work_item_write_scopes":     `SELECT * FROM work_item_write_scopes`,
+		"work_item_requirement_refs": `SELECT * FROM work_item_requirement_refs`,
+		"executions":                 `SELECT * FROM executions`,
+		"artifacts":                  `SELECT * FROM artifacts`,
+		"attestations":               `SELECT * FROM attestations`,
+		"events":                     `SELECT * FROM events`,
+		"outbox": `SELECT ref, kind, goal_ref, work_item_ref, execution_ref,
+plan_generation, work_item_generation, available_at, claim_token, claimed_by,
+claimed_until, delivery_attempt, fence, completed_at, quarantined_at, last_error_code
+FROM outbox`,
+		"work_item_fences": `SELECT * FROM work_item_fences`,
+		"action_consumption_receipts": `SELECT action_ref, kind, goal_ref, work_item_ref,
+execution_ref, plan_generation, work_item_generation, fence, delivery_attempt,
+claim_token, worker_ref, outcome, error_code, consumed_at
+FROM action_consumption_receipts`,
 	}
 	result := make(map[string][]string, len(queries))
 	for table, query := range queries {

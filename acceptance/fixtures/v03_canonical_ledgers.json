@@ -69,23 +69,23 @@
     },
     {
       "path": "product/traceability/historical_bug_extraction_policy.json",
-      "sha256": "sha256:6616f62325a24e27f5dce66b9426ad93e146331290c4ffe90864ab62ec97bfdd"
+      "sha256": "sha256:695bc673f01acf754c4ff780c8e99f05a19cb22552466d77a3602ac45f41f129"
     },
     {
       "path": "product/traceability/historical_bug_id_review_bindings.jsonl",
-      "sha256": "sha256:aada6c21eccb6319f114c1d56f9abb7df5cccd43e9da2956ff043cf962e6f0d7"
+      "sha256": "sha256:5bd7e891a17cab68906b9a5fe3f2dc62e94ed123c0b92f38200be83b95629b6d"
     },
     {
       "path": "product/traceability/historical_bug_id_reviews.jsonl",
-      "sha256": "sha256:02fb0cd1dd56f7e70ea4f5ca7cdfac61e3f79bfbead3ea792935c4306aa6961a"
+      "sha256": "sha256:fb96251bcb52794894c496fcb0fca01727f54dedeed2e7fb177b409a515506bf"
     },
     {
       "path": "product/traceability/historical_bug_ids.jsonl",
-      "sha256": "sha256:0d903bf620d4a7131224f1734b4baceff50240cfd6600e8263562aa1ee302b3a"
+      "sha256": "sha256:2c0f82296c19dde547c6bb35f09e40243fb2cc0eb40f8f97a4b3ebb378b24656"
     },
     {
       "path": "product/traceability/historical_bug_occurrences.jsonl",
-      "sha256": "sha256:2a7c5a291bc339bfce0bd1808fd88dfcc9babbdf77701d42847903ba8be043f6"
+      "sha256": "sha256:5a0caec58be4bf0f8f1ac3b6ddf3883567134d4da8741b9c877c78c9aa24f108"
     },
     {
       "path": "product/traceability/historical_bug_row_enrichments.jsonl",
@@ -101,11 +101,11 @@
     },
     {
       "path": "product/traceability/markdown_source_roles.jsonl",
-      "sha256": "sha256:48549f1089f8b9aedfa4509cdbc0de14d67c4d778cccf27ff9bb2ff9304b1e2b"
+      "sha256": "sha256:d9157c0a813b6696f42797a93ae1ecdd7406e185a3a49294d0e671659340b406"
     },
     {
       "path": "product/traceability/pending_sources.json",
-      "sha256": "sha256:328d5728529552fd258c22080015189102ceeca439d1a549e936eca2b2f6ecf0"
+      "sha256": "sha256:57e4f524daaaa4b00b75923112aefac4afdc29fe47b0275e9ba60e7ddba24e30"
     },
     {
       "path": "product/traceability/reviewed_task_blocks.jsonl",
@@ -117,7 +117,7 @@
     },
     {
       "path": "product/traceability/source_dispositions.jsonl",
-      "sha256": "sha256:b7bbdb6167bf6dab7114173a3ac79833ac1a513559b9d4fca1e0a53954a8904d"
+      "sha256": "sha256:0f3b04fd560be2fea9a879eece21853618868ae046d32931e443c0b8cb0fc0f0"
     },
     {
       "path": "product/traceability/task_candidate_exclusions.jsonl",
@@ -170,10 +170,10 @@
   "bugs": {
     "source_count": 159,
     "rich_row_count": 239,
-    "occurrence_count": 1292,
-    "id_count": 334,
+    "occurrence_count": 1293,
+    "id_count": 335,
     "row_covered_id_count": 197,
-    "narrative_only_id_count": 137
+    "narrative_only_id_count": 138
   },
   "closure_inferred_count": 0,
   "rejected_task": {

@@ -14,8 +14,9 @@ var errForbidden = errors.New("application.forbidden")
 // Access binds one authenticated principal to one explicit project request.
 // It carries no authority by itself; every use case still asks AccessRepository.
 type Access struct {
-	principal  identity.Principal
-	projectRef goal.ProjectRef
+	principal         identity.Principal
+	projectRef        goal.ProjectRef
+	authenticatedExec goal.ExecutionRef
 }
 
 func NewAccess(principal identity.Principal, projectRef goal.ProjectRef) (Access, error) {
@@ -28,11 +29,44 @@ func NewAccess(principal identity.Principal, projectRef goal.ProjectRef) (Access
 	return Access{principal: principal, projectRef: projectRef}, nil
 }
 
+// NewExecutionAccess is reserved for trusted transport/runtime boundaries that
+// authenticated one exact execution. Request payloads must never supply this
+// binding; they may only be checked against it by application use cases.
+func NewExecutionAccess(
+	principal identity.Principal,
+	projectRef goal.ProjectRef,
+	executionRef goal.ExecutionRef,
+) (Access, error) {
+	access, err := NewAccess(principal, projectRef)
+	if err != nil {
+		return Access{}, err
+	}
+	if executionRef.String() == "" {
+		return Access{}, errors.New("application.execution_ref_required")
+	}
+	access.authenticatedExec = executionRef
+	return access, nil
+}
+
 func (access Access) values() (identity.Principal, goal.ProjectRef, error) {
 	if err := identity.ValidatePrincipal(access.principal); err != nil || access.projectRef.String() == "" {
 		return identity.Principal{}, goal.ProjectRef{}, errors.New("application.access_invalid")
 	}
 	return access.principal, access.projectRef, nil
+}
+
+// authenticatedExecution returns boundary-authenticated identity, never the
+// caller-provided expected value. Unbound or successor executions are denied
+// identically so mailbox callers cannot probe another execution's address.
+func (access Access) authenticatedExecution(expected goal.ExecutionRef) (goal.ExecutionRef, error) {
+	if _, _, err := access.values(); err != nil {
+		return goal.ExecutionRef{}, err
+	}
+	if expected.String() == "" || access.authenticatedExec.String() == "" ||
+		access.authenticatedExec != expected {
+		return goal.ExecutionRef{}, errForbidden
+	}
+	return access.authenticatedExec, nil
 }
 
 type MembershipGrantState struct {

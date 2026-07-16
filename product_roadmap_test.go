@@ -1061,21 +1061,26 @@ func TestProductRoadmapV13ScopeAndExecutableContract(t *testing.T) {
 		}
 	}
 	sort.Strings(owned)
-	wantOwned := []string{"ORC-04", "ORC-05", "ORC-14", "ORC-15"}
+	wantOwned := []string{"ORC-04", "ORC-05", "ORC-14"}
 	if !reflect.DeepEqual(owned, wantOwned) {
 		t.Fatalf("V13 accepted ownership = %v, want exact %v", owned, wantOwned)
+	}
+	wantEvidence := []string{
+		"acceptance/v13_mailbox_test.go",
+		"acceptance/fixtures/v13_mailbox.json",
+		"product/evidence/v13_mailbox.json",
 	}
 	wantVertical := verticals["mailbox"]
 	for _, id := range wantOwned {
 		entry := entries[id]
-		if entry.Status != "declared" || len(entry.EvidenceRefs) != 0 ||
+		if entry.Status != "accredited" || !reflect.DeepEqual(entry.EvidenceRefs, wantEvidence) ||
 			!reflect.DeepEqual(entry.Dependencies, wantVertical.DependsOn) ||
 			!reflect.DeepEqual(entry.AcceptanceContracts, wantVertical.AcceptanceContracts) {
-			t.Errorf("V13 red capability %s progressed prematurely or lost causality: %#v", id, entry)
+			t.Errorf("V13 capability %s lacks exact accreditation or causality: %#v", id, entry)
 		}
 	}
 
-	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV13ScopeAndExecutableContract|TestV13EvidenceBelongsOnlyToMailboxCapabilities|TestV13AcceptanceCommandRunsMailboxConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV13Mailbox|TestV13CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/application ./internal/ports ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta'"
+	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV13ScopeAndExecutableContract|TestV13EvidenceBelongsOnlyToMailboxCapabilities|TestV13AcceptanceCommandRunsMailboxConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV13Mailbox|TestV13CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/config ./internal/application ./internal/ports ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta'"
 	for _, contract := range roadmap.AcceptanceContracts {
 		if contract.ID != "AC-V13-MAILBOX" {
 			continue
@@ -1102,20 +1107,27 @@ func TestProductRoadmapV13ScopeAndExecutableContract(t *testing.T) {
 func TestV13EvidenceBelongsOnlyToMailboxCapabilities(t *testing.T) {
 	var roadmap roadmapDocument
 	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
-	owned := map[string]bool{"ORC-04": true, "ORC-05": true, "ORC-14": true, "ORC-15": true}
-	v13Evidence := map[string]bool{
-		"acceptance/v13_mailbox_test.go":       true,
-		"acceptance/fixtures/v13_mailbox.json": true,
-		"product/evidence/v13_mailbox.json":    true,
+	owned := map[string]bool{"ORC-04": true, "ORC-05": true, "ORC-14": true}
+	wantEvidence := []string{
+		"acceptance/v13_mailbox_test.go",
+		"acceptance/fixtures/v13_mailbox.json",
+		"product/evidence/v13_mailbox.json",
+	}
+	v13Evidence := make(map[string]bool, len(wantEvidence))
+	for _, ref := range wantEvidence {
+		v13Evidence[ref] = true
 	}
 	for _, entry := range roadmap.CapabilityEntries {
-		if owned[entry.ID] && (entry.Status != "declared" || len(entry.EvidenceRefs) != 0) {
-			t.Errorf("V13 red capability %s has premature accreditation: status=%q evidence=%v",
-				entry.ID, entry.Status, entry.EvidenceRefs)
+		if owned[entry.ID] {
+			if entry.Status != "accredited" || !reflect.DeepEqual(entry.EvidenceRefs, wantEvidence) {
+				t.Errorf("owned V13 capability %s lacks exact accreditation: status=%q evidence=%v",
+					entry.ID, entry.Status, entry.EvidenceRefs)
+			}
+			continue
 		}
 		for _, evidenceRef := range entry.EvidenceRefs {
 			if v13Evidence[evidenceRef] {
-				t.Errorf("capability %s claims unissued V13 evidence %q", entry.ID, evidenceRef)
+				t.Errorf("unowned capability %s claims V13 evidence %q", entry.ID, evidenceRef)
 			}
 		}
 	}
@@ -1130,7 +1142,7 @@ func TestV13AcceptanceCommandRunsMailboxConsumers(t *testing.T) {
 		}
 		for _, required := range []string{
 			"./acceptance", "./internal/goal", "./internal/identity", "./internal/application",
-			"./internal/ports", "./internal/adapters/state/sqlite", "./internal/bootstrap", "./cmd/orquesta",
+			"./internal/config", "./internal/ports", "./internal/adapters/state/sqlite", "./internal/bootstrap", "./cmd/orquesta",
 		} {
 			if !roadmapCommandHasArgument(contract.Command, required) {
 				t.Errorf("V13 acceptance omits mailbox consumer package %q: %q", required, contract.Command)
@@ -1146,16 +1158,23 @@ func roadmapV13Assertions() []string {
 		"admission is request-idempotent and atomically binds one immutable envelope to one action in the existing outbox without treating admission as delivery",
 		"the envelope binds exact project Goal plan generation parent and child WorkItems plus source and recipient principal WorkItem and execution identities",
 		"admitted claimed delivered consumed and acknowledged or blocked are separate causal facts with trusted timestamps and no text-derived lifecycle",
-		"concurrent exact-recipient claims have one winner and use transaction-clock lease opaque token monotonic fence and delivery attempt rather than caller time",
+		"concurrent exact-recipient claims have one winner and use transaction-clock lease opaque token and one monotonic fence as the delivery-attempt ordinal rather than caller time",
 		"wrong project Goal generation principal WorkItem execution sibling or successor cannot claim deliver consume acknowledge block or enumerate the message",
-		"expired lease wrong token and stale fence cannot mutate while a post-expiry reclaim preserves the envelope and increments fence and attempt exactly once",
+		"expired lease wrong token and stale fence cannot mutate while a post-expiry reclaim preserves the envelope and increments the single fence exactly once",
 		"a crash after claim and before terminal recipient resolution permits safe reclaim after restart without message loss or partial acknowledgement",
+		"exact claim replay returns the original claimed frontier without renewing its lease after expiry delivery or consumption and conflicts after a superseding fence or terminal mailbox",
+		"exact delivery and consumption replay returns the original historical frontier after terminal state or a later fence without authorizing another mutation",
+		"recipient mailbox listing is deterministic causal FIFO by admitted_at then message ref and applies its limit after exact recipient scope",
 		"delivery consumption and recipient acknowledgement have distinct immutable receipts and an outbox consumption receipt alone is not recipient evidence",
 		"exact acknowledgement replay returns the same receipt and acknowledged or blocked messages are never redelivered by outbox replay restart or another execution",
 		"a successor execution cannot acknowledge a message addressed to its predecessor even when both executions use the same principal",
-		"a contractual parent cannot succeed or close its Goal until every direct child has one acknowledged delivery or explicit blocked resolution addressed to that parent execution",
+		"if the exact recipient execution fails before resolution the mailbox becomes retired in the same Goal failure transaction without replacement readdress ACK authorization or ChildHandoffResolution",
+		"a contractual parent cannot succeed until every successful direct child has one acknowledged delivery or explicit recipient block; failed and dependency_failed skipped children are durable causal blocks",
 		"an unrelated child terminal WorkItem admission ACK or delivery without recipient acknowledgement does not satisfy the parent closure barrier",
-		"message handoff and child_delivery are typed compact envelopes using summaries and artifact refs while rich context resumable sessions and preventive provider handoff stay deferred",
+		"parent lineage is noncontractual by default and only an explicit HandoffRequired true edge activates the mailbox barrier so public V05 DAGs remain operable while public mailbox bindings are deferred",
+		"child_delivery is the only V13 causal envelope; canonical mailbox.max_envelope_bytes bounds its summary and artifact refs while generic messages rich context resumable sessions and provider handoff stay deferred",
+		"the existing outbox fence is the single mailbox attempt ordinal; mailbox adds no second delivery counter or private fence store",
+		"V13 preserves the V02 application-only Goal writer the V05 contractual lineage gate and the V06 V09 V10 acceptance harness wiring",
 		"Goal and application remain the only lifecycle authority and mailbox adds no private store database queue scheduler loop goroutine daemon provider policy or parallel lifecycle",
 	}
 }

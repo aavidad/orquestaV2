@@ -1,8 +1,8 @@
 {
   "document_type": "orquesta.config_ui",
   "schema_version": 2,
-  "registry_revision": "2026-07-15.11",
-  "registry_hash": "sha256:5b67d20f425e1883d80998ad29bd8ea4ea06e739b4c96a9f773c89f9eb175a8d",
+  "registry_revision": "2026-07-16.12",
+  "registry_hash": "sha256:c3da7e8c380be52f5708c4025e61164c760f698b16ff516203901d3ab77151f2",
   "aliases": [],
   "cross_validators": [
     {
@@ -488,6 +488,20 @@
       "validator_ids": [
         "positive_duration"
       ]
+    },
+    {
+      "key": "mailbox.max_envelope_bytes",
+      "semantic_ref": "orquesta.config.mailbox.max_envelope_bytes",
+      "label_key": "config.field.mailbox.max_envelope_bytes",
+      "type": "integer",
+      "sensitive": false,
+      "scope": "mailbox",
+      "restart_required": true,
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1024,
+      "maximum": 16777216
     },
     {
       "key": "scheduler.poll_interval",

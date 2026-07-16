@@ -287,7 +287,8 @@ func (fixture planFixture) newItem(overrides domain.NewWorkItemInput) (domain.Wo
 		Ref: overrides.Ref, Goal: fixture.goal.Ref(), Actor: fixture.actor, Project: fixture.project,
 		Objective: "execute " + overrides.Ref.String(), CreatedAt: baseTime().Add(2 * time.Minute),
 		Phase: overrides.Phase, Role: overrides.Role, Parent: overrides.Parent,
-		Dependencies: overrides.Dependencies, WriteSet: overrides.WriteSet,
+		HandoffRequired: overrides.HandoffRequired,
+		Dependencies:    overrides.Dependencies, WriteSet: overrides.WriteSet,
 		SkillRefs: overrides.SkillRefs, ToolRefs: overrides.ToolRefs, CapabilityRefs: overrides.CapabilityRefs,
 		OutputContract: overrides.OutputContract,
 	})

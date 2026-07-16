@@ -183,7 +183,7 @@ func v05AssertWorkItemShape(t *testing.T, fixture v05Fixture) {
 		}
 	}
 	if !v05HasTypedParentRef(workItemType, 3, make(map[reflect.Type]bool)) {
-		t.Errorf("WorkItem lacks an explicit contractual parent typed with WorkItemRef")
+		t.Errorf("WorkItem lacks explicit parent lineage typed with WorkItemRef")
 	}
 }
 
@@ -357,7 +357,7 @@ func v05AssertContractualLineageDoesNotCloseGoalEarly(t *testing.T) {
 	childRef := v05MustRef(t, "work-item:v05-child", goal.NewWorkItemRef)
 	parent := fixture.item(t, parentRef, phase.Key(), nil, []goal.WriteScope{v05MustScope(t, "internal/parent")})
 	child := fixture.itemWithMetadata(t, v05ItemMetadata{
-		Ref: childRef, Phase: phase.Key(), Parent: parentRef,
+		Ref: childRef, Phase: phase.Key(), Parent: parentRef, HandoffRequired: true,
 		WriteSet: []goal.WriteScope{v05MustScope(t, "internal/child")},
 	})
 	running := fixture.applyAndStart(t, phase, []goal.WorkItem{parent, child})
@@ -365,21 +365,22 @@ func v05AssertContractualLineageDoesNotCloseGoalEarly(t *testing.T) {
 	if len(children) != 1 || children[0].Ref() != childRef {
 		t.Fatalf("ChildWorkItems(%q) = %v, want exact child %q", parentRef, v05WorkItemRefs(children), childRef)
 	}
-	if got, ok := children[0].Parent(); !ok || got != parentRef {
-		t.Fatalf("child Parent() = %q/%v, want %q/true", got, ok, parentRef)
+	if got, ok := children[0].Parent(); !ok || got != parentRef || !children[0].HandoffRequired() {
+		t.Fatalf("child Parent() = %q/%v handoff=%v, want %q/true/true",
+			got, ok, children[0].HandoffRequired(), parentRef)
 	}
 
 	running = v05StartItem(t, running, parentRef, "execution:v05-parent", fixture.startedAt.Add(time.Minute))
 	running = v05StartItem(t, running, childRef, "execution:v05-child", fixture.startedAt.Add(2*time.Minute))
 	parent, _ = running.WorkItem(parentRef)
-	running, err := running.SucceedWorkItem(
+	_, err := running.SucceedWorkItem(
 		running.Revision(), parent.Revision(), parentRef,
 		[]goal.ArtifactRef{v05MustRef(t, "artifact:v05-parent", goal.NewArtifactRef)},
 		[]goal.AttestationRef{v05MustRef(t, "attestation:v05-parent", goal.NewAttestationRef)},
 		fixture.startedAt.Add(3*time.Minute),
 	)
-	if err != nil {
-		t.Fatalf("SucceedWorkItem(parent): %v", err)
+	if goal.ErrorCodeOf(err) != goal.ErrorChildHandoffsPending {
+		t.Fatalf("SucceedWorkItem(parent before child handoff): %v", err)
 	}
 	if _, err := running.Close(running.Revision(), goal.GoalOutcomeSucceeded, fixture.startedAt.Add(4*time.Minute)); err == nil {
 		t.Error("Goal closed while a contractual child remained nonterminal")
@@ -395,9 +396,27 @@ func v05AssertContractualLineageDoesNotCloseGoalEarly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SucceedWorkItem(child): %v", err)
 	}
+	running, err = running.ResolveChildHandoff(
+		running.Revision(), parentRef, childRef, "message:v05-child",
+		goal.ChildHandoffAcknowledged, "receipt:v05-child", fixture.startedAt.Add(5*time.Minute),
+	)
+	if err != nil {
+		t.Fatalf("ResolveChildHandoff(child): %v", err)
+	}
 	parent, _ = running.WorkItem(parentRef)
-	if parent.State() != goal.WorkItemStateSucceeded {
-		t.Errorf("parent state changed while child completed = %q, want succeeded", parent.State())
+	running, err = running.SucceedWorkItem(
+		running.Revision(), parent.Revision(), parentRef,
+		[]goal.ArtifactRef{v05MustRef(t, "artifact:v05-parent", goal.NewArtifactRef)},
+		[]goal.AttestationRef{v05MustRef(t, "attestation:v05-parent", goal.NewAttestationRef)},
+		fixture.startedAt.Add(6*time.Minute),
+	)
+	if err != nil {
+		t.Fatalf("SucceedWorkItem(parent after child handoff): %v", err)
+	}
+	if _, err := running.Close(
+		running.Revision(), goal.GoalOutcomeSucceeded, fixture.startedAt.Add(7*time.Minute),
+	); err != nil {
+		t.Fatalf("Close(terminal contractual lineage): %v", err)
 	}
 }
 
@@ -587,7 +606,7 @@ func v05AssertRunningGoalCanReplanMonotonically(t *testing.T) {
 	running := fixture.start(t, fixture.apply(t, 1, phase, []goal.WorkItem{parent}))
 	running = v05StartItem(t, running, parentRef, "execution:v05-running-parent", fixture.startedAt.Add(time.Minute))
 	child := fixture.itemWithMetadata(t, v05ItemMetadata{
-		Ref: childRef, Phase: phase.Key(), Parent: parentRef,
+		Ref: childRef, Phase: phase.Key(), Parent: parentRef, HandoffRequired: false,
 	})
 	replan := v05MustPlan(t, goal.PlanInput{
 		Generation: 2,
@@ -614,6 +633,8 @@ func v05AssertRunningGoalCanReplanMonotonically(t *testing.T) {
 	children := updated.ChildWorkItems(parentRef)
 	if len(children) != 1 || children[0].Ref() != childRef {
 		t.Errorf("running replan children = %v, want %q", v05WorkItemRefs(children), childRef)
+	} else if children[0].HandoffRequired() {
+		t.Error("parent metadata silently became a contractual handoff")
 	}
 }
 
@@ -671,14 +692,15 @@ func (fixture v05DomainFixture) item(
 }
 
 type v05ItemMetadata struct {
-	Ref            goal.WorkItemRef
-	Phase          goal.PhaseKey
-	Parent         goal.WorkItemRef
-	Dependencies   []goal.WorkItemRef
-	WriteSet       []goal.WriteScope
-	SkillRefs      []goal.SkillRef
-	ToolRefs       []goal.ToolRef
-	CapabilityRefs []goal.CapabilityRef
+	Ref             goal.WorkItemRef
+	Phase           goal.PhaseKey
+	Parent          goal.WorkItemRef
+	HandoffRequired bool
+	Dependencies    []goal.WorkItemRef
+	WriteSet        []goal.WriteScope
+	SkillRefs       []goal.SkillRef
+	ToolRefs        []goal.ToolRef
+	CapabilityRefs  []goal.CapabilityRef
 }
 
 func (fixture v05DomainFixture) itemWithMetadata(t *testing.T, metadata v05ItemMetadata) goal.WorkItem {
@@ -687,7 +709,8 @@ func (fixture v05DomainFixture) itemWithMetadata(t *testing.T, metadata v05ItemM
 		Ref: metadata.Ref, Goal: fixture.aggregate.Ref(), Actor: fixture.actor, Project: fixture.project,
 		Objective: "execute " + metadata.Ref.String(), CreatedAt: fixture.itemAt,
 		Phase: metadata.Phase, Role: goal.DefaultRoleKey(), Parent: metadata.Parent,
-		Dependencies: metadata.Dependencies, WriteSet: metadata.WriteSet,
+		HandoffRequired: metadata.HandoffRequired,
+		Dependencies:    metadata.Dependencies, WriteSet: metadata.WriteSet,
 		SkillRefs: metadata.SkillRefs, ToolRefs: metadata.ToolRefs, CapabilityRefs: metadata.CapabilityRefs,
 		OutputContract: goal.EvidenceBundleOutputContract(),
 	})

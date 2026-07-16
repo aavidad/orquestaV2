@@ -1,27 +1,38 @@
 # Uso de Orquesta con un agente externo
 
-Fecha de corte: 2026-07-15. Rama: `reconstruccion/orquesta-total-20260714`.
+Fecha de corte: 2026-07-16. Rama: `reconstruccion/orquesta-total-20260714`.
 Repositorio operativo: `/home/alberto/Trabajo/orquesta-rebuild`.
 
 ## Respuesta corta y alcance real
 
-Sí: el checkpoint V01-V12 ya sirve para que un Codex externo use Orquesta por
+Sí: el checkpoint acreditado V01-V12 ya sirve para que un Codex externo use Orquesta por
 MCP, cree un Goal con un DAG, lance uno o varios workers Codex, consulte su
 estado y recupere artefactos durables. Hay un binario productivo único,
 autenticación, autorización por proyecto, SQLite, artefactos, scheduler,
 backup/recovery y cierre cooperativo.
+
+V13 tiene un candidato interno para handoff causal `child_delivery`, pero aún
+no tiene receipt V3 ni bindings públicos. No se cuenta como checkpoint
+operativo y este runbook no atribuye al agente externo claim, delivery, consume
+o ACK por mailbox. `Parent` sigue siendo solo linaje: la entrada MCP pública no
+expone `HandoffRequired`, su valor queda `false` y el DAG normal cierra sin
+mailbox ni requeue.
 
 No es todavía la Orquesta total. Hasta V22, el agente externo sigue siendo el
 director práctico: inspecciona el proyecto, aporta contexto autocontenido,
 compila el DAG, revisa resultados y, si el operador autorizó cambios, aplica y
 prueba los parches fuera de Orquesta. Un Goal `succeeded` acredita la ejecución
 y sus artefactos; no acredita por sí solo que exista commit, merge o deploy.
+V12 es coordinación operativa limitada, V22 es el primer MVP de programación
+extremo a extremo y solo V34 cierra la aplicación total.
 
 Fuente de verdad del estado:
 
 - `product/roadmap.json`: capacidades y estados canónicos;
 - `product/evidence/v01_*.json` a `product/evidence/v12_*.json`: receipts
   reproducibles;
+- `product/evidence/v13_mailbox.json`: placeholder hasta que exista ejecución
+  sellada; `{}` no es evidencia;
 - `docs/reconstruccion/estado_y_handoff_rebuild.md`: último handoff humano.
 
 V01-V12 representan 12 de 34 verticales. V12 añade `GOV-08`, `GOV-09`,
@@ -42,6 +53,7 @@ Resumen funcional:
 | V10 | proyectos, multiusuario, RBAC, aislamiento y auditoría |
 | V11 | proveedor neutral de identidad, `local_token` y OIDC; interoperabilidad AD mediante Dex/LDAP-LDAPS probada en entorno aislado |
 | V12 | Director neutral con claim, renew, takeover, lease/fence y propuesta causal sobre el mismo Goal/SQLite/outbox |
+| V13 candidato | mailbox interno solo `child_delivery` opt-in: destinatario exacto, lifecycle causal y retiro sistémico; `Parent` público permanece no contractual, sin bindings mailbox ni receipt todavía |
 
 V12 no añade tools públicas: el protocolo del Director está en aplicación y
 persistencia, pero la superficie MCP pública vigente sigue teniendo seis tools.
@@ -402,10 +414,16 @@ succeeded no equivale a cambio integrado. Entrega refs de Goal/AppSpec,
 executions/artifacts, tests, riesgos y bloqueos.
 ```
 
-## 7. Limitaciones hasta V13+
+## 7. Limitaciones desde el candidato V13
 
-- V13: faltan mailbox/handoff durable, ACK por destinatario y propagación de
-  resultados entre padre e hijos.
+- V13 candidato: existe mailbox durable interno para `child_delivery`, con
+  `admitted → claimed → delivered → consumed → acknowledged|blocked` y
+  `retired` sistémico. `Parent` y `HandoffRequired` son contratos distintos:
+  el segundo es explícito, `false` por defecto y no puede ser `true` sin padre.
+  Sigue sin superficie HTTP/MCP/CLI: las seis tools públicas no exponen ese
+  opt-in ni permiten claim, deliver, consume o ACK. Por tanto el DAG V05
+  público conserva `false` y cierra sin mailbox/requeue. Mensajes genéricos,
+  sesiones reanudables y handoff entre proveedores (`ORC-15`) quedan en V27.
 - V14: faltan pausa, resume, cancel, stop, retry y replan públicos.
 - V15: faltan presupuestos completos, fairness, riesgo y effects/approvals.
 - V16: faltan workspace, worktree, aplicación de patch y receipts Git; los
@@ -421,8 +439,8 @@ executions/artifacts, tests, riesgos y bloqueos.
   deploy, OPES, PostgreSQL/S3/multihost y operación completa.
 
 No simular estas capacidades con scripts laterales ni meterlas en el núcleo.
-El protocolo V12 de Director existe, pero aún no tiene bindings en las seis
-tools MCP actuales.
+El protocolo V12 de Director y el mailbox candidato V13 existen internamente,
+pero aún no tienen bindings en las seis tools MCP actuales.
 
 ## 8. Verificación y E2E
 
@@ -467,6 +485,15 @@ go test -mod=vendor -v -count=1 ./internal/bootstrap \
 La prueba debe cerrar un Goal por servidor MCP de producción, leer un artifact
 con marcador único y apagar todos sus procesos. No apuntarla al runtime legacy
 ni al estado operativo que se quiera conservar.
+
+Última comprobación real: `PASS` en `6.15s`, ejecutada
+`2026-07-16T12:12:56+02:00` con configuración aislada
+`/home/alberto/Trabajo/.orquesta-rebuild-real-e2e-v13-20260716T115042/orquesta.toml`,
+source digest
+`sha256:d3bac625fa52b76fdc2c0007292577751ca8931a6ca890ecd2751a8976fa8d36`
+y marcador `ORQUESTA_CODEX_E2E_OK_70c61a97f86425f3464a7e12e9b9829a`.
+Prueba composición productiva, MCP, Codex, SQLite y CAS sin regresión; no activa
+mailbox ni convierte el candidato V13 en checkpoint acreditado.
 
 ## 9. Seguridad, parada y limpieza
 

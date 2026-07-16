@@ -27,7 +27,8 @@ func validateClaimedRecord(claim ActionClaim, record GoalRecord, kind ActionKind
 	if claim.Token == "" || claim.WorkerRef == "" || claim.Action.Kind != kind ||
 		claim.DeliveryAttempt == 0 || claim.Fence == 0 || claim.LeaseUntil.IsZero() ||
 		claim.Action.GoalRef != record.Goal.Ref() ||
-		claim.Action.PlanGeneration != record.Goal.PlanGeneration() || claim.Action.WorkItemGeneration == 0 ||
+		claim.Action.PlanGeneration == 0 || claim.Action.PlanGeneration > record.Goal.PlanGeneration() ||
+		claim.Action.WorkItemGeneration == 0 ||
 		!ok || claim.Action.WorkItemRef != execution.WorkItemRef ||
 		claim.Action.ExecutionRef != execution.Ref || execution.GoalRef != record.Goal.Ref() ||
 		intent.Ref() != record.Goal.Intent() || intent.Hash() != record.Goal.IntentHash() ||
@@ -44,7 +45,7 @@ func validateClaimedRecord(claim ActionClaim, record GoalRecord, kind ActionKind
 	}
 	if execution.MaxOutputBytes <= 0 || execution.AttemptNo == 0 ||
 		execution.MaxExecutionAttempts == 0 || execution.AttemptNo > execution.MaxExecutionAttempts ||
-		execution.PlanGeneration != record.Goal.PlanGeneration() ||
+		execution.PlanGeneration == 0 || execution.PlanGeneration != claim.Action.PlanGeneration ||
 		execution.AppSpecGeneration != record.Goal.AppSpec().Generation() || execution.SpecHash != record.Goal.SpecHash() ||
 		strings.TrimSpace(execution.ArtifactMediaType) == "" ||
 		strings.TrimSpace(execution.IdempotencyKey) == "" || execution.CreatedAt.IsZero() ||

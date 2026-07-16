@@ -316,11 +316,18 @@ func cloneGoalSnapshot(snapshot domain.GoalSnapshot) domain.GoalSnapshot {
 	for index, item := range snapshot.WorkItems {
 		cloned.WorkItems[index] = cloneWorkItemSnapshot(item)
 	}
+	cloned.ChildHandoffResolutions = append(
+		[]domain.ChildHandoffResolutionSnapshot(nil), snapshot.ChildHandoffResolutions...,
+	)
 	return cloned
 }
 
 func cloneWorkItemSnapshot(snapshot domain.WorkItemSnapshot) domain.WorkItemSnapshot {
 	cloned := snapshot
+	if snapshot.HandoffRequired != nil {
+		handoffRequired := *snapshot.HandoffRequired
+		cloned.HandoffRequired = &handoffRequired
+	}
 	cloned.DependencyRefs = append([]string(nil), snapshot.DependencyRefs...)
 	cloned.WriteSet = append([]string(nil), snapshot.WriteSet...)
 	cloned.SkillRefs = append([]string(nil), snapshot.SkillRefs...)

@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "revision": "2026-07-15.11",
+  "revision": "2026-07-16.12",
   "precedence": [
     "default",
     "file",
@@ -569,6 +569,22 @@
       "validator_ids": [
         "positive_duration"
       ]
+    },
+    {
+      "key": "mailbox.max_envelope_bytes",
+      "go_name": "MailboxMaxEnvelopeBytes",
+      "semantic_ref": "orquesta.config.mailbox.max_envelope_bytes",
+      "type": "integer",
+      "default": 65536,
+      "sensitive": false,
+      "scope": "mailbox",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_MAILBOX_MAX_ENVELOPE_BYTES",
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1024,
+      "maximum": 16777216
     },
     {
       "key": "scheduler.poll_interval",

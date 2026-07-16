@@ -311,6 +311,9 @@ func validatePlanShape(plan Plan, requirePendingItems bool) error {
 }
 
 func validateWorkItemPlanMetadata(item WorkItem) error {
+	if item.handoffRequired && !validWorkItemRef(item.parent) {
+		return domainError(ErrorInvalidPlan, "handoff_parent")
+	}
 	if validWorkItemRef(item.parent) && item.parent == item.ref {
 		return domainError(ErrorInvalidPlan, "self_parent")
 	}

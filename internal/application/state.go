@@ -18,6 +18,11 @@ const (
 	StateConflict       StateErrorCode = "state.conflict"
 	StateInvalid        StateErrorCode = "state.invalid"
 	StateAlreadyClaimed StateErrorCode = "state.already_claimed"
+	// StateRecipientMailboxActive means an execution replacement lost the
+	// atomic race against an unresolved mailbox addressed to that exact
+	// execution. The application must fail the recipient attempt and retire
+	// those inbox records; it must never readdress them implicitly.
+	StateRecipientMailboxActive StateErrorCode = "state.recipient_mailbox_active"
 )
 
 type StateError struct {
@@ -111,8 +116,9 @@ type EventRecord struct {
 type ActionKind string
 
 const (
-	ActionLaunchAgent  ActionKind = "launch_agent"
-	ActionObserveAgent ActionKind = "observe_agent"
+	ActionLaunchAgent    ActionKind = "launch_agent"
+	ActionObserveAgent   ActionKind = "observe_agent"
+	ActionDeliverMailbox ActionKind = "deliver_mailbox"
 )
 
 type ActionRecord struct {
@@ -157,6 +163,7 @@ type ActionConsumptionReceipt struct {
 	GoalRef            goal.GoalRef
 	WorkItemRef        goal.WorkItemRef
 	ExecutionRef       goal.ExecutionRef
+	MailboxMessageRef  MailboxMessageRef
 	PlanGeneration     goal.PlanGeneration
 	WorkItemGeneration goal.Revision
 	Fence              uint64
@@ -319,6 +326,15 @@ type StateRepository interface {
 	ClaimDirector(context.Context, ClaimDirectorState) (DirectorLeaseRecord, bool, error)
 	RenewDirector(context.Context, RenewDirectorState) (DirectorLeaseRecord, bool, error)
 	ApplyDirectorPlan(context.Context, ApplyDirectorPlanState) (DirectorDecisionRecord, bool, error)
+	MailboxReplay(context.Context, MailboxReplayRequest) (MailboxReplayRecord, bool, error)
+	AdmitMailbox(context.Context, AdmitMailboxState) (MailboxRecord, bool, error)
+	ClaimMailbox(context.Context, ClaimMailboxState) (MailboxClaim, bool, error)
+	MarkMailboxDelivered(context.Context, MarkMailboxDeliveredState) (MailboxRecord, bool, error)
+	ConsumeMailbox(context.Context, ConsumeMailboxState) (MailboxRecord, bool, error)
+	AcknowledgeMailbox(context.Context, ResolveMailboxState) (MailboxAcknowledgement, bool, error)
+	BlockMailbox(context.Context, ResolveMailboxState) (MailboxAcknowledgement, bool, error)
+	GetMailbox(context.Context, goal.ProjectRef, goal.GoalRef, MailboxMessageRef, MailboxEndpoint) (MailboxRecord, error)
+	ListMailbox(context.Context, goal.ProjectRef, goal.GoalRef, MailboxEndpoint, int) ([]MailboxRecord, error)
 	ClaimNextAction(context.Context, ClaimRequest) (ActionClaim, bool, error)
 	RecordLaunchPrepared(context.Context, LaunchPreparedState) error
 	RecordLaunchAccepted(context.Context, LaunchAcceptedState) error

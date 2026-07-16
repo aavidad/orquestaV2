@@ -4,9 +4,9 @@ package config
 
 import "time"
 
-const generatedRegistrySourceSHA256 = "a175bbbda9c81199c28cbcdd743a4036cfda6c3501b534dd3baa6476ae2c72a5"
-const generatedRegistryRevision = "2026-07-15.11"
-const generatedRegistrySemanticSHA256 = "sha256:5b67d20f425e1883d80998ad29bd8ea4ea06e739b4c96a9f773c89f9eb175a8d"
+const generatedRegistrySourceSHA256 = "72a5833f0a6f989b47df94ab71bfbf031b09216a1de2d95a134a09127f5312bd"
+const generatedRegistryRevision = "2026-07-16.12"
+const generatedRegistrySemanticSHA256 = "sha256:c3da7e8c380be52f5708c4025e61164c760f698b16ff516203901d3ab77151f2"
 
 const (
 	KeyServerListen                        Key = "server.listen"
@@ -44,6 +44,7 @@ const (
 	KeyIdentityOIDCUpstreamTimeout         Key = "identity.oidc.upstream_timeout"
 	KeyProjectDefault                      Key = "project.default"
 	KeyDirectorLeaseDuration               Key = "director.lease_duration"
+	KeyMailboxMaxEnvelopeBytes             Key = "mailbox.max_envelope_bytes"
 	KeySchedulerPollInterval               Key = "scheduler.poll_interval"
 	KeySchedulerObservationInterval        Key = "scheduler.observation_interval"
 	KeySchedulerClaimLease                 Key = "scheduler.claim_lease"
@@ -92,6 +93,7 @@ func allGeneratedKeys() []Key {
 		KeyIdentityOIDCUpstreamTimeout,
 		KeyProjectDefault,
 		KeyDirectorLeaseDuration,
+		KeyMailboxMaxEnvelopeBytes,
 		KeySchedulerPollInterval,
 		KeySchedulerObservationInterval,
 		KeySchedulerClaimLease,
@@ -349,6 +351,13 @@ func (s Snapshot) DirectorLeaseDuration() time.Duration {
 	return typed
 }
 
+// MailboxMaxEnvelopeBytes returns mailbox.max_envelope_bytes.
+func (s Snapshot) MailboxMaxEnvelopeBytes() int64 {
+	value, _ := s.value(KeyMailboxMaxEnvelopeBytes)
+	typed, _ := value.(int64)
+	return typed
+}
+
 // SchedulerPollInterval returns scheduler.poll_interval.
 func (s Snapshot) SchedulerPollInterval() time.Duration {
 	value, _ := s.value(KeySchedulerPollInterval)
@@ -414,7 +423,7 @@ func (s Snapshot) ConfigEffectiveMaxExistingBytes() int64 {
 
 const generatedRegistryJSON = `{
   "schema_version": 2,
-  "revision": "2026-07-15.11",
+  "revision": "2026-07-16.12",
   "precedence": [
     "default",
     "file",
@@ -983,6 +992,22 @@ const generatedRegistryJSON = `{
       "validator_ids": [
         "positive_duration"
       ]
+    },
+    {
+      "key": "mailbox.max_envelope_bytes",
+      "go_name": "MailboxMaxEnvelopeBytes",
+      "semantic_ref": "orquesta.config.mailbox.max_envelope_bytes",
+      "type": "integer",
+      "default": 65536,
+      "sensitive": false,
+      "scope": "mailbox",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_MAILBOX_MAX_ENVELOPE_BYTES",
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1024,
+      "maximum": 16777216
     },
     {
       "key": "scheduler.poll_interval",

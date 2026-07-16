@@ -30,6 +30,63 @@ func TestSubmissionFingerprintFramesPlanCollections(t *testing.T) {
 	if submissionFingerprint(access, left) == submissionFingerprint(access, right) {
 		t.Fatal("dependency/write-set boundary collision")
 	}
+	metadata := base
+	metadata.Plan = clonePlanSpec(base.Plan)
+	metadata.Plan.WorkItems[0].Parent = "work:parent"
+	contractual := metadata
+	contractual.Plan = clonePlanSpec(metadata.Plan)
+	contractual.Plan.WorkItems[0].HandoffRequired = true
+	if submissionFingerprint(access, metadata) == submissionFingerprint(access, contractual) {
+		t.Fatal("parent metadata and contractual handoff share a fingerprint")
+	}
+}
+
+func TestWorkItemSpecPropagatesExplicitHandoffPolicy(t *testing.T) {
+	clock := &mutableClock{now: time.Date(2026, 7, 16, 22, 0, 0, 0, time.UTC)}
+	repository := newMemoryRepository()
+	orchestrator, _ := newTestOrchestrator(t, repository, clock, &scriptedAgent{now: clock.Now})
+	actor, project := testScope(t)
+	access := accessForScope(t, actor, project)
+	phase := PhaseSpec{
+		Ref: "phase-instance:handoff-policy", Key: "phase:handoff-policy",
+		TemplateRef: "phase-template:handoff-policy",
+	}
+	result, err := orchestrator.Submit(context.Background(), access, SubmitRequest{
+		RequestRef: "request:handoff-policy", Statement: "compile explicit handoff policy", Confirm: true,
+		Plan: &PlanSpec{
+			Phases: []PhaseSpec{phase},
+			WorkItems: []WorkItemSpec{
+				{Key: "parent", Objective: "parent", Phase: phase.Key, Role: "role:worker", OutputContract: goal.OutputContractEvidenceBundle},
+				{Key: "metadata", Objective: "metadata child", Phase: phase.Key, Role: "role:worker", Parent: "parent", HandoffRequired: false, OutputContract: goal.OutputContractEvidenceBundle},
+				{Key: "contractual", Objective: "contractual child", Phase: phase.Key, Role: "role:worker", Parent: "parent", HandoffRequired: true, OutputContract: goal.OutputContractEvidenceBundle},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Submit(explicit handoff policy) error = %v", err)
+	}
+	items := make(map[string]goal.WorkItem)
+	for _, item := range result.Record.Goal.WorkItems() {
+		items[item.Objective()] = item
+	}
+	if items["metadata child"].HandoffRequired() || !items["contractual child"].HandoffRequired() {
+		t.Fatalf("compiled handoff policy metadata=%v contractual=%v",
+			items["metadata child"].HandoffRequired(), items["contractual child"].HandoffRequired())
+	}
+
+	_, err = orchestrator.Submit(context.Background(), access, SubmitRequest{
+		RequestRef: "request:handoff-without-parent", Statement: "reject orphan handoff", Confirm: true,
+		Plan: &PlanSpec{
+			Phases: []PhaseSpec{phase},
+			WorkItems: []WorkItemSpec{{
+				Key: "orphan", Objective: "orphan handoff", Phase: phase.Key, Role: "role:worker",
+				HandoffRequired: true, OutputContract: goal.OutputContractEvidenceBundle,
+			}},
+		},
+	})
+	if goal.ErrorCodeOf(err) != goal.ErrorInvalidPlan {
+		t.Fatalf("handoff without parent error = %v", err)
+	}
 }
 
 func TestExplicitPlanPreservesContractsAndLaunchesMaximalSafeCohort(t *testing.T) {

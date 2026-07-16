@@ -77,6 +77,19 @@ func validateRecoveryDatabase(ctx context.Context, database *sql.DB) (string, st
 		if err := validateRecoveryV12Director(ctx, transaction); err != nil {
 			return "", "", invalid(err)
 		}
+	case recoverySchemaV13:
+		if err := validateMigratedGoalRecords(ctx, transaction); err != nil {
+			return "", "", invalid(err)
+		}
+		if err := validateRecoveryV10Identity(ctx, transaction); err != nil {
+			return "", "", invalid(err)
+		}
+		if err := validateRecoveryV12Director(ctx, transaction); err != nil {
+			return "", "", invalid(err)
+		}
+		if err := validateRecoveryV13Mailbox(ctx, transaction); err != nil {
+			return "", "", invalid(err)
+		}
 	}
 	if err := validateRecoveryEvents(ctx, transaction); err != nil {
 		return "", "", invalid(err)
@@ -163,6 +176,17 @@ FROM events ORDER BY ref`)
 }
 
 func validateRecoveryOutbox(ctx context.Context, transaction *sql.Tx) error {
+	hasMailbox, err := sqliteTableHasColumn(ctx, transaction, "outbox", "mailbox_message_ref")
+	if err != nil {
+		return err
+	}
+	if hasMailbox {
+		return validateRecoveryOutboxV13(ctx, transaction)
+	}
+	return validateRecoveryOutboxLegacy(ctx, transaction)
+}
+
+func validateRecoveryOutboxLegacy(ctx context.Context, transaction *sql.Tx) error {
 	rows, err := transaction.QueryContext(ctx, `
 SELECT o.ref, o.kind, o.goal_ref, o.work_item_ref, o.execution_ref,
        o.plan_generation, o.work_item_generation, o.available_at,
@@ -181,6 +205,7 @@ JOIN work_items wi
  AND wi.ref = o.work_item_ref
 JOIN goals g ON g.ref = o.goal_ref
 LEFT JOIN work_item_fences wf ON wf.goal_ref = o.goal_ref AND wf.work_item_ref = o.work_item_ref
+WHERE o.kind IN ('launch_agent', 'observe_agent')
 ORDER BY o.ref`)
 	if err != nil {
 		return err
@@ -320,6 +345,17 @@ func activeRecoveryActionState(
 }
 
 func validateRecoveryReceiptBindings(ctx context.Context, transaction *sql.Tx) error {
+	hasMailbox, err := sqliteTableHasColumn(ctx, transaction, "action_consumption_receipts", "mailbox_message_ref")
+	if err != nil {
+		return err
+	}
+	if hasMailbox {
+		return validateRecoveryReceiptBindingsV13(ctx, transaction)
+	}
+	return validateRecoveryReceiptBindingsLegacy(ctx, transaction)
+}
+
+func validateRecoveryReceiptBindingsLegacy(ctx context.Context, transaction *sql.Tx) error {
 	var invalidBindings int
 	if err := transaction.QueryRowContext(ctx, `
 SELECT COUNT(*)
@@ -352,6 +388,15 @@ WHERE
 		return errors.New("sqlite.recovery_receipt_binding_invalid")
 	}
 	return nil
+}
+
+func sqliteTableHasColumn(ctx context.Context, source queryer, table, column string) (bool, error) {
+	var count int
+	query := "SELECT COUNT(*) FROM pragma_table_xinfo(" + quoteSQLiteIdentifier(table) + ") WHERE name = ?"
+	if err := source.QueryRowContext(ctx, query, column).Scan(&count); err != nil {
+		return false, err
+	}
+	return count == 1, nil
 }
 
 // logicalStateDigest hashes schema plus every persisted value as a canonical

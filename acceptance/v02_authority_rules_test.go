@@ -63,6 +63,7 @@ type v02Lifecycle struct {
 	AgentPortType         string   `json:"agent_port_type"`
 	ForbiddenGoalTerms    []string `json:"forbidden_goal_field_terms"`
 	MutationMethods       []string `json:"mutation_methods"`
+	PureTransitionHelpers []string `json:"pure_transition_helpers"`
 	ReadyMethod           string   `json:"ready_method"`
 	SchedulerMethod       string   `json:"scheduler_method"`
 	ClaimMethod           string   `json:"claim_method"`
@@ -495,9 +496,11 @@ func v02AssertSingleWriterAndScheduler(t *testing.T, sources v02SourceSet, lifec
 	mutationSet := v02StringSet(lifecycle.MutationMethods)
 	declaredMutations := make(map[string]struct{})
 	seenMutations := make(map[string]struct{})
+	seenPureTransitionHelpers := make(map[string]struct{})
 	seenSchedulerOperations := make(map[string]struct{})
 	schedulerDeclarations := 0
 	allowedSchedulerTypes := v02StringSet(lifecycle.AllowedSchedulerTypes)
+	pureTransitionHelpers := v02StringSet(lifecycle.PureTransitionHelpers)
 
 	for _, file := range sources.Files {
 		if file.Test {
@@ -531,7 +534,10 @@ func v02AssertSingleWriterAndScheduler(t *testing.T, sources v02SourceSet, lifec
 						t.Errorf("scheduler authority %s.%s must belong to %s.%s", file.PackagePath, typed.Name.Name, lifecycle.WriterPackage, lifecycle.WriterType)
 					}
 				}
-				v02InspectCalls(t, sources, file, typed, info, lifecycle, mutationSet, seenMutations, seenSchedulerOperations)
+				v02InspectCalls(
+					t, sources, file, typed, info, lifecycle, mutationSet, pureTransitionHelpers,
+					seenMutations, seenPureTransitionHelpers, seenSchedulerOperations,
+				)
 			}
 		}
 	}
@@ -540,6 +546,9 @@ func v02AssertSingleWriterAndScheduler(t *testing.T, sources v02SourceSet, lifec
 	}
 	if !reflect.DeepEqual(seenMutations, mutationSet) {
 		t.Errorf("application mutation calls = %v, want every frozen mutation %v", v02SortedKeys(seenMutations), v02SortedKeys(mutationSet))
+	}
+	if !reflect.DeepEqual(seenPureTransitionHelpers, pureTransitionHelpers) {
+		t.Errorf("pure transition helpers used = %v, want exact allowlist %v", v02SortedKeys(seenPureTransitionHelpers), v02SortedKeys(pureTransitionHelpers))
 	}
 	if schedulerDeclarations != 1 {
 		t.Errorf("scheduler method declarations = %d, want 1", schedulerDeclarations)
@@ -596,7 +605,9 @@ func v02InspectCalls(
 	info *types.Info,
 	lifecycle v02Lifecycle,
 	mutations map[string]struct{},
+	pureTransitionHelpers map[string]struct{},
 	seen map[string]struct{},
+	seenPureTransitionHelpers map[string]struct{},
 	seenSchedulerOperations map[string]struct{},
 ) {
 	t.Helper()
@@ -604,6 +615,7 @@ func v02InspectCalls(
 		return
 	}
 	callerReceiver := v02ReceiverName(info, function)
+	callerQualified := file.PackagePath + "." + function.Name.Name
 	ast.Inspect(function.Body, func(node ast.Node) bool {
 		call, ok := node.(*ast.CallExpr)
 		if !ok {
@@ -622,7 +634,10 @@ func v02InspectCalls(
 		if receiverPackage == lifecycle.Package && receiverType == lifecycle.Type {
 			if _, mutation := mutations[method]; mutation {
 				seen[method] = struct{}{}
-				if file.PackagePath != lifecycle.WriterPackage || callerReceiver != lifecycle.WriterType {
+				_, pureTransitionHelper := pureTransitionHelpers[callerQualified]
+				if pureTransitionHelper && file.PackagePath == lifecycle.WriterPackage && callerReceiver == "" {
+					seenPureTransitionHelpers[callerQualified] = struct{}{}
+				} else if file.PackagePath != lifecycle.WriterPackage || callerReceiver != lifecycle.WriterType {
 					position := sources.FileSet.Position(selector.Pos())
 					t.Errorf("%s:%d invokes Goal.%s outside sole writer %s.%s", file.Path, position.Line, method, lifecycle.WriterPackage, lifecycle.WriterType)
 				}

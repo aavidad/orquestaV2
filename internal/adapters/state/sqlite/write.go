@@ -72,14 +72,31 @@ func insertWorkItems(
 	if start < 0 || start > len(snapshot.WorkItems) {
 		return invalid(fmt.Errorf("sqlite.work_item_start_invalid:%d", start))
 	}
+	var handoffColumns int
+	if err := transaction.QueryRowContext(ctx, `
+SELECT COUNT(*) FROM pragma_table_info('work_items') WHERE name = 'handoff_required'`,
+	).Scan(&handoffColumns); err != nil {
+		return mapDatabaseError(err)
+	}
+	if handoffColumns < 0 || handoffColumns > 1 {
+		return invalid(fmt.Errorf("sqlite.work_item_handoff_schema_invalid"))
+	}
+	handoffPersisted := handoffColumns == 1
 	for position := start; position < len(snapshot.WorkItems); position++ {
 		item := snapshot.WorkItems[position]
-		if _, err := transaction.ExecContext(ctx, `
+		if item.HandoffRequired == nil {
+			return invalid(fmt.Errorf("sqlite.work_item_handoff_required_missing:%s", item.Ref))
+		}
+		if !handoffPersisted && *item.HandoffRequired {
+			return invalid(fmt.Errorf("sqlite.work_item_handoff_schema_unsupported:%s", item.Ref))
+		}
+		query := `
 INSERT INTO work_items(
     ref, goal_ref, actor_ref, project_ref, objective, phase_key, role_key, parent_ref,
     output_contract, skip_reason, state, revision, position,
     created_at, started_at, finished_at, execution_ref
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		arguments := []any{
 			item.Ref,
 			item.GoalRef,
 			item.ActorRef,
@@ -97,7 +114,17 @@ INSERT INTO work_items(
 			storedTime(item.StartedAt),
 			storedTime(item.FinishedAt),
 			nullableString(item.ExecutionRef),
-		); err != nil {
+		}
+		if handoffPersisted {
+			query = `
+INSERT INTO work_items(
+    ref, goal_ref, actor_ref, project_ref, objective, phase_key, role_key, parent_ref,
+    output_contract, skip_reason, state, revision, position,
+    created_at, started_at, finished_at, execution_ref, handoff_required
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+			arguments = append(arguments, storedBool(*item.HandoffRequired))
+		}
+		if _, err := transaction.ExecContext(ctx, query, arguments...); err != nil {
 			return mapDatabaseError(err)
 		}
 	}
@@ -422,16 +449,18 @@ func itemSnapshot(item goal.WorkItem) goal.WorkItemSnapshot {
 	if hasParent {
 		parentValue = parent.String()
 	}
+	handoffRequired := item.HandoffRequired()
 	return goal.WorkItemSnapshot{
-		Ref:            item.Ref().String(),
-		GoalRef:        item.Goal().String(),
-		ActorRef:       item.Actor().String(),
-		ProjectRef:     item.Project().String(),
-		Objective:      item.Objective(),
-		PhaseKey:       item.Phase().String(),
-		RoleKey:        item.Role().String(),
-		ParentRef:      parentValue,
-		OutputContract: item.OutputContract().Kind(),
+		Ref:             item.Ref().String(),
+		GoalRef:         item.Goal().String(),
+		ActorRef:        item.Actor().String(),
+		ProjectRef:      item.Project().String(),
+		Objective:       item.Objective(),
+		PhaseKey:        item.Phase().String(),
+		RoleKey:         item.Role().String(),
+		ParentRef:       parentValue,
+		HandoffRequired: &handoffRequired,
+		OutputContract:  item.OutputContract().Kind(),
 		SkipReason: func() goal.WorkItemSkipReason {
 			reason, _ := item.SkipReason()
 			return reason
@@ -448,6 +477,13 @@ func itemSnapshot(item goal.WorkItem) goal.WorkItemSnapshot {
 		FinishedAt:     finishedAt,
 		ExecutionRef:   executionValue,
 	}
+}
+
+func storedBool(value bool) int64 {
+	if value {
+		return 1
+	}
+	return 0
 }
 
 func refStrings[T interface{ String() string }](refs []T) []string {

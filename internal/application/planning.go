@@ -30,17 +30,18 @@ type PhaseSpec struct {
 }
 
 type WorkItemSpec struct {
-	Key            string
-	Objective      string
-	Phase          string
-	Role           string
-	Parent         string
-	Dependencies   []string
-	WriteSet       []string
-	SkillRefs      []string
-	ToolRefs       []string
-	CapabilityRefs []string
-	OutputContract goal.OutputContractKind
+	Key             string
+	Objective       string
+	Phase           string
+	Role            string
+	Parent          string
+	HandoffRequired bool
+	Dependencies    []string
+	WriteSet        []string
+	SkillRefs       []string
+	ToolRefs        []string
+	CapabilityRefs  []string
+	OutputContract  goal.OutputContractKind
 }
 
 func (orchestrator *Orchestrator) compilePlan(
@@ -305,8 +306,9 @@ func compileWorkItemSpec(
 	return goal.NewWorkItem(goal.NewWorkItemInput{
 		Ref: ref, Goal: scope.goalRef, Actor: scope.actorRef,
 		Project: scope.projectRef, Objective: spec.Objective, CreatedAt: scope.createdAt,
-		Phase: phaseKey, Role: roleKey, Parent: parent, Dependencies: dependencies,
-		WriteSet: writeSet, SkillRefs: skillRefs, ToolRefs: toolRefs,
+		Phase: phaseKey, Role: roleKey, Parent: parent, HandoffRequired: spec.HandoffRequired,
+		Dependencies: dependencies,
+		WriteSet:     writeSet, SkillRefs: skillRefs, ToolRefs: toolRefs,
 		CapabilityRefs: capabilityRefs, OutputContract: contract,
 	})
 }
@@ -405,6 +407,7 @@ func writePlanFingerprint(digest hash.Hash, spec *PlanSpec) {
 		writeFingerprintField(digest, item.Phase)
 		writeFingerprintField(digest, item.Role)
 		writeFingerprintField(digest, item.Parent)
+		writeFingerprintField(digest, strconv.FormatBool(item.HandoffRequired))
 		writeFingerprintField(digest, string(item.OutputContract))
 		writeFingerprintStrings(digest, "dependencies", item.Dependencies)
 		writeFingerprintStrings(digest, "write_set", item.WriteSet)

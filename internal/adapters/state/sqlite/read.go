@@ -49,7 +49,7 @@ SELECT
 	(SELECT COUNT(*) FROM goals WHERE project_ref = ?),
 	(SELECT COUNT(*) FROM goals WHERE project_ref = ? AND state = 'running'),
 	(SELECT COUNT(*) FROM outbox o JOIN goals g ON g.ref = o.goal_ref
-	 WHERE g.project_ref = ? AND o.completed_at IS NULL AND o.quarantined_at IS NULL),
+	 WHERE g.project_ref = ? AND o.completed_at IS NULL AND o.retired_at IS NULL AND o.quarantined_at IS NULL),
 	(SELECT COUNT(*) FROM outbox o JOIN goals g ON g.ref = o.goal_ref
 	 WHERE g.project_ref = ? AND o.quarantined_at IS NOT NULL)`,
 		projectRef.String(), projectRef.String(), projectRef.String(), projectRef.String(),
@@ -276,6 +276,10 @@ WHERE g.ref = ?`, goalValue).Scan(
 		return application.GoalRecord{}, invalid(err)
 	}
 	snapshot.WorkItems = items
+	snapshot.ChildHandoffResolutions, err = readChildHandoffResolutions(ctx, source, goalValue)
+	if err != nil {
+		return application.GoalRecord{}, err
+	}
 	aggregate, err := goal.RestoreGoal(snapshot)
 	if err != nil {
 		return application.GoalRecord{}, invalid(err)
@@ -314,9 +318,22 @@ func readWorkItems(
 	artifactRefs map[string][]string,
 	attestationRefs map[string][]string,
 ) ([]goal.WorkItemSnapshot, error) {
+	var handoffColumns int
+	if err := source.QueryRowContext(ctx, `
+SELECT COUNT(*) FROM pragma_table_info('work_items') WHERE name = 'handoff_required'`,
+	).Scan(&handoffColumns); err != nil {
+		return nil, mapDatabaseError(err)
+	}
+	if handoffColumns < 0 || handoffColumns > 1 {
+		return nil, invalid(fmt.Errorf("sqlite.work_item_handoff_schema_invalid"))
+	}
+	handoffProjection := "0"
+	if handoffColumns == 1 {
+		handoffProjection = "handoff_required"
+	}
 	rows, err := source.QueryContext(ctx, `
 SELECT ref, goal_ref, actor_ref, project_ref, objective, state, revision,
-       phase_key, role_key, parent_ref, output_contract, skip_reason,
+       phase_key, role_key, parent_ref, `+handoffProjection+`, output_contract, skip_reason,
        created_at, started_at, finished_at, execution_ref
 FROM work_items
 WHERE goal_ref = ?
@@ -329,7 +346,7 @@ ORDER BY position`, goalValue)
 	for rows.Next() {
 		var item goal.WorkItemSnapshot
 		var state, outputContract, skipReason string
-		var revision int64
+		var revision, handoffRequired int64
 		var createdAt int64
 		var startedAt, finishedAt sql.NullInt64
 		var parentRef, executionRef sql.NullString
@@ -344,6 +361,7 @@ ORDER BY position`, goalValue)
 			&item.PhaseKey,
 			&item.RoleKey,
 			&parentRef,
+			&handoffRequired,
 			&outputContract,
 			&skipReason,
 			&createdAt,
@@ -356,6 +374,11 @@ ORDER BY position`, goalValue)
 		if revision <= 0 {
 			return nil, invalid(fmt.Errorf("sqlite.revision_invalid"))
 		}
+		if handoffRequired != 0 && handoffRequired != 1 {
+			return nil, invalid(fmt.Errorf("sqlite.work_item_handoff_required_invalid"))
+		}
+		handoff := handoffRequired == 1
+		item.HandoffRequired = &handoff
 		item.State = goal.WorkItemState(state)
 		item.OutputContract = goal.OutputContractKind(outputContract)
 		item.SkipReason = goal.WorkItemSkipReason(skipReason)
@@ -503,13 +526,22 @@ func readConsumptionReceipts(
 	source queryer,
 	goalValue string,
 ) ([]application.ActionConsumptionReceipt, error) {
-	rows, err := source.QueryContext(ctx, `
+	hasMailbox, err := sqliteTableHasColumn(ctx, source, "action_consumption_receipts", "mailbox_message_ref")
+	if err != nil {
+		return nil, mapDatabaseError(err)
+	}
+	mailboxColumn := "NULL"
+	if hasMailbox {
+		mailboxColumn = "mailbox_message_ref"
+	}
+	query := `
 SELECT action_ref, kind, goal_ref, work_item_ref, execution_ref,
-       plan_generation, work_item_generation, fence, delivery_attempt,
+       ` + mailboxColumn + `, plan_generation, work_item_generation, fence, delivery_attempt,
        claim_token, worker_ref, outcome, error_code, consumed_at
 FROM action_consumption_receipts
 WHERE goal_ref = ?
-ORDER BY consumed_at, action_ref`, goalValue)
+ORDER BY consumed_at, action_ref`
+	rows, err := source.QueryContext(ctx, query, goalValue)
 	if err != nil {
 		return nil, mapDatabaseError(err)
 	}
@@ -518,9 +550,11 @@ ORDER BY consumed_at, action_ref`, goalValue)
 	for rows.Next() {
 		var receipt application.ActionConsumptionReceipt
 		var kind, goalRefValue, workItemRefValue, executionRefValue, outcome string
+		var mailboxMessageValue sql.NullString
 		var planGeneration, itemGeneration, fence, deliveryAttempt, consumedAt int64
 		if err := rows.Scan(
 			&receipt.ActionRef, &kind, &goalRefValue, &workItemRefValue, &executionRefValue,
+			&mailboxMessageValue,
 			&planGeneration, &itemGeneration, &fence, &deliveryAttempt,
 			&receipt.ClaimToken, &receipt.WorkerRef, &outcome, &receipt.ErrorCode, &consumedAt,
 		); err != nil {
@@ -531,6 +565,12 @@ ORDER BY consumed_at, action_ref`, goalValue)
 		}
 		var refErr error
 		receipt.Kind = application.ActionKind(kind)
+		if mailboxMessageValue.Valid {
+			receipt.MailboxMessageRef, refErr = application.NewMailboxMessageRef(mailboxMessageValue.String)
+			if refErr != nil {
+				return nil, invalid(refErr)
+			}
+		}
 		if receipt.GoalRef, refErr = goal.NewGoalRef(goalRefValue); refErr != nil {
 			return nil, invalid(refErr)
 		}
@@ -547,6 +587,49 @@ ORDER BY consumed_at, action_ref`, goalValue)
 		receipt.Outcome = application.ActionConsumptionOutcome(outcome)
 		receipt.ConsumedAt = time.Unix(0, consumedAt).UTC()
 		result = append(result, receipt)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, mapDatabaseError(err)
+	}
+	return result, nil
+}
+
+func readChildHandoffResolutions(
+	ctx context.Context,
+	source queryer,
+	goalValue string,
+) ([]goal.ChildHandoffResolutionSnapshot, error) {
+	var tableExists int
+	if err := source.QueryRowContext(ctx, `
+SELECT COUNT(*) FROM sqlite_schema
+WHERE type = 'table' AND name = 'goal_child_handoff_resolutions'`).Scan(&tableExists); err != nil {
+		return nil, mapDatabaseError(err)
+	}
+	if tableExists == 0 {
+		return nil, nil
+	}
+	rows, err := source.QueryContext(ctx, `
+SELECT parent_work_item_ref, child_work_item_ref, mailbox_message_ref,
+       outcome, receipt_ref, resolved_at
+FROM goal_child_handoff_resolutions
+WHERE goal_ref = ?
+ORDER BY resolved_at, parent_work_item_ref, child_work_item_ref`, goalValue)
+	if err != nil {
+		return nil, mapDatabaseError(err)
+	}
+	defer rows.Close()
+	var result []goal.ChildHandoffResolutionSnapshot
+	for rows.Next() {
+		var resolution goal.ChildHandoffResolutionSnapshot
+		var resolvedAt int64
+		if err := rows.Scan(
+			&resolution.ParentRef, &resolution.ChildRef, &resolution.MessageRef,
+			&resolution.Outcome, &resolution.ReceiptRef, &resolvedAt,
+		); err != nil {
+			return nil, mapDatabaseError(err)
+		}
+		resolution.ResolvedAt = time.Unix(0, resolvedAt).UTC()
+		result = append(result, resolution)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, mapDatabaseError(err)

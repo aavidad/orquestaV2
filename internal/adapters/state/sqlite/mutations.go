@@ -90,6 +90,11 @@ func (repository *Repository) RecordExecutionReplaced(
 		return invalid(err)
 	}
 	return repository.mutate(ctx, state.Claim, state.OperationAt, func(transaction *sql.Tx) error {
+		if err := requireNoUnresolvedRecipientMailbox(
+			ctx, transaction, state.FailedExecution.Ref,
+		); err != nil {
+			return err
+		}
 		if err := updateGoalCAS(ctx, transaction, state.Goal, state.ExpectedGoalRevision); err != nil {
 			return err
 		}
@@ -173,6 +178,9 @@ func (repository *Repository) RecordGoalFailed(ctx context.Context, state applic
 			expectedExecutionState = application.ExecutionDispatching
 		}
 		if err := updateExecutionCAS(ctx, transaction, state.Execution, expectedExecutionState); err != nil {
+			return err
+		}
+		if err := retireFailedRecipientMailboxes(ctx, transaction, state.Execution); err != nil {
 			return err
 		}
 		if err := completeClaim(

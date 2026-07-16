@@ -2,9 +2,9 @@
 
 # Orquesta configuration registry
 
-Registry revision: `2026-07-15.11`
+Registry revision: `2026-07-16.12`
 
-Registry hash: `sha256:5b67d20f425e1883d80998ad29bd8ea4ea06e739b4c96a9f773c89f9eb175a8d`
+Registry hash: `sha256:c3da7e8c380be52f5708c4025e61164c760f698b16ff516203901d3ab77151f2`
 
 Precedence: `default < file < env`
 
@@ -51,6 +51,7 @@ Source limit: `1048576` bytes
 | `identity.oidc.upstream_timeout` | `duration` | `"10s"` | `ORQUESTA_IDENTITY_OIDC_UPSTREAM_TIMEOUT` | `true` | `positive_duration` |
 | `project.default` | `string` | `"project:default"` | `ORQUESTA_PROJECT_DEFAULT` | `true` | `opaque_ref` |
 | `director.lease_duration` | `duration` | `"2m"` | `ORQUESTA_DIRECTOR_LEASE_DURATION` | `true` | `positive_duration` |
+| `mailbox.max_envelope_bytes` | `integer` | `65536` | `ORQUESTA_MAILBOX_MAX_ENVELOPE_BYTES` | `true` | `integer_bounds` |
 | `scheduler.poll_interval` | `duration` | `"500ms"` | `ORQUESTA_SCHEDULER_POLL_INTERVAL` | `true` | `positive_duration` |
 | `scheduler.observation_interval` | `duration` | `"2s"` | `ORQUESTA_SCHEDULER_OBSERVATION_INTERVAL` | `true` | `positive_duration` |
 | `scheduler.claim_lease` | `duration` | `"2m"` | `ORQUESTA_SCHEDULER_CLAIM_LEASE` | `true` | `positive_duration` |

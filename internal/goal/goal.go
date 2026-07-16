@@ -1,6 +1,9 @@
 package goal
 
-import "time"
+import (
+	"strings"
+	"time"
+)
 
 type GoalState string
 
@@ -22,6 +25,35 @@ const (
 	GoalOutcomeFailed    GoalOutcome = "failed"
 )
 
+// ChildHandoffOutcome is the terminal causal observation required from every
+// contractual child before its parent and Goal may close successfully.
+type ChildHandoffOutcome string
+
+const (
+	ChildHandoffAcknowledged ChildHandoffOutcome = "acknowledged"
+	ChildHandoffBlocked      ChildHandoffOutcome = "blocked"
+)
+
+// ChildHandoffResolution is immutable evidence that one direct contractual
+// child has either delivered a handoff acknowledged by its exact recipient or
+// has an explicit blockage receipt. Mailbox claims and leases stay outside
+// Goal; only this closure-relevant fact belongs to the aggregate.
+type ChildHandoffResolution struct {
+	parentRef  WorkItemRef
+	childRef   WorkItemRef
+	messageRef string
+	outcome    ChildHandoffOutcome
+	receiptRef string
+	resolvedAt time.Time
+}
+
+func (resolution ChildHandoffResolution) ParentRef() WorkItemRef       { return resolution.parentRef }
+func (resolution ChildHandoffResolution) ChildRef() WorkItemRef        { return resolution.childRef }
+func (resolution ChildHandoffResolution) MessageRef() string           { return resolution.messageRef }
+func (resolution ChildHandoffResolution) Outcome() ChildHandoffOutcome { return resolution.outcome }
+func (resolution ChildHandoffResolution) ReceiptRef() string           { return resolution.receiptRef }
+func (resolution ChildHandoffResolution) ResolvedAt() time.Time        { return resolution.resolvedAt }
+
 // Goal is an immutable aggregate snapshot and the consistency boundary for its
 // WorkItems. All aggregate mutations require the caller's expected revision.
 type Goal struct {
@@ -38,6 +70,7 @@ type Goal struct {
 	phases         []PhaseInstance
 	items          map[WorkItemRef]WorkItem
 	itemOrder      []WorkItemRef
+	childHandoffs  []ChildHandoffResolution
 }
 
 func NewGoal(ref GoalRef, spec AppSpec, createdAt time.Time) (Goal, error) {
@@ -139,6 +172,10 @@ func (goal Goal) WorkItems() []WorkItem {
 		items = append(items, goal.items[ref].clone())
 	}
 	return items
+}
+
+func (goal Goal) ChildHandoffResolutions() []ChildHandoffResolution {
+	return cloneChildHandoffResolutions(goal.childHandoffs)
 }
 
 // ApplyPlan evolves a pending or running Goal monotonically. Goal revision is
@@ -326,8 +363,8 @@ func (goal Goal) ReadyWorkItems() []WorkItem {
 	return ready
 }
 
-// ChildWorkItems derives contractual children independently from dependency
-// edges. Order is the authoritative plan order.
+// ChildWorkItems derives parent lineage independently from dependency edges.
+// HandoffRequired is a separate immutable policy. Order follows the plan.
 func (goal Goal) ChildWorkItems(parent WorkItemRef) []WorkItem {
 	children := make([]WorkItem, 0)
 	for _, ref := range goal.itemOrder {
@@ -337,6 +374,69 @@ func (goal Goal) ChildWorkItems(parent WorkItemRef) []WorkItem {
 		}
 	}
 	return children
+}
+
+// ChildHandoffsResolved reports whether every direct contractual child has a
+// terminal handoff fact. A leaf is resolved; an unknown parent is not.
+func (goal Goal) ChildHandoffsResolved(parent WorkItemRef) bool {
+	if _, exists := goal.items[parent]; !exists {
+		return false
+	}
+	return goal.childHandoffsResolvedForParent(parent)
+}
+
+// ResolveChildHandoff records the only closure-relevant mailbox fact in Goal.
+// An exact replay is idempotent even when it carries the pre-write expected
+// revision; a different fact for the same parent/child pair is contradictory.
+func (goal Goal) ResolveChildHandoff(
+	expected Revision,
+	parentRef WorkItemRef,
+	childRef WorkItemRef,
+	messageRef string,
+	outcome ChildHandoffOutcome,
+	receiptRef string,
+	at time.Time,
+) (Goal, error) {
+	if !validWorkItemRef(parentRef) || !validWorkItemRef(childRef) ||
+		!validChildHandoffRecordRef(messageRef) || !validChildHandoffOutcome(outcome) ||
+		!validChildHandoffRecordRef(receiptRef) || at.IsZero() {
+		return Goal{}, domainError(ErrorChildHandoffInvalid, "child_handoff")
+	}
+	resolution := ChildHandoffResolution{
+		parentRef: parentRef, childRef: childRef, messageRef: messageRef,
+		outcome: outcome, receiptRef: receiptRef, resolvedAt: canonicalTime(at),
+	}
+	for _, existing := range goal.childHandoffs {
+		if existing.parentRef != parentRef || existing.childRef != childRef {
+			continue
+		}
+		if equalChildHandoffResolutions(existing, resolution) {
+			return goal, nil
+		}
+		return Goal{}, domainError(ErrorChildHandoffConflict, "child_handoff")
+	}
+	if err := goal.expectRevision(expected); err != nil {
+		return Goal{}, err
+	}
+	if goal.state != GoalStateRunning {
+		return Goal{}, domainError(ErrorInvalidTransition, "goal_state")
+	}
+	if _, exists := goal.items[parentRef]; !exists {
+		return Goal{}, domainError(ErrorChildHandoffInvalid, "parent_ref")
+	}
+	child, exists := goal.items[childRef]
+	if !exists || child.parent != parentRef {
+		return Goal{}, domainError(ErrorChildHandoffInvalid, "child_ref")
+	}
+	if !child.handoffRequired || child.state != WorkItemStateSucceeded ||
+		!validTransitionTime(resolution.resolvedAt, child.finishedAt) {
+		return Goal{}, domainError(ErrorChildHandoffInvalid, "resolved_at")
+	}
+
+	updated := goal.clone()
+	updated.childHandoffs = append(updated.childHandoffs, resolution)
+	updated.revision++
+	return updated, nil
 }
 
 func (goal Goal) SucceedWorkItem(
@@ -356,6 +456,9 @@ func (goal Goal) SucceedWorkItem(
 	}
 	if item.state != WorkItemStateRunning {
 		return Goal{}, domainError(ErrorInvalidTransition, "work_item_state")
+	}
+	if !goal.childHandoffsResolvedForParent(ref) {
+		return Goal{}, domainError(ErrorChildHandoffsPending, "child_handoffs")
 	}
 	item, err = item.Succeed(expectedItem, artifacts, attestations, at)
 	if err != nil {
@@ -412,6 +515,9 @@ func (goal Goal) Close(expected Revision, outcome GoalOutcome, at time.Time) (Go
 	if outcome != GoalOutcomeSucceeded && outcome != GoalOutcomeFailed {
 		return Goal{}, domainError(ErrorInvalidArgument, "goal_outcome")
 	}
+	if !goal.allChildHandoffsResolved() {
+		return Goal{}, domainError(ErrorChildHandoffsPending, "child_handoffs")
+	}
 
 	closableOutcome, closable := goal.ClosableOutcome()
 	if !closable {
@@ -449,7 +555,7 @@ func (goal Goal) Close(expected Revision, outcome GoalOutcome, at time.Time) (Go
 // ClosableOutcome derives closure eligibility without duplicating lifecycle
 // rules in application or schedulers.
 func (goal Goal) ClosableOutcome() (GoalOutcome, bool) {
-	if goal.state != GoalStateRunning || len(goal.items) == 0 {
+	if goal.state != GoalStateRunning || len(goal.items) == 0 || !goal.allChildHandoffsResolved() {
 		return "", false
 	}
 	allSucceeded := true
@@ -537,6 +643,60 @@ func (goal Goal) hasFailedDependency(item WorkItem) bool {
 	return false
 }
 
+func (goal Goal) childHandoffsResolvedForParent(parentRef WorkItemRef) bool {
+	parent, exists := goal.items[parentRef]
+	if !exists {
+		return false
+	}
+	if parent.handoffBlockedByOwnOutcome() {
+		return true
+	}
+	for _, childRef := range goal.itemOrder {
+		child := goal.items[childRef]
+		if child.parent == parentRef && child.handoffRequired && !child.handoffBlockedByOwnOutcome() &&
+			(child.state != WorkItemStateSucceeded || !goal.childHandoffResolved(parentRef, childRef)) {
+			return false
+		}
+	}
+	return true
+}
+
+func (goal Goal) allChildHandoffsResolved() bool {
+	for _, parentRef := range goal.itemOrder {
+		if !goal.childHandoffsResolvedForParent(parentRef) {
+			return false
+		}
+	}
+	return true
+}
+
+func (goal Goal) childHandoffResolved(parentRef, childRef WorkItemRef) bool {
+	for _, resolution := range goal.childHandoffs {
+		if resolution.parentRef == parentRef && resolution.childRef == childRef {
+			return true
+		}
+	}
+	return false
+}
+
+func validChildHandoffOutcome(outcome ChildHandoffOutcome) bool {
+	return outcome == ChildHandoffAcknowledged || outcome == ChildHandoffBlocked
+}
+
+func validChildHandoffRecordRef(value string) bool {
+	return value != "" && strings.TrimSpace(value) == value && !strings.ContainsRune(value, '\x00')
+}
+
+func equalChildHandoffResolutions(left, right ChildHandoffResolution) bool {
+	return left.parentRef == right.parentRef && left.childRef == right.childRef &&
+		left.messageRef == right.messageRef && left.outcome == right.outcome &&
+		left.receiptRef == right.receiptRef && left.resolvedAt.Equal(right.resolvedAt)
+}
+
+func cloneChildHandoffResolutions(resolutions []ChildHandoffResolution) []ChildHandoffResolution {
+	return append([]ChildHandoffResolution(nil), resolutions...)
+}
+
 func conflictsWithWriteSets(candidate []WriteScope, others [][]WriteScope) bool {
 	for _, other := range others {
 		if writeSetsOverlap(candidate, other) {
@@ -554,6 +714,7 @@ func (goal Goal) clone() Goal {
 	goal.items = items
 	goal.phases = clonePhases(goal.phases)
 	goal.itemOrder = append([]WorkItemRef(nil), goal.itemOrder...)
+	goal.childHandoffs = cloneChildHandoffResolutions(goal.childHandoffs)
 	return goal
 }
 

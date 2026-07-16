@@ -102,7 +102,7 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 		ExecutionRef: execution.Ref, GoalRef: record.Goal.Ref(),
 		WorkItemRef: item.Ref(), SpecHash: record.Goal.SpecHash(), ActorRef: record.Goal.Actor(),
 		ProjectRef: record.Goal.Project(), Objective: item.Objective(),
-		PlanGeneration: record.Goal.PlanGeneration(), AppSpecGeneration: record.Goal.AppSpec().Generation(),
+		PlanGeneration: execution.PlanGeneration, AppSpecGeneration: record.Goal.AppSpec().Generation(),
 		ExecutionAttempt: execution.AttemptNo,
 		PhaseRef:         phase.Ref().String(), PhaseKey: item.Phase().String(),
 		PhaseTemplateRef: phase.TemplateRef().String(),
@@ -149,7 +149,7 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 	next := ActionRecord{
 		Ref: "action:observe:" + execution.Ref.String(), Kind: ActionObserveAgent,
 		GoalRef: record.Goal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref,
-		PlanGeneration: record.Goal.PlanGeneration(), WorkItemGeneration: item.Revision(),
+		PlanGeneration: execution.PlanGeneration, WorkItemGeneration: item.Revision(),
 		AvailableAt: orchestrator.clock.Now(),
 	}
 	return orchestrator.state.RecordLaunchAccepted(ctx, LaunchAcceptedState{
@@ -242,6 +242,16 @@ func (orchestrator *Orchestrator) succeedGoal(
 	observation ports.AgentObservation,
 	transitionAt time.Time,
 ) error {
+	item, found := record.Goal.WorkItem(claim.Action.WorkItemRef)
+	if !found {
+		return &StateError{Code: StateConflict}
+	}
+	// Provider completion is not parent completion. Park the observation in
+	// the existing outbox until every contractual child has a durable terminal
+	// handoff; do not store the same artifact or consume execution attempts.
+	if !record.Goal.ChildHandoffsResolved(item.Ref()) {
+		return orchestrator.requeue(ctx, claim, execution, "application.child_handoffs_pending")
+	}
 	putRequest := ports.PutArtifactRequest{
 		MediaType: observation.MediaType, Content: observation.Content,
 	}
@@ -255,7 +265,6 @@ func (orchestrator *Orchestrator) succeedGoal(
 	if err := ports.ValidateStoredArtifact(putRequest, stored); err != nil {
 		return orchestrator.failGoalAt(ctx, claim, record, ports.ArtifactContractErrorCode(err), transitionAt)
 	}
-	item, _ := record.Goal.WorkItem(claim.Action.WorkItemRef)
 	// Artifact persistence may be slow. Lifecycle time and the repository's
 	// exclusive lease fence must observe the time after that external effect.
 	transitionAt = lifecycleTime(orchestrator.clock.Now(), record.Goal, item)
@@ -418,18 +427,22 @@ func (orchestrator *Orchestrator) replaceExecutionAttempt(
 	next := ActionRecord{
 		Ref: "action:launch:" + replacementRef.String(), Kind: ActionLaunchAgent,
 		GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: replacementRef,
-		PlanGeneration: aggregate.PlanGeneration(), WorkItemGeneration: updatedItem.Revision(),
+		PlanGeneration: replacement.PlanGeneration, WorkItemGeneration: updatedItem.Revision(),
 		AvailableAt: at.Add(executionRetryBackoff(orchestrator.observationDelay, execution.AttemptNo, orchestrator.executionTimeout)),
 	}
 	events := []EventRecord{
 		{Ref: "event:execution-failed:" + execution.Ref.String(), Kind: "execution.failed", GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref, OccurredAt: at},
 		{Ref: "event:execution-dispatching:" + replacement.Ref.String(), Kind: "execution.dispatching", GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: replacement.Ref, OccurredAt: at},
 	}
-	return orchestrator.state.RecordExecutionReplaced(ctx, ExecutionReplacedState{
+	err = orchestrator.state.RecordExecutionReplaced(ctx, ExecutionReplacedState{
 		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: item.Revision(),
 		Goal: aggregate, FailedExecution: execution, ReplacementExecution: replacement,
 		NextAction: next, Events: events, ErrorCode: execution.FailureCode, OperationAt: at,
 	})
+	if IsStateError(err, StateRecipientMailboxActive) {
+		return orchestrator.failGoalAt(ctx, claim, record, code, at)
+	}
+	return err
 }
 
 func executionRetryBackoff(base time.Duration, completedAttempt uint64, ceiling time.Duration) time.Duration {
