@@ -2,10 +2,23 @@
 
 Fecha de decisión: 2026-07-16.
 
-Estado: implementación integrada y en cierre de acreditación. Dominio,
-application, SQLite, fake, Codex, bootstrap y el E2E de controles están verdes;
-falta fijar el candidato Git, ejecutar el gate desde checkout limpio y emitir
-el receipt V3. V15 sigue cerrado.
+Estado: **V14 acreditado**. Dominio, application, SQLite, fake, Codex,
+bootstrap y los E2E de controles quedaron sellados por
+`AC-V14-CONTROLS`; `product/evidence/v14_controls.json` es receipt V3 `PASS`
+ejecutado desde checkout `detached_clean`. V15 no está abierto.
+
+Cadena autoritativa del cierre:
+
+```text
+producto P:   6dbc0d808de63973305914b002c3bc2b8a806bb0
+sellado S:    e3e7c28e669ccd7e67a8661c40333d649ab82dd5
+evidencia E:  5b97545ad14a40fd0063fc3671f6e79d9978ec09
+resultado:    PASS; 48/257 = 18,68 %; 14/34 = 41,18 %; 14/14 receipts
+```
+
+Los controles permanecen internos a aplicación/composición. Sus bindings
+HTTP/MCP/CLI siguen perteneciendo al registro único V20. La próxima sesión
+empieza analizando V15; este cierre no inicia ni programa ese vertical.
 
 ## Resultado del estudio
 
@@ -374,8 +387,8 @@ los intentos/provider replacements, `internal/application/closure_test.go` ya
 no debe exigir Goal `failed` inmediato. La última Execution conserva `failed`,
 el número máximo de intentos, sus receipts, refs, fences e idempotencia V06; el
 WorkItem queda `interrupted/execution_failed` y el Goal permanece abierto para
-replan o cancel. La prueba V06 se actualizará en el mismo candidato V14 y sus
-demás invariantes seguirán verdes. Esto es evolución versionada del contrato,
+replan o cancel. La prueba V06 quedó actualizada en el mismo candidato V14 y
+sus demás invariantes siguen verdes. Esto es evolución versionada del contrato,
 no reapertura de una Execution ni regresión encubierta.
 
 ## Contrato de aceptación ejecutable
@@ -482,7 +495,7 @@ sin otro contrato.
 
 ## Lecciones históricas convertidas en invariantes
 
-V14 acreditará únicamente el fragmento de sus capacidades en
+V14 acredita únicamente el fragmento de sus capacidades en
 `BUG-ORQ-20260705-197`, `BUG-ORQ-20260709-198`,
 `BUG-ORQ-20260710-208`, `BUG-ORQ-20260710-208C`,
 `BUG-ORQ-20260710-208S`, `BUG-ORQ-20260711-208Z`,
@@ -521,6 +534,7 @@ internal/bootstrap/** solo wiring/E2E
 docs/reconstruccion/** de estado, mapa y handoff
 ```
 
-Orden: contrato rojo → dominio/application → SQLite/fake → Codex/composición →
-contrarrevisión → sellado P/C/E → receipt reproducible. No se abre V15 hasta
-cerrar V14.
+Orden ejecutado: contrato rojo → dominio/application → SQLite/fake →
+Codex/composición → contrarrevisión → sellado P/S/E → receipt reproducible.
+V14 quedó cerrado; V15 continúa sin abrir y la próxima sesión comienza por su
+análisis, no por programación.

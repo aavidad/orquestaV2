@@ -2,8 +2,8 @@
 
 Fecha de corte: 2026-07-16
 
-Estado: mapa explicativo del corte acreditado V13 y del candidato V14. No
-gobierna el roadmap total ni sustituye los receipts estructurados.
+Estado: mapa explicativo del corte acreditado V14. No gobierna el roadmap total
+ni sustituye los receipts estructurados.
 
 [`product/capabilities.json`](../../product/capabilities.json) es el manifest
 ejecutable del corte. `status: accepted` significa que la capacidad tiene un
@@ -78,19 +78,22 @@ que V13 no expone ese opt-in en `WorkItemInput` público y que el DAG V05 cierra
 sin mailbox, requeue ni acciones pendientes mientras llegan los bindings de
 V20–V22.
 
-## V14: controles candidatos a acreditación
+## V14: controles acreditados
 
-`AC-V14-CONTROLS` tiene implementación y composición verdes, pero aún no está
-acreditado: falta fijar el commit de producto, sellar el candidato, ejecutar el
-argv exacto desde checkout `detached_clean` y emitir
-`product/evidence/v14_controls.json` como receipt V3 `PASS`. Hasta entonces el
-conteo canónico sigue en V13.
+`AC-V14-CONTROLS` está cerrado. Su argv exacto pasó desde checkout
+`detached_clean` y `product/evidence/v14_controls.json` es receipt V3 `PASS`.
 
-| IDs candidatos | Contrato candidato | Alcance exacto |
+```text
+producto P:   6dbc0d808de63973305914b002c3bc2b8a806bb0
+sellado S:    e3e7c28e669ccd7e67a8661c40333d649ab82dd5
+evidencia E:  5b97545ad14a40fd0063fc3671f6e79d9978ec09
+```
+
+| IDs acreditados | Contrato acreditado | Alcance exacto |
 |---|---|---|
 | `GOV-07`, `STG-15`, `ORC-03`, `ORC-16` | `acceptance/v14_controls_test.go`; `internal/application/control*_test.go`; `internal/adapters/state/sqlite/*control*_test.go`; `internal/bootstrap/controls_e2e_test.go` | Pause/resume, cancel, stop cooperativo/forzado, retry de Execution y replan causal sobre el mismo Goal, CAS, outbox y `StateRepository` |
 
-Garantías del candidato:
+Garantías acreditadas:
 
 - controles autenticados, idempotentes y cercados por proyecto, Goal, AppSpec,
   PlanGeneration, revisión de WorkItem, intento de Execution y fingerprint;
@@ -108,23 +111,29 @@ Garantías del candidato:
 - `TestRealCodexControlsThroughProductionComposition` recorre bootstrap
   productivo, proceso controlable, stop forzado selectivo y receipt durable,
   dejando Goal abierto, WorkItem `interrupted` y Execution `stopped`.
+- `TestRealCodexCooperativeStopLeavesResidentSchedulerLive` conserva progreso
+  del scheduler único ante `SIGTERM` ignorado y hace alcanzable la escalada
+  forzada; el replay de intent forced sin proof reintenta `SIGKILL` idempotente
+  contra la identidad exacta y converge.
 
 V14 solo añade casos de uso internos de aplicación. No añade bindings HTTP,
 MCP o CLI ni otra tool; el registro único y esos bindings son V20, y la paridad
 i18n completa es V21. Tampoco acredita presupuestos, approvals, fairness o
-retry de efectos: V15 sigue sin abrir.
+retry de efectos: V15 sigue sin abrir. La próxima sesión empieza por analizarlo,
+sin programación previa.
 
 Estado contable:
 
 ```text
-antes del receipt V14: 44/257 = 17,12 %; 13/34 = 38,24 %; 13/13 receipts
-tras receipt V3 PASS:   48/257 = 18,68 %; 14/34 = 41,18 %; 14/14 receipts
+corte histórico V13: 44/257 = 17,12 %; 13/34 = 38,24 %; 13/13 receipts
+corte vigente V14:   48/257 = 18,68 %; 14/34 = 41,18 %; 14/14 receipts
 ```
 
 ## Ejecuciones finales registradas
 
 | Fecha | Comando | Resultado | Alcance |
 |---|---|---|---|
+| 2026-07-16 | argv exacto de `AC-V14-CONTROLS`, registrado en `product/evidence/v14_controls.json` | receipt V3 `PASS`, `detached_clean`, P=`6dbc0d808de63973305914b002c3bc2b8a806bb0`, S=`e3e7c28e669ccd7e67a8661c40333d649ab82dd5`, E=`5b97545ad14a40fd0063fc3671f6e79d9978ec09` | controles internos, SQLite/recovery, fake/Codex, stop selectivo, scheduler vivo, carreras, ratchets y composición productiva V14 |
 | 2026-07-16 | argv exacto de `AC-V13-MAILBOX`, registrado en `product/evidence/v13_mailbox.json` | `PASS`, `detached_clean` | contrato mailbox, guards de arquitectura/trazabilidad y paquetes Goal, identidad, config, aplicación, puertos, SQLite, bootstrap y cmd sobre el candidato sellado |
 | 2026-07-16 | `go test -mod=vendor -v -count=1 ./internal/bootstrap -run '^TestRealCodexAdapterClosesGoalThroughProductionMCPServer$' -args -orquesta-real-codex-config=/home/alberto/Trabajo/.orquesta-rebuild-real-e2e-v13-20260716T115042/orquesta.toml` | `PASS` en `6.15s` | composición productiva, Bearer local, MCP, Codex real, SQLite y CAS sobre fuentes V13; smoke de no regresión, no contrato mailbox |
 | 2026-07-14 | `go test -mod=vendor -count=1 ./...` | `PASS` histórico; comando revocado | después se comprobó que `./...` enumera 131 paquetes y puede lanzar smokes legacy; no es gate vigente |
@@ -153,10 +162,10 @@ Los resultados de la tabla pertenecen al candidato mínimo. Para trabajo nuevo,
 la raíz valida manifest/receipt y los paquetes se enumeran de forma explícita;
 `./...` queda prohibido porque incluye superficies congeladas.
 
-El cierre V14 debe ejecutar literalmente `execution_argv` de
-`acceptance/fixtures/v14_controls.json` desde su candidato sellado. Un verde
-del worktree, incluido el E2E de composición, prepara el candidato pero no
-sustituye ese receipt.
+El cierre V14 ejecutó literalmente `execution_argv` de
+`acceptance/fixtures/v14_controls.json` desde su candidato sellado. El receipt
+V3 conserva la identidad de fuentes y el resultado reproducible; los verdes
+posteriores del worktree no lo sustituyen.
 
 Checklist reproducible:
 

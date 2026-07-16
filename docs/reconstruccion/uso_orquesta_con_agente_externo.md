@@ -5,16 +5,17 @@ Repositorio operativo: `/home/alberto/Trabajo/orquesta-rebuild`.
 
 ## Respuesta corta y alcance real
 
-Sí: el checkpoint acreditado V01-V13 ya sirve para que un Codex externo use
+Sí: el checkpoint acreditado V01-V14 ya sirve para que un Codex externo use
 Orquesta por MCP, cree un Goal con un DAG, lance uno o varios workers Codex,
 consulte su estado y recupere artefactos durables. Hay un binario productivo
 único, autenticación, autorización por proyecto, SQLite, artefactos, scheduler,
 backup/recovery y cierre cooperativo.
 
-V14 tiene un candidato interno listo para sellar. Cuando su receipt V3 resulte
-`PASS`, V01-V14 quedarán cerrados; mientras falta, el último cierre acreditado
-sigue siendo V13. En ambos casos este runbook público conserva las mismas seis
-tools: V14 no añade bindings HTTP/MCP/CLI para sus controles.
+V14 está cerrado por receipt V3 `PASS`: P=`6dbc0d808de63973305914b002c3bc2b8a806bb0`,
+S=`e3e7c28e669ccd7e67a8661c40333d649ab82dd5` y
+E=`5b97545ad14a40fd0063fc3671f6e79d9978ec09`. Este runbook público conserva
+las mismas seis tools: V14 no añade bindings HTTP/MCP/CLI para sus controles;
+estos pertenecen al registro único V20.
 
 V13 acredita el mailbox causal interno `child_delivery`, pero no añade bindings
 públicos. Este runbook no atribuye al agente externo claim, delivery, consume o
@@ -33,22 +34,18 @@ extremo a extremo y solo V34 cierra la aplicación total.
 Fuente de verdad del estado:
 
 - `product/roadmap.json`: capacidades y estados canónicos;
-- `product/evidence/v01_*.json` a `product/evidence/v13_*.json`: receipts
+- `product/evidence/v01_*.json` a `product/evidence/v14_*.json`: receipts
   reproducibles;
 - `product/evidence/v13_mailbox.json`: receipt V3 `PASS` desde checkout
   `detached_clean` sobre el candidato sellado V13;
-- `product/evidence/v14_controls.json`: solo será fuente de cierre cuando
-  exista como receipt V3 `PASS` sobre el candidato V14 sellado;
+- `product/evidence/v14_controls.json`: receipt V3 `PASS` desde checkout
+  `detached_clean` sobre el candidato V14 sellado;
 - `docs/reconstruccion/estado_y_handoff_rebuild.md`: último handoff humano.
 
-V01-V13 representan 13 de 34 verticales, 38,24 %. V13 añade `ORC-04`,
-`ORC-05` y `ORC-14`; el total acreditado queda en 44 de 257 capacidades,
-17,12 %, con 13/13 receipts válidos. V11 es una vertical transversal y no se
-apropia de IDs nuevos.
-
-Tras un receipt V3 V14 `PASS`, el total será 14/34 verticales, 41,18 %, y
-48/257 capacidades, 18,68 %, con 14/14 receipts. V14 sumará exclusivamente
-`GOV-07`, `STG-15`, `ORC-03` y `ORC-16`.
+V01-V14 representan 14 de 34 verticales, 41,18 %, y 48 de 257 capacidades,
+18,68 %, con 14/14 receipts válidos. V14 suma exclusivamente `GOV-07`,
+`STG-15`, `ORC-03` y `ORC-16`; V11 sigue siendo una vertical transversal sin
+IDs nuevos.
 
 Resumen funcional:
 
@@ -65,7 +62,7 @@ Resumen funcional:
 | V11 | proveedor neutral de identidad, `local_token` y OIDC; interoperabilidad AD mediante Dex/LDAP-LDAPS probada en entorno aislado |
 | V12 | Director neutral con claim, renew, takeover, lease/fence y propuesta causal sobre el mismo Goal/SQLite/outbox |
 | V13 | mailbox interno acreditado solo para `child_delivery` opt-in: destinatario exacto, lifecycle causal y retiro sistémico; `Parent` público permanece no contractual y sin bindings mailbox |
-| V14 candidato | controles application-only: pause/resume, cancel, stop selectivo cooperativo/forzado, retry de Execution y replan causal; solo cuenta tras receipt V3 `PASS` y no añade bindings públicos |
+| V14 | controles acreditados application-only: pause/resume, cancel, stop selectivo cooperativo/forzado, retry de Execution y replan causal; sin bindings públicos hasta V20 |
 
 V12–V14 no añaden tools públicas: Director, mailbox y controles están en
 aplicación/composición, pero la superficie MCP pública vigente sigue teniendo
@@ -427,7 +424,7 @@ succeeded no equivale a cambio integrado. Entrega refs de Goal/AppSpec,
 executions/artifacts, tests, riesgos y bloqueos.
 ```
 
-## 7. Limitaciones con el candidato V14
+## 7. Limitaciones tras V14
 
 - V13 cerrado: existe mailbox durable interno para `child_delivery`, con
   `admitted → claimed → delivered → consumed → acknowledged|blocked` y
@@ -437,13 +434,12 @@ executions/artifacts, tests, riesgos y bloqueos.
   opt-in ni permiten claim, deliver, consume o ACK. Por tanto el DAG V05
   público conserva `false` y cierra sin mailbox/requeue. Mensajes genéricos,
   sesiones reanudables y handoff entre proveedores (`ORC-15`) quedan en V27.
-- V14 candidato: los casos internos de aplicación para pause/resume, cancel,
+- V14 acreditado: los casos internos de aplicación para pause/resume, cancel,
   stop selectivo cooperativo/forzado, retry de Execution y replan causal están
-  implementados. Quedan cerrados solo con receipt V3 `PASS`. Sus bindings
-  HTTP/MCP/CLI públicos se incorporarán mediante el registro único de V20; V14
-  no añade tools ad hoc.
+  cerrados por receipt V3 `PASS`. Sus bindings HTTP/MCP/CLI públicos se
+  incorporarán mediante el registro único de V20; V14 no añade tools ad hoc.
 - V15 no está abierto: faltan presupuestos completos, fairness, riesgo y
-  effects/approvals. Solo se analizará después del sello y receipt V14.
+  effects/approvals. La próxima sesión empieza por su análisis, no por código.
 - V16: faltan workspace, worktree, aplicación de patch y receipts Git; los
   workers actuales no editan el proyecto objetivo.
 - V17-V19: faltan atestador independiente completo, autor/reviewers/refinery y
@@ -462,29 +458,26 @@ internamente, pero aún no tienen bindings en las seis tools MCP actuales.
 
 ## 8. Verificación y E2E
 
-Desde un checkout limpio, validar el último cierre acreditado V01-V13:
+Desde un checkout limpio, validar el último cierre acreditado V01-V14:
 
 ```bash
 cd /home/alberto/Trabajo/orquesta-rebuild
 go test -mod=vendor -count=1 ./acceptance \
-  -run '^TestAcceptanceV(0[1-9]|1[0-3]).*Receipt$'
+  -run '^TestAcceptanceV(0[1-9]|1[0-4]).*Receipt$'
 ```
-
-Después de emitir `product/evidence/v14_controls.json` como receipt V3 `PASS`,
-ampliar el rango a `V(0[1-9]|1[0-4])`. No hacerlo antes: un test de producto
-verde no convierte por sí mismo V14 en acreditado.
 
 Validar el E2E interno de controles mediante la composición productiva:
 
 ```bash
 go test -mod=vendor -count=1 ./internal/bootstrap \
-  -run '^TestRealCodexControlsThroughProductionComposition$'
+  -run '^(TestRealCodexControlsThroughProductionComposition|TestRealCodexCooperativeStopLeavesResidentSchedulerLive)$'
 ```
 
 Este E2E construye y arranca la composición, crea una Execution viva, solicita
 stop forzado exacto y exige control confirmado, receipt durable, Execution
-`stopped`, WorkItem `interrupted` y Goal abierto. No usa un binding público de
-control ni acredita por sí solo V14; forma parte del argv sellado del contrato.
+`stopped`, WorkItem `interrupted` y Goal abierto; el segundo demuestra progreso
+del scheduler único ante `SIGTERM` ignorado y escalada forced posterior. No
+usan binding público de control: forman parte del argv sellado ya acreditado.
 
 Validar API MCP pública, DAG y shutdown con composición aislada de test:
 

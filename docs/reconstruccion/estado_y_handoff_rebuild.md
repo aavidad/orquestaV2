@@ -1,33 +1,32 @@
 # Estado y handoff vivo del rebuild
 
-Última actualización: 2026-07-16 17:10 Europe/Madrid.
+Última actualización: 2026-07-16 18:00 Europe/Madrid.
 
 Este documento permite continuar el rebuild sin reconstruir el contexto de la
 sesión. Es estado operativo, no evidencia de aceptación. Los estados canónicos
 de capacidades, verticales y contratos viven en `product/roadmap.json`; los
 verdes viven en receipts fuera de su propio candidato.
 
-## Checkpoint vigente: V14 candidato listo; cierre sujeto al receipt V3
+## Checkpoint vigente: V14 acreditado; V15 aún no abierto
 
-La implementación V14 está integrada y contrarrevisada en el worktree de
-producto. Dominio, aplicación, puertos, fake, Codex, SQLite, bootstrap,
-recovery, carreras y el E2E de composición están verdes. Esto deja un
-**candidato listo para sellar**, no una capacidad acreditada.
-
-V01–V14 solo pueden declararse cerrados cuando se cumpla toda la cadena:
+V01–V14 están cerrados con receipts reproducibles. Dominio, aplicación,
+puertos, fake, Codex, SQLite, bootstrap, recovery, carreras y los E2E de
+composición V14 pasaron el argv contractual desde checkout `detached_clean`.
+La cadena autoritativa es:
 
 ```text
-producto P -> candidato sellado C -> checkout detached_clean
-           -> argv exacto AC-V14-CONTROLS -> receipt V3 PASS E
+producto P:   6dbc0d808de63973305914b002c3bc2b8a806bb0
+sellado S:    e3e7c28e669ccd7e67a8661c40333d649ab82dd5
+evidencia E:  5b97545ad14a40fd0063fc3671f6e79d9978ec09
+contrato:     AC-V14-CONTROLS
+receipt:      product/evidence/v14_controls.json; V3 PASS; detached_clean
 ```
 
-Hasta que exista ese receipt, el último corte canónico sigue siendo V13:
-44/257 capacidades, 17,12 %, 13/34 verticales, 38,24 %, y 13/13 receipts
-válidos. Si el receipt V3 V14 resulta `PASS`, el cierre pasa exactamente a
-48/257 capacidades, 18,68 %, 14/34 verticales, 41,18 %, y 14/14 receipts
-válidos. Los cuatro IDs nuevos serán `GOV-07`, `STG-15`, `ORC-03` y `ORC-16`.
+El corte canónico queda en **48/257 capacidades, 18,68 %; 14/34 verticales,
+41,18 %; 14/14 receipts válidos**. V14 acredita exclusivamente `GOV-07`,
+`STG-15`, `ORC-03` y `ORC-16`.
 
-Resultado funcional candidato V14:
+Resultado funcional acreditado V14:
 
 - `Control` es el único caso de uso autenticado para `pause`, `resume`,
   `cancel`, `stop` y `retry`; `ProposeDirectorPlan` sigue siendo la única
@@ -55,12 +54,19 @@ Resultado funcional candidato V14:
   exige receipt confirmado, Execution `stopped`, WorkItem `interrupted` y Goal
   aún abierto. Las suites A/B/C/D comprueban además que parar B preserva A/C/D
   antes y después de crash/restart;
+- `TestRealCodexCooperativeStopLeavesResidentSchedulerLive` prueba que un
+  proceso que ignora `SIGTERM` no bloquea el scheduler único: otro Goal progresa
+  y el stop forzado posterior queda alcanzable. Codex reintenta `SIGKILL`
+  idempotente tras crash entre intent durable y syscall, siempre contra la
+  identidad exacta del proceso;
 - V14 queda interno a aplicación/composición. No añade bindings HTTP, MCP o CLI
   ni tools ad hoc: el registro único y esas superficies pertenecen a V20; i18n
   total pertenece a V21.
 
 V15 no está abierto. Presupuestos, fairness, riesgo, approvals y retry de
 efectos externos siguen íntegramente diferidos a `AC-V15-BUDGETS-EFFECTS`.
+La próxima sesión empieza por analizar y fijar ese contrato; no debe comenzar
+programando ni abrir V16.
 
 ## Checkpoint histórico: V13 cerrado
 
@@ -462,8 +468,7 @@ git diff --check
 scripts/check_rebuild_write_set.sh
 ```
 
-Solo después de emitir el receipt V3 V14, el rango de receipts pasa a
-`V(0[1-9]|1[0-4])`.
+El rango vigente de receipts acreditados es `V(0[1-9]|1[0-4])`.
 
 ## Progreso honesto
 
@@ -496,34 +501,28 @@ Solo después de emitir el receipt V3 V14, el rango de receipts pasa a
   exactamente `ORC-04`, `ORC-05` y `ORC-14`. La compatibilidad productiva V05
   queda verde; el handoff sigue opt-in interno. `ORC-15` permanece en V27 y
   los bindings públicos en V20–V22.
-- V14 controles: candidato de producto integrado y contrarrevisado; acredita
-  `GOV-07`, `STG-15`, `ORC-03` y `ORC-16` únicamente si el gate sellado emite
-  receipt V3 `PASS`. Es application-only; no expone HTTP/MCP/CLI.
+- V14 controles: cerrado; receipt V3 `PASS`; acredita exactamente `GOV-07`,
+  `STG-15`, `ORC-03` y `ORC-16`. Es application-only; no expone HTTP/MCP/CLI,
+  cuyos bindings siguen en V20.
 - V15–V34: pendientes. V15 no está abierto. No contar código heredado,
   groundwork o una prueba aislada como vertical posterior cerrada.
-- progreso canónico mientras falta el receipt V14: 13 de 34, 38,24 %, con
-  13/13 receipts válidos; tras `PASS`: 14 de 34, 41,18 %, con 14/14;
-- capacidades canónicas mientras falta el receipt V14: 44 de 257 en estado
-  `accredited`, 17,12 %; tras `PASS`: 48 de 257, 18,68 %, al sumar solo
-  `GOV-07`, `STG-15`, `ORC-03` y `ORC-16`. Las 44 ya acreditadas son:
+- progreso canónico: 14 de 34, 41,18 %, con 14/14 receipts válidos;
+- capacidades canónicas: 48 de 257 en estado `accredited`, 18,68 %, al sumar
+  solo `GOV-07`, `STG-15`, `ORC-03` y `ORC-16`. Las 48 acreditadas son:
   `EVD-02`, `EVD-11`, `EVD-12`, `EVD-15`, `GOV-02`, `GOV-03`, `GOV-04`, `GOV-05`,
-  `GOV-06`, `GOV-08`, `GOV-09`, `GOV-10`, `GOV-16`, `GOV-19`, `GOV-20`,
+  `GOV-06`, `GOV-07`, `GOV-08`, `GOV-09`, `GOV-10`, `GOV-16`, `GOV-19`, `GOV-20`,
   `GOV-21`, `GOV-22`, `OPS-01`, `OPS-02`, `OPS-03`, `OPS-04`,
   `OPS-05`, `OPS-06`, `OPS-08`, `OPS-09`, `OPS-10`, `OPS-12`, `OPS-14`, `OPS-26`,
-  `OPS-27`, `OPS-28`, `OPS-29`, `OPS-30`, `ORC-01`, `ORC-02`, `ORC-04`,
+  `OPS-27`, `OPS-28`, `OPS-29`, `OPS-30`, `ORC-01`, `ORC-02`, `ORC-03`, `ORC-04`,
   `ORC-05`, `ORC-06`, `ORC-12`, `ORC-13`, `ORC-14`, `ORC-17`, `ORC-24` y
-  `STG-00`.
+  `ORC-16`, `STG-00` y `STG-15`.
 
 ## Siguiente acción exacta
 
-Cerrar exclusivamente la cadena V14: fijar el commit de producto, sellar el
-candidato, ejecutar el argv exacto desde checkout detached limpio y emitir el
-receipt V3. Si no es `PASS`, V14 continúa abierto y los contadores no cambian.
-
-Solo después del sello y receipt V3 `PASS`, abrir una tarea de **análisis V15**:
-dependencias, presupuesto de complejidad y contrato rojo
-`AC-V15-BUDGETS-EFFECTS`. No programar V15 antes de ese estudio ni abrir V16 u
-otro frente.
+La próxima sesión empieza por una tarea de **análisis V15**: dependencias,
+presupuesto de complejidad, autoridad de presupuestos/permisos/efectos y
+contrato rojo `AC-V15-BUDGETS-EFFECTS`. V15 todavía no está abierto: no
+programarlo antes de ese estudio ni abrir V16 u otro frente.
 
 Los subagentes directos siguen siendo bootstrap hasta V22. Hoy Orquesta puede
 coordinar un DAG declarado; una petición abierta aún necesita dirección externa.
@@ -532,7 +531,7 @@ coordinar un DAG declarado; una petición abierta aún necesita dirección exter
 
 Las palabras “pendiente”, “siguiente” o “en curso” dentro del historial
 describen checkpoints pasados. No son órdenes de reanudación. La acción vigente
-es sellar y acreditar V14; después, analizar V15 sin programarlo todavía.
+es analizar V15 sin programarlo todavía.
 
 ## V03: trabajo ya realizado
 

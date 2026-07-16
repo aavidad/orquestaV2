@@ -199,25 +199,26 @@ Nota de evidencia V13: un E2E Codex real que recorra composición, MCP, SQLite
 y CAS pero no active `HandoffRequired` sirve como gate de no regresión. No
 sustituye `AC-V13-MAILBOX` ni acredita mailbox o bindings públicos.
 
-Corte vigente 2026-07-16: V13 sigue siendo el último cierre acreditado por
-receipt V3. V14 tiene candidato de producto integrado y E2E de composición
-verde, pero solo contará tras sellarlo, ejecutar `AC-V14-CONTROLS` desde
-checkout `detached_clean` y emitir receipt V3 `PASS`.
+Corte vigente 2026-07-16: V14 está acreditado por receipt V3 `PASS` tras
+ejecutar `AC-V14-CONTROLS` desde checkout `detached_clean`.
 
 ```text
-canónico mientras falta V14: 44/257 = 17,12 %; 13/34 = 38,24 %; 13/13 receipts
-estado tras V14 PASS:         48/257 = 18,68 %; 14/34 = 41,18 %; 14/14 receipts
+producto P:   6dbc0d808de63973305914b002c3bc2b8a806bb0
+sellado S:    e3e7c28e669ccd7e67a8661c40333d649ab82dd5
+evidencia E:  5b97545ad14a40fd0063fc3671f6e79d9978ec09
+estado:       48/257 = 18,68 %; 14/34 = 41,18 %; 14/14 receipts
 ```
 
-El receipt V14 acreditará únicamente `GOV-07`, `STG-15`, `ORC-03` y `ORC-16`.
+El receipt V14 acredita únicamente `GOV-07`, `STG-15`, `ORC-03` y `ORC-16`.
 Sus controles son casos de uso internos de aplicación y composición; no existen
-bindings
-HTTP/MCP/CLI hasta el registro único V20, ni paridad i18n total hasta V21. El
+bindings HTTP/MCP/CLI hasta el registro único V20, ni paridad i18n total hasta V21. El
 E2E de composición prueba stop forzado selectivo, receipt confirmado y
 lifecycle `Execution stopped`/`WorkItem interrupted` sin cerrar el Goal; las
-suites causales cubren también A/B/C/D, restart, retry, cancel y replan.
-V15 no está abierto. Tras el sello y receipt V14, la única siguiente acción es
-analizar V15 y fijar `AC-V15-BUDGETS-EFFECTS` antes de programarlo.
+suites causales cubren también A/B/C/D, restart, retry, cancel y replan. Otro
+E2E confirma que un stop cooperativo pendiente no bloquea el scheduler único y
+que el forced posterior converge.
+V15 no está abierto. La próxima sesión empieza analizándolo y fijando
+`AC-V15-BUDGETS-EFFECTS` antes de cualquier programación.
 
 ## 6. Olas y transición a auto-orquestación
 
@@ -226,7 +227,7 @@ Ejemplos de paralelismo seguro:
 
 - V07 y contratos iniciales de V10 pueden avanzar tras V06 con write-sets
   separados; V08 consume la salida canónica de V07.
-- V15 solo se abre después del receipt V3 `PASS` de V14, empezando por análisis
+- V15 no está abierto en este corte. La próxima sesión empieza por su análisis
   y contrato rojo; V16 no se adelanta sobre ese write-set causal.
 - V17, adapters iniciales de V21 y catálogos i18n pueden desarrollarse en ramas
   separadas, pero solo integran con sus dependencias acreditadas.
