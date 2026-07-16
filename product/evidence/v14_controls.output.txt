@@ -1,0 +1,17 @@
+ok  	orquesta	0.138s
+ok  	orquesta/acceptance	1.320s
+ok  	orquesta/internal/goal	0.008s
+ok  	orquesta/internal/identity	0.003s
+ok  	orquesta/internal/config	0.328s
+ok  	orquesta/internal/credentials	0.006s
+ok  	orquesta/internal/application	0.023s
+ok  	orquesta/internal/ports	0.009s
+ok  	orquesta/internal/adapters/agent/fake	0.007s
+ok  	orquesta/internal/adapters/agent/codex	1.165s
+ok  	orquesta/internal/adapters/state/sqlite	12.106s
+ok  	orquesta/internal/bootstrap	1.859s
+ok  	orquesta/cmd/orquesta	0.003s
+ok  	orquesta/internal/application	1.025s
+ok  	orquesta/internal/adapters/state/sqlite	12.796s
+ok  	orquesta/internal/adapters/agent/codex	3.040s
+ok  	orquesta/internal/bootstrap	7.692s
