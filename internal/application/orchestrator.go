@@ -26,6 +26,7 @@ type Dependencies struct {
 	MaxExecutionAttempts    uint64
 	ClaimLease              time.Duration
 	DirectorLeaseDuration   time.Duration
+	EffectApprovalTTL       time.Duration
 	ObservationDelay        time.Duration
 	ExecutionTimeout        time.Duration
 	AgentCapabilities       ports.AgentCapabilities
@@ -45,6 +46,7 @@ type Orchestrator struct {
 	maxExecutionAttempts    uint64
 	claimLease              time.Duration
 	directorLeaseDuration   time.Duration
+	effectApprovalTTL       time.Duration
 	observationDelay        time.Duration
 	executionTimeout        time.Duration
 	agentCapabilities       ports.AgentCapabilities
@@ -101,6 +103,7 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 		maxExecutionAttempts:    dependencies.MaxExecutionAttempts,
 		claimLease:              dependencies.ClaimLease,
 		directorLeaseDuration:   dependencies.DirectorLeaseDuration,
+		effectApprovalTTL:       dependencies.EffectApprovalTTL,
 		observationDelay:        dependencies.ObservationDelay,
 		executionTimeout:        dependencies.ExecutionTimeout,
 		agentCapabilities:       cloneAgentCapabilities(dependencies.AgentCapabilities),

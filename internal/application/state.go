@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
 	"orquesta/internal/identity"
 	"orquesta/internal/ports"
 )
@@ -135,18 +136,20 @@ type ActionRecord struct {
 	WorkItemRef        goal.WorkItemRef
 	ExecutionRef       goal.ExecutionRef
 	ControlRef         string
+	EffectIntentRef    string
 	PlanGeneration     goal.PlanGeneration
 	WorkItemGeneration goal.Revision
 	AvailableAt        time.Time
 }
 
 type ActionClaim struct {
-	Action          ActionRecord
-	Token           string
-	WorkerRef       string
-	DeliveryAttempt uint64
-	Fence           uint64
-	LeaseUntil      time.Time
+	Action               ActionRecord
+	Token                string
+	WorkerRef            string
+	DeliveryAttempt      uint64
+	Fence                uint64
+	BudgetReservationRef string
+	LeaseUntil           time.Time
 }
 
 type ClaimRequest struct {
@@ -198,6 +201,12 @@ type GoalRecord struct {
 	Artifacts           []ArtifactRecord
 	Attestations        []AttestationRecord
 	Controls            []ControlRecord
+	BudgetEnvelopes     []governance.BudgetEnvelope
+	BudgetReservations  []governance.BudgetReservation
+	EffectIntents       []EffectIntent
+	EffectApprovals     []EffectApproval
+	EffectAttempts      []EffectAttempt
+	EffectReceipts      []EffectReceipt
 	ConsumptionReceipts []ActionConsumptionReceipt
 }
 
@@ -349,6 +358,7 @@ type GoalFailedState struct {
 // trusted transaction clock immediately before commit. OperationAt is causal
 // lifecycle data and must never be accepted as proof that a lease is still live.
 type StateRepository interface {
+	GovernanceRepository
 	CreateGoal(context.Context, CreateGoalState) (GoalRecord, bool, error)
 	AmendGoal(context.Context, AmendGoalState) (GoalRecord, bool, error)
 	GetGoal(context.Context, goal.GoalRef) (GoalRecord, error)
