@@ -602,7 +602,7 @@ func (agent *dagAgent) Launch(ctx context.Context, request ports.AgentLaunchRequ
 		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash, ProviderRef: "provider:dag-test",
 		ModelRef: "model:dag-test", AgentRef: "agent:dag-test",
 		ExternalRef: "external:" + request.ExecutionRef.String(), IdempotencyKey: request.IdempotencyKey,
-		AcceptedAt: agent.clock.Now(),
+		ReceiptRef: "dag-launch:" + request.ExecutionRef.String(), AcceptedAt: agent.clock.Now(),
 	}
 	agent.requests[request.ExecutionRef] = request
 	agent.receipts[request.ExecutionRef] = receipt
@@ -628,12 +628,12 @@ func (agent *dagAgent) Observe(ctx context.Context, executionRef goal.ExecutionR
 	if agent.failures[request.Objective] {
 		return ports.AgentObservation{
 			ExecutionRef: executionRef, SpecHash: request.SpecHash, Status: ports.AgentFailed,
-			ErrorCode: "dag_agent.failed", ObservedAt: agent.clock.Now(),
+			ErrorCode: "dag_agent.failed", Usage: unknownTestUsage(), ObservedAt: agent.clock.Now(),
 		}, nil
 	}
 	return ports.AgentObservation{
 		ExecutionRef: executionRef, SpecHash: request.SpecHash, Status: ports.AgentCompleted, MediaType: request.ArtifactMediaType,
-		Content: []byte("artifact:" + executionRef.String()), ObservedAt: agent.clock.Now(),
+		Content: []byte("artifact:" + executionRef.String()), Usage: unknownTestUsage(), ObservedAt: agent.clock.Now(),
 	}, nil
 }
 

@@ -17,6 +17,7 @@ import (
 	"orquesta/internal/application"
 	"orquesta/internal/config"
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
 	"orquesta/internal/ports"
 )
 
@@ -140,6 +141,7 @@ func (agent *countingAgent) Launch(ctx context.Context, request ports.AgentLaunc
 		ProviderRef: "provider:test", ModelRef: "model:test", AgentRef: "agent:test",
 		ExternalRef:    "test:" + request.ExecutionRef.String(),
 		IdempotencyKey: request.IdempotencyKey, AcceptedAt: agent.now(),
+		ReceiptRef: "test-launch:" + request.ExecutionRef.String(),
 	}, nil
 }
 
@@ -161,7 +163,7 @@ func (agent *countingAgent) Observe(ctx context.Context, executionRef goal.Execu
 	return ports.AgentObservation{
 		ExecutionRef: executionRef, SpecHash: request.SpecHash, Status: ports.AgentCompleted,
 		MediaType: "text/plain", Content: append([]byte(nil), content...),
-		ObservedAt: agent.now(),
+		Usage: unknownTestUsage(), ObservedAt: agent.now(),
 	}, nil
 }
 
@@ -303,13 +305,23 @@ func (agent *processAgent) receipt(request ports.AgentLaunchRequest) ports.Agent
 		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash,
 		ProviderRef: "provider:process-test", ModelRef: "model:process-test", AgentRef: "agent:process-test",
 		ExternalRef: "pid-owned", IdempotencyKey: request.IdempotencyKey, AcceptedAt: agent.now(),
+		ReceiptRef: "process-launch:" + request.ExecutionRef.String(),
 	}
 }
 
 func (agent *processAgent) Observe(context.Context, goal.ExecutionRef) (ports.AgentObservation, error) {
 	return ports.AgentObservation{
-		ExecutionRef: agent.execution, SpecHash: agent.request.SpecHash, Status: ports.AgentRunning, ObservedAt: agent.now(),
+		ExecutionRef: agent.execution, SpecHash: agent.request.SpecHash, Status: ports.AgentRunning,
+		Usage: unknownTestUsage(), ObservedAt: agent.now(),
 	}, nil
+}
+
+func testBudgetDemand(ref string) governance.BudgetDemand {
+	return governance.BudgetDemand{Ref: "budget-demand:" + ref}
+}
+
+func unknownTestUsage() governance.ResourceUsage {
+	return governance.ResourceUsage{Quality: governance.UsageQualityUnknown}
 }
 
 func (agent *processAgent) Shutdown(ctx context.Context) error {

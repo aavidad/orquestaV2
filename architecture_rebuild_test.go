@@ -86,6 +86,16 @@ func TestRebuildArchitecture(t *testing.T) {
 		}
 	})
 
+	t.Run("governance_is_shared_inward_domain", func(t *testing.T) {
+		for _, file := range rebuildArchitectureFilesUnder(files, "internal/governance") {
+			for _, imported := range file.imports {
+				if reason := rebuildArchitectureOnlyInternalPackages(imported.path, "orquesta/internal/governance"); reason != "" {
+					rebuildArchitectureImportError(t, file, imported, "internal/governance "+reason)
+				}
+			}
+		}
+	})
+
 	t.Run("application_has_no_delivery_or_concrete_runtime_dependencies", func(t *testing.T) {
 		for _, file := range rebuildArchitectureFilesUnder(files, "internal/application") {
 			for _, imported := range file.imports {
@@ -96,13 +106,21 @@ func TestRebuildArchitecture(t *testing.T) {
 		}
 	})
 
-	t.Run("ports_and_identity_depend_only_inward", func(t *testing.T) {
-		for _, root := range []string{"internal/ports", "internal/identity"} {
-			for _, file := range rebuildArchitectureFilesUnder(files, root) {
-				for _, imported := range file.imports {
-					if reason := rebuildArchitectureOnlyInternalPackages(imported.path, "orquesta/internal/goal"); reason != "" {
-						rebuildArchitectureImportError(t, file, imported, root+" "+reason)
-					}
+	t.Run("ports_depend_only_inward", func(t *testing.T) {
+		for _, file := range rebuildArchitectureFilesUnder(files, "internal/ports") {
+			for _, imported := range file.imports {
+				if reason := rebuildArchitectureOnlyInternalPackages(imported.path, "orquesta/internal/goal", "orquesta/internal/governance"); reason != "" {
+					rebuildArchitectureImportError(t, file, imported, "internal/ports "+reason)
+				}
+			}
+		}
+	})
+
+	t.Run("identity_depends_only_inward", func(t *testing.T) {
+		for _, file := range rebuildArchitectureFilesUnder(files, "internal/identity") {
+			for _, imported := range file.imports {
+				if reason := rebuildArchitectureOnlyInternalPackages(imported.path, "orquesta/internal/goal"); reason != "" {
+					rebuildArchitectureImportError(t, file, imported, "internal/identity "+reason)
 				}
 			}
 		}
@@ -114,6 +132,7 @@ func TestRebuildArchitecture(t *testing.T) {
 				"orquesta/internal/application",
 				"orquesta/internal/credentials",
 				"orquesta/internal/goal",
+				"orquesta/internal/governance",
 				"orquesta/internal/identity",
 				"orquesta/internal/ports",
 			}
@@ -542,8 +561,10 @@ func rebuildArchitectureGoalImportReason(importPath string) string {
 	if layer := rebuildArchitectureForbiddenInternalLayer(importPath, "adapter", "adapters", "interface", "interfaces", "bootstrap"); layer != "" {
 		return "internal/goal must not depend on internal/" + layer
 	}
-	if strings.HasPrefix(importPath, "orquesta/internal/") && importPath != "orquesta/internal/goal" {
-		return "internal/goal must not depend on another internal package"
+	if strings.HasPrefix(importPath, "orquesta/internal/") &&
+		importPath != "orquesta/internal/goal" &&
+		importPath != "orquesta/internal/governance" {
+		return "internal/goal may depend only on internal/governance"
 	}
 	switch {
 	case importPath == "database/sql":
@@ -569,9 +590,10 @@ func rebuildArchitectureApplicationImportReason(importPath string) string {
 	}
 	if strings.HasPrefix(importPath, "orquesta/internal/") &&
 		importPath != "orquesta/internal/goal" &&
+		importPath != "orquesta/internal/governance" &&
 		importPath != "orquesta/internal/identity" &&
 		importPath != "orquesta/internal/ports" {
-		return "internal/application may depend only on internal/goal, internal/identity and internal/ports"
+		return "internal/application may depend only on internal/goal, internal/governance, internal/identity and internal/ports"
 	}
 	switch {
 	case importPath == "net/http" || strings.HasPrefix(importPath, "net/http/"):

@@ -430,6 +430,27 @@ func (*memoryState) DirectorReplay(
 	return application.DirectorReplayRecord{}, false, nil
 }
 
+func (*memoryState) EffectReplay(
+	context.Context,
+	application.EffectReplayRequest,
+) (application.EffectApproval, bool, error) {
+	return application.EffectApproval{}, false, nil
+}
+
+func (*memoryState) DecideEffect(
+	context.Context,
+	application.DecideEffectState,
+) (application.EffectApproval, bool, error) {
+	return application.EffectApproval{}, false, errors.New("test_state.effect_unsupported")
+}
+
+func (*memoryState) RecordEffectAttempt(
+	context.Context,
+	application.RecordEffectAttemptState,
+) (application.EffectAttempt, bool, error) {
+	return application.EffectAttempt{}, false, errors.New("test_state.effect_unsupported")
+}
+
 func (*memoryState) ClaimDirector(
 	context.Context,
 	application.ClaimDirectorState,
@@ -726,10 +747,21 @@ func (state *memoryState) failGoal(t *testing.T, goalRef goal.GoalRef, code stri
 }
 
 func cloneGoalRecord(record application.GoalRecord) application.GoalRecord {
-	record.Executions = append([]application.ExecutionRecord(nil), record.Executions...)
-	record.Artifacts = append([]application.ArtifactRecord(nil), record.Artifacts...)
-	record.Attestations = append([]application.AttestationRecord(nil), record.Attestations...)
+	record.Executions = cloneSlice(record.Executions)
+	record.Artifacts = cloneSlice(record.Artifacts)
+	record.Attestations = cloneSlice(record.Attestations)
+	record.BudgetEnvelopes = cloneSlice(record.BudgetEnvelopes)
+	record.BudgetReservations = cloneSlice(record.BudgetReservations)
+	record.EffectIntents = cloneSlice(record.EffectIntents)
+	record.EffectApprovals = cloneSlice(record.EffectApprovals)
+	record.EffectAttempts = cloneSlice(record.EffectAttempts)
+	record.EffectReceipts = cloneSlice(record.EffectReceipts)
+	record.ConsumptionReceipts = cloneSlice(record.ConsumptionReceipts)
 	return record
+}
+
+func cloneSlice[T any](values []T) []T {
+	return append([]T(nil), values...)
 }
 
 func (state *memoryState) counts() (goals int, requests int, successors int, pendingActions int64) {

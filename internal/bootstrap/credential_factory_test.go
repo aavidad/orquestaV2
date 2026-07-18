@@ -24,6 +24,7 @@ import (
 	localruntime "orquesta/internal/adapters/system/local"
 	"orquesta/internal/credentials"
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
 	"orquesta/internal/ports"
 )
 
@@ -340,6 +341,8 @@ func bootstrapCredentialAgentRequest(t *testing.T, suffix, objective string) por
 		CapabilityRefs: []string{"capability:patch"}, WriteSet: []string{"internal/bootstrap"},
 		OutputContract: string(goal.OutputContractEvidenceBundle), ArtifactMediaType: "text/plain",
 		IdempotencyKey: "launch:" + suffix, MaxOutputBytes: 1024,
+		BudgetDemand: testBudgetDemand(suffix), SecurityCriticality: governance.SecurityCriticalityNormal,
+		ReasoningEffort: governance.ReasoningEffortMedium,
 	}
 }
 
