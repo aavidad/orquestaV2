@@ -524,6 +524,7 @@ func (adapter *Adapter) observationForState(executionRef goal.ExecutionRef, stat
 		ExecutionRef: executionRef,
 		SpecHash:     state.receipt.SpecHash,
 		Status:       state.status,
+		Usage:        unknownCodexUsage(),
 		ObservedAt:   observedAt.UTC(),
 	}, nil
 }

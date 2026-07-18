@@ -119,13 +119,16 @@ func TestCodexSelectiveStopAdoptsAfterCrashAndRejectsReusedPID(t *testing.T) {
 		if err != nil || receipt.Status != ports.AgentStopped {
 			t.Fatalf("Stop(recovered forced intent) = %+v, %v", receipt, err)
 		}
+		if receipt.ReceiptRef == "" {
+			t.Fatal("forced stop receipt ref missing")
+		}
 		_ = command.Wait()
 		assertProcessGoneWithESRCH(t, grandchild)
 		if _, found, err := reopened.loadStopSignalProof(runPath, requestHash, stop); err != nil || !found {
 			t.Fatalf("forced replay proof found=%v err=%v", found, err)
 		}
 		replay, err := reopened.Stop(context.Background(), stop)
-		if err != nil || replay != receipt {
+		if err != nil || replay != receipt || replay.ReceiptRef != receipt.ReceiptRef {
 			t.Fatalf("forced replay receipt = %+v, %v; want %+v", replay, err, receipt)
 		}
 	})

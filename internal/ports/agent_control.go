@@ -172,7 +172,7 @@ func ValidateAgentStopReceipt(request AgentStopRequest, receipt AgentStopReceipt
 
 	switch receipt.Status {
 	case AgentStopped, AgentStopAlreadyStopped, AgentStopAlreadyCompleted, AgentStopAlreadyFailed:
-		if strings.TrimSpace(receipt.ReceiptRef) == "" {
+		if !validAgentReceiptRef(receipt.ReceiptRef) {
 			return stopReceiptError("receipt_ref_required")
 		}
 		if receipt.ConfirmedAt.IsZero() {

@@ -9,6 +9,7 @@ import (
 
 	"orquesta/internal/application"
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
 	"orquesta/internal/ports"
 )
 
@@ -23,6 +24,7 @@ type Config struct {
 	Content             []byte
 	Now                 func() time.Time
 	ControlCapabilities *ports.AgentControlCapabilities
+	Usage               governance.ResourceUsage
 }
 
 type Adapter struct {
@@ -41,8 +43,12 @@ type run struct {
 }
 
 func New(config Config) (*Adapter, error) {
+	if config.Usage == (governance.ResourceUsage{}) {
+		config.Usage = governance.ResourceUsage{Quality: governance.UsageQualityUnknown}
+	}
 	if config.MediaType == "" || len(config.Content) == 0 || config.Now == nil ||
-		ports.ValidateAgentCapabilities(agentCapabilities(config.ProviderRef)) != nil {
+		ports.ValidateAgentCapabilities(agentCapabilities(config.ProviderRef)) != nil ||
+		governance.ValidateResourceUsage(config.Usage) != nil {
 		return nil, errors.New("fake_agent.config_invalid")
 	}
 	controls := ports.AgentControlCapabilities{CooperativeStop: true, ForcedStop: true}
@@ -99,6 +105,7 @@ func (adapter *Adapter) Launch(ctx context.Context, request ports.AgentLaunchReq
 		AgentRef:          AgentRef,
 		ExternalRef:       "fake:" + request.ExecutionRef.String(),
 		IdempotencyKey:    request.IdempotencyKey,
+		ReceiptRef:        fakeReceiptRef("launch", request.ExecutionRef, request.IdempotencyKey),
 		AcceptedAt:        adapter.config.Now(),
 	}
 	if err := ports.ValidateAgentLaunchReceipt(request, receipt); err != nil {
@@ -135,6 +142,7 @@ func (adapter *Adapter) Observe(ctx context.Context, executionRef goal.Execution
 		Status:       ports.AgentCompleted,
 		MediaType:    adapter.config.MediaType,
 		Content:      content,
+		Usage:        adapter.config.Usage,
 		ObservedAt:   adapter.config.Now(),
 	}, nil
 }

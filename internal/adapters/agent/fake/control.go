@@ -84,7 +84,7 @@ func (adapter *Adapter) newStopReceipt(request ports.AgentStopRequest, status po
 	}
 	if status == ports.AgentStopped || status == ports.AgentStopAlreadyStopped ||
 		status == ports.AgentStopAlreadyCompleted || status == ports.AgentStopAlreadyFailed {
-		receipt.ReceiptRef = "fake-stop:" + request.ExecutionRef.String() + ":" + request.IdempotencyKey
+		receipt.ReceiptRef = fakeReceiptRef("stop", request.ExecutionRef, request.IdempotencyKey)
 		receipt.ConfirmedAt = adapter.config.Now()
 	}
 	return receipt

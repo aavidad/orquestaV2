@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
 	"orquesta/internal/ports"
 )
 
@@ -57,6 +58,9 @@ func TestAdapterSuccessfulExecutionUsesHardenedCommandAndPrivateTerminal(t *test
 	if receipt.SpecHash != request.SpecHash {
 		t.Fatalf("receipt spec hash = %q, want %q", receipt.SpecHash, request.SpecHash)
 	}
+	if receipt.ReceiptRef == "" {
+		t.Fatal("launch receipt ref missing")
+	}
 	if receipt.GoalRef != request.GoalRef || receipt.WorkItemRef != request.WorkItemRef ||
 		receipt.PlanGeneration != request.PlanGeneration || receipt.AppSpecGeneration != request.AppSpecGeneration ||
 		receipt.ExecutionAttempt != request.ExecutionAttempt || receipt.ModelRef != DefaultModelRef || receipt.AgentRef != AgentRef {
@@ -74,6 +78,9 @@ func TestAdapterSuccessfulExecutionUsesHardenedCommandAndPrivateTerminal(t *test
 	}
 	if observation.SpecHash != request.SpecHash {
 		t.Fatalf("observation spec hash = %q, want %q", observation.SpecHash, request.SpecHash)
+	}
+	if observation.Usage != unknownCodexUsage() {
+		t.Fatalf("Codex invented usage: %+v", observation.Usage)
 	}
 
 	runDirectory := filepath.Join(config.WorkRoot, filepath.FromSlash(executionPath(request.ExecutionRef)))
@@ -144,6 +151,9 @@ func TestAdapterLaunchIsIdempotentAcrossRestart(t *testing.T) {
 	}
 	if firstReceipt != secondReceipt {
 		t.Fatalf("receipt changed after restart: first=%+v second=%+v", firstReceipt, secondReceipt)
+	}
+	if firstReceipt.ReceiptRef == "" || firstReceipt.ReceiptRef != secondReceipt.ReceiptRef {
+		t.Fatalf("receipt ref changed after restart: first=%q second=%q", firstReceipt.ReceiptRef, secondReceipt.ReceiptRef)
 	}
 	observation := awaitTerminal(t, second, request.ExecutionRef)
 	if observation.Status != ports.AgentCompleted || string(observation.Content) != "artifact:success" {
@@ -683,6 +693,14 @@ func testRequest(t *testing.T, suffix, objective string, maxOutput int64) ports.
 		ArtifactMediaType:  "text/markdown",
 		IdempotencyKey:     "launch:" + suffix,
 		MaxOutputBytes:     maxOutput,
+		BudgetDemand: governance.BudgetDemand{
+			Ref: "demand:" + suffix, Resources: governance.ResourceVector{
+				Tokens: 100_000, ActiveTimeNS: int64(5 * time.Second), ProcessSlots: 1,
+				DiskBytes: maxOutput,
+			},
+		},
+		SecurityCriticality: governance.SecurityCriticalityNormal,
+		ReasoningEffort:     governance.ReasoningEffortMedium,
 	}
 }
 

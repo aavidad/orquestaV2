@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
 )
 
 func validAgentLaunchRequest(t *testing.T) AgentLaunchRequest {
@@ -39,6 +40,13 @@ func validAgentLaunchRequest(t *testing.T) AgentLaunchRequest {
 		ArtifactMediaType:  "text/markdown",
 		IdempotencyKey:     "launch:1",
 		MaxOutputBytes:     1024,
+		BudgetDemand: governance.BudgetDemand{
+			Ref: "demand:work:1", Resources: governance.ResourceVector{
+				Tokens: 1_000, ActiveTimeNS: int64(time.Minute), ProcessSlots: 1, DiskBytes: 1024,
+			},
+		},
+		SecurityCriticality: governance.SecurityCriticalityNormal,
+		ReasoningEffort:     governance.ReasoningEffortMedium,
 	}
 }
 
@@ -56,6 +64,7 @@ func validAgentLaunchReceipt(request AgentLaunchRequest) AgentLaunchReceipt {
 		AgentRef:          "agent:fake",
 		ExternalRef:       "external:1",
 		IdempotencyKey:    request.IdempotencyKey,
+		ReceiptRef:        "receipt:launch:1",
 		AcceptedAt:        time.Unix(10, 0).UTC(),
 	}
 }
@@ -181,6 +190,7 @@ func TestAgentContractAcceptsCausalLaunchAndTerminalObservation(t *testing.T) {
 		Status:       AgentCompleted,
 		MediaType:    "text/markdown",
 		Content:      []byte("artifact"),
+		Usage:        governance.ResourceUsage{Quality: governance.UsageQualityUnknown},
 		ObservedAt:   time.Unix(11, 0).UTC(),
 	}
 	if err := ValidateAgentObservation(observation, request.MaxOutputBytes); err != nil {
@@ -202,6 +212,7 @@ func TestAgentContractRejectsIdentityMismatchAndFalseTerminalState(t *testing.T)
 		SpecHash:     request.SpecHash,
 		Status:       AgentCompleted,
 		ErrorCode:    "provider.failed",
+		Usage:        governance.ResourceUsage{Quality: governance.UsageQualityUnknown},
 		ObservedAt:   time.Unix(11, 0).UTC(),
 	}
 	if code := AgentContractErrorCode(ValidateAgentObservation(observation, request.MaxOutputBytes)); code == "" {
@@ -221,6 +232,7 @@ func TestAgentContractRejectsReceiptSpecHashMismatchAndInvalidObservationHash(t 
 		ExecutionRef: request.ExecutionRef,
 		SpecHash:     "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
 		Status:       AgentRunning,
+		Usage:        governance.ResourceUsage{Quality: governance.UsageQualityUnknown},
 		ObservedAt:   time.Unix(11, 0).UTC(),
 	}
 	if code := AgentContractErrorCode(ValidateAgentObservation(observation, request.MaxOutputBytes)); code != "agent.observation_spec_hash_invalid" {
@@ -324,9 +336,46 @@ func TestAgentContractCapsOutputBeforeApplication(t *testing.T) {
 		Status:       AgentCompleted,
 		MediaType:    "text/plain",
 		Content:      make([]byte, request.MaxOutputBytes+1),
+		Usage:        governance.ResourceUsage{Quality: governance.UsageQualityUnknown},
 		ObservedAt:   time.Unix(11, 0).UTC(),
 	}
 	if code := AgentContractErrorCode(ValidateAgentObservation(observation, request.MaxOutputBytes)); code != "agent.observation_output_too_large" {
 		t.Fatalf("output cap error code = %q", code)
+	}
+}
+
+func TestAgentContractValidatesBudgetRiskEffortAndUsageWithoutInference(t *testing.T) {
+	request := validAgentLaunchRequest(t)
+	mutations := map[string]func(*AgentLaunchRequest){
+		"budget": func(value *AgentLaunchRequest) { value.BudgetDemand.Resources.Tokens = -1 },
+		"criticality": func(value *AgentLaunchRequest) {
+			value.SecurityCriticality = governance.SecurityCriticality("inferred")
+		},
+		"effort": func(value *AgentLaunchRequest) { value.ReasoningEffort = governance.ReasoningEffort("auto") },
+	}
+	for name, mutate := range mutations {
+		t.Run(name, func(t *testing.T) {
+			candidate := request
+			mutate(&candidate)
+			if AgentContractErrorCode(ValidateAgentLaunchRequest(candidate)) == "" {
+				t.Fatal("invalid governance metadata accepted")
+			}
+		})
+	}
+
+	receipt := validAgentLaunchReceipt(request)
+	receipt.ReceiptRef = ""
+	if code := AgentContractErrorCode(ValidateAgentLaunchReceipt(request, receipt)); code != "agent.receipt_ref_required" {
+		t.Fatalf("missing receipt ref code = %q", code)
+	}
+	observation := AgentObservation{
+		ExecutionRef: request.ExecutionRef, SpecHash: request.SpecHash, Status: AgentRunning,
+		Usage: governance.ResourceUsage{
+			Resources: governance.ResourceVector{Tokens: 1}, Quality: governance.UsageQualityUnknown,
+		},
+		ObservedAt: time.Unix(11, 0).UTC(),
+	}
+	if code := AgentContractErrorCode(ValidateAgentObservation(observation, request.MaxOutputBytes)); code != "agent.observation_usage_invalid" {
+		t.Fatalf("invalid usage code = %q", code)
 	}
 }

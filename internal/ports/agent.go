@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
 )
 
 type AgentStatus string
@@ -39,30 +40,33 @@ type AgentRequirements struct {
 }
 
 type AgentLaunchRequest struct {
-	ExecutionRef       goal.ExecutionRef
-	GoalRef            goal.GoalRef
-	WorkItemRef        goal.WorkItemRef
-	PlanGeneration     goal.PlanGeneration
-	AppSpecGeneration  goal.AppSpecGeneration
-	ExecutionAttempt   uint64
-	SpecHash           string
-	ActorRef           goal.ActorRef
-	ProjectRef         goal.ProjectRef
-	Objective          string
-	PhaseRef           string
-	PhaseKey           string
-	PhaseTemplateRef   string
-	PhaseInputRefs     []string
-	PhaseCriterionRefs []string
-	RoleKey            string
-	SkillRefs          []string
-	ToolRefs           []string
-	CapabilityRefs     []string
-	WriteSet           []string
-	OutputContract     string
-	ArtifactMediaType  string
-	IdempotencyKey     string
-	MaxOutputBytes     int64
+	ExecutionRef        goal.ExecutionRef
+	GoalRef             goal.GoalRef
+	WorkItemRef         goal.WorkItemRef
+	PlanGeneration      goal.PlanGeneration
+	AppSpecGeneration   goal.AppSpecGeneration
+	ExecutionAttempt    uint64
+	SpecHash            string
+	ActorRef            goal.ActorRef
+	ProjectRef          goal.ProjectRef
+	Objective           string
+	PhaseRef            string
+	PhaseKey            string
+	PhaseTemplateRef    string
+	PhaseInputRefs      []string
+	PhaseCriterionRefs  []string
+	RoleKey             string
+	SkillRefs           []string
+	ToolRefs            []string
+	CapabilityRefs      []string
+	WriteSet            []string
+	OutputContract      string
+	ArtifactMediaType   string
+	IdempotencyKey      string
+	MaxOutputBytes      int64
+	BudgetDemand        governance.BudgetDemand
+	SecurityCriticality governance.SecurityCriticality
+	ReasoningEffort     governance.ReasoningEffort
 }
 
 type AgentLaunchReceipt struct {
@@ -78,6 +82,7 @@ type AgentLaunchReceipt struct {
 	AgentRef          string
 	ExternalRef       string
 	IdempotencyKey    string
+	ReceiptRef        string
 	AcceptedAt        time.Time
 }
 
@@ -88,6 +93,7 @@ type AgentObservation struct {
 	MediaType    string
 	Content      []byte
 	ErrorCode    string
+	Usage        governance.ResourceUsage
 	ObservedAt   time.Time
 }
 
@@ -200,7 +206,7 @@ func ValidateAgentLaunchRequest(request AgentLaunchRequest) error {
 	case request.MaxOutputBytes <= 0:
 		return &AgentContractError{Code: "agent.max_output_bytes_invalid"}
 	default:
-		return nil
+		return validateAgentGovernanceRequest(request)
 	}
 }
 
@@ -374,6 +380,9 @@ func ValidateAgentLaunchReceipt(request AgentLaunchRequest, receipt AgentLaunchR
 	if receipt.IdempotencyKey != request.IdempotencyKey {
 		return &AgentContractError{Code: "agent.receipt_idempotency_mismatch"}
 	}
+	if !validAgentReceiptRef(receipt.ReceiptRef) {
+		return &AgentContractError{Code: "agent.receipt_ref_required"}
+	}
 	if !validAgentIdentityRef(receipt.ProviderRef) {
 		return &AgentContractError{Code: "agent.receipt_provider_ref_required"}
 	}
@@ -407,6 +416,9 @@ func ValidateAgentObservation(observation AgentObservation, maxOutputBytes int64
 	}
 	if int64(len(observation.Content)) > maxOutputBytes {
 		return &AgentContractError{Code: "agent.observation_output_too_large"}
+	}
+	if governance.ValidateResourceUsage(observation.Usage) != nil {
+		return &AgentContractError{Code: "agent.observation_usage_invalid"}
 	}
 	switch observation.Status {
 	case AgentPending, AgentRunning:

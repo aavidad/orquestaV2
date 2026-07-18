@@ -417,6 +417,7 @@ func (record launchRecord) receipt(executionRef goal.ExecutionRef) (ports.AgentL
 		AgentRef:          record.AgentRef,
 		ExternalRef:       record.ExternalRef,
 		IdempotencyKey:    record.IdempotencyKey,
+		ReceiptRef:        launchReceiptRef(record.RequestHash),
 		AcceptedAt:        record.AcceptedAt,
 	}
 	request := ports.AgentLaunchRequest{
@@ -452,6 +453,7 @@ func (adapter *Adapter) observationReceipt(record launchRecord, executionRef goa
 		AgentRef:       AgentRef,
 		ExternalRef:    record.ExternalRef,
 		IdempotencyKey: record.IdempotencyKey,
+		ReceiptRef:     launchReceiptRef(record.RequestHash),
 		AcceptedAt:     record.AcceptedAt,
 	}, nil
 }
@@ -503,8 +505,13 @@ func (terminal terminalRecord) observation(executionRef goal.ExecutionRef, specH
 		MediaType:    terminal.MediaType,
 		Content:      append([]byte(nil), []byte(terminal.Artifact)...),
 		ErrorCode:    terminal.ErrorCode,
+		Usage:        unknownCodexUsage(),
 		ObservedAt:   terminal.ObservedAt,
 	}
+}
+
+func launchReceiptRef(requestHash string) string {
+	return "codex-launch:" + requestHash
 }
 
 func (adapter *Adapter) ensurePrivateDirectory(directory string) error {

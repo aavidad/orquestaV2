@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
 	"orquesta/internal/ports"
 )
 
@@ -46,6 +47,9 @@ func TestAdapterLaunchIsIdempotentAndObservable(t *testing.T) {
 	if first.SpecHash != request.SpecHash {
 		t.Fatalf("receipt spec hash = %q, want %q", first.SpecHash, request.SpecHash)
 	}
+	if first.ReceiptRef == "" || first.ReceiptRef != second.ReceiptRef {
+		t.Fatalf("unstable launch receipt ref: first=%q second=%q", first.ReceiptRef, second.ReceiptRef)
+	}
 	if err := ports.ValidateAgentLaunchReceipt(request, first); err != nil {
 		t.Fatalf("receipt contract error = %v", err)
 	}
@@ -68,6 +72,9 @@ func TestAdapterLaunchIsIdempotentAndObservable(t *testing.T) {
 	}
 	if observation.SpecHash != request.SpecHash {
 		t.Fatalf("observation spec hash = %q, want %q", observation.SpecHash, request.SpecHash)
+	}
+	if observation.Usage.Quality != governance.UsageQualityUnknown || observation.Usage.Known != 0 {
+		t.Fatalf("fake invented usage: %+v", observation.Usage)
 	}
 }
 
@@ -100,5 +107,12 @@ func validRequest(t *testing.T) ports.AgentLaunchRequest {
 		ArtifactMediaType:  "text/markdown",
 		IdempotencyKey:     "launch:fake",
 		MaxOutputBytes:     1024,
+		BudgetDemand: governance.BudgetDemand{
+			Ref: "demand:fake", Resources: governance.ResourceVector{
+				Tokens: 1_000, ActiveTimeNS: int64(time.Minute), ProcessSlots: 1, DiskBytes: 1024,
+			},
+		},
+		SecurityCriticality: governance.SecurityCriticalityNormal,
+		ReasoningEffort:     governance.ReasoningEffortMedium,
 	}
 }

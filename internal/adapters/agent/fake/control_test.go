@@ -62,6 +62,9 @@ func TestFakeStopIsSelectiveAndIdempotent(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(first, second) || first.Status != ports.AgentStopped {
 		t.Fatalf("idempotent Stop() = %+v/%+v, %v", first, second, err)
 	}
+	if first.ReceiptRef == "" || first.ReceiptRef != second.ReceiptRef {
+		t.Fatalf("unstable stop receipt ref: first=%q second=%q", first.ReceiptRef, second.ReceiptRef)
+	}
 	if _, err := adapter.Observe(context.Background(), a.ExecutionRef); err != nil {
 		t.Fatalf("sibling execution was affected: %v", err)
 	}
