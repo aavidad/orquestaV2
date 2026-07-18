@@ -1368,6 +1368,107 @@ func roadmapV14Assertions() []string {
 	}
 }
 
+func TestProductRoadmapV15ScopeAndPreparedContract(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+	verticals := make(map[string]roadmapVertical, len(roadmap.Verticals))
+	entries := make(map[string]roadmapEntry, len(roadmap.CapabilityEntries))
+	contracts := make(map[string]roadmapAcceptanceContract, len(roadmap.AcceptanceContracts))
+	var owned []string
+	for _, vertical := range roadmap.Verticals {
+		verticals[vertical.ID] = vertical
+	}
+	for _, entry := range roadmap.CapabilityEntries {
+		entries[entry.ID] = entry
+		if entry.OwnerContext == "budgets_effects" && entry.Decision == "accept" {
+			owned = append(owned, entry.ID)
+		}
+	}
+	for _, contract := range roadmap.AcceptanceContracts {
+		contracts[contract.ID] = contract
+	}
+	sort.Strings(owned)
+	wantOwned := []string{"EVD-03", "EVD-14", "GOV-15", "ORC-08", "ORC-09", "ORC-10", "ORC-11", "STG-09"}
+	if !reflect.DeepEqual(owned, wantOwned) {
+		t.Fatalf("V15 accepted ownership = %v, want exact %v", owned, wantOwned)
+	}
+	wantVertical := verticals["budgets_effects"]
+	for _, id := range wantOwned {
+		entry := entries[id]
+		if entry.Status != "declared" || len(entry.EvidenceRefs) != 0 ||
+			!reflect.DeepEqual(entry.Dependencies, wantVertical.DependsOn) ||
+			!reflect.DeepEqual(entry.AcceptanceContracts, wantVertical.AcceptanceContracts) {
+			t.Errorf("V15 capability %s must remain declared without evidence during contract preparation: %#v", id, entry)
+		}
+	}
+
+	const wantCommand = "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'"
+	contract := contracts["AC-V15-BUDGETS-EFFECTS"]
+	if contract.Status != "planned" || contract.TestRef != "planned:acceptance/v15_budgets_effects_test.go" ||
+		contract.Fixture != "planned:fixtures/v15_budgets_effects" || contract.Receipt != "" ||
+		contract.Command != wantCommand || !reflect.DeepEqual(contract.Assertions, roadmapV15Assertions()) {
+		t.Fatalf("invalid V15 prepared contract: %#v", contract)
+	}
+	for _, id := range []string{"AC-V16-WORKSPACE-GIT", "AC-V20-COMMAND-REGISTRY", "AC-V31-POSTGRES-S3-MULTIHOST"} {
+		if deferred := contracts[id]; deferred.Status != "planned" || deferred.Receipt != "" {
+			t.Fatalf("V15 contract preparation prematurely opens deferred contract %s: %#v", id, deferred)
+		}
+	}
+}
+
+func TestV15EvidenceBelongsOnlyToBudgetsEffectsCapabilities(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+	owned := map[string]bool{
+		"GOV-15": true, "STG-09": true, "ORC-08": true, "ORC-09": true,
+		"ORC-10": true, "ORC-11": true, "EVD-03": true, "EVD-14": true,
+	}
+	v15Evidence := map[string]bool{
+		"acceptance/v15_budgets_effects_test.go":          true,
+		"acceptance/fixtures/v15_budgets_effects.json":    true,
+		"product/evidence/v15_budgets_effects.json":       true,
+		"product/evidence/v15_budgets_effects.output.txt": true,
+	}
+	for _, entry := range roadmap.CapabilityEntries {
+		if owned[entry.ID] {
+			if entry.Status != "declared" || len(entry.EvidenceRefs) != 0 {
+				t.Errorf("owned V15 capability %s has premature accreditation: status=%q evidence=%v",
+					entry.ID, entry.Status, entry.EvidenceRefs)
+			}
+			continue
+		}
+		for _, evidenceRef := range entry.EvidenceRefs {
+			if v15Evidence[evidenceRef] {
+				t.Errorf("unowned capability %s claims V15 evidence %q", entry.ID, evidenceRef)
+			}
+		}
+	}
+}
+
+func roadmapV15Assertions() []string {
+	return []string{
+		"GOV-15 STG-09 ORC-08 ORC-09 ORC-10 ORC-11 EVD-03 and EVD-14 are the exact accepted V15 ownership; every other capability and V16 workspace Git collaboration remain deferred",
+		"BudgetEnvelope BudgetDemand BudgetReservation BudgetSettlement EffectIntent EffectApproval EffectAttempt and EffectReceipt are distinct typed causal facts and neither an admission ACK nor agent text proves reserved capacity approval attempt or external effect",
+		"budget dimensions are typed nonnegative tokens money in minor units wall time process slots and disk bytes with explicit deployment project and Goal scopes; every reservation is charged atomically against all applicable finite envelopes",
+		"a Director plan declares WorkItem decomposition dependencies write sets typed budget demand model effort security criticality and intended effects, while authenticated application policy remains the only authority that validates and persists them",
+		"concurrent reservations through the single StateRepository transaction never exceed any envelope and exact request replay returns the original reservation without double charging",
+		"settlement records observed usage releases only unused reserved capacity never mints capacity and is idempotent across concurrent completion crash restart backup and restore",
+		"temporary capacity or provider quota defers eligible work with a durable retry frontier and never marks its Goal WorkItem Execution or effect terminal failed merely because capacity is currently unavailable",
+		"fair scheduling across projects and Goals is deterministic and bounded under contention so an eligible nonexhausted contender cannot starve while exhausted or temporarily limited contenders remain durably deferred",
+		"the Codex composition exposes canonical configurable defaults of 70 parent executions per scheduler cycle and at most 6 direct children per parent, effective configuration reports both values, and restart preserves them",
+		"the neutral core has no provider-named or hidden global concurrency cap; only explicit envelopes configured limits and observed provider runtime or OS limits may reduce dispatch and every reduction is visible as quota evidence rather than silent truncation",
+		"security criticality and model reasoning effort are independent typed axes, all valid combinations survive plan persistence, and risk policy uses declared metadata rather than keyword rails or provider-specific heuristics",
+		"permission risk budget and approval checks bind the exact authenticated principal project Goal generation WorkItem Execution effect kind target scope payload digest cost envelope revision request ref and idempotency key before an EffectAttempt can be claimed",
+		"EffectIntent admission is not approval; approval and denial are immutable explicit decisions with approver authority policy revision expiry and exact scope, and stale revoked denied mismatched or absent approval produces zero adapter calls",
+		"agent launch reserves its declared demand before launch preparation and exact cooperative or forced stop remains an authorized safety effect with its own intent attempt and receipt while never degrading to global Shutdown",
+		"all agent launch stop and future external effects use the existing application writer single outbox action scheduler claim lease fence and StateRepository rather than a BudgetStore EffectDB private queue second scheduler goroutine daemon or provider policy",
+		"an EffectAttempt is persisted before adapter invocation and its terminal EffectReceipt is persisted separately with exact intent approval attempt idempotency outcome and observed usage while receipts expose no credential secret prompt environment argv or local process identity",
+		"a crash before or after adapter invocation retries only through the same effect idempotency key and fenced attempt; replay or reconciliation converges on one immutable EffectReceipt and never performs the external effect twice",
+		"V15 preserves the V02 single Goal writer V05 DAG V06 atomic outbox V07 canonical configuration V08 credentials V09 recovery V10 RBAC V12 Director lease V13 mailbox and V14 controls without another lifecycle state authority scheduler store database or command surface",
+		"V15 exposes application and neutral port contracts only; workspace Git forge artifacts reviews council HTTP MCP CLI web provider parity deploy notifications PostgreSQL S3 and multihost remain owned by their later verticals",
+	}
+}
+
 func TestV04AccreditsOnlyGOV02AndPreservesGOV01Deferred(t *testing.T) {
 	var roadmap roadmapDocument
 	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
