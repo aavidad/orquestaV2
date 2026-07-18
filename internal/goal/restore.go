@@ -3,6 +3,8 @@ package goal
 import (
 	"strings"
 	"time"
+
+	"orquesta/internal/governance"
 )
 
 // RestoreIntentManifest validates persisted data and recomputes its hash.
@@ -84,10 +86,12 @@ func RestoreAppSpec(snapshot AppSpecSnapshot) (AppSpec, error) {
 	return spec, nil
 }
 
-// RestoreGoal accepts only the current complete schema. Adapters own durable
-// migrations before data reaches the domain.
+// RestoreGoal accepts the current complete schema and the immediately previous
+// schema whose WorkItems predate immutable governance metadata. Every emitted
+// snapshot uses the current schema, so compatibility is one-way and bounded.
 func RestoreGoal(snapshot GoalSnapshot) (Goal, error) {
-	if snapshot.SchemaVersion != GoalSnapshotSchemaVersion {
+	if snapshot.SchemaVersion != GoalSnapshotSchemaVersion &&
+		snapshot.SchemaVersion != governanceCompatibleSnapshotSchemaVersion {
 		return Goal{}, domainError(ErrorSnapshotInvalid, "schema_version")
 	}
 	spec, err := RestoreAppSpec(snapshot.AppSpec)
@@ -142,7 +146,7 @@ func RestoreGoal(snapshot GoalSnapshot) (Goal, error) {
 		itemOrder: make([]WorkItemRef, 0, len(snapshot.WorkItems)),
 	}
 	for _, itemSnapshot := range snapshot.WorkItems {
-		item, restoreErr := restoreWorkItem(itemSnapshot)
+		item, restoreErr := restoreWorkItem(itemSnapshot, snapshot.SchemaVersion)
 		if restoreErr != nil {
 			return Goal{}, restoreErr
 		}
@@ -181,7 +185,7 @@ func RestoreGoal(snapshot GoalSnapshot) (Goal, error) {
 	return restored, nil
 }
 
-func restoreWorkItem(snapshot WorkItemSnapshot) (WorkItem, error) {
+func restoreWorkItem(snapshot WorkItemSnapshot, schemaVersion uint32) (WorkItem, error) {
 	ref, err := NewWorkItemRef(snapshot.Ref)
 	if err != nil {
 		return WorkItem{}, err
@@ -247,6 +251,10 @@ func restoreWorkItem(snapshot WorkItemSnapshot) (WorkItem, error) {
 	if err != nil {
 		return WorkItem{}, err
 	}
+	budgetDemand, criticality, effort, err := restoreWorkItemGovernance(snapshot, schemaVersion, ref)
+	if err != nil {
+		return WorkItem{}, err
+	}
 	execution, err := restoreExecutionRef(snapshot.ExecutionRef)
 	if err != nil {
 		return WorkItem{}, err
@@ -271,6 +279,7 @@ func restoreWorkItem(snapshot WorkItemSnapshot) (WorkItem, error) {
 		dependencies: dependencies, writeSet: writeSet,
 		skillRefs: skillRefs, toolRefs: toolRefs, capabilityRefs: capabilityRefs,
 		outputContract: outputContract, skipReason: snapshot.SkipReason,
+		budgetDemand: budgetDemand, securityCriticality: criticality, reasoningEffort: effort,
 		interruptCause: snapshot.InterruptCause, reworkOf: reworkOf,
 		state: snapshot.State, revision: snapshot.Revision,
 		paused: snapshot.Paused, cancelRequested: snapshot.CancelRequested,
@@ -288,6 +297,31 @@ func restoreWorkItem(snapshot WorkItemSnapshot) (WorkItem, error) {
 		return WorkItem{}, err
 	}
 	return restored, nil
+}
+
+func restoreWorkItemGovernance(
+	snapshot WorkItemSnapshot,
+	schemaVersion uint32,
+	ref WorkItemRef,
+) (governance.BudgetDemand, governance.SecurityCriticality, governance.ReasoningEffort, error) {
+	if schemaVersion == governanceCompatibleSnapshotSchemaVersion {
+		if snapshot.BudgetDemand != (governance.BudgetDemand{}) || snapshot.SecurityCriticality != "" ||
+			snapshot.ReasoningEffort != "" {
+			return governance.BudgetDemand{}, "", "", domainError(ErrorSnapshotInvalid, "work_item_governance_schema")
+		}
+		return governance.BudgetDemand{Ref: "budget-demand:" + ref.String()},
+			governance.SecurityCriticalityNormal, governance.ReasoningEffortMedium, nil
+	}
+	if governance.ValidateBudgetDemand(snapshot.BudgetDemand) != nil {
+		return governance.BudgetDemand{}, "", "", domainError(ErrorSnapshotInvalid, "budget_demand")
+	}
+	if governance.ValidateSecurityCriticality(snapshot.SecurityCriticality) != nil {
+		return governance.BudgetDemand{}, "", "", domainError(ErrorSnapshotInvalid, "security_criticality")
+	}
+	if governance.ValidateReasoningEffort(snapshot.ReasoningEffort) != nil {
+		return governance.BudgetDemand{}, "", "", domainError(ErrorSnapshotInvalid, "reasoning_effort")
+	}
+	return snapshot.BudgetDemand, snapshot.SecurityCriticality, snapshot.ReasoningEffort, nil
 }
 
 func validateRestoredWorkItem(item WorkItem) error {

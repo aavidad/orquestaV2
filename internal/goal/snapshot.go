@@ -1,8 +1,13 @@
 package goal
 
-import "time"
+import (
+	"time"
 
-const GoalSnapshotSchemaVersion uint32 = 5
+	"orquesta/internal/governance"
+)
+
+const GoalSnapshotSchemaVersion uint32 = 6
+const governanceCompatibleSnapshotSchemaVersion uint32 = 5
 
 // IntentManifestSnapshot is a persistence-neutral representation. Primitive
 // ref values keep adapters independent from domain internals.
@@ -41,36 +46,39 @@ type PhaseInstanceSnapshot struct {
 // WorkItemSnapshot is the complete immutable state required to rehydrate a
 // WorkItem as part of its Goal aggregate.
 type WorkItemSnapshot struct {
-	Ref             string
-	GoalRef         string
-	ActorRef        string
-	ProjectRef      string
-	Objective       string
-	PhaseKey        string
-	RoleKey         string
-	ParentRef       string
-	HandoffRequired *bool
-	DependencyRefs  []string
-	WriteSet        []string
-	SkillRefs       []string
-	ToolRefs        []string
-	CapabilityRefs  []string
-	OutputContract  OutputContractKind
-	SkipReason      WorkItemSkipReason
-	InterruptCause  WorkItemInterruptCause
-	ReworkOf        string
-	State           WorkItemState
-	Revision        Revision
-	Paused          bool
-	CancelRequested bool
-	ControlSequence uint64
-	CreatedAt       time.Time
-	StartedAt       time.Time
-	InterruptedAt   time.Time
-	FinishedAt      time.Time
-	ExecutionRef    string
-	ArtifactRefs    []string
-	AttestationRefs []string
+	Ref                 string
+	GoalRef             string
+	ActorRef            string
+	ProjectRef          string
+	Objective           string
+	PhaseKey            string
+	RoleKey             string
+	ParentRef           string
+	HandoffRequired     *bool
+	DependencyRefs      []string
+	WriteSet            []string
+	SkillRefs           []string
+	ToolRefs            []string
+	CapabilityRefs      []string
+	OutputContract      OutputContractKind
+	BudgetDemand        governance.BudgetDemand
+	SecurityCriticality governance.SecurityCriticality
+	ReasoningEffort     governance.ReasoningEffort
+	SkipReason          WorkItemSkipReason
+	InterruptCause      WorkItemInterruptCause
+	ReworkOf            string
+	State               WorkItemState
+	Revision            Revision
+	Paused              bool
+	CancelRequested     bool
+	ControlSequence     uint64
+	CreatedAt           time.Time
+	StartedAt           time.Time
+	InterruptedAt       time.Time
+	FinishedAt          time.Time
+	ExecutionRef        string
+	ArtifactRefs        []string
+	AttestationRefs     []string
 }
 
 // ChildHandoffResolutionSnapshot persists only the closure-relevant fact.
@@ -222,6 +230,8 @@ func snapshotWorkItem(item WorkItem) WorkItemSnapshot {
 		ToolRefs:        stringsFromRefs(item.toolRefs),
 		CapabilityRefs:  stringsFromRefs(item.capabilityRefs),
 		OutputContract:  item.outputContract.kind,
+		BudgetDemand:    item.budgetDemand, SecurityCriticality: item.securityCriticality,
+		ReasoningEffort: item.reasoningEffort,
 		SkipReason:      item.skipReason,
 		InterruptCause:  item.interruptCause,
 		ReworkOf:        item.reworkOf.String(),

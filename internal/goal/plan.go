@@ -4,6 +4,8 @@ import (
 	"math"
 	"path"
 	"strings"
+
+	"orquesta/internal/governance"
 )
 
 // PlanGeneration is the optimistic version of the plan embedded in a Goal.
@@ -217,6 +219,7 @@ func validatePlanShape(plan Plan, requirePendingItems bool) error {
 	}
 
 	byRef := make(map[WorkItemRef]WorkItem, len(plan.items))
+	demandRefs := make(map[string]struct{}, len(plan.items))
 	for _, item := range plan.items {
 		if !validWorkItemRef(item.ref) {
 			return domainError(ErrorInvalidRef, "work_item_ref")
@@ -243,6 +246,10 @@ func validatePlanShape(plan Plan, requirePendingItems bool) error {
 		if err := validateWorkItemPlanMetadata(item); err != nil {
 			return err
 		}
+		if _, duplicate := demandRefs[item.budgetDemand.Ref]; duplicate {
+			return domainError(ErrorInvalidPlan, "duplicate_budget_demand_ref")
+		}
+		demandRefs[item.budgetDemand.Ref] = struct{}{}
 		if !requirePendingItems && item.state != WorkItemStatePending {
 			if err := validateRestoredWorkItem(item); err != nil {
 				return err
@@ -328,6 +335,15 @@ func validatePlanShape(plan Plan, requirePendingItems bool) error {
 }
 
 func validateWorkItemPlanMetadata(item WorkItem) error {
+	if err := governance.ValidateBudgetDemand(item.budgetDemand); err != nil {
+		return domainError(ErrorInvalidPlan, "budget_demand")
+	}
+	if err := governance.ValidateSecurityCriticality(item.securityCriticality); err != nil {
+		return domainError(ErrorInvalidPlan, "security_criticality")
+	}
+	if err := governance.ValidateReasoningEffort(item.reasoningEffort); err != nil {
+		return domainError(ErrorInvalidPlan, "reasoning_effort")
+	}
 	if item.handoffRequired && !validWorkItemRef(item.parent) {
 		return domainError(ErrorInvalidPlan, "handoff_parent")
 	}

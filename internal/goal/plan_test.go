@@ -290,7 +290,8 @@ func (fixture planFixture) newItem(overrides domain.NewWorkItemInput) (domain.Wo
 		HandoffRequired: overrides.HandoffRequired,
 		Dependencies:    overrides.Dependencies, WriteSet: overrides.WriteSet,
 		SkillRefs: overrides.SkillRefs, ToolRefs: overrides.ToolRefs, CapabilityRefs: overrides.CapabilityRefs,
-		OutputContract: overrides.OutputContract,
+		OutputContract: overrides.OutputContract, BudgetDemand: overrides.BudgetDemand,
+		SecurityCriticality: overrides.SecurityCriticality, ReasoningEffort: overrides.ReasoningEffort,
 	})
 }
 

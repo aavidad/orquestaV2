@@ -5,6 +5,7 @@ import (
 	"time"
 
 	domain "orquesta/internal/goal"
+	"orquesta/internal/governance"
 )
 
 func TestWorkItemTransitionsProduceImmutableRevisions(t *testing.T) {
@@ -159,6 +160,42 @@ func TestWorkItemRejectsInvalidInputAndTransitionTimes(t *testing.T) {
 		baseTime().Add(4*time.Minute),
 	)
 	requireCode(t, err, domain.ErrorInvalidRef)
+}
+
+func TestWorkItemGovernanceDefaultsAndValidationAreTyped(t *testing.T) {
+	item := newWorkItem(t, "critical xhigh provider-derived are only objective data")
+	if item.BudgetDemand() != (governance.BudgetDemand{Ref: "budget-demand:" + item.Ref().String()}) ||
+		item.SecurityCriticality() != governance.SecurityCriticalityNormal ||
+		item.ReasoningEffort() != governance.ReasoningEffortMedium {
+		t.Fatalf("governance defaults = %+v/%q/%q", item.BudgetDemand(), item.SecurityCriticality(), item.ReasoningEffort())
+	}
+
+	valid := domain.NewWorkItemInput{
+		Ref:       mustRef(t, "work-item:governance-validation", domain.NewWorkItemRef),
+		Goal:      mustRef(t, "goal:governance-validation", domain.NewGoalRef),
+		Actor:     mustRef(t, "actor:governance-validation", domain.NewActorRef),
+		Project:   mustRef(t, "project:governance-validation", domain.NewProjectRef),
+		Objective: "validate declared governance", CreatedAt: baseTime().Add(2 * time.Minute),
+		BudgetDemand:        governance.BudgetDemand{Ref: "budget-demand:governance-validation"},
+		SecurityCriticality: governance.SecurityCriticalitySensitive,
+		ReasoningEffort:     governance.ReasoningEffortHigh,
+	}
+	for _, test := range []struct {
+		name   string
+		mutate func(*domain.NewWorkItemInput)
+	}{
+		{"demand ref", func(input *domain.NewWorkItemInput) { input.BudgetDemand.Ref = " bad" }},
+		{"negative demand", func(input *domain.NewWorkItemInput) { input.BudgetDemand.Resources.Tokens = -1 }},
+		{"criticality", func(input *domain.NewWorkItemInput) { input.SecurityCriticality = "provider-derived" }},
+		{"effort", func(input *domain.NewWorkItemInput) { input.ReasoningEffort = "auto" }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			candidate := valid
+			test.mutate(&candidate)
+			_, err := domain.NewWorkItem(candidate)
+			requireCode(t, err, domain.ErrorInvalidPlan)
+		})
+	}
 }
 
 func newWorkItem(t *testing.T, objective string) domain.WorkItem {

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
 )
 
 // PlanSpec is an application input contract. Keys are local to the request;
@@ -30,18 +31,21 @@ type PhaseSpec struct {
 }
 
 type WorkItemSpec struct {
-	Key             string
-	Objective       string
-	Phase           string
-	Role            string
-	Parent          string
-	HandoffRequired bool
-	Dependencies    []string
-	WriteSet        []string
-	SkillRefs       []string
-	ToolRefs        []string
-	CapabilityRefs  []string
-	OutputContract  goal.OutputContractKind
+	Key                 string
+	Objective           string
+	Phase               string
+	Role                string
+	Parent              string
+	HandoffRequired     bool
+	Dependencies        []string
+	WriteSet            []string
+	SkillRefs           []string
+	ToolRefs            []string
+	CapabilityRefs      []string
+	OutputContract      goal.OutputContractKind
+	BudgetDemand        governance.BudgetDemand
+	SecurityCriticality governance.SecurityCriticality
+	ReasoningEffort     governance.ReasoningEffort
 }
 
 func (orchestrator *Orchestrator) compilePlan(
@@ -310,6 +314,8 @@ func compileWorkItemSpec(
 		Dependencies: dependencies,
 		WriteSet:     writeSet, SkillRefs: skillRefs, ToolRefs: toolRefs,
 		CapabilityRefs: capabilityRefs, OutputContract: contract,
+		BudgetDemand: spec.BudgetDemand, SecurityCriticality: spec.SecurityCriticality,
+		ReasoningEffort: spec.ReasoningEffort,
 	})
 }
 
@@ -382,7 +388,11 @@ func (orchestrator *Orchestrator) scheduleReady(
 }
 
 func writePlanFingerprint(digest hash.Hash, spec *PlanSpec) {
-	writeFingerprintField(digest, "orquesta.plan.v1")
+	version := "orquesta.plan.v1"
+	if planDeclaresGovernance(spec) {
+		version = "orquesta.plan.v2"
+	}
+	writeFingerprintField(digest, version)
 	if spec == nil {
 		writeFingerprintField(digest, "mode:default")
 		return
@@ -414,7 +424,32 @@ func writePlanFingerprint(digest hash.Hash, spec *PlanSpec) {
 		writeFingerprintStrings(digest, "skills", item.SkillRefs)
 		writeFingerprintStrings(digest, "tools", item.ToolRefs)
 		writeFingerprintStrings(digest, "capabilities", item.CapabilityRefs)
+		if version == "orquesta.plan.v2" {
+			writeFingerprintField(digest, "governance")
+			writeFingerprintField(digest, item.BudgetDemand.Ref)
+			writeFingerprintField(digest, strconv.FormatInt(item.BudgetDemand.Resources.Tokens, 10))
+			writeFingerprintField(digest, strconv.FormatInt(item.BudgetDemand.Resources.MoneyMicros, 10))
+			writeFingerprintField(digest, string(item.BudgetDemand.Resources.Currency))
+			writeFingerprintField(digest, strconv.FormatInt(item.BudgetDemand.Resources.ActiveTimeNS, 10))
+			writeFingerprintField(digest, strconv.FormatInt(item.BudgetDemand.Resources.ProcessSlots, 10))
+			writeFingerprintField(digest, strconv.FormatInt(item.BudgetDemand.Resources.DiskBytes, 10))
+			writeFingerprintField(digest, string(item.SecurityCriticality))
+			writeFingerprintField(digest, string(item.ReasoningEffort))
+		}
 	}
+}
+
+func planDeclaresGovernance(spec *PlanSpec) bool {
+	if spec == nil {
+		return false
+	}
+	for _, item := range spec.WorkItems {
+		if item.BudgetDemand != (governance.BudgetDemand{}) || item.SecurityCriticality != "" ||
+			item.ReasoningEffort != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func writeFingerprintStrings(digest hash.Hash, label string, values []string) {

@@ -3,6 +3,8 @@ package goal
 import (
 	"strings"
 	"time"
+
+	"orquesta/internal/governance"
 )
 
 // Revision is an aggregate snapshot revision. The first persisted snapshot is 1.
@@ -41,56 +43,62 @@ const (
 )
 
 type NewWorkItemInput struct {
-	Ref             WorkItemRef
-	Goal            GoalRef
-	Actor           ActorRef
-	Project         ProjectRef
-	Objective       string
-	CreatedAt       time.Time
-	Phase           PhaseKey
-	Role            RoleKey
-	Parent          WorkItemRef
-	HandoffRequired bool
-	Dependencies    []WorkItemRef
-	WriteSet        []WriteScope
-	SkillRefs       []SkillRef
-	ToolRefs        []ToolRef
-	CapabilityRefs  []CapabilityRef
-	OutputContract  OutputContract
+	Ref                 WorkItemRef
+	Goal                GoalRef
+	Actor               ActorRef
+	Project             ProjectRef
+	Objective           string
+	CreatedAt           time.Time
+	Phase               PhaseKey
+	Role                RoleKey
+	Parent              WorkItemRef
+	HandoffRequired     bool
+	Dependencies        []WorkItemRef
+	WriteSet            []WriteScope
+	SkillRefs           []SkillRef
+	ToolRefs            []ToolRef
+	CapabilityRefs      []CapabilityRef
+	OutputContract      OutputContract
+	BudgetDemand        governance.BudgetDemand
+	SecurityCriticality governance.SecurityCriticality
+	ReasoningEffort     governance.ReasoningEffort
 }
 
 // WorkItem is an immutable execution-unit snapshot.
 type WorkItem struct {
-	ref             WorkItemRef
-	goal            GoalRef
-	actor           ActorRef
-	project         ProjectRef
-	objective       string
-	phase           PhaseKey
-	role            RoleKey
-	parent          WorkItemRef
-	handoffRequired bool
-	dependencies    []WorkItemRef
-	writeSet        []WriteScope
-	skillRefs       []SkillRef
-	toolRefs        []ToolRef
-	capabilityRefs  []CapabilityRef
-	outputContract  OutputContract
-	skipReason      WorkItemSkipReason
-	interruptCause  WorkItemInterruptCause
-	reworkOf        WorkItemRef
-	state           WorkItemState
-	revision        Revision
-	paused          bool
-	cancelRequested bool
-	controlSequence uint64
-	createdAt       time.Time
-	startedAt       time.Time
-	interruptedAt   time.Time
-	finishedAt      time.Time
-	execution       ExecutionRef
-	artifacts       []ArtifactRef
-	attestations    []AttestationRef
+	ref                 WorkItemRef
+	goal                GoalRef
+	actor               ActorRef
+	project             ProjectRef
+	objective           string
+	phase               PhaseKey
+	role                RoleKey
+	parent              WorkItemRef
+	handoffRequired     bool
+	dependencies        []WorkItemRef
+	writeSet            []WriteScope
+	skillRefs           []SkillRef
+	toolRefs            []ToolRef
+	capabilityRefs      []CapabilityRef
+	outputContract      OutputContract
+	budgetDemand        governance.BudgetDemand
+	securityCriticality governance.SecurityCriticality
+	reasoningEffort     governance.ReasoningEffort
+	skipReason          WorkItemSkipReason
+	interruptCause      WorkItemInterruptCause
+	reworkOf            WorkItemRef
+	state               WorkItemState
+	revision            Revision
+	paused              bool
+	cancelRequested     bool
+	controlSequence     uint64
+	createdAt           time.Time
+	startedAt           time.Time
+	interruptedAt       time.Time
+	finishedAt          time.Time
+	execution           ExecutionRef
+	artifacts           []ArtifactRef
+	attestations        []AttestationRef
 }
 
 func NewWorkItem(input NewWorkItemInput) (WorkItem, error) {
@@ -131,6 +139,18 @@ func NewWorkItem(input NewWorkItemInput) (WorkItem, error) {
 	if !validOutputContractKind(outputContract.kind) {
 		return WorkItem{}, domainError(ErrorInvalidPlan, "output_contract")
 	}
+	budgetDemand := input.BudgetDemand
+	if budgetDemand.Ref == "" {
+		budgetDemand.Ref = "budget-demand:" + input.Ref.String()
+	}
+	criticality := input.SecurityCriticality
+	if criticality == "" {
+		criticality = governance.SecurityCriticalityNormal
+	}
+	effort := input.ReasoningEffort
+	if effort == "" {
+		effort = governance.ReasoningEffortMedium
+	}
 
 	item := WorkItem{
 		ref:             input.Ref,
@@ -148,9 +168,10 @@ func NewWorkItem(input NewWorkItemInput) (WorkItem, error) {
 		toolRefs:        cloneRefs(input.ToolRefs),
 		capabilityRefs:  cloneRefs(input.CapabilityRefs),
 		outputContract:  outputContract,
-		state:           WorkItemStatePending,
-		revision:        1,
-		createdAt:       canonicalTime(input.CreatedAt),
+		budgetDemand:    budgetDemand, securityCriticality: criticality, reasoningEffort: effort,
+		state:     WorkItemStatePending,
+		revision:  1,
+		createdAt: canonicalTime(input.CreatedAt),
 	}
 	if err := validateWorkItemPlanMetadata(item); err != nil {
 		return WorkItem{}, err
@@ -158,30 +179,35 @@ func NewWorkItem(input NewWorkItemInput) (WorkItem, error) {
 	return item, nil
 }
 
-func (item WorkItem) Ref() WorkItemRef                { return item.ref }
-func (item WorkItem) Goal() GoalRef                   { return item.goal }
-func (item WorkItem) Actor() ActorRef                 { return item.actor }
-func (item WorkItem) Project() ProjectRef             { return item.project }
-func (item WorkItem) Objective() string               { return item.objective }
-func (item WorkItem) Phase() PhaseKey                 { return item.phase }
-func (item WorkItem) Role() RoleKey                   { return item.role }
-func (item WorkItem) Parent() (WorkItemRef, bool)     { return item.parent, validWorkItemRef(item.parent) }
-func (item WorkItem) HandoffRequired() bool           { return item.handoffRequired }
-func (item WorkItem) Dependencies() []WorkItemRef     { return cloneDependencies(item.dependencies) }
-func (item WorkItem) WriteSet() []WriteScope          { return cloneWriteSet(item.writeSet) }
-func (item WorkItem) SkillRefs() []SkillRef           { return cloneRefs(item.skillRefs) }
-func (item WorkItem) ToolRefs() []ToolRef             { return cloneRefs(item.toolRefs) }
-func (item WorkItem) CapabilityRefs() []CapabilityRef { return cloneRefs(item.capabilityRefs) }
-func (item WorkItem) OutputContract() OutputContract  { return item.outputContract }
-func (item WorkItem) State() WorkItemState            { return item.state }
-func (item WorkItem) Revision() Revision              { return item.revision }
-func (item WorkItem) CreatedAt() time.Time            { return item.createdAt }
-func (item WorkItem) IsTerminal() bool                { return item.state.Terminal() }
-func (item WorkItem) Artifacts() []ArtifactRef        { return cloneArtifacts(item.artifacts) }
-func (item WorkItem) Attestations() []AttestationRef  { return cloneAttestations(item.attestations) }
-func (item WorkItem) Paused() bool                    { return item.paused }
-func (item WorkItem) CancelRequested() bool           { return item.cancelRequested }
-func (item WorkItem) ControlSequence() uint64         { return item.controlSequence }
+func (item WorkItem) Ref() WorkItemRef                      { return item.ref }
+func (item WorkItem) Goal() GoalRef                         { return item.goal }
+func (item WorkItem) Actor() ActorRef                       { return item.actor }
+func (item WorkItem) Project() ProjectRef                   { return item.project }
+func (item WorkItem) Objective() string                     { return item.objective }
+func (item WorkItem) Phase() PhaseKey                       { return item.phase }
+func (item WorkItem) Role() RoleKey                         { return item.role }
+func (item WorkItem) Parent() (WorkItemRef, bool)           { return item.parent, validWorkItemRef(item.parent) }
+func (item WorkItem) HandoffRequired() bool                 { return item.handoffRequired }
+func (item WorkItem) Dependencies() []WorkItemRef           { return cloneDependencies(item.dependencies) }
+func (item WorkItem) WriteSet() []WriteScope                { return cloneWriteSet(item.writeSet) }
+func (item WorkItem) SkillRefs() []SkillRef                 { return cloneRefs(item.skillRefs) }
+func (item WorkItem) ToolRefs() []ToolRef                   { return cloneRefs(item.toolRefs) }
+func (item WorkItem) CapabilityRefs() []CapabilityRef       { return cloneRefs(item.capabilityRefs) }
+func (item WorkItem) OutputContract() OutputContract        { return item.outputContract }
+func (item WorkItem) BudgetDemand() governance.BudgetDemand { return item.budgetDemand }
+func (item WorkItem) SecurityCriticality() governance.SecurityCriticality {
+	return item.securityCriticality
+}
+func (item WorkItem) ReasoningEffort() governance.ReasoningEffort { return item.reasoningEffort }
+func (item WorkItem) State() WorkItemState                        { return item.state }
+func (item WorkItem) Revision() Revision                          { return item.revision }
+func (item WorkItem) CreatedAt() time.Time                        { return item.createdAt }
+func (item WorkItem) IsTerminal() bool                            { return item.state.Terminal() }
+func (item WorkItem) Artifacts() []ArtifactRef                    { return cloneArtifacts(item.artifacts) }
+func (item WorkItem) Attestations() []AttestationRef              { return cloneAttestations(item.attestations) }
+func (item WorkItem) Paused() bool                                { return item.paused }
+func (item WorkItem) CancelRequested() bool                       { return item.cancelRequested }
+func (item WorkItem) ControlSequence() uint64                     { return item.controlSequence }
 
 func (item WorkItem) InterruptCause() (WorkItemInterruptCause, bool) {
 	return item.interruptCause, item.interruptCause != ""
@@ -394,6 +420,8 @@ func equalWorkItems(left, right WorkItem) bool {
 		refsEqual(left.dependencies, right.dependencies) && refsEqual(left.writeSet, right.writeSet) &&
 		refsEqual(left.skillRefs, right.skillRefs) && refsEqual(left.toolRefs, right.toolRefs) &&
 		refsEqual(left.capabilityRefs, right.capabilityRefs) && left.outputContract == right.outputContract &&
+		left.budgetDemand == right.budgetDemand && left.securityCriticality == right.securityCriticality &&
+		left.reasoningEffort == right.reasoningEffort &&
 		left.skipReason == right.skipReason && left.state == right.state && left.revision == right.revision &&
 		left.interruptCause == right.interruptCause && left.reworkOf == right.reworkOf &&
 		left.paused == right.paused && left.cancelRequested == right.cancelRequested &&
