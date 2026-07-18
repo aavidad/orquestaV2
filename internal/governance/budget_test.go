@@ -2,7 +2,9 @@ package governance_test
 
 import (
 	"math"
+	"strings"
 	"testing"
+	"time"
 
 	"orquesta/internal/governance"
 )
@@ -14,7 +16,8 @@ func TestBudgetContractUsesOneCanonicalEnvelopeAcrossLayers(t *testing.T) {
 	}
 	envelope := governance.BudgetEnvelope{
 		Ref: "budget:deployment", SubjectRef: "deployment:local", Scope: governance.BudgetScopeDeployment,
-		Limit: governance.ResourceVector{Tokens: 100, MoneyMicros: 500, Currency: currency, ActiveTimeNS: 1_000, ProcessSlots: 2, DiskBytes: 2_000}, Revision: 1,
+		Limit:    governance.ResourceVector{Tokens: 100, MoneyMicros: 500, Currency: currency, ActiveTimeNS: 1_000, ProcessSlots: 2, DiskBytes: 2_000},
+		Revision: 1, PolicyHash: strings.Repeat("a", 64), CreatedAt: time.Unix(1, 0).UTC(),
 	}
 	if err := governance.ValidateBudgetEnvelope(envelope); err != nil {
 		t.Fatal(err)
@@ -37,7 +40,7 @@ func TestBudgetContractUsesOneCanonicalEnvelopeAcrossLayers(t *testing.T) {
 		t.Fatalf("overflow code = %q, err=%v", governance.ErrorCodeOf(err), err)
 	}
 
-	reservation := governance.BudgetReservation{Ref: "reservation:work", DemandRef: demand.Ref, Resources: demand.Resources}
+	reservation := validReservation("reservation:work", demand.Ref, demand.Resources)
 	usage := governance.ResourceUsage{
 		Resources: governance.ResourceVector{ActiveTimeNS: 350, ProcessSlots: 0},
 		Known:     governance.ResourceActiveTime | governance.ResourceProcessSlots, Quality: governance.UsageQualityMeasured,
@@ -78,10 +81,8 @@ func TestResourceContractRejectsNegativesCurrencyConflictAndUnknownValues(t *tes
 }
 
 func TestReconcileRecordsKnownOverrunWithoutMintingRelease(t *testing.T) {
-	reservation := governance.BudgetReservation{
-		Ref: "reservation:1", DemandRef: "demand:1",
-		Resources: governance.ResourceVector{Tokens: 10, ActiveTimeNS: 20, ProcessSlots: 1},
-	}
+	reservation := validReservation("reservation:1", "demand:1",
+		governance.ResourceVector{Tokens: 10, ActiveTimeNS: 20, ProcessSlots: 1})
 	usage := governance.ResourceUsage{
 		Resources: governance.ResourceVector{Tokens: 15, ActiveTimeNS: 5, ProcessSlots: 0},
 		Known:     governance.ResourceTokens | governance.ResourceActiveTime | governance.ResourceProcessSlots,
@@ -100,5 +101,15 @@ func TestReconcileRecordsKnownOverrunWithoutMintingRelease(t *testing.T) {
 	settlement.Charged.Tokens--
 	if err := governance.ValidateBudgetSettlement(settlement); governance.ErrorCodeOf(err) != governance.ErrorInvalidArgument {
 		t.Fatalf("tampered settlement code = %q", governance.ErrorCodeOf(err))
+	}
+}
+
+func validReservation(ref, demandRef string, resources governance.ResourceVector) governance.BudgetReservation {
+	return governance.BudgetReservation{
+		Ref: ref, DemandRef: demandRef, ActionRef: "action:1", EffectIntentRef: "effect-intent:1",
+		ProjectRef: "project:1", GoalRef: "goal:1", WorkItemRef: "work-item:1", ExecutionRef: "execution:1",
+		PlanGeneration: 1, AppSpecGeneration: 1, WorkItemGeneration: 1, Fence: 1,
+		SpecHash: strings.Repeat("b", 64), PolicyHash: strings.Repeat("c", 64),
+		Resources: resources, ReservedAt: time.Unix(2, 0).UTC(),
 	}
 }

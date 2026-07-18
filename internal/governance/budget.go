@@ -1,6 +1,10 @@
 package governance
 
-import "strings"
+import (
+	"encoding/hex"
+	"strings"
+	"time"
+)
 
 // BudgetScope is one level of the deployment -> project -> Goal hierarchy.
 type BudgetScope string
@@ -17,6 +21,8 @@ type BudgetEnvelope struct {
 	Scope      BudgetScope
 	Limit      ResourceVector
 	Revision   uint64
+	PolicyHash string
+	CreatedAt  time.Time
 }
 
 type BudgetDemand struct {
@@ -25,9 +31,22 @@ type BudgetDemand struct {
 }
 
 type BudgetReservation struct {
-	Ref       string
-	DemandRef string
-	Resources ResourceVector
+	Ref                string
+	DemandRef          string
+	ActionRef          string
+	EffectIntentRef    string
+	ProjectRef         string
+	GoalRef            string
+	WorkItemRef        string
+	ExecutionRef       string
+	PlanGeneration     uint64
+	AppSpecGeneration  uint64
+	WorkItemGeneration uint64
+	Fence              uint64
+	SpecHash           string
+	PolicyHash         string
+	Resources          ResourceVector
+	ReservedAt         time.Time
 }
 
 // ResourceDimensions makes missing telemetry explicit. A known zero differs
@@ -60,12 +79,14 @@ type ResourceUsage struct {
 
 // BudgetSettlement separates observed telemetry from conservative accounting.
 type BudgetSettlement struct {
+	Ref            string
 	ReservationRef string
 	Reserved       ResourceVector
 	Observed       ResourceUsage
 	Charged        ResourceVector
 	Released       ResourceVector
 	Overrun        ResourceVector
+	SettledAt      time.Time
 }
 
 func ValidateBudgetEnvelope(envelope BudgetEnvelope) error {
@@ -75,7 +96,7 @@ func ValidateBudgetEnvelope(envelope BudgetEnvelope) error {
 	if envelope.Scope != BudgetScopeDeployment && envelope.Scope != BudgetScopeProject && envelope.Scope != BudgetScopeGoal {
 		return domainError(ErrorInvalidArgument, "budget_scope")
 	}
-	if envelope.Revision == 0 {
+	if envelope.Revision == 0 || !validDigest(envelope.PolicyHash) || envelope.CreatedAt.IsZero() {
 		return domainError(ErrorInvalidArgument, "budget_revision")
 	}
 	return ValidateResourceVector(envelope.Limit)
@@ -89,8 +110,17 @@ func ValidateBudgetDemand(demand BudgetDemand) error {
 }
 
 func ValidateBudgetReservation(reservation BudgetReservation) error {
-	if !validOpaqueRef(reservation.Ref) || !validOpaqueRef(reservation.DemandRef) {
+	if !validOpaqueRef(reservation.Ref) || !validOpaqueRef(reservation.DemandRef) ||
+		!validOpaqueRef(reservation.ActionRef) || !validOpaqueRef(reservation.EffectIntentRef) ||
+		!validOpaqueRef(reservation.ProjectRef) || !validOpaqueRef(reservation.GoalRef) ||
+		!validOpaqueRef(reservation.WorkItemRef) || !validOpaqueRef(reservation.ExecutionRef) {
 		return domainError(ErrorInvalidRef, "budget_reservation")
+	}
+	if reservation.PlanGeneration == 0 || reservation.AppSpecGeneration == 0 ||
+		reservation.WorkItemGeneration == 0 || reservation.Fence == 0 ||
+		!validDigest(reservation.SpecHash) || !validDigest(reservation.PolicyHash) ||
+		reservation.ReservedAt.IsZero() {
+		return domainError(ErrorInvalidArgument, "budget_reservation")
 	}
 	return ValidateResourceVector(reservation.Resources)
 }
@@ -125,7 +155,13 @@ func Reconcile(reservation BudgetReservation, usage ResourceUsage) (BudgetSettle
 	if err := ValidateResourceUsage(usage); err != nil {
 		return BudgetSettlement{}, err
 	}
-	return reconcileResources(reservation.Ref, reservation.Resources, usage)
+	settlement, err := reconcileResources(reservation.Ref, reservation.Resources, usage)
+	if err != nil {
+		return BudgetSettlement{}, err
+	}
+	settlement.Ref = "budget-settlement:" + reservation.Ref
+	settlement.SettledAt = reservation.ReservedAt
+	return settlement, nil
 }
 
 func reconcileResources(reservationRef string, reserved ResourceVector, usage ResourceUsage) (BudgetSettlement, error) {
@@ -144,7 +180,7 @@ func reconcileResources(reservationRef string, reserved ResourceVector, usage Re
 
 // ValidateBudgetSettlement lets persistence reject a tampered accounting fact.
 func ValidateBudgetSettlement(settlement BudgetSettlement) error {
-	if !validOpaqueRef(settlement.ReservationRef) {
+	if !validOpaqueRef(settlement.Ref) || !validOpaqueRef(settlement.ReservationRef) || settlement.SettledAt.IsZero() {
 		return domainError(ErrorInvalidRef, "budget_reservation_ref")
 	}
 	if err := ValidateResourceVector(settlement.Reserved); err != nil {
@@ -157,7 +193,8 @@ func ValidateBudgetSettlement(settlement BudgetSettlement) error {
 	if err != nil {
 		return err
 	}
-	if settlement.Charged != expected.Charged || settlement.Released != expected.Released ||
+	if settlement.Ref != "budget-settlement:"+settlement.ReservationRef ||
+		settlement.Charged != expected.Charged || settlement.Released != expected.Released ||
 		settlement.Overrun != expected.Overrun {
 		return domainError(ErrorInvalidArgument, "budget_settlement")
 	}
@@ -210,4 +247,12 @@ func maxZero(value int64) int64 {
 
 func validOpaqueRef(value string) bool {
 	return value != "" && strings.TrimSpace(value) == value && !strings.ContainsAny(value, "\x00\r\n")
+}
+
+func validDigest(value string) bool {
+	if len(value) != 64 || strings.ToLower(value) != value {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	return err == nil
 }
