@@ -7,19 +7,17 @@ sesión. Es estado operativo, no evidencia de aceptación. Los estados canónico
 de capacidades, verticales y contratos viven en `product/roadmap.json`; los
 verdes viven en receipts fuera de su propio candidato.
 
-## Checkpoint verificable: V15 solo cuenta con receipt V3 válido
+## Checkpoint verificable: V15 acreditado; análisis V16 cerrado
 
-V01–V14 están cerrados por receipts V3 reproducibles. V15 está implementado,
-cableado y ejercitado, pero solo se promueve a acreditado cuando
-`TestAcceptanceV15BudgetsEffectsReceipt` valida un `PASS` reproducible en
-`product/evidence/v15_budgets_effects.json`. La ausencia del fichero, `{}` o
-un receipt del candidato anterior no acreditan nada.
+En `9bc99351c7`, V01–V15 están cerrados por receipts V3 reproducibles.
+`TestAcceptanceV15BudgetsEffectsReceipt` valida el `PASS` de
+`product/evidence/v15_budgets_effects.json`; la regla sigue siendo mecánica: si
+un checkout futuro pierde el fichero, contiene `{}` o deja de validar, V15 deja
+de contar.
 
-Mientras esa validación no pase, el corte honesto es **48/257 capacidades,
-18,68 %; 14/34 verticales, 41,18 %; 14/14 receipts**. Cuando pase, V15 acredita
-únicamente `GOV-15`, `STG-09`, `ORC-08`, `ORC-09`, `ORC-10`, `ORC-11`,
-`EVD-03` y `EVD-14`, y el corte será **56/257, 21,79 %; 15/34, 44,12 %;
-15/15 receipts**.
+El corte vigente es **56/257 capacidades, 21,79 %; 15/34 verticales, 44,12 %;
+15/15 receipts**. V15 acredita únicamente `GOV-15`, `STG-09`, `ORC-08`,
+`ORC-09`, `ORC-10`, `ORC-11`, `EVD-03` y `EVD-14`.
 
 Resultado funcional del candidato V15:
 
@@ -45,10 +43,31 @@ Resultado funcional del candidato V15:
   aparcado o se liquida localmente cuando ya no existe efecto externo. La
   adopción/reautorización operativa general permanece en V32.
 
-V16 no está abierto en este checkpoint. El siguiente trabajo es analizar y
-fijar `AC-V16-WORKSPACE-GIT` antes de programar workspace, worktrees, commits o
-forge. V15 sigue siendo aplicación/puertos internos; HTTP/MCP/CLI públicos
+El análisis V16 está cerrado en
+`docs/reconstruccion/analisis_y_contrato_v16_workspace_git.md`. V16 se reduce a
+workspace y Git local (`STG-02`, `STG-10`, `EXT-10`); `EXT-11` GitHub/GitLab/
+Gitea pasa a V28. El siguiente gate es el contrato rojo exacto
+`TestAcceptanceV16WorkspaceGit`; todavía no hay código ni capacidad V16
+acreditada. V15 sigue siendo aplicación/puertos internos; HTTP/MCP/CLI públicos
 pertenecen a V20 e i18n completa a V21.
+
+### Cierre de sesión 2026-07-18 14:17 Europe/Madrid
+
+- no se abrió código V16 ni V17;
+- `AC-V16-WORKSPACE-GIT` ya tiene nombre de test/comando exactos y siete
+  assertions; se retiró el patrón genérico que podía quedar verde con cero
+  tests;
+- `BUG-REBUILD-20260718-231` cerró la regresión donde el test histórico V10
+  exigía que `ORC-11` siguiera pendiente después de su acreditación V15;
+- reapareció el patrón ya inventariado como `BUG-REBUILD-20260714-042`: el
+  receipt global Codex había quedado stale al cambiar fuentes V15. Se renovó
+  mediante el servidor MCP productivo con resultado `PASS` en 5,39 s, source
+  digest `sha256:a37af4c18943f94dc0ed34efbb4bc9fe1a0c97c60463e2bebf04ab9e5168d37b`
+  y marcador `ORQUESTA_CODEX_E2E_OK_eda4551e7362dce5ed829a7fae0f2631`;
+- `go test -mod=vendor -count=1 .`, focales de roadmap/trazabilidad,
+  `jq empty product/roadmap.json` y `git diff --check` pasan antes del commit;
+- siguiente acción única: crear el test/fixture rojo V16 descrito en la sección
+  `Siguiente acción exacta`; no reanalizar V16 ni recuperar código legacy.
 
 ## Checkpoint histórico: V13 cerrado
 
@@ -513,11 +532,12 @@ El rango vigente de receipts acreditados es `V(0[1-9]|1[0-5])`.
 
 ## Siguiente acción exacta
 
-Si el receipt V15 falta o no valida, la siguiente acción es terminar su
-resellado reproducible. Solo después empieza el **análisis V16**: frontera de
-workspace/Git, write-set, concurrencia multiusuario, puertos, adapters y
-contrato rojo `AC-V16-WORKSPACE-GIT`. No programar V16 antes de ambos gates ni
-abrir V17 u otro frente.
+Crear `acceptance/v16_workspace_git_test.go` y su fixture con el único test
+`TestAcceptanceV16WorkspaceGit`, ejecutar el comando exacto de
+`AC-V16-WORKSPACE-GIT` y conservar el rojo que demuestre ausencia del producto.
+Después implementar por dentro: tipos/puertos, mismo state/outbox/effect ledger,
+adapter Git local, wiring y E2E. No abrir V17 ni Forge remoto antes de cerrar
+V16 con receipt reproducible.
 
 Los subagentes directos siguen siendo bootstrap hasta V22. Hoy Orquesta puede
 coordinar un DAG declarado; una petición abierta aún necesita dirección externa.
@@ -526,7 +546,7 @@ coordinar un DAG declarado; una petición abierta aún necesita dirección exter
 
 Las palabras “pendiente”, “siguiente” o “en curso” dentro del historial
 describen checkpoints pasados. No son órdenes de reanudación. La acción vigente
-es analizar V16 sin programarlo todavía.
+es crear el contrato rojo V16 y después implementar únicamente su alcance local.
 
 ## V03: trabajo ya realizado
 

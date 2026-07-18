@@ -798,11 +798,16 @@ func TestProductRoadmapV10ScopeAndExecutableContract(t *testing.T) {
 
 	fairness := entries["ORC-11"]
 	wantV15 := verticals["budgets_effects"]
+	wantV15Evidence := []string{
+		"acceptance/v15_budgets_effects_test.go",
+		"acceptance/fixtures/v15_budgets_effects.json",
+		"product/evidence/v15_budgets_effects.json",
+	}
 	if fairness.OwnerContext != "budgets_effects" ||
 		!reflect.DeepEqual(fairness.Dependencies, wantV15.DependsOn) ||
 		!reflect.DeepEqual(fairness.AcceptanceContracts, wantV15.AcceptanceContracts) ||
-		fairness.Status != "declared" || len(fairness.EvidenceRefs) != 0 {
-		t.Fatalf("ORC-11 fairness must remain wholly deferred to V15: %#v", fairness)
+		fairness.Status != "accredited" || !reflect.DeepEqual(fairness.EvidenceRefs, wantV15Evidence) {
+		t.Fatalf("ORC-11 fairness must remain owned and accredited only by V15: %#v", fairness)
 	}
 
 	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV10ScopeAndExecutableContract|TestV10EvidenceBelongsOnlyToIdentityCapabilities|TestV10AcceptanceCommandRunsIdentityConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV10IdentityProjectsRBAC|TestV10CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/application ./internal/config ./internal/i18n ./internal/adapters/auth/localtoken ./internal/adapters/state/sqlite ./internal/interfaces/mcp ./internal/bootstrap ./cmd/orquesta'"
@@ -826,6 +831,35 @@ func TestProductRoadmapV10ScopeAndExecutableContract(t *testing.T) {
 		if strings.Contains(strings.ToLower(contract.Command), forbidden) {
 			t.Fatalf("V10 command opens a broad or deferred surface %q: %q", forbidden, contract.Command)
 		}
+	}
+}
+
+func TestProductRoadmapV10DeferredFairnessUsesOnlyV15EvidenceAfterClosure(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+
+	var fairness roadmapEntry
+	var budgets roadmapVertical
+	for _, entry := range roadmap.CapabilityEntries {
+		if entry.ID == "ORC-11" {
+			fairness = entry
+		}
+	}
+	for _, vertical := range roadmap.Verticals {
+		if vertical.ID == "budgets_effects" {
+			budgets = vertical
+		}
+	}
+	wantEvidence := []string{
+		"acceptance/v15_budgets_effects_test.go",
+		"acceptance/fixtures/v15_budgets_effects.json",
+		"product/evidence/v15_budgets_effects.json",
+	}
+	if fairness.OwnerContext != budgets.ID ||
+		!reflect.DeepEqual(fairness.Dependencies, budgets.DependsOn) ||
+		!reflect.DeepEqual(fairness.AcceptanceContracts, budgets.AcceptanceContracts) ||
+		fairness.Status != "accredited" || !reflect.DeepEqual(fairness.EvidenceRefs, wantEvidence) {
+		t.Fatalf("V10-deferred ORC-11 does not carry only its V15 accreditation: %#v", fairness)
 	}
 }
 

@@ -860,13 +860,17 @@
       "id": "AC-V16-WORKSPACE-GIT",
       "vertical": "workspace_git",
       "status": "planned",
-      "test_ref": "planned:acceptance/v16_workspace_git_test.go",
-      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "test_ref": "planned:acceptance/v16_workspace_git_test.go#TestAcceptanceV16WorkspaceGit",
+      "command": "planned:go test -mod=vendor -count=1 ./acceptance -run '^TestAcceptanceV16WorkspaceGit$'",
       "fixture": "planned:fixtures/v16_workspace_git",
       "assertions": [
-        "one isolated workspace exists per execution",
-        "stale base and merge conflict never mutate target branch",
-        "pending work is visible per actor and project"
+        "one private isolated workspace with an opaque branch and exact base object exists per project Goal WorkItem and Execution and an execution replacement never reuses it",
+        "workspace preparation commit and integration reuse the V06 outbox claim lease fence scheduler and StateRepository plus the V15 intent approval attempt receipt ledger without a second lifecycle store queue or daemon",
+        "Codex or any interchangeable agent runs only in the workspace bound to its exact Execution and work outside the declared write set never reaches a Git mutation",
+        "commit binds the exact execution base tree diff changed paths and idempotency key while replay and restart converge on one immutable receipt without exposing paths commands credentials or provider details",
+        "integration computes conflicts without mutating the target and updates the target only by expected object CAS so a stale base conflict stale fence or concurrent loser preserves all pending work and never changes the target ref",
+        "pending committed conflicted and stale work is durably visible and RBAC scoped by actor project repository Goal and execution after restart",
+        "V16 accredits only STG-02 STG-10 and EXT-10; remote push pull request and forge merge including EXT-11 remain explicit governed connector effects owned by V28"
       ]
     },
     {
@@ -1022,7 +1026,8 @@
       "assertions": [
         "connectors use opaque refs and public contracts",
         "no connector reads internal state or filesystem",
-        "research document data media shell and browser effects obey permissions"
+        "research document data media shell and browser effects obey permissions",
+        "GitHub GitLab and Gitea implement one neutral Forge port and remote publish pull request and merge require exact credentials egress permission target CAS idempotency and immutable receipts"
       ]
     },
     {
@@ -4652,16 +4657,16 @@
       "kind": "extension",
       "release_target": "total_v1",
       "cutover_required": true,
-      "owner_context": "workspace_git",
+      "owner_context": "domain_plugins",
       "dependencies": [
-        "goal_dag_phases",
-        "atomic_state_outbox",
-        "identity_projects_rbac",
-        "controls",
-        "budgets_effects"
+        "workspace_git",
+        "test_attestor",
+        "command_registry",
+        "tools_skills_sdk",
+        "context_rag_evals"
       ],
       "acceptance_contracts": [
-        "AC-V16-WORKSPACE-GIT"
+        "AC-V28-DOMAIN-PLUGINS"
       ],
       "status": "declared",
       "evidence_refs": [],

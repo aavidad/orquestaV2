@@ -175,7 +175,7 @@ causal; dentro de cada corte se ejecuta la ola máxima con write-sets disjuntos.
 | V13 Mailbox `child_delivery` | V06,V12 | `Parent` expresa linaje; no activa una barrera. `HandoffRequired` es separado, explícito, `false` por defecto e inválido como `true` sin `Parent`. Solo esa arista opt-in genera un envelope compacto `child_delivery`, ligado a proyecto, Goal/generación y source/recipient principal+WorkItem+Execution exactos. Lifecycle: `admitted → claimed → delivered → consumed → acknowledged|blocked`; el fallo previo del destinatario exacto lo deja `retired` sin readdress ni ACK sintético. Reutiliza el mismo `StateRepository`, transacción y outbox; `outbox.fence` es el único ordinal. Helper puro de resolución, Orchestrator como único writer y SQLite como misma autoridad; límite de envelope en configuración canónica. Gate: crash/restart permite reclaim sin pérdida; replay conserva fronteras históricas sin renovar lease ni redeliver; sucesor no suplanta destinatario; padre contractual no cierra sin ACK/bloqueo causal. V13 no expone el opt-in por MCP: el DAG público V05 con `Parent` cierra sin mailbox, requeue ni acción pendiente. Mensajes genéricos, sesiones y handoff de proveedor (`ORC-15`) quedan en V27; bindings públicos llegan por V20–V22 y no se simulan aquí. |
 | V14 Pausa, resume, cancel, stop y replan | V05–V06,V12–V13 | Controles tipados por Goal/WorkItem/Execution y generación exacta; parada cooperativa y forzada según capability. Gate A/B/C/D: detener B preserva A/C/D antes y después de restart; terminales no se reejecutan. |
 | V15 Presupuestos, permisos y efectos | V06,V10,V12,V14 | Tokens, dinero, tiempo, procesos, disco, fairness y riesgo; `EffectIntent`, approval, attempt y receipt separados. Gate: cuota temporal no se vuelve fallo terminal; efecto sin autoridad no se ejecuta; retry es idempotente. |
-| V16 Workspace, Git y colaboración | V05–V06,V10,V14–V15 | `WorkspaceManager` y `VersionControl`; Git local/worktrees primero, branches, diffs, commits, merge state y adapters GitHub/GitLab/Gitea. Gate: workspace persistido, rework causal, conflictos visibles y trabajo pendiente por usuario/proyecto. Git no sustituye CAS/leases. |
+| V16 Workspace y Git local | V05–V06,V10,V14–V15 | `WorkspaceManager` y `VersionControl`; un worktree/ref opaco por ejecución, base exacta, inventario, commit e integración local por CAS. Gate: workspace persistido, Codex dentro del binding exacto, rework causal, conflicto/stale sin mutar destino y trabajo pendiente visible por usuario/proyecto. Reutiliza el mismo state/outbox/scheduler/ledger; no crea lifecycle ni store propios. `EXT-11` remoto queda en V28. |
 | V17 Artefactos y atestador | V06,V09,V15–V16 | CAS inmutable FS, metadata causal, `TestAttestor`, snapshot/diff y ataques de filesystem/sandbox. Gate: tests independientes reproducibles; traversal/symlink/hardlink/owner/modo/leaks fallan; ACK no equivale a artefacto. |
 | V18 Autor, reviews y refinery | V14,V16–V17 | Autor, reviewer primario y adversarial con tres launches distintos sobre misma generación/tree/diff/tests; rework e integración explícitos. Gate: retirar cualquier launch o cambiar el árbol bloquea promoción. |
 | V19 Consejo | V12,V17–V18 | Políticas `auto|required|skip_by_operator`, propuestas, crítica, ballots, disenso, veto de seguridad y decisión. Gate: tres E2E aislados; skip lleva principal/motivo/fecha/spec hash; Consejo nunca sustituye reviews. |
@@ -187,7 +187,7 @@ causal; dentro de cada corte se ejecuta la ola máxima con write-sets disjuntos.
 | V25 Hermes y proveedores restantes | V12–V14,V17–V22 | Hermes como Director estándar; Claude, Gemini, Ollama y runtime local mediante la familia neutral; catálogo de modelos, capabilities, cuota, uso, routing y fallback explícito. Gate: suite por adapter, smokes reales disponibles y aislamiento de ausencia/fallo; nunca paridad de calidad inventada. |
 | V26 Tools, resources, skills y rulepacks | V08,V10,V15,V21 | Registro/SDK único, namespaces lazy, resources paginados, skills progresivas, scopes, trust, hashes, tests, install/upgrade/revoke/rollback y bootstrap/doctor. Gate: tool no autorizada no corre, resultado grande va a artifact y cero skill/rulepack observado sin disposición. |
 | V27 Contexto, RAG, routing y evals | V17,V25–V26 | ContextBundle mínimo, refs, FTS5/BM25, memoria por proyecto, handoffs, caching/compaction y routing barato medido. Gate: dataset versionado mide calidad/coste/latencia; embeddings/reranker/vector DB solo tras mejora demostrada. |
-| V28 Plugins genéricos | V16–V17,V21,V26–V27 | Protocolo `DomainPlugin`; `change_app`, investigación, web/browser, documentos/PDF, datos, DB externas, presentaciones, OCR, imagen/audio, shell y computer-use como conectores gobernados. Gate: refs opacas, permisos, contrato/E2E y cero acceso a estado/filesystem interno. |
+| V28 Plugins y Forge remotos | V16–V17,V21,V26–V27 | Protocolo `DomainPlugin`; `change_app`, investigación, web/browser, documentos/PDF, datos, DB externas, presentaciones, OCR, imagen/audio, shell y computer-use como conectores gobernados. Un único puerto neutral `Forge` recibe adapters GitHub/GitLab/Gitea; push, pull request y merge remoto son efectos explícitos con credential ref, egress, permiso, CAS e idempotencia. Gate: refs opacas, permisos, contrato/E2E por adapter y cero acceso a estado/filesystem interno. |
 | V29 Deploy y notificaciones | V08,V10,V15,V21,V28 | Hooks, webhooks, email, Telegram y efectos dry-run/local/contenedor/systemd; remotos como plugins ratificados. Gate: aprobación, scope, receipt, rollback e idempotencia; ningún sink decide lifecycle. |
 | V30 OPES temporal completo | V18–V22,V25–V29 | Plugin externo para inventario/reutilización, investigación, temas, visuales, tests, supuestos, reviews, ensamblado, audio, tutor/RAG, HTML, manual y paquete. Gate `AC-V30-OPES`: fixture OPES temporal con DB/FS separados, seis launches acreditados cuando se exijan, lista exacta de artefactos/QA y producción imposible sin confirmación/scope. |
 | V31 PostgreSQL, S3 y multihost | V06,V09–V10,V13–V17,V22 | Adapters Postgres y S3-compatible; worker/host affinity, claims con fencing, recuperación de host y workspaces clonables. Gate: misma suite que SQLite/FS, carga/concurrencia, aislamiento y colaboración multiusuario/multihost sin cambiar dominio. |
@@ -218,8 +218,10 @@ mismo writer, scheduler, outbox y repositorio; no crean otro motor. Launch y
 stop quedan gobernados también en composición Codex. HTTP/MCP/CLI públicos
 siguen esperando V20 y la paridad i18n total espera V21.
 
-V16 no está abierto. Siguiente sesión: analizar workspace, Git y colaboración,
-fijar `AC-V16-WORKSPACE-GIT` rojo y solo después programar su write-set.
+El análisis V16 está cerrado en
+`docs/reconstruccion/analisis_y_contrato_v16_workspace_git.md`. Siguiente
+sesión: crear `TestAcceptanceV16WorkspaceGit` rojo y solo después implementar
+su write-set local. Forge remoto no se abre hasta V28.
 
 ## 6. Olas y transición a auto-orquestación
 
@@ -228,9 +230,9 @@ Ejemplos de paralelismo seguro:
 
 - V07 y contratos iniciales de V10 pueden avanzar tras V06 con write-sets
   separados; V08 consume la salida canónica de V07.
-- Tras validar el receipt V15, V16 comienza por análisis y contrato rojo; V17
-  no se adelanta sobre su autoridad de workspace/Git aunque pueda preparar
-  contratos disjuntos sin integrarlos.
+- Tras validar el receipt V15 y cerrar el análisis V16, se crea su contrato rojo
+  exacto; V17 no se adelanta sobre su autoridad de workspace/Git aunque pueda
+  preparar contratos disjuntos sin integrarlos.
 - V17, adapters iniciales de V21 y catálogos i18n pueden desarrollarse en ramas
   separadas, pero solo integran con sus dependencias acreditadas.
 - tras congelar contrato en V20, los adapters de V25 se portan en paralelo.

@@ -152,8 +152,9 @@ Garantías ejercitadas por el candidato y acreditadas solo tras ese gate:
 - backup/restore, recovery adversarial, SQLite concurrente, `-race`, ratchets de
   arquitectura y presupuesto de simplicidad forman parte del argv sellado.
 
-V15 no añade bindings públicos, workspace/Git ni otro scheduler/store. V16 es
-el siguiente corte causal y empieza por análisis de `AC-V16-WORKSPACE-GIT`.
+V15 no añade bindings públicos, workspace/Git ni otro scheduler/store. El
+análisis del siguiente corte V16 ya está cerrado; falta crear su contrato rojo
+exacto e implementar únicamente workspace/Git local. Forge remoto queda V28.
 
 Estado contable:
 
