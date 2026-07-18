@@ -24,6 +24,8 @@ const (
 	PermissionGoalsGet                Permission = "goals.get"
 	PermissionGoalsList               Permission = "goals.list"
 	PermissionGoalsDirect             Permission = "goals.direct"
+	PermissionBudgetsManage           Permission = "budgets.manage"
+	PermissionEffectsApprove          Permission = "effects.approve"
 	PermissionArtifactsRead           Permission = "artifacts.read"
 	PermissionProjectStatus           Permission = "project.status"
 )
@@ -42,7 +44,8 @@ func ValidatePermission(permission Permission) error {
 	switch permission {
 	case PermissionProjectHierarchyManage, PermissionProjectMembershipManage,
 		PermissionGoalsCreate, PermissionGoalsAmend, PermissionGoalsGet,
-		PermissionGoalsList, PermissionGoalsDirect, PermissionArtifactsRead, PermissionProjectStatus:
+		PermissionGoalsList, PermissionGoalsDirect, PermissionBudgetsManage,
+		PermissionEffectsApprove, PermissionArtifactsRead, PermissionProjectStatus:
 		return nil
 	default:
 		return errors.New("identity.invalid_permission")
@@ -64,13 +67,17 @@ func RoleAllows(role Role, permission Permission) bool {
 		return permission == PermissionGoalsCreate || permission == PermissionGoalsAmend ||
 			permission == PermissionGoalsGet || permission == PermissionGoalsList ||
 			permission == PermissionArtifactsRead || permission == PermissionProjectStatus
-	case RoleReviewer, RoleViewer:
+	case RoleReviewer:
+		return permission == PermissionGoalsGet || permission == PermissionGoalsList ||
+			permission == PermissionEffectsApprove || permission == PermissionArtifactsRead ||
+			permission == PermissionProjectStatus
+	case RoleViewer:
 		return permission == PermissionGoalsGet || permission == PermissionGoalsList ||
 			permission == PermissionArtifactsRead || permission == PermissionProjectStatus
 	case RoleOperator:
 		return permission == PermissionGoalsCreate || permission == PermissionGoalsGet ||
 			permission == PermissionGoalsList || permission == PermissionGoalsDirect ||
-			permission == PermissionArtifactsRead ||
+			permission == PermissionEffectsApprove || permission == PermissionArtifactsRead ||
 			permission == PermissionProjectStatus
 	default:
 		return false

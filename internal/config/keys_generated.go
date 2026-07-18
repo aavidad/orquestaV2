@@ -4,56 +4,63 @@ package config
 
 import "time"
 
-const generatedRegistrySourceSHA256 = "72a5833f0a6f989b47df94ab71bfbf031b09216a1de2d95a134a09127f5312bd"
-const generatedRegistryRevision = "2026-07-16.12"
-const generatedRegistrySemanticSHA256 = "sha256:c3da7e8c380be52f5708c4025e61164c760f698b16ff516203901d3ab77151f2"
+const generatedRegistrySourceSHA256 = "b4eefe1ddfc9306a22c3707a584ab38e6c5224dd1dde6c7b2ad94a6a1df52e6c"
+const generatedRegistryRevision = "2026-07-18.15"
+const generatedRegistrySemanticSHA256 = "sha256:f1024af0fdca9ed804388c50bead31ae05cb084329f637a572a5d9bff65fe584"
 
 const (
-	KeyServerListen                        Key = "server.listen"
-	KeyServerMCPPath                       Key = "server.mcp_path"
-	KeyServerMaxRequestBytes               Key = "server.max_request_bytes"
-	KeyServerReadTimeout                   Key = "server.read_timeout"
-	KeyServerWriteTimeout                  Key = "server.write_timeout"
-	KeyServerIdleTimeout                   Key = "server.idle_timeout"
-	KeyServerShutdownTimeout               Key = "server.shutdown_timeout"
-	KeyStateSQLitePath                     Key = "state.sqlite.path"
-	KeyStateSQLiteBusyTimeout              Key = "state.sqlite.busy_timeout"
-	KeyStateSQLiteMaxOpenConnections       Key = "state.sqlite.max_open_connections"
-	KeyArtifactFilesystemRoot              Key = "artifact.filesystem.root"
-	KeyCredentialsLocalPath                Key = "credentials.local.path"
-	KeyCredentialsLocalMaxDocumentBytes    Key = "credentials.local.max_document_bytes"
-	KeyRuntimeProvider                     Key = "runtime.provider"
-	KeyRuntimeMaxOutputBytes               Key = "runtime.max_output_bytes"
-	KeyRuntimeCodexCommand                 Key = "runtime.codex.command"
-	KeyRuntimeCodexModel                   Key = "runtime.codex.model"
-	KeyRuntimeCodexReasoning               Key = "runtime.codex.reasoning"
-	KeyRuntimeCodexTimeout                 Key = "runtime.codex.timeout"
-	KeyRuntimeCodexProcessPipeDrainDelay   Key = "runtime.codex.process_pipe_drain_delay"
-	KeyRuntimeCodexMaxDiagnosticBytes      Key = "runtime.codex.max_diagnostic_bytes"
-	KeyRuntimeCodexMaxConcurrentExecutions Key = "runtime.codex.max_concurrent_executions"
-	KeyRuntimeCodexWorkRoot                Key = "runtime.codex.work_root"
-	KeyRuntimeCodexEnvAllowlist            Key = "runtime.codex.env_allowlist"
-	KeyRuntimeCodexCredentialRef           Key = "runtime.codex.credential_ref"
-	KeyIdentityProvider                    Key = "identity.provider"
-	KeyIdentityLocalActor                  Key = "identity.local_actor"
-	KeyIdentityLocalTokenPath              Key = "identity.local_token_path"
-	KeyIdentityOIDCIssuer                  Key = "identity.oidc.issuer"
-	KeyIdentityOIDCAudience                Key = "identity.oidc.audience"
-	KeyIdentityOIDCRequiredGroups          Key = "identity.oidc.required_groups"
-	KeyIdentityOIDCClockSkew               Key = "identity.oidc.clock_skew"
-	KeyIdentityOIDCUpstreamTimeout         Key = "identity.oidc.upstream_timeout"
-	KeyProjectDefault                      Key = "project.default"
-	KeyDirectorLeaseDuration               Key = "director.lease_duration"
-	KeyMailboxMaxEnvelopeBytes             Key = "mailbox.max_envelope_bytes"
-	KeySchedulerPollInterval               Key = "scheduler.poll_interval"
-	KeySchedulerObservationInterval        Key = "scheduler.observation_interval"
-	KeySchedulerClaimLease                 Key = "scheduler.claim_lease"
-	KeySchedulerMaxExecutionAttempts       Key = "scheduler.max_execution_attempts"
-	KeySchedulerExecutionTimeout           Key = "scheduler.execution_timeout"
-	KeyAPIMaxListLimit                     Key = "api.max_list_limit"
-	KeyAPILocale                           Key = "api.locale"
-	KeyConfigEffectivePath                 Key = "config.effective_path"
-	KeyConfigEffectiveMaxExistingBytes     Key = "config.effective_max_existing_bytes"
+	KeyServerListen                                Key = "server.listen"
+	KeyServerMCPPath                               Key = "server.mcp_path"
+	KeyServerMaxRequestBytes                       Key = "server.max_request_bytes"
+	KeyServerReadTimeout                           Key = "server.read_timeout"
+	KeyServerWriteTimeout                          Key = "server.write_timeout"
+	KeyServerIdleTimeout                           Key = "server.idle_timeout"
+	KeyServerShutdownTimeout                       Key = "server.shutdown_timeout"
+	KeyStateSQLitePath                             Key = "state.sqlite.path"
+	KeyStateSQLiteBusyTimeout                      Key = "state.sqlite.busy_timeout"
+	KeyStateSQLiteMaxOpenConnections               Key = "state.sqlite.max_open_connections"
+	KeyArtifactFilesystemRoot                      Key = "artifact.filesystem.root"
+	KeyCredentialsLocalPath                        Key = "credentials.local.path"
+	KeyCredentialsLocalMaxDocumentBytes            Key = "credentials.local.max_document_bytes"
+	KeyRuntimeProvider                             Key = "runtime.provider"
+	KeyRuntimeMaxOutputBytes                       Key = "runtime.max_output_bytes"
+	KeyRuntimeCodexCommand                         Key = "runtime.codex.command"
+	KeyRuntimeCodexModel                           Key = "runtime.codex.model"
+	KeyRuntimeCodexReasoning                       Key = "runtime.codex.reasoning"
+	KeyRuntimeCodexTimeout                         Key = "runtime.codex.timeout"
+	KeyRuntimeCodexProcessPipeDrainDelay           Key = "runtime.codex.process_pipe_drain_delay"
+	KeyRuntimeCodexMaxDiagnosticBytes              Key = "runtime.codex.max_diagnostic_bytes"
+	KeyRuntimeCodexMaxConcurrentExecutions         Key = "runtime.codex.max_concurrent_executions"
+	KeyRuntimeCodexWorkRoot                        Key = "runtime.codex.work_root"
+	KeyRuntimeCodexEnvAllowlist                    Key = "runtime.codex.env_allowlist"
+	KeyRuntimeCodexCredentialRef                   Key = "runtime.codex.credential_ref"
+	KeyIdentityProvider                            Key = "identity.provider"
+	KeyIdentityLocalActor                          Key = "identity.local_actor"
+	KeyIdentityLocalTokenPath                      Key = "identity.local_token_path"
+	KeyIdentityOIDCIssuer                          Key = "identity.oidc.issuer"
+	KeyIdentityOIDCAudience                        Key = "identity.oidc.audience"
+	KeyIdentityOIDCRequiredGroups                  Key = "identity.oidc.required_groups"
+	KeyIdentityOIDCClockSkew                       Key = "identity.oidc.clock_skew"
+	KeyIdentityOIDCUpstreamTimeout                 Key = "identity.oidc.upstream_timeout"
+	KeyProjectDefault                              Key = "project.default"
+	KeyGovernanceBudgetCurrency                    Key = "governance.budget_currency"
+	KeyGovernanceGlobalTokenBudget                 Key = "governance.global_token_budget"
+	KeyGovernanceGlobalMoneyMicrosBudget           Key = "governance.global_money_micros_budget"
+	KeyGovernanceDefaultExecutionTokenBudget       Key = "governance.default_execution_token_budget"
+	KeyGovernanceDefaultExecutionMoneyMicrosBudget Key = "governance.default_execution_money_micros_budget"
+	KeyGovernanceEffectApprovalTTL                 Key = "governance.effect_approval_ttl"
+	KeyDirectorLeaseDuration                       Key = "director.lease_duration"
+	KeyMailboxMaxEnvelopeBytes                     Key = "mailbox.max_envelope_bytes"
+	KeySchedulerPollInterval                       Key = "scheduler.poll_interval"
+	KeySchedulerObservationInterval                Key = "scheduler.observation_interval"
+	KeySchedulerClaimLease                         Key = "scheduler.claim_lease"
+	KeySchedulerMaxExecutionAttempts               Key = "scheduler.max_execution_attempts"
+	KeySchedulerMaxChildrenPerParent               Key = "scheduler.max_children_per_parent"
+	KeySchedulerExecutionTimeout                   Key = "scheduler.execution_timeout"
+	KeyAPIMaxListLimit                             Key = "api.max_list_limit"
+	KeyAPILocale                                   Key = "api.locale"
+	KeyConfigEffectivePath                         Key = "config.effective_path"
+	KeyConfigEffectiveMaxExistingBytes             Key = "config.effective_max_existing_bytes"
 )
 
 func allGeneratedKeys() []Key {
@@ -92,12 +99,19 @@ func allGeneratedKeys() []Key {
 		KeyIdentityOIDCClockSkew,
 		KeyIdentityOIDCUpstreamTimeout,
 		KeyProjectDefault,
+		KeyGovernanceBudgetCurrency,
+		KeyGovernanceGlobalTokenBudget,
+		KeyGovernanceGlobalMoneyMicrosBudget,
+		KeyGovernanceDefaultExecutionTokenBudget,
+		KeyGovernanceDefaultExecutionMoneyMicrosBudget,
+		KeyGovernanceEffectApprovalTTL,
 		KeyDirectorLeaseDuration,
 		KeyMailboxMaxEnvelopeBytes,
 		KeySchedulerPollInterval,
 		KeySchedulerObservationInterval,
 		KeySchedulerClaimLease,
 		KeySchedulerMaxExecutionAttempts,
+		KeySchedulerMaxChildrenPerParent,
 		KeySchedulerExecutionTimeout,
 		KeyAPIMaxListLimit,
 		KeyAPILocale,
@@ -344,6 +358,48 @@ func (s Snapshot) ProjectDefault() string {
 	return typed
 }
 
+// GovernanceBudgetCurrency returns governance.budget_currency.
+func (s Snapshot) GovernanceBudgetCurrency() string {
+	value, _ := s.value(KeyGovernanceBudgetCurrency)
+	typed, _ := value.(string)
+	return typed
+}
+
+// GovernanceGlobalTokenBudget returns governance.global_token_budget.
+func (s Snapshot) GovernanceGlobalTokenBudget() int64 {
+	value, _ := s.value(KeyGovernanceGlobalTokenBudget)
+	typed, _ := value.(int64)
+	return typed
+}
+
+// GovernanceGlobalMoneyMicrosBudget returns governance.global_money_micros_budget.
+func (s Snapshot) GovernanceGlobalMoneyMicrosBudget() int64 {
+	value, _ := s.value(KeyGovernanceGlobalMoneyMicrosBudget)
+	typed, _ := value.(int64)
+	return typed
+}
+
+// GovernanceDefaultExecutionTokenBudget returns governance.default_execution_token_budget.
+func (s Snapshot) GovernanceDefaultExecutionTokenBudget() int64 {
+	value, _ := s.value(KeyGovernanceDefaultExecutionTokenBudget)
+	typed, _ := value.(int64)
+	return typed
+}
+
+// GovernanceDefaultExecutionMoneyMicrosBudget returns governance.default_execution_money_micros_budget.
+func (s Snapshot) GovernanceDefaultExecutionMoneyMicrosBudget() int64 {
+	value, _ := s.value(KeyGovernanceDefaultExecutionMoneyMicrosBudget)
+	typed, _ := value.(int64)
+	return typed
+}
+
+// GovernanceEffectApprovalTTL returns governance.effect_approval_ttl.
+func (s Snapshot) GovernanceEffectApprovalTTL() time.Duration {
+	value, _ := s.value(KeyGovernanceEffectApprovalTTL)
+	typed, _ := value.(time.Duration)
+	return typed
+}
+
 // DirectorLeaseDuration returns director.lease_duration.
 func (s Snapshot) DirectorLeaseDuration() time.Duration {
 	value, _ := s.value(KeyDirectorLeaseDuration)
@@ -386,6 +442,13 @@ func (s Snapshot) SchedulerMaxExecutionAttempts() int64 {
 	return typed
 }
 
+// SchedulerMaxChildrenPerParent returns scheduler.max_children_per_parent.
+func (s Snapshot) SchedulerMaxChildrenPerParent() int64 {
+	value, _ := s.value(KeySchedulerMaxChildrenPerParent)
+	typed, _ := value.(int64)
+	return typed
+}
+
 // SchedulerExecutionTimeout returns scheduler.execution_timeout.
 func (s Snapshot) SchedulerExecutionTimeout() time.Duration {
 	value, _ := s.value(KeySchedulerExecutionTimeout)
@@ -423,7 +486,7 @@ func (s Snapshot) ConfigEffectiveMaxExistingBytes() int64 {
 
 const generatedRegistryJSON = `{
   "schema_version": 2,
-  "revision": "2026-07-16.12",
+  "revision": "2026-07-18.15",
   "precedence": [
     "default",
     "file",
@@ -980,6 +1043,98 @@ const generatedRegistryJSON = `{
       ]
     },
     {
+      "key": "governance.budget_currency",
+      "go_name": "GovernanceBudgetCurrency",
+      "semantic_ref": "orquesta.config.governance.budget_currency",
+      "type": "string",
+      "default": "USD",
+      "sensitive": false,
+      "scope": "governance",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_GOVERNANCE_BUDGET_CURRENCY",
+      "validator_ids": [
+        "trimmed_non_empty_string"
+      ]
+    },
+    {
+      "key": "governance.global_token_budget",
+      "go_name": "GovernanceGlobalTokenBudget",
+      "semantic_ref": "orquesta.config.governance.global_token_budget",
+      "type": "integer",
+      "default": 14000000,
+      "sensitive": false,
+      "scope": "governance",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_GOVERNANCE_GLOBAL_TOKEN_BUDGET",
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1,
+      "maximum": 1000000000000000
+    },
+    {
+      "key": "governance.global_money_micros_budget",
+      "go_name": "GovernanceGlobalMoneyMicrosBudget",
+      "semantic_ref": "orquesta.config.governance.global_money_micros_budget",
+      "type": "integer",
+      "default": 70000000,
+      "sensitive": false,
+      "scope": "governance",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_GOVERNANCE_GLOBAL_MONEY_MICROS_BUDGET",
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1,
+      "maximum": 9000000000000000
+    },
+    {
+      "key": "governance.default_execution_token_budget",
+      "go_name": "GovernanceDefaultExecutionTokenBudget",
+      "semantic_ref": "orquesta.config.governance.default_execution_token_budget",
+      "type": "integer",
+      "default": 200000,
+      "sensitive": false,
+      "scope": "governance",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_GOVERNANCE_DEFAULT_EXECUTION_TOKEN_BUDGET",
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1,
+      "maximum": 1000000000000
+    },
+    {
+      "key": "governance.default_execution_money_micros_budget",
+      "go_name": "GovernanceDefaultExecutionMoneyMicrosBudget",
+      "semantic_ref": "orquesta.config.governance.default_execution_money_micros_budget",
+      "type": "integer",
+      "default": 1000000,
+      "sensitive": false,
+      "scope": "governance",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_GOVERNANCE_DEFAULT_EXECUTION_MONEY_MICROS_BUDGET",
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1,
+      "maximum": 1000000000000000
+    },
+    {
+      "key": "governance.effect_approval_ttl",
+      "go_name": "GovernanceEffectApprovalTTL",
+      "semantic_ref": "orquesta.config.governance.effect_approval_ttl",
+      "type": "duration",
+      "default": "24h",
+      "sensitive": false,
+      "scope": "governance",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_GOVERNANCE_EFFECT_APPROVAL_TTL",
+      "validator_ids": [
+        "positive_duration"
+      ]
+    },
+    {
       "key": "director.lease_duration",
       "go_name": "DirectorLeaseDuration",
       "semantic_ref": "orquesta.config.director.lease_duration",
@@ -1066,6 +1221,22 @@ const generatedRegistryJSON = `{
       ],
       "minimum": 1,
       "maximum": 1000
+    },
+    {
+      "key": "scheduler.max_children_per_parent",
+      "go_name": "SchedulerMaxChildrenPerParent",
+      "semantic_ref": "orquesta.config.scheduler.max_children_per_parent",
+      "type": "integer",
+      "default": 6,
+      "sensitive": false,
+      "scope": "scheduler",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_SCHEDULER_MAX_CHILDREN_PER_PARENT",
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1,
+      "maximum": 4096
     },
     {
       "key": "scheduler.execution_timeout",

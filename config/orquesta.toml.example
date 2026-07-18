@@ -50,6 +50,14 @@ upstream_timeout = "10s"
 [project]
 default = "project:default"
 
+[governance]
+budget_currency = "USD"
+global_token_budget = 14000000
+global_money_micros_budget = 70000000
+default_execution_token_budget = 200000
+default_execution_money_micros_budget = 1000000
+effect_approval_ttl = "24h"
+
 [director]
 lease_duration = "2m"
 
@@ -61,6 +69,7 @@ poll_interval = "500ms"
 observation_interval = "2s"
 claim_lease = "2m"
 max_execution_attempts = 3
+max_children_per_parent = 6
 execution_timeout = "45m"
 
 [api]

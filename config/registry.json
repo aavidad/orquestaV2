@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "revision": "2026-07-16.12",
+  "revision": "2026-07-18.15",
   "precedence": [
     "default",
     "file",
@@ -557,6 +557,98 @@
       ]
     },
     {
+      "key": "governance.budget_currency",
+      "go_name": "GovernanceBudgetCurrency",
+      "semantic_ref": "orquesta.config.governance.budget_currency",
+      "type": "string",
+      "default": "USD",
+      "sensitive": false,
+      "scope": "governance",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_GOVERNANCE_BUDGET_CURRENCY",
+      "validator_ids": [
+        "trimmed_non_empty_string"
+      ]
+    },
+    {
+      "key": "governance.global_token_budget",
+      "go_name": "GovernanceGlobalTokenBudget",
+      "semantic_ref": "orquesta.config.governance.global_token_budget",
+      "type": "integer",
+      "default": 14000000,
+      "sensitive": false,
+      "scope": "governance",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_GOVERNANCE_GLOBAL_TOKEN_BUDGET",
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1,
+      "maximum": 1000000000000000
+    },
+    {
+      "key": "governance.global_money_micros_budget",
+      "go_name": "GovernanceGlobalMoneyMicrosBudget",
+      "semantic_ref": "orquesta.config.governance.global_money_micros_budget",
+      "type": "integer",
+      "default": 70000000,
+      "sensitive": false,
+      "scope": "governance",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_GOVERNANCE_GLOBAL_MONEY_MICROS_BUDGET",
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1,
+      "maximum": 9000000000000000
+    },
+    {
+      "key": "governance.default_execution_token_budget",
+      "go_name": "GovernanceDefaultExecutionTokenBudget",
+      "semantic_ref": "orquesta.config.governance.default_execution_token_budget",
+      "type": "integer",
+      "default": 200000,
+      "sensitive": false,
+      "scope": "governance",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_GOVERNANCE_DEFAULT_EXECUTION_TOKEN_BUDGET",
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1,
+      "maximum": 1000000000000
+    },
+    {
+      "key": "governance.default_execution_money_micros_budget",
+      "go_name": "GovernanceDefaultExecutionMoneyMicrosBudget",
+      "semantic_ref": "orquesta.config.governance.default_execution_money_micros_budget",
+      "type": "integer",
+      "default": 1000000,
+      "sensitive": false,
+      "scope": "governance",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_GOVERNANCE_DEFAULT_EXECUTION_MONEY_MICROS_BUDGET",
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1,
+      "maximum": 1000000000000000
+    },
+    {
+      "key": "governance.effect_approval_ttl",
+      "go_name": "GovernanceEffectApprovalTTL",
+      "semantic_ref": "orquesta.config.governance.effect_approval_ttl",
+      "type": "duration",
+      "default": "24h",
+      "sensitive": false,
+      "scope": "governance",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_GOVERNANCE_EFFECT_APPROVAL_TTL",
+      "validator_ids": [
+        "positive_duration"
+      ]
+    },
+    {
       "key": "director.lease_duration",
       "go_name": "DirectorLeaseDuration",
       "semantic_ref": "orquesta.config.director.lease_duration",
@@ -643,6 +735,22 @@
       ],
       "minimum": 1,
       "maximum": 1000
+    },
+    {
+      "key": "scheduler.max_children_per_parent",
+      "go_name": "SchedulerMaxChildrenPerParent",
+      "semantic_ref": "orquesta.config.scheduler.max_children_per_parent",
+      "type": "integer",
+      "default": 6,
+      "sensitive": false,
+      "scope": "scheduler",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_SCHEDULER_MAX_CHILDREN_PER_PARENT",
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1,
+      "maximum": 4096
     },
     {
       "key": "scheduler.execution_timeout",

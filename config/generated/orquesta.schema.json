@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:orquesta:config:2026-07-16.12",
+  "$id": "urn:orquesta:config:2026-07-18.15",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -151,6 +151,93 @@
           "x-sensitive": false,
           "x-validator-ids": [
             "positive_duration"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "governance": {
+      "additionalProperties": false,
+      "properties": {
+        "budget_currency": {
+          "default": "USD",
+          "type": "string",
+          "x-env-alias": "ORQUESTA_GOVERNANCE_BUDGET_CURRENCY",
+          "x-restart-required": true,
+          "x-scope": "governance",
+          "x-semantic-ref": "orquesta.config.governance.budget_currency",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "trimmed_non_empty_string"
+          ]
+        },
+        "default_execution_money_micros_budget": {
+          "default": 1000000,
+          "maximum": 1000000000000000,
+          "minimum": 1,
+          "type": "integer",
+          "x-env-alias": "ORQUESTA_GOVERNANCE_DEFAULT_EXECUTION_MONEY_MICROS_BUDGET",
+          "x-restart-required": true,
+          "x-scope": "governance",
+          "x-semantic-ref": "orquesta.config.governance.default_execution_money_micros_budget",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "integer_bounds"
+          ]
+        },
+        "default_execution_token_budget": {
+          "default": 200000,
+          "maximum": 1000000000000,
+          "minimum": 1,
+          "type": "integer",
+          "x-env-alias": "ORQUESTA_GOVERNANCE_DEFAULT_EXECUTION_TOKEN_BUDGET",
+          "x-restart-required": true,
+          "x-scope": "governance",
+          "x-semantic-ref": "orquesta.config.governance.default_execution_token_budget",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "integer_bounds"
+          ]
+        },
+        "effect_approval_ttl": {
+          "default": "24h",
+          "pattern": "^[1-9][0-9]*(ns|us|µs|ms|s|m|h)([0-9].*)?$",
+          "type": "string",
+          "x-env-alias": "ORQUESTA_GOVERNANCE_EFFECT_APPROVAL_TTL",
+          "x-restart-required": true,
+          "x-scope": "governance",
+          "x-semantic-ref": "orquesta.config.governance.effect_approval_ttl",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "positive_duration"
+          ]
+        },
+        "global_money_micros_budget": {
+          "default": 70000000,
+          "maximum": 9000000000000000,
+          "minimum": 1,
+          "type": "integer",
+          "x-env-alias": "ORQUESTA_GOVERNANCE_GLOBAL_MONEY_MICROS_BUDGET",
+          "x-restart-required": true,
+          "x-scope": "governance",
+          "x-semantic-ref": "orquesta.config.governance.global_money_micros_budget",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "integer_bounds"
+          ]
+        },
+        "global_token_budget": {
+          "default": 14000000,
+          "maximum": 1000000000000000,
+          "minimum": 1,
+          "type": "integer",
+          "x-env-alias": "ORQUESTA_GOVERNANCE_GLOBAL_TOKEN_BUDGET",
+          "x-restart-required": true,
+          "x-scope": "governance",
+          "x-semantic-ref": "orquesta.config.governance.global_token_budget",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "integer_bounds"
           ]
         }
       },
@@ -527,6 +614,20 @@
             "positive_duration"
           ]
         },
+        "max_children_per_parent": {
+          "default": 6,
+          "maximum": 4096,
+          "minimum": 1,
+          "type": "integer",
+          "x-env-alias": "ORQUESTA_SCHEDULER_MAX_CHILDREN_PER_PARENT",
+          "x-restart-required": true,
+          "x-scope": "scheduler",
+          "x-semantic-ref": "orquesta.config.scheduler.max_children_per_parent",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "integer_bounds"
+          ]
+        },
         "max_execution_attempts": {
           "default": 3,
           "maximum": 1000,
@@ -715,8 +816,8 @@
       "type": "object"
     }
   },
-  "x-registry-revision": "2026-07-16.12",
-  "x-registry-hash": "sha256:c3da7e8c380be52f5708c4025e61164c760f698b16ff516203901d3ab77151f2",
+  "x-registry-revision": "2026-07-18.15",
+  "x-registry-hash": "sha256:f1024af0fdca9ed804388c50bead31ae05cb084329f637a572a5d9bff65fe584",
   "x-source-max-bytes": 1048576,
   "x-aliases": [],
   "x-cross-validators": [

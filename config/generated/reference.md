@@ -2,9 +2,9 @@
 
 # Orquesta configuration registry
 
-Registry revision: `2026-07-16.12`
+Registry revision: `2026-07-18.15`
 
-Registry hash: `sha256:c3da7e8c380be52f5708c4025e61164c760f698b16ff516203901d3ab77151f2`
+Registry hash: `sha256:f1024af0fdca9ed804388c50bead31ae05cb084329f637a572a5d9bff65fe584`
 
 Precedence: `default < file < env`
 
@@ -50,12 +50,19 @@ Source limit: `1048576` bytes
 | `identity.oidc.clock_skew` | `duration` | `"30s"` | `ORQUESTA_IDENTITY_OIDC_CLOCK_SKEW` | `true` | `positive_duration` |
 | `identity.oidc.upstream_timeout` | `duration` | `"10s"` | `ORQUESTA_IDENTITY_OIDC_UPSTREAM_TIMEOUT` | `true` | `positive_duration` |
 | `project.default` | `string` | `"project:default"` | `ORQUESTA_PROJECT_DEFAULT` | `true` | `opaque_ref` |
+| `governance.budget_currency` | `string` | `"USD"` | `ORQUESTA_GOVERNANCE_BUDGET_CURRENCY` | `true` | `trimmed_non_empty_string` |
+| `governance.global_token_budget` | `integer` | `14000000` | `ORQUESTA_GOVERNANCE_GLOBAL_TOKEN_BUDGET` | `true` | `integer_bounds` |
+| `governance.global_money_micros_budget` | `integer` | `70000000` | `ORQUESTA_GOVERNANCE_GLOBAL_MONEY_MICROS_BUDGET` | `true` | `integer_bounds` |
+| `governance.default_execution_token_budget` | `integer` | `200000` | `ORQUESTA_GOVERNANCE_DEFAULT_EXECUTION_TOKEN_BUDGET` | `true` | `integer_bounds` |
+| `governance.default_execution_money_micros_budget` | `integer` | `1000000` | `ORQUESTA_GOVERNANCE_DEFAULT_EXECUTION_MONEY_MICROS_BUDGET` | `true` | `integer_bounds` |
+| `governance.effect_approval_ttl` | `duration` | `"24h"` | `ORQUESTA_GOVERNANCE_EFFECT_APPROVAL_TTL` | `true` | `positive_duration` |
 | `director.lease_duration` | `duration` | `"2m"` | `ORQUESTA_DIRECTOR_LEASE_DURATION` | `true` | `positive_duration` |
 | `mailbox.max_envelope_bytes` | `integer` | `65536` | `ORQUESTA_MAILBOX_MAX_ENVELOPE_BYTES` | `true` | `integer_bounds` |
 | `scheduler.poll_interval` | `duration` | `"500ms"` | `ORQUESTA_SCHEDULER_POLL_INTERVAL` | `true` | `positive_duration` |
 | `scheduler.observation_interval` | `duration` | `"2s"` | `ORQUESTA_SCHEDULER_OBSERVATION_INTERVAL` | `true` | `positive_duration` |
 | `scheduler.claim_lease` | `duration` | `"2m"` | `ORQUESTA_SCHEDULER_CLAIM_LEASE` | `true` | `positive_duration` |
 | `scheduler.max_execution_attempts` | `integer` | `3` | `ORQUESTA_SCHEDULER_MAX_EXECUTION_ATTEMPTS` | `true` | `integer_bounds` |
+| `scheduler.max_children_per_parent` | `integer` | `6` | `ORQUESTA_SCHEDULER_MAX_CHILDREN_PER_PARENT` | `true` | `integer_bounds` |
 | `scheduler.execution_timeout` | `duration` | `"45m"` | `ORQUESTA_SCHEDULER_EXECUTION_TIMEOUT` | `true` | `positive_duration` |
 | `api.max_list_limit` | `integer` | `100` | `ORQUESTA_API_MAX_LIST_LIMIT` | `true` | `integer_bounds` |
 | `api.locale` | `string` | `"es"` | `ORQUESTA_API_LOCALE` | `true` | `allowed_values` |

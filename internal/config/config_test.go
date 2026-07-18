@@ -41,9 +41,17 @@ func TestResolveReturnsImmutableTypedCanonicalDefaults(t *testing.T) {
 		snapshot.RuntimeCodexMaxConcurrentExecutions() != 70 || snapshot.RuntimeCodexProcessPipeDrainDelay() != 250*time.Millisecond {
 		t.Fatal("runtime defaults missing")
 	}
+	if snapshot.GovernanceBudgetCurrency() != "USD" || snapshot.GovernanceGlobalTokenBudget() != 14000000 ||
+		snapshot.GovernanceGlobalMoneyMicrosBudget() != 70000000 ||
+		snapshot.GovernanceDefaultExecutionTokenBudget() != 200000 ||
+		snapshot.GovernanceDefaultExecutionMoneyMicrosBudget() != 1000000 ||
+		snapshot.GovernanceEffectApprovalTTL() != 24*time.Hour {
+		t.Fatal("governance defaults missing")
+	}
 	if snapshot.ConfigEffectiveMaxExistingBytes() != 16777216 || snapshot.SchedulerObservationInterval() != 2*time.Second ||
 		snapshot.SchedulerClaimLease() != 2*time.Minute || snapshot.SchedulerMaxExecutionAttempts() != 3 ||
-		snapshot.SchedulerExecutionTimeout() != 45*time.Minute || snapshot.MailboxMaxEnvelopeBytes() != 65536 ||
+		snapshot.SchedulerMaxChildrenPerParent() != 6 || snapshot.SchedulerExecutionTimeout() != 45*time.Minute ||
+		snapshot.MailboxMaxEnvelopeBytes() != 65536 ||
 		snapshot.APIMaxListLimit() != 100 || snapshot.APILocale() != "es" {
 		t.Fatal("scheduler/API/effective defaults missing")
 	}
