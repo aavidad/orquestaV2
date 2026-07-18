@@ -829,10 +829,11 @@
     {
       "id": "AC-V15-BUDGETS-EFFECTS",
       "vertical": "budgets_effects",
-      "status": "planned",
-      "test_ref": "planned:acceptance/v15_budgets_effects_test.go",
-      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
-      "fixture": "planned:fixtures/v15_budgets_effects",
+      "status": "executable",
+      "test_ref": "acceptance/v15_budgets_effects_test.go",
+      "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV15ScopeAndExecutableContract|TestV15EvidenceBelongsOnlyToBudgetsEffectsCapabilities|TestV15AcceptanceCommandRunsBudgetEffectConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV15BudgetsEffects|TestV15CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/governance ./internal/identity ./internal/config ./internal/credentials ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta && go test -mod=vendor -race -count=1 ./internal/application ./internal/adapters/state/sqlite ./internal/adapters/agent/fake ./internal/bootstrap -run \"^(TestBudgetContractUsesOneCanonicalEnvelopeAcrossLayers|TestConcurrentBudgetReservationsNeverExceedEnvelope|TestTemporaryQuotaParksActionWithoutTerminalFailure|TestHierarchicalFairnessBoundsProjectAndGoalStarvation|TestEffectRequiresExactLiveApprovalBeforeAdapterInvocation|TestEffectCrashAfterApplyBeforeReceiptReconcilesOnce|TestSQLiteBudgetsEffectsRestartRaceAndReplay|TestV15RecoveryRejectsBudgetEffectCausalTampering|TestV15BackupRestorePreservesBudgetsAndEffects|TestRealCodexBudgetsAndEffectsThroughProductionComposition)$\"'",
+      "fixture": "acceptance/fixtures/v15_budgets_effects.json",
+      "receipt": "product/evidence/v15_budgets_effects.json",
       "assertions": [
         "GOV-15 STG-09 ORC-08 ORC-09 ORC-10 ORC-11 EVD-03 and EVD-14 are the exact accepted V15 ownership; every other capability and V16 workspace Git collaboration remain deferred",
         "BudgetEnvelope BudgetDemand BudgetReservation BudgetSettlement EffectIntent EffectApproval EffectAttempt and EffectReceipt are distinct typed causal facts and neither an admission ACK nor agent text proves reserved capacity approval attempt or external effect",

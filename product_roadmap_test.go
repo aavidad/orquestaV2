@@ -1235,7 +1235,11 @@ func TestProductRoadmapV14ScopeAndExecutableContract(t *testing.T) {
 			t.Fatalf("V14 command opens broad or deferred surface %q: %q", forbidden, contract.Command)
 		}
 	}
-	for _, id := range []string{"AC-V15-BUDGETS-EFFECTS", "AC-V20-COMMAND-REGISTRY", "AC-V31-POSTGRES-S3-MULTIHOST"} {
+	if next := contracts["AC-V15-BUDGETS-EFFECTS"]; next.Status != "executable" ||
+		next.Receipt != "product/evidence/v15_budgets_effects.json" {
+		t.Fatalf("V14 successor V15 must advance only through its executable contract: %#v", next)
+	}
+	for _, id := range []string{"AC-V20-COMMAND-REGISTRY", "AC-V31-POSTGRES-S3-MULTIHOST"} {
 		if deferred := contracts[id]; deferred.Status != "planned" || deferred.Receipt != "" {
 			t.Fatalf("V14 prematurely opens deferred contract %s: %#v", id, deferred)
 		}
@@ -1368,7 +1372,7 @@ func roadmapV14Assertions() []string {
 	}
 }
 
-func TestProductRoadmapV15ScopeAndPreparedContract(t *testing.T) {
+func TestProductRoadmapV15ScopeAndExecutableContract(t *testing.T) {
 	var roadmap roadmapDocument
 	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
 	verticals := make(map[string]roadmapVertical, len(roadmap.Verticals))
@@ -1402,16 +1406,41 @@ func TestProductRoadmapV15ScopeAndPreparedContract(t *testing.T) {
 		}
 	}
 
-	const wantCommand = "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'"
+	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV15ScopeAndExecutableContract|TestV15EvidenceBelongsOnlyToBudgetsEffectsCapabilities|TestV15AcceptanceCommandRunsBudgetEffectConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV15BudgetsEffects|TestV15CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/governance ./internal/identity ./internal/config ./internal/credentials ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta && go test -mod=vendor -race -count=1 ./internal/application ./internal/adapters/state/sqlite ./internal/adapters/agent/fake ./internal/bootstrap -run \"^(TestBudgetContractUsesOneCanonicalEnvelopeAcrossLayers|TestConcurrentBudgetReservationsNeverExceedEnvelope|TestTemporaryQuotaParksActionWithoutTerminalFailure|TestHierarchicalFairnessBoundsProjectAndGoalStarvation|TestEffectRequiresExactLiveApprovalBeforeAdapterInvocation|TestEffectCrashAfterApplyBeforeReceiptReconcilesOnce|TestSQLiteBudgetsEffectsRestartRaceAndReplay|TestV15RecoveryRejectsBudgetEffectCausalTampering|TestV15BackupRestorePreservesBudgetsAndEffects|TestRealCodexBudgetsAndEffectsThroughProductionComposition)$\"'"
 	contract := contracts["AC-V15-BUDGETS-EFFECTS"]
-	if contract.Status != "planned" || contract.TestRef != "planned:acceptance/v15_budgets_effects_test.go" ||
-		contract.Fixture != "planned:fixtures/v15_budgets_effects" || contract.Receipt != "" ||
+	if contract.Status != "executable" || contract.TestRef != "acceptance/v15_budgets_effects_test.go" ||
+		contract.Fixture != "acceptance/fixtures/v15_budgets_effects.json" ||
+		contract.Receipt != "product/evidence/v15_budgets_effects.json" ||
 		contract.Command != wantCommand || !reflect.DeepEqual(contract.Assertions, roadmapV15Assertions()) {
-		t.Fatalf("invalid V15 prepared contract: %#v", contract)
+		t.Fatalf("invalid V15 executable contract: %#v", contract)
 	}
 	for _, id := range []string{"AC-V16-WORKSPACE-GIT", "AC-V20-COMMAND-REGISTRY", "AC-V31-POSTGRES-S3-MULTIHOST"} {
 		if deferred := contracts[id]; deferred.Status != "planned" || deferred.Receipt != "" {
 			t.Fatalf("V15 contract preparation prematurely opens deferred contract %s: %#v", id, deferred)
+		}
+	}
+}
+
+func TestV15AcceptanceCommandRunsBudgetEffectConsumers(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+	var contract roadmapAcceptanceContract
+	for _, candidate := range roadmap.AcceptanceContracts {
+		if candidate.ID == "AC-V15-BUDGETS-EFFECTS" {
+			contract = candidate
+			break
+		}
+	}
+	for _, required := range []string{
+		"TestAcceptanceV15BudgetsEffects", "TestV15CandidateSubjectsCoverCommittedDelta",
+		"./internal/governance", "./internal/application", "./internal/adapters/state/sqlite",
+		"./internal/adapters/agent/fake", "./internal/adapters/agent/codex", "./internal/bootstrap",
+		"TestConcurrentBudgetReservationsNeverExceedEnvelope",
+		"TestEffectCrashAfterApplyBeforeReceiptReconcilesOnce",
+		"TestRealCodexBudgetsAndEffectsThroughProductionComposition",
+	} {
+		if !strings.Contains(contract.Command, required) {
+			t.Errorf("V15 command does not execute %q", required)
 		}
 	}
 }

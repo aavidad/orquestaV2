@@ -2,7 +2,7 @@
 
 Fecha de decisión: 2026-07-18.
 
-Estado: **contrato fijado; implementación no iniciada**. V01-V14 siguen
+Estado: **contrato rojo ejecutable; implementación no iniciada**. V01-V14 siguen
 acreditados. V16 no se abre hasta que `AC-V15-BUDGETS-EFFECTS` tenga receipt V3
 `PASS` reproducido desde un checkout limpio y sellado.
 
@@ -281,4 +281,3 @@ y solo añaden los IDs V15 verificados. El bug único
 `BUG-ORQ-20260706-BUDGET-CONTRACT-DESALINEADO` no se cerrará por texto: exige
 el test nominal canónico y ampliar de forma coherente el vocabulario de
 trazabilidad; si no se hace, permanece pendiente.
-

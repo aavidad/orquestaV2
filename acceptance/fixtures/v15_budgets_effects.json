@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "receipt_schema_version": 3,
+  "contract_id": "AC-V15-BUDGETS-EFFECTS",
+  "trusted_base_git_commit_oid": "7aa91cbea80741c6d757ec17d09bc9d7aa7e3085",
+  "product_delta_base_git_commit_oid": "7aa91cbea80741c6d757ec17d09bc9d7aa7e3085",
+  "product_delta_sealed_git_commit_oid": "0000000000000000000000000000000000000000",
+  "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV15ScopeAndExecutableContract|TestV15EvidenceBelongsOnlyToBudgetsEffectsCapabilities|TestV15AcceptanceCommandRunsBudgetEffectConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV15BudgetsEffects|TestV15CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/governance ./internal/identity ./internal/config ./internal/credentials ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta && go test -mod=vendor -race -count=1 ./internal/application ./internal/adapters/state/sqlite ./internal/adapters/agent/fake ./internal/bootstrap -run \"^(TestBudgetContractUsesOneCanonicalEnvelopeAcrossLayers|TestConcurrentBudgetReservationsNeverExceedEnvelope|TestTemporaryQuotaParksActionWithoutTerminalFailure|TestHierarchicalFairnessBoundsProjectAndGoalStarvation|TestEffectRequiresExactLiveApprovalBeforeAdapterInvocation|TestEffectCrashAfterApplyBeforeReceiptReconcilesOnce|TestSQLiteBudgetsEffectsRestartRaceAndReplay|TestV15RecoveryRejectsBudgetEffectCausalTampering|TestV15BackupRestorePreservesBudgetsAndEffects|TestRealCodexBudgetsAndEffectsThroughProductionComposition)$\"'",
+  "execution_argv": [
+    "sh",
+    "-c",
+    "go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV15ScopeAndExecutableContract|TestV15EvidenceBelongsOnlyToBudgetsEffectsCapabilities|TestV15AcceptanceCommandRunsBudgetEffectConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV15BudgetsEffects|TestV15CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/governance ./internal/identity ./internal/config ./internal/credentials ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta && go test -mod=vendor -race -count=1 ./internal/application ./internal/adapters/state/sqlite ./internal/adapters/agent/fake ./internal/bootstrap -run \"^(TestBudgetContractUsesOneCanonicalEnvelopeAcrossLayers|TestConcurrentBudgetReservationsNeverExceedEnvelope|TestTemporaryQuotaParksActionWithoutTerminalFailure|TestHierarchicalFairnessBoundsProjectAndGoalStarvation|TestEffectRequiresExactLiveApprovalBeforeAdapterInvocation|TestEffectCrashAfterApplyBeforeReceiptReconcilesOnce|TestSQLiteBudgetsEffectsRestartRaceAndReplay|TestV15RecoveryRejectsBudgetEffectCausalTampering|TestV15BackupRestorePreservesBudgetsAndEffects|TestRealCodexBudgetsAndEffectsThroughProductionComposition)$\""
+  ],
+  "output_path": "product/evidence/v15_budgets_effects.output.txt",
+  "receipt_path": "product/evidence/v15_budgets_effects.json",
+  "candidate_subjects": [
+    "acceptance/fixtures/v15_budgets_effects.json",
+    "acceptance/v15_budgets_effects_test.go",
+    "docs/reconstruccion/analisis_y_contrato_v15_presupuestos_efectos.md",
+    "product/roadmap.json",
+    "product_roadmap_test.go"
+  ],
+  "owned_capability_ids": ["GOV-15", "STG-09", "ORC-08", "ORC-09", "ORC-10", "ORC-11", "EVD-03", "EVD-14"],
+  "dependency_verticals": ["atomic_state_outbox", "identity_projects_rbac", "director_lease", "controls"],
+  "budget_dimensions": ["tokens", "money_micros", "active_time_ns", "process_slots", "disk_bytes"],
+  "budget_scopes": ["deployment", "project", "goal"],
+  "risk_levels": ["normal", "sensitive", "critical"],
+  "reasoning_efforts": ["low", "medium", "high", "xhigh"],
+  "effect_facts": ["intent", "approval", "attempt", "receipt"],
+  "effect_kinds": ["agent_launch", "agent_stop"],
+  "approval_outcomes": ["approved", "denied"],
+  "approval_sources": ["goal_confirmation", "director_decision", "explicit_decision"],
+  "default_parent_launches_per_cycle": 70,
+  "default_max_children_per_parent": 6,
+  "required_use_cases": ["DecideEffect"],
+  "required_repository_methods": ["EffectReplay", "DecideEffect", "RecordEffectAttempt"],
+  "forbidden_private_authorities": [
+    "BudgetStore", "BudgetDatabase", "BudgetQueue", "BudgetLoop", "BudgetScheduler",
+    "EffectStore", "EffectDatabase", "EffectQueue", "EffectLoop", "EffectScheduler",
+    "ApprovalStore", "ApprovalDatabase", "ApprovalQueue", "EffectLifecycle"
+  ],
+  "required_behavior_tests": [
+    "TestBudgetContractUsesOneCanonicalEnvelopeAcrossLayers",
+    "TestConcurrentBudgetReservationsNeverExceedEnvelope",
+    "TestTemporaryQuotaParksActionWithoutTerminalFailure",
+    "TestHierarchicalFairnessBoundsProjectAndGoalStarvation",
+    "TestEffectRequiresExactLiveApprovalBeforeAdapterInvocation",
+    "TestEffectCrashAfterApplyBeforeReceiptReconcilesOnce",
+    "TestSQLiteBudgetsEffectsRestartRaceAndReplay",
+    "TestV15RecoveryRejectsBudgetEffectCausalTampering",
+    "TestV15BackupRestorePreservesBudgetsAndEffects",
+    "TestRealCodexBudgetsAndEffectsThroughProductionComposition"
+  ],
+  "deferred_surfaces": [
+    "workspace_git_and_forge",
+    "independent_attestation_reviews_and_council",
+    "public_http_mcp_cli_web_and_full_i18n",
+    "provider_parity_tools_skills_rag_plugins_and_generic_external_effects",
+    "deploy_notifications_opes_postgres_s3_multihost_and_cutover"
+  ],
+  "scenario": {
+    "base_time": "2026-07-18T08:00:00Z",
+    "projects": 2,
+    "goals_per_project": 2,
+    "concurrent_claims": 100,
+    "global_process_slots": 3,
+    "project_process_slots": 2,
+    "goal_process_slots": 1,
+    "effect_crash_frontiers": ["before_adapter_call", "after_adapter_apply_before_receipt", "after_receipt_before_action_consume"]
+  }
+}
