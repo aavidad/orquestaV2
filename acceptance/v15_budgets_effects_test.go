@@ -21,7 +21,7 @@ import (
 
 const v15FixturePath = "acceptance/fixtures/v15_budgets_effects.json"
 const v15ContractBaseGitCommitOID = "7aa91cbea80741c6d757ec17d09bc9d7aa7e3085"
-const v15ProductDeltaSealedGitCommitOID = "0000000000000000000000000000000000000000"
+const v15ProductDeltaSealedGitCommitOID = "4a97fb568d547ac52b43655a2369758e09e30f2e"
 
 type v15Fixture struct {
 	SchemaVersion                  int         `json:"schema_version"`
