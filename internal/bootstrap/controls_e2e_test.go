@@ -8,8 +8,10 @@ import (
 	"testing"
 	"time"
 
+	"orquesta/internal/adapters/auth/localtoken"
 	"orquesta/internal/application"
 	"orquesta/internal/goal"
+	"orquesta/internal/identity"
 	"orquesta/internal/ports"
 )
 
@@ -119,6 +121,8 @@ func TestRealCodexCooperativeStopLeavesResidentSchedulerLive(t *testing.T) {
 	if err != nil || !forced.Created || forced.Control.SupersedesControlRef != cooperative.Control.Ref {
 		t.Fatalf("persist forced escalation: result=%+v err=%v", forced, err)
 	}
+	approveRuntimeForcedStop(t, runtime, access, forced.Control, execution.Ref,
+		"request:v15-approve-forced-after-cooperative")
 	closed := waitForStoppedExecution(t, runtime, access, latest.Goal.Ref(), forced.Control.Ref)
 	cooperativeFound := false
 	for _, control := range closed.Controls {
@@ -205,6 +209,8 @@ func TestRealCodexControlsThroughProductionComposition(t *testing.T) {
 	if !controlled.Created || controlled.Control.Status != application.ControlRequested {
 		t.Fatalf("stop was not durably requested: %+v", controlled)
 	}
+	approveRuntimeForcedStop(t, runtime, access, controlled.Control, execution.Ref,
+		"request:v15-approve-production-stop")
 	closed := waitForStoppedExecution(t, runtime, access, created.Record.Goal.Ref(), controlled.Control.Ref)
 	stoppedItem := closed.Goal.WorkItems()[0]
 	if closed.Goal.IsTerminal() || closed.Goal.State() != goal.GoalStateRunning ||
@@ -212,6 +218,138 @@ func TestRealCodexControlsThroughProductionComposition(t *testing.T) {
 		closed.Executions[0].State != application.ExecutionStopped {
 		t.Fatalf("stop did not preserve V14 lifecycle: goal=%s item=%s execution=%s",
 			closed.Goal.State(), stoppedItem.State(), closed.Executions[0].State)
+	}
+	assertProductionStopEffectLedger(t, closed, controlled.Control, execution.Ref)
+}
+
+func assertProductionStopEffectLedger(
+	t *testing.T,
+	record application.GoalRecord,
+	control application.ControlRecord,
+	executionRef goal.ExecutionRef,
+) {
+	t.Helper()
+	actionRef := "action:stop:" + control.Ref + ":" + executionRef.String()
+	var intents, approvals, attempts, receipts, links int
+	var intentRef, approvalRef, attemptRef, receiptRef string
+	for _, intent := range record.EffectIntents {
+		if intent.ActionRef == actionRef {
+			intents++
+			intentRef = intent.Ref
+			if intent.Kind != application.EffectKindAgentStop {
+				t.Fatalf("production stop intent kind = %q", intent.Kind)
+			}
+		}
+	}
+	for _, approval := range record.EffectApprovals {
+		if approval.IntentRef == intentRef {
+			approvals++
+			approvalRef = approval.Ref
+			if approval.Decision != application.EffectApproved ||
+				approval.Source != application.EffectApprovalSourceExplicitDecision ||
+				approval.DecidedBy == approval.ProposedBy {
+				t.Fatalf("production stop approval = %+v", approval)
+			}
+		}
+	}
+	for _, attempt := range record.EffectAttempts {
+		if attempt.IntentRef == intentRef {
+			attempts++
+			attemptRef = attempt.Ref
+			if attempt.ApprovalRef != approvalRef || attempt.ActionRef != actionRef {
+				t.Fatalf("production stop attempt = %+v", attempt)
+			}
+		}
+	}
+	for _, receipt := range record.EffectReceipts {
+		if receipt.IntentRef == intentRef {
+			receipts++
+			receiptRef = receipt.Ref
+			if receipt.ApprovalRef != approvalRef || receipt.AttemptRef != attemptRef || receipt.ActionRef != actionRef ||
+				(receipt.Status != application.EffectStatusStopped &&
+					receipt.Status != application.EffectStatusAlreadyStopped) {
+				t.Fatalf("production stop effect receipt = %+v", receipt)
+			}
+		}
+	}
+	for _, consumption := range record.ConsumptionReceipts {
+		if consumption.ActionRef == actionRef && consumption.EffectReceiptRef == receiptRef {
+			links++
+		}
+	}
+	if intents != 1 || approvals != 1 || attempts != 1 || receipts != 1 || links != 1 {
+		t.Fatalf("production stop effect chain counts = intent:%d approval:%d attempt:%d receipt:%d link:%d",
+			intents, approvals, attempts, receipts, links)
+	}
+}
+
+func approveRuntimeForcedStop(
+	t *testing.T,
+	runtime *Runtime,
+	ownerAccess application.Access,
+	control application.ControlRecord,
+	executionRef goal.ExecutionRef,
+	requestRef string,
+) {
+	t.Helper()
+	owner, hierarchy, err := localIdentityComposition(runtime.config)
+	if err != nil {
+		t.Fatalf("compose local owner: %v", err)
+	}
+	actorRef, err := goal.NewActorRef("actor:critical-effect-reviewer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	principalRef, err := identity.NewPrincipalRef("principal:critical-effect-reviewer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reviewer, err := identity.NewPrincipal(
+		principalRef, actorRef, identity.PrincipalKindHuman, localtoken.AuthenticationMethod,
+	)
+	if err != nil {
+		t.Fatalf("create independent effect reviewer: %v", err)
+	}
+	requestedAt := time.Now().UTC()
+	grant, err := identity.NewMembershipGrantRequest(identity.MembershipGrantRequestInput{
+		RequestRef: "membership-" + requestRef, Actor: owner, TargetRef: reviewer.Ref,
+		ProjectRef: hierarchy.ProjectRef(), Role: identity.RoleReviewer, RequestedAt: requestedAt,
+	})
+	if err != nil {
+		t.Fatalf("create reviewer membership grant: %v", err)
+	}
+	if _, _, created, grantErr := runtime.Orchestrator().GrantMembership(
+		context.Background(), ownerAccess, grant, reviewer,
+	); grantErr != nil || !created {
+		t.Fatalf("grant independent reviewer membership: created=%v err=%v", created, grantErr)
+	}
+	reviewerAccess, err := application.NewAccess(reviewer, hierarchy.ProjectRef())
+	if err != nil {
+		t.Fatalf("create reviewer access: %v", err)
+	}
+	record, err := runtime.Orchestrator().GetGoal(context.Background(), ownerAccess, control.GoalRef)
+	if err != nil {
+		t.Fatalf("load forced stop intent: %v", err)
+	}
+	wantActionRef := "action:stop:" + control.Ref + ":" + executionRef.String()
+	var intent application.EffectIntent
+	for _, candidate := range record.EffectIntents {
+		if candidate.ActionRef == wantActionRef {
+			intent = candidate
+			break
+		}
+	}
+	if intent.Ref == "" {
+		t.Fatalf("forced stop intent for %s missing: %+v", wantActionRef, record.EffectIntents)
+	}
+	decision, err := runtime.Orchestrator().DecideEffect(context.Background(), reviewerAccess,
+		application.DecideEffectRequest{
+			RequestRef: requestRef, GoalRef: control.GoalRef, IntentRef: intent.Ref,
+			ExpectedIntentDigest: intent.Digest, Decision: application.EffectApproved,
+			Reason: "independent approval for critical forced stop",
+		})
+	if err != nil || !decision.Created || decision.Approval.DecidedBy == intent.ProposedBy {
+		t.Fatalf("approve forced stop: result=%+v err=%v", decision, err)
 	}
 }
 

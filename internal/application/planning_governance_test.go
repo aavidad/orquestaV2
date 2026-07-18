@@ -29,6 +29,7 @@ func TestWorkItemSpecCompilesDeclaredGovernanceWithoutTextInference(t *testing.T
 	}, ref, workItemCompileScope{
 		goalRef: goalRef, actorRef: actorRef, projectRef: projectRef,
 		createdAt: time.Date(2026, 7, 18, 8, 0, 0, 0, time.UTC),
+		goalLimit: governance.ResourceVector{Tokens: 100, MoneyMicros: 1_000, Currency: currency, ProcessSlots: 6},
 	}, workItemRefResolver{})
 	if err != nil {
 		t.Fatalf("compileWorkItemSpec() error = %v", err)

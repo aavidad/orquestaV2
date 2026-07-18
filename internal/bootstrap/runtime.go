@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"orquesta/internal/adapters/agent/codex"
 	"orquesta/internal/adapters/artifact/filesystem"
@@ -89,6 +90,10 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		return nil, err
 	}
 	clock := local.Clock{}
+	policy, err := buildBudgetPolicy(snapshot, clock.Now())
+	if err != nil {
+		return nil, err
+	}
 	catalog, err := i18n.LoadBundled()
 	if err != nil {
 		return nil, err
@@ -97,58 +102,20 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	// Validate or acquire the reversible network boundary before creating any
-	// durable composition state. Injected listeners remain owned by Build and
-	// are closed on every failed build.
-	listener := options.Listener
-	if listener == nil {
-		listener, err = net.Listen("tcp", snapshot.ServerListen())
-		if err != nil {
-			return nil, fmt.Errorf("bootstrap.listen_failed: %w", err)
-		}
-	}
-	cleanupListener := true
-	defer func() {
-		if cleanupListener {
-			_ = listener.Close()
-		}
-	}()
-	if err := validateListener(listener); err != nil {
-		return nil, err
-	}
-
-	// Agent validation may inspect its executable and allocate its isolated
-	// work root, but it must succeed before token/config/state/artifact writes.
-	factory := options.AgentFactory
-	if factory == nil {
-		factory = productionAgentFactory
-	}
-	agent, err := factory(snapshot, clock)
+	setup := buildSetup{snapshot: snapshot, clock: clock, budgetPolicy: policy, catalog: catalog, workerRef: workerRef}
+	var cleanup buildCleanup
+	defer cleanup.run()
+	listener, err := openBuildListener(setup.snapshot, options.Listener)
 	if err != nil {
 		return nil, err
 	}
-	if agent == nil {
-		return nil, errors.New("bootstrap.agent_factory_returned_nil")
-	}
-	cleanupAgent := true
-	defer func() {
-		if cleanupAgent {
-			shutdownCtx, cancel := context.WithTimeout(context.Background(), snapshot.ServerShutdownTimeout())
-			defer cancel()
-			_ = agent.Shutdown(shutdownCtx)
-		}
-	}()
-	capabilities, err := agent.Capabilities(ctx)
+	cleanup.add(func() { _ = listener.Close() })
+	agent, capabilities, controller, err := openBuildAgent(ctx, setup.snapshot, setup.clock, options.AgentFactory)
 	if err != nil {
 		return nil, err
 	}
-	if err := ports.ValidateAgentCapabilities(capabilities); err != nil {
-		return nil, err
-	}
-	controller, _ := agent.(application.AgentController)
-
-	identityComposition, err := composeIdentityRuntime(ctx, snapshot, options.IdentityHTTPClient)
+	cleanup.add(func() { shutdownBuildAgent(agent, setup.snapshot.ServerShutdownTimeout()) })
+	identityComposition, err := composeIdentityRuntime(ctx, setup.snapshot, options.IdentityHTTPClient)
 	if err != nil {
 		return nil, err
 	}
@@ -156,102 +123,171 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := writeEffectiveSnapshot(ctx, snapshot); err != nil {
+	if err := writeEffectiveSnapshot(ctx, setup.snapshot); err != nil {
 		return nil, err
 	}
+	repository, err := openBuildRepository(ctx, setup, agent, identityComposition)
+	if err != nil {
+		return nil, err
+	}
+	cleanup.add(func() { _ = repository.Close() })
+	artifacts, err := filesystem.Open(setup.snapshot.ArtifactFilesystemRoot())
+	if err != nil {
+		return nil, err
+	}
+	cleanup.add(func() { _ = artifacts.Close() })
+	orchestrator, err := newBuildOrchestrator(setup, repository, artifacts, agent, controller, capabilities)
+	if err != nil {
+		return nil, err
+	}
+	runtime, err := newBuildRuntime(setup, options, listener, agent, repository, artifacts, orchestrator, authenticator)
+	if err != nil {
+		return nil, err
+	}
+	cleanup.add(runtime.cancelLifecycle)
+	cleanup.release()
+	return runtime, nil
+}
 
+type buildSetup struct {
+	snapshot     config.Snapshot
+	clock        local.Clock
+	budgetPolicy application.BudgetPolicy
+	catalog      *i18n.Catalog
+	workerRef    string
+}
+
+type buildCleanup []func()
+
+func (cleanup *buildCleanup) add(operation func()) { *cleanup = append(*cleanup, operation) }
+func (cleanup *buildCleanup) release()             { *cleanup = nil }
+func (cleanup *buildCleanup) run() {
+	for index := len(*cleanup) - 1; index >= 0; index-- {
+		(*cleanup)[index]()
+	}
+}
+
+func openBuildListener(snapshot config.Snapshot, listener net.Listener) (net.Listener, error) {
+	var err error
+	if listener == nil {
+		listener, err = net.Listen("tcp", snapshot.ServerListen())
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap.listen_failed: %w", err)
+		}
+	}
+	if err := validateListener(listener); err != nil {
+		_ = listener.Close()
+		return nil, err
+	}
+	return listener, nil
+}
+
+func openBuildAgent(
+	ctx context.Context, snapshot config.Snapshot, clock local.Clock, factory AgentFactory,
+) (AgentAdapter, ports.AgentCapabilities, application.AgentController, error) {
+	if factory == nil {
+		factory = productionAgentFactory
+	}
+	agent, err := factory(snapshot, clock)
+	if err != nil {
+		return nil, ports.AgentCapabilities{}, nil, err
+	}
+	if agent == nil {
+		return nil, ports.AgentCapabilities{}, nil, errors.New("bootstrap.agent_factory_returned_nil")
+	}
+	capabilities, err := agent.Capabilities(ctx)
+	if err == nil {
+		err = ports.ValidateAgentCapabilities(capabilities)
+	}
+	if err != nil {
+		shutdownBuildAgent(agent, snapshot.ServerShutdownTimeout())
+		return nil, ports.AgentCapabilities{}, nil, err
+	}
+	controller, _ := agent.(application.AgentController)
+	return agent, capabilities, controller, nil
+}
+
+func shutdownBuildAgent(agent AgentAdapter, timeout time.Duration) {
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	_ = agent.Shutdown(shutdownCtx)
+}
+
+func openBuildRepository(
+	ctx context.Context, setup buildSetup, agent AgentAdapter, composition identityRuntimeComposition,
+) (*statesqlite.Repository, error) {
 	repository, err := statesqlite.Open(ctx, statesqlite.Options{
-		Path: snapshot.StateSQLitePath(), BusyTimeout: snapshot.StateSQLiteBusyTimeout(),
-		MaxOpenConnections: int(snapshot.StateSQLiteMaxOpenConnections()),
-		Now:                clock.Now,
+		Path: setup.snapshot.StateSQLitePath(), BusyTimeout: setup.snapshot.StateSQLiteBusyTimeout(),
+		MaxOpenConnections: int(setup.snapshot.StateSQLiteMaxOpenConnections()), Now: setup.clock.Now,
 	})
 	if err != nil {
 		return nil, err
 	}
-	cleanupRepository := true
-	defer func() {
-		if cleanupRepository {
-			_ = repository.Close()
-		}
-	}()
+	fail := func(err error) (*statesqlite.Repository, error) { _ = repository.Close(); return nil, err }
 	if err := bindAgentRuntimeScope(agent, repository); err != nil {
-		return nil, err
+		return fail(err)
 	}
-	if identityComposition.provisionLocal {
-		if err := repository.ProvisionLocalAccess(
-			ctx, identityComposition.localPrincipal, identityComposition.localHierarchy,
-			identity.RoleProjectOwner, clock.Now(),
-		); err != nil {
-			return nil, err
+	if composition.provisionLocal {
+		err = repository.ProvisionLocalAccess(
+			ctx, composition.localPrincipal, composition.localHierarchy, identity.RoleProjectOwner, setup.clock.Now(),
+		)
+		if err != nil {
+			return fail(err)
 		}
 	}
+	return repository, nil
+}
 
-	artifacts, err := filesystem.Open(snapshot.ArtifactFilesystemRoot())
-	if err != nil {
-		return nil, err
-	}
-	cleanupArtifacts := true
-	defer func() {
-		if cleanupArtifacts {
-			_ = artifacts.Close()
-		}
-	}()
-
-	orchestrator, err := application.New(application.Dependencies{
+func newBuildOrchestrator(
+	setup buildSetup, repository *statesqlite.Repository, artifacts *filesystem.Store,
+	agent AgentAdapter, controller application.AgentController, capabilities ports.AgentCapabilities,
+) (*application.Orchestrator, error) {
+	return application.New(application.Dependencies{
 		State: repository, Access: repository,
 		Launcher: agent, Observer: agent, Controller: controller, Artifacts: artifacts,
-		Clock: clock, IDs: local.IDGenerator{},
-		MaxOutputBytes:          snapshot.RuntimeMaxOutputBytes(),
-		MaxMailboxEnvelopeBytes: snapshot.MailboxMaxEnvelopeBytes(),
-		MaxExecutionAttempts:    uint64(snapshot.SchedulerMaxExecutionAttempts()),
-		ClaimLease:              snapshot.SchedulerClaimLease(),
-		DirectorLeaseDuration:   snapshot.DirectorLeaseDuration(),
-		ObservationDelay:        snapshot.SchedulerObservationInterval(),
-		ExecutionTimeout:        snapshot.SchedulerExecutionTimeout(),
-		AgentCapabilities:       capabilities,
+		Clock: setup.clock, IDs: local.IDGenerator{},
+		MaxOutputBytes: setup.snapshot.RuntimeMaxOutputBytes(), MaxMailboxEnvelopeBytes: setup.snapshot.MailboxMaxEnvelopeBytes(),
+		MaxExecutionAttempts: uint64(setup.snapshot.SchedulerMaxExecutionAttempts()),
+		MaxChildrenPerParent: int(setup.snapshot.SchedulerMaxChildrenPerParent()),
+		ClaimLease:           setup.snapshot.SchedulerClaimLease(), DirectorLeaseDuration: setup.snapshot.DirectorLeaseDuration(),
+		EffectApprovalTTL: setup.snapshot.GovernanceEffectApprovalTTL(), BudgetPolicy: setup.budgetPolicy,
+		ObservationDelay: setup.snapshot.SchedulerObservationInterval(), ExecutionTimeout: setup.snapshot.SchedulerExecutionTimeout(),
+		AgentCapabilities: capabilities,
 	})
-	if err != nil {
-		return nil, err
-	}
+}
+
+func newBuildRuntime(
+	setup buildSetup, options Options, listener net.Listener, agent AgentAdapter,
+	repository *statesqlite.Repository, artifacts *filesystem.Store, orchestrator *application.Orchestrator,
+	authenticator *bearer.Middleware,
+) (*Runtime, error) {
 	version := strings.TrimSpace(options.Version)
 	if version == "" {
 		version = "dev"
 	}
 	interfaceServer, err := mcpiface.New(mcpiface.Config{
-		Orchestrator: orchestrator, Identity: identity.ContextProvider{}, Catalog: catalog,
-		Locale: snapshot.APILocale(), MaxListLimit: int(snapshot.APIMaxListLimit()),
-		MaxRequestBytes: snapshot.ServerMaxRequestBytes(), Version: version,
+		Orchestrator: orchestrator, Identity: identity.ContextProvider{}, Catalog: setup.catalog,
+		Locale: setup.snapshot.APILocale(), MaxListLimit: int(setup.snapshot.APIMaxListLimit()),
+		MaxRequestBytes: setup.snapshot.ServerMaxRequestBytes(), Version: version,
 	})
 	if err != nil {
 		return nil, err
 	}
 	mux := http.NewServeMux()
-	mux.Handle(snapshot.ServerMCPPath(), authenticator.Wrap(interfaceServer.Handler()))
+	mux.Handle(setup.snapshot.ServerMCPPath(), authenticator.Wrap(interfaceServer.Handler()))
 	lifecycleCtx, cancelLifecycle := context.WithCancel(context.Background())
-	cleanupLifecycle := true
-	defer func() {
-		if cleanupLifecycle {
-			cancelLifecycle()
-		}
-	}()
 	httpServer := &http.Server{
-		Handler: mux, ReadTimeout: snapshot.ServerReadTimeout(),
-		WriteTimeout: snapshot.ServerWriteTimeout(), IdleTimeout: snapshot.ServerIdleTimeout(),
+		Handler: mux, ReadTimeout: setup.snapshot.ServerReadTimeout(),
+		WriteTimeout: setup.snapshot.ServerWriteTimeout(), IdleTimeout: setup.snapshot.ServerIdleTimeout(),
 		BaseContext: func(net.Listener) context.Context { return lifecycleCtx },
 	}
-	runtime := &Runtime{
-		config: snapshot, orchestrator: orchestrator, repository: repository,
+	return &Runtime{
+		config: setup.snapshot, orchestrator: orchestrator, repository: repository,
 		artifacts: artifacts, agent: agent, listener: listener, httpServer: httpServer,
-		workerRef: workerRef, reportError: options.ReportError,
+		workerRef: setup.workerRef, reportError: options.ReportError,
 		lifecycleCtx: lifecycleCtx, cancelLifecycle: cancelLifecycle,
 		shutdownDone: make(chan struct{}),
-	}
-	cleanupRepository = false
-	cleanupArtifacts = false
-	cleanupAgent = false
-	cleanupListener = false
-	cleanupLifecycle = false
-	return runtime, nil
+	}, nil
 }
 
 func composeIdentityRuntime(
@@ -362,7 +398,9 @@ func (runtime *Runtime) Start(parent context.Context) error {
 		defer close(runtime.schedulerDone)
 		scheduler{
 			orchestrator: runtime.orchestrator, workerRef: runtime.workerRef,
-			pollInterval: runtime.config.SchedulerPollInterval(), report: runtime.reportError,
+			pollInterval:        runtime.config.SchedulerPollInterval(),
+			maxLaunchesPerCycle: runtime.config.RuntimeCodexMaxConcurrentExecutions(),
+			report:              runtime.reportError,
 		}.run(schedulerCtx)
 	}()
 	go func() {

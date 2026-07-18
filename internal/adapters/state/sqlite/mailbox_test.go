@@ -13,6 +13,7 @@ import (
 
 	"orquesta/internal/application"
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
 	"orquesta/internal/identity"
 	"orquesta/internal/ports"
 )
@@ -172,7 +173,9 @@ func TestMailboxRestartPreservesEveryCausalFrontier(t *testing.T) {
 	defer func() { _ = repository.Close() }()
 
 	fixture := newMailboxGoalFixture(t, clock.Now())
-	created, fresh, err := createLegacyGoal(t, repository, fixture.state)
+	createState := authorizeLegacyCreateState(t, repository, fixture.state)
+	createState = governLegacyCreateState(t, createState)
+	created, fresh, err := repository.CreateGoal(ctx, createState)
 	if err != nil || !fresh {
 		t.Fatalf("create mailbox Goal fresh=%v err=%v", fresh, err)
 	}
@@ -521,9 +524,12 @@ SELECT COUNT(*) FROM outbox WHERE kind = 'deliver_mailbox' AND goal_ref = ?`,
 		t.Fatalf("exact expired/consumed claim replay renewed or projected later state: replay=%+v found=%v err=%v",
 			latestClaimReplay, found, err)
 	}
+	recipientCapabilities := sqliteTestCapabilities()
+	recipientCapabilities.Unrestricted = false
+	recipientCapabilities.RoleKeys = []string{"role:mailbox"}
 	genericClaim, found, err := repository.ClaimNextAction(ctx, application.ClaimRequest{
 		WorkerRef: "worker:generic-must-not-see-mailbox", Token: "token:generic-must-not-see-mailbox",
-		LeaseDuration: time.Minute, Capabilities: sqliteTestCapabilities(),
+		LeaseDuration: time.Minute, Capabilities: recipientCapabilities, BudgetPolicy: sqliteRuntimeTestPolicy(),
 	})
 	if err != nil || (found && genericClaim.Action.Kind == application.ActionDeliverMailbox) {
 		t.Fatalf("generic scheduler claimed mailbox claim=%+v found=%v err=%v", genericClaim, found, err)
@@ -822,7 +828,7 @@ func assertConsumedMailboxRetirement(
 	if !initialActionFound || actionClaim.Action.ExecutionRef != envelope.Recipient.ExecutionRef {
 		actionClaim, initialActionFound, err = repository.ClaimNextAction(ctx, application.ClaimRequest{
 			WorkerRef: "worker:mailbox-retirement", Token: "token:mailbox-retirement",
-			LeaseDuration: time.Minute, Capabilities: sqliteTestCapabilities(),
+			LeaseDuration: time.Minute, Capabilities: sqliteTestCapabilities(), BudgetPolicy: sqliteRuntimeTestPolicy(),
 		})
 	}
 	if err != nil || !initialActionFound || actionClaim.Action.ExecutionRef != envelope.Recipient.ExecutionRef ||
@@ -882,7 +888,8 @@ func assertConsumedMailboxRetirement(
 	failedState := application.GoalFailedState{
 		Claim: actionClaim, ExpectedGoalRevision: expectedGoalRevision,
 		ExpectedItemRevision: expectedItemRevision, Goal: failedGoal, Execution: execution,
-		Events: events, OperationAt: failedAt,
+		Events: events, BudgetSettlement: sqliteMailboxSettlement(t, record, execution, failedAt),
+		OperationAt: failedAt,
 	}
 	seeded := events[0]
 	if _, err := repository.db.Exec(`
@@ -1223,9 +1230,12 @@ func assertMailboxFrontierRetires(
 	}
 	repository := openMailboxTestRepository(t, path, clock)
 	defer repository.Close()
+	capabilities := sqliteTestCapabilities()
+	capabilities.Unrestricted = false
+	capabilities.RoleKeys = []string{"role:mailbox"}
 	actionClaim, found, err := repository.ClaimNextAction(ctx, application.ClaimRequest{
 		WorkerRef: "worker:mailbox-retire-" + suffix, Token: "token:mailbox-retire-" + suffix,
-		LeaseDuration: time.Minute, Capabilities: sqliteTestCapabilities(),
+		LeaseDuration: time.Minute, Capabilities: capabilities, BudgetPolicy: sqliteRuntimeTestPolicy(),
 	})
 	if err != nil || !found || actionClaim.Action.Kind != application.ActionObserveAgent ||
 		actionClaim.Action.ExecutionRef != envelope.Recipient.ExecutionRef {
@@ -1256,6 +1266,7 @@ func assertMailboxFrontierRetires(
 	execution.State = application.ExecutionFailed
 	execution.FinishedAt = failedAt
 	execution.FailureCode = "agent.frontier_failed_" + suffix
+	budgetSettlement := sqliteMailboxSettlement(t, record, execution, failedAt)
 	events := []application.EventRecord{{
 		Ref: "event:mailbox-frontier-failed:" + suffix, Kind: "work_item.failed",
 		GoalRef: envelope.GoalRef, WorkItemRef: item.Ref(), ExecutionRef: execution.Ref,
@@ -1270,7 +1281,7 @@ func assertMailboxFrontierRetires(
 	if err := repository.RecordGoalFailed(ctx, application.GoalFailedState{
 		Claim: actionClaim, ExpectedGoalRevision: record.Goal.Revision(),
 		ExpectedItemRevision: item.Revision(), Goal: failedGoal, Execution: execution,
-		Events: events, OperationAt: failedAt,
+		Events: events, BudgetSettlement: budgetSettlement, OperationAt: failedAt,
 	}); err != nil {
 		t.Fatalf("retire %s frontier: %v cause=%v", suffix, err, errors.Unwrap(err))
 	}
@@ -1285,7 +1296,7 @@ func assertMailboxFrontierRetires(
 		t.Fatalf("%s retired outbox completed=%v retired=%v err=%v", suffix, completedAt, retiredAt, err)
 	}
 	if _, _, err := validateRecoveryDatabase(ctx, repository.db); err != nil {
-		t.Fatalf("recovery rejected %s retirement frontier: %v", suffix, err)
+		t.Fatalf("recovery rejected %s retirement frontier: %v cause=%v", suffix, err, errors.Unwrap(err))
 	}
 	repository = restartMailboxTestRepository(t, repository, path, clock)
 	if restarted := assertMailboxState(
@@ -1336,7 +1347,8 @@ func buildMailboxReplacementState(
 	return application.ExecutionReplacedState{
 		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: item.Revision(),
 		Goal: replacedGoal, FailedExecution: failed, ReplacementExecution: replacement,
-		NextAction: next, ErrorCode: failureCode, OperationAt: at,
+		NextAction: next, ErrorCode: failureCode,
+		BudgetSettlement: sqliteMailboxSettlement(t, record, failed, at), OperationAt: at,
 		Events: []application.EventRecord{
 			{Ref: "event:" + suffix + ":failed", Kind: "execution.failed", GoalRef: record.Goal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref, OccurredAt: at},
 			{Ref: "event:" + suffix + ":queued", Kind: "execution.queued", GoalRef: record.Goal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: replacementRef, OccurredAt: at},
@@ -1580,7 +1592,7 @@ func mustMailboxSchedulerClaim(
 	claim, found, err := repository.ClaimNextAction(context.Background(), application.ClaimRequest{
 		WorkerRef:     "worker:mailbox:" + kind,
 		Token:         "token:scheduler:mailbox:" + kind + ":" + time.Unix(0, int64(index)+1).UTC().Format("150405.000000000"),
-		LeaseDuration: time.Minute, Capabilities: sqliteTestCapabilities(),
+		LeaseDuration: time.Minute, Capabilities: sqliteTestCapabilities(), BudgetPolicy: sqliteRuntimeTestPolicy(),
 	})
 	if err != nil || !found {
 		t.Fatalf("scheduler claim %s found=%v err=%v at=%s", kind, found, err, at)
@@ -1606,6 +1618,10 @@ func startMailboxExecution(t *testing.T, repository *Repository, claim applicati
 	}
 	execution := findMailboxExecution(t, record.Executions, claim.Action.ExecutionRef)
 	execution.State = application.ExecutionDispatching
+	if claim.Action.EffectIntentRef != "" {
+		execution.BudgetReservationRef = claim.BudgetReservationRef
+		execution.EffectIntentRef = claim.Action.EffectIntentRef
+	}
 	if err := repository.RecordLaunchPrepared(context.Background(), application.LaunchPreparedState{
 		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), Goal: updated,
 		Execution: execution, OperationAt: at,
@@ -1615,6 +1631,18 @@ func startMailboxExecution(t *testing.T, repository *Repository, claim applicati
 		},
 	}); err != nil {
 		t.Fatal(err)
+	}
+	var effectReceipt application.EffectReceipt
+	if claim.Action.EffectIntentRef != "" {
+		attempt := sqliteV15Attempt(claim, at)
+		attempt, _, err = repository.RecordEffectAttempt(context.Background(), application.RecordEffectAttemptState{
+			Claim: claim, Attempt: attempt, OperationAt: at,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		effectReceipt = sqliteV15EffectReceipt(claim, attempt, application.EffectStatusAccepted, at)
+		execution.LaunchReceiptRef = effectReceipt.Ref
 	}
 	execution.State = application.ExecutionRunning
 	execution.ProviderRef = "provider:codex"
@@ -1632,7 +1660,7 @@ func startMailboxExecution(t *testing.T, repository *Repository, claim applicati
 			GoalRef: updated.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref,
 			PlanGeneration: updated.PlanGeneration(), WorkItemGeneration: startedItem.Revision(), AvailableAt: at,
 		},
-		Event: application.EventRecord{
+		EffectReceipt: effectReceipt, Event: application.EventRecord{
 			Ref: "event:accepted:" + execution.Ref.String(), Kind: "execution.accepted",
 			GoalRef: updated.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref, OccurredAt: at,
 		},
@@ -1665,6 +1693,7 @@ func succeedMailboxChild(
 	execution := findMailboxExecution(t, record.Executions, claim.Action.ExecutionRef)
 	execution.State = application.ExecutionSucceeded
 	execution.FinishedAt = at
+	budgetSettlement := sqliteMailboxSettlement(t, record, execution, at)
 	artifact := application.ArtifactRecord{
 		Stored:  ports.StoredArtifact{Ref: artifactRef, Digest: "sha256:mailbox-child", MediaType: "text/plain", Size: 8},
 		GoalRef: updated.Ref(), WorkItemRef: item.Ref(), CreatedAt: at,
@@ -1679,11 +1708,38 @@ func succeedMailboxChild(
 		Events: []application.EventRecord{{
 			Ref: "event:work-succeeded:mailbox-child", Kind: "work_item.succeeded",
 			GoalRef: updated.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref, OccurredAt: at,
-		}}, OperationAt: at,
+		}}, BudgetSettlement: budgetSettlement, OperationAt: at,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	return artifactRef
+}
+
+func sqliteMailboxSettlement(
+	t *testing.T,
+	record application.GoalRecord,
+	execution application.ExecutionRecord,
+	at time.Time,
+) *governance.BudgetSettlement {
+	t.Helper()
+	if execution.BudgetReservationRef == "" {
+		return nil
+	}
+	for _, reservation := range record.BudgetReservations {
+		if reservation.Ref != execution.BudgetReservationRef {
+			continue
+		}
+		settlement, err := governance.Reconcile(
+			reservation, governance.ResourceUsage{Quality: governance.UsageQualityUnknown},
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		settlement.SettledAt = at
+		return &settlement
+	}
+	t.Fatal("mailbox execution budget reservation missing")
+	return nil
 }
 
 func findMailboxExecution(

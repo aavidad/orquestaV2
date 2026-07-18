@@ -63,7 +63,7 @@ func TestRepositoryMigratesPopulatedV2ToCanonicalAppSpecsAndSecondOpenIsStable(t
 	if err := repository.db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&receipts); err != nil {
 		t.Fatalf("migration receipts: %v", err)
 	}
-	if version != recoverySchemaV14 || receipts != recoverySchemaV14 {
+	if version != recoverySchemaV15 || receipts != recoverySchemaV15 {
 		t.Fatalf("migration state version=%d receipts=%d", version, receipts)
 	}
 }
@@ -434,6 +434,7 @@ func createFailedSourceForAmend(t *testing.T, repository *Repository, suffix str
 	}
 	preparedExecution := record.Executions[0]
 	preparedExecution.State = application.ExecutionDispatching
+	repository.now = func() time.Time { return failedAt }
 	if err := repository.RecordLaunchPrepared(context.Background(), application.LaunchPreparedState{
 		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), Goal: preparedGoal,
 		Execution: preparedExecution, OperationAt: failedAt,

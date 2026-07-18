@@ -33,6 +33,10 @@ func TestV10MigrationPreservesSealedV09StateAndReopensIdempotently(t *testing.T)
 
 	assertV10MigrationState(t, repository)
 	after := v10LegacyRows(t, repository.db)
+	if !strings.Contains(after["outbox"][0], "governance.legacy_reauthorization_required") {
+		t.Fatalf("V15 migration did not park legacy effect: %v", after["outbox"])
+	}
+	before["outbox"] = after["outbox"]
 	if !reflect.DeepEqual(after, before) {
 		t.Fatalf("V09 durable rows changed during V10 migration:\nbefore=%v\nafter=%v", before, after)
 	}
@@ -370,7 +374,7 @@ WHERE g.ref = 'goal:v10-v09'
 	if err := repository.db.QueryRow(`SELECT COUNT(*) FROM pragma_foreign_key_check`).Scan(&violations); err != nil {
 		t.Fatal(err)
 	}
-	if version != recoverySchemaV14 || receipts != recoverySchemaV14 || principals != 1 || hierarchyRows != 0 ||
+	if version != recoverySchemaV15 || receipts != recoverySchemaV15 || principals != 1 || hierarchyRows != 0 ||
 		memberships != 0 || requestedBy != 1 || violations != 0 {
 		t.Fatalf("V10 migration state invalid: version=%d receipts=%d principals=%d hierarchy=%d memberships=%d requested_by=%d fk=%d",
 			version, receipts, principals, hierarchyRows, memberships, requestedBy, violations)

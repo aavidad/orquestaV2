@@ -41,7 +41,7 @@ VALUES (?, ?, ?, ?, ?)`, state.Goal.Ref().String(), itemRef, requirement.kind, r
 	}
 	if _, found, err := repository.ClaimNextAction(context.Background(), application.ClaimRequest{
 		WorkerRef: "worker:missing-capability", Token: "claim:missing-capability",
-		LeaseDuration: time.Minute, Capabilities: missing,
+		LeaseDuration: time.Minute, Capabilities: missing, BudgetPolicy: sqliteRuntimeTestPolicy(),
 	}); err != nil || found {
 		t.Fatalf("insufficient capabilities claimed = found:%v err:%v", found, err)
 	}
@@ -50,13 +50,13 @@ VALUES (?, ?, ?, ?, ?)`, state.Goal.Ref().String(), itemRef, requirement.kind, r
 	repository.now = func() time.Time { return base.Add(-time.Nanosecond) }
 	if _, found, err := repository.ClaimNextAction(context.Background(), application.ClaimRequest{
 		WorkerRef: "worker:before-available", Token: "claim:before-available",
-		LeaseDuration: time.Minute, Capabilities: exact,
+		LeaseDuration: time.Minute, Capabilities: exact, BudgetPolicy: sqliteRuntimeTestPolicy(),
 	}); err != nil || found {
 		t.Fatalf("repository clock before availability = found:%v err:%v", found, err)
 	}
 	repository.now = func() time.Time { return base }
 	claim, found, err := repository.ClaimNextAction(context.Background(), application.ClaimRequest{
-		WorkerRef: "worker:exact", Token: "claim:exact", LeaseDuration: time.Minute, Capabilities: exact,
+		WorkerRef: "worker:exact", Token: "claim:exact", LeaseDuration: time.Minute, Capabilities: exact, BudgetPolicy: sqliteRuntimeTestPolicy(),
 	})
 	if err != nil || !found || claim.DeliveryAttempt != 1 || claim.Fence != 1 ||
 		!claim.LeaseUntil.Equal(base.Add(time.Minute)) {
@@ -121,7 +121,7 @@ func TestV06ExecutionReplacementRoundTripsReceiptFenceAndRestart(t *testing.T) {
 	}
 	next, found, err := repository.ClaimNextAction(context.Background(), application.ClaimRequest{
 		WorkerRef: "worker:replacement", Token: "claim:replacement", LeaseDuration: time.Minute,
-		Capabilities: sqliteTestCapabilities(),
+		Capabilities: sqliteTestCapabilities(), BudgetPolicy: sqliteRuntimeTestPolicy(),
 	})
 	if err != nil || !found || next.Action.ExecutionRef != replacement.ReplacementExecution.Ref ||
 		next.DeliveryAttempt != 1 || next.Fence != oldClaim.Fence+1 {
@@ -202,6 +202,7 @@ func TestV06GoalMutationRejectsEventFromDifferentExecutionAndRollsBack(t *testin
 		t.Fatalf("start claimed WorkItem: %v", err)
 	}
 	currentExecution.State = application.ExecutionDispatching
+	repository.now = func() time.Time { return operationAt }
 	if err := repository.RecordLaunchPrepared(context.Background(), application.LaunchPreparedState{
 		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), Goal: preparedGoal,
 		Execution: currentExecution, OperationAt: operationAt,
@@ -388,6 +389,7 @@ WHERE ref = ?`, execution.Ref.String()); err != nil {
 		WorkItemRef: item.Ref(), ExecutionRef: tampered.Ref, ArtifactRef: artifact.Stored.Ref,
 		Policy: "test.identity", AcceptedAt: finishedAt,
 	}
+	repository.now = func() time.Time { return finishedAt }
 	err = repository.RecordGoalSucceeded(context.Background(), application.GoalSucceededState{
 		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: item.Revision(),
 		Goal: succeededGoal, Execution: tampered, Artifact: artifact, Attestation: attestation,
@@ -474,6 +476,7 @@ func buildReplacementState(
 	}
 	preparedExecution := record.Executions[0]
 	preparedExecution.State = application.ExecutionDispatching
+	repository.now = func() time.Time { return preparedAt }
 	if err := repository.RecordLaunchPrepared(context.Background(), application.LaunchPreparedState{
 		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), Goal: preparedGoal,
 		Execution: preparedExecution, OperationAt: preparedAt,
@@ -517,6 +520,7 @@ func buildReplacementState(
 		GoalRef: replacedGoal.Ref(), WorkItemRef: updatedItem.Ref(), ExecutionRef: replacementRef,
 		PlanGeneration: replacedGoal.PlanGeneration(), WorkItemGeneration: updatedItem.Revision(), AvailableAt: replacedAt,
 	}
+	repository.now = func() time.Time { return replacedAt }
 	return application.ExecutionReplacedState{
 		Claim: claim, ExpectedGoalRevision: current.Goal.Revision(), ExpectedItemRevision: currentItem.Revision(),
 		Goal: replacedGoal, FailedExecution: failed, ReplacementExecution: replacement,
@@ -553,6 +557,7 @@ func createRunningV06Fixture(
 	}
 	execution := record.Executions[0]
 	execution.State = application.ExecutionDispatching
+	repository.now = func() time.Time { return at }
 	if err := repository.RecordLaunchPrepared(context.Background(), application.LaunchPreparedState{
 		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), Goal: preparedGoal,
 		Execution: execution, OperationAt: at,
@@ -645,7 +650,7 @@ SELECT COUNT(*) FROM pragma_table_info('executions') WHERE name = 'max_attempts'
 		WorkerRef: "worker:v4-wrong-provider", Token: "claim:v4-wrong-provider", LeaseDuration: time.Minute,
 		Capabilities: ports.AgentCapabilities{
 			ProviderRef: "provider:other", ModelRef: "model:current", AgentRef: "agent:current", Unrestricted: true,
-		},
+		}, BudgetPolicy: sqliteRuntimeTestPolicy(),
 	}); err != nil || found {
 		t.Fatalf("wrong provider claimed legacy observation = found:%v err:%v", found, err)
 	}
@@ -653,7 +658,7 @@ SELECT COUNT(*) FROM pragma_table_info('executions') WHERE name = 'max_attempts'
 		WorkerRef: "worker:v4-provider", Token: "claim:v4-provider", LeaseDuration: time.Minute,
 		Capabilities: ports.AgentCapabilities{
 			ProviderRef: "provider:v4", ModelRef: "model:current", AgentRef: "agent:current", Unrestricted: true,
-		},
+		}, BudgetPolicy: sqliteRuntimeTestPolicy(),
 	})
 	if err != nil || !found || claim.Action.Kind != application.ActionObserveAgent ||
 		claim.Action.ExecutionRef != execution.Ref {
@@ -682,6 +687,7 @@ func TestV06ObserveClaimRequiresExactCurrentProviderModelAndAgent(t *testing.T) 
 	}
 	execution := record.Executions[0]
 	execution.State = application.ExecutionDispatching
+	repository.now = func() time.Time { return at }
 	if err := repository.RecordLaunchPrepared(context.Background(), application.LaunchPreparedState{
 		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), Goal: preparedGoal,
 		Execution: execution, OperationAt: at,
@@ -720,7 +726,7 @@ func TestV06ObserveClaimRequiresExactCurrentProviderModelAndAgent(t *testing.T) 
 		WorkerRef: "worker:v06-wrong-model", Token: "claim:v06-wrong-model", LeaseDuration: time.Minute,
 		Capabilities: ports.AgentCapabilities{
 			ProviderRef: execution.ProviderRef, ModelRef: "model:other", AgentRef: execution.AgentRef, Unrestricted: true,
-		},
+		}, BudgetPolicy: sqliteRuntimeTestPolicy(),
 	}); err != nil || found {
 		t.Fatalf("non-exact V6 identity claimed observation = found:%v err:%v", found, err)
 	}
@@ -728,7 +734,7 @@ func TestV06ObserveClaimRequiresExactCurrentProviderModelAndAgent(t *testing.T) 
 		WorkerRef: "worker:v06-exact", Token: "claim:v06-exact", LeaseDuration: time.Minute,
 		Capabilities: ports.AgentCapabilities{
 			ProviderRef: execution.ProviderRef, ModelRef: execution.ModelRef, AgentRef: execution.AgentRef, Unrestricted: true,
-		},
+		}, BudgetPolicy: sqliteRuntimeTestPolicy(),
 	})
 	if err != nil || !found || claimed.Action.ExecutionRef != execution.Ref {
 		t.Fatalf("exact V6 identity observation claim = %+v found:%v err:%v", claimed, found, err)

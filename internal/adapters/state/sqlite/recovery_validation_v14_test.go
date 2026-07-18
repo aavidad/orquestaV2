@@ -237,15 +237,16 @@ SET superseded_at = superseded_at + 1 WHERE ref = ?`, seed.old.Ref)
 			want: "sqlite.recovery_control_supersession_event_invalid",
 		},
 		{
-			name: "retired cooperative action gains provider effect",
+			name: "retired cooperative action steals forced provider effect",
 			mutate: func(t *testing.T, seed recoveryV14SupersessionSeed) {
 				rewriteRecoveryTrigger(t, seed.repository.db, "action_consumption_receipts_immutable_update", func() {
-					actionRef := "action:stop:" + seed.old.Ref + ":" + seed.old.ExecutionRef.String()
-					mustV10Exec(t, seed.repository.db, `UPDATE outbox SET last_error_code = '' WHERE ref = ?`, actionRef)
+					oldActionRef := "action:stop:" + seed.old.Ref + ":" + seed.old.ExecutionRef.String()
+					forcedActionRef := "action:stop:" + seed.next.Ref + ":" + seed.next.ExecutionRef.String()
+					mustV10Exec(t, seed.repository.db, `UPDATE outbox SET last_error_code = '' WHERE ref = ?`, oldActionRef)
 					mustV10Exec(t, seed.repository.db, `UPDATE action_consumption_receipts
-SET error_code = '', effect_receipt_ref = 'receipt:tampered-superseded-effect',
-    effect_status = 'already_stopped', effect_confirmed_at = consumed_at
-WHERE action_ref = ?`, actionRef)
+SET error_code = '', effect_receipt_ref = (
+    SELECT effect_receipt_ref FROM action_consumption_receipts WHERE action_ref = ?
+) WHERE action_ref = ?`, forcedActionRef, oldActionRef)
 				})
 			},
 			want: "sqlite.recovery_stop_effect_control_invalid",
@@ -291,6 +292,7 @@ func seedRecoveryV14Supersession(t *testing.T, suffix string) recoveryV14Superse
 		State: repository, Access: repository, Launcher: agent, Observer: agent, Controller: agent,
 		Artifacts: restartArtifacts{}, Clock: clock, IDs: ids, MaxOutputBytes: 4096,
 		MaxMailboxEnvelopeBytes: 64 << 10, MaxExecutionAttempts: 3,
+		MaxChildrenPerParent: 6, EffectApprovalTTL: time.Hour, BudgetPolicy: sqliteTestBudgetPolicy(clock.Now()),
 		AgentCapabilities: sqliteMultiControlCapabilities(), ClaimLease: time.Minute,
 		DirectorLeaseDuration: time.Minute, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})
@@ -353,6 +355,26 @@ func seedRecoveryV14Supersession(t *testing.T, suffix string) recoveryV14Superse
 	)
 	if _, err := orchestrator.Control(context.Background(), access, forced); err != nil {
 		t.Fatal(err)
+	}
+	pendingForced, err := repository.GetGoal(context.Background(), running.Goal.Ref())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, forcedControl := sqliteControlsByRequest(t, pendingForced, cooperative.RequestRef, forced.RequestRef)
+	var forcedIntent application.EffectIntent
+	for _, intent := range pendingForced.EffectIntents {
+		if intent.ActionRef == "action:stop:"+forcedControl.Ref+":"+execution.Ref.String() {
+			forcedIntent = intent
+			break
+		}
+	}
+	approved, err := orchestrator.DecideEffect(context.Background(), access, application.DecideEffectRequest{
+		RequestRef: "approval:recovery-supersession-forced-" + suffix, GoalRef: pendingForced.Goal.Ref(),
+		IntentRef: forcedIntent.Ref, ExpectedIntentDigest: forcedIntent.Digest,
+		Decision: application.EffectApproved, Reason: "owner approves forced supersession seed",
+	})
+	if err != nil || !approved.Created {
+		t.Fatalf("forced seed approval=%+v intent=%+v err=%v", approved, forcedIntent, err)
 	}
 	if result, processErr := orchestrator.ProcessNext(context.Background(), "worker:recovery-supersession-forced"); processErr != nil || !result.Processed || result.Action != application.ActionStopAgent {
 		t.Fatalf("forced seed: result=%+v err=%v", result, processErr)
@@ -685,7 +707,7 @@ func TestV14RecoveryAcceptsClaimedTerminalStopThenReclaimsAndSettlesOnce(t *test
 	}
 	claim, found, err := repository.ClaimNextAction(ctx, application.ClaimRequest{
 		WorkerRef: "worker:recovery-v14-stop-crashed", Token: "claim:recovery-v14-stop-crashed",
-		LeaseDuration: time.Minute, Capabilities: sqliteMultiControlCapabilities(),
+		LeaseDuration: time.Minute, Capabilities: sqliteMultiControlCapabilities(), BudgetPolicy: sqliteRuntimeTestPolicy(),
 	})
 	if err != nil || !found || claim.Action.Kind != application.ActionStopAgent {
 		t.Fatalf("claim terminal stop: found=%v claim=%+v err=%v", found, claim, err)
@@ -861,6 +883,7 @@ func newRecoveryV14ControlOrchestrator(
 		State: state, Access: repository, Launcher: agent, Observer: agent, Controller: agent,
 		Artifacts: leaseAdvancingArtifacts{clock: clock}, Clock: clock, IDs: ids,
 		MaxOutputBytes: 4096, MaxMailboxEnvelopeBytes: 64 << 10, MaxExecutionAttempts: 3,
+		MaxChildrenPerParent: 6, EffectApprovalTTL: time.Hour, BudgetPolicy: sqliteTestBudgetPolicy(clock.Now()),
 		AgentCapabilities: sqliteMultiControlCapabilities(), ClaimLease: time.Minute,
 		DirectorLeaseDuration: time.Minute, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})

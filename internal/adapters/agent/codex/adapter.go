@@ -125,6 +125,13 @@ func (err *Error) Temporary() bool {
 	return err != nil && err.TemporaryFailure
 }
 
+// DefinitelyNotApplied proves the capacity rejection happened before Codex
+// created durable launch state or started a process. Other temporary failures
+// remain ambiguous and retain their reservation for idempotent reconciliation.
+func (err *Error) DefinitelyNotApplied() bool {
+	return err != nil && err.Code == CodeCapacityUnavailable
+}
+
 func ErrorCode(err error) string {
 	var adapterError *Error
 	if errors.As(err, &adapterError) {

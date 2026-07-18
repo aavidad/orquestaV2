@@ -193,7 +193,7 @@ func TestSharedPlanCompilerPreservesInitialAndExtensionGraph(t *testing.T) {
 			{Key: "extension-root", Objective: "extension root", Phase: "phase:extension", Role: "role:worker", Dependencies: []string{initial[2].Ref().String()}, OutputContract: goal.OutputContractEvidenceBundle},
 			{Key: "extension-child", Objective: "extension child", Phase: "phase:extension", Role: "role:reviewer", Parent: initial[1].Ref().String(), Dependencies: []string{"extension-root"}, OutputContract: goal.OutputContractAttestation},
 		},
-	}, clock.Now().Add(time.Second))
+	}, orchestrator.budgetPolicy.effectPolicy(), clock.Now().Add(time.Second))
 	if err != nil {
 		t.Fatalf("compile extension: %v", err)
 	}
@@ -232,7 +232,7 @@ func TestPlanExtensionRejectsRequestKeyCollidingWithExistingWorkItemRef(t *testi
 			Key: existingRef, Objective: "ambiguous item", Phase: goal.DefaultPhaseKey().String(),
 			Role: goal.DefaultRoleKey().String(), OutputContract: goal.OutputContractEvidenceBundle,
 		}},
-	}, clock.Now().Add(time.Second))
+	}, orchestrator.budgetPolicy.effectPolicy(), clock.Now().Add(time.Second))
 	if err == nil || err.Error() != "application.plan_item_key_ref_collision" {
 		t.Fatalf("collision error = %v", err)
 	}

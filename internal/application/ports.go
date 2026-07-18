@@ -28,6 +28,19 @@ func isTemporaryAgentError(err error) bool {
 	return errors.As(err, &temporary) && temporary.Temporary()
 }
 
+// definitelyNotAppliedAgentError is optional structural evidence that an
+// adapter rejected an operation before crossing its external effect boundary.
+// Temporary alone is deliberately insufficient: a timeout may hide success.
+type definitelyNotAppliedAgentError interface {
+	error
+	DefinitelyNotApplied() bool
+}
+
+func isDefinitelyNotAppliedAgentError(err error) bool {
+	var unapplied definitelyNotAppliedAgentError
+	return errors.As(err, &unapplied) && unapplied.DefinitelyNotApplied()
+}
+
 // AgentObserver recovers observations, including terminal state, by execution.
 type AgentObserver interface {
 	Observe(context.Context, goal.ExecutionRef) (ports.AgentObservation, error)

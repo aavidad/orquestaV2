@@ -2,9 +2,9 @@
 
 Fecha de decisión: 2026-07-18.
 
-Estado: **contrato rojo ejecutable; implementación no iniciada**. V01-V14 siguen
-acreditados. V16 no se abre hasta que `AC-V15-BUDGETS-EFFECTS` tenga receipt V3
-`PASS` reproducido desde un checkout limpio y sellado.
+Estado: **acreditado por receipt V3 `PASS`**. V01-V15 están cerrados y V16 no
+se abre hasta iniciar su análisis y fijar un contrato rojo propio. La fuente
+autoritaria del cierre es `product/evidence/v15_budgets_effects.json`.
 
 ## Decisión
 
@@ -28,12 +28,28 @@ Capacidades propiedad exclusiva de V15:
 
 Sus dependencias exactas son V06 `atomic_state_outbox`, V10
 `identity_projects_rbac`, V12 `director_lease` y V14 `controls`, todas ya
-acreditadas. Tras un cierre válido V15 el progreso será 56/257 (21,79 %),
-15/34 (44,12 %) y 15/15 receipts.
+acreditadas. El cierre V15 deja el progreso en 56/257 (21,79 %), 15/34
+(44,12 %) y 15/15 receipts.
 
-## Huecos reales encontrados
+## Resultado del cierre
 
-El límite actual `runtime.codex.max_concurrent_executions=70` vive en memoria
+La implementación final conserva un único writer, scheduler, outbox y
+`StateRepository`. No añadió `BudgetStore`, `EffectStore`, DB, daemon, loop,
+lifecycle ni endpoint paralelo. La política de presupuesto confirmada queda
+congelada con el Goal y sobrevive a una rotación posterior de configuración;
+un registro parcial o corrupto falla cerrado, sin fallback silencioso.
+
+SQLite y aplicación validan la misma cadena causal, incluidos pares exactos de
+fuente/permiso, `policy_hash`, target, TTL, revisión de membership, fence,
+tiempos, clase de efecto y settlement. Un launch exige orden durable `reserva
+<= dispatching/preparación <= attempt <= receipt`. Claims, restart, backup y recovery no
+pueden fabricar aprobación, reserva, receipt o uso. Acciones V14 sin gobernanza
+se aparcan sin ejecutar nuevo efecto; un terminal local puede liquidarse sin
+pedir aprobación retrospectiva.
+
+## Huecos de partida cerrados
+
+El límite anterior `runtime.codex.max_concurrent_executions=70` vivía en memoria
 del adaptador y se comprueba después del claim. No es una reserva durable ni
 prueba presupuesto global/Goal/proyecto. El claim SQLite es FIFO global y
 puede producir hambre multiproyecto. `AgentObservation` no transporta uso de
@@ -42,9 +58,9 @@ los cuatro hechos separados. Los tres campos `Effect*` de
 `ActionConsumptionReceipt` mezclan el consumo del outbox con la evidencia del
 efecto y solo cubren stop.
 
-La cuota temporal ya puede provocar requeue en algunos errores de agente, pero
-eso no acredita V15: falta reserva previa, estado causal de la cuota,
-reconciliación, fairness y restart.
+La cuota temporal podía provocar requeue en algunos errores de agente, pero no
+existían reserva previa, estado causal, reconciliación, fairness ni restart. El
+receipt V15 cierra esos huecos mediante los contratos de este documento.
 
 ## Modelo mínimo
 
@@ -171,7 +187,7 @@ otra clave ni se declara éxito.
 
 ## Persistencia y autoridad
 
-La migración V15 será `010_budgets_effects.sql`. Extiende las tablas actuales
+La migración V15 es `010_budgets_effects.sql`. Extiende las tablas actuales
 con envelopes, reservas/settlements, ordinales de fairness e intents,
 decisiones, attempts y receipts. Todo vive en la misma SQLite y en las mismas
 transacciones que snapshot/eventos/outbox. Los registros son ledger causal, no
@@ -238,6 +254,11 @@ quedan fuera de ese sujeto.
 - PostgreSQL/S3/multihost: V31;
 - operación, apps externas y cutover: V32-V34.
 
+La adopción masiva o adjudicación asistida de efectos V14 aparcados, así como
+la remediación operativa de una aprobación revocada después de un attempt
+ambiguo, quedan en V32. V15 conserva ambos estados visibles y seguros, con cero
+reinvocación automática; no crea un motor legacy lateral.
+
 V15 expone casos de uso de aplicación y puertos neutrales, no endpoints ad hoc.
 
 ## Presupuesto de simplicidad y write-set
@@ -255,6 +276,16 @@ Ratchets netos máximos antes del sello:
 Máximo dos paquetes productivos nuevos, fichero productivo 400 líneas y función
 80 líneas. Superar un límite exige parar, justificar la garantía que lo obliga
 y retirar complejidad equivalente; no se sube el ratchet para obtener verde.
+
+Resultado congelado: core 2.162/2.200, adaptadores 2.373/2.400, migración
+650/650, tests 6.353/6.500 y producción 5.185/5.250; una función modificada
+alcanza 78/80, el mayor fichero productivo nuevo 355/400 y solo se añade un
+paquete productivo. El gate `-race` exacto V15 pasó en SQLite en 39,829 s y el
+mailbox aislado en 27,251 s. La ejecución opcional de todo el paquete SQLite
+bajo `-race` rozó el timeout de diez minutos y una invocación perdió su salida:
+no se contó como evidencia. Queda inventariado como
+`BUG-REBUILD-20260718-229`, residual de rendimiento/harness para V17/V32, sin
+ocultar ni bloquear el gate causal V15 capturado.
 
 Write-set V15:
 
@@ -278,6 +309,6 @@ docs/reconstruccion/** de análisis, estado, ruta y handoff
 
 Lecciones históricas multi-capacidad conservan `closure_evidence=not_verified`
 y solo añaden los IDs V15 verificados. El bug único
-`BUG-ORQ-20260706-BUDGET-CONTRACT-DESALINEADO` no se cerrará por texto: exige
-el test nominal canónico y ampliar de forma coherente el vocabulario de
-trazabilidad; si no se hace, permanece pendiente.
+`BUG-ORQ-20260706-BUDGET-CONTRACT-DESALINEADO` queda ligado a `ORC-09`, al test
+nominal canónico, fixture y receipt V15; esa cobertura del rebuild no se
+interpreta como verificación retroactiva del cierre legacy.

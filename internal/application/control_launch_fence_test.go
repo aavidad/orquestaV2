@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -55,7 +54,7 @@ func TestPauseGatesRetryUntilRecordLaunchPrepared(t *testing.T) {
 }
 
 func TestPauseGatesAutomaticReplacementThroughoutBackoff(t *testing.T) {
-	agent := &scriptedAgent{launchErr: errors.New("provider rejected first launch")}
+	agent := &scriptedAgent{launchErr: definitelyUnappliedPermanentError{"provider rejected first launch"}}
 	system := newControlTestSystem(t, agent)
 	if result, err := system.orchestrator.ProcessNext(context.Background(), "worker:replacement-failure"); err != nil ||
 		!result.Processed || result.Action != ActionLaunchAgent {

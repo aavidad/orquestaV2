@@ -459,7 +459,7 @@ func TestRepositoryV12MigratesPopulatedV6ToV7(t *testing.T) {
 		t.Fatalf("migrate V6 to V7: %v", err)
 	}
 	t.Cleanup(func() { _ = migrated.Close() })
-	assertRecoverySchemaVersion(t, migrated.db, recoverySchemaV14)
+	assertRecoverySchemaVersion(t, migrated.db, recoverySchemaV15)
 	if _, err := migrated.GetGoal(ctx, state.Goal.Ref()); err != nil {
 		t.Fatalf("migrated Goal: %v", err)
 	}
@@ -804,6 +804,7 @@ func newSQLiteDirectorOrchestrator(
 		State: repository, Access: repository, Launcher: stub, Observer: stub, Artifacts: stub,
 		Clock: clock, IDs: ids, MaxOutputBytes: 1024,
 		MaxMailboxEnvelopeBytes: 64 << 10, MaxExecutionAttempts: 3,
+		MaxChildrenPerParent: 6, EffectApprovalTTL: time.Hour, BudgetPolicy: sqliteTestBudgetPolicy(clock.Now()),
 		ClaimLease: time.Minute, DirectorLeaseDuration: 30 * time.Second,
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 		AgentCapabilities: sqliteTestCapabilities(),

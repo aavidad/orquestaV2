@@ -113,6 +113,7 @@ type ApplyDirectorPlanState struct {
 	UpdatedExecutions        []ExecutionRecord
 	NewExecutions            []ExecutionRecord
 	NewActions               []ActionRecord
+	NewWorkItemAuthorities   []WorkItemAuthority
 	RetireActionRefs         []string
 	Events                   []EventRecord
 	Decision                 DirectorDecisionRecord

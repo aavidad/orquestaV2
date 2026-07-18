@@ -20,7 +20,21 @@ func insertCreateState(ctx context.Context, transaction *sql.Tx, state applicati
 	if err := insertGoalPhases(ctx, transaction, snapshot, 0); err != nil {
 		return err
 	}
-	if err := insertWorkItems(ctx, transaction, snapshot, 0); err != nil {
+	governed := len(state.WorkItemAuthorities) == len(snapshot.WorkItems) && len(state.BudgetEnvelopes) == 3
+	if err := insertWorkItems(ctx, transaction, snapshot, 0, governed); err != nil {
+		return err
+	}
+	if err := insertWorkItemAuthorities(ctx, transaction, snapshot.Ref, state.WorkItemAuthorities); err != nil {
+		return err
+	}
+	if len(state.BudgetEnvelopes) == 0 {
+		for _, action := range state.Actions {
+			if action.EffectIntentRef != "" {
+				return invalid(fmt.Errorf("sqlite.budget_envelopes_missing"))
+			}
+		}
+	}
+	if err := insertBudgetEnvelopes(ctx, transaction, state.BudgetEnvelopes); err != nil {
 		return err
 	}
 	for _, execution := range state.Executions {
@@ -68,129 +82,141 @@ func insertWorkItems(
 	transaction *sql.Tx,
 	snapshot goal.GoalSnapshot,
 	start int,
+	governed bool,
 ) error {
 	if start < 0 || start > len(snapshot.WorkItems) {
 		return invalid(fmt.Errorf("sqlite.work_item_start_invalid:%d", start))
 	}
-	var handoffColumns int
-	if err := transaction.QueryRowContext(ctx, `
-SELECT COUNT(*) FROM pragma_table_info('work_items') WHERE name = 'handoff_required'`,
-	).Scan(&handoffColumns); err != nil {
-		return mapDatabaseError(err)
-	}
-	if handoffColumns < 0 || handoffColumns > 1 {
-		return invalid(fmt.Errorf("sqlite.work_item_handoff_schema_invalid"))
-	}
-	handoffPersisted := handoffColumns == 1
-	controlsPersisted, err := sqliteTableHasColumn(ctx, transaction, "work_items", "control_sequence")
+	schema, err := readWorkItemSchema(ctx, transaction)
 	if err != nil {
-		return mapDatabaseError(err)
+		return err
 	}
 	for position := start; position < len(snapshot.WorkItems); position++ {
-		item := snapshot.WorkItems[position]
-		if item.HandoffRequired == nil {
-			return invalid(fmt.Errorf("sqlite.work_item_handoff_required_missing:%s", item.Ref))
-		}
-		if !handoffPersisted && *item.HandoffRequired {
-			return invalid(fmt.Errorf("sqlite.work_item_handoff_schema_unsupported:%s", item.Ref))
-		}
-		query := `
-INSERT INTO work_items(
-    ref, goal_ref, actor_ref, project_ref, objective, phase_key, role_key, parent_ref,
-    output_contract, skip_reason, interrupt_cause, rework_of, state, revision,
-    paused, cancel_requested, control_sequence, position,
-    created_at, started_at, interrupted_at, finished_at, execution_ref
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-		arguments := []any{
-			item.Ref,
-			item.GoalRef,
-			item.ActorRef,
-			item.ProjectRef,
-			item.Objective,
-			item.PhaseKey,
-			item.RoleKey,
-			nullableString(item.ParentRef),
-			string(item.OutputContract),
-			string(item.SkipReason),
-			string(item.InterruptCause),
-			nullableString(item.ReworkOf),
-			string(item.State),
-			int64(item.Revision),
-			storedBool(item.Paused),
-			storedBool(item.CancelRequested),
-			int64(item.ControlSequence),
-			position,
-			requiredTime(item.CreatedAt),
-			storedTime(item.StartedAt),
-			storedTime(item.InterruptedAt),
-			storedTime(item.FinishedAt),
-			nullableString(item.ExecutionRef),
-		}
-		if !controlsPersisted {
-			query = `
-INSERT INTO work_items(
-    ref, goal_ref, actor_ref, project_ref, objective, phase_key, role_key, parent_ref,
-    output_contract, skip_reason, state, revision, position,
-    created_at, started_at, finished_at, execution_ref
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-			arguments = []any{
-				item.Ref, item.GoalRef, item.ActorRef, item.ProjectRef, item.Objective,
-				item.PhaseKey, item.RoleKey, nullableString(item.ParentRef), string(item.OutputContract),
-				string(item.SkipReason), string(item.State), int64(item.Revision), position,
-				requiredTime(item.CreatedAt), storedTime(item.StartedAt), storedTime(item.FinishedAt),
-				nullableString(item.ExecutionRef),
-			}
-		}
-		if handoffPersisted {
-			if controlsPersisted {
-				query = `
-INSERT INTO work_items(
-    ref, goal_ref, actor_ref, project_ref, objective, phase_key, role_key, parent_ref,
-    output_contract, skip_reason, interrupt_cause, rework_of, state, revision,
-    paused, cancel_requested, control_sequence, position,
-    created_at, started_at, interrupted_at, finished_at, execution_ref, handoff_required
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-			} else {
-				query = `
-INSERT INTO work_items(
-    ref, goal_ref, actor_ref, project_ref, objective, phase_key, role_key, parent_ref,
-    output_contract, skip_reason, state, revision, position,
-    created_at, started_at, finished_at, execution_ref, handoff_required
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-			}
-			arguments = append(arguments, storedBool(*item.HandoffRequired))
-		}
-		if _, err := transaction.ExecContext(ctx, query, arguments...); err != nil {
-			return mapDatabaseError(err)
+		if err := insertWorkItem(ctx, transaction, snapshot.WorkItems[position], position, schema, governed); err != nil {
+			return err
 		}
 	}
 	for _, item := range snapshot.WorkItems[start:] {
-		for dependencyPosition, dependency := range item.DependencyRefs {
-			if _, err := transaction.ExecContext(ctx, `
-INSERT INTO work_item_dependencies(goal_ref, work_item_ref, dependency_ref, position)
-VALUES (?, ?, ?, ?)`, item.GoalRef, item.Ref, dependency, dependencyPosition); err != nil {
-				return mapDatabaseError(err)
-			}
-		}
-		for scopePosition, scope := range item.WriteSet {
-			if _, err := transaction.ExecContext(ctx, `
-INSERT INTO work_item_write_scopes(goal_ref, work_item_ref, scope, position)
-VALUES (?, ?, ?, ?)`, item.GoalRef, item.Ref, scope, scopePosition); err != nil {
-				return mapDatabaseError(err)
-			}
-		}
-		if err := insertOrderedContractRefs(ctx, transaction, "work_item_requirement_refs", item.GoalRef, item.Ref, "skill", item.SkillRefs); err != nil {
-			return err
-		}
-		if err := insertOrderedContractRefs(ctx, transaction, "work_item_requirement_refs", item.GoalRef, item.Ref, "tool", item.ToolRefs); err != nil {
-			return err
-		}
-		if err := insertOrderedContractRefs(ctx, transaction, "work_item_requirement_refs", item.GoalRef, item.Ref, "capability", item.CapabilityRefs); err != nil {
+		if err := insertWorkItemRelations(ctx, transaction, item); err != nil {
 			return err
 		}
 	}
 	return nil
 }
+
+type workItemSchema struct{ handoff, controls, governance bool }
+
+func readWorkItemSchema(ctx context.Context, source queryer) (workItemSchema, error) {
+	var schema workItemSchema
+	columns := []struct {
+		name  string
+		value *bool
+	}{{"handoff_required", &schema.handoff}, {"control_sequence", &schema.controls}, {"governance_version", &schema.governance}}
+	for _, column := range columns {
+		found, err := sqliteTableHasColumn(ctx, source, "work_items", column.name)
+		if err != nil {
+			return workItemSchema{}, mapDatabaseError(err)
+		}
+		*column.value = found
+	}
+	return schema, nil
+}
+
+func insertWorkItem(
+	ctx context.Context, tx *sql.Tx, item goal.WorkItemSnapshot, position int, schema workItemSchema, governed bool,
+) error {
+	if item.HandoffRequired == nil {
+		return invalid(fmt.Errorf("sqlite.work_item_handoff_required_missing:%s", item.Ref))
+	}
+	if !schema.handoff && *item.HandoffRequired {
+		return invalid(fmt.Errorf("sqlite.work_item_handoff_schema_unsupported:%s", item.Ref))
+	}
+	governed = governed && schema.governance
+	if governed && (!schema.handoff || !schema.controls) {
+		return invalid(fmt.Errorf("sqlite.work_item_governance_schema_unsupported:%s", item.Ref))
+	}
+	query, arguments := workItemInsert(item, position, schema, governed)
+	_, err := tx.ExecContext(ctx, query, arguments...)
+	return mapDatabaseError(err)
+}
+
+func workItemInsert(item goal.WorkItemSnapshot, position int, schema workItemSchema, governed bool) (string, []any) {
+	query := workItemControlledInsert
+	arguments := []any{
+		item.Ref, item.GoalRef, item.ActorRef, item.ProjectRef, item.Objective, item.PhaseKey,
+		item.RoleKey, nullableString(item.ParentRef), string(item.OutputContract), string(item.SkipReason),
+		string(item.InterruptCause), nullableString(item.ReworkOf), string(item.State), int64(item.Revision),
+		storedBool(item.Paused), storedBool(item.CancelRequested), int64(item.ControlSequence), position,
+		requiredTime(item.CreatedAt), storedTime(item.StartedAt), storedTime(item.InterruptedAt),
+		storedTime(item.FinishedAt), nullableString(item.ExecutionRef),
+	}
+	if !schema.controls {
+		query = workItemLegacyInsert
+		arguments = []any{item.Ref, item.GoalRef, item.ActorRef, item.ProjectRef, item.Objective,
+			item.PhaseKey, item.RoleKey, nullableString(item.ParentRef), string(item.OutputContract),
+			string(item.SkipReason), string(item.State), int64(item.Revision), position,
+			requiredTime(item.CreatedAt), storedTime(item.StartedAt), storedTime(item.FinishedAt), nullableString(item.ExecutionRef)}
+	}
+	if schema.handoff {
+		query = map[bool]string{true: workItemControlledHandoffInsert, false: workItemLegacyHandoffInsert}[schema.controls]
+		arguments = append(arguments, storedBool(*item.HandoffRequired))
+	}
+	if governed {
+		resources := item.BudgetDemand.Resources
+		query = workItemGovernedInsert
+		arguments = append(arguments, item.BudgetDemand.Ref, resources.Tokens, resources.MoneyMicros,
+			string(resources.Currency), resources.ActiveTimeNS, resources.ProcessSlots, resources.DiskBytes,
+			string(item.SecurityCriticality), string(item.ReasoningEffort))
+	}
+	return query, arguments
+}
+
+func insertWorkItemRelations(ctx context.Context, tx *sql.Tx, item goal.WorkItemSnapshot) error {
+	for position, dependency := range item.DependencyRefs {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO work_item_dependencies(
+goal_ref, work_item_ref, dependency_ref, position) VALUES (?, ?, ?, ?)`,
+			item.GoalRef, item.Ref, dependency, position); err != nil {
+			return mapDatabaseError(err)
+		}
+	}
+	for position, scope := range item.WriteSet {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO work_item_write_scopes(
+goal_ref, work_item_ref, scope, position) VALUES (?, ?, ?, ?)`,
+			item.GoalRef, item.Ref, scope, position); err != nil {
+			return mapDatabaseError(err)
+		}
+	}
+	for _, refs := range []struct {
+		kind string
+		refs []string
+	}{{"skill", item.SkillRefs}, {"tool", item.ToolRefs}, {"capability", item.CapabilityRefs}} {
+		if err := insertOrderedContractRefs(ctx, tx, "work_item_requirement_refs", item.GoalRef, item.Ref, refs.kind, refs.refs); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+const workItemControlledInsert = `INSERT INTO work_items(
+ref,goal_ref,actor_ref,project_ref,objective,phase_key,role_key,parent_ref,output_contract,skip_reason,
+interrupt_cause,rework_of,state,revision,paused,cancel_requested,control_sequence,position,created_at,
+started_at,interrupted_at,finished_at,execution_ref) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+const workItemControlledHandoffInsert = `INSERT INTO work_items(
+ref,goal_ref,actor_ref,project_ref,objective,phase_key,role_key,parent_ref,output_contract,skip_reason,
+interrupt_cause,rework_of,state,revision,paused,cancel_requested,control_sequence,position,created_at,
+started_at,interrupted_at,finished_at,execution_ref,handoff_required) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+const workItemLegacyInsert = `INSERT INTO work_items(
+ref,goal_ref,actor_ref,project_ref,objective,phase_key,role_key,parent_ref,output_contract,skip_reason,
+state,revision,position,created_at,started_at,finished_at,execution_ref) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+const workItemLegacyHandoffInsert = `INSERT INTO work_items(
+ref,goal_ref,actor_ref,project_ref,objective,phase_key,role_key,parent_ref,output_contract,skip_reason,
+state,revision,position,created_at,started_at,finished_at,execution_ref,handoff_required) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+const workItemGovernedInsert = `INSERT INTO work_items(
+ref,goal_ref,actor_ref,project_ref,objective,phase_key,role_key,parent_ref,output_contract,skip_reason,
+interrupt_cause,rework_of,state,revision,paused,cancel_requested,control_sequence,position,created_at,
+started_at,interrupted_at,finished_at,execution_ref,handoff_required,governance_version,budget_demand_ref,
+budget_tokens,budget_money_micros,budget_currency,budget_active_time_ns,budget_process_slots,budget_disk_bytes,
+security_criticality,reasoning_effort) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?,?,?,?,?,?)`
 
 func insertGoalHeader(
 	ctx context.Context,
@@ -283,9 +309,9 @@ INSERT INTO app_specs(
 }
 
 func insertExecution(ctx context.Context, transaction *sql.Tx, execution application.ExecutionRecord) error {
-	mailboxMarker, err := sqliteTableHasColumn(ctx, transaction, "executions", "recipient_mailbox_retired")
+	schema, err := readExecutionSchema(ctx, transaction)
 	if err != nil {
-		return mapDatabaseError(err)
+		return err
 	}
 	query := `
 INSERT INTO executions(
@@ -324,7 +350,7 @@ INSERT INTO executions(
 		execution.FailureCode,
 		storedBool(execution.RecipientMailboxRetired),
 	}
-	if !mailboxMarker {
+	if !schema.mailbox {
 		query = `
 INSERT INTO executions(
     ref, goal_ref, work_item_ref, attempt_no, max_execution_attempts,
@@ -336,8 +362,43 @@ INSERT INTO executions(
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 		arguments = arguments[:len(arguments)-1]
 	}
+	if schema.governance {
+		version := int64(0)
+		if execution.BudgetReservationRef != "" || execution.EffectIntentRef != "" || execution.LaunchReceiptRef != "" {
+			version = 1
+		}
+		query = `
+INSERT INTO executions(
+    ref, goal_ref, work_item_ref, attempt_no, max_execution_attempts,
+    replaces_execution_ref, plan_generation, app_spec_generation, spec_hash,
+    state, artifact_media_type, idempotency_key, max_output_bytes,
+    provider_ref, model_ref, agent_ref, external_ref, created_at, deadline_at,
+    started_at, provider_accepted_at, last_observed_at, provider_observed_at,
+    finished_at, failure_code, recipient_mailbox_retired, governance_version,
+    budget_reservation_ref, effect_intent_ref, launch_receipt_ref
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		arguments = append(arguments, version, nullableString(execution.BudgetReservationRef),
+			nullableString(execution.EffectIntentRef), nullableString(execution.LaunchReceiptRef))
+	}
 	_, err = transaction.ExecContext(ctx, query, arguments...)
 	return mapDatabaseError(err)
+}
+
+type executionSchema struct{ mailbox, governance bool }
+
+func readExecutionSchema(ctx context.Context, source queryer) (executionSchema, error) {
+	var schema executionSchema
+	for _, column := range []struct {
+		name  string
+		value *bool
+	}{{"recipient_mailbox_retired", &schema.mailbox}, {"governance_version", &schema.governance}} {
+		found, err := sqliteTableHasColumn(ctx, source, "executions", column.name)
+		if err != nil {
+			return executionSchema{}, mapDatabaseError(err)
+		}
+		*column.value = found
+	}
+	return schema, nil
 }
 
 func updateExecutionCAS(
@@ -346,20 +407,32 @@ func updateExecutionCAS(
 	execution application.ExecutionRecord,
 	expected application.ExecutionState,
 ) error {
+	governancePersisted, err := sqliteTableHasColumn(ctx, transaction, "executions", "governance_version")
+	if err != nil {
+		return mapDatabaseError(err)
+	}
+	if !governancePersisted {
+		return updateLegacyExecutionCAS(ctx, transaction, execution, expected)
+	}
 	if expected == application.ExecutionDispatching && execution.State == application.ExecutionRunning {
 		return acceptExecutionCAS(ctx, transaction, execution)
 	}
 	result, err := transaction.ExecContext(ctx, `
 UPDATE executions
 SET state = ?, deadline_at = ?, started_at = ?, provider_accepted_at = ?, last_observed_at = ?,
-    provider_observed_at = ?, finished_at = ?, failure_code = ?, recipient_mailbox_retired = ?
+    provider_observed_at = ?, finished_at = ?, failure_code = ?, recipient_mailbox_retired = ?,
+    governance_version = CASE WHEN ? IS NULL AND ? IS NULL AND ? IS NULL THEN 0 ELSE 1 END,
+    budget_reservation_ref = ?, effect_intent_ref = ?, launch_receipt_ref = ?
 WHERE ref = ? AND goal_ref = ? AND work_item_ref = ? AND state = ?
   AND provider_ref = ? AND model_ref = ? AND agent_ref = ? AND external_ref = ?
   AND attempt_no = ? AND max_execution_attempts = ?
   AND replaces_execution_ref IS ?
   AND plan_generation = ? AND app_spec_generation = ? AND spec_hash = ?
   AND artifact_media_type = ? AND idempotency_key = ?
-  AND max_output_bytes = ? AND created_at = ?`,
+  AND max_output_bytes = ? AND created_at = ?
+  AND (budget_reservation_ref IS NULL OR budget_reservation_ref IS ?)
+  AND (effect_intent_ref IS NULL OR effect_intent_ref IS ?)
+  AND (launch_receipt_ref IS NULL OR launch_receipt_ref IS ?)`,
 		string(execution.State),
 		storedTime(execution.DeadlineAt),
 		storedTime(execution.StartedAt),
@@ -369,6 +442,9 @@ WHERE ref = ? AND goal_ref = ? AND work_item_ref = ? AND state = ?
 		storedTime(execution.FinishedAt),
 		execution.FailureCode,
 		storedBool(execution.RecipientMailboxRetired),
+		nullableString(execution.BudgetReservationRef), nullableString(execution.EffectIntentRef),
+		nullableString(execution.LaunchReceiptRef), nullableString(execution.BudgetReservationRef),
+		nullableString(execution.EffectIntentRef), nullableString(execution.LaunchReceiptRef),
 		execution.Ref.String(),
 		execution.GoalRef.String(),
 		execution.WorkItemRef.String(),
@@ -387,6 +463,8 @@ WHERE ref = ? AND goal_ref = ? AND work_item_ref = ? AND state = ?
 		execution.IdempotencyKey,
 		execution.MaxOutputBytes,
 		requiredTime(execution.CreatedAt),
+		nullableString(execution.BudgetReservationRef), nullableString(execution.EffectIntentRef),
+		nullableString(execution.LaunchReceiptRef),
 	)
 	if err != nil {
 		return mapDatabaseError(err)
@@ -399,14 +477,17 @@ func acceptExecutionCAS(ctx context.Context, transaction *sql.Tx, execution appl
 UPDATE executions
 SET state = ?, provider_ref = ?, model_ref = ?, agent_ref = ?, external_ref = ?,
     deadline_at = ?, started_at = ?, provider_accepted_at = ?, last_observed_at = ?,
-    provider_observed_at = ?, finished_at = ?, failure_code = ?, recipient_mailbox_retired = ?
+    provider_observed_at = ?, finished_at = ?, failure_code = ?, recipient_mailbox_retired = ?,
+    governance_version = CASE WHEN budget_reservation_ref IS NULL AND effect_intent_ref IS NULL THEN 0 ELSE 1 END, launch_receipt_ref = ?
 WHERE ref = ? AND goal_ref = ? AND work_item_ref = ? AND state = 'dispatching'
   AND provider_ref = '' AND model_ref = '' AND agent_ref = '' AND external_ref = ''
   AND attempt_no = ? AND max_execution_attempts = ?
   AND replaces_execution_ref IS ?
   AND plan_generation = ? AND app_spec_generation = ? AND spec_hash = ?
   AND artifact_media_type = ? AND idempotency_key = ?
-  AND max_output_bytes = ? AND created_at = ?`,
+  AND max_output_bytes = ? AND created_at = ?
+  AND budget_reservation_ref IS ? AND effect_intent_ref IS ?
+  AND launch_receipt_ref IS NULL`,
 		string(execution.State),
 		execution.ProviderRef,
 		execution.ModelRef,
@@ -420,6 +501,7 @@ WHERE ref = ? AND goal_ref = ? AND work_item_ref = ? AND state = 'dispatching'
 		storedTime(execution.FinishedAt),
 		execution.FailureCode,
 		storedBool(execution.RecipientMailboxRetired),
+		nullableString(execution.LaunchReceiptRef),
 		execution.Ref.String(),
 		execution.GoalRef.String(),
 		execution.WorkItemRef.String(),
@@ -433,6 +515,7 @@ WHERE ref = ? AND goal_ref = ? AND work_item_ref = ? AND state = 'dispatching'
 		execution.IdempotencyKey,
 		execution.MaxOutputBytes,
 		requiredTime(execution.CreatedAt),
+		nullableString(execution.BudgetReservationRef), nullableString(execution.EffectIntentRef),
 	)
 	if err != nil {
 		return mapDatabaseError(err)
@@ -564,6 +647,8 @@ func itemSnapshot(item goal.WorkItem) goal.WorkItemSnapshot {
 		ParentRef:       parentValue,
 		HandoffRequired: &handoffRequired,
 		OutputContract:  item.OutputContract().Kind(),
+		BudgetDemand:    item.BudgetDemand(), SecurityCriticality: item.SecurityCriticality(),
+		ReasoningEffort: item.ReasoningEffort(),
 		SkipReason: func() goal.WorkItemSkipReason {
 			reason, _ := item.SkipReason()
 			return reason
@@ -662,6 +747,31 @@ INSERT INTO outbox(
 			action.Ref, string(action.Kind), action.GoalRef.String(), action.WorkItemRef.String(),
 			action.ExecutionRef.String(), int64(action.PlanGeneration),
 			int64(action.WorkItemGeneration), requiredTime(action.AvailableAt),
+		)
+		return mapDatabaseError(err)
+	}
+	governanceColumn, err := sqliteTableHasColumn(ctx, transaction, "outbox", "governance_version")
+	if err != nil {
+		return mapDatabaseError(err)
+	}
+	if governanceColumn {
+		version := int64(0)
+		if action.EffectIntentRef != "" {
+			version = 1
+			if err := insertEffectAdmission(ctx, transaction, action); err != nil {
+				return err
+			}
+		}
+		_, err = transaction.ExecContext(ctx, `
+INSERT INTO outbox(
+    ref, kind, goal_ref, work_item_ref, execution_ref, control_ref,
+    plan_generation, work_item_generation, available_at,
+    governance_version, effect_intent_ref
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			action.Ref, string(action.Kind), action.GoalRef.String(), action.WorkItemRef.String(),
+			action.ExecutionRef.String(), nullableString(action.ControlRef), int64(action.PlanGeneration),
+			int64(action.WorkItemGeneration), requiredTime(action.AvailableAt), version,
+			nullableString(action.EffectIntentRef),
 		)
 		return mapDatabaseError(err)
 	}

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
 	"orquesta/internal/ports"
 )
 
@@ -25,10 +26,17 @@ func (orchestrator *Orchestrator) processStop(ctx context.Context, claim ActionC
 		execution.State == ExecutionCanceled || execution.State == ExecutionStopped {
 		return orchestrator.settleStopAgainstTerminal(ctx, claim, record, item, execution, control)
 	}
+	if err := validateClaimedEffect(claim, orchestrator.clock.Now()); err != nil {
+		return orchestrator.quarantine(ctx, claim, err.Error())
+	}
 	// A prepared launch owns the WorkItem lease until its exact external
 	// acceptance/rejection is durable. No controller call is possible yet.
 	if execution.State == ExecutionDispatching || execution.ExternalRef == "" {
 		return orchestrator.requeue(ctx, claim, execution, "application.stop_waiting_launch_receipt")
+	}
+	request := stopRequest(control, execution)
+	if stopTargetDigest(control, request) != claim.Action.EffectIntent.TargetDigest {
+		return orchestrator.quarantine(ctx, claim, "application.effect_target_mismatch")
 	}
 	capabilities, err := orchestrator.controller.ControlCapabilities(ctx)
 	if err != nil {
@@ -37,7 +45,13 @@ func (orchestrator *Orchestrator) processStop(ctx context.Context, claim ActionC
 	if !ports.SupportsAgentStopMode(capabilities, control.Mode) {
 		return orchestrator.requeue(ctx, claim, execution, "agent.stop_unsupported")
 	}
-	request := stopRequest(control, execution)
+	if err := orchestrator.validateCurrentAutomaticAuthority(ctx, claim); err != nil {
+		return orchestrator.requeue(ctx, claim, execution, err.Error())
+	}
+	attempt, err := orchestrator.beginEffectAttempt(ctx, claim, orchestrator.clock.Now())
+	if err != nil {
+		return err
+	}
 	receipt, stopErr := orchestrator.controller.Stop(ctx, request)
 	if stopErr != nil {
 		if ctx.Err() != nil {
@@ -46,17 +60,31 @@ func (orchestrator *Orchestrator) processStop(ctx context.Context, claim ActionC
 		return orchestrator.requeue(ctx, claim, execution, "agent.stop_failed")
 	}
 	if err := ports.ValidateAgentStopReceipt(request, receipt); err != nil {
-		return orchestrator.quarantine(ctx, claim, ports.AgentContractErrorCode(err))
+		return orchestrator.requeue(ctx, claim, execution, ports.AgentContractErrorCode(err))
 	}
 	switch receipt.Status {
 	case ports.AgentStopPending, ports.AgentStopUnsupported:
 		return orchestrator.requeue(ctx, claim, execution, "agent.stop_"+string(receipt.Status))
 	case ports.AgentStopAlreadyCompleted, ports.AgentStopAlreadyFailed:
-		return orchestrator.settleStopObservedTerminal(ctx, claim, record, item, execution, control, receipt)
+		confirmedAt := orchestrator.clock.Now().UTC()
+		externalReceipt, err := effectReceipt(
+			claim, attempt, receipt.ReceiptRef, EffectStatus(receipt.Status), unknownUsage(), confirmedAt,
+		)
+		if err != nil {
+			return err
+		}
+		return orchestrator.settleStopObservedTerminal(ctx, claim, record, item, execution, control, receipt, externalReceipt)
 	case ports.AgentStopped, ports.AgentStopAlreadyStopped:
-		return orchestrator.settleStopped(ctx, claim, record, item, execution, control, receipt)
+		confirmedAt := orchestrator.clock.Now().UTC()
+		externalReceipt, err := effectReceipt(
+			claim, attempt, receipt.ReceiptRef, EffectStatus(receipt.Status), unknownUsage(), confirmedAt,
+		)
+		if err != nil {
+			return err
+		}
+		return orchestrator.settleStopped(ctx, claim, record, item, execution, control, receipt, externalReceipt)
 	default:
-		return errors.New("application.stop_receipt_status_invalid")
+		return orchestrator.requeue(ctx, claim, execution, "application.stop_receipt_status_invalid")
 	}
 }
 
@@ -73,9 +101,13 @@ func (orchestrator *Orchestrator) settleCanceledObservation(
 	if observation.Status == ports.AgentCompleted {
 		state, failureCode = ExecutionSucceeded, ""
 	}
+	settlement, err := settlementFor(record, execution, observation.Usage, int64(len(observation.Content)), at)
+	if err != nil {
+		return err
+	}
 	return orchestrator.settleCanceledExecution(
 		ctx, claim, record, item, execution, state, failureCode,
-		observation.ObservedAt, "receipt:observation:"+execution.Ref.String(), at,
+		observation.ObservedAt, "receipt:observation:"+execution.Ref.String(), at, settlement, "",
 	)
 }
 
@@ -88,24 +120,18 @@ func (orchestrator *Orchestrator) settleCanceledLaunchRejection(
 	failureCode string,
 ) error {
 	at := lifecycleTime(orchestrator.clock.Now(), record.Goal, item)
+	settlement, err := releaseSettlement(claim, at)
+	if err != nil {
+		return err
+	}
 	return orchestrator.settleCanceledExecution(
 		ctx, claim, record, item, execution, ExecutionFailed, stableFailureCode(failureCode),
-		time.Time{}, "receipt:launch-rejected:"+execution.Ref.String(), at,
+		time.Time{}, "receipt:launch-rejected:"+execution.Ref.String(), at, &settlement,
+		"agent.launch_definitely_not_applied",
 	)
 }
 
-func (orchestrator *Orchestrator) settleCanceledExecution(
-	ctx context.Context,
-	claim ActionClaim,
-	record GoalRecord,
-	item goal.WorkItem,
-	execution ExecutionRecord,
-	terminalState ExecutionState,
-	failureCode string,
-	providerObservedAt time.Time,
-	receiptRef string,
-	at time.Time,
-) error {
+func (orchestrator *Orchestrator) settleCanceledExecution(ctx context.Context, claim ActionClaim, record GoalRecord, item goal.WorkItem, execution ExecutionRecord, terminalState ExecutionState, failureCode string, providerObservedAt time.Time, receiptRef string, at time.Time, settlement *governance.BudgetSettlement, claimErrorCode string) error {
 	control, found := pendingCancelControl(record.Controls, item.Ref())
 	if !found || (terminalState != ExecutionSucceeded && terminalState != ExecutionFailed) {
 		return &StateError{Code: StateConflict}
@@ -150,7 +176,9 @@ func (orchestrator *Orchestrator) settleCanceledExecution(
 		})
 	}
 	existing := replaceExecution(record.Executions, execution)
-	newExecutions, newActions, scheduledEvents, err := orchestrator.scheduleReady(ctx, aggregate, existing, at)
+	newExecutions, newActions, scheduledEvents, err := orchestrator.scheduleHistoricalReady(
+		ctx, record, aggregate, existing, at,
+	)
 	if err != nil {
 		return err
 	}
@@ -162,10 +190,12 @@ func (orchestrator *Orchestrator) settleCanceledExecution(
 		ExpectedGoalRevision: record.Goal.Revision(), ExpectedPlanGeneration: record.Goal.PlanGeneration(),
 		ExpectedWorkItemRevision: item.Revision(), ExpectedExecutionState: previousExecutionState,
 		ExpectedControlStatus: ControlRequested, Claim: claim, Goal: aggregate,
+		ClaimErrorCode:               claimErrorCode,
 		Executions:                   append([]ExecutionRecord{execution}, newExecutions...),
 		NewActions:                   newActions,
 		RetireActionRefs:             []string{"action:stop:" + control.Ref + ":" + execution.Ref.String()},
 		RetireMailboxForExecutionRef: execution.Ref,
+		BudgetSettlement:             settlement,
 		Events:                       events, Control: control, OperationAt: at,
 	})
 	return err

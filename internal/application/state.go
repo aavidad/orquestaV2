@@ -80,6 +80,9 @@ type ExecutionRecord struct {
 	ModelRef             string
 	AgentRef             string
 	ExternalRef          string
+	BudgetReservationRef string
+	EffectIntentRef      string
+	LaunchReceiptRef     string
 	CreatedAt            time.Time
 	DeadlineAt           time.Time
 	StartedAt            time.Time
@@ -137,6 +140,8 @@ type ActionRecord struct {
 	ExecutionRef       goal.ExecutionRef
 	ControlRef         string
 	EffectIntentRef    string
+	EffectIntent       EffectIntent
+	EffectApproval     *EffectApproval
 	PlanGeneration     goal.PlanGeneration
 	WorkItemGeneration goal.Revision
 	AvailableAt        time.Time
@@ -149,6 +154,8 @@ type ActionClaim struct {
 	DeliveryAttempt      uint64
 	Fence                uint64
 	BudgetReservationRef string
+	BudgetReservation    governance.BudgetReservation
+	EffectApproval       EffectApproval
 	LeaseUntil           time.Time
 }
 
@@ -157,6 +164,7 @@ type ClaimRequest struct {
 	Token         string
 	LeaseDuration time.Duration
 	Capabilities  ports.AgentCapabilities
+	BudgetPolicy  BudgetPolicy
 }
 
 type ActionConsumptionOutcome string
@@ -183,13 +191,22 @@ type ActionConsumptionReceipt struct {
 	WorkerRef          string
 	Outcome            ActionConsumptionOutcome
 	ErrorCode          string
-	// Effect* is optional provider evidence for an externally confirmed
-	// action. V14 uses it only for stop_agent; local retirements and all other
-	// action kinds leave the triplet empty.
-	EffectReceiptRef  string
-	EffectStatus      string
-	EffectConfirmedAt time.Time
-	ConsumedAt        time.Time
+	// EffectReceiptRef is the only link to external effect evidence. Status and
+	// timestamps live exclusively in the immutable EffectReceipt fact.
+	EffectReceiptRef string
+	ConsumedAt       time.Time
+}
+
+// WorkItemAuthority preserves the exact create/direct decision that admitted
+// a WorkItem. It lets later readiness scheduling create effects without
+// inventing authority or consulting a second control loop.
+type WorkItemAuthority struct {
+	WorkItemRef          goal.WorkItemRef
+	PrincipalRef         identity.PrincipalRef
+	Permission           identity.Permission
+	Source               EffectApprovalSource
+	AuthorizationReceipt identity.AuthorizationReceipt
+	RecordedAt           time.Time
 }
 
 type GoalRecord struct {
@@ -203,6 +220,8 @@ type GoalRecord struct {
 	Controls            []ControlRecord
 	BudgetEnvelopes     []governance.BudgetEnvelope
 	BudgetReservations  []governance.BudgetReservation
+	BudgetSettlements   []governance.BudgetSettlement
+	WorkItemAuthorities []WorkItemAuthority
 	EffectIntents       []EffectIntent
 	EffectApprovals     []EffectApproval
 	EffectAttempts      []EffectAttempt
@@ -242,6 +261,8 @@ type CreateGoalState struct {
 	Executions           []ExecutionRecord
 	Actions              []ActionRecord
 	Events               []EventRecord
+	WorkItemAuthorities  []WorkItemAuthority
+	BudgetEnvelopes      []governance.BudgetEnvelope
 }
 
 // AmendGoalState carries a fully constructed successor plus the source fence
@@ -275,26 +296,31 @@ type LaunchPreparedState struct {
 }
 
 type LaunchAcceptedState struct {
-	Claim       ActionClaim
-	Execution   ExecutionRecord
-	NextAction  ActionRecord
-	Event       EventRecord
-	OperationAt time.Time
+	Claim         ActionClaim
+	Execution     ExecutionRecord
+	NextAction    ActionRecord
+	Event         EventRecord
+	EffectReceipt EffectReceipt
+	OperationAt   time.Time
 }
 
 type ActionRequeuedState struct {
-	Claim       ActionClaim
-	Execution   ExecutionRecord
-	AvailableAt time.Time
-	ErrorCode   string
-	OperationAt time.Time
+	Claim              ActionClaim
+	Execution          ExecutionRecord
+	AvailableAt        time.Time
+	ErrorCode          string
+	OperationAt        time.Time
+	BudgetSettlement   *governance.BudgetSettlement
+	ClearEffectBinding bool
 }
 
 type ActionQuarantinedState struct {
-	Claim       ActionClaim
-	ErrorCode   string
-	Event       EventRecord
-	OperationAt time.Time
+	Claim              ActionClaim
+	ErrorCode          string
+	Event              EventRecord
+	BudgetSettlement   *governance.BudgetSettlement
+	ClearEffectBinding bool
+	OperationAt        time.Time
 }
 
 // ExecutionReplacedState atomically consumes the failed attempt's action,
@@ -309,6 +335,7 @@ type ExecutionReplacedState struct {
 	NextAction           ActionRecord
 	Events               []EventRecord
 	ErrorCode            string
+	BudgetSettlement     *governance.BudgetSettlement
 	OperationAt          time.Time
 }
 
@@ -323,6 +350,7 @@ type ExecutionInterruptedState struct {
 	NewExecutions        []ExecutionRecord
 	NewActions           []ActionRecord
 	Events               []EventRecord
+	BudgetSettlement     *governance.BudgetSettlement
 	OperationAt          time.Time
 }
 
@@ -337,6 +365,7 @@ type GoalSucceededState struct {
 	NewExecutions        []ExecutionRecord
 	NewActions           []ActionRecord
 	Events               []EventRecord
+	BudgetSettlement     *governance.BudgetSettlement
 	OperationAt          time.Time
 }
 
@@ -349,6 +378,7 @@ type GoalFailedState struct {
 	NewExecutions        []ExecutionRecord
 	NewActions           []ActionRecord
 	Events               []EventRecord
+	BudgetSettlement     *governance.BudgetSettlement
 	OperationAt          time.Time
 }
 

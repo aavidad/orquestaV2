@@ -93,6 +93,16 @@ type AccessRepository interface {
 	RevokeMembership(context.Context, MembershipRevokeState) (identity.Membership, identity.MembershipAuditReceipt, bool, error)
 }
 
+// authorizationCausalFloor prevents durable adapter time from being newer
+// than application facts derived from its authorization receipt.
+func authorizationCausalFloor(at time.Time, receipt identity.AuthorizationReceipt) time.Time {
+	at = at.UTC()
+	if recordedAt := receipt.RecordedAt(); at.Before(recordedAt) {
+		return recordedAt
+	}
+	return at
+}
+
 func (orchestrator *Orchestrator) authorize(
 	ctx context.Context,
 	access Access,

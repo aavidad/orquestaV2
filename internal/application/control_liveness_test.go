@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"orquesta/internal/goal"
@@ -74,7 +73,7 @@ func TestControlTerminalTransitionsReleaseWriteSetAndScheduleExactlyOnce(t *test
 	})
 
 	t.Run("exhausted failure", func(t *testing.T) {
-		system := newControlTestSystemWithPlan(t, &scriptedAgent{launchErr: errors.New("permanent launch failure")}, controlConflictingPlan())
+		system := newControlTestSystemWithPlan(t, &scriptedAgent{launchErr: definitelyUnappliedPermanentError{"permanent launch failure"}}, controlConflictingPlan())
 		record := system.record(t)
 		first := controlItemByObjective(t, record, "first writer")
 		second := controlItemByObjective(t, record, "second writer")

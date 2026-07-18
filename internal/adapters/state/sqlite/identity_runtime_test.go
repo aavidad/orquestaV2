@@ -240,6 +240,7 @@ func TestRepositoryV10ApplicationMembershipReplayAcceptsFreshAuthorizationReceip
 		State: repository, Access: repository, Launcher: stub, Observer: stub, Artifacts: stub,
 		Clock: clock, IDs: ids, MaxOutputBytes: 1024,
 		MaxMailboxEnvelopeBytes: 64 << 10, MaxExecutionAttempts: 2,
+		MaxChildrenPerParent: 6, EffectApprovalTTL: time.Hour, BudgetPolicy: sqliteTestBudgetPolicy(clock.Now()),
 		ClaimLease: time.Minute, DirectorLeaseDuration: time.Minute,
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 		AgentCapabilities: sqliteTestCapabilities(),

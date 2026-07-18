@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"testing"
+	"time"
 
 	"orquesta/internal/goal"
 	"orquesta/internal/identity"
@@ -37,7 +38,21 @@ func newMemoryAccessRepository() *memoryAccessRepository {
 
 func (repository *memoryAccessRepository) setRole(principal identity.PrincipalRef, project goal.ProjectRef, role identity.Role) {
 	repository.mu.Lock()
-	repository.roles[memoryMembershipKey(principal, project)] = role
+	key := memoryMembershipKey(principal, project)
+	repository.roles[key] = role
+	if role == "" || role == identity.RolePlatformAdmin {
+		delete(repository.memberships, key)
+	} else {
+		membership, err := identity.NewMembership(identity.MembershipInput{
+			PrincipalRef: principal, ProjectRef: project, Role: role, Revision: 1,
+			Status: identity.MembershipActive, GrantedBy: principal,
+			GrantedAt: time.Unix(1, 0).UTC(),
+		})
+		if err != nil {
+			panic(err)
+		}
+		repository.memberships[key] = membership
+	}
 	repository.mu.Unlock()
 }
 

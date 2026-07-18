@@ -2,10 +2,9 @@ package application
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"strconv"
+	"time"
 
 	"orquesta/internal/goal"
 	"orquesta/internal/identity"
@@ -51,6 +50,7 @@ func (orchestrator *Orchestrator) Amend(ctx context.Context, access Access, requ
 	if err != nil {
 		return AmendResult{}, err
 	}
+	now = authorizationCausalFloor(now, authorizationReceipt)
 
 	source, err := orchestrator.state.GetGoal(ctx, request.SourceGoalRef)
 	if err != nil {
@@ -67,33 +67,7 @@ func (orchestrator *Orchestrator) Amend(ctx context.Context, access Access, requ
 		return AmendResult{}, &goal.DomainError{Code: goal.ErrorInvalidTransition, Field: "source_goal"}
 	}
 
-	intentRef, err := newIntentRef(ctx, orchestrator.ids)
-	if err != nil {
-		return AmendResult{}, err
-	}
-	appSpecRef, err := newAppSpecRef(ctx, orchestrator.ids)
-	if err != nil {
-		return AmendResult{}, err
-	}
-	goalRef, err := newGoalRef(ctx, orchestrator.ids)
-	if err != nil {
-		return AmendResult{}, err
-	}
-	intent, err := goal.NewIntentManifest(goal.IntentManifestInput{
-		Ref: intentRef, Actor: source.Goal.Actor(), Project: source.Goal.Project(),
-		Statement: request.Statement, SubmittedAt: now,
-	})
-	if err != nil {
-		return AmendResult{}, err
-	}
-	appSpec, err := source.Goal.AppSpec().Amend(goal.AppSpecInput{
-		Ref: appSpecRef, Intent: intent, Objective: request.NormalizedObjective,
-		Reason: request.Reason, ConfirmedBy: principal.ActorRef, ConfirmedAt: now,
-	})
-	if err != nil {
-		return AmendResult{}, err
-	}
-	successor, err := goal.NewSuccessorGoal(goalRef, source.Goal, appSpec, now)
+	successor, goalRef, err := orchestrator.buildSuccessorGoal(ctx, source.Goal, principal.ActorRef, request, now)
 	if err != nil {
 		return AmendResult{}, err
 	}
@@ -125,16 +99,51 @@ func (orchestrator *Orchestrator) Amend(ctx context.Context, access Access, requ
 	return AmendResult{Record: record, Created: created}, nil
 }
 
+func (orchestrator *Orchestrator) buildSuccessorGoal(
+	ctx context.Context,
+	source goal.Goal,
+	confirmedBy goal.ActorRef,
+	request AmendRequest,
+	now time.Time,
+) (goal.Goal, goal.GoalRef, error) {
+	intentRef, err := newIntentRef(ctx, orchestrator.ids)
+	if err != nil {
+		return goal.Goal{}, goal.GoalRef{}, err
+	}
+	appSpecRef, err := newAppSpecRef(ctx, orchestrator.ids)
+	if err != nil {
+		return goal.Goal{}, goal.GoalRef{}, err
+	}
+	goalRef, err := newGoalRef(ctx, orchestrator.ids)
+	if err != nil {
+		return goal.Goal{}, goal.GoalRef{}, err
+	}
+	intent, err := goal.NewIntentManifest(goal.IntentManifestInput{
+		Ref: intentRef, Actor: source.Actor(), Project: source.Project(),
+		Statement: request.Statement, SubmittedAt: now,
+	})
+	if err != nil {
+		return goal.Goal{}, goal.GoalRef{}, err
+	}
+	appSpec, err := source.AppSpec().Amend(goal.AppSpecInput{
+		Ref: appSpecRef, Intent: intent, Objective: request.NormalizedObjective,
+		Reason: request.Reason, ConfirmedBy: confirmedBy, ConfirmedAt: now,
+	})
+	if err != nil {
+		return goal.Goal{}, goal.GoalRef{}, err
+	}
+	successor, err := goal.NewSuccessorGoal(goalRef, source, appSpec, now)
+	if err != nil {
+		return goal.Goal{}, goal.GoalRef{}, err
+	}
+	return successor, goalRef, nil
+}
+
 func amendmentFingerprint(access Access, request AmendRequest) string {
-	digest := sha256.New()
-	writeFingerprintField(digest, "orquesta.amend.v1")
-	writeFingerprintField(digest, access.principal.Ref.String())
-	writeFingerprintField(digest, access.projectRef.String())
-	writeFingerprintField(digest, request.SourceGoalRef.String())
-	writeFingerprintField(digest, strconv.FormatUint(uint64(request.ExpectedSourceRevision), 10))
-	writeFingerprintField(digest, request.ExpectedSourceSpecHash)
-	writeFingerprintField(digest, request.Statement)
-	writeFingerprintField(digest, normalizedObjective(request.Statement, request.NormalizedObjective))
-	writeFingerprintField(digest, request.Reason)
-	return hex.EncodeToString(digest.Sum(nil))
+	return fingerprintFields(
+		"orquesta.amend.v1", access.principal.Ref.String(), access.projectRef.String(),
+		request.SourceGoalRef.String(), strconv.FormatUint(uint64(request.ExpectedSourceRevision), 10),
+		request.ExpectedSourceSpecHash, request.Statement,
+		normalizedObjective(request.Statement, request.NormalizedObjective), request.Reason,
+	)
 }

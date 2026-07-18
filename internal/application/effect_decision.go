@@ -2,8 +2,6 @@ package application
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"strings"
 
@@ -34,9 +32,6 @@ func (orchestrator *Orchestrator) DecideEffect(
 	if orchestrator == nil {
 		return DecideEffectResult{}, errors.New("application.unavailable")
 	}
-	if orchestrator.effectApprovalTTL <= 0 {
-		return DecideEffectResult{}, errors.New("application.effect_approval_ttl_invalid")
-	}
 	request.Reason = strings.TrimSpace(request.Reason)
 	if err := validateDecideEffectRequest(request); err != nil {
 		return DecideEffectResult{}, err
@@ -51,33 +46,20 @@ func (orchestrator *Orchestrator) DecideEffect(
 		PrincipalRef: principal.Ref, ProjectRef: projectRef, GoalRef: request.GoalRef,
 		IntentRef: request.IntentRef, IntentDigest: request.ExpectedIntentDigest,
 	}
+	intent, err := orchestrator.loadDecidableEffectIntent(ctx, principal.Ref, projectRef, request)
+	if err != nil {
+		return DecideEffectResult{}, err
+	}
 	if replayed, found, replayErr := orchestrator.state.EffectReplay(ctx, replayRequest); replayErr != nil {
 		return DecideEffectResult{}, replayErr
 	} else if found {
 		if err := validateEffectDecisionResult(request, fingerprint, principal.Ref, projectRef, replayed); err != nil {
 			return DecideEffectResult{}, err
 		}
+		if err := ValidateEffectApproval(intent, replayed); err != nil {
+			return DecideEffectResult{}, err
+		}
 		return DecideEffectResult{Approval: replayed}, nil
-	}
-
-	record, err := orchestrator.state.GetGoal(ctx, request.GoalRef)
-	if err != nil {
-		return DecideEffectResult{}, err
-	}
-	intent, found := effectIntentByRef(record.EffectIntents, request.IntentRef)
-	if !found {
-		return DecideEffectResult{}, &StateError{Code: StateNotFound}
-	}
-	if err := ValidateEffectIntent(intent); err != nil {
-		return DecideEffectResult{}, &StateError{Code: StateInvalid, Cause: err}
-	}
-	if record.Goal.Project() != projectRef || intent.Subject.ProjectRef != projectRef ||
-		intent.Subject.GoalRef != request.GoalRef || intent.Digest != request.ExpectedIntentDigest {
-		return DecideEffectResult{}, &StateError{Code: StateConflict}
-	}
-	if request.Decision == EffectApproved && intent.SecurityCriticality == governance.SecurityCriticalityCritical &&
-		intent.ProposedBy == principal.Ref {
-		return DecideEffectResult{}, errors.New("application.effect_critical_separation_required")
 	}
 
 	now := orchestrator.clock.Now().UTC()
@@ -89,6 +71,7 @@ func (orchestrator *Orchestrator) DecideEffect(
 	if err != nil {
 		return DecideEffectResult{}, err
 	}
+	now = authorizationCausalFloor(now, authorization)
 	ref, err := orchestrator.ids.NewID(ctx, "effect-approval")
 	if err != nil {
 		return DecideEffectResult{}, err
@@ -98,46 +81,82 @@ func (orchestrator *Orchestrator) DecideEffect(
 		IntentRef: intent.Ref, IntentDigest: intent.Digest, Subject: intent.Subject,
 		ProposedBy: intent.ProposedBy, DecidedBy: principal.Ref, Decision: request.Decision,
 		Source: EffectApprovalSourceExplicitDecision, SecurityCriticality: intent.SecurityCriticality,
+		PolicyHash: intent.PolicyHash, PolicyRevision: intent.PolicyRevision, TargetDigest: intent.TargetDigest,
 		Reason: request.Reason, IdempotencyKey: intent.IdempotencyKey,
 		AuthorizationReceipt: authorization, DecidedAt: now,
 	}
 	if request.Decision == EffectApproved {
-		approval.ExpiresAt = now.Add(orchestrator.effectApprovalTTL)
+		approval.ExpiresAt = now.Add(intent.ApprovalTTL)
 	}
-	persisted, created, err := orchestrator.state.DecideEffect(ctx, DecideEffectState{
+	state := DecideEffectState{
 		RequestRef: request.RequestRef, RequestFingerprint: fingerprint,
 		AuthorizationReceipt: authorization, PrincipalRef: principal.Ref,
 		ProjectRef: projectRef, GoalRef: request.GoalRef, IntentRef: intent.Ref,
 		IntentDigest: intent.Digest, Approval: approval, OperationAt: now,
-	})
-	if err != nil {
-		return orchestrator.replayEffectDecisionAfterConflict(ctx, request, replayRequest, err)
 	}
-	if err := validateEffectDecisionResult(request, fingerprint, principal.Ref, projectRef, persisted); err != nil {
+	return orchestrator.persistEffectDecision(ctx, request, replayRequest, intent, state)
+}
+
+func (orchestrator *Orchestrator) persistEffectDecision(
+	ctx context.Context,
+	request DecideEffectRequest,
+	replayRequest EffectReplayRequest,
+	intent EffectIntent,
+	state DecideEffectState,
+) (DecideEffectResult, error) {
+	persisted, created, err := orchestrator.state.DecideEffect(ctx, state)
+	if err != nil {
+		if !IsStateError(err, StateConflict) {
+			return DecideEffectResult{}, err
+		}
+		replayed, found, replayErr := orchestrator.state.EffectReplay(ctx, replayRequest)
+		if replayErr != nil || !found {
+			return DecideEffectResult{}, err
+		}
+		if validateEffectDecisionResult(
+			request, state.RequestFingerprint, state.PrincipalRef, state.ProjectRef, replayed,
+		) != nil || ValidateEffectApproval(intent, replayed) != nil {
+			return DecideEffectResult{}, err
+		}
+		return DecideEffectResult{Approval: replayed}, nil
+	}
+	if err := validateEffectDecisionResult(
+		request, state.RequestFingerprint, state.PrincipalRef, state.ProjectRef, persisted,
+	); err != nil {
+		return DecideEffectResult{}, err
+	}
+	if err := ValidateEffectApproval(intent, persisted); err != nil {
 		return DecideEffectResult{}, err
 	}
 	return DecideEffectResult{Approval: persisted, Created: created}, nil
 }
 
-func (orchestrator *Orchestrator) replayEffectDecisionAfterConflict(
+func (orchestrator *Orchestrator) loadDecidableEffectIntent(
 	ctx context.Context,
+	principal identity.PrincipalRef,
+	projectRef goal.ProjectRef,
 	request DecideEffectRequest,
-	replayRequest EffectReplayRequest,
-	conflict error,
-) (DecideEffectResult, error) {
-	if !IsStateError(conflict, StateConflict) {
-		return DecideEffectResult{}, conflict
+) (EffectIntent, error) {
+	record, err := orchestrator.state.GetGoal(ctx, request.GoalRef)
+	if err != nil {
+		return EffectIntent{}, err
 	}
-	replayed, found, err := orchestrator.state.EffectReplay(ctx, replayRequest)
-	if err != nil || !found {
-		return DecideEffectResult{}, conflict
+	intent, found := effectIntentByRef(record.EffectIntents, request.IntentRef)
+	if !found {
+		return EffectIntent{}, &StateError{Code: StateNotFound}
 	}
-	if err := validateEffectDecisionResult(
-		request, replayRequest.RequestFingerprint, replayRequest.PrincipalRef, replayRequest.ProjectRef, replayed,
-	); err != nil {
-		return DecideEffectResult{}, conflict
+	if err := ValidateEffectIntent(intent); err != nil {
+		return EffectIntent{}, &StateError{Code: StateInvalid, Cause: err}
 	}
-	return DecideEffectResult{Approval: replayed}, nil
+	if record.Goal.Project() != projectRef || intent.Subject.ProjectRef != projectRef ||
+		intent.Subject.GoalRef != request.GoalRef || intent.Digest != request.ExpectedIntentDigest {
+		return EffectIntent{}, &StateError{Code: StateConflict}
+	}
+	if request.Decision == EffectApproved && intent.SecurityCriticality == governance.SecurityCriticalityCritical &&
+		intent.ProposedBy == principal {
+		return EffectIntent{}, errors.New("application.effect_critical_separation_required")
+	}
+	return intent, nil
 }
 
 func validateDecideEffectRequest(request DecideEffectRequest) error {
@@ -171,6 +190,8 @@ func validateEffectDecisionResult(
 		approval.Decision != request.Decision || approval.Reason != request.Reason ||
 		approval.Source != EffectApprovalSourceExplicitDecision ||
 		governance.ValidateSecurityCriticality(approval.SecurityCriticality) != nil ||
+		!validEffectDigest(approval.PolicyHash) || approval.PolicyRevision == 0 ||
+		!validEffectDigest(approval.TargetDigest) ||
 		!validApplicationRef(approval.IdempotencyKey) || approval.DecidedAt.IsZero() ||
 		!effectApprovalAuthorizationValid(approval) {
 		return &StateError{Code: StateConflict}
@@ -226,22 +247,15 @@ func decideEffectFingerprint(
 	projectRef goal.ProjectRef,
 	request DecideEffectRequest,
 ) string {
-	digest := sha256.New()
-	for _, field := range []string{
+	return fingerprintFields(
 		"orquesta.effect.decision.v1", principal.String(), projectRef.String(), request.GoalRef.String(),
 		request.IntentRef, request.ExpectedIntentDigest, string(request.Decision), strings.TrimSpace(request.Reason),
-	} {
-		writeFingerprintField(digest, field)
-	}
-	return hex.EncodeToString(digest.Sum(nil))
+	)
 }
 
 func effectApprovalAuthorizationRequestRef(requestRef, fingerprint string) string {
-	digest := sha256.New()
-	writeFingerprintField(digest, "orquesta.effect.approval.authorization.v1")
-	writeFingerprintField(digest, requestRef)
-	writeFingerprintField(digest, fingerprint)
-	return "authorization-request:effect-approval:" + hex.EncodeToString(digest.Sum(nil))
+	return "authorization-request:effect-approval:" +
+		fingerprintFields("orquesta.effect.approval.authorization.v1", requestRef, fingerprint)
 }
 
 func effectApprovalResourceRef(goalRef goal.GoalRef, intentRef, digest string) string {

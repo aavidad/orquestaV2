@@ -29,8 +29,10 @@ func TestAdapterCapacityIsTemporaryAndCreatesNothingUntilSlotIsReleased(t *testi
 	}
 
 	second := testRequest(t, "capacity-second", "helper:success", 1024)
-	if _, err := adapter.Launch(context.Background(), second); ErrorCode(err) != CodeCapacityUnavailable || !isTemporaryCodexError(err) {
-		t.Fatalf("Launch(second) error=%v code=%q temporary=%v", err, ErrorCode(err), isTemporaryCodexError(err))
+	if _, err := adapter.Launch(context.Background(), second); ErrorCode(err) != CodeCapacityUnavailable ||
+		!isTemporaryCodexError(err) || !isDefinitelyNotAppliedCodexError(err) {
+		t.Fatalf("Launch(second) error=%v code=%q temporary=%v unapplied=%v",
+			err, ErrorCode(err), isTemporaryCodexError(err), isDefinitelyNotAppliedCodexError(err))
 	}
 	if _, _, found, err := adapter.loadLaunchRecord(second.ExecutionRef); err != nil || found {
 		t.Fatalf("capacity rejection durable record: found=%v error=%v", found, err)
@@ -62,12 +64,20 @@ func TestAdapterRejectsMissingCapacityAndErrorTemporaryUsesFlag(t *testing.T) {
 	}
 	temporary := &Error{Code: CodeCapacityUnavailable, TemporaryFailure: true}
 	permanent := &Error{Code: CodeCapacityUnavailable}
-	if !temporary.Temporary() || permanent.Temporary() {
-		t.Fatalf("Temporary() true=%v false=%v", temporary.Temporary(), permanent.Temporary())
+	ambiguous := &Error{Code: CodeUnavailable, TemporaryFailure: true}
+	if !temporary.Temporary() || permanent.Temporary() || !temporary.DefinitelyNotApplied() ||
+		!permanent.DefinitelyNotApplied() || ambiguous.DefinitelyNotApplied() {
+		t.Fatalf("temporary=%v permanent=%v capacity_unapplied=%v ambiguous_unapplied=%v",
+			temporary.Temporary(), permanent.Temporary(), temporary.DefinitelyNotApplied(), ambiguous.DefinitelyNotApplied())
 	}
 }
 
 func isTemporaryCodexError(err error) bool {
 	var adapterErr *Error
 	return errors.As(err, &adapterErr) && adapterErr.Temporary()
+}
+
+func isDefinitelyNotAppliedCodexError(err error) bool {
+	var adapterErr interface{ DefinitelyNotApplied() bool }
+	return errors.As(err, &adapterErr) && adapterErr.DefinitelyNotApplied()
 }

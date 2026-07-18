@@ -243,7 +243,7 @@ func TestControlsCancelBeforeAndAfterLaunchPrepared(t *testing.T) {
 		release := make(chan struct{})
 		agent := &scriptedAgent{
 			launchEntered: entered, launchRelease: release,
-			launchErr: errors.New("provider rejected launch"),
+			launchErr: definitelyUnappliedPermanentError{"provider rejected launch"},
 		}
 		system := newControlTestSystem(t, agent)
 		done := make(chan error, 1)
@@ -486,6 +486,26 @@ func TestControlsRetryCreatesFreshExecutionAndPreservesStoppedAttempt(t *testing
 	}
 }
 
+func TestLegacyStoppedRetryRequiresReauthorizationWithoutNewEffect(t *testing.T) {
+	system, itemRef, executionRef := stoppedControlSystem(t, 3)
+	system.repository.mu.Lock()
+	record := system.repository.records[system.goalRef]
+	record.WorkItemAuthorities = nil
+	system.repository.records[system.goalRef] = record
+	system.repository.mu.Unlock()
+
+	request := system.request(
+		t, "control:legacy-retry-needs-reauthorization", ControlRetry,
+		ControlTargetWorkItem, itemRef, executionRef,
+	)
+	before := system.effects(t)
+	if _, err := system.orchestrator.Control(context.Background(), system.access, request); err == nil ||
+		err.Error() != "governance.legacy_reauthorization_required" {
+		t.Fatalf("legacy retry error=%v", err)
+	}
+	system.assertEffects(t, before)
+}
+
 func TestControlsRetryRejectsTerminalGoalRetiredMailboxAndAttemptLimit(t *testing.T) {
 	t.Run("terminal Goal", func(t *testing.T) {
 		system, itemRef, executionRef := stoppedControlSystem(t, 3)
@@ -703,9 +723,12 @@ func TestControlsStopCrashReplayConvergesWithoutDuplicateEffect(t *testing.T) {
 				break
 			}
 		}
-		if stopEffect == nil || stopEffect.EffectReceiptRef != "receipt:idempotent:"+execution.Ref.String() ||
-			stopEffect.EffectStatus != string(ports.AgentStopped) || stopEffect.EffectConfirmedAt.IsZero() {
+		if stopEffect == nil || stopEffect.EffectReceiptRef !=
+			"effect-receipt:effect-intent:"+stopEffect.ActionRef {
 			t.Fatalf("exact stop evidence missing from immutable consumption receipt: %+v", stopEffect)
+		}
+		if len(closed.EffectReceipts) == 0 || closed.EffectReceipts[len(closed.EffectReceipts)-1].Status != EffectStatusStopped {
+			t.Fatalf("terminal effect receipt missing: %+v", closed.EffectReceipts)
 		}
 		beforeReplay := controller.snapshot()
 		replay, err := system.orchestrator.Control(context.Background(), system.access, request)
@@ -994,7 +1017,7 @@ func (repository *failStopReceiptRepository) ApplyControl(
 	state ApplyControlState,
 ) (ControlRecord, bool, error) {
 	repository.mu.Lock()
-	fail := state.StopReceipt != nil && repository.failNextReceipt
+	fail := state.EffectReceipt != nil && repository.failNextReceipt
 	if fail {
 		repository.failNextReceipt = false
 	}

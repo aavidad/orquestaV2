@@ -70,13 +70,18 @@ func countRecoveryV14StopEffectReceipts(
 	controls map[string]application.ControlRecord,
 	counts map[string]recoveryControlEffects,
 ) error {
+	receiptColumn, statusColumn, timeColumn, effectJoin, err := recoveryV14EffectProjection(ctx, transaction)
+	if err != nil {
+		return err
+	}
 	rows, err := transaction.QueryContext(ctx, `
-SELECT action.control_ref, receipt.action_ref, receipt.effect_receipt_ref,
-       receipt.effect_status, receipt.effect_confirmed_at,
+SELECT action.control_ref, receipt.action_ref, `+receiptColumn+`,
+       `+statusColumn+`, `+timeColumn+`,
        execution.state, execution.finished_at, execution.failure_code
 FROM action_consumption_receipts receipt
 JOIN outbox action ON action.ref = receipt.action_ref
 JOIN executions execution ON execution.ref = receipt.execution_ref
+`+effectJoin+`
 WHERE receipt.kind = 'stop_agent' AND receipt.effect_receipt_ref IS NOT NULL
 ORDER BY receipt.action_ref`)
 	if err != nil {
@@ -89,6 +94,20 @@ ORDER BY receipt.action_ref`)
 		}
 	}
 	return rows.Err()
+}
+
+func recoveryV14EffectProjection(ctx context.Context, source queryer) (string, string, string, string, error) {
+	legacy, err := sqliteTableHasColumn(ctx, source, "action_consumption_receipts", "legacy_effect_status")
+	if err != nil {
+		return "", "", "", "", err
+	}
+	if legacy {
+		return "COALESCE(effect.external_ref,receipt.effect_receipt_ref)",
+			"COALESCE(receipt.legacy_effect_status,effect.status)",
+			"COALESCE(receipt.legacy_effect_confirmed_at,effect.confirmed_at)",
+			"LEFT JOIN effect_receipts effect ON effect.ref=receipt.effect_receipt_ref", nil
+	}
+	return "receipt.effect_receipt_ref", "receipt.effect_status", "receipt.effect_confirmed_at", "", nil
 }
 
 func countRecoveryV14StopEffectReceipt(

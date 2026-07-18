@@ -450,9 +450,6 @@ func traceBuildHistoricalBugIDs(
 		if binding, exists := bindings[bugID]; exists {
 			entry.VerifiedCapabilityIDs = append([]string(nil), binding.VerifiedCapabilityIDs...)
 			entry.RebuildEvidenceRefs = append([]string(nil), binding.RebuildEvidenceRefs...)
-			if len(entry.VerifiedCapabilityIDs) > 0 && reflect.DeepEqual(entry.VerifiedCapabilityIDs, entry.CapabilityIDs) {
-				entry.ClosureEvidence = "verified"
-			}
 		}
 		entries = append(entries, entry)
 	}
@@ -492,12 +489,8 @@ func traceValidateHistoricalBugRebuildEvidence(t *testing.T, entry traceHistoric
 		}
 		seenEvidence[evidenceRef] = struct{}{}
 	}
-	wantClosure := "not_verified"
-	if reflect.DeepEqual(entry.VerifiedCapabilityIDs, entry.CapabilityIDs) {
-		wantClosure = "verified"
-	}
-	if entry.ClosureEvidence != wantClosure {
-		t.Fatalf("historical bug %q closure=%q, want %q from capability coverage", entry.BugID, entry.ClosureEvidence, wantClosure)
+	if entry.ClosureEvidence != "not_verified" {
+		t.Fatalf("historical bug %q inferred legacy closure from capability coverage: %#v", entry.BugID, entry)
 	}
 }
 

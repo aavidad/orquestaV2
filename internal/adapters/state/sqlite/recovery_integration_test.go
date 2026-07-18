@@ -14,6 +14,7 @@ import (
 
 	"orquesta/internal/application"
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
 	"orquesta/internal/identity"
 	"orquesta/internal/ports"
 )
@@ -34,6 +35,7 @@ func TestArtifactPersistenceCrossingLeaseCannotCommitBackdatedSuccess(t *testing
 		Artifacts: leaseAdvancingArtifacts{clock: clock, advance: 2 * time.Second},
 		Clock:     clock, IDs: &restartIDs{}, MaxOutputBytes: 4096,
 		MaxMailboxEnvelopeBytes: 64 << 10, MaxExecutionAttempts: 3,
+		MaxChildrenPerParent: 6, EffectApprovalTTL: time.Hour, BudgetPolicy: sqliteTestBudgetPolicy(clock.Now()),
 		AgentCapabilities: ports.AgentCapabilities{
 			ProviderRef: "provider:lease-test", ModelRef: "model:lease-test", AgentRef: "agent:lease-test", Unrestricted: true,
 		},
@@ -155,7 +157,7 @@ func TestPreparedLaunchWithRetainedClaimRecoversAfterCrashAndLeaseExpiry(t *test
 		WorkerRef: "worker:crashed", Token: "claim:crashed", LeaseDuration: time.Second,
 		Capabilities: ports.AgentCapabilities{
 			ProviderRef: "provider:restart", ModelRef: "model:restart", AgentRef: "agent:restart", Unrestricted: true,
-		},
+		}, BudgetPolicy: sqliteRuntimeTestPolicy(),
 	})
 	if err != nil || !found || claim.DeliveryAttempt != 1 {
 		t.Fatalf("first claim = %+v found=%v err=%v", claim, found, err)
@@ -194,6 +196,7 @@ func TestPreparedLaunchWithRetainedClaimRecoversAfterCrashAndLeaseExpiry(t *test
 		RoleKey:          item.Role().String(), WriteSet: []string{},
 		OutputContract: string(item.OutputContract().Kind()), ArtifactMediaType: preparedExecution.ArtifactMediaType,
 		IdempotencyKey: preparedExecution.IdempotencyKey, MaxOutputBytes: preparedExecution.MaxOutputBytes,
+		BudgetDemand: item.BudgetDemand(), SecurityCriticality: item.SecurityCriticality(), ReasoningEffort: item.ReasoningEffort(),
 	}
 	if err := repository.Close(); err != nil {
 		t.Fatalf("simulate crash close: %v", err)
@@ -237,6 +240,7 @@ func newRestartOrchestrator(
 		State: repository, Access: repository, Launcher: agent, Observer: agent, Artifacts: restartArtifacts{},
 		Clock: clock, IDs: ids, MaxOutputBytes: 4096,
 		MaxMailboxEnvelopeBytes: 64 << 10, MaxExecutionAttempts: 3,
+		MaxChildrenPerParent: 6, EffectApprovalTTL: time.Hour, BudgetPolicy: sqliteTestBudgetPolicy(clock.Now()),
 		AgentCapabilities: ports.AgentCapabilities{
 			ProviderRef: "provider:restart", ModelRef: "model:restart", AgentRef: "agent:restart", Unrestricted: true,
 		},
@@ -340,7 +344,8 @@ func (agent *restartAgent) Launch(ctx context.Context, request ports.AgentLaunch
 			PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
 			ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash, ProviderRef: "provider:restart",
 			ModelRef: "model:restart", AgentRef: "agent:restart",
-			ExternalRef: "external:" + request.ExecutionRef.String(), IdempotencyKey: request.IdempotencyKey, AcceptedAt: agent.clock.Now(),
+			ExternalRef: "external:" + request.ExecutionRef.String(), ReceiptRef: "receipt:restart:" + request.ExecutionRef.String(),
+			IdempotencyKey: request.IdempotencyKey, AcceptedAt: agent.clock.Now(),
 		}
 		if agent.temporaryFirst {
 			return ports.AgentLaunchReceipt{}, restartTemporaryError{}
@@ -395,7 +400,8 @@ func (agent *leaseCompletionAgent) Launch(_ context.Context, request ports.Agent
 		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
 		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash, ProviderRef: "provider:lease-test",
 		ModelRef: "model:lease-test", AgentRef: "agent:lease-test",
-		ExternalRef: "external:" + request.ExecutionRef.String(), IdempotencyKey: request.IdempotencyKey, AcceptedAt: agent.clock.Now(),
+		ExternalRef: "external:" + request.ExecutionRef.String(), ReceiptRef: "receipt:lease:" + request.ExecutionRef.String(),
+		IdempotencyKey: request.IdempotencyKey, AcceptedAt: agent.clock.Now(),
 	}, nil
 }
 
@@ -405,7 +411,8 @@ func (agent *leaseCompletionAgent) Observe(_ context.Context, executionRef goal.
 	agent.mu.Unlock()
 	return ports.AgentObservation{
 		ExecutionRef: executionRef, SpecHash: specHash, Status: ports.AgentCompleted, MediaType: "text/plain",
-		Content: []byte("lease-fenced artifact"), ObservedAt: agent.clock.Now(),
+		Content: []byte("lease-fenced artifact"),
+		Usage:   governance.ResourceUsage{Quality: governance.UsageQualityUnknown}, ObservedAt: agent.clock.Now(),
 	}, nil
 }
 

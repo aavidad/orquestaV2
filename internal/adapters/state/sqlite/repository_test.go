@@ -55,7 +55,7 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 	if err := repository.db.QueryRow("PRAGMA user_version").Scan(&userVersion); err != nil {
 		t.Fatalf("user_version: %v", err)
 	}
-	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != recoverySchemaV14 {
+	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != recoverySchemaV15 {
 		t.Fatalf("pragmas = fk:%d busy:%d version:%d", foreignKeys, busyTimeout, userVersion)
 	}
 
@@ -73,12 +73,12 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 		tables = append(tables, name)
 	}
 	wantTables := []string{
-		"action_consumption_receipts", "app_specs", "artifacts", "attestations", "authorization_receipts", "controls",
-		"director_decisions", "director_lease_receipts", "director_leases", "events", "executions",
+		"action_consumption_receipts", "app_specs", "artifacts", "attestations", "authorization_receipts",
+		"budget_envelopes", "budget_reservations", "budget_settlements", "controls", "director_decisions", "director_lease_receipts", "director_leases", "effect_approvals", "effect_attempts", "effect_intents", "effect_receipts", "events", "executions", "fairness_cursors",
 		"goal_child_handoff_resolutions", "goal_phase_contract_refs", "goal_phases", "goals", "groups", "intents",
 		"mailbox_admission_receipts", "mailbox_artifact_refs", "mailbox_delivery_acks", "mailbox_delivery_attempts", "mailbox_envelopes", "mailbox_retirements",
 		"membership_audit_receipts", "outbox", "principals", "project_memberships", "projects", "repositories", "schema_migrations",
-		"work_item_dependencies", "work_item_fences", "work_item_requirement_refs", "work_item_write_scopes", "work_items",
+		"work_item_authorities", "work_item_dependencies", "work_item_fences", "work_item_requirement_refs", "work_item_write_scopes", "work_items",
 		"workspaces",
 	}
 	if !reflect.DeepEqual(tables, wantTables) {
@@ -606,6 +606,7 @@ func TestRepositoryRejectsInvalidExecutionAndLifecycleContracts(t *testing.T) {
 			OccurredAt: launchAt,
 		},
 	}
+	repository.now = func() time.Time { return launchAt }
 	if err := repository.RecordLaunchAccepted(context.Background(), invalidLaunch); !application.IsStateError(err, application.StateInvalid) {
 		t.Fatalf("launch with queued execution = %v", err)
 	}
@@ -715,7 +716,7 @@ func TestRepositoryClaimIsAtomicRecoversExpiredLeaseAndQuarantines(t *testing.T)
 			claim, found, err := repository.ClaimNextAction(context.Background(), application.ClaimRequest{
 				WorkerRef:     "worker:" + testIndex(index),
 				Token:         "claim:" + testIndex(index),
-				LeaseDuration: 10 * time.Second, Capabilities: sqliteTestCapabilities(),
+				LeaseDuration: 10 * time.Second, Capabilities: sqliteTestCapabilities(), BudgetPolicy: sqliteRuntimeTestPolicy(),
 			})
 			if err != nil {
 				errorsByWorker <- err
@@ -745,7 +746,7 @@ func TestRepositoryClaimIsAtomicRecoversExpiredLeaseAndQuarantines(t *testing.T)
 	oldClaim := won[0]
 	repository.now = func() time.Time { return now.Add(9 * time.Second) }
 	if _, found, err := repository.ClaimNextAction(context.Background(), application.ClaimRequest{
-		WorkerRef: "worker:early", Token: "claim:early", LeaseDuration: time.Second, Capabilities: sqliteTestCapabilities(),
+		WorkerRef: "worker:early", Token: "claim:early", LeaseDuration: time.Second, Capabilities: sqliteTestCapabilities(), BudgetPolicy: sqliteRuntimeTestPolicy(),
 	}); err != nil || found {
 		t.Fatalf("claim before expiry = found:%v err:%v", found, err)
 	}
@@ -763,7 +764,7 @@ func TestRepositoryClaimIsAtomicRecoversExpiredLeaseAndQuarantines(t *testing.T)
 	}
 	repository.now = func() time.Time { return now.Add(10 * time.Second) }
 	recovered, found, err := repository.ClaimNextAction(context.Background(), application.ClaimRequest{
-		WorkerRef: "worker:recovery", Token: "claim:recovery", LeaseDuration: time.Second, Capabilities: sqliteTestCapabilities(),
+		WorkerRef: "worker:recovery", Token: "claim:recovery", LeaseDuration: time.Second, Capabilities: sqliteTestCapabilities(), BudgetPolicy: sqliteRuntimeTestPolicy(),
 	})
 	if err != nil || !found || recovered.DeliveryAttempt != 2 || recovered.Fence != oldClaim.Fence+1 {
 		t.Fatalf("recovered claim = found:%v attempt:%d err:%v", found, recovered.DeliveryAttempt, err)
@@ -780,6 +781,7 @@ func TestRepositoryClaimIsAtomicRecoversExpiredLeaseAndQuarantines(t *testing.T)
 	}
 	stale := quarantine
 	stale.Claim = oldClaim
+	repository.now = func() time.Time { return quarantineAt }
 	if err := repository.QuarantineAction(context.Background(), stale); !application.IsStateError(err, application.StateConflict) {
 		t.Fatalf("stale claim mutation = %v", err)
 	}
@@ -828,6 +830,7 @@ func TestRepositoryMutationsAreAtomicCASAndRestoreEvidence(t *testing.T) {
 	}
 	preparedExecution := record.Executions[0]
 	preparedExecution.State = application.ExecutionDispatching
+	repository.now = func() time.Time { return launchAt }
 	if err := repository.RecordLaunchPrepared(context.Background(), application.LaunchPreparedState{
 		Claim: launchClaim, ExpectedGoalRevision: record.Goal.Revision(), Goal: launchedGoal,
 		Execution: preparedExecution, OperationAt: launchAt,
@@ -873,6 +876,7 @@ func TestRepositoryMutationsAreAtomicCASAndRestoreEvidence(t *testing.T) {
 	requeuedExecution.LastObservedAt = launchAt.Add(time.Second)
 	requeuedExecution.ProviderObservedAt = launchAt.Add(-time.Hour)
 	retryAt := launchAt.Add(5 * time.Second)
+	repository.now = func() time.Time { return launchAt.Add(time.Second) }
 	if err := repository.RequeueAction(context.Background(), application.ActionRequeuedState{
 		Claim: observeClaim, Execution: requeuedExecution, AvailableAt: retryAt, ErrorCode: "agent.pending",
 		OperationAt: launchAt.Add(time.Second),
@@ -880,7 +884,7 @@ func TestRepositoryMutationsAreAtomicCASAndRestoreEvidence(t *testing.T) {
 		t.Fatalf("requeue: %v", err)
 	}
 	if _, found, err := repository.ClaimNextAction(context.Background(), application.ClaimRequest{
-		WorkerRef: "worker:too-early", Token: "claim:too-early", LeaseDuration: time.Second, Capabilities: sqliteTestCapabilities(),
+		WorkerRef: "worker:too-early", Token: "claim:too-early", LeaseDuration: time.Second, Capabilities: sqliteTestCapabilities(), BudgetPolicy: sqliteRuntimeTestPolicy(),
 	}); err != nil || found {
 		t.Fatalf("early retry claim = found:%v err:%v", found, err)
 	}
@@ -931,6 +935,7 @@ func TestRepositoryMutationsAreAtomicCASAndRestoreEvidence(t *testing.T) {
 		Goal: succeededGoal, Execution: succeededExecution, Artifact: artifact,
 		Attestation: attestation, Events: validEvents, OperationAt: succeededAt,
 	}
+	repository.now = func() time.Time { return succeededAt }
 	wrongCAS := successState
 	wrongCAS.ExpectedGoalRevision++
 	if err := repository.RecordGoalSucceeded(context.Background(), wrongCAS); !application.IsStateError(err, application.StateConflict) {
@@ -1008,6 +1013,7 @@ func TestRepositoryRecordsFailedGoalAtomically(t *testing.T) {
 	}
 	preparedExecution := record.Executions[0]
 	preparedExecution.State = application.ExecutionDispatching
+	repository.now = func() time.Time { return failedAt }
 	if err := repository.RecordLaunchPrepared(context.Background(), application.LaunchPreparedState{
 		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), Goal: failedGoal,
 		Execution: preparedExecution, OperationAt: failedAt,
@@ -1205,7 +1211,7 @@ func newV05CreateFixture(t *testing.T) application.CreateGoalState {
 	}
 }
 
-func TestRepositoryRollsBackSuccessWhenReadySuccessorsAreOmitted(t *testing.T) {
+func TestRepositoryParksLegacyReadySuccessorsWithoutSyntheticGovernance(t *testing.T) {
 	repository, _ := openTestRepository(t)
 	state := newDAGCreateFixture(t)
 	if _, _, err := createLegacyGoal(t, repository, state); err != nil {
@@ -1229,6 +1235,7 @@ func TestRepositoryRollsBackSuccessWhenReadySuccessorsAreOmitted(t *testing.T) {
 	}
 	preparedExecution := record.Executions[0]
 	preparedExecution.State = application.ExecutionDispatching
+	repository.now = func() time.Time { return launchAt }
 	if err := repository.RecordLaunchPrepared(context.Background(), application.LaunchPreparedState{
 		Claim: launchClaim, ExpectedGoalRevision: record.Goal.Revision(), Goal: preparedGoal,
 		Execution: preparedExecution, OperationAt: launchAt,
@@ -1288,6 +1295,7 @@ func TestRepositoryRollsBackSuccessWhenReadySuccessorsAreOmitted(t *testing.T) {
 	succeededExecution.LastObservedAt = finishedAt
 	succeededExecution.ProviderObservedAt = finishedAt
 	succeededExecution.FinishedAt = finishedAt
+	repository.now = func() time.Time { return finishedAt }
 	err = repository.RecordGoalSucceeded(context.Background(), application.GoalSucceededState{
 		Claim: observeClaim, ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: runningRoot.Revision(),
 		Goal: succeededGoal, Execution: succeededExecution, OperationAt: finishedAt,
@@ -1305,14 +1313,14 @@ func TestRepositoryRollsBackSuccessWhenReadySuccessorsAreOmitted(t *testing.T) {
 			OccurredAt: finishedAt,
 		}},
 	})
-	if !application.IsStateError(err, application.StateConflict) {
-		t.Fatalf("omitted ready successors = %v", err)
+	if err != nil {
+		t.Fatalf("park legacy successor: %v", err)
 	}
 	after, err := repository.GetGoal(context.Background(), state.Goal.Ref())
 	afterRoot, _ := workItemByObjective(after.Goal, "root")
-	if err != nil || afterRoot.State() != goal.WorkItemStateRunning || after.Executions[0].State != application.ExecutionRunning ||
-		len(after.Artifacts) != 0 || tableCount(t, repository, "executions") != 1 {
-		t.Fatalf("partial omitted-successor mutation escaped: record=%+v err=%v", after, err)
+	if err != nil || afterRoot.State() != goal.WorkItemStateSucceeded || after.Executions[0].State != application.ExecutionSucceeded ||
+		len(after.Artifacts) != 1 || tableCount(t, repository, "executions") != 1 {
+		t.Fatalf("legacy successor was synthesized or parent rolled back: record=%+v err=%v", after, err)
 	}
 }
 
@@ -1504,6 +1512,7 @@ func mustClaim(t *testing.T, repository *Repository, worker, token string, now t
 	repository.now = func() time.Time { return now }
 	claim, found, err := repository.ClaimNextAction(context.Background(), application.ClaimRequest{
 		WorkerRef: worker, Token: token, LeaseDuration: 30 * time.Second, Capabilities: sqliteTestCapabilities(),
+		BudgetPolicy: sqliteTestBudgetPolicy(now),
 	})
 	if err != nil || !found {
 		t.Fatalf("claim = found:%v err:%v", found, err)

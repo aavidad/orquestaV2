@@ -1,7 +1,12 @@
 package acceptance_test
 
 import (
+	"bytes"
 	"context"
+	"go/ast"
+	"go/format"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -87,7 +92,10 @@ func TestV15CandidateSubjectsCoverCommittedDelta(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	v15AssertSimplicityBudget(t, numstat)
+	v15AssertSimplicityBudget(
+		t, repositoryRoot, fixture.ProductDeltaBaseGitCommitOID,
+		fixture.ProductDeltaSealedGitCommitOID, numstat,
+	)
 }
 
 func TestAcceptanceV15BudgetsEffects(t *testing.T) {
@@ -148,10 +156,7 @@ func TestAcceptanceV15BudgetsEffects(t *testing.T) {
 				t.Errorf("V15_RED WorkItemSpec lacks %s", field)
 			}
 		}
-		if strings.Contains(strings.ToLower(governance), "codex") ||
-			strings.Contains(strings.ToLower(governance), "keyword") {
-			t.Error("V15 neutral governance contains provider or keyword policy")
-		}
+		v15AssertNeutralGovernance(t, filepath.Join(repositoryRoot, "internal", "governance"))
 	})
 
 	t.Run("effect_facts_and_exact_approval_are_distinct", func(t *testing.T) {
@@ -244,6 +249,14 @@ func TestAcceptanceV15BudgetsEffects(t *testing.T) {
 	})
 }
 
+func TestAcceptanceV15BudgetsEffectsReceipt(t *testing.T) {
+	evidenceAssertReceiptV3(t, evidenceRepositoryRoot(t), evidenceReceiptV3Expectation{
+		Contract: "AC-V15-BUDGETS-EFFECTS", FixturePath: v15FixturePath,
+		ReceiptPath:       "product/evidence/v15_budgets_effects.json",
+		ExecutedNotBefore: "2026-07-18T00:00:00Z", TrustedBaseGitCommitOID: v15ContractBaseGitCommitOID,
+	})
+}
+
 func v15AssertFixtureHeader(t *testing.T, repositoryRoot string, fixture v15Fixture) {
 	t.Helper()
 	wantOwned := []string{"GOV-15", "STG-09", "ORC-08", "ORC-09", "ORC-10", "ORC-11", "EVD-03", "EVD-14"}
@@ -259,25 +272,103 @@ func v15AssertFixtureHeader(t *testing.T, repositoryRoot string, fixture v15Fixt
 		!reflect.DeepEqual(fixture.BudgetDimensions, []string{"tokens", "money_micros", "active_time_ns", "process_slots", "disk_bytes"}) ||
 		!reflect.DeepEqual(fixture.BudgetScopes, []string{"deployment", "project", "goal"}) ||
 		!reflect.DeepEqual(fixture.RiskLevels, []string{"normal", "sensitive", "critical"}) ||
+		!reflect.DeepEqual(fixture.ReasoningEfforts, []string{"low", "medium", "high", "xhigh"}) ||
 		!reflect.DeepEqual(fixture.EffectFacts, []string{"intent", "approval", "attempt", "receipt"}) ||
+		!reflect.DeepEqual(fixture.EffectKinds, []string{"agent_launch", "agent_stop"}) ||
+		!reflect.DeepEqual(fixture.ApprovalOutcomes, []string{"approved", "denied"}) ||
+		!reflect.DeepEqual(fixture.ApprovalSources, []string{
+			"goal_confirmation", "director_decision", "explicit_decision",
+		}) ||
 		fixture.DefaultParentLaunchesPerCycle != 70 || fixture.DefaultMaxChildrenPerParent != 6 ||
-		len(fixture.RequiredBehaviorTests) == 0 || len(fixture.DeferredSurfaces) == 0 {
+		!reflect.DeepEqual(fixture.RequiredUseCases, []string{"DecideEffect"}) ||
+		!reflect.DeepEqual(fixture.RequiredRepositoryMethods, []string{
+			"EffectReplay", "DecideEffect", "RecordEffectAttempt",
+		}) ||
+		!reflect.DeepEqual(fixture.ForbiddenPrivateAuthorities, []string{
+			"BudgetStore", "BudgetDatabase", "BudgetQueue", "BudgetLoop", "BudgetScheduler",
+			"EffectStore", "EffectDatabase", "EffectQueue", "EffectLoop", "EffectScheduler",
+			"ApprovalStore", "ApprovalDatabase", "ApprovalQueue", "EffectLifecycle",
+		}) ||
+		!reflect.DeepEqual(fixture.RequiredBehaviorTests, v15ExpectedBehaviorTests()) ||
+		!reflect.DeepEqual(fixture.DeferredSurfaces, []string{
+			"workspace_git_and_forge",
+			"independent_attestation_reviews_and_council",
+			"public_http_mcp_cli_web_and_full_i18n",
+			"provider_parity_tools_skills_rag_plugins_and_generic_external_effects",
+			"deploy_notifications_opes_postgres_s3_multihost_and_cutover",
+		}) {
 		t.Fatalf("invalid V15 fixture header: %+v", fixture)
 	}
-	if len(fixture.ExecutionArgv) != 3 || fixture.ExecutionArgv[0] != "sh" ||
-		fixture.ExecutionArgv[1] != "-c" || fixture.ExecutionArgv[2] == "" ||
-		fixture.Command != "sh -c '"+fixture.ExecutionArgv[2]+"'" {
-		t.Fatal("invalid V15 execution argv")
+	if fixture.Command != "sh -c '"+v15ValidationShellBody()+"'" ||
+		!reflect.DeepEqual(fixture.ExecutionArgv, []string{"sh", "-c", v15ValidationShellBody()}) {
+		t.Fatalf("invalid V15 command/argv: %q %#v", fixture.Command, fixture.ExecutionArgv)
 	}
+	v15AssertRaceGate(t, v15ValidationShellBody())
 	if parsed, err := time.Parse(time.RFC3339Nano, fixture.Scenario.BaseTime); err != nil || parsed.IsZero() ||
 		fixture.Scenario.Projects != 2 || fixture.Scenario.GoalsPerProject != 2 ||
 		fixture.Scenario.ConcurrentClaims < 100 || fixture.Scenario.GlobalProcessSlots != 3 ||
 		fixture.Scenario.ProjectProcessSlots != 2 || fixture.Scenario.GoalProcessSlots != 1 ||
-		len(fixture.Scenario.EffectCrashFrontiers) != 3 {
+		!reflect.DeepEqual(fixture.Scenario.EffectCrashFrontiers, []string{
+			"before_adapter_call", "after_adapter_apply_before_receipt", "after_receipt_before_action_consume",
+		}) {
 		t.Fatalf("invalid V15 scenario: %+v", fixture.Scenario)
 	}
 	if root, err := filepath.Abs(repositoryRoot); err != nil || root == "" {
 		t.Fatal("repository root unavailable")
+	}
+	if _, err := evidenceGitCanonicalCommit(repositoryRoot, fixture.TrustedBaseGitCommitOID); err != nil {
+		t.Fatalf("invalid V15 contract base: %v", err)
+	}
+	if err := evidenceValidateCandidateSubjects(
+		fixture.CandidateSubjects, fixture.ReceiptPath, fixture.OutputPath,
+	); err != nil {
+		t.Fatal(err)
+	}
+	for _, relative := range fixture.CandidateSubjects {
+		if _, err := os.Stat(filepath.Join(repositoryRoot, filepath.FromSlash(relative))); err != nil {
+			t.Fatalf("candidate subject %q is not readable: %v", relative, err)
+		}
+	}
+}
+
+func v15ExpectedBehaviorTests() []string {
+	return []string{
+		"TestBudgetContractUsesOneCanonicalEnvelopeAcrossLayers",
+		"TestConcurrentBudgetReservationsNeverExceedEnvelope",
+		"TestTemporaryQuotaParksActionWithoutTerminalFailure",
+		"TestHierarchicalFairnessBoundsProjectAndGoalStarvation",
+		"TestEffectRequiresExactLiveApprovalBeforeAdapterInvocation",
+		"TestEffectCrashAfterApplyBeforeReceiptReconcilesOnce",
+		"TestSQLiteBudgetsEffectsRestartRaceAndReplay",
+		"TestV15RecoveryRejectsBudgetEffectCausalTampering",
+		"TestV15BackupRestorePreservesBudgetsAndEffects",
+		"TestRealCodexBudgetsAndEffectsThroughProductionComposition",
+	}
+}
+
+func v15ValidationShellBody() string {
+	return "go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV15ScopeAndExecutableContract|TestV15EvidenceBelongsOnlyToBudgetsEffectsCapabilities|TestV15AcceptanceCommandRunsBudgetEffectConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestTraceabilityRebuildHistoricalBugIDs|TestTraceabilityRebuildHistoricalBugReviewBindings|TestTraceabilityRebuildSchemaValidatesCanonicalLedgers|TestHistoricalBugCapabilityCoverageNeverInfersLegacyClosure|TestAcceptanceV15BudgetsEffects|TestV15CandidateSubjectsCoverCommittedDelta)$\"" +
+		" && go test -mod=vendor -count=1 ./internal/goal ./internal/governance ./internal/identity ./internal/config ./internal/credentials ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta" +
+		" && " + v15RaceValidationShellBody()
+}
+
+func v15RaceValidationShellBody() string {
+	return "go test -mod=vendor -race -count=1 ./internal/application ./internal/adapters/state/sqlite ./internal/adapters/agent/fake ./internal/bootstrap" +
+		" -run \"^(TestBudgetContractUsesOneCanonicalEnvelopeAcrossLayers|TestConcurrentBudgetReservationsNeverExceedEnvelope|TestTemporaryQuotaParksActionWithoutTerminalFailure|TestHierarchicalFairnessBoundsProjectAndGoalStarvation|TestEffectRequiresExactLiveApprovalBeforeAdapterInvocation|TestEffectCrashAfterApplyBeforeReceiptReconcilesOnce|TestSQLiteBudgetsEffectsRestartRaceAndReplay|TestV15RecoveryRejectsBudgetEffectCausalTampering|TestV15BackupRestorePreservesBudgetsAndEffects|TestRealCodexBudgetsAndEffectsThroughProductionComposition)$\""
+}
+
+func v15AssertRaceGate(t *testing.T, command string) {
+	t.Helper()
+	if !strings.Contains(command, " && go test -mod=vendor -race -count=1") {
+		t.Fatalf("V15 acceptance command omits race detector gate: %q", command)
+	}
+	for _, required := range append([]string{
+		"./internal/application", "./internal/adapters/state/sqlite",
+		"./internal/adapters/agent/fake", "./internal/bootstrap",
+	}, v15ExpectedBehaviorTests()...) {
+		if !strings.Contains(v15RaceValidationShellBody(), required) {
+			t.Errorf("V15 race gate omits %q: %q", required, v15RaceValidationShellBody())
+		}
 	}
 }
 
@@ -306,7 +397,41 @@ func v15ReadProductionGo(t *testing.T, directories ...string) string {
 	return result.String()
 }
 
-func v15AssertSimplicityBudget(t *testing.T, numstat []byte) {
+func v15AssertNeutralGovernance(t *testing.T, directory string) {
+	t.Helper()
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+			continue
+		}
+		path := filepath.Join(directory, entry.Name())
+		parsed, err := parser.ParseFile(token.NewFileSet(), path, nil, parser.SkipObjectResolution)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ast.Inspect(parsed, func(node ast.Node) bool {
+			var value string
+			switch typed := node.(type) {
+			case *ast.Ident:
+				value = typed.Name
+			case *ast.BasicLit:
+				if typed.Kind == token.STRING {
+					value, _ = strconv.Unquote(typed.Value)
+				}
+			}
+			lower := strings.ToLower(value)
+			if strings.Contains(lower, "codex") || strings.Contains(lower, "keyword") {
+				t.Errorf("V15 neutral governance contains provider/keyword policy in %s: %q", path, value)
+			}
+			return true
+		})
+	}
+}
+
+func v15AssertSimplicityBudget(t *testing.T, repositoryRoot, baseOID, sealedOID string, numstat []byte) {
 	t.Helper()
 	type limit struct{ net, max int }
 	limits := map[string]*limit{
@@ -325,7 +450,11 @@ func v15AssertSimplicityBudget(t *testing.T, numstat []byte) {
 		if addErr != nil || deleteErr != nil {
 			t.Fatalf("V15 invalid numstat %q", row)
 		}
-		if class := v15SimplicityClass(fields[2]); class != "" {
+		class := v15SimplicityClass(fields[2])
+		if class == "" {
+			t.Fatalf("V15 simplicity budget cannot classify changed path %q", fields[2])
+		}
+		if class != "metadata" {
 			limits[class].net += added - deleted
 		}
 	}
@@ -337,6 +466,7 @@ func v15AssertSimplicityBudget(t *testing.T, numstat []byte) {
 	if limits["core"].net+limits["adapters"].net+limits["migration"].net > 5250 {
 		t.Errorf("V15 production net LOC exceeds 5250")
 	}
+	v15AssertStructuralSimplicity(t, repositoryRoot, baseOID, sealedOID)
 }
 
 func v15SimplicityClass(relative string) string {
@@ -344,10 +474,14 @@ func v15SimplicityClass(relative string) string {
 	case strings.HasSuffix(relative, "_test.go"), strings.HasPrefix(relative, "acceptance/"):
 		return "tests"
 	case strings.HasSuffix(relative, ".sql"):
-		return "migration"
+		if relative == "internal/adapters/state/sqlite/migrations/010_budgets_effects.sql" {
+			return "migration"
+		}
 	case strings.HasPrefix(relative, "internal/adapters/"), strings.HasPrefix(relative, "internal/bootstrap/"),
-		strings.HasPrefix(relative, "internal/config/"), strings.HasPrefix(relative, "config/"):
-		if strings.HasSuffix(relative, ".go") || strings.HasSuffix(relative, ".json") {
+		strings.HasPrefix(relative, "internal/config/"), strings.HasPrefix(relative, "config/"),
+		strings.HasPrefix(relative, "cmd/orquesta/"):
+		if relative == "config/orquesta.toml.example" || strings.HasSuffix(relative, ".go") || strings.HasSuffix(relative, ".json") ||
+			strings.HasSuffix(relative, ".toml") || strings.HasSuffix(relative, ".md") {
 			return "adapters"
 		}
 	case strings.HasPrefix(relative, "internal/governance/"), strings.HasPrefix(relative, "internal/goal/"),
@@ -356,6 +490,160 @@ func v15SimplicityClass(relative string) string {
 		if strings.HasSuffix(relative, ".go") {
 			return "core"
 		}
+	case strings.HasPrefix(relative, "docs/reconstruccion/"), relative == "product/roadmap.json",
+		strings.HasPrefix(relative, "product/traceability/"):
+		return "metadata"
 	}
 	return ""
+}
+
+type v15ChangedPath struct {
+	status string
+	path   string
+}
+
+func v15AssertStructuralSimplicity(t *testing.T, repositoryRoot, baseOID, sealedOID string) {
+	t.Helper()
+	output, err := evidenceGit(
+		repositoryRoot, "diff", "--no-renames", "--name-status", baseOID, sealedOID, "--",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var changed []v15ChangedPath
+	for _, row := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if row == "" {
+			continue
+		}
+		fields := strings.SplitN(row, "\t", 2)
+		if len(fields) != 2 || (fields[0] != "A" && fields[0] != "M" && fields[0] != "D") {
+			t.Fatalf("V15 unsupported changed-path row %q", row)
+		}
+		if class := v15SimplicityClass(fields[1]); class == "" {
+			t.Fatalf("V15 unclassified changed path %q", fields[1])
+		}
+		changed = append(changed, v15ChangedPath{status: fields[0], path: fields[1]})
+	}
+
+	newPackageCandidates := make(map[string]struct{})
+	for _, entry := range changed {
+		class := v15SimplicityClass(entry.path)
+		productiveGo := (class == "core" || class == "adapters") &&
+			strings.HasSuffix(entry.path, ".go") && !strings.HasSuffix(entry.path, "_test.go")
+		if !productiveGo || entry.status == "D" {
+			continue
+		}
+		content := v15GitBlob(t, repositoryRoot, sealedOID, entry.path)
+		if entry.status == "A" {
+			if lines := v15LineCount(content); lines > 400 {
+				t.Errorf("V15 added productive Go file %s has %d lines, max 400", entry.path, lines)
+			}
+			newPackageCandidates[filepath.Dir(entry.path)] = struct{}{}
+		}
+		var base []byte
+		if entry.status == "M" {
+			base = v15GitBlob(t, repositoryRoot, baseOID, entry.path)
+		}
+		v15AssertChangedFunctions(t, entry.path, base, content)
+	}
+
+	newPackages := 0
+	for directory := range newPackageCandidates {
+		if !v15ProductiveGoPackageExistsAt(t, repositoryRoot, baseOID, directory) {
+			newPackages++
+		}
+	}
+	if newPackages > 2 {
+		t.Errorf("V15 adds %d productive packages, max 2", newPackages)
+	}
+}
+
+func v15GitBlob(t *testing.T, repositoryRoot, oid, relative string) []byte {
+	t.Helper()
+	content, err := evidenceGit(repositoryRoot, "show", oid+":"+relative)
+	if err != nil {
+		t.Fatalf("read %s at %s: %v", relative, oid, err)
+	}
+	return content
+}
+
+func v15LineCount(content []byte) int {
+	if len(content) == 0 {
+		return 0
+	}
+	lines := bytes.Count(content, []byte{'\n'})
+	if content[len(content)-1] != '\n' {
+		lines++
+	}
+	return lines
+}
+
+func v15ProductiveGoPackageExistsAt(
+	t *testing.T, repositoryRoot, baseOID, directory string,
+) bool {
+	t.Helper()
+	output, err := evidenceGit(repositoryRoot, "ls-tree", "-r", "--name-only", baseOID, "--", directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, relative := range strings.Split(strings.TrimSpace(string(output)), "\n") {
+		if strings.HasSuffix(relative, ".go") && !strings.HasSuffix(relative, "_test.go") {
+			return true
+		}
+	}
+	return false
+}
+
+type v15FunctionShape struct {
+	canonical string
+	lines     int
+}
+
+func v15AssertChangedFunctions(t *testing.T, relative string, base, sealed []byte) {
+	t.Helper()
+	before := v15FunctionShapes(t, relative+"@base", base)
+	after := v15FunctionShapes(t, relative+"@sealed", sealed)
+	for identity, function := range after {
+		previous, existed := before[identity]
+		if existed && previous.canonical == function.canonical {
+			continue
+		}
+		if function.lines > 80 {
+			t.Errorf("V15 new/modified function %s in %s has %d lines, max 80", identity, relative, function.lines)
+		}
+	}
+}
+
+func v15FunctionShapes(t *testing.T, source string, content []byte) map[string]v15FunctionShape {
+	t.Helper()
+	result := make(map[string]v15FunctionShape)
+	if len(content) == 0 {
+		return result
+	}
+	files := token.NewFileSet()
+	parsed, err := parser.ParseFile(files, source, content, parser.SkipObjectResolution)
+	if err != nil {
+		t.Fatalf("parse %s: %v", source, err)
+	}
+	for _, declaration := range parsed.Decls {
+		function, ok := declaration.(*ast.FuncDecl)
+		if !ok || function.Body == nil {
+			continue
+		}
+		identity := parsed.Name.Name + "." + function.Name.Name
+		if function.Recv != nil && len(function.Recv.List) == 1 {
+			var receiver bytes.Buffer
+			if err := format.Node(&receiver, files, function.Recv.List[0].Type); err != nil {
+				t.Fatal(err)
+			}
+			identity = parsed.Name.Name + ".(" + receiver.String() + ")." + function.Name.Name
+		}
+		var canonical bytes.Buffer
+		if err := format.Node(&canonical, files, function); err != nil {
+			t.Fatal(err)
+		}
+		start, end := files.Position(function.Pos()).Line, files.Position(function.End()).Line
+		result[identity] = v15FunctionShape{canonical: canonical.String(), lines: end - start + 1}
+	}
+	return result
 }

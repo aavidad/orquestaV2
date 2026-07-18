@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"errors"
 	"reflect"
 	"testing"
 
@@ -60,7 +59,7 @@ func TestDirectorProposeReplanSplitStoppedAndFailedSources(t *testing.T) {
 					t.Fatal("Director test launcher is not scriptedAgent")
 				}
 				agent.mu.Lock()
-				agent.launchErr = errors.New("permanent launch failure")
+				agent.launchErr = definitelyUnappliedPermanentError{"permanent launch failure"}
 				agent.mu.Unlock()
 				if result, err := system.orchestrator.ProcessNext(context.Background(), "worker:v14-replan-fail"); err != nil || !result.Processed {
 					t.Fatalf("fail source: result=%+v err=%v", result, err)

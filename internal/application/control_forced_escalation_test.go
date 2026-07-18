@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
 	"orquesta/internal/ports"
 )
 
@@ -67,6 +68,7 @@ func TestControlsForcedStopSupersedesOnlyExactPendingCooperativeStop(t *testing.
 		old.SupersededAt != escalated.Control.RequestedAt || system.actionKindCount(ActionStopAgent) != 1 {
 		t.Fatalf("atomic transfer old=%+v active_stops=%d", old, system.actionKindCount(ActionStopAgent))
 	}
+	approveForcedStop(t, system, "approval:forced-escalation")
 	if result, processErr := system.orchestrator.ProcessNext(context.Background(), "worker:forced-escalation"); processErr != nil || !result.Processed || result.Action != ActionStopAgent {
 		t.Fatalf("forced stop: result=%+v err=%v", result, processErr)
 	}
@@ -103,7 +105,7 @@ func TestControlsForcedStopSupersedesOnlyExactPendingCooperativeStop(t *testing.
 	}
 }
 
-func TestControlsCancelPrefersForcedStopCapability(t *testing.T) {
+func TestControlsCancelPrefersCooperativeStopCapability(t *testing.T) {
 	system := newControlTestSystem(t, nil)
 	system.launch(t)
 	record := system.record(t)
@@ -113,7 +115,7 @@ func TestControlsCancelPrefersForcedStopCapability(t *testing.T) {
 		item.Ref(), goal.ExecutionRef{},
 	)
 	result, err := system.orchestrator.Control(context.Background(), system.access, request)
-	if err != nil || result.Control.Mode != ports.AgentStopForced {
+	if err != nil || result.Control.Mode != ports.AgentStopCooperative {
 		t.Fatalf("cancel mode=%q err=%v", result.Control.Mode, err)
 	}
 }
@@ -149,6 +151,7 @@ func TestControlsForcedEscalationSettlesWhenCooperativeAlreadyStoppedTarget(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
+	approveForcedStop(t, system, "approval:forced-already-stopped")
 	if _, err := system.orchestrator.ProcessNext(context.Background(), "worker:forced-already-stopped"); err != nil {
 		t.Fatal(err)
 	}
@@ -163,6 +166,27 @@ func TestControlsForcedEscalationSettlesWhenCooperativeAlreadyStoppedTarget(t *t
 		current.State != ExecutionStopped || len(requests) != 2 || physical != 0 {
 		t.Fatalf("already-stopped lineage old=%+v next=%+v execution=%s requests=%d physical=%d",
 			old, escalated, current.State, len(requests), physical)
+	}
+}
+
+func approveForcedStop(t *testing.T, system *controlTestSystem, requestRef string) {
+	t.Helper()
+	record := system.record(t)
+	var intent EffectIntent
+	for _, candidate := range record.EffectIntents {
+		if candidate.Kind == EffectKindAgentStop && candidate.SecurityCriticality == governance.SecurityCriticalitySensitive {
+			intent = candidate
+		}
+	}
+	if intent.Ref == "" {
+		t.Fatal("forced stop intent missing")
+	}
+	result, err := system.orchestrator.DecideEffect(context.Background(), system.access, DecideEffectRequest{
+		RequestRef: requestRef, GoalRef: record.Goal.Ref(), IntentRef: intent.Ref,
+		ExpectedIntentDigest: intent.Digest, Decision: EffectApproved, Reason: "owner forced stop approval",
+	})
+	if err != nil || !result.Created {
+		t.Fatalf("forced stop approval=%+v err=%v", result, err)
 	}
 }
 

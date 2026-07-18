@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"orquesta/internal/goal"
+	"orquesta/internal/identity"
 	"orquesta/internal/ports"
 )
 
@@ -25,6 +26,7 @@ func TestNewClonesAgentCapabilitySlices(t *testing.T) {
 		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1 << 20,
 		MaxMailboxEnvelopeBytes: 64 << 10, MaxExecutionAttempts: 3,
 		ClaimLease: time.Minute, DirectorLeaseDuration: time.Minute,
+		MaxChildrenPerParent: 6, EffectApprovalTTL: time.Hour, BudgetPolicy: testBudgetPolicy(clock.Now()),
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 		AgentCapabilities: capabilities,
 	})
@@ -137,6 +139,44 @@ func TestSubmitIdempotencyRejectsSemanticConflict(t *testing.T) {
 	_, err := orchestrator.Submit(ctx, access, SubmitRequest{RequestRef: "request:same", Statement: "dos", Confirm: true})
 	if !IsStateError(err, StateConflict) {
 		t.Fatalf("expected conflict, got %v", err)
+	}
+}
+
+func TestSubmitUsesAuthorizationCommitTimeAsCausalFloor(t *testing.T) {
+	ctx := context.Background()
+	clock := &mutableClock{now: time.Date(2026, 7, 14, 20, 15, 0, 0, time.UTC)}
+	repository := newMemoryRepository()
+	accessRepository := newMemoryAccessRepository()
+	accessRepository.authorizeHook = func(request identity.AuthorizationRequest) (identity.AuthorizationReceipt, error) {
+		decision, err := identity.NewAuthorizationDecision(identity.AuthorizationDecisionInput{
+			Request: request, Outcome: identity.AuthorizationAllowed, Role: identity.RolePlatformAdmin,
+			ReasonCode: "access.allowed", DecidedAt: request.RequestedAt(),
+		})
+		if err != nil {
+			return identity.AuthorizationReceipt{}, err
+		}
+		return identity.NewAuthorizationReceipt(identity.AuthorizationReceiptInput{
+			Ref: "authorization-receipt:" + request.RequestRef(), Decision: decision,
+			RecordedAt: request.RequestedAt().Add(time.Second),
+		})
+	}
+	agent := &scriptedAgent{now: clock.Now}
+	orchestrator, _ := newTestOrchestratorWithAccess(t, repository, accessRepository, clock, agent)
+	actor, project := testScope(t)
+	submitted, err := orchestrator.Submit(ctx, accessForScope(t, actor, project), SubmitRequest{
+		RequestRef: "request:authorization-commit-floor", Statement: "respect causal clock", Confirm: true,
+	})
+	if err != nil {
+		t.Fatalf("submit: %v", err)
+	}
+	want := clock.Now().Add(time.Second)
+	if len(submitted.Record.EffectIntents) != 1 {
+		t.Fatalf("effect intents=%d want=1", len(submitted.Record.EffectIntents))
+	}
+	if !submitted.Record.Goal.CreatedAt().Equal(want) ||
+		!submitted.Record.EffectIntents[0].CreatedAt.Equal(want) {
+		t.Fatalf("causal floor missing: goal=%s effect=%s want=%s",
+			submitted.Record.Goal.CreatedAt(), submitted.Record.EffectIntents[0].CreatedAt, want)
 	}
 }
 

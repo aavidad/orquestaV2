@@ -242,6 +242,13 @@ type sqliteLaunchFenceAgent struct {
 	launches     int
 }
 
+type sqliteLaunchFenceDefinitelyUnapplied struct{}
+
+func (sqliteLaunchFenceDefinitelyUnapplied) Error() string {
+	return "sqlite launch fence permanent failure"
+}
+func (sqliteLaunchFenceDefinitelyUnapplied) DefinitelyNotApplied() bool { return true }
+
 func (*sqliteLaunchFenceAgent) Capabilities(context.Context) (ports.AgentCapabilities, error) {
 	return sqliteMultiControlCapabilities(), nil
 }
@@ -255,7 +262,7 @@ func (agent *sqliteLaunchFenceAgent) Launch(
 	if agent.failLaunches > 0 {
 		agent.failLaunches--
 		agent.mu.Unlock()
-		return ports.AgentLaunchReceipt{}, errors.New("sqlite launch fence permanent failure")
+		return ports.AgentLaunchReceipt{}, sqliteLaunchFenceDefinitelyUnapplied{}
 	}
 	agent.mu.Unlock()
 	return ports.AgentLaunchReceipt{
@@ -264,7 +271,7 @@ func (agent *sqliteLaunchFenceAgent) Launch(
 		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash,
 		ProviderRef: "provider:sqlite-multi", ModelRef: "model:sqlite-multi", AgentRef: "agent:sqlite-multi",
 		ExternalRef: "external:" + request.ExecutionRef.String(), IdempotencyKey: request.IdempotencyKey,
-		AcceptedAt: agent.clock.Now(),
+		ReceiptRef: "receipt:sqlite-launch:" + request.ExecutionRef.String(), AcceptedAt: agent.clock.Now(),
 	}, nil
 }
 
@@ -298,6 +305,7 @@ func newSQLiteLaunchFenceOrchestrator(
 		State: repository, Access: repository, Launcher: agent, Observer: agent, Controller: agent,
 		Artifacts: restartArtifacts{}, Clock: clock, IDs: ids, MaxOutputBytes: 4096,
 		MaxMailboxEnvelopeBytes: 64 << 10, MaxExecutionAttempts: 3,
+		MaxChildrenPerParent: 6, EffectApprovalTTL: time.Hour, BudgetPolicy: sqliteTestBudgetPolicy(clock.Now()),
 		AgentCapabilities: sqliteMultiControlCapabilities(), ClaimLease: time.Minute,
 		DirectorLeaseDuration: time.Minute, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})

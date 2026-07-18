@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -24,7 +23,7 @@ func TestClaimedRetryRevalidatesPauseBeforeLaunchPreparation(t *testing.T) {
 }
 
 func TestClaimedAutomaticReplacementRevalidatesPauseBeforeLaunchPreparation(t *testing.T) {
-	agent := &scriptedAgent{launchErr: errors.New("provider rejected first launch")}
+	agent := &scriptedAgent{launchErr: definitelyUnappliedPermanentError{"provider rejected first launch"}}
 	system := newControlTestSystem(t, agent)
 	if result, err := system.orchestrator.ProcessNext(context.Background(), "worker:create-replacement"); err != nil ||
 		!result.Processed || result.Action != ActionLaunchAgent {
@@ -103,6 +102,7 @@ func assertClaimedLaunchRevalidatesPause(
 	if !found || pending.token != "" || pending.workerRef != "" || pending.lease != (time.Time{}) {
 		t.Fatalf("launch action not reusable after pause: found=%v action=%+v", found, pending)
 	}
+	assertActionReservationReleased(t, system.record(t), pending.record.Ref)
 
 	resume := system.request(
 		t, "control:resume-after-claim:"+executionRef.String(), ControlResume, pauseTarget,

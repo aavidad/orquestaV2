@@ -233,7 +233,11 @@ func TestCanonicalRegistryAndEveryGeneratedArtifactStaySynchronized(t *testing.T
 		t.Fatal(err)
 	}
 	digest := sha256.Sum256(source)
-	if got := hex.EncodeToString(digest[:]); got != generatedRegistrySourceSHA256 || string(source) != generatedRegistryJSON {
+	var compactSource bytes.Buffer
+	if err := json.Compact(&compactSource, source); err != nil {
+		t.Fatal(err)
+	}
+	if got := hex.EncodeToString(digest[:]); got != generatedRegistrySourceSHA256 || compactSource.String() != generatedRegistryJSON {
 		t.Fatalf("embedded registry drift: %s", got)
 	}
 	registry, err := loadRegistry()
@@ -242,6 +246,13 @@ func TestCanonicalRegistryAndEveryGeneratedArtifactStaySynchronized(t *testing.T
 	}
 	if len(registry.keys) != len(allGeneratedKeys()) {
 		t.Fatal("generated key count drift")
+	}
+	generatedGo, err := os.ReadFile("keys_generated.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lines := bytes.Count(generatedGo, []byte{'\n'}); lines > 400 {
+		t.Fatalf("generated config Go exceeds 400 lines: %d", lines)
 	}
 
 	temporary := t.TempDir()

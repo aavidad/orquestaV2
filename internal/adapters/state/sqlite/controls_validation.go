@@ -60,6 +60,12 @@ func validateApplyControlState(state application.ApplyControlState) error {
 			return errors.New("sqlite.control_claim_invalid")
 		}
 	}
+	if state.ClaimErrorCode != "" &&
+		(state.ClaimErrorCode != "agent.launch_definitely_not_applied" ||
+			state.Claim.Action.Kind != application.ActionLaunchAgent || state.EffectReceipt != nil ||
+			!exactReleasedClaimBudget(state.Claim, state.BudgetSettlement)) {
+		return errors.New("sqlite.control_claim_settlement_invalid")
+	}
 	if state.ExpectedControlStatus != "" && state.ExpectedControlStatus != application.ControlRequested {
 		return errors.New("sqlite.control_status_invalid")
 	}
@@ -101,7 +107,7 @@ func validateControlSupersessionState(state application.ApplyControlState) error
 		newAction.GoalRef != next.GoalRef || newAction.WorkItemRef != next.WorkItemRef ||
 		newAction.ExecutionRef != next.ExecutionRef || newAction.PlanGeneration != next.PlanGeneration ||
 		newAction.WorkItemGeneration != next.WorkItemRevision || !newAction.AvailableAt.Equal(state.OperationAt) ||
-		state.Claim.Action.Ref != "" || state.StopReceipt != nil {
+		state.Claim.Action.Ref != "" || state.EffectReceipt != nil || state.BudgetSettlement != nil {
 		return errors.New("sqlite.control_supersession_state_invalid")
 	}
 	if err := validateControlSupersessionEvent(state, old); err != nil {
@@ -168,29 +174,24 @@ func validateControlTransition(state application.ApplyControlState, current appl
 }
 
 func validateControlStopReceipt(state application.ApplyControlState, current application.GoalRecord) error {
-	if state.StopReceipt == nil {
+	if state.EffectReceipt == nil {
 		return nil
 	}
-	execution, found := sqliteExecutionByRef(current.Executions, state.StopReceipt.ExecutionRef)
+	receipt := *state.EffectReceipt
+	execution, found := sqliteExecutionByRef(current.Executions, receipt.Subject.ExecutionRef)
 	if !found || state.Claim.Action.Kind != application.ActionStopAgent ||
-		!state.StopReceipt.ConfirmedAt.Equal(state.OperationAt) {
+		receipt.ActionRef != state.Claim.Action.Ref || receipt.ActionFence != state.Claim.Fence ||
+		receipt.Subject.GoalRef != execution.GoalRef || receipt.Subject.WorkItemRef != execution.WorkItemRef ||
+		!receipt.ConfirmedAt.Equal(state.OperationAt) {
 		return errors.New("sqlite.control_stop_receipt_invalid")
 	}
-	request := ports.AgentStopRequest{
-		ExecutionRef: execution.Ref, GoalRef: execution.GoalRef, WorkItemRef: execution.WorkItemRef,
-		PlanGeneration: execution.PlanGeneration, AppSpecGeneration: execution.AppSpecGeneration,
-		ExecutionAttempt: execution.AttemptNo, SpecHash: execution.SpecHash,
-		ProviderRef: execution.ProviderRef, ModelRef: execution.ModelRef, AgentRef: execution.AgentRef,
-		ExternalRef: execution.ExternalRef, Mode: state.Control.Mode,
-		IdempotencyKey: "stop:" + state.Control.Ref + ":" + execution.Ref.String(),
+	if receipt.ConfirmedAt.After(state.Claim.LeaseUntil) {
+		return errors.New("sqlite.control_stop_receipt_after_lease")
 	}
-	if err := ports.ValidateAgentStopReceipt(request, *state.StopReceipt); err != nil {
-		return err
-	}
-	if state.StopReceipt.Status != ports.AgentStopped &&
-		state.StopReceipt.Status != ports.AgentStopAlreadyStopped &&
-		state.StopReceipt.Status != ports.AgentStopAlreadyCompleted &&
-		state.StopReceipt.Status != ports.AgentStopAlreadyFailed {
+	if receipt.Status != application.EffectStatusStopped &&
+		receipt.Status != application.EffectStatusAlreadyStopped &&
+		receipt.Status != application.EffectStatusAlreadyCompleted &&
+		receipt.Status != application.EffectStatusAlreadyFailed {
 		return errors.New("sqlite.control_stop_receipt_nonterminal")
 	}
 	return nil

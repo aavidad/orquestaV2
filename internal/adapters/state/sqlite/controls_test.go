@@ -12,6 +12,8 @@ import (
 
 	"orquesta/internal/application"
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
+	"orquesta/internal/identity"
 	"orquesta/internal/ports"
 )
 
@@ -105,6 +107,7 @@ func TestSQLiteStopActionClaimsAfterCompletionAndConsumesAlreadyCompleted(t *tes
 			State: state, Access: repository, Launcher: agent, Observer: agent, Controller: agent,
 			Artifacts: leaseAdvancingArtifacts{clock: clock}, Clock: clock, IDs: ids,
 			MaxOutputBytes: 4096, MaxMailboxEnvelopeBytes: 64 << 10, MaxExecutionAttempts: 3,
+			MaxChildrenPerParent: 6, EffectApprovalTTL: time.Hour, BudgetPolicy: sqliteTestBudgetPolicy(clock.Now()),
 			AgentCapabilities: capabilities, ClaimLease: time.Minute, DirectorLeaseDuration: time.Minute,
 			ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 		})
@@ -171,6 +174,27 @@ func TestSQLiteStopActionClaimsAfterCompletionAndConsumesAlreadyCompleted(t *tes
 		close(gate.release)
 		t.Fatalf("request stop: result=%+v err=%v", requested, err)
 	}
+	originalRef, refErr := identity.NewPrincipalRef(actor.String())
+	if refErr != nil {
+		t.Fatal(refErr)
+	}
+	original, principalErr := identity.NewPrincipal(originalRef, actor, identity.PrincipalKindHuman, "test")
+	if principalErr != nil {
+		t.Fatal(principalErr)
+	}
+	second := testPrincipal(t, "principal:sqlite-terminal-second-owner", "actor:sqlite-terminal-second-owner", identity.PrincipalKindHuman)
+	grantTestMembership(t, repository, original, second, project, identity.RoleProjectOwner,
+		"membership:sqlite-terminal-second-owner", clock.Now())
+	authorization := authorizeTest(t, repository, second, project,
+		identity.PermissionProjectMembershipManage, original.Ref.String(),
+		"authorization:sqlite-terminal-revoke-owner", clock.Now())
+	revoke := testRevokeRequest(t, "membership:sqlite-terminal-revoke-owner", second, original.Ref, project, 1, clock.Now())
+	if _, _, changed, revokeErr := repository.RevokeMembership(ctx, application.MembershipRevokeState{
+		AuthorizationReceipt: authorization, Request: revoke,
+	}); revokeErr != nil || !changed {
+		close(gate.release)
+		t.Fatalf("revoke terminal stop authority changed=%v err=%v", changed, revokeErr)
+	}
 	close(gate.release)
 	select {
 	case outcome := <-processed:
@@ -207,9 +231,7 @@ func TestSQLiteStopActionClaimsAfterCompletionAndConsumesAlreadyCompleted(t *tes
 		}
 	}
 	if stopReceipt == nil || stopReceipt.Outcome != application.ActionConsumedCompleted ||
-		stopReceipt.EffectStatus != string(ports.AgentStopAlreadyCompleted) ||
-		stopReceipt.EffectReceiptRef != "receipt:terminal:"+execution.Ref.String() ||
-		stopReceipt.EffectConfirmedAt.IsZero() || stopReceipt.ConsumedAt != stopReceipt.EffectConfirmedAt {
+		stopReceipt.EffectReceiptRef != "" {
 		t.Fatalf("terminal stop consumption receipt=%+v", stopReceipt)
 	}
 	if err := repository.Close(); err != nil {
@@ -350,10 +372,10 @@ func assertSQLiteExactStopReceipts(
 	executions []application.ExecutionRecord,
 ) {
 	t.Helper()
-	effects := make(map[goal.ExecutionRef]application.ActionConsumptionReceipt)
-	for _, receipt := range record.ConsumptionReceipts {
-		if receipt.Kind == application.ActionStopAgent && receipt.EffectStatus == string(ports.AgentStopped) {
-			effects[receipt.ExecutionRef] = receipt
+	effects := make(map[goal.ExecutionRef]application.EffectReceipt)
+	for _, receipt := range record.EffectReceipts {
+		if receipt.Status == application.EffectStatusStopped {
+			effects[receipt.Subject.ExecutionRef] = receipt
 		}
 	}
 	if len(effects) != len(executions) {
@@ -361,8 +383,8 @@ func assertSQLiteExactStopReceipts(
 	}
 	for _, execution := range executions {
 		receipt, found := effects[execution.Ref]
-		if !found || receipt.EffectReceiptRef != "receipt:sqlite-stop:"+execution.Ref.String() ||
-			receipt.EffectConfirmedAt.IsZero() || receipt.ConsumedAt != receipt.EffectConfirmedAt {
+		if !found || receipt.ExternalRef != "receipt:sqlite-stop:"+execution.Ref.String() ||
+			receipt.ConfirmedAt.IsZero() {
 			t.Fatalf("receipt for %s=%+v found=%v", execution.Ref, receipt, found)
 		}
 	}
@@ -420,7 +442,7 @@ func (agent *sqliteTerminalStopAgent) Launch(
 		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash,
 		ProviderRef: "provider:sqlite-multi", ModelRef: "model:sqlite-multi", AgentRef: "agent:sqlite-multi",
 		ExternalRef: "external:" + request.ExecutionRef.String(), IdempotencyKey: request.IdempotencyKey,
-		AcceptedAt: agent.clock.Now(),
+		ReceiptRef: "receipt:sqlite-launch:" + request.ExecutionRef.String(), AcceptedAt: agent.clock.Now(),
 	}, nil
 }
 
@@ -434,6 +456,7 @@ func (agent *sqliteTerminalStopAgent) Observe(
 	return ports.AgentObservation{
 		ExecutionRef: executionRef, SpecHash: specHash, Status: ports.AgentCompleted,
 		MediaType: "text/plain", Content: []byte("completion wins before stop claim"),
+		Usage:      governance.ResourceUsage{Quality: governance.UsageQualityUnknown},
 		ObservedAt: agent.clock.Now(),
 	}, nil
 }
@@ -479,7 +502,7 @@ func (agent *sqliteMultiControlAgent) Launch(
 		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash,
 		ProviderRef: "provider:sqlite-multi", ModelRef: "model:sqlite-multi", AgentRef: "agent:sqlite-multi",
 		ExternalRef: "external:" + request.ExecutionRef.String(), IdempotencyKey: request.IdempotencyKey,
-		AcceptedAt: agent.clock.Now(),
+		ReceiptRef: "receipt:sqlite-launch:" + request.ExecutionRef.String(), AcceptedAt: agent.clock.Now(),
 	}, nil
 }
 
@@ -518,6 +541,7 @@ func newSQLiteMultiControlOrchestrator(
 		State: repository, Access: repository, Launcher: agent, Observer: agent, Controller: agent,
 		Artifacts: restartArtifacts{}, Clock: clock, IDs: ids, MaxOutputBytes: 4096,
 		MaxMailboxEnvelopeBytes: 64 << 10, MaxExecutionAttempts: 3,
+		MaxChildrenPerParent: 6, EffectApprovalTTL: time.Hour, BudgetPolicy: sqliteTestBudgetPolicy(clock.Now()),
 		AgentCapabilities: sqliteMultiControlCapabilities(), ClaimLease: time.Minute,
 		DirectorLeaseDuration: time.Minute, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})

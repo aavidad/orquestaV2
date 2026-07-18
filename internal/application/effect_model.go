@@ -19,6 +19,17 @@ type EffectKind string
 const (
 	EffectKindAgentLaunch EffectKind = "agent_launch"
 	EffectKindAgentStop   EffectKind = "agent_stop"
+	EffectRiskPolicyV1               = "orquesta.effect-risk.v1"
+)
+
+type EffectStatus string
+
+const (
+	EffectStatusAccepted         EffectStatus = "accepted"
+	EffectStatusStopped          EffectStatus = "stopped"
+	EffectStatusAlreadyStopped   EffectStatus = "already_stopped"
+	EffectStatusAlreadyCompleted EffectStatus = "already_completed"
+	EffectStatusAlreadyFailed    EffectStatus = "already_failed"
 )
 
 type EffectApprovalSource string
@@ -36,8 +47,6 @@ const (
 	EffectDenied   EffectDecision = "denied"
 )
 
-// EffectSubject is the immutable causal scope copied into every effect fact.
-// It does not own lifecycle; it binds evidence to the authoritative Goal.
 type EffectSubject struct {
 	ProjectRef        goal.ProjectRef
 	GoalRef           goal.GoalRef
@@ -49,7 +58,6 @@ type EffectSubject struct {
 	ActorRef          goal.ActorRef
 }
 
-// EffectIntent is admission evidence, not proof that an external effect ran.
 type EffectIntent struct {
 	Ref                 string
 	RequestRef          string
@@ -64,12 +72,16 @@ type EffectIntent struct {
 	Demand              governance.BudgetDemand
 	SecurityCriticality governance.SecurityCriticality
 	ReasoningEffort     governance.ReasoningEffort
+	PolicyHash          string
+	PolicyRevision      uint64
+	QuotaRetryDelay     time.Duration
+	ApprovalTTL         time.Duration
+	TargetDigest        string
 	IdempotencyKey      string
 	CreatedAt           time.Time
 	Digest              string
 }
 
-// EffectApproval is a distinct approved/denied decision over one exact intent.
 type EffectApproval struct {
 	Ref                  string
 	RequestRef           string
@@ -82,6 +94,9 @@ type EffectApproval struct {
 	Decision             EffectDecision
 	Source               EffectApprovalSource
 	SecurityCriticality  governance.SecurityCriticality
+	PolicyHash           string
+	PolicyRevision       uint64
+	TargetDigest         string
 	Reason               string
 	IdempotencyKey       string
 	AuthorizationReceipt identity.AuthorizationReceipt
@@ -89,8 +104,6 @@ type EffectApproval struct {
 	ExpiresAt            time.Time
 }
 
-// EffectAttempt is persisted before an adapter crosses the external boundary.
-// ActionFence is the existing outbox attempt ordinal; effects add no scheduler.
 type EffectAttempt struct {
 	Ref            string
 	IntentRef      string
@@ -102,12 +115,8 @@ type EffectAttempt struct {
 	WorkerRef      string
 	IdempotencyKey string
 	StartedAt      time.Time
-	FinishedAt     time.Time
-	FailureCode    string
 }
 
-// EffectReceipt is external confirmation and is never interchangeable with an
-// admission ACK, approval, attempt, or ActionConsumptionReceipt.
 type EffectReceipt struct {
 	Ref            string
 	IntentRef      string
@@ -119,7 +128,7 @@ type EffectReceipt struct {
 	ActionFence    uint64
 	IdempotencyKey string
 	ExternalRef    string
-	Status         string
+	Status         EffectStatus
 	Usage          governance.ResourceUsage
 	ConfirmedAt    time.Time
 }
@@ -153,8 +162,6 @@ type RecordEffectAttemptState struct {
 	OperationAt time.Time
 }
 
-// GovernanceRepository remains part of the one StateRepository authority.
-// Implementations must persist each operation atomically with the same state.
 type GovernanceRepository interface {
 	EffectReplay(context.Context, EffectReplayRequest) (EffectApproval, bool, error)
 	DecideEffect(context.Context, DecideEffectState) (EffectApproval, bool, error)
@@ -175,7 +182,10 @@ func EffectIntentDigest(intent EffectIntent) string {
 		strconv.FormatInt(resources.MoneyMicros, 10), string(resources.Currency),
 		strconv.FormatInt(resources.ActiveTimeNS, 10), strconv.FormatInt(resources.ProcessSlots, 10),
 		strconv.FormatInt(resources.DiskBytes, 10), string(intent.SecurityCriticality),
-		string(intent.ReasoningEffort), intent.IdempotencyKey, intent.CreatedAt.UTC().Format(time.RFC3339Nano),
+		string(intent.ReasoningEffort), intent.PolicyHash, strconv.FormatUint(intent.PolicyRevision, 10),
+		strconv.FormatInt(int64(intent.QuotaRetryDelay), 10), strconv.FormatInt(int64(intent.ApprovalTTL), 10),
+		intent.TargetDigest, intent.IdempotencyKey,
+		intent.CreatedAt.UTC().Format(time.RFC3339Nano),
 	} {
 		writeFingerprintField(digest, field)
 	}
@@ -206,6 +216,9 @@ func ValidateEffectIntent(intent EffectIntent) error {
 		return errors.New("application.effect_criticality_invalid")
 	case governance.ValidateReasoningEffort(intent.ReasoningEffort) != nil:
 		return errors.New("application.effect_effort_invalid")
+	case !validEffectDigest(intent.PolicyHash) || intent.PolicyRevision == 0 || intent.QuotaRetryDelay <= 0 ||
+		intent.ApprovalTTL <= 0 || !validEffectDigest(intent.TargetDigest):
+		return errors.New("application.effect_policy_hash_invalid")
 	case identity.ValidatePermission(intent.Permission) != nil:
 		return errors.New("application.effect_permission_invalid")
 	case !effectIntentAuthorityValid(intent):
@@ -235,10 +248,6 @@ func effectIntentAuthorityValid(intent EffectIntent) bool {
 		!intent.Authority.RecordedAt().After(intent.CreatedAt)
 }
 
-// ValidateEffectApproval binds automatic approvals to the original causal
-// authority and reserves effects.approve for an explicit decision. Only normal
-// risk may be auto-approved; critical effects also require proposer/approver
-// separation.
 func ValidateEffectApproval(intent EffectIntent, approval EffectApproval) error {
 	if err := ValidateEffectIntent(intent); err != nil {
 		return err
@@ -248,7 +257,8 @@ func ValidateEffectApproval(intent EffectIntent, approval EffectApproval) error 
 		approval.IntentRef != intent.Ref || approval.IntentDigest != intent.Digest ||
 		approval.Subject != intent.Subject || approval.ProposedBy != intent.ProposedBy ||
 		approval.IdempotencyKey != intent.IdempotencyKey ||
-		approval.SecurityCriticality != intent.SecurityCriticality {
+		approval.SecurityCriticality != intent.SecurityCriticality || approval.PolicyHash != intent.PolicyHash ||
+		approval.PolicyRevision != intent.PolicyRevision || approval.TargetDigest != intent.TargetDigest {
 		return errors.New("application.effect_approval_intent_mismatch")
 	}
 	if approval.Decision != EffectApproved && approval.Decision != EffectDenied {
@@ -260,8 +270,12 @@ func ValidateEffectApproval(intent EffectIntent, approval EffectApproval) error 
 		return errors.New("application.effect_approval_fact_invalid")
 	}
 	if approval.Decision == EffectApproved {
-		if !approval.ExpiresAt.After(approval.DecidedAt) {
+		if approval.Source == EffectApprovalSourceExplicitDecision &&
+			!approval.ExpiresAt.Equal(approval.DecidedAt.Add(intent.ApprovalTTL)) {
 			return errors.New("application.effect_approval_expiry_invalid")
+		}
+		if approval.Source != EffectApprovalSourceExplicitDecision && !approval.ExpiresAt.IsZero() {
+			return errors.New("application.effect_automatic_approval_expiry_forbidden")
 		}
 	} else if !approval.ExpiresAt.IsZero() || approval.Source != EffectApprovalSourceExplicitDecision {
 		return errors.New("application.effect_denial_invalid")
@@ -269,6 +283,10 @@ func ValidateEffectApproval(intent EffectIntent, approval EffectApproval) error 
 	if approval.Decision == EffectApproved && intent.SecurityCriticality == governance.SecurityCriticalityCritical &&
 		approval.DecidedBy == intent.ProposedBy {
 		return errors.New("application.effect_critical_separation_required")
+	}
+	if approval.Decision == EffectApproved && intent.SecurityCriticality == governance.SecurityCriticalityCritical &&
+		!identity.IsProjectAuthority(approval.AuthorizationReceipt.Decision().Role()) {
+		return errors.New("application.effect_critical_project_authority_required")
 	}
 	switch approval.Source {
 	case EffectApprovalSourceGoalConfirmation:
@@ -294,13 +312,7 @@ func ValidateEffectApproval(intent EffectIntent, approval EffectApproval) error 
 }
 
 func sameAuthorizationReceipt(left, right identity.AuthorizationReceipt) bool {
-	leftRequest, rightRequest := left.Decision().Request(), right.Decision().Request()
-	return left.Ref() != "" && left.Ref() == right.Ref() && left.Decision().Outcome() == right.Decision().Outcome() &&
-		left.Decision().Role() == right.Decision().Role() &&
-		left.Decision().MembershipRevision() == right.Decision().MembershipRevision() &&
-		leftRequest.RequestRef() == rightRequest.RequestRef() && leftRequest.Principal().Ref == rightRequest.Principal().Ref &&
-		leftRequest.ProjectRef() == rightRequest.ProjectRef() && leftRequest.Permission() == rightRequest.Permission() &&
-		leftRequest.ResourceRef() == rightRequest.ResourceRef() && left.RecordedAt().Equal(right.RecordedAt())
+	return left.Ref() != "" && left == right
 }
 
 func validEffectDigest(value string) bool {

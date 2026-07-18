@@ -8,8 +8,8 @@ import (
 
 	"orquesta/internal/application"
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
 	"orquesta/internal/identity"
-	"orquesta/internal/ports"
 )
 
 const maxSQLiteInteger = uint64(1<<63 - 1)
@@ -506,19 +506,7 @@ func validateConsumptionReceipt(receipt application.ActionConsumptionReceipt) er
 	default:
 		return errors.New("sqlite.consumption_receipt_outcome_invalid")
 	}
-	hasEffect := receipt.EffectReceiptRef != "" || receipt.EffectStatus != "" || !receipt.EffectConfirmedAt.IsZero()
-	if hasEffect {
-		if receipt.Kind != application.ActionStopAgent || receipt.Outcome != application.ActionConsumedCompleted ||
-			receipt.ErrorCode != "" || !validText(receipt.EffectReceiptRef) ||
-			!receipt.EffectConfirmedAt.Equal(receipt.ConsumedAt) ||
-			(receipt.EffectStatus != string(ports.AgentStopped) &&
-				receipt.EffectStatus != string(ports.AgentStopAlreadyStopped) &&
-				receipt.EffectStatus != string(ports.AgentStopAlreadyCompleted) &&
-				receipt.EffectStatus != string(ports.AgentStopAlreadyFailed)) {
-			return errors.New("sqlite.consumption_receipt_effect_invalid")
-		}
-	} else if receipt.Kind == application.ActionStopAgent &&
-		receipt.Outcome == application.ActionConsumedCompleted && receipt.ErrorCode == "" {
+	if receipt.EffectReceiptRef != "" && !validText(receipt.EffectReceiptRef) {
 		return errors.New("sqlite.consumption_receipt_effect_missing")
 	}
 	return nil
@@ -626,6 +614,11 @@ func validateLaunchPrepared(state application.LaunchPreparedState) error {
 		state.Execution.SpecHash != state.Goal.SpecHash() {
 		return errors.New("sqlite.launch_prepare_invalid")
 	}
+	if state.Claim.BudgetReservationRef != "" && (!state.Event.OccurredAt.Equal(state.OperationAt.UTC()) ||
+		state.OperationAt.Before(state.Claim.BudgetReservation.ReservedAt) || state.Execution.BudgetReservationRef != state.Claim.BudgetReservationRef ||
+		state.Execution.EffectIntentRef != state.Claim.Action.EffectIntentRef) {
+		return errors.New("sqlite.launch_prepare_effect_frontier_invalid")
+	}
 	if err := validateEvent(state.Event); err != nil ||
 		state.Event.Kind != "execution.dispatching" ||
 		!eventMatches(state.Event, state.Goal.Ref().String(), preparedItem.Ref().String(), state.Execution.Ref.String()) {
@@ -643,6 +636,9 @@ func validateLaunchAccepted(state application.LaunchAcceptedState) error {
 		state.Execution.GoalRef != state.Claim.Action.GoalRef || state.Execution.WorkItemRef != state.Claim.Action.WorkItemRef ||
 		state.Execution.PlanGeneration != state.Claim.Action.PlanGeneration {
 		return errors.New("sqlite.launch_action_kind_invalid")
+	}
+	if err := validateLaunchEffectReceipt(state); err != nil {
+		return err
 	}
 	if err := validateExecution(state.Execution); err != nil {
 		return err
@@ -670,6 +666,29 @@ func validateLaunchAccepted(state application.LaunchAcceptedState) error {
 	}
 	if !eventMatches(state.Event, state.Execution.GoalRef.String(), state.Execution.WorkItemRef.String(), state.Execution.Ref.String()) {
 		return errors.New("sqlite.event_scope_mismatch")
+	}
+	return nil
+}
+
+func validateLaunchEffectReceipt(state application.LaunchAcceptedState) error {
+	receipt := state.EffectReceipt
+	if state.Claim.Action.EffectIntentRef == "" {
+		if receipt != (application.EffectReceipt{}) {
+			return errors.New("sqlite.legacy_launch_effect_receipt_forbidden")
+		}
+		return nil
+	}
+	intent := state.Claim.Action.EffectIntent
+	if receipt.Status != application.EffectStatusAccepted ||
+		receipt.IntentRef != intent.Ref || receipt.IntentDigest != intent.Digest ||
+		receipt.ApprovalRef != state.Claim.EffectApproval.Ref || receipt.Subject != intent.Subject ||
+		receipt.ActionRef != state.Claim.Action.Ref || receipt.ActionFence != state.Claim.Fence ||
+		receipt.IdempotencyKey != intent.IdempotencyKey || !validText(receipt.AttemptRef) ||
+		!validText(receipt.Ref) || !validText(receipt.ExternalRef) ||
+		!receipt.ConfirmedAt.Equal(state.OperationAt) || !receipt.ConfirmedAt.Equal(state.Event.OccurredAt) ||
+		receipt.ConfirmedAt.After(state.Claim.LeaseUntil) ||
+		governance.ValidateResourceUsage(receipt.Usage) != nil {
+		return errors.New("sqlite.launch_effect_receipt_invalid")
 	}
 	return nil
 }
@@ -706,6 +725,12 @@ func validateRequeued(state application.ActionRequeuedState) error {
 	if state.ErrorCode != "" && !validText(state.ErrorCode) {
 		return errors.New("sqlite.error_code_invalid")
 	}
+	if state.ClearEffectBinding {
+		if state.Execution.BudgetReservationRef != "" || state.Execution.EffectIntentRef != "" ||
+			state.Execution.LaunchReceiptRef != "" || !exactReleasedClaimBudget(state.Claim, state.BudgetSettlement) {
+			return errors.New("sqlite.requeue_effect_clear_invalid")
+		}
+	}
 	return nil
 }
 
@@ -730,7 +755,22 @@ func validateQuarantined(state application.ActionQuarantinedState) error {
 	) {
 		return errors.New("sqlite.quarantine_event_scope_mismatch")
 	}
+	if state.ClearEffectBinding && !exactReleasedClaimBudget(state.Claim, state.BudgetSettlement) {
+		return errors.New("sqlite.quarantine_effect_clear_invalid")
+	}
 	return nil
+}
+
+func exactReleasedClaimBudget(claim application.ActionClaim, settlement *governance.BudgetSettlement) bool {
+	if claim.Action.Kind != application.ActionLaunchAgent || settlement == nil ||
+		governance.ValidateBudgetSettlement(*settlement) != nil ||
+		settlement.ReservationRef != claim.BudgetReservationRef || settlement.Reserved != claim.BudgetReservation.Resources {
+		return false
+	}
+	zero := governance.ResourceVector{Currency: settlement.Reserved.Currency}
+	return settlement.Observed.Known == governance.AllResourceDimensions &&
+		settlement.Observed.Quality == governance.UsageQualityExact && settlement.Observed.Resources == zero &&
+		settlement.Charged == zero && settlement.Released == settlement.Reserved && settlement.Overrun == zero
 }
 
 func validateExecutionReplaced(state application.ExecutionReplacedState) error {
@@ -755,6 +795,9 @@ func validateExecutionReplaced(state application.ExecutionReplacedState) error {
 		return err
 	}
 	if err := validateExecution(state.ReplacementExecution); err != nil {
+		return err
+	}
+	if err := validateExecutionBudgetSettlement(state.FailedExecution, state.BudgetSettlement); err != nil {
 		return err
 	}
 	failed := state.FailedExecution
@@ -808,6 +851,9 @@ func validateExecutionInterrupted(state application.ExecutionInterruptedState) e
 		!validText(state.Execution.FailureCode) || state.Execution.FinishedAt.IsZero() {
 		return errors.New("sqlite.execution_interrupted_invalid")
 	}
+	if err := validateExecutionBudgetSettlement(state.Execution, state.BudgetSettlement); err != nil {
+		return err
+	}
 	if err := validateScheduled(state.Goal, state.NewExecutions, state.NewActions); err != nil {
 		return err
 	}
@@ -843,6 +889,9 @@ func validateSucceeded(state application.GoalSucceededState) (goal.WorkItem, err
 	}
 	if state.Execution.FinishedAt.IsZero() {
 		return goal.WorkItem{}, errors.New("sqlite.execution_finished_at_required")
+	}
+	if err := validateExecutionBudgetSettlement(state.Execution, state.BudgetSettlement); err != nil {
+		return goal.WorkItem{}, err
 	}
 	if err := validateArtifactRecord(state.Artifact); err != nil ||
 		state.Artifact.GoalRef != state.Goal.Ref() || state.Artifact.WorkItemRef != item.Ref() {
@@ -895,6 +944,9 @@ func validateFailed(state application.GoalFailedState) (goal.WorkItem, error) {
 	if item.State() != goal.WorkItemStateFailed {
 		return goal.WorkItem{}, errors.New("sqlite.failed_item_state_invalid")
 	}
+	if err := validateExecutionBudgetSettlement(state.Execution, state.BudgetSettlement); err != nil {
+		return goal.WorkItem{}, err
+	}
 	if err := validateScheduled(state.Goal, state.NewExecutions, state.NewActions); err != nil {
 		return goal.WorkItem{}, err
 	}
@@ -916,6 +968,23 @@ func validateFailed(state application.GoalFailedState) (goal.WorkItem, error) {
 		return goal.WorkItem{}, err
 	}
 	return item, nil
+}
+
+func validateExecutionBudgetSettlement(
+	execution application.ExecutionRecord,
+	settlement *governance.BudgetSettlement,
+) error {
+	if execution.BudgetReservationRef == "" {
+		if settlement != nil {
+			return errors.New("sqlite.legacy_budget_settlement_unexpected")
+		}
+		return nil
+	}
+	if settlement == nil || governance.ValidateBudgetSettlement(*settlement) != nil ||
+		settlement.ReservationRef != execution.BudgetReservationRef {
+		return errors.New("sqlite.governed_budget_settlement_invalid")
+	}
+	return nil
 }
 
 func validateGoalMutation(

@@ -15,6 +15,10 @@ func validateRecoveryV14StopSupersessions(
 	transaction *sql.Tx,
 	controls map[string]application.ControlRecord,
 ) error {
+	_, statusColumn, timeColumn, effectJoin, err := recoveryV14EffectProjection(ctx, transaction)
+	if err != nil {
+		return err
+	}
 	pairs := 0
 	for oldRef, old := range controls {
 		if old.Status != application.ControlSuperseded {
@@ -58,6 +62,7 @@ WHERE ref = ? AND kind = 'control.stop_superseded' AND goal_ref = ?
 SELECT COUNT(*)
 FROM outbox action
 JOIN action_consumption_receipts receipt ON receipt.action_ref = action.ref
+`+effectJoin+`
 WHERE action.ref = ? AND action.kind = 'stop_agent' AND action.control_ref = ?
   AND action.goal_ref = ? AND action.work_item_ref = ? AND action.execution_ref = ?
   AND action.plan_generation = ? AND action.work_item_generation = ?
@@ -69,7 +74,7 @@ WHERE action.ref = ? AND action.kind = 'stop_agent' AND action.control_ref = ?
   AND receipt.work_item_generation = action.work_item_generation
   AND receipt.outcome = 'completed' AND receipt.error_code = 'application.action_retired'
   AND receipt.consumed_at = ? AND receipt.effect_receipt_ref IS NULL
-  AND receipt.effect_status IS NULL AND receipt.effect_confirmed_at IS NULL`,
+  AND `+statusColumn+` IS NULL AND `+timeColumn+` IS NULL`,
 			"action:stop:"+old.Ref+":"+old.ExecutionRef.String(), old.Ref,
 			old.GoalRef.String(), old.WorkItemRef.String(), old.ExecutionRef.String(),
 			int64(old.PlanGeneration), int64(old.WorkItemRevision), requiredTime(next.RequestedAt),

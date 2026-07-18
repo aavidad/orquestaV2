@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"orquesta/internal/goal"
-	"orquesta/internal/ports"
 )
 
 func TestControlGoalCancelPersistsExactReceiptForEveryStoppedExecution(t *testing.T) {
@@ -44,10 +43,10 @@ func TestControlGoalCancelPersistsExactReceiptForEveryStoppedExecution(t *testin
 		t.Fatalf("multi cancel did not converge: Goal=%s control=%s actions=%d stops=%d",
 			closed.Goal.State(), control.Status, system.actionKindCount(ActionStopAgent), system.stopCount())
 	}
-	effects := make(map[goal.ExecutionRef]ActionConsumptionReceipt)
-	for _, receipt := range closed.ConsumptionReceipts {
-		if receipt.Kind == ActionStopAgent && receipt.EffectStatus == string(ports.AgentStopped) {
-			effects[receipt.ExecutionRef] = receipt
+	effects := make(map[goal.ExecutionRef]EffectReceipt)
+	for _, receipt := range closed.EffectReceipts {
+		if receipt.Status == EffectStatusStopped {
+			effects[receipt.Subject.ExecutionRef] = receipt
 		}
 	}
 	if len(effects) != len(running.Executions) {
@@ -56,8 +55,7 @@ func TestControlGoalCancelPersistsExactReceiptForEveryStoppedExecution(t *testin
 	for _, execution := range running.Executions {
 		receipt, found := effects[execution.Ref]
 		if !found || receipt.ActionRef != "action:stop:"+control.Ref+":"+execution.Ref.String() ||
-			receipt.EffectReceiptRef != "receipt:stop:"+execution.Ref.String() ||
-			receipt.EffectConfirmedAt.IsZero() || receipt.ConsumedAt != receipt.EffectConfirmedAt {
+			receipt.ExternalRef != "receipt:stop:"+execution.Ref.String() || receipt.ConfirmedAt.IsZero() {
 			t.Fatalf("exact effect receipt for %s=%+v found=%v", execution.Ref, receipt, found)
 		}
 	}

@@ -3,8 +3,11 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
+	"time"
 
 	"orquesta/internal/application"
+	"orquesta/internal/governance"
 )
 
 func persistInitialControlState(
@@ -25,6 +28,11 @@ func persistInitialControlState(
 		return "", err
 	}
 	preRetiredAction := state.RetireActionRefs[0]
+	if err := settleRetiredLaunchReservation(
+		ctx, transaction, preRetiredAction, state.OperationAt,
+	); err != nil {
+		return "", err
+	}
 	if err := consumeRetiredAction(
 		ctx, transaction, preRetiredAction, state.Control.Ref, state.OperationAt,
 	); err != nil {
@@ -114,8 +122,13 @@ func (repository *Repository) settleControlApplication(
 			return err
 		}
 		if err := completeClaimWithEffect(
-			ctx, transaction, state.Claim, state.OperationAt, "", false, state.StopReceipt,
+			ctx, transaction, state.Claim, state.OperationAt, state.ClaimErrorCode, false, state.EffectReceipt,
 		); err != nil {
+			return err
+		}
+	}
+	if state.BudgetSettlement != nil {
+		if err := insertBudgetSettlement(ctx, transaction, *state.BudgetSettlement); err != nil {
 			return err
 		}
 	}
@@ -127,6 +140,11 @@ func (repository *Repository) settleControlApplication(
 		if actionRef == preRetiredAction ||
 			(state.Claim.Action.Ref != "" && actionRef == state.Claim.Action.Ref) {
 			continue
+		}
+		if err := settleRetiredLaunchReservation(
+			ctx, transaction, actionRef, state.OperationAt,
+		); err != nil {
+			return err
 		}
 		if err := consumeRetiredAction(
 			ctx, transaction, actionRef, state.Control.Ref, state.OperationAt,
@@ -141,4 +159,44 @@ func (repository *Repository) settleControlApplication(
 		return updateControl(ctx, transaction, state.Control)
 	}
 	return nil
+}
+
+func settleRetiredLaunchReservation(
+	ctx context.Context,
+	transaction *sql.Tx,
+	actionRef string,
+	at time.Time,
+) error {
+	var kind string
+	var governanceVersion int64
+	err := transaction.QueryRowContext(ctx, `
+SELECT kind, governance_version FROM outbox WHERE ref = ?`, actionRef).Scan(&kind, &governanceVersion)
+	if err != nil {
+		return mapDatabaseError(err)
+	}
+	if kind != string(application.ActionLaunchAgent) || governanceVersion != 1 {
+		return nil
+	}
+	reservation, found, err := readActiveBudgetReservation(ctx, transaction, actionRef)
+	if err != nil || !found {
+		return err
+	}
+	var attempts int
+	if err := transaction.QueryRowContext(ctx, `
+SELECT COUNT(*) FROM effect_attempts WHERE action_ref = ?`, actionRef).Scan(&attempts); err != nil {
+		return mapDatabaseError(err)
+	}
+	if attempts != 0 {
+		return conflict(errors.New("sqlite.retired_launch_effect_attempt_exists"))
+	}
+	usage := governance.ResourceUsage{
+		Resources: governance.ResourceVector{Currency: reservation.Resources.Currency},
+		Known:     governance.AllResourceDimensions, Quality: governance.UsageQualityExact,
+	}
+	settlement, err := governance.Reconcile(reservation, usage)
+	if err != nil {
+		return invalid(err)
+	}
+	settlement.SettledAt = at
+	return insertBudgetSettlement(ctx, transaction, settlement)
 }

@@ -36,12 +36,25 @@ func (repository *Repository) RecordLaunchAccepted(ctx context.Context, state ap
 		return invalid(err)
 	}
 	return repository.mutate(ctx, state.Claim, state.OperationAt, func(transaction *sql.Tx) error {
+		now, err := repository.transactionTime()
+		if err != nil {
+			return err
+		}
+		if state.OperationAt.After(now) {
+			return invalid(errors.New("sqlite.launch_receipt_time_future"))
+		}
 		if err := updateExecutionCAS(ctx, transaction, state.Execution, application.ExecutionDispatching); err != nil {
 			return err
 		}
 		// Consume first so the partial active-action index remains a hard
 		// invariant even while launch and observe share one WorkItem.
-		if err := completeClaim(ctx, transaction, state.Claim, state.Event.OccurredAt, "", false); err != nil {
+		var effectReceipt *application.EffectReceipt
+		if state.Claim.Action.EffectIntentRef != "" {
+			effectReceipt = &state.EffectReceipt
+		}
+		if err := completeClaimWithEffect(
+			ctx, transaction, state.Claim, state.Event.OccurredAt, "", false, effectReceipt,
+		); err != nil {
 			return err
 		}
 		if err := insertAction(ctx, transaction, state.NextAction); err != nil {
@@ -59,8 +72,18 @@ func (repository *Repository) RequeueAction(ctx context.Context, state applicati
 		return invalid(err)
 	}
 	return repository.mutate(ctx, state.Claim, state.OperationAt, func(transaction *sql.Tx) error {
+		if state.ClearEffectBinding {
+			if err := clearClaimEffectBinding(ctx, transaction, state.Claim); err != nil {
+				return err
+			}
+		}
 		if err := updateExecutionCAS(ctx, transaction, state.Execution, state.Execution.State); err != nil {
 			return err
+		}
+		if state.BudgetSettlement != nil {
+			if err := insertBudgetSettlement(ctx, transaction, *state.BudgetSettlement); err != nil {
+				return err
+			}
 		}
 		return releaseClaimForRetry(ctx, transaction, state)
 	})
@@ -71,8 +94,18 @@ func (repository *Repository) QuarantineAction(ctx context.Context, state applic
 		return invalid(err)
 	}
 	return repository.mutate(ctx, state.Claim, state.OperationAt, func(transaction *sql.Tx) error {
+		if state.ClearEffectBinding {
+			if err := clearClaimEffectBinding(ctx, transaction, state.Claim); err != nil {
+				return err
+			}
+		}
 		if err := insertEvent(ctx, transaction, state.Event); err != nil {
 			return err
+		}
+		if state.BudgetSettlement != nil {
+			if err := insertBudgetSettlement(ctx, transaction, *state.BudgetSettlement); err != nil {
+				return err
+			}
 		}
 		return completeClaim(
 			ctx,
@@ -113,6 +146,11 @@ func (repository *Repository) RecordExecutionReplaced(
 		// the partial unique index then proves at most one active attempt.
 		if err := updateExecutionCAS(ctx, transaction, state.FailedExecution, expectedExecutionState); err != nil {
 			return err
+		}
+		if state.BudgetSettlement != nil {
+			if err := insertBudgetSettlement(ctx, transaction, *state.BudgetSettlement); err != nil {
+				return err
+			}
 		}
 		if err := completeClaim(
 			ctx, transaction, state.Claim, state.OperationAt, state.ErrorCode, false,
@@ -163,6 +201,11 @@ UPDATE executions SET recipient_mailbox_retired = 1 WHERE ref = ?`, state.Execut
 				return mapDatabaseError(err)
 			}
 		}
+		if state.BudgetSettlement != nil {
+			if err := insertBudgetSettlement(ctx, transaction, *state.BudgetSettlement); err != nil {
+				return err
+			}
+		}
 		if err := completeClaim(
 			ctx, transaction, state.Claim, state.OperationAt, state.Execution.FailureCode, false,
 		); err != nil {
@@ -197,6 +240,11 @@ func (repository *Repository) RecordGoalSucceeded(ctx context.Context, state app
 		}
 		if err := insertAttestation(ctx, transaction, state.Attestation); err != nil {
 			return err
+		}
+		if state.BudgetSettlement != nil {
+			if err := insertBudgetSettlement(ctx, transaction, *state.BudgetSettlement); err != nil {
+				return err
+			}
 		}
 		if err := completeClaim(ctx, transaction, state.Claim, state.Execution.FinishedAt, "", false); err != nil {
 			return err
@@ -244,6 +292,11 @@ UPDATE executions SET recipient_mailbox_retired = 1 WHERE ref = ?`, state.Execut
 				return mapDatabaseError(err)
 			}
 		}
+		if state.BudgetSettlement != nil {
+			if err := insertBudgetSettlement(ctx, transaction, *state.BudgetSettlement); err != nil {
+				return err
+			}
+		}
 		if err := completeClaim(
 			ctx, transaction, state.Claim, state.Execution.FinishedAt, state.Execution.FailureCode, false,
 		); err != nil {
@@ -273,6 +326,24 @@ WHERE goal_ref = ? AND work_item_ref = ?
 			aggregate.Ref().String(), item.Ref().String(),
 		).Scan(&count); err != nil {
 			return mapDatabaseError(err)
+		}
+		if count == 0 {
+			var governanceVersion, authorityCount int
+			if err := transaction.QueryRowContext(ctx, `
+SELECT item.governance_version,
+       (SELECT COUNT(*) FROM work_item_authorities authority
+        WHERE authority.goal_ref=item.goal_ref AND authority.work_item_ref=item.ref)
+FROM work_items item WHERE item.goal_ref=? AND item.ref=?`,
+				aggregate.Ref().String(), item.Ref().String(),
+			).Scan(&governanceVersion, &authorityCount); err != nil {
+				return mapDatabaseError(err)
+			}
+			// A migrated V14 successor has no durable authority from which an
+			// effect may be admitted. Keep it ready and parked; never invent a
+			// launch, authority, or approval retroactively.
+			if governanceVersion == 0 && authorityCount == 0 {
+				continue
+			}
 		}
 		if count != 1 {
 			return conflict(errors.New("sqlite.ready_execution_missing"))
@@ -308,6 +379,16 @@ func (repository *Repository) mutate(
 ) error {
 	if operationAt.IsZero() {
 		return invalid(errors.New("sqlite.operation_time_invalid"))
+	}
+	now, err := repository.transactionTime()
+	if err != nil {
+		return err
+	}
+	if operationAt.After(now) {
+		return invalid(errors.New("sqlite.operation_time_future"))
+	}
+	if !operationAt.Before(claim.LeaseUntil) {
+		return conflict(errors.New("sqlite.claim_lease_expired"))
 	}
 	transaction, err := beginTransaction(ctx, repository)
 	if err != nil {

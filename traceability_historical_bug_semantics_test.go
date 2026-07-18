@@ -35,6 +35,32 @@ type traceHistoricalBugRowEnrichment struct {
 	Basis                string `json:"basis"`
 }
 
+func TestHistoricalBugCapabilityCoverageNeverInfersLegacyClosure(t *testing.T) {
+	const bugID = "BUG-ORQ-20990101-CAPABILITY-COVERAGE"
+	capabilities := []string{"ORC-09"}
+	entries := traceBuildHistoricalBugIDs(
+		map[string][]traceHistoricalBugOccurrence{bugID: {{
+			OccurrenceRef: "BUGOCC-aaaaaaaaaaaaaaaaaaaaaaaa", BugID: bugID,
+			CoverageKind: "narrative_only",
+		}}},
+		nil,
+		nil,
+		map[string]traceHistoricalBugIDReview{bugID: {
+			BugID: bugID, CapabilityIDs: capabilities,
+			ReviewNote: "Capability coverage is rebuild evidence but never proof that a legacy incident itself closed.",
+		}},
+		map[string]traceHistoricalBugIDReviewBinding{bugID: {
+			BugID: bugID, VerifiedCapabilityIDs: capabilities,
+			RebuildEvidenceRefs: []string{"product/evidence/v15_budgets_effects.json"},
+		}},
+	)
+	if len(entries) != 1 || !reflect.DeepEqual(entries[0].VerifiedCapabilityIDs, capabilities) ||
+		entries[0].ClosureEvidence != "not_verified" {
+		t.Fatalf("capability coverage inferred historical closure: %#v", entries)
+	}
+	traceValidateHistoricalBugRebuildEvidence(t, entries[0])
+}
+
 func TestTraceabilityRebuildHistoricalBugReviewBindings(t *testing.T) {
 	var policy traceHistoricalBugExtractionPolicy
 	traceDecodeStrict(t, "product/traceability/historical_bug_extraction_policy.json", &policy)

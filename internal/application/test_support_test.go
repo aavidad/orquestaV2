@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
 	"orquesta/internal/identity"
 	"orquesta/internal/ports"
 )
@@ -94,12 +95,21 @@ func (repository *memoryRepository) CreateGoal(_ context.Context, state CreateGo
 		RequestRef: state.RequestRef, RequestFingerprint: state.RequestFingerprint,
 		RequestedBy: state.RequestedBy,
 		Goal:        state.Goal, Executions: append([]ExecutionRecord(nil), state.Executions...),
+		BudgetEnvelopes:     append([]governance.BudgetEnvelope(nil), state.BudgetEnvelopes...),
+		WorkItemAuthorities: append([]WorkItemAuthority(nil), state.WorkItemAuthorities...),
 	}
 	repository.requests[requestKey] = state.Goal.Ref()
 	repository.records[state.Goal.Ref()] = record
 	for _, action := range state.Actions {
+		if action.EffectIntent.Ref != "" {
+			record.EffectIntents = append(record.EffectIntents, action.EffectIntent)
+		}
+		if action.EffectApproval != nil {
+			record.EffectApprovals = append(record.EffectApprovals, *action.EffectApproval)
+		}
 		repository.actions[action.Ref] = memoryAction{record: action}
 	}
+	repository.records[state.Goal.Ref()] = record
 	repository.events = append(repository.events, state.Events...)
 	return cloneGoalRecord(record), true, nil
 }
@@ -162,6 +172,95 @@ func (repository *memoryRepository) GetGoal(_ context.Context, ref goal.GoalRef)
 		return GoalRecord{}, &StateError{Code: StateNotFound}
 	}
 	return cloneGoalRecord(record), nil
+}
+
+func (repository *memoryRepository) EffectReplay(
+	_ context.Context,
+	request EffectReplayRequest,
+) (EffectApproval, bool, error) {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	record, found := repository.records[request.GoalRef]
+	if !found || record.Goal.Project() != request.ProjectRef {
+		return EffectApproval{}, false, &StateError{Code: StateNotFound}
+	}
+	for _, approval := range record.EffectApprovals {
+		if approval.RequestRef != request.RequestRef || approval.DecidedBy != request.PrincipalRef {
+			continue
+		}
+		if approval.RequestFingerprint != request.RequestFingerprint || approval.IntentRef != request.IntentRef ||
+			approval.IntentDigest != request.IntentDigest {
+			return EffectApproval{}, false, &StateError{Code: StateConflict}
+		}
+		return approval, true, nil
+	}
+	return EffectApproval{}, false, nil
+}
+
+func (repository *memoryRepository) DecideEffect(
+	_ context.Context,
+	state DecideEffectState,
+) (EffectApproval, bool, error) {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	record, found := repository.records[state.GoalRef]
+	if !found || record.Goal.Project() != state.ProjectRef || state.OperationAt.IsZero() ||
+		!memoryWriteAuthorizationValid(
+			state.AuthorizationReceipt, state.PrincipalRef, state.ProjectRef,
+			identity.PermissionEffectsApprove,
+			effectApprovalResourceRef(state.GoalRef, state.IntentRef, state.IntentDigest),
+		) {
+		return EffectApproval{}, false, &StateError{Code: StateInvalid}
+	}
+	for _, approval := range record.EffectApprovals {
+		if approval.RequestRef == state.RequestRef && approval.DecidedBy == state.PrincipalRef {
+			if approval.RequestFingerprint != state.RequestFingerprint {
+				return EffectApproval{}, false, &StateError{Code: StateConflict}
+			}
+			return approval, false, nil
+		}
+	}
+	intent, found := effectIntentByRef(record.EffectIntents, state.IntentRef)
+	if !found || intent.Digest != state.IntentDigest || ValidateEffectApproval(intent, state.Approval) != nil {
+		return EffectApproval{}, false, &StateError{Code: StateInvalid}
+	}
+	record.EffectApprovals = append(record.EffectApprovals, state.Approval)
+	repository.records[state.GoalRef] = record
+	return state.Approval, true, nil
+}
+
+func (repository *memoryRepository) RecordEffectAttempt(
+	_ context.Context,
+	state RecordEffectAttemptState,
+) (EffectAttempt, bool, error) {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	action, found := repository.actions[state.Claim.Action.Ref]
+	if !found || !memoryClaimMatches(action, state.Claim, state.OperationAt) ||
+		validateEffectAttempt(state.Claim, state.Attempt) != nil {
+		return EffectAttempt{}, false, &StateError{Code: StateConflict}
+	}
+	record := repository.records[state.Claim.Action.GoalRef]
+	for _, attempt := range record.EffectAttempts {
+		if attempt.Ref == state.Attempt.Ref {
+			if !reflect.DeepEqual(attempt, state.Attempt) {
+				return EffectAttempt{}, false, &StateError{Code: StateConflict}
+			}
+			return attempt, false, nil
+		}
+	}
+	record.EffectAttempts = append(record.EffectAttempts, state.Attempt)
+	repository.records[record.Goal.Ref()] = record
+	return state.Attempt, true, nil
+}
+
+func effectAttemptByRef(records []EffectAttempt, ref string) (EffectAttempt, bool) {
+	for _, record := range records {
+		if record.Ref == ref {
+			return record, true
+		}
+	}
+	return EffectAttempt{}, false
 }
 
 func (repository *memoryRepository) ControlReplay(
@@ -294,15 +393,24 @@ func (repository *memoryRepository) ApplyControl(
 		repository.hasRetiredMailboxRecipientLocked(state.RequireMailboxClearForExecutionRef) {
 		return ControlRecord{}, false, &StateError{Code: StateRecipientMailboxActive}
 	}
-	if state.StopReceipt != nil {
-		execution, ok := executionByRef(current.Executions, state.StopReceipt.ExecutionRef)
-		if !ok || ports.ValidateAgentStopReceipt(stopRequest(state.Control, execution), *state.StopReceipt) != nil {
+	if state.EffectReceipt != nil {
+		attempt, ok := effectAttemptByRef(current.EffectAttempts, state.EffectReceipt.AttemptRef)
+		if !ok || validateEffectReceipt(state.Claim, attempt, *state.EffectReceipt) != nil {
 			return ControlRecord{}, false, &StateError{Code: StateInvalid}
 		}
+	}
+	if state.BudgetSettlement != nil && governance.ValidateBudgetSettlement(*state.BudgetSettlement) != nil {
+		return ControlRecord{}, false, &StateError{Code: StateInvalid}
 	}
 	for _, action := range state.NewActions {
 		if _, duplicate := repository.actions[action.Ref]; duplicate {
 			return ControlRecord{}, false, &StateError{Code: StateConflict}
+		}
+		if action.EffectIntent.Ref != "" {
+			current.EffectIntents = append(current.EffectIntents, action.EffectIntent)
+		}
+		if action.EffectApproval != nil {
+			current.EffectApprovals = append(current.EffectApprovals, *action.EffectApproval)
 		}
 	}
 	current.Goal = state.Goal
@@ -315,11 +423,13 @@ func (repository *memoryRepository) ApplyControl(
 		current.Controls = replaceControl(current.Controls, state.Control)
 	}
 	if state.Claim.Token != "" {
-		receipt := consumptionReceipt(state.Claim, ActionConsumedCompleted, "", state.OperationAt)
-		if state.StopReceipt != nil {
-			receipt.EffectReceiptRef = state.StopReceipt.ReceiptRef
-			receipt.EffectStatus = string(state.StopReceipt.Status)
-			receipt.EffectConfirmedAt = state.StopReceipt.ConfirmedAt.UTC()
+		receipt := consumptionReceipt(state.Claim, ActionConsumedCompleted, state.ClaimErrorCode, state.OperationAt)
+		if state.EffectReceipt != nil {
+			receipt.EffectReceiptRef = state.EffectReceipt.Ref
+			current.EffectReceipts = append(current.EffectReceipts, *state.EffectReceipt)
+		}
+		if state.BudgetSettlement != nil {
+			current.BudgetSettlements = append(current.BudgetSettlements, *state.BudgetSettlement)
 		}
 		current.ConsumptionReceipts = append(current.ConsumptionReceipts, receipt)
 		delete(repository.actions, state.Claim.Action.Ref)
@@ -1031,6 +1141,42 @@ func (repository *memoryRepository) ClaimNextAction(_ context.Context, request C
 				execution.AgentRef != request.Capabilities.AgentRef) {
 			continue
 		}
+		var approval EffectApproval
+		var reservation governance.BudgetReservation
+		terminalStop := action.record.Kind == ActionStopAgent && executionFound &&
+			(execution.State == ExecutionSucceeded || execution.State == ExecutionFailed ||
+				execution.State == ExecutionCanceled || execution.State == ExecutionStopped)
+		if action.record.Kind == ActionLaunchAgent || action.record.Kind == ActionStopAgent && !terminalStop {
+			approval, found = memoryLiveApproval(record, action.record, now)
+			if !found {
+				continue
+			}
+		}
+		if action.record.Kind == ActionLaunchAgent {
+			if ValidateBudgetPolicy(request.BudgetPolicy) != nil {
+				return ActionClaim{}, false, &StateError{Code: StateInvalid}
+			}
+			reservation, found = repository.activeActionReservationLocked(record, action.record)
+			if !found {
+				fits, quotaErr := repository.budgetFitsLocked(record, action.record.EffectIntent)
+				if quotaErr != nil {
+					return ActionClaim{}, false, quotaErr
+				}
+				if !fits {
+					action.record.AvailableAt = now.Add(action.record.EffectIntent.QuotaRetryDelay)
+					repository.actions[ref] = action
+					continue
+				}
+				reservation = memoryReservation(action.record, action.fence+1, now)
+				record.BudgetReservations = append(record.BudgetReservations, reservation)
+			}
+			if executionFound && execution.State == ExecutionDispatching {
+				execution.BudgetReservationRef = reservation.Ref
+				execution.EffectIntentRef = action.record.EffectIntent.Ref
+				record.Executions = replaceExecution(record.Executions, execution)
+			}
+			repository.records[record.Goal.Ref()] = record
+		}
 		action.token = request.Token
 		action.workerRef = request.WorkerRef
 		action.deliveryAttempt++
@@ -1040,9 +1186,153 @@ func (repository *memoryRepository) ClaimNextAction(_ context.Context, request C
 		return ActionClaim{
 			Action: action.record, Token: action.token, WorkerRef: action.workerRef,
 			DeliveryAttempt: action.deliveryAttempt, Fence: action.fence, LeaseUntil: action.lease,
+			BudgetReservationRef: reservation.Ref, BudgetReservation: reservation, EffectApproval: approval,
 		}, true, nil
 	}
 	return ActionClaim{}, false, nil
+}
+
+func memoryLiveApproval(record GoalRecord, action ActionRecord, now time.Time) (EffectApproval, bool) {
+	var latest *EffectApproval
+	for index := range record.EffectApprovals {
+		candidate := record.EffectApprovals[index]
+		if candidate.IntentRef != action.EffectIntent.Ref || candidate.IntentDigest != action.EffectIntent.Digest ||
+			ValidateEffectApproval(action.EffectIntent, candidate) != nil {
+			continue
+		}
+		if latest == nil || memoryApprovalLater(candidate, *latest) {
+			copy := candidate
+			latest = &copy
+		}
+	}
+	if latest == nil || latest.Decision != EffectApproved ||
+		(latest.Source == EffectApprovalSourceExplicitDecision && !latest.ExpiresAt.After(now)) {
+		return EffectApproval{}, false
+	}
+	return *latest, true
+}
+
+func memoryApprovalLater(left, right EffectApproval) bool {
+	if !left.DecidedAt.Equal(right.DecidedAt) {
+		return left.DecidedAt.After(right.DecidedAt)
+	}
+	leftExplicit, rightExplicit := left.Source == EffectApprovalSourceExplicitDecision, right.Source == EffectApprovalSourceExplicitDecision
+	if leftExplicit != rightExplicit {
+		return leftExplicit
+	}
+	if (left.Decision == EffectDenied) != (right.Decision == EffectDenied) {
+		return left.Decision == EffectDenied
+	}
+	return left.Ref > right.Ref
+}
+
+func memoryReservation(action ActionRecord, fence uint64, at time.Time) governance.BudgetReservation {
+	intent := action.EffectIntent
+	return governance.BudgetReservation{
+		Ref: "budget-reservation:" + action.Ref + ":" + fmt.Sprint(fence), DemandRef: intent.Demand.Ref,
+		ActionRef: action.Ref, EffectIntentRef: intent.Ref, ProjectRef: intent.Subject.ProjectRef.String(),
+		GoalRef: intent.Subject.GoalRef.String(), WorkItemRef: intent.Subject.WorkItemRef.String(),
+		ExecutionRef: intent.Subject.ExecutionRef.String(), PlanGeneration: uint64(intent.Subject.PlanGeneration),
+		AppSpecGeneration: uint64(intent.Subject.AppSpecGeneration), WorkItemGeneration: uint64(action.WorkItemGeneration),
+		Fence: fence, SpecHash: intent.Subject.SpecHash, PolicyHash: intent.PolicyHash,
+		Resources: intent.Demand.Resources, ReservedAt: at,
+	}
+}
+
+func (repository *memoryRepository) activeActionReservationLocked(
+	record GoalRecord,
+	action ActionRecord,
+) (governance.BudgetReservation, bool) {
+	settled := make(map[string]struct{}, len(record.BudgetSettlements))
+	for _, settlement := range record.BudgetSettlements {
+		settled[settlement.ReservationRef] = struct{}{}
+	}
+	for _, reservation := range record.BudgetReservations {
+		if reservation.ActionRef == action.Ref {
+			if _, done := settled[reservation.Ref]; !done {
+				return reservation, true
+			}
+		}
+	}
+	return governance.BudgetReservation{}, false
+}
+
+func (repository *memoryRepository) budgetFitsLocked(
+	goalRecord GoalRecord,
+	intent EffectIntent,
+) (bool, error) {
+	deployment, project, goalUsage := governance.ResourceVector{}, governance.ResourceVector{}, governance.ResourceVector{}
+	for _, record := range repository.records {
+		settled := make(map[string]struct{}, len(record.BudgetSettlements))
+		for _, fact := range record.BudgetSettlements {
+			settled[fact.ReservationRef] = struct{}{}
+		}
+		for _, reservation := range record.BudgetReservations {
+			if _, done := settled[reservation.Ref]; done {
+				continue
+			}
+			var err error
+			deployment, err = governance.Add(deployment, reservation.Resources)
+			if err != nil {
+				return false, err
+			}
+			if record.Goal.Project() == goalRecord.Goal.Project() {
+				project, err = governance.Add(project, reservation.Resources)
+			}
+			if record.Goal.Ref() == goalRecord.Goal.Ref() {
+				goalUsage, err = governance.Add(goalUsage, reservation.Resources)
+			}
+			if err != nil {
+				return false, err
+			}
+		}
+	}
+	limits, err := memoryHistoricalBudgetLimits(goalRecord, intent)
+	if err != nil {
+		return false, err
+	}
+	for _, pair := range [][2]governance.ResourceVector{
+		{limits[0], deployment}, {limits[1], project}, {limits[2], goalUsage},
+	} {
+		requested, err := governance.Add(pair[1], intent.Demand.Resources)
+		if err != nil {
+			return false, err
+		}
+		fits, err := governance.Fits(pair[0], requested)
+		if err != nil || !fits {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
+func memoryHistoricalBudgetLimits(record GoalRecord, intent EffectIntent) ([3]governance.ResourceVector, error) {
+	var limits [3]governance.ResourceVector
+	var found [3]bool
+	for _, envelope := range record.BudgetEnvelopes {
+		if envelope.PolicyHash != intent.PolicyHash || envelope.Revision != intent.PolicyRevision {
+			continue
+		}
+		index := -1
+		switch {
+		case envelope.Scope == governance.BudgetScopeDeployment:
+			index = 0
+		case envelope.Scope == governance.BudgetScopeProject && envelope.SubjectRef == intent.Subject.ProjectRef.String():
+			index = 1
+		case envelope.Scope == governance.BudgetScopeGoal && envelope.SubjectRef == intent.Subject.GoalRef.String():
+			index = 2
+		}
+		if index >= 0 {
+			if found[index] {
+				return limits, errors.New("test.budget_policy_duplicate")
+			}
+			limits[index], found[index] = envelope.Limit, true
+		}
+	}
+	if !found[0] || !found[1] || !found[2] {
+		return limits, errors.New("test.budget_policy_missing")
+	}
+	return limits, nil
 }
 
 func memoryActionPriority(action ActionRecord) int {
@@ -1128,11 +1418,20 @@ func (repository *memoryRepository) RecordLaunchAccepted(_ context.Context, stat
 		return &StateError{Code: StateConflict}
 	}
 	record := repository.records[state.Claim.Action.GoalRef]
+	attempt, found := effectAttemptByRef(record.EffectAttempts, state.EffectReceipt.AttemptRef)
+	if !found || validateEffectReceipt(state.Claim, attempt, state.EffectReceipt) != nil {
+		return &StateError{Code: StateInvalid}
+	}
 	record.Executions = replaceExecution(record.Executions, state.Execution)
-	record.ConsumptionReceipts = append(record.ConsumptionReceipts, consumptionReceipt(state.Claim, ActionConsumedCompleted, "", state.OperationAt))
+	receipt := consumptionReceipt(state.Claim, ActionConsumedCompleted, "", state.OperationAt)
+	receipt.EffectReceiptRef = state.EffectReceipt.Ref
+	record.ConsumptionReceipts = append(record.ConsumptionReceipts, receipt)
+	record.EffectReceipts = append(record.EffectReceipts, state.EffectReceipt)
 	repository.records[record.Goal.Ref()] = record
 	delete(repository.actions, state.Claim.Action.Ref)
 	repository.actions[state.NextAction.Ref] = memoryAction{record: state.NextAction}
+	memoryAddActionFacts(&record, state.NextAction)
+	repository.records[record.Goal.Ref()] = record
 	repository.events = append(repository.events, state.Event)
 	return nil
 }
@@ -1149,7 +1448,17 @@ func (repository *memoryRepository) RequeueAction(_ context.Context, state Actio
 	if !ok || !found || current.Ref != state.Execution.Ref {
 		return &StateError{Code: StateConflict}
 	}
+	if state.ClearEffectBinding &&
+		(state.BudgetSettlement == nil || state.Execution.BudgetReservationRef != "" || state.Execution.EffectIntentRef != "") {
+		return &StateError{Code: StateInvalid}
+	}
+	if state.ClearEffectBinding && !memoryEffectBindingMatchesClaim(current, state.Claim) {
+		return &StateError{Code: StateConflict}
+	}
 	record.Executions = replaceExecution(record.Executions, state.Execution)
+	if state.BudgetSettlement != nil {
+		record.BudgetSettlements = append(record.BudgetSettlements, *state.BudgetSettlement)
+	}
 	repository.records[record.Goal.Ref()] = record
 	action.record.AvailableAt = state.AvailableAt
 	action.token = ""
@@ -1167,11 +1476,30 @@ func (repository *memoryRepository) QuarantineAction(_ context.Context, state Ac
 		return &StateError{Code: StateConflict}
 	}
 	record := repository.records[state.Claim.Action.GoalRef]
+	if state.ClearEffectBinding {
+		execution, found := executionForAction(record, state.Claim.Action)
+		if !found || state.BudgetSettlement == nil || !memoryEffectBindingMatchesClaim(execution, state.Claim) {
+			return &StateError{Code: StateInvalid}
+		}
+		execution.BudgetReservationRef = ""
+		execution.EffectIntentRef = ""
+		record.Executions = replaceExecution(record.Executions, execution)
+	}
+	if state.BudgetSettlement != nil {
+		record.BudgetSettlements = append(record.BudgetSettlements, *state.BudgetSettlement)
+	}
 	record.ConsumptionReceipts = append(record.ConsumptionReceipts, consumptionReceipt(state.Claim, ActionConsumedQuarantined, state.ErrorCode, state.OperationAt))
 	repository.records[record.Goal.Ref()] = record
 	delete(repository.actions, state.Claim.Action.Ref)
 	repository.events = append(repository.events, state.Event)
 	return nil
+}
+
+func memoryEffectBindingMatchesClaim(execution ExecutionRecord, claim ActionClaim) bool {
+	unbound := execution.BudgetReservationRef == "" && execution.EffectIntentRef == ""
+	bound := execution.BudgetReservationRef == claim.BudgetReservationRef &&
+		execution.EffectIntentRef == claim.Action.EffectIntentRef
+	return unbound || bound
 }
 
 func (repository *memoryRepository) RecordExecutionReplaced(_ context.Context, state ExecutionReplacedState) error {
@@ -1187,10 +1515,15 @@ func (repository *memoryRepository) RecordExecutionReplaced(_ context.Context, s
 	record.Goal = state.Goal
 	record.Executions = replaceExecution(record.Executions, state.FailedExecution)
 	record.Executions = append(record.Executions, state.ReplacementExecution)
+	if state.BudgetSettlement != nil {
+		record.BudgetSettlements = append(record.BudgetSettlements, *state.BudgetSettlement)
+	}
 	record.ConsumptionReceipts = append(record.ConsumptionReceipts, consumptionReceipt(state.Claim, ActionConsumedCompleted, state.ErrorCode, state.OperationAt))
 	repository.records[state.Goal.Ref()] = record
 	delete(repository.actions, state.Claim.Action.Ref)
 	repository.actions[state.NextAction.Ref] = memoryAction{record: state.NextAction}
+	memoryAddActionFacts(&record, state.NextAction)
+	repository.records[state.Goal.Ref()] = record
 	repository.events = append(repository.events, state.Events...)
 	return nil
 }
@@ -1213,13 +1546,18 @@ func (repository *memoryRepository) RecordExecutionInterrupted(
 	record.Goal = state.Goal
 	record.Executions = replaceExecution(record.Executions, state.Execution)
 	record.Executions = append(record.Executions, state.NewExecutions...)
+	if state.BudgetSettlement != nil {
+		record.BudgetSettlements = append(record.BudgetSettlements, *state.BudgetSettlement)
+	}
 	record.ConsumptionReceipts = append(record.ConsumptionReceipts,
 		consumptionReceipt(state.Claim, ActionConsumedCompleted, state.Execution.FailureCode, state.OperationAt))
 	repository.records[state.Goal.Ref()] = record
 	delete(repository.actions, state.Claim.Action.Ref)
 	for _, action := range state.NewActions {
+		memoryAddActionFacts(&record, action)
 		repository.actions[action.Ref] = memoryAction{record: action}
 	}
+	repository.records[state.Goal.Ref()] = record
 	repository.events = append(repository.events, state.Events...)
 	return nil
 }
@@ -1236,12 +1574,17 @@ func (repository *memoryRepository) RecordGoalSucceeded(_ context.Context, state
 	record.Executions = append(record.Executions, state.NewExecutions...)
 	record.Artifacts = append(record.Artifacts, state.Artifact)
 	record.Attestations = append(record.Attestations, state.Attestation)
+	if state.BudgetSettlement != nil {
+		record.BudgetSettlements = append(record.BudgetSettlements, *state.BudgetSettlement)
+	}
 	record.ConsumptionReceipts = append(record.ConsumptionReceipts, consumptionReceipt(state.Claim, ActionConsumedCompleted, "", state.OperationAt))
 	repository.records[state.Goal.Ref()] = record
 	delete(repository.actions, state.Claim.Action.Ref)
 	for _, action := range state.NewActions {
+		memoryAddActionFacts(&record, action)
 		repository.actions[action.Ref] = memoryAction{record: action}
 	}
+	repository.records[state.Goal.Ref()] = record
 	repository.events = append(repository.events, state.Events...)
 	return nil
 }
@@ -1268,6 +1611,9 @@ func (repository *memoryRepository) RecordGoalFailed(_ context.Context, state Go
 	record.Goal = state.Goal
 	record.Executions = replaceExecution(record.Executions, state.Execution)
 	record.Executions = append(record.Executions, state.NewExecutions...)
+	if state.BudgetSettlement != nil {
+		record.BudgetSettlements = append(record.BudgetSettlements, *state.BudgetSettlement)
+	}
 	record.ConsumptionReceipts = append(record.ConsumptionReceipts, consumptionReceipt(state.Claim, ActionConsumedCompleted, state.Execution.FailureCode, state.OperationAt))
 	repository.records[state.Goal.Ref()] = record
 	for messageRef, retirement := range retirements {
@@ -1279,8 +1625,10 @@ func (repository *memoryRepository) RecordGoalFailed(_ context.Context, state Go
 	}
 	delete(repository.actions, state.Claim.Action.Ref)
 	for _, action := range state.NewActions {
+		memoryAddActionFacts(&record, action)
 		repository.actions[action.Ref] = memoryAction{record: action}
 	}
+	repository.records[state.Goal.Ref()] = record
 	repository.events = append(repository.events, state.Events...)
 	return nil
 }
@@ -1349,8 +1697,25 @@ func cloneGoalRecord(record GoalRecord) GoalRecord {
 	record.Artifacts = append([]ArtifactRecord(nil), record.Artifacts...)
 	record.Attestations = append([]AttestationRecord(nil), record.Attestations...)
 	record.Controls = append([]ControlRecord(nil), record.Controls...)
+	record.BudgetEnvelopes = append([]governance.BudgetEnvelope(nil), record.BudgetEnvelopes...)
+	record.BudgetReservations = append([]governance.BudgetReservation(nil), record.BudgetReservations...)
+	record.BudgetSettlements = append([]governance.BudgetSettlement(nil), record.BudgetSettlements...)
+	record.WorkItemAuthorities = append([]WorkItemAuthority(nil), record.WorkItemAuthorities...)
+	record.EffectIntents = append([]EffectIntent(nil), record.EffectIntents...)
+	record.EffectApprovals = append([]EffectApproval(nil), record.EffectApprovals...)
+	record.EffectAttempts = append([]EffectAttempt(nil), record.EffectAttempts...)
+	record.EffectReceipts = append([]EffectReceipt(nil), record.EffectReceipts...)
 	record.ConsumptionReceipts = append([]ActionConsumptionReceipt(nil), record.ConsumptionReceipts...)
 	return record
+}
+
+func memoryAddActionFacts(record *GoalRecord, action ActionRecord) {
+	if action.EffectIntent.Ref != "" {
+		record.EffectIntents = append(record.EffectIntents, action.EffectIntent)
+	}
+	if action.EffectApproval != nil {
+		record.EffectApprovals = append(record.EffectApprovals, *action.EffectApproval)
+	}
 }
 
 func memoryControlRequestKey(
@@ -1504,13 +1869,26 @@ type scriptedAgent struct {
 	preserveEmptyObservationSpecHash bool
 	observations                     []ports.AgentObservation
 	launchErr                        error
+	launchOverride                   func(ports.AgentLaunchRequest) (ports.AgentLaunchReceipt, error)
 	launchEntered                    chan struct{}
 	launchRelease                    <-chan struct{}
 	controlCapabilities              *ports.AgentControlCapabilities
 	stopStatus                       ports.AgentStopStatus
+	stopOverride                     func(ports.AgentStopRequest) (ports.AgentStopReceipt, error)
 	stopCalls                        int
 	stopRequests                     []ports.AgentStopRequest
 }
+
+type definitelyUnappliedPermanentError struct{ message string }
+
+func (err definitelyUnappliedPermanentError) Error() string {
+	if err.message == "" {
+		return "test.effect_rejected_before_apply"
+	}
+	return err.message
+}
+
+func (definitelyUnappliedPermanentError) DefinitelyNotApplied() bool { return true }
 
 func (agent *scriptedAgent) ControlCapabilities(context.Context) (ports.AgentControlCapabilities, error) {
 	if agent.controlCapabilities != nil {
@@ -1527,6 +1905,9 @@ func (agent *scriptedAgent) Stop(
 	defer agent.mu.Unlock()
 	agent.stopCalls++
 	agent.stopRequests = append(agent.stopRequests, request)
+	if agent.stopOverride != nil {
+		return agent.stopOverride(request)
+	}
 	status := agent.stopStatus
 	if status == "" {
 		status = ports.AgentStopped
@@ -1539,7 +1920,7 @@ func (agent *scriptedAgent) Stop(
 		ExternalRef: request.ExternalRef, Mode: request.Mode, IdempotencyKey: request.IdempotencyKey,
 		Status: status,
 	}
-	if status == ports.AgentStopped || status == ports.AgentStopAlreadyCompleted ||
+	if status == ports.AgentStopped || status == ports.AgentStopAlreadyStopped || status == ports.AgentStopAlreadyCompleted ||
 		status == ports.AgentStopAlreadyFailed {
 		receipt.ReceiptRef = "receipt:stop:" + request.ExecutionRef.String()
 		receipt.ConfirmedAt = agent.now().UTC()
@@ -1569,6 +1950,7 @@ func (agent *scriptedAgent) Launch(_ context.Context, request ports.AgentLaunchR
 	release := agent.launchRelease
 	now := agent.now
 	launchErr := agent.launchErr
+	launchOverride := agent.launchOverride
 	receiptSpecHash := agent.receiptSpecHashOverride
 	if receiptSpecHash == "" && !agent.preserveEmptyReceiptSpecHash {
 		receiptSpecHash = request.SpecHash
@@ -1586,12 +1968,16 @@ func (agent *scriptedAgent) Launch(_ context.Context, request ports.AgentLaunchR
 	if launchErr != nil {
 		return ports.AgentLaunchReceipt{}, launchErr
 	}
+	if launchOverride != nil {
+		return launchOverride(request)
+	}
 	return ports.AgentLaunchReceipt{
 		ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
 		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
 		ExecutionAttempt: request.ExecutionAttempt, SpecHash: receiptSpecHash,
 		ProviderRef: "provider:test", ModelRef: "model:test", AgentRef: "agent:test",
 		ExternalRef:    "external:" + request.ExecutionRef.String(),
+		ReceiptRef:     "receipt:launch:" + request.ExecutionRef.String(),
 		IdempotencyKey: request.IdempotencyKey, AcceptedAt: now(),
 	}, nil
 }
@@ -1611,6 +1997,9 @@ func (agent *scriptedAgent) Observe(_ context.Context, execution goal.ExecutionR
 	}
 	if observation.ObservedAt.IsZero() {
 		observation.ObservedAt = agent.now()
+	}
+	if observation.Usage == (governance.ResourceUsage{}) {
+		observation.Usage = unknownUsage()
 	}
 	return observation, nil
 }
@@ -1638,6 +2027,7 @@ func newTestOrchestratorWithAccess(
 		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1 << 20,
 		MaxMailboxEnvelopeBytes: 64 << 10,
 		MaxExecutionAttempts:    3, ClaimLease: time.Minute, DirectorLeaseDuration: time.Minute,
+		MaxChildrenPerParent: 6, EffectApprovalTTL: time.Hour, BudgetPolicy: testBudgetPolicy(clock.Now()),
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 		AgentCapabilities: capabilities,
 	})
@@ -1645,6 +2035,36 @@ func newTestOrchestratorWithAccess(
 		t.Fatalf("new orchestrator: %v", err)
 	}
 	return orchestrator, artifacts
+}
+
+func testBudgetPolicy(at time.Time) BudgetPolicy {
+	policyHash := effectAdmissionFingerprint("test-budget-policy")
+	limit := governance.ResourceVector{
+		Tokens: 1_000_000, MoneyMicros: 1_000_000_000, Currency: "EUR",
+		ActiveTimeNS: int64(24 * time.Hour), ProcessSlots: 70, DiskBytes: 1 << 30,
+	}
+	envelope := func(ref, subject string, scope governance.BudgetScope) governance.BudgetEnvelope {
+		return governance.BudgetEnvelope{
+			Ref: ref, SubjectRef: subject, Scope: scope, Limit: limit,
+			Revision: 1, PolicyHash: policyHash, CreatedAt: at.UTC(),
+		}
+	}
+	return BudgetPolicy{
+		DeploymentEnvelope: envelope(
+			"budget-envelope:deployment:test:"+policyHash, "deployment:test", governance.BudgetScopeDeployment,
+		),
+		ProjectEnvelopeTemplate: envelope(
+			"budget-envelope:project:template:"+policyHash, "project:template", governance.BudgetScopeProject,
+		),
+		GoalEnvelopeTemplate: envelope(
+			"budget-envelope:goal:template:"+policyHash, "goal:template", governance.BudgetScopeGoal,
+		),
+		DefaultWorkItemDemand: governance.ResourceVector{
+			Tokens: 100, MoneyMicros: 1_000, Currency: "EUR", ActiveTimeNS: int64(time.Minute),
+			ProcessSlots: 1, DiskBytes: 1 << 10,
+		},
+		QuotaRetryDelay: time.Second, EffectApprovalTTL: time.Hour, PolicyHash: policyHash,
+	}
 }
 
 func testScope(t interface{ Fatalf(string, ...any) }) (goal.ActorRef, goal.ProjectRef) {

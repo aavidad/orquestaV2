@@ -1,72 +1,51 @@
 # Estado y handoff vivo del rebuild
 
-Última actualización: 2026-07-16 18:00 Europe/Madrid.
+Última actualización: 2026-07-18 Europe/Madrid.
 
 Este documento permite continuar el rebuild sin reconstruir el contexto de la
 sesión. Es estado operativo, no evidencia de aceptación. Los estados canónicos
 de capacidades, verticales y contratos viven en `product/roadmap.json`; los
 verdes viven en receipts fuera de su propio candidato.
 
-## Checkpoint vigente: V14 acreditado; V15 aún no abierto
+## Checkpoint vigente: V15 acreditado; V16 es el siguiente corte causal
 
-V01–V14 están cerrados con receipts reproducibles. Dominio, aplicación,
-puertos, fake, Codex, SQLite, bootstrap, recovery, carreras y los E2E de
-composición V14 pasaron el argv contractual desde checkout `detached_clean`.
-La cadena autoritativa es:
+V01–V15 están cerrados por receipts V3 reproducibles. El argv exacto de
+`AC-V15-BUDGETS-EFFECTS` pasó desde un checkout `detached_clean`; su fuente de
+verdad es `product/evidence/v15_budgets_effects.json` y acredita únicamente
+`GOV-15`, `STG-09`, `ORC-08`, `ORC-09`, `ORC-10`, `ORC-11`, `EVD-03` y
+`EVD-14`.
 
-```text
-producto P:   6dbc0d808de63973305914b002c3bc2b8a806bb0
-sellado S:    e3e7c28e669ccd7e67a8661c40333d649ab82dd5
-evidencia E:  5b97545ad14a40fd0063fc3671f6e79d9978ec09
-contrato:     AC-V14-CONTROLS
-receipt:      product/evidence/v14_controls.json; V3 PASS; detached_clean
-```
+El corte canónico queda en **56/257 capacidades, 21,79 %; 15/34 verticales,
+44,12 %; 15/15 receipts válidos**.
 
-El corte canónico queda en **48/257 capacidades, 18,68 %; 14/34 verticales,
-41,18 %; 14/14 receipts válidos**. V14 acredita exclusivamente `GOV-07`,
-`STG-15`, `ORC-03` y `ORC-16`.
+Resultado funcional nuevo de V15:
 
-Resultado funcional acreditado V14:
+- presupuesto tipado de tokens, dinero entero, tiempo activo, slots y disco,
+  con envelopes global, proyecto y Goal, reserva atómica y settlement
+  conservador en el mismo `StateRepository`/SQLite/outbox/scheduler;
+- fairness durable `project -> Goal`, FIFO como desempate, cuota temporal sin
+  intento ni terminal falso y cien claims concurrentes sin sobrepasar límites;
+- `SecurityCriticality` y `ReasoningEffort` son ejes independientes declarados;
+  no se infieren por palabras ni proveedor;
+- todo launch y stop real conserva hechos distintos `EffectIntent ->
+  EffectApproval -> EffectAttempt -> EffectReceipt`; ACK/consumo de outbox no
+  sustituye el receipt externo;
+- aprobación ausente, denegada, expirada, revocada o de otro target produce cero
+  llamada al adaptador. Crash ambiguo conserva la misma idempotency key y una
+  sola reserva/receipt; solo evidencia estructural `definitely_not_applied`
+  permite liberar y sustituir;
+- defaults Codex 70 padres por ciclo y fanout 6 viven en configuración canónica
+  y configuración efectiva; no existe cap oculto en el núcleo;
+- fake, Codex, SQLite, restart, backup/restore, recovery/tamper y `-race`
+  ejercitan launch y stop por la composición real;
+- migraciones V14 no reciben aprobación retrospectiva: trabajo legacy queda
+  aparcado o se liquida localmente cuando ya no existe efecto externo. La
+  adopción/reautorización operativa general permanece en V32.
 
-- `Control` es el único caso de uso autenticado para `pause`, `resume`,
-  `cancel`, `stop` y `retry`; `ProposeDirectorPlan` sigue siendo la única
-  entrada de `replan` bajo lease/fence del Director;
-- cada mutación queda ligada a proyecto, Goal, AppSpec generation/hash,
-  PlanGeneration, revisión de WorkItem, intento de Execution, `request_ref` y
-  fingerprint exactos; replay idéntico no crea IDs, revisiones ni efectos;
-- pausa es un gate reversible Goal/WorkItem. La unión efectiva de ambos scopes
-  impide nuevos launches, pero no detiene observaciones, mailbox ni procesos ya
-  preparados; resume reutiliza la acción pendiente;
-- stop cooperativo o forzado apunta a una Execution exacta mediante el outbox y
-  `AgentController` existentes. El receipt separa petición y confirmación, no
-  falsifica terminales y nunca usa `Shutdown` global;
-- la escalada forzada solo puede sustituir al stop cooperativo todavía activo
-  del mismo intento; retiros, cuarentena, carreras, restart, PID/PGID reutilizado
-  y adopción tras crash fallan cerrados o convergen sin duplicar el efecto;
-- cancel es irreversible por Goal/WorkItem; retry crea una Execution nueva sin
-  reabrir el intento terminal; replan es append-only, conserva `rework_of` y
-  resuelve sucesores anidados sin reescribir historia;
-- snapshot, evento, outbox, control y receipt se persisten por el mismo
-  `StateRepository` y CAS. No nacen store, DB, scheduler, loop, daemon ni
-  lifecycle paralelos;
-- `TestRealCodexControlsThroughProductionComposition` construye la composición
-  productiva, inicia un proceso controlable, solicita stop forzado selectivo y
-  exige receipt confirmado, Execution `stopped`, WorkItem `interrupted` y Goal
-  aún abierto. Las suites A/B/C/D comprueban además que parar B preserva A/C/D
-  antes y después de crash/restart;
-- `TestRealCodexCooperativeStopLeavesResidentSchedulerLive` prueba que un
-  proceso que ignora `SIGTERM` no bloquea el scheduler único: otro Goal progresa
-  y el stop forzado posterior queda alcanzable. Codex reintenta `SIGKILL`
-  idempotente tras crash entre intent durable y syscall, siempre contra la
-  identidad exacta del proceso;
-- V14 queda interno a aplicación/composición. No añade bindings HTTP, MCP o CLI
-  ni tools ad hoc: el registro único y esas superficies pertenecen a V20; i18n
-  total pertenece a V21.
-
-V15 no está abierto. Presupuestos, fairness, riesgo, approvals y retry de
-efectos externos siguen íntegramente diferidos a `AC-V15-BUDGETS-EFFECTS`.
-La próxima sesión empieza por analizar y fijar ese contrato; no debe comenzar
-programando ni abrir V16.
+V16 no está abierto en este checkpoint. El siguiente trabajo es analizar y
+fijar `AC-V16-WORKSPACE-GIT` antes de programar workspace, worktrees, commits o
+forge. V15 sigue siendo aplicación/puertos internos; HTTP/MCP/CLI públicos
+pertenecen a V20 e i18n completa a V21.
 
 ## Checkpoint histórico: V13 cerrado
 
@@ -463,12 +442,12 @@ Verificación rápida del último cierre acreditado sin atravesar superficies
 legacy:
 
 ```bash
-go test -mod=vendor -count=1 ./acceptance -run '^TestAcceptanceV(0[1-9]|1[0-3]).*Receipt$'
+go test -mod=vendor -count=1 ./acceptance -run '^TestAcceptanceV(0[1-9]|1[0-5]).*Receipt$'
 git diff --check
 scripts/check_rebuild_write_set.sh
 ```
 
-El rango vigente de receipts acreditados es `V(0[1-9]|1[0-4])`.
+El rango vigente de receipts acreditados es `V(0[1-9]|1[0-5])`.
 
 ## Progreso honesto
 
@@ -504,25 +483,33 @@ El rango vigente de receipts acreditados es `V(0[1-9]|1[0-4])`.
 - V14 controles: cerrado; receipt V3 `PASS`; acredita exactamente `GOV-07`,
   `STG-15`, `ORC-03` y `ORC-16`. Es application-only; no expone HTTP/MCP/CLI,
   cuyos bindings siguen en V20.
-- V15–V34: pendientes. V15 no está abierto. No contar código heredado,
-  groundwork o una prueba aislada como vertical posterior cerrada.
-- progreso canónico: 14 de 34, 41,18 %, con 14/14 receipts válidos;
-- capacidades canónicas: 48 de 257 en estado `accredited`, 18,68 %, al sumar
-  solo `GOV-07`, `STG-15`, `ORC-03` y `ORC-16`. Las 48 acreditadas son:
+- V15: cerrado por receipt V3; acredita exactamente `GOV-15`, `STG-09`,
+  `ORC-08`, `ORC-09`, `ORC-10`, `ORC-11`, `EVD-03` y `EVD-14`.
+- Residual V15 no P0: `BUG-REBUILD-20260718-229` conserva abierto el presupuesto
+  temporal del full-package SQLite bajo `-race`. El gate exacto V15 sí quedó
+  capturado verde (SQLite 39,829 s), el mailbox aislado pasó en 27,251 s y una
+  ejecución sin salida capturada no se usó como evidencia. Su cierre pertenece
+  al atestador/operación V17/V32, no a una excepción silenciosa del receipt.
+- V16–V34: pendientes. No contar código heredado, groundwork o una prueba
+  aislada como vertical posterior cerrada.
+- progreso canónico: 15 de 34, 44,12 %, con 15/15 receipts válidos;
+- capacidades canónicas: 56 de 257 en estado `accredited`, 21,79 %. Las 56
+  acreditadas son:
   `EVD-02`, `EVD-11`, `EVD-12`, `EVD-15`, `GOV-02`, `GOV-03`, `GOV-04`, `GOV-05`,
   `GOV-06`, `GOV-07`, `GOV-08`, `GOV-09`, `GOV-10`, `GOV-16`, `GOV-19`, `GOV-20`,
   `GOV-21`, `GOV-22`, `OPS-01`, `OPS-02`, `OPS-03`, `OPS-04`,
   `OPS-05`, `OPS-06`, `OPS-08`, `OPS-09`, `OPS-10`, `OPS-12`, `OPS-14`, `OPS-26`,
   `OPS-27`, `OPS-28`, `OPS-29`, `OPS-30`, `ORC-01`, `ORC-02`, `ORC-03`, `ORC-04`,
   `ORC-05`, `ORC-06`, `ORC-12`, `ORC-13`, `ORC-14`, `ORC-17`, `ORC-24` y
-  `ORC-16`, `STG-00` y `STG-15`.
+  `ORC-16`, `STG-00`, `STG-09`, `STG-15`, `GOV-15`, `ORC-08`, `ORC-09`,
+  `ORC-10`, `ORC-11`, `EVD-03` y `EVD-14`.
 
 ## Siguiente acción exacta
 
-La próxima sesión empieza por una tarea de **análisis V15**: dependencias,
-presupuesto de complejidad, autoridad de presupuestos/permisos/efectos y
-contrato rojo `AC-V15-BUDGETS-EFFECTS`. V15 todavía no está abierto: no
-programarlo antes de ese estudio ni abrir V16 u otro frente.
+La próxima sesión empieza por una tarea de **análisis V16**: frontera de
+workspace/Git, write-set, concurrencia multiusuario, puertos, adapters y
+contrato rojo `AC-V16-WORKSPACE-GIT`. No programar V16 antes de ese estudio ni
+abrir V17 u otro frente.
 
 Los subagentes directos siguen siendo bootstrap hasta V22. Hoy Orquesta puede
 coordinar un DAG declarado; una petición abierta aún necesita dirección externa.
@@ -531,7 +518,7 @@ coordinar un DAG declarado; una petición abierta aún necesita dirección exter
 
 Las palabras “pendiente”, “siguiente” o “en curso” dentro del historial
 describen checkpoints pasados. No son órdenes de reanudación. La acción vigente
-es analizar V15 sin programarlo todavía.
+es analizar V16 sin programarlo todavía.
 
 ## V03: trabajo ya realizado
 

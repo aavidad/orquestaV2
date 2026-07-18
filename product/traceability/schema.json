@@ -1052,7 +1052,7 @@
         "lesson_state": {"enum": ["pending_invariant_test", "candidate_not_accredited"]},
         "occurrence_count": {"type": "integer", "minimum": 1},
         "occurrences_sha256": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
-        "closure_evidence": {"enum": ["not_verified", "verified"]},
+        "closure_evidence": {"const": "not_verified"},
         "review_note": {"type": "string", "minLength": 40}
       }
     }

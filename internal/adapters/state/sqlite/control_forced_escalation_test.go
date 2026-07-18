@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -23,6 +24,7 @@ func TestSQLiteForcedStopSupersessionIsAtomicConcurrentAndRestartSafe(t *testing
 			State: state, Access: access, Launcher: agent, Observer: agent, Controller: agent,
 			Artifacts: restartArtifacts{}, Clock: clock, IDs: ids, MaxOutputBytes: 4096,
 			MaxMailboxEnvelopeBytes: 64 << 10, MaxExecutionAttempts: 3,
+			MaxChildrenPerParent: 6, EffectApprovalTTL: time.Hour, BudgetPolicy: sqliteTestBudgetPolicy(clock.Now()),
 			AgentCapabilities: sqliteMultiControlCapabilities(), ClaimLease: time.Minute,
 			DirectorLeaseDuration: time.Minute, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 		})
@@ -113,6 +115,20 @@ func TestSQLiteForcedStopSupersessionIsAtomicConcurrentAndRestartSafe(t *testing
 		next.Status != application.ControlRequested || next.SupersedesControlRef != old.Ref {
 		t.Fatalf("lineage old=%+v next=%+v", old, next)
 	}
+	var forcedIntent application.EffectIntent
+	for _, intent := range transferred.EffectIntents {
+		if intent.ActionRef == "action:stop:"+next.Ref+":"+execution.Ref.String() {
+			forcedIntent = intent
+		}
+	}
+	approved, err := orchestrator.DecideEffect(ctx, access, application.DecideEffectRequest{
+		RequestRef: "approval:sqlite-forced-owner", GoalRef: transferred.Goal.Ref(),
+		IntentRef: forcedIntent.Ref, ExpectedIntentDigest: forcedIntent.Digest,
+		Decision: application.EffectApproved, Reason: "owner forced stop approval",
+	})
+	if err != nil || !approved.Created {
+		t.Fatalf("forced stop approval=%+v intent=%+v err=%v", approved, forcedIntent, err)
+	}
 	var active, oldRetirements int
 	if err := repository.db.QueryRow(`SELECT COUNT(*) FROM outbox
 WHERE kind = 'stop_agent' AND completed_at IS NULL`).Scan(&active); err != nil {
@@ -128,7 +144,7 @@ WHERE action_ref = ? AND error_code = 'application.action_retired' AND effect_re
 		t.Fatalf("atomic outbox active=%d old_retirements=%d", active, oldRetirements)
 	}
 	if _, _, err := validateRecoveryDatabase(ctx, repository.db); err != nil {
-		t.Fatalf("recovery before restart: %v", err)
+		t.Fatalf("recovery before restart: %v cause=%v", err, errors.Unwrap(err))
 	}
 
 	if err := repository.Close(); err != nil {
@@ -158,7 +174,7 @@ WHERE action_ref = ? AND error_code = 'application.action_retired' AND effect_re
 			old.Status, next.Status, stopped.State, len(requests), physical)
 	}
 	if _, _, err := validateRecoveryDatabase(ctx, restarted.db); err != nil {
-		t.Fatalf("recovery after settlement: %v", err)
+		t.Fatalf("recovery after settlement: %v cause=%v", err, errors.Unwrap(err))
 	}
 }
 
@@ -173,6 +189,7 @@ func TestSQLiteForcedStopRejectsQuarantinedCooperativeOwnerWithoutPartialWrite(t
 		State: repository, Access: repository, Launcher: agent, Observer: agent, Controller: agent,
 		Artifacts: restartArtifacts{}, Clock: clock, IDs: ids, MaxOutputBytes: 4096,
 		MaxMailboxEnvelopeBytes: 64 << 10, MaxExecutionAttempts: 3,
+		MaxChildrenPerParent: 6, EffectApprovalTTL: time.Hour, BudgetPolicy: sqliteTestBudgetPolicy(clock.Now()),
 		AgentCapabilities: sqliteMultiControlCapabilities(), ClaimLease: time.Minute,
 		DirectorLeaseDuration: time.Minute, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})
@@ -206,7 +223,7 @@ func TestSQLiteForcedStopRejectsQuarantinedCooperativeOwnerWithoutPartialWrite(t
 	}
 	claim, found, err := repository.ClaimNextAction(ctx, application.ClaimRequest{
 		WorkerRef: "worker:sqlite-quarantine-cooperative", Token: "claim:sqlite-quarantine-cooperative",
-		LeaseDuration: time.Minute, Capabilities: sqliteMultiControlCapabilities(),
+		LeaseDuration: time.Minute, Capabilities: sqliteMultiControlCapabilities(), BudgetPolicy: sqliteRuntimeTestPolicy(),
 	})
 	if err != nil || !found || claim.Action.Kind != application.ActionStopAgent ||
 		claim.Action.ControlRef != old.Control.Ref {
@@ -334,7 +351,7 @@ func (agent *sqliteEscalationAgent) Launch(
 		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash,
 		ProviderRef: "provider:sqlite-multi", ModelRef: "model:sqlite-multi", AgentRef: "agent:sqlite-multi",
 		ExternalRef: "external:" + request.ExecutionRef.String(), IdempotencyKey: request.IdempotencyKey,
-		AcceptedAt: agent.clock.Now(),
+		ReceiptRef: "receipt:sqlite-launch:" + request.ExecutionRef.String(), AcceptedAt: agent.clock.Now(),
 	}, nil
 }
 

@@ -205,7 +205,14 @@ func (repository *memoryRepository) ApplyDirectorPlan(
 		updated.Executions = replaceExecution(updated.Executions, execution)
 	}
 	updated.Executions = append(updated.Executions, state.NewExecutions...)
+	updated.WorkItemAuthorities = append(updated.WorkItemAuthorities, state.NewWorkItemAuthorities...)
 	for _, action := range state.NewActions {
+		if action.EffectIntent.Ref != "" {
+			updated.EffectIntents = append(updated.EffectIntents, action.EffectIntent)
+		}
+		if action.EffectApproval != nil {
+			updated.EffectApprovals = append(updated.EffectApprovals, *action.EffectApproval)
+		}
 		repository.actions[action.Ref] = memoryAction{record: action}
 	}
 	for _, actionRef := range state.RetireActionRefs {

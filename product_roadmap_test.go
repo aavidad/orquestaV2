@@ -1397,16 +1397,21 @@ func TestProductRoadmapV15ScopeAndExecutableContract(t *testing.T) {
 		t.Fatalf("V15 accepted ownership = %v, want exact %v", owned, wantOwned)
 	}
 	wantVertical := verticals["budgets_effects"]
+	wantEvidence := []string{
+		"acceptance/v15_budgets_effects_test.go",
+		"acceptance/fixtures/v15_budgets_effects.json",
+		"product/evidence/v15_budgets_effects.json",
+	}
 	for _, id := range wantOwned {
 		entry := entries[id]
-		if entry.Status != "declared" || len(entry.EvidenceRefs) != 0 ||
+		if entry.Status != "accredited" || !reflect.DeepEqual(entry.EvidenceRefs, wantEvidence) ||
 			!reflect.DeepEqual(entry.Dependencies, wantVertical.DependsOn) ||
 			!reflect.DeepEqual(entry.AcceptanceContracts, wantVertical.AcceptanceContracts) {
-			t.Errorf("V15 capability %s must remain declared without evidence during contract preparation: %#v", id, entry)
+			t.Errorf("V15 capability %s lacks exact accreditation: %#v", id, entry)
 		}
 	}
 
-	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV15ScopeAndExecutableContract|TestV15EvidenceBelongsOnlyToBudgetsEffectsCapabilities|TestV15AcceptanceCommandRunsBudgetEffectConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV15BudgetsEffects|TestV15CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/governance ./internal/identity ./internal/config ./internal/credentials ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta && go test -mod=vendor -race -count=1 ./internal/application ./internal/adapters/state/sqlite ./internal/adapters/agent/fake ./internal/bootstrap -run \"^(TestBudgetContractUsesOneCanonicalEnvelopeAcrossLayers|TestConcurrentBudgetReservationsNeverExceedEnvelope|TestTemporaryQuotaParksActionWithoutTerminalFailure|TestHierarchicalFairnessBoundsProjectAndGoalStarvation|TestEffectRequiresExactLiveApprovalBeforeAdapterInvocation|TestEffectCrashAfterApplyBeforeReceiptReconcilesOnce|TestSQLiteBudgetsEffectsRestartRaceAndReplay|TestV15RecoveryRejectsBudgetEffectCausalTampering|TestV15BackupRestorePreservesBudgetsAndEffects|TestRealCodexBudgetsAndEffectsThroughProductionComposition)$\"'"
+	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV15ScopeAndExecutableContract|TestV15EvidenceBelongsOnlyToBudgetsEffectsCapabilities|TestV15AcceptanceCommandRunsBudgetEffectConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestTraceabilityRebuildHistoricalBugIDs|TestTraceabilityRebuildHistoricalBugReviewBindings|TestTraceabilityRebuildSchemaValidatesCanonicalLedgers|TestHistoricalBugCapabilityCoverageNeverInfersLegacyClosure|TestAcceptanceV15BudgetsEffects|TestV15CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/governance ./internal/identity ./internal/config ./internal/credentials ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta && go test -mod=vendor -race -count=1 ./internal/application ./internal/adapters/state/sqlite ./internal/adapters/agent/fake ./internal/bootstrap -run \"^(TestBudgetContractUsesOneCanonicalEnvelopeAcrossLayers|TestConcurrentBudgetReservationsNeverExceedEnvelope|TestTemporaryQuotaParksActionWithoutTerminalFailure|TestHierarchicalFairnessBoundsProjectAndGoalStarvation|TestEffectRequiresExactLiveApprovalBeforeAdapterInvocation|TestEffectCrashAfterApplyBeforeReceiptReconcilesOnce|TestSQLiteBudgetsEffectsRestartRaceAndReplay|TestV15RecoveryRejectsBudgetEffectCausalTampering|TestV15BackupRestorePreservesBudgetsAndEffects|TestRealCodexBudgetsAndEffectsThroughProductionComposition)$\"'"
 	contract := contracts["AC-V15-BUDGETS-EFFECTS"]
 	if contract.Status != "executable" || contract.TestRef != "acceptance/v15_budgets_effects_test.go" ||
 		contract.Fixture != "acceptance/fixtures/v15_budgets_effects.json" ||
@@ -1433,6 +1438,9 @@ func TestV15AcceptanceCommandRunsBudgetEffectConsumers(t *testing.T) {
 	}
 	for _, required := range []string{
 		"TestAcceptanceV15BudgetsEffects", "TestV15CandidateSubjectsCoverCommittedDelta",
+		"TestTraceabilityRebuildHistoricalBugIDs", "TestTraceabilityRebuildHistoricalBugReviewBindings",
+		"TestTraceabilityRebuildSchemaValidatesCanonicalLedgers",
+		"TestHistoricalBugCapabilityCoverageNeverInfersLegacyClosure",
 		"./internal/governance", "./internal/application", "./internal/adapters/state/sqlite",
 		"./internal/adapters/agent/fake", "./internal/adapters/agent/codex", "./internal/bootstrap",
 		"TestConcurrentBudgetReservationsNeverExceedEnvelope",
@@ -1460,8 +1468,13 @@ func TestV15EvidenceBelongsOnlyToBudgetsEffectsCapabilities(t *testing.T) {
 	}
 	for _, entry := range roadmap.CapabilityEntries {
 		if owned[entry.ID] {
-			if entry.Status != "declared" || len(entry.EvidenceRefs) != 0 {
-				t.Errorf("owned V15 capability %s has premature accreditation: status=%q evidence=%v",
+			want := []string{
+				"acceptance/v15_budgets_effects_test.go",
+				"acceptance/fixtures/v15_budgets_effects.json",
+				"product/evidence/v15_budgets_effects.json",
+			}
+			if entry.Status != "accredited" || !reflect.DeepEqual(entry.EvidenceRefs, want) {
+				t.Errorf("owned V15 capability %s lacks exact accreditation: status=%q evidence=%v",
 					entry.ID, entry.Status, entry.EvidenceRefs)
 			}
 			continue
@@ -1471,6 +1484,26 @@ func TestV15EvidenceBelongsOnlyToBudgetsEffectsCapabilities(t *testing.T) {
 				t.Errorf("unowned capability %s claims V15 evidence %q", entry.ID, evidenceRef)
 			}
 		}
+	}
+	wantHistoricalEvidence := []string{
+		"acceptance/v15_budgets_effects_test.go",
+		"acceptance/fixtures/v15_budgets_effects.json",
+		"product/evidence/v15_budgets_effects.json",
+	}
+	foundHistorical := false
+	for _, bug := range traceReadHistoricalBugIDs(t, "product/traceability/historical_bug_ids.jsonl") {
+		if bug.BugID != "BUG-ORQ-20260706-BUDGET-CONTRACT-DESALINEADO" {
+			continue
+		}
+		foundHistorical = true
+		if !reflect.DeepEqual(bug.VerifiedCapabilityIDs, []string{"ORC-09"}) ||
+			!reflect.DeepEqual(bug.RebuildEvidenceRefs, wantHistoricalEvidence) ||
+			bug.ClosureEvidence != "not_verified" {
+			t.Errorf("V15 historical budget evidence/closure invalid: %#v", bug)
+		}
+	}
+	if !foundHistorical {
+		t.Fatal("V15 historical budget bug binding missing")
 	}
 }
 

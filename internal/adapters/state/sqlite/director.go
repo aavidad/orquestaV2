@@ -382,63 +382,82 @@ func (repository *Repository) ApplyDirectorPlan(
 		}
 		return storedDecision, false, nil
 	}
-
-	now, err := repository.transactionTime()
+	decision, err := repository.applyDirectorPlanChange(ctx, transaction, state)
 	if err != nil {
 		return application.DirectorDecisionRecord{}, false, err
 	}
-	if err := requireLiveDirectorLease(ctx, transaction, state, now); err != nil {
+	if err := commit(transaction); err != nil {
 		return application.DirectorDecisionRecord{}, false, err
+	}
+	return decision, true, nil
+}
+
+func (repository *Repository) applyDirectorPlanChange(
+	ctx context.Context, transaction *sql.Tx, state application.ApplyDirectorPlanState,
+) (application.DirectorDecisionRecord, error) {
+	now, err := repository.transactionTime()
+	if err != nil {
+		return application.DirectorDecisionRecord{}, err
+	}
+	if err := requireLiveDirectorLease(ctx, transaction, state, now); err != nil {
+		return application.DirectorDecisionRecord{}, err
 	}
 	current, err := readGoalRecord(ctx, transaction, state.GoalRef.String())
 	if err != nil {
-		return application.DirectorDecisionRecord{}, false, err
+		return application.DirectorDecisionRecord{}, err
 	}
 	if err := validateDirectorPlanTransition(state, current); err != nil {
-		return application.DirectorDecisionRecord{}, false, conflict(err)
+		return application.DirectorDecisionRecord{}, conflict(err)
 	}
 	if err := updateGoalCAS(ctx, transaction, state.Goal, state.ExpectedGoalRevision); err != nil {
-		return application.DirectorDecisionRecord{}, false, err
+		return application.DirectorDecisionRecord{}, err
 	}
 	if err := updateDirectorExistingWorkItems(ctx, transaction, current.Goal, state.Goal); err != nil {
-		return application.DirectorDecisionRecord{}, false, err
+		return application.DirectorDecisionRecord{}, err
 	}
-	if err := insertDirectorPlanDelta(ctx, transaction, current.Goal, state.Goal); err != nil {
-		return application.DirectorDecisionRecord{}, false, err
+	if err := insertDirectorPlanDelta(
+		ctx, transaction, current.Goal, state.Goal, len(state.NewWorkItemAuthorities) > 0,
+	); err != nil {
+		return application.DirectorDecisionRecord{}, err
+	}
+	if err := insertWorkItemAuthorities(
+		ctx, transaction, state.GoalRef.String(), state.NewWorkItemAuthorities,
+	); err != nil {
+		return application.DirectorDecisionRecord{}, err
 	}
 	for _, execution := range state.UpdatedExecutions {
 		stored, found := sqliteExecutionByRef(current.Executions, execution.Ref)
 		if !found {
-			return application.DirectorDecisionRecord{}, false,
+			return application.DirectorDecisionRecord{},
 				conflict(errors.New("sqlite.director_execution_missing"))
 		}
 		if err := updateExecutionCAS(ctx, transaction, execution, stored.State); err != nil {
-			return application.DirectorDecisionRecord{}, false, err
+			return application.DirectorDecisionRecord{}, err
 		}
 	}
 	for _, actionRef := range state.RetireActionRefs {
 		if err := consumeRetiredAction(ctx, transaction, actionRef, state.Decision.Ref, state.OperationAt); err != nil {
-			return application.DirectorDecisionRecord{}, false, err
+			return application.DirectorDecisionRecord{}, err
 		}
 	}
 	if err := insertScheduled(ctx, transaction, state.NewExecutions, state.NewActions); err != nil {
-		return application.DirectorDecisionRecord{}, false, err
+		return application.DirectorDecisionRecord{}, err
 	}
 	if err := requireReadyExecutions(ctx, transaction, state.Goal); err != nil {
-		return application.DirectorDecisionRecord{}, false, err
+		return application.DirectorDecisionRecord{}, err
 	}
 	if err := insertEvents(ctx, transaction, state.Events); err != nil {
-		return application.DirectorDecisionRecord{}, false, err
+		return application.DirectorDecisionRecord{}, err
 	}
 	if err := insertDirectorDecision(ctx, transaction, state.Decision, state.ProjectRef); err != nil {
-		return application.DirectorDecisionRecord{}, false, err
+		return application.DirectorDecisionRecord{}, err
 	}
 	commitNow, err := repository.transactionTime()
 	if err != nil {
-		return application.DirectorDecisionRecord{}, false, err
+		return application.DirectorDecisionRecord{}, err
 	}
 	if err := requireLiveDirectorLease(ctx, transaction, state, commitNow); err != nil {
-		return application.DirectorDecisionRecord{}, false, err
+		return application.DirectorDecisionRecord{}, err
 	}
 	decision, found, err := readDirectorDecisionByRequest(
 		ctx, transaction, state.PrincipalRef, state.ProjectRef, state.GoalRef, state.RequestRef,
@@ -447,12 +466,9 @@ func (repository *Repository) ApplyDirectorPlan(
 		if err == nil {
 			err = conflict(errors.New("sqlite.director_decision_missing_after_write"))
 		}
-		return application.DirectorDecisionRecord{}, false, err
+		return application.DirectorDecisionRecord{}, err
 	}
-	if err := commit(transaction); err != nil {
-		return application.DirectorDecisionRecord{}, false, err
-	}
-	return decision, true, nil
+	return decision, nil
 }
 
 func validateClaimDirectorState(state application.ClaimDirectorState) error {
@@ -840,13 +856,16 @@ func insertDirectorPlanDelta(
 	transaction *sql.Tx,
 	before goal.Goal,
 	after goal.Goal,
+	governed bool,
 ) error {
 	beforeSnapshot := before.Snapshot()
 	afterSnapshot := after.Snapshot()
 	if err := insertGoalPhases(ctx, transaction, afterSnapshot, len(beforeSnapshot.Phases)); err != nil {
 		return err
 	}
-	return insertWorkItems(ctx, transaction, afterSnapshot, len(beforeSnapshot.WorkItems))
+	return insertWorkItems(
+		ctx, transaction, afterSnapshot, len(beforeSnapshot.WorkItems), governed,
+	)
 }
 
 func insertDirectorDecision(

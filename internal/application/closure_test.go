@@ -152,7 +152,8 @@ func TestInvalidArtifactAdapterCannotAccreditSuccessfulGoal(t *testing.T) {
 		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1024, MaxMailboxEnvelopeBytes: 64 << 10,
 		MaxExecutionAttempts: 3, AgentCapabilities: testAgentCapabilities(), ClaimLease: time.Minute,
 		DirectorLeaseDuration: time.Minute,
-		ObservationDelay:      time.Second, ExecutionTimeout: time.Hour,
+		MaxChildrenPerParent:  6, EffectApprovalTTL: time.Hour, BudgetPolicy: testBudgetPolicy(clock.Now()),
+		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})
 	if err != nil {
 		t.Fatalf("new: %v", err)
@@ -184,7 +185,7 @@ func TestLaunchInfrastructureFailureCreatesReplaceableAttempt(t *testing.T) {
 	clock := &mutableClock{now: time.Date(2026, 7, 14, 22, 0, 0, 0, time.UTC)}
 	repository := newMemoryRepository()
 	repository.now = clock.Now
-	agent := &scriptedAgent{now: clock.Now, launchErr: errors.New("missing executable"), observations: []ports.AgentObservation{{
+	agent := &scriptedAgent{now: clock.Now, launchErr: definitelyUnappliedPermanentError{"missing executable"}, observations: []ports.AgentObservation{{
 		Status: ports.AgentCompleted, MediaType: "text/plain", Content: []byte("recovered"),
 	}}}
 	orchestrator, _ := newTestOrchestrator(t, repository, clock, agent)
@@ -276,7 +277,8 @@ func TestTemporaryLaunchCapacityWaitDoesNotConsumeExecutionAttemptBudget(t *test
 		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1024, MaxMailboxEnvelopeBytes: 64 << 10,
 		MaxExecutionAttempts: 3, AgentCapabilities: testAgentCapabilities(), ClaimLease: time.Minute,
 		DirectorLeaseDuration: time.Minute,
-		ObservationDelay:      time.Second, ExecutionTimeout: time.Hour,
+		MaxChildrenPerParent:  6, EffectApprovalTTL: time.Hour, BudgetPolicy: testBudgetPolicy(clock.Now()),
+		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})
 	if err != nil {
 		t.Fatalf("new: %v", err)
@@ -335,7 +337,8 @@ func TestPendingObservationHasDurableAttemptBoundary(t *testing.T) {
 		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1024, MaxMailboxEnvelopeBytes: 64 << 10,
 		MaxExecutionAttempts: 3, AgentCapabilities: testAgentCapabilities(), ClaimLease: time.Minute,
 		DirectorLeaseDuration: time.Minute,
-		ObservationDelay:      time.Second, ExecutionTimeout: time.Hour,
+		MaxChildrenPerParent:  6, EffectApprovalTTL: time.Hour, BudgetPolicy: testBudgetPolicy(clock.Now()),
+		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})
 	if err != nil {
 		t.Fatalf("new: %v", err)

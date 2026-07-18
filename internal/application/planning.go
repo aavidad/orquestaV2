@@ -12,16 +12,13 @@ import (
 	"orquesta/internal/governance"
 )
 
-// PlanSpec is an application input contract. Keys are local to the request;
-// durable opaque WorkItem refs are generated inside the application.
+// PlanSpec uses request-local keys; application generates durable refs.
 type PlanSpec struct {
 	Phases    []PhaseSpec
 	WorkItems []WorkItemSpec
 }
 
-// PhaseSpec is transport-neutral immutable metadata. References point to
-// definitions owned outside the Goal aggregate; application only validates
-// and carries them into the authoritative plan.
+// PhaseSpec carries transport-neutral refs to externally owned definitions.
 type PhaseSpec struct {
 	Ref           string
 	Key           string
@@ -94,6 +91,8 @@ func (orchestrator *Orchestrator) compilePlan(
 	}
 	scope := workItemCompileScope{
 		goalRef: goalRef, actorRef: actorRef, projectRef: projectRef, createdAt: at,
+		defaultDemand: orchestrator.budgetPolicy.DefaultWorkItemDemand,
+		goalLimit:     orchestrator.budgetPolicy.GoalEnvelopeTemplate.Limit,
 	}
 	items := make([]goal.WorkItem, 0, len(spec.WorkItems))
 	for _, itemSpec := range spec.WorkItems {
@@ -103,16 +102,18 @@ func (orchestrator *Orchestrator) compilePlan(
 		}
 		items = append(items, item)
 	}
+	if err := validatePlanFanout(items, orchestrator.maxChildrenPerParent); err != nil {
+		return goal.Plan{}, err
+	}
 	return goal.NewPlan(goal.PlanInput{Generation: 1, Phases: phases, WorkItems: items})
 }
 
-// compilePlanExtension turns a Director PlanSpec into an append-only proposal.
-// Existing phases and WorkItems remain the exact prefix required by Goal.ApplyPlan.
-// Dependencies may name a new request-local key or an existing opaque WorkItem ref.
+// compilePlanExtension preserves the existing plan prefix and resolves local/existing refs.
 func (orchestrator *Orchestrator) compilePlanExtension(
 	ctx context.Context,
 	aggregate goal.Goal,
 	spec PlanSpec,
+	policy effectPolicySnapshot,
 	at time.Time,
 ) (goal.Plan, error) {
 	if len(spec.WorkItems) == 0 {
@@ -150,6 +151,8 @@ func (orchestrator *Orchestrator) compilePlanExtension(
 	}
 	scope := workItemCompileScope{
 		goalRef: aggregate.Ref(), actorRef: aggregate.Actor(), projectRef: aggregate.Project(), createdAt: at,
+		defaultDemand: policy.DefaultDemand,
+		goalLimit:     policy.GoalLimit,
 	}
 	items := aggregate.WorkItems()
 	for _, itemSpec := range spec.WorkItems {
@@ -162,12 +165,30 @@ func (orchestrator *Orchestrator) compilePlanExtension(
 		}
 		items = append(items, item)
 	}
+	if err := validatePlanFanout(items, orchestrator.maxChildrenPerParent); err != nil {
+		return goal.Plan{}, err
+	}
 
 	generation := aggregate.PlanGeneration() + 1
 	if generation == 0 {
 		return goal.Plan{}, errors.New("application.plan_generation_overflow")
 	}
 	return goal.NewPlan(goal.PlanInput{Generation: generation, Phases: phases, WorkItems: items})
+}
+
+func validatePlanFanout(items []goal.WorkItem, maximum int) error {
+	children := make(map[goal.WorkItemRef]int)
+	for _, item := range items {
+		parent, found := item.Parent()
+		if !found {
+			continue
+		}
+		children[parent]++
+		if children[parent] > maximum {
+			return errors.New("application.plan_fanout_exceeded")
+		}
+	}
+	return nil
 }
 
 func compilePhaseSpec(spec PhaseSpec) (goal.PhaseInstance, error) {
@@ -224,10 +245,12 @@ func allocateWorkItemRefs(
 }
 
 type workItemCompileScope struct {
-	goalRef    goal.GoalRef
-	actorRef   goal.ActorRef
-	projectRef goal.ProjectRef
-	createdAt  time.Time
+	goalRef       goal.GoalRef
+	actorRef      goal.ActorRef
+	projectRef    goal.ProjectRef
+	createdAt     time.Time
+	defaultDemand governance.ResourceVector
+	goalLimit     governance.ResourceVector
 }
 
 type workItemRefResolver struct {
@@ -307,6 +330,11 @@ func compileWorkItemSpec(
 	if err != nil {
 		return goal.WorkItem{}, err
 	}
+	demand := effectiveDemand(spec.BudgetDemand, scope.defaultDemand)
+	fits, fitErr := governance.Fits(scope.goalLimit, demand.Resources)
+	if fitErr != nil || !fits || demand.Resources.ProcessSlots == 0 {
+		return goal.WorkItem{}, errors.New("application.work_item_budget_demand_invalid")
+	}
 	return goal.NewWorkItem(goal.NewWorkItemInput{
 		Ref: ref, Goal: scope.goalRef, Actor: scope.actorRef,
 		Project: scope.projectRef, Objective: spec.Objective, CreatedAt: scope.createdAt,
@@ -314,7 +342,7 @@ func compileWorkItemSpec(
 		Dependencies: dependencies,
 		WriteSet:     writeSet, SkillRefs: skillRefs, ToolRefs: toolRefs,
 		CapabilityRefs: capabilityRefs, OutputContract: contract,
-		BudgetDemand: spec.BudgetDemand, SecurityCriticality: spec.SecurityCriticality,
+		BudgetDemand: demand, SecurityCriticality: spec.SecurityCriticality,
 		ReasoningEffort: spec.ReasoningEffort,
 	})
 }
@@ -343,6 +371,8 @@ func (orchestrator *Orchestrator) scheduleReady(
 	ctx context.Context,
 	aggregate goal.Goal,
 	existing []ExecutionRecord,
+	authorities []WorkItemAuthority,
+	policy effectPolicySnapshot,
 	at time.Time,
 ) ([]ExecutionRecord, []ActionRecord, []EventRecord, error) {
 	scheduled := make(map[goal.WorkItemRef]struct{}, len(existing))
@@ -352,9 +382,17 @@ func (orchestrator *Orchestrator) scheduleReady(
 	var executions []ExecutionRecord
 	var actions []ActionRecord
 	var events []EventRecord
+	legacyGovernance := len(authorities) == 0
 	for _, item := range aggregate.ReadyWorkItems() {
 		if _, exists := scheduled[item.Ref()]; exists {
 			continue
+		}
+		authority, found := workItemAuthorityFor(authorities, item.Ref())
+		if !found && legacyGovernance {
+			continue
+		}
+		if !found || validateWorkItemAuthority(aggregate, authority) != nil {
+			return nil, nil, nil, errors.New("application.work_item_authority_missing")
 		}
 		executionRef, err := newExecutionRef(ctx, orchestrator.ids)
 		if err != nil {
@@ -370,13 +408,12 @@ func (orchestrator *Orchestrator) scheduleReady(
 			MaxOutputBytes: orchestrator.maxOutputBytes,
 			CreatedAt:      at,
 		}
+		action, err := orchestrator.launchAction(policy, aggregate, item, execution, authority, at, at)
+		if err != nil {
+			return nil, nil, nil, err
+		}
 		executions = append(executions, execution)
-		actions = append(actions, ActionRecord{
-			Ref: "action:launch:" + executionRef.String(), Kind: ActionLaunchAgent,
-			GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: executionRef,
-			PlanGeneration: aggregate.PlanGeneration(), WorkItemGeneration: item.Revision(),
-			AvailableAt: at,
-		})
+		actions = append(actions, action)
 		events = append(events, EventRecord{
 			Ref: "event:execution-queued:" + executionRef.String(), Kind: "execution.queued",
 			GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: executionRef,
@@ -385,6 +422,19 @@ func (orchestrator *Orchestrator) scheduleReady(
 		scheduled[item.Ref()] = struct{}{}
 	}
 	return executions, actions, events, nil
+}
+
+func (orchestrator *Orchestrator) scheduleHistoricalReady(
+	ctx context.Context, record GoalRecord, aggregate goal.Goal, existing []ExecutionRecord, at time.Time,
+) ([]ExecutionRecord, []ActionRecord, []EventRecord, error) {
+	if legacyGovernanceRecord(record) {
+		return nil, nil, nil, nil
+	}
+	policy, err := historicalEffectPolicy(record)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return orchestrator.scheduleReady(ctx, aggregate, existing, record.WorkItemAuthorities, policy, at)
 }
 
 func writePlanFingerprint(digest hash.Hash, spec *PlanSpec) {

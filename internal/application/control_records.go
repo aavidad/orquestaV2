@@ -35,20 +35,6 @@ func confirmLocalControl(record *ControlRecord, at time.Time) {
 	record.ReceiptRef = "receipt:" + record.Ref
 }
 
-func stopAction(
-	controlRef string,
-	aggregate goal.Goal,
-	item goal.WorkItem,
-	execution ExecutionRecord,
-	at time.Time,
-) ActionRecord {
-	return ActionRecord{
-		Ref: "action:stop:" + controlRef + ":" + execution.Ref.String(), Kind: ActionStopAgent,
-		GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref, ControlRef: controlRef,
-		PlanGeneration: execution.PlanGeneration, WorkItemGeneration: item.Revision(), AvailableAt: at,
-	}
-}
-
 func cancelExecutions(records []ExecutionRecord, target ControlTarget, itemRef goal.WorkItemRef) []ExecutionRecord {
 	result := make([]ExecutionRecord, 0)
 	for _, execution := range records {
@@ -63,11 +49,11 @@ func cancelExecutions(records []ExecutionRecord, target ControlTarget, itemRef g
 }
 
 func cancelStopMode(capabilities ports.AgentControlCapabilities) (ports.AgentStopMode, bool) {
-	if capabilities.ForcedStop {
-		return ports.AgentStopForced, true
-	}
 	if capabilities.CooperativeStop {
 		return ports.AgentStopCooperative, true
+	}
+	if capabilities.ForcedStop {
+		return ports.AgentStopForced, true
 	}
 	return "", false
 }

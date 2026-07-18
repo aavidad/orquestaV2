@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
 	"orquesta/internal/identity"
 	"orquesta/internal/ports"
 )
@@ -1117,6 +1118,16 @@ func newMailboxTestSystem(t *testing.T, childCount int) *mailboxTestSystem {
 		CreatedAt: base.Add(-25 * time.Minute), StartedAt: base.Add(-25 * time.Minute),
 		ProviderAcceptedAt: base.Add(-25 * time.Minute), DeadlineAt: base.Add(time.Hour),
 	}}
+	policy := orchestrator.budgetPolicy
+	reservation := governance.BudgetReservation{
+		Ref: "budget-reservation:mailbox-parent", DemandRef: parent.BudgetDemand().Ref,
+		ActionRef: "action:launch:" + parentExecution.String(), EffectIntentRef: "effect-intent:mailbox-parent",
+		ProjectRef: project.String(), GoalRef: goalRef.String(), WorkItemRef: parentRef.String(),
+		ExecutionRef: parentExecution.String(), PlanGeneration: 1, AppSpecGeneration: uint64(spec.Generation()),
+		WorkItemGeneration: uint64(parent.Revision()), Fence: 1, SpecHash: spec.Hash(), PolicyHash: policy.PolicyHash,
+		Resources: policy.DefaultWorkItemDemand, ReservedAt: base.Add(-25 * time.Minute),
+	}
+	executions[0].BudgetReservationRef = reservation.Ref
 	for index, childRef := range children {
 		executions = append(executions, ExecutionRecord{
 			Ref: childExecutions[index], GoalRef: goalRef, WorkItemRef: childRef,
@@ -1130,9 +1141,26 @@ func newMailboxTestSystem(t *testing.T, childCount int) *mailboxTestSystem {
 			FinishedAt: base.Add(-20*time.Minute + time.Duration(index)*time.Second),
 		})
 	}
+	authority := effectTestAuthorization(
+		t, source, project, identity.PermissionGoalsCreate, project.String(), base.Add(-28*time.Minute),
+	)
+	authorities := workItemAuthorities(
+		items, source.Ref, identity.PermissionGoalsCreate,
+		EffectApprovalSourceGoalConfirmation, authority, base.Add(-28*time.Minute),
+	)
+	launch, err := orchestrator.launchAction(
+		policy.effectPolicy(), aggregate, parent, executions[0], authorities[0],
+		base.Add(-25*time.Minute), base.Add(-25*time.Minute),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
 	repository.records[goalRef] = GoalRecord{
 		RequestRef: "request:mailbox-fixture", RequestFingerprint: "fixture",
 		RequestedBy: source.Ref, Goal: aggregate, Executions: executions,
+		BudgetEnvelopes:     policy.envelopes(project, goalRef, base.Add(-28*time.Minute)),
+		BudgetReservations:  []governance.BudgetReservation{reservation},
+		WorkItemAuthorities: authorities, EffectIntents: []EffectIntent{launch.EffectIntent},
 	}
 	sourceAccesses := make([]Access, len(childExecutions))
 	for index, executionRef := range childExecutions {

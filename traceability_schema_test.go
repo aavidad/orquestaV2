@@ -113,6 +113,17 @@ func TestTraceabilityRebuildSchemaValidatesCanonicalLedgers(t *testing.T) {
 			}
 		})
 	}
+
+	historicalContent, err := os.ReadFile("product/traceability/historical_bug_ids.jsonl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	historicalLine, _, _ := bytes.Cut(historicalContent, []byte{'\n'})
+	historical := traceDecodeSchemaInstance(t, "historical closure fixture", historicalLine).(map[string]any)
+	historical["closure_evidence"] = "verified"
+	if err := resolved.Validate(historical); err == nil {
+		t.Fatal("schema allowed capability coverage to claim historical incident closure")
+	}
 }
 
 func traceDecodeSchemaInstance(t *testing.T, source string, content []byte) any {

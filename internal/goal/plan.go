@@ -186,81 +186,89 @@ func validateRestoredPlan(plan Plan) error {
 }
 
 func validatePlanShape(plan Plan, requirePendingItems bool) error {
-	if plan.generation == 0 {
-		return domainError(ErrorInvalidPlan, "plan_generation")
+	byRef, err := validatePlanMembers(plan, requirePendingItems)
+	if err != nil {
+		return err
 	}
-	if len(plan.phases) == 0 {
-		return domainError(ErrorInvalidPlan, "phases")
-	}
-	if len(plan.items) == 0 {
-		return domainError(ErrorWorkItemsRequired, "work_items")
-	}
+	return validatePlanDependencies(plan.items, byRef)
+}
 
+func validatePlanMembers(plan Plan, requirePendingItems bool) (map[WorkItemRef]WorkItem, error) {
+	switch {
+	case plan.generation == 0:
+		return nil, domainError(ErrorInvalidPlan, "plan_generation")
+	case len(plan.phases) == 0:
+		return nil, domainError(ErrorInvalidPlan, "phases")
+	case len(plan.items) == 0:
+		return nil, domainError(ErrorWorkItemsRequired, "work_items")
+	}
 	phases := make(map[PhaseKey]struct{}, len(plan.phases))
 	phaseRefs := make(map[PhaseRef]struct{}, len(plan.phases))
 	for _, phase := range plan.phases {
 		if !validPhaseRef(phase.ref) || !validPhaseTemplateRef(phase.templateRef) || !validPhaseKey(phase.key) {
-			return domainError(ErrorInvalidPlan, "phase_key")
+			return nil, domainError(ErrorInvalidPlan, "phase_key")
 		}
 		if err := validateUniqueRefs(phase.inputRefs, validInputRef, "input_ref"); err != nil {
-			return err
+			return nil, err
 		}
 		if err := validateUniqueRefs(phase.criterionRefs, validCriterionRef, "criterion_ref"); err != nil {
-			return err
+			return nil, err
 		}
 		if _, duplicate := phaseRefs[phase.ref]; duplicate {
-			return domainError(ErrorInvalidPlan, "duplicate_phase_ref")
+			return nil, domainError(ErrorInvalidPlan, "duplicate_phase_ref")
 		}
 		if _, duplicate := phases[phase.key]; duplicate {
-			return domainError(ErrorInvalidPlan, "duplicate_phase")
+			return nil, domainError(ErrorInvalidPlan, "duplicate_phase")
 		}
 		phaseRefs[phase.ref] = struct{}{}
 		phases[phase.key] = struct{}{}
 	}
-
 	byRef := make(map[WorkItemRef]WorkItem, len(plan.items))
 	demandRefs := make(map[string]struct{}, len(plan.items))
 	for _, item := range plan.items {
 		if !validWorkItemRef(item.ref) {
-			return domainError(ErrorInvalidRef, "work_item_ref")
+			return nil, domainError(ErrorInvalidRef, "work_item_ref")
 		}
 		if _, duplicate := byRef[item.ref]; duplicate {
-			return domainError(ErrorDuplicateWorkItem, "work_item_ref")
+			return nil, domainError(ErrorDuplicateWorkItem, "work_item_ref")
 		}
 		if _, exists := phases[item.phase]; !exists {
-			return domainError(ErrorInvalidPlan, "work_item_phase")
+			return nil, domainError(ErrorInvalidPlan, "work_item_phase")
 		}
 		if !validRoleKey(item.role) {
-			return domainError(ErrorInvalidPlan, "work_item_role")
+			return nil, domainError(ErrorInvalidPlan, "work_item_role")
 		}
 		if !validOutputContractKind(item.outputContract.kind) {
-			return domainError(ErrorInvalidPlan, "output_contract")
+			return nil, domainError(ErrorInvalidPlan, "output_contract")
 		}
 		if requirePendingItems && (item.state != WorkItemStatePending || item.revision != 1 ||
 			!item.startedAt.IsZero() || !item.finishedAt.IsZero() ||
 			validExecutionRef(item.execution) || len(item.artifacts) != 0 || len(item.attestations) != 0 ||
 			item.paused || item.cancelRequested || item.controlSequence != 0 || item.interruptCause != "" ||
 			!item.interruptedAt.IsZero() || validWorkItemRef(item.reworkOf)) {
-			return domainError(ErrorInvalidPlan, "work_item_snapshot")
+			return nil, domainError(ErrorInvalidPlan, "work_item_snapshot")
 		}
 		if err := validateWorkItemPlanMetadata(item); err != nil {
-			return err
+			return nil, err
 		}
 		if _, duplicate := demandRefs[item.budgetDemand.Ref]; duplicate {
-			return domainError(ErrorInvalidPlan, "duplicate_budget_demand_ref")
+			return nil, domainError(ErrorInvalidPlan, "duplicate_budget_demand_ref")
 		}
 		demandRefs[item.budgetDemand.Ref] = struct{}{}
 		if !requirePendingItems && item.state != WorkItemStatePending {
 			if err := validateRestoredWorkItem(item); err != nil {
-				return err
+				return nil, err
 			}
 		}
 		byRef[item.ref] = item
 	}
+	return byRef, nil
+}
 
-	indegree := make(map[WorkItemRef]int, len(plan.items))
-	dependents := make(map[WorkItemRef][]WorkItemRef, len(plan.items))
-	for _, item := range plan.items {
+func validatePlanDependencies(items []WorkItem, byRef map[WorkItemRef]WorkItem) error {
+	indegree := make(map[WorkItemRef]int, len(items))
+	dependents := make(map[WorkItemRef][]WorkItemRef, len(items))
+	for _, item := range items {
 		for _, dependency := range item.dependencies {
 			if _, exists := byRef[dependency]; !exists {
 				return domainError(ErrorInvalidPlan, "dependency_ref")
@@ -287,8 +295,8 @@ func validatePlanShape(plan Plan, requirePendingItems bool) error {
 		}
 	}
 
-	queue := make([]WorkItemRef, 0, len(plan.items))
-	for _, item := range plan.items {
+	queue := make([]WorkItemRef, 0, len(items))
+	for _, item := range items {
 		if indegree[item.ref] == 0 {
 			queue = append(queue, item.ref)
 		}
@@ -305,10 +313,10 @@ func validatePlanShape(plan Plan, requirePendingItems bool) error {
 			}
 		}
 	}
-	if visited != len(plan.items) {
+	if visited != len(items) {
 		return domainError(ErrorInvalidPlan, "dependency_or_parent_cycle")
 	}
-	for _, item := range plan.items {
+	for _, item := range items {
 		if item.state == WorkItemStateSuperseded && !hasReworkSuccessorIn(item.ref, byRef) {
 			return domainError(ErrorInvalidPlan, "superseded_without_successor")
 		}
@@ -321,11 +329,11 @@ func validatePlanShape(plan Plan, requirePendingItems bool) error {
 			return domainError(ErrorInvalidPlan, "pending_failed_dependency")
 		}
 	}
-	for leftIndex, left := range plan.items {
+	for leftIndex, left := range items {
 		if left.state != WorkItemStateRunning {
 			continue
 		}
-		for _, right := range plan.items[leftIndex+1:] {
+		for _, right := range items[leftIndex+1:] {
 			if right.state == WorkItemStateRunning && writeSetsOverlap(left.writeSet, right.writeSet) {
 				return domainError(ErrorInvalidPlan, "running_write_set_conflict")
 			}

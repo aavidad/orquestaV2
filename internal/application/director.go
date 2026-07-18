@@ -2,11 +2,10 @@ package application
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"strconv"
 	"strings"
+	"time"
 
 	"orquesta/internal/goal"
 	"orquesta/internal/identity"
@@ -211,35 +210,67 @@ func (orchestrator *Orchestrator) ProposeDirectorPlan(
 		return DirectorPlanResult{}, err
 	}
 	now := orchestrator.clock.Now().UTC()
-
-	current, err := orchestrator.state.GetGoal(ctx, request.GoalRef)
-	if err != nil {
-		return DirectorPlanResult{}, err
-	}
-	if current.Goal.Project() != projectRef {
-		return DirectorPlanResult{}, &StateError{Code: StateNotFound}
-	}
-	if current.Goal.Revision() != request.ExpectedGoalRevision ||
-		current.Goal.PlanGeneration() != request.ExpectedPlanGeneration {
-		return DirectorPlanResult{}, &StateError{Code: StateConflict}
-	}
-	plan, err := orchestrator.compilePlanExtension(ctx, current.Goal, request.Plan, now)
-	if err != nil {
-		return DirectorPlanResult{}, err
-	}
-	updated, updatedExecutions, retireActionRefs, proposalEvents, err := orchestrator.applyDirectorProposal(current, request, plan, now)
-	if err != nil {
-		return DirectorPlanResult{}, err
-	}
-	newExecutions, newActions, scheduledEvents, err := orchestrator.scheduleReady(
-		ctx, updated, current.Executions, now,
+	state, err := orchestrator.buildDirectorPlanState(
+		ctx, request, fingerprint, principal, projectRef, authorization, now,
 	)
 	if err != nil {
 		return DirectorPlanResult{}, err
 	}
-	decisionRef, err := orchestrator.ids.NewID(ctx, "director-decision")
+	persisted, created, err := orchestrator.state.ApplyDirectorPlan(ctx, state)
 	if err != nil {
 		return DirectorPlanResult{}, err
+	}
+	if err := validateDirectorDecision(request, fingerprint, principal.Ref, projectRef, persisted); err != nil {
+		return DirectorPlanResult{}, err
+	}
+	return DirectorPlanResult{Decision: persisted, Created: created}, nil
+}
+
+func (orchestrator *Orchestrator) buildDirectorPlanState(ctx context.Context, request ProposeDirectorPlanRequest, fingerprint string, principal identity.Principal, projectRef goal.ProjectRef, authorization identity.AuthorizationReceipt, now time.Time) (ApplyDirectorPlanState, error) {
+	current, err := orchestrator.state.GetGoal(ctx, request.GoalRef)
+	if err != nil {
+		return ApplyDirectorPlanState{}, err
+	}
+	if current.Goal.Project() != projectRef {
+		return ApplyDirectorPlanState{}, &StateError{Code: StateNotFound}
+	}
+	if current.Goal.Revision() != request.ExpectedGoalRevision ||
+		current.Goal.PlanGeneration() != request.ExpectedPlanGeneration {
+		return ApplyDirectorPlanState{}, &StateError{Code: StateConflict}
+	}
+	if legacyGovernanceRecord(current) {
+		return ApplyDirectorPlanState{}, errors.New("governance.legacy_reauthorization_required")
+	}
+	goalPolicy, policyErr := historicalEffectPolicy(current)
+	if policyErr != nil {
+		return ApplyDirectorPlanState{}, policyErr
+	}
+	if goalPolicy.PolicyHash == orchestrator.budgetPolicy.PolicyHash {
+		goalPolicy.DefaultDemand = orchestrator.budgetPolicy.DefaultWorkItemDemand
+	}
+	plan, err := orchestrator.compilePlanExtension(ctx, current.Goal, request.Plan, goalPolicy, now)
+	if err != nil {
+		return ApplyDirectorPlanState{}, err
+	}
+	updated, updatedExecutions, retireActionRefs, proposalEvents, err := orchestrator.applyDirectorProposal(current, request, plan, now)
+	if err != nil {
+		return ApplyDirectorPlanState{}, err
+	}
+	allItems, oldItems := updated.WorkItems(), current.Goal.WorkItems()
+	newAuthorities := workItemAuthorities(
+		allItems[len(oldItems):], principal.Ref, identity.PermissionGoalsDirect,
+		EffectApprovalSourceDirectorDecision, authorization, now,
+	)
+	authorities := append(append([]WorkItemAuthority(nil), current.WorkItemAuthorities...), newAuthorities...)
+	newExecutions, newActions, scheduledEvents, err := orchestrator.scheduleReady(
+		ctx, updated, current.Executions, authorities, goalPolicy, now,
+	)
+	if err != nil {
+		return ApplyDirectorPlanState{}, err
+	}
+	decisionRef, err := orchestrator.ids.NewID(ctx, "director-decision")
+	if err != nil {
+		return ApplyDirectorPlanState{}, err
 	}
 	decision := DirectorDecisionRecord{
 		Ref: decisionRef, RequestRef: request.RequestRef, RequestFingerprint: fingerprint,
@@ -257,7 +288,7 @@ func (orchestrator *Orchestrator) ProposeDirectorPlan(
 		GoalRef: request.GoalRef, OccurredAt: now,
 	}}, proposalEvents...)
 	events = append(events, scheduledEvents...)
-	persistedDecision, created, err := orchestrator.state.ApplyDirectorPlan(ctx, ApplyDirectorPlanState{
+	return ApplyDirectorPlanState{
 		RequestRef: request.RequestRef, RequestFingerprint: fingerprint,
 		AuthorizationReceipt: authorization, PrincipalRef: principal.Ref,
 		ProjectRef: projectRef, GoalRef: request.GoalRef,
@@ -267,22 +298,12 @@ func (orchestrator *Orchestrator) ProposeDirectorPlan(
 		ExpectedWorkItemRevision: request.ExpectedWorkItemRevision,
 		Goal:                     updated, UpdatedExecutions: updatedExecutions,
 		NewExecutions: newExecutions, NewActions: newActions, RetireActionRefs: retireActionRefs,
-		Events: events, Decision: decision, OperationAt: now,
-	})
-	if err != nil {
-		return DirectorPlanResult{}, err
-	}
-	if err := validateDirectorDecision(
-		request, fingerprint, principal.Ref, current.Goal.Project(), persistedDecision,
-	); err != nil {
-		return DirectorPlanResult{}, err
-	}
-	return DirectorPlanResult{Decision: persistedDecision, Created: created}, nil
+		NewWorkItemAuthorities: newAuthorities,
+		Events:                 events, Decision: decision, OperationAt: now,
+	}, nil
 }
 
-// requireCurrentDirectorAccess authorizes the read-only replay lookup against
-// the live membership projection. It creates no second authorization receipt,
-// but a revoked or demoted principal can never recover a lease token or result.
+// requireCurrentDirectorAccess prevents revoked principals from replaying results.
 func (orchestrator *Orchestrator) requireCurrentDirectorAccess(
 	ctx context.Context,
 	principalRef identity.PrincipalRef,
@@ -424,12 +445,9 @@ func directorClaimFingerprint(
 	projectRef goal.ProjectRef,
 	request ClaimDirectorRequest,
 ) string {
-	digest := sha256.New()
-	writeFingerprintField(digest, "orquesta.director.claim.v1")
-	writeFingerprintField(digest, principal.String())
-	writeFingerprintField(digest, projectRef.String())
-	writeFingerprintField(digest, request.GoalRef.String())
-	return hex.EncodeToString(digest.Sum(nil))
+	return fingerprintFields(
+		"orquesta.director.claim.v1", principal.String(), projectRef.String(), request.GoalRef.String(),
+	)
 }
 
 func directorRenewFingerprint(
@@ -437,14 +455,10 @@ func directorRenewFingerprint(
 	projectRef goal.ProjectRef,
 	request RenewDirectorRequest,
 ) string {
-	digest := sha256.New()
-	writeFingerprintField(digest, "orquesta.director.renew.v1")
-	writeFingerprintField(digest, principal.String())
-	writeFingerprintField(digest, projectRef.String())
-	writeFingerprintField(digest, request.GoalRef.String())
-	writeFingerprintField(digest, request.Token)
-	writeFingerprintField(digest, strconv.FormatUint(request.Fence, 10))
-	return hex.EncodeToString(digest.Sum(nil))
+	return fingerprintFields(
+		"orquesta.director.renew.v1", principal.String(), projectRef.String(), request.GoalRef.String(),
+		request.Token, strconv.FormatUint(request.Fence, 10),
+	)
 }
 
 func directorPlanFingerprint(
@@ -452,30 +466,20 @@ func directorPlanFingerprint(
 	projectRef goal.ProjectRef,
 	request ProposeDirectorPlanRequest,
 ) string {
-	digest := sha256.New()
-	writeFingerprintField(digest, "orquesta.director.plan.v1")
-	writeFingerprintField(digest, principal.String())
-	writeFingerprintField(digest, projectRef.String())
-	writeFingerprintField(digest, request.GoalRef.String())
-	writeFingerprintField(digest, strconv.FormatUint(uint64(request.ExpectedGoalRevision), 10))
-	writeFingerprintField(digest, strconv.FormatUint(uint64(request.ExpectedPlanGeneration), 10))
-	writeFingerprintField(digest, request.LeaseToken)
-	writeFingerprintField(digest, strconv.FormatUint(request.LeaseFence, 10))
-	writeFingerprintField(digest, string(request.Cause))
-	writeFingerprintField(digest, request.SourceWorkItemRef.String())
-	writeFingerprintField(digest, strconv.FormatUint(uint64(request.ExpectedWorkItemRevision), 10))
-	writeFingerprintField(digest, request.SourceExecutionRef.String())
-	writeFingerprintField(digest, strconv.FormatUint(request.SourceExecutionAttempt, 10))
-	writeFingerprintField(digest, request.Reason)
+	digest := fingerprintDigest(
+		"orquesta.director.plan.v1", principal.String(), projectRef.String(), request.GoalRef.String(),
+		strconv.FormatUint(uint64(request.ExpectedGoalRevision), 10),
+		strconv.FormatUint(uint64(request.ExpectedPlanGeneration), 10), request.LeaseToken,
+		strconv.FormatUint(request.LeaseFence, 10), string(request.Cause), request.SourceWorkItemRef.String(),
+		strconv.FormatUint(uint64(request.ExpectedWorkItemRevision), 10), request.SourceExecutionRef.String(),
+		strconv.FormatUint(request.SourceExecutionAttempt, 10), request.Reason,
+	)
 	writePlanFingerprint(digest, &request.Plan)
-	return hex.EncodeToString(digest.Sum(nil))
+	return fingerprintHex(digest)
 }
 
 func directorAuthorizationRequestRef(kind DirectorMutationKind, requestRef, fingerprint string) string {
-	digest := sha256.New()
-	writeFingerprintField(digest, "orquesta.director.authorization.v1")
-	writeFingerprintField(digest, string(kind))
-	writeFingerprintField(digest, requestRef)
-	writeFingerprintField(digest, fingerprint)
-	return "authorization-request:director:" + hex.EncodeToString(digest.Sum(nil))
+	return "authorization-request:director:" + fingerprintFields(
+		"orquesta.director.authorization.v1", string(kind), requestRef, fingerprint,
+	)
 }

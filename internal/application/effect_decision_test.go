@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"errors"
 	"reflect"
 	"strings"
 	"sync"
@@ -13,21 +12,6 @@ import (
 	"orquesta/internal/governance"
 	"orquesta/internal/identity"
 )
-
-// Existing application tests use memoryRepository directly. These no-op
-// governance methods keep that shared fake structurally current without
-// adding V15 state to the older helper.
-func (*memoryRepository) EffectReplay(context.Context, EffectReplayRequest) (EffectApproval, bool, error) {
-	return EffectApproval{}, false, nil
-}
-
-func (*memoryRepository) DecideEffect(context.Context, DecideEffectState) (EffectApproval, bool, error) {
-	return EffectApproval{}, false, errors.New("test.effect_governance_not_configured")
-}
-
-func (*memoryRepository) RecordEffectAttempt(context.Context, RecordEffectAttemptState) (EffectAttempt, bool, error) {
-	return EffectAttempt{}, false, errors.New("test.effect_governance_not_configured")
-}
 
 type effectDecisionMutation struct {
 	request  EffectReplayRequest
@@ -93,7 +77,7 @@ func (repository *effectDecisionRepository) DecideEffect(
 	}
 	intent, found := effectIntentByRef(record.EffectIntents, state.IntentRef)
 	if !found || intent.Digest != state.IntentDigest || intent.Subject.ProjectRef != state.ProjectRef ||
-		intent.Subject != state.Approval.Subject {
+		intent.Subject != state.Approval.Subject || ValidateEffectApproval(intent, state.Approval) != nil {
 		return EffectApproval{}, false, &StateError{Code: StateConflict}
 	}
 	repository.memoryRepository.mu.Lock()
@@ -152,8 +136,39 @@ func TestDecideEffectIsAuthorizedRequestIdempotentAndExact(t *testing.T) {
 		t.Fatalf("semantic conflict=%v", err)
 	}
 	stored, err := fixture.repository.GetGoal(context.Background(), fixture.intent.Subject.GoalRef)
-	if err != nil || len(stored.EffectApprovals) != 1 || stored.EffectApprovals[0].IntentDigest != fixture.intent.Digest {
+	storedApproval, found := effectApprovalByIntent(stored.EffectApprovals, fixture.intent.Ref)
+	if err != nil || !found || storedApproval.IntentDigest != fixture.intent.Digest {
 		t.Fatalf("stored exact approval=%+v err=%v", stored.EffectApprovals, err)
+	}
+}
+
+func TestDecideEffectUsesAuthorizationCommitTimeAsCausalFloor(t *testing.T) {
+	fixture := newEffectDecisionFixture(t, governance.SecurityCriticalityNormal, time.Minute)
+	fixture.accessRepository.authorizeHook = func(request identity.AuthorizationRequest) (identity.AuthorizationReceipt, error) {
+		decision, err := identity.NewAuthorizationDecision(identity.AuthorizationDecisionInput{
+			Request: request, Outcome: identity.AuthorizationAllowed, Role: identity.RolePlatformAdmin,
+			ReasonCode: "access.allowed", DecidedAt: request.RequestedAt(),
+		})
+		if err != nil {
+			return identity.AuthorizationReceipt{}, err
+		}
+		return identity.NewAuthorizationReceipt(identity.AuthorizationReceiptInput{
+			Ref: "authorization-receipt:" + request.RequestRef(), Decision: decision,
+			RecordedAt: request.RequestedAt().Add(time.Second),
+		})
+	}
+	result, err := fixture.orchestrator.DecideEffect(context.Background(), fixture.access, DecideEffectRequest{
+		RequestRef: "request:effect-causal-floor", GoalRef: fixture.intent.Subject.GoalRef,
+		IntentRef: fixture.intent.Ref, ExpectedIntentDigest: fixture.intent.Digest,
+		Decision: EffectApproved, Reason: "causally ordered approval",
+	})
+	if err != nil {
+		t.Fatalf("decide effect: %v", err)
+	}
+	want := fixture.clock.Now().Add(time.Second)
+	if !result.Approval.DecidedAt.Equal(want) || !result.Approval.ExpiresAt.Equal(want.Add(time.Minute)) {
+		t.Fatalf("causal floor missing: decided=%s expires=%s want=%s",
+			result.Approval.DecidedAt, result.Approval.ExpiresAt, want)
 	}
 }
 
@@ -169,8 +184,10 @@ func TestEffectApprovalSourcesSeparateCausalAutoApprovalFromExplicitAuthority(t 
 		ProposedBy: fixture.intent.ProposedBy, DecidedBy: fixture.intent.ProposedBy,
 		Decision: EffectApproved, Source: EffectApprovalSourceDirectorDecision,
 		SecurityCriticality: fixture.intent.SecurityCriticality, Reason: "causal director decision",
+		PolicyHash: fixture.intent.PolicyHash, PolicyRevision: fixture.intent.PolicyRevision,
+		TargetDigest:   fixture.intent.TargetDigest,
 		IdempotencyKey: fixture.intent.IdempotencyKey, AuthorizationReceipt: fixture.intent.Authority,
-		DecidedAt: fixture.intent.CreatedAt, ExpiresAt: fixture.intent.CreatedAt.Add(time.Minute),
+		DecidedAt: fixture.intent.CreatedAt,
 	}
 	if err := ValidateEffectApproval(fixture.intent, automatic); err != nil {
 		t.Fatalf("director causal approval: %v", err)
@@ -227,21 +244,27 @@ func TestCriticalEffectRequiresIndependentApproverAndTTL(t *testing.T) {
 		t.Fatalf("independent approval=%+v err=%v", approved, err)
 	}
 
-	invalidTTL := newEffectDecisionFixture(t, governance.SecurityCriticalityNormal, 0)
-	request.GoalRef, request.IntentRef, request.ExpectedIntentDigest = invalidTTL.intent.Subject.GoalRef, invalidTTL.intent.Ref, invalidTTL.intent.Digest
-	request.RequestRef = "request:invalid-ttl"
-	if _, err := invalidTTL.orchestrator.DecideEffect(context.Background(), invalidTTL.access, request); err == nil ||
-		err.Error() != "application.effect_approval_ttl_invalid" {
-		t.Fatalf("invalid TTL did not fail closed: %v", err)
+	rotation := newEffectDecisionFixture(t, governance.SecurityCriticalityNormal, time.Minute)
+	rotation.orchestrator.budgetPolicy = budgetPolicyVariant(
+		testBudgetPolicy(rotation.clock.Now()), "rotated-approval", 9, time.Second, 12*time.Hour, 1_000_000,
+	)
+	request.GoalRef, request.IntentRef, request.ExpectedIntentDigest =
+		rotation.intent.Subject.GoalRef, rotation.intent.Ref, rotation.intent.Digest
+	request.RequestRef = "request:historical-ttl"
+	rotated, err := rotation.orchestrator.DecideEffect(context.Background(), rotation.access, request)
+	if err != nil || !rotated.Approval.ExpiresAt.Equal(rotated.Approval.DecidedAt.Add(time.Minute)) {
+		t.Fatalf("historical intent TTL lost: approval=%+v err=%v", rotated.Approval, err)
 	}
 }
 
 type effectDecisionFixture struct {
-	orchestrator *Orchestrator
-	repository   *effectDecisionRepository
-	access       Access
-	intent       EffectIntent
-	clock        *mutableClock
+	orchestrator     *Orchestrator
+	repository       *effectDecisionRepository
+	accessRepository *memoryAccessRepository
+	access           Access
+	intent           EffectIntent
+	clock            *mutableClock
+	agent            *scriptedAgent
 }
 
 func newEffectDecisionFixture(
@@ -253,14 +276,22 @@ func newEffectDecisionFixture(
 	base := time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC)
 	clock := &mutableClock{now: base}
 	repository := newEffectDecisionRepository()
+	repository.now = clock.Now
 	accessRepository := newMemoryAccessRepository()
 	agent := &scriptedAgent{now: clock.Now}
 	artifacts := newMemoryArtifactStore()
+	configuredTTL := ttl
+	if configuredTTL <= 0 {
+		configuredTTL = time.Minute
+	}
+	policy := testBudgetPolicy(clock.Now())
+	policy.EffectApprovalTTL = configuredTTL
 	orchestrator, err := New(Dependencies{
 		State: repository, Access: accessRepository, Launcher: agent, Observer: agent, Controller: agent,
 		Artifacts: artifacts, Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1 << 20,
 		MaxMailboxEnvelopeBytes: 64 << 10, MaxExecutionAttempts: 3, ClaimLease: time.Minute,
-		DirectorLeaseDuration: time.Minute, EffectApprovalTTL: ttl,
+		DirectorLeaseDuration: time.Minute, EffectApprovalTTL: configuredTTL,
+		MaxChildrenPerParent: 6, BudgetPolicy: policy,
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour, AgentCapabilities: testAgentCapabilities(),
 	})
 	if err != nil {
@@ -312,7 +343,12 @@ func newEffectDecisionFixture(
 			Tokens: 100, ActiveTimeNS: int64(time.Minute), ProcessSlots: 1, DiskBytes: 1024,
 		}},
 		SecurityCriticality: criticality, ReasoningEffort: governance.ReasoningEffortMedium,
-		IdempotencyKey: execution.IdempotencyKey, CreatedAt: base,
+		PolicyHash:      orchestrator.budgetPolicy.PolicyHash,
+		PolicyRevision:  orchestrator.budgetPolicy.GoalEnvelopeTemplate.Revision,
+		QuotaRetryDelay: orchestrator.budgetPolicy.QuotaRetryDelay,
+		ApprovalTTL:     orchestrator.budgetPolicy.EffectApprovalTTL,
+		TargetDigest:    action.EffectIntent.TargetDigest,
+		IdempotencyKey:  execution.IdempotencyKey, CreatedAt: base,
 	}
 	intent.Digest = EffectIntentDigest(intent)
 	if err := ValidateEffectIntent(intent); err != nil {
@@ -323,12 +359,23 @@ func newEffectDecisionFixture(
 	current.EffectIntents = append(current.EffectIntents, intent)
 	actionState := repository.memoryRepository.actions[action.Ref]
 	actionState.record.EffectIntentRef = intent.Ref
+	actionState.record.EffectIntent = intent
 	repository.memoryRepository.actions[action.Ref] = actionState
 	repository.memoryRepository.records[record.Goal.Ref()] = current
 	repository.memoryRepository.mu.Unlock()
 	return effectDecisionFixture{
-		orchestrator: orchestrator, repository: repository, access: access, intent: intent, clock: clock,
+		orchestrator: orchestrator, repository: repository, accessRepository: accessRepository,
+		access: access, intent: intent, clock: clock, agent: agent,
 	}
+}
+
+func effectApprovalByIntent(records []EffectApproval, intentRef string) (EffectApproval, bool) {
+	for _, record := range records {
+		if record.IntentRef == intentRef {
+			return record, true
+		}
+	}
+	return EffectApproval{}, false
 }
 
 func effectDecisionKey(principal identity.PrincipalRef, project goal.ProjectRef, requestRef string) string {

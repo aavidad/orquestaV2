@@ -70,6 +70,7 @@ func TestV04ConfirmationFalseHasNoClockIDOrStateEffect(t *testing.T) {
 		Clock: clock, IDs: ids, MaxOutputBytes: 1024, MaxMailboxEnvelopeBytes: 64 << 10,
 		MaxExecutionAttempts: 3, AgentCapabilities: testAgentCapabilities(),
 		ClaimLease: time.Minute, DirectorLeaseDuration: time.Minute,
+		MaxChildrenPerParent: 6, EffectApprovalTTL: time.Hour, BudgetPolicy: testBudgetPolicy(time.Unix(1, 0)),
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})
 	if err != nil {
@@ -263,6 +264,7 @@ func TestV04AmendRejectsNonterminalStaleAndForeignSource(t *testing.T) {
 			Clock: clock, IDs: ids, MaxOutputBytes: 1024, MaxMailboxEnvelopeBytes: 64 << 10,
 			MaxExecutionAttempts: 3, AgentCapabilities: testAgentCapabilities(),
 			ClaimLease: time.Minute, DirectorLeaseDuration: time.Minute,
+			MaxChildrenPerParent: 6, EffectApprovalTTL: time.Hour, BudgetPolicy: testBudgetPolicy(clock.Now()),
 			ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 		})
 		if err != nil {
@@ -452,26 +454,34 @@ func TestV04ProviderSpecHashMismatchCreatesNoEvidenceOrClosure(t *testing.T) {
 				t.Fatalf("submit: %v", err)
 			}
 			result, processErr := orchestrator.ProcessNext(ctx, "worker:test")
-			if !strings.HasPrefix(testCase.name, "receipt") {
+			receiptCase := strings.HasPrefix(testCase.name, "receipt")
+			if !receiptCase {
 				if processErr != nil {
 					t.Fatalf("launch: %v", processErr)
 				}
 				clock.Advance(time.Second)
 				result, processErr = orchestrator.ProcessNext(ctx, "worker:test")
 			}
-			if !result.Processed || processErr == nil || processErr.Error() != testCase.wantError {
+			if !result.Processed || (!receiptCase && (processErr == nil || processErr.Error() != testCase.wantError)) ||
+				(receiptCase && processErr != nil) {
 				t.Fatalf("spec-hash fence result=%+v err=%v, want %s", result, processErr, testCase.wantError)
 			}
 			record, err := repository.GetGoal(ctx, submitted.Record.Goal.Ref())
 			status, statusErr := repository.Status(ctx, project)
+			wantQuarantined, wantPending := int64(1), int64(0)
+			if receiptCase {
+				wantQuarantined, wantPending = 0, 1
+			}
 			if err != nil || statusErr != nil || record.Goal.IsTerminal() || record.Goal.State() != goal.GoalStateRunning ||
-				onlyExecution(t, record).FailureCode != "" || status.QuarantinedActions != 1 || status.PendingActions != 0 ||
+				onlyExecution(t, record).FailureCode != "" || status.QuarantinedActions != wantQuarantined || status.PendingActions != wantPending ||
 				len(record.Artifacts) != 0 || len(record.Attestations) != 0 || len(artifacts.content) != 0 {
-				t.Fatalf("mismatched evidence escaped quarantine: record=%+v status=%+v stored=%d err=%v/%v",
+				t.Fatalf("mismatched evidence escaped governed state: record=%+v status=%+v stored=%d err=%v/%v",
 					record, status, len(artifacts.content), err, statusErr)
 			}
-			if replay, err := orchestrator.ProcessNext(ctx, "worker:test"); err != nil || replay.Processed {
-				t.Fatalf("quarantined action replayed: result=%+v err=%v", replay, err)
+			if !receiptCase {
+				if replay, err := orchestrator.ProcessNext(ctx, "worker:test"); err != nil || replay.Processed {
+					t.Fatalf("quarantined action replayed: result=%+v err=%v", replay, err)
+				}
 			}
 		})
 	}
@@ -526,7 +536,8 @@ func v04NewOrchestrator(
 		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1 << 20, MaxMailboxEnvelopeBytes: 64 << 10,
 		MaxExecutionAttempts: 3, AgentCapabilities: testAgentCapabilities(), ClaimLease: time.Minute,
 		DirectorLeaseDuration: time.Minute,
-		ObservationDelay:      time.Second, ExecutionTimeout: time.Hour,
+		MaxChildrenPerParent:  6, EffectApprovalTTL: time.Hour, BudgetPolicy: testBudgetPolicy(clock.Now()),
+		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})
 	if err != nil {
 		t.Fatalf("new orchestrator: %v", err)

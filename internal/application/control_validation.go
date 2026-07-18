@@ -1,8 +1,6 @@
 package application
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"strconv"
 	"strings"
@@ -67,8 +65,7 @@ func controlFingerprint(
 	project goal.ProjectRef,
 	request ControlRequest,
 ) string {
-	digest := sha256.New()
-	for _, field := range []string{
+	return fingerprintFields(
 		"orquesta.control.v1", principal.String(), project.String(), request.GoalRef.String(),
 		strconv.FormatUint(uint64(request.ExpectedGoalRevision), 10),
 		strconv.FormatUint(uint64(request.ExpectedPlanGeneration), 10),
@@ -76,10 +73,7 @@ func controlFingerprint(
 		string(request.Operation), string(request.Target), request.WorkItemRef.String(),
 		strconv.FormatUint(uint64(request.ExpectedWorkItemRevision), 10), request.ExecutionRef.String(),
 		strconv.FormatUint(request.ExpectedExecutionAttempt, 10), string(request.Mode), strings.TrimSpace(request.Reason),
-	} {
-		writeFingerprintField(digest, field)
-	}
-	return hex.EncodeToString(digest.Sum(nil))
+	)
 }
 
 func validateControlResult(
@@ -176,9 +170,6 @@ func ValidatePersistedControlRecord(record ControlRecord) error {
 }
 
 func controlAuthorizationRequestRef(requestRef, fingerprint string) string {
-	digest := sha256.New()
-	writeFingerprintField(digest, "orquesta.control.authorization.v1")
-	writeFingerprintField(digest, requestRef)
-	writeFingerprintField(digest, fingerprint)
-	return "authorization-request:control:" + hex.EncodeToString(digest.Sum(nil))
+	return "authorization-request:control:" +
+		fingerprintFields("orquesta.control.authorization.v1", requestRef, fingerprint)
 }

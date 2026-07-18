@@ -9,17 +9,20 @@ import (
 
 	"orquesta/internal/application"
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
 	"orquesta/internal/ports"
 )
 
 type claimCandidate struct {
-	action          application.ActionRecord
-	roleKey         string
-	providerRef     string
-	modelRef        string
-	agentRef        string
-	executionState  application.ExecutionState
-	deliveryAttempt int64
+	action            application.ActionRecord
+	projectRef        goal.ProjectRef
+	governanceVersion int64
+	roleKey           string
+	providerRef       string
+	modelRef          string
+	agentRef          string
+	executionState    application.ExecutionState
+	deliveryAttempt   int64
 }
 
 const (
@@ -31,14 +34,8 @@ func (repository *Repository) ClaimNextAction(
 	ctx context.Context,
 	request application.ClaimRequest,
 ) (application.ActionClaim, bool, error) {
-	if !validText(request.WorkerRef) || !validText(request.Token) {
-		return application.ActionClaim{}, false, invalid(errors.New("sqlite.claim_identity_invalid"))
-	}
-	if err := ports.ValidateAgentCapabilities(request.Capabilities); err != nil {
-		return application.ActionClaim{}, false, invalid(err)
-	}
-	if request.LeaseDuration <= 0 {
-		return application.ActionClaim{}, false, invalid(errors.New("sqlite.claim_time_invalid"))
+	if err := validateClaimRequest(request); err != nil {
+		return application.ActionClaim{}, false, err
 	}
 	transaction, err := beginTransaction(ctx, repository)
 	if err != nil {
@@ -57,114 +54,213 @@ func (repository *Repository) ClaimNextAction(
 		return application.ActionClaim{}, false, invalid(err)
 	}
 
-	var tokenExists int
-	err = transaction.QueryRowContext(ctx, `
-SELECT 1
-FROM (
-    SELECT claim_token AS token FROM outbox WHERE claim_token = ?
-    UNION ALL
-    SELECT claim_token AS token FROM action_consumption_receipts WHERE claim_token = ?
-)
-LIMIT 1`, request.Token, request.Token).Scan(&tokenExists)
-	if err == nil {
-		return application.ActionClaim{}, false, stateError(application.StateAlreadyClaimed, errors.New("sqlite.claim_token_reused"))
+	if err := requireFreshClaimToken(ctx, transaction, request.Token); err != nil {
+		return application.ActionClaim{}, false, err
 	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return application.ActionClaim{}, false, mapDatabaseError(err)
-	}
-
 	candidates, err := readClaimCandidates(ctx, transaction, now)
 	if err != nil {
 		return application.ActionClaim{}, false, err
 	}
-	var selected *claimCandidate
-	for index := range candidates {
-		// A terminal Execution makes its stop a local ledger settlement. It
-		// cannot call the provider, so a replacement composition may safely
-		// consume it without advertising the original role or adapter identity.
-		// Running stops retain the exact provider/model/agent routing below.
-		if terminalStopSettlement(candidates[index]) {
-			selected = &candidates[index]
-			break
-		}
-		requirements, readErr := readAgentRequirements(ctx, transaction, candidates[index])
-		if readErr != nil {
-			return application.ActionClaim{}, false, readErr
-		}
-		if !ports.MatchAgentCapabilities(request.Capabilities, requirements) {
-			continue
-		}
-		if (candidates[index].action.Kind == application.ActionObserveAgent ||
-			candidates[index].action.Kind == application.ActionStopAgent) &&
-			!observeIdentityMatches(candidates[index], request.Capabilities) {
-			continue
-		}
-		selected = &candidates[index]
-		break
+	selected, found, err := selectClaimCandidate(ctx, transaction, candidates, request.Capabilities, now)
+	if err != nil {
+		return application.ActionClaim{}, false, err
 	}
-	if selected == nil {
+	if !found {
 		if err := commit(transaction); err != nil {
 			return application.ActionClaim{}, false, err
 		}
 		return application.ActionClaim{}, false, nil
 	}
-	if selected.deliveryAttempt < 0 || uint64(selected.deliveryAttempt) >= maxSQLiteInteger {
-		return application.ActionClaim{}, false, invalid(fmt.Errorf("sqlite.action_attempt_invalid"))
-	}
-	deliveryAttempt := selected.deliveryAttempt + 1
-
-	var fence int64
-	err = transaction.QueryRowContext(ctx, `
-INSERT INTO work_item_fences(goal_ref, work_item_ref, fence)
-VALUES (?, ?, 1)
-ON CONFLICT(goal_ref, work_item_ref)
-DO UPDATE SET fence = work_item_fences.fence + 1
-RETURNING fence`,
-		selected.action.GoalRef.String(), selected.action.WorkItemRef.String(),
-	).Scan(&fence)
+	claim, err := claimSelectedCandidate(ctx, transaction, request, selected, now, leaseUntil)
 	if err != nil {
-		return application.ActionClaim{}, false, mapDatabaseError(err)
-	}
-	if fence <= 0 {
-		return application.ActionClaim{}, false, invalid(errors.New("sqlite.claim_fence_invalid"))
-	}
-
-	result, err := transaction.ExecContext(ctx, `
-UPDATE outbox
-SET claim_token = ?, claimed_by = ?, claimed_until = ?, delivery_attempt = ?, fence = ?
-WHERE ref = ?
-  AND completed_at IS NULL
-  AND retired_at IS NULL
-  AND quarantined_at IS NULL
-  AND available_at <= ?
-  AND (claim_token IS NULL OR claimed_until <= ?)`,
-		request.Token,
-		request.WorkerRef,
-		requiredTime(leaseUntil),
-		deliveryAttempt,
-		fence,
-		selected.action.Ref,
-		requiredTime(now),
-		requiredTime(now),
-	)
-	if err != nil {
-		return application.ActionClaim{}, false, mapDatabaseError(err)
-	}
-	if err := requireOneRow(result); err != nil {
 		return application.ActionClaim{}, false, err
-	}
-	claim := application.ActionClaim{
-		Action:          selected.action,
-		Token:           request.Token,
-		WorkerRef:       request.WorkerRef,
-		DeliveryAttempt: uint64(deliveryAttempt),
-		Fence:           uint64(fence),
-		LeaseUntil:      leaseUntil,
 	}
 	if err := commit(transaction); err != nil {
 		return application.ActionClaim{}, false, err
 	}
 	return claim, true, nil
+}
+
+func validateClaimRequest(request application.ClaimRequest) error {
+	if !validText(request.WorkerRef) || !validText(request.Token) {
+		return invalid(errors.New("sqlite.claim_identity_invalid"))
+	}
+	if err := ports.ValidateAgentCapabilities(request.Capabilities); err != nil {
+		return invalid(err)
+	}
+	if request.LeaseDuration <= 0 {
+		return invalid(errors.New("sqlite.claim_time_invalid"))
+	}
+	if err := application.ValidateBudgetPolicy(request.BudgetPolicy); err != nil {
+		return invalid(err)
+	}
+	return nil
+}
+
+func requireFreshClaimToken(ctx context.Context, tx *sql.Tx, token string) error {
+	var exists int
+	err := tx.QueryRowContext(ctx, `SELECT 1 FROM (
+SELECT claim_token FROM outbox WHERE claim_token=? UNION ALL
+SELECT claim_token FROM action_consumption_receipts WHERE claim_token=?) LIMIT 1`, token, token).Scan(&exists)
+	if err == nil {
+		return stateError(application.StateAlreadyClaimed, errors.New("sqlite.claim_token_reused"))
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	return mapDatabaseError(err)
+}
+
+type claimSelection struct {
+	candidate         claimCandidate
+	approval          application.EffectApproval
+	reservation       governance.BudgetReservation
+	reservationExists bool
+}
+
+func selectClaimCandidate(
+	ctx context.Context, tx *sql.Tx, candidates []claimCandidate,
+	capabilities ports.AgentCapabilities, now time.Time,
+) (claimSelection, bool, error) {
+	for index := range candidates {
+		candidate := &candidates[index]
+		matches, err := claimCandidateMatches(ctx, tx, *candidate, capabilities)
+		if err != nil {
+			return claimSelection{}, false, err
+		}
+		if !matches {
+			continue
+		}
+		approval, admitted, err := admitClaimEffect(ctx, tx, candidate, now)
+		if err != nil {
+			return claimSelection{}, false, err
+		}
+		if !admitted {
+			continue
+		}
+		reservation, exists, capacity, err := admitClaimBudget(ctx, tx, *candidate, now)
+		if err != nil {
+			return claimSelection{}, false, err
+		}
+		if !capacity {
+			continue
+		}
+		return claimSelection{*candidate, approval, reservation, exists}, true, nil
+	}
+	return claimSelection{}, false, nil
+}
+
+func claimCandidateMatches(
+	ctx context.Context, tx *sql.Tx, candidate claimCandidate, capabilities ports.AgentCapabilities,
+) (bool, error) {
+	// Terminal stops settle locally; no provider identity is needed.
+	if terminalStopSettlement(candidate) {
+		return true, nil
+	}
+	requirements, err := readAgentRequirements(ctx, tx, candidate)
+	if err != nil {
+		return false, err
+	}
+	if !ports.MatchAgentCapabilities(capabilities, requirements) {
+		return false, nil
+	}
+	if candidate.action.Kind == application.ActionObserveAgent || candidate.action.Kind == application.ActionStopAgent {
+		return observeIdentityMatches(candidate, capabilities), nil
+	}
+	return true, nil
+}
+
+func admitClaimEffect(
+	ctx context.Context, tx *sql.Tx, candidate *claimCandidate, now time.Time,
+) (application.EffectApproval, bool, error) {
+	if candidate.governanceVersion != 1 {
+		return application.EffectApproval{}, true, nil
+	}
+	if terminalStopSettlement(*candidate) {
+		intent, err := requireTerminalStopIntent(ctx, tx, *candidate)
+		candidate.action.EffectIntent = intent
+		return application.EffectApproval{}, err == nil, err
+	}
+	if candidate.action.Kind != application.ActionLaunchAgent && candidate.action.Kind != application.ActionStopAgent {
+		return application.EffectApproval{}, true, nil
+	}
+	intent, approval, admitted, err := requireEffectAdmission(ctx, tx, *candidate, now)
+	if err != nil {
+		return application.EffectApproval{}, false, err
+	}
+	if !admitted {
+		if candidate.action.Kind == application.ActionLaunchAgent && intent.Ref != "" {
+			err = parkLaunchWithStaleAdmission(ctx, tx, *candidate, intent, now)
+		}
+		return application.EffectApproval{}, false, err
+	}
+	candidate.action.EffectIntent = intent
+	return approval, true, nil
+}
+
+func admitClaimBudget(
+	ctx context.Context, tx *sql.Tx, candidate claimCandidate, now time.Time,
+) (governance.BudgetReservation, bool, bool, error) {
+	if candidate.governanceVersion != 1 || candidate.action.Kind != application.ActionLaunchAgent {
+		return governance.BudgetReservation{}, false, true, nil
+	}
+	reservation, exists, capacity, err := prepareBudgetAdmission(ctx, tx, candidate)
+	if err != nil || capacity {
+		return reservation, exists, capacity, err
+	}
+	err = deferQuotaLimitedAction(ctx, tx, candidate.action.Ref, now, candidate.action.EffectIntent.QuotaRetryDelay)
+	return governance.BudgetReservation{}, false, false, err
+}
+
+func claimSelectedCandidate(
+	ctx context.Context, tx *sql.Tx, request application.ClaimRequest,
+	selected claimSelection, now, leaseUntil time.Time,
+) (application.ActionClaim, error) {
+	candidate := selected.candidate
+	if candidate.deliveryAttempt < 0 || uint64(candidate.deliveryAttempt) >= maxSQLiteInteger {
+		return application.ActionClaim{}, invalid(fmt.Errorf("sqlite.action_attempt_invalid"))
+	}
+	deliveryAttempt, fence := candidate.deliveryAttempt+1, int64(0)
+	err := tx.QueryRowContext(ctx, `INSERT INTO work_item_fences(goal_ref,work_item_ref,fence) VALUES(?,?,1)
+ON CONFLICT(goal_ref,work_item_ref) DO UPDATE SET fence=work_item_fences.fence+1 RETURNING fence`,
+		candidate.action.GoalRef.String(), candidate.action.WorkItemRef.String()).Scan(&fence)
+	if err != nil {
+		return application.ActionClaim{}, mapDatabaseError(err)
+	}
+	if fence <= 0 {
+		return application.ActionClaim{}, invalid(errors.New("sqlite.claim_fence_invalid"))
+	}
+	reservation := selected.reservation
+	if candidate.governanceVersion == 1 && candidate.action.Kind == application.ActionLaunchAgent {
+		if !selected.reservationExists {
+			reservation, err = insertBudgetReservation(ctx, tx, candidate, uint64(fence), now)
+		}
+		if err == nil {
+			err = bindClaimedLaunchExecution(ctx, tx, candidate, reservation)
+		}
+		if err != nil {
+			return application.ActionClaim{}, err
+		}
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE outbox SET claim_token=?,claimed_by=?,claimed_until=?,delivery_attempt=?,fence=?
+WHERE ref=? AND completed_at IS NULL AND retired_at IS NULL AND quarantined_at IS NULL
+AND available_at<=? AND (claim_token IS NULL OR claimed_until<=?)`, request.Token, request.WorkerRef,
+		requiredTime(leaseUntil), deliveryAttempt, fence, candidate.action.Ref, requiredTime(now), requiredTime(now))
+	if err != nil {
+		return application.ActionClaim{}, mapDatabaseError(err)
+	}
+	if err := requireOneRow(result); err != nil {
+		return application.ActionClaim{}, err
+	}
+	claim := application.ActionClaim{Action: candidate.action, Token: request.Token, WorkerRef: request.WorkerRef,
+		DeliveryAttempt: uint64(deliveryAttempt), Fence: uint64(fence), BudgetReservationRef: reservation.Ref,
+		BudgetReservation: reservation, EffectApproval: selected.approval, LeaseUntil: leaseUntil}
+	if candidate.governanceVersion == 1 && candidate.action.Kind == application.ActionLaunchAgent {
+		if err := advanceFairness(ctx, tx, candidate.projectRef, candidate.action.GoalRef, now); err != nil {
+			return application.ActionClaim{}, err
+		}
+	}
+	return claim, nil
 }
 
 func observeIdentityMatches(candidate claimCandidate, capabilities ports.AgentCapabilities) bool {
@@ -190,10 +286,31 @@ func terminalStopSettlement(candidate claimCandidate) bool {
 	}
 }
 
+func requireTerminalStopIntent(
+	ctx context.Context,
+	transaction *sql.Tx,
+	candidate claimCandidate,
+) (application.EffectIntent, error) {
+	intent, err := readEffectIntent(ctx, transaction, candidate.action.EffectIntentRef)
+	if err != nil {
+		return application.EffectIntent{}, err
+	}
+	if intent.ActionRef != candidate.action.Ref || intent.ActionKind != application.ActionStopAgent ||
+		intent.Kind != application.EffectKindAgentStop || intent.Subject.ProjectRef != candidate.projectRef ||
+		intent.Subject.GoalRef != candidate.action.GoalRef ||
+		intent.Subject.WorkItemRef != candidate.action.WorkItemRef ||
+		intent.Subject.ExecutionRef != candidate.action.ExecutionRef ||
+		intent.Subject.PlanGeneration != candidate.action.PlanGeneration {
+		return application.EffectIntent{}, invalid(errors.New("sqlite.terminal_stop_effect_intent_causal_invalid"))
+	}
+	return intent, nil
+}
+
 func readClaimCandidates(ctx context.Context, transaction *sql.Tx, now time.Time) ([]claimCandidate, error) {
 	rows, err := transaction.QueryContext(ctx, `
 SELECT o.ref, o.kind, o.goal_ref, o.work_item_ref, o.execution_ref,
-       o.control_ref, o.plan_generation, o.work_item_generation, o.available_at,
+       o.control_ref, o.effect_intent_ref, o.governance_version,
+       o.plan_generation, o.work_item_generation, o.available_at, g.project_ref,
        o.delivery_attempt, wi.role_key, e.state,
        e.provider_ref, e.model_ref, e.agent_ref
 FROM outbox o
@@ -201,10 +318,17 @@ JOIN work_items wi ON wi.goal_ref = o.goal_ref AND wi.ref = o.work_item_ref
 JOIN goals g ON g.ref = o.goal_ref
 JOIN executions e
   ON e.goal_ref = o.goal_ref AND e.work_item_ref = o.work_item_ref AND e.ref = o.execution_ref
+LEFT JOIN fairness_cursors project_cursor
+  ON project_cursor.scope = 'project' AND project_cursor.subject_ref = g.project_ref
+LEFT JOIN fairness_cursors goal_cursor
+  ON goal_cursor.scope = 'goal' AND goal_cursor.subject_ref = g.ref
 WHERE o.completed_at IS NULL
   AND o.retired_at IS NULL
   AND o.quarantined_at IS NULL
   AND o.kind IN ('launch_agent', 'observe_agent', 'stop_agent')
+  AND (o.governance_version = 1 OR o.kind = 'observe_agent'
+       OR (o.kind = 'stop_agent' AND e.state IN ('succeeded', 'failed', 'canceled', 'stopped'))
+       OR (o.governance_version = 0 AND o.last_error_code <> 'governance.legacy_reauthorization_required'))
   AND o.available_at <= ?
   AND (o.claim_token IS NULL OR o.claimed_until <= ?)
   AND NOT EXISTS (
@@ -228,13 +352,15 @@ WHERE o.completed_at IS NULL
       SELECT 1 FROM outbox stop
       WHERE stop.goal_ref = o.goal_ref AND stop.execution_ref = o.execution_ref
         AND stop.kind = 'stop_agent' AND stop.completed_at IS NULL
+        AND stop.governance_version = 1
         AND stop.retired_at IS NULL AND stop.quarantined_at IS NULL
   ))
--- Stop is urgent. Other scheduler work stays FIFO; launch only wins the
--- tie so a newly scheduled launch cannot starve an older observation.
-ORDER BY CASE o.kind WHEN 'stop_agent' THEN 0 ELSE 1 END,
-         o.available_at,
-         CASE o.kind WHEN 'launch_agent' THEN 0 WHEN 'observe_agent' THEN 1 ELSE 2 END,
+-- Stop is urgent. Governed launches use hierarchical round-robin before
+-- their FIFO tie-break; observations run after no launch fits admission.
+ORDER BY CASE o.kind WHEN 'stop_agent' THEN 0 WHEN 'launch_agent' THEN 1 WHEN 'observe_agent' THEN 2 ELSE 3 END,
+	     CASE WHEN o.kind = 'launch_agent' THEN COALESCE(project_cursor.ordinal, 0) ELSE 0 END,
+	     CASE WHEN o.kind = 'launch_agent' THEN COALESCE(goal_cursor.ordinal, 0) ELSE 0 END,
+	     o.available_at,
          o.ref`, requiredTime(now), requiredTime(now), requiredTime(now))
 	if err != nil {
 		return nil, mapDatabaseError(err)
@@ -242,40 +368,9 @@ ORDER BY CASE o.kind WHEN 'stop_agent' THEN 0 ELSE 1 END,
 	defer rows.Close()
 	var result []claimCandidate
 	for rows.Next() {
-		var candidate claimCandidate
-		var kind, goalValue, itemValue, executionValue string
-		var controlRef sql.NullString
-		var planGeneration, itemGeneration, availableAt int64
-		if err := rows.Scan(
-			&candidate.action.Ref, &kind, &goalValue, &itemValue, &executionValue,
-			&controlRef, &planGeneration, &itemGeneration, &availableAt, &candidate.deliveryAttempt,
-			&candidate.roleKey, &candidate.executionState,
-			&candidate.providerRef, &candidate.modelRef, &candidate.agentRef,
-		); err != nil {
-			return nil, mapDatabaseError(err)
-		}
-		if planGeneration <= 0 || itemGeneration <= 0 || candidate.deliveryAttempt < 0 {
-			return nil, invalid(errors.New("sqlite.action_generation_invalid"))
-		}
-		var refErr error
-		candidate.action.Kind = application.ActionKind(kind)
-		if controlRef.Valid {
-			candidate.action.ControlRef = controlRef.String
-		}
-		if candidate.action.GoalRef, refErr = goal.NewGoalRef(goalValue); refErr != nil {
-			return nil, invalid(refErr)
-		}
-		if candidate.action.WorkItemRef, refErr = goal.NewWorkItemRef(itemValue); refErr != nil {
-			return nil, invalid(refErr)
-		}
-		if candidate.action.ExecutionRef, refErr = goal.NewExecutionRef(executionValue); refErr != nil {
-			return nil, invalid(refErr)
-		}
-		candidate.action.PlanGeneration = goal.PlanGeneration(planGeneration)
-		candidate.action.WorkItemGeneration = goal.Revision(itemGeneration)
-		candidate.action.AvailableAt = time.Unix(0, availableAt).UTC()
-		if err := validateAction(candidate.action); err != nil {
-			return nil, invalid(err)
+		candidate, err := scanClaimCandidate(rows)
+		if err != nil {
+			return nil, err
 		}
 		result = append(result, candidate)
 	}
@@ -283,6 +378,52 @@ ORDER BY CASE o.kind WHEN 'stop_agent' THEN 0 ELSE 1 END,
 		return nil, mapDatabaseError(err)
 	}
 	return result, nil
+}
+
+func scanClaimCandidate(rows *sql.Rows) (claimCandidate, error) {
+	var candidate claimCandidate
+	var kind, goalValue, itemValue, executionValue, projectValue string
+	var controlRef, effectIntentRef sql.NullString
+	var planGeneration, itemGeneration, availableAt int64
+	err := rows.Scan(&candidate.action.Ref, &kind, &goalValue, &itemValue, &executionValue,
+		&controlRef, &effectIntentRef, &candidate.governanceVersion, &planGeneration,
+		&itemGeneration, &availableAt, &projectValue, &candidate.deliveryAttempt,
+		&candidate.roleKey, &candidate.executionState, &candidate.providerRef,
+		&candidate.modelRef, &candidate.agentRef)
+	if err != nil {
+		return candidate, mapDatabaseError(err)
+	}
+	if planGeneration <= 0 || itemGeneration <= 0 || candidate.deliveryAttempt < 0 ||
+		(candidate.governanceVersion != 0 && candidate.governanceVersion != 1) {
+		return candidate, invalid(errors.New("sqlite.action_generation_invalid"))
+	}
+	candidate.action.Kind = application.ActionKind(kind)
+	if controlRef.Valid {
+		candidate.action.ControlRef = controlRef.String
+	}
+	if effectIntentRef.Valid {
+		candidate.action.EffectIntentRef = effectIntentRef.String
+	}
+	var refErr error
+	if candidate.projectRef, refErr = goal.NewProjectRef(projectValue); refErr != nil {
+		return candidate, invalid(refErr)
+	}
+	if candidate.action.GoalRef, refErr = goal.NewGoalRef(goalValue); refErr != nil {
+		return candidate, invalid(refErr)
+	}
+	if candidate.action.WorkItemRef, refErr = goal.NewWorkItemRef(itemValue); refErr != nil {
+		return candidate, invalid(refErr)
+	}
+	if candidate.action.ExecutionRef, refErr = goal.NewExecutionRef(executionValue); refErr != nil {
+		return candidate, invalid(refErr)
+	}
+	candidate.action.PlanGeneration = goal.PlanGeneration(planGeneration)
+	candidate.action.WorkItemGeneration = goal.Revision(itemGeneration)
+	candidate.action.AvailableAt = time.Unix(0, availableAt).UTC()
+	if err := validateAction(candidate.action); err != nil {
+		return candidate, invalid(err)
+	}
+	return candidate, nil
 }
 
 func readAgentRequirements(
@@ -384,7 +525,7 @@ func completeClaimWithEffect(
 	at time.Time,
 	errorCode string,
 	quarantined bool,
-	effect *ports.AgentStopReceipt,
+	effect *application.EffectReceipt,
 ) error {
 	var quarantineAt any
 	outcome := application.ActionConsumedCompleted
@@ -408,28 +549,69 @@ WHERE ref = ? AND claim_token = ? AND claimed_by = ? AND claimed_until = ?
 	if err := requireOneRow(result); err != nil {
 		return err
 	}
-	effectReceipt, effectStatus, effectAt := stopEffectColumns(effect)
-	_, err = transaction.ExecContext(ctx, `
+	if effect != nil {
+		if err := insertEffectReceipt(ctx, transaction, *effect); err != nil {
+			return err
+		}
+	}
+	version := int64(0)
+	if claim.Action.EffectIntentRef != "" {
+		version = 1
+	}
+	receipt := application.ActionConsumptionReceipt{
+		ActionRef: claim.Action.Ref, Kind: claim.Action.Kind, GoalRef: claim.Action.GoalRef,
+		WorkItemRef: claim.Action.WorkItemRef, ExecutionRef: claim.Action.ExecutionRef,
+		PlanGeneration: claim.Action.PlanGeneration, WorkItemGeneration: claim.Action.WorkItemGeneration,
+		Fence: claim.Fence, DeliveryAttempt: claim.DeliveryAttempt, ClaimToken: claim.Token,
+		WorkerRef: claim.WorkerRef, Outcome: outcome, ErrorCode: errorCode, ConsumedAt: at,
+	}
+	if effect != nil {
+		receipt.EffectReceiptRef = effect.Ref
+	}
+	return insertActionConsumptionReceipt(ctx, transaction, receipt, version, effect)
+}
+
+func insertActionConsumptionReceipt(
+	ctx context.Context, tx *sql.Tx, receipt application.ActionConsumptionReceipt,
+	governanceVersion int64, effect *application.EffectReceipt,
+) error {
+	persisted, err := sqliteTableHasColumn(ctx, tx, "action_consumption_receipts", "governance_version")
+	if err != nil {
+		return mapDatabaseError(err)
+	}
+	if persisted {
+		_, err = tx.ExecContext(ctx, `
+INSERT INTO action_consumption_receipts(
+    action_ref, governance_version, kind, goal_ref, work_item_ref, execution_ref,
+    plan_generation, work_item_generation, fence, delivery_attempt,
+    claim_token, worker_ref, outcome, error_code, consumed_at, effect_receipt_ref
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			receipt.ActionRef, governanceVersion, string(receipt.Kind), receipt.GoalRef.String(),
+			receipt.WorkItemRef.String(), receipt.ExecutionRef.String(), int64(receipt.PlanGeneration),
+			int64(receipt.WorkItemGeneration), int64(receipt.Fence), int64(receipt.DeliveryAttempt),
+			receipt.ClaimToken, receipt.WorkerRef, string(receipt.Outcome), receipt.ErrorCode,
+			requiredTime(receipt.ConsumedAt), nullableString(receipt.EffectReceiptRef),
+		)
+		return mapDatabaseError(err)
+	}
+	var effectStatus, effectAt any
+	if effect != nil {
+		effectStatus, effectAt = effect.Status, requiredTime(effect.ConfirmedAt)
+	}
+	_, err = tx.ExecContext(ctx, `
 INSERT INTO action_consumption_receipts(
     action_ref, kind, goal_ref, work_item_ref, execution_ref,
     plan_generation, work_item_generation, fence, delivery_attempt,
     claim_token, worker_ref, outcome, error_code, consumed_at,
     effect_receipt_ref, effect_status, effect_confirmed_at
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		claim.Action.Ref, string(claim.Action.Kind), claim.Action.GoalRef.String(),
-		claim.Action.WorkItemRef.String(), claim.Action.ExecutionRef.String(),
-		int64(claim.Action.PlanGeneration), int64(claim.Action.WorkItemGeneration),
-		int64(claim.Fence), int64(claim.DeliveryAttempt), claim.Token, claim.WorkerRef,
-		string(outcome), errorCode, requiredTime(at), effectReceipt, effectStatus, effectAt,
+		receipt.ActionRef, string(receipt.Kind), receipt.GoalRef.String(), receipt.WorkItemRef.String(),
+		receipt.ExecutionRef.String(), int64(receipt.PlanGeneration), int64(receipt.WorkItemGeneration),
+		int64(receipt.Fence), int64(receipt.DeliveryAttempt), receipt.ClaimToken, receipt.WorkerRef,
+		string(receipt.Outcome), receipt.ErrorCode, requiredTime(receipt.ConsumedAt),
+		nullableString(receipt.EffectReceiptRef), effectStatus, effectAt,
 	)
 	return mapDatabaseError(err)
-}
-
-func stopEffectColumns(effect *ports.AgentStopReceipt) (any, any, any) {
-	if effect == nil {
-		return nil, nil, nil
-	}
-	return effect.ReceiptRef, string(effect.Status), requiredTime(effect.ConfirmedAt)
 }
 
 func releaseClaimForRetry(

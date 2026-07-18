@@ -17,6 +17,13 @@ func (orchestrator *Orchestrator) buildInitialControl(
 	state *ApplyControlState,
 ) error {
 	var err error
+	policy := orchestrator.budgetPolicy.effectPolicy()
+	if (request.Operation == ControlStop || request.Operation == ControlCancel) && !legacyGovernanceRecord(record) {
+		policy, err = historicalEffectPolicy(record)
+		if err != nil {
+			return err
+		}
+	}
 	switch request.Operation {
 	case ControlPause, ControlResume:
 		paused := request.Operation == ControlPause
@@ -29,8 +36,8 @@ func (orchestrator *Orchestrator) buildInitialControl(
 		}
 		if err == nil && !paused {
 			var scheduledEvents []EventRecord
-			state.Executions, state.NewActions, scheduledEvents, err = orchestrator.scheduleReady(
-				ctx, state.Goal, record.Executions, state.OperationAt,
+			state.Executions, state.NewActions, scheduledEvents, err = orchestrator.scheduleHistoricalReady(
+				ctx, record, state.Goal, record.Executions, state.OperationAt,
 			)
 			state.Events = append(state.Events, scheduledEvents...)
 		}
@@ -48,12 +55,12 @@ func (orchestrator *Orchestrator) buildInitialControl(
 		}
 		state.Goal, err = record.Goal.AdvanceControl(record.Goal.Revision(), state.OperationAt)
 		if err == nil {
-			state.NewActions = []ActionRecord{
-				stopAction(state.Control.Ref, state.Goal, item, execution, state.OperationAt),
-			}
+			var action ActionRecord
+			action, err = orchestrator.stopAction(policy, state.Control, state.Goal, item, execution, state.OperationAt)
+			state.NewActions = []ActionRecord{action}
 		}
 	case ControlCancel:
-		err = orchestrator.buildCancelControl(ctx, record, item, request, state)
+		err = orchestrator.buildCancelControl(ctx, record, item, request, policy, state)
 	case ControlRetry:
 		err = orchestrator.buildRetryControl(ctx, record, item, execution, state)
 	default:
@@ -69,13 +76,7 @@ func (orchestrator *Orchestrator) buildInitialControl(
 	return nil
 }
 
-func (orchestrator *Orchestrator) buildCancelControl(
-	ctx context.Context,
-	record GoalRecord,
-	item goal.WorkItem,
-	request ControlRequest,
-	state *ApplyControlState,
-) error {
+func (orchestrator *Orchestrator) buildCancelControl(ctx context.Context, record GoalRecord, item goal.WorkItem, request ControlRequest, policy effectPolicySnapshot, state *ApplyControlState) error {
 	var err error
 	if request.Target == ControlTargetGoal {
 		state.Goal, err = record.Goal.RequestCancel(record.Goal.Revision(), state.OperationAt)
@@ -114,9 +115,13 @@ func (orchestrator *Orchestrator) buildCancelControl(
 			state.Executions = append(state.Executions, current)
 			state.RetireActionRefs = append(state.RetireActionRefs, "action:launch:"+current.Ref.String())
 		case ExecutionDispatching, ExecutionRunning:
-			state.NewActions = append(state.NewActions, stopAction(
-				state.Control.Ref, state.Goal, updatedItem, current, state.OperationAt,
-			))
+			action, actionErr := orchestrator.stopAction(
+				policy, state.Control, state.Goal, updatedItem, current, state.OperationAt,
+			)
+			if actionErr != nil {
+				return actionErr
+			}
+			state.NewActions = append(state.NewActions, action)
 		}
 	}
 	if len(state.NewActions) == 0 {
@@ -135,7 +140,7 @@ func (orchestrator *Orchestrator) buildCancelControl(
 		existing = replaceExecution(existing, updated)
 	}
 	newExecutions, newActions, scheduledEvents, scheduleErr := orchestrator.scheduleReady(
-		ctx, state.Goal, existing, state.OperationAt,
+		ctx, state.Goal, existing, record.WorkItemAuthorities, policy, state.OperationAt,
 	)
 	if scheduleErr != nil {
 		return scheduleErr
@@ -159,6 +164,17 @@ func (orchestrator *Orchestrator) buildRetryControl(
 		execution.AttemptNo >= execution.MaxExecutionAttempts {
 		return &StateError{Code: StateConflict}
 	}
+	authority, found := workItemAuthorityFor(record.WorkItemAuthorities, item.Ref())
+	if !found {
+		if len(record.WorkItemAuthorities) == 0 {
+			return errors.New("governance.legacy_reauthorization_required")
+		}
+		return errors.New("application.work_item_authority_missing")
+	}
+	policy, err := historicalEffectPolicy(record)
+	if err != nil {
+		return err
+	}
 	replacementRef, err := newExecutionRef(ctx, orchestrator.ids)
 	if err != nil {
 		return err
@@ -174,29 +190,24 @@ func (orchestrator *Orchestrator) buildRetryControl(
 		AttemptNo: execution.AttemptNo + 1, MaxExecutionAttempts: execution.MaxExecutionAttempts,
 		ReplacesExecutionRef: execution.Ref, PlanGeneration: state.Goal.PlanGeneration(),
 		AppSpecGeneration: execution.AppSpecGeneration, SpecHash: execution.SpecHash,
-		// Retry only queues a fresh provider attempt. RecordLaunchPrepared is the
-		// single durable frontier that may move it to dispatching after a worker
-		// has claimed the launch and revalidated the effective pause gate.
 		State: ExecutionQueued, ArtifactMediaType: execution.ArtifactMediaType,
 		IdempotencyKey: "execution:" + replacementRef.String(), MaxOutputBytes: execution.MaxOutputBytes,
 		CreatedAt: state.OperationAt,
 	}
 	updatedItem, _ := state.Goal.WorkItem(item.Ref())
 	state.Executions = []ExecutionRecord{replacement}
-	state.NewActions = []ActionRecord{{
-		Ref: "action:launch:" + replacement.Ref.String(), Kind: ActionLaunchAgent,
-		GoalRef: state.Goal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: replacement.Ref,
-		PlanGeneration: replacement.PlanGeneration, WorkItemGeneration: updatedItem.Revision(),
-		AvailableAt: state.OperationAt,
-	}}
+	action, err := orchestrator.launchAction(
+		policy, state.Goal, updatedItem, replacement, authority, state.OperationAt, state.OperationAt,
+	)
+	if err != nil {
+		return err
+	}
+	state.NewActions = []ActionRecord{action}
 	state.RequireMailboxClearForExecutionRef = execution.Ref
 	confirmLocalControl(&state.Control, state.OperationAt)
 	return nil
 }
 
-// exclusiveStopOwner keeps one effect owner per live Execution. The only
-// transfer allowed is cooperative Stop -> forced Stop for the same exact
-// Execution; cancel ownership and forced ownership are never preempted.
 func exclusiveStopOwner(record GoalRecord, request ControlRequest) (ControlRecord, error) {
 	var targets []ExecutionRecord
 	switch request.Operation {

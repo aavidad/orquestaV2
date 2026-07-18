@@ -46,6 +46,14 @@ integra commit de evidencia `E`, que solo añade/renueva salidas y receipts. No 
 ejecuta desde el worktree principal sucio ni se cambia candidato entre `C` y la
 ejecución.
 
+Los contratos que además sellan un delta `base..P` usan la forma equivalente
+de tres commits: `P` contiene producto, tests, roadmap y documentación; `S`
+solo liga el fixture y su constante a `P` y puede añadir un receipt placeholder
+regular cuando el roadmap exige que la ruta exista; el argv corre desde `S`
+detached y limpio; `E` sustituye el placeholder y añade la salida. Los
+`candidate_subjects` son exactamente el delta `base..P`, nunca receipt/salida
+ni los cambios de enlace exclusivos de `S`.
+
 El fixture sellado es la única lista de `candidate_subjects`. Cada sujeto debe
 ser blob regular `100644` o `100755`; rutas absolutas, escapes, duplicados,
 symlinks, árboles y submódulos fallan cerrados. El digest enmarca ruta, modo y

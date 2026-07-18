@@ -1,6 +1,6 @@
 # Ruta canónica hasta Orquesta total
 
-Fecha: 2026-07-16
+Fecha: 2026-07-18
 
 Estado: autoridad de ejecución del rebuild. Esta ruta define el trabajo; no
 afirma que el producto total esté terminado.
@@ -199,26 +199,25 @@ Nota de evidencia V13: un E2E Codex real que recorra composición, MCP, SQLite
 y CAS pero no active `HandoffRequired` sirve como gate de no regresión. No
 sustituye `AC-V13-MAILBOX` ni acredita mailbox o bindings públicos.
 
-Corte vigente 2026-07-16: V14 está acreditado por receipt V3 `PASS` tras
-ejecutar `AC-V14-CONTROLS` desde checkout `detached_clean`.
+Corte vigente 2026-07-18: V15 está acreditado por receipt V3 `PASS` tras
+ejecutar `AC-V15-BUDGETS-EFFECTS` desde checkout `detached_clean`. Los OID y
+digests autoritativos viven en
+[`product/evidence/v15_budgets_effects.json`](../../product/evidence/v15_budgets_effects.json);
+no se duplican manualmente en esta ruta.
 
 ```text
-producto P:   6dbc0d808de63973305914b002c3bc2b8a806bb0
-sellado S:    e3e7c28e669ccd7e67a8661c40333d649ab82dd5
-evidencia E:  5b97545ad14a40fd0063fc3671f6e79d9978ec09
-estado:       48/257 = 18,68 %; 14/34 = 41,18 %; 14/14 receipts
+estado: 56/257 = 21,79 %; 15/34 = 44,12 %; 15/15 receipts
 ```
 
-El receipt V14 acredita únicamente `GOV-07`, `STG-15`, `ORC-03` y `ORC-16`.
-Sus controles son casos de uso internos de aplicación y composición; no existen
-bindings HTTP/MCP/CLI hasta el registro único V20, ni paridad i18n total hasta V21. El
-E2E de composición prueba stop forzado selectivo, receipt confirmado y
-lifecycle `Execution stopped`/`WorkItem interrupted` sin cerrar el Goal; las
-suites causales cubren también A/B/C/D, restart, retry, cancel y replan. Otro
-E2E confirma que un stop cooperativo pendiente no bloquea el scheduler único y
-que el forced posterior converge.
-V15 no está abierto. La próxima sesión empieza analizándolo y fijando
-`AC-V15-BUDGETS-EFFECTS` antes de cualquier programación.
+El receipt V15 acredita únicamente `GOV-15`, `STG-09`, `ORC-08`, `ORC-09`,
+`ORC-10`, `ORC-11`, `EVD-03` y `EVD-14`. Presupuestos jerárquicos, fairness,
+riesgo/esfuerzo y ledger `intent -> approval -> attempt -> receipt` amplían el
+mismo writer, scheduler, outbox y repositorio; no crean otro motor. Launch y
+stop quedan gobernados también en composición Codex. HTTP/MCP/CLI públicos
+siguen esperando V20 y la paridad i18n total espera V21.
+
+V16 no está abierto. Siguiente sesión: analizar workspace, Git y colaboración,
+fijar `AC-V16-WORKSPACE-GIT` rojo y solo después programar su write-set.
 
 ## 6. Olas y transición a auto-orquestación
 
@@ -227,8 +226,9 @@ Ejemplos de paralelismo seguro:
 
 - V07 y contratos iniciales de V10 pueden avanzar tras V06 con write-sets
   separados; V08 consume la salida canónica de V07.
-- V15 no está abierto en este corte. La próxima sesión empieza por su análisis
-  y contrato rojo; V16 no se adelanta sobre ese write-set causal.
+- V15 está cerrado. V16 comienza por análisis y contrato rojo; V17 no se
+  adelanta sobre su autoridad de workspace/Git aunque pueda preparar contratos
+  disjuntos sin integrarlos.
 - V17, adapters iniciales de V21 y catálogos i18n pueden desarrollarse en ramas
   separadas, pero solo integran con sus dependencias acreditadas.
 - tras congelar contrato en V20, los adapters de V25 se portan en paralelo.

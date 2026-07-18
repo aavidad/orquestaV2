@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
 	"orquesta/internal/identity"
 	"orquesta/internal/ports"
 )
@@ -112,13 +113,15 @@ type ApplyControlState struct {
 	ExpectedExecutionState             ExecutionState
 	ExpectedControlStatus              ControlStatus
 	Claim                              ActionClaim
+	ClaimErrorCode                     string
 	Goal                               goal.Goal
 	Executions                         []ExecutionRecord
 	NewActions                         []ActionRecord
 	RetireActionRefs                   []string
 	RetireMailboxForExecutionRef       goal.ExecutionRef
 	RequireMailboxClearForExecutionRef goal.ExecutionRef
-	StopReceipt                        *ports.AgentStopReceipt
+	EffectReceipt                      *EffectReceipt
+	BudgetSettlement                   *governance.BudgetSettlement
 	// SupersededControl carries the complete typed old->new Stop lineage. The
 	// repository validates and persists it in the same transaction as the new
 	// forced Stop and its replacement outbox action.

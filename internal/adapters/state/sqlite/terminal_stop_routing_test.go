@@ -121,8 +121,7 @@ func TestSQLiteTerminalStopSettlesAfterRestartWithReplacementAgentRouting(t *tes
 		t.Fatalf("local terminal settlement: record=%+v physical_stops=%d err=%v", settled, agent.stopCount(), err)
 	}
 	var receipts int
-	if err := restarted.db.QueryRow(`SELECT COUNT(*) FROM action_consumption_receipts
-WHERE action_ref = ? AND effect_status = 'already_completed'`,
+	if err := restarted.db.QueryRow(`SELECT COUNT(*) FROM action_consumption_receipts WHERE action_ref = ?`,
 		"action:stop:"+requested.Control.Ref+":"+execution.Ref.String(),
 	).Scan(&receipts); err != nil {
 		t.Fatal(err)
@@ -184,13 +183,13 @@ func TestSQLiteRunningStopRetainsExactAgentRouting(t *testing.T) {
 	}
 	if claim, found, claimErr := repository.ClaimNextAction(ctx, application.ClaimRequest{
 		WorkerRef: "worker:replacement-live", Token: "claim:replacement-live",
-		LeaseDuration: time.Minute, Capabilities: replacement,
+		LeaseDuration: time.Minute, Capabilities: replacement, BudgetPolicy: sqliteRuntimeTestPolicy(),
 	}); claimErr != nil || found {
 		t.Fatalf("replacement claimed running stop: found=%v claim=%+v err=%v", found, claim, claimErr)
 	}
 	claim, found, claimErr := repository.ClaimNextAction(ctx, application.ClaimRequest{
 		WorkerRef: "worker:original-live", Token: "claim:original-live",
-		LeaseDuration: time.Minute, Capabilities: capabilities,
+		LeaseDuration: time.Minute, Capabilities: capabilities, BudgetPolicy: sqliteRuntimeTestPolicy(),
 	})
 	if claimErr != nil || !found || claim.Action.Kind != application.ActionStopAgent {
 		t.Fatalf("original adapter did not claim running stop: found=%v claim=%+v err=%v", found, claim, claimErr)
@@ -211,6 +210,7 @@ func newTerminalStopRoutingOrchestrator(
 		State: state, Access: access, Launcher: agent, Observer: agent, Controller: agent,
 		Artifacts: leaseAdvancingArtifacts{clock: clock}, Clock: clock, IDs: ids,
 		MaxOutputBytes: 4096, MaxMailboxEnvelopeBytes: 64 << 10, MaxExecutionAttempts: 3,
+		MaxChildrenPerParent: 6, EffectApprovalTTL: time.Hour, BudgetPolicy: sqliteTestBudgetPolicy(clock.Now()),
 		AgentCapabilities: capabilities, ClaimLease: time.Minute, DirectorLeaseDuration: time.Minute,
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})

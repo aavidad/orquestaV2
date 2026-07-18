@@ -18,6 +18,7 @@ import (
 	"orquesta/internal/adapters/auth/localtoken"
 	"orquesta/internal/adapters/state/sqlite"
 	"orquesta/internal/application"
+	"orquesta/internal/config"
 	"orquesta/internal/goal"
 	"orquesta/internal/i18n"
 	"orquesta/internal/identity"
@@ -414,14 +415,25 @@ func newDAGHarness(t *testing.T, failures map[string]bool) *dagHarness {
 	}
 	agent := newDAGAgent(clock, failures)
 	artifacts := newDAGArtifacts()
+	snapshot, err := config.Resolve(config.ResolveOptions{})
+	if err != nil {
+		t.Fatalf("resolve canonical DAG config: %v", err)
+	}
+	budgetPolicy, err := buildBudgetPolicy(snapshot, clock.Now())
+	if err != nil {
+		t.Fatalf("build canonical DAG budget policy: %v", err)
+	}
 	orchestrator, err := application.New(application.Dependencies{
 		State: repository, Access: repository,
 		Launcher: agent, Observer: agent, Artifacts: artifacts,
 		Clock: clock, IDs: &dagSequentialIDs{}, MaxOutputBytes: 4096,
 		MaxMailboxEnvelopeBytes: 64 << 10,
-		MaxExecutionAttempts:    3, AgentCapabilities: dagAgentCapabilities(),
-		ClaimLease: time.Minute, DirectorLeaseDuration: 2 * time.Minute,
+		MaxExecutionAttempts:    3,
+		MaxChildrenPerParent:    int(snapshot.SchedulerMaxChildrenPerParent()),
+		ClaimLease:              time.Minute, DirectorLeaseDuration: 2 * time.Minute,
+		EffectApprovalTTL: snapshot.GovernanceEffectApprovalTTL(), BudgetPolicy: budgetPolicy,
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
+		AgentCapabilities: dagAgentCapabilities(),
 	})
 	if err != nil {
 		t.Fatalf("new DAG orchestrator: %v", err)

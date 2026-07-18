@@ -55,57 +55,8 @@ func validateRecoveryDatabase(ctx context.Context, database *sql.DB) (string, st
 	if integrity != "ok" {
 		return "", "", invalid(fmt.Errorf("sqlite.integrity_check_failed:%s", integrity))
 	}
-	switch current {
-	case recoverySchemaV09:
-		if err := validateRecoveryV09GoalRecords(ctx, transaction); err != nil {
-			return "", "", invalid(err)
-		}
-	case recoverySchemaV10:
-		if err := validateMigratedGoalRecords(ctx, transaction); err != nil {
-			return "", "", invalid(err)
-		}
-		if err := validateRecoveryV10Identity(ctx, transaction); err != nil {
-			return "", "", invalid(err)
-		}
-	case recoverySchemaV12:
-		if err := validateMigratedGoalRecords(ctx, transaction); err != nil {
-			return "", "", invalid(err)
-		}
-		if err := validateRecoveryV10Identity(ctx, transaction); err != nil {
-			return "", "", invalid(err)
-		}
-		if err := validateRecoveryV12Director(ctx, transaction); err != nil {
-			return "", "", invalid(err)
-		}
-	case recoverySchemaV13:
-		if err := validateMigratedGoalRecords(ctx, transaction); err != nil {
-			return "", "", invalid(err)
-		}
-		if err := validateRecoveryV10Identity(ctx, transaction); err != nil {
-			return "", "", invalid(err)
-		}
-		if err := validateRecoveryV12Director(ctx, transaction); err != nil {
-			return "", "", invalid(err)
-		}
-		if err := validateRecoveryV13Mailbox(ctx, transaction); err != nil {
-			return "", "", invalid(err)
-		}
-	case recoverySchemaV14:
-		if err := validateMigratedGoalRecords(ctx, transaction); err != nil {
-			return "", "", invalid(err)
-		}
-		if err := validateRecoveryV10Identity(ctx, transaction); err != nil {
-			return "", "", invalid(err)
-		}
-		if err := validateRecoveryV12Director(ctx, transaction); err != nil {
-			return "", "", invalid(err)
-		}
-		if err := validateRecoveryV13Mailbox(ctx, transaction); err != nil {
-			return "", "", invalid(err)
-		}
-		if err := validateRecoveryV14Controls(ctx, transaction); err != nil {
-			return "", "", invalid(err)
-		}
+	if err := validateRecoveryVersion(ctx, transaction, current); err != nil {
+		return "", "", invalid(err)
 	}
 	if err := validateRecoveryEvents(ctx, transaction); err != nil {
 		return "", "", invalid(err)
@@ -125,6 +76,34 @@ func validateRecoveryDatabase(ctx context.Context, database *sql.DB) (string, st
 		return "", "", mapDatabaseError(err)
 	}
 	return schemaRef, logicalDigest, nil
+}
+
+type recoveryValidator func(context.Context, *sql.Tx) error
+
+func validateRecoveryVersion(ctx context.Context, tx *sql.Tx, version int) error {
+	validators := []recoveryValidator{validateMigratedGoalRecords, validateRecoveryV10Identity}
+	if version == recoverySchemaV09 {
+		validators = []recoveryValidator{validateRecoveryV09GoalRecords}
+	} else {
+		if version >= recoverySchemaV12 {
+			validators = append(validators, validateRecoveryV12Director)
+		}
+		if version >= recoverySchemaV13 {
+			validators = append(validators, validateRecoveryV13Mailbox)
+		}
+		if version >= recoverySchemaV14 {
+			validators = append(validators, validateRecoveryV14Controls)
+		}
+		if version >= recoverySchemaV15 {
+			validators = append(validators, validateRecoveryV15Governance)
+		}
+	}
+	for _, validate := range validators {
+		if err := validate(ctx, tx); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func schemaInventoryDigest(ctx context.Context, source queryer) (string, error) {

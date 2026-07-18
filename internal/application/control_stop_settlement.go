@@ -16,8 +16,9 @@ func (orchestrator *Orchestrator) settleStopped(
 	execution ExecutionRecord,
 	control ControlRecord,
 	receipt ports.AgentStopReceipt,
+	effectReceipt EffectReceipt,
 ) error {
-	at := lifecycleTime(receipt.ConfirmedAt, record.Goal, item)
+	at := lifecycleTime(effectReceipt.ConfirmedAt, record.Goal, item)
 	aggregate := record.Goal
 	previousExecutionState := execution.State
 	var err error
@@ -40,6 +41,10 @@ func (orchestrator *Orchestrator) settleStopped(
 	execution.State = ExecutionStopped
 	execution.FailureCode = "application.execution_stopped"
 	execution.FinishedAt = at
+	settlement, err := settlementFor(record, execution, unknownUsage(), 0, at)
+	if err != nil {
+		return err
+	}
 	updatedItem, _ := aggregate.WorkItem(item.Ref())
 	if control.Operation != ControlCancel || control.Target == ControlTargetWorkItem || aggregate.IsTerminal() {
 		control.Status = ControlConfirmed
@@ -48,7 +53,9 @@ func (orchestrator *Orchestrator) settleStopped(
 	}
 	events := stoppedExecutionEvents(aggregate, updatedItem, execution, at)
 	existing := replaceExecution(record.Executions, execution)
-	newExecutions, newActions, scheduledEvents, err := orchestrator.scheduleReady(ctx, aggregate, existing, at)
+	newExecutions, newActions, scheduledEvents, err := orchestrator.scheduleHistoricalReady(
+		ctx, record, aggregate, existing, at,
+	)
 	if err != nil {
 		return err
 	}
@@ -63,8 +70,9 @@ func (orchestrator *Orchestrator) settleStopped(
 		Executions:                   append([]ExecutionRecord{execution}, newExecutions...),
 		NewActions:                   newActions,
 		RetireActionRefs:             []string{"action:observe:" + execution.Ref.String()},
-		RetireMailboxForExecutionRef: execution.Ref, StopReceipt: &receipt,
-		Events: events, Control: control, OperationAt: at,
+		RetireMailboxForExecutionRef: execution.Ref, EffectReceipt: &effectReceipt,
+		BudgetSettlement: settlement,
+		Events:           events, Control: control, OperationAt: at,
 	})
 	return err
 }
@@ -110,10 +118,11 @@ func (orchestrator *Orchestrator) settleStopObservedTerminal(
 	execution ExecutionRecord,
 	control ControlRecord,
 	receipt ports.AgentStopReceipt,
+	effectReceipt EffectReceipt,
 ) error {
 	if control.Operation != ControlCancel {
 		control.Status = ControlConfirmed
-		control.ConfirmedAt = receipt.ConfirmedAt.UTC()
+		control.ConfirmedAt = effectReceipt.ConfirmedAt
 		control.ReceiptRef = receipt.ReceiptRef
 	}
 	_, _, err := orchestrator.state.ApplyControl(ctx, ApplyControlState{
@@ -123,11 +132,11 @@ func (orchestrator *Orchestrator) settleStopObservedTerminal(
 		ExpectedGoalRevision: record.Goal.Revision(), ExpectedPlanGeneration: record.Goal.PlanGeneration(),
 		ExpectedWorkItemRevision: item.Revision(), ExpectedExecutionState: execution.State,
 		ExpectedControlStatus: ControlRequested, Claim: claim, Goal: record.Goal,
-		StopReceipt: &receipt, Control: control, OperationAt: receipt.ConfirmedAt.UTC(),
+		EffectReceipt: &effectReceipt, Control: control, OperationAt: effectReceipt.ConfirmedAt,
 		Events: []EventRecord{{
 			Ref: "event:stop-observed-terminal:" + claim.Action.Ref, Kind: "control.stop_observed_terminal",
 			GoalRef: record.Goal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref,
-			OccurredAt: receipt.ConfirmedAt.UTC(),
+			OccurredAt: effectReceipt.ConfirmedAt,
 		}},
 	})
 	return err
@@ -141,21 +150,23 @@ func (orchestrator *Orchestrator) settleStopAgainstTerminal(
 	execution ExecutionRecord,
 	control ControlRecord,
 ) error {
-	status := ports.AgentStopAlreadyFailed
-	if execution.State == ExecutionStopped {
-		status = ports.AgentStopAlreadyStopped
-	} else if execution.State == ExecutionSucceeded {
-		status = ports.AgentStopAlreadyCompleted
-	}
 	at := orchestrator.clock.Now().UTC()
-	receipt := ports.AgentStopReceipt{
-		ExecutionRef: execution.Ref, GoalRef: execution.GoalRef, WorkItemRef: execution.WorkItemRef,
-		PlanGeneration: execution.PlanGeneration, AppSpecGeneration: execution.AppSpecGeneration,
-		ExecutionAttempt: execution.AttemptNo, SpecHash: execution.SpecHash,
-		ProviderRef: execution.ProviderRef, ModelRef: execution.ModelRef, AgentRef: execution.AgentRef,
-		ExternalRef: execution.ExternalRef, Mode: control.Mode,
-		IdempotencyKey: "stop:" + control.Ref + ":" + execution.Ref.String(), Status: status,
-		ReceiptRef: "receipt:terminal:" + execution.Ref.String(), ConfirmedAt: at,
+	if control.Operation != ControlCancel {
+		control.Status, control.ConfirmedAt = ControlConfirmed, at
+		control.ReceiptRef = "receipt:local-terminal:" + execution.Ref.String()
 	}
-	return orchestrator.settleStopObservedTerminal(ctx, claim, record, item, execution, control, receipt)
+	_, _, err := orchestrator.state.ApplyControl(ctx, ApplyControlState{
+		RequestRef: control.RequestRef, RequestFingerprint: control.RequestFingerprint,
+		AuthorizationReceipt: control.AuthorizationReceipt, PrincipalRef: control.PrincipalRef,
+		ProjectRef: control.ProjectRef, GoalRef: control.GoalRef,
+		ExpectedGoalRevision: record.Goal.Revision(), ExpectedPlanGeneration: record.Goal.PlanGeneration(),
+		ExpectedWorkItemRevision: item.Revision(), ExpectedExecutionState: execution.State,
+		ExpectedControlStatus: ControlRequested, Claim: claim, Goal: record.Goal,
+		Control: control, OperationAt: at,
+		Events: []EventRecord{{
+			Ref: "event:stop-local-terminal:" + claim.Action.Ref, Kind: "control.stop_local_terminal",
+			GoalRef: record.Goal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref, OccurredAt: at,
+		}},
+	})
+	return err
 }

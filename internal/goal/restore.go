@@ -94,21 +94,12 @@ func RestoreGoal(snapshot GoalSnapshot) (Goal, error) {
 		snapshot.SchemaVersion != governanceCompatibleSnapshotSchemaVersion {
 		return Goal{}, domainError(ErrorSnapshotInvalid, "schema_version")
 	}
-	spec, err := RestoreAppSpec(snapshot.AppSpec)
-	if err != nil {
-		return Goal{}, err
-	}
+	spec, specErr := RestoreAppSpec(snapshot.AppSpec)
 	intent := spec.Intent()
-	ref, err := NewGoalRef(snapshot.Ref)
-	if err != nil {
-		return Goal{}, err
-	}
-	actor, err := NewActorRef(snapshot.ActorRef)
-	if err != nil {
-		return Goal{}, err
-	}
-	project, err := NewProjectRef(snapshot.ProjectRef)
-	if err != nil {
+	ref, refErr := NewGoalRef(snapshot.Ref)
+	actor, actorErr := NewActorRef(snapshot.ActorRef)
+	project, projectErr := NewProjectRef(snapshot.ProjectRef)
+	if err := firstError(specErr, refErr, actorErr, projectErr); err != nil {
 		return Goal{}, err
 	}
 	if actor != intent.Actor() || project != intent.Project() {
@@ -145,22 +136,8 @@ func RestoreGoal(snapshot GoalSnapshot) (Goal, error) {
 		items:     make(map[WorkItemRef]WorkItem, len(snapshot.WorkItems)),
 		itemOrder: make([]WorkItemRef, 0, len(snapshot.WorkItems)),
 	}
-	for _, itemSnapshot := range snapshot.WorkItems {
-		item, restoreErr := restoreWorkItem(itemSnapshot, snapshot.SchemaVersion)
-		if restoreErr != nil {
-			return Goal{}, restoreErr
-		}
-		if _, duplicate := restored.items[item.ref]; duplicate {
-			return Goal{}, domainError(ErrorDuplicateWorkItem, "work_item_ref")
-		}
-		if item.goal != restored.ref || item.actor != restored.actor || item.project != restored.project {
-			return Goal{}, domainError(ErrorScopeConflict, "work_item_scope")
-		}
-		if item.createdAt.Before(restored.createdAt) {
-			return Goal{}, domainError(ErrorSnapshotInvalid, "work_item_created_at")
-		}
-		restored.items[item.ref] = item
-		restored.itemOrder = append(restored.itemOrder, item.ref)
+	if err := restoreGoalItems(snapshot, &restored); err != nil {
+		return Goal{}, err
 	}
 	childHandoffs, err := restoreChildHandoffResolutions(snapshot.ChildHandoffResolutions)
 	if err != nil {
@@ -185,21 +162,33 @@ func RestoreGoal(snapshot GoalSnapshot) (Goal, error) {
 	return restored, nil
 }
 
+func restoreGoalItems(snapshot GoalSnapshot, restored *Goal) error {
+	for _, itemSnapshot := range snapshot.WorkItems {
+		item, err := restoreWorkItem(itemSnapshot, snapshot.SchemaVersion)
+		if err != nil {
+			return err
+		}
+		if _, duplicate := restored.items[item.ref]; duplicate {
+			return domainError(ErrorDuplicateWorkItem, "work_item_ref")
+		}
+		if item.goal != restored.ref || item.actor != restored.actor || item.project != restored.project {
+			return domainError(ErrorScopeConflict, "work_item_scope")
+		}
+		if item.createdAt.Before(restored.createdAt) {
+			return domainError(ErrorSnapshotInvalid, "work_item_created_at")
+		}
+		restored.items[item.ref] = item
+		restored.itemOrder = append(restored.itemOrder, item.ref)
+	}
+	return nil
+}
+
 func restoreWorkItem(snapshot WorkItemSnapshot, schemaVersion uint32) (WorkItem, error) {
-	ref, err := NewWorkItemRef(snapshot.Ref)
-	if err != nil {
-		return WorkItem{}, err
-	}
-	goalRef, err := NewGoalRef(snapshot.GoalRef)
-	if err != nil {
-		return WorkItem{}, err
-	}
-	actor, err := NewActorRef(snapshot.ActorRef)
-	if err != nil {
-		return WorkItem{}, err
-	}
-	project, err := NewProjectRef(snapshot.ProjectRef)
-	if err != nil {
+	ref, refErr := NewWorkItemRef(snapshot.Ref)
+	goalRef, goalErr := NewGoalRef(snapshot.GoalRef)
+	actor, actorErr := NewActorRef(snapshot.ActorRef)
+	project, projectErr := NewProjectRef(snapshot.ProjectRef)
+	if err := firstError(refErr, goalErr, actorErr, projectErr); err != nil {
 		return WorkItem{}, err
 	}
 	if strings.TrimSpace(snapshot.Objective) == "" || !validWorkItemState(snapshot.State) {
@@ -208,28 +197,16 @@ func restoreWorkItem(snapshot WorkItemSnapshot, schemaVersion uint32) (WorkItem,
 	if !validRestoredWorkItemRevision(snapshot.State, snapshot.Revision, snapshot.ControlSequence) || snapshot.CreatedAt.IsZero() {
 		return WorkItem{}, domainError(ErrorSnapshotInvalid, "work_item_revision")
 	}
-	phase, err := NewPhaseKey(snapshot.PhaseKey)
-	if err != nil {
+	phase, phaseErr := NewPhaseKey(snapshot.PhaseKey)
+	role, roleErr := NewRoleKey(snapshot.RoleKey)
+	outputContract, outputErr := NewOutputContract(snapshot.OutputContract)
+	if err := firstError(phaseErr, roleErr, outputErr); err != nil {
 		return WorkItem{}, err
 	}
-	role, err := NewRoleKey(snapshot.RoleKey)
-	if err != nil {
-		return WorkItem{}, err
-	}
-	outputContract, err := NewOutputContract(snapshot.OutputContract)
-	if err != nil {
-		return WorkItem{}, err
-	}
-	dependencies, err := restoreWorkItemRefs(snapshot.DependencyRefs)
-	if err != nil {
-		return WorkItem{}, err
-	}
-	writeSet, err := restoreWriteSet(snapshot.WriteSet)
-	if err != nil {
-		return WorkItem{}, err
-	}
-	parent, err := restoreOptionalWorkItemRef(snapshot.ParentRef)
-	if err != nil {
+	dependencies, dependenciesErr := restoreWorkItemRefs(snapshot.DependencyRefs)
+	writeSet, writeSetErr := restoreWriteSet(snapshot.WriteSet)
+	parent, parentErr := restoreOptionalWorkItemRef(snapshot.ParentRef)
+	if err := firstError(dependenciesErr, writeSetErr, parentErr); err != nil {
 		return WorkItem{}, err
 	}
 	if snapshot.HandoffRequired == nil {
@@ -239,36 +216,21 @@ func restoreWorkItem(snapshot WorkItemSnapshot, schemaVersion uint32) (WorkItem,
 	if handoffRequired && !validWorkItemRef(parent) {
 		return WorkItem{}, domainError(ErrorSnapshotInvalid, "handoff_parent")
 	}
-	skillRefs, err := restoreSkillRefs(snapshot.SkillRefs)
-	if err != nil {
+	skillRefs, skillErr := restoreSkillRefs(snapshot.SkillRefs)
+	toolRefs, toolErr := restoreToolRefs(snapshot.ToolRefs)
+	capabilityRefs, capabilityErr := restoreCapabilityRefs(snapshot.CapabilityRefs)
+	if err := firstError(skillErr, toolErr, capabilityErr); err != nil {
 		return WorkItem{}, err
 	}
-	toolRefs, err := restoreToolRefs(snapshot.ToolRefs)
-	if err != nil {
-		return WorkItem{}, err
+	budgetDemand, criticality, effort, governanceErr := restoreWorkItemGovernance(snapshot, schemaVersion, ref)
+	if governanceErr != nil {
+		return WorkItem{}, governanceErr
 	}
-	capabilityRefs, err := restoreCapabilityRefs(snapshot.CapabilityRefs)
-	if err != nil {
-		return WorkItem{}, err
-	}
-	budgetDemand, criticality, effort, err := restoreWorkItemGovernance(snapshot, schemaVersion, ref)
-	if err != nil {
-		return WorkItem{}, err
-	}
-	execution, err := restoreExecutionRef(snapshot.ExecutionRef)
-	if err != nil {
-		return WorkItem{}, err
-	}
-	reworkOf, err := restoreOptionalWorkItemRef(snapshot.ReworkOf)
-	if err != nil {
-		return WorkItem{}, err
-	}
-	artifacts, err := restoreArtifactRefs(snapshot.ArtifactRefs)
-	if err != nil {
-		return WorkItem{}, err
-	}
-	attestations, err := restoreAttestationRefs(snapshot.AttestationRefs)
-	if err != nil {
+	execution, executionErr := restoreExecutionRef(snapshot.ExecutionRef)
+	reworkOf, reworkErr := restoreOptionalWorkItemRef(snapshot.ReworkOf)
+	artifacts, artifactsErr := restoreArtifactRefs(snapshot.ArtifactRefs)
+	attestations, attestationsErr := restoreAttestationRefs(snapshot.AttestationRefs)
+	if err := firstError(executionErr, reworkErr, artifactsErr, attestationsErr); err != nil {
 		return WorkItem{}, err
 	}
 
@@ -297,6 +259,15 @@ func restoreWorkItem(snapshot WorkItemSnapshot, schemaVersion uint32) (WorkItem,
 		return WorkItem{}, err
 	}
 	return restored, nil
+}
+
+func firstError(errs ...error) error {
+	for _, err := range errs {
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func restoreWorkItemGovernance(

@@ -198,34 +198,13 @@ func requirePersistedAuthorization(
 	permission identity.Permission,
 	resourceRef string,
 ) (identity.Membership, error) {
-	request := receipt.Decision().Request()
-	if receipt.Ref() == "" || requestedBy.String() == "" || projectRef.String() == "" ||
-		request.Principal().Ref != requestedBy || request.ProjectRef() != projectRef ||
-		request.Permission() != permission || request.ResourceRef() != resourceRef {
-		return identity.Membership{}, conflict(errors.New("sqlite.authorization_scope_conflict"))
-	}
-	fingerprint := authorizationRequestFingerprint(request)
-	stored, found, err := findAuthorizationByRef(ctx, transaction, receipt.Ref())
+	persisted, err := requirePersistedAuthorizationFact(
+		ctx, transaction, receipt, requestedBy, projectRef, permission, resourceRef,
+	)
 	if err != nil {
 		return identity.Membership{}, err
 	}
-	if !found {
-		return identity.Membership{}, conflict(errors.New("sqlite.authorization_receipt_missing"))
-	}
-	persisted, err := restoreAuthorizationReceipt(request, fingerprint, stored)
-	if err != nil || !sameAuthorizationReceipt(persisted, receipt) {
-		if err != nil {
-			return identity.Membership{}, err
-		}
-		return identity.Membership{}, conflict(errors.New("sqlite.authorization_receipt_conflict"))
-	}
 	decision := persisted.Decision()
-	if decision.Outcome() != identity.AuthorizationAllowed || !identity.RoleAllows(decision.Role(), permission) {
-		return identity.Membership{}, conflict(errors.New("sqlite.authorization_denied"))
-	}
-	if err := requirePrincipal(ctx, transaction, request.Principal()); err != nil {
-		return identity.Membership{}, err
-	}
 	membership, err := readMembership(ctx, transaction, requestedBy, projectRef)
 	if err != nil {
 		if application.IsStateError(err, application.StateNotFound) {
@@ -238,6 +217,46 @@ func requirePersistedAuthorization(
 		return identity.Membership{}, conflict(errors.New("sqlite.authorization_membership_stale"))
 	}
 	return membership, nil
+}
+
+func requirePersistedAuthorizationFact(
+	ctx context.Context,
+	transaction *sql.Tx,
+	receipt identity.AuthorizationReceipt,
+	requestedBy identity.PrincipalRef,
+	projectRef goal.ProjectRef,
+	permission identity.Permission,
+	resourceRef string,
+) (identity.AuthorizationReceipt, error) {
+	request := receipt.Decision().Request()
+	if receipt.Ref() == "" || requestedBy.String() == "" || projectRef.String() == "" ||
+		request.Principal().Ref != requestedBy || request.ProjectRef() != projectRef ||
+		request.Permission() != permission || request.ResourceRef() != resourceRef {
+		return identity.AuthorizationReceipt{}, conflict(errors.New("sqlite.authorization_scope_conflict"))
+	}
+	fingerprint := authorizationRequestFingerprint(request)
+	stored, found, err := findAuthorizationByRef(ctx, transaction, receipt.Ref())
+	if err != nil {
+		return identity.AuthorizationReceipt{}, err
+	}
+	if !found {
+		return identity.AuthorizationReceipt{}, conflict(errors.New("sqlite.authorization_receipt_missing"))
+	}
+	persisted, err := restoreAuthorizationReceipt(request, fingerprint, stored)
+	if err != nil || !sameAuthorizationReceipt(persisted, receipt) {
+		if err != nil {
+			return identity.AuthorizationReceipt{}, err
+		}
+		return identity.AuthorizationReceipt{}, conflict(errors.New("sqlite.authorization_receipt_conflict"))
+	}
+	decision := persisted.Decision()
+	if decision.Outcome() != identity.AuthorizationAllowed || !identity.RoleAllows(decision.Role(), permission) {
+		return identity.AuthorizationReceipt{}, conflict(errors.New("sqlite.authorization_denied"))
+	}
+	if err := requirePrincipal(ctx, transaction, request.Principal()); err != nil {
+		return identity.AuthorizationReceipt{}, err
+	}
+	return persisted, nil
 }
 
 func validateAuthorizationRequest(request identity.AuthorizationRequest) error {

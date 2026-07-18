@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
 	"orquesta/internal/ports"
 )
 
@@ -31,6 +32,7 @@ func (orchestrator *Orchestrator) ProcessNext(ctx context.Context, workerRef str
 	claim, found, err := orchestrator.state.ClaimNextAction(ctx, ClaimRequest{
 		WorkerRef: workerRef, Token: token, LeaseDuration: orchestrator.claimLease,
 		Capabilities: orchestrator.agentCapabilities,
+		BudgetPolicy: orchestrator.budgetPolicy,
 	})
 	if err != nil || !found {
 		return ProcessResult{}, err
@@ -50,146 +52,41 @@ func (orchestrator *Orchestrator) ProcessNext(ctx context.Context, workerRef str
 }
 
 func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim ActionClaim) error {
-	record, err := orchestrator.state.GetGoal(ctx, claim.Action.GoalRef)
-	if err != nil {
-		if IsStateError(err, StateNotFound) {
-			return orchestrator.quarantine(ctx, claim, "application.action_goal_not_found")
-		}
+	record, item, execution, phase, proceed, err := orchestrator.loadClaimedLaunch(ctx, claim)
+	if err != nil || !proceed {
 		return err
 	}
-	if err := validateClaimedRecord(claim, record, ActionLaunchAgent); err != nil {
-		return orchestrator.quarantine(ctx, claim, err.Error())
+	record, item, execution, proceed, err = orchestrator.prepareLaunchDispatch(ctx, claim, record, item, execution)
+	if err != nil || !proceed {
+		return err
 	}
-	item, ok := record.Goal.WorkItem(claim.Action.WorkItemRef)
-	execution, found := executionForAction(record, claim.Action)
-	if !ok || !found {
-		return &StateError{Code: StateConflict}
+	request := agentLaunchRequest(record.Goal, item, execution, phase)
+	if launchTargetDigest(request) != claim.Action.EffectIntent.TargetDigest {
+		return orchestrator.quarantineUnapplied(ctx, claim, "application.effect_target_mismatch")
 	}
-	// Claim-time filtering is only a scheduling optimization. A lifecycle
-	// control may commit after the action is claimed, so application must fence
-	// the last queued state before crossing the durable dispatch frontier.
-	// RecordLaunchPrepared's expected Goal revision remains the second CAS when
-	// pause/cancel commits after this read.
-	if execution.State == ExecutionQueued && launchBlockedByLifecycleControl(record.Goal, item) {
-		return orchestrator.requeue(ctx, claim, execution, "application.launch_control_pending")
+	attempt, receipt, proceed, err := orchestrator.dispatchLaunchEffect(ctx, claim, record, execution, request)
+	if err != nil || !proceed {
+		return err
 	}
-	phase, phaseFound := phaseForWorkItem(record.Goal, item)
-	if !phaseFound {
-		return &StateError{Code: StateConflict}
-	}
-	if execution.State == ExecutionQueued {
-		transitionAt := lifecycleTime(orchestrator.clock.Now(), record.Goal, item)
-		aggregate := record.Goal
-		switch item.State() {
-		case goal.WorkItemStatePending:
-			var startErr error
-			aggregate, startErr = record.Goal.StartWorkItem(
-				record.Goal.Revision(), item.Revision(), item.Ref(), execution.Ref, transitionAt,
-			)
-			if goal.ErrorCodeOf(startErr) == goal.ErrorWorkItemNotReady {
-				return orchestrator.requeue(ctx, claim, execution, "application.work_item_not_ready")
-			}
-			if startErr != nil {
-				return startErr
-			}
-		case goal.WorkItemStateRunning:
-			bound, boundFound := item.Execution()
-			if !boundFound || bound != execution.Ref {
-				return &StateError{Code: StateConflict}
-			}
-		default:
-			return &StateError{Code: StateConflict}
-		}
-		execution.State = ExecutionDispatching
-		if err := orchestrator.state.RecordLaunchPrepared(ctx, LaunchPreparedState{
-			Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), Goal: aggregate,
-			Execution: execution,
-			Event: EventRecord{
-				Ref: "event:execution-dispatching:" + execution.Ref.String(), Kind: "execution.dispatching",
-				GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref,
-				OccurredAt: transitionAt,
-			},
-			OperationAt: transitionAt,
-		}); err != nil {
-			if IsStateError(err, StateConflict) {
-				return orchestrator.requeue(ctx, claim, executionWithState(execution, ExecutionQueued), "state.conflict")
-			}
-			return err
-		}
-		record.Goal = aggregate
-		record.Executions = replaceExecution(record.Executions, execution)
-		item, _ = aggregate.WorkItem(item.Ref())
-	}
-	request := ports.AgentLaunchRequest{
-		ExecutionRef: execution.Ref, GoalRef: record.Goal.Ref(),
-		WorkItemRef: item.Ref(), SpecHash: record.Goal.SpecHash(), ActorRef: record.Goal.Actor(),
-		ProjectRef: record.Goal.Project(), Objective: item.Objective(),
-		PlanGeneration: execution.PlanGeneration, AppSpecGeneration: record.Goal.AppSpec().Generation(),
-		ExecutionAttempt: execution.AttemptNo,
-		PhaseRef:         phase.Ref().String(), PhaseKey: item.Phase().String(),
-		PhaseTemplateRef: phase.TemplateRef().String(),
-		PhaseInputRefs:   workItemRefs(phase.InputRefs()), PhaseCriterionRefs: workItemRefs(phase.CriterionRefs()),
-		RoleKey:   item.Role().String(),
-		SkillRefs: workItemRefs(item.SkillRefs()), ToolRefs: workItemRefs(item.ToolRefs()),
-		CapabilityRefs: workItemRefs(item.CapabilityRefs()),
-		WriteSet:       workItemWriteSet(item), OutputContract: string(item.OutputContract().Kind()),
-		ArtifactMediaType: execution.ArtifactMediaType,
-		IdempotencyKey:    execution.IdempotencyKey,
-		MaxOutputBytes:    execution.MaxOutputBytes,
-	}
-	receipt, launchErr := orchestrator.launcher.Launch(ctx, request)
-	if launchErr != nil {
-		if ctx.Err() != nil {
-			return orchestrator.requeue(ctx, claim, execution, ctx.Err().Error())
-		}
-		if isTemporaryAgentError(launchErr) {
-			return orchestrator.requeue(ctx, claim, execution, "agent.temporarily_unavailable")
-		}
-		latest, latestItem, latestExecution, err := orchestrator.reloadPreparedLaunch(ctx, claim)
-		if err != nil {
-			return err
-		}
-		if latestItem.CancelRequested() {
-			return orchestrator.settleCanceledLaunchRejection(
-				ctx, claim, latest, latestItem, latestExecution, "agent.launch_failed",
-			)
-		}
-		return orchestrator.replaceExecutionAttempt(
-			ctx, claim, latest, "agent.launch_failed", orchestrator.clock.Now(),
-		)
-	}
-	if err := ports.ValidateAgentLaunchReceipt(request, receipt); err != nil {
-		code := ports.AgentContractErrorCode(err)
-		if isSpecHashFenceCode(code) {
-			return orchestrator.quarantine(ctx, claim, code)
-		}
-		return orchestrator.failGoal(ctx, claim, record, code)
-	}
-	if receipt.ProviderRef != orchestrator.agentCapabilities.ProviderRef ||
-		receipt.ModelRef != orchestrator.agentCapabilities.ModelRef ||
-		receipt.AgentRef != orchestrator.agentCapabilities.AgentRef {
-		return orchestrator.failGoal(ctx, claim, record, "agent.receipt_identity_mismatch")
-	}
-	// Pause/cancel may win after launch preparation but before the provider
-	// receipt returns. Reload the aggregate so acceptance preserves that newer
-	// control revision and addresses the next action to its exact WorkItem
-	// generation instead of overwriting or quarantining it.
 	latest, latestItem, latestExecution, err := orchestrator.reloadPreparedLaunch(ctx, claim)
 	if err != nil {
 		return err
 	}
-	record = latest
-	item = latestItem
-	execution = latestExecution
+	record, item, execution = latest, latestItem, latestExecution
 	transitionAt := lifecycleTime(orchestrator.clock.Now(), record.Goal, item)
 	execution.State = ExecutionRunning
-	execution.ProviderRef = receipt.ProviderRef
-	execution.ModelRef = receipt.ModelRef
-	execution.AgentRef = receipt.AgentRef
-	execution.ExternalRef = receipt.ExternalRef
+	execution.ProviderRef, execution.ModelRef = receipt.ProviderRef, receipt.ModelRef
+	execution.AgentRef, execution.ExternalRef = receipt.AgentRef, receipt.ExternalRef
 	execution.StartedAt = transitionAt
 	execution.DeadlineAt = transitionAt.Add(orchestrator.executionTimeout)
 	execution.ProviderAcceptedAt = receipt.AcceptedAt.UTC()
+	externalReceipt, err := effectReceipt(
+		claim, attempt, receipt.ReceiptRef, EffectStatusAccepted, unknownUsage(), transitionAt,
+	)
+	if err != nil {
+		return err
+	}
+	execution.LaunchReceiptRef = externalReceipt.Ref
 	next := ActionRecord{
 		Ref: "action:observe:" + execution.Ref.String(), Kind: ActionObserveAgent,
 		GoalRef: record.Goal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref,
@@ -197,7 +94,7 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 		AvailableAt: orchestrator.clock.Now(),
 	}
 	return orchestrator.state.RecordLaunchAccepted(ctx, LaunchAcceptedState{
-		Claim: claim, Execution: execution, NextAction: next,
+		Claim: claim, Execution: execution, NextAction: next, EffectReceipt: externalReceipt,
 		Event: EventRecord{
 			Ref: "event:execution-accepted:" + execution.Ref.String(), Kind: "execution.accepted",
 			GoalRef: record.Goal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref,
@@ -205,6 +102,181 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 		},
 		OperationAt: transitionAt,
 	})
+}
+
+func (orchestrator *Orchestrator) loadClaimedLaunch(
+	ctx context.Context,
+	claim ActionClaim,
+) (GoalRecord, goal.WorkItem, ExecutionRecord, goal.PhaseInstance, bool, error) {
+	record, err := orchestrator.state.GetGoal(ctx, claim.Action.GoalRef)
+	if err != nil {
+		if IsStateError(err, StateNotFound) {
+			err = orchestrator.quarantineUnapplied(ctx, claim, "application.action_goal_not_found")
+		}
+		return GoalRecord{}, goal.WorkItem{}, ExecutionRecord{}, goal.PhaseInstance{}, false, err
+	}
+	if err := validateClaimedRecord(claim, record, ActionLaunchAgent); err != nil {
+		err = orchestrator.quarantineUnapplied(ctx, claim, err.Error())
+		return GoalRecord{}, goal.WorkItem{}, ExecutionRecord{}, goal.PhaseInstance{}, false, err
+	}
+	if err := validateClaimedEffect(claim, orchestrator.clock.Now()); err != nil {
+		err = orchestrator.quarantineUnapplied(ctx, claim, err.Error())
+		return GoalRecord{}, goal.WorkItem{}, ExecutionRecord{}, goal.PhaseInstance{}, false, err
+	}
+	item, ok := record.Goal.WorkItem(claim.Action.WorkItemRef)
+	execution, found := executionForAction(record, claim.Action)
+	if !ok || !found {
+		err = orchestrator.quarantineUnapplied(ctx, claim, "state.conflict")
+		return GoalRecord{}, goal.WorkItem{}, ExecutionRecord{}, goal.PhaseInstance{}, false, err
+	}
+	if err := orchestrator.validateCurrentAutomaticAuthority(ctx, claim); err != nil {
+		err = orchestrator.requeueUnappliedEffect(ctx, claim, execution, err.Error())
+		return GoalRecord{}, goal.WorkItem{}, ExecutionRecord{}, goal.PhaseInstance{}, false, err
+	}
+	execution.BudgetReservationRef = claim.BudgetReservation.Ref
+	execution.EffectIntentRef = claim.Action.EffectIntent.Ref
+	if execution.State == ExecutionQueued && launchBlockedByLifecycleControl(record.Goal, item) {
+		err = orchestrator.requeueUnappliedEffect(ctx, claim, execution, "application.launch_control_pending")
+		return GoalRecord{}, goal.WorkItem{}, ExecutionRecord{}, goal.PhaseInstance{}, false, err
+	}
+	phase, phaseFound := phaseForWorkItem(record.Goal, item)
+	if !phaseFound {
+		err = orchestrator.quarantineUnapplied(ctx, claim, "state.conflict")
+		return GoalRecord{}, goal.WorkItem{}, ExecutionRecord{}, goal.PhaseInstance{}, false, err
+	}
+	return record, item, execution, phase, true, nil
+}
+
+func (orchestrator *Orchestrator) prepareLaunchDispatch(
+	ctx context.Context,
+	claim ActionClaim,
+	record GoalRecord,
+	item goal.WorkItem,
+	execution ExecutionRecord,
+) (GoalRecord, goal.WorkItem, ExecutionRecord, bool, error) {
+	if execution.State != ExecutionQueued {
+		return record, item, execution, true, nil
+	}
+	transitionAt := lifecycleTime(orchestrator.clock.Now(), record.Goal, item)
+	aggregate := record.Goal
+	switch item.State() {
+	case goal.WorkItemStatePending:
+		var startErr error
+		aggregate, startErr = record.Goal.StartWorkItem(
+			record.Goal.Revision(), item.Revision(), item.Ref(), execution.Ref, transitionAt,
+		)
+		if goal.ErrorCodeOf(startErr) == goal.ErrorWorkItemNotReady {
+			err := orchestrator.requeueUnappliedEffect(ctx, claim, execution, "application.work_item_not_ready")
+			return GoalRecord{}, goal.WorkItem{}, ExecutionRecord{}, false, err
+		}
+		if startErr != nil {
+			return GoalRecord{}, goal.WorkItem{}, ExecutionRecord{}, false, startErr
+		}
+	case goal.WorkItemStateRunning:
+		bound, found := item.Execution()
+		if !found || bound != execution.Ref {
+			err := orchestrator.quarantineUnapplied(ctx, claim, "state.conflict")
+			return GoalRecord{}, goal.WorkItem{}, ExecutionRecord{}, false, err
+		}
+	default:
+		err := orchestrator.quarantineUnapplied(ctx, claim, "state.conflict")
+		return GoalRecord{}, goal.WorkItem{}, ExecutionRecord{}, false, err
+	}
+	execution.State = ExecutionDispatching
+	err := orchestrator.state.RecordLaunchPrepared(ctx, LaunchPreparedState{
+		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), Goal: aggregate, Execution: execution,
+		Event: EventRecord{
+			Ref: "event:execution-dispatching:" + execution.Ref.String(), Kind: "execution.dispatching",
+			GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref, OccurredAt: transitionAt,
+		},
+		OperationAt: transitionAt,
+	})
+	if IsStateError(err, StateConflict) {
+		err = orchestrator.requeueUnappliedEffect(
+			ctx, claim, executionWithState(execution, ExecutionQueued), "state.conflict",
+		)
+		return GoalRecord{}, goal.WorkItem{}, ExecutionRecord{}, false, err
+	}
+	if err != nil {
+		return GoalRecord{}, goal.WorkItem{}, ExecutionRecord{}, false, err
+	}
+	record.Goal = aggregate
+	record.Executions = replaceExecution(record.Executions, execution)
+	item, _ = aggregate.WorkItem(item.Ref())
+	return record, item, execution, true, nil
+}
+
+func agentLaunchRequest(
+	aggregate goal.Goal,
+	item goal.WorkItem,
+	execution ExecutionRecord,
+	phase goal.PhaseInstance,
+) ports.AgentLaunchRequest {
+	request := launchEffectTargetRequest(aggregate, item, execution)
+	request.Objective = item.Objective()
+	request.PhaseRef, request.PhaseKey = phase.Ref().String(), item.Phase().String()
+	request.PhaseTemplateRef = phase.TemplateRef().String()
+	request.PhaseInputRefs, request.PhaseCriterionRefs = workItemRefs(phase.InputRefs()), workItemRefs(phase.CriterionRefs())
+	request.RoleKey = item.Role().String()
+	request.SkillRefs, request.ToolRefs = workItemRefs(item.SkillRefs()), workItemRefs(item.ToolRefs())
+	request.CapabilityRefs, request.WriteSet = workItemRefs(item.CapabilityRefs()), workItemWriteSet(item)
+	request.OutputContract, request.ArtifactMediaType = string(item.OutputContract().Kind()), execution.ArtifactMediaType
+	request.MaxOutputBytes, request.BudgetDemand = execution.MaxOutputBytes, item.BudgetDemand()
+	request.SecurityCriticality, request.ReasoningEffort = item.SecurityCriticality(), item.ReasoningEffort()
+	return request
+}
+
+func (orchestrator *Orchestrator) dispatchLaunchEffect(
+	ctx context.Context,
+	claim ActionClaim,
+	record GoalRecord,
+	execution ExecutionRecord,
+	request ports.AgentLaunchRequest,
+) (EffectAttempt, ports.AgentLaunchReceipt, bool, error) {
+	attempt, err := orchestrator.beginEffectAttempt(ctx, claim, orchestrator.clock.Now())
+	if err != nil {
+		return EffectAttempt{}, ports.AgentLaunchReceipt{}, false, err
+	}
+	receipt, launchErr := orchestrator.launcher.Launch(ctx, request)
+	if launchErr != nil {
+		var handled error
+		if ctx.Err() != nil {
+			handled = orchestrator.requeue(ctx, claim, execution, ctx.Err().Error())
+		} else if isDefinitelyNotAppliedAgentError(launchErr) {
+			latest, latestItem, latestExecution, err := orchestrator.reloadPreparedLaunch(ctx, claim)
+			if err != nil {
+				handled = err
+			} else if latestItem.CancelRequested() {
+				handled = orchestrator.settleCanceledLaunchRejection(
+					ctx, claim, latest, latestItem, latestExecution, "agent.launch_failed",
+				)
+			} else if isTemporaryAgentError(launchErr) {
+				handled = orchestrator.requeueUnappliedEffect(
+					ctx, claim, latestExecution, "agent.temporarily_unavailable",
+				)
+			} else {
+				handled = orchestrator.replaceExecutionAttempt(
+					ctx, claim, latest, "agent.launch_failed", orchestrator.clock.Now(), unknownUsage(), 0, true,
+				)
+			}
+		} else if isTemporaryAgentError(launchErr) {
+			handled = orchestrator.requeue(ctx, claim, execution, "agent.temporarily_unavailable")
+		} else {
+			handled = orchestrator.requeue(ctx, claim, execution, "agent.launch_outcome_unknown")
+		}
+		return EffectAttempt{}, ports.AgentLaunchReceipt{}, false, handled
+	}
+	if err := ports.ValidateAgentLaunchReceipt(request, receipt); err != nil {
+		err = orchestrator.requeue(ctx, claim, execution, ports.AgentContractErrorCode(err))
+		return EffectAttempt{}, ports.AgentLaunchReceipt{}, false, err
+	}
+	if receipt.ProviderRef != orchestrator.agentCapabilities.ProviderRef ||
+		receipt.ModelRef != orchestrator.agentCapabilities.ModelRef ||
+		receipt.AgentRef != orchestrator.agentCapabilities.AgentRef {
+		err = orchestrator.requeue(ctx, claim, execution, "agent.receipt_identity_mismatch")
+		return EffectAttempt{}, ports.AgentLaunchReceipt{}, false, err
+	}
+	return attempt, receipt, true, nil
 }
 
 func launchBlockedByLifecycleControl(aggregate goal.Goal, item goal.WorkItem) bool {
@@ -247,7 +319,10 @@ func (orchestrator *Orchestrator) processObservation(ctx context.Context, claim 
 	observation, observeErr := orchestrator.observer.Observe(ctx, execution.Ref)
 	if observeErr != nil {
 		if orchestrator.executionExpired(execution, claim) {
-			return orchestrator.replaceExecutionAttempt(ctx, claim, record, "application.execution_expired", orchestrator.clock.Now())
+			return orchestrator.replaceExecutionAttempt(
+				ctx, claim, record, "application.execution_expired", orchestrator.clock.Now(),
+				unknownUsage(), 0, false,
+			)
 		}
 		return orchestrator.requeue(ctx, claim, execution, "agent.observe_failed")
 	}
@@ -277,11 +352,17 @@ func (orchestrator *Orchestrator) processObservation(ctx context.Context, claim 
 	switch observation.Status {
 	case ports.AgentPending, ports.AgentRunning:
 		if orchestrator.executionExpired(execution, claim) {
-			return orchestrator.replaceExecutionAttempt(ctx, claim, record, "application.execution_expired", transitionAt)
+			return orchestrator.replaceExecutionAttempt(
+				ctx, claim, record, "application.execution_expired", transitionAt,
+				observation.Usage, int64(len(observation.Content)), false,
+			)
 		}
 		return orchestrator.requeue(ctx, claim, execution, "")
 	case ports.AgentFailed:
-		return orchestrator.replaceExecutionAttempt(ctx, claim, record, observation.ErrorCode, transitionAt)
+		return orchestrator.replaceExecutionAttempt(
+			ctx, claim, record, observation.ErrorCode, transitionAt,
+			observation.Usage, int64(len(observation.Content)), false,
+		)
 	case ports.AgentCompleted:
 		return orchestrator.succeedGoal(ctx, claim, record, execution, observation, transitionAt)
 	default:
@@ -303,21 +384,11 @@ func isSpecHashFenceCode(code string) bool {
 	}
 }
 
-func (orchestrator *Orchestrator) succeedGoal(
-	ctx context.Context,
-	claim ActionClaim,
-	record GoalRecord,
-	execution ExecutionRecord,
-	observation ports.AgentObservation,
-	transitionAt time.Time,
-) error {
+func (orchestrator *Orchestrator) succeedGoal(ctx context.Context, claim ActionClaim, record GoalRecord, execution ExecutionRecord, observation ports.AgentObservation, transitionAt time.Time) error {
 	item, found := record.Goal.WorkItem(claim.Action.WorkItemRef)
 	if !found {
 		return &StateError{Code: StateConflict}
 	}
-	// Provider completion is not parent completion. Park the observation in
-	// the existing outbox until every contractual child has a durable terminal
-	// handoff; do not store the same artifact or consume execution attempts.
 	if !record.Goal.ChildHandoffsResolved(item.Ref()) {
 		return orchestrator.requeue(ctx, claim, execution, "application.child_handoffs_pending")
 	}
@@ -334,8 +405,6 @@ func (orchestrator *Orchestrator) succeedGoal(
 	if err := ports.ValidateStoredArtifact(putRequest, stored); err != nil {
 		return orchestrator.failGoalAt(ctx, claim, record, ports.ArtifactContractErrorCode(err), transitionAt)
 	}
-	// Artifact persistence may be slow. Lifecycle time and the repository's
-	// exclusive lease fence must observe the time after that external effect.
 	transitionAt = lifecycleTime(orchestrator.clock.Now(), record.Goal, item)
 	attestationRef, err := goal.NewAttestationRef("attestation:execution:" + execution.Ref.String())
 	if err != nil {
@@ -356,6 +425,10 @@ func (orchestrator *Orchestrator) succeedGoal(
 	}
 	execution.State = ExecutionSucceeded
 	execution.FinishedAt = transitionAt
+	settlement, err := settlementFor(record, execution, observation.Usage, int64(len(observation.Content)), transitionAt)
+	if err != nil {
+		return err
+	}
 	artifact := ArtifactRecord{
 		Stored: stored, GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(),
 		CreatedAt: transitionAt,
@@ -366,7 +439,9 @@ func (orchestrator *Orchestrator) succeedGoal(
 		Policy: outputAttestationPolicy, AcceptedAt: transitionAt,
 	}
 	existing := replaceExecution(record.Executions, execution)
-	newExecutions, newActions, scheduledEvents, err := orchestrator.scheduleReady(ctx, aggregate, existing, transitionAt)
+	newExecutions, newActions, scheduledEvents, err := orchestrator.scheduleHistoricalReady(
+		ctx, record, aggregate, existing, transitionAt,
+	)
 	if err != nil {
 		return err
 	}
@@ -382,7 +457,8 @@ func (orchestrator *Orchestrator) succeedGoal(
 		ExpectedItemRevision: item.Revision(), Goal: aggregate, Execution: execution,
 		Artifact: artifact, Attestation: attestation,
 		NewExecutions: newExecutions, NewActions: newActions, Events: events,
-		OperationAt: transitionAt,
+		BudgetSettlement: settlement,
+		OperationAt:      transitionAt,
 	})
 }
 
@@ -429,8 +505,14 @@ func (orchestrator *Orchestrator) failGoalAt(
 	execution.State = ExecutionFailed
 	execution.FailureCode = stableFailureCode(code)
 	execution.FinishedAt = at.UTC()
+	settlement, err := settlementFor(record, execution, unknownUsage(), 0, at)
+	if err != nil {
+		return err
+	}
 	existing := replaceExecution(record.Executions, execution)
-	newExecutions, newActions, scheduledEvents, err := orchestrator.scheduleReady(ctx, aggregate, existing, at)
+	newExecutions, newActions, scheduledEvents, err := orchestrator.scheduleHistoricalReady(
+		ctx, record, aggregate, existing, at,
+	)
 	if err != nil {
 		return err
 	}
@@ -449,24 +531,35 @@ func (orchestrator *Orchestrator) failGoalAt(
 		Claim: claim, ExpectedGoalRevision: expectedGoal,
 		ExpectedItemRevision: expectedItem, Goal: aggregate, Execution: execution,
 		NewExecutions: newExecutions, NewActions: newActions, Events: events,
-		OperationAt: at,
+		BudgetSettlement: settlement,
+		OperationAt:      at,
 	})
 }
 
-func (orchestrator *Orchestrator) replaceExecutionAttempt(
-	ctx context.Context,
-	claim ActionClaim,
-	record GoalRecord,
-	code string,
-	at time.Time,
-) error {
+func (orchestrator *Orchestrator) replaceExecutionAttempt(ctx context.Context, claim ActionClaim, record GoalRecord, code string, at time.Time, usage governance.ResourceUsage, diskBytes int64, definitelyUnapplied bool) error {
 	item, ok := record.Goal.WorkItem(claim.Action.WorkItemRef)
 	execution, found := executionForAction(record, claim.Action)
 	if !ok || !found || item.State() != goal.WorkItemStateRunning {
 		return &StateError{Code: StateConflict}
 	}
+	authority, authorityFound := workItemAuthorityFor(record.WorkItemAuthorities, item.Ref())
+	if !authorityFound {
+		if len(record.WorkItemAuthorities) == 0 {
+			return orchestrator.interruptExhaustedExecution(
+				ctx, claim, record, execution, item, "governance.legacy_reauthorization_required",
+				at, usage, diskBytes, definitelyUnapplied,
+			)
+		}
+		return errors.New("application.work_item_authority_missing")
+	}
+	policy, err := historicalEffectPolicy(record)
+	if err != nil {
+		return err
+	}
 	if execution.AttemptNo >= execution.MaxExecutionAttempts {
-		return orchestrator.interruptExhaustedExecution(ctx, claim, record, execution, item, code, at)
+		return orchestrator.interruptExhaustedExecution(
+			ctx, claim, record, execution, item, code, at, usage, diskBytes, definitelyUnapplied,
+		)
 	}
 	replacementRef, err := newExecutionRef(ctx, orchestrator.ids)
 	if err != nil {
@@ -487,20 +580,22 @@ func (orchestrator *Orchestrator) replaceExecutionAttempt(
 		AttemptNo: execution.AttemptNo + 1, MaxExecutionAttempts: execution.MaxExecutionAttempts,
 		ReplacesExecutionRef: execution.Ref, PlanGeneration: execution.PlanGeneration,
 		AppSpecGeneration: execution.AppSpecGeneration, SpecHash: execution.SpecHash,
-		// A replacement is not provider work until its launch is claimed and
-		// RecordLaunchPrepared commits. Keeping it queued makes pause/cancel win
-		// cleanly throughout backoff.
 		State: ExecutionQueued, ArtifactMediaType: execution.ArtifactMediaType,
 		IdempotencyKey: "execution:" + replacementRef.String(),
 		MaxOutputBytes: execution.MaxOutputBytes,
 		CreatedAt:      at.UTC(),
 	}
 	updatedItem, _ := aggregate.WorkItem(item.Ref())
-	next := ActionRecord{
-		Ref: "action:launch:" + replacementRef.String(), Kind: ActionLaunchAgent,
-		GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: replacementRef,
-		PlanGeneration: replacement.PlanGeneration, WorkItemGeneration: updatedItem.Revision(),
-		AvailableAt: at.Add(executionRetryBackoff(orchestrator.observationDelay, execution.AttemptNo, orchestrator.executionTimeout)),
+	availableAt := at.Add(executionRetryBackoff(orchestrator.observationDelay, execution.AttemptNo, orchestrator.executionTimeout))
+	next, err := orchestrator.launchAction(policy, aggregate, updatedItem, replacement, authority, at, availableAt)
+	if err != nil {
+		return err
+	}
+	settlement, err := settlementForExecutionAttempt(
+		record, claim, execution, usage, diskBytes, at, definitelyUnapplied,
+	)
+	if err != nil {
+		return err
 	}
 	events := []EventRecord{
 		{Ref: "event:execution-failed:" + execution.Ref.String(), Kind: "execution.failed", GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref, OccurredAt: at},
@@ -509,7 +604,8 @@ func (orchestrator *Orchestrator) replaceExecutionAttempt(
 	err = orchestrator.state.RecordExecutionReplaced(ctx, ExecutionReplacedState{
 		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: item.Revision(),
 		Goal: aggregate, FailedExecution: execution, ReplacementExecution: replacement,
-		NextAction: next, Events: events, ErrorCode: execution.FailureCode, OperationAt: at,
+		NextAction: next, Events: events, ErrorCode: execution.FailureCode,
+		BudgetSettlement: settlement, OperationAt: at,
 	})
 	if IsStateError(err, StateRecipientMailboxActive) {
 		return orchestrator.failGoalAt(ctx, claim, record, code, at)
@@ -525,6 +621,9 @@ func (orchestrator *Orchestrator) interruptExhaustedExecution(
 	item goal.WorkItem,
 	code string,
 	at time.Time,
+	usage governance.ResourceUsage,
+	diskBytes int64,
+	definitelyUnapplied bool,
 ) error {
 	at = lifecycleTime(at, record.Goal, item)
 	aggregate, err := record.Goal.InterruptWorkItem(
@@ -537,6 +636,12 @@ func (orchestrator *Orchestrator) interruptExhaustedExecution(
 	execution.State = ExecutionFailed
 	execution.FailureCode = stableFailureCode(code)
 	execution.FinishedAt = at
+	settlement, err := settlementForExecutionAttempt(
+		record, claim, execution, usage, diskBytes, at, definitelyUnapplied,
+	)
+	if err != nil {
+		return err
+	}
 	events := []EventRecord{
 		{
 			Ref: "event:execution-failed:" + execution.Ref.String(), Kind: "execution.failed",
@@ -550,7 +655,9 @@ func (orchestrator *Orchestrator) interruptExhaustedExecution(
 		},
 	}
 	existing := replaceExecution(record.Executions, execution)
-	newExecutions, newActions, scheduledEvents, err := orchestrator.scheduleReady(ctx, aggregate, existing, at)
+	newExecutions, newActions, scheduledEvents, err := orchestrator.scheduleHistoricalReady(
+		ctx, record, aggregate, existing, at,
+	)
 	if err != nil {
 		return err
 	}
@@ -558,7 +665,7 @@ func (orchestrator *Orchestrator) interruptExhaustedExecution(
 	return orchestrator.state.RecordExecutionInterrupted(ctx, ExecutionInterruptedState{
 		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: item.Revision(),
 		Goal: aggregate, Execution: execution, NewExecutions: newExecutions, NewActions: newActions,
-		Events: events, OperationAt: at,
+		Events: events, BudgetSettlement: settlement, OperationAt: at,
 	})
 }
 
@@ -639,16 +746,54 @@ func (orchestrator *Orchestrator) requeue(
 	})
 }
 
+func (orchestrator *Orchestrator) requeueUnappliedEffect(
+	ctx context.Context,
+	claim ActionClaim,
+	execution ExecutionRecord,
+	code string,
+) error {
+	now := orchestrator.clock.Now()
+	settlement, err := releaseSettlement(claim, now)
+	if err != nil {
+		return err
+	}
+	execution.BudgetReservationRef = ""
+	execution.EffectIntentRef = ""
+	return orchestrator.state.RequeueAction(ctx, ActionRequeuedState{
+		Claim: claim, Execution: execution, AvailableAt: now.Add(orchestrator.observationDelay),
+		ErrorCode: stableFailureCode(code), OperationAt: now, BudgetSettlement: &settlement,
+		ClearEffectBinding: true,
+	})
+}
+
 func (orchestrator *Orchestrator) executionExpired(execution ExecutionRecord, claim ActionClaim) bool {
 	_ = claim // delivery retries never consume provider execution attempts.
 	return !orchestrator.clock.Now().Before(execution.DeadlineAt)
 }
 
 func (orchestrator *Orchestrator) quarantine(ctx context.Context, claim ActionClaim, code string) error {
+	return orchestrator.quarantineEffect(ctx, claim, code, false)
+}
+
+func (orchestrator *Orchestrator) quarantineUnapplied(ctx context.Context, claim ActionClaim, code string) error {
+	return orchestrator.quarantineEffect(ctx, claim, code, true)
+}
+
+func (orchestrator *Orchestrator) quarantineEffect(
+	ctx context.Context,
+	claim ActionClaim,
+	code string,
+	definitelyUnapplied bool,
+) error {
 	code = stableFailureCode(code)
 	now := orchestrator.clock.Now()
+	settlement, settlementErr := claimBudgetSettlement(claim, now, definitelyUnapplied)
+	if settlementErr != nil {
+		return settlementErr
+	}
 	err := orchestrator.state.QuarantineAction(ctx, ActionQuarantinedState{
-		Claim: claim, ErrorCode: code, OperationAt: now,
+		Claim: claim, ErrorCode: code, OperationAt: now, BudgetSettlement: settlement,
+		ClearEffectBinding: definitelyUnapplied,
 		Event: EventRecord{
 			Ref:  fmt.Sprintf("event:action-quarantined:%s:%d", claim.Action.Ref, claim.DeliveryAttempt),
 			Kind: "action.quarantined", GoalRef: claim.Action.GoalRef,

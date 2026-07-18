@@ -831,7 +831,7 @@
       "vertical": "budgets_effects",
       "status": "executable",
       "test_ref": "acceptance/v15_budgets_effects_test.go",
-      "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV15ScopeAndExecutableContract|TestV15EvidenceBelongsOnlyToBudgetsEffectsCapabilities|TestV15AcceptanceCommandRunsBudgetEffectConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV15BudgetsEffects|TestV15CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/governance ./internal/identity ./internal/config ./internal/credentials ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta && go test -mod=vendor -race -count=1 ./internal/application ./internal/adapters/state/sqlite ./internal/adapters/agent/fake ./internal/bootstrap -run \"^(TestBudgetContractUsesOneCanonicalEnvelopeAcrossLayers|TestConcurrentBudgetReservationsNeverExceedEnvelope|TestTemporaryQuotaParksActionWithoutTerminalFailure|TestHierarchicalFairnessBoundsProjectAndGoalStarvation|TestEffectRequiresExactLiveApprovalBeforeAdapterInvocation|TestEffectCrashAfterApplyBeforeReceiptReconcilesOnce|TestSQLiteBudgetsEffectsRestartRaceAndReplay|TestV15RecoveryRejectsBudgetEffectCausalTampering|TestV15BackupRestorePreservesBudgetsAndEffects|TestRealCodexBudgetsAndEffectsThroughProductionComposition)$\"'",
+      "command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV15ScopeAndExecutableContract|TestV15EvidenceBelongsOnlyToBudgetsEffectsCapabilities|TestV15AcceptanceCommandRunsBudgetEffectConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestTraceabilityRebuildHistoricalBugIDs|TestTraceabilityRebuildHistoricalBugReviewBindings|TestTraceabilityRebuildSchemaValidatesCanonicalLedgers|TestHistoricalBugCapabilityCoverageNeverInfersLegacyClosure|TestAcceptanceV15BudgetsEffects|TestV15CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/governance ./internal/identity ./internal/config ./internal/credentials ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta && go test -mod=vendor -race -count=1 ./internal/application ./internal/adapters/state/sqlite ./internal/adapters/agent/fake ./internal/bootstrap -run \"^(TestBudgetContractUsesOneCanonicalEnvelopeAcrossLayers|TestConcurrentBudgetReservationsNeverExceedEnvelope|TestTemporaryQuotaParksActionWithoutTerminalFailure|TestHierarchicalFairnessBoundsProjectAndGoalStarvation|TestEffectRequiresExactLiveApprovalBeforeAdapterInvocation|TestEffectCrashAfterApplyBeforeReceiptReconcilesOnce|TestSQLiteBudgetsEffectsRestartRaceAndReplay|TestV15RecoveryRejectsBudgetEffectCausalTampering|TestV15BackupRestorePreservesBudgetsAndEffects|TestRealCodexBudgetsAndEffectsThroughProductionComposition)$\"'",
       "fixture": "acceptance/fixtures/v15_budgets_effects.json",
       "receipt": "product/evidence/v15_budgets_effects.json",
       "assertions": [
@@ -1454,8 +1454,12 @@
       "acceptance_contracts": [
         "AC-V15-BUDGETS-EFFECTS"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v15_budgets_effects_test.go",
+        "acceptance/fixtures/v15_budgets_effects.json",
+        "product/evidence/v15_budgets_effects.json"
+      ],
       "supersedes": []
     },
     {
@@ -2394,8 +2398,12 @@
       "acceptance_contracts": [
         "AC-V15-BUDGETS-EFFECTS"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v15_budgets_effects_test.go",
+        "acceptance/fixtures/v15_budgets_effects.json",
+        "product/evidence/v15_budgets_effects.json"
+      ],
       "supersedes": []
     },
     {
@@ -2837,8 +2845,12 @@
       "acceptance_contracts": [
         "AC-V15-BUDGETS-EFFECTS"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v15_budgets_effects_test.go",
+        "acceptance/fixtures/v15_budgets_effects.json",
+        "product/evidence/v15_budgets_effects.json"
+      ],
       "supersedes": []
     },
     {
@@ -2859,8 +2871,12 @@
       "acceptance_contracts": [
         "AC-V15-BUDGETS-EFFECTS"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v15_budgets_effects_test.go",
+        "acceptance/fixtures/v15_budgets_effects.json",
+        "product/evidence/v15_budgets_effects.json"
+      ],
       "supersedes": []
     },
     {
@@ -2881,8 +2897,12 @@
       "acceptance_contracts": [
         "AC-V15-BUDGETS-EFFECTS"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v15_budgets_effects_test.go",
+        "acceptance/fixtures/v15_budgets_effects.json",
+        "product/evidence/v15_budgets_effects.json"
+      ],
       "supersedes": []
     },
     {
@@ -2903,8 +2923,12 @@
       "acceptance_contracts": [
         "AC-V15-BUDGETS-EFFECTS"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v15_budgets_effects_test.go",
+        "acceptance/fixtures/v15_budgets_effects.json",
+        "product/evidence/v15_budgets_effects.json"
+      ],
       "supersedes": []
     },
     {
@@ -3397,8 +3421,12 @@
       "acceptance_contracts": [
         "AC-V15-BUDGETS-EFFECTS"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v15_budgets_effects_test.go",
+        "acceptance/fixtures/v15_budgets_effects.json",
+        "product/evidence/v15_budgets_effects.json"
+      ],
       "supersedes": []
     },
     {
@@ -3643,8 +3671,12 @@
       "acceptance_contracts": [
         "AC-V15-BUDGETS-EFFECTS"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v15_budgets_effects_test.go",
+        "acceptance/fixtures/v15_budgets_effects.json",
+        "product/evidence/v15_budgets_effects.json"
+      ],
       "supersedes": []
     },
     {

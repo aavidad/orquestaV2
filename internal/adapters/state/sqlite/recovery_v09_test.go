@@ -34,7 +34,7 @@ func TestV09RecoveryRoundTripPreservesCausalTablesAndClaims(t *testing.T) {
 	recovery, backupRoot, _ := newV09TestRecovery(t, repository, at.Add(time.Minute), nil)
 	receipt, err := recovery.CreateBackup(context.Background())
 	if err != nil {
-		t.Fatalf("create online backup: %v", err)
+		t.Fatalf("create online backup: %v cause=%v", err, errors.Unwrap(err))
 	}
 	migrations, _ := loadMigrations()
 	if receipt.SchemaRef != migrationSchemaRef(migrations) || !strings.HasPrefix(receipt.Ref.String(), backupRefPrefix) {
@@ -312,7 +312,7 @@ UPDATE action_consumption_receipts SET worker_ref = 'worker:tampered';`); err !=
 		if err != nil {
 			t.Fatal(err)
 		}
-		expectedSchema, err := canonicalSchemaInventoryDigest(recoverySchemaV14)
+		expectedSchema, err := canonicalSchemaInventoryDigest(recoverySchemaV15)
 		if err != nil || actualSchema != expectedSchema {
 			t.Fatalf("test failed to restore canonical schema: actual=%s expected=%s err=%v", actualSchema, expectedSchema, err)
 		}
@@ -389,7 +389,7 @@ UPDATE outbox SET plan_generation = plan_generation + 1 WHERE goal_ref = ?`,
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectedSchema, err := canonicalSchemaInventoryDigest(recoverySchemaV14)
+	expectedSchema, err := canonicalSchemaInventoryDigest(recoverySchemaV15)
 	if err != nil || actualSchema != expectedSchema {
 		t.Fatalf("test failed to restore canonical schema: actual=%s expected=%s err=%v", actualSchema, expectedSchema, err)
 	}
@@ -422,7 +422,7 @@ WHERE kind = 'observe_agent' AND completed_at IS NULL`); err != nil {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expectedSchema, err := canonicalSchemaInventoryDigest(recoverySchemaV14)
+	expectedSchema, err := canonicalSchemaInventoryDigest(recoverySchemaV15)
 	if err != nil || actualSchema != expectedSchema {
 		t.Fatalf("test failed to restore canonical schema: actual=%s expected=%s err=%v", actualSchema, expectedSchema, err)
 	}
@@ -460,6 +460,7 @@ func TestV09RecoveryBacksUpDispatchingLaunchBeforeAndAfterRequeue(t *testing.T) 
 	}
 	preparedExecution := record.Executions[0]
 	preparedExecution.State = application.ExecutionDispatching
+	repository.now = func() time.Time { return preparedAt }
 	if err := repository.RecordLaunchPrepared(context.Background(), application.LaunchPreparedState{
 		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), Goal: preparedGoal,
 		Execution: preparedExecution, OperationAt: preparedAt,
