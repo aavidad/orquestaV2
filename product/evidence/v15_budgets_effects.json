@@ -1,1 +1,32 @@
-{}
+{
+  "schema_version": 3,
+  "evidence_kind": "reproducibility_descriptor",
+  "contract": "AC-V15-BUDGETS-EFFECTS",
+  "result": "PASS",
+  "validation_command": "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV15ScopeAndExecutableContract|TestV15EvidenceBelongsOnlyToBudgetsEffectsCapabilities|TestV15AcceptanceCommandRunsBudgetEffectConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestTraceabilityRebuildHistoricalBugIDs|TestTraceabilityRebuildHistoricalBugReviewBindings|TestTraceabilityRebuildSchemaValidatesCanonicalLedgers|TestHistoricalBugCapabilityCoverageNeverInfersLegacyClosure|TestAcceptanceV15BudgetsEffects|TestV15CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/governance ./internal/identity ./internal/config ./internal/credentials ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta && timeout --kill-after=10s 150s go test -mod=vendor -race -count=1 -timeout=120s ./internal/application ./internal/adapters/state/sqlite ./internal/adapters/agent/fake ./internal/bootstrap -run \"^(TestBudgetContractUsesOneCanonicalEnvelopeAcrossLayers|TestConcurrentBudgetReservationsNeverExceedEnvelope|TestTemporaryQuotaParksActionWithoutTerminalFailure|TestHierarchicalFairnessBoundsProjectAndGoalStarvation|TestEffectRequiresExactLiveApprovalBeforeAdapterInvocation|TestEffectCrashAfterApplyBeforeReceiptReconcilesOnce|TestPendingStopBackoffPreservesFirstUrgencyThenYieldsAndCaps|TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas|TestFastSemanticRepositoryRestartPersistsCommittedData|TestSQLiteBudgetsEffectsRestartRaceAndReplay|TestV15RecoveryRejectsBudgetEffectCausalTampering|TestV15BackupRestorePreservesBudgetsAndEffects|TestRealCodexBudgetsAndEffectsThroughProductionComposition)$\"'",
+  "executed_at": "2026-07-18T11:49:28.655691073Z",
+  "execution": {
+    "argv": [
+      "sh",
+      "-c",
+      "go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV15ScopeAndExecutableContract|TestV15EvidenceBelongsOnlyToBudgetsEffectsCapabilities|TestV15AcceptanceCommandRunsBudgetEffectConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestTraceabilityRebuildHistoricalBugIDs|TestTraceabilityRebuildHistoricalBugReviewBindings|TestTraceabilityRebuildSchemaValidatesCanonicalLedgers|TestHistoricalBugCapabilityCoverageNeverInfersLegacyClosure|TestAcceptanceV15BudgetsEffects|TestV15CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/governance ./internal/identity ./internal/config ./internal/credentials ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta && timeout --kill-after=10s 150s go test -mod=vendor -race -count=1 -timeout=120s ./internal/application ./internal/adapters/state/sqlite ./internal/adapters/agent/fake ./internal/bootstrap -run \"^(TestBudgetContractUsesOneCanonicalEnvelopeAcrossLayers|TestConcurrentBudgetReservationsNeverExceedEnvelope|TestTemporaryQuotaParksActionWithoutTerminalFailure|TestHierarchicalFairnessBoundsProjectAndGoalStarvation|TestEffectRequiresExactLiveApprovalBeforeAdapterInvocation|TestEffectCrashAfterApplyBeforeReceiptReconcilesOnce|TestPendingStopBackoffPreservesFirstUrgencyThenYieldsAndCaps|TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas|TestFastSemanticRepositoryRestartPersistsCommittedData|TestSQLiteBudgetsEffectsRestartRaceAndReplay|TestV15RecoveryRejectsBudgetEffectCausalTampering|TestV15BackupRestorePreservesBudgetsAndEffects|TestRealCodexBudgetsAndEffectsThroughProductionComposition)$\""
+    ],
+    "source_git_commit_oid": "3eaa533d6fd1e7e1a7ef6bda956b8328bd0395a6",
+    "source_worktree_state": "detached_clean",
+    "source_status_porcelain_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "exit_code": 0,
+    "combined_output_path": "product/evidence/v15_budgets_effects.output.txt",
+    "combined_output_sha256": "sha256:e4a9281bda5c24afdbd847a1f2f5aed0c7b61dfec0c99f824b5f5d4e1c3a9111",
+    "go_version": "go1.25.11"
+  },
+  "fixture_sha256": "sha256:a398b858ab1e89a683b6694d5b0f1eebbedf2f6b89837c619bf7920ed3b84443",
+  "candidate_digest_algorithm": "sha256:length-framed-git-blob-set:v1",
+  "candidate_sha256": "sha256:9a662cedad49e3ce683cbbf1bb942c6a3ba8f57b923d6f79a87a4cb53407393d",
+  "sealed_source": {
+    "identity_kind": "sealed_git_subject_set",
+    "git_commit_oid": "3eaa533d6fd1e7e1a7ef6bda956b8328bd0395a6",
+    "git_tree_oid": "4df5b35918ba9ffb2eb8f48068f21d5a4ce8e2a8",
+    "fixture_blob_oid": "a079ecc5b36c9b4a45cef7d7f2c18c4f7096f903",
+    "sha256": "sha256:9a662cedad49e3ce683cbbf1bb942c6a3ba8f57b923d6f79a87a4cb53407393d"
+  }
+}
