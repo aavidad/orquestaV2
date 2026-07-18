@@ -19,6 +19,10 @@ import (
 
 const driverName = "sqlite"
 
+type sqliteDurabilityProfile string
+
+const fullSQLiteDurability sqliteDurabilityProfile = "FULL"
+
 type Options struct {
 	Path               string
 	BusyTimeout        time.Duration
@@ -45,6 +49,10 @@ var _ application.StateRepository = (*Repository)(nil)
 var _ application.AccessRepository = (*Repository)(nil)
 
 func Open(ctx context.Context, options Options) (*Repository, error) {
+	return openWithDurability(ctx, options, fullSQLiteDurability)
+}
+
+func openWithDurability(ctx context.Context, options Options, durability sqliteDurabilityProfile) (*Repository, error) {
 	path, busyMilliseconds, err := validateOptions(options)
 	if err != nil {
 		return nil, invalid(err)
@@ -67,7 +75,7 @@ func Open(ctx context.Context, options Options) (*Repository, error) {
 	// and shared-memory namespace. The per-repository connector validates the
 	// descriptor opened by every physical connection against the retained
 	// identity witness before database/sql can admit that connection.
-	dsn := buildDSN(path, busyMilliseconds)
+	dsn := buildDSNWithDurability(path, busyMilliseconds, durability)
 	connector, err := newLocalStateConnector(dsn, identityHandle, identitySupported)
 	if err != nil {
 		return nil, invalid(err)
@@ -264,12 +272,20 @@ func enforceDatabaseMode(path string) error {
 }
 
 func buildDSN(path string, busyMilliseconds int64) string {
+	return buildDSNWithDurability(path, busyMilliseconds, fullSQLiteDurability)
+}
+
+func buildDSNWithDurability(
+	path string,
+	busyMilliseconds int64,
+	durability sqliteDurabilityProfile,
+) string {
 	dsn := &url.URL{Scheme: "file", Path: path}
 	query := dsn.Query()
 	query.Add("_pragma", "busy_timeout("+strconv.FormatInt(busyMilliseconds, 10)+")")
 	query.Add("_pragma", "foreign_keys(1)")
 	query.Add("_pragma", "journal_mode(WAL)")
-	query.Add("_pragma", "synchronous(FULL)")
+	query.Add("_pragma", "synchronous("+string(durability)+")")
 	query.Set("_txlock", "immediate")
 	dsn.RawQuery = query.Encode()
 	return dsn.String()

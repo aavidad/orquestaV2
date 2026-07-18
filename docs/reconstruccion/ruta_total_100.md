@@ -199,14 +199,16 @@ Nota de evidencia V13: un E2E Codex real que recorra composición, MCP, SQLite
 y CAS pero no active `HandoffRequired` sirve como gate de no regresión. No
 sustituye `AC-V13-MAILBOX` ni acredita mailbox o bindings públicos.
 
-Corte vigente 2026-07-18: V15 está acreditado por receipt V3 `PASS` tras
-ejecutar `AC-V15-BUDGETS-EFFECTS` desde checkout `detached_clean`. Los OID y
-digests autoritativos viven en
+Corte verificable 2026-07-18: V15 solo está acreditado cuando el receipt V3
+`PASS` de `AC-V15-BUDGETS-EFFECTS` valida desde checkout `detached_clean`. Los
+OID y digests autoritativos viven en
 [`product/evidence/v15_budgets_effects.json`](../../product/evidence/v15_budgets_effects.json);
-no se duplican manualmente en esta ruta.
+no se duplican manualmente en esta ruta. Si falta, contiene `{}` o no valida,
+el corte sigue formalmente en V14.
 
 ```text
-estado: 56/257 = 21,79 %; 15/34 = 44,12 %; 15/15 receipts
+sin receipt V15 válido: 48/257 = 18,68 %; 14/34 = 41,18 %; 14/14 receipts
+con receipt V15 válido: 56/257 = 21,79 %; 15/34 = 44,12 %; 15/15 receipts
 ```
 
 El receipt V15 acredita únicamente `GOV-15`, `STG-09`, `ORC-08`, `ORC-09`,
@@ -226,9 +228,9 @@ Ejemplos de paralelismo seguro:
 
 - V07 y contratos iniciales de V10 pueden avanzar tras V06 con write-sets
   separados; V08 consume la salida canónica de V07.
-- V15 está cerrado. V16 comienza por análisis y contrato rojo; V17 no se
-  adelanta sobre su autoridad de workspace/Git aunque pueda preparar contratos
-  disjuntos sin integrarlos.
+- Tras validar el receipt V15, V16 comienza por análisis y contrato rojo; V17
+  no se adelanta sobre su autoridad de workspace/Git aunque pueda preparar
+  contratos disjuntos sin integrarlos.
 - V17, adapters iniciales de V21 y catálogos i18n pueden desarrollarse en ramas
   separadas, pero solo integran con sus dependencias acreditadas.
 - tras congelar contrato en V20, los adapters de V25 se portan en paralelo.

@@ -50,7 +50,7 @@ partió del commit sellado `5daf174bde3ec5d9a98f387de05491f258634264`
 en checkout `detached_clean` y acredita exactamente `ORC-04`, `ORC-05` y
 `ORC-14`.
 
-| IDs acreditados | Contrato acreditado | Alcance exacto |
+| IDs del candidato | Contrato condicionado | Alcance exacto |
 |---|---|---|
 | `ORC-04`, `ORC-05`, `ORC-14` | `acceptance/v13_mailbox_test.go`; `internal/application/mailbox*_test.go`; `internal/adapters/state/sqlite/mailbox*_test.go` | Solo `child_delivery` contractual: destinatario exacto, lifecycle `admitted → claimed → delivered → consumed → acknowledged|blocked`, retiro sistémico, replay/fencing, barrera causal padre/hijo y recovery SQLite sobre la misma autoridad |
 
@@ -121,18 +121,19 @@ MCP o CLI ni otra tool; el registro único y esos bindings son V20, y la paridad
 i18n completa es V21. Presupuestos, approvals, fairness y retry de efectos se
 acreditan por separado en V15.
 
-## V15: presupuestos y efectos acreditados
+## V15: presupuestos y efectos condicionados al receipt
 
-`AC-V15-BUDGETS-EFFECTS` está cerrado. Su argv exacto pasó desde checkout
-`detached_clean` y `product/evidence/v15_budgets_effects.json` es receipt V3
-`PASS`. El propio receipt conserva los OID y digests sellados; este mapa no
-mantiene una copia manual susceptible de divergir.
+`AC-V15-BUDGETS-EFFECTS` solo está cerrado cuando su argv exacto pasa desde
+checkout `detached_clean` y `product/evidence/v15_budgets_effects.json` valida
+como receipt V3 `PASS`. Un fichero ausente, `{}` o ligado al candidato anterior
+mantiene V15 pendiente. El receipt válido conserva los OID y digests sellados;
+este mapa no mantiene una copia manual susceptible de divergir.
 
 | IDs acreditados | Contrato acreditado | Alcance exacto |
 |---|---|---|
 | `GOV-15`, `STG-09`, `ORC-08`, `ORC-09`, `ORC-10`, `ORC-11`, `EVD-03`, `EVD-14` | `acceptance/v15_budgets_effects_test.go`; suites V15 de aplicación, SQLite, bootstrap y Codex | Envelopes global/proyecto/Goal, reservas y settlement durables, fairness jerárquica, criticidad/esfuerzo tipados y ledger `intent -> approval -> attempt -> receipt` para launch/stop |
 
-Garantías acreditadas:
+Garantías ejercitadas por el candidato y acreditadas solo tras ese gate:
 
 - cien claims concurrentes respetan simultáneamente límites global, proyecto y
   Goal; cuota temporal aparca sin fabricar intento o estado terminal;
@@ -159,14 +160,15 @@ Estado contable:
 ```text
 corte histórico V13: 44/257 = 17,12 %; 13/34 = 38,24 %; 13/13 receipts
 corte histórico V14: 48/257 = 18,68 %; 14/34 = 41,18 %; 14/14 receipts
-corte vigente V15:   56/257 = 21,79 %; 15/34 = 44,12 %; 15/15 receipts
+corte sin receipt V15 válido: 48/257 = 18,68 %; 14/34 = 41,18 %; 14/14 receipts
+corte con receipt V15 válido: 56/257 = 21,79 %; 15/34 = 44,12 %; 15/15 receipts
 ```
 
 ## Ejecuciones finales registradas
 
 | Fecha | Comando | Resultado | Alcance |
 |---|---|---|---|
-| 2026-07-18 | argv exacto de `AC-V15-BUDGETS-EFFECTS`, registrado en `product/evidence/v15_budgets_effects.json` | receipt V3 `PASS`, `detached_clean`; OID/digests en el receipt | presupuestos jerárquicos, fairness, riesgo/esfuerzo, cadena causal launch/stop, policy histórica, recovery/backup, 100 claims concurrentes, carreras, ratchets y composición Codex V15 |
+| 2026-07-18 | argv exacto de `AC-V15-BUDGETS-EFFECTS`, registrado en `product/evidence/v15_budgets_effects.json` | válido únicamente si el receipt V3 `PASS` supera su test estricto desde `detached_clean`; OID/digests en el receipt | presupuestos jerárquicos, fairness, riesgo/esfuerzo, cadena causal launch/stop, policy histórica, recovery/backup, 100 claims concurrentes, carreras, ratchets y composición Codex V15 |
 | 2026-07-16 | argv exacto de `AC-V14-CONTROLS`, registrado en `product/evidence/v14_controls.json` | receipt V3 `PASS`, `detached_clean`, P=`6dbc0d808de63973305914b002c3bc2b8a806bb0`, S=`e3e7c28e669ccd7e67a8661c40333d649ab82dd5`, E=`5b97545ad14a40fd0063fc3671f6e79d9978ec09` | controles internos, SQLite/recovery, fake/Codex, stop selectivo, scheduler vivo, carreras, ratchets y composición productiva V14 |
 | 2026-07-16 | argv exacto de `AC-V13-MAILBOX`, registrado en `product/evidence/v13_mailbox.json` | `PASS`, `detached_clean` | contrato mailbox, guards de arquitectura/trazabilidad y paquetes Goal, identidad, config, aplicación, puertos, SQLite, bootstrap y cmd sobre el candidato sellado |
 | 2026-07-16 | `go test -mod=vendor -v -count=1 ./internal/bootstrap -run '^TestRealCodexAdapterClosesGoalThroughProductionMCPServer$' -args -orquesta-real-codex-config=/home/alberto/Trabajo/.orquesta-rebuild-real-e2e-v13-20260716T115042/orquesta.toml` | `PASS` en `6.15s` | composición productiva, Bearer local, MCP, Codex real, SQLite y CAS sobre fuentes V13; smoke de no regresión, no contrato mailbox |

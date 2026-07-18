@@ -21,8 +21,13 @@ import (
 
 const testBusyTimeout = 3 * time.Second
 
+const fastSQLiteTestDurability sqliteDurabilityProfile = "OFF"
+
 func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
-	repository, path := openTestRepository(t)
+	path := filepath.Join(t.TempDir(), "private-state", "orquesta.sqlite")
+	repository := openFullTestRepository(t, Options{
+		Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 8,
+	})
 	directoryInfo, err := os.Stat(filepath.Dir(path))
 	if err != nil {
 		t.Fatalf("stat state directory: %v", err)
@@ -45,7 +50,7 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 	if journalMode != "wal" {
 		t.Fatalf("journal_mode = %q, want wal", journalMode)
 	}
-	var foreignKeys, busyTimeout, userVersion int
+	var foreignKeys, busyTimeout, userVersion, synchronous int
 	if err := repository.db.QueryRow("PRAGMA foreign_keys").Scan(&foreignKeys); err != nil {
 		t.Fatalf("foreign_keys: %v", err)
 	}
@@ -55,8 +60,14 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 	if err := repository.db.QueryRow("PRAGMA user_version").Scan(&userVersion); err != nil {
 		t.Fatalf("user_version: %v", err)
 	}
+	if err := repository.db.QueryRow("PRAGMA synchronous").Scan(&synchronous); err != nil {
+		t.Fatalf("synchronous: %v", err)
+	}
 	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != recoverySchemaV15 {
 		t.Fatalf("pragmas = fk:%d busy:%d version:%d", foreignKeys, busyTimeout, userVersion)
+	}
+	if synchronous != 2 {
+		t.Fatalf("public Open synchronous = %d, want FULL", synchronous)
 	}
 
 	rows, err := repository.db.Query("SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name")
@@ -136,6 +147,42 @@ INSERT INTO events(ref, kind, goal_ref, work_item_ref, execution_ref, occurred_a
 VALUES ('event:invalid-fk', 'invalid', 'goal:missing', 'work:missing', 'execution:missing', 1)`)
 	if err == nil {
 		t.Fatalf("foreign key violation accepted")
+	}
+	if _, err := repository.db.Exec(`INSERT INTO workspaces(ref) VALUES ('workspace:full-restart')`); err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.Close(); err != nil {
+		t.Fatal(err)
+	}
+	restarted := openFullTestRepository(t, Options{
+		Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 8,
+	})
+	var count int
+	if err := restarted.db.QueryRow(`SELECT COUNT(*) FROM workspaces WHERE ref='workspace:full-restart'`).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("FULL restart committed=%d err=%v", count, err)
+	}
+}
+
+func TestFastSemanticRepositoryRestartPersistsCommittedData(t *testing.T) {
+	repository, path := openTestRepository(t)
+	if _, err := repository.db.Exec(`INSERT INTO workspaces(ref) VALUES ('workspace:fast-restart')`); err != nil {
+		t.Fatal(err)
+	}
+	if err := repository.Close(); err != nil {
+		t.Fatal(err)
+	}
+	restarted := openFastTestRepository(t, Options{
+		Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 8,
+	})
+	var synchronous, count int
+	if err := restarted.db.QueryRow("PRAGMA synchronous").Scan(&synchronous); err != nil {
+		t.Fatal(err)
+	}
+	if err := restarted.db.QueryRow(`SELECT COUNT(*) FROM workspaces WHERE ref='workspace:fast-restart'`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if synchronous != 0 || count != 1 {
+		t.Fatalf("fast restart synchronous=%d committed=%d", synchronous, count)
 	}
 }
 
@@ -1397,15 +1444,31 @@ func openTestRepository(t *testing.T) (*Repository, string) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "private-state", "orquesta.sqlite")
 	now := time.Date(2026, 7, 14, 12, 0, 0, 123456789, time.UTC)
-	repository, err := Open(context.Background(), Options{
+	repository := openFastTestRepository(t, Options{
 		Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 8,
 		Now: func() time.Time { return now },
 	})
+	return repository, path
+}
+
+func openFastTestRepository(t *testing.T, options Options) *Repository {
+	t.Helper()
+	repository, err := openWithDurability(context.Background(), options, fastSQLiteTestDurability)
 	if err != nil {
 		t.Fatalf("open repository: %v", err)
 	}
 	t.Cleanup(func() { _ = repository.Close() })
-	return repository, path
+	return repository
+}
+
+func openFullTestRepository(t *testing.T, options Options) *Repository {
+	t.Helper()
+	repository, err := Open(context.Background(), options)
+	if err != nil {
+		t.Fatalf("open FULL repository: %v", err)
+	}
+	t.Cleanup(func() { _ = repository.Close() })
+	return repository
 }
 
 func newCreateFixture(

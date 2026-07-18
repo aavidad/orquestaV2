@@ -7,18 +7,21 @@ sesión. Es estado operativo, no evidencia de aceptación. Los estados canónico
 de capacidades, verticales y contratos viven en `product/roadmap.json`; los
 verdes viven en receipts fuera de su propio candidato.
 
-## Checkpoint vigente: V15 acreditado; V16 es el siguiente corte causal
+## Checkpoint verificable: V15 solo cuenta con receipt V3 válido
 
-V01–V15 están cerrados por receipts V3 reproducibles. El argv exacto de
-`AC-V15-BUDGETS-EFFECTS` pasó desde un checkout `detached_clean`; su fuente de
-verdad es `product/evidence/v15_budgets_effects.json` y acredita únicamente
-`GOV-15`, `STG-09`, `ORC-08`, `ORC-09`, `ORC-10`, `ORC-11`, `EVD-03` y
-`EVD-14`.
+V01–V14 están cerrados por receipts V3 reproducibles. V15 está implementado,
+cableado y ejercitado, pero solo se promueve a acreditado cuando
+`TestAcceptanceV15BudgetsEffectsReceipt` valida un `PASS` reproducible en
+`product/evidence/v15_budgets_effects.json`. La ausencia del fichero, `{}` o
+un receipt del candidato anterior no acreditan nada.
 
-El corte canónico queda en **56/257 capacidades, 21,79 %; 15/34 verticales,
-44,12 %; 15/15 receipts válidos**.
+Mientras esa validación no pase, el corte honesto es **48/257 capacidades,
+18,68 %; 14/34 verticales, 41,18 %; 14/14 receipts**. Cuando pase, V15 acredita
+únicamente `GOV-15`, `STG-09`, `ORC-08`, `ORC-09`, `ORC-10`, `ORC-11`,
+`EVD-03` y `EVD-14`, y el corte será **56/257, 21,79 %; 15/34, 44,12 %;
+15/15 receipts**.
 
-Resultado funcional nuevo de V15:
+Resultado funcional del candidato V15:
 
 - presupuesto tipado de tokens, dinero entero, tiempo activo, slots y disco,
   con envelopes global, proyecto y Goal, reserva atómica y settlement
@@ -483,18 +486,22 @@ El rango vigente de receipts acreditados es `V(0[1-9]|1[0-5])`.
 - V14 controles: cerrado; receipt V3 `PASS`; acredita exactamente `GOV-07`,
   `STG-15`, `ORC-03` y `ORC-16`. Es application-only; no expone HTTP/MCP/CLI,
   cuyos bindings siguen en V20.
-- V15: cerrado por receipt V3; acredita exactamente `GOV-15`, `STG-09`,
-  `ORC-08`, `ORC-09`, `ORC-10`, `ORC-11`, `EVD-03` y `EVD-14`.
-- Residual V15 no P0: `BUG-REBUILD-20260718-229` conserva abierto el presupuesto
-  temporal del full-package SQLite bajo `-race`. El gate exacto V15 sí quedó
-  capturado verde (SQLite 39,829 s), el mailbox aislado pasó en 27,251 s y una
-  ejecución sin salida capturada no se usó como evidencia. Su cierre pertenece
-  al atestador/operación V17/V32, no a una excepción silenciosa del receipt.
+- V15: solo cerrado si su receipt V3 valida; entonces acredita exactamente
+  `GOV-15`, `STG-09`, `ORC-08`, `ORC-09`, `ORC-10`, `ORC-11`, `EVD-03` y
+  `EVD-14`.
+- La contrarrevisión cerró `BUG-REBUILD-20260718-229`: producción y pruebas de
+  crash/publicación conservan SQLite `synchronous=FULL`; solo las pruebas
+  semánticas usan un seam privado `OFF`, y el gate `-race` queda limitado por
+  `-timeout=120s` y un deadline total de 150 s.
+- También cerró `BUG-REBUILD-20260718-230`: un stop pendiente conserva primera
+  prioridad, pero reintenta con backoff durable exponencial y acotado, dejando
+  progresar acciones ajenas mientras aún no es elegible.
 - V16–V34: pendientes. No contar código heredado, groundwork o una prueba
   aislada como vertical posterior cerrada.
-- progreso canónico: 15 de 34, 44,12 %, con 15/15 receipts válidos;
-- capacidades canónicas: 56 de 257 en estado `accredited`, 21,79 %. Las 56
-  acreditadas son:
+- progreso canónico: 14 de 34, 41,18 %, hasta validar V15; después 15 de 34,
+  44,12 %, con 15/15 receipts válidos;
+- capacidades canónicas: 48 de 257, 18,68 %, hasta validar V15; después 56 de
+  257, 21,79 %. Con receipt V15 válido, las 56 acreditadas son:
   `EVD-02`, `EVD-11`, `EVD-12`, `EVD-15`, `GOV-02`, `GOV-03`, `GOV-04`, `GOV-05`,
   `GOV-06`, `GOV-07`, `GOV-08`, `GOV-09`, `GOV-10`, `GOV-16`, `GOV-19`, `GOV-20`,
   `GOV-21`, `GOV-22`, `OPS-01`, `OPS-02`, `OPS-03`, `OPS-04`,
@@ -506,9 +513,10 @@ El rango vigente de receipts acreditados es `V(0[1-9]|1[0-5])`.
 
 ## Siguiente acción exacta
 
-La próxima sesión empieza por una tarea de **análisis V16**: frontera de
+Si el receipt V15 falta o no valida, la siguiente acción es terminar su
+resellado reproducible. Solo después empieza el **análisis V16**: frontera de
 workspace/Git, write-set, concurrencia multiusuario, puertos, adapters y
-contrato rojo `AC-V16-WORKSPACE-GIT`. No programar V16 antes de ese estudio ni
+contrato rojo `AC-V16-WORKSPACE-GIT`. No programar V16 antes de ambos gates ni
 abrir V17 u otro frente.
 
 Los subagentes directos siguen siendo bootstrap hasta V22. Hoy Orquesta puede

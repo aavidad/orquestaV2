@@ -247,6 +247,13 @@ func newSQLiteV15System(t *testing.T, slots int64) *sqliteV15System {
 	}
 }
 
+func openSQLiteV15Repository(t *testing.T, path string, now func() time.Time) *Repository {
+	t.Helper()
+	return openFastTestRepository(t, Options{
+		Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 8, Now: now,
+	})
+}
+
 func newSQLiteV15Orchestrator(t *testing.T, repository *Repository, clock *sqliteMembershipClock, external *sqliteV15External, policy application.BudgetPolicy, ids *sqliteV15IDs) *application.Orchestrator {
 	t.Helper()
 	orchestrator, err := application.New(application.Dependencies{

@@ -32,7 +32,7 @@ func (orchestrator *Orchestrator) processStop(ctx context.Context, claim ActionC
 	// A prepared launch owns the WorkItem lease until its exact external
 	// acceptance/rejection is durable. No controller call is possible yet.
 	if execution.State == ExecutionDispatching || execution.ExternalRef == "" {
-		return orchestrator.requeue(ctx, claim, execution, "application.stop_waiting_launch_receipt")
+		return orchestrator.requeueStop(ctx, claim, execution, "application.stop_waiting_launch_receipt")
 	}
 	request := stopRequest(control, execution)
 	if stopTargetDigest(control, request) != claim.Action.EffectIntent.TargetDigest {
@@ -40,13 +40,13 @@ func (orchestrator *Orchestrator) processStop(ctx context.Context, claim ActionC
 	}
 	capabilities, err := orchestrator.controller.ControlCapabilities(ctx)
 	if err != nil {
-		return orchestrator.requeue(ctx, claim, execution, "agent.control_capabilities_failed")
+		return orchestrator.requeueStop(ctx, claim, execution, "agent.control_capabilities_failed")
 	}
 	if !ports.SupportsAgentStopMode(capabilities, control.Mode) {
-		return orchestrator.requeue(ctx, claim, execution, "agent.stop_unsupported")
+		return orchestrator.requeueStop(ctx, claim, execution, "agent.stop_unsupported")
 	}
 	if err := orchestrator.validateCurrentAutomaticAuthority(ctx, claim); err != nil {
-		return orchestrator.requeue(ctx, claim, execution, err.Error())
+		return orchestrator.requeueStop(ctx, claim, execution, err.Error())
 	}
 	attempt, err := orchestrator.beginEffectAttempt(ctx, claim, orchestrator.clock.Now())
 	if err != nil {
@@ -55,16 +55,16 @@ func (orchestrator *Orchestrator) processStop(ctx context.Context, claim ActionC
 	receipt, stopErr := orchestrator.controller.Stop(ctx, request)
 	if stopErr != nil {
 		if ctx.Err() != nil {
-			return orchestrator.requeue(ctx, claim, execution, ctx.Err().Error())
+			return orchestrator.requeueStop(ctx, claim, execution, ctx.Err().Error())
 		}
-		return orchestrator.requeue(ctx, claim, execution, "agent.stop_failed")
+		return orchestrator.requeueStop(ctx, claim, execution, "agent.stop_failed")
 	}
 	if err := ports.ValidateAgentStopReceipt(request, receipt); err != nil {
-		return orchestrator.requeue(ctx, claim, execution, ports.AgentContractErrorCode(err))
+		return orchestrator.requeueStop(ctx, claim, execution, ports.AgentContractErrorCode(err))
 	}
 	switch receipt.Status {
 	case ports.AgentStopPending, ports.AgentStopUnsupported:
-		return orchestrator.requeue(ctx, claim, execution, "agent.stop_"+string(receipt.Status))
+		return orchestrator.requeueStop(ctx, claim, execution, "agent.stop_"+string(receipt.Status))
 	case ports.AgentStopAlreadyCompleted, ports.AgentStopAlreadyFailed:
 		confirmedAt := orchestrator.clock.Now().UTC()
 		externalReceipt, err := effectReceipt(
@@ -84,7 +84,7 @@ func (orchestrator *Orchestrator) processStop(ctx context.Context, claim ActionC
 		}
 		return orchestrator.settleStopped(ctx, claim, record, item, execution, control, receipt, externalReceipt)
 	default:
-		return orchestrator.requeue(ctx, claim, execution, "application.stop_receipt_status_invalid")
+		return orchestrator.requeueStop(ctx, claim, execution, "application.stop_receipt_status_invalid")
 	}
 }
 

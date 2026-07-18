@@ -72,7 +72,10 @@ func TestV09RecoveryRoundTripPreservesCausalTablesAndClaims(t *testing.T) {
 }
 
 func TestV09RecoveryOnlineSnapshotContainsWholeConcurrentCommit(t *testing.T) {
-	repository, _ := openTestRepository(t)
+	path := filepath.Join(t.TempDir(), "private-state", "orquesta.sqlite")
+	repository := openFullTestRepository(t, Options{
+		Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 8,
+	})
 	initial := authorizeRecoveryCreate(t, repository, newCreateFixture(t, "v09-before", "request:v09-before", "fingerprint:v09-before", "actor:v09", "project:v09"))
 	if _, _, err := repository.CreateGoal(context.Background(), initial); err != nil {
 		t.Fatal(err)
@@ -123,7 +126,10 @@ func TestV09RecoveryFailpointsLeaveNoPartialPublication(t *testing.T) {
 		"after_restore_sync", "after_restore_publish",
 	} {
 		t.Run(stage, func(t *testing.T) {
-			repository, _ := openTestRepository(t)
+			path := filepath.Join(t.TempDir(), "private-state", "orquesta.sqlite")
+			repository := openFullTestRepository(t, Options{
+				Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 8,
+			})
 			injected := errors.New("v09.injected")
 			var stableReceipt application.BackupReceipt
 			var backupRoot, restoreRoot string
@@ -179,7 +185,10 @@ func TestV09RecoveryFailpointsLeaveNoPartialPublication(t *testing.T) {
 }
 
 func TestV09RestoreNeverOverwritesTargetCreatedAtPublicationBoundary(t *testing.T) {
-	repository, _ := openTestRepository(t)
+	path := filepath.Join(t.TempDir(), "private-state", "orquesta.sqlite")
+	repository := openFullTestRepository(t, Options{
+		Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 8,
+	})
 	stable, backupRoot, restoreRoot := newV09TestRecovery(t, repository, time.Now().UTC(), nil)
 	receipt, err := stable.CreateBackup(context.Background())
 	if err != nil {

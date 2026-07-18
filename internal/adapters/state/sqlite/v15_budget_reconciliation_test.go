@@ -194,13 +194,7 @@ func TestSQLiteDependentWorkKeepsHistoricalPolicyAfterRuntimeRotation(t *testing
 	if err := system.repository.Close(); err != nil {
 		t.Fatal(err)
 	}
-	repository, err := Open(context.Background(), Options{
-		Path: system.path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 8, Now: system.clock.Now,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = repository.Close() })
+	repository := openSQLiteV15Repository(t, system.path, system.clock.Now)
 	system.repository, system.policy = repository, rotated
 	system.orchestrator = newSQLiteV15Orchestrator(t, repository, system.clock, system.external, rotated, system.ids)
 	system.clock.Advance(time.Second)

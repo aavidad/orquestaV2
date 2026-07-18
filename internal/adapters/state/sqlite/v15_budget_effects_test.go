@@ -386,13 +386,7 @@ func TestSQLiteRoundTripsAllCriticalityEffortPairsWithoutTextInference(t *testin
 	if err := system.repository.Close(); err != nil {
 		t.Fatal(err)
 	}
-	restarted, err := Open(context.Background(), Options{
-		Path: system.path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 8, Now: system.clock.Now,
-	})
-	if err != nil {
-		t.Fatalf("restart governance matrix: %v cause=%v", err, errors.Unwrap(err))
-	}
-	t.Cleanup(func() { _ = restarted.Close() })
+	restarted := openSQLiteV15Repository(t, system.path, system.clock.Now)
 	persisted, err := restarted.GetGoal(context.Background(), created.Record.Goal.Ref())
 	if err != nil {
 		t.Fatal(err)
@@ -444,13 +438,7 @@ func TestSQLiteBudgetsEffectsRestartRaceAndReplay(t *testing.T) {
 	if err := system.repository.Close(); err != nil {
 		t.Fatal(err)
 	}
-	restarted, err := Open(context.Background(), Options{
-		Path: system.path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 8, Now: system.clock.Now,
-	})
-	if err != nil {
-		t.Fatalf("legacy submit: %v cause=%v", err, errors.Unwrap(err))
-	}
-	t.Cleanup(func() { _ = restarted.Close() })
+	restarted := openSQLiteV15Repository(t, system.path, system.clock.Now)
 	replayed, replayCreated, err := restarted.RecordEffectAttempt(context.Background(),
 		application.RecordEffectAttemptState{Claim: second, Attempt: attempt, OperationAt: system.clock.Now()})
 	if err != nil || replayCreated || replayed != attempt {
@@ -622,13 +610,7 @@ func restartSQLiteV15System(t *testing.T, system *sqliteV15System) {
 	if err := system.repository.Close(); err != nil {
 		t.Fatal(err)
 	}
-	restarted, err := Open(context.Background(), Options{
-		Path: system.path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 8, Now: system.clock.Now,
-	})
-	if err != nil {
-		t.Fatalf("restart V15 system: %v cause=%v", err, errors.Unwrap(err))
-	}
-	t.Cleanup(func() { _ = restarted.Close() })
+	restarted := openSQLiteV15Repository(t, system.path, system.clock.Now)
 	system.repository = restarted
 	system.orchestrator = newSQLiteV15Orchestrator(t, restarted, system.clock, system.external, system.policy, system.ids)
 }
@@ -660,13 +642,7 @@ func TestV15DefinitelyUnappliedRequeueRestartsWithFreshReservation(t *testing.T)
 	if err := system.repository.Close(); err != nil {
 		t.Fatal(err)
 	}
-	restarted, err := Open(context.Background(), Options{
-		Path: system.path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 8, Now: system.clock.Now,
-	})
-	if err != nil {
-		t.Fatalf("restart requeue: %v cause=%v", err, errors.Unwrap(err))
-	}
-	t.Cleanup(func() { _ = restarted.Close() })
+	restarted := openSQLiteV15Repository(t, system.path, system.clock.Now)
 	system.repository = restarted
 	system.orchestrator = newSQLiteV15Orchestrator(t, restarted, system.clock, system.external, system.policy, system.ids)
 	system.external.mu.Lock()

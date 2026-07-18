@@ -21,7 +21,7 @@ import (
 
 const v15FixturePath = "acceptance/fixtures/v15_budgets_effects.json"
 const v15ContractBaseGitCommitOID = "7aa91cbea80741c6d757ec17d09bc9d7aa7e3085"
-const v15ProductDeltaSealedGitCommitOID = "7e896b4c3a540344c6bcd2f215629d33a57d97da"
+const v15ProductDeltaSealedGitCommitOID = "0000000000000000000000000000000000000000"
 
 type v15Fixture struct {
 	SchemaVersion                  int         `json:"schema_version"`
@@ -339,6 +339,9 @@ func v15ExpectedBehaviorTests() []string {
 		"TestHierarchicalFairnessBoundsProjectAndGoalStarvation",
 		"TestEffectRequiresExactLiveApprovalBeforeAdapterInvocation",
 		"TestEffectCrashAfterApplyBeforeReceiptReconcilesOnce",
+		"TestPendingStopBackoffPreservesFirstUrgencyThenYieldsAndCaps",
+		"TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas",
+		"TestFastSemanticRepositoryRestartPersistsCommittedData",
 		"TestSQLiteBudgetsEffectsRestartRaceAndReplay",
 		"TestV15RecoveryRejectsBudgetEffectCausalTampering",
 		"TestV15BackupRestorePreservesBudgetsAndEffects",
@@ -353,13 +356,13 @@ func v15ValidationShellBody() string {
 }
 
 func v15RaceValidationShellBody() string {
-	return "go test -mod=vendor -race -count=1 ./internal/application ./internal/adapters/state/sqlite ./internal/adapters/agent/fake ./internal/bootstrap" +
-		" -run \"^(TestBudgetContractUsesOneCanonicalEnvelopeAcrossLayers|TestConcurrentBudgetReservationsNeverExceedEnvelope|TestTemporaryQuotaParksActionWithoutTerminalFailure|TestHierarchicalFairnessBoundsProjectAndGoalStarvation|TestEffectRequiresExactLiveApprovalBeforeAdapterInvocation|TestEffectCrashAfterApplyBeforeReceiptReconcilesOnce|TestSQLiteBudgetsEffectsRestartRaceAndReplay|TestV15RecoveryRejectsBudgetEffectCausalTampering|TestV15BackupRestorePreservesBudgetsAndEffects|TestRealCodexBudgetsAndEffectsThroughProductionComposition)$\""
+	return "timeout --kill-after=10s 150s go test -mod=vendor -race -count=1 -timeout=120s ./internal/application ./internal/adapters/state/sqlite ./internal/adapters/agent/fake ./internal/bootstrap" +
+		" -run \"^(TestBudgetContractUsesOneCanonicalEnvelopeAcrossLayers|TestConcurrentBudgetReservationsNeverExceedEnvelope|TestTemporaryQuotaParksActionWithoutTerminalFailure|TestHierarchicalFairnessBoundsProjectAndGoalStarvation|TestEffectRequiresExactLiveApprovalBeforeAdapterInvocation|TestEffectCrashAfterApplyBeforeReceiptReconcilesOnce|TestPendingStopBackoffPreservesFirstUrgencyThenYieldsAndCaps|TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas|TestFastSemanticRepositoryRestartPersistsCommittedData|TestSQLiteBudgetsEffectsRestartRaceAndReplay|TestV15RecoveryRejectsBudgetEffectCausalTampering|TestV15BackupRestorePreservesBudgetsAndEffects|TestRealCodexBudgetsAndEffectsThroughProductionComposition)$\""
 }
 
 func v15AssertRaceGate(t *testing.T, command string) {
 	t.Helper()
-	if !strings.Contains(command, " && go test -mod=vendor -race -count=1") {
+	if !strings.Contains(command, " && timeout --kill-after=10s 150s go test -mod=vendor -race -count=1 -timeout=120s") {
 		t.Fatalf("V15 acceptance command omits race detector gate: %q", command)
 	}
 	for _, required := range append([]string{

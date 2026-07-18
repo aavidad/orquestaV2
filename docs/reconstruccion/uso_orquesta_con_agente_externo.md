@@ -5,16 +5,17 @@ Repositorio operativo: `/home/alberto/Trabajo/orquesta-rebuild`.
 
 ## Respuesta corta y alcance real
 
-Sí: el checkpoint acreditado V01-V15 ya sirve para que un Codex externo use
+Sí: el checkpoint acreditado V01-V14 ya sirve para que un Codex externo use
 Orquesta por MCP, cree un Goal con un DAG, lance uno o varios workers Codex,
 consulte su estado y recupere artefactos durables. Hay un binario productivo
 único, autenticación, autorización por proyecto, SQLite, artefactos, scheduler,
 backup/recovery y cierre cooperativo.
 
-V15 está cerrado por receipt V3 `PASS`; sus OID y digests autoritativos viven
-en `product/evidence/v15_budgets_effects.json`. Este runbook público conserva
-las mismas seis tools: V14 y V15 no añaden bindings HTTP/MCP/CLI para controles
-o gobernanza de efectos; estos pertenecen al registro único V20.
+V15 solo cuenta cerrado si `TestAcceptanceV15BudgetsEffectsReceipt` valida un
+receipt V3 `PASS` nuevo; sus OID y digests autoritativos viven entonces en
+`product/evidence/v15_budgets_effects.json`. Este runbook público conserva las
+mismas seis tools: V14 y V15 no añaden bindings HTTP/MCP/CLI para controles o
+gobernanza de efectos; estos pertenecen al registro único V20.
 
 V13 acredita el mailbox causal interno `child_delivery`, pero no añade bindings
 públicos. Este runbook no atribuye al agente externo claim, delivery, consume o
@@ -39,14 +40,16 @@ Fuente de verdad del estado:
   `detached_clean` sobre el candidato sellado V13;
 - `product/evidence/v14_controls.json`: receipt V3 `PASS` desde checkout
   `detached_clean` sobre el candidato V14 sellado;
-- `product/evidence/v15_budgets_effects.json`: receipt V3 `PASS` desde checkout
-  `detached_clean` sobre el candidato V15 sellado;
+- `product/evidence/v15_budgets_effects.json`: solo fuente válida si contiene
+  receipt V3 `PASS` verificado desde checkout `detached_clean` sobre el
+  candidato V15 sellado;
 - `docs/reconstruccion/estado_y_handoff_rebuild.md`: último handoff humano.
 
-V01-V15 representan 15 de 34 verticales, 44,12 %, y 56 de 257 capacidades,
-21,79 %, con 15/15 receipts válidos. V15 suma exclusivamente `GOV-15`,
-`STG-09`, `ORC-08..11`, `EVD-03` y `EVD-14`; V11 sigue siendo una vertical
-transversal sin IDs nuevos.
+Sin receipt V15 válido, V01-V14 representan 14 de 34 verticales, 41,18 %, y
+48 de 257 capacidades, 18,68 %, con 14/14 receipts. Tras validarlo, V01-V15
+representan 15/34, 44,12 %, y 56/257, 21,79 %, con 15/15 receipts. V15 suma
+exclusivamente `GOV-15`, `STG-09`, `ORC-08..11`, `EVD-03` y `EVD-14`; V11
+sigue siendo una vertical transversal sin IDs nuevos.
 
 Resumen funcional:
 
@@ -426,7 +429,7 @@ succeeded no equivale a cambio integrado. Entrega refs de Goal/AppSpec,
 executions/artifacts, tests, riesgos y bloqueos.
 ```
 
-## 7. Limitaciones tras V15
+## 7. Limitaciones del candidato V15
 
 - V13 cerrado: existe mailbox durable interno para `child_delivery`, con
   `admitted → claimed → delivered → consumed → acknowledged|blocked` y
@@ -440,9 +443,10 @@ executions/artifacts, tests, riesgos y bloqueos.
   stop selectivo cooperativo/forzado, retry de Execution y replan causal están
   cerrados por receipt V3 `PASS`. Sus bindings HTTP/MCP/CLI públicos se
   incorporarán mediante el registro único de V20; V14 no añade tools ad hoc.
-- V15 acreditado: envelopes y settlements durables, fairness jerárquica,
-  riesgo/esfuerzo tipados y cadena `intent -> approval -> attempt -> receipt`
-  gobiernan launch/stop internos. No hay bindings públicos nuevos.
+- V15, tras validar su receipt: envelopes y settlements durables, fairness
+  jerárquica, riesgo/esfuerzo tipados y cadena
+  `intent -> approval -> attempt -> receipt` gobiernan launch/stop internos.
+  No hay bindings públicos nuevos.
 - V16: faltan workspace, worktree, aplicación de patch y receipts Git; los
   workers actuales no editan el proyecto objetivo.
 - V17-V19: faltan atestador independiente completo, autor/reviewers/refinery y
@@ -461,7 +465,8 @@ existen internamente, pero aún no tienen bindings en las seis tools MCP.
 
 ## 8. Verificación y E2E
 
-Desde un checkout limpio, validar el último cierre acreditado V01-V15:
+Desde un checkout limpio, validar V01-V14 y comprobar si V15 ya está
+acreditado:
 
 ```bash
 cd /home/alberto/Trabajo/orquesta-rebuild

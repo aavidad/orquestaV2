@@ -738,10 +738,34 @@ func (orchestrator *Orchestrator) requeue(
 	execution ExecutionRecord,
 	code string,
 ) error {
+	return orchestrator.requeueAfter(ctx, claim, execution, code, orchestrator.observationDelay)
+}
+
+func (orchestrator *Orchestrator) requeueStop(
+	ctx context.Context,
+	claim ActionClaim,
+	execution ExecutionRecord,
+	code string,
+) error {
+	base := claim.Action.EffectIntent.QuotaRetryDelay
+	if claim.Action.Kind != ActionStopAgent || base <= 0 {
+		return errors.New("application.stop_retry_policy_invalid")
+	}
+	delay := executionRetryBackoff(base, claim.DeliveryAttempt, orchestrator.executionTimeout)
+	return orchestrator.requeueAfter(ctx, claim, execution, code, delay)
+}
+
+func (orchestrator *Orchestrator) requeueAfter(
+	ctx context.Context,
+	claim ActionClaim,
+	execution ExecutionRecord,
+	code string,
+	delay time.Duration,
+) error {
 	now := orchestrator.clock.Now()
 	return orchestrator.state.RequeueAction(ctx, ActionRequeuedState{
 		Claim: claim, Execution: execution,
-		AvailableAt: now.Add(orchestrator.observationDelay), OperationAt: now,
+		AvailableAt: now.Add(delay), OperationAt: now,
 		ErrorCode: stableFailureCode(code),
 	})
 }

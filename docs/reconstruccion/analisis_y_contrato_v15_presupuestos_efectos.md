@@ -2,9 +2,10 @@
 
 Fecha de decisión: 2026-07-18.
 
-Estado: **acreditado por receipt V3 `PASS`**. V01-V15 están cerrados y V16 no
-se abre hasta iniciar su análisis y fijar un contrato rojo propio. La fuente
-autoritaria del cierre es `product/evidence/v15_budgets_effects.json`.
+Estado: **candidato implementado, cableado y ejercitado; acreditación
+condicionada**. V15 solo cuenta cerrado cuando
+`TestAcceptanceV15BudgetsEffectsReceipt` valida un receipt V3 `PASS` nuevo en
+`product/evidence/v15_budgets_effects.json`. V16 no se abre antes de ese gate.
 
 ## Decisión
 
@@ -28,10 +29,11 @@ Capacidades propiedad exclusiva de V15:
 
 Sus dependencias exactas son V06 `atomic_state_outbox`, V10
 `identity_projects_rbac`, V12 `director_lease` y V14 `controls`, todas ya
-acreditadas. El cierre V15 deja el progreso en 56/257 (21,79 %), 15/34
-(44,12 %) y 15/15 receipts.
+acreditadas. Hasta validar el receipt V15, el progreso honesto permanece en
+48/257 (18,68 %), 14/34 (41,18 %) y 14/14 receipts; tras validarlo pasa a
+56/257 (21,79 %), 15/34 (44,12 %) y 15/15 receipts.
 
-## Resultado del cierre
+## Resultado del candidato
 
 La implementación final conserva un único writer, scheduler, outbox y
 `StateRepository`. No añadió `BudgetStore`, `EffectStore`, DB, daemon, loop,
@@ -277,15 +279,16 @@ Máximo dos paquetes productivos nuevos, fichero productivo 400 líneas y funci�
 80 líneas. Superar un límite exige parar, justificar la garantía que lo obliga
 y retirar complejidad equivalente; no se sube el ratchet para obtener verde.
 
-Resultado congelado: core 2.162/2.200, adaptadores 2.373/2.400, migración
-650/650, tests 6.353/6.500 y producción 5.185/5.250; una función modificada
-alcanza 78/80, el mayor fichero productivo nuevo 355/400 y solo se añade un
-paquete productivo. El gate `-race` exacto V15 pasó en SQLite en 39,829 s y el
-mailbox aislado en 27,251 s. La ejecución opcional de todo el paquete SQLite
-bajo `-race` rozó el timeout de diez minutos y una invocación perdió su salida:
-no se contó como evidencia. Queda inventariado como
-`BUG-REBUILD-20260718-229`, residual de rendimiento/harness para V17/V32, sin
-ocultar ni bloquear el gate causal V15 capturado.
+Resultado corregido del candidato: core 2.186/2.200, adaptadores 2.389/2.400,
+migración 650/650, tests 6.476/6.500 y producción 5.225/5.250. No se elevó
+ningún ratchet. `BUG-REBUILD-20260718-229` quedó cerrado sin rebajar producción:
+`Open` público y las pruebas de crash/publicación usan
+`synchronous=FULL`; un seam privado de test usa `OFF` solo para semántica de
+restart, y el gate `-race` exige `-timeout=120s` más deadline total de 150 s.
+`BUG-REBUILD-20260718-230` elimina el hot-loop/starvation de stop pendiente con
+backoff durable exponencial y acotado, conservando intent, idempotency key,
+fence, intentos y estado de control. El receipt nuevo sigue siendo requisito
+separado: una prueba local verde no acredita por sí sola el corte.
 
 Write-set V15:
 
@@ -294,7 +297,7 @@ product/roadmap.json y tests de roadmap
 acceptance/v15_budgets_effects_test.go
 acceptance/fixtures/v15_budgets_effects.json
 product/evidence/v15_budgets_effects.{json,output.txt}
-product/traceability/** solo enlaces de lecciones V15 acreditadas
+product/traceability/** solo enlaces de lecciones V15 verificadas
 internal/governance/**
 internal/goal/** solo metadata de plan/snapshot
 internal/identity/** solo dos permisos/política

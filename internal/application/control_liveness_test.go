@@ -5,7 +5,71 @@ import (
 	"testing"
 
 	"orquesta/internal/goal"
+	"orquesta/internal/ports"
 )
+
+func TestPendingStopBackoffPreservesFirstUrgencyThenYieldsAndCaps(t *testing.T) {
+	agent := &scriptedAgent{stopStatus: ports.AgentStopPending}
+	system := newControlTestSystemWithPlan(t, agent, controlIndependentPlan())
+	system.launch(t)
+	running := system.record(t)
+	runningItem := controlItemByObjective(t, running, "first independent")
+	execution := mustBoundExecution(t, running, runningItem.Ref())
+	requested, err := system.orchestrator.Control(context.Background(), system.access,
+		system.request(t, "control:pending-stop-backoff", ControlStop,
+			ControlTargetExecution, runningItem.Ref(), execution.Ref))
+	if err != nil || !requested.Created {
+		t.Fatalf("request pending stop: result=%+v err=%v", requested, err)
+	}
+	stopActionRef := "action:stop:" + requested.Control.Ref + ":" + execution.Ref.String()
+	initial := system.effects(t).actions[stopActionRef]
+	intent := initial.record.EffectIntent
+	base, capDelay := intent.QuotaRetryDelay, 2*intent.QuotaRetryDelay
+	system.orchestrator.executionTimeout = capDelay
+	firstAt := system.clock.Now()
+	first, err := system.orchestrator.ProcessNext(context.Background(), "worker:pending-stop-first")
+	if err != nil || first.Action != ActionStopAgent {
+		t.Fatalf("first pending stop lost urgent priority: result=%+v err=%v", first, err)
+	}
+	firstRetry := system.effects(t).actions[stopActionRef]
+	if firstRetry.deliveryAttempt != 1 || firstRetry.fence != 1 ||
+		firstRetry.record.EffectIntent != intent || !firstRetry.record.AvailableAt.Equal(firstAt.Add(base)) {
+		t.Fatalf("first stop retry lost durable policy/fence: %+v", firstRetry)
+	}
+	yielded, err := system.orchestrator.ProcessNext(context.Background(), "worker:fresh-launch-after-stop")
+	if err != nil || yielded.Action != ActionLaunchAgent {
+		t.Fatalf("pending stop did not yield to unrelated launch: result=%+v err=%v", yielded, err)
+	}
+	for attempt := uint64(2); attempt <= 3; attempt++ {
+		pending := system.effects(t).actions[stopActionRef]
+		system.clock.Advance(pending.record.AvailableAt.Sub(system.clock.Now()))
+		retriedAt := system.clock.Now()
+		result, processErr := system.orchestrator.ProcessNext(context.Background(), "worker:pending-stop-retry")
+		if processErr != nil || result.Action != ActionStopAgent {
+			t.Fatalf("pending stop retry %d: result=%+v err=%v", attempt, result, processErr)
+		}
+		retry := system.effects(t).actions[stopActionRef]
+		if retry.deliveryAttempt != attempt || retry.fence != attempt || retry.record.EffectIntent != intent ||
+			!retry.record.AvailableAt.Equal(retriedAt.Add(capDelay)) {
+			t.Fatalf("bounded stop retry %d lost causal state: %+v", attempt, retry)
+		}
+	}
+	closed := system.record(t)
+	stopAttempts := 0
+	for _, attempt := range closed.EffectAttempts {
+		if attempt.ActionRef == stopActionRef {
+			stopAttempts++
+			if attempt.IntentRef != intent.Ref || attempt.IntentDigest != intent.Digest ||
+				attempt.IdempotencyKey != intent.IdempotencyKey {
+				t.Fatalf("stop retry changed durable intent: %+v", attempt)
+			}
+		}
+	}
+	control, _ := controlByRef(closed.Controls, requested.Control.Ref)
+	if stopAttempts != 3 || control.Status != ControlRequested {
+		t.Fatalf("pending retry facts attempts=%d control=%+v", stopAttempts, control)
+	}
+}
 
 func TestControlResumeSchedulesWorkThatBecameReadyWhilePaused(t *testing.T) {
 	system := newControlTestSystemWithPlan(t, completedObservation("dependency complete"), controlDependencyPlan())
