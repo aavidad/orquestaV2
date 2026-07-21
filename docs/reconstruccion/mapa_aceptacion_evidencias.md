@@ -210,7 +210,7 @@ con receipt V16 válido: 59/257 = 22,96 %; 16/34 = 47,06 %; 16/16 receipts
 
 | Fecha | Comando | Resultado | Alcance |
 |---|---|---|---|
-| 2026-07-21 | `go test -mod=vendor -v -count=1 ./internal/bootstrap -run '^TestRealCodexAdapterClosesGoalThroughProductionMCPServer$' -args -orquesta-real-codex-config=/home/alberto/Trabajo/.orquesta-rebuild-real-e2e-v14-20260716T171502/orquesta.toml` | `PASS` en `6.85s`; marcador `ORQUESTA_CODEX_E2E_OK_afa8e2ed4bbfb6744e2990fbcd9a1d7e` | no regresión de composición productiva, MCP, Codex real, SQLite y CAS sobre source digest V16; no acredita workspace/Git ni sustituye receipt P/S/E |
+| 2026-07-21 | `go test -mod=vendor -v -count=1 ./internal/bootstrap -run '^TestRealCodexAdapterClosesGoalThroughProductionMCPServer$' -args -orquesta-real-codex-config=/home/alberto/Trabajo/.orquesta-rebuild-real-e2e-v14-20260716T171502/orquesta.toml` | `PASS` en `6.35s`; marcador `ORQUESTA_CODEX_E2E_OK_41f7d5b1642f7f9efc8008a34610b650` | no regresión de composición productiva, MCP, Codex real, SQLite y CAS sobre source digest V16; no acredita workspace/Git ni sustituye receipt P/S/E |
 | 2026-07-18 | argv exacto de `AC-V15-BUDGETS-EFFECTS`, registrado en `product/evidence/v15_budgets_effects.json` | válido únicamente si el receipt V3 `PASS` supera su test estricto desde `detached_clean`; OID/digests en el receipt | presupuestos jerárquicos, fairness, riesgo/esfuerzo, cadena causal launch/stop, policy histórica, recovery/backup, 100 claims concurrentes, carreras, ratchets y composición Codex V15 |
 | 2026-07-16 | argv exacto de `AC-V14-CONTROLS`, registrado en `product/evidence/v14_controls.json` | receipt V3 `PASS`, `detached_clean`, P=`6dbc0d808de63973305914b002c3bc2b8a806bb0`, S=`e3e7c28e669ccd7e67a8661c40333d649ab82dd5`, E=`5b97545ad14a40fd0063fc3671f6e79d9978ec09` | controles internos, SQLite/recovery, fake/Codex, stop selectivo, scheduler vivo, carreras, ratchets y composición productiva V14 |
 | 2026-07-16 | argv exacto de `AC-V13-MAILBOX`, registrado en `product/evidence/v13_mailbox.json` | `PASS`, `detached_clean` | contrato mailbox, guards de arquitectura/trazabilidad y paquetes Goal, identidad, config, aplicación, puertos, SQLite, bootstrap y cmd sobre el candidato sellado |
@@ -225,10 +225,10 @@ El placeholder `<TOML temporal>` de 2026-07-14 era intencional y esa ejecución
 queda como evidencia histórica. La renovación vigente del 2026-07-21 reutilizó
 una configuración aislada, creó un request nuevo, cerró el Goal por el servidor
 MCP productivo y leyó de vuelta el marcador
-`ORQUESTA_CODEX_E2E_OK_afa8e2ed4bbfb6744e2990fbcd9a1d7e`. El receipt durable
+`ORQUESTA_CODEX_E2E_OK_41f7d5b1642f7f9efc8008a34610b650`. El receipt durable
 [`product/evidence/real_codex_mcp_e2e.json`](../../product/evidence/real_codex_mcp_e2e.json)
-liga comando, `2026-07-21T23:18:46+02:00` y source digest
-`sha256:8de5dcf604e8297eed817beac0af02b4719212ec4a96b040ab2cd5bd17944110`.
+liga comando, `2026-07-21T23:41:21+02:00` y source digest
+`sha256:94d74130dfc3c18c89c64475d58546e4ee641a3eaf62ddeb83a2429e463a70e9`.
 
 Este `PASS` demuestra ausencia de regresión en composición productiva, MCP,
 Codex, SQLite y CAS. El Goal sin `WriteSet` no activa workspace Git y el smoke

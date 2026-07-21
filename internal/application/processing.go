@@ -585,29 +585,9 @@ func (orchestrator *Orchestrator) replaceExecutionAttempt(ctx context.Context, c
 	execution.State = ExecutionFailed
 	execution.FailureCode = stableFailureCode(code)
 	execution.FinishedAt = at.UTC()
-	replacement := ExecutionRecord{
-		Ref: replacementRef, GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(),
-		AttemptNo: execution.AttemptNo + 1, MaxExecutionAttempts: execution.MaxExecutionAttempts,
-		ReplacesExecutionRef: execution.Ref, PlanGeneration: execution.PlanGeneration,
-		AppSpecGeneration: execution.AppSpecGeneration, SpecHash: execution.SpecHash,
-		State: ExecutionQueued, ArtifactMediaType: execution.ArtifactMediaType,
-		IdempotencyKey: "execution:" + replacementRef.String(),
-		MaxOutputBytes: execution.MaxOutputBytes,
-		CreatedAt:      at.UTC(),
-	}
-	if len(item.WriteSet()) != 0 {
-		workspaceRef, workspaceErr := newExecutionWorkspaceRef(ctx, orchestrator.ids)
-		if workspaceErr != nil {
-			return workspaceErr
-		}
-		replacement.RepositoryRef = execution.RepositoryRef
-		if replacement.RepositoryRef.String() == "" {
-			replacement.RepositoryRef, err = orchestrator.state.ProjectRepository(ctx, aggregate.Project())
-			if err != nil {
-				return err
-			}
-		}
-		replacement.ExecutionWorkspaceRef = workspaceRef
+	replacement, err := orchestrator.buildReplacementExecution(ctx, aggregate, item, execution, replacementRef, at)
+	if err != nil {
+		return err
 	}
 	updatedItem, _ := aggregate.WorkItem(item.Ref())
 	availableAt := at.Add(executionRetryBackoff(orchestrator.observationDelay, execution.AttemptNo, orchestrator.executionTimeout))
@@ -640,6 +620,37 @@ func (orchestrator *Orchestrator) replaceExecutionAttempt(ctx context.Context, c
 		return orchestrator.failGoalAt(ctx, claim, record, code, at)
 	}
 	return err
+}
+
+func (orchestrator *Orchestrator) buildReplacementExecution(ctx context.Context, aggregate goal.Goal, item goal.WorkItem,
+	execution ExecutionRecord, replacementRef goal.ExecutionRef, at time.Time,
+) (ExecutionRecord, error) {
+	replacement := ExecutionRecord{
+		Ref: replacementRef, GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(),
+		AttemptNo: execution.AttemptNo + 1, MaxExecutionAttempts: execution.MaxExecutionAttempts,
+		ReplacesExecutionRef: execution.Ref, PlanGeneration: execution.PlanGeneration,
+		AppSpecGeneration: execution.AppSpecGeneration, SpecHash: execution.SpecHash,
+		State: ExecutionQueued, ArtifactMediaType: execution.ArtifactMediaType,
+		IdempotencyKey: "execution:" + replacementRef.String(),
+		MaxOutputBytes: execution.MaxOutputBytes,
+		CreatedAt:      at.UTC(),
+	}
+	if len(item.WriteSet()) == 0 {
+		return replacement, nil
+	}
+	workspaceRef, err := newExecutionWorkspaceRef(ctx, orchestrator.ids)
+	if err != nil {
+		return ExecutionRecord{}, err
+	}
+	replacement.RepositoryRef = execution.RepositoryRef
+	if replacement.RepositoryRef.String() == "" {
+		replacement.RepositoryRef, err = orchestrator.state.ProjectRepository(ctx, aggregate.Project())
+		if err != nil {
+			return ExecutionRecord{}, err
+		}
+	}
+	replacement.ExecutionWorkspaceRef = workspaceRef
+	return replacement, nil
 }
 
 func (orchestrator *Orchestrator) interruptExhaustedExecution(

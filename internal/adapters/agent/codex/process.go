@@ -77,7 +77,6 @@ func (adapter *Adapter) startExecutionLocked(callerContext context.Context, requ
 		adapter.finishWithoutProcessLocked(state, ErrorCode(err), []byte(err.Error()))
 		return
 	}
-
 	runContext, cancel := context.WithCancelCause(adapter.lifecycle)
 	timeout := time.AfterFunc(adapter.config.Timeout, func() {
 		cancel(errExecutionTimeout)
@@ -102,16 +101,7 @@ func (adapter *Adapter) startExecutionLocked(callerContext context.Context, requ
 		adapter.finishWithoutProcessLocked(state, CodeProcessStartFailed, []byte(commandErr.Error()))
 		return
 	}
-	command.WaitDelay = adapter.config.ProcessPipeDrainDelay
-	configureProcessGroup(command, func() error { return context.Cause(runContext) })
-	command.Dir = workingDirectory
-	command.Env = append([]string(nil), environment...)
-	if command.Env == nil {
-		command.Env = []string{}
-	}
-	command.Stdin = strings.NewReader(agentPrompt(request))
-	command.Stdout = io.Discard
-	command.Stderr = diagnostic
+	adapter.configureExecutionCommand(command, runContext, workingDirectory, environment, request, diagnostic)
 
 	var ownerLock *os.File
 	if adapter.processControlsEnabled() {
@@ -145,36 +135,64 @@ func (adapter *Adapter) startExecutionLocked(callerContext context.Context, requ
 		adapter.finishWithoutProcessLockedWithDiagnostic(state, CodeProcessStartFailed, payload, truncated)
 		return
 	}
-	if adapter.processControlsEnabled() {
-		pgid, bootID, birthMarker, identityErr := platformCaptureProcess(command.Process.Pid)
-		record := processRecord{
-			SchemaVersion: processSchemaVersion, ExecutionRef: request.ExecutionRef.String(),
-			RequestHash: state.requestHash, RuntimeScope: adapter.config.RuntimeScope,
-			PID: command.Process.Pid, PGID: pgid, BootID: bootID, BirthMarker: birthMarker,
-		}
-		if identityErr != nil {
-			adapter.abortGatedStartLocked(command, gateWriter, ownerLock, timeout, cancel, finished, state, identityErr)
-			return
-		}
-		if persistErr := adapter.persistProcessRecord(state.runPath, record); persistErr != nil {
-			adapter.abortGatedStartLocked(command, gateWriter, ownerLock, timeout, cancel, finished, state, persistErr)
-			return
-		}
-		state.process, state.ownerLock = &record, ownerLock
-		if _, releaseErr := gateWriter.Write([]byte("run\n")); releaseErr != nil {
-			adapter.abortGatedStartLocked(command, gateWriter, ownerLock, timeout, cancel, finished, state, releaseErr)
-			return
-		}
-		if releaseErr := gateWriter.Close(); releaseErr != nil {
-			adapter.abortGatedStartLocked(command, nil, ownerLock, timeout, cancel, finished, state, releaseErr)
-			return
-		}
+	if !adapter.releaseGatedStartLocked(command, gateWriter, ownerLock, timeout, cancel, finished, request, state) {
+		return
 	}
 	state.status = ports.AgentRunning
 	state.cancel = cancel
 	state.settled = make(chan struct{})
 	adapter.waitGroup.Add(1)
 	go adapter.waitForExecution(command, runContext, cancel, timeout, finished, request, state, diagnostic)
+}
+
+func (adapter *Adapter) configureExecutionCommand(
+	command *exec.Cmd, runContext context.Context, workingDirectory string,
+	environment []string, request ports.AgentLaunchRequest, diagnostic *cappedDiagnostic,
+) {
+	command.WaitDelay = adapter.config.ProcessPipeDrainDelay
+	configureProcessGroup(command, func() error { return context.Cause(runContext) })
+	command.Dir = workingDirectory
+	command.Env = append([]string(nil), environment...)
+	if command.Env == nil {
+		command.Env = []string{}
+	}
+	command.Stdin = strings.NewReader(agentPrompt(request))
+	command.Stdout = io.Discard
+	command.Stderr = diagnostic
+}
+
+func (adapter *Adapter) releaseGatedStartLocked(
+	command *exec.Cmd, gateWriter, ownerLock *os.File, timeout *time.Timer,
+	cancel context.CancelCauseFunc, finished chan struct{},
+	request ports.AgentLaunchRequest, state *executionState,
+) bool {
+	if !adapter.processControlsEnabled() {
+		return true
+	}
+	pgid, bootID, birthMarker, err := platformCaptureProcess(command.Process.Pid)
+	record := processRecord{
+		SchemaVersion: processSchemaVersion, ExecutionRef: request.ExecutionRef.String(),
+		RequestHash: state.requestHash, RuntimeScope: adapter.config.RuntimeScope,
+		PID: command.Process.Pid, PGID: pgid, BootID: bootID, BirthMarker: birthMarker,
+	}
+	if err != nil {
+		adapter.abortGatedStartLocked(command, gateWriter, ownerLock, timeout, cancel, finished, state, err)
+		return false
+	}
+	if err := adapter.persistProcessRecord(state.runPath, record); err != nil {
+		adapter.abortGatedStartLocked(command, gateWriter, ownerLock, timeout, cancel, finished, state, err)
+		return false
+	}
+	state.process, state.ownerLock = &record, ownerLock
+	if _, err := gateWriter.Write([]byte("run\n")); err != nil {
+		adapter.abortGatedStartLocked(command, gateWriter, ownerLock, timeout, cancel, finished, state, err)
+		return false
+	}
+	if err := gateWriter.Close(); err != nil {
+		adapter.abortGatedStartLocked(command, nil, ownerLock, timeout, cancel, finished, state, err)
+		return false
+	}
+	return true
 }
 
 func (adapter *Adapter) executionWorkingDirectory(ctx context.Context, request ports.AgentLaunchRequest, runPath string) (string, bool, error) {

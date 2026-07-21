@@ -310,16 +310,7 @@ func requireTerminalStopIntent(
 	return intent, nil
 }
 
-func readClaimCandidates(ctx context.Context, transaction *sql.Tx, now time.Time) ([]claimCandidate, error) {
-	workspaceColumns, err := sqliteTableHasColumn(ctx, transaction, "outbox", "change_ref")
-	if err != nil {
-		return nil, mapDatabaseError(err)
-	}
-	changeProjection := "'' AS change_ref, '' AS expected_target_oid"
-	if workspaceColumns {
-		changeProjection = "o.change_ref, o.expected_target_oid"
-	}
-	rows, err := transaction.QueryContext(ctx, fmt.Sprintf(`
+const claimCandidatesQuery = `
 SELECT o.ref, o.kind, o.goal_ref, o.work_item_ref, o.execution_ref,
        o.control_ref, %s, o.effect_intent_ref, o.governance_version,
        o.plan_generation, o.work_item_generation, o.available_at, g.project_ref,
@@ -376,7 +367,19 @@ ORDER BY CASE o.kind WHEN 'stop_agent' THEN 0 WHEN 'prepare_workspace' THEN 1 WH
 	     CASE WHEN o.kind = 'launch_agent' THEN COALESCE(project_cursor.ordinal, 0) ELSE 0 END,
 	     CASE WHEN o.kind = 'launch_agent' THEN COALESCE(goal_cursor.ordinal, 0) ELSE 0 END,
 	     o.available_at,
-	     o.ref`, changeProjection), requiredTime(now), requiredTime(now), requiredTime(now))
+	     o.ref`
+
+func readClaimCandidates(ctx context.Context, transaction *sql.Tx, now time.Time) ([]claimCandidate, error) {
+	workspaceColumns, err := sqliteTableHasColumn(ctx, transaction, "outbox", "change_ref")
+	if err != nil {
+		return nil, mapDatabaseError(err)
+	}
+	changeProjection := "'' AS change_ref, '' AS expected_target_oid"
+	if workspaceColumns {
+		changeProjection = "o.change_ref, o.expected_target_oid"
+	}
+	rows, err := transaction.QueryContext(ctx, fmt.Sprintf(claimCandidatesQuery, changeProjection),
+		requiredTime(now), requiredTime(now), requiredTime(now))
 	if err != nil {
 		return nil, mapDatabaseError(err)
 	}

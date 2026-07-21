@@ -322,34 +322,7 @@ INSERT INTO executions(
     started_at, provider_accepted_at, last_observed_at, provider_observed_at,
     finished_at, failure_code, recipient_mailbox_retired
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	arguments := []any{
-		execution.Ref.String(),
-		execution.GoalRef.String(),
-		execution.WorkItemRef.String(),
-		int64(execution.AttemptNo),
-		int64(execution.MaxExecutionAttempts),
-		nullableString(execution.ReplacesExecutionRef.String()),
-		int64(execution.PlanGeneration),
-		int64(execution.AppSpecGeneration),
-		execution.SpecHash,
-		string(execution.State),
-		execution.ArtifactMediaType,
-		execution.IdempotencyKey,
-		execution.MaxOutputBytes,
-		execution.ProviderRef,
-		execution.ModelRef,
-		execution.AgentRef,
-		execution.ExternalRef,
-		requiredTime(execution.CreatedAt),
-		storedTime(execution.DeadlineAt),
-		storedTime(execution.StartedAt),
-		storedTime(execution.ProviderAcceptedAt),
-		storedTime(execution.LastObservedAt),
-		storedTime(execution.ProviderObservedAt),
-		storedTime(execution.FinishedAt),
-		execution.FailureCode,
-		storedBool(execution.RecipientMailboxRetired),
-	}
+	arguments := executionInsertArguments(execution)
 	if !schema.mailbox {
 		query = `
 INSERT INTO executions(
@@ -402,6 +375,37 @@ INSERT INTO executions(
 	}
 	_, err = transaction.ExecContext(ctx, query, arguments...)
 	return mapDatabaseError(err)
+}
+
+func executionInsertArguments(execution application.ExecutionRecord) []any {
+	return []any{
+		execution.Ref.String(),
+		execution.GoalRef.String(),
+		execution.WorkItemRef.String(),
+		int64(execution.AttemptNo),
+		int64(execution.MaxExecutionAttempts),
+		nullableString(execution.ReplacesExecutionRef.String()),
+		int64(execution.PlanGeneration),
+		int64(execution.AppSpecGeneration),
+		execution.SpecHash,
+		string(execution.State),
+		execution.ArtifactMediaType,
+		execution.IdempotencyKey,
+		execution.MaxOutputBytes,
+		execution.ProviderRef,
+		execution.ModelRef,
+		execution.AgentRef,
+		execution.ExternalRef,
+		requiredTime(execution.CreatedAt),
+		storedTime(execution.DeadlineAt),
+		storedTime(execution.StartedAt),
+		storedTime(execution.ProviderAcceptedAt),
+		storedTime(execution.LastObservedAt),
+		storedTime(execution.ProviderObservedAt),
+		storedTime(execution.FinishedAt),
+		execution.FailureCode,
+		storedBool(execution.RecipientMailboxRetired),
+	}
 }
 
 type executionSchema struct{ mailbox, governance, workspace bool }
@@ -492,24 +496,28 @@ WHERE ref = ? AND goal_ref = ? AND work_item_ref = ? AND state = ?
 	if err := requireOneRow(result); err != nil {
 		return err
 	}
+	return updateExecutionWorkspaceCAS(ctx, transaction, execution)
+}
+
+func updateExecutionWorkspaceCAS(
+	ctx context.Context, transaction *sql.Tx, execution application.ExecutionRecord,
+) error {
 	workspacePersisted, err := sqliteTableHasColumn(ctx, transaction, "executions", "execution_workspace_ref")
 	if err != nil {
 		return mapDatabaseError(err)
 	}
-	if workspacePersisted {
-		updated, err := transaction.ExecContext(ctx, `
+	if !workspacePersisted {
+		return nil
+	}
+	updated, err := transaction.ExecContext(ctx, `
 UPDATE executions SET repository_ref=?, execution_workspace_ref=?
 WHERE ref=? AND goal_ref=? AND work_item_ref=? AND state=?`,
-			execution.RepositoryRef.String(), execution.ExecutionWorkspaceRef.String(), execution.Ref.String(),
-			execution.GoalRef.String(), execution.WorkItemRef.String(), string(execution.State))
-		if err != nil {
-			return mapDatabaseError(err)
-		}
-		if err := requireOneRow(updated); err != nil {
-			return err
-		}
+		execution.RepositoryRef.String(), execution.ExecutionWorkspaceRef.String(), execution.Ref.String(),
+		execution.GoalRef.String(), execution.WorkItemRef.String(), string(execution.State))
+	if err != nil {
+		return mapDatabaseError(err)
 	}
-	return nil
+	return requireOneRow(updated)
 }
 
 func acceptExecutionCAS(ctx context.Context, transaction *sql.Tx, execution application.ExecutionRecord) error {

@@ -78,13 +78,7 @@ func (orchestrator *Orchestrator) buildInitialControl(
 
 func (orchestrator *Orchestrator) buildCancelControl(ctx context.Context, record GoalRecord, item goal.WorkItem, request ControlRequest, policy effectPolicySnapshot, state *ApplyControlState) error {
 	var err error
-	if request.Target == ControlTargetGoal {
-		state.Goal, err = record.Goal.RequestCancel(record.Goal.Revision(), state.OperationAt)
-	} else {
-		state.Goal, err = record.Goal.RequestWorkItemCancel(
-			record.Goal.Revision(), item.Revision(), item.Ref(), state.OperationAt,
-		)
-	}
+	state.Goal, err = cancelRequest(record.Goal, item, request, state)
 	if err != nil {
 		return err
 	}
@@ -109,24 +103,21 @@ func (orchestrator *Orchestrator) buildCancelControl(ctx context.Context, record
 			return &StateError{Code: StateConflict}
 		}
 		switch current.State {
-		case ExecutionQueued:
+		case ExecutionQueued, ExecutionAwaitingCommit, ExecutionAwaitingIntegration:
+			previousState := current.State
 			current.State = ExecutionCanceled
 			current.FinishedAt = state.OperationAt
 			state.Executions = append(state.Executions, current)
-			initialRef := "action:launch:" + current.Ref.String()
-			if current.ExecutionWorkspaceRef.String() != "" {
-				initialRef = "action:prepare-workspace:" + current.Ref.String()
+			switch previousState {
+			case ExecutionQueued:
+				initialRef := "action:launch:" + current.Ref.String()
+				if current.ExecutionWorkspaceRef.String() != "" {
+					initialRef = "action:prepare-workspace:" + current.Ref.String()
+				}
+				state.RetireActionRefs = append(state.RetireActionRefs, initialRef)
+			case ExecutionAwaitingCommit:
+				state.RetireActionRefs = append(state.RetireActionRefs, "action:commit-change:"+current.Ref.String())
 			}
-			state.RetireActionRefs = append(state.RetireActionRefs, initialRef)
-		case ExecutionAwaitingCommit:
-			current.State = ExecutionCanceled
-			current.FinishedAt = state.OperationAt
-			state.Executions = append(state.Executions, current)
-			state.RetireActionRefs = append(state.RetireActionRefs, "action:commit-change:"+current.Ref.String())
-		case ExecutionAwaitingIntegration:
-			current.State = ExecutionCanceled
-			current.FinishedAt = state.OperationAt
-			state.Executions = append(state.Executions, current)
 		case ExecutionDispatching, ExecutionRunning:
 			action, actionErr := orchestrator.stopAction(
 				policy, state.Control, state.Goal, updatedItem, current, state.OperationAt,
@@ -162,6 +153,15 @@ func (orchestrator *Orchestrator) buildCancelControl(ctx context.Context, record
 	state.NewActions = append(state.NewActions, newActions...)
 	state.Events = append(state.Events, scheduledEvents...)
 	return nil
+}
+
+func cancelRequest(
+	current goal.Goal, item goal.WorkItem, request ControlRequest, state *ApplyControlState,
+) (goal.Goal, error) {
+	if request.Target == ControlTargetGoal {
+		return current.RequestCancel(current.Revision(), state.OperationAt)
+	}
+	return current.RequestWorkItemCancel(current.Revision(), item.Revision(), item.Ref(), state.OperationAt)
 }
 
 func (orchestrator *Orchestrator) buildRetryControl(

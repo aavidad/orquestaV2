@@ -196,6 +196,10 @@ func validateExecution(execution application.ExecutionRecord) error {
 		execution.LastObservedAt.After(execution.FinishedAt) {
 		return errors.New("sqlite.execution_observed_after_finish")
 	}
+	return validateExecutionStateFields(execution)
+}
+
+func validateExecutionStateFields(execution application.ExecutionRecord) error {
 	switch execution.State {
 	case application.ExecutionQueued:
 		if execution.ProviderRef != "" || execution.ModelRef != "" || execution.AgentRef != "" ||
@@ -334,7 +338,10 @@ func validateGoalRecordConsistency(record application.GoalRecord, expectedGoalRe
 		}
 		artifacts[artifact.Stored.Ref] = artifact
 	}
+	return validateGoalRecordAttestationsAndReceipts(record, aggregate, items, executions, artifacts)
+}
 
+func validateGoalRecordAttestationsAndReceipts(record application.GoalRecord, aggregate goal.Goal, items map[goal.WorkItemRef]goal.WorkItem, executions map[goal.ExecutionRef]application.ExecutionRecord, artifacts map[goal.ArtifactRef]application.ArtifactRecord) error {
 	attestations := make(map[goal.AttestationRef]application.AttestationRecord, len(record.Attestations))
 	for _, attestation := range record.Attestations {
 		if err := validateAttestationRecord(attestation); err != nil {
@@ -538,6 +545,10 @@ func validateWorkItemExecutionChain(item goal.WorkItem, records []application.Ex
 			return errors.New("sqlite.goal_record_historical_execution_active")
 		}
 	}
+	return validateWorkItemExecutionBinding(item, latest, bound, hasBinding)
+}
+
+func validateWorkItemExecutionBinding(item goal.WorkItem, latest application.ExecutionRecord, bound goal.ExecutionRef, hasBinding bool) error {
 	switch item.State() {
 	case goal.WorkItemStatePending:
 		if hasBinding || latest.State != application.ExecutionQueued {
