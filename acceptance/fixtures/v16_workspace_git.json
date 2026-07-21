@@ -1,0 +1,184 @@
+{
+  "schema_version": 1,
+  "contract_id": "AC-V16-WORKSPACE-GIT",
+  "trusted_base_git_commit_oid": "3820df2ae89f1a217de1b14d5b88abf8e86c898b",
+  "command": "go test -mod=vendor -count=1 ./acceptance -run '^TestAcceptanceV16WorkspaceGit$'",
+  "execution_argv": [
+    "go",
+    "test",
+    "-mod=vendor",
+    "-count=1",
+    "./acceptance",
+    "-run",
+    "^TestAcceptanceV16WorkspaceGit$"
+  ],
+  "owned_capability_ids": ["STG-02", "STG-10", "EXT-10"],
+  "dependency_verticals": [
+    "goal_dag_phases",
+    "atomic_state_outbox",
+    "identity_projects_rbac",
+    "controls",
+    "budgets_effects"
+  ],
+  "required_application_types": [
+    {
+      "name": "WorkspaceBinding",
+      "fields": [
+        "Ref", "PrincipalRef", "ActorRef", "ProjectRef", "RepositoryRef",
+        "GoalRef", "WorkItemRef", "ExecutionRef", "ExecutionAttempt",
+        "PlanGeneration", "AppSpecGeneration", "SpecHash", "WriteSetDigest",
+        "TargetRef", "BaseOID", "ObjectFormat", "AdapterRef",
+        "EffectIntentRef", "EffectAttemptRef", "EffectFence", "ReceiptRef", "PreparedAt"
+      ]
+    },
+    {
+      "name": "ChangeSet",
+      "fields": [
+        "Ref", "WorkspaceRef", "PrincipalRef", "ActorRef", "ProjectRef", "RepositoryRef",
+        "GoalRef", "WorkItemRef", "ExecutionRef", "ExecutionAttempt",
+        "BaseOID", "ParentOID", "HeadOID", "TreeOID", "DiffDigest",
+        "ChangedPaths", "WriteSetDigest", "ParentChangeRef",
+        "EffectIntentRef", "EffectAttemptRef", "EffectFence", "IdempotencyKey",
+        "ReceiptRef", "CommittedAt"
+      ]
+    },
+    {
+      "name": "MergeObservation",
+      "fields": [
+        "Ref", "ChangeRef", "TargetRef", "SourceOID", "TargetOID",
+        "CandidateTreeOID", "Status", "ConflictDigest", "ObservedAt"
+      ]
+    },
+    {
+      "name": "IntegrationReceipt",
+      "fields": [
+        "Ref", "ChangeRef", "TargetRef", "TargetBeforeOID", "TargetAfterOID",
+        "SourceOID", "TreeOID", "MarkerRef", "EffectReceiptRef", "Status", "RecordedAt"
+      ]
+    }
+  ],
+  "required_outbound_ports": [
+    {"name": "WorkspaceManager", "methods": ["Prepare", "Inspect", "Release"]},
+    {"name": "VersionControl", "methods": ["Commit", "PreviewIntegration", "Integrate"]}
+  ],
+  "required_use_cases": ["ListPendingChanges", "IntegrateChange"],
+  "required_actions": ["prepare_workspace", "commit_change", "integrate_change"],
+  "required_effect_kinds": ["prepare_workspace", "commit_change", "integrate_change"],
+  "required_statuses": ["clean", "conflicted", "stale", "integrated"],
+  "forbidden_private_authorities": [
+    "WorkspaceStore", "WorkspaceDatabase", "WorkspaceQueue", "WorkspaceLoop",
+    "WorkspaceScheduler", "GitStore", "GitDatabase", "GitQueue", "GitLoop",
+    "GitScheduler", "MergeLifecycle"
+  ],
+  "required_behavior_tests": [
+    "TestWorkspacePrepareIsIdempotentAndUniquePerExecution",
+    "TestReplacementExecutionGetsDistinctWorkspace",
+    "TestLaunchUsesExactOpaqueWorkspaceBinding",
+    "TestCommitBindsBaseTreeDiffWriteSetAndExecution",
+    "TestOutOfWriteSetChangeLeavesGitUnmodified",
+    "TestReworkRequiresExplicitParentChangeRef",
+    "TestConflictAndStaleIntegrationLeaveTargetUnchanged",
+    "TestConcurrentIntegrationCASPreservesLoserPending",
+    "TestWorkspaceEffectsReplayEveryCrashFrontierExactlyOnce",
+    "TestPendingChangesAreRBACScopedAndSurviveRestart",
+    "TestGitWorkspaceRejectsUnsafeFilesystemAndGitControls",
+    "TestWorkspaceEvidenceLeaksNoPrivateAdapterData",
+    "TestWorkspaceArchitectureKeepsOneWriterStateOutboxScheduler",
+    "TestRealGitSQLiteWorkspaceLifecycleEndToEnd",
+    "TestWorkspaceConcurrentPrepareCommitIntegrateRace"
+  ],
+  "git_fixture": {
+    "minimum_version": "2.38.0",
+    "object_format": "sha1",
+    "target_ref": "refs/heads/main",
+    "author_name": "Orquesta Fixture",
+    "author_email": "fixture@orquesta.invalid",
+    "base_oid": "40fc9de952f5209b82be732daf3f1f170714e3f3",
+    "base_tree_oid": "71e5c137cdcf6d73521a653a05babda1d24e5f74",
+    "target_oid": "8bf78be67a91de755d76a58b09305a00dee8e0bf",
+    "target_tree_oid": "e13415ffa217fb36b24e0b44432127e2718a9ed1",
+    "base_unix_time": 1787040000,
+    "target_unix_time": 1787040060,
+    "base_files": [
+      {"path": "README.md", "content": "fixture-v16\n"},
+      {"path": "src/shared.txt", "content": "base\n"}
+    ],
+    "target_changes": [
+      {"path": "src/shared.txt", "content": "target\n"},
+      {"path": "target-only.txt", "content": "target-only\n"}
+    ]
+  },
+  "actors": [
+    {
+      "principal_ref": "principal:v16-alice",
+      "actor_ref": "actor:v16-alice",
+      "memberships": [
+        {"project_ref": "project:v16-alpha", "repository_ref": "repository:v16-alpha", "role": "project_owner"}
+      ]
+    },
+    {
+      "principal_ref": "principal:v16-bob",
+      "actor_ref": "actor:v16-bob",
+      "memberships": [
+        {"project_ref": "project:v16-alpha", "repository_ref": "repository:v16-alpha", "role": "contributor"},
+        {"project_ref": "project:v16-beta", "repository_ref": "repository:v16-beta", "role": "project_owner"}
+      ]
+    }
+  ],
+  "changes": [
+    {
+      "name": "clean",
+      "execution_ref": "execution:v16-clean",
+      "write_set": ["src/clean.txt"],
+      "writes": [{"path": "src/clean.txt", "content": "clean\n"}],
+      "expected": "clean"
+    },
+    {
+      "name": "conflict",
+      "execution_ref": "execution:v16-conflict",
+      "write_set": ["src/shared.txt"],
+      "writes": [{"path": "src/shared.txt", "content": "source\n"}],
+      "expected": "conflicted"
+    },
+    {
+      "name": "out_of_scope",
+      "execution_ref": "execution:v16-out-of-scope",
+      "write_set": ["src/allowed.txt"],
+      "writes": [
+        {"path": "src/allowed.txt", "content": "allowed\n"},
+        {"path": "outside.txt", "content": "forbidden\n"}
+      ],
+      "expected": "rejected_without_git_mutation"
+    }
+  ],
+  "crash_frontiers": [
+    "before_adapter_call",
+    "after_branch_marker_before_worktree",
+    "after_worktree_before_state_receipt",
+    "after_commit_object_before_ref",
+    "after_isolated_ref_before_state_receipt",
+    "after_target_and_marker_before_state_receipt",
+    "during_release"
+  ],
+  "security_cases": [
+    "path_traversal", "ancestor_symlink", "hardlink_control_file", "fifo",
+    "device", "foreign_owner", "group_or_world_writable_root", "git_metadata_write",
+    "hook", "filter", "pager", "credential_helper", "fsmonitor", "external_diff",
+    "signing_program", "git_dir_environment", "git_work_tree_environment",
+    "git_index_file_environment", "object_directory_environment", "alternate_object_environment"
+  ],
+  "private_leak_markers": [
+    "/operator/private/v16-workspace",
+    "https://example.invalid/private/repository.git",
+    "secret-v16-do-not-leak",
+    "GIT_DIR=/operator/private/gitdir",
+    "git update-ref refs/heads/main"
+  ],
+  "deferred_surfaces": [
+    "remote_push",
+    "github_gitlab_gitea_forge_adapters",
+    "hostile_process_sandbox_and_attestation",
+    "automatic_retention_cleanup",
+    "postgres_s3_multihost"
+  ]
+}
