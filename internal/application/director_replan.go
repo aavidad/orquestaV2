@@ -66,8 +66,11 @@ func (orchestrator *Orchestrator) applyDirectorProposal(
 		GoalRef: execution.GoalRef, WorkItemRef: execution.WorkItemRef,
 		ExecutionRef: execution.Ref, OccurredAt: at,
 	}
-	return updated, []ExecutionRecord{execution},
-		[]string{"action:launch:" + execution.Ref.String()}, []EventRecord{event}, nil
+	actionRef := "action:launch:" + execution.Ref.String()
+	if len(source.WriteSet()) != 0 {
+		actionRef = "action:prepare-workspace:" + execution.Ref.String()
+	}
+	return updated, []ExecutionRecord{execution}, []string{actionRef}, []EventRecord{event}, nil
 }
 
 func executionByRef(records []ExecutionRecord, ref goal.ExecutionRef) (ExecutionRecord, bool) {

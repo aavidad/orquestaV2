@@ -10,6 +10,7 @@ import (
 	"orquesta/internal/goal"
 	"orquesta/internal/governance"
 	"orquesta/internal/identity"
+	"orquesta/internal/ports"
 )
 
 // authorizeLegacyCreateState keeps pre-V10 state-adapter fixtures focused on
@@ -255,7 +256,136 @@ func createLegacyGoal(
 	state application.CreateGoalState,
 ) (application.GoalRecord, bool, error) {
 	t.Helper()
-	return repository.CreateGoal(context.Background(), authorizeLegacyCreateState(t, repository, state))
+	state = authorizeLegacyCreateState(t, repository, state)
+	state = governLegacyWorkspaceCreateState(t, state)
+	return repository.CreateGoal(context.Background(), state)
+}
+
+// governLegacyWorkspaceCreateState upgrades only fixtures that already declare
+// a WriteSet. It preserves their domain snapshot while making the V16
+// prepare-before-launch boundary explicit and causally governed.
+func governLegacyWorkspaceCreateState(t *testing.T, state application.CreateGoalState) application.CreateGoalState {
+	t.Helper()
+	hasWorkspace := false
+	repositoryRef, err := identity.NewRepositoryRef("repository:" + state.Goal.Project().String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index := range state.Executions {
+		execution := &state.Executions[index]
+		item, found := state.Goal.WorkItem(execution.WorkItemRef)
+		if !found || len(item.WriteSet()) == 0 {
+			continue
+		}
+		hasWorkspace = true
+		workspaceRef, refErr := ports.NewExecutionWorkspaceRef("execution-workspace:" + execution.Ref.String())
+		if refErr != nil {
+			t.Fatal(refErr)
+		}
+		execution.RepositoryRef, execution.ExecutionWorkspaceRef = repositoryRef, workspaceRef
+		for actionIndex := range state.Actions {
+			action := &state.Actions[actionIndex]
+			if action.ExecutionRef == execution.Ref {
+				action.Ref = "action:prepare-workspace:" + execution.Ref.String()
+				action.Kind = application.ActionPrepareWorkspace
+			}
+		}
+	}
+	if !hasWorkspace {
+		return state
+	}
+	policy := sqliteTestBudgetPolicy(state.Goal.CreatedAt())
+	state.WorkItemAuthorities = make([]application.WorkItemAuthority, 0, state.Goal.WorkItemCount())
+	for _, item := range state.Goal.WorkItems() {
+		state.WorkItemAuthorities = append(state.WorkItemAuthorities, application.WorkItemAuthority{
+			WorkItemRef: item.Ref(), PrincipalRef: state.RequestedBy,
+			Permission: identity.PermissionGoalsCreate, Source: application.EffectApprovalSourceGoalConfirmation,
+			AuthorizationReceipt: state.AuthorizationReceipt, RecordedAt: state.Goal.CreatedAt(),
+		})
+	}
+	deployment, project, goalEnvelope := policy.DeploymentEnvelope, policy.ProjectEnvelopeTemplate, policy.GoalEnvelopeTemplate
+	project.Ref, project.SubjectRef = "budget-envelope:project:"+state.Goal.Project().String()+":"+policy.PolicyHash, state.Goal.Project().String()
+	goalEnvelope.Ref, goalEnvelope.SubjectRef, goalEnvelope.CreatedAt = "budget-envelope:goal:"+state.Goal.Ref().String()+":"+policy.PolicyHash, state.Goal.Ref().String(), state.Goal.CreatedAt()
+	state.BudgetEnvelopes = []governance.BudgetEnvelope{deployment, project, goalEnvelope}
+	for index := range state.Actions {
+		action := state.Actions[index]
+		item, itemFound := state.Goal.WorkItem(action.WorkItemRef)
+		execution, executionFound := legacyExecutionByRef(state.Executions, action.ExecutionRef)
+		if !itemFound || !executionFound {
+			t.Fatalf("govern legacy workspace scope missing: %s", action.Ref)
+		}
+		authority := state.WorkItemAuthorities[0]
+		for _, candidate := range state.WorkItemAuthorities {
+			if candidate.WorkItemRef == item.Ref() {
+				authority = candidate
+				break
+			}
+		}
+		state.Actions[index] = legacyGovernedExecutionAction(t, state.Goal, item, execution, action, authority, policy)
+	}
+	return state
+}
+
+func legacyGovernedExecutionAction(
+	t *testing.T,
+	aggregate goal.Goal,
+	item goal.WorkItem,
+	execution application.ExecutionRecord,
+	action application.ActionRecord,
+	authority application.WorkItemAuthority,
+	policy application.BudgetPolicy,
+) application.ActionRecord {
+	t.Helper()
+	effectKind := application.EffectKindAgentLaunch
+	demand, idempotency := item.BudgetDemand(), execution.IdempotencyKey
+	targetFields := []string{
+		"target:launch:v1", aggregate.Project().String(), aggregate.Ref().String(), item.Ref().String(),
+		execution.Ref.String(), strconv.FormatUint(uint64(execution.PlanGeneration), 10),
+		strconv.FormatUint(uint64(execution.AppSpecGeneration), 10), strconv.FormatUint(execution.AttemptNo, 10),
+		execution.SpecHash, aggregate.Actor().String(), execution.ExecutionWorkspaceRef.String(), execution.IdempotencyKey,
+	}
+	if action.Kind == application.ActionPrepareWorkspace {
+		effectKind = application.EffectKindPrepareWorkspace
+		demand = governance.BudgetDemand{Ref: "budget-demand:" + action.Ref}
+		idempotency = "workspace:" + execution.IdempotencyKey
+		targetFields = []string{
+			"target:workspace-prepare:v1", execution.RepositoryRef.String(), aggregate.Project().String(),
+			aggregate.Ref().String(), item.Ref().String(), execution.Ref.String(), execution.ExecutionWorkspaceRef.String(),
+			strconv.FormatUint(uint64(execution.PlanGeneration), 10),
+			strconv.FormatUint(uint64(execution.AppSpecGeneration), 10), strconv.FormatUint(execution.AttemptNo, 10),
+			execution.SpecHash,
+		}
+		for _, scope := range item.WriteSet() {
+			targetFields = append(targetFields, scope.String())
+		}
+	}
+	intent := application.EffectIntent{
+		Ref:                "effect-intent:" + action.Ref,
+		RequestRef:         authority.AuthorizationReceipt.Decision().Request().RequestRef(),
+		RequestFingerprint: canonicalFingerprint("orquesta.effect.admission.v1", action.Ref, authority.AuthorizationReceipt.Ref(), policy.PolicyHash),
+		ActionRef:          action.Ref, ActionKind: action.Kind, Kind: effectKind,
+		Subject: application.EffectSubject{ProjectRef: aggregate.Project(), GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(),
+			ExecutionRef: execution.Ref, PlanGeneration: execution.PlanGeneration,
+			AppSpecGeneration: execution.AppSpecGeneration, SpecHash: execution.SpecHash, ActorRef: aggregate.Actor()},
+		ProposedBy: authority.PrincipalRef, Permission: authority.Permission, Authority: authority.AuthorizationReceipt,
+		Demand: demand, SecurityCriticality: item.SecurityCriticality(), ReasoningEffort: item.ReasoningEffort(),
+		PolicyHash: policy.PolicyHash, PolicyRevision: policy.GoalEnvelopeTemplate.Revision,
+		QuotaRetryDelay: policy.QuotaRetryDelay, ApprovalTTL: policy.EffectApprovalTTL,
+		TargetDigest:   canonicalFingerprint(append([]string{"orquesta.effect.admission.v1"}, targetFields...)...),
+		IdempotencyKey: idempotency, CreatedAt: action.AvailableAt,
+	}
+	intent.Digest = application.EffectIntentDigest(intent)
+	approval := application.EffectApproval{
+		Ref: "effect-approval:auto:" + intent.Ref, RequestRef: intent.RequestRef, RequestFingerprint: intent.Digest,
+		IntentRef: intent.Ref, IntentDigest: intent.Digest, Subject: intent.Subject,
+		ProposedBy: intent.ProposedBy, DecidedBy: intent.ProposedBy, Decision: application.EffectApproved,
+		Source: authority.Source, SecurityCriticality: intent.SecurityCriticality,
+		PolicyHash: intent.PolicyHash, PolicyRevision: intent.PolicyRevision, TargetDigest: intent.TargetDigest,
+		Reason: "sqlite test causal authority", IdempotencyKey: intent.IdempotencyKey,
+		AuthorizationReceipt: intent.Authority, DecidedAt: intent.CreatedAt,
+	}
+	action.EffectIntentRef, action.EffectIntent, action.EffectApproval = intent.Ref, intent, &approval
+	return action
 }
 
 func amendLegacyGoal(

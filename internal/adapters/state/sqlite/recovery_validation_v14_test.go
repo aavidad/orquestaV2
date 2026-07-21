@@ -543,11 +543,7 @@ func seedRecoveryV14PendingMultiCancel(t *testing.T) recoveryV14ControlSeed {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for range 2 {
-		if result, processErr := orchestrator.ProcessNext(context.Background(), "worker:recovery-v14-multi-launch"); processErr != nil || !result.Processed || result.Action != application.ActionLaunchAgent {
-			t.Fatalf("launch multi cancel: result=%+v err=%v", result, processErr)
-		}
-	}
+	processSQLiteWorkspaceLaunches(t, orchestrator, "worker:recovery-v14-multi-launch", 2)
 	running, err := repository.GetGoal(context.Background(), submitted.Record.Goal.Ref())
 	if err != nil {
 		t.Fatal(err)

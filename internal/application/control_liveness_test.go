@@ -36,9 +36,13 @@ func TestPendingStopBackoffPreservesFirstUrgencyThenYieldsAndCaps(t *testing.T) 
 		firstRetry.record.EffectIntent != intent || !firstRetry.record.AvailableAt.Equal(firstAt.Add(base)) {
 		t.Fatalf("first stop retry lost durable policy/fence: %+v", firstRetry)
 	}
+	prepared, err := system.orchestrator.ProcessNext(context.Background(), "worker:fresh-prepare-after-stop")
+	if err != nil || prepared.Action != ActionPrepareWorkspace {
+		t.Fatalf("pending stop did not yield to unrelated workspace preparation: result=%+v err=%v", prepared, err)
+	}
 	yielded, err := system.orchestrator.ProcessNext(context.Background(), "worker:fresh-launch-after-stop")
 	if err != nil || yielded.Action != ActionLaunchAgent {
-		t.Fatalf("pending stop did not yield to unrelated launch: result=%+v err=%v", yielded, err)
+		t.Fatalf("prepared workspace did not launch: result=%+v err=%v", yielded, err)
 	}
 	for attempt := uint64(2); attempt <= 3; attempt++ {
 		pending := system.effects(t).actions[stopActionRef]
@@ -111,8 +115,8 @@ func TestControlTerminalTransitionsReleaseWriteSetAndScheduleExactlyOnce(t *test
 			t.Fatalf("cancel queued: result=%+v err=%v", result, err)
 		}
 		after := system.record(t)
-		if !controlExecutionForItem(after, second.Ref()) || system.actionKindCount(ActionLaunchAgent) != 1 {
-			t.Fatalf("queued cancel did not release writer: executions=%+v actions=%d", after.Executions, system.actionKindCount(ActionLaunchAgent))
+		if !controlExecutionForItem(after, second.Ref()) || system.actionKindCount(ActionPrepareWorkspace) != 1 {
+			t.Fatalf("queued cancel did not release writer: executions=%+v actions=%d", after.Executions, system.actionKindCount(ActionPrepareWorkspace))
 		}
 	})
 
@@ -131,8 +135,8 @@ func TestControlTerminalTransitionsReleaseWriteSetAndScheduleExactlyOnce(t *test
 			t.Fatalf("process stop: result=%+v err=%v", result, err)
 		}
 		after := system.record(t)
-		if !controlExecutionForItem(after, second.Ref()) || system.actionKindCount(ActionLaunchAgent) != 1 {
-			t.Fatalf("stop did not release writer: executions=%+v actions=%d", after.Executions, system.actionKindCount(ActionLaunchAgent))
+		if !controlExecutionForItem(after, second.Ref()) || system.actionKindCount(ActionPrepareWorkspace) != 1 {
+			t.Fatalf("stop did not release writer: executions=%+v actions=%d", after.Executions, system.actionKindCount(ActionPrepareWorkspace))
 		}
 	})
 
@@ -146,15 +150,18 @@ func TestControlTerminalTransitionsReleaseWriteSetAndScheduleExactlyOnce(t *test
 		stored.Executions[0].MaxExecutionAttempts = 1
 		system.repository.records[system.goalRef] = stored
 		system.repository.mu.Unlock()
-		if result, err := system.orchestrator.ProcessNext(context.Background(), "worker:exhaust-writer"); err != nil || !result.Processed {
+		if result, err := system.orchestrator.ProcessNext(context.Background(), "worker:exhaust-prepare"); err != nil || result.Action != ActionPrepareWorkspace {
+			t.Fatalf("prepare writer: result=%+v err=%v", result, err)
+		}
+		if result, err := system.orchestrator.ProcessNext(context.Background(), "worker:exhaust-writer"); err != nil || !result.Processed || result.Action != ActionLaunchAgent {
 			t.Fatalf("exhaust writer: result=%+v err=%v", result, err)
 		}
 		after := system.record(t)
 		interrupted, _ := after.Goal.WorkItem(first.Ref())
 		if interrupted.State() != goal.WorkItemStateInterrupted || !controlExecutionForItem(after, second.Ref()) ||
-			system.actionKindCount(ActionLaunchAgent) != 1 {
+			system.actionKindCount(ActionPrepareWorkspace) != 1 {
 			t.Fatalf("exhaustion did not release writer: item=%s executions=%+v actions=%d",
-				interrupted.State(), after.Executions, system.actionKindCount(ActionLaunchAgent))
+				interrupted.State(), after.Executions, system.actionKindCount(ActionPrepareWorkspace))
 		}
 	})
 }

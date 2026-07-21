@@ -39,12 +39,18 @@ func (orchestrator *Orchestrator) ProcessNext(ctx context.Context, workerRef str
 	}
 	result := ProcessResult{Processed: true, GoalRef: claim.Action.GoalRef, Action: claim.Action.Kind}
 	switch claim.Action.Kind {
+	case ActionPrepareWorkspace:
+		err = orchestrator.processPrepareWorkspace(ctx, claim)
 	case ActionLaunchAgent:
 		err = orchestrator.processLaunch(ctx, claim)
 	case ActionObserveAgent:
 		err = orchestrator.processObservation(ctx, claim)
 	case ActionStopAgent:
 		err = orchestrator.processStop(ctx, claim)
+	case ActionCommitChange:
+		err = orchestrator.processCommitChange(ctx, claim)
+	case ActionIntegrateChange:
+		err = orchestrator.processIntegrateChange(ctx, claim)
 	default:
 		err = orchestrator.quarantine(ctx, claim, fmt.Sprintf("application.action_kind_invalid:%s", claim.Action.Kind))
 	}
@@ -221,6 +227,7 @@ func agentLaunchRequest(
 	request.SkillRefs, request.ToolRefs = workItemRefs(item.SkillRefs()), workItemRefs(item.ToolRefs())
 	request.CapabilityRefs, request.WriteSet = workItemRefs(item.CapabilityRefs()), workItemWriteSet(item)
 	request.OutputContract, request.ArtifactMediaType = string(item.OutputContract().Kind()), execution.ArtifactMediaType
+	request.ExecutionWorkspaceRef = execution.ExecutionWorkspaceRef
 	request.MaxOutputBytes, request.BudgetDemand = execution.MaxOutputBytes, item.BudgetDemand()
 	request.SecurityCriticality, request.ReasoningEffort = item.SecurityCriticality(), item.ReasoningEffort()
 	return request
@@ -364,6 +371,9 @@ func (orchestrator *Orchestrator) processObservation(ctx context.Context, claim 
 			observation.Usage, int64(len(observation.Content)), false,
 		)
 	case ports.AgentCompleted:
+		if len(item.WriteSet()) != 0 {
+			return orchestrator.stageExecutionOutput(ctx, claim, record, execution, observation, transitionAt)
+		}
 		return orchestrator.succeedGoal(ctx, claim, record, execution, observation, transitionAt)
 	default:
 		return orchestrator.failGoal(ctx, claim, record, "agent.observation_status_invalid")
@@ -585,9 +595,28 @@ func (orchestrator *Orchestrator) replaceExecutionAttempt(ctx context.Context, c
 		MaxOutputBytes: execution.MaxOutputBytes,
 		CreatedAt:      at.UTC(),
 	}
+	if len(item.WriteSet()) != 0 {
+		workspaceRef, workspaceErr := newExecutionWorkspaceRef(ctx, orchestrator.ids)
+		if workspaceErr != nil {
+			return workspaceErr
+		}
+		replacement.RepositoryRef = execution.RepositoryRef
+		if replacement.RepositoryRef.String() == "" {
+			replacement.RepositoryRef, err = orchestrator.state.ProjectRepository(ctx, aggregate.Project())
+			if err != nil {
+				return err
+			}
+		}
+		replacement.ExecutionWorkspaceRef = workspaceRef
+	}
 	updatedItem, _ := aggregate.WorkItem(item.Ref())
 	availableAt := at.Add(executionRetryBackoff(orchestrator.observationDelay, execution.AttemptNo, orchestrator.executionTimeout))
-	next, err := orchestrator.launchAction(policy, aggregate, updatedItem, replacement, authority, at, availableAt)
+	var next ActionRecord
+	if len(updatedItem.WriteSet()) != 0 {
+		next, err = orchestrator.prepareWorkspaceAction(policy, aggregate, updatedItem, replacement, authority, at, availableAt)
+	} else {
+		next, err = orchestrator.launchAction(policy, aggregate, updatedItem, replacement, authority, at, availableAt)
+	}
 	if err != nil {
 		return err
 	}

@@ -116,14 +116,23 @@ func evidenceDecodeStrictJSONFile[T any](filename string) (T, error) {
 		return value, fmt.Errorf("open strict JSON %s: %w", filename, err)
 	}
 	defer handle.Close()
-	decoder := json.NewDecoder(handle)
+	content, err := io.ReadAll(handle)
+	if err != nil {
+		return value, fmt.Errorf("read strict JSON %s: %w", filename, err)
+	}
+	return evidenceDecodeStrictJSONBytes[T](content)
+}
+
+func evidenceDecodeStrictJSONBytes[T any](content []byte) (T, error) {
+	var value T
+	decoder := json.NewDecoder(bytes.NewReader(content))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&value); err != nil {
-		return value, fmt.Errorf("decode strict JSON %s: %w", filename, err)
+		return value, err
 	}
 	var trailing any
 	if err := decoder.Decode(&trailing); err != io.EOF {
-		return value, fmt.Errorf("decode trailing JSON %s: %v", filename, err)
+		return value, fmt.Errorf("trailing JSON: %v", err)
 	}
 	return value, nil
 }

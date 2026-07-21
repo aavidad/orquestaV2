@@ -19,30 +19,32 @@ import (
 )
 
 const (
-	legacyStateSchemaVersion = 3
-	stateSchemaVersion       = 4
-	requestFileName          = "request.json"
-	launchUpgradeFileName    = "request-v4-upgrade.json"
-	terminalFileName         = "terminal.json"
+	legacyStateSchemaVersion       = 3
+	intermediateStateSchemaVersion = 4
+	stateSchemaVersion             = 5
+	requestFileName                = "request.json"
+	launchUpgradeFileName          = "request-v5-upgrade.json"
+	terminalFileName               = "terminal.json"
 )
 
 type launchRecord struct {
-	SchemaVersion     int                    `json:"schema_version"`
-	RequestHash       string                 `json:"request_hash"`
-	ExecutionRef      string                 `json:"execution_ref"`
-	GoalRef           string                 `json:"goal_ref"`
-	WorkItemRef       string                 `json:"work_item_ref"`
-	PlanGeneration    goal.PlanGeneration    `json:"plan_generation"`
-	AppSpecGeneration goal.AppSpecGeneration `json:"app_spec_generation"`
-	ExecutionAttempt  uint64                 `json:"execution_attempt"`
-	SpecHash          string                 `json:"spec_hash"`
-	ProviderRef       string                 `json:"provider_ref"`
-	ModelRef          string                 `json:"model_ref"`
-	AgentRef          string                 `json:"agent_ref"`
-	ExternalRef       string                 `json:"external_ref"`
-	IdempotencyKey    string                 `json:"idempotency_key"`
-	AcceptedAt        time.Time              `json:"accepted_at"`
-	MaxOutputBytes    int64                  `json:"max_output_bytes"`
+	SchemaVersion         int                    `json:"schema_version"`
+	RequestHash           string                 `json:"request_hash"`
+	ExecutionRef          string                 `json:"execution_ref"`
+	ExecutionWorkspaceRef string                 `json:"execution_workspace_ref,omitempty"`
+	GoalRef               string                 `json:"goal_ref"`
+	WorkItemRef           string                 `json:"work_item_ref"`
+	PlanGeneration        goal.PlanGeneration    `json:"plan_generation"`
+	AppSpecGeneration     goal.AppSpecGeneration `json:"app_spec_generation"`
+	ExecutionAttempt      uint64                 `json:"execution_attempt"`
+	SpecHash              string                 `json:"spec_hash"`
+	ProviderRef           string                 `json:"provider_ref"`
+	ModelRef              string                 `json:"model_ref"`
+	AgentRef              string                 `json:"agent_ref"`
+	ExternalRef           string                 `json:"external_ref"`
+	IdempotencyKey        string                 `json:"idempotency_key"`
+	AcceptedAt            time.Time              `json:"accepted_at"`
+	MaxOutputBytes        int64                  `json:"max_output_bytes"`
 }
 
 type terminalRecord struct {
@@ -93,60 +95,76 @@ type legacyRequestHashDocument struct {
 }
 
 type requestHashDocument struct {
-	SchemaVersion      int                    `json:"schema_version"`
-	ExecutionRef       string                 `json:"execution_ref"`
-	GoalRef            string                 `json:"goal_ref"`
-	WorkItemRef        string                 `json:"work_item_ref"`
-	PlanGeneration     goal.PlanGeneration    `json:"plan_generation"`
-	AppSpecGeneration  goal.AppSpecGeneration `json:"app_spec_generation"`
-	ExecutionAttempt   uint64                 `json:"execution_attempt"`
-	SpecHash           string                 `json:"spec_hash"`
-	ActorRef           string                 `json:"actor_ref"`
-	ProjectRef         string                 `json:"project_ref"`
-	Objective          string                 `json:"objective"`
-	PhaseRef           string                 `json:"phase_ref"`
-	PhaseKey           string                 `json:"phase_key"`
-	PhaseTemplateRef   string                 `json:"phase_template_ref"`
-	PhaseInputRefs     []string               `json:"phase_input_refs"`
-	PhaseCriterionRefs []string               `json:"phase_criterion_refs"`
-	RoleKey            string                 `json:"role_key"`
-	SkillRefs          []string               `json:"skill_refs"`
-	ToolRefs           []string               `json:"tool_refs"`
-	CapabilityRefs     []string               `json:"capability_refs"`
-	WriteSet           []string               `json:"write_set"`
-	OutputContract     string                 `json:"output_contract"`
-	ArtifactMediaType  string                 `json:"artifact_media_type"`
-	IdempotencyKey     string                 `json:"idempotency_key"`
-	MaxOutputBytes     int64                  `json:"max_output_bytes"`
+	SchemaVersion         int                    `json:"schema_version"`
+	ExecutionRef          string                 `json:"execution_ref"`
+	ExecutionWorkspaceRef string                 `json:"execution_workspace_ref,omitempty"`
+	GoalRef               string                 `json:"goal_ref"`
+	WorkItemRef           string                 `json:"work_item_ref"`
+	PlanGeneration        goal.PlanGeneration    `json:"plan_generation"`
+	AppSpecGeneration     goal.AppSpecGeneration `json:"app_spec_generation"`
+	ExecutionAttempt      uint64                 `json:"execution_attempt"`
+	SpecHash              string                 `json:"spec_hash"`
+	ActorRef              string                 `json:"actor_ref"`
+	ProjectRef            string                 `json:"project_ref"`
+	Objective             string                 `json:"objective"`
+	PhaseRef              string                 `json:"phase_ref"`
+	PhaseKey              string                 `json:"phase_key"`
+	PhaseTemplateRef      string                 `json:"phase_template_ref"`
+	PhaseInputRefs        []string               `json:"phase_input_refs"`
+	PhaseCriterionRefs    []string               `json:"phase_criterion_refs"`
+	RoleKey               string                 `json:"role_key"`
+	SkillRefs             []string               `json:"skill_refs"`
+	ToolRefs              []string               `json:"tool_refs"`
+	CapabilityRefs        []string               `json:"capability_refs"`
+	WriteSet              []string               `json:"write_set"`
+	OutputContract        string                 `json:"output_contract"`
+	ArtifactMediaType     string                 `json:"artifact_media_type"`
+	IdempotencyKey        string                 `json:"idempotency_key"`
+	MaxOutputBytes        int64                  `json:"max_output_bytes"`
 }
 
 func hashLaunchRequest(request ports.AgentLaunchRequest) (string, error) {
+	return hashLaunchRequestVersion(request, stateSchemaVersion)
+}
+
+// hashV4LaunchRequest preserves the exact V4 journal identity for an existing
+// non-workspace execution.  V5 binds the opaque workspace ref into the same
+// canonical hash document, rather than silently reusing a V4 launch.
+func hashV4LaunchRequest(request ports.AgentLaunchRequest) (string, error) {
+	if request.ExecutionWorkspaceRef.String() != "" {
+		return "", &Error{Code: CodeExecutionConflict}
+	}
+	return hashLaunchRequestVersion(request, intermediateStateSchemaVersion)
+}
+
+func hashLaunchRequestVersion(request ports.AgentLaunchRequest, schemaVersion int) (string, error) {
 	document := requestHashDocument{
-		SchemaVersion:      stateSchemaVersion,
-		ExecutionRef:       request.ExecutionRef.String(),
-		GoalRef:            request.GoalRef.String(),
-		WorkItemRef:        request.WorkItemRef.String(),
-		PlanGeneration:     request.PlanGeneration,
-		AppSpecGeneration:  request.AppSpecGeneration,
-		ExecutionAttempt:   request.ExecutionAttempt,
-		SpecHash:           request.SpecHash,
-		ActorRef:           request.ActorRef.String(),
-		ProjectRef:         request.ProjectRef.String(),
-		Objective:          request.Objective,
-		PhaseRef:           request.PhaseRef,
-		PhaseKey:           request.PhaseKey,
-		PhaseTemplateRef:   request.PhaseTemplateRef,
-		PhaseInputRefs:     append([]string(nil), request.PhaseInputRefs...),
-		PhaseCriterionRefs: append([]string(nil), request.PhaseCriterionRefs...),
-		RoleKey:            request.RoleKey,
-		SkillRefs:          append([]string(nil), request.SkillRefs...),
-		ToolRefs:           append([]string(nil), request.ToolRefs...),
-		CapabilityRefs:     append([]string(nil), request.CapabilityRefs...),
-		WriteSet:           append([]string(nil), request.WriteSet...),
-		OutputContract:     request.OutputContract,
-		ArtifactMediaType:  request.ArtifactMediaType,
-		IdempotencyKey:     request.IdempotencyKey,
-		MaxOutputBytes:     request.MaxOutputBytes,
+		SchemaVersion:         schemaVersion,
+		ExecutionRef:          request.ExecutionRef.String(),
+		ExecutionWorkspaceRef: request.ExecutionWorkspaceRef.String(),
+		GoalRef:               request.GoalRef.String(),
+		WorkItemRef:           request.WorkItemRef.String(),
+		PlanGeneration:        request.PlanGeneration,
+		AppSpecGeneration:     request.AppSpecGeneration,
+		ExecutionAttempt:      request.ExecutionAttempt,
+		SpecHash:              request.SpecHash,
+		ActorRef:              request.ActorRef.String(),
+		ProjectRef:            request.ProjectRef.String(),
+		Objective:             request.Objective,
+		PhaseRef:              request.PhaseRef,
+		PhaseKey:              request.PhaseKey,
+		PhaseTemplateRef:      request.PhaseTemplateRef,
+		PhaseInputRefs:        append([]string(nil), request.PhaseInputRefs...),
+		PhaseCriterionRefs:    append([]string(nil), request.PhaseCriterionRefs...),
+		RoleKey:               request.RoleKey,
+		SkillRefs:             append([]string(nil), request.SkillRefs...),
+		ToolRefs:              append([]string(nil), request.ToolRefs...),
+		CapabilityRefs:        append([]string(nil), request.CapabilityRefs...),
+		WriteSet:              append([]string(nil), request.WriteSet...),
+		OutputContract:        request.OutputContract,
+		ArtifactMediaType:     request.ArtifactMediaType,
+		IdempotencyKey:        request.IdempotencyKey,
+		MaxOutputBytes:        request.MaxOutputBytes,
 	}
 	payload, err := json.Marshal(document)
 	if err != nil {
@@ -209,22 +227,23 @@ func (adapter *Adapter) ensureLaunchRecord(request ports.AgentLaunchRequest, req
 		return launchRecord{}, "", false, &Error{Code: CodeClockInvalid}
 	}
 	candidate := launchRecord{
-		SchemaVersion:     stateSchemaVersion,
-		RequestHash:       requestHash,
-		ExecutionRef:      request.ExecutionRef.String(),
-		GoalRef:           request.GoalRef.String(),
-		WorkItemRef:       request.WorkItemRef.String(),
-		PlanGeneration:    request.PlanGeneration,
-		AppSpecGeneration: request.AppSpecGeneration,
-		ExecutionAttempt:  request.ExecutionAttempt,
-		SpecHash:          request.SpecHash,
-		ProviderRef:       ProviderRef,
-		ModelRef:          adapter.modelRef(),
-		AgentRef:          AgentRef,
-		ExternalRef:       "codex:" + path.Base(runPath),
-		IdempotencyKey:    request.IdempotencyKey,
-		AcceptedAt:        acceptedAt.UTC(),
-		MaxOutputBytes:    request.MaxOutputBytes,
+		SchemaVersion:         stateSchemaVersion,
+		RequestHash:           requestHash,
+		ExecutionRef:          request.ExecutionRef.String(),
+		ExecutionWorkspaceRef: request.ExecutionWorkspaceRef.String(),
+		GoalRef:               request.GoalRef.String(),
+		WorkItemRef:           request.WorkItemRef.String(),
+		PlanGeneration:        request.PlanGeneration,
+		AppSpecGeneration:     request.AppSpecGeneration,
+		ExecutionAttempt:      request.ExecutionAttempt,
+		SpecHash:              request.SpecHash,
+		ProviderRef:           ProviderRef,
+		ModelRef:              adapter.modelRef(),
+		AgentRef:              AgentRef,
+		ExternalRef:           "codex:" + path.Base(runPath),
+		IdempotencyKey:        request.IdempotencyKey,
+		AcceptedAt:            acceptedAt.UTC(),
+		MaxOutputBytes:        request.MaxOutputBytes,
 	}
 	created, err := adapter.publishJSON(runPath, requestFileName, candidate)
 	if err != nil {
@@ -287,8 +306,12 @@ func (adapter *Adapter) readLaunchRecord(runPath string) (launchRecord, bool, er
 			record.ModelRef != "" || record.AgentRef != "" {
 			return launchRecord{}, false, &Error{Code: CodeStateInvalid}
 		}
-	case stateSchemaVersion:
+	case intermediateStateSchemaVersion:
 		if err := validateLaunchRecordV4(record); err != nil {
+			return launchRecord{}, false, err
+		}
+	case stateSchemaVersion:
+		if err := validateLaunchRecordV5(record); err != nil {
 			return launchRecord{}, false, err
 		}
 	default:
@@ -298,7 +321,7 @@ func (adapter *Adapter) readLaunchRecord(runPath string) (launchRecord, bool, er
 }
 
 func validateLaunchRecordV4(record launchRecord) error {
-	if record.SchemaVersion != stateSchemaVersion ||
+	if record.SchemaVersion != intermediateStateSchemaVersion ||
 		record.GoalRef == "" ||
 		record.WorkItemRef == "" ||
 		record.PlanGeneration == 0 ||
@@ -311,13 +334,32 @@ func validateLaunchRecordV4(record launchRecord) error {
 	return nil
 }
 
+func validateLaunchRecordV5(record launchRecord) error {
+	if record.SchemaVersion != stateSchemaVersion ||
+		record.GoalRef == "" || record.WorkItemRef == "" ||
+		record.PlanGeneration == 0 || record.AppSpecGeneration == 0 || record.ExecutionAttempt == 0 ||
+		record.ModelRef == "" || record.AgentRef != AgentRef {
+		return &Error{Code: CodeStateInvalid}
+	}
+	return nil
+}
+
 func (adapter *Adapter) bindLegacyLaunchRecord(
 	runPath string,
 	legacy launchRecord,
 	request ports.AgentLaunchRequest,
 	requestHash string,
 ) (launchRecord, error) {
-	legacyHash, err := hashLegacyLaunchRequest(request)
+	var legacyHash string
+	var err error
+	switch legacy.SchemaVersion {
+	case legacyStateSchemaVersion:
+		legacyHash, err = hashLegacyLaunchRequest(request)
+	case intermediateStateSchemaVersion:
+		legacyHash, err = hashV4LaunchRequest(request)
+	default:
+		return launchRecord{}, &Error{Code: CodeStateInvalid}
+	}
 	if err != nil {
 		return launchRecord{}, &Error{Code: CodeStateInvalid, Cause: err}
 	}
@@ -325,26 +367,27 @@ func (adapter *Adapter) bindLegacyLaunchRecord(
 		return launchRecord{}, &Error{Code: CodeExecutionConflict}
 	}
 	candidate := launchRecord{
-		SchemaVersion:     stateSchemaVersion,
-		RequestHash:       requestHash,
-		ExecutionRef:      legacy.ExecutionRef,
-		GoalRef:           request.GoalRef.String(),
-		WorkItemRef:       request.WorkItemRef.String(),
-		PlanGeneration:    request.PlanGeneration,
-		AppSpecGeneration: request.AppSpecGeneration,
-		ExecutionAttempt:  request.ExecutionAttempt,
-		SpecHash:          legacy.SpecHash,
-		ProviderRef:       legacy.ProviderRef,
-		ModelRef:          adapter.modelRef(),
-		AgentRef:          AgentRef,
-		ExternalRef:       legacy.ExternalRef,
-		IdempotencyKey:    legacy.IdempotencyKey,
-		AcceptedAt:        legacy.AcceptedAt,
-		MaxOutputBytes:    legacy.MaxOutputBytes,
+		SchemaVersion:         stateSchemaVersion,
+		RequestHash:           requestHash,
+		ExecutionRef:          legacy.ExecutionRef,
+		ExecutionWorkspaceRef: request.ExecutionWorkspaceRef.String(),
+		GoalRef:               request.GoalRef.String(),
+		WorkItemRef:           request.WorkItemRef.String(),
+		PlanGeneration:        request.PlanGeneration,
+		AppSpecGeneration:     request.AppSpecGeneration,
+		ExecutionAttempt:      request.ExecutionAttempt,
+		SpecHash:              legacy.SpecHash,
+		ProviderRef:           legacy.ProviderRef,
+		ModelRef:              adapter.modelRef(),
+		AgentRef:              AgentRef,
+		ExternalRef:           legacy.ExternalRef,
+		IdempotencyKey:        legacy.IdempotencyKey,
+		AcceptedAt:            legacy.AcceptedAt,
+		MaxOutputBytes:        legacy.MaxOutputBytes,
 	}
 	upgrade := launchUpgradeRecord{
 		SchemaVersion:       stateSchemaVersion,
-		SourceSchemaVersion: legacyStateSchemaVersion,
+		SourceSchemaVersion: legacy.SchemaVersion,
 		SourceRequestHash:   legacy.RequestHash,
 		Launch:              candidate,
 	}
@@ -372,11 +415,11 @@ func (adapter *Adapter) bindLegacyLaunchRecord(
 
 func validateLegacyLaunchUpgrade(upgrade launchUpgradeRecord, legacy launchRecord) error {
 	if upgrade.SchemaVersion != stateSchemaVersion ||
-		upgrade.SourceSchemaVersion != legacyStateSchemaVersion ||
+		(upgrade.SourceSchemaVersion != legacyStateSchemaVersion && upgrade.SourceSchemaVersion != intermediateStateSchemaVersion) ||
 		upgrade.SourceRequestHash != legacy.RequestHash {
 		return &Error{Code: CodeStateInvalid}
 	}
-	if err := validateLaunchRecordV4(upgrade.Launch); err != nil {
+	if err := validateLaunchRecordV5(upgrade.Launch); err != nil {
 		return err
 	}
 	launch := upgrade.Launch
@@ -437,7 +480,7 @@ func (record launchRecord) receipt(executionRef goal.ExecutionRef) (ports.AgentL
 }
 
 func (adapter *Adapter) observationReceipt(record launchRecord, executionRef goal.ExecutionRef) (ports.AgentLaunchReceipt, error) {
-	if record.SchemaVersion == stateSchemaVersion {
+	if record.SchemaVersion == stateSchemaVersion || record.SchemaVersion == intermediateStateSchemaVersion {
 		return record.receipt(executionRef)
 	}
 	if record.SchemaVersion != legacyStateSchemaVersion || record.ExecutionRef != executionRef.String() {
@@ -482,7 +525,7 @@ func (adapter *Adapter) loadTerminal(runPath, requestHash, specHash string, maxO
 	if err != nil || !found {
 		return terminalRecord{}, found, err
 	}
-	if (terminal.SchemaVersion != legacyStateSchemaVersion && terminal.SchemaVersion != stateSchemaVersion) ||
+	if (terminal.SchemaVersion != legacyStateSchemaVersion && terminal.SchemaVersion != intermediateStateSchemaVersion && terminal.SchemaVersion != stateSchemaVersion) ||
 		terminal.RequestHash != requestHash || terminal.ObservedAt.IsZero() {
 		return terminalRecord{}, false, &Error{Code: CodeStateInvalid}
 	}

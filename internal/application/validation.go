@@ -16,6 +16,8 @@ func validatePersistedCandidate(candidate goal.Goal, executions []ExecutionRecor
 	if !reflect.DeepEqual(record.Goal.Snapshot(), candidate.Snapshot()) ||
 		!slices.Equal(record.Executions, executions) ||
 		len(record.Artifacts) != 0 || len(record.Attestations) != 0 || len(record.Controls) != 0 ||
+		len(record.WorkspaceBindings) != 0 || len(record.ChangeSets) != 0 ||
+		len(record.MergeObservations) != 0 || len(record.IntegrationReceipts) != 0 ||
 		len(record.ConsumptionReceipts) != 0 {
 		return &StateError{Code: StateConflict}
 	}
@@ -53,7 +55,17 @@ func validateClaimedRecord(claim ActionClaim, record GoalRecord, kind ActionKind
 		execution.Ref.String() == "" {
 		return errors.New("application.execution_record_invalid")
 	}
+	if execution.ExecutionWorkspaceRef.String() != "" && execution.RepositoryRef.String() == "" {
+		return errors.New("application.execution_workspace_invalid")
+	}
 	switch kind {
+	case ActionPrepareWorkspace:
+		if claim.Action.Ref != "action:prepare-workspace:"+execution.Ref.String() ||
+			claim.Action.WorkItemGeneration > item.Revision() || len(item.WriteSet()) == 0 ||
+			execution.RepositoryRef.String() == "" || execution.ExecutionWorkspaceRef.String() == "" ||
+			!validWorkspacePrepareClaimState(item, execution) {
+			return errors.New("application.workspace_prepare_state_invalid")
+		}
 	case ActionLaunchAgent:
 		if claim.Action.Ref != "action:launch:"+execution.Ref.String() ||
 			claim.Action.WorkItemGeneration > item.Revision() ||
@@ -71,8 +83,25 @@ func validateClaimedRecord(claim ActionClaim, record GoalRecord, kind ActionKind
 			execution.ProviderAcceptedAt.IsZero() || !execution.DeadlineAt.After(execution.StartedAt) {
 			return errors.New("application.observe_state_invalid")
 		}
+	case ActionCommitChange:
+		if claim.Action.Ref != "action:commit-change:"+execution.Ref.String() ||
+			claim.Action.WorkItemGeneration > item.Revision() || item.State() != goal.WorkItemStateRunning ||
+			execution.State != ExecutionAwaitingCommit || execution.ExecutionWorkspaceRef.String() == "" {
+			return errors.New("application.commit_change_state_invalid")
+		}
+	case ActionIntegrateChange:
+		if !strings.HasPrefix(claim.Action.Ref, "action:integrate-change:") ||
+			claim.Action.WorkItemGeneration > item.Revision() || item.State() != goal.WorkItemStateRunning ||
+			execution.State != ExecutionAwaitingIntegration || execution.ExecutionWorkspaceRef.String() == "" {
+			return errors.New("application.integrate_change_state_invalid")
+		}
 	}
 	return nil
+}
+
+func validWorkspacePrepareClaimState(item goal.WorkItem, execution ExecutionRecord) bool {
+	return (item.State() == goal.WorkItemStatePending || item.State() == goal.WorkItemStateRunning) &&
+		execution.State == ExecutionQueued
 }
 
 func validateCreatedRecord(
@@ -123,6 +152,8 @@ func validateAmendedRecord(
 		record.Goal.Actor() != source.Actor() || record.Goal.Project() != projectRef ||
 		record.Goal.State() != goal.GoalStatePending || record.Goal.WorkItemCount() != 0 ||
 		len(record.Executions) != 0 || len(record.Artifacts) != 0 || len(record.Attestations) != 0 ||
+		len(record.WorkspaceBindings) != 0 || len(record.ChangeSets) != 0 ||
+		len(record.MergeObservations) != 0 || len(record.IntegrationReceipts) != 0 ||
 		len(record.Controls) != 0 || len(record.ConsumptionReceipts) != 0 ||
 		intent.Actor() != source.Actor() || intent.Project() != projectRef ||
 		intent.Statement() != request.Statement ||

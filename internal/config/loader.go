@@ -185,9 +185,10 @@ func runtimePathsDisjoint(values map[Key]resolvedValue, sourcePath string) bool 
 	artifactRoot, artifactOK := canonical(KeyArtifactFilesystemRoot)
 	credentialPath, credentialOK := canonical(KeyCredentialsLocalPath)
 	workRoot, workOK := canonical(KeyRuntimeCodexWorkRoot)
+	workspaceRoot, workspaceOK := canonical(KeyWorkspaceLocalRoot)
 	effectivePath, effectiveOK := canonical(KeyConfigEffectivePath)
 	tokenPath, tokenOK := canonical(KeyIdentityLocalTokenPath)
-	if !stateOK || !artifactOK || !credentialOK || !workOK || !effectiveOK || !tokenOK {
+	if !stateOK || !artifactOK || !credentialOK || !workOK || !workspaceOK || !effectiveOK || !tokenOK {
 		return false
 	}
 	stateDirectory, tokenDirectory := filepath.Dir(statePath), filepath.Dir(tokenPath)
@@ -198,6 +199,8 @@ func runtimePathsDisjoint(values map[Key]resolvedValue, sourcePath string) bool 
 		{effectivePath, statePath}, {effectivePath, artifactRoot}, {effectivePath, workRoot},
 		{tokenDirectory, stateDirectory}, {tokenDirectory, artifactRoot}, {tokenDirectory, workRoot},
 		{tokenDirectory, effectivePath},
+		{workspaceRoot, stateDirectory}, {workspaceRoot, artifactRoot}, {workspaceRoot, credentialPath},
+		{workspaceRoot, workRoot}, {workspaceRoot, effectivePath}, {workspaceRoot, tokenDirectory},
 	}
 	for _, pair := range pairs {
 		if pathsOverlap(pair[0], pair[1]) {
@@ -209,7 +212,7 @@ func runtimePathsDisjoint(values map[Key]resolvedValue, sourcePath string) bool 
 		if err != nil {
 			return false
 		}
-		for _, other := range []string{statePath, artifactRoot, credentialPath, workRoot, effectivePath, tokenDirectory} {
+		for _, other := range []string{statePath, artifactRoot, credentialPath, workRoot, workspaceRoot, effectivePath, tokenDirectory} {
 			if pathsOverlap(configPath, other) {
 				return false
 			}

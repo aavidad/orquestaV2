@@ -14,6 +14,7 @@ import (
 
 	"orquesta/internal/application"
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
 	"orquesta/internal/i18n"
 	"orquesta/internal/identity"
 	"orquesta/internal/ports"
@@ -72,15 +73,16 @@ func newTestInterface(t *testing.T, maxRequestBytes int64) (*Interface, *memoryS
 	}
 	clock := &testClock{now: testNow()}
 	ids := &sequentialIDs{}
+	policy := mcpTestBudgetPolicy(clock.Now())
 	state.clock = clock
 	state.ids = ids
 	artifacts := &memoryArtifacts{content: make(map[goal.ArtifactRef]ports.ArtifactContent)}
 	orchestrator, err := application.New(application.Dependencies{
 		State: state, Access: state, Launcher: inertAgent{}, Observer: inertAgent{}, Artifacts: artifacts,
 		Clock: clock, IDs: ids, MaxOutputBytes: 4096, MaxMailboxEnvelopeBytes: 64 << 10,
-		MaxExecutionAttempts: 3, AgentCapabilities: inertAgentCapabilities(),
+		MaxExecutionAttempts: 3, MaxChildrenPerParent: 6, AgentCapabilities: inertAgentCapabilities(),
 		ClaimLease: time.Minute, DirectorLeaseDuration: 2 * time.Minute, ObservationDelay: time.Second,
-		ExecutionTimeout: time.Hour,
+		ExecutionTimeout: time.Hour, EffectApprovalTTL: policy.EffectApprovalTTL, BudgetPolicy: policy,
 	})
 	if err != nil {
 		t.Fatalf("application.New() error = %v", err)
@@ -88,6 +90,36 @@ func newTestInterface(t *testing.T, maxRequestBytes int64) (*Interface, *memoryS
 	state.orchestrator = orchestrator
 	server := newTestInterfaceForPrincipal(t, state, "actor:local", "project:local", maxRequestBytes)
 	return server, state, artifacts
+}
+
+func mcpTestBudgetPolicy(at time.Time) application.BudgetPolicy {
+	const policyHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	limit := governance.ResourceVector{
+		Tokens: 1_000_000, MoneyMicros: 1_000_000_000, Currency: "EUR",
+		ActiveTimeNS: int64(24 * time.Hour), ProcessSlots: 70, DiskBytes: 1 << 30,
+	}
+	envelope := func(ref, subject string, scope governance.BudgetScope) governance.BudgetEnvelope {
+		return governance.BudgetEnvelope{
+			Ref: ref, SubjectRef: subject, Scope: scope, Limit: limit,
+			Revision: 1, PolicyHash: policyHash, CreatedAt: at.UTC(),
+		}
+	}
+	return application.BudgetPolicy{
+		DeploymentEnvelope: envelope(
+			"budget-envelope:deployment:mcp:"+policyHash, "deployment:mcp", governance.BudgetScopeDeployment,
+		),
+		ProjectEnvelopeTemplate: envelope(
+			"budget-envelope:project:mcp:"+policyHash, "project:template", governance.BudgetScopeProject,
+		),
+		GoalEnvelopeTemplate: envelope(
+			"budget-envelope:goal:mcp:"+policyHash, "goal:template", governance.BudgetScopeGoal,
+		),
+		DefaultWorkItemDemand: governance.ResourceVector{
+			Tokens: 100, MoneyMicros: 1_000, Currency: "EUR", ActiveTimeNS: int64(time.Minute),
+			ProcessSlots: 1, DiskBytes: 1 << 10,
+		},
+		QuotaRetryDelay: time.Second, EffectApprovalTTL: time.Hour, PolicyHash: policyHash,
+	}
 }
 
 func newTestInterfaceForPrincipal(
@@ -693,6 +725,34 @@ func (state *memoryState) RecordGoalSucceeded(context.Context, application.GoalS
 
 func (state *memoryState) RecordGoalFailed(context.Context, application.GoalFailedState) error {
 	return errors.New("test.state_write_not_used")
+}
+
+func (*memoryState) ProjectRepository(_ context.Context, projectRef goal.ProjectRef) (identity.RepositoryRef, error) {
+	return identity.NewRepositoryRef("repository:" + projectRef.String())
+}
+
+func (*memoryState) ListPendingChanges(context.Context, application.PendingChangeQuery) ([]application.PendingChange, error) {
+	return nil, nil
+}
+
+func (*memoryState) RecordWorkspacePrepared(context.Context, application.WorkspacePreparedState) error {
+	return errors.New("test.workspace_state_write_not_used")
+}
+
+func (*memoryState) RecordExecutionOutputReady(context.Context, application.ExecutionOutputReadyState) error {
+	return errors.New("test.workspace_state_write_not_used")
+}
+
+func (*memoryState) RecordChangeCommitted(context.Context, application.ChangeCommittedState) error {
+	return errors.New("test.workspace_state_write_not_used")
+}
+
+func (*memoryState) AdmitIntegration(context.Context, application.AdmitIntegrationState) (application.ActionRecord, bool, error) {
+	return application.ActionRecord{}, false, errors.New("test.workspace_state_write_not_used")
+}
+
+func (*memoryState) RecordIntegrationResult(context.Context, application.IntegrationResultState) error {
+	return errors.New("test.workspace_state_write_not_used")
 }
 
 func (state *memoryState) attachArtifact(t *testing.T, goalRef goal.GoalRef, artifact application.ArtifactRecord) {

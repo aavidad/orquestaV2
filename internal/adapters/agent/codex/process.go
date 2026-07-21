@@ -72,6 +72,11 @@ func (adapter *Adapter) startExecutionLocked(callerContext context.Context, requ
 		adapter.finishWithoutProcessLocked(state, CodeStatePersistenceFailed, []byte(err.Error()))
 		return
 	}
+	workingDirectory, workspaceBound, err := adapter.executionWorkingDirectory(callerContext, request, state.runPath)
+	if err != nil {
+		adapter.finishWithoutProcessLocked(state, ErrorCode(err), []byte(err.Error()))
+		return
+	}
 
 	runContext, cancel := context.WithCancelCause(adapter.lifecycle)
 	timeout := time.AfterFunc(adapter.config.Timeout, func() {
@@ -89,7 +94,7 @@ func (adapter *Adapter) startExecutionLocked(callerContext context.Context, requ
 	}
 
 	diagnostic := &cappedDiagnostic{maximum: adapter.config.MaxDiagnosticBytes}
-	command, gateReader, gateWriter, commandErr := adapter.executionCommand(runContext, state.runPath)
+	command, gateReader, gateWriter, commandErr := adapter.executionWorkspaceCommand(runContext, state.runPath, workspaceBound)
 	if commandErr != nil {
 		timeout.Stop()
 		cancel(errExecutionFinished)
@@ -99,7 +104,7 @@ func (adapter *Adapter) startExecutionLocked(callerContext context.Context, requ
 	}
 	command.WaitDelay = adapter.config.ProcessPipeDrainDelay
 	configureProcessGroup(command, func() error { return context.Cause(runContext) })
-	command.Dir = filepath.Join(adapter.rootPath, filepath.FromSlash(state.runPath))
+	command.Dir = workingDirectory
 	command.Env = append([]string(nil), environment...)
 	if command.Env == nil {
 		command.Env = []string{}
@@ -172,8 +177,36 @@ func (adapter *Adapter) startExecutionLocked(callerContext context.Context, requ
 	go adapter.waitForExecution(command, runContext, cancel, timeout, finished, request, state, diagnostic)
 }
 
+func (adapter *Adapter) executionWorkingDirectory(ctx context.Context, request ports.AgentLaunchRequest, runPath string) (string, bool, error) {
+	if request.ExecutionWorkspaceRef.String() == "" {
+		return filepath.Join(adapter.rootPath, filepath.FromSlash(runPath)), false, nil
+	}
+	if adapter.workspaceResolver == nil {
+		return "", false, &Error{Code: CodeWorkspaceResolverInvalid}
+	}
+	resolved, err := adapter.workspaceResolver.ResolveExecutionWorkspace(ctx, request.ExecutionWorkspaceRef)
+	if err != nil {
+		return "", false, &Error{Code: CodeWorkspaceUnavailable, Cause: err}
+	}
+	if !filepath.IsAbs(resolved) {
+		return "", false, &Error{Code: CodeWorkspaceUnsafe}
+	}
+	info, err := os.Lstat(resolved)
+	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return "", false, &Error{Code: CodeWorkspaceUnsafe, Cause: err}
+	}
+	return resolved, true, nil
+}
+
+// executionCommand remains the legacy private-control command constructor for
+// existing non-workspace control tests. Production launch uses the explicit
+// workspace variant below.
 func (adapter *Adapter) executionCommand(runContext context.Context, runPath string) (*exec.Cmd, *os.File, *os.File, error) {
-	arguments := adapter.commandArguments(runPath)
+	return adapter.executionWorkspaceCommand(runContext, runPath, false)
+}
+
+func (adapter *Adapter) executionWorkspaceCommand(runContext context.Context, runPath string, workspaceBound bool) (*exec.Cmd, *os.File, *os.File, error) {
+	arguments := adapter.commandArguments(runPath, workspaceBound)
 	if !adapter.processControlsEnabled() {
 		return exec.CommandContext(runContext, adapter.command, arguments...), nil, nil, nil
 	}
@@ -490,7 +523,8 @@ func (adapter *Adapter) writePrivateRuntimeFile(filePath string, content []byte)
 	return nil
 }
 
-func (adapter *Adapter) commandArguments(runPath string) []string {
+func (adapter *Adapter) commandArguments(runPath string, workspace ...bool) []string {
+	workspaceBound := len(workspace) == 1 && workspace[0]
 	schemaPath := filepath.Join(adapter.rootPath, filepath.FromSlash(path.Join(runPath, outputSchemaFileName)))
 	lastMessagePath := filepath.Join(adapter.rootPath, filepath.FromSlash(path.Join(runPath, lastMessageFileName)))
 	arguments := []string{
@@ -500,7 +534,7 @@ func (adapter *Adapter) commandArguments(runPath string) []string {
 		"--ignore-rules",
 		"--strict-config",
 		"--skip-git-repo-check",
-		"--sandbox", "read-only",
+		"--sandbox", codexSandbox(workspaceBound),
 		"--output-schema", schemaPath,
 		"--output-last-message", lastMessagePath,
 		"--config", fmt.Sprintf("model_reasoning_effort=%q", adapter.config.ReasoningEffort),
@@ -514,6 +548,13 @@ func (adapter *Adapter) commandArguments(runPath string) []string {
 		arguments = append(arguments, "--model", adapter.config.Model)
 	}
 	return arguments
+}
+
+func codexSandbox(workspaceBound bool) string {
+	if workspaceBound {
+		return "workspace-write"
+	}
+	return "read-only"
 }
 
 func shellEnvironmentIncludeOnly(environment map[string]string) string {

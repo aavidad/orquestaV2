@@ -21,6 +21,7 @@ import (
 	credentiallocal "orquesta/internal/adapters/credentials/local"
 	statesqlite "orquesta/internal/adapters/state/sqlite"
 	"orquesta/internal/adapters/system/local"
+	gitlocal "orquesta/internal/adapters/workspace/gitlocal"
 	"orquesta/internal/application"
 	"orquesta/internal/config"
 	"orquesta/internal/credentials"
@@ -119,6 +120,16 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	if err != nil {
 		return nil, err
 	}
+	var workspace *gitlocal.Adapter
+	if setup.snapshot.RepositoryLocalSeedPath() != "" {
+		workspace, err = openBuildWorkspace(ctx, setup.snapshot, setup.clock, identityComposition)
+		if err != nil {
+			return nil, err
+		}
+		if err := bindAgentWorkspaceResolver(agent, workspace); err != nil {
+			return nil, err
+		}
+	}
 	authenticator, err := bearer.New(identityComposition.provider)
 	if err != nil {
 		return nil, err
@@ -136,7 +147,7 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		return nil, err
 	}
 	cleanup.add(func() { _ = artifacts.Close() })
-	orchestrator, err := newBuildOrchestrator(setup, repository, artifacts, agent, controller, capabilities)
+	orchestrator, err := newBuildOrchestrator(setup, repository, artifacts, agent, controller, capabilities, workspace)
 	if err != nil {
 		return nil, err
 	}
@@ -207,6 +218,80 @@ func openBuildAgent(
 	return agent, capabilities, controller, nil
 }
 
+type workspaceResolverBinder interface {
+	BindWorkspacePathResolver(codex.WorkspacePathResolver) error
+}
+
+// localRepositoryLocator is deliberately a one-binding composition adapter.
+// The runtime's bootstrap project is the only repository V16 may expose; an
+// empty seed leaves non-code Goals usable while write work fails structurally.
+type localRepositoryLocator struct {
+	repositoryRef identity.RepositoryRef
+	seedPath      string
+	targetRef     string
+}
+
+func (locator localRepositoryLocator) LocateLocalRepository(_ context.Context, ref identity.RepositoryRef) (gitlocal.LocalRepositoryBinding, error) {
+	if locator.repositoryRef.String() == "" || ref != locator.repositoryRef || locator.seedPath == "" {
+		return gitlocal.LocalRepositoryBinding{}, errors.New("bootstrap.repository_seed_unavailable")
+	}
+	return gitlocal.LocalRepositoryBinding{Path: locator.seedPath, TargetRef: locator.targetRef}, nil
+}
+
+func openBuildWorkspace(
+	ctx context.Context, snapshot config.Snapshot, clock application.Clock, composition identityRuntimeComposition,
+) (*gitlocal.Adapter, error) {
+	seedPath := snapshot.RepositoryLocalSeedPath()
+	if seedPath == "" {
+		return nil, errors.New("bootstrap.repository_seed_unavailable")
+	}
+	environment, err := config.ResolveChildEnvironment(snapshot.RuntimeCodexEnvAllowlist())
+	if err != nil {
+		return nil, err
+	}
+	gitCommand, err := resolveBootstrapExecutable("git", environment)
+	if err != nil {
+		return nil, err
+	}
+	seedPath, err = filepath.Abs(seedPath)
+	if err != nil {
+		return nil, err
+	}
+	return gitlocal.New(gitlocal.Config{
+		Root: snapshot.WorkspaceLocalRoot(), GitCommand: gitCommand, Now: clock.Now,
+		Locator: localRepositoryLocator{
+			repositoryRef: composition.localHierarchy.RepositoryRef(), seedPath: seedPath,
+			targetRef: snapshot.RepositoryLocalTargetRef(),
+		},
+	})
+}
+
+func resolveBootstrapExecutable(name string, environment map[string]string) (string, error) {
+	if name == "" || filepath.IsAbs(name) || strings.ContainsRune(name, filepath.Separator) {
+		return "", errors.New("bootstrap.executable_invalid")
+	}
+	searchPath := environment["PATH"]
+	for _, directory := range filepath.SplitList(searchPath) {
+		if directory == "" || !filepath.IsAbs(directory) {
+			continue
+		}
+		candidate := filepath.Join(directory, name)
+		info, err := os.Stat(candidate)
+		if err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0o111 != 0 {
+			return candidate, nil
+		}
+	}
+	return "", errors.New("bootstrap.executable_not_found")
+}
+
+func bindAgentWorkspaceResolver(agent AgentAdapter, resolver codex.WorkspacePathResolver) error {
+	binder, ok := agent.(workspaceResolverBinder)
+	if !ok {
+		return errors.New("bootstrap.agent_workspace_resolver_unsupported")
+	}
+	return binder.BindWorkspacePathResolver(resolver)
+}
+
 func shutdownBuildAgent(agent AgentAdapter, timeout time.Duration) {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -240,11 +325,12 @@ func openBuildRepository(
 
 func newBuildOrchestrator(
 	setup buildSetup, repository *statesqlite.Repository, artifacts *filesystem.Store,
-	agent AgentAdapter, controller application.AgentController, capabilities ports.AgentCapabilities,
+	agent AgentAdapter, controller application.AgentController, capabilities ports.AgentCapabilities, workspace *gitlocal.Adapter,
 ) (*application.Orchestrator, error) {
 	return application.New(application.Dependencies{
 		State: repository, Access: repository,
 		Launcher: agent, Observer: agent, Controller: controller, Artifacts: artifacts,
+		WorkspaceManager: workspace, VersionControl: workspace,
 		Clock: setup.clock, IDs: local.IDGenerator{},
 		MaxOutputBytes: setup.snapshot.RuntimeMaxOutputBytes(), MaxMailboxEnvelopeBytes: setup.snapshot.MailboxMaxEnvelopeBytes(),
 		MaxExecutionAttempts: uint64(setup.snapshot.SchedulerMaxExecutionAttempts()),
@@ -601,6 +687,14 @@ func (agent *credentialAgent) BindRuntimeScope(scope string) error {
 		return errors.New("bootstrap.agent_runtime_scope_unsupported")
 	}
 	return binder.BindRuntimeScope(scope)
+}
+
+func (agent *credentialAgent) BindWorkspacePathResolver(resolver codex.WorkspacePathResolver) error {
+	binder, ok := agent.AgentAdapter.(workspaceResolverBinder)
+	if !ok {
+		return errors.New("bootstrap.agent_workspace_resolver_unsupported")
+	}
+	return binder.BindWorkspacePathResolver(resolver)
 }
 
 func (agent *credentialAgent) ControlCapabilities(ctx context.Context) (ports.AgentControlCapabilities, error) {

@@ -506,6 +506,14 @@ type v15ChangedPath struct {
 }
 
 func v15AssertStructuralSimplicity(t *testing.T, repositoryRoot, baseOID, sealedOID string) {
+	v15AssertStructuralSimplicityWithClassifier(t, repositoryRoot, baseOID, sealedOID, v15SimplicityClass)
+}
+
+func v15AssertStructuralSimplicityWithClassifier(
+	t *testing.T,
+	repositoryRoot, baseOID, sealedOID string,
+	classify func(string) string,
+) {
 	t.Helper()
 	output, err := evidenceGit(
 		repositoryRoot, "diff", "--no-renames", "--name-status", baseOID, sealedOID, "--",
@@ -522,7 +530,7 @@ func v15AssertStructuralSimplicity(t *testing.T, repositoryRoot, baseOID, sealed
 		if len(fields) != 2 || (fields[0] != "A" && fields[0] != "M" && fields[0] != "D") {
 			t.Fatalf("V15 unsupported changed-path row %q", row)
 		}
-		if class := v15SimplicityClass(fields[1]); class == "" {
+		if class := classify(fields[1]); class == "" {
 			t.Fatalf("V15 unclassified changed path %q", fields[1])
 		}
 		changed = append(changed, v15ChangedPath{status: fields[0], path: fields[1]})
@@ -530,7 +538,7 @@ func v15AssertStructuralSimplicity(t *testing.T, repositoryRoot, baseOID, sealed
 
 	newPackageCandidates := make(map[string]struct{})
 	for _, entry := range changed {
-		class := v15SimplicityClass(entry.path)
+		class := classify(entry.path)
 		productiveGo := (class == "core" || class == "adapters") &&
 			strings.HasSuffix(entry.path, ".go") && !strings.HasSuffix(entry.path, "_test.go")
 		if !productiveGo || entry.status == "D" {

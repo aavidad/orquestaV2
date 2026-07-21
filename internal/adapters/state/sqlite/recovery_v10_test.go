@@ -93,7 +93,7 @@ WHERE type = 'table' AND name IN ('principals', 'project_memberships', 'authoriz
 		t.Fatalf("Open did not migrate restored V09: %v", err)
 	}
 	defer migrated.Close()
-	assertRecoverySchemaVersion(t, migrated.db, recoverySchemaV15)
+	assertRecoverySchemaVersion(t, migrated.db, recoverySchemaV16)
 	var bound int
 	if err := migrated.db.QueryRow(`SELECT COUNT(*) FROM goals g
 JOIN app_specs spec ON spec.ref = g.app_spec_ref
@@ -129,7 +129,7 @@ func TestV10RecoveryRestoresExactV10IdentitySnapshot(t *testing.T) {
 		t.Fatalf("backup V10: %v", err)
 	}
 	migrations, _ := loadMigrations()
-	if receipt.SchemaRef != migrationSchemaRef(migrations[:recoverySchemaV15]) {
+	if receipt.SchemaRef != migrationSchemaRef(migrations[:recoverySchemaV16]) {
 		t.Fatalf("V15 schema ref = %s", receipt.SchemaRef)
 	}
 	targetRef, _ := application.NewRecoveryTargetRef("recovery-target:v10-exact")
@@ -144,7 +144,7 @@ func TestV10RecoveryRestoresExactV10IdentitySnapshot(t *testing.T) {
 	}
 	raw := openRawV10TestDatabase(t, targetPath)
 	defer raw.Close()
-	assertRecoverySchemaVersion(t, raw, recoverySchemaV15)
+	assertRecoverySchemaVersion(t, raw, recoverySchemaV16)
 	if schemaRef, _, err := validateRecoveryDatabase(ctx, raw); err != nil || schemaRef != receipt.SchemaRef {
 		t.Fatalf("restored V10 semantics: schema=%s err=%v", schemaRef, err)
 	}

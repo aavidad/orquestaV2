@@ -1453,7 +1453,11 @@ func TestProductRoadmapV15ScopeAndExecutableContract(t *testing.T) {
 		contract.Command != wantCommand || !reflect.DeepEqual(contract.Assertions, roadmapV15Assertions()) {
 		t.Fatalf("invalid V15 executable contract: %#v", contract)
 	}
-	for _, id := range []string{"AC-V16-WORKSPACE-GIT", "AC-V20-COMMAND-REGISTRY", "AC-V31-POSTGRES-S3-MULTIHOST"} {
+	next := contracts["AC-V16-WORKSPACE-GIT"]
+	if next.Status != "executable" || next.Receipt != "product/evidence/v16_workspace_git.json" {
+		t.Fatalf("V15 successor V16 must advance only through its executable contract: %#v", next)
+	}
+	for _, id := range []string{"AC-V20-COMMAND-REGISTRY", "AC-V31-POSTGRES-S3-MULTIHOST"} {
 		if deferred := contracts[id]; deferred.Status != "planned" || deferred.Receipt != "" {
 			t.Fatalf("V15 contract preparation prematurely opens deferred contract %s: %#v", id, deferred)
 		}
@@ -1566,6 +1570,160 @@ func roadmapV15Assertions() []string {
 		"a crash before or after adapter invocation retries only through the same effect idempotency key and fenced attempt; replay or reconciliation converges on one immutable EffectReceipt and never performs the external effect twice",
 		"V15 preserves the V02 single Goal writer V05 DAG V06 atomic outbox V07 canonical configuration V08 credentials V09 recovery V10 RBAC V12 Director lease V13 mailbox and V14 controls without another lifecycle state authority scheduler store database or command surface",
 		"V15 exposes application and neutral port contracts only; workspace Git forge artifacts reviews council HTTP MCP CLI web provider parity deploy notifications PostgreSQL S3 and multihost remain owned by their later verticals",
+	}
+}
+
+func TestProductRoadmapV16ScopeAndExecutableContract(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+	verticals := make(map[string]roadmapVertical, len(roadmap.Verticals))
+	entries := make(map[string]roadmapEntry, len(roadmap.CapabilityEntries))
+	contracts := make(map[string]roadmapAcceptanceContract, len(roadmap.AcceptanceContracts))
+	var owned []string
+	for _, vertical := range roadmap.Verticals {
+		verticals[vertical.ID] = vertical
+	}
+	for _, entry := range roadmap.CapabilityEntries {
+		entries[entry.ID] = entry
+		if entry.OwnerContext == "workspace_git" && entry.Decision == "accept" {
+			owned = append(owned, entry.ID)
+		}
+	}
+	for _, contract := range roadmap.AcceptanceContracts {
+		contracts[contract.ID] = contract
+	}
+	sort.Strings(owned)
+	wantOwned := []string{"EXT-10", "STG-02", "STG-10"}
+	if !reflect.DeepEqual(owned, wantOwned) {
+		t.Fatalf("V16 accepted ownership = %v, want exact %v", owned, wantOwned)
+	}
+	wantEvidence := []string{
+		"acceptance/v16_workspace_git_test.go",
+		"acceptance/fixtures/v16_workspace_git.json",
+		"product/evidence/v16_workspace_git.json",
+	}
+	wantVertical := verticals["workspace_git"]
+	for _, id := range wantOwned {
+		entry := entries[id]
+		if entry.Status != "accredited" || !reflect.DeepEqual(entry.EvidenceRefs, wantEvidence) ||
+			!reflect.DeepEqual(entry.Dependencies, wantVertical.DependsOn) ||
+			!reflect.DeepEqual(entry.AcceptanceContracts, wantVertical.AcceptanceContracts) {
+			t.Errorf("V16 capability %s lacks exact accreditation: %#v", id, entry)
+		}
+	}
+	contract := contracts["AC-V16-WORKSPACE-GIT"]
+	if contract.Status != "executable" || contract.TestRef != "acceptance/v16_workspace_git_test.go" ||
+		contract.Fixture != "acceptance/fixtures/v16_workspace_git.json" ||
+		contract.Receipt != "product/evidence/v16_workspace_git.json" ||
+		contract.Command != roadmapV16ValidationCommand() ||
+		!reflect.DeepEqual(contract.Assertions, roadmapV16Assertions()) {
+		t.Fatalf("invalid V16 executable contract: %#v", contract)
+	}
+	if next := contracts["AC-V17-TEST-ATTESTOR"]; next.Status != "planned" || next.Receipt != "" {
+		t.Fatalf("V16 must not open V17 before its own evidence closes: %#v", next)
+	}
+	if forge := entries["EXT-11"]; forge.Status != "declared" || forge.OwnerContext != "domain_plugins" ||
+		len(forge.EvidenceRefs) != 0 {
+		t.Fatalf("V16 must leave remote forge capability deferred: %#v", forge)
+	}
+}
+
+func TestV16AcceptanceCommandRunsWorkspaceGitConsumers(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+	var command string
+	for _, contract := range roadmap.AcceptanceContracts {
+		if contract.ID == "AC-V16-WORKSPACE-GIT" {
+			command = contract.Command
+			break
+		}
+	}
+	if command == "" {
+		t.Fatal("AC-V16-WORKSPACE-GIT missing")
+	}
+	if strings.Contains(command, "./...") {
+		t.Fatalf("V16 command uses broad package wildcard: %q", command)
+	}
+	for _, required := range []string{
+		"git diff --check 3820df2ae89f1a217de1b14d5b88abf8e86c898b HEAD --",
+		"TestAcceptanceV16WorkspaceGit", "TestV16CandidateSubjectsCoverCommittedDelta",
+		"TestAcceptanceV02AuthorityRules", "TestAcceptanceV03CanonicalLedgers",
+		"TestAcceptanceV06AtomicStateOutbox", "TestAcceptanceV09RecoveryBackup",
+		"TestAcceptanceV10IdentityProjectsRBAC",
+		"TestProductRoadmapV16ScopeAndExecutableContract", "TestV16EvidenceBelongsOnlyToWorkspaceGitCapabilities",
+		"TestV16AcceptanceCommandRunsWorkspaceGitConsumers", "./internal/goal", "./internal/governance",
+		"./internal/identity", "./internal/config", "./internal/credentials", "./internal/application",
+		"./internal/ports", "./internal/adapters/agent/fake", "./internal/adapters/agent/codex",
+		"./internal/adapters/state/sqlite", "./internal/adapters/workspace/gitlocal", "./internal/bootstrap",
+		"./cmd/orquesta", "timeout --kill-after=10s 180s", "-timeout=150s", "-race",
+		"TestWorkspaceConcurrentPrepareCommitIntegrateRace", "TestWorkspaceEffectsReplayEveryCrashFrontierExactlyOnce",
+		"TestRecoveryV16RejectsWorkspaceCausalTampering", "TestRealGitSQLiteWorkspaceLifecycleEndToEnd",
+		"TestRecoveryV16RejectsMissingIntegrationFacts",
+		"TestIntegrateChangeRejectsMalformedTargetBeforeAuthorizationOrAdmission", "TestValidateGitOIDRejectsMalformedValues",
+		"TestGitWorkspaceRejectsRepositoryOverlappingPrivateRoot",
+		"TestIntegrationReplayRejectsSameKeyWithDifferentPayload",
+		"GOFLAGS=-mod=vendor go vet",
+	} {
+		if !strings.Contains(command, required) {
+			t.Errorf("V16 acceptance command does not execute %q", required)
+		}
+	}
+}
+
+func TestV16EvidenceBelongsOnlyToWorkspaceGitCapabilities(t *testing.T) {
+	var roadmap roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+	owned := map[string]bool{"STG-02": true, "STG-10": true, "EXT-10": true}
+	wantEvidence := []string{
+		"acceptance/v16_workspace_git_test.go",
+		"acceptance/fixtures/v16_workspace_git.json",
+		"product/evidence/v16_workspace_git.json",
+	}
+	v16Evidence := map[string]bool{
+		"acceptance/v16_workspace_git_test.go":          true,
+		"acceptance/fixtures/v16_workspace_git.json":    true,
+		"product/evidence/v16_workspace_git.json":       true,
+		"product/evidence/v16_workspace_git.output.txt": true,
+	}
+	for _, entry := range roadmap.CapabilityEntries {
+		if owned[entry.ID] {
+			if entry.Status != "accredited" || !reflect.DeepEqual(entry.EvidenceRefs, wantEvidence) {
+				t.Errorf("owned V16 capability %s lacks exact accreditation: status=%q evidence=%v",
+					entry.ID, entry.Status, entry.EvidenceRefs)
+			}
+			continue
+		}
+		for _, evidenceRef := range entry.EvidenceRefs {
+			if v16Evidence[evidenceRef] {
+				t.Errorf("unowned capability %s claims V16 evidence %q", entry.ID, evidenceRef)
+			}
+		}
+	}
+}
+
+func roadmapV16ValidationCommand() string {
+	return "sh -c 'git diff --check 3820df2ae89f1a217de1b14d5b88abf8e86c898b HEAD -- && go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV16ScopeAndExecutableContract|TestV16EvidenceBelongsOnlyToWorkspaceGitCapabilities|TestV16AcceptanceCommandRunsWorkspaceGitConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestTraceabilityRebuildHistoricalBugIDs|TestTraceabilityRebuildHistoricalBugReviewBindings|TestTraceabilityRebuildSchemaValidatesCanonicalLedgers|TestHistoricalBugCapabilityCoverageNeverInfersLegacyClosure|TestAcceptanceV02AuthorityRules|TestAcceptanceV03CanonicalLedgers|TestAcceptanceV06AtomicStateOutbox|TestAcceptanceV09RecoveryBackup|TestAcceptanceV10IdentityProjectsRBAC|TestAcceptanceV16WorkspaceGit|TestV16CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/governance ./internal/identity ./internal/config ./internal/credentials ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/adapters/workspace/gitlocal ./internal/bootstrap ./cmd/orquesta && timeout --kill-after=10s 180s go test -mod=vendor -race -count=1 -timeout=150s ./internal/application ./internal/ports ./internal/adapters/state/sqlite ./internal/adapters/workspace/gitlocal ./internal/adapters/agent/codex ./internal/bootstrap -run \"^(TestWorkspacePrepareIsIdempotentAndUniquePerExecution|TestReplacementExecutionGetsDistinctWorkspace|TestLaunchUsesExactOpaqueWorkspaceBinding|TestCommitBindsBaseTreeDiffWriteSetAndExecution|TestOutOfWriteSetChangeLeavesGitUnmodified|TestReworkRequiresExplicitParentChangeRef|TestConflictAndStaleIntegrationLeaveTargetUnchanged|TestConcurrentIntegrationCASPreservesLoserPending|TestWorkspaceEffectsReplayEveryCrashFrontierExactlyOnce|TestPendingChangesAreRBACScopedAndSurviveRestart|TestGitWorkspaceRejectsUnsafeFilesystemAndGitControls|TestGitWorkspaceRejectsRepositoryOverlappingPrivateRoot|TestIntegrationReplayRejectsSameKeyWithDifferentPayload|TestWorkspaceEvidenceLeaksNoPrivateAdapterData|TestWorkspaceArchitectureKeepsOneWriterStateOutboxScheduler|TestRealGitSQLiteWorkspaceLifecycleEndToEnd|TestWorkspaceConcurrentPrepareCommitIntegrateRace|TestSQLiteWorkspaceGitRestartRaceAndReplay|TestRecoveryV16RejectsWorkspaceCausalTampering|TestRecoveryV16RejectsMissingIntegrationFacts|TestIntegrateChangeRejectsMalformedTargetBeforeAuthorizationOrAdmission|TestValidateGitOIDRejectsMalformedValues)$\" && GOFLAGS=-mod=vendor go vet ./internal/goal ./internal/governance ./internal/identity ./internal/config ./internal/credentials ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/adapters/workspace/gitlocal ./internal/bootstrap ./cmd/orquesta'"
+}
+
+func roadmapV16Assertions() []string {
+	return []string{
+		"STG-02 STG-10 and EXT-10 are the exact accepted V16 ownership; remote forge push pull request and EXT-11 remain deferred to V28",
+		"one private isolated workspace with opaque identity target and exact base object exists per project Goal WorkItem and Execution and a replacement Execution never reuses it",
+		"a WorkItem without a write set stays on the non-workspace path while a write-scoped launch receives only its exact opaque ExecutionWorkspaceRef",
+		"workspace preparation commit and integration reuse the V06 outbox claim lease fence scheduler and StateRepository plus the V15 intent approval attempt receipt ledger without a second lifecycle store queue daemon or writer",
+		"WorkspaceBinding ChangeSet MergeObservation and IntegrationReceipt are immutable causal facts bound to exact actor project repository Goal WorkItem Execution attempt generations action intent attempt fence and receipt",
+		"Codex and every interchangeable agent run only in the workspace resolved for the exact Execution and work outside the canonical write set produces zero Git mutation",
+		"commit binds exact base parent head tree diff changed paths write-set digest execution and idempotency key while explicit rework names its immutable parent ChangeSet",
+		"commit replay and restart converge only on the deterministic object for the exact parent tree causal digest identity timestamp and message; an arbitrary child conflicts and no receipt exposes filesystem paths commands URLs credentials environment provider details or Git private metadata",
+		"integration first records a nonmutating merge observation and updates target plus idempotency marker only through one expected-object Git ref transaction",
+		"conflict stale base malformed object stale fence and concurrent CAS loser preserve target and ChangeSet as pending work rather than discarding or force-updating it",
+		"pending committed conflicted and stale work is durably queryable only through application authorization scoped by principal actor project repository Goal and execution after restart",
+		"every external crash frontier preserves one effect idempotency key and stable semantic payload while retry AttemptRef and fence may advance as separately persisted envelopes; recovery rejects cross-linked workspace change integration or receipt facts",
+		"the Git CLI adapter uses argv-only machine-readable commands explicit object IDs disabled ambient Git controls and private filesystem roots while domain and application receive only opaque refs OIDs and digests",
+		"traversal unsafe ancestors links special files foreign ownership group or world writable roots and metadata foreign Git common directories hooks filters pagers credential helpers signing programs and inherited Git environment fail before protected refs mutate",
+		"workspace.local.root is defined once in the canonical registry validated disjoint from all state secret artifact runtime and source roots and consumed through typed configuration",
+		"V16 preserves the V02 single Goal writer V05 DAG V06 atomic state and outbox V07 configuration V08 credentials V09 recovery V10 RBAC V12 Director V13 mailbox V14 controls and V15 budgets and effects",
+		"local Git integration is an explicit application use case and receipt but never closes a Goal authorizes review publication or proves remote effect; attestation review council forge and multihost remain later verticals",
 	}
 }
 

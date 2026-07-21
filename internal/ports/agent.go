@@ -40,33 +40,37 @@ type AgentRequirements struct {
 }
 
 type AgentLaunchRequest struct {
-	ExecutionRef        goal.ExecutionRef
-	GoalRef             goal.GoalRef
-	WorkItemRef         goal.WorkItemRef
-	PlanGeneration      goal.PlanGeneration
-	AppSpecGeneration   goal.AppSpecGeneration
-	ExecutionAttempt    uint64
-	SpecHash            string
-	ActorRef            goal.ActorRef
-	ProjectRef          goal.ProjectRef
-	Objective           string
-	PhaseRef            string
-	PhaseKey            string
-	PhaseTemplateRef    string
-	PhaseInputRefs      []string
-	PhaseCriterionRefs  []string
-	RoleKey             string
-	SkillRefs           []string
-	ToolRefs            []string
-	CapabilityRefs      []string
-	WriteSet            []string
-	OutputContract      string
-	ArtifactMediaType   string
-	IdempotencyKey      string
-	MaxOutputBytes      int64
-	BudgetDemand        governance.BudgetDemand
-	SecurityCriticality governance.SecurityCriticality
-	ReasoningEffort     governance.ReasoningEffort
+	ExecutionRef goal.ExecutionRef
+	// ExecutionWorkspaceRef is an opaque, optional execution workspace binding.
+	// When empty the adapter preserves the non-code path.  A physical path is
+	// deliberately never carried through this provider-neutral request.
+	ExecutionWorkspaceRef ExecutionWorkspaceRef
+	GoalRef               goal.GoalRef
+	WorkItemRef           goal.WorkItemRef
+	PlanGeneration        goal.PlanGeneration
+	AppSpecGeneration     goal.AppSpecGeneration
+	ExecutionAttempt      uint64
+	SpecHash              string
+	ActorRef              goal.ActorRef
+	ProjectRef            goal.ProjectRef
+	Objective             string
+	PhaseRef              string
+	PhaseKey              string
+	PhaseTemplateRef      string
+	PhaseInputRefs        []string
+	PhaseCriterionRefs    []string
+	RoleKey               string
+	SkillRefs             []string
+	ToolRefs              []string
+	CapabilityRefs        []string
+	WriteSet              []string
+	OutputContract        string
+	ArtifactMediaType     string
+	IdempotencyKey        string
+	MaxOutputBytes        int64
+	BudgetDemand          governance.BudgetDemand
+	SecurityCriticality   governance.SecurityCriticality
+	ReasoningEffort       governance.ReasoningEffort
 }
 
 type AgentLaunchReceipt struct {

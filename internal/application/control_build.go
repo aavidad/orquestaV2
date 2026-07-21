@@ -113,7 +113,20 @@ func (orchestrator *Orchestrator) buildCancelControl(ctx context.Context, record
 			current.State = ExecutionCanceled
 			current.FinishedAt = state.OperationAt
 			state.Executions = append(state.Executions, current)
-			state.RetireActionRefs = append(state.RetireActionRefs, "action:launch:"+current.Ref.String())
+			initialRef := "action:launch:" + current.Ref.String()
+			if current.ExecutionWorkspaceRef.String() != "" {
+				initialRef = "action:prepare-workspace:" + current.Ref.String()
+			}
+			state.RetireActionRefs = append(state.RetireActionRefs, initialRef)
+		case ExecutionAwaitingCommit:
+			current.State = ExecutionCanceled
+			current.FinishedAt = state.OperationAt
+			state.Executions = append(state.Executions, current)
+			state.RetireActionRefs = append(state.RetireActionRefs, "action:commit-change:"+current.Ref.String())
+		case ExecutionAwaitingIntegration:
+			current.State = ExecutionCanceled
+			current.FinishedAt = state.OperationAt
+			state.Executions = append(state.Executions, current)
 		case ExecutionDispatching, ExecutionRunning:
 			action, actionErr := orchestrator.stopAction(
 				policy, state.Control, state.Goal, updatedItem, current, state.OperationAt,
@@ -194,11 +207,32 @@ func (orchestrator *Orchestrator) buildRetryControl(
 		IdempotencyKey: "execution:" + replacementRef.String(), MaxOutputBytes: execution.MaxOutputBytes,
 		CreatedAt: state.OperationAt,
 	}
+	if len(item.WriteSet()) != 0 {
+		workspaceRef, workspaceErr := newExecutionWorkspaceRef(ctx, orchestrator.ids)
+		if workspaceErr != nil {
+			return workspaceErr
+		}
+		replacement.RepositoryRef = execution.RepositoryRef
+		if replacement.RepositoryRef.String() == "" {
+			replacement.RepositoryRef, err = orchestrator.state.ProjectRepository(ctx, state.Goal.Project())
+			if err != nil {
+				return err
+			}
+		}
+		replacement.ExecutionWorkspaceRef = workspaceRef
+	}
 	updatedItem, _ := state.Goal.WorkItem(item.Ref())
 	state.Executions = []ExecutionRecord{replacement}
-	action, err := orchestrator.launchAction(
-		policy, state.Goal, updatedItem, replacement, authority, state.OperationAt, state.OperationAt,
-	)
+	var action ActionRecord
+	if len(updatedItem.WriteSet()) != 0 {
+		action, err = orchestrator.prepareWorkspaceAction(
+			policy, state.Goal, updatedItem, replacement, authority, state.OperationAt, state.OperationAt,
+		)
+	} else {
+		action, err = orchestrator.launchAction(
+			policy, state.Goal, updatedItem, replacement, authority, state.OperationAt, state.OperationAt,
+		)
+	}
 	if err != nil {
 		return err
 	}

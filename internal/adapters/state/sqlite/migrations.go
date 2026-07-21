@@ -125,6 +125,11 @@ func applyMigrationSteps(
 				return current, migrated, invalid(err)
 			}
 		}
+		if migration.version == recoverySchemaV16 && current == recoverySchemaV15 {
+			if err := validateRecoveryV15Governance(ctx, transaction); err != nil {
+				return current, migrated, invalid(err)
+			}
+		}
 		if _, err := transaction.ExecContext(ctx, migration.preSQL); err != nil {
 			return current, migrated, mapDatabaseError(err)
 		}

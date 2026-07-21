@@ -324,6 +324,7 @@ func v09CreateStateFixture(t *testing.T, fixture v09Fixture, root string) v09Sta
 		WorkerRef: "worker:v09-lease", Token: "claim-token:v09-lease",
 		LeaseDuration: v06Duration(t, v06.ClockAndRetry.ClaimLease),
 		Capabilities:  v06Capabilities(v06.OpaqueRequirements, true),
+		BudgetPolicy:  v06BudgetPolicy(t, clock.Now()),
 	})
 	if err != nil || !claimed || pendingClaim.Action.GoalRef != pending.Record.Goal.Ref() {
 		t.Fatalf("claim pending fixture: claim=%+v claimed=%v err=%v", pendingClaim, claimed, err)
@@ -344,11 +345,15 @@ func v09NewOrchestrator(
 ) *application.Orchestrator {
 	t.Helper()
 	agent := newV06Agent(clock, v06Capabilities(fixture.OpaqueRequirements, true), "accepted")
+	policy := v06BudgetPolicy(t, clock.Now())
 	orchestrator, err := application.New(application.Dependencies{
 		State: repository, Access: repository, Launcher: agent, Observer: agent, Artifacts: artifacts,
 		Clock: clock, IDs: &v06IDs{}, MaxOutputBytes: 1 << 20,
 		MaxMailboxEnvelopeBytes: 64 << 10,
 		MaxExecutionAttempts:    fixture.ClockAndRetry.MaxExecutionAttempts,
+		MaxChildrenPerParent:    6,
+		EffectApprovalTTL:       policy.EffectApprovalTTL,
+		BudgetPolicy:            policy,
 		ClaimLease:              v06Duration(t, fixture.ClockAndRetry.ClaimLease),
 		DirectorLeaseDuration:   2 * time.Minute,
 		ObservationDelay:        v06Duration(t, fixture.ClockAndRetry.ObservationDelay),

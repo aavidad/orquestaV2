@@ -56,7 +56,8 @@ SELECT COUNT(*) FROM outbox action LEFT JOIN effect_intents intent ON intent.ref
 LEFT JOIN work_items item ON item.goal_ref=action.goal_ref AND item.ref=action.work_item_ref
 LEFT JOIN executions execution ON execution.goal_ref=action.goal_ref AND execution.ref=action.execution_ref
 WHERE (action.governance_version=0 AND action.effect_intent_ref IS NOT NULL) OR (action.governance_version=1 AND
- (action.kind NOT IN ('launch_agent','stop_agent') OR intent.ref IS NULL OR intent.action_ref<>action.ref
+ (action.kind NOT IN ('launch_agent','stop_agent','prepare_workspace','commit_change','integrate_change')
+  OR intent.ref IS NULL OR intent.action_ref<>action.ref
   OR intent.action_kind<>action.kind OR intent.goal_ref<>action.goal_ref OR intent.work_item_ref<>action.work_item_ref
   OR intent.execution_ref<>action.execution_ref OR intent.plan_generation<>action.plan_generation
   OR intent.app_spec_generation<>execution.app_spec_generation OR intent.spec_hash<>execution.spec_hash
@@ -134,6 +135,15 @@ WHERE intent.ref IS NULL OR approval.ref IS NULL OR action.ref IS NULL OR approv
  OR (intent.kind='agent_stop' AND NOT EXISTS(SELECT 1 FROM events event WHERE event.goal_ref=attempt.goal_ref
     AND event.work_item_ref=attempt.work_item_ref AND event.execution_ref=attempt.execution_ref
     AND event.kind='execution.accepted' AND event.occurred_at<=attempt.started_at))
+ OR (intent.kind='prepare_workspace' AND NOT EXISTS(SELECT 1 FROM events event WHERE event.goal_ref=attempt.goal_ref
+    AND event.work_item_ref=attempt.work_item_ref AND event.execution_ref=attempt.execution_ref
+    AND event.kind='execution.queued' AND event.occurred_at<=attempt.started_at))
+ OR (intent.kind='commit_change' AND NOT EXISTS(SELECT 1 FROM events event WHERE event.goal_ref=attempt.goal_ref
+    AND event.work_item_ref=attempt.work_item_ref AND event.execution_ref=attempt.execution_ref
+    AND event.kind='execution.output_ready' AND event.occurred_at<=attempt.started_at))
+ OR (intent.kind='integrate_change' AND NOT EXISTS(SELECT 1 FROM events event WHERE event.goal_ref=attempt.goal_ref
+    AND event.work_item_ref=attempt.work_item_ref AND event.execution_ref=attempt.execution_ref
+    AND event.kind='change.committed' AND event.occurred_at<=attempt.started_at))
  OR (approval.source='explicit_decision' AND attempt.started_at>=approval.expires_at)
  OR approval.ref IS NOT (SELECT latest.ref FROM effect_approvals latest WHERE latest.intent_ref=intent.ref
     AND latest.decided_at<=attempt.started_at ORDER BY latest.decided_at DESC,
@@ -153,7 +163,10 @@ WHERE attempt.ref IS NULL OR intent.ref IS NULL OR action.ref IS NULL
  OR receipt.action_fence<>attempt.action_fence OR receipt.idempotency_key<>attempt.idempotency_key
  OR receipt.confirmed_at<attempt.started_at OR receipt.confirmed_at>=action.claimed_until
  OR (intent.kind='agent_launch' AND receipt.status<>'accepted')
- OR (intent.kind='agent_stop' AND receipt.status NOT IN ('stopped','already_stopped','already_completed','already_failed'))`},
+ OR (intent.kind='agent_stop' AND receipt.status NOT IN ('stopped','already_stopped','already_completed','already_failed'))
+ OR (intent.kind='prepare_workspace' AND receipt.status<>'prepared')
+ OR (intent.kind='commit_change' AND receipt.status<>'committed')
+ OR (intent.kind='integrate_change' AND receipt.status NOT IN ('integrated','conflicted','stale'))`},
 	{"sqlite.recovery_v15_effect_binding_invalid", `
 SELECT (SELECT COUNT(*) FROM executions execution LEFT JOIN effect_intents intent ON intent.ref=execution.effect_intent_ref
  LEFT JOIN budget_reservations reservation ON reservation.ref=execution.budget_reservation_ref
@@ -169,6 +182,8 @@ SELECT (SELECT COUNT(*) FROM executions execution LEFT JOIN effect_intents inten
   (receipt.action_ref<>consumed.action_ref OR receipt.action_fence<>consumed.fence))
  OR (consumed.governance_version=1 AND consumed.kind='launch_agent' AND consumed.outcome='completed'
   AND consumed.error_code='' AND receipt.ref IS NULL)
+ OR (consumed.governance_version=1 AND consumed.kind IN ('prepare_workspace','commit_change','integrate_change')
+  AND consumed.outcome='completed' AND consumed.error_code='' AND receipt.ref IS NULL)
  OR (consumed.governance_version=1 AND consumed.kind='stop_agent' AND consumed.outcome='completed'
   AND consumed.error_code='' AND receipt.ref IS NULL AND EXISTS(SELECT 1 FROM effect_attempts attempt
       WHERE attempt.action_ref=consumed.action_ref AND attempt.action_fence=consumed.fence)))

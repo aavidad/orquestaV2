@@ -192,12 +192,15 @@ func TestAdapterRejectsExecutionPayloadConflict(t *testing.T) {
 }
 
 func TestLaunchHashAndPromptCarryPlanMetadata(t *testing.T) {
-	if stateSchemaVersion != 4 {
-		t.Fatalf("launch metadata schema version = %d, want explicit V4 cut", stateSchemaVersion)
+	if stateSchemaVersion != 5 {
+		t.Fatalf("launch metadata schema version = %d, want explicit V5 cut", stateSchemaVersion)
 	}
 	request := testRequest(t, "plan-metadata", "helper:success", 1024)
 	baseHash := mustRequestHash(t, request)
 	mutations := map[string]func(*ports.AgentLaunchRequest){
+		"execution_workspace_ref": func(value *ports.AgentLaunchRequest) {
+			value.ExecutionWorkspaceRef, _ = ports.NewExecutionWorkspaceRef("execution-workspace:other")
+		},
 		"plan_generation":     func(value *ports.AgentLaunchRequest) { value.PlanGeneration++ },
 		"app_spec_generation": func(value *ports.AgentLaunchRequest) { value.AppSpecGeneration++ },
 		"execution_attempt":   func(value *ports.AgentLaunchRequest) { value.ExecutionAttempt++ },
@@ -546,7 +549,7 @@ func parseCodexHelperArguments(arguments []string) (helperOptions, error) {
 		value := arguments[index]
 		switch argument {
 		case "--sandbox":
-			if value != "read-only" {
+			if value != "read-only" && value != "workspace-write" {
 				return helperOptions{}, fmt.Errorf("sandbox = %q", value)
 			}
 		case "--output-schema":

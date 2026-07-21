@@ -35,6 +35,13 @@ work_root = "./var/work"
 env_allowlist = ["PATH", "HOME", "CODEX_HOME"]
 credential_ref = ""
 
+[workspace.local]
+root = "./var/workspaces"
+
+[repository.local]
+seed_path = ""
+target_ref = "refs/heads/main"
+
 [identity]
 provider = "local_token"
 local_actor = "actor:local-owner"

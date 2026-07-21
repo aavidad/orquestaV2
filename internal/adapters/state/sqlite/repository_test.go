@@ -16,6 +16,8 @@ import (
 
 	"orquesta/internal/application"
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
+	"orquesta/internal/identity"
 	"orquesta/internal/ports"
 )
 
@@ -63,7 +65,7 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 	if err := repository.db.QueryRow("PRAGMA synchronous").Scan(&synchronous); err != nil {
 		t.Fatalf("synchronous: %v", err)
 	}
-	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != recoverySchemaV15 {
+	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != recoverySchemaV16 {
 		t.Fatalf("pragmas = fk:%d busy:%d version:%d", foreignKeys, busyTimeout, userVersion)
 	}
 	if synchronous != 2 {
@@ -85,12 +87,12 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 	}
 	wantTables := []string{
 		"action_consumption_receipts", "app_specs", "artifacts", "attestations", "authorization_receipts",
-		"budget_envelopes", "budget_reservations", "budget_settlements", "controls", "director_decisions", "director_lease_receipts", "director_leases", "effect_approvals", "effect_attempts", "effect_intents", "effect_receipts", "events", "executions", "fairness_cursors",
-		"goal_child_handoff_resolutions", "goal_phase_contract_refs", "goal_phases", "goals", "groups", "intents",
+		"budget_envelopes", "budget_reservations", "budget_settlements", "change_set_paths", "change_sets", "controls", "director_decisions", "director_lease_receipts", "director_leases", "effect_approvals", "effect_attempts", "effect_intents", "effect_receipts", "events", "executions", "fairness_cursors",
+		"goal_child_handoff_resolutions", "goal_phase_contract_refs", "goal_phases", "goals", "groups", "integration_receipts", "intents",
 		"mailbox_admission_receipts", "mailbox_artifact_refs", "mailbox_delivery_acks", "mailbox_delivery_attempts", "mailbox_envelopes", "mailbox_retirements",
-		"membership_audit_receipts", "outbox", "principals", "project_memberships", "projects", "repositories", "schema_migrations",
+		"membership_audit_receipts", "merge_observations", "outbox", "principals", "project_memberships", "projects", "repositories", "schema_migrations",
 		"work_item_authorities", "work_item_dependencies", "work_item_fences", "work_item_requirement_refs", "work_item_write_scopes", "work_items",
-		"workspaces",
+		"workspace_binding_write_scopes", "workspace_bindings", "workspaces",
 	}
 	if !reflect.DeepEqual(tables, wantTables) {
 		t.Fatalf("tables = %#v, want %#v", tables, wantTables)
@@ -1342,6 +1344,48 @@ func TestRepositoryParksLegacyReadySuccessorsWithoutSyntheticGovernance(t *testi
 	succeededExecution.LastObservedAt = finishedAt
 	succeededExecution.ProviderObservedAt = finishedAt
 	succeededExecution.FinishedAt = finishedAt
+	var successorExecutions []application.ExecutionRecord
+	var successorActions []application.ActionRecord
+	successorEvents := []application.EventRecord{{
+		Ref: "event:work-succeeded:missing-successor", Kind: "work_item.succeeded",
+		GoalRef: succeededGoal.Ref(), WorkItemRef: runningRoot.Ref(), ExecutionRef: succeededExecution.Ref,
+		OccurredAt: finishedAt,
+	}}
+	for _, successor := range succeededGoal.ReadyWorkItems() {
+		executionRef := mustRef(t, "execution:missing-successor:"+successor.Ref().String(), goal.NewExecutionRef)
+		execution := application.ExecutionRecord{
+			Ref: executionRef, GoalRef: succeededGoal.Ref(), WorkItemRef: successor.Ref(),
+			AttemptNo: 1, MaxExecutionAttempts: 3, PlanGeneration: succeededGoal.PlanGeneration(),
+			AppSpecGeneration: succeededGoal.AppSpec().Generation(), SpecHash: succeededGoal.SpecHash(),
+			State: application.ExecutionQueued, ArtifactMediaType: "text/plain",
+			IdempotencyKey: "execution:" + executionRef.String(), MaxOutputBytes: 1 << 20, CreatedAt: finishedAt,
+		}
+		actionKind, actionRef := application.ActionLaunchAgent, "action:launch:"+executionRef.String()
+		if len(successor.WriteSet()) != 0 {
+			execution.RepositoryRef, _ = identity.NewRepositoryRef("repository:" + succeededGoal.Project().String())
+			execution.ExecutionWorkspaceRef, _ = ports.NewExecutionWorkspaceRef("execution-workspace:" + executionRef.String())
+			actionKind, actionRef = application.ActionPrepareWorkspace, "action:prepare-workspace:"+executionRef.String()
+		}
+		authority := application.WorkItemAuthority{}
+		for _, candidate := range record.WorkItemAuthorities {
+			if candidate.WorkItemRef == successor.Ref() {
+				authority = candidate
+				break
+			}
+		}
+		action := legacyGovernedExecutionAction(t, succeededGoal, successor, execution, application.ActionRecord{
+			Ref: actionRef, Kind: actionKind, GoalRef: succeededGoal.Ref(), WorkItemRef: successor.Ref(),
+			ExecutionRef: executionRef, PlanGeneration: execution.PlanGeneration,
+			WorkItemGeneration: successor.Revision(), AvailableAt: finishedAt,
+		}, authority, sqliteTestBudgetPolicy(succeededGoal.CreatedAt()))
+		successorExecutions = append(successorExecutions, execution)
+		successorActions = append(successorActions, action)
+		successorEvents = append(successorEvents, application.EventRecord{
+			Ref: "event:execution-queued:" + executionRef.String(), Kind: "execution.queued",
+			GoalRef: succeededGoal.Ref(), WorkItemRef: successor.Ref(), ExecutionRef: executionRef,
+			OccurredAt: finishedAt,
+		})
+	}
 	repository.now = func() time.Time { return finishedAt }
 	err = repository.RecordGoalSucceeded(context.Background(), application.GoalSucceededState{
 		Claim: observeClaim, ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: runningRoot.Revision(),
@@ -1354,20 +1398,16 @@ func TestRepositoryParksLegacyReadySuccessorsWithoutSyntheticGovernance(t *testi
 			Ref: attestationRef, GoalRef: succeededGoal.Ref(), WorkItemRef: runningRoot.Ref(),
 			ExecutionRef: succeededExecution.Ref, ArtifactRef: artifactRef, Policy: "test", AcceptedAt: finishedAt,
 		},
-		Events: []application.EventRecord{{
-			Ref: "event:work-succeeded:missing-successor", Kind: "work_item.succeeded",
-			GoalRef: succeededGoal.Ref(), WorkItemRef: runningRoot.Ref(), ExecutionRef: succeededExecution.Ref,
-			OccurredAt: finishedAt,
-		}},
+		NewExecutions: successorExecutions, NewActions: successorActions, Events: successorEvents,
 	})
 	if err != nil {
-		t.Fatalf("park legacy successor: %v", err)
+		t.Fatalf("park legacy successor: %v cause=%v", err, errors.Unwrap(err))
 	}
 	after, err := repository.GetGoal(context.Background(), state.Goal.Ref())
 	afterRoot, _ := workItemByObjective(after.Goal, "root")
 	if err != nil || afterRoot.State() != goal.WorkItemStateSucceeded || after.Executions[0].State != application.ExecutionSucceeded ||
-		len(after.Artifacts) != 1 || tableCount(t, repository, "executions") != 1 {
-		t.Fatalf("legacy successor was synthesized or parent rolled back: record=%+v err=%v", after, err)
+		len(after.Artifacts) != 1 || tableCount(t, repository, "executions") != 3 {
+		t.Fatalf("successor scheduling or parent completion failed: record=%+v err=%v", after, err)
 	}
 }
 
@@ -1580,7 +1620,93 @@ func mustClaim(t *testing.T, repository *Repository, worker, token string, now t
 	if err != nil || !found {
 		t.Fatalf("claim = found:%v err:%v", found, err)
 	}
+	if claim.Action.Kind == application.ActionPrepareWorkspace {
+		prepareLegacyWorkspaceClaim(t, repository, claim, now)
+		return mustClaim(t, repository, worker, token+":launch", now)
+	}
 	return claim
+}
+
+func prepareLegacyWorkspaceClaim(
+	t *testing.T,
+	repository *Repository,
+	claim application.ActionClaim,
+	at time.Time,
+) {
+	t.Helper()
+	record, err := repository.GetGoal(context.Background(), claim.Action.GoalRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	item, found := record.Goal.WorkItem(claim.Action.WorkItemRef)
+	execution, executionFound := legacyExecutionByRef(record.Executions, claim.Action.ExecutionRef)
+	if !found || !executionFound {
+		t.Fatal("legacy workspace claim scope missing")
+	}
+	attempt := application.EffectAttempt{
+		Ref:       "effect-attempt:" + claim.Action.Ref + ":" + claim.Token,
+		IntentRef: claim.Action.EffectIntent.Ref, IntentDigest: claim.Action.EffectIntent.Digest,
+		ApprovalRef: claim.EffectApproval.Ref, Subject: claim.Action.EffectIntent.Subject,
+		ActionRef: claim.Action.Ref, ActionFence: claim.Fence, WorkerRef: claim.WorkerRef,
+		IdempotencyKey: claim.Action.EffectIntent.IdempotencyKey, StartedAt: at,
+	}
+	persistedAttempt, _, err := repository.RecordEffectAttempt(context.Background(), application.RecordEffectAttemptState{
+		Claim: claim, Attempt: attempt, OperationAt: at,
+	})
+	if err != nil {
+		t.Fatalf("record legacy workspace attempt: %v", err)
+	}
+	receipt := application.EffectReceipt{
+		Ref:       "effect-receipt:" + claim.Action.EffectIntent.Ref,
+		IntentRef: claim.Action.EffectIntent.Ref, IntentDigest: claim.Action.EffectIntent.Digest,
+		ApprovalRef: claim.EffectApproval.Ref, AttemptRef: persistedAttempt.Ref,
+		Subject: claim.Action.EffectIntent.Subject, ActionRef: claim.Action.Ref, ActionFence: claim.Fence,
+		IdempotencyKey: claim.Action.EffectIntent.IdempotencyKey,
+		ExternalRef:    "workspace-external-receipt:" + execution.ExecutionWorkspaceRef.String(),
+		Status:         application.EffectStatusPrepared,
+		Usage:          governance.ResourceUsage{Quality: governance.UsageQualityUnknown}, ConfirmedAt: at,
+	}
+	authority := application.WorkItemAuthority{}
+	for _, candidate := range record.WorkItemAuthorities {
+		if candidate.WorkItemRef == item.Ref() {
+			authority = candidate
+			break
+		}
+	}
+	next := application.ActionRecord{
+		Ref: "action:launch:" + execution.Ref.String(), Kind: application.ActionLaunchAgent,
+		GoalRef: record.Goal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref,
+		PlanGeneration: execution.PlanGeneration, WorkItemGeneration: item.Revision(), AvailableAt: at,
+	}
+	binding := application.WorkspaceBinding{
+		Ref: execution.ExecutionWorkspaceRef, PrincipalRef: authority.PrincipalRef,
+		ActorRef: record.Goal.Actor(), ProjectRef: record.Goal.Project(), RepositoryRef: execution.RepositoryRef,
+		GoalRef: record.Goal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref,
+		ExecutionAttempt: execution.AttemptNo, PlanGeneration: execution.PlanGeneration,
+		AppSpecGeneration: execution.AppSpecGeneration, SpecHash: execution.SpecHash,
+		WriteSet: workItemWriteSetForSQLiteTest(item), WriteSetDigest: ports.WorkspaceWriteSetDigest(workItemWriteSetForSQLiteTest(item)),
+		TargetRef: "refs/heads/main", BaseOID: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		ObjectFormat: ports.GitObjectFormatSHA1, AdapterRef: "workspace-adapter:legacy-test",
+		EffectIntentRef: claim.Action.EffectIntent.Ref, EffectAttemptRef: persistedAttempt.Ref,
+		EffectFence: claim.Fence, ReceiptRef: receipt.Ref, PreparedAt: at,
+	}
+	if err := repository.RecordWorkspacePrepared(context.Background(), application.WorkspacePreparedState{
+		Claim: claim, Execution: execution, Binding: binding, NextAction: next,
+		EffectReceipt: receipt, Event: application.EventRecord{
+			Ref: "event:workspace-prepared:" + execution.Ref.String(), Kind: "workspace.prepared",
+			GoalRef: record.Goal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref, OccurredAt: at,
+		}, OperationAt: at,
+	}); err != nil {
+		t.Fatalf("record legacy workspace preparation: %v", err)
+	}
+}
+
+func workItemWriteSetForSQLiteTest(item goal.WorkItem) []string {
+	values := make([]string, 0, len(item.WriteSet()))
+	for _, scope := range item.WriteSet() {
+		values = append(values, scope.String())
+	}
+	return values
 }
 
 func sqliteTestCapabilities() ports.AgentCapabilities {

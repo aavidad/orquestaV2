@@ -313,12 +313,7 @@ func TestSQLiteGoalCancelPersistsOneStopReceiptPerExecutionAcrossRestart(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	for index := 0; index < 2; index++ {
-		if result, processErr := orchestrator.ProcessNext(ctx, "worker:sqlite-multi-launch"); processErr != nil ||
-			!result.Processed || result.Action != application.ActionLaunchAgent {
-			t.Fatalf("launch %d: result=%+v err=%v", index+1, result, processErr)
-		}
-	}
+	processSQLiteWorkspaceLaunches(t, orchestrator, "worker:sqlite-multi-launch", 2)
 	running, err := repository.GetGoal(ctx, submitted.Record.Goal.Ref())
 	if err != nil || len(running.Executions) != 2 {
 		t.Fatalf("running executions=%+v err=%v", running.Executions, err)
@@ -539,7 +534,8 @@ func newSQLiteMultiControlOrchestrator(
 	t.Helper()
 	orchestrator, err := application.New(application.Dependencies{
 		State: repository, Access: repository, Launcher: agent, Observer: agent, Controller: agent,
-		Artifacts: restartArtifacts{}, Clock: clock, IDs: ids, MaxOutputBytes: 4096,
+		WorkspaceManager: &sqliteTestWorkspaceManager{},
+		Artifacts:        restartArtifacts{}, Clock: clock, IDs: ids, MaxOutputBytes: 4096,
 		MaxMailboxEnvelopeBytes: 64 << 10, MaxExecutionAttempts: 3,
 		MaxChildrenPerParent: 6, EffectApprovalTTL: time.Hour, BudgetPolicy: sqliteTestBudgetPolicy(clock.Now()),
 		AgentCapabilities: sqliteMultiControlCapabilities(), ClaimLease: time.Minute,

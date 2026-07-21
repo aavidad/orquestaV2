@@ -97,6 +97,9 @@ func validateRecoveryVersion(ctx context.Context, tx *sql.Tx, version int) error
 		if version >= recoverySchemaV15 {
 			validators = append(validators, validateRecoveryV15Governance)
 		}
+		if version >= recoverySchemaV16 {
+			validators = append(validators, validateRecoveryV16WorkspaceGit)
+		}
 	}
 	for _, validate := range validators {
 		if err := validate(ctx, tx); err != nil {

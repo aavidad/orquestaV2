@@ -53,44 +53,48 @@ func IsStateError(err error, code StateErrorCode) bool {
 type ExecutionState string
 
 const (
-	ExecutionQueued      ExecutionState = "queued"
-	ExecutionDispatching ExecutionState = "dispatching"
-	ExecutionRunning     ExecutionState = "running"
-	ExecutionSucceeded   ExecutionState = "succeeded"
-	ExecutionFailed      ExecutionState = "failed"
-	ExecutionCanceled    ExecutionState = "canceled"
-	ExecutionStopped     ExecutionState = "stopped"
+	ExecutionQueued              ExecutionState = "queued"
+	ExecutionDispatching         ExecutionState = "dispatching"
+	ExecutionRunning             ExecutionState = "running"
+	ExecutionAwaitingCommit      ExecutionState = "awaiting_commit"
+	ExecutionAwaitingIntegration ExecutionState = "awaiting_integration"
+	ExecutionSucceeded           ExecutionState = "succeeded"
+	ExecutionFailed              ExecutionState = "failed"
+	ExecutionCanceled            ExecutionState = "canceled"
+	ExecutionStopped             ExecutionState = "stopped"
 )
 
 type ExecutionRecord struct {
-	Ref                  goal.ExecutionRef
-	GoalRef              goal.GoalRef
-	WorkItemRef          goal.WorkItemRef
-	AttemptNo            uint64
-	MaxExecutionAttempts uint64
-	ReplacesExecutionRef goal.ExecutionRef
-	PlanGeneration       goal.PlanGeneration
-	AppSpecGeneration    goal.AppSpecGeneration
-	SpecHash             string
-	State                ExecutionState
-	ArtifactMediaType    string
-	IdempotencyKey       string
-	MaxOutputBytes       int64
-	ProviderRef          string
-	ModelRef             string
-	AgentRef             string
-	ExternalRef          string
-	BudgetReservationRef string
-	EffectIntentRef      string
-	LaunchReceiptRef     string
-	CreatedAt            time.Time
-	DeadlineAt           time.Time
-	StartedAt            time.Time
-	ProviderAcceptedAt   time.Time
-	LastObservedAt       time.Time
-	ProviderObservedAt   time.Time
-	FinishedAt           time.Time
-	FailureCode          string
+	Ref                   goal.ExecutionRef
+	GoalRef               goal.GoalRef
+	WorkItemRef           goal.WorkItemRef
+	AttemptNo             uint64
+	MaxExecutionAttempts  uint64
+	ReplacesExecutionRef  goal.ExecutionRef
+	PlanGeneration        goal.PlanGeneration
+	AppSpecGeneration     goal.AppSpecGeneration
+	SpecHash              string
+	RepositoryRef         identity.RepositoryRef
+	State                 ExecutionState
+	ArtifactMediaType     string
+	IdempotencyKey        string
+	MaxOutputBytes        int64
+	ProviderRef           string
+	ModelRef              string
+	AgentRef              string
+	ExternalRef           string
+	ExecutionWorkspaceRef ports.ExecutionWorkspaceRef
+	BudgetReservationRef  string
+	EffectIntentRef       string
+	LaunchReceiptRef      string
+	CreatedAt             time.Time
+	DeadlineAt            time.Time
+	StartedAt             time.Time
+	ProviderAcceptedAt    time.Time
+	LastObservedAt        time.Time
+	ProviderObservedAt    time.Time
+	FinishedAt            time.Time
+	FailureCode           string
 	// RecipientMailboxRetired is durable evidence that stopping or canceling
 	// this exact recipient retired at least one unresolved V13 envelope. A
 	// later execution retry must reject instead of readdressing that evidence.
@@ -126,10 +130,13 @@ type EventRecord struct {
 type ActionKind string
 
 const (
-	ActionLaunchAgent    ActionKind = "launch_agent"
-	ActionObserveAgent   ActionKind = "observe_agent"
-	ActionStopAgent      ActionKind = "stop_agent"
-	ActionDeliverMailbox ActionKind = "deliver_mailbox"
+	ActionLaunchAgent      ActionKind = "launch_agent"
+	ActionObserveAgent     ActionKind = "observe_agent"
+	ActionStopAgent        ActionKind = "stop_agent"
+	ActionDeliverMailbox   ActionKind = "deliver_mailbox"
+	ActionPrepareWorkspace ActionKind = "prepare_workspace"
+	ActionCommitChange     ActionKind = "commit_change"
+	ActionIntegrateChange  ActionKind = "integrate_change"
 )
 
 type ActionRecord struct {
@@ -138,7 +145,9 @@ type ActionRecord struct {
 	GoalRef            goal.GoalRef
 	WorkItemRef        goal.WorkItemRef
 	ExecutionRef       goal.ExecutionRef
+	ChangeRef          ports.ChangeSetRef
 	ControlRef         string
+	ExpectedTargetOID  string
 	EffectIntentRef    string
 	EffectIntent       EffectIntent
 	EffectApproval     *EffectApproval
@@ -182,6 +191,7 @@ type ActionConsumptionReceipt struct {
 	GoalRef            goal.GoalRef
 	WorkItemRef        goal.WorkItemRef
 	ExecutionRef       goal.ExecutionRef
+	ChangeRef          ports.ChangeSetRef
 	MailboxMessageRef  MailboxMessageRef
 	PlanGeneration     goal.PlanGeneration
 	WorkItemGeneration goal.Revision
@@ -226,6 +236,10 @@ type GoalRecord struct {
 	EffectApprovals     []EffectApproval
 	EffectAttempts      []EffectAttempt
 	EffectReceipts      []EffectReceipt
+	WorkspaceBindings   []WorkspaceBinding
+	ChangeSets          []ChangeSet
+	MergeObservations   []MergeObservation
+	IntegrationReceipts []IntegrationReceipt
 	ConsumptionReceipts []ActionConsumptionReceipt
 }
 
@@ -394,6 +408,8 @@ type StateRepository interface {
 	GetGoal(context.Context, goal.GoalRef) (GoalRecord, error)
 	ListGoals(context.Context, goal.ProjectRef, int) ([]GoalSummary, error)
 	Status(context.Context, goal.ProjectRef) (RepositoryStatus, error)
+	ProjectRepository(context.Context, goal.ProjectRef) (identity.RepositoryRef, error)
+	ListPendingChanges(context.Context, PendingChangeQuery) ([]PendingChange, error)
 	DirectorReplay(context.Context, DirectorReplayRequest) (DirectorReplayRecord, bool, error)
 	ClaimDirector(context.Context, ClaimDirectorState) (DirectorLeaseRecord, bool, error)
 	RenewDirector(context.Context, RenewDirectorState) (DirectorLeaseRecord, bool, error)
@@ -418,4 +434,9 @@ type StateRepository interface {
 	RecordExecutionInterrupted(context.Context, ExecutionInterruptedState) error
 	RecordGoalSucceeded(context.Context, GoalSucceededState) error
 	RecordGoalFailed(context.Context, GoalFailedState) error
+	RecordWorkspacePrepared(context.Context, WorkspacePreparedState) error
+	RecordExecutionOutputReady(context.Context, ExecutionOutputReadyState) error
+	RecordChangeCommitted(context.Context, ChangeCommittedState) error
+	AdmitIntegration(context.Context, AdmitIntegrationState) (ActionRecord, bool, error)
+	RecordIntegrationResult(context.Context, IntegrationResultState) error
 }

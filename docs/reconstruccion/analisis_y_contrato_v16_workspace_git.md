@@ -1,10 +1,12 @@
 # V16: análisis y contrato de workspace y Git local
 
-Fecha de decisión: 2026-07-18.
+Fecha de decisión: 2026-07-18. Checkpoint de implementación: 2026-07-21.
 
-Estado: análisis cerrado; implementación no acreditada. El siguiente gate es
-crear `TestAcceptanceV16WorkspaceGit` rojo y demostrar que falla por ausencia
-de producto, no por fixture o infraestructura.
+Estado del checkpoint: análisis e implementación completos en el worktree;
+sellado P/S/E y receipt V3 pendientes. Esta implementación no acredita V16 por
+sí sola: V16 cuenta cerrado únicamente cuando
+`TestAcceptanceV16WorkspaceGitReceipt` valida el receipt V3 `PASS` generado por
+el argv exacto desde el candidato S en checkout `detached_clean`.
 
 ## 1. Decisión
 
@@ -279,11 +281,15 @@ un proceso hostil completo.
 Obligatorio en V16:
 
 - roots y metadata de control privados `0700`, owner exacto y ancestros no
-  escribibles por terceros;
+  escribibles por grupo ni terceros;
 - ninguna ruta derivada de actor, objetivo, branch solicitada o nombre de
   fichero sin normalización estructural;
-- `Lstat`/operaciones relativas: traversal, ancestro symlink, hardlink, fichero
-  especial, owner ajeno y modificación de `.git` fallan antes de mutar refs;
+- `Lstat`/`open` con `NOFOLLOW` y apertura no bloqueante: traversal, ancestro
+  symlink, hardlink, FIFO, device, owner ajeno y modificación de `.git` fallan
+  antes de mutar refs;
+- el `git-dir` y `common-dir` resueltos pertenecen al repositorio autorizado,
+  no contienen symlinks, conservan owner/modo/ancestros privados y no pueden
+  sustituirse por metadata de otro checkout;
 - un symlink Git legítimo solo puede tratarse como leaf sin seguir su destino;
 - write-set repository-relative, sin globs dentro del dominio y con pathspecs
   terminados en NUL;
@@ -332,11 +338,12 @@ No se porta `modulos/orquesta-runtime-worktree`. Su código histórico sirve par
 caracterización, pero mezcla `os.Environ`, HEAD implícito, parsing frágil,
 locks locales, staging/commit y push. V16 se reimplementa contra estos contratos.
 
-## 13. Contrato rojo obligatorio
+## 13. Contrato de aceptación
 
-El primer test se llamará exactamente `TestAcceptanceV16WorkspaceGit`; el
-comando no usará el patrón genérico `^TestAcceptance$`, que puede quedar verde
-sin ejecutar pruebas.
+El primer test se creó exactamente como `TestAcceptanceV16WorkspaceGit`; el
+comando no usa el patrón genérico `^TestAcceptance$`, que puede quedar verde
+sin ejecutar pruebas. Este apartado conserva el contrato que gobernó la
+implementación; no sustituye el receipt final.
 
 La aceptación cubrirá como mínimo:
 
@@ -358,12 +365,19 @@ La aceptación cubrirá como mínimo:
 14. E2E con Git temporal real, SQLite real, dos worktrees, commits, integración,
     conflicto/stale, restart y consulta pendiente;
 15. `-race` focal para prepare/commit/integrate concurrentes.
+16. misma idempotency key con payload semántico distinto falla; `AttemptRef` y
+    fence pueden avanzar únicamente como envelope de reintento del mismo intent;
+17. prepare fija la base antes del claim, commit no adopta un hijo arbitrario,
+    el perdedor CAS revalida el marker exacto y release reconcilia el crash
+    posterior a la eliminación física;
+18. los tests de CAS alcanzan de forma determinista la frontera `update-ref`, y
+    los controles `.git` cubren special files y `common-dir` ajeno/inseguro.
 
 El fixture declarará Git mínimo, formato de objetos, base/target OID, dos
 actores, dos proyectos, write-sets, cambios clean/conflict/out-of-scope y puntos
 de crash. No dependerá del checkout del propio rebuild.
 
-## 14. Orden de implementación
+## 14. Orden de implementación ejecutada
 
 1. Commit documental de esta decisión y movimiento de `EXT-11`.
 2. Test de aceptación exacto rojo + fixture; verificar que no hay falso verde.
@@ -379,3 +393,54 @@ de crash. No dependerá del checkout del propio rebuild.
 V16 solo se contará al validar ese receipt. El cierre pasará de 56 a 59 de 257
 capacidades y de 15 a 16 de 34 verticales. `EXT-11` seguirá pendiente y no se
 contará hasta V28.
+
+## 15. Implementación realizada y cierre pendiente
+
+El checkpoint 2026-07-21 implementa el alcance local completo sin abrir V17:
+
+- contratos neutrales y validación estructural en `internal/ports`;
+- modelos, casos de uso y procesamiento por el único `application.Orchestrator`;
+- persistencia, migración 011 y recovery adversarial en el mismo
+  `StateRepository` SQLite;
+- adapter Git CLI local en `internal/adapters/workspace/gitlocal`, sin forge ni
+  motor Git embebido;
+- wiring opt-in de bootstrap y resolución opaca del workspace para Codex;
+- claves canónicas `workspace.local.root`, `repository.local.seed_path` y
+  `repository.local.target_ref`, con validación de roots disjuntos;
+- aceptación estructural, E2E Git+SQLite real, crash/replay, RBAC, seguridad,
+  concurrencia y `-race` focal.
+
+La contrarrevisión hizo visible que el presupuesto rojo inicial infravaloraba
+las pruebas adversariales y la reconciliación durable: cabía el camino feliz,
+pero no `common-dir` hostil, CAS forzado en la frontera real, release después
+de borrado ni replay por objeto determinista. No se ocultaron esos tests para
+mantener una cifra. El ratchet final queda fijo en neto base→S: core 2050,
+adaptadores 3650, migración 650, tests 5600 y producción total 6250. La
+compensación estructural fue retirar el mutex global, separar responsabilidades
+y dejar todos los ficheros V16 nuevos bajo 400 líneas y funciones bajo 80; una
+ampliación posterior exige otra vertical y su propio presupuesto.
+
+Los gates focales que deben validarse de nuevo sobre S incluyen, entre otros,
+`TestRealGitSQLiteWorkspaceLifecycleEndToEnd`,
+`TestWorkspaceEffectsReplayEveryCrashFrontierExactlyOnce`,
+`TestSQLiteWorkspaceGitRestartRaceAndReplay` y
+`TestRecoveryV16RejectsWorkspaceCausalTampering`, además de los negativos de
+replay, CAS, release y `common-dir` inventariados en los bugs 247–254. Este
+documento no afirma su
+verde final sobre un worktree compartido en transición; incluso cuando pasan
+son evidencia de preparación, no acreditación separada.
+
+Secuencia única de cierre:
+
+1. ejecutar los gates finales y sincronizar `candidate_subjects` con el delta
+   real base→producto;
+2. crear P con producto y documentación, sin output ni receipt V16;
+3. sustituir el OID cero de test y fixture por el OID inmutable de P y crear S;
+4. ejecutar literalmente `execution_argv` desde S, detached y limpio;
+5. crear E únicamente con output y receipt V3, y validar el receipt estricto;
+6. solo entonces contabilizar `STG-02`, `STG-10`, `EXT-10` y V16.
+
+Hasta completar el punto 5, el total canónico permanece en 56/257 capacidades,
+15/34 verticales y 15/15 receipts. Tras un receipt V16 válido pasa a 59/257,
+16/34 y 16/16. El siguiente trabajo sigue siendo sellar V16; V17 permanece
+cerrado a cambios.

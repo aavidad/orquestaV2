@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -36,6 +37,7 @@ type memoryRepository struct {
 	mailboxDeliveries   int
 	mailboxConsumptions int
 	mailboxResolutions  int
+	integrationAdmits   map[string]memoryIntegrationAdmission
 	now                 func() time.Time
 }
 
@@ -53,19 +55,27 @@ type memoryAction struct {
 	lease           time.Time
 }
 
+type memoryIntegrationAdmission struct {
+	requestFingerprint string
+	goalRef            goal.GoalRef
+	changeRef          ports.ChangeSetRef
+	action             ActionRecord
+}
+
 func newMemoryRepository() *memoryRepository {
 	return &memoryRepository{
-		records:          make(map[goal.GoalRef]GoalRecord),
-		requests:         make(map[string]goal.GoalRef),
-		successors:       make(map[goal.AppSpecRef]goal.GoalRef),
-		actions:          make(map[string]memoryAction),
-		directorLeases:   make(map[goal.GoalRef]DirectorLeaseRecord),
-		directorRequests: make(map[string]memoryDirectorMutation),
-		controlRequests:  make(map[string]ControlReplayRequest),
-		controlRefs:      make(map[string]string),
-		mailboxes:        make(map[MailboxMessageRef]MailboxRecord),
-		mailboxRequests:  make(map[string]memoryMailboxMutation),
-		now:              time.Now,
+		records:           make(map[goal.GoalRef]GoalRecord),
+		requests:          make(map[string]goal.GoalRef),
+		successors:        make(map[goal.AppSpecRef]goal.GoalRef),
+		actions:           make(map[string]memoryAction),
+		directorLeases:    make(map[goal.GoalRef]DirectorLeaseRecord),
+		directorRequests:  make(map[string]memoryDirectorMutation),
+		controlRequests:   make(map[string]ControlReplayRequest),
+		controlRefs:       make(map[string]string),
+		mailboxes:         make(map[MailboxMessageRef]MailboxRecord),
+		mailboxRequests:   make(map[string]memoryMailboxMutation),
+		integrationAdmits: make(map[string]memoryIntegrationAdmission),
+		now:               time.Now,
 	}
 }
 
@@ -1146,7 +1156,9 @@ func (repository *memoryRepository) ClaimNextAction(_ context.Context, request C
 		terminalStop := action.record.Kind == ActionStopAgent && executionFound &&
 			(execution.State == ExecutionSucceeded || execution.State == ExecutionFailed ||
 				execution.State == ExecutionCanceled || execution.State == ExecutionStopped)
-		if action.record.Kind == ActionLaunchAgent || action.record.Kind == ActionStopAgent && !terminalStop {
+		if action.record.Kind == ActionLaunchAgent || action.record.Kind == ActionPrepareWorkspace ||
+			action.record.Kind == ActionCommitChange || action.record.Kind == ActionIntegrateChange ||
+			action.record.Kind == ActionStopAgent && !terminalStop {
 			approval, found = memoryLiveApproval(record, action.record, now)
 			if !found {
 				continue
@@ -1633,6 +1645,292 @@ func (repository *memoryRepository) RecordGoalFailed(_ context.Context, state Go
 	return nil
 }
 
+// ProjectRepository is deliberately deterministic in the in-memory adapter.
+// The durable adapter obtains this relation from the project hierarchy; tests
+// only need the same opaque repository identity every time a project is read.
+func (repository *memoryRepository) ProjectRepository(_ context.Context, projectRef goal.ProjectRef) (identity.RepositoryRef, error) {
+	if projectRef.String() == "" {
+		return identity.RepositoryRef{}, &StateError{Code: StateInvalid}
+	}
+	ref, err := identity.NewRepositoryRef("repository:" + projectRef.String())
+	if err != nil {
+		return identity.RepositoryRef{}, &StateError{Code: StateInvalid, Cause: err}
+	}
+	return ref, nil
+}
+
+func (repository *memoryRepository) ListPendingChanges(_ context.Context, query PendingChangeQuery) ([]PendingChange, error) {
+	if query.ProjectRef.String() == "" || query.RepositoryRef.String() == "" || query.Limit <= 0 {
+		return nil, &StateError{Code: StateInvalid}
+	}
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	result := make([]PendingChange, 0)
+	for _, record := range repository.records {
+		if record.Goal.Project() != query.ProjectRef {
+			continue
+		}
+		for _, change := range record.ChangeSets {
+			if change.ProjectRef != query.ProjectRef || change.RepositoryRef != query.RepositoryRef ||
+				(query.ActorRef.String() != "" && change.ActorRef != query.ActorRef) {
+				continue
+			}
+			var integration IntegrationReceipt
+			var observation MergeObservation
+			for _, candidate := range record.IntegrationReceipts {
+				if candidate.ChangeRef == change.Ref {
+					integration = candidate
+				}
+			}
+			for _, candidate := range record.MergeObservations {
+				if candidate.ChangeRef == change.Ref {
+					observation = candidate
+				}
+			}
+			// A successful integration is no longer pending. Conflicts and stale
+			// receipts remain visible as pending repair work.
+			if integration.Status == ports.IntegrationStatusIntegrated {
+				continue
+			}
+			binding, found := workspaceBindingForExecution(record, change.ExecutionRef)
+			if !found {
+				return nil, &StateError{Code: StateConflict}
+			}
+			result = append(result, PendingChange{Binding: binding, ChangeSet: change, Observation: observation, Integration: integration})
+		}
+	}
+	sort.Slice(result, func(left, right int) bool {
+		if result[left].ChangeSet.CommittedAt.Equal(result[right].ChangeSet.CommittedAt) {
+			return result[left].ChangeSet.Ref.String() < result[right].ChangeSet.Ref.String()
+		}
+		return result[left].ChangeSet.CommittedAt.Before(result[right].ChangeSet.CommittedAt)
+	})
+	if len(result) > query.Limit {
+		result = result[:query.Limit]
+	}
+	return result, nil
+}
+
+func (repository *memoryRepository) RecordWorkspacePrepared(_ context.Context, state WorkspacePreparedState) error {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	if err := repository.validateWorkspaceClaim(state.Claim, state.OperationAt); err != nil {
+		// Preparing does not advance the Goal revision; validate the exact live
+		// item separately because older test plans may begin at revision one.
+		return err
+	}
+	record := repository.records[state.Claim.Action.GoalRef]
+	if state.Execution.Ref != state.Claim.Action.ExecutionRef || ValidateWorkspaceBinding(state.Binding) != nil ||
+		state.Binding.ExecutionRef != state.Execution.Ref || state.NextAction.Kind != ActionLaunchAgent ||
+		state.NextAction.ExecutionRef != state.Execution.Ref {
+		return &StateError{Code: StateInvalid}
+	}
+	if _, found := workspaceBindingForExecution(record, state.Execution.Ref); found {
+		return &StateError{Code: StateConflict}
+	}
+	if _, found := repository.actions[state.NextAction.Ref]; found {
+		return &StateError{Code: StateConflict}
+	}
+	attempt, found := effectAttemptByRef(record.EffectAttempts, state.EffectReceipt.AttemptRef)
+	if !found || validateEffectReceipt(state.Claim, attempt, state.EffectReceipt) != nil {
+		return &StateError{Code: StateInvalid}
+	}
+	record.Executions = replaceExecution(record.Executions, state.Execution)
+	record.WorkspaceBindings = append(record.WorkspaceBindings, state.Binding)
+	record.EffectReceipts = append(record.EffectReceipts, state.EffectReceipt)
+	receipt := consumptionReceipt(state.Claim, ActionConsumedCompleted, "", state.OperationAt)
+	receipt.EffectReceiptRef = state.EffectReceipt.Ref
+	record.ConsumptionReceipts = append(record.ConsumptionReceipts, receipt)
+	memoryAddActionFacts(&record, state.NextAction)
+	repository.records[record.Goal.Ref()] = record
+	delete(repository.actions, state.Claim.Action.Ref)
+	repository.actions[state.NextAction.Ref] = memoryAction{record: state.NextAction}
+	repository.events = append(repository.events, state.Event)
+	return nil
+}
+
+func (repository *memoryRepository) RecordExecutionOutputReady(_ context.Context, state ExecutionOutputReadyState) error {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	if err := repository.validateMutation(state.Claim, state.OperationAt, state.ExpectedGoalRevision, state.ExpectedItemRevision); err != nil {
+		return err
+	}
+	record := repository.records[state.Claim.Action.GoalRef]
+	if state.Execution.Ref != state.Claim.Action.ExecutionRef || state.Execution.State != ExecutionAwaitingCommit ||
+		state.NextAction.Kind != ActionCommitChange || state.NextAction.ExecutionRef != state.Execution.Ref ||
+		state.Artifact.GoalRef != record.Goal.Ref() || state.Attestation.ExecutionRef != state.Execution.Ref {
+		return &StateError{Code: StateInvalid}
+	}
+	if _, found := repository.actions[state.NextAction.Ref]; found {
+		return &StateError{Code: StateConflict}
+	}
+	record.Executions = replaceExecution(record.Executions, state.Execution)
+	record.Artifacts = append(record.Artifacts, state.Artifact)
+	record.Attestations = append(record.Attestations, state.Attestation)
+	if state.BudgetSettlement != nil {
+		record.BudgetSettlements = append(record.BudgetSettlements, *state.BudgetSettlement)
+	}
+	record.ConsumptionReceipts = append(record.ConsumptionReceipts, consumptionReceipt(state.Claim, ActionConsumedCompleted, "", state.OperationAt))
+	memoryAddActionFacts(&record, state.NextAction)
+	repository.records[record.Goal.Ref()] = record
+	delete(repository.actions, state.Claim.Action.Ref)
+	repository.actions[state.NextAction.Ref] = memoryAction{record: state.NextAction}
+	repository.events = append(repository.events, state.Event)
+	return nil
+}
+
+func (repository *memoryRepository) RecordChangeCommitted(_ context.Context, state ChangeCommittedState) error {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	if err := repository.validateWorkspaceClaim(state.Claim, state.OperationAt); err != nil {
+		return err
+	}
+	record := repository.records[state.Claim.Action.GoalRef]
+	if state.Execution.Ref != state.Claim.Action.ExecutionRef || state.Execution.State != ExecutionAwaitingIntegration ||
+		state.ChangeSet.Ref != state.Claim.Action.ChangeRef || state.ChangeSet.ExecutionRef != state.Execution.Ref ||
+		ValidateChangeSet(state.ChangeSet) != nil {
+		return &StateError{Code: StateInvalid}
+	}
+	if _, found := changeSetByRef(record, state.ChangeSet.Ref); found {
+		return &StateError{Code: StateConflict}
+	}
+	attempt, found := effectAttemptByRef(record.EffectAttempts, state.EffectReceipt.AttemptRef)
+	if !found || validateEffectReceipt(state.Claim, attempt, state.EffectReceipt) != nil {
+		return &StateError{Code: StateInvalid}
+	}
+	record.Executions = replaceExecution(record.Executions, state.Execution)
+	record.ChangeSets = append(record.ChangeSets, state.ChangeSet)
+	record.EffectReceipts = append(record.EffectReceipts, state.EffectReceipt)
+	receipt := consumptionReceipt(state.Claim, ActionConsumedCompleted, "", state.OperationAt)
+	receipt.EffectReceiptRef = state.EffectReceipt.Ref
+	record.ConsumptionReceipts = append(record.ConsumptionReceipts, receipt)
+	repository.records[record.Goal.Ref()] = record
+	delete(repository.actions, state.Claim.Action.Ref)
+	repository.events = append(repository.events, state.Event)
+	return nil
+}
+
+func (repository *memoryRepository) AdmitIntegration(_ context.Context, state AdmitIntegrationState) (ActionRecord, bool, error) {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	if !memoryWriteAuthorizationValid(state.AuthorizationReceipt, state.PrincipalRef, state.ProjectRef,
+		identity.PermissionChangesIntegrate, state.GoalRef.String()) {
+		return ActionRecord{}, false, &StateError{Code: StateInvalid}
+	}
+	record, found := repository.records[state.GoalRef]
+	if !found || record.Goal.Project() != state.ProjectRef {
+		return ActionRecord{}, false, &StateError{Code: StateNotFound}
+	}
+	key := state.PrincipalRef.String() + "\x00" + state.ProjectRef.String() + "\x00" + state.RequestRef
+	if previous, exists := repository.integrationAdmits[key]; exists {
+		if previous.requestFingerprint != state.RequestFingerprint || previous.goalRef != state.GoalRef ||
+			previous.changeRef != state.ChangeRef || previous.action.Ref != state.Action.Ref ||
+			previous.action.ExpectedTargetOID != state.Action.ExpectedTargetOID {
+			return ActionRecord{}, false, &StateError{Code: StateConflict}
+		}
+		return cloneActionRecord(previous.action), false, nil
+	}
+	if state.Action.Kind != ActionIntegrateChange || state.Action.GoalRef != state.GoalRef || state.Action.ChangeRef != state.ChangeRef ||
+		state.Action.EffectApproval == nil || state.Action.EffectIntent.Permission != identity.PermissionChangesIntegrate ||
+		state.Action.EffectIntent.RequestFingerprint != state.RequestFingerprint ||
+		record.Goal.Revision() != state.ExpectedGoalRevision {
+		return ActionRecord{}, false, &StateError{Code: StateInvalid}
+	}
+	item, itemFound := record.Goal.WorkItem(state.Action.WorkItemRef)
+	execution, executionFound := executionByRef(record.Executions, state.Action.ExecutionRef)
+	change, changeFound := changeSetByRef(record, state.ChangeRef)
+	if !itemFound || !executionFound || !changeFound || item.Revision() != state.ExpectedItemRevision ||
+		item.State() != goal.WorkItemStateRunning || execution.State != ExecutionAwaitingIntegration ||
+		change.ExecutionRef != execution.Ref || change.ProjectRef != state.ProjectRef {
+		return ActionRecord{}, false, &StateError{Code: StateConflict}
+	}
+	for _, receipt := range record.IntegrationReceipts {
+		if receipt.ChangeRef == state.ChangeRef && receipt.Status == ports.IntegrationStatusIntegrated {
+			return ActionRecord{}, false, &StateError{Code: StateConflict}
+		}
+	}
+	if _, found := repository.actions[state.Action.Ref]; found {
+		return ActionRecord{}, false, &StateError{Code: StateConflict}
+	}
+	memoryAddActionFacts(&record, state.Action)
+	repository.records[state.GoalRef] = record
+	repository.actions[state.Action.Ref] = memoryAction{record: state.Action}
+	repository.integrationAdmits[key] = memoryIntegrationAdmission{
+		requestFingerprint: state.RequestFingerprint, goalRef: state.GoalRef,
+		changeRef: state.ChangeRef, action: cloneActionRecord(state.Action),
+	}
+	return state.Action, true, nil
+}
+
+func cloneActionRecord(action ActionRecord) ActionRecord {
+	cloned := action
+	if action.EffectApproval != nil {
+		approval := *action.EffectApproval
+		cloned.EffectApproval = &approval
+	}
+	return cloned
+}
+
+func (repository *memoryRepository) RecordIntegrationResult(_ context.Context, state IntegrationResultState) error {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	if err := repository.validateMutation(state.Claim, state.OperationAt, state.ExpectedGoalRevision, state.ExpectedItemRevision); err != nil {
+		return err
+	}
+	record := repository.records[state.Claim.Action.GoalRef]
+	if state.Execution.Ref != state.Claim.Action.ExecutionRef || state.Integration.ChangeRef != state.Claim.Action.ChangeRef ||
+		ValidateMergeObservation(state.Observation) != nil || ValidateIntegrationReceipt(state.Integration) != nil {
+		return &StateError{Code: StateInvalid}
+	}
+	for _, previous := range record.IntegrationReceipts {
+		if previous.ChangeRef == state.Integration.ChangeRef {
+			return &StateError{Code: StateConflict}
+		}
+	}
+	attempt, found := effectAttemptByRef(record.EffectAttempts, state.EffectReceipt.AttemptRef)
+	if !found || validateEffectReceipt(state.Claim, attempt, state.EffectReceipt) != nil {
+		return &StateError{Code: StateInvalid}
+	}
+	record.Goal = state.Goal
+	record.Executions = replaceExecution(record.Executions, state.Execution)
+	record.Executions = append(record.Executions, state.NewExecutions...)
+	record.MergeObservations = append(record.MergeObservations, state.Observation)
+	record.IntegrationReceipts = append(record.IntegrationReceipts, state.Integration)
+	record.EffectReceipts = append(record.EffectReceipts, state.EffectReceipt)
+	receipt := consumptionReceipt(state.Claim, ActionConsumedCompleted, "", state.OperationAt)
+	receipt.EffectReceiptRef = state.EffectReceipt.Ref
+	record.ConsumptionReceipts = append(record.ConsumptionReceipts, receipt)
+	for _, action := range state.NewActions {
+		if _, exists := repository.actions[action.Ref]; exists {
+			return &StateError{Code: StateConflict}
+		}
+		memoryAddActionFacts(&record, action)
+	}
+	repository.records[record.Goal.Ref()] = record
+	delete(repository.actions, state.Claim.Action.Ref)
+	for _, action := range state.NewActions {
+		repository.actions[action.Ref] = memoryAction{record: action}
+	}
+	repository.events = append(repository.events, state.Events...)
+	return nil
+}
+
+func (repository *memoryRepository) validateWorkspaceClaim(claim ActionClaim, operationAt time.Time) error {
+	action, found := repository.actions[claim.Action.Ref]
+	if !found || !memoryClaimMatches(action, claim, operationAt) {
+		return &StateError{Code: StateConflict}
+	}
+	record, found := repository.records[claim.Action.GoalRef]
+	if !found {
+		return &StateError{Code: StateNotFound}
+	}
+	item, found := record.Goal.WorkItem(claim.Action.WorkItemRef)
+	if !found || item.Revision() != claim.Action.WorkItemGeneration {
+		return &StateError{Code: StateConflict}
+	}
+	return nil
+}
+
 func (repository *memoryRepository) hasUnresolvedMailboxRecipientLocked(executionRef goal.ExecutionRef) bool {
 	for _, mailbox := range repository.mailboxes {
 		if mailbox.Envelope.Recipient.ExecutionRef == executionRef &&
@@ -1705,6 +2003,10 @@ func cloneGoalRecord(record GoalRecord) GoalRecord {
 	record.EffectApprovals = append([]EffectApproval(nil), record.EffectApprovals...)
 	record.EffectAttempts = append([]EffectAttempt(nil), record.EffectAttempts...)
 	record.EffectReceipts = append([]EffectReceipt(nil), record.EffectReceipts...)
+	record.WorkspaceBindings = append([]WorkspaceBinding(nil), record.WorkspaceBindings...)
+	record.ChangeSets = append([]ChangeSet(nil), record.ChangeSets...)
+	record.MergeObservations = append([]MergeObservation(nil), record.MergeObservations...)
+	record.IntegrationReceipts = append([]IntegrationReceipt(nil), record.IntegrationReceipts...)
 	record.ConsumptionReceipts = append([]ActionConsumptionReceipt(nil), record.ConsumptionReceipts...)
 	return record
 }
@@ -1879,6 +2181,118 @@ type scriptedAgent struct {
 	stopRequests                     []ports.AgentStopRequest
 }
 
+// scriptedWorkspaceManager and scriptedVersionControl are contractual test
+// adapters. They retain only opaque refs/OIDs: physical workspace paths are
+// intentionally unavailable even to application tests.
+type scriptedWorkspaceManager struct {
+	mu       sync.Mutex
+	prepared map[ports.ExecutionWorkspaceRef]ports.WorkspacePrepared
+	requests []ports.WorkspacePrepareRequest
+}
+
+func (manager *scriptedWorkspaceManager) Prepare(_ context.Context, request ports.WorkspacePrepareRequest) (ports.WorkspacePrepared, error) {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	if previous, found := manager.prepared[request.WorkspaceRef]; found {
+		return previous, nil
+	}
+	prepared := ports.WorkspacePrepared{
+		WorkspaceRef: request.WorkspaceRef, RepositoryRef: request.RepositoryRef, ExecutionRef: request.ExecutionRef,
+		TargetRef: "refs/heads/main", BaseOID: testGitOID('a'), ObjectFormat: ports.GitObjectFormatSHA1,
+		WriteSetDigest: request.WriteSetDigest, AdapterRef: "workspace-adapter:test",
+		ReceiptRef: "workspace-receipt:" + request.WorkspaceRef.String(), PreparedAt: request.PreparedAt,
+	}
+	if manager.prepared == nil {
+		manager.prepared = make(map[ports.ExecutionWorkspaceRef]ports.WorkspacePrepared)
+	}
+	manager.prepared[request.WorkspaceRef] = prepared
+	manager.requests = append(manager.requests, request)
+	return prepared, nil
+}
+
+func (manager *scriptedWorkspaceManager) Inspect(_ context.Context, request ports.WorkspaceInspectRequest) (ports.WorkspaceInspection, error) {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	prepared, found := manager.prepared[request.WorkspaceRef]
+	if !found {
+		return ports.WorkspaceInspection{}, errors.New("test.workspace_not_prepared")
+	}
+	return ports.WorkspaceInspection{WorkspaceRef: request.WorkspaceRef, RepositoryRef: request.RepositoryRef,
+		ExecutionRef: request.ExecutionRef, BaseOID: prepared.BaseOID, HeadOID: prepared.BaseOID,
+		TreeOID: testGitOID('b'), WriteSetDigest: prepared.WriteSetDigest, AdapterRef: prepared.AdapterRef,
+		InspectedAt: time.Unix(1, 0).UTC()}, nil
+}
+
+func (manager *scriptedWorkspaceManager) Release(_ context.Context, request ports.WorkspaceReleaseRequest) (ports.WorkspaceReleaseReceipt, error) {
+	return ports.WorkspaceReleaseReceipt{WorkspaceRef: request.WorkspaceRef, RepositoryRef: request.RepositoryRef,
+		ExecutionRef: request.ExecutionRef, Released: false, ReceiptRef: "workspace-release:" + request.WorkspaceRef.String(),
+		ReleasedAt: request.RequestedAt}, nil
+}
+
+type scriptedVersionControl struct {
+	mu                  sync.Mutex
+	commits             map[ports.ChangeSetRef]ports.CommitResult
+	integrations        map[string]ports.IntegrationResult
+	commitRequests      []ports.CommitRequest
+	integrationRequests []ports.IntegrationRequest
+}
+
+func (control *scriptedVersionControl) Commit(_ context.Context, request ports.CommitRequest) (ports.CommitResult, error) {
+	control.mu.Lock()
+	defer control.mu.Unlock()
+	if previous, found := control.commits[request.ChangeSetRef]; found {
+		return previous, nil
+	}
+	paths := append([]string(nil), request.WriteSet...)
+	result := ports.CommitResult{ChangeSetRef: request.ChangeSetRef, WorkspaceRef: request.WorkspaceRef,
+		RepositoryRef: request.RepositoryRef, ExecutionRef: request.ExecutionRef, BaseOID: request.BaseOID,
+		ParentOID: request.BaseOID, HeadOID: testGitOID('c'), TreeOID: testGitOID('d'),
+		ObjectFormat: request.ObjectFormat, DiffDigest: testDigest("commit:" + request.ChangeSetRef.String()),
+		ChangedPaths: paths, WriteSetDigest: request.WriteSetDigest, ParentChangeRef: request.ParentChangeRef,
+		AdapterRef: "version-control:test", ReceiptRef: "commit-receipt:" + request.ChangeSetRef.String(),
+		CommittedAt: request.CommittedAt}
+	if control.commits == nil {
+		control.commits = make(map[ports.ChangeSetRef]ports.CommitResult)
+	}
+	control.commits[request.ChangeSetRef] = result
+	control.commitRequests = append(control.commitRequests, request)
+	return result, nil
+}
+
+func (control *scriptedVersionControl) PreviewIntegration(_ context.Context, request ports.IntegrationPreviewRequest) (ports.IntegrationPreview, error) {
+	return ports.IntegrationPreview{ChangeSetRef: request.ChangeSetRef, RepositoryRef: request.RepositoryRef,
+		SourceOID: request.SourceOID, TargetRef: request.TargetRef, TargetOID: request.TargetOID,
+		ObjectFormat: request.ObjectFormat, Status: ports.MergeStatusClean, CandidateTreeOID: testGitOID('e'),
+		AdapterRef: "version-control:test", ObservedAt: request.RequestedAt}, nil
+}
+
+func (control *scriptedVersionControl) Integrate(_ context.Context, request ports.IntegrationRequest) (ports.IntegrationResult, error) {
+	control.mu.Lock()
+	defer control.mu.Unlock()
+	if previous, found := control.integrations[request.IdempotencyKey]; found {
+		return previous, nil
+	}
+	result := ports.IntegrationResult{ChangeSetRef: request.ChangeSetRef, RepositoryRef: request.RepositoryRef,
+		SourceOID: request.SourceOID, TargetRef: request.TargetRef, TargetBeforeOID: request.ExpectedTargetOID,
+		TargetAfterOID: testGitOID('f'), TreeOID: testGitOID('e'), ObjectFormat: request.ObjectFormat,
+		Status: ports.IntegrationStatusIntegrated, MarkerRef: "refs/orquesta/effects:test",
+		AdapterRef: "version-control:test", ReceiptRef: "integration-receipt:" + request.ChangeSetRef.String(),
+		RecordedAt: request.RequestedAt}
+	if control.integrations == nil {
+		control.integrations = make(map[string]ports.IntegrationResult)
+	}
+	control.integrations[request.IdempotencyKey] = result
+	control.integrationRequests = append(control.integrationRequests, request)
+	return result, nil
+}
+
+func testGitOID(value byte) string { return strings.Repeat(string([]byte{value}), 40) }
+
+func testDigest(value string) string {
+	digest := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(digest[:])
+}
+
 type definitelyUnappliedPermanentError struct{ message string }
 
 func (err definitelyUnappliedPermanentError) Error() string {
@@ -2024,6 +2438,7 @@ func newTestOrchestratorWithAccess(
 	orchestrator, err := New(Dependencies{
 		State: repository, Access: accessRepository,
 		Launcher: agent, Observer: agent, Controller: agent, Artifacts: artifacts,
+		WorkspaceManager: &scriptedWorkspaceManager{}, VersionControl: &scriptedVersionControl{},
 		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1 << 20,
 		MaxMailboxEnvelopeBytes: 64 << 10,
 		MaxExecutionAttempts:    3, ClaimLease: time.Minute, DirectorLeaseDuration: time.Minute,

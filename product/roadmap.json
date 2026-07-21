@@ -859,18 +859,29 @@
     {
       "id": "AC-V16-WORKSPACE-GIT",
       "vertical": "workspace_git",
-      "status": "planned",
-      "test_ref": "planned:acceptance/v16_workspace_git_test.go#TestAcceptanceV16WorkspaceGit",
-      "command": "planned:go test -mod=vendor -count=1 ./acceptance -run '^TestAcceptanceV16WorkspaceGit$'",
-      "fixture": "planned:fixtures/v16_workspace_git",
+      "status": "executable",
+      "test_ref": "acceptance/v16_workspace_git_test.go",
+      "command": "sh -c 'git diff --check 3820df2ae89f1a217de1b14d5b88abf8e86c898b HEAD -- && go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV16ScopeAndExecutableContract|TestV16EvidenceBelongsOnlyToWorkspaceGitCapabilities|TestV16AcceptanceCommandRunsWorkspaceGitConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestTraceabilityRebuildHistoricalBugIDs|TestTraceabilityRebuildHistoricalBugReviewBindings|TestTraceabilityRebuildSchemaValidatesCanonicalLedgers|TestHistoricalBugCapabilityCoverageNeverInfersLegacyClosure|TestAcceptanceV02AuthorityRules|TestAcceptanceV03CanonicalLedgers|TestAcceptanceV06AtomicStateOutbox|TestAcceptanceV09RecoveryBackup|TestAcceptanceV10IdentityProjectsRBAC|TestAcceptanceV16WorkspaceGit|TestV16CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/governance ./internal/identity ./internal/config ./internal/credentials ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/adapters/workspace/gitlocal ./internal/bootstrap ./cmd/orquesta && timeout --kill-after=10s 180s go test -mod=vendor -race -count=1 -timeout=150s ./internal/application ./internal/ports ./internal/adapters/state/sqlite ./internal/adapters/workspace/gitlocal ./internal/adapters/agent/codex ./internal/bootstrap -run \"^(TestWorkspacePrepareIsIdempotentAndUniquePerExecution|TestReplacementExecutionGetsDistinctWorkspace|TestLaunchUsesExactOpaqueWorkspaceBinding|TestCommitBindsBaseTreeDiffWriteSetAndExecution|TestOutOfWriteSetChangeLeavesGitUnmodified|TestReworkRequiresExplicitParentChangeRef|TestConflictAndStaleIntegrationLeaveTargetUnchanged|TestConcurrentIntegrationCASPreservesLoserPending|TestWorkspaceEffectsReplayEveryCrashFrontierExactlyOnce|TestPendingChangesAreRBACScopedAndSurviveRestart|TestGitWorkspaceRejectsUnsafeFilesystemAndGitControls|TestGitWorkspaceRejectsRepositoryOverlappingPrivateRoot|TestIntegrationReplayRejectsSameKeyWithDifferentPayload|TestWorkspaceEvidenceLeaksNoPrivateAdapterData|TestWorkspaceArchitectureKeepsOneWriterStateOutboxScheduler|TestRealGitSQLiteWorkspaceLifecycleEndToEnd|TestWorkspaceConcurrentPrepareCommitIntegrateRace|TestSQLiteWorkspaceGitRestartRaceAndReplay|TestRecoveryV16RejectsWorkspaceCausalTampering|TestRecoveryV16RejectsMissingIntegrationFacts|TestIntegrateChangeRejectsMalformedTargetBeforeAuthorizationOrAdmission|TestValidateGitOIDRejectsMalformedValues)$\" && GOFLAGS=-mod=vendor go vet ./internal/goal ./internal/governance ./internal/identity ./internal/config ./internal/credentials ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/adapters/workspace/gitlocal ./internal/bootstrap ./cmd/orquesta'",
+      "fixture": "acceptance/fixtures/v16_workspace_git.json",
+      "receipt": "product/evidence/v16_workspace_git.json",
       "assertions": [
-        "one private isolated workspace with an opaque branch and exact base object exists per project Goal WorkItem and Execution and an execution replacement never reuses it",
-        "workspace preparation commit and integration reuse the V06 outbox claim lease fence scheduler and StateRepository plus the V15 intent approval attempt receipt ledger without a second lifecycle store queue or daemon",
-        "Codex or any interchangeable agent runs only in the workspace bound to its exact Execution and work outside the declared write set never reaches a Git mutation",
-        "commit binds the exact execution base tree diff changed paths and idempotency key while replay and restart converge on one immutable receipt without exposing paths commands credentials or provider details",
-        "integration computes conflicts without mutating the target and updates the target only by expected object CAS so a stale base conflict stale fence or concurrent loser preserves all pending work and never changes the target ref",
-        "pending committed conflicted and stale work is durably visible and RBAC scoped by actor project repository Goal and execution after restart",
-        "V16 accredits only STG-02 STG-10 and EXT-10; remote push pull request and forge merge including EXT-11 remain explicit governed connector effects owned by V28"
+        "STG-02 STG-10 and EXT-10 are the exact accepted V16 ownership; remote forge push pull request and EXT-11 remain deferred to V28",
+        "one private isolated workspace with opaque identity target and exact base object exists per project Goal WorkItem and Execution and a replacement Execution never reuses it",
+        "a WorkItem without a write set stays on the non-workspace path while a write-scoped launch receives only its exact opaque ExecutionWorkspaceRef",
+        "workspace preparation commit and integration reuse the V06 outbox claim lease fence scheduler and StateRepository plus the V15 intent approval attempt receipt ledger without a second lifecycle store queue daemon or writer",
+        "WorkspaceBinding ChangeSet MergeObservation and IntegrationReceipt are immutable causal facts bound to exact actor project repository Goal WorkItem Execution attempt generations action intent attempt fence and receipt",
+        "Codex and every interchangeable agent run only in the workspace resolved for the exact Execution and work outside the canonical write set produces zero Git mutation",
+        "commit binds exact base parent head tree diff changed paths write-set digest execution and idempotency key while explicit rework names its immutable parent ChangeSet",
+        "commit replay and restart converge only on the deterministic object for the exact parent tree causal digest identity timestamp and message; an arbitrary child conflicts and no receipt exposes filesystem paths commands URLs credentials environment provider details or Git private metadata",
+        "integration first records a nonmutating merge observation and updates target plus idempotency marker only through one expected-object Git ref transaction",
+        "conflict stale base malformed object stale fence and concurrent CAS loser preserve target and ChangeSet as pending work rather than discarding or force-updating it",
+        "pending committed conflicted and stale work is durably queryable only through application authorization scoped by principal actor project repository Goal and execution after restart",
+        "every external crash frontier preserves one effect idempotency key and stable semantic payload while retry AttemptRef and fence may advance as separately persisted envelopes; recovery rejects cross-linked workspace change integration or receipt facts",
+        "the Git CLI adapter uses argv-only machine-readable commands explicit object IDs disabled ambient Git controls and private filesystem roots while domain and application receive only opaque refs OIDs and digests",
+        "traversal unsafe ancestors links special files foreign ownership group or world writable roots and metadata foreign Git common directories hooks filters pagers credential helpers signing programs and inherited Git environment fail before protected refs mutate",
+        "workspace.local.root is defined once in the canonical registry validated disjoint from all state secret artifact runtime and source roots and consumed through typed configuration",
+        "V16 preserves the V02 single Goal writer V05 DAG V06 atomic state and outbox V07 configuration V08 credentials V09 recovery V10 RBAC V12 Director V13 mailbox V14 controls and V15 budgets and effects",
+        "local Git integration is an explicit application use case and receipt but never closes a Goal authorizes review publication or proves remote effect; attestation review council forge and multihost remain later verticals"
       ]
     },
     {
@@ -2252,8 +2263,12 @@
       "acceptance_contracts": [
         "AC-V16-WORKSPACE-GIT"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v16_workspace_git_test.go",
+        "acceptance/fixtures/v16_workspace_git.json",
+        "product/evidence/v16_workspace_git.json"
+      ],
       "supersedes": []
     },
     {
@@ -2430,8 +2445,12 @@
       "acceptance_contracts": [
         "AC-V16-WORKSPACE-GIT"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v16_workspace_git_test.go",
+        "acceptance/fixtures/v16_workspace_git.json",
+        "product/evidence/v16_workspace_git.json"
+      ],
       "supersedes": []
     },
     {
@@ -4645,8 +4664,12 @@
       "acceptance_contracts": [
         "AC-V16-WORKSPACE-GIT"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v16_workspace_git_test.go",
+        "acceptance/fixtures/v16_workspace_git.json",
+        "product/evidence/v16_workspace_git.json"
+      ],
       "supersedes": []
     },
     {

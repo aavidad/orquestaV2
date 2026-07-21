@@ -136,8 +136,17 @@ func TestExplicitPlanPreservesContractsAndLaunchesMaximalSafeCohort(t *testing.T
 	if !scheduled["first writer"] || !scheduled["free writer"] || scheduled["overlapping writer"] {
 		t.Fatalf("scheduled cohort = %+v", scheduled)
 	}
-	if _, err := orchestrator.ProcessNext(context.Background(), "worker:v05"); err != nil {
-		t.Fatalf("launch required work: %v", err)
+	for attempts := 0; attempts < 3; attempts++ {
+		result, err := orchestrator.ProcessNext(context.Background(), "worker:v05")
+		if err != nil {
+			t.Fatalf("launch required work: %v", err)
+		}
+		if result.Action == ActionLaunchAgent {
+			break
+		}
+		if attempts == 2 {
+			t.Fatalf("workspace preparation did not reach launch: %+v", result)
+		}
 	}
 	agent.mu.Lock()
 	requests := append([]ports.AgentLaunchRequest(nil), agent.launchRequests...)

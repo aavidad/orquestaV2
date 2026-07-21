@@ -339,6 +339,14 @@ func v02AssertUniqueGoal(t *testing.T, sources v02SourceSet, lifecycle v02Lifecy
 
 var v02ParallelGoalPattern = regexp.MustCompile(`(?i)(goal.*(?:next|v[0-9]+)|(?:next|v[0-9]+).*goal)`)
 
+// v02SharedDomainPackages are pure value-domain packages which may be shared
+// by the Goal aggregate and the application writer.  They are deliberately
+// enumerated here instead of accepting internal/*: adapters, composition and
+// persistence must remain outside both authorities.
+var v02SharedDomainPackages = map[string]struct{}{
+	"orquesta/internal/governance": {},
+}
+
 func v02VersionedGoalType(name string) bool {
 	return v02ParallelGoalPattern.MatchString(name)
 }
@@ -423,6 +431,9 @@ func v02AssertExecutionAndProviderSeparation(t *testing.T, sources v02SourceSet,
 		for _, spec := range file.Syntax.Imports {
 			importPath, _ := strconv.Unquote(spec.Path.Value)
 			if file.PackagePath == lifecycle.Package && strings.HasPrefix(importPath, sources.Module+"/internal/") {
+				if _, allowed := v02SharedDomainPackages[importPath]; allowed {
+					continue
+				}
 				position := sources.FileSet.Position(spec.Pos())
 				t.Errorf("%s:%d Goal domain imports concrete/internal boundary %q", file.Path, position.Line, importPath)
 			}
@@ -430,6 +441,9 @@ func v02AssertExecutionAndProviderSeparation(t *testing.T, sources v02SourceSet,
 				continue
 			}
 			if importPath == lifecycle.Package || importPath == sources.Module+"/internal/identity" || importPath == sources.Module+"/internal/ports" {
+				continue
+			}
+			if _, allowed := v02SharedDomainPackages[importPath]; allowed {
 				continue
 			}
 			position := sources.FileSet.Position(spec.Pos())

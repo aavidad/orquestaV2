@@ -19,6 +19,8 @@ type Dependencies struct {
 	Observer                AgentObserver
 	Controller              AgentController
 	Artifacts               ArtifactStore
+	WorkspaceManager        WorkspaceManager
+	VersionControl          VersionControl
 	Clock                   Clock
 	IDs                     IDGenerator
 	MaxOutputBytes          int64
@@ -41,6 +43,8 @@ type Orchestrator struct {
 	observer                AgentObserver
 	controller              AgentController
 	artifacts               ArtifactStore
+	workspaceManager        WorkspaceManager
+	versionControl          VersionControl
 	clock                   Clock
 	ids                     IDGenerator
 	maxOutputBytes          int64
@@ -106,6 +110,8 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 		observer:                dependencies.Observer,
 		controller:              controller,
 		artifacts:               dependencies.Artifacts,
+		workspaceManager:        dependencies.WorkspaceManager,
+		versionControl:          dependencies.VersionControl,
 		clock:                   dependencies.Clock,
 		ids:                     dependencies.IDs,
 		maxOutputBytes:          dependencies.MaxOutputBytes,

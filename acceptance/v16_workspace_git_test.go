@@ -1,49 +1,52 @@
 package acceptance_test
 
 import (
-	"bytes"
-	"context"
-	"go/ast"
-	"go/format"
-	"go/parser"
-	"go/token"
 	"os"
 	"path/filepath"
 	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
-
-	"orquesta/internal/application"
 )
 
 const v16FixturePath = "acceptance/fixtures/v16_workspace_git.json"
 const v16ContractBaseGitCommitOID = "3820df2ae89f1a217de1b14d5b88abf8e86c898b"
 
+// P-stage placeholder. Closure replaces this with the immutable product commit
+// before creating the source and evidence commits.
+const v16ProductDeltaSealedGitCommitOID = "0000000000000000000000000000000000000000"
+
 type v16Fixture struct {
-	SchemaVersion            int               `json:"schema_version"`
-	ContractID               string            `json:"contract_id"`
-	TrustedBaseGitCommitOID  string            `json:"trusted_base_git_commit_oid"`
-	Command                  string            `json:"command"`
-	ExecutionArgv            []string          `json:"execution_argv"`
-	OwnedCapabilityIDs       []string          `json:"owned_capability_ids"`
-	DependencyVerticals      []string          `json:"dependency_verticals"`
-	RequiredApplicationTypes []v16RequiredType `json:"required_application_types"`
-	RequiredOutboundPorts    []v16RequiredPort `json:"required_outbound_ports"`
-	RequiredUseCases         []string          `json:"required_use_cases"`
-	RequiredActions          []string          `json:"required_actions"`
-	RequiredEffectKinds      []string          `json:"required_effect_kinds"`
-	RequiredStatuses         []string          `json:"required_statuses"`
-	ForbiddenAuthorities     []string          `json:"forbidden_private_authorities"`
-	RequiredBehaviorTests    []string          `json:"required_behavior_tests"`
-	GitFixture               v16GitFixture     `json:"git_fixture"`
-	Actors                   []v16Actor        `json:"actors"`
-	Changes                  []v16Change       `json:"changes"`
-	CrashFrontiers           []string          `json:"crash_frontiers"`
-	SecurityCases            []string          `json:"security_cases"`
-	PrivateLeakMarkers       []string          `json:"private_leak_markers"`
-	DeferredSurfaces         []string          `json:"deferred_surfaces"`
+	SchemaVersion                  int               `json:"schema_version"`
+	ReceiptSchemaVersion           int               `json:"receipt_schema_version"`
+	ContractID                     string            `json:"contract_id"`
+	TrustedBaseGitCommitOID        string            `json:"trusted_base_git_commit_oid"`
+	ProductDeltaBaseGitCommitOID   string            `json:"product_delta_base_git_commit_oid"`
+	ProductDeltaSealedGitCommitOID string            `json:"product_delta_sealed_git_commit_oid"`
+	Command                        string            `json:"command"`
+	ExecutionArgv                  []string          `json:"execution_argv"`
+	OutputPath                     string            `json:"output_path"`
+	ReceiptPath                    string            `json:"receipt_path"`
+	CandidateSubjects              []string          `json:"candidate_subjects"`
+	OwnedCapabilityIDs             []string          `json:"owned_capability_ids"`
+	DependencyVerticals            []string          `json:"dependency_verticals"`
+	RequiredApplicationTypes       []v16RequiredType `json:"required_application_types"`
+	RequiredOutboundPorts          []v16RequiredPort `json:"required_outbound_ports"`
+	RequiredUseCases               []string          `json:"required_use_cases"`
+	RequiredActions                []string          `json:"required_actions"`
+	RequiredEffectKinds            []string          `json:"required_effect_kinds"`
+	RequiredStatuses               []string          `json:"required_statuses"`
+	ForbiddenAuthorities           []string          `json:"forbidden_private_authorities"`
+	RequiredBehaviorTests          []string          `json:"required_behavior_tests"`
+	GitFixture                     v16GitFixture     `json:"git_fixture"`
+	Actors                         []v16Actor        `json:"actors"`
+	Changes                        []v16Change       `json:"changes"`
+	CrashFrontiers                 []string          `json:"crash_frontiers"`
+	SecurityCases                  []string          `json:"security_cases"`
+	PrivateLeakMarkers             []string          `json:"private_leak_markers"`
+	DeferredSurfaces               []string          `json:"deferred_surfaces"`
 }
 
 type v16RequiredType struct {
@@ -97,6 +100,37 @@ type v16FixtureWrite struct {
 	Content string `json:"content"`
 }
 
+func TestV16CandidateSubjectsCoverCommittedDelta(t *testing.T) {
+	repositoryRoot := evidenceRepositoryRoot(t)
+	fixture := evidenceDecodeStrictJSON[v16Fixture](t, filepath.Join(repositoryRoot, filepath.FromSlash(v16FixturePath)))
+	if err := evidenceValidateSealedCommit(
+		repositoryRoot, fixture.ProductDeltaBaseGitCommitOID, fixture.ProductDeltaSealedGitCommitOID,
+	); err != nil {
+		t.Fatal(err)
+	}
+	output, err := evidenceGit(repositoryRoot, "diff", "--name-only",
+		fixture.ProductDeltaBaseGitCommitOID, fixture.ProductDeltaSealedGitCommitOID, "--")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var changed []string
+	if value := strings.TrimSpace(string(output)); value != "" {
+		changed = strings.Split(value, "\n")
+	}
+	sort.Strings(changed)
+	if !reflect.DeepEqual(changed, fixture.CandidateSubjects) {
+		t.Fatalf("V16 candidate subjects differ from sealed product delta:\nchanged=%v\nfixture=%v", changed, fixture.CandidateSubjects)
+	}
+	numstat, err := evidenceGit(repositoryRoot, "diff", "--numstat",
+		fixture.ProductDeltaBaseGitCommitOID, fixture.ProductDeltaSealedGitCommitOID, "--")
+	if err != nil {
+		t.Fatal(err)
+	}
+	v16AssertSimplicityBudget(
+		t, repositoryRoot, fixture.ProductDeltaBaseGitCommitOID, fixture.ProductDeltaSealedGitCommitOID, numstat,
+	)
+}
+
 func TestAcceptanceV16WorkspaceGit(t *testing.T) {
 	repositoryRoot := evidenceRepositoryRoot(t)
 	fixture := evidenceDecodeStrictJSON[v16Fixture](t, filepath.Join(repositoryRoot, filepath.FromSlash(v16FixturePath)))
@@ -106,126 +140,43 @@ func TestAcceptanceV16WorkspaceGit(t *testing.T) {
 	portsDirectory := filepath.Join(repositoryRoot, "internal", "ports")
 
 	t.Run("one_writer_and_two_outbound_ports", func(t *testing.T) {
-		statePort := reflect.TypeOf((*application.StateRepository)(nil)).Elem()
-		dependencies := reflect.TypeOf(application.Dependencies{})
-		stateFields := 0
-		for index := 0; index < dependencies.NumField(); index++ {
-			if dependencies.Field(index).Type == statePort {
-				stateFields++
-			}
-		}
-		if stateFields != 1 {
-			t.Errorf("V16_RED Dependencies StateRepository fields=%d, want 1", stateFields)
-		}
-		for _, port := range fixture.RequiredOutboundPorts {
-			v16RequireOutboundInterface(t, applicationDirectory, port)
-			if count := v16StructFieldTypeCount(t, applicationDirectory, "Dependencies", port.Name); count != 1 {
-				t.Errorf("V16_RED Dependencies fields of type %s=%d, want 1", port.Name, count)
-			}
-		}
-		production := v16ReadProductionGo(t, applicationDirectory)
-		for _, forbidden := range fixture.ForbiddenAuthorities {
-			if strings.Contains(production, "type "+forbidden+" ") {
-				t.Errorf("V16 private authority %s is forbidden", forbidden)
-			}
-		}
+		v16AssertOneWriterAndOutboundPorts(t, applicationDirectory, fixture)
 	})
 
 	t.Run("immutable_facts_are_causal_and_path_free", func(t *testing.T) {
-		for _, required := range fixture.RequiredApplicationTypes {
-			v14RequireProductionFields(t, applicationDirectory, required.Name, required.Fields)
-			fields, found := v13ProductionTypeFields(t, applicationDirectory, required.Name)
-			if found {
-				for _, forbidden := range []string{"Path", "WorkspacePath", "RepositoryPath", "URL", "Argv", "Environment", "Secret"} {
-					if fields[forbidden] {
-						t.Errorf("V16 %s leaks adapter-private field %s", required.Name, forbidden)
-					}
-				}
-			}
-		}
-		if !v16ProductionTypeExists(t, portsDirectory, "ExecutionWorkspaceRef") {
-			t.Error("V16_RED ports.ExecutionWorkspaceRef missing")
-		}
-		v14RequireProductionFields(t, portsDirectory, "AgentLaunchRequest", []string{"ExecutionWorkspaceRef"})
+		v16AssertImmutableFacts(t, applicationDirectory, portsDirectory, fixture)
 	})
 
 	t.Run("public_use_cases_admit_and_query_but_do_not_create_lifecycle", func(t *testing.T) {
-		orchestrator := reflect.TypeOf((*application.Orchestrator)(nil))
-		for _, useCase := range fixture.RequiredUseCases {
-			v16RequireUseCase(t, orchestrator, useCase)
-		}
-		production := v16ReadProductionGo(t, applicationDirectory)
-		for _, value := range append(append([]string{}, fixture.RequiredActions...), fixture.RequiredEffectKinds...) {
-			if !strings.Contains(production, `"`+value+`"`) {
-				t.Errorf("V16_RED application contract lacks %q", value)
-			}
-		}
-		for _, status := range fixture.RequiredStatuses {
-			if !strings.Contains(production, `"`+status+`"`) {
-				t.Errorf("V16_RED application contract lacks status %q", status)
-			}
-		}
+		v16AssertPublicUseCases(t, applicationDirectory, fixture)
 	})
 
 	t.Run("sqlite_config_git_adapter_and_bootstrap_are_real", func(t *testing.T) {
-		migration := filepath.Join(repositoryRoot, "internal", "adapters", "state", "sqlite", "migrations", "011_workspace_git.sql")
-		content, err := os.ReadFile(migration)
-		if err != nil {
-			t.Errorf("V16_RED SQLite migration 011 missing: %v", err)
-		} else {
-			lower := strings.ToLower(string(content))
-			for _, token := range []string{"workspace", "change", "merge", "integration", "outbox", "effect"} {
-				if !strings.Contains(lower, token) {
-					t.Errorf("V16_RED migration lacks %s", token)
-				}
-			}
-		}
-		registry, err := os.ReadFile(filepath.Join(repositoryRoot, "config", "registry.json"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if count := strings.Count(string(registry), `"workspace.local.root"`); count != 1 {
-			t.Errorf("V16_RED canonical workspace.local.root definitions=%d, want 1", count)
-		}
-		adapterDirectory := filepath.Join(repositoryRoot, "internal", "adapters", "workspace", "gitlocal")
-		adapterSource := v16ReadProductionGoOptional(t, adapterDirectory)
-		for _, required := range []string{"exec.CommandContext", "merge-tree", "update-ref", "--porcelain", "--lock"} {
-			if !strings.Contains(adapterSource, required) {
-				t.Errorf("V16_RED Git CLI adapter lacks %q", required)
-			}
-		}
-		for _, forbidden := range []string{"go-git", "libgit2", "sh -c", `"merge"`} {
-			if strings.Contains(adapterSource, forbidden) {
-				t.Errorf("V16 Git adapter contains forbidden mechanism %q", forbidden)
-			}
-		}
+		v16AssertConcreteAdapters(t, repositoryRoot)
 	})
 
 	t.Run("all_behavior_security_restart_e2e_and_race_gates_exist", func(t *testing.T) {
-		testSource := v16ReadGoTests(t,
-			applicationDirectory,
-			portsDirectory,
-			filepath.Join(repositoryRoot, "internal", "adapters", "state", "sqlite"),
-			filepath.Join(repositoryRoot, "internal", "adapters", "workspace", "gitlocal"),
-			filepath.Join(repositoryRoot, "internal", "adapters", "agent", "codex"),
-			filepath.Join(repositoryRoot, "internal", "bootstrap"),
-		)
-		for _, name := range fixture.RequiredBehaviorTests {
-			if !strings.Contains(testSource, "func "+name+"(") {
-				t.Errorf("V16_RED executable behavior test missing: %s", name)
-			}
-		}
+		v16AssertBehaviorTests(t, repositoryRoot, applicationDirectory, portsDirectory, fixture)
+	})
+}
+
+func TestAcceptanceV16WorkspaceGitReceipt(t *testing.T) {
+	evidenceAssertReceiptV3(t, evidenceRepositoryRoot(t), evidenceReceiptV3Expectation{
+		Contract: "AC-V16-WORKSPACE-GIT", FixturePath: v16FixturePath,
+		ReceiptPath:       "product/evidence/v16_workspace_git.json",
+		ExecutedNotBefore: "2026-07-21T00:00:00Z", TrustedBaseGitCommitOID: v16ContractBaseGitCommitOID,
 	})
 }
 
 func v16AssertFixture(t *testing.T, repositoryRoot string, fixture v16Fixture) {
 	t.Helper()
-	if fixture.SchemaVersion != 1 || fixture.ContractID != "AC-V16-WORKSPACE-GIT" ||
+	if fixture.SchemaVersion != 1 || fixture.ReceiptSchemaVersion != 3 ||
+		fixture.ContractID != "AC-V16-WORKSPACE-GIT" ||
 		fixture.TrustedBaseGitCommitOID != v16ContractBaseGitCommitOID ||
-		fixture.Command != "go test -mod=vendor -count=1 ./acceptance -run '^TestAcceptanceV16WorkspaceGit$'" ||
-		!reflect.DeepEqual(fixture.ExecutionArgv, []string{
-			"go", "test", "-mod=vendor", "-count=1", "./acceptance", "-run", "^TestAcceptanceV16WorkspaceGit$",
-		}) ||
+		fixture.ProductDeltaBaseGitCommitOID != v16ContractBaseGitCommitOID ||
+		fixture.ProductDeltaSealedGitCommitOID != v16ProductDeltaSealedGitCommitOID ||
+		fixture.OutputPath != "product/evidence/v16_workspace_git.output.txt" ||
+		fixture.ReceiptPath != "product/evidence/v16_workspace_git.json" ||
 		!reflect.DeepEqual(fixture.OwnedCapabilityIDs, []string{"STG-02", "STG-10", "EXT-10"}) ||
 		!reflect.DeepEqual(fixture.DependencyVerticals, []string{
 			"goal_dag_phases", "atomic_state_outbox", "identity_projects_rbac", "controls", "budgets_effects",
@@ -236,9 +187,24 @@ func v16AssertFixture(t *testing.T, repositoryRoot string, fixture v16Fixture) {
 		!reflect.DeepEqual(fixture.RequiredStatuses, []string{"clean", "conflicted", "stale", "integrated"}) {
 		t.Fatalf("invalid V16 fixture identity: %+v", fixture)
 	}
+	if fixture.Command != "sh -c '"+v16ValidationShellBody()+"'" ||
+		!reflect.DeepEqual(fixture.ExecutionArgv, []string{"sh", "-c", v16ValidationShellBody()}) {
+		t.Fatalf("invalid V16 command/argv: %q %#v", fixture.Command, fixture.ExecutionArgv)
+	}
+	v16AssertValidationGates(t, v16ValidationShellBody())
+	if err := evidenceValidateCandidateSubjects(
+		fixture.CandidateSubjects, fixture.ReceiptPath, fixture.OutputPath,
+	); err != nil {
+		t.Fatal(err)
+	}
+	for _, relative := range fixture.CandidateSubjects {
+		if _, err := os.Stat(filepath.Join(repositoryRoot, filepath.FromSlash(relative))); err != nil {
+			t.Fatalf("candidate subject %q is not readable: %v", relative, err)
+		}
+	}
 	if len(fixture.RequiredApplicationTypes) != 4 || len(fixture.RequiredOutboundPorts) != 2 ||
-		len(fixture.RequiredBehaviorTests) != 15 || len(fixture.CrashFrontiers) != 7 ||
-		len(fixture.SecurityCases) != 20 || len(fixture.PrivateLeakMarkers) != 5 {
+		len(fixture.RequiredBehaviorTests) != 29 || len(fixture.CrashFrontiers) != 7 ||
+		len(fixture.SecurityCases) != 22 || len(fixture.PrivateLeakMarkers) != 5 {
 		t.Fatalf("invalid V16 fixture coverage counts: %+v", fixture)
 	}
 	if fixture.GitFixture.MinimumVersion != "2.38.0" || fixture.GitFixture.ObjectFormat != "sha1" ||
@@ -278,205 +244,133 @@ func v16AssertFixture(t *testing.T, repositoryRoot string, fixture v16Fixture) {
 	}
 }
 
-func v16RequireOutboundInterface(t *testing.T, directory string, required v16RequiredPort) {
-	t.Helper()
-	methods, found := v16InterfaceMethods(t, directory, required.Name)
-	if !found {
-		t.Errorf("V16_RED application outbound port %s missing", required.Name)
-		return
+func v16ValidationShellBody() string {
+	return "git diff --check " + v16ContractBaseGitCommitOID + " HEAD --" +
+		" && go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV16ScopeAndExecutableContract|TestV16EvidenceBelongsOnlyToWorkspaceGitCapabilities|TestV16AcceptanceCommandRunsWorkspaceGitConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestTraceabilityRebuildHistoricalBugIDs|TestTraceabilityRebuildHistoricalBugReviewBindings|TestTraceabilityRebuildSchemaValidatesCanonicalLedgers|TestHistoricalBugCapabilityCoverageNeverInfersLegacyClosure|TestAcceptanceV02AuthorityRules|TestAcceptanceV03CanonicalLedgers|TestAcceptanceV06AtomicStateOutbox|TestAcceptanceV09RecoveryBackup|TestAcceptanceV10IdentityProjectsRBAC|TestAcceptanceV16WorkspaceGit|TestV16CandidateSubjectsCoverCommittedDelta)$\"" +
+		" && go test -mod=vendor -count=1 ./internal/goal ./internal/governance ./internal/identity ./internal/config ./internal/credentials ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/adapters/workspace/gitlocal ./internal/bootstrap ./cmd/orquesta" +
+		" && timeout --kill-after=10s 180s go test -mod=vendor -race -count=1 -timeout=150s ./internal/application ./internal/ports ./internal/adapters/state/sqlite ./internal/adapters/workspace/gitlocal ./internal/adapters/agent/codex ./internal/bootstrap -run \"^(" +
+		strings.Join(v16ExpectedRaceTests(), "|") + ")$\"" +
+		" && GOFLAGS=-mod=vendor go vet ./internal/goal ./internal/governance ./internal/identity ./internal/config ./internal/credentials ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/adapters/workspace/gitlocal ./internal/bootstrap ./cmd/orquesta"
+}
+
+func v16ExpectedRaceTests() []string {
+	return []string{
+		"TestWorkspacePrepareIsIdempotentAndUniquePerExecution",
+		"TestReplacementExecutionGetsDistinctWorkspace",
+		"TestLaunchUsesExactOpaqueWorkspaceBinding",
+		"TestCommitBindsBaseTreeDiffWriteSetAndExecution",
+		"TestOutOfWriteSetChangeLeavesGitUnmodified",
+		"TestReworkRequiresExplicitParentChangeRef",
+		"TestConflictAndStaleIntegrationLeaveTargetUnchanged",
+		"TestConcurrentIntegrationCASPreservesLoserPending",
+		"TestWorkspaceEffectsReplayEveryCrashFrontierExactlyOnce",
+		"TestPendingChangesAreRBACScopedAndSurviveRestart",
+		"TestGitWorkspaceRejectsUnsafeFilesystemAndGitControls",
+		"TestGitWorkspaceRejectsRepositoryOverlappingPrivateRoot",
+		"TestIntegrationReplayRejectsSameKeyWithDifferentPayload",
+		"TestWorkspaceEvidenceLeaksNoPrivateAdapterData",
+		"TestWorkspaceArchitectureKeepsOneWriterStateOutboxScheduler",
+		"TestRealGitSQLiteWorkspaceLifecycleEndToEnd",
+		"TestWorkspaceConcurrentPrepareCommitIntegrateRace",
+		"TestSQLiteWorkspaceGitRestartRaceAndReplay",
+		"TestRecoveryV16RejectsWorkspaceCausalTampering",
+		"TestRecoveryV16RejectsMissingIntegrationFacts",
+		"TestIntegrateChangeRejectsMalformedTargetBeforeAuthorizationOrAdmission",
+		"TestValidateGitOIDRejectsMalformedValues",
 	}
-	for _, name := range required.Methods {
-		signature, ok := methods[name]
-		if !ok {
-			t.Errorf("V16_RED %s lacks %s", required.Name, name)
+}
+
+func v16AssertValidationGates(t *testing.T, command string) {
+	t.Helper()
+	if strings.Contains(command, "./...") {
+		t.Fatalf("V16 acceptance command uses forbidden broad package wildcard: %q", command)
+	}
+	for _, required := range []string{
+		"git diff --check " + v16ContractBaseGitCommitOID + " HEAD --",
+		"TestProductRoadmapV16ScopeAndExecutableContract",
+		"TestV16EvidenceBelongsOnlyToWorkspaceGitCapabilities",
+		"TestV16AcceptanceCommandRunsWorkspaceGitConsumers",
+		"TestAcceptanceV16WorkspaceGit",
+		"TestV16CandidateSubjectsCoverCommittedDelta",
+		"TestAcceptanceV02AuthorityRules", "TestAcceptanceV03CanonicalLedgers",
+		"TestAcceptanceV06AtomicStateOutbox", "TestAcceptanceV09RecoveryBackup",
+		"TestAcceptanceV10IdentityProjectsRBAC",
+		"./internal/application", "./internal/ports", "./internal/adapters/state/sqlite",
+		"./internal/adapters/workspace/gitlocal", "./internal/adapters/agent/codex",
+		"./internal/bootstrap", "./cmd/orquesta",
+		"timeout --kill-after=10s 180s", "-timeout=150s", "GOFLAGS=-mod=vendor go vet",
+	} {
+		if !strings.Contains(command, required) {
+			t.Errorf("V16 acceptance command omits %q", required)
+		}
+	}
+	for _, name := range v16ExpectedRaceTests() {
+		if !strings.Contains(command, name) {
+			t.Errorf("V16 race gate omits %q", name)
+		}
+	}
+}
+
+func v16AssertSimplicityBudget(t *testing.T, repositoryRoot, baseOID, sealedOID string, numstat []byte) {
+	t.Helper()
+	type limit struct{ net, max int }
+	limits := map[string]*limit{
+		"core": {max: 2050}, "adapters": {max: 3650}, "migration": {max: 650}, "tests": {max: 5600},
+	}
+	for _, row := range strings.Split(strings.TrimSpace(string(numstat)), "\n") {
+		if row == "" {
 			continue
 		}
-		if !strings.Contains(signature, "context.Context") || strings.Count(signature, "ports.") < 2 ||
-			!strings.Contains(signature, "error") {
-			t.Errorf("V16_RED %s.%s must use context plus neutral ports request/result: %s", required.Name, name, signature)
+		fields := strings.SplitN(row, "\t", 3)
+		if len(fields) != 3 || fields[0] == "-" || fields[1] == "-" {
+			t.Fatalf("V16 simplicity budget cannot classify %q", row)
+		}
+		added, addErr := strconv.Atoi(fields[0])
+		deleted, deleteErr := strconv.Atoi(fields[1])
+		if addErr != nil || deleteErr != nil {
+			t.Fatalf("V16 invalid numstat %q", row)
+		}
+		class := v16SimplicityClass(fields[2])
+		if class == "" {
+			t.Fatalf("V16 simplicity budget cannot classify changed path %q", fields[2])
+		}
+		if class != "metadata" {
+			limits[class].net += added - deleted
 		}
 	}
+	for class, budget := range limits {
+		if budget.net > budget.max {
+			t.Errorf("V16 simplicity budget %s net LOC=%d, max=%d", class, budget.net, budget.max)
+		}
+	}
+	production := limits["core"].net + limits["adapters"].net + limits["migration"].net
+	if production > 6250 {
+		t.Errorf("V16 production net LOC=%d, max=6250", production)
+	}
+	v15AssertStructuralSimplicityWithClassifier(t, repositoryRoot, baseOID, sealedOID, v16SimplicityClass)
 }
 
-func v16InterfaceMethods(t *testing.T, directory, typeName string) (map[string]string, bool) {
-	t.Helper()
-	for _, file := range v16ProductionGoFiles(t, directory, false) {
-		parsed, err := parser.ParseFile(token.NewFileSet(), file, nil, 0)
-		if err != nil {
-			t.Fatalf("parse %s: %v", file, err)
-		}
-		for _, declaration := range parsed.Decls {
-			general, ok := declaration.(*ast.GenDecl)
-			if !ok || general.Tok != token.TYPE {
-				continue
-			}
-			for _, specification := range general.Specs {
-				typeSpec, ok := specification.(*ast.TypeSpec)
-				if !ok || typeSpec.Name.Name != typeName {
-					continue
-				}
-				iface, ok := typeSpec.Type.(*ast.InterfaceType)
-				if !ok {
-					return nil, true
-				}
-				methods := make(map[string]string)
-				for _, field := range iface.Methods.List {
-					if len(field.Names) != 1 {
-						continue
-					}
-					var rendered bytes.Buffer
-					if err := format.Node(&rendered, token.NewFileSet(), field.Type); err != nil {
-						t.Fatalf("render %s.%s: %v", typeName, field.Names[0].Name, err)
-					}
-					methods[field.Names[0].Name] = rendered.String()
-				}
-				return methods, true
-			}
-		}
+func v16SimplicityClass(relative string) string {
+	switch {
+	case strings.HasSuffix(relative, "_test.go"), strings.HasPrefix(relative, "acceptance/"):
+		return "tests"
+	case relative == "internal/adapters/state/sqlite/migrations/011_workspace_git.sql":
+		// One normalized transactional schema migration. Count separately so its
+		// declarative DDL does not conceal executable adapter growth.
+		return "migration"
+	case strings.HasSuffix(relative, ".sql"):
+		return ""
+	case strings.HasPrefix(relative, "internal/adapters/"), strings.HasPrefix(relative, "internal/bootstrap/"),
+		strings.HasPrefix(relative, "internal/config/"), strings.HasPrefix(relative, "config/"),
+		strings.HasPrefix(relative, "cmd/orquesta/"):
+		return "adapters"
+	case strings.HasPrefix(relative, "internal/governance/"), strings.HasPrefix(relative, "internal/goal/"),
+		strings.HasPrefix(relative, "internal/application/"), strings.HasPrefix(relative, "internal/identity/"),
+		strings.HasPrefix(relative, "internal/ports/"):
+		return "core"
+	case strings.HasPrefix(relative, "docs/reconstruccion/"), relative == "product/roadmap.json",
+		strings.HasPrefix(relative, "product/traceability/"), strings.HasPrefix(relative, "product/evidence/"):
+		return "metadata"
 	}
-	return nil, false
-}
-
-func v16RequireUseCase(t *testing.T, orchestrator reflect.Type, name string) {
-	t.Helper()
-	method, ok := orchestrator.MethodByName(name)
-	if !ok {
-		t.Errorf("V16_RED Orchestrator lacks %s", name)
-		return
-	}
-	contextType := reflect.TypeOf((*context.Context)(nil)).Elem()
-	errorType := reflect.TypeOf((*error)(nil)).Elem()
-	if method.Type.NumIn() != 4 || method.Type.In(1) != contextType ||
-		method.Type.In(2) != reflect.TypeOf(application.Access{}) ||
-		method.Type.In(3).Name() != name+"Request" || method.Type.NumOut() != 2 ||
-		method.Type.Out(0).Name() != name+"Result" || method.Type.Out(1) != errorType {
-		t.Errorf("V16_RED %s signature=%s", name, method.Type)
-	}
-}
-
-func v16StructFieldTypeCount(t *testing.T, directory, typeName, fieldType string) int {
-	t.Helper()
-	for _, file := range v16ProductionGoFiles(t, directory, false) {
-		parsed, err := parser.ParseFile(token.NewFileSet(), file, nil, 0)
-		if err != nil {
-			t.Fatalf("parse %s: %v", file, err)
-		}
-		for _, declaration := range parsed.Decls {
-			general, ok := declaration.(*ast.GenDecl)
-			if !ok || general.Tok != token.TYPE {
-				continue
-			}
-			for _, specification := range general.Specs {
-				typeSpec, ok := specification.(*ast.TypeSpec)
-				if !ok || typeSpec.Name.Name != typeName {
-					continue
-				}
-				structure, ok := typeSpec.Type.(*ast.StructType)
-				if !ok {
-					return 0
-				}
-				count := 0
-				for _, field := range structure.Fields.List {
-					identifier, ok := field.Type.(*ast.Ident)
-					if ok && identifier.Name == fieldType {
-						count += len(field.Names)
-					}
-				}
-				return count
-			}
-		}
-	}
-	return 0
-}
-
-func v16ProductionTypeExists(t *testing.T, directory, typeName string) bool {
-	t.Helper()
-	for _, file := range v16ProductionGoFiles(t, directory, false) {
-		parsed, err := parser.ParseFile(token.NewFileSet(), file, nil, 0)
-		if err != nil {
-			t.Fatalf("parse %s: %v", file, err)
-		}
-		for _, declaration := range parsed.Decls {
-			general, ok := declaration.(*ast.GenDecl)
-			if !ok || general.Tok != token.TYPE {
-				continue
-			}
-			for _, specification := range general.Specs {
-				typeSpec, ok := specification.(*ast.TypeSpec)
-				if ok && typeSpec.Name.Name == typeName {
-					return true
-				}
-			}
-		}
-	}
-	return false
-}
-
-func v16ReadProductionGo(t *testing.T, directory string) string {
-	t.Helper()
-	var source strings.Builder
-	for _, file := range v16ProductionGoFiles(t, directory, false) {
-		content, err := os.ReadFile(file)
-		if err != nil {
-			t.Fatalf("read %s: %v", file, err)
-		}
-		source.Write(content)
-		source.WriteByte('\n')
-	}
-	return source.String()
-}
-
-func v16ReadProductionGoOptional(t *testing.T, directory string) string {
-	t.Helper()
-	if _, err := os.Stat(directory); err != nil {
-		if os.IsNotExist(err) {
-			return ""
-		}
-		t.Fatalf("stat %s: %v", directory, err)
-	}
-	return v16ReadProductionGo(t, directory)
-}
-
-func v16ReadGoTests(t *testing.T, directories ...string) string {
-	t.Helper()
-	var source strings.Builder
-	for _, directory := range directories {
-		if _, err := os.Stat(directory); err != nil {
-			if os.IsNotExist(err) {
-				t.Errorf("V16_RED test package missing: %s", directory)
-				continue
-			}
-			t.Fatalf("stat test package %s: %v", directory, err)
-		}
-		for _, file := range v16ProductionGoFiles(t, directory, true) {
-			content, err := os.ReadFile(file)
-			if err != nil {
-				t.Fatalf("read %s: %v", file, err)
-			}
-			source.Write(content)
-			source.WriteByte('\n')
-		}
-	}
-	return source.String()
-}
-
-func v16ProductionGoFiles(t *testing.T, directory string, tests bool) []string {
-	t.Helper()
-	entries, err := os.ReadDir(directory)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		t.Fatalf("read %s: %v", directory, err)
-	}
-	var files []string
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") ||
-			(strings.HasSuffix(entry.Name(), "_test.go") != tests) {
-			continue
-		}
-		files = append(files, filepath.Join(directory, entry.Name()))
-	}
-	sort.Strings(files)
-	return files
+	return ""
 }

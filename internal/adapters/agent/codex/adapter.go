@@ -25,49 +25,59 @@ const (
 )
 
 const (
-	CodeUnavailable             = "codex.unavailable"
-	CodeCapacityUnavailable     = "codex.capacity_unavailable"
-	CodeExecutionConflict       = "codex.execution_conflict"
-	CodeExecutionNotFound       = "codex.execution_not_found"
-	CodeExecutionInterrupted    = "codex.execution_interrupted"
-	CodeExecutionCanceled       = "codex.execution_canceled"
-	CodeExecutionStopped        = "codex.execution_stopped"
-	CodeExecutionTimeout        = "codex.execution_timeout"
-	CodeProcessStartFailed      = "codex.process_start_failed"
-	CodeProcessFailed           = "codex.process_failed"
-	CodeProcessCleanupFailed    = "codex.process_cleanup_failed"
-	CodeOutputMissing           = "codex.output_missing"
-	CodeOutputTooLarge          = "codex.output_too_large"
-	CodeOutputInvalid           = "codex.output_invalid"
-	CodeStateInvalid            = "codex.state_invalid"
-	CodeStatePersistenceFailed  = "codex.state_persistence_failed"
-	CodeClockInvalid            = "codex.clock_invalid"
-	CodeCommandRequired         = "codex.command_required"
-	CodeCommandInvalid          = "codex.command_invalid"
-	CodeCommandNotFound         = "codex.command_not_found"
-	CodeWorkRootRequired        = "codex.work_root_required"
-	CodeWorkRootCreateFailed    = "codex.work_root_create_failed"
-	CodeWorkRootInvalid         = "codex.work_root_invalid"
-	CodeWorkRootPermissions     = "codex.work_root_permissions"
-	CodeWorkRootOpenFailed      = "codex.work_root_open_failed"
-	CodeRuntimeScopeInvalid     = "codex.runtime_scope_invalid"
-	CodeReasoningEffortInvalid  = "codex.reasoning_effort_invalid"
-	CodeTimeoutInvalid          = "codex.timeout_invalid"
-	CodeProcessPipeDrainInvalid = "codex.process_pipe_drain_delay_invalid"
-	CodeDiagnosticLimitInvalid  = "codex.max_diagnostic_bytes_invalid"
-	CodeMaxConcurrentInvalid    = "codex.max_concurrent_executions_invalid"
-	CodeEnvironmentInvalid      = "codex.environment_invalid"
-	CodeCredentialInvalid       = "codex.credential_invalid"
-	CodeCredentialUnavailable   = "codex.credential_unavailable"
-	CodeSecretLeak              = "codex.secret_leak"
-	CodeControlUnsupported      = "codex.control_unsupported"
-	CodeProcessOwnershipBusy    = "codex.process_ownership_busy"
-	CodeProcessOwnershipInvalid = "codex.process_ownership_invalid"
-	CodeProcessIdentityMismatch = "codex.process_identity_mismatch"
-	CodeProcessInspectionFailed = "codex.process_inspection_failed"
-	CodeProcessSignalFailed     = "codex.process_signal_failed"
-	CodeStopConflict            = "codex.stop_conflict"
+	CodeUnavailable              = "codex.unavailable"
+	CodeCapacityUnavailable      = "codex.capacity_unavailable"
+	CodeExecutionConflict        = "codex.execution_conflict"
+	CodeExecutionNotFound        = "codex.execution_not_found"
+	CodeExecutionInterrupted     = "codex.execution_interrupted"
+	CodeExecutionCanceled        = "codex.execution_canceled"
+	CodeExecutionStopped         = "codex.execution_stopped"
+	CodeExecutionTimeout         = "codex.execution_timeout"
+	CodeProcessStartFailed       = "codex.process_start_failed"
+	CodeProcessFailed            = "codex.process_failed"
+	CodeProcessCleanupFailed     = "codex.process_cleanup_failed"
+	CodeOutputMissing            = "codex.output_missing"
+	CodeOutputTooLarge           = "codex.output_too_large"
+	CodeOutputInvalid            = "codex.output_invalid"
+	CodeStateInvalid             = "codex.state_invalid"
+	CodeStatePersistenceFailed   = "codex.state_persistence_failed"
+	CodeClockInvalid             = "codex.clock_invalid"
+	CodeCommandRequired          = "codex.command_required"
+	CodeCommandInvalid           = "codex.command_invalid"
+	CodeCommandNotFound          = "codex.command_not_found"
+	CodeWorkRootRequired         = "codex.work_root_required"
+	CodeWorkRootCreateFailed     = "codex.work_root_create_failed"
+	CodeWorkRootInvalid          = "codex.work_root_invalid"
+	CodeWorkRootPermissions      = "codex.work_root_permissions"
+	CodeWorkRootOpenFailed       = "codex.work_root_open_failed"
+	CodeRuntimeScopeInvalid      = "codex.runtime_scope_invalid"
+	CodeReasoningEffortInvalid   = "codex.reasoning_effort_invalid"
+	CodeTimeoutInvalid           = "codex.timeout_invalid"
+	CodeProcessPipeDrainInvalid  = "codex.process_pipe_drain_delay_invalid"
+	CodeDiagnosticLimitInvalid   = "codex.max_diagnostic_bytes_invalid"
+	CodeMaxConcurrentInvalid     = "codex.max_concurrent_executions_invalid"
+	CodeEnvironmentInvalid       = "codex.environment_invalid"
+	CodeCredentialInvalid        = "codex.credential_invalid"
+	CodeCredentialUnavailable    = "codex.credential_unavailable"
+	CodeWorkspaceResolverInvalid = "codex.workspace_resolver_invalid"
+	CodeWorkspaceUnavailable     = "codex.workspace_unavailable"
+	CodeWorkspaceUnsafe          = "codex.workspace_unsafe"
+	CodeSecretLeak               = "codex.secret_leak"
+	CodeControlUnsupported       = "codex.control_unsupported"
+	CodeProcessOwnershipBusy     = "codex.process_ownership_busy"
+	CodeProcessOwnershipInvalid  = "codex.process_ownership_invalid"
+	CodeProcessIdentityMismatch  = "codex.process_identity_mismatch"
+	CodeProcessInspectionFailed  = "codex.process_inspection_failed"
+	CodeProcessSignalFailed      = "codex.process_signal_failed"
+	CodeStopConflict             = "codex.stop_conflict"
 )
+
+// WorkspacePathResolver is deliberately adapter-local.  It resolves the
+// opaque execution binding only at the process boundary; neither the agent
+// port nor any Codex receipt gains a physical workspace path.
+type WorkspacePathResolver interface {
+	ResolveExecutionWorkspace(context.Context, ports.ExecutionWorkspaceRef) (string, error)
+}
 
 var (
 	errExecutionTimeout            = errors.New(CodeExecutionTimeout)
@@ -95,6 +105,7 @@ type Config struct {
 	Environment             map[string]string
 	CredentialStore         credentials.Store
 	CredentialRef           credentials.CredentialRef
+	WorkspacePathResolver   WorkspacePathResolver
 	Now                     func() time.Time
 }
 
@@ -149,6 +160,7 @@ type Adapter struct {
 	syncDirectoryFn       func(*os.Root, string) error
 	processCleanup        func(*exec.Cmd) error
 	credentialOutputScrub func(string) error
+	workspaceResolver     WorkspacePathResolver
 	lifecycle             context.Context
 	cancelLifecycle       context.CancelCauseFunc
 
@@ -185,17 +197,18 @@ func New(config Config) (*Adapter, error) {
 	}
 	lifecycle, cancelLifecycle := context.WithCancelCause(context.Background())
 	adapter := &Adapter{
-		config:          validated,
-		command:         command,
-		environment:     environment,
-		rootPath:        rootPath,
-		root:            root,
-		syncDirectoryFn: syncCodexDirectory,
-		processCleanup:  cleanupProcessGroup,
-		lifecycle:       lifecycle,
-		cancelLifecycle: cancelLifecycle,
-		executions:      make(map[string]*executionState),
-		shutdownDone:    make(chan struct{}),
+		config:            validated,
+		command:           command,
+		environment:       environment,
+		rootPath:          rootPath,
+		root:              root,
+		workspaceResolver: validated.WorkspacePathResolver,
+		syncDirectoryFn:   syncCodexDirectory,
+		processCleanup:    cleanupProcessGroup,
+		lifecycle:         lifecycle,
+		cancelLifecycle:   cancelLifecycle,
+		executions:        make(map[string]*executionState),
+		shutdownDone:      make(chan struct{}),
 	}
 	adapter.credentialOutputScrub = adapter.scrubCredentialOutput
 	return adapter, nil
@@ -224,6 +237,23 @@ func (adapter *Adapter) BindRuntimeScope(scope string) error {
 		return &Error{Code: CodeRuntimeScopeInvalid}
 	}
 	adapter.config.RuntimeScope = scope
+	return nil
+}
+
+// BindWorkspacePathResolver attaches the composition-owned local resolver only
+// after it has built the authorised workspace adapter. It is intentionally not
+// persisted with the Codex journal and may not be replaced while executions
+// are live.
+func (adapter *Adapter) BindWorkspacePathResolver(resolver WorkspacePathResolver) error {
+	if adapter == nil || resolver == nil {
+		return &Error{Code: CodeWorkspaceResolverInvalid}
+	}
+	adapter.mu.Lock()
+	defer adapter.mu.Unlock()
+	if adapter.closed || len(adapter.executions) != 0 {
+		return &Error{Code: CodeWorkspaceResolverInvalid}
+	}
+	adapter.workspaceResolver = resolver
 	return nil
 }
 
@@ -324,7 +354,7 @@ func (adapter *Adapter) resumeLaunchRecordLocked(
 	}()
 	executionKey := request.ExecutionRef.String()
 	terminalRequestHash := record.RequestHash
-	if record.SchemaVersion == legacyStateSchemaVersion {
+	if record.SchemaVersion == legacyStateSchemaVersion || record.SchemaVersion == intermediateStateSchemaVersion {
 		upgraded, err := adapter.bindLegacyLaunchRecord(runPath, record, request, requestHash)
 		if err != nil {
 			return ports.AgentLaunchReceipt{}, err

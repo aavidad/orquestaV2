@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "revision": "2026-07-18.15",
+  "revision": "2026-07-21.16",
   "precedence": [
     "default",
     "file",
@@ -38,6 +38,7 @@
         "artifact.filesystem.root",
         "credentials.local.path",
         "runtime.codex.work_root",
+        "workspace.local.root",
         "config.effective_path",
         "identity.local_token_path"
       ]
@@ -424,6 +425,48 @@
       "env_alias": "ORQUESTA_RUNTIME_CODEX_CREDENTIAL_REF",
       "validator_ids": [
         "credential_ref"
+      ]
+    },
+    {
+      "key": "workspace.local.root",
+      "go_name": "WorkspaceLocalRoot",
+      "semantic_ref": "orquesta.config.workspace.local.root",
+      "type": "path",
+      "default": "./var/workspaces",
+      "sensitive": false,
+      "scope": "workspace",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_WORKSPACE_LOCAL_ROOT",
+      "validator_ids": [
+        "non_empty_path"
+      ]
+    },
+    {
+      "key": "repository.local.seed_path",
+      "go_name": "RepositoryLocalSeedPath",
+      "semantic_ref": "orquesta.config.repository.local.seed_path",
+      "type": "string",
+      "default": "",
+      "sensitive": false,
+      "scope": "workspace",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_REPOSITORY_LOCAL_SEED_PATH",
+      "validator_ids": [
+        "trimmed_optional_string"
+      ]
+    },
+    {
+      "key": "repository.local.target_ref",
+      "go_name": "RepositoryLocalTargetRef",
+      "semantic_ref": "orquesta.config.repository.local.target_ref",
+      "type": "string",
+      "default": "refs/heads/main",
+      "sensitive": false,
+      "scope": "workspace",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_REPOSITORY_LOCAL_TARGET_REF",
+      "validator_ids": [
+        "trimmed_non_empty_string"
       ]
     },
     {

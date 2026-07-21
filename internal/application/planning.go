@@ -408,7 +408,21 @@ func (orchestrator *Orchestrator) scheduleReady(
 			MaxOutputBytes: orchestrator.maxOutputBytes,
 			CreatedAt:      at,
 		}
-		action, err := orchestrator.launchAction(policy, aggregate, item, execution, authority, at, at)
+		var action ActionRecord
+		if len(item.WriteSet()) != 0 {
+			repositoryRef, repositoryErr := orchestrator.state.ProjectRepository(ctx, aggregate.Project())
+			if repositoryErr != nil {
+				return nil, nil, nil, repositoryErr
+			}
+			workspaceRef, workspaceErr := newExecutionWorkspaceRef(ctx, orchestrator.ids)
+			if workspaceErr != nil {
+				return nil, nil, nil, workspaceErr
+			}
+			execution.RepositoryRef, execution.ExecutionWorkspaceRef = repositoryRef, workspaceRef
+			action, err = orchestrator.prepareWorkspaceAction(policy, aggregate, item, execution, authority, at, at)
+		} else {
+			action, err = orchestrator.launchAction(policy, aggregate, item, execution, authority, at, at)
+		}
 		if err != nil {
 			return nil, nil, nil, err
 		}

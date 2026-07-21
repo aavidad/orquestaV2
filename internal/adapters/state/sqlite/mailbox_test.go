@@ -173,9 +173,7 @@ func TestMailboxRestartPreservesEveryCausalFrontier(t *testing.T) {
 	defer func() { _ = repository.Close() }()
 
 	fixture := newMailboxGoalFixture(t, clock.Now())
-	createState := authorizeLegacyCreateState(t, repository, fixture.state)
-	createState = governLegacyCreateState(t, createState)
-	created, fresh, err := repository.CreateGoal(ctx, createState)
+	created, fresh, err := createLegacyGoal(t, repository, fixture.state)
 	if err != nil || !fresh {
 		t.Fatalf("create mailbox Goal fresh=%v err=%v", fresh, err)
 	}
@@ -809,6 +807,9 @@ func assertConsumedMailboxRetirement(
 	t.Helper()
 	ctx := context.Background()
 	recovery, _, _ := newV09TestRecovery(t, source, clock.Now(), nil)
+	if _, _, recoveryErr := validateRecoveryDatabase(ctx, source.db); recoveryErr != nil {
+		t.Fatalf("pre-backup mailbox FIFO recovery: %v", recoveryErr)
+	}
 	backup, err := recovery.CreateBackup(ctx)
 	if err != nil {
 		t.Fatalf("backup consumed mailbox branch: %v", err)
@@ -1063,7 +1064,7 @@ func assertMailboxListFIFO(
 	recovery, _, _ := newV09TestRecovery(t, source, clock.Now(), nil)
 	backup, err := recovery.CreateBackup(ctx)
 	if err != nil {
-		t.Fatalf("backup mailbox FIFO branch: %v", err)
+		t.Fatalf("backup mailbox FIFO branch: %v cause=%v", err, errors.Unwrap(err))
 	}
 	targetRef, _ := application.NewRecoveryTargetRef("recovery-target:mailbox-fifo")
 	if _, err := recovery.RestoreBackup(ctx, backup.Ref, targetRef); err != nil {
@@ -1344,6 +1345,36 @@ func buildMailboxReplacementState(
 		PlanGeneration: replacement.PlanGeneration, WorkItemGeneration: replacedItem.Revision(),
 		AvailableAt: at,
 	}
+	if len(replacedItem.WriteSet()) != 0 {
+		replacement.RepositoryRef = execution.RepositoryRef
+		if replacement.RepositoryRef.String() == "" {
+			replacement.RepositoryRef, err = identity.NewRepositoryRef("repository:" + record.Goal.Project().String())
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		replacement.ExecutionWorkspaceRef, err = ports.NewExecutionWorkspaceRef(
+			"execution-workspace:" + replacementRef.String(),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		next.Ref = "action:prepare-workspace:" + replacementRef.String()
+		next.Kind = application.ActionPrepareWorkspace
+		authority := application.WorkItemAuthority{}
+		for _, candidate := range record.WorkItemAuthorities {
+			if candidate.WorkItemRef == replacedItem.Ref() {
+				authority = candidate
+				break
+			}
+		}
+		if authority.PrincipalRef.String() == "" {
+			t.Fatal("mailbox replacement WorkItem authority missing")
+		}
+		next = legacyGovernedExecutionAction(
+			t, replacedGoal, replacedItem, replacement, next, authority, sqliteTestBudgetPolicy(at),
+		)
+	}
 	return application.ExecutionReplacedState{
 		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: item.Revision(),
 		Goal: replacedGoal, FailedExecution: failed, ReplacementExecution: replacement,
@@ -1596,6 +1627,10 @@ func mustMailboxSchedulerClaim(
 	})
 	if err != nil || !found {
 		t.Fatalf("scheduler claim %s found=%v err=%v at=%s", kind, found, err, at)
+	}
+	if claim.Action.Kind == application.ActionPrepareWorkspace {
+		prepareLegacyWorkspaceClaim(t, repository, claim, at)
+		return mustMailboxSchedulerClaim(t, repository, kind+"-launch", index, at)
 	}
 	return claim
 }

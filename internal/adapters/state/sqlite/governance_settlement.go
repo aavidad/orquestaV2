@@ -83,7 +83,9 @@ func validSQLiteEffectStatus(status application.EffectStatus) bool {
 	switch status {
 	case application.EffectStatusAccepted, application.EffectStatusStopped,
 		application.EffectStatusAlreadyStopped, application.EffectStatusAlreadyCompleted,
-		application.EffectStatusAlreadyFailed:
+		application.EffectStatusAlreadyFailed, application.EffectStatusPrepared,
+		application.EffectStatusCommitted, application.EffectStatusIntegrated,
+		application.EffectStatusConflicted, application.EffectStatusStale:
 		return true
 	default:
 		return false
@@ -91,11 +93,25 @@ func validSQLiteEffectStatus(status application.EffectStatus) bool {
 }
 
 func validSQLiteEffectStatusForKind(kind application.EffectKind, status application.EffectStatus) bool {
-	if kind == application.EffectKindAgentLaunch {
+	switch kind {
+	case application.EffectKindAgentLaunch:
 		return status == application.EffectStatusAccepted
+	case application.EffectKindAgentStop:
+		return status == application.EffectStatusStopped ||
+			status == application.EffectStatusAlreadyStopped ||
+			status == application.EffectStatusAlreadyCompleted ||
+			status == application.EffectStatusAlreadyFailed
+	case application.EffectKindPrepareWorkspace:
+		return status == application.EffectStatusPrepared
+	case application.EffectKindCommitChange:
+		return status == application.EffectStatusCommitted
+	case application.EffectKindIntegrateChange:
+		return status == application.EffectStatusIntegrated ||
+			status == application.EffectStatusConflicted ||
+			status == application.EffectStatusStale
+	default:
+		return false
 	}
-	return kind == application.EffectKindAgentStop && status != application.EffectStatusAccepted &&
-		validSQLiteEffectStatus(status)
 }
 
 func insertBudgetSettlement(

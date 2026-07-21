@@ -167,6 +167,8 @@ func TestResolveExecutesEveryDeclaredCrossValidator(t *testing.T) {
 		{name: "non loopback", toml: "[server]\nlisten = \"0.0.0.0:8080\""},
 		{name: "non literal MCP path", toml: "[server]\nmcp_path = \"/mcp/../other\""},
 		{name: "overlapping paths", toml: "[artifact.filesystem]\nroot = \"./var/state\""},
+		{name: "workspace overlaps state", toml: "[workspace.local]\nroot = \"./var/state\""},
+		{name: "workspace contains credentials", toml: "[workspace.local]\nroot = \"./var\""},
 		{name: "credential store equals local token", toml: "[credentials.local]\npath = \"./var/secrets/local-owner.token\""},
 		{name: "credential store inside artifacts", toml: "[credentials.local]\npath = \"./var/artifacts/credentials.json\""},
 		{name: "OIDC issuer missing", toml: "[identity]\nprovider = \"oidc\"\n[identity.oidc]\naudience = \"orquesta\""},

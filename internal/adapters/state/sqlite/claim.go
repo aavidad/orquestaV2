@@ -153,6 +153,9 @@ func selectClaimCandidate(
 func claimCandidateMatches(
 	ctx context.Context, tx *sql.Tx, candidate claimCandidate, capabilities ports.AgentCapabilities,
 ) (bool, error) {
+	if candidate.action.Kind == application.ActionPrepareWorkspace || candidate.action.Kind == application.ActionCommitChange || candidate.action.Kind == application.ActionIntegrateChange {
+		return true, nil
+	}
 	// Terminal stops settle locally; no provider identity is needed.
 	if terminalStopSettlement(candidate) {
 		return true, nil
@@ -181,7 +184,8 @@ func admitClaimEffect(
 		candidate.action.EffectIntent = intent
 		return application.EffectApproval{}, err == nil, err
 	}
-	if candidate.action.Kind != application.ActionLaunchAgent && candidate.action.Kind != application.ActionStopAgent {
+	if candidate.action.Kind != application.ActionLaunchAgent && candidate.action.Kind != application.ActionStopAgent &&
+		candidate.action.Kind != application.ActionPrepareWorkspace && candidate.action.Kind != application.ActionCommitChange && candidate.action.Kind != application.ActionIntegrateChange {
 		return application.EffectApproval{}, true, nil
 	}
 	intent, approval, admitted, err := requireEffectAdmission(ctx, tx, *candidate, now)
@@ -307,9 +311,17 @@ func requireTerminalStopIntent(
 }
 
 func readClaimCandidates(ctx context.Context, transaction *sql.Tx, now time.Time) ([]claimCandidate, error) {
-	rows, err := transaction.QueryContext(ctx, `
+	workspaceColumns, err := sqliteTableHasColumn(ctx, transaction, "outbox", "change_ref")
+	if err != nil {
+		return nil, mapDatabaseError(err)
+	}
+	changeProjection := "'' AS change_ref, '' AS expected_target_oid"
+	if workspaceColumns {
+		changeProjection = "o.change_ref, o.expected_target_oid"
+	}
+	rows, err := transaction.QueryContext(ctx, fmt.Sprintf(`
 SELECT o.ref, o.kind, o.goal_ref, o.work_item_ref, o.execution_ref,
-       o.control_ref, o.effect_intent_ref, o.governance_version,
+       o.control_ref, %s, o.effect_intent_ref, o.governance_version,
        o.plan_generation, o.work_item_generation, o.available_at, g.project_ref,
        o.delivery_attempt, wi.role_key, e.state,
        e.provider_ref, e.model_ref, e.agent_ref
@@ -325,7 +337,7 @@ LEFT JOIN fairness_cursors goal_cursor
 WHERE o.completed_at IS NULL
   AND o.retired_at IS NULL
   AND o.quarantined_at IS NULL
-  AND o.kind IN ('launch_agent', 'observe_agent', 'stop_agent')
+  AND o.kind IN ('launch_agent', 'observe_agent', 'stop_agent', 'prepare_workspace', 'commit_change', 'integrate_change')
   AND (o.governance_version = 1 OR o.kind = 'observe_agent'
        OR (o.kind = 'stop_agent' AND e.state IN ('succeeded', 'failed', 'canceled', 'stopped'))
        OR (o.governance_version = 0 AND o.last_error_code <> 'governance.legacy_reauthorization_required'))
@@ -334,7 +346,7 @@ WHERE o.completed_at IS NULL
   AND NOT EXISTS (
       SELECT 1 FROM outbox leased
       WHERE leased.goal_ref = o.goal_ref AND leased.work_item_ref = o.work_item_ref
-        AND leased.kind IN ('launch_agent', 'observe_agent', 'stop_agent')
+        AND leased.kind IN ('launch_agent', 'observe_agent', 'stop_agent', 'prepare_workspace', 'commit_change', 'integrate_change')
         AND leased.ref <> o.ref AND leased.completed_at IS NULL
         AND leased.retired_at IS NULL AND leased.quarantined_at IS NULL
         AND leased.claim_token IS NOT NULL AND leased.claimed_until > ?
@@ -348,6 +360,9 @@ WHERE o.completed_at IS NULL
       (e.state = 'running' AND e.external_ref <> '')
       OR e.state IN ('succeeded', 'failed', 'canceled', 'stopped')
   ))
+  AND (o.kind <> 'prepare_workspace' OR e.state = 'queued')
+  AND (o.kind <> 'commit_change' OR e.state = 'awaiting_commit')
+  AND (o.kind <> 'integrate_change' OR e.state = 'awaiting_integration')
   AND (o.kind <> 'observe_agent' OR NOT EXISTS (
       SELECT 1 FROM outbox stop
       WHERE stop.goal_ref = o.goal_ref AND stop.execution_ref = o.execution_ref
@@ -357,11 +372,11 @@ WHERE o.completed_at IS NULL
   ))
 -- Stop is urgent. Governed launches use hierarchical round-robin before
 -- their FIFO tie-break; observations run after no launch fits admission.
-ORDER BY CASE o.kind WHEN 'stop_agent' THEN 0 WHEN 'launch_agent' THEN 1 WHEN 'observe_agent' THEN 2 ELSE 3 END,
+ORDER BY CASE o.kind WHEN 'stop_agent' THEN 0 WHEN 'prepare_workspace' THEN 1 WHEN 'launch_agent' THEN 2 WHEN 'commit_change' THEN 3 WHEN 'integrate_change' THEN 4 WHEN 'observe_agent' THEN 5 ELSE 6 END,
 	     CASE WHEN o.kind = 'launch_agent' THEN COALESCE(project_cursor.ordinal, 0) ELSE 0 END,
 	     CASE WHEN o.kind = 'launch_agent' THEN COALESCE(goal_cursor.ordinal, 0) ELSE 0 END,
 	     o.available_at,
-         o.ref`, requiredTime(now), requiredTime(now), requiredTime(now))
+	     o.ref`, changeProjection), requiredTime(now), requiredTime(now), requiredTime(now))
 	if err != nil {
 		return nil, mapDatabaseError(err)
 	}
@@ -384,9 +399,10 @@ func scanClaimCandidate(rows *sql.Rows) (claimCandidate, error) {
 	var candidate claimCandidate
 	var kind, goalValue, itemValue, executionValue, projectValue string
 	var controlRef, effectIntentRef sql.NullString
+	var changeRef, expectedTarget string
 	var planGeneration, itemGeneration, availableAt int64
 	err := rows.Scan(&candidate.action.Ref, &kind, &goalValue, &itemValue, &executionValue,
-		&controlRef, &effectIntentRef, &candidate.governanceVersion, &planGeneration,
+		&controlRef, &changeRef, &expectedTarget, &effectIntentRef, &candidate.governanceVersion, &planGeneration,
 		&itemGeneration, &availableAt, &projectValue, &candidate.deliveryAttempt,
 		&candidate.roleKey, &candidate.executionState, &candidate.providerRef,
 		&candidate.modelRef, &candidate.agentRef)
@@ -401,6 +417,10 @@ func scanClaimCandidate(rows *sql.Rows) (claimCandidate, error) {
 	if controlRef.Valid {
 		candidate.action.ControlRef = controlRef.String
 	}
+	if changeRef != "" {
+		candidate.action.ChangeRef, _ = ports.NewChangeSetRef(changeRef)
+	}
+	candidate.action.ExpectedTargetOID = expectedTarget
 	if effectIntentRef.Valid {
 		candidate.action.EffectIntentRef = effectIntentRef.String
 	}
@@ -469,19 +489,28 @@ func requireClaim(ctx context.Context, transaction *sql.Tx, claim application.Ac
 	}
 	var kind, goalValue, itemValue, executionValue string
 	var controlRef sql.NullString
+	var changeRef, expectedTarget string
 	var availableAt, planGeneration, itemGeneration int64
 	var token, worker sql.NullString
 	var leaseUntil, completedAt, quarantinedAt sql.NullInt64
 	var deliveryAttempt, fence, currentFence int64
-	err := transaction.QueryRowContext(ctx, `
-SELECT o.kind, o.goal_ref, o.work_item_ref, o.execution_ref, o.control_ref,
+	workspaceColumns, err := sqliteTableHasColumn(ctx, transaction, "outbox", "change_ref")
+	if err != nil {
+		return mapDatabaseError(err)
+	}
+	changeProjection := "'' AS change_ref, '' AS expected_target_oid"
+	if workspaceColumns {
+		changeProjection = "o.change_ref, o.expected_target_oid"
+	}
+	err = transaction.QueryRowContext(ctx, fmt.Sprintf(`
+SELECT o.kind, o.goal_ref, o.work_item_ref, o.execution_ref, o.control_ref, %s,
        o.plan_generation, o.work_item_generation, o.available_at,
        o.claim_token, o.claimed_by, o.claimed_until, o.delivery_attempt, o.fence,
        o.completed_at, o.quarantined_at, wf.fence
 FROM outbox o
 JOIN work_item_fences wf ON wf.goal_ref = o.goal_ref AND wf.work_item_ref = o.work_item_ref
-WHERE o.ref = ?`, claim.Action.Ref).Scan(
-		&kind, &goalValue, &itemValue, &executionValue, &controlRef,
+WHERE o.ref = ?`, changeProjection), claim.Action.Ref).Scan(
+		&kind, &goalValue, &itemValue, &executionValue, &controlRef, &changeRef, &expectedTarget,
 		&planGeneration, &itemGeneration, &availableAt,
 		&token, &worker, &leaseUntil, &deliveryAttempt, &fence,
 		&completedAt, &quarantinedAt, &currentFence,
@@ -499,6 +528,7 @@ WHERE o.ref = ?`, claim.Action.Ref).Scan(
 		goalValue != claim.Action.GoalRef.String() || itemValue != claim.Action.WorkItemRef.String() ||
 		executionValue != claim.Action.ExecutionRef.String() ||
 		controlRef.String != claim.Action.ControlRef ||
+		changeRef != claim.Action.ChangeRef.String() || expectedTarget != claim.Action.ExpectedTargetOID ||
 		planGeneration != int64(claim.Action.PlanGeneration) ||
 		itemGeneration != int64(claim.Action.WorkItemGeneration) ||
 		availableAt != requiredTime(claim.Action.AvailableAt) {
@@ -564,6 +594,7 @@ WHERE ref = ? AND claim_token = ? AND claimed_by = ? AND claimed_until = ?
 		PlanGeneration: claim.Action.PlanGeneration, WorkItemGeneration: claim.Action.WorkItemGeneration,
 		Fence: claim.Fence, DeliveryAttempt: claim.DeliveryAttempt, ClaimToken: claim.Token,
 		WorkerRef: claim.WorkerRef, Outcome: outcome, ErrorCode: errorCode, ConsumedAt: at,
+		ChangeRef: claim.Action.ChangeRef,
 	}
 	if effect != nil {
 		receipt.EffectReceiptRef = effect.Ref
@@ -580,14 +611,34 @@ func insertActionConsumptionReceipt(
 		return mapDatabaseError(err)
 	}
 	if persisted {
-		_, err = tx.ExecContext(ctx, `
+		workspaceColumns, columnErr := sqliteTableHasColumn(ctx, tx, "action_consumption_receipts", "change_ref")
+		if columnErr != nil {
+			return mapDatabaseError(columnErr)
+		}
+		if !workspaceColumns {
+			_, err = tx.ExecContext(ctx, `
 INSERT INTO action_consumption_receipts(
     action_ref, governance_version, kind, goal_ref, work_item_ref, execution_ref,
     plan_generation, work_item_generation, fence, delivery_attempt,
     claim_token, worker_ref, outcome, error_code, consumed_at, effect_receipt_ref
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				receipt.ActionRef, governanceVersion, string(receipt.Kind), receipt.GoalRef.String(),
+				receipt.WorkItemRef.String(), receipt.ExecutionRef.String(), int64(receipt.PlanGeneration),
+				int64(receipt.WorkItemGeneration), int64(receipt.Fence), int64(receipt.DeliveryAttempt),
+				receipt.ClaimToken, receipt.WorkerRef, string(receipt.Outcome), receipt.ErrorCode,
+				requiredTime(receipt.ConsumedAt), nullableString(receipt.EffectReceiptRef),
+			)
+			return mapDatabaseError(err)
+		}
+		_, err = tx.ExecContext(ctx, `
+INSERT INTO action_consumption_receipts(
+    action_ref, governance_version, kind, goal_ref, work_item_ref, execution_ref,
+    change_ref,
+    plan_generation, work_item_generation, fence, delivery_attempt,
+    claim_token, worker_ref, outcome, error_code, consumed_at, effect_receipt_ref
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			receipt.ActionRef, governanceVersion, string(receipt.Kind), receipt.GoalRef.String(),
-			receipt.WorkItemRef.String(), receipt.ExecutionRef.String(), int64(receipt.PlanGeneration),
+			receipt.WorkItemRef.String(), receipt.ExecutionRef.String(), receipt.ChangeRef.String(), int64(receipt.PlanGeneration),
 			int64(receipt.WorkItemGeneration), int64(receipt.Fence), int64(receipt.DeliveryAttempt),
 			receipt.ClaimToken, receipt.WorkerRef, string(receipt.Outcome), receipt.ErrorCode,
 			requiredTime(receipt.ConsumedAt), nullableString(receipt.EffectReceiptRef),

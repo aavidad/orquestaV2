@@ -1,21 +1,21 @@
 # Uso de Orquesta con un agente externo
 
-Fecha de corte: 2026-07-18. Rama: `reconstruccion/orquesta-total-20260714`.
+Fecha de corte: 2026-07-21. Rama: `reconstruccion/orquesta-total-20260714`.
 Repositorio operativo: `/home/alberto/Trabajo/orquesta-rebuild`.
 
 ## Respuesta corta y alcance real
 
-Sí: el checkpoint acreditado V01-V14 ya sirve para que un Codex externo use
+Sí: el checkpoint acreditado V01-V15 ya sirve para que un Codex externo use
 Orquesta por MCP, cree un Goal con un DAG, lance uno o varios workers Codex,
 consulte su estado y recupere artefactos durables. Hay un binario productivo
 único, autenticación, autorización por proyecto, SQLite, artefactos, scheduler,
 backup/recovery y cierre cooperativo.
 
-V15 solo cuenta cerrado si `TestAcceptanceV15BudgetsEffectsReceipt` valida un
-receipt V3 `PASS` nuevo; sus OID y digests autoritativos viven entonces en
-`product/evidence/v15_budgets_effects.json`. Este runbook público conserva las
-mismas seis tools: V14 y V15 no añaden bindings HTTP/MCP/CLI para controles o
-gobernanza de efectos; estos pertenecen al registro único V20.
+V16 está implementado, pero solo cuenta cerrado cuando
+`TestAcceptanceV16WorkspaceGitReceipt` valida su receipt V3 `PASS` desde el
+candidato sellado. Aun después de ese cierre, este runbook público conserva las
+mismas seis tools: V14–V16 no añaden bindings HTTP/MCP/CLI para controles,
+efectos, pendientes o integración; estos pertenecen al registro único V20.
 
 V13 acredita el mailbox causal interno `child_delivery`, pero no añade bindings
 públicos. Este runbook no atribuye al agente externo claim, delivery, consume o
@@ -34,22 +34,23 @@ extremo a extremo y solo V34 cierra la aplicación total.
 Fuente de verdad del estado:
 
 - `product/roadmap.json`: capacidades y estados canónicos;
-- `product/evidence/v01_*.json` a `product/evidence/v15_*.json`: receipts
-  reproducibles;
+- `product/evidence/v01_*.json` a `product/evidence/v15_*.json`: receipts V3
+  reproducibles y vigentes;
 - `product/evidence/v13_mailbox.json`: receipt V3 `PASS` desde checkout
   `detached_clean` sobre el candidato sellado V13;
 - `product/evidence/v14_controls.json`: receipt V3 `PASS` desde checkout
   `detached_clean` sobre el candidato V14 sellado;
-- `product/evidence/v15_budgets_effects.json`: solo fuente válida si contiene
-  receipt V3 `PASS` verificado desde checkout `detached_clean` sobre el
-  candidato V15 sellado;
+- `product/evidence/v15_budgets_effects.json`: receipt V3 `PASS` del candidato
+  V15 sellado;
+- `product/evidence/v16_workspace_git.json`: solo se convierte en fuente válida
+  cuando contiene receipt V3 `PASS` verificado desde checkout `detached_clean`
+  sobre S;
 - `docs/reconstruccion/estado_y_handoff_rebuild.md`: último handoff humano.
 
-Sin receipt V15 válido, V01-V14 representan 14 de 34 verticales, 41,18 %, y
-48 de 257 capacidades, 18,68 %, con 14/14 receipts. Tras validarlo, V01-V15
-representan 15/34, 44,12 %, y 56/257, 21,79 %, con 15/15 receipts. V15 suma
-exclusivamente `GOV-15`, `STG-09`, `ORC-08..11`, `EVD-03` y `EVD-14`; V11
-sigue siendo una vertical transversal sin IDs nuevos.
+V01–V15 representan 15/34, 44,12 %, y 56/257, 21,79 %, con 15/15
+receipts. Tras validar el receipt V16 pasan a 16/34, 47,06 %, y 59/257,
+22,96 %, con 16/16 receipts. V16 suma exclusivamente `STG-02`, `STG-10` y
+`EXT-10`; V11 sigue siendo una vertical transversal sin IDs nuevos.
 
 Resumen funcional:
 
@@ -68,12 +69,14 @@ Resumen funcional:
 | V13 | mailbox interno acreditado solo para `child_delivery` opt-in: destinatario exacto, lifecycle causal y retiro sistémico; `Parent` público permanece no contractual y sin bindings mailbox |
 | V14 | controles acreditados application-only: pause/resume, cancel, stop selectivo cooperativo/forzado, retry de Execution y replan causal; sin bindings públicos hasta V20 |
 | V15 | presupuestos global/proyecto/Goal, fairness, riesgo/esfuerzo y ledger causal de efectos launch/stop; sin bindings públicos hasta V20 |
+| V16 | workspace opaco, inventario/write-set, commit e integración Git local por CAS; application-only hasta sus bindings V20 y condicionado a receipt V3 válido |
 
-V12–V15 no añaden tools públicas: Director, mailbox, controles y gobernanza de
-efectos están en aplicación/composición, pero la superficie MCP pública vigente
-sigue teniendo seis tools. Para operar hoy, el Codex externo declara el plan
-completo en `orquesta.goals.create`; no puede invocar `Control`, aprobar efectos
-ni `ProposeDirectorPlan` por MCP.
+V12–V16 no añaden tools públicas: Director, mailbox, controles, gobernanza de
+efectos y casos de uso Git están en aplicación/composición, pero la superficie
+MCP pública vigente sigue teniendo seis tools. Para operar hoy, el Codex externo
+declara el plan completo en `orquesta.goals.create`; no puede invocar `Control`,
+aprobar efectos, `ProposeDirectorPlan`, `ListPendingChanges` ni
+`IntegrateChange` por MCP.
 
 ## 1. Preflight obligatorio
 
@@ -116,7 +119,7 @@ repo. Si se elige otra raíz, todas las sustituciones deben apuntar a rutas
 absolutas equivalentes y no solapadas.
 
 ```bash
-export ORQUESTA_RUNTIME_ROOT=/home/alberto/.local/state/orquesta-rebuild/v12-external
+export ORQUESTA_RUNTIME_ROOT=/home/alberto/.local/state/orquesta-rebuild/v16-external
 umask 077
 install -d -m 700 \
   "$ORQUESTA_RUNTIME_ROOT" \
@@ -125,6 +128,7 @@ install -d -m 700 \
   "$ORQUESTA_RUNTIME_ROOT/state" \
   "$ORQUESTA_RUNTIME_ROOT/artifacts" \
   "$ORQUESTA_RUNTIME_ROOT/work" \
+  "$ORQUESTA_RUNTIME_ROOT/workspaces" \
   "$ORQUESTA_RUNTIME_ROOT/secrets"
 cp config/orquesta.toml.example "$ORQUESTA_RUNTIME_ROOT/config/orquesta.toml"
 chmod 600 "$ORQUESTA_RUNTIME_ROOT/config/orquesta.toml"
@@ -132,6 +136,7 @@ sed -i \
   -e "s|./var/state/orquesta.sqlite|$ORQUESTA_RUNTIME_ROOT/state/orquesta.sqlite|" \
   -e "s|./var/artifacts|$ORQUESTA_RUNTIME_ROOT/artifacts|" \
   -e "s|./var/secrets/credentials.json|$ORQUESTA_RUNTIME_ROOT/secrets/credentials.json|" \
+  -e "s|./var/workspaces|$ORQUESTA_RUNTIME_ROOT/workspaces|" \
   -e "s|./var/work|$ORQUESTA_RUNTIME_ROOT/work|" \
   -e "s|./var/secrets/local-owner.token|$ORQUESTA_RUNTIME_ROOT/secrets/local-owner.token|" \
   -e "s|./var/effective_config.json|$ORQUESTA_RUNTIME_ROOT/effective_config.json|" \
@@ -155,10 +160,17 @@ max_concurrent_executions = 70
 env_allowlist = ["PATH", "HOME", "CODEX_HOME"]
 credential_ref = ""
 
+[workspace.local]
+root = "/home/alberto/.local/state/orquesta-rebuild/v16-external/workspaces"
+
+[repository.local]
+seed_path = ""
+target_ref = "refs/heads/main"
+
 [identity]
 provider = "local_token"
 local_actor = "actor:local-owner"
-local_token_path = "/home/alberto/.local/state/orquesta-rebuild/v12-external/secrets/local-owner.token"
+local_token_path = "/home/alberto/.local/state/orquesta-rebuild/v16-external/secrets/local-owner.token"
 
 [project]
 default = "project:default"
@@ -167,6 +179,15 @@ default = "project:default"
 No crear otra variable de servidor ni otro fichero de secretos. El registro
 canónico es `config/registry.json`; el TOML contiene valores no sensibles y
 refs. `effective_config.json` es una salida redactada, nunca una entrada.
+
+`repository.local.seed_path = ""` desactiva el conector Git y es la opción
+recomendada para investigación/DAG read-only. Para WorkItems de código con
+`WriteSet`, debe apuntar a un repositorio local autorizado mediante ruta
+absoluta; `target_ref` fija la ref destino. El servidor entonces prepara
+worktrees aislados bajo `workspace.local.root`. No usar el checkout del rebuild,
+una ruta productiva ni roots solapados. Mientras las seis tools públicas no
+expongan pending/integrate, un agente MCP externo no debe iniciar ese flujo de
+código esperando poder aprobar la integración por la misma API.
 
 Construir el binario desde el checkpoint elegido:
 
@@ -185,7 +206,7 @@ Terminal A, en primer plano:
 
 ```bash
 cd /home/alberto/Trabajo/orquesta-rebuild
-export ORQUESTA_RUNTIME_ROOT=/home/alberto/.local/state/orquesta-rebuild/v12-external
+export ORQUESTA_RUNTIME_ROOT=/home/alberto/.local/state/orquesta-rebuild/v16-external
 "$ORQUESTA_RUNTIME_ROOT/bin/orquesta" serve \
   --config "$ORQUESTA_RUNTIME_ROOT/config/orquesta.toml"
 ```
@@ -203,10 +224,10 @@ arranque; no se sustituye silenciosamente.
 Terminal B. Registrar una vez el nombre de la variable, nunca su contenido:
 
 ```bash
-codex mcp add orquesta-rebuild-v12 \
+codex mcp add orquesta-rebuild-v16 \
   --url http://127.0.0.1:8080/mcp \
   --bearer-token-env-var ORQUESTA_MCP_TOKEN
-codex mcp get --json orquesta-rebuild-v12
+codex mcp get --json orquesta-rebuild-v16
 ```
 
 Si el conector ya existe, verificar URL y nombre de variable en vez de borrarlo
@@ -216,7 +237,7 @@ Cargar el secreto sin imprimirlo, iniciar una sesión nueva y retirarlo al
 salir:
 
 ```bash
-export ORQUESTA_RUNTIME_ROOT=/home/alberto/.local/state/orquesta-rebuild/v12-external
+export ORQUESTA_RUNTIME_ROOT=/home/alberto/.local/state/orquesta-rebuild/v16-external
 test -r "$ORQUESTA_RUNTIME_ROOT/secrets/local-owner.token"
 ORQUESTA_MCP_TOKEN="$(<"$ORQUESTA_RUNTIME_ROOT/secrets/local-owner.token")"
 export ORQUESTA_MCP_TOKEN
@@ -277,8 +298,8 @@ Conservar `goal_ref`, `revision`, `app_spec.hash`, `app_spec.generation` y
 `plan_generation`. Repetir la misma `request_ref` con idéntico payload devuelve
 el mismo Goal con `created:false`; cambiar su significado exige una ref nueva.
 
-Para trabajo paralelo, usar un DAG explícito. Este ejemplo lanza dos items con
-write-sets disjuntos:
+Para trabajo paralelo de investigación, usar un DAG explícito. Este ejemplo
+lanza dos items read-only sin activar workspace/Git:
 
 ```json
 {
@@ -304,7 +325,7 @@ write-sets disjuntos:
         "phase": "phase:analysis",
         "role": "role:reviewer",
         "dependencies": [],
-        "write_set": ["internal/domain"],
+        "write_set": [],
         "skill_refs": [],
         "tool_refs": [],
         "capability_refs": [],
@@ -316,7 +337,7 @@ write-sets disjuntos:
         "phase": "phase:analysis",
         "role": "role:reviewer",
         "dependencies": [],
-        "write_set": ["internal/adapters/x"],
+        "write_set": [],
         "skill_refs": [],
         "tool_refs": [],
         "capability_refs": [],
@@ -327,9 +348,12 @@ write-sets disjuntos:
 }
 ```
 
-Claves de `dependencies` y `parent` son locales a la petición. Los write-sets
-son rutas relativas limpias, sin globs ni rutas absolutas. Items listos con
-write-sets solapados se serializan; los disjuntos forman la cohorte máxima.
+Claves de `dependencies` y `parent` son locales a la petición. En investigación
+read-only se usa `write_set: []`. En un flujo de código interno, los write-sets
+son rutas relativas limpias, sin globs ni rutas absolutas; items listos con
+write-sets solapados se serializan y los disjuntos forman la cohorte máxima.
+Ese flujo requiere conector local configurado y una vía autorizada para listar
+y decidir integración; la API MCP pública actual aún no ofrece esa vía.
 
 ### 5.3 Consultar hasta terminalidad
 
@@ -416,10 +440,11 @@ reconstruccion/orquesta-total-20260714; no uses runtime, código ni estado de
 
 Primero llama orquesta.system.status con project_ref=project:default. Inspecciona
 el proyecto objetivo con rg y lecturas acotadas. Declara revisión base,
-write-sets, dependencias y tests. Compila Goals/DAG autocontenidos; paraleliza
-solo write-sets disjuntos. Los workers actuales son read-only, no reciben el
-workspace del proyecto ni contexto implícito: incluye fragmentos y contratos
-mínimos en cada objective y pide artifacts/diffs, no efectos.
+dependencias y tests. En la superficie MCP pública usa write_set vacío y compila
+Goals/DAG autocontenidos de investigación; incluye fragmentos y contratos
+mínimos en cada objective porque no existe contexto implícito. El flujo interno
+V16 sí entrega workspace a un worker con WriteSet, pero esta API aún no permite
+listar ni autorizar su integración.
 
 Consulta goals.get, lee cada artifact por artifacts.read y valida digest,
 scope, secretos, base y tests. Solo aplica cambios si el encargo lo autoriza;
@@ -429,7 +454,7 @@ succeeded no equivale a cambio integrado. Entrega refs de Goal/AppSpec,
 executions/artifacts, tests, riesgos y bloqueos.
 ```
 
-## 7. Limitaciones del candidato V15
+## 7. Limitaciones del candidato V16
 
 - V13 cerrado: existe mailbox durable interno para `child_delivery`, con
   `admitted → claimed → delivered → consumed → acknowledged|blocked` y
@@ -443,12 +468,16 @@ executions/artifacts, tests, riesgos y bloqueos.
   stop selectivo cooperativo/forzado, retry de Execution y replan causal están
   cerrados por receipt V3 `PASS`. Sus bindings HTTP/MCP/CLI públicos se
   incorporarán mediante el registro único de V20; V14 no añade tools ad hoc.
-- V15, tras validar su receipt: envelopes y settlements durables, fairness
+- V15 cerrado: envelopes y settlements durables, fairness
   jerárquica, riesgo/esfuerzo tipados y cadena
   `intent -> approval -> attempt -> receipt` gobiernan launch/stop internos.
   No hay bindings públicos nuevos.
-- V16: faltan workspace, worktree, aplicación de patch y receipts Git; los
-  workers actuales no editan el proyecto objetivo.
+- V16 implementado y condicionado a su receipt: workspace/worktree por
+  Execution, inventario, commit causal, pending work e integración Git local
+  por CAS existen en aplicación/composición. `ListPendingChanges` e
+  `IntegrateChange` no están en las seis tools públicas; por ello este runbook
+  recomienda DAG read-only hasta V20, aunque el conector interno puede ejecutar
+  WorkItems con `WriteSet` cuando está configurado.
 - V17-V19: faltan atestador independiente completo, autor/reviewers/refinery y
   Consejo de Sabios gobernados.
 - V20-V21: faltan registro único de comandos y paridad/i18n total entre HTTP,
@@ -460,18 +489,22 @@ executions/artifacts, tests, riesgos y bloqueos.
   deploy, OPES, PostgreSQL/S3/multihost y operación completa.
 
 No simular estas capacidades con scripts laterales ni meterlas en el núcleo.
-El protocolo V12 de Director, mailbox V13, controles V14 y gobernanza V15
-existen internamente, pero aún no tienen bindings en las seis tools MCP.
+El protocolo V12 de Director, mailbox V13, controles V14, gobernanza V15 y
+workspace/Git V16 existen internamente, pero aún no tienen bindings completos
+en las seis tools MCP.
 
 ## 8. Verificación y E2E
 
-Desde un checkout limpio, validar V01-V14 y comprobar si V15 ya está
-acreditado:
+Desde un checkout limpio, validar V01–V15. Solo después de existir E y validar
+el receipt V16 ampliar el patrón hasta V16:
 
 ```bash
 cd /home/alberto/Trabajo/orquesta-rebuild
 go test -mod=vendor -count=1 ./acceptance \
   -run '^TestAcceptanceV(0[1-9]|1[0-5]).*Receipt$'
+# Después del receipt V16 estricto:
+go test -mod=vendor -count=1 ./acceptance \
+  -run '^TestAcceptanceV(0[1-9]|1[0-6]).*Receipt$'
 ```
 
 Validar el E2E interno de controles mediante la composición productiva:
@@ -521,15 +554,15 @@ La prueba debe cerrar un Goal por servidor MCP de producción, leer un artifact
 con marcador único y apagar todos sus procesos. No apuntarla al runtime legacy
 ni al estado operativo que se quiera conservar.
 
-Última comprobación real: `PASS` en `6.15s`, ejecutada
-`2026-07-16T12:12:56+02:00` con configuración aislada
-`/home/alberto/Trabajo/.orquesta-rebuild-real-e2e-v13-20260716T115042/orquesta.toml`,
+Última comprobación real: `PASS` en `6.85s`, ejecutada
+`2026-07-21T23:18:46+02:00` con configuración aislada
+`/home/alberto/Trabajo/.orquesta-rebuild-real-e2e-v14-20260716T171502/orquesta.toml`,
 source digest
-`sha256:d3bac625fa52b76fdc2c0007292577751ca8931a6ca890ecd2751a8976fa8d36`
-y marcador `ORQUESTA_CODEX_E2E_OK_70c61a97f86425f3464a7e12e9b9829a`.
-Prueba composición productiva, MCP, Codex, SQLite y CAS sin regresión; no activa
-mailbox ni acredita por sí sola el contrato V13. Esa acreditación procede del
-receipt V3 separado `product/evidence/v13_mailbox.json`.
+`sha256:8de5dcf604e8297eed817beac0af02b4719212ec4a96b040ab2cd5bd17944110`
+y marcador `ORQUESTA_CODEX_E2E_OK_afa8e2ed4bbfb6744e2990fbcd9a1d7e`.
+Prueba composición productiva, MCP, Codex, SQLite y CAS sin regresión. El Goal
+sin `WriteSet` no activa workspace Git ni acredita por sí solo V16; esa
+acreditación procede únicamente del receipt V3 P/S/E separado.
 
 ## 9. Seguridad, parada y limpieza
 
@@ -567,5 +600,5 @@ Goals, artifact refs, receipts y evidencia ya no se necesitan. Retirar el
 conector Codex solo por decisión explícita:
 
 ```bash
-codex mcp remove orquesta-rebuild-v12
+codex mcp remove orquesta-rebuild-v16
 ```

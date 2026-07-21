@@ -17,9 +17,12 @@ import (
 type EffectKind string
 
 const (
-	EffectKindAgentLaunch EffectKind = "agent_launch"
-	EffectKindAgentStop   EffectKind = "agent_stop"
-	EffectRiskPolicyV1               = "orquesta.effect-risk.v1"
+	EffectKindAgentLaunch      EffectKind = "agent_launch"
+	EffectKindAgentStop        EffectKind = "agent_stop"
+	EffectKindPrepareWorkspace EffectKind = "prepare_workspace"
+	EffectKindCommitChange     EffectKind = "commit_change"
+	EffectKindIntegrateChange  EffectKind = "integrate_change"
+	EffectRiskPolicyV1                    = "orquesta.effect-risk.v1"
 )
 
 type EffectStatus string
@@ -30,14 +33,20 @@ const (
 	EffectStatusAlreadyStopped   EffectStatus = "already_stopped"
 	EffectStatusAlreadyCompleted EffectStatus = "already_completed"
 	EffectStatusAlreadyFailed    EffectStatus = "already_failed"
+	EffectStatusPrepared         EffectStatus = "prepared"
+	EffectStatusCommitted        EffectStatus = "committed"
+	EffectStatusIntegrated       EffectStatus = "integrated"
+	EffectStatusConflicted       EffectStatus = "conflicted"
+	EffectStatusStale            EffectStatus = "stale"
 )
 
 type EffectApprovalSource string
 
 const (
-	EffectApprovalSourceGoalConfirmation EffectApprovalSource = "goal_confirmation"
-	EffectApprovalSourceDirectorDecision EffectApprovalSource = "director_decision"
-	EffectApprovalSourceExplicitDecision EffectApprovalSource = "explicit_decision"
+	EffectApprovalSourceGoalConfirmation    EffectApprovalSource = "goal_confirmation"
+	EffectApprovalSourceDirectorDecision    EffectApprovalSource = "director_decision"
+	EffectApprovalSourceExplicitDecision    EffectApprovalSource = "explicit_decision"
+	EffectApprovalSourceIntegrationDecision EffectApprovalSource = "integration_decision"
 )
 
 type EffectDecision string
@@ -199,10 +208,9 @@ func ValidateEffectIntent(intent EffectIntent) error {
 		!validEffectDigest(intent.RequestFingerprint) || !validApplicationRef(intent.ActionRef) ||
 		!validApplicationRef(intent.IdempotencyKey):
 		return errors.New("application.effect_intent_ref_invalid")
-	case intent.Kind != EffectKindAgentLaunch && intent.Kind != EffectKindAgentStop:
+	case !validEffectKind(intent.Kind):
 		return errors.New("application.effect_kind_invalid")
-	case (intent.Kind == EffectKindAgentLaunch && intent.ActionKind != ActionLaunchAgent) ||
-		(intent.Kind == EffectKindAgentStop && intent.ActionKind != ActionStopAgent):
+	case !effectActionKindMatches(intent.Kind, intent.ActionKind):
 		return errors.New("application.effect_action_kind_mismatch")
 	case subject.ProjectRef.String() == "" || subject.GoalRef.String() == "" ||
 		subject.WorkItemRef.String() == "" || subject.ExecutionRef.String() == "" ||
@@ -237,6 +245,8 @@ func effectIntentAuthorityValid(intent EffectIntent) bool {
 	case identity.PermissionGoalsCreate:
 		expectedResource = intent.Subject.ProjectRef.String()
 	case identity.PermissionGoalsDirect:
+		expectedResource = intent.Subject.GoalRef.String()
+	case identity.PermissionChangesIntegrate:
 		expectedResource = intent.Subject.GoalRef.String()
 	default:
 		return false
@@ -305,10 +315,43 @@ func ValidateEffectApproval(intent EffectIntent, approval EffectApproval) error 
 		if !effectApprovalAuthorizationValid(approval) {
 			return errors.New("application.effect_explicit_authority_invalid")
 		}
+	case EffectApprovalSourceIntegrationDecision:
+		if intent.SecurityCriticality != governance.SecurityCriticalityNormal ||
+			intent.Permission != identity.PermissionChangesIntegrate || approval.DecidedBy != intent.ProposedBy ||
+			!sameAuthorizationReceipt(approval.AuthorizationReceipt, intent.Authority) {
+			return errors.New("application.effect_integration_authority_invalid")
+		}
 	default:
 		return errors.New("application.effect_approval_source_invalid")
 	}
 	return nil
+}
+
+func validEffectKind(kind EffectKind) bool {
+	switch kind {
+	case EffectKindAgentLaunch, EffectKindAgentStop, EffectKindPrepareWorkspace,
+		EffectKindCommitChange, EffectKindIntegrateChange:
+		return true
+	default:
+		return false
+	}
+}
+
+func effectActionKindMatches(kind EffectKind, action ActionKind) bool {
+	switch kind {
+	case EffectKindAgentLaunch:
+		return action == ActionLaunchAgent
+	case EffectKindAgentStop:
+		return action == ActionStopAgent
+	case EffectKindPrepareWorkspace:
+		return action == ActionPrepareWorkspace
+	case EffectKindCommitChange:
+		return action == ActionCommitChange
+	case EffectKindIntegrateChange:
+		return action == ActionIntegrateChange
+	default:
+		return false
+	}
 }
 
 func sameAuthorizationReceipt(left, right identity.AuthorizationReceipt) bool {

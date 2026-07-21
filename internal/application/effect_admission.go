@@ -71,6 +71,108 @@ func (orchestrator *Orchestrator) launchAction(
 	}, authority.Source, at)
 }
 
+func (orchestrator *Orchestrator) prepareWorkspaceAction(
+	policy effectPolicySnapshot,
+	aggregate goal.Goal,
+	item goal.WorkItem,
+	execution ExecutionRecord,
+	authority WorkItemAuthority,
+	at time.Time,
+	availableAt time.Time,
+) (ActionRecord, error) {
+	actionRef := "action:prepare-workspace:" + execution.Ref.String()
+	intent := EffectIntent{
+		Ref: "effect-intent:" + actionRef, RequestRef: authority.AuthorizationReceipt.Decision().Request().RequestRef(),
+		RequestFingerprint: effectAdmissionFingerprint(actionRef, authority.AuthorizationReceipt.Ref(), policy.PolicyHash),
+		ActionRef:          actionRef, ActionKind: ActionPrepareWorkspace, Kind: EffectKindPrepareWorkspace,
+		Subject: effectSubject(aggregate, item, execution), ProposedBy: authority.PrincipalRef,
+		Permission: authority.Permission, Authority: authority.AuthorizationReceipt,
+		Demand:              governance.BudgetDemand{Ref: "budget-demand:" + actionRef},
+		SecurityCriticality: item.SecurityCriticality(), ReasoningEffort: item.ReasoningEffort(),
+		PolicyHash: policy.PolicyHash, PolicyRevision: policy.PolicyRevision,
+		QuotaRetryDelay: policy.QuotaRetryDelay, ApprovalTTL: policy.ApprovalTTL,
+		TargetDigest:   workspacePrepareTargetDigest(aggregate, item, execution),
+		IdempotencyKey: "workspace:" + execution.IdempotencyKey, CreatedAt: at.UTC(),
+	}
+	return orchestrator.finalizeEffectAction(intent, ActionRecord{
+		Ref: actionRef, Kind: ActionPrepareWorkspace, GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(),
+		ExecutionRef: execution.Ref, PlanGeneration: execution.PlanGeneration,
+		WorkItemGeneration: item.Revision(), AvailableAt: availableAt,
+	}, authority.Source, at)
+}
+
+func (orchestrator *Orchestrator) commitChangeAction(
+	policy effectPolicySnapshot,
+	aggregate goal.Goal,
+	item goal.WorkItem,
+	execution ExecutionRecord,
+	binding WorkspaceBinding,
+	changeRef ports.ChangeSetRef,
+	authority WorkItemAuthority,
+	at time.Time,
+) (ActionRecord, error) {
+	actionRef := "action:commit-change:" + execution.Ref.String()
+	intent := EffectIntent{
+		Ref: "effect-intent:" + actionRef, RequestRef: authority.AuthorizationReceipt.Decision().Request().RequestRef(),
+		RequestFingerprint: effectAdmissionFingerprint(actionRef, authority.AuthorizationReceipt.Ref(), policy.PolicyHash),
+		ActionRef:          actionRef, ActionKind: ActionCommitChange, Kind: EffectKindCommitChange,
+		Subject: effectSubject(aggregate, item, execution), ProposedBy: authority.PrincipalRef,
+		Permission: authority.Permission, Authority: authority.AuthorizationReceipt,
+		Demand:              governance.BudgetDemand{Ref: "budget-demand:" + actionRef},
+		SecurityCriticality: item.SecurityCriticality(), ReasoningEffort: item.ReasoningEffort(),
+		PolicyHash: policy.PolicyHash, PolicyRevision: policy.PolicyRevision,
+		QuotaRetryDelay: policy.QuotaRetryDelay, ApprovalTTL: policy.ApprovalTTL,
+		TargetDigest:   commitChangeTargetDigest(binding, changeRef, execution),
+		IdempotencyKey: "commit:" + execution.IdempotencyKey, CreatedAt: at.UTC(),
+	}
+	return orchestrator.finalizeEffectAction(intent, ActionRecord{
+		Ref: actionRef, Kind: ActionCommitChange, GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(),
+		ExecutionRef: execution.Ref, ChangeRef: changeRef, PlanGeneration: execution.PlanGeneration,
+		WorkItemGeneration: item.Revision(), AvailableAt: at,
+	}, authority.Source, at)
+}
+
+func (orchestrator *Orchestrator) integrateChangeAction(
+	policy effectPolicySnapshot,
+	aggregate goal.Goal,
+	item goal.WorkItem,
+	execution ExecutionRecord,
+	change ChangeSet,
+	expectedTargetOID string,
+	principal identity.PrincipalRef,
+	authority identity.AuthorizationReceipt,
+	requestRef string,
+	requestFingerprint string,
+	at time.Time,
+) (ActionRecord, error) {
+	actionRef := integrationActionRef(principal, aggregate.Project(), requestRef)
+	intent := EffectIntent{
+		Ref: "effect-intent:" + actionRef, RequestRef: requestRef,
+		RequestFingerprint: requestFingerprint,
+		ActionRef:          actionRef, ActionKind: ActionIntegrateChange, Kind: EffectKindIntegrateChange,
+		Subject: effectSubject(aggregate, item, execution), ProposedBy: principal,
+		Permission: identity.PermissionChangesIntegrate, Authority: authority,
+		Demand:              governance.BudgetDemand{Ref: "budget-demand:" + actionRef},
+		SecurityCriticality: governance.SecurityCriticalityNormal,
+		ReasoningEffort:     governance.ReasoningEffortLow,
+		PolicyHash:          policy.PolicyHash, PolicyRevision: policy.PolicyRevision,
+		QuotaRetryDelay: policy.QuotaRetryDelay, ApprovalTTL: policy.ApprovalTTL,
+		TargetDigest:   integrationTargetDigest(change, expectedTargetOID),
+		IdempotencyKey: "integration:" + requestRef, CreatedAt: at.UTC(),
+	}
+	return orchestrator.finalizeEffectAction(intent, ActionRecord{
+		Ref: actionRef, Kind: ActionIntegrateChange, GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(),
+		ExecutionRef: execution.Ref, ChangeRef: change.Ref, ExpectedTargetOID: expectedTargetOID,
+		PlanGeneration: execution.PlanGeneration, WorkItemGeneration: item.Revision(), AvailableAt: at,
+	}, EffectApprovalSourceIntegrationDecision, at)
+}
+
+func integrationActionRef(principal identity.PrincipalRef, project goal.ProjectRef, requestRef string) string {
+	return "action:integrate-change:" + fingerprintFields(
+		"orquesta.integrate-change.action.v1", principal.String(), project.String(), requestRef,
+	)
+}
+
 func (orchestrator *Orchestrator) stopAction(
 	policy effectPolicySnapshot,
 	control ControlRecord,
@@ -128,6 +230,7 @@ func launchEffectTargetRequest(aggregate goal.Goal, item goal.WorkItem, executio
 		PlanGeneration: execution.PlanGeneration, AppSpecGeneration: execution.AppSpecGeneration,
 		ExecutionAttempt: execution.AttemptNo, SpecHash: execution.SpecHash,
 		ActorRef: aggregate.Actor(), ProjectRef: aggregate.Project(), IdempotencyKey: execution.IdempotencyKey,
+		ExecutionWorkspaceRef: execution.ExecutionWorkspaceRef,
 	}
 }
 
@@ -171,7 +274,7 @@ func launchTargetDigest(request ports.AgentLaunchRequest) string {
 		"target:launch:v1", request.ProjectRef.String(), request.GoalRef.String(), request.WorkItemRef.String(),
 		request.ExecutionRef.String(), strconv.FormatUint(uint64(request.PlanGeneration), 10),
 		strconv.FormatUint(uint64(request.AppSpecGeneration), 10), strconv.FormatUint(request.ExecutionAttempt, 10),
-		request.SpecHash, request.ActorRef.String(), request.IdempotencyKey,
+		request.SpecHash, request.ActorRef.String(), request.ExecutionWorkspaceRef.String(), request.IdempotencyKey,
 	)
 }
 
@@ -181,6 +284,35 @@ func stopTargetDigest(control ControlRecord, request ports.AgentStopRequest) str
 		request.ExecutionRef.String(), request.GoalRef.String(), request.WorkItemRef.String(),
 		strconv.FormatUint(uint64(request.PlanGeneration), 10), strconv.FormatUint(uint64(request.AppSpecGeneration), 10),
 		strconv.FormatUint(request.ExecutionAttempt, 10), request.SpecHash, request.IdempotencyKey,
+	)
+}
+
+func workspacePrepareTargetDigest(aggregate goal.Goal, item goal.WorkItem, execution ExecutionRecord) string {
+	fields := []string{
+		"target:workspace-prepare:v1", execution.RepositoryRef.String(), aggregate.Project().String(),
+		aggregate.Ref().String(), item.Ref().String(), execution.Ref.String(),
+		execution.ExecutionWorkspaceRef.String(),
+		strconv.FormatUint(uint64(execution.PlanGeneration), 10),
+		strconv.FormatUint(uint64(execution.AppSpecGeneration), 10),
+		strconv.FormatUint(execution.AttemptNo, 10), execution.SpecHash,
+	}
+	for _, scope := range item.WriteSet() {
+		fields = append(fields, scope.String())
+	}
+	return effectAdmissionFingerprint(fields...)
+}
+
+func commitChangeTargetDigest(binding WorkspaceBinding, changeRef ports.ChangeSetRef, execution ExecutionRecord) string {
+	return effectAdmissionFingerprint(
+		"target:commit-change:v1", changeRef.String(), binding.Ref.String(), binding.RepositoryRef.String(),
+		binding.BaseOID, binding.WriteSetDigest, execution.Ref.String(), execution.SpecHash,
+	)
+}
+
+func integrationTargetDigest(change ChangeSet, expectedTargetOID string) string {
+	return effectAdmissionFingerprint(
+		"target:integrate-change:v1", change.Ref.String(), change.RepositoryRef.String(),
+		change.HeadOID, change.TreeOID, expectedTargetOID, change.DiffDigest,
 	)
 }
 

@@ -2,9 +2,9 @@
 
 # Orquesta configuration registry
 
-Registry revision: `2026-07-18.15`
+Registry revision: `2026-07-21.16`
 
-Registry hash: `sha256:f1024af0fdca9ed804388c50bead31ae05cb084329f637a572a5d9bff65fe584`
+Registry hash: `sha256:987475e75789d12be14a633ebfca002261a4b2d2e821528dd86287f0b229c244`
 
 Precedence: `default < file < env`
 
@@ -41,6 +41,9 @@ Source limit: `1048576` bytes
         "CODEX_HOME"
       ]` | `ORQUESTA_RUNTIME_CODEX_ENV_ALLOWLIST` | `true` | `unique_non_empty_string_list, environment_name_list` |
 | `runtime.codex.credential_ref` | `credential_ref` | `"[REDACTED]"` | `ORQUESTA_RUNTIME_CODEX_CREDENTIAL_REF` | `true` | `credential_ref` |
+| `workspace.local.root` | `path` | `"./var/workspaces"` | `ORQUESTA_WORKSPACE_LOCAL_ROOT` | `true` | `non_empty_path` |
+| `repository.local.seed_path` | `string` | `""` | `ORQUESTA_REPOSITORY_LOCAL_SEED_PATH` | `true` | `trimmed_optional_string` |
+| `repository.local.target_ref` | `string` | `"refs/heads/main"` | `ORQUESTA_REPOSITORY_LOCAL_TARGET_REF` | `true` | `trimmed_non_empty_string` |
 | `identity.provider` | `string` | `"local_token"` | `ORQUESTA_IDENTITY_PROVIDER` | `true` | `allowed_values` |
 | `identity.local_actor` | `string` | `"actor:local-owner"` | `ORQUESTA_IDENTITY_LOCAL_ACTOR` | `true` | `opaque_ref` |
 | `identity.local_token_path` | `path` | `"./var/secrets/local-owner.token"` | `ORQUESTA_IDENTITY_LOCAL_TOKEN_PATH` | `true` | `non_empty_path` |
@@ -74,7 +77,7 @@ Source limit: `1048576` bytes
 - `runtime_codex_timeout_before_scheduler_execution_timeout`: `runtime.codex.timeout`, `scheduler.execution_timeout`
 - `server_listen_loopback`: `server.listen`
 - `server_mcp_path_literal`: `server.mcp_path`
-- `runtime_paths_disjoint`: `state.sqlite.path`, `artifact.filesystem.root`, `credentials.local.path`, `runtime.codex.work_root`, `config.effective_path`, `identity.local_token_path`
+- `runtime_paths_disjoint`: `state.sqlite.path`, `artifact.filesystem.root`, `credentials.local.path`, `runtime.codex.work_root`, `workspace.local.root`, `config.effective_path`, `identity.local_token_path`
 - `identity_provider_requirements`: `identity.provider`, `identity.oidc.issuer`, `identity.oidc.audience`, `identity.oidc.clock_skew`, `identity.oidc.upstream_timeout`
 
 ## Temporary aliases

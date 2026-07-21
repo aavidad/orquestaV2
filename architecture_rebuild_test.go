@@ -109,7 +109,10 @@ func TestRebuildArchitecture(t *testing.T) {
 	t.Run("ports_depend_only_inward", func(t *testing.T) {
 		for _, file := range rebuildArchitectureFilesUnder(files, "internal/ports") {
 			for _, imported := range file.imports {
-				if reason := rebuildArchitectureOnlyInternalPackages(imported.path, "orquesta/internal/goal", "orquesta/internal/governance"); reason != "" {
+				// Ports may share pure identity value objects; providers, policy
+				// decisions and every concrete identity adapter remain outside.
+				if reason := rebuildArchitectureOnlyInternalPackages(imported.path,
+					"orquesta/internal/goal", "orquesta/internal/governance", "orquesta/internal/identity"); reason != "" {
 					rebuildArchitectureImportError(t, file, imported, "internal/ports "+reason)
 				}
 			}

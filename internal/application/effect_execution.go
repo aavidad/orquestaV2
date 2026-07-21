@@ -11,7 +11,7 @@ import (
 )
 
 func validateClaimedEffect(claim ActionClaim, at time.Time) error {
-	if claim.Action.Kind != ActionLaunchAgent && claim.Action.Kind != ActionStopAgent {
+	if !actionUsesEffectLedger(claim.Action.Kind) {
 		return nil
 	}
 	intent := claim.Action.EffectIntent
@@ -26,9 +26,9 @@ func validateClaimedEffect(claim ActionClaim, at time.Time) error {
 		(approval.Source == EffectApprovalSourceExplicitDecision && !approval.ExpiresAt.After(at.UTC())) {
 		return errors.New("application.effect_live_approval_required")
 	}
-	if claim.Action.Kind == ActionStopAgent {
+	if claim.Action.Kind != ActionLaunchAgent {
 		if claim.BudgetReservationRef != "" || claim.BudgetReservation != (governance.BudgetReservation{}) {
-			return errors.New("application.stop_budget_reservation_forbidden")
+			return errors.New("application.local_effect_budget_reservation_forbidden")
 		}
 		return nil
 	}
@@ -169,12 +169,30 @@ func validateEffectReceipt(claim ActionClaim, attempt EffectAttempt, receipt Eff
 }
 
 func validEffectStatus(kind EffectKind, status EffectStatus) bool {
-	if kind == EffectKindAgentLaunch {
+	switch kind {
+	case EffectKindAgentLaunch:
 		return status == EffectStatusAccepted
+	case EffectKindAgentStop:
+		return status == EffectStatusStopped || status == EffectStatusAlreadyStopped ||
+			status == EffectStatusAlreadyCompleted || status == EffectStatusAlreadyFailed
+	case EffectKindPrepareWorkspace:
+		return status == EffectStatusPrepared
+	case EffectKindCommitChange:
+		return status == EffectStatusCommitted
+	case EffectKindIntegrateChange:
+		return status == EffectStatusIntegrated || status == EffectStatusConflicted || status == EffectStatusStale
+	default:
+		return false
 	}
-	return kind == EffectKindAgentStop &&
-		(status == EffectStatusStopped || status == EffectStatusAlreadyStopped ||
-			status == EffectStatusAlreadyCompleted || status == EffectStatusAlreadyFailed)
+}
+
+func actionUsesEffectLedger(kind ActionKind) bool {
+	switch kind {
+	case ActionLaunchAgent, ActionStopAgent, ActionPrepareWorkspace, ActionCommitChange, ActionIntegrateChange:
+		return true
+	default:
+		return false
+	}
 }
 
 func unknownUsage() governance.ResourceUsage {

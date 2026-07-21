@@ -841,10 +841,16 @@ func (system *controlTestSystem) request(
 
 func (system *controlTestSystem) launch(t *testing.T) {
 	t.Helper()
-	result, err := system.orchestrator.ProcessNext(context.Background(), "worker:control-launch")
-	if err != nil || !result.Processed || result.Action != ActionLaunchAgent {
-		t.Fatalf("launch control fixture: result=%+v err=%v", result, err)
+	for attempts := 0; attempts < 8; attempts++ {
+		result, err := system.orchestrator.ProcessNext(context.Background(), "worker:control-launch")
+		if err != nil {
+			t.Fatalf("launch control fixture: result=%+v err=%v", result, err)
+		}
+		if result.Processed && result.Action == ActionLaunchAgent {
+			return
+		}
 	}
+	t.Fatal("launch control fixture did not drain workspace preparation")
 }
 
 func (system *controlTestSystem) observe(t *testing.T) {

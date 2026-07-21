@@ -19,6 +19,7 @@ import (
 	"orquesta/internal/adapters/state/sqlite"
 	"orquesta/internal/application"
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
 	"orquesta/internal/identity"
 	"orquesta/internal/ports"
 )
@@ -442,7 +443,7 @@ func v06AssertFencedClaimAndReceipt(t *testing.T, fixture v06Fixture) {
 			<-start
 			claim, found, err := repository.ClaimNextAction(ctx, application.ClaimRequest{
 				WorkerRef: fmt.Sprintf("worker:v06-%02d", index), Token: fmt.Sprintf("claim:v06-%02d", index),
-				LeaseDuration: lease, Capabilities: capabilities,
+				LeaseDuration: lease, Capabilities: capabilities, BudgetPolicy: v06BudgetPolicy(t, clock.Now()),
 			})
 			results <- claimResult{claim: claim, found: found, err: err}
 		}(index, repository)
@@ -465,6 +466,7 @@ func v06AssertFencedClaimAndReceipt(t *testing.T, fixture v06Fixture) {
 	clock.Advance(lease + time.Nanosecond)
 	reclaimed, found, err := second.ClaimNextAction(ctx, application.ClaimRequest{
 		WorkerRef: "worker:v06-reclaimer", Token: "claim:v06-reclaimer", LeaseDuration: lease, Capabilities: capabilities,
+		BudgetPolicy: v06BudgetPolicy(t, clock.Now()),
 	})
 	if err != nil || !found || reclaimed.Action.Ref != stale.Action.Ref || reclaimed.Fence != stale.Fence+1 ||
 		reclaimed.DeliveryAttempt != stale.DeliveryAttempt+1 {
@@ -619,11 +621,15 @@ func v06NewOrchestrator(
 	fixture v06Fixture,
 ) *application.Orchestrator {
 	t.Helper()
+	policy := v06BudgetPolicy(t, clock.Now())
 	orchestrator, err := application.New(application.Dependencies{
 		State: repository, Access: repository, Launcher: agent, Observer: agent, Artifacts: artifacts, Clock: clock, IDs: ids,
 		MaxOutputBytes:          1 << 20,
 		MaxMailboxEnvelopeBytes: 64 << 10,
 		MaxExecutionAttempts:    fixture.ClockAndRetry.MaxExecutionAttempts,
+		MaxChildrenPerParent:    6,
+		EffectApprovalTTL:       policy.EffectApprovalTTL,
+		BudgetPolicy:            policy,
 		ClaimLease:              v06Duration(t, fixture.ClockAndRetry.ClaimLease),
 		DirectorLeaseDuration:   2 * time.Minute,
 		ObservationDelay:        v06Duration(t, fixture.ClockAndRetry.ObservationDelay),
@@ -634,6 +640,44 @@ func v06NewOrchestrator(
 		t.Fatal(err)
 	}
 	return orchestrator
+}
+
+// v06BudgetPolicy supplies the same explicit governance dependency required
+// by the current application constructor.  It is deliberately a valid,
+// bounded test policy; acceptance scenarios must not regain an implicit
+// unlimited/no-policy path merely because V06 predates the V15 policy model.
+func v06BudgetPolicy(t *testing.T, at time.Time) application.BudgetPolicy {
+	t.Helper()
+	currency, err := governance.NewCurrency("USD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	policyHash := strings.Repeat("a", 64)
+	limit := governance.ResourceVector{
+		Tokens: 14_000_000, MoneyMicros: 70_000_000, Currency: currency,
+		ActiveTimeNS: (45 * time.Minute).Nanoseconds() * 70, ProcessSlots: 70, DiskBytes: (1 << 20) * 70,
+	}
+	demand := governance.ResourceVector{
+		Tokens: 200_000, MoneyMicros: 1_000_000, Currency: currency,
+		ActiveTimeNS: (45 * time.Minute).Nanoseconds(), ProcessSlots: 1, DiskBytes: 1 << 20,
+	}
+	envelope := func(ref, subject string, scope governance.BudgetScope) governance.BudgetEnvelope {
+		return governance.BudgetEnvelope{
+			Ref: ref, SubjectRef: subject, Scope: scope, Limit: limit,
+			Revision: 1, PolicyHash: policyHash, CreatedAt: at.UTC(),
+		}
+	}
+	policy := application.BudgetPolicy{
+		DeploymentEnvelope:      envelope("budget-envelope:deployment:acceptance", "deployment:acceptance", governance.BudgetScopeDeployment),
+		ProjectEnvelopeTemplate: envelope("budget-envelope:project:acceptance", "project:acceptance", governance.BudgetScopeProject),
+		GoalEnvelopeTemplate:    envelope("budget-envelope:goal:acceptance", "goal:acceptance", governance.BudgetScopeGoal),
+		DefaultWorkItemDemand:   demand, QuotaRetryDelay: 500 * time.Millisecond,
+		EffectApprovalTTL: 24 * time.Hour, PolicyHash: policyHash,
+	}
+	if err := application.ValidateBudgetPolicy(policy); err != nil {
+		t.Fatalf("build V06 governance policy: %v", err)
+	}
+	return policy
 }
 
 func v06OpenSQLite(t *testing.T, ctx context.Context, path string, clock *v06Clock) *sqlite.Repository {
@@ -851,6 +895,11 @@ type v06TemporaryError struct{}
 func (v06TemporaryError) Error() string   { return "v06.temporary" }
 func (v06TemporaryError) Temporary() bool { return true }
 
+type v06DefinitelyUnappliedError struct{}
+
+func (v06DefinitelyUnappliedError) Error() string              { return "v06.permanent" }
+func (v06DefinitelyUnappliedError) DefinitelyNotApplied() bool { return true }
+
 type v06Agent struct {
 	mu           sync.Mutex
 	clock        *v06Clock
@@ -883,7 +932,7 @@ func (agent *v06Agent) Launch(_ context.Context, request ports.AgentLaunchReques
 	case "temporary_error":
 		return ports.AgentLaunchReceipt{}, v06TemporaryError{}
 	case "permanent_error":
-		return ports.AgentLaunchReceipt{}, errors.New("v06.permanent")
+		return ports.AgentLaunchReceipt{}, v06DefinitelyUnappliedError{}
 	case "accepted":
 	default:
 		return ports.AgentLaunchReceipt{}, fmt.Errorf("v06.unknown_launch_outcome:%s", outcome)
@@ -895,6 +944,7 @@ func (agent *v06Agent) Launch(_ context.Context, request ports.AgentLaunchReques
 		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash,
 		ProviderRef: "provider:v06", ModelRef: "model:v06", AgentRef: "agent:v06",
 		ExternalRef: "external:" + request.ExecutionRef.String(), IdempotencyKey: request.IdempotencyKey,
+		ReceiptRef: "receipt:" + request.ExecutionRef.String(),
 		AcceptedAt: agent.clock.Now(),
 	}, nil
 }
@@ -908,7 +958,8 @@ func (agent *v06Agent) Observe(_ context.Context, executionRef goal.ExecutionRef
 	}
 	return ports.AgentObservation{
 		ExecutionRef: executionRef, SpecHash: request.SpecHash, Status: ports.AgentCompleted,
-		MediaType: "text/plain", Content: []byte("V06 acreditado"), ObservedAt: agent.clock.Now(),
+		MediaType: "text/plain", Content: []byte("V06 acreditado"),
+		Usage: governance.ResourceUsage{Quality: governance.UsageQualityUnknown}, ObservedAt: agent.clock.Now(),
 	}, nil
 }
 

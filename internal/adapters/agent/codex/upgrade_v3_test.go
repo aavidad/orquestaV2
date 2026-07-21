@@ -234,8 +234,8 @@ func TestAdapterUpgradeV3ConcurrentBindingHasSingleDurableWinner(t *testing.T) {
 	}
 }
 
-func TestAdapterUpgradeRejectsTerminalSchemasOutsideV3AndV4(t *testing.T) {
-	for _, schemaVersion := range []int{2, 5} {
+func TestAdapterUpgradeRejectsTerminalSchemasOutsideV3V4AndV5(t *testing.T) {
+	for _, schemaVersion := range []int{2, 6} {
 		t.Run(strconv.Itoa(schemaVersion), func(t *testing.T) {
 			config := testConfig(t)
 			request := testRequest(t, "upgrade-terminal-schema", "helper:success", 1024)

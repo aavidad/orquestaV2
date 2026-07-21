@@ -1,13 +1,13 @@
 # Estado y handoff vivo del rebuild
 
-Última actualización: 2026-07-18 Europe/Madrid.
+Última actualización: 2026-07-21 Europe/Madrid.
 
 Este documento permite continuar el rebuild sin reconstruir el contexto de la
 sesión. Es estado operativo, no evidencia de aceptación. Los estados canónicos
 de capacidades, verticales y contratos viven en `product/roadmap.json`; los
 verdes viven en receipts fuera de su propio candidato.
 
-## Checkpoint verificable: V15 acreditado; análisis V16 cerrado
+## Checkpoint verificable: V15 acreditado; V16 implementado y sin sellar
 
 En `9bc99351c7`, V01–V15 están cerrados por receipts V3 reproducibles.
 `TestAcceptanceV15BudgetsEffectsReceipt` valida el `PASS` de
@@ -43,31 +43,49 @@ Resultado funcional del candidato V15:
   aparcado o se liquida localmente cuando ya no existe efecto externo. La
   adopción/reautorización operativa general permanece en V32.
 
-El análisis V16 está cerrado en
-`docs/reconstruccion/analisis_y_contrato_v16_workspace_git.md`. V16 se reduce a
+El análisis y la implementación V16 están completos en el worktree según
+`docs/reconstruccion/analisis_y_contrato_v16_workspace_git.md`. El alcance es
 workspace y Git local (`STG-02`, `STG-10`, `EXT-10`); `EXT-11` GitHub/GitLab/
-Gitea pasa a V28. El siguiente gate es el contrato rojo exacto
-`TestAcceptanceV16WorkspaceGit`; todavía no hay código ni capacidad V16
-acreditada. V15 sigue siendo aplicación/puertos internos; HTTP/MCP/CLI públicos
-pertenecen a V20 e i18n completa a V21.
+Gitea permanece en V28. Existen contratos neutrales, casos de uso sobre el
+único `Orchestrator`, migración/recovery SQLite, adapter Git CLI local, wiring
+opt-in de bootstrap/Codex y E2E Git+SQLite real.
 
-### Cierre de sesión 2026-07-18 14:17 Europe/Madrid
+Este checkpoint no acredita V16: faltan los commits P/S/E y el receipt V3. El
+total canónico permanece en **56/257; 15/34; 15/15 receipts** hasta que
+`TestAcceptanceV16WorkspaceGitReceipt` valide un receipt `PASS` ejecutado desde
+S en checkout `detached_clean`. Solo entonces será **59/257; 16/34; 16/16**.
+V15 sigue siendo aplicación/puertos internos; V16 tampoco añade bindings MCP,
+HTTP o CLI. El registro público pertenece a V20 e i18n completa a V21.
 
-- no se abrió código V16 ni V17;
-- `AC-V16-WORKSPACE-GIT` ya tiene nombre de test/comando exactos y siete
-  assertions; se retiró el patrón genérico que podía quedar verde con cero
-  tests;
-- `BUG-REBUILD-20260718-231` cerró la regresión donde el test histórico V10
-  exigía que `ORC-11` siguiera pendiente después de su acreditación V15;
-- reapareció el patrón ya inventariado como `BUG-REBUILD-20260714-042`: el
-  receipt global Codex había quedado stale al cambiar fuentes V15. Se renovó
-  mediante el servidor MCP productivo con resultado `PASS` en 5,39 s, source
-  digest `sha256:a37af4c18943f94dc0ed34efbb4bc9fe1a0c97c60463e2bebf04ab9e5168d37b`
-  y marcador `ORQUESTA_CODEX_E2E_OK_eda4551e7362dce5ed829a7fae0f2631`;
-- `go test -mod=vendor -count=1 .`, focales de roadmap/trazabilidad,
-  `jq empty product/roadmap.json` y `git diff --check` pasan antes del commit;
-- siguiente acción única: crear el test/fixture rojo V16 descrito en la sección
-  `Siguiente acción exacta`; no reanalizar V16 ni recuperar código legacy.
+### Checkpoint de preparación V16 2026-07-21
+
+- V17 no se abrió y Forge remoto sigue asignado a V28;
+- `AC-V16-WORKSPACE-GIT` tiene test, fixture, argv exacto, lista de sujetos y
+  budgets de simplicidad; el OID sellado continúa a cero deliberadamente hasta
+  crear P;
+- los focales Git+SQLite, crash/replay, RBAC, recovery adversarial, config,
+  regresiones V02/V03/V06/V09/V10 y aceptación estructural son gates
+  obligatorios; deben repetirse sobre el árbol ya estabilizado antes de P;
+- el ledger incorpora las lecciones V16 solo con tests exactos verdes, incluida
+  la recuperación que exige conservar receipts y observaciones de integración;
+- las lecciones nuevas son `BUG-REBUILD-20260721-232`, `233`, `235`, `236`,
+  `237`, `239`, `240`, `242`, `245`, `246` y `247`–`254`; los huecos anteriores
+  son deliberados y no se rellenan con evidencia prestada;
+- las reapariciones de opcionalidad, catálogo V02 y schema drift se consolidan
+  con `BUG-REBUILD-20260714-034`, `BUG-REBUILD-20260715-101` y
+  `BUG-REBUILD-20260715-115`; la compatibilidad de los harness V06/V09 queda
+  bajo sus gates históricos ya inventariados, sin duplicar `lesson_test_ref`;
+- siguiente acción única: ejecutar el protocolo P/S/E descrito abajo. No abrir
+  otro frente ni V17.
+
+Validación previa al sellado: los guards de trazabilidad, JSONL, config,
+aplicación, Git local y recovery SQLite pasan. El fallo transitorio que repetía
+`prepare_workspace` quedó corregido; el selector V16 bootstrap vuelve a avanzar
+a `launch_agent`, cubre 7/7 crash frontiers y pasó también bajo `-race`. La
+contrarrevisión posterior exigió además payload semántico exacto, base fijada
+antes del claim, commit determinista, marker CAS revalidado, release recuperable
+y `common-dir` seguro. Aun así, ningún `status: closed` del ledger acredita V16
+antes del receipt P/S/E.
 
 ## Checkpoint histórico: V13 cerrado
 
@@ -196,20 +214,21 @@ control plane en una única cola `database/sql`. La prueba
 `TestRepositorySerializesWritersBeforeSQLiteBusyTimeout` y el E2E real cierran
 la incidencia sin retry ciego ni segunda autoridad.
 
-Último smoke Codex real, renovado durante el cierre V13:
+Último smoke Codex real, renovado sobre fuentes V16 antes de P:
 
 ```text
-source SHA: sha256:d3bac625fa52b76fdc2c0007292577751ca8931a6ca890ecd2751a8976fa8d36
-marker:     ORQUESTA_CODEX_E2E_OK_70c61a97f86425f3464a7e12e9b9829a
-ejecutado:  2026-07-16T12:12:56+02:00
-duración:   6.15s
-config:     /home/alberto/Trabajo/.orquesta-rebuild-real-e2e-v13-20260716T115042/orquesta.toml
+source SHA: sha256:8de5dcf604e8297eed817beac0af02b4719212ec4a96b040ab2cd5bd17944110
+marker:     ORQUESTA_CODEX_E2E_OK_afa8e2ed4bbfb6744e2990fbcd9a1d7e
+ejecutado:  2026-07-21T23:18:46+02:00
+duración:   6.85s
+config:     /home/alberto/Trabajo/.orquesta-rebuild-real-e2e-v14-20260716T171502/orquesta.toml
 ```
 
 El `PASS` recorre composición productiva, API MCP, Codex real, SQLite y CAS y
-demuestra que V13 no regresó ese vertical. No activa `HandoffRequired`, no usa
-bindings mailbox y no acredita `AC-V13-MAILBOX`, `ORC-04`, `ORC-05` ni
-`ORC-14` por sí mismo. Esas capacidades quedaron acreditadas por el receipt V3
+demuestra que las fuentes V16 no regresaron ese vertical. No usa workspace Git
+porque el Goal de smoke carece de `WriteSet`, ni acredita V16 por sí mismo. V16
+solo se acredita mediante su receipt V3 P/S/E. Las capacidades V13 quedaron
+acreditadas por el receipt V3
 V13 separado, no por el smoke del proveedor.
 
 `BUG-REBUILD-20260715-152` permanece diferido y asignado a V24: una instalación
@@ -469,7 +488,10 @@ git diff --check
 scripts/check_rebuild_write_set.sh
 ```
 
-El rango vigente de receipts acreditados es `V(0[1-9]|1[0-5])`.
+El rango vigente antes del sellado V16 es `V(0[1-9]|1[0-5])`. Después de crear
+E, no ampliar el rango por edición manual: ejecutar primero
+`TestAcceptanceV16WorkspaceGitReceipt`; solo si pasa puede usarse
+`V(0[1-9]|1[0-6])`.
 
 ## Progreso honesto
 
@@ -505,9 +527,8 @@ El rango vigente de receipts acreditados es `V(0[1-9]|1[0-5])`.
 - V14 controles: cerrado; receipt V3 `PASS`; acredita exactamente `GOV-07`,
   `STG-15`, `ORC-03` y `ORC-16`. Es application-only; no expone HTTP/MCP/CLI,
   cuyos bindings siguen en V20.
-- V15: solo cerrado si su receipt V3 valida; entonces acredita exactamente
-  `GOV-15`, `STG-09`, `ORC-08`, `ORC-09`, `ORC-10`, `ORC-11`, `EVD-03` y
-  `EVD-14`.
+- V15: cerrado por receipt V3 válido; acredita exactamente `GOV-15`, `STG-09`,
+  `ORC-08`, `ORC-09`, `ORC-10`, `ORC-11`, `EVD-03` y `EVD-14`.
 - La contrarrevisión cerró `BUG-REBUILD-20260718-229`: producción y pruebas de
   crash/publicación conservan SQLite `synchronous=FULL`; solo las pruebas
   semánticas usan un seam privado `OFF`, y el gate `-race` queda limitado por
@@ -515,12 +536,15 @@ El rango vigente de receipts acreditados es `V(0[1-9]|1[0-5])`.
 - También cerró `BUG-REBUILD-20260718-230`: un stop pendiente conserva primera
   prioridad, pero reintenta con backoff durable exponencial y acotado, dejando
   progresar acciones ajenas mientras aún no es elegible.
-- V16–V34: pendientes. No contar código heredado, groundwork o una prueba
+- V16: implementación completa en el worktree, acreditación pendiente del
+  receipt P/S/E. Cuando el gate estricto pase acreditará exactamente `STG-02`,
+  `STG-10` y `EXT-10`; antes no cuenta ninguna de las tres.
+- V17–V34: pendientes. No contar código heredado, groundwork o una prueba
   aislada como vertical posterior cerrada.
-- progreso canónico: 14 de 34, 41,18 %, hasta validar V15; después 15 de 34,
-  44,12 %, con 15/15 receipts válidos;
-- capacidades canónicas: 48 de 257, 18,68 %, hasta validar V15; después 56 de
-  257, 21,79 %. Con receipt V15 válido, las 56 acreditadas son:
+- progreso canónico vigente: 15 de 34, 44,12 %, con 15/15 receipts válidos;
+  tras receipt V16 válido: 16 de 34, 47,06 %, con 16/16 receipts;
+- capacidades canónicas vigentes: 56 de 257, 21,79 %. Tras receipt V16 válido:
+  59 de 257, 22,96 %. Las 56 acreditadas antes de ese cierre son:
   `EVD-02`, `EVD-11`, `EVD-12`, `EVD-15`, `GOV-02`, `GOV-03`, `GOV-04`, `GOV-05`,
   `GOV-06`, `GOV-07`, `GOV-08`, `GOV-09`, `GOV-10`, `GOV-16`, `GOV-19`, `GOV-20`,
   `GOV-21`, `GOV-22`, `OPS-01`, `OPS-02`, `OPS-03`, `OPS-04`,
@@ -532,12 +556,21 @@ El rango vigente de receipts acreditados es `V(0[1-9]|1[0-5])`.
 
 ## Siguiente acción exacta
 
-Crear `acceptance/v16_workspace_git_test.go` y su fixture con el único test
-`TestAcceptanceV16WorkspaceGit`, ejecutar el comando exacto de
-`AC-V16-WORKSPACE-GIT` y conservar el rojo que demuestre ausencia del producto.
-Después implementar por dentro: tipos/puertos, mismo state/outbox/effect ledger,
-adapter Git local, wiring y E2E. No abrir V17 ni Forge remoto antes de cerrar
-V16 con receipt reproducible.
+Cerrar únicamente V16 con este orden:
+
+1. ejecutar gates finales y resincronizar `candidate_subjects` contra el delta
+   real base→P;
+2. crear P con producto y documentación, excluyendo output/receipt V16;
+3. sustituir el OID cero en test y fixture por P y crear S;
+4. desde checkout detached limpio de S, ejecutar literalmente el
+   `execution_argv` de `acceptance/fixtures/v16_workspace_git.json`;
+5. crear E solo con `product/evidence/v16_workspace_git.output.txt` y el
+   receipt V3 `product/evidence/v16_workspace_git.json`;
+6. validar `TestAcceptanceV16WorkspaceGitReceipt`. Solo su `PASS` permite
+   contar V16 y actualizar el rango de receipts.
+
+No abrir V17, Forge remoto ni bindings públicos. Si un gate falla, corregir
+V16 y repetir P/S/E; no fabricar ni editar el receipt a mano.
 
 Los subagentes directos siguen siendo bootstrap hasta V22. Hoy Orquesta puede
 coordinar un DAG declarado; una petición abierta aún necesita dirección externa.
@@ -546,7 +579,7 @@ coordinar un DAG declarado; una petición abierta aún necesita dirección exter
 
 Las palabras “pendiente”, “siguiente” o “en curso” dentro del historial
 describen checkpoints pasados. No son órdenes de reanudación. La acción vigente
-es crear el contrato rojo V16 y después implementar únicamente su alcance local.
+es sellar V16 mediante P/S/E y detenerse; su implementación ya existe.
 
 ## V03: trabajo ya realizado
 

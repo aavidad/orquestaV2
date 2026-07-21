@@ -1,8 +1,8 @@
 {
   "document_type": "orquesta.config_ui",
   "schema_version": 2,
-  "registry_revision": "2026-07-18.15",
-  "registry_hash": "sha256:f1024af0fdca9ed804388c50bead31ae05cb084329f637a572a5d9bff65fe584",
+  "registry_revision": "2026-07-21.16",
+  "registry_hash": "sha256:987475e75789d12be14a633ebfca002261a4b2d2e821528dd86287f0b229c244",
   "aliases": [],
   "cross_validators": [
     {
@@ -31,6 +31,7 @@
         "artifact.filesystem.root",
         "credentials.local.path",
         "runtime.codex.work_root",
+        "workspace.local.root",
         "config.effective_path",
         "identity.local_token_path"
       ]
@@ -363,6 +364,42 @@
       "restart_required": true,
       "validator_ids": [
         "credential_ref"
+      ]
+    },
+    {
+      "key": "workspace.local.root",
+      "semantic_ref": "orquesta.config.workspace.local.root",
+      "label_key": "config.field.workspace.local.root",
+      "type": "path",
+      "sensitive": false,
+      "scope": "workspace",
+      "restart_required": true,
+      "validator_ids": [
+        "non_empty_path"
+      ]
+    },
+    {
+      "key": "repository.local.seed_path",
+      "semantic_ref": "orquesta.config.repository.local.seed_path",
+      "label_key": "config.field.repository.local.seed_path",
+      "type": "string",
+      "sensitive": false,
+      "scope": "workspace",
+      "restart_required": true,
+      "validator_ids": [
+        "trimmed_optional_string"
+      ]
+    },
+    {
+      "key": "repository.local.target_ref",
+      "semantic_ref": "orquesta.config.repository.local.target_ref",
+      "label_key": "config.field.repository.local.target_ref",
+      "type": "string",
+      "sensitive": false,
+      "scope": "workspace",
+      "restart_required": true,
+      "validator_ids": [
+        "trimmed_non_empty_string"
       ]
     },
     {

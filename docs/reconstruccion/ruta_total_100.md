@@ -1,6 +1,6 @@
 # Ruta canónica hasta Orquesta total
 
-Fecha: 2026-07-18
+Fecha: 2026-07-21
 
 Estado: autoridad de ejecución del rebuild. Esta ruta define el trabajo; no
 afirma que el producto total esté terminado.
@@ -199,16 +199,16 @@ Nota de evidencia V13: un E2E Codex real que recorra composición, MCP, SQLite
 y CAS pero no active `HandoffRequired` sirve como gate de no regresión. No
 sustituye `AC-V13-MAILBOX` ni acredita mailbox o bindings públicos.
 
-Corte verificable 2026-07-18: V15 solo está acreditado cuando el receipt V3
-`PASS` de `AC-V15-BUDGETS-EFFECTS` valida desde checkout `detached_clean`. Los
-OID y digests autoritativos viven en
-[`product/evidence/v15_budgets_effects.json`](../../product/evidence/v15_budgets_effects.json);
-no se duplican manualmente en esta ruta. Si falta, contiene `{}` o no valida,
-el corte sigue formalmente en V14.
+Corte verificable 2026-07-21: V01–V15 están acreditados por receipts V3
+válidos. V16 está implementado, pero el código y los verdes focales no lo
+acreditan: debe existir un receipt V3 `PASS` de `AC-V16-WORKSPACE-GIT`, generado
+desde S en checkout `detached_clean` y validado por su test estricto. Los OID y
+digests autoritativos vivirán únicamente en
+`product/evidence/v16_workspace_git.json`.
 
 ```text
-sin receipt V15 válido: 48/257 = 18,68 %; 14/34 = 41,18 %; 14/14 receipts
-con receipt V15 válido: 56/257 = 21,79 %; 15/34 = 44,12 %; 15/15 receipts
+antes del receipt V16: 56/257 = 21,79 %; 15/34 = 44,12 %; 15/15 receipts
+con receipt V16 válido: 59/257 = 22,96 %; 16/34 = 47,06 %; 16/16 receipts
 ```
 
 El receipt V15 acredita únicamente `GOV-15`, `STG-09`, `ORC-08`, `ORC-09`,
@@ -218,10 +218,10 @@ mismo writer, scheduler, outbox y repositorio; no crean otro motor. Launch y
 stop quedan gobernados también en composición Codex. HTTP/MCP/CLI públicos
 siguen esperando V20 y la paridad i18n total espera V21.
 
-El análisis V16 está cerrado en
-`docs/reconstruccion/analisis_y_contrato_v16_workspace_git.md`. Siguiente
-sesión: crear `TestAcceptanceV16WorkspaceGit` rojo y solo después implementar
-su write-set local. Forge remoto no se abre hasta V28.
+El análisis y la implementación V16 están completos en el worktree según
+`docs/reconstruccion/analisis_y_contrato_v16_workspace_git.md`. El siguiente y
+único paso es sellar P/S/E, ejecutar su argv exacto y validar el receipt. V16
+solo acredita `STG-02`, `STG-10` y `EXT-10`; Forge remoto no se abre hasta V28.
 
 ## 6. Olas y transición a auto-orquestación
 
@@ -230,9 +230,9 @@ Ejemplos de paralelismo seguro:
 
 - V07 y contratos iniciales de V10 pueden avanzar tras V06 con write-sets
   separados; V08 consume la salida canónica de V07.
-- Tras validar el receipt V15 y cerrar el análisis V16, se crea su contrato rojo
-  exacto; V17 no se adelanta sobre su autoridad de workspace/Git aunque pueda
-  preparar contratos disjuntos sin integrarlos.
+- Mientras V16 no tenga receipt estricto, solo se ejecuta su sellado P/S/E;
+  V17 no se adelanta sobre su autoridad de workspace/Git ni se integra trabajo
+  preparatorio de otra vertical.
 - V17, adapters iniciales de V21 y catálogos i18n pueden desarrollarse en ramas
   separadas, pero solo integran con sus dependencias acreditadas.
 - tras congelar contrato en V20, los adapters de V25 se portan en paralelo.

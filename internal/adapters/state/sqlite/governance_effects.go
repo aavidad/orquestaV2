@@ -307,11 +307,18 @@ func (repository *Repository) RecordEffectAttempt(
 
 func requireEffectAttemptFrontier(ctx context.Context, transaction *sql.Tx, state application.RecordEffectAttemptState, candidate claimCandidate) error {
 	frontier, eventKind, reservationRef, intentRef := "running", "execution.accepted", "", ""
-	if state.Claim.Action.Kind == application.ActionLaunchAgent {
+	switch state.Claim.Action.Kind {
+	case application.ActionLaunchAgent:
 		if err := requireClaimBudgetReservation(ctx, transaction, state.Claim, candidate); err != nil {
 			return err
 		}
 		frontier, eventKind, reservationRef, intentRef = "dispatching", "execution.dispatching", state.Claim.BudgetReservationRef, state.Attempt.IntentRef
+	case application.ActionPrepareWorkspace:
+		frontier, eventKind = "queued", "execution.queued"
+	case application.ActionCommitChange:
+		frontier, eventKind = "awaiting_commit", "execution.output_ready"
+	case application.ActionIntegrateChange:
+		frontier, eventKind = "awaiting_integration", "change.committed"
 	}
 	var bound int
 	err := transaction.QueryRowContext(ctx, `SELECT COUNT(*) FROM executions WHERE ref=? AND state=? AND (?='' OR governance_version=1)

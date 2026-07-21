@@ -362,8 +362,8 @@ INSERT INTO executions(
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
 		arguments = arguments[:len(arguments)-1]
 	}
+	version := int64(0)
 	if schema.governance {
-		version := int64(0)
 		if execution.BudgetReservationRef != "" || execution.EffectIntentRef != "" || execution.LaunchReceiptRef != "" {
 			version = 1
 		}
@@ -380,18 +380,38 @@ INSERT INTO executions(
 		arguments = append(arguments, version, nullableString(execution.BudgetReservationRef),
 			nullableString(execution.EffectIntentRef), nullableString(execution.LaunchReceiptRef))
 	}
+	if schema.workspace {
+		query = `
+INSERT INTO executions(
+    ref, goal_ref, work_item_ref, attempt_no, max_execution_attempts,
+    replaces_execution_ref, plan_generation, app_spec_generation, spec_hash,
+    repository_ref, execution_workspace_ref, state, artifact_media_type, idempotency_key, max_output_bytes,
+    provider_ref, model_ref, agent_ref, external_ref, governance_version, budget_reservation_ref,
+    effect_intent_ref, launch_receipt_ref, created_at, deadline_at, started_at, provider_accepted_at,
+    last_observed_at, provider_observed_at, finished_at, failure_code, recipient_mailbox_retired
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		arguments = []any{execution.Ref.String(), execution.GoalRef.String(), execution.WorkItemRef.String(),
+			int64(execution.AttemptNo), int64(execution.MaxExecutionAttempts), nullableString(execution.ReplacesExecutionRef.String()),
+			int64(execution.PlanGeneration), int64(execution.AppSpecGeneration), execution.SpecHash,
+			execution.RepositoryRef.String(), execution.ExecutionWorkspaceRef.String(), string(execution.State), execution.ArtifactMediaType,
+			execution.IdempotencyKey, execution.MaxOutputBytes, execution.ProviderRef, execution.ModelRef, execution.AgentRef, execution.ExternalRef,
+			version, nullableString(execution.BudgetReservationRef), nullableString(execution.EffectIntentRef), nullableString(execution.LaunchReceiptRef),
+			requiredTime(execution.CreatedAt), storedTime(execution.DeadlineAt), storedTime(execution.StartedAt), storedTime(execution.ProviderAcceptedAt),
+			storedTime(execution.LastObservedAt), storedTime(execution.ProviderObservedAt), storedTime(execution.FinishedAt), execution.FailureCode,
+			storedBool(execution.RecipientMailboxRetired)}
+	}
 	_, err = transaction.ExecContext(ctx, query, arguments...)
 	return mapDatabaseError(err)
 }
 
-type executionSchema struct{ mailbox, governance bool }
+type executionSchema struct{ mailbox, governance, workspace bool }
 
 func readExecutionSchema(ctx context.Context, source queryer) (executionSchema, error) {
 	var schema executionSchema
 	for _, column := range []struct {
 		name  string
 		value *bool
-	}{{"recipient_mailbox_retired", &schema.mailbox}, {"governance_version", &schema.governance}} {
+	}{{"recipient_mailbox_retired", &schema.mailbox}, {"governance_version", &schema.governance}, {"execution_workspace_ref", &schema.workspace}} {
 		found, err := sqliteTableHasColumn(ctx, source, "executions", column.name)
 		if err != nil {
 			return executionSchema{}, mapDatabaseError(err)
@@ -469,7 +489,27 @@ WHERE ref = ? AND goal_ref = ? AND work_item_ref = ? AND state = ?
 	if err != nil {
 		return mapDatabaseError(err)
 	}
-	return requireOneRow(result)
+	if err := requireOneRow(result); err != nil {
+		return err
+	}
+	workspacePersisted, err := sqliteTableHasColumn(ctx, transaction, "executions", "execution_workspace_ref")
+	if err != nil {
+		return mapDatabaseError(err)
+	}
+	if workspacePersisted {
+		updated, err := transaction.ExecContext(ctx, `
+UPDATE executions SET repository_ref=?, execution_workspace_ref=?
+WHERE ref=? AND goal_ref=? AND work_item_ref=? AND state=?`,
+			execution.RepositoryRef.String(), execution.ExecutionWorkspaceRef.String(), execution.Ref.String(),
+			execution.GoalRef.String(), execution.WorkItemRef.String(), string(execution.State))
+		if err != nil {
+			return mapDatabaseError(err)
+		}
+		if err := requireOneRow(updated); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func acceptExecutionCAS(ctx context.Context, transaction *sql.Tx, execution application.ExecutionRecord) error {
@@ -761,6 +801,21 @@ INSERT INTO outbox(
 			if err := insertEffectAdmission(ctx, transaction, action); err != nil {
 				return err
 			}
+		}
+		workspaceColumns, columnErr := sqliteTableHasColumn(ctx, transaction, "outbox", "change_ref")
+		if columnErr != nil {
+			return mapDatabaseError(columnErr)
+		}
+		if workspaceColumns {
+			_, err = transaction.ExecContext(ctx, `
+INSERT INTO outbox(
+    ref, kind, goal_ref, work_item_ref, execution_ref, control_ref, change_ref, expected_target_oid,
+    plan_generation, work_item_generation, available_at, governance_version, effect_intent_ref
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				action.Ref, string(action.Kind), action.GoalRef.String(), action.WorkItemRef.String(), action.ExecutionRef.String(),
+				nullableString(action.ControlRef), action.ChangeRef.String(), action.ExpectedTargetOID, int64(action.PlanGeneration), int64(action.WorkItemGeneration),
+				requiredTime(action.AvailableAt), version, nullableString(action.EffectIntentRef))
+			return mapDatabaseError(err)
 		}
 		_, err = transaction.ExecContext(ctx, `
 INSERT INTO outbox(

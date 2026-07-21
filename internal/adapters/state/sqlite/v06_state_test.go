@@ -254,7 +254,8 @@ func TestV06GoalMutationRejectsEventFromDifferentExecutionAndRollsBack(t *testin
 		}
 	}
 	if afterItem.State() != goal.WorkItemStateRunning ||
-		persistedCurrent.State != application.ExecutionDispatching || len(after.ConsumptionReceipts) != 0 {
+		persistedCurrent.State != application.ExecutionDispatching ||
+		len(after.ConsumptionReceipts) != len(preparedRecord.ConsumptionReceipts) {
 		t.Fatalf("cross-execution rejection partially committed: %+v", after)
 	}
 }

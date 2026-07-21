@@ -308,7 +308,7 @@ func memoryDirectorScheduleValid(state ApplyDirectorPlanState) bool {
 		seenExecutions[execution.Ref] = struct{}{}
 	}
 	for _, action := range state.NewActions {
-		if action.Kind != ActionLaunchAgent || action.GoalRef != state.GoalRef ||
+		if (action.Kind != ActionLaunchAgent && action.Kind != ActionPrepareWorkspace) || action.GoalRef != state.GoalRef ||
 			action.PlanGeneration != state.Goal.PlanGeneration() {
 			return false
 		}

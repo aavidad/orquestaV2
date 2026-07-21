@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -44,23 +45,24 @@ func TestMCPCreatesAndExecutesDiamondDAGAtomically(t *testing.T) {
 		t.Fatalf("created diamond = %+v", created)
 	}
 
-	harness.process(t, 2)
+	// Writer lifecycle is prepare -> launch -> observe -> commit -> integrate.
+	harness.process(t, 5)
 	afterRoot := harness.get(t, created.GoalRef)
 	status, err := harness.repository.Status(context.Background(), harness.projectRef)
 	if err != nil || len(afterRoot.Executions) != 3 || len(afterRoot.Artifacts) != 1 || status.PendingActions != 2 {
 		t.Fatalf("atomic fan-out = executions:%d artifacts:%d status:%+v err:%v", len(afterRoot.Executions), len(afterRoot.Artifacts), status, err)
 	}
 
-	harness.process(t, 2)
+	harness.process(t, 4)
 	if harness.agent.concurrent() != 2 {
 		t.Fatalf("disjoint successors were not concurrently launchable: %d", harness.agent.concurrent())
 	}
-	harness.process(t, 2)
+	harness.process(t, 6)
 	afterBranches := harness.get(t, created.GoalRef)
 	if len(afterBranches.Executions) != 4 || afterBranches.State != string(goal.GoalStateRunning) {
 		t.Fatalf("join was not scheduled exactly once: %+v", afterBranches)
 	}
-	harness.process(t, 2)
+	harness.process(t, 5)
 	closed := harness.get(t, created.GoalRef)
 	if closed.State != string(goal.GoalStateSucceeded) || len(closed.Executions) != 4 ||
 		len(closed.Artifacts) != 4 || len(closed.Attestations) != 4 {
@@ -174,7 +176,7 @@ func TestMCPRoundTripsPhaseMetadataAndExecutionRequirementsToAgent(t *testing.T)
 		t.Fatalf("work requirements did not round trip through MCP/SQLite: %+v", stored.WorkItems)
 	}
 
-	harness.process(t, 1)
+	harness.process(t, 2)
 	request, ok := harness.agent.requestForObjective("research exact sources")
 	if !ok || request.PhaseRef != "phase-instance:research" || request.PhaseKey != "phase:research" ||
 		request.PhaseTemplateRef != "phase-template:research-web" ||
@@ -231,7 +233,7 @@ func TestMCPParentMetadataClosesWithoutMailboxOrRequeue(t *testing.T) {
 			parentItem.HandoffRequired(), childItem.HandoffRequired())
 	}
 
-	harness.process(t, 4)
+	harness.process(t, 7)
 	closed := harness.get(t, created.GoalRef)
 	states := workStates(closed.WorkItems)
 	status, statusErr := harness.repository.Status(ctx, harness.projectRef)
@@ -259,13 +261,13 @@ func TestSchedulerSerializesOverlappingRootsBeforeProvider(t *testing.T) {
 	if len(created.Executions) != 1 {
 		t.Fatalf("overlap roots not initially scheduled: %+v", created)
 	}
-	harness.process(t, 1)
+	harness.process(t, 2)
 	if harness.agent.launchCount() != 1 || harness.agent.concurrent() != 1 {
 		t.Fatalf("conflicting root reached provider: launches=%d concurrent=%d", harness.agent.launchCount(), harness.agent.concurrent())
 	}
-	harness.process(t, 1)
+	harness.process(t, 3)
 	harness.clock.Advance(2 * time.Second)
-	harness.process(t, 2)
+	harness.process(t, 5)
 	closed := harness.get(t, created.GoalRef)
 	if closed.State != string(goal.GoalStateSucceeded) || harness.agent.launchCount() != 2 || harness.agent.concurrent() != 1 {
 		t.Fatalf("serialized writer did not progress: goal=%+v launches=%d max=%d", closed, harness.agent.launchCount(), harness.agent.concurrent())
@@ -283,7 +285,7 @@ func TestExhaustedRootInterruptsAndKeepsGoalOpenForDirectorReplan(t *testing.T) 
 			planItem("d", "independent", "phase:work", nil, []string{"internal/independent"}),
 		},
 	})
-	harness.process(t, 3)
+	harness.process(t, 5)
 	afterFirstFailure := harness.get(t, created.GoalRef)
 	if afterFirstFailure.State != string(goal.GoalStateRunning) || len(afterFirstFailure.Executions) != 3 {
 		t.Fatalf("replaceable provider failure did not preserve Goal: %+v", afterFirstFailure)
@@ -305,6 +307,12 @@ func TestExhaustedRootInterruptsAndKeepsGoalOpenForDirectorReplan(t *testing.T) 
 	harness.process(t, 2)
 	harness.clock.Advance(2 * time.Second)
 	harness.process(t, 2)
+	// Second replacement is launched above. Its failure schedules the final
+	// attempt after the two-second backoff; only that final failed observation
+	// interrupts the WorkItem.
+	harness.process(t, 1)
+	harness.clock.Advance(2 * time.Second)
+	harness.process(t, 3)
 	open := harness.get(t, created.GoalRef)
 	states = workStates(open.WorkItems)
 	if open.State != string(goal.GoalStateRunning) || open.ClosedAt != nil ||
@@ -364,13 +372,15 @@ func workStates(items []mcpiface.WorkItemView) map[string]string {
 }
 
 type dagHarness struct {
-	orchestrator  *application.Orchestrator
-	repository    *sqlite.Repository
-	access        application.Access
-	projectRef    goal.ProjectRef
-	clock         *dagClock
-	agent         *dagAgent
-	clientSession *sdkmcp.ClientSession
+	orchestrator   *application.Orchestrator
+	repository     *sqlite.Repository
+	access         application.Access
+	projectRef     goal.ProjectRef
+	clock          *dagClock
+	agent          *dagAgent
+	workspace      *dagWorkspace
+	versionControl *dagVersionControl
+	clientSession  *sdkmcp.ClientSession
 }
 
 func newDAGHarness(t *testing.T, failures map[string]bool) *dagHarness {
@@ -415,6 +425,8 @@ func newDAGHarness(t *testing.T, failures map[string]bool) *dagHarness {
 	}
 	agent := newDAGAgent(clock, failures)
 	artifacts := newDAGArtifacts()
+	workspace := newDAGWorkspace()
+	versionControl := newDAGVersionControl()
 	snapshot, err := config.Resolve(config.ResolveOptions{})
 	if err != nil {
 		t.Fatalf("resolve canonical DAG config: %v", err)
@@ -426,6 +438,7 @@ func newDAGHarness(t *testing.T, failures map[string]bool) *dagHarness {
 	orchestrator, err := application.New(application.Dependencies{
 		State: repository, Access: repository,
 		Launcher: agent, Observer: agent, Artifacts: artifacts,
+		WorkspaceManager: workspace, VersionControl: versionControl,
 		Clock: clock, IDs: &dagSequentialIDs{}, MaxOutputBytes: 4096,
 		MaxMailboxEnvelopeBytes: 64 << 10,
 		MaxExecutionAttempts:    3,
@@ -460,7 +473,7 @@ func newDAGHarness(t *testing.T, failures map[string]bool) *dagHarness {
 	t.Cleanup(httpServer.Close)
 	return &dagHarness{
 		orchestrator: orchestrator, repository: repository, access: access, projectRef: projectRef,
-		clock: clock, agent: agent,
+		clock: clock, agent: agent, workspace: workspace, versionControl: versionControl,
 		clientSession: connectDAGClient(t, httpServer.URL),
 	}
 }
@@ -545,7 +558,30 @@ func (harness *dagHarness) process(t *testing.T, count int) {
 			}
 			t.Fatalf("process DAG step %d = %+v err=%v", index, result, err)
 		}
+		if err := harness.admitCommittedChanges(context.Background()); err != nil {
+			t.Fatalf("admit DAG integrations after step %d: %v", index, err)
+		}
 	}
+}
+
+// admitCommittedChanges is deliberately harness-owned. A completed agent only
+// stages output; non-empty WriteSets require an explicit owner integration.
+func (harness *dagHarness) admitCommittedChanges(ctx context.Context) error {
+	changes, err := harness.orchestrator.ListPendingChanges(ctx, harness.access, application.ListPendingChangesRequest{Limit: 100})
+	if err != nil {
+		return err
+	}
+	for _, pending := range changes.Changes {
+		_, err := harness.orchestrator.IntegrateChange(ctx, harness.access, application.IntegrateChangeRequest{
+			RequestRef: "request:dag-integrate:" + pending.ChangeSet.Ref.String(),
+			GoalRef:    pending.ChangeSet.GoalRef, ChangeRef: pending.ChangeSet.Ref,
+			ExpectedTargetOID: pending.ChangeSet.BaseOID,
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type dagClock struct {
@@ -670,6 +706,108 @@ func (agent *dagAgent) requestForObjective(objective string) (ports.AgentLaunchR
 		}
 	}
 	return ports.AgentLaunchRequest{}, false
+}
+
+// dagWorkspace and dagVersionControl are neutral contractual fakes. They keep
+// only opaque refs and deterministic object IDs; no filesystem or Git process
+// participates in this MCP lifecycle test.
+type dagWorkspace struct {
+	mu       sync.Mutex
+	prepared map[ports.ExecutionWorkspaceRef]ports.WorkspacePrepared
+}
+
+func newDAGWorkspace() *dagWorkspace {
+	return &dagWorkspace{prepared: make(map[ports.ExecutionWorkspaceRef]ports.WorkspacePrepared)}
+}
+
+func (workspace *dagWorkspace) Prepare(_ context.Context, request ports.WorkspacePrepareRequest) (ports.WorkspacePrepared, error) {
+	workspace.mu.Lock()
+	defer workspace.mu.Unlock()
+	if prepared, found := workspace.prepared[request.WorkspaceRef]; found {
+		return prepared, nil
+	}
+	prepared := ports.WorkspacePrepared{
+		WorkspaceRef: request.WorkspaceRef, RepositoryRef: request.RepositoryRef, ExecutionRef: request.ExecutionRef,
+		TargetRef: "refs/heads/main", BaseOID: dagGitOID('a'), ObjectFormat: ports.GitObjectFormatSHA1,
+		WriteSetDigest: request.WriteSetDigest, AdapterRef: "workspace-adapter:dag",
+		ReceiptRef: "workspace-receipt:" + request.WorkspaceRef.String(), PreparedAt: request.PreparedAt,
+	}
+	workspace.prepared[request.WorkspaceRef] = prepared
+	return prepared, nil
+}
+
+func (workspace *dagWorkspace) Inspect(_ context.Context, request ports.WorkspaceInspectRequest) (ports.WorkspaceInspection, error) {
+	workspace.mu.Lock()
+	defer workspace.mu.Unlock()
+	prepared, found := workspace.prepared[request.WorkspaceRef]
+	if !found {
+		return ports.WorkspaceInspection{}, errors.New("dag_workspace.not_prepared")
+	}
+	return ports.WorkspaceInspection{WorkspaceRef: request.WorkspaceRef, RepositoryRef: request.RepositoryRef,
+		ExecutionRef: request.ExecutionRef, BaseOID: prepared.BaseOID, HeadOID: prepared.BaseOID,
+		TreeOID: dagGitOID('b'), WriteSetDigest: prepared.WriteSetDigest, AdapterRef: prepared.AdapterRef,
+		InspectedAt: prepared.PreparedAt}, nil
+}
+
+func (workspace *dagWorkspace) Release(_ context.Context, request ports.WorkspaceReleaseRequest) (ports.WorkspaceReleaseReceipt, error) {
+	return ports.WorkspaceReleaseReceipt{WorkspaceRef: request.WorkspaceRef, RepositoryRef: request.RepositoryRef,
+		ExecutionRef: request.ExecutionRef, Released: false, ReceiptRef: "workspace-release:" + request.WorkspaceRef.String(),
+		ReleasedAt: request.RequestedAt}, nil
+}
+
+type dagVersionControl struct {
+	mu           sync.Mutex
+	commits      map[ports.ChangeSetRef]ports.CommitResult
+	integrations map[string]ports.IntegrationResult
+}
+
+func newDAGVersionControl() *dagVersionControl {
+	return &dagVersionControl{commits: make(map[ports.ChangeSetRef]ports.CommitResult), integrations: make(map[string]ports.IntegrationResult)}
+}
+
+func (control *dagVersionControl) Commit(_ context.Context, request ports.CommitRequest) (ports.CommitResult, error) {
+	control.mu.Lock()
+	defer control.mu.Unlock()
+	if result, found := control.commits[request.ChangeSetRef]; found {
+		return result, nil
+	}
+	result := ports.CommitResult{ChangeSetRef: request.ChangeSetRef, WorkspaceRef: request.WorkspaceRef,
+		RepositoryRef: request.RepositoryRef, ExecutionRef: request.ExecutionRef, BaseOID: request.BaseOID,
+		ParentOID: request.BaseOID, HeadOID: dagGitOID('c'), TreeOID: dagGitOID('d'), ObjectFormat: request.ObjectFormat,
+		DiffDigest: dagDigest("commit:" + request.ChangeSetRef.String()), ChangedPaths: append([]string(nil), request.WriteSet...),
+		WriteSetDigest: request.WriteSetDigest, ParentChangeRef: request.ParentChangeRef, AdapterRef: "version-control:dag",
+		ReceiptRef: "commit-receipt:" + request.ChangeSetRef.String(), CommittedAt: request.CommittedAt}
+	control.commits[request.ChangeSetRef] = result
+	return result, nil
+}
+
+func (control *dagVersionControl) PreviewIntegration(_ context.Context, request ports.IntegrationPreviewRequest) (ports.IntegrationPreview, error) {
+	return ports.IntegrationPreview{ChangeSetRef: request.ChangeSetRef, RepositoryRef: request.RepositoryRef,
+		SourceOID: request.SourceOID, TargetRef: request.TargetRef, TargetOID: request.TargetOID,
+		ObjectFormat: request.ObjectFormat, Status: ports.MergeStatusClean, CandidateTreeOID: dagGitOID('e'),
+		AdapterRef: "version-control:dag", ObservedAt: request.RequestedAt}, nil
+}
+
+func (control *dagVersionControl) Integrate(_ context.Context, request ports.IntegrationRequest) (ports.IntegrationResult, error) {
+	control.mu.Lock()
+	defer control.mu.Unlock()
+	if result, found := control.integrations[request.IdempotencyKey]; found {
+		return result, nil
+	}
+	result := ports.IntegrationResult{ChangeSetRef: request.ChangeSetRef, RepositoryRef: request.RepositoryRef,
+		SourceOID: request.SourceOID, TargetRef: request.TargetRef, TargetBeforeOID: request.ExpectedTargetOID,
+		TargetAfterOID: dagGitOID('f'), TreeOID: dagGitOID('e'), ObjectFormat: request.ObjectFormat,
+		Status: ports.IntegrationStatusIntegrated, MarkerRef: "refs/orquesta/effects:dag", AdapterRef: "version-control:dag",
+		ReceiptRef: "integration-receipt:" + request.ChangeSetRef.String(), RecordedAt: request.RequestedAt}
+	control.integrations[request.IdempotencyKey] = result
+	return result, nil
+}
+
+func dagGitOID(value byte) string { return strings.Repeat(string([]byte{value}), 40) }
+
+func dagDigest(value string) string {
+	digest := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(digest[:])
 }
 
 type dagArtifacts struct {

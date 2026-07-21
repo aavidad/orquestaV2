@@ -260,8 +260,17 @@ func TestAcceptanceV03CanonicalLedgers(t *testing.T) {
 	v03ValidateFixture(t, fixture)
 
 	t.Run("static_ledgers_match_exact_digests", func(t *testing.T) {
-		for _, ledger := range fixture.LedgerDigests {
-			got := evidenceFileSHA256(t, filepath.Join(repositoryRoot, filepath.FromSlash(ledger.Path)))
+		// V03 is a historical census.  Its digest set is sealed by the V3
+		// receipt, so later verticals may add closure evidence to the live
+		// ledgers without rewriting the census or its historical hashes.
+		sealedFixture, sealedCommit := v03SealedFixture(t, repositoryRoot)
+		for _, ledger := range sealedFixture.LedgerDigests {
+			entry, err := evidenceGitBlobAt(repositoryRoot, sealedCommit, ledger.Path)
+			if err != nil {
+				t.Errorf("sealed ledger %s: %v", ledger.Path, err)
+				continue
+			}
+			got := evidenceBytesSHA256(entry.Content)
 			if got != ledger.SHA256 {
 				t.Errorf("ledger %s digest=%s, want %s", ledger.Path, got, ledger.SHA256)
 			}
@@ -286,6 +295,35 @@ func TestAcceptanceV03CanonicalLedgers(t *testing.T) {
 		v03AssertNoInferredClosure(t, repositoryRoot, fixture.ClosureInferredCount)
 	})
 
+}
+
+func v03SealedFixture(t *testing.T, repositoryRoot string) (v03Fixture, string) {
+	t.Helper()
+	expectation := evidenceReceiptV3Expectation{
+		Contract: "AC-V03-CANONICAL-LEDGERS", FixturePath: v03FixturePath,
+		ReceiptPath:       "product/evidence/v03_canonical_ledgers.json",
+		ExecutedNotBefore: "2026-07-14T00:00:00+02:00", TrustedBaseGitCommitOID: "a301a3bbacd80c1ea2d47422a2964339dcd70980",
+	}
+	if err := evidenceValidateReceiptV3(repositoryRoot, expectation); err != nil {
+		t.Fatalf("validate V03 sealed receipt before reading its subjects: %v", err)
+	}
+	receipt := evidenceDecodeStrictJSON[evidenceReceiptV3](
+		t, filepath.Join(repositoryRoot, "product", "evidence", "v03_canonical_ledgers.json"),
+	)
+	if receipt.SchemaVersion != 3 || receipt.Contract != "AC-V03-CANONICAL-LEDGERS" ||
+		receipt.SealedSource.GitCommitOID == "" ||
+		receipt.Execution.SourceGitCommitOID != receipt.SealedSource.GitCommitOID {
+		t.Fatalf("invalid V03 sealed receipt identity: %+v", receipt)
+	}
+	entry, err := evidenceGitBlobAt(repositoryRoot, receipt.SealedSource.GitCommitOID, v03FixturePath)
+	if err != nil {
+		t.Fatalf("read sealed V03 fixture: %v", err)
+	}
+	fixture, err := evidenceDecodeStrictJSONBytes[v03Fixture](entry.Content)
+	if err != nil {
+		t.Fatalf("decode sealed V03 fixture: %v", err)
+	}
+	return fixture, receipt.SealedSource.GitCommitOID
 }
 
 func TestAcceptanceV03CanonicalLedgersReceipt(t *testing.T) {

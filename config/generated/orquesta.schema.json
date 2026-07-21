@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:orquesta:config:2026-07-18.15",
+  "$id": "urn:orquesta:config:2026-07-21.16",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -397,6 +397,42 @@
           "x-validator-ids": [
             "opaque_ref"
           ]
+        }
+      },
+      "type": "object"
+    },
+    "repository": {
+      "additionalProperties": false,
+      "properties": {
+        "local": {
+          "additionalProperties": false,
+          "properties": {
+            "seed_path": {
+              "default": "",
+              "type": "string",
+              "x-env-alias": "ORQUESTA_REPOSITORY_LOCAL_SEED_PATH",
+              "x-restart-required": true,
+              "x-scope": "workspace",
+              "x-semantic-ref": "orquesta.config.repository.local.seed_path",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "trimmed_optional_string"
+              ]
+            },
+            "target_ref": {
+              "default": "refs/heads/main",
+              "type": "string",
+              "x-env-alias": "ORQUESTA_REPOSITORY_LOCAL_TARGET_REF",
+              "x-restart-required": true,
+              "x-scope": "workspace",
+              "x-semantic-ref": "orquesta.config.repository.local.target_ref",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "trimmed_non_empty_string"
+              ]
+            }
+          },
+          "type": "object"
         }
       },
       "type": "object"
@@ -814,10 +850,35 @@
         }
       },
       "type": "object"
+    },
+    "workspace": {
+      "additionalProperties": false,
+      "properties": {
+        "local": {
+          "additionalProperties": false,
+          "properties": {
+            "root": {
+              "default": "./var/workspaces",
+              "minLength": 1,
+              "type": "string",
+              "x-env-alias": "ORQUESTA_WORKSPACE_LOCAL_ROOT",
+              "x-restart-required": true,
+              "x-scope": "workspace",
+              "x-semantic-ref": "orquesta.config.workspace.local.root",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "non_empty_path"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
     }
   },
-  "x-registry-revision": "2026-07-18.15",
-  "x-registry-hash": "sha256:f1024af0fdca9ed804388c50bead31ae05cb084329f637a572a5d9bff65fe584",
+  "x-registry-revision": "2026-07-21.16",
+  "x-registry-hash": "sha256:987475e75789d12be14a633ebfca002261a4b2d2e821528dd86287f0b229c244",
   "x-source-max-bytes": 1048576,
   "x-aliases": [],
   "x-cross-validators": [
@@ -847,6 +908,7 @@
         "artifact.filesystem.root",
         "credentials.local.path",
         "runtime.codex.work_root",
+        "workspace.local.root",
         "config.effective_path",
         "identity.local_token_path"
       ]

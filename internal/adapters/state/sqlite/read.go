@@ -11,6 +11,7 @@ import (
 	"orquesta/internal/goal"
 	"orquesta/internal/governance"
 	"orquesta/internal/identity"
+	"orquesta/internal/ports"
 )
 
 func (repository *Repository) GetGoal(ctx context.Context, goalRef goal.GoalRef) (application.GoalRecord, error) {
@@ -192,6 +193,10 @@ func readGoalRecord(ctx context.Context, source queryer, goalValue string) (appl
 	if err != nil {
 		return application.GoalRecord{}, err
 	}
+	workspaceFacts, err := readWorkspaceGitFacts(ctx, source, goalValue)
+	if err != nil {
+		return application.GoalRecord{}, err
+	}
 	record := application.GoalRecord{
 		RequestRef: header.requestRef, RequestFingerprint: header.requestFingerprint,
 		RequestedBy: data.requestedBy, Goal: data.goal, Executions: data.executions,
@@ -201,6 +206,8 @@ func readGoalRecord(ctx context.Context, source queryer, goalValue string) (appl
 		EffectIntents: governanceData.intents, EffectApprovals: governanceData.approvals,
 		EffectAttempts: governanceData.attempts, EffectReceipts: governanceData.receipts,
 		ConsumptionReceipts: data.consumptionReceipts,
+		WorkspaceBindings:   workspaceFacts.bindings, ChangeSets: workspaceFacts.changes,
+		MergeObservations: workspaceFacts.observations, IntegrationReceipts: workspaceFacts.receipts,
 	}
 	if err := validateGoalRecordConsistency(record, goalValue); err != nil {
 		return application.GoalRecord{}, invalid(err)
@@ -512,8 +519,13 @@ func readWorkItemRelations(
 	ctx context.Context, source queryer, goalValue string, item *goal.WorkItemSnapshot,
 	artifactRefs, attestationRefs map[string][]string,
 ) error {
-	item.ArtifactRefs = append([]string(nil), artifactRefs[item.Ref]...)
-	item.AttestationRefs = append([]string(nil), attestationRefs[item.Ref]...)
+	// Workspace-backed executions persist their output before commit/integration,
+	// while the WorkItem deliberately remains running. Those staged records are
+	// GoalRecord facts, not WorkItem outputs, until integration succeeds.
+	if item.State == goal.WorkItemStateSucceeded {
+		item.ArtifactRefs = append([]string(nil), artifactRefs[item.Ref]...)
+		item.AttestationRefs = append([]string(nil), attestationRefs[item.Ref]...)
+	}
 	var err error
 	item.DependencyRefs, err = readContractRefs(ctx, source,
 		`SELECT dependency_ref FROM work_item_dependencies WHERE work_item_ref = ? ORDER BY position`, item.Ref)
@@ -548,15 +560,19 @@ func readExecutions(ctx context.Context, source queryer, goalValue string) ([]ap
 	if schema.governance {
 		governanceProjection = "governance_version, budget_reservation_ref, effect_intent_ref, launch_receipt_ref"
 	}
+	workspaceProjection := "'', ''"
+	if schema.workspace {
+		workspaceProjection = "repository_ref, execution_workspace_ref"
+	}
 	rows, err := source.QueryContext(ctx, `
 SELECT ref, goal_ref, work_item_ref, state, artifact_media_type, idempotency_key,
        attempt_no, max_execution_attempts, replaces_execution_ref,
        plan_generation, app_spec_generation, spec_hash,
        max_output_bytes, provider_ref, model_ref, agent_ref,
-       external_ref, created_at,
+	       external_ref, created_at,
        deadline_at, started_at, provider_accepted_at, last_observed_at,
        provider_observed_at, finished_at, failure_code, `+markerProjection+`,
-       `+governanceProjection+`
+	       `+governanceProjection+`, `+workspaceProjection+`
 FROM executions
 WHERE goal_ref = ?
 ORDER BY (
@@ -590,7 +606,7 @@ type storedExecution struct {
 	ref, goalRef, workItemRef, state                                  string
 	created                                                           int64
 	deadline, started, accepted, observed, providerObserved, finished sql.NullInt64
-	replaces, reservation, intent, receipt                            sql.NullString
+	replaces, reservation, intent, receipt, repository, workspace     sql.NullString
 	attempt, maxAttempts, plan, appSpec, mailbox, governanceVersion   int64
 }
 
@@ -601,7 +617,7 @@ func scanExecution(rows *sql.Rows) (storedExecution, error) {
 		&v.record.SpecHash, &v.record.MaxOutputBytes, &v.record.ProviderRef, &v.record.ModelRef,
 		&v.record.AgentRef, &v.record.ExternalRef, &v.created, &v.deadline, &v.started,
 		&v.accepted, &v.observed, &v.providerObserved, &v.finished, &v.record.FailureCode,
-		&v.mailbox, &v.governanceVersion, &v.reservation, &v.intent, &v.receipt)
+		&v.mailbox, &v.governanceVersion, &v.reservation, &v.intent, &v.receipt, &v.repository, &v.workspace)
 	if err != nil {
 		return storedExecution{}, mapDatabaseError(err)
 	}
@@ -644,6 +660,16 @@ func restoreExecution(v storedExecution) (application.ExecutionRecord, error) {
 	if v.receipt.Valid {
 		record.LaunchReceiptRef = v.receipt.String
 	}
+	if v.repository.Valid && v.repository.String != "" {
+		if record.RepositoryRef, err = identity.NewRepositoryRef(v.repository.String); err != nil {
+			return record, invalid(err)
+		}
+	}
+	if v.workspace.Valid && v.workspace.String != "" {
+		if record.ExecutionWorkspaceRef, err = ports.NewExecutionWorkspaceRef(v.workspace.String); err != nil {
+			return record, invalid(err)
+		}
+	}
 	return record, nil
 }
 
@@ -652,13 +678,13 @@ func readConsumptionReceipts(
 	source queryer,
 	goalValue string,
 ) ([]application.ActionConsumptionReceipt, error) {
-	mailboxColumn, effectColumn, err := consumptionReceiptColumns(ctx, source)
+	mailboxColumn, changeColumn, effectColumn, err := consumptionReceiptColumns(ctx, source)
 	if err != nil {
 		return nil, err
 	}
 	query := `
 SELECT action_ref, kind, goal_ref, work_item_ref, execution_ref,
-       ` + mailboxColumn + `, plan_generation, work_item_generation, fence, delivery_attempt,
+       ` + mailboxColumn + `, ` + changeColumn + `, plan_generation, work_item_generation, fence, delivery_attempt,
        claim_token, worker_ref, outcome, error_code, ` + effectColumn + `, consumed_at
 FROM action_consumption_receipts
 WHERE goal_ref = ?
@@ -673,11 +699,12 @@ ORDER BY consumed_at, action_ref`
 		var receipt application.ActionConsumptionReceipt
 		var kind, goalRefValue, workItemRefValue, executionRefValue, outcome string
 		var mailboxMessageValue sql.NullString
+		var changeRefValue sql.NullString
 		var effectReceipt sql.NullString
 		var planGeneration, itemGeneration, fence, deliveryAttempt, consumedAt int64
 		if err := rows.Scan(
 			&receipt.ActionRef, &kind, &goalRefValue, &workItemRefValue, &executionRefValue,
-			&mailboxMessageValue,
+			&mailboxMessageValue, &changeRefValue,
 			&planGeneration, &itemGeneration, &fence, &deliveryAttempt,
 			&receipt.ClaimToken, &receipt.WorkerRef, &outcome, &receipt.ErrorCode,
 			&effectReceipt, &consumedAt,
@@ -704,6 +731,11 @@ ORDER BY consumed_at, action_ref`
 		if receipt.ExecutionRef, refErr = goal.NewExecutionRef(executionRefValue); refErr != nil {
 			return nil, invalid(refErr)
 		}
+		if changeRefValue.Valid && changeRefValue.String != "" {
+			if receipt.ChangeRef, refErr = ports.NewChangeSetRef(changeRefValue.String); refErr != nil {
+				return nil, invalid(refErr)
+			}
+		}
 		receipt.PlanGeneration = goal.PlanGeneration(planGeneration)
 		receipt.WorkItemGeneration = goal.Revision(itemGeneration)
 		receipt.Fence = uint64(fence)
@@ -721,18 +753,18 @@ ORDER BY consumed_at, action_ref`
 	return result, nil
 }
 
-func consumptionReceiptColumns(ctx context.Context, source queryer) (string, string, error) {
-	columns := []string{"NULL", "NULL"}
-	for position, name := range []string{"mailbox_message_ref", "effect_receipt_ref"} {
+func consumptionReceiptColumns(ctx context.Context, source queryer) (string, string, string, error) {
+	columns := []string{"NULL", "NULL", "NULL"}
+	for position, name := range []string{"mailbox_message_ref", "change_ref", "effect_receipt_ref"} {
 		found, err := sqliteTableHasColumn(ctx, source, "action_consumption_receipts", name)
 		if err != nil {
-			return "", "", mapDatabaseError(err)
+			return "", "", "", mapDatabaseError(err)
 		}
 		if found {
 			columns[position] = name
 		}
 	}
-	return columns[0], columns[1], nil
+	return columns[0], columns[1], columns[2], nil
 }
 
 func readChildHandoffResolutions(
