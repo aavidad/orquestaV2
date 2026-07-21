@@ -217,9 +217,9 @@ la incidencia sin retry ciego ni segunda autoridad.
 Último smoke Codex real, renovado sobre fuentes V16 antes de P:
 
 ```text
-source SHA: sha256:94d74130dfc3c18c89c64475d58546e4ee641a3eaf62ddeb83a2429e463a70e9
-marker:     ORQUESTA_CODEX_E2E_OK_41f7d5b1642f7f9efc8008a34610b650
-ejecutado:  2026-07-21T23:41:21+02:00
+source SHA: sha256:15018d857a263e8f3b99aa6eb68609ecbd288c55fe164ed53d5ddeb3a93a080d
+marker:     ORQUESTA_CODEX_E2E_OK_798736afa7e84a5f97e5be139c1d3e1e
+ejecutado:  2026-07-21T23:46:53+02:00
 duración:   6.85s
 config:     /home/alberto/Trabajo/.orquesta-rebuild-real-e2e-v14-20260716T171502/orquesta.toml
 ```

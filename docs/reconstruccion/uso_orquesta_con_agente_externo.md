@@ -555,11 +555,11 @@ con marcador único y apagar todos sus procesos. No apuntarla al runtime legacy
 ni al estado operativo que se quiera conservar.
 
 Última comprobación real: `PASS` en `6.85s`, ejecutada
-`2026-07-21T23:41:21+02:00` con configuración aislada
+`2026-07-21T23:46:53+02:00` con configuración aislada
 `/home/alberto/Trabajo/.orquesta-rebuild-real-e2e-v14-20260716T171502/orquesta.toml`,
 source digest
-`sha256:94d74130dfc3c18c89c64475d58546e4ee641a3eaf62ddeb83a2429e463a70e9`
-y marcador `ORQUESTA_CODEX_E2E_OK_41f7d5b1642f7f9efc8008a34610b650`.
+`sha256:15018d857a263e8f3b99aa6eb68609ecbd288c55fe164ed53d5ddeb3a93a080d`
+y marcador `ORQUESTA_CODEX_E2E_OK_798736afa7e84a5f97e5be139c1d3e1e`.
 Prueba composición productiva, MCP, Codex, SQLite y CAS sin regresión. El Goal
 sin `WriteSet` no activa workspace Git ni acredita por sí solo V16; esa
 acreditación procede únicamente del receipt V3 P/S/E separado.

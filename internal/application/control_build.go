@@ -78,7 +78,7 @@ func (orchestrator *Orchestrator) buildInitialControl(
 
 func (orchestrator *Orchestrator) buildCancelControl(ctx context.Context, record GoalRecord, item goal.WorkItem, request ControlRequest, policy effectPolicySnapshot, state *ApplyControlState) error {
 	var err error
-	state.Goal, err = cancelRequest(record.Goal, item, request, state)
+	state.Goal, err = orchestrator.cancelRequest(record.Goal, item, request, state)
 	if err != nil {
 		return err
 	}
@@ -155,7 +155,7 @@ func (orchestrator *Orchestrator) buildCancelControl(ctx context.Context, record
 	return nil
 }
 
-func cancelRequest(
+func (orchestrator *Orchestrator) cancelRequest(
 	current goal.Goal, item goal.WorkItem, request ControlRequest, state *ApplyControlState,
 ) (goal.Goal, error) {
 	if request.Target == ControlTargetGoal {

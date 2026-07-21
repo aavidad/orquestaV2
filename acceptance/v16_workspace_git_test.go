@@ -16,7 +16,7 @@ const v16ContractBaseGitCommitOID = "3820df2ae89f1a217de1b14d5b88abf8e86c898b"
 
 // P-stage placeholder. Closure replaces this with the immutable product commit
 // before creating the source and evidence commits.
-const v16ProductDeltaSealedGitCommitOID = "8f4d504eeaced02d061c967a2efa117e262659bb"
+const v16ProductDeltaSealedGitCommitOID = "0000000000000000000000000000000000000000"
 
 type v16Fixture struct {
 	SchemaVersion                  int               `json:"schema_version"`
