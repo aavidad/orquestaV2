@@ -390,13 +390,13 @@ de crash. No dependerá del checkout del propio rebuild.
 9. Contrarrevisión independiente de los bloqueos iniciales.
 10. Receipt V3 reproducible desde candidato detached y limpio.
 
-V16 solo se contará al validar ese receipt. El cierre pasará de 56 a 59 de 257
-capacidades y de 15 a 16 de 34 verticales. `EXT-11` seguirá pendiente y no se
-contará hasta V28.
+El receipt ya valida y V16 cuenta: 59 de 257 capacidades y 16 de 34
+verticales, con 16/16 receipts. `EXT-11` sigue pendiente y no se contará hasta
+V28.
 
-## 15. Implementación realizada y cierre pendiente
+## 15. Implementación realizada y cierre acreditado
 
-El checkpoint 2026-07-21 implementa el alcance local completo sin abrir V17:
+El checkpoint 2026-07-22 acredita el alcance local completo sin abrir V17:
 
 - contratos neutrales y validación estructural en `internal/ports`;
 - modelos, casos de uso y procesamiento por el único `application.Orchestrator`;
@@ -420,27 +420,16 @@ compensación estructural fue retirar el mutex global, separar responsabilidades
 y dejar todos los ficheros V16 nuevos bajo 400 líneas y funciones bajo 80; una
 ampliación posterior exige otra vertical y su propio presupuesto.
 
-Los gates focales que deben validarse de nuevo sobre S incluyen, entre otros,
+Los gates focales ejecutados sobre S incluyen, entre otros,
 `TestRealGitSQLiteWorkspaceLifecycleEndToEnd`,
 `TestWorkspaceEffectsReplayEveryCrashFrontierExactlyOnce`,
 `TestSQLiteWorkspaceGitRestartRaceAndReplay` y
 `TestRecoveryV16RejectsWorkspaceCausalTampering`, además de los negativos de
-replay, CAS, release y `common-dir` inventariados en los bugs 247–254. Este
-documento no afirma su
-verde final sobre un worktree compartido en transición; incluso cuando pasan
-son evidencia de preparación, no acreditación separada.
+replay, CAS, release y `common-dir` inventariados en los bugs 247–254. Los bugs
+255–257 conservan además las lecciones del sellado y su entorno de ejecución.
 
-Secuencia única de cierre:
-
-1. ejecutar los gates finales y sincronizar `candidate_subjects` con el delta
-   real base→producto;
-2. crear P con producto y documentación, sin output ni receipt V16;
-3. sustituir el OID cero de test y fixture por el OID inmutable de P y crear S;
-4. ejecutar literalmente `execution_argv` desde S, detached y limpio;
-5. crear E únicamente con output y receipt V3, y validar el receipt estricto;
-6. solo entonces contabilizar `STG-02`, `STG-10`, `EXT-10` y V16.
-
-Hasta completar el punto 5, el total canónico permanece en 56/257 capacidades,
-15/34 verticales y 15/15 receipts. Tras un receipt V16 válido pasa a 59/257,
-16/34 y 16/16. El siguiente trabajo sigue siendo sellar V16; V17 permanece
-cerrado a cambios.
+Cadena final: P=`b48162b0433dd32b6369ee324358e5f87af325ad`,
+S=`a4f602ab01c4e77f0d876c79c2c8e86b44b68fa4` y
+E=`38e1ffb82d6f71610ac0a745d693d52fd43dac22`. El receipt V3 liga 122 sujetos,
+argv literal, checkout `detached_clean`, 22 carreras, vet y salida capturada.
+V17 permanece sin iniciar hasta una próxima sesión autorizada.

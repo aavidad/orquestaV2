@@ -1,10 +1,9 @@
 # Mapa de aceptación y evidencias
 
-Fecha de corte: 2026-07-21
+Fecha de corte: 2026-07-22
 
-Estado: mapa explicativo del corte acreditado V15 y del candidato V16
-implementado pendiente de sellado. No gobierna el roadmap total ni sustituye
-los receipts estructurados.
+Estado: mapa explicativo del corte acreditado V16. No gobierna el roadmap total
+ni sustituye los receipts estructurados.
 
 [`product/capabilities.json`](../../product/capabilities.json) es el manifest
 ejecutable del corte. `status: accepted` significa que la capacidad tiene un
@@ -51,7 +50,7 @@ partió del commit sellado `5daf174bde3ec5d9a98f387de05491f258634264`
 en checkout `detached_clean` y acredita exactamente `ORC-04`, `ORC-05` y
 `ORC-14`.
 
-| IDs del candidato | Contrato condicionado | Alcance exacto |
+| IDs acreditados | Contrato acreditado | Alcance exacto |
 |---|---|---|
 | `ORC-04`, `ORC-05`, `ORC-14` | `acceptance/v13_mailbox_test.go`; `internal/application/mailbox*_test.go`; `internal/adapters/state/sqlite/mailbox*_test.go` | Solo `child_delivery` contractual: destinatario exacto, lifecycle `admitted → claimed → delivered → consumed → acknowledged|blocked`, retiro sistémico, replay/fencing, barrera causal padre/hijo y recovery SQLite sobre la misma autoridad |
 
@@ -155,19 +154,17 @@ Garantías ejercitadas por el candidato y acreditadas solo tras ese gate:
 
 V15 no añade bindings públicos, workspace/Git ni otro scheduler/store.
 
-## V16: workspace y Git local condicionados al receipt
+## V16: workspace y Git local acreditados
 
-`AC-V16-WORKSPACE-GIT` está implementado en el worktree, pero solo se cierra
-cuando su argv exacto pasa desde S en checkout `detached_clean` y
-`product/evidence/v16_workspace_git.json` valida como receipt V3 `PASS`. El OID
-sellado continúa a cero durante la preparación P; un receipt ausente, vacío,
-ligado a otro candidato o no reproducible mantiene V16 pendiente.
+`AC-V16-WORKSPACE-GIT` está cerrado: su argv exacto pasó desde S en checkout
+`detached_clean` y `product/evidence/v16_workspace_git.json` valida como receipt
+V3 `PASS`.
 
-| IDs del candidato | Contrato condicionado | Alcance exacto |
+| IDs acreditados | Contrato acreditado | Alcance exacto |
 |---|---|---|
 | `STG-02`, `STG-10`, `EXT-10` | `acceptance/v16_workspace_git_test.go`; contratos y suites de `internal/application`, `internal/ports`, SQLite, `internal/adapters/workspace/gitlocal`, Codex y bootstrap | Workspace opaco por Execution, inventario/write-set, commit causal, integración local explícita por CAS, pendientes RBAC, crash/replay y E2E Git+SQLite real |
 
-Garantías implementadas y acreditadas únicamente después de ese gate:
+Garantías acreditadas por ese gate:
 
 - cada Execution con `WriteSet` obtiene un binding privado, opaco e idempotente;
   una Execution sustituta no reutiliza workspace y un `WriteSet` vacío no crea
@@ -202,14 +199,15 @@ corte histórico V13: 44/257 = 17,12 %; 13/34 = 38,24 %; 13/13 receipts
 corte histórico V14: 48/257 = 18,68 %; 14/34 = 41,18 %; 14/14 receipts
 corte sin receipt V15 válido: 48/257 = 18,68 %; 14/34 = 41,18 %; 14/14 receipts
 corte con receipt V15 válido: 56/257 = 21,79 %; 15/34 = 44,12 %; 15/15 receipts
-candidato V16 sin receipt válido: 56/257 = 21,79 %; 15/34 = 44,12 %; 15/15 receipts
-con receipt V16 válido: 59/257 = 22,96 %; 16/34 = 47,06 %; 16/16 receipts
+corte histórico antes de V16: 56/257 = 21,79 %; 15/34 = 44,12 %; 15/15 receipts
+corte vigente V16: 59/257 = 22,96 %; 16/34 = 47,06 %; 16/16 receipts
 ```
 
 ## Ejecuciones finales registradas
 
 | Fecha | Comando | Resultado | Alcance |
 |---|---|---|---|
+| 2026-07-22 | argv exacto de `AC-V16-WORKSPACE-GIT`, registrado en `product/evidence/v16_workspace_git.json` | receipt V3 `PASS`; P=`b48162b0433dd32b6369ee324358e5f87af325ad`, S=`a4f602ab01c4e77f0d876c79c2c8e86b44b68fa4`, E=`38e1ffb82d6f71610ac0a745d693d52fd43dac22`; candidate `sha256:83962cf0feca66a38030b18f655d86201117df1d5b1cbe2efa795e8010c939a1`; output `sha256:1cf6dc65ac2138927bff503198eee1c63451437a04949ccb0d62e369e3187f2b` | workspace/Git local, SQLite/recovery, Codex binding, crash/replay, RBAC, CAS, 22 carreras, ratchets y vet desde `detached_clean` |
 | 2026-07-21 | `go test -mod=vendor -v -count=1 ./internal/bootstrap -run '^TestRealCodexAdapterClosesGoalThroughProductionMCPServer$' -args -orquesta-real-codex-config=/home/alberto/Trabajo/.orquesta-rebuild-real-e2e-v14-20260716T171502/orquesta.toml` | `PASS` en `6.49s`; marcador `ORQUESTA_CODEX_E2E_OK_798736afa7e84a5f97e5be139c1d3e1e` | no regresión de composición productiva, MCP, Codex real, SQLite y CAS sobre source digest V16; no acredita workspace/Git ni sustituye receipt P/S/E |
 | 2026-07-18 | argv exacto de `AC-V15-BUDGETS-EFFECTS`, registrado en `product/evidence/v15_budgets_effects.json` | válido únicamente si el receipt V3 `PASS` supera su test estricto desde `detached_clean`; OID/digests en el receipt | presupuestos jerárquicos, fairness, riesgo/esfuerzo, cadena causal launch/stop, policy histórica, recovery/backup, 100 claims concurrentes, carreras, ratchets y composición Codex V15 |
 | 2026-07-16 | argv exacto de `AC-V14-CONTROLS`, registrado en `product/evidence/v14_controls.json` | receipt V3 `PASS`, `detached_clean`, P=`6dbc0d808de63973305914b002c3bc2b8a806bb0`, S=`e3e7c28e669ccd7e67a8661c40333d649ab82dd5`, E=`5b97545ad14a40fd0063fc3671f6e79d9978ec09` | controles internos, SQLite/recovery, fake/Codex, stop selectivo, scheduler vivo, carreras, ratchets y composición productiva V14 |
@@ -232,8 +230,8 @@ liga comando, `2026-07-21T23:46:53+02:00` y source digest
 
 Este `PASS` demuestra ausencia de regresión en composición productiva, MCP,
 Codex, SQLite y CAS. El Goal sin `WriteSet` no activa workspace Git y el smoke
-no acredita por sí solo `AC-V16-WORKSPACE-GIT`; el receipt V3 V16 separado es
-el único gate de esa vertical.
+no acredita por sí solo `AC-V16-WORKSPACE-GIT`; el receipt V3 V16 separado ya
+validado es el gate de esa vertical.
 
 ## Gates de integración
 

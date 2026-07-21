@@ -1,13 +1,53 @@
 # Estado y handoff vivo del rebuild
 
-Última actualización: 2026-07-21 Europe/Madrid.
+Última actualización: 2026-07-22 Europe/Madrid.
 
 Este documento permite continuar el rebuild sin reconstruir el contexto de la
 sesión. Es estado operativo, no evidencia de aceptación. Los estados canónicos
 de capacidades, verticales y contratos viven en `product/roadmap.json`; los
 verdes viven en receipts fuera de su propio candidato.
 
-## Checkpoint verificable: V15 acreditado; V16 implementado y sin sellar
+## Checkpoint verificable vigente: V16 acreditado; V17 no iniciado
+
+En `38e1ffb82d`, V01–V16 están cerrados por receipts V3 reproducibles.
+`TestAcceptanceV16WorkspaceGitReceipt` valida el `PASS` de
+`product/evidence/v16_workspace_git.json` contra los blobs Git sellados; no se
+infiere el cierre desde código, documentación ni verdes focales.
+
+El corte vigente es **59/257 capacidades, 22,96 %; 16/34 verticales, 47,06 %;
+16/16 receipts**. V16 acredita exactamente `STG-02`, `STG-10` y `EXT-10`.
+No acredita bindings públicos, Forge remoto ni sandbox/atestación V17.
+
+Cadena autoritativa V16:
+
+```text
+producto P:          b48162b0433dd32b6369ee324358e5f87af325ad
+sellado S:           a4f602ab01c4e77f0d876c79c2c8e86b44b68fa4
+evidencia E:         38e1ffb82d6f71610ac0a745d693d52fd43dac22
+candidate SHA:       sha256:83962cf0feca66a38030b18f655d86201117df1d5b1cbe2efa795e8010c939a1
+output SHA:          sha256:1cf6dc65ac2138927bff503198eee1c63451437a04949ccb0d62e369e3187f2b
+source worktree:     detached_clean
+ejecutado:           2026-07-22T00:06:27+02:00
+```
+
+El argv sellado pasó contrato/roadmap/trazabilidad, V02/V03/V06/V09/V10/V16,
+todos los paquetes consumidores, 22 pruebas `-race` y `go vet`. El cierre
+final volvió a pasar raíz, `./acceptance`, `./internal/...`, CLI, vet,
+`git diff --check` y write-set. Workspace, refs Git, commit determinista,
+integración CAS, pending RBAC, recovery SQLite y crash/replay quedan ejercitados
+por la composición real Git+SQLite; Codex real por MCP también se renovó sobre
+las fuentes V16.
+
+Los sellos intermedios rechazados no son evidencia: `95537f3432` detectó que un
+helper libre violaba el writer único; `a130031096` detectó un runner temporal
+incompatible con el hardening. `BUG-REBUILD-20260721-255`–`257` conservan esas
+lecciones. No se relajaron autoridad, seguridad, timeouts ni presupuestos.
+
+V17 no se abrió. No queda proceso de prueba, `orquesta-server`, cache o worktree
+temporal V16 creado por este cierre. La siguiente sesión debe partir de este
+checkpoint y solo abrir V17 con orden del operador.
+
+## Checkpoint histórico previo al sellado: V15 acreditado; V16 preparado
 
 En `9bc99351c7`, V01–V15 están cerrados por receipts V3 reproducibles.
 `TestAcceptanceV15BudgetsEffectsReceipt` valida el `PASS` de
@@ -69,7 +109,7 @@ HTTP o CLI. El registro público pertenece a V20 e i18n completa a V21.
 - el ledger incorpora las lecciones V16 solo con tests exactos verdes, incluida
   la recuperación que exige conservar receipts y observaciones de integración;
 - las lecciones nuevas son `BUG-REBUILD-20260721-232`, `233`, `235`, `236`,
-  `237`, `239`, `240`, `242`, `245`, `246` y `247`–`254`; los huecos anteriores
+  `237`, `239`, `240`, `242`, `245`, `246` y `247`–`257`; los huecos anteriores
   son deliberados y no se rellenan con evidencia prestada;
 - las reapariciones de opcionalidad, catálogo V02 y schema drift se consolidan
   con `BUG-REBUILD-20260714-034`, `BUG-REBUILD-20260715-101` y
@@ -220,7 +260,7 @@ la incidencia sin retry ciego ni segunda autoridad.
 source SHA: sha256:15018d857a263e8f3b99aa6eb68609ecbd288c55fe164ed53d5ddeb3a93a080d
 marker:     ORQUESTA_CODEX_E2E_OK_798736afa7e84a5f97e5be139c1d3e1e
 ejecutado:  2026-07-21T23:46:53+02:00
-duración:   6.85s
+duración:   6.49s
 config:     /home/alberto/Trabajo/.orquesta-rebuild-real-e2e-v14-20260716T171502/orquesta.toml
 ```
 
@@ -483,15 +523,14 @@ Verificación rápida del último cierre acreditado sin atravesar superficies
 legacy:
 
 ```bash
-go test -mod=vendor -count=1 ./acceptance -run '^TestAcceptanceV(0[1-9]|1[0-5]).*Receipt$'
+go test -mod=vendor -count=1 ./acceptance -run '^TestAcceptanceV(0[1-9]|1[0-6]).*Receipt$'
 git diff --check
 scripts/check_rebuild_write_set.sh
 ```
 
-El rango vigente antes del sellado V16 es `V(0[1-9]|1[0-5])`. Después de crear
-E, no ampliar el rango por edición manual: ejecutar primero
-`TestAcceptanceV16WorkspaceGitReceipt`; solo si pasa puede usarse
-`V(0[1-9]|1[0-6])`.
+El rango vigente es `V(0[1-9]|1[0-6])`. No ampliarlo por edición manual: una
+vertical posterior solo cuenta después de que su receipt estricto valide el
+candidato sellado.
 
 ## Progreso honesto
 
@@ -536,15 +575,12 @@ E, no ampliar el rango por edición manual: ejecutar primero
 - También cerró `BUG-REBUILD-20260718-230`: un stop pendiente conserva primera
   prioridad, pero reintenta con backoff durable exponencial y acotado, dejando
   progresar acciones ajenas mientras aún no es elegible.
-- V16: implementación completa en el worktree, acreditación pendiente del
-  receipt P/S/E. Cuando el gate estricto pase acreditará exactamente `STG-02`,
-  `STG-10` y `EXT-10`; antes no cuenta ninguna de las tres.
+- V16: cerrado por receipt V3 válido; acredita exactamente `STG-02`, `STG-10`
+  y `EXT-10`.
 - V17–V34: pendientes. No contar código heredado, groundwork o una prueba
   aislada como vertical posterior cerrada.
-- progreso canónico vigente: 15 de 34, 44,12 %, con 15/15 receipts válidos;
-  tras receipt V16 válido: 16 de 34, 47,06 %, con 16/16 receipts;
-- capacidades canónicas vigentes: 56 de 257, 21,79 %. Tras receipt V16 válido:
-  59 de 257, 22,96 %. Las 56 acreditadas antes de ese cierre son:
+- progreso canónico vigente: 16 de 34, 47,06 %, con 16/16 receipts válidos;
+- capacidades canónicas vigentes: 59 de 257, 22,96 %. Son:
   `EVD-02`, `EVD-11`, `EVD-12`, `EVD-15`, `GOV-02`, `GOV-03`, `GOV-04`, `GOV-05`,
   `GOV-06`, `GOV-07`, `GOV-08`, `GOV-09`, `GOV-10`, `GOV-16`, `GOV-19`, `GOV-20`,
   `GOV-21`, `GOV-22`, `OPS-01`, `OPS-02`, `OPS-03`, `OPS-04`,
@@ -552,25 +588,20 @@ E, no ampliar el rango por edición manual: ejecutar primero
   `OPS-27`, `OPS-28`, `OPS-29`, `OPS-30`, `ORC-01`, `ORC-02`, `ORC-03`, `ORC-04`,
   `ORC-05`, `ORC-06`, `ORC-12`, `ORC-13`, `ORC-14`, `ORC-17`, `ORC-24` y
   `ORC-16`, `STG-00`, `STG-09`, `STG-15`, `GOV-15`, `ORC-08`, `ORC-09`,
-  `ORC-10`, `ORC-11`, `EVD-03` y `EVD-14`.
+  `ORC-10`, `ORC-11`, `EVD-03`, `EVD-14`, `STG-02`, `STG-10` y `EXT-10`.
 
 ## Siguiente acción exacta
 
-Cerrar únicamente V16 con este orden:
+V16 no requiere más trabajo. Esta sesión termina sin abrir V17. En una próxima
+sesión autorizada:
 
-1. ejecutar gates finales y resincronizar `candidate_subjects` contra el delta
-   real base→P;
-2. crear P con producto y documentación, excluyendo output/receipt V16;
-3. sustituir el OID cero en test y fixture por P y crear S;
-4. desde checkout detached limpio de S, ejecutar literalmente el
-   `execution_argv` de `acceptance/fixtures/v16_workspace_git.json`;
-5. crear E solo con `product/evidence/v16_workspace_git.output.txt` y el
-   receipt V3 `product/evidence/v16_workspace_git.json`;
-6. validar `TestAcceptanceV16WorkspaceGitReceipt`. Solo su `PASS` permite
-   contar V16 y actualizar el rango de receipts.
+1. verificar `TestAcceptanceV16WorkspaceGitReceipt` y worktree limpio;
+2. leer la fila V17 y sus dependencias en `product/roadmap.json` y
+   `ruta_total_100.md`;
+3. crear primero análisis, contrato rojo y write-set de V17; no reutilizar
+   código legacy ni inferir acreditación desde groundwork.
 
-No abrir V17, Forge remoto ni bindings públicos. Si un gate falla, corregir
-V16 y repetir P/S/E; no fabricar ni editar el receipt a mano.
+Forge remoto sigue en V28 y bindings públicos en V20. No adelantarlos.
 
 Los subagentes directos siguen siendo bootstrap hasta V22. Hoy Orquesta puede
 coordinar un DAG declarado; una petición abierta aún necesita dirección externa.
@@ -578,8 +609,8 @@ coordinar un DAG declarado; una petición abierta aún necesita dirección exter
 ## Historial de ejecución (no sustituye el checkpoint vigente)
 
 Las palabras “pendiente”, “siguiente” o “en curso” dentro del historial
-describen checkpoints pasados. No son órdenes de reanudación. La acción vigente
-es sellar V16 mediante P/S/E y detenerse; su implementación ya existe.
+describen checkpoints pasados. No son órdenes de reanudación. V16 ya está
+acreditado; V17 permanece sin iniciar hasta una nueva orden.
 
 ## V03: trabajo ya realizado
 

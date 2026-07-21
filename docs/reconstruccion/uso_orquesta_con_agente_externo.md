@@ -1,20 +1,19 @@
 # Uso de Orquesta con un agente externo
 
-Fecha de corte: 2026-07-21. Rama: `reconstruccion/orquesta-total-20260714`.
+Fecha de corte: 2026-07-22. Rama: `reconstruccion/orquesta-total-20260714`.
 Repositorio operativo: `/home/alberto/Trabajo/orquesta-rebuild`.
 
 ## Respuesta corta y alcance real
 
-Sí: el checkpoint acreditado V01-V15 ya sirve para que un Codex externo use
+Sí: el checkpoint acreditado V01-V16 ya sirve para que un Codex externo use
 Orquesta por MCP, cree un Goal con un DAG, lance uno o varios workers Codex,
 consulte su estado y recupere artefactos durables. Hay un binario productivo
 único, autenticación, autorización por proyecto, SQLite, artefactos, scheduler,
 backup/recovery y cierre cooperativo.
 
-V16 está implementado, pero solo cuenta cerrado cuando
-`TestAcceptanceV16WorkspaceGitReceipt` valida su receipt V3 `PASS` desde el
-candidato sellado. Aun después de ese cierre, este runbook público conserva las
-mismas seis tools: V14–V16 no añaden bindings HTTP/MCP/CLI para controles,
+V16 está cerrado: `TestAcceptanceV16WorkspaceGitReceipt` valida su receipt V3
+`PASS` desde el candidato sellado. Este runbook público conserva las mismas
+seis tools: V14–V16 no añaden bindings HTTP/MCP/CLI para controles,
 efectos, pendientes o integración; estos pertenecen al registro único V20.
 
 V13 acredita el mailbox causal interno `child_delivery`, pero no añade bindings
@@ -34,7 +33,7 @@ extremo a extremo y solo V34 cierra la aplicación total.
 Fuente de verdad del estado:
 
 - `product/roadmap.json`: capacidades y estados canónicos;
-- `product/evidence/v01_*.json` a `product/evidence/v15_*.json`: receipts V3
+- `product/evidence/v01_*.json` a `product/evidence/v16_*.json`: receipts V3
   reproducibles y vigentes;
 - `product/evidence/v13_mailbox.json`: receipt V3 `PASS` desde checkout
   `detached_clean` sobre el candidato sellado V13;
@@ -42,14 +41,12 @@ Fuente de verdad del estado:
   `detached_clean` sobre el candidato V14 sellado;
 - `product/evidence/v15_budgets_effects.json`: receipt V3 `PASS` del candidato
   V15 sellado;
-- `product/evidence/v16_workspace_git.json`: solo se convierte en fuente válida
-  cuando contiene receipt V3 `PASS` verificado desde checkout `detached_clean`
-  sobre S;
+- `product/evidence/v16_workspace_git.json`: receipt V3 `PASS` verificado desde
+  checkout `detached_clean` sobre S;
 - `docs/reconstruccion/estado_y_handoff_rebuild.md`: último handoff humano.
 
-V01–V15 representan 15/34, 44,12 %, y 56/257, 21,79 %, con 15/15
-receipts. Tras validar el receipt V16 pasan a 16/34, 47,06 %, y 59/257,
-22,96 %, con 16/16 receipts. V16 suma exclusivamente `STG-02`, `STG-10` y
+V01–V16 representan 16/34, 47,06 %, y 59/257, 22,96 %, con 16/16
+receipts. V16 suma exclusivamente `STG-02`, `STG-10` y
 `EXT-10`; V11 sigue siendo una vertical transversal sin IDs nuevos.
 
 Resumen funcional:
@@ -69,7 +66,7 @@ Resumen funcional:
 | V13 | mailbox interno acreditado solo para `child_delivery` opt-in: destinatario exacto, lifecycle causal y retiro sistémico; `Parent` público permanece no contractual y sin bindings mailbox |
 | V14 | controles acreditados application-only: pause/resume, cancel, stop selectivo cooperativo/forzado, retry de Execution y replan causal; sin bindings públicos hasta V20 |
 | V15 | presupuestos global/proyecto/Goal, fairness, riesgo/esfuerzo y ledger causal de efectos launch/stop; sin bindings públicos hasta V20 |
-| V16 | workspace opaco, inventario/write-set, commit e integración Git local por CAS; application-only hasta sus bindings V20 y condicionado a receipt V3 válido |
+| V16 | workspace opaco, inventario/write-set, commit e integración Git local por CAS; acreditado y application-only hasta sus bindings V20 |
 
 V12–V16 no añaden tools públicas: Director, mailbox, controles, gobernanza de
 efectos y casos de uso Git están en aplicación/composición, pero la superficie
@@ -454,7 +451,7 @@ succeeded no equivale a cambio integrado. Entrega refs de Goal/AppSpec,
 executions/artifacts, tests, riesgos y bloqueos.
 ```
 
-## 7. Limitaciones del candidato V16
+## 7. Limitaciones tras V16
 
 - V13 cerrado: existe mailbox durable interno para `child_delivery`, con
   `admitted → claimed → delivered → consumed → acknowledged|blocked` y
@@ -472,7 +469,7 @@ executions/artifacts, tests, riesgos y bloqueos.
   jerárquica, riesgo/esfuerzo tipados y cadena
   `intent -> approval -> attempt -> receipt` gobiernan launch/stop internos.
   No hay bindings públicos nuevos.
-- V16 implementado y condicionado a su receipt: workspace/worktree por
+- V16 acreditado: workspace/worktree por
   Execution, inventario, commit causal, pending work e integración Git local
   por CAS existen en aplicación/composición. `ListPendingChanges` e
   `IntegrateChange` no están en las seis tools públicas; por ello este runbook
@@ -495,14 +492,10 @@ en las seis tools MCP.
 
 ## 8. Verificación y E2E
 
-Desde un checkout limpio, validar V01–V15. Solo después de existir E y validar
-el receipt V16 ampliar el patrón hasta V16:
+Desde un checkout limpio, validar V01–V16:
 
 ```bash
 cd /home/alberto/Trabajo/orquesta-rebuild
-go test -mod=vendor -count=1 ./acceptance \
-  -run '^TestAcceptanceV(0[1-9]|1[0-5]).*Receipt$'
-# Después del receipt V16 estricto:
 go test -mod=vendor -count=1 ./acceptance \
   -run '^TestAcceptanceV(0[1-9]|1[0-6]).*Receipt$'
 ```
