@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "vertical": "V18",
+  "slug": "independent_reviews",
+  "branch": "reconstruccion/v18-independent-reviews",
+  "worktree": "/home/alberto/Trabajo/orquesta-rebuild-worktrees/v18-independent-reviews",
+  "base_oid": "eb272b6645928d800619709c9afd272440b0dabf",
+  "owner_state": "awaiting_dependency",
+  "owner_continuity_required": true,
+  "preflight_only": true,
+  "dependencies": [
+    {
+      "vertical": "V14",
+      "slug": "controls",
+      "receipt": "product/evidence/v14_controls.json",
+      "status": "verified_present"
+    },
+    {
+      "vertical": "V16",
+      "slug": "workspace_git",
+      "receipt": "product/evidence/v16_workspace_git.json",
+      "status": "verified_present"
+    },
+    {
+      "vertical": "V17",
+      "slug": "test_attestor",
+      "receipt": "product/evidence/v17_test_attestor.json",
+      "status": "awaiting_dependency"
+    }
+  ],
+  "capability_ids": ["GOV-12", "STG-13", "STG-14", "STG-16", "EVD-06"],
+  "acceptance_contract": "AC-V18-INDEPENDENT-REVIEWS",
+  "owned_globs": [
+    "docs/reconstruccion/analisis_y_contrato_v18_*.md",
+    "docs/reconstruccion/worksets/v18*.json",
+    "acceptance/v18_*.go",
+    "acceptance/fixtures/v18_*.json"
+  ],
+  "future_owned_globs_after_v17_rebase": [
+    "internal/review/**",
+    "internal/adapters/reviewer/**",
+    "acceptance/v18_*",
+    "acceptance/fixtures/v18_*",
+    "docs/reconstruccion/analisis_y_contrato_v18_*",
+    "docs/reconstruccion/worksets/v18*.json"
+  ],
+  "integration_files_requested": [],
+  "locks_requested": [],
+  "future_integration_files_requested_after_v17_rebase": [
+    "internal/goal replan cause and snapshot fields selected against sealed V17",
+    "internal/application execution review facts integration gate and StateRepository methods selected against sealed V17",
+    "internal/adapters/state/sqlite schema migration read write validation recovery",
+    "internal/bootstrap composition and V18 E2E harness"
+  ],
+  "future_locks_requested_after_v17_rebase": [
+    "L-AGGREGATE",
+    "L-STATE",
+    "L-SQLITE-MIGRATION",
+    "L-BOOTSTRAP",
+    "L-TRACE",
+    "L-SEAL"
+  ],
+  "forbidden_globs": [
+    "product/roadmap.json",
+    "product/capabilities.json",
+    "product/evidence/**",
+    "product/traceability/**",
+    "config/**",
+    "internal/**",
+    "cmd/**",
+    "/home/alberto/Trabajo/orquesta-rebuild/**",
+    "/home/alberto/Trabajo/orquesta/**"
+  ],
+  "required_tests": [
+    "go test -mod=vendor -count=1 ./acceptance -run '^TestAcceptanceV18IndependentReviews$'",
+    "go test -mod=vendor -count=1 ./acceptance -run '^TestAcceptanceV(12DirectorLease|14Controls|16WorkspaceGit)Receipt$'",
+    "git diff --check"
+  ],
+  "expected_preflight_red": "V18_RED only: production review types, markers and behavior tests are absent",
+  "runtime_roots": [],
+  "cache_roots": [],
+  "ports": [],
+  "processes": [],
+  "simplicity_budget": {
+    "product_loc_after_unblock": 4200,
+    "review_domain_loc": 700,
+    "application_loc": 1800,
+    "sqlite_recovery_loc": 1000,
+    "adapters_bootstrap_loc": 700,
+    "max_file_lines": 350,
+    "new_lifecycle_writers": 0,
+    "new_schedulers": 0,
+    "new_stores": 0,
+    "new_daemons": 0,
+    "new_outbound_ports": 0,
+    "e2e_max_wall_time_seconds": 180
+  },
+  "next_transition": {
+    "trigger": "valid V17 receipt integrated in the new base HEAD",
+    "actions": [
+      "rebase this same branch and worktree onto the integrated V17 HEAD",
+      "verify V17 receipt and freeze its actual subject and attestation API",
+      "update base_oid and dependency status without changing V18 ownership",
+      "reserve shared aggregate state SQLite and bootstrap leases before product edits",
+      "continue domain application persistence wiring recovery E2E review and P/S/E as the same V18 owner"
+    ]
+  }
+}
