@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "contract_id": "AC-V21-I18N",
+  "vertical": "i18n",
+  "owned_capability_ids": ["UI-18"],
+  "awaiting_dependency": "command_registry",
+  "awaiting_acceptance_contract": "AC-V20-COMMAND-REGISTRY",
+  "implementation_status": "awaiting_product",
+  "catalog_owner_surfaces": ["web", "wizard", "cli", "notifications", "errors", "prompts", "public_docs"],
+  "default_locale": "es",
+  "fallback_locale": "es",
+  "bcp47_examples": ["es", "en", "zh-Hans", "ca-ES-valencia"],
+  "formatters": ["plural", "date", "number", "currency", "timezone"],
+  "catalog_checks": ["extract_public_keys", "locale_parity", "missing_key_fails", "unused_key_fails", "machine_codes_invariant"],
+  "binding_e2e": {
+    "status": "awaiting_dependency",
+    "dependency": "command_registry",
+    "surfaces": ["http", "mcp", "cli"],
+    "assertions": ["same semantic key and machine code", "Spanish fallback and locale format matrix"]
+  },
+  "red_gate": "V21_PRODUCT_PENDING"
+}

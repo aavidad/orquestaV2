@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "vertical": "i18n",
+  "base_commit": "e311a97e4fdcafcf81c6114dbd904af4ed9293ad",
+  "owned_capability_ids": ["UI-18"],
+  "dependencies": {
+    "required": ["command_registry"],
+    "awaiting_dependency": "command_registry",
+    "awaiting_acceptance_contract": "AC-V20-COMMAND-REGISTRY"
+  },
+  "write_set": [
+    "docs/reconstruccion/analisis_y_contrato_v21_*.md",
+    "docs/reconstruccion/worksets/v21_*.json",
+    "acceptance/v21_*.go",
+    "acceptance/fixtures/v21_*.json"
+  ],
+  "forbidden": ["product/**", "config/**", "internal/**", "cmd/**", "roadmap", "evidence", "trace"],
+  "red_gate": "V21_PRODUCT_PENDING",
+  "implementation_status": "awaiting_product"
+}
