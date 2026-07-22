@@ -143,11 +143,46 @@ func validateCrossRegistryValues(registry registry, values map[Key]resolvedValue
 			if provider == "oidc" && (!canonicalOIDCIssuer(issuer) || audience == "") {
 				return fail(validator.ID)
 			}
+		case "test_attestor_provider_requirements":
+			if !validTestAttestorValues(values) {
+				return fail(validator.ID)
+			}
 		default:
 			return fail(validator.ID)
 		}
 	}
 	return nil
+}
+
+func validTestAttestorValues(values map[Key]resolvedValue) bool {
+	provider, providerOK := values[KeyTestAttestorProvider].value.(string)
+	command, commandOK := values[KeyTestAttestorBubblewrapCommand].value.(string)
+	toolchain, toolchainOK := values[KeyTestAttestorGoToolchainRoot].value.(string)
+	maxOutput, outputOK := values[KeyRuntimeMaxOutputBytes].value.(int64)
+	maxSubject, subjectOK := values[KeyTestAttestorMaxSubjectBytes].value.(int64)
+	timeout, timeoutOK := values[KeyTestAttestorTimeout].value.(time.Duration)
+	maxConcurrent, concurrentOK := values[KeyTestAttestorMaxConcurrentRuns].value.(int64)
+	seedPath, seedOK := values[KeyRepositoryLocalSeedPath].value.(string)
+	cgroupRoot, cgroupOK := values[KeyTestAttestorCgroupRoot].value.(string)
+	memory, memoryOK := values[KeyTestAttestorMemoryMaxBytes].value.(int64)
+	pids, pidsOK := values[KeyTestAttestorPIDsMax].value.(int64)
+	quota, quotaOK := values[KeyTestAttestorCPUQuotaMicros].value.(int64)
+	cleanup, cleanupOK := values[KeyServerShutdownTimeout].value.(time.Duration)
+	attestLease, leaseOK := values[KeySchedulerAttestTestClaimLease].value.(time.Duration)
+	executionTimeout, executionOK := values[KeySchedulerExecutionTimeout].value.(time.Duration)
+	allTyped := providerOK && commandOK && toolchainOK && outputOK && subjectOK && timeoutOK && concurrentOK &&
+		seedOK && cgroupOK && memoryOK && pidsOK && quotaOK && cleanupOK && leaseOK && executionOK
+	if !allTyped || provider != "bubblewrap" {
+		return allTyped
+	}
+	return canonicalAbsolutePath(command) && canonicalAbsolutePath(toolchain) && seedPath != "" &&
+		canonicalAbsolutePath(cgroupRoot) && maxOutput > 0 && maxSubject > 0 && maxConcurrent > 0 &&
+		memory > maxOutput && pids > 0 && quota > 0 && timeout > 0 && cleanup > 0 &&
+		timeout < attestLease && cleanup < attestLease-timeout && attestLease < executionTimeout
+}
+
+func canonicalAbsolutePath(value string) bool {
+	return value != "" && filepath.IsAbs(value) && filepath.Clean(value) == value
 }
 
 func canonicalOIDCIssuer(value string) bool {

@@ -40,9 +40,11 @@ func TestGitWorkspaceValidatesPrivateAncestorsAndAllowsStickyTempAncestor(t *tes
 	if err := os.Chmod(stickyParent, 0o777|os.ModeSticky); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := New(Config{Root: filepath.Join(stickyParent, "private"), GitCommand: "/usr/bin/git", Locator: testLocator{}, Now: time.Now}); err != nil {
+	stickyAdapter, err := newTestAdapter(Config{Root: filepath.Join(stickyParent, "private"), GitCommand: testGitExecutable(t), Locator: testLocator{}, Now: time.Now})
+	if err != nil {
 		t.Fatalf("sticky ancestor rejected: %v", err)
 	}
+	t.Cleanup(func() { _ = stickyAdapter.Close() })
 
 	base := t.TempDir()
 	realParent := filepath.Join(base, "real-parent")
@@ -73,11 +75,51 @@ func TestGitWorkspaceIsolatesHostConfigAndRejectsExecutableRepositoryControls(t 
 		t.Fatalf("isolated host config affected Git: %v", err)
 	}
 
-	hostileAdapter, hostileRequest := testAdapterAndPrepare(t)
-	repository := hostileAdapter.loc.(testLocator).binding.Path
-	gitTest(t, repository, "config", "filter.evil.clean", "/bin/false")
-	if _, err := hostileAdapter.Prepare(context.Background(), hostileRequest); ErrorCodeOf(err) != CodeWorkspaceUnsafe {
-		t.Fatalf("executable repo config err=%v", err)
+	for name, configure := range map[string]func(*testing.T, string, string){
+		"filter_attribute": func(t *testing.T, repository, marker string) {
+			if err := os.WriteFile(filepath.Join(repository, ".gitattributes"), []byte("*.txt filter=evil\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			gitTest(t, repository, "add", ".gitattributes")
+			gitTest(t, repository, "commit", "-m", "attributes")
+			gitTest(t, repository, "config", "filter.evil.clean", "sh -c 'touch "+marker+"; cat'")
+		},
+		"merge_attribute": func(t *testing.T, repository, marker string) {
+			if err := os.WriteFile(filepath.Join(repository, ".gitattributes"), []byte("*.txt merge=evil\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			gitTest(t, repository, "add", ".gitattributes")
+			gitTest(t, repository, "commit", "-m", "attributes")
+			gitTest(t, repository, "config", "merge.evil.driver", "sh -c 'touch "+marker+"; exit 0'")
+		},
+		"textconv_attribute": func(t *testing.T, repository, marker string) {
+			if err := os.WriteFile(filepath.Join(repository, ".gitattributes"), []byte("*.txt diff=evil\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			gitTest(t, repository, "add", ".gitattributes")
+			gitTest(t, repository, "commit", "-m", "attributes")
+			gitTest(t, repository, "config", "diff.evil.textconv", "sh -c 'touch "+marker+"; cat'")
+		},
+		"included_filter": func(t *testing.T, repository, marker string) {
+			included := filepath.Join(t.TempDir(), "included.gitconfig")
+			if err := os.WriteFile(included, []byte("[filter \"evil\"]\n\tclean = sh -c 'touch "+marker+"; cat'\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			gitTest(t, repository, "config", "include.path", included)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			hostileAdapter, hostileRequest := testAdapterAndPrepare(t)
+			repository := hostileAdapter.loc.(testLocator).binding.Path
+			marker := filepath.Join(t.TempDir(), "executed")
+			configure(t, repository, marker)
+			if _, err := hostileAdapter.Prepare(context.Background(), hostileRequest); ErrorCodeOf(err) != CodeWorkspaceUnsafe {
+				t.Fatalf("executable repo config err=%v", err)
+			}
+			if _, err := os.Lstat(marker); !os.IsNotExist(err) {
+				t.Fatalf("repository-controlled helper executed: %v", err)
+			}
+		})
 	}
 }
 
@@ -94,14 +136,15 @@ func TestGitWorkspaceRejectsRepositoryOverlappingPrivateRoot(t *testing.T) {
 	if err := os.Chmod(repository, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	adapter, err := New(Config{
-		Root: filepath.Join(repository, "var", "workspaces"), GitCommand: "/usr/bin/git",
+	adapter, err := newTestAdapter(Config{
+		Root: filepath.Join(repository, "var", "workspaces"), GitCommand: testGitExecutable(t),
 		Locator: testLocator{binding: LocalRepositoryBinding{Path: repository, TargetRef: "refs/heads/main"}},
 		Now:     time.Now,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = adapter.Close() })
 	_, request := testAdapterAndPrepare(t)
 	if _, err := adapter.Prepare(context.Background(), request); ErrorCodeOf(err) != CodeRepositoryInvalid {
 		t.Fatalf("overlapping repository/workspace root err=%v", err)

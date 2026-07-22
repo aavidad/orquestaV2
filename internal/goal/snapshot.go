@@ -6,7 +6,8 @@ import (
 	"orquesta/internal/governance"
 )
 
-const GoalSnapshotSchemaVersion uint32 = 6
+const GoalSnapshotSchemaVersion uint32 = 7
+const requiredTestsCompatibleSnapshotSchemaVersion uint32 = 6
 const governanceCompatibleSnapshotSchemaVersion uint32 = 5
 
 // IntentManifestSnapshot is a persistence-neutral representation. Primitive
@@ -43,6 +44,13 @@ type PhaseInstanceSnapshot struct {
 	CriterionRefs []string
 }
 
+type RequiredTestSpecSnapshot struct {
+	Ref              string
+	ToolRef          string
+	Arguments        []string
+	WorkingDirectory string
+}
+
 // WorkItemSnapshot is the complete immutable state required to rehydrate a
 // WorkItem as part of its Goal aggregate.
 type WorkItemSnapshot struct {
@@ -57,6 +65,7 @@ type WorkItemSnapshot struct {
 	HandoffRequired     *bool
 	DependencyRefs      []string
 	WriteSet            []string
+	RequiredTests       []RequiredTestSpecSnapshot
 	SkillRefs           []string
 	ToolRefs            []string
 	CapabilityRefs      []string
@@ -207,6 +216,16 @@ func snapshotWorkItem(item WorkItem) WorkItemSnapshot {
 			artifacts[index] = ref.String()
 		}
 	}
+	var requiredTests []RequiredTestSpecSnapshot
+	if len(item.requiredTests) > 0 {
+		requiredTests = make([]RequiredTestSpecSnapshot, len(item.requiredTests))
+		for index, spec := range item.requiredTests {
+			requiredTests[index] = RequiredTestSpecSnapshot{
+				Ref: spec.ref.String(), ToolRef: spec.toolRef.String(),
+				Arguments: append([]string(nil), spec.arguments...), WorkingDirectory: spec.workingDirectory,
+			}
+		}
+	}
 	var attestations []string
 	if len(item.attestations) > 0 {
 		attestations = make([]string, len(item.attestations))
@@ -226,6 +245,7 @@ func snapshotWorkItem(item WorkItem) WorkItemSnapshot {
 		HandoffRequired: &handoffRequired,
 		DependencyRefs:  dependencies,
 		WriteSet:        writeSet,
+		RequiredTests:   requiredTests,
 		SkillRefs:       stringsFromRefs(item.skillRefs),
 		ToolRefs:        stringsFromRefs(item.toolRefs),
 		CapabilityRefs:  stringsFromRefs(item.capabilityRefs),

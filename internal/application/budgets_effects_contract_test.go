@@ -175,6 +175,15 @@ func TestEffectRequiresExactLiveApprovalBeforeAdapterInvocation(t *testing.T) {
 }
 
 func TestEffectCrashAfterApplyBeforeReceiptReconcilesOnce(t *testing.T) {
+	testUnknownAppliedEffectNeverRerunsPhysicalLaunch(t)
+}
+
+func TestUnknownAppliedEffectNeverRerunsPhysicalLaunch(t *testing.T) {
+	testUnknownAppliedEffectNeverRerunsPhysicalLaunch(t)
+}
+
+func testUnknownAppliedEffectNeverRerunsPhysicalLaunch(t *testing.T) {
+	t.Helper()
 	clock := &mutableClock{now: time.Date(2026, 7, 18, 16, 0, 0, 0, time.UTC)}
 	physical, crashed := 0, false
 	var durable ports.AgentLaunchReceipt
@@ -205,8 +214,8 @@ func TestEffectCrashAfterApplyBeforeReceiptReconcilesOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := orchestrator.ProcessNext(context.Background(), "worker:crash"); err != nil {
-		t.Fatal(err)
+	if _, err := orchestrator.ProcessNext(context.Background(), "worker:crash"); err == nil || err.Error() != effectUnknownAppliedCode {
+		t.Fatalf("ambiguous launch error=%v want=%s", err, effectUnknownAppliedCode)
 	}
 	crashedRecord, err := repository.GetGoal(context.Background(), submitted.Record.Goal.Ref())
 	if err != nil || physical != 1 || len(crashedRecord.BudgetReservations) != 1 ||
@@ -216,25 +225,19 @@ func TestEffectCrashAfterApplyBeforeReceiptReconcilesOnce(t *testing.T) {
 			len(crashedRecord.EffectAttempts), err)
 	}
 	clock.Advance(time.Second)
-	if _, err := orchestrator.ProcessNext(context.Background(), "worker:reconcile"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := orchestrator.ProcessNext(context.Background(), "worker:observe"); err != nil {
-		t.Fatal(err)
+	if result, err := orchestrator.ProcessNext(context.Background(), "worker:reconcile"); err != nil || result.Processed {
+		t.Fatalf("quarantined launch replayed: result=%+v err=%v", result, err)
 	}
 	closed, err := repository.GetGoal(context.Background(), submitted.Record.Goal.Ref())
-	if err != nil || physical != 1 || agent.launches != 2 || len(closed.BudgetReservations) != 1 ||
-		len(closed.BudgetSettlements) != 1 || len(closed.EffectAttempts) != 2 || len(closed.EffectReceipts) != 1 {
-		t.Fatalf("reconciliation duplicated effect/facts: physical=%d calls=%d reservations=%d settlements=%d attempts=%d receipts=%d err=%v",
+	if err != nil || physical != 1 || agent.launches != 1 || len(closed.BudgetReservations) != 1 ||
+		len(closed.BudgetSettlements) != 0 || len(closed.EffectAttempts) != 1 || len(closed.EffectReceipts) != 0 {
+		t.Fatalf("unknown launch duplicated effect/facts: physical=%d calls=%d reservations=%d settlements=%d attempts=%d receipts=%d err=%v",
 			physical, agent.launches, len(closed.BudgetReservations), len(closed.BudgetSettlements),
 			len(closed.EffectAttempts), len(closed.EffectReceipts), err)
 	}
-	if closed.BudgetSettlements[0].ReservationRef != closed.BudgetReservations[0].Ref {
-		t.Fatalf("settled wrong reservation: %+v", closed.BudgetSettlements[0])
-	}
-	if closed.BudgetSettlements[0].Observed.Quality != governance.UsageQualityMeasured {
-		t.Fatalf("mixed exact provider/measured application usage kept false quality: %+v",
-			closed.BudgetSettlements[0].Observed)
+	if execution := onlyExecution(t, closed); execution.BudgetReservationRef != closed.BudgetReservations[0].Ref ||
+		execution.EffectIntentRef == "" {
+		t.Fatalf("unknown launch lost budget/effect fence: execution=%+v reservations=%+v", execution, closed.BudgetReservations)
 	}
 }
 
@@ -244,10 +247,130 @@ func (definitelyUnappliedTemporaryError) Error() string              { return "t
 func (definitelyUnappliedTemporaryError) Temporary() bool            { return true }
 func (definitelyUnappliedTemporaryError) DefinitelyNotApplied() bool { return true }
 
+func TestTerminalEffectReceiptBlocksReplayDespiteZeroRelease(t *testing.T) {
+	reservation := governance.BudgetReservation{
+		Ref: "reservation:receipt", ActionRef: "action:receipt", EffectIntentRef: "intent:receipt",
+		Fence: 1, Resources: governance.ResourceVector{Tokens: 7, Currency: "EUR"},
+	}
+	attempt := EffectAttempt{
+		Ref: "attempt:receipt", ActionRef: reservation.ActionRef, IntentRef: reservation.EffectIntentRef,
+		ActionFence: 2, StartedAt: time.Unix(10, 0).UTC(),
+	}
+	zero := governance.ResourceVector{Currency: "EUR"}
+	record := GoalRecord{
+		BudgetReservations: []governance.BudgetReservation{reservation},
+		BudgetSettlements: []governance.BudgetSettlement{{
+			ReservationRef: reservation.Ref, CausalAttemptRef: attempt.Ref, Reserved: reservation.Resources,
+			Observed: governance.ResourceUsage{
+				Resources: zero, Known: governance.AllResourceDimensions, Quality: governance.UsageQualityExact,
+			},
+			Charged: zero, Released: reservation.Resources, Overrun: zero, SettledAt: attempt.StartedAt,
+		}},
+		EffectAttempts: []EffectAttempt{attempt},
+		EffectReceipts: []EffectReceipt{{
+			AttemptRef: attempt.Ref, ActionRef: attempt.ActionRef,
+			IntentRef: attempt.IntentRef, ActionFence: attempt.ActionFence,
+		}},
+	}
+	action := ActionRecord{Ref: reservation.ActionRef, EffectIntentRef: reservation.EffectIntentRef}
+	if !priorEffectAttemptBlocksDispatch(record, action) {
+		t.Fatal("terminal receipt lost known-applied authority to contradictory zero release")
+	}
+}
+
+func TestExactZeroReleaseAtAttemptStartAllowsRetry(t *testing.T) {
+	reservation := governance.BudgetReservation{
+		Ref: "reservation:equal-time", ActionRef: "action:equal-time", EffectIntentRef: "intent:equal-time",
+		Fence: 1, Resources: governance.ResourceVector{Tokens: 7, Currency: "EUR"},
+	}
+	attempt := EffectAttempt{
+		Ref: "attempt:equal-time", ActionRef: reservation.ActionRef, IntentRef: reservation.EffectIntentRef,
+		ActionFence: 2, StartedAt: time.Unix(10, 0).UTC(),
+	}
+	zero := governance.ResourceVector{Currency: "EUR"}
+	record := GoalRecord{
+		BudgetReservations: []governance.BudgetReservation{reservation},
+		BudgetSettlements: []governance.BudgetSettlement{{
+			ReservationRef: reservation.Ref, CausalAttemptRef: attempt.Ref, Reserved: reservation.Resources,
+			Observed: governance.ResourceUsage{
+				Resources: zero, Known: governance.AllResourceDimensions, Quality: governance.UsageQualityExact,
+			},
+			Charged: zero, Released: reservation.Resources, Overrun: zero, SettledAt: attempt.StartedAt,
+		}},
+		EffectAttempts: []EffectAttempt{attempt},
+	}
+	action := ActionRecord{Ref: reservation.ActionRef, EffectIntentRef: reservation.EffectIntentRef}
+	if priorEffectAttemptBlocksDispatch(record, action) {
+		t.Fatal("wall-clock equality overrode exact causal zero-release evidence")
+	}
+}
+
+func TestDefinitelyUnappliedOutcomeUsesDurableCausalityNotWallTime(t *testing.T) {
+	reservation := governance.BudgetReservation{
+		Ref: "reservation:test", ActionRef: "action:test", EffectIntentRef: "intent:test",
+		Fence: 1, Resources: governance.ResourceVector{Tokens: 7, MoneyMicros: 9, Currency: "EUR"},
+	}
+	attempt := EffectAttempt{
+		Ref: "attempt:test", ActionRef: reservation.ActionRef, IntentRef: reservation.EffectIntentRef,
+		ActionFence: 3, StartedAt: time.Unix(10, 0).UTC(),
+	}
+	action := ActionRecord{
+		Ref: reservation.ActionRef, Kind: ActionLaunchAgent, EffectIntentRef: reservation.EffectIntentRef,
+	}
+	record := GoalRecord{BudgetReservations: []governance.BudgetReservation{reservation}, EffectAttempts: []EffectAttempt{attempt}}
+	if !priorEffectAttemptBlocksDispatch(record, action) {
+		t.Fatal("orphan launch without settlement became retryable")
+	}
+	zero := governance.ResourceVector{Currency: "EUR"}
+	settlement := governance.BudgetSettlement{
+		ReservationRef: reservation.Ref, CausalAttemptRef: attempt.Ref, Reserved: reservation.Resources,
+		Observed: governance.ResourceUsage{
+			Resources: zero, Known: governance.AllResourceDimensions, Quality: governance.UsageQualityExact,
+		},
+		Charged: zero, Released: reservation.Resources, Overrun: zero,
+		SettledAt: attempt.StartedAt,
+	}
+	record.BudgetSettlements = []governance.BudgetSettlement{settlement}
+	if priorEffectAttemptBlocksDispatch(record, action) {
+		t.Fatal("exact causal release did not authorize retry")
+	}
+	record.EffectReceipts = []EffectReceipt{{
+		AttemptRef: attempt.Ref, ActionRef: attempt.ActionRef,
+		IntentRef: attempt.IntentRef, ActionFence: attempt.ActionFence,
+	}}
+	if !priorEffectAttemptBlocksDispatch(record, action) {
+		t.Fatal("terminal receipt authorized replay despite contradictory zero release")
+	}
+	record.EffectReceipts = nil
+	peerReservation := reservation
+	peerReservation.Ref = "reservation:test:peer"
+	peerReservation.Fence = 2
+	peerReservation.ReservedAt = attempt.StartedAt.Add(-time.Second)
+	peerSettlement := settlement
+	peerSettlement.ReservationRef = peerReservation.Ref
+	peerSettlement.SettledAt = attempt.StartedAt.Add(2 * time.Second)
+	record.BudgetReservations = append(record.BudgetReservations, peerReservation)
+	record.BudgetSettlements = append(record.BudgetSettlements, peerSettlement)
+	if !priorEffectAttemptBlocksDispatch(record, action) {
+		t.Fatal("multiple reservations causal at attempt authorized retry")
+	}
+	record.BudgetReservations = record.BudgetReservations[:1]
+	record.BudgetSettlements = record.BudgetSettlements[:1]
+	record.EffectAttempts = append(record.EffectAttempts, EffectAttempt{
+		Ref: "attempt:test:ambiguous", ActionRef: reservation.ActionRef, IntentRef: reservation.EffectIntentRef,
+		ActionFence: 2, StartedAt: attempt.StartedAt.Add(2 * time.Second),
+	})
+	if !priorEffectAttemptBlocksDispatch(record, action) {
+		t.Fatal("one settlement proved multiple physical attempts unapplied")
+	}
+}
+
 func TestTemporaryLaunchReleasesOnlyWithDefinitelyNotAppliedEvidence(t *testing.T) {
 	clock := &mutableClock{now: time.Date(2026, 7, 18, 17, 0, 0, 0, time.UTC)}
 	repository := newMemoryRepository()
-	agent := &scriptedAgent{now: clock.Now, launchErr: definitelyUnappliedTemporaryError{}}
+	agent := &scriptedAgent{
+		now: clock.Now, launchErr: definitelyUnappliedTemporaryError{},
+	}
 	orchestrator, _ := newTestOrchestrator(t, repository, clock, agent)
 	actor, project := testScope(t)
 	submitted, err := orchestrator.Submit(context.Background(), accessForScope(t, actor, project), SubmitRequest{
@@ -260,6 +383,12 @@ func TestTemporaryLaunchReleasesOnlyWithDefinitelyNotAppliedEvidence(t *testing.
 		t.Fatal(err)
 	}
 	assertOneExactRelease(t, repository, submitted.Record.Goal.Ref())
+	released, _ := repository.GetGoal(context.Background(), submitted.Record.Goal.Ref())
+	if released.BudgetSettlements[0].CausalAttemptRef != released.EffectAttempts[0].Ref ||
+		!released.BudgetSettlements[0].SettledAt.Equal(released.EffectAttempts[0].StartedAt) {
+		t.Fatalf("release lacks exact same-tick attempt edge: settlements=%+v attempts=%+v",
+			released.BudgetSettlements, released.EffectAttempts)
+	}
 	agent.mu.Lock()
 	agent.launchErr = nil
 	agent.mu.Unlock()

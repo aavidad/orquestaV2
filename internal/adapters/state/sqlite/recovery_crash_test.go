@@ -29,6 +29,9 @@ var v09RecoveryCrashStages = []string{
 // process. os.Exit bypasses Backup.Finish, deferred cleanup and Close, so the
 // parent proves restart recovery rather than ordinary error unwinding.
 func TestV09RecoverySurvivesProcessCrashAtEveryBoundary(t *testing.T) {
+	if raceEnabled {
+		t.Skip("multiprocess crash matrix is covered by the normal gate; focal races cover V17")
+	}
 	for _, stage := range v09RecoveryCrashStages {
 		stage := stage
 		t.Run(stage, func(t *testing.T) {
@@ -103,18 +106,14 @@ func TestV09RecoverySurvivesProcessCrashAtEveryBoundary(t *testing.T) {
 				assertV09CompleteBackupSet(t, recovered, backupRoot)
 			} else {
 				target, err := application.NewRecoveryTargetRef("recovery-target:" + suffix)
-				if err != nil {
-					t.Fatal(err)
-				}
+				sqliteTestNoError(t, err)
 				if stage == "after_restore_sync" {
 					if _, err := recovered.RestoreBackup(ctx, backupRef, target); err != nil {
 						t.Fatalf("retry restore after prepublish crash: %v", err)
 					}
 				}
 				targetPath, err := recovered.TargetPath(target)
-				if err != nil {
-					t.Fatal(err)
-				}
+				sqliteTestNoError(t, err)
 				assertV09NoRecoveryResidue(t, backupRoot, restoreRoot)
 				restored := openV09CrashRepository(t, targetPath, at)
 				if _, err := restored.GetGoal(ctx, created.Goal.Ref()); err != nil {
@@ -143,9 +142,7 @@ func TestV09RecoveryCrashProcessHelper(t *testing.T) {
 	backupRoot, restoreRoot := arguments[3], arguments[4]
 	backupRefValue, timeValue := arguments[5], arguments[6]
 	at, err := time.Parse(time.RFC3339Nano, timeValue)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	repository := openV09CrashRepository(t, databasePath, at)
 	recovery, err := NewRecovery(RecoveryOptions{
 		Repository:  repository,
@@ -159,20 +156,14 @@ func TestV09RecoveryCrashProcessHelper(t *testing.T) {
 			return nil
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	if strings.HasPrefix(stage, "after_restore_") {
 		backupRef, err := application.NewBackupRef(backupRefValue)
-		if err != nil {
-			t.Fatal(err)
-		}
+		sqliteTestNoError(t, err)
 		target, err := application.NewRecoveryTargetRef(
 			"recovery-target:v09-crash-" + strings.ReplaceAll(stage, "_", "-"),
 		)
-		if err != nil {
-			t.Fatal(err)
-		}
+		sqliteTestNoError(t, err)
 		_, err = recovery.RestoreBackup(context.Background(), backupRef, target)
 	} else {
 		_, err = recovery.CreateBackup(context.Background())
@@ -212,9 +203,7 @@ func assertV09CompleteBackupSet(t *testing.T, recovery *Recovery, backupRoot str
 			t.Fatalf("backup %s is incomplete: files=%v err=%v", name, files, err)
 		}
 		ref, err := application.NewBackupRef(backupRefPrefix + name)
-		if err != nil {
-			t.Fatal(err)
-		}
+		sqliteTestNoError(t, err)
 		if _, err := recovery.VerifyBackup(context.Background(), ref); err != nil {
 			t.Fatalf("published backup %s is not verifiable: %v", name, err)
 		}
@@ -239,8 +228,6 @@ func assertV09NoRecoveryResidue(t *testing.T, roots ...string) {
 			}
 			return nil
 		})
-		if err != nil {
-			t.Fatal(err)
-		}
+		sqliteTestNoError(t, err)
 	}
 }

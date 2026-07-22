@@ -14,6 +14,7 @@ import (
 
 	"orquesta/internal/adapters/agent/codex"
 	"orquesta/internal/adapters/artifact/filesystem"
+	"orquesta/internal/adapters/attestor/bubblewrap"
 	"orquesta/internal/adapters/auth/bearer"
 	"orquesta/internal/adapters/auth/localtoken"
 	"orquesta/internal/adapters/auth/oidc"
@@ -61,6 +62,8 @@ type Runtime struct {
 	orchestrator    *application.Orchestrator
 	repository      *statesqlite.Repository
 	artifacts       *filesystem.Store
+	testAttestor    interface{ Close() error }
+	workspace       *gitlocal.Adapter
 	agent           AgentAdapter
 	listener        net.Listener
 	httpServer      *http.Server
@@ -83,27 +86,10 @@ type Runtime struct {
 }
 
 func Build(ctx context.Context, options Options) (*Runtime, error) {
-	snapshot, err := loadConfigSnapshot(ctx, options.ConfigPath)
+	setup, err := prepareBuildSetup(ctx, options.ConfigPath)
 	if err != nil {
 		return nil, err
 	}
-	if err := validateSnapshot(snapshot, options.ConfigPath); err != nil {
-		return nil, err
-	}
-	clock := local.Clock{}
-	policy, err := buildBudgetPolicy(snapshot, clock.Now())
-	if err != nil {
-		return nil, err
-	}
-	catalog, err := i18n.LoadBundled()
-	if err != nil {
-		return nil, err
-	}
-	workerRef, err := local.IDGenerator{}.NewID(ctx, "worker")
-	if err != nil {
-		return nil, err
-	}
-	setup := buildSetup{snapshot: snapshot, clock: clock, budgetPolicy: policy, catalog: catalog, workerRef: workerRef}
 	var cleanup buildCleanup
 	defer cleanup.run()
 	listener, err := openBuildListener(setup.snapshot, options.Listener)
@@ -126,9 +112,17 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		if err != nil {
 			return nil, err
 		}
+		cleanup.add(func() { _ = workspace.Close() })
 		if err := bindAgentWorkspaceResolver(agent, workspace); err != nil {
 			return nil, err
 		}
+	}
+	testAttestor, err := openBuildTestAttestor(setup.snapshot, setup.clock, workspace)
+	if err != nil {
+		return nil, err
+	}
+	if testAttestor.closer != nil {
+		cleanup.add(func() { _ = testAttestor.closer.Close() })
 	}
 	authenticator, err := bearer.New(identityComposition.provider)
 	if err != nil {
@@ -147,11 +141,16 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		return nil, err
 	}
 	cleanup.add(func() { _ = artifacts.Close() })
-	orchestrator, err := newBuildOrchestrator(setup, repository, artifacts, agent, controller, capabilities, workspace)
+	orchestrator, err := newBuildOrchestrator(
+		setup, repository, artifacts, agent, controller, capabilities, workspace, testAttestor,
+	)
 	if err != nil {
 		return nil, err
 	}
-	runtime, err := newBuildRuntime(setup, options, listener, agent, repository, artifacts, orchestrator, authenticator)
+	runtime, err := newBuildRuntime(
+		setup, options, listener, agent, repository, artifacts, orchestrator, authenticator,
+		testAttestor.closer, workspace,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -160,12 +159,49 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	return runtime, nil
 }
 
+func prepareBuildSetup(ctx context.Context, configPath string) (buildSetup, error) {
+	snapshot, err := loadConfigSnapshot(ctx, configPath)
+	if err != nil {
+		return buildSetup{}, err
+	}
+	if err := validateSnapshot(snapshot, configPath); err != nil {
+		return buildSetup{}, err
+	}
+	clock := local.Clock{}
+	policy, err := buildBudgetPolicy(snapshot, clock.Now())
+	if err != nil {
+		return buildSetup{}, err
+	}
+	catalog, err := i18n.LoadBundled()
+	if err != nil {
+		return buildSetup{}, err
+	}
+	workerRef, err := local.IDGenerator{}.NewID(ctx, "worker")
+	if err != nil {
+		return buildSetup{}, err
+	}
+	return buildSetup{
+		snapshot: snapshot, clock: clock, budgetPolicy: policy, catalog: catalog, workerRef: workerRef,
+	}, nil
+}
+
 type buildSetup struct {
 	snapshot     config.Snapshot
 	clock        local.Clock
 	budgetPolicy application.BudgetPolicy
 	catalog      *i18n.Catalog
 	workerRef    string
+}
+
+const (
+	testAttestorDisabled   = "disabled"
+	testAttestorBubblewrap = "bubblewrap"
+)
+
+type buildTestAttestorComposition struct {
+	attestor application.TestAttestor
+	policy   application.TestAttestationPolicy
+	closer   interface{ Close() error }
 }
 
 type buildCleanup []func()
@@ -259,11 +295,57 @@ func openBuildWorkspace(
 	}
 	return gitlocal.New(gitlocal.Config{
 		Root: snapshot.WorkspaceLocalRoot(), GitCommand: gitCommand, Now: clock.Now,
+		MaxSnapshotBytes:   snapshot.TestAttestorMaxSubjectBytes(),
+		MaxSnapshotEntries: bubblewrap.SubjectEntryLimit(snapshot.TestAttestorMaxSubjectBytes()),
 		Locator: localRepositoryLocator{
 			repositoryRef: composition.localHierarchy.RepositoryRef(), seedPath: seedPath,
 			targetRef: snapshot.RepositoryLocalTargetRef(),
 		},
 	})
+}
+
+func openBuildTestAttestor(
+	snapshot config.Snapshot,
+	clock application.Clock,
+	workspace *gitlocal.Adapter,
+) (buildTestAttestorComposition, error) {
+	switch snapshot.TestAttestorProvider() {
+	case testAttestorDisabled:
+		return buildTestAttestorComposition{}, nil
+	case testAttestorBubblewrap:
+		if workspace == nil {
+			return buildTestAttestorComposition{}, errors.New("bootstrap.test_attestor_workspace_required")
+		}
+		config := bubblewrapConfig(snapshot, workspace, clock.Now)
+		attestor, err := bubblewrap.New(config)
+		if err != nil {
+			return buildTestAttestorComposition{}, err
+		}
+		identity := attestor.PolicyIdentity()
+		policy := application.TestAttestationPolicy{Ref: identity.Ref, Digest: identity.Digest}
+		if err := application.ValidateTestAttestationPolicy(policy); err != nil {
+			_ = attestor.Close()
+			return buildTestAttestorComposition{}, err
+		}
+		return buildTestAttestorComposition{attestor: attestor, policy: policy, closer: attestor}, nil
+	default:
+		return buildTestAttestorComposition{}, errors.New("bootstrap.test_attestor_provider_unsupported")
+	}
+}
+
+func bubblewrapConfig(snapshot config.Snapshot, source bubblewrap.SnapshotStreamSource, now func() time.Time) bubblewrap.Config {
+	return bubblewrap.Config{
+		BubblewrapCommand: snapshot.TestAttestorBubblewrapCommand(),
+		ToolchainRoot:     snapshot.TestAttestorGoToolchainRoot(), CgroupRoot: snapshot.TestAttestorCgroupRoot(),
+		SnapshotSource: source, Now: now,
+		Limits: bubblewrap.Limits{
+			Timeout: snapshot.TestAttestorTimeout(), CleanupTimeout: snapshot.ServerShutdownTimeout(),
+			MaxOutputBytes: snapshot.RuntimeMaxOutputBytes(), MaxSubjectBytes: snapshot.TestAttestorMaxSubjectBytes(),
+			MaxConcurrentRuns: snapshot.TestAttestorMaxConcurrentRuns(),
+			MemoryMaxBytes:    snapshot.TestAttestorMemoryMaxBytes(), PIDsMax: snapshot.TestAttestorPIDsMax(),
+			CPUQuotaMicros: snapshot.TestAttestorCPUQuotaMicros(),
+		},
+	}
 }
 
 func resolveBootstrapExecutable(name string, environment map[string]string) (string, error) {
@@ -326,26 +408,42 @@ func openBuildRepository(
 func newBuildOrchestrator(
 	setup buildSetup, repository *statesqlite.Repository, artifacts *filesystem.Store,
 	agent AgentAdapter, controller application.AgentController, capabilities ports.AgentCapabilities, workspace *gitlocal.Adapter,
+	testAttestor buildTestAttestorComposition,
 ) (*application.Orchestrator, error) {
-	return application.New(application.Dependencies{
+	return application.New(buildOrchestratorDependencies(
+		setup, repository, artifacts, agent, controller, capabilities, workspace, testAttestor,
+	))
+}
+
+func buildOrchestratorDependencies(
+	setup buildSetup, repository *statesqlite.Repository, artifacts *filesystem.Store,
+	agent AgentAdapter, controller application.AgentController, capabilities ports.AgentCapabilities, workspace *gitlocal.Adapter,
+	testAttestor buildTestAttestorComposition,
+) application.Dependencies {
+	return application.Dependencies{
 		State: repository, Access: repository,
 		Launcher: agent, Observer: agent, Controller: controller, Artifacts: artifacts,
 		WorkspaceManager: workspace, VersionControl: workspace,
+		TestAttestor: testAttestor.attestor, TestAttestationPolicy: testAttestor.policy,
 		Clock: setup.clock, IDs: local.IDGenerator{},
 		MaxOutputBytes: setup.snapshot.RuntimeMaxOutputBytes(), MaxMailboxEnvelopeBytes: setup.snapshot.MailboxMaxEnvelopeBytes(),
-		MaxExecutionAttempts: uint64(setup.snapshot.SchedulerMaxExecutionAttempts()),
-		MaxChildrenPerParent: int(setup.snapshot.SchedulerMaxChildrenPerParent()),
-		ClaimLease:           setup.snapshot.SchedulerClaimLease(), DirectorLeaseDuration: setup.snapshot.DirectorLeaseDuration(),
-		EffectApprovalTTL: setup.snapshot.GovernanceEffectApprovalTTL(), BudgetPolicy: setup.budgetPolicy,
+		MaxExecutionAttempts:  uint64(setup.snapshot.SchedulerMaxExecutionAttempts()),
+		MaxChildrenPerParent:  int(setup.snapshot.SchedulerMaxChildrenPerParent()),
+		ClaimLease:            setup.snapshot.SchedulerClaimLease(),
+		AttestTestClaimLease:  setup.snapshot.SchedulerAttestTestClaimLease(),
+		DirectorLeaseDuration: setup.snapshot.DirectorLeaseDuration(),
+		EffectApprovalTTL:     setup.snapshot.GovernanceEffectApprovalTTL(), BudgetPolicy: setup.budgetPolicy,
 		ObservationDelay: setup.snapshot.SchedulerObservationInterval(), ExecutionTimeout: setup.snapshot.SchedulerExecutionTimeout(),
 		AgentCapabilities: capabilities,
-	})
+	}
 }
 
 func newBuildRuntime(
 	setup buildSetup, options Options, listener net.Listener, agent AgentAdapter,
 	repository *statesqlite.Repository, artifacts *filesystem.Store, orchestrator *application.Orchestrator,
 	authenticator *bearer.Middleware,
+	testAttestor interface{ Close() error },
+	workspace *gitlocal.Adapter,
 ) (*Runtime, error) {
 	version := strings.TrimSpace(options.Version)
 	if version == "" {
@@ -369,7 +467,8 @@ func newBuildRuntime(
 	}
 	return &Runtime{
 		config: setup.snapshot, orchestrator: orchestrator, repository: repository,
-		artifacts: artifacts, agent: agent, listener: listener, httpServer: httpServer,
+		artifacts: artifacts, testAttestor: testAttestor, workspace: workspace,
+		agent: agent, listener: listener, httpServer: httpServer,
 		workerRef: setup.workerRef, reportError: options.ReportError,
 		lifecycleCtx: lifecycleCtx, cancelLifecycle: cancelLifecycle,
 		shutdownDone: make(chan struct{}),
@@ -591,6 +690,16 @@ func (runtime *Runtime) performShutdown() {
 	if err := runtime.artifacts.Close(); err != nil {
 		failures = append(failures, err)
 	}
+	if runtime.testAttestor != nil {
+		if err := runtime.testAttestor.Close(); err != nil {
+			failures = append(failures, err)
+		}
+	}
+	if runtime.workspace != nil {
+		if err := runtime.workspace.Close(); err != nil {
+			failures = append(failures, err)
+		}
+	}
 	if err := runtime.repository.Close(); err != nil {
 		failures = append(failures, err)
 	}
@@ -743,30 +852,22 @@ func validateListener(listener net.Listener) error {
 }
 
 func validateRuntimePaths(snapshot config.Snapshot, sourceConfigPath string) error {
-	statePath, err := canonicalRuntimePath(snapshot.StateSQLitePath())
-	if err != nil {
-		return errors.New("bootstrap.state_path_invalid")
+	paths := []struct{ raw, code, value string }{
+		{raw: snapshot.StateSQLitePath(), code: "bootstrap.state_path_invalid"},
+		{raw: snapshot.ArtifactFilesystemRoot(), code: "bootstrap.artifact_path_invalid"},
+		{raw: snapshot.RuntimeCodexWorkRoot(), code: "bootstrap.work_path_invalid"},
+		{raw: snapshot.ConfigEffectivePath(), code: "bootstrap.effective_path_invalid"},
+		{raw: snapshot.IdentityLocalTokenPath(), code: "bootstrap.local_token_path_invalid"},
+		{raw: snapshot.CredentialsLocalPath(), code: "bootstrap.credential_path_invalid"},
 	}
-	artifactRoot, err := canonicalRuntimePath(snapshot.ArtifactFilesystemRoot())
-	if err != nil {
-		return errors.New("bootstrap.artifact_path_invalid")
+	for index := range paths {
+		var err error
+		if paths[index].value, err = canonicalRuntimePath(paths[index].raw); err != nil {
+			return errors.New(paths[index].code)
+		}
 	}
-	workRoot, err := canonicalRuntimePath(snapshot.RuntimeCodexWorkRoot())
-	if err != nil {
-		return errors.New("bootstrap.work_path_invalid")
-	}
-	effectivePath, err := canonicalRuntimePath(snapshot.ConfigEffectivePath())
-	if err != nil {
-		return errors.New("bootstrap.effective_path_invalid")
-	}
-	tokenPath, err := canonicalRuntimePath(snapshot.IdentityLocalTokenPath())
-	if err != nil {
-		return errors.New("bootstrap.local_token_path_invalid")
-	}
-	credentialPath, err := canonicalRuntimePath(snapshot.CredentialsLocalPath())
-	if err != nil {
-		return errors.New("bootstrap.credential_path_invalid")
-	}
+	statePath, artifactRoot, workRoot := paths[0].value, paths[1].value, paths[2].value
+	effectivePath, tokenPath, credentialPath := paths[3].value, paths[4].value, paths[5].value
 	rawCredentialReservedPaths := credentiallocal.ReservedPaths(snapshot.CredentialsLocalPath())
 	credentialReservedPaths := make([]string, 0, len(rawCredentialReservedPaths))
 	for _, raw := range rawCredentialReservedPaths {
@@ -777,21 +878,15 @@ func validateRuntimePaths(snapshot config.Snapshot, sourceConfigPath string) err
 		credentialReservedPaths = append(credentialReservedPaths, reservedPath)
 	}
 	tokenDirectory := filepath.Dir(tokenPath)
-	if pathsOverlap(filepath.Dir(statePath), artifactRoot) ||
-		pathsOverlap(filepath.Dir(statePath), workRoot) || pathsOverlap(artifactRoot, workRoot) ||
-		pathsOverlap(effectivePath, statePath) || pathsOverlap(effectivePath, artifactRoot) ||
-		pathsOverlap(effectivePath, workRoot) || pathsOverlap(tokenDirectory, filepath.Dir(statePath)) ||
-		pathsOverlap(tokenDirectory, artifactRoot) || pathsOverlap(tokenDirectory, workRoot) ||
-		pathsOverlap(tokenDirectory, effectivePath) ||
-		pathsOverlap(credentialPath, filepath.Dir(statePath)) || pathsOverlap(credentialPath, artifactRoot) ||
-		pathsOverlap(credentialPath, workRoot) || pathsOverlap(credentialPath, effectivePath) ||
-		pathsOverlap(credentialPath, tokenPath) {
+	stateDirectory := filepath.Dir(statePath)
+	if overlapsAny(stateDirectory, artifactRoot, workRoot) || overlapsAny(artifactRoot, workRoot) ||
+		overlapsAny(effectivePath, statePath, artifactRoot, workRoot) ||
+		overlapsAny(tokenDirectory, stateDirectory, artifactRoot, workRoot, effectivePath) ||
+		overlapsAny(credentialPath, stateDirectory, artifactRoot, workRoot, effectivePath, tokenPath) {
 		return errors.New("bootstrap.runtime_paths_overlap")
 	}
 	for _, reservedPath := range credentialReservedPaths {
-		if pathsOverlap(reservedPath, filepath.Dir(statePath)) || pathsOverlap(reservedPath, artifactRoot) ||
-			pathsOverlap(reservedPath, workRoot) || pathsOverlap(reservedPath, effectivePath) ||
-			pathsOverlap(reservedPath, tokenPath) {
+		if overlapsAny(reservedPath, stateDirectory, artifactRoot, workRoot, effectivePath, tokenPath) {
 			return errors.New("bootstrap.runtime_paths_overlap")
 		}
 	}
@@ -800,9 +895,7 @@ func validateRuntimePaths(snapshot config.Snapshot, sourceConfigPath string) err
 		if err != nil {
 			return errors.New("bootstrap.config_path_invalid")
 		}
-		if pathsOverlap(configPath, statePath) || pathsOverlap(configPath, artifactRoot) ||
-			pathsOverlap(configPath, workRoot) || pathsOverlap(configPath, effectivePath) ||
-			pathsOverlap(configPath, tokenDirectory) || pathsOverlap(configPath, credentialPath) {
+		if overlapsAny(configPath, statePath, artifactRoot, workRoot, effectivePath, tokenDirectory, credentialPath) {
 			return errors.New("bootstrap.runtime_paths_overlap")
 		}
 		for _, reservedPath := range credentialReservedPaths {
@@ -812,6 +905,15 @@ func validateRuntimePaths(snapshot config.Snapshot, sourceConfigPath string) err
 		}
 	}
 	return nil
+}
+
+func overlapsAny(path string, others ...string) bool {
+	for _, other := range others {
+		if pathsOverlap(path, other) {
+			return true
+		}
+	}
+	return false
 }
 
 func canonicalRuntimePath(raw string) (string, error) {

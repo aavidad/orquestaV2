@@ -184,7 +184,7 @@ func TestResolveExecutesEveryDeclaredCrossValidator(t *testing.T) {
 			assertConfigError(t, err, ErrorCrossValidation, "")
 		})
 	}
-	if got := CrossValidators(); len(got) != 5 {
+	if got := CrossValidators(); len(got) != 6 {
 		t.Fatalf("cross validator catalog = %+v", got)
 	} else {
 		got[0].Keys[0] = "mutated"

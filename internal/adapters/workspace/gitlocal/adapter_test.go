@@ -2,6 +2,7 @@ package gitlocal
 
 import (
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +17,19 @@ import (
 )
 
 type testLocator struct{ binding LocalRepositoryBinding }
+
+func gitTestNoError(t testing.TB, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func newTestAdapter(config Config) (*Adapter, error) { return newTestAdapterAfterHash(config, nil) }
+
+func newTestAdapterAfterHash(config Config, afterHash func()) (*Adapter, error) {
+	return newAdapter(config, gitPinPolicy{ownerUID: uint32(os.Geteuid()), afterHash: afterHash})
+}
 
 func (value testLocator) LocateLocalRepository(context.Context, identity.RepositoryRef) (LocalRepositoryBinding, error) {
 	return value.binding, nil
@@ -43,10 +57,11 @@ func TestWorkspacePrepareIsIdempotentAndUniquePerExecution(t *testing.T) {
 	if replayed != first {
 		t.Fatalf("prepare retry differs: %#v %#v", replayed, first)
 	}
-	fresh, err := New(Config{Root: adapter.root, GitCommand: adapter.git, Locator: adapter.loc, Now: adapter.now})
+	fresh, err := newTestAdapter(Config{Root: adapter.root, GitCommand: testGitExecutable(t), Locator: adapter.loc, Now: adapter.now})
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = fresh.Close() })
 	changedTarget := retry
 	changedTarget.TargetRef = "refs/heads/other"
 	if _, err := adapter.Prepare(context.Background(), changedTarget); ErrorCodeOf(err) != CodeWorkspaceConflict {
@@ -243,10 +258,11 @@ func TestWorkspaceCommitReplaySurvivesAdapterRestart(t *testing.T) {
 	if _, err := adapter.Commit(context.Background(), changed); ErrorCodeOf(err) != CodeChangeConflict {
 		t.Fatalf("changed commit err=%v", err)
 	}
-	fresh, err := New(Config{Root: adapter.root, GitCommand: adapter.git, Locator: adapter.loc, Now: adapter.now})
+	fresh, err := newTestAdapter(Config{Root: adapter.root, GitCommand: testGitExecutable(t), Locator: adapter.loc, Now: adapter.now})
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = fresh.Close() })
 	prepareRetry := prepare
 	prepareRetry.AttemptRef, prepareRetry.ActionFence = "attempt:prepare-after-restart", 88
 	preparedAgain, err := fresh.Prepare(context.Background(), prepareRetry)
@@ -271,9 +287,17 @@ func TestWorkspaceCommitReplaySurvivesAdapterRestart(t *testing.T) {
 }
 
 func testAdapterAndPrepare(t *testing.T) (*Adapter, ports.WorkspacePrepareRequest) {
+	return testAdapterAndPrepareFormat(t, "")
+}
+
+func testAdapterAndPrepareFormat(t *testing.T, format string) (*Adapter, ports.WorkspacePrepareRequest) {
 	t.Helper()
 	repository := t.TempDir()
-	gitTest(t, repository, "init", "-b", "main")
+	initArgs := []string{"init", "-b", "main"}
+	if format != "" {
+		initArgs = append(initArgs, "--object-format="+format)
+	}
+	gitTest(t, repository, initArgs...)
 	gitTest(t, repository, "config", "user.name", "Test")
 	gitTest(t, repository, "config", "user.email", "test@example.invalid")
 	if err := os.WriteFile(filepath.Join(repository, "allowed.txt"), []byte("base"), 0o600); err != nil {
@@ -288,10 +312,11 @@ func testAdapterAndPrepare(t *testing.T) (*Adapter, ports.WorkspacePrepareReques
 		t.Fatal(err)
 	}
 	adapterRoot := filepath.Join(t.TempDir(), "private")
-	adapter, err := New(Config{Root: adapterRoot, GitCommand: "/usr/bin/git", Locator: testLocator{binding: LocalRepositoryBinding{Path: repository, TargetRef: "refs/heads/main"}}, Now: func() time.Time { return time.Unix(1_700_000_000, 0).UTC() }})
+	adapter, err := newTestAdapter(Config{Root: adapterRoot, GitCommand: testGitExecutable(t), Locator: testLocator{binding: LocalRepositoryBinding{Path: repository, TargetRef: "refs/heads/main"}}, Now: func() time.Time { return time.Unix(1_700_000_000, 0).UTC() }})
 	if err != nil {
 		t.Fatalf("root=%s err=%v", adapterRoot, err)
 	}
+	t.Cleanup(func() { _ = adapter.Close() })
 	actor, _ := goal.NewActorRef("actor:test")
 	project, _ := goal.NewProjectRef("project:test")
 	principal, _ := identity.NewPrincipalRef("principal:test")
@@ -302,6 +327,31 @@ func testAdapterAndPrepare(t *testing.T) (*Adapter, ports.WorkspacePrepareReques
 	workspace := mustWorkspace(t, "workspace:test")
 	request := ports.WorkspacePrepareRequest{WorkspaceRef: workspace, PrincipalRef: principal, ActorRef: actor, ProjectRef: project, RepositoryRef: repositoryRef, GoalRef: goalRef, WorkItemRef: item, ExecutionRef: execution, ExecutionAttempt: 1, PlanGeneration: 1, AppSpecGeneration: 1, AppSpecHash: strings.Repeat("a", 64), WriteSet: []string{"allowed.txt"}, WriteSetDigest: ports.WorkspaceWriteSetDigest([]string{"allowed.txt"}), IntentRef: "intent:test", AttemptRef: "attempt:test", ActionFence: 1, IdempotencyKey: "prepare:test", PreparedAt: time.Unix(1_700_000_000, 0).UTC()}
 	return adapter, request
+}
+
+func testGitExecutable(t *testing.T) string {
+	t.Helper()
+	source, err := os.Open("/usr/bin/git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer source.Close()
+	path := filepath.Join(t.TempDir(), "git")
+	target, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o500)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.Copy(target, source); err != nil {
+		_ = target.Close()
+		t.Fatal(err)
+	}
+	if err := target.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }
 
 func testCommit(t *testing.T, prepare ports.WorkspacePrepareRequest, prepared ports.WorkspacePrepared) ports.CommitRequest {

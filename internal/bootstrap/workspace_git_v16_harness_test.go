@@ -2,6 +2,8 @@ package bootstrap
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"os/exec"
@@ -10,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"orquesta/internal/adapters/system/local"
+	gitlocal "orquesta/internal/adapters/workspace/gitlocal"
 	"orquesta/internal/application"
 	"orquesta/internal/config"
 	"orquesta/internal/goal"
@@ -59,27 +63,71 @@ func newV16Harness(t *testing.T, fixture v16E2EFixture, writes map[string]v16Wri
 		workspaceRoot: filepath.Join(root, "workspaces"), git: gitPath, writes: writes,
 	}
 	harness.configPath = v16WriteConfig(t, root, seed, harness.workspaceRoot, fixture.GitFixture.TargetRef)
-	harness.build(t)
+	replaceTestConfigValue(t, harness.configPath, "[scheduler]\n", `[scheduler]
+attest_test_claim_lease = "2s"
+`)
 	t.Cleanup(func() { harness.shutdown() })
+	harness.build(t)
 	return harness
 }
 
 func (harness *v16Harness) build(t *testing.T) {
 	t.Helper()
+	var workspaceAgent *v16WorkspaceAgent
 	runtime, err := Build(context.Background(), Options{
 		ConfigPath: harness.configPath, Version: "v16-real-git-sqlite-e2e",
+		Listener: &runtimeEdgeFailingListener{err: errors.New("v16_test.listener_unused")},
 		AgentFactory: func(_ config.Snapshot, clock application.Clock) (AgentAdapter, error) {
-			return &v16WorkspaceAgent{
+			workspaceAgent = &v16WorkspaceAgent{
 				now: clock.Now, writes: harness.writes, launches: &harness.launches,
 				requests: make(map[goal.ExecutionRef]ports.AgentLaunchRequest),
-			}, nil
+			}
+			return workspaceAgent, nil
 		},
 	})
 	if err != nil {
 		t.Fatalf("build V16 composition: %v", err)
 	}
 	harness.runtime = runtime
+	harness.installPassingTestAttestor(t, runtime, workspaceAgent)
 	harness.access = testRuntimeAccess(t, runtime)
+}
+
+func (harness *v16Harness) installPassingTestAttestor(
+	t *testing.T,
+	runtime *Runtime,
+	agent *v16WorkspaceAgent,
+) {
+	t.Helper()
+	agent.mu.Lock()
+	resolver := agent.resolver
+	agent.mu.Unlock()
+	workspace, ok := resolver.(*gitlocal.Adapter)
+	if !ok || workspace == nil {
+		t.Fatalf("V16 harness workspace resolver=%T", resolver)
+	}
+	clock := local.Clock{}
+	budgetPolicy, err := buildBudgetPolicy(runtime.config, clock.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	capabilities, err := runtime.agent.Capabilities(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy := legacyTestAttestationPolicy()
+	// V16 remains a legacy harness: Build opened the real Git/SQLite/CAS
+	// adapters, then only its application wiring receives this canonical fake.
+	// Production Bubblewrap ownership stays in the dedicated V17 E2E.
+	orchestrator, err := newBuildOrchestrator(
+		buildSetup{snapshot: runtime.config, clock: clock, budgetPolicy: budgetPolicy},
+		runtime.repository, runtime.artifacts, runtime.agent, nil, capabilities, workspace,
+		buildTestAttestorComposition{attestor: legacyPassingTestAttestor{}, policy: policy},
+	)
+	if err != nil {
+		t.Fatalf("install V16 canonical test attestor: %v", err)
+	}
+	runtime.orchestrator = orchestrator
 }
 
 func (harness *v16Harness) shutdown() {
@@ -121,7 +169,12 @@ func (harness *v16Harness) submit(
 			}},
 			WorkItems: []application.WorkItemSpec{{
 				Key: "writer", Objective: objective, Phase: "phase:v16-workspace", Role: "role:writer",
-				WriteSet: append([]string(nil), writeSet...), OutputContract: goal.OutputContractEvidenceBundle,
+				WriteSet: append([]string(nil), writeSet...),
+				RequiredTests: []application.RequiredTestSpec{{
+					Ref: "required-test:v16-go", ToolRef: "tool:go",
+					Arguments: []string{"test", "./..."}, WorkingDirectory: ".",
+				}},
+				OutputContract: goal.OutputContractEvidenceBundle,
 			}},
 		},
 	})
@@ -197,8 +250,8 @@ func (harness *v16Harness) workspacePath(ref ports.ExecutionWorkspaceRef) string
 func (harness *v16Harness) driveToIntegrated(t *testing.T, ref goal.GoalRef, requestRef string) {
 	t.Helper()
 	record := harness.get(t, harness.access, ref)
-	if len(record.ChangeSets) == 0 {
-		harness.driveToCommitted(t, record)
+	if len(record.ChangeSets) == 0 || record.Executions[0].State != application.ExecutionAwaitingIntegration {
+		harness.driveToAttested(t, record)
 		record = harness.get(t, harness.access, ref)
 	}
 	if len(record.IntegrationReceipts) == 0 {
@@ -213,20 +266,82 @@ func (harness *v16Harness) driveToIntegrated(t *testing.T, ref goal.GoalRef, req
 	}
 }
 
-func (harness *v16Harness) driveToCommitted(t *testing.T, record application.GoalRecord) {
+func (harness *v16Harness) driveToAttested(t *testing.T, record application.GoalRecord) {
 	t.Helper()
 	if len(record.Executions) != 1 {
-		t.Fatalf("commit driver executions=%d", len(record.Executions))
+		t.Fatalf("attestation driver executions=%d", len(record.Executions))
 	}
 	switch record.Executions[0].State {
 	case application.ExecutionQueued:
 		harness.process(t, application.ActionPrepareWorkspace, application.ActionLaunchAgent,
-			application.ActionObserveAgent, application.ActionCommitChange)
+			application.ActionObserveAgent, application.ActionCommitChange, application.ActionAttestTest)
 	case application.ExecutionAwaitingCommit:
-		harness.process(t, application.ActionCommitChange)
+		harness.process(t, application.ActionCommitChange, application.ActionAttestTest)
+	case application.ExecutionAwaitingAttestation:
+		harness.process(t, application.ActionAttestTest)
 	case application.ExecutionAwaitingIntegration:
 		return
 	default:
-		t.Fatalf("commit driver unexpected execution state=%s", record.Executions[0].State)
+		t.Fatalf("attestation driver unexpected execution state=%s", record.Executions[0].State)
 	}
+}
+
+type legacyPassingTestAttestor struct{}
+
+func (legacyPassingTestAttestor) Attest(
+	ctx context.Context,
+	run ports.TestAttestationRun,
+) (ports.TestAttestationResult, error) {
+	request := run.Request
+	if err := ctx.Err(); err != nil {
+		return ports.TestAttestationResult{}, err
+	}
+	if err := ports.ValidateTestAttestationRequest(request); err != nil {
+		return ports.TestAttestationResult{}, err
+	}
+	outcomes := make([]ports.RequiredTestOutcome, len(request.RequiredTests))
+	for index, spec := range request.RequiredTests {
+		outcomes[index] = ports.RequiredTestOutcome{
+			RequiredTestRef: spec.Ref(), ExitCode: 0,
+			OutputDigest: legacyAttestationDigest("pass:" + spec.Ref().String()),
+		}
+	}
+	manifest, err := ports.BuildTestSubjectManifest(request.Subject)
+	if err != nil {
+		return ports.TestAttestationResult{}, err
+	}
+	report, err := ports.BuildTestAttestationReport(ports.TestAttestationReportInput{
+		SubjectDigest: request.SubjectDigest, Verdict: ports.TestAttestationPassed, Tests: outcomes,
+		AttestorRef: "test-attestor:legacy-harness",
+		PolicyRef:   request.Subject.PolicyRef, PolicyDigest: request.Subject.PolicyDigest,
+	})
+	if err != nil {
+		return ports.TestAttestationResult{}, err
+	}
+	receiptRef, err := ports.TestAttestationReceiptRef(report)
+	if err != nil {
+		return ports.TestAttestationResult{}, err
+	}
+	result := ports.TestAttestationResult{
+		Subject: request.Subject, SubjectDigest: request.SubjectDigest,
+		Verdict: ports.TestAttestationPassed, Manifest: manifest, Report: report, Tests: outcomes,
+		AttestorRef: "test-attestor:legacy-harness",
+		ReceiptRef:  receiptRef,
+		PolicyRef:   request.Subject.PolicyRef, PolicyDigest: request.Subject.PolicyDigest,
+		StartedAt: request.RequestedAt, FinishedAt: request.RequestedAt,
+	}
+	if err := ports.ValidateTestAttestationResult(request, result); err != nil {
+		return ports.TestAttestationResult{}, err
+	}
+	return result, nil
+}
+
+func legacyTestAttestationPolicy() application.TestAttestationPolicy {
+	const ref = "test-attestation-policy:legacy-harness"
+	return application.TestAttestationPolicy{Ref: ref, Digest: legacyAttestationDigest(ref)}
+}
+
+func legacyAttestationDigest(value string) string {
+	digest := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(digest[:])
 }

@@ -26,17 +26,13 @@ func TestSQLitePauseGatesQueuedRetryAcrossRestart(t *testing.T) {
 	submitted, err := orchestrator.Submit(ctx, access, application.SubmitRequest{
 		RequestRef: "request:sqlite-pause-retry", Statement: "pause retry before launch claim", Confirm: true,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	if result, processErr := orchestrator.ProcessNext(ctx, "worker:sqlite-pause-initial"); processErr != nil ||
 		!result.Processed || result.Action != application.ActionLaunchAgent {
 		t.Fatalf("initial launch: result=%+v err=%v", result, processErr)
 	}
 	running, err := repository.GetGoal(ctx, submitted.Record.Goal.Ref())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	item := running.Goal.WorkItems()[0]
 	execution := running.Executions[0]
 	stop := sqliteLaunchFenceControl(running, "control:sqlite-pause-retry-stop", application.ControlStop,
@@ -73,9 +69,7 @@ func TestSQLitePauseGatesQueuedRetryAcrossRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	restarted, err := Open(ctx, Options{Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 4, Now: clock.Now})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	t.Cleanup(func() { _ = restarted.Close() })
 	if _, _, err := validateRecoveryDatabase(ctx, restarted.db); err != nil {
 		t.Fatalf("recovery rejected paused queued retry: %v", err)
@@ -115,9 +109,7 @@ func TestSQLitePauseGatesAutomaticReplacementBackoffAcrossRestart(t *testing.T) 
 	submitted, err := orchestrator.Submit(ctx, access, application.SubmitRequest{
 		RequestRef: "request:sqlite-pause-backoff", Statement: "pause automatic replacement backoff", Confirm: true,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	if result, processErr := orchestrator.ProcessNext(ctx, "worker:sqlite-backoff-failure"); processErr != nil ||
 		!result.Processed || result.Action != application.ActionLaunchAgent {
 		t.Fatalf("create replacement: result=%+v err=%v", result, processErr)
@@ -141,9 +133,7 @@ func TestSQLitePauseGatesAutomaticReplacementBackoffAcrossRestart(t *testing.T) 
 		t.Fatal(err)
 	}
 	restarted, err := Open(ctx, Options{Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 4, Now: clock.Now})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	t.Cleanup(func() { _ = restarted.Close() })
 	if _, _, err := validateRecoveryDatabase(ctx, restarted.db); err != nil {
 		t.Fatalf("recovery rejected paused queued replacement: %v cause=%v", err, errors.Unwrap(err))
@@ -261,6 +251,7 @@ func (agent *sqliteLaunchFenceAgent) Launch(
 	agent.launches++
 	if agent.failLaunches > 0 {
 		agent.failLaunches--
+		agent.clock.Advance(time.Nanosecond)
 		agent.mu.Unlock()
 		return ports.AgentLaunchReceipt{}, sqliteLaunchFenceDefinitelyUnapplied{}
 	}
@@ -309,8 +300,6 @@ func newSQLiteLaunchFenceOrchestrator(
 		AgentCapabilities: sqliteMultiControlCapabilities(), ClaimLease: time.Minute,
 		DirectorLeaseDuration: time.Minute, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	return orchestrator
 }

@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
-	"sort"
-	"strconv"
 	"strings"
 	"testing"
 )
@@ -103,29 +101,8 @@ type v16FixtureWrite struct {
 func TestV16CandidateSubjectsCoverCommittedDelta(t *testing.T) {
 	repositoryRoot := evidenceRepositoryRoot(t)
 	fixture := evidenceDecodeStrictJSON[v16Fixture](t, filepath.Join(repositoryRoot, filepath.FromSlash(v16FixturePath)))
-	if err := evidenceValidateSealedCommit(
-		repositoryRoot, fixture.ProductDeltaBaseGitCommitOID, fixture.ProductDeltaSealedGitCommitOID,
-	); err != nil {
-		t.Fatal(err)
-	}
-	output, err := evidenceGit(repositoryRoot, "diff", "--name-only",
-		fixture.ProductDeltaBaseGitCommitOID, fixture.ProductDeltaSealedGitCommitOID, "--")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var changed []string
-	if value := strings.TrimSpace(string(output)); value != "" {
-		changed = strings.Split(value, "\n")
-	}
-	sort.Strings(changed)
-	if !reflect.DeepEqual(changed, fixture.CandidateSubjects) {
-		t.Fatalf("V16 candidate subjects differ from sealed product delta:\nchanged=%v\nfixture=%v", changed, fixture.CandidateSubjects)
-	}
-	numstat, err := evidenceGit(repositoryRoot, "diff", "--numstat",
-		fixture.ProductDeltaBaseGitCommitOID, fixture.ProductDeltaSealedGitCommitOID, "--")
-	if err != nil {
-		t.Fatal(err)
-	}
+	numstat := evidenceAssertCandidateDelta(t, "V16", repositoryRoot, fixture.ProductDeltaBaseGitCommitOID,
+		fixture.ProductDeltaSealedGitCommitOID, fixture.CandidateSubjects)
 	v16AssertSimplicityBudget(
 		t, repositoryRoot, fixture.ProductDeltaBaseGitCommitOID, fixture.ProductDeltaSealedGitCommitOID, numstat,
 	)
@@ -313,40 +290,8 @@ func v16AssertValidationGates(t *testing.T, command string) {
 
 func v16AssertSimplicityBudget(t *testing.T, repositoryRoot, baseOID, sealedOID string, numstat []byte) {
 	t.Helper()
-	type limit struct{ net, max int }
-	limits := map[string]*limit{
-		"core": {max: 2050}, "adapters": {max: 3650}, "migration": {max: 650}, "tests": {max: 5600},
-	}
-	for _, row := range strings.Split(strings.TrimSpace(string(numstat)), "\n") {
-		if row == "" {
-			continue
-		}
-		fields := strings.SplitN(row, "\t", 3)
-		if len(fields) != 3 || fields[0] == "-" || fields[1] == "-" {
-			t.Fatalf("V16 simplicity budget cannot classify %q", row)
-		}
-		added, addErr := strconv.Atoi(fields[0])
-		deleted, deleteErr := strconv.Atoi(fields[1])
-		if addErr != nil || deleteErr != nil {
-			t.Fatalf("V16 invalid numstat %q", row)
-		}
-		class := v16SimplicityClass(fields[2])
-		if class == "" {
-			t.Fatalf("V16 simplicity budget cannot classify changed path %q", fields[2])
-		}
-		if class != "metadata" {
-			limits[class].net += added - deleted
-		}
-	}
-	for class, budget := range limits {
-		if budget.net > budget.max {
-			t.Errorf("V16 simplicity budget %s net LOC=%d, max=%d", class, budget.net, budget.max)
-		}
-	}
-	production := limits["core"].net + limits["adapters"].net + limits["migration"].net
-	if production > 6250 {
-		t.Errorf("V16 production net LOC=%d, max=6250", production)
-	}
+	evidenceAssertSimplicityBudget(t, "V16", numstat, v16SimplicityClass,
+		map[string]int{"core": 2050, "adapters": 3650, "migration": 650, "tests": 5600}, 6250)
 	v15AssertStructuralSimplicityWithClassifier(t, repositoryRoot, baseOID, sealedOID, v16SimplicityClass)
 }
 

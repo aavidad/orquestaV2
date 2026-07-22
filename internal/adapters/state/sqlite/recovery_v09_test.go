@@ -26,9 +26,7 @@ func TestV09RecoveryRoundTripPreservesCausalTablesAndClaims(t *testing.T) {
 		t.Fatalf("active claim kind = %s", claim.Action.Kind)
 	}
 	beforeGoal, err := repository.GetGoal(context.Background(), running.Goal.Ref())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	beforeTables := recoveryCausalTables(t, repository.db)
 
 	recovery, backupRoot, _ := newV09TestRecovery(t, repository, at.Add(time.Minute), nil)
@@ -103,9 +101,7 @@ func TestV09RecoveryOnlineSnapshotContainsWholeConcurrentCommit(t *testing.T) {
 	restored, err := Open(context.Background(), Options{
 		Path: targetPath, BusyTimeout: testBusyTimeout, MaxOpenConnections: 4,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	defer restored.Close()
 	status, err := restored.Status(context.Background(), concurrent.Goal.Project())
 	if err != nil || status.Goals < 1 || status.Goals > 2 {
@@ -138,9 +134,7 @@ func TestV09RecoveryFailpointsLeaveNoPartialPublication(t *testing.T) {
 				backupRoot, restoreRoot = backup, restore
 				var err error
 				stableReceipt, err = stable.CreateBackup(context.Background())
-				if err != nil {
-					t.Fatal(err)
-				}
+				sqliteTestNoError(t, err)
 				_ = stable.Close()
 			}
 			if backupRoot == "" {
@@ -156,9 +150,7 @@ func TestV09RecoveryFailpointsLeaveNoPartialPublication(t *testing.T) {
 					return nil
 				},
 			})
-			if err != nil {
-				t.Fatal(err)
-			}
+			sqliteTestNoError(t, err)
 			if strings.HasPrefix(stage, "after_restore_") {
 				target, _ := application.NewRecoveryTargetRef("recovery-target:v09-failpoint-unit")
 				_, err = recovery.RestoreBackup(context.Background(), stableReceipt.Ref, target)
@@ -191,9 +183,7 @@ func TestV09RestoreNeverOverwritesTargetCreatedAtPublicationBoundary(t *testing.
 	})
 	stable, backupRoot, restoreRoot := newV09TestRecovery(t, repository, time.Now().UTC(), nil)
 	receipt, err := stable.CreateBackup(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	_ = stable.Close()
 	target, _ := application.NewRecoveryTargetRef("recovery-target:v09-race")
 	targetName := recoveryTargetName(target)
@@ -208,9 +198,7 @@ func TestV09RestoreNeverOverwritesTargetCreatedAtPublicationBoundary(t *testing.
 			return nil
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	if _, err := racing.RestoreBackup(context.Background(), receipt.Ref, target); err == nil {
 		t.Fatal("restore replaced a target created at publication boundary")
 	}
@@ -225,9 +213,7 @@ func TestV09RecoveryRejectsHardlinksUnsafeRootsAndOperationsAfterClose(t *testin
 	repository, path := openTestRepository(t)
 	recovery, backupRoot, _ := newV09TestRecovery(t, repository, time.Now().UTC(), nil)
 	receipt, err := recovery.CreateBackup(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	payload := findRecoveryFile(t, backupRoot, recoveryPayloadName)
 	linked := payload + ".linked"
 	if err := os.Link(payload, linked); err != nil {
@@ -269,9 +255,7 @@ func TestV09RecoveryRejectsHardlinksUnsafeRootsAndOperationsAfterClose(t *testin
 
 func TestV09SchemaRefChangesWithMigrationChecksumSet(t *testing.T) {
 	migrations, err := loadMigrations()
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	baseline := migrationSchemaRef(migrations)
 	changed := append([]migration(nil), migrations...)
 	changed[len(changed)-1].checksum = "sha256:" + strings.Repeat("0", 64)
@@ -318,10 +302,8 @@ UPDATE action_consumption_receipts SET worker_ref = 'worker:tampered';`); err !=
 			t.Fatal(err)
 		}
 		actualSchema, err := schemaInventoryDigest(context.Background(), repository.db)
-		if err != nil {
-			t.Fatal(err)
-		}
-		expectedSchema, err := canonicalSchemaInventoryDigest(recoverySchemaV16)
+		sqliteTestNoError(t, err)
+		expectedSchema, err := canonicalSchemaInventoryDigest(recoverySchemaV17)
 		if err != nil || actualSchema != expectedSchema {
 			t.Fatalf("test failed to restore canonical schema: actual=%s expected=%s err=%v", actualSchema, expectedSchema, err)
 		}
@@ -395,10 +377,8 @@ UPDATE outbox SET plan_generation = plan_generation + 1 WHERE goal_ref = ?`,
 		t.Fatal(err)
 	}
 	actualSchema, err := schemaInventoryDigest(context.Background(), repository.db)
-	if err != nil {
-		t.Fatal(err)
-	}
-	expectedSchema, err := canonicalSchemaInventoryDigest(recoverySchemaV16)
+	sqliteTestNoError(t, err)
+	expectedSchema, err := canonicalSchemaInventoryDigest(recoverySchemaV17)
 	if err != nil || actualSchema != expectedSchema {
 		t.Fatalf("test failed to restore canonical schema: actual=%s expected=%s err=%v", actualSchema, expectedSchema, err)
 	}
@@ -428,10 +408,8 @@ WHERE kind = 'observe_agent' AND completed_at IS NULL`); err != nil {
 		t.Fatal(err)
 	}
 	actualSchema, err := schemaInventoryDigest(context.Background(), repository.db)
-	if err != nil {
-		t.Fatal(err)
-	}
-	expectedSchema, err := canonicalSchemaInventoryDigest(recoverySchemaV16)
+	sqliteTestNoError(t, err)
+	expectedSchema, err := canonicalSchemaInventoryDigest(recoverySchemaV17)
 	if err != nil || actualSchema != expectedSchema {
 		t.Fatalf("test failed to restore canonical schema: actual=%s expected=%s err=%v", actualSchema, expectedSchema, err)
 	}
@@ -456,17 +434,13 @@ func TestV09RecoveryBacksUpDispatchingLaunchBeforeAndAfterRequeue(t *testing.T) 
 	}
 	claim := mustClaim(t, repository, "worker:v09-dispatching", "claim:v09-dispatching", state.Goal.CreatedAt())
 	record, err := repository.GetGoal(context.Background(), state.Goal.Ref())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	item := onlyItem(t, record.Goal)
 	preparedAt := state.Goal.CreatedAt().Add(time.Second)
 	preparedGoal, err := record.Goal.StartWorkItem(
 		record.Goal.Revision(), item.Revision(), item.Ref(), record.Executions[0].Ref, preparedAt,
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	preparedExecution := record.Executions[0]
 	preparedExecution.State = application.ExecutionDispatching
 	repository.now = func() time.Time { return preparedAt }
@@ -591,9 +565,7 @@ func TestV09RecoveryRootLocksAndOwnedStageCleanup(t *testing.T) {
 	reopened, err := NewRecovery(RecoveryOptions{
 		Repository: repository, BackupRoot: backupRoot, RestoreRoot: restoreRoot,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	defer reopened.Close()
 	for _, stale := range []string{backupStage, restoreStage} {
 		if _, err := os.Lstat(stale); !errors.Is(err, os.ErrNotExist) {
@@ -629,9 +601,7 @@ func TestV09RecoveryRejectsRootPathReplacementAfterLock(t *testing.T) {
 		repository, _ := openTestRepository(t)
 		recovery, _, restoreRoot := newV09TestRecovery(t, repository, time.Now().UTC(), nil)
 		receipt, err := recovery.CreateBackup(context.Background())
-		if err != nil {
-			t.Fatal(err)
-		}
+		sqliteTestNoError(t, err)
 		lockedRoot := restoreRoot + ".locked"
 		if err := os.Rename(restoreRoot, lockedRoot); err != nil {
 			t.Fatal(err)
@@ -661,9 +631,7 @@ func TestV09RecoveryUnsupportedPlatformsRemainExplicitAndBuildable(t *testing.T)
 	read := func(name string) string {
 		t.Helper()
 		content, err := os.ReadFile(name)
-		if err != nil {
-			t.Fatal(err)
-		}
+		sqliteTestNoError(t, err)
 		return string(content)
 	}
 	common := read("recovery_files.go")
@@ -741,9 +709,7 @@ func TestV09RecoveryRejectsRootReplacementBetweenVerificationAndIO(t *testing.T)
 				return nil
 			},
 		})
-		if err != nil {
-			t.Fatal(err)
-		}
+		sqliteTestNoError(t, err)
 		defer recovery.Close()
 		if _, err := recovery.CreateBackup(context.Background()); err == nil {
 			t.Fatal("backup accepted root replaced after initial verification")
@@ -765,16 +731,12 @@ func TestV09RecoveryRejectsRootReplacementBetweenVerificationAndIO(t *testing.T)
 		repository, _ := openTestRepository(t)
 		stable, backupRoot, restoreRoot := newV09TestRecovery(t, repository, time.Now().UTC(), nil)
 		receipt, err := stable.CreateBackup(context.Background())
-		if err != nil {
-			t.Fatal(err)
-		}
+		sqliteTestNoError(t, err)
 		if err := stable.Close(); err != nil {
 			t.Fatal(err)
 		}
 		before, err := snapshotV09RecoveryTree(backupRoot)
-		if err != nil {
-			t.Fatal(err)
-		}
+		sqliteTestNoError(t, err)
 		lockedRoot := backupRoot + ".locked"
 		swapped := false
 		reachedBackupRead := false
@@ -807,9 +769,7 @@ func TestV09RecoveryRejectsRootReplacementBetweenVerificationAndIO(t *testing.T)
 				return nil
 			},
 		})
-		if err != nil {
-			t.Fatal(err)
-		}
+		sqliteTestNoError(t, err)
 		defer recovery.Close()
 		if _, err := recovery.VerifyBackup(context.Background(), receipt.Ref); err == nil {
 			t.Fatal("verification accepted byte-identical replacement root")
@@ -831,9 +791,7 @@ func TestV09RecoveryRejectsRootReplacementBetweenVerificationAndIO(t *testing.T)
 		repository, _ := openTestRepository(t)
 		stable, backupRoot, restoreRoot := newV09TestRecovery(t, repository, time.Now().UTC(), nil)
 		receipt, err := stable.CreateBackup(context.Background())
-		if err != nil {
-			t.Fatal(err)
-		}
+		sqliteTestNoError(t, err)
 		if err := stable.Close(); err != nil {
 			t.Fatal(err)
 		}
@@ -871,9 +829,7 @@ func TestV09RecoveryRejectsRootReplacementBetweenVerificationAndIO(t *testing.T)
 				return nil
 			},
 		})
-		if err != nil {
-			t.Fatal(err)
-		}
+		sqliteTestNoError(t, err)
 		defer recovery.Close()
 		_, restoreErr := recovery.RestoreBackup(context.Background(), receipt.Ref, target)
 		if restoreErr == nil {
@@ -894,16 +850,12 @@ func TestV09RestoreRetainsInspectedPayloadHandleAcrossRootSwap(t *testing.T) {
 	repository, _ := openTestRepository(t)
 	stable, backupRoot, restoreRoot := newV09TestRecovery(t, repository, time.Now().UTC(), nil)
 	receipt, err := stable.CreateBackup(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	if err := stable.Close(); err != nil {
 		t.Fatal(err)
 	}
 	before, err := snapshotV09RecoveryTree(backupRoot)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	lockedRoot := backupRoot + ".locked"
 	swapped := false
 	reachedRestoreSync := false
@@ -926,9 +878,7 @@ func TestV09RestoreRetainsInspectedPayloadHandleAcrossRootSwap(t *testing.T) {
 			return nil
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	defer recovery.Close()
 	target, _ := application.NewRecoveryTargetRef("recovery-target:v09-inspected-handle")
 	_, restoreErr := recovery.RestoreBackup(context.Background(), receipt.Ref, target)
@@ -1059,13 +1009,9 @@ func recoveryCausalTables(t *testing.T, database *sql.DB) map[string][]string {
 	result := make(map[string][]string)
 	for _, table := range []string{"events", "outbox", "action_consumption_receipts", "work_item_fences"} {
 		rows, err := database.Query("SELECT * FROM " + quoteSQLiteIdentifier(table))
-		if err != nil {
-			t.Fatal(err)
-		}
+		sqliteTestNoError(t, err)
 		columns, err := rows.Columns()
-		if err != nil {
-			t.Fatal(err)
-		}
+		sqliteTestNoError(t, err)
 		for rows.Next() {
 			values := make([]any, len(columns))
 			destinations := make([]any, len(columns))
@@ -1089,13 +1035,9 @@ func readV09Manifest(t *testing.T, root string) backupManifest {
 	t.Helper()
 	path := findRecoveryFile(t, root, recoveryManifestName)
 	content, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	manifest, err := decodeCanonicalManifest(content)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	return manifest
 }
 

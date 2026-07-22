@@ -14,6 +14,7 @@ type InputRef struct{ value string }
 type CriterionRef struct{ value string }
 type SkillRef struct{ value string }
 type ToolRef struct{ value string }
+type RequiredTestRef struct{ value string }
 type CapabilityRef struct{ value string }
 type ExecutionRef struct{ value string }
 type ArtifactRef struct{ value string }
@@ -79,6 +80,11 @@ func NewToolRef(value string) (ToolRef, error) {
 	return ToolRef{value: value}, err
 }
 
+func NewRequiredTestRef(value string) (RequiredTestRef, error) {
+	value, err := validOpaqueRef("required_test_ref", value)
+	return RequiredTestRef{value: value}, err
+}
+
 func NewCapabilityRef(value string) (CapabilityRef, error) {
 	value, err := validOpaqueRef("capability_ref", value)
 	return CapabilityRef{value: value}, err
@@ -111,6 +117,7 @@ func (ref InputRef) String() string         { return ref.value }
 func (ref CriterionRef) String() string     { return ref.value }
 func (ref SkillRef) String() string         { return ref.value }
 func (ref ToolRef) String() string          { return ref.value }
+func (ref RequiredTestRef) String() string  { return ref.value }
 func (ref CapabilityRef) String() string    { return ref.value }
 func (ref ExecutionRef) String() string     { return ref.value }
 func (ref ArtifactRef) String() string      { return ref.value }
@@ -135,6 +142,7 @@ func validInputRef(ref InputRef) bool                 { return ref.value != "" }
 func validCriterionRef(ref CriterionRef) bool         { return ref.value != "" }
 func validSkillRef(ref SkillRef) bool                 { return ref.value != "" }
 func validToolRef(ref ToolRef) bool                   { return ref.value != "" }
+func validRequiredTestRef(ref RequiredTestRef) bool   { return ref.value != "" }
 func validCapabilityRef(ref CapabilityRef) bool       { return ref.value != "" }
 func validExecutionRef(ref ExecutionRef) bool         { return ref.value != "" }
 func validArtifactRef(ref ArtifactRef) bool           { return ref.value != "" }

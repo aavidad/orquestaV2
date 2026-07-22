@@ -84,7 +84,8 @@ func validSQLiteEffectStatus(status application.EffectStatus) bool {
 	case application.EffectStatusAccepted, application.EffectStatusStopped,
 		application.EffectStatusAlreadyStopped, application.EffectStatusAlreadyCompleted,
 		application.EffectStatusAlreadyFailed, application.EffectStatusPrepared,
-		application.EffectStatusCommitted, application.EffectStatusIntegrated,
+		application.EffectStatusCommitted, application.EffectStatusAttestedPassed,
+		application.EffectStatusAttestedFailed, application.EffectStatusIntegrated,
 		application.EffectStatusConflicted, application.EffectStatusStale:
 		return true
 	default:
@@ -105,6 +106,9 @@ func validSQLiteEffectStatusForKind(kind application.EffectKind, status applicat
 		return status == application.EffectStatusPrepared
 	case application.EffectKindCommitChange:
 		return status == application.EffectStatusCommitted
+	case application.EffectKindAttestTest:
+		return status == application.EffectStatusAttestedPassed ||
+			status == application.EffectStatusAttestedFailed
 	case application.EffectKindIntegrateChange:
 		return status == application.EffectStatusIntegrated ||
 			status == application.EffectStatusConflicted ||
@@ -132,11 +136,25 @@ func insertBudgetSettlement(
 	if reservation.Resources != settlement.Reserved {
 		return conflict(errors.New("sqlite.budget_settlement_reservation_conflict"))
 	}
+	if settlement.CausalAttemptRef != "" {
+		var causal int
+		err = transaction.QueryRowContext(ctx, `
+SELECT COUNT(*) FROM effect_attempts attempt
+WHERE attempt.ref=? AND attempt.action_ref=? AND attempt.intent_ref=? AND ?<=attempt.action_fence`,
+			settlement.CausalAttemptRef, reservation.ActionRef, reservation.EffectIntentRef,
+			reservation.Fence).Scan(&causal)
+		if err != nil {
+			return mapDatabaseError(err)
+		}
+		if causal != 1 || !governance.IsExactZeroRelease(settlement) {
+			return conflict(errors.New("sqlite.budget_settlement_causal_attempt_invalid"))
+		}
+	}
 	reserved, observed := settlement.Reserved, settlement.Observed.Resources
 	charged, released, overrun := settlement.Charged, settlement.Released, settlement.Overrun
 	_, err = transaction.ExecContext(ctx, `
 INSERT INTO budget_settlements(
-    ref, reservation_ref,
+    ref, reservation_ref, causal_attempt_ref,
     reserved_tokens, reserved_money_micros, reserved_currency,
     reserved_active_time_ns, reserved_process_slots, reserved_disk_bytes,
     observed_tokens, observed_money_micros, observed_currency,
@@ -148,8 +166,9 @@ INSERT INTO budget_settlements(
     released_active_time_ns, released_process_slots, released_disk_bytes,
     overrun_tokens, overrun_money_micros, overrun_currency,
     overrun_active_time_ns, overrun_process_slots, overrun_disk_bytes, settled_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, settlement.Ref, settlement.ReservationRef,
+		nullableString(settlement.CausalAttemptRef),
 		reserved.Tokens, reserved.MoneyMicros, string(reserved.Currency), reserved.ActiveTimeNS,
 		reserved.ProcessSlots, reserved.DiskBytes, observed.Tokens, observed.MoneyMicros,
 		string(observed.Currency), observed.ActiveTimeNS, observed.ProcessSlots, observed.DiskBytes,

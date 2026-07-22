@@ -57,11 +57,35 @@ const (
 	ExecutionDispatching         ExecutionState = "dispatching"
 	ExecutionRunning             ExecutionState = "running"
 	ExecutionAwaitingCommit      ExecutionState = "awaiting_commit"
+	ExecutionAwaitingAttestation ExecutionState = "awaiting_attestation"
 	ExecutionAwaitingIntegration ExecutionState = "awaiting_integration"
 	ExecutionSucceeded           ExecutionState = "succeeded"
 	ExecutionFailed              ExecutionState = "failed"
 	ExecutionCanceled            ExecutionState = "canceled"
 	ExecutionStopped             ExecutionState = "stopped"
+)
+
+type ArtifactKind string
+
+const (
+	ArtifactKindAgentOutput         ArtifactKind = "agent_output"
+	ArtifactKindTestSubjectManifest ArtifactKind = "test_subject_manifest"
+	ArtifactKindTestReport          ArtifactKind = "test_attestation_report"
+)
+
+type AttestationKind string
+
+const (
+	AttestationKindArtifactProvenance AttestationKind = "artifact_provenance"
+	AttestationKindRequiredTests      AttestationKind = "required_tests"
+)
+
+type AttestationVerdict string
+
+const (
+	AttestationVerdictObserved AttestationVerdict = "observed"
+	AttestationVerdictPassed   AttestationVerdict = "passed"
+	AttestationVerdictFailed   AttestationVerdict = "failed"
 )
 
 type ExecutionRecord struct {
@@ -102,20 +126,56 @@ type ExecutionRecord struct {
 }
 
 type ArtifactRecord struct {
-	Stored      ports.StoredArtifact
-	GoalRef     goal.GoalRef
-	WorkItemRef goal.WorkItemRef
-	CreatedAt   time.Time
+	OccurrenceRef      string
+	Kind               ArtifactKind
+	Stored             ports.StoredArtifact
+	GoalRef            goal.GoalRef
+	WorkItemRef        goal.WorkItemRef
+	ExecutionRef       goal.ExecutionRef
+	ExecutionAttempt   uint64
+	PlanGeneration     goal.PlanGeneration
+	WorkItemGeneration goal.Revision
+	AppSpecGeneration  goal.AppSpecGeneration
+	SpecHash           string
+	CreatedAt          time.Time
 }
 
 type AttestationRecord struct {
-	Ref          goal.AttestationRef
-	GoalRef      goal.GoalRef
-	WorkItemRef  goal.WorkItemRef
-	ExecutionRef goal.ExecutionRef
-	ArtifactRef  goal.ArtifactRef
-	Policy       string
-	AcceptedAt   time.Time
+	Ref                    goal.AttestationRef
+	Kind                   AttestationKind
+	Verdict                AttestationVerdict
+	GoalRef                goal.GoalRef
+	WorkItemRef            goal.WorkItemRef
+	ExecutionRef           goal.ExecutionRef
+	ExecutionAttempt       uint64
+	PlanGeneration         goal.PlanGeneration
+	WorkItemGeneration     goal.Revision
+	AppSpecGeneration      goal.AppSpecGeneration
+	SpecHash               string
+	ArtifactRef            goal.ArtifactRef
+	SubjectDigest          string
+	WorkspaceBindingDigest string
+	ChangeSetRef           ports.ChangeSetRef
+	ChangeSetDigest        string
+	ManifestArtifactRef    goal.ArtifactRef
+	ReportArtifactRef      goal.ArtifactRef
+	AttestorRef            string
+	ReceiptRef             string
+	Tests                  []ports.RequiredTestOutcome
+	PolicyRef              string
+	RequiredTestsDigest    string
+	PolicyDigest           string
+	EffectIntentRef        string
+	EffectAttemptRef       string
+	EffectFence            uint64
+	EffectReceiptRef       string
+	StartedAt              time.Time
+	FinishedAt             time.Time
+
+	// Policy and AcceptedAt keep the V16 read model compatible while adapters
+	// migrate to the typed fields above. They carry no independent authority.
+	Policy     string
+	AcceptedAt time.Time
 }
 
 type EventRecord struct {
@@ -136,6 +196,7 @@ const (
 	ActionDeliverMailbox   ActionKind = "deliver_mailbox"
 	ActionPrepareWorkspace ActionKind = "prepare_workspace"
 	ActionCommitChange     ActionKind = "commit_change"
+	ActionAttestTest       ActionKind = "attest_test"
 	ActionIntegrateChange  ActionKind = "integrate_change"
 )
 
@@ -169,11 +230,12 @@ type ActionClaim struct {
 }
 
 type ClaimRequest struct {
-	WorkerRef     string
-	Token         string
-	LeaseDuration time.Duration
-	Capabilities  ports.AgentCapabilities
-	BudgetPolicy  BudgetPolicy
+	WorkerRef               string
+	Token                   string
+	LeaseDuration           time.Duration
+	AttestTestLeaseDuration time.Duration
+	Capabilities            ports.AgentCapabilities
+	BudgetPolicy            BudgetPolicy
 }
 
 type ActionConsumptionOutcome string
@@ -437,6 +499,7 @@ type StateRepository interface {
 	RecordWorkspacePrepared(context.Context, WorkspacePreparedState) error
 	RecordExecutionOutputReady(context.Context, ExecutionOutputReadyState) error
 	RecordChangeCommitted(context.Context, ChangeCommittedState) error
+	RecordTestAttested(context.Context, TestAttestedState) error
 	AdmitIntegration(context.Context, AdmitIntegrationState) (ActionRecord, bool, error)
 	RecordIntegrationResult(context.Context, IntegrationResultState) error
 }

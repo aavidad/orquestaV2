@@ -27,6 +27,9 @@ func persistInitialControlState(
 	if err := updateControl(ctx, transaction, *state.SupersededControl); err != nil {
 		return "", err
 	}
+	if status, err := supersededStopActionStatus(ctx, transaction, *state.SupersededControl); err != nil || status == "quarantined" {
+		return "", err
+	}
 	preRetiredAction := state.RetireActionRefs[0]
 	if err := settleRetiredLaunchReservation(
 		ctx, transaction, preRetiredAction, state.OperationAt,

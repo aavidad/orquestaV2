@@ -55,6 +55,13 @@ type memoryAction struct {
 	lease           time.Time
 }
 
+func appTestNoError(t testing.TB, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 type memoryIntegrationAdmission struct {
 	requestFingerprint string
 	goalRef            goal.GoalRef
@@ -252,6 +259,10 @@ func (repository *memoryRepository) RecordEffectAttempt(
 	}
 	record := repository.records[state.Claim.Action.GoalRef]
 	for _, attempt := range record.EffectAttempts {
+		if attempt.ActionRef == state.Attempt.ActionRef && attempt.ActionFence == state.Attempt.ActionFence &&
+			attempt.Ref != state.Attempt.Ref {
+			return EffectAttempt{}, false, &StateError{Code: StateConflict}
+		}
 		if attempt.Ref == state.Attempt.Ref {
 			if !reflect.DeepEqual(attempt, state.Attempt) {
 				return EffectAttempt{}, false, &StateError{Code: StateConflict}
@@ -271,6 +282,38 @@ func effectAttemptByRef(records []EffectAttempt, ref string) (EffectAttempt, boo
 		}
 	}
 	return EffectAttempt{}, false
+}
+
+func (repository *memoryRepository) validateBudgetSettlementLocked(
+	record GoalRecord,
+	settlement *governance.BudgetSettlement,
+) error {
+	if settlement == nil {
+		return nil
+	}
+	if governance.ValidateBudgetSettlement(*settlement) != nil {
+		return &StateError{Code: StateInvalid}
+	}
+	if settlement.CausalAttemptRef == "" {
+		return nil
+	}
+	reservation, found := reservationByRef(record.BudgetReservations, settlement.ReservationRef)
+	if !found || reservation.Resources != settlement.Reserved || settlement.SettledAt.Before(reservation.ReservedAt) {
+		return &StateError{Code: StateInvalid}
+	}
+	attempt, found := effectAttemptByRef(record.EffectAttempts, settlement.CausalAttemptRef)
+	if !found || attempt.ActionRef != reservation.ActionRef || attempt.IntentRef != reservation.EffectIntentRef ||
+		reservation.Fence > attempt.ActionFence || !governance.IsExactZeroRelease(*settlement) {
+		return &StateError{Code: StateInvalid}
+	}
+	for _, candidate := range repository.records {
+		for _, existing := range candidate.BudgetSettlements {
+			if existing.CausalAttemptRef == settlement.CausalAttemptRef {
+				return &StateError{Code: StateConflict}
+			}
+		}
+	}
+	return nil
 }
 
 func (repository *memoryRepository) ControlReplay(
@@ -409,8 +452,8 @@ func (repository *memoryRepository) ApplyControl(
 			return ControlRecord{}, false, &StateError{Code: StateInvalid}
 		}
 	}
-	if state.BudgetSettlement != nil && governance.ValidateBudgetSettlement(*state.BudgetSettlement) != nil {
-		return ControlRecord{}, false, &StateError{Code: StateInvalid}
+	if err := repository.validateBudgetSettlementLocked(current, state.BudgetSettlement); err != nil {
+		return ControlRecord{}, false, err
 	}
 	for _, action := range state.NewActions {
 		if _, duplicate := repository.actions[action.Ref]; duplicate {
@@ -1157,7 +1200,8 @@ func (repository *memoryRepository) ClaimNextAction(_ context.Context, request C
 			(execution.State == ExecutionSucceeded || execution.State == ExecutionFailed ||
 				execution.State == ExecutionCanceled || execution.State == ExecutionStopped)
 		if action.record.Kind == ActionLaunchAgent || action.record.Kind == ActionPrepareWorkspace ||
-			action.record.Kind == ActionCommitChange || action.record.Kind == ActionIntegrateChange ||
+			action.record.Kind == ActionCommitChange || action.record.Kind == ActionAttestTest ||
+			action.record.Kind == ActionIntegrateChange ||
 			action.record.Kind == ActionStopAgent && !terminalStop {
 			approval, found = memoryLiveApproval(record, action.record, now)
 			if !found {
@@ -1467,6 +1511,9 @@ func (repository *memoryRepository) RequeueAction(_ context.Context, state Actio
 	if state.ClearEffectBinding && !memoryEffectBindingMatchesClaim(current, state.Claim) {
 		return &StateError{Code: StateConflict}
 	}
+	if err := repository.validateBudgetSettlementLocked(record, state.BudgetSettlement); err != nil {
+		return err
+	}
 	record.Executions = replaceExecution(record.Executions, state.Execution)
 	if state.BudgetSettlement != nil {
 		record.BudgetSettlements = append(record.BudgetSettlements, *state.BudgetSettlement)
@@ -1487,7 +1534,14 @@ func (repository *memoryRepository) QuarantineAction(_ context.Context, state Ac
 	if !ok || !memoryClaimMatches(action, state.Claim, state.OperationAt) {
 		return &StateError{Code: StateConflict}
 	}
+	if state.ErrorCode == effectUnknownAppliedCode &&
+		(state.ClearEffectBinding || state.BudgetSettlement != nil) {
+		return &StateError{Code: StateInvalid}
+	}
 	record := repository.records[state.Claim.Action.GoalRef]
+	if err := repository.validateBudgetSettlementLocked(record, state.BudgetSettlement); err != nil {
+		return err
+	}
 	if state.ClearEffectBinding {
 		execution, found := executionForAction(record, state.Claim.Action)
 		if !found || state.BudgetSettlement == nil || !memoryEffectBindingMatchesClaim(execution, state.Claim) {
@@ -1524,6 +1578,9 @@ func (repository *memoryRepository) RecordExecutionReplaced(_ context.Context, s
 		return &StateError{Code: StateRecipientMailboxActive}
 	}
 	record := repository.records[state.Goal.Ref()]
+	if err := repository.validateBudgetSettlementLocked(record, state.BudgetSettlement); err != nil {
+		return err
+	}
 	record.Goal = state.Goal
 	record.Executions = replaceExecution(record.Executions, state.FailedExecution)
 	record.Executions = append(record.Executions, state.ReplacementExecution)
@@ -1555,6 +1612,9 @@ func (repository *memoryRepository) RecordExecutionInterrupted(
 		state.Execution.RecipientMailboxRetired = true
 	}
 	record := repository.records[state.Goal.Ref()]
+	if err := repository.validateBudgetSettlementLocked(record, state.BudgetSettlement); err != nil {
+		return err
+	}
 	record.Goal = state.Goal
 	record.Executions = replaceExecution(record.Executions, state.Execution)
 	record.Executions = append(record.Executions, state.NewExecutions...)
@@ -1581,6 +1641,9 @@ func (repository *memoryRepository) RecordGoalSucceeded(_ context.Context, state
 		return err
 	}
 	record := repository.records[state.Goal.Ref()]
+	if err := repository.validateBudgetSettlementLocked(record, state.BudgetSettlement); err != nil {
+		return err
+	}
 	record.Goal = state.Goal
 	record.Executions = replaceExecution(record.Executions, state.Execution)
 	record.Executions = append(record.Executions, state.NewExecutions...)
@@ -1620,6 +1683,9 @@ func (repository *memoryRepository) RecordGoalFailed(_ context.Context, state Go
 		retirements[messageRef] = retirement
 	}
 	record := repository.records[state.Goal.Ref()]
+	if err := repository.validateBudgetSettlementLocked(record, state.BudgetSettlement); err != nil {
+		return err
+	}
 	record.Goal = state.Goal
 	record.Executions = replaceExecution(record.Executions, state.Execution)
 	record.Executions = append(record.Executions, state.NewExecutions...)
@@ -1756,6 +1822,9 @@ func (repository *memoryRepository) RecordExecutionOutputReady(_ context.Context
 		return err
 	}
 	record := repository.records[state.Claim.Action.GoalRef]
+	if err := repository.validateBudgetSettlementLocked(record, state.BudgetSettlement); err != nil {
+		return err
+	}
 	if state.Execution.Ref != state.Claim.Action.ExecutionRef || state.Execution.State != ExecutionAwaitingCommit ||
 		state.NextAction.Kind != ActionCommitChange || state.NextAction.ExecutionRef != state.Execution.Ref ||
 		state.Artifact.GoalRef != record.Goal.Ref() || state.Attestation.ExecutionRef != state.Execution.Ref {
@@ -1786,10 +1855,23 @@ func (repository *memoryRepository) RecordChangeCommitted(_ context.Context, sta
 		return err
 	}
 	record := repository.records[state.Claim.Action.GoalRef]
-	if state.Execution.Ref != state.Claim.Action.ExecutionRef || state.Execution.State != ExecutionAwaitingIntegration ||
+	if state.Execution.Ref != state.Claim.Action.ExecutionRef || state.Execution.State != ExecutionAwaitingAttestation ||
 		state.ChangeSet.Ref != state.Claim.Action.ChangeRef || state.ChangeSet.ExecutionRef != state.Execution.Ref ||
 		ValidateChangeSet(state.ChangeSet) != nil {
 		return &StateError{Code: StateInvalid}
+	}
+	item, itemFound := record.Goal.WorkItem(state.Execution.WorkItemRef)
+	if !itemFound || (len(item.RequiredTests()) == 0) != (state.NextAction == nil) {
+		return &StateError{Code: StateInvalid}
+	}
+	if state.NextAction != nil {
+		if state.NextAction.Kind != ActionAttestTest || state.NextAction.ExecutionRef != state.Execution.Ref ||
+			state.NextAction.ChangeRef != state.ChangeSet.Ref {
+			return &StateError{Code: StateInvalid}
+		}
+		if _, found := repository.actions[state.NextAction.Ref]; found {
+			return &StateError{Code: StateConflict}
+		}
 	}
 	if _, found := changeSetByRef(record, state.ChangeSet.Ref); found {
 		return &StateError{Code: StateConflict}
@@ -1804,9 +1886,94 @@ func (repository *memoryRepository) RecordChangeCommitted(_ context.Context, sta
 	receipt := consumptionReceipt(state.Claim, ActionConsumedCompleted, "", state.OperationAt)
 	receipt.EffectReceiptRef = state.EffectReceipt.Ref
 	record.ConsumptionReceipts = append(record.ConsumptionReceipts, receipt)
+	if state.NextAction != nil {
+		memoryAddActionFacts(&record, *state.NextAction)
+	}
 	repository.records[record.Goal.Ref()] = record
 	delete(repository.actions, state.Claim.Action.Ref)
+	if state.NextAction != nil {
+		repository.actions[state.NextAction.Ref] = memoryAction{record: *state.NextAction}
+	}
 	repository.events = append(repository.events, state.Event)
+	return nil
+}
+
+func (repository *memoryRepository) RecordTestAttested(_ context.Context, state TestAttestedState) error {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	if err := repository.validateMutation(
+		state.Claim, state.OperationAt, state.ExpectedGoalRevision, state.ExpectedItemRevision,
+	); err != nil {
+		return err
+	}
+	record := repository.records[state.Claim.Action.GoalRef]
+	item, itemFound := record.Goal.WorkItem(state.Claim.Action.WorkItemRef)
+	change, changeFound := changeSetByRef(record, state.Claim.Action.ChangeRef)
+	binding, bindingFound := workspaceBindingForExecution(record, state.Execution.Ref)
+	if !itemFound || !changeFound || !bindingFound || state.Execution.Ref != state.Claim.Action.ExecutionRef ||
+		state.Attestation.ExecutionRef != state.Execution.Ref || state.Attestation.ChangeSetRef != change.Ref ||
+		state.Attestation.WorkItemGeneration != item.Revision() ||
+		state.ManifestArtifact.ExecutionRef != state.Execution.Ref ||
+		state.ReportArtifact.ExecutionRef != state.Execution.Ref || len(state.Events) == 0 {
+		return &StateError{Code: StateInvalid}
+	}
+	for _, artifact := range record.Artifacts {
+		if artifact.OccurrenceRef == state.ManifestArtifact.OccurrenceRef ||
+			artifact.OccurrenceRef == state.ReportArtifact.OccurrenceRef {
+			return &StateError{Code: StateConflict}
+		}
+	}
+	for _, attestation := range record.Attestations {
+		if attestation.Ref == state.Attestation.Ref {
+			return &StateError{Code: StateConflict}
+		}
+	}
+	attempt, found := effectAttemptByRef(record.EffectAttempts, state.EffectReceipt.AttemptRef)
+	if !found || validateEffectReceipt(state.Claim, attempt, state.EffectReceipt) != nil {
+		return &StateError{Code: StateInvalid}
+	}
+	policy := TestAttestationPolicy{Ref: state.Attestation.PolicyRef, Digest: state.Attestation.PolicyDigest}
+	subject, err := buildTestSubject(record.Goal, item, state.Execution, binding, change, policy)
+	if err != nil {
+		return &StateError{Code: StateInvalid}
+	}
+	candidate := cloneGoalRecord(record)
+	candidate.Artifacts = append(candidate.Artifacts, state.ManifestArtifact, state.ReportArtifact)
+	candidate.Attestations = append(candidate.Attestations, state.Attestation)
+	candidate.EffectReceipts = append(candidate.EffectReceipts, state.EffectReceipt)
+	passed := state.Attestation.Verdict == AttestationVerdictPassed
+	if !RequiredTestsAttestationEvidenceMatches(
+		candidate, item, state.Execution, subject, state.Attestation, passed,
+	) {
+		return &StateError{Code: StateInvalid}
+	}
+	updatedItem, updatedFound := state.Goal.WorkItem(item.Ref())
+	if !updatedFound || state.Goal.Ref() != record.Goal.Ref() ||
+		(passed && (state.Execution.State != ExecutionAwaitingIntegration ||
+			!reflect.DeepEqual(state.Goal.Snapshot(), record.Goal.Snapshot()) ||
+			len(state.NewExecutions) != 0 || len(state.NewActions) != 0)) ||
+		(!passed && (state.Execution.State != ExecutionFailed ||
+			updatedItem.State() != goal.WorkItemStateInterrupted || state.Execution.FailureCode == "")) {
+		return &StateError{Code: StateInvalid}
+	}
+	for _, action := range state.NewActions {
+		if _, exists := repository.actions[action.Ref]; exists {
+			return &StateError{Code: StateConflict}
+		}
+		memoryAddActionFacts(&candidate, action)
+	}
+	candidate.Goal = state.Goal
+	candidate.Executions = replaceExecution(candidate.Executions, state.Execution)
+	candidate.Executions = append(candidate.Executions, state.NewExecutions...)
+	receipt := consumptionReceipt(state.Claim, ActionConsumedCompleted, "", state.OperationAt)
+	receipt.EffectReceiptRef = state.EffectReceipt.Ref
+	candidate.ConsumptionReceipts = append(candidate.ConsumptionReceipts, receipt)
+	repository.records[candidate.Goal.Ref()] = candidate
+	delete(repository.actions, state.Claim.Action.Ref)
+	for _, action := range state.NewActions {
+		repository.actions[action.Ref] = memoryAction{record: action}
+	}
+	repository.events = append(repository.events, state.Events...)
 	return nil
 }
 
@@ -1841,7 +2008,8 @@ func (repository *memoryRepository) AdmitIntegration(_ context.Context, state Ad
 	change, changeFound := changeSetByRef(record, state.ChangeRef)
 	if !itemFound || !executionFound || !changeFound || item.Revision() != state.ExpectedItemRevision ||
 		item.State() != goal.WorkItemStateRunning || execution.State != ExecutionAwaitingIntegration ||
-		change.ExecutionRef != execution.Ref || change.ProjectRef != state.ProjectRef {
+		change.ExecutionRef != execution.Ref || change.ProjectRef != state.ProjectRef ||
+		!anyRequiredTestsPassForChange(record, item, execution, change) {
 		return ActionRecord{}, false, &StateError{Code: StateConflict}
 	}
 	for _, receipt := range record.IntegrationReceipts {
@@ -1994,6 +2162,11 @@ func cloneGoalRecord(record GoalRecord) GoalRecord {
 	record.Executions = append([]ExecutionRecord(nil), record.Executions...)
 	record.Artifacts = append([]ArtifactRecord(nil), record.Artifacts...)
 	record.Attestations = append([]AttestationRecord(nil), record.Attestations...)
+	for index := range record.Attestations {
+		record.Attestations[index].Tests = append(
+			[]ports.RequiredTestOutcome(nil), record.Attestations[index].Tests...,
+		)
+	}
 	record.Controls = append([]ControlRecord(nil), record.Controls...)
 	record.BudgetEnvelopes = append([]governance.BudgetEnvelope(nil), record.BudgetEnvelopes...)
 	record.BudgetReservations = append([]governance.BudgetReservation(nil), record.BudgetReservations...)
@@ -2075,7 +2248,8 @@ func consumptionReceipt(claim ActionClaim, outcome ActionConsumptionOutcome, cod
 	return ActionConsumptionReceipt{
 		ActionRef: claim.Action.Ref, Kind: claim.Action.Kind,
 		GoalRef: claim.Action.GoalRef, WorkItemRef: claim.Action.WorkItemRef,
-		ExecutionRef: claim.Action.ExecutionRef, PlanGeneration: claim.Action.PlanGeneration,
+		ExecutionRef: claim.Action.ExecutionRef, ChangeRef: claim.Action.ChangeRef,
+		PlanGeneration:     claim.Action.PlanGeneration,
 		WorkItemGeneration: claim.Action.WorkItemGeneration, Fence: claim.Fence,
 		DeliveryAttempt: claim.DeliveryAttempt, ClaimToken: claim.Token,
 		WorkerRef: claim.WorkerRef, Outcome: outcome, ErrorCode: code, ConsumedAt: at.UTC(),
@@ -2171,6 +2345,7 @@ type scriptedAgent struct {
 	preserveEmptyObservationSpecHash bool
 	observations                     []ports.AgentObservation
 	launchErr                        error
+	launchErrorHook                  func()
 	launchOverride                   func(ports.AgentLaunchRequest) (ports.AgentLaunchReceipt, error)
 	launchEntered                    chan struct{}
 	launchRelease                    <-chan struct{}
@@ -2293,6 +2468,66 @@ func testDigest(value string) string {
 	return hex.EncodeToString(digest[:])
 }
 
+type scriptedTestAttestor struct {
+	mu       sync.Mutex
+	verdict  ports.TestAttestationVerdict
+	runs     []TestAttestationRun
+	requests []ports.TestAttestationRequest
+	override func(ports.TestAttestationRequest) (ports.TestAttestationResult, error)
+}
+
+func (attestor *scriptedTestAttestor) Attest(
+	_ context.Context,
+	run TestAttestationRun,
+) (ports.TestAttestationResult, error) {
+	attestor.mu.Lock()
+	defer attestor.mu.Unlock()
+	request := run.Request
+	attestor.runs = append(attestor.runs, run)
+	attestor.requests = append(attestor.requests, request)
+	if attestor.override != nil {
+		return attestor.override(request)
+	}
+	verdict := attestor.verdict
+	if verdict == "" {
+		verdict = ports.TestAttestationPassed
+	}
+	outcomes := make([]ports.RequiredTestOutcome, len(request.RequiredTests))
+	for index, spec := range request.RequiredTests {
+		exitCode := 0
+		if verdict == ports.TestAttestationFailed && index == 0 {
+			exitCode = 1
+		}
+		outcomes[index] = ports.RequiredTestOutcome{
+			RequiredTestRef: spec.Ref(), ExitCode: exitCode,
+			OutputDigest: testDigest("test-output:" + spec.Ref().String()),
+		}
+	}
+	manifest, err := ports.BuildTestSubjectManifest(request.Subject)
+	if err != nil {
+		return ports.TestAttestationResult{}, err
+	}
+	report, err := ports.BuildTestAttestationReport(ports.TestAttestationReportInput{
+		SubjectDigest: request.SubjectDigest, Verdict: verdict, Tests: outcomes,
+		AttestorRef: "test-attestor:scripted", PolicyRef: request.Subject.PolicyRef,
+		PolicyDigest: request.Subject.PolicyDigest,
+	})
+	if err != nil {
+		return ports.TestAttestationResult{}, err
+	}
+	receiptRef, err := ports.TestAttestationReceiptRef(report)
+	if err != nil {
+		return ports.TestAttestationResult{}, err
+	}
+	return ports.TestAttestationResult{
+		Subject: request.Subject, SubjectDigest: request.SubjectDigest, Verdict: verdict,
+		Manifest: manifest, Report: report, Tests: outcomes, AttestorRef: "test-attestor:scripted",
+		ReceiptRef: receiptRef,
+		PolicyRef:  request.Subject.PolicyRef, PolicyDigest: request.Subject.PolicyDigest,
+		StartedAt: request.RequestedAt, FinishedAt: request.RequestedAt,
+	}, nil
+}
+
 type definitelyUnappliedPermanentError struct{ message string }
 
 func (err definitelyUnappliedPermanentError) Error() string {
@@ -2364,6 +2599,7 @@ func (agent *scriptedAgent) Launch(_ context.Context, request ports.AgentLaunchR
 	release := agent.launchRelease
 	now := agent.now
 	launchErr := agent.launchErr
+	launchErrorHook := agent.launchErrorHook
 	launchOverride := agent.launchOverride
 	receiptSpecHash := agent.receiptSpecHashOverride
 	if receiptSpecHash == "" && !agent.preserveEmptyReceiptSpecHash {
@@ -2380,6 +2616,9 @@ func (agent *scriptedAgent) Launch(_ context.Context, request ports.AgentLaunchR
 		<-release
 	}
 	if launchErr != nil {
+		if launchErrorHook != nil {
+			launchErrorHook()
+		}
 		return ports.AgentLaunchReceipt{}, launchErr
 	}
 	if launchOverride != nil {
@@ -2439,6 +2678,9 @@ func newTestOrchestratorWithAccess(
 		State: repository, Access: accessRepository,
 		Launcher: agent, Observer: agent, Controller: agent, Artifacts: artifacts,
 		WorkspaceManager: &scriptedWorkspaceManager{}, VersionControl: &scriptedVersionControl{},
+		TestAttestor: &scriptedTestAttestor{}, TestAttestationPolicy: TestAttestationPolicy{
+			Ref: "test-attestation-policy:default", Digest: testDigest("test-attestation-policy:default"),
+		},
 		Clock: clock, IDs: &sequentialIDs{}, MaxOutputBytes: 1 << 20,
 		MaxMailboxEnvelopeBytes: 64 << 10,
 		MaxExecutionAttempts:    3, ClaimLease: time.Minute, DirectorLeaseDuration: time.Minute,

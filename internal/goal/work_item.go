@@ -55,6 +55,7 @@ type NewWorkItemInput struct {
 	HandoffRequired     bool
 	Dependencies        []WorkItemRef
 	WriteSet            []WriteScope
+	RequiredTests       []RequiredTestSpec
 	SkillRefs           []SkillRef
 	ToolRefs            []ToolRef
 	CapabilityRefs      []CapabilityRef
@@ -77,6 +78,7 @@ type WorkItem struct {
 	handoffRequired     bool
 	dependencies        []WorkItemRef
 	writeSet            []WriteScope
+	requiredTests       []RequiredTestSpec
 	skillRefs           []SkillRef
 	toolRefs            []ToolRef
 	capabilityRefs      []CapabilityRef
@@ -164,6 +166,7 @@ func NewWorkItem(input NewWorkItemInput) (WorkItem, error) {
 		handoffRequired: input.HandoffRequired,
 		dependencies:    append([]WorkItemRef(nil), input.Dependencies...),
 		writeSet:        append([]WriteScope(nil), input.WriteSet...),
+		requiredTests:   cloneRequiredTests(input.RequiredTests),
 		skillRefs:       cloneRefs(input.SkillRefs),
 		toolRefs:        cloneRefs(input.ToolRefs),
 		capabilityRefs:  cloneRefs(input.CapabilityRefs),
@@ -179,17 +182,21 @@ func NewWorkItem(input NewWorkItemInput) (WorkItem, error) {
 	return item, nil
 }
 
-func (item WorkItem) Ref() WorkItemRef                      { return item.ref }
-func (item WorkItem) Goal() GoalRef                         { return item.goal }
-func (item WorkItem) Actor() ActorRef                       { return item.actor }
-func (item WorkItem) Project() ProjectRef                   { return item.project }
-func (item WorkItem) Objective() string                     { return item.objective }
-func (item WorkItem) Phase() PhaseKey                       { return item.phase }
-func (item WorkItem) Role() RoleKey                         { return item.role }
-func (item WorkItem) Parent() (WorkItemRef, bool)           { return item.parent, validWorkItemRef(item.parent) }
-func (item WorkItem) HandoffRequired() bool                 { return item.handoffRequired }
-func (item WorkItem) Dependencies() []WorkItemRef           { return cloneDependencies(item.dependencies) }
-func (item WorkItem) WriteSet() []WriteScope                { return cloneWriteSet(item.writeSet) }
+func (item WorkItem) Ref() WorkItemRef            { return item.ref }
+func (item WorkItem) Goal() GoalRef               { return item.goal }
+func (item WorkItem) Actor() ActorRef             { return item.actor }
+func (item WorkItem) Project() ProjectRef         { return item.project }
+func (item WorkItem) Objective() string           { return item.objective }
+func (item WorkItem) Phase() PhaseKey             { return item.phase }
+func (item WorkItem) Role() RoleKey               { return item.role }
+func (item WorkItem) Parent() (WorkItemRef, bool) { return item.parent, validWorkItemRef(item.parent) }
+func (item WorkItem) HandoffRequired() bool       { return item.handoffRequired }
+func (item WorkItem) Dependencies() []WorkItemRef { return cloneDependencies(item.dependencies) }
+func (item WorkItem) WriteSet() []WriteScope      { return cloneWriteSet(item.writeSet) }
+func (item WorkItem) RequiredTests() []RequiredTestSpec {
+	return cloneRequiredTests(item.requiredTests)
+}
+func (item WorkItem) RequiredTestsDigest() string           { return RequiredTestsDigest(item.requiredTests) }
 func (item WorkItem) SkillRefs() []SkillRef                 { return cloneRefs(item.skillRefs) }
 func (item WorkItem) ToolRefs() []ToolRef                   { return cloneRefs(item.toolRefs) }
 func (item WorkItem) CapabilityRefs() []CapabilityRef       { return cloneRefs(item.capabilityRefs) }
@@ -405,6 +412,7 @@ func (item WorkItem) expectRevision(expected Revision) error {
 func (item WorkItem) clone() WorkItem {
 	item.dependencies = cloneDependencies(item.dependencies)
 	item.writeSet = cloneWriteSet(item.writeSet)
+	item.requiredTests = cloneRequiredTests(item.requiredTests)
 	item.skillRefs = cloneRefs(item.skillRefs)
 	item.toolRefs = cloneRefs(item.toolRefs)
 	item.capabilityRefs = cloneRefs(item.capabilityRefs)
@@ -418,6 +426,7 @@ func equalWorkItems(left, right WorkItem) bool {
 		left.project == right.project && left.objective == right.objective && left.phase == right.phase &&
 		left.role == right.role && left.parent == right.parent && left.handoffRequired == right.handoffRequired &&
 		refsEqual(left.dependencies, right.dependencies) && refsEqual(left.writeSet, right.writeSet) &&
+		requiredTestsEqual(left.requiredTests, right.requiredTests) &&
 		refsEqual(left.skillRefs, right.skillRefs) && refsEqual(left.toolRefs, right.toolRefs) &&
 		refsEqual(left.capabilityRefs, right.capabilityRefs) && left.outputContract == right.outputContract &&
 		left.budgetDemand == right.budgetDemand && left.securityCriticality == right.securityCriticality &&

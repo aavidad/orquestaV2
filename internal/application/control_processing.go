@@ -22,6 +22,9 @@ func (orchestrator *Orchestrator) processStop(ctx context.Context, claim ActionC
 	if err != nil {
 		return orchestrator.quarantine(ctx, claim, err.Error())
 	}
+	if priorEffectAttemptBlocksDispatch(record, claim.Action) {
+		return orchestrator.quarantineUnknownApplied(ctx, claim)
+	}
 	if execution.State == ExecutionSucceeded || execution.State == ExecutionFailed ||
 		execution.State == ExecutionCanceled || execution.State == ExecutionStopped {
 		return orchestrator.settleStopAgainstTerminal(ctx, claim, record, item, execution, control)
@@ -29,8 +32,6 @@ func (orchestrator *Orchestrator) processStop(ctx context.Context, claim ActionC
 	if err := validateClaimedEffect(claim, orchestrator.clock.Now()); err != nil {
 		return orchestrator.quarantine(ctx, claim, err.Error())
 	}
-	// A prepared launch owns the WorkItem lease until its exact external
-	// acceptance/rejection is durable. No controller call is possible yet.
 	if execution.State == ExecutionDispatching || execution.ExternalRef == "" {
 		return orchestrator.requeueStop(ctx, claim, execution, "application.stop_waiting_launch_receipt")
 	}
@@ -48,43 +49,42 @@ func (orchestrator *Orchestrator) processStop(ctx context.Context, claim ActionC
 	if err := orchestrator.validateCurrentAutomaticAuthority(ctx, claim); err != nil {
 		return orchestrator.requeueStop(ctx, claim, execution, err.Error())
 	}
-	attempt, err := orchestrator.beginEffectAttempt(ctx, claim, orchestrator.clock.Now())
+	attempt, err := orchestrator.beginNewEffectAttempt(ctx, claim, orchestrator.clock.Now())
 	if err != nil {
 		return err
 	}
 	receipt, stopErr := orchestrator.controller.Stop(ctx, request)
 	if stopErr != nil {
-		if ctx.Err() != nil {
-			return orchestrator.requeueStop(ctx, claim, execution, ctx.Err().Error())
-		}
-		return orchestrator.requeueStop(ctx, claim, execution, "agent.stop_failed")
+		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	}
 	if err := ports.ValidateAgentStopReceipt(request, receipt); err != nil {
-		return orchestrator.requeueStop(ctx, claim, execution, ports.AgentContractErrorCode(err))
+		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	}
 	switch receipt.Status {
 	case ports.AgentStopPending, ports.AgentStopUnsupported:
-		return orchestrator.requeueStop(ctx, claim, execution, "agent.stop_"+string(receipt.Status))
+		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	case ports.AgentStopAlreadyCompleted, ports.AgentStopAlreadyFailed:
 		confirmedAt := orchestrator.clock.Now().UTC()
-		externalReceipt, err := effectReceipt(
-			claim, attempt, receipt.ReceiptRef, EffectStatus(receipt.Status), unknownUsage(), confirmedAt,
-		)
+		externalReceipt, err := effectReceipt(claim, attempt, receipt.ReceiptRef, EffectStatus(receipt.Status), unknownUsage(), confirmedAt)
 		if err != nil {
-			return err
+			return orchestrator.quarantineUnknownApplied(ctx, claim)
 		}
-		return orchestrator.settleStopObservedTerminal(ctx, claim, record, item, execution, control, receipt, externalReceipt)
+		if err := orchestrator.settleStopObservedTerminal(ctx, claim, record, item, execution, control, receipt, externalReceipt); err != nil {
+			return orchestrator.quarantineUnknownApplied(ctx, claim)
+		}
+		return nil
 	case ports.AgentStopped, ports.AgentStopAlreadyStopped:
 		confirmedAt := orchestrator.clock.Now().UTC()
-		externalReceipt, err := effectReceipt(
-			claim, attempt, receipt.ReceiptRef, EffectStatus(receipt.Status), unknownUsage(), confirmedAt,
-		)
+		externalReceipt, err := effectReceipt(claim, attempt, receipt.ReceiptRef, EffectStatus(receipt.Status), unknownUsage(), confirmedAt)
 		if err != nil {
-			return err
+			return orchestrator.quarantineUnknownApplied(ctx, claim)
 		}
-		return orchestrator.settleStopped(ctx, claim, record, item, execution, control, receipt, externalReceipt)
+		if err := orchestrator.settleStopped(ctx, claim, record, item, execution, control, receipt, externalReceipt); err != nil {
+			return orchestrator.quarantineUnknownApplied(ctx, claim)
+		}
+		return nil
 	default:
-		return orchestrator.requeueStop(ctx, claim, execution, "application.stop_receipt_status_invalid")
+		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	}
 }
 
@@ -117,10 +117,11 @@ func (orchestrator *Orchestrator) settleCanceledLaunchRejection(
 	record GoalRecord,
 	item goal.WorkItem,
 	execution ExecutionRecord,
+	causalAttemptRef string,
 	failureCode string,
 ) error {
 	at := lifecycleTime(orchestrator.clock.Now(), record.Goal, item)
-	settlement, err := releaseSettlement(claim, at)
+	settlement, err := releaseSettlementForAttempt(claim, causalAttemptRef, at)
 	if err != nil {
 		return err
 	}

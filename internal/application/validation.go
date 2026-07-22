@@ -89,6 +89,12 @@ func validateClaimedRecord(claim ActionClaim, record GoalRecord, kind ActionKind
 			execution.State != ExecutionAwaitingCommit || execution.ExecutionWorkspaceRef.String() == "" {
 			return errors.New("application.commit_change_state_invalid")
 		}
+	case ActionAttestTest:
+		if claim.Action.Ref != "action:attest-test:"+execution.Ref.String() ||
+			claim.Action.WorkItemGeneration > item.Revision() || item.State() != goal.WorkItemStateRunning || execution.State != ExecutionAwaitingAttestation ||
+			execution.ExecutionWorkspaceRef.String() == "" || claim.Action.ChangeRef.String() == "" || len(item.RequiredTests()) == 0 {
+			return errors.New("application.attest_test_state_invalid")
+		}
 	case ActionIntegrateChange:
 		if !strings.HasPrefix(claim.Action.Ref, "action:integrate-change:") ||
 			claim.Action.WorkItemGeneration > item.Revision() || item.State() != goal.WorkItemStateRunning ||

@@ -62,11 +62,10 @@ func (orchestrator *Orchestrator) stageExecutionOutput(
 	}
 	return orchestrator.state.RecordExecutionOutputReady(ctx, ExecutionOutputReadyState{
 		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: item.Revision(),
-		Execution: execution,
-		Artifact:  ArtifactRecord{Stored: stored, GoalRef: record.Goal.Ref(), WorkItemRef: item.Ref(), CreatedAt: transitionAt},
-		Attestation: AttestationRecord{Ref: attestationRef, GoalRef: record.Goal.Ref(), WorkItemRef: item.Ref(),
-			ExecutionRef: execution.Ref, ArtifactRef: stored.Ref, Policy: outputAttestationPolicy, AcceptedAt: transitionAt},
-		NextAction: next, BudgetSettlement: settlement,
+		Execution:   execution,
+		Artifact:    artifactProvenanceRecord(stored, record.Goal, item, execution, transitionAt),
+		Attestation: artifactProvenanceAttestation(attestationRef, stored.Ref, record.Goal, item, execution, transitionAt),
+		NextAction:  next, BudgetSettlement: settlement,
 		Event: EventRecord{Ref: "event:execution-output-ready:" + execution.Ref.String(), Kind: "execution.output_ready",
 			GoalRef: record.Goal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref, OccurredAt: transitionAt},
 		OperationAt: transitionAt,

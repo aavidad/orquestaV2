@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -15,7 +14,7 @@ import (
 )
 
 func (adapter *Adapter) Commit(ctx context.Context, request ports.CommitRequest) (ports.CommitResult, error) {
-	if adapter == nil {
+	if err := adapter.ensureAvailable(); err != nil {
 		return ports.CommitResult{}, &Error{Code: CodeUnavailable}
 	}
 	if err := ports.ValidateCommitRequest(request); err != nil {
@@ -126,7 +125,7 @@ func (adapter *Adapter) createWorkspaceCommit(
 		}
 		return ports.CommitResult{}, &Error{Code: CodeBaseStale, Cause: err}
 	}
-	return adapter.rememberCommitResult(request, head, tree, paths)
+	return adapter.rememberCommitResult(ctx, request, path, head, tree, paths)
 }
 
 func commitMessage(request ports.CommitRequest) []byte {
@@ -141,18 +140,26 @@ func crashFrontierCommitMessage(request ports.CommitRequest) []byte {
 }
 
 func (adapter *Adapter) rememberCommitResult(
+	ctx context.Context,
 	request ports.CommitRequest,
+	workspace string,
 	head, tree string,
 	paths []string,
 ) (ports.CommitResult, error) {
-	diff := sha256.Sum256([]byte(strings.Join(paths, "\x00")))
+	diffDigest, err := adapter.committedDiffDigest(ctx, workspace, request.BaseOID, head)
+	if err != nil {
+		return ports.CommitResult{}, err
+	}
 	result := ports.CommitResult{ChangeSetRef: request.ChangeSetRef, WorkspaceRef: request.WorkspaceRef,
 		RepositoryRef: request.RepositoryRef, ExecutionRef: request.ExecutionRef, BaseOID: request.BaseOID,
 		ParentOID: request.BaseOID, HeadOID: head, TreeOID: tree, ObjectFormat: request.ObjectFormat,
-		DiffDigest: hex.EncodeToString(diff[:]), ChangedPaths: paths, WriteSetDigest: request.WriteSetDigest,
+		DiffDigest: diffDigest, ChangedPaths: paths, WriteSetDigest: request.WriteSetDigest,
 		ParentChangeRef: request.ParentChangeRef, AdapterRef: adapterRef,
 		ReceiptRef: digestRef("commit-receipt:", request.IdempotencyKey), CommittedAt: request.CommittedAt}
 	if err := ports.ValidateCommitResult(request, result); err != nil {
+		return ports.CommitResult{}, err
+	}
+	if err := adapter.ensureSnapshotChangeMarker(ctx, workspace, request, result); err != nil {
 		return ports.CommitResult{}, err
 	}
 	adapter.rememberCommit(commitRecord{request: request, result: result})
@@ -182,7 +189,7 @@ func (adapter *Adapter) replayCommit(ctx context.Context, request ports.CommitRe
 	if err != nil || len(paths) == 0 || !pathsWithin(paths, request.WriteSet) {
 		return ports.CommitResult{}, &Error{Code: CodeChangeConflict, Cause: err}
 	}
-	return adapter.rememberCommitResult(request, head, tree, paths)
+	return adapter.rememberCommitResult(ctx, request, path, head, tree, paths)
 }
 
 func deterministicReplayMessage(actual []byte, request ports.CommitRequest) ([]byte, bool) {
@@ -205,27 +212,22 @@ func (adapter *Adapter) gitCommitTree(ctx context.Context, repository, tree, par
 	}
 	// commit-tree reads these values only for this exact child process. They are
 	// deterministic facts from the persisted intent, never ambient identity.
-	command := exec.CommandContext(ctx, adapter.git, append([]string{
+	command, cleanup, err := adapter.pinnedGitCommand(ctx, nil, append([]string{
 		"-c", "core.hooksPath=/dev/null", "-c", "commit.gpgSign=false", "-C", repository,
 	}, args...)...)
+	if err != nil {
+		return nil, err
+	}
+	defer cleanup()
 	command.Env = append(gitEnvironment(adapter.root),
 		"GIT_AUTHOR_NAME=Orquesta", "GIT_AUTHOR_EMAIL=orquesta@local", "GIT_AUTHOR_DATE="+stamp,
 		"GIT_COMMITTER_NAME=Orquesta", "GIT_COMMITTER_EMAIL=orquesta@local", "GIT_COMMITTER_DATE="+stamp)
-	command.Stdin = bytes.NewReader(message)
-	var output bytes.Buffer
-	command.Stdout, command.Stderr = &output, &output
-	if err := command.Run(); err != nil {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-		return nil, &Error{Code: CodeGitFailed, Cause: err}
-	}
-	return output.Bytes(), nil
+	return adapter.runGitCommand(ctx, command, message)
 }
 
 func (adapter *Adapter) committedPaths(ctx context.Context, workspace, head string) ([]string, error) {
 	output, err := adapter.gitRun(ctx, workspace, nil,
-		"diff-tree", "--no-commit-id", "--name-only", "-z", "-r", "--no-renames", head)
+		"diff-tree", "--no-ext-diff", "--no-textconv", "--no-commit-id", "--name-only", "-z", "-r", "--no-renames", head)
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +237,7 @@ func (adapter *Adapter) committedPaths(ctx context.Context, workspace, head stri
 }
 
 func (adapter *Adapter) changedPaths(ctx context.Context, workspace, base string) ([]string, error) {
-	tracked, err := adapter.gitRun(ctx, workspace, nil, "diff", "--name-only", "-z", "--no-renames", base)
+	tracked, err := adapter.gitRun(ctx, workspace, nil, "diff", "--no-ext-diff", "--no-textconv", "--name-only", "-z", "--no-renames", base)
 	if err != nil {
 		return nil, err
 	}
@@ -278,4 +280,14 @@ func pathsWithin(paths, scopes []string) bool {
 		}
 	}
 	return true
+}
+
+func (adapter *Adapter) committedDiffDigest(ctx context.Context, repository, parent, head string) (string, error) {
+	raw, err := adapter.gitRun(ctx, repository, nil, "diff-tree", "--no-ext-diff", "--no-textconv",
+		"--raw", "-z", "-r", "--no-abbrev", "--no-renames", "--no-commit-id", parent, head)
+	if err != nil {
+		return "", err
+	}
+	digest := sha256.Sum256(raw)
+	return hex.EncodeToString(digest[:]), nil
 }

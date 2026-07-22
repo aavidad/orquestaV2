@@ -19,6 +19,7 @@ const (
 	valueTypeInteger       valueType = "integer"
 	valueTypeDuration      valueType = "duration"
 	valueTypePath          valueType = "path"
+	valueTypeOptionalPath  valueType = "optional_path"
 	valueTypeStringList    valueType = "string_list"
 	valueTypeCredentialRef valueType = "credential_ref"
 )
@@ -268,7 +269,8 @@ func validateRegistryDefinition(definition registryKeyDefinition) error {
 		return fmt.Errorf("env_alias is invalid")
 	}
 	switch definition.Type {
-	case valueTypeString, valueTypeInteger, valueTypeDuration, valueTypePath, valueTypeStringList, valueTypeCredentialRef:
+	case valueTypeString, valueTypeInteger, valueTypeDuration, valueTypePath, valueTypeOptionalPath,
+		valueTypeStringList, valueTypeCredentialRef:
 	default:
 		return fmt.Errorf("unsupported value type")
 	}
@@ -310,6 +312,8 @@ func requiredValidatorIDs(definition registryKeyDefinition) []string {
 		result = append(result, "positive_duration")
 	case valueTypePath:
 		result = append(result, "non_empty_path")
+	case valueTypeOptionalPath:
+		result = append(result, "optional_path")
 	case valueTypeStringList:
 		result = append(result, "unique_non_empty_string_list")
 	case valueTypeCredentialRef:
@@ -342,6 +346,10 @@ func validateValidatorIDs(definition registryKeyDefinition) error {
 		case "trimmed_non_empty_string", "trimmed_optional_string", "opaque_ref":
 			if definition.Type != valueTypeString {
 				return fmt.Errorf("string validator requires string type")
+			}
+		case "optional_path":
+			if definition.Type != valueTypeOptionalPath {
+				return fmt.Errorf("optional_path validator requires optional_path type")
 			}
 		case "environment_name_list":
 			if definition.Type != valueTypeStringList {
@@ -438,6 +446,14 @@ func validateCrossValidators(definitions []registryCrossValidatorDefinition, key
 		"identity_provider_requirements": {
 			KeyIdentityProvider, KeyIdentityOIDCIssuer, KeyIdentityOIDCAudience, KeyIdentityOIDCClockSkew,
 			KeyIdentityOIDCUpstreamTimeout,
+		},
+		"test_attestor_provider_requirements": {
+			KeyTestAttestorProvider, KeyTestAttestorTimeout, KeyTestAttestorBubblewrapCommand, KeyTestAttestorGoToolchainRoot,
+			KeyRuntimeMaxOutputBytes, KeyTestAttestorMaxSubjectBytes,
+			KeyTestAttestorMaxConcurrentRuns, KeyRepositoryLocalSeedPath,
+			KeyTestAttestorCgroupRoot, KeyTestAttestorMemoryMaxBytes,
+			KeyTestAttestorPIDsMax, KeyTestAttestorCPUQuotaMicros, KeyServerShutdownTimeout,
+			KeySchedulerAttestTestClaimLease, KeySchedulerExecutionTimeout,
 		},
 	}
 	if len(definitions) != len(expected) {
@@ -585,8 +601,7 @@ func Aliases() []AliasDefinition {
 	}
 	result := make([]AliasDefinition, len(loaded.aliases))
 	for index, alias := range loaded.aliases {
-		result[index] = AliasDefinition{Kind: alias.Kind, Name: alias.Name, Target: alias.Target,
-			IntroducedRevision: alias.IntroducedRevision, RemoveAfterRevision: alias.RemoveAfterRevision}
+		result[index] = AliasDefinition(alias)
 	}
 	return result
 }

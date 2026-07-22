@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -65,7 +66,7 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 	if err := repository.db.QueryRow("PRAGMA synchronous").Scan(&synchronous); err != nil {
 		t.Fatalf("synchronous: %v", err)
 	}
-	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != recoverySchemaV16 {
+	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != recoverySchemaV17 {
 		t.Fatalf("pragmas = fk:%d busy:%d version:%d", foreignKeys, busyTimeout, userVersion)
 	}
 	if synchronous != 2 {
@@ -86,12 +87,12 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 		tables = append(tables, name)
 	}
 	wantTables := []string{
-		"action_consumption_receipts", "app_specs", "artifacts", "attestations", "authorization_receipts",
+		"action_consumption_receipts", "app_specs", "artifact_occurrences", "artifacts", "attestation_test_outcomes", "attestations", "authorization_receipts",
 		"budget_envelopes", "budget_reservations", "budget_settlements", "change_set_paths", "change_sets", "controls", "director_decisions", "director_lease_receipts", "director_leases", "effect_approvals", "effect_attempts", "effect_intents", "effect_receipts", "events", "executions", "fairness_cursors",
 		"goal_child_handoff_resolutions", "goal_phase_contract_refs", "goal_phases", "goals", "groups", "integration_receipts", "intents",
 		"mailbox_admission_receipts", "mailbox_artifact_refs", "mailbox_delivery_acks", "mailbox_delivery_attempts", "mailbox_envelopes", "mailbox_retirements",
 		"membership_audit_receipts", "merge_observations", "outbox", "principals", "project_memberships", "projects", "repositories", "schema_migrations",
-		"work_item_authorities", "work_item_dependencies", "work_item_fences", "work_item_requirement_refs", "work_item_write_scopes", "work_items",
+		"work_item_authorities", "work_item_dependencies", "work_item_fences", "work_item_required_test_arguments", "work_item_required_tests", "work_item_requirement_refs", "work_item_write_scopes", "work_items",
 		"workspace_binding_write_scopes", "workspace_bindings", "workspaces",
 	}
 	if !reflect.DeepEqual(tables, wantTables) {
@@ -194,9 +195,7 @@ func TestRepositorySerializesWritersBeforeSQLiteBusyTimeout(t *testing.T) {
 	repository, err := Open(context.Background(), Options{
 		Path: path, BusyTimeout: busyTimeout, MaxOpenConnections: 4,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	t.Cleanup(func() { _ = repository.Close() })
 	if got := repository.writer.Stats().MaxOpenConnections; got != 1 {
 		t.Fatalf("writer max connections = %d, want 1", got)
@@ -206,9 +205,7 @@ func TestRepositorySerializesWritersBeforeSQLiteBusyTimeout(t *testing.T) {
 	}
 
 	first, err := beginTransaction(context.Background(), repository)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	defer first.Rollback()
 	if _, err := first.Exec(`INSERT INTO workspaces(ref) VALUES ('workspace:writer-first')`); err != nil {
 		t.Fatal(err)
@@ -291,7 +288,7 @@ func TestRepositoryMigratesPopulatedV1StateToDAGSchema(t *testing.T) {
 		Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 8,
 	})
 	if err != nil {
-		t.Fatalf("migrate populated V1: %v", err)
+		t.Fatalf("migrate populated V1: %s", sqliteTestErrorChain(err))
 	}
 	t.Cleanup(func() { _ = repository.Close() })
 
@@ -947,10 +944,12 @@ func TestRepositoryMutationsAreAtomicCASAndRestoreEvidence(t *testing.T) {
 	}
 	item = onlyItem(t, record.Goal)
 	succeededAt := retryAt.Add(time.Second)
+	artifactDigest := strings.Repeat("a", 64)
+	artifactRef := mustRef(t, "artifact:sha256:"+artifactDigest, goal.NewArtifactRef)
+	attestationRef := mustRef(t, "attestation:success", goal.NewAttestationRef)
 	succeededGoal, err := record.Goal.SucceedWorkItem(
 		record.Goal.Revision(), item.Revision(), item.Ref(),
-		[]goal.ArtifactRef{mustRef(t, "artifact:success", goal.NewArtifactRef)},
-		[]goal.AttestationRef{mustRef(t, "attestation:success", goal.NewAttestationRef)},
+		[]goal.ArtifactRef{artifactRef}, []goal.AttestationRef{attestationRef},
 		succeededAt,
 	)
 	if err != nil {
@@ -964,16 +963,23 @@ func TestRepositoryMutationsAreAtomicCASAndRestoreEvidence(t *testing.T) {
 	succeededExecution.State = application.ExecutionSucceeded
 	succeededExecution.FinishedAt = succeededAt
 	artifact := application.ArtifactRecord{
-		Stored: ports.StoredArtifact{
-			Ref: mustRef(t, "artifact:success", goal.NewArtifactRef), Digest: "sha256:digest",
-			MediaType: "application/json", Size: 42,
-		},
-		GoalRef: succeededGoal.Ref(), WorkItemRef: item.Ref(), CreatedAt: succeededAt,
+		OccurrenceRef: "artifact-occurrence:test-success:" + succeededExecution.Ref.String(),
+		Kind:          application.ArtifactKindAgentOutput,
+		Stored:        ports.StoredArtifact{Ref: artifactRef, Digest: artifactDigest, MediaType: "application/json", Size: 42},
+		GoalRef:       succeededGoal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: succeededExecution.Ref,
+		ExecutionAttempt: succeededExecution.AttemptNo, PlanGeneration: succeededExecution.PlanGeneration,
+		WorkItemGeneration: item.Revision(), AppSpecGeneration: succeededExecution.AppSpecGeneration,
+		SpecHash: succeededExecution.SpecHash, CreatedAt: succeededAt,
 	}
 	attestation := application.AttestationRecord{
-		Ref: mustRef(t, "attestation:success", goal.NewAttestationRef), GoalRef: succeededGoal.Ref(),
-		WorkItemRef: item.Ref(), ExecutionRef: succeededExecution.Ref, ArtifactRef: artifact.Stored.Ref,
-		Policy: "agent_output_present", AcceptedAt: succeededAt,
+		Ref: attestationRef, Kind: application.AttestationKindArtifactProvenance,
+		Verdict: application.AttestationVerdictObserved, GoalRef: succeededGoal.Ref(), WorkItemRef: item.Ref(),
+		ExecutionRef: succeededExecution.Ref, ExecutionAttempt: succeededExecution.AttemptNo,
+		PlanGeneration: succeededExecution.PlanGeneration, WorkItemGeneration: item.Revision(),
+		AppSpecGeneration: succeededExecution.AppSpecGeneration, SpecHash: succeededExecution.SpecHash,
+		ArtifactRef: artifact.Stored.Ref, SubjectDigest: strings.Repeat("b", 64),
+		PolicyRef: "agent_output_present", PolicyDigest: strings.Repeat("c", 64),
+		StartedAt: succeededAt, FinishedAt: succeededAt, Policy: "agent_output_present", AcceptedAt: succeededAt,
 	}
 	validEvents := []application.EventRecord{
 		{Ref: "event:work-succeeded:success", Kind: "work_item.succeeded", GoalRef: succeededGoal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: succeededExecution.Ref, OccurredAt: succeededAt},
@@ -1195,7 +1201,7 @@ func newV05CreateFixture(t *testing.T) application.CreateGoalState {
 	parent := mustWorkItem(t, goal.NewWorkItemInput{
 		Ref: parentRef, Goal: pending.Ref(), Actor: pending.Actor(), Project: pending.Project(),
 		Objective: "parent", CreatedAt: pending.CreatedAt(), Phase: phaseKey, Role: role,
-		WriteSet: []goal.WriteScope{shared}, SkillRefs: []goal.SkillRef{mustRef(t, "skill:go", goal.NewSkillRef)},
+		WriteSet: []goal.WriteScope{shared}, RequiredTests: sqliteRequiredTests(t, "required-test:sqlite-v05-parent"), SkillRefs: []goal.SkillRef{mustRef(t, "skill:go", goal.NewSkillRef)},
 		ToolRefs:       []goal.ToolRef{mustRef(t, "tool:test", goal.NewToolRef)},
 		CapabilityRefs: []goal.CapabilityRef{mustRef(t, "capability:patch", goal.NewCapabilityRef)},
 		OutputContract: goal.EvidenceBundleOutputContract(),
@@ -1203,12 +1209,12 @@ func newV05CreateFixture(t *testing.T) application.CreateGoalState {
 	child := mustWorkItem(t, goal.NewWorkItemInput{
 		Ref: childRef, Goal: pending.Ref(), Actor: pending.Actor(), Project: pending.Project(),
 		Objective: "overlapping child", CreatedAt: pending.CreatedAt(), Phase: phaseKey, Role: role,
-		Parent: parentRef, WriteSet: []goal.WriteScope{overlap}, OutputContract: goal.EvidenceBundleOutputContract(),
+		Parent: parentRef, WriteSet: []goal.WriteScope{overlap}, RequiredTests: sqliteRequiredTests(t, "required-test:sqlite-v05-child"), OutputContract: goal.EvidenceBundleOutputContract(),
 	})
 	independent := mustWorkItem(t, goal.NewWorkItemInput{
 		Ref: freeRef, Goal: pending.Ref(), Actor: pending.Actor(), Project: pending.Project(),
 		Objective: "independent", CreatedAt: pending.CreatedAt(), Phase: phaseKey, Role: role,
-		WriteSet: []goal.WriteScope{free}, OutputContract: goal.EvidenceBundleOutputContract(),
+		WriteSet: []goal.WriteScope{free}, RequiredTests: sqliteRequiredTests(t, "required-test:sqlite-v05-free"), OutputContract: goal.EvidenceBundleOutputContract(),
 	})
 	// Child-before-parent is valid plan ordering: lineage is not a dependency.
 	// The durable self-FK must therefore be deferred until the transaction has
@@ -1330,7 +1336,8 @@ func TestRepositoryParksLegacyReadySuccessorsWithoutSyntheticGovernance(t *testi
 	}
 	runningRoot, _ := workItemByObjective(record.Goal, "root")
 	finishedAt := launchAt.Add(time.Second)
-	artifactRef := mustRef(t, "artifact:missing-successor", goal.NewArtifactRef)
+	artifactDigest := strings.Repeat("d", 64)
+	artifactRef := mustRef(t, "artifact:sha256:"+artifactDigest, goal.NewArtifactRef)
 	attestationRef := mustRef(t, "attestation:missing-successor", goal.NewAttestationRef)
 	succeededGoal, err := record.Goal.SucceedWorkItem(
 		record.Goal.Revision(), runningRoot.Revision(), runningRoot.Ref(),
@@ -1391,12 +1398,23 @@ func TestRepositoryParksLegacyReadySuccessorsWithoutSyntheticGovernance(t *testi
 		Claim: observeClaim, ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: runningRoot.Revision(),
 		Goal: succeededGoal, Execution: succeededExecution, OperationAt: finishedAt,
 		Artifact: application.ArtifactRecord{
-			Stored:  ports.StoredArtifact{Ref: artifactRef, Digest: "digest:missing-successor", MediaType: "text/plain", Size: 1},
-			GoalRef: succeededGoal.Ref(), WorkItemRef: runningRoot.Ref(), CreatedAt: finishedAt,
+			OccurrenceRef: "artifact-occurrence:missing-successor:" + succeededExecution.Ref.String(),
+			Kind:          application.ArtifactKindAgentOutput,
+			Stored:        ports.StoredArtifact{Ref: artifactRef, Digest: artifactDigest, MediaType: "text/plain", Size: 1},
+			GoalRef:       succeededGoal.Ref(), WorkItemRef: runningRoot.Ref(), ExecutionRef: succeededExecution.Ref,
+			ExecutionAttempt: succeededExecution.AttemptNo, PlanGeneration: succeededExecution.PlanGeneration,
+			WorkItemGeneration: runningRoot.Revision(), AppSpecGeneration: succeededExecution.AppSpecGeneration,
+			SpecHash: succeededExecution.SpecHash, CreatedAt: finishedAt,
 		},
 		Attestation: application.AttestationRecord{
-			Ref: attestationRef, GoalRef: succeededGoal.Ref(), WorkItemRef: runningRoot.Ref(),
-			ExecutionRef: succeededExecution.Ref, ArtifactRef: artifactRef, Policy: "test", AcceptedAt: finishedAt,
+			Ref: attestationRef, Kind: application.AttestationKindArtifactProvenance,
+			Verdict: application.AttestationVerdictObserved, GoalRef: succeededGoal.Ref(), WorkItemRef: runningRoot.Ref(),
+			ExecutionRef: succeededExecution.Ref, ExecutionAttempt: succeededExecution.AttemptNo,
+			PlanGeneration: succeededExecution.PlanGeneration, WorkItemGeneration: runningRoot.Revision(),
+			AppSpecGeneration: succeededExecution.AppSpecGeneration, SpecHash: succeededExecution.SpecHash,
+			ArtifactRef: artifactRef, SubjectDigest: strings.Repeat("e", 64),
+			PolicyRef: "test", PolicyDigest: strings.Repeat("f", 64),
+			StartedAt: finishedAt, FinishedAt: finishedAt, Policy: "test", AcceptedAt: finishedAt,
 		},
 		NewExecutions: successorExecutions, NewActions: successorActions, Events: successorEvents,
 	})
@@ -1431,12 +1449,12 @@ func newDAGCreateFixture(t *testing.T) application.CreateGoalState {
 	a := mustWorkItem(t, goal.NewWorkItemInput{
 		Ref: aRef, Goal: pending.Ref(), Actor: pending.Actor(), Project: pending.Project(),
 		Objective: "root", CreatedAt: pending.CreatedAt(), Phase: phaseBuild, Role: worker,
-		WriteSet: []goal.WriteScope{scopeA}, OutputContract: goal.EvidenceBundleOutputContract(),
+		WriteSet: []goal.WriteScope{scopeA}, RequiredTests: sqliteRequiredTests(t, "required-test:sqlite-dag-a"), OutputContract: goal.EvidenceBundleOutputContract(),
 	})
 	b := mustWorkItem(t, goal.NewWorkItemInput{
 		Ref: bRef, Goal: pending.Ref(), Actor: pending.Actor(), Project: pending.Project(),
 		Objective: "left", CreatedAt: pending.CreatedAt(), Phase: phaseReview, Role: worker,
-		Dependencies: []goal.WorkItemRef{aRef}, WriteSet: []goal.WriteScope{scopeB},
+		Dependencies: []goal.WorkItemRef{aRef}, WriteSet: []goal.WriteScope{scopeB}, RequiredTests: sqliteRequiredTests(t, "required-test:sqlite-dag-b"),
 		OutputContract: goal.EvidenceBundleOutputContract(),
 	})
 	c := mustWorkItem(t, goal.NewWorkItemInput{
@@ -1635,9 +1653,7 @@ func prepareLegacyWorkspaceClaim(
 ) {
 	t.Helper()
 	record, err := repository.GetGoal(context.Background(), claim.Action.GoalRef)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	item, found := record.Goal.WorkItem(claim.Action.WorkItemRef)
 	execution, executionFound := legacyExecutionByRef(record.Executions, claim.Action.ExecutionRef)
 	if !found || !executionFound {
@@ -1771,4 +1787,13 @@ func testIndex(index int) string {
 		return string(digits[index])
 	}
 	return "overflow"
+}
+
+func sqliteTestErrorChain(err error) string {
+	var chain []string
+	for err != nil {
+		chain = append(chain, err.Error())
+		err = errors.Unwrap(err)
+	}
+	return strings.Join(chain, " -> ")
 }

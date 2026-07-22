@@ -109,6 +109,51 @@ func TestSafeGitDirectoryRejectsWritableMetadataAndAncestry(t *testing.T) {
 	}
 }
 
+func TestWorkspaceLeafHardenedAfterGroupWritableGitCreation(t *testing.T) {
+	adapter, request := testAdapterAndPrepare(t)
+	repository, binding, err := adapter.repository(context.Background(), request.RepositoryRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, base, _, err := adapter.prepareTarget(context.Background(), repository, binding.TargetRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace := adapter.workspacePath(request.WorkspaceRef)
+	previousUmask := syscall.Umask(0o002)
+	_, createErr := adapter.gitRun(context.Background(), repository, nil,
+		"worktree", "add", "--lock", "-b", workspaceBranch(request.WorkspaceRef), workspace, base)
+	syscall.Umask(previousUmask)
+	if createErr != nil {
+		t.Fatal(createErr)
+	}
+	if err := adapter.hardenCreatedWorkspaceGitMetadata(context.Background(), repository, workspace); err != nil {
+		t.Fatal(err)
+	}
+	// core.sharedRepository can make current Git narrower than umask 0002.
+	// Preserve the hostile 0775 recovery case explicitly.
+	if err := os.Chmod(workspace, 0o775); err != nil {
+		t.Fatal(err)
+	}
+	assertWorkspaceMode(t, workspace, 0o775)
+
+	if _, err := adapter.Prepare(context.Background(), request); err != nil {
+		t.Fatal(err)
+	}
+	assertWorkspaceMode(t, workspace, 0o700)
+}
+
+func assertWorkspaceMode(t *testing.T, workspace string, want os.FileMode) {
+	t.Helper()
+	info, err := os.Lstat(workspace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != want {
+		t.Fatalf("workspace mode=%#o want=%#o", got, want)
+	}
+}
+
 func chmodMetadata(_ string, metadata string) string { return metadata }
 
 func chmodMetadataAncestor(parent string, _ string) string { return parent }

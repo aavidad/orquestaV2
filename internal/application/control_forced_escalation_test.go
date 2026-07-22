@@ -27,7 +27,7 @@ func TestControlsForcedStopSupersedesOnlyExactPendingCooperativeStop(t *testing.
 	if err != nil || first.Control.Status != ControlRequested {
 		t.Fatalf("cooperative request: result=%+v err=%v", first, err)
 	}
-	if result, processErr := system.orchestrator.ProcessNext(context.Background(), "worker:cooperative-pending"); processErr != nil || !result.Processed || result.Action != ActionStopAgent {
+	if result, processErr := system.orchestrator.ProcessNext(context.Background(), "worker:cooperative-pending"); processErr == nil || processErr.Error() != effectUnknownAppliedCode || !result.Processed || result.Action != ActionStopAgent {
 		t.Fatalf("cooperative pending: result=%+v err=%v", result, processErr)
 	}
 	for _, control := range []struct {
@@ -58,50 +58,8 @@ func TestControlsForcedStopSupersedesOnlyExactPendingCooperativeStop(t *testing.
 	)
 	forced.Mode = ports.AgentStopForced
 	escalated, err := system.orchestrator.Control(context.Background(), system.access, forced)
-	if err != nil || !escalated.Created || escalated.Control.Status != ControlRequested ||
-		escalated.Control.SupersedesControlRef != first.Control.Ref {
-		t.Fatalf("forced escalation: result=%+v err=%v", escalated, err)
-	}
-	transferred := system.record(t)
-	old := mustControlByRequest(t, transferred, cooperative.RequestRef)
-	if old.Status != ControlSuperseded || old.SupersededByControlRef != escalated.Control.Ref ||
-		old.SupersededAt != escalated.Control.RequestedAt || system.actionKindCount(ActionStopAgent) != 1 {
-		t.Fatalf("atomic transfer old=%+v active_stops=%d", old, system.actionKindCount(ActionStopAgent))
-	}
-	approveForcedStop(t, system, "approval:forced-escalation")
-	if result, processErr := system.orchestrator.ProcessNext(context.Background(), "worker:forced-escalation"); processErr != nil || !result.Processed || result.Action != ActionStopAgent {
-		t.Fatalf("forced stop: result=%+v err=%v", result, processErr)
-	}
-
-	settled := system.record(t)
-	old = mustControlByRequest(t, settled, cooperative.RequestRef)
-	next := mustControlByRequest(t, settled, forced.RequestRef)
-	current, _ := executionByRef(settled.Executions, execution.Ref)
-	if old.Status != ControlSuperseded || next.Status != ControlConfirmed ||
-		next.SupersedesControlRef != old.Ref || current.State != ExecutionStopped ||
-		system.actionKindCount(ActionStopAgent) != 0 {
-		t.Fatalf("settled lineage old=%+v next=%+v execution=%s actions=%d",
-			old, next, current.State, system.actionKindCount(ActionStopAgent))
-	}
-	requests, physical := controller.snapshot()
-	if len(requests) != 2 || requests[0].Mode != ports.AgentStopCooperative ||
-		requests[1].Mode != ports.AgentStopForced || requests[0].IdempotencyKey == requests[1].IdempotencyKey ||
-		physical != 1 {
-		t.Fatalf("controller requests=%+v physical=%d", requests, physical)
-	}
-
-	oldReplay, err := system.orchestrator.Control(context.Background(), system.access, cooperative)
-	if err != nil || oldReplay.Created || oldReplay.Control.Status != ControlSuperseded {
-		t.Fatalf("old replay: result=%+v err=%v", oldReplay, err)
-	}
-	newReplay, err := system.orchestrator.Control(context.Background(), system.access, forced)
-	if err != nil || newReplay.Created || newReplay.Control.Status != ControlConfirmed {
-		t.Fatalf("new replay: result=%+v err=%v", newReplay, err)
-	}
-	afterRequests, afterPhysical := controller.snapshot()
-	if len(afterRequests) != len(requests) || afterPhysical != physical {
-		t.Fatalf("replay repeated effect requests=%d/%d physical=%d/%d",
-			len(requests), len(afterRequests), physical, afterPhysical)
+	if !IsStateError(err, StateConflict) {
+		t.Fatalf("unknown cooperative stop was superseded: result=%+v err=%v", escalated, err)
 	}
 }
 
@@ -135,12 +93,12 @@ func TestControlsForcedEscalationSettlesWhenCooperativeAlreadyStoppedTarget(t *t
 		t, "control:cooperative-already-stopped", ControlStop, ControlTargetExecution,
 		item.Ref(), execution.Ref,
 	)
-	first, err := system.orchestrator.Control(context.Background(), system.access, cooperative)
+	_, err := system.orchestrator.Control(context.Background(), system.access, cooperative)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := system.orchestrator.ProcessNext(context.Background(), "worker:cooperative-already-stopped"); err != nil {
-		t.Fatal(err)
+	if _, err := system.orchestrator.ProcessNext(context.Background(), "worker:cooperative-already-stopped"); err == nil || err.Error() != effectUnknownAppliedCode {
+		t.Fatalf("pending cooperative stop was not quarantined: %v", err)
 	}
 	forced := system.request(
 		t, "control:forced-already-stopped", ControlStop, ControlTargetExecution,
@@ -148,24 +106,8 @@ func TestControlsForcedEscalationSettlesWhenCooperativeAlreadyStoppedTarget(t *t
 	)
 	forced.Mode = ports.AgentStopForced
 	next, err := system.orchestrator.Control(context.Background(), system.access, forced)
-	if err != nil {
-		t.Fatal(err)
-	}
-	approveForcedStop(t, system, "approval:forced-already-stopped")
-	if _, err := system.orchestrator.ProcessNext(context.Background(), "worker:forced-already-stopped"); err != nil {
-		t.Fatal(err)
-	}
-
-	settled := system.record(t)
-	old := mustControlByRequest(t, settled, cooperative.RequestRef)
-	escalated := mustControlByRequest(t, settled, forced.RequestRef)
-	current, _ := executionByRef(settled.Executions, execution.Ref)
-	requests, physical := controller.snapshot()
-	if old.Ref != first.Control.Ref || old.Status != ControlSuperseded ||
-		escalated.Ref != next.Control.Ref || escalated.Status != ControlConfirmed ||
-		current.State != ExecutionStopped || len(requests) != 2 || physical != 0 {
-		t.Fatalf("already-stopped lineage old=%+v next=%+v execution=%s requests=%d physical=%d",
-			old, escalated, current.State, len(requests), physical)
+	if !IsStateError(err, StateConflict) {
+		t.Fatalf("unknown cooperative stop was superseded: result=%+v err=%v", next, err)
 	}
 }
 

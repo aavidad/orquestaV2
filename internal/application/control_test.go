@@ -2,7 +2,6 @@ package application
 
 import (
 	"context"
-	"errors"
 	"reflect"
 	"strings"
 	"sync"
@@ -246,6 +245,7 @@ func TestControlsCancelBeforeAndAfterLaunchPrepared(t *testing.T) {
 			launchErr: definitelyUnappliedPermanentError{"provider rejected launch"},
 		}
 		system := newControlTestSystem(t, agent)
+		agent.launchErrorHook = func() { system.clock.Advance(time.Nanosecond) }
 		done := make(chan error, 1)
 		go func() {
 			_, err := system.orchestrator.ProcessNext(context.Background(), "worker:prepared-rejection")
@@ -678,8 +678,6 @@ func TestControlsStopCrashReplayConvergesWithoutDuplicateEffect(t *testing.T) {
 		system.launch(t)
 		controller := &idempotentStopController{now: system.clock.Now, receipts: make(map[string]ports.AgentStopReceipt)}
 		system.orchestrator.controller = controller
-		crashingState := &failStopReceiptRepository{memoryRepository: system.repository, failNextReceipt: true}
-		system.orchestrator.state = crashingState
 		record := system.record(t)
 		item := record.Goal.WorkItems()[0]
 		execution := mustBoundExecution(t, record, item.Ref())
@@ -687,9 +685,10 @@ func TestControlsStopCrashReplayConvergesWithoutDuplicateEffect(t *testing.T) {
 		if _, err := system.orchestrator.Control(context.Background(), system.access, request); err != nil {
 			t.Fatalf("request stop: %v", err)
 		}
+		system.orchestrator.state = terminalEffectFaultState{StateRepository: system.repository, stop: true}
 
 		processed, err := system.orchestrator.ProcessNext(context.Background(), "worker:crash-after-stop")
-		if !processed.Processed || processed.Action != ActionStopAgent || err == nil || err.Error() != "test.crash_after_stop_receipt" {
+		if !processed.Processed || processed.Action != ActionStopAgent || err == nil || err.Error() != effectUnknownAppliedCode {
 			t.Fatalf("crash after effect frontier: result=%+v err=%v", processed, err)
 		}
 		if calls, effects := controller.counts(); calls != 1 || effects != 1 {
@@ -702,41 +701,17 @@ func TestControlsStopCrashReplayConvergesWithoutDuplicateEffect(t *testing.T) {
 
 		system.clock.Advance(2 * time.Minute)
 		processed, err = system.orchestrator.ProcessNext(context.Background(), "worker:recover-after-stop")
-		if err != nil || !processed.Processed || processed.Action != ActionStopAgent {
-			t.Fatalf("recover after effect: result=%+v err=%v", processed, err)
+		if err != nil || (processed.Processed && processed.Action == ActionStopAgent) {
+			t.Fatalf("unknown stop became schedulable: result=%+v err=%v", processed, err)
 		}
-		if calls, effects := controller.counts(); calls != 2 || effects != 1 {
-			t.Fatalf("replay controller calls/effects=%d/%d", calls, effects)
+		if calls, effects := controller.counts(); calls != 1 || effects != 1 {
+			t.Fatalf("unknown stop was reinvoked calls/effects=%d/%d", calls, effects)
 		}
 		closed := system.record(t)
 		current, _ := executionByRef(closed.Executions, execution.Ref)
-		control := mustControlByRequest(t, closed, request.RequestRef)
-		if current.State != ExecutionStopped || control.Status != ControlConfirmed || system.actionKindCount(ActionStopAgent) != 0 {
-			t.Fatalf("replay did not converge: execution=%s control=%s stop_actions=%d",
-				current.State, control.Status, system.actionKindCount(ActionStopAgent))
-		}
-		var stopEffect *ActionConsumptionReceipt
-		for index := range closed.ConsumptionReceipts {
-			candidate := &closed.ConsumptionReceipts[index]
-			if candidate.Kind == ActionStopAgent && candidate.ExecutionRef == execution.Ref {
-				stopEffect = candidate
-				break
-			}
-		}
-		if stopEffect == nil || stopEffect.EffectReceiptRef !=
-			"effect-receipt:effect-intent:"+stopEffect.ActionRef {
-			t.Fatalf("exact stop evidence missing from immutable consumption receipt: %+v", stopEffect)
-		}
-		if len(closed.EffectReceipts) == 0 || closed.EffectReceipts[len(closed.EffectReceipts)-1].Status != EffectStatusStopped {
-			t.Fatalf("terminal effect receipt missing: %+v", closed.EffectReceipts)
-		}
-		beforeReplay := controller.snapshot()
-		replay, err := system.orchestrator.Control(context.Background(), system.access, request)
-		if err != nil || replay.Created || replay.Control.Ref != control.Ref {
-			t.Fatalf("control replay after recovery: result=%+v err=%v", replay, err)
-		}
-		if afterReplay := controller.snapshot(); !reflect.DeepEqual(afterReplay, beforeReplay) {
-			t.Fatalf("read replay repeated stop: before=%+v after=%+v", beforeReplay, afterReplay)
+		if current.State != ExecutionRunning || len(closed.EffectReceipts) != 1 {
+			t.Fatalf("unknown stop mutated terminal frontier: execution=%s receipts=%+v",
+				current.State, closed.EffectReceipts)
 		}
 	})
 }
@@ -1010,28 +985,6 @@ func stoppedControlSystem(t *testing.T, maxAttempts uint64) (*controlTestSystem,
 		t.Fatalf("stop for retry: result=%+v err=%v", result, err)
 	}
 	return system, item.Ref(), execution.Ref
-}
-
-type failStopReceiptRepository struct {
-	*memoryRepository
-	mu              sync.Mutex
-	failNextReceipt bool
-}
-
-func (repository *failStopReceiptRepository) ApplyControl(
-	ctx context.Context,
-	state ApplyControlState,
-) (ControlRecord, bool, error) {
-	repository.mu.Lock()
-	fail := state.EffectReceipt != nil && repository.failNextReceipt
-	if fail {
-		repository.failNextReceipt = false
-	}
-	repository.mu.Unlock()
-	if fail {
-		return ControlRecord{}, false, errors.New("test.crash_after_stop_receipt")
-	}
-	return repository.memoryRepository.ApplyControl(ctx, state)
 }
 
 type idempotentStopController struct {

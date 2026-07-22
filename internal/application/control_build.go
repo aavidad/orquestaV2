@@ -82,8 +82,7 @@ func (orchestrator *Orchestrator) buildCancelControl(ctx context.Context, record
 	if err != nil {
 		return err
 	}
-	live := cancelExecutions(record.Executions, request.Target, request.WorkItemRef)
-	if len(live) > 0 {
+	if len(cancelExecutions(record.Executions, request.Target, request.WorkItemRef)) > 0 {
 		capabilities, capabilityErr := orchestrator.controller.ControlCapabilities(ctx)
 		if capabilityErr != nil {
 			return capabilityErr
@@ -103,7 +102,7 @@ func (orchestrator *Orchestrator) buildCancelControl(ctx context.Context, record
 			return &StateError{Code: StateConflict}
 		}
 		switch current.State {
-		case ExecutionQueued, ExecutionAwaitingCommit, ExecutionAwaitingIntegration:
+		case ExecutionQueued, ExecutionAwaitingCommit, ExecutionAwaitingAttestation, ExecutionAwaitingIntegration:
 			previousState := current.State
 			current.State = ExecutionCanceled
 			current.FinishedAt = state.OperationAt
@@ -117,11 +116,17 @@ func (orchestrator *Orchestrator) buildCancelControl(ctx context.Context, record
 				state.RetireActionRefs = append(state.RetireActionRefs, initialRef)
 			case ExecutionAwaitingCommit:
 				state.RetireActionRefs = append(state.RetireActionRefs, "action:commit-change:"+current.Ref.String())
+			case ExecutionAwaitingAttestation:
+				state.RetireActionRefs = append(state.RetireActionRefs, "action:attest-test:"+current.Ref.String())
+			case ExecutionAwaitingIntegration:
+				integrationRefs, integrationErr := integrationActionRefsForCancellation(record, current)
+				if integrationErr != nil {
+					return integrationErr
+				}
+				state.RetireActionRefs = append(state.RetireActionRefs, integrationRefs...)
 			}
 		case ExecutionDispatching, ExecutionRunning:
-			action, actionErr := orchestrator.stopAction(
-				policy, state.Control, state.Goal, updatedItem, current, state.OperationAt,
-			)
+			action, actionErr := orchestrator.stopAction(policy, state.Control, state.Goal, updatedItem, current, state.OperationAt)
 			if actionErr != nil {
 				return actionErr
 			}
@@ -139,13 +144,8 @@ func (orchestrator *Orchestrator) buildCancelControl(ctx context.Context, record
 		}
 		confirmLocalControl(&state.Control, state.OperationAt)
 	}
-	existing := append([]ExecutionRecord(nil), record.Executions...)
-	for _, updated := range state.Executions {
-		existing = replaceExecution(existing, updated)
-	}
-	newExecutions, newActions, scheduledEvents, scheduleErr := orchestrator.scheduleReady(
-		ctx, state.Goal, existing, record.WorkItemAuthorities, policy, state.OperationAt,
-	)
+	existing := replaceExecutions(record.Executions, state.Executions)
+	newExecutions, newActions, scheduledEvents, scheduleErr := orchestrator.scheduleReady(ctx, state.Goal, existing, record.WorkItemAuthorities, policy, state.OperationAt)
 	if scheduleErr != nil {
 		return scheduleErr
 	}
@@ -153,6 +153,52 @@ func (orchestrator *Orchestrator) buildCancelControl(ctx context.Context, record
 	state.NewActions = append(state.NewActions, newActions...)
 	state.Events = append(state.Events, scheduledEvents...)
 	return nil
+}
+
+func replaceExecutions(existing, updates []ExecutionRecord) []ExecutionRecord {
+	replaced := append([]ExecutionRecord(nil), existing...)
+	for _, update := range updates {
+		replaced = replaceExecution(replaced, update)
+	}
+	return replaced
+}
+
+func integrationActionRefsForCancellation(record GoalRecord, execution ExecutionRecord) ([]string, error) {
+	terminal := make(map[string]struct{}, len(record.ConsumptionReceipts))
+	for _, receipt := range record.ConsumptionReceipts {
+		if receipt.Kind == ActionIntegrateChange && receipt.GoalRef == execution.GoalRef &&
+			receipt.WorkItemRef == execution.WorkItemRef && receipt.ExecutionRef == execution.Ref &&
+			receipt.PlanGeneration == execution.PlanGeneration &&
+			(receipt.Outcome == ActionConsumedCompleted || receipt.Outcome == ActionConsumedQuarantined) {
+			terminal[receipt.ActionRef] = struct{}{}
+		}
+	}
+
+	seen := make(map[string]struct{})
+	refs := make([]string, 0, 1)
+	for _, intent := range record.EffectIntents {
+		subject := intent.Subject
+		if intent.ActionKind != ActionIntegrateChange || subject.ProjectRef != record.Goal.Project() ||
+			subject.GoalRef != execution.GoalRef || subject.GoalRef != record.Goal.Ref() ||
+			subject.WorkItemRef != execution.WorkItemRef || subject.ExecutionRef != execution.Ref ||
+			subject.PlanGeneration != execution.PlanGeneration ||
+			subject.AppSpecGeneration != execution.AppSpecGeneration || subject.SpecHash != execution.SpecHash ||
+			subject.ActorRef != record.Goal.Actor() {
+			continue
+		}
+		if err := ValidateEffectIntent(intent); err != nil {
+			return nil, &StateError{Code: StateInvalid, Cause: err}
+		}
+		if _, consumed := terminal[intent.ActionRef]; consumed {
+			continue
+		}
+		if _, duplicate := seen[intent.ActionRef]; duplicate {
+			continue
+		}
+		seen[intent.ActionRef] = struct{}{}
+		refs = append(refs, intent.ActionRef)
+	}
+	return refs, nil
 }
 
 func (orchestrator *Orchestrator) cancelRequest(

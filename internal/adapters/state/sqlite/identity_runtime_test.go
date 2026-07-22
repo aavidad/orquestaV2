@@ -56,9 +56,7 @@ func TestRepositoryV10AuthorizationScopesProjectsPrincipalsAndDefaultsToDeny(t *
 		RequestRef: "auth:service:create", Principal: service, ProjectRef: projectA,
 		Permission: identity.PermissionGoalsCreate, ResourceRef: "resource:changed", RequestedAt: now,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	if _, err := repository.Authorize(ctx, request); !application.IsStateError(err, application.StateConflict) {
 		t.Fatalf("divergent authorization replay = %v", err)
 	}
@@ -245,17 +243,13 @@ func TestRepositoryV10ApplicationMembershipReplayAcceptsFreshAuthorizationReceip
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 		AgentCapabilities: sqliteTestCapabilities(),
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	project := mustRef(t, "project:application-membership", goal.NewProjectRef)
 	owner := testPrincipal(t, "principal:application-owner", "actor:application-owner", identity.PrincipalKindHuman)
 	target := testPrincipal(t, "principal:application-target", "actor:application-target", identity.PrincipalKindService)
 	provisionTestAccess(t, repository, owner, project, identity.RoleProjectOwner, clock.Now())
 	access, err := application.NewAccess(owner, project)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	grant := testGrantRequest(
 		t, "membership:application-grant", owner, target.Ref, project,
 		identity.RoleContributor, 0, clock.Now(),
@@ -305,9 +299,7 @@ func TestRepositoryV10ProvisionRestartAndRevocationFenceGoalMutation(t *testing.
 		Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 8,
 		Now: func() time.Time { return firstNow },
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	project := mustRef(t, "project:restart", goal.NewProjectRef)
 	owner := testPrincipal(t, "principal:restart-owner", "actor:restart-owner", identity.PrincipalKindHuman)
 	contributor := testPrincipal(t, "principal:restart-contributor", "actor:restart-contributor", identity.PrincipalKindHuman)
@@ -323,9 +315,7 @@ func TestRepositoryV10ProvisionRestartAndRevocationFenceGoalMutation(t *testing.
 		Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 8,
 		Now: func() time.Time { return secondNow },
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	t.Cleanup(func() { _ = repository.Close() })
 	if err := repository.ProvisionLocalAccess(ctx, owner, hierarchy, identity.RoleProjectOwner, secondNow); err != nil {
 		t.Fatalf("restart provision: %v", err)
@@ -349,15 +339,11 @@ func TestRepositoryV10ProvisionRestartAndRevocationFenceGoalMutation(t *testing.
 		t.Fatalf("bootstrap audit rows = %d", got)
 	}
 	differentRepository, err := identity.NewRepositoryRef("repository:restart-different")
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	differentHierarchyInput := hierarchy.Snapshot()
 	differentHierarchyInput.RepositoryRef = differentRepository
 	differentHierarchy, err := identity.NewProjectHierarchy(differentHierarchyInput)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	if err := repository.ProvisionLocalAccess(
 		ctx, owner, differentHierarchy, identity.RoleProjectOwner, secondNow,
 	); !application.IsStateError(err, application.StateConflict) {
@@ -453,39 +439,27 @@ func testPrincipal(
 ) identity.Principal {
 	t.Helper()
 	principalRef, err := identity.NewPrincipalRef(principalValue)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	actorRef := mustRef(t, actorValue, goal.NewActorRef)
 	principal, err := identity.NewPrincipal(principalRef, actorRef, kind, "test-auth")
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	return principal
 }
 
 func testHierarchy(t *testing.T, project goal.ProjectRef) identity.ProjectHierarchy {
 	t.Helper()
 	workspace, err := identity.NewWorkspaceRef("workspace:test")
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	group, err := identity.NewGroupRef("group:" + project.String())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	repositoryRef, err := identity.NewRepositoryRef("repository:" + project.String())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	hierarchy, err := identity.NewProjectHierarchy(identity.ProjectHierarchyInput{
 		WorkspaceRef: workspace, GroupRef: group, GroupParentWorkspaceRef: workspace,
 		ProjectRef: project, ProjectParentGroupRef: group,
 		RepositoryRef: repositoryRef, RepositoryParentProjectRef: project,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	return hierarchy
 }
 
@@ -517,9 +491,7 @@ func authorizeTest(
 		RequestRef: requestRef, Principal: principal, ProjectRef: project,
 		Permission: permission, ResourceRef: resourceRef, RequestedAt: at,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	receipt, err := repository.Authorize(context.Background(), request)
 	if err != nil {
 		t.Fatalf("authorize: %v", err)
@@ -566,9 +538,7 @@ func testGrantRequest(
 		RequestRef: requestRef, Actor: actor, TargetRef: target, ProjectRef: project,
 		Role: role, ExpectedRevision: revision, RequestedAt: at,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	return request
 }
 
@@ -586,9 +556,7 @@ func testRevokeRequest(
 		RequestRef: requestRef, Actor: actor, TargetRef: target, ProjectRef: project,
 		ExpectedRevision: revision, RequestedAt: at,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	return request
 }
 
@@ -603,9 +571,7 @@ func TestRepositoryV10RejectsConflictingPrincipalIdentity(t *testing.T) {
 		RequestRef: "auth:principal-conflict", Principal: conflicting, ProjectRef: project,
 		Permission: identity.PermissionGoalsGet, ResourceRef: "goal:any", RequestedAt: now,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	if _, err := repository.Authorize(context.Background(), request); !application.IsStateError(err, application.StateConflict) {
 		t.Fatalf("conflicting principal = %v", err)
 	}
@@ -621,20 +587,16 @@ func TestRepositoryV10MigratedActorCanProvisionNewAuthenticationPrincipal(t *tes
 		Now: func() time.Time { return now },
 	})
 	if err != nil {
-		t.Fatalf("migrate V09 state: %v", err)
+		t.Fatalf("migrate V09 state: %s", sqliteTestErrorChain(err))
 	}
 	t.Cleanup(func() { _ = repository.Close() })
 	actorRef := mustRef(t, "actor:v1", goal.NewActorRef)
 	principalRef, err := identity.NewPrincipalRef("actor:v1")
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	localPrincipal, err := identity.NewPrincipal(
 		principalRef, actorRef, identity.PrincipalKindHuman, "local_token",
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	project := mustRef(t, "project:v1", goal.NewProjectRef)
 	if err := repository.ProvisionLocalAccess(
 		ctx, localPrincipal, testHierarchy(t, project), identity.RoleProjectOwner, now,

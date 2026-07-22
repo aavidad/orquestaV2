@@ -234,9 +234,7 @@ func newSQLiteV15System(t *testing.T, slots int64) *sqliteV15System {
 	owner := testPrincipal(t, "principal:v15-owner", "actor:v15-owner", identity.PrincipalKindHuman)
 	provisionTestAccess(t, repository, owner, project, identity.RoleProjectOwner, clock.Now())
 	access, err := application.NewAccess(owner, project)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	external := newSQLiteV15External(clock)
 	policy := sqliteBudgetPolicyWithSlots(clock.Now(), slots)
 	ids := &sqliteV15IDs{}
@@ -255,9 +253,21 @@ func openSQLiteV15Repository(t *testing.T, path string, now func() time.Time) *R
 }
 
 func newSQLiteV15Orchestrator(t *testing.T, repository *Repository, clock *sqliteMembershipClock, external *sqliteV15External, policy application.BudgetPolicy, ids *sqliteV15IDs) *application.Orchestrator {
+	return newSQLiteV15OrchestratorWithState(t, repository, repository, clock, external, policy, ids)
+}
+
+func newSQLiteV15OrchestratorWithState(
+	t *testing.T,
+	state application.StateRepository,
+	repository *Repository,
+	clock *sqliteMembershipClock,
+	external *sqliteV15External,
+	policy application.BudgetPolicy,
+	ids *sqliteV15IDs,
+) *application.Orchestrator {
 	t.Helper()
 	orchestrator, err := application.New(application.Dependencies{
-		State: repository, Access: repository, Launcher: external, Observer: external,
+		State: state, Access: repository, Launcher: external, Observer: external,
 		Controller: external, Artifacts: external, Clock: clock, IDs: ids,
 		MaxOutputBytes: 1024, MaxMailboxEnvelopeBytes: 64 << 10,
 		MaxExecutionAttempts: 3, MaxChildrenPerParent: 6, ClaimLease: time.Minute,
@@ -265,9 +275,7 @@ func newSQLiteV15Orchestrator(t *testing.T, repository *Repository, clock *sqlit
 		BudgetPolicy: policy, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 		AgentCapabilities: sqliteTestCapabilities(),
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	return orchestrator
 }
 
@@ -285,9 +293,7 @@ func (system *sqliteV15System) submit(t *testing.T, ref string) application.Subm
 func prepareSQLiteV15Launch(t *testing.T, system *sqliteV15System, claim application.ActionClaim) {
 	t.Helper()
 	record, err := system.repository.GetGoal(context.Background(), claim.Action.GoalRef)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	item, found := record.Goal.WorkItem(claim.Action.WorkItemRef)
 	if !found {
 		t.Fatal("claimed WorkItem missing")
@@ -295,9 +301,7 @@ func prepareSQLiteV15Launch(t *testing.T, system *sqliteV15System, claim applica
 	started, err := record.Goal.StartWorkItem(
 		record.Goal.Revision(), item.Revision(), item.Ref(), claim.Action.ExecutionRef, system.clock.Now(),
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	execution, found := sqliteExecutionByRef(record.Executions, claim.Action.ExecutionRef)
 	if !found {
 		t.Fatal("claimed execution missing")

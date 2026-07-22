@@ -62,9 +62,7 @@ func TestMailboxHandoffRequirementSurvivesRestartAndGatesAdmission(t *testing.T)
 			childArtifact := succeedMailboxChild(t, repository, childObserve, clock.Now())
 
 			beforeRestart, err := repository.GetGoal(ctx, fixture.state.Goal.Ref())
-			if err != nil {
-				t.Fatal(err)
-			}
+			sqliteTestNoError(t, err)
 			beforeParent, _ := beforeRestart.Goal.WorkItem(fixture.parentRef)
 			beforeChild, _ := beforeRestart.Goal.WorkItem(fixture.childRef)
 			if beforeParent.HandoffRequired() || beforeChild.HandoffRequired() != test.handoffRequired {
@@ -81,9 +79,7 @@ func TestMailboxHandoffRequirementSurvivesRestartAndGatesAdmission(t *testing.T)
 
 			repository = restartMailboxTestRepository(t, repository, path, clock)
 			restarted, err := repository.GetGoal(ctx, fixture.state.Goal.Ref())
-			if err != nil {
-				t.Fatal(err)
-			}
+			sqliteTestNoError(t, err)
 			restartedParent, _ := restarted.Goal.WorkItem(fixture.parentRef)
 			restartedChild, _ := restarted.Goal.WorkItem(fixture.childRef)
 			if restartedParent.HandoffRequired() || restartedChild.HandoffRequired() != test.handoffRequired {
@@ -197,9 +193,7 @@ func TestMailboxRestartPreservesEveryCausalFrontier(t *testing.T) {
 	childArtifact := succeedMailboxChild(t, repository, childObserve, clock.Now())
 
 	running, err := repository.GetGoal(ctx, fixture.state.Goal.Ref())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	parent, _ := running.Goal.WorkItem(fixture.parentRef)
 	child, _ := running.Goal.WorkItem(fixture.childRef)
 	parentExecution, parentBound := parent.Execution()
@@ -286,9 +280,7 @@ func TestMailboxRestartPreservesEveryCausalFrontier(t *testing.T) {
 	assertMailboxState(t, repository, envelope, application.MailboxStateAdmitted, 0)
 	assertMailboxListFIFO(t, repository, clock, envelope)
 	restartedGoal, err := repository.GetGoal(ctx, envelope.GoalRef)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	restartedChild, _ := restartedGoal.Goal.WorkItem(fixture.childRef)
 	if !restartedChild.HandoffRequired() {
 		t.Fatal("restart lost required child handoff edge")
@@ -346,9 +338,7 @@ SELECT COUNT(*) FROM outbox WHERE kind = 'deliver_mailbox' AND goal_ref = ?`,
 	}
 
 	directorAccess, err := application.NewAccess(source, envelope.ProjectRef)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	director := newSQLiteDirectorOrchestrator(t, repository, clock, &sqliteDirectorIDs{})
 	directorLease, err := director.ClaimDirector(ctx, directorAccess, application.ClaimDirectorRequest{
 		RequestRef: "director-claim:mailbox-plan-extension", GoalRef: envelope.GoalRef,
@@ -357,9 +347,7 @@ SELECT COUNT(*) FROM outbox WHERE kind = 'deliver_mailbox' AND goal_ref = ?`,
 		t.Fatalf("claim mailbox Director lease=%+v err=%v", directorLease, err)
 	}
 	beforeExtension, err := repository.GetGoal(ctx, envelope.GoalRef)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	planDecision, err := director.ProposeDirectorPlan(ctx, directorAccess, application.ProposeDirectorPlanRequest{
 		RequestRef: "director-plan:mailbox-monotonic-extension", GoalRef: envelope.GoalRef,
 		ExpectedGoalRevision:   beforeExtension.Goal.Revision(),
@@ -540,17 +528,13 @@ SELECT COUNT(*) FROM outbox WHERE kind = 'deliver_mailbox' AND goal_ref = ?`,
 	clock.Advance(time.Second)
 	ackAuthorization := authorizeMailboxTest(t, repository, recipient, envelope, "ack", clock.Now())
 	beforeAck, err := repository.GetGoal(ctx, envelope.GoalRef)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	ackRef := "receipt:mailbox-acknowledged"
 	updated, err := beforeAck.Goal.ResolveChildHandoff(
 		beforeAck.Goal.Revision(), fixture.parentRef, fixture.childRef,
 		messageRef.String(), goal.ChildHandoffAcknowledged, ackRef, clock.Now(),
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	ack := application.MailboxAcknowledgement{
 		Ref: ackRef, MessageRef: messageRef, ActionRef: action.Ref,
 		RequestRef: "request:mailbox-ack",
@@ -590,9 +574,7 @@ SELECT COUNT(*) FROM outbox WHERE kind = 'deliver_mailbox' AND goal_ref = ?`,
 	repository = restartMailboxTestRepository(t, repository, path, clock)
 	final := assertMailboxState(t, repository, envelope, application.MailboxStateAcknowledged, 2)
 	finalGoal, err := repository.GetGoal(ctx, envelope.GoalRef)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	if final.Acknowledgement == nil || len(finalGoal.Goal.ChildHandoffResolutions()) != 1 ||
 		finalGoal.Goal.ChildHandoffResolutions()[0].ReceiptRef() != ackRef ||
 		finalGoal.Goal.PlanGeneration() != envelope.TargetPlanGeneration+1 {
@@ -640,9 +622,7 @@ SELECT COUNT(*) FROM outbox WHERE kind = 'deliver_mailbox' AND goal_ref = ?`,
 		t.Fatalf("restore V13 mailbox: %v", err)
 	}
 	targetPath, err := recovery.TargetPath(targetRef)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	restored := openMailboxTestRepository(t, targetPath, clock)
 	defer restored.Close()
 	restoredMailbox := assertMailboxState(
@@ -819,9 +799,7 @@ func assertConsumedMailboxRetirement(
 		t.Fatalf("restore consumed mailbox branch: %v", err)
 	}
 	path, err := recovery.TargetPath(targetRef)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	repository := openMailboxTestRepository(t, path, clock)
 	defer repository.Close()
 
@@ -837,9 +815,7 @@ func assertConsumedMailboxRetirement(
 		t.Fatalf("claim recipient observe for retirement claim=%+v found=%v err=%v", actionClaim, initialActionFound, err)
 	}
 	record, err := repository.GetGoal(ctx, envelope.GoalRef)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	item, found := record.Goal.WorkItem(envelope.ParentWorkItemRef)
 	if !found {
 		t.Fatal("retirement recipient WorkItem missing")
@@ -870,9 +846,7 @@ func assertConsumedMailboxRetirement(
 	failedGoal, err := record.Goal.FailWorkItem(
 		expectedGoalRevision, expectedItemRevision, item.Ref(), failedAt,
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	execution.State = application.ExecutionFailed
 	execution.FinishedAt = failedAt
 	execution.FailureCode = "agent.recipient_failed"
@@ -1071,17 +1045,13 @@ func assertMailboxListFIFO(
 		t.Fatalf("restore mailbox FIFO branch: %v", err)
 	}
 	path, err := recovery.TargetPath(targetRef)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	repository := openMailboxTestRepository(t, path, clock)
 	defer repository.Close()
 	first, err := repository.GetMailbox(
 		ctx, envelope.ProjectRef, envelope.GoalRef, envelope.Ref, envelope.Recipient,
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	secondChild := mustRef(t, "work-item:mailbox-fifo-child", goal.NewWorkItemRef)
 	secondExecution := mustRef(t, "execution:mailbox-fifo-child", goal.NewExecutionRef)
 	if _, err := repository.db.Exec(`
@@ -1226,9 +1196,7 @@ func assertMailboxFrontierRetires(
 		t.Fatalf("restore %s retirement frontier: %v", suffix, err)
 	}
 	path, err := recovery.TargetPath(targetRef)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	repository := openMailboxTestRepository(t, path, clock)
 	defer repository.Close()
 	capabilities := sqliteTestCapabilities()
@@ -1243,9 +1211,7 @@ func assertMailboxFrontierRetires(
 		t.Fatalf("claim %s recipient action=%+v found=%v err=%v", suffix, actionClaim, found, err)
 	}
 	record, err := repository.GetGoal(ctx, envelope.GoalRef)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	item, found := record.Goal.WorkItem(envelope.ParentWorkItemRef)
 	if !found {
 		t.Fatal("retirement frontier parent missing")
@@ -1261,9 +1227,7 @@ func assertMailboxFrontierRetires(
 	failedGoal, err := record.Goal.FailWorkItem(
 		record.Goal.Revision(), item.Revision(), item.Ref(), failedAt,
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	execution.State = application.ExecutionFailed
 	execution.FinishedAt = failedAt
 	execution.FailureCode = "agent.frontier_failed_" + suffix
@@ -1322,9 +1286,7 @@ func buildMailboxReplacementState(
 	replacedGoal, err := record.Goal.ReplaceWorkItemExecution(
 		record.Goal.Revision(), item.Revision(), item.Ref(), execution.Ref, replacementRef, at,
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	failed := execution
 	failed.State = application.ExecutionFailed
 	failed.FinishedAt = at
@@ -1349,16 +1311,12 @@ func buildMailboxReplacementState(
 		replacement.RepositoryRef = execution.RepositoryRef
 		if replacement.RepositoryRef.String() == "" {
 			replacement.RepositoryRef, err = identity.NewRepositoryRef("repository:" + record.Goal.Project().String())
-			if err != nil {
-				t.Fatal(err)
-			}
+			sqliteTestNoError(t, err)
 		}
 		replacement.ExecutionWorkspaceRef, err = ports.NewExecutionWorkspaceRef(
 			"execution-workspace:" + replacementRef.String(),
 		)
-		if err != nil {
-			t.Fatal(err)
-		}
+		sqliteTestNoError(t, err)
 		next.Ref = "action:prepare-workspace:" + replacementRef.String()
 		next.Kind = application.ActionPrepareWorkspace
 		authority := application.WorkItemAuthority{}
@@ -1411,15 +1369,11 @@ func assertAcknowledgedMailboxAllowsBirthGenerationReplacement(
 		t.Fatalf("restore acknowledged replacement branch: %v", err)
 	}
 	path, err := recovery.TargetPath(targetRef)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	repository := openMailboxTestRepository(t, path, clock)
 	defer repository.Close()
 	record, err := repository.GetGoal(ctx, envelope.GoalRef)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	if record.Goal.PlanGeneration() <= claim.Action.PlanGeneration {
 		t.Fatalf("test lacks later Goal generation: action=%d goal=%d", claim.Action.PlanGeneration, record.Goal.PlanGeneration())
 	}
@@ -1482,9 +1436,7 @@ func assertMailboxRecoveryTamperRejected(
 		t.Fatal(err)
 	}
 	connection, err := repository.db.Conn(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	defer connection.Close()
 	apply := func(query string, arguments []any) {
 		t.Helper()
@@ -1550,9 +1502,7 @@ func newMailboxGoalFixtureWithHandoff(
 	pending, err := goal.NewGoal(
 		mustRef(t, "goal:mailbox-runtime", goal.NewGoalRef), base.Goal.AppSpec(), at,
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	phaseKey, _ := goal.NewPhaseKey("phase:mailbox")
 	phase, _ := goal.NewPhaseInstance(phaseKey)
 	role, _ := goal.NewRoleKey("role:mailbox")
@@ -1563,27 +1513,23 @@ func newMailboxGoalFixtureWithHandoff(
 	parent := mustWorkItem(t, goal.NewWorkItemInput{
 		Ref: parentRef, Goal: pending.Ref(), Actor: pending.Actor(), Project: pending.Project(),
 		Objective: "mailbox parent", CreatedAt: at, Phase: phaseKey, Role: role,
-		WriteSet: []goal.WriteScope{parentScope}, OutputContract: goal.EvidenceBundleOutputContract(),
+		WriteSet: []goal.WriteScope{parentScope}, RequiredTests: sqliteRequiredTests(t, "required-test:sqlite-mailbox-parent"), OutputContract: goal.EvidenceBundleOutputContract(),
 	})
 	child := mustWorkItem(t, goal.NewWorkItemInput{
 		Ref: childRef, Goal: pending.Ref(), Actor: pending.Actor(), Project: pending.Project(),
 		Objective: "mailbox child", CreatedAt: at, Phase: phaseKey, Role: role, Parent: parentRef,
 		HandoffRequired: handoffRequired,
-		WriteSet:        []goal.WriteScope{childScope}, OutputContract: goal.EvidenceBundleOutputContract(),
+		WriteSet:        []goal.WriteScope{childScope}, RequiredTests: sqliteRequiredTests(t, "required-test:sqlite-mailbox-child"), OutputContract: goal.EvidenceBundleOutputContract(),
 	})
 	plan, err := goal.NewPlan(goal.PlanInput{
 		Generation: 1, Phases: []goal.PhaseInstance{phase}, WorkItems: []goal.WorkItem{child, parent},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	aggregate, err := pending.ApplyPlan(pending.Revision(), plan)
 	if err == nil {
 		aggregate, err = aggregate.Start(aggregate.Revision(), at)
 	}
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	state := application.CreateGoalState{
 		RequestRef: "request:mailbox-goal", RequestFingerprint: "fingerprint:mailbox-goal", Goal: aggregate,
 		Events: []application.EventRecord{{
@@ -1638,9 +1584,7 @@ func mustMailboxSchedulerClaim(
 func startMailboxExecution(t *testing.T, repository *Repository, claim application.ActionClaim, at time.Time) {
 	t.Helper()
 	record, err := repository.GetGoal(context.Background(), claim.Action.GoalRef)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	item, found := record.Goal.WorkItem(claim.Action.WorkItemRef)
 	if !found {
 		t.Fatal("claimed WorkItem missing")
@@ -1648,9 +1592,7 @@ func startMailboxExecution(t *testing.T, repository *Repository, claim applicati
 	updated, err := record.Goal.StartWorkItem(
 		record.Goal.Revision(), item.Revision(), item.Ref(), claim.Action.ExecutionRef, at,
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	execution := findMailboxExecution(t, record.Executions, claim.Action.ExecutionRef)
 	execution.State = application.ExecutionDispatching
 	if claim.Action.EffectIntentRef != "" {
@@ -1673,9 +1615,7 @@ func startMailboxExecution(t *testing.T, repository *Repository, claim applicati
 		attempt, _, err = repository.RecordEffectAttempt(context.Background(), application.RecordEffectAttemptState{
 			Claim: claim, Attempt: attempt, OperationAt: at,
 		})
-		if err != nil {
-			t.Fatal(err)
-		}
+		sqliteTestNoError(t, err)
 		effectReceipt = sqliteV15EffectReceipt(claim, attempt, application.EffectStatusAccepted, at)
 		execution.LaunchReceiptRef = effectReceipt.Ref
 	}
@@ -1712,30 +1652,38 @@ func succeedMailboxChild(
 ) goal.ArtifactRef {
 	t.Helper()
 	record, err := repository.GetGoal(context.Background(), claim.Action.GoalRef)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	item, _ := record.Goal.WorkItem(claim.Action.WorkItemRef)
-	artifactRef := mustRef(t, "artifact:mailbox-child", goal.NewArtifactRef)
+	artifactDigest := strings.Repeat("c", 64)
+	artifactRef := mustRef(t, "artifact:sha256:"+artifactDigest, goal.NewArtifactRef)
 	attestationRef := mustRef(t, "attestation:mailbox-child", goal.NewAttestationRef)
 	updated, err := record.Goal.SucceedWorkItem(
 		record.Goal.Revision(), item.Revision(), item.Ref(),
 		[]goal.ArtifactRef{artifactRef}, []goal.AttestationRef{attestationRef}, at,
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	execution := findMailboxExecution(t, record.Executions, claim.Action.ExecutionRef)
 	execution.State = application.ExecutionSucceeded
 	execution.FinishedAt = at
 	budgetSettlement := sqliteMailboxSettlement(t, record, execution, at)
 	artifact := application.ArtifactRecord{
-		Stored:  ports.StoredArtifact{Ref: artifactRef, Digest: "sha256:mailbox-child", MediaType: "text/plain", Size: 8},
-		GoalRef: updated.Ref(), WorkItemRef: item.Ref(), CreatedAt: at,
+		OccurrenceRef: "artifact-occurrence:mailbox-child:" + execution.Ref.String(),
+		Kind:          application.ArtifactKindAgentOutput,
+		Stored:        ports.StoredArtifact{Ref: artifactRef, Digest: artifactDigest, MediaType: "text/plain", Size: 8},
+		GoalRef:       updated.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref,
+		ExecutionAttempt: execution.AttemptNo, PlanGeneration: execution.PlanGeneration,
+		WorkItemGeneration: item.Revision(), AppSpecGeneration: execution.AppSpecGeneration,
+		SpecHash: execution.SpecHash, CreatedAt: at,
 	}
 	attestation := application.AttestationRecord{
-		Ref: attestationRef, GoalRef: updated.Ref(), WorkItemRef: item.Ref(),
-		ExecutionRef: execution.Ref, ArtifactRef: artifactRef, Policy: "mailbox.child.complete", AcceptedAt: at,
+		Ref: attestationRef, Kind: application.AttestationKindArtifactProvenance,
+		Verdict: application.AttestationVerdictObserved, GoalRef: updated.Ref(), WorkItemRef: item.Ref(),
+		ExecutionRef: execution.Ref, ExecutionAttempt: execution.AttemptNo,
+		PlanGeneration: execution.PlanGeneration, WorkItemGeneration: item.Revision(),
+		AppSpecGeneration: execution.AppSpecGeneration, SpecHash: execution.SpecHash,
+		ArtifactRef: artifactRef, SubjectDigest: strings.Repeat("d", 64),
+		PolicyRef: "mailbox.child.complete", PolicyDigest: strings.Repeat("e", 64),
+		StartedAt: at, FinishedAt: at, Policy: "mailbox.child.complete", AcceptedAt: at,
 	}
 	if err := repository.RecordGoalSucceeded(context.Background(), application.GoalSucceededState{
 		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: item.Revision(),
@@ -1767,9 +1715,7 @@ func sqliteMailboxSettlement(
 		settlement, err := governance.Reconcile(
 			reservation, governance.ResourceUsage{Quality: governance.UsageQualityUnknown},
 		)
-		if err != nil {
-			t.Fatal(err)
-		}
+		sqliteTestNoError(t, err)
 		settlement.SettledAt = at
 		return &settlement
 	}
@@ -1816,9 +1762,7 @@ func openMailboxTestRepository(
 	repository, err := Open(context.Background(), Options{
 		Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 8, Now: clock.Now,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	return repository
 }
 

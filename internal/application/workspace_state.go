@@ -37,14 +37,35 @@ type ExecutionOutputReadyState struct {
 }
 
 // ChangeCommittedState consumes commit_change and records one immutable local
-// commit. It deliberately creates no integration action.
+// commit. New write work schedules attest_test; legacy work without declared
+// tests remains pending with no invented evidence or next action.
 type ChangeCommittedState struct {
 	Claim         ActionClaim
 	Execution     ExecutionRecord
 	ChangeSet     ChangeSet
+	NextAction    *ActionRecord
 	EffectReceipt EffectReceipt
 	Event         EventRecord
 	OperationAt   time.Time
+}
+
+// TestAttestedState publishes both immutable CAS occurrences and one typed
+// verdict in the same state transaction that consumes attest_test. PASS leaves
+// integration to the separately authorized IntegrateChange use case.
+type TestAttestedState struct {
+	Claim                ActionClaim
+	ExpectedGoalRevision goal.Revision
+	ExpectedItemRevision goal.Revision
+	Goal                 goal.Goal
+	Execution            ExecutionRecord
+	ManifestArtifact     ArtifactRecord
+	ReportArtifact       ArtifactRecord
+	Attestation          AttestationRecord
+	EffectReceipt        EffectReceipt
+	NewExecutions        []ExecutionRecord
+	NewActions           []ActionRecord
+	Events               []EventRecord
+	OperationAt          time.Time
 }
 
 type AdmitIntegrationState struct {

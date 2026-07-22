@@ -362,10 +362,12 @@ WHERE ref = ?`, execution.Ref.String()); err != nil {
 	claim := mustClaim(t, repository, "worker:v06-terminal", "claim:v06-terminal", at)
 	item := onlyItem(t, record.Goal)
 	finishedAt := at.Add(time.Second)
+	artifactDigest := strings.Repeat("6", 64)
+	artifactRef := mustRef(t, "artifact:sha256:"+artifactDigest, goal.NewArtifactRef)
+	attestationRef := mustRef(t, "attestation:v06-identity", goal.NewAttestationRef)
 	succeededGoal, err := record.Goal.SucceedWorkItem(
 		record.Goal.Revision(), item.Revision(), item.Ref(),
-		[]goal.ArtifactRef{mustRef(t, "artifact:v06-identity", goal.NewArtifactRef)},
-		[]goal.AttestationRef{mustRef(t, "attestation:v06-identity", goal.NewAttestationRef)},
+		[]goal.ArtifactRef{artifactRef}, []goal.AttestationRef{attestationRef},
 		finishedAt,
 	)
 	if err == nil {
@@ -379,16 +381,23 @@ WHERE ref = ?`, execution.Ref.String()); err != nil {
 	tampered.ModelRef = "model:tampered"
 	tampered.FinishedAt = finishedAt
 	artifact := application.ArtifactRecord{
-		Stored: ports.StoredArtifact{
-			Ref: mustRef(t, "artifact:v06-identity", goal.NewArtifactRef), Digest: "sha256:v06-identity",
-			MediaType: "text/plain", Size: 1,
-		},
-		GoalRef: succeededGoal.Ref(), WorkItemRef: item.Ref(), CreatedAt: finishedAt,
+		OccurrenceRef: "artifact-occurrence:v06-identity:" + tampered.Ref.String(),
+		Kind:          application.ArtifactKindAgentOutput,
+		Stored:        ports.StoredArtifact{Ref: artifactRef, Digest: artifactDigest, MediaType: "text/plain", Size: 1},
+		GoalRef:       succeededGoal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: tampered.Ref,
+		ExecutionAttempt: tampered.AttemptNo, PlanGeneration: tampered.PlanGeneration,
+		WorkItemGeneration: item.Revision(), AppSpecGeneration: tampered.AppSpecGeneration,
+		SpecHash: tampered.SpecHash, CreatedAt: finishedAt,
 	}
 	attestation := application.AttestationRecord{
-		Ref: mustRef(t, "attestation:v06-identity", goal.NewAttestationRef), GoalRef: succeededGoal.Ref(),
-		WorkItemRef: item.Ref(), ExecutionRef: tampered.Ref, ArtifactRef: artifact.Stored.Ref,
-		Policy: "test.identity", AcceptedAt: finishedAt,
+		Ref: attestationRef, Kind: application.AttestationKindArtifactProvenance,
+		Verdict: application.AttestationVerdictObserved, GoalRef: succeededGoal.Ref(), WorkItemRef: item.Ref(),
+		ExecutionRef: tampered.Ref, ExecutionAttempt: tampered.AttemptNo,
+		PlanGeneration: tampered.PlanGeneration, WorkItemGeneration: item.Revision(),
+		AppSpecGeneration: tampered.AppSpecGeneration, SpecHash: tampered.SpecHash,
+		ArtifactRef: artifact.Stored.Ref, SubjectDigest: strings.Repeat("7", 64),
+		PolicyRef: "test.identity", PolicyDigest: strings.Repeat("8", 64),
+		StartedAt: finishedAt, FinishedAt: finishedAt, Policy: "test.identity", AcceptedAt: finishedAt,
 	}
 	repository.now = func() time.Time { return finishedAt }
 	err = repository.RecordGoalSucceeded(context.Background(), application.GoalSucceededState{

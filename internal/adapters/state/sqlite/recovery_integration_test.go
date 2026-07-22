@@ -85,7 +85,7 @@ func TestDispatchingLaunchRecoversAcrossRestartWithSameIdempotency(t *testing.T)
 	clock := &restartClock{now: time.Date(2026, 7, 14, 16, 0, 0, 0, time.UTC)}
 	repository.now = clock.Now
 	ids := &restartIDs{}
-	agent := &restartAgent{clock: clock, temporaryFirst: true}
+	agent := &restartAgent{clock: clock}
 	orchestrator := newRestartOrchestrator(t, repository, clock, ids, agent)
 	actor, _ := goal.NewActorRef("actor:restart")
 	project, _ := goal.NewProjectRef("project:restart")
@@ -97,8 +97,13 @@ func TestDispatchingLaunchRecoversAcrossRestartWithSameIdempotency(t *testing.T)
 	if err != nil {
 		t.Fatalf("submit: %v", err)
 	}
+	mustV10Exec(t, repository.db, `
+CREATE TRIGGER bug270_crash_before_launch_receipt
+BEFORE INSERT ON effect_receipts WHEN NEW.status='accepted'
+BEGIN SELECT RAISE(ABORT,'bug270_launch_receipt_crash'); END`)
 	result, err := orchestrator.ProcessNext(context.Background(), "worker:first")
-	if err != nil || !result.Processed || result.Action != application.ActionLaunchAgent {
+	if err == nil || err.Error() != "application.effect_unknown_applied" ||
+		!result.Processed || result.Action != application.ActionLaunchAgent {
 		t.Fatalf("first launch = %+v err=%v", result, err)
 	}
 	dispatching, err := repository.GetGoal(context.Background(), submitted.Record.Goal.Ref())
@@ -106,11 +111,12 @@ func TestDispatchingLaunchRecoversAcrossRestartWithSameIdempotency(t *testing.T)
 		!dispatching.Executions[0].StartedAt.IsZero() || !dispatching.Executions[0].DeadlineAt.IsZero() {
 		t.Fatalf("durable dispatching state = %+v err=%v", dispatching, err)
 	}
+	mustV10Exec(t, repository.db, `DROP TRIGGER bug270_crash_before_launch_receipt`)
 	if err := repository.Close(); err != nil {
 		t.Fatalf("close before restart: %v", err)
 	}
 
-	clock.Advance(2 * time.Second)
+	clock.Advance(time.Minute + time.Second)
 	repository, err = Open(context.Background(), Options{
 		Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 8, Now: clock.Now,
 	})
@@ -120,19 +126,24 @@ func TestDispatchingLaunchRecoversAcrossRestartWithSameIdempotency(t *testing.T)
 	t.Cleanup(func() { _ = repository.Close() })
 	orchestrator = newRestartOrchestrator(t, repository, clock, ids, agent)
 	result, err = orchestrator.ProcessNext(context.Background(), "worker:second")
-	if err != nil || !result.Processed || result.Action != application.ActionLaunchAgent {
+	if err != nil || result.Processed {
 		t.Fatalf("recovered launch = %+v err=%v", result, err)
 	}
-	running, err := repository.GetGoal(context.Background(), submitted.Record.Goal.Ref())
-	if err != nil || len(running.Executions) != 1 || running.Executions[0].State != application.ExecutionRunning ||
-		!running.Executions[0].StartedAt.Equal(clock.Now()) ||
-		!running.Executions[0].DeadlineAt.Equal(clock.Now().Add(time.Hour)) {
-		t.Fatalf("accepted recovered execution = %+v err=%v", running, err)
+	recovered, err := repository.GetGoal(context.Background(), submitted.Record.Goal.Ref())
+	if err != nil || len(recovered.Executions) != 1 ||
+		recovered.Executions[0].State != application.ExecutionDispatching ||
+		len(recovered.EffectAttempts) != 1 || len(recovered.EffectReceipts) != 0 ||
+		len(recovered.BudgetReservations) != 1 || len(recovered.BudgetSettlements) != 0 ||
+		recovered.Executions[0].BudgetReservationRef != recovered.BudgetReservations[0].Ref ||
+		recovered.Executions[0].EffectIntentRef == "" {
+		t.Fatalf("unknown-applied recovery = %+v err=%v", recovered, err)
 	}
 	requests := agent.launchRequests()
-	if len(requests) != 2 || !reflect.DeepEqual(requests[0], requests[1]) ||
-		requests[0].IdempotencyKey != running.Executions[0].IdempotencyKey {
-		t.Fatalf("recovery changed causal launch request: %+v", requests)
+	if len(requests) != 1 {
+		t.Fatalf("recovery repeated physical launch: %+v", requests)
+	}
+	if _, _, err := validateRecoveryDatabase(context.Background(), repository.db); err != nil {
+		t.Fatalf("unknown-applied launch recovery invalid: %v cause=%v", err, errors.Unwrap(err))
 	}
 }
 
@@ -262,18 +273,12 @@ func newRestartAccess(
 ) application.Access {
 	t.Helper()
 	principalRef, err := identity.NewPrincipalRef(actorRef.String())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	principal, err := identity.NewPrincipal(principalRef, actorRef, identity.PrincipalKindHuman, "test")
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	provisionTestAccess(t, repository, principal, projectRef, identity.RoleProjectOwner, at)
 	access, err := application.NewAccess(principal, projectRef)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	return access
 }
 

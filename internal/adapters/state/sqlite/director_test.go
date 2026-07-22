@@ -262,25 +262,17 @@ func TestRepositoryV12AuthorizationReplayKeepsOriginalTime(t *testing.T) {
 		Permission: identity.PermissionGoalsGet, ResourceRef: system.goal.Goal.Ref().String(),
 		RequestedAt: system.clock.Now(),
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	first, err := system.repository.Authorize(ctx, firstRequest)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	retryRequest, err := identity.NewAuthorizationRequest(identity.AuthorizationRequestInput{
 		RequestRef: requestRef, Principal: system.owner, ProjectRef: system.project,
 		Permission: identity.PermissionGoalsGet, ResourceRef: system.goal.Goal.Ref().String(),
 		RequestedAt: system.clock.Now().Add(time.Minute),
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	replayed, err := system.repository.Authorize(ctx, retryRequest)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	if replayed.Ref() != first.Ref() || replayed.Decision().Request() != firstRequest ||
 		!replayed.RecordedAt().Equal(first.RecordedAt()) {
 		t.Fatalf("authorization replay first=%+v replay=%+v", first, replayed)
@@ -300,9 +292,7 @@ SELECT COUNT(*) FROM authorization_receipts WHERE principal_ref = ? AND request_
 		Permission: identity.PermissionGoalsGet, ResourceRef: "goal:divergent",
 		RequestedAt: system.clock.Now().Add(2 * time.Minute),
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	if _, err := system.repository.Authorize(ctx, divergent); !application.IsStateError(err, application.StateConflict) {
 		t.Fatalf("divergent authorization replay=%v", err)
 	}
@@ -314,9 +304,7 @@ func TestRepositoryV12DirectorPlanLateReplayRestartAndRecovery(t *testing.T) {
 	claim, err := system.orchestrator.ClaimDirector(ctx, system.ownerAccess, application.ClaimDirectorRequest{
 		RequestRef: "director-claim:plan", GoalRef: system.goal.Goal.Ref(),
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	firstRequest := application.ProposeDirectorPlanRequest{
 		RequestRef: "director-plan:first", GoalRef: system.goal.Goal.Ref(),
 		ExpectedGoalRevision:   system.goal.Goal.Revision(),
@@ -326,7 +314,7 @@ func TestRepositoryV12DirectorPlanLateReplayRestartAndRecovery(t *testing.T) {
 		Plan: application.PlanSpec{WorkItems: []application.WorkItemSpec{{
 			Key: "work:research", Objective: "inspect recoverable input",
 			Phase: goal.DefaultPhaseKey().String(), Role: "role:researcher",
-			WriteSet: []string{"docs"}, OutputContract: goal.OutputContractEvidenceBundle,
+			WriteSet: []string{"docs"}, RequiredTests: sqliteRequiredTestSpecs("required-test:sqlite-director"), OutputContract: goal.OutputContractEvidenceBundle,
 		}}},
 	}
 	first, err := system.orchestrator.ProposeDirectorPlan(ctx, system.ownerAccess, firstRequest)
@@ -389,16 +377,12 @@ func TestRepositoryV12DirectorPlanLateReplayRestartAndRecovery(t *testing.T) {
 		t.Fatalf("verify V12: %v", err)
 	}
 	targetRef, err := application.NewRecoveryTargetRef("recovery-target:v12-director")
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	if _, err := recovery.RestoreBackup(ctx, backup.Ref, targetRef); err != nil {
 		t.Fatalf("restore V12: %v", err)
 	}
 	targetPath, err := recovery.TargetPath(targetRef)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	restored, err := Open(ctx, Options{
 		Path: targetPath, BusyTimeout: testBusyTimeout, MaxOpenConnections: 8, Now: restarted.clock.Now,
 	})
@@ -430,9 +414,7 @@ func TestRepositoryV12MigratesPopulatedV6ToV7(t *testing.T) {
 	}
 	database := openRawV10TestDatabase(t, path)
 	migrations, err := loadMigrations()
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	if err := applyRecoveryMigrationPrefix(ctx, database, migrations[:recoverySchemaV10]); err != nil {
 		t.Fatal(err)
 	}
@@ -459,7 +441,7 @@ func TestRepositoryV12MigratesPopulatedV6ToV7(t *testing.T) {
 		t.Fatalf("migrate V6 to V7: %v", err)
 	}
 	t.Cleanup(func() { _ = migrated.Close() })
-	assertRecoverySchemaVersion(t, migrated.db, recoverySchemaV16)
+	assertRecoverySchemaVersion(t, migrated.db, recoverySchemaV17)
 	if _, err := migrated.GetGoal(ctx, state.Goal.Ref()); err != nil {
 		t.Fatalf("migrated Goal: %v", err)
 	}
@@ -475,9 +457,7 @@ func TestRepositoryV12MigratesPopulatedV6ToV7(t *testing.T) {
 	}
 	var foreignKeyFailures int
 	rows, err := migrated.db.Query(`PRAGMA foreign_key_check`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	for rows.Next() {
 		foreignKeyFailures++
 	}
@@ -516,9 +496,7 @@ WHERE goal_ref = ?`, system.goal.Goal.Ref().String())
 		claim, err := system.orchestrator.ClaimDirector(ctx, system.ownerAccess, application.ClaimDirectorRequest{
 			RequestRef: "director-claim:renew-binding", GoalRef: system.goal.Goal.Ref(),
 		})
-		if err != nil {
-			t.Fatal(err)
-		}
+		sqliteTestNoError(t, err)
 		system.clock.Advance(time.Second)
 		if _, err := system.orchestrator.RenewDirector(ctx, system.ownerAccess, application.RenewDirectorRequest{
 			RequestRef: "director-renew:binding", GoalRef: system.goal.Goal.Ref(),
@@ -657,13 +635,9 @@ func seedSQLiteDirectorDecision(t *testing.T) (*sqliteDirectorSystem, applicatio
 	claim, err := system.orchestrator.ClaimDirector(ctx, system.ownerAccess, application.ClaimDirectorRequest{
 		RequestRef: "director-claim:tamper", GoalRef: system.goal.Goal.Ref(),
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	current, err := system.repository.GetGoal(ctx, system.goal.Goal.Ref())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	decision, err := system.orchestrator.ProposeDirectorPlan(ctx, system.ownerAccess, application.ProposeDirectorPlanRequest{
 		RequestRef: "director-plan:tamper", GoalRef: current.Goal.Ref(),
 		ExpectedGoalRevision: current.Goal.Revision(), ExpectedPlanGeneration: current.Goal.PlanGeneration(),
@@ -686,13 +660,9 @@ func TestRepositoryV14DirectorSplitReplanSurvivesRestart(t *testing.T) {
 	claim, err := system.orchestrator.ClaimDirector(ctx, system.ownerAccess, application.ClaimDirectorRequest{
 		RequestRef: "director-claim:v14-split", GoalRef: system.goal.Goal.Ref(),
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	current, err := system.repository.GetGoal(ctx, system.goal.Goal.Ref())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	source := current.Goal.WorkItems()[0]
 	if len(current.Executions) != 1 || current.Executions[0].State != application.ExecutionQueued {
 		t.Fatalf("split source projection=%+v", current.Executions)
@@ -717,9 +687,7 @@ func TestRepositoryV14DirectorSplitReplanSurvivesRestart(t *testing.T) {
 
 	restarted := reopenSQLiteDirectorSystem(t, system)
 	persisted, err := restarted.repository.GetGoal(ctx, current.Goal.Ref())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	persistedSource, _ := persisted.Goal.WorkItem(source.Ref())
 	if persistedSource.State() != goal.WorkItemStateSuperseded || len(persisted.Goal.WorkItems()) != 2 {
 		t.Fatalf("restart source/items=%s/%d", persistedSource.State(), len(persisted.Goal.WorkItems()))
@@ -771,13 +739,9 @@ func newSQLiteDirectorSystem(t *testing.T) *sqliteDirectorSystem {
 	provisionTestAccess(t, repository, owner, project, identity.RoleProjectOwner, clock.Now())
 	grantTestMembership(t, repository, owner, service, project, identity.RoleOperator, "membership:v12-service", clock.Now())
 	ownerAccess, err := application.NewAccess(owner, project)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	serviceAccess, err := application.NewAccess(service, project)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	orchestrator := newSQLiteDirectorOrchestrator(t, repository, clock, ids)
 	submitted, err := orchestrator.Submit(context.Background(), ownerAccess, application.SubmitRequest{
 		RequestRef: "request:v12-goal", Statement: "coordinate transferable goal", Confirm: true,
@@ -809,9 +773,7 @@ func newSQLiteDirectorOrchestrator(
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 		AgentCapabilities: sqliteTestCapabilities(),
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	return orchestrator
 }
 
@@ -823,9 +785,7 @@ func reopenSQLiteDirectorSystem(t *testing.T, source *sqliteDirectorSystem) *sql
 	repository, err := Open(context.Background(), Options{
 		Path: source.path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 8, Now: source.clock.Now,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	t.Cleanup(func() { _ = repository.Close() })
 	restarted := *source
 	restarted.repository = repository
@@ -865,9 +825,7 @@ func sqliteDirectorPersistentCounts(t *testing.T, repository *Repository) [6]int
 func sqliteTableColumns(t *testing.T, repository *Repository, table string) map[string]bool {
 	t.Helper()
 	rows, err := repository.db.Query(`PRAGMA table_info(` + table + `)`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	defer rows.Close()
 	result := make(map[string]bool)
 	for rows.Next() {

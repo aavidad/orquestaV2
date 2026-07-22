@@ -10,6 +10,64 @@ import (
 	"orquesta/internal/identity"
 )
 
+func (orchestrator *Orchestrator) actionCallContext(parent context.Context, claim ActionClaim) (context.Context, context.CancelFunc) {
+	remaining := claim.LeaseUntil.Sub(orchestrator.clock.Now().UTC())
+	if remaining <= 0 {
+		ctx, cancel := context.WithCancel(parent)
+		cancel()
+		return ctx, func() {}
+	}
+	return context.WithTimeout(parent, remaining)
+}
+
+const effectUnknownAppliedCode = "application.effect_unknown_applied"
+
+// priorEffectAttemptBlocksDispatch reports whether a causal physical attempt
+// prevents repeating the same action and intent. A terminal receipt confirms
+// the effect, while only one exact causal zero-release proves it was unapplied.
+// A later claim fence is recovery authority, never replay authority.
+func priorEffectAttemptBlocksDispatch(record GoalRecord, action ActionRecord) bool {
+	for _, attempt := range record.EffectAttempts {
+		if attempt.ActionRef != action.Ref || attempt.IntentRef != action.EffectIntentRef {
+			continue
+		}
+		if effectAttemptHasReceipt(record.EffectReceipts, attempt) {
+			return true
+		}
+		if !effectAttemptDefinitelyUnapplied(record, attempt) {
+			return true
+		}
+	}
+	return false
+}
+
+func effectAttemptHasReceipt(receipts []EffectReceipt, attempt EffectAttempt) bool {
+	for _, receipt := range receipts {
+		if receipt.AttemptRef == attempt.Ref && receipt.ActionRef == attempt.ActionRef &&
+			receipt.IntentRef == attempt.IntentRef && receipt.ActionFence == attempt.ActionFence {
+			return true
+		}
+	}
+	return false
+}
+
+func effectAttemptDefinitelyUnapplied(record GoalRecord, attempt EffectAttempt) bool {
+	matches := 0
+	for _, settlement := range record.BudgetSettlements {
+		if settlement.CausalAttemptRef != attempt.Ref {
+			continue
+		}
+		reservation, found := reservationByRef(record.BudgetReservations, settlement.ReservationRef)
+		if !found || reservation.ActionRef != attempt.ActionRef || reservation.EffectIntentRef != attempt.IntentRef ||
+			reservation.Fence > attempt.ActionFence || settlement.Reserved != reservation.Resources ||
+			!governance.IsExactZeroRelease(settlement) {
+			return false
+		}
+		matches++
+	}
+	return matches == 1
+}
+
 func validateClaimedEffect(claim ActionClaim, at time.Time) error {
 	if !actionUsesEffectLedger(claim.Action.Kind) {
 		return nil
@@ -52,9 +110,9 @@ func (orchestrator *Orchestrator) beginEffectAttempt(
 	ctx context.Context,
 	claim ActionClaim,
 	at time.Time,
-) (EffectAttempt, error) {
+) (EffectAttempt, bool, error) {
 	if err := validateClaimedEffect(claim, at); err != nil {
-		return EffectAttempt{}, err
+		return EffectAttempt{}, false, err
 	}
 	intent, approval := claim.Action.EffectIntent, claim.EffectApproval
 	attempt := EffectAttempt{
@@ -63,16 +121,31 @@ func (orchestrator *Orchestrator) beginEffectAttempt(
 		Subject: intent.Subject, ActionRef: claim.Action.Ref, ActionFence: claim.Fence,
 		WorkerRef: claim.WorkerRef, IdempotencyKey: intent.IdempotencyKey, StartedAt: at.UTC(),
 	}
-	persisted, _, err := orchestrator.state.RecordEffectAttempt(ctx, RecordEffectAttemptState{
+	persisted, created, err := orchestrator.state.RecordEffectAttempt(ctx, RecordEffectAttemptState{
 		Claim: claim, Attempt: attempt, OperationAt: at.UTC(),
 	})
 	if err != nil {
-		return EffectAttempt{}, err
+		return EffectAttempt{}, false, err
 	}
 	if err := validateEffectAttempt(claim, persisted); err != nil {
-		return EffectAttempt{}, err
+		return EffectAttempt{}, false, err
 	}
-	return persisted, nil
+	return persisted, created, nil
+}
+
+// beginNewEffectAttempt is the sole gate to a physical effect. An ambiguous,
+// malformed, or pre-existing persistence result cannot authorize an adapter
+// call and is quarantined as potentially applied.
+func (orchestrator *Orchestrator) beginNewEffectAttempt(
+	ctx context.Context,
+	claim ActionClaim,
+	at time.Time,
+) (EffectAttempt, error) {
+	attempt, created, err := orchestrator.beginEffectAttempt(ctx, claim, at)
+	if err != nil || !created {
+		return EffectAttempt{}, orchestrator.quarantineUnknownApplied(ctx, claim)
+	}
+	return attempt, nil
 }
 
 func (orchestrator *Orchestrator) validateCurrentAutomaticAuthority(
@@ -123,7 +196,9 @@ func (orchestrator *Orchestrator) validateCurrentEffectMembership(
 
 func validateEffectAttempt(claim ActionClaim, attempt EffectAttempt) error {
 	intent := claim.Action.EffectIntent
-	if !validApplicationRef(attempt.Ref) || attempt.IntentRef != intent.Ref || attempt.IntentDigest != intent.Digest ||
+	wantRef := "effect-attempt:" + claim.Action.Ref + ":" + claim.Token
+	if attempt.Ref != wantRef || !validApplicationRef(attempt.Ref) ||
+		attempt.IntentRef != intent.Ref || attempt.IntentDigest != intent.Digest ||
 		attempt.ApprovalRef != claim.EffectApproval.Ref || attempt.Subject != intent.Subject ||
 		attempt.ActionRef != claim.Action.Ref || attempt.ActionFence != claim.Fence ||
 		attempt.WorkerRef != claim.WorkerRef || attempt.IdempotencyKey != intent.IdempotencyKey ||
@@ -179,6 +254,8 @@ func validEffectStatus(kind EffectKind, status EffectStatus) bool {
 		return status == EffectStatusPrepared
 	case EffectKindCommitChange:
 		return status == EffectStatusCommitted
+	case EffectKindAttestTest:
+		return status == EffectStatusAttestedPassed || status == EffectStatusAttestedFailed
 	case EffectKindIntegrateChange:
 		return status == EffectStatusIntegrated || status == EffectStatusConflicted || status == EffectStatusStale
 	default:
@@ -188,7 +265,7 @@ func validEffectStatus(kind EffectKind, status EffectStatus) bool {
 
 func actionUsesEffectLedger(kind ActionKind) bool {
 	switch kind {
-	case ActionLaunchAgent, ActionStopAgent, ActionPrepareWorkspace, ActionCommitChange, ActionIntegrateChange:
+	case ActionLaunchAgent, ActionStopAgent, ActionPrepareWorkspace, ActionCommitChange, ActionAttestTest, ActionIntegrateChange:
 		return true
 	default:
 		return false
@@ -236,6 +313,22 @@ func releaseSettlement(claim ActionClaim, at time.Time) (governance.BudgetSettle
 	return *settlement, nil
 }
 
+func releaseSettlementForAttempt(
+	claim ActionClaim,
+	attemptRef string,
+	at time.Time,
+) (governance.BudgetSettlement, error) {
+	settlement, err := releaseSettlement(claim, at)
+	if err != nil {
+		return governance.BudgetSettlement{}, err
+	}
+	settlement.CausalAttemptRef = attemptRef
+	if err := governance.ValidateBudgetSettlement(settlement); err != nil {
+		return governance.BudgetSettlement{}, err
+	}
+	return settlement, nil
+}
+
 func settlementForExecutionAttempt(
 	record GoalRecord,
 	claim ActionClaim,
@@ -246,7 +339,9 @@ func settlementForExecutionAttempt(
 	definitelyUnapplied bool,
 ) (*governance.BudgetSettlement, error) {
 	if definitelyUnapplied {
-		settlement, err := releaseSettlement(claim, at)
+		settlement, err := releaseSettlementForAttempt(
+			claim, "effect-attempt:"+claim.Action.Ref+":"+claim.Token, at,
+		)
 		return &settlement, err
 	}
 	return settlementFor(record, execution, usage, diskBytes, at)

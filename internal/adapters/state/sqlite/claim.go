@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"orquesta/internal/application"
@@ -23,6 +24,31 @@ type claimCandidate struct {
 	agentRef          string
 	executionState    application.ExecutionState
 	deliveryAttempt   int64
+	order             claimCandidateOrder
+}
+
+type claimCandidateOrder struct {
+	kind, project, goal, availableAt int64
+	ref                              string
+}
+
+type claimRequirementKey struct {
+	goalRef, workItemRef string
+}
+
+const claimCandidateWindowSize = 16
+
+type claimQueryObservation struct {
+	kind      string
+	itemCount int
+}
+
+type claimQueryObserverContextKey struct{}
+
+func observeClaimQuery(ctx context.Context, observation claimQueryObservation) {
+	if observer, ok := ctx.Value(claimQueryObserverContextKey{}).(func(claimQueryObservation)); ok {
+		observer(observation)
+	}
 }
 
 const (
@@ -49,27 +75,51 @@ func (repository *Repository) ClaimNextAction(
 	if err != nil {
 		return application.ActionClaim{}, false, err
 	}
-	leaseUntil, err := safeLeaseUntil(now, request.LeaseDuration)
-	if err != nil {
-		return application.ActionClaim{}, false, invalid(err)
-	}
-
 	if err := requireFreshClaimToken(ctx, transaction, request.Token); err != nil {
 		return application.ActionClaim{}, false, err
 	}
-	candidates, err := readClaimCandidates(ctx, transaction, now)
+	workspaceColumns, err := sqliteTableHasColumn(ctx, transaction, "outbox", "change_ref")
 	if err != nil {
-		return application.ActionClaim{}, false, err
+		return application.ActionClaim{}, false, mapDatabaseError(err)
 	}
-	selected, found, err := selectClaimCandidate(ctx, transaction, candidates, request.Capabilities, now)
-	if err != nil {
-		return application.ActionClaim{}, false, err
+	var selected claimSelection
+	var found bool
+	var after *claimCandidateOrder
+	for {
+		candidates, err := readClaimCandidateWindow(ctx, transaction, now, workspaceColumns, after)
+		if err != nil {
+			return application.ActionClaim{}, false, err
+		}
+		if len(candidates) == 0 {
+			break
+		}
+		requirements, err := readAgentRequirementsBatch(ctx, transaction, candidates)
+		if err != nil {
+			return application.ActionClaim{}, false, err
+		}
+		selected, found, err = selectClaimCandidate(ctx, transaction, candidates, requirements, request.Capabilities, now)
+		if err != nil {
+			return application.ActionClaim{}, false, err
+		}
+		if found || len(candidates) < claimCandidateWindowSize {
+			break
+		}
+		continuation := candidates[len(candidates)-1].order
+		after = &continuation
 	}
 	if !found {
 		if err := commit(transaction); err != nil {
 			return application.ActionClaim{}, false, err
 		}
 		return application.ActionClaim{}, false, nil
+	}
+	leaseDuration := request.LeaseDuration
+	if selected.candidate.action.Kind == application.ActionAttestTest && request.AttestTestLeaseDuration > 0 {
+		leaseDuration = request.AttestTestLeaseDuration
+	}
+	leaseUntil, err := safeLeaseUntil(now, leaseDuration)
+	if err != nil {
+		return application.ActionClaim{}, false, invalid(err)
 	}
 	claim, err := claimSelectedCandidate(ctx, transaction, request, selected, now, leaseUntil)
 	if err != nil {
@@ -80,7 +130,6 @@ func (repository *Repository) ClaimNextAction(
 	}
 	return claim, true, nil
 }
-
 func validateClaimRequest(request application.ClaimRequest) error {
 	if !validText(request.WorkerRef) || !validText(request.Token) {
 		return invalid(errors.New("sqlite.claim_identity_invalid"))
@@ -89,6 +138,9 @@ func validateClaimRequest(request application.ClaimRequest) error {
 		return invalid(err)
 	}
 	if request.LeaseDuration <= 0 {
+		return invalid(errors.New("sqlite.claim_time_invalid"))
+	}
+	if request.AttestTestLeaseDuration < 0 {
 		return invalid(errors.New("sqlite.claim_time_invalid"))
 	}
 	if err := application.ValidateBudgetPolicy(request.BudgetPolicy); err != nil {
@@ -120,11 +172,12 @@ type claimSelection struct {
 
 func selectClaimCandidate(
 	ctx context.Context, tx *sql.Tx, candidates []claimCandidate,
+	requirements map[claimRequirementKey]ports.AgentRequirements,
 	capabilities ports.AgentCapabilities, now time.Time,
 ) (claimSelection, bool, error) {
 	for index := range candidates {
 		candidate := &candidates[index]
-		matches, err := claimCandidateMatches(ctx, tx, *candidate, capabilities)
+		matches, err := claimCandidateMatches(*candidate, requirements, capabilities)
 		if err != nil {
 			return claimSelection{}, false, err
 		}
@@ -151,18 +204,20 @@ func selectClaimCandidate(
 }
 
 func claimCandidateMatches(
-	ctx context.Context, tx *sql.Tx, candidate claimCandidate, capabilities ports.AgentCapabilities,
+	candidate claimCandidate, requirementsByCandidate map[claimRequirementKey]ports.AgentRequirements,
+	capabilities ports.AgentCapabilities,
 ) (bool, error) {
-	if candidate.action.Kind == application.ActionPrepareWorkspace || candidate.action.Kind == application.ActionCommitChange || candidate.action.Kind == application.ActionIntegrateChange {
+	if candidate.action.Kind == application.ActionPrepareWorkspace || candidate.action.Kind == application.ActionCommitChange ||
+		candidate.action.Kind == application.ActionAttestTest || candidate.action.Kind == application.ActionIntegrateChange {
 		return true, nil
 	}
 	// Terminal stops settle locally; no provider identity is needed.
 	if terminalStopSettlement(candidate) {
 		return true, nil
 	}
-	requirements, err := readAgentRequirements(ctx, tx, candidate)
-	if err != nil {
-		return false, err
+	requirements, ok := requirementsByCandidate[requirementKey(candidate)]
+	if !ok {
+		return false, invalid(errors.New("sqlite.claim_requirements_missing"))
 	}
 	if !ports.MatchAgentCapabilities(capabilities, requirements) {
 		return false, nil
@@ -185,7 +240,8 @@ func admitClaimEffect(
 		return application.EffectApproval{}, err == nil, err
 	}
 	if candidate.action.Kind != application.ActionLaunchAgent && candidate.action.Kind != application.ActionStopAgent &&
-		candidate.action.Kind != application.ActionPrepareWorkspace && candidate.action.Kind != application.ActionCommitChange && candidate.action.Kind != application.ActionIntegrateChange {
+		candidate.action.Kind != application.ActionPrepareWorkspace && candidate.action.Kind != application.ActionCommitChange &&
+		candidate.action.Kind != application.ActionAttestTest && candidate.action.Kind != application.ActionIntegrateChange {
 		return application.EffectApproval{}, true, nil
 	}
 	intent, approval, admitted, err := requireEffectAdmission(ctx, tx, *candidate, now)
@@ -315,7 +371,10 @@ SELECT o.ref, o.kind, o.goal_ref, o.work_item_ref, o.execution_ref,
        o.control_ref, %s, o.effect_intent_ref, o.governance_version,
        o.plan_generation, o.work_item_generation, o.available_at, g.project_ref,
        o.delivery_attempt, wi.role_key, e.state,
-       e.provider_ref, e.model_ref, e.agent_ref
+	   e.provider_ref, e.model_ref, e.agent_ref,
+       CASE o.kind WHEN 'stop_agent' THEN 0 WHEN 'prepare_workspace' THEN 1 WHEN 'launch_agent' THEN 2 WHEN 'commit_change' THEN 3 WHEN 'attest_test' THEN 4 WHEN 'integrate_change' THEN 5 WHEN 'observe_agent' THEN 6 ELSE 7 END,
+       CASE WHEN o.kind = 'launch_agent' THEN COALESCE(project_cursor.ordinal, 0) ELSE 0 END,
+       CASE WHEN o.kind = 'launch_agent' THEN COALESCE(goal_cursor.ordinal, 0) ELSE 0 END
 FROM outbox o
 JOIN work_items wi ON wi.goal_ref = o.goal_ref AND wi.ref = o.work_item_ref
 JOIN goals g ON g.ref = o.goal_ref
@@ -328,7 +387,7 @@ LEFT JOIN fairness_cursors goal_cursor
 WHERE o.completed_at IS NULL
   AND o.retired_at IS NULL
   AND o.quarantined_at IS NULL
-  AND o.kind IN ('launch_agent', 'observe_agent', 'stop_agent', 'prepare_workspace', 'commit_change', 'integrate_change')
+  AND o.kind IN ('launch_agent', 'observe_agent', 'stop_agent', 'prepare_workspace', 'commit_change', 'attest_test', 'integrate_change')
   AND (o.governance_version = 1 OR o.kind = 'observe_agent'
        OR (o.kind = 'stop_agent' AND e.state IN ('succeeded', 'failed', 'canceled', 'stopped'))
        OR (o.governance_version = 0 AND o.last_error_code <> 'governance.legacy_reauthorization_required'))
@@ -337,7 +396,7 @@ WHERE o.completed_at IS NULL
   AND NOT EXISTS (
       SELECT 1 FROM outbox leased
       WHERE leased.goal_ref = o.goal_ref AND leased.work_item_ref = o.work_item_ref
-        AND leased.kind IN ('launch_agent', 'observe_agent', 'stop_agent', 'prepare_workspace', 'commit_change', 'integrate_change')
+        AND leased.kind IN ('launch_agent', 'observe_agent', 'stop_agent', 'prepare_workspace', 'commit_change', 'attest_test', 'integrate_change')
         AND leased.ref <> o.ref AND leased.completed_at IS NULL
         AND leased.retired_at IS NULL AND leased.quarantined_at IS NULL
         AND leased.claim_token IS NOT NULL AND leased.claimed_until > ?
@@ -353,7 +412,15 @@ WHERE o.completed_at IS NULL
   ))
   AND (o.kind <> 'prepare_workspace' OR e.state = 'queued')
   AND (o.kind <> 'commit_change' OR e.state = 'awaiting_commit')
-  AND (o.kind <> 'integrate_change' OR e.state = 'awaiting_integration')
+  AND (o.kind <> 'attest_test' OR e.state = 'awaiting_attestation')
+  AND (o.kind <> 'integrate_change' OR (e.state = 'awaiting_integration' AND EXISTS (
+      SELECT 1 FROM attestations attestation
+      WHERE attestation.kind='required_tests' AND attestation.verdict='passed'
+       AND attestation.goal_ref=o.goal_ref AND attestation.work_item_ref=o.work_item_ref
+       AND attestation.execution_ref=o.execution_ref AND attestation.change_set_ref=o.change_ref
+       AND attestation.plan_generation=o.plan_generation
+       AND attestation.work_item_generation=o.work_item_generation
+  )))
   AND (o.kind <> 'observe_agent' OR NOT EXISTS (
       SELECT 1 FROM outbox stop
       WHERE stop.goal_ref = o.goal_ref AND stop.execution_ref = o.execution_ref
@@ -361,25 +428,42 @@ WHERE o.completed_at IS NULL
         AND stop.governance_version = 1
         AND stop.retired_at IS NULL AND stop.quarantined_at IS NULL
   ))
+  AND (? = 0 OR (
+      CASE o.kind WHEN 'stop_agent' THEN 0 WHEN 'prepare_workspace' THEN 1 WHEN 'launch_agent' THEN 2 WHEN 'commit_change' THEN 3 WHEN 'attest_test' THEN 4 WHEN 'integrate_change' THEN 5 WHEN 'observe_agent' THEN 6 ELSE 7 END,
+      CASE WHEN o.kind = 'launch_agent' THEN COALESCE(project_cursor.ordinal, 0) ELSE 0 END,
+      CASE WHEN o.kind = 'launch_agent' THEN COALESCE(goal_cursor.ordinal, 0) ELSE 0 END,
+      o.available_at,
+      o.ref
+  ) > (?, ?, ?, ?, ?))
 -- Stop is urgent. Governed launches use hierarchical round-robin before
 -- their FIFO tie-break; observations run after no launch fits admission.
-ORDER BY CASE o.kind WHEN 'stop_agent' THEN 0 WHEN 'prepare_workspace' THEN 1 WHEN 'launch_agent' THEN 2 WHEN 'commit_change' THEN 3 WHEN 'integrate_change' THEN 4 WHEN 'observe_agent' THEN 5 ELSE 6 END,
+ORDER BY CASE o.kind WHEN 'stop_agent' THEN 0 WHEN 'prepare_workspace' THEN 1 WHEN 'launch_agent' THEN 2 WHEN 'commit_change' THEN 3 WHEN 'attest_test' THEN 4 WHEN 'integrate_change' THEN 5 WHEN 'observe_agent' THEN 6 ELSE 7 END,
 	     CASE WHEN o.kind = 'launch_agent' THEN COALESCE(project_cursor.ordinal, 0) ELSE 0 END,
 	     CASE WHEN o.kind = 'launch_agent' THEN COALESCE(goal_cursor.ordinal, 0) ELSE 0 END,
 	     o.available_at,
-	     o.ref`
+	     o.ref
+LIMIT ?`
 
-func readClaimCandidates(ctx context.Context, transaction *sql.Tx, now time.Time) ([]claimCandidate, error) {
-	workspaceColumns, err := sqliteTableHasColumn(ctx, transaction, "outbox", "change_ref")
-	if err != nil {
-		return nil, mapDatabaseError(err)
-	}
+func readClaimCandidateWindow(
+	ctx context.Context,
+	transaction *sql.Tx,
+	now time.Time,
+	workspaceColumns bool,
+	after *claimCandidateOrder,
+) ([]claimCandidate, error) {
 	changeProjection := "'' AS change_ref, '' AS expected_target_oid"
 	if workspaceColumns {
 		changeProjection = "o.change_ref, o.expected_target_oid"
 	}
+	continuation, enabled := claimCandidateOrder{}, 0
+	if after != nil {
+		continuation, enabled = *after, 1
+	}
+	observeClaimQuery(ctx, claimQueryObservation{kind: "candidate_window", itemCount: claimCandidateWindowSize})
 	rows, err := transaction.QueryContext(ctx, fmt.Sprintf(claimCandidatesQuery, changeProjection),
-		requiredTime(now), requiredTime(now), requiredTime(now))
+		requiredTime(now), requiredTime(now), requiredTime(now), enabled,
+		continuation.kind, continuation.project, continuation.goal, continuation.availableAt, continuation.ref,
+		claimCandidateWindowSize)
 	if err != nil {
 		return nil, mapDatabaseError(err)
 	}
@@ -395,6 +479,7 @@ func readClaimCandidates(ctx context.Context, transaction *sql.Tx, now time.Time
 	if err := rows.Err(); err != nil {
 		return nil, mapDatabaseError(err)
 	}
+	observeClaimQuery(ctx, claimQueryObservation{kind: "candidate_result", itemCount: len(result)})
 	return result, nil
 }
 
@@ -408,7 +493,8 @@ func scanClaimCandidate(rows *sql.Rows) (claimCandidate, error) {
 		&controlRef, &changeRef, &expectedTarget, &effectIntentRef, &candidate.governanceVersion, &planGeneration,
 		&itemGeneration, &availableAt, &projectValue, &candidate.deliveryAttempt,
 		&candidate.roleKey, &candidate.executionState, &candidate.providerRef,
-		&candidate.modelRef, &candidate.agentRef)
+		&candidate.modelRef, &candidate.agentRef, &candidate.order.kind,
+		&candidate.order.project, &candidate.order.goal)
 	if err != nil {
 		return candidate, mapDatabaseError(err)
 	}
@@ -443,47 +529,89 @@ func scanClaimCandidate(rows *sql.Rows) (claimCandidate, error) {
 	candidate.action.PlanGeneration = goal.PlanGeneration(planGeneration)
 	candidate.action.WorkItemGeneration = goal.Revision(itemGeneration)
 	candidate.action.AvailableAt = time.Unix(0, availableAt).UTC()
+	candidate.order.availableAt = availableAt
+	candidate.order.ref = candidate.action.Ref
 	if err := validateAction(candidate.action); err != nil {
 		return candidate, invalid(err)
 	}
 	return candidate, nil
 }
 
-func readAgentRequirements(
+func readAgentRequirementsBatch(
 	ctx context.Context,
 	transaction *sql.Tx,
-	candidate claimCandidate,
-) (ports.AgentRequirements, error) {
-	requirements := ports.AgentRequirements{RoleKey: candidate.roleKey}
-	rows, err := transaction.QueryContext(ctx, `
-SELECT kind, value
-FROM work_item_requirement_refs
-WHERE goal_ref = ? AND work_item_ref = ?
-ORDER BY kind, position`, candidate.action.GoalRef.String(), candidate.action.WorkItemRef.String())
+	candidates []claimCandidate,
+) (map[claimRequirementKey]ports.AgentRequirements, error) {
+	requirements := make(map[claimRequirementKey]ports.AgentRequirements, len(candidates))
+	keys := make([]claimRequirementKey, 0, len(candidates))
+	args := make([]any, 0, len(candidates)*2)
+	for _, candidate := range candidates {
+		if !candidateNeedsAgentRequirements(candidate) {
+			continue
+		}
+		key := requirementKey(candidate)
+		if _, exists := requirements[key]; exists {
+			continue
+		}
+		requirements[key] = ports.AgentRequirements{RoleKey: candidate.roleKey}
+		keys = append(keys, key)
+		args = append(args, key.goalRef, key.workItemRef)
+	}
+	if len(keys) == 0 {
+		return requirements, nil
+	}
+	values := strings.TrimSuffix(strings.Repeat("(?, ?),", len(keys)), ",")
+	query := `WITH requested(goal_ref, work_item_ref) AS (VALUES ` + values + `)
+SELECT refs.goal_ref, refs.work_item_ref, refs.kind, refs.value
+FROM requested
+JOIN work_item_requirement_refs refs
+  ON refs.goal_ref = requested.goal_ref AND refs.work_item_ref = requested.work_item_ref
+ORDER BY refs.goal_ref, refs.work_item_ref, refs.kind, refs.position`
+	observeClaimQuery(ctx, claimQueryObservation{kind: "requirements_batch", itemCount: len(keys)})
+	rows, err := transaction.QueryContext(ctx, query, args...)
 	if err != nil {
-		return ports.AgentRequirements{}, mapDatabaseError(err)
+		return nil, mapDatabaseError(err)
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var kind, value string
-		if err := rows.Scan(&kind, &value); err != nil {
-			return ports.AgentRequirements{}, mapDatabaseError(err)
+		var goalRef, workItemRef, kind, value string
+		if err := rows.Scan(&goalRef, &workItemRef, &kind, &value); err != nil {
+			return nil, mapDatabaseError(err)
 		}
+		key := claimRequirementKey{goalRef: goalRef, workItemRef: workItemRef}
+		item := requirements[key]
 		switch kind {
 		case "skill":
-			requirements.SkillRefs = append(requirements.SkillRefs, value)
+			item.SkillRefs = append(item.SkillRefs, value)
 		case "tool":
-			requirements.ToolRefs = append(requirements.ToolRefs, value)
+			item.ToolRefs = append(item.ToolRefs, value)
 		case "capability":
-			requirements.CapabilityRefs = append(requirements.CapabilityRefs, value)
+			item.CapabilityRefs = append(item.CapabilityRefs, value)
 		default:
-			return ports.AgentRequirements{}, invalid(errors.New("sqlite.requirement_kind_invalid"))
+			return nil, invalid(errors.New("sqlite.requirement_kind_invalid"))
 		}
+		requirements[key] = item
 	}
 	if err := rows.Err(); err != nil {
-		return ports.AgentRequirements{}, mapDatabaseError(err)
+		return nil, mapDatabaseError(err)
 	}
 	return requirements, nil
+}
+
+func candidateNeedsAgentRequirements(candidate claimCandidate) bool {
+	switch candidate.action.Kind {
+	case application.ActionPrepareWorkspace, application.ActionCommitChange,
+		application.ActionAttestTest, application.ActionIntegrateChange:
+		return false
+	default:
+		return !terminalStopSettlement(candidate)
+	}
+}
+
+func requirementKey(candidate claimCandidate) claimRequirementKey {
+	return claimRequirementKey{
+		goalRef: candidate.action.GoalRef.String(), workItemRef: candidate.action.WorkItemRef.String(),
+	}
 }
 
 func requireClaim(ctx context.Context, transaction *sql.Tx, claim application.ActionClaim) error {

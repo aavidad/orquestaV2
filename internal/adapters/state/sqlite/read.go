@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"orquesta/internal/application"
@@ -533,6 +534,9 @@ func readWorkItemRelations(
 		item.WriteSet, err = readContractRefs(ctx, source,
 			`SELECT scope FROM work_item_write_scopes WHERE work_item_ref = ? ORDER BY position`, item.Ref)
 	}
+	if err == nil {
+		item.RequiredTests, err = readRequiredTestSpecs(ctx, source, goalValue, item.Ref)
+	}
 	requirements := []struct {
 		kind   string
 		target *[]string
@@ -868,11 +872,21 @@ func readArtifacts(
 	source queryer,
 	goalValue string,
 ) ([]application.ArtifactRecord, map[string][]string, error) {
-	rows, err := source.QueryContext(ctx, `
-SELECT ref, goal_ref, work_item_ref, digest, media_type, size, created_at
-FROM artifacts
-WHERE goal_ref = ?
-ORDER BY created_at, ref`, goalValue)
+	persisted, err := sqliteTableHasColumn(ctx, source, "artifact_occurrences", "occurrence_ref")
+	if err != nil {
+		return nil, nil, mapDatabaseError(err)
+	}
+	query := `SELECT occurrence.occurrence_ref,occurrence.kind,artifact.ref,occurrence.goal_ref,
+       occurrence.work_item_ref,occurrence.execution_ref,occurrence.execution_attempt,
+       occurrence.plan_generation,occurrence.work_item_generation,occurrence.app_spec_generation,
+       occurrence.spec_hash,artifact.digest,artifact.media_type,artifact.size,occurrence.created_at
+FROM artifact_occurrences occurrence JOIN artifacts artifact
+ ON artifact.goal_ref=occurrence.goal_ref AND artifact.ref=occurrence.artifact_ref
+WHERE occurrence.goal_ref=? ORDER BY occurrence.created_at,occurrence.occurrence_ref`
+	if !persisted {
+		query = `SELECT 'artifact-occurrence:migrated-v16:'||ref,'agent_output',ref,goal_ref,work_item_ref,'',0,0,0,0,'',digest,media_type,size,created_at FROM artifacts WHERE goal_ref=? ORDER BY created_at,ref`
+	}
+	rows, err := source.QueryContext(ctx, query, goalValue)
 	if err != nil {
 		return nil, nil, mapDatabaseError(err)
 	}
@@ -881,12 +895,11 @@ ORDER BY created_at, ref`, goalValue)
 	refs := make(map[string][]string)
 	for rows.Next() {
 		var record application.ArtifactRecord
-		var refValue, goalRefValue, workItemRefValue string
-		var createdAt int64
+		var refValue, goalRefValue, workItemRefValue, executionRefValue, kind string
+		var createdAt, executionAttempt, planGeneration, itemGeneration, appGeneration int64
 		if err := rows.Scan(
-			&refValue,
-			&goalRefValue,
-			&workItemRefValue,
+			&record.OccurrenceRef, &kind, &refValue, &goalRefValue, &workItemRefValue, &executionRefValue,
+			&executionAttempt, &planGeneration, &itemGeneration, &appGeneration, &record.SpecHash,
 			&record.Stored.Digest,
 			&record.Stored.MediaType,
 			&record.Stored.Size,
@@ -904,8 +917,24 @@ ORDER BY created_at, ref`, goalValue)
 		if record.WorkItemRef, refErr = goal.NewWorkItemRef(workItemRefValue); refErr != nil {
 			return nil, nil, invalid(refErr)
 		}
+		if persisted {
+			if record.ExecutionRef, refErr = goal.NewExecutionRef(executionRefValue); refErr != nil {
+				return nil, nil, invalid(refErr)
+			}
+		}
+		if persisted && (executionAttempt <= 0 || planGeneration <= 0 || itemGeneration <= 0 || appGeneration <= 0) {
+			return nil, nil, invalid(errors.New("sqlite.artifact_occurrence_generation_invalid"))
+		}
+		record.Kind = application.ArtifactKind(kind)
+		record.ExecutionAttempt = uint64(executionAttempt)
+		record.PlanGeneration = goal.PlanGeneration(planGeneration)
+		record.WorkItemGeneration = goal.Revision(itemGeneration)
+		record.AppSpecGeneration = goal.AppSpecGeneration(appGeneration)
 		record.CreatedAt = time.Unix(0, createdAt).UTC()
-		refs[workItemRefValue] = append(refs[workItemRefValue], refValue)
+		if record.Kind == application.ArtifactKindAgentOutput &&
+			!slices.Contains(refs[workItemRefValue], refValue) {
+			refs[workItemRefValue] = append(refs[workItemRefValue], refValue)
+		}
 		result = append(result, record)
 	}
 	if err := rows.Err(); err != nil {
@@ -919,54 +948,89 @@ func readAttestations(
 	source queryer,
 	goalValue string,
 ) ([]application.AttestationRecord, map[string][]string, error) {
-	rows, err := source.QueryContext(ctx, `
-SELECT ref, goal_ref, work_item_ref, execution_ref, artifact_ref, policy, accepted_at
-FROM attestations
-WHERE goal_ref = ?
-ORDER BY accepted_at, ref`, goalValue)
+	typed, err := sqliteTableHasColumn(ctx, source, "attestations", "kind")
 	if err != nil {
 		return nil, nil, mapDatabaseError(err)
 	}
-	defer rows.Close()
+	query := `SELECT ref,kind,verdict,goal_ref,work_item_ref,execution_ref,execution_attempt,
+       plan_generation,work_item_generation,app_spec_generation,spec_hash,artifact_ref,
+       subject_digest,workspace_binding_digest,change_set_ref,change_set_digest,
+       manifest_artifact_ref,report_artifact_ref,attestor_ref,receipt_ref,policy_ref,
+       required_tests_digest,policy_digest,effect_intent_ref,effect_attempt_ref,effect_fence,
+       effect_receipt_ref,started_at,finished_at,policy,accepted_at
+FROM attestations WHERE goal_ref=? ORDER BY accepted_at,ref`
+	if !typed {
+		query = `SELECT ref,'artifact_provenance','observed',goal_ref,work_item_ref,execution_ref,0,0,0,0,'',artifact_ref,'','',NULL,'',NULL,NULL,'','',policy,'','',NULL,NULL,0,NULL,accepted_at,accepted_at,policy,accepted_at FROM attestations WHERE goal_ref=? ORDER BY accepted_at,ref`
+	}
+	rows, err := source.QueryContext(ctx, query, goalValue)
+	if err != nil {
+		return nil, nil, mapDatabaseError(err)
+	}
 	var result []application.AttestationRecord
 	refs := make(map[string][]string)
 	for rows.Next() {
-		var record application.AttestationRecord
-		var refValue, goalRefValue, workItemRefValue, executionRefValue, artifactRefValue string
-		var acceptedAt int64
-		if err := rows.Scan(
-			&refValue,
-			&goalRefValue,
-			&workItemRefValue,
-			&executionRefValue,
-			&artifactRefValue,
-			&record.Policy,
-			&acceptedAt,
-		); err != nil {
-			return nil, nil, mapDatabaseError(err)
+		record, workItemRefValue, scanErr := scanAttestation(rows)
+		if scanErr != nil {
+			_ = rows.Close()
+			return nil, nil, scanErr
 		}
-		var refErr error
-		if record.Ref, refErr = goal.NewAttestationRef(refValue); refErr != nil {
-			return nil, nil, invalid(refErr)
-		}
-		if record.GoalRef, refErr = goal.NewGoalRef(goalRefValue); refErr != nil {
-			return nil, nil, invalid(refErr)
-		}
-		if record.WorkItemRef, refErr = goal.NewWorkItemRef(workItemRefValue); refErr != nil {
-			return nil, nil, invalid(refErr)
-		}
-		if record.ExecutionRef, refErr = goal.NewExecutionRef(executionRefValue); refErr != nil {
-			return nil, nil, invalid(refErr)
-		}
-		if record.ArtifactRef, refErr = goal.NewArtifactRef(artifactRefValue); refErr != nil {
-			return nil, nil, invalid(refErr)
-		}
-		record.AcceptedAt = time.Unix(0, acceptedAt).UTC()
-		refs[workItemRefValue] = append(refs[workItemRefValue], refValue)
+		refs[workItemRefValue] = append(refs[workItemRefValue], record.Ref.String())
 		result = append(result, record)
 	}
 	if err := rows.Err(); err != nil {
+		_ = rows.Close()
 		return nil, nil, mapDatabaseError(err)
 	}
+	if err := rows.Close(); err != nil {
+		return nil, nil, mapDatabaseError(err)
+	}
+	for index := range result {
+		result[index].Tests, err = readAttestationOutcomes(ctx, source, result[index].Ref.String())
+		if err != nil {
+			return nil, nil, err
+		}
+	}
 	return result, refs, nil
+}
+
+func scanAttestation(row interface{ Scan(...any) error }) (application.AttestationRecord, string, error) {
+	var record application.AttestationRecord
+	var refValue, goalValue, itemValue, executionValue, artifactValue, kind, verdict string
+	var changeRef, manifestRef, reportRef, effectIntent, effectAttempt, effectReceipt sql.NullString
+	var acceptedAt, startedAt, finishedAt, attempt, plan, itemGeneration, appGeneration, effectFence int64
+	if err := row.Scan(&refValue, &kind, &verdict, &goalValue, &itemValue, &executionValue, &attempt, &plan, &itemGeneration, &appGeneration, &record.SpecHash, &artifactValue, &record.SubjectDigest, &record.WorkspaceBindingDigest, &changeRef, &record.ChangeSetDigest, &manifestRef, &reportRef, &record.AttestorRef, &record.ReceiptRef, &record.PolicyRef, &record.RequiredTestsDigest, &record.PolicyDigest, &effectIntent, &effectAttempt, &effectFence, &effectReceipt, &startedAt, &finishedAt, &record.Policy, &acceptedAt); err != nil {
+		return record, "", mapDatabaseError(err)
+	}
+	var err error
+	if record.Ref, err = goal.NewAttestationRef(refValue); err == nil {
+		record.GoalRef, err = goal.NewGoalRef(goalValue)
+	}
+	if err == nil {
+		record.WorkItemRef, err = goal.NewWorkItemRef(itemValue)
+	}
+	if err == nil {
+		record.ExecutionRef, err = goal.NewExecutionRef(executionValue)
+	}
+	if err == nil {
+		record.ArtifactRef, err = goal.NewArtifactRef(artifactValue)
+	}
+	if err == nil && changeRef.Valid {
+		record.ChangeSetRef, err = ports.NewChangeSetRef(changeRef.String)
+	}
+	if err == nil && manifestRef.Valid {
+		record.ManifestArtifactRef, err = goal.NewArtifactRef(manifestRef.String)
+	}
+	if err == nil && reportRef.Valid {
+		record.ReportArtifactRef, err = goal.NewArtifactRef(reportRef.String)
+	}
+	if err != nil {
+		return record, "", invalid(err)
+	}
+	record.Kind, record.Verdict = application.AttestationKind(kind), application.AttestationVerdict(verdict)
+	record.ExecutionAttempt, record.PlanGeneration = uint64(attempt), goal.PlanGeneration(plan)
+	record.WorkItemGeneration, record.AppSpecGeneration = goal.Revision(itemGeneration), goal.AppSpecGeneration(appGeneration)
+	record.EffectIntentRef, record.EffectAttemptRef, record.EffectReceiptRef = effectIntent.String, effectAttempt.String, effectReceipt.String
+	record.EffectFence = uint64(effectFence)
+	record.StartedAt, record.FinishedAt, record.AcceptedAt = time.Unix(0, startedAt).UTC(), time.Unix(0, finishedAt).UTC(), time.Unix(0, acceptedAt).UTC()
+	return record, itemValue, nil
 }

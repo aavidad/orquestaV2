@@ -34,7 +34,7 @@ func readBudgetReservationsForGoal(ctx context.Context, source queryer, goalRef 
 
 func readBudgetSettlementsForGoal(ctx context.Context, source queryer, goalRef string) ([]governance.BudgetSettlement, error) {
 	rows, err := source.QueryContext(ctx, `
-SELECT settlement.ref,settlement.reservation_ref,reserved_tokens,reserved_money_micros,reserved_currency,reserved_active_time_ns,reserved_process_slots,reserved_disk_bytes,
+SELECT settlement.ref,settlement.reservation_ref,COALESCE(settlement.causal_attempt_ref,''),reserved_tokens,reserved_money_micros,reserved_currency,reserved_active_time_ns,reserved_process_slots,reserved_disk_bytes,
  observed_tokens,observed_money_micros,observed_currency,observed_active_time_ns,observed_process_slots,observed_disk_bytes,observed_known,observed_quality,
  charged_tokens,charged_money_micros,charged_currency,charged_active_time_ns,charged_process_slots,charged_disk_bytes,
  released_tokens,released_money_micros,released_currency,released_active_time_ns,released_process_slots,released_disk_bytes,
@@ -50,7 +50,7 @@ WHERE reservation.goal_ref=? ORDER BY settled_at,settlement.ref`, goalRef)
 		var v governance.BudgetSettlement
 		var rc, oc, cc, lc, xc string
 		var known, at int64
-		if err := rows.Scan(&v.Ref, &v.ReservationRef, &v.Reserved.Tokens, &v.Reserved.MoneyMicros, &rc, &v.Reserved.ActiveTimeNS, &v.Reserved.ProcessSlots, &v.Reserved.DiskBytes, &v.Observed.Resources.Tokens, &v.Observed.Resources.MoneyMicros, &oc, &v.Observed.Resources.ActiveTimeNS, &v.Observed.Resources.ProcessSlots, &v.Observed.Resources.DiskBytes, &known, &v.Observed.Quality, &v.Charged.Tokens, &v.Charged.MoneyMicros, &cc, &v.Charged.ActiveTimeNS, &v.Charged.ProcessSlots, &v.Charged.DiskBytes, &v.Released.Tokens, &v.Released.MoneyMicros, &lc, &v.Released.ActiveTimeNS, &v.Released.ProcessSlots, &v.Released.DiskBytes, &v.Overrun.Tokens, &v.Overrun.MoneyMicros, &xc, &v.Overrun.ActiveTimeNS, &v.Overrun.ProcessSlots, &v.Overrun.DiskBytes, &at); err != nil {
+		if err := rows.Scan(&v.Ref, &v.ReservationRef, &v.CausalAttemptRef, &v.Reserved.Tokens, &v.Reserved.MoneyMicros, &rc, &v.Reserved.ActiveTimeNS, &v.Reserved.ProcessSlots, &v.Reserved.DiskBytes, &v.Observed.Resources.Tokens, &v.Observed.Resources.MoneyMicros, &oc, &v.Observed.Resources.ActiveTimeNS, &v.Observed.Resources.ProcessSlots, &v.Observed.Resources.DiskBytes, &known, &v.Observed.Quality, &v.Charged.Tokens, &v.Charged.MoneyMicros, &cc, &v.Charged.ActiveTimeNS, &v.Charged.ProcessSlots, &v.Charged.DiskBytes, &v.Released.Tokens, &v.Released.MoneyMicros, &lc, &v.Released.ActiveTimeNS, &v.Released.ProcessSlots, &v.Released.DiskBytes, &v.Overrun.Tokens, &v.Overrun.MoneyMicros, &xc, &v.Overrun.ActiveTimeNS, &v.Overrun.ProcessSlots, &v.Overrun.DiskBytes, &at); err != nil {
 			return nil, mapDatabaseError(err)
 		}
 		v.Reserved.Currency = governance.Currency(rc)

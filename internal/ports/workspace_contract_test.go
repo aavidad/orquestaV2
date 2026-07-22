@@ -81,6 +81,29 @@ func TestVersionControlContractsRejectChangedPathOutsideWriteSet(t *testing.T) {
 	}
 }
 
+func TestSnapshotVerificationContractBindsSubjectDigestAndScope(t *testing.T) {
+	attestation := validTestAttestationRequest(t)
+	attestation.Subject.WriteSetDigest = WorkspaceWriteSetDigest([]string{"internal/ports"})
+	request := SnapshotVerificationRequest{
+		Subject: attestation.Subject, ChangedPaths: []string{"internal/ports/version_control.go"},
+		WriteSet: []string{"internal/ports"},
+	}
+	request.SubjectDigest = TestSubjectDigest(request.Subject)
+	if err := ValidateSnapshotVerificationRequest(request); err != nil {
+		t.Fatalf("valid snapshot request: %v", err)
+	}
+	drifted := request
+	drifted.Subject.PolicyDigest = workspaceTestHash()
+	if code := VersionControlContractErrorCode(ValidateSnapshotVerificationRequest(drifted)); code != "version_control.snapshot_subject_mismatch" {
+		t.Fatalf("subject drift code=%q", code)
+	}
+	outOfScope := request
+	outOfScope.ChangedPaths = []string{"outside.go"}
+	if code := VersionControlContractErrorCode(ValidateSnapshotVerificationRequest(outOfScope)); code != "version_control.snapshot_scope_invalid" {
+		t.Fatalf("out-of-scope path code=%q", code)
+	}
+}
+
 func TestIntegrationContractDoesNotClaimMarkerForUnappliedOutcome(t *testing.T) {
 	change, _ := NewChangeSetRef("change:one")
 	principal, _ := identity.NewPrincipalRef("principal:one")

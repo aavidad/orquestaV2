@@ -11,26 +11,23 @@ import (
 	"orquesta/internal/ports"
 )
 
-func activeSupersededStopAction(
+func supersededStopActionStatus(
 	ctx context.Context,
 	transaction *sql.Tx,
 	control application.ControlRecord,
-) (bool, error) {
-	var exactActive int
-	err := transaction.QueryRowContext(ctx, `
-SELECT COUNT(*) FROM outbox
-WHERE ref = ? AND kind = 'stop_agent' AND control_ref = ?
-  AND goal_ref = ? AND work_item_ref = ? AND execution_ref = ?
-  AND plan_generation = ? AND work_item_generation = ?
-  AND completed_at IS NULL AND retired_at IS NULL AND quarantined_at IS NULL`,
+) (string, error) {
+	var status string
+	err := transaction.QueryRowContext(ctx, `SELECT COALESCE((SELECT CASE WHEN completed_at IS NULL AND retired_at IS NULL AND quarantined_at IS NULL THEN 'active'
+ WHEN quarantined_at IS NOT NULL AND EXISTS (SELECT 1 FROM action_consumption_receipts consumed WHERE consumed.action_ref=outbox.ref AND consumed.outcome='quarantined' AND consumed.error_code='application.effect_unknown_applied') THEN 'quarantined' ELSE '' END
+ FROM outbox WHERE ref=? AND kind='stop_agent' AND control_ref=? AND goal_ref=? AND work_item_ref=? AND execution_ref=? AND plan_generation=? AND work_item_generation=?),'')`,
 		"action:stop:"+control.Ref+":"+control.ExecutionRef.String(), control.Ref,
 		control.GoalRef.String(), control.WorkItemRef.String(), control.ExecutionRef.String(),
 		int64(control.PlanGeneration), int64(control.WorkItemRevision),
-	).Scan(&exactActive)
+	).Scan(&status)
 	if err != nil {
-		return false, mapDatabaseError(err)
+		return "", mapDatabaseError(err)
 	}
-	return exactActive == 1, nil
+	return status, nil
 }
 
 func validateApplyControlState(state application.ApplyControlState) error {

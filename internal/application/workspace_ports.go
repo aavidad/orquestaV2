@@ -22,3 +22,24 @@ type VersionControl interface {
 	PreviewIntegration(context.Context, ports.IntegrationPreviewRequest) (ports.IntegrationPreview, error)
 	Integrate(context.Context, ports.IntegrationRequest) (ports.IntegrationResult, error)
 }
+
+type TestAttestationRun = ports.TestAttestationRun
+
+// TestAttestor executes declared tests for one immutable logical run.
+type TestAttestor interface {
+	Attest(context.Context, ports.TestAttestationRun) (ports.TestAttestationResult, error)
+}
+
+func ValidateTestAttestationRun(run TestAttestationRun) error {
+	if err := ports.ValidateTestAttestationRequest(run.Request); err != nil {
+		return err
+	}
+	if err := ports.ValidateSnapshotVerificationRequest(run.Snapshot); err != nil {
+		return err
+	}
+	if run.Request.Subject != run.Snapshot.Subject ||
+		run.Request.SubjectDigest != run.Snapshot.SubjectDigest {
+		return &ports.TestAttestorContractError{Code: "test_attestor.run_subject_mismatch"}
+	}
+	return nil
+}

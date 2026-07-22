@@ -178,22 +178,22 @@ func (plan Plan) Phases() []PhaseInstance    { return clonePhases(plan.phases) }
 func (plan Plan) WorkItems() []WorkItem      { return cloneWorkItems(plan.items) }
 
 func validatePlan(plan Plan) error {
-	return validatePlanShape(plan, false)
+	return validatePlanShape(plan, false, false)
 }
 
 func validateRestoredPlan(plan Plan) error {
-	return validatePlanShape(plan, false)
+	return validatePlanShape(plan, false, true)
 }
 
-func validatePlanShape(plan Plan, requirePendingItems bool) error {
-	byRef, err := validatePlanMembers(plan, requirePendingItems)
+func validatePlanShape(plan Plan, requirePendingItems, allowMissingRequiredTests bool) error {
+	byRef, err := validatePlanMembers(plan, requirePendingItems, allowMissingRequiredTests)
 	if err != nil {
 		return err
 	}
 	return validatePlanDependencies(plan.items, byRef)
 }
 
-func validatePlanMembers(plan Plan, requirePendingItems bool) (map[WorkItemRef]WorkItem, error) {
+func validatePlanMembers(plan Plan, requirePendingItems, allowMissingRequiredTests bool) (map[WorkItemRef]WorkItem, error) {
 	switch {
 	case plan.generation == 0:
 		return nil, domainError(ErrorInvalidPlan, "plan_generation")
@@ -248,7 +248,7 @@ func validatePlanMembers(plan Plan, requirePendingItems bool) (map[WorkItemRef]W
 			!item.interruptedAt.IsZero() || validWorkItemRef(item.reworkOf)) {
 			return nil, domainError(ErrorInvalidPlan, "work_item_snapshot")
 		}
-		if err := validateWorkItemPlanMetadata(item); err != nil {
+		if err := validateWorkItemPlanMetadataForRestore(item, allowMissingRequiredTests); err != nil {
 			return nil, err
 		}
 		if _, duplicate := demandRefs[item.budgetDemand.Ref]; duplicate {
@@ -343,6 +343,10 @@ func validatePlanDependencies(items []WorkItem, byRef map[WorkItemRef]WorkItem) 
 }
 
 func validateWorkItemPlanMetadata(item WorkItem) error {
+	return validateWorkItemPlanMetadataForRestore(item, false)
+}
+
+func validateWorkItemPlanMetadataForRestore(item WorkItem, allowMissingRequiredTests bool) error {
 	if err := governance.ValidateBudgetDemand(item.budgetDemand); err != nil {
 		return domainError(ErrorInvalidPlan, "budget_demand")
 	}
@@ -380,6 +384,12 @@ func validateWorkItemPlanMetadata(item WorkItem) error {
 			return domainError(ErrorInvalidPlan, "duplicate_write_scope")
 		}
 		seenScopes[scope] = struct{}{}
+	}
+	if err := validateRequiredTests(item.requiredTests); err != nil {
+		return err
+	}
+	if !allowMissingRequiredTests && len(item.writeSet) > 0 && len(item.requiredTests) == 0 {
+		return domainError(ErrorInvalidPlan, "required_tests")
 	}
 	if err := validateUniqueRefs(item.skillRefs, validSkillRef, "skill_ref"); err != nil {
 		return err

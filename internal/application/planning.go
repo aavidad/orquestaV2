@@ -36,6 +36,7 @@ type WorkItemSpec struct {
 	HandoffRequired     bool
 	Dependencies        []string
 	WriteSet            []string
+	RequiredTests       []RequiredTestSpec
 	SkillRefs           []string
 	ToolRefs            []string
 	CapabilityRefs      []string
@@ -43,6 +44,13 @@ type WorkItemSpec struct {
 	BudgetDemand        governance.BudgetDemand
 	SecurityCriticality governance.SecurityCriticality
 	ReasoningEffort     governance.ReasoningEffort
+}
+
+type RequiredTestSpec struct {
+	Ref              string
+	ToolRef          string
+	Arguments        []string
+	WorkingDirectory string
 }
 
 func (orchestrator *Orchestrator) compilePlan(
@@ -318,6 +326,10 @@ func compileWorkItemSpec(
 		}
 		writeSet = append(writeSet, writeScope)
 	}
+	requiredTests, err := compileRequiredTestSpecs(spec.RequiredTests)
+	if err != nil {
+		return goal.WorkItem{}, err
+	}
 	skillRefs, err := parsePlanRefs(spec.SkillRefs, goal.NewSkillRef)
 	if err != nil {
 		return goal.WorkItem{}, err
@@ -340,11 +352,34 @@ func compileWorkItemSpec(
 		Project: scope.projectRef, Objective: spec.Objective, CreatedAt: scope.createdAt,
 		Phase: phaseKey, Role: roleKey, Parent: parent, HandoffRequired: spec.HandoffRequired,
 		Dependencies: dependencies,
-		WriteSet:     writeSet, SkillRefs: skillRefs, ToolRefs: toolRefs,
+		WriteSet:     writeSet, RequiredTests: requiredTests,
+		SkillRefs: skillRefs, ToolRefs: toolRefs,
 		CapabilityRefs: capabilityRefs, OutputContract: contract,
 		BudgetDemand: demand, SecurityCriticality: spec.SecurityCriticality,
 		ReasoningEffort: spec.ReasoningEffort,
 	})
+}
+
+func compileRequiredTestSpecs(rawSpecs []RequiredTestSpec) ([]goal.RequiredTestSpec, error) {
+	compiled := make([]goal.RequiredTestSpec, 0, len(rawSpecs))
+	for _, raw := range rawSpecs {
+		testRef, refErr := goal.NewRequiredTestRef(raw.Ref)
+		if refErr != nil {
+			return nil, refErr
+		}
+		toolRef, toolErr := goal.NewToolRef(raw.ToolRef)
+		if toolErr != nil {
+			return nil, toolErr
+		}
+		testSpec, err := goal.NewRequiredTestSpec(goal.RequiredTestSpecInput{
+			Ref: testRef, ToolRef: toolRef, Arguments: raw.Arguments, WorkingDirectory: raw.WorkingDirectory,
+		})
+		if err != nil {
+			return nil, err
+		}
+		compiled = append(compiled, testSpec)
+	}
+	return compiled, nil
 }
 
 func indexWorkItemRefs(items []goal.WorkItem) map[string]goal.WorkItemRef {
@@ -453,7 +488,11 @@ func (orchestrator *Orchestrator) scheduleHistoricalReady(
 
 func writePlanFingerprint(digest hash.Hash, spec *PlanSpec) {
 	version := "orquesta.plan.v1"
-	if planDeclaresGovernance(spec) {
+	declaresGovernance := planDeclaresGovernance(spec)
+	declaresRequiredTests := planDeclaresRequiredTests(spec)
+	if declaresRequiredTests {
+		version = "orquesta.plan.v3"
+	} else if declaresGovernance {
 		version = "orquesta.plan.v2"
 	}
 	writeFingerprintField(digest, version)
@@ -485,10 +524,21 @@ func writePlanFingerprint(digest hash.Hash, spec *PlanSpec) {
 		writeFingerprintField(digest, string(item.OutputContract))
 		writeFingerprintStrings(digest, "dependencies", item.Dependencies)
 		writeFingerprintStrings(digest, "write_set", item.WriteSet)
+		if declaresRequiredTests {
+			writeFingerprintField(digest, "required_tests")
+			writeFingerprintField(digest, strconv.Itoa(len(item.RequiredTests)))
+			for _, testSpec := range item.RequiredTests {
+				writeFingerprintField(digest, "required_test")
+				writeFingerprintField(digest, testSpec.Ref)
+				writeFingerprintField(digest, testSpec.ToolRef)
+				writeFingerprintStrings(digest, "arguments", testSpec.Arguments)
+				writeFingerprintField(digest, testSpec.WorkingDirectory)
+			}
+		}
 		writeFingerprintStrings(digest, "skills", item.SkillRefs)
 		writeFingerprintStrings(digest, "tools", item.ToolRefs)
 		writeFingerprintStrings(digest, "capabilities", item.CapabilityRefs)
-		if version == "orquesta.plan.v2" {
+		if declaresGovernance {
 			writeFingerprintField(digest, "governance")
 			writeFingerprintField(digest, item.BudgetDemand.Ref)
 			writeFingerprintField(digest, strconv.FormatInt(item.BudgetDemand.Resources.Tokens, 10))
@@ -501,6 +551,18 @@ func writePlanFingerprint(digest hash.Hash, spec *PlanSpec) {
 			writeFingerprintField(digest, string(item.ReasoningEffort))
 		}
 	}
+}
+
+func planDeclaresRequiredTests(spec *PlanSpec) bool {
+	if spec == nil {
+		return false
+	}
+	for _, item := range spec.WorkItems {
+		if len(item.RequiredTests) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func planDeclaresGovernance(spec *PlanSpec) bool {

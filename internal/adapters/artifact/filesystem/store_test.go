@@ -1,3 +1,5 @@
+//go:build linux
+
 package filesystem
 
 import (
@@ -41,10 +43,7 @@ func TestStorePutGetIsContentAddressedAndIdempotent(t *testing.T) {
 }
 
 func TestStoreUsesPrivateFilesAndRejectsCorruption(t *testing.T) {
-	root := t.TempDir()
-	if err := os.Chmod(root, 0o700); err != nil {
-		t.Fatalf("Chmod(root) error = %v", err)
-	}
+	root := privateTestDirectory(t)
 	store, err := Open(root)
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
@@ -80,11 +79,8 @@ func TestStoreRejectsMalformedRefAndSymlinkEscape(t *testing.T) {
 		t.Fatal("malformed ref accepted")
 	}
 
-	root := t.TempDir()
+	root := privateTestDirectory(t)
 	outside := t.TempDir()
-	if err := os.Chmod(root, 0o700); err != nil {
-		t.Fatalf("Chmod(root) error = %v", err)
-	}
 	if err := os.Symlink(outside, filepath.Join(root, "sha256")); err != nil {
 		t.Skipf("symlink unsupported: %v", err)
 	}
@@ -109,10 +105,7 @@ func TestStoreRejectsMalformedRefAndSymlinkEscape(t *testing.T) {
 }
 
 func TestStorePutRejectsSymlinkAtFinalBlobPath(t *testing.T) {
-	root := t.TempDir()
-	if err := os.Chmod(root, 0o700); err != nil {
-		t.Fatalf("Chmod(root) error = %v", err)
-	}
+	root := privateTestDirectory(t)
 	store, err := Open(root)
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
@@ -145,10 +138,7 @@ func TestStorePutRejectsSymlinkAtFinalBlobPath(t *testing.T) {
 }
 
 func TestStorePutSynchronizesDirectoryPublicationCausallyAndSurvivesReopen(t *testing.T) {
-	rootPath := t.TempDir()
-	if err := os.Chmod(rootPath, 0o700); err != nil {
-		t.Fatalf("Chmod(root) error = %v", err)
-	}
+	rootPath := privateTestDirectory(t)
 	store, err := Open(rootPath)
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
@@ -236,16 +226,16 @@ func TestStorePutRetriesPublicationAfterDirectorySyncFailure(t *testing.T) {
 	}
 }
 
-func TestOpenCreatesRootCausallyAndStoreSurvivesReopen(t *testing.T) {
+func TestOpenCreatesAndReopensRootBelowSafe0755Parent(t *testing.T) {
 	base := t.TempDir()
+	if err := os.Chmod(base, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	rootPath := filepath.Join(base, "level-one", "level-two", "artifacts")
 	var synchronizedParents []string
-	store, err := openStore(rootPath, func(root *os.Root, directory string) error {
-		if directory != "." {
-			return errors.New("unexpected root sync path")
-		}
-		synchronizedParents = append(synchronizedParents, filepath.Clean(root.Name()))
-		return syncDirectory(root, directory)
+	store, err := openStore(rootPath, func(directory *os.File) error {
+		synchronizedParents = append(synchronizedParents, filepath.Clean(directory.Name()))
+		return directory.Sync()
 	})
 	if err != nil {
 		t.Fatalf("openStore() error = %v", err)
@@ -299,6 +289,12 @@ func TestOpenCreatesRootCausallyAndStoreSurvivesReopen(t *testing.T) {
 func TestOpenRejectsIntermediateSymlinkWithoutCreatingTargetRoot(t *testing.T) {
 	base := t.TempDir()
 	target := t.TempDir()
+	if err := os.Chmod(base, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(target, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	linkPath := filepath.Join(base, "linked-parent")
 	if err := os.Symlink(target, linkPath); err != nil {
 		t.Skipf("symlink unsupported: %v", err)
@@ -318,10 +314,7 @@ func TestOpenRejectsIntermediateSymlinkWithoutCreatingTargetRoot(t *testing.T) {
 
 func openTestStore(t *testing.T) *Store {
 	t.Helper()
-	root := t.TempDir()
-	if err := os.Chmod(root, 0o700); err != nil {
-		t.Fatalf("Chmod(root) error = %v", err)
-	}
+	root := privateTestDirectory(t)
 	store, err := Open(root)
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)

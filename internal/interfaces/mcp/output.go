@@ -62,27 +62,36 @@ type PhaseView struct {
 }
 
 type WorkItemView struct {
-	WorkItemRef     string     `json:"work_item_ref"`
-	Objective       string     `json:"objective"`
-	PhaseKey        string     `json:"phase_key"`
-	RoleKey         string     `json:"role_key"`
-	ParentRef       string     `json:"parent_ref,omitempty"`
-	ChildRefs       []string   `json:"child_refs"`
-	DependencyRefs  []string   `json:"dependency_refs"`
-	WriteSet        []string   `json:"write_set"`
-	SkillRefs       []string   `json:"skill_refs"`
-	ToolRefs        []string   `json:"tool_refs"`
-	CapabilityRefs  []string   `json:"capability_refs"`
-	OutputContract  string     `json:"output_contract"`
-	SkipReason      string     `json:"skip_reason,omitempty"`
-	State           string     `json:"state"`
-	Revision        uint64     `json:"revision"`
-	CreatedAt       time.Time  `json:"created_at"`
-	StartedAt       *time.Time `json:"started_at,omitempty"`
-	FinishedAt      *time.Time `json:"finished_at,omitempty"`
-	ExecutionRef    string     `json:"execution_ref,omitempty"`
-	ArtifactRefs    []string   `json:"artifact_refs"`
-	AttestationRefs []string   `json:"attestation_refs"`
+	WorkItemRef     string             `json:"work_item_ref"`
+	Objective       string             `json:"objective"`
+	PhaseKey        string             `json:"phase_key"`
+	RoleKey         string             `json:"role_key"`
+	ParentRef       string             `json:"parent_ref,omitempty"`
+	ChildRefs       []string           `json:"child_refs"`
+	DependencyRefs  []string           `json:"dependency_refs"`
+	WriteSet        []string           `json:"write_set"`
+	RequiredTests   []RequiredTestView `json:"required_tests"`
+	SkillRefs       []string           `json:"skill_refs"`
+	ToolRefs        []string           `json:"tool_refs"`
+	CapabilityRefs  []string           `json:"capability_refs"`
+	OutputContract  string             `json:"output_contract"`
+	SkipReason      string             `json:"skip_reason,omitempty"`
+	State           string             `json:"state"`
+	Revision        uint64             `json:"revision"`
+	CreatedAt       time.Time          `json:"created_at"`
+	StartedAt       *time.Time         `json:"started_at,omitempty"`
+	FinishedAt      *time.Time         `json:"finished_at,omitempty"`
+	ExecutionRef    string             `json:"execution_ref,omitempty"`
+	ArtifactRefs    []string           `json:"artifact_refs"`
+	AttestationRefs []string           `json:"attestation_refs"`
+}
+
+type RequiredTestView struct {
+	Ref              string   `json:"ref"`
+	ToolRef          string   `json:"tool_ref"`
+	Arguments        []string `json:"arguments"`
+	WorkingDirectory string   `json:"working_directory"`
+	Digest           string   `json:"digest"`
 }
 
 type ExecutionView struct {
@@ -171,6 +180,23 @@ func goalView(record application.GoalRecord) GoalView {
 	}
 	items := make([]WorkItemView, 0, len(snapshot.WorkItems))
 	for _, item := range snapshot.WorkItems {
+		requiredTests := make([]RequiredTestView, 0, len(item.RequiredTests))
+		for _, testSpec := range item.RequiredTests {
+			ref, refErr := goal.NewRequiredTestRef(testSpec.Ref)
+			toolRef, toolErr := goal.NewToolRef(testSpec.ToolRef)
+			spec, specErr := goal.NewRequiredTestSpec(goal.RequiredTestSpecInput{
+				Ref: ref, ToolRef: toolRef, Arguments: testSpec.Arguments,
+				WorkingDirectory: testSpec.WorkingDirectory,
+			})
+			if refErr != nil || toolErr != nil || specErr != nil {
+				continue
+			}
+			requiredTests = append(requiredTests, RequiredTestView{
+				Ref: testSpec.Ref, ToolRef: testSpec.ToolRef,
+				Arguments: nonNilStrings(testSpec.Arguments), WorkingDirectory: testSpec.WorkingDirectory,
+				Digest: spec.Digest(),
+			})
+		}
 		items = append(items, WorkItemView{
 			WorkItemRef:     item.Ref,
 			Objective:       item.Objective,
@@ -180,6 +206,7 @@ func goalView(record application.GoalRecord) GoalView {
 			ChildRefs:       nonNilStrings(childrenByParent[item.Ref]),
 			DependencyRefs:  nonNilStrings(item.DependencyRefs),
 			WriteSet:        nonNilStrings(item.WriteSet),
+			RequiredTests:   requiredTests,
 			SkillRefs:       nonNilStrings(item.SkillRefs),
 			ToolRefs:        nonNilStrings(item.ToolRefs),
 			CapabilityRefs:  nonNilStrings(item.CapabilityRefs),

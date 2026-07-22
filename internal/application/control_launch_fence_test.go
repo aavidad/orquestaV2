@@ -56,6 +56,7 @@ func TestPauseGatesRetryUntilRecordLaunchPrepared(t *testing.T) {
 func TestPauseGatesAutomaticReplacementThroughoutBackoff(t *testing.T) {
 	agent := &scriptedAgent{launchErr: definitelyUnappliedPermanentError{"provider rejected first launch"}}
 	system := newControlTestSystem(t, agent)
+	agent.launchErrorHook = func() { system.clock.Advance(time.Nanosecond) }
 	if result, err := system.orchestrator.ProcessNext(context.Background(), "worker:replacement-failure"); err != nil ||
 		!result.Processed || result.Action != ActionLaunchAgent {
 		t.Fatalf("create automatic replacement: result=%+v err=%v", result, err)

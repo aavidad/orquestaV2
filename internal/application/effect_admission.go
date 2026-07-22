@@ -132,6 +132,41 @@ func (orchestrator *Orchestrator) commitChangeAction(
 	}, authority.Source, at)
 }
 
+func (orchestrator *Orchestrator) attestTestAction(
+	policy effectPolicySnapshot,
+	aggregate goal.Goal,
+	item goal.WorkItem,
+	execution ExecutionRecord,
+	binding WorkspaceBinding,
+	change ChangeSet,
+	authority WorkItemAuthority,
+	at time.Time,
+) (ActionRecord, error) {
+	subject, err := buildTestSubject(aggregate, item, execution, binding, change, orchestrator.testAttestationPolicy)
+	if err != nil {
+		return ActionRecord{}, err
+	}
+	actionRef := "action:attest-test:" + execution.Ref.String()
+	intent := EffectIntent{
+		Ref: "effect-intent:" + actionRef, RequestRef: authority.AuthorizationReceipt.Decision().Request().RequestRef(),
+		RequestFingerprint: effectAdmissionFingerprint(actionRef, authority.AuthorizationReceipt.Ref(), policy.PolicyHash),
+		ActionRef:          actionRef, ActionKind: ActionAttestTest, Kind: EffectKindAttestTest,
+		Subject: effectSubject(aggregate, item, execution), ProposedBy: authority.PrincipalRef,
+		Permission: authority.Permission, Authority: authority.AuthorizationReceipt,
+		Demand:              governance.BudgetDemand{Ref: "budget-demand:" + actionRef},
+		SecurityCriticality: item.SecurityCriticality(), ReasoningEffort: item.ReasoningEffort(),
+		PolicyHash: policy.PolicyHash, PolicyRevision: policy.PolicyRevision,
+		QuotaRetryDelay: policy.QuotaRetryDelay, ApprovalTTL: policy.ApprovalTTL,
+		TargetDigest: ports.TestSubjectDigest(subject), IdempotencyKey: "attest:" + change.Ref.String(),
+		CreatedAt: at.UTC(),
+	}
+	return orchestrator.finalizeEffectAction(intent, ActionRecord{
+		Ref: actionRef, Kind: ActionAttestTest, GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(),
+		ExecutionRef: execution.Ref, ChangeRef: change.Ref, PlanGeneration: execution.PlanGeneration,
+		WorkItemGeneration: item.Revision(), AvailableAt: at.UTC(),
+	}, authority.Source, at)
+}
+
 func (orchestrator *Orchestrator) integrateChangeAction(
 	policy effectPolicySnapshot,
 	aggregate goal.Goal,

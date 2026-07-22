@@ -10,15 +10,15 @@ import (
 )
 
 func (orchestrator *Orchestrator) processIntegrateChange(ctx context.Context, claim ActionClaim) error {
-	if orchestrator.versionControl == nil {
-		return orchestrator.requeueWorkspaceEffect(ctx, claim, "version_control.unavailable")
-	}
 	record, err := orchestrator.state.GetGoal(ctx, claim.Action.GoalRef)
 	if err != nil {
 		return err
 	}
 	if err := validateClaimedRecord(claim, record, ActionIntegrateChange); err != nil {
 		return orchestrator.quarantine(ctx, claim, err.Error())
+	}
+	if priorEffectAttemptBlocksDispatch(record, claim.Action) {
+		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	}
 	if err := validateClaimedEffect(claim, orchestrator.clock.Now()); err != nil {
 		return orchestrator.quarantine(ctx, claim, err.Error())
@@ -29,60 +29,84 @@ func (orchestrator *Orchestrator) processIntegrateChange(ctx context.Context, cl
 	if !found || integrationTargetDigest(change, claim.Action.ExpectedTargetOID) != claim.Action.EffectIntent.TargetDigest {
 		return orchestrator.quarantine(ctx, claim, "application.effect_target_mismatch")
 	}
+	if _, passed := requiredTestsPassForChange(record, item, execution, change, orchestrator.testAttestationPolicy); !passed {
+		return orchestrator.quarantine(ctx, claim, "application.required_tests_pass_missing")
+	}
+	if !record.Goal.ChildHandoffsResolved(item.Ref()) {
+		return orchestrator.requeueWorkspaceEffect(ctx, claim, "application.child_handoffs_pending")
+	}
+	if orchestrator.versionControl == nil {
+		return orchestrator.requeueWorkspaceEffect(ctx, claim, "version_control.unavailable")
+	}
 	if err := orchestrator.validateCurrentAutomaticAuthority(ctx, claim); err != nil {
 		return orchestrator.requeueWorkspaceEffect(ctx, claim, err.Error())
 	}
-	attempt, err := orchestrator.beginEffectAttempt(ctx, claim, orchestrator.clock.Now())
+	previewRequest := integrationPreviewRequest(claim, record, change)
+	preview, err := orchestrator.versionControl.PreviewIntegration(ctx, previewRequest)
+	if err != nil {
+		return orchestrator.requeueWorkspaceEffect(ctx, claim, versionControlErrorCode(err, "version_control.preview_failed"))
+	}
+	if err := ports.ValidateIntegrationPreview(previewRequest, preview); err != nil {
+		return orchestrator.quarantine(ctx, claim, ports.VersionControlContractErrorCode(err))
+	}
+	attempt, err := orchestrator.beginNewEffectAttempt(ctx, claim, orchestrator.clock.Now())
 	if err != nil {
 		return err
 	}
-	result, err := orchestrator.executeIntegration(ctx, claim, record, change, attempt)
+	request := integrationRequest(claim, change, preview, attempt)
+	effectCtx, cancel := orchestrator.actionCallContext(ctx, claim)
+	result, err := orchestrator.versionControl.Integrate(effectCtx, request)
+	cancel()
 	if err != nil {
-		return err
+		return orchestrator.quarantineUnknownApplied(ctx, claim)
+	}
+	if err := ports.ValidateIntegrationResult(request, result); err != nil {
+		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	}
 	now := orchestrator.clock.Now().UTC()
 	effectStatus, observationStatus, candidateTreeOID, conflictDigest := integrationFactStatus(result)
 	externalReceipt, err := effectReceipt(claim, attempt, result.ReceiptRef, effectStatus, unknownUsage(), now)
 	if err != nil {
-		return err
+		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	}
 	observation, integration := integrationFacts(
 		claim, attempt, result, externalReceipt, observationStatus, candidateTreeOID, conflictDigest,
 	)
 	if ValidateMergeObservation(observation) != nil || ValidateIntegrationReceipt(integration) != nil {
-		return orchestrator.quarantine(ctx, claim, "application.integration_fact_invalid")
+		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	}
 	transition, err := orchestrator.advanceIntegration(ctx, claim, record, item, execution, change, result.Status, now)
 	if err != nil {
-		return err
+		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	}
-	return orchestrator.state.RecordIntegrationResult(ctx, IntegrationResultState{
+	err = orchestrator.state.RecordIntegrationResult(ctx, IntegrationResultState{
 		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: item.Revision(),
 		Goal: transition.goal, Execution: transition.execution, Observation: observation, Integration: integration,
 		EffectReceipt: externalReceipt, NewExecutions: transition.newExecutions, NewActions: transition.newActions,
 		Events: transition.events, OperationAt: now,
 	})
+	if err != nil {
+		return orchestrator.quarantineUnknownApplied(ctx, claim)
+	}
+	return nil
 }
 
-func (orchestrator *Orchestrator) executeIntegration(ctx context.Context, claim ActionClaim,
-	record GoalRecord, change ChangeSet, attempt EffectAttempt,
-) (ports.IntegrationResult, error) {
-	previewRequest := ports.IntegrationPreviewRequest{
+func integrationPreviewRequest(claim ActionClaim, record GoalRecord, change ChangeSet) ports.IntegrationPreviewRequest {
+	return ports.IntegrationPreviewRequest{
 		ChangeSetRef: change.Ref, RepositoryRef: change.RepositoryRef, SourceOID: change.HeadOID,
 		TargetRef: workspaceTargetRef(record, change), TargetOID: claim.Action.ExpectedTargetOID,
 		ObjectFormat: change.ObjectFormat, IdempotencyKey: "preview:" + claim.Action.EffectIntent.IdempotencyKey,
 		RequestedAt: claim.Action.EffectIntent.CreatedAt,
 	}
-	preview, err := orchestrator.versionControl.PreviewIntegration(ctx, previewRequest)
-	if err != nil {
-		return ports.IntegrationResult{}, orchestrator.requeueWorkspaceEffect(
-			ctx, claim, versionControlErrorCode(err, "version_control.preview_failed"),
-		)
-	}
-	if err := ports.ValidateIntegrationPreview(previewRequest, preview); err != nil {
-		return ports.IntegrationResult{}, orchestrator.quarantine(ctx, claim, ports.VersionControlContractErrorCode(err))
-	}
-	request := ports.IntegrationRequest{
+}
+
+func integrationRequest(
+	claim ActionClaim,
+	change ChangeSet,
+	preview ports.IntegrationPreview,
+	attempt EffectAttempt,
+) ports.IntegrationRequest {
+	return ports.IntegrationRequest{
 		ChangeSetRef: change.Ref, RepositoryRef: change.RepositoryRef,
 		PrincipalRef: claim.Action.EffectIntent.ProposedBy, ProjectRef: change.ProjectRef,
 		SourceOID: change.HeadOID, TargetRef: preview.TargetRef, ExpectedTargetOID: claim.Action.ExpectedTargetOID,
@@ -90,16 +114,6 @@ func (orchestrator *Orchestrator) executeIntegration(ctx context.Context, claim 
 		ActionFence: claim.Fence, IdempotencyKey: claim.Action.EffectIntent.IdempotencyKey,
 		RequestedAt: claim.Action.EffectIntent.CreatedAt,
 	}
-	result, err := orchestrator.versionControl.Integrate(ctx, request)
-	if err != nil {
-		return ports.IntegrationResult{}, orchestrator.requeueWorkspaceEffect(
-			ctx, claim, versionControlErrorCode(err, "version_control.integrate_failed"),
-		)
-	}
-	if err := ports.ValidateIntegrationResult(request, result); err != nil {
-		return ports.IntegrationResult{}, orchestrator.quarantine(ctx, claim, ports.VersionControlContractErrorCode(err))
-	}
-	return result, nil
 }
 
 func integrationFactStatus(result ports.IntegrationResult) (EffectStatus, ports.MergeStatus, string, string) {
@@ -166,12 +180,18 @@ func (orchestrator *Orchestrator) advanceIntegration(ctx context.Context, claim 
 	if !record.Goal.ChildHandoffsResolved(item.Ref()) {
 		return integrationTransition{}, orchestrator.requeueWorkspaceEffect(ctx, claim, "application.child_handoffs_pending")
 	}
-	artifact, attestation, found := executionEvidence(record, execution.Ref)
+	artifact, provenance, found := executionEvidence(record, execution.Ref)
 	if !found {
 		return integrationTransition{}, &StateError{Code: StateConflict}
 	}
+	requiredTests, passed := requiredTestsPassForChange(
+		record, item, execution, change, orchestrator.testAttestationPolicy,
+	)
+	if !passed {
+		return integrationTransition{}, &StateError{Code: StateConflict}
+	}
 	aggregate, err := record.Goal.SucceedWorkItem(record.Goal.Revision(), item.Revision(), item.Ref(),
-		[]goal.ArtifactRef{artifact.Stored.Ref}, []goal.AttestationRef{attestation.Ref}, at)
+		[]goal.ArtifactRef{artifact.Stored.Ref}, []goal.AttestationRef{provenance.Ref, requiredTests.Ref}, at)
 	if err != nil {
 		return integrationTransition{}, err
 	}

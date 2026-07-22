@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -33,7 +34,7 @@ func TestSQLiteWorkspaceGitRestartRaceAndReplay(t *testing.T) {
 		}
 	}
 	var version int
-	if err := repository.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != recoverySchemaV16 {
+	if err := repository.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != recoverySchemaV17 {
 		t.Fatalf("v16 version=%d err=%v", version, err)
 	}
 	if err := repository.Close(); err != nil {
@@ -154,18 +155,19 @@ func seedSQLiteV16Integrated(t *testing.T) *sqliteV15System {
 			}},
 			WorkItems: []application.WorkItemSpec{{
 				Key: "writer", Objective: "write isolated evidence", Phase: "phase:v16-recovery", Role: "role:writer",
-				WriteSet: []string{"internal/workspace"}, OutputContract: goal.OutputContractEvidenceBundle,
+				WriteSet:       []string{"internal/workspace"},
+				RequiredTests:  sqliteRequiredTestSpecs("required-test:v17-sqlite"),
+				OutputContract: goal.OutputContractEvidenceBundle,
 			}},
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	processSQLiteV16Actions(t, system,
 		application.ActionPrepareWorkspace,
 		application.ActionLaunchAgent,
 		application.ActionObserveAgent,
 		application.ActionCommitChange,
+		application.ActionAttestTest,
 	)
 	record, err := system.repository.GetGoal(context.Background(), result.Record.Goal.Ref())
 	if err != nil || len(record.ChangeSets) != 1 || len(record.WorkspaceBindings) != 1 {
@@ -181,10 +183,10 @@ func seedSQLiteV16Integrated(t *testing.T) *sqliteV15System {
 	record, err = system.repository.GetGoal(context.Background(), record.Goal.Ref())
 	if err != nil || len(record.IntegrationReceipts) != 1 ||
 		record.IntegrationReceipts[0].Status != ports.IntegrationStatusIntegrated {
-		t.Fatalf("V16 integrated seed incomplete: record=%+v err=%v", record, err)
+		t.Fatalf("V16 integrated seed incomplete: record=%+v err=%v cause=%v", record, err, errors.Unwrap(err))
 	}
 	if _, _, err := validateRecoveryDatabase(context.Background(), system.repository.db); err != nil {
-		t.Fatalf("valid V16 recovery seed rejected: %v", err)
+		t.Fatalf("valid V16 recovery seed rejected: %v cause=%v", err, errors.Unwrap(err))
 	}
 	return system
 }
@@ -202,7 +204,7 @@ func processSQLiteV16Actions(t *testing.T, system *sqliteV15System, expected ...
 			system.clock.Advance(time.Second)
 		}
 		if err != nil || !result.Processed || result.Action != want {
-			t.Fatalf("process V16 action=%s result=%+v err=%v", want, result, err)
+			t.Fatalf("process V16 action=%s result=%+v err=%v cause=%v", want, result, err, errors.Unwrap(err))
 		}
 	}
 }

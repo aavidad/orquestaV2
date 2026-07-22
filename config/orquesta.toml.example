@@ -42,6 +42,24 @@ root = "./var/workspaces"
 seed_path = ""
 target_ref = "refs/heads/main"
 
+[test_attestor]
+provider = "disabled"
+max_subject_bytes = 536870912
+timeout = "15m"
+max_concurrent_runs = 2
+
+[test_attestor.bubblewrap]
+command = ""
+
+[test_attestor.go]
+toolchain_root = ""
+
+[test_attestor.resources]
+cgroup_root = ""
+memory_max_bytes = 2147483648
+pids_max = 256
+cpu_quota_micros = 200000
+
 [identity]
 provider = "local_token"
 local_actor = "actor:local-owner"
@@ -75,6 +93,7 @@ max_envelope_bytes = 65536
 poll_interval = "500ms"
 observation_interval = "2s"
 claim_lease = "2m"
+attest_test_claim_lease = "20m"
 max_execution_attempts = 3
 max_children_per_parent = 6
 execution_timeout = "45m"

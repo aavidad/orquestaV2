@@ -21,6 +21,8 @@ type Dependencies struct {
 	Artifacts               ArtifactStore
 	WorkspaceManager        WorkspaceManager
 	VersionControl          VersionControl
+	TestAttestor            TestAttestor
+	TestAttestationPolicy   TestAttestationPolicy
 	Clock                   Clock
 	IDs                     IDGenerator
 	MaxOutputBytes          int64
@@ -28,6 +30,7 @@ type Dependencies struct {
 	MaxExecutionAttempts    uint64
 	MaxChildrenPerParent    int
 	ClaimLease              time.Duration
+	AttestTestClaimLease    time.Duration
 	DirectorLeaseDuration   time.Duration
 	EffectApprovalTTL       time.Duration
 	BudgetPolicy            BudgetPolicy
@@ -45,6 +48,8 @@ type Orchestrator struct {
 	artifacts               ArtifactStore
 	workspaceManager        WorkspaceManager
 	versionControl          VersionControl
+	testAttestor            TestAttestor
+	testAttestationPolicy   TestAttestationPolicy
 	clock                   Clock
 	ids                     IDGenerator
 	maxOutputBytes          int64
@@ -52,6 +57,7 @@ type Orchestrator struct {
 	maxExecutionAttempts    uint64
 	maxChildrenPerParent    int
 	claimLease              time.Duration
+	attestTestClaimLease    time.Duration
 	directorLeaseDuration   time.Duration
 	budgetPolicy            BudgetPolicy
 	observationDelay        time.Duration
@@ -87,6 +93,8 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 		return nil, errors.New("application.agent_capabilities_invalid")
 	case dependencies.ClaimLease <= 0:
 		return nil, errors.New("application.claim_lease_invalid")
+	case dependencies.AttestTestClaimLease < 0:
+		return nil, errors.New("application.attest_test_claim_lease_invalid")
 	case dependencies.DirectorLeaseDuration <= 0:
 		return nil, errors.New("application.director_lease_duration_invalid")
 	case dependencies.EffectApprovalTTL <= 0 ||
@@ -98,6 +106,10 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 		return nil, errors.New("application.observation_delay_invalid")
 	case dependencies.ExecutionTimeout <= 0:
 		return nil, errors.New("application.execution_timeout_invalid")
+	case dependencies.TestAttestor == nil && dependencies.TestAttestationPolicy != (TestAttestationPolicy{}):
+		return nil, errors.New("application.test_attestor_required")
+	case dependencies.TestAttestor != nil && ValidateTestAttestationPolicy(dependencies.TestAttestationPolicy) != nil:
+		return nil, errors.New("application.test_attestation_policy_invalid")
 	}
 	controller := dependencies.Controller
 	if controller == nil {
@@ -112,6 +124,8 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 		artifacts:               dependencies.Artifacts,
 		workspaceManager:        dependencies.WorkspaceManager,
 		versionControl:          dependencies.VersionControl,
+		testAttestor:            dependencies.TestAttestor,
+		testAttestationPolicy:   dependencies.TestAttestationPolicy,
 		clock:                   dependencies.Clock,
 		ids:                     dependencies.IDs,
 		maxOutputBytes:          dependencies.MaxOutputBytes,
@@ -119,6 +133,7 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 		maxExecutionAttempts:    dependencies.MaxExecutionAttempts,
 		maxChildrenPerParent:    dependencies.MaxChildrenPerParent,
 		claimLease:              dependencies.ClaimLease,
+		attestTestClaimLease:    dependencies.AttestTestClaimLease,
 		directorLeaseDuration:   dependencies.DirectorLeaseDuration,
 		budgetPolicy:            dependencies.BudgetPolicy,
 		observationDelay:        dependencies.ObservationDelay,

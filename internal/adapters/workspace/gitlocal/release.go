@@ -10,7 +10,7 @@ import (
 )
 
 func (adapter *Adapter) Release(ctx context.Context, request ports.WorkspaceReleaseRequest) (ports.WorkspaceReleaseReceipt, error) {
-	if adapter == nil {
+	if err := adapter.ensureAvailable(); err != nil {
 		return ports.WorkspaceReleaseReceipt{}, &Error{Code: CodeUnavailable}
 	}
 	result, err := workspaceReleaseReceipt(request)

@@ -162,10 +162,11 @@ func testReleaseRequest(prepare ports.WorkspacePrepareRequest) ports.WorkspaceRe
 
 func freshAdapter(t *testing.T, adapter *Adapter) *Adapter {
 	t.Helper()
-	fresh, err := New(Config{Root: adapter.root, GitCommand: adapter.git, Locator: adapter.loc, Now: adapter.now})
+	fresh, err := newTestAdapter(Config{Root: adapter.root, GitCommand: testGitExecutable(t), Locator: adapter.loc, Now: adapter.now})
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = fresh.Close() })
 	return fresh
 }
 

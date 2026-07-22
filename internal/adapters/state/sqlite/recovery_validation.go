@@ -81,6 +81,26 @@ func validateRecoveryDatabase(ctx context.Context, database *sql.DB) (string, st
 type recoveryValidator func(context.Context, *sql.Tx) error
 
 func validateRecoveryVersion(ctx context.Context, tx *sql.Tx, version int) error {
+	if version >= recoverySchemaV17 {
+		// Classify broken ledgers at their owning schema boundary before the
+		// hydrated read model rejects the same corruption more generically.
+		validators := []recoveryValidator{
+			validateRecoveryV10Identity,
+			validateRecoveryV12Director,
+			validateRecoveryV13Mailbox,
+			validateRecoveryV14Controls,
+			validateRecoveryV17Governance,
+			validateRecoveryV16WorkspaceGit,
+			validateRecoveryV17TestAttestor,
+			validateMigratedGoalRecords,
+		}
+		for _, validate := range validators {
+			if err := validate(ctx, tx); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 	validators := []recoveryValidator{validateMigratedGoalRecords, validateRecoveryV10Identity}
 	if version == recoverySchemaV09 {
 		validators = []recoveryValidator{validateRecoveryV09GoalRecords}

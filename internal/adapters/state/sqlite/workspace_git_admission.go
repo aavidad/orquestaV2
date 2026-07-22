@@ -42,6 +42,9 @@ func (r *Repository) AdmitIntegration(ctx context.Context, s application.AdmitIn
 		); err != nil {
 			return application.ActionRecord{}, false, err
 		}
+		if err := requireIntegrationPassEvidence(ctx, tx, s); err != nil {
+			return application.ActionRecord{}, false, err
+		}
 		if err = commit(tx); err != nil {
 			return application.ActionRecord{}, false, err
 		}
@@ -51,6 +54,9 @@ func (r *Repository) AdmitIntegration(ctx context.Context, s application.AdmitIn
 		ctx, tx, s.AuthorizationReceipt, s.PrincipalRef, s.ProjectRef,
 		identity.PermissionChangesIntegrate, s.GoalRef.String(),
 	); err != nil {
+		return application.ActionRecord{}, false, err
+	}
+	if err := requireIntegrationPassEvidence(ctx, tx, s); err != nil {
 		return application.ActionRecord{}, false, err
 	}
 	if err := requireIntegrationAdmissionFrontier(ctx, tx, s); err != nil {
@@ -66,6 +72,26 @@ func (r *Repository) AdmitIntegration(ctx context.Context, s application.AdmitIn
 		return application.ActionRecord{}, false, err
 	}
 	return s.Action, true, nil
+}
+
+func requireIntegrationPassEvidence(ctx context.Context, tx *sql.Tx, s application.AdmitIntegrationState) error {
+	record, err := readGoalRecord(ctx, tx, s.GoalRef.String())
+	if err != nil {
+		return err
+	}
+	count := 0
+	for _, evidence := range record.Attestations {
+		if evidence.Kind == application.AttestationKindRequiredTests && evidence.Verdict == application.AttestationVerdictPassed &&
+			evidence.WorkItemRef == s.Action.WorkItemRef && evidence.ExecutionRef == s.Action.ExecutionRef &&
+			evidence.ChangeSetRef == s.ChangeRef && evidence.PlanGeneration == s.Action.PlanGeneration &&
+			evidence.WorkItemGeneration == s.ExpectedItemRevision {
+			count++
+		}
+	}
+	if count != 1 {
+		return conflict(errors.New("sqlite.integration_required_tests_pass_missing"))
+	}
+	return nil
 }
 func validateIntegrationAdmissionState(s application.AdmitIntegrationState) error {
 	action, intent := s.Action, s.Action.EffectIntent

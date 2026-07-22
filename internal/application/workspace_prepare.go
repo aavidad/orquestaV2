@@ -16,15 +16,18 @@ func newChangeSetRef(ctx context.Context, ids IDGenerator) (ports.ChangeSetRef, 
 }
 
 func (orchestrator *Orchestrator) processPrepareWorkspace(ctx context.Context, claim ActionClaim) error {
-	if orchestrator.workspaceManager == nil {
-		return orchestrator.requeueWorkspaceEffect(ctx, claim, "workspace.manager_unavailable")
-	}
 	record, err := orchestrator.state.GetGoal(ctx, claim.Action.GoalRef)
 	if err != nil {
 		return err
 	}
 	if err := validateClaimedRecord(claim, record, ActionPrepareWorkspace); err != nil {
 		return orchestrator.quarantine(ctx, claim, err.Error())
+	}
+	if priorEffectAttemptBlocksDispatch(record, claim.Action) {
+		return orchestrator.quarantineUnknownApplied(ctx, claim)
+	}
+	if orchestrator.workspaceManager == nil {
+		return orchestrator.requeueWorkspaceEffect(ctx, claim, "workspace.manager_unavailable")
 	}
 	if err := validateClaimedEffect(claim, orchestrator.clock.Now()); err != nil {
 		return orchestrator.quarantine(ctx, claim, err.Error())
@@ -35,28 +38,34 @@ func (orchestrator *Orchestrator) processPrepareWorkspace(ctx context.Context, c
 	if !itemFound || !executionFound || !authorityFound || validateWorkItemAuthority(record.Goal, authority) != nil {
 		return orchestrator.quarantine(ctx, claim, "application.workspace_scope_invalid")
 	}
+	if workspacePrepareTargetDigest(record.Goal, item, execution) != claim.Action.EffectIntent.TargetDigest {
+		return orchestrator.quarantine(ctx, claim, "application.effect_target_mismatch")
+	}
 	if err := orchestrator.validateCurrentAutomaticAuthority(ctx, claim); err != nil {
 		return orchestrator.requeueWorkspaceEffect(ctx, claim, err.Error())
 	}
-	attempt, err := orchestrator.beginEffectAttempt(ctx, claim, orchestrator.clock.Now())
+	policy, err := historicalEffectPolicy(record)
+	if err != nil {
+		return err
+	}
+	attempt, err := orchestrator.beginNewEffectAttempt(ctx, claim, orchestrator.clock.Now())
 	if err != nil {
 		return err
 	}
 	request := prepareWorkspaceRequest(record, item, execution, authority, claim, attempt)
-	if workspacePrepareTargetDigest(record.Goal, item, execution) != claim.Action.EffectIntent.TargetDigest {
-		return orchestrator.quarantine(ctx, claim, "application.effect_target_mismatch")
-	}
-	prepared, prepareErr := orchestrator.workspaceManager.Prepare(ctx, request)
+	effectCtx, cancel := orchestrator.actionCallContext(ctx, claim)
+	prepared, prepareErr := orchestrator.workspaceManager.Prepare(effectCtx, request)
+	cancel()
 	if prepareErr != nil {
-		return orchestrator.requeueWorkspaceEffect(ctx, claim, workspaceErrorCode(prepareErr, "workspace.prepare_failed"))
+		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	}
 	if err := ports.ValidateWorkspacePrepared(request, prepared); err != nil {
-		return orchestrator.quarantine(ctx, claim, ports.WorkspaceContractErrorCode(err))
+		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	}
 	now := orchestrator.clock.Now().UTC()
 	externalReceipt, err := effectReceipt(claim, attempt, prepared.ReceiptRef, EffectStatusPrepared, unknownUsage(), now)
 	if err != nil {
-		return err
+		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	}
 	binding := WorkspaceBinding{
 		Ref: prepared.WorkspaceRef, PrincipalRef: authority.PrincipalRef,
@@ -71,23 +80,22 @@ func (orchestrator *Orchestrator) processPrepareWorkspace(ctx context.Context, c
 		PreparedAt: prepared.PreparedAt,
 	}
 	if err := ValidateWorkspaceBinding(binding); err != nil {
-		return orchestrator.quarantine(ctx, claim, err.Error())
+		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	}
 	execution.ExecutionWorkspaceRef = binding.Ref
-	policy, err := historicalEffectPolicy(record)
-	if err != nil {
-		return err
-	}
 	next, err := orchestrator.launchAction(policy, record.Goal, item, execution, authority, now, now)
 	if err != nil {
-		return err
+		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	}
-	return orchestrator.state.RecordWorkspacePrepared(ctx, WorkspacePreparedState{
+	err = orchestrator.state.RecordWorkspacePrepared(ctx, WorkspacePreparedState{
 		Claim: claim, Execution: execution, Binding: binding, NextAction: next, EffectReceipt: externalReceipt,
 		Event: EventRecord{Ref: "event:workspace-prepared:" + execution.Ref.String(), Kind: "workspace.prepared",
-			GoalRef: record.Goal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref, OccurredAt: now},
-		OperationAt: now,
+			GoalRef: record.Goal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref, OccurredAt: now}, OperationAt: now,
 	})
+	if err != nil {
+		return orchestrator.quarantineUnknownApplied(ctx, claim)
+	}
+	return nil
 }
 
 func prepareWorkspaceRequest(record GoalRecord, item goal.WorkItem, execution ExecutionRecord,

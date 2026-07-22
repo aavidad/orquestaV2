@@ -223,6 +223,15 @@ func (adapter *Adapter) finishStoppedProcessLocked(state *executionState, proof 
 }
 
 func waitForExactProcess(ctx context.Context, record processRecord, settled <-chan struct{}) (bool, error) {
+	return waitForExactProcessWithInspector(ctx, record, settled, inspectProcessTree)
+}
+
+func waitForExactProcessWithInspector(
+	ctx context.Context,
+	record processRecord,
+	settled <-chan struct{},
+	inspect func(processRecord) (bool, error),
+) (bool, error) {
 	if settled != nil {
 		select {
 		case <-ctx.Done():
@@ -233,7 +242,7 @@ func waitForExactProcess(ctx context.Context, record processRecord, settled <-ch
 	ticker := time.NewTicker(5 * time.Millisecond)
 	defer ticker.Stop()
 	for {
-		gone, err := inspectProcessTree(record)
+		gone, err := inspect(record)
 		if err == nil && gone {
 			return true, nil
 		}

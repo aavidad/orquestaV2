@@ -171,32 +171,6 @@ func workItemInsert(item goal.WorkItemSnapshot, position int, schema workItemSch
 	return query, arguments
 }
 
-func insertWorkItemRelations(ctx context.Context, tx *sql.Tx, item goal.WorkItemSnapshot) error {
-	for position, dependency := range item.DependencyRefs {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO work_item_dependencies(
-goal_ref, work_item_ref, dependency_ref, position) VALUES (?, ?, ?, ?)`,
-			item.GoalRef, item.Ref, dependency, position); err != nil {
-			return mapDatabaseError(err)
-		}
-	}
-	for position, scope := range item.WriteSet {
-		if _, err := tx.ExecContext(ctx, `INSERT INTO work_item_write_scopes(
-goal_ref, work_item_ref, scope, position) VALUES (?, ?, ?, ?)`,
-			item.GoalRef, item.Ref, scope, position); err != nil {
-			return mapDatabaseError(err)
-		}
-	}
-	for _, refs := range []struct {
-		kind string
-		refs []string
-	}{{"skill", item.SkillRefs}, {"tool", item.ToolRefs}, {"capability", item.CapabilityRefs}} {
-		if err := insertOrderedContractRefs(ctx, tx, "work_item_requirement_refs", item.GoalRef, item.Ref, refs.kind, refs.refs); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 const workItemControlledInsert = `INSERT INTO work_items(
 ref,goal_ref,actor_ref,project_ref,objective,phase_key,role_key,parent_ref,output_contract,skip_reason,
 interrupt_cause,rework_of,state,revision,paused,cancel_requested,control_sequence,position,created_at,
@@ -881,9 +855,17 @@ func insertEvents(ctx context.Context, transaction *sql.Tx, events []application
 }
 
 func insertArtifact(ctx context.Context, transaction *sql.Tx, artifact application.ArtifactRecord) error {
+	if err := validateArtifactRecord(artifact); err != nil {
+		return invalid(err)
+	}
+	if !validCanonicalHash(artifact.Stored.Digest) ||
+		artifact.Stored.Ref.String() != "artifact:sha256:"+artifact.Stored.Digest {
+		return invalid(fmt.Errorf("sqlite.artifact_cas_identity_invalid"))
+	}
 	_, err := transaction.ExecContext(ctx, `
 INSERT INTO artifacts(ref, goal_ref, work_item_ref, digest, media_type, size, created_at)
-VALUES (?, ?, ?, ?, ?, ?, ?)`,
+VALUES (?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(goal_ref,ref) DO NOTHING`,
 		artifact.Stored.Ref.String(),
 		artifact.GoalRef.String(),
 		artifact.WorkItemRef.String(),
@@ -892,22 +874,43 @@ VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		artifact.Stored.Size,
 		requiredTime(artifact.CreatedAt),
 	)
-	return mapDatabaseError(err)
-}
-
-func insertAttestation(ctx context.Context, transaction *sql.Tx, attestation application.AttestationRecord) error {
-	_, err := transaction.ExecContext(ctx, `
-INSERT INTO attestations(
-    ref, goal_ref, work_item_ref, execution_ref, artifact_ref, policy, accepted_at
-) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		attestation.Ref.String(),
-		attestation.GoalRef.String(),
-		attestation.WorkItemRef.String(),
-		attestation.ExecutionRef.String(),
-		attestation.ArtifactRef.String(),
-		attestation.Policy,
-		requiredTime(attestation.AcceptedAt),
-	)
+	if err != nil {
+		return mapDatabaseError(err)
+	}
+	var digest, mediaType string
+	var size int64
+	if err := transaction.QueryRowContext(ctx, `
+SELECT digest,media_type,size FROM artifacts WHERE goal_ref=? AND ref=?`,
+		artifact.GoalRef.String(), artifact.Stored.Ref.String()).Scan(&digest, &mediaType, &size); err != nil {
+		return mapDatabaseError(err)
+	}
+	if digest != artifact.Stored.Digest || mediaType != artifact.Stored.MediaType || size != artifact.Stored.Size {
+		return invalid(fmt.Errorf("sqlite.artifact_cas_identity_conflict"))
+	}
+	var duplicate int
+	if err := transaction.QueryRowContext(ctx, `
+SELECT COUNT(*) FROM artifact_occurrences
+WHERE kind=? AND goal_ref=? AND work_item_ref=? AND execution_ref=? AND artifact_ref=?
+ AND execution_attempt=? AND plan_generation=? AND work_item_generation=?
+ AND app_spec_generation=? AND spec_hash=?`,
+		string(artifact.Kind), artifact.GoalRef.String(), artifact.WorkItemRef.String(),
+		artifact.ExecutionRef.String(), artifact.Stored.Ref.String(), int64(artifact.ExecutionAttempt),
+		int64(artifact.PlanGeneration), int64(artifact.WorkItemGeneration),
+		int64(artifact.AppSpecGeneration), artifact.SpecHash).Scan(&duplicate); err != nil {
+		return mapDatabaseError(err)
+	}
+	if duplicate != 0 {
+		return conflict(fmt.Errorf("sqlite.artifact_occurrence_duplicate"))
+	}
+	_, err = transaction.ExecContext(ctx, `
+INSERT INTO artifact_occurrences(
+ occurrence_ref,kind,goal_ref,work_item_ref,execution_ref,artifact_ref,
+ execution_attempt,plan_generation,work_item_generation,app_spec_generation,spec_hash,created_at
+) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+		artifact.OccurrenceRef, string(artifact.Kind), artifact.GoalRef.String(),
+		artifact.WorkItemRef.String(), artifact.ExecutionRef.String(), artifact.Stored.Ref.String(),
+		int64(artifact.ExecutionAttempt), int64(artifact.PlanGeneration), int64(artifact.WorkItemGeneration),
+		int64(artifact.AppSpecGeneration), artifact.SpecHash, requiredTime(artifact.CreatedAt))
 	return mapDatabaseError(err)
 }
 

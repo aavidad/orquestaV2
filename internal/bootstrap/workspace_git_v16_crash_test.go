@@ -124,7 +124,7 @@ func v16InjectIntegrationCrash(
 	integrationRequestRef string,
 ) {
 	harness.process(t, application.ActionPrepareWorkspace, application.ActionLaunchAgent,
-		application.ActionObserveAgent, application.ActionCommitChange)
+		application.ActionObserveAgent, application.ActionCommitChange, application.ActionAttestTest)
 	record := harness.get(t, harness.access, goalRef)
 	before := record.WorkspaceBindings[0].BaseOID
 	if _, err := harness.runtime.Orchestrator().IntegrateChange(context.Background(), harness.access,
@@ -157,8 +157,8 @@ func v16FinishCrashReplay(
 ) {
 	if frontier != "during_release" {
 		record := harness.get(t, harness.access, goalRef)
-		if len(record.ChangeSets) == 0 {
-			harness.driveToCommitted(t, record)
+		if len(record.ChangeSets) == 0 || record.Executions[0].State != application.ExecutionAwaitingIntegration {
+			harness.driveToAttested(t, record)
 			record = harness.get(t, harness.access, goalRef)
 		}
 		if len(record.IntegrationReceipts) == 0 {
@@ -191,10 +191,12 @@ func v16AssertCrashClosed(
 		len(closed.ChangeSets) != 1 || len(closed.IntegrationReceipts) != 1 ||
 		len(closed.MergeObservations) != 1 || closed.MergeObservations[0].Status != ports.MergeStatusClean ||
 		closed.IntegrationReceipts[0].Status != ports.IntegrationStatusIntegrated ||
-		len(closed.EffectReceipts) != 4 || harness.launches.Load() != 1 {
-		t.Fatalf("frontier %s duplicated/lost effects: state=%s bindings=%d changes=%d integrations=%d effect_receipts=%d launches=%d",
+		len(closed.Artifacts) != 3 || len(closed.Attestations) != 2 ||
+		len(closed.EffectReceipts) != 5 || harness.launches.Load() != 1 {
+		t.Fatalf("frontier %s duplicated/lost effects: state=%s bindings=%d changes=%d artifacts=%d attestations=%d integrations=%d effect_receipts=%d launches=%d",
 			frontier, closed.Goal.State(), len(closed.WorkspaceBindings), len(closed.ChangeSets),
-			len(closed.IntegrationReceipts), len(closed.EffectReceipts), harness.launches.Load())
+			len(closed.Artifacts), len(closed.Attestations), len(closed.IntegrationReceipts),
+			len(closed.EffectReceipts), harness.launches.Load())
 	}
 	log := v16Git(t, harness.git, harness.seed, "log", "--format=%s", fixture.GitFixture.TargetRef)
 	if count := strings.Count(log, "orquesta integration"); count != 1 {

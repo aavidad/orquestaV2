@@ -12,7 +12,7 @@ import (
 )
 
 func (adapter *Adapter) PreviewIntegration(ctx context.Context, request ports.IntegrationPreviewRequest) (ports.IntegrationPreview, error) {
-	if adapter == nil {
+	if err := adapter.ensureAvailable(); err != nil {
 		return ports.IntegrationPreview{}, &Error{Code: CodeUnavailable}
 	}
 	if err := ports.ValidateIntegrationPreviewRequest(request); err != nil {
@@ -37,7 +37,7 @@ func (adapter *Adapter) PreviewIntegration(ctx context.Context, request ports.In
 }
 
 func (adapter *Adapter) Integrate(ctx context.Context, request ports.IntegrationRequest) (ports.IntegrationResult, error) {
-	if adapter == nil {
+	if err := adapter.ensureAvailable(); err != nil {
 		return ports.IntegrationResult{}, &Error{Code: CodeUnavailable}
 	}
 	if err := ports.ValidateIntegrationRequest(request); err != nil {

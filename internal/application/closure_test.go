@@ -185,9 +185,10 @@ func TestLaunchInfrastructureFailureCreatesReplaceableAttempt(t *testing.T) {
 	clock := &mutableClock{now: time.Date(2026, 7, 14, 22, 0, 0, 0, time.UTC)}
 	repository := newMemoryRepository()
 	repository.now = clock.Now
-	agent := &scriptedAgent{now: clock.Now, launchErr: definitelyUnappliedPermanentError{"missing executable"}, observations: []ports.AgentObservation{{
-		Status: ports.AgentCompleted, MediaType: "text/plain", Content: []byte("recovered"),
-	}}}
+	agent := &scriptedAgent{now: clock.Now, launchErr: definitelyUnappliedPermanentError{"missing executable"},
+		launchErrorHook: func() { clock.Advance(time.Nanosecond) }, observations: []ports.AgentObservation{{
+			Status: ports.AgentCompleted, MediaType: "text/plain", Content: []byte("recovered"),
+		}}}
 	orchestrator, _ := newTestOrchestrator(t, repository, clock, agent)
 	actor, project := testScope(t)
 	access := accessForScope(t, actor, project)
@@ -225,9 +226,10 @@ func TestTemporaryLaunchFailureRequeuesWithoutClosingGoal(t *testing.T) {
 	clock := &mutableClock{now: time.Date(2026, 7, 14, 22, 30, 0, 0, time.UTC)}
 	repository := newMemoryRepository()
 	repository.now = clock.Now
-	agent := &scriptedAgent{now: clock.Now, launchErr: temporaryAgentTestError{}, observations: []ports.AgentObservation{{
-		Status: ports.AgentCompleted, MediaType: "text/plain", Content: []byte("after capacity"),
-	}}}
+	agent := &scriptedAgent{now: clock.Now, launchErr: definitelyUnappliedTemporaryError{},
+		launchErrorHook: func() { clock.Advance(time.Nanosecond) }, observations: []ports.AgentObservation{{
+			Status: ports.AgentCompleted, MediaType: "text/plain", Content: []byte("after capacity"),
+		}}}
 	orchestrator, _ := newTestOrchestrator(t, repository, clock, agent)
 	actor, project := testScope(t)
 	access := accessForScope(t, actor, project)
@@ -268,9 +270,10 @@ func TestTemporaryLaunchCapacityWaitDoesNotConsumeExecutionAttemptBudget(t *test
 	clock := &mutableClock{now: time.Date(2026, 7, 14, 23, 0, 0, 0, time.UTC)}
 	repository := newMemoryRepository()
 	repository.now = clock.Now
-	agent := &scriptedAgent{now: clock.Now, launchErr: temporaryAgentTestError{}, observations: []ports.AgentObservation{{
-		Status: ports.AgentCompleted, MediaType: "text/plain", Content: []byte("capacity recovered"),
-	}}}
+	agent := &scriptedAgent{now: clock.Now, launchErr: definitelyUnappliedTemporaryError{},
+		launchErrorHook: func() { clock.Advance(time.Nanosecond) }, observations: []ports.AgentObservation{{
+			Status: ports.AgentCompleted, MediaType: "text/plain", Content: []byte("capacity recovered"),
+		}}}
 	orchestrator, err := New(Dependencies{
 		State: repository, Access: newMemoryAccessRepository(),
 		Launcher: agent, Observer: agent, Artifacts: newMemoryArtifactStore(),

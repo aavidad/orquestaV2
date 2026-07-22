@@ -17,6 +17,12 @@ const (
 	CodeNoChanges         ErrorCode = "gitlocal.no_changes"
 	CodeChangeConflict    ErrorCode = "gitlocal.change_conflict"
 	CodeGitFailed         ErrorCode = "gitlocal.git_failed"
+	CodeSnapshotHash      ErrorCode = "gitlocal.snapshot_hash_mismatch"
+	CodeSnapshotInvalid   ErrorCode = "gitlocal.snapshot_invalid"
+	CodeSnapshotPath      ErrorCode = "gitlocal.snapshot_path_invalid"
+	CodeSnapshotGitlink   ErrorCode = "gitlocal.snapshot_gitlink_unsupported"
+	CodeSnapshotLimit     ErrorCode = "gitlocal.snapshot_limit_exceeded"
+	CodeSnapshotStream    ErrorCode = "gitlocal.snapshot_stream_failed"
 )
 
 type Error struct {

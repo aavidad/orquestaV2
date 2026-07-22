@@ -107,12 +107,13 @@ func TestExplicitPlanPreservesContractsAndLaunchesMaximalSafeCohort(t *testing.T
 			WorkItems: []WorkItemSpec{
 				{Key: "a", Objective: "first writer", Phase: "phase:build", Role: "role:worker",
 					WriteSet: []string{"internal/shared"}, SkillRefs: []string{"skill:go"},
-					ToolRefs: []string{"tool:test"}, CapabilityRefs: []string{"capability:patch"},
+					RequiredTests: requiredTestSpecs("required-test:a"),
+					ToolRefs:      []string{"tool:test"}, CapabilityRefs: []string{"capability:patch"},
 					OutputContract: goal.OutputContractEvidenceBundle},
 				{Key: "b", Objective: "overlapping writer", Phase: "phase:build", Role: "role:worker",
-					WriteSet: []string{"internal/shared/file.go"}, OutputContract: goal.OutputContractEvidenceBundle},
+					WriteSet: []string{"internal/shared/file.go"}, RequiredTests: requiredTestSpecs("required-test:b"), OutputContract: goal.OutputContractEvidenceBundle},
 				{Key: "c", Objective: "free writer", Phase: "phase:build", Role: "role:worker",
-					WriteSet: []string{"docs/free.md"}, OutputContract: goal.OutputContractEvidenceBundle},
+					WriteSet: []string{"docs/free.md"}, RequiredTests: requiredTestSpecs("required-test:c"), OutputContract: goal.OutputContractEvidenceBundle},
 			},
 		},
 	})
@@ -250,5 +251,19 @@ func TestPlanExtensionRejectsRequestKeyCollidingWithExistingWorkItemRef(t *testi
 func clonePlanSpec(input *PlanSpec) *PlanSpec {
 	result := &PlanSpec{Phases: append([]PhaseSpec(nil), input.Phases...)}
 	result.WorkItems = append([]WorkItemSpec(nil), input.WorkItems...)
+	for index := range result.WorkItems {
+		result.WorkItems[index].RequiredTests = append([]RequiredTestSpec(nil), input.WorkItems[index].RequiredTests...)
+		for testIndex := range result.WorkItems[index].RequiredTests {
+			result.WorkItems[index].RequiredTests[testIndex].Arguments = append(
+				[]string(nil), input.WorkItems[index].RequiredTests[testIndex].Arguments...,
+			)
+		}
+	}
 	return result
+}
+
+func requiredTestSpecs(ref string) []RequiredTestSpec {
+	return []RequiredTestSpec{{
+		Ref: ref, ToolRef: "tool:test", Arguments: []string{"./..."}, WorkingDirectory: ".",
+	}}
 }

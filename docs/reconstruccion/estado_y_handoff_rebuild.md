@@ -7,7 +7,7 @@ sesión. Es estado operativo, no evidencia de aceptación. Los estados canónico
 de capacidades, verticales y contratos viven en `product/roadmap.json`; los
 verdes viven en receipts fuera de su propio candidato.
 
-## Checkpoint verificable vigente: V16 acreditado; V17 no iniciado
+## Checkpoint verificable vigente: V16 acreditado; V17 en ejecución sin sello
 
 En `38e1ffb82d`, V01–V16 están cerrados por receipts V3 reproducibles.
 `TestAcceptanceV16WorkspaceGitReceipt` valida el `PASS` de
@@ -43,9 +43,62 @@ helper libre violaba el writer único; `a130031096` detectó un runner temporal
 incompatible con el hardening. `BUG-REBUILD-20260721-255`–`257` conservan esas
 lecciones. No se relajaron autoridad, seguridad, timeouts ni presupuestos.
 
-V17 no se abrió. No queda proceso de prueba, `orquesta-server`, cache o worktree
-temporal V16 creado por este cierre. La siguiente sesión debe partir de este
-checkpoint y solo abrir V17 con orden del operador.
+V17 se abrió después de este checkpoint y permanece **no acreditada** mientras
+no exista su receipt V3 reproducible. Su contrato y análisis viven en
+`docs/reconstruccion/analisis_y_contrato_v17_artefactos_atestador.md`; hay
+trabajo activo sobre CAS filesystem, `TestAttestor`, verificación Git exacta,
+flujo de aplicación y persistencia/recovery SQLite. Nada de ello aumenta el
+conteo hasta completar P/S/E desde checkout limpio.
+
+### Handoff V17 pre-P: contrato de cierre preparado, producto aún rojo
+
+La contrarrevisión de aceptación dejó fixture estricto con las 199 rutas
+exactas de `B..working tree`, budget y argv separados para focal/race/E2E/vet.
+El OID P continúa vacío, no existe
+`product/evidence/v17_test_attestor.json`, `AC-V17-TEST-ATTESTOR` sigue
+`planned` y `EVD-01/04/05/13` siguen `declared` sin evidence refs. Un ACK no
+cambia ninguno de esos hechos.
+
+Estado reproducible PRE-P:
+
+- acceptance V17 pasa y compara el inventario dirty exacto mientras P está
+  vacío; los behavior tests se descubren por AST y la suite race no admite
+  nombres sin una definición Linux seleccionada;
+- trazabilidad JSONL y tests estructurales de bugs: verdes;
+- config canónica/example/generados: verdes;
+- la ruta productiva actual es object-stream: binding durable exacto y
+  marcadores Git -> OID/tree/diff verificados -> stream/archivos sellados ->
+  bubblewrap. No materializa un worktree de tests ni usa `VerifySnapshot`
+  diagnóstico antes/después;
+- el proceso bubblewrap debe ser EUID/EGID no-root, pero sus entradas bwrap/Go
+  permanecen root-owned, no escribibles y selladas. Son identidades distintas;
+- los seis efectos físicos cruzan el adapter solo tras un `EffectAttempt`
+  nuevo; receipt terminal bloquea replay y el único retry permitido conserva
+  `CausalAttemptRef` con zero-release exacto, sin inferencia temporal;
+- SQLite aplica el mismo contrato de attempt; Git exige WorkspaceRef y
+  WorkspaceBindingDigest exactos; cgroup parsea estrictamente
+  `memory.events`, `pids.events` y `cgroup.events` y nunca convierte corrupción
+  en PASS;
+- el receipt del atestador liga el informe canónico completo —verdict,
+  outcomes y output— y no puede colisionar entre PASS y FAIL del mismo sujeto;
+- V15 conserva backoff solo antes de un efecto de stop, mientras V17
+  cuarentena cualquier resultado externo ambiguo y no repite el efecto;
+- los lessons focales `296`, `305`, `309`, `311`, `312` y `316` pasaron y sus
+  filas se cerraron. Los bugs ligados a E2E, budget sellado o P/S/E siguen
+  abiertos.
+
+Siguiente dependencia única: ejecutar race/vet y el E2E final sobre el árbol
+congelado, crear P, fijar su OID en S y emitir E desde `detached_clean`. El E2E
+real ya pasó una vez en el servicio transitorio systemd delegado; todavía no es
+el receipt reproducible de S. El presupuesto medido y su deuda están decididos
+en `docs/reconstruccion/adr_v17_presupuesto_seguridad_2026-07-22.md`.
+
+La estrategia de agentes independientes para terminar V17-V34, con DAG,
+worktrees, write-sets, leases y fichas por vertical, vive en
+`docs/reconstruccion/plan_agentes_independientes_v17_v34.md`. V17 es la última
+excepción en worktree compartido; V18 y siguientes deben usar worktree y branch
+aislados. No queda runtime temporal V16; el runtime de análisis V17 debe cerrarse
+cooperativamente al sellar V17.
 
 ## Checkpoint histórico previo al sellado: V15 acreditado; V16 preparado
 

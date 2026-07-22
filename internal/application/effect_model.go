@@ -21,6 +21,7 @@ const (
 	EffectKindAgentStop        EffectKind = "agent_stop"
 	EffectKindPrepareWorkspace EffectKind = "prepare_workspace"
 	EffectKindCommitChange     EffectKind = "commit_change"
+	EffectKindAttestTest       EffectKind = "attest_test"
 	EffectKindIntegrateChange  EffectKind = "integrate_change"
 	EffectRiskPolicyV1                    = "orquesta.effect-risk.v1"
 )
@@ -35,6 +36,8 @@ const (
 	EffectStatusAlreadyFailed    EffectStatus = "already_failed"
 	EffectStatusPrepared         EffectStatus = "prepared"
 	EffectStatusCommitted        EffectStatus = "committed"
+	EffectStatusAttestedPassed   EffectStatus = "attested_passed"
+	EffectStatusAttestedFailed   EffectStatus = "attested_failed"
 	EffectStatusIntegrated       EffectStatus = "integrated"
 	EffectStatusConflicted       EffectStatus = "conflicted"
 	EffectStatusStale            EffectStatus = "stale"
@@ -330,7 +333,7 @@ func ValidateEffectApproval(intent EffectIntent, approval EffectApproval) error 
 func validEffectKind(kind EffectKind) bool {
 	switch kind {
 	case EffectKindAgentLaunch, EffectKindAgentStop, EffectKindPrepareWorkspace,
-		EffectKindCommitChange, EffectKindIntegrateChange:
+		EffectKindCommitChange, EffectKindAttestTest, EffectKindIntegrateChange:
 		return true
 	default:
 		return false
@@ -347,6 +350,8 @@ func effectActionKindMatches(kind EffectKind, action ActionKind) bool {
 		return action == ActionPrepareWorkspace
 	case EffectKindCommitChange:
 		return action == ActionCommitChange
+	case EffectKindAttestTest:
+		return action == ActionAttestTest
 	case EffectKindIntegrateChange:
 		return action == ActionIntegrateChange
 	default:

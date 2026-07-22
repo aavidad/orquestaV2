@@ -25,6 +25,7 @@ func TestClaimedRetryRevalidatesPauseBeforeLaunchPreparation(t *testing.T) {
 func TestClaimedAutomaticReplacementRevalidatesPauseBeforeLaunchPreparation(t *testing.T) {
 	agent := &scriptedAgent{launchErr: definitelyUnappliedPermanentError{"provider rejected first launch"}}
 	system := newControlTestSystem(t, agent)
+	agent.launchErrorHook = func() { system.clock.Advance(time.Nanosecond) }
 	if result, err := system.orchestrator.ProcessNext(context.Background(), "worker:create-replacement"); err != nil ||
 		!result.Processed || result.Action != ActionLaunchAgent {
 		t.Fatalf("create replacement: result=%+v err=%v", result, err)

@@ -122,20 +122,77 @@ func (adapter *Adapter) validateGitMetadataRoot(ctx context.Context, repository 
 }
 
 func hardenOwnedDirectory(path string) error {
-	fd, err := syscall.Open(path, syscall.O_RDONLY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW|syscall.O_DIRECTORY, 0)
+	file, err := openBoundDirectory(path, safeOwnedDirectoryInfo, CodeWorkspaceUnsafe)
 	if err != nil {
+		return err
+	}
+	defer file.Close()
+	if err := file.Chmod(0o700); err != nil {
 		return &Error{Code: CodeWorkspaceUnsafe, Cause: err}
 	}
-	defer syscall.Close(fd)
-	var stat syscall.Stat_t
-	if err := syscall.Fstat(fd, &stat); err != nil || stat.Mode&syscall.S_IFMT != syscall.S_IFDIR ||
-		int(stat.Uid) != os.Getuid() {
+	if err := verifyBoundDirectory(path, file, safeSnapshotDirectoryInfo, CodeWorkspaceUnsafe); err != nil {
 		return &Error{Code: CodeWorkspaceUnsafe, Cause: errUnsafeWorkspace}
 	}
-	if err := syscall.Fchmod(fd, 0o700); err != nil {
-		return &Error{Code: CodeWorkspaceUnsafe, Cause: err}
+	return nil
+}
+
+func safeOwnedDirectoryInfo(info os.FileInfo) bool {
+	if info == nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return false
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	return ok && int(stat.Uid) == os.Geteuid()
+}
+
+func openVerifiedSnapshotDirectory(path string) (*os.File, error) {
+	return openBoundDirectory(path, safeSnapshotDirectoryInfo, CodeWorkspaceUnsafe)
+}
+
+func openBoundDirectory(path string, valid func(os.FileInfo) bool, code ErrorCode) (*os.File, error) {
+	before, err := os.Lstat(path)
+	if err != nil || !valid(before) {
+		return nil, &Error{Code: code, Cause: errUnsafeWorkspace}
+	}
+	fd, err := syscall.Open(path, syscall.O_RDONLY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW|syscall.O_DIRECTORY, 0)
+	if err != nil {
+		return nil, &Error{Code: code, Cause: err}
+	}
+	file := os.NewFile(uintptr(fd), path)
+	if file == nil {
+		_ = syscall.Close(fd)
+		return nil, &Error{Code: code, Cause: errUnsafeWorkspace}
+	}
+	opened, statErr := file.Stat()
+	if statErr != nil || !os.SameFile(before, opened) {
+		_ = file.Close()
+		return nil, &Error{Code: code, Cause: errUnsafeWorkspace}
+	}
+	if err := verifyBoundDirectory(path, file, valid, code); err != nil {
+		_ = file.Close()
+		return nil, err
+	}
+	return file, nil
+}
+
+func verifySnapshotDirectoryBinding(path string, file *os.File) error {
+	return verifyBoundDirectory(path, file, safeSnapshotDirectoryInfo, CodeWorkspaceUnsafe)
+}
+
+func verifyBoundDirectory(path string, file *os.File, valid func(os.FileInfo) bool, code ErrorCode) error {
+	if file == nil {
+		return &Error{Code: code, Cause: errUnsafeWorkspace}
+	}
+	opened, openErr := file.Stat()
+	bound, bindErr := os.Lstat(path)
+	if openErr != nil || bindErr != nil || !valid(opened) || !valid(bound) || !os.SameFile(opened, bound) {
+		return &Error{Code: code, Cause: errUnsafeWorkspace}
 	}
 	return nil
+}
+
+func safeSnapshotDirectoryInfo(info os.FileInfo) bool {
+	const specialMode = os.ModeSetuid | os.ModeSetgid | os.ModeSticky
+	return safeOwnedDirectoryInfo(info) && info.Mode().Perm() == 0o700 && info.Mode()&specialMode == 0
 }
 
 func safeControlInfo(info os.FileInfo) bool {
@@ -155,18 +212,52 @@ func (adapter *Adapter) verifyWorkspace(
 	if err := ensureSafeNewWorkspacePath(adapter.root, path); err != nil {
 		return "", err
 	}
-	if info, err := os.Lstat(path); err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
-		return "", &Error{Code: CodeWorkspaceUnsafe, Cause: errUnsafeWorkspace}
+	if err := hardenOwnedDirectory(path); err != nil {
+		return "", err
 	}
 	if err := hardenGitControl(path); err != nil {
 		return "", err
 	}
+	return adapter.verifyWorkspaceFacts(ctx, repository, path, base, ref)
+}
+
+func (adapter *Adapter) verifyWorkspaceReadOnly(
+	ctx context.Context,
+	repository, path, base string,
+	ref ports.ExecutionWorkspaceRef,
+) (*os.File, string, error) {
+	if err := ensureSafeNewWorkspacePath(adapter.root, path); err != nil {
+		return nil, "", err
+	}
+	workspace, err := openVerifiedSnapshotDirectory(path)
+	if err != nil {
+		return nil, "", err
+	}
+	gitDir, err := adapter.verifyWorkspaceFacts(ctx, repository, path, base, ref)
+	if err != nil {
+		_ = workspace.Close()
+		return nil, "", err
+	}
+	if err := verifySnapshotDirectoryBinding(path, workspace); err != nil {
+		_ = workspace.Close()
+		return nil, "", err
+	}
+	return workspace, gitDir, nil
+}
+
+func (adapter *Adapter) verifyWorkspaceFacts(
+	ctx context.Context,
+	repository, path, base string,
+	ref ports.ExecutionWorkspaceRef,
+) (string, error) {
 	gitDir, err := adapter.verifyWorkspaceGitBinding(ctx, repository, path)
 	if err != nil {
 		return "", err
 	}
-	if actual, err := adapter.gitOID(ctx, path, "HEAD"); err != nil || (base != "" && actual != base) {
-		return "", &Error{Code: CodeBaseStale, Cause: err}
+	if base != "" {
+		if actual, err := adapter.gitOID(ctx, path, "HEAD"); err != nil || actual != base {
+			return "", &Error{Code: CodeBaseStale, Cause: err}
+		}
 	}
 	branch, err := adapter.gitRun(ctx, path, nil, "rev-parse", "--symbolic-full-name", "HEAD")
 	if err != nil || trimOID(branch) != "refs/heads/"+workspaceBranch(ref) {

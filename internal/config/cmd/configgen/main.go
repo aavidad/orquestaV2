@@ -134,15 +134,14 @@ func mustRenderGo(registry registryFile, source []byte, semanticHash string) []b
 		fmt.Fprintf(&output, "\t\tKey%s,\n", definition.GoName)
 	}
 	output.WriteString("\t}\n}\n\n")
-	output.WriteString("func generatedValue[T any](snapshot Snapshot, key Key) T {\n")
+	output.WriteString("func get[T any](snapshot Snapshot, key Key) T {\n")
 	output.WriteString("\tvalue, _ := snapshot.value(key)\n\ttyped, _ := value.(T)\n\treturn typed\n}\n\n")
 	for _, definition := range registry.Keys {
-		fmt.Fprintf(&output, "// %s returns %s.\n", definition.GoName, definition.Key)
 		if definition.Type == "string_list" {
-			fmt.Fprintf(&output, "func (s Snapshot) %s() %s { return append([]string(nil), generatedValue[%s](s, Key%s)...) }\n\n",
+			fmt.Fprintf(&output, "func (s Snapshot) %s() %s { return append([]string(nil), get[%s](s, Key%s)...) }\n\n",
 				definition.GoName, goType(definition.Type), goType(definition.Type), definition.GoName)
 		} else {
-			fmt.Fprintf(&output, "func (s Snapshot) %s() %s { return generatedValue[%s](s, Key%s) }\n\n",
+			fmt.Fprintf(&output, "func (s Snapshot) %s() %s { return get[%s](s, Key%s) }\n\n",
 				definition.GoName, goType(definition.Type), goType(definition.Type), definition.GoName)
 		}
 	}

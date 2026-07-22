@@ -2,9 +2,9 @@
 
 # Orquesta configuration registry
 
-Registry revision: `2026-07-21.16`
+Registry revision: `2026-07-22.23`
 
-Registry hash: `sha256:987475e75789d12be14a633ebfca002261a4b2d2e821528dd86287f0b229c244`
+Registry hash: `sha256:99aa6485dcadafc4d38c3bdbfb35df7116b6a13c4f1f0e934501de9c4284e973`
 
 Precedence: `default < file < env`
 
@@ -42,8 +42,18 @@ Source limit: `1048576` bytes
       ]` | `ORQUESTA_RUNTIME_CODEX_ENV_ALLOWLIST` | `true` | `unique_non_empty_string_list, environment_name_list` |
 | `runtime.codex.credential_ref` | `credential_ref` | `"[REDACTED]"` | `ORQUESTA_RUNTIME_CODEX_CREDENTIAL_REF` | `true` | `credential_ref` |
 | `workspace.local.root` | `path` | `"./var/workspaces"` | `ORQUESTA_WORKSPACE_LOCAL_ROOT` | `true` | `non_empty_path` |
-| `repository.local.seed_path` | `string` | `""` | `ORQUESTA_REPOSITORY_LOCAL_SEED_PATH` | `true` | `trimmed_optional_string` |
+| `repository.local.seed_path` | `optional_path` | `""` | `ORQUESTA_REPOSITORY_LOCAL_SEED_PATH` | `true` | `optional_path` |
 | `repository.local.target_ref` | `string` | `"refs/heads/main"` | `ORQUESTA_REPOSITORY_LOCAL_TARGET_REF` | `true` | `trimmed_non_empty_string` |
+| `test_attestor.provider` | `string` | `"disabled"` | `ORQUESTA_TEST_ATTESTOR_PROVIDER` | `true` | `allowed_values` |
+| `test_attestor.max_subject_bytes` | `integer` | `536870912` | `ORQUESTA_TEST_ATTESTOR_MAX_SUBJECT_BYTES` | `true` | `integer_bounds` |
+| `test_attestor.timeout` | `duration` | `"15m"` | `ORQUESTA_TEST_ATTESTOR_TIMEOUT` | `true` | `positive_duration` |
+| `test_attestor.max_concurrent_runs` | `integer` | `2` | `ORQUESTA_TEST_ATTESTOR_MAX_CONCURRENT_RUNS` | `true` | `integer_bounds` |
+| `test_attestor.bubblewrap.command` | `optional_path` | `""` | `ORQUESTA_TEST_ATTESTOR_BUBBLEWRAP_COMMAND` | `true` | `optional_path` |
+| `test_attestor.go.toolchain_root` | `optional_path` | `""` | `ORQUESTA_TEST_ATTESTOR_GO_TOOLCHAIN_ROOT` | `true` | `optional_path` |
+| `test_attestor.resources.cgroup_root` | `optional_path` | `""` | `ORQUESTA_TEST_ATTESTOR_CGROUP_ROOT` | `true` | `optional_path` |
+| `test_attestor.resources.memory_max_bytes` | `integer` | `2147483648` | `ORQUESTA_TEST_ATTESTOR_MEMORY_MAX_BYTES` | `true` | `integer_bounds` |
+| `test_attestor.resources.pids_max` | `integer` | `256` | `ORQUESTA_TEST_ATTESTOR_PIDS_MAX` | `true` | `integer_bounds` |
+| `test_attestor.resources.cpu_quota_micros` | `integer` | `200000` | `ORQUESTA_TEST_ATTESTOR_CPU_QUOTA_MICROS` | `true` | `integer_bounds` |
 | `identity.provider` | `string` | `"local_token"` | `ORQUESTA_IDENTITY_PROVIDER` | `true` | `allowed_values` |
 | `identity.local_actor` | `string` | `"actor:local-owner"` | `ORQUESTA_IDENTITY_LOCAL_ACTOR` | `true` | `opaque_ref` |
 | `identity.local_token_path` | `path` | `"./var/secrets/local-owner.token"` | `ORQUESTA_IDENTITY_LOCAL_TOKEN_PATH` | `true` | `non_empty_path` |
@@ -64,6 +74,7 @@ Source limit: `1048576` bytes
 | `scheduler.poll_interval` | `duration` | `"500ms"` | `ORQUESTA_SCHEDULER_POLL_INTERVAL` | `true` | `positive_duration` |
 | `scheduler.observation_interval` | `duration` | `"2s"` | `ORQUESTA_SCHEDULER_OBSERVATION_INTERVAL` | `true` | `positive_duration` |
 | `scheduler.claim_lease` | `duration` | `"2m"` | `ORQUESTA_SCHEDULER_CLAIM_LEASE` | `true` | `positive_duration` |
+| `scheduler.attest_test_claim_lease` | `duration` | `"20m"` | `ORQUESTA_SCHEDULER_ATTEST_TEST_CLAIM_LEASE` | `true` | `positive_duration` |
 | `scheduler.max_execution_attempts` | `integer` | `3` | `ORQUESTA_SCHEDULER_MAX_EXECUTION_ATTEMPTS` | `true` | `integer_bounds` |
 | `scheduler.max_children_per_parent` | `integer` | `6` | `ORQUESTA_SCHEDULER_MAX_CHILDREN_PER_PARENT` | `true` | `integer_bounds` |
 | `scheduler.execution_timeout` | `duration` | `"45m"` | `ORQUESTA_SCHEDULER_EXECUTION_TIMEOUT` | `true` | `positive_duration` |
@@ -79,6 +90,7 @@ Source limit: `1048576` bytes
 - `server_mcp_path_literal`: `server.mcp_path`
 - `runtime_paths_disjoint`: `state.sqlite.path`, `artifact.filesystem.root`, `credentials.local.path`, `runtime.codex.work_root`, `workspace.local.root`, `config.effective_path`, `identity.local_token_path`
 - `identity_provider_requirements`: `identity.provider`, `identity.oidc.issuer`, `identity.oidc.audience`, `identity.oidc.clock_skew`, `identity.oidc.upstream_timeout`
+- `test_attestor_provider_requirements`: `test_attestor.provider`, `test_attestor.timeout`, `test_attestor.bubblewrap.command`, `test_attestor.go.toolchain_root`, `runtime.max_output_bytes`, `test_attestor.max_subject_bytes`, `test_attestor.max_concurrent_runs`, `repository.local.seed_path`, `test_attestor.resources.cgroup_root`, `test_attestor.resources.memory_max_bytes`, `test_attestor.resources.pids_max`, `test_attestor.resources.cpu_quota_micros`, `server.shutdown_timeout`, `scheduler.attest_test_claim_lease`, `scheduler.execution_timeout`
 
 ## Temporary aliases
 

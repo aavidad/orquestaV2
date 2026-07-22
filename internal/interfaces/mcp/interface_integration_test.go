@@ -95,7 +95,8 @@ func TestOfficialClientListsExactToolsAndCallsGoalArtifactAndStatus(t *testing.T
 	}
 	if created.Goal.Phases == nil || created.Goal.Executions == nil || created.Goal.Artifacts == nil ||
 		created.Goal.Attestations == nil || created.Goal.WorkItems[0].ArtifactRefs == nil ||
-		created.Goal.WorkItems[0].DependencyRefs == nil || created.Goal.WorkItems[0].WriteSet == nil {
+		created.Goal.WorkItems[0].DependencyRefs == nil || created.Goal.WorkItems[0].WriteSet == nil ||
+		created.Goal.WorkItems[0].RequiredTests == nil {
 		t.Fatalf("evidence arrays are not typed empty arrays: %+v", created.Goal)
 	}
 

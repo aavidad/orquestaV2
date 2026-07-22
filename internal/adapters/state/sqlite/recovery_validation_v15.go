@@ -56,7 +56,7 @@ SELECT COUNT(*) FROM outbox action LEFT JOIN effect_intents intent ON intent.ref
 LEFT JOIN work_items item ON item.goal_ref=action.goal_ref AND item.ref=action.work_item_ref
 LEFT JOIN executions execution ON execution.goal_ref=action.goal_ref AND execution.ref=action.execution_ref
 WHERE (action.governance_version=0 AND action.effect_intent_ref IS NOT NULL) OR (action.governance_version=1 AND
- (action.kind NOT IN ('launch_agent','stop_agent','prepare_workspace','commit_change','integrate_change')
+ (action.kind NOT IN ('launch_agent','stop_agent','prepare_workspace','commit_change','attest_test','integrate_change')
   OR intent.ref IS NULL OR intent.action_ref<>action.ref
   OR intent.action_kind<>action.kind OR intent.goal_ref<>action.goal_ref OR intent.work_item_ref<>action.work_item_ref
   OR intent.execution_ref<>action.execution_ref OR intent.plan_generation<>action.plan_generation
@@ -141,14 +141,59 @@ WHERE intent.ref IS NULL OR approval.ref IS NULL OR action.ref IS NULL OR approv
  OR (intent.kind='commit_change' AND NOT EXISTS(SELECT 1 FROM events event WHERE event.goal_ref=attempt.goal_ref
     AND event.work_item_ref=attempt.work_item_ref AND event.execution_ref=attempt.execution_ref
     AND event.kind='execution.output_ready' AND event.occurred_at<=attempt.started_at))
- OR (intent.kind='integrate_change' AND NOT EXISTS(SELECT 1 FROM events event WHERE event.goal_ref=attempt.goal_ref
+ OR (intent.kind='attest_test' AND NOT EXISTS(SELECT 1 FROM events event WHERE event.goal_ref=attempt.goal_ref
     AND event.work_item_ref=attempt.work_item_ref AND event.execution_ref=attempt.execution_ref
     AND event.kind='change.committed' AND event.occurred_at<=attempt.started_at))
+ OR (intent.kind='integrate_change' AND NOT EXISTS(SELECT 1 FROM events event WHERE event.goal_ref=attempt.goal_ref
+    AND event.work_item_ref=attempt.work_item_ref AND event.execution_ref=attempt.execution_ref
+    AND event.kind='test_attestation.passed' AND event.occurred_at<=attempt.started_at))
  OR (approval.source='explicit_decision' AND attempt.started_at>=approval.expires_at)
  OR approval.ref IS NOT (SELECT latest.ref FROM effect_approvals latest WHERE latest.intent_ref=intent.ref
     AND latest.decided_at<=attempt.started_at ORDER BY latest.decided_at DESC,
     CASE latest.source WHEN 'explicit_decision' THEN 0 ELSE 1 END,
     CASE latest.decision WHEN 'denied' THEN 0 ELSE 1 END, latest.ref DESC LIMIT 1)`},
+	{"sqlite.recovery_v15_unknown_applied_repeated", `
+SELECT COUNT(*) FROM effect_attempts later
+JOIN effect_attempts prior ON prior.action_ref=later.action_ref AND prior.intent_ref=later.intent_ref
+ AND prior.action_fence<later.action_fence
+JOIN effect_intents intent ON intent.ref=prior.intent_ref
+LEFT JOIN effect_receipts receipt ON receipt.attempt_ref=prior.ref
+WHERE receipt.ref IS NULL AND intent.kind IN ('agent_launch','attest_test')
+ AND (intent.kind<>'agent_launch' OR NOT EXISTS(
+  SELECT 1 FROM budget_reservations reservation
+  JOIN budget_settlements settlement ON settlement.reservation_ref=reservation.ref
+  WHERE reservation.action_ref=prior.action_ref AND reservation.effect_intent_ref=prior.intent_ref
+   AND reservation.fence<=prior.action_fence AND reservation.reserved_at<=prior.started_at
+   AND (SELECT COUNT(*) FROM budget_reservations candidate
+       WHERE candidate.action_ref=prior.action_ref AND candidate.effect_intent_ref=prior.intent_ref
+        AND candidate.fence<=prior.action_fence AND candidate.reserved_at<=prior.started_at
+        AND NOT EXISTS(SELECT 1 FROM budget_settlements candidate_settlement
+            WHERE candidate_settlement.reservation_ref=candidate.ref
+             AND candidate_settlement.settled_at<prior.started_at))=1
+   AND NOT EXISTS(SELECT 1 FROM effect_attempts peer
+       WHERE peer.ref<>prior.ref AND peer.action_ref=prior.action_ref AND peer.intent_ref=prior.intent_ref
+        AND reservation.fence<=peer.action_fence AND reservation.reserved_at<=peer.started_at
+        AND NOT EXISTS(SELECT 1 FROM budget_settlements peer_settlement
+            WHERE peer_settlement.reservation_ref=reservation.ref
+             AND peer_settlement.settled_at<peer.started_at))
+   AND settlement.settled_at>prior.started_at
+   AND settlement.observed_known=31 AND settlement.observed_quality='exact'
+   AND settlement.observed_tokens=0 AND settlement.observed_money_micros=0
+   AND settlement.observed_currency=reservation.currency AND settlement.observed_active_time_ns=0
+   AND settlement.observed_process_slots=0 AND settlement.observed_disk_bytes=0
+   AND settlement.charged_tokens=0 AND settlement.charged_money_micros=0
+   AND settlement.charged_currency=reservation.currency AND settlement.charged_active_time_ns=0
+   AND settlement.charged_process_slots=0 AND settlement.charged_disk_bytes=0
+   AND settlement.released_tokens=reservation.tokens
+   AND settlement.released_money_micros=reservation.money_micros
+   AND settlement.released_currency=reservation.currency
+   AND settlement.released_active_time_ns=reservation.active_time_ns
+   AND settlement.released_process_slots=reservation.process_slots
+   AND settlement.released_disk_bytes=reservation.disk_bytes
+   AND settlement.overrun_tokens=0 AND settlement.overrun_money_micros=0
+   AND settlement.overrun_currency=reservation.currency AND settlement.overrun_active_time_ns=0
+   AND settlement.overrun_process_slots=0 AND settlement.overrun_disk_bytes=0
+ ))`},
 	{"sqlite.recovery_v15_effect_receipt_invalid", `
 SELECT COUNT(*) FROM effect_receipts receipt LEFT JOIN effect_attempts attempt ON attempt.ref=receipt.attempt_ref
 LEFT JOIN effect_intents intent ON intent.ref=receipt.intent_ref
@@ -166,6 +211,7 @@ WHERE attempt.ref IS NULL OR intent.ref IS NULL OR action.ref IS NULL
  OR (intent.kind='agent_stop' AND receipt.status NOT IN ('stopped','already_stopped','already_completed','already_failed'))
  OR (intent.kind='prepare_workspace' AND receipt.status<>'prepared')
  OR (intent.kind='commit_change' AND receipt.status<>'committed')
+ OR (intent.kind='attest_test' AND receipt.status NOT IN ('attested_passed','attested_failed'))
  OR (intent.kind='integrate_change' AND receipt.status NOT IN ('integrated','conflicted','stale'))`},
 	{"sqlite.recovery_v15_effect_binding_invalid", `
 SELECT (SELECT COUNT(*) FROM executions execution LEFT JOIN effect_intents intent ON intent.ref=execution.effect_intent_ref
@@ -182,7 +228,7 @@ SELECT (SELECT COUNT(*) FROM executions execution LEFT JOIN effect_intents inten
   (receipt.action_ref<>consumed.action_ref OR receipt.action_fence<>consumed.fence))
  OR (consumed.governance_version=1 AND consumed.kind='launch_agent' AND consumed.outcome='completed'
   AND consumed.error_code='' AND receipt.ref IS NULL)
- OR (consumed.governance_version=1 AND consumed.kind IN ('prepare_workspace','commit_change','integrate_change')
+ OR (consumed.governance_version=1 AND consumed.kind IN ('prepare_workspace','commit_change','attest_test','integrate_change')
   AND consumed.outcome='completed' AND consumed.error_code='' AND receipt.ref IS NULL)
  OR (consumed.governance_version=1 AND consumed.kind='stop_agent' AND consumed.outcome='completed'
   AND consumed.error_code='' AND receipt.ref IS NULL AND EXISTS(SELECT 1 FROM effect_attempts attempt

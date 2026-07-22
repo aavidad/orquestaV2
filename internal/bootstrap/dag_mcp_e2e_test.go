@@ -45,11 +45,12 @@ func TestMCPCreatesAndExecutesDiamondDAGAtomically(t *testing.T) {
 		t.Fatalf("created diamond = %+v", created)
 	}
 
-	// Writer lifecycle is prepare -> launch -> observe -> commit -> integrate.
-	harness.process(t, 5)
+	// Writer lifecycle is prepare -> launch -> observe -> commit -> attest -> integrate.
+	harness.process(t, 6)
 	afterRoot := harness.get(t, created.GoalRef)
 	status, err := harness.repository.Status(context.Background(), harness.projectRef)
-	if err != nil || len(afterRoot.Executions) != 3 || len(afterRoot.Artifacts) != 1 || status.PendingActions != 2 {
+	if err != nil || len(afterRoot.Executions) != 3 || len(afterRoot.Artifacts) != 3 ||
+		len(afterRoot.Attestations) != 2 || status.PendingActions != 2 {
 		t.Fatalf("atomic fan-out = executions:%d artifacts:%d status:%+v err:%v", len(afterRoot.Executions), len(afterRoot.Artifacts), status, err)
 	}
 
@@ -57,15 +58,15 @@ func TestMCPCreatesAndExecutesDiamondDAGAtomically(t *testing.T) {
 	if harness.agent.concurrent() != 2 {
 		t.Fatalf("disjoint successors were not concurrently launchable: %d", harness.agent.concurrent())
 	}
-	harness.process(t, 6)
+	harness.process(t, 8)
 	afterBranches := harness.get(t, created.GoalRef)
 	if len(afterBranches.Executions) != 4 || afterBranches.State != string(goal.GoalStateRunning) {
 		t.Fatalf("join was not scheduled exactly once: %+v", afterBranches)
 	}
-	harness.process(t, 5)
+	harness.process(t, 6)
 	closed := harness.get(t, created.GoalRef)
 	if closed.State != string(goal.GoalStateSucceeded) || len(closed.Executions) != 4 ||
-		len(closed.Artifacts) != 4 || len(closed.Attestations) != 4 {
+		len(closed.Artifacts) != 12 || len(closed.Attestations) != 8 {
 		t.Fatalf("closed diamond = %+v", closed)
 	}
 	for _, item := range closed.WorkItems {
@@ -131,9 +132,9 @@ func TestApplicationSQLiteCreatesMultiItemMaximalCohort(t *testing.T) {
 				Ref: "phase-instance:work", Key: "phase:work", TemplateRef: "phase-template:program",
 			}},
 			WorkItems: []application.WorkItemSpec{
-				{Key: "a", Objective: "writer a", Phase: "phase:work", Role: "role:worker", WriteSet: []string{"internal/shared"}, OutputContract: goal.OutputContractEvidenceBundle},
-				{Key: "b", Objective: "writer b", Phase: "phase:work", Role: "role:worker", WriteSet: []string{"internal/shared/file.go"}, OutputContract: goal.OutputContractEvidenceBundle},
-				{Key: "c", Objective: "writer c", Phase: "phase:work", Role: "role:worker", WriteSet: []string{"docs/free.md"}, OutputContract: goal.OutputContractEvidenceBundle},
+				{Key: "a", Objective: "writer a", Phase: "phase:work", Role: "role:worker", WriteSet: []string{"internal/shared"}, RequiredTests: dagRequiredTests("a"), OutputContract: goal.OutputContractEvidenceBundle},
+				{Key: "b", Objective: "writer b", Phase: "phase:work", Role: "role:worker", WriteSet: []string{"internal/shared/file.go"}, RequiredTests: dagRequiredTests("b"), OutputContract: goal.OutputContractEvidenceBundle},
+				{Key: "c", Objective: "writer c", Phase: "phase:work", Role: "role:worker", WriteSet: []string{"docs/free.md"}, RequiredTests: dagRequiredTests("c"), OutputContract: goal.OutputContractEvidenceBundle},
 			},
 		},
 	})
@@ -233,7 +234,7 @@ func TestMCPParentMetadataClosesWithoutMailboxOrRequeue(t *testing.T) {
 			parentItem.HandoffRequired(), childItem.HandoffRequired())
 	}
 
-	harness.process(t, 7)
+	harness.process(t, 8)
 	closed := harness.get(t, created.GoalRef)
 	states := workStates(closed.WorkItems)
 	status, statusErr := harness.repository.Status(ctx, harness.projectRef)
@@ -241,7 +242,7 @@ func TestMCPParentMetadataClosesWithoutMailboxOrRequeue(t *testing.T) {
 	if closed.State != string(goal.GoalStateSucceeded) ||
 		states["coordinate"] != string(goal.WorkItemStateSucceeded) ||
 		states["implement"] != string(goal.WorkItemStateSucceeded) ||
-		len(closed.Artifacts) != 2 || len(closed.Attestations) != 2 ||
+		len(closed.Artifacts) != 4 || len(closed.Attestations) != 3 ||
 		len(closed.Executions) != 2 || harness.agent.launchCount() != 2 ||
 		statusErr != nil || status.PendingActions != 0 || idleErr != nil || idle.Processed {
 		t.Fatalf("public parent metadata did not close without requeue: goal=%+v status=%+v/%v idle=%+v/%v launches=%d",
@@ -265,9 +266,9 @@ func TestSchedulerSerializesOverlappingRootsBeforeProvider(t *testing.T) {
 	if harness.agent.launchCount() != 1 || harness.agent.concurrent() != 1 {
 		t.Fatalf("conflicting root reached provider: launches=%d concurrent=%d", harness.agent.launchCount(), harness.agent.concurrent())
 	}
-	harness.process(t, 3)
+	harness.process(t, 4)
 	harness.clock.Advance(2 * time.Second)
-	harness.process(t, 5)
+	harness.process(t, 6)
 	closed := harness.get(t, created.GoalRef)
 	if closed.State != string(goal.GoalStateSucceeded) || harness.agent.launchCount() != 2 || harness.agent.concurrent() != 1 {
 		t.Fatalf("serialized writer did not progress: goal=%+v launches=%d max=%d", closed, harness.agent.launchCount(), harness.agent.concurrent())
@@ -307,10 +308,9 @@ func TestExhaustedRootInterruptsAndKeepsGoalOpenForDirectorReplan(t *testing.T) 
 	harness.process(t, 2)
 	harness.clock.Advance(2 * time.Second)
 	harness.process(t, 2)
-	// Second replacement is launched above. Its failure schedules the final
-	// attempt after the two-second backoff; only that final failed observation
-	// interrupts the WorkItem.
-	harness.process(t, 1)
+	// Second replacement is launched above. Its failure and the independent
+	// PASS integration are both consumed before the final backoff.
+	harness.process(t, 2)
 	harness.clock.Advance(2 * time.Second)
 	harness.process(t, 3)
 	open := harness.get(t, created.GoalRef)
@@ -320,7 +320,7 @@ func TestExhaustedRootInterruptsAndKeepsGoalOpenForDirectorReplan(t *testing.T) 
 		states["child"] != string(goal.WorkItemStatePending) ||
 		states["grandchild"] != string(goal.WorkItemStatePending) ||
 		states["independent"] != string(goal.WorkItemStateSucceeded) ||
-		len(open.Executions) != 4 || len(open.Artifacts) != 1 {
+		len(open.Executions) != 4 || len(open.Artifacts) != 3 || len(open.Attestations) != 2 {
 		t.Fatalf("exhausted DAG did not remain open for replan = goal:%+v states:%+v", open, states)
 	}
 	record, err := harness.orchestrator.GetGoal(
@@ -343,11 +343,25 @@ func TestExhaustedRootInterruptsAndKeepsGoalOpenForDirectorReplan(t *testing.T) 
 }
 
 func planItem(key, objective, phase string, dependencies, writeSet []string) map[string]any {
-	return map[string]any{
+	item := map[string]any{
 		"key": key, "objective": objective, "phase": phase, "role": "role:worker",
 		"dependencies": dependencies, "write_set": writeSet,
 		"output_contract": string(goal.OutputContractEvidenceBundle),
 	}
+	if len(writeSet) != 0 {
+		item["required_tests"] = []any{map[string]any{
+			"ref": "required-test:dag-" + key, "tool_ref": "tool:go",
+			"arguments": []string{"test", "./..."}, "working_directory": ".",
+		}}
+	}
+	return item
+}
+
+func dagRequiredTests(key string) []application.RequiredTestSpec {
+	return []application.RequiredTestSpec{{
+		Ref: "required-test:dag-" + key, ToolRef: "tool:go",
+		Arguments: []string{"test", "./..."}, WorkingDirectory: ".",
+	}}
 }
 
 func planPhase(ref, key, templateRef string, inputRefs, criterionRefs []string) map[string]any {
@@ -439,11 +453,12 @@ func newDAGHarness(t *testing.T, failures map[string]bool) *dagHarness {
 		State: repository, Access: repository,
 		Launcher: agent, Observer: agent, Artifacts: artifacts,
 		WorkspaceManager: workspace, VersionControl: versionControl,
+		TestAttestor: legacyPassingTestAttestor{}, TestAttestationPolicy: legacyTestAttestationPolicy(),
 		Clock: clock, IDs: &dagSequentialIDs{}, MaxOutputBytes: 4096,
 		MaxMailboxEnvelopeBytes: 64 << 10,
 		MaxExecutionAttempts:    3,
 		MaxChildrenPerParent:    int(snapshot.SchedulerMaxChildrenPerParent()),
-		ClaimLease:              time.Minute, DirectorLeaseDuration: 2 * time.Minute,
+		ClaimLease:              time.Minute, AttestTestClaimLease: time.Minute, DirectorLeaseDuration: 2 * time.Minute,
 		EffectApprovalTTL: snapshot.GovernanceEffectApprovalTTL(), BudgetPolicy: budgetPolicy,
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 		AgentCapabilities: dagAgentCapabilities(),
@@ -558,21 +573,41 @@ func (harness *dagHarness) process(t *testing.T, count int) {
 			}
 			t.Fatalf("process DAG step %d = %+v err=%v", index, result, err)
 		}
-		if err := harness.admitCommittedChanges(context.Background()); err != nil {
-			t.Fatalf("admit DAG integrations after step %d: %v", index, err)
+		if result.Action == application.ActionAttestTest {
+			if err := harness.admitAttestedChanges(context.Background()); err != nil {
+				t.Fatalf("admit DAG integrations after step %d: %v", index, err)
+			}
 		}
 	}
 }
 
-// admitCommittedChanges is deliberately harness-owned. A completed agent only
-// stages output; non-empty WriteSets require an explicit owner integration.
-func (harness *dagHarness) admitCommittedChanges(ctx context.Context) error {
+// admitAttestedChanges is deliberately harness-owned. PASS leaves each change
+// pending; only this explicit owner request admits integration.
+func (harness *dagHarness) admitAttestedChanges(ctx context.Context) error {
 	changes, err := harness.orchestrator.ListPendingChanges(ctx, harness.access, application.ListPendingChangesRequest{Limit: 100})
 	if err != nil {
 		return err
 	}
 	for _, pending := range changes.Changes {
-		_, err := harness.orchestrator.IntegrateChange(ctx, harness.access, application.IntegrateChangeRequest{
+		record, err := harness.orchestrator.GetGoal(ctx, harness.access, pending.ChangeSet.GoalRef)
+		if err != nil {
+			return err
+		}
+		passes := 0
+		for _, attestation := range record.Attestations {
+			if attestation.Kind == application.AttestationKindRequiredTests &&
+				attestation.Verdict == application.AttestationVerdictPassed &&
+				attestation.ChangeSetRef == pending.ChangeSet.Ref {
+				passes++
+			}
+		}
+		if passes == 0 {
+			continue
+		}
+		if passes != 1 {
+			return errors.New("dag_harness.required_test_pass_not_unique")
+		}
+		_, err = harness.orchestrator.IntegrateChange(ctx, harness.access, application.IntegrateChangeRequest{
 			RequestRef: "request:dag-integrate:" + pending.ChangeSet.Ref.String(),
 			GoalRef:    pending.ChangeSet.GoalRef, ChangeRef: pending.ChangeSet.Ref,
 			ExpectedTargetOID: pending.ChangeSet.BaseOID,

@@ -11,7 +11,7 @@ import (
 )
 
 func (adapter *Adapter) Prepare(ctx context.Context, request ports.WorkspacePrepareRequest) (ports.WorkspacePrepared, error) {
-	if adapter == nil {
+	if err := adapter.ensureAvailable(); err != nil {
 		return ports.WorkspacePrepared{}, &Error{Code: CodeUnavailable}
 	}
 	if err := ports.ValidateWorkspacePrepareRequest(request); err != nil {
@@ -77,6 +77,9 @@ func (adapter *Adapter) prepareWorkspace(
 	if err := ports.ValidateWorkspacePrepared(request, result); err != nil {
 		return ports.WorkspacePrepared{}, err
 	}
+	if err := adapter.ensureWorkspaceBindingMarker(ctx, repository, request, result); err != nil {
+		return ports.WorkspacePrepared{}, err
+	}
 	adapter.rememberPrepared(preparedRecord{request: request, result: result, path: path, gitFile: gitDir})
 	return result, nil
 }
@@ -119,6 +122,9 @@ func (adapter *Adapter) ensureWorkspace(
 		arguments = append(arguments, "-b", workspaceBranch(ref), path, base)
 	}
 	if _, err := adapter.gitRun(ctx, repository, nil, arguments...); err != nil {
+		return "", "", err
+	}
+	if err := hardenOwnedDirectory(path); err != nil {
 		return "", "", err
 	}
 	if err := adapter.hardenCreatedWorkspaceGitMetadata(ctx, repository, path); err != nil {
@@ -199,7 +205,7 @@ func (adapter *Adapter) createWorkspaceBaseRef(ctx context.Context, repository s
 }
 
 func (adapter *Adapter) Inspect(ctx context.Context, request ports.WorkspaceInspectRequest) (ports.WorkspaceInspection, error) {
-	if adapter == nil {
+	if err := adapter.ensureAvailable(); err != nil {
 		return ports.WorkspaceInspection{}, &Error{Code: CodeUnavailable}
 	}
 	record, ok := adapter.preparedRecord(request.WorkspaceRef)
@@ -239,7 +245,7 @@ func (adapter *Adapter) Inspect(ctx context.Context, request ports.WorkspaceInsp
 // process adapter (such as Codex). The physical path never crosses the
 // application ports, state snapshot, receipt or public API.
 func (adapter *Adapter) ResolveExecutionWorkspace(ctx context.Context, ref ports.ExecutionWorkspaceRef) (string, error) {
-	if adapter == nil {
+	if err := adapter.ensureAvailable(); err != nil {
 		return "", &Error{Code: CodeUnavailable}
 	}
 	if ref.String() == "" {
@@ -298,7 +304,7 @@ func (adapter *Adapter) repository(ctx context.Context, ref identity.RepositoryR
 }
 
 func (adapter *Adapter) validateRepositoryControls(ctx context.Context, repository string) error {
-	output, err := adapter.gitRun(ctx, repository, nil, "config", "--local", "--null", "--list")
+	output, err := adapter.gitRun(ctx, repository, nil, "config", "--local", "--no-includes", "--null", "--list")
 	if err != nil {
 		return err
 	}
@@ -308,11 +314,17 @@ func (adapter *Adapter) validateRepositoryControls(ctx context.Context, reposito
 			key = key[:index]
 		}
 		key = strings.ToLower(strings.TrimSpace(key))
-		if key == "core.hookspath" || key == "core.fsmonitor" || key == "diff.external" ||
+		if key == "core.hookspath" || key == "core.fsmonitor" || key == "core.sshcommand" ||
+			key == "core.editor" || key == "core.attributesfile" || key == "diff.external" ||
+			key == "core.alternaterefscommand" || key == "extensions.worktreeconfig" ||
+			key == "interactive.difffilter" || key == "sequence.editor" || key == "gpg.program" ||
 			key == "commit.gpgsign" || key == "tag.gpgsign" || key == "user.signingkey" ||
-			key == "credential.helper" || strings.HasPrefix(key, "filter.") ||
+			key == "credential.helper" || strings.HasPrefix(key, "filter.") || strings.HasPrefix(key, "include.") ||
+			strings.HasPrefix(key, "includeif.") ||
 			strings.HasPrefix(key, "pager.") || (strings.HasPrefix(key, "diff.") &&
-			(strings.HasSuffix(key, ".command") || strings.HasSuffix(key, ".textconv"))) {
+			(strings.HasSuffix(key, ".command") || strings.HasSuffix(key, ".textconv"))) ||
+			(strings.HasPrefix(key, "merge.") && strings.HasSuffix(key, ".driver")) ||
+			(strings.HasPrefix(key, "gpg.") && strings.HasSuffix(key, ".program")) {
 			return &Error{Code: CodeWorkspaceUnsafe}
 		}
 	}

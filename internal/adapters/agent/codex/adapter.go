@@ -83,7 +83,6 @@ var (
 	errExecutionTimeout            = errors.New(CodeExecutionTimeout)
 	errExecutionCanceled           = errors.New(CodeExecutionCanceled)
 	errExecutionStoppedCooperative = errors.New(CodeExecutionStopped + ".cooperative")
-	errExecutionStoppedForced      = errors.New(CodeExecutionStopped + ".forced")
 	errAdapterShutdown             = errors.New("codex.adapter_shutdown")
 	errExecutionFinished           = errors.New("codex.execution_finished")
 )
@@ -160,6 +159,8 @@ type Adapter struct {
 	syncDirectoryFn       func(*os.Root, string) error
 	processCleanup        func(*exec.Cmd) error
 	credentialOutputScrub func(string) error
+	shutdownSignal        func(processRecord, ports.AgentStopMode) error
+	shutdownInspect       func(processRecord) (bool, error)
 	workspaceResolver     WorkspacePathResolver
 	lifecycle             context.Context
 	cancelLifecycle       context.CancelCauseFunc
@@ -205,6 +206,8 @@ func New(config Config) (*Adapter, error) {
 		workspaceResolver: validated.WorkspacePathResolver,
 		syncDirectoryFn:   syncCodexDirectory,
 		processCleanup:    cleanupProcessGroup,
+		shutdownSignal:    signalProcessTree,
+		shutdownInspect:   inspectProcessTree,
 		lifecycle:         lifecycle,
 		cancelLifecycle:   cancelLifecycle,
 		executions:        make(map[string]*executionState),
@@ -577,8 +580,13 @@ func (adapter *Adapter) Shutdown(ctx context.Context) error {
 	}
 	adapter.shutdownOnce.Do(func() {
 		adopted, discoveryErr := adapter.adoptedProcessesLocked()
+		// Shutdown callers normally provide the composition deadline. Config.Timeout
+		// bounds Close(context.Background()) too, so adopted-process inspection can
+		// never retain the root descriptor indefinitely.
+		shutdownCtx, cancel := context.WithTimeout(ctx, adapter.config.Timeout)
 		go func() {
-			adoptedErr := adapter.stopAdoptedProcesses(adopted)
+			defer cancel()
+			adoptedErr := adapter.stopAdoptedProcesses(shutdownCtx, adopted)
 			adapter.waitGroup.Wait()
 			adapter.shutdownErr = errors.Join(discoveryErr, adoptedErr, adapter.root.Close())
 			close(adapter.shutdownDone)
@@ -612,10 +620,11 @@ func (adapter *Adapter) adoptedProcessesLocked() ([]adoptedProcess, error) {
 	return processes, discoveryErr
 }
 
-func (adapter *Adapter) stopAdoptedProcesses(processes []adoptedProcess) error {
+func (adapter *Adapter) stopAdoptedProcesses(ctx context.Context, processes []adoptedProcess) error {
+	defer adapter.releaseAdoptedProcessOwnership(processes)
 	errorsByProcess := make([]error, len(processes))
 	for index, process := range processes {
-		err := signalProcessTree(process.record, ports.AgentStopForced)
+		err := adapter.shutdownSignal(process.record, ports.AgentStopForced)
 		if err != nil && !errors.Is(err, os.ErrProcessDone) {
 			errorsByProcess[index] = err
 		}
@@ -623,7 +632,7 @@ func (adapter *Adapter) stopAdoptedProcesses(processes []adoptedProcess) error {
 	for index, process := range processes {
 		observedGone := false
 		if errorsByProcess[index] == nil {
-			observedGone, errorsByProcess[index] = waitForExactProcess(context.Background(), process.record, nil)
+			observedGone, errorsByProcess[index] = waitForExactProcessWithInspector(ctx, process.record, nil, adapter.shutdownInspect)
 		}
 		if observedGone {
 			adapter.mu.Lock()
@@ -634,6 +643,16 @@ func (adapter *Adapter) stopAdoptedProcesses(processes []adoptedProcess) error {
 		}
 	}
 	return errors.Join(errorsByProcess...)
+}
+
+func (adapter *Adapter) releaseAdoptedProcessOwnership(processes []adoptedProcess) {
+	adapter.mu.Lock()
+	defer adapter.mu.Unlock()
+	for _, process := range processes {
+		if process.state.process != nil && *process.state.process == process.record {
+			adapter.releaseProcessOwnershipLocked(process.state)
+		}
+	}
 }
 
 func (adapter *Adapter) Close() error {

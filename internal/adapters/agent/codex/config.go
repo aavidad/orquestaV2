@@ -80,7 +80,7 @@ func prepareConfig(config Config) (Config, string, []string, string, *os.Root, e
 
 func validReasoningEffort(value string) bool {
 	switch value {
-	case "low", "medium", "high", "xhigh":
+	case "low", "medium", "high", "xhigh", "ultra":
 		return true
 	default:
 		return false

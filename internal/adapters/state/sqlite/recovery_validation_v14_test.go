@@ -296,9 +296,7 @@ func seedRecoveryV14Supersession(t *testing.T, suffix string) recoveryV14Superse
 		AgentCapabilities: sqliteMultiControlCapabilities(), ClaimLease: time.Minute,
 		DirectorLeaseDuration: time.Minute, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	actor, _ := goal.NewActorRef("actor:recovery-v14-supersession-" + suffix)
 	project, _ := goal.NewProjectRef("project:recovery-v14-supersession-" + suffix)
 	access := newRestartAccess(t, repository, actor, project, clock.Now())
@@ -306,25 +304,18 @@ func seedRecoveryV14Supersession(t *testing.T, suffix string) recoveryV14Superse
 		RequestRef: "request:recovery-v14-supersession-" + suffix,
 		Statement:  "recovery validates exact stop supersession " + suffix, Confirm: true,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	if result, processErr := orchestrator.ProcessNext(context.Background(), "worker:recovery-supersession-launch"); processErr != nil || !result.Processed || result.Action != application.ActionLaunchAgent {
 		t.Fatalf("launch seed: result=%+v err=%v", result, processErr)
 	}
 	running, err := repository.GetGoal(context.Background(), submitted.Record.Goal.Ref())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	item, execution := running.Goal.WorkItems()[0], running.Executions[0]
 	cooperative := sqliteExactStopRequest(
 		running, item, execution, "control:recovery-cooperative-"+suffix, ports.AgentStopCooperative,
 	)
 	if _, err := orchestrator.Control(context.Background(), access, cooperative); err != nil {
 		t.Fatal(err)
-	}
-	if result, processErr := orchestrator.ProcessNext(context.Background(), "worker:recovery-supersession-pending"); processErr != nil || !result.Processed || result.Action != application.ActionStopAgent {
-		t.Fatalf("pending seed: result=%+v err=%v", result, processErr)
 	}
 	for _, operation := range []application.ControlOperation{application.ControlPause, application.ControlResume} {
 		intermediate, getErr := repository.GetGoal(context.Background(), running.Goal.Ref())
@@ -346,9 +337,7 @@ func seedRecoveryV14Supersession(t *testing.T, suffix string) recoveryV14Superse
 		}
 	}
 	current, err := repository.GetGoal(context.Background(), running.Goal.Ref())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	item, _ = current.Goal.WorkItem(item.Ref())
 	forced := sqliteExactStopRequest(
 		current, item, execution, "control:recovery-forced-"+suffix, ports.AgentStopForced,
@@ -357,9 +346,7 @@ func seedRecoveryV14Supersession(t *testing.T, suffix string) recoveryV14Superse
 		t.Fatal(err)
 	}
 	pendingForced, err := repository.GetGoal(context.Background(), running.Goal.Ref())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	_, forcedControl := sqliteControlsByRequest(t, pendingForced, cooperative.RequestRef, forced.RequestRef)
 	var forcedIntent application.EffectIntent
 	for _, intent := range pendingForced.EffectIntents {
@@ -380,9 +367,7 @@ func seedRecoveryV14Supersession(t *testing.T, suffix string) recoveryV14Superse
 		t.Fatalf("forced seed: result=%+v err=%v", result, processErr)
 	}
 	transferred, err := repository.GetGoal(context.Background(), running.Goal.Ref())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	old, next := sqliteControlsByRequest(t, transferred, cooperative.RequestRef, forced.RequestRef)
 	if _, _, err := validateRecoveryDatabase(context.Background(), repository.db); err != nil {
 		t.Fatalf("valid supersession seed rejected: %v cause=%v", err, errors.Unwrap(err))
@@ -393,9 +378,7 @@ func seedRecoveryV14Supersession(t *testing.T, suffix string) recoveryV14Superse
 func mutateRecoveryControlIgnoringChecks(t *testing.T, database *sql.DB, statement string, args ...any) {
 	t.Helper()
 	connection, err := database.Conn(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	defer connection.Close()
 	var triggerSQL string
 	if err := connection.QueryRowContext(context.Background(), `
@@ -535,19 +518,15 @@ func seedRecoveryV14PendingMultiCancel(t *testing.T) recoveryV14ControlSeed {
 				TemplateRef: "phase-template:recovery-v14-multi-cancel",
 			}},
 			WorkItems: []application.WorkItemSpec{
-				{Key: "first", Objective: "first live cancellation target", Phase: "phase:recovery-v14-multi-cancel", Role: "role:worker", WriteSet: []string{"first"}, OutputContract: goal.OutputContractEvidenceBundle},
-				{Key: "second", Objective: "second live cancellation target", Phase: "phase:recovery-v14-multi-cancel", Role: "role:worker", WriteSet: []string{"second"}, OutputContract: goal.OutputContractEvidenceBundle},
+				{Key: "first", Objective: "first live cancellation target", Phase: "phase:recovery-v14-multi-cancel", Role: "role:worker", WriteSet: []string{"first"}, RequiredTests: sqliteRequiredTestSpecs("required-test:sqlite-recovery-first"), OutputContract: goal.OutputContractEvidenceBundle},
+				{Key: "second", Objective: "second live cancellation target", Phase: "phase:recovery-v14-multi-cancel", Role: "role:worker", WriteSet: []string{"second"}, RequiredTests: sqliteRequiredTestSpecs("required-test:sqlite-recovery-second"), OutputContract: goal.OutputContractEvidenceBundle},
 			},
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	processSQLiteWorkspaceLaunches(t, orchestrator, "worker:recovery-v14-multi-launch", 2)
 	running, err := repository.GetGoal(context.Background(), submitted.Record.Goal.Ref())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	requested, err := orchestrator.Control(context.Background(), access, application.ControlRequest{
 		RequestRef: "control:recovery-v14-multi-cancel",
 		Operation:  application.ControlCancel, Target: application.ControlTargetGoal,
@@ -605,16 +584,12 @@ func seedRecoveryV14ConfirmedWorkItemCancel(t *testing.T, suffix string) recover
 		RequestRef: "request:recovery-v14-item-cancel-" + suffix,
 		Statement:  "cancel one exact WorkItem " + suffix, Confirm: true,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	if result, processErr := orchestrator.ProcessNext(context.Background(), "worker:recovery-v14-item-launch"); processErr != nil || !result.Processed || result.Action != application.ActionLaunchAgent {
 		t.Fatalf("launch WorkItem cancel: result=%+v err=%v", result, processErr)
 	}
 	running, err := repository.GetGoal(context.Background(), submitted.Record.Goal.Ref())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	item := running.Goal.WorkItems()[0]
 	requested, err := orchestrator.Control(context.Background(), access, application.ControlRequest{
 		RequestRef: "control:recovery-v14-item-cancel-" + suffix,
@@ -652,17 +627,13 @@ func TestV14RecoveryAcceptsClaimedTerminalStopThenReclaimsAndSettlesOnce(t *test
 	submitted, err := orchestrator.Submit(ctx, access, application.SubmitRequest{
 		RequestRef: "request:recovery-v14-terminal-claim", Statement: "finish before stop settlement", Confirm: true,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	if result, processErr := orchestrator.ProcessNext(ctx, "worker:recovery-v14-launch"); processErr != nil ||
 		!result.Processed || result.Action != application.ActionLaunchAgent {
 		t.Fatalf("launch: result=%+v err=%v", result, processErr)
 	}
 	running, err := repository.GetGoal(ctx, submitted.Record.Goal.Ref())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	item, execution := running.Goal.WorkItems()[0], running.Executions[0]
 	gate := &sqliteGetGoalGate{
 		StateRepository: repository, entered: make(chan struct{}), release: make(chan struct{}),
@@ -724,9 +695,7 @@ func TestV14RecoveryAcceptsClaimedTerminalStopThenReclaimsAndSettlesOnce(t *test
 	restarted, err := Open(ctx, Options{
 		Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 4, Now: clock.Now,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	t.Cleanup(func() { _ = restarted.Close() })
 	if _, _, err := validateRecoveryDatabase(ctx, restarted.db); err != nil {
 		t.Fatalf("restarted live claim rejected: %v", err)
@@ -772,13 +741,9 @@ func seedRecoveryV14PauseControl(t *testing.T, suffix string) recoveryV14Control
 	submitted, err := orchestrator.Submit(context.Background(), access, application.SubmitRequest{
 		RequestRef: "request:recovery-v14-pause", Statement: "validate recovery " + suffix, Confirm: true,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	record, err := repository.GetGoal(context.Background(), submitted.Record.Goal.Ref())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	result, err := orchestrator.Control(context.Background(), access, application.ControlRequest{
 		RequestRef: "control:recovery-v14-pause",
 		Operation:  application.ControlPause, Target: application.ControlTargetGoal,
@@ -797,13 +762,9 @@ func seedRecoveryV14PauseControl(t *testing.T, suffix string) recoveryV14Control
 		Principal:  principal, ProjectRef: project, Permission: identity.PermissionGoalsDirect,
 		ResourceRef: record.Goal.Ref().String(), RequestedAt: clock.Now(),
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	alternate, err := repository.Authorize(context.Background(), authorizationRequest)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	return recoveryV14ControlSeed{
 		repository: repository, clock: clock, control: result.Control,
 		alternateAuthorizationRef: alternate.Ref(),
@@ -824,16 +785,12 @@ func seedRecoveryV14StoppedControl(t *testing.T, suffix string) recoveryV14Contr
 	submitted, err := orchestrator.Submit(context.Background(), access, application.SubmitRequest{
 		RequestRef: "request:recovery-v14-stop-" + suffix, Statement: "stop recovery " + suffix, Confirm: true,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	if result, processErr := orchestrator.ProcessNext(context.Background(), "worker:recovery-v14-stop-launch"); processErr != nil || !result.Processed || result.Action != application.ActionLaunchAgent {
 		t.Fatalf("launch stop seed: result=%+v err=%v", result, processErr)
 	}
 	running, err := repository.GetGoal(context.Background(), submitted.Record.Goal.Ref())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	item, execution := running.Goal.WorkItems()[0], running.Executions[0]
 	requested, err := orchestrator.Control(context.Background(), access, application.ControlRequest{
 		RequestRef: "control:recovery-v14-stop-" + suffix,
@@ -845,9 +802,7 @@ func seedRecoveryV14StoppedControl(t *testing.T, suffix string) recoveryV14Contr
 		ExecutionRef: execution.Ref, ExpectedExecutionAttempt: execution.AttemptNo,
 		Mode: ports.AgentStopCooperative, Reason: "stop recovery semantic seed",
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	if result, processErr := orchestrator.ProcessNext(context.Background(), "worker:recovery-v14-stop"); processErr != nil || !result.Processed || result.Action != application.ActionStopAgent {
 		t.Fatalf("stop seed: result=%+v err=%v", result, processErr)
 	}
@@ -883,8 +838,6 @@ func newRecoveryV14ControlOrchestrator(
 		AgentCapabilities: sqliteMultiControlCapabilities(), ClaimLease: time.Minute,
 		DirectorLeaseDuration: time.Minute, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	return orchestrator
 }

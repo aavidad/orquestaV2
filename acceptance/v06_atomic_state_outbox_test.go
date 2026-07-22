@@ -332,11 +332,13 @@ func v06AssertReplaceableAttemptsAndRestart(t *testing.T, fixture v06Fixture) {
 	t.Helper()
 	ctx := context.Background()
 	clock := v06ClockFromFixture(t, fixture)
+	v06AssertAmbiguousLaunchQuarantined(t, ctx, fixture, clock)
+
 	databasePath := v06PrivateDatabasePath(t, "attempts.db")
 	repository := v06OpenSQLite(t, ctx, databasePath, clock)
 	ids := &v06IDs{}
 	artifacts := newV06ArtifactStore()
-	agent := newV06Agent(clock, v06Capabilities(fixture.OpaqueRequirements, true), fixture.ClockAndRetry.LaunchOutcomes...)
+	agent := newV06Agent(clock, v06Capabilities(fixture.OpaqueRequirements, true), "permanent_error", "accepted")
 	orchestrator := v06NewOrchestrator(t, repository, clock, ids, agent, artifacts, fixture)
 
 	created, err := orchestrator.Submit(ctx, v06Access(t), v06SubmitRequest(t, "request:v06-attempts", nil))
@@ -346,19 +348,9 @@ func v06AssertReplaceableAttemptsAndRestart(t *testing.T, fixture v06Fixture) {
 	goalRef := created.Record.Goal.Ref()
 	firstResult, err := orchestrator.ProcessNext(ctx, "worker:v06")
 	if err != nil || !firstResult.Processed {
-		t.Fatalf("temporary delivery: result=%+v err=%v", firstResult, err)
+		t.Fatalf("definitely-unapplied replacement: result=%+v err=%v", firstResult, err)
 	}
 	record := v06GetGoal(t, repository, goalRef)
-	if len(record.Executions) != 1 || record.Executions[0].AttemptNo != 1 || len(record.ConsumptionReceipts) != 0 {
-		t.Fatalf("delivery retry became execution/receipt: executions=%+v receipts=%+v", record.Executions, record.ConsumptionReceipts)
-	}
-
-	clock.Advance(v06Duration(t, fixture.ClockAndRetry.ObservationDelay))
-	secondResult, err := orchestrator.ProcessNext(ctx, "worker:v06")
-	if err != nil || !secondResult.Processed {
-		t.Fatalf("provider failure replacement: result=%+v err=%v", secondResult, err)
-	}
-	record = v06GetGoal(t, repository, goalRef)
 	executions := v06ExecutionsByAttempt(record.Executions)
 	if len(executions) != 2 || executions[0].AttemptNo != 1 || executions[1].AttemptNo != 2 ||
 		executions[0].State != application.ExecutionFailed || executions[1].State != application.ExecutionQueued ||
@@ -366,14 +358,18 @@ func v06AssertReplaceableAttemptsAndRestart(t *testing.T, fixture v06Fixture) {
 		t.Fatalf("provider failure did not create replaceable attempt: goal=%s executions=%+v", record.Goal.State(), executions)
 	}
 	firstConsumption := v06ReceiptForExecution(t, record.ConsumptionReceipts, executions[0].Ref, application.ActionLaunchAgent)
-	if firstConsumption.DeliveryAttempt != 2 || firstConsumption.Fence < 2 || firstConsumption.Outcome != application.ActionConsumedCompleted {
+	if firstConsumption.DeliveryAttempt != 1 || firstConsumption.Fence != 1 || firstConsumption.Outcome != application.ActionConsumedCompleted ||
+		len(record.EffectAttempts) != 1 || len(record.BudgetSettlements) != 1 ||
+		record.BudgetSettlements[0].CausalAttemptRef != record.EffectAttempts[0].Ref ||
+		!governance.IsExactZeroRelease(record.BudgetSettlements[0]) ||
+		!record.BudgetSettlements[0].SettledAt.Equal(record.EffectAttempts[0].StartedAt) {
 		t.Fatalf("delivery and execution attempts conflated: %+v", firstConsumption)
 	}
 
 	clock.Advance(v06Duration(t, fixture.ClockAndRetry.ObservationDelay))
-	thirdResult, err := orchestrator.ProcessNext(ctx, "worker:v06")
-	if err != nil || !thirdResult.Processed {
-		t.Fatalf("replacement launch: result=%+v err=%v", thirdResult, err)
+	secondResult, err := orchestrator.ProcessNext(ctx, "worker:v06")
+	if err != nil || !secondResult.Processed {
+		t.Fatalf("replacement launch: result=%+v err=%v", secondResult, err)
 	}
 	record = v06GetGoal(t, repository, goalRef)
 	executions = v06ExecutionsByAttempt(record.Executions)
@@ -408,6 +404,42 @@ func v06AssertReplaceableAttemptsAndRestart(t *testing.T, fixture v06Fixture) {
 	}
 	if replay, err := orchestrator.ProcessNext(ctx, "worker:v06-restart"); err != nil || replay.Processed {
 		t.Fatalf("terminal work reexecuted: result=%+v err=%v", replay, err)
+	}
+}
+
+func v06AssertAmbiguousLaunchQuarantined(
+	t *testing.T,
+	ctx context.Context,
+	fixture v06Fixture,
+	clock *v06Clock,
+) {
+	t.Helper()
+	path := v06PrivateDatabasePath(t, "ambiguous.db")
+	repository := v06OpenSQLite(t, ctx, path, clock)
+	agent := newV06Agent(clock, v06Capabilities(fixture.OpaqueRequirements, true), "temporary_error")
+	orchestrator := v06NewOrchestrator(t, repository, clock, &v06IDs{}, agent, newV06ArtifactStore(), fixture)
+	created, err := orchestrator.Submit(ctx, v06Access(t), v06SubmitRequest(t, "request:v06-ambiguous", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := orchestrator.ProcessNext(ctx, "worker:v06-ambiguous")
+	if err == nil || err.Error() != "application.effect_unknown_applied" || !result.Processed {
+		t.Fatalf("ambiguous launch escaped quarantine: result=%+v err=%v", result, err)
+	}
+	record := v06GetGoal(t, repository, created.Record.Goal.Ref())
+	if agent.launches != 1 || len(record.EffectAttempts) != 1 || len(record.EffectReceipts) != 0 ||
+		len(record.BudgetSettlements) != 0 || len(record.ConsumptionReceipts) != 1 ||
+		record.ConsumptionReceipts[0].Outcome != application.ActionConsumedQuarantined {
+		t.Fatalf("ambiguous launch mutated retry frontier: %+v", record)
+	}
+	if err := repository.Close(); err != nil {
+		t.Fatal(err)
+	}
+	repository = v06OpenSQLite(t, ctx, path, clock)
+	defer repository.Close()
+	orchestrator = v06NewOrchestrator(t, repository, clock, &v06IDs{}, agent, newV06ArtifactStore(), fixture)
+	if replay, err := orchestrator.ProcessNext(ctx, "worker:v06-ambiguous-restart"); err != nil || replay.Processed || agent.launches != 1 {
+		t.Fatalf("ambiguous launch reinvoked after restart: result=%+v launches=%d err=%v", replay, agent.launches, err)
 	}
 }
 

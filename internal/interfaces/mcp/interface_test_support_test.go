@@ -747,6 +747,10 @@ func (*memoryState) RecordChangeCommitted(context.Context, application.ChangeCom
 	return errors.New("test.workspace_state_write_not_used")
 }
 
+func (*memoryState) RecordTestAttested(context.Context, application.TestAttestedState) error {
+	return errors.New("test.workspace_state_write_not_used")
+}
+
 func (*memoryState) AdmitIntegration(context.Context, application.AdmitIntegrationState) (application.ActionRecord, bool, error) {
 	return application.ActionRecord{}, false, errors.New("test.workspace_state_write_not_used")
 }

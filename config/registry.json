@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "revision": "2026-07-21.16",
+  "revision": "2026-07-22.23",
   "precedence": [
     "default",
     "file",
@@ -51,6 +51,26 @@
         "identity.oidc.audience",
         "identity.oidc.clock_skew",
         "identity.oidc.upstream_timeout"
+      ]
+    },
+    {
+      "id": "test_attestor_provider_requirements",
+      "keys": [
+        "test_attestor.provider",
+        "test_attestor.timeout",
+        "test_attestor.bubblewrap.command",
+        "test_attestor.go.toolchain_root",
+        "runtime.max_output_bytes",
+        "test_attestor.max_subject_bytes",
+        "test_attestor.max_concurrent_runs",
+        "repository.local.seed_path",
+        "test_attestor.resources.cgroup_root",
+        "test_attestor.resources.memory_max_bytes",
+        "test_attestor.resources.pids_max",
+        "test_attestor.resources.cpu_quota_micros",
+        "server.shutdown_timeout",
+        "scheduler.attest_test_claim_lease",
+        "scheduler.execution_timeout"
       ]
     }
   ],
@@ -317,7 +337,8 @@
         "low",
         "medium",
         "high",
-        "xhigh"
+        "xhigh",
+        "ultra"
       ]
     },
     {
@@ -445,14 +466,14 @@
       "key": "repository.local.seed_path",
       "go_name": "RepositoryLocalSeedPath",
       "semantic_ref": "orquesta.config.repository.local.seed_path",
-      "type": "string",
+      "type": "optional_path",
       "default": "",
       "sensitive": false,
       "scope": "workspace",
       "restart_required": true,
       "env_alias": "ORQUESTA_REPOSITORY_LOCAL_SEED_PATH",
       "validator_ids": [
-        "trimmed_optional_string"
+        "optional_path"
       ]
     },
     {
@@ -468,6 +489,160 @@
       "validator_ids": [
         "trimmed_non_empty_string"
       ]
+    },
+    {
+      "key": "test_attestor.provider",
+      "go_name": "TestAttestorProvider",
+      "semantic_ref": "orquesta.config.test_attestor.provider",
+      "type": "string",
+      "default": "disabled",
+      "sensitive": false,
+      "scope": "attestor",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_TEST_ATTESTOR_PROVIDER",
+      "validator_ids": [
+        "allowed_values"
+      ],
+      "allowed_values": [
+        "disabled",
+        "bubblewrap"
+      ]
+    },
+    {
+      "key": "test_attestor.max_subject_bytes",
+      "go_name": "TestAttestorMaxSubjectBytes",
+      "semantic_ref": "orquesta.config.test_attestor.max_subject_bytes",
+      "type": "integer",
+      "default": 536870912,
+      "sensitive": false,
+      "scope": "attestor",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_TEST_ATTESTOR_MAX_SUBJECT_BYTES",
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1048576,
+      "maximum": 8589934592
+    },
+    {
+      "key": "test_attestor.timeout",
+      "go_name": "TestAttestorTimeout",
+      "semantic_ref": "orquesta.config.test_attestor.timeout",
+      "type": "duration",
+      "default": "15m",
+      "sensitive": false,
+      "scope": "attestor",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_TEST_ATTESTOR_TIMEOUT",
+      "validator_ids": [
+        "positive_duration"
+      ]
+    },
+    {
+      "key": "test_attestor.max_concurrent_runs",
+      "go_name": "TestAttestorMaxConcurrentRuns",
+      "semantic_ref": "orquesta.config.test_attestor.max_concurrent_runs",
+      "type": "integer",
+      "default": 2,
+      "sensitive": false,
+      "scope": "attestor",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_TEST_ATTESTOR_MAX_CONCURRENT_RUNS",
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1,
+      "maximum": 64
+    },
+    {
+      "key": "test_attestor.bubblewrap.command",
+      "go_name": "TestAttestorBubblewrapCommand",
+      "semantic_ref": "orquesta.config.test_attestor.bubblewrap.command",
+      "type": "optional_path",
+      "default": "",
+      "sensitive": false,
+      "scope": "attestor",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_TEST_ATTESTOR_BUBBLEWRAP_COMMAND",
+      "validator_ids": [
+        "optional_path"
+      ]
+    },
+    {
+      "key": "test_attestor.go.toolchain_root",
+      "go_name": "TestAttestorGoToolchainRoot",
+      "semantic_ref": "orquesta.config.test_attestor.go.toolchain_root",
+      "type": "optional_path",
+      "default": "",
+      "sensitive": false,
+      "scope": "attestor",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_TEST_ATTESTOR_GO_TOOLCHAIN_ROOT",
+      "validator_ids": [
+        "optional_path"
+      ]
+    },
+    {
+      "key": "test_attestor.resources.cgroup_root",
+      "go_name": "TestAttestorCgroupRoot",
+      "semantic_ref": "orquesta.config.test_attestor.resources.cgroup_root",
+      "type": "optional_path",
+      "default": "",
+      "sensitive": false,
+      "scope": "attestor",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_TEST_ATTESTOR_CGROUP_ROOT",
+      "validator_ids": [
+        "optional_path"
+      ]
+    },
+    {
+      "key": "test_attestor.resources.memory_max_bytes",
+      "go_name": "TestAttestorMemoryMaxBytes",
+      "semantic_ref": "orquesta.config.test_attestor.resources.memory_max_bytes",
+      "type": "integer",
+      "default": 2147483648,
+      "sensitive": false,
+      "scope": "attestor",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_TEST_ATTESTOR_MEMORY_MAX_BYTES",
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 268435456,
+      "maximum": 17179869184
+    },
+    {
+      "key": "test_attestor.resources.pids_max",
+      "go_name": "TestAttestorPIDsMax",
+      "semantic_ref": "orquesta.config.test_attestor.resources.pids_max",
+      "type": "integer",
+      "default": 256,
+      "sensitive": false,
+      "scope": "attestor",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_TEST_ATTESTOR_PIDS_MAX",
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 16,
+      "maximum": 4096
+    },
+    {
+      "key": "test_attestor.resources.cpu_quota_micros",
+      "go_name": "TestAttestorCPUQuotaMicros",
+      "semantic_ref": "orquesta.config.test_attestor.resources.cpu_quota_micros",
+      "type": "integer",
+      "default": 200000,
+      "sensitive": false,
+      "scope": "attestor",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_TEST_ATTESTOR_CPU_QUOTA_MICROS",
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1000,
+      "maximum": 10000000
     },
     {
       "key": "identity.provider",
@@ -759,6 +934,20 @@
       "scope": "scheduler",
       "restart_required": true,
       "env_alias": "ORQUESTA_SCHEDULER_CLAIM_LEASE",
+      "validator_ids": [
+        "positive_duration"
+      ]
+    },
+    {
+      "key": "scheduler.attest_test_claim_lease",
+      "go_name": "SchedulerAttestTestClaimLease",
+      "semantic_ref": "orquesta.config.scheduler.attest_test_claim_lease",
+      "type": "duration",
+      "default": "20m",
+      "sensitive": false,
+      "scope": "scheduler",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_SCHEDULER_ATTEST_TEST_CLAIM_LEASE",
       "validator_ids": [
         "positive_duration"
       ]

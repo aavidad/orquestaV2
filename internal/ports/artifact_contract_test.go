@@ -34,3 +34,22 @@ func TestArtifactContractsBindReferenceDigestSizeAndMediaTypeToContent(t *testin
 		t.Fatalf("content mismatch code = %q", code)
 	}
 }
+
+func TestArtifactMediaTypeValidationIsStrictAndProportional(t *testing.T) {
+	for _, valid := range []string{"text/plain", "application/json; charset=utf-8", "image/svg+xml"} {
+		if err := ValidateArtifactMediaType(valid); err != nil {
+			t.Fatalf("ValidateArtifactMediaType(%q) error = %v", valid, err)
+		}
+	}
+	for _, invalid := range []string{"", " text/plain", "text/plain ", "text", "text/", "text/plain; charset"} {
+		if code := ArtifactContractErrorCode(ValidateArtifactMediaType(invalid)); code != ArtifactErrorMediaTypeInvalid {
+			t.Fatalf("ValidateArtifactMediaType(%q) code = %q", invalid, code)
+		}
+	}
+}
+
+func TestArtifactFilesystemUnsupportedCodeIsCanonical(t *testing.T) {
+	if ArtifactErrorFilesystemUnsupported != "artifact.filesystem_unsupported" {
+		t.Fatalf("filesystem unsupported code = %q", ArtifactErrorFilesystemUnsupported)
+	}
+}

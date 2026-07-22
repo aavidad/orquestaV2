@@ -4,9 +4,9 @@ package config
 
 import "time"
 
-const generatedRegistrySourceSHA256 = "871366191e8bad74c9c31ca4c28bc0ad6381aa101d270fef61e45619d4004009"
-const generatedRegistryRevision = "2026-07-21.16"
-const generatedRegistrySemanticSHA256 = "sha256:987475e75789d12be14a633ebfca002261a4b2d2e821528dd86287f0b229c244"
+const generatedRegistrySourceSHA256 = "54677c30067f24effacfcfa64482aa5ff03d5c05354a4f7fbb9695d61489f46e"
+const generatedRegistryRevision = "2026-07-22.23"
+const generatedRegistrySemanticSHA256 = "sha256:99aa6485dcadafc4d38c3bdbfb35df7116b6a13c4f1f0e934501de9c4284e973"
 
 const (
 	KeyServerListen                                Key = "server.listen"
@@ -37,6 +37,16 @@ const (
 	KeyWorkspaceLocalRoot                          Key = "workspace.local.root"
 	KeyRepositoryLocalSeedPath                     Key = "repository.local.seed_path"
 	KeyRepositoryLocalTargetRef                    Key = "repository.local.target_ref"
+	KeyTestAttestorProvider                        Key = "test_attestor.provider"
+	KeyTestAttestorMaxSubjectBytes                 Key = "test_attestor.max_subject_bytes"
+	KeyTestAttestorTimeout                         Key = "test_attestor.timeout"
+	KeyTestAttestorMaxConcurrentRuns               Key = "test_attestor.max_concurrent_runs"
+	KeyTestAttestorBubblewrapCommand               Key = "test_attestor.bubblewrap.command"
+	KeyTestAttestorGoToolchainRoot                 Key = "test_attestor.go.toolchain_root"
+	KeyTestAttestorCgroupRoot                      Key = "test_attestor.resources.cgroup_root"
+	KeyTestAttestorMemoryMaxBytes                  Key = "test_attestor.resources.memory_max_bytes"
+	KeyTestAttestorPIDsMax                         Key = "test_attestor.resources.pids_max"
+	KeyTestAttestorCPUQuotaMicros                  Key = "test_attestor.resources.cpu_quota_micros"
 	KeyIdentityProvider                            Key = "identity.provider"
 	KeyIdentityLocalActor                          Key = "identity.local_actor"
 	KeyIdentityLocalTokenPath                      Key = "identity.local_token_path"
@@ -57,6 +67,7 @@ const (
 	KeySchedulerPollInterval                       Key = "scheduler.poll_interval"
 	KeySchedulerObservationInterval                Key = "scheduler.observation_interval"
 	KeySchedulerClaimLease                         Key = "scheduler.claim_lease"
+	KeySchedulerAttestTestClaimLease               Key = "scheduler.attest_test_claim_lease"
 	KeySchedulerMaxExecutionAttempts               Key = "scheduler.max_execution_attempts"
 	KeySchedulerMaxChildrenPerParent               Key = "scheduler.max_children_per_parent"
 	KeySchedulerExecutionTimeout                   Key = "scheduler.execution_timeout"
@@ -96,6 +107,16 @@ func allGeneratedKeys() []Key {
 		KeyWorkspaceLocalRoot,
 		KeyRepositoryLocalSeedPath,
 		KeyRepositoryLocalTargetRef,
+		KeyTestAttestorProvider,
+		KeyTestAttestorMaxSubjectBytes,
+		KeyTestAttestorTimeout,
+		KeyTestAttestorMaxConcurrentRuns,
+		KeyTestAttestorBubblewrapCommand,
+		KeyTestAttestorGoToolchainRoot,
+		KeyTestAttestorCgroupRoot,
+		KeyTestAttestorMemoryMaxBytes,
+		KeyTestAttestorPIDsMax,
+		KeyTestAttestorCPUQuotaMicros,
 		KeyIdentityProvider,
 		KeyIdentityLocalActor,
 		KeyIdentityLocalTokenPath,
@@ -116,6 +137,7 @@ func allGeneratedKeys() []Key {
 		KeySchedulerPollInterval,
 		KeySchedulerObservationInterval,
 		KeySchedulerClaimLease,
+		KeySchedulerAttestTestClaimLease,
 		KeySchedulerMaxExecutionAttempts,
 		KeySchedulerMaxChildrenPerParent,
 		KeySchedulerExecutionTimeout,
@@ -126,267 +148,220 @@ func allGeneratedKeys() []Key {
 	}
 }
 
-func generatedValue[T any](snapshot Snapshot, key Key) T {
+func get[T any](snapshot Snapshot, key Key) T {
 	value, _ := snapshot.value(key)
 	typed, _ := value.(T)
 	return typed
 }
 
-// ServerListen returns server.listen.
-func (s Snapshot) ServerListen() string { return generatedValue[string](s, KeyServerListen) }
+func (s Snapshot) ServerListen() string { return get[string](s, KeyServerListen) }
 
-// ServerMCPPath returns server.mcp_path.
-func (s Snapshot) ServerMCPPath() string { return generatedValue[string](s, KeyServerMCPPath) }
+func (s Snapshot) ServerMCPPath() string { return get[string](s, KeyServerMCPPath) }
 
-// ServerMaxRequestBytes returns server.max_request_bytes.
-func (s Snapshot) ServerMaxRequestBytes() int64 {
-	return generatedValue[int64](s, KeyServerMaxRequestBytes)
-}
+func (s Snapshot) ServerMaxRequestBytes() int64 { return get[int64](s, KeyServerMaxRequestBytes) }
 
-// ServerReadTimeout returns server.read_timeout.
 func (s Snapshot) ServerReadTimeout() time.Duration {
-	return generatedValue[time.Duration](s, KeyServerReadTimeout)
+	return get[time.Duration](s, KeyServerReadTimeout)
 }
 
-// ServerWriteTimeout returns server.write_timeout.
 func (s Snapshot) ServerWriteTimeout() time.Duration {
-	return generatedValue[time.Duration](s, KeyServerWriteTimeout)
+	return get[time.Duration](s, KeyServerWriteTimeout)
 }
 
-// ServerIdleTimeout returns server.idle_timeout.
 func (s Snapshot) ServerIdleTimeout() time.Duration {
-	return generatedValue[time.Duration](s, KeyServerIdleTimeout)
+	return get[time.Duration](s, KeyServerIdleTimeout)
 }
 
-// ServerShutdownTimeout returns server.shutdown_timeout.
 func (s Snapshot) ServerShutdownTimeout() time.Duration {
-	return generatedValue[time.Duration](s, KeyServerShutdownTimeout)
+	return get[time.Duration](s, KeyServerShutdownTimeout)
 }
 
-// StateSQLitePath returns state.sqlite.path.
-func (s Snapshot) StateSQLitePath() string { return generatedValue[string](s, KeyStateSQLitePath) }
+func (s Snapshot) StateSQLitePath() string { return get[string](s, KeyStateSQLitePath) }
 
-// StateSQLiteBusyTimeout returns state.sqlite.busy_timeout.
 func (s Snapshot) StateSQLiteBusyTimeout() time.Duration {
-	return generatedValue[time.Duration](s, KeyStateSQLiteBusyTimeout)
+	return get[time.Duration](s, KeyStateSQLiteBusyTimeout)
 }
 
-// StateSQLiteMaxOpenConnections returns state.sqlite.max_open_connections.
 func (s Snapshot) StateSQLiteMaxOpenConnections() int64 {
-	return generatedValue[int64](s, KeyStateSQLiteMaxOpenConnections)
+	return get[int64](s, KeyStateSQLiteMaxOpenConnections)
 }
 
-// ArtifactFilesystemRoot returns artifact.filesystem.root.
-func (s Snapshot) ArtifactFilesystemRoot() string {
-	return generatedValue[string](s, KeyArtifactFilesystemRoot)
-}
+func (s Snapshot) ArtifactFilesystemRoot() string { return get[string](s, KeyArtifactFilesystemRoot) }
 
-// CredentialsLocalPath returns credentials.local.path.
-func (s Snapshot) CredentialsLocalPath() string {
-	return generatedValue[string](s, KeyCredentialsLocalPath)
-}
+func (s Snapshot) CredentialsLocalPath() string { return get[string](s, KeyCredentialsLocalPath) }
 
-// CredentialsLocalMaxDocumentBytes returns credentials.local.max_document_bytes.
 func (s Snapshot) CredentialsLocalMaxDocumentBytes() int64 {
-	return generatedValue[int64](s, KeyCredentialsLocalMaxDocumentBytes)
+	return get[int64](s, KeyCredentialsLocalMaxDocumentBytes)
 }
 
-// RuntimeProvider returns runtime.provider.
-func (s Snapshot) RuntimeProvider() string { return generatedValue[string](s, KeyRuntimeProvider) }
+func (s Snapshot) RuntimeProvider() string { return get[string](s, KeyRuntimeProvider) }
 
-// RuntimeMaxOutputBytes returns runtime.max_output_bytes.
-func (s Snapshot) RuntimeMaxOutputBytes() int64 {
-	return generatedValue[int64](s, KeyRuntimeMaxOutputBytes)
-}
+func (s Snapshot) RuntimeMaxOutputBytes() int64 { return get[int64](s, KeyRuntimeMaxOutputBytes) }
 
-// RuntimeCodexCommand returns runtime.codex.command.
-func (s Snapshot) RuntimeCodexCommand() string {
-	return generatedValue[string](s, KeyRuntimeCodexCommand)
-}
+func (s Snapshot) RuntimeCodexCommand() string { return get[string](s, KeyRuntimeCodexCommand) }
 
-// RuntimeCodexModel returns runtime.codex.model.
-func (s Snapshot) RuntimeCodexModel() string { return generatedValue[string](s, KeyRuntimeCodexModel) }
+func (s Snapshot) RuntimeCodexModel() string { return get[string](s, KeyRuntimeCodexModel) }
 
-// RuntimeCodexReasoning returns runtime.codex.reasoning.
-func (s Snapshot) RuntimeCodexReasoning() string {
-	return generatedValue[string](s, KeyRuntimeCodexReasoning)
-}
+func (s Snapshot) RuntimeCodexReasoning() string { return get[string](s, KeyRuntimeCodexReasoning) }
 
-// RuntimeCodexTimeout returns runtime.codex.timeout.
 func (s Snapshot) RuntimeCodexTimeout() time.Duration {
-	return generatedValue[time.Duration](s, KeyRuntimeCodexTimeout)
+	return get[time.Duration](s, KeyRuntimeCodexTimeout)
 }
 
-// RuntimeCodexProcessPipeDrainDelay returns runtime.codex.process_pipe_drain_delay.
 func (s Snapshot) RuntimeCodexProcessPipeDrainDelay() time.Duration {
-	return generatedValue[time.Duration](s, KeyRuntimeCodexProcessPipeDrainDelay)
+	return get[time.Duration](s, KeyRuntimeCodexProcessPipeDrainDelay)
 }
 
-// RuntimeCodexMaxDiagnosticBytes returns runtime.codex.max_diagnostic_bytes.
 func (s Snapshot) RuntimeCodexMaxDiagnosticBytes() int64 {
-	return generatedValue[int64](s, KeyRuntimeCodexMaxDiagnosticBytes)
+	return get[int64](s, KeyRuntimeCodexMaxDiagnosticBytes)
 }
 
-// RuntimeCodexMaxConcurrentExecutions returns runtime.codex.max_concurrent_executions.
 func (s Snapshot) RuntimeCodexMaxConcurrentExecutions() int64 {
-	return generatedValue[int64](s, KeyRuntimeCodexMaxConcurrentExecutions)
+	return get[int64](s, KeyRuntimeCodexMaxConcurrentExecutions)
 }
 
-// RuntimeCodexWorkRoot returns runtime.codex.work_root.
-func (s Snapshot) RuntimeCodexWorkRoot() string {
-	return generatedValue[string](s, KeyRuntimeCodexWorkRoot)
-}
+func (s Snapshot) RuntimeCodexWorkRoot() string { return get[string](s, KeyRuntimeCodexWorkRoot) }
 
-// RuntimeCodexEnvAllowlist returns runtime.codex.env_allowlist.
 func (s Snapshot) RuntimeCodexEnvAllowlist() []string {
-	return append([]string(nil), generatedValue[[]string](s, KeyRuntimeCodexEnvAllowlist)...)
+	return append([]string(nil), get[[]string](s, KeyRuntimeCodexEnvAllowlist)...)
 }
 
-// RuntimeCodexCredentialRef returns runtime.codex.credential_ref.
 func (s Snapshot) RuntimeCodexCredentialRef() CredentialRef {
-	return generatedValue[CredentialRef](s, KeyRuntimeCodexCredentialRef)
+	return get[CredentialRef](s, KeyRuntimeCodexCredentialRef)
 }
 
-// WorkspaceLocalRoot returns workspace.local.root.
-func (s Snapshot) WorkspaceLocalRoot() string {
-	return generatedValue[string](s, KeyWorkspaceLocalRoot)
-}
+func (s Snapshot) WorkspaceLocalRoot() string { return get[string](s, KeyWorkspaceLocalRoot) }
 
-// RepositoryLocalSeedPath returns repository.local.seed_path.
-func (s Snapshot) RepositoryLocalSeedPath() string {
-	return generatedValue[string](s, KeyRepositoryLocalSeedPath)
-}
+func (s Snapshot) RepositoryLocalSeedPath() string { return get[string](s, KeyRepositoryLocalSeedPath) }
 
-// RepositoryLocalTargetRef returns repository.local.target_ref.
 func (s Snapshot) RepositoryLocalTargetRef() string {
-	return generatedValue[string](s, KeyRepositoryLocalTargetRef)
+	return get[string](s, KeyRepositoryLocalTargetRef)
 }
 
-// IdentityProvider returns identity.provider.
-func (s Snapshot) IdentityProvider() string { return generatedValue[string](s, KeyIdentityProvider) }
+func (s Snapshot) TestAttestorProvider() string { return get[string](s, KeyTestAttestorProvider) }
 
-// IdentityLocalActor returns identity.local_actor.
-func (s Snapshot) IdentityLocalActor() string {
-	return generatedValue[string](s, KeyIdentityLocalActor)
+func (s Snapshot) TestAttestorMaxSubjectBytes() int64 {
+	return get[int64](s, KeyTestAttestorMaxSubjectBytes)
 }
 
-// IdentityLocalTokenPath returns identity.local_token_path.
-func (s Snapshot) IdentityLocalTokenPath() string {
-	return generatedValue[string](s, KeyIdentityLocalTokenPath)
+func (s Snapshot) TestAttestorTimeout() time.Duration {
+	return get[time.Duration](s, KeyTestAttestorTimeout)
 }
 
-// IdentityOIDCIssuer returns identity.oidc.issuer.
-func (s Snapshot) IdentityOIDCIssuer() string {
-	return generatedValue[string](s, KeyIdentityOIDCIssuer)
+func (s Snapshot) TestAttestorMaxConcurrentRuns() int64 {
+	return get[int64](s, KeyTestAttestorMaxConcurrentRuns)
 }
 
-// IdentityOIDCAudience returns identity.oidc.audience.
-func (s Snapshot) IdentityOIDCAudience() string {
-	return generatedValue[string](s, KeyIdentityOIDCAudience)
+func (s Snapshot) TestAttestorBubblewrapCommand() string {
+	return get[string](s, KeyTestAttestorBubblewrapCommand)
 }
 
-// IdentityOIDCRequiredGroups returns identity.oidc.required_groups.
+func (s Snapshot) TestAttestorGoToolchainRoot() string {
+	return get[string](s, KeyTestAttestorGoToolchainRoot)
+}
+
+func (s Snapshot) TestAttestorCgroupRoot() string { return get[string](s, KeyTestAttestorCgroupRoot) }
+
+func (s Snapshot) TestAttestorMemoryMaxBytes() int64 {
+	return get[int64](s, KeyTestAttestorMemoryMaxBytes)
+}
+
+func (s Snapshot) TestAttestorPIDsMax() int64 { return get[int64](s, KeyTestAttestorPIDsMax) }
+
+func (s Snapshot) TestAttestorCPUQuotaMicros() int64 {
+	return get[int64](s, KeyTestAttestorCPUQuotaMicros)
+}
+
+func (s Snapshot) IdentityProvider() string { return get[string](s, KeyIdentityProvider) }
+
+func (s Snapshot) IdentityLocalActor() string { return get[string](s, KeyIdentityLocalActor) }
+
+func (s Snapshot) IdentityLocalTokenPath() string { return get[string](s, KeyIdentityLocalTokenPath) }
+
+func (s Snapshot) IdentityOIDCIssuer() string { return get[string](s, KeyIdentityOIDCIssuer) }
+
+func (s Snapshot) IdentityOIDCAudience() string { return get[string](s, KeyIdentityOIDCAudience) }
+
 func (s Snapshot) IdentityOIDCRequiredGroups() []string {
-	return append([]string(nil), generatedValue[[]string](s, KeyIdentityOIDCRequiredGroups)...)
+	return append([]string(nil), get[[]string](s, KeyIdentityOIDCRequiredGroups)...)
 }
 
-// IdentityOIDCClockSkew returns identity.oidc.clock_skew.
 func (s Snapshot) IdentityOIDCClockSkew() time.Duration {
-	return generatedValue[time.Duration](s, KeyIdentityOIDCClockSkew)
+	return get[time.Duration](s, KeyIdentityOIDCClockSkew)
 }
 
-// IdentityOIDCUpstreamTimeout returns identity.oidc.upstream_timeout.
 func (s Snapshot) IdentityOIDCUpstreamTimeout() time.Duration {
-	return generatedValue[time.Duration](s, KeyIdentityOIDCUpstreamTimeout)
+	return get[time.Duration](s, KeyIdentityOIDCUpstreamTimeout)
 }
 
-// ProjectDefault returns project.default.
-func (s Snapshot) ProjectDefault() string { return generatedValue[string](s, KeyProjectDefault) }
+func (s Snapshot) ProjectDefault() string { return get[string](s, KeyProjectDefault) }
 
-// GovernanceBudgetCurrency returns governance.budget_currency.
 func (s Snapshot) GovernanceBudgetCurrency() string {
-	return generatedValue[string](s, KeyGovernanceBudgetCurrency)
+	return get[string](s, KeyGovernanceBudgetCurrency)
 }
 
-// GovernanceGlobalTokenBudget returns governance.global_token_budget.
 func (s Snapshot) GovernanceGlobalTokenBudget() int64 {
-	return generatedValue[int64](s, KeyGovernanceGlobalTokenBudget)
+	return get[int64](s, KeyGovernanceGlobalTokenBudget)
 }
 
-// GovernanceGlobalMoneyMicrosBudget returns governance.global_money_micros_budget.
 func (s Snapshot) GovernanceGlobalMoneyMicrosBudget() int64 {
-	return generatedValue[int64](s, KeyGovernanceGlobalMoneyMicrosBudget)
+	return get[int64](s, KeyGovernanceGlobalMoneyMicrosBudget)
 }
 
-// GovernanceDefaultExecutionTokenBudget returns governance.default_execution_token_budget.
 func (s Snapshot) GovernanceDefaultExecutionTokenBudget() int64 {
-	return generatedValue[int64](s, KeyGovernanceDefaultExecutionTokenBudget)
+	return get[int64](s, KeyGovernanceDefaultExecutionTokenBudget)
 }
 
-// GovernanceDefaultExecutionMoneyMicrosBudget returns governance.default_execution_money_micros_budget.
 func (s Snapshot) GovernanceDefaultExecutionMoneyMicrosBudget() int64 {
-	return generatedValue[int64](s, KeyGovernanceDefaultExecutionMoneyMicrosBudget)
+	return get[int64](s, KeyGovernanceDefaultExecutionMoneyMicrosBudget)
 }
 
-// GovernanceEffectApprovalTTL returns governance.effect_approval_ttl.
 func (s Snapshot) GovernanceEffectApprovalTTL() time.Duration {
-	return generatedValue[time.Duration](s, KeyGovernanceEffectApprovalTTL)
+	return get[time.Duration](s, KeyGovernanceEffectApprovalTTL)
 }
 
-// DirectorLeaseDuration returns director.lease_duration.
 func (s Snapshot) DirectorLeaseDuration() time.Duration {
-	return generatedValue[time.Duration](s, KeyDirectorLeaseDuration)
+	return get[time.Duration](s, KeyDirectorLeaseDuration)
 }
 
-// MailboxMaxEnvelopeBytes returns mailbox.max_envelope_bytes.
-func (s Snapshot) MailboxMaxEnvelopeBytes() int64 {
-	return generatedValue[int64](s, KeyMailboxMaxEnvelopeBytes)
-}
+func (s Snapshot) MailboxMaxEnvelopeBytes() int64 { return get[int64](s, KeyMailboxMaxEnvelopeBytes) }
 
-// SchedulerPollInterval returns scheduler.poll_interval.
 func (s Snapshot) SchedulerPollInterval() time.Duration {
-	return generatedValue[time.Duration](s, KeySchedulerPollInterval)
+	return get[time.Duration](s, KeySchedulerPollInterval)
 }
 
-// SchedulerObservationInterval returns scheduler.observation_interval.
 func (s Snapshot) SchedulerObservationInterval() time.Duration {
-	return generatedValue[time.Duration](s, KeySchedulerObservationInterval)
+	return get[time.Duration](s, KeySchedulerObservationInterval)
 }
 
-// SchedulerClaimLease returns scheduler.claim_lease.
 func (s Snapshot) SchedulerClaimLease() time.Duration {
-	return generatedValue[time.Duration](s, KeySchedulerClaimLease)
+	return get[time.Duration](s, KeySchedulerClaimLease)
 }
 
-// SchedulerMaxExecutionAttempts returns scheduler.max_execution_attempts.
+func (s Snapshot) SchedulerAttestTestClaimLease() time.Duration {
+	return get[time.Duration](s, KeySchedulerAttestTestClaimLease)
+}
+
 func (s Snapshot) SchedulerMaxExecutionAttempts() int64 {
-	return generatedValue[int64](s, KeySchedulerMaxExecutionAttempts)
+	return get[int64](s, KeySchedulerMaxExecutionAttempts)
 }
 
-// SchedulerMaxChildrenPerParent returns scheduler.max_children_per_parent.
 func (s Snapshot) SchedulerMaxChildrenPerParent() int64 {
-	return generatedValue[int64](s, KeySchedulerMaxChildrenPerParent)
+	return get[int64](s, KeySchedulerMaxChildrenPerParent)
 }
 
-// SchedulerExecutionTimeout returns scheduler.execution_timeout.
 func (s Snapshot) SchedulerExecutionTimeout() time.Duration {
-	return generatedValue[time.Duration](s, KeySchedulerExecutionTimeout)
+	return get[time.Duration](s, KeySchedulerExecutionTimeout)
 }
 
-// APIMaxListLimit returns api.max_list_limit.
-func (s Snapshot) APIMaxListLimit() int64 { return generatedValue[int64](s, KeyAPIMaxListLimit) }
+func (s Snapshot) APIMaxListLimit() int64 { return get[int64](s, KeyAPIMaxListLimit) }
 
-// APILocale returns api.locale.
-func (s Snapshot) APILocale() string { return generatedValue[string](s, KeyAPILocale) }
+func (s Snapshot) APILocale() string { return get[string](s, KeyAPILocale) }
 
-// ConfigEffectivePath returns config.effective_path.
-func (s Snapshot) ConfigEffectivePath() string {
-	return generatedValue[string](s, KeyConfigEffectivePath)
-}
+func (s Snapshot) ConfigEffectivePath() string { return get[string](s, KeyConfigEffectivePath) }
 
-// ConfigEffectiveMaxExistingBytes returns config.effective_max_existing_bytes.
 func (s Snapshot) ConfigEffectiveMaxExistingBytes() int64 {
-	return generatedValue[int64](s, KeyConfigEffectiveMaxExistingBytes)
+	return get[int64](s, KeyConfigEffectiveMaxExistingBytes)
 }
 
-const generatedRegistryJSON = "{\"schema_version\":2,\"revision\":\"2026-07-21.16\",\"precedence\":[\"default\",\"file\",\"env\"],\"document_limits\":{\"source_max_bytes\":1048576,\"audit_entry_max_bytes\":65536},\"aliases\":[],\"cross_validators\":[{\"id\":\"runtime_codex_timeout_before_scheduler_execution_timeout\",\"keys\":[\"runtime.codex.timeout\",\"scheduler.execution_timeout\"]},{\"id\":\"server_listen_loopback\",\"keys\":[\"server.listen\"]},{\"id\":\"server_mcp_path_literal\",\"keys\":[\"server.mcp_path\"]},{\"id\":\"runtime_paths_disjoint\",\"keys\":[\"state.sqlite.path\",\"artifact.filesystem.root\",\"credentials.local.path\",\"runtime.codex.work_root\",\"workspace.local.root\",\"config.effective_path\",\"identity.local_token_path\"]},{\"id\":\"identity_provider_requirements\",\"keys\":[\"identity.provider\",\"identity.oidc.issuer\",\"identity.oidc.audience\",\"identity.oidc.clock_skew\",\"identity.oidc.upstream_timeout\"]}],\"keys\":[{\"key\":\"server.listen\",\"go_name\":\"ServerListen\",\"semantic_ref\":\"orquesta.config.server.listen\",\"type\":\"string\",\"default\":\"127.0.0.1:8080\",\"sensitive\":false,\"scope\":\"server\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_SERVER_LISTEN\",\"validator_ids\":[]},{\"key\":\"server.mcp_path\",\"go_name\":\"ServerMCPPath\",\"semantic_ref\":\"orquesta.config.server.mcp_path\",\"type\":\"string\",\"default\":\"/mcp\",\"sensitive\":false,\"scope\":\"server\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_SERVER_MCP_PATH\",\"validator_ids\":[]},{\"key\":\"server.max_request_bytes\",\"go_name\":\"ServerMaxRequestBytes\",\"semantic_ref\":\"orquesta.config.server.max_request_bytes\",\"type\":\"integer\",\"default\":1048576,\"sensitive\":false,\"scope\":\"server\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_SERVER_MAX_REQUEST_BYTES\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1,\"maximum\":1073741824},{\"key\":\"server.read_timeout\",\"go_name\":\"ServerReadTimeout\",\"semantic_ref\":\"orquesta.config.server.read_timeout\",\"type\":\"duration\",\"default\":\"15s\",\"sensitive\":false,\"scope\":\"server\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_SERVER_READ_TIMEOUT\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"server.write_timeout\",\"go_name\":\"ServerWriteTimeout\",\"semantic_ref\":\"orquesta.config.server.write_timeout\",\"type\":\"duration\",\"default\":\"30s\",\"sensitive\":false,\"scope\":\"server\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_SERVER_WRITE_TIMEOUT\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"server.idle_timeout\",\"go_name\":\"ServerIdleTimeout\",\"semantic_ref\":\"orquesta.config.server.idle_timeout\",\"type\":\"duration\",\"default\":\"60s\",\"sensitive\":false,\"scope\":\"server\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_SERVER_IDLE_TIMEOUT\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"server.shutdown_timeout\",\"go_name\":\"ServerShutdownTimeout\",\"semantic_ref\":\"orquesta.config.server.shutdown_timeout\",\"type\":\"duration\",\"default\":\"15s\",\"sensitive\":false,\"scope\":\"server\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_SERVER_SHUTDOWN_TIMEOUT\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"state.sqlite.path\",\"go_name\":\"StateSQLitePath\",\"semantic_ref\":\"orquesta.config.state.sqlite.path\",\"type\":\"path\",\"default\":\"./var/state/orquesta.sqlite\",\"sensitive\":false,\"scope\":\"state\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_STATE_SQLITE_PATH\",\"validator_ids\":[\"non_empty_path\"]},{\"key\":\"state.sqlite.busy_timeout\",\"go_name\":\"StateSQLiteBusyTimeout\",\"semantic_ref\":\"orquesta.config.state.sqlite.busy_timeout\",\"type\":\"duration\",\"default\":\"5s\",\"sensitive\":false,\"scope\":\"state\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_STATE_SQLITE_BUSY_TIMEOUT\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"state.sqlite.max_open_connections\",\"go_name\":\"StateSQLiteMaxOpenConnections\",\"semantic_ref\":\"orquesta.config.state.sqlite.max_open_connections\",\"type\":\"integer\",\"default\":8,\"sensitive\":false,\"scope\":\"state\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_STATE_SQLITE_MAX_OPEN_CONNECTIONS\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1,\"maximum\":1024},{\"key\":\"artifact.filesystem.root\",\"go_name\":\"ArtifactFilesystemRoot\",\"semantic_ref\":\"orquesta.config.artifact.filesystem.root\",\"type\":\"path\",\"default\":\"./var/artifacts\",\"sensitive\":false,\"scope\":\"artifact\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_ARTIFACT_FILESYSTEM_ROOT\",\"validator_ids\":[\"non_empty_path\"]},{\"key\":\"credentials.local.path\",\"go_name\":\"CredentialsLocalPath\",\"semantic_ref\":\"orquesta.config.credentials.local.path\",\"type\":\"path\",\"default\":\"./var/secrets/credentials.json\",\"sensitive\":false,\"scope\":\"credentials\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_CREDENTIALS_LOCAL_PATH\",\"validator_ids\":[\"non_empty_path\"]},{\"key\":\"credentials.local.max_document_bytes\",\"go_name\":\"CredentialsLocalMaxDocumentBytes\",\"semantic_ref\":\"orquesta.config.credentials.local.max_document_bytes\",\"type\":\"integer\",\"default\":1048576,\"sensitive\":false,\"scope\":\"credentials\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_CREDENTIALS_LOCAL_MAX_DOCUMENT_BYTES\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1024,\"maximum\":16777216},{\"key\":\"runtime.provider\",\"go_name\":\"RuntimeProvider\",\"semantic_ref\":\"orquesta.config.runtime.provider\",\"type\":\"string\",\"default\":\"codex\",\"sensitive\":false,\"scope\":\"runtime\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_RUNTIME_PROVIDER\",\"validator_ids\":[\"allowed_values\"],\"allowed_values\":[\"codex\"]},{\"key\":\"runtime.max_output_bytes\",\"go_name\":\"RuntimeMaxOutputBytes\",\"semantic_ref\":\"orquesta.config.runtime.max_output_bytes\",\"type\":\"integer\",\"default\":1048576,\"sensitive\":false,\"scope\":\"runtime\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_RUNTIME_MAX_OUTPUT_BYTES\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1,\"maximum\":1073741824},{\"key\":\"runtime.codex.command\",\"go_name\":\"RuntimeCodexCommand\",\"semantic_ref\":\"orquesta.config.runtime.codex.command\",\"type\":\"string\",\"default\":\"codex\",\"sensitive\":false,\"scope\":\"runtime\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_RUNTIME_CODEX_COMMAND\",\"validator_ids\":[\"trimmed_non_empty_string\"]},{\"key\":\"runtime.codex.model\",\"go_name\":\"RuntimeCodexModel\",\"semantic_ref\":\"orquesta.config.runtime.codex.model\",\"type\":\"string\",\"default\":\"\",\"sensitive\":false,\"scope\":\"runtime\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_RUNTIME_CODEX_MODEL\",\"validator_ids\":[\"trimmed_optional_string\"]},{\"key\":\"runtime.codex.reasoning\",\"go_name\":\"RuntimeCodexReasoning\",\"semantic_ref\":\"orquesta.config.runtime.codex.reasoning\",\"type\":\"string\",\"default\":\"medium\",\"sensitive\":false,\"scope\":\"runtime\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_RUNTIME_CODEX_REASONING\",\"validator_ids\":[\"allowed_values\"],\"allowed_values\":[\"low\",\"medium\",\"high\",\"xhigh\"]},{\"key\":\"runtime.codex.timeout\",\"go_name\":\"RuntimeCodexTimeout\",\"semantic_ref\":\"orquesta.config.runtime.codex.timeout\",\"type\":\"duration\",\"default\":\"30m\",\"sensitive\":false,\"scope\":\"runtime\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_RUNTIME_CODEX_TIMEOUT\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"runtime.codex.process_pipe_drain_delay\",\"go_name\":\"RuntimeCodexProcessPipeDrainDelay\",\"semantic_ref\":\"orquesta.config.runtime.codex.process_pipe_drain_delay\",\"type\":\"duration\",\"default\":\"250ms\",\"sensitive\":false,\"scope\":\"runtime\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_RUNTIME_CODEX_PROCESS_PIPE_DRAIN_DELAY\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"runtime.codex.max_diagnostic_bytes\",\"go_name\":\"RuntimeCodexMaxDiagnosticBytes\",\"semantic_ref\":\"orquesta.config.runtime.codex.max_diagnostic_bytes\",\"type\":\"integer\",\"default\":65536,\"sensitive\":false,\"scope\":\"runtime\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_RUNTIME_CODEX_MAX_DIAGNOSTIC_BYTES\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1,\"maximum\":67108864},{\"key\":\"runtime.codex.max_concurrent_executions\",\"go_name\":\"RuntimeCodexMaxConcurrentExecutions\",\"semantic_ref\":\"orquesta.config.runtime.codex.max_concurrent_executions\",\"type\":\"integer\",\"default\":70,\"sensitive\":false,\"scope\":\"runtime\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_RUNTIME_CODEX_MAX_CONCURRENT_EXECUTIONS\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1,\"maximum\":4096},{\"key\":\"runtime.codex.work_root\",\"go_name\":\"RuntimeCodexWorkRoot\",\"semantic_ref\":\"orquesta.config.runtime.codex.work_root\",\"type\":\"path\",\"default\":\"./var/work\",\"sensitive\":false,\"scope\":\"runtime\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_RUNTIME_CODEX_WORK_ROOT\",\"validator_ids\":[\"non_empty_path\"]},{\"key\":\"runtime.codex.env_allowlist\",\"go_name\":\"RuntimeCodexEnvAllowlist\",\"semantic_ref\":\"orquesta.config.runtime.codex.env_allowlist\",\"type\":\"string_list\",\"default\":[\"PATH\",\"HOME\",\"CODEX_HOME\"],\"sensitive\":false,\"scope\":\"runtime\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_RUNTIME_CODEX_ENV_ALLOWLIST\",\"validator_ids\":[\"unique_non_empty_string_list\",\"environment_name_list\"]},{\"key\":\"runtime.codex.credential_ref\",\"go_name\":\"RuntimeCodexCredentialRef\",\"semantic_ref\":\"orquesta.config.runtime.codex.credential_ref\",\"type\":\"credential_ref\",\"default\":\"\",\"sensitive\":true,\"scope\":\"runtime\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_RUNTIME_CODEX_CREDENTIAL_REF\",\"validator_ids\":[\"credential_ref\"]},{\"key\":\"workspace.local.root\",\"go_name\":\"WorkspaceLocalRoot\",\"semantic_ref\":\"orquesta.config.workspace.local.root\",\"type\":\"path\",\"default\":\"./var/workspaces\",\"sensitive\":false,\"scope\":\"workspace\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_WORKSPACE_LOCAL_ROOT\",\"validator_ids\":[\"non_empty_path\"]},{\"key\":\"repository.local.seed_path\",\"go_name\":\"RepositoryLocalSeedPath\",\"semantic_ref\":\"orquesta.config.repository.local.seed_path\",\"type\":\"string\",\"default\":\"\",\"sensitive\":false,\"scope\":\"workspace\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_REPOSITORY_LOCAL_SEED_PATH\",\"validator_ids\":[\"trimmed_optional_string\"]},{\"key\":\"repository.local.target_ref\",\"go_name\":\"RepositoryLocalTargetRef\",\"semantic_ref\":\"orquesta.config.repository.local.target_ref\",\"type\":\"string\",\"default\":\"refs/heads/main\",\"sensitive\":false,\"scope\":\"workspace\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_REPOSITORY_LOCAL_TARGET_REF\",\"validator_ids\":[\"trimmed_non_empty_string\"]},{\"key\":\"identity.provider\",\"go_name\":\"IdentityProvider\",\"semantic_ref\":\"orquesta.config.identity.provider\",\"type\":\"string\",\"default\":\"local_token\",\"sensitive\":false,\"scope\":\"identity\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_IDENTITY_PROVIDER\",\"validator_ids\":[\"allowed_values\"],\"allowed_values\":[\"local_token\",\"oidc\"]},{\"key\":\"identity.local_actor\",\"go_name\":\"IdentityLocalActor\",\"semantic_ref\":\"orquesta.config.identity.local_actor\",\"type\":\"string\",\"default\":\"actor:local-owner\",\"sensitive\":false,\"scope\":\"identity\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_IDENTITY_LOCAL_ACTOR\",\"validator_ids\":[\"opaque_ref\"]},{\"key\":\"identity.local_token_path\",\"go_name\":\"IdentityLocalTokenPath\",\"semantic_ref\":\"orquesta.config.identity.local_token_path\",\"type\":\"path\",\"default\":\"./var/secrets/local-owner.token\",\"sensitive\":false,\"scope\":\"identity\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_IDENTITY_LOCAL_TOKEN_PATH\",\"validator_ids\":[\"non_empty_path\"]},{\"key\":\"identity.oidc.issuer\",\"go_name\":\"IdentityOIDCIssuer\",\"semantic_ref\":\"orquesta.config.identity.oidc.issuer\",\"type\":\"string\",\"default\":\"\",\"sensitive\":false,\"scope\":\"identity\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_IDENTITY_OIDC_ISSUER\",\"validator_ids\":[\"trimmed_optional_string\"]},{\"key\":\"identity.oidc.audience\",\"go_name\":\"IdentityOIDCAudience\",\"semantic_ref\":\"orquesta.config.identity.oidc.audience\",\"type\":\"string\",\"default\":\"\",\"sensitive\":false,\"scope\":\"identity\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_IDENTITY_OIDC_AUDIENCE\",\"validator_ids\":[\"trimmed_optional_string\"]},{\"key\":\"identity.oidc.required_groups\",\"go_name\":\"IdentityOIDCRequiredGroups\",\"semantic_ref\":\"orquesta.config.identity.oidc.required_groups\",\"type\":\"string_list\",\"default\":[],\"sensitive\":false,\"scope\":\"identity\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_IDENTITY_OIDC_REQUIRED_GROUPS\",\"validator_ids\":[\"unique_non_empty_string_list\"]},{\"key\":\"identity.oidc.clock_skew\",\"go_name\":\"IdentityOIDCClockSkew\",\"semantic_ref\":\"orquesta.config.identity.oidc.clock_skew\",\"type\":\"duration\",\"default\":\"30s\",\"sensitive\":false,\"scope\":\"identity\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_IDENTITY_OIDC_CLOCK_SKEW\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"identity.oidc.upstream_timeout\",\"go_name\":\"IdentityOIDCUpstreamTimeout\",\"semantic_ref\":\"orquesta.config.identity.oidc.upstream_timeout\",\"type\":\"duration\",\"default\":\"10s\",\"sensitive\":false,\"scope\":\"identity\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_IDENTITY_OIDC_UPSTREAM_TIMEOUT\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"project.default\",\"go_name\":\"ProjectDefault\",\"semantic_ref\":\"orquesta.config.project.default\",\"type\":\"string\",\"default\":\"project:default\",\"sensitive\":false,\"scope\":\"project\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_PROJECT_DEFAULT\",\"validator_ids\":[\"opaque_ref\"]},{\"key\":\"governance.budget_currency\",\"go_name\":\"GovernanceBudgetCurrency\",\"semantic_ref\":\"orquesta.config.governance.budget_currency\",\"type\":\"string\",\"default\":\"USD\",\"sensitive\":false,\"scope\":\"governance\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_GOVERNANCE_BUDGET_CURRENCY\",\"validator_ids\":[\"trimmed_non_empty_string\"]},{\"key\":\"governance.global_token_budget\",\"go_name\":\"GovernanceGlobalTokenBudget\",\"semantic_ref\":\"orquesta.config.governance.global_token_budget\",\"type\":\"integer\",\"default\":14000000,\"sensitive\":false,\"scope\":\"governance\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_GOVERNANCE_GLOBAL_TOKEN_BUDGET\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1,\"maximum\":1000000000000000},{\"key\":\"governance.global_money_micros_budget\",\"go_name\":\"GovernanceGlobalMoneyMicrosBudget\",\"semantic_ref\":\"orquesta.config.governance.global_money_micros_budget\",\"type\":\"integer\",\"default\":70000000,\"sensitive\":false,\"scope\":\"governance\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_GOVERNANCE_GLOBAL_MONEY_MICROS_BUDGET\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1,\"maximum\":9000000000000000},{\"key\":\"governance.default_execution_token_budget\",\"go_name\":\"GovernanceDefaultExecutionTokenBudget\",\"semantic_ref\":\"orquesta.config.governance.default_execution_token_budget\",\"type\":\"integer\",\"default\":200000,\"sensitive\":false,\"scope\":\"governance\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_GOVERNANCE_DEFAULT_EXECUTION_TOKEN_BUDGET\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1,\"maximum\":1000000000000},{\"key\":\"governance.default_execution_money_micros_budget\",\"go_name\":\"GovernanceDefaultExecutionMoneyMicrosBudget\",\"semantic_ref\":\"orquesta.config.governance.default_execution_money_micros_budget\",\"type\":\"integer\",\"default\":1000000,\"sensitive\":false,\"scope\":\"governance\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_GOVERNANCE_DEFAULT_EXECUTION_MONEY_MICROS_BUDGET\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1,\"maximum\":1000000000000000},{\"key\":\"governance.effect_approval_ttl\",\"go_name\":\"GovernanceEffectApprovalTTL\",\"semantic_ref\":\"orquesta.config.governance.effect_approval_ttl\",\"type\":\"duration\",\"default\":\"24h\",\"sensitive\":false,\"scope\":\"governance\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_GOVERNANCE_EFFECT_APPROVAL_TTL\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"director.lease_duration\",\"go_name\":\"DirectorLeaseDuration\",\"semantic_ref\":\"orquesta.config.director.lease_duration\",\"type\":\"duration\",\"default\":\"2m\",\"sensitive\":false,\"scope\":\"director\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_DIRECTOR_LEASE_DURATION\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"mailbox.max_envelope_bytes\",\"go_name\":\"MailboxMaxEnvelopeBytes\",\"semantic_ref\":\"orquesta.config.mailbox.max_envelope_bytes\",\"type\":\"integer\",\"default\":65536,\"sensitive\":false,\"scope\":\"mailbox\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_MAILBOX_MAX_ENVELOPE_BYTES\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1024,\"maximum\":16777216},{\"key\":\"scheduler.poll_interval\",\"go_name\":\"SchedulerPollInterval\",\"semantic_ref\":\"orquesta.config.scheduler.poll_interval\",\"type\":\"duration\",\"default\":\"500ms\",\"sensitive\":false,\"scope\":\"scheduler\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_SCHEDULER_POLL_INTERVAL\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"scheduler.observation_interval\",\"go_name\":\"SchedulerObservationInterval\",\"semantic_ref\":\"orquesta.config.scheduler.observation_interval\",\"type\":\"duration\",\"default\":\"2s\",\"sensitive\":false,\"scope\":\"scheduler\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_SCHEDULER_OBSERVATION_INTERVAL\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"scheduler.claim_lease\",\"go_name\":\"SchedulerClaimLease\",\"semantic_ref\":\"orquesta.config.scheduler.claim_lease\",\"type\":\"duration\",\"default\":\"2m\",\"sensitive\":false,\"scope\":\"scheduler\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_SCHEDULER_CLAIM_LEASE\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"scheduler.max_execution_attempts\",\"go_name\":\"SchedulerMaxExecutionAttempts\",\"semantic_ref\":\"orquesta.config.scheduler.max_execution_attempts\",\"type\":\"integer\",\"default\":3,\"sensitive\":false,\"scope\":\"scheduler\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_SCHEDULER_MAX_EXECUTION_ATTEMPTS\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1,\"maximum\":1000},{\"key\":\"scheduler.max_children_per_parent\",\"go_name\":\"SchedulerMaxChildrenPerParent\",\"semantic_ref\":\"orquesta.config.scheduler.max_children_per_parent\",\"type\":\"integer\",\"default\":6,\"sensitive\":false,\"scope\":\"scheduler\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_SCHEDULER_MAX_CHILDREN_PER_PARENT\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1,\"maximum\":4096},{\"key\":\"scheduler.execution_timeout\",\"go_name\":\"SchedulerExecutionTimeout\",\"semantic_ref\":\"orquesta.config.scheduler.execution_timeout\",\"type\":\"duration\",\"default\":\"45m\",\"sensitive\":false,\"scope\":\"scheduler\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_SCHEDULER_EXECUTION_TIMEOUT\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"api.max_list_limit\",\"go_name\":\"APIMaxListLimit\",\"semantic_ref\":\"orquesta.config.api.max_list_limit\",\"type\":\"integer\",\"default\":100,\"sensitive\":false,\"scope\":\"api\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_API_MAX_LIST_LIMIT\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1,\"maximum\":10000},{\"key\":\"api.locale\",\"go_name\":\"APILocale\",\"semantic_ref\":\"orquesta.config.api.locale\",\"type\":\"string\",\"default\":\"es\",\"sensitive\":false,\"scope\":\"api\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_API_LOCALE\",\"validator_ids\":[\"allowed_values\"],\"allowed_values\":[\"es\",\"en\"]},{\"key\":\"config.effective_path\",\"go_name\":\"ConfigEffectivePath\",\"semantic_ref\":\"orquesta.config.config.effective_path\",\"type\":\"path\",\"default\":\"./var/effective_config.json\",\"sensitive\":false,\"scope\":\"config\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_EFFECTIVE_CONFIG_PATH\",\"validator_ids\":[\"non_empty_path\"]},{\"key\":\"config.effective_max_existing_bytes\",\"go_name\":\"ConfigEffectiveMaxExistingBytes\",\"semantic_ref\":\"orquesta.config.config.effective_max_existing_bytes\",\"type\":\"integer\",\"default\":16777216,\"sensitive\":false,\"scope\":\"config\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_EFFECTIVE_CONFIG_MAX_EXISTING_BYTES\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1024,\"maximum\":1073741824}]}"
+const generatedRegistryJSON = "{\"schema_version\":2,\"revision\":\"2026-07-22.23\",\"precedence\":[\"default\",\"file\",\"env\"],\"document_limits\":{\"source_max_bytes\":1048576,\"audit_entry_max_bytes\":65536},\"aliases\":[],\"cross_validators\":[{\"id\":\"runtime_codex_timeout_before_scheduler_execution_timeout\",\"keys\":[\"runtime.codex.timeout\",\"scheduler.execution_timeout\"]},{\"id\":\"server_listen_loopback\",\"keys\":[\"server.listen\"]},{\"id\":\"server_mcp_path_literal\",\"keys\":[\"server.mcp_path\"]},{\"id\":\"runtime_paths_disjoint\",\"keys\":[\"state.sqlite.path\",\"artifact.filesystem.root\",\"credentials.local.path\",\"runtime.codex.work_root\",\"workspace.local.root\",\"config.effective_path\",\"identity.local_token_path\"]},{\"id\":\"identity_provider_requirements\",\"keys\":[\"identity.provider\",\"identity.oidc.issuer\",\"identity.oidc.audience\",\"identity.oidc.clock_skew\",\"identity.oidc.upstream_timeout\"]},{\"id\":\"test_attestor_provider_requirements\",\"keys\":[\"test_attestor.provider\",\"test_attestor.timeout\",\"test_attestor.bubblewrap.command\",\"test_attestor.go.toolchain_root\",\"runtime.max_output_bytes\",\"test_attestor.max_subject_bytes\",\"test_attestor.max_concurrent_runs\",\"repository.local.seed_path\",\"test_attestor.resources.cgroup_root\",\"test_attestor.resources.memory_max_bytes\",\"test_attestor.resources.pids_max\",\"test_attestor.resources.cpu_quota_micros\",\"server.shutdown_timeout\",\"scheduler.attest_test_claim_lease\",\"scheduler.execution_timeout\"]}],\"keys\":[{\"key\":\"server.listen\",\"go_name\":\"ServerListen\",\"semantic_ref\":\"orquesta.config.server.listen\",\"type\":\"string\",\"default\":\"127.0.0.1:8080\",\"sensitive\":false,\"scope\":\"server\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_SERVER_LISTEN\",\"validator_ids\":[]},{\"key\":\"server.mcp_path\",\"go_name\":\"ServerMCPPath\",\"semantic_ref\":\"orquesta.config.server.mcp_path\",\"type\":\"string\",\"default\":\"/mcp\",\"sensitive\":false,\"scope\":\"server\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_SERVER_MCP_PATH\",\"validator_ids\":[]},{\"key\":\"server.max_request_bytes\",\"go_name\":\"ServerMaxRequestBytes\",\"semantic_ref\":\"orquesta.config.server.max_request_bytes\",\"type\":\"integer\",\"default\":1048576,\"sensitive\":false,\"scope\":\"server\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_SERVER_MAX_REQUEST_BYTES\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1,\"maximum\":1073741824},{\"key\":\"server.read_timeout\",\"go_name\":\"ServerReadTimeout\",\"semantic_ref\":\"orquesta.config.server.read_timeout\",\"type\":\"duration\",\"default\":\"15s\",\"sensitive\":false,\"scope\":\"server\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_SERVER_READ_TIMEOUT\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"server.write_timeout\",\"go_name\":\"ServerWriteTimeout\",\"semantic_ref\":\"orquesta.config.server.write_timeout\",\"type\":\"duration\",\"default\":\"30s\",\"sensitive\":false,\"scope\":\"server\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_SERVER_WRITE_TIMEOUT\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"server.idle_timeout\",\"go_name\":\"ServerIdleTimeout\",\"semantic_ref\":\"orquesta.config.server.idle_timeout\",\"type\":\"duration\",\"default\":\"60s\",\"sensitive\":false,\"scope\":\"server\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_SERVER_IDLE_TIMEOUT\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"server.shutdown_timeout\",\"go_name\":\"ServerShutdownTimeout\",\"semantic_ref\":\"orquesta.config.server.shutdown_timeout\",\"type\":\"duration\",\"default\":\"15s\",\"sensitive\":false,\"scope\":\"server\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_SERVER_SHUTDOWN_TIMEOUT\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"state.sqlite.path\",\"go_name\":\"StateSQLitePath\",\"semantic_ref\":\"orquesta.config.state.sqlite.path\",\"type\":\"path\",\"default\":\"./var/state/orquesta.sqlite\",\"sensitive\":false,\"scope\":\"state\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_STATE_SQLITE_PATH\",\"validator_ids\":[\"non_empty_path\"]},{\"key\":\"state.sqlite.busy_timeout\",\"go_name\":\"StateSQLiteBusyTimeout\",\"semantic_ref\":\"orquesta.config.state.sqlite.busy_timeout\",\"type\":\"duration\",\"default\":\"5s\",\"sensitive\":false,\"scope\":\"state\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_STATE_SQLITE_BUSY_TIMEOUT\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"state.sqlite.max_open_connections\",\"go_name\":\"StateSQLiteMaxOpenConnections\",\"semantic_ref\":\"orquesta.config.state.sqlite.max_open_connections\",\"type\":\"integer\",\"default\":8,\"sensitive\":false,\"scope\":\"state\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_STATE_SQLITE_MAX_OPEN_CONNECTIONS\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1,\"maximum\":1024},{\"key\":\"artifact.filesystem.root\",\"go_name\":\"ArtifactFilesystemRoot\",\"semantic_ref\":\"orquesta.config.artifact.filesystem.root\",\"type\":\"path\",\"default\":\"./var/artifacts\",\"sensitive\":false,\"scope\":\"artifact\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_ARTIFACT_FILESYSTEM_ROOT\",\"validator_ids\":[\"non_empty_path\"]},{\"key\":\"credentials.local.path\",\"go_name\":\"CredentialsLocalPath\",\"semantic_ref\":\"orquesta.config.credentials.local.path\",\"type\":\"path\",\"default\":\"./var/secrets/credentials.json\",\"sensitive\":false,\"scope\":\"credentials\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_CREDENTIALS_LOCAL_PATH\",\"validator_ids\":[\"non_empty_path\"]},{\"key\":\"credentials.local.max_document_bytes\",\"go_name\":\"CredentialsLocalMaxDocumentBytes\",\"semantic_ref\":\"orquesta.config.credentials.local.max_document_bytes\",\"type\":\"integer\",\"default\":1048576,\"sensitive\":false,\"scope\":\"credentials\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_CREDENTIALS_LOCAL_MAX_DOCUMENT_BYTES\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1024,\"maximum\":16777216},{\"key\":\"runtime.provider\",\"go_name\":\"RuntimeProvider\",\"semantic_ref\":\"orquesta.config.runtime.provider\",\"type\":\"string\",\"default\":\"codex\",\"sensitive\":false,\"scope\":\"runtime\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_RUNTIME_PROVIDER\",\"validator_ids\":[\"allowed_values\"],\"allowed_values\":[\"codex\"]},{\"key\":\"runtime.max_output_bytes\",\"go_name\":\"RuntimeMaxOutputBytes\",\"semantic_ref\":\"orquesta.config.runtime.max_output_bytes\",\"type\":\"integer\",\"default\":1048576,\"sensitive\":false,\"scope\":\"runtime\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_RUNTIME_MAX_OUTPUT_BYTES\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1,\"maximum\":1073741824},{\"key\":\"runtime.codex.command\",\"go_name\":\"RuntimeCodexCommand\",\"semantic_ref\":\"orquesta.config.runtime.codex.command\",\"type\":\"string\",\"default\":\"codex\",\"sensitive\":false,\"scope\":\"runtime\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_RUNTIME_CODEX_COMMAND\",\"validator_ids\":[\"trimmed_non_empty_string\"]},{\"key\":\"runtime.codex.model\",\"go_name\":\"RuntimeCodexModel\",\"semantic_ref\":\"orquesta.config.runtime.codex.model\",\"type\":\"string\",\"default\":\"\",\"sensitive\":false,\"scope\":\"runtime\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_RUNTIME_CODEX_MODEL\",\"validator_ids\":[\"trimmed_optional_string\"]},{\"key\":\"runtime.codex.reasoning\",\"go_name\":\"RuntimeCodexReasoning\",\"semantic_ref\":\"orquesta.config.runtime.codex.reasoning\",\"type\":\"string\",\"default\":\"medium\",\"sensitive\":false,\"scope\":\"runtime\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_RUNTIME_CODEX_REASONING\",\"validator_ids\":[\"allowed_values\"],\"allowed_values\":[\"low\",\"medium\",\"high\",\"xhigh\",\"ultra\"]},{\"key\":\"runtime.codex.timeout\",\"go_name\":\"RuntimeCodexTimeout\",\"semantic_ref\":\"orquesta.config.runtime.codex.timeout\",\"type\":\"duration\",\"default\":\"30m\",\"sensitive\":false,\"scope\":\"runtime\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_RUNTIME_CODEX_TIMEOUT\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"runtime.codex.process_pipe_drain_delay\",\"go_name\":\"RuntimeCodexProcessPipeDrainDelay\",\"semantic_ref\":\"orquesta.config.runtime.codex.process_pipe_drain_delay\",\"type\":\"duration\",\"default\":\"250ms\",\"sensitive\":false,\"scope\":\"runtime\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_RUNTIME_CODEX_PROCESS_PIPE_DRAIN_DELAY\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"runtime.codex.max_diagnostic_bytes\",\"go_name\":\"RuntimeCodexMaxDiagnosticBytes\",\"semantic_ref\":\"orquesta.config.runtime.codex.max_diagnostic_bytes\",\"type\":\"integer\",\"default\":65536,\"sensitive\":false,\"scope\":\"runtime\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_RUNTIME_CODEX_MAX_DIAGNOSTIC_BYTES\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1,\"maximum\":67108864},{\"key\":\"runtime.codex.max_concurrent_executions\",\"go_name\":\"RuntimeCodexMaxConcurrentExecutions\",\"semantic_ref\":\"orquesta.config.runtime.codex.max_concurrent_executions\",\"type\":\"integer\",\"default\":70,\"sensitive\":false,\"scope\":\"runtime\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_RUNTIME_CODEX_MAX_CONCURRENT_EXECUTIONS\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1,\"maximum\":4096},{\"key\":\"runtime.codex.work_root\",\"go_name\":\"RuntimeCodexWorkRoot\",\"semantic_ref\":\"orquesta.config.runtime.codex.work_root\",\"type\":\"path\",\"default\":\"./var/work\",\"sensitive\":false,\"scope\":\"runtime\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_RUNTIME_CODEX_WORK_ROOT\",\"validator_ids\":[\"non_empty_path\"]},{\"key\":\"runtime.codex.env_allowlist\",\"go_name\":\"RuntimeCodexEnvAllowlist\",\"semantic_ref\":\"orquesta.config.runtime.codex.env_allowlist\",\"type\":\"string_list\",\"default\":[\"PATH\",\"HOME\",\"CODEX_HOME\"],\"sensitive\":false,\"scope\":\"runtime\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_RUNTIME_CODEX_ENV_ALLOWLIST\",\"validator_ids\":[\"unique_non_empty_string_list\",\"environment_name_list\"]},{\"key\":\"runtime.codex.credential_ref\",\"go_name\":\"RuntimeCodexCredentialRef\",\"semantic_ref\":\"orquesta.config.runtime.codex.credential_ref\",\"type\":\"credential_ref\",\"default\":\"\",\"sensitive\":true,\"scope\":\"runtime\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_RUNTIME_CODEX_CREDENTIAL_REF\",\"validator_ids\":[\"credential_ref\"]},{\"key\":\"workspace.local.root\",\"go_name\":\"WorkspaceLocalRoot\",\"semantic_ref\":\"orquesta.config.workspace.local.root\",\"type\":\"path\",\"default\":\"./var/workspaces\",\"sensitive\":false,\"scope\":\"workspace\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_WORKSPACE_LOCAL_ROOT\",\"validator_ids\":[\"non_empty_path\"]},{\"key\":\"repository.local.seed_path\",\"go_name\":\"RepositoryLocalSeedPath\",\"semantic_ref\":\"orquesta.config.repository.local.seed_path\",\"type\":\"optional_path\",\"default\":\"\",\"sensitive\":false,\"scope\":\"workspace\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_REPOSITORY_LOCAL_SEED_PATH\",\"validator_ids\":[\"optional_path\"]},{\"key\":\"repository.local.target_ref\",\"go_name\":\"RepositoryLocalTargetRef\",\"semantic_ref\":\"orquesta.config.repository.local.target_ref\",\"type\":\"string\",\"default\":\"refs/heads/main\",\"sensitive\":false,\"scope\":\"workspace\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_REPOSITORY_LOCAL_TARGET_REF\",\"validator_ids\":[\"trimmed_non_empty_string\"]},{\"key\":\"test_attestor.provider\",\"go_name\":\"TestAttestorProvider\",\"semantic_ref\":\"orquesta.config.test_attestor.provider\",\"type\":\"string\",\"default\":\"disabled\",\"sensitive\":false,\"scope\":\"attestor\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_TEST_ATTESTOR_PROVIDER\",\"validator_ids\":[\"allowed_values\"],\"allowed_values\":[\"disabled\",\"bubblewrap\"]},{\"key\":\"test_attestor.max_subject_bytes\",\"go_name\":\"TestAttestorMaxSubjectBytes\",\"semantic_ref\":\"orquesta.config.test_attestor.max_subject_bytes\",\"type\":\"integer\",\"default\":536870912,\"sensitive\":false,\"scope\":\"attestor\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_TEST_ATTESTOR_MAX_SUBJECT_BYTES\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1048576,\"maximum\":8589934592},{\"key\":\"test_attestor.timeout\",\"go_name\":\"TestAttestorTimeout\",\"semantic_ref\":\"orquesta.config.test_attestor.timeout\",\"type\":\"duration\",\"default\":\"15m\",\"sensitive\":false,\"scope\":\"attestor\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_TEST_ATTESTOR_TIMEOUT\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"test_attestor.max_concurrent_runs\",\"go_name\":\"TestAttestorMaxConcurrentRuns\",\"semantic_ref\":\"orquesta.config.test_attestor.max_concurrent_runs\",\"type\":\"integer\",\"default\":2,\"sensitive\":false,\"scope\":\"attestor\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_TEST_ATTESTOR_MAX_CONCURRENT_RUNS\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1,\"maximum\":64},{\"key\":\"test_attestor.bubblewrap.command\",\"go_name\":\"TestAttestorBubblewrapCommand\",\"semantic_ref\":\"orquesta.config.test_attestor.bubblewrap.command\",\"type\":\"optional_path\",\"default\":\"\",\"sensitive\":false,\"scope\":\"attestor\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_TEST_ATTESTOR_BUBBLEWRAP_COMMAND\",\"validator_ids\":[\"optional_path\"]},{\"key\":\"test_attestor.go.toolchain_root\",\"go_name\":\"TestAttestorGoToolchainRoot\",\"semantic_ref\":\"orquesta.config.test_attestor.go.toolchain_root\",\"type\":\"optional_path\",\"default\":\"\",\"sensitive\":false,\"scope\":\"attestor\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_TEST_ATTESTOR_GO_TOOLCHAIN_ROOT\",\"validator_ids\":[\"optional_path\"]},{\"key\":\"test_attestor.resources.cgroup_root\",\"go_name\":\"TestAttestorCgroupRoot\",\"semantic_ref\":\"orquesta.config.test_attestor.resources.cgroup_root\",\"type\":\"optional_path\",\"default\":\"\",\"sensitive\":false,\"scope\":\"attestor\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_TEST_ATTESTOR_CGROUP_ROOT\",\"validator_ids\":[\"optional_path\"]},{\"key\":\"test_attestor.resources.memory_max_bytes\",\"go_name\":\"TestAttestorMemoryMaxBytes\",\"semantic_ref\":\"orquesta.config.test_attestor.resources.memory_max_bytes\",\"type\":\"integer\",\"default\":2147483648,\"sensitive\":false,\"scope\":\"attestor\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_TEST_ATTESTOR_MEMORY_MAX_BYTES\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":268435456,\"maximum\":17179869184},{\"key\":\"test_attestor.resources.pids_max\",\"go_name\":\"TestAttestorPIDsMax\",\"semantic_ref\":\"orquesta.config.test_attestor.resources.pids_max\",\"type\":\"integer\",\"default\":256,\"sensitive\":false,\"scope\":\"attestor\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_TEST_ATTESTOR_PIDS_MAX\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":16,\"maximum\":4096},{\"key\":\"test_attestor.resources.cpu_quota_micros\",\"go_name\":\"TestAttestorCPUQuotaMicros\",\"semantic_ref\":\"orquesta.config.test_attestor.resources.cpu_quota_micros\",\"type\":\"integer\",\"default\":200000,\"sensitive\":false,\"scope\":\"attestor\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_TEST_ATTESTOR_CPU_QUOTA_MICROS\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1000,\"maximum\":10000000},{\"key\":\"identity.provider\",\"go_name\":\"IdentityProvider\",\"semantic_ref\":\"orquesta.config.identity.provider\",\"type\":\"string\",\"default\":\"local_token\",\"sensitive\":false,\"scope\":\"identity\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_IDENTITY_PROVIDER\",\"validator_ids\":[\"allowed_values\"],\"allowed_values\":[\"local_token\",\"oidc\"]},{\"key\":\"identity.local_actor\",\"go_name\":\"IdentityLocalActor\",\"semantic_ref\":\"orquesta.config.identity.local_actor\",\"type\":\"string\",\"default\":\"actor:local-owner\",\"sensitive\":false,\"scope\":\"identity\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_IDENTITY_LOCAL_ACTOR\",\"validator_ids\":[\"opaque_ref\"]},{\"key\":\"identity.local_token_path\",\"go_name\":\"IdentityLocalTokenPath\",\"semantic_ref\":\"orquesta.config.identity.local_token_path\",\"type\":\"path\",\"default\":\"./var/secrets/local-owner.token\",\"sensitive\":false,\"scope\":\"identity\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_IDENTITY_LOCAL_TOKEN_PATH\",\"validator_ids\":[\"non_empty_path\"]},{\"key\":\"identity.oidc.issuer\",\"go_name\":\"IdentityOIDCIssuer\",\"semantic_ref\":\"orquesta.config.identity.oidc.issuer\",\"type\":\"string\",\"default\":\"\",\"sensitive\":false,\"scope\":\"identity\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_IDENTITY_OIDC_ISSUER\",\"validator_ids\":[\"trimmed_optional_string\"]},{\"key\":\"identity.oidc.audience\",\"go_name\":\"IdentityOIDCAudience\",\"semantic_ref\":\"orquesta.config.identity.oidc.audience\",\"type\":\"string\",\"default\":\"\",\"sensitive\":false,\"scope\":\"identity\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_IDENTITY_OIDC_AUDIENCE\",\"validator_ids\":[\"trimmed_optional_string\"]},{\"key\":\"identity.oidc.required_groups\",\"go_name\":\"IdentityOIDCRequiredGroups\",\"semantic_ref\":\"orquesta.config.identity.oidc.required_groups\",\"type\":\"string_list\",\"default\":[],\"sensitive\":false,\"scope\":\"identity\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_IDENTITY_OIDC_REQUIRED_GROUPS\",\"validator_ids\":[\"unique_non_empty_string_list\"]},{\"key\":\"identity.oidc.clock_skew\",\"go_name\":\"IdentityOIDCClockSkew\",\"semantic_ref\":\"orquesta.config.identity.oidc.clock_skew\",\"type\":\"duration\",\"default\":\"30s\",\"sensitive\":false,\"scope\":\"identity\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_IDENTITY_OIDC_CLOCK_SKEW\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"identity.oidc.upstream_timeout\",\"go_name\":\"IdentityOIDCUpstreamTimeout\",\"semantic_ref\":\"orquesta.config.identity.oidc.upstream_timeout\",\"type\":\"duration\",\"default\":\"10s\",\"sensitive\":false,\"scope\":\"identity\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_IDENTITY_OIDC_UPSTREAM_TIMEOUT\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"project.default\",\"go_name\":\"ProjectDefault\",\"semantic_ref\":\"orquesta.config.project.default\",\"type\":\"string\",\"default\":\"project:default\",\"sensitive\":false,\"scope\":\"project\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_PROJECT_DEFAULT\",\"validator_ids\":[\"opaque_ref\"]},{\"key\":\"governance.budget_currency\",\"go_name\":\"GovernanceBudgetCurrency\",\"semantic_ref\":\"orquesta.config.governance.budget_currency\",\"type\":\"string\",\"default\":\"USD\",\"sensitive\":false,\"scope\":\"governance\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_GOVERNANCE_BUDGET_CURRENCY\",\"validator_ids\":[\"trimmed_non_empty_string\"]},{\"key\":\"governance.global_token_budget\",\"go_name\":\"GovernanceGlobalTokenBudget\",\"semantic_ref\":\"orquesta.config.governance.global_token_budget\",\"type\":\"integer\",\"default\":14000000,\"sensitive\":false,\"scope\":\"governance\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_GOVERNANCE_GLOBAL_TOKEN_BUDGET\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1,\"maximum\":1000000000000000},{\"key\":\"governance.global_money_micros_budget\",\"go_name\":\"GovernanceGlobalMoneyMicrosBudget\",\"semantic_ref\":\"orquesta.config.governance.global_money_micros_budget\",\"type\":\"integer\",\"default\":70000000,\"sensitive\":false,\"scope\":\"governance\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_GOVERNANCE_GLOBAL_MONEY_MICROS_BUDGET\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1,\"maximum\":9000000000000000},{\"key\":\"governance.default_execution_token_budget\",\"go_name\":\"GovernanceDefaultExecutionTokenBudget\",\"semantic_ref\":\"orquesta.config.governance.default_execution_token_budget\",\"type\":\"integer\",\"default\":200000,\"sensitive\":false,\"scope\":\"governance\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_GOVERNANCE_DEFAULT_EXECUTION_TOKEN_BUDGET\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1,\"maximum\":1000000000000},{\"key\":\"governance.default_execution_money_micros_budget\",\"go_name\":\"GovernanceDefaultExecutionMoneyMicrosBudget\",\"semantic_ref\":\"orquesta.config.governance.default_execution_money_micros_budget\",\"type\":\"integer\",\"default\":1000000,\"sensitive\":false,\"scope\":\"governance\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_GOVERNANCE_DEFAULT_EXECUTION_MONEY_MICROS_BUDGET\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1,\"maximum\":1000000000000000},{\"key\":\"governance.effect_approval_ttl\",\"go_name\":\"GovernanceEffectApprovalTTL\",\"semantic_ref\":\"orquesta.config.governance.effect_approval_ttl\",\"type\":\"duration\",\"default\":\"24h\",\"sensitive\":false,\"scope\":\"governance\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_GOVERNANCE_EFFECT_APPROVAL_TTL\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"director.lease_duration\",\"go_name\":\"DirectorLeaseDuration\",\"semantic_ref\":\"orquesta.config.director.lease_duration\",\"type\":\"duration\",\"default\":\"2m\",\"sensitive\":false,\"scope\":\"director\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_DIRECTOR_LEASE_DURATION\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"mailbox.max_envelope_bytes\",\"go_name\":\"MailboxMaxEnvelopeBytes\",\"semantic_ref\":\"orquesta.config.mailbox.max_envelope_bytes\",\"type\":\"integer\",\"default\":65536,\"sensitive\":false,\"scope\":\"mailbox\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_MAILBOX_MAX_ENVELOPE_BYTES\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1024,\"maximum\":16777216},{\"key\":\"scheduler.poll_interval\",\"go_name\":\"SchedulerPollInterval\",\"semantic_ref\":\"orquesta.config.scheduler.poll_interval\",\"type\":\"duration\",\"default\":\"500ms\",\"sensitive\":false,\"scope\":\"scheduler\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_SCHEDULER_POLL_INTERVAL\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"scheduler.observation_interval\",\"go_name\":\"SchedulerObservationInterval\",\"semantic_ref\":\"orquesta.config.scheduler.observation_interval\",\"type\":\"duration\",\"default\":\"2s\",\"sensitive\":false,\"scope\":\"scheduler\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_SCHEDULER_OBSERVATION_INTERVAL\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"scheduler.claim_lease\",\"go_name\":\"SchedulerClaimLease\",\"semantic_ref\":\"orquesta.config.scheduler.claim_lease\",\"type\":\"duration\",\"default\":\"2m\",\"sensitive\":false,\"scope\":\"scheduler\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_SCHEDULER_CLAIM_LEASE\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"scheduler.attest_test_claim_lease\",\"go_name\":\"SchedulerAttestTestClaimLease\",\"semantic_ref\":\"orquesta.config.scheduler.attest_test_claim_lease\",\"type\":\"duration\",\"default\":\"20m\",\"sensitive\":false,\"scope\":\"scheduler\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_SCHEDULER_ATTEST_TEST_CLAIM_LEASE\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"scheduler.max_execution_attempts\",\"go_name\":\"SchedulerMaxExecutionAttempts\",\"semantic_ref\":\"orquesta.config.scheduler.max_execution_attempts\",\"type\":\"integer\",\"default\":3,\"sensitive\":false,\"scope\":\"scheduler\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_SCHEDULER_MAX_EXECUTION_ATTEMPTS\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1,\"maximum\":1000},{\"key\":\"scheduler.max_children_per_parent\",\"go_name\":\"SchedulerMaxChildrenPerParent\",\"semantic_ref\":\"orquesta.config.scheduler.max_children_per_parent\",\"type\":\"integer\",\"default\":6,\"sensitive\":false,\"scope\":\"scheduler\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_SCHEDULER_MAX_CHILDREN_PER_PARENT\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1,\"maximum\":4096},{\"key\":\"scheduler.execution_timeout\",\"go_name\":\"SchedulerExecutionTimeout\",\"semantic_ref\":\"orquesta.config.scheduler.execution_timeout\",\"type\":\"duration\",\"default\":\"45m\",\"sensitive\":false,\"scope\":\"scheduler\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_SCHEDULER_EXECUTION_TIMEOUT\",\"validator_ids\":[\"positive_duration\"]},{\"key\":\"api.max_list_limit\",\"go_name\":\"APIMaxListLimit\",\"semantic_ref\":\"orquesta.config.api.max_list_limit\",\"type\":\"integer\",\"default\":100,\"sensitive\":false,\"scope\":\"api\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_API_MAX_LIST_LIMIT\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1,\"maximum\":10000},{\"key\":\"api.locale\",\"go_name\":\"APILocale\",\"semantic_ref\":\"orquesta.config.api.locale\",\"type\":\"string\",\"default\":\"es\",\"sensitive\":false,\"scope\":\"api\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_API_LOCALE\",\"validator_ids\":[\"allowed_values\"],\"allowed_values\":[\"es\",\"en\"]},{\"key\":\"config.effective_path\",\"go_name\":\"ConfigEffectivePath\",\"semantic_ref\":\"orquesta.config.config.effective_path\",\"type\":\"path\",\"default\":\"./var/effective_config.json\",\"sensitive\":false,\"scope\":\"config\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_EFFECTIVE_CONFIG_PATH\",\"validator_ids\":[\"non_empty_path\"]},{\"key\":\"config.effective_max_existing_bytes\",\"go_name\":\"ConfigEffectiveMaxExistingBytes\",\"semantic_ref\":\"orquesta.config.config.effective_max_existing_bytes\",\"type\":\"integer\",\"default\":16777216,\"sensitive\":false,\"scope\":\"config\",\"restart_required\":true,\"env_alias\":\"ORQUESTA_EFFECTIVE_CONFIG_MAX_EXISTING_BYTES\",\"validator_ids\":[\"integer_bounds\"],\"minimum\":1024,\"maximum\":1073741824}]}"

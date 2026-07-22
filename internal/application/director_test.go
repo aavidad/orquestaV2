@@ -174,7 +174,8 @@ func TestDirectorPlanUsesGoalApplyPlanExistingOutboxAndIdempotency(t *testing.T)
 			WorkItems: []WorkItemSpec{{
 				Key: "work:research", Objective: "inspect recoverable input",
 				Phase: "phase:research", Role: "role:researcher",
-				WriteSet: []string{"docs"}, OutputContract: goal.OutputContractEvidenceBundle,
+				WriteSet: []string{"docs"}, RequiredTests: requiredTestSpecs("required-test:director-research"),
+				OutputContract: goal.OutputContractEvidenceBundle,
 			}},
 		},
 	}

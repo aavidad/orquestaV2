@@ -301,38 +301,16 @@ func TestProductRoadmapAccreditationDoesNotExceedEvidence(t *testing.T) {
 }
 
 func TestProductRoadmapV05ScopeAndExecutableContract(t *testing.T) {
-	var roadmap roadmapDocument
-	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
-
-	entries := make(map[string]roadmapEntry, len(roadmap.CapabilityEntries))
-	var ownedAccepted []string
-	for _, entry := range roadmap.CapabilityEntries {
-		entries[entry.ID] = entry
-		if entry.OwnerContext == "goal_dag_phases" && entry.Decision == "accept" {
-			ownedAccepted = append(ownedAccepted, entry.ID)
-		}
-	}
-	sort.Strings(ownedAccepted)
-	wantAccepted := []string{
-		"GOV-04",
-		"ORC-01", "ORC-02", "ORC-06",
-		"STG-00",
-	}
-	sort.Strings(wantAccepted)
-	if !reflect.DeepEqual(ownedAccepted, wantAccepted) {
-		t.Fatalf("V05 accepted ownership = %v, want exact %v", ownedAccepted, wantAccepted)
-	}
-	wantEvidence := []string{
-		"acceptance/v05_goal_dag_phases_test.go",
-		"acceptance/fixtures/v05_goal_dag_phases.json",
-		"product/evidence/v05_goal_dag_phases.json",
-	}
-	for _, id := range wantAccepted {
-		entry := entries[id]
-		if entry.Status != "accredited" || !reflect.DeepEqual(entry.EvidenceRefs, wantEvidence) {
-			t.Errorf("V05 capability %s lacks exact accreditation evidence: %#v", id, entry)
-		}
-	}
+	const command = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV05ScopeAndExecutableContract|TestAcceptanceV05GoalDAGPhases|TestV05CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/interfaces/mcp ./internal/bootstrap'"
+	index := assertRoadmapVerticalContract(t, roadmapVerticalContractSpec{
+		version: "V05", owner: "goal_dag_phases", contractID: "AC-V05-GOAL-DAG-PHASES",
+		testRef: "acceptance/v05_goal_dag_phases_test.go", fixture: "acceptance/fixtures/v05_goal_dag_phases.json",
+		receipt: "product/evidence/v05_goal_dag_phases.json", command: command, assertionCount: 6,
+		owned: []string{"GOV-04", "ORC-01", "ORC-02", "ORC-06", "STG-00"}, evidence: []string{
+			"acceptance/v05_goal_dag_phases_test.go", "acceptance/fixtures/v05_goal_dag_phases.json",
+			"product/evidence/v05_goal_dag_phases.json",
+		},
+	})
 
 	wantMoved := map[string]string{
 		"GOV-05": "atomic_state_outbox",
@@ -357,77 +335,30 @@ func TestProductRoadmapV05ScopeAndExecutableContract(t *testing.T) {
 		"STG-20": "operations_telemetry",
 	}
 	for id, owner := range wantMoved {
-		entry := entries[id]
+		entry := index.entries[id]
 		if entry.OwnerContext != owner || roadmapEvidenceContainsVertical(entry.EvidenceRefs, "v05_goal_dag_phases") {
 			t.Errorf("moved capability %s = %#v, want owner %s without V05 evidence", id, entry, owner)
 		}
 	}
-	if entry := entries["ORC-18"]; entry.Decision != "reject" || entry.ReleaseTarget != "excluded" || entry.CutoverRequired {
+	if entry := index.entries["ORC-18"]; entry.Decision != "reject" || entry.ReleaseTarget != "excluded" || entry.CutoverRequired {
 		t.Fatalf("ORC-18 must remain rejected and outside cutover: %#v", entry)
 	}
-
-	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV05ScopeAndExecutableContract|TestAcceptanceV05GoalDAGPhases|TestV05CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/interfaces/mcp ./internal/bootstrap'"
-	var contract roadmapAcceptanceContract
-	for _, candidate := range roadmap.AcceptanceContracts {
-		if candidate.ID == "AC-V05-GOAL-DAG-PHASES" {
-			contract = candidate
-			break
-		}
-	}
-	if contract.Status != "executable" || contract.TestRef != "acceptance/v05_goal_dag_phases_test.go" ||
-		contract.Fixture != "acceptance/fixtures/v05_goal_dag_phases.json" ||
-		contract.Receipt != "product/evidence/v05_goal_dag_phases.json" || contract.Command != wantCommand {
-		t.Fatalf("invalid V05 executable contract: %#v", contract)
-	}
+	contract := index.contracts["AC-V05-GOAL-DAG-PHASES"]
 	if !roadmapCommandHasArgument(contract.Command, "./acceptance") || strings.Contains(contract.Command, "^TestAcceptance$") {
 		t.Fatalf("V05 command can omit real acceptance tests: %q", contract.Command)
 	}
 }
 
 func TestProductRoadmapV06ScopeAndExecutableContract(t *testing.T) {
-	var roadmap roadmapDocument
-	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
-
-	entries := make(map[string]roadmapEntry, len(roadmap.CapabilityEntries))
-	verticals := make(map[string]roadmapVertical, len(roadmap.Verticals))
-	var ownedAccepted []string
-	for _, vertical := range roadmap.Verticals {
-		verticals[vertical.ID] = vertical
-	}
-	for _, entry := range roadmap.CapabilityEntries {
-		entries[entry.ID] = entry
-		if entry.OwnerContext == "atomic_state_outbox" && entry.Decision == "accept" {
-			ownedAccepted = append(ownedAccepted, entry.ID)
-		}
-	}
-	sort.Strings(ownedAccepted)
-	wantOwned := []string{
-		"EVD-02", "GOV-05", "GOV-06", "OPS-09", "OPS-10", "OPS-12", "ORC-12", "ORC-13", "ORC-17",
-	}
-	sort.Strings(wantOwned)
-	if !reflect.DeepEqual(ownedAccepted, wantOwned) {
-		t.Fatalf("V06 accepted ownership = %v, want exact %v", ownedAccepted, wantOwned)
-	}
-	wantV06Evidence := []string{
-		"acceptance/v06_atomic_state_outbox_test.go",
-		"acceptance/fixtures/v06_atomic_state_outbox.json",
-		"product/evidence/v06_atomic_state_outbox.json",
-	}
-	for _, id := range wantOwned {
-		entry := entries[id]
-		switch entry.Status {
-		case "declared":
-			if len(entry.EvidenceRefs) != 0 {
-				t.Errorf("declared V06 capability %s has premature evidence: %v", id, entry.EvidenceRefs)
-			}
-		case "accredited":
-			if !reflect.DeepEqual(entry.EvidenceRefs, wantV06Evidence) {
-				t.Errorf("accredited V06 capability %s has wrong evidence: %v", id, entry.EvidenceRefs)
-			}
-		default:
-			t.Errorf("V06 capability %s has partial status %q; contract must remain declared or become fully accredited", id, entry.Status)
-		}
-	}
+	const command = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV06ScopeAndExecutableContract|TestAcceptanceV06AtomicStateOutbox|TestV06CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/interfaces/mcp ./internal/bootstrap ./cmd/orquesta'"
+	index := assertRoadmapVerticalContract(t, roadmapVerticalContractSpec{
+		version: "V06", owner: "atomic_state_outbox", contractID: "AC-V06-ATOMIC-STATE-OUTBOX",
+		testRef: "acceptance/v06_atomic_state_outbox_test.go", fixture: "acceptance/fixtures/v06_atomic_state_outbox.json",
+		receipt: "product/evidence/v06_atomic_state_outbox.json", command: command, assertionCount: 9, allowDeclared: true,
+		owned: []string{"EVD-02", "GOV-05", "GOV-06", "OPS-09", "OPS-10", "OPS-12", "ORC-12", "ORC-13", "ORC-17"},
+		evidence: []string{"acceptance/v06_atomic_state_outbox_test.go", "acceptance/fixtures/v06_atomic_state_outbox.json",
+			"product/evidence/v06_atomic_state_outbox.json"},
+	})
 
 	wantMoved := map[string]string{
 		"GOV-17": "command_registry",
@@ -435,8 +366,7 @@ func TestProductRoadmapV06ScopeAndExecutableContract(t *testing.T) {
 		"OPS-13": "postgres_s3_multihost",
 	}
 	for id, owner := range wantMoved {
-		entry := entries[id]
-		vertical := verticals[owner]
+		entry, vertical := index.entries[id], index.verticals[owner]
 		if entry.OwnerContext != owner || !reflect.DeepEqual(entry.Dependencies, vertical.DependsOn) ||
 			!reflect.DeepEqual(entry.AcceptanceContracts, vertical.AcceptanceContracts) || entry.Status != "declared" ||
 			len(entry.EvidenceRefs) != 0 {
@@ -444,20 +374,7 @@ func TestProductRoadmapV06ScopeAndExecutableContract(t *testing.T) {
 		}
 	}
 
-	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV06ScopeAndExecutableContract|TestAcceptanceV06AtomicStateOutbox|TestV06CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/interfaces/mcp ./internal/bootstrap ./cmd/orquesta'"
-	var contract roadmapAcceptanceContract
-	for _, candidate := range roadmap.AcceptanceContracts {
-		if candidate.ID == "AC-V06-ATOMIC-STATE-OUTBOX" {
-			contract = candidate
-			break
-		}
-	}
-	if contract.Status != "executable" || contract.TestRef != "acceptance/v06_atomic_state_outbox_test.go" ||
-		contract.Fixture != "acceptance/fixtures/v06_atomic_state_outbox.json" ||
-		contract.Receipt != "product/evidence/v06_atomic_state_outbox.json" || contract.Command != wantCommand ||
-		len(contract.Assertions) != 9 {
-		t.Fatalf("invalid V06 executable contract: %#v", contract)
-	}
+	contract := index.contracts["AC-V06-ATOMIC-STATE-OUTBOX"]
 	if !roadmapCommandHasArgument(contract.Command, "./acceptance") || strings.Contains(contract.Command, "./...") ||
 		strings.Contains(contract.Command, "^TestAcceptance$") {
 		t.Fatalf("V06 command is broad or can omit real gates: %q", contract.Command)
@@ -465,53 +382,15 @@ func TestProductRoadmapV06ScopeAndExecutableContract(t *testing.T) {
 }
 
 func TestProductRoadmapV07ScopeAndExecutableContract(t *testing.T) {
-	var roadmap roadmapDocument
-	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
-
-	entries := make(map[string]roadmapEntry, len(roadmap.CapabilityEntries))
-	verticals := make(map[string]roadmapVertical, len(roadmap.Verticals))
-	var ownedAccepted []string
-	for _, vertical := range roadmap.Verticals {
-		verticals[vertical.ID] = vertical
-	}
-	for _, entry := range roadmap.CapabilityEntries {
-		entries[entry.ID] = entry
-		if entry.OwnerContext == "config" && entry.Decision == "accept" {
-			ownedAccepted = append(ownedAccepted, entry.ID)
-		}
-	}
-	sort.Strings(ownedAccepted)
-	wantOwned := []string{
-		"OPS-01", "OPS-02", "OPS-04", "OPS-05", "OPS-06",
-		"OPS-26", "OPS-27", "OPS-28", "OPS-29", "OPS-30",
-	}
-	sort.Strings(wantOwned)
-	if !reflect.DeepEqual(ownedAccepted, wantOwned) {
-		t.Fatalf("V07 accepted ownership = %v, want exact %v", ownedAccepted, wantOwned)
-	}
-	wantV07Evidence := []string{
-		"acceptance/v07_config_test.go",
-		"acceptance/fixtures/v07_config.json",
-		"product/evidence/v07_config.json",
-	}
-	for _, id := range wantOwned {
-		entry := entries[id]
-		switch entry.Status {
-		case "declared":
-			if len(entry.EvidenceRefs) != 0 {
-				t.Errorf("declared V07 capability %s has premature evidence: %v", id, entry.EvidenceRefs)
-			}
-		case "accredited":
-			if !reflect.DeepEqual(entry.EvidenceRefs, wantV07Evidence) {
-				t.Errorf("accredited V07 capability %s has wrong evidence: %v", id, entry.EvidenceRefs)
-			}
-		default:
-			t.Errorf("V07 capability %s has partial status %q; contract must remain declared or become fully accredited", id, entry.Status)
-		}
-	}
-
-	deferred := entries["OPS-07"]
-	wantDeferredVertical := verticals["web_admin"]
+	const command = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV07ScopeAndExecutableContract|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV07Config|TestV07CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/config ./internal/adapters/config/effectivefile ./internal/adapters/config/toml ./internal/bootstrap ./cmd/orquesta'"
+	index := assertRoadmapVerticalContract(t, roadmapVerticalContractSpec{
+		version: "V07", owner: "config", contractID: "AC-V07-CONFIG", testRef: "acceptance/v07_config_test.go",
+		fixture: "acceptance/fixtures/v07_config.json", receipt: "product/evidence/v07_config.json",
+		command: command, assertionCount: 13, allowDeclared: true,
+		owned:    []string{"OPS-01", "OPS-02", "OPS-04", "OPS-05", "OPS-06", "OPS-26", "OPS-27", "OPS-28", "OPS-29", "OPS-30"},
+		evidence: []string{"acceptance/v07_config_test.go", "acceptance/fixtures/v07_config.json", "product/evidence/v07_config.json"},
+	})
+	deferred, wantDeferredVertical := index.entries["OPS-07"], index.verticals["web_admin"]
 	if deferred.OwnerContext != "web_admin" ||
 		!reflect.DeepEqual(deferred.Dependencies, wantDeferredVertical.DependsOn) ||
 		!reflect.DeepEqual(deferred.AcceptanceContracts, wantDeferredVertical.AcceptanceContracts) ||
@@ -519,20 +398,7 @@ func TestProductRoadmapV07ScopeAndExecutableContract(t *testing.T) {
 		t.Fatalf("OPS-07 must remain wholly deferred to V24 public bindings: %#v", deferred)
 	}
 
-	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV07ScopeAndExecutableContract|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV07Config|TestV07CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/config ./internal/adapters/config/effectivefile ./internal/adapters/config/toml ./internal/bootstrap ./cmd/orquesta'"
-	var contract roadmapAcceptanceContract
-	for _, candidate := range roadmap.AcceptanceContracts {
-		if candidate.ID == "AC-V07-CONFIG" {
-			contract = candidate
-			break
-		}
-	}
-	if contract.Status != "executable" || contract.TestRef != "acceptance/v07_config_test.go" ||
-		contract.Fixture != "acceptance/fixtures/v07_config.json" ||
-		contract.Receipt != "product/evidence/v07_config.json" || contract.Command != wantCommand ||
-		len(contract.Assertions) != 13 {
-		t.Fatalf("invalid V07 executable contract: %#v", contract)
-	}
+	contract := index.contracts["AC-V07-CONFIG"]
 	if !roadmapCommandHasArgument(contract.Command, "./acceptance") || strings.Contains(contract.Command, "./...") ||
 		strings.Contains(contract.Command, "^TestAcceptance$") || strings.Contains(contract.Command, "./internal/interfaces/mcp") {
 		t.Fatalf("V07 command is broad, exposes premature public bindings, or can omit real gates: %q", contract.Command)
@@ -540,50 +406,16 @@ func TestProductRoadmapV07ScopeAndExecutableContract(t *testing.T) {
 }
 
 func TestProductRoadmapV08ScopeAndExecutableContract(t *testing.T) {
-	var roadmap roadmapDocument
-	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
-
-	entries := make(map[string]roadmapEntry, len(roadmap.CapabilityEntries))
-	verticals := make(map[string]roadmapVertical, len(roadmap.Verticals))
-	var ownedAccepted []string
-	for _, vertical := range roadmap.Verticals {
-		verticals[vertical.ID] = vertical
-	}
-	for _, entry := range roadmap.CapabilityEntries {
-		entries[entry.ID] = entry
-		if entry.OwnerContext == "credentials" && entry.Decision == "accept" {
-			ownedAccepted = append(ownedAccepted, entry.ID)
-		}
-	}
-	sort.Strings(ownedAccepted)
-	wantOwned := []string{"EVD-11", "EVD-12", "OPS-03", "OPS-08"}
-	sort.Strings(wantOwned)
-	if !reflect.DeepEqual(ownedAccepted, wantOwned) {
-		t.Fatalf("V08 accepted ownership = %v, want exact %v", ownedAccepted, wantOwned)
-	}
-	wantV08Evidence := []string{
-		"acceptance/v08_credentials_test.go",
-		"acceptance/fixtures/v08_credentials.json",
-		"product/evidence/v08_credentials.json",
-	}
-	for _, id := range wantOwned {
-		entry := entries[id]
-		switch entry.Status {
-		case "declared":
-			if len(entry.EvidenceRefs) != 0 {
-				t.Errorf("declared V08 capability %s has premature evidence: %v", id, entry.EvidenceRefs)
-			}
-		case "accredited":
-			if !reflect.DeepEqual(entry.EvidenceRefs, wantV08Evidence) {
-				t.Errorf("accredited V08 capability %s has wrong evidence: %v", id, entry.EvidenceRefs)
-			}
-		default:
-			t.Errorf("V08 capability %s has partial status %q; contract must remain declared or become fully accredited", id, entry.Status)
-		}
-	}
-
-	deferred := entries["EVD-13"]
-	wantDeferredVertical := verticals["test_attestor"]
+	const command = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV08ScopeAndExecutableContract|TestV08AcceptanceCommandRunsCodexCredentialIntegration|TestCredentialRefsMatchConfigAndGoalOpaqueRefs|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV08Credentials|TestV08CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/credentials ./internal/adapters/credentials/local ./internal/adapters/agent/codex ./internal/config ./internal/goal ./internal/bootstrap ./cmd/orquesta'"
+	index := assertRoadmapVerticalContract(t, roadmapVerticalContractSpec{
+		version: "V08", owner: "credentials", contractID: "AC-V08-CREDENTIALS",
+		testRef: "acceptance/v08_credentials_test.go", fixture: "acceptance/fixtures/v08_credentials.json",
+		receipt: "product/evidence/v08_credentials.json", command: command, assertionCount: 11, allowDeclared: true,
+		owned: []string{"EVD-11", "EVD-12", "OPS-03", "OPS-08"}, evidence: []string{
+			"acceptance/v08_credentials_test.go", "acceptance/fixtures/v08_credentials.json", "product/evidence/v08_credentials.json",
+		},
+	})
+	deferred, wantDeferredVertical := index.entries["EVD-13"], index.verticals["test_attestor"]
 	if deferred.OwnerContext != "test_attestor" ||
 		!reflect.DeepEqual(deferred.Dependencies, wantDeferredVertical.DependsOn) ||
 		!reflect.DeepEqual(deferred.AcceptanceContracts, wantDeferredVertical.AcceptanceContracts) ||
@@ -591,20 +423,7 @@ func TestProductRoadmapV08ScopeAndExecutableContract(t *testing.T) {
 		t.Fatalf("EVD-13 must remain wholly deferred to V17 real sandbox enforcement: %#v", deferred)
 	}
 
-	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV08ScopeAndExecutableContract|TestV08AcceptanceCommandRunsCodexCredentialIntegration|TestCredentialRefsMatchConfigAndGoalOpaqueRefs|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV08Credentials|TestV08CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/credentials ./internal/adapters/credentials/local ./internal/adapters/agent/codex ./internal/config ./internal/goal ./internal/bootstrap ./cmd/orquesta'"
-	var contract roadmapAcceptanceContract
-	for _, candidate := range roadmap.AcceptanceContracts {
-		if candidate.ID == "AC-V08-CREDENTIALS" {
-			contract = candidate
-			break
-		}
-	}
-	if contract.Status != "executable" || contract.TestRef != "acceptance/v08_credentials_test.go" ||
-		contract.Fixture != "acceptance/fixtures/v08_credentials.json" ||
-		contract.Receipt != "product/evidence/v08_credentials.json" || contract.Command != wantCommand ||
-		len(contract.Assertions) != 11 {
-		t.Fatalf("invalid V08 executable contract: %#v", contract)
-	}
+	contract := index.contracts["AC-V08-CREDENTIALS"]
 	for _, forbidden := range []string{"./...", "^TestAcceptance$", "./internal/interfaces/mcp", "./internal/identity", "http", "web", "rbac"} {
 		if strings.Contains(strings.ToLower(contract.Command), forbidden) {
 			t.Fatalf("V08 command opens a broad or deferred surface %q: %q", forbidden, contract.Command)
@@ -619,64 +438,26 @@ func TestProductRoadmapV08ScopeAndExecutableContract(t *testing.T) {
 }
 
 func TestV08AcceptanceCommandRunsCodexCredentialIntegration(t *testing.T) {
-	var roadmap roadmapDocument
-	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
-	for _, contract := range roadmap.AcceptanceContracts {
-		if contract.ID != "AC-V08-CREDENTIALS" {
-			continue
-		}
-		if !roadmapCommandHasArgument(contract.Command, "./internal/adapters/agent/codex") {
-			t.Fatalf("V08 acceptance omits the real credential consumer package: %q", contract.Command)
-		}
-		return
+	contract := readRoadmapTestIndex(t).contracts["AC-V08-CREDENTIALS"]
+	if !roadmapCommandHasArgument(contract.Command, "./internal/adapters/agent/codex") {
+		t.Fatalf("V08 acceptance omits the real credential consumer package: %q", contract.Command)
 	}
-	t.Fatal("AC-V08-CREDENTIALS missing")
 }
 
 func TestProductRoadmapV09ScopeAndExecutableContract(t *testing.T) {
-	var roadmap roadmapDocument
-	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
+	const command = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV09ScopeAndExecutableContract|TestV09EvidenceBelongsOnlyToRecoveryCapabilities|TestV09AcceptanceCommandRunsRecoveryConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV09RecoveryBackup|TestV09CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/application ./internal/ports ./internal/adapters/state/sqlite ./internal/adapters/artifact/filesystem ./internal/config ./internal/adapters/config/toml ./internal/adapters/config/jsonimport ./cmd/orquesta ./internal/bootstrap'"
+	index := assertRoadmapVerticalContract(t, roadmapVerticalContractSpec{
+		version: "V09", owner: "recovery_backup", contractID: "AC-V09-RECOVERY-BACKUP",
+		testRef: "acceptance/v09_recovery_backup_test.go", fixture: "acceptance/fixtures/v09_recovery_backup.json",
+		receipt: "product/evidence/v09_recovery_backup.json", command: command, assertionCount: 12, allowDeclared: true,
+		owned: []string{"EVD-15", "OPS-14"}, evidence: []string{
+			"acceptance/v09_recovery_backup_test.go", "acceptance/fixtures/v09_recovery_backup.json",
+			"product/evidence/v09_recovery_backup.json",
+		},
+	})
 
-	entries := make(map[string]roadmapEntry, len(roadmap.CapabilityEntries))
-	verticals := make(map[string]roadmapVertical, len(roadmap.Verticals))
-	var ownedAccepted []string
-	for _, vertical := range roadmap.Verticals {
-		verticals[vertical.ID] = vertical
-	}
-	for _, entry := range roadmap.CapabilityEntries {
-		entries[entry.ID] = entry
-		if entry.OwnerContext == "recovery_backup" && entry.Decision == "accept" {
-			ownedAccepted = append(ownedAccepted, entry.ID)
-		}
-	}
-	sort.Strings(ownedAccepted)
-	wantOwned := []string{"EVD-15", "OPS-14"}
-	if !reflect.DeepEqual(ownedAccepted, wantOwned) {
-		t.Fatalf("V09 accepted ownership = %v, want exact %v", ownedAccepted, wantOwned)
-	}
-	wantV09Evidence := []string{
-		"acceptance/v09_recovery_backup_test.go",
-		"acceptance/fixtures/v09_recovery_backup.json",
-		"product/evidence/v09_recovery_backup.json",
-	}
-	for _, id := range wantOwned {
-		entry := entries[id]
-		switch entry.Status {
-		case "declared":
-			if len(entry.EvidenceRefs) != 0 {
-				t.Errorf("declared V09 capability %s has premature evidence: %v", id, entry.EvidenceRefs)
-			}
-		case "accredited":
-			if !reflect.DeepEqual(entry.EvidenceRefs, wantV09Evidence) {
-				t.Errorf("accredited V09 capability %s has wrong evidence: %v", id, entry.EvidenceRefs)
-			}
-		default:
-			t.Errorf("V09 capability %s has partial status %q; contract must remain declared or become fully accredited", id, entry.Status)
-		}
-	}
-
-	deferred := entries["OPS-15"]
-	wantDeferredVertical := verticals["operations_telemetry"]
+	deferred := index.entries["OPS-15"]
+	wantDeferredVertical := index.verticals["operations_telemetry"]
 	if deferred.OwnerContext != "operations_telemetry" ||
 		!reflect.DeepEqual(deferred.Dependencies, wantDeferredVertical.DependsOn) ||
 		!reflect.DeepEqual(deferred.AcceptanceContracts, wantDeferredVertical.AcceptanceContracts) ||
@@ -684,20 +465,7 @@ func TestProductRoadmapV09ScopeAndExecutableContract(t *testing.T) {
 		t.Fatalf("OPS-15 must remain wholly deferred to V32 operation and rollback: %#v", deferred)
 	}
 
-	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV09ScopeAndExecutableContract|TestV09EvidenceBelongsOnlyToRecoveryCapabilities|TestV09AcceptanceCommandRunsRecoveryConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV09RecoveryBackup|TestV09CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/application ./internal/ports ./internal/adapters/state/sqlite ./internal/adapters/artifact/filesystem ./internal/config ./internal/adapters/config/toml ./internal/adapters/config/jsonimport ./cmd/orquesta ./internal/bootstrap'"
-	var contract roadmapAcceptanceContract
-	for _, candidate := range roadmap.AcceptanceContracts {
-		if candidate.ID == "AC-V09-RECOVERY-BACKUP" {
-			contract = candidate
-			break
-		}
-	}
-	if contract.Status != "executable" || contract.TestRef != "acceptance/v09_recovery_backup_test.go" ||
-		contract.Fixture != "acceptance/fixtures/v09_recovery_backup.json" ||
-		contract.Receipt != "product/evidence/v09_recovery_backup.json" || contract.Command != wantCommand ||
-		len(contract.Assertions) != 12 {
-		t.Fatalf("invalid V09 executable contract: %#v", contract)
-	}
+	contract := index.contracts["AC-V09-RECOVERY-BACKUP"]
 	for _, forbidden := range []string{
 		"./...", "^testacceptance$", "./internal/interfaces/mcp", "./internal/identity",
 		"./internal/credentials", "./internal/adapters/credentials", "codex", "http", "web", "rbac",
@@ -710,94 +478,40 @@ func TestProductRoadmapV09ScopeAndExecutableContract(t *testing.T) {
 }
 
 func TestV09EvidenceBelongsOnlyToRecoveryCapabilities(t *testing.T) {
-	var roadmap roadmapDocument
-	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
-
-	owned := map[string]bool{"EVD-15": true, "OPS-14": true}
-	v09Evidence := map[string]bool{
-		"acceptance/v09_recovery_backup_test.go":       true,
-		"acceptance/fixtures/v09_recovery_backup.json": true,
-		"product/evidence/v09_recovery_backup.json":    true,
-	}
-	for _, entry := range roadmap.CapabilityEntries {
-		if owned[entry.ID] {
-			if entry.Status != "accredited" {
-				t.Errorf("owned V09 capability %s status=%q, want accredited", entry.ID, entry.Status)
-			}
-			continue
-		}
-		for _, evidenceRef := range entry.EvidenceRefs {
-			if v09Evidence[evidenceRef] {
-				t.Errorf("unowned capability %s claims V09 evidence %q", entry.ID, evidenceRef)
-			}
-		}
-	}
+	assertRoadmapAccreditedEvidenceExclusive(t, []string{"EVD-15", "OPS-14"}, []string{
+		"acceptance/v09_recovery_backup_test.go", "acceptance/fixtures/v09_recovery_backup.json",
+		"product/evidence/v09_recovery_backup.json",
+	})
 }
 
 func TestV09AcceptanceCommandRunsRecoveryConsumers(t *testing.T) {
-	var roadmap roadmapDocument
-	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
-	for _, contract := range roadmap.AcceptanceContracts {
-		if contract.ID != "AC-V09-RECOVERY-BACKUP" {
-			continue
-		}
-		for _, required := range []string{
-			"./acceptance",
-			"./internal/application",
-			"./internal/ports",
-			"./internal/adapters/state/sqlite",
-			"./internal/adapters/artifact/filesystem",
-			"./internal/config",
-			"./internal/adapters/config/toml",
-			"./internal/adapters/config/jsonimport",
-			"./internal/bootstrap",
-			"./cmd/orquesta",
-		} {
-			if !roadmapCommandHasArgument(contract.Command, required) {
-				t.Errorf("V09 acceptance omits recovery consumer package %q: %q", required, contract.Command)
-			}
-		}
-		return
-	}
-	t.Fatal("AC-V09-RECOVERY-BACKUP missing")
+	assertRoadmapCommandArguments(t, readRoadmapTestIndex(t).contracts["AC-V09-RECOVERY-BACKUP"],
+		"./acceptance",
+		"./internal/application",
+		"./internal/ports",
+		"./internal/adapters/state/sqlite",
+		"./internal/adapters/artifact/filesystem",
+		"./internal/config",
+		"./internal/adapters/config/toml",
+		"./internal/adapters/config/jsonimport",
+		"./internal/bootstrap",
+		"./cmd/orquesta",
+	)
 }
 
 func TestProductRoadmapV10ScopeAndExecutableContract(t *testing.T) {
-	var roadmap roadmapDocument
-	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
-
-	entries := make(map[string]roadmapEntry, len(roadmap.CapabilityEntries))
-	verticals := make(map[string]roadmapVertical, len(roadmap.Verticals))
-	var ownedAccepted []string
-	for _, vertical := range roadmap.Verticals {
-		verticals[vertical.ID] = vertical
-	}
-	for _, entry := range roadmap.CapabilityEntries {
-		entries[entry.ID] = entry
-		if entry.OwnerContext == "identity_projects_rbac" && entry.Decision == "accept" {
-			ownedAccepted = append(ownedAccepted, entry.ID)
-		}
-	}
-	sort.Strings(ownedAccepted)
-	wantOwned := []string{"GOV-19", "GOV-20", "GOV-22"}
-	if !reflect.DeepEqual(ownedAccepted, wantOwned) {
-		t.Fatalf("V10 accepted ownership = %v, want exact %v", ownedAccepted, wantOwned)
-	}
-
-	wantV10Evidence := []string{
-		"acceptance/v10_identity_projects_rbac_test.go",
-		"acceptance/fixtures/v10_identity_projects_rbac.json",
-		"product/evidence/v10_identity_projects_rbac.json",
-	}
-	for _, id := range wantOwned {
-		entry := entries[id]
-		if entry.Status != "accredited" || !reflect.DeepEqual(entry.EvidenceRefs, wantV10Evidence) {
-			t.Errorf("V10 capability %s accreditation=%q evidence=%v", id, entry.Status, entry.EvidenceRefs)
-		}
-	}
-
-	fairness := entries["ORC-11"]
-	wantV15 := verticals["budgets_effects"]
+	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV10ScopeAndExecutableContract|TestV10EvidenceBelongsOnlyToIdentityCapabilities|TestV10AcceptanceCommandRunsIdentityConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV10IdentityProjectsRBAC|TestV10CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/application ./internal/config ./internal/i18n ./internal/adapters/auth/localtoken ./internal/adapters/state/sqlite ./internal/interfaces/mcp ./internal/bootstrap ./cmd/orquesta'"
+	index := assertRoadmapVerticalContract(t, roadmapVerticalContractSpec{
+		version: "V10", owner: "identity_projects_rbac", contractID: "AC-V10-IDENTITY-PROJECTS-RBAC",
+		testRef: "acceptance/v10_identity_projects_rbac_test.go", fixture: "acceptance/fixtures/v10_identity_projects_rbac.json",
+		receipt: "product/evidence/v10_identity_projects_rbac.json", command: wantCommand, assertionCount: 12,
+		owned: []string{"GOV-19", "GOV-20", "GOV-22"}, evidence: []string{
+			"acceptance/v10_identity_projects_rbac_test.go", "acceptance/fixtures/v10_identity_projects_rbac.json",
+			"product/evidence/v10_identity_projects_rbac.json",
+		},
+	})
+	fairness := index.entries["ORC-11"]
+	wantV15 := index.verticals["budgets_effects"]
 	wantV15Evidence := []string{
 		"acceptance/v15_budgets_effects_test.go",
 		"acceptance/fixtures/v15_budgets_effects.json",
@@ -810,20 +524,7 @@ func TestProductRoadmapV10ScopeAndExecutableContract(t *testing.T) {
 		t.Fatalf("ORC-11 fairness must remain owned and accredited only by V15: %#v", fairness)
 	}
 
-	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV10ScopeAndExecutableContract|TestV10EvidenceBelongsOnlyToIdentityCapabilities|TestV10AcceptanceCommandRunsIdentityConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV10IdentityProjectsRBAC|TestV10CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/application ./internal/config ./internal/i18n ./internal/adapters/auth/localtoken ./internal/adapters/state/sqlite ./internal/interfaces/mcp ./internal/bootstrap ./cmd/orquesta'"
-	var contract roadmapAcceptanceContract
-	for _, candidate := range roadmap.AcceptanceContracts {
-		if candidate.ID == "AC-V10-IDENTITY-PROJECTS-RBAC" {
-			contract = candidate
-			break
-		}
-	}
-	if contract.Status != "executable" || contract.TestRef != "acceptance/v10_identity_projects_rbac_test.go" ||
-		contract.Fixture != "acceptance/fixtures/v10_identity_projects_rbac.json" ||
-		contract.Receipt != "product/evidence/v10_identity_projects_rbac.json" || contract.Command != wantCommand ||
-		len(contract.Assertions) != 12 {
-		t.Fatalf("invalid V10 executable contract: %#v", contract)
-	}
+	contract := index.contracts["AC-V10-IDENTITY-PROJECTS-RBAC"]
 	for _, forbidden := range []string{
 		"./...", "^testacceptance$", "/codex", "oidc", "ldap", "workspace", "git", "budget",
 		"fairness", "/web", "postgres", "s3", "multihost",
@@ -835,21 +536,8 @@ func TestProductRoadmapV10ScopeAndExecutableContract(t *testing.T) {
 }
 
 func TestProductRoadmapV10DeferredFairnessUsesOnlyV15EvidenceAfterClosure(t *testing.T) {
-	var roadmap roadmapDocument
-	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
-
-	var fairness roadmapEntry
-	var budgets roadmapVertical
-	for _, entry := range roadmap.CapabilityEntries {
-		if entry.ID == "ORC-11" {
-			fairness = entry
-		}
-	}
-	for _, vertical := range roadmap.Verticals {
-		if vertical.ID == "budgets_effects" {
-			budgets = vertical
-		}
-	}
+	index := readRoadmapTestIndex(t)
+	fairness, budgets := index.entries["ORC-11"], index.verticals["budgets_effects"]
 	wantEvidence := []string{
 		"acceptance/v15_budgets_effects_test.go",
 		"acceptance/fixtures/v15_budgets_effects.json",
@@ -864,102 +552,54 @@ func TestProductRoadmapV10DeferredFairnessUsesOnlyV15EvidenceAfterClosure(t *tes
 }
 
 func TestV10EvidenceBelongsOnlyToIdentityCapabilities(t *testing.T) {
-	var roadmap roadmapDocument
-	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
-
-	owned := map[string]bool{"GOV-19": true, "GOV-20": true, "GOV-22": true}
-	v10Evidence := map[string]bool{
-		"acceptance/v10_identity_projects_rbac_test.go":       true,
-		"acceptance/fixtures/v10_identity_projects_rbac.json": true,
-		"product/evidence/v10_identity_projects_rbac.json":    true,
-	}
-	for _, entry := range roadmap.CapabilityEntries {
-		if owned[entry.ID] {
-			if entry.Status != "accredited" || !reflect.DeepEqual(entry.EvidenceRefs, []string{
-				"acceptance/v10_identity_projects_rbac_test.go",
-				"acceptance/fixtures/v10_identity_projects_rbac.json",
-				"product/evidence/v10_identity_projects_rbac.json",
-			}) {
-				t.Errorf("owned V10 capability %s lacks exact accreditation: status=%q evidence=%v", entry.ID, entry.Status, entry.EvidenceRefs)
-			}
-			continue
-		}
-		for _, evidenceRef := range entry.EvidenceRefs {
-			if v10Evidence[evidenceRef] {
-				t.Errorf("unowned capability %s claims V10 evidence %q", entry.ID, evidenceRef)
-			}
-		}
-	}
+	want := []string{"acceptance/v10_identity_projects_rbac_test.go",
+		"acceptance/fixtures/v10_identity_projects_rbac.json", "product/evidence/v10_identity_projects_rbac.json"}
+	assertRoadmapAccreditedEvidenceExclusive(t, []string{"GOV-19", "GOV-20", "GOV-22"}, want)
 }
 
 func TestV10AcceptanceCommandRunsIdentityConsumers(t *testing.T) {
-	var roadmap roadmapDocument
-	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
-	for _, contract := range roadmap.AcceptanceContracts {
-		if contract.ID != "AC-V10-IDENTITY-PROJECTS-RBAC" {
-			continue
-		}
-		for _, required := range []string{
-			"./acceptance",
-			"./internal/goal",
-			"./internal/identity",
-			"./internal/application",
-			"./internal/config",
-			"./internal/i18n",
-			"./internal/adapters/auth/localtoken",
-			"./internal/adapters/state/sqlite",
-			"./internal/interfaces/mcp",
-			"./internal/bootstrap",
-			"./cmd/orquesta",
-		} {
-			if !roadmapCommandHasArgument(contract.Command, required) {
-				t.Errorf("V10 acceptance omits identity consumer package %q: %q", required, contract.Command)
-			}
-		}
-		return
-	}
-	t.Fatal("AC-V10-IDENTITY-PROJECTS-RBAC missing")
+	assertRoadmapCommandArguments(t, readRoadmapTestIndex(t).contracts["AC-V10-IDENTITY-PROJECTS-RBAC"],
+		"./acceptance",
+		"./internal/goal",
+		"./internal/identity",
+		"./internal/application",
+		"./internal/config",
+		"./internal/i18n",
+		"./internal/adapters/auth/localtoken",
+		"./internal/adapters/state/sqlite",
+		"./internal/interfaces/mcp",
+		"./internal/bootstrap",
+		"./cmd/orquesta",
+	)
 }
 
 func TestProductRoadmapV11ScopeAndExecutableContract(t *testing.T) {
-	var roadmap roadmapDocument
-	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
-
-	for _, entry := range roadmap.CapabilityEntries {
+	index := readRoadmapTestIndex(t)
+	for _, entry := range index.document.CapabilityEntries {
 		if entry.OwnerContext == "oidc_ad" {
 			t.Fatalf("V11 is a transverse integration vertical and must not invent a capability ID: %#v", entry)
 		}
 	}
 	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV11ScopeAndExecutableContract|TestV11OwnsNoCapabilityIDs|TestV11AcceptanceCommandRunsIdentityConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV11OIDCAD|TestV11CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/identity ./internal/config ./internal/adapters/auth/bearer ./internal/adapters/auth/localtoken ./internal/adapters/auth/oidc ./internal/bootstrap ./cmd/orquesta && ./scripts/smoke_v11_dex_samba_ad.sh'"
-	for _, contract := range roadmap.AcceptanceContracts {
-		if contract.ID != "AC-V11-OIDC-AD" {
-			continue
-		}
-		if contract.Status != "executable" || contract.TestRef != "acceptance/v11_oidc_ad_test.go" ||
-			contract.Fixture != "acceptance/fixtures/v11_oidc_ad.json" ||
-			contract.Receipt != "product/evidence/v11_oidc_ad.json" || contract.Command != wantCommand ||
-			len(contract.Assertions) != 16 {
-			t.Fatalf("invalid V11 executable contract: %#v", contract)
-		}
-		return
+	contract := index.contracts["AC-V11-OIDC-AD"]
+	if contract.Status != "executable" || contract.TestRef != "acceptance/v11_oidc_ad_test.go" ||
+		contract.Fixture != "acceptance/fixtures/v11_oidc_ad.json" ||
+		contract.Receipt != "product/evidence/v11_oidc_ad.json" || contract.Command != wantCommand ||
+		len(contract.Assertions) != 16 {
+		t.Fatalf("invalid V11 executable contract: %#v", contract)
 	}
-	t.Fatal("AC-V11-OIDC-AD missing")
 }
 
 func TestV11OwnsNoCapabilityIDs(t *testing.T) {
-	var roadmap roadmapDocument
-	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
-	v11Evidence := map[string]bool{
-		"acceptance/v11_oidc_ad_test.go":       true,
-		"acceptance/fixtures/v11_oidc_ad.json": true,
-		"product/evidence/v11_oidc_ad.json":    true,
-	}
+	roadmap := readRoadmapTestIndex(t).document
+	evidence := roadmapSetOf("acceptance/v11_oidc_ad_test.go", "acceptance/fixtures/v11_oidc_ad.json",
+		"product/evidence/v11_oidc_ad.json")
 	for _, entry := range roadmap.CapabilityEntries {
 		if entry.OwnerContext == "oidc_ad" {
 			t.Errorf("capability %s is incorrectly owned by transverse V11", entry.ID)
 		}
 		for _, evidenceRef := range entry.EvidenceRefs {
-			if v11Evidence[evidenceRef] {
+			if _, ok := evidence[evidenceRef]; ok {
 				t.Errorf("capability %s incorrectly claims transverse V11 evidence %q", entry.ID, evidenceRef)
 			}
 		}
@@ -967,224 +607,78 @@ func TestV11OwnsNoCapabilityIDs(t *testing.T) {
 }
 
 func TestV11AcceptanceCommandRunsIdentityConsumers(t *testing.T) {
-	var roadmap roadmapDocument
-	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
-	for _, contract := range roadmap.AcceptanceContracts {
-		if contract.ID != "AC-V11-OIDC-AD" {
-			continue
-		}
-		for _, required := range []string{
-			"./acceptance", "./internal/identity", "./internal/config",
-			"./internal/adapters/auth/bearer", "./internal/adapters/auth/localtoken",
-			"./internal/adapters/auth/oidc", "./internal/bootstrap", "./cmd/orquesta",
-			"./scripts/smoke_v11_dex_samba_ad.sh",
-		} {
-			if !roadmapCommandHasArgument(contract.Command, required) {
-				t.Errorf("V11 acceptance omits identity consumer package %q: %q", required, contract.Command)
-			}
-		}
-		return
-	}
-	t.Fatal("AC-V11-OIDC-AD missing")
+	assertRoadmapCommandArguments(t, readRoadmapTestIndex(t).contracts["AC-V11-OIDC-AD"],
+		"./acceptance", "./internal/identity", "./internal/config",
+		"./internal/adapters/auth/bearer", "./internal/adapters/auth/localtoken",
+		"./internal/adapters/auth/oidc", "./internal/bootstrap", "./cmd/orquesta",
+		"./scripts/smoke_v11_dex_samba_ad.sh",
+	)
 }
 
 func TestProductRoadmapV12ScopeAndExecutableContract(t *testing.T) {
-	var roadmap roadmapDocument
-	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
-	var owned []string
-	entries := make(map[string]roadmapEntry, len(roadmap.CapabilityEntries))
-	for _, entry := range roadmap.CapabilityEntries {
-		entries[entry.ID] = entry
-		if entry.OwnerContext == "director_lease" && entry.Decision == "accept" {
-			owned = append(owned, entry.ID)
-		}
-	}
-	sort.Strings(owned)
-	wantOwned := []string{"GOV-08", "GOV-09", "GOV-10", "ORC-24"}
-	if !reflect.DeepEqual(owned, wantOwned) {
-		t.Fatalf("V12 accepted ownership = %v, want exact %v", owned, wantOwned)
-	}
-	wantEvidence := []string{
-		"acceptance/v12_director_lease_test.go",
-		"acceptance/fixtures/v12_director_lease.json",
-		"product/evidence/v12_director_lease.json",
-	}
-	for _, id := range wantOwned {
-		entry := entries[id]
-		if entry.Status != "accredited" || !reflect.DeepEqual(entry.EvidenceRefs, wantEvidence) {
-			t.Errorf("V12 capability %s accreditation=%q evidence=%v", id, entry.Status, entry.EvidenceRefs)
-		}
-	}
 	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV12ScopeAndExecutableContract|TestV12EvidenceBelongsOnlyToDirectorCapabilities|TestV12AcceptanceCommandRunsDirectorConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV12DirectorLease|TestV12CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/application ./internal/config ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta'"
-	for _, contract := range roadmap.AcceptanceContracts {
-		if contract.ID != "AC-V12-DIRECTOR-LEASE" {
-			continue
-		}
-		if contract.Status != "executable" || contract.TestRef != "acceptance/v12_director_lease_test.go" ||
-			contract.Fixture != "acceptance/fixtures/v12_director_lease.json" ||
-			contract.Receipt != "product/evidence/v12_director_lease.json" || contract.Command != wantCommand ||
-			len(contract.Assertions) != 14 {
-			t.Fatalf("invalid V12 executable contract: %#v", contract)
-		}
-		return
-	}
-	t.Fatal("AC-V12-DIRECTOR-LEASE missing")
+	assertRoadmapVerticalContract(t, roadmapVerticalContractSpec{
+		version: "V12", owner: "director_lease", contractID: "AC-V12-DIRECTOR-LEASE",
+		testRef: "acceptance/v12_director_lease_test.go", fixture: "acceptance/fixtures/v12_director_lease.json",
+		receipt: "product/evidence/v12_director_lease.json", command: wantCommand, assertionCount: 14,
+		owned: []string{"GOV-08", "GOV-09", "GOV-10", "ORC-24"}, evidence: []string{
+			"acceptance/v12_director_lease_test.go", "acceptance/fixtures/v12_director_lease.json",
+			"product/evidence/v12_director_lease.json",
+		},
+	})
 }
 
 func TestV12EvidenceBelongsOnlyToDirectorCapabilities(t *testing.T) {
-	var roadmap roadmapDocument
-	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
-	owned := map[string]bool{"GOV-08": true, "GOV-09": true, "GOV-10": true, "ORC-24": true}
 	wantEvidence := []string{
 		"acceptance/v12_director_lease_test.go",
 		"acceptance/fixtures/v12_director_lease.json",
 		"product/evidence/v12_director_lease.json",
 	}
-	v12Evidence := make(map[string]bool, len(wantEvidence))
-	for _, ref := range wantEvidence {
-		v12Evidence[ref] = true
-	}
-	for _, entry := range roadmap.CapabilityEntries {
-		if owned[entry.ID] {
-			if entry.Status != "accredited" || !reflect.DeepEqual(entry.EvidenceRefs, wantEvidence) {
-				t.Errorf("owned V12 capability %s lacks exact accreditation: status=%q evidence=%v", entry.ID, entry.Status, entry.EvidenceRefs)
-			}
-			continue
-		}
-		for _, evidenceRef := range entry.EvidenceRefs {
-			if v12Evidence[evidenceRef] {
-				t.Errorf("unowned capability %s claims V12 evidence %q", entry.ID, evidenceRef)
-			}
-		}
-	}
+	assertRoadmapAccreditedEvidenceExclusive(t, []string{"GOV-08", "GOV-09", "GOV-10", "ORC-24"}, wantEvidence)
 }
 
 func TestV12AcceptanceCommandRunsDirectorConsumers(t *testing.T) {
-	var roadmap roadmapDocument
-	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
-	for _, contract := range roadmap.AcceptanceContracts {
-		if contract.ID != "AC-V12-DIRECTOR-LEASE" {
-			continue
-		}
-		for _, required := range []string{
-			"./acceptance", "./internal/goal", "./internal/identity", "./internal/application",
-			"./internal/config", "./internal/adapters/state/sqlite", "./internal/bootstrap", "./cmd/orquesta",
-		} {
-			if !roadmapCommandHasArgument(contract.Command, required) {
-				t.Errorf("V12 acceptance omits Director consumer package %q: %q", required, contract.Command)
-			}
-		}
-		return
-	}
-	t.Fatal("AC-V12-DIRECTOR-LEASE missing")
+	assertRoadmapCommandArguments(t, readRoadmapTestIndex(t).contracts["AC-V12-DIRECTOR-LEASE"],
+		"./acceptance", "./internal/goal", "./internal/identity", "./internal/application",
+		"./internal/config", "./internal/adapters/state/sqlite", "./internal/bootstrap", "./cmd/orquesta",
+	)
 }
 
 func TestProductRoadmapV13ScopeAndExecutableContract(t *testing.T) {
-	var roadmap roadmapDocument
-	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
-	verticals := make(map[string]roadmapVertical, len(roadmap.Verticals))
-	entries := make(map[string]roadmapEntry, len(roadmap.CapabilityEntries))
-	var owned []string
-	for _, vertical := range roadmap.Verticals {
-		verticals[vertical.ID] = vertical
-	}
-	for _, entry := range roadmap.CapabilityEntries {
-		entries[entry.ID] = entry
-		if entry.OwnerContext == "mailbox" && entry.Decision == "accept" {
-			owned = append(owned, entry.ID)
-		}
-	}
-	sort.Strings(owned)
-	wantOwned := []string{"ORC-04", "ORC-05", "ORC-14"}
-	if !reflect.DeepEqual(owned, wantOwned) {
-		t.Fatalf("V13 accepted ownership = %v, want exact %v", owned, wantOwned)
-	}
-	wantEvidence := []string{
-		"acceptance/v13_mailbox_test.go",
-		"acceptance/fixtures/v13_mailbox.json",
-		"product/evidence/v13_mailbox.json",
-	}
-	wantVertical := verticals["mailbox"]
-	for _, id := range wantOwned {
-		entry := entries[id]
-		if entry.Status != "accredited" || !reflect.DeepEqual(entry.EvidenceRefs, wantEvidence) ||
-			!reflect.DeepEqual(entry.Dependencies, wantVertical.DependsOn) ||
-			!reflect.DeepEqual(entry.AcceptanceContracts, wantVertical.AcceptanceContracts) {
-			t.Errorf("V13 capability %s lacks exact accreditation or causality: %#v", id, entry)
-		}
-	}
-
 	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV13ScopeAndExecutableContract|TestV13EvidenceBelongsOnlyToMailboxCapabilities|TestV13AcceptanceCommandRunsMailboxConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV13Mailbox|TestV13CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/config ./internal/application ./internal/ports ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta'"
-	for _, contract := range roadmap.AcceptanceContracts {
-		if contract.ID != "AC-V13-MAILBOX" {
-			continue
+	index := assertRoadmapVerticalContract(t, roadmapVerticalContractSpec{
+		version: "V13", owner: "mailbox", contractID: "AC-V13-MAILBOX",
+		testRef: "acceptance/v13_mailbox_test.go", fixture: "acceptance/fixtures/v13_mailbox.json",
+		receipt: "product/evidence/v13_mailbox.json", command: wantCommand, assertions: roadmapV13Assertions(), causal: true,
+		owned: []string{"ORC-04", "ORC-05", "ORC-14"}, evidence: []string{
+			"acceptance/v13_mailbox_test.go", "acceptance/fixtures/v13_mailbox.json", "product/evidence/v13_mailbox.json",
+		},
+	})
+	contract := index.contracts["AC-V13-MAILBOX"]
+	for _, forbidden := range []string{
+		"./...", "/codex", "oidc", "ldap", "workspace", "git", "budget", "fairness",
+		"/web", "postgres", "s3", "multihost", "pause", "resume", "cancel", "stop",
+	} {
+		if strings.Contains(strings.ToLower(contract.Command), forbidden) {
+			t.Fatalf("V13 command opens broad or deferred surface %q: %q", forbidden, contract.Command)
 		}
-		if contract.Status != "executable" || contract.TestRef != "acceptance/v13_mailbox_test.go" ||
-			contract.Fixture != "acceptance/fixtures/v13_mailbox.json" ||
-			contract.Receipt != "product/evidence/v13_mailbox.json" || contract.Command != wantCommand ||
-			!reflect.DeepEqual(contract.Assertions, roadmapV13Assertions()) {
-			t.Fatalf("invalid V13 executable contract: %#v", contract)
-		}
-		for _, forbidden := range []string{
-			"./...", "/codex", "oidc", "ldap", "workspace", "git", "budget", "fairness",
-			"/web", "postgres", "s3", "multihost", "pause", "resume", "cancel", "stop",
-		} {
-			if strings.Contains(strings.ToLower(contract.Command), forbidden) {
-				t.Fatalf("V13 command opens broad or deferred surface %q: %q", forbidden, contract.Command)
-			}
-		}
-		return
 	}
-	t.Fatal("AC-V13-MAILBOX missing")
 }
 
 func TestV13EvidenceBelongsOnlyToMailboxCapabilities(t *testing.T) {
-	var roadmap roadmapDocument
-	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
-	owned := map[string]bool{"ORC-04": true, "ORC-05": true, "ORC-14": true}
 	wantEvidence := []string{
 		"acceptance/v13_mailbox_test.go",
 		"acceptance/fixtures/v13_mailbox.json",
 		"product/evidence/v13_mailbox.json",
 	}
-	v13Evidence := make(map[string]bool, len(wantEvidence))
-	for _, ref := range wantEvidence {
-		v13Evidence[ref] = true
-	}
-	for _, entry := range roadmap.CapabilityEntries {
-		if owned[entry.ID] {
-			if entry.Status != "accredited" || !reflect.DeepEqual(entry.EvidenceRefs, wantEvidence) {
-				t.Errorf("owned V13 capability %s lacks exact accreditation: status=%q evidence=%v",
-					entry.ID, entry.Status, entry.EvidenceRefs)
-			}
-			continue
-		}
-		for _, evidenceRef := range entry.EvidenceRefs {
-			if v13Evidence[evidenceRef] {
-				t.Errorf("unowned capability %s claims V13 evidence %q", entry.ID, evidenceRef)
-			}
-		}
-	}
+	assertRoadmapAccreditedEvidenceExclusive(t, []string{"ORC-04", "ORC-05", "ORC-14"}, wantEvidence)
 }
 
 func TestV13AcceptanceCommandRunsMailboxConsumers(t *testing.T) {
-	var roadmap roadmapDocument
-	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
-	for _, contract := range roadmap.AcceptanceContracts {
-		if contract.ID != "AC-V13-MAILBOX" {
-			continue
-		}
-		for _, required := range []string{
-			"./acceptance", "./internal/goal", "./internal/identity", "./internal/application",
-			"./internal/config", "./internal/ports", "./internal/adapters/state/sqlite", "./internal/bootstrap", "./cmd/orquesta",
-		} {
-			if !roadmapCommandHasArgument(contract.Command, required) {
-				t.Errorf("V13 acceptance omits mailbox consumer package %q: %q", required, contract.Command)
-			}
-		}
-		return
-	}
-	t.Fatal("AC-V13-MAILBOX missing")
+	assertRoadmapCommandArguments(t, readRoadmapTestIndex(t).contracts["AC-V13-MAILBOX"],
+		"./acceptance", "./internal/goal", "./internal/identity", "./internal/application",
+		"./internal/config", "./internal/ports", "./internal/adapters/state/sqlite", "./internal/bootstrap", "./cmd/orquesta",
+	)
 }
 
 func roadmapV13Assertions() []string {
@@ -1214,52 +708,16 @@ func roadmapV13Assertions() []string {
 }
 
 func TestProductRoadmapV14ScopeAndExecutableContract(t *testing.T) {
-	var roadmap roadmapDocument
-	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
-	verticals := make(map[string]roadmapVertical, len(roadmap.Verticals))
-	entries := make(map[string]roadmapEntry, len(roadmap.CapabilityEntries))
-	contracts := make(map[string]roadmapAcceptanceContract, len(roadmap.AcceptanceContracts))
-	var owned []string
-	for _, vertical := range roadmap.Verticals {
-		verticals[vertical.ID] = vertical
-	}
-	for _, entry := range roadmap.CapabilityEntries {
-		entries[entry.ID] = entry
-		if entry.OwnerContext == "controls" && entry.Decision == "accept" {
-			owned = append(owned, entry.ID)
-		}
-	}
-	for _, contract := range roadmap.AcceptanceContracts {
-		contracts[contract.ID] = contract
-	}
-	sort.Strings(owned)
-	wantOwned := []string{"GOV-07", "ORC-03", "ORC-16", "STG-15"}
-	if !reflect.DeepEqual(owned, wantOwned) {
-		t.Fatalf("V14 accepted ownership = %v, want exact %v", owned, wantOwned)
-	}
-	wantEvidence := []string{
-		"acceptance/v14_controls_test.go",
-		"acceptance/fixtures/v14_controls.json",
-		"product/evidence/v14_controls.json",
-	}
-	wantVertical := verticals["controls"]
-	for _, id := range wantOwned {
-		entry := entries[id]
-		if entry.Status != "accredited" || !reflect.DeepEqual(entry.EvidenceRefs, wantEvidence) ||
-			!reflect.DeepEqual(entry.Dependencies, wantVertical.DependsOn) ||
-			!reflect.DeepEqual(entry.AcceptanceContracts, wantVertical.AcceptanceContracts) {
-			t.Errorf("V14 capability %s lacks exact accreditation: %#v", id, entry)
-		}
-	}
-
 	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV14ScopeAndExecutableContract|TestV14EvidenceBelongsOnlyToControlCapabilities|TestV14AcceptanceCommandRunsControlConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestAcceptanceV14Controls|TestV14CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/identity ./internal/config ./internal/credentials ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta && go test -mod=vendor -race -count=1 ./internal/application ./internal/adapters/state/sqlite ./internal/adapters/agent/codex ./internal/bootstrap -run \"^(TestConcurrentIdenticalControlCASLoserReturnsExactReplay|TestControlsGoalAndWorkItemCancelCompletionCASBothOrders|TestControlsStopCompletionCASAndUnsupportedMode|TestControlsStopCrashReplayConvergesWithoutDuplicateEffect|TestClaimedRetryRevalidatesPauseBeforeLaunchPreparation|TestClaimedAutomaticReplacementRevalidatesPauseBeforeLaunchPreparation|TestSQLiteControlsRestartAndConcurrentCAS|TestSQLiteForcedStopSupersessionIsAtomicConcurrentAndRestartSafe|TestSQLiteTerminalStopSettlesAfterRestartWithReplacementAgentRouting|TestV14RecoveryAcceptsClaimedTerminalStopThenReclaimsAndSettlesOnce|TestCodexSelectiveStopPreservesSiblingProcessTrees|TestCodexSelectiveStopAdoptsAfterCrashAndRejectsReusedPID|TestCodexLaunchGateCrashNeverOrphansProcess|TestCodexOwnerLockIsExclusiveAndCLOEXEC|TestCodexRestoredDatabaseCannotAdoptSourceProcess|TestBuildBindsAgentToOpenedRepositoryIdentity|TestRealCodexControlsThroughProductionComposition|TestRealCodexCooperativeStopLeavesResidentSchedulerLive)$\"'"
-	contract := contracts["AC-V14-CONTROLS"]
-	if contract.Status != "executable" || contract.TestRef != "acceptance/v14_controls_test.go" ||
-		contract.Fixture != "acceptance/fixtures/v14_controls.json" ||
-		contract.Receipt != "product/evidence/v14_controls.json" || contract.Command != wantCommand ||
-		!reflect.DeepEqual(contract.Assertions, roadmapV14Assertions()) {
-		t.Fatalf("invalid V14 executable contract: %#v", contract)
-	}
+	index := assertRoadmapVerticalContract(t, roadmapVerticalContractSpec{
+		version: "V14", owner: "controls", contractID: "AC-V14-CONTROLS",
+		testRef: "acceptance/v14_controls_test.go", fixture: "acceptance/fixtures/v14_controls.json",
+		receipt: "product/evidence/v14_controls.json", command: wantCommand, assertions: roadmapV14Assertions(), causal: true,
+		owned: []string{"GOV-07", "ORC-03", "ORC-16", "STG-15"}, evidence: []string{
+			"acceptance/v14_controls_test.go", "acceptance/fixtures/v14_controls.json", "product/evidence/v14_controls.json",
+		},
+	})
+	contract := index.contracts["AC-V14-CONTROLS"]
 	for _, forbidden := range []string{
 		"./...", "./internal/interfaces/mcp", "oidc", "ldap", "workspace", "git", "budget",
 		"fairness", "effects", "/web", "postgres", "s3", "multihost", "claude", "gemini",
@@ -1269,46 +727,33 @@ func TestProductRoadmapV14ScopeAndExecutableContract(t *testing.T) {
 			t.Fatalf("V14 command opens broad or deferred surface %q: %q", forbidden, contract.Command)
 		}
 	}
-	if next := contracts["AC-V15-BUDGETS-EFFECTS"]; next.Status != "executable" ||
+	if next := index.contracts["AC-V15-BUDGETS-EFFECTS"]; next.Status != "executable" ||
 		next.Receipt != "product/evidence/v15_budgets_effects.json" {
 		t.Fatalf("V14 successor V15 must advance only through its executable contract: %#v", next)
 	}
 	for _, id := range []string{"AC-V20-COMMAND-REGISTRY", "AC-V31-POSTGRES-S3-MULTIHOST"} {
-		if deferred := contracts[id]; deferred.Status != "planned" || deferred.Receipt != "" {
+		if deferred := index.contracts[id]; deferred.Status != "planned" || deferred.Receipt != "" {
 			t.Fatalf("V14 prematurely opens deferred contract %s: %#v", id, deferred)
 		}
 	}
 }
 
 func TestV14EvidenceBelongsOnlyToControlCapabilities(t *testing.T) {
-	var roadmap roadmapDocument
-	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
-	owned := map[string]bool{"GOV-07": true, "STG-15": true, "ORC-03": true, "ORC-16": true}
-	v14Evidence := map[string]bool{
-		"acceptance/v14_controls_test.go":          true,
-		"acceptance/fixtures/v14_controls.json":    true,
-		"product/evidence/v14_controls.json":       true,
-		"product/evidence/v14_controls.output.txt": true,
-	}
+	roadmap := readRoadmapTestIndex(t).document
 	wantEvidence := []string{
 		"acceptance/v14_controls_test.go",
 		"acceptance/fixtures/v14_controls.json",
 		"product/evidence/v14_controls.json",
 	}
-	for _, entry := range roadmap.CapabilityEntries {
-		if owned[entry.ID] {
+	v14Evidence := roadmapSetOf(append(wantEvidence, "product/evidence/v14_controls.output.txt")...)
+	assertRoadmapEvidenceExclusive(t, roadmap.CapabilityEntries,
+		roadmapSetOf("GOV-07", "STG-15", "ORC-03", "ORC-16"), v14Evidence,
+		func(t *testing.T, entry roadmapEntry) {
 			if entry.Status != "accredited" || !reflect.DeepEqual(entry.EvidenceRefs, wantEvidence) {
 				t.Errorf("owned V14 capability %s lacks exact accreditation: status=%q evidence=%v",
 					entry.ID, entry.Status, entry.EvidenceRefs)
 			}
-			continue
-		}
-		for _, evidenceRef := range entry.EvidenceRefs {
-			if v14Evidence[evidenceRef] {
-				t.Errorf("unowned capability %s claims V14 evidence %q", entry.ID, evidenceRef)
-			}
-		}
-	}
+		})
 	wantHistoricalCapabilities := map[string][]string{
 		"BUG-ORQ-20260705-197":  {"GOV-07"},
 		"BUG-ORQ-20260709-198":  {"STG-15"},
@@ -1328,7 +773,7 @@ func TestV14EvidenceBelongsOnlyToControlCapabilities(t *testing.T) {
 		wantCapabilities, belongsToV14 := wantHistoricalCapabilities[bug.BugID]
 		if !belongsToV14 {
 			for _, evidenceRef := range bug.RebuildEvidenceRefs {
-				if v14Evidence[evidenceRef] {
+				if _, ok := v14Evidence[evidenceRef]; ok {
 					t.Errorf("unowned historical bug %s claims V14 evidence %q", bug.BugID, evidenceRef)
 				}
 			}
@@ -1349,28 +794,16 @@ func TestV14EvidenceBelongsOnlyToControlCapabilities(t *testing.T) {
 }
 
 func TestV14AcceptanceCommandRunsControlConsumers(t *testing.T) {
-	var roadmap roadmapDocument
-	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
-	for _, contract := range roadmap.AcceptanceContracts {
-		if contract.ID != "AC-V14-CONTROLS" {
-			continue
-		}
-		for _, required := range []string{
-			"./acceptance", "./internal/goal", "./internal/identity", "./internal/config",
-			"./internal/credentials", "./internal/application", "./internal/ports",
-			"./internal/adapters/agent/fake", "./internal/adapters/agent/codex",
-			"./internal/adapters/state/sqlite", "./internal/bootstrap", "./cmd/orquesta",
-		} {
-			if !roadmapCommandHasArgument(contract.Command, required) {
-				t.Errorf("V14 acceptance omits control consumer package %q: %q", required, contract.Command)
-			}
-		}
-		if !strings.Contains(contract.Command, "TestV14CandidateSubjectsCoverCommittedDelta") {
-			t.Errorf("V14 acceptance omits candidate delta gate: %q", contract.Command)
-		}
-		return
+	contract := readRoadmapTestIndex(t).contracts["AC-V14-CONTROLS"]
+	assertRoadmapCommandArguments(t, contract,
+		"./acceptance", "./internal/goal", "./internal/identity", "./internal/config",
+		"./internal/credentials", "./internal/application", "./internal/ports",
+		"./internal/adapters/agent/fake", "./internal/adapters/agent/codex",
+		"./internal/adapters/state/sqlite", "./internal/bootstrap", "./cmd/orquesta",
+	)
+	if !strings.Contains(contract.Command, "TestV14CandidateSubjectsCoverCommittedDelta") {
+		t.Errorf("V14 acceptance omits candidate delta gate: %q", contract.Command)
 	}
-	t.Fatal("AC-V14-CONTROLS missing")
 }
 
 func roadmapV14Assertions() []string {
@@ -1407,74 +840,28 @@ func roadmapV14Assertions() []string {
 }
 
 func TestProductRoadmapV15ScopeAndExecutableContract(t *testing.T) {
-	var roadmap roadmapDocument
-	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
-	verticals := make(map[string]roadmapVertical, len(roadmap.Verticals))
-	entries := make(map[string]roadmapEntry, len(roadmap.CapabilityEntries))
-	contracts := make(map[string]roadmapAcceptanceContract, len(roadmap.AcceptanceContracts))
-	var owned []string
-	for _, vertical := range roadmap.Verticals {
-		verticals[vertical.ID] = vertical
-	}
-	for _, entry := range roadmap.CapabilityEntries {
-		entries[entry.ID] = entry
-		if entry.OwnerContext == "budgets_effects" && entry.Decision == "accept" {
-			owned = append(owned, entry.ID)
-		}
-	}
-	for _, contract := range roadmap.AcceptanceContracts {
-		contracts[contract.ID] = contract
-	}
-	sort.Strings(owned)
-	wantOwned := []string{"EVD-03", "EVD-14", "GOV-15", "ORC-08", "ORC-09", "ORC-10", "ORC-11", "STG-09"}
-	if !reflect.DeepEqual(owned, wantOwned) {
-		t.Fatalf("V15 accepted ownership = %v, want exact %v", owned, wantOwned)
-	}
-	wantVertical := verticals["budgets_effects"]
-	wantEvidence := []string{
-		"acceptance/v15_budgets_effects_test.go",
-		"acceptance/fixtures/v15_budgets_effects.json",
-		"product/evidence/v15_budgets_effects.json",
-	}
-	for _, id := range wantOwned {
-		entry := entries[id]
-		if entry.Status != "accredited" || !reflect.DeepEqual(entry.EvidenceRefs, wantEvidence) ||
-			!reflect.DeepEqual(entry.Dependencies, wantVertical.DependsOn) ||
-			!reflect.DeepEqual(entry.AcceptanceContracts, wantVertical.AcceptanceContracts) {
-			t.Errorf("V15 capability %s lacks exact accreditation: %#v", id, entry)
-		}
-	}
-
 	const wantCommand = "sh -c 'go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV15ScopeAndExecutableContract|TestV15EvidenceBelongsOnlyToBudgetsEffectsCapabilities|TestV15AcceptanceCommandRunsBudgetEffectConsumers|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestTraceabilityRebuildHistoricalBugIDs|TestTraceabilityRebuildHistoricalBugReviewBindings|TestTraceabilityRebuildSchemaValidatesCanonicalLedgers|TestHistoricalBugCapabilityCoverageNeverInfersLegacyClosure|TestAcceptanceV15BudgetsEffects|TestV15CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/governance ./internal/identity ./internal/config ./internal/credentials ./internal/application ./internal/ports ./internal/adapters/agent/fake ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta && timeout --kill-after=10s 150s go test -mod=vendor -race -count=1 -timeout=120s ./internal/application ./internal/adapters/state/sqlite ./internal/adapters/agent/fake ./internal/bootstrap -run \"^(TestBudgetContractUsesOneCanonicalEnvelopeAcrossLayers|TestConcurrentBudgetReservationsNeverExceedEnvelope|TestTemporaryQuotaParksActionWithoutTerminalFailure|TestHierarchicalFairnessBoundsProjectAndGoalStarvation|TestEffectRequiresExactLiveApprovalBeforeAdapterInvocation|TestEffectCrashAfterApplyBeforeReceiptReconcilesOnce|TestPendingStopBackoffPreservesFirstUrgencyThenYieldsAndCaps|TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas|TestFastSemanticRepositoryRestartPersistsCommittedData|TestSQLiteBudgetsEffectsRestartRaceAndReplay|TestV15RecoveryRejectsBudgetEffectCausalTampering|TestV15BackupRestorePreservesBudgetsAndEffects|TestRealCodexBudgetsAndEffectsThroughProductionComposition)$\"'"
-	contract := contracts["AC-V15-BUDGETS-EFFECTS"]
-	if contract.Status != "executable" || contract.TestRef != "acceptance/v15_budgets_effects_test.go" ||
-		contract.Fixture != "acceptance/fixtures/v15_budgets_effects.json" ||
-		contract.Receipt != "product/evidence/v15_budgets_effects.json" ||
-		contract.Command != wantCommand || !reflect.DeepEqual(contract.Assertions, roadmapV15Assertions()) {
-		t.Fatalf("invalid V15 executable contract: %#v", contract)
-	}
-	next := contracts["AC-V16-WORKSPACE-GIT"]
+	index := assertRoadmapVerticalContract(t, roadmapVerticalContractSpec{
+		version: "V15", owner: "budgets_effects", contractID: "AC-V15-BUDGETS-EFFECTS",
+		testRef: "acceptance/v15_budgets_effects_test.go", fixture: "acceptance/fixtures/v15_budgets_effects.json",
+		receipt: "product/evidence/v15_budgets_effects.json", command: wantCommand, assertions: roadmapV15Assertions(), causal: true,
+		owned: []string{"EVD-03", "EVD-14", "GOV-15", "ORC-08", "ORC-09", "ORC-10", "ORC-11", "STG-09"},
+		evidence: []string{"acceptance/v15_budgets_effects_test.go", "acceptance/fixtures/v15_budgets_effects.json",
+			"product/evidence/v15_budgets_effects.json"},
+	})
+	next := index.contracts["AC-V16-WORKSPACE-GIT"]
 	if next.Status != "executable" || next.Receipt != "product/evidence/v16_workspace_git.json" {
 		t.Fatalf("V15 successor V16 must advance only through its executable contract: %#v", next)
 	}
 	for _, id := range []string{"AC-V20-COMMAND-REGISTRY", "AC-V31-POSTGRES-S3-MULTIHOST"} {
-		if deferred := contracts[id]; deferred.Status != "planned" || deferred.Receipt != "" {
+		if deferred := index.contracts[id]; deferred.Status != "planned" || deferred.Receipt != "" {
 			t.Fatalf("V15 contract preparation prematurely opens deferred contract %s: %#v", id, deferred)
 		}
 	}
 }
 
 func TestV15AcceptanceCommandRunsBudgetEffectConsumers(t *testing.T) {
-	var roadmap roadmapDocument
-	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
-	var contract roadmapAcceptanceContract
-	for _, candidate := range roadmap.AcceptanceContracts {
-		if candidate.ID == "AC-V15-BUDGETS-EFFECTS" {
-			contract = candidate
-			break
-		}
-	}
-	for _, required := range []string{
+	assertRoadmapCommandContains(t, readRoadmapTestIndex(t).contracts["AC-V15-BUDGETS-EFFECTS"], nil,
 		"TestAcceptanceV15BudgetsEffects", "TestV15CandidateSubjectsCoverCommittedDelta",
 		"TestTraceabilityRebuildHistoricalBugIDs", "TestTraceabilityRebuildHistoricalBugReviewBindings",
 		"TestTraceabilityRebuildSchemaValidatesCanonicalLedgers",
@@ -1488,45 +875,25 @@ func TestV15AcceptanceCommandRunsBudgetEffectConsumers(t *testing.T) {
 		"TestFastSemanticRepositoryRestartPersistsCommittedData",
 		"TestRealCodexBudgetsAndEffectsThroughProductionComposition",
 		"timeout --kill-after=10s 150s", "-timeout=120s",
-	} {
-		if !strings.Contains(contract.Command, required) {
-			t.Errorf("V15 command does not execute %q", required)
-		}
-	}
+	)
 }
 
 func TestV15EvidenceBelongsOnlyToBudgetsEffectsCapabilities(t *testing.T) {
-	var roadmap roadmapDocument
-	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
-	owned := map[string]bool{
-		"GOV-15": true, "STG-09": true, "ORC-08": true, "ORC-09": true,
-		"ORC-10": true, "ORC-11": true, "EVD-03": true, "EVD-14": true,
+	roadmap := readRoadmapTestIndex(t).document
+	want := []string{
+		"acceptance/v15_budgets_effects_test.go",
+		"acceptance/fixtures/v15_budgets_effects.json",
+		"product/evidence/v15_budgets_effects.json",
 	}
-	v15Evidence := map[string]bool{
-		"acceptance/v15_budgets_effects_test.go":          true,
-		"acceptance/fixtures/v15_budgets_effects.json":    true,
-		"product/evidence/v15_budgets_effects.json":       true,
-		"product/evidence/v15_budgets_effects.output.txt": true,
-	}
-	for _, entry := range roadmap.CapabilityEntries {
-		if owned[entry.ID] {
-			want := []string{
-				"acceptance/v15_budgets_effects_test.go",
-				"acceptance/fixtures/v15_budgets_effects.json",
-				"product/evidence/v15_budgets_effects.json",
-			}
+	v15Evidence := roadmapSetOf(append(want, "product/evidence/v15_budgets_effects.output.txt")...)
+	assertRoadmapEvidenceExclusive(t, roadmap.CapabilityEntries,
+		roadmapSetOf("GOV-15", "STG-09", "ORC-08", "ORC-09", "ORC-10", "ORC-11", "EVD-03", "EVD-14"),
+		v15Evidence, func(t *testing.T, entry roadmapEntry) {
 			if entry.Status != "accredited" || !reflect.DeepEqual(entry.EvidenceRefs, want) {
 				t.Errorf("owned V15 capability %s lacks exact accreditation: status=%q evidence=%v",
 					entry.ID, entry.Status, entry.EvidenceRefs)
 			}
-			continue
-		}
-		for _, evidenceRef := range entry.EvidenceRefs {
-			if v15Evidence[evidenceRef] {
-				t.Errorf("unowned capability %s claims V15 evidence %q", entry.ID, evidenceRef)
-			}
-		}
-	}
+		})
 	wantHistoricalEvidence := []string{
 		"acceptance/v15_budgets_effects_test.go",
 		"acceptance/fixtures/v15_budgets_effects.json",
@@ -1574,77 +941,29 @@ func roadmapV15Assertions() []string {
 }
 
 func TestProductRoadmapV16ScopeAndExecutableContract(t *testing.T) {
-	var roadmap roadmapDocument
-	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
-	verticals := make(map[string]roadmapVertical, len(roadmap.Verticals))
-	entries := make(map[string]roadmapEntry, len(roadmap.CapabilityEntries))
-	contracts := make(map[string]roadmapAcceptanceContract, len(roadmap.AcceptanceContracts))
-	var owned []string
-	for _, vertical := range roadmap.Verticals {
-		verticals[vertical.ID] = vertical
-	}
-	for _, entry := range roadmap.CapabilityEntries {
-		entries[entry.ID] = entry
-		if entry.OwnerContext == "workspace_git" && entry.Decision == "accept" {
-			owned = append(owned, entry.ID)
-		}
-	}
-	for _, contract := range roadmap.AcceptanceContracts {
-		contracts[contract.ID] = contract
-	}
-	sort.Strings(owned)
-	wantOwned := []string{"EXT-10", "STG-02", "STG-10"}
-	if !reflect.DeepEqual(owned, wantOwned) {
-		t.Fatalf("V16 accepted ownership = %v, want exact %v", owned, wantOwned)
-	}
-	wantEvidence := []string{
-		"acceptance/v16_workspace_git_test.go",
-		"acceptance/fixtures/v16_workspace_git.json",
-		"product/evidence/v16_workspace_git.json",
-	}
-	wantVertical := verticals["workspace_git"]
-	for _, id := range wantOwned {
-		entry := entries[id]
-		if entry.Status != "accredited" || !reflect.DeepEqual(entry.EvidenceRefs, wantEvidence) ||
-			!reflect.DeepEqual(entry.Dependencies, wantVertical.DependsOn) ||
-			!reflect.DeepEqual(entry.AcceptanceContracts, wantVertical.AcceptanceContracts) {
-			t.Errorf("V16 capability %s lacks exact accreditation: %#v", id, entry)
-		}
-	}
-	contract := contracts["AC-V16-WORKSPACE-GIT"]
-	if contract.Status != "executable" || contract.TestRef != "acceptance/v16_workspace_git_test.go" ||
-		contract.Fixture != "acceptance/fixtures/v16_workspace_git.json" ||
-		contract.Receipt != "product/evidence/v16_workspace_git.json" ||
-		contract.Command != roadmapV16ValidationCommand() ||
-		!reflect.DeepEqual(contract.Assertions, roadmapV16Assertions()) {
-		t.Fatalf("invalid V16 executable contract: %#v", contract)
-	}
-	if next := contracts["AC-V17-TEST-ATTESTOR"]; next.Status != "planned" || next.Receipt != "" {
+	index := assertRoadmapVerticalContract(t, roadmapVerticalContractSpec{
+		version: "V16", owner: "workspace_git", contractID: "AC-V16-WORKSPACE-GIT",
+		testRef: "acceptance/v16_workspace_git_test.go", fixture: "acceptance/fixtures/v16_workspace_git.json",
+		receipt: "product/evidence/v16_workspace_git.json", command: roadmapV16ValidationCommand(),
+		assertions: roadmapV16Assertions(), causal: true, owned: []string{"EXT-10", "STG-02", "STG-10"},
+		evidence: []string{"acceptance/v16_workspace_git_test.go", "acceptance/fixtures/v16_workspace_git.json",
+			"product/evidence/v16_workspace_git.json"},
+	})
+	if next := index.contracts["AC-V17-TEST-ATTESTOR"]; next.Status != "planned" || next.Receipt != "" {
 		t.Fatalf("V16 must not open V17 before its own evidence closes: %#v", next)
 	}
-	if forge := entries["EXT-11"]; forge.Status != "declared" || forge.OwnerContext != "domain_plugins" ||
+	if forge := index.entries["EXT-11"]; forge.Status != "declared" || forge.OwnerContext != "domain_plugins" ||
 		len(forge.EvidenceRefs) != 0 {
 		t.Fatalf("V16 must leave remote forge capability deferred: %#v", forge)
 	}
 }
 
 func TestV16AcceptanceCommandRunsWorkspaceGitConsumers(t *testing.T) {
-	var roadmap roadmapDocument
-	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
-	var command string
-	for _, contract := range roadmap.AcceptanceContracts {
-		if contract.ID == "AC-V16-WORKSPACE-GIT" {
-			command = contract.Command
-			break
-		}
-	}
-	if command == "" {
+	contract := readRoadmapTestIndex(t).contracts["AC-V16-WORKSPACE-GIT"]
+	if contract.Command == "" {
 		t.Fatal("AC-V16-WORKSPACE-GIT missing")
 	}
-	if strings.Contains(command, "./...") {
-		t.Fatalf("V16 command uses broad package wildcard: %q", command)
-	}
-	for _, required := range []string{
+	assertRoadmapCommandContains(t, contract, []string{"./..."},
 		"git diff --check 3820df2ae89f1a217de1b14d5b88abf8e86c898b HEAD --",
 		"TestAcceptanceV16WorkspaceGit", "TestV16CandidateSubjectsCoverCommittedDelta",
 		"TestAcceptanceV02AuthorityRules", "TestAcceptanceV03CanonicalLedgers",
@@ -1663,42 +982,17 @@ func TestV16AcceptanceCommandRunsWorkspaceGitConsumers(t *testing.T) {
 		"TestGitWorkspaceRejectsRepositoryOverlappingPrivateRoot",
 		"TestIntegrationReplayRejectsSameKeyWithDifferentPayload",
 		"GOFLAGS=-mod=vendor go vet",
-	} {
-		if !strings.Contains(command, required) {
-			t.Errorf("V16 acceptance command does not execute %q", required)
-		}
-	}
+	)
 }
 
 func TestV16EvidenceBelongsOnlyToWorkspaceGitCapabilities(t *testing.T) {
-	var roadmap roadmapDocument
-	decodeRoadmapStrictJSON(t, "product/roadmap.json", &roadmap)
-	owned := map[string]bool{"STG-02": true, "STG-10": true, "EXT-10": true}
 	wantEvidence := []string{
 		"acceptance/v16_workspace_git_test.go",
 		"acceptance/fixtures/v16_workspace_git.json",
 		"product/evidence/v16_workspace_git.json",
 	}
-	v16Evidence := map[string]bool{
-		"acceptance/v16_workspace_git_test.go":          true,
-		"acceptance/fixtures/v16_workspace_git.json":    true,
-		"product/evidence/v16_workspace_git.json":       true,
-		"product/evidence/v16_workspace_git.output.txt": true,
-	}
-	for _, entry := range roadmap.CapabilityEntries {
-		if owned[entry.ID] {
-			if entry.Status != "accredited" || !reflect.DeepEqual(entry.EvidenceRefs, wantEvidence) {
-				t.Errorf("owned V16 capability %s lacks exact accreditation: status=%q evidence=%v",
-					entry.ID, entry.Status, entry.EvidenceRefs)
-			}
-			continue
-		}
-		for _, evidenceRef := range entry.EvidenceRefs {
-			if v16Evidence[evidenceRef] {
-				t.Errorf("unowned capability %s claims V16 evidence %q", entry.ID, evidenceRef)
-			}
-		}
-	}
+	assertRoadmapAccreditedEvidenceExclusive(t, []string{"STG-02", "STG-10", "EXT-10"}, wantEvidence,
+		"product/evidence/v16_workspace_git.output.txt")
 }
 
 func roadmapV16ValidationCommand() string {
@@ -1725,6 +1019,172 @@ func roadmapV16Assertions() []string {
 		"V16 preserves the V02 single Goal writer V05 DAG V06 atomic state and outbox V07 configuration V08 credentials V09 recovery V10 RBAC V12 Director V13 mailbox V14 controls and V15 budgets and effects",
 		"local Git integration is an explicit application use case and receipt but never closes a Goal authorizes review publication or proves remote effect; attestation review council forge and multihost remain later verticals",
 	}
+}
+
+type roadmapV17Fixture struct {
+	ProductDeltaSealedGitCommitOID string                    `json:"product_delta_sealed_git_commit_oid"`
+	SealStatus                     string                    `json:"seal_status"`
+	Command                        string                    `json:"command"`
+	ExecutionArgv                  []string                  `json:"execution_argv"`
+	OutputPath                     string                    `json:"output_path"`
+	ReceiptPath                    string                    `json:"receipt_path"`
+	OwnedCapabilityIDs             []string                  `json:"owned_capability_ids"`
+	DependencyVerticals            []string                  `json:"dependency_verticals"`
+	RequiredBehaviorTests          []roadmapV17BehaviorTest  `json:"required_behavior_tests"`
+	FocalSuite                     roadmapV17ValidationSuite `json:"focal_suite"`
+	RaceSuite                      roadmapV17ValidationSuite `json:"race_suite"`
+	E2ESuite                       roadmapV17ValidationSuite `json:"e2e_suite"`
+	VetPackages                    []string                  `json:"vet_packages"`
+	RoadmapAssertions              []string                  `json:"roadmap_assertions"`
+}
+
+type roadmapV17BehaviorTest struct {
+	Directory string `json:"directory"`
+	Name      string `json:"name"`
+	Gate      string `json:"gate"`
+}
+
+type roadmapV17ValidationSuite struct {
+	Packages []string `json:"packages"`
+	Tests    []string `json:"tests"`
+}
+
+func TestProductRoadmapV17ScopeAndExecutableContract(t *testing.T) {
+	index := readRoadmapTestIndex(t)
+	fixture := readRoadmapV17Fixture(t)
+	var owned []string
+	for _, entry := range index.document.CapabilityEntries {
+		if entry.OwnerContext == "test_attestor" && entry.Decision == "accept" {
+			owned = append(owned, entry.ID)
+		}
+	}
+	sort.Strings(owned)
+	if !reflect.DeepEqual(owned, fixture.OwnedCapabilityIDs) {
+		t.Fatalf("V17 accepted ownership = %v, want exact %v", owned, fixture.OwnedCapabilityIDs)
+	}
+	wantEvidence := []string{
+		"acceptance/v17_test_attestor_test.go",
+		"acceptance/fixtures/v17_test_attestor.json",
+		"product/evidence/v17_test_attestor.json",
+	}
+	_, receiptErr := os.Stat(fixture.ReceiptPath)
+	receiptExists := receiptErr == nil
+	if receiptErr != nil && !os.IsNotExist(receiptErr) {
+		t.Fatal(receiptErr)
+	}
+	for _, id := range fixture.OwnedCapabilityIDs {
+		entry := index.entries[id]
+		if !reflect.DeepEqual(entry.Dependencies, fixture.DependencyVerticals) {
+			t.Errorf("V17 capability %s dependencies=%v, want %v", id, entry.Dependencies, fixture.DependencyVerticals)
+		}
+		if receiptExists {
+			if entry.Status != "accredited" || !reflect.DeepEqual(entry.EvidenceRefs, wantEvidence) {
+				t.Errorf("V17 capability %s lacks exact post-E accreditation: %#v", id, entry)
+			}
+		} else if entry.Status == "accredited" || len(entry.EvidenceRefs) != 0 {
+			t.Errorf("V17 capability %s was accredited before a valid E receipt: %#v", id, entry)
+		}
+	}
+	contract := index.contracts["AC-V17-TEST-ATTESTOR"]
+	if receiptExists {
+		if contract.Status != "executable" || contract.TestRef != "acceptance/v17_test_attestor_test.go" ||
+			contract.Command != fixture.Command || contract.Fixture != "acceptance/fixtures/v17_test_attestor.json" ||
+			contract.Receipt != fixture.ReceiptPath || !reflect.DeepEqual(contract.Assertions, fixture.RoadmapAssertions) {
+			t.Fatalf("invalid V17 post-E executable contract: %#v", contract)
+		}
+	} else {
+		if contract.Status == "executable" {
+			if contract.TestRef != "acceptance/v17_test_attestor_test.go" || contract.Command != fixture.Command ||
+				contract.Fixture != "acceptance/fixtures/v17_test_attestor.json" ||
+				contract.Receipt != fixture.ReceiptPath || !reflect.DeepEqual(contract.Assertions, fixture.RoadmapAssertions) {
+				t.Fatalf("invalid V17 executable but unaccredited contract: %#v", contract)
+			}
+		} else if contract.Status != "planned" || !strings.HasPrefix(contract.TestRef, "planned:") ||
+			!strings.HasPrefix(contract.Command, "planned:") || !strings.HasPrefix(contract.Fixture, "planned:") ||
+			contract.Receipt != "" {
+			t.Fatalf("invalid V17 pre-E planned contract: %#v", contract)
+		}
+	}
+	if next := index.contracts["AC-V18-INDEPENDENT-REVIEWS"]; next.Status != "planned" || next.Receipt != "" {
+		t.Fatalf("V17 must leave author reviewers and refinery deferred: %#v", next)
+	}
+}
+
+func TestV17AcceptanceCommandRunsTestAttestorConsumers(t *testing.T) {
+	index := readRoadmapTestIndex(t)
+	fixture := readRoadmapV17Fixture(t)
+	contract := index.contracts["AC-V17-TEST-ATTESTOR"]
+	command := fixture.Command
+	if contract.Status == "executable" && contract.Command != command {
+		t.Fatalf("V17 executable roadmap command differs from fixture argv: roadmap=%q fixture=%q", contract.Command, command)
+	}
+	assertRoadmapCommandContains(t, roadmapAcceptanceContract{ID: contract.ID, Command: command},
+		[]string{"./...", "./internal/..."},
+		"git diff --check eb272b6645928d800619709c9afd272440b0dabf HEAD --",
+		"TestProductRoadmapV17ScopeAndExecutableContract",
+		"TestV17EvidenceBelongsOnlyToTestAttestorCapabilities",
+		"TestV17AcceptanceCommandRunsTestAttestorConsumers",
+		"TestAcceptanceV17TestAttestor", "TestAcceptanceV06AtomicStateOutbox",
+		"TestAcceptanceV09RecoveryBackup", "TestAcceptanceV15BudgetsEffects",
+		"TestAcceptanceV16WorkspaceGit", "./internal/goal", "./internal/application",
+		"./internal/ports", "./internal/adapters/artifact/filesystem",
+		"./internal/adapters/workspace/gitlocal", "./internal/adapters/attestor/bubblewrap",
+		"./internal/adapters/state/sqlite", "./internal/bootstrap", "./cmd/orquesta",
+		"timeout --kill-after=10s", "-race", "GOFLAGS=-mod=vendor go vet",
+	)
+	for _, behavior := range fixture.RequiredBehaviorTests {
+		if !strings.Contains(command, "./"+behavior.Directory) {
+			t.Errorf("V17 acceptance command does not execute behavior package %q for %s", behavior.Directory, behavior.Name)
+		}
+	}
+}
+
+func TestV17EvidenceBelongsOnlyToTestAttestorCapabilities(t *testing.T) {
+	roadmap := readRoadmapTestIndex(t).document
+	fixture := readRoadmapV17Fixture(t)
+	owned := roadmapSetOf(fixture.OwnedCapabilityIDs...)
+	wantEvidence := []string{
+		"acceptance/v17_test_attestor_test.go",
+		"acceptance/fixtures/v17_test_attestor.json",
+		"product/evidence/v17_test_attestor.json",
+	}
+	evidence := roadmapSetOf(
+		"acceptance/v17_test_attestor_test.go",
+		"acceptance/fixtures/v17_test_attestor.json",
+		"product/evidence/v17_test_attestor.json",
+		"product/evidence/v17_test_attestor.output.txt",
+	)
+	assertRoadmapEvidenceExclusive(t, roadmap.CapabilityEntries, owned, evidence,
+		func(t *testing.T, entry roadmapEntry) {
+			if entry.Status == "accredited" && !reflect.DeepEqual(entry.EvidenceRefs, wantEvidence) {
+				t.Errorf("owned V17 capability %s has noncanonical accreditation: status=%q evidence=%v",
+					entry.ID, entry.Status, entry.EvidenceRefs)
+			}
+			if entry.Status != "accredited" && len(entry.EvidenceRefs) != 0 {
+				t.Errorf("owned V17 capability %s claims evidence before accreditation: status=%q evidence=%v",
+					entry.ID, entry.Status, entry.EvidenceRefs)
+			}
+		})
+}
+
+func readRoadmapV17Fixture(t *testing.T) roadmapV17Fixture {
+	t.Helper()
+	content, err := os.ReadFile("acceptance/fixtures/v17_test_attestor.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture roadmapV17Fixture
+	if err := json.Unmarshal(content, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	if len(fixture.OwnedCapabilityIDs) != 4 || len(fixture.RequiredBehaviorTests) < 30 ||
+		len(fixture.FocalSuite.Packages) == 0 || len(fixture.RaceSuite.Tests) == 0 ||
+		len(fixture.E2ESuite.Tests) == 0 || len(fixture.VetPackages) == 0 ||
+		fixture.Command == "" || len(fixture.ExecutionArgv) != 3 ||
+		fixture.OutputPath == "" || fixture.ReceiptPath == "" || len(fixture.RoadmapAssertions) != 12 {
+		t.Fatalf("invalid V17 roadmap fixture: %+v", fixture)
+	}
+	return fixture
 }
 
 func TestV04AccreditsOnlyGOV02AndPreservesGOV01Deferred(t *testing.T) {
@@ -2049,6 +1509,140 @@ func roadmapSetOf(values ...string) map[string]struct{} {
 		result[value] = struct{}{}
 	}
 	return result
+}
+
+type roadmapTestIndex struct {
+	document  roadmapDocument
+	verticals map[string]roadmapVertical
+	contracts map[string]roadmapAcceptanceContract
+	entries   map[string]roadmapEntry
+}
+
+type roadmapVerticalContractSpec struct {
+	version, owner, contractID, testRef, fixture, receipt, command string
+	owned, evidence                                                []string
+	assertions                                                     []string
+	assertionCount                                                 int
+	causal, allowDeclared                                          bool
+}
+
+func readRoadmapTestIndex(t *testing.T) roadmapTestIndex {
+	t.Helper()
+	var document roadmapDocument
+	decodeRoadmapStrictJSON(t, "product/roadmap.json", &document)
+	index := roadmapTestIndex{document: document, verticals: make(map[string]roadmapVertical, len(document.Verticals)),
+		contracts: make(map[string]roadmapAcceptanceContract, len(document.AcceptanceContracts)),
+		entries:   make(map[string]roadmapEntry, len(document.CapabilityEntries))}
+	for _, value := range document.Verticals {
+		index.verticals[value.ID] = value
+	}
+	for _, value := range document.AcceptanceContracts {
+		index.contracts[value.ID] = value
+	}
+	for _, value := range document.CapabilityEntries {
+		index.entries[value.ID] = value
+	}
+	return index
+}
+
+func assertRoadmapVerticalContract(t *testing.T, spec roadmapVerticalContractSpec) roadmapTestIndex {
+	t.Helper()
+	index := readRoadmapTestIndex(t)
+	var owned []string
+	for _, entry := range index.document.CapabilityEntries {
+		if entry.OwnerContext == spec.owner && entry.Decision == "accept" {
+			owned = append(owned, entry.ID)
+		}
+	}
+	sort.Strings(owned)
+	if !reflect.DeepEqual(owned, spec.owned) {
+		t.Fatalf("%s accepted ownership = %v, want exact %v", spec.version, owned, spec.owned)
+	}
+	vertical := index.verticals[spec.owner]
+	for _, id := range spec.owned {
+		entry := index.entries[id]
+		valid := entry.Status == "accredited" && reflect.DeepEqual(entry.EvidenceRefs, spec.evidence)
+		if spec.allowDeclared && entry.Status == "declared" && len(entry.EvidenceRefs) == 0 {
+			valid = true
+		}
+		if spec.causal {
+			valid = valid && reflect.DeepEqual(entry.Dependencies, vertical.DependsOn) &&
+				reflect.DeepEqual(entry.AcceptanceContracts, vertical.AcceptanceContracts)
+		}
+		if !valid {
+			t.Errorf("%s capability %s lacks exact accreditation or causality: %#v", spec.version, id, entry)
+		}
+	}
+	contract := index.contracts[spec.contractID]
+	valid := contract.Status == "executable" && contract.TestRef == spec.testRef &&
+		contract.Fixture == spec.fixture && contract.Receipt == spec.receipt && contract.Command == spec.command
+	if spec.assertions != nil {
+		valid = valid && reflect.DeepEqual(contract.Assertions, spec.assertions)
+	} else {
+		valid = valid && len(contract.Assertions) == spec.assertionCount
+	}
+	if !valid {
+		t.Fatalf("invalid %s executable contract: %#v", spec.version, contract)
+	}
+	return index
+}
+
+func assertRoadmapCommandContains(t *testing.T, contract roadmapAcceptanceContract, forbidden []string, required ...string) {
+	t.Helper()
+	for _, value := range forbidden {
+		if strings.Contains(contract.Command, value) {
+			t.Fatalf("%s command contains forbidden %q: %q", contract.ID, value, contract.Command)
+		}
+	}
+	for _, value := range required {
+		if !strings.Contains(contract.Command, value) {
+			t.Errorf("%s command does not execute %q", contract.ID, value)
+		}
+	}
+}
+
+func assertRoadmapCommandArguments(t *testing.T, contract roadmapAcceptanceContract, required ...string) {
+	t.Helper()
+	if contract.Command == "" {
+		t.Fatalf("%s missing", contract.ID)
+	}
+	for _, value := range required {
+		if !roadmapCommandHasArgument(contract.Command, value) {
+			t.Errorf("%s command omits package %q: %q", contract.ID, value, contract.Command)
+		}
+	}
+}
+
+func assertRoadmapEvidenceExclusive(
+	t *testing.T, entries []roadmapEntry, owned map[string]struct{}, evidence map[string]struct{},
+	assertOwned func(*testing.T, roadmapEntry),
+) {
+	t.Helper()
+	for _, entry := range entries {
+		if _, ok := owned[entry.ID]; ok {
+			assertOwned(t, entry)
+			continue
+		}
+		for _, ref := range entry.EvidenceRefs {
+			if _, leaked := evidence[ref]; leaked {
+				t.Errorf("unowned capability %s claims evidence %q", entry.ID, ref)
+			}
+		}
+	}
+}
+
+func assertRoadmapAccreditedEvidenceExclusive(
+	t *testing.T, owned []string, canonical []string, extraEvidence ...string,
+) {
+	t.Helper()
+	evidence := append(append([]string(nil), canonical...), extraEvidence...)
+	assertRoadmapEvidenceExclusive(t, readRoadmapTestIndex(t).document.CapabilityEntries,
+		roadmapSetOf(owned...), roadmapSetOf(evidence...), func(t *testing.T, entry roadmapEntry) {
+			if entry.Status != "accredited" || !reflect.DeepEqual(entry.EvidenceRefs, canonical) {
+				t.Errorf("owned capability %s lacks exact accreditation: status=%q evidence=%v",
+					entry.ID, entry.Status, entry.EvidenceRefs)
+			}
+		})
 }
 
 func roadmapTwoDigits(value int) string {

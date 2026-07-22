@@ -283,13 +283,23 @@ func (fixture planFixture) itemWithContract(t *testing.T, ref domain.WorkItemRef
 }
 
 func (fixture planFixture) newItem(overrides domain.NewWorkItemInput) (domain.WorkItem, error) {
+	requiredTests := overrides.RequiredTests
+	if len(overrides.WriteSet) > 0 && len(requiredTests) == 0 {
+		ref, _ := domain.NewRequiredTestRef("required-test:" + overrides.Ref.String())
+		toolRef, _ := domain.NewToolRef("tool:test")
+		spec, _ := domain.NewRequiredTestSpec(domain.RequiredTestSpecInput{
+			Ref: ref, ToolRef: toolRef, Arguments: []string{"./..."}, WorkingDirectory: ".",
+		})
+		requiredTests = []domain.RequiredTestSpec{spec}
+	}
 	return domain.NewWorkItem(domain.NewWorkItemInput{
 		Ref: overrides.Ref, Goal: fixture.goal.Ref(), Actor: fixture.actor, Project: fixture.project,
 		Objective: "execute " + overrides.Ref.String(), CreatedAt: baseTime().Add(2 * time.Minute),
 		Phase: overrides.Phase, Role: overrides.Role, Parent: overrides.Parent,
 		HandoffRequired: overrides.HandoffRequired,
 		Dependencies:    overrides.Dependencies, WriteSet: overrides.WriteSet,
-		SkillRefs: overrides.SkillRefs, ToolRefs: overrides.ToolRefs, CapabilityRefs: overrides.CapabilityRefs,
+		RequiredTests: requiredTests,
+		SkillRefs:     overrides.SkillRefs, ToolRefs: overrides.ToolRefs, CapabilityRefs: overrides.CapabilityRefs,
 		OutputContract: overrides.OutputContract, BudgetDemand: overrides.BudgetDemand,
 		SecurityCriticality: overrides.SecurityCriticality, ReasoningEffort: overrides.ReasoningEffort,
 	})

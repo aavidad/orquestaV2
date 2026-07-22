@@ -705,12 +705,13 @@ type v05ItemMetadata struct {
 
 func (fixture v05DomainFixture) itemWithMetadata(t *testing.T, metadata v05ItemMetadata) goal.WorkItem {
 	t.Helper()
+	requiredTests := v05RequiredTests(t, metadata.Ref, metadata.WriteSet)
 	item, err := goal.NewWorkItem(goal.NewWorkItemInput{
 		Ref: metadata.Ref, Goal: fixture.aggregate.Ref(), Actor: fixture.actor, Project: fixture.project,
 		Objective: "execute " + metadata.Ref.String(), CreatedAt: fixture.itemAt,
 		Phase: metadata.Phase, Role: goal.DefaultRoleKey(), Parent: metadata.Parent,
 		HandoffRequired: metadata.HandoffRequired,
-		Dependencies:    metadata.Dependencies, WriteSet: metadata.WriteSet,
+		Dependencies:    metadata.Dependencies, WriteSet: metadata.WriteSet, RequiredTests: requiredTests,
 		SkillRefs: metadata.SkillRefs, ToolRefs: metadata.ToolRefs, CapabilityRefs: metadata.CapabilityRefs,
 		OutputContract: goal.EvidenceBundleOutputContract(),
 	})
@@ -718,6 +719,26 @@ func (fixture v05DomainFixture) itemWithMetadata(t *testing.T, metadata v05ItemM
 		t.Fatalf("NewWorkItem(%q): %v", metadata.Ref, err)
 	}
 	return item
+}
+
+func v05RequiredTests(
+	t *testing.T,
+	ref goal.WorkItemRef,
+	writeSet []goal.WriteScope,
+) []goal.RequiredTestSpec {
+	t.Helper()
+	if len(writeSet) == 0 {
+		return nil
+	}
+	testRef := v05MustRef(t, "required-test:"+ref.String(), goal.NewRequiredTestRef)
+	toolRef := v05MustRef(t, "tool:v05-tests", goal.NewToolRef)
+	spec, err := goal.NewRequiredTestSpec(goal.RequiredTestSpecInput{
+		Ref: testRef, ToolRef: toolRef, Arguments: []string{"./..."}, WorkingDirectory: ".",
+	})
+	if err != nil {
+		t.Fatalf("NewRequiredTestSpec(%q): %v", ref, err)
+	}
+	return []goal.RequiredTestSpec{spec}
 }
 
 func (fixture v05DomainFixture) apply(

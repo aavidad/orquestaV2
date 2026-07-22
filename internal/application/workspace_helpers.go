@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"errors"
+	"time"
 
 	"orquesta/internal/goal"
 	"orquesta/internal/ports"
@@ -50,7 +51,9 @@ func workspaceTargetRef(record GoalRecord, change ChangeSet) string {
 
 func executionEvidence(record GoalRecord, executionRef goal.ExecutionRef) (ArtifactRecord, AttestationRecord, bool) {
 	for _, attestation := range record.Attestations {
-		if attestation.ExecutionRef != executionRef {
+		if attestation.ExecutionRef != executionRef ||
+			attestation.Kind != AttestationKindArtifactProvenance ||
+			attestation.Verdict != AttestationVerdictObserved {
 			continue
 		}
 		for _, artifact := range record.Artifacts {
@@ -60,6 +63,47 @@ func executionEvidence(record GoalRecord, executionRef goal.ExecutionRef) (Artif
 		}
 	}
 	return ArtifactRecord{}, AttestationRecord{}, false
+}
+
+func artifactProvenanceRecord(
+	stored ports.StoredArtifact,
+	aggregate goal.Goal,
+	item goal.WorkItem,
+	execution ExecutionRecord,
+	at time.Time,
+) ArtifactRecord {
+	return ArtifactRecord{
+		OccurrenceRef: "artifact-occurrence:agent-output:" + execution.Ref.String(),
+		Kind:          ArtifactKindAgentOutput, Stored: stored, GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(),
+		ExecutionRef: execution.Ref, ExecutionAttempt: execution.AttemptNo,
+		PlanGeneration: execution.PlanGeneration, WorkItemGeneration: item.Revision(),
+		AppSpecGeneration: execution.AppSpecGeneration, SpecHash: execution.SpecHash, CreatedAt: at.UTC(),
+	}
+}
+
+func artifactProvenanceAttestation(
+	ref goal.AttestationRef,
+	artifactRef goal.ArtifactRef,
+	aggregate goal.Goal,
+	item goal.WorkItem,
+	execution ExecutionRecord,
+	at time.Time,
+) AttestationRecord {
+	policyDigest := fingerprintFields("orquesta.artifact-provenance-policy.v1", outputAttestationPolicy)
+	subjectDigest := fingerprintFields(
+		"orquesta.artifact-provenance.v1", aggregate.Ref().String(), item.Ref().String(),
+		execution.Ref.String(), decimal(execution.AttemptNo), decimal(uint64(execution.PlanGeneration)),
+		decimal(uint64(execution.AppSpecGeneration)), execution.SpecHash, artifactRef.String(),
+	)
+	return AttestationRecord{
+		Ref: ref, Kind: AttestationKindArtifactProvenance, Verdict: AttestationVerdictObserved,
+		GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref,
+		ExecutionAttempt: execution.AttemptNo, PlanGeneration: execution.PlanGeneration,
+		WorkItemGeneration: item.Revision(), AppSpecGeneration: execution.AppSpecGeneration,
+		SpecHash: execution.SpecHash, ArtifactRef: artifactRef, SubjectDigest: subjectDigest,
+		PolicyRef: outputAttestationPolicy, PolicyDigest: policyDigest,
+		StartedAt: at.UTC(), FinishedAt: at.UTC(), Policy: outputAttestationPolicy, AcceptedAt: at.UTC(),
+	}
 }
 
 func (orchestrator *Orchestrator) requeueWorkspaceEffect(ctx context.Context, claim ActionClaim, code string) error {

@@ -43,17 +43,25 @@ type PhaseInput struct {
 }
 
 type WorkItemInput struct {
-	Key            string   `json:"key"`
-	Objective      string   `json:"objective"`
-	Phase          string   `json:"phase"`
-	Role           string   `json:"role"`
-	Parent         string   `json:"parent,omitempty"`
-	Dependencies   []string `json:"dependencies"`
-	WriteSet       []string `json:"write_set"`
-	SkillRefs      []string `json:"skill_refs,omitempty"`
-	ToolRefs       []string `json:"tool_refs,omitempty"`
-	CapabilityRefs []string `json:"capability_refs,omitempty"`
-	OutputContract string   `json:"output_contract"`
+	Key            string              `json:"key"`
+	Objective      string              `json:"objective"`
+	Phase          string              `json:"phase"`
+	Role           string              `json:"role"`
+	Parent         string              `json:"parent,omitempty"`
+	Dependencies   []string            `json:"dependencies"`
+	WriteSet       []string            `json:"write_set"`
+	RequiredTests  []RequiredTestInput `json:"required_tests,omitempty"`
+	SkillRefs      []string            `json:"skill_refs,omitempty"`
+	ToolRefs       []string            `json:"tool_refs,omitempty"`
+	CapabilityRefs []string            `json:"capability_refs,omitempty"`
+	OutputContract string              `json:"output_contract"`
+}
+
+type RequiredTestInput struct {
+	Ref              string   `json:"ref"`
+	ToolRef          string   `json:"tool_ref"`
+	Arguments        []string `json:"arguments"`
+	WorkingDirectory string   `json:"working_directory"`
 }
 
 type CreateGoalOutput struct {
@@ -247,10 +255,19 @@ func applicationPlan(input *PlanInput) *application.PlanSpec {
 	}
 	result.WorkItems = make([]application.WorkItemSpec, 0, len(input.WorkItems))
 	for _, item := range input.WorkItems {
+		requiredTests := make([]application.RequiredTestSpec, 0, len(item.RequiredTests))
+		for _, testSpec := range item.RequiredTests {
+			requiredTests = append(requiredTests, application.RequiredTestSpec{
+				Ref: testSpec.Ref, ToolRef: testSpec.ToolRef,
+				Arguments:        append([]string(nil), testSpec.Arguments...),
+				WorkingDirectory: testSpec.WorkingDirectory,
+			})
+		}
 		result.WorkItems = append(result.WorkItems, application.WorkItemSpec{
 			Key: item.Key, Objective: item.Objective, Phase: item.Phase, Role: item.Role, Parent: item.Parent,
 			Dependencies:   append([]string(nil), item.Dependencies...),
 			WriteSet:       append([]string(nil), item.WriteSet...),
+			RequiredTests:  requiredTests,
 			SkillRefs:      append([]string(nil), item.SkillRefs...),
 			ToolRefs:       append([]string(nil), item.ToolRefs...),
 			CapabilityRefs: append([]string(nil), item.CapabilityRefs...),

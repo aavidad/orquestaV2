@@ -110,6 +110,11 @@ func (orchestrator *Orchestrator) IntegrateChange(ctx context.Context, access Ac
 	if !itemFound || !executionFound {
 		return IntegrateChangeResult{}, &StateError{Code: StateConflict}
 	}
+	if _, passed := requiredTestsPassForChange(
+		record, item, execution, change, orchestrator.testAttestationPolicy,
+	); !passed {
+		return IntegrateChangeResult{}, &StateError{Code: StateConflict}
+	}
 	if previous, found, replayErr := integrationIntentForRequest(record, request.RequestRef); replayErr != nil {
 		return IntegrateChangeResult{}, replayErr
 	} else if found {

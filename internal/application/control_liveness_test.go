@@ -2,11 +2,51 @@ package application
 
 import (
 	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	"orquesta/internal/goal"
 	"orquesta/internal/ports"
 )
+
+func TestPendingStopQuarantinesUnknownAppliedAndYields(t *testing.T) {
+	agent := &scriptedAgent{stopStatus: ports.AgentStopPending}
+	system := newControlTestSystemWithPlan(t, agent, controlIndependentPlan())
+	system.launch(t)
+	running := system.record(t)
+	runningItem := controlItemByObjective(t, running, "first independent")
+	execution := mustBoundExecution(t, running, runningItem.Ref())
+	requested, err := system.orchestrator.Control(context.Background(), system.access,
+		system.request(t, "control:pending-stop-backoff", ControlStop,
+			ControlTargetExecution, runningItem.Ref(), execution.Ref))
+	if err != nil || !requested.Created {
+		t.Fatalf("request pending stop: result=%+v err=%v", requested, err)
+	}
+	stopActionRef := "action:stop:" + requested.Control.Ref + ":" + execution.Ref.String()
+	first, err := system.orchestrator.ProcessNext(context.Background(), "worker:pending-stop-first")
+	if err == nil || err.Error() != effectUnknownAppliedCode || first.Action != ActionStopAgent {
+		t.Fatalf("pending stop not quarantined: result=%+v err=%v", first, err)
+	}
+	prepared, err := system.orchestrator.ProcessNext(context.Background(), "worker:fresh-prepare-after-stop")
+	if err != nil || !prepared.Processed || prepared.Action == ActionStopAgent {
+		t.Fatalf("pending stop did not yield to other work: result=%+v err=%v", prepared, err)
+	}
+	closed := system.record(t)
+	stopAttempts := 0
+	for _, attempt := range closed.EffectAttempts {
+		if attempt.ActionRef == stopActionRef {
+			stopAttempts++
+		}
+	}
+	control, _ := controlByRef(closed.Controls, requested.Control.Ref)
+	if stopAttempts != 1 || control.Status != ControlRequested {
+		t.Fatalf("pending quarantine facts attempts=%d control=%+v", stopAttempts, control)
+	}
+	if _, exists := system.effects(t).actions[stopActionRef]; exists {
+		t.Fatalf("quarantined stop action remained schedulable: %s", stopActionRef)
+	}
+}
 
 func TestPendingStopBackoffPreservesFirstUrgencyThenYieldsAndCaps(t *testing.T) {
 	agent := &scriptedAgent{stopStatus: ports.AgentStopPending}
@@ -27,9 +67,14 @@ func TestPendingStopBackoffPreservesFirstUrgencyThenYieldsAndCaps(t *testing.T) 
 	base, capDelay := intent.QuotaRetryDelay, 2*intent.QuotaRetryDelay
 	system.orchestrator.executionTimeout = capDelay
 	firstAt := system.clock.Now()
-	first, err := system.orchestrator.ProcessNext(context.Background(), "worker:pending-stop-first")
-	if err != nil || first.Action != ActionStopAgent {
-		t.Fatalf("first pending stop lost urgent priority: result=%+v err=%v", first, err)
+	first := system.claim(t, "pending-stop-first")
+	if first.Action.Kind != ActionStopAgent {
+		t.Fatalf("first pending stop lost urgent priority: claim=%+v", first)
+	}
+	if err := system.orchestrator.requeueStop(
+		context.Background(), first, execution, "application.stop_waiting_launch_receipt",
+	); err != nil {
+		t.Fatalf("requeue first pre-effect stop: %v", err)
 	}
 	firstRetry := system.effects(t).actions[stopActionRef]
 	if firstRetry.deliveryAttempt != 1 || firstRetry.fence != 1 ||
@@ -48,9 +93,14 @@ func TestPendingStopBackoffPreservesFirstUrgencyThenYieldsAndCaps(t *testing.T) 
 		pending := system.effects(t).actions[stopActionRef]
 		system.clock.Advance(pending.record.AvailableAt.Sub(system.clock.Now()))
 		retriedAt := system.clock.Now()
-		result, processErr := system.orchestrator.ProcessNext(context.Background(), "worker:pending-stop-retry")
-		if processErr != nil || result.Action != ActionStopAgent {
-			t.Fatalf("pending stop retry %d: result=%+v err=%v", attempt, result, processErr)
+		claim := system.claim(t, fmt.Sprintf("pending-stop-retry-%d", attempt))
+		if claim.Action.Kind != ActionStopAgent {
+			t.Fatalf("pending stop retry %d lost priority: claim=%+v", attempt, claim)
+		}
+		if err := system.orchestrator.requeueStop(
+			context.Background(), claim, execution, "application.stop_waiting_launch_receipt",
+		); err != nil {
+			t.Fatalf("requeue pre-effect stop %d: %v", attempt, err)
 		}
 		retry := system.effects(t).actions[stopActionRef]
 		if retry.deliveryAttempt != attempt || retry.fence != attempt || retry.record.EffectIntent != intent ||
@@ -59,19 +109,14 @@ func TestPendingStopBackoffPreservesFirstUrgencyThenYieldsAndCaps(t *testing.T) 
 		}
 	}
 	closed := system.record(t)
-	stopAttempts := 0
+	control, _ := controlByRef(closed.Controls, requested.Control.Ref)
 	for _, attempt := range closed.EffectAttempts {
 		if attempt.ActionRef == stopActionRef {
-			stopAttempts++
-			if attempt.IntentRef != intent.Ref || attempt.IntentDigest != intent.Digest ||
-				attempt.IdempotencyKey != intent.IdempotencyKey {
-				t.Fatalf("stop retry changed durable intent: %+v", attempt)
-			}
+			t.Fatalf("pre-effect backoff created physical stop attempt: %+v", attempt)
 		}
 	}
-	control, _ := controlByRef(closed.Controls, requested.Control.Ref)
-	if stopAttempts != 3 || control.Status != ControlRequested {
-		t.Fatalf("pending retry facts attempts=%d control=%+v", stopAttempts, control)
+	if system.stopCount() != 0 || control.Status != ControlRequested {
+		t.Fatalf("pre-effect retry invoked adapter or closed control: stops=%d control=%+v", system.stopCount(), control)
 	}
 }
 
@@ -141,7 +186,9 @@ func TestControlTerminalTransitionsReleaseWriteSetAndScheduleExactlyOnce(t *test
 	})
 
 	t.Run("exhausted failure", func(t *testing.T) {
-		system := newControlTestSystemWithPlan(t, &scriptedAgent{launchErr: definitelyUnappliedPermanentError{"permanent launch failure"}}, controlConflictingPlan())
+		agent := &scriptedAgent{launchErr: definitelyUnappliedPermanentError{"permanent launch failure"}}
+		system := newControlTestSystemWithPlan(t, agent, controlConflictingPlan())
+		agent.launchErrorHook = func() { system.clock.Advance(time.Nanosecond) }
 		record := system.record(t)
 		first := controlItemByObjective(t, record, "first writer")
 		second := controlItemByObjective(t, record, "second writer")
@@ -272,8 +319,8 @@ func controlConflictingPlan() *PlanSpec {
 	return &PlanSpec{
 		Phases: []PhaseSpec{{Ref: "phase-instance:control-writers", Key: "phase:control-writers", TemplateRef: "phase-template:control-writers"}},
 		WorkItems: []WorkItemSpec{
-			{Key: "first", Objective: "first writer", Phase: "phase:control-writers", Role: "role:worker", WriteSet: []string{"internal/shared"}, OutputContract: goal.OutputContractEvidenceBundle},
-			{Key: "second", Objective: "second writer", Phase: "phase:control-writers", Role: "role:worker", WriteSet: []string{"internal/shared/file.go"}, OutputContract: goal.OutputContractEvidenceBundle},
+			{Key: "first", Objective: "first writer", Phase: "phase:control-writers", Role: "role:worker", WriteSet: []string{"internal/shared"}, RequiredTests: requiredTestSpecs("required-test:control-first"), OutputContract: goal.OutputContractEvidenceBundle},
+			{Key: "second", Objective: "second writer", Phase: "phase:control-writers", Role: "role:worker", WriteSet: []string{"internal/shared/file.go"}, RequiredTests: requiredTestSpecs("required-test:control-second"), OutputContract: goal.OutputContractEvidenceBundle},
 		},
 	}
 }
@@ -282,8 +329,8 @@ func controlIndependentPlan() *PlanSpec {
 	return &PlanSpec{
 		Phases: []PhaseSpec{{Ref: "phase-instance:control-independent", Key: "phase:control-independent", TemplateRef: "phase-template:control-independent"}},
 		WorkItems: []WorkItemSpec{
-			{Key: "first", Objective: "first independent", Phase: "phase:control-independent", Role: "role:worker", WriteSet: []string{"internal/first"}, OutputContract: goal.OutputContractEvidenceBundle},
-			{Key: "second", Objective: "second independent", Phase: "phase:control-independent", Role: "role:worker", WriteSet: []string{"internal/second"}, OutputContract: goal.OutputContractEvidenceBundle},
+			{Key: "first", Objective: "first independent", Phase: "phase:control-independent", Role: "role:worker", WriteSet: []string{"internal/first"}, RequiredTests: requiredTestSpecs("required-test:control-independent-first"), OutputContract: goal.OutputContractEvidenceBundle},
+			{Key: "second", Objective: "second independent", Phase: "phase:control-independent", Role: "role:worker", WriteSet: []string{"internal/second"}, RequiredTests: requiredTestSpecs("required-test:control-independent-second"), OutputContract: goal.OutputContractEvidenceBundle},
 		},
 	}
 }

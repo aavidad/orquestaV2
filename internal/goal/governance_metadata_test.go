@@ -71,7 +71,7 @@ func TestSnapshotV5UpgradesOnlyMissingGovernanceMetadata(t *testing.T) {
 		t.Fatal(err)
 	}
 	legacy := planned.Snapshot()
-	legacy.SchemaVersion = domain.GoalSnapshotSchemaVersion - 1
+	legacy.SchemaVersion = domain.GoalSnapshotSchemaVersion - 2
 	legacy.WorkItems[0].BudgetDemand = governance.BudgetDemand{}
 	legacy.WorkItems[0].SecurityCriticality = ""
 	legacy.WorkItems[0].ReasoningEffort = ""

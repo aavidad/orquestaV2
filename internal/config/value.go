@@ -35,6 +35,12 @@ func parseFileValue(definition registryKeyDefinition, raw any) (any, error) {
 			return nil, fmt.Errorf("expected non-empty path")
 		}
 		value = parsed
+	case valueTypeOptionalPath:
+		parsed, ok := raw.(string)
+		if !ok || strings.TrimSpace(parsed) != parsed || strings.ContainsRune(parsed, '\x00') {
+			return nil, fmt.Errorf("expected optional path")
+		}
+		value = parsed
 	case valueTypeCredentialRef:
 		parsed, ok := raw.(string)
 		if !ok || !validCredentialRef(parsed) {
@@ -94,7 +100,7 @@ func validateDeclaredValue(definition registryKeyDefinition, value any) error {
 			if !ok || text == "" || strings.TrimSpace(text) != text || strings.ContainsRune(text, '\x00') {
 				return fmt.Errorf("expected opaque reference")
 			}
-		case "integer_bounds", "positive_duration", "non_empty_path", "unique_non_empty_string_list", "credential_ref", "allowed_values":
+		case "integer_bounds", "positive_duration", "non_empty_path", "optional_path", "unique_non_empty_string_list", "credential_ref", "allowed_values":
 			// Enforced by the typed parser before semantic validators run.
 		default:
 			return fmt.Errorf("unsupported declared validator")

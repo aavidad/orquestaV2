@@ -30,9 +30,7 @@ func TestV10RecoveryRestoresExactV09ThenOpenMigratesToV10(t *testing.T) {
 		t.Fatalf("validate exact V09: %v", err)
 	}
 	migrations, err := loadMigrations()
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	if schemaRef != migrationSchemaRef(migrations[:recoverySchemaV09]) {
 		t.Fatalf("V09 schema ref = %s", schemaRef)
 	}
@@ -51,13 +49,9 @@ func TestV10RecoveryRestoresExactV09ThenOpenMigratesToV10(t *testing.T) {
 		t.Fatalf("restore V09: %v", err)
 	}
 	targetPath, err := recovery.TargetPath(targetRef)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	payload, err := os.ReadFile(findRecoveryFile(t, backupRoot, recoveryPayloadName))
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	restoredBytes, err := os.ReadFile(targetPath)
 	if err != nil || !bytes.Equal(payload, restoredBytes) {
 		t.Fatalf("restore changed V09 bytes: equal=%v err=%v", bytes.Equal(payload, restoredBytes), err)
@@ -93,7 +87,7 @@ WHERE type = 'table' AND name IN ('principals', 'project_memberships', 'authoriz
 		t.Fatalf("Open did not migrate restored V09: %v", err)
 	}
 	defer migrated.Close()
-	assertRecoverySchemaVersion(t, migrated.db, recoverySchemaV16)
+	assertRecoverySchemaVersion(t, migrated.db, recoverySchemaV17)
 	var bound int
 	if err := migrated.db.QueryRow(`SELECT COUNT(*) FROM goals g
 JOIN app_specs spec ON spec.ref = g.app_spec_ref
@@ -117,9 +111,7 @@ func TestV10RecoveryRestoresExactV10IdentitySnapshot(t *testing.T) {
 		ProjectRef: projectRef, Permission: identity.PermissionGoalsGet,
 		ResourceRef: "goal:recovery-v10", RequestedAt: at,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	if _, err := repository.Authorize(ctx, authorizationRequest); err != nil {
 		t.Fatalf("seed authorization receipt: %v", err)
 	}
@@ -129,7 +121,7 @@ func TestV10RecoveryRestoresExactV10IdentitySnapshot(t *testing.T) {
 		t.Fatalf("backup V10: %v", err)
 	}
 	migrations, _ := loadMigrations()
-	if receipt.SchemaRef != migrationSchemaRef(migrations[:recoverySchemaV16]) {
+	if receipt.SchemaRef != migrationSchemaRef(migrations[:recoverySchemaV17]) {
 		t.Fatalf("V15 schema ref = %s", receipt.SchemaRef)
 	}
 	targetRef, _ := application.NewRecoveryTargetRef("recovery-target:v10-exact")
@@ -144,7 +136,7 @@ func TestV10RecoveryRestoresExactV10IdentitySnapshot(t *testing.T) {
 	}
 	raw := openRawV10TestDatabase(t, targetPath)
 	defer raw.Close()
-	assertRecoverySchemaVersion(t, raw, recoverySchemaV16)
+	assertRecoverySchemaVersion(t, raw, recoverySchemaV17)
 	if schemaRef, _, err := validateRecoveryDatabase(ctx, raw); err != nil || schemaRef != receipt.SchemaRef {
 		t.Fatalf("restored V10 semantics: schema=%s err=%v", schemaRef, err)
 	}
@@ -315,9 +307,7 @@ func TestV10RecoveryAuthorizationTupleContract(t *testing.T) {
 		RequestRef: "authorization-request:tuple-contract", Principal: principal, ProjectRef: projectRef,
 		Permission: identity.PermissionGoalsCreate, ResourceRef: projectRef.String(), RequestedAt: at,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	tests := []struct {
 		name     string
 		outcome  identity.AuthorizationOutcome
@@ -403,25 +393,15 @@ func TestV10RecoveryAcceptsContiguousMembershipLifecycle(t *testing.T) {
 
 func TestRecoveryCanonicalInventoryAndSchemaRefAreVersioned(t *testing.T) {
 	v09, err := canonicalSchemaInventoryDigest(recoverySchemaV09)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	v10, err := canonicalSchemaInventoryDigest(recoverySchemaV10)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	v12, err := canonicalSchemaInventoryDigest(recoverySchemaV12)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	v13, err := canonicalSchemaInventoryDigest(recoverySchemaV13)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	v14, err := canonicalSchemaInventoryDigest(recoverySchemaV14)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	if v09 == v10 || v09 == v12 || v09 == v13 || v09 == v14 ||
 		v10 == v12 || v10 == v13 || v10 == v14 || v12 == v13 || v12 == v14 || v13 == v14 ||
 		!strings.HasPrefix(v09, "sha256:") || !strings.HasPrefix(v10, "sha256:") ||

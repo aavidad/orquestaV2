@@ -27,7 +27,9 @@ func TestIntegrateChangeReplaysExactAdmissionBeforeAndAfterCompletion(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []ActionKind{ActionPrepareWorkspace, ActionLaunchAgent, ActionObserveAgent, ActionCommitChange} {
+	for _, want := range []ActionKind{
+		ActionPrepareWorkspace, ActionLaunchAgent, ActionObserveAgent, ActionCommitChange, ActionAttestTest,
+	} {
 		processed, processErr := orchestrator.ProcessNext(ctx, "worker:integration-replay")
 		if processErr != nil || processed.Action != want {
 			t.Fatalf("process=%+v want=%s err=%v", processed, want, processErr)
@@ -172,7 +174,8 @@ func TestReplacementExecutionGetsDistinctWorkspace(t *testing.T) {
 	ctx := context.Background()
 	clock := &mutableClock{now: time.Date(2026, 7, 21, 9, 30, 0, 0, time.UTC)}
 	repository := newMemoryRepository()
-	agent := &scriptedAgent{now: clock.Now, launchErr: definitelyUnappliedPermanentError{"replace"}}
+	agent := &scriptedAgent{now: clock.Now, launchErr: definitelyUnappliedPermanentError{"replace"},
+		launchErrorHook: func() { clock.Advance(time.Nanosecond) }}
 	orchestrator, _ := newTestOrchestrator(t, repository, clock, agent)
 	orchestrator.workspaceManager = &scriptedWorkspaceManager{}
 	actor, project := testScope(t)
@@ -209,5 +212,5 @@ func TestReplacementExecutionGetsDistinctWorkspace(t *testing.T) {
 func workspaceWritePlan() *PlanSpec {
 	return &PlanSpec{Phases: []PhaseSpec{{Ref: "phase-instance:workspace", Key: "phase:workspace", TemplateRef: "phase-template:workspace"}},
 		WorkItems: []WorkItemSpec{{Key: "writer", Objective: "isolated writer", Phase: "phase:workspace", Role: "role:worker",
-			WriteSet: []string{"internal/workspace"}, OutputContract: goal.OutputContractEvidenceBundle}}}
+			WriteSet: []string{"internal/workspace"}, RequiredTests: requiredTestSpecs("required-test:workspace"), OutputContract: goal.OutputContractEvidenceBundle}}}
 }

@@ -317,8 +317,10 @@ func requireEffectAttemptFrontier(ctx context.Context, transaction *sql.Tx, stat
 		frontier, eventKind = "queued", "execution.queued"
 	case application.ActionCommitChange:
 		frontier, eventKind = "awaiting_commit", "execution.output_ready"
+	case application.ActionAttestTest:
+		frontier, eventKind = "awaiting_attestation", "change.committed"
 	case application.ActionIntegrateChange:
-		frontier, eventKind = "awaiting_integration", "change.committed"
+		frontier, eventKind = "awaiting_integration", "test_attestation.passed"
 	}
 	var bound int
 	err := transaction.QueryRowContext(ctx, `SELECT COUNT(*) FROM executions WHERE ref=? AND state=? AND (?='' OR governance_version=1)
@@ -335,11 +337,13 @@ AND (?='' OR (budget_reservation_ref=? AND effect_intent_ref=?)) AND EXISTS(SELE
 }
 
 func effectAttemptMatchesClaim(attempt application.EffectAttempt, claim application.ActionClaim) bool {
-	return validText(attempt.Ref) && attempt.IntentRef == claim.Action.EffectIntentRef &&
+	wantRef := "effect-attempt:" + claim.Action.Ref + ":" + claim.Token
+	return attempt.Ref == wantRef && validText(attempt.Ref) && attempt.IntentRef == claim.Action.EffectIntentRef &&
 		attempt.IntentDigest == claim.Action.EffectIntent.Digest &&
 		attempt.ApprovalRef == claim.EffectApproval.Ref && attempt.Subject == claim.Action.EffectIntent.Subject &&
 		attempt.ActionRef == claim.Action.Ref && attempt.ActionFence == claim.Fence &&
-		attempt.WorkerRef == claim.WorkerRef && validText(attempt.IdempotencyKey) && !attempt.StartedAt.IsZero()
+		attempt.WorkerRef == claim.WorkerRef &&
+		attempt.IdempotencyKey == claim.Action.EffectIntent.IdempotencyKey && !attempt.StartedAt.IsZero()
 }
 
 func insertEffectAttempt(ctx context.Context, transaction *sql.Tx, attempt application.EffectAttempt) error {

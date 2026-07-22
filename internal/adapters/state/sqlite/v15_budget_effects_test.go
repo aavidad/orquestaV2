@@ -130,9 +130,7 @@ func TestHierarchicalFairnessBoundsProjectAndGoalStarvation(t *testing.T) {
 	secondOwner := testPrincipal(t, "principal:v15-second", "actor:v15-second", identity.PrincipalKindHuman)
 	provisionTestAccess(t, system.repository, secondOwner, secondProject, identity.RoleProjectOwner, system.clock.Now())
 	secondAccess, err := application.NewAccess(secondOwner, secondProject)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	goalProjects := make(map[goal.GoalRef]goal.ProjectRef, 4)
 	firstAction := make(map[goal.GoalRef]string, 4)
 	submit := func(access application.Access, project goal.ProjectRef, ref string) {
@@ -148,9 +146,7 @@ func TestHierarchicalFairnessBoundsProjectAndGoalStarvation(t *testing.T) {
 		result, err := system.orchestrator.Submit(context.Background(), access, application.SubmitRequest{
 			RequestRef: ref, Statement: "fair governed work " + ref, Confirm: true, Plan: plan,
 		})
-		if err != nil {
-			t.Fatal(err)
-		}
+		sqliteTestNoError(t, err)
 		goalRef := result.Record.Goal.Ref()
 		goalProjects[goalRef] = project
 		if err := system.repository.db.QueryRow(`SELECT MIN(ref) FROM outbox WHERE goal_ref=?`,
@@ -248,9 +244,7 @@ WHERE last_error_code='budget.temporarily_unavailable'`).Scan(&deferred, &delive
 	}
 	released := grantedClaims[0]
 	record, err := system.repository.GetGoal(context.Background(), released.Action.GoalRef)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	execution, found := sqliteExecutionByRef(record.Executions, released.Action.ExecutionRef)
 	if !found {
 		t.Fatal("released execution missing")
@@ -259,9 +253,7 @@ WHERE last_error_code='budget.temporarily_unavailable'`).Scan(&deferred, &delive
 	settlement, err := governance.Reconcile(released.BudgetReservation, governance.ResourceUsage{
 		Resources: zero, Known: governance.AllResourceDimensions, Quality: governance.UsageQualityExact,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	settlement.SettledAt = system.clock.Now()
 	execution.BudgetReservationRef, execution.EffectIntentRef, execution.LaunchReceiptRef = "", "", ""
 	if err := system.repository.RequeueAction(context.Background(), application.ActionRequeuedState{
@@ -388,9 +380,7 @@ func TestSQLiteRoundTripsAllCriticalityEffortPairsWithoutTextInference(t *testin
 	}
 	restarted := openSQLiteV15Repository(t, system.path, system.clock.Now)
 	persisted, err := restarted.GetGoal(context.Background(), created.Record.Goal.Ref())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	assertMatrix(persisted)
 }
 
@@ -473,9 +463,7 @@ func TestV15RestartReleasesPreAttemptReservationWhenApprovalExpires(t *testing.T
 			}},
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	intent := created.Record.EffectIntents[0]
 	approved, err := system.orchestrator.DecideEffect(context.Background(), system.access, application.DecideEffectRequest{
 		RequestRef: "approval:v15-expiring", GoalRef: created.Record.Goal.Ref(), IntentRef: intent.Ref,
@@ -523,9 +511,7 @@ func TestV15RestartReleasesRevokedPreAttemptButRetainsPostAttemptReservation(t *
 				t.Fatalf("revoked authority claim found=%v err=%v", found, err)
 			}
 			record, err := system.repository.GetGoal(context.Background(), created.Record.Goal.Ref())
-			if err != nil {
-				t.Fatal(err)
-			}
+			sqliteTestNoError(t, err)
 			if !withAttempt {
 				assertSQLiteV15StalePreAttemptReleased(t, system, created.Record.Goal.Ref(), claim)
 				return
@@ -633,7 +619,8 @@ func TestV15DefinitelyUnappliedRequeueRestartsWithFreshReservation(t *testing.T)
 	zero := governance.ResourceVector{Currency: settlement.Reserved.Currency}
 	if settlement.Charged != zero || settlement.Released != settlement.Reserved ||
 		settlement.Observed.Known != governance.AllResourceDimensions ||
-		settlement.Observed.Quality != governance.UsageQualityExact {
+		settlement.Observed.Quality != governance.UsageQualityExact ||
+		settlement.CausalAttemptRef != requeued.EffectAttempts[0].Ref {
 		t.Fatalf("requeue settlement not exact release: %+v", settlement)
 	}
 	if _, _, err := validateRecoveryDatabase(context.Background(), system.repository.db); err != nil {
@@ -670,9 +657,7 @@ func TestV15CancelClaimRaceSettlesUncalledReservation(t *testing.T) {
 	created := system.submit(t, "request:v15-cancel-claimed")
 	claim := claimSQLiteV15(t, system, "claim:v15-cancel-claimed")
 	record, err := system.repository.GetGoal(context.Background(), created.Record.Goal.Ref())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	result, err := system.orchestrator.Control(context.Background(), system.access, application.ControlRequest{
 		RequestRef: "request:v15-cancel-control", Operation: application.ControlCancel,
 		Target: application.ControlTargetGoal, GoalRef: record.Goal.Ref(),
@@ -775,9 +760,7 @@ func TestV15MigrationParksLegacyEffectsWithoutRetroactiveApproval(t *testing.T) 
 	}
 	database := openRawV10TestDatabase(t, path)
 	migrations, err := loadMigrations()
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	if err := applyRecoveryMigrationPrefix(ctx, database, migrations[:recoverySchemaV14]); err != nil {
 		t.Fatal(err)
 	}
@@ -843,9 +826,7 @@ func TestV15MigratedV14ParentSuccessParksReadyChildWithoutRetroactiveAuthority(t
 	}
 	database := openRawV10TestDatabase(t, path)
 	migrations, err := loadMigrations()
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	if err := applyRecoveryMigrationPrefix(ctx, database, migrations[:recoverySchemaV14]); err != nil {
 		t.Fatal(err)
 	}
@@ -855,9 +836,7 @@ func TestV15MigratedV14ParentSuccessParksReadyChildWithoutRetroactiveAuthority(t
 	owner := testPrincipal(t, "principal:v15-legacy-multi", "actor:v15-legacy-multi", identity.PrincipalKindHuman)
 	provisionTestAccess(t, legacy, owner, project, identity.RoleProjectOwner, clock.Now())
 	access, err := application.NewAccess(owner, project)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	policy := sqliteTestBudgetPolicy(clock.Now())
 	external := newSQLiteV15External(clock)
 	ids := &sqliteV15IDs{}
@@ -887,9 +866,7 @@ func TestV15MigratedV14ParentSuccessParksReadyChildWithoutRetroactiveAuthority(t
 		legacyGoalRef = mustRef(t, value, goal.NewGoalRef)
 	}
 	record, err := legacy.GetGoal(ctx, legacyGoalRef)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	parent := record.Goal.WorkItems()[0]
 	execution := record.Executions[0]
 	claim := application.ActionClaim{
@@ -916,9 +893,7 @@ WHERE ref=?`, claim.Token, claim.WorkerRef, requiredTime(claim.LeaseUntil), clai
 	started, err := record.Goal.StartWorkItem(
 		record.Goal.Revision(), parent.Revision(), parent.Ref(), claim.Action.ExecutionRef, clock.Now(),
 	)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	execution.State = application.ExecutionDispatching
 	if err := legacy.RecordLaunchPrepared(ctx, application.LaunchPreparedState{
 		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), Goal: started, Execution: execution,
@@ -950,9 +925,7 @@ WHERE ref=?`, claim.Token, claim.WorkerRef, requiredTime(claim.LeaseUntil), clai
 		t.Fatalf("persist V14 running parent: %v cause=%v", err, errors.Unwrap(err))
 	}
 	running, err := legacy.GetGoal(ctx, legacyGoalRef)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	controlResult, err := orchestrator.Control(ctx, access, application.ControlRequest{
 		RequestRef: "control:v15-legacy-running-stop", Operation: application.ControlStop,
 		Target: application.ControlTargetExecution, GoalRef: running.Goal.Ref(),
@@ -982,9 +955,7 @@ WHERE ref=?`, claim.Token, claim.WorkerRef, requiredTime(claim.LeaseUntil), clai
 		t.Fatalf("migrated parent completion result=%+v err=%v", result, err)
 	}
 	after, err := migrated.GetGoal(ctx, legacyGoalRef)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	items := after.Goal.WorkItems()
 	if after.Goal.State() != goal.GoalStateRunning || len(items) != 2 ||
 		items[0].State() != goal.WorkItemStateSucceeded || items[1].State() != goal.WorkItemStatePending ||
@@ -1071,9 +1042,7 @@ func TestV15BackupRestorePreservesBudgetsAndEffects(t *testing.T) {
 	restored, err := Open(context.Background(), Options{
 		Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 4, Now: system.clock.Now,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	t.Cleanup(func() { _ = restored.Close() })
 	after, err := restored.GetGoal(context.Background(), created.Record.Goal.Ref())
 	if err != nil || !reflect.DeepEqual(before.BudgetEnvelopes, after.BudgetEnvelopes) ||

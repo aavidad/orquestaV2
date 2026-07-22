@@ -86,11 +86,11 @@ func RestoreAppSpec(snapshot AppSpecSnapshot) (AppSpec, error) {
 	return spec, nil
 }
 
-// RestoreGoal accepts the current complete schema and the immediately previous
-// schema whose WorkItems predate immutable governance metadata. Every emitted
-// snapshot uses the current schema, so compatibility is one-way and bounded.
+// RestoreGoal accepts the current complete schema and the two bounded legacy
+// schemas preceding required tests and immutable governance metadata.
 func RestoreGoal(snapshot GoalSnapshot) (Goal, error) {
 	if snapshot.SchemaVersion != GoalSnapshotSchemaVersion &&
+		snapshot.SchemaVersion != requiredTestsCompatibleSnapshotSchemaVersion &&
 		snapshot.SchemaVersion != governanceCompatibleSnapshotSchemaVersion {
 		return Goal{}, domainError(ErrorSnapshotInvalid, "schema_version")
 	}
@@ -205,8 +205,9 @@ func restoreWorkItem(snapshot WorkItemSnapshot, schemaVersion uint32) (WorkItem,
 	}
 	dependencies, dependenciesErr := restoreWorkItemRefs(snapshot.DependencyRefs)
 	writeSet, writeSetErr := restoreWriteSet(snapshot.WriteSet)
+	requiredTests, requiredTestsErr := restoreRequiredTests(snapshot.RequiredTests, schemaVersion)
 	parent, parentErr := restoreOptionalWorkItemRef(snapshot.ParentRef)
-	if err := firstError(dependenciesErr, writeSetErr, parentErr); err != nil {
+	if err := firstError(dependenciesErr, writeSetErr, requiredTestsErr, parentErr); err != nil {
 		return WorkItem{}, err
 	}
 	if snapshot.HandoffRequired == nil {
@@ -238,7 +239,7 @@ func restoreWorkItem(snapshot WorkItemSnapshot, schemaVersion uint32) (WorkItem,
 		ref: ref, goal: goalRef, actor: actor, project: project,
 		objective: snapshot.Objective, phase: phase, role: role,
 		parent: parent, handoffRequired: handoffRequired,
-		dependencies: dependencies, writeSet: writeSet,
+		dependencies: dependencies, writeSet: writeSet, requiredTests: requiredTests,
 		skillRefs: skillRefs, toolRefs: toolRefs, capabilityRefs: capabilityRefs,
 		outputContract: outputContract, skipReason: snapshot.SkipReason,
 		budgetDemand: budgetDemand, securityCriticality: criticality, reasoningEffort: effort,
@@ -252,13 +253,42 @@ func restoreWorkItem(snapshot WorkItemSnapshot, schemaVersion uint32) (WorkItem,
 		finishedAt:      canonicalOptionalTime(snapshot.FinishedAt),
 		execution:       execution, artifacts: artifacts, attestations: attestations,
 	}
-	if err := validateWorkItemPlanMetadata(restored); err != nil {
+	if err := validateWorkItemPlanMetadataForRestore(restored, true); err != nil {
 		return WorkItem{}, err
 	}
 	if err := validateRestoredWorkItem(restored); err != nil {
 		return WorkItem{}, err
 	}
 	return restored, nil
+}
+
+func restoreRequiredTests(snapshots []RequiredTestSpecSnapshot, schemaVersion uint32) ([]RequiredTestSpec, error) {
+	if schemaVersion != GoalSnapshotSchemaVersion {
+		if len(snapshots) != 0 {
+			return nil, domainError(ErrorSnapshotInvalid, "required_tests_schema")
+		}
+		return nil, nil
+	}
+	specs := make([]RequiredTestSpec, 0, len(snapshots))
+	for _, snapshot := range snapshots {
+		ref, refErr := NewRequiredTestRef(snapshot.Ref)
+		toolRef, toolErr := NewToolRef(snapshot.ToolRef)
+		if err := firstError(refErr, toolErr); err != nil {
+			return nil, err
+		}
+		spec, err := NewRequiredTestSpec(RequiredTestSpecInput{
+			Ref: ref, ToolRef: toolRef, Arguments: snapshot.Arguments,
+			WorkingDirectory: snapshot.WorkingDirectory,
+		})
+		if err != nil {
+			return nil, err
+		}
+		specs = append(specs, spec)
+	}
+	if err := validateRequiredTests(specs); err != nil {
+		return nil, err
+	}
+	return specs, nil
 }
 
 func firstError(errs ...error) error {

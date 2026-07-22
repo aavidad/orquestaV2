@@ -31,8 +31,9 @@ func (orchestrator *Orchestrator) ProcessNext(ctx context.Context, workerRef str
 	}
 	claim, found, err := orchestrator.state.ClaimNextAction(ctx, ClaimRequest{
 		WorkerRef: workerRef, Token: token, LeaseDuration: orchestrator.claimLease,
-		Capabilities: orchestrator.agentCapabilities,
-		BudgetPolicy: orchestrator.budgetPolicy,
+		AttestTestLeaseDuration: orchestrator.attestTestClaimLease,
+		Capabilities:            orchestrator.agentCapabilities,
+		BudgetPolicy:            orchestrator.budgetPolicy,
 	})
 	if err != nil || !found {
 		return ProcessResult{}, err
@@ -49,6 +50,8 @@ func (orchestrator *Orchestrator) ProcessNext(ctx context.Context, workerRef str
 		err = orchestrator.processStop(ctx, claim)
 	case ActionCommitChange:
 		err = orchestrator.processCommitChange(ctx, claim)
+	case ActionAttestTest:
+		err = orchestrator.processAttestTest(ctx, claim)
 	case ActionIntegrateChange:
 		err = orchestrator.processIntegrateChange(ctx, claim)
 	default:
@@ -76,7 +79,7 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 	}
 	latest, latestItem, latestExecution, err := orchestrator.reloadPreparedLaunch(ctx, claim)
 	if err != nil {
-		return err
+		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	}
 	record, item, execution = latest, latestItem, latestExecution
 	transitionAt := lifecycleTime(orchestrator.clock.Now(), record.Goal, item)
@@ -90,7 +93,7 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 		claim, attempt, receipt.ReceiptRef, EffectStatusAccepted, unknownUsage(), transitionAt,
 	)
 	if err != nil {
-		return err
+		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	}
 	execution.LaunchReceiptRef = externalReceipt.Ref
 	next := ActionRecord{
@@ -99,7 +102,7 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 		PlanGeneration: execution.PlanGeneration, WorkItemGeneration: item.Revision(),
 		AvailableAt: orchestrator.clock.Now(),
 	}
-	return orchestrator.state.RecordLaunchAccepted(ctx, LaunchAcceptedState{
+	err = orchestrator.state.RecordLaunchAccepted(ctx, LaunchAcceptedState{
 		Claim: claim, Execution: execution, NextAction: next, EffectReceipt: externalReceipt,
 		Event: EventRecord{
 			Ref: "event:execution-accepted:" + execution.Ref.String(), Kind: "execution.accepted",
@@ -108,6 +111,10 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 		},
 		OperationAt: transitionAt,
 	})
+	if err != nil {
+		return orchestrator.quarantineUnknownApplied(ctx, claim)
+	}
+	return nil
 }
 
 func (orchestrator *Orchestrator) loadClaimedLaunch(
@@ -119,6 +126,10 @@ func (orchestrator *Orchestrator) loadClaimedLaunch(
 		if IsStateError(err, StateNotFound) {
 			err = orchestrator.quarantineUnapplied(ctx, claim, "application.action_goal_not_found")
 		}
+		return GoalRecord{}, goal.WorkItem{}, ExecutionRecord{}, goal.PhaseInstance{}, false, err
+	}
+	if priorEffectAttemptBlocksDispatch(record, claim.Action) {
+		err = orchestrator.quarantineUnknownApplied(ctx, claim)
 		return GoalRecord{}, goal.WorkItem{}, ExecutionRecord{}, goal.PhaseInstance{}, false, err
 	}
 	if err := validateClaimedRecord(claim, record, ActionLaunchAgent); err != nil {
@@ -136,13 +147,13 @@ func (orchestrator *Orchestrator) loadClaimedLaunch(
 		return GoalRecord{}, goal.WorkItem{}, ExecutionRecord{}, goal.PhaseInstance{}, false, err
 	}
 	if err := orchestrator.validateCurrentAutomaticAuthority(ctx, claim); err != nil {
-		err = orchestrator.requeueUnappliedEffect(ctx, claim, execution, err.Error())
+		err = orchestrator.requeueUnappliedEffect(ctx, claim, execution, "", err.Error())
 		return GoalRecord{}, goal.WorkItem{}, ExecutionRecord{}, goal.PhaseInstance{}, false, err
 	}
 	execution.BudgetReservationRef = claim.BudgetReservation.Ref
 	execution.EffectIntentRef = claim.Action.EffectIntent.Ref
 	if execution.State == ExecutionQueued && launchBlockedByLifecycleControl(record.Goal, item) {
-		err = orchestrator.requeueUnappliedEffect(ctx, claim, execution, "application.launch_control_pending")
+		err = orchestrator.requeueUnappliedEffect(ctx, claim, execution, "", "application.launch_control_pending")
 		return GoalRecord{}, goal.WorkItem{}, ExecutionRecord{}, goal.PhaseInstance{}, false, err
 	}
 	phase, phaseFound := phaseForWorkItem(record.Goal, item)
@@ -172,7 +183,7 @@ func (orchestrator *Orchestrator) prepareLaunchDispatch(
 			record.Goal.Revision(), item.Revision(), item.Ref(), execution.Ref, transitionAt,
 		)
 		if goal.ErrorCodeOf(startErr) == goal.ErrorWorkItemNotReady {
-			err := orchestrator.requeueUnappliedEffect(ctx, claim, execution, "application.work_item_not_ready")
+			err := orchestrator.requeueUnappliedEffect(ctx, claim, execution, "", "application.work_item_not_ready")
 			return GoalRecord{}, goal.WorkItem{}, ExecutionRecord{}, false, err
 		}
 		if startErr != nil {
@@ -199,7 +210,7 @@ func (orchestrator *Orchestrator) prepareLaunchDispatch(
 	})
 	if IsStateError(err, StateConflict) {
 		err = orchestrator.requeueUnappliedEffect(
-			ctx, claim, executionWithState(execution, ExecutionQueued), "state.conflict",
+			ctx, claim, executionWithState(execution, ExecutionQueued), "", "state.conflict",
 		)
 		return GoalRecord{}, goal.WorkItem{}, ExecutionRecord{}, false, err
 	}
@@ -240,47 +251,47 @@ func (orchestrator *Orchestrator) dispatchLaunchEffect(
 	execution ExecutionRecord,
 	request ports.AgentLaunchRequest,
 ) (EffectAttempt, ports.AgentLaunchReceipt, bool, error) {
-	attempt, err := orchestrator.beginEffectAttempt(ctx, claim, orchestrator.clock.Now())
+	attempt, err := orchestrator.beginNewEffectAttempt(ctx, claim, orchestrator.clock.Now())
 	if err != nil {
 		return EffectAttempt{}, ports.AgentLaunchReceipt{}, false, err
 	}
 	receipt, launchErr := orchestrator.launcher.Launch(ctx, request)
 	if launchErr != nil {
 		var handled error
-		if ctx.Err() != nil {
-			handled = orchestrator.requeue(ctx, claim, execution, ctx.Err().Error())
-		} else if isDefinitelyNotAppliedAgentError(launchErr) {
-			latest, latestItem, latestExecution, err := orchestrator.reloadPreparedLaunch(ctx, claim)
-			if err != nil {
-				handled = err
-			} else if latestItem.CancelRequested() {
+		if isDefinitelyNotAppliedAgentError(launchErr) {
+			latest, latestItem, latestExecution, reloadErr := orchestrator.reloadPreparedLaunch(ctx, claim)
+			switch {
+			case reloadErr != nil:
+				handled = reloadErr
+			case latestItem.CancelRequested():
 				handled = orchestrator.settleCanceledLaunchRejection(
-					ctx, claim, latest, latestItem, latestExecution, "agent.launch_failed",
+					ctx, claim, latest, latestItem, latestExecution, attempt.Ref, "agent.launch_failed",
 				)
-			} else if isTemporaryAgentError(launchErr) {
+			case isTemporaryAgentError(launchErr):
 				handled = orchestrator.requeueUnappliedEffect(
-					ctx, claim, latestExecution, "agent.temporarily_unavailable",
+					ctx, claim, latestExecution, attempt.Ref, "agent.temporarily_unavailable",
 				)
-			} else {
+			default:
 				handled = orchestrator.replaceExecutionAttempt(
 					ctx, claim, latest, "agent.launch_failed", orchestrator.clock.Now(), unknownUsage(), 0, true,
 				)
 			}
-		} else if isTemporaryAgentError(launchErr) {
-			handled = orchestrator.requeue(ctx, claim, execution, "agent.temporarily_unavailable")
+			if handled != nil {
+				handled = orchestrator.quarantineUnknownApplied(ctx, claim)
+			}
 		} else {
-			handled = orchestrator.requeue(ctx, claim, execution, "agent.launch_outcome_unknown")
+			handled = orchestrator.quarantineUnknownApplied(ctx, claim)
 		}
 		return EffectAttempt{}, ports.AgentLaunchReceipt{}, false, handled
 	}
 	if err := ports.ValidateAgentLaunchReceipt(request, receipt); err != nil {
-		err = orchestrator.requeue(ctx, claim, execution, ports.AgentContractErrorCode(err))
+		err = orchestrator.quarantineUnknownApplied(ctx, claim)
 		return EffectAttempt{}, ports.AgentLaunchReceipt{}, false, err
 	}
 	if receipt.ProviderRef != orchestrator.agentCapabilities.ProviderRef ||
 		receipt.ModelRef != orchestrator.agentCapabilities.ModelRef ||
 		receipt.AgentRef != orchestrator.agentCapabilities.AgentRef {
-		err = orchestrator.requeue(ctx, claim, execution, "agent.receipt_identity_mismatch")
+		err = orchestrator.quarantineUnknownApplied(ctx, claim)
 		return EffectAttempt{}, ports.AgentLaunchReceipt{}, false, err
 	}
 	return attempt, receipt, true, nil
@@ -439,15 +450,10 @@ func (orchestrator *Orchestrator) succeedGoal(ctx context.Context, claim ActionC
 	if err != nil {
 		return err
 	}
-	artifact := ArtifactRecord{
-		Stored: stored, GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(),
-		CreatedAt: transitionAt,
-	}
-	attestation := AttestationRecord{
-		Ref: attestationRef, GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(),
-		ExecutionRef: execution.Ref, ArtifactRef: stored.Ref,
-		Policy: outputAttestationPolicy, AcceptedAt: transitionAt,
-	}
+	artifact := artifactProvenanceRecord(stored, aggregate, item, execution, transitionAt)
+	attestation := artifactProvenanceAttestation(
+		attestationRef, stored.Ref, aggregate, item, execution, transitionAt,
+	)
 	existing := replaceExecution(record.Executions, execution)
 	newExecutions, newActions, scheduledEvents, err := orchestrator.scheduleHistoricalReady(
 		ctx, record, aggregate, existing, transitionAt,
@@ -814,10 +820,17 @@ func (orchestrator *Orchestrator) requeueUnappliedEffect(
 	ctx context.Context,
 	claim ActionClaim,
 	execution ExecutionRecord,
+	causalAttemptRef string,
 	code string,
 ) error {
 	now := orchestrator.clock.Now()
-	settlement, err := releaseSettlement(claim, now)
+	var settlement governance.BudgetSettlement
+	var err error
+	if causalAttemptRef == "" {
+		settlement, err = releaseSettlement(claim, now)
+	} else {
+		settlement, err = releaseSettlementForAttempt(claim, causalAttemptRef, now)
+	}
 	if err != nil {
 		return err
 	}
@@ -841,6 +854,24 @@ func (orchestrator *Orchestrator) quarantine(ctx context.Context, claim ActionCl
 
 func (orchestrator *Orchestrator) quarantineUnapplied(ctx context.Context, claim ActionClaim, code string) error {
 	return orchestrator.quarantineEffect(ctx, claim, code, true)
+}
+
+func (orchestrator *Orchestrator) quarantineUnknownApplied(ctx context.Context, claim ActionClaim) error {
+	now := orchestrator.clock.Now()
+	err := orchestrator.state.QuarantineAction(ctx, ActionQuarantinedState{
+		Claim: claim, ErrorCode: effectUnknownAppliedCode, OperationAt: now,
+		BudgetSettlement: nil, ClearEffectBinding: false,
+		Event: EventRecord{
+			Ref:  fmt.Sprintf("event:action-quarantined:%s:%d", claim.Action.Ref, claim.DeliveryAttempt),
+			Kind: "action.quarantined", GoalRef: claim.Action.GoalRef,
+			WorkItemRef: claim.Action.WorkItemRef, ExecutionRef: claim.Action.ExecutionRef,
+			OccurredAt: now,
+		},
+	})
+	if err != nil {
+		return err
+	}
+	return errors.New(effectUnknownAppliedCode)
 }
 
 func (orchestrator *Orchestrator) quarantineEffect(

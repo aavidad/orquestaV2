@@ -330,6 +330,11 @@ func cloneWorkItemSnapshot(snapshot domain.WorkItemSnapshot) domain.WorkItemSnap
 	}
 	cloned.DependencyRefs = append([]string(nil), snapshot.DependencyRefs...)
 	cloned.WriteSet = append([]string(nil), snapshot.WriteSet...)
+	cloned.RequiredTests = make([]domain.RequiredTestSpecSnapshot, len(snapshot.RequiredTests))
+	for index, spec := range snapshot.RequiredTests {
+		cloned.RequiredTests[index] = spec
+		cloned.RequiredTests[index].Arguments = append([]string(nil), spec.Arguments...)
+	}
 	cloned.SkillRefs = append([]string(nil), snapshot.SkillRefs...)
 	cloned.ToolRefs = append([]string(nil), snapshot.ToolRefs...)
 	cloned.CapabilityRefs = append([]string(nil), snapshot.CapabilityRefs...)

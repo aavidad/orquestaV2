@@ -79,11 +79,11 @@ func validateStoredSupersededControl(
 		!controlIdentityMatches(*state.SupersededControl, stored) {
 		return conflict(errors.New("sqlite.control_supersession_conflict"))
 	}
-	active, err := activeSupersededStopAction(ctx, transaction, stored)
+	status, err := supersededStopActionStatus(ctx, transaction, stored)
 	if err != nil {
 		return err
 	}
-	if !active {
+	if status != "active" && status != "quarantined" {
 		return conflict(errors.New("sqlite.control_supersession_action_inactive"))
 	}
 	return nil

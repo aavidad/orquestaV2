@@ -75,18 +75,14 @@ WHERE type = 'trigger' AND name = 'executions_identity_immutable'`).Scan(&execut
 		t.Fatal(err)
 	}
 	record, err := readRecoveryV09GoalRecord(context.Background(), raw, "goal:v10-v09")
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	original := record.Goal.AppSpec()
 	reviewer := mustRef(t, "actor:historical-reviewer", goal.NewActorRef)
 	reviewed, err := goal.NewInitialAppSpec(goal.AppSpecInput{
 		Ref: original.Ref(), Intent: original.Intent(), Objective: original.Objective(),
 		Reason: original.Reason(), ConfirmedBy: reviewer, ConfirmedAt: original.ConfirmedAt(),
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	mustV10Exec(t, raw, `DROP TRIGGER app_specs_immutable_update`)
 	mustV10Exec(t, raw, `DROP TRIGGER executions_identity_immutable`)
 	mustV10Exec(t, raw, `UPDATE app_specs SET confirmed_by = ?, hash = ?
@@ -101,9 +97,7 @@ WHERE ref = (SELECT app_spec_ref FROM goals WHERE ref = 'goal:v10-v09')`, review
 	repository, err := Open(context.Background(), Options{
 		Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 4,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	t.Cleanup(func() { _ = repository.Close() })
 	var requestedBy string
 	if err := repository.db.QueryRow(`SELECT requested_by_ref FROM goals WHERE ref = 'goal:v10-v09'`).Scan(&requestedBy); err != nil {
@@ -285,17 +279,13 @@ func seedV09DatabaseForV10(t *testing.T, path string) {
 	defer database.Close()
 	database.SetMaxOpenConns(1)
 	connection, err := database.Conn(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	defer connection.Close()
 	if _, err := connection.ExecContext(context.Background(), `PRAGMA foreign_keys = OFF`); err != nil {
 		t.Fatal(err)
 	}
 	transaction, err := connection.BeginTx(context.Background(), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	defer transaction.Rollback()
 	migrations, err := loadMigrations()
 	if err != nil || len(migrations) < 6 {
@@ -374,7 +364,7 @@ WHERE g.ref = 'goal:v10-v09'
 	if err := repository.db.QueryRow(`SELECT COUNT(*) FROM pragma_foreign_key_check`).Scan(&violations); err != nil {
 		t.Fatal(err)
 	}
-	if version != recoverySchemaV16 || receipts != recoverySchemaV16 || principals != 1 || hierarchyRows != 0 ||
+	if version != recoverySchemaV17 || receipts != recoverySchemaV17 || principals != 1 || hierarchyRows != 0 ||
 		memberships != 0 || requestedBy != 1 || violations != 0 {
 		t.Fatalf("V10 migration state invalid: version=%d receipts=%d principals=%d hierarchy=%d memberships=%d requested_by=%d fk=%d",
 			version, receipts, principals, hierarchyRows, memberships, requestedBy, violations)
@@ -452,9 +442,7 @@ FROM action_consumption_receipts`,
 func openRawV10TestDatabase(t *testing.T, path string) *sql.DB {
 	t.Helper()
 	database, err := sql.Open(driverName, buildDSN(path, testBusyTimeout.Milliseconds()))
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	return database
 }
 

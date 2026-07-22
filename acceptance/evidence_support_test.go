@@ -11,12 +11,78 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
 )
+
+func evidenceAssertSimplicityBudget(
+	t *testing.T, version string, numstat []byte, classify func(string) string,
+	limits map[string]int, productMaximum int,
+) map[string]int {
+	t.Helper()
+	net := map[string]int{"core": 0, "adapters": 0, "migration": 0, "tests": 0}
+	for _, row := range strings.Split(strings.TrimSpace(string(numstat)), "\n") {
+		if row == "" {
+			continue
+		}
+		fields := strings.SplitN(row, "\t", 3)
+		if len(fields) != 3 || fields[0] == "-" || fields[1] == "-" {
+			t.Fatalf("%s simplicity budget cannot classify %q", version, row)
+		}
+		added, addErr := strconv.Atoi(fields[0])
+		deleted, deleteErr := strconv.Atoi(fields[1])
+		class := classify(fields[2])
+		if addErr != nil || deleteErr != nil || class == "" {
+			t.Fatalf("%s invalid or unclassified numstat %q", version, row)
+		}
+		if class != "metadata" {
+			net[class] += added - deleted
+		}
+	}
+	for class, maximum := range limits {
+		if net[class] > maximum {
+			t.Errorf("%s simplicity budget %s net LOC=%d, max=%d", version, class, net[class], maximum)
+		}
+	}
+	if product := net["core"] + net["adapters"] + net["migration"]; product > productMaximum {
+		t.Errorf("%s production net LOC=%d, max=%d", version, product, productMaximum)
+	}
+	return net
+}
+
+func evidenceAssertCandidateDelta(
+	t *testing.T, version, repositoryRoot, baseOID, sealedOID string, candidates []string,
+) []byte {
+	t.Helper()
+	if sealedOID == "" {
+		t.Fatalf("%s_GATE_P_PENDING: product_delta_sealed_git_commit_oid is empty", version)
+	}
+	if err := evidenceValidateSealedCommit(repositoryRoot, baseOID, sealedOID); err != nil {
+		t.Fatal(err)
+	}
+	output, err := evidenceGit(repositoryRoot, "diff", "--name-only", baseOID, sealedOID, "--")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var changed []string
+	if value := strings.TrimSpace(string(output)); value != "" {
+		changed = strings.Split(value, "\n")
+	}
+	sort.Strings(changed)
+	if !reflect.DeepEqual(changed, candidates) {
+		t.Fatalf("%s candidate subjects differ from sealed product delta:\nchanged=%v\nfixture=%v", version, changed, candidates)
+	}
+	numstat, err := evidenceGit(repositoryRoot, "diff", "--numstat", baseOID, sealedOID, "--")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return numstat
+}
 
 const (
 	evidenceCandidateDigestAlgorithmV3 = "sha256:length-framed-git-blob-set:v1"

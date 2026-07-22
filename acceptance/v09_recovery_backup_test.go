@@ -296,6 +296,9 @@ type v09StateFixture struct {
 
 func v09CreateStateFixture(t *testing.T, fixture v09Fixture, root string) v09StateFixture {
 	t.Helper()
+	if err := os.Chmod(root, 0o700); err != nil {
+		t.Fatalf("secure V09 fixture root: %v", err)
+	}
 	v06 := evidenceDecodeStrictJSON[v06Fixture](t, filepath.Join(evidenceRepositoryRoot(t), "acceptance/fixtures/v06_atomic_state_outbox.json"))
 	clock := v06ClockFromFixture(t, v06)
 	databasePath := filepath.Join(root, "state", "orquesta.sqlite")

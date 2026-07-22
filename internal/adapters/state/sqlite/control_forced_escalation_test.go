@@ -28,9 +28,7 @@ func TestSQLiteForcedStopSupersessionIsAtomicConcurrentAndRestartSafe(t *testing
 			AgentCapabilities: sqliteMultiControlCapabilities(), ClaimLease: time.Minute,
 			DirectorLeaseDuration: time.Minute, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 		})
-		if err != nil {
-			t.Fatal(err)
-		}
+		sqliteTestNoError(t, err)
 		return orchestrator
 	}
 	orchestrator := newOrchestrator(repository, repository)
@@ -40,16 +38,12 @@ func TestSQLiteForcedStopSupersessionIsAtomicConcurrentAndRestartSafe(t *testing
 	submitted, err := orchestrator.Submit(ctx, access, application.SubmitRequest{
 		RequestRef: "request:sqlite-forced-escalation", Statement: "escalate one pending cooperative stop", Confirm: true,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	if result, processErr := orchestrator.ProcessNext(ctx, "worker:sqlite-escalation-launch"); processErr != nil || !result.Processed || result.Action != application.ActionLaunchAgent {
 		t.Fatalf("launch: result=%+v err=%v", result, processErr)
 	}
 	running, err := repository.GetGoal(ctx, submitted.Record.Goal.Ref())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	item, execution := running.Goal.WorkItems()[0], running.Executions[0]
 	cooperative := sqliteExactStopRequest(
 		running, item, execution, "control:sqlite-cooperative-owner", ports.AgentStopCooperative,
@@ -58,14 +52,8 @@ func TestSQLiteForcedStopSupersessionIsAtomicConcurrentAndRestartSafe(t *testing
 	if err != nil || first.Control.Status != application.ControlRequested {
 		t.Fatalf("cooperative request: result=%+v err=%v", first, err)
 	}
-	if result, processErr := orchestrator.ProcessNext(ctx, "worker:sqlite-cooperative-pending"); processErr != nil || !result.Processed || result.Action != application.ActionStopAgent {
-		t.Fatalf("cooperative pending: result=%+v err=%v", result, processErr)
-	}
-
 	current, err := repository.GetGoal(ctx, running.Goal.Ref())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	item, _ = current.Goal.WorkItem(item.Ref())
 	forced := sqliteExactStopRequest(
 		current, item, execution, "control:sqlite-forced-owner", ports.AgentStopForced,
@@ -153,23 +141,19 @@ WHERE action_ref = ? AND error_code = 'application.action_retired' AND effect_re
 	restarted, err := Open(ctx, Options{
 		Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 4, Now: clock.Now,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	t.Cleanup(func() { _ = restarted.Close() })
 	restartedOrchestrator := newOrchestrator(restarted, restarted)
 	if result, processErr := restartedOrchestrator.ProcessNext(ctx, "worker:sqlite-forced-after-restart"); processErr != nil || !result.Processed || result.Action != application.ActionStopAgent {
 		t.Fatalf("forced after restart: result=%+v err=%v", result, processErr)
 	}
 	settled, err := restarted.GetGoal(ctx, running.Goal.Ref())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	old, next = sqliteControlsByRequest(t, settled, cooperative.RequestRef, forced.RequestRef)
 	stopped, _ := sqliteExecutionByRef(settled.Executions, execution.Ref)
 	requests, physical := agent.snapshot()
 	if old.Status != application.ControlSuperseded || next.Status != application.ControlConfirmed ||
-		stopped.State != application.ExecutionStopped || len(requests) != 2 || physical != 1 {
+		stopped.State != application.ExecutionStopped || len(requests) != 1 || physical != 1 {
 		t.Fatalf("settled old=%s next=%s execution=%s requests=%d physical=%d",
 			old.Status, next.Status, stopped.State, len(requests), physical)
 	}
@@ -193,9 +177,7 @@ func TestSQLiteForcedStopRejectsQuarantinedCooperativeOwnerWithoutPartialWrite(t
 		AgentCapabilities: sqliteMultiControlCapabilities(), ClaimLease: time.Minute,
 		DirectorLeaseDuration: time.Minute, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	actor, _ := goal.NewActorRef("actor:sqlite-inactive-supersession")
 	project, _ := goal.NewProjectRef("project:sqlite-inactive-supersession")
 	access := newRestartAccess(t, repository, actor, project, clock.Now())
@@ -203,16 +185,12 @@ func TestSQLiteForcedStopRejectsQuarantinedCooperativeOwnerWithoutPartialWrite(t
 		RequestRef: "request:sqlite-inactive-supersession",
 		Statement:  "reject escalation after cooperative action is quarantined", Confirm: true,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	if result, processErr := orchestrator.ProcessNext(ctx, "worker:sqlite-inactive-launch"); processErr != nil || !result.Processed || result.Action != application.ActionLaunchAgent {
 		t.Fatalf("launch: result=%+v err=%v", result, processErr)
 	}
 	running, err := repository.GetGoal(ctx, submitted.Record.Goal.Ref())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	item, execution := running.Goal.WorkItems()[0], running.Executions[0]
 	cooperative := sqliteExactStopRequest(
 		running, item, execution, "control:sqlite-inactive-cooperative", ports.AgentStopCooperative,
@@ -242,9 +220,7 @@ func TestSQLiteForcedStopRejectsQuarantinedCooperativeOwnerWithoutPartialWrite(t
 	}
 
 	current, err := repository.GetGoal(ctx, running.Goal.Ref())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	item, _ = current.Goal.WorkItem(item.Ref())
 	forced := sqliteExactStopRequest(
 		current, item, execution, "control:sqlite-inactive-forced", ports.AgentStopForced,

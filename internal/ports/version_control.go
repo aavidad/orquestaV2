@@ -65,6 +65,16 @@ type CommitResult struct {
 	CommittedAt     time.Time
 }
 
+// SnapshotVerificationRequest asks the version-control adapter to prove the
+// exact immutable Git-object subject. TestSubject carries logical identities
+// only; a mutable worktree is never verification authority.
+type SnapshotVerificationRequest struct {
+	Subject       TestSubject
+	SubjectDigest string
+	ChangedPaths  []string
+	WriteSet      []string
+}
+
 type IntegrationPreviewRequest struct {
 	ChangeSetRef   ChangeSetRef
 	RepositoryRef  identity.RepositoryRef
@@ -176,6 +186,21 @@ func ValidateCommitResult(request CommitRequest, result CommitResult) error {
 	}
 	if result.ChangeSetRef != request.ChangeSetRef || result.WorkspaceRef != request.WorkspaceRef || result.RepositoryRef != request.RepositoryRef || result.ExecutionRef != request.ExecutionRef || result.BaseOID != request.BaseOID || result.ObjectFormat != request.ObjectFormat || result.WriteSetDigest != request.WriteSetDigest || result.ParentChangeRef != request.ParentChangeRef || !validGitOID(result.ParentOID, result.ObjectFormat) || !validGitOID(result.HeadOID, result.ObjectFormat) || !validGitOID(result.TreeOID, result.ObjectFormat) || !validWorkspaceDigest(result.DiffDigest) || !validWorkspaceWriteSet(result.ChangedPaths) || !withinWriteSet(result.ChangedPaths, request.WriteSet) || !validWorkspaceLogicalRef(result.AdapterRef) || !validWorkspaceLogicalRef(result.ReceiptRef) || result.CommittedAt.IsZero() {
 		return &VersionControlContractError{Code: "version_control.commit_result_invalid"}
+	}
+	return nil
+}
+
+func ValidateSnapshotVerificationRequest(request SnapshotVerificationRequest) error {
+	if err := validateTestSubject(request.Subject); err != nil {
+		return &VersionControlContractError{Code: "version_control.snapshot_subject_invalid"}
+	}
+	if request.SubjectDigest != TestSubjectDigest(request.Subject) {
+		return &VersionControlContractError{Code: "version_control.snapshot_subject_mismatch"}
+	}
+	if !validWorkspaceWriteSet(request.ChangedPaths) || !validWorkspaceWriteSet(request.WriteSet) ||
+		!withinWriteSet(request.ChangedPaths, request.WriteSet) ||
+		WorkspaceWriteSetDigest(request.WriteSet) != request.Subject.WriteSetDigest {
+		return &VersionControlContractError{Code: "version_control.snapshot_scope_invalid"}
 	}
 	return nil
 }

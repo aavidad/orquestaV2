@@ -9,8 +9,28 @@ import (
 	"time"
 
 	"orquesta/internal/application"
+	"orquesta/internal/goal"
 	"orquesta/internal/ports"
 )
+
+func sqliteRequiredTestSpecs(ref string) []application.RequiredTestSpec {
+	return []application.RequiredTestSpec{{
+		Ref: ref, ToolRef: "tool:go-test", Arguments: []string{"test", "./..."}, WorkingDirectory: ".",
+	}}
+}
+
+func sqliteRequiredTests(t *testing.T, refValue string) []goal.RequiredTestSpec {
+	t.Helper()
+	ref, err := goal.NewRequiredTestRef(refValue)
+	sqliteTestNoError(t, err)
+	tool, err := goal.NewToolRef("tool:go-test")
+	sqliteTestNoError(t, err)
+	spec, err := goal.NewRequiredTestSpec(goal.RequiredTestSpecInput{
+		Ref: ref, ToolRef: tool, Arguments: []string{"test", "./..."}, WorkingDirectory: ".",
+	})
+	sqliteTestNoError(t, err)
+	return []goal.RequiredTestSpec{spec}
+}
 
 type sqliteTestWorkspaceManager struct {
 	mu       sync.Mutex
@@ -21,6 +41,83 @@ type sqliteTestVersionControl struct {
 	mu           sync.Mutex
 	commits      map[ports.ChangeSetRef]ports.CommitResult
 	integrations map[string]ports.IntegrationResult
+}
+
+type sqliteTestAttestor struct {
+	mu       sync.Mutex
+	calls    int
+	effects  int
+	verdict  ports.TestAttestationVerdict
+	failures int
+	results  map[string]ports.TestAttestationResult
+}
+
+func (attestor *sqliteTestAttestor) Attest(
+	_ context.Context, run ports.TestAttestationRun,
+) (ports.TestAttestationResult, error) {
+	if err := application.ValidateTestAttestationRun(run); err != nil {
+		return ports.TestAttestationResult{}, err
+	}
+	request := run.Request
+	attestor.mu.Lock()
+	defer attestor.mu.Unlock()
+	attestor.calls++
+	if attestor.failures > 0 {
+		attestor.failures--
+		return ports.TestAttestationResult{}, errors.New("sqlite_test.attestor_transient")
+	}
+	if result, found := attestor.results[request.IdempotencyKey]; found {
+		return result, nil
+	}
+	verdict := attestor.verdict
+	if verdict == "" {
+		verdict = ports.TestAttestationPassed
+	}
+	outcomes := make([]ports.RequiredTestOutcome, len(request.RequiredTests))
+	for index, spec := range request.RequiredTests {
+		outcomes[index] = ports.RequiredTestOutcome{
+			RequiredTestRef: spec.Ref(), ExitCode: 0,
+			OutputDigest: strings.Repeat("a", 64),
+		}
+	}
+	if verdict == ports.TestAttestationFailed {
+		outcomes[0].ExitCode = 1
+	}
+	manifest, err := ports.BuildTestSubjectManifest(request.Subject)
+	if err != nil {
+		return ports.TestAttestationResult{}, err
+	}
+	report, err := ports.BuildTestAttestationReport(ports.TestAttestationReportInput{
+		SubjectDigest: request.SubjectDigest, Verdict: verdict,
+		Tests: outcomes, AttestorRef: "test-attestor:sqlite", PolicyRef: request.Subject.PolicyRef,
+		PolicyDigest: request.Subject.PolicyDigest,
+	})
+	if err != nil {
+		return ports.TestAttestationResult{}, err
+	}
+	receiptRef, err := ports.TestAttestationReceiptRef(report)
+	if err != nil {
+		return ports.TestAttestationResult{}, err
+	}
+	result := ports.TestAttestationResult{
+		Subject: request.Subject, SubjectDigest: request.SubjectDigest,
+		Verdict: verdict, Manifest: manifest, Report: report, Tests: outcomes,
+		AttestorRef: "test-attestor:sqlite", ReceiptRef: receiptRef,
+		PolicyRef: request.Subject.PolicyRef, PolicyDigest: request.Subject.PolicyDigest,
+		StartedAt: request.RequestedAt, FinishedAt: request.RequestedAt,
+	}
+	if attestor.results == nil {
+		attestor.results = make(map[string]ports.TestAttestationResult)
+	}
+	attestor.results[request.IdempotencyKey] = result
+	attestor.effects++
+	return result, nil
+}
+
+func (attestor *sqliteTestAttestor) counts() (calls, effects int) {
+	attestor.mu.Lock()
+	defer attestor.mu.Unlock()
+	return attestor.calls, attestor.effects
 }
 
 func processSQLiteWorkspaceLaunches(
@@ -167,22 +264,42 @@ func newSQLiteV16Orchestrator(
 	t *testing.T,
 	system *sqliteV15System,
 ) *application.Orchestrator {
+	return newSQLiteV16OrchestratorWithAttestor(t, system, &sqliteTestAttestor{})
+}
+
+func newSQLiteV16OrchestratorWithAttestor(
+	t *testing.T,
+	system *sqliteV15System,
+	attestor application.TestAttestor,
+) *application.Orchestrator {
+	return newSQLiteV16OrchestratorWithStateAndAttestor(t, system, system.repository, attestor)
+}
+
+func newSQLiteV16OrchestratorWithStateAndAttestor(
+	t *testing.T,
+	system *sqliteV15System,
+	state application.StateRepository,
+	attestor application.TestAttestor,
+) *application.Orchestrator {
 	t.Helper()
 	orchestrator, err := application.New(application.Dependencies{
-		State: system.repository, Access: system.repository,
+		State: state, Access: system.repository,
 		Launcher: system.external, Observer: system.external, Controller: system.external,
 		Artifacts: system.external, WorkspaceManager: &sqliteTestWorkspaceManager{},
-		VersionControl: &sqliteTestVersionControl{}, Clock: system.clock, IDs: system.ids,
+		VersionControl: &sqliteTestVersionControl{}, TestAttestor: attestor,
+		TestAttestationPolicy: application.TestAttestationPolicy{
+			Ref: "test-attestation-policy:sqlite", Digest: strings.Repeat("b", 64),
+		},
+		Clock: system.clock, IDs: system.ids,
 		MaxOutputBytes: 1024, MaxMailboxEnvelopeBytes: 64 << 10,
 		MaxExecutionAttempts: 3, MaxChildrenPerParent: 6,
-		ClaimLease: time.Minute, DirectorLeaseDuration: 30 * time.Second,
-		EffectApprovalTTL: system.policy.EffectApprovalTTL, BudgetPolicy: system.policy,
+		ClaimLease: time.Minute, AttestTestClaimLease: 20 * time.Minute,
+		DirectorLeaseDuration: 30 * time.Second,
+		EffectApprovalTTL:     system.policy.EffectApprovalTTL, BudgetPolicy: system.policy,
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 		AgentCapabilities: sqliteTestCapabilities(),
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	return orchestrator
 }
 

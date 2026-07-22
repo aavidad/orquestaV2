@@ -79,14 +79,15 @@ type ResourceUsage struct {
 
 // BudgetSettlement separates observed telemetry from conservative accounting.
 type BudgetSettlement struct {
-	Ref            string
-	ReservationRef string
-	Reserved       ResourceVector
-	Observed       ResourceUsage
-	Charged        ResourceVector
-	Released       ResourceVector
-	Overrun        ResourceVector
-	SettledAt      time.Time
+	Ref              string
+	ReservationRef   string
+	CausalAttemptRef string
+	Reserved         ResourceVector
+	Observed         ResourceUsage
+	Charged          ResourceVector
+	Released         ResourceVector
+	Overrun          ResourceVector
+	SettledAt        time.Time
 }
 
 func ValidateBudgetEnvelope(envelope BudgetEnvelope) error {
@@ -183,6 +184,9 @@ func ValidateBudgetSettlement(settlement BudgetSettlement) error {
 	if !validOpaqueRef(settlement.Ref) || !validOpaqueRef(settlement.ReservationRef) || settlement.SettledAt.IsZero() {
 		return domainError(ErrorInvalidRef, "budget_reservation_ref")
 	}
+	if settlement.CausalAttemptRef != "" && !validOpaqueRef(settlement.CausalAttemptRef) {
+		return domainError(ErrorInvalidRef, "budget_settlement_causal_attempt_ref")
+	}
 	if err := ValidateResourceVector(settlement.Reserved); err != nil {
 		return err
 	}
@@ -198,7 +202,19 @@ func ValidateBudgetSettlement(settlement BudgetSettlement) error {
 		settlement.Overrun != expected.Overrun {
 		return domainError(ErrorInvalidArgument, "budget_settlement")
 	}
+	if settlement.CausalAttemptRef != "" && !IsExactZeroRelease(settlement) {
+		return domainError(ErrorInvalidArgument, "budget_settlement_causal_attempt")
+	}
 	return nil
+}
+
+// IsExactZeroRelease identifies the sole accounting fact that may prove a
+// physical effect attempt definitely was not applied.
+func IsExactZeroRelease(settlement BudgetSettlement) bool {
+	zero := ResourceVector{Currency: settlement.Reserved.Currency}
+	return settlement.Observed.Known == AllResourceDimensions &&
+		settlement.Observed.Quality == UsageQualityExact && settlement.Observed.Resources == zero &&
+		settlement.Charged == zero && settlement.Released == settlement.Reserved && settlement.Overrun == zero
 }
 
 func applyKnownUsage(charged *ResourceVector, usage ResourceUsage) {

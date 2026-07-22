@@ -86,7 +86,7 @@ FROM action_consumption_receipts ORDER BY action_ref`); !reflect.DeepEqual(after
 	if err := repository.db.QueryRow(`SELECT name FROM schema_migrations WHERE version = 8`).Scan(&migrationName); err != nil {
 		t.Fatal(err)
 	}
-	if version != recoverySchemaV16 || migrationName != "008_mailbox.sql" {
+	if version != recoverySchemaV17 || migrationName != "008_mailbox.sql" {
 		t.Fatalf("mailbox migration identity: version=%d name=%q", version, migrationName)
 	}
 
@@ -163,9 +163,7 @@ SELECT COUNT(*) FROM pragma_table_info('work_items') WHERE name = 'handoff_requi
 SELECT name FROM sqlite_schema
 WHERE type = 'table' AND (lower(name) LIKE '%queue%' OR lower(name) LIKE '%outbox%')
 ORDER BY name`)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
@@ -231,9 +229,7 @@ func TestMailboxSchemaV13EnforcesExactRecipientProgressAndImmutableCausalReceipt
 	repository, err := Open(context.Background(), Options{
 		Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 4,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	t.Cleanup(func() { _ = repository.Close() })
 	database = repository.db
 	base := mailboxUnix(time.Date(2026, 7, 16, 8, 0, 0, 0, time.UTC))
@@ -554,26 +550,20 @@ func mailboxUpgradeV7(t *testing.T, database *sql.DB) {
 	t.Helper()
 	database.SetMaxOpenConns(1)
 	connection, err := database.Conn(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	defer connection.Close()
 	if _, err := connection.ExecContext(context.Background(), `PRAGMA foreign_keys = OFF`); err != nil {
 		t.Fatal(err)
 	}
 	transaction, err := connection.BeginTx(context.Background(), nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	defer transaction.Rollback()
 	migrations, err := loadMigrations()
 	if err != nil || len(migrations) < 8 {
 		t.Fatalf("load migration chain: count=%d err=%v", len(migrations), err)
 	}
 	current, migrated, err := applyMigrationSteps(context.Background(), transaction, migrations[:7], 5)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	if current != 7 || !migrated {
 		t.Fatalf("V7 seed migration: current=%d migrated=%v", current, migrated)
 	}
@@ -591,14 +581,10 @@ func mailboxUpgradeV7(t *testing.T, database *sql.DB) {
 func mailboxRows(t *testing.T, database *sql.DB, query string, arguments ...any) []string {
 	t.Helper()
 	rows, err := database.Query(query, arguments...)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	defer rows.Close()
 	columns, err := rows.Columns()
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	var result []string
 	for rows.Next() {
 		values := make([]any, len(columns))

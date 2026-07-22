@@ -30,9 +30,7 @@ func TestSQLiteControlsRestartAndConcurrentCAS(t *testing.T) {
 	submitted, err := orchestrator.Submit(ctx, access, application.SubmitRequest{
 		RequestRef: "request:sqlite-control-cas", Statement: "verify concurrent controls", Confirm: true,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	record := submitted.Record
 	request := func(ref string) application.ControlRequest {
 		return application.ControlRequest{
@@ -77,14 +75,10 @@ func TestSQLiteControlsRestartAndConcurrentCAS(t *testing.T) {
 	restarted, err := Open(ctx, Options{
 		Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 4, Now: clock.Now,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	t.Cleanup(func() { _ = restarted.Close() })
 	persisted, err := restarted.GetGoal(ctx, record.Goal.Ref())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	if !persisted.Goal.Paused() || len(persisted.Controls) != 1 ||
 		persisted.Controls[0].Status != application.ControlConfirmed {
 		t.Fatalf("restart lost winning control: paused=%v controls=%+v", persisted.Goal.Paused(), persisted.Controls)
@@ -111,9 +105,7 @@ func TestSQLiteStopActionClaimsAfterCompletionAndConsumesAlreadyCompleted(t *tes
 			AgentCapabilities: capabilities, ClaimLease: time.Minute, DirectorLeaseDuration: time.Minute,
 			ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 		})
-		if err != nil {
-			t.Fatal(err)
-		}
+		sqliteTestNoError(t, err)
 		return orchestrator
 	}
 	orchestrator := newOrchestrator(repository)
@@ -123,17 +115,13 @@ func TestSQLiteStopActionClaimsAfterCompletionAndConsumesAlreadyCompleted(t *tes
 	submitted, err := orchestrator.Submit(ctx, access, application.SubmitRequest{
 		RequestRef: "request:sqlite-terminal-stop", Statement: "complete before pending stop is claimed", Confirm: true,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	if result, processErr := orchestrator.ProcessNext(ctx, "worker:sqlite-terminal-launch"); processErr != nil ||
 		!result.Processed || result.Action != application.ActionLaunchAgent {
 		t.Fatalf("launch: result=%+v err=%v", result, processErr)
 	}
 	running, err := repository.GetGoal(ctx, submitted.Record.Goal.Ref())
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	item := running.Goal.WorkItems()[0]
 	execution := running.Executions[0]
 
@@ -238,9 +226,7 @@ func TestSQLiteStopActionClaimsAfterCompletionAndConsumesAlreadyCompleted(t *tes
 		t.Fatal(err)
 	}
 	restarted, err := Open(ctx, Options{Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 4, Now: clock.Now})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	t.Cleanup(func() { _ = restarted.Close() })
 	persisted, err := restarted.GetGoal(ctx, running.Goal.Ref())
 	if err != nil || persisted.Controls[0].Status != application.ControlConfirmed ||
@@ -262,9 +248,7 @@ func TestSQLiteBackupExcludesCodexPrivateProcessJournal(t *testing.T) {
 	}
 	recovery, backupRoot, _ := newV09TestRecovery(t, repository, time.Now().UTC(), nil)
 	receipt, err := recovery.CreateBackup(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	if _, err := recovery.VerifyBackup(ctx, receipt.Ref); err != nil {
 		t.Fatal(err)
 	}
@@ -281,9 +265,7 @@ func TestSQLiteBackupExcludesCodexPrivateProcessJournal(t *testing.T) {
 		}
 		return readErr
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 }
 
 func TestSQLiteGoalCancelPersistsOneStopReceiptPerExecutionAcrossRestart(t *testing.T) {
@@ -305,14 +287,12 @@ func TestSQLiteGoalCancelPersistsOneStopReceiptPerExecutionAcrossRestart(t *test
 				TemplateRef: "phase-template:sqlite-multi-control",
 			}},
 			WorkItems: []application.WorkItemSpec{
-				{Key: "first", Objective: "first live execution", Phase: "phase:sqlite-multi-control", Role: "role:worker", WriteSet: []string{"internal/first"}, OutputContract: goal.OutputContractEvidenceBundle},
-				{Key: "second", Objective: "second live execution", Phase: "phase:sqlite-multi-control", Role: "role:worker", WriteSet: []string{"internal/second"}, OutputContract: goal.OutputContractEvidenceBundle},
+				{Key: "first", Objective: "first live execution", Phase: "phase:sqlite-multi-control", Role: "role:worker", WriteSet: []string{"internal/first"}, RequiredTests: sqliteRequiredTestSpecs("required-test:sqlite-control-first"), OutputContract: goal.OutputContractEvidenceBundle},
+				{Key: "second", Objective: "second live execution", Phase: "phase:sqlite-multi-control", Role: "role:worker", WriteSet: []string{"internal/second"}, RequiredTests: sqliteRequiredTestSpecs("required-test:sqlite-control-second"), OutputContract: goal.OutputContractEvidenceBundle},
 			},
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	processSQLiteWorkspaceLaunches(t, orchestrator, "worker:sqlite-multi-launch", 2)
 	running, err := repository.GetGoal(ctx, submitted.Record.Goal.Ref())
 	if err != nil || len(running.Executions) != 2 {
@@ -347,9 +327,7 @@ func TestSQLiteGoalCancelPersistsOneStopReceiptPerExecutionAcrossRestart(t *test
 		t.Fatal(err)
 	}
 	restarted, err := Open(ctx, Options{Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 4, Now: clock.Now})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	t.Cleanup(func() { _ = restarted.Close() })
 	persisted, err := restarted.GetGoal(ctx, running.Goal.Ref())
 	if err != nil || persisted.Goal.State() != goal.GoalStateCanceled {
@@ -541,9 +519,7 @@ func newSQLiteMultiControlOrchestrator(
 		AgentCapabilities: sqliteMultiControlCapabilities(), ClaimLease: time.Minute,
 		DirectorLeaseDuration: time.Minute, ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sqliteTestNoError(t, err)
 	return orchestrator
 }
 
