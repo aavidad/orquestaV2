@@ -669,7 +669,8 @@ func v17SimplicityClass(relative string) string {
 		strings.HasPrefix(relative, "cmd/orquesta/"):
 		return "adapters"
 	case strings.HasPrefix(relative, "docs/reconstruccion/"), relative == "product/roadmap.json",
-		relative == "product_roadmap_test.go", strings.HasPrefix(relative, "product/traceability/"):
+		relative == "product_roadmap_test.go", strings.HasPrefix(relative, "product/traceability/"),
+		strings.HasPrefix(relative, "product/evidence/"):
 		return "metadata"
 	}
 	return ""
@@ -691,6 +692,7 @@ func TestV17SimplicityClassCoversEveryCandidate(t *testing.T) {
 		"internal/adapters/state/sqlite/migrations/012_test_attestor.sql": "migration",
 		"internal/application/test_attestation_flow_test.go":              "tests",
 		"acceptance/fixtures/v17_test_attestor.json":                      "tests",
+		"product/evidence/real_codex_mcp_e2e.json":                        "metadata",
 		"product/traceability/rebuild_bugs.jsonl":                         "metadata",
 	} {
 		if got := v17SimplicityClass(relative); got != want {
@@ -703,6 +705,12 @@ func TestV17SimplicityClassCoversEveryCandidate(t *testing.T) {
 		if got := v17SimplicityClass(relative); got == "" {
 			t.Errorf("v17SimplicityClass(%q) is empty", relative)
 		}
+	}
+}
+
+func TestV17SimplicityClassTreatsProductEvidenceAsMetadata(t *testing.T) {
+	if got := v17SimplicityClass("product/evidence/real_codex_mcp_e2e.json"); got != "metadata" {
+		t.Fatalf("product evidence class=%q, want metadata", got)
 	}
 }
 
