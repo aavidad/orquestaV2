@@ -7,7 +7,7 @@ sesión. Es estado operativo, no evidencia de aceptación. Los estados canónico
 de capacidades, verticales y contratos viven en `product/roadmap.json`; los
 verdes viven en receipts fuera de su propio candidato.
 
-## Checkpoint verificable vigente: V16 acreditado; V17 preparando nuevo P
+## Checkpoint verificable vigente: V16 acreditado; V17 con P sellado y E pendiente
 
 En `38e1ffb82d`, V01–V16 están cerrados por receipts V3 reproducibles.
 `TestAcceptanceV16WorkspaceGitReceipt` valida el `PASS` de
@@ -44,21 +44,21 @@ incompatible con el hardening. `BUG-REBUILD-20260721-255`–`257` conservan esas
 lecciones. No se relajaron autoridad, seguridad, timeouts ni presupuestos.
 
 V17 permanece **no acreditada** mientras no exista su receipt V3 reproducible.
-El primer candidato `5ca94551f9` fue rechazado por el gate estructural y no es
-evidencia; su contrato y análisis viven en
+El primer candidato `5ca94551f9` fue rechazado por el gate estructural; el P
+válido quedó sellado en `7f462741014bec30bb04f03d9d222229ef8b64cb`.
+Su contrato y análisis viven en
 `docs/reconstruccion/analisis_y_contrato_v17_artefactos_atestador.md`; hay
 trabajo activo sobre CAS filesystem, `TestAttestor`, verificación Git exacta,
 flujo de aplicación y persistencia/recovery SQLite. Nada de ello aumenta el
 conteo hasta completar P/S/E desde checkout limpio.
 
-### Handoff V17 pre-P2: corrección estructural terminada, nuevo sello pendiente
+### Handoff V17 post-P: producto congelado, evidencia pendiente
 
 La contrarrevisión dejó el fixture estricto con las 200 rutas exactas del
-delta, budget y argv separados para focal/race/E2E/vet. El OID P permanece
-vacío hasta crear P2; `AC-V17-TEST-ATTESTOR` y `EVD-01/04/05/13` no aumentan
-el conteo hasta E.
+delta sellado, budget y argv separados para focal/race/E2E/vet. P está fijado;
+`AC-V17-TEST-ATTESTOR` y `EVD-01/04/05/13` no aumentan el conteo hasta E.
 
-Estado reproducible pre-P2:
+Estado reproducible post-P:
 
 - acceptance V17 pasa y compara el inventario exacto; los
   behavior tests se descubren por AST y la suite race no admite
@@ -86,8 +86,8 @@ Estado reproducible pre-P2:
   filas se cerraron. Los bugs ligados a E2E, budget sellado o P/S/E siguen
   abiertos.
 
-Siguiente dependencia única: crear P2, fijarlo en S y emitir E desde
-`detached_clean`. Race, vet y el E2E real ya pasaron; todavía no son el
+Siguiente dependencia única: crear S y emitir E desde `detached_clean`.
+Race, vet y el E2E real ya pasaron; todavía no son el
 receipt reproducible de S. El presupuesto medido y su deuda están decididos
 en `docs/reconstruccion/adr_v17_presupuesto_seguridad_2026-07-22.md`.
 
