@@ -11,7 +11,7 @@ verdes viven en receipts fuera de su propio candidato.
 
 En `c309c588b3badad51d5832b76c37863cd233c0e0`, V01–V17 están
 cerrados por receipts V3 reproducibles. El corte canónico es **63/257
-capacidades, 24,51 %; 17/34 verticales, 50,00 %; 17/17 receipts**. V17
+capacidades, 24,51 %; 17/37 verticales, 45,95 %; 17/17 receipts**. V17
 acredita exactamente `EVD-01`, `EVD-04`, `EVD-05` y `EVD-13`; autor,
 revisiones independientes, refinery y Consejo permanecen en V18–V19.
 
@@ -57,10 +57,26 @@ con marcador `ORQUESTA_CODEX_E2E_OK_4f25fa65f0e788447c1a08e82af93fcd` y
 source digest
 `sha256:a12c0ad219524a205be5efdd241e0c62e9fa8bf1760b4e74e40a5c3ffda923d7`.
 
-Siguiente dependencia causal: V18 `independent_reviews`, únicamente en su
-worktree/branch aislado y sin reabrir V17 salvo regresión reproducible. El
-producto total no está al 100 %; el progreso honesto es 24,51 % de capacidades
-y 50 % de verticales.
+La ruta fue ampliada por orden del operador hasta V37 sin ampliar las 257
+capacidades: V35–V37 acreditarán build, QA y promoción de videojuegos como
+composición externa. El contrato está en
+`docs/reconstruccion/contrato_v35_v37_videojuegos.md`. Por ello el corte vigente
+es **17/37 verticales, 45,95 %**.
+
+Ready-set activo:
+
+- V18 `independent_reviews`, worktree
+  `/home/alberto/Trabajo/orquesta-rebuild-worktrees/v18-independent-reviews`;
+  posee temporalmente los leases de `StateRepository`, SQLite y bootstrap;
+- V20 `command_registry`, worktree
+  `/home/alberto/Trabajo/orquesta-rebuild-worktrees/v20-command-registry`;
+  avanza su capa privada de registro/schemas/dispatcher/bindings y espera a
+  que V18 libere los leases compartidos para cerrar recovery/E2E;
+- el integrador es el único que modifica roadmap, evidence, trazabilidad y
+  sellos P/S/E.
+
+No reabrir V17 salvo regresión reproducible. No integrar las ramas V18/V20
+mientras conserven acceptance roja o metadatos de base caducados.
 
 ## Checkpoint histórico previo al cierre V17: V16 acreditado; V17 con P sellado y E pendiente
 
@@ -148,7 +164,7 @@ Race, vet y el E2E real ya pasaron; todavía no son el
 receipt reproducible de S. El presupuesto medido y su deuda están decididos
 en `docs/reconstruccion/adr_v17_presupuesto_seguridad_2026-07-22.md`.
 
-La estrategia de agentes independientes para terminar V17-V34, con DAG,
+La estrategia de agentes independientes para terminar V18-V37, con DAG,
 worktrees, write-sets, leases y fichas por vertical, vive en
 `docs/reconstruccion/plan_agentes_independientes_v17_v34.md`. V17 es la última
 excepción en worktree compartido; V18 y siguientes deben usar worktree y branch

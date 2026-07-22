@@ -509,6 +509,39 @@
       "acceptance_contracts": [
         "AC-V34-CUTOVER-ACCREDITATION"
       ]
+    },
+    {
+      "id": "game_build_composition",
+      "title": "Videojuegos: composición y build externo",
+      "sequence": 35,
+      "depends_on": [
+        "cutover_accreditation"
+      ],
+      "acceptance_contracts": [
+        "AC-V35-GAME-BUILD-COMPOSITION"
+      ]
+    },
+    {
+      "id": "game_reproducible_qa",
+      "title": "Videojuegos: QA reproducible",
+      "sequence": 36,
+      "depends_on": [
+        "game_build_composition"
+      ],
+      "acceptance_contracts": [
+        "AC-V36-GAME-REPRODUCIBLE-QA"
+      ]
+    },
+    {
+      "id": "game_release_promotion",
+      "title": "Videojuegos: promoción gobernada",
+      "sequence": 37,
+      "depends_on": [
+        "game_reproducible_qa"
+      ],
+      "acceptance_contracts": [
+        "AC-V37-GAME-RELEASE-PROMOTION"
+      ]
     }
   ],
   "acceptance_contracts": [
@@ -1129,6 +1162,45 @@
         "P0 and P1 are zero",
         "legacy writers imports bridges leases and unreconciled receipts are zero",
         "release restore rollback and shutdown are green"
+      ]
+    },
+    {
+      "id": "AC-V35-GAME-BUILD-COMPOSITION",
+      "vertical": "game_build_composition",
+      "status": "planned",
+      "test_ref": "planned:acceptance/v35_game_build_composition_test.go",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "fixture": "planned:fixtures/v35_game_build_composition",
+      "assertions": [
+        "a public Goal drives an external game plugin through opaque project build and toolchain refs without importing or mounting Orquesta internal state",
+        "an isolated fixture produces a reproducible ROM manifest diagnostics and artifact receipts bound to exact source plugin toolchain and configuration digests",
+        "scope spoofing internal filesystem access and undeclared effects are rejected before external execution"
+      ]
+    },
+    {
+      "id": "AC-V36-GAME-REPRODUCIBLE-QA",
+      "vertical": "game_reproducible_qa",
+      "status": "planned",
+      "test_ref": "planned:acceptance/v36_game_reproducible_qa_test.go",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "fixture": "planned:fixtures/v36_game_reproducible_qa",
+      "assertions": [
+        "the exact sealed game build runs in an isolated emulator with scripted input and produces deterministic screenshots audio telemetry and review artifacts",
+        "ROM asset toolchain input or policy drift invalidates QA instead of reusing prior evidence",
+        "author primary and adversarial review facts remain causal and promotion stays explicit"
+      ]
+    },
+    {
+      "id": "AC-V37-GAME-RELEASE-PROMOTION",
+      "vertical": "game_release_promotion",
+      "status": "planned",
+      "test_ref": "planned:acceptance/v37_game_release_promotion_test.go",
+      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
+      "fixture": "planned:fixtures/v37_game_release_promotion",
+      "assertions": [
+        "a release manifest binds source plugin toolchain ROM QA reviews and target scope to immutable digests",
+        "publication is impossible without an authorized approved effect and exact candidate generation",
+        "apply replay rollback and demotion are idempotent auditable and leave a reproducible terminal receipt"
       ]
     }
   ],

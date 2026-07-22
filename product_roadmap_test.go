@@ -90,8 +90,8 @@ func TestProductRoadmapIsExhaustiveAndCausal(t *testing.T) {
 	assertRoadmapOperatorDecisions(t, roadmap.OperatorDecisions)
 
 	verticals := make(map[string]roadmapVertical, len(roadmap.Verticals))
-	if len(roadmap.Verticals) != 34 {
-		t.Fatalf("vertical count = %d, want 34", len(roadmap.Verticals))
+	if len(roadmap.Verticals) != 37 {
+		t.Fatalf("vertical count = %d, want 37", len(roadmap.Verticals))
 	}
 	for index, vertical := range roadmap.Verticals {
 		if vertical.ID == "" || strings.TrimSpace(vertical.Title) == "" || vertical.Sequence != index+1 ||
@@ -119,8 +119,8 @@ func TestProductRoadmapIsExhaustiveAndCausal(t *testing.T) {
 	})
 
 	contracts := make(map[string]roadmapAcceptanceContract, len(roadmap.AcceptanceContracts))
-	if len(roadmap.AcceptanceContracts) != 34 {
-		t.Fatalf("acceptance contract count = %d, want 34", len(roadmap.AcceptanceContracts))
+	if len(roadmap.AcceptanceContracts) != 37 {
+		t.Fatalf("acceptance contract count = %d, want 37", len(roadmap.AcceptanceContracts))
 	}
 	for _, contract := range roadmap.AcceptanceContracts {
 		if contract.ID == "" || contract.Vertical == "" || contract.Command == "" || contract.Fixture == "" ||

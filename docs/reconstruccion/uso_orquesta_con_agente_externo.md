@@ -5,14 +5,14 @@ Repositorio operativo: `/home/alberto/Trabajo/orquesta-rebuild`.
 
 ## Respuesta corta y alcance real
 
-Sí: el checkpoint acreditado V01-V16 ya sirve para que un Codex externo use
+Sí: el checkpoint acreditado V01-V17 ya sirve para que un Codex externo use
 Orquesta por MCP, cree un Goal con un DAG, lance uno o varios workers Codex,
 consulte su estado y recupere artefactos durables. Hay un binario productivo
 único, autenticación, autorización por proyecto, SQLite, artefactos, scheduler,
 backup/recovery y cierre cooperativo.
 
-V16 está cerrado: `TestAcceptanceV16WorkspaceGitReceipt` valida su receipt V3
-`PASS` desde el candidato sellado. Este runbook público conserva las mismas
+V17 también está cerrado: su receipt V3 valida el atestador reproducible sobre
+el candidato sellado. Este runbook público conserva las mismas
 seis tools: V14–V16 no añaden bindings HTTP/MCP/CLI para controles,
 efectos, pendientes o integración; estos pertenecen al registro único V20.
 
@@ -28,7 +28,8 @@ compila el DAG, revisa resultados y, si el operador autorizó cambios, aplica y
 prueba los parches fuera de Orquesta. Un Goal `succeeded` acredita la ejecución
 y sus artefactos; no acredita por sí solo que exista commit, merge o deploy.
 V12 es coordinación operativa limitada, V22 es el primer MVP de programación
-extremo a extremo y solo V34 cierra la aplicación total.
+extremo a extremo. V34 cierra/corta el producto genérico; V35–V37 califican la
+fábrica externa de videojuegos hasta build, QA y promoción gobernada.
 
 Fuente de verdad del estado:
 

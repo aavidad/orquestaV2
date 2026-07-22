@@ -1,4 +1,7 @@
-# Plan operativo de agentes independientes V17-V34
+# Plan operativo de agentes independientes V18-V37
+
+El nombre del fichero se conserva porque ya forma parte de evidencia sellada
+V17. El contenido vigente alcanza V37; no se crea una copia paralela.
 
 Fecha de autoridad: 2026-07-22 Europe/Madrid.
 
@@ -21,12 +24,11 @@ de editar y registra la contradicción. No la resuelve inventando compatibilidad
 
 ## 1. Corte de partida
 
-- V01-V16 están acreditados por 16 receipts V3.
-- El único checkpoint acreditado es el HEAD posterior al cierre V16. Que V17
-  tenga código sin sellar no modifica ese corte.
-- V17 está en ejecución y es el gate de fan-out. Fue iniciada antes de este
-  protocolo en un worktree compartido; es la última excepción tolerada.
-- Ningún agente abre implementación V18-V34 hasta que todos sus `depends_on`
+- V01-V17 están acreditados por 17 receipts V3.
+- El checkpoint acreditado es el HEAD posterior al cierre V17, con cadena P/S/E
+  registrada en `product/evidence/v17_test_attestor.json`.
+- V18 y V20 son el ready-set vigente y usan worktrees distintos.
+- Ningún agente abre implementación V18-V37 hasta que todos sus `depends_on`
   tengan receipt válido y estén integrados en el HEAD que usará como base.
 - Análisis y contrato rojo pueden prepararse antes, en una rama aislada, pero
   no cuentan como vertical iniciada ni autorizan asumir APIs pendientes.
@@ -70,8 +72,8 @@ queued -> active -> integration_ready -> sealing -> sealed
 
 La superficie operativa es un Goal de programa con un WorkItem por vertical:
 
-- `GoalRef`: objetivo estable `finish_orquesta_v34`;
-- `WorkItemRef`: `V17` ... `V34`;
+- `GoalRef`: objetivo estable `finish_orquesta_v37`;
+- `WorkItemRef`: `V18` ... `V37`;
 - `Dependencies`: copia exacta de `product/roadmap.json`;
 - `WriteSet`: manifest de la sección 5;
 - `RequiredTests`: contrato focal, regresiones, race/seguridad y E2E;
@@ -201,11 +203,14 @@ corte anterior ya está sellado. No son barreras artificiales.
 | C8 | V30, V32 | Ambas esperan V29; V32 espera además V31. |
 | C9 | V33 | V24-V29 y V31-V32 selladas. |
 | C10 | V34 | V30 y V33, además de todas sus dependencias, selladas. |
+| C11 | V35 | V34 sellada; usa solo la superficie pública cortada. |
+| C12 | V36 | V35 sellada. |
+| C13 | V37 | V36 sellada. |
 
 Cadena crítica:
 
 ```text
-V17 -> V18 -> V19 -> V22 -> V25 -> V27 -> V28 -> V29 -> V30 -> V34
+V17 -> V18 -> V19 -> V22 -> V25 -> V27 -> V28 -> V29 -> V30 -> V34 -> V35 -> V36 -> V37
    \-> V20 -> V21 -> V22
            \-> V26 -> V27
                   V23 -> V24 ----------------------> V33 -> V34
@@ -213,11 +218,11 @@ V17 -> V18 -> V19 -> V22 -> V25 -> V27 -> V28 -> V29 -> V30 -> V34
                                       V29 -> V32
 ```
 
-No hay ninguna vertical V18-V34 implementable antes de V17. Sí se pueden
-preparar contratos rojos aislados de V18 y V20, sin tocar producto ni afirmar
-APIs futuras.
+V17 ya está sellada. V18 y V20 pueden implementarse en paralelo porque solo
+comparten esa dependencia y sus write-sets privados están aislados. Los leases
+de estado/SQLite/bootstrap se serializan cuando ambas necesiten integración.
 
-## 7. Fichas de propiedad V17-V34
+## 7. Fichas de propiedad V17-V37
 
 La columna “raíces privadas” es el espacio preferente. Cualquier cambio fuera
 de él se declara en `integration_files_requested` y exige el lease aplicable.
@@ -232,8 +237,8 @@ de él se declara en `integration_files_requested` y exige el lease aplicable.
 - Gate: sujeto exacto tree/diff/tests reproducible; traversal, symlink,
   hardlink, owner, modos, sandbox y leaks fallan; ACK nunca es PASS.
 - Exclusión: autor/reviews V18 y Consejo V19.
-- Excepción vigente: sus capas ya están en worktree compartido. Se termina y
-  sella antes de aplicar el modelo de worktrees a V18+.
+- Estado: sellada; su worktree/runtime temporal quedó retirado. No se reabre
+  salvo regresión reproducible.
 
 ### V18 — Autor, reviewers y refinery
 
@@ -406,6 +411,40 @@ de él se declara en `integration_files_requested` y exige el lease aplicable.
 - Exclusión: no borrar por apariencia; cada retirada necesita referencias,
   caracterización y evidencia de reemplazo.
 
+### V35 — Videojuegos: composición y build externo
+
+- Dependencia: V34.
+- Capabilities: ninguna nueva; compone `EXT-00`, `EXT-01`, `EXT-09`,
+  `EXT-20`, `EXT-21` y las garantías ya acreditadas de effects/apps.
+- Raíces: fixture/plugin externo V35 y contratos de consumo público; cero
+  imports del proyecto de juegos en el núcleo.
+- Gate: un Goal construye una ROM reproducible con manifest, diagnósticos y
+  receipts ligados a source/plugin/toolchain/config exactos.
+- Exclusión: Orquesta no posee spec, engine, emulador, DB ni filesystem del
+  proyecto `/home/alberto/Trabajo/juegos`.
+
+### V36 — Videojuegos: QA reproducible
+
+- Dependencia: V35.
+- Capabilities: ninguna nueva; reutiliza artefactos, attestor, reviews, tools,
+  media, contexto y plugins.
+- Raíces: fixture/verificador externo V36 y evidence de emulación.
+- Gate: el build sellado corre con input guionizado y produce capturas, audio,
+  telemetría y reviews; cualquier drift invalida la QA.
+- Exclusión: MAME/libretro/GnGeo siguen siendo adaptadores externos, nunca
+  lógica del core.
+
+### V37 — Videojuegos: promoción gobernada
+
+- Dependencia: V36.
+- Capabilities: ninguna nueva; reutiliza deploy/effects, RBAC, receipts,
+  rollback y operación.
+- Raíces: fixture/target temporal V37 y manifiesto de release externo.
+- Gate: sin aprobación exacta no publica; apply/replay/rollback/demote son
+  idempotentes y auditables sobre el mismo candidato.
+- Exclusión: fabricación física, firma propietaria o targets no disponibles
+  quedan plugins/efectos futuros, no deuda oculta del núcleo.
+
 ## 8. Contrato de entrega de cada agente
 
 El handoff mínimo contiene:
@@ -473,16 +512,18 @@ sujetos vale `unproven`.
 - Si una vertical crece sin control, se simplifica dentro de su contrato antes
   de seguir. No se divide creando otro núcleo, generación o capa legacy.
 - El porcentaje canónico solo cambia por receipts válidos: capacidades/257,
-  verticales/34 y receipts/verticales cerradas.
+  verticales/37 y receipts/verticales cerradas.
 
 ## 11. Próxima asignación exacta
 
-1. Terminar V17 vigente y sellarla; no abrir otra implementación en su worktree.
-2. Crear dos worktrees desde el HEAD V17 sellado.
-3. Lanzar propietario V18 y propietario V20 en paralelo.
-4. Al cerrar V18, lanzar V19. Al cerrar V20, lanzar V21 y V26.
-5. Continuar por eventos según sección 6, conservando como máximo un
-   propietario por vertical y un titular por lease compartido.
+1. Mantener V18 y V20 en worktrees separados sobre el V17 sellado.
+2. Integrar cada una solo tras aceptación completa, contrarrevisión y P/S/E.
+3. Al cerrar V18, lanzar V19. Al cerrar V20, lanzar V21 y V26.
+4. Continuar por eventos hasta V34; desde V22, la nueva Orquesta dirige el
+   ready-set por defecto.
+5. Ejecutar V35, V36 y V37 como composición externa tras el cutover V34.
+6. Conservar como máximo un propietario por vertical y un titular por lease
+   compartido.
 
 Este orden permite paralelismo real sin convertir la reconstrucción en una
 mezcla de parches concurrentes.

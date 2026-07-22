@@ -32,6 +32,14 @@ retirarlas de la nueva release. Se consultan para extraer semántica,
 caracterizar bugs y demostrar retirada; no se importan, cablean, ejecutan ni
 amplían.
 
+La orden del operador del 2026-07-22 extiende el cierre hasta V37. V35–V37 no
+agrandan el catálogo ni el núcleo: califican una fábrica de videojuegos externa
+como consumidor real de los puertos públicos ya acreditados. El proyecto
+`/home/alberto/Trabajo/juegos` conserva lifecycle, spec, toolchain y datos
+propios; Orquesta solo lo dirige mediante refs opacas, plugins, tools y efectos.
+El contrato ejecutable de estos tres cortes vive en
+`docs/reconstruccion/contrato_v35_v37_videojuegos.md`.
+
 ## 2. Qué significa “total al 100 %”
 
 El catálogo exhaustivo contiene 257 IDs canónicos:
@@ -153,7 +161,7 @@ Decisiones de producto ya resueltas para evitar ramas abiertas:
   debe convertir cada una en `accept` o `reject`; una decisión condicional
   abierta impide el cierre total.
 
-## 5. Las 34 verticales causales
+## 5. Las 37 verticales causales
 
 El estado de cada vertical se obtiene del ledger, no de esta tabla. El orden es
 causal; dentro de cada corte se ejecuta la ola máxima con write-sets disjuntos.
@@ -194,6 +202,9 @@ causal; dentro de cada corte se ejecuta la ola máxima con write-sets disjuntos.
 | V32 Operación completa | V07–V11,V20–V22,V29,V31 | Install, doctor, update, rollback, migraciones, retención, cleanup, idle wakeup/backoff, watchdog cooperativo, métricas/trazas, health/readiness y smokes/nightly. Gate: upgrade/rollback/restore reales, spoof rechazado, perfil idle y shutdown API con cero residuos. |
 | V33 Apps externas Go y no-Go | V23–V29,V31–V32 | Dos apps completas creadas por superficies públicas y atestadas contra `APP-01..16`: hexagonal, i18n, accesibilidad, config/secretos, auth, pruebas, docs y deploy proporcional. Gate: misma tree/image y E2E real; ficheros generados sin wiring no cuentan. |
 | V34 Migración, cutover y retirada | V01–V33 | Censo final, cierre de ingreso antiguo, drain/sello, snapshot/import único, configuración migrada sin doble lectura, E2E final y retirada de módulos/cmd/scripts superseded. Gate global de la sección 9; legacy queda evidencia read-only, no runtime. |
+| V35 Videojuegos: composición y build externo | V34 | `DomainPlugin`/tool externo para inventario, spec, toolchain y build con refs opacas. Gate: un Goal público produce ROM, manifest, diagnósticos y receipts reproducibles desde fixture aislado; no importa ni monta estado/filesystem interno de Orquesta. |
+| V36 Videojuegos: QA reproducible | V35 | Emulador y verificador externos ejecutan el build exacto con entradas guionizadas y publican capturas, audio, telemetría y reviews como artefactos. Gate: drift de ROM/assets/toolchain/policy invalida la QA y promoción sigue explícita. |
+| V37 Videojuegos: promoción gobernada | V36 | Manifiesto liga fuente, plugin, toolchain, ROM, QA, reviews y target; publicar es un efecto aprobado. Gate: sin autoridad no publica; apply/replay/rollback/demote son idempotentes, auditables y terminan con receipt reproducible. |
 
 Nota de evidencia V13: un E2E Codex real que recorra composición, MCP, SQLite
 y CAS pero no active `HandoffRequired` sirve como gate de no regresión. No
@@ -205,9 +216,9 @@ OID y digests autoritativos viven únicamente en
 `product/evidence/v16_workspace_git.json`.
 
 ```text
-corte histórico antes de V16: 56/257 = 21,79 %; 15/34 = 44,12 %; 15/15 receipts
-corte vigente V16: 59/257 = 22,96 %; 16/34 = 47,06 %; 16/16 receipts
-corte vigente V17: 63/257 = 24,51 %; 17/34 = 50,00 %; 17/17 receipts
+corte histórico antes de V16: 56/257 = 21,79 %; 15/37 = 40,54 %; 15/15 receipts
+corte histórico V16: 59/257 = 22,96 %; 16/37 = 43,24 %; 16/16 receipts
+corte vigente V17: 63/257 = 24,51 %; 17/37 = 45,95 %; 17/17 receipts
 ```
 
 El receipt V15 acredita únicamente `GOV-15`, `STG-09`, `ORC-08`, `ORC-09`,
@@ -252,7 +263,7 @@ integración/rework
 restart/stop/shutdown
 ```
 
-Cuando ese gate pase, nueva Orquesta dirige V23–V34 por defecto. Codex directo
+Cuando ese gate pase, nueva Orquesta dirige V23–V37 por defecto. Codex directo
 queda para observación, integración o desbloqueo acotado documentado. Si el
 producto se auto-modifica, usa la misma plantilla `self_change`, permisos y
 receipts; no obtiene privilegios ocultos.
@@ -361,6 +372,9 @@ full_i18n_accessibility_matrix == green
 opes_temporary_e2e == green
 generated_go_and_non_go_APP_01_16 == green
 install_upgrade_rollback_restore_shutdown == green
+external_game_build_composition == green
+external_game_reproducible_qa == green
+external_game_release_promotion_and_rollback == green
 critical_negative_and_mutation_matrix == green
 ```
 
@@ -417,7 +431,9 @@ PostgreSQL/S3, multiusuario y colaborativa; identidad local u OIDC/Active
 Directory elegida en instalación; Director intercambiable, agentes iguales por
 protocolo y roles asignables; Codex, Hermes, Claude, Gemini, Ollama y local como
 adaptadores; Consejo y reviews acreditados; API/MCP/CLI/web coherentes; Wizard,
-Git, tools, skills, contexto, plugins, deploy, OPES y operación completa.
+Git, tools, skills, contexto, plugins, deploy, OPES y operación completa; y una
+fábrica externa de videojuegos acreditada hasta build, QA y promoción sin
+convertir sus peculiaridades en reglas del núcleo.
 
 Todo ello conserva un único Goal, un único writer y una única composición. Si
 el gate de la sección 9 no pasa, el estado correcto es “producto parcial con

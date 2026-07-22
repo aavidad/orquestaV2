@@ -201,7 +201,7 @@ corte sin receipt V15 válido: 48/257 = 18,68 %; 14/34 = 41,18 %; 14/14 receipts
 corte con receipt V15 válido: 56/257 = 21,79 %; 15/34 = 44,12 %; 15/15 receipts
 corte histórico antes de V16: 56/257 = 21,79 %; 15/34 = 44,12 %; 15/15 receipts
 corte vigente V16: 59/257 = 22,96 %; 16/34 = 47,06 %; 16/16 receipts
-corte vigente V17: 63/257 = 24,51 %; 17/34 = 50,00 %; 17/17 receipts
+corte vigente V17 con ruta extendida: 63/257 = 24,51 %; 17/37 = 45,95 %; 17/17 receipts
 ```
 
 ## Ejecuciones finales registradas
