@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "contract_id": "AC-V19-COUNCIL",
+  "vertical": "council",
+  "owned_capability_ids": ["GOV-11", "GOV-13", "GOV-14", "STG-06", "STG-08", "EVD-07"],
+  "awaiting_dependency": "independent_reviews",
+  "awaiting_acceptance_contract": "AC-V18-INDEPENDENT-REVIEWS",
+  "implementation_status": "awaiting_product",
+  "policies": ["auto", "required", "skip_by_operator"],
+  "invariants": [
+    "council does not replace V18 independent reviews or the Director lease",
+    "proposal critique ballot dissent security veto and decision bind one project Goal generation subject and spec hash",
+    "skip_by_operator records authorized principal non-empty reason UTC time and spec hash",
+    "replay is idempotent and recovery preserves immutable council facts without duplicate launches"
+  ],
+  "e2e_cases": [
+    {
+      "policy": "auto",
+      "isolated_runtime": true,
+      "assertions": ["three V18 launches are causally linked", "dissent and decision survive restart replay"]
+    },
+    {
+      "policy": "required",
+      "isolated_runtime": true,
+      "assertions": ["promotion blocks without decision", "security veto is durable and blocks promotion"]
+    },
+    {
+      "policy": "skip_by_operator",
+      "isolated_runtime": true,
+      "assertions": ["principal reason UTC time and spec hash are required", "cross-subject skip and changed replay payload fail"]
+    }
+  ],
+  "red_gate": "V19_PRODUCT_PENDING"
+}

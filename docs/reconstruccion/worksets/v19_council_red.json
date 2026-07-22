@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "vertical": "council",
+  "base_commit": "e311a97e4fdcafcf81c6114dbd904af4ed9293ad",
+  "owned_capability_ids": ["GOV-11", "GOV-13", "GOV-14", "STG-06", "STG-08", "EVD-07"],
+  "dependencies": {
+    "required": ["director_lease", "test_attestor", "independent_reviews"],
+    "awaiting_dependency": "independent_reviews",
+    "awaiting_acceptance_contract": "AC-V18-INDEPENDENT-REVIEWS"
+  },
+  "write_set": [
+    "docs/reconstruccion/analisis_y_contrato_v19_*.md",
+    "docs/reconstruccion/worksets/v19_*.json",
+    "acceptance/v19_*.go",
+    "acceptance/fixtures/v19_*.json"
+  ],
+  "forbidden": ["product/**", "config/**", "internal/**", "cmd/**", "roadmap", "evidence", "trace"],
+  "red_gate": "V19_PRODUCT_PENDING",
+  "implementation_status": "awaiting_product"
+}
