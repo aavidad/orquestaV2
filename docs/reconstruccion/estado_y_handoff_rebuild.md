@@ -57,6 +57,8 @@ conteo hasta completar P/S/E desde checkout limpio.
 La contrarrevisión dejó el fixture estricto con las 200 rutas exactas del
 delta sellado, budget y argv separados para focal/race/E2E/vet. P está fijado;
 `AC-V17-TEST-ATTESTOR` y `EVD-01/04/05/13` no aumentan el conteo hasta E.
+La ruta del receipt permanece ausente hasta el PASS real; no se usa `{}` como
+placeholder porque su mera existencia representa post-E en el gate del roadmap.
 
 Estado reproducible post-P:
 
