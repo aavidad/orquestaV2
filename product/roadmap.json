@@ -887,14 +887,24 @@
     {
       "id": "AC-V17-TEST-ATTESTOR",
       "vertical": "test_attestor",
-      "status": "planned",
-      "test_ref": "planned:acceptance/v17_test_attestor_test.go",
-      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
-      "fixture": "planned:fixtures/v17_test_attestor",
+      "status": "executable",
+      "test_ref": "acceptance/v17_test_attestor_test.go",
+      "command": "sh -c 'git diff --check eb272b6645928d800619709c9afd272440b0dabf HEAD -- && go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV17ScopeAndExecutableContract|TestV17EvidenceBelongsOnlyToTestAttestorCapabilities|TestV17AcceptanceCommandRunsTestAttestorConsumers|TestV17AcceptanceCommandUsesNoDestructiveTemporaryCleanup|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons|TestTraceabilityRebuildHistoricalBugIDs|TestTraceabilityRebuildHistoricalBugReviewBindings|TestTraceabilityRebuildSchemaValidatesCanonicalLedgers|TestHistoricalBugCapabilityCoverageNeverInfersLegacyClosure|TestAcceptanceV02AuthorityRules|TestAcceptanceV03CanonicalLedgers|TestAcceptanceV06AtomicStateOutbox|TestAcceptanceV09RecoveryBackup|TestAcceptanceV15BudgetsEffects|TestAcceptanceV16WorkspaceGit|TestAcceptanceV17TestAttestor|TestV17CandidateSubjectsCoverCommittedDelta)$\" && go test -mod=vendor -count=1 ./internal/goal ./internal/ports ./internal/application ./internal/config ./internal/adapters/agent/codex ./internal/interfaces/mcp ./internal/adapters/artifact/filesystem ./internal/adapters/workspace/gitlocal ./internal/adapters/attestor/bubblewrap ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta && timeout --kill-after=10s 240s go test -mod=vendor -race -count=1 -timeout=210s ./internal/application ./internal/adapters/artifact/filesystem ./internal/adapters/workspace/gitlocal ./internal/adapters/attestor/bubblewrap ./internal/adapters/state/sqlite ./internal/bootstrap -run \"^(TestStoreConcurrentPutPreservesSinglePrivateBlob|TestConcurrentStoreHandlesPublishOnePrivateBlob|TestCloseIsConcurrentAndIdempotent|TestPinnedGitConcurrentCommandsSurviveCloseRace|TestConcurrentCommitReplayRestoresSnapshotChangeMarkerAcrossRestart|TestConcurrentAttestationFenceAllowsOneWriter|TestExpiredAttestClaimFenceCannotWriteAfterSpecialLeaseRecovery|TestTestAttestationCrashFrontiersReplayExactlyOnce|TestTerminalAttestationReceiptPreventsRestartRerun)$\" && e2e_events=$(CGO_ENABLED=0 go test -mod=vendor -tags=v17_real_e2e -json -count=1 -timeout=180s ./internal/bootstrap -run \"^TestRealGitSQLiteCASBubblewrapAttestationEndToEnd$\" 2>&1); e2e_status=$?; printf '%s\\n' \"$e2e_events\"; [ \"$e2e_status\" -eq 0 ] && printf '%s\\n' \"$e2e_events\" | grep -F \"\\\"Action\\\":\\\"run\\\"\" | grep -F \"\\\"Package\\\":\\\"orquesta/internal/bootstrap\\\"\" | grep -F \"\\\"Test\\\":\\\"TestRealGitSQLiteCASBubblewrapAttestationEndToEnd\\\"\" >/dev/null && printf '%s\\n' \"$e2e_events\" | grep -F \"\\\"Action\\\":\\\"pass\\\"\" | grep -F \"\\\"Package\\\":\\\"orquesta/internal/bootstrap\\\"\" | grep -F \"\\\"Test\\\":\\\"TestRealGitSQLiteCASBubblewrapAttestationEndToEnd\\\"\" >/dev/null && GOFLAGS=-mod=vendor go vet ./internal/goal ./internal/ports ./internal/application ./internal/config ./internal/adapters/agent/codex ./internal/interfaces/mcp ./internal/adapters/artifact/filesystem ./internal/adapters/workspace/gitlocal ./internal/adapters/attestor/bubblewrap ./internal/adapters/state/sqlite ./internal/bootstrap ./cmd/orquesta'",
+      "fixture": "acceptance/fixtures/v17_test_attestor.json",
+      "receipt": "product/evidence/v17_test_attestor.json",
       "assertions": [
-        "attestation is reproducible against exact tree and inputs",
-        "filesystem traversal link ownership mode and leak attacks fail",
-        "launch ACK is not evidence"
+        "EVD-01 EVD-04 EVD-05 and EVD-13 are the exact accepted V17 ownership; author reviewers refinery and Council remain deferred to V18 and V19",
+        "RequiredTestSpec is canonical structured data with ToolRef ordered arguments and repository-relative working directory; new write-scoped work without required tests fails closed while a V16 legacy candidate remains pending nonattestable and nonintegrable without invented tests or PASS",
+        "ArtifactRecord preserves occurrence causality even when CAS bytes match while typed artifact_provenance never means tests passed",
+        "required_tests attestation binds exact Goal WorkItem Execution attempt generations SpecHash WorkspaceBinding ChangeSet Git OIDs diff write set required tests and sandbox policy into one deterministic SubjectDigest",
+        "TestAttestor is a neutral outbound port and AgentObserver output provider ACK or launch receipt can never produce a required_tests PASS",
+        "SnapshotStreamSource checks durable workspace and ChangeSet markers plus exact Git objects and returns one sealed object stream without exposing physical paths",
+        "commit_change schedules attest_test through the existing outbox claim lease fence budget and effect ledger; no private lifecycle store queue scheduler daemon or writer exists",
+        "a passing attestation leaves the ChangeSet pending; only an authorized IntegrateChange request with the exact PASS schedules integrate_change and V18 later adds reviews to that same gate",
+        "failed missing malformed stale or mismatched attestation never integrates or closes and failed evidence remains durable for rework",
+        "the local bubblewrap adapter runs non-root direct argv with namespaces no network capabilities ambient environment HOME production Docker socket metadata endpoint or unauthorized host mounts",
+        "filesystem CAS rejects traversal links special files wrong owner unsafe modes extra hardlinks and metadata drift and revalidates immutable bytes by SHA-256",
+        "CAS publication then one SQLite transaction makes PASS and FAIL replay crash restart fence loss and concurrent claims converge without partial evidence rerunning a terminal receipt or synthesizing legacy PASS"
       ]
     },
     {
@@ -3399,8 +3409,12 @@
       "acceptance_contracts": [
         "AC-V17-TEST-ATTESTOR"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v17_test_attestor_test.go",
+        "acceptance/fixtures/v17_test_attestor.json",
+        "product/evidence/v17_test_attestor.json"
+      ],
       "supersedes": []
     },
     {
@@ -3471,8 +3485,12 @@
       "acceptance_contracts": [
         "AC-V17-TEST-ATTESTOR"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v17_test_attestor_test.go",
+        "acceptance/fixtures/v17_test_attestor.json",
+        "product/evidence/v17_test_attestor.json"
+      ],
       "supersedes": []
     },
     {
@@ -3493,8 +3511,12 @@
       "acceptance_contracts": [
         "AC-V17-TEST-ATTESTOR"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v17_test_attestor_test.go",
+        "acceptance/fixtures/v17_test_attestor.json",
+        "product/evidence/v17_test_attestor.json"
+      ],
       "supersedes": []
     },
     {
@@ -3673,8 +3695,12 @@
       "acceptance_contracts": [
         "AC-V17-TEST-ATTESTOR"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v17_test_attestor_test.go",
+        "acceptance/fixtures/v17_test_attestor.json",
+        "product/evidence/v17_test_attestor.json"
+      ],
       "supersedes": []
     },
     {

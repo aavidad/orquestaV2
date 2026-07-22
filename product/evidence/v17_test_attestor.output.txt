@@ -1,0 +1,42 @@
+ok  	orquesta	1.092s
+ok  	orquesta/acceptance	6.567s
+ok  	orquesta/internal/goal	0.009s
+ok  	orquesta/internal/ports	0.004s
+ok  	orquesta/internal/application	0.114s
+ok  	orquesta/internal/config	0.394s
+ok  	orquesta/internal/adapters/agent/codex	1.252s
+ok  	orquesta/internal/interfaces/mcp	0.209s
+ok  	orquesta/internal/adapters/artifact/filesystem	0.013s
+ok  	orquesta/internal/adapters/workspace/gitlocal	6.368s
+ok  	orquesta/internal/adapters/attestor/bubblewrap	0.015s
+ok  	orquesta/internal/adapters/state/sqlite	52.736s
+ok  	orquesta/internal/bootstrap	10.220s
+ok  	orquesta/cmd/orquesta	0.004s
+ok  	orquesta/internal/application	1.014s [no tests to run]
+ok  	orquesta/internal/adapters/artifact/filesystem	1.022s
+ok  	orquesta/internal/adapters/workspace/gitlocal	1.180s
+ok  	orquesta/internal/adapters/attestor/bubblewrap	1.013s
+ok  	orquesta/internal/adapters/state/sqlite	37.084s
+ok  	orquesta/internal/bootstrap	1.014s [no tests to run]
+{"Time":"2026-07-22T21:59:30.750248012+02:00","Action":"start","Package":"orquesta/internal/bootstrap"}
+{"Time":"2026-07-22T21:59:30.753348711+02:00","Action":"run","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteCASBubblewrapAttestationEndToEnd"}
+{"Time":"2026-07-22T21:59:30.753368671+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteCASBubblewrapAttestationEndToEnd","Output":"=== RUN   TestRealGitSQLiteCASBubblewrapAttestationEndToEnd\n"}
+{"Time":"2026-07-22T21:59:47.986594263+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteCASBubblewrapAttestationEndToEnd","Output":"Running as unit: orquesta-v17-e2e-7c24343489ed99de8214f699.service; invocation ID: 75acf29b45b34c2f98b540f02ade10c8\n"}
+{"Time":"2026-07-22T21:59:47.986620543+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteCASBubblewrapAttestationEndToEnd","Output":"=== RUN   TestRealGitSQLiteCASBubblewrapAttestationEndToEnd\n"}
+{"Time":"2026-07-22T21:59:47.986626693+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteCASBubblewrapAttestationEndToEnd","Output":"=== RUN   TestRealGitSQLiteCASBubblewrapAttestationEndToEnd/PASS_survives_restart_without_integrating_then_closes_explicitly\n"}
+{"Time":"2026-07-22T21:59:47.986629243+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteCASBubblewrapAttestationEndToEnd","Output":"=== RUN   TestRealGitSQLiteCASBubblewrapAttestationEndToEnd/failed_test_keeps_change_pending_and_goal_open\n"}
+{"Time":"2026-07-22T21:59:47.986631823+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteCASBubblewrapAttestationEndToEnd","Output":"V17_SYSTEMD_INNER_E2E_PASSED:orquesta-v17-e2e-7c24343489ed99de8214f699.service\n"}
+{"Time":"2026-07-22T21:59:47.986634373+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteCASBubblewrapAttestationEndToEnd","Output":"--- PASS: TestRealGitSQLiteCASBubblewrapAttestationEndToEnd (17.19s)\n"}
+{"Time":"2026-07-22T21:59:47.986636473+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteCASBubblewrapAttestationEndToEnd","Output":"    --- PASS: TestRealGitSQLiteCASBubblewrapAttestationEndToEnd/PASS_survives_restart_without_integrating_then_closes_explicitly (8.78s)\n"}
+{"Time":"2026-07-22T21:59:47.986638853+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteCASBubblewrapAttestationEndToEnd","Output":"    --- PASS: TestRealGitSQLiteCASBubblewrapAttestationEndToEnd/failed_test_keeps_change_pending_and_goal_open (8.40s)\n"}
+{"Time":"2026-07-22T21:59:47.986641273+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteCASBubblewrapAttestationEndToEnd","Output":"PASS\n"}
+{"Time":"2026-07-22T21:59:47.986643663+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteCASBubblewrapAttestationEndToEnd","Output":"          Finished with result: success\n"}
+{"Time":"2026-07-22T21:59:47.986646563+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteCASBubblewrapAttestationEndToEnd","Output":"Main processes terminated with: code=exited, status=0/SUCCESS\n"}
+{"Time":"2026-07-22T21:59:47.986648942+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteCASBubblewrapAttestationEndToEnd","Output":"               Service runtime: 17.195s\n"}
+{"Time":"2026-07-22T21:59:47.986651262+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteCASBubblewrapAttestationEndToEnd","Output":"             CPU time consumed: 31.515s\n"}
+{"Time":"2026-07-22T21:59:47.986653672+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteCASBubblewrapAttestationEndToEnd","Output":"                   Memory peak: 458.9M (swap: 0B)\n"}
+{"Time":"2026-07-22T21:59:48.027010929+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteCASBubblewrapAttestationEndToEnd","Output":"--- PASS: TestRealGitSQLiteCASBubblewrapAttestationEndToEnd (17.27s)\n"}
+{"Time":"2026-07-22T21:59:48.027019959+02:00","Action":"pass","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteCASBubblewrapAttestationEndToEnd","Elapsed":17.27}
+{"Time":"2026-07-22T21:59:48.027028719+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Output":"PASS\n"}
+{"Time":"2026-07-22T21:59:48.027817686+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Output":"ok  \torquesta/internal/bootstrap\t17.277s\n"}
+{"Time":"2026-07-22T21:59:48.027835696+02:00","Action":"pass","Package":"orquesta/internal/bootstrap","Elapsed":17.278}
