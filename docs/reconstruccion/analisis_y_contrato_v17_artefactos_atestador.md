@@ -9,6 +9,25 @@ auditoría de cierre pre-P. V17 posee exclusivamente
 `AC-V17-TEST-ATTESTOR`. Depende de V06, V09, V15 y V16. Autor/reviewers,
 refinery y Consejo siguen en V18/V19.
 
+## Cierre acreditado
+
+El contrato quedó acreditado el 2026-07-22. La auditoría pre-P que sigue se
+conserva como historia del razonamiento; sus apartados «todavía rojos» y
+«P/S/E permanecen abiertas» ya no describen el estado vigente.
+
+```text
+P: d2f02073848c751130586fbc2f7eae5a9bfd822e
+S: a97ea3bc3771c6d89ec055e8189bda1bc6f97ce6
+E: c309c588b3badad51d5832b76c37863cd233c0e0
+candidate: sha256:8c0463aab77cde82a570cafd1d481bb07d97c143eac72ea32e758e82efa4c6c5
+output: sha256:49767386a260d3514158a3a66a2f00d62af36b13957ed376080999adca34471a
+```
+
+El fixture sellado enumera 202 subjects, aplica los límites finales
+`6800/1900/4500/500/7500` y su argv pasó desde `detached_clean`. La evidencia
+canónica vive en `product/evidence/v17_test_attestor.json`. Solo
+`EVD-01/04/05/13` llevan sus tres refs; V18 es la siguiente dependencia.
+
 ## Evidencia del análisis
 
 La nueva Orquesta dirigió un DAG real de tres análisis read-only mediante MCP:

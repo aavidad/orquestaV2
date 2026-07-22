@@ -7,7 +7,62 @@ sesión. Es estado operativo, no evidencia de aceptación. Los estados canónico
 de capacidades, verticales y contratos viven en `product/roadmap.json`; los
 verdes viven en receipts fuera de su propio candidato.
 
-## Checkpoint verificable vigente: V16 acreditado; V17 con P sellado y E pendiente
+## Checkpoint verificable vigente: V17 acreditado
+
+En `c309c588b3badad51d5832b76c37863cd233c0e0`, V01–V17 están
+cerrados por receipts V3 reproducibles. El corte canónico es **63/257
+capacidades, 24,51 %; 17/34 verticales, 50,00 %; 17/17 receipts**. V17
+acredita exactamente `EVD-01`, `EVD-04`, `EVD-05` y `EVD-13`; autor,
+revisiones independientes, refinery y Consejo permanecen en V18–V19.
+
+Cadena autoritativa V17:
+
+```text
+producto P:          d2f02073848c751130586fbc2f7eae5a9bfd822e
+sellado S:           a97ea3bc3771c6d89ec055e8189bda1bc6f97ce6
+evidencia E:         c309c588b3badad51d5832b76c37863cd233c0e0
+candidate SHA:       sha256:8c0463aab77cde82a570cafd1d481bb07d97c143eac72ea32e758e82efa4c6c5
+output SHA:          sha256:49767386a260d3514158a3a66a2f00d62af36b13957ed376080999adca34471a
+source worktree:     detached_clean
+ejecutado:           2026-07-22T21:59:57+02:00
+```
+
+El argv exacto de `acceptance/fixtures/v17_test_attestor.json` pasó raíz y
+aceptación seleccionadas, todos los paquetes propietarios, carreras acotadas,
+el E2E real Git+SQLite+CAS+bubblewrap bajo unidad systemd delegada y `go vet`.
+El receipt durable está en `product/evidence/v17_test_attestor.json`; el output
+completo ligado por hash está a su lado.
+
+Resultado funcional:
+
+- `RequiredTestSpec` y el sujeto de atestación ligan Goal, WorkItem, Execution,
+  generaciones, workspace, ChangeSet, OIDs Git, diff, write-set, tests y
+  política de sandbox;
+- Git produce un object stream verificado y sellado; el atestador no recibe
+  rutas físicas ni un worktree mutable de pruebas;
+- bubblewrap ejecuta no-root, sin red ni mounts/entorno no autorizados, con
+  límites de cgroup, output y proceso; Go viaja en memfd sellado independiente
+  por ejecución;
+- CAS filesystem y SQLite cierran publicación, receipt, replay, restart,
+  fence loss y concurrencia sin sintetizar PASS ni repetir efectos terminales;
+- PASS de tests no integra por sí solo: la integración sigue siendo una acción
+  autorizada separada y V18 añade las revisiones al mismo gate.
+
+La contrarrevisión final encontró y cerró `BUG-REBUILD-20260722-325`–`329`:
+ratchets históricos stale, receipt Codex desfasado, evidencia sin clase de
+simplicidad, acreditación de roadmap mal anclada y un intento de cruzar la
+frontera legacy con un gate global. `modulos/**` quedó intacto y V02 volvió a
+validar su digest congelado. El E2E Codex real se renovó sobre las fuentes V17
+con marcador `ORQUESTA_CODEX_E2E_OK_4f25fa65f0e788447c1a08e82af93fcd` y
+source digest
+`sha256:a12c0ad219524a205be5efdd241e0c62e9fa8bf1760b4e74e40a5c3ffda923d7`.
+
+Siguiente dependencia causal: V18 `independent_reviews`, únicamente en su
+worktree/branch aislado y sin reabrir V17 salvo regresión reproducible. El
+producto total no está al 100 %; el progreso honesto es 24,51 % de capacidades
+y 50 % de verticales.
+
+## Checkpoint histórico previo al cierre V17: V16 acreditado; V17 con P sellado y E pendiente
 
 En `38e1ffb82d`, V01–V16 están cerrados por receipts V3 reproducibles.
 `TestAcceptanceV16WorkspaceGitReceipt` valida el `PASS` de

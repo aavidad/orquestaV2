@@ -207,6 +207,7 @@ OID y digests autoritativos viven únicamente en
 ```text
 corte histórico antes de V16: 56/257 = 21,79 %; 15/34 = 44,12 %; 15/15 receipts
 corte vigente V16: 59/257 = 22,96 %; 16/34 = 47,06 %; 16/16 receipts
+corte vigente V17: 63/257 = 24,51 %; 17/34 = 50,00 %; 17/17 receipts
 ```
 
 El receipt V15 acredita únicamente `GOV-15`, `STG-09`, `ORC-08`, `ORC-09`,
@@ -217,9 +218,9 @@ stop quedan gobernados también en composición Codex. HTTP/MCP/CLI públicos
 siguen esperando V20 y la paridad i18n total espera V21.
 
 El análisis, implementación y sellado V16 están completos. V16 acredita solo
-`STG-02`, `STG-10` y `EXT-10`; Forge remoto no se abre hasta V28. V17 permanece
-sin iniciar y es la primera vertical pendiente para una próxima sesión
-autorizada.
+`STG-02`, `STG-10` y `EXT-10`; Forge remoto no se abre hasta V28. V17 también
+está acreditada y añade exactamente `EVD-01`, `EVD-04`, `EVD-05` y `EVD-13`.
+V18 `independent_reviews` es la siguiente dependencia causal.
 
 ## 6. Olas y transición a auto-orquestación
 
@@ -228,9 +229,10 @@ Ejemplos de paralelismo seguro:
 
 - V07 y contratos iniciales de V10 pueden avanzar tras V06 con write-sets
   separados; V08 consume la salida canónica de V07.
-- V16 ya tiene receipt estricto; V17 puede abrirse en una próxima sesión, pero
-  no se adelanta Forge remoto ni se integra otra vertical sin sus dependencias.
-- V17, adapters iniciales de V21 y catálogos i18n pueden desarrollarse en ramas
+- V16 y V17 ya tienen receipts estrictos; V18 puede continuar en su worktree
+  aislado, pero no se adelanta Forge remoto ni se integra otra vertical sin sus
+  dependencias.
+- V18, adapters iniciales de V21 y catálogos i18n pueden desarrollarse en ramas
   separadas, pero solo integran con sus dependencias acreditadas.
 - tras congelar contrato en V20, los adapters de V25 se portan en paralelo.
 - plugins de V28 se paralelizan por proceso/namespace; OPES espera únicamente

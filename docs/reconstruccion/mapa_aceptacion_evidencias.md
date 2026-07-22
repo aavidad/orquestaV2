@@ -201,12 +201,15 @@ corte sin receipt V15 válido: 48/257 = 18,68 %; 14/34 = 41,18 %; 14/14 receipts
 corte con receipt V15 válido: 56/257 = 21,79 %; 15/34 = 44,12 %; 15/15 receipts
 corte histórico antes de V16: 56/257 = 21,79 %; 15/34 = 44,12 %; 15/15 receipts
 corte vigente V16: 59/257 = 22,96 %; 16/34 = 47,06 %; 16/16 receipts
+corte vigente V17: 63/257 = 24,51 %; 17/34 = 50,00 %; 17/17 receipts
 ```
 
 ## Ejecuciones finales registradas
 
 | Fecha | Comando | Resultado | Alcance |
 |---|---|---|---|
+| 2026-07-22 | argv exacto de `AC-V17-TEST-ATTESTOR`, registrado en `product/evidence/v17_test_attestor.json` | receipt V3 `PASS`; P=`d2f02073848c751130586fbc2f7eae5a9bfd822e`, S=`a97ea3bc3771c6d89ec055e8189bda1bc6f97ce6`, E=`c309c588b3badad51d5832b76c37863cd233c0e0`; candidate `sha256:8c0463aab77cde82a570cafd1d481bb07d97c143eac72ea32e758e82efa4c6c5`; output `sha256:49767386a260d3514158a3a66a2f00d62af36b13957ed376080999adca34471a` | atestador neutral, Git object stream, CAS filesystem, SQLite/recovery, bubblewrap/cgroup, race, E2E systemd real y vet desde `detached_clean` |
+| 2026-07-22 | `go test -mod=vendor -v -count=1 ./internal/bootstrap -run '^TestRealCodexAdapterClosesGoalThroughProductionMCPServer$' -args -orquesta-real-codex-config=/home/alberto/Trabajo/.orquesta-rebuild-real-e2e-v14-20260716T171502/orquesta.toml` | `PASS` en `5.42s`; marcador `ORQUESTA_CODEX_E2E_OK_4f25fa65f0e788447c1a08e82af93fcd` | no regresión de composición productiva, MCP, Codex real, SQLite y CAS sobre source digest V17; no sustituye el receipt P/S/E del atestador |
 | 2026-07-22 | argv exacto de `AC-V16-WORKSPACE-GIT`, registrado en `product/evidence/v16_workspace_git.json` | receipt V3 `PASS`; P=`b48162b0433dd32b6369ee324358e5f87af325ad`, S=`a4f602ab01c4e77f0d876c79c2c8e86b44b68fa4`, E=`38e1ffb82d6f71610ac0a745d693d52fd43dac22`; candidate `sha256:83962cf0feca66a38030b18f655d86201117df1d5b1cbe2efa795e8010c939a1`; output `sha256:1cf6dc65ac2138927bff503198eee1c63451437a04949ccb0d62e369e3187f2b` | workspace/Git local, SQLite/recovery, Codex binding, crash/replay, RBAC, CAS, 22 carreras, ratchets y vet desde `detached_clean` |
 | 2026-07-21 | `go test -mod=vendor -v -count=1 ./internal/bootstrap -run '^TestRealCodexAdapterClosesGoalThroughProductionMCPServer$' -args -orquesta-real-codex-config=/home/alberto/Trabajo/.orquesta-rebuild-real-e2e-v14-20260716T171502/orquesta.toml` | `PASS` en `6.49s`; marcador `ORQUESTA_CODEX_E2E_OK_798736afa7e84a5f97e5be139c1d3e1e` | no regresión de composición productiva, MCP, Codex real, SQLite y CAS sobre source digest V16; no acredita workspace/Git ni sustituye receipt P/S/E |
 | 2026-07-18 | argv exacto de `AC-V15-BUDGETS-EFFECTS`, registrado en `product/evidence/v15_budgets_effects.json` | válido únicamente si el receipt V3 `PASS` supera su test estricto desde `detached_clean`; OID/digests en el receipt | presupuestos jerárquicos, fairness, riesgo/esfuerzo, cadena causal launch/stop, policy histórica, recovery/backup, 100 claims concurrentes, carreras, ratchets y composición Codex V15 |
@@ -220,13 +223,13 @@ corte vigente V16: 59/257 = 22,96 %; 16/34 = 47,06 %; 16/16 receipts
 | 2026-07-14 | `git diff --check` y `scripts/check_rebuild_write_set.sh` | `PASS` | higiene del diff y aislamiento frente al árbol legacy; 2332 rutas autorizadas, incluido vendor |
 
 El placeholder `<TOML temporal>` de 2026-07-14 era intencional y esa ejecución
-queda como evidencia histórica. La renovación vigente del 2026-07-21 reutilizó
+queda como evidencia histórica. La renovación vigente del 2026-07-22 reutilizó
 una configuración aislada, creó un request nuevo, cerró el Goal por el servidor
 MCP productivo y leyó de vuelta el marcador
-`ORQUESTA_CODEX_E2E_OK_798736afa7e84a5f97e5be139c1d3e1e`. El receipt durable
+`ORQUESTA_CODEX_E2E_OK_4f25fa65f0e788447c1a08e82af93fcd`. El receipt durable
 [`product/evidence/real_codex_mcp_e2e.json`](../../product/evidence/real_codex_mcp_e2e.json)
-liga comando, `2026-07-21T23:46:53+02:00` y source digest
-`sha256:15018d857a263e8f3b99aa6eb68609ecbd288c55fe164ed53d5ddeb3a93a080d`.
+liga comando, `2026-07-22T21:49:54+02:00` y source digest
+`sha256:a12c0ad219524a205be5efdd241e0c62e9fa8bf1760b4e74e40a5c3ffda923d7`.
 
 Este `PASS` demuestra ausencia de regresión en composición productiva, MCP,
 Codex, SQLite y CAS. El Goal sin `WriteSet` no activa workspace Git y el smoke

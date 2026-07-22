@@ -547,12 +547,12 @@ La prueba debe cerrar un Goal por servidor MCP de producción, leer un artifact
 con marcador único y apagar todos sus procesos. No apuntarla al runtime legacy
 ni al estado operativo que se quiera conservar.
 
-Última comprobación real: `PASS` en `6.85s`, ejecutada
-`2026-07-21T23:46:53+02:00` con configuración aislada
+Última comprobación real: `PASS` en `5.42s`, ejecutada
+`2026-07-22T21:49:54+02:00` con configuración aislada
 `/home/alberto/Trabajo/.orquesta-rebuild-real-e2e-v14-20260716T171502/orquesta.toml`,
 source digest
-`sha256:15018d857a263e8f3b99aa6eb68609ecbd288c55fe164ed53d5ddeb3a93a080d`
-y marcador `ORQUESTA_CODEX_E2E_OK_798736afa7e84a5f97e5be139c1d3e1e`.
+`sha256:a12c0ad219524a205be5efdd241e0c62e9fa8bf1760b4e74e40a5c3ffda923d7`
+y marcador `ORQUESTA_CODEX_E2E_OK_4f25fa65f0e788447c1a08e82af93fcd`.
 Prueba composición productiva, MCP, Codex, SQLite y CAS sin regresión. El Goal
 sin `WriteSet` no activa workspace Git ni acredita por sí solo V16; esa
 acreditación procede únicamente del receipt V3 P/S/E separado.
