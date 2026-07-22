@@ -7,7 +7,7 @@ sesión. Es estado operativo, no evidencia de aceptación. Los estados canónico
 de capacidades, verticales y contratos viven en `product/roadmap.json`; los
 verdes viven en receipts fuera de su propio candidato.
 
-## Checkpoint verificable vigente: V16 acreditado; V17 en ejecución sin sello
+## Checkpoint verificable vigente: V16 acreditado; V17 preparando nuevo P
 
 En `38e1ffb82d`, V01–V16 están cerrados por receipts V3 reproducibles.
 `TestAcceptanceV16WorkspaceGitReceipt` valida el `PASS` de
@@ -43,26 +43,25 @@ helper libre violaba el writer único; `a130031096` detectó un runner temporal
 incompatible con el hardening. `BUG-REBUILD-20260721-255`–`257` conservan esas
 lecciones. No se relajaron autoridad, seguridad, timeouts ni presupuestos.
 
-V17 se abrió después de este checkpoint y permanece **no acreditada** mientras
-no exista su receipt V3 reproducible. Su contrato y análisis viven en
+V17 permanece **no acreditada** mientras no exista su receipt V3 reproducible.
+El primer candidato `5ca94551f9` fue rechazado por el gate estructural y no es
+evidencia; su contrato y análisis viven en
 `docs/reconstruccion/analisis_y_contrato_v17_artefactos_atestador.md`; hay
 trabajo activo sobre CAS filesystem, `TestAttestor`, verificación Git exacta,
 flujo de aplicación y persistencia/recovery SQLite. Nada de ello aumenta el
 conteo hasta completar P/S/E desde checkout limpio.
 
-### Handoff V17 pre-P: contrato de cierre preparado, producto aún rojo
+### Handoff V17 pre-P2: corrección estructural terminada, nuevo sello pendiente
 
-La contrarrevisión de aceptación dejó fixture estricto con las 199 rutas
-exactas de `B..working tree`, budget y argv separados para focal/race/E2E/vet.
-El OID P continúa vacío, no existe
-`product/evidence/v17_test_attestor.json`, `AC-V17-TEST-ATTESTOR` sigue
-`planned` y `EVD-01/04/05/13` siguen `declared` sin evidence refs. Un ACK no
-cambia ninguno de esos hechos.
+La contrarrevisión dejó el fixture estricto con las 200 rutas exactas del
+delta, budget y argv separados para focal/race/E2E/vet. El OID P permanece
+vacío hasta crear P2; `AC-V17-TEST-ATTESTOR` y `EVD-01/04/05/13` no aumentan
+el conteo hasta E.
 
-Estado reproducible PRE-P:
+Estado reproducible pre-P2:
 
-- acceptance V17 pasa y compara el inventario dirty exacto mientras P está
-  vacío; los behavior tests se descubren por AST y la suite race no admite
+- acceptance V17 pasa y compara el inventario exacto; los
+  behavior tests se descubren por AST y la suite race no admite
   nombres sin una definición Linux seleccionada;
 - trazabilidad JSONL y tests estructurales de bugs: verdes;
 - config canónica/example/generados: verdes;
@@ -87,10 +86,9 @@ Estado reproducible PRE-P:
   filas se cerraron. Los bugs ligados a E2E, budget sellado o P/S/E siguen
   abiertos.
 
-Siguiente dependencia única: ejecutar race/vet y el E2E final sobre el árbol
-congelado, crear P, fijar su OID en S y emitir E desde `detached_clean`. El E2E
-real ya pasó una vez en el servicio transitorio systemd delegado; todavía no es
-el receipt reproducible de S. El presupuesto medido y su deuda están decididos
+Siguiente dependencia única: crear P2, fijarlo en S y emitir E desde
+`detached_clean`. Race, vet y el E2E real ya pasaron; todavía no son el
+receipt reproducible de S. El presupuesto medido y su deuda están decididos
 en `docs/reconstruccion/adr_v17_presupuesto_seguridad_2026-07-22.md`.
 
 La estrategia de agentes independientes para terminar V17-V34, con DAG,

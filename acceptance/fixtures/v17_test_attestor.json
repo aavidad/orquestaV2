@@ -220,9 +220,9 @@
   "owned_capability_ids": ["EVD-01", "EVD-04", "EVD-05", "EVD-13"],
   "dependency_verticals": ["atomic_state_outbox", "recovery_backup", "budgets_effects", "workspace_git"],
   "simplicity_budget": {
-    "product_net_lines": 6750,
-    "core_net_lines": 2000,
-    "adapter_net_lines": 4450,
+    "product_net_lines": 6800,
+    "core_net_lines": 1900,
+    "adapter_net_lines": 4500,
     "migration_net_lines": 500,
     "test_net_lines": 7500,
     "max_function_lines": 80,

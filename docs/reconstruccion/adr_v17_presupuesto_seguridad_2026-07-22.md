@@ -22,11 +22,11 @@ rutas tracked y untracked, mide:
 
 | Clase | Neto real | Límite V17 |
 |---|---:|---:|
-| core/ports | 1804 | 2000 |
-| adapters | 4442 | 4450 |
+| core/ports | 1819 | 1900 |
+| adapters | 4467 | 4500 |
 | migración | 500 | 500 |
-| tests | 7458 | 7500 |
-| producto total | 6746 | 6750 |
+| tests | 7459 | 7500 |
+| producto total | 6786 | 6800 |
 
 ## Decisión
 

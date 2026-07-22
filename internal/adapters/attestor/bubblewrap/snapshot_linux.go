@@ -59,6 +59,29 @@ func readSnapshotStreamLimited(source io.Reader, request ports.TestAttestationRe
 	if err := readStrings(canonical, fields[:]); err != nil || fields[0] != string(request.Subject.ObjectFormat) || fields[1] != request.SubjectDigest || fields[2] != request.Subject.HeadOID || fields[3] != request.Subject.TreeOID {
 		return nil, streamError(limited, err)
 	}
+	directories, err := readSnapshotEntries(limited, canonical, digest, request, snapshot, max, maxFiles)
+	if err != nil {
+		return nil, err
+	}
+	want, got := digest.Sum(nil), make([]byte, sha256.Size)
+	if _, err := io.ReadFull(limited, got); err != nil || !bytes.Equal(got, want) {
+		return nil, streamError(limited, err)
+	}
+	var extra [1]byte
+	if count, trailing := limited.Read(extra[:]); count != 0 || trailing != io.EOF {
+		return nil, streamError(limited, trailing)
+	}
+	if limited.N == 0 {
+		return nil, snapshotLimit()
+	}
+	for directory := range directories {
+		snapshot.directories = append(snapshot.directories, directory)
+	}
+	sort.Strings(snapshot.directories)
+	return snapshot, nil
+}
+
+func readSnapshotEntries(limited *io.LimitedReader, canonical io.Reader, digest io.Writer, request ports.TestAttestationRequest, snapshot *sandboxSnapshot, max, maxFiles int64) (map[string]struct{}, error) {
 	directories := map[string]struct{}{}
 	maxEntries, openFiles, previous := SubjectEntryLimit(max), int64(0), ""
 	for entries := int64(0); ; entries++ {
@@ -67,7 +90,7 @@ func readSnapshotStreamLimited(source io.Reader, request ports.TestAttestationRe
 			return nil, streamError(limited, err)
 		}
 		if tag[0] == snapshotEndTag {
-			break
+			return directories, nil
 		}
 		if tag[0] != snapshotEntryTag || entries >= maxEntries {
 			return nil, snapshotInvalid()
@@ -113,22 +136,6 @@ func readSnapshotStreamLimited(source io.Reader, request ports.TestAttestationRe
 			return nil, snapshotLimit()
 		}
 	}
-	want, got := digest.Sum(nil), make([]byte, sha256.Size)
-	if _, err := io.ReadFull(limited, got); err != nil || !bytes.Equal(got, want) {
-		return nil, streamError(limited, err)
-	}
-	var extra [1]byte
-	if count, trailing := limited.Read(extra[:]); count != 0 || trailing != io.EOF {
-		return nil, streamError(limited, trailing)
-	}
-	if limited.N == 0 {
-		return nil, snapshotLimit()
-	}
-	for directory := range directories {
-		snapshot.directories = append(snapshot.directories, directory)
-	}
-	sort.Strings(snapshot.directories)
-	return snapshot, nil
 }
 
 func addParentDirectories(directories map[string]struct{}, name string) error {

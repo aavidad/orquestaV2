@@ -67,18 +67,8 @@ func (orchestrator *Orchestrator) processPrepareWorkspace(ctx context.Context, c
 	if err != nil {
 		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	}
-	binding := WorkspaceBinding{
-		Ref: prepared.WorkspaceRef, PrincipalRef: authority.PrincipalRef,
-		ActorRef: record.Goal.Actor(), ProjectRef: record.Goal.Project(), RepositoryRef: prepared.RepositoryRef,
-		GoalRef: record.Goal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref,
-		ExecutionAttempt: execution.AttemptNo, PlanGeneration: execution.PlanGeneration,
-		AppSpecGeneration: execution.AppSpecGeneration, SpecHash: execution.SpecHash,
-		WriteSet: request.WriteSet, WriteSetDigest: prepared.WriteSetDigest,
-		TargetRef: prepared.TargetRef, BaseOID: prepared.BaseOID, ObjectFormat: prepared.ObjectFormat,
-		AdapterRef: prepared.AdapterRef, EffectIntentRef: claim.Action.EffectIntent.Ref,
-		EffectAttemptRef: attempt.Ref, EffectFence: claim.Fence, ReceiptRef: externalReceipt.Ref,
-		PreparedAt: prepared.PreparedAt,
-	}
+	binding := workspaceBindingFromPrepared(record, item, execution, authority, claim, attempt,
+		request, prepared, externalReceipt)
 	if err := ValidateWorkspaceBinding(binding); err != nil {
 		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	}
@@ -96,6 +86,24 @@ func (orchestrator *Orchestrator) processPrepareWorkspace(ctx context.Context, c
 		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	}
 	return nil
+}
+
+func workspaceBindingFromPrepared(record GoalRecord, item goal.WorkItem, execution ExecutionRecord,
+	authority WorkItemAuthority, claim ActionClaim, attempt EffectAttempt,
+	request ports.WorkspacePrepareRequest, prepared ports.WorkspacePrepared, receipt EffectReceipt,
+) WorkspaceBinding {
+	return WorkspaceBinding{
+		Ref: prepared.WorkspaceRef, PrincipalRef: authority.PrincipalRef,
+		ActorRef: record.Goal.Actor(), ProjectRef: record.Goal.Project(), RepositoryRef: prepared.RepositoryRef,
+		GoalRef: record.Goal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref,
+		ExecutionAttempt: execution.AttemptNo, PlanGeneration: execution.PlanGeneration,
+		AppSpecGeneration: execution.AppSpecGeneration, SpecHash: execution.SpecHash,
+		WriteSet: request.WriteSet, WriteSetDigest: prepared.WriteSetDigest,
+		TargetRef: prepared.TargetRef, BaseOID: prepared.BaseOID, ObjectFormat: prepared.ObjectFormat,
+		AdapterRef: prepared.AdapterRef, EffectIntentRef: claim.Action.EffectIntent.Ref,
+		EffectAttemptRef: attempt.Ref, EffectFence: claim.Fence, ReceiptRef: receipt.Ref,
+		PreparedAt: prepared.PreparedAt,
+	}
 }
 
 func prepareWorkspaceRequest(record GoalRecord, item goal.WorkItem, execution ExecutionRecord,

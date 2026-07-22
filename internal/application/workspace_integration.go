@@ -63,6 +63,13 @@ func (orchestrator *Orchestrator) processIntegrateChange(ctx context.Context, cl
 	if err := ports.ValidateIntegrationResult(request, result); err != nil {
 		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	}
+	return orchestrator.recordIntegrationOutcome(ctx, claim, record, item, execution, change, attempt, result)
+}
+
+func (orchestrator *Orchestrator) recordIntegrationOutcome(ctx context.Context, claim ActionClaim,
+	record GoalRecord, item goal.WorkItem, execution ExecutionRecord, change ChangeSet,
+	attempt EffectAttempt, result ports.IntegrationResult,
+) error {
 	now := orchestrator.clock.Now().UTC()
 	effectStatus, observationStatus, candidateTreeOID, conflictDigest := integrationFactStatus(result)
 	externalReceipt, err := effectReceipt(claim, attempt, result.ReceiptRef, effectStatus, unknownUsage(), now)

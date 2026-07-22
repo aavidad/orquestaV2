@@ -153,100 +153,13 @@ type ArtifactView struct {
 
 func goalView(record application.GoalRecord) GoalView {
 	snapshot := record.Goal.Snapshot()
-	intent := IntentView{
-		Ref: snapshot.AppSpec.Intent.Ref, Hash: snapshot.AppSpec.Intent.Hash,
-		ActorRef: snapshot.AppSpec.Intent.ActorRef, ProjectRef: snapshot.AppSpec.Intent.ProjectRef,
-		Statement: snapshot.AppSpec.Intent.Statement, SubmittedAt: snapshot.AppSpec.Intent.SubmittedAt,
-	}
-	appSpec := AppSpecView{
-		Ref: snapshot.AppSpec.Ref, Generation: uint64(snapshot.AppSpec.Generation), Hash: snapshot.AppSpec.Hash,
-		ParentRef: snapshot.AppSpec.ParentRef, ParentHash: snapshot.AppSpec.ParentHash,
-		Objective: snapshot.AppSpec.Objective, Reason: snapshot.AppSpec.Reason,
-		ConfirmedBy: snapshot.AppSpec.ConfirmedBy, ConfirmedAt: snapshot.AppSpec.ConfirmedAt,
-		Intent: intent,
-	}
+	intent := intentView(snapshot.AppSpec.Intent)
 	phases := make([]PhaseView, 0, len(snapshot.Phases))
 	for _, phase := range snapshot.Phases {
 		phases = append(phases, PhaseView{
 			PhaseRef: phase.Ref, PhaseKey: phase.Key, TemplateRef: phase.TemplateRef,
 			InputRefs: nonNilStrings(phase.InputRefs), CriterionRefs: nonNilStrings(phase.CriterionRefs),
 		})
-	}
-	childrenByParent := make(map[string][]string, len(snapshot.WorkItems))
-	for _, item := range snapshot.WorkItems {
-		if item.ParentRef != "" {
-			childrenByParent[item.ParentRef] = append(childrenByParent[item.ParentRef], item.Ref)
-		}
-	}
-	items := make([]WorkItemView, 0, len(snapshot.WorkItems))
-	for _, item := range snapshot.WorkItems {
-		requiredTests := make([]RequiredTestView, 0, len(item.RequiredTests))
-		for _, testSpec := range item.RequiredTests {
-			ref, refErr := goal.NewRequiredTestRef(testSpec.Ref)
-			toolRef, toolErr := goal.NewToolRef(testSpec.ToolRef)
-			spec, specErr := goal.NewRequiredTestSpec(goal.RequiredTestSpecInput{
-				Ref: ref, ToolRef: toolRef, Arguments: testSpec.Arguments,
-				WorkingDirectory: testSpec.WorkingDirectory,
-			})
-			if refErr != nil || toolErr != nil || specErr != nil {
-				continue
-			}
-			requiredTests = append(requiredTests, RequiredTestView{
-				Ref: testSpec.Ref, ToolRef: testSpec.ToolRef,
-				Arguments: nonNilStrings(testSpec.Arguments), WorkingDirectory: testSpec.WorkingDirectory,
-				Digest: spec.Digest(),
-			})
-		}
-		items = append(items, WorkItemView{
-			WorkItemRef:     item.Ref,
-			Objective:       item.Objective,
-			PhaseKey:        item.PhaseKey,
-			RoleKey:         item.RoleKey,
-			ParentRef:       item.ParentRef,
-			ChildRefs:       nonNilStrings(childrenByParent[item.Ref]),
-			DependencyRefs:  nonNilStrings(item.DependencyRefs),
-			WriteSet:        nonNilStrings(item.WriteSet),
-			RequiredTests:   requiredTests,
-			SkillRefs:       nonNilStrings(item.SkillRefs),
-			ToolRefs:        nonNilStrings(item.ToolRefs),
-			CapabilityRefs:  nonNilStrings(item.CapabilityRefs),
-			OutputContract:  string(item.OutputContract),
-			SkipReason:      string(item.SkipReason),
-			State:           string(item.State),
-			Revision:        uint64(item.Revision),
-			CreatedAt:       item.CreatedAt,
-			StartedAt:       optionalTime(item.StartedAt),
-			FinishedAt:      optionalTime(item.FinishedAt),
-			ExecutionRef:    item.ExecutionRef,
-			ArtifactRefs:    nonNilStrings(item.ArtifactRefs),
-			AttestationRefs: nonNilStrings(item.AttestationRefs),
-		})
-	}
-	artifacts := make([]ArtifactEvidence, 0, len(record.Artifacts))
-	for _, artifact := range record.Artifacts {
-		artifacts = append(artifacts, ArtifactEvidence{
-			ArtifactRef: artifact.Stored.Ref.String(),
-			WorkItemRef: artifact.WorkItemRef.String(),
-			Digest:      artifact.Stored.Digest,
-			MediaType:   artifact.Stored.MediaType,
-			Size:        artifact.Stored.Size,
-			CreatedAt:   artifact.CreatedAt,
-		})
-	}
-	attestations := make([]AttestationEvidence, 0, len(record.Attestations))
-	for _, attestation := range record.Attestations {
-		attestations = append(attestations, AttestationEvidence{
-			AttestationRef: attestation.Ref.String(),
-			WorkItemRef:    attestation.WorkItemRef.String(),
-			ExecutionRef:   attestation.ExecutionRef.String(),
-			ArtifactRef:    attestation.ArtifactRef.String(),
-			Policy:         attestation.Policy,
-			AcceptedAt:     attestation.AcceptedAt,
-		})
-	}
-	executions := make([]ExecutionView, 0, len(record.Executions))
-	for _, execution := range record.Executions {
-		executions = append(executions, executionView(execution))
 	}
 	return GoalView{
 		RequestRef:     record.RequestRef,
@@ -256,7 +169,7 @@ func goalView(record application.GoalRecord) GoalView {
 		ActorRef:       snapshot.ActorRef,
 		ProjectRef:     snapshot.ProjectRef,
 		Statement:      intent.Statement,
-		AppSpec:        appSpec,
+		AppSpec:        appSpecView(snapshot.AppSpec, intent),
 		State:          string(snapshot.State),
 		Revision:       uint64(snapshot.Revision),
 		PlanGeneration: uint64(snapshot.PlanGeneration),
@@ -264,11 +177,101 @@ func goalView(record application.GoalRecord) GoalView {
 		StartedAt:      optionalTime(snapshot.StartedAt),
 		ClosedAt:       optionalTime(snapshot.ClosedAt),
 		Phases:         phases,
-		WorkItems:      items,
-		Executions:     executions,
-		Artifacts:      artifacts,
-		Attestations:   attestations,
+		WorkItems:      workItemViews(snapshot.WorkItems),
+		Executions:     executionViews(record.Executions),
+		Artifacts:      artifactEvidenceViews(record.Artifacts),
+		Attestations:   attestationEvidenceViews(record.Attestations),
 	}
+}
+
+func intentView(intent goal.IntentManifestSnapshot) IntentView {
+	return IntentView{
+		Ref: intent.Ref, Hash: intent.Hash, ActorRef: intent.ActorRef, ProjectRef: intent.ProjectRef,
+		Statement: intent.Statement, SubmittedAt: intent.SubmittedAt,
+	}
+}
+
+func appSpecView(spec goal.AppSpecSnapshot, intent IntentView) AppSpecView {
+	return AppSpecView{
+		Ref: spec.Ref, Generation: uint64(spec.Generation), Hash: spec.Hash,
+		ParentRef: spec.ParentRef, ParentHash: spec.ParentHash, Objective: spec.Objective, Reason: spec.Reason,
+		ConfirmedBy: spec.ConfirmedBy, ConfirmedAt: spec.ConfirmedAt, Intent: intent,
+	}
+}
+
+func workItemViews(items []goal.WorkItemSnapshot) []WorkItemView {
+	childrenByParent := make(map[string][]string, len(items))
+	for _, item := range items {
+		if item.ParentRef != "" {
+			childrenByParent[item.ParentRef] = append(childrenByParent[item.ParentRef], item.Ref)
+		}
+	}
+	views := make([]WorkItemView, 0, len(items))
+	for _, item := range items {
+		views = append(views, WorkItemView{
+			WorkItemRef: item.Ref, Objective: item.Objective, PhaseKey: item.PhaseKey, RoleKey: item.RoleKey,
+			ParentRef: item.ParentRef, ChildRefs: nonNilStrings(childrenByParent[item.Ref]),
+			DependencyRefs: nonNilStrings(item.DependencyRefs), WriteSet: nonNilStrings(item.WriteSet),
+			RequiredTests: requiredTestViews(item.RequiredTests), SkillRefs: nonNilStrings(item.SkillRefs),
+			ToolRefs: nonNilStrings(item.ToolRefs), CapabilityRefs: nonNilStrings(item.CapabilityRefs),
+			OutputContract: string(item.OutputContract), SkipReason: string(item.SkipReason), State: string(item.State),
+			Revision: uint64(item.Revision), CreatedAt: item.CreatedAt, StartedAt: optionalTime(item.StartedAt),
+			FinishedAt: optionalTime(item.FinishedAt), ExecutionRef: item.ExecutionRef,
+			ArtifactRefs: nonNilStrings(item.ArtifactRefs), AttestationRefs: nonNilStrings(item.AttestationRefs),
+		})
+	}
+	return views
+}
+
+func requiredTestViews(tests []goal.RequiredTestSpecSnapshot) []RequiredTestView {
+	views := make([]RequiredTestView, 0, len(tests))
+	for _, test := range tests {
+		ref, refErr := goal.NewRequiredTestRef(test.Ref)
+		toolRef, toolErr := goal.NewToolRef(test.ToolRef)
+		spec, specErr := goal.NewRequiredTestSpec(goal.RequiredTestSpecInput{
+			Ref: ref, ToolRef: toolRef, Arguments: test.Arguments, WorkingDirectory: test.WorkingDirectory,
+		})
+		if refErr != nil || toolErr != nil || specErr != nil {
+			continue
+		}
+		views = append(views, RequiredTestView{
+			Ref: test.Ref, ToolRef: test.ToolRef, Arguments: nonNilStrings(test.Arguments),
+			WorkingDirectory: test.WorkingDirectory, Digest: spec.Digest(),
+		})
+	}
+	return views
+}
+
+func artifactEvidenceViews(artifacts []application.ArtifactRecord) []ArtifactEvidence {
+	views := make([]ArtifactEvidence, 0, len(artifacts))
+	for _, artifact := range artifacts {
+		views = append(views, ArtifactEvidence{
+			ArtifactRef: artifact.Stored.Ref.String(), WorkItemRef: artifact.WorkItemRef.String(),
+			Digest: artifact.Stored.Digest, MediaType: artifact.Stored.MediaType,
+			Size: artifact.Stored.Size, CreatedAt: artifact.CreatedAt,
+		})
+	}
+	return views
+}
+
+func attestationEvidenceViews(attestations []application.AttestationRecord) []AttestationEvidence {
+	views := make([]AttestationEvidence, 0, len(attestations))
+	for _, attestation := range attestations {
+		views = append(views, AttestationEvidence{
+			AttestationRef: attestation.Ref.String(), WorkItemRef: attestation.WorkItemRef.String(),
+			ExecutionRef: attestation.ExecutionRef.String(), ArtifactRef: attestation.ArtifactRef.String(),
+			Policy: attestation.Policy, AcceptedAt: attestation.AcceptedAt,
+		})
+	}
+	return views
+}
+
+func executionViews(executions []application.ExecutionRecord) []ExecutionView {
+	views := make([]ExecutionView, 0, len(executions))
+	for _, execution := range executions {
+		views = append(views, executionView(execution))
+	}
+	return views
 }
 
 func executionView(execution application.ExecutionRecord) ExecutionView {

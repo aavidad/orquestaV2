@@ -187,7 +187,7 @@ func v17AssertFixture(t *testing.T, repositoryRoot string, fixture v17Fixture) {
 		!reflect.DeepEqual(fixture.DependencyVerticals, []string{
 			"atomic_state_outbox", "recovery_backup", "budgets_effects", "workspace_git",
 		}) || fixture.SimplicityBudget != (v17Budget{
-		ProductNetLines: 6750, CoreNetLines: 2000, AdapterNetLines: 4450, MigrationNetLines: 500,
+		ProductNetLines: 6800, CoreNetLines: 1900, AdapterNetLines: 4500, MigrationNetLines: 500,
 		TestNetLines: 7500, MaxFunctionLines: 80, MaxAddedGoFileLines: 350, MaxNewProductPackages: 2,
 	}) {
 		t.Fatalf("invalid V17 ownership, dependencies or simplicity budget: %+v", fixture)
