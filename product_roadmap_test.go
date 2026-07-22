@@ -368,11 +368,15 @@ func TestProductRoadmapV06ScopeAndExecutableContract(t *testing.T) {
 	for id, owner := range wantMoved {
 		entry, vertical := index.entries[id], index.verticals[owner]
 		if entry.OwnerContext != owner || !reflect.DeepEqual(entry.Dependencies, vertical.DependsOn) ||
-			!reflect.DeepEqual(entry.AcceptanceContracts, vertical.AcceptanceContracts) || entry.Status != "declared" ||
-			len(entry.EvidenceRefs) != 0 {
-			t.Errorf("deferred V06 capability %s = %#v, want exact owner %s", id, entry, owner)
+			!reflect.DeepEqual(entry.AcceptanceContracts, vertical.AcceptanceContracts) {
+			t.Errorf("V06-deferred capability %s lost exact owner %s: %#v", id, owner, entry)
+			continue
+		}
+		if id != "EVD-01" && (entry.Status != "declared" || len(entry.EvidenceRefs) != 0) {
+			t.Errorf("still-deferred V06 capability %s = %#v, want exact owner %s", id, entry, owner)
 		}
 	}
+	assertRoadmapV17Lifecycle(t, index, readRoadmapV17Fixture(t))
 
 	contract := index.contracts["AC-V06-ATOMIC-STATE-OUTBOX"]
 	if !roadmapCommandHasArgument(contract.Command, "./acceptance") || strings.Contains(contract.Command, "./...") ||
@@ -415,13 +419,13 @@ func TestProductRoadmapV08ScopeAndExecutableContract(t *testing.T) {
 			"acceptance/v08_credentials_test.go", "acceptance/fixtures/v08_credentials.json", "product/evidence/v08_credentials.json",
 		},
 	})
-	deferred, wantDeferredVertical := index.entries["EVD-13"], index.verticals["test_attestor"]
-	if deferred.OwnerContext != "test_attestor" ||
-		!reflect.DeepEqual(deferred.Dependencies, wantDeferredVertical.DependsOn) ||
-		!reflect.DeepEqual(deferred.AcceptanceContracts, wantDeferredVertical.AcceptanceContracts) ||
-		deferred.Status != "declared" || len(deferred.EvidenceRefs) != 0 {
-		t.Fatalf("EVD-13 must remain wholly deferred to V17 real sandbox enforcement: %#v", deferred)
+	attestor, wantAttestorVertical := index.entries["EVD-13"], index.verticals["test_attestor"]
+	if attestor.OwnerContext != "test_attestor" ||
+		!reflect.DeepEqual(attestor.Dependencies, wantAttestorVertical.DependsOn) ||
+		!reflect.DeepEqual(attestor.AcceptanceContracts, wantAttestorVertical.AcceptanceContracts) {
+		t.Fatalf("V08-deferred EVD-13 lost exact V17 ownership: %#v", attestor)
 	}
+	assertRoadmapV17Lifecycle(t, index, readRoadmapV17Fixture(t))
 
 	contract := index.contracts["AC-V08-CREDENTIALS"]
 	for _, forbidden := range []string{"./...", "^TestAcceptance$", "./internal/interfaces/mcp", "./internal/identity", "http", "web", "rbac"} {
@@ -949,9 +953,7 @@ func TestProductRoadmapV16ScopeAndExecutableContract(t *testing.T) {
 		evidence: []string{"acceptance/v16_workspace_git_test.go", "acceptance/fixtures/v16_workspace_git.json",
 			"product/evidence/v16_workspace_git.json"},
 	})
-	if next := index.contracts["AC-V17-TEST-ATTESTOR"]; next.Status != "planned" || next.Receipt != "" {
-		t.Fatalf("V16 must not open V17 before its own evidence closes: %#v", next)
-	}
+	assertRoadmapV17Lifecycle(t, index, readRoadmapV17Fixture(t))
 	if forge := index.entries["EXT-11"]; forge.Status != "declared" || forge.OwnerContext != "domain_plugins" ||
 		len(forge.EvidenceRefs) != 0 {
 		t.Fatalf("V16 must leave remote forge capability deferred: %#v", forge)
@@ -1052,6 +1054,15 @@ type roadmapV17ValidationSuite struct {
 func TestProductRoadmapV17ScopeAndExecutableContract(t *testing.T) {
 	index := readRoadmapTestIndex(t)
 	fixture := readRoadmapV17Fixture(t)
+	assertRoadmapV17Lifecycle(t, index, fixture)
+}
+
+func TestHistoricalRoadmapScopesAcceptOnlyExactV17Lifecycle(t *testing.T) {
+	assertRoadmapV17Lifecycle(t, readRoadmapTestIndex(t), readRoadmapV17Fixture(t))
+}
+
+func assertRoadmapV17Lifecycle(t *testing.T, index roadmapTestIndex, fixture roadmapV17Fixture) {
+	t.Helper()
 	var owned []string
 	for _, entry := range index.document.CapabilityEntries {
 		if entry.OwnerContext == "test_attestor" && entry.Decision == "accept" {
@@ -1081,8 +1092,8 @@ func TestProductRoadmapV17ScopeAndExecutableContract(t *testing.T) {
 			if entry.Status != "accredited" || !reflect.DeepEqual(entry.EvidenceRefs, wantEvidence) {
 				t.Errorf("V17 capability %s lacks exact post-E accreditation: %#v", id, entry)
 			}
-		} else if entry.Status == "accredited" || len(entry.EvidenceRefs) != 0 {
-			t.Errorf("V17 capability %s was accredited before a valid E receipt: %#v", id, entry)
+		} else if entry.Status != "declared" || len(entry.EvidenceRefs) != 0 {
+			t.Errorf("V17 capability %s is not exactly deferred before E: %#v", id, entry)
 		}
 	}
 	contract := index.contracts["AC-V17-TEST-ATTESTOR"]
@@ -1093,13 +1104,7 @@ func TestProductRoadmapV17ScopeAndExecutableContract(t *testing.T) {
 			t.Fatalf("invalid V17 post-E executable contract: %#v", contract)
 		}
 	} else {
-		if contract.Status == "executable" {
-			if contract.TestRef != "acceptance/v17_test_attestor_test.go" || contract.Command != fixture.Command ||
-				contract.Fixture != "acceptance/fixtures/v17_test_attestor.json" ||
-				contract.Receipt != fixture.ReceiptPath || !reflect.DeepEqual(contract.Assertions, fixture.RoadmapAssertions) {
-				t.Fatalf("invalid V17 executable but unaccredited contract: %#v", contract)
-			}
-		} else if contract.Status != "planned" || !strings.HasPrefix(contract.TestRef, "planned:") ||
+		if contract.Status != "planned" || !strings.HasPrefix(contract.TestRef, "planned:") ||
 			!strings.HasPrefix(contract.Command, "planned:") || !strings.HasPrefix(contract.Fixture, "planned:") ||
 			contract.Receipt != "" {
 			t.Fatalf("invalid V17 pre-E planned contract: %#v", contract)
