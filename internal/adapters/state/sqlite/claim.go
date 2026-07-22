@@ -23,6 +23,7 @@ type claimCandidate struct {
 	modelRef          string
 	agentRef          string
 	executionState    application.ExecutionState
+	executionPurpose  application.ExecutionPurpose
 	deliveryAttempt   int64
 	order             claimCandidateOrder
 }
@@ -33,7 +34,7 @@ type claimCandidateOrder struct {
 }
 
 type claimRequirementKey struct {
-	goalRef, workItemRef string
+	goalRef, workItemRef, executionRef string
 }
 
 const claimCandidateWindowSize = 16
@@ -370,7 +371,7 @@ const claimCandidatesQuery = `
 SELECT o.ref, o.kind, o.goal_ref, o.work_item_ref, o.execution_ref,
        o.control_ref, %s, o.effect_intent_ref, o.governance_version,
        o.plan_generation, o.work_item_generation, o.available_at, g.project_ref,
-       o.delivery_attempt, wi.role_key, e.state,
+       o.delivery_attempt, wi.role_key, e.state, e.purpose,
 	   e.provider_ref, e.model_ref, e.agent_ref,
        CASE o.kind WHEN 'stop_agent' THEN 0 WHEN 'prepare_workspace' THEN 1 WHEN 'launch_agent' THEN 2 WHEN 'commit_change' THEN 3 WHEN 'attest_test' THEN 4 WHEN 'integrate_change' THEN 5 WHEN 'observe_agent' THEN 6 ELSE 7 END,
        CASE WHEN o.kind = 'launch_agent' THEN COALESCE(project_cursor.ordinal, 0) ELSE 0 END,
@@ -451,9 +452,9 @@ func readClaimCandidateWindow(
 	workspaceColumns bool,
 	after *claimCandidateOrder,
 ) ([]claimCandidate, error) {
-	changeProjection := "'' AS change_ref, '' AS expected_target_oid"
+	changeProjection := "'' AS change_ref, '' AS expected_target_oid, '' AS review_gate_digest"
 	if workspaceColumns {
-		changeProjection = "o.change_ref, o.expected_target_oid"
+		changeProjection = "o.change_ref, o.expected_target_oid, o.review_gate_digest"
 	}
 	continuation, enabled := claimCandidateOrder{}, 0
 	if after != nil {
@@ -487,12 +488,12 @@ func scanClaimCandidate(rows *sql.Rows) (claimCandidate, error) {
 	var candidate claimCandidate
 	var kind, goalValue, itemValue, executionValue, projectValue string
 	var controlRef, effectIntentRef sql.NullString
-	var changeRef, expectedTarget string
+	var changeRef, expectedTarget, reviewGateDigest string
 	var planGeneration, itemGeneration, availableAt int64
 	err := rows.Scan(&candidate.action.Ref, &kind, &goalValue, &itemValue, &executionValue,
-		&controlRef, &changeRef, &expectedTarget, &effectIntentRef, &candidate.governanceVersion, &planGeneration,
+		&controlRef, &changeRef, &expectedTarget, &reviewGateDigest, &effectIntentRef, &candidate.governanceVersion, &planGeneration,
 		&itemGeneration, &availableAt, &projectValue, &candidate.deliveryAttempt,
-		&candidate.roleKey, &candidate.executionState, &candidate.providerRef,
+		&candidate.roleKey, &candidate.executionState, &candidate.executionPurpose, &candidate.providerRef,
 		&candidate.modelRef, &candidate.agentRef, &candidate.order.kind,
 		&candidate.order.project, &candidate.order.goal)
 	if err != nil {
@@ -510,6 +511,7 @@ func scanClaimCandidate(rows *sql.Rows) (claimCandidate, error) {
 		candidate.action.ChangeRef, _ = ports.NewChangeSetRef(changeRef)
 	}
 	candidate.action.ExpectedTargetOID = expectedTarget
+	candidate.action.ReviewGateDigest = reviewGateDigest
 	if effectIntentRef.Valid {
 		candidate.action.EffectIntentRef = effectIntentRef.String
 	}
@@ -555,14 +557,19 @@ func readAgentRequirementsBatch(
 		}
 		requirements[key] = ports.AgentRequirements{RoleKey: candidate.roleKey}
 		keys = append(keys, key)
-		args = append(args, key.goalRef, key.workItemRef)
+		if candidate.executionPurpose == application.ExecutionPurposePrimaryReview ||
+			candidate.executionPurpose == application.ExecutionPurposeAdversarialReview {
+			requirements[key] = ports.AgentRequirements{RoleKey: "role:reviewer"}
+			continue
+		}
+		args = append(args, key.goalRef, key.workItemRef, key.executionRef)
 	}
-	if len(keys) == 0 {
+	if len(args) == 0 {
 		return requirements, nil
 	}
-	values := strings.TrimSuffix(strings.Repeat("(?, ?),", len(keys)), ",")
-	query := `WITH requested(goal_ref, work_item_ref) AS (VALUES ` + values + `)
-SELECT refs.goal_ref, refs.work_item_ref, refs.kind, refs.value
+	values := strings.TrimSuffix(strings.Repeat("(?, ?, ?),", len(args)/3), ",")
+	query := `WITH requested(goal_ref, work_item_ref, execution_ref) AS (VALUES ` + values + `)
+SELECT refs.goal_ref, refs.work_item_ref, requested.execution_ref, refs.kind, refs.value
 FROM requested
 JOIN work_item_requirement_refs refs
   ON refs.goal_ref = requested.goal_ref AND refs.work_item_ref = requested.work_item_ref
@@ -574,11 +581,11 @@ ORDER BY refs.goal_ref, refs.work_item_ref, refs.kind, refs.position`
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var goalRef, workItemRef, kind, value string
-		if err := rows.Scan(&goalRef, &workItemRef, &kind, &value); err != nil {
+		var goalRef, workItemRef, executionRef, kind, value string
+		if err := rows.Scan(&goalRef, &workItemRef, &executionRef, &kind, &value); err != nil {
 			return nil, mapDatabaseError(err)
 		}
-		key := claimRequirementKey{goalRef: goalRef, workItemRef: workItemRef}
+		key := claimRequirementKey{goalRef: goalRef, workItemRef: workItemRef, executionRef: executionRef}
 		item := requirements[key]
 		switch kind {
 		case "skill":
@@ -611,6 +618,7 @@ func candidateNeedsAgentRequirements(candidate claimCandidate) bool {
 func requirementKey(candidate claimCandidate) claimRequirementKey {
 	return claimRequirementKey{
 		goalRef: candidate.action.GoalRef.String(), workItemRef: candidate.action.WorkItemRef.String(),
+		executionRef: candidate.action.ExecutionRef.String(),
 	}
 }
 
@@ -620,7 +628,7 @@ func requireClaim(ctx context.Context, transaction *sql.Tx, claim application.Ac
 	}
 	var kind, goalValue, itemValue, executionValue string
 	var controlRef sql.NullString
-	var changeRef, expectedTarget string
+	var changeRef, expectedTarget, reviewGateDigest string
 	var availableAt, planGeneration, itemGeneration int64
 	var token, worker sql.NullString
 	var leaseUntil, completedAt, quarantinedAt sql.NullInt64
@@ -629,9 +637,9 @@ func requireClaim(ctx context.Context, transaction *sql.Tx, claim application.Ac
 	if err != nil {
 		return mapDatabaseError(err)
 	}
-	changeProjection := "'' AS change_ref, '' AS expected_target_oid"
+	changeProjection := "'' AS change_ref, '' AS expected_target_oid, '' AS review_gate_digest"
 	if workspaceColumns {
-		changeProjection = "o.change_ref, o.expected_target_oid"
+		changeProjection = "o.change_ref, o.expected_target_oid, o.review_gate_digest"
 	}
 	err = transaction.QueryRowContext(ctx, fmt.Sprintf(`
 SELECT o.kind, o.goal_ref, o.work_item_ref, o.execution_ref, o.control_ref, %s,
@@ -641,7 +649,7 @@ SELECT o.kind, o.goal_ref, o.work_item_ref, o.execution_ref, o.control_ref, %s,
 FROM outbox o
 JOIN work_item_fences wf ON wf.goal_ref = o.goal_ref AND wf.work_item_ref = o.work_item_ref
 WHERE o.ref = ?`, changeProjection), claim.Action.Ref).Scan(
-		&kind, &goalValue, &itemValue, &executionValue, &controlRef, &changeRef, &expectedTarget,
+		&kind, &goalValue, &itemValue, &executionValue, &controlRef, &changeRef, &expectedTarget, &reviewGateDigest,
 		&planGeneration, &itemGeneration, &availableAt,
 		&token, &worker, &leaseUntil, &deliveryAttempt, &fence,
 		&completedAt, &quarantinedAt, &currentFence,
@@ -660,6 +668,7 @@ WHERE o.ref = ?`, changeProjection), claim.Action.Ref).Scan(
 		executionValue != claim.Action.ExecutionRef.String() ||
 		controlRef.String != claim.Action.ControlRef ||
 		changeRef != claim.Action.ChangeRef.String() || expectedTarget != claim.Action.ExpectedTargetOID ||
+		reviewGateDigest != claim.Action.ReviewGateDigest ||
 		planGeneration != int64(claim.Action.PlanGeneration) ||
 		itemGeneration != int64(claim.Action.WorkItemGeneration) ||
 		availableAt != requiredTime(claim.Action.AvailableAt) {

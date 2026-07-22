@@ -116,6 +116,7 @@ type ApplyControlState struct {
 	ClaimErrorCode                     string
 	Goal                               goal.Goal
 	Executions                         []ExecutionRecord
+	NewControls                        []ControlRecord
 	NewActions                         []ActionRecord
 	RetireActionRefs                   []string
 	RetireMailboxForExecutionRef       goal.ExecutionRef

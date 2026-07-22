@@ -8,9 +8,10 @@ import (
 type ReplanCause string
 
 const (
-	ReplanCauseSplitPending     ReplanCause = "split_pending"
-	ReplanCauseExecutionStopped ReplanCause = "execution_stopped"
-	ReplanCauseExecutionFailed  ReplanCause = "execution_failed"
+	ReplanCauseSplitPending           ReplanCause = "split_pending"
+	ReplanCauseExecutionStopped       ReplanCause = "execution_stopped"
+	ReplanCauseExecutionFailed        ReplanCause = "execution_failed"
+	ReplanCauseReviewChangesRequested ReplanCause = "review_changes_requested"
 )
 
 type ReplanInput struct {
@@ -86,6 +87,8 @@ func (goal Goal) validReplanSource(source WorkItem, input ReplanInput) bool {
 	case ReplanCauseExecutionFailed:
 		return source.state == WorkItemStateInterrupted && source.interruptCause == WorkItemInterruptExecutionFailed &&
 			source.execution == input.CausalExecution && validExecutionRef(input.CausalExecution)
+	case ReplanCauseReviewChangesRequested:
+		return source.state == WorkItemStateInterrupted && source.execution == input.CausalExecution && validExecutionRef(input.CausalExecution)
 	}
 	return false
 }

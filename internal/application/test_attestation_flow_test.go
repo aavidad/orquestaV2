@@ -86,6 +86,11 @@ func (system *testAttestationSystem) processCommit(t *testing.T) {
 	system.process(t, ActionPrepareWorkspace, ActionLaunchAgent, ActionObserveAgent, ActionCommitChange)
 }
 
+func (system *testAttestationSystem) approveReviews(t *testing.T) {
+	t.Helper()
+	system.process(t, ActionLaunchAgent, ActionLaunchAgent, ActionObserveAgent, ActionObserveAgent)
+}
+
 func TestPassingAttestationLeavesChangePending(t *testing.T) {
 	system := newTestAttestationSystem(t, ports.TestAttestationPassed)
 	system.processCommit(t)
@@ -105,8 +110,8 @@ func TestPassingAttestationLeavesChangePending(t *testing.T) {
 	system.repository.mu.Lock()
 	pendingActions := len(system.repository.actions)
 	system.repository.mu.Unlock()
-	if pendingActions != 0 {
-		t.Fatalf("PASS scheduled integration implicitly: actions=%d", pendingActions)
+	if pendingActions != 2 || len(record.Reviews) != 0 {
+		t.Fatalf("PASS did not schedule the independent review round: actions=%d reviews=%d", pendingActions, len(record.Reviews))
 	}
 	system.attestor.mu.Lock()
 	attestorCalls := len(system.attestor.runs)
@@ -142,6 +147,9 @@ func TestIntegrateChangeRequiresExactPassAndRejectsFailedMissingInvalid(t *testi
 			system.processCommit(t)
 			if test.attest {
 				system.process(t, ActionAttestTest)
+				if test.verdict == ports.TestAttestationPassed {
+					system.approveReviews(t)
+				}
 			}
 			if test.tamper {
 				system.repository.mu.Lock()
@@ -168,6 +176,7 @@ func TestPassingAttestationIsBoundToExactWorkItemGeneration(t *testing.T) {
 	system.orchestrator.versionControl = control
 	system.processCommit(t)
 	system.process(t, ActionAttestTest)
+	system.approveReviews(t)
 
 	passed := system.record(t)
 	item := passed.Goal.WorkItems()[0]
@@ -186,7 +195,8 @@ func TestPassingAttestationIsBoundToExactWorkItemGeneration(t *testing.T) {
 		ChangeRef: change.Ref, ExpectedTargetOID: passed.WorkspaceBindings[0].BaseOID,
 	})
 	if err != nil || !admitted.Created || admitted.Action.Kind != ActionIntegrateChange {
-		t.Fatalf("integration at generation N: result=%+v err=%v", admitted, err)
+		t.Fatalf("integration at generation N: result=%+v reviews=%+v executions=%+v err=%v", admitted,
+			system.record(t).Reviews, system.record(t).Executions, err)
 	}
 
 	aggregate := passed.Goal

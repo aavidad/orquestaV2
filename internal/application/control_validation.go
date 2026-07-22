@@ -87,6 +87,12 @@ func validateControlResult(
 	if request.Operation == ControlCancel {
 		modeMatches = record.Mode == "" || validStopMode(record.Mode)
 	}
+	authorizationValid := directorAuthorizationValid(
+		record.AuthorizationReceipt, principal, projectRef, request.GoalRef,
+	)
+	if IsReviewCleanupControl(record) {
+		authorizationValid = ReviewCleanupAuthorizationValid(record)
+	}
 	if record.Ref == "" || record.RequestRef != request.RequestRef ||
 		record.RequestFingerprint != fingerprint || record.PrincipalRef != principal ||
 		record.ProjectRef != projectRef || record.GoalRef != request.GoalRef ||
@@ -96,9 +102,7 @@ func validateControlResult(
 		record.Reason != request.Reason || record.GoalRevision != request.ExpectedGoalRevision ||
 		record.PlanGeneration != request.ExpectedPlanGeneration ||
 		record.AppSpecGeneration != request.ExpectedAppSpecGeneration || record.SpecHash != request.ExpectedSpecHash ||
-		record.RequestedAt.IsZero() || !directorAuthorizationValid(
-		record.AuthorizationReceipt, principal, projectRef, request.GoalRef,
-	) {
+		record.RequestedAt.IsZero() || !authorizationValid {
 		return &StateError{Code: StateConflict}
 	}
 	switch record.Status {
@@ -162,11 +166,28 @@ func ValidatePersistedControlRecord(record ControlRecord) error {
 		return errors.New("application.control_record_invalid")
 	}
 	authorizationRequest := record.AuthorizationReceipt.Decision().Request()
-	if authorizationRequest.RequestRef() != controlAuthorizationRequestRef(record.RequestRef, fingerprint) ||
+	if IsReviewCleanupControl(record) {
+		if !ReviewCleanupAuthorizationValid(record) {
+			return errors.New("application.control_record_invalid")
+		}
+	} else if authorizationRequest.RequestRef() != controlAuthorizationRequestRef(record.RequestRef, fingerprint) ||
 		record.AuthorizationReceipt.RecordedAt().After(record.RequestedAt) {
 		return errors.New("application.control_record_invalid")
 	}
 	return nil
+}
+
+func ReviewCleanupAuthorizationValid(record ControlRecord) bool {
+	if !IsReviewCleanupControl(record) {
+		return false
+	}
+	request := record.AuthorizationReceipt.Decision().Request()
+	return record.AuthorizationReceipt.Decision().Outcome() == identity.AuthorizationAllowed &&
+		record.AuthorizationReceipt.Ref() != "" && !record.AuthorizationReceipt.RecordedAt().IsZero() &&
+		identity.RoleAllows(record.AuthorizationReceipt.Decision().Role(), identity.PermissionGoalsCreate) &&
+		request.Principal().Ref == record.PrincipalRef && request.ProjectRef() == record.ProjectRef &&
+		request.Permission() == identity.PermissionGoalsCreate && request.ResourceRef() == record.ProjectRef.String() &&
+		!record.AuthorizationReceipt.RecordedAt().After(record.RequestedAt)
 }
 
 func controlAuthorizationRequestRef(requestRef, fingerprint string) string {

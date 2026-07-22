@@ -35,6 +35,12 @@ func TestIntegrateChangeReplaysExactAdmissionBeforeAndAfterCompletion(t *testing
 			t.Fatalf("process=%+v want=%s err=%v", processed, want, processErr)
 		}
 	}
+	for _, want := range []ActionKind{ActionLaunchAgent, ActionLaunchAgent, ActionObserveAgent, ActionObserveAgent} {
+		processed, processErr := orchestrator.ProcessNext(ctx, "worker:integration-replay")
+		if processErr != nil || processed.Action != want {
+			t.Fatalf("review process=%+v want=%s err=%v", processed, want, processErr)
+		}
+	}
 	record, err := repository.GetGoal(ctx, submitted.Record.Goal.Ref())
 	if err != nil {
 		t.Fatal(err)

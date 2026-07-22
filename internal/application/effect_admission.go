@@ -47,6 +47,14 @@ func (orchestrator *Orchestrator) launchAction(
 	at time.Time,
 	availableAt time.Time,
 ) (ActionRecord, error) {
+	if isReviewerExecution(execution) {
+		return ActionRecord{}, errors.New("application.reviewer_launch_requires_exact_subject")
+	}
+	phase, found := phaseForWorkItem(aggregate, item)
+	if !found {
+		return ActionRecord{}, errors.New("application.phase_missing")
+	}
+	launchRequest := agentLaunchRequest(aggregate, item, execution, phase)
 	actionRef := "action:launch:" + execution.Ref.String()
 	intent := EffectIntent{
 		Ref: "effect-intent:" + actionRef, RequestRef: authority.AuthorizationReceipt.Decision().Request().RequestRef(),
@@ -60,7 +68,7 @@ func (orchestrator *Orchestrator) launchAction(
 		PolicyRevision:  policy.PolicyRevision,
 		QuotaRetryDelay: policy.QuotaRetryDelay,
 		ApprovalTTL:     policy.ApprovalTTL,
-		TargetDigest:    launchTargetDigest(launchEffectTargetRequest(aggregate, item, execution)),
+		TargetDigest:    authorLaunchTargetDigest(launchRequest),
 		IdempotencyKey:  execution.IdempotencyKey,
 		CreatedAt:       at.UTC(),
 	}
@@ -174,6 +182,7 @@ func (orchestrator *Orchestrator) integrateChangeAction(
 	execution ExecutionRecord,
 	change ChangeSet,
 	expectedTargetOID string,
+	reviewGateDigest string,
 	principal identity.PrincipalRef,
 	authority identity.AuthorizationReceipt,
 	requestRef string,
@@ -192,13 +201,14 @@ func (orchestrator *Orchestrator) integrateChangeAction(
 		ReasoningEffort:     governance.ReasoningEffortLow,
 		PolicyHash:          policy.PolicyHash, PolicyRevision: policy.PolicyRevision,
 		QuotaRetryDelay: policy.QuotaRetryDelay, ApprovalTTL: policy.ApprovalTTL,
-		TargetDigest:   integrationTargetDigest(change, expectedTargetOID),
+		TargetDigest:   integrationTargetDigest(change, expectedTargetOID, reviewGateDigest),
 		IdempotencyKey: "integration:" + requestRef, CreatedAt: at.UTC(),
 	}
 	return orchestrator.finalizeEffectAction(intent, ActionRecord{
 		Ref: actionRef, Kind: ActionIntegrateChange, GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(),
 		ExecutionRef: execution.Ref, ChangeRef: change.Ref, ExpectedTargetOID: expectedTargetOID,
-		PlanGeneration: execution.PlanGeneration, WorkItemGeneration: item.Revision(), AvailableAt: at,
+		ReviewGateDigest: reviewGateDigest,
+		PlanGeneration:   execution.PlanGeneration, WorkItemGeneration: item.Revision(), AvailableAt: at,
 	}, EffectApprovalSourceIntegrationDecision, at)
 }
 
@@ -304,13 +314,32 @@ func effectAdmissionFingerprint(fields ...string) string {
 	return fingerprintFields("orquesta.effect.admission.v1", fields...)
 }
 
-func launchTargetDigest(request ports.AgentLaunchRequest) string {
+func authorLaunchTargetDigest(request ports.AgentLaunchRequest) string {
 	return effectAdmissionFingerprint(
 		"target:launch:v1", request.ProjectRef.String(), request.GoalRef.String(), request.WorkItemRef.String(),
 		request.ExecutionRef.String(), strconv.FormatUint(uint64(request.PlanGeneration), 10),
 		strconv.FormatUint(uint64(request.AppSpecGeneration), 10), strconv.FormatUint(request.ExecutionAttempt, 10),
 		request.SpecHash, request.ActorRef.String(), request.ExecutionWorkspaceRef.String(), request.IdempotencyKey,
 	)
+}
+
+func reviewerLaunchTargetDigest(request ports.AgentLaunchRequest) string {
+	fields := []string{
+		"target:launch:v2", request.ProjectRef.String(), request.GoalRef.String(), request.WorkItemRef.String(),
+		request.ExecutionRef.String(), strconv.FormatUint(uint64(request.PlanGeneration), 10),
+		strconv.FormatUint(uint64(request.AppSpecGeneration), 10), strconv.FormatUint(request.ExecutionAttempt, 10),
+		request.SpecHash, request.ActorRef.String(), request.ExecutionWorkspaceRef.String(), request.IdempotencyKey,
+		request.Objective, request.PhaseRef, request.PhaseKey, request.PhaseTemplateRef, request.RoleKey,
+		request.OutputContract, request.ArtifactMediaType, strconv.FormatInt(request.MaxOutputBytes, 10),
+		string(request.SecurityCriticality), string(request.ReasoningEffort), request.BudgetDemand.Ref,
+	}
+	fields = append(fields, request.PhaseInputRefs...)
+	fields = append(fields, request.PhaseCriterionRefs...)
+	fields = append(fields, request.SkillRefs...)
+	fields = append(fields, request.ToolRefs...)
+	fields = append(fields, request.CapabilityRefs...)
+	fields = append(fields, request.WriteSet...)
+	return effectAdmissionFingerprint(fields...)
 }
 
 func stopTargetDigest(control ControlRecord, request ports.AgentStopRequest) string {
@@ -344,10 +373,14 @@ func commitChangeTargetDigest(binding WorkspaceBinding, changeRef ports.ChangeSe
 	)
 }
 
-func integrationTargetDigest(change ChangeSet, expectedTargetOID string) string {
+func integrationTargetDigest(change ChangeSet, expectedTargetOID string, reviewGateDigest ...string) string {
+	gateDigest := ""
+	if len(reviewGateDigest) != 0 {
+		gateDigest = reviewGateDigest[0]
+	}
 	return effectAdmissionFingerprint(
-		"target:integrate-change:v1", change.Ref.String(), change.RepositoryRef.String(),
-		change.HeadOID, change.TreeOID, expectedTargetOID, change.DiffDigest,
+		"target:integrate-change:v2", change.Ref.String(), change.RepositoryRef.String(),
+		change.HeadOID, change.TreeOID, expectedTargetOID, change.DiffDigest, gateDigest,
 	)
 }
 

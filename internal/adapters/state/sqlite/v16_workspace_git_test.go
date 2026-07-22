@@ -34,7 +34,7 @@ func TestSQLiteWorkspaceGitRestartRaceAndReplay(t *testing.T) {
 		}
 	}
 	var version int
-	if err := repository.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != recoverySchemaV17 {
+	if err := repository.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != recoverySchemaV18 {
 		t.Fatalf("v16 version=%d err=%v", version, err)
 	}
 	if err := repository.Close(); err != nil {
@@ -168,6 +168,10 @@ func seedSQLiteV16Integrated(t *testing.T) *sqliteV15System {
 		application.ActionObserveAgent,
 		application.ActionCommitChange,
 		application.ActionAttestTest,
+		application.ActionLaunchAgent,
+		application.ActionLaunchAgent,
+		application.ActionObserveAgent,
+		application.ActionObserveAgent,
 	)
 	record, err := system.repository.GetGoal(context.Background(), result.Record.Goal.Ref())
 	if err != nil || len(record.ChangeSets) != 1 || len(record.WorkspaceBindings) != 1 {

@@ -171,6 +171,7 @@ func newPhysicalEffectFaultFixture(t *testing.T, kind ActionKind) physicalEffect
 	case ActionIntegrateChange:
 		system.processCommit(t)
 		system.process(t, ActionAttestTest)
+		system.approveReviews(t)
 		record := system.record(t)
 		if _, err := system.orchestrator.IntegrateChange(context.Background(), system.access, IntegrateChangeRequest{
 			RequestRef: "request:local-effect-fault", GoalRef: record.Goal.Ref(),

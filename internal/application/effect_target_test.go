@@ -51,9 +51,9 @@ func TestLaunchTargetDigestBindsExactExecution(t *testing.T) {
 		SpecHash: "sha256:" + effectAdmissionFingerprint("target-spec"), ActorRef: actor,
 		ProjectRef: project, IdempotencyKey: "launch:target-digest",
 	}
-	want := launchTargetDigest(request)
+	want := authorLaunchTargetDigest(request)
 	request.ExecutionAttempt++
-	if got := launchTargetDigest(request); got == want {
+	if got := authorLaunchTargetDigest(request); got == want {
 		t.Fatal("execution attempt retained launch target digest")
 	}
 }

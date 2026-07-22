@@ -85,6 +85,7 @@ func TestIntegrateChangeWaitsForChildHandoffBeforeVersionControl(t *testing.T) {
 	system.orchestrator.versionControl = control
 	system.processCommit(t)
 	system.process(t, ActionAttestTest)
+	system.approveReviews(t)
 
 	record := system.record(t)
 	parent := record.Goal.WorkItems()[0]

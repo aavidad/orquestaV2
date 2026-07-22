@@ -16,6 +16,20 @@ func (function workspacePathResolverFunc) ResolveExecutionWorkspace(ctx context.
 	return function(ctx, ref)
 }
 
+func TestBoundReviewerWorkspaceUsesReadOnlySandbox(t *testing.T) {
+	adapter := &Adapter{config: testConfig(t)}
+	arguments := adapter.commandArguments("run:review", true, false)
+	for index := range arguments {
+		if arguments[index] == "--sandbox" && index+1 < len(arguments) {
+			if arguments[index+1] != "read-only" {
+				t.Fatalf("review sandbox=%q", arguments[index+1])
+			}
+			return
+		}
+	}
+	t.Fatal("sandbox argument missing")
+}
+
 func TestLaunchUsesExactOpaqueWorkspaceBinding(t *testing.T) {
 	config := testConfig(t)
 	workspace := filepath.Join(t.TempDir(), "exact-workspace")

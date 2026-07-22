@@ -85,6 +85,11 @@ func persistControlActionsAndMailboxes(
 	transaction *sql.Tx,
 	state application.ApplyControlState,
 ) error {
+	for _, control := range state.NewControls {
+		if err := insertControl(ctx, transaction, control); err != nil {
+			return err
+		}
+	}
 	for _, action := range state.NewActions {
 		if err := insertAction(ctx, transaction, action); err != nil {
 			return err

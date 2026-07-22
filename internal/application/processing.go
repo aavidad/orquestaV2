@@ -70,7 +70,17 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 		return err
 	}
 	request := agentLaunchRequest(record.Goal, item, execution, phase)
-	if launchTargetDigest(request) != claim.Action.EffectIntent.TargetDigest {
+	if isReviewerExecution(execution) {
+		request, err = reviewerAgentLaunchRequest(record, item, execution, phase, orchestrator.testAttestationPolicy)
+		if err != nil {
+			return orchestrator.quarantineUnapplied(ctx, claim, err.Error())
+		}
+	}
+	targetDigest := authorLaunchTargetDigest(request)
+	if isReviewerExecution(execution) {
+		targetDigest = reviewerLaunchTargetDigest(request)
+	}
+	if targetDigest != claim.Action.EffectIntent.TargetDigest {
 		return orchestrator.quarantineUnapplied(ctx, claim, "application.effect_target_mismatch")
 	}
 	attempt, receipt, proceed, err := orchestrator.dispatchLaunchEffect(ctx, claim, record, execution, request)
@@ -82,6 +92,9 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	}
 	record, item, execution = latest, latestItem, latestExecution
+	if isReviewerExecution(execution) && !reviewExternalRefAvailable(record, execution, receipt.ExternalRef) {
+		return orchestrator.abortReviewerLaunch(ctx, claim, record, execution, attempt, receipt)
+	}
 	transitionAt := lifecycleTime(orchestrator.clock.Now(), record.Goal, item)
 	execution.State = ExecutionRunning
 	execution.ProviderRef, execution.ModelRef = receipt.ProviderRef, receipt.ModelRef
@@ -102,6 +115,16 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 		PlanGeneration: execution.PlanGeneration, WorkItemGeneration: item.Revision(),
 		AvailableAt: orchestrator.clock.Now(),
 	}
+	if cleanup, pending := pendingReviewCleanupControl(record, execution); pending {
+		policy, policyErr := historicalEffectPolicy(record)
+		if policyErr != nil {
+			return orchestrator.quarantineUnknownApplied(ctx, claim)
+		}
+		next, err = orchestrator.reviewCleanupStopAction(policy, cleanup, record.Goal, item, execution, transitionAt)
+		if err != nil {
+			return orchestrator.quarantineUnknownApplied(ctx, claim)
+		}
+	}
 	err = orchestrator.state.RecordLaunchAccepted(ctx, LaunchAcceptedState{
 		Claim: claim, Execution: execution, NextAction: next, EffectReceipt: externalReceipt,
 		Event: EventRecord{
@@ -112,6 +135,12 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 		OperationAt: transitionAt,
 	})
 	if err != nil {
+		if isReviewerExecution(execution) {
+			latest, _, latestExecution, reloadErr := orchestrator.reloadPreparedLaunch(ctx, claim)
+			if reloadErr == nil && !reviewExternalRefAvailable(latest, latestExecution, receipt.ExternalRef) {
+				return orchestrator.abortReviewerLaunch(ctx, claim, latest, latestExecution, attempt, receipt)
+			}
+		}
 		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	}
 	return nil
@@ -176,6 +205,24 @@ func (orchestrator *Orchestrator) prepareLaunchDispatch(
 	}
 	transitionAt := lifecycleTime(orchestrator.clock.Now(), record.Goal, item)
 	aggregate := record.Goal
+	if isReviewerExecution(execution) {
+		if err := validateReviewerLaunch(record, item, execution, orchestrator.testAttestationPolicy); err != nil {
+			err = orchestrator.quarantineUnapplied(ctx, claim, err.Error())
+			return GoalRecord{}, goal.WorkItem{}, ExecutionRecord{}, false, err
+		}
+		execution.State = ExecutionDispatching
+		err := orchestrator.state.RecordLaunchPrepared(ctx, LaunchPreparedState{
+			Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), Goal: aggregate, Execution: execution,
+			Event: EventRecord{Ref: "event:execution-dispatching:" + execution.Ref.String(), Kind: "execution.dispatching",
+				GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref, OccurredAt: transitionAt},
+			OperationAt: transitionAt,
+		})
+		if err != nil {
+			return GoalRecord{}, goal.WorkItem{}, ExecutionRecord{}, false, err
+		}
+		record.Executions = replaceExecution(record.Executions, execution)
+		return record, item, execution, true, nil
+	}
 	switch item.State() {
 	case goal.WorkItemStatePending:
 		var startErr error
@@ -230,6 +277,9 @@ func agentLaunchRequest(
 	phase goal.PhaseInstance,
 ) ports.AgentLaunchRequest {
 	request := launchEffectTargetRequest(aggregate, item, execution)
+	if isReviewerExecution(execution) {
+		return ports.AgentLaunchRequest{}
+	}
 	request.Objective = item.Objective()
 	request.PhaseRef, request.PhaseKey = phase.Ref().String(), item.Phase().String()
 	request.PhaseTemplateRef = phase.TemplateRef().String()
@@ -242,6 +292,19 @@ func agentLaunchRequest(
 	request.MaxOutputBytes, request.BudgetDemand = execution.MaxOutputBytes, item.BudgetDemand()
 	request.SecurityCriticality, request.ReasoningEffort = item.SecurityCriticality(), item.ReasoningEffort()
 	return request
+}
+
+func validateReviewerLaunch(record GoalRecord, item goal.WorkItem, execution ExecutionRecord,
+	policy TestAttestationPolicy,
+) error {
+	if item.State() != goal.WorkItemStateRunning {
+		return errors.New("review.subject_mismatch")
+	}
+	attachment, err := reviewAttached(record, item, execution, policy)
+	if err != nil || attachment.Author.State != ExecutionAwaitingIntegration {
+		return errors.New("review.subject_mismatch")
+	}
+	return nil
 }
 
 func (orchestrator *Orchestrator) dispatchLaunchEffect(
@@ -260,21 +323,27 @@ func (orchestrator *Orchestrator) dispatchLaunchEffect(
 		var handled error
 		if isDefinitelyNotAppliedAgentError(launchErr) {
 			latest, latestItem, latestExecution, reloadErr := orchestrator.reloadPreparedLaunch(ctx, claim)
-			switch {
-			case reloadErr != nil:
+			if reloadErr != nil {
 				handled = reloadErr
-			case latestItem.CancelRequested():
-				handled = orchestrator.settleCanceledLaunchRejection(
-					ctx, claim, latest, latestItem, latestExecution, attempt.Ref, "agent.launch_failed",
+			} else if cleanup, pending := pendingReviewCleanupControl(latest, latestExecution); isReviewerExecution(latestExecution) && pending {
+				handled = orchestrator.resolveUnappliedReviewCleanupLaunch(
+					ctx, claim, latest, latestItem, latestExecution, cleanup, attempt.Ref, orchestrator.clock.Now(),
 				)
-			case isTemporaryAgentError(launchErr):
-				handled = orchestrator.requeueUnappliedEffect(
-					ctx, claim, latestExecution, attempt.Ref, "agent.temporarily_unavailable",
-				)
-			default:
-				handled = orchestrator.replaceExecutionAttempt(
-					ctx, claim, latest, "agent.launch_failed", orchestrator.clock.Now(), unknownUsage(), 0, true,
-				)
+			} else {
+				switch {
+				case latestItem.CancelRequested():
+					handled = orchestrator.settleCanceledLaunchRejection(
+						ctx, claim, latest, latestItem, latestExecution, attempt.Ref, "agent.launch_failed",
+					)
+				case isTemporaryAgentError(launchErr):
+					handled = orchestrator.requeueUnappliedEffect(
+						ctx, claim, latestExecution, attempt.Ref, "agent.temporarily_unavailable",
+					)
+				default:
+					handled = orchestrator.replaceExecutionAttempt(
+						ctx, claim, latest, "agent.launch_failed", orchestrator.clock.Now(), unknownUsage(), 0, true,
+					)
+				}
 			}
 			if handled != nil {
 				handled = orchestrator.quarantineUnknownApplied(ctx, claim)
@@ -292,6 +361,10 @@ func (orchestrator *Orchestrator) dispatchLaunchEffect(
 		receipt.ModelRef != orchestrator.agentCapabilities.ModelRef ||
 		receipt.AgentRef != orchestrator.agentCapabilities.AgentRef {
 		err = orchestrator.quarantineUnknownApplied(ctx, claim)
+		return EffectAttempt{}, ports.AgentLaunchReceipt{}, false, err
+	}
+	if isReviewerExecution(execution) && !reviewExternalRefAvailable(record, execution, receipt.ExternalRef) {
+		err = orchestrator.abortReviewerLaunch(ctx, claim, record, execution, attempt, receipt)
 		return EffectAttempt{}, ports.AgentLaunchReceipt{}, false, err
 	}
 	return attempt, receipt, true, nil
@@ -334,9 +407,14 @@ func (orchestrator *Orchestrator) processObservation(ctx context.Context, claim 
 	if !ok || !found || item.State() != goal.WorkItemStateRunning || execution.State != ExecutionRunning {
 		return &StateError{Code: StateConflict}
 	}
+	reviewer := isReviewerExecution(execution)
 	observation, observeErr := orchestrator.observer.Observe(ctx, execution.Ref)
 	if observeErr != nil {
 		if orchestrator.executionExpired(execution, claim) {
+			if reviewer {
+				return orchestrator.replaceReviewerExecution(ctx, claim, record, execution,
+					"application.execution_expired", orchestrator.clock.Now(), unknownUsage(), 0, false)
+			}
 			return orchestrator.replaceExecutionAttempt(
 				ctx, claim, record, "application.execution_expired", orchestrator.clock.Now(),
 				unknownUsage(), 0, false,
@@ -345,12 +423,19 @@ func (orchestrator *Orchestrator) processObservation(ctx context.Context, claim 
 		return orchestrator.requeue(ctx, claim, execution, "agent.observe_failed")
 	}
 	if observation.ExecutionRef != execution.Ref {
+		if reviewer {
+			return orchestrator.quarantine(ctx, claim, "agent.observation_execution_mismatch")
+		}
 		return orchestrator.failGoal(ctx, claim, record, "agent.observation_execution_mismatch")
 	}
 	if err := ports.ValidateAgentObservation(observation, execution.MaxOutputBytes); err != nil {
 		code := ports.AgentContractErrorCode(err)
 		if isSpecHashFenceCode(code) {
 			return orchestrator.quarantine(ctx, claim, code)
+		}
+		if reviewer {
+			return orchestrator.replaceReviewerExecution(ctx, claim, record, execution, code,
+				orchestrator.clock.Now(), observation.Usage, int64(len(observation.Content)), false)
 		}
 		return orchestrator.failGoal(ctx, claim, record, code)
 	}
@@ -362,6 +447,11 @@ func (orchestrator *Orchestrator) processObservation(ctx context.Context, claim 
 		return orchestrator.settleCanceledObservation(ctx, claim, record, item, execution, observation)
 	}
 	if observation.Status == ports.AgentCompleted && !compatibleMediaType(execution.ArtifactMediaType, observation.MediaType) {
+		if reviewer {
+			return orchestrator.replaceReviewerExecution(ctx, claim, record, execution,
+				"agent.observation_media_type_mismatch", orchestrator.clock.Now(), observation.Usage,
+				int64(len(observation.Content)), false)
+		}
 		return orchestrator.failGoal(ctx, claim, record, "agent.observation_media_type_mismatch")
 	}
 	transitionAt := lifecycleTime(orchestrator.clock.Now(), record.Goal, item)
@@ -370,6 +460,11 @@ func (orchestrator *Orchestrator) processObservation(ctx context.Context, claim 
 	switch observation.Status {
 	case ports.AgentPending, ports.AgentRunning:
 		if orchestrator.executionExpired(execution, claim) {
+			if reviewer {
+				return orchestrator.replaceReviewerExecution(ctx, claim, record, execution,
+					"application.execution_expired", transitionAt, observation.Usage,
+					int64(len(observation.Content)), false)
+			}
 			return orchestrator.replaceExecutionAttempt(
 				ctx, claim, record, "application.execution_expired", transitionAt,
 				observation.Usage, int64(len(observation.Content)), false,
@@ -377,11 +472,18 @@ func (orchestrator *Orchestrator) processObservation(ctx context.Context, claim 
 		}
 		return orchestrator.requeue(ctx, claim, execution, "")
 	case ports.AgentFailed:
+		if reviewer {
+			return orchestrator.replaceReviewerExecution(ctx, claim, record, execution,
+				observation.ErrorCode, transitionAt, observation.Usage, int64(len(observation.Content)), false)
+		}
 		return orchestrator.replaceExecutionAttempt(
 			ctx, claim, record, observation.ErrorCode, transitionAt,
 			observation.Usage, int64(len(observation.Content)), false,
 		)
 	case ports.AgentCompleted:
+		if reviewer {
+			return orchestrator.recordReviewerObservation(ctx, claim, record, item, execution, observation, transitionAt)
+		}
 		if len(item.WriteSet()) != 0 {
 			return orchestrator.stageExecutionOutput(ctx, claim, record, execution, observation, transitionAt)
 		}
@@ -636,10 +738,12 @@ func (orchestrator *Orchestrator) buildReplacementExecution(ctx context.Context,
 		AttemptNo: execution.AttemptNo + 1, MaxExecutionAttempts: execution.MaxExecutionAttempts,
 		ReplacesExecutionRef: execution.Ref, PlanGeneration: execution.PlanGeneration,
 		AppSpecGeneration: execution.AppSpecGeneration, SpecHash: execution.SpecHash,
-		State: ExecutionQueued, ArtifactMediaType: execution.ArtifactMediaType,
-		IdempotencyKey: "execution:" + replacementRef.String(),
-		MaxOutputBytes: execution.MaxOutputBytes,
-		CreatedAt:      at.UTC(),
+		State: ExecutionQueued, Purpose: execution.Purpose,
+		ReviewSubjectDigest: execution.ReviewSubjectDigest,
+		ArtifactMediaType:   execution.ArtifactMediaType,
+		IdempotencyKey:      "execution:" + replacementRef.String(),
+		MaxOutputBytes:      execution.MaxOutputBytes,
+		CreatedAt:           at.UTC(),
 	}
 	if len(item.WriteSet()) == 0 {
 		return replacement, nil

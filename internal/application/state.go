@@ -9,6 +9,7 @@ import (
 	"orquesta/internal/governance"
 	"orquesta/internal/identity"
 	"orquesta/internal/ports"
+	"orquesta/internal/review"
 )
 
 // StateErrorCode is stable machine-readable repository failure information.
@@ -65,12 +66,23 @@ const (
 	ExecutionStopped             ExecutionState = "stopped"
 )
 
+type ExecutionPurpose string
+
+const (
+	ExecutionPurposeWork              ExecutionPurpose = "work"
+	ExecutionPurposeAuthor            ExecutionPurpose = "author"
+	ExecutionPurposePrimaryReview     ExecutionPurpose = "primary_review"
+	ExecutionPurposeAdversarialReview ExecutionPurpose = "adversarial_review"
+)
+
 type ArtifactKind string
 
 const (
 	ArtifactKindAgentOutput         ArtifactKind = "agent_output"
 	ArtifactKindTestSubjectManifest ArtifactKind = "test_subject_manifest"
 	ArtifactKindTestReport          ArtifactKind = "test_attestation_report"
+	ArtifactKindReviewAssessment    ArtifactKind = "review_assessment"
+	ArtifactKindReviewDiagnostic    ArtifactKind = "review_diagnostic"
 )
 
 type AttestationKind string
@@ -123,6 +135,28 @@ type ExecutionRecord struct {
 	// this exact recipient retired at least one unresolved V13 envelope. A
 	// later execution retry must reject instead of readdressing that evidence.
 	RecipientMailboxRetired bool
+	Purpose                 ExecutionPurpose
+	ReviewSubjectDigest     string
+}
+
+// ReviewRecord is a fact owned by the existing Goal state transaction, not a review lifecycle.
+type ReviewRecord struct {
+	Ref                      string
+	GoalRef                  goal.GoalRef
+	WorkItemRef              goal.WorkItemRef
+	ChangeSetRef             ports.ChangeSetRef
+	SubjectDigest            string
+	Role                     review.Role
+	Verdict                  review.Verdict
+	ReviewerExecutionRef     goal.ExecutionRef
+	ReviewerExecutionAttempt uint64
+	LaunchReceiptRef         string
+	PrincipalRef             identity.PrincipalRef
+	AgentRef                 string
+	ExternalRef              string
+	AssessmentArtifactRef    string
+	AssessmentDigest         string
+	RecordedAt               time.Time
 }
 
 type ArtifactRecord struct {
@@ -209,6 +243,7 @@ type ActionRecord struct {
 	ChangeRef          ports.ChangeSetRef
 	ControlRef         string
 	ExpectedTargetOID  string
+	ReviewGateDigest   string
 	EffectIntentRef    string
 	EffectIntent       EffectIntent
 	EffectApproval     *EffectApproval
@@ -302,6 +337,7 @@ type GoalRecord struct {
 	ChangeSets          []ChangeSet
 	MergeObservations   []MergeObservation
 	IntegrationReceipts []IntegrationReceipt
+	Reviews             []ReviewRecord
 	ConsumptionReceipts []ActionConsumptionReceipt
 }
 
@@ -458,6 +494,65 @@ type GoalFailedState struct {
 	OperationAt          time.Time
 }
 
+// ReviewAssessedState consumes one reviewer observation and publishes its CAS
+// occurrence and decision fact atomically. Goal/AuthorExecution change only
+// when a complete round derives changes_requested.
+type ReviewAssessedState struct {
+	Claim                ActionClaim
+	ExpectedGoalRevision goal.Revision
+	ExpectedItemRevision goal.Revision
+	Goal                 goal.Goal
+	ReviewerExecution    ExecutionRecord
+	AuthorExecution      ExecutionRecord
+	Artifact             ArtifactRecord
+	Review               ReviewRecord
+	BudgetSettlement     *governance.BudgetSettlement
+	Events               []EventRecord
+	OperationAt          time.Time
+}
+
+// ReviewExecutionReplacedState retries a reviewer without rebinding the
+// WorkItem's authoritative author execution.
+type ReviewExecutionReplacedState struct {
+	Claim                ActionClaim
+	ExpectedGoalRevision goal.Revision
+	ExpectedItemRevision goal.Revision
+	FailedExecution      ExecutionRecord
+	ReplacementExecution ExecutionRecord
+	NextAction           ActionRecord
+	DiagnosticArtifact   *ArtifactRecord
+	BudgetSettlement     *governance.BudgetSettlement
+	Events               []EventRecord
+	OperationAt          time.Time
+}
+
+// ReviewParticipantRetirement terminalizes another live participant of the
+// exact same immutable review round without rebinding WorkItem authority.
+type ReviewParticipantRetirement struct {
+	Execution     ExecutionRecord
+	ExpectedState ExecutionState
+}
+
+type ReviewExecutionFailedState struct {
+	Claim                ActionClaim
+	ExpectedGoalRevision goal.Revision
+	ExpectedItemRevision goal.Revision
+	Execution            ExecutionRecord
+	Goal                 goal.Goal
+	AuthorExecution      ExecutionRecord
+	RetiredReviewers     []ReviewParticipantRetirement
+	RetireActionRefs     []string
+	CleanupControls      []ControlRecord
+	CleanupActions       []ActionRecord
+	ResolvedCleanup      *ControlRecord
+	DiagnosticArtifact   *ArtifactRecord
+	EffectReceipt        *EffectReceipt
+	QuarantineClaim      bool
+	BudgetSettlement     *governance.BudgetSettlement
+	Events               []EventRecord
+	OperationAt          time.Time
+}
+
 // StateRepository is the durable state port. Every mutation is an atomic
 // application-level operation; adapters never choose lifecycle transitions.
 // Mutations carrying ActionClaim must also fence the lease with the adapter's
@@ -496,6 +591,9 @@ type StateRepository interface {
 	RecordExecutionInterrupted(context.Context, ExecutionInterruptedState) error
 	RecordGoalSucceeded(context.Context, GoalSucceededState) error
 	RecordGoalFailed(context.Context, GoalFailedState) error
+	RecordReviewAssessed(context.Context, ReviewAssessedState) error
+	RecordReviewExecutionReplaced(context.Context, ReviewExecutionReplacedState) error
+	RecordReviewExecutionFailed(context.Context, ReviewExecutionFailedState) error
 	RecordWorkspacePrepared(context.Context, WorkspacePreparedState) error
 	RecordExecutionOutputReady(context.Context, ExecutionOutputReadyState) error
 	RecordChangeCommitted(context.Context, ChangeCommittedState) error

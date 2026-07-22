@@ -1,0 +1,152 @@
+package application
+
+import (
+	"errors"
+
+	"orquesta/internal/goal"
+	"orquesta/internal/review"
+)
+
+func buildReviewSubject(record GoalRecord, item goal.WorkItem, execution ExecutionRecord,
+	change ChangeSet, policy TestAttestationPolicy,
+) (review.Subject, error) {
+	if execution.Purpose != ExecutionPurposeAuthor || execution.LaunchReceiptRef == "" || execution.ExternalRef == "" {
+		return review.Subject{}, errors.New("review.subject_invalid")
+	}
+	binding, found := workspaceBindingForExecution(record, execution.Ref)
+	if !found {
+		return review.Subject{}, errors.New("review.subject_invalid")
+	}
+	attestation, passed := requiredTestsPassForChange(record, item, execution, change, policy)
+	if !passed {
+		return review.Subject{}, errors.New("review.subject_invalid")
+	}
+	return reviewSubjectFromEvidence(item, execution, binding, change, attestation)
+}
+
+func reviewSubjectFromEvidence(item goal.WorkItem, execution ExecutionRecord, binding WorkspaceBinding,
+	change ChangeSet, attestation AttestationRecord,
+) (review.Subject, error) {
+	if execution.Purpose != ExecutionPurposeAuthor || execution.LaunchReceiptRef == "" || execution.ExternalRef == "" ||
+		attestation.Verdict != AttestationVerdictPassed || attestation.ExecutionRef != execution.Ref ||
+		attestation.ChangeSetRef != change.Ref || attestation.WorkspaceBindingDigest != binding.Digest() ||
+		attestation.ChangeSetDigest != change.Digest() || attestation.RequiredTestsDigest != item.RequiredTestsDigest() {
+		return review.Subject{}, errors.New("review.subject_invalid")
+	}
+	return review.NewSubject(review.Subject{
+		GoalRef: execution.GoalRef.String(), WorkItemRef: execution.WorkItemRef.String(),
+		AuthorExecutionRef: execution.Ref.String(), AuthorExecutionAttempt: execution.AttemptNo,
+		PlanGeneration: uint64(execution.PlanGeneration), WorkItemGeneration: uint64(attestation.WorkItemGeneration),
+		AppSpecGeneration: uint64(execution.AppSpecGeneration), SpecHash: execution.SpecHash,
+		AuthorLaunchReceiptRef: execution.LaunchReceiptRef, AuthorExternalRef: execution.ExternalRef,
+		WorkspaceBindingDigest: binding.Digest(),
+		ChangeSetRef:           change.Ref.String(), ChangeSetDigest: change.Digest(), TreeOID: change.TreeOID,
+		DiffDigest: change.DiffDigest, WriteSetDigest: change.WriteSetDigest,
+		RequiredTestsDigest: attestation.RequiredTestsDigest, TestAttestationRef: attestation.Ref.String(),
+		TestSubjectDigest: attestation.SubjectDigest, TestPolicyDigest: attestation.PolicyDigest,
+	})
+}
+
+func reviewGateForChange(record GoalRecord, execution ExecutionRecord, change ChangeSet,
+	policy TestAttestationPolicy,
+) (review.Subject, review.Gate, error) {
+	if execution.Purpose != ExecutionPurposeAuthor {
+		return review.Subject{}, review.Gate{}, errors.New("review.subject_mismatch")
+	}
+	item, found := record.Goal.WorkItem(change.WorkItemRef)
+	if !found {
+		return review.Subject{}, review.Gate{}, errors.New("review.subject_mismatch")
+	}
+	subject, err := buildReviewSubject(record, item, execution, change, policy)
+	if err != nil {
+		return review.Subject{}, review.Gate{}, errors.New("review.subject_mismatch")
+	}
+	assessments := make([]review.Assessment, 0, 2)
+	for _, fact := range record.Reviews {
+		if fact.ChangeSetRef != change.Ref {
+			continue
+		}
+		assessments = append(assessments, review.Assessment{
+			SubjectDigest: fact.SubjectDigest, Role: fact.Role, Verdict: fact.Verdict,
+			ReviewerExecutionRef: fact.ReviewerExecutionRef.String(), ReviewerExecutionAttempt: fact.ReviewerExecutionAttempt,
+			LaunchReceiptRef: fact.LaunchReceiptRef, ReviewerExternalRef: fact.ExternalRef,
+			AssessmentArtifactRef: fact.AssessmentArtifactRef,
+			AssessmentDigest:      fact.AssessmentDigest, RecordedAt: fact.RecordedAt,
+		})
+	}
+	gate, err := review.EvaluateGate(subject, assessments)
+	if err != nil {
+		return subject, review.Gate{}, err
+	}
+	return subject, gate, nil
+}
+
+func reviewGateAllowsIntegration(record GoalRecord, execution ExecutionRecord, change ChangeSet,
+	policy TestAttestationPolicy,
+) (string, error) {
+	_, gate, err := reviewGateForChange(record, execution, change, policy)
+	if err != nil {
+		return "", err
+	}
+	if gate.Status == review.GateApproved {
+		return gate.Digest, nil
+	}
+	if gate.Status == review.GateChangesRequested {
+		return "", errors.New("review.changes_requested")
+	}
+	return "", errors.New("review.required")
+}
+
+// ValidatePersistedIntegrationReviewGate is used by durable adapters during
+// recovery. Historical completed V17 integrations are not passed here; every
+// live V18 integration action must carry the exact approved pair gate.
+func ValidatePersistedIntegrationReviewGate(record GoalRecord, action ActionRecord) error {
+	item, itemFound := record.Goal.WorkItem(action.WorkItemRef)
+	execution, executionFound := executionByRef(record.Executions, action.ExecutionRef)
+	change, changeFound := changeSetByRef(record, action.ChangeRef)
+	if !itemFound || !executionFound || !changeFound || action.Kind != ActionIntegrateChange ||
+		action.GoalRef != record.Goal.Ref() || change.WorkItemRef != item.Ref() ||
+		change.ExecutionRef != execution.Ref || action.ReviewGateDigest == "" {
+		return errors.New("review.integration_gate_invalid")
+	}
+	var gateDigest string
+	matches := 0
+	for _, attestation := range record.Attestations {
+		if attestation.Kind != AttestationKindRequiredTests || attestation.Verdict != AttestationVerdictPassed ||
+			attestation.ExecutionRef != execution.Ref || attestation.ChangeSetRef != change.Ref {
+			continue
+		}
+		policy := TestAttestationPolicy{Ref: attestation.PolicyRef, Digest: attestation.PolicyDigest}
+		candidate, err := reviewGateAllowsIntegration(record, execution, change, policy)
+		if err == nil {
+			gateDigest, matches = candidate, matches+1
+		}
+	}
+	var intent EffectIntent
+	intentMatches := 0
+	for _, candidate := range record.EffectIntents {
+		if candidate.ActionRef == action.Ref && candidate.ActionKind == ActionIntegrateChange {
+			intent, intentMatches = candidate, intentMatches+1
+		}
+	}
+	if matches != 1 || gateDigest != action.ReviewGateDigest || intentMatches != 1 ||
+		intent.TargetDigest != integrationTargetDigest(change, action.ExpectedTargetOID, gateDigest) {
+		return errors.New("review.integration_gate_invalid")
+	}
+	return nil
+}
+
+func changeForAuthor(record GoalRecord, execution ExecutionRecord) (ChangeSet, bool) {
+	var result ChangeSet
+	found := false
+	for _, change := range record.ChangeSets {
+		if change.ExecutionRef != execution.Ref {
+			continue
+		}
+		if found {
+			return ChangeSet{}, false
+		}
+		result, found = change, true
+	}
+	return result, found
+}

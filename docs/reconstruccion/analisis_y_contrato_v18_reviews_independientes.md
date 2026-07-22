@@ -1,12 +1,11 @@
 # V18: autor, reviews independientes y refinery causal
 
-Fecha de decisión preflight: 2026-07-22 Europe/Madrid. Base analizada:
-`eb272b6645928d800619709c9afd272440b0dabf`.
+Fecha de decisión: 2026-07-22 Europe/Madrid. Base rebasada:
+`4428f46dd6b48659a4fb871a66cb72927f41cb93`.
 
-Estado: `awaiting_dependency`. Este documento, el fixture y el test de
-aceptación son contrato rojo de preparación. No son producto, wiring, receipt
-ni evidencia de V18. V17 todavía no está sellada; por tanto V18 no fija nombres
-ni firmas de V17 y no puede pasar a implementación.
+Estado: `implementation`. V17 está sellada por su receipt publicado, con sujeto
+fuente `a97ea3bc3771c6d89ec055e8189bda1bc6f97ce6`. Documento, fixture y tests
+definen gates de implementación; no son receipt ni evidencia de V18.
 
 V18 posee exactamente `GOV-12`, `STG-13`, `STG-14`, `STG-16` y `EVD-06` bajo
 `AC-V18-INDEPENDENT-REVIEWS`. Depende de V14, V16 y V17. Consejo, ballots,
@@ -98,10 +97,10 @@ Superficie estable observada:
 Conclusión: V18 amplía el gate de `IntegrateChange`; no añade otro merge gate,
 otro VCS ni integración automática.
 
-### 1.4 V17 visible, aún no contractual
+### 1.4 V17 sellada, binding contractual
 
-La rama de integración muestra trabajo V17 sin commit/sello. Su análisis y
-superficie visible proponen:
+El receipt publicado V17 acredita la superficie de tests requeridos y sujeto
+exacto. V18 usa los facts ya sellados:
 
 - tests requeridos estructurados;
 - sujeto exacto de test ligado a workspace, ChangeSet, Git, diff, write-set,
@@ -111,11 +110,8 @@ superficie visible proponen:
 - admission y processing de integración revalidan el PASS exacto;
 - mismo writer, state, outbox, effect ledger y SQLite.
 
-Esto orienta V18 pero no autoriza importar tipos, campos, métodos, migración o
-errores V17. Tras el receipt V17, V18 hará rebase, volverá a leer su API sellada
-y sustituirá en este contrato cualquier término provisional por el nombre real.
-Hasta entonces el fixture solo expresa el sujeto V18 neutral que V17 deberá
-alimentar.
+V18 no cambia API, migración ni evidencia V17. El binding consume facts
+existentes de `GoalRecord` y atestación; preserva writer, state, outbox y ledger.
 
 ### 1.5 Frontera de API durante el preflight
 
@@ -176,6 +172,7 @@ WorkItemGeneration
 AppSpecGeneration
 SpecHash
 AuthorLaunchReceiptRef
+AuthorExternalRef
 WorkspaceBindingDigest
 ChangeSetRef
 ChangeSetDigest
@@ -219,9 +216,14 @@ changes_requested
 
 `author` prueba procedencia del candidato; no emite verdict de review. Primary
 y adversarial deben ser launches y executions distintos del autor y entre sí.
-No se exige provider/model distinto: la independencia contractual es identidad
-de ejecución/launch y rol, no una promesa de calidad entre modelos que V18 no
-puede medir.
+No se exige provider/model ni `AgentRef` distinto: `AgentRef` identifica el
+conector. La independencia contractual exige `ExecutionRef`, launch receipt y
+`ExternalRef`/proceso distintos entre A/P/D. Un receipt reviewer que reutiliza
+un proceso ya ligado a la ronda se rechaza antes de observarlo.
+
+`WorkItem.execution_ref` conserva siempre la autoridad del autor. Primary y
+adversarial son participantes adjuntos, ligados al autor y al `SubjectDigest`;
+nunca reemplazan ese binding ni arrancan/cierran directamente el WorkItem.
 
 ### 3.3 `review.Assessment`
 
@@ -233,6 +235,7 @@ Role = primary | adversarial
 Verdict = approve | changes_requested
 ReviewerExecutionRef + attempt
 LaunchReceiptRef
+ReviewerExternalRef
 AssessmentArtifactRef + AssessmentDigest
 RecordedAt
 ```
@@ -252,7 +255,7 @@ SubjectDigest
 Role + Verdict
 ReviewerExecutionRef + attempt
 LaunchReceiptRef
-PrincipalRef + AgentRef
+PrincipalRef + AgentRef + ExternalRef
 AssessmentArtifactRef + AssessmentDigest
 RecordedAt
 ```
@@ -439,11 +442,16 @@ Propiedades:
 La migración se diseña sobre el schema V17 sellado, no sobre su árbol sucio.
 Reglas ya decididas:
 
-- reservar ordinal SQLite después del rebase;
+- usar el ordinal SQLite 013 reservado tras el rebase V17;
 - no backfill de approvals;
 - executions históricas no se convierten en primary/adversarial;
-- un pending ChangeSet histórico permanece pending y no integrable hasta que
-  una acción explícita y autorizada cree un round nuevo sobre PASS V17 exacto;
+- ningún `ChangeSet` histórico con PASS exacto y estado
+  `awaiting_integration` cruza de schema 012 a 013 sin cerrar antes su frontera
+  de integración bajo V17;
+- cualquier frontera pendiente, claimed, con attempt, desconocida o sin action
+  bloquea la migración de forma atómica y conserva schema 012 intacto; el
+  operador debe drenar V17 y volver a abrir, sin conversión ni backfill V18;
+- una integración V17 ya completada y acreditada se conserva como historia;
 - backup/restore conserva ReviewRecords, actions, effects, artifacts,
   integration intents y causalidad de rework;
 - dry recovery rechaza tamper antes de publicar schema/receipt de migración;
@@ -687,9 +695,8 @@ Cuando V17 quede sellada e integrada:
 14. P/S/E desde checkout detached clean;
 15. solo receipt V3 válido cambia estado a `sealed`.
 
-Hasta ese trigger el estado correcto es `awaiting_dependency`, nunca
-`integration_ready`, `sealing` ni `sealed`. El propietario V18 no se reasigna
-ni abandona la vertical.
+V17 ya está sellada e integrada. Estado actual: `implementation`, nunca
+`sealed`; el propietario V18 no se reasigna ni abandona la vertical.
 
 ## 20. Diferido explícito
 

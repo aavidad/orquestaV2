@@ -115,11 +115,17 @@ func (orchestrator *Orchestrator) IntegrateChange(ctx context.Context, access Ac
 	); !passed {
 		return IntegrateChangeResult{}, &StateError{Code: StateConflict}
 	}
+	reviewGateDigest, gateErr := reviewGateAllowsIntegration(
+		record, execution, change, orchestrator.testAttestationPolicy,
+	)
+	if gateErr != nil {
+		return IntegrateChangeResult{}, &StateError{Code: StateConflict, Cause: gateErr}
+	}
 	if previous, found, replayErr := integrationIntentForRequest(record, request.RequestRef); replayErr != nil {
 		return IntegrateChangeResult{}, replayErr
 	} else if found {
 		action, replayErr := integrationReplayAction(
-			record, item, execution, change, previous, request, principal.Ref, fingerprint,
+			record, item, execution, change, previous, request, principal.Ref, fingerprint, reviewGateDigest,
 		)
 		if replayErr != nil {
 			return IntegrateChangeResult{}, replayErr
@@ -137,7 +143,7 @@ func (orchestrator *Orchestrator) IntegrateChange(ctx context.Context, access Ac
 	}
 	action, err := orchestrator.integrateChangeAction(
 		policy, record.Goal, item, execution, change, request.ExpectedTargetOID,
-		principal.Ref, authorization, request.RequestRef, fingerprint, now,
+		reviewGateDigest, principal.Ref, authorization, request.RequestRef, fingerprint, now,
 	)
 	if err != nil {
 		return IntegrateChangeResult{}, err
@@ -186,7 +192,7 @@ func integrationIntentForRequest(record GoalRecord, requestRef string) (EffectIn
 
 func integrationReplayAction(record GoalRecord, item goal.WorkItem, execution ExecutionRecord,
 	change ChangeSet, intent EffectIntent, request IntegrateChangeRequest,
-	principal identity.PrincipalRef, fingerprint string,
+	principal identity.PrincipalRef, fingerprint string, reviewGateDigest string,
 ) (ActionRecord, error) {
 	if intent.RequestFingerprint != fingerprint || intent.ProposedBy != principal ||
 		intent.ActionRef != integrationActionRef(principal, record.Goal.Project(), request.RequestRef) ||
@@ -194,7 +200,7 @@ func integrationReplayAction(record GoalRecord, item goal.WorkItem, execution Ex
 		intent.Subject.ProjectRef != record.Goal.Project() || intent.Subject.GoalRef != record.Goal.Ref() ||
 		intent.Subject.WorkItemRef != change.WorkItemRef || intent.Subject.ExecutionRef != change.ExecutionRef ||
 		intent.Subject.PlanGeneration != execution.PlanGeneration ||
-		intent.TargetDigest != integrationTargetDigest(change, request.ExpectedTargetOID) {
+		intent.TargetDigest != integrationTargetDigest(change, request.ExpectedTargetOID, reviewGateDigest) {
 		return ActionRecord{}, &StateError{Code: StateConflict}
 	}
 	approval, found := effectApprovalForIntent(record.EffectApprovals, intent.Ref)
@@ -205,7 +211,8 @@ func integrationReplayAction(record GoalRecord, item goal.WorkItem, execution Ex
 		Ref: intent.ActionRef, Kind: ActionIntegrateChange,
 		GoalRef: record.Goal.Ref(), WorkItemRef: change.WorkItemRef, ExecutionRef: change.ExecutionRef,
 		ChangeRef: change.Ref, ExpectedTargetOID: request.ExpectedTargetOID,
-		EffectIntentRef: intent.Ref, EffectIntent: intent, EffectApproval: &approval,
+		ReviewGateDigest: reviewGateDigest,
+		EffectIntentRef:  intent.Ref, EffectIntent: intent, EffectApproval: &approval,
 		PlanGeneration: intent.Subject.PlanGeneration, WorkItemGeneration: item.Revision(),
 		AvailableAt: intent.CreatedAt,
 	}, nil

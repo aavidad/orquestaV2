@@ -130,7 +130,7 @@ func readPersistedIntegrationAction(
 	err := source.QueryRowContext(ctx, `
 SELECT action.ref,action.kind,action.goal_ref,action.work_item_ref,action.execution_ref,
        action.change_ref,action.expected_target_oid,action.plan_generation,
-       action.work_item_generation,action.available_at,action.effect_intent_ref,
+       action.work_item_generation,action.available_at,action.effect_intent_ref,action.review_gate_digest,
        action.admission_request_fingerprint
 FROM outbox action
 JOIN effect_intents intent ON intent.ref=action.effect_intent_ref
@@ -139,7 +139,7 @@ WHERE action.kind='integrate_change' AND action.admission_request_ref=?
 		state.RequestRef, state.GoalRef.String(), state.PrincipalRef.String(), state.ProjectRef.String()).Scan(
 		&action.Ref, &kind, &goalValue, &itemValue, &executionValue, &changeValue,
 		&action.ExpectedTargetOID, &planGeneration, &itemGeneration, &availableAt,
-		&intentRef, &fingerprint,
+		&intentRef, &action.ReviewGateDigest, &fingerprint,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return application.ActionRecord{}, "", false, nil
@@ -201,6 +201,7 @@ func integrationAdmissionReplayMatches(
 		persisted.Kind != application.ActionIntegrateChange || persisted.GoalRef != s.GoalRef ||
 		persisted.WorkItemRef != s.Action.WorkItemRef || persisted.ExecutionRef != s.Action.ExecutionRef ||
 		persisted.ChangeRef != s.ChangeRef || persisted.ExpectedTargetOID != s.Action.ExpectedTargetOID ||
+		persisted.ReviewGateDigest != s.Action.ReviewGateDigest ||
 		persisted.PlanGeneration != s.Action.PlanGeneration || persisted.EffectIntent != s.Action.EffectIntent ||
 		persisted.EffectApproval == nil || s.Action.EffectApproval == nil ||
 		*persisted.EffectApproval != *s.Action.EffectApproval {
@@ -268,12 +269,12 @@ func insertIntegrationAction(ctx context.Context, tx *sql.Tx, s application.Admi
 INSERT INTO outbox(
  ref,kind,goal_ref,work_item_ref,execution_ref,control_ref,change_ref,expected_target_oid,
  admission_request_ref,admission_request_fingerprint,plan_generation,work_item_generation,
- available_at,governance_version,effect_intent_ref
-) VALUES(?,?,?,?,?,NULL,?,?,?,?,?,?,?,1,?)`,
+ available_at,governance_version,effect_intent_ref,review_gate_digest
+) VALUES(?,?,?,?,?,NULL,?,?,?,?,?,?,?,1,?,?)`,
 		action.Ref, string(action.Kind), action.GoalRef.String(), action.WorkItemRef.String(),
 		action.ExecutionRef.String(), action.ChangeRef.String(), action.ExpectedTargetOID,
 		s.RequestRef, s.RequestFingerprint, int64(action.PlanGeneration),
-		int64(action.WorkItemGeneration), requiredTime(action.AvailableAt), action.EffectIntentRef,
+		int64(action.WorkItemGeneration), requiredTime(action.AvailableAt), action.EffectIntentRef, action.ReviewGateDigest,
 	)
 	return mapDatabaseError(err)
 }

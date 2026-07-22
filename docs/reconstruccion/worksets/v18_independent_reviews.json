@@ -4,10 +4,10 @@
   "slug": "independent_reviews",
   "branch": "reconstruccion/v18-independent-reviews",
   "worktree": "/home/alberto/Trabajo/orquesta-rebuild-worktrees/v18-independent-reviews",
-  "base_oid": "eb272b6645928d800619709c9afd272440b0dabf",
-  "owner_state": "awaiting_dependency",
+  "base_oid": "4428f46dd6b48659a4fb871a66cb72927f41cb93",
+  "owner_state": "implementation_complete_pending_integration",
   "owner_continuity_required": true,
-  "preflight_only": true,
+  "preflight_only": false,
   "dependencies": [
     {
       "vertical": "V14",
@@ -25,16 +25,24 @@
       "vertical": "V17",
       "slug": "test_attestor",
       "receipt": "product/evidence/v17_test_attestor.json",
-      "status": "awaiting_dependency"
+      "status": "verified_present"
     }
   ],
   "capability_ids": ["GOV-12", "STG-13", "STG-14", "STG-16", "EVD-06"],
   "acceptance_contract": "AC-V18-INDEPENDENT-REVIEWS",
   "owned_globs": [
+    "architecture_rebuild_test.go",
+    "acceptance/v02_authority_rules_test.go",
     "docs/reconstruccion/analisis_y_contrato_v18_*.md",
     "docs/reconstruccion/worksets/v18*.json",
     "acceptance/v18_*.go",
-    "acceptance/fixtures/v18_*.json"
+    "acceptance/fixtures/v18_*.json",
+    "internal/review/**",
+    "internal/goal/replan.go",
+    "internal/goal/*review*test.go",
+    "internal/application/**",
+    "internal/adapters/state/sqlite/**",
+    "internal/bootstrap/*review*"
   ],
   "future_owned_globs_after_v17_rebase": [
     "internal/review/**",
@@ -79,7 +87,6 @@
     "product/evidence/**",
     "product/traceability/**",
     "config/**",
-    "internal/**",
     "cmd/**",
     "/home/alberto/Trabajo/orquesta-rebuild/**",
     "/home/alberto/Trabajo/orquesta/**"
@@ -89,7 +96,7 @@
     "go test -mod=vendor -count=1 ./acceptance -run '^TestAcceptanceV(12DirectorLease|14Controls|16WorkspaceGit)Receipt$'",
     "git diff --check"
   ],
-  "expected_preflight_red": "V18_RED only: production review types, markers and behavior tests are absent",
+  "expected_preflight_red": "none; implementation is locally green and awaits independent integration review",
   "runtime_roots": [],
   "cache_roots": [],
   "ports": [],
@@ -109,13 +116,11 @@
     "e2e_max_wall_time_seconds": 180
   },
   "next_transition": {
-    "trigger": "valid V17 receipt integrated in the new base HEAD",
+    "trigger": "independent integration review accepts the locally verified V18 commit",
     "actions": [
-      "rebase this same branch and worktree onto the integrated V17 HEAD",
-      "verify V17 receipt and freeze its actual subject and attestation API",
-      "update base_oid and dependency status without changing V18 ownership",
-      "reserve shared aggregate state SQLite and bootstrap leases before product edits",
-      "continue domain application persistence wiring recovery E2E review and P/S/E as the same V18 owner"
+      "review the committed V18 delta and its exact regression evidence",
+      "integrate the commit without editing product roadmap evidence or traceability from this owner",
+      "run promotion seal and evidence as the authorized integration owner"
     ]
   }
 }

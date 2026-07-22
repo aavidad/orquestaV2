@@ -1,18 +1,18 @@
 package acceptance_test
 
 import (
-	"crypto/sha256"
-	"encoding/binary"
-	"encoding/hex"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strconv"
 	"testing"
+
+	"orquesta/internal/review"
 )
 
 const v18FixturePath = "acceptance/fixtures/v18_independent_reviews.json"
-const v18ContractBaseGitCommitOID = "eb272b6645928d800619709c9afd272440b0dabf"
+const v18ContractBaseGitCommitOID = "4428f46dd6b48659a4fb871a66cb72927f41cb93"
+const v18V17SealedGitCommitOID = "a97ea3bc3771c6d89ec055e8189bda1bc6f97ce6"
 
 type v18Fixture struct {
 	SchemaVersion                  int                    `json:"schema_version"`
@@ -66,6 +66,7 @@ type v18SubjectFixture struct {
 	AppSpecGeneration      uint64 `json:"app_spec_generation"`
 	SpecHash               string `json:"spec_hash"`
 	AuthorLaunchReceiptRef string `json:"author_launch_receipt_ref"`
+	AuthorExternalRef      string `json:"author_external_ref"`
 	WorkspaceBindingDigest string `json:"workspace_binding_digest"`
 	ChangeSetRef           string `json:"change_set_ref"`
 	ChangeSetDigest        string `json:"change_set_digest"`
@@ -83,6 +84,7 @@ type v18ParticipantFixture struct {
 	Role             string `json:"role"`
 	ExecutionRef     string `json:"execution_ref"`
 	LaunchReceiptRef string `json:"launch_receipt_ref"`
+	ExternalRef      string `json:"external_ref"`
 	SubjectDigest    string `json:"subject_digest"`
 	Decision         string `json:"decision"`
 }
@@ -160,10 +162,10 @@ func v18AssertFixture(t *testing.T, repositoryRoot string, fixture v18Fixture) {
 	t.Helper()
 	if fixture.SchemaVersion != 1 || fixture.ContractID != "AC-V18-INDEPENDENT-REVIEWS" ||
 		fixture.TrustedBaseGitCommitOID != v18ContractBaseGitCommitOID ||
-		fixture.ProductDeltaSealedGitCommitOID != "" ||
-		fixture.SealStatus != "preflight_awaiting_v17_no_product_evidence" ||
-		fixture.SealNote != "Preflight contract only. V17 is not sealed; empty product OID and this fixture never accredit V18." {
-		t.Fatalf("invalid V18 preflight identity: %+v", fixture)
+		fixture.ProductDeltaSealedGitCommitOID != v18V17SealedGitCommitOID ||
+		fixture.SealStatus != "v17_sealed_v18_unaccredited" ||
+		fixture.SealNote != "V17 receipt is sealed. This V18 contract defines implementation gates only and never accredits V18." {
+		t.Fatalf("invalid V18 dependency identity: %+v", fixture)
 	}
 	if !reflect.DeepEqual(fixture.OwnedCapabilityIDs, []string{"GOV-12", "STG-13", "STG-14", "STG-16", "EVD-06"}) ||
 		!reflect.DeepEqual(fixture.DependencyVerticals, []string{"controls", "workspace_git", "test_attestor"}) ||
@@ -174,23 +176,23 @@ func v18AssertFixture(t *testing.T, repositoryRoot string, fixture v18Fixture) {
 	wantReceipts := []v18DependencyReceipt{
 		{Vertical: "controls", Path: "product/evidence/v14_controls.json", PreflightStatus: "verified_present"},
 		{Vertical: "workspace_git", Path: "product/evidence/v16_workspace_git.json", PreflightStatus: "verified_present"},
-		{Vertical: "test_attestor", Path: "product/evidence/v17_test_attestor.json", PreflightStatus: "awaiting_dependency"},
+		{Vertical: "test_attestor", Path: "product/evidence/v17_test_attestor.json", PreflightStatus: "verified_present"},
 	}
 	if !reflect.DeepEqual(fixture.DependencyReceipts, wantReceipts) {
 		t.Fatalf("invalid V18 dependency receipt state: %+v", fixture.DependencyReceipts)
 	}
-	for _, dependency := range fixture.DependencyReceipts[:2] {
+	for _, dependency := range fixture.DependencyReceipts {
 		info, err := os.Lstat(filepath.Join(repositoryRoot, filepath.FromSlash(dependency.Path)))
 		if err != nil || !info.Mode().IsRegular() {
-			t.Fatalf("sealed V18 dependency receipt %s unavailable: %v", dependency.Path, err)
+			t.Fatalf("V18 dependency receipt %s unavailable: %v", dependency.Path, err)
 		}
 	}
 	if fixture.SubjectContract.Directory != "internal/review" || fixture.SubjectContract.Name != "Subject" ||
 		fixture.SubjectContract.Constructor != "NewSubject" || fixture.SubjectContract.DigestMethod != "Digest" ||
-		len(fixture.SubjectContract.Fields) != 19 || len(fixture.RequiredTypeContracts) != 4 ||
+		len(fixture.SubjectContract.Fields) != 20 || len(fixture.RequiredTypeContracts) != 4 ||
 		len(fixture.RequiredReviewMarkers) != 8 || len(fixture.RequiredApplicationMarkers) != 7 ||
-		len(fixture.ForbiddenPrivateAuthorities) != 11 || len(fixture.RequiredBehaviorTests) != 18 ||
-		len(fixture.MutationGates) != 15 || len(fixture.RecoveryReplayRequirements) != 6 ||
+		len(fixture.ForbiddenPrivateAuthorities) != 11 || len(fixture.RequiredBehaviorTests) != 23 ||
+		len(fixture.MutationGates) != 16 || len(fixture.RecoveryReplayRequirements) != 7 ||
 		len(fixture.DeferredSurfaces) != 8 {
 		t.Fatalf("invalid V18 contract coverage counts: %+v", fixture)
 	}
@@ -213,7 +215,7 @@ func v18AssertFixture(t *testing.T, repositoryRoot string, fixture v18Fixture) {
 		t.Fatalf("invalid V18 simplicity budget: %+v", fixture.SimplicityBudget)
 	}
 	if _, err := evidenceGitCanonicalCommit(repositoryRoot, fixture.TrustedBaseGitCommitOID); err != nil {
-		t.Fatalf("invalid V18 preflight base: %v", err)
+		t.Fatalf("invalid V18 dependency base: %v", err)
 	}
 }
 
@@ -224,17 +226,19 @@ func v18AssertAcceptedScenario(t *testing.T, scenario v18AcceptedScenario) {
 		t.Fatalf("invalid V18 accepted scenario subject/integration: %+v", scenario)
 	}
 	wantRoles, wantDecisions := []string{"author", "primary", "adversarial"}, []string{"produced", "approve", "approve"}
-	executions, launches := map[string]bool{}, map[string]bool{}
+	executions, launches, external := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for index, participant := range scenario.Participants {
 		if participant.Role != wantRoles[index] || participant.Decision != wantDecisions[index] ||
 			participant.SubjectDigest != scenario.Subject.SubjectDigest || participant.ExecutionRef == "" ||
-			participant.LaunchReceiptRef == "" || executions[participant.ExecutionRef] || launches[participant.LaunchReceiptRef] {
+			participant.LaunchReceiptRef == "" || participant.ExternalRef == "" ||
+			executions[participant.ExecutionRef] || launches[participant.LaunchReceiptRef] || external[participant.ExternalRef] {
 			t.Fatalf("V18 fixture participants are not three distinct launches on one subject: %+v", scenario.Participants)
 		}
-		executions[participant.ExecutionRef], launches[participant.LaunchReceiptRef] = true, true
+		executions[participant.ExecutionRef], launches[participant.LaunchReceiptRef], external[participant.ExternalRef] = true, true, true
 	}
 	if scenario.Participants[0].ExecutionRef != scenario.Subject.AuthorExecutionRef ||
-		scenario.Participants[0].LaunchReceiptRef != scenario.Subject.AuthorLaunchReceiptRef {
+		scenario.Participants[0].LaunchReceiptRef != scenario.Subject.AuthorLaunchReceiptRef ||
+		scenario.Participants[0].ExternalRef != scenario.Subject.AuthorExternalRef {
 		t.Fatalf("V18 fixture author does not match subject: %+v", scenario.Participants[0])
 	}
 }
@@ -242,7 +246,7 @@ func v18AssertAcceptedScenario(t *testing.T, scenario v18AcceptedScenario) {
 func v18AssertDriftMutations(t *testing.T, baseline v18SubjectFixture, mutations []v18DriftMutation) {
 	t.Helper()
 	wantFields := []string{
-		"plan_generation", "work_item_generation", "author_launch_receipt_ref", "tree_oid",
+		"plan_generation", "work_item_generation", "author_launch_receipt_ref", "author_external_ref", "tree_oid",
 		"diff_digest", "required_tests_digest", "test_subject_digest", "test_policy_digest",
 	}
 	if len(mutations) != len(wantFields) {
@@ -260,6 +264,8 @@ func v18AssertDriftMutations(t *testing.T, baseline v18SubjectFixture, mutations
 			changed.WorkItemGeneration = mustV18Uint(t, mutation.Replacement)
 		case "author_launch_receipt_ref":
 			changed.AuthorLaunchReceiptRef = mutation.Replacement
+		case "author_external_ref":
+			changed.AuthorExternalRef = mutation.Replacement
 		case "tree_oid":
 			changed.TreeOID = mutation.Replacement
 		case "diff_digest":
@@ -289,22 +295,22 @@ func v18AssertReworkScenario(t *testing.T, accepted v18AcceptedScenario, rework 
 }
 
 func v18FixtureSubjectDigest(subject v18SubjectFixture) string {
-	fields := []string{
-		"orquesta.review-subject.fixture.v1", subject.GoalRef, subject.WorkItemRef, subject.AuthorExecutionRef,
-		strconv.FormatUint(subject.AuthorExecutionAttempt, 10), strconv.FormatUint(subject.PlanGeneration, 10),
-		strconv.FormatUint(subject.WorkItemGeneration, 10), strconv.FormatUint(subject.AppSpecGeneration, 10),
-		subject.SpecHash, subject.AuthorLaunchReceiptRef, subject.WorkspaceBindingDigest, subject.ChangeSetRef,
-		subject.ChangeSetDigest, subject.TreeOID, subject.DiffDigest, subject.WriteSetDigest,
-		subject.RequiredTestsDigest, subject.TestAttestationRef, subject.TestSubjectDigest, subject.TestPolicyDigest,
+	value, err := review.NewSubject(review.Subject{
+		GoalRef: subject.GoalRef, WorkItemRef: subject.WorkItemRef,
+		AuthorExecutionRef: subject.AuthorExecutionRef, AuthorExecutionAttempt: subject.AuthorExecutionAttempt,
+		PlanGeneration: subject.PlanGeneration, WorkItemGeneration: subject.WorkItemGeneration,
+		AppSpecGeneration: subject.AppSpecGeneration, SpecHash: subject.SpecHash,
+		AuthorLaunchReceiptRef: subject.AuthorLaunchReceiptRef, AuthorExternalRef: subject.AuthorExternalRef,
+		WorkspaceBindingDigest: subject.WorkspaceBindingDigest, ChangeSetRef: subject.ChangeSetRef,
+		ChangeSetDigest: subject.ChangeSetDigest, TreeOID: subject.TreeOID, DiffDigest: subject.DiffDigest,
+		WriteSetDigest: subject.WriteSetDigest, RequiredTestsDigest: subject.RequiredTestsDigest,
+		TestAttestationRef: subject.TestAttestationRef, TestSubjectDigest: subject.TestSubjectDigest,
+		TestPolicyDigest: subject.TestPolicyDigest,
+	})
+	if err != nil {
+		return ""
 	}
-	digest := sha256.New()
-	for _, field := range fields {
-		var size [8]byte
-		binary.BigEndian.PutUint64(size[:], uint64(len(field)))
-		_, _ = digest.Write(size[:])
-		_, _ = digest.Write([]byte(field))
-	}
-	return "sha256:" + hex.EncodeToString(digest.Sum(nil))
+	return value.Digest()
 }
 
 func mustV18Uint(t *testing.T, value string) uint64 {

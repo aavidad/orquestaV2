@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"orquesta/internal/goal"
+	"orquesta/internal/review"
 )
 
 func (orchestrator *Orchestrator) applyDirectorProposal(
@@ -36,6 +37,16 @@ func (orchestrator *Orchestrator) applyDirectorProposal(
 		}
 	case goal.ReplanCauseExecutionFailed:
 		if execution.State != ExecutionFailed {
+			return goal.Goal{}, nil, nil, nil, &StateError{Code: StateConflict}
+		}
+	case goal.ReplanCauseReviewChangesRequested:
+		change, changeFound := changeForAuthor(current, execution)
+		_, gate, gateErr := reviewGateForChange(current, execution, change, orchestrator.testAttestationPolicy)
+		interrupt, hasInterrupt := source.InterruptCause()
+		if execution.State != ExecutionFailed ||
+			execution.FailureCode != string(goal.ReplanCauseReviewChangesRequested) || !changeFound ||
+			gateErr != nil || gate.Status != review.GateChangesRequested || !hasInterrupt ||
+			interrupt != goal.WorkItemInterruptExecutionFailed {
 			return goal.Goal{}, nil, nil, nil, &StateError{Code: StateConflict}
 		}
 	default:

@@ -66,7 +66,7 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 	if err := repository.db.QueryRow("PRAGMA synchronous").Scan(&synchronous); err != nil {
 		t.Fatalf("synchronous: %v", err)
 	}
-	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != recoverySchemaV17 {
+	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != recoverySchemaV18 {
 		t.Fatalf("pragmas = fk:%d busy:%d version:%d", foreignKeys, busyTimeout, userVersion)
 	}
 	if synchronous != 2 {
@@ -91,7 +91,7 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 		"budget_envelopes", "budget_reservations", "budget_settlements", "change_set_paths", "change_sets", "controls", "director_decisions", "director_lease_receipts", "director_leases", "effect_approvals", "effect_attempts", "effect_intents", "effect_receipts", "events", "executions", "fairness_cursors",
 		"goal_child_handoff_resolutions", "goal_phase_contract_refs", "goal_phases", "goals", "groups", "integration_receipts", "intents",
 		"mailbox_admission_receipts", "mailbox_artifact_refs", "mailbox_delivery_acks", "mailbox_delivery_attempts", "mailbox_envelopes", "mailbox_retirements",
-		"membership_audit_receipts", "merge_observations", "outbox", "principals", "project_memberships", "projects", "repositories", "schema_migrations",
+		"membership_audit_receipts", "merge_observations", "outbox", "principals", "project_memberships", "projects", "repositories", "review_records", "schema_migrations",
 		"work_item_authorities", "work_item_dependencies", "work_item_fences", "work_item_required_test_arguments", "work_item_required_tests", "work_item_requirement_refs", "work_item_write_scopes", "work_items",
 		"workspace_binding_write_scopes", "workspace_bindings", "workspaces",
 	}
@@ -1247,7 +1247,7 @@ func newV05CreateFixture(t *testing.T) application.CreateGoalState {
 			AttemptNo: 1, MaxExecutionAttempts: 3, PlanGeneration: aggregate.PlanGeneration(),
 			AppSpecGeneration: aggregate.AppSpec().Generation(), SpecHash: aggregate.SpecHash(),
 			ArtifactMediaType: "text/plain", IdempotencyKey: "execution:" + executionRef.String(),
-			MaxOutputBytes: 1 << 20, CreatedAt: aggregate.CreatedAt(),
+			MaxOutputBytes: 1 << 20, CreatedAt: aggregate.CreatedAt(), Purpose: application.ExecutionPurposeWork,
 		})
 		actions = append(actions, application.ActionRecord{
 			Ref: "action:launch:" + executionRef.String(), Kind: application.ActionLaunchAgent,
@@ -1366,12 +1366,16 @@ func TestRepositoryParksLegacyReadySuccessorsWithoutSyntheticGovernance(t *testi
 			AppSpecGeneration: succeededGoal.AppSpec().Generation(), SpecHash: succeededGoal.SpecHash(),
 			State: application.ExecutionQueued, ArtifactMediaType: "text/plain",
 			IdempotencyKey: "execution:" + executionRef.String(), MaxOutputBytes: 1 << 20, CreatedAt: finishedAt,
+			Purpose: application.ExecutionPurposeWork,
 		}
 		actionKind, actionRef := application.ActionLaunchAgent, "action:launch:"+executionRef.String()
 		if len(successor.WriteSet()) != 0 {
 			execution.RepositoryRef, _ = identity.NewRepositoryRef("repository:" + succeededGoal.Project().String())
 			execution.ExecutionWorkspaceRef, _ = ports.NewExecutionWorkspaceRef("execution-workspace:" + executionRef.String())
 			actionKind, actionRef = application.ActionPrepareWorkspace, "action:prepare-workspace:"+executionRef.String()
+		}
+		if len(successor.WriteSet()) != 0 && len(successor.RequiredTests()) != 0 {
+			execution.Purpose = application.ExecutionPurposeAuthor
 		}
 		authority := application.WorkItemAuthority{}
 		for _, candidate := range record.WorkItemAuthorities {
@@ -1481,7 +1485,7 @@ func newDAGCreateFixture(t *testing.T) application.CreateGoalState {
 		AttemptNo: 1, MaxExecutionAttempts: 3, PlanGeneration: aggregate.PlanGeneration(),
 		AppSpecGeneration: aggregate.AppSpec().Generation(), SpecHash: aggregate.SpecHash(),
 		ArtifactMediaType: "text/plain", IdempotencyKey: "execution:dag:a", MaxOutputBytes: 1 << 20,
-		CreatedAt: aggregate.CreatedAt(),
+		CreatedAt: aggregate.CreatedAt(), Purpose: application.ExecutionPurposeWork,
 	}
 	return application.CreateGoalState{
 		RequestRef: "request:dag", RequestFingerprint: "fingerprint:dag", Goal: aggregate,
@@ -1600,7 +1604,7 @@ func newCreateFixtureWithStatement(
 		AttemptNo: 1, MaxExecutionAttempts: 3, PlanGeneration: aggregate.PlanGeneration(),
 		AppSpecGeneration: aggregate.AppSpec().Generation(), SpecHash: aggregate.SpecHash(),
 		ArtifactMediaType: "text/plain", IdempotencyKey: "execution:" + suffix,
-		MaxOutputBytes: 1 << 20, CreatedAt: base,
+		MaxOutputBytes: 1 << 20, CreatedAt: base, Purpose: application.ExecutionPurposeWork,
 	}
 	return application.CreateGoalState{
 		RequestRef: requestRef, RequestFingerprint: fingerprint, Goal: aggregate,

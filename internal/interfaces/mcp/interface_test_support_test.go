@@ -727,6 +727,18 @@ func (state *memoryState) RecordGoalFailed(context.Context, application.GoalFail
 	return errors.New("test.state_write_not_used")
 }
 
+func (*memoryState) RecordReviewAssessed(context.Context, application.ReviewAssessedState) error {
+	return errors.New("test.review_state_write_not_used")
+}
+
+func (*memoryState) RecordReviewExecutionReplaced(context.Context, application.ReviewExecutionReplacedState) error {
+	return errors.New("test.review_state_write_not_used")
+}
+
+func (*memoryState) RecordReviewExecutionFailed(context.Context, application.ReviewExecutionFailedState) error {
+	return errors.New("test.review_state_write_not_used")
+}
+
 func (*memoryState) ProjectRepository(_ context.Context, projectRef goal.ProjectRef) (identity.RepositoryRef, error) {
 	return identity.NewRepositoryRef("repository:" + projectRef.String())
 }

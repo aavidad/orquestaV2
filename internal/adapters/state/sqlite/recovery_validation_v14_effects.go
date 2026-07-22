@@ -143,9 +143,13 @@ func countRecoveryV14StopEffectReceipt(
 			!control.ConfirmedAt.Equal(confirmed)) {
 		return fmt.Errorf("sqlite.recovery_stop_effect_control_invalid:%s", actionRef)
 	}
+	expectedFailureCode := "application.execution_stopped"
+	if application.IsReviewCleanupControl(control) {
+		expectedFailureCode = "review.round_aborted"
+	}
 	if (status == string(ports.AgentStopped) || status == string(ports.AgentStopAlreadyStopped)) &&
 		(executionState != string(application.ExecutionStopped) || !finishedAt.Valid ||
-			finishedAt.Int64 != confirmedAt || failureCode != "application.execution_stopped") {
+			finishedAt.Int64 != confirmedAt || failureCode != expectedFailureCode) {
 		return fmt.Errorf("sqlite.recovery_stop_effect_execution_invalid:%s", actionRef)
 	}
 	return nil

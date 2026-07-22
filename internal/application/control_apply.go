@@ -19,7 +19,9 @@ func (orchestrator *Orchestrator) applyNewControl(
 	if err != nil {
 		return ControlResult{}, err
 	}
-	item, execution, err := validateControlFences(current, projectRef, request)
+	item, execution, err := validateControlFences(
+		current, projectRef, request, orchestrator.testAttestationPolicy,
+	)
 	if err != nil {
 		return orchestrator.replayControlAfterConflict(
 			ctx, request, fingerprint, principal, projectRef, err,

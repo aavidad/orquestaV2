@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -14,6 +16,7 @@ import (
 	"orquesta/internal/governance"
 	"orquesta/internal/identity"
 	"orquesta/internal/ports"
+	"orquesta/internal/review"
 )
 
 const sqliteV15PolicyHash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -81,6 +84,7 @@ type sqliteV15External struct {
 	mu               sync.Mutex
 	clock            *sqliteMembershipClock
 	launches         map[string]ports.AgentLaunchReceipt
+	launchRequests   map[goal.ExecutionRef]ports.AgentLaunchRequest
 	content          map[goal.ArtifactRef]ports.ArtifactContent
 	launchErr        error
 	launchStart      chan struct{}
@@ -88,6 +92,7 @@ type sqliteV15External struct {
 	launchCalls      int
 	stopCalls        int
 	observationUsage governance.ResourceUsage
+	reviewContent    []byte
 }
 
 type sqliteV15DefinitelyUnapplied struct{}
@@ -99,6 +104,7 @@ func (sqliteV15DefinitelyUnapplied) DefinitelyNotApplied() bool { return true }
 func newSQLiteV15External(clock *sqliteMembershipClock) *sqliteV15External {
 	return &sqliteV15External{
 		clock: clock, launches: make(map[string]ports.AgentLaunchReceipt),
+		launchRequests:   make(map[goal.ExecutionRef]ports.AgentLaunchRequest),
 		content:          make(map[goal.ArtifactRef]ports.ArtifactContent),
 		observationUsage: governance.ResourceUsage{Quality: governance.UsageQualityUnknown},
 	}
@@ -139,6 +145,7 @@ func (external *sqliteV15External) Launch(
 		ReceiptRef: "provider-receipt:" + request.ExecutionRef.String(), AcceptedAt: external.clock.Now(),
 	}
 	external.launches[request.IdempotencyKey] = receipt
+	external.launchRequests[request.ExecutionRef] = request
 	return receipt, nil
 }
 
@@ -149,6 +156,30 @@ func (external *sqliteV15External) Observe(
 	defer external.mu.Unlock()
 	for _, receipt := range external.launches {
 		if receipt.ExecutionRef == executionRef {
+			request := external.launchRequests[executionRef]
+			if request.ArtifactMediaType == review.AssessmentMediaType {
+				if external.reviewContent != nil {
+					return ports.AgentObservation{ExecutionRef: executionRef, SpecHash: receipt.SpecHash,
+						Status: ports.AgentCompleted, MediaType: review.AssessmentMediaType,
+						Content: append([]byte(nil), external.reviewContent...),
+						Usage:   external.observationUsage, ObservedAt: external.clock.Now()}, nil
+				}
+				role := review.RolePrimary
+				if strings.Contains(request.Objective, `"role":"adversarial"`) {
+					role = review.RoleAdversarial
+				}
+				payload, err := json.Marshal(review.Artifact{
+					SchemaVersion: 1, SubjectDigest: reviewSubjectDigestFromObjective(request.Objective),
+					Role: role, Verdict: review.VerdictApprove, Summary: "exact subject approved",
+					Findings: []review.Finding{},
+				})
+				if err != nil {
+					return ports.AgentObservation{}, err
+				}
+				return ports.AgentObservation{ExecutionRef: executionRef, SpecHash: receipt.SpecHash,
+					Status: ports.AgentCompleted, MediaType: review.AssessmentMediaType, Content: payload,
+					Usage: external.observationUsage, ObservedAt: external.clock.Now()}, nil
+			}
 			return ports.AgentObservation{
 				ExecutionRef: executionRef, SpecHash: receipt.SpecHash, Status: ports.AgentCompleted,
 				MediaType: "text/plain", Content: []byte("v15 evidence"),
@@ -158,6 +189,27 @@ func (external *sqliteV15External) Observe(
 		}
 	}
 	return ports.AgentObservation{}, fmt.Errorf("sqlite.v15.execution_missing")
+}
+
+func reviewSubjectDigestFromObjective(objective string) string {
+	const evidencePrefix = "Review exact immutable evidence "
+	if strings.HasPrefix(objective, evidencePrefix) {
+		value := strings.TrimPrefix(objective, evidencePrefix)
+		if end := strings.Index(value, ". Inspect with "); end >= 0 {
+			var evidence struct {
+				SubjectDigest string `json:"subject_digest"`
+			}
+			if json.Unmarshal([]byte(value[:end]), &evidence) == nil {
+				return evidence.SubjectDigest
+			}
+		}
+	}
+	const prefix = "Review the exact immutable subject "
+	value := strings.TrimPrefix(objective, prefix)
+	if end := strings.IndexByte(value, ' '); end >= 0 {
+		return value[:end]
+	}
+	return value
 }
 
 func (external *sqliteV15External) ControlCapabilities(context.Context) (ports.AgentControlCapabilities, error) {

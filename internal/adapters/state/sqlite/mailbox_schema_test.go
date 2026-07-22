@@ -86,7 +86,7 @@ FROM action_consumption_receipts ORDER BY action_ref`); !reflect.DeepEqual(after
 	if err := repository.db.QueryRow(`SELECT name FROM schema_migrations WHERE version = 8`).Scan(&migrationName); err != nil {
 		t.Fatal(err)
 	}
-	if version != recoverySchemaV17 || migrationName != "008_mailbox.sql" {
+	if version != recoverySchemaV18 || migrationName != "008_mailbox.sql" {
 		t.Fatalf("mailbox migration identity: version=%d name=%q", version, migrationName)
 	}
 
@@ -278,13 +278,13 @@ FROM work_items WHERE goal_ref = ? AND ref = ?`,
 INSERT INTO executions(
     ref, goal_ref, work_item_ref, attempt_no, max_execution_attempts,
     replaces_execution_ref, plan_generation, app_spec_generation, spec_hash,
-    state, artifact_media_type, idempotency_key, max_output_bytes,
+    state, purpose, artifact_media_type, idempotency_key, max_output_bytes,
     provider_ref, model_ref, agent_ref, external_ref, created_at, deadline_at,
     started_at, provider_accepted_at, last_observed_at, provider_observed_at,
     finished_at, failure_code
 )
 SELECT ?, goal_ref, ?, 1, max_execution_attempts, NULL, plan_generation,
-       app_spec_generation, spec_hash, 'succeeded', artifact_media_type,
+       app_spec_generation, spec_hash, 'succeeded', 'work', artifact_media_type,
        'idempotency:mailbox-child', max_output_bytes, '', '', '', '', ?, NULL,
        ?, NULL, NULL, NULL, ?, ''
 FROM executions WHERE goal_ref = ? AND work_item_ref = ? AND ref = ?`,

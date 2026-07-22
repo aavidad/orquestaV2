@@ -119,6 +119,29 @@ func (orchestrator *Orchestrator) completeTestAttestation(
 	if err != nil {
 		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	}
+	if result.Verdict == ports.TestAttestationPassed {
+		subject, subjectErr := reviewSubjectFromEvidence(item, execution, binding, change, attestation)
+		if subjectErr != nil {
+			return orchestrator.quarantineUnknownApplied(ctx, claim)
+		}
+		reviewRecord := record
+		reviewRecord.Attestations = append(append([]AttestationRecord(nil), record.Attestations...), attestation)
+		reviewRecord.Artifacts = append(append([]ArtifactRecord(nil), record.Artifacts...), manifestRecord, reportRecord)
+		reviewRecord.EffectReceipts = append(append([]EffectReceipt(nil), record.EffectReceipts...), externalReceipt)
+		consumed := consumptionReceipt(claim, ActionConsumedCompleted, "", completedAt)
+		consumed.EffectReceiptRef = externalReceipt.Ref
+		reviewRecord.ConsumptionReceipts = append(append([]ActionConsumptionReceipt(nil), record.ConsumptionReceipts...), consumed)
+		reviewRecord.Executions = replaceExecution(reviewRecord.Executions, transition.execution)
+		reviewExecutions, reviewActions, reviewEvents, scheduleErr := orchestrator.scheduleIndependentReviews(
+			reviewRecord, item, transition.execution, subject, completedAt,
+		)
+		if scheduleErr != nil {
+			return orchestrator.quarantineUnknownApplied(ctx, claim)
+		}
+		transition.newExecutions = append(transition.newExecutions, reviewExecutions...)
+		transition.newActions = append(transition.newActions, reviewActions...)
+		transition.events = append(transition.events, reviewEvents...)
+	}
 	err = orchestrator.state.RecordTestAttested(ctx, TestAttestedState{
 		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: item.Revision(),
 		Goal: transition.goal, Execution: transition.execution,

@@ -61,7 +61,19 @@ func assertSQLiteV17Pass(t *testing.T, repository *Repository, goalRef goal.Goal
 	if err != nil {
 		t.Fatalf("read V17 pass: %s", sqliteTestErrorChain(err))
 	}
-	if len(record.Executions) != 1 || record.Executions[0].State != application.ExecutionAwaitingIntegration ||
+	authors, reviewers := 0, 0
+	for _, execution := range record.Executions {
+		switch {
+		case execution.Purpose == application.ExecutionPurposeAuthor &&
+			execution.State == application.ExecutionAwaitingIntegration:
+			authors++
+		case (execution.Purpose == application.ExecutionPurposePrimaryReview ||
+			execution.Purpose == application.ExecutionPurposeAdversarialReview) &&
+			(execution.State == application.ExecutionQueued || execution.State == application.ExecutionRunning):
+			reviewers++
+		}
+	}
+	if len(record.Executions) != 3 || authors != 1 || reviewers != 2 ||
 		len(record.Artifacts) != 3 || len(record.Attestations) != 2 {
 		t.Fatalf("V17 pass frontier executions=%+v artifacts=%d attestations=%+v",
 			record.Executions, len(record.Artifacts), record.Attestations)

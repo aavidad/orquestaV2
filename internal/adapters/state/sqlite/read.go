@@ -13,6 +13,7 @@ import (
 	"orquesta/internal/governance"
 	"orquesta/internal/identity"
 	"orquesta/internal/ports"
+	"orquesta/internal/review"
 )
 
 func (repository *Repository) GetGoal(ctx context.Context, goalRef goal.GoalRef) (application.GoalRecord, error) {
@@ -198,6 +199,10 @@ func readGoalRecord(ctx context.Context, source queryer, goalValue string) (appl
 	if err != nil {
 		return application.GoalRecord{}, err
 	}
+	reviews, err := readReviewRecords(ctx, source, goalValue)
+	if err != nil {
+		return application.GoalRecord{}, err
+	}
 	record := application.GoalRecord{
 		RequestRef: header.requestRef, RequestFingerprint: header.requestFingerprint,
 		RequestedBy: data.requestedBy, Goal: data.goal, Executions: data.executions,
@@ -209,11 +214,65 @@ func readGoalRecord(ctx context.Context, source queryer, goalValue string) (appl
 		ConsumptionReceipts: data.consumptionReceipts,
 		WorkspaceBindings:   workspaceFacts.bindings, ChangeSets: workspaceFacts.changes,
 		MergeObservations: workspaceFacts.observations, IntegrationReceipts: workspaceFacts.receipts,
+		Reviews: reviews,
 	}
 	if err := validateGoalRecordConsistency(record, goalValue); err != nil {
 		return application.GoalRecord{}, invalid(err)
 	}
 	return record, nil
+}
+
+func readReviewRecords(ctx context.Context, source queryer, goalValue string) ([]application.ReviewRecord, error) {
+	persisted, err := sqliteTableHasColumn(ctx, source, "review_records", "subject_digest")
+	if err != nil || !persisted {
+		return nil, mapDatabaseError(err)
+	}
+	rows, err := source.QueryContext(ctx, `SELECT ref,goal_ref,work_item_ref,change_set_ref,subject_digest,
+role,verdict,reviewer_execution_ref,reviewer_execution_attempt,launch_receipt_ref,principal_ref,agent_ref,
+external_ref,assessment_artifact_ref,assessment_digest,recorded_at FROM review_records WHERE goal_ref=? ORDER BY recorded_at,ref`, goalValue)
+	if err != nil {
+		return nil, mapDatabaseError(err)
+	}
+	defer rows.Close()
+	var records []application.ReviewRecord
+	for rows.Next() {
+		var record application.ReviewRecord
+		var goalValue, itemValue, changeValue, executionValue, principalValue string
+		var attempt, recorded int64
+		if err := rows.Scan(&record.Ref, &goalValue, &itemValue, &changeValue, &record.SubjectDigest,
+			&record.Role, &record.Verdict, &executionValue, &attempt, &record.LaunchReceiptRef,
+			&principalValue, &record.AgentRef, &record.ExternalRef, &record.AssessmentArtifactRef, &record.AssessmentDigest, &recorded); err != nil {
+			return nil, mapDatabaseError(err)
+		}
+		if attempt <= 0 {
+			return nil, invalid(errors.New("sqlite.review_attempt_invalid"))
+		}
+		if record.GoalRef, err = goal.NewGoalRef(goalValue); err != nil {
+			return nil, invalid(err)
+		}
+		if record.WorkItemRef, err = goal.NewWorkItemRef(itemValue); err != nil {
+			return nil, invalid(err)
+		}
+		if record.ChangeSetRef, err = ports.NewChangeSetRef(changeValue); err != nil {
+			return nil, invalid(err)
+		}
+		if record.ReviewerExecutionRef, err = goal.NewExecutionRef(executionValue); err != nil {
+			return nil, invalid(err)
+		}
+		if record.PrincipalRef, err = identity.NewPrincipalRef(principalValue); err != nil {
+			return nil, invalid(err)
+		}
+		record.ReviewerExecutionAttempt, record.RecordedAt = uint64(attempt), time.Unix(0, recorded).UTC()
+		if _, err := review.NewAssessment(review.Assessment{SubjectDigest: record.SubjectDigest, Role: record.Role,
+			Verdict: record.Verdict, ReviewerExecutionRef: executionValue, ReviewerExecutionAttempt: uint64(attempt),
+			LaunchReceiptRef: record.LaunchReceiptRef, ReviewerExternalRef: record.ExternalRef,
+			AssessmentArtifactRef: record.AssessmentArtifactRef,
+			AssessmentDigest:      record.AssessmentDigest, RecordedAt: record.RecordedAt}); err != nil {
+			return nil, invalid(err)
+		}
+		records = append(records, record)
+	}
+	return records, mapDatabaseError(rows.Err())
 }
 
 type storedGoalHeader struct {
@@ -568,6 +627,10 @@ func readExecutions(ctx context.Context, source queryer, goalValue string) ([]ap
 	if schema.workspace {
 		workspaceProjection = "repository_ref, execution_workspace_ref"
 	}
+	reviewProjection := "'work', ''"
+	if schema.reviews {
+		reviewProjection = "purpose, review_subject_digest"
+	}
 	rows, err := source.QueryContext(ctx, `
 SELECT ref, goal_ref, work_item_ref, state, artifact_media_type, idempotency_key,
        attempt_no, max_execution_attempts, replaces_execution_ref,
@@ -576,7 +639,7 @@ SELECT ref, goal_ref, work_item_ref, state, artifact_media_type, idempotency_key
 	       external_ref, created_at,
        deadline_at, started_at, provider_accepted_at, last_observed_at,
        provider_observed_at, finished_at, failure_code, `+markerProjection+`,
-	       `+governanceProjection+`, `+workspaceProjection+`
+	       `+governanceProjection+`, `+workspaceProjection+`, `+reviewProjection+`
 FROM executions
 WHERE goal_ref = ?
 ORDER BY (
@@ -611,6 +674,7 @@ type storedExecution struct {
 	created                                                           int64
 	deadline, started, accepted, observed, providerObserved, finished sql.NullInt64
 	replaces, reservation, intent, receipt, repository, workspace     sql.NullString
+	purpose, reviewSubject                                            string
 	attempt, maxAttempts, plan, appSpec, mailbox, governanceVersion   int64
 }
 
@@ -621,7 +685,8 @@ func scanExecution(rows *sql.Rows) (storedExecution, error) {
 		&v.record.SpecHash, &v.record.MaxOutputBytes, &v.record.ProviderRef, &v.record.ModelRef,
 		&v.record.AgentRef, &v.record.ExternalRef, &v.created, &v.deadline, &v.started,
 		&v.accepted, &v.observed, &v.providerObserved, &v.finished, &v.record.FailureCode,
-		&v.mailbox, &v.governanceVersion, &v.reservation, &v.intent, &v.receipt, &v.repository, &v.workspace)
+		&v.mailbox, &v.governanceVersion, &v.reservation, &v.intent, &v.receipt, &v.repository, &v.workspace,
+		&v.purpose, &v.reviewSubject)
 	if err != nil {
 		return storedExecution{}, mapDatabaseError(err)
 	}
@@ -650,6 +715,7 @@ func restoreExecution(v storedExecution) (application.ExecutionRecord, error) {
 		return record, invalid(fmt.Errorf("sqlite.execution_generation_invalid"))
 	}
 	record.State, record.AttemptNo, record.MaxExecutionAttempts = application.ExecutionState(v.state), uint64(v.attempt), uint64(v.maxAttempts)
+	record.Purpose, record.ReviewSubjectDigest = application.ExecutionPurpose(v.purpose), v.reviewSubject
 	record.PlanGeneration, record.AppSpecGeneration = goal.PlanGeneration(v.plan), goal.AppSpecGeneration(v.appSpec)
 	record.CreatedAt, record.DeadlineAt = time.Unix(0, v.created).UTC(), restoredTime(v.deadline)
 	record.StartedAt, record.ProviderAcceptedAt = restoredTime(v.started), restoredTime(v.accepted)

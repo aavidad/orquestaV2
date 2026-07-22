@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"orquesta/internal/application"
@@ -347,6 +348,27 @@ INSERT INTO executions(
 			storedTime(execution.LastObservedAt), storedTime(execution.ProviderObservedAt), storedTime(execution.FinishedAt), execution.FailureCode,
 			storedBool(execution.RecipientMailboxRetired)}
 	}
+	if schema.reviews {
+		query = `
+INSERT INTO executions(
+ ref,goal_ref,work_item_ref,attempt_no,max_execution_attempts,replaces_execution_ref,
+ plan_generation,app_spec_generation,spec_hash,repository_ref,execution_workspace_ref,state,purpose,review_subject_digest,
+ artifact_media_type,idempotency_key,max_output_bytes,provider_ref,model_ref,agent_ref,external_ref,
+ governance_version,budget_reservation_ref,effect_intent_ref,launch_receipt_ref,created_at,deadline_at,started_at,
+ provider_accepted_at,last_observed_at,provider_observed_at,finished_at,failure_code,recipient_mailbox_retired)
+VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+		arguments = []any{execution.Ref.String(), execution.GoalRef.String(), execution.WorkItemRef.String(),
+			int64(execution.AttemptNo), int64(execution.MaxExecutionAttempts), nullableString(execution.ReplacesExecutionRef.String()),
+			int64(execution.PlanGeneration), int64(execution.AppSpecGeneration), execution.SpecHash,
+			execution.RepositoryRef.String(), execution.ExecutionWorkspaceRef.String(), string(execution.State),
+			executionPurposeValue(execution), execution.ReviewSubjectDigest, execution.ArtifactMediaType, execution.IdempotencyKey,
+			execution.MaxOutputBytes, execution.ProviderRef, execution.ModelRef, execution.AgentRef, execution.ExternalRef,
+			version, nullableString(execution.BudgetReservationRef), nullableString(execution.EffectIntentRef),
+			nullableString(execution.LaunchReceiptRef), requiredTime(execution.CreatedAt), storedTime(execution.DeadlineAt),
+			storedTime(execution.StartedAt), storedTime(execution.ProviderAcceptedAt), storedTime(execution.LastObservedAt),
+			storedTime(execution.ProviderObservedAt), storedTime(execution.FinishedAt), execution.FailureCode,
+			storedBool(execution.RecipientMailboxRetired)}
+	}
 	_, err = transaction.ExecContext(ctx, query, arguments...)
 	return mapDatabaseError(err)
 }
@@ -382,14 +404,15 @@ func executionInsertArguments(execution application.ExecutionRecord) []any {
 	}
 }
 
-type executionSchema struct{ mailbox, governance, workspace bool }
+type executionSchema struct{ mailbox, governance, workspace, reviews bool }
 
 func readExecutionSchema(ctx context.Context, source queryer) (executionSchema, error) {
 	var schema executionSchema
 	for _, column := range []struct {
 		name  string
 		value *bool
-	}{{"recipient_mailbox_retired", &schema.mailbox}, {"governance_version", &schema.governance}, {"execution_workspace_ref", &schema.workspace}} {
+	}{{"recipient_mailbox_retired", &schema.mailbox}, {"governance_version", &schema.governance},
+		{"execution_workspace_ref", &schema.workspace}, {"purpose", &schema.reviews}} {
 		found, err := sqliteTableHasColumn(ctx, source, "executions", column.name)
 		if err != nil {
 			return executionSchema{}, mapDatabaseError(err)
@@ -405,6 +428,9 @@ func updateExecutionCAS(
 	execution application.ExecutionRecord,
 	expected application.ExecutionState,
 ) error {
+	if err := requireExecutionReviewIdentity(ctx, transaction, execution); err != nil {
+		return err
+	}
 	governancePersisted, err := sqliteTableHasColumn(ctx, transaction, "executions", "governance_version")
 	if err != nil {
 		return mapDatabaseError(err)
@@ -471,6 +497,30 @@ WHERE ref = ? AND goal_ref = ? AND work_item_ref = ? AND state = ?
 		return err
 	}
 	return updateExecutionWorkspaceCAS(ctx, transaction, execution)
+}
+
+func requireExecutionReviewIdentity(ctx context.Context, source queryer, execution application.ExecutionRecord) error {
+	persisted, err := sqliteTableHasColumn(ctx, source, "executions", "purpose")
+	if err != nil || !persisted {
+		return mapDatabaseError(err)
+	}
+	var count int
+	if err := source.QueryRowContext(ctx, `SELECT COUNT(*) FROM executions
+WHERE ref=? AND purpose=? AND review_subject_digest=?`, execution.Ref.String(), executionPurposeValue(execution),
+		execution.ReviewSubjectDigest).Scan(&count); err != nil {
+		return mapDatabaseError(err)
+	}
+	if count != 1 {
+		return conflict(errors.New("sqlite.execution_review_identity_mismatch"))
+	}
+	return nil
+}
+
+func executionPurposeValue(execution application.ExecutionRecord) string {
+	if execution.Purpose == "" {
+		return string(application.ExecutionPurposeWork)
+	}
+	return string(execution.Purpose)
 }
 
 func updateExecutionWorkspaceCAS(
@@ -792,11 +842,11 @@ INSERT INTO outbox(
 			_, err = transaction.ExecContext(ctx, `
 INSERT INTO outbox(
     ref, kind, goal_ref, work_item_ref, execution_ref, control_ref, change_ref, expected_target_oid,
-    plan_generation, work_item_generation, available_at, governance_version, effect_intent_ref
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    plan_generation, work_item_generation, available_at, governance_version, effect_intent_ref, review_gate_digest
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 				action.Ref, string(action.Kind), action.GoalRef.String(), action.WorkItemRef.String(), action.ExecutionRef.String(),
 				nullableString(action.ControlRef), action.ChangeRef.String(), action.ExpectedTargetOID, int64(action.PlanGeneration), int64(action.WorkItemGeneration),
-				requiredTime(action.AvailableAt), version, nullableString(action.EffectIntentRef))
+				requiredTime(action.AvailableAt), version, nullableString(action.EffectIntentRef), action.ReviewGateDigest)
 			return mapDatabaseError(err)
 		}
 		_, err = transaction.ExecContext(ctx, `

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -17,6 +18,7 @@ import (
 	"orquesta/internal/governance"
 	"orquesta/internal/identity"
 	"orquesta/internal/ports"
+	"orquesta/internal/review"
 )
 
 type memoryRepository struct {
@@ -358,10 +360,17 @@ func (repository *memoryRepository) ApplyControl(
 		}
 		return control, false, nil
 	}
-	if !memoryWriteAuthorizationValid(
+	authorized := memoryWriteAuthorizationValid(
 		state.AuthorizationReceipt, state.PrincipalRef, state.ProjectRef,
 		identity.PermissionGoalsDirect, state.GoalRef.String(),
-	) || state.OperationAt.IsZero() {
+	)
+	if IsReviewCleanupControl(state.Control) {
+		authorized = memoryWriteAuthorizationValid(
+			state.AuthorizationReceipt, state.PrincipalRef, state.ProjectRef,
+			identity.PermissionGoalsCreate, state.ProjectRef.String(),
+		)
+	}
+	if !authorized || state.OperationAt.IsZero() {
 		return ControlRecord{}, false, &StateError{Code: StateInvalid}
 	}
 	current, found := repository.records[state.GoalRef]
@@ -465,6 +474,12 @@ func (repository *memoryRepository) ApplyControl(
 		if action.EffectApproval != nil {
 			current.EffectApprovals = append(current.EffectApprovals, *action.EffectApproval)
 		}
+	}
+	for _, cleanup := range state.NewControls {
+		if !IsReviewCleanupControl(cleanup) {
+			return ControlRecord{}, false, &StateError{Code: StateInvalid}
+		}
+		current.Controls = append(current.Controls, cleanup)
 	}
 	current.Goal = state.Goal
 	for _, execution := range state.Executions {
@@ -1478,6 +1493,10 @@ func (repository *memoryRepository) RecordLaunchAccepted(_ context.Context, stat
 	if !found || validateEffectReceipt(state.Claim, attempt, state.EffectReceipt) != nil {
 		return &StateError{Code: StateInvalid}
 	}
+	if isReviewerExecution(state.Execution) &&
+		!reviewExternalRefAvailable(record, state.Execution, state.Execution.ExternalRef) {
+		return &StateError{Code: StateConflict}
+	}
 	record.Executions = replaceExecution(record.Executions, state.Execution)
 	receipt := consumptionReceipt(state.Claim, ActionConsumedCompleted, "", state.OperationAt)
 	receipt.EffectReceiptRef = state.EffectReceipt.Ref
@@ -1948,10 +1967,11 @@ func (repository *memoryRepository) RecordTestAttested(_ context.Context, state 
 		return &StateError{Code: StateInvalid}
 	}
 	updatedItem, updatedFound := state.Goal.WorkItem(item.Ref())
+	reviewRoundValid := validMemoryReviewRound(state, item)
 	if !updatedFound || state.Goal.Ref() != record.Goal.Ref() ||
 		(passed && (state.Execution.State != ExecutionAwaitingIntegration ||
 			!reflect.DeepEqual(state.Goal.Snapshot(), record.Goal.Snapshot()) ||
-			len(state.NewExecutions) != 0 || len(state.NewActions) != 0)) ||
+			!reviewRoundValid)) ||
 		(!passed && (state.Execution.State != ExecutionFailed ||
 			updatedItem.State() != goal.WorkItemStateInterrupted || state.Execution.FailureCode == "")) {
 		return &StateError{Code: StateInvalid}
@@ -1973,6 +1993,213 @@ func (repository *memoryRepository) RecordTestAttested(_ context.Context, state 
 	for _, action := range state.NewActions {
 		repository.actions[action.Ref] = memoryAction{record: action}
 	}
+	repository.events = append(repository.events, state.Events...)
+	return nil
+}
+
+func validMemoryReviewRound(state TestAttestedState, item goal.WorkItem) bool {
+	if state.Execution.Purpose != ExecutionPurposeAuthor || len(item.WriteSet()) == 0 || len(item.RequiredTests()) == 0 {
+		return len(state.NewExecutions) == 0 && len(state.NewActions) == 0
+	}
+	if len(state.NewExecutions) != 2 || len(state.NewActions) != 2 {
+		return false
+	}
+	seen := map[ExecutionPurpose]bool{}
+	for index, execution := range state.NewExecutions {
+		if !isReviewerExecution(execution) || execution.WorkItemRef != item.Ref() ||
+			execution.ReviewSubjectDigest == "" || state.NewActions[index].ExecutionRef != execution.Ref ||
+			state.NewActions[index].Kind != ActionLaunchAgent {
+			return false
+		}
+		seen[execution.Purpose] = true
+	}
+	return seen[ExecutionPurposePrimaryReview] && seen[ExecutionPurposeAdversarialReview]
+}
+
+func (repository *memoryRepository) RecordReviewAssessed(_ context.Context, state ReviewAssessedState) error {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	if err := repository.validateMutation(state.Claim, state.OperationAt, state.ExpectedGoalRevision, state.ExpectedItemRevision); err != nil {
+		return err
+	}
+	record := repository.records[state.Claim.Action.GoalRef]
+	item, found := record.Goal.WorkItem(state.Claim.Action.WorkItemRef)
+	role, reviewer := reviewerRole(state.ReviewerExecution)
+	if !found || !reviewer || state.ReviewerExecution.Ref != state.Claim.Action.ExecutionRef ||
+		state.ReviewerExecution.State != ExecutionSucceeded || state.Review.Role != role ||
+		state.Review.ReviewerExecutionRef != state.ReviewerExecution.Ref ||
+		state.Review.SubjectDigest != state.ReviewerExecution.ReviewSubjectDigest ||
+		state.Artifact.Kind != ArtifactKindReviewAssessment || state.Artifact.ExecutionRef != state.ReviewerExecution.Ref ||
+		state.Review.AssessmentArtifactRef != state.Artifact.Stored.Ref.String() {
+		return &StateError{Code: StateInvalid}
+	}
+	if _, err := review.NewAssessment(review.Assessment{SubjectDigest: state.Review.SubjectDigest,
+		Role: state.Review.Role, Verdict: state.Review.Verdict,
+		ReviewerExecutionRef:     state.Review.ReviewerExecutionRef.String(),
+		ReviewerExecutionAttempt: state.Review.ReviewerExecutionAttempt,
+		LaunchReceiptRef:         state.Review.LaunchReceiptRef, ReviewerExternalRef: state.Review.ExternalRef,
+		AssessmentArtifactRef: state.Review.AssessmentArtifactRef,
+		AssessmentDigest:      state.Review.AssessmentDigest, RecordedAt: state.Review.RecordedAt}); err != nil {
+		return &StateError{Code: StateInvalid, Cause: err}
+	}
+	for _, prior := range record.Reviews {
+		if prior.SubjectDigest == state.Review.SubjectDigest && prior.Role == state.Review.Role {
+			return &StateError{Code: StateConflict}
+		}
+	}
+	if err := repository.validateBudgetSettlementLocked(record, state.BudgetSettlement); err != nil {
+		return err
+	}
+	record.Goal = state.Goal
+	record.Executions = replaceExecution(record.Executions, state.ReviewerExecution)
+	if state.AuthorExecution.Ref.String() != "" {
+		record.Executions = replaceExecution(record.Executions, state.AuthorExecution)
+	}
+	record.Artifacts = append(record.Artifacts, state.Artifact)
+	record.Reviews = append(record.Reviews, state.Review)
+	if state.BudgetSettlement != nil {
+		record.BudgetSettlements = append(record.BudgetSettlements, *state.BudgetSettlement)
+	}
+	record.ConsumptionReceipts = append(record.ConsumptionReceipts,
+		consumptionReceipt(state.Claim, ActionConsumedCompleted, "", state.OperationAt))
+	repository.records[record.Goal.Ref()] = record
+	delete(repository.actions, state.Claim.Action.Ref)
+	repository.events = append(repository.events, state.Events...)
+	_ = item
+	return nil
+}
+
+func (repository *memoryRepository) RecordReviewExecutionReplaced(_ context.Context,
+	state ReviewExecutionReplacedState,
+) error {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	if err := repository.validateMutation(state.Claim, state.OperationAt, state.ExpectedGoalRevision, state.ExpectedItemRevision); err != nil {
+		return err
+	}
+	record := repository.records[state.Claim.Action.GoalRef]
+	if !isReviewerExecution(state.FailedExecution) || !isReviewerExecution(state.ReplacementExecution) ||
+		state.FailedExecution.State != ExecutionFailed || state.ReplacementExecution.State != ExecutionQueued ||
+		state.ReplacementExecution.ReplacesExecutionRef != state.FailedExecution.Ref ||
+		state.ReplacementExecution.Purpose != state.FailedExecution.Purpose ||
+		state.ReplacementExecution.ReviewSubjectDigest != state.FailedExecution.ReviewSubjectDigest ||
+		state.NextAction.ExecutionRef != state.ReplacementExecution.Ref {
+		return &StateError{Code: StateInvalid}
+	}
+	if err := repository.validateBudgetSettlementLocked(record, state.BudgetSettlement); err != nil {
+		return err
+	}
+	record.Executions = replaceExecution(record.Executions, state.FailedExecution)
+	record.Executions = append(record.Executions, state.ReplacementExecution)
+	if state.DiagnosticArtifact != nil {
+		record.Artifacts = append(record.Artifacts, *state.DiagnosticArtifact)
+	}
+	if state.BudgetSettlement != nil {
+		record.BudgetSettlements = append(record.BudgetSettlements, *state.BudgetSettlement)
+	}
+	record.ConsumptionReceipts = append(record.ConsumptionReceipts,
+		consumptionReceipt(state.Claim, ActionConsumedCompleted, state.FailedExecution.FailureCode, state.OperationAt))
+	memoryAddActionFacts(&record, state.NextAction)
+	repository.records[record.Goal.Ref()] = record
+	delete(repository.actions, state.Claim.Action.Ref)
+	repository.actions[state.NextAction.Ref] = memoryAction{record: state.NextAction}
+	repository.events = append(repository.events, state.Events...)
+	return nil
+}
+
+func (repository *memoryRepository) RecordReviewExecutionFailed(_ context.Context,
+	state ReviewExecutionFailedState,
+) error {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	if err := repository.validateMutation(state.Claim, state.OperationAt, state.ExpectedGoalRevision, state.ExpectedItemRevision); err != nil {
+		return err
+	}
+	record := repository.records[state.Claim.Action.GoalRef]
+	if !isReviewerExecution(state.Execution) || state.Execution.State != ExecutionFailed ||
+		state.Execution.Ref != state.Claim.Action.ExecutionRef ||
+		(state.AuthorExecution.Ref.String() != "" && state.AuthorExecution.State != ExecutionFailed) ||
+		(state.AuthorExecution.Ref.String() == "" && len(state.CleanupControls) == 0 && state.ResolvedCleanup == nil) {
+		return &StateError{Code: StateInvalid}
+	}
+	if err := repository.validateBudgetSettlementLocked(record, state.BudgetSettlement); err != nil {
+		return err
+	}
+	for _, actionRef := range state.RetireActionRefs {
+		if _, found := repository.actions[actionRef]; !found {
+			return &StateError{Code: StateConflict}
+		}
+	}
+	for _, control := range state.CleanupControls {
+		if !IsReviewCleanupControl(control) {
+			return &StateError{Code: StateInvalid}
+		}
+		record.Controls = append(record.Controls, control)
+	}
+	if state.ResolvedCleanup != nil {
+		previous, found := controlByRef(record.Controls, state.ResolvedCleanup.Ref)
+		if !found || previous.Status != ControlRequested || !IsReviewCleanupControl(*state.ResolvedCleanup) ||
+			state.ResolvedCleanup.Status != ControlConfirmed ||
+			state.ResolvedCleanup.ExecutionRef != state.Execution.Ref ||
+			state.ResolvedCleanup.ExecutionAttempt != state.Execution.AttemptNo {
+			return &StateError{Code: StateInvalid}
+		}
+		record.Controls = replaceControl(record.Controls, *state.ResolvedCleanup)
+	}
+	for _, action := range state.CleanupActions {
+		if _, found := repository.actions[action.Ref]; found {
+			return &StateError{Code: StateConflict}
+		}
+		memoryAddActionFacts(&record, action)
+	}
+	record.Goal = state.Goal
+	record.Executions = replaceExecution(record.Executions, state.Execution)
+	if state.AuthorExecution.Ref.String() != "" {
+		record.Executions = replaceExecution(record.Executions, state.AuthorExecution)
+	}
+	for _, retirement := range state.RetiredReviewers {
+		previous, found := executionByRef(record.Executions, retirement.Execution.Ref)
+		if !found || previous.State != retirement.ExpectedState || !isReviewerExecution(retirement.Execution) ||
+			retirement.Execution.State != ExecutionFailed {
+			return &StateError{Code: StateConflict}
+		}
+		record.Executions = replaceExecution(record.Executions, retirement.Execution)
+	}
+	if state.DiagnosticArtifact != nil {
+		record.Artifacts = append(record.Artifacts, *state.DiagnosticArtifact)
+	}
+	if state.EffectReceipt != nil {
+		attempt, found := effectAttemptByRef(record.EffectAttempts, state.EffectReceipt.AttemptRef)
+		if !found || validateEffectReceipt(state.Claim, attempt, *state.EffectReceipt) != nil {
+			return &StateError{Code: StateInvalid}
+		}
+		record.EffectReceipts = append(record.EffectReceipts, *state.EffectReceipt)
+	}
+	if state.BudgetSettlement != nil {
+		record.BudgetSettlements = append(record.BudgetSettlements, *state.BudgetSettlement)
+	}
+	receipt := consumptionReceipt(state.Claim, ActionConsumedCompleted, state.Execution.FailureCode, state.OperationAt)
+	if state.QuarantineClaim {
+		receipt.Outcome = ActionConsumedQuarantined
+	}
+	if state.EffectReceipt != nil {
+		receipt.EffectReceiptRef = state.EffectReceipt.Ref
+	}
+	record.ConsumptionReceipts = append(record.ConsumptionReceipts, receipt)
+	repository.records[record.Goal.Ref()] = record
+	delete(repository.actions, state.Claim.Action.Ref)
+	for _, actionRef := range state.RetireActionRefs {
+		if retired, found := repository.retireActionLocked(actionRef,
+			"review-round:"+state.Execution.Ref.String(), "system:review-round", state.OperationAt); found {
+			record.ConsumptionReceipts = append(record.ConsumptionReceipts, retired)
+		} else {
+			return &StateError{Code: StateConflict}
+		}
+	}
+	for _, action := range state.CleanupActions {
+		repository.actions[action.Ref] = memoryAction{record: action}
+	}
+	repository.records[record.Goal.Ref()] = record
 	repository.events = append(repository.events, state.Events...)
 	return nil
 }
@@ -2180,6 +2407,7 @@ func cloneGoalRecord(record GoalRecord) GoalRecord {
 	record.ChangeSets = append([]ChangeSet(nil), record.ChangeSets...)
 	record.MergeObservations = append([]MergeObservation(nil), record.MergeObservations...)
 	record.IntegrationReceipts = append([]IntegrationReceipt(nil), record.IntegrationReceipts...)
+	record.Reviews = append([]ReviewRecord(nil), record.Reviews...)
 	record.ConsumptionReceipts = append([]ActionConsumptionReceipt(nil), record.ConsumptionReceipts...)
 	return record
 }
@@ -2244,24 +2472,23 @@ func memoryClaimMatches(action memoryAction, claim ActionClaim, operationAt time
 		action.lease.Equal(claim.LeaseUntil) && operationAt.Before(action.lease)
 }
 
-func consumptionReceipt(claim ActionClaim, outcome ActionConsumptionOutcome, code string, at time.Time) ActionConsumptionReceipt {
-	return ActionConsumptionReceipt{
-		ActionRef: claim.Action.Ref, Kind: claim.Action.Kind,
-		GoalRef: claim.Action.GoalRef, WorkItemRef: claim.Action.WorkItemRef,
-		ExecutionRef: claim.Action.ExecutionRef, ChangeRef: claim.Action.ChangeRef,
-		PlanGeneration:     claim.Action.PlanGeneration,
-		WorkItemGeneration: claim.Action.WorkItemGeneration, Fence: claim.Fence,
-		DeliveryAttempt: claim.DeliveryAttempt, ClaimToken: claim.Token,
-		WorkerRef: claim.WorkerRef, Outcome: outcome, ErrorCode: code, ConsumedAt: at.UTC(),
-	}
-}
-
 func onlyExecution(t *testing.T, record GoalRecord) ExecutionRecord {
 	t.Helper()
-	if len(record.Executions) != 1 {
-		t.Fatalf("execution count = %d, want 1", len(record.Executions))
+	var result ExecutionRecord
+	found := false
+	for _, execution := range record.Executions {
+		if isReviewerExecution(execution) {
+			continue
+		}
+		if found {
+			t.Fatalf("non-review execution count > 1")
+		}
+		result, found = execution, true
 	}
-	return record.Executions[0]
+	if !found {
+		t.Fatal("non-review execution missing")
+	}
+	return result
 }
 
 type mutableClock struct {
@@ -2640,6 +2867,24 @@ func (agent *scriptedAgent) Observe(_ context.Context, execution goal.ExecutionR
 	defer agent.mu.Unlock()
 	agent.observationCalls++
 	if len(agent.observations) == 0 {
+		for _, request := range agent.launchRequests {
+			if request.ExecutionRef != execution || request.ArtifactMediaType != review.AssessmentMediaType {
+				continue
+			}
+			role := review.RolePrimary
+			if strings.Contains(request.Objective, `"role":"adversarial"`) {
+				role = review.RoleAdversarial
+			}
+			payload, err := json.Marshal(review.Artifact{SchemaVersion: 1,
+				SubjectDigest: reviewSubjectDigestFromPrompt(request.Objective), Role: role,
+				Verdict: review.VerdictApprove, Summary: "exact subject approved", Findings: []review.Finding{}})
+			if err != nil {
+				return ports.AgentObservation{}, err
+			}
+			return ports.AgentObservation{ExecutionRef: execution, SpecHash: agent.launchSpecHashes[execution],
+				Status: ports.AgentCompleted, MediaType: review.AssessmentMediaType, Content: payload,
+				Usage: unknownUsage(), ObservedAt: agent.now()}, nil
+		}
 		return ports.AgentObservation{}, errors.New("test.no_observation")
 	}
 	observation := agent.observations[0]
@@ -2655,6 +2900,27 @@ func (agent *scriptedAgent) Observe(_ context.Context, execution goal.ExecutionR
 		observation.Usage = unknownUsage()
 	}
 	return observation, nil
+}
+
+func reviewSubjectDigestFromPrompt(objective string) string {
+	const evidencePrefix = "Review exact immutable evidence "
+	if strings.HasPrefix(objective, evidencePrefix) {
+		value := strings.TrimPrefix(objective, evidencePrefix)
+		if end := strings.Index(value, ". Inspect with "); end >= 0 {
+			var evidence struct {
+				SubjectDigest string `json:"subject_digest"`
+			}
+			if json.Unmarshal([]byte(value[:end]), &evidence) == nil {
+				return evidence.SubjectDigest
+			}
+		}
+	}
+	const prefix = "Review the exact immutable subject "
+	value := strings.TrimPrefix(objective, prefix)
+	if end := strings.IndexByte(value, ' '); end >= 0 {
+		return value[:end]
+	}
+	return value
 }
 
 func newTestOrchestrator(t interface{ Fatalf(string, ...any) }, repository *memoryRepository, clock *mutableClock, agent *scriptedAgent) (*Orchestrator, *memoryArtifactStore) {

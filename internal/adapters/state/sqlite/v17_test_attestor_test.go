@@ -142,8 +142,8 @@ func TestTerminalAttestationReceiptPreventsRestartRerun(t *testing.T) {
 	restartedAttestor := &sqliteTestAttestor{}
 	system.orchestrator = newSQLiteV16OrchestratorWithAttestor(t, system, restartedAttestor)
 	result, err := system.orchestrator.ProcessNext(context.Background(), "worker:v17-restart")
-	if err != nil || result.Processed {
-		t.Fatalf("terminal attestation reran after restart: result=%+v err=%v", result, err)
+	if err != nil || !result.Processed || result.Action != application.ActionLaunchAgent {
+		t.Fatalf("terminal attestation did not advance to durable review after restart: result=%+v err=%v", result, err)
 	}
 	if calls, effects := restartedAttestor.counts(); calls != 0 || effects != 0 {
 		t.Fatalf("restarted attestor calls/effects=%d/%d want=0/0", calls, effects)

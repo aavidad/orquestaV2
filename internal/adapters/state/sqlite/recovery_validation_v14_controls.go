@@ -146,6 +146,11 @@ func validateRecoveryV14ControlBinding(
 	transaction *sql.Tx,
 	record application.ControlRecord,
 ) error {
+	if application.IsReviewCleanupControl(record) {
+		if err := validateReviewCleanupControlAuthority(ctx, transaction, record); err != nil {
+			return err
+		}
+	}
 	var projectValue, specHash string
 	var goalRevision, planGeneration, appSpecGeneration, goalCreatedAt int64
 	err := transaction.QueryRowContext(ctx, `
@@ -200,12 +205,20 @@ FROM executions WHERE goal_ref = ? AND ref = ?`,
 		}
 	}
 
+	var eventRef, eventKind string
+	if application.IsReviewCleanupControl(record) {
+		eventRef = "event:review-cleanup-requested:" + record.ExecutionRef.String()
+		eventKind = "review.cleanup_requested"
+	} else {
+		eventRef = "event:control:" + record.Ref
+		eventKind = "control." + string(record.Operation)
+	}
 	var events int
 	if err := transaction.QueryRowContext(ctx, `
 SELECT COUNT(*) FROM events
 WHERE ref = ? AND kind = ? AND goal_ref = ?
   AND work_item_ref IS ? AND execution_ref IS ? AND occurred_at = ?`,
-		"event:control:"+record.Ref, "control."+string(record.Operation), record.GoalRef.String(),
+		eventRef, eventKind, record.GoalRef.String(),
 		nullableString(record.WorkItemRef.String()), nullableString(record.ExecutionRef.String()),
 		requiredTime(record.RequestedAt),
 	).Scan(&events); err != nil {
@@ -213,6 +226,41 @@ WHERE ref = ? AND kind = ? AND goal_ref = ?
 	}
 	if events != 1 {
 		return fmt.Errorf("sqlite.recovery_control_event_invalid:%s", record.Ref)
+	}
+	return nil
+}
+
+func validateReviewCleanupControlAuthority(ctx context.Context, transaction *sql.Tx,
+	record application.ControlRecord,
+) error {
+	var matches int
+	err := transaction.QueryRowContext(ctx, `
+SELECT COUNT(*)
+FROM executions reviewer
+JOIN executions author ON author.goal_ref=reviewer.goal_ref
+ AND author.work_item_ref=reviewer.work_item_ref AND author.purpose='author'
+JOIN effect_intents intent ON intent.ref=author.effect_intent_ref
+JOIN work_item_authorities authority ON authority.goal_ref=reviewer.goal_ref
+ AND authority.work_item_ref=reviewer.work_item_ref
+WHERE reviewer.goal_ref=? AND reviewer.work_item_ref=? AND reviewer.ref=?
+ AND reviewer.purpose IN ('primary_review','adversarial_review')
+ AND intent.action_kind='launch_agent' AND intent.kind='agent_launch'
+ AND intent.project_ref=? AND intent.goal_ref=reviewer.goal_ref
+ AND intent.work_item_ref=reviewer.work_item_ref AND intent.execution_ref=author.ref
+ AND intent.plan_generation=author.plan_generation
+ AND intent.app_spec_generation=author.app_spec_generation AND intent.spec_hash=author.spec_hash
+ AND intent.proposed_by_ref=? AND intent.permission=? AND intent.authority_receipt_ref=?
+ AND authority.principal_ref=intent.proposed_by_ref AND authority.permission=intent.permission
+ AND authority.authorization_receipt_ref=intent.authority_receipt_ref`,
+		record.GoalRef.String(), record.WorkItemRef.String(), record.ExecutionRef.String(),
+		record.ProjectRef.String(), record.PrincipalRef.String(), string(identity.PermissionGoalsCreate),
+		record.AuthorizationReceipt.Ref(),
+	).Scan(&matches)
+	if err != nil {
+		return err
+	}
+	if matches != 1 {
+		return fmt.Errorf("sqlite.recovery_review_cleanup_authority_invalid:%s", record.Ref)
 	}
 	return nil
 }

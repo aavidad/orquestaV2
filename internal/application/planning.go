@@ -442,6 +442,10 @@ func (orchestrator *Orchestrator) scheduleReady(
 			IdempotencyKey: "execution:" + executionRef.String(),
 			MaxOutputBytes: orchestrator.maxOutputBytes,
 			CreatedAt:      at,
+			Purpose:        ExecutionPurposeWork,
+		}
+		if len(item.WriteSet()) != 0 && len(item.RequiredTests()) != 0 {
+			execution.Purpose = ExecutionPurposeAuthor
 		}
 		var action ActionRecord
 		if len(item.WriteSet()) != 0 {

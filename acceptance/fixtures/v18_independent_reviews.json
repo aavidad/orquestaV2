@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
   "contract_id": "AC-V18-INDEPENDENT-REVIEWS",
-  "trusted_base_git_commit_oid": "eb272b6645928d800619709c9afd272440b0dabf",
-  "product_delta_sealed_git_commit_oid": "",
-  "seal_status": "preflight_awaiting_v17_no_product_evidence",
-  "seal_note": "Preflight contract only. V17 is not sealed; empty product OID and this fixture never accredit V18.",
+  "trusted_base_git_commit_oid": "4428f46dd6b48659a4fb871a66cb72927f41cb93",
+  "product_delta_sealed_git_commit_oid": "a97ea3bc3771c6d89ec055e8189bda1bc6f97ce6",
+  "seal_status": "v17_sealed_v18_unaccredited",
+  "seal_note": "V17 receipt is sealed. This V18 contract defines implementation gates only and never accredits V18.",
   "owned_capability_ids": ["GOV-12", "STG-13", "STG-14", "STG-16", "EVD-06"],
   "dependency_verticals": ["controls", "workspace_git", "test_attestor"],
   "dependency_receipts": [
@@ -21,7 +21,7 @@
     {
       "vertical": "test_attestor",
       "path": "product/evidence/v17_test_attestor.json",
-      "preflight_status": "awaiting_dependency"
+      "preflight_status": "verified_present"
     }
   ],
   "review_roles": ["author", "primary", "adversarial"],
@@ -41,6 +41,7 @@
       "AppSpecGeneration",
       "SpecHash",
       "AuthorLaunchReceiptRef",
+      "AuthorExternalRef",
       "WorkspaceBindingDigest",
       "ChangeSetRef",
       "ChangeSetDigest",
@@ -64,6 +65,7 @@
         "ReviewerExecutionRef",
         "ReviewerExecutionAttempt",
         "LaunchReceiptRef",
+        "ReviewerExternalRef",
         "AssessmentArtifactRef",
         "AssessmentDigest",
         "RecordedAt"
@@ -85,6 +87,7 @@
         "LaunchReceiptRef",
         "PrincipalRef",
         "AgentRef",
+        "ExternalRef",
         "AssessmentArtifactRef",
         "AssessmentDigest",
         "RecordedAt"
@@ -142,40 +145,44 @@
       "plan_generation": 4,
       "work_item_generation": 7,
       "app_spec_generation": 2,
-      "spec_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "spec_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "author_launch_receipt_ref": "receipt:launch:v18-author",
-      "workspace_binding_digest": "workspace-digest:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "author_external_ref": "external:v18-author",
+      "workspace_binding_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "change_set_ref": "change-set:v18-candidate",
-      "change_set_digest": "change-digest:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "change_set_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
       "tree_oid": "1111111111111111111111111111111111111111",
-      "diff_digest": "diff-digest:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-      "write_set_digest": "write-set-digest:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-      "required_tests_digest": "required-tests-digest:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "diff_digest": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "write_set_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "required_tests_digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
       "test_attestation_ref": "attestation:v18-tests",
-      "test_subject_digest": "test-subject-digest:0000000000000000000000000000000000000000000000000000000000000000",
-      "test_policy_digest": "test-policy-digest:2222222222222222222222222222222222222222222222222222222222222222",
-      "subject_digest": "sha256:8e83e56ff8a35bdc68d480c0135b9a5117ed0c2b3ceb8ec4130df321e7530ee7"
+      "test_subject_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "test_policy_digest": "2222222222222222222222222222222222222222222222222222222222222222",
+      "subject_digest": "sha256:b824e93ed2b943d321af5587edfafa2769b7f7f065871ea9ac3095d870763ac9"
     },
     "participants": [
       {
         "role": "author",
         "execution_ref": "execution:v18-author",
         "launch_receipt_ref": "receipt:launch:v18-author",
-        "subject_digest": "sha256:8e83e56ff8a35bdc68d480c0135b9a5117ed0c2b3ceb8ec4130df321e7530ee7",
+        "external_ref": "external:v18-author",
+        "subject_digest": "sha256:b824e93ed2b943d321af5587edfafa2769b7f7f065871ea9ac3095d870763ac9",
         "decision": "produced"
       },
       {
         "role": "primary",
         "execution_ref": "execution:v18-primary",
         "launch_receipt_ref": "receipt:launch:v18-primary",
-        "subject_digest": "sha256:8e83e56ff8a35bdc68d480c0135b9a5117ed0c2b3ceb8ec4130df321e7530ee7",
+        "external_ref": "external:v18-primary",
+        "subject_digest": "sha256:b824e93ed2b943d321af5587edfafa2769b7f7f065871ea9ac3095d870763ac9",
         "decision": "approve"
       },
       {
         "role": "adversarial",
         "execution_ref": "execution:v18-adversarial",
         "launch_receipt_ref": "receipt:launch:v18-adversarial",
-        "subject_digest": "sha256:8e83e56ff8a35bdc68d480c0135b9a5117ed0c2b3ceb8ec4130df321e7530ee7",
+        "external_ref": "external:v18-adversarial",
+        "subject_digest": "sha256:b824e93ed2b943d321af5587edfafa2769b7f7f065871ea9ac3095d870763ac9",
         "decision": "approve"
       }
     ],
@@ -186,14 +193,15 @@
     {"field": "plan_generation", "replacement": "5", "expected_code": "review.subject_mismatch"},
     {"field": "work_item_generation", "replacement": "8", "expected_code": "review.subject_mismatch"},
     {"field": "author_launch_receipt_ref", "replacement": "receipt:launch:v18-substitute", "expected_code": "review.subject_mismatch"},
+    {"field": "author_external_ref", "replacement": "external:v18-substitute", "expected_code": "review.subject_mismatch"},
     {"field": "tree_oid", "replacement": "2222222222222222222222222222222222222222", "expected_code": "review.subject_mismatch"},
-    {"field": "diff_digest", "replacement": "diff-digest:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "expected_code": "review.subject_mismatch"},
-    {"field": "required_tests_digest", "replacement": "required-tests-digest:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "expected_code": "review.subject_mismatch"},
-    {"field": "test_subject_digest", "replacement": "test-subject-digest:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "expected_code": "review.subject_mismatch"},
-    {"field": "test_policy_digest", "replacement": "test-policy-digest:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "expected_code": "review.subject_mismatch"}
+    {"field": "diff_digest", "replacement": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "expected_code": "review.subject_mismatch"},
+    {"field": "required_tests_digest", "replacement": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "expected_code": "review.subject_mismatch"},
+    {"field": "test_subject_digest", "replacement": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "expected_code": "review.subject_mismatch"},
+    {"field": "test_policy_digest", "replacement": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd", "expected_code": "review.subject_mismatch"}
   ],
   "rework_scenario": {
-    "source_subject_digest": "sha256:8e83e56ff8a35bdc68d480c0135b9a5117ed0c2b3ceb8ec4130df321e7530ee7",
+    "source_subject_digest": "sha256:b824e93ed2b943d321af5587edfafa2769b7f7f065871ea9ac3095d870763ac9",
     "changes_requested_by": "primary",
     "replan_cause": "review_changes_requested",
     "source_work_item_ref": "work-item:v18-author",
@@ -210,20 +218,25 @@
     "TestAuthorPrimaryAndAdversarialUseThreeDistinctLaunches",
     "TestReviewRolesCannotReuseAuthorOrEachOtherLaunch",
     "TestReviewAssessmentsRequireExactSubjectAndStructuredVerdict",
-    "TestPrimaryAndAdversarialMustBothApproveBeforeIntegrationAdmission",
-    "TestRemovingAnyReviewLaunchBlocksPromotion",
-    "TestReviewSubjectDriftInvalidatesIntegrationBeforeExternalEffect",
-    "TestAgentObservationTestPassAndAuthorCannotSelfApproveReview",
-    "TestReviewChangesRequestedPersistsEvidenceAndBlocksIntegration",
-    "TestReviewReworkRequiresRejectedRoundAndExplicitParentChange",
     "TestReworkCreatesFreshSubjectAndInvalidatesEarlierReviews",
-    "TestIntegrationRemainsExplicitAfterBothReviewsApprove",
-    "TestReviewCrashFrontiersReplayWithoutDuplicateLaunchOrDecision",
+    "TestReviewAttachmentKeepsAuthorAsOnlyWorkItemAuthority",
+    "TestReviewerLaunchRequestCarriesCanonicalExactEvidenceAndNoWriteSet",
+    "TestReviewerLaunchRejectsAuthorProcessReuseBeforeObservation",
+    "TestAdversarialLaunchRejectsPrimaryProcessReuseBeforeObservation",
+    "TestReviewAttachmentRejectsCrossWorkspaceAndStaleSubject",
+    "TestPassingAttestationLeavesChangePending",
+    "TestIntegrateChangeRequiresExactPassAndRejectsFailedMissingInvalid",
+    "TestChangesRequestedAssessmentThenUnavailableReviewerDoesNotReplan",
+    "TestMalformedReviewerPayloadPersistsRedactedDiagnosticBeforeAbort",
+    "TestSequentialReviewerLaunchesCannotShareExternalProcess",
     "TestReviewRecoveryRejectsMissingDuplicateAndCrossProjectFacts",
+    "TestReviewIntegrationRecoveryRejectsGateOrTargetDrift",
     "TestConcurrentReviewClaimsKeepOneDecisionPerRole",
-    "TestReviewEvidenceLeaksNoPromptPathOrProviderPrivateData",
-    "TestReviewArchitectureReusesOneWriterStateOutboxScheduler",
-    "TestFakeAgentsGitSQLiteCASAttestorReviewsEndToEnd"
+    "TestReviewCrashFrontiersReplayWithoutDuplicateLaunchOrDecision",
+    "TestFakeAgentsGitSQLiteCASAttestorReviewsEndToEnd",
+    "TestReworkRequiresExplicitParentChangeRef",
+    "TestV18MigrationBlocksEveryUndrainedLegacyIntegrationFrontierWithoutMutation",
+    "TestV18MigrationPreservesCompletedV17IntegrationAndForeignKeys"
   ],
   "mutation_gates": [
     "remove_author_launch",
@@ -231,6 +244,7 @@
     "remove_adversarial_launch",
     "reuse_author_launch_for_primary",
     "reuse_primary_launch_for_adversarial",
+    "reuse_author_or_reviewer_external_process",
     "change_plan_or_work_item_generation",
     "change_tree",
     "change_diff",
@@ -247,7 +261,8 @@
     "restart before either launch after primary only and after both reviews converges without duplicate role decisions",
     "a terminal reviewer launch receipt or assessment is never synthesized replayed as another role or reassigned",
     "integration admission and processing both revalidate exact test PASS review gate digest and target digest",
-    "legacy pending changes receive no backfilled review approvals and remain nonintegrable until an exact new round completes",
+    "recovery recomputes active reviewer subjects and launch targets before any provider or integration effect",
+    "schema 012 to 013 is fail-closed while any exact PASS remains awaiting integration; V17 must drain it before upgrade and no review approval is backfilled",
     "SQLite recovery rejects missing duplicate cross-project cross-goal stale-generation and mismatched-subject review facts"
   ],
   "e2e_contract": {

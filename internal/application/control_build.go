@@ -110,7 +110,7 @@ func (orchestrator *Orchestrator) buildCancelControl(ctx context.Context, record
 			switch previousState {
 			case ExecutionQueued:
 				initialRef := "action:launch:" + current.Ref.String()
-				if current.ExecutionWorkspaceRef.String() != "" {
+				if !isReviewerExecution(current) && current.ExecutionWorkspaceRef.String() != "" {
 					initialRef = "action:prepare-workspace:" + current.Ref.String()
 				}
 				state.RetireActionRefs = append(state.RetireActionRefs, initialRef)
@@ -337,6 +337,7 @@ func validateControlFences(
 	record GoalRecord,
 	projectRef goal.ProjectRef,
 	request ControlRequest,
+	reviewPolicy TestAttestationPolicy,
 ) (goal.WorkItem, ExecutionRecord, error) {
 	if record.Goal.Project() != projectRef {
 		return goal.WorkItem{}, ExecutionRecord{}, &StateError{Code: StateNotFound}
@@ -365,8 +366,14 @@ func validateControlFences(
 			}
 		}
 		bound, hasBinding := item.Execution()
+		attachedReviewer := false
+		if found && request.Operation == ControlStop && isReviewerExecution(execution) {
+			_, attachmentErr := reviewAttached(record, item, execution, reviewPolicy)
+			attachedReviewer = attachmentErr == nil
+		}
 		if !found || execution.GoalRef != request.GoalRef || execution.WorkItemRef != request.WorkItemRef ||
-			execution.AttemptNo != request.ExpectedExecutionAttempt || !hasBinding || bound != execution.Ref {
+			execution.AttemptNo != request.ExpectedExecutionAttempt || !hasBinding ||
+			(bound != execution.Ref && !attachedReviewer) {
 			return goal.WorkItem{}, ExecutionRecord{}, &StateError{Code: StateConflict}
 		}
 	}

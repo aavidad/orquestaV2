@@ -171,6 +171,18 @@ func validateExecution(execution application.ExecutionRecord) error {
 	if (execution.RepositoryRef.String() == "") != (execution.ExecutionWorkspaceRef.String() == "") {
 		return errors.New("sqlite.execution_workspace_invalid")
 	}
+	switch execution.Purpose {
+	case "", application.ExecutionPurposeWork, application.ExecutionPurposeAuthor:
+		if execution.ReviewSubjectDigest != "" {
+			return errors.New("sqlite.execution_review_scope_invalid")
+		}
+	case application.ExecutionPurposePrimaryReview, application.ExecutionPurposeAdversarialReview:
+		if !validReviewDigest(execution.ReviewSubjectDigest) || execution.RepositoryRef.String() == "" {
+			return errors.New("sqlite.execution_review_scope_invalid")
+		}
+	default:
+		return errors.New("sqlite.execution_purpose_invalid")
+	}
 	if execution.RecipientMailboxRetired &&
 		execution.State != application.ExecutionSucceeded && execution.State != application.ExecutionFailed &&
 		execution.State != application.ExecutionStopped &&
@@ -280,7 +292,8 @@ func validateArtifactRecord(artifact application.ArtifactRecord) error {
 	}
 	switch artifact.Kind {
 	case application.ArtifactKindAgentOutput, application.ArtifactKindTestSubjectManifest,
-		application.ArtifactKindTestReport:
+		application.ArtifactKindTestReport, application.ArtifactKindReviewAssessment,
+		application.ArtifactKindReviewDiagnostic:
 	default:
 		return errors.New("sqlite.artifact_kind_invalid")
 	}
@@ -348,6 +361,8 @@ func validateGoalRecordConsistency(record application.GoalRecord, expectedGoalRe
 				return errors.New("sqlite.goal_record_artifact_scope_invalid")
 			}
 		} else if artifact.Kind != application.ArtifactKindAgentOutput &&
+			artifact.Kind != application.ArtifactKindReviewAssessment &&
+			artifact.Kind != application.ArtifactKindReviewDiagnostic &&
 			!stagedArtifactHasExactAttestation(record, artifact, execution.Ref) {
 			return errors.New("sqlite.goal_record_artifact_scope_invalid")
 		}
@@ -363,7 +378,10 @@ func validateGoalRecordConsistency(record application.GoalRecord, expectedGoalRe
 			artifacts[artifact.Stored.Ref] = artifact
 		}
 	}
-	return validateGoalRecordAttestationsAndReceipts(record, aggregate, items, executions, artifacts)
+	if err := validateGoalRecordAttestationsAndReceipts(record, aggregate, items, executions, artifacts); err != nil {
+		return err
+	}
+	return validateGoalRecordReviews(record, items, executions)
 }
 
 func workItemStagedOutputExecution(
@@ -435,6 +453,14 @@ func failedWorkItemStagedOutputExecution(
 		}
 		return application.ExecutionRecord{}, false
 	}
+	if execution.FailureCode == "review.unavailable" ||
+		execution.FailureCode == string(goal.ReplanCauseReviewChangesRequested) {
+		item, found := record.Goal.WorkItem(execution.WorkItemRef)
+		if found && v18FailedReviewPreservesCandidate(record, item, execution, matchingChange) {
+			return execution, true
+		}
+		return application.ExecutionRecord{}, false
+	}
 	wantStatus := ports.IntegrationStatus("")
 	switch execution.FailureCode {
 	case "version_control.integration_conflicted":
@@ -471,6 +497,28 @@ func stagedArtifactHasExactAttestation(
 }
 
 func validateWorkItemExecutionChain(item goal.WorkItem, records []application.ExecutionRecord) error {
+	var author []application.ExecutionRecord
+	reviewChains := make(map[string][]application.ExecutionRecord)
+	for _, execution := range records {
+		if execution.Purpose == "" || execution.Purpose == application.ExecutionPurposeWork || execution.Purpose == application.ExecutionPurposeAuthor {
+			author = append(author, execution)
+			continue
+		}
+		key := string(execution.Purpose) + "\x00" + execution.ReviewSubjectDigest
+		reviewChains[key] = append(reviewChains[key], execution)
+	}
+	if err := validateAuthorExecutionChain(item, author); err != nil {
+		return err
+	}
+	for _, chain := range reviewChains {
+		if err := validateReviewerExecutionChain(item, author, chain); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateAuthorExecutionChain(item goal.WorkItem, records []application.ExecutionRecord) error {
 	bound, hasBinding := item.Execution()
 	if len(records) == 0 {
 		if hasBinding {
@@ -513,6 +561,37 @@ func validateWorkItemExecutionChain(item goal.WorkItem, records []application.Ex
 		}
 	}
 	return validateWorkItemExecutionBinding(item, latest, bound, hasBinding)
+}
+
+func validateReviewerExecutionChain(item goal.WorkItem, author, records []application.ExecutionRecord) error {
+	if len(author) == 0 || len(records) == 0 {
+		return errors.New("sqlite.goal_record_review_execution_invalid")
+	}
+	byAttempt := make(map[uint64]application.ExecutionRecord, len(records))
+	for _, execution := range records {
+		if _, exists := byAttempt[execution.AttemptNo]; exists {
+			return errors.New("sqlite.goal_record_review_attempt_duplicate")
+		}
+		byAttempt[execution.AttemptNo] = execution
+	}
+	for attempt := uint64(1); attempt <= uint64(len(records)); attempt++ {
+		execution, found := byAttempt[attempt]
+		if !found {
+			return errors.New("sqlite.goal_record_review_attempt_gap")
+		}
+		if execution.RepositoryRef != author[len(author)-1].RepositoryRef ||
+			execution.ExecutionWorkspaceRef != author[len(author)-1].ExecutionWorkspaceRef {
+			return errors.New("sqlite.goal_record_review_workspace_mismatch")
+		}
+		if attempt > 1 {
+			previous := byAttempt[attempt-1]
+			if execution.ReplacesExecutionRef != previous.Ref || previous.State != application.ExecutionFailed ||
+				execution.Purpose != previous.Purpose || execution.ReviewSubjectDigest != previous.ReviewSubjectDigest {
+				return errors.New("sqlite.goal_record_review_chain_invalid")
+			}
+		}
+	}
+	return nil
 }
 
 func validateWorkItemExecutionBinding(item goal.WorkItem, latest application.ExecutionRecord, bound goal.ExecutionRef, hasBinding bool) error {
@@ -616,28 +695,33 @@ func validateAction(action application.ActionRecord) error {
 	switch action.Kind {
 	case application.ActionLaunchAgent, application.ActionObserveAgent, application.ActionDeliverMailbox,
 		application.ActionPrepareWorkspace:
-		if action.ControlRef != "" || action.ChangeRef.String() != "" || action.ExpectedTargetOID != "" {
+		if action.ControlRef != "" || action.ChangeRef.String() != "" || action.ExpectedTargetOID != "" || action.ReviewGateDigest != "" {
 			return errors.New("sqlite.action_scope_unexpected")
 		}
 		return nil
 	case application.ActionCommitChange, application.ActionAttestTest:
-		if action.ControlRef != "" || action.ChangeRef.String() == "" || action.ExpectedTargetOID != "" {
+		if action.ControlRef != "" || action.ChangeRef.String() == "" || action.ExpectedTargetOID != "" || action.ReviewGateDigest != "" {
 			return errors.New("sqlite.action_change_scope_invalid")
 		}
 		return nil
 	case application.ActionIntegrateChange:
-		if action.ControlRef != "" || action.ChangeRef.String() == "" || !validText(action.ExpectedTargetOID) {
+		if action.ControlRef != "" || action.ChangeRef.String() == "" || !validText(action.ExpectedTargetOID) ||
+			!validReviewDigest(action.ReviewGateDigest) {
 			return errors.New("sqlite.action_integration_scope_invalid")
 		}
 		return nil
 	case application.ActionStopAgent:
-		if !validText(action.ControlRef) || action.ChangeRef.String() != "" || action.ExpectedTargetOID != "" {
+		if !validText(action.ControlRef) || action.ChangeRef.String() != "" || action.ExpectedTargetOID != "" || action.ReviewGateDigest != "" {
 			return errors.New("sqlite.action_control_required")
 		}
 		return nil
 	default:
 		return errors.New("sqlite.action_kind_invalid")
 	}
+}
+
+func validReviewDigest(value string) bool {
+	return len(value) == 71 && strings.HasPrefix(value, "sha256:") && validCanonicalHash(strings.TrimPrefix(value, "sha256:"))
 }
 
 func validateClaim(claim application.ActionClaim) error {
@@ -674,7 +758,13 @@ func validateLaunchPrepared(state application.LaunchPreparedState) error {
 	}
 	preparedItem, found := state.Goal.WorkItem(state.Claim.Action.WorkItemRef)
 	bound, hasBinding := preparedItem.Execution()
-	if !found || !hasBinding || bound != state.Execution.Ref ||
+	reviewer := state.Execution.Purpose == application.ExecutionPurposePrimaryReview ||
+		state.Execution.Purpose == application.ExecutionPurposeAdversarialReview
+	boundExecutionMatches := bound == state.Execution.Ref
+	if reviewer {
+		boundExecutionMatches = bound != state.Execution.Ref && state.Execution.ReviewSubjectDigest != ""
+	}
+	if !found || !hasBinding || !boundExecutionMatches ||
 		state.Goal.State() != goal.GoalStateRunning || preparedItem.State() != goal.WorkItemStateRunning {
 		return errors.New("sqlite.launch_prepare_item_invalid")
 	}
@@ -682,6 +772,9 @@ func validateLaunchPrepared(state application.LaunchPreparedState) error {
 		preparedItem.Revision() > state.Claim.Action.WorkItemGeneration
 	replacementStart := state.Goal.Revision() == state.ExpectedGoalRevision &&
 		preparedItem.Revision() >= state.Claim.Action.WorkItemGeneration
+	if reviewer {
+		initialStart = false
+	}
 	if (!initialStart && !replacementStart) || uint64(state.Goal.Revision()) > maxSQLiteInteger ||
 		uint64(preparedItem.Revision()) > maxSQLiteInteger {
 		return errors.New("sqlite.launch_prepare_revision_invalid")
@@ -718,7 +811,11 @@ func validateLaunchAccepted(state application.LaunchAcceptedState) error {
 	if err := validateClaim(state.Claim); err != nil {
 		return err
 	}
-	if state.Claim.Action.Kind != application.ActionLaunchAgent || state.NextAction.Kind != application.ActionObserveAgent ||
+	nextValid := state.NextAction.Kind == application.ActionObserveAgent ||
+		(state.NextAction.Kind == application.ActionStopAgent && state.NextAction.ControlRef != "" &&
+			state.NextAction.EffectIntent.Kind == application.EffectKindAgentStop &&
+			state.NextAction.EffectIntent.Permission == identity.PermissionGoalsCreate)
+	if state.Claim.Action.Kind != application.ActionLaunchAgent || !nextValid ||
 		state.Execution.State != application.ExecutionRunning || state.Execution.Ref != state.Claim.Action.ExecutionRef ||
 		state.Execution.GoalRef != state.Claim.Action.GoalRef || state.Execution.WorkItemRef != state.Claim.Action.WorkItemRef ||
 		state.Execution.PlanGeneration != state.Claim.Action.PlanGeneration {

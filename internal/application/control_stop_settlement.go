@@ -18,41 +18,83 @@ func (orchestrator *Orchestrator) settleStopped(
 	receipt ports.AgentStopReceipt,
 	effectReceipt EffectReceipt,
 ) error {
+	if IsReviewCleanupControl(control) {
+		return orchestrator.settleReviewCleanupStopped(
+			ctx, claim, record, item, execution, control, receipt, effectReceipt,
+		)
+	}
 	at := lifecycleTime(effectReceipt.ConfirmedAt, record.Goal, item)
 	aggregate := record.Goal
 	previousExecutionState := execution.State
+	execution.State = ExecutionStopped
+	execution.FailureCode = "application.execution_stopped"
+	execution.FinishedAt = at
+	updates := []ExecutionRecord{execution}
+	retireActionRefs := []string{"action:observe:" + execution.Ref.String()}
+	var retirementEvents []EventRecord
+	var cleanupControls []ControlRecord
+	var cleanupActions []ActionRecord
 	var err error
 	if control.Operation == ControlCancel {
-		aggregate, err = aggregate.CompleteWorkItemCancel(
-			aggregate.Revision(), item.Revision(), item.Ref(), at,
-		)
-		if err == nil {
-			aggregate, err = orchestrator.closeCanceledScope(aggregate, control, at)
+		candidate := replaceExecution(record.Executions, execution)
+		if !activeExecutionInItem(candidate, item.Ref()) && !item.IsTerminal() {
+			aggregate, err = aggregate.CompleteWorkItemCancel(
+				aggregate.Revision(), item.Revision(), item.Ref(), at,
+			)
+			if err == nil {
+				aggregate, err = orchestrator.closeCanceledScope(aggregate, control, at)
+			}
+		}
+		if err == nil && !activeExecutionInControlScope(candidate, control) {
+			control.Status = ControlConfirmed
+			control.ConfirmedAt = at
+			control.ReceiptRef = confirmedControlReceiptRef(control, receipt.ReceiptRef)
 		}
 	} else {
-		aggregate, err = aggregate.InterruptWorkItem(
-			aggregate.Revision(), item.Revision(), item.Ref(), execution.Ref,
-			goal.WorkItemInterruptExecutionStopped, at,
-		)
+		if isReviewerExecution(execution) {
+			var retired []ReviewParticipantRetirement
+			var refs []string
+			retired, refs, cleanupControls, cleanupActions, retirementEvents, err =
+				orchestrator.reviewCleanupPlan(record, item, execution.Ref, execution.ReviewSubjectDigest,
+					control.Ref, at)
+			if err == nil {
+				for _, participant := range retired {
+					updates = append(updates, participant.Execution)
+				}
+				retireActionRefs = append(retireActionRefs, refs...)
+				if !reviewCleanupStillActive(record, execution, retired) {
+					var author ExecutionRecord
+					aggregate, author, err = orchestrator.interruptAuthorForReviewFailure(
+						record, item, at, "review.unavailable",
+					)
+					if err == nil {
+						updates = append(updates, author)
+					}
+				}
+			}
+		} else {
+			aggregate, err = aggregate.InterruptWorkItem(
+				aggregate.Revision(), item.Revision(), item.Ref(), execution.Ref,
+				goal.WorkItemInterruptExecutionStopped, at,
+			)
+		}
+		if err == nil {
+			control.Status = ControlConfirmed
+			control.ConfirmedAt = at
+			control.ReceiptRef = confirmedControlReceiptRef(control, receipt.ReceiptRef)
+		}
 	}
 	if err != nil {
 		return err
 	}
-	execution.State = ExecutionStopped
-	execution.FailureCode = "application.execution_stopped"
-	execution.FinishedAt = at
 	settlement, err := settlementFor(record, execution, unknownUsage(), 0, at)
 	if err != nil {
 		return err
 	}
 	updatedItem, _ := aggregate.WorkItem(item.Ref())
-	if control.Operation != ControlCancel || control.Target == ControlTargetWorkItem || aggregate.IsTerminal() {
-		control.Status = ControlConfirmed
-		control.ConfirmedAt = at
-		control.ReceiptRef = confirmedControlReceiptRef(control, receipt.ReceiptRef)
-	}
 	events := stoppedExecutionEvents(aggregate, updatedItem, execution, at)
-	existing := replaceExecution(record.Executions, execution)
+	events = append(events, retirementEvents...)
+	existing := replaceExecutions(record.Executions, updates)
 	newExecutions, newActions, scheduledEvents, err := orchestrator.scheduleHistoricalReady(
 		ctx, record, aggregate, existing, at,
 	)
@@ -67,14 +109,37 @@ func (orchestrator *Orchestrator) settleStopped(
 		ExpectedGoalRevision: record.Goal.Revision(), ExpectedPlanGeneration: record.Goal.PlanGeneration(),
 		ExpectedWorkItemRevision: item.Revision(), ExpectedExecutionState: previousExecutionState,
 		ExpectedControlStatus: ControlRequested, Claim: claim, Goal: aggregate,
-		Executions:                   append([]ExecutionRecord{execution}, newExecutions...),
-		NewActions:                   newActions,
-		RetireActionRefs:             []string{"action:observe:" + execution.Ref.String()},
+		Executions:                   append(updates, newExecutions...),
+		NewControls:                  cleanupControls,
+		NewActions:                   append(cleanupActions, newActions...),
+		RetireActionRefs:             retireActionRefs,
 		RetireMailboxForExecutionRef: execution.Ref, EffectReceipt: &effectReceipt,
 		BudgetSettlement: settlement,
 		Events:           events, Control: control, OperationAt: at,
 	})
 	return err
+}
+
+func activeExecutionInItem(executions []ExecutionRecord, itemRef goal.WorkItemRef) bool {
+	for _, execution := range executions {
+		if execution.WorkItemRef == itemRef &&
+			(execution.State == ExecutionDispatching || execution.State == ExecutionRunning) {
+			return true
+		}
+	}
+	return false
+}
+
+func activeExecutionInControlScope(executions []ExecutionRecord, control ControlRecord) bool {
+	for _, execution := range executions {
+		if control.Target == ControlTargetWorkItem && execution.WorkItemRef != control.WorkItemRef {
+			continue
+		}
+		if execution.State == ExecutionDispatching || execution.State == ExecutionRunning {
+			return true
+		}
+	}
+	return false
 }
 
 func stoppedExecutionEvents(

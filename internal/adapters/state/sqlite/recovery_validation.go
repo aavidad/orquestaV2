@@ -92,6 +92,7 @@ func validateRecoveryVersion(ctx context.Context, tx *sql.Tx, version int) error
 			validateRecoveryV17Governance,
 			validateRecoveryV16WorkspaceGit,
 			validateRecoveryV17TestAttestor,
+			validateRecoveryV18Reviews,
 			validateMigratedGoalRecords,
 		}
 		for _, validate := range validators {
@@ -205,13 +206,22 @@ func validateRecoveryOutbox(ctx context.Context, transaction *sql.Tx) error {
 }
 
 func validateRecoveryOutboxLegacy(ctx context.Context, transaction *sql.Tx) error {
-	rows, err := transaction.QueryContext(ctx, `
+	hasPurpose, err := sqliteTableHasColumn(ctx, transaction, "executions", "purpose")
+	if err != nil {
+		return err
+	}
+	executionPurpose, boundPurpose := "'work'", "'work'"
+	if hasPurpose {
+		executionPurpose, boundPurpose = "e.purpose", "bound.purpose"
+	}
+	rows, err := transaction.QueryContext(ctx, fmt.Sprintf(`
 SELECT o.ref, o.kind, o.goal_ref, o.work_item_ref, o.execution_ref,
        o.plan_generation, o.work_item_generation, o.available_at,
        o.claim_token, o.claimed_by, o.claimed_until, o.delivery_attempt, o.fence,
        o.completed_at, o.quarantined_at, wf.fence,
-       e.plan_generation, e.state, e.attempt_no,
+       e.plan_generation, e.state, e.attempt_no, %s,
        wi.revision, wi.state, wi.execution_ref,
+       %s, bound.state,
        g.plan_generation, g.state
 FROM outbox o
 JOIN executions e
@@ -222,9 +232,10 @@ JOIN work_items wi
   ON wi.goal_ref = o.goal_ref
  AND wi.ref = o.work_item_ref
 JOIN goals g ON g.ref = o.goal_ref
+LEFT JOIN executions bound ON bound.goal_ref=wi.goal_ref AND bound.work_item_ref=wi.ref AND bound.ref=wi.execution_ref
 LEFT JOIN work_item_fences wf ON wf.goal_ref = o.goal_ref AND wf.work_item_ref = o.work_item_ref
 WHERE o.kind IN ('launch_agent', 'observe_agent')
-ORDER BY o.ref`)
+ORDER BY o.ref`, executionPurpose, boundPurpose))
 	if err != nil {
 		return err
 	}
@@ -234,7 +245,8 @@ ORDER BY o.ref`)
 		var kind, goalValue, itemValue, executionValue string
 		var planGeneration, itemGeneration, availableAt, deliveryAttempt, fence int64
 		var executionPlanGeneration, executionAttempt, currentItemRevision, currentGoalPlanGeneration int64
-		var executionState, currentItemState, currentGoalState string
+		var executionState, executionPurpose, currentItemState, currentGoalState string
+		var boundPurpose, boundState sql.NullString
 		var currentExecutionRef sql.NullString
 		var currentFence sql.NullInt64
 		var token, worker sql.NullString
@@ -243,8 +255,9 @@ ORDER BY o.ref`)
 			&action.Ref, &kind, &goalValue, &itemValue, &executionValue,
 			&planGeneration, &itemGeneration, &availableAt, &token, &worker, &claimedUntil,
 			&deliveryAttempt, &fence, &completedAt, &quarantinedAt, &currentFence,
-			&executionPlanGeneration, &executionState, &executionAttempt,
+			&executionPlanGeneration, &executionState, &executionAttempt, &executionPurpose,
 			&currentItemRevision, &currentItemState, &currentExecutionRef,
+			&boundPurpose, &boundState,
 			&currentGoalPlanGeneration, &currentGoalState,
 		); err != nil {
 			return err
@@ -290,6 +303,9 @@ ORDER BY o.ref`)
 			currentExecutionRef,
 			currentGoalPlanGeneration,
 			currentGoalState,
+			executionPurpose,
+			boundPurpose,
+			boundState,
 		) {
 			return fmt.Errorf("sqlite.recovery_outbox_active_state_invalid:%s", action.Ref)
 		}
@@ -338,12 +354,21 @@ func activeRecoveryActionState(
 	currentExecutionRef sql.NullString,
 	currentGoalPlanGeneration int64,
 	currentGoalState string,
+	executionPurpose string,
+	boundPurpose sql.NullString,
+	boundState sql.NullString,
 ) bool {
 	if planGeneration > currentGoalPlanGeneration || currentGoalState != "running" {
 		return false
 	}
 	switch kind {
 	case application.ActionLaunchAgent:
+		if executionPurpose == string(application.ExecutionPurposePrimaryReview) ||
+			executionPurpose == string(application.ExecutionPurposeAdversarialReview) {
+			return (executionState == "queued" || executionState == "dispatching") && currentItemState == "running" &&
+				currentExecutionRef.Valid && currentExecutionRef.String != executionRef && boundPurpose.String == "author" &&
+				boundState.String == "awaiting_integration" && itemGeneration <= currentItemRevision
+		}
 		if executionState == "queued" {
 			initial := currentItemState == "pending" && !currentExecutionRef.Valid
 			replacement := currentItemState == "running" && currentExecutionRef.Valid &&
@@ -356,6 +381,12 @@ func activeRecoveryActionState(
 		}
 		return itemGeneration <= currentItemRevision
 	case application.ActionObserveAgent:
+		if executionPurpose == string(application.ExecutionPurposePrimaryReview) ||
+			executionPurpose == string(application.ExecutionPurposeAdversarialReview) {
+			return executionState == "running" && currentItemState == "running" && currentExecutionRef.Valid &&
+				currentExecutionRef.String != executionRef && boundPurpose.String == "author" &&
+				boundState.String == "awaiting_integration" && itemGeneration == currentItemRevision
+		}
 		return executionState == "running" && currentItemState == "running" &&
 			currentExecutionRef.Valid && currentExecutionRef.String == executionRef &&
 			itemGeneration == currentItemRevision

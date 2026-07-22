@@ -96,9 +96,22 @@ func TestRebuildArchitecture(t *testing.T) {
 		}
 	})
 
+	t.Run("review_is_pure_inward_domain", func(t *testing.T) {
+		for _, file := range rebuildArchitectureFilesUnder(files, "internal/review") {
+			for _, imported := range file.imports {
+				if reason := rebuildArchitectureOnlyInternalPackages(imported.path, "orquesta/internal/goal", "orquesta/internal/governance", "orquesta/internal/identity"); reason != "" {
+					rebuildArchitectureImportError(t, file, imported, "internal/review "+reason)
+				}
+			}
+		}
+	})
+
 	t.Run("application_has_no_delivery_or_concrete_runtime_dependencies", func(t *testing.T) {
 		for _, file := range rebuildArchitectureFilesUnder(files, "internal/application") {
 			for _, imported := range file.imports {
+				if imported.path == "orquesta/internal/review" {
+					continue
+				}
 				if reason := rebuildArchitectureApplicationImportReason(imported.path); reason != "" {
 					rebuildArchitectureImportError(t, file, imported, reason)
 				}
@@ -138,6 +151,7 @@ func TestRebuildArchitecture(t *testing.T) {
 				"orquesta/internal/governance",
 				"orquesta/internal/identity",
 				"orquesta/internal/ports",
+				"orquesta/internal/review",
 			}
 			if rebuildArchitecturePathUnder(file.path, "internal/adapters/config") {
 				allowed = append(allowed, "orquesta/internal/config")

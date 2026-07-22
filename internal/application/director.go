@@ -374,7 +374,7 @@ func validateProposeDirectorPlanRequest(request ProposeDirectorPlanRequest) erro
 	if request.SourceWorkItemRef.String() == "" || request.ExpectedWorkItemRevision == 0 ||
 		request.SourceExecutionRef.String() == "" || request.SourceExecutionAttempt == 0 ||
 		(request.Cause != goal.ReplanCauseSplitPending && request.Cause != goal.ReplanCauseExecutionStopped &&
-			request.Cause != goal.ReplanCauseExecutionFailed) || len(request.Plan.Phases) != 0 {
+			request.Cause != goal.ReplanCauseExecutionFailed && request.Cause != goal.ReplanCauseReviewChangesRequested) || len(request.Plan.Phases) != 0 {
 		return errors.New("application.director_plan_replan_fence_invalid")
 	}
 	return nil

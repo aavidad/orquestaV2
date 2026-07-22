@@ -135,6 +135,14 @@ func applyMigrationSteps(
 				return current, migrated, invalid(err)
 			}
 		}
+		if migration.version == recoverySchemaV18 && current == recoverySchemaV17 {
+			if err := validateRecoveryV17TestAttestor(ctx, transaction); err != nil {
+				return current, migrated, invalid(err)
+			}
+			if err := validateV18LegacyReviewUpgradeSource(ctx, transaction); err != nil {
+				return current, migrated, invalid(err)
+			}
+		}
 		if _, err := transaction.ExecContext(ctx, migration.preSQL); err != nil {
 			return current, migrated, mapDatabaseError(err)
 		}

@@ -1074,13 +1074,13 @@ FROM work_items source WHERE goal_ref = ? AND ref = ?`,
 INSERT INTO executions(
     ref, goal_ref, work_item_ref, attempt_no, max_execution_attempts,
     replaces_execution_ref, plan_generation, app_spec_generation, spec_hash,
-    state, artifact_media_type, idempotency_key, max_output_bytes,
+    state, purpose, artifact_media_type, idempotency_key, max_output_bytes,
     provider_ref, model_ref, agent_ref, external_ref, created_at, deadline_at,
     started_at, provider_accepted_at, last_observed_at, provider_observed_at,
     finished_at, failure_code
 )
 SELECT ?, goal_ref, ?, attempt_no, max_execution_attempts, NULL, plan_generation,
-       app_spec_generation, spec_hash, state, artifact_media_type, ?, max_output_bytes,
+       app_spec_generation, spec_hash, state, 'work', artifact_media_type, ?, max_output_bytes,
        provider_ref, model_ref, agent_ref, external_ref, created_at, deadline_at,
        started_at, provider_accepted_at, last_observed_at, provider_observed_at,
        finished_at, failure_code

@@ -21,6 +21,7 @@ func TestCancelAwaitingIntegrationRetiresExactAdmittedAction(t *testing.T) {
 	seedDirectorMembership(t, accessStore, principal, projectRef, identity.RoleProjectOwner, system.orchestrator.clock.Now())
 	system.processCommit(t)
 	system.process(t, ActionAttestTest)
+	system.approveReviews(t)
 
 	awaiting := system.record(t)
 	item := awaiting.Goal.WorkItems()[0]
@@ -107,6 +108,7 @@ func TestIntegrationActionRefsForCancellationAreCausalAndNonterminal(t *testing.
 	system := newTestAttestationSystem(t, ports.TestAttestationPassed)
 	system.processCommit(t)
 	system.process(t, ActionAttestTest)
+	system.approveReviews(t)
 	record := system.record(t)
 	execution := onlyExecution(t, record)
 	admitted, err := system.orchestrator.IntegrateChange(context.Background(), system.access, IntegrateChangeRequest{

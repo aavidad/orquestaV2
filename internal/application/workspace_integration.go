@@ -26,11 +26,18 @@ func (orchestrator *Orchestrator) processIntegrateChange(ctx context.Context, cl
 	item, _ := record.Goal.WorkItem(claim.Action.WorkItemRef)
 	execution, _ := executionForAction(record, claim.Action)
 	change, found := changeSetByRef(record, claim.Action.ChangeRef)
-	if !found || integrationTargetDigest(change, claim.Action.ExpectedTargetOID) != claim.Action.EffectIntent.TargetDigest {
+	if !found {
 		return orchestrator.quarantine(ctx, claim, "application.effect_target_mismatch")
 	}
 	if _, passed := requiredTestsPassForChange(record, item, execution, change, orchestrator.testAttestationPolicy); !passed {
 		return orchestrator.quarantine(ctx, claim, "application.required_tests_pass_missing")
+	}
+	gateDigest, gateErr := reviewGateAllowsIntegration(record, execution, change, orchestrator.testAttestationPolicy)
+	if gateErr != nil || gateDigest == "" || gateDigest != claim.Action.ReviewGateDigest {
+		return orchestrator.quarantine(ctx, claim, "review.gate_digest_mismatch")
+	}
+	if integrationTargetDigest(change, claim.Action.ExpectedTargetOID, gateDigest) != claim.Action.EffectIntent.TargetDigest {
+		return orchestrator.quarantine(ctx, claim, "application.effect_target_mismatch")
 	}
 	if !record.Goal.ChildHandoffsResolved(item.Ref()) {
 		return orchestrator.requeueWorkspaceEffect(ctx, claim, "application.child_handoffs_pending")
