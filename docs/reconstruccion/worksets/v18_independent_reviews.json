@@ -38,7 +38,6 @@
   ],
   "future_owned_globs_after_v17_rebase": [
     "internal/review/**",
-    "internal/adapters/reviewer/**",
     "acceptance/v18_*",
     "acceptance/fixtures/v18_*",
     "docs/reconstruccion/analisis_y_contrato_v18_*",
@@ -60,6 +59,20 @@
     "L-TRACE",
     "L-SEAL"
   ],
+  "v17_api_freeze_policy": {
+    "preflight_allowed": [
+      "published dependency receipt path and state",
+      "semantic binding to exact passed test subject and policy",
+      "sealed V12 V14 V16 seams asserted by the red acceptance contract"
+    ],
+    "preflight_forbidden": [
+      "V17 Go type field method error or action names",
+      "V17 SQLite ordinal table column or migration shape",
+      "V17 execution scheduling representation",
+      "an exact total launch count that includes V17 attestor work"
+    ],
+    "post_rebase_rule": "resolve exact shared paths and semantic bindings from the sealed V17 delta then acquire one lease per shared path before editing"
+  },
   "forbidden_globs": [
     "product/roadmap.json",
     "product/capabilities.json",

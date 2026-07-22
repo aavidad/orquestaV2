@@ -115,12 +115,12 @@ type v18ReworkScenario struct {
 }
 
 type v18E2EContract struct {
-	Composition                     string   `json:"composition"`
-	RealProviderRequired            bool     `json:"real_provider_required"`
-	RequiredLaunchCountPerCandidate int      `json:"required_launch_count_per_candidate"`
-	RestartFrontiers                []string `json:"restart_frontiers"`
-	MaxWallTimeSeconds              int      `json:"max_wall_time_seconds"`
-	ZeroOwnedProcessesAfter         bool     `json:"zero_owned_processes_after"`
+	Composition                       string   `json:"composition"`
+	RealProviderRequired              bool     `json:"real_provider_required"`
+	RequiredReviewParticipantLaunches int      `json:"required_review_participant_launch_count"`
+	RestartFrontiers                  []string `json:"restart_frontiers"`
+	MaxWallTimeSeconds                int      `json:"max_wall_time_seconds"`
+	ZeroOwnedProcessesAfter           bool     `json:"zero_owned_processes_after"`
 }
 
 type v18SimplicityBudget struct {
@@ -198,7 +198,7 @@ func v18AssertFixture(t *testing.T, repositoryRoot string, fixture v18Fixture) {
 	v18AssertDriftMutations(t, fixture.AcceptedScenario.Subject, fixture.DriftMutations)
 	v18AssertReworkScenario(t, fixture.AcceptedScenario, fixture.ReworkScenario)
 	wantE2E := v18E2EContract{
-		Composition: "fake_agents_git_sqlite_cas_test_attestor", RequiredLaunchCountPerCandidate: 3,
+		Composition: "fake_agents_git_sqlite_cas_test_attestor", RequiredReviewParticipantLaunches: 3,
 		RestartFrontiers:   []string{"before_reviews", "after_primary", "after_both", "after_integration_admission"},
 		MaxWallTimeSeconds: 180, ZeroOwnedProcessesAfter: true,
 	}

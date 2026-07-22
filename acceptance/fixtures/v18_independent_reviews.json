@@ -253,7 +253,7 @@
   "e2e_contract": {
     "composition": "fake_agents_git_sqlite_cas_test_attestor",
     "real_provider_required": false,
-    "required_launch_count_per_candidate": 3,
+    "required_review_participant_launch_count": 3,
     "restart_frontiers": ["before_reviews", "after_primary", "after_both", "after_integration_admission"],
     "max_wall_time_seconds": 180,
     "zero_owned_processes_after": true

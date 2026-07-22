@@ -117,6 +117,25 @@ y sustituirá en este contrato cualquier término provisional por el nombre real
 Hasta entonces el fixture solo expresa el sujeto V18 neutral que V17 deberá
 alimentar.
 
+### 1.5 Frontera de API durante el preflight
+
+Este contrato congela semántica V18, no la forma interna de V17. Antes del
+receipt solo se permiten como dependencias nominales los receipts publicados y
+las seams ya selladas de V12/V14/V16. En concreto, el preflight no congela:
+
+- nombres de tipos, campos, métodos, errores o actions V17;
+- ordinal, tablas, columnas ni estrategia de migración V17;
+- orden concreto entre la persistencia del PASS y el scheduling de reviews;
+- número total de launches del candidato: V18 exige tres participantes A/P/D,
+  pero un test attestor V17 puede acreditar otro launch independiente;
+- forma exacta de representar las executions de review dentro del agregado.
+
+`TestAttestationRef`, `TestSubjectDigest` y `TestPolicyDigest` son bindings
+semánticos propiedad del sujeto V18. Después del rebase se mapearán a los facts
+sellados reales de V17 sin obligar a que V17 use esos identificadores Go. Lo
+mismo aplica a los nombres V18 `Purpose` y `ReviewSubjectDigest`: describen el
+resultado requerido, no una modificación anticipada de tipos del árbol sucio.
+
 ## 2. Diagnóstico: hueco real y piezas que no hacen falta
 
 Hoy un author launch puede producir output, workspace, commit y solicitud de
@@ -441,9 +460,10 @@ internal/adapters/state/sqlite  persistencia y recovery del mismo StateRepositor
 internal/bootstrap              wiring del mismo Orchestrator
 ```
 
-No se crea `internal/adapters/reviewer` salvo que después del rebase aparezca
-una frontera externa real con segundo consumidor y fake contractual. Parsear el
-schema canónico de assessment es dominio/protocolo, no provider nuevo.
+V18 no crea `internal/adapters/reviewer`. Parsear el schema canónico de
+assessment es dominio/protocolo, no provider nuevo. Si después del rebase
+apareciese una frontera externa real, se documentará y diferirá al vertical de
+provider correspondiente; no ampliará silenciosamente este write-set.
 
 Provider-specific prompt, model routing y calidad real quedan en V22/V25. V18
 acredita semántica neutral con fake agents y composición productiva local.
@@ -546,7 +566,8 @@ Escenario positivo:
 
 1. author launch produce ChangeSet;
 2. PASS exacto;
-3. primary y adversarial launches distintos;
+3. primary y adversarial launches distintos —tres launches A/P/D como mínimo
+   contractual V18, sin contar un posible launch propio del attestor V17—;
 4. restart después de primary;
 5. adversarial completa;
 6. ninguna integración ocurre sola;
@@ -579,7 +600,7 @@ internal/review dominio puro        <= 700
 application/writer/flows            <= 1.800
 SQLite/migración/recovery            <= 1.000
 adapters/bootstrap/composición       <= 700
-fichero individual orientativo       <= 350 líneas
+fichero individual de producto        <= 350 líneas
 ```
 
 Ratchets:
@@ -617,7 +638,10 @@ Tras receipt V17 y rebase se solicitarán:
 - `L-SEAL` al ejecutar P/S/E.
 
 Raíz privada preferente: `internal/review/**`. Cualquier edición compartida se
-declarará por archivo después de conocer el delta V17 real.
+declarará por archivo después de conocer el delta V17 real. No se reserva ahora
+ningún glob de adapter ni ningún directorio compartido. Tras el rebase, el
+write-set se resolverá a paths concretos desde el delta V17 sellado y cada path
+compartido requerirá su lease antes de editar.
 
 ## 18. Riesgos P0/P1
 
