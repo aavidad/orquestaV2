@@ -88,3 +88,29 @@ func TestValidatePersistedCouncilSubjectKeepsSupersededHistoricalSubject(t *test
 		t.Fatalf("superseded historical subject rejected: %v", err)
 	}
 }
+
+func TestValidatePersistedCouncilSubjectKeepsCanceledHistoricalSubject(t *testing.T) {
+	system := newCouncilSystem(t, council.PolicySkipByOperator)
+	system.processCommit(t)
+	system.process(t, ActionAttestTest)
+	system.approveReviews(t)
+	record := system.record(t)
+	subject := record.CouncilSkips[0].Subject
+	item := record.Goal.WorkItems()[0]
+	principal, project, err := system.access.values()
+	appTestNoError(t, err)
+	seedDirectorMembership(t, system.orchestrator.access.(*memoryAccessRepository), principal, project,
+		identity.RoleProjectOwner, system.orchestrator.clock.Now())
+	_, err = system.orchestrator.Control(context.Background(), system.access, ControlRequest{
+		RequestRef: "control:cancel:council-historical", Operation: ControlCancel, Target: ControlTargetWorkItem,
+		GoalRef: record.Goal.Ref(), ExpectedGoalRevision: record.Goal.Revision(),
+		ExpectedPlanGeneration: record.Goal.PlanGeneration(), ExpectedAppSpecGeneration: record.Goal.AppSpec().Generation(),
+		ExpectedSpecHash: record.Goal.SpecHash(), WorkItemRef: item.Ref(), ExpectedWorkItemRevision: item.Revision(),
+		Reason: "cancel preserves historical Council subject",
+	})
+	appTestNoError(t, err)
+	after := system.record(t)
+	if err := ValidatePersistedCouncilSubject(after, subject); err != nil {
+		t.Fatalf("canceled historical subject rejected: %v", err)
+	}
+}

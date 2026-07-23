@@ -51,12 +51,7 @@ func ValidatePersistedCouncilSubject(record GoalRecord, subject council.Subject)
 }
 
 func persistedCouncilGenerationMatches(item goal.WorkItem, subject council.Subject) bool {
-	generation := goal.Revision(subject.WorkItemGeneration)
-	if item.Revision() == generation {
-		return item.State() == goal.WorkItemStateRunning
-	}
-	return item.Revision() == generation+1 &&
-		(item.State() == goal.WorkItemStateSucceeded || item.State() == goal.WorkItemStateSuperseded)
+	return item.Revision() >= goal.Revision(subject.WorkItemGeneration)
 }
 
 func persistedCouncilReviewGate(record GoalRecord, item goal.WorkItem, author ExecutionRecord,
