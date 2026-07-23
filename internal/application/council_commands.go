@@ -59,7 +59,7 @@ func (orchestrator *Orchestrator) OpenCouncilRound(ctx context.Context, access A
 	if !found || !authorFound || item.Revision() != request.ExpectedItemRevision || policy != council.PolicyRequired || !hasPolicy {
 		return OpenCouncilRoundResult{}, &StateError{Code: StateConflict}
 	}
-	subject, err := councilSubjectForPolicy(record, item, author, change, policy, orchestrator.testAttestationPolicy)
+	subject, err := councilSubject(record, item, author, change, policy, orchestrator.testAttestationPolicy)
 	if err != nil {
 		return OpenCouncilRoundResult{}, &StateError{Code: StateConflict, Cause: err}
 	}
@@ -97,7 +97,10 @@ func (orchestrator *Orchestrator) SkipCouncil(ctx context.Context, access Access
 		return SkipCouncilResult{}, errors.New("council.skip_request_invalid")
 	}
 	principal, project, err := access.values()
-	if err != nil || principal.Kind != identity.PrincipalKindHuman {
+	if err != nil {
+		return SkipCouncilResult{}, err
+	}
+	if principal.Kind != identity.PrincipalKindHuman {
 		return SkipCouncilResult{}, errForbidden
 	}
 	now := orchestrator.clock.Now().UTC()
@@ -120,7 +123,7 @@ func (orchestrator *Orchestrator) SkipCouncil(ctx context.Context, access Access
 	if !found || !authorFound || !present || policy != council.PolicySkipByOperator || item.Revision() != request.ExpectedItemRevision {
 		return SkipCouncilResult{}, &StateError{Code: StateConflict}
 	}
-	subject, err := councilSubjectForPolicy(record, item, author, change, policy, orchestrator.testAttestationPolicy)
+	subject, err := councilSubject(record, item, author, change, policy, orchestrator.testAttestationPolicy)
 	if err != nil {
 		return SkipCouncilResult{}, &StateError{Code: StateConflict, Cause: err}
 	}
@@ -136,23 +139,12 @@ func (orchestrator *Orchestrator) SkipCouncil(ctx context.Context, access Access
 	return SkipCouncilResult{Skip: persisted, Created: created}, nil
 }
 
-func councilSubjectForPolicy(record GoalRecord, item goal.WorkItem, author ExecutionRecord, change ChangeSet, policy council.Policy, testPolicy TestAttestationPolicy) (council.Subject, error) {
-	if council.ValidatePolicy(policy) != nil {
-		return council.Subject{}, errors.New("council.policy_invalid")
-	}
-	reviewSubject, gate, err := reviewGateForChange(record, author, change, testPolicy)
-	if err != nil || gate.Status != "approved" {
-		return council.Subject{}, errors.New("council.review_gate_required")
-	}
-	return council.NewSubject(council.Subject{ProjectRef: record.Goal.Project().String(), ReviewSubjectDigest: reviewSubject.Digest(), ReviewGateDigest: gate.Digest, Policy: policy, GoalRef: record.Goal.Ref().String(), WorkItemRef: item.Ref().String(), ChangeSetRef: change.Ref.String(), SpecHash: author.SpecHash, PlanGeneration: uint64(author.PlanGeneration), WorkItemGeneration: uint64(item.Revision()), AppSpecGeneration: uint64(author.AppSpecGeneration)})
-}
-
 func councilIntegrationResolution(record GoalRecord, item goal.WorkItem, execution ExecutionRecord, change ChangeSet, gateDigest string, testPolicy TestAttestationPolicy) (*CouncilResolution, error) {
 	policy, ok := item.CouncilPolicy()
 	if !ok {
 		return nil, errors.New("council.policy_required")
 	}
-	subject, err := councilSubjectForPolicy(record, item, execution, change, policy, testPolicy)
+	subject, err := councilSubject(record, item, execution, change, policy, testPolicy)
 	if err != nil || subject.ReviewGateDigest != gateDigest {
 		return nil, errors.New("council.subject_invalid")
 	}

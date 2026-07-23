@@ -5,6 +5,7 @@ import (
 
 	"orquesta/internal/council"
 	"orquesta/internal/goal"
+	"orquesta/internal/review"
 )
 
 // councilSubject rebuilds the only admissible Council input: the exact,
@@ -12,19 +13,27 @@ import (
 func councilSubject(record GoalRecord, item goal.WorkItem, author ExecutionRecord,
 	change ChangeSet, policy council.Policy, testPolicy TestAttestationPolicy,
 ) (council.Subject, error) {
-	if council.ValidatePolicy(policy) != nil || policy == council.PolicySkipByOperator ||
-		author.State != ExecutionAwaitingIntegration {
+	if council.ValidatePolicy(policy) != nil {
 		return council.Subject{}, errors.New("council.subject_invalid")
 	}
 	reviewSubject, gate, err := reviewGateForChange(record, author, change, testPolicy)
-	if err != nil || gate.Status != "approved" {
+	if err != nil {
+		return council.Subject{}, errors.New("council.review_gate_required")
+	}
+	return councilSubjectFromReviewGate(record, item, author, change, policy, reviewSubject, gate)
+}
+
+func councilSubjectFromReviewGate(record GoalRecord, item goal.WorkItem, author ExecutionRecord,
+	change ChangeSet, policy council.Policy, reviewSubject review.Subject, gate review.Gate,
+) (council.Subject, error) {
+	if gate.Status != review.GateApproved {
 		return council.Subject{}, errors.New("council.review_gate_required")
 	}
 	return council.NewSubject(council.Subject{
 		ProjectRef: record.Goal.Project().String(), ReviewSubjectDigest: reviewSubject.Digest(),
 		ReviewGateDigest: gate.Digest, Policy: policy, GoalRef: record.Goal.Ref().String(),
 		WorkItemRef: item.Ref().String(), ChangeSetRef: change.Ref.String(), SpecHash: author.SpecHash,
-		PlanGeneration: uint64(author.PlanGeneration), WorkItemGeneration: uint64(item.Revision()),
+		PlanGeneration: uint64(author.PlanGeneration), WorkItemGeneration: reviewSubject.WorkItemGeneration,
 		AppSpecGeneration: uint64(author.AppSpecGeneration),
 	})
 }

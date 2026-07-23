@@ -16,6 +16,9 @@ func (orchestrator *Orchestrator) autoCouncilOpenState(record GoalRecord, item g
 	if !present || policy != council.PolicyAuto {
 		return nil, nil
 	}
+	if author.State != ExecutionAwaitingIntegration {
+		return nil, errors.New("council.subject_invalid")
+	}
 	subject, err := councilSubject(record, item, author, change, policy, orchestrator.testAttestationPolicy)
 	if err != nil {
 		return nil, err
@@ -36,44 +39,10 @@ func (orchestrator *Orchestrator) autoCouncilOpenState(record GoalRecord, item g
 	if !found {
 		return nil, errors.New("application.work_item_authority_missing")
 	}
-	policySnapshot, err := historicalEffectPolicy(record)
-	if err != nil {
-		return nil, err
-	}
 	requestRef := authority.AuthorizationReceipt.Decision().Request().RequestRef()
 	fingerprint := effectAdmissionFingerprint("orquesta.council.auto-open.v1", requestRef, string(digest))
-	round := CouncilRoundRecord{
-		Ref:     "council-round:" + fingerprintFields("orquesta.council-round.v1", record.Goal.Ref().String(), item.Ref().String(), string(digest)),
-		GoalRef: record.Goal.Ref(), WorkItemRef: item.Ref(), ChangeSetRef: change.Ref.String(), Subject: subject,
-		SubjectDigest: digest, OpenedBy: authority.PrincipalRef, OpenedAt: at.UTC(),
-		IdempotencyKey: "council-round:" + string(digest), Opener: CouncilRoundOpenerAuto,
-		RequestRef: requestRef, RequestFingerprint: fingerprint, AuthorizationReceiptRef: authority.AuthorizationReceipt.Ref(),
-	}
-	executions := make([]ExecutionRecord, 0, 3)
-	actions := make([]ActionRecord, 0, 3)
-	events := make([]EventRecord, 0, 3)
-	for _, role := range council.Roles() {
-		execution, execErr := councilExecution(record.Goal, item, author, digest, role, at,
-			orchestrator.maxExecutionAttempts, orchestrator.maxOutputBytes)
-		if execErr != nil {
-			return nil, execErr
-		}
-		scheduled := record
-		scheduled.Executions = append(append([]ExecutionRecord(nil), record.Executions...), executions...)
-		scheduled.Executions = append(scheduled.Executions, execution)
-		action, actionErr := orchestrator.councilLaunchAction(policySnapshot, scheduled, item, execution, authority, subject, at, at)
-		if actionErr != nil {
-			return nil, actionErr
-		}
-		executions, actions = append(executions, execution), append(actions, action)
-		events = append(events, EventRecord{Ref: "event:council-queued:" + execution.Ref.String(), Kind: "council.queued",
-			GoalRef: record.Goal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref, OccurredAt: at.UTC()})
-	}
-	return &OpenCouncilRoundState{RequestRef: requestRef, RequestFingerprint: fingerprint,
-		AuthorizationReceipt: authority.AuthorizationReceipt, PrincipalRef: authority.PrincipalRef,
-		ProjectRef: record.Goal.Project(), GoalRef: record.Goal.Ref(), ExpectedGoalRevision: record.Goal.Revision(),
-		ExpectedItemRevision: item.Revision(), Round: round, Executions: executions, Actions: actions, Events: events,
-		OperationAt: at.UTC()}, nil
+	return orchestrator.councilOpenState(record, item, author, change, subject, digest, authority,
+		CouncilRoundOpenerAuto, requestRef, fingerprint, "", 0, at)
 }
 
 func councilExecution(aggregate goal.Goal, item goal.WorkItem, author ExecutionRecord, digest CouncilSubjectDigest,

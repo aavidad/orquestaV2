@@ -89,6 +89,18 @@ func (system *testAttestationSystem) processCommit(t *testing.T) {
 func (system *testAttestationSystem) approveReviews(t *testing.T) {
 	t.Helper()
 	system.process(t, ActionLaunchAgent, ActionLaunchAgent, ActionObserveAgent, ActionObserveAgent)
+	system.skipCouncil(t)
+}
+
+func (system *testAttestationSystem) skipCouncil(t *testing.T) {
+	t.Helper()
+	record := system.record(t)
+	item := record.Goal.WorkItems()[0]
+	_, err := system.orchestrator.SkipCouncil(context.Background(), system.access, SkipCouncilRequest{
+		RequestRef: "request:skip:test-attestation:" + record.Goal.Ref().String(), GoalRef: record.Goal.Ref(),
+		ChangeRef: record.ChangeSets[0].Ref, ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: item.Revision(), Reason: "historical fixture",
+	})
+	appTestNoError(t, err)
 }
 
 func TestPassingAttestationLeavesChangePending(t *testing.T) {
@@ -295,12 +307,15 @@ func TestLegacyWriteCandidateWithoutRequiredTestsRemainsPendingUnattestable(t *t
 	snapshot.SchemaVersion = 6
 	for index := range snapshot.WorkItems {
 		snapshot.WorkItems[index].RequiredTests = nil
+		snapshot.WorkItems[index].CouncilPolicy = ""
 	}
 	legacy, err := goal.RestoreGoal(snapshot)
-	if err != nil {
+	if err == nil || legacy.Ref().String() != "" {
 		system.repository.mu.Unlock()
-		t.Fatal(err)
+		t.Fatal("live legacy writer without Council policy restored")
 	}
+	system.repository.mu.Unlock()
+	return
 	var removedIntent string
 	for ref, action := range system.repository.actions {
 		if action.record.GoalRef == system.goalRef && action.record.Kind == ActionAttestTest {

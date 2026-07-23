@@ -23,7 +23,7 @@ func TestCompileWorkItemSpecPreservesRequiredTestsAndRejectsUntestedWriter(t *te
 	spec := WorkItemSpec{
 		Key: "writer", Objective: "write exact change", Phase: goal.DefaultPhaseKey().String(),
 		Role: goal.DefaultRoleKey().String(), WriteSet: []string{"internal/planning"},
-		RequiredTests:  requiredTestSpecs("required-test:planning"),
+		CouncilPolicy: "skip_by_operator", RequiredTests: requiredTestSpecs("required-test:planning"),
 		OutputContract: goal.OutputContractEvidenceBundle,
 	}
 	item, err := compileWorkItemSpec(spec, ref, scope, workItemRefResolver{})
@@ -43,7 +43,7 @@ func TestCompileWorkItemSpecPreservesRequiredTestsAndRejectsUntestedWriter(t *te
 func TestPlanFingerprintBindsEveryRequiredTestField(t *testing.T) {
 	base := &PlanSpec{WorkItems: []WorkItemSpec{{
 		Key: "writer", WriteSet: []string{"internal/planning"},
-		RequiredTests: requiredTestSpecs("required-test:fingerprint"),
+		CouncilPolicy: "skip_by_operator", RequiredTests: requiredTestSpecs("required-test:fingerprint"),
 	}}}
 	fingerprint := func(spec *PlanSpec) string {
 		digest := sha256.New()

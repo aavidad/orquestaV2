@@ -106,14 +106,14 @@ func TestExplicitPlanPreservesContractsAndLaunchesMaximalSafeCohort(t *testing.T
 			}},
 			WorkItems: []WorkItemSpec{
 				{Key: "a", Objective: "first writer", Phase: "phase:build", Role: "role:worker",
-					WriteSet: []string{"internal/shared"}, SkillRefs: []string{"skill:go"},
+					WriteSet: []string{"internal/shared"}, CouncilPolicy: "skip_by_operator", SkillRefs: []string{"skill:go"},
 					RequiredTests: requiredTestSpecs("required-test:a"),
 					ToolRefs:      []string{"tool:test"}, CapabilityRefs: []string{"capability:patch"},
 					OutputContract: goal.OutputContractEvidenceBundle},
 				{Key: "b", Objective: "overlapping writer", Phase: "phase:build", Role: "role:worker",
-					WriteSet: []string{"internal/shared/file.go"}, RequiredTests: requiredTestSpecs("required-test:b"), OutputContract: goal.OutputContractEvidenceBundle},
+					WriteSet: []string{"internal/shared/file.go"}, CouncilPolicy: "skip_by_operator", RequiredTests: requiredTestSpecs("required-test:b"), OutputContract: goal.OutputContractEvidenceBundle},
 				{Key: "c", Objective: "free writer", Phase: "phase:build", Role: "role:worker",
-					WriteSet: []string{"docs/free.md"}, RequiredTests: requiredTestSpecs("required-test:c"), OutputContract: goal.OutputContractEvidenceBundle},
+					WriteSet: []string{"docs/free.md"}, CouncilPolicy: "skip_by_operator", RequiredTests: requiredTestSpecs("required-test:c"), OutputContract: goal.OutputContractEvidenceBundle},
 			},
 		},
 	})

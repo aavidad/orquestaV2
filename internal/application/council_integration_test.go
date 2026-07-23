@@ -16,3 +16,15 @@ func TestIntegrationTargetDigestKeepsLegacyV2AndBindsCouncilResolution(t *testin
 		t.Fatal("council resolution absent from target digest")
 	}
 }
+
+func TestCloneActionRecordDoesNotAliasCouncilResolution(t *testing.T) {
+	digest := CouncilSubjectDigest("sha256:" + string(makeDigest('b')))
+	action := ActionRecord{CouncilResolution: &CouncilResolution{SubjectDigest: digest, SkipRef: "skip:one", SkipDigest: digest},
+		EffectIntent: EffectIntent{CouncilResolution: &CouncilResolution{SubjectDigest: digest, DecisionRef: "decision:one", DecisionDigest: digest}}}
+	cloned := cloneActionRecord(action)
+	cloned.CouncilResolution.SkipRef = "skip:mutated"
+	cloned.EffectIntent.CouncilResolution.DecisionRef = "decision:mutated"
+	if action.CouncilResolution.SkipRef != "skip:one" || action.EffectIntent.CouncilResolution.DecisionRef != "decision:one" {
+		t.Fatal("persisted action resolution aliased response")
+	}
+}

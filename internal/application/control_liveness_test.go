@@ -319,8 +319,8 @@ func controlConflictingPlan() *PlanSpec {
 	return &PlanSpec{
 		Phases: []PhaseSpec{{Ref: "phase-instance:control-writers", Key: "phase:control-writers", TemplateRef: "phase-template:control-writers"}},
 		WorkItems: []WorkItemSpec{
-			{Key: "first", Objective: "first writer", Phase: "phase:control-writers", Role: "role:worker", WriteSet: []string{"internal/shared"}, RequiredTests: requiredTestSpecs("required-test:control-first"), OutputContract: goal.OutputContractEvidenceBundle},
-			{Key: "second", Objective: "second writer", Phase: "phase:control-writers", Role: "role:worker", WriteSet: []string{"internal/shared/file.go"}, RequiredTests: requiredTestSpecs("required-test:control-second"), OutputContract: goal.OutputContractEvidenceBundle},
+			{Key: "first", Objective: "first writer", Phase: "phase:control-writers", Role: "role:worker", WriteSet: []string{"internal/shared"}, CouncilPolicy: "skip_by_operator", RequiredTests: requiredTestSpecs("required-test:control-first"), OutputContract: goal.OutputContractEvidenceBundle},
+			{Key: "second", Objective: "second writer", Phase: "phase:control-writers", Role: "role:worker", WriteSet: []string{"internal/shared/file.go"}, CouncilPolicy: "skip_by_operator", RequiredTests: requiredTestSpecs("required-test:control-second"), OutputContract: goal.OutputContractEvidenceBundle},
 		},
 	}
 }
@@ -329,8 +329,8 @@ func controlIndependentPlan() *PlanSpec {
 	return &PlanSpec{
 		Phases: []PhaseSpec{{Ref: "phase-instance:control-independent", Key: "phase:control-independent", TemplateRef: "phase-template:control-independent"}},
 		WorkItems: []WorkItemSpec{
-			{Key: "first", Objective: "first independent", Phase: "phase:control-independent", Role: "role:worker", WriteSet: []string{"internal/first"}, RequiredTests: requiredTestSpecs("required-test:control-independent-first"), OutputContract: goal.OutputContractEvidenceBundle},
-			{Key: "second", Objective: "second independent", Phase: "phase:control-independent", Role: "role:worker", WriteSet: []string{"internal/second"}, RequiredTests: requiredTestSpecs("required-test:control-independent-second"), OutputContract: goal.OutputContractEvidenceBundle},
+			{Key: "first", Objective: "first independent", Phase: "phase:control-independent", Role: "role:worker", WriteSet: []string{"internal/first"}, CouncilPolicy: "skip_by_operator", RequiredTests: requiredTestSpecs("required-test:control-independent-first"), OutputContract: goal.OutputContractEvidenceBundle},
+			{Key: "second", Objective: "second independent", Phase: "phase:control-independent", Role: "role:worker", WriteSet: []string{"internal/second"}, CouncilPolicy: "skip_by_operator", RequiredTests: requiredTestSpecs("required-test:control-independent-second"), OutputContract: goal.OutputContractEvidenceBundle},
 		},
 	}
 }

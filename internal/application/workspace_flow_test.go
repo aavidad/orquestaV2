@@ -50,6 +50,14 @@ func TestIntegrateChangeReplaysExactAdmissionBeforeAndAfterCompletion(t *testing
 		t.Fatalf("agent output closed lifecycle early: goal=%s changes=%d execution=%s",
 			record.Goal.State(), len(record.ChangeSets), record.Executions[0].State)
 	}
+	item := record.Goal.WorkItems()[0]
+	if _, err := orchestrator.SkipCouncil(ctx, access, SkipCouncilRequest{RequestRef: "request:skip:workspace-replay", GoalRef: record.Goal.Ref(), ChangeRef: record.ChangeSets[0].Ref, ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: item.Revision(), Reason: "historical fixture"}); err != nil {
+		t.Fatal(err)
+	}
+	record, err = repository.GetGoal(ctx, submitted.Record.Goal.Ref())
+	if err != nil {
+		t.Fatal(err)
+	}
 	request := IntegrateChangeRequest{
 		RequestRef: "request:integrate-replay", GoalRef: record.Goal.Ref(),
 		ChangeRef: record.ChangeSets[0].Ref, ExpectedTargetOID: record.WorkspaceBindings[0].BaseOID,
@@ -218,5 +226,5 @@ func TestReplacementExecutionGetsDistinctWorkspace(t *testing.T) {
 func workspaceWritePlan() *PlanSpec {
 	return &PlanSpec{Phases: []PhaseSpec{{Ref: "phase-instance:workspace", Key: "phase:workspace", TemplateRef: "phase-template:workspace"}},
 		WorkItems: []WorkItemSpec{{Key: "writer", Objective: "isolated writer", Phase: "phase:workspace", Role: "role:worker",
-			WriteSet: []string{"internal/workspace"}, RequiredTests: requiredTestSpecs("required-test:workspace"), OutputContract: goal.OutputContractEvidenceBundle}}}
+			WriteSet: []string{"internal/workspace"}, CouncilPolicy: "skip_by_operator", RequiredTests: requiredTestSpecs("required-test:workspace"), OutputContract: goal.OutputContractEvidenceBundle}}}
 }

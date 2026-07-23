@@ -3,9 +3,121 @@ package application
 import (
 	"errors"
 
+	"orquesta/internal/council"
 	"orquesta/internal/goal"
 	"orquesta/internal/review"
 )
+
+// ValidatePersistedCouncilSubject proves a durable Council subject still
+// derives from one exact V18 PASS subject/gate and immutable WorkItem policy.
+func ValidatePersistedCouncilSubject(record GoalRecord, subject council.Subject) error {
+	if _, err := council.NewSubject(subject); err != nil {
+		return errors.New("council.persisted_subject_invalid")
+	}
+	item, found := persistedCouncilWorkItem(record, subject)
+	if !found || record.Goal.Ref().String() != subject.GoalRef ||
+		record.Goal.Project().String() != subject.ProjectRef ||
+		record.Goal.AppSpec().Generation() != goal.AppSpecGeneration(subject.AppSpecGeneration) {
+		return errors.New("council.persisted_subject_invalid")
+	}
+	author, found := persistedCouncilAuthor(record, subject)
+	if !found {
+		return errors.New("council.persisted_subject_invalid")
+	}
+	change, found := persistedCouncilChange(record, subject)
+	policy, policyFound := item.CouncilPolicy()
+	if !found || !policyFound || policy != subject.Policy ||
+		!persistedCouncilGenerationMatches(item, subject) || change.ExecutionRef != author.Ref {
+		return errors.New("council.persisted_subject_invalid")
+	}
+	matches := 0
+	for _, attestation := range record.Attestations {
+		if attestation.Kind != AttestationKindRequiredTests || attestation.Verdict != AttestationVerdictPassed || attestation.ExecutionRef != author.Ref || attestation.ChangeSetRef != change.Ref {
+			continue
+		}
+		reviewSubject, gate, err := persistedCouncilReviewGate(record, item, author, change, attestation)
+		if err != nil {
+			continue
+		}
+		candidate, err := councilSubjectFromReviewGate(record, item, author, change, policy, reviewSubject, gate)
+		if err == nil && candidate == subject {
+			matches++
+		}
+	}
+	if matches != 1 {
+		return errors.New("council.persisted_subject_invalid")
+	}
+	return nil
+}
+
+func persistedCouncilGenerationMatches(item goal.WorkItem, subject council.Subject) bool {
+	generation := goal.Revision(subject.WorkItemGeneration)
+	if item.Revision() == generation {
+		return item.State() == goal.WorkItemStateRunning
+	}
+	return item.Revision() == generation+1 &&
+		(item.State() == goal.WorkItemStateSucceeded || item.State() == goal.WorkItemStateSuperseded)
+}
+
+func persistedCouncilReviewGate(record GoalRecord, item goal.WorkItem, author ExecutionRecord,
+	change ChangeSet, attestation AttestationRecord,
+) (review.Subject, review.Gate, error) {
+	binding, found := workspaceBindingForExecution(record, author.Ref)
+	if !found || !TestAttestationConsumptionMatches(record, attestation) {
+		return review.Subject{}, review.Gate{}, errors.New("council.persisted_subject_invalid")
+	}
+	subject, err := reviewSubjectFromEvidence(item, author, binding, change, attestation)
+	if err != nil {
+		return review.Subject{}, review.Gate{}, errors.New("council.persisted_subject_invalid")
+	}
+	assessments := make([]review.Assessment, 0, 2)
+	for _, fact := range record.Reviews {
+		if fact.ChangeSetRef != change.Ref || fact.SubjectDigest != subject.Digest() {
+			continue
+		}
+		assessment, assessmentErr := fact.Assessment()
+		if assessmentErr != nil {
+			return review.Subject{}, review.Gate{}, errors.New("council.persisted_subject_invalid")
+		}
+		assessments = append(assessments, assessment)
+	}
+	gate, err := review.EvaluateGate(subject, assessments)
+	if err != nil {
+		return review.Subject{}, review.Gate{}, errors.New("council.persisted_subject_invalid")
+	}
+	return subject, gate, nil
+}
+
+func persistedCouncilWorkItem(record GoalRecord, subject council.Subject) (goal.WorkItem, bool) {
+	for _, item := range record.Goal.WorkItems() {
+		if item.Ref().String() == subject.WorkItemRef {
+			return item, true
+		}
+	}
+	return goal.WorkItem{}, false
+}
+
+func persistedCouncilAuthor(record GoalRecord, subject council.Subject) (ExecutionRecord, bool) {
+	for _, candidate := range record.Executions {
+		if candidate.Purpose == ExecutionPurposeAuthor && candidate.GoalRef.String() == subject.GoalRef &&
+			candidate.WorkItemRef.String() == subject.WorkItemRef &&
+			candidate.PlanGeneration == goal.PlanGeneration(subject.PlanGeneration) &&
+			candidate.AppSpecGeneration == goal.AppSpecGeneration(subject.AppSpecGeneration) &&
+			candidate.SpecHash == subject.SpecHash {
+			return candidate, true
+		}
+	}
+	return ExecutionRecord{}, false
+}
+
+func persistedCouncilChange(record GoalRecord, subject council.Subject) (ChangeSet, bool) {
+	for _, candidate := range record.ChangeSets {
+		if candidate.Ref.String() == subject.ChangeSetRef {
+			return candidate, true
+		}
+	}
+	return ChangeSet{}, false
+}
 
 func buildReviewSubject(record GoalRecord, item goal.WorkItem, execution ExecutionRecord,
 	change ChangeSet, policy TestAttestationPolicy,

@@ -2639,6 +2639,10 @@ func cloneActionRecord(action ActionRecord) ActionRecord {
 		resolution := *action.CouncilResolution
 		cloned.CouncilResolution = &resolution
 	}
+	if action.EffectIntent.CouncilResolution != nil {
+		resolution := *action.EffectIntent.CouncilResolution
+		cloned.EffectIntent.CouncilResolution = &resolution
+	}
 	return cloned
 }
 
