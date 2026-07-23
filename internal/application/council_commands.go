@@ -42,6 +42,7 @@ func (orchestrator *Orchestrator) OpenCouncilRound(ctx context.Context, access A
 	if err != nil {
 		return OpenCouncilRoundResult{}, err
 	}
+	now = authorization.RecordedAt().UTC()
 	record, err := orchestrator.state.GetGoal(ctx, request.GoalRef)
 	if err != nil {
 		return OpenCouncilRoundResult{}, err
@@ -109,6 +110,7 @@ func (orchestrator *Orchestrator) SkipCouncil(ctx context.Context, access Access
 	if err != nil {
 		return SkipCouncilResult{}, err
 	}
+	now = authorization.RecordedAt().UTC()
 	record, err := orchestrator.state.GetGoal(ctx, request.GoalRef)
 	if err != nil {
 		return SkipCouncilResult{}, err
