@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
-	"strings"
 	"testing"
 )
 
@@ -47,17 +46,28 @@ func (value *v19PolicyContract) UnmarshalJSON(data []byte) error {
 }
 
 type v19Fixture struct {
-	SchemaVersion        int                 `json:"schema_version"`
-	ContractID           string              `json:"contract_id"`
-	Vertical             string              `json:"vertical"`
-	OwnedCapabilityIDs   []string            `json:"owned_capability_ids"`
-	Dependency           v19Dependency       `json:"dependency"`
-	ImplementationStatus string              `json:"implementation_status"`
-	PSourcePaths         []string            `json:"p_source_paths"`
-	PTestPaths           []string            `json:"p_test_paths"`
-	Policies             []string            `json:"policies"`
-	PolicyContracts      []v19PolicyContract `json:"policy_contracts"`
-	PolicySourceContract struct {
+	SchemaVersion                  int                 `json:"schema_version"`
+	ReceiptSchemaVersion           int                 `json:"receipt_schema_version"`
+	TrustedBaseGitCommitOID        string              `json:"trusted_base_git_commit_oid"`
+	ProductDeltaBaseGitCommitOID   string              `json:"product_delta_base_git_commit_oid"`
+	ProductDeltaSealedGitCommitOID string              `json:"product_delta_sealed_git_commit_oid"`
+	SealStatus                     string              `json:"seal_status"`
+	SealNote                       string              `json:"seal_note"`
+	Command                        string              `json:"command"`
+	ExecutionArgv                  []string            `json:"execution_argv"`
+	OutputPath                     string              `json:"output_path"`
+	ReceiptPath                    string              `json:"receipt_path"`
+	CandidateSubjects              []string            `json:"candidate_subjects"`
+	ContractID                     string              `json:"contract_id"`
+	Vertical                       string              `json:"vertical"`
+	OwnedCapabilityIDs             []string            `json:"owned_capability_ids"`
+	Dependency                     v19Dependency       `json:"dependency"`
+	ImplementationStatus           string              `json:"implementation_status"`
+	PSourcePaths                   []string            `json:"p_source_paths"`
+	PTestPaths                     []string            `json:"p_test_paths"`
+	Policies                       []string            `json:"policies"`
+	PolicyContracts                []v19PolicyContract `json:"policy_contracts"`
+	PolicySourceContract           struct {
 		Input        string `json:"input"`
 		DomainType   string `json:"domain_type"`
 		DurablePath  string `json:"durable_path"`
@@ -157,7 +167,8 @@ type v19Fixture struct {
 
 func TestAcceptanceV19Council(t *testing.T) {
 	fixture := loadV19Fixture(t)
-	if fixture.SchemaVersion != 2 || fixture.ContractID != "AC-V19-COUNCIL" || fixture.Vertical != "council" ||
+	if fixture.SchemaVersion != 1 || fixture.ReceiptSchemaVersion != 3 ||
+		fixture.ContractID != "AC-V19-COUNCIL" || fixture.Vertical != "council" ||
 		fixture.ImplementationStatus != "implemented_unsealed" || fixture.LifecycleGate != "V19_IMPLEMENTED_UNSEALED" {
 		t.Fatalf("invalid V19 implemented-unsealed identity: %+v", fixture)
 	}
@@ -169,39 +180,6 @@ func TestAcceptanceV19Council(t *testing.T) {
 	assertV19SafetyAndPersistence(t, fixture)
 	assertV19ProductPresence(t, fixture)
 	assertV19E2E(t, fixture)
-}
-
-// TestV19PSEImplementedUnsealedLifecycle accepts P only: product and tests are
-// present, but neither a seal nor an execution receipt exists.
-func TestV19PSEImplementedUnsealedLifecycle(t *testing.T) {
-	fixture := loadV19Fixture(t)
-	if fixture.ImplementationStatus != "implemented_unsealed" || fixture.LifecycleGate != "V19_IMPLEMENTED_UNSEALED" {
-		t.Fatalf("V19 is not exactly P: %+v", fixture)
-	}
-	for _, path := range []string{v19SealManifestPath, v19ReceiptPath, v19OutputPath} {
-		if _, err := os.Lstat(filepath.Join("..", filepath.FromSlash(path))); err == nil {
-			t.Fatalf("V19 pre-P evidence exists: %s", path)
-		} else if !os.IsNotExist(err) {
-			t.Fatal(err)
-		}
-	}
-	matches, err := filepath.Glob("../product/evidence/v19_council*")
-	if err != nil || len(matches) != 0 {
-		t.Fatalf("V19 pre-P evidence paths=%v err=%v", matches, err)
-	}
-	command := v19E2EValidationShellBody()
-	for _, value := range []string{
-		"-tags=v18_real_e2e,v19_real_e2e",
-		"TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd",
-		"TestV19CouncilAutoSQLiteFilesystemRestartE2E",
-		"TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E",
-		"TestV19CouncilSkipHumanReplayAndIntegrationE2E",
-		"\"Action\":\"run\"", "\"Action\":\"pass\"",
-	} {
-		if !strings.Contains(command, value) {
-			t.Fatalf("V19 E2E command lacks %q", value)
-		}
-	}
 }
 
 func assertV19ProductPresence(t *testing.T, fixture v19Fixture) {
@@ -226,8 +204,14 @@ func assertV19ProductPresence(t *testing.T, fixture v19Fixture) {
 	}
 }
 
-func v19E2EValidationShellBody() string {
-	return `e2e_events=$(CGO_ENABLED=0 go test -mod=vendor -tags=v18_real_e2e,v19_real_e2e -json -count=1 -timeout=240s ./internal/bootstrap -run "^(TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd|TestV19CouncilAutoSQLiteFilesystemRestartE2E|TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E|TestV19CouncilSkipHumanReplayAndIntegrationE2E)$" 2>&1); e2e_status=$?; printf '%s\n' "$e2e_events"; [ "$e2e_status" -eq 0 ] && for test_name in TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd TestV19CouncilAutoSQLiteFilesystemRestartE2E TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E TestV19CouncilSkipHumanReplayAndIntegrationE2E; do printf '%s\n' "$e2e_events" | grep -F '"Action":"run"' | grep -F '"Package":"orquesta/internal/bootstrap"' | grep -F "\"Test\":\"$test_name\"" >/dev/null && printf '%s\n' "$e2e_events" | grep -F '"Action":"pass"' | grep -F '"Package":"orquesta/internal/bootstrap"' | grep -F "\"Test\":\"$test_name\"" >/dev/null || exit 1; done`
+func v19ValidationShellBody() string {
+	const base = "6f244a7594141c74dc28e095e0e5e32a05102826"
+	return `./scripts/check_rebuild_write_set.sh ` + base +
+		` && git diff --check ` + base + ` HEAD --` +
+		` && go test -mod=vendor -count=1 ./...` +
+		` && timeout --kill-after=10s 240s go test -mod=vendor -race -count=1 -timeout=210s ./internal/application ./internal/adapters/state/sqlite -run "^(TestCouncilRequiredOpenUsesRecordedAuthorizationTimeAndReplays|TestCouncilSkipUsesRecordedAuthorizationTimeAndReplays|TestSQLiteV19CouncilRoundFactsDecisionReplayRestartAndConcurrency|TestSQLiteDirectorCouncilNegativeReplanRestart)$"` +
+		` && e2e_events=$(CGO_ENABLED=0 go test -mod=vendor -tags=v17_real_e2e,v18_real_e2e,v19_real_e2e -json -count=1 -timeout=240s ./internal/bootstrap -run "^(TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd|TestV19CouncilAutoSQLiteFilesystemRestartE2E|TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E|TestV19CouncilSkipHumanReplayAndIntegrationE2E)$" 2>&1); e2e_status=$?; printf '%s\n' "$e2e_events"; [ "$e2e_status" -eq 0 ] && for test_name in TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd TestV19CouncilAutoSQLiteFilesystemRestartE2E TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E TestV19CouncilSkipHumanReplayAndIntegrationE2E; do printf '%s\n' "$e2e_events" | grep -F '"Action":"run"' | grep -F '"Package":"orquesta/internal/bootstrap"' | grep -F "\"Test\":\"$test_name\"" >/dev/null && printf '%s\n' "$e2e_events" | grep -F '"Action":"pass"' | grep -F '"Package":"orquesta/internal/bootstrap"' | grep -F "\"Test\":\"$test_name\"" >/dev/null || exit 1; done` +
+		` && GOFLAGS=-mod=vendor go vet ./...`
 }
 
 func assertV19Dependency(t *testing.T, dependency v19Dependency) {

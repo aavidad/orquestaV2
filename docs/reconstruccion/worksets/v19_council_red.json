@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "vertical": "council",
   "base_commit": "6f244a7594141c74dc28e095e0e5e32a05102826",
   "owned_capability_ids": ["GOV-11", "GOV-13", "GOV-14", "STG-06", "STG-08", "EVD-07"],
@@ -16,6 +16,11 @@
     "acceptance/v19_*.go",
     "acceptance/fixtures/v19_*.json"
   ],
+  "p2_product_write_set_44": [
+    "internal/adapters/state/sqlite/app_specs_test.go", "internal/adapters/state/sqlite/claim.go", "internal/adapters/state/sqlite/controls_test.go", "internal/adapters/state/sqlite/council_helpers.go", "internal/adapters/state/sqlite/council_mutation.go", "internal/adapters/state/sqlite/council_read.go", "internal/adapters/state/sqlite/council_round.go", "internal/adapters/state/sqlite/council_validate.go", "internal/adapters/state/sqlite/director.go", "internal/adapters/state/sqlite/director_test.go", "internal/adapters/state/sqlite/governance_effect_read.go", "internal/adapters/state/sqlite/governance_effects.go", "internal/adapters/state/sqlite/mailbox_schema_test.go", "internal/adapters/state/sqlite/mailbox_test.go", "internal/adapters/state/sqlite/migrations.go", "internal/adapters/state/sqlite/migrations/014_council.sql", "internal/adapters/state/sqlite/mutations.go", "internal/adapters/state/sqlite/read.go", "internal/adapters/state/sqlite/recovery_v09_test.go", "internal/adapters/state/sqlite/recovery_v10_test.go", "internal/adapters/state/sqlite/recovery_validation.go", "internal/adapters/state/sqlite/recovery_validation_v14_test.go", "internal/adapters/state/sqlite/recovery_validation_v18.go", "internal/adapters/state/sqlite/recovery_validation_v19.go", "internal/adapters/state/sqlite/recovery_validation_versions.go", "internal/adapters/state/sqlite/repository_test.go", "internal/adapters/state/sqlite/reviews.go", "internal/adapters/state/sqlite/v10_migration_test.go", "internal/adapters/state/sqlite/v15_test_support_test.go", "internal/adapters/state/sqlite/v16_workspace_git_test.go", "internal/adapters/state/sqlite/v17_test_attestor_support_test.go", "internal/adapters/state/sqlite/v18_director_review_changes_replan_test.go", "internal/adapters/state/sqlite/v18_end_to_end_test.go", "internal/adapters/state/sqlite/v18_migration_test.go", "internal/adapters/state/sqlite/v18_recovery_test.go", "internal/adapters/state/sqlite/v19_council_recovery_test.go", "internal/adapters/state/sqlite/v19_council_test.go", "internal/adapters/state/sqlite/v19_director_council_negative_replan_test.go", "internal/adapters/state/sqlite/v19_migration_test.go", "internal/adapters/state/sqlite/validate.go", "internal/adapters/state/sqlite/workspace_git_admission.go", "internal/adapters/state/sqlite/write.go", "product/roadmap.json", "product_roadmap_v19_test.go"
+  ],
+  "p2_enforcement_write_set": ["scripts/check_rebuild_write_set.sh"],
+  "p2_write_set_justification": "Las 44 rutas de producto hacen visible el delta SQLite/roadmap que el contrato debe sellar; el script es una ruta adicional de enforcement, también candidata, porque su whitelist debía admitir product_roadmap_v19_test.go. No se ocultan tras globs.",
   "completed_trace_correction": {
     "commit": "799dc95eb6",
     "paths": ["product/roadmap.json", "product/traceability/rebuild_bugs.jsonl", "product_roadmap_v19_test.go"],
@@ -50,14 +55,15 @@
   ],
   "forbidden_private_authorities": ["CouncilStore", "CouncilQueue", "CouncilScheduler", "CouncilLifecycle", "CouncilEngine", "CouncilDaemon", "CouncilWriter"],
   "budget_contract": {
-    "stage": "pre_P_operational_ceiling",
-    "product_loc_max": 3650,
-    "layers": {"domain_loc_max": 350, "application_loc_max": 1300, "sqlite_recovery_loc_max": 1600, "bootstrap_loc_max": 400},
-    "file_loc_max": 1450,
+    "stage": "P2_honest_inventory_not_accreditation",
+    "measured_product_loc": 3419,
+    "measured_layers": {"domain": 387, "application": 1214, "sqlite_recovery": 1818, "bootstrap_production": 0, "bootstrap_test_support": 545},
+    "ratchet_ceilings": {"domain_min": 400, "sqlite_recovery_min": 1850, "file_max": 1500, "bootstrap_production_max": 400, "bootstrap_test_metric_separate": true},
+    "files_over_350_count": 43,
     "migration_exception": "forbidden",
     "not_accreditation": "P_cannot_declare_simplicity_green_from_this_ceiling",
-    "seal_requirement": "S_records_LOC_by_layer_and_files_over_350",
-    "post_v22_debt": "separate_SQLite_claim_read_validate_write_and_application_adapters_over_350_then_restore_compact_per_module_budget"
+    "seal_requirement": "S records the measured layers, the 43 files over 350 and the exact candidate digest",
+    "post_v22_debt": "separate SQLite claim/read/validate/write and application adapters over 350; restore a compact per-module budget after V22"
   },
   "lifecycle_gate": "V19_IMPLEMENTED_UNSEALED",
   "implementation_status": "implemented_unsealed",

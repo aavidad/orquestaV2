@@ -52,7 +52,7 @@ func TestProductRoadmapV19ScopeAndImplementedUnsealedContract(t *testing.T) {
 
 	contract := index.contracts["AC-V19-COUNCIL"]
 	if contract.Status != "planned" || contract.TestRef != "planned:acceptance/v19_council_test.go" ||
-		contract.Command != "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'" ||
+		contract.Command != "planned:fixture:acceptance/fixtures/v19_council.json#execution_argv" ||
 		contract.Fixture != "planned:fixtures/v19_council" || contract.Receipt != "" ||
 		!reflect.DeepEqual(contract.Assertions, []string{
 			"auto required and operator-skip policies have isolated E2Es",
