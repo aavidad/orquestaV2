@@ -218,7 +218,7 @@ func restoreWorkItem(snapshot WorkItemSnapshot, schemaVersion uint32) (WorkItem,
 	if schemaVersion == GoalSnapshotSchemaVersion && snapshot.CouncilPolicy != "" && council.ValidatePolicy(snapshot.CouncilPolicy) != nil {
 		return WorkItem{}, domainError(ErrorSnapshotInvalid, "council_policy")
 	}
-	if schemaVersion == GoalSnapshotSchemaVersion && len(writeSet) > 0 && council.ValidatePolicy(snapshot.CouncilPolicy) != nil {
+	if schemaVersion == GoalSnapshotSchemaVersion && len(writeSet) > 0 && snapshot.CouncilPolicy == "" && !snapshot.State.Terminal() {
 		return WorkItem{}, domainError(ErrorSnapshotInvalid, "council_policy")
 	}
 	if schemaVersion != GoalSnapshotSchemaVersion && len(writeSet) > 0 && !snapshot.State.Terminal() {

@@ -152,4 +152,17 @@ func TestCouncilPolicyLegacyTerminalPreservedButLiveAndCurrentMissingFail(t *tes
 	if policy, found := restoredItem.CouncilPolicy(); found || policy != "" {
 		t.Fatalf("legacy terminal policy=%q/%v", policy, found)
 	}
+	expected := cloneGoalSnapshot(legacy)
+	expected.SchemaVersion = domain.GoalSnapshotSchemaVersion
+	reemitted := restored.Snapshot()
+	if !reflect.DeepEqual(reemitted, expected) {
+		t.Fatalf("legacy terminal preservation changed snapshot:\n got: %#v\nwant: %#v", reemitted, expected)
+	}
+	restarted, err := domain.RestoreGoal(reemitted)
+	if err != nil {
+		t.Fatalf("reemitted terminal policy restart: %v", err)
+	}
+	if got := restarted.Snapshot(); !reflect.DeepEqual(got, reemitted) {
+		t.Fatalf("terminal policy restart changed snapshot:\n got: %#v\nwant: %#v", got, reemitted)
+	}
 }
