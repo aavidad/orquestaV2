@@ -1,0 +1,96 @@
+rebuild_write_set_ok base=6f244a7594141c74dc28e095e0e5e32a05102826 files=132
+ok  	orquesta	8.476s
+ok  	orquesta/acceptance	29.237s
+ok  	orquesta/internal/adapters/agent/codex	1.167s
+ok  	orquesta/internal/adapters/agent/fake	0.003s
+ok  	orquesta/internal/adapters/artifact/filesystem	0.012s
+ok  	orquesta/internal/adapters/attestor/bubblewrap	0.010s
+ok  	orquesta/internal/adapters/auth/bearer	0.003s
+ok  	orquesta/internal/adapters/auth/localtoken	0.004s
+ok  	orquesta/internal/adapters/auth/oidc	1.526s
+ok  	orquesta/internal/adapters/config/effectivefile	0.073s
+ok  	orquesta/internal/adapters/config/jsonimport	0.046s
+ok  	orquesta/internal/adapters/config/toml	0.022s
+ok  	orquesta/internal/adapters/credentials/local	0.051s
+ok  	orquesta/internal/adapters/state/sqlite	97.853s
+ok  	orquesta/internal/adapters/system/local	0.003s
+ok  	orquesta/internal/adapters/workspace/gitlocal	6.255s
+ok  	orquesta/internal/application	0.161s
+ok  	orquesta/internal/bootstrap	15.730s
+ok  	orquesta/internal/config	0.366s
+?   	orquesta/internal/config/cmd/configgen	[no test files]
+ok  	orquesta/internal/council	0.003s
+ok  	orquesta/internal/credentials	0.003s
+ok  	orquesta/internal/goal	0.009s
+ok  	orquesta/internal/governance	0.002s
+ok  	orquesta/internal/i18n	0.003s
+ok  	orquesta/internal/identity	0.003s
+ok  	orquesta/internal/interfaces/mcp	0.191s
+ok  	orquesta/internal/ports	0.004s
+ok  	orquesta/internal/review	0.003s
+ok  	orquesta/cmd/orquesta	0.004s
+?   	orquesta/cmd/orquesta-cli	[no test files]
+ok  	orquesta/cmd/orquesta-guardian	5.239s
+ok  	orquesta/cmd/orquesta-server	71.307s
+ok  	orquesta/internal/application	1.028s
+ok  	orquesta/internal/adapters/state/sqlite	68.324s
+{"Time":"2026-07-23T07:35:45.984459404+02:00","Action":"start","Package":"orquesta/internal/bootstrap"}
+{"Time":"2026-07-23T07:35:45.987121931+02:00","Action":"run","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd"}
+{"Time":"2026-07-23T07:35:45.987129451+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd","Output":"=== RUN   TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd\n"}
+{"Time":"2026-07-23T07:35:56.478161655+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd","Output":"Running as unit: orquesta-v18-e2e-2b64b0de601e21f848be92a2.service\n"}
+{"Time":"2026-07-23T07:35:56.478179915+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd","Output":"=== RUN   TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd\n"}
+{"Time":"2026-07-23T07:35:56.478182005+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd","Output":"V18_SYSTEMD_INNER_E2E_PASSED:orquesta-v18-e2e-2b64b0de601e21f848be92a2.service\n"}
+{"Time":"2026-07-23T07:35:56.478183855+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd","Output":"--- PASS: TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd (10.46s)\n"}
+{"Time":"2026-07-23T07:35:56.478185925+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd","Output":"PASS\n"}
+{"Time":"2026-07-23T07:35:56.478189395+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd","Output":"          Finished with result: success\n"}
+{"Time":"2026-07-23T07:35:56.478191335+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd","Output":"Main processes terminated with: code=exited, status=0/SUCCESS\n"}
+{"Time":"2026-07-23T07:35:56.478193245+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd","Output":"               Service runtime: 10.463s\n"}
+{"Time":"2026-07-23T07:35:56.478194745+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd","Output":"             CPU time consumed: 17.314s\n"}
+{"Time":"2026-07-23T07:35:56.478196555+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd","Output":"                   Memory peak: 487.3M (swap: 0B)\n"}
+{"Time":"2026-07-23T07:35:56.520799563+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd","Output":"--- PASS: TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd (10.53s)\n"}
+{"Time":"2026-07-23T07:35:56.520807053+02:00","Action":"pass","Package":"orquesta/internal/bootstrap","Test":"TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd","Elapsed":10.53}
+{"Time":"2026-07-23T07:35:56.520816963+02:00","Action":"run","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilAutoSQLiteFilesystemRestartE2E"}
+{"Time":"2026-07-23T07:35:56.520820453+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilAutoSQLiteFilesystemRestartE2E","Output":"=== RUN   TestV19CouncilAutoSQLiteFilesystemRestartE2E\n"}
+{"Time":"2026-07-23T07:36:06.048063348+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilAutoSQLiteFilesystemRestartE2E","Output":"Running as unit: orquesta-v19-council-65182ac71ce738f2075b36ee.service; invocation ID: 1bc8fbcfeb8d4a8989e5b74599b340c1\n"}
+{"Time":"2026-07-23T07:36:06.048084508+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilAutoSQLiteFilesystemRestartE2E","Output":"=== RUN   TestV19CouncilAutoSQLiteFilesystemRestartE2E\n"}
+{"Time":"2026-07-23T07:36:06.048087988+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilAutoSQLiteFilesystemRestartE2E","Output":"V19_COUNCIL_REAL_E2E_PASSED:orquesta-v19-council-65182ac71ce738f2075b36ee.service\n"}
+{"Time":"2026-07-23T07:36:06.048090618+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilAutoSQLiteFilesystemRestartE2E","Output":"--- PASS: TestV19CouncilAutoSQLiteFilesystemRestartE2E (9.49s)\n"}
+{"Time":"2026-07-23T07:36:06.048093288+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilAutoSQLiteFilesystemRestartE2E","Output":"PASS\n"}
+{"Time":"2026-07-23T07:36:06.048098628+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilAutoSQLiteFilesystemRestartE2E","Output":"          Finished with result: success\n"}
+{"Time":"2026-07-23T07:36:06.048102718+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilAutoSQLiteFilesystemRestartE2E","Output":"Main processes terminated with: code=exited, status=0/SUCCESS\n"}
+{"Time":"2026-07-23T07:36:06.048104828+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilAutoSQLiteFilesystemRestartE2E","Output":"               Service runtime: 9.499s\n"}
+{"Time":"2026-07-23T07:36:06.048107108+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilAutoSQLiteFilesystemRestartE2E","Output":"             CPU time consumed: 16.186s\n"}
+{"Time":"2026-07-23T07:36:06.048109128+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilAutoSQLiteFilesystemRestartE2E","Output":"                   Memory peak: 470.6M (swap: 0B)\n"}
+{"Time":"2026-07-23T07:36:06.082481213+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilAutoSQLiteFilesystemRestartE2E","Output":"--- PASS: TestV19CouncilAutoSQLiteFilesystemRestartE2E (9.56s)\n"}
+{"Time":"2026-07-23T07:36:06.082487833+02:00","Action":"pass","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilAutoSQLiteFilesystemRestartE2E","Elapsed":9.56}
+{"Time":"2026-07-23T07:36:06.082491563+02:00","Action":"run","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E"}
+{"Time":"2026-07-23T07:36:06.082498353+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E","Output":"=== RUN   TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E\n"}
+{"Time":"2026-07-23T07:36:23.471535639+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E","Output":"Running as unit: orquesta-v19-council-31ff3be2aa2d973b9289b4ee.service; invocation ID: cd7ba90186b5481695daed743b707a07\n"}
+{"Time":"2026-07-23T07:36:23.471554989+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E","Output":"=== RUN   TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E\n"}
+{"Time":"2026-07-23T07:36:23.471558129+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E","Output":"V19_COUNCIL_REAL_E2E_PASSED:orquesta-v19-council-31ff3be2aa2d973b9289b4ee.service\n"}
+{"Time":"2026-07-23T07:36:23.471560449+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E","Output":"--- PASS: TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E (17.36s)\n"}
+{"Time":"2026-07-23T07:36:23.471562589+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E","Output":"PASS\n"}
+{"Time":"2026-07-23T07:36:23.471564439+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E","Output":"          Finished with result: success\n"}
+{"Time":"2026-07-23T07:36:23.471566629+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E","Output":"Main processes terminated with: code=exited, status=0/SUCCESS\n"}
+{"Time":"2026-07-23T07:36:23.471568089+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E","Output":"               Service runtime: 17.369s\n"}
+{"Time":"2026-07-23T07:36:23.471569669+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E","Output":"             CPU time consumed: 30.795s\n"}
+{"Time":"2026-07-23T07:36:23.471571279+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E","Output":"                   Memory peak: 483.8M (swap: 0B)\n"}
+{"Time":"2026-07-23T07:36:23.515024083+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E","Output":"--- PASS: TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E (17.43s)\n"}
+{"Time":"2026-07-23T07:36:23.515031183+02:00","Action":"pass","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E","Elapsed":17.43}
+{"Time":"2026-07-23T07:36:23.515036403+02:00","Action":"run","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilSkipHumanReplayAndIntegrationE2E"}
+{"Time":"2026-07-23T07:36:23.515038473+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilSkipHumanReplayAndIntegrationE2E","Output":"=== RUN   TestV19CouncilSkipHumanReplayAndIntegrationE2E\n"}
+{"Time":"2026-07-23T07:36:32.460468524+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilSkipHumanReplayAndIntegrationE2E","Output":"Running as unit: orquesta-v19-council-9bf055f59c63a5b6525bd4c3.service; invocation ID: 65d062a082e141de867b63a61604c18e\n"}
+{"Time":"2026-07-23T07:36:32.460488794+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilSkipHumanReplayAndIntegrationE2E","Output":"=== RUN   TestV19CouncilSkipHumanReplayAndIntegrationE2E\n"}
+{"Time":"2026-07-23T07:36:32.460491154+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilSkipHumanReplayAndIntegrationE2E","Output":"V19_COUNCIL_REAL_E2E_PASSED:orquesta-v19-council-9bf055f59c63a5b6525bd4c3.service\n"}
+{"Time":"2026-07-23T07:36:32.460494144+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilSkipHumanReplayAndIntegrationE2E","Output":"--- PASS: TestV19CouncilSkipHumanReplayAndIntegrationE2E (8.91s)\n"}
+{"Time":"2026-07-23T07:36:32.460495974+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilSkipHumanReplayAndIntegrationE2E","Output":"PASS\n"}
+{"Time":"2026-07-23T07:36:32.460497764+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilSkipHumanReplayAndIntegrationE2E","Output":"          Finished with result: success\n"}
+{"Time":"2026-07-23T07:36:32.460499864+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilSkipHumanReplayAndIntegrationE2E","Output":"Main processes terminated with: code=exited, status=0/SUCCESS\n"}
+{"Time":"2026-07-23T07:36:32.460501224+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilSkipHumanReplayAndIntegrationE2E","Output":"               Service runtime: 8.920s\n"}
+{"Time":"2026-07-23T07:36:32.460502584+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilSkipHumanReplayAndIntegrationE2E","Output":"             CPU time consumed: 15.562s\n"}
+{"Time":"2026-07-23T07:36:32.460503844+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilSkipHumanReplayAndIntegrationE2E","Output":"                   Memory peak: 422.9M (swap: 0B)\n"}
+{"Time":"2026-07-23T07:36:32.508386907+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilSkipHumanReplayAndIntegrationE2E","Output":"--- PASS: TestV19CouncilSkipHumanReplayAndIntegrationE2E (8.99s)\n"}
+{"Time":"2026-07-23T07:36:32.508402077+02:00","Action":"pass","Package":"orquesta/internal/bootstrap","Test":"TestV19CouncilSkipHumanReplayAndIntegrationE2E","Elapsed":8.99}
+{"Time":"2026-07-23T07:36:32.508409087+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Output":"PASS\n"}
+{"Time":"2026-07-23T07:36:32.509019568+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Output":"ok  \torquesta/internal/bootstrap\t46.524s\n"}
+{"Time":"2026-07-23T07:36:32.509028308+02:00","Action":"pass","Package":"orquesta/internal/bootstrap","Elapsed":46.525}

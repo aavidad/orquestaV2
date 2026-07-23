@@ -71,22 +71,24 @@ func TestProductRoadmapV19ScopeAndLifecycleContract(t *testing.T) {
 	}
 
 	contract := index.contracts["AC-V19-COUNCIL"]
-	wantAssertions := []string{
+	preEAssertions := []string{
 		"auto required and operator-skip policies have isolated E2Es",
 		"ballot identity derives from accredited launch",
 		"skip records principal reason time and spec hash",
 		"P implementation is present and unsealed; roadmap stays planned until S/E receipt",
 	}
 	if receiptExists {
+		postEAssertions := append([]string(nil), preEAssertions...)
+		postEAssertions[3] = "P/S/E binds exact product, sealed source, output and receipt before accreditation"
 		if contract.Status != "executable" || contract.TestRef != "acceptance/v19_council_test.go" ||
 			contract.Command != fixture.Command || contract.Fixture != "acceptance/fixtures/v19_council.json" ||
-			contract.Receipt != fixture.ReceiptPath || !reflect.DeepEqual(contract.Assertions, wantAssertions) {
+			contract.Receipt != fixture.ReceiptPath || !reflect.DeepEqual(contract.Assertions, postEAssertions) {
 			t.Fatalf("V19 roadmap contract is not exact post-E: %#v", contract)
 		}
 	} else if contract.Status != "planned" || contract.TestRef != "planned:acceptance/v19_council_test.go" ||
 		contract.Command != "planned:go test -mod=vendor -count=1 . ./acceptance -run '^TestAcceptanceV19Council$'" ||
 		contract.Fixture != "planned:fixtures/v19_council" || contract.Receipt != "" ||
-		!reflect.DeepEqual(contract.Assertions, wantAssertions) {
+		!reflect.DeepEqual(contract.Assertions, preEAssertions) {
 		t.Fatalf("V19 roadmap contract must remain non-executable before E: %#v", contract)
 	}
 }

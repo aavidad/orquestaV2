@@ -1,21 +1,23 @@
-# V19 Council — cierre P/S/E pendiente
+# V19 Council — cierre P/S/E
 
-Estado P2: `implemented_unsealed`. Producto y tests Council existen; todavía no
-hay acreditación V19.
+Estado: acreditado.
 
-- P: fixture schema 1 con envelope preparado para receipt V3, command/argv
-  congelados y candidate subjects declarados. Roadmap sigue `planned`; seis
-  capabilities siguen `declared` y sin `evidence_refs`.
-- S: crear únicamente `product/evidence/v19_council_seal.json` con árbol,
-  binario, configuración efectiva redactada, receipt V18, sujetos Council,
-  LOC y 53 ficheros candidatos sobre 350 líneas. No crear receipt ni output.
-- E: desde worktree `detached_clean`, ejecutar argv congelado y crear pareja
-  `v19_council.output.txt` + receipt V3. Receipt debe enlazar fixture, hash de
-  candidate y commit/tree sellado. Solo review externa `GO` promociona roadmap
-  y capabilities.
+- P `cccfb4a64bd2cfb788a2d604ccd8d008e946e8a3`: 131 sujetos exactos desde la
+  base, producto y tests; candidate P
+  `sha256:5525987a4b80e5ffa50fa4f82bcdd6299cfa9e99fd1c79dcbfe24d903aed67f2`.
+- S `f7a574e36528871ee07a5529a88be1f0a88511d7`: manifest
+  `sha256:22e62d8078fcc1617512cd6d74c0919ca927f6b9ff76eea3d2b412220efa49ba`
+  con árbol, binario, configuración efectiva, V18, sujetos y deuda medidos.
+- E: argv congelado ejecutado desde S `detached_clean`, código 0. Output
+  `sha256:17a6f5682960aa9fd55281ebe620d20817ea2aaf62dc707e45b8de83e804e334`;
+  receipt V3
+  `sha256:90f1ee3a78c75bdc85d528cb0dc29b8c1467013cdf0a66cc78a6ab7f76d15af8`,
+  candidate S `sha256:916f4cc33aa356c86fe0db50ee7a53c1ff6913e159b1fce9a56c4878b57d6292`.
+  Revisión externa independiente: `GO`, cuatro E2E con cuatro `run` y cuatro
+  `pass`, sin FAIL/SKIP/panic/race. Roadmap y seis capabilities promovidos.
 
-No se permite placeholder de manifest, output o receipt. El candidate P2 no
-incluye paths de S/E; antes de S se recalcula contra base y commit P2 sellado.
+Manifest, output y receipt son evidencia real, no placeholders. P permanece
+separado de S/E y el receipt liga el fixture/blob del commit S.
 
 Deuda: límites observados no acreditan simplicidad. Inventario P2: producto
 `3441` (dominio `387`, aplicación `1214`, SQLite/recovery `1835`, bootstrap de

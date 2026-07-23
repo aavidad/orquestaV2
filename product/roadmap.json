@@ -957,15 +957,16 @@
     {
       "id": "AC-V19-COUNCIL",
       "vertical": "council",
-      "status": "planned",
-      "test_ref": "planned:acceptance/v19_council_test.go",
-      "command": "planned:go test -mod=vendor -count=1 . ./acceptance -run '^TestAcceptanceV19Council$'",
-      "fixture": "planned:fixtures/v19_council",
+      "status": "executable",
+      "test_ref": "acceptance/v19_council_test.go",
+      "command": "sh -c './scripts/check_rebuild_write_set.sh 6f244a7594141c74dc28e095e0e5e32a05102826 && git diff --check 6f244a7594141c74dc28e095e0e5e32a05102826 HEAD -- && go test -mod=vendor -count=1 . ./acceptance ./internal/... ./cmd/... && timeout --kill-after=10s 240s go test -mod=vendor -race -count=1 -timeout=210s ./internal/application ./internal/adapters/state/sqlite -run \"^(TestCouncilRequiredOpenUsesRecordedAuthorizationTimeAndReplays|TestCouncilSkipUsesRecordedAuthorizationTimeAndReplays|TestSQLiteV19CouncilRoundFactsDecisionReplayRestartAndConcurrency|TestSQLiteDirectorCouncilNegativeReplanRestart)$\" && e2e_events=$(CGO_ENABLED=0 go test -mod=vendor -tags=v17_real_e2e,v18_real_e2e,v19_real_e2e -json -count=1 -timeout=240s ./internal/bootstrap -run \"^(TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd|TestV19CouncilAutoSQLiteFilesystemRestartE2E|TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E|TestV19CouncilSkipHumanReplayAndIntegrationE2E)$\" 2>&1); e2e_status=$?; printf '%s\\n' \"$e2e_events\"; [ \"$e2e_status\" -eq 0 ] && for test_name in TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd TestV19CouncilAutoSQLiteFilesystemRestartE2E TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E TestV19CouncilSkipHumanReplayAndIntegrationE2E; do printf '%s\\n' \"$e2e_events\" | grep -F '\"Action\":\"run\"' | grep -F '\"Package\":\"orquesta/internal/bootstrap\"' | grep -F \"\\\"Test\\\":\\\"$test_name\\\"\" >/dev/null && printf '%s\\n' \"$e2e_events\" | grep -F '\"Action\":\"pass\"' | grep -F '\"Package\":\"orquesta/internal/bootstrap\"' | grep -F \"\\\"Test\\\":\\\"$test_name\\\"\" >/dev/null || exit 1; done && GOFLAGS=-mod=vendor go vet . ./acceptance ./internal/... ./cmd/...'",
+      "fixture": "acceptance/fixtures/v19_council.json",
+      "receipt": "product/evidence/v19_council.json",
       "assertions": [
         "auto required and operator-skip policies have isolated E2Es",
         "ballot identity derives from accredited launch",
         "skip records principal reason time and spec hash",
-        "P implementation is present and unsealed; roadmap stays planned until S/E receipt"
+        "P/S/E binds exact product, sealed source, output and receipt before accreditation"
       ]
     },
     {
@@ -1469,8 +1470,12 @@
       "acceptance_contracts": [
         "AC-V19-COUNCIL"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v19_council_test.go",
+        "acceptance/fixtures/v19_council.json",
+        "product/evidence/v19_council.json"
+      ],
       "supersedes": []
     },
     {
@@ -1515,8 +1520,12 @@
       "acceptance_contracts": [
         "AC-V19-COUNCIL"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v19_council_test.go",
+        "acceptance/fixtures/v19_council.json",
+        "product/evidence/v19_council.json"
+      ],
       "supersedes": []
     },
     {
@@ -1536,8 +1545,12 @@
       "acceptance_contracts": [
         "AC-V19-COUNCIL"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v19_council_test.go",
+        "acceptance/fixtures/v19_council.json",
+        "product/evidence/v19_council.json"
+      ],
       "supersedes": []
     },
     {
@@ -2441,8 +2454,12 @@
       "acceptance_contracts": [
         "AC-V19-COUNCIL"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v19_council_test.go",
+        "acceptance/fixtures/v19_council.json",
+        "product/evidence/v19_council.json"
+      ],
       "supersedes": []
     },
     {
@@ -2484,8 +2501,12 @@
       "acceptance_contracts": [
         "AC-V19-COUNCIL"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v19_council_test.go",
+        "acceptance/fixtures/v19_council.json",
+        "product/evidence/v19_council.json"
+      ],
       "supersedes": []
     },
     {
@@ -3651,8 +3672,12 @@
       "acceptance_contracts": [
         "AC-V19-COUNCIL"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v19_council_test.go",
+        "acceptance/fixtures/v19_council.json",
+        "product/evidence/v19_council.json"
+      ],
       "supersedes": []
     },
     {

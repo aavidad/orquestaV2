@@ -39,12 +39,33 @@ func TestV19PSELifecycleIsExact(t *testing.T) {
 			fixture.SealStatus != "s_product_delta_sealed_pending_execution" {
 			t.Fatalf("V19 S declaration is not exact: %+v", fixture)
 		}
-		v19AssertEvidencePresence(t, repositoryRoot, true, false)
+		hasExecution := v19ExecutionEvidencePresent(t, repositoryRoot)
+		v19AssertEvidencePresence(t, repositoryRoot, true, hasExecution)
 		v19AssertSealManifest(t, repositoryRoot, fixture)
-		v19AssertRoadmapLifecycle(t, repositoryRoot, "planned", "declared")
+		if hasExecution {
+			v19AssertRoadmapLifecycle(t, repositoryRoot, "executable", "accredited")
+		} else {
+			v19AssertRoadmapLifecycle(t, repositoryRoot, "planned", "declared")
+		}
 	default:
 		t.Fatalf("V19 fixture implementation_status=%q; only P/S declarations are valid", fixture.ImplementationStatus)
 	}
+}
+
+func v19ExecutionEvidencePresent(t *testing.T, repositoryRoot string) bool {
+	t.Helper()
+	present := make([]bool, 0, 2)
+	for _, path := range []string{v19ReceiptPath, v19OutputPath} {
+		_, err := os.Lstat(filepath.Join(repositoryRoot, filepath.FromSlash(path)))
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			t.Fatal(err)
+		}
+		present = append(present, err == nil)
+	}
+	if present[0] != present[1] {
+		t.Fatal("V19 execution evidence must contain both receipt and output or neither")
+	}
+	return present[0]
 }
 
 // TestV19EReceiptLifecycle is deliberately independent of fixture mutation:

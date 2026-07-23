@@ -1,0 +1,28 @@
+{
+  "schema_version": 3,
+  "evidence_kind": "reproducibility_descriptor",
+  "contract": "AC-V19-COUNCIL",
+  "result": "PASS",
+  "validation_command": "sh -c './scripts/check_rebuild_write_set.sh 6f244a7594141c74dc28e095e0e5e32a05102826 && git diff --check 6f244a7594141c74dc28e095e0e5e32a05102826 HEAD -- && go test -mod=vendor -count=1 . ./acceptance ./internal/... ./cmd/... && timeout --kill-after=10s 240s go test -mod=vendor -race -count=1 -timeout=210s ./internal/application ./internal/adapters/state/sqlite -run \"^(TestCouncilRequiredOpenUsesRecordedAuthorizationTimeAndReplays|TestCouncilSkipUsesRecordedAuthorizationTimeAndReplays|TestSQLiteV19CouncilRoundFactsDecisionReplayRestartAndConcurrency|TestSQLiteDirectorCouncilNegativeReplanRestart)$\" && e2e_events=$(CGO_ENABLED=0 go test -mod=vendor -tags=v17_real_e2e,v18_real_e2e,v19_real_e2e -json -count=1 -timeout=240s ./internal/bootstrap -run \"^(TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd|TestV19CouncilAutoSQLiteFilesystemRestartE2E|TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E|TestV19CouncilSkipHumanReplayAndIntegrationE2E)$\" 2>&1); e2e_status=$?; printf '%s\\n' \"$e2e_events\"; [ \"$e2e_status\" -eq 0 ] && for test_name in TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd TestV19CouncilAutoSQLiteFilesystemRestartE2E TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E TestV19CouncilSkipHumanReplayAndIntegrationE2E; do printf '%s\\n' \"$e2e_events\" | grep -F '\"Action\":\"run\"' | grep -F '\"Package\":\"orquesta/internal/bootstrap\"' | grep -F \"\\\"Test\\\":\\\"$test_name\\\"\" >/dev/null && printf '%s\\n' \"$e2e_events\" | grep -F '\"Action\":\"pass\"' | grep -F '\"Package\":\"orquesta/internal/bootstrap\"' | grep -F \"\\\"Test\\\":\\\"$test_name\\\"\" >/dev/null || exit 1; done && GOFLAGS=-mod=vendor go vet . ./acceptance ./internal/... ./cmd/...'",
+  "executed_at": "2026-07-23T07:38:25+02:00",
+  "execution": {
+    "argv": ["sh","-c","./scripts/check_rebuild_write_set.sh 6f244a7594141c74dc28e095e0e5e32a05102826 && git diff --check 6f244a7594141c74dc28e095e0e5e32a05102826 HEAD -- && go test -mod=vendor -count=1 . ./acceptance ./internal/... ./cmd/... && timeout --kill-after=10s 240s go test -mod=vendor -race -count=1 -timeout=210s ./internal/application ./internal/adapters/state/sqlite -run \"^(TestCouncilRequiredOpenUsesRecordedAuthorizationTimeAndReplays|TestCouncilSkipUsesRecordedAuthorizationTimeAndReplays|TestSQLiteV19CouncilRoundFactsDecisionReplayRestartAndConcurrency|TestSQLiteDirectorCouncilNegativeReplanRestart)$\" && e2e_events=$(CGO_ENABLED=0 go test -mod=vendor -tags=v17_real_e2e,v18_real_e2e,v19_real_e2e -json -count=1 -timeout=240s ./internal/bootstrap -run \"^(TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd|TestV19CouncilAutoSQLiteFilesystemRestartE2E|TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E|TestV19CouncilSkipHumanReplayAndIntegrationE2E)$\" 2>&1); e2e_status=$?; printf '%s\\n' \"$e2e_events\"; [ \"$e2e_status\" -eq 0 ] && for test_name in TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd TestV19CouncilAutoSQLiteFilesystemRestartE2E TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E TestV19CouncilSkipHumanReplayAndIntegrationE2E; do printf '%s\\n' \"$e2e_events\" | grep -F '\"Action\":\"run\"' | grep -F '\"Package\":\"orquesta/internal/bootstrap\"' | grep -F \"\\\"Test\\\":\\\"$test_name\\\"\" >/dev/null && printf '%s\\n' \"$e2e_events\" | grep -F '\"Action\":\"pass\"' | grep -F '\"Package\":\"orquesta/internal/bootstrap\"' | grep -F \"\\\"Test\\\":\\\"$test_name\\\"\" >/dev/null || exit 1; done && GOFLAGS=-mod=vendor go vet . ./acceptance ./internal/... ./cmd/..."],
+    "source_git_commit_oid": "f7a574e36528871ee07a5529a88be1f0a88511d7",
+    "source_worktree_state": "detached_clean",
+    "source_status_porcelain_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "exit_code": 0,
+    "combined_output_path": "product/evidence/v19_council.output.txt",
+    "combined_output_sha256": "sha256:17a6f5682960aa9fd55281ebe620d20817ea2aaf62dc707e45b8de83e804e334",
+    "go_version": "go version go1.25.11 linux/amd64"
+  },
+  "fixture_sha256": "sha256:1f0f8f6945e2d781521e0cfa3f137c6ad567b5e58e10d9277649337e3e5f6a9f",
+  "candidate_digest_algorithm": "sha256:length-framed-git-blob-set:v1",
+  "candidate_sha256": "sha256:916f4cc33aa356c86fe0db50ee7a53c1ff6913e159b1fce9a56c4878b57d6292",
+  "sealed_source": {
+    "identity_kind": "sealed_git_subject_set",
+    "git_commit_oid": "f7a574e36528871ee07a5529a88be1f0a88511d7",
+    "git_tree_oid": "12a3dc4c39c708380953bded32c4a2c9947621df",
+    "fixture_blob_oid": "6f5622c1f492c4d1bc83b3088f6b73d94a79d705",
+    "sha256": "sha256:916f4cc33aa356c86fe0db50ee7a53c1ff6913e159b1fce9a56c4878b57d6292"
+  }
+}

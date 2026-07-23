@@ -1,11 +1,13 @@
-# V19 — Consejo: análisis cerrado y contrato P
+# V19 — Consejo: análisis y P/S/E cerrados
 
 Fecha: 2026-07-23. Base integrada: V18 acreditada en `6f244a7594`.
 
-Estado: V18 verificada mediante receipt V3 `PASS`; producto y tests V19 están
-integrados en P (`implemented_unsealed`). No hay sello ni receipt V19, y las
-seis capabilities siguen `declared` sin `evidence_refs`. No existe bloqueo de
-dependencia ni se acredita ninguna capability V19.
+Estado: V19 acreditada. P=`cccfb4a64bd2cfb788a2d604ccd8d008e946e8a3` y
+S=`f7a574e36528871ee07a5529a88be1f0a88511d7`. El manifest S liga árbol,
+binario, configuración, V18, tres sujetos Council y presupuesto. El argv exacto
+ejecutado desde S `detached_clean` cerró suite, race, V18 real, los tres E2E
+Council y vet. Receipt V3 `PASS` y revisión externa `GO` promocionan únicamente
+AC-V19 y sus seis capabilities.
 
 ## Decisión estructural
 

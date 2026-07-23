@@ -65,7 +65,9 @@
     "seal_requirement": "S records the measured layers, the 53 candidate files over 350 and the exact candidate digest",
     "post_v22_debt": "separate SQLite claim/read/validate/write and application adapters over 350; restore a compact per-module budget after V22"
   },
-  "lifecycle_gate": "V19_IMPLEMENTED_UNSEALED",
-  "implementation_status": "implemented_unsealed",
-  "workset_state": "product_implemented_unsealed_unaccredited"
+  "lifecycle_gate": "V19_ACCREDITED",
+  "implementation_status": "accredited",
+  "workset_state": "p_s_e_closed",
+  "sealed_commits": {"p": "cccfb4a64bd2cfb788a2d604ccd8d008e946e8a3", "s": "f7a574e36528871ee07a5529a88be1f0a88511d7"},
+  "evidence": {"manifest_sha256": "sha256:22e62d8078fcc1617512cd6d74c0919ca927f6b9ff76eea3d2b412220efa49ba", "receipt_sha256": "sha256:90f1ee3a78c75bdc85d528cb0dc29b8c1467013cdf0a66cc78a6ab7f76d15af8", "output_sha256": "sha256:17a6f5682960aa9fd55281ebe620d20817ea2aaf62dc707e45b8de83e804e334", "external_review": "GO"}
 }
