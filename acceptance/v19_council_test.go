@@ -204,7 +204,8 @@ func assertV19Policies(t *testing.T, fixture v19Fixture) {
 	if source.Input != "WorkItemSpec.CouncilPolicy" || source.DomainType != "council.Policy" ||
 		source.DurablePath != "WorkItem_and_GoalSnapshot_before_author_launch" ||
 		source.WriterRule != "required_for_every_work_item_with_non_empty_write_set" ||
-		source.ReadOnlyRule != "empty_policy_allowed_only_without_change_or_council_subject" || source.ReworkRule == "" {
+		source.ReadOnlyRule != "empty_policy_allowed_only_without_change_or_council_subject" ||
+		source.ReworkRule != "new_work_item_declares_policy_explicitly_and_never_infers_from_mutable_config_or_text" {
 		t.Fatalf("council policy source is not durable and pre-launch: %+v", source)
 	}
 }
@@ -224,7 +225,8 @@ func assertV19CouncilShape(t *testing.T, fixture v19Fixture) {
 	role := fixture.RoleContract
 	if role.RequiredLaunches != 3 || role.RequiredBallots != 3 || !role.DistinctFromEachOther ||
 		!role.DistinctFromV18AuthorPrimaryAdversarial || !role.FactsRequireLaunchReceipt ||
-		!reflect.DeepEqual(role.ArtifactSchemas, []string{"orquesta.council.contribution.v1"}) || role.ArtifactRule == "" {
+		!reflect.DeepEqual(role.ArtifactSchemas, []string{"orquesta.council.contribution.v1"}) ||
+		role.ArtifactRule != "one strict envelope per role contains role body ballot and typed evidence; proposer derives proposal plus ballot critic derives critique plus ballot arbiter derives ballot; every derived fact references the same CAS artifact" {
 		t.Fatalf("invalid council cardinality/independence: %+v", role)
 	}
 	decision := fixture.DecisionContract
@@ -234,7 +236,9 @@ func assertV19CouncilShape(t *testing.T, fixture v19Fixture) {
 		decision.NoConsensus != "every_other_complete_three_ballot_result" ||
 		decision.BlockedSecurity != "any_typed_security_veto_with_artifact_and_evidence_ref" ||
 		decision.SecurityVetoDecisionTiming != "after_all_three_ballots_without_retiring_pending_roles" ||
-		decision.Dissent == "" || decision.Integration == "" || decision.ReplanCausality == "" {
+		decision.Dissent != "accepted derives dissent for reject or abstain; rejected derives dissent for accept or abstain; no_consensus derives dissent for all three ballots; blocked_security derives dissent for every non_veto ballot" ||
+		decision.Integration != "only explicit integration command may proceed and must revalidate V18 gate plus council decision digest" ||
+		decision.ReplanCausality != "every Director replan proposal and successor binds source CouncilDecisionRef CouncilDecisionDigest and CouncilSubjectDigest" {
 		t.Fatalf("incomplete deterministic decision contract: %+v", decision)
 	}
 	assertV19Strings(t, "decision outcomes", decision.RequiredTestOutcomes,
@@ -262,7 +266,9 @@ func assertV19SafetyAndPersistence(t *testing.T, fixture v19Fixture) {
 		!reflect.DeepEqual(fixture.PersistenceContract.Facts, []string{"round", "proposal", "critique", "ballot", "dissent", "security_veto", "decision", "skip"}) ||
 		fixture.PersistenceContract.Replay == "" || fixture.PersistenceContract.Recovery == "" ||
 		fixture.MigrationContract.Version != 14 || fixture.MigrationContract.SourceVersion != 13 ||
-		fixture.MigrationContract.LiveV18CandidateWithoutDurablePolicy != "fail_closed" || fixture.MigrationContract.Backfill != "forbidden" {
+		fixture.MigrationContract.LiveV18CandidateWithoutDurablePolicy != "fail_closed" ||
+		fixture.MigrationContract.CompletedV18Records != "preserve_without_retroactive_council" ||
+		fixture.MigrationContract.Backfill != "forbidden" {
 		t.Fatalf("invalid persistence/migration contract: %+v %+v", fixture.PersistenceContract, fixture.MigrationContract)
 	}
 	if fixture.Budgets.ProductLOCMax != 3400 || fixture.Budgets.FileLOCMax != 350 ||
