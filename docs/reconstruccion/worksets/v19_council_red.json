@@ -56,13 +56,13 @@
   "forbidden_private_authorities": ["CouncilStore", "CouncilQueue", "CouncilScheduler", "CouncilLifecycle", "CouncilEngine", "CouncilDaemon", "CouncilWriter"],
   "budget_contract": {
     "stage": "P2_honest_inventory_not_accreditation",
-    "measured_product_loc": 3419,
-    "measured_layers": {"domain": 387, "application": 1214, "sqlite_recovery": 1818, "bootstrap_production": 0, "bootstrap_test_support": 545},
-    "ratchet_ceilings": {"domain_min": 400, "sqlite_recovery_min": 1850, "file_max": 1500, "bootstrap_production_max": 400, "bootstrap_test_metric_separate": true},
-    "files_over_350_count": 43,
+    "measured_product_loc": 3441,
+    "measured_layers": {"domain": 387, "application": 1214, "sqlite_recovery": 1835, "bootstrap_production": 0, "transport_adapter_production": 5, "test_support_total": 3731, "bootstrap_test_support": 668, "transport_adapter_test_support": 43},
+    "ratchet_ceilings": {"product_max": 3650, "domain_max": 400, "application_max": 1300, "sqlite_recovery_max": 1850, "file_max": 1500, "file_max_scope": "production", "bootstrap_production_max": 400, "transport_adapter_production_max": 50, "test_support_metric_separate": true},
+    "files_over_350_count": 53,
     "migration_exception": "forbidden",
     "not_accreditation": "P_cannot_declare_simplicity_green_from_this_ceiling",
-    "seal_requirement": "S records the measured layers, the 43 files over 350 and the exact candidate digest",
+    "seal_requirement": "S records the measured layers, the 53 candidate files over 350 and the exact candidate digest",
     "post_v22_debt": "separate SQLite claim/read/validate/write and application adapters over 350; restore a compact per-module budget after V22"
   },
   "lifecycle_gate": "V19_IMPLEMENTED_UNSEALED",

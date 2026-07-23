@@ -70,6 +70,7 @@ type WorkItemView struct {
 	ChildRefs       []string           `json:"child_refs"`
 	DependencyRefs  []string           `json:"dependency_refs"`
 	WriteSet        []string           `json:"write_set"`
+	CouncilPolicy   string             `json:"council_policy,omitempty"`
 	RequiredTests   []RequiredTestView `json:"required_tests"`
 	SkillRefs       []string           `json:"skill_refs"`
 	ToolRefs        []string           `json:"tool_refs"`
@@ -212,6 +213,7 @@ func workItemViews(items []goal.WorkItemSnapshot) []WorkItemView {
 			WorkItemRef: item.Ref, Objective: item.Objective, PhaseKey: item.PhaseKey, RoleKey: item.RoleKey,
 			ParentRef: item.ParentRef, ChildRefs: nonNilStrings(childrenByParent[item.Ref]),
 			DependencyRefs: nonNilStrings(item.DependencyRefs), WriteSet: nonNilStrings(item.WriteSet),
+			CouncilPolicy: string(item.CouncilPolicy),
 			RequiredTests: requiredTestViews(item.RequiredTests), SkillRefs: nonNilStrings(item.SkillRefs),
 			ToolRefs: nonNilStrings(item.ToolRefs), CapabilityRefs: nonNilStrings(item.CapabilityRefs),
 			OutputContract: string(item.OutputContract), SkipReason: string(item.SkipReason), State: string(item.State),

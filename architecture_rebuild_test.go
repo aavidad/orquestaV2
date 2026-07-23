@@ -96,6 +96,17 @@ func TestRebuildArchitecture(t *testing.T) {
 		}
 	})
 
+	t.Run("council_is_shared_inward_domain", func(t *testing.T) {
+		for _, file := range rebuildArchitectureFilesUnder(files, "internal/council") {
+			for _, imported := range file.imports {
+				if reason := rebuildArchitectureOnlyInternalPackages(imported.path,
+					"orquesta/internal/council", "orquesta/internal/governance"); reason != "" {
+					rebuildArchitectureImportError(t, file, imported, "internal/council "+reason)
+				}
+			}
+		}
+	})
+
 	t.Run("review_is_pure_inward_domain", func(t *testing.T) {
 		for _, file := range rebuildArchitectureFilesUnder(files, "internal/review") {
 			for _, imported := range file.imports {
@@ -146,6 +157,7 @@ func TestRebuildArchitecture(t *testing.T) {
 		for _, file := range rebuildArchitectureFilesUnder(files, "internal/adapters") {
 			allowed := []string{
 				"orquesta/internal/application",
+				"orquesta/internal/council",
 				"orquesta/internal/credentials",
 				"orquesta/internal/goal",
 				"orquesta/internal/governance",
@@ -223,6 +235,25 @@ func TestRebuildArchitecture(t *testing.T) {
 
 	t.Run("configuration_guard_rejects_nested_and_last_argument_mutants", func(t *testing.T) {
 		rebuildArchitectureAssertConfigGuardMutants(t)
+	})
+
+	t.Run("council_domain_allowlist_keeps_concrete_boundaries_forbidden", func(t *testing.T) {
+		if reason := rebuildArchitectureGoalImportReason("orquesta/internal/council"); reason != "" {
+			t.Errorf("Goal must accept pure council domain: %s", reason)
+		}
+		if reason := rebuildArchitectureApplicationImportReason("orquesta/internal/council"); reason != "" {
+			t.Errorf("application must accept pure council domain: %s", reason)
+		}
+		for name, reason := range map[string]string{
+			"goal_adapter":        rebuildArchitectureGoalImportReason("orquesta/internal/adapters/state/sqlite"),
+			"goal_http":           rebuildArchitectureGoalImportReason("net/http"),
+			"application_adapter": rebuildArchitectureApplicationImportReason("orquesta/internal/adapters/state/sqlite"),
+			"application_http":    rebuildArchitectureApplicationImportReason("net/http"),
+		} {
+			if reason == "" {
+				t.Errorf("%s concrete dependency escaped architecture guard", name)
+			}
+		}
 	})
 
 	t.Run("command_is_thin_bootstrap", func(t *testing.T) {
@@ -580,8 +611,9 @@ func rebuildArchitectureGoalImportReason(importPath string) string {
 	}
 	if strings.HasPrefix(importPath, "orquesta/internal/") &&
 		importPath != "orquesta/internal/goal" &&
+		importPath != "orquesta/internal/council" &&
 		importPath != "orquesta/internal/governance" {
-		return "internal/goal may depend only on internal/governance"
+		return "internal/goal may depend only on internal/council and internal/governance"
 	}
 	switch {
 	case importPath == "database/sql":
@@ -607,10 +639,11 @@ func rebuildArchitectureApplicationImportReason(importPath string) string {
 	}
 	if strings.HasPrefix(importPath, "orquesta/internal/") &&
 		importPath != "orquesta/internal/goal" &&
+		importPath != "orquesta/internal/council" &&
 		importPath != "orquesta/internal/governance" &&
 		importPath != "orquesta/internal/identity" &&
 		importPath != "orquesta/internal/ports" {
-		return "internal/application may depend only on internal/goal, internal/governance, internal/identity and internal/ports"
+		return "internal/application may depend only on internal/council, internal/goal, internal/governance, internal/identity and internal/ports"
 	}
 	switch {
 	case importPath == "net/http" || strings.HasPrefix(importPath, "net/http/"):

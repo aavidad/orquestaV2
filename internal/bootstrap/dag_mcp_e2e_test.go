@@ -21,6 +21,7 @@ import (
 	"orquesta/internal/adapters/state/sqlite"
 	"orquesta/internal/application"
 	"orquesta/internal/config"
+	"orquesta/internal/council"
 	"orquesta/internal/goal"
 	"orquesta/internal/i18n"
 	"orquesta/internal/identity"
@@ -134,9 +135,9 @@ func TestApplicationSQLiteCreatesMultiItemMaximalCohort(t *testing.T) {
 				Ref: "phase-instance:work", Key: "phase:work", TemplateRef: "phase-template:program",
 			}},
 			WorkItems: []application.WorkItemSpec{
-				{Key: "a", Objective: "writer a", Phase: "phase:work", Role: "role:worker", WriteSet: []string{"internal/shared"}, RequiredTests: dagRequiredTests("a"), OutputContract: goal.OutputContractEvidenceBundle},
-				{Key: "b", Objective: "writer b", Phase: "phase:work", Role: "role:worker", WriteSet: []string{"internal/shared/file.go"}, RequiredTests: dagRequiredTests("b"), OutputContract: goal.OutputContractEvidenceBundle},
-				{Key: "c", Objective: "writer c", Phase: "phase:work", Role: "role:worker", WriteSet: []string{"docs/free.md"}, RequiredTests: dagRequiredTests("c"), OutputContract: goal.OutputContractEvidenceBundle},
+				{Key: "a", Objective: "writer a", Phase: "phase:work", Role: "role:worker", WriteSet: []string{"internal/shared"}, CouncilPolicy: council.PolicySkipByOperator, RequiredTests: dagRequiredTests("a"), OutputContract: goal.OutputContractEvidenceBundle},
+				{Key: "b", Objective: "writer b", Phase: "phase:work", Role: "role:worker", WriteSet: []string{"internal/shared/file.go"}, CouncilPolicy: council.PolicySkipByOperator, RequiredTests: dagRequiredTests("b"), OutputContract: goal.OutputContractEvidenceBundle},
+				{Key: "c", Objective: "writer c", Phase: "phase:work", Role: "role:worker", WriteSet: []string{"docs/free.md"}, CouncilPolicy: council.PolicySkipByOperator, RequiredTests: dagRequiredTests("c"), OutputContract: goal.OutputContractEvidenceBundle},
 			},
 		},
 	})
@@ -346,6 +347,7 @@ func planItem(key, objective, phase string, dependencies, writeSet []string) map
 		"output_contract": string(goal.OutputContractEvidenceBundle),
 	}
 	if len(writeSet) != 0 {
+		item["council_policy"] = string(council.PolicySkipByOperator)
 		item["required_tests"] = []any{map[string]any{
 			"ref": "required-test:dag-" + key, "tool_ref": "tool:go",
 			"arguments": []string{"test", "./..."}, "working_directory": ".",
@@ -621,6 +623,9 @@ func (harness *dagHarness) completeReviewsAndAdmit(ctx context.Context, step int
 				waiting = true
 				continue
 			}
+			if err = harness.authorizeCouncilSkip(ctx, record, pending.ChangeSet); err != nil {
+				return fmt.Errorf("skip Council for %s: %w", pending.ChangeSet.Ref, err)
+			}
 			if _, err = harness.orchestrator.IntegrateChange(ctx, harness.access, application.IntegrateChangeRequest{
 				RequestRef: "request:dag-integrate:" + pending.ChangeSet.Ref.String(),
 				GoalRef:    pending.ChangeSet.GoalRef, ChangeRef: pending.ChangeSet.Ref,
@@ -638,6 +643,31 @@ func (harness *dagHarness) completeReviewsAndAdmit(ctx context.Context, step int
 		}
 	}
 	return errors.New("dag_harness.review_round_did_not_settle")
+}
+
+func (harness *dagHarness) authorizeCouncilSkip(
+	ctx context.Context,
+	record application.GoalRecord,
+	change application.ChangeSet,
+) error {
+	for _, existing := range record.CouncilSkips {
+		if existing.Subject.ChangeSetRef == change.Ref.String() {
+			return nil
+		}
+	}
+	item, found := record.Goal.WorkItem(change.WorkItemRef)
+	if !found {
+		return errors.New("dag_harness.skip_work_item_not_found")
+	}
+	_, err := harness.orchestrator.SkipCouncil(ctx, harness.access, application.SkipCouncilRequest{
+		RequestRef:           "request:dag-council-skip:" + change.Ref.String(),
+		GoalRef:              change.GoalRef,
+		ChangeRef:            change.Ref,
+		ExpectedGoalRevision: record.Goal.Revision(),
+		ExpectedItemRevision: item.Revision(),
+		Reason:               "human test operator approved legacy DAG integration",
+	})
+	return err
 }
 
 func dagHasRequiredTestPass(record application.GoalRecord, changeRef ports.ChangeSetRef) bool {

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"orquesta/internal/application"
+	"orquesta/internal/council"
 	"orquesta/internal/goal"
 	"orquesta/internal/identity"
 	"orquesta/internal/ports"
@@ -26,7 +27,7 @@ func v16TestCleanLifecycle(t *testing.T, fixture v16E2EFixture) {
 	harness := newV16Harness(t, fixture, map[string]v16Write{
 		"clean-change": v16FixtureWrites(change.Writes),
 	})
-	goalRef := harness.submit(t, harness.access, "request:v16-real-clean", "clean-change", change.WriteSet)
+	goalRef := v16SubmitSkipWriter(t, harness, harness.access, "request:v16-real-clean", "clean-change", change.WriteSet)
 	harness.process(t, application.ActionPrepareWorkspace, application.ActionLaunchAgent,
 		application.ActionObserveAgent, application.ActionCommitChange, application.ActionAttestTest)
 	record := harness.get(t, harness.access, goalRef)
@@ -39,6 +40,8 @@ func v16TestCleanLifecycle(t *testing.T, fixture v16E2EFixture) {
 			len(record.Artifacts), len(record.Attestations), len(record.IntegrationReceipts), record.Executions[0].State)
 	}
 	harness.driveReviews(t, goalRef)
+	record = harness.get(t, harness.access, goalRef)
+	v16AuthorizeCouncilSkip(t, harness, record)
 	record = harness.get(t, harness.access, goalRef)
 	before := v16Git(t, harness.git, harness.seed, "rev-parse", fixture.GitFixture.TargetRef)
 	pending := harness.pending(t, harness.access)
@@ -72,14 +75,16 @@ func v16TestConflictAndStale(t *testing.T, fixture v16E2EFixture) {
 		"conflict-change": v16FixtureWrites(conflict.Writes),
 		"stale-change":    {"src/stale.txt": "stale candidate\n"},
 	})
-	conflictGoal := harness.submit(t, harness.access, "request:v16-conflict", "conflict-change", conflict.WriteSet)
+	conflictGoal := v16SubmitSkipWriter(t, harness, harness.access, "request:v16-conflict", "conflict-change", conflict.WriteSet)
 	harness.process(t, application.ActionPrepareWorkspace, application.ActionLaunchAgent,
 		application.ActionObserveAgent, application.ActionCommitChange, application.ActionAttestTest)
 	harness.driveReviews(t, conflictGoal)
-	staleGoal := harness.submit(t, harness.access, "request:v16-stale", "stale-change", []string{"src/stale.txt"})
+	v16AuthorizeCouncilSkip(t, harness, harness.get(t, harness.access, conflictGoal))
+	staleGoal := v16SubmitSkipWriter(t, harness, harness.access, "request:v16-stale", "stale-change", []string{"src/stale.txt"})
 	harness.process(t, application.ActionPrepareWorkspace, application.ActionLaunchAgent,
 		application.ActionObserveAgent, application.ActionCommitChange, application.ActionAttestTest)
 	harness.driveReviews(t, staleGoal)
+	v16AuthorizeCouncilSkip(t, harness, harness.get(t, harness.access, staleGoal))
 	conflictRecord := harness.get(t, harness.access, conflictGoal)
 	staleRecord := harness.get(t, harness.access, staleGoal)
 	base := conflictRecord.WorkspaceBindings[0].BaseOID
@@ -149,11 +154,11 @@ func TestPendingChangesAreRBACScopedAndSurviveRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ownerGoal := harness.submit(t, harness.access, "request:v16-owner-pending", "owner-pending", []string{"src/owner.txt"})
+	ownerGoal := v16SubmitSkipWriter(t, harness, harness.access, "request:v16-owner-pending", "owner-pending", []string{"src/owner.txt"})
 	harness.process(t, application.ActionPrepareWorkspace, application.ActionLaunchAgent,
 		application.ActionObserveAgent, application.ActionCommitChange, application.ActionAttestTest)
 	harness.driveReviews(t, ownerGoal)
-	bobGoal := harness.submit(t, bobAlpha, "request:v16-bob-pending", "bob-pending", []string{"src/bob.txt"})
+	bobGoal := v16SubmitSkipWriter(t, harness, bobAlpha, "request:v16-bob-pending", "bob-pending", []string{"src/bob.txt"})
 	harness.process(t, application.ActionPrepareWorkspace, application.ActionLaunchAgent,
 		application.ActionObserveAgent, application.ActionCommitChange, application.ActionAttestTest)
 	harness.driveReviews(t, bobGoal)
@@ -208,4 +213,68 @@ func v16AssertPendingRBACAfterRestart(
 	}
 	v16AssertFactsPathFree(t, harness, ownerRecord)
 	v16AssertFactsPathFree(t, harness, bobRecord)
+}
+
+func v16SubmitSkipWriter(
+	t *testing.T,
+	harness *v16Harness,
+	access application.Access,
+	requestRef, objective string,
+	writeSet []string,
+) goal.GoalRef {
+	t.Helper()
+	result, err := harness.runtime.Orchestrator().Submit(context.Background(), access, application.SubmitRequest{
+		RequestRef: requestRef, Statement: objective, Confirm: true,
+		Plan: &application.PlanSpec{
+			Phases: []application.PhaseSpec{{
+				Ref: "phase-instance:v16-workspace", Key: "phase:v16-workspace",
+				TemplateRef: "phase-template:v16-workspace",
+			}},
+			WorkItems: []application.WorkItemSpec{{
+				Key: "writer", Objective: objective, Phase: "phase:v16-workspace", Role: "role:writer",
+				WriteSet: append([]string(nil), writeSet...), CouncilPolicy: council.PolicySkipByOperator,
+				RequiredTests: []application.RequiredTestSpec{{
+					Ref: "required-test:v16-go", ToolRef: "tool:go",
+					Arguments: []string{"test", "./..."}, WorkingDirectory: ".",
+				}},
+				OutputContract: goal.OutputContractEvidenceBundle,
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("submit %s: %v", objective, err)
+	}
+	return result.Record.Goal.Ref()
+}
+
+func v16AuthorizeCouncilSkip(t *testing.T, harness *v16Harness, record application.GoalRecord) {
+	t.Helper()
+	if len(record.ChangeSets) != 1 {
+		t.Fatalf("Council skip changes=%d", len(record.ChangeSets))
+	}
+	change := record.ChangeSets[0]
+	for _, existing := range record.CouncilSkips {
+		if existing.Subject.ChangeSetRef == change.Ref.String() {
+			return
+		}
+	}
+	item, found := record.Goal.WorkItem(change.WorkItemRef)
+	if !found {
+		t.Fatalf("Council skip WorkItem %s missing", change.WorkItemRef)
+	}
+	result, err := harness.runtime.Orchestrator().SkipCouncil(
+		context.Background(),
+		harness.access,
+		application.SkipCouncilRequest{
+			RequestRef:           "request:v16-council-skip:" + change.Ref.String(),
+			GoalRef:              record.Goal.Ref(),
+			ChangeRef:            change.Ref,
+			ExpectedGoalRevision: record.Goal.Revision(),
+			ExpectedItemRevision: item.Revision(),
+			Reason:               "human test operator approved legacy V16 integration",
+		},
+	)
+	if err != nil || !result.Created {
+		t.Fatalf("authorize Council skip=%+v err=%v", result, err)
+	}
 }

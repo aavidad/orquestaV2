@@ -7,13 +7,15 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strings"
 	"testing"
 )
 
 const (
-	v19CandidateSubjectCount   = 113
-	v19CandidateSubjectsSHA256 = "d3ff227abcad64b5eb17ca265e6444268ee514fbc22895d8d74176ba1c77aa37"
+	v19CandidateSubjectCount   = 131
+	v19CandidateSubjectsSHA256 = "9a3c3a55e9e0a2c5f6bada899d35f4cf9b9e3fbc1b52bc707053577661f23d85"
 )
 
 func TestV19PSELifecycleIsExact(t *testing.T) {
@@ -38,7 +40,7 @@ func TestV19PSELifecycleIsExact(t *testing.T) {
 			t.Fatalf("V19 S declaration is not exact: %+v", fixture)
 		}
 		v19AssertEvidencePresence(t, repositoryRoot, true, false)
-		v19AssertSealManifest(t, repositoryRoot)
+		v19AssertSealManifest(t, repositoryRoot, fixture)
 		v19AssertRoadmapLifecycle(t, repositoryRoot, "planned", "declared")
 	default:
 		t.Fatalf("V19 fixture implementation_status=%q; only P/S declarations are valid", fixture.ImplementationStatus)
@@ -64,7 +66,27 @@ func TestV19EReceiptLifecycle(t *testing.T) {
 		Contract: "AC-V19-COUNCIL", FixturePath: "acceptance/" + v19FixturePath, ReceiptPath: fixture.ReceiptPath,
 		ExecutedNotBefore: "2026-07-23T00:00:00Z", TrustedBaseGitCommitOID: fixture.TrustedBaseGitCommitOID,
 	})
+	v19AssertReceiptBindsSealManifest(t, repositoryRoot, fixture)
 	v19AssertRoadmapLifecycle(t, repositoryRoot, "executable", "accredited")
+}
+
+func v19AssertReceiptBindsSealManifest(t *testing.T, repositoryRoot string, fixture v19Fixture) {
+	t.Helper()
+	receipt := evidenceDecodeStrictJSON[evidenceReceiptV3](t, filepath.Join(repositoryRoot, filepath.FromSlash(fixture.ReceiptPath)))
+	if err := evidenceGitAncestor(repositoryRoot, fixture.ProductDeltaSealedGitCommitOID, receipt.SealedSource.GitCommitOID); err != nil {
+		t.Fatalf("V19 executed S commit does not descend from sealed P: %v", err)
+	}
+	sealedEntry, err := evidenceGitBlobAt(repositoryRoot, receipt.SealedSource.GitCommitOID, v19SealManifestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	current, err := os.ReadFile(filepath.Join(repositoryRoot, filepath.FromSlash(v19SealManifestPath)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(sealedEntry.Content, current) {
+		t.Fatal("V19 receipt sealed tree does not bind current Council seal manifest")
+	}
 }
 
 func v19AssertLifecycleEnvelope(t *testing.T, fixture v19Fixture) {
@@ -96,39 +118,29 @@ func v19AssertEvidencePresence(t *testing.T, repositoryRoot string, wantSeal, wa
 	}
 }
 
-func v19AssertSealManifest(t *testing.T, repositoryRoot string) {
+func v19AssertSealManifest(t *testing.T, repositoryRoot string, fixture v19Fixture) {
 	t.Helper()
-	content, err := os.ReadFile(filepath.Join(repositoryRoot, filepath.FromSlash(v19SealManifestPath)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var manifest struct {
-		SchemaVersion int    `json:"schema_version"`
-		ManifestKind  string `json:"manifest_kind"`
-		ContractID    string `json:"contract_id"`
-		SealState     string `json:"seal_state"`
-	}
-	if err := json.Unmarshal(content, &manifest); err != nil {
-		t.Fatal(err)
-	}
-	if manifest.SchemaVersion != 1 || manifest.ManifestKind != "orquesta.v19_council.seal_manifest.v1" ||
-		manifest.ContractID != "AC-V19-COUNCIL" || manifest.SealState != "sealed_unexecuted" {
-		t.Fatalf("invalid V19 S manifest: %+v", manifest)
-	}
+	v19AssertSealRepositoryBindings(t, repositoryRoot, fixture)
 }
 
 func v19AssertRoadmapLifecycle(t *testing.T, repositoryRoot, contractStatus, capabilityStatus string) {
 	t.Helper()
+	fixture := evidenceDecodeStrictJSON[v19Fixture](t, v19FixtureRepositoryPath(repositoryRoot))
 	content, err := os.ReadFile(filepath.Join(repositoryRoot, "product/roadmap.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	var roadmap struct {
 		AcceptanceContracts []struct {
-			ID     string `json:"id"`
-			Status string `json:"status"`
+			ID      string `json:"id"`
+			Status  string `json:"status"`
+			TestRef string `json:"test_ref"`
+			Command string `json:"command"`
+			Fixture string `json:"fixture"`
+			Receipt string `json:"receipt"`
 		} `json:"acceptance_contracts"`
 		CapabilityEntries []struct {
+			ID           string   `json:"id"`
 			OwnerContext string   `json:"owner_context"`
 			Status       string   `json:"status"`
 			EvidenceRefs []string `json:"evidence_refs"`
@@ -138,28 +150,51 @@ func v19AssertRoadmapLifecycle(t *testing.T, repositoryRoot, contractStatus, cap
 		t.Fatal(err)
 	}
 	for _, contract := range roadmap.AcceptanceContracts {
-		if contract.ID == "AC-V19-COUNCIL" && contract.Status == contractStatus {
-			goto capabilities
+		if contract.ID != "AC-V19-COUNCIL" {
+			continue
 		}
+		if contract.Status != contractStatus {
+			t.Fatalf("V19 roadmap contract status=%q want=%q", contract.Status, contractStatus)
+		}
+		if contractStatus == "planned" && (contract.TestRef != "planned:acceptance/v19_council_test.go" ||
+			contract.Command != "planned:go test -mod=vendor -count=1 . ./acceptance -run '^TestAcceptanceV19Council$'" ||
+			contract.Fixture != "planned:fixtures/v19_council" || contract.Receipt != "") {
+			t.Fatalf("V19 planned roadmap contract metadata invalid: %+v", contract)
+		}
+		if contractStatus == "executable" && (contract.TestRef != "acceptance/v19_council_test.go" ||
+			contract.Command != fixture.Command || contract.Fixture != "acceptance/fixtures/v19_council.json" ||
+			contract.Receipt != v19ReceiptPath) {
+			t.Fatalf("V19 executable roadmap contract metadata invalid: %+v", contract)
+		}
+		goto capabilities
 	}
-	t.Fatalf("V19 roadmap contract status is not %q", contractStatus)
+	t.Fatal("missing V19 roadmap contract")
 
 capabilities:
-	count := 0
+	wantIDs := map[string]bool{"EVD-07": false, "GOV-11": false, "GOV-13": false, "GOV-14": false, "STG-06": false, "STG-08": false}
+	wantEvidence := []string{"acceptance/v19_council_test.go", "acceptance/fixtures/v19_council.json", v19ReceiptPath}
 	for _, entry := range roadmap.CapabilityEntries {
 		if entry.OwnerContext != "council" {
 			continue
 		}
-		count++
+		if _, found := wantIDs[entry.ID]; !found || wantIDs[entry.ID] {
+			t.Fatalf("unexpected or duplicate V19 council capability %q", entry.ID)
+		}
+		wantIDs[entry.ID] = true
 		if entry.Status != capabilityStatus {
 			t.Fatalf("V19 council capability status=%q want=%q", entry.Status, capabilityStatus)
 		}
 		if capabilityStatus == "declared" && len(entry.EvidenceRefs) != 0 {
 			t.Fatalf("P/S council capability has evidence refs: %#v", entry)
 		}
+		if capabilityStatus == "accredited" && !reflect.DeepEqual(entry.EvidenceRefs, wantEvidence) {
+			t.Fatalf("E council capability %s evidence=%v want=%v", entry.ID, entry.EvidenceRefs, wantEvidence)
+		}
 	}
-	if count != 6 {
-		t.Fatalf("V19 council capability count=%d want=6", count)
+	for id, found := range wantIDs {
+		if !found {
+			t.Fatalf("missing V19 council capability %s", id)
+		}
 	}
 }
 
@@ -180,5 +215,32 @@ func TestV19CandidateSubjectsDeclareExactBaseThroughP2Delta(t *testing.T) {
 	digest := sha256.Sum256([]byte(strings.Join(fixture.CandidateSubjects, "\n") + "\n"))
 	if got := hex.EncodeToString(digest[:]); got != v19CandidateSubjectsSHA256 {
 		t.Fatalf("V19 P2 candidate subjects digest=%s want=%s", got, v19CandidateSubjectsSHA256)
+	}
+	if fixture.ProductDeltaSealedGitCommitOID != "" {
+		evidenceAssertCandidateDelta(t, "V19", repositoryRoot, fixture.ProductDeltaBaseGitCommitOID,
+			fixture.ProductDeltaSealedGitCommitOID, fixture.CandidateSubjects)
+		return
+	}
+	tracked, err := evidenceGit(repositoryRoot, "diff", "--name-only", fixture.ProductDeltaBaseGitCommitOID, "--")
+	if err != nil {
+		t.Fatal(err)
+	}
+	untracked, err := evidenceGit(repositoryRoot, "ls-files", "--others", "--exclude-standard")
+	if err != nil {
+		t.Fatal(err)
+	}
+	unique := map[string]struct{}{}
+	for _, output := range [][]byte{tracked, untracked} {
+		for _, path := range v19NonEmptyLines(output) {
+			unique[filepath.ToSlash(path)] = struct{}{}
+		}
+	}
+	dirty := make([]string, 0, len(unique))
+	for path := range unique {
+		dirty = append(dirty, path)
+	}
+	sort.Strings(dirty)
+	if !reflect.DeepEqual(dirty, fixture.CandidateSubjects) {
+		t.Fatalf("V19_GATE_PRE_P_SUBJECTS: dirty=%v fixture=%v", dirty, fixture.CandidateSubjects)
 	}
 }

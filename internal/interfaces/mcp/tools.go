@@ -7,6 +7,7 @@ import (
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"orquesta/internal/application"
+	"orquesta/internal/council"
 	"orquesta/internal/goal"
 	"orquesta/internal/identity"
 )
@@ -50,6 +51,7 @@ type WorkItemInput struct {
 	Parent         string              `json:"parent,omitempty"`
 	Dependencies   []string            `json:"dependencies"`
 	WriteSet       []string            `json:"write_set"`
+	CouncilPolicy  string              `json:"council_policy,omitempty" jsonschema:"required for write-scoped work: auto, required, or skip_by_operator"`
 	RequiredTests  []RequiredTestInput `json:"required_tests,omitempty"`
 	SkillRefs      []string            `json:"skill_refs,omitempty"`
 	ToolRefs       []string            `json:"tool_refs,omitempty"`
@@ -267,6 +269,7 @@ func applicationPlan(input *PlanInput) *application.PlanSpec {
 			Key: item.Key, Objective: item.Objective, Phase: item.Phase, Role: item.Role, Parent: item.Parent,
 			Dependencies:   append([]string(nil), item.Dependencies...),
 			WriteSet:       append([]string(nil), item.WriteSet...),
+			CouncilPolicy:  council.Policy(item.CouncilPolicy),
 			RequiredTests:  requiredTests,
 			SkillRefs:      append([]string(nil), item.SkillRefs...),
 			ToolRefs:       append([]string(nil), item.ToolRefs...),

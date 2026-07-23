@@ -731,6 +731,41 @@ func (*memoryState) RecordReviewAssessed(context.Context, application.ReviewAsse
 	return errors.New("test.review_state_write_not_used")
 }
 
+func (*memoryState) OpenCouncilRound(
+	context.Context,
+	application.OpenCouncilRoundState,
+) (application.CouncilRoundRecord, bool, error) {
+	return application.CouncilRoundRecord{}, false, errors.New("test.council_state_write_not_used")
+}
+
+func (*memoryState) RecordCouncilContribution(
+	context.Context,
+	application.CouncilContributionState,
+) error {
+	return errors.New("test.council_state_write_not_used")
+}
+
+func (*memoryState) RecordCouncilSkip(
+	context.Context,
+	application.CouncilSkipState,
+) (application.CouncilSkipRecord, bool, error) {
+	return application.CouncilSkipRecord{}, false, errors.New("test.council_state_write_not_used")
+}
+
+func (*memoryState) RecordCouncilExecutionReplaced(
+	context.Context,
+	application.CouncilExecutionReplacedState,
+) error {
+	return errors.New("test.council_state_write_not_used")
+}
+
+func (*memoryState) RecordCouncilExecutionFailed(
+	context.Context,
+	application.CouncilExecutionFailedState,
+) error {
+	return errors.New("test.council_state_write_not_used")
+}
+
 func (*memoryState) RecordReviewExecutionReplaced(context.Context, application.ReviewExecutionReplacedState) error {
 	return errors.New("test.review_state_write_not_used")
 }

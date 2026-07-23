@@ -203,8 +203,12 @@ func TestTraceabilityRebuildHistoricalBugRowProvenance(t *testing.T) {
 		enrichmentsByKey[key] = enrichment
 	}
 
+	rowsBySource := make(map[string][]traceHistoricalBugRow)
 	for _, row := range rows {
-		lines := traceReadSourceLines(t, row.SourceRef)
+		rowsBySource[row.SourceRef] = append(rowsBySource[row.SourceRef], row)
+	}
+	for _, row := range rows {
+		lines := traceHistoricalBugCanonicalLines(traceReadSourceLines(t, row.SourceRef), rowsBySource[row.SourceRef])
 		line := lines[row.SourceLine-1]
 		key := traceHistoricalBugRowKey(row.SourceRef, row.SourceLine)
 		if row.SourceRef == "docs/inventario_bugs_orquesta_2026-06-30.md" {
@@ -233,6 +237,21 @@ func TestTraceabilityRebuildHistoricalBugRowProvenance(t *testing.T) {
 	if len(enrichments) != policy.Baseline.RichRowEnrichmentCount ||
 		traceFileSHA256(t, policy.RichRowEnrichmentsAuthority) != policy.Baseline.RichRowEnrichmentsSHA256 {
 		t.Fatalf("historical bug row enrichment baseline drift: count=%d digest=%s", len(enrichments), traceFileSHA256(t, policy.RichRowEnrichmentsAuthority))
+	}
+}
+
+func TestHistoricalBugCanonicalLinesPreserveSealedIdentityAcrossLiveRows(t *testing.T) {
+	sealed := "| BUG-ORQ-20260705-191 | cerrado | area | sintoma | hipotesis | evidencia | accion |"
+	live := "| BUG-ORQ-20260723-354 | abierto | area | sintoma | hipotesis | evidencia | accion |"
+	lines := []string{"# Inventario", live, sealed}
+	rows := []traceHistoricalBugRow{{SourceBugID: "BUG-ORQ-20260705-191"}}
+	if got := traceHistoricalBugCanonicalLines(lines, rows); !reflect.DeepEqual(got, []string{"# Inventario", sealed}) {
+		t.Fatalf("canonical historical lines=%v", got)
+	}
+
+	changedSealed := strings.Replace(sealed, "cerrado", "reabierto", 1)
+	if got := traceHistoricalBugCanonicalLines([]string{changedSealed}, rows); !reflect.DeepEqual(got, []string{changedSealed}) {
+		t.Fatalf("changed sealed row was hidden instead of left for provenance rejection: %v", got)
 	}
 }
 

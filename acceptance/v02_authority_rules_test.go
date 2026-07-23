@@ -344,6 +344,7 @@ var v02ParallelGoalPattern = regexp.MustCompile(`(?i)(goal.*(?:next|v[0-9]+)|(?:
 // enumerated here instead of accepting internal/*: adapters, composition and
 // persistence must remain outside both authorities.
 var v02SharedDomainPackages = map[string]struct{}{
+	"orquesta/internal/council":    {},
 	"orquesta/internal/governance": {},
 }
 

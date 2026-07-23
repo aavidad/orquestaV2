@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"orquesta/internal/council"
 	"orquesta/internal/goal"
 )
 
@@ -711,7 +712,8 @@ func (fixture v05DomainFixture) itemWithMetadata(t *testing.T, metadata v05ItemM
 		Objective: "execute " + metadata.Ref.String(), CreatedAt: fixture.itemAt,
 		Phase: metadata.Phase, Role: goal.DefaultRoleKey(), Parent: metadata.Parent,
 		HandoffRequired: metadata.HandoffRequired,
-		Dependencies:    metadata.Dependencies, WriteSet: metadata.WriteSet, RequiredTests: requiredTests,
+		Dependencies:    metadata.Dependencies, WriteSet: metadata.WriteSet,
+		CouncilPolicy: council.PolicySkipByOperator, RequiredTests: requiredTests,
 		SkillRefs: metadata.SkillRefs, ToolRefs: metadata.ToolRefs, CapabilityRefs: metadata.CapabilityRefs,
 		OutputContract: goal.EvidenceBundleOutputContract(),
 	})

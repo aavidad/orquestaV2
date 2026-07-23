@@ -137,15 +137,18 @@ integración.
 
 ## Simplicidad y P/S/E
 
-El inventario P2 honesto es 3.419 LOC netas: dominio 387, aplicación 1.214,
-SQLite/recovery 1.818 y bootstrap de producción 0. El soporte de test/bootstrap
-se mide aparte (545), para no presentarlo como producción. No es una acreditación
-de simplicidad: hay 43 ficheros por encima de 350 líneas y V19 no puede afirmar
+El inventario P2 honesto es 3.441 LOC netas: dominio 387, aplicación 1.214,
+SQLite/recovery 1.835, bootstrap de producción 0 y adaptador MCP 5. El soporte
+de test se mide aparte (3.731: bootstrap 668, MCP 43 y resto 3.020), para no
+presentarlo como producción. No es una acreditación de simplicidad: hay 53
+ficheros candidatos por encima de 350 líneas y V19 no puede afirmar
 verde mientras subsistan.
 
-Hasta V22 rige un ratchet verificable, no un falso techo verde: dominio >=400,
-SQLite/recovery >=1850, fichero <=1500 y bootstrap de producción <=400; la
-métrica de test/bootstrap queda separada. S debe sellar esas mediciones, los 43
+Hasta V22 rige un ratchet verificable, no un falso techo verde: producto <=3650,
+dominio <=400, aplicación <=1300, SQLite/recovery <=1850, fichero <=1500 y
+bootstrap de producción <=400; MCP/adaptador de transporte <=50. El límite por
+fichero aplica a producción; tests y datos grandes quedan inventariados como
+deuda, no ocultos. S debe sellar esas mediciones, los 53
 ficheros >350 y el digest del candidato. La deuda V22 es separar
 `claim/read/validate/write` SQLite y los adaptadores de aplicación mayores de
 350, recuperando presupuesto compacto por módulo. Sin duplicar tipos V18,

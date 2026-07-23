@@ -91,6 +91,10 @@ func traceValidateHistoricalBugRows(
 	richRowSourceRefs []string,
 ) map[string]traceHistoricalBugRow {
 	t.Helper()
+	rowsBySource := make(map[string][]traceHistoricalBugRow)
+	for _, row := range rows {
+		rowsBySource[row.SourceRef] = append(rowsBySource[row.SourceRef], row)
+	}
 	richRowSources := make(map[string]struct{}, len(richRowSourceRefs))
 	for _, sourceRef := range richRowSourceRefs {
 		if _, duplicate := richRowSources[sourceRef]; duplicate {
@@ -105,10 +109,12 @@ func traceValidateHistoricalBugRows(
 	detectedRows := make(map[string]struct{})
 	for sourceRef := range bugSources {
 		lines := traceReadSourceLines(t, sourceRef)
-		sourceLines[sourceRef] = lines
 		if _, reviewedRichSource := richRowSources[sourceRef]; !reviewedRichSource {
+			sourceLines[sourceRef] = lines
 			continue
 		}
+		lines = traceHistoricalBugCanonicalLines(lines, rowsBySource[sourceRef])
+		sourceLines[sourceRef] = lines
 		for index, line := range lines {
 			if strings.HasPrefix(strings.TrimSpace(line), "| BUG-ORQ-") {
 				detectedRows[traceHistoricalBugRowKey(sourceRef, index+1)] = struct{}{}
@@ -238,6 +244,13 @@ func traceExtractHistoricalBugOccurrences(
 	seenRefs := make(map[string]struct{})
 	for _, sourceRef := range sourceRefs {
 		lines := traceReadSourceLines(t, sourceRef)
+		var sealedRows []traceHistoricalBugRow
+		for _, row := range rowsByLine {
+			if row.SourceRef == sourceRef {
+				sealedRows = append(sealedRows, row)
+			}
+		}
+		lines = traceHistoricalBugCanonicalLines(lines, sealedRows)
 		for lineIndex, line := range lines {
 			textSHA := "sha256:" + traceSHA256Hex(line)
 			for _, match := range basePattern.FindAllStringIndex(line, -1) {
@@ -276,6 +289,31 @@ func traceExtractHistoricalBugOccurrences(
 		}
 	}
 	return entries
+}
+
+// traceHistoricalBugCanonicalLines keeps the V03 rich-row ledger stable while
+// the live bug inventory continues to receive rebuild-era incidents. A new
+// first-cell BUG-ORQ ID is outside the sealed historical row universe and must
+// not renumber existing BUGENTRY/BUGOCC identities. A changed row with an
+// already sealed ID remains in place so its exact text/provenance checks fail.
+func traceHistoricalBugCanonicalLines(lines []string, sealedRows []traceHistoricalBugRow) []string {
+	if len(sealedRows) == 0 {
+		return lines
+	}
+	sealedIDs := make(map[string]struct{}, len(sealedRows))
+	for _, row := range sealedRows {
+		sealedIDs[row.SourceBugID] = struct{}{}
+	}
+	canonical := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "| BUG-ORQ-") {
+			if _, sealed := sealedIDs[traceMarkdownFirstCell(line)]; !sealed {
+				continue
+			}
+		}
+		canonical = append(canonical, line)
+	}
+	return canonical
 }
 
 func traceHistoricalBugSlashParts(line string, offset int, slashPattern *regexp.Regexp) ([]string, int) {

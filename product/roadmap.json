@@ -959,7 +959,7 @@
       "vertical": "council",
       "status": "planned",
       "test_ref": "planned:acceptance/v19_council_test.go",
-      "command": "planned:fixture:acceptance/fixtures/v19_council.json#execution_argv",
+      "command": "planned:go test -mod=vendor -count=1 . ./acceptance -run '^TestAcceptanceV19Council$'",
       "fixture": "planned:fixtures/v19_council",
       "assertions": [
         "auto required and operator-skip policies have isolated E2Es",

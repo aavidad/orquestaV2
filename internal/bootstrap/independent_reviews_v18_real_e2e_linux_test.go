@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"orquesta/internal/application"
+	"orquesta/internal/council"
 	"orquesta/internal/goal"
 	"orquesta/internal/ports"
 	"orquesta/internal/review"
@@ -69,6 +70,20 @@ func v18TestIndependentReviewsRealE2E(t *testing.T) {
 	v18AssertNoAutomaticIntegration(t, harness, afterReviews, targetBefore)
 
 	change := v18One(t, afterReviews.ChangeSets, "change set", func(application.ChangeSet) bool { return true })
+	item, found := afterReviews.Goal.WorkItem(change.WorkItemRef)
+	if !found {
+		t.Fatalf("V18 Council skip WorkItem %s missing", change.WorkItemRef)
+	}
+	skipped, err := harness.runtime.Orchestrator().SkipCouncil(
+		context.Background(), harness.access, application.SkipCouncilRequest{
+			RequestRef: "request:v18-real-council-skip", GoalRef: goalRef,
+			ChangeRef: change.Ref, ExpectedGoalRevision: afterReviews.Goal.Revision(),
+			ExpectedItemRevision: item.Revision(),
+			Reason:               "human project owner approved legacy V18 integration",
+		})
+	if err != nil || !skipped.Created || skipped.Skip.Skip.PrincipalRef == "" {
+		t.Fatalf("explicit V18 Council skip=%+v err=%v", skipped, err)
+	}
 	admitted, err := harness.runtime.Orchestrator().IntegrateChange(
 		context.Background(), harness.access, application.IntegrateChangeRequest{
 			RequestRef: "request:v18-real-integrate", GoalRef: goalRef,
@@ -121,7 +136,8 @@ func (harness *v18RealE2EHarness) submit(t *testing.T) goal.GoalRef {
 				}},
 				WorkItems: []application.WorkItemSpec{{
 					Key: "author", Objective: "v18-author-candidate", Phase: "phase:v18-e2e", Role: "role:author",
-					WriteSet: []string{"subject"}, RequiredTests: []application.RequiredTestSpec{{
+					WriteSet: []string{"subject"}, CouncilPolicy: council.PolicySkipByOperator,
+					RequiredTests: []application.RequiredTestSpec{{
 						Ref: "required-test:v18-real-go", ToolRef: "tool:go",
 						Arguments: []string{"test", "-buildvcs=false", "./...", "-count=1"}, WorkingDirectory: "subject",
 					}}, OutputContract: goal.OutputContractEvidenceBundle,

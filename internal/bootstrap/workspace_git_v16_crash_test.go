@@ -29,7 +29,7 @@ func v16RunCrashFrontier(t *testing.T, fixture v16E2EFixture, frontier string) {
 	harness := newV16Harness(t, fixture, map[string]v16Write{
 		"crash-change": {"src/crash.txt": "survives " + frontier + "\n"},
 	})
-	goalRef := harness.submit(t, harness.access, "request:v16-crash:"+frontier,
+	goalRef := v16SubmitSkipWriter(t, harness, harness.access, "request:v16-crash:"+frontier,
 		"crash-change", []string{"src/crash.txt"})
 	integrationRequestRef := v16InjectCrashFrontier(t, harness, fixture, goalRef, frontier)
 	v16FinishCrashReplay(t, harness, fixture, goalRef, frontier, integrationRequestRef)
@@ -127,6 +127,8 @@ func v16InjectIntegrationCrash(
 		application.ActionObserveAgent, application.ActionCommitChange, application.ActionAttestTest)
 	harness.driveReviews(t, goalRef)
 	record := harness.get(t, harness.access, goalRef)
+	v16AuthorizeCouncilSkip(t, harness, record)
+	record = harness.get(t, harness.access, goalRef)
 	before := record.WorkspaceBindings[0].BaseOID
 	if _, err := harness.runtime.Orchestrator().IntegrateChange(context.Background(), harness.access,
 		application.IntegrateChangeRequest{
@@ -141,8 +143,12 @@ func v16InjectIntegrationCrash(
 }
 
 func v16InjectReleaseCrash(t *testing.T, harness *v16Harness, goalRef goal.GoalRef) {
-	harness.driveToIntegrated(t, goalRef, "request:v16-release-integrate")
 	record := harness.get(t, harness.access, goalRef)
+	harness.driveToAttested(t, record)
+	harness.driveReviews(t, goalRef)
+	v16AuthorizeCouncilSkip(t, harness, harness.get(t, harness.access, goalRef))
+	harness.driveToIntegrated(t, goalRef, "request:v16-release-integrate")
+	record = harness.get(t, harness.access, goalRef)
 	workspace := record.WorkspaceBindings[0].Ref
 	v16Git(t, harness.git, harness.seed, "worktree", "unlock", harness.workspacePath(workspace))
 	harness.restart(t)
@@ -163,6 +169,8 @@ func v16FinishCrashReplay(
 			record = harness.get(t, harness.access, goalRef)
 		}
 		harness.driveReviews(t, goalRef)
+		record = harness.get(t, harness.access, goalRef)
+		v16AuthorizeCouncilSkip(t, harness, record)
 		record = harness.get(t, harness.access, goalRef)
 		if len(record.IntegrationReceipts) == 0 {
 			before := record.WorkspaceBindings[0].BaseOID

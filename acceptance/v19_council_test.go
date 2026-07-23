@@ -27,22 +27,10 @@ type v19Dependency struct {
 }
 
 type v19PolicyContract struct {
-	Policy, Opener, Behavior, PromotionGate string
-}
-
-func (value *v19PolicyContract) UnmarshalJSON(data []byte) error {
-	type wire struct {
-		Policy        string `json:"policy"`
-		Opener        string `json:"opener"`
-		Behavior      string `json:"behavior"`
-		PromotionGate string `json:"promotion_gate"`
-	}
-	var decoded wire
-	if err := json.Unmarshal(data, &decoded); err != nil {
-		return err
-	}
-	*value = v19PolicyContract(decoded)
-	return nil
+	Policy        string `json:"policy"`
+	Opener        string `json:"opener"`
+	Behavior      string `json:"behavior"`
+	PromotionGate string `json:"promotion_gate"`
 }
 
 type v19Fixture struct {
@@ -149,6 +137,7 @@ type v19Fixture struct {
 		ApplicationLOCMax    int    `json:"application_loc_max"`
 		SQLiteRecoveryLOCMax int    `json:"sqlite_recovery_loc_max"`
 		BootstrapLOCMax      int    `json:"bootstrap_loc_max"`
+		TransportAdapterMax  int    `json:"transport_adapter_loc_max"`
 		FileLOCMax           int    `json:"file_loc_max"`
 		MigrationException   string `json:"migration_exception"`
 		QualityAccreditation string `json:"quality_accreditation"`
@@ -167,10 +156,12 @@ type v19Fixture struct {
 
 func TestAcceptanceV19Council(t *testing.T) {
 	fixture := loadV19Fixture(t)
+	validLifecycle := (fixture.ImplementationStatus == "implemented_unsealed" && fixture.LifecycleGate == "V19_IMPLEMENTED_UNSEALED") ||
+		(fixture.ImplementationStatus == "sealed_unexecuted" && fixture.LifecycleGate == "V19_SEALED_UNEXECUTED")
 	if fixture.SchemaVersion != 1 || fixture.ReceiptSchemaVersion != 3 ||
 		fixture.ContractID != "AC-V19-COUNCIL" || fixture.Vertical != "council" ||
-		fixture.ImplementationStatus != "implemented_unsealed" || fixture.LifecycleGate != "V19_IMPLEMENTED_UNSEALED" {
-		t.Fatalf("invalid V19 implemented-unsealed identity: %+v", fixture)
+		!validLifecycle {
+		t.Fatalf("invalid V19 lifecycle identity: %+v", fixture)
 	}
 	wantCapabilities := []string{"EVD-07", "GOV-11", "GOV-13", "GOV-14", "STG-06", "STG-08"}
 	assertV19Strings(t, "capabilities", sortedV19(fixture.OwnedCapabilityIDs), wantCapabilities)
@@ -206,12 +197,13 @@ func assertV19ProductPresence(t *testing.T, fixture v19Fixture) {
 
 func v19ValidationShellBody() string {
 	const base = "6f244a7594141c74dc28e095e0e5e32a05102826"
+	const packages = ` . ./acceptance ./internal/... ./cmd/...`
 	return `./scripts/check_rebuild_write_set.sh ` + base +
 		` && git diff --check ` + base + ` HEAD --` +
-		` && go test -mod=vendor -count=1 ./...` +
+		` && go test -mod=vendor -count=1` + packages +
 		` && timeout --kill-after=10s 240s go test -mod=vendor -race -count=1 -timeout=210s ./internal/application ./internal/adapters/state/sqlite -run "^(TestCouncilRequiredOpenUsesRecordedAuthorizationTimeAndReplays|TestCouncilSkipUsesRecordedAuthorizationTimeAndReplays|TestSQLiteV19CouncilRoundFactsDecisionReplayRestartAndConcurrency|TestSQLiteDirectorCouncilNegativeReplanRestart)$"` +
 		` && e2e_events=$(CGO_ENABLED=0 go test -mod=vendor -tags=v17_real_e2e,v18_real_e2e,v19_real_e2e -json -count=1 -timeout=240s ./internal/bootstrap -run "^(TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd|TestV19CouncilAutoSQLiteFilesystemRestartE2E|TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E|TestV19CouncilSkipHumanReplayAndIntegrationE2E)$" 2>&1); e2e_status=$?; printf '%s\n' "$e2e_events"; [ "$e2e_status" -eq 0 ] && for test_name in TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd TestV19CouncilAutoSQLiteFilesystemRestartE2E TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E TestV19CouncilSkipHumanReplayAndIntegrationE2E; do printf '%s\n' "$e2e_events" | grep -F '"Action":"run"' | grep -F '"Package":"orquesta/internal/bootstrap"' | grep -F "\"Test\":\"$test_name\"" >/dev/null && printf '%s\n' "$e2e_events" | grep -F '"Action":"pass"' | grep -F '"Package":"orquesta/internal/bootstrap"' | grep -F "\"Test\":\"$test_name\"" >/dev/null || exit 1; done` +
-		` && GOFLAGS=-mod=vendor go vet ./...`
+		` && GOFLAGS=-mod=vendor go vet` + packages
 }
 
 func assertV19Dependency(t *testing.T, dependency v19Dependency) {
@@ -347,14 +339,14 @@ func assertV19SafetyAndPersistence(t *testing.T, fixture v19Fixture) {
 		t.Fatalf("invalid persistence/migration contract: %+v %+v", fixture.PersistenceContract, fixture.MigrationContract)
 	}
 	budget := fixture.Budgets
-	if budget.Stage != "pre_P_operational_ceiling" || budget.ProductLOCMax != 3650 ||
-		budget.DomainLOCMax != 350 || budget.ApplicationLOCMax != 1300 ||
-		budget.SQLiteRecoveryLOCMax != 1600 || budget.BootstrapLOCMax != 400 || budget.FileLOCMax != 1450 ||
+	if budget.Stage != "P2_honest_operational_ceiling" || budget.ProductLOCMax != 3650 ||
+		budget.DomainLOCMax != 400 || budget.ApplicationLOCMax != 1300 ||
+		budget.SQLiteRecoveryLOCMax != 1850 || budget.BootstrapLOCMax != 400 || budget.TransportAdapterMax != 50 ||
+		budget.FileLOCMax != 1500 ||
 		budget.MigrationException != "forbidden" ||
 		budget.QualityAccreditation != "P_cannot_declare_simplicity_green_from_this_ceiling" ||
 		budget.SealRequirement != "S_records_LOC_by_layer_and_files_over_350" ||
-		budget.PostV22Debt != "separate_SQLite_claim_read_validate_write_and_application_adapters_over_350_then_restore_compact_per_module_budget" ||
-		budget.DomainLOCMax+budget.ApplicationLOCMax+budget.SQLiteRecoveryLOCMax+budget.BootstrapLOCMax != budget.ProductLOCMax {
+		budget.PostV22Debt != "separate_SQLite_claim_read_validate_write_and_application_adapters_over_350_then_restore_compact_per_module_budget" {
 		t.Fatalf("invalid V19 pre-P budget/debt contract: %+v", budget)
 	}
 }
@@ -382,15 +374,7 @@ func assertV19E2E(t *testing.T, fixture v19Fixture) {
 
 func loadV19Fixture(t *testing.T) v19Fixture {
 	t.Helper()
-	content, err := os.ReadFile(v19FixturePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var fixture v19Fixture
-	if err := json.Unmarshal(content, &fixture); err != nil {
-		t.Fatal(err)
-	}
-	return fixture
+	return evidenceDecodeStrictJSON[v19Fixture](t, v19FixturePath)
 }
 
 func assertV19Strings(t *testing.T, name string, got, want []string) {
