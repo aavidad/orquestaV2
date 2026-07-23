@@ -1,0 +1,32 @@
+{
+  "schema_version": 3,
+  "evidence_kind": "reproducibility_descriptor",
+  "contract": "AC-V20-COMMAND-REGISTRY",
+  "result": "PASS",
+  "validation_command": "sh -c './scripts/check_rebuild_write_set.sh 42692512b0048f116d660a53fbe6650e243bb4e3 && git diff --check 42692512b0048f116d660a53fbe6650e243bb4e3 HEAD -- && go test -mod=vendor -count=1 . ./acceptance ./internal/... ./cmd/... ./sdk/... && timeout --kill-after=10s 240s go test -mod=vendor -race -count=1 -timeout=210s ./internal/commands ./internal/adapters/state/sqlite ./internal/bootstrap -run \"^(TestConcurrentReplayAppendsOneExactTerminalWithoutRawData|TestCommandDispatcherCrashAfterMutatingHandlerReplaysApplicationReceiptWithoutSecondEffect|TestSQLiteCommandAuditConcurrentExactReplayConverges|TestRealCommandAuditSurvivesRestartAndLifecycleRemainsApplicationOwned)$\" && e2e_events=$(go test -mod=vendor -json -count=1 -timeout=180s ./internal/bootstrap -run \"^(TestRealHTTPMCPCLIAndSDKParityEndToEnd|TestRealCommandAuditSurvivesRestartAndLifecycleRemainsApplicationOwned)$\" 2>&1); e2e_status=$?; printf \"%s\\n\" \"$e2e_events\"; [ \"$e2e_status\" -eq 0 ] && for test_name in TestRealHTTPMCPCLIAndSDKParityEndToEnd TestRealCommandAuditSurvivesRestartAndLifecycleRemainsApplicationOwned; do printf \"%s\\n\" \"$e2e_events\" | grep -F \"\\\"Action\\\":\\\"run\\\"\" | grep -F \"\\\"Package\\\":\\\"orquesta/internal/bootstrap\\\"\" | grep -F \"\\\"Test\\\":\\\"$test_name\\\"\" >/dev/null && printf \"%s\\n\" \"$e2e_events\" | grep -F \"\\\"Action\\\":\\\"pass\\\"\" | grep -F \"\\\"Package\\\":\\\"orquesta/internal/bootstrap\\\"\" | grep -F \"\\\"Test\\\":\\\"$test_name\\\"\" >/dev/null || exit 1; done && GOFLAGS=-mod=vendor go vet . ./acceptance ./internal/... ./cmd/... ./sdk/...'",
+  "executed_at": "2026-07-23T09:44:55+02:00",
+  "execution": {
+    "argv": [
+      "sh",
+      "-c",
+      "./scripts/check_rebuild_write_set.sh 42692512b0048f116d660a53fbe6650e243bb4e3 && git diff --check 42692512b0048f116d660a53fbe6650e243bb4e3 HEAD -- && go test -mod=vendor -count=1 . ./acceptance ./internal/... ./cmd/... ./sdk/... && timeout --kill-after=10s 240s go test -mod=vendor -race -count=1 -timeout=210s ./internal/commands ./internal/adapters/state/sqlite ./internal/bootstrap -run \"^(TestConcurrentReplayAppendsOneExactTerminalWithoutRawData|TestCommandDispatcherCrashAfterMutatingHandlerReplaysApplicationReceiptWithoutSecondEffect|TestSQLiteCommandAuditConcurrentExactReplayConverges|TestRealCommandAuditSurvivesRestartAndLifecycleRemainsApplicationOwned)$\" && e2e_events=$(go test -mod=vendor -json -count=1 -timeout=180s ./internal/bootstrap -run \"^(TestRealHTTPMCPCLIAndSDKParityEndToEnd|TestRealCommandAuditSurvivesRestartAndLifecycleRemainsApplicationOwned)$\" 2>&1); e2e_status=$?; printf \"%s\\n\" \"$e2e_events\"; [ \"$e2e_status\" -eq 0 ] && for test_name in TestRealHTTPMCPCLIAndSDKParityEndToEnd TestRealCommandAuditSurvivesRestartAndLifecycleRemainsApplicationOwned; do printf \"%s\\n\" \"$e2e_events\" | grep -F \"\\\"Action\\\":\\\"run\\\"\" | grep -F \"\\\"Package\\\":\\\"orquesta/internal/bootstrap\\\"\" | grep -F \"\\\"Test\\\":\\\"$test_name\\\"\" >/dev/null && printf \"%s\\n\" \"$e2e_events\" | grep -F \"\\\"Action\\\":\\\"pass\\\"\" | grep -F \"\\\"Package\\\":\\\"orquesta/internal/bootstrap\\\"\" | grep -F \"\\\"Test\\\":\\\"$test_name\\\"\" >/dev/null || exit 1; done && GOFLAGS=-mod=vendor go vet . ./acceptance ./internal/... ./cmd/... ./sdk/..."
+    ],
+    "source_git_commit_oid": "7f27685d992c9a8f5f308d94bbfc3e9828009d84",
+    "source_worktree_state": "detached_clean",
+    "source_status_porcelain_sha256": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "exit_code": 0,
+    "combined_output_path": "product/evidence/v20_command_registry.output.txt",
+    "combined_output_sha256": "sha256:bc590edc8d8a9b61a5bf5201b00b66c8a3b5ef155020c42658dcd21cdbf46adb",
+    "go_version": "go version go1.25.11 linux/amd64"
+  },
+  "fixture_sha256": "sha256:622eb39fdc2deeaf75f08cdb62a22bebab4afe7d76f484f576eda95925ccf3b8",
+  "candidate_digest_algorithm": "sha256:length-framed-git-blob-set:v1",
+  "candidate_sha256": "sha256:adc6367373cf84dfe70483a7331103892b282588c33faac423a0fa6b858e6464",
+  "sealed_source": {
+    "identity_kind": "sealed_git_subject_set",
+    "git_commit_oid": "7f27685d992c9a8f5f308d94bbfc3e9828009d84",
+    "git_tree_oid": "627ed8e1bcebbf56c759a5bd437f042cb4329f94",
+    "fixture_blob_oid": "8b5685b38370031b3d559581697394abcda975b4",
+    "sha256": "sha256:adc6367373cf84dfe70483a7331103892b282588c33faac423a0fa6b858e6464"
+  }
+}

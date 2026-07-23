@@ -972,10 +972,11 @@
     {
       "id": "AC-V20-COMMAND-REGISTRY",
       "vertical": "command_registry",
-      "status": "planned",
-      "test_ref": "planned:acceptance/v20_command_registry_test.go",
-      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
-      "fixture": "planned:fixtures/v20_command_registry",
+      "status": "executable",
+      "test_ref": "acceptance/v20_command_registry_test.go",
+      "command": "sh -c './scripts/check_rebuild_write_set.sh 42692512b0048f116d660a53fbe6650e243bb4e3 && git diff --check 42692512b0048f116d660a53fbe6650e243bb4e3 HEAD -- && go test -mod=vendor -count=1 . ./acceptance ./internal/... ./cmd/... ./sdk/... && timeout --kill-after=10s 240s go test -mod=vendor -race -count=1 -timeout=210s ./internal/commands ./internal/adapters/state/sqlite ./internal/bootstrap -run \"^(TestConcurrentReplayAppendsOneExactTerminalWithoutRawData|TestCommandDispatcherCrashAfterMutatingHandlerReplaysApplicationReceiptWithoutSecondEffect|TestSQLiteCommandAuditConcurrentExactReplayConverges|TestRealCommandAuditSurvivesRestartAndLifecycleRemainsApplicationOwned)$\" && e2e_events=$(go test -mod=vendor -json -count=1 -timeout=180s ./internal/bootstrap -run \"^(TestRealHTTPMCPCLIAndSDKParityEndToEnd|TestRealCommandAuditSurvivesRestartAndLifecycleRemainsApplicationOwned)$\" 2>&1); e2e_status=$?; printf \"%s\\n\" \"$e2e_events\"; [ \"$e2e_status\" -eq 0 ] && for test_name in TestRealHTTPMCPCLIAndSDKParityEndToEnd TestRealCommandAuditSurvivesRestartAndLifecycleRemainsApplicationOwned; do printf \"%s\\n\" \"$e2e_events\" | grep -F \"\\\"Action\\\":\\\"run\\\"\" | grep -F \"\\\"Package\\\":\\\"orquesta/internal/bootstrap\\\"\" | grep -F \"\\\"Test\\\":\\\"$test_name\\\"\" >/dev/null && printf \"%s\\n\" \"$e2e_events\" | grep -F \"\\\"Action\\\":\\\"pass\\\"\" | grep -F \"\\\"Package\\\":\\\"orquesta/internal/bootstrap\\\"\" | grep -F \"\\\"Test\\\":\\\"$test_name\\\"\" >/dev/null || exit 1; done && GOFLAGS=-mod=vendor go vet . ./acceptance ./internal/... ./cmd/... ./sdk/...'",
+      "fixture": "acceptance/fixtures/v20_command_registry.json",
+      "receipt": "product/evidence/v20_command_registry.json",
       "assertions": [
         "one command definition generates HTTP MCP and CLI bindings",
         "auth schema i18n and error codes are semantically identical",
@@ -1620,8 +1621,12 @@
       "acceptance_contracts": [
         "AC-V20-COMMAND-REGISTRY"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v20_command_registry_test.go",
+        "acceptance/fixtures/v20_command_registry.json",
+        "product/evidence/v20_command_registry.json"
+      ],
       "supersedes": []
     },
     {
@@ -3910,8 +3915,12 @@
       "acceptance_contracts": [
         "AC-V20-COMMAND-REGISTRY"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v20_command_registry_test.go",
+        "acceptance/fixtures/v20_command_registry.json",
+        "product/evidence/v20_command_registry.json"
+      ],
       "supersedes": [],
       "kind": "interface"
     },

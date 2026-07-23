@@ -1,0 +1,54 @@
+rebuild_write_set_ok base=42692512b0048f116d660a53fbe6650e243bb4e3 files=97
+ok  	orquesta	7.692s
+ok  	orquesta/acceptance	32.723s
+ok  	orquesta/internal/adapters/agent/codex	1.260s
+ok  	orquesta/internal/adapters/agent/fake	0.003s
+ok  	orquesta/internal/adapters/artifact/filesystem	0.011s
+ok  	orquesta/internal/adapters/attestor/bubblewrap	0.009s
+ok  	orquesta/internal/adapters/auth/bearer	0.003s
+ok  	orquesta/internal/adapters/auth/localtoken	0.003s
+ok  	orquesta/internal/adapters/auth/oidc	1.618s
+ok  	orquesta/internal/adapters/config/effectivefile	0.072s
+ok  	orquesta/internal/adapters/config/jsonimport	0.045s
+ok  	orquesta/internal/adapters/config/toml	0.026s
+ok  	orquesta/internal/adapters/credentials/local	0.053s
+ok  	orquesta/internal/adapters/state/sqlite	104.934s
+ok  	orquesta/internal/adapters/system/local	0.003s
+ok  	orquesta/internal/adapters/workspace/gitlocal	6.381s
+ok  	orquesta/internal/application	0.159s
+ok  	orquesta/internal/bootstrap	18.028s
+ok  	orquesta/internal/commands	0.037s
+ok  	orquesta/internal/commands/cmd/commandgen	0.029s
+ok  	orquesta/internal/config	0.336s
+?   	orquesta/internal/config/cmd/configgen	[no test files]
+ok  	orquesta/internal/council	0.004s
+ok  	orquesta/internal/credentials	0.003s
+ok  	orquesta/internal/goal	0.010s
+ok  	orquesta/internal/governance	0.003s
+ok  	orquesta/internal/i18n	0.004s
+ok  	orquesta/internal/identity	0.004s
+ok  	orquesta/internal/interfaces/cli	0.003s
+ok  	orquesta/internal/interfaces/httpapi	0.004s
+ok  	orquesta/internal/interfaces/mcp	0.054s
+ok  	orquesta/internal/ports	0.005s
+ok  	orquesta/internal/review	0.003s
+ok  	orquesta/cmd/orquesta	0.030s
+?   	orquesta/cmd/orquesta-cli	[no test files]
+ok  	orquesta/cmd/orquesta-guardian	5.247s
+ok  	orquesta/cmd/orquesta-server	71.347s
+ok  	orquesta/sdk/commands	0.006s
+ok  	orquesta/internal/commands	1.026s
+ok  	orquesta/internal/adapters/state/sqlite	10.832s
+ok  	orquesta/internal/bootstrap	11.872s
+{"Time":"2026-07-23T09:44:11.415575136+02:00","Action":"start","Package":"orquesta/internal/bootstrap"}
+{"Time":"2026-07-23T09:44:11.418666838+02:00","Action":"run","Package":"orquesta/internal/bootstrap","Test":"TestRealCommandAuditSurvivesRestartAndLifecycleRemainsApplicationOwned"}
+{"Time":"2026-07-23T09:44:11.418674208+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealCommandAuditSurvivesRestartAndLifecycleRemainsApplicationOwned","Output":"=== RUN   TestRealCommandAuditSurvivesRestartAndLifecycleRemainsApplicationOwned\n"}
+{"Time":"2026-07-23T09:44:11.793506077+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealCommandAuditSurvivesRestartAndLifecycleRemainsApplicationOwned","Output":"--- PASS: TestRealCommandAuditSurvivesRestartAndLifecycleRemainsApplicationOwned (0.37s)\n"}
+{"Time":"2026-07-23T09:44:11.793524387+02:00","Action":"pass","Package":"orquesta/internal/bootstrap","Test":"TestRealCommandAuditSurvivesRestartAndLifecycleRemainsApplicationOwned","Elapsed":0.37}
+{"Time":"2026-07-23T09:44:11.793530867+02:00","Action":"run","Package":"orquesta/internal/bootstrap","Test":"TestRealHTTPMCPCLIAndSDKParityEndToEnd"}
+{"Time":"2026-07-23T09:44:11.793534307+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealHTTPMCPCLIAndSDKParityEndToEnd","Output":"=== RUN   TestRealHTTPMCPCLIAndSDKParityEndToEnd\n"}
+{"Time":"2026-07-23T09:44:12.17677629+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealHTTPMCPCLIAndSDKParityEndToEnd","Output":"--- PASS: TestRealHTTPMCPCLIAndSDKParityEndToEnd (0.38s)\n"}
+{"Time":"2026-07-23T09:44:12.17679813+02:00","Action":"pass","Package":"orquesta/internal/bootstrap","Test":"TestRealHTTPMCPCLIAndSDKParityEndToEnd","Elapsed":0.38}
+{"Time":"2026-07-23T09:44:12.17681822+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Output":"PASS\n"}
+{"Time":"2026-07-23T09:44:12.179222441+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Output":"ok  \torquesta/internal/bootstrap\t0.763s\n"}
+{"Time":"2026-07-23T09:44:12.179236771+02:00","Action":"pass","Package":"orquesta/internal/bootstrap","Elapsed":0.764}
