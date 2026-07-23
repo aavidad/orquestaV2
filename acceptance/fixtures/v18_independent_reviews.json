@@ -4,9 +4,9 @@
   "contract_id": "AC-V18-INDEPENDENT-REVIEWS",
   "trusted_base_git_commit_oid": "4428f46dd6b48659a4fb871a66cb72927f41cb93",
   "product_delta_base_git_commit_oid": "e311a97e4fdcafcf81c6114dbd904af4ed9293ad",
-  "product_delta_sealed_git_commit_oid": "de0285ec2c9f7a772f487ce5dde155f81cca2d0b",
-  "seal_status": "p_product_delta_sealed_pending_evidence",
-  "seal_note": "P product commit sealed; S and E remain pending and no PASS is implied.",
+  "product_delta_sealed_git_commit_oid": "",
+  "seal_status": "pre_p_unsealed_no_evidence",
+  "seal_note": "Pre-P contract only: empty sealed OID is mandatory; this fixture and any ACK are not product evidence.",
   "command": "sh -c 'git diff --check e311a97e4fdcafcf81c6114dbd904af4ed9293ad HEAD -- && go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV17ScopeAndExecutableContract|TestV17EvidenceBelongsOnlyToTestAttestorCapabilities|TestProductRoadmapV18ScopeAndExecutableContract|TestV18EvidenceBelongsOnlyToIndependentReviewCapabilities|TestAcceptanceV16WorkspaceGit|TestAcceptanceV16WorkspaceGitReceipt|TestAcceptanceV17TestAttestor|TestAcceptanceV17TestAttestorReceipt|TestAcceptanceV18IndependentReviews|TestV18CandidateSubjectsCoverLifecycleDelta|TestV18CandidateSubjectsRetainGenericReceipt|TestV18ReceiptV3Lifecycle|TestV18RoadmapAndEvidenceLifecycle|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons)$\" && go test -mod=vendor -count=1 ./internal/review ./internal/application ./internal/adapters/state/sqlite ./internal/bootstrap ./internal/goal ./internal/ports ./internal/interfaces/mcp ./internal/adapters/agent/codex ./internal/adapters/artifact/filesystem ./internal/adapters/attestor/bubblewrap ./internal/adapters/workspace/gitlocal ./cmd/orquesta && timeout --kill-after=10s 240s go test -mod=vendor -race -count=1 -timeout=210s ./internal/application ./internal/adapters/state/sqlite ./internal/bootstrap -run \"^(TestConcurrentReviewClaimsKeepOneDecisionPerRole|TestReviewCrashFrontiersReplayWithoutDuplicateLaunchOrDecision|TestTerminalAttestationReceiptPreventsRestartRerun)$\" && e2e_events=$(CGO_ENABLED=0 go test -mod=vendor -tags=v18_real_e2e -json -count=1 -timeout=180s ./internal/bootstrap -run \"^TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd$\" 2>&1); e2e_status=$?; printf '%s\\n' \"$e2e_events\"; [ \"$e2e_status\" -eq 0 ] && printf '%s\\n' \"$e2e_events\" | grep -F \"\\\"Action\\\":\\\"run\\\"\" | grep -F \"\\\"Package\\\":\\\"orquesta/internal/bootstrap\\\"\" | grep -F \"\\\"Test\\\":\\\"TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd\\\"\" >/dev/null && printf '%s\\n' \"$e2e_events\" | grep -F \"\\\"Action\\\":\\\"pass\\\"\" | grep -F \"\\\"Package\\\":\\\"orquesta/internal/bootstrap\\\"\" | grep -F \"\\\"Test\\\":\\\"TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd\\\"\" >/dev/null && GOFLAGS=-mod=vendor go vet ./internal/review ./internal/application ./internal/adapters/state/sqlite ./internal/bootstrap ./internal/goal ./internal/ports ./internal/interfaces/mcp ./internal/adapters/agent/codex ./internal/adapters/artifact/filesystem ./internal/adapters/attestor/bubblewrap ./internal/adapters/workspace/gitlocal ./cmd/orquesta'",
   "execution_argv": [
     "sh",
@@ -110,6 +110,7 @@
     "internal/review/review_test.go",
     "product/evidence/real_codex_mcp_e2e.json",
     "product/traceability/rebuild_bugs.jsonl",
+    "product_roadmap_test.go",
     "product_roadmap_v18_test.go"
   ],
   "owned_capability_ids": ["GOV-12", "STG-13", "STG-14", "STG-16", "EVD-06"],

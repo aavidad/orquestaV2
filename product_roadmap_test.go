@@ -1110,9 +1110,7 @@ func assertRoadmapV17Lifecycle(t *testing.T, index roadmapTestIndex, fixture roa
 			t.Fatalf("invalid V17 pre-E planned contract: %#v", contract)
 		}
 	}
-	if next := index.contracts["AC-V18-INDEPENDENT-REVIEWS"]; next.Status != "planned" || next.Receipt != "" {
-		t.Fatalf("V17 must leave author reviewers and refinery deferred: %#v", next)
-	}
+	assertRoadmapV18Lifecycle(t, index, readRoadmapV18Fixture(t))
 }
 
 func TestV17AcceptanceCommandRunsTestAttestorConsumers(t *testing.T) {
