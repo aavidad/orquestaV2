@@ -1,10 +1,11 @@
-# V19 — Consejo: análisis cerrado y contrato rojo
+# V19 — Consejo: análisis cerrado y contrato P
 
 Fecha: 2026-07-23. Base integrada: V18 acreditada en `6f244a7594`.
 
-Estado: V18 verificada mediante receipt V3 `PASS`; producto V19 aún ausente.
-`TestAcceptanceV19Council` permanece rojo solo por `V19_PRODUCT_PENDING`.
-No existe bloqueo de dependencia ni se acredita ninguna capability V19.
+Estado: V18 verificada mediante receipt V3 `PASS`; producto y tests V19 están
+integrados en P (`implemented_unsealed`). No hay sello ni receipt V19, y las
+seis capabilities siguen `declared` sin `evidence_refs`. No existe bloqueo de
+dependencia ni se acredita ninguna capability V19.
 
 ## Decisión estructural
 
@@ -147,10 +148,9 @@ adaptadores legacy que V19 toca; migraciones no obtienen excepción adicional.
 Deuda V22 obligatoria: separar `claim/read/validate/write` SQLite y los
 adaptadores de aplicación que exceden 350, y volver a un presupuesto compacto
 por módulo. P no puede declarar verde simplicidad por estos límites; S registra
-LOC por capa y lista de ficheros >350. La fixture roja conserva sus números
-pre-P hasta que la transición `implemented_unsealed` actualice contrato y tests
-en el write-set de acreditación. Sin duplicar tipos V18, scheduler ni
-autenticación.
+LOC por capa y lista de ficheros >350. La fixture y sus assertions ya reflejan
+el techo pre-P operacional; esto no acredita simplicidad. Sin duplicar tipos
+V18, scheduler ni autenticación.
 
 - `P` (`implemented_unsealed`): producto y tests ya integrados, pero toda
   capability V19 sigue `declared`, sin `evidence_refs` y sin receipt. La

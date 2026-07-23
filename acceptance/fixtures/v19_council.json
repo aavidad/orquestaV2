@@ -11,7 +11,18 @@
     "sealed_source_git_commit_oid": "32ee17e407006d9e0aeb46557b1e160769dd4848",
     "status": "verified_accredited"
   },
-  "implementation_status": "awaiting_product",
+  "implementation_status": "implemented_unsealed",
+  "p_source_paths": [
+    "internal/council/council.go",
+    "internal/application/council_commands.go",
+    "internal/adapters/state/sqlite/migrations/014_council.sql",
+    "internal/bootstrap/v19_council_auto_e2e_linux_test.go"
+  ],
+  "p_test_paths": [
+    "internal/application/council_commands_replay_test.go",
+    "internal/adapters/state/sqlite/v19_council_test.go",
+    "internal/bootstrap/v19_council_required_e2e_linux_test.go"
+  ],
   "policies": ["auto", "required", "skip_by_operator"],
   "policy_contracts": [
     {
@@ -181,5 +192,5 @@
     "S": "seal exact tree binary effective configuration V18 gate subjects and council subjects",
     "E": "detached_clean execution of three isolated E2Es with external V3 receipt"
   },
-  "red_gate": "V19_PRODUCT_PENDING"
+  "lifecycle_gate": "V19_IMPLEMENTED_UNSEALED"
 }

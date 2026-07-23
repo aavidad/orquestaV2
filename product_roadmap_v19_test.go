@@ -12,7 +12,7 @@ import (
 
 var roadmapV19OwnedCapabilities = []string{"EVD-07", "GOV-11", "GOV-13", "GOV-14", "STG-06", "STG-08"}
 
-func TestProductRoadmapV19ScopeAndControlledRedContract(t *testing.T) {
+func TestProductRoadmapV19ScopeAndImplementedUnsealedContract(t *testing.T) {
 	index := readRoadmapTestIndex(t)
 	assertRoadmapV18Lifecycle(t, index, readRoadmapV18Fixture(t))
 	if _, err := os.Stat("product/evidence/v18_independent_reviews.json"); err != nil {
@@ -35,7 +35,7 @@ func TestProductRoadmapV19ScopeAndControlledRedContract(t *testing.T) {
 		if entry.Status != "declared" || len(entry.EvidenceRefs) != 0 ||
 			!reflect.DeepEqual(entry.Dependencies, vertical.DependsOn) ||
 			!reflect.DeepEqual(entry.AcceptanceContracts, vertical.AcceptanceContracts) {
-			t.Errorf("V19 capability %s is not exact controlled-red ownership: %#v", id, entry)
+			t.Errorf("V19 capability %s is not exact implemented-unsealed ownership: %#v", id, entry)
 		}
 	}
 
@@ -52,12 +52,19 @@ func TestProductRoadmapV19ScopeAndControlledRedContract(t *testing.T) {
 
 	contract := index.contracts["AC-V19-COUNCIL"]
 	if contract.Status != "planned" || contract.TestRef != "planned:acceptance/v19_council_test.go" ||
-		contract.Fixture != "planned:fixtures/v19_council" || contract.Receipt != "" {
-		t.Fatalf("V19 must remain controlled red until product exists: %#v", contract)
+		contract.Command != "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'" ||
+		contract.Fixture != "planned:fixtures/v19_council" || contract.Receipt != "" ||
+		!reflect.DeepEqual(contract.Assertions, []string{
+			"auto required and operator-skip policies have isolated E2Es",
+			"ballot identity derives from accredited launch",
+			"skip records principal reason time and spec hash",
+			"P implementation is present and unsealed; roadmap stays planned until S/E receipt",
+		}) {
+		t.Fatalf("V19 roadmap contract must remain non-executable and receipt-free at P: %#v", contract)
 	}
 }
 
-func TestProductRoadmapV19PlannedLifecycleHasNoEvidencePaths(t *testing.T) {
+func TestProductRoadmapV19ImplementedUnsealedHasNoEvidencePaths(t *testing.T) {
 	for _, path := range []string{
 		"product/evidence/v19_council_seal.json",
 		"product/evidence/v19_council.json",
@@ -72,12 +79,12 @@ func TestProductRoadmapV19PlannedLifecycleHasNoEvidencePaths(t *testing.T) {
 }
 
 func TestV19FocalEvidenceRejectsZeroTestPackagePass(t *testing.T) {
-	const name = "TestProductRoadmapV19ScopeAndControlledRedContract"
+	const name = "TestProductRoadmapV19ScopeAndImplementedUnsealedContract"
 	packagePassOnly := `{"Action":"pass","Package":"orquesta"}`
 	wrongTest := `{"Action":"run","Package":"orquesta","Test":"TestProductRoadmapV19ScopeAndExecutableContract"}
 {"Action":"pass","Package":"orquesta","Test":"TestProductRoadmapV19ScopeAndExecutableContract"}`
-	exact := `{"Action":"run","Package":"orquesta","Test":"TestProductRoadmapV19ScopeAndControlledRedContract"}
-{"Action":"pass","Package":"orquesta","Test":"TestProductRoadmapV19ScopeAndControlledRedContract"}`
+	exact := `{"Action":"run","Package":"orquesta","Test":"TestProductRoadmapV19ScopeAndImplementedUnsealedContract"}
+{"Action":"pass","Package":"orquesta","Test":"TestProductRoadmapV19ScopeAndImplementedUnsealedContract"}`
 	if v19HasExactRunPass(packagePassOnly, name) || v19HasExactRunPass(wrongTest, name) ||
 		!v19HasExactRunPass(exact, name) {
 		t.Fatal("V19 focal evidence accepted package PASS without exact test run/pass")

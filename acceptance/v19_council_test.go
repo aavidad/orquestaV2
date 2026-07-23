@@ -53,6 +53,8 @@ type v19Fixture struct {
 	OwnedCapabilityIDs   []string            `json:"owned_capability_ids"`
 	Dependency           v19Dependency       `json:"dependency"`
 	ImplementationStatus string              `json:"implementation_status"`
+	PSourcePaths         []string            `json:"p_source_paths"`
+	PTestPaths           []string            `json:"p_test_paths"`
 	Policies             []string            `json:"policies"`
 	PolicyContracts      []v19PolicyContract `json:"policy_contracts"`
 	PolicySourceContract struct {
@@ -149,15 +151,15 @@ type v19Fixture struct {
 		IsolatedRuntime bool     `json:"isolated_runtime"`
 		Assertions      []string `json:"assertions"`
 	} `json:"e2e_cases"`
-	PSEContract map[string]string `json:"pse_contract"`
-	RedGate     string            `json:"red_gate"`
+	PSEContract   map[string]string `json:"pse_contract"`
+	LifecycleGate string            `json:"lifecycle_gate"`
 }
 
 func TestAcceptanceV19Council(t *testing.T) {
 	fixture := loadV19Fixture(t)
 	if fixture.SchemaVersion != 2 || fixture.ContractID != "AC-V19-COUNCIL" || fixture.Vertical != "council" ||
-		fixture.ImplementationStatus != "awaiting_product" || fixture.RedGate != "V19_PRODUCT_PENDING" {
-		t.Fatalf("invalid V19 controlled-red identity: %+v", fixture)
+		fixture.ImplementationStatus != "implemented_unsealed" || fixture.LifecycleGate != "V19_IMPLEMENTED_UNSEALED" {
+		t.Fatalf("invalid V19 implemented-unsealed identity: %+v", fixture)
 	}
 	wantCapabilities := []string{"EVD-07", "GOV-11", "GOV-13", "GOV-14", "STG-06", "STG-08"}
 	assertV19Strings(t, "capabilities", sortedV19(fixture.OwnedCapabilityIDs), wantCapabilities)
@@ -165,17 +167,16 @@ func TestAcceptanceV19Council(t *testing.T) {
 	assertV19Policies(t, fixture)
 	assertV19CouncilShape(t, fixture)
 	assertV19SafetyAndPersistence(t, fixture)
+	assertV19ProductPresence(t, fixture)
 	assertV19E2E(t, fixture)
-	t.Fatalf("%s: V18 is accredited; only product V19 is absent", fixture.RedGate)
 }
 
-// TestV19PSEPlannedLifecycle forbids evidence before product implementation.
-// Future P/S/E transitions are deliberate: implemented_unsealed, then
-// sealed_unexecuted, then executable after the external V3 receipt.
-func TestV19PSEPlannedLifecycle(t *testing.T) {
+// TestV19PSEImplementedUnsealedLifecycle accepts P only: product and tests are
+// present, but neither a seal nor an execution receipt exists.
+func TestV19PSEImplementedUnsealedLifecycle(t *testing.T) {
 	fixture := loadV19Fixture(t)
-	if fixture.ImplementationStatus != "awaiting_product" || fixture.RedGate != "V19_PRODUCT_PENDING" {
-		t.Fatalf("V19 no longer planned: %+v", fixture)
+	if fixture.ImplementationStatus != "implemented_unsealed" || fixture.LifecycleGate != "V19_IMPLEMENTED_UNSEALED" {
+		t.Fatalf("V19 is not exactly P: %+v", fixture)
 	}
 	for _, path := range []string{v19SealManifestPath, v19ReceiptPath, v19OutputPath} {
 		if _, err := os.Lstat(filepath.Join("..", filepath.FromSlash(path))); err == nil {
@@ -199,6 +200,28 @@ func TestV19PSEPlannedLifecycle(t *testing.T) {
 	} {
 		if !strings.Contains(command, value) {
 			t.Fatalf("V19 E2E command lacks %q", value)
+		}
+	}
+}
+
+func assertV19ProductPresence(t *testing.T, fixture v19Fixture) {
+	t.Helper()
+	wantSources := []string{
+		"internal/council/council.go",
+		"internal/application/council_commands.go",
+		"internal/adapters/state/sqlite/migrations/014_council.sql",
+		"internal/bootstrap/v19_council_auto_e2e_linux_test.go",
+	}
+	wantTests := []string{
+		"internal/application/council_commands_replay_test.go",
+		"internal/adapters/state/sqlite/v19_council_test.go",
+		"internal/bootstrap/v19_council_required_e2e_linux_test.go",
+	}
+	assertV19Strings(t, "P source paths", fixture.PSourcePaths, wantSources)
+	assertV19Strings(t, "P test paths", fixture.PTestPaths, wantTests)
+	for _, path := range append(append([]string(nil), fixture.PSourcePaths...), fixture.PTestPaths...) {
+		if info, err := os.Stat(filepath.Join("..", filepath.FromSlash(path))); err != nil || info.IsDir() {
+			t.Fatalf("V19 P path=%q info=%v err=%v", path, info, err)
 		}
 	}
 }

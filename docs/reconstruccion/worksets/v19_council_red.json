@@ -59,7 +59,7 @@
     "seal_requirement": "S_records_LOC_by_layer_and_files_over_350",
     "post_v22_debt": "separate_SQLite_claim_read_validate_write_and_application_adapters_over_350_then_restore_compact_per_module_budget"
   },
-  "red_gate": "V19_PRODUCT_PENDING",
-  "implementation_status": "awaiting_product",
-  "workset_state": "contract_hardened_dependency_satisfied_product_red"
+  "lifecycle_gate": "V19_IMPLEMENTED_UNSEALED",
+  "implementation_status": "implemented_unsealed",
+  "workset_state": "product_implemented_unsealed_unaccredited"
 }
