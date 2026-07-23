@@ -4,9 +4,9 @@
   "contract_id": "AC-V21-I18N",
   "trusted_base_git_commit_oid": "8063d8ce3ed75dd5ec92108ef6e7e73ee8e11cb8",
   "product_delta_base_git_commit_oid": "8063d8ce3ed75dd5ec92108ef6e7e73ee8e11cb8",
-  "product_delta_sealed_git_commit_oid": "",
-  "seal_status": "p_implemented_unsealed_pending_seal",
-  "seal_note": "P freezes the exact V21 product and test candidate; no S binding, execution or PASS evidence exists.",
+  "product_delta_sealed_git_commit_oid": "8bbda22080d636b8dd4a589139a67d6ec1f05120",
+  "seal_status": "s_product_delta_sealed_pending_execution",
+  "seal_note": "S binds the exact V21 P product candidate; E receipt/output are absent and no PASS is implied.",
   "command": "sh -c './scripts/check_rebuild_write_set.sh 8063d8ce3ed75dd5ec92108ef6e7e73ee8e11cb8 && git diff --check 8063d8ce3ed75dd5ec92108ef6e7e73ee8e11cb8 HEAD -- && go test -mod=vendor -count=1 . ./acceptance ./internal/i18n ./internal/interfaces/httpapi ./internal/interfaces/mcp ./internal/interfaces/cli ./internal/bootstrap ./cmd/orquesta ./sdk/commands && timeout --kill-after=10s 180s go test -mod=vendor -race -count=1 -timeout=150s ./internal/i18n ./internal/bootstrap -run \"^(TestCatalogConcurrentReadsAreRaceFree|TestRealHTTPMCPCLIAndI18NParityEndToEnd)$\" && e2e_events=$(go test -mod=vendor -json -count=1 -timeout=120s ./internal/bootstrap -run \"^TestRealHTTPMCPCLIAndI18NParityEndToEnd$\" 2>&1); e2e_status=$?; printf \"%s\\n\" \"$e2e_events\"; [ \"$e2e_status\" -eq 0 ] && printf \"%s\\n\" \"$e2e_events\" | grep -F \"\\\"Action\\\":\\\"run\\\"\" | grep -F \"\\\"Package\\\":\\\"orquesta/internal/bootstrap\\\"\" | grep -F \"\\\"Test\\\":\\\"TestRealHTTPMCPCLIAndI18NParityEndToEnd\\\"\" >/dev/null && printf \"%s\\n\" \"$e2e_events\" | grep -F \"\\\"Action\\\":\\\"pass\\\"\" | grep -F \"\\\"Package\\\":\\\"orquesta/internal/bootstrap\\\"\" | grep -F \"\\\"Test\\\":\\\"TestRealHTTPMCPCLIAndI18NParityEndToEnd\\\"\" >/dev/null && GOFLAGS=-mod=vendor go vet . ./acceptance ./internal/i18n ./internal/interfaces/httpapi ./internal/interfaces/mcp ./internal/interfaces/cli ./internal/bootstrap ./cmd/orquesta ./sdk/commands'",
   "execution_argv": [
     "sh",
@@ -98,8 +98,8 @@
     "vendor/golang.org/x/text/number/option.go",
     "vendor/modules.txt"
   ],
-  "implementation_status": "implemented_unsealed",
-  "lifecycle_gate": "V21_IMPLEMENTED_UNSEALED",
+  "implementation_status": "sealed_unexecuted",
+  "lifecycle_gate": "V21_SEALED_UNEXECUTED",
   "preflight_status": "integrated_implementation_complete",
   "preflight_note": "V20 is accredited and the exact V21 product, tests and traceability candidate is frozen; P contains no S binding or E PASS evidence.",
   "blocking_dependency_vertical": "none",
