@@ -44,7 +44,7 @@ func councilAgentLaunchRequestForSubject(record GoalRecord, item goal.WorkItem, 
 	request.Objective = fmt.Sprintf("Assess exact approved V18 evidence %s. Return exactly one JSON envelope: {\"schema\":\"orquesta.council.contribution.v1\",\"subject_digest\":\"%s\",\"role\":\"%s\",\"body\":\"...\",\"ballot\":\"accept|reject|abstain|security_veto\",\"evidence\":[{\"kind\":\"...\",\"ref\":\"...\"}]}.", string(evidence), subject.Digest(), role)
 	request.PhaseRef, request.PhaseKey, request.PhaseTemplateRef = phase.Ref().String(), item.Phase().String(), phase.TemplateRef().String()
 	request.PhaseInputRefs, request.PhaseCriterionRefs = workItemRefs(phase.InputRefs()), workItemRefs(phase.CriterionRefs())
-	request.RoleKey, request.OutputContract = "role:council-"+string(role), council.ContributionSchema
+	request.RoleKey, request.OutputContract = "role:council-"+string(role), string(goal.OutputContractArtifact)
 	request.ArtifactMediaType, request.WriteSet = council.ContributionMediaType, nil
 	request.MaxOutputBytes, request.BudgetDemand = execution.MaxOutputBytes, item.BudgetDemand()
 	request.SecurityCriticality, request.ReasoningEffort = item.SecurityCriticality(), item.ReasoningEffort()

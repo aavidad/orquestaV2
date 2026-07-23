@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"orquesta/internal/council"
+	"orquesta/internal/goal"
+	"orquesta/internal/identity"
 	"orquesta/internal/ports"
 )
 
@@ -55,6 +57,14 @@ func TestCouncilAutoOpensAfterExactApprovedGateAndDecidesAtThree(t *testing.T) {
 	for _, execution := range councilExecutions {
 		if execution.ReviewSubjectDigest != "" || execution.CouncilSubjectDigest != round.SubjectDigest {
 			t.Fatalf("Council reused V18 subject: %+v", execution)
+		}
+		phase, found := phaseForWorkItem(record.Goal, record.Goal.WorkItems()[0])
+		if !found {
+			t.Fatal("Council phase missing")
+		}
+		request, err := councilAgentLaunchRequestForSubject(record, record.Goal.WorkItems()[0], execution, phase, round.Subject)
+		if err != nil || request.OutputContract != string(goal.OutputContractArtifact) || request.ArtifactMediaType != council.ContributionMediaType || ports.ValidateAgentLaunchRequest(request) != nil {
+			t.Fatalf("Council launch contract request=%+v err=%v", request, err)
 		}
 	}
 	system.process(t, ActionLaunchAgent, ActionLaunchAgent, ActionLaunchAgent)
@@ -131,6 +141,81 @@ func TestCouncilRequiredAndSkipDoNotAutoOpen(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCouncilAutoAndRequiredUseSameCohortBuilder(t *testing.T) {
+	auto := newCouncilSystem(t, council.PolicyAuto)
+	auto.processCommit(t)
+	auto.process(t, ActionAttestTest, ActionLaunchAgent, ActionLaunchAgent, ActionObserveAgent, ActionObserveAgent)
+	autoRecord := auto.record(t)
+
+	required := newCouncilSystem(t, council.PolicyRequired)
+	required.processCommit(t)
+	required.process(t, ActionAttestTest, ActionLaunchAgent, ActionLaunchAgent, ActionObserveAgent, ActionObserveAgent)
+	requiredRecord := required.record(t)
+	principal, project, err := required.access.values()
+	appTestNoError(t, err)
+	required.orchestrator.access.(*memoryAccessRepository).setRole(principal.Ref, project, identity.RoleProjectOwner)
+	claim, err := required.orchestrator.ClaimDirector(context.Background(), required.access,
+		ClaimDirectorRequest{RequestRef: "claim:council-cohort", GoalRef: required.goalRef})
+	appTestNoError(t, err)
+	change := requiredRecord.ChangeSets[0]
+	item := requiredRecord.Goal.WorkItems()[0]
+	opened, err := required.orchestrator.OpenCouncilRound(context.Background(), required.access, OpenCouncilRoundRequest{
+		RequestRef: "open:council-cohort", GoalRef: required.goalRef, ChangeRef: change.Ref,
+		ExpectedGoalRevision: requiredRecord.Goal.Revision(), ExpectedItemRevision: item.Revision(),
+		LeaseToken: claim.Lease.Token, LeaseFence: claim.Lease.Fence,
+	})
+	appTestNoError(t, err)
+	if !opened.Created {
+		t.Fatal("required Council cohort was not created")
+	}
+	requiredRecord = required.record(t)
+
+	if len(autoRecord.CouncilRounds) != 1 || len(requiredRecord.CouncilRounds) != 1 ||
+		autoRecord.CouncilRounds[0].Opener != CouncilRoundOpenerAuto ||
+		requiredRecord.CouncilRounds[0].Opener != CouncilRoundOpenerDirector {
+		t.Fatalf("Council openers auto=%+v required=%+v", autoRecord.CouncilRounds, requiredRecord.CouncilRounds)
+	}
+	assertSameCouncilCohortShape(t, autoRecord, requiredRecord)
+}
+
+func assertSameCouncilCohortShape(t *testing.T, auto, required GoalRecord) {
+	t.Helper()
+	autoCohort, requiredCohort := councilExecutions(auto), councilExecutions(required)
+	if len(autoCohort) != len(council.Roles()) || len(requiredCohort) != len(council.Roles()) {
+		t.Fatalf("Council cohort cardinality auto=%d required=%d", len(autoCohort), len(requiredCohort))
+	}
+	for _, role := range council.Roles() {
+		autoExecution, autoOK := councilExecutionForRole(autoCohort, role)
+		requiredExecution, requiredOK := councilExecutionForRole(requiredCohort, role)
+		if !autoOK || !requiredOK || autoExecution.Purpose != requiredExecution.Purpose ||
+			autoExecution.ArtifactMediaType != council.ContributionMediaType || requiredExecution.ArtifactMediaType != council.ContributionMediaType ||
+			autoExecution.State != ExecutionQueued || requiredExecution.State != ExecutionQueued ||
+			autoExecution.AttemptNo != 1 || requiredExecution.AttemptNo != 1 ||
+			autoExecution.CouncilSubjectDigest == "" || requiredExecution.CouncilSubjectDigest == "" ||
+			!councilLaunchIntentPresent(auto, autoExecution) || !councilLaunchIntentPresent(required, requiredExecution) {
+			t.Fatalf("Council cohort role=%s auto=%+v required=%+v", role, autoExecution, requiredExecution)
+		}
+	}
+}
+
+func councilExecutionForRole(executions []ExecutionRecord, role council.Role) (ExecutionRecord, bool) {
+	for _, execution := range executions {
+		if actual, ok := councilRole(execution); ok && actual == role {
+			return execution, true
+		}
+	}
+	return ExecutionRecord{}, false
+}
+
+func councilLaunchIntentPresent(record GoalRecord, execution ExecutionRecord) bool {
+	for _, intent := range record.EffectIntents {
+		if intent.Subject.ExecutionRef == execution.Ref && intent.ActionKind == ActionLaunchAgent && intent.Kind == EffectKindAgentLaunch {
+			return true
+		}
+	}
+	return false
 }
 
 func councilExecutions(record GoalRecord) []ExecutionRecord {
