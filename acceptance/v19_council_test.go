@@ -47,7 +47,15 @@ type v19Fixture struct {
 	ImplementationStatus string              `json:"implementation_status"`
 	Policies             []string            `json:"policies"`
 	PolicyContracts      []v19PolicyContract `json:"policy_contracts"`
-	SubjectContract      struct {
+	PolicySourceContract struct {
+		Input        string `json:"input"`
+		DomainType   string `json:"domain_type"`
+		DurablePath  string `json:"durable_path"`
+		WriterRule   string `json:"writer_rule"`
+		ReadOnlyRule string `json:"read_only_rule"`
+		ReworkRule   string `json:"rework_rule"`
+	} `json:"policy_source_contract"`
+	SubjectContract struct {
 		DigestFields      []string `json:"digest_fields"`
 		PersistedBindings []string `json:"persisted_bindings"`
 		DigestEncoding    string   `json:"digest_encoding"`
@@ -61,17 +69,21 @@ type v19Fixture struct {
 		DistinctFromV18AuthorPrimaryAdversarial bool     `json:"distinct_from_v18_author_primary_adversarial"`
 		FactsRequireLaunchReceipt               bool     `json:"facts_require_launch_receipt"`
 		ArtifactSchemas                         []string `json:"artifact_schemas"`
+		ArtifactRule                            string   `json:"artifact_rule"`
 	} `json:"role_contract"`
 	Ballots          []string `json:"ballots"`
 	DecisionContract struct {
-		NormalQuorum                 int    `json:"normal_quorum"`
-		Accepted                     string `json:"accepted"`
-		Rejected                     string `json:"rejected"`
-		NoConsensus                  string `json:"no_consensus"`
-		BlockedSecurity              string `json:"blocked_security"`
-		EarlyNormalDecisionForbidden bool   `json:"early_normal_decision_forbidden"`
-		Dissent                      string `json:"dissent"`
-		Integration                  string `json:"integration"`
+		NormalQuorum                 int      `json:"normal_quorum"`
+		Accepted                     string   `json:"accepted"`
+		Rejected                     string   `json:"rejected"`
+		NoConsensus                  string   `json:"no_consensus"`
+		BlockedSecurity              string   `json:"blocked_security"`
+		EarlyNormalDecisionForbidden bool     `json:"early_normal_decision_forbidden"`
+		SecurityVetoDecisionTiming   string   `json:"security_veto_decision_timing"`
+		Dissent                      string   `json:"dissent"`
+		Integration                  string   `json:"integration"`
+		ReplanCausality              string   `json:"replan_causality"`
+		RequiredTestOutcomes         []string `json:"required_test_outcomes"`
 	} `json:"decision_contract"`
 	AuthorityContract struct {
 		RequiredOpenPermission string   `json:"required_open_permission"`
@@ -167,17 +179,33 @@ func assertV19Policies(t *testing.T, fixture v19Fixture) {
 	if len(fixture.PolicyContracts) != 3 {
 		t.Fatalf("policy contracts=%d want=3", len(fixture.PolicyContracts))
 	}
-	openers := map[string]string{}
+	openers, behaviors, gates := map[string]string{}, map[string]string{}, map[string]string{}
 	for _, policy := range fixture.PolicyContracts {
 		if policy.Policy == "" || policy.Opener == "" || policy.Behavior == "" || policy.PromotionGate == "" {
 			t.Fatalf("incomplete policy: %+v", policy)
 		}
 		openers[policy.Policy] = policy.Opener
+		behaviors[policy.Policy] = policy.Behavior
+		gates[policy.Policy] = policy.PromotionGate
 	}
 	if openers["auto"] != "application_after_exact_v18_gate" ||
 		openers["required"] != "director_with_live_goal_lease_and_fence" ||
 		openers["skip_by_operator"] != "authorized_human_with_council_skip" {
 		t.Fatalf("policy openers overlap or drift: %v", openers)
+	}
+	if behaviors["auto"] != "open once and schedule exactly proposer critic and arbiter" ||
+		behaviors["required"] != "block integration until explicit governed open then schedule exactly proposer critic and arbiter" ||
+		behaviors["skip_by_operator"] != "record exact skip before any council round fact or launch and schedule no council execution" ||
+		gates["auto"] != "accepted_decision_only" || gates["required"] != "accepted_decision_only" ||
+		gates["skip_by_operator"] != "valid_skip_plus_exact_v18_gate" {
+		t.Fatalf("policy behavior/gate drift: behaviors=%v gates=%v", behaviors, gates)
+	}
+	source := fixture.PolicySourceContract
+	if source.Input != "WorkItemSpec.CouncilPolicy" || source.DomainType != "council.Policy" ||
+		source.DurablePath != "WorkItem_and_GoalSnapshot_before_author_launch" ||
+		source.WriterRule != "required_for_every_work_item_with_non_empty_write_set" ||
+		source.ReadOnlyRule != "empty_policy_allowed_only_without_change_or_council_subject" || source.ReworkRule == "" {
+		t.Fatalf("council policy source is not durable and pre-launch: %+v", source)
 	}
 }
 
@@ -185,19 +213,32 @@ func assertV19CouncilShape(t *testing.T, fixture v19Fixture) {
 	t.Helper()
 	assertV19Strings(t, "subject digest", fixture.SubjectContract.DigestFields,
 		[]string{"ProjectRef", "ReviewSubjectDigest", "ReviewGateDigest", "CouncilPolicy"})
+	assertV19Strings(t, "subject bindings", fixture.SubjectContract.PersistedBindings,
+		[]string{"GoalRef", "WorkItemRef", "ChangeSetRef", "SpecHash", "PlanGeneration", "WorkItemGeneration", "AppSpecGeneration"})
+	if fixture.SubjectContract.DigestEncoding != "domain_separated_length_framed_sha256" ||
+		fixture.SubjectContract.V18Revalidation != "rebuild exact author production provenance plus primary and adversarial approve gate at every council write and integration admission processing" {
+		t.Fatalf("subject digest/revalidation drift: %+v", fixture.SubjectContract)
+	}
 	assertV19Strings(t, "roles", fixture.Roles, []string{"proposer", "critic", "arbiter"})
 	assertV19Strings(t, "ballots", sortedV19(fixture.Ballots), []string{"abstain", "accept", "reject", "security_veto"})
 	role := fixture.RoleContract
 	if role.RequiredLaunches != 3 || role.RequiredBallots != 3 || !role.DistinctFromEachOther ||
-		!role.DistinctFromV18AuthorPrimaryAdversarial || !role.FactsRequireLaunchReceipt || len(role.ArtifactSchemas) != 3 {
+		!role.DistinctFromV18AuthorPrimaryAdversarial || !role.FactsRequireLaunchReceipt ||
+		!reflect.DeepEqual(role.ArtifactSchemas, []string{"orquesta.council.contribution.v1"}) || role.ArtifactRule == "" {
 		t.Fatalf("invalid council cardinality/independence: %+v", role)
 	}
 	decision := fixture.DecisionContract
-	if decision.NormalQuorum != 3 || !decision.EarlyNormalDecisionForbidden || decision.Accepted == "" ||
-		decision.Rejected == "" || decision.NoConsensus == "" || decision.BlockedSecurity == "" ||
-		decision.Dissent == "" || decision.Integration == "" {
+	if decision.NormalQuorum != 3 || !decision.EarlyNormalDecisionForbidden ||
+		decision.Accepted != "at_least_two_accept_after_three_ballots" ||
+		decision.Rejected != "at_least_two_reject_after_three_ballots" ||
+		decision.NoConsensus != "every_other_complete_three_ballot_result" ||
+		decision.BlockedSecurity != "any_typed_security_veto_with_artifact_and_evidence_ref" ||
+		decision.SecurityVetoDecisionTiming != "after_all_three_ballots_without_retiring_pending_roles" ||
+		decision.Dissent == "" || decision.Integration == "" || decision.ReplanCausality == "" {
 		t.Fatalf("incomplete deterministic decision contract: %+v", decision)
 	}
+	assertV19Strings(t, "decision outcomes", decision.RequiredTestOutcomes,
+		[]string{"accepted", "rejected", "no_consensus", "blocked_security"})
 }
 
 func assertV19SafetyAndPersistence(t *testing.T, fixture v19Fixture) {
@@ -213,10 +254,13 @@ func assertV19SafetyAndPersistence(t *testing.T, fixture v19Fixture) {
 	}
 	if !fixture.ExecutionContract.NewActionKindForbidden || fixture.ExecutionContract.ACKOrTextIsEvidence ||
 		!reflect.DeepEqual(fixture.ExecutionContract.ActionKinds, []string{"launch_agent", "observe_agent"}) ||
-		len(fixture.ExecutionContract.Purposes) != 3 {
+		!reflect.DeepEqual(fixture.ExecutionContract.Purposes, []string{"council_proposer", "council_critic", "council_arbiter"}) {
 		t.Fatalf("council introduced execution authority: %+v", fixture.ExecutionContract)
 	}
-	if fixture.PersistenceContract.Authority != "GoalRecord_through_StateRepository" || len(fixture.PersistenceContract.Facts) != 8 ||
+	if fixture.PersistenceContract.Authority != "GoalRecord_through_StateRepository" ||
+		fixture.PersistenceContract.Atomicity != "same_CAS_snapshot_event_outbox_transaction" ||
+		!reflect.DeepEqual(fixture.PersistenceContract.Facts, []string{"round", "proposal", "critique", "ballot", "dissent", "security_veto", "decision", "skip"}) ||
+		fixture.PersistenceContract.Replay == "" || fixture.PersistenceContract.Recovery == "" ||
 		fixture.MigrationContract.Version != 14 || fixture.MigrationContract.SourceVersion != 13 ||
 		fixture.MigrationContract.LiveV18CandidateWithoutDurablePolicy != "fail_closed" || fixture.MigrationContract.Backfill != "forbidden" {
 		t.Fatalf("invalid persistence/migration contract: %+v %+v", fixture.PersistenceContract, fixture.MigrationContract)
@@ -233,10 +277,11 @@ func assertV19E2E(t *testing.T, fixture v19Fixture) {
 		t.Fatalf("V19 E2E/PSE count invalid")
 	}
 	var policies []string
+	wantAssertions := map[string]int{"auto": 6, "required": 7, "skip_by_operator": 6}
 	for _, scenario := range fixture.E2ECases {
 		policies = append(policies, scenario.Policy)
-		if !scenario.IsolatedRuntime || len(scenario.Assertions) != 6 {
-			t.Errorf("V19 %s lacks isolated six-assertion E2E", scenario.Policy)
+		if !scenario.IsolatedRuntime || len(scenario.Assertions) != wantAssertions[scenario.Policy] {
+			t.Errorf("V19 %s E2E assertions=%d want=%d", scenario.Policy, len(scenario.Assertions), wantAssertions[scenario.Policy])
 		}
 	}
 	assertV19Strings(t, "E2E policies", sortedV19(policies), []string{"auto", "required", "skip_by_operator"})

@@ -33,11 +33,19 @@
       "promotion_gate": "valid_skip_plus_exact_v18_gate"
     }
   ],
+  "policy_source_contract": {
+    "input": "WorkItemSpec.CouncilPolicy",
+    "domain_type": "council.Policy",
+    "durable_path": "WorkItem_and_GoalSnapshot_before_author_launch",
+    "writer_rule": "required_for_every_work_item_with_non_empty_write_set",
+    "read_only_rule": "empty_policy_allowed_only_without_change_or_council_subject",
+    "rework_rule": "new_work_item_declares_policy_explicitly_and_never_infers_from_mutable_config_or_text"
+  },
   "subject_contract": {
     "digest_fields": ["ProjectRef", "ReviewSubjectDigest", "ReviewGateDigest", "CouncilPolicy"],
     "persisted_bindings": ["GoalRef", "WorkItemRef", "ChangeSetRef", "SpecHash", "PlanGeneration", "WorkItemGeneration", "AppSpecGeneration"],
     "digest_encoding": "domain_separated_length_framed_sha256",
-    "v18_revalidation": "rebuild exact author primary adversarial gate at every council write and integration admission processing"
+    "v18_revalidation": "rebuild exact author production provenance plus primary and adversarial approve gate at every council write and integration admission processing"
   },
   "roles": ["proposer", "critic", "arbiter"],
   "role_contract": {
@@ -46,7 +54,8 @@
     "distinct_from_each_other": true,
     "distinct_from_v18_author_primary_adversarial": true,
     "facts_require_launch_receipt": true,
-    "artifact_schemas": ["orquesta.council.proposal.v1", "orquesta.council.critique.v1", "orquesta.council.ballot.v1"]
+    "artifact_schemas": ["orquesta.council.contribution.v1"],
+    "artifact_rule": "one strict envelope per role contains role body ballot and typed evidence; proposer derives proposal plus ballot critic derives critique plus ballot arbiter derives ballot; every derived fact references the same CAS artifact"
   },
   "ballots": ["accept", "reject", "abstain", "security_veto"],
   "decision_contract": {
@@ -56,8 +65,11 @@
     "no_consensus": "every_other_complete_three_ballot_result",
     "blocked_security": "any_typed_security_veto_with_artifact_and_evidence_ref",
     "early_normal_decision_forbidden": true,
-    "dissent": "persist every non_decisive minority ballot as immutable derived fact",
-    "integration": "only explicit integration command may proceed and must revalidate V18 gate plus council decision digest"
+    "security_veto_decision_timing": "after_all_three_ballots_without_retiring_pending_roles",
+    "dissent": "accepted derives dissent for reject or abstain; rejected derives dissent for accept or abstain; no_consensus derives dissent for all three ballots; blocked_security derives dissent for every non_veto ballot",
+    "integration": "only explicit integration command may proceed and must revalidate V18 gate plus council decision digest",
+    "replan_causality": "every Director replan proposal and successor binds source CouncilDecisionRef CouncilDecisionDigest and CouncilSubjectDigest",
+    "required_test_outcomes": ["accepted", "rejected", "no_consensus", "blocked_security"]
   },
   "authority_contract": {
     "required_open_permission": "goals.direct",
@@ -99,7 +111,7 @@
     "file_loc_max": 350
   },
   "invariants": [
-    "council never replaces V18 independent author primary adversarial reviews test attestation or Director lease",
+    "council never replaces V18 author production provenance primary and adversarial reviews test attestation or Director lease",
     "one immutable policy belongs to one exact council subject and the three policies are mutually exclusive",
     "auto and required differ by opener while using the same three council roles and decision rules",
     "skip is a human authorization fact and never a ballot decision or synthetic launch",
@@ -132,6 +144,7 @@
         "integration blocks before governed open",
         "stale Director lease or fence cannot open",
         "live Director opens exactly one round and three roles",
+        "a second exact subject with accept reject abstain persists no_consensus and three dissent facts",
         "typed arbiter security veto with evidence produces blocked_security",
         "veto remains durable after restart and integration stays blocked",
         "ACK text severity or incomplete artifact cannot become veto or ballot"

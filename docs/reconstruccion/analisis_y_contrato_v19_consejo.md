@@ -14,9 +14,10 @@ Consejo añade hechos causales y tres propósitos de ejecución; no añade store
 cola, daemon, scheduler, lifecycle, writer, puerto outbound ni `ActionKind`.
 
 El gate V18 sigue siendo obligatorio. Autor, reviewer primario y reviewer
-adversarial deben ser tres launches distintos, aprobar el mismo sujeto exacto y
-mantener attestation `PASS`. Consejo nunca sustituye esas reviews, integra,
-cierra ni replanea. Solo habilita o bloquea un comando explícito de integración.
+adversarial son tres launches distintos: autor aporta producción/provenance;
+primario y adversarial aprueban el mismo sujeto exacto con attestation `PASS`.
+Consejo nunca sustituye esas reviews, integra, cierra ni replanea. Solo habilita
+o bloquea un comando explícito de integración.
 
 ## Sujeto exacto
 
@@ -32,6 +33,13 @@ length-framed sobre:
 item y AppSpec se persisten como enlaces verificables. No se copia ni reinventa
 el sujeto V18: cada apertura, fact, decisión, skip, admisión y procesamiento de
 integración reconstruye el gate V18 y comprueba ambos digests.
+
+La política nace únicamente en `WorkItemSpec.CouncilPolicy`, se valida como
+`council.Policy`, se incorpora al `WorkItem` y a `GoalSnapshot` y queda durable
+antes del launch autor. Es obligatoria para todo item con write-set; un item
+read-only puede carecer de ella porque no produce change ni sujeto Council. Un
+rework declara otra vez política en el nuevo item. Nunca se deriva de texto,
+rol, criticidad, configuración mutable ni estado posterior a las reviews.
 
 ## Políticas excluyentes
 
@@ -53,9 +61,15 @@ La política se congela para el sujeto. No existe caída automática de
 La ronda exige tres launches Council nuevos, distintos entre sí y distintos de
 los launches V18:
 
-- `proposer` publica `orquesta.council.proposal.v1` y ballot;
-- `critic` publica `orquesta.council.critique.v1` y ballot;
-- `arbiter` publica `orquesta.council.ballot.v1` y ballot.
+- `proposer` publica contribución de propuesta y ballot;
+- `critic` publica contribución crítica y ballot;
+- `arbiter` publica ballot arbitral.
+
+Cada rol emite un único envelope estricto
+`orquesta.council.contribution.v1` con sujeto, rol, body, ballot y evidencia
+tipada. Proposer deriva facts proposal+ballot; critic, critique+ballot; arbiter,
+ballot. Todos referencian el mismo artifact CAS de esa observación. No se
+fragmenta una observación en efectos externos ni artifacts inventados.
 
 Ballots exactos: `accept`, `reject`, `abstain`, `security_veto`. ACK, texto,
 severidad, alias o log no son evidencia. Todo fact requiere receipt de launch,
@@ -64,16 +78,20 @@ artifact estricto, sujeto, rol, intento e idempotencia exactos.
 Regla determinista:
 
 - cualquier `security_veto` tipado con artifact y evidence ref produce
-  `blocked_security`;
+  `blocked_security` después de recibir 3/3 ballots;
 - sin veto, se esperan 3/3 ballots;
 - al menos dos `accept` producen `accepted`;
 - al menos dos `reject` producen `rejected`;
 - todo otro conjunto completo produce `no_consensus`.
 
-No se decide normalmente con 2/3 temprano: un tercer ballot puede cambiar el
-resultado tras crash/replay. Ballots minoritarios no decisivos se conservan
-como disenso inmutable. `rejected`, `no_consensus` y `blocked_security`
-preservan trabajo y exigen replan causal del Director.
+No existe decisión temprana: ni mayoría provisional ni veto retiran roles o
+acciones pendientes. Así crash/replay usa una sola regla de cierre. Disenso
+derivado exacto: `accepted` marca reject/abstain; `rejected` marca
+accept/abstain; `no_consensus` marca los tres ballots; `blocked_security` marca
+todo ballot no-veto. `rejected`, `no_consensus` y `blocked_security` preservan
+trabajo y exigen replan causal del Director. Propuesta y sucesor del replan
+incluyen `CouncilDecisionRef`, `CouncilDecisionDigest` y
+`CouncilSubjectDigest` fuente.
 
 ## Aplicación, persistencia y recovery
 
@@ -102,7 +120,8 @@ Tres runtimes aislados, DB/FS/agentes propios:
 1. `auto`: gate V18 abre una ronda; tres launches; 2 accept + 1 reject; disenso;
    integración explícita; restart/replay sin duplicados; sustitución rechazada.
 2. `required`: no abre ni integra sin Director válido; fence stale falla; veto
-   tipado queda durable y bloquea; ACK/texto no se transforma en evidencia.
+   tipado espera 3/3, queda durable y bloquea; segundo sujeto 1/1/1 demuestra
+   `no_consensus` y tres disensos; ACK/texto no se transforma en evidencia.
 3. `skip_by_operator`: RBAC humano exacto, payload completo, cero launches,
    replay igual idempotente, payload/cruce/post-ronda rechazado; V18 revalidado.
 
