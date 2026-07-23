@@ -298,7 +298,7 @@ func TestAgentObservationAndLaunchReceiptCannotProveRequiredTests(t *testing.T) 
 	}
 }
 
-func TestLegacyWriteCandidateWithoutRequiredTestsRemainsPendingUnattestable(t *testing.T) {
+func TestLiveLegacyWriteCandidateWithoutCouncilPolicyFailsClosed(t *testing.T) {
 	system := newTestAttestationSystem(t, ports.TestAttestationPassed)
 	system.processCommit(t)
 	system.repository.mu.Lock()
@@ -315,49 +315,4 @@ func TestLegacyWriteCandidateWithoutRequiredTestsRemainsPendingUnattestable(t *t
 		t.Fatal("live legacy writer without Council policy restored")
 	}
 	system.repository.mu.Unlock()
-	return
-	var removedIntent string
-	for ref, action := range system.repository.actions {
-		if action.record.GoalRef == system.goalRef && action.record.Kind == ActionAttestTest {
-			removedIntent = action.record.EffectIntentRef
-			delete(system.repository.actions, ref)
-		}
-	}
-	record.Goal = legacy
-	intents := record.EffectIntents[:0]
-	for _, intent := range record.EffectIntents {
-		if intent.Ref != removedIntent {
-			intents = append(intents, intent)
-		}
-	}
-	record.EffectIntents = intents
-	approvals := record.EffectApprovals[:0]
-	for _, approval := range record.EffectApprovals {
-		if approval.IntentRef != removedIntent {
-			approvals = append(approvals, approval)
-		}
-	}
-	record.EffectApprovals = approvals
-	system.repository.records[system.goalRef] = record
-	system.repository.mu.Unlock()
-
-	legacyRecord := system.record(t)
-	if len(legacyRecord.Goal.WorkItems()[0].RequiredTests()) != 0 ||
-		legacyRecord.Executions[0].State != ExecutionAwaitingAttestation {
-		t.Fatalf("legacy candidate=%+v", legacyRecord)
-	}
-	if result, err := system.orchestrator.ProcessNext(context.Background(), "worker:legacy"); err != nil || result.Processed {
-		t.Fatalf("legacy candidate became attestable: result=%+v err=%v", result, err)
-	}
-	_, err = system.orchestrator.IntegrateChange(context.Background(), system.access, IntegrateChangeRequest{
-		RequestRef: "request:integrate:legacy", GoalRef: legacyRecord.Goal.Ref(),
-		ChangeRef: legacyRecord.ChangeSets[0].Ref, ExpectedTargetOID: legacyRecord.WorkspaceBindings[0].BaseOID,
-	})
-	if !IsStateError(err, StateConflict) {
-		t.Fatalf("legacy candidate integrated without tests: %v", err)
-	}
-	if len(system.attestor.requests) != 0 || len(legacyRecord.ChangeSets) != 1 ||
-		len(legacyRecord.IntegrationReceipts) != 0 {
-		t.Fatalf("legacy candidate mutated: %+v", legacyRecord)
-	}
 }
