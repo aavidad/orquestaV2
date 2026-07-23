@@ -5,7 +5,7 @@
   "branch": "reconstruccion/v18-integration-prep",
   "worktree": "/home/alberto/Trabajo/orquesta-rebuild-worktrees/v18-integration-prep",
   "base_oid": "e311a97e4fdcafcf81c6114dbd904af4ed9293ad",
-  "owner_state": "accredited_handoff_complete_pending_lock_release",
+  "owner_state": "accredited_handoff_complete_locks_released",
   "owner_continuity_required": true,
   "preflight_only": false,
   "dependencies": [
@@ -76,6 +76,15 @@
       "valid_until": "2026-07-23T13:12:26Z",
       "held_locks": ["L-TRACE", "L-SEAL"]
     }
+  },
+  "locks_released": {
+    "receipt_path": "/home/alberto/Trabajo/orquesta-rebuild/.orquesta-runtime/control-plane/runs/v18-seal-20260723T011000Z/lease_release_receipt.json",
+    "sha256": "569b8b61b392ce5faa788af0d45bdc044189c3f8dbbc62fd6f5df337cb453784",
+    "result": "RELEASED",
+    "released_at": "2026-07-23T01:54:54Z",
+    "holder_process_exited": true,
+    "released_locks": ["L-TRACE", "L-SEAL"],
+    "post_release_nonblocking_acquire_exit_codes": {"L-TRACE": 0, "L-SEAL": 0}
   },
   "independent_review_receipt": {
     "path": "/home/alberto/Trabajo/orquesta-rebuild/.orquesta-runtime/control-plane/runs/v18-seal-20260723T011000Z/review_receipt.json",
@@ -191,11 +200,11 @@
     "e2e_max_wall_time_seconds": 180
   },
   "next_transition": {
-    "trigger": "recorded release of L-TRACE and L-SEAL after the accredited V18 handoff",
+    "trigger": "V19 may acquire its own disjoint workset and required locks",
     "actions": [
-      "handoff the next causal vertical V19 council",
+      "start the next causal vertical V19 council under its own lock authority",
       "preserve the immutable V18 receipt and output",
-      "do not claim either lock released until its holder records release"
+      "retain the acquisition and release receipt history"
   ]
 }
 }

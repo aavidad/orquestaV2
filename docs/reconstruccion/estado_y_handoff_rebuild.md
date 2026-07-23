@@ -28,8 +28,12 @@ La revisión E2 `GO` está en
 (`sha256:98a62d5a0f983f1e3509c1a46b0fb89de52b42c409749e40091869011add877b`).
 `BUG-REBUILD-20260723-333` queda cerrado: los ratchets históricos validan el
 lifecycle V18 exacto. El primer E fue invalidado por ese falso rojo y no
-acredita nada. `L-TRACE` y `L-SEAL` siguen vivos; el siguiente frente es V19,
-sin afirmar aún su liberación.
+acredita nada. `L-TRACE` y `L-SEAL` fueron liberados cooperativamente a
+`2026-07-23T01:54:54Z`; el holder salió y ambos `flock` no bloqueantes dieron
+exit 0. El receipt está en
+`.orquesta-runtime/control-plane/runs/v18-seal-20260723T011000Z/lease_release_receipt.json`
+(`sha256:569b8b61b392ce5faa788af0d45bdc044189c3f8dbbc62fd6f5df337cb453784`).
+V19 queda lista para adquirir su propio workset y locks.
 
 ## Checkpoint histórico inmediato: V17 acreditado
 
