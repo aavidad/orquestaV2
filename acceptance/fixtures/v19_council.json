@@ -67,9 +67,17 @@
     "early_normal_decision_forbidden": true,
     "security_veto_decision_timing": "after_all_three_ballots_without_retiring_pending_roles",
     "dissent": "accepted derives dissent for reject or abstain; rejected derives dissent for accept or abstain; no_consensus derives dissent for all three ballots; blocked_security derives dissent for every non_veto ballot",
-    "integration": "only explicit integration command may proceed and must revalidate V18 gate plus council decision digest",
+    "integration": "only explicit integration command may proceed and must revalidate V18 gate plus exact typed council resolution",
     "replan_causality": "every Director replan proposal and successor binds source CouncilDecisionRef CouncilDecisionDigest and CouncilSubjectDigest",
     "required_test_outcomes": ["accepted", "rejected", "no_consensus", "blocked_security"]
+  },
+  "resolution_contract": {
+    "common_binding": "CouncilSubjectDigest",
+    "accepted_round_binding": ["CouncilDecisionRef", "CouncilDecisionDigest"],
+    "skip_binding": ["CouncilSkipRef", "CouncilSkipDigest"],
+    "mutual_exclusion": "exactly one accepted_round or skip binding is present on integration action intent admission and processing",
+    "target_digest": "bind resolution kind common subject digest and the selected ref plus digest",
+    "synthetic_skip_decision_forbidden": true
   },
   "authority_contract": {
     "required_open_permission": "goals.direct",

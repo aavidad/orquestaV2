@@ -85,6 +85,14 @@ type v19Fixture struct {
 		ReplanCausality              string   `json:"replan_causality"`
 		RequiredTestOutcomes         []string `json:"required_test_outcomes"`
 	} `json:"decision_contract"`
+	ResolutionContract struct {
+		CommonBinding          string   `json:"common_binding"`
+		AcceptedRoundBinding   []string `json:"accepted_round_binding"`
+		SkipBinding            []string `json:"skip_binding"`
+		MutualExclusion        string   `json:"mutual_exclusion"`
+		TargetDigest           string   `json:"target_digest"`
+		SyntheticSkipForbidden bool     `json:"synthetic_skip_decision_forbidden"`
+	} `json:"resolution_contract"`
 	AuthorityContract struct {
 		RequiredOpenPermission string   `json:"required_open_permission"`
 		SkipPermission         string   `json:"skip_permission"`
@@ -237,12 +245,21 @@ func assertV19CouncilShape(t *testing.T, fixture v19Fixture) {
 		decision.BlockedSecurity != "any_typed_security_veto_with_artifact_and_evidence_ref" ||
 		decision.SecurityVetoDecisionTiming != "after_all_three_ballots_without_retiring_pending_roles" ||
 		decision.Dissent != "accepted derives dissent for reject or abstain; rejected derives dissent for accept or abstain; no_consensus derives dissent for all three ballots; blocked_security derives dissent for every non_veto ballot" ||
-		decision.Integration != "only explicit integration command may proceed and must revalidate V18 gate plus council decision digest" ||
+		decision.Integration != "only explicit integration command may proceed and must revalidate V18 gate plus exact typed council resolution" ||
 		decision.ReplanCausality != "every Director replan proposal and successor binds source CouncilDecisionRef CouncilDecisionDigest and CouncilSubjectDigest" {
 		t.Fatalf("incomplete deterministic decision contract: %+v", decision)
 	}
 	assertV19Strings(t, "decision outcomes", decision.RequiredTestOutcomes,
 		[]string{"accepted", "rejected", "no_consensus", "blocked_security"})
+	resolution := fixture.ResolutionContract
+	if resolution.CommonBinding != "CouncilSubjectDigest" ||
+		!reflect.DeepEqual(resolution.AcceptedRoundBinding, []string{"CouncilDecisionRef", "CouncilDecisionDigest"}) ||
+		!reflect.DeepEqual(resolution.SkipBinding, []string{"CouncilSkipRef", "CouncilSkipDigest"}) ||
+		resolution.MutualExclusion != "exactly one accepted_round or skip binding is present on integration action intent admission and processing" ||
+		resolution.TargetDigest != "bind resolution kind common subject digest and the selected ref plus digest" ||
+		!resolution.SyntheticSkipForbidden {
+		t.Fatalf("ambiguous Council integration resolution: %+v", resolution)
+	}
 }
 
 func assertV19SafetyAndPersistence(t *testing.T, fixture v19Fixture) {

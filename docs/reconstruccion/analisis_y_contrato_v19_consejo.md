@@ -110,8 +110,12 @@ recompone acciones persistidas, nunca duplica launch, fact o decisión.
 
 Replay con identidad y payload iguales devuelve el mismo hecho. Cambiar payload,
 sujeto, proyecto, generación, rol, intento o launch falla. Integración guarda
-`CouncilDecisionDigest` y lo revalida junto a V18 tanto al admitir como al
-procesar el efecto.
+una resolución tipada y mutuamente excluyente: `auto|required` enlazan
+`CouncilDecisionRef` + `CouncilDecisionDigest`; `skip_by_operator` enlaza
+`CouncilSkipRef` + `CouncilSkipDigest`. Ambos llevan `CouncilSubjectDigest`.
+Action, intent, admisión, target digest y processing permiten exactamente una
+de esas dos formas y la revalidan junto a V18. Un skip nunca se serializa como
+decisión sintética.
 
 ## E2E obligatorios
 
