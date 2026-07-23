@@ -1,0 +1,20 @@
+rebuild_write_set_ok base=8063d8ce3ed75dd5ec92108ef6e7e73ee8e11cb8 files=81
+ok  	orquesta	8.380s
+ok  	orquesta/acceptance	34.167s
+ok  	orquesta/internal/i18n	0.008s
+ok  	orquesta/internal/interfaces/httpapi	0.003s
+ok  	orquesta/internal/interfaces/mcp	0.075s
+ok  	orquesta/internal/interfaces/cli	0.003s
+ok  	orquesta/internal/bootstrap	19.092s
+ok  	orquesta/cmd/orquesta	0.030s
+ok  	orquesta/sdk/commands	0.007s
+ok  	orquesta/internal/i18n	1.014s
+ok  	orquesta/internal/bootstrap	22.063s
+{"Time":"2026-07-23T11:17:10.461575517+02:00","Action":"start","Package":"orquesta/internal/bootstrap"}
+{"Time":"2026-07-23T11:17:10.465188095+02:00","Action":"run","Package":"orquesta/internal/bootstrap","Test":"TestRealHTTPMCPCLIAndI18NParityEndToEnd"}
+{"Time":"2026-07-23T11:17:10.465204105+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealHTTPMCPCLIAndI18NParityEndToEnd","Output":"=== RUN   TestRealHTTPMCPCLIAndI18NParityEndToEnd\n"}
+{"Time":"2026-07-23T11:17:11.574346295+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Test":"TestRealHTTPMCPCLIAndI18NParityEndToEnd","Output":"--- PASS: TestRealHTTPMCPCLIAndI18NParityEndToEnd (1.11s)\n"}
+{"Time":"2026-07-23T11:17:11.574373345+02:00","Action":"pass","Package":"orquesta/internal/bootstrap","Test":"TestRealHTTPMCPCLIAndI18NParityEndToEnd","Elapsed":1.11}
+{"Time":"2026-07-23T11:17:11.574381485+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Output":"PASS\n"}
+{"Time":"2026-07-23T11:17:11.575973544+02:00","Action":"output","Package":"orquesta/internal/bootstrap","Output":"ok  \torquesta/internal/bootstrap\t1.114s\n"}
+{"Time":"2026-07-23T11:17:11.575990414+02:00","Action":"pass","Package":"orquesta/internal/bootstrap","Elapsed":1.114}
