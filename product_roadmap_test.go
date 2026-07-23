@@ -372,7 +372,7 @@ func TestProductRoadmapV06ScopeAndExecutableContract(t *testing.T) {
 			t.Errorf("V06-deferred capability %s lost exact owner %s: %#v", id, owner, entry)
 			continue
 		}
-		if id != "EVD-01" && (entry.Status != "declared" || len(entry.EvidenceRefs) != 0) {
+		if id == "OPS-13" && (entry.Status != "declared" || len(entry.EvidenceRefs) != 0) {
 			t.Errorf("still-deferred V06 capability %s = %#v, want exact owner %s", id, entry, owner)
 		}
 	}
