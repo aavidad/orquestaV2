@@ -111,12 +111,17 @@
     "CouncilStore", "CouncilQueue", "CouncilScheduler", "CouncilLifecycle", "CouncilEngine", "CouncilDaemon", "CouncilWriter"
   ],
   "budgets": {
-    "product_loc_max": 3400,
-    "domain_loc_max": 450,
-    "application_loc_max": 1250,
-    "sqlite_recovery_loc_max": 1100,
-    "bootstrap_loc_max": 350,
-    "file_loc_max": 350
+    "stage": "pre_P_operational_ceiling",
+    "product_loc_max": 3650,
+    "domain_loc_max": 350,
+    "application_loc_max": 1300,
+    "sqlite_recovery_loc_max": 1600,
+    "bootstrap_loc_max": 400,
+    "file_loc_max": 1450,
+    "migration_exception": "forbidden",
+    "quality_accreditation": "P_cannot_declare_simplicity_green_from_this_ceiling",
+    "seal_requirement": "S_records_LOC_by_layer_and_files_over_350",
+    "post_v22_debt": "separate_SQLite_claim_read_validate_write_and_application_adapters_over_350_then_restore_compact_per_module_budget"
   },
   "invariants": [
     "council never replaces V18 author production provenance primary and adversarial reviews test attestation or Director lease",

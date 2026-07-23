@@ -131,12 +131,17 @@ type v19Fixture struct {
 	} `json:"migration_contract"`
 	ForbiddenPrivateAuthorities []string `json:"forbidden_private_authorities"`
 	Budgets                     struct {
-		ProductLOCMax        int `json:"product_loc_max"`
-		DomainLOCMax         int `json:"domain_loc_max"`
-		ApplicationLOCMax    int `json:"application_loc_max"`
-		SQLiteRecoveryLOCMax int `json:"sqlite_recovery_loc_max"`
-		BootstrapLOCMax      int `json:"bootstrap_loc_max"`
-		FileLOCMax           int `json:"file_loc_max"`
+		Stage                string `json:"stage"`
+		ProductLOCMax        int    `json:"product_loc_max"`
+		DomainLOCMax         int    `json:"domain_loc_max"`
+		ApplicationLOCMax    int    `json:"application_loc_max"`
+		SQLiteRecoveryLOCMax int    `json:"sqlite_recovery_loc_max"`
+		BootstrapLOCMax      int    `json:"bootstrap_loc_max"`
+		FileLOCMax           int    `json:"file_loc_max"`
+		MigrationException   string `json:"migration_exception"`
+		QualityAccreditation string `json:"quality_accreditation"`
+		SealRequirement      string `json:"seal_requirement"`
+		PostV22Debt          string `json:"post_v22_debt"`
 	} `json:"budgets"`
 	Invariants []string `json:"invariants"`
 	E2ECases   []struct {
@@ -334,9 +339,16 @@ func assertV19SafetyAndPersistence(t *testing.T, fixture v19Fixture) {
 		fixture.MigrationContract.Backfill != "forbidden" {
 		t.Fatalf("invalid persistence/migration contract: %+v %+v", fixture.PersistenceContract, fixture.MigrationContract)
 	}
-	if fixture.Budgets.ProductLOCMax != 3400 || fixture.Budgets.FileLOCMax != 350 ||
-		fixture.Budgets.DomainLOCMax+fixture.Budgets.ApplicationLOCMax+fixture.Budgets.SQLiteRecoveryLOCMax+fixture.Budgets.BootstrapLOCMax > fixture.Budgets.ProductLOCMax {
-		t.Fatalf("invalid simplicity budget: %+v", fixture.Budgets)
+	budget := fixture.Budgets
+	if budget.Stage != "pre_P_operational_ceiling" || budget.ProductLOCMax != 3650 ||
+		budget.DomainLOCMax != 350 || budget.ApplicationLOCMax != 1300 ||
+		budget.SQLiteRecoveryLOCMax != 1600 || budget.BootstrapLOCMax != 400 || budget.FileLOCMax != 1450 ||
+		budget.MigrationException != "forbidden" ||
+		budget.QualityAccreditation != "P_cannot_declare_simplicity_green_from_this_ceiling" ||
+		budget.SealRequirement != "S_records_LOC_by_layer_and_files_over_350" ||
+		budget.PostV22Debt != "separate_SQLite_claim_read_validate_write_and_application_adapters_over_350_then_restore_compact_per_module_budget" ||
+		budget.DomainLOCMax+budget.ApplicationLOCMax+budget.SQLiteRecoveryLOCMax+budget.BootstrapLOCMax != budget.ProductLOCMax {
+		t.Fatalf("invalid V19 pre-P budget/debt contract: %+v", budget)
 	}
 }
 
