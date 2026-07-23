@@ -943,10 +943,11 @@
     {
       "id": "AC-V18-INDEPENDENT-REVIEWS",
       "vertical": "independent_reviews",
-      "status": "planned",
-      "test_ref": "planned:acceptance/v18_independent_reviews_test.go",
-      "command": "planned:go test -mod=vendor -count=1 . ./internal/... ./cmd/orquesta -run '^TestAcceptance$'",
-      "fixture": "planned:fixtures/v18_independent_reviews",
+      "status": "executable",
+      "test_ref": "acceptance/v18_independent_reviews_test.go",
+      "command": "sh -c 'git diff --check e311a97e4fdcafcf81c6114dbd904af4ed9293ad HEAD -- \u0026\u0026 go test -mod=vendor -count=1 . ./acceptance -run \"^(TestProductRoadmapIsExhaustiveAndCausal|TestProductRoadmapV17ScopeAndExecutableContract|TestV17EvidenceBelongsOnlyToTestAttestorCapabilities|TestProductRoadmapV18ScopeAndExecutableContract|TestV18EvidenceBelongsOnlyToIndependentReviewCapabilities|TestAcceptanceV16WorkspaceGit|TestAcceptanceV16WorkspaceGitReceipt|TestAcceptanceV17TestAttestor|TestAcceptanceV17TestAttestorReceipt|TestAcceptanceV18IndependentReviews|TestV18CandidateSubjectsCoverLifecycleDelta|TestV18CandidateSubjectsRetainGenericReceipt|TestV18ReceiptV3Lifecycle|TestV18RoadmapAndEvidenceLifecycle|TestRebuildArchitecture|TestTraceabilityRebuildBugLessons)$\" \u0026\u0026 go test -mod=vendor -count=1 ./internal/review ./internal/application ./internal/adapters/state/sqlite ./internal/bootstrap ./internal/goal ./internal/ports ./internal/interfaces/mcp ./internal/adapters/agent/codex ./internal/adapters/artifact/filesystem ./internal/adapters/attestor/bubblewrap ./internal/adapters/workspace/gitlocal ./cmd/orquesta \u0026\u0026 timeout --kill-after=10s 240s go test -mod=vendor -race -count=1 -timeout=210s ./internal/application ./internal/adapters/state/sqlite ./internal/bootstrap -run \"^(TestConcurrentReviewClaimsKeepOneDecisionPerRole|TestReviewCrashFrontiersReplayWithoutDuplicateLaunchOrDecision|TestTerminalAttestationReceiptPreventsRestartRerun)$\" \u0026\u0026 e2e_events=$(CGO_ENABLED=0 go test -mod=vendor -tags=v18_real_e2e -json -count=1 -timeout=180s ./internal/bootstrap -run \"^TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd$\" 2\u003e\u00261); e2e_status=$?; printf '%s\\n' \"$e2e_events\"; [ \"$e2e_status\" -eq 0 ] \u0026\u0026 printf '%s\\n' \"$e2e_events\" | grep -F \"\\\"Action\\\":\\\"run\\\"\" | grep -F \"\\\"Package\\\":\\\"orquesta/internal/bootstrap\\\"\" | grep -F \"\\\"Test\\\":\\\"TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd\\\"\" \u003e/dev/null \u0026\u0026 printf '%s\\n' \"$e2e_events\" | grep -F \"\\\"Action\\\":\\\"pass\\\"\" | grep -F \"\\\"Package\\\":\\\"orquesta/internal/bootstrap\\\"\" | grep -F \"\\\"Test\\\":\\\"TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd\\\"\" \u003e/dev/null \u0026\u0026 GOFLAGS=-mod=vendor go vet ./internal/review ./internal/application ./internal/adapters/state/sqlite ./internal/bootstrap ./internal/goal ./internal/ports ./internal/interfaces/mcp ./internal/adapters/agent/codex ./internal/adapters/artifact/filesystem ./internal/adapters/attestor/bubblewrap ./internal/adapters/workspace/gitlocal ./cmd/orquesta'",
+      "fixture": "acceptance/fixtures/v18_independent_reviews.json",
+      "receipt": "product/evidence/v18_independent_reviews.json",
       "assertions": [
         "author primary reviewer and adversarial reviewer use distinct launches",
         "all review the same generation tree diff and tests",
@@ -1488,8 +1489,12 @@
       "acceptance_contracts": [
         "AC-V18-INDEPENDENT-REVIEWS"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v18_independent_reviews_test.go",
+        "acceptance/fixtures/v18_independent_reviews.json",
+        "product/evidence/v18_independent_reviews.json"
+      ],
       "supersedes": []
     },
     {
@@ -2596,8 +2601,12 @@
       "acceptance_contracts": [
         "AC-V18-INDEPENDENT-REVIEWS"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v18_independent_reviews_test.go",
+        "acceptance/fixtures/v18_independent_reviews.json",
+        "product/evidence/v18_independent_reviews.json"
+      ],
       "supersedes": []
     },
     {
@@ -2617,8 +2626,12 @@
       "acceptance_contracts": [
         "AC-V18-INDEPENDENT-REVIEWS"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v18_independent_reviews_test.go",
+        "acceptance/fixtures/v18_independent_reviews.json",
+        "product/evidence/v18_independent_reviews.json"
+      ],
       "supersedes": []
     },
     {
@@ -2664,8 +2677,12 @@
       "acceptance_contracts": [
         "AC-V18-INDEPENDENT-REVIEWS"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v18_independent_reviews_test.go",
+        "acceptance/fixtures/v18_independent_reviews.json",
+        "product/evidence/v18_independent_reviews.json"
+      ],
       "supersedes": []
     },
     {
@@ -3608,8 +3625,12 @@
       "acceptance_contracts": [
         "AC-V18-INDEPENDENT-REVIEWS"
       ],
-      "status": "declared",
-      "evidence_refs": [],
+      "status": "accredited",
+      "evidence_refs": [
+        "acceptance/v18_independent_reviews_test.go",
+        "acceptance/fixtures/v18_independent_reviews.json",
+        "product/evidence/v18_independent_reviews.json"
+      ],
       "supersedes": []
     },
     {
