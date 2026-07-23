@@ -1,34 +1,159 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "contract_id": "AC-V19-COUNCIL",
   "vertical": "council",
   "owned_capability_ids": ["GOV-11", "GOV-13", "GOV-14", "STG-06", "STG-08", "EVD-07"],
-  "awaiting_dependency": "independent_reviews",
-  "awaiting_acceptance_contract": "AC-V18-INDEPENDENT-REVIEWS",
+  "dependency": {
+    "vertical": "independent_reviews",
+    "contract": "AC-V18-INDEPENDENT-REVIEWS",
+    "receipt_path": "product/evidence/v18_independent_reviews.json",
+    "receipt_result": "PASS",
+    "sealed_source_git_commit_oid": "32ee17e407006d9e0aeb46557b1e160769dd4848",
+    "status": "verified_accredited"
+  },
   "implementation_status": "awaiting_product",
   "policies": ["auto", "required", "skip_by_operator"],
+  "policy_contracts": [
+    {
+      "policy": "auto",
+      "opener": "application_after_exact_v18_gate",
+      "behavior": "open once and schedule exactly proposer critic and arbiter",
+      "promotion_gate": "accepted_decision_only"
+    },
+    {
+      "policy": "required",
+      "opener": "director_with_live_goal_lease_and_fence",
+      "behavior": "block integration until explicit governed open then schedule exactly proposer critic and arbiter",
+      "promotion_gate": "accepted_decision_only"
+    },
+    {
+      "policy": "skip_by_operator",
+      "opener": "authorized_human_with_council_skip",
+      "behavior": "record exact skip before any council round fact or launch and schedule no council execution",
+      "promotion_gate": "valid_skip_plus_exact_v18_gate"
+    }
+  ],
+  "subject_contract": {
+    "digest_fields": ["ProjectRef", "ReviewSubjectDigest", "ReviewGateDigest", "CouncilPolicy"],
+    "persisted_bindings": ["GoalRef", "WorkItemRef", "ChangeSetRef", "SpecHash", "PlanGeneration", "WorkItemGeneration", "AppSpecGeneration"],
+    "digest_encoding": "domain_separated_length_framed_sha256",
+    "v18_revalidation": "rebuild exact author primary adversarial gate at every council write and integration admission processing"
+  },
+  "roles": ["proposer", "critic", "arbiter"],
+  "role_contract": {
+    "required_launches": 3,
+    "required_ballots": 3,
+    "distinct_from_each_other": true,
+    "distinct_from_v18_author_primary_adversarial": true,
+    "facts_require_launch_receipt": true,
+    "artifact_schemas": ["orquesta.council.proposal.v1", "orquesta.council.critique.v1", "orquesta.council.ballot.v1"]
+  },
+  "ballots": ["accept", "reject", "abstain", "security_veto"],
+  "decision_contract": {
+    "normal_quorum": 3,
+    "accepted": "at_least_two_accept_after_three_ballots",
+    "rejected": "at_least_two_reject_after_three_ballots",
+    "no_consensus": "every_other_complete_three_ballot_result",
+    "blocked_security": "any_typed_security_veto_with_artifact_and_evidence_ref",
+    "early_normal_decision_forbidden": true,
+    "dissent": "persist every non_decisive minority ballot as immutable derived fact",
+    "integration": "only explicit integration command may proceed and must revalidate V18 gate plus council decision digest"
+  },
+  "authority_contract": {
+    "required_open_permission": "goals.direct",
+    "skip_permission": "council.skip",
+    "skip_roles": ["platform_admin", "project_owner", "operator"],
+    "skip_principal_kind": "human",
+    "skip_required_fields": ["PrincipalRef", "Reason", "RecordedAtUTC", "SpecHash", "IdempotencyKey", "CouncilSubjectDigest"],
+    "skip_temporal_boundary": "before_round_fact_or_council_launch"
+  },
+  "execution_contract": {
+    "purposes": ["council_proposer", "council_critic", "council_arbiter"],
+    "action_kinds": ["launch_agent", "observe_agent"],
+    "new_action_kind_forbidden": true,
+    "ack_or_text_is_evidence": false
+  },
+  "persistence_contract": {
+    "authority": "GoalRecord_through_StateRepository",
+    "atomicity": "same_CAS_snapshot_event_outbox_transaction",
+    "facts": ["round", "proposal", "critique", "ballot", "dissent", "security_veto", "decision", "skip"],
+    "replay": "same_identity_same_payload_returns_same_fact_changed_payload_or_subject_fails",
+    "recovery": "validate round_to_change_to_v18_gate fact_to_launch decision_skip_veto_and_pending_integration without duplicate launch or fact"
+  },
+  "migration_contract": {
+    "version": 14,
+    "source_version": 13,
+    "live_v18_candidate_without_durable_policy": "fail_closed",
+    "completed_v18_records": "preserve_without_retroactive_council",
+    "backfill": "forbidden"
+  },
+  "forbidden_private_authorities": [
+    "CouncilStore", "CouncilQueue", "CouncilScheduler", "CouncilLifecycle", "CouncilEngine", "CouncilDaemon", "CouncilWriter"
+  ],
+  "budgets": {
+    "product_loc_max": 3400,
+    "domain_loc_max": 450,
+    "application_loc_max": 1250,
+    "sqlite_recovery_loc_max": 1100,
+    "bootstrap_loc_max": 350,
+    "file_loc_max": 350
+  },
   "invariants": [
-    "council does not replace V18 independent reviews or the Director lease",
-    "proposal critique ballot dissent security veto and decision bind one project Goal generation subject and spec hash",
-    "skip_by_operator records authorized principal non-empty reason UTC time and spec hash",
-    "replay is idempotent and recovery preserves immutable council facts without duplicate launches"
+    "council never replaces V18 independent author primary adversarial reviews test attestation or Director lease",
+    "one immutable policy belongs to one exact council subject and the three policies are mutually exclusive",
+    "auto and required differ by opener while using the same three council roles and decision rules",
+    "skip is a human authorization fact and never a ballot decision or synthetic launch",
+    "all council deliberation facts derive from three real distinct launches and strict typed artifacts",
+    "ballot identity derives from its accredited launch and cannot cross project generation subject role or attempt",
+    "security veto is explicit typed evidence and never inferred from words severity aliases or logs",
+    "normal decisions wait for all three ballots and preserve minority dissent",
+    "accepted council output permits only explicit integration and council never integrates closes or replans directly",
+    "rejected no_consensus and blocked_security preserve work and require causal Director replan",
+    "admission processing replay and recovery revalidate exact V18 and council digests",
+    "same lifecycle writer scheduler CAS event stream outbox and StateRepository remain authoritative"
   ],
   "e2e_cases": [
     {
       "policy": "auto",
       "isolated_runtime": true,
-      "assertions": ["three V18 launches are causally linked", "dissent and decision survive restart replay"]
+      "assertions": [
+        "exact V18 gate opens one round automatically",
+        "three distinct council launches produce strict artifacts and ballots",
+        "two accepts plus one reject persist accepted decision and dissent only after ballot three",
+        "explicit integration revalidates both gate digests",
+        "restart replay duplicates no launch fact decision or integration",
+        "cross subject generation and launch substitution fail"
+      ]
     },
     {
       "policy": "required",
       "isolated_runtime": true,
-      "assertions": ["promotion blocks without decision", "security veto is durable and blocks promotion"]
+      "assertions": [
+        "integration blocks before governed open",
+        "stale Director lease or fence cannot open",
+        "live Director opens exactly one round and three roles",
+        "typed arbiter security veto with evidence produces blocked_security",
+        "veto remains durable after restart and integration stays blocked",
+        "ACK text severity or incomplete artifact cannot become veto or ballot"
+      ]
     },
     {
       "policy": "skip_by_operator",
       "isolated_runtime": true,
-      "assertions": ["principal reason UTC time and spec hash are required", "cross-subject skip and changed replay payload fail"]
+      "assertions": [
+        "only authorized human platform_admin project_owner or operator may skip",
+        "principal reason UTC spec hash idempotency and exact subject are mandatory",
+        "skip before round schedules zero council launches",
+        "same replay returns exact skip and changed replay payload fails",
+        "cross project generation subject and post round skip fail",
+        "explicit integration still revalidates exact V18 gate"
+      ]
     }
   ],
+  "pse_contract": {
+    "P": "product plus tests without accreditation",
+    "S": "seal exact tree binary effective configuration V18 gate subjects and council subjects",
+    "E": "detached_clean execution of three isolated E2Es with external V3 receipt"
+  },
   "red_gate": "V19_PRODUCT_PENDING"
 }

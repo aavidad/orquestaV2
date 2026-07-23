@@ -1,20 +1,55 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "vertical": "council",
-  "base_commit": "e311a97e4fdcafcf81c6114dbd904af4ed9293ad",
+  "base_commit": "6f244a7594141c74dc28e095e0e5e32a05102826",
   "owned_capability_ids": ["GOV-11", "GOV-13", "GOV-14", "STG-06", "STG-08", "EVD-07"],
   "dependencies": {
     "required": ["director_lease", "test_attestor", "independent_reviews"],
-    "awaiting_dependency": "independent_reviews",
-    "awaiting_acceptance_contract": "AC-V18-INDEPENDENT-REVIEWS"
+    "verified_acceptance_contract": "AC-V18-INDEPENDENT-REVIEWS",
+    "verified_receipt": "product/evidence/v18_independent_reviews.json",
+    "verified_result": "PASS",
+    "status": "satisfied"
   },
-  "write_set": [
+  "contract_write_set": [
     "docs/reconstruccion/analisis_y_contrato_v19_*.md",
     "docs/reconstruccion/worksets/v19_*.json",
     "acceptance/v19_*.go",
     "acceptance/fixtures/v19_*.json"
   ],
-  "forbidden": ["product/**", "config/**", "internal/**", "cmd/**", "roadmap", "evidence", "trace"],
+  "completed_trace_correction": {
+    "commit": "799dc95eb6",
+    "paths": ["product/roadmap.json", "product/traceability/rebuild_bugs.jsonl", "product_roadmap_v19_test.go"],
+    "reason": "align STG-06 with exact council ownership before product"
+  },
+  "next_write_sets": [
+    {
+      "id": "v19-domain",
+      "paths": ["internal/council/**"],
+      "depends_on": ["v19-contract"]
+    },
+    {
+      "id": "v19-application",
+      "paths": ["internal/application/*council*", "internal/application/state.go", "internal/application/processing.go", "internal/application/workspace_integration.go", "internal/identity/policy.go", "internal/identity/*council*"],
+      "depends_on": ["v19-domain"]
+    },
+    {
+      "id": "v19-sqlite",
+      "paths": ["internal/adapters/state/sqlite/migrations/014_council.sql", "internal/adapters/state/sqlite/*council*", "internal/adapters/state/sqlite/recovery_validation_v19.go", "internal/adapters/state/sqlite/recovery_validation_versions.go", "internal/adapters/state/sqlite/migrations.go", "internal/adapters/state/sqlite/read.go", "internal/adapters/state/sqlite/write.go", "internal/adapters/state/sqlite/validate.go"],
+      "depends_on": ["v19-application"]
+    },
+    {
+      "id": "v19-bootstrap-e2e",
+      "paths": ["internal/bootstrap/*council*"],
+      "depends_on": ["v19-sqlite"]
+    },
+    {
+      "id": "v19-seal-accredit",
+      "paths": ["acceptance/**", "docs/reconstruccion/**", "product/roadmap.json", "product/evidence/v19_council*", "product/traceability/rebuild_bugs.jsonl", "product_roadmap_v19_test.go"],
+      "depends_on": ["v19-bootstrap-e2e"]
+    }
+  ],
+  "forbidden_private_authorities": ["CouncilStore", "CouncilQueue", "CouncilScheduler", "CouncilLifecycle", "CouncilEngine", "CouncilDaemon", "CouncilWriter"],
   "red_gate": "V19_PRODUCT_PENDING",
-  "implementation_status": "awaiting_product"
+  "implementation_status": "awaiting_product",
+  "workset_state": "contract_hardened_dependency_satisfied_product_red"
 }

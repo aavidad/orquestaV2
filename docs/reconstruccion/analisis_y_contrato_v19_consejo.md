@@ -1,81 +1,126 @@
-# V19 — Consejo: contrato rojo
+# V19 — Consejo: análisis cerrado y contrato rojo
 
-Fecha: 2026-07-22. Base: `e311a97e4f`.
+Fecha: 2026-07-23. Base integrada: V18 acreditada en `6f244a7594`.
 
-Estado: **awaiting_dependency** de V18 (`independent_reviews`) y producto V19
-ausente. Este contrato y su aceptación son deliberadamente rojos; no acreditan
-ninguna capability ni anticipan APIs de V18.
+Estado: V18 verificada mediante receipt V3 `PASS`; producto V19 aún ausente.
+`TestAcceptanceV19Council` permanece rojo solo por `V19_PRODUCT_PENDING`.
+No existe bloqueo de dependencia ni se acredita ninguna capability V19.
 
-## Alcance y autoridad
+## Decisión estructural
 
-V19 es dueño de `GOV-11`, `GOV-13`, `GOV-14`, `STG-06`, `STG-08` y `EVD-07`.
-El Consejo reúne propuestas, crítica, ballots, disenso, veto de seguridad y una
-decisión durable para un Goal, generación, árbol, diff y tests exactos. La
-aplicación sigue siendo el único escritor de lifecycle; un Director con lease
-propone, pero no obtiene una ruta privada a la decisión.
+V19 no crea otro orquestador. Reutiliza un Goal, un lifecycle, un writer de
+aplicación, un scheduler, un `StateRepository`, CAS, eventos y outbox. El
+Consejo añade hechos causales y tres propósitos de ejecución; no añade store,
+cola, daemon, scheduler, lifecycle, writer, puerto outbound ni `ActionKind`.
 
-El Consejo no es Director, scheduler, store ni sustituto de V18: autor,
-reviewer primario y reviewer adversarial siguen siendo tres launches
-independientes. La entrada V19 solo puede enlazar evidencia acreditada de esos
-launches cuando V18 esté sellada.
+El gate V18 sigue siendo obligatorio. Autor, reviewer primario y reviewer
+adversarial deben ser tres launches distintos, aprobar el mismo sujeto exacto y
+mantener attestation `PASS`. Consejo nunca sustituye esas reviews, integra,
+cierra ni replanea. Solo habilita o bloquea un comando explícito de integración.
 
-## Política y hechos causales
+## Sujeto exacto
 
-Las políticas son exactas y excluyentes:
+`CouncilSubject` puro calcula digest SHA-256 con separación de dominio y campos
+length-framed sobre:
 
-- `auto`: se solicita Consejo y su decisión se persiste antes de la promoción.
-- `required`: la promoción queda bloqueada hasta decisión del Consejo.
-- `skip_by_operator`: requiere principal autorizado, motivo no vacío, instante
-  UTC y hash de spec; deja un hecho durable de skip, no un falso ballot.
+1. `ProjectRef`;
+2. `ReviewSubjectDigest` V18;
+3. `ReviewGateDigest` V18;
+4. política Council inmutable.
 
-Cada propuesta/crítica/ballot lleva actor o launch acreditado, proyecto, Goal,
-generación, sujeto (tree/diff/tests), spec hash e idempotency key. Un ballot no
-puede suplantar otro launch ni cruzar proyecto/generación/sujeto. Disenso y veto
-de seguridad son hechos inmutables y observables; un veto bloquea la promoción.
-La decisión no reescribe propuestas, ballots ni reviews.
+`GoalRef`, `WorkItemRef`, `ChangeSetRef`, `SpecHash` y generaciones de plan,
+item y AppSpec se persisten como enlaces verificables. No se copia ni reinventa
+el sujeto V18: cada apertura, fact, decisión, skip, admisión y procesamiento de
+integración reconstruye el gate V18 y comprueba ambos digests.
 
-## Recovery, replay y seguridad
+## Políticas excluyentes
 
-La persistencia futura debe usar la misma transacción de snapshot, evento y
-outbox; no se admite `CouncilStore`, cola, daemon o lifecycle paralelo. Replay
-con la misma identidad devuelve el mismo hecho; cambio de payload o sujeto
-causal falla. Crash/restart conserva propuesta, crítica, ballots, skip, disenso,
-veto y decisión sin duplicar un launch ni convertir un ACK/texto en evidencia.
+- `auto`: aplicación abre una ronda exactamente una vez tras gate V18 válido y
+  agenda `proposer`, `critic` y `arbiter`.
+- `required`: integración queda bloqueada. Director con lease/fence vivo abre
+  explícitamente la ronda; después usa los mismos tres roles y reglas.
+- `skip_by_operator`: humano con permiso exacto `council.skip`, rol
+  `platform_admin`, `project_owner` u `operator`, registra principal, motivo no
+  vacío, UTC, `SpecHash`, idempotency key y subject digest. Solo existe antes de
+  cualquier ronda/fact/launch Council. Agenda cero agentes. No es ballot ni
+  decisión sintética. V18 sigue siendo obligatorio.
 
-Toda consulta y escritura queda filtrada por principal/proyecto. Datos de
-provider, prompt, secreto, PID, argv y workspace privado no forman parte del
-ballot ni del receipt.
+La política se congela para el sujeto. No existe caída automática de
+`required` a `auto`, de Consejo fallido a skip ni de skip a ronda.
 
-## Gates rojos y E2E futuro
+## Deliberación y decisión
 
-El fixture `v19_council.json` declara tres E2E aislados: `auto`, `required` y
-`skip_by_operator`. Cada uno usa runtime/estado temporal propio, la misma
-identidad causal y su propia comprobación de restart/replay:
+La ronda exige tres launches Council nuevos, distintos entre sí y distintos de
+los launches V18:
 
-1. `auto` conserva propuesta, crítica, ballot, disenso y decisión ligada a los
-   tres launches de V18.
-2. `required` no promociona sin decisión; un veto de seguridad bloquea y queda
-   durable.
-3. `skip_by_operator` solo avanza con principal, motivo, hora UTC y spec hash;
-   replay es idempotente y un skip cruzado falla.
+- `proposer` publica `orquesta.council.proposal.v1` y ballot;
+- `critic` publica `orquesta.council.critique.v1` y ballot;
+- `arbiter` publica `orquesta.council.ballot.v1` y ballot.
 
-Hasta que V18 esté acreditada y exista producto V19, `TestAcceptanceV19Council`
-falla exclusivamente como `V19_PRODUCT_PENDING`. No se inventa un fake de V18
-ni se vincula a tipos, métodos o paquetes aún inexistentes.
+Ballots exactos: `accept`, `reject`, `abstain`, `security_veto`. ACK, texto,
+severidad, alias o log no son evidencia. Todo fact requiere receipt de launch,
+artifact estricto, sujeto, rol, intento e idempotencia exactos.
 
-## P/S/E y write-set
+Regla determinista:
 
-`P` contendrá contrato productivo V19 y sus tests sin autoacreditarse. `S`
-sellará árbol, binario, configuración efectiva y sujetos de review. `E`
-ejecutará los tres E2E desde `detached_clean` de `S` y emitirá un receipt V3
-externo al candidato.
+- cualquier `security_veto` tipado con artifact y evidence ref produce
+  `blocked_security`;
+- sin veto, se esperan 3/3 ballots;
+- al menos dos `accept` producen `accepted`;
+- al menos dos `reject` producen `rejected`;
+- todo otro conjunto completo produce `no_consensus`.
 
-Este corte solo puede tocar:
+No se decide normalmente con 2/3 temprano: un tercer ballot puede cambiar el
+resultado tras crash/replay. Ballots minoritarios no decisivos se conservan
+como disenso inmutable. `rejected`, `no_consensus` y `blocked_security`
+preservan trabajo y exigen replan causal del Director.
 
-- `docs/reconstruccion/analisis_y_contrato_v19_*.md`;
-- `docs/reconstruccion/worksets/v19_*.json`;
-- `acceptance/v19_*.go` y `acceptance/fixtures/v19_*.json`.
+## Aplicación, persistencia y recovery
 
-Producto, roadmap, evidence, trace, configuración y cualquier superficie V18
-quedan fuera. El siguiente write-set causal pertenece a V18 sellada y después
-a la implementación V19, con contrato y APIs definidos por esa evidencia.
+`GoalRecord` incorpora rondas y facts Council. `StateRepository` recibe
+mutaciones atómicas de apertura, contribución y skip; persiste snapshot, evento
+y outbox en la misma transacción. Lanzamiento/observación usan
+`ActionLaunchAgent` y `ActionObserveAgent` con propósitos Council. No hay
+`CouncilStore`.
+
+La migración SQLite `014_council.sql` sucede a V18/013. Debe fallar cerrado si
+encuentra candidato V18 vivo pendiente/claim/unknown sin política Council
+durable. No inventa backfill ni promociona retrospectivamente; registros V18 ya
+completados se preservan. Recovery valida ronda→change→gate V18,
+fact→launch→artifact, decisión/skip/veto e integración pendiente. Restart
+recompone acciones persistidas, nunca duplica launch, fact o decisión.
+
+Replay con identidad y payload iguales devuelve el mismo hecho. Cambiar payload,
+sujeto, proyecto, generación, rol, intento o launch falla. Integración guarda
+`CouncilDecisionDigest` y lo revalida junto a V18 tanto al admitir como al
+procesar el efecto.
+
+## E2E obligatorios
+
+Tres runtimes aislados, DB/FS/agentes propios:
+
+1. `auto`: gate V18 abre una ronda; tres launches; 2 accept + 1 reject; disenso;
+   integración explícita; restart/replay sin duplicados; sustitución rechazada.
+2. `required`: no abre ni integra sin Director válido; fence stale falla; veto
+   tipado queda durable y bloquea; ACK/texto no se transforma en evidencia.
+3. `skip_by_operator`: RBAC humano exacto, payload completo, cero launches,
+   replay igual idempotente, payload/cruce/post-ronda rechazado; V18 revalidado.
+
+Tests unitarios/mutación cubren digest, quorum, veto, disenso, spoof, cruce,
+replay e invariantes. SQLite/race/restart cubren upgrade 013→014, FK/triggers,
+ballot/skip concurrentes y crashes antes/después de launch, fact, decisión e
+integración.
+
+## Simplicidad y P/S/E
+
+Presupuesto producto máximo: 3.400 LOC; dominio 450, aplicación 1.250,
+SQLite/recovery 1.100, bootstrap 350; fichero máximo 350 salvo migración
+justificada. Sin duplicar tipos V18, scheduler ni autenticación.
+
+- `P`: producto y tests; no se autoacredita.
+- `S`: sella árbol, binario, configuración efectiva, gates V18 y sujetos Council.
+- `E`: ejecuta desde `detached_clean` tres E2E aislados y emite receipt V3
+  externo al candidato.
+
+Orden: contrato rojo endurecido → contrarrevisión → dominio → aplicación →
+SQLite/recovery → bootstrap/E2E → P/S/E → integración limpia.
