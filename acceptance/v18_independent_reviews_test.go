@@ -12,17 +12,25 @@ import (
 
 const v18FixturePath = "acceptance/fixtures/v18_independent_reviews.json"
 const v18ContractBaseGitCommitOID = "4428f46dd6b48659a4fb871a66cb72927f41cb93"
-const v18V17SealedGitCommitOID = "a97ea3bc3771c6d89ec055e8189bda1bc6f97ce6"
+const v18ProductDeltaBaseGitCommitOID = "e311a97e4fdcafcf81c6114dbd904af4ed9293ad"
 
 type v18Fixture struct {
 	SchemaVersion                  int                    `json:"schema_version"`
+	ReceiptSchemaVersion           int                    `json:"receipt_schema_version"`
 	ContractID                     string                 `json:"contract_id"`
 	TrustedBaseGitCommitOID        string                 `json:"trusted_base_git_commit_oid"`
+	ProductDeltaBaseGitCommitOID   string                 `json:"product_delta_base_git_commit_oid"`
 	ProductDeltaSealedGitCommitOID string                 `json:"product_delta_sealed_git_commit_oid"`
 	SealStatus                     string                 `json:"seal_status"`
 	SealNote                       string                 `json:"seal_note"`
+	Command                        string                 `json:"command"`
+	ExecutionArgv                  []string               `json:"execution_argv"`
+	OutputPath                     string                 `json:"output_path"`
+	ReceiptPath                    string                 `json:"receipt_path"`
+	CandidateSubjects              []string               `json:"candidate_subjects"`
 	OwnedCapabilityIDs             []string               `json:"owned_capability_ids"`
 	DependencyVerticals            []string               `json:"dependency_verticals"`
+	RoadmapAssertions              []string               `json:"roadmap_assertions"`
 	DependencyReceipts             []v18DependencyReceipt `json:"dependency_receipts"`
 	ReviewRoles                    []string               `json:"review_roles"`
 	ReviewVerdicts                 []string               `json:"review_verdicts"`
@@ -160,15 +168,41 @@ func TestAcceptanceV18IndependentReviews(t *testing.T) {
 
 func v18AssertFixture(t *testing.T, repositoryRoot string, fixture v18Fixture) {
 	t.Helper()
-	if fixture.SchemaVersion != 1 || fixture.ContractID != "AC-V18-INDEPENDENT-REVIEWS" ||
+	if fixture.SchemaVersion != 1 || fixture.ReceiptSchemaVersion != 3 || fixture.ContractID != "AC-V18-INDEPENDENT-REVIEWS" ||
 		fixture.TrustedBaseGitCommitOID != v18ContractBaseGitCommitOID ||
-		fixture.ProductDeltaSealedGitCommitOID != v18V17SealedGitCommitOID ||
-		fixture.SealStatus != "v17_sealed_v18_unaccredited" ||
-		fixture.SealNote != "V17 receipt is sealed. This V18 contract defines implementation gates only and never accredits V18." {
-		t.Fatalf("invalid V18 dependency identity: %+v", fixture)
+		fixture.ProductDeltaBaseGitCommitOID != v18ProductDeltaBaseGitCommitOID ||
+		fixture.OutputPath != "product/evidence/v18_independent_reviews.output.txt" ||
+		fixture.ReceiptPath != "product/evidence/v18_independent_reviews.json" {
+		t.Fatalf("invalid V18 P/S/E identity: %+v", fixture)
+	}
+	if fixture.ProductDeltaSealedGitCommitOID == "" {
+		if fixture.SealStatus != "pre_p_unsealed_no_evidence" ||
+			fixture.SealNote != "Pre-P contract only: empty sealed OID is mandatory; this fixture and any ACK are not product evidence." {
+			t.Fatalf("invalid V18 pre-P seal declaration: %+v", fixture)
+		}
+	} else {
+		if fixture.SealStatus != "p_product_delta_sealed_pending_evidence" ||
+			fixture.SealNote != "P product commit sealed; S and E remain pending and no PASS is implied." {
+			t.Fatalf("invalid V18 post-P pre-E seal declaration: %+v", fixture)
+		}
+		if err := evidenceValidateSealedCommit(repositoryRoot, fixture.ProductDeltaBaseGitCommitOID, fixture.ProductDeltaSealedGitCommitOID); err != nil {
+			t.Fatalf("invalid V18 P subject: %v", err)
+		}
+	}
+	if fixture.Command != "sh -c '"+v18ValidationShellBody()+"'" ||
+		!reflect.DeepEqual(fixture.ExecutionArgv, []string{"sh", "-c", v18ValidationShellBody()}) {
+		t.Fatalf("invalid V18 P/S/E command/argv: %q %#v", fixture.Command, fixture.ExecutionArgv)
+	}
+	if err := evidenceValidateCandidateSubjects(fixture.CandidateSubjects, fixture.ReceiptPath, fixture.OutputPath); err != nil {
+		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(fixture.OwnedCapabilityIDs, []string{"GOV-12", "STG-13", "STG-14", "STG-16", "EVD-06"}) ||
 		!reflect.DeepEqual(fixture.DependencyVerticals, []string{"controls", "workspace_git", "test_attestor"}) ||
+		!reflect.DeepEqual(fixture.RoadmapAssertions, []string{
+			"author primary reviewer and adversarial reviewer use distinct launches",
+			"all review the same generation tree diff and tests",
+			"changing any subject invalidates approval",
+		}) ||
 		!reflect.DeepEqual(fixture.ReviewRoles, []string{"author", "primary", "adversarial"}) ||
 		!reflect.DeepEqual(fixture.ReviewVerdicts, []string{"approve", "changes_requested"}) {
 		t.Fatalf("invalid V18 ownership, dependencies, roles or verdicts: %+v", fixture)

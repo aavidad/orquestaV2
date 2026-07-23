@@ -2,10 +2,10 @@
   "schema_version": 1,
   "vertical": "V18",
   "slug": "independent_reviews",
-  "branch": "reconstruccion/v18-independent-reviews",
-  "worktree": "/home/alberto/Trabajo/orquesta-rebuild-worktrees/v18-independent-reviews",
-  "base_oid": "4428f46dd6b48659a4fb871a66cb72927f41cb93",
-  "owner_state": "implementation_complete_pending_integration",
+  "branch": "reconstruccion/v18-integration-prep",
+  "worktree": "/home/alberto/Trabajo/orquesta-rebuild-worktrees/v18-integration-prep",
+  "base_oid": "e311a97e4fdcafcf81c6114dbd904af4ed9293ad",
+  "owner_state": "integration_seal_authorized",
   "owner_continuity_required": true,
   "preflight_only": false,
   "dependencies": [
@@ -51,8 +51,16 @@
     "docs/reconstruccion/analisis_y_contrato_v18_*",
     "docs/reconstruccion/worksets/v18*.json"
   ],
-  "integration_files_requested": [],
-  "locks_requested": [],
+  "integration_files_requested": [
+    "product/roadmap.json",
+    "product/evidence/real_codex_mcp_e2e.json",
+    "product/evidence/v18_independent_reviews.json",
+    "product/evidence/v18_independent_reviews.output.txt",
+    "product/traceability/rebuild_bugs.jsonl",
+    "product_roadmap_v18_test.go",
+    "docs/reconstruccion/cierre_v18_pse_pendiente.md"
+  ],
+  "locks_requested": ["L-TRACE", "L-SEAL"],
   "future_integration_files_requested_after_v17_rebase": [
     "internal/goal replan cause and snapshot fields selected against sealed V17",
     "internal/application execution review facts integration gate and StateRepository methods selected against sealed V17",
@@ -82,10 +90,40 @@
     "post_rebase_rule": "resolve exact shared paths and semantic bindings from the sealed V17 delta then acquire one lease per shared path before editing"
   },
   "forbidden_globs": [
-    "product/roadmap.json",
-    "product/capabilities.json",
-    "product/evidence/**",
-    "product/traceability/**",
+    "product/evidence/v01_*.json",
+    "product/evidence/v01_*.output.txt",
+    "product/evidence/v02_*.json",
+    "product/evidence/v02_*.output.txt",
+    "product/evidence/v03_*.json",
+    "product/evidence/v03_*.output.txt",
+    "product/evidence/v04_*.json",
+    "product/evidence/v04_*.output.txt",
+    "product/evidence/v05_*.json",
+    "product/evidence/v05_*.output.txt",
+    "product/evidence/v06_*.json",
+    "product/evidence/v06_*.output.txt",
+    "product/evidence/v07_*.json",
+    "product/evidence/v07_*.output.txt",
+    "product/evidence/v08_*.json",
+    "product/evidence/v08_*.output.txt",
+    "product/evidence/v09_*.json",
+    "product/evidence/v09_*.output.txt",
+    "product/evidence/v10_*.json",
+    "product/evidence/v10_*.output.txt",
+    "product/evidence/v11_*.json",
+    "product/evidence/v11_*.output.txt",
+    "product/evidence/v12_*.json",
+    "product/evidence/v12_*.output.txt",
+    "product/evidence/v13_*.json",
+    "product/evidence/v13_*.output.txt",
+    "product/evidence/v14_*.json",
+    "product/evidence/v14_*.output.txt",
+    "product/evidence/v15_*.json",
+    "product/evidence/v15_*.output.txt",
+    "product/evidence/v16_*.json",
+    "product/evidence/v16_*.output.txt",
+    "product/evidence/v17_*.json",
+    "product/evidence/v17_*.output.txt",
     "config/**",
     "cmd/**",
     "/home/alberto/Trabajo/orquesta-rebuild/**",
@@ -119,8 +157,8 @@
     "trigger": "independent integration review accepts the locally verified V18 commit",
     "actions": [
       "review the committed V18 delta and its exact regression evidence",
-      "integrate the commit without editing product roadmap evidence or traceability from this owner",
-      "run promotion seal and evidence as the authorized integration owner"
-    ]
-  }
+    "integrate the commit under L-TRACE and L-SEAL with only the requested master files released",
+    "run P/S/E as the authorized integration owner; S still creates neither output nor receipt and E alone may promote roadmap evidence"
+  ]
+}
 }
