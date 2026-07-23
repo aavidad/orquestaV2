@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"orquesta/internal/application"
+	"orquesta/internal/council"
 	"orquesta/internal/goal"
 	"orquesta/internal/identity"
 )
@@ -314,7 +315,8 @@ func TestRepositoryV12DirectorPlanLateReplayRestartAndRecovery(t *testing.T) {
 		Plan: application.PlanSpec{WorkItems: []application.WorkItemSpec{{
 			Key: "work:research", Objective: "inspect recoverable input",
 			Phase: goal.DefaultPhaseKey().String(), Role: "role:researcher",
-			WriteSet: []string{"docs"}, RequiredTests: sqliteRequiredTestSpecs("required-test:sqlite-director"), OutputContract: goal.OutputContractEvidenceBundle,
+			WriteSet: []string{"docs"}, CouncilPolicy: council.PolicyRequired,
+			RequiredTests: sqliteRequiredTestSpecs("required-test:sqlite-director"), OutputContract: goal.OutputContractEvidenceBundle,
 		}}},
 	}
 	first, err := system.orchestrator.ProposeDirectorPlan(ctx, system.ownerAccess, firstRequest)
@@ -441,7 +443,7 @@ func TestRepositoryV12MigratesPopulatedV6ToV7(t *testing.T) {
 		t.Fatalf("migrate V6 to V7: %v", err)
 	}
 	t.Cleanup(func() { _ = migrated.Close() })
-	assertRecoverySchemaVersion(t, migrated.db, recoverySchemaV18)
+	assertRecoverySchemaVersion(t, migrated.db, recoverySchemaV19)
 	if _, err := migrated.GetGoal(ctx, state.Goal.Ref()); err != nil {
 		t.Fatalf("migrated Goal: %v", err)
 	}

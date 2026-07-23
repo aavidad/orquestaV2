@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"orquesta/internal/application"
+	"orquesta/internal/council"
 	"orquesta/internal/goal"
 	"orquesta/internal/governance"
 	"orquesta/internal/identity"
@@ -202,6 +203,10 @@ func readGoalRecord(ctx context.Context, source queryer, goalValue string) (appl
 	if err != nil {
 		return application.GoalRecord{}, err
 	}
+	councilRecords, err := readCouncilGoalRecords(ctx, source, goalValue)
+	if err != nil {
+		return application.GoalRecord{}, err
+	}
 	record := application.GoalRecord{
 		RequestRef: header.requestRef, RequestFingerprint: header.requestFingerprint,
 		RequestedBy: data.requestedBy, Goal: data.goal, Executions: data.executions,
@@ -213,7 +218,9 @@ func readGoalRecord(ctx context.Context, source queryer, goalValue string) (appl
 		ConsumptionReceipts: data.consumptionReceipts,
 		WorkspaceBindings:   workspaceFacts.bindings, ChangeSets: workspaceFacts.changes,
 		MergeObservations: workspaceFacts.observations, IntegrationReceipts: workspaceFacts.receipts,
-		Reviews: reviews,
+		Reviews:       reviews,
+		CouncilRounds: councilRecords.rounds, CouncilFacts: councilRecords.facts,
+		CouncilDecisions: councilRecords.decisions, CouncilSkips: councilRecords.skips,
 	}
 	if err := validateGoalRecordConsistency(record, goalValue); err != nil {
 		return application.GoalRecord{}, invalid(err)
@@ -466,11 +473,15 @@ func readWorkItems(
             budget_money_micros, budget_currency, budget_active_time_ns,
             budget_process_slots, budget_disk_bytes, security_criticality, reasoning_effort`
 	}
+	councilProjection := "''"
+	if schema.council {
+		councilProjection = "council_policy"
+	}
 	rows, err := source.QueryContext(ctx, `
 SELECT ref, goal_ref, actor_ref, project_ref, objective, state, revision,
        phase_key, role_key, parent_ref, `+handoffProjection+`, output_contract, skip_reason,
 	       `+controlProjection+`, created_at, started_at, `+interruptedProjection+`, finished_at, execution_ref,
-       `+governanceProjection+`
+       `+governanceProjection+`, `+councilProjection+`
 FROM work_items
 WHERE goal_ref = ?
 ORDER BY position`, goalValue)
@@ -501,7 +512,7 @@ ORDER BY position`, goalValue)
 
 type storedWorkItem struct {
 	item                                                                goal.WorkItemSnapshot
-	state, outputContract, skipReason, interruptCause                   string
+	state, outputContract, skipReason, interruptCause, councilPolicy    string
 	demandRef, currency, criticality, effort                            string
 	revision, handoff, paused, cancel, control, governanceVersion       int64
 	tokens, moneyMicros, activeTimeNS, processSlots, diskBytes, created int64
@@ -517,7 +528,7 @@ func scanWorkItem(rows *sql.Rows) (storedWorkItem, error) {
 		&v.reworkOf, &v.paused, &v.cancel, &v.control, &v.created, &v.started,
 		&v.interrupted, &v.finished, &v.execution, &v.governanceVersion, &v.demandRef,
 		&v.tokens, &v.moneyMicros, &v.currency, &v.activeTimeNS, &v.processSlots,
-		&v.diskBytes, &v.criticality, &v.effort)
+		&v.diskBytes, &v.criticality, &v.effort, &v.councilPolicy)
 	if err != nil {
 		return storedWorkItem{}, mapDatabaseError(err)
 	}
@@ -555,6 +566,7 @@ func restoreWorkItem(v storedWorkItem) (goal.WorkItemSnapshot, error) {
 	handoff := v.handoff == 1
 	item.HandoffRequired, item.State, item.Revision = &handoff, goal.WorkItemState(v.state), goal.Revision(v.revision)
 	item.OutputContract, item.SkipReason = goal.OutputContractKind(v.outputContract), goal.WorkItemSkipReason(v.skipReason)
+	item.CouncilPolicy = council.Policy(v.councilPolicy)
 	item.InterruptCause, item.Paused, item.CancelRequested = goal.WorkItemInterruptCause(v.interruptCause), v.paused == 1, v.cancel == 1
 	item.ControlSequence, item.CreatedAt = uint64(v.control), time.Unix(0, v.created).UTC()
 	item.StartedAt, item.InterruptedAt, item.FinishedAt = restoredTime(v.started), restoredTime(v.interrupted), restoredTime(v.finished)
@@ -622,9 +634,12 @@ func readExecutions(ctx context.Context, source queryer, goalValue string) ([]ap
 	if schema.workspace {
 		workspaceProjection = "repository_ref, execution_workspace_ref"
 	}
-	reviewProjection := "'work', ''"
+	reviewProjection := "'work', '', ''"
 	if schema.reviews {
-		reviewProjection = "purpose, review_subject_digest"
+		reviewProjection = "purpose, review_subject_digest, ''"
+	}
+	if schema.council {
+		reviewProjection = "purpose, review_subject_digest, council_subject_digest"
 	}
 	rows, err := source.QueryContext(ctx, `
 SELECT ref, goal_ref, work_item_ref, state, artifact_media_type, idempotency_key,
@@ -669,7 +684,7 @@ type storedExecution struct {
 	created                                                           int64
 	deadline, started, accepted, observed, providerObserved, finished sql.NullInt64
 	replaces, reservation, intent, receipt, repository, workspace     sql.NullString
-	purpose, reviewSubject                                            string
+	purpose, reviewSubject, councilSubject                            string
 	attempt, maxAttempts, plan, appSpec, mailbox, governanceVersion   int64
 }
 
@@ -681,7 +696,7 @@ func scanExecution(rows *sql.Rows) (storedExecution, error) {
 		&v.record.AgentRef, &v.record.ExternalRef, &v.created, &v.deadline, &v.started,
 		&v.accepted, &v.observed, &v.providerObserved, &v.finished, &v.record.FailureCode,
 		&v.mailbox, &v.governanceVersion, &v.reservation, &v.intent, &v.receipt, &v.repository, &v.workspace,
-		&v.purpose, &v.reviewSubject)
+		&v.purpose, &v.reviewSubject, &v.councilSubject)
 	if err != nil {
 		return storedExecution{}, mapDatabaseError(err)
 	}
@@ -711,6 +726,7 @@ func restoreExecution(v storedExecution) (application.ExecutionRecord, error) {
 	}
 	record.State, record.AttemptNo, record.MaxExecutionAttempts = application.ExecutionState(v.state), uint64(v.attempt), uint64(v.maxAttempts)
 	record.Purpose, record.ReviewSubjectDigest = application.ExecutionPurpose(v.purpose), v.reviewSubject
+	record.CouncilSubjectDigest = application.CouncilSubjectDigest(v.councilSubject)
 	record.PlanGeneration, record.AppSpecGeneration = goal.PlanGeneration(v.plan), goal.AppSpecGeneration(v.appSpec)
 	record.CreatedAt, record.DeadlineAt = time.Unix(0, v.created).UTC(), restoredTime(v.deadline)
 	record.StartedAt, record.ProviderAcceptedAt = restoredTime(v.started), restoredTime(v.accepted)

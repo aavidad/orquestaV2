@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"orquesta/internal/application"
+	"orquesta/internal/council"
 	"orquesta/internal/goal"
 )
 
@@ -34,6 +35,7 @@ func seedSQLiteV17Committed(
 				Key: "writer", Objective: "produce a tested isolated change",
 				Phase: "phase:v17-test-attestor", Role: "role:writer",
 				WriteSet:       []string{"internal/v17"},
+				CouncilPolicy:  council.PolicyAuto,
 				RequiredTests:  sqliteRequiredTestSpecs("required-test:v17-exact"),
 				OutputContract: goal.OutputContractEvidenceBundle,
 			}},

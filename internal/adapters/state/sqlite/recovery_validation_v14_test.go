@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"orquesta/internal/application"
+	"orquesta/internal/council"
 	"orquesta/internal/goal"
 	"orquesta/internal/identity"
 	"orquesta/internal/ports"
@@ -518,8 +519,8 @@ func seedRecoveryV14PendingMultiCancel(t *testing.T) recoveryV14ControlSeed {
 				TemplateRef: "phase-template:recovery-v14-multi-cancel",
 			}},
 			WorkItems: []application.WorkItemSpec{
-				{Key: "first", Objective: "first live cancellation target", Phase: "phase:recovery-v14-multi-cancel", Role: "role:worker", WriteSet: []string{"first"}, RequiredTests: sqliteRequiredTestSpecs("required-test:sqlite-recovery-first"), OutputContract: goal.OutputContractEvidenceBundle},
-				{Key: "second", Objective: "second live cancellation target", Phase: "phase:recovery-v14-multi-cancel", Role: "role:worker", WriteSet: []string{"second"}, RequiredTests: sqliteRequiredTestSpecs("required-test:sqlite-recovery-second"), OutputContract: goal.OutputContractEvidenceBundle},
+				{Key: "first", Objective: "first live cancellation target", Phase: "phase:recovery-v14-multi-cancel", Role: "role:worker", WriteSet: []string{"first"}, CouncilPolicy: council.PolicyRequired, RequiredTests: sqliteRequiredTestSpecs("required-test:sqlite-recovery-first"), OutputContract: goal.OutputContractEvidenceBundle},
+				{Key: "second", Objective: "second live cancellation target", Phase: "phase:recovery-v14-multi-cancel", Role: "role:worker", WriteSet: []string{"second"}, CouncilPolicy: council.PolicyRequired, RequiredTests: sqliteRequiredTestSpecs("required-test:sqlite-recovery-second"), OutputContract: goal.OutputContractEvidenceBundle},
 			},
 		},
 	})

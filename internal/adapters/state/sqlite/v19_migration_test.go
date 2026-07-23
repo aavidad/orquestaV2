@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"orquesta/internal/goal"
 )
 
 func TestV19MigrationEmptyV18DatabaseCreatesCouncilFoundation(t *testing.T) {
@@ -89,6 +91,13 @@ func TestV19MigrationPreservesTerminalHistoryChecksumAndReopensIdempotently(t *t
 	if _, _, err := validateRecoveryDatabase(context.Background(), repository.db); err != nil {
 		t.Fatalf("V19 recovery validation: %v", err)
 	}
+	rewriteRecoveryTrigger(t, repository.db, "work_items_council_policy_immutable", func() {
+		mustV19Exec(t, repository.db, `UPDATE work_items SET council_policy='required'
+WHERE ref='work-item:v19-closed'`)
+	})
+	if _, _, err := validateRecoveryDatabase(context.Background(), repository.db); err != nil {
+		t.Fatalf("V19 read-only policy recovery: %v", err)
+	}
 	sqliteTestNoError(t, repository.Close())
 
 	reopened, err := Open(context.Background(), Options{Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 4})
@@ -101,6 +110,79 @@ func TestV19MigrationPreservesTerminalHistoryChecksumAndReopensIdempotently(t *t
 	sqliteTestNoError(t, reopened.db.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE version=?`, recoverySchemaV19).Scan(&receipts))
 	if receipts != 1 {
 		t.Fatalf("V19 migration receipts=%d", receipts)
+	}
+}
+
+func TestV19MigrationPreservesSupersededTerminalWriterWithoutPolicy(t *testing.T) {
+	path := populatedTerminalSQLiteV18Database(t)
+	database, err := sql.Open(driverName, path)
+	sqliteTestNoError(t, err)
+	rewriteRecoveryTrigger(t, database, "artifact_occurrences_immutable_delete", func() {
+		rewriteRecoveryTrigger(t, database, "attestations_immutable_delete", func() {
+			rewriteRecoveryTrigger(t, database, "artifacts_immutable_delete", func() {
+				mustV19Exec(t, database, `DELETE FROM attestation_test_outcomes`)
+				mustV19Exec(t, database, `DELETE FROM artifact_occurrences`)
+				mustV19Exec(t, database, `DELETE FROM attestations`)
+				mustV19Exec(t, database, `DELETE FROM artifacts`)
+			})
+		})
+	})
+	mustV19Exec(t, database, `UPDATE goals SET state='failed',revision=9,control_sequence=1,plan_generation=2
+WHERE ref='goal:v19-closed'`)
+	mustV19Exec(t, database, `UPDATE work_items SET state='superseded',revision=4,control_sequence=1
+WHERE ref='work-item:v19-closed'`)
+	mustV19Exec(t, database, `UPDATE executions SET state='failed',failure_code='application.execution_superseded'
+WHERE ref='execution:v19-closed'`)
+	mustV19Exec(t, database, `INSERT INTO work_items(
+ ref,goal_ref,actor_ref,project_ref,objective,phase_key,role_key,parent_ref,output_contract,
+ skip_reason,interrupt_cause,rework_of,state,revision,paused,cancel_requested,control_sequence,
+ position,created_at,started_at,interrupted_at,finished_at,execution_ref,handoff_required,
+ governance_version,budget_demand_ref,budget_tokens,budget_money_micros,budget_currency,
+ budget_active_time_ns,budget_process_slots,budget_disk_bytes,security_criticality,reasoning_effort)
+SELECT 'work-item:v19-successor',goal_ref,actor_ref,project_ref,'terminal rework successor',
+ phase_key,role_key,NULL,output_contract,'','',ref,'failed',3,0,0,0,1,created_at,started_at,
+ NULL,finished_at,'execution:v19-successor',0,governance_version,budget_demand_ref,budget_tokens,
+ budget_money_micros,budget_currency,budget_active_time_ns,budget_process_slots,budget_disk_bytes,
+ security_criticality,reasoning_effort
+FROM work_items WHERE ref='work-item:v19-closed'`)
+	mustV19Exec(t, database, `INSERT INTO executions(
+ ref,goal_ref,work_item_ref,attempt_no,max_execution_attempts,replaces_execution_ref,
+ plan_generation,app_spec_generation,spec_hash,repository_ref,execution_workspace_ref,state,
+ purpose,review_subject_digest,artifact_media_type,idempotency_key,max_output_bytes,provider_ref,
+ model_ref,agent_ref,external_ref,governance_version,budget_reservation_ref,effect_intent_ref,
+ launch_receipt_ref,created_at,deadline_at,started_at,provider_accepted_at,last_observed_at,
+ provider_observed_at,finished_at,failure_code,recipient_mailbox_retired)
+SELECT 'execution:v19-successor',goal_ref,'work-item:v19-successor',1,max_execution_attempts,NULL,
+ 2,app_spec_generation,spec_hash,'','','failed','work','',artifact_media_type,
+ 'idempotency:v19-successor',max_output_bytes,provider_ref,model_ref,agent_ref,
+ 'external:v19-successor',0,NULL,NULL,NULL,created_at,deadline_at,started_at,
+ provider_accepted_at,last_observed_at,provider_observed_at,finished_at,
+ 'application.execution_failed',0
+FROM executions WHERE ref='execution:v19-closed'`)
+	mustV19Exec(t, database, `INSERT INTO work_item_write_scopes(goal_ref,work_item_ref,scope,position)
+VALUES ('goal:v19-closed','work-item:v19-closed','internal/v19',0)`)
+	sqliteTestNoError(t, database.Close())
+
+	repository, err := Open(context.Background(), Options{
+		Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 4,
+	})
+	if err != nil {
+		t.Fatalf("superseded terminal V18 migration: %s", sqliteTestErrorChain(err))
+	}
+	t.Cleanup(func() { _ = repository.Close() })
+	record, err := repository.GetGoal(context.Background(), mustRef(t, "goal:v19-closed", goal.NewGoalRef))
+	sqliteTestNoError(t, err)
+	source, found := record.Goal.WorkItem(mustRef(t, "work-item:v19-closed", goal.NewWorkItemRef))
+	successor, successorFound := record.Goal.WorkItem(mustRef(t, "work-item:v19-successor", goal.NewWorkItemRef))
+	reworkOf, linked := successor.ReworkOf()
+	_, policyFound := source.CouncilPolicy()
+	if !found || !successorFound || source.State() != goal.WorkItemStateSuperseded ||
+		successor.State() != goal.WorkItemStateFailed || !linked || reworkOf != source.Ref() || policyFound {
+		t.Fatalf("superseded migration source=%+v successor=%+v linked=%t policy=%t",
+			source, successor, linked, policyFound)
+	}
+	if _, _, err := validateRecoveryDatabase(context.Background(), repository.db); err != nil {
+		t.Fatalf("superseded terminal recovery: %s", sqliteTestErrorChain(err))
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"orquesta/internal/application"
+	"orquesta/internal/council"
 	"orquesta/internal/goal"
 	"orquesta/internal/review"
 )
@@ -172,6 +173,14 @@ func admitSQLiteV18Integration(t *testing.T, system *sqliteV15System, goalRef go
 	t.Helper()
 	record, err := system.repository.GetGoal(context.Background(), goalRef)
 	sqliteTestNoError(t, err)
+	if policy, found := record.Goal.WorkItems()[0].CouncilPolicy(); found && policy == council.PolicyAuto &&
+		len(record.CouncilDecisions) == 0 {
+		processSQLiteV16Actions(t, system,
+			application.ActionLaunchAgent, application.ActionLaunchAgent, application.ActionLaunchAgent,
+			application.ActionObserveAgent, application.ActionObserveAgent, application.ActionObserveAgent)
+		record, err = system.repository.GetGoal(context.Background(), goalRef)
+		sqliteTestNoError(t, err)
+	}
 	result, err := system.orchestrator.IntegrateChange(context.Background(), system.access,
 		application.IntegrateChangeRequest{
 			RequestRef: "request:v18-e2e-integration", GoalRef: goalRef,
@@ -211,8 +220,8 @@ func assertSQLiteV18ReviewClosure(t *testing.T, system *sqliteV15System, goalRef
 	system.external.mu.Lock()
 	launches := system.external.launchCalls
 	system.external.mu.Unlock()
-	if launches != 3 {
-		t.Fatalf("V18 participant launches=%d want author+primary+adversarial", launches)
+	if launches != 6 {
+		t.Fatalf("participant launches=%d want author+review pair+Council cohort", launches)
 	}
 	if _, _, err := validateRecoveryDatabase(context.Background(), system.repository.db); err != nil {
 		t.Fatalf("V18 closure recovery: %v", err)

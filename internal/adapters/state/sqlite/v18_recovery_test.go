@@ -72,7 +72,7 @@ WHERE action_kind='integrate_change'`,
 		t.Run(test.name, func(t *testing.T) {
 			system := seedSQLiteV18Integration(t, false)
 			if _, _, err := validateRecoveryDatabase(context.Background(), system.repository.db); err != nil {
-				t.Fatalf("valid integration review gate: %v", err)
+				t.Fatalf("valid integration review gate: %s", sqliteTestErrorChain(err))
 			}
 			rewriteRecoveryTrigger(t, system.repository.db, test.trigger, func() {
 				mustV10Exec(t, system.repository.db, test.mutate)

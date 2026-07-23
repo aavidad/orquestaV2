@@ -93,8 +93,11 @@ func validateRecoveryVersion(ctx context.Context, tx *sql.Tx, version int) error
 			validateRecoveryV16WorkspaceGit,
 			validateRecoveryV17TestAttestor,
 			validateRecoveryV18Reviews,
-			validateMigratedGoalRecords,
 		}
+		if version >= recoverySchemaV19 {
+			validators = append(validators, validateRecoveryV19Council)
+		}
+		validators = append(validators, validateMigratedGoalRecords)
 		for _, validate := range validators {
 			if err := validate(ctx, tx); err != nil {
 				return err
@@ -364,7 +367,10 @@ func activeRecoveryActionState(
 	switch kind {
 	case application.ActionLaunchAgent:
 		if executionPurpose == string(application.ExecutionPurposePrimaryReview) ||
-			executionPurpose == string(application.ExecutionPurposeAdversarialReview) {
+			executionPurpose == string(application.ExecutionPurposeAdversarialReview) ||
+			executionPurpose == string(application.ExecutionPurposeCouncilProposer) ||
+			executionPurpose == string(application.ExecutionPurposeCouncilCritic) ||
+			executionPurpose == string(application.ExecutionPurposeCouncilArbiter) {
 			return (executionState == "queued" || executionState == "dispatching") && currentItemState == "running" &&
 				currentExecutionRef.Valid && currentExecutionRef.String != executionRef && boundPurpose.String == "author" &&
 				boundState.String == "awaiting_integration" && itemGeneration <= currentItemRevision
@@ -382,7 +388,10 @@ func activeRecoveryActionState(
 		return itemGeneration <= currentItemRevision
 	case application.ActionObserveAgent:
 		if executionPurpose == string(application.ExecutionPurposePrimaryReview) ||
-			executionPurpose == string(application.ExecutionPurposeAdversarialReview) {
+			executionPurpose == string(application.ExecutionPurposeAdversarialReview) ||
+			executionPurpose == string(application.ExecutionPurposeCouncilProposer) ||
+			executionPurpose == string(application.ExecutionPurposeCouncilCritic) ||
+			executionPurpose == string(application.ExecutionPurposeCouncilArbiter) {
 			return executionState == "running" && currentItemState == "running" && currentExecutionRef.Valid &&
 				currentExecutionRef.String != executionRef && boundPurpose.String == "author" &&
 				boundState.String == "awaiting_integration" && itemGeneration == currentItemRevision

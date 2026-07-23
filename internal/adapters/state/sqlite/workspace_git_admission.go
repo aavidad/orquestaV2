@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"reflect"
 	"time"
 
 	"orquesta/internal/application"
@@ -45,6 +46,10 @@ func (r *Repository) AdmitIntegration(ctx context.Context, s application.AdmitIn
 		if err := requireIntegrationPassEvidence(ctx, tx, s); err != nil {
 			return application.ActionRecord{}, false, err
 		}
+		record, readErr := readGoalRecord(ctx, tx, s.GoalRef.String())
+		if readErr != nil || application.ValidatePersistedIntegrationReviewGate(record, persisted) != nil {
+			return application.ActionRecord{}, false, conflict(errors.New("sqlite.integration_council_resolution_invalid"))
+		}
 		if err = commit(tx); err != nil {
 			return application.ActionRecord{}, false, err
 		}
@@ -67,6 +72,10 @@ func (r *Repository) AdmitIntegration(ctx context.Context, s application.AdmitIn
 	}
 	if err = insertIntegrationAction(ctx, tx, s); err != nil {
 		return application.ActionRecord{}, false, err
+	}
+	record, readErr := readGoalRecord(ctx, tx, s.GoalRef.String())
+	if readErr != nil || application.ValidatePersistedIntegrationReviewGate(record, s.Action) != nil {
+		return application.ActionRecord{}, false, conflict(errors.New("sqlite.integration_council_resolution_invalid"))
 	}
 	if err = commit(tx); err != nil {
 		return application.ActionRecord{}, false, err
@@ -105,6 +114,8 @@ func validateIntegrationAdmissionState(s application.AdmitIntegrationState) erro
 	if action.Kind != application.ActionIntegrateChange ||
 		action.GoalRef != s.GoalRef || action.ChangeRef != s.ChangeRef ||
 		action.WorkItemGeneration != s.ExpectedItemRevision || action.EffectIntentRef != intent.Ref ||
+		!reflect.DeepEqual(action.CouncilResolution, s.CouncilResolution) ||
+		!reflect.DeepEqual(intent.CouncilResolution, s.CouncilResolution) ||
 		!action.AvailableAt.Equal(intent.CreatedAt) || s.OperationAt.Before(action.AvailableAt) ||
 		intent.RequestRef != s.RequestRef || intent.RequestFingerprint != s.RequestFingerprint ||
 		intent.ActionRef != action.Ref || intent.ActionKind != application.ActionIntegrateChange ||
@@ -126,12 +137,15 @@ func readPersistedIntegrationAction(
 ) (application.ActionRecord, string, bool, error) {
 	var action application.ActionRecord
 	var kind, goalValue, itemValue, executionValue, changeValue, intentRef, fingerprint string
+	var councilSubject string
+	var councilDecisionRef, councilDecisionDigest, councilSkipRef, councilSkipDigest sql.NullString
 	var planGeneration, itemGeneration, availableAt int64
 	err := source.QueryRowContext(ctx, `
 SELECT action.ref,action.kind,action.goal_ref,action.work_item_ref,action.execution_ref,
        action.change_ref,action.expected_target_oid,action.plan_generation,
        action.work_item_generation,action.available_at,action.effect_intent_ref,action.review_gate_digest,
-       action.admission_request_fingerprint
+       action.admission_request_fingerprint,action.council_subject_digest,action.council_decision_ref,
+       action.council_decision_digest,action.council_skip_ref,action.council_skip_digest
 FROM outbox action
 JOIN effect_intents intent ON intent.ref=action.effect_intent_ref
 WHERE action.kind='integrate_change' AND action.admission_request_ref=?
@@ -139,7 +153,8 @@ WHERE action.kind='integrate_change' AND action.admission_request_ref=?
 		state.RequestRef, state.GoalRef.String(), state.PrincipalRef.String(), state.ProjectRef.String()).Scan(
 		&action.Ref, &kind, &goalValue, &itemValue, &executionValue, &changeValue,
 		&action.ExpectedTargetOID, &planGeneration, &itemGeneration, &availableAt,
-		&intentRef, &action.ReviewGateDigest, &fingerprint,
+		&intentRef, &action.ReviewGateDigest, &fingerprint, &councilSubject, &councilDecisionRef,
+		&councilDecisionDigest, &councilSkipRef, &councilSkipDigest,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return application.ActionRecord{}, "", false, nil
@@ -168,6 +183,12 @@ WHERE action.kind='integrate_change' AND action.admission_request_ref=?
 	action.WorkItemGeneration = goal.Revision(itemGeneration)
 	action.AvailableAt = time.Unix(0, availableAt).UTC()
 	action.EffectIntentRef = intentRef
+	action.CouncilResolution, err = restoreCouncilResolution(
+		councilSubject, councilDecisionRef, councilDecisionDigest, councilSkipRef, councilSkipDigest,
+	)
+	if err != nil {
+		return application.ActionRecord{}, "", false, err
+	}
 	action.EffectIntent, err = readEffectIntent(ctx, source, intentRef)
 	if err != nil {
 		return application.ActionRecord{}, "", false, err
@@ -202,7 +223,9 @@ func integrationAdmissionReplayMatches(
 		persisted.WorkItemRef != s.Action.WorkItemRef || persisted.ExecutionRef != s.Action.ExecutionRef ||
 		persisted.ChangeRef != s.ChangeRef || persisted.ExpectedTargetOID != s.Action.ExpectedTargetOID ||
 		persisted.ReviewGateDigest != s.Action.ReviewGateDigest ||
-		persisted.PlanGeneration != s.Action.PlanGeneration || persisted.EffectIntent != s.Action.EffectIntent ||
+		!reflect.DeepEqual(persisted.CouncilResolution, s.Action.CouncilResolution) ||
+		persisted.PlanGeneration != s.Action.PlanGeneration ||
+		!reflect.DeepEqual(persisted.EffectIntent, s.Action.EffectIntent) ||
 		persisted.EffectApproval == nil || s.Action.EffectApproval == nil ||
 		*persisted.EffectApproval != *s.Action.EffectApproval {
 		return false
@@ -265,16 +288,23 @@ WHERE change_set.ref=? AND change_set.project_ref=? AND change_set.goal_ref=?
 
 func insertIntegrationAction(ctx context.Context, tx *sql.Tx, s application.AdmitIntegrationState) error {
 	action := s.Action
+	subject, decisionRef, decisionDigest, skipRef, skipDigest := storedCouncilResolution(action.CouncilResolution)
+	resolutionKind := "accepted_round"
+	if action.CouncilResolution != nil && action.CouncilResolution.SkipRef != "" {
+		resolutionKind = "skip"
+	}
 	_, err := tx.ExecContext(ctx, `
 INSERT INTO outbox(
  ref,kind,goal_ref,work_item_ref,execution_ref,control_ref,change_ref,expected_target_oid,
  admission_request_ref,admission_request_fingerprint,plan_generation,work_item_generation,
- available_at,governance_version,effect_intent_ref,review_gate_digest
-) VALUES(?,?,?,?,?,NULL,?,?,?,?,?,?,?,1,?,?)`,
+ available_at,governance_version,effect_intent_ref,review_gate_digest,council_subject_digest,
+ council_resolution_kind,council_decision_ref,council_decision_digest,council_skip_ref,council_skip_digest
+) VALUES(?,?,?,?,?,NULL,?,?,?,?,?,?,?,1,?,?,?,?,?,?,?,?)`,
 		action.Ref, string(action.Kind), action.GoalRef.String(), action.WorkItemRef.String(),
 		action.ExecutionRef.String(), action.ChangeRef.String(), action.ExpectedTargetOID,
 		s.RequestRef, s.RequestFingerprint, int64(action.PlanGeneration),
 		int64(action.WorkItemGeneration), requiredTime(action.AvailableAt), action.EffectIntentRef, action.ReviewGateDigest,
+		subject, resolutionKind, decisionRef, decisionDigest, skipRef, skipDigest,
 	)
 	return mapDatabaseError(err)
 }

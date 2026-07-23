@@ -452,9 +452,17 @@ func readClaimCandidateWindow(
 	workspaceColumns bool,
 	after *claimCandidateOrder,
 ) ([]claimCandidate, error) {
-	changeProjection := "'' AS change_ref, '' AS expected_target_oid, '' AS review_gate_digest"
+	changeProjection := "'' AS change_ref, '' AS expected_target_oid, '' AS review_gate_digest, '', NULL, NULL, NULL, NULL"
 	if workspaceColumns {
-		changeProjection = "o.change_ref, o.expected_target_oid, o.review_gate_digest"
+		councilColumns, err := sqliteTableHasColumn(ctx, transaction, "outbox", "council_subject_digest")
+		if err != nil {
+			return nil, mapDatabaseError(err)
+		}
+		changeProjection = "o.change_ref, o.expected_target_oid, o.review_gate_digest, '', NULL, NULL, NULL, NULL"
+		if councilColumns {
+			changeProjection = `o.change_ref,o.expected_target_oid,o.review_gate_digest,o.council_subject_digest,
+o.council_decision_ref,o.council_decision_digest,o.council_skip_ref,o.council_skip_digest`
+		}
 	}
 	continuation, enabled := claimCandidateOrder{}, 0
 	if after != nil {
@@ -489,9 +497,12 @@ func scanClaimCandidate(rows *sql.Rows) (claimCandidate, error) {
 	var kind, goalValue, itemValue, executionValue, projectValue string
 	var controlRef, effectIntentRef sql.NullString
 	var changeRef, expectedTarget, reviewGateDigest string
+	var councilSubject string
+	var councilDecisionRef, councilDecisionDigest, councilSkipRef, councilSkipDigest sql.NullString
 	var planGeneration, itemGeneration, availableAt int64
 	err := rows.Scan(&candidate.action.Ref, &kind, &goalValue, &itemValue, &executionValue,
-		&controlRef, &changeRef, &expectedTarget, &reviewGateDigest, &effectIntentRef, &candidate.governanceVersion, &planGeneration,
+		&controlRef, &changeRef, &expectedTarget, &reviewGateDigest, &councilSubject, &councilDecisionRef,
+		&councilDecisionDigest, &councilSkipRef, &councilSkipDigest, &effectIntentRef, &candidate.governanceVersion, &planGeneration,
 		&itemGeneration, &availableAt, &projectValue, &candidate.deliveryAttempt,
 		&candidate.roleKey, &candidate.executionState, &candidate.executionPurpose, &candidate.providerRef,
 		&candidate.modelRef, &candidate.agentRef, &candidate.order.kind,
@@ -512,6 +523,12 @@ func scanClaimCandidate(rows *sql.Rows) (claimCandidate, error) {
 	}
 	candidate.action.ExpectedTargetOID = expectedTarget
 	candidate.action.ReviewGateDigest = reviewGateDigest
+	candidate.action.CouncilResolution, err = restoreCouncilResolution(
+		councilSubject, councilDecisionRef, councilDecisionDigest, councilSkipRef, councilSkipDigest,
+	)
+	if err != nil {
+		return candidate, err
+	}
 	if effectIntentRef.Valid {
 		candidate.action.EffectIntentRef = effectIntentRef.String
 	}

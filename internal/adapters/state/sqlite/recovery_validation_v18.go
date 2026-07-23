@@ -108,11 +108,24 @@ func validateRecoveryV18Reviews(ctx context.Context, tx *sql.Tx) error {
 }
 
 func validateRecoveryV18IntegrationGates(ctx context.Context, tx *sql.Tx) error {
-	rows, err := tx.QueryContext(ctx, `
+	councilColumns, err := sqliteTableHasColumn(ctx, tx, "outbox", "council_subject_digest")
+	if err != nil {
+		return err
+	}
+	query := `
 SELECT ref,goal_ref,work_item_ref,execution_ref,change_ref,expected_target_oid,
  review_gate_digest,plan_generation,work_item_generation
 FROM outbox WHERE kind='integrate_change' AND completed_at IS NULL
- AND retired_at IS NULL AND quarantined_at IS NULL ORDER BY ref`)
+ AND retired_at IS NULL AND quarantined_at IS NULL ORDER BY ref`
+	if councilColumns {
+		query = `
+SELECT ref,goal_ref,work_item_ref,execution_ref,change_ref,expected_target_oid,
+ review_gate_digest,plan_generation,work_item_generation,council_subject_digest,
+ council_decision_ref,council_decision_digest,council_skip_ref,council_skip_digest
+FROM outbox WHERE kind='integrate_change' AND completed_at IS NULL
+ AND retired_at IS NULL AND quarantined_at IS NULL ORDER BY ref`
+	}
+	rows, err := tx.QueryContext(ctx, query)
 	if err != nil {
 		return err
 	}
@@ -127,11 +140,24 @@ FROM outbox WHERE kind='integrate_change' AND completed_at IS NULL
 	for rows.Next() {
 		var value candidate
 		var plan, itemGeneration int64
-		if err := rows.Scan(&value.action.Ref, &value.goal, &value.item, &value.exec,
-			&value.change, &value.action.ExpectedTargetOID, &value.action.ReviewGateDigest,
-			&plan, &itemGeneration); err != nil {
+		destinations := []any{&value.action.Ref, &value.goal, &value.item, &value.exec,
+			&value.change, &value.action.ExpectedTargetOID, &value.action.ReviewGateDigest, &plan, &itemGeneration}
+		var subject string
+		var decisionRef, decisionDigest, skipRef, skipDigest sql.NullString
+		if councilColumns {
+			destinations = append(destinations, &subject, &decisionRef, &decisionDigest, &skipRef, &skipDigest)
+		}
+		if err := rows.Scan(destinations...); err != nil {
 			_ = rows.Close()
 			return err
+		}
+		if councilColumns {
+			value.action.CouncilResolution, err = restoreCouncilResolution(
+				subject, decisionRef, decisionDigest, skipRef, skipDigest)
+			if err != nil {
+				_ = rows.Close()
+				return err
+			}
 		}
 		value.action.Kind = application.ActionIntegrateChange
 		value.action.PlanGeneration = goal.PlanGeneration(plan)

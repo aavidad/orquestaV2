@@ -173,12 +173,19 @@ func validateExecution(execution application.ExecutionRecord) error {
 	}
 	switch execution.Purpose {
 	case "", application.ExecutionPurposeWork, application.ExecutionPurposeAuthor:
-		if execution.ReviewSubjectDigest != "" {
+		if execution.ReviewSubjectDigest != "" || execution.CouncilSubjectDigest != "" {
 			return errors.New("sqlite.execution_review_scope_invalid")
 		}
 	case application.ExecutionPurposePrimaryReview, application.ExecutionPurposeAdversarialReview:
-		if !validReviewDigest(execution.ReviewSubjectDigest) || execution.RepositoryRef.String() == "" {
+		if !validReviewDigest(execution.ReviewSubjectDigest) || execution.CouncilSubjectDigest != "" ||
+			execution.RepositoryRef.String() == "" {
 			return errors.New("sqlite.execution_review_scope_invalid")
+		}
+	case application.ExecutionPurposeCouncilProposer, application.ExecutionPurposeCouncilCritic,
+		application.ExecutionPurposeCouncilArbiter:
+		if execution.ReviewSubjectDigest != "" || !validReviewDigest(string(execution.CouncilSubjectDigest)) ||
+			execution.RepositoryRef.String() == "" {
+			return errors.New("sqlite.execution_council_scope_invalid")
 		}
 	default:
 		return errors.New("sqlite.execution_purpose_invalid")
@@ -293,7 +300,7 @@ func validateArtifactRecord(artifact application.ArtifactRecord) error {
 	switch artifact.Kind {
 	case application.ArtifactKindAgentOutput, application.ArtifactKindTestSubjectManifest,
 		application.ArtifactKindTestReport, application.ArtifactKindReviewAssessment,
-		application.ArtifactKindReviewDiagnostic:
+		application.ArtifactKindReviewDiagnostic, application.ArtifactKindCouncilContribution:
 	default:
 		return errors.New("sqlite.artifact_kind_invalid")
 	}
@@ -363,6 +370,7 @@ func validateGoalRecordConsistency(record application.GoalRecord, expectedGoalRe
 		} else if artifact.Kind != application.ArtifactKindAgentOutput &&
 			artifact.Kind != application.ArtifactKindReviewAssessment &&
 			artifact.Kind != application.ArtifactKindReviewDiagnostic &&
+			artifact.Kind != application.ArtifactKindCouncilContribution &&
 			!stagedArtifactHasExactAttestation(record, artifact, execution.Ref) {
 			return errors.New("sqlite.goal_record_artifact_scope_invalid")
 		}
@@ -381,7 +389,10 @@ func validateGoalRecordConsistency(record application.GoalRecord, expectedGoalRe
 	if err := validateGoalRecordAttestationsAndReceipts(record, aggregate, items, executions, artifacts); err != nil {
 		return err
 	}
-	return validateGoalRecordReviews(record, items, executions)
+	if err := validateGoalRecordReviews(record, items, executions); err != nil {
+		return err
+	}
+	return validateGoalRecordCouncil(record, items, executions)
 }
 
 func workItemStagedOutputExecution(
@@ -695,23 +706,27 @@ func validateAction(action application.ActionRecord) error {
 	switch action.Kind {
 	case application.ActionLaunchAgent, application.ActionObserveAgent, application.ActionDeliverMailbox,
 		application.ActionPrepareWorkspace:
-		if action.ControlRef != "" || action.ChangeRef.String() != "" || action.ExpectedTargetOID != "" || action.ReviewGateDigest != "" {
+		if action.ControlRef != "" || action.ChangeRef.String() != "" || action.ExpectedTargetOID != "" ||
+			action.ReviewGateDigest != "" || action.CouncilResolution != nil {
 			return errors.New("sqlite.action_scope_unexpected")
 		}
 		return nil
 	case application.ActionCommitChange, application.ActionAttestTest:
-		if action.ControlRef != "" || action.ChangeRef.String() == "" || action.ExpectedTargetOID != "" || action.ReviewGateDigest != "" {
+		if action.ControlRef != "" || action.ChangeRef.String() == "" || action.ExpectedTargetOID != "" ||
+			action.ReviewGateDigest != "" || action.CouncilResolution != nil {
 			return errors.New("sqlite.action_change_scope_invalid")
 		}
 		return nil
 	case application.ActionIntegrateChange:
 		if action.ControlRef != "" || action.ChangeRef.String() == "" || !validText(action.ExpectedTargetOID) ||
-			!validReviewDigest(action.ReviewGateDigest) {
+			!validReviewDigest(action.ReviewGateDigest) ||
+			(action.CouncilResolution != nil && action.CouncilResolution.Validate() != nil) {
 			return errors.New("sqlite.action_integration_scope_invalid")
 		}
 		return nil
 	case application.ActionStopAgent:
-		if !validText(action.ControlRef) || action.ChangeRef.String() != "" || action.ExpectedTargetOID != "" || action.ReviewGateDigest != "" {
+		if !validText(action.ControlRef) || action.ChangeRef.String() != "" || action.ExpectedTargetOID != "" ||
+			action.ReviewGateDigest != "" || action.CouncilResolution != nil {
 			return errors.New("sqlite.action_control_required")
 		}
 		return nil
@@ -760,9 +775,14 @@ func validateLaunchPrepared(state application.LaunchPreparedState) error {
 	bound, hasBinding := preparedItem.Execution()
 	reviewer := state.Execution.Purpose == application.ExecutionPurposePrimaryReview ||
 		state.Execution.Purpose == application.ExecutionPurposeAdversarialReview
+	councilParticipant := state.Execution.Purpose == application.ExecutionPurposeCouncilProposer ||
+		state.Execution.Purpose == application.ExecutionPurposeCouncilCritic ||
+		state.Execution.Purpose == application.ExecutionPurposeCouncilArbiter
 	boundExecutionMatches := bound == state.Execution.Ref
-	if reviewer {
-		boundExecutionMatches = bound != state.Execution.Ref && state.Execution.ReviewSubjectDigest != ""
+	if reviewer || councilParticipant {
+		boundExecutionMatches = bound != state.Execution.Ref &&
+			((reviewer && state.Execution.ReviewSubjectDigest != "") ||
+				(councilParticipant && state.Execution.CouncilSubjectDigest != ""))
 	}
 	if !found || !hasBinding || !boundExecutionMatches ||
 		state.Goal.State() != goal.GoalStateRunning || preparedItem.State() != goal.WorkItemStateRunning {
@@ -772,7 +792,7 @@ func validateLaunchPrepared(state application.LaunchPreparedState) error {
 		preparedItem.Revision() > state.Claim.Action.WorkItemGeneration
 	replacementStart := state.Goal.Revision() == state.ExpectedGoalRevision &&
 		preparedItem.Revision() >= state.Claim.Action.WorkItemGeneration
-	if reviewer {
+	if reviewer || councilParticipant {
 		initialStart = false
 	}
 	if (!initialStart && !replacementStart) || uint64(state.Goal.Revision()) > maxSQLiteInteger ||

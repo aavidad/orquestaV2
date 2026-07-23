@@ -1,5 +1,30 @@
 -- V19 adds Council facts to the existing Goal authority. No policy is
 -- backfilled: empty survives only for terminal history and read-only items.
+PRAGMA legacy_alter_table=ON;
+DROP TRIGGER authorization_receipts_immutable_update;
+DROP TRIGGER authorization_receipts_immutable_delete;
+DROP INDEX authorization_receipts_project_idx;
+DROP INDEX authorization_receipts_mailbox_scope_idx;
+ALTER TABLE authorization_receipts RENAME TO authorization_receipts_v14;
+CREATE TABLE authorization_receipts (
+ ref TEXT PRIMARY KEY CHECK(length(trim(ref))>0),request_ref TEXT NOT NULL CHECK(length(trim(request_ref))>0),
+ request_fingerprint TEXT NOT NULL CHECK(length(trim(request_fingerprint))>0),principal_ref TEXT NOT NULL REFERENCES principals(ref) ON DELETE RESTRICT,
+ project_ref TEXT NOT NULL CHECK(length(trim(project_ref))>0),
+ permission TEXT NOT NULL CHECK(permission IN ('project.hierarchy.manage','project.membership.manage','goals.create','goals.amend','goals.get','goals.list','goals.direct','budgets.manage','effects.approve','changes.integrate','council.skip','artifacts.read','project.status')),
+ resource_ref TEXT NOT NULL CHECK(length(trim(resource_ref))>0),requested_at INTEGER NOT NULL,outcome TEXT NOT NULL CHECK(outcome IN ('allowed','denied')),
+ role TEXT NOT NULL DEFAULT '' CHECK(role IN ('','platform_admin','project_owner','project_admin','contributor','reviewer','operator','viewer')),
+ membership_revision INTEGER NOT NULL CHECK(membership_revision>=0),reason_code TEXT NOT NULL CHECK(length(trim(reason_code))>0),
+ decided_at INTEGER NOT NULL,recorded_at INTEGER NOT NULL,UNIQUE(principal_ref,request_ref),CHECK(decided_at>=requested_at),CHECK(recorded_at>=decided_at),
+ CHECK((outcome='allowed' AND role<>'' AND (role='platform_admin' OR membership_revision>0)) OR outcome='denied')
+) STRICT;
+INSERT INTO authorization_receipts SELECT * FROM authorization_receipts_v14;
+DROP TABLE authorization_receipts_v14;
+PRAGMA legacy_alter_table=OFF;
+CREATE INDEX authorization_receipts_project_idx ON authorization_receipts(project_ref,recorded_at,ref);
+CREATE UNIQUE INDEX authorization_receipts_mailbox_scope_idx ON authorization_receipts(ref,principal_ref,project_ref);
+CREATE TRIGGER authorization_receipts_immutable_update BEFORE UPDATE ON authorization_receipts BEGIN SELECT RAISE(ABORT,'sqlite.authorization_receipt_immutable'); END;
+CREATE TRIGGER authorization_receipts_immutable_delete BEFORE DELETE ON authorization_receipts BEGIN SELECT RAISE(ABORT,'sqlite.authorization_receipt_immutable'); END;
+
 ALTER TABLE work_items ADD COLUMN council_policy TEXT NOT NULL DEFAULT ''
  CHECK(council_policy IN ('','auto','required','skip_by_operator'));
 CREATE TRIGGER work_items_council_policy_immutable
@@ -135,7 +160,6 @@ CREATE TABLE council_rounds (
 CREATE TABLE council_facts (
  ref TEXT PRIMARY KEY CHECK(length(trim(ref))>0),round_ref TEXT NOT NULL,goal_ref TEXT NOT NULL,work_item_ref TEXT NOT NULL,
  council_subject_digest TEXT NOT NULL CHECK(length(council_subject_digest)=71 AND substr(council_subject_digest,1,7)='sha256:'),
- subject_digest TEXT NOT NULL CHECK(length(subject_digest)=64 AND subject_digest NOT GLOB '*[^0-9a-f]*'),
  role TEXT NOT NULL CHECK(role IN ('proposer','critic','arbiter')),ballot TEXT NOT NULL CHECK(ballot IN ('accept','reject','abstain','security_veto')),
  contribution_schema TEXT NOT NULL CHECK(contribution_schema='orquesta.council.contribution.v1'),
  body TEXT NOT NULL CHECK(length(trim(body))>0 AND length(body)<=8000 AND instr(body,char(0))=0),
@@ -154,7 +178,6 @@ CREATE TABLE council_facts (
 CREATE TABLE council_decisions (
  ref TEXT PRIMARY KEY CHECK(length(trim(ref))>0),round_ref TEXT NOT NULL UNIQUE,goal_ref TEXT NOT NULL,work_item_ref TEXT NOT NULL,
  subject_digest TEXT NOT NULL CHECK(length(subject_digest)=71 AND substr(subject_digest,1,7)='sha256:'),
- domain_subject_digest TEXT NOT NULL CHECK(length(domain_subject_digest)=64 AND domain_subject_digest NOT GLOB '*[^0-9a-f]*'),
  outcome TEXT NOT NULL CHECK(outcome IN ('accepted','rejected','no_consensus','blocked_security')),
  decision_digest TEXT NOT NULL UNIQUE CHECK(length(decision_digest)=71 AND substr(decision_digest,1,7)='sha256:'),recorded_at INTEGER NOT NULL,
  FOREIGN KEY(round_ref,goal_ref,work_item_ref,subject_digest) REFERENCES council_rounds(ref,goal_ref,work_item_ref,subject_digest) ON DELETE RESTRICT
@@ -186,6 +209,16 @@ CREATE TRIGGER council_decisions_immutable_delete BEFORE DELETE ON council_decis
 CREATE TRIGGER council_skips_immutable_update BEFORE UPDATE ON council_skips BEGIN SELECT RAISE(ABORT,'sqlite.council_skip_immutable'); END;
 CREATE TRIGGER council_skips_immutable_delete BEFORE DELETE ON council_skips BEGIN SELECT RAISE(ABORT,'sqlite.council_skip_immutable'); END;
 
+ALTER TABLE effect_intents ADD COLUMN council_subject_digest TEXT NOT NULL DEFAULT '';
+ALTER TABLE effect_intents ADD COLUMN council_decision_ref TEXT REFERENCES council_decisions(ref) ON DELETE RESTRICT;
+ALTER TABLE effect_intents ADD COLUMN council_decision_digest TEXT;
+ALTER TABLE effect_intents ADD COLUMN council_skip_ref TEXT REFERENCES council_skips(ref) ON DELETE RESTRICT;
+ALTER TABLE effect_intents ADD COLUMN council_skip_digest TEXT CHECK(
+ (council_subject_digest='' AND council_decision_ref IS NULL AND council_decision_digest IS NULL AND council_skip_ref IS NULL AND council_skip_digest IS NULL) OR
+ (length(council_subject_digest)=71 AND substr(council_subject_digest,1,7)='sha256:' AND
+  ((council_decision_ref IS NOT NULL AND length(council_decision_digest)=71 AND substr(council_decision_digest,1,7)='sha256:' AND council_skip_ref IS NULL AND council_skip_digest IS NULL) OR
+   (council_skip_ref IS NOT NULL AND length(council_skip_digest)=71 AND substr(council_skip_digest,1,7)='sha256:' AND council_decision_ref IS NULL AND council_decision_digest IS NULL)))) ;
+
 ALTER TABLE outbox ADD COLUMN council_subject_digest TEXT NOT NULL DEFAULT '';
 ALTER TABLE outbox ADD COLUMN council_resolution_kind TEXT NOT NULL DEFAULT '' CHECK(council_resolution_kind IN ('','accepted_round','skip'));
 ALTER TABLE outbox ADD COLUMN council_decision_ref TEXT REFERENCES council_decisions(ref) ON DELETE RESTRICT;
@@ -200,3 +233,10 @@ DROP TRIGGER outbox_integration_admission_immutable;
 CREATE TRIGGER outbox_integration_admission_immutable BEFORE UPDATE OF change_ref,expected_target_oid,admission_request_ref,admission_request_fingerprint,
  review_gate_digest,council_subject_digest,council_resolution_kind,council_decision_ref,council_decision_digest,council_skip_ref,council_skip_digest ON outbox
 BEGIN SELECT RAISE(ABORT,'sqlite.outbox_integration_admission_immutable'); END;
+
+ALTER TABLE director_decisions ADD COLUMN council_subject_digest TEXT NOT NULL DEFAULT '';
+ALTER TABLE director_decisions ADD COLUMN council_decision_ref TEXT REFERENCES council_decisions(ref) ON DELETE RESTRICT;
+ALTER TABLE director_decisions ADD COLUMN council_decision_digest TEXT CHECK(
+ (council_subject_digest='' AND council_decision_ref IS NULL AND council_decision_digest IS NULL) OR
+ (length(council_subject_digest)=71 AND substr(council_subject_digest,1,7)='sha256:' AND
+  council_decision_ref IS NOT NULL AND length(council_decision_digest)=71 AND substr(council_decision_digest,1,7)='sha256:')) ;

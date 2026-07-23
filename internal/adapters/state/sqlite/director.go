@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"reflect"
 	"time"
 
@@ -881,8 +882,9 @@ INSERT INTO director_decisions(
     source_goal_revision, source_plan_generation, cause,
     source_work_item_ref, source_work_item_revision,
     source_execution_ref, source_execution_attempt,
-    applied_goal_revision, applied_plan_generation, reason, decided_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    applied_goal_revision, applied_plan_generation, reason, decided_at,
+    council_subject_digest,council_decision_ref,council_decision_digest
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		decision.Ref, decision.RequestRef, decision.RequestFingerprint,
 		decision.AuthorizationReceipt.Ref(), decision.GoalRef.String(), projectRef.String(),
 		decision.PrincipalRef.String(), int64(decision.LeaseFence),
@@ -892,6 +894,8 @@ INSERT INTO director_decisions(
 		int64(decision.SourceExecutionAttempt),
 		int64(decision.AppliedGoalRevision), int64(decision.AppliedPlanGeneration),
 		decision.Reason, requiredTime(decision.DecidedAt),
+		string(decision.CouncilSubjectDigest), nullableString(decision.CouncilDecisionRef),
+		nullableString(string(decision.CouncilDecisionDigest)),
 	)
 	return mapDatabaseError(err)
 }
@@ -910,21 +914,32 @@ func readDirectorDecisionByRequest(
 	var appliedRevision, appliedGeneration, decidedAt int64
 	var cause string
 	var sourceItem, sourceExecution sql.NullString
-	err := source.QueryRowContext(ctx, `
+	var councilSubject string
+	var councilDecisionRef, councilDecisionDigest sql.NullString
+	councilPersisted, err := sqliteTableHasColumn(ctx, source, "director_decisions", "council_subject_digest")
+	if err != nil {
+		return application.DirectorDecisionRecord{}, false, mapDatabaseError(err)
+	}
+	councilProjection := "'',NULL,NULL"
+	if councilPersisted {
+		councilProjection = "council_subject_digest,council_decision_ref,council_decision_digest"
+	}
+	err = source.QueryRowContext(ctx, fmt.Sprintf(`
 SELECT ref, request_ref, request_fingerprint, authorization_receipt_ref,
        goal_ref, principal_ref, lease_fence,
        source_goal_revision, source_plan_generation, cause,
        source_work_item_ref, source_work_item_revision,
        source_execution_ref, source_execution_attempt,
-       applied_goal_revision, applied_plan_generation, reason, decided_at
+       applied_goal_revision, applied_plan_generation, reason, decided_at,%s
 FROM director_decisions
-WHERE principal_ref = ? AND project_ref = ? AND goal_ref = ? AND request_ref = ?`,
+WHERE principal_ref = ? AND project_ref = ? AND goal_ref = ? AND request_ref = ?`, councilProjection),
 		principalRef.String(), projectRef.String(), goalRef.String(), requestRef,
 	).Scan(
 		&decision.Ref, &decision.RequestRef, &decision.RequestFingerprint, &authorizationRef,
 		&goalValue, &principalValue, &fence, &sourceRevision, &sourceGeneration,
 		&cause, &sourceItem, &sourceItemRevision, &sourceExecution, &sourceExecutionAttempt,
 		&appliedRevision, &appliedGeneration, &decision.Reason, &decidedAt,
+		&councilSubject, &councilDecisionRef, &councilDecisionDigest,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return application.DirectorDecisionRecord{}, false, nil
@@ -959,6 +974,13 @@ WHERE principal_ref = ? AND project_ref = ? AND goal_ref = ? AND request_ref = ?
 	}
 	decision.AppliedGoalRevision = goal.Revision(appliedRevision)
 	decision.AppliedPlanGeneration = goal.PlanGeneration(appliedGeneration)
+	decision.CouncilSubjectDigest = application.CouncilSubjectDigest(councilSubject)
+	if councilDecisionRef.Valid {
+		decision.CouncilDecisionRef = councilDecisionRef.String
+	}
+	if councilDecisionDigest.Valid {
+		decision.CouncilDecisionDigest = application.CouncilSubjectDigest(councilDecisionDigest.String)
+	}
 	decision.DecidedAt = time.Unix(0, decidedAt).UTC()
 	decision.AuthorizationReceipt, err = readAuthorizationReceipt(ctx, source, authorizationRef)
 	if err != nil {

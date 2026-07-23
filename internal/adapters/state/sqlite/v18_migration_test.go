@@ -2,7 +2,10 @@ package sqlite
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -114,6 +117,8 @@ func seedSQLiteV18Integration(t *testing.T, complete bool) *sqliteV15System {
 		application.ActionAttestTest,
 		application.ActionLaunchAgent, application.ActionLaunchAgent,
 		application.ActionObserveAgent, application.ActionObserveAgent,
+		application.ActionLaunchAgent, application.ActionLaunchAgent, application.ActionLaunchAgent,
+		application.ActionObserveAgent, application.ActionObserveAgent, application.ActionObserveAgent,
 	)
 	record, err := system.repository.GetGoal(context.Background(), goalRef)
 	sqliteTestNoError(t, err)
@@ -157,6 +162,14 @@ func emptySQLiteV17Database(t *testing.T) string {
 
 func copyCurrentIntegrationFixtureToV17(t *testing.T, system *sqliteV15System) string {
 	t.Helper()
+	goals, err := system.repository.ListGoals(context.Background(), system.project, 1)
+	sqliteTestNoError(t, err)
+	if len(goals) != 1 {
+		t.Fatalf("V17 fixture goals=%d", len(goals))
+	}
+	record, err := system.repository.GetGoal(context.Background(), goals[0].Ref)
+	sqliteTestNoError(t, err)
+	legacyIntent, legacyTarget := historicalV17IntegrationIntent(t, system, record)
 	sourcePath := system.path
 	sqliteTestNoError(t, system.repository.Close())
 	targetPath := emptySQLiteV17Database(t)
@@ -196,6 +209,18 @@ WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name<>'schema_migrations' OR
 	for _, table := range tables {
 		copySharedV17Table(t, database, table)
 	}
+	_, err = database.Exec(`UPDATE effect_intents SET target_digest=?,digest=? WHERE ref=?`,
+		legacyTarget, legacyIntent.Digest, legacyIntent.Ref)
+	sqliteTestNoError(t, err)
+	_, err = database.Exec(`UPDATE effect_approvals SET intent_digest=?,target_digest=? WHERE intent_ref=?`,
+		legacyIntent.Digest, legacyTarget, legacyIntent.Ref)
+	sqliteTestNoError(t, err)
+	_, err = database.Exec(`UPDATE effect_attempts SET intent_digest=? WHERE intent_ref=?`,
+		legacyIntent.Digest, legacyIntent.Ref)
+	sqliteTestNoError(t, err)
+	_, err = database.Exec(`UPDATE effect_receipts SET intent_digest=? WHERE intent_ref=?`,
+		legacyIntent.Digest, legacyIntent.Ref)
+	sqliteTestNoError(t, err)
 	for _, value := range triggers {
 		_, err = database.Exec(value.statement)
 		sqliteTestNoError(t, err)
@@ -213,6 +238,48 @@ WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name<>'schema_migrations' OR
 		t.Fatalf("V17 fixture foreign key violations=%d", violations)
 	}
 	return targetPath
+}
+
+func historicalV17IntegrationIntent(
+	t *testing.T, system *sqliteV15System, record application.GoalRecord,
+) (application.EffectIntent, string) {
+	t.Helper()
+	var intent application.EffectIntent
+	for _, candidate := range record.EffectIntents {
+		if candidate.Kind == application.EffectKindIntegrateChange {
+			intent = candidate
+			break
+		}
+	}
+	if intent.Ref == "" || len(record.ChangeSets) != 1 {
+		t.Fatal("V17 integration intent missing")
+	}
+	var expectedTarget, gate string
+	sqliteTestNoError(t, system.repository.db.QueryRow(`
+SELECT expected_target_oid,review_gate_digest FROM outbox
+WHERE kind='integrate_change' AND effect_intent_ref=?`, intent.Ref).Scan(&expectedTarget, &gate))
+	change := record.ChangeSets[0]
+	target := sqliteV17Fingerprint("orquesta.effect.admission.v1", "target:integrate-change:v2",
+		change.Ref.String(), change.RepositoryRef.String(), change.HeadOID, change.TreeOID,
+		expectedTarget, change.DiffDigest, gate)
+	intent.CouncilResolution, intent.TargetDigest = nil, target
+	intent.Digest = application.EffectIntentDigest(intent)
+	return intent, target
+}
+
+func sqliteV17Fingerprint(version string, fields ...string) string {
+	digest := sha256.New()
+	write := func(value string) {
+		var length [8]byte
+		binary.BigEndian.PutUint64(length[:], uint64(len(value)))
+		_, _ = digest.Write(length[:])
+		_, _ = digest.Write([]byte(value))
+	}
+	write(version)
+	for _, field := range fields {
+		write(field)
+	}
+	return hex.EncodeToString(digest.Sum(nil))
 }
 
 func copySharedV17Table(t *testing.T, database *sql.DB, table string) {
@@ -260,27 +327,28 @@ func sqliteFixtureColumns(t *testing.T, database *sql.DB, schema, table string) 
 }
 
 func v17FixtureFilter(table string) string {
-	reviewerRefs := `(SELECT ref FROM source.executions WHERE purpose IN ('primary_review','adversarial_review'))`
-	reviewIntents := `(SELECT ref FROM source.effect_intents WHERE execution_ref IN ` + reviewerRefs + `)`
+	peerRefs := `(SELECT ref FROM source.executions WHERE purpose IN ('primary_review','adversarial_review','council_proposer','council_critic','council_arbiter'))`
+	peerIntents := `(SELECT ref FROM source.effect_intents WHERE execution_ref IN ` + peerRefs + `)`
 	switch table {
 	case "executions":
-		return `WHERE purpose NOT IN ('primary_review','adversarial_review')`
+		return `WHERE purpose NOT IN ('primary_review','adversarial_review','council_proposer','council_critic','council_arbiter')`
 	case "outbox", "action_consumption_receipts", "events":
-		return `WHERE execution_ref IS NULL OR execution_ref NOT IN ` + reviewerRefs
+		return `WHERE execution_ref IS NULL OR execution_ref NOT IN ` + peerRefs
 	case "effect_intents":
-		return `WHERE ref NOT IN ` + reviewIntents
+		return `WHERE ref NOT IN ` + peerIntents
 	case "effect_approvals":
-		return `WHERE intent_ref NOT IN ` + reviewIntents
+		return `WHERE intent_ref NOT IN ` + peerIntents
 	case "effect_attempts", "effect_receipts":
-		return `WHERE intent_ref NOT IN ` + reviewIntents
+		return `WHERE intent_ref NOT IN ` + peerIntents
 	case "budget_reservations":
-		return `WHERE effect_intent_ref NOT IN ` + reviewIntents
+		return `WHERE effect_intent_ref NOT IN ` + peerIntents
 	case "budget_settlements":
-		return `WHERE reservation_ref NOT IN (SELECT ref FROM source.budget_reservations WHERE effect_intent_ref IN ` + reviewIntents + `)`
+		return `WHERE reservation_ref NOT IN (SELECT ref FROM source.budget_reservations WHERE effect_intent_ref IN ` + peerIntents + `)`
 	case "artifacts":
-		return `WHERE ref NOT IN (SELECT assessment_artifact_ref FROM source.review_records)`
+		return `WHERE ref NOT IN (SELECT assessment_artifact_ref FROM source.review_records)
+ AND ref NOT IN (SELECT artifact_ref FROM source.artifact_occurrences WHERE kind='council_contribution')`
 	case "artifact_occurrences":
-		return `WHERE kind NOT IN ('review_assessment','review_diagnostic')`
+		return `WHERE kind NOT IN ('review_assessment','review_diagnostic','council_contribution')`
 	default:
 		return ""
 	}
@@ -297,7 +365,7 @@ func assertSQLiteV18MigrationHealthy(t *testing.T, repository *Repository) {
 		violations++
 	}
 	sqliteTestNoError(t, rows.Close())
-	if version != recoverySchemaV18 || receipt != 1 || violations != 0 {
+	if version != recoverySchemaV19 || receipt != 1 || violations != 0 {
 		t.Fatalf("V18 migration version=%d receipt=%d foreign-keys=%d", version, receipt, violations)
 	}
 }

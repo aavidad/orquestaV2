@@ -25,17 +25,28 @@ func readEffectIntent(ctx context.Context, source queryer, ref string) (applicat
 	var intent application.EffectIntent
 	var actionKind, kind, projectRef, goalRef, workRef, executionRef, actorRef, proposedBy string
 	var permission, currency, criticality, effort, authorityRef string
+	var councilSubject string
+	var councilDecisionRef, councilDecisionDigest, councilSkipRef, councilSkipDigest sql.NullString
 	var planGeneration, appSpecGeneration, policyRevision, quotaRetryDelay, approvalTTL, createdAt int64
 	var resources governance.ResourceVector
-	err := source.QueryRowContext(ctx, `
+	councilPersisted, err := sqliteTableHasColumn(ctx, source, "effect_intents", "council_subject_digest")
+	if err != nil {
+		return application.EffectIntent{}, mapDatabaseError(err)
+	}
+	councilProjection := "'',NULL,NULL,NULL,NULL"
+	if councilPersisted {
+		councilProjection = "council_subject_digest,council_decision_ref,council_decision_digest,council_skip_ref,council_skip_digest"
+	}
+	err = source.QueryRowContext(ctx, fmt.Sprintf(`
 SELECT ref, request_ref, request_fingerprint, action_ref, action_kind, kind,
        project_ref, goal_ref, work_item_ref, execution_ref, plan_generation,
        app_spec_generation, spec_hash, actor_ref, proposed_by_ref, permission,
        authority_receipt_ref, demand_ref, demand_tokens, demand_money_micros,
        demand_currency, demand_active_time_ns, demand_process_slots, demand_disk_bytes,
        security_criticality, reasoning_effort, policy_hash, policy_revision,
-       quota_retry_delay_ns, approval_ttl_ns, target_digest, idempotency_key, created_at, digest
-FROM effect_intents WHERE ref = ?`, ref).Scan(
+       quota_retry_delay_ns, approval_ttl_ns, target_digest, idempotency_key, created_at, digest,
+       %s
+FROM effect_intents WHERE ref = ?`, councilProjection), ref).Scan(
 		&intent.Ref, &intent.RequestRef, &intent.RequestFingerprint, &intent.ActionRef,
 		&actionKind, &kind, &projectRef, &goalRef, &workRef, &executionRef,
 		&planGeneration, &appSpecGeneration, &intent.Subject.SpecHash, &actorRef, &proposedBy,
@@ -43,7 +54,8 @@ FROM effect_intents WHERE ref = ?`, ref).Scan(
 		&currency, &resources.ActiveTimeNS, &resources.ProcessSlots, &resources.DiskBytes,
 		&criticality, &effort, &intent.PolicyHash, &policyRevision, &quotaRetryDelay, &approvalTTL,
 		&intent.TargetDigest,
-		&intent.IdempotencyKey, &createdAt, &intent.Digest,
+		&intent.IdempotencyKey, &createdAt, &intent.Digest, &councilSubject, &councilDecisionRef,
+		&councilDecisionDigest, &councilSkipRef, &councilSkipDigest,
 	)
 	if err != nil {
 		return application.EffectIntent{}, mapDatabaseError(err)
@@ -71,6 +83,12 @@ FROM effect_intents WHERE ref = ?`, ref).Scan(
 	intent.QuotaRetryDelay = time.Duration(quotaRetryDelay)
 	intent.ApprovalTTL = time.Duration(approvalTTL)
 	intent.CreatedAt = time.Unix(0, createdAt).UTC()
+	intent.CouncilResolution, err = restoreCouncilResolution(
+		councilSubject, councilDecisionRef, councilDecisionDigest, councilSkipRef, councilSkipDigest,
+	)
+	if err != nil {
+		return application.EffectIntent{}, err
+	}
 	intent.Authority, err = readAuthorizationReceipt(ctx, source, authorityRef)
 	if err != nil {
 		return application.EffectIntent{}, err

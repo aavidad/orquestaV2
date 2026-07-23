@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"orquesta/internal/application"
+	"orquesta/internal/council"
 	"orquesta/internal/goal"
 	"orquesta/internal/governance"
 	"orquesta/internal/identity"
@@ -66,7 +67,7 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 	if err := repository.db.QueryRow("PRAGMA synchronous").Scan(&synchronous); err != nil {
 		t.Fatalf("synchronous: %v", err)
 	}
-	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != recoverySchemaV18 {
+	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != recoverySchemaV19 {
 		t.Fatalf("pragmas = fk:%d busy:%d version:%d", foreignKeys, busyTimeout, userVersion)
 	}
 	if synchronous != 2 {
@@ -88,7 +89,9 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 	}
 	wantTables := []string{
 		"action_consumption_receipts", "app_specs", "artifact_occurrences", "artifacts", "attestation_test_outcomes", "attestations", "authorization_receipts",
-		"budget_envelopes", "budget_reservations", "budget_settlements", "change_set_paths", "change_sets", "controls", "director_decisions", "director_lease_receipts", "director_leases", "effect_approvals", "effect_attempts", "effect_intents", "effect_receipts", "events", "executions", "fairness_cursors",
+		"budget_envelopes", "budget_reservations", "budget_settlements", "change_set_paths", "change_sets", "controls",
+		"council_decisions", "council_facts", "council_rounds", "council_skips",
+		"director_decisions", "director_lease_receipts", "director_leases", "effect_approvals", "effect_attempts", "effect_intents", "effect_receipts", "events", "executions", "fairness_cursors",
 		"goal_child_handoff_resolutions", "goal_phase_contract_refs", "goal_phases", "goals", "groups", "integration_receipts", "intents",
 		"mailbox_admission_receipts", "mailbox_artifact_refs", "mailbox_delivery_acks", "mailbox_delivery_attempts", "mailbox_envelopes", "mailbox_retirements",
 		"membership_audit_receipts", "merge_observations", "outbox", "principals", "project_memberships", "projects", "repositories", "review_records", "schema_migrations",
@@ -1201,7 +1204,8 @@ func newV05CreateFixture(t *testing.T) application.CreateGoalState {
 	parent := mustWorkItem(t, goal.NewWorkItemInput{
 		Ref: parentRef, Goal: pending.Ref(), Actor: pending.Actor(), Project: pending.Project(),
 		Objective: "parent", CreatedAt: pending.CreatedAt(), Phase: phaseKey, Role: role,
-		WriteSet: []goal.WriteScope{shared}, RequiredTests: sqliteRequiredTests(t, "required-test:sqlite-v05-parent"), SkillRefs: []goal.SkillRef{mustRef(t, "skill:go", goal.NewSkillRef)},
+		WriteSet: []goal.WriteScope{shared}, CouncilPolicy: council.PolicyRequired,
+		RequiredTests: sqliteRequiredTests(t, "required-test:sqlite-v05-parent"), SkillRefs: []goal.SkillRef{mustRef(t, "skill:go", goal.NewSkillRef)},
 		ToolRefs:       []goal.ToolRef{mustRef(t, "tool:test", goal.NewToolRef)},
 		CapabilityRefs: []goal.CapabilityRef{mustRef(t, "capability:patch", goal.NewCapabilityRef)},
 		OutputContract: goal.EvidenceBundleOutputContract(),
@@ -1209,12 +1213,14 @@ func newV05CreateFixture(t *testing.T) application.CreateGoalState {
 	child := mustWorkItem(t, goal.NewWorkItemInput{
 		Ref: childRef, Goal: pending.Ref(), Actor: pending.Actor(), Project: pending.Project(),
 		Objective: "overlapping child", CreatedAt: pending.CreatedAt(), Phase: phaseKey, Role: role,
-		Parent: parentRef, WriteSet: []goal.WriteScope{overlap}, RequiredTests: sqliteRequiredTests(t, "required-test:sqlite-v05-child"), OutputContract: goal.EvidenceBundleOutputContract(),
+		Parent: parentRef, WriteSet: []goal.WriteScope{overlap}, CouncilPolicy: council.PolicyRequired,
+		RequiredTests: sqliteRequiredTests(t, "required-test:sqlite-v05-child"), OutputContract: goal.EvidenceBundleOutputContract(),
 	})
 	independent := mustWorkItem(t, goal.NewWorkItemInput{
 		Ref: freeRef, Goal: pending.Ref(), Actor: pending.Actor(), Project: pending.Project(),
 		Objective: "independent", CreatedAt: pending.CreatedAt(), Phase: phaseKey, Role: role,
-		WriteSet: []goal.WriteScope{free}, RequiredTests: sqliteRequiredTests(t, "required-test:sqlite-v05-free"), OutputContract: goal.EvidenceBundleOutputContract(),
+		WriteSet: []goal.WriteScope{free}, CouncilPolicy: council.PolicyRequired,
+		RequiredTests: sqliteRequiredTests(t, "required-test:sqlite-v05-free"), OutputContract: goal.EvidenceBundleOutputContract(),
 	})
 	// Child-before-parent is valid plan ordering: lineage is not a dependency.
 	// The durable self-FK must therefore be deferred until the transaction has
@@ -1453,12 +1459,14 @@ func newDAGCreateFixture(t *testing.T) application.CreateGoalState {
 	a := mustWorkItem(t, goal.NewWorkItemInput{
 		Ref: aRef, Goal: pending.Ref(), Actor: pending.Actor(), Project: pending.Project(),
 		Objective: "root", CreatedAt: pending.CreatedAt(), Phase: phaseBuild, Role: worker,
-		WriteSet: []goal.WriteScope{scopeA}, RequiredTests: sqliteRequiredTests(t, "required-test:sqlite-dag-a"), OutputContract: goal.EvidenceBundleOutputContract(),
+		WriteSet: []goal.WriteScope{scopeA}, CouncilPolicy: council.PolicyRequired,
+		RequiredTests: sqliteRequiredTests(t, "required-test:sqlite-dag-a"), OutputContract: goal.EvidenceBundleOutputContract(),
 	})
 	b := mustWorkItem(t, goal.NewWorkItemInput{
 		Ref: bRef, Goal: pending.Ref(), Actor: pending.Actor(), Project: pending.Project(),
 		Objective: "left", CreatedAt: pending.CreatedAt(), Phase: phaseReview, Role: worker,
-		Dependencies: []goal.WorkItemRef{aRef}, WriteSet: []goal.WriteScope{scopeB}, RequiredTests: sqliteRequiredTests(t, "required-test:sqlite-dag-b"),
+		Dependencies: []goal.WorkItemRef{aRef}, WriteSet: []goal.WriteScope{scopeB}, CouncilPolicy: council.PolicyRequired,
+		RequiredTests:  sqliteRequiredTests(t, "required-test:sqlite-dag-b"),
 		OutputContract: goal.EvidenceBundleOutputContract(),
 	})
 	c := mustWorkItem(t, goal.NewWorkItemInput{
@@ -1755,6 +1763,9 @@ func workItemByObjective(aggregate goal.Goal, objective string) (goal.WorkItem, 
 
 func mustWorkItem(t *testing.T, input goal.NewWorkItemInput) goal.WorkItem {
 	t.Helper()
+	if len(input.WriteSet) != 0 && input.CouncilPolicy == "" {
+		t.Fatal("write-scoped SQLite test WorkItem must declare Council policy")
+	}
 	item, err := goal.NewWorkItem(input)
 	if err != nil {
 		t.Fatalf("new work item: %v", err)

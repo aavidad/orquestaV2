@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"reflect"
 
 	"orquesta/internal/application"
 	"orquesta/internal/identity"
@@ -71,6 +72,8 @@ func insertEffectAdmission(ctx context.Context, transaction *sql.Tx, action appl
 		return conflict(errors.New("sqlite.effect_intent_authority_conflict"))
 	}
 	resources := intent.Demand.Resources
+	councilSubject, councilDecisionRef, councilDecisionDigest, councilSkipRef, councilSkipDigest :=
+		storedCouncilResolution(intent.CouncilResolution)
 	_, err = transaction.ExecContext(ctx, `
 INSERT INTO effect_intents(
     ref, request_ref, request_fingerprint, action_ref, action_kind, kind,
@@ -79,8 +82,9 @@ INSERT INTO effect_intents(
     authority_receipt_ref, demand_ref, demand_tokens, demand_money_micros,
     demand_currency, demand_active_time_ns, demand_process_slots, demand_disk_bytes,
     security_criticality, reasoning_effort, policy_hash, policy_revision,
-    quota_retry_delay_ns, approval_ttl_ns, target_digest, idempotency_key, created_at, digest
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    quota_retry_delay_ns, approval_ttl_ns, target_digest, idempotency_key, created_at, digest,
+    council_subject_digest,council_decision_ref,council_decision_digest,council_skip_ref,council_skip_digest
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		intent.Ref, intent.RequestRef, intent.RequestFingerprint, intent.ActionRef,
 		string(intent.ActionKind), string(intent.Kind), intent.Subject.ProjectRef.String(),
 		intent.Subject.GoalRef.String(), intent.Subject.WorkItemRef.String(), intent.Subject.ExecutionRef.String(),
@@ -91,6 +95,7 @@ INSERT INTO effect_intents(
 		string(intent.SecurityCriticality), string(intent.ReasoningEffort), intent.PolicyHash,
 		int64(intent.PolicyRevision), int64(intent.QuotaRetryDelay), int64(intent.ApprovalTTL), intent.TargetDigest,
 		intent.IdempotencyKey, requiredTime(intent.CreatedAt), intent.Digest,
+		councilSubject, councilDecisionRef, councilDecisionDigest, councilSkipRef, councilSkipDigest,
 	)
 	if err != nil {
 		return mapDatabaseError(err)
@@ -266,7 +271,8 @@ func (repository *Repository) RecordEffectAttempt(
 	if err != nil {
 		return application.EffectAttempt{}, false, err
 	}
-	if !admitted || intent != state.Claim.Action.EffectIntent || approval != state.Claim.EffectApproval {
+	if !admitted || !reflect.DeepEqual(intent, state.Claim.Action.EffectIntent) ||
+		!reflect.DeepEqual(approval, state.Claim.EffectApproval) {
 		return application.EffectAttempt{}, false,
 			conflict(errors.New("sqlite.effect_attempt_authority_stale"))
 	}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"orquesta/internal/application"
+	"orquesta/internal/council"
 	"orquesta/internal/goal"
 	"orquesta/internal/ports"
 )
@@ -34,7 +35,7 @@ func TestSQLiteWorkspaceGitRestartRaceAndReplay(t *testing.T) {
 		}
 	}
 	var version int
-	if err := repository.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != recoverySchemaV18 {
+	if err := repository.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != recoverySchemaV19 {
 		t.Fatalf("v16 version=%d err=%v", version, err)
 	}
 	if err := repository.Close(); err != nil {
@@ -156,6 +157,7 @@ func seedSQLiteV16Integrated(t *testing.T) *sqliteV15System {
 			WorkItems: []application.WorkItemSpec{{
 				Key: "writer", Objective: "write isolated evidence", Phase: "phase:v16-recovery", Role: "role:writer",
 				WriteSet:       []string{"internal/workspace"},
+				CouncilPolicy:  council.PolicyAuto,
 				RequiredTests:  sqliteRequiredTestSpecs("required-test:v17-sqlite"),
 				OutputContract: goal.OutputContractEvidenceBundle,
 			}},
@@ -170,6 +172,12 @@ func seedSQLiteV16Integrated(t *testing.T) *sqliteV15System {
 		application.ActionAttestTest,
 		application.ActionLaunchAgent,
 		application.ActionLaunchAgent,
+		application.ActionObserveAgent,
+		application.ActionObserveAgent,
+		application.ActionLaunchAgent,
+		application.ActionLaunchAgent,
+		application.ActionLaunchAgent,
+		application.ActionObserveAgent,
 		application.ActionObserveAgent,
 		application.ActionObserveAgent,
 	)

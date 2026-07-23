@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"orquesta/internal/application"
+	"orquesta/internal/council"
 	"orquesta/internal/goal"
 	"orquesta/internal/governance"
 	"orquesta/internal/identity"
@@ -1513,13 +1514,15 @@ func newMailboxGoalFixtureWithHandoff(
 	parent := mustWorkItem(t, goal.NewWorkItemInput{
 		Ref: parentRef, Goal: pending.Ref(), Actor: pending.Actor(), Project: pending.Project(),
 		Objective: "mailbox parent", CreatedAt: at, Phase: phaseKey, Role: role,
-		WriteSet: []goal.WriteScope{parentScope}, RequiredTests: sqliteRequiredTests(t, "required-test:sqlite-mailbox-parent"), OutputContract: goal.EvidenceBundleOutputContract(),
+		WriteSet: []goal.WriteScope{parentScope}, CouncilPolicy: council.PolicyRequired,
+		RequiredTests: sqliteRequiredTests(t, "required-test:sqlite-mailbox-parent"), OutputContract: goal.EvidenceBundleOutputContract(),
 	})
 	child := mustWorkItem(t, goal.NewWorkItemInput{
 		Ref: childRef, Goal: pending.Ref(), Actor: pending.Actor(), Project: pending.Project(),
 		Objective: "mailbox child", CreatedAt: at, Phase: phaseKey, Role: role, Parent: parentRef,
 		HandoffRequired: handoffRequired,
-		WriteSet:        []goal.WriteScope{childScope}, RequiredTests: sqliteRequiredTests(t, "required-test:sqlite-mailbox-child"), OutputContract: goal.EvidenceBundleOutputContract(),
+		WriteSet:        []goal.WriteScope{childScope}, CouncilPolicy: council.PolicyRequired,
+		RequiredTests: sqliteRequiredTests(t, "required-test:sqlite-mailbox-child"), OutputContract: goal.EvidenceBundleOutputContract(),
 	})
 	plan, err := goal.NewPlan(goal.PlanInput{
 		Generation: 1, Phases: []goal.PhaseInstance{phase}, WorkItems: []goal.WorkItem{child, parent},

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"orquesta/internal/application"
+	"orquesta/internal/council"
 	"orquesta/internal/goal"
 	"orquesta/internal/governance"
 	"orquesta/internal/identity"
@@ -287,8 +288,8 @@ func TestSQLiteGoalCancelPersistsOneStopReceiptPerExecutionAcrossRestart(t *test
 				TemplateRef: "phase-template:sqlite-multi-control",
 			}},
 			WorkItems: []application.WorkItemSpec{
-				{Key: "first", Objective: "first live execution", Phase: "phase:sqlite-multi-control", Role: "role:worker", WriteSet: []string{"internal/first"}, RequiredTests: sqliteRequiredTestSpecs("required-test:sqlite-control-first"), OutputContract: goal.OutputContractEvidenceBundle},
-				{Key: "second", Objective: "second live execution", Phase: "phase:sqlite-multi-control", Role: "role:worker", WriteSet: []string{"internal/second"}, RequiredTests: sqliteRequiredTestSpecs("required-test:sqlite-control-second"), OutputContract: goal.OutputContractEvidenceBundle},
+				{Key: "first", Objective: "first live execution", Phase: "phase:sqlite-multi-control", Role: "role:worker", WriteSet: []string{"internal/first"}, CouncilPolicy: council.PolicyRequired, RequiredTests: sqliteRequiredTestSpecs("required-test:sqlite-control-first"), OutputContract: goal.OutputContractEvidenceBundle},
+				{Key: "second", Objective: "second live execution", Phase: "phase:sqlite-multi-control", Role: "role:worker", WriteSet: []string{"internal/second"}, CouncilPolicy: council.PolicyRequired, RequiredTests: sqliteRequiredTestSpecs("required-test:sqlite-control-second"), OutputContract: goal.OutputContractEvidenceBundle},
 			},
 		},
 	})

@@ -105,14 +105,15 @@ func insertWorkItems(
 	return nil
 }
 
-type workItemSchema struct{ handoff, controls, governance bool }
+type workItemSchema struct{ handoff, controls, governance, council bool }
 
 func readWorkItemSchema(ctx context.Context, source queryer) (workItemSchema, error) {
 	var schema workItemSchema
 	columns := []struct {
 		name  string
 		value *bool
-	}{{"handoff_required", &schema.handoff}, {"control_sequence", &schema.controls}, {"governance_version", &schema.governance}}
+	}{{"handoff_required", &schema.handoff}, {"control_sequence", &schema.controls},
+		{"governance_version", &schema.governance}, {"council_policy", &schema.council}}
 	for _, column := range columns {
 		found, err := sqliteTableHasColumn(ctx, source, "work_items", column.name)
 		if err != nil {
@@ -169,6 +170,14 @@ func workItemInsert(item goal.WorkItemSnapshot, position int, schema workItemSch
 			string(resources.Currency), resources.ActiveTimeNS, resources.ProcessSlots, resources.DiskBytes,
 			string(item.SecurityCriticality), string(item.ReasoningEffort))
 	}
+	if schema.council {
+		if governed {
+			query = workItemGovernedCouncilInsert
+		} else {
+			query = workItemControlledHandoffCouncilInsert
+		}
+		arguments = append(arguments, string(item.CouncilPolicy))
+	}
 	return query, arguments
 }
 
@@ -180,6 +189,10 @@ const workItemControlledHandoffInsert = `INSERT INTO work_items(
 ref,goal_ref,actor_ref,project_ref,objective,phase_key,role_key,parent_ref,output_contract,skip_reason,
 interrupt_cause,rework_of,state,revision,paused,cancel_requested,control_sequence,position,created_at,
 started_at,interrupted_at,finished_at,execution_ref,handoff_required) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+const workItemControlledHandoffCouncilInsert = `INSERT INTO work_items(
+ref,goal_ref,actor_ref,project_ref,objective,phase_key,role_key,parent_ref,output_contract,skip_reason,
+interrupt_cause,rework_of,state,revision,paused,cancel_requested,control_sequence,position,created_at,
+started_at,interrupted_at,finished_at,execution_ref,handoff_required,council_policy) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
 const workItemLegacyInsert = `INSERT INTO work_items(
 ref,goal_ref,actor_ref,project_ref,objective,phase_key,role_key,parent_ref,output_contract,skip_reason,
 state,revision,position,created_at,started_at,finished_at,execution_ref) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
@@ -192,6 +205,12 @@ interrupt_cause,rework_of,state,revision,paused,cancel_requested,control_sequenc
 started_at,interrupted_at,finished_at,execution_ref,handoff_required,governance_version,budget_demand_ref,
 budget_tokens,budget_money_micros,budget_currency,budget_active_time_ns,budget_process_slots,budget_disk_bytes,
 security_criticality,reasoning_effort) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?,?,?,?,?,?)`
+const workItemGovernedCouncilInsert = `INSERT INTO work_items(
+ref,goal_ref,actor_ref,project_ref,objective,phase_key,role_key,parent_ref,output_contract,skip_reason,
+interrupt_cause,rework_of,state,revision,paused,cancel_requested,control_sequence,position,created_at,
+started_at,interrupted_at,finished_at,execution_ref,handoff_required,governance_version,budget_demand_ref,
+budget_tokens,budget_money_micros,budget_currency,budget_active_time_ns,budget_process_slots,budget_disk_bytes,
+security_criticality,reasoning_effort,council_policy) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?,?,?,?,?,?,?)`
 
 func insertGoalHeader(
 	ctx context.Context,
@@ -369,6 +388,27 @@ VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
 			storedTime(execution.ProviderObservedAt), storedTime(execution.FinishedAt), execution.FailureCode,
 			storedBool(execution.RecipientMailboxRetired)}
 	}
+	if schema.council {
+		query = `
+INSERT INTO executions(
+ ref,goal_ref,work_item_ref,attempt_no,max_execution_attempts,replaces_execution_ref,
+ plan_generation,app_spec_generation,spec_hash,repository_ref,execution_workspace_ref,state,purpose,review_subject_digest,council_subject_digest,
+ artifact_media_type,idempotency_key,max_output_bytes,provider_ref,model_ref,agent_ref,external_ref,
+ governance_version,budget_reservation_ref,effect_intent_ref,launch_receipt_ref,created_at,deadline_at,started_at,
+ provider_accepted_at,last_observed_at,provider_observed_at,finished_at,failure_code,recipient_mailbox_retired)
+VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+		arguments = []any{execution.Ref.String(), execution.GoalRef.String(), execution.WorkItemRef.String(),
+			int64(execution.AttemptNo), int64(execution.MaxExecutionAttempts), nullableString(execution.ReplacesExecutionRef.String()),
+			int64(execution.PlanGeneration), int64(execution.AppSpecGeneration), execution.SpecHash,
+			execution.RepositoryRef.String(), execution.ExecutionWorkspaceRef.String(), string(execution.State),
+			executionPurposeValue(execution), execution.ReviewSubjectDigest, string(execution.CouncilSubjectDigest),
+			execution.ArtifactMediaType, execution.IdempotencyKey, execution.MaxOutputBytes, execution.ProviderRef,
+			execution.ModelRef, execution.AgentRef, execution.ExternalRef, version, nullableString(execution.BudgetReservationRef),
+			nullableString(execution.EffectIntentRef), nullableString(execution.LaunchReceiptRef), requiredTime(execution.CreatedAt),
+			storedTime(execution.DeadlineAt), storedTime(execution.StartedAt), storedTime(execution.ProviderAcceptedAt),
+			storedTime(execution.LastObservedAt), storedTime(execution.ProviderObservedAt), storedTime(execution.FinishedAt),
+			execution.FailureCode, storedBool(execution.RecipientMailboxRetired)}
+	}
 	_, err = transaction.ExecContext(ctx, query, arguments...)
 	return mapDatabaseError(err)
 }
@@ -404,7 +444,7 @@ func executionInsertArguments(execution application.ExecutionRecord) []any {
 	}
 }
 
-type executionSchema struct{ mailbox, governance, workspace, reviews bool }
+type executionSchema struct{ mailbox, governance, workspace, reviews, council bool }
 
 func readExecutionSchema(ctx context.Context, source queryer) (executionSchema, error) {
 	var schema executionSchema
@@ -412,7 +452,8 @@ func readExecutionSchema(ctx context.Context, source queryer) (executionSchema, 
 		name  string
 		value *bool
 	}{{"recipient_mailbox_retired", &schema.mailbox}, {"governance_version", &schema.governance},
-		{"execution_workspace_ref", &schema.workspace}, {"purpose", &schema.reviews}} {
+		{"execution_workspace_ref", &schema.workspace}, {"purpose", &schema.reviews},
+		{"council_subject_digest", &schema.council}} {
 		found, err := sqliteTableHasColumn(ctx, source, "executions", column.name)
 		if err != nil {
 			return executionSchema{}, mapDatabaseError(err)
@@ -504,10 +545,18 @@ func requireExecutionReviewIdentity(ctx context.Context, source queryer, executi
 	if err != nil || !persisted {
 		return mapDatabaseError(err)
 	}
+	councilPersisted, err := sqliteTableHasColumn(ctx, source, "executions", "council_subject_digest")
+	if err != nil {
+		return mapDatabaseError(err)
+	}
+	query := `SELECT COUNT(*) FROM executions WHERE ref=? AND purpose=? AND review_subject_digest=?`
+	arguments := []any{execution.Ref.String(), executionPurposeValue(execution), execution.ReviewSubjectDigest}
+	if councilPersisted {
+		query += ` AND council_subject_digest=?`
+		arguments = append(arguments, string(execution.CouncilSubjectDigest))
+	}
 	var count int
-	if err := source.QueryRowContext(ctx, `SELECT COUNT(*) FROM executions
-WHERE ref=? AND purpose=? AND review_subject_digest=?`, execution.Ref.String(), executionPurposeValue(execution),
-		execution.ReviewSubjectDigest).Scan(&count); err != nil {
+	if err := source.QueryRowContext(ctx, query, arguments...).Scan(&count); err != nil {
 		return mapDatabaseError(err)
 	}
 	if count != 1 {
@@ -839,6 +888,32 @@ INSERT INTO outbox(
 			return mapDatabaseError(columnErr)
 		}
 		if workspaceColumns {
+			councilColumns, councilErr := sqliteTableHasColumn(ctx, transaction, "outbox", "council_subject_digest")
+			if councilErr != nil {
+				return mapDatabaseError(councilErr)
+			}
+			if councilColumns {
+				subject, decisionRef, decisionDigest, skipRef, skipDigest := storedCouncilResolution(action.CouncilResolution)
+				resolutionKind := ""
+				if action.CouncilResolution != nil {
+					resolutionKind = "accepted_round"
+					if action.CouncilResolution.SkipRef != "" {
+						resolutionKind = "skip"
+					}
+				}
+				_, err = transaction.ExecContext(ctx, `
+INSERT INTO outbox(
+    ref, kind, goal_ref, work_item_ref, execution_ref, control_ref, change_ref, expected_target_oid,
+    plan_generation, work_item_generation, available_at, governance_version, effect_intent_ref, review_gate_digest,
+    council_subject_digest,council_resolution_kind,council_decision_ref,council_decision_digest,council_skip_ref,council_skip_digest
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					action.Ref, string(action.Kind), action.GoalRef.String(), action.WorkItemRef.String(), action.ExecutionRef.String(),
+					nullableString(action.ControlRef), action.ChangeRef.String(), action.ExpectedTargetOID,
+					int64(action.PlanGeneration), int64(action.WorkItemGeneration), requiredTime(action.AvailableAt),
+					version, nullableString(action.EffectIntentRef), action.ReviewGateDigest, subject, resolutionKind,
+					decisionRef, decisionDigest, skipRef, skipDigest)
+				return mapDatabaseError(err)
+			}
 			_, err = transaction.ExecContext(ctx, `
 INSERT INTO outbox(
     ref, kind, goal_ref, work_item_ref, execution_ref, control_ref, change_ref, expected_target_oid,

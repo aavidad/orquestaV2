@@ -33,6 +33,13 @@ func (repository *Repository) RecordReviewAssessed(ctx context.Context, state ap
 		if err := insertReviewRecord(ctx, tx, state.Review); err != nil {
 			return err
 		}
+		if state.AutoOpenCouncil != nil {
+			if _, created, err := openCouncilRoundTx(ctx, tx, *state.AutoOpenCouncil, state.OperationAt); err != nil {
+				return err
+			} else if !created {
+				return conflict(errors.New("sqlite.council_auto_open_replay_conflict"))
+			}
+		}
 		if state.BudgetSettlement != nil {
 			if err := insertBudgetSettlement(ctx, tx, *state.BudgetSettlement); err != nil {
 				return err

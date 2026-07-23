@@ -15,6 +15,18 @@ func (repository *Repository) RecordLaunchPrepared(ctx context.Context, state ap
 		return invalid(err)
 	}
 	return repository.mutate(ctx, state.Claim, state.OperationAt, func(transaction *sql.Tx) error {
+		if _, councilParticipant := councilExecutionRole(state.Execution); councilParticipant {
+			record, err := readGoalRecord(ctx, transaction, state.Execution.GoalRef.String())
+			if err != nil {
+				return err
+			}
+			round, found := councilRoundFor(record.CouncilRounds, state.Execution.CouncilSubjectDigest)
+			if !found || round.GoalRef != state.Execution.GoalRef ||
+				round.WorkItemRef != state.Execution.WorkItemRef ||
+				application.ValidatePersistedCouncilSubject(record, round.Subject) != nil {
+				return conflict(errors.New("sqlite.council_launch_subject_invalid"))
+			}
+		}
 		// Initial launches advance Goal/WorkItem revisions. Retry/replacement
 		// launches keep those revisions, but this same-revision CAS still proves
 		// no pause/cancel mutation won before the preparation frontier.

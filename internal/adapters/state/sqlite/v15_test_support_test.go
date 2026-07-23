@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"orquesta/internal/application"
+	"orquesta/internal/council"
 	"orquesta/internal/goal"
 	"orquesta/internal/governance"
 	"orquesta/internal/identity"
@@ -180,6 +181,23 @@ func (external *sqliteV15External) Observe(
 					Status: ports.AgentCompleted, MediaType: review.AssessmentMediaType, Content: payload,
 					Usage: external.observationUsage, ObservedAt: external.clock.Now()}, nil
 			}
+			if request.ArtifactMediaType == council.ContributionMediaType {
+				subjectDigest, reviewGate, role, err := sqliteCouncilEvidenceFromObjective(request.Objective)
+				if err != nil {
+					return ports.AgentObservation{}, err
+				}
+				payload, err := json.Marshal(council.Contribution{
+					Schema: council.ContributionSchema, SubjectDigest: subjectDigest, Role: role,
+					Body: "sqlite exact contribution", Ballot: council.BallotAccept,
+					Evidence: []council.Evidence{{Kind: "review_gate", Ref: reviewGate}},
+				})
+				if err != nil {
+					return ports.AgentObservation{}, err
+				}
+				return ports.AgentObservation{ExecutionRef: executionRef, SpecHash: receipt.SpecHash,
+					Status: ports.AgentCompleted, MediaType: council.ContributionMediaType, Content: payload,
+					Usage: external.observationUsage, ObservedAt: external.clock.Now()}, nil
+			}
 			return ports.AgentObservation{
 				ExecutionRef: executionRef, SpecHash: receipt.SpecHash, Status: ports.AgentCompleted,
 				MediaType: "text/plain", Content: []byte("v15 evidence"),
@@ -189,6 +207,26 @@ func (external *sqliteV15External) Observe(
 		}
 	}
 	return ports.AgentObservation{}, fmt.Errorf("sqlite.v15.execution_missing")
+}
+
+func sqliteCouncilEvidenceFromObjective(objective string) (string, string, council.Role, error) {
+	const prefix = "Assess exact approved V18 evidence "
+	value := strings.TrimPrefix(objective, prefix)
+	end := strings.Index(value, ". Return exactly")
+	var evidence struct {
+		SubjectDigest string `json:"subject_digest"`
+		ReviewGate    string `json:"review_gate_digest"`
+	}
+	if end < 0 || json.Unmarshal([]byte(value[:end]), &evidence) != nil {
+		return "", "", "", fmt.Errorf("sqlite.v19_council_evidence_invalid")
+	}
+	role := council.RoleProposer
+	for _, candidate := range council.Roles() {
+		if strings.Contains(objective, `"role":"`+string(candidate)+`"`) {
+			role = candidate
+		}
+	}
+	return evidence.SubjectDigest, evidence.ReviewGate, role, nil
 }
 
 func reviewSubjectDigestFromObjective(objective string) string {
