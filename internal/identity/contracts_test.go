@@ -91,7 +91,7 @@ func TestRoleAllowsUsesExactDefaultDenyMatrix(t *testing.T) {
 		PermissionProjectHierarchyManage, PermissionProjectMembershipManage,
 		PermissionGoalsCreate, PermissionGoalsAmend, PermissionGoalsGet,
 		PermissionGoalsList, PermissionBudgetsManage, PermissionEffectsApprove,
-		PermissionArtifactsRead, PermissionProjectStatus,
+		PermissionCouncilSkip, PermissionArtifactsRead, PermissionProjectStatus,
 	}
 	want := map[Role]map[Permission]bool{
 		RolePlatformAdmin: allowAll(permissions),
@@ -111,7 +111,7 @@ func TestRoleAllowsUsesExactDefaultDenyMatrix(t *testing.T) {
 		),
 		RoleOperator: allowed(
 			PermissionGoalsCreate, PermissionGoalsGet, PermissionGoalsList,
-			PermissionEffectsApprove, PermissionArtifactsRead, PermissionProjectStatus,
+			PermissionEffectsApprove, PermissionCouncilSkip, PermissionArtifactsRead, PermissionProjectStatus,
 		),
 		RoleViewer: allowed(
 			PermissionGoalsGet, PermissionGoalsList, PermissionArtifactsRead, PermissionProjectStatus,

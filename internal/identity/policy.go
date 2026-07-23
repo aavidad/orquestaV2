@@ -27,6 +27,7 @@ const (
 	PermissionBudgetsManage           Permission = "budgets.manage"
 	PermissionEffectsApprove          Permission = "effects.approve"
 	PermissionChangesIntegrate        Permission = "changes.integrate"
+	PermissionCouncilSkip             Permission = "council.skip"
 	PermissionArtifactsRead           Permission = "artifacts.read"
 	PermissionProjectStatus           Permission = "project.status"
 )
@@ -46,7 +47,8 @@ func ValidatePermission(permission Permission) error {
 	case PermissionProjectHierarchyManage, PermissionProjectMembershipManage,
 		PermissionGoalsCreate, PermissionGoalsAmend, PermissionGoalsGet,
 		PermissionGoalsList, PermissionGoalsDirect, PermissionBudgetsManage,
-		PermissionEffectsApprove, PermissionChangesIntegrate, PermissionArtifactsRead, PermissionProjectStatus:
+		PermissionEffectsApprove, PermissionChangesIntegrate, PermissionCouncilSkip,
+		PermissionArtifactsRead, PermissionProjectStatus:
 		return nil
 	default:
 		return errors.New("identity.invalid_permission")
@@ -63,7 +65,7 @@ func RoleAllows(role Role, permission Permission) bool {
 	case RolePlatformAdmin, RoleProjectOwner:
 		return true
 	case RoleProjectAdmin:
-		return permission != PermissionProjectHierarchyManage
+		return permission != PermissionProjectHierarchyManage && permission != PermissionCouncilSkip
 	case RoleContributor:
 		return permission == PermissionGoalsCreate || permission == PermissionGoalsAmend ||
 			permission == PermissionGoalsGet || permission == PermissionGoalsList ||
@@ -78,7 +80,8 @@ func RoleAllows(role Role, permission Permission) bool {
 	case RoleOperator:
 		return permission == PermissionGoalsCreate || permission == PermissionGoalsGet ||
 			permission == PermissionGoalsList || permission == PermissionGoalsDirect ||
-			permission == PermissionEffectsApprove || permission == PermissionChangesIntegrate || permission == PermissionArtifactsRead ||
+			permission == PermissionEffectsApprove || permission == PermissionChangesIntegrate ||
+			permission == PermissionCouncilSkip || permission == PermissionArtifactsRead ||
 			permission == PermissionProjectStatus
 	default:
 		return false

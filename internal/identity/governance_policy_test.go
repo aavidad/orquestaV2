@@ -38,3 +38,28 @@ func TestGovernancePermissionsUseExactDefaultDenyRolePolicy(t *testing.T) {
 		t.Fatal("unknown governance role or permission escaped default deny")
 	}
 }
+
+func TestCouncilSkipUsesExactDefaultDenyRolePolicy(t *testing.T) {
+	roles := []Role{
+		RolePlatformAdmin, RoleProjectOwner, RoleProjectAdmin, RoleContributor,
+		RoleReviewer, RoleOperator, RoleViewer,
+	}
+	want := map[Role]bool{
+		RolePlatformAdmin: true,
+		RoleProjectOwner:  true,
+		RoleOperator:      true,
+	}
+	if err := ValidatePermission(PermissionCouncilSkip); err != nil {
+		t.Fatalf("ValidatePermission(council.skip): %v", err)
+	}
+	for _, role := range roles {
+		if got := RoleAllows(role, PermissionCouncilSkip); got != want[role] {
+			t.Errorf("RoleAllows(%s, council.skip)=%v want=%v", role, got, want[role])
+		}
+	}
+	for _, alias := range []Permission{"council.skip.alias", "council_skip", "Council.skip"} {
+		if ValidatePermission(alias) == nil || RoleAllows(RolePlatformAdmin, alias) || RoleAllows(RoleOperator, alias) {
+			t.Errorf("council.skip alias accepted: %q", alias)
+		}
+	}
+}
