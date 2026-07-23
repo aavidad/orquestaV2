@@ -89,6 +89,7 @@ type EffectIntent struct {
 	QuotaRetryDelay     time.Duration
 	ApprovalTTL         time.Duration
 	TargetDigest        string
+	CouncilResolution   *CouncilResolution
 	IdempotencyKey      string
 	CreatedAt           time.Time
 	Digest              string
@@ -196,7 +197,7 @@ func EffectIntentDigest(intent EffectIntent) string {
 		strconv.FormatInt(resources.DiskBytes, 10), string(intent.SecurityCriticality),
 		string(intent.ReasoningEffort), intent.PolicyHash, strconv.FormatUint(intent.PolicyRevision, 10),
 		strconv.FormatInt(int64(intent.QuotaRetryDelay), 10), strconv.FormatInt(int64(intent.ApprovalTTL), 10),
-		intent.TargetDigest, intent.IdempotencyKey,
+		intent.TargetDigest, councilResolutionFingerprint(intent.CouncilResolution), intent.IdempotencyKey,
 		intent.CreatedAt.UTC().Format(time.RFC3339Nano),
 	} {
 		writeFingerprintField(digest, field)
@@ -215,6 +216,10 @@ func ValidateEffectIntent(intent EffectIntent) error {
 		return errors.New("application.effect_kind_invalid")
 	case !effectActionKindMatches(intent.Kind, intent.ActionKind):
 		return errors.New("application.effect_action_kind_mismatch")
+	case intent.ActionKind == ActionIntegrateChange && intent.CouncilResolution != nil && intent.CouncilResolution.Validate() != nil:
+		return errors.New("application.effect_council_resolution_invalid")
+	case intent.ActionKind != ActionIntegrateChange && intent.CouncilResolution != nil:
+		return errors.New("application.effect_council_resolution_invalid")
 	case subject.ProjectRef.String() == "" || subject.GoalRef.String() == "" ||
 		subject.WorkItemRef.String() == "" || subject.ExecutionRef.String() == "" ||
 		subject.PlanGeneration == 0 || subject.AppSpecGeneration == 0 ||
@@ -239,6 +244,14 @@ func ValidateEffectIntent(intent EffectIntent) error {
 	default:
 		return nil
 	}
+}
+
+func councilResolutionFingerprint(resolution *CouncilResolution) string {
+	if resolution == nil {
+		return "none"
+	}
+	return strings.Join([]string{"council", string(resolution.SubjectDigest), resolution.DecisionRef,
+		string(resolution.DecisionDigest), resolution.SkipRef, string(resolution.SkipDigest)}, "\x00")
 }
 
 func effectIntentAuthorityValid(intent EffectIntent) bool {

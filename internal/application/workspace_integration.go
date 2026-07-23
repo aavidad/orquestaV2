@@ -36,7 +36,10 @@ func (orchestrator *Orchestrator) processIntegrateChange(ctx context.Context, cl
 	if gateErr != nil || gateDigest == "" || gateDigest != claim.Action.ReviewGateDigest {
 		return orchestrator.quarantine(ctx, claim, "review.gate_digest_mismatch")
 	}
-	if integrationTargetDigest(change, claim.Action.ExpectedTargetOID, gateDigest) != claim.Action.EffectIntent.TargetDigest {
+	resolution, resolutionErr := councilIntegrationResolution(record, item, execution, change, gateDigest, orchestrator.testAttestationPolicy)
+	if resolutionErr != nil || !councilResolutionEqual(claim.Action.CouncilResolution, resolution) ||
+		!councilResolutionEqual(claim.Action.EffectIntent.CouncilResolution, resolution) ||
+		integrationTargetDigest(change, claim.Action.ExpectedTargetOID, gateDigest, resolution) != claim.Action.EffectIntent.TargetDigest {
 		return orchestrator.quarantine(ctx, claim, "application.effect_target_mismatch")
 	}
 	if !record.Goal.ChildHandoffsResolved(item.Ref()) {

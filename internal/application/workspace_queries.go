@@ -90,10 +90,6 @@ func (orchestrator *Orchestrator) IntegrateChange(ctx context.Context, access Ac
 		return IntegrateChangeResult{}, err
 	}
 	now = authorizationCausalFloor(now, authorization)
-	fingerprint := fingerprintFields(
-		"orquesta.integrate-change.v1", principal.Ref.String(), projectRef.String(), request.RequestRef,
-		request.GoalRef.String(), request.ChangeRef.String(), request.ExpectedTargetOID,
-	)
 	record, err := orchestrator.state.GetGoal(ctx, request.GoalRef)
 	if err != nil {
 		return IntegrateChangeResult{}, err
@@ -121,11 +117,19 @@ func (orchestrator *Orchestrator) IntegrateChange(ctx context.Context, access Ac
 	if gateErr != nil {
 		return IntegrateChangeResult{}, &StateError{Code: StateConflict, Cause: gateErr}
 	}
+	resolution, resolutionErr := councilIntegrationResolution(record, item, execution, change, reviewGateDigest, orchestrator.testAttestationPolicy)
+	if resolutionErr != nil {
+		return IntegrateChangeResult{}, &StateError{Code: StateConflict, Cause: resolutionErr}
+	}
+	fingerprint := fingerprintFields(
+		"orquesta.integrate-change.v2", principal.Ref.String(), projectRef.String(), request.RequestRef,
+		request.GoalRef.String(), request.ChangeRef.String(), request.ExpectedTargetOID, councilResolutionFingerprint(resolution),
+	)
 	if previous, found, replayErr := integrationIntentForRequest(record, request.RequestRef); replayErr != nil {
 		return IntegrateChangeResult{}, replayErr
 	} else if found {
 		action, replayErr := integrationReplayAction(
-			record, item, execution, change, previous, request, principal.Ref, fingerprint, reviewGateDigest,
+			record, item, execution, change, previous, request, principal.Ref, fingerprint, reviewGateDigest, resolution,
 		)
 		if replayErr != nil {
 			return IntegrateChangeResult{}, replayErr
@@ -143,7 +147,7 @@ func (orchestrator *Orchestrator) IntegrateChange(ctx context.Context, access Ac
 	}
 	action, err := orchestrator.integrateChangeAction(
 		policy, record.Goal, item, execution, change, request.ExpectedTargetOID,
-		reviewGateDigest, principal.Ref, authorization, request.RequestRef, fingerprint, now,
+		reviewGateDigest, resolution, principal.Ref, authorization, request.RequestRef, fingerprint, now,
 	)
 	if err != nil {
 		return IntegrateChangeResult{}, err
@@ -163,7 +167,7 @@ func (orchestrator *Orchestrator) persistIntegrationAdmission(ctx context.Contex
 		AuthorizationReceipt: authorization, PrincipalRef: principal,
 		ProjectRef: projectRef, GoalRef: request.GoalRef, ChangeRef: request.ChangeRef,
 		ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: item.Revision(),
-		Action: action, OperationAt: at,
+		Action: action, CouncilResolution: action.CouncilResolution, OperationAt: at,
 	})
 	if err != nil {
 		return IntegrateChangeResult{}, err
@@ -192,7 +196,7 @@ func integrationIntentForRequest(record GoalRecord, requestRef string) (EffectIn
 
 func integrationReplayAction(record GoalRecord, item goal.WorkItem, execution ExecutionRecord,
 	change ChangeSet, intent EffectIntent, request IntegrateChangeRequest,
-	principal identity.PrincipalRef, fingerprint string, reviewGateDigest string,
+	principal identity.PrincipalRef, fingerprint string, reviewGateDigest string, resolution *CouncilResolution,
 ) (ActionRecord, error) {
 	if intent.RequestFingerprint != fingerprint || intent.ProposedBy != principal ||
 		intent.ActionRef != integrationActionRef(principal, record.Goal.Project(), request.RequestRef) ||
@@ -200,7 +204,8 @@ func integrationReplayAction(record GoalRecord, item goal.WorkItem, execution Ex
 		intent.Subject.ProjectRef != record.Goal.Project() || intent.Subject.GoalRef != record.Goal.Ref() ||
 		intent.Subject.WorkItemRef != change.WorkItemRef || intent.Subject.ExecutionRef != change.ExecutionRef ||
 		intent.Subject.PlanGeneration != execution.PlanGeneration ||
-		intent.TargetDigest != integrationTargetDigest(change, request.ExpectedTargetOID, reviewGateDigest) {
+		intent.TargetDigest != integrationTargetDigest(change, request.ExpectedTargetOID, reviewGateDigest, resolution) ||
+		!councilResolutionEqual(intent.CouncilResolution, resolution) {
 		return ActionRecord{}, &StateError{Code: StateConflict}
 	}
 	approval, found := effectApprovalForIntent(record.EffectApprovals, intent.Ref)
@@ -211,8 +216,8 @@ func integrationReplayAction(record GoalRecord, item goal.WorkItem, execution Ex
 		Ref: intent.ActionRef, Kind: ActionIntegrateChange,
 		GoalRef: record.Goal.Ref(), WorkItemRef: change.WorkItemRef, ExecutionRef: change.ExecutionRef,
 		ChangeRef: change.Ref, ExpectedTargetOID: request.ExpectedTargetOID,
-		ReviewGateDigest: reviewGateDigest,
-		EffectIntentRef:  intent.Ref, EffectIntent: intent, EffectApproval: &approval,
+		ReviewGateDigest: reviewGateDigest, CouncilResolution: resolution,
+		EffectIntentRef: intent.Ref, EffectIntent: intent, EffectApproval: &approval,
 		PlanGeneration: intent.Subject.PlanGeneration, WorkItemGeneration: item.Revision(),
 		AvailableAt: intent.CreatedAt,
 	}, nil

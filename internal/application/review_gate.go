@@ -110,6 +110,7 @@ func ValidatePersistedIntegrationReviewGate(record GoalRecord, action ActionReco
 		return errors.New("review.integration_gate_invalid")
 	}
 	var gateDigest string
+	var gatePolicy TestAttestationPolicy
 	matches := 0
 	for _, attestation := range record.Attestations {
 		if attestation.Kind != AttestationKindRequiredTests || attestation.Verdict != AttestationVerdictPassed ||
@@ -119,7 +120,7 @@ func ValidatePersistedIntegrationReviewGate(record GoalRecord, action ActionReco
 		policy := TestAttestationPolicy{Ref: attestation.PolicyRef, Digest: attestation.PolicyDigest}
 		candidate, err := reviewGateAllowsIntegration(record, execution, change, policy)
 		if err == nil {
-			gateDigest, matches = candidate, matches+1
+			gateDigest, gatePolicy, matches = candidate, policy, matches+1
 		}
 	}
 	var intent EffectIntent
@@ -129,8 +130,19 @@ func ValidatePersistedIntegrationReviewGate(record GoalRecord, action ActionReco
 			intent, intentMatches = candidate, intentMatches+1
 		}
 	}
-	if matches != 1 || gateDigest != action.ReviewGateDigest || intentMatches != 1 ||
-		intent.TargetDigest != integrationTargetDigest(change, action.ExpectedTargetOID, gateDigest) {
+	if matches != 1 || gateDigest != action.ReviewGateDigest || intentMatches != 1 {
+		return errors.New("review.integration_gate_invalid")
+	}
+	if action.CouncilResolution == nil && intent.CouncilResolution == nil {
+		if intent.TargetDigest == integrationTargetDigest(change, action.ExpectedTargetOID, gateDigest) {
+			return nil
+		}
+		return errors.New("review.integration_gate_invalid")
+	}
+	resolution, resolutionErr := councilIntegrationResolution(record, item, execution, change, gateDigest, gatePolicy)
+	if resolutionErr != nil || !councilResolutionEqual(action.CouncilResolution, resolution) ||
+		!councilResolutionEqual(intent.CouncilResolution, resolution) ||
+		intent.TargetDigest != integrationTargetDigest(change, action.ExpectedTargetOID, gateDigest, resolution) {
 		return errors.New("review.integration_gate_invalid")
 	}
 	return nil

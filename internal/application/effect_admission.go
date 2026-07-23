@@ -183,12 +183,16 @@ func (orchestrator *Orchestrator) integrateChangeAction(
 	change ChangeSet,
 	expectedTargetOID string,
 	reviewGateDigest string,
+	resolution *CouncilResolution,
 	principal identity.PrincipalRef,
 	authority identity.AuthorizationReceipt,
 	requestRef string,
 	requestFingerprint string,
 	at time.Time,
 ) (ActionRecord, error) {
+	if resolution == nil || resolution.Validate() != nil {
+		return ActionRecord{}, errors.New("council.resolution_required")
+	}
 	actionRef := integrationActionRef(principal, aggregate.Project(), requestRef)
 	intent := EffectIntent{
 		Ref: "effect-intent:" + actionRef, RequestRef: requestRef,
@@ -201,14 +205,16 @@ func (orchestrator *Orchestrator) integrateChangeAction(
 		ReasoningEffort:     governance.ReasoningEffortLow,
 		PolicyHash:          policy.PolicyHash, PolicyRevision: policy.PolicyRevision,
 		QuotaRetryDelay: policy.QuotaRetryDelay, ApprovalTTL: policy.ApprovalTTL,
-		TargetDigest:   integrationTargetDigest(change, expectedTargetOID, reviewGateDigest),
-		IdempotencyKey: "integration:" + requestRef, CreatedAt: at.UTC(),
+		TargetDigest:      integrationTargetDigest(change, expectedTargetOID, reviewGateDigest, resolution),
+		CouncilResolution: resolution,
+		IdempotencyKey:    "integration:" + requestRef, CreatedAt: at.UTC(),
 	}
 	return orchestrator.finalizeEffectAction(intent, ActionRecord{
 		Ref: actionRef, Kind: ActionIntegrateChange, GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(),
 		ExecutionRef: execution.Ref, ChangeRef: change.Ref, ExpectedTargetOID: expectedTargetOID,
-		ReviewGateDigest: reviewGateDigest,
-		PlanGeneration:   execution.PlanGeneration, WorkItemGeneration: item.Revision(), AvailableAt: at,
+		ReviewGateDigest:  reviewGateDigest,
+		CouncilResolution: resolution,
+		PlanGeneration:    execution.PlanGeneration, WorkItemGeneration: item.Revision(), AvailableAt: at,
 	}, EffectApprovalSourceIntegrationDecision, at)
 }
 
@@ -373,14 +379,17 @@ func commitChangeTargetDigest(binding WorkspaceBinding, changeRef ports.ChangeSe
 	)
 }
 
-func integrationTargetDigest(change ChangeSet, expectedTargetOID string, reviewGateDigest ...string) string {
-	gateDigest := ""
-	if len(reviewGateDigest) != 0 {
-		gateDigest = reviewGateDigest[0]
+func integrationTargetDigest(change ChangeSet, expectedTargetOID string, reviewGateDigest string, resolution ...*CouncilResolution) string {
+	if len(resolution) == 0 || resolution[0] == nil {
+		return effectAdmissionFingerprint(
+			"target:integrate-change:v2", change.Ref.String(), change.RepositoryRef.String(),
+			change.HeadOID, change.TreeOID, expectedTargetOID, change.DiffDigest, reviewGateDigest,
+		)
 	}
+	resolutionValue := councilResolutionFingerprint(resolution[0])
 	return effectAdmissionFingerprint(
-		"target:integrate-change:v2", change.Ref.String(), change.RepositoryRef.String(),
-		change.HeadOID, change.TreeOID, expectedTargetOID, change.DiffDigest, gateDigest,
+		"target:integrate-change:v3", change.Ref.String(), change.RepositoryRef.String(),
+		change.HeadOID, change.TreeOID, expectedTargetOID, change.DiffDigest, reviewGateDigest, resolutionValue,
 	)
 }
 
