@@ -128,6 +128,72 @@ func ValidatePersistedReviewerBinding(record GoalRecord, item goal.WorkItem,
 	return nil
 }
 
+// ValidatePersistedReviewRecord centralizes the pure aggregate invariant used
+// by durable adapters. Persistence owns atomicity, not a second review model.
+func ValidatePersistedReviewRecord(record GoalRecord, item goal.WorkItem,
+	fact ReviewRecord,
+) (review.Subject, review.Assessment, error) {
+	reviewer, reviewerFound := executionByRef(record.Executions, fact.ReviewerExecutionRef)
+	attachment, attachmentErr := persistedReviewAttachment(record, item, reviewer)
+	intent, intentFound := effectIntentByRef(record.EffectIntents, reviewer.EffectIntentRef)
+	authority, authorityFound := workItemAuthorityFor(record.WorkItemAuthorities, item.Ref())
+	role, roleFound := reviewerRole(reviewer)
+	artifact, artifactFound := artifactForReview(record.Artifacts, fact.AssessmentArtifactRef)
+	if !reviewerFound || attachmentErr != nil || !intentFound || !authorityFound || !roleFound || !artifactFound ||
+		fact.GoalRef != record.Goal.Ref() || fact.WorkItemRef != item.Ref() || fact.ChangeSetRef != attachment.Change.Ref ||
+		fact.Role != role || fact.SubjectDigest != reviewer.ReviewSubjectDigest || fact.Ref != "review:"+reviewer.Ref.String() ||
+		fact.ReviewerExecutionAttempt != reviewer.AttemptNo || fact.LaunchReceiptRef != reviewer.LaunchReceiptRef ||
+		fact.AgentRef != reviewer.AgentRef || fact.ExternalRef != reviewer.ExternalRef ||
+		fact.PrincipalRef != intent.ProposedBy || fact.PrincipalRef != authority.PrincipalRef ||
+		intent.Permission != authority.Permission || intent.Authority.Ref() != authority.AuthorizationReceipt.Ref() ||
+		reviewer.State != ExecutionSucceeded || !fact.RecordedAt.Equal(reviewer.FinishedAt) ||
+		!fact.RecordedAt.Equal(artifact.CreatedAt) || artifact.Kind != ArtifactKindReviewAssessment ||
+		artifact.ExecutionRef != reviewer.Ref || artifact.GoalRef != fact.GoalRef || artifact.WorkItemRef != fact.WorkItemRef ||
+		artifact.ExecutionAttempt != reviewer.AttemptNo || artifact.PlanGeneration != reviewer.PlanGeneration ||
+		artifact.AppSpecGeneration != reviewer.AppSpecGeneration || artifact.SpecHash != reviewer.SpecHash ||
+		artifact.WorkItemGeneration != goal.Revision(attachment.Subject.WorkItemGeneration) ||
+		artifact.Stored.Digest != fact.AssessmentDigest || artifact.Stored.Ref.String() != fact.AssessmentArtifactRef {
+		return review.Subject{}, review.Assessment{}, errors.New("review.persisted_record_invalid")
+	}
+	assessment, err := fact.Assessment()
+	if err != nil {
+		return review.Subject{}, review.Assessment{}, errors.New("review.persisted_record_invalid")
+	}
+	return attachment.Subject, assessment, nil
+}
+
+func artifactForReview(artifacts []ArtifactRecord, ref string) (ArtifactRecord, bool) {
+	for _, artifact := range artifacts {
+		if artifact.Stored.Ref.String() == ref {
+			return artifact, true
+		}
+	}
+	return ArtifactRecord{}, false
+}
+
+func ValidatePersistedReviewCleanupControl(record GoalRecord, control ControlRecord) error {
+	item, itemFound := record.Goal.WorkItem(control.WorkItemRef)
+	reviewer, reviewerFound := executionByRef(record.Executions, control.ExecutionRef)
+	author, authorFound := authorBound(record, item)
+	intent, intentFound := effectIntentByRef(record.EffectIntents, author.EffectIntentRef)
+	authority, authorityFound := workItemAuthorityFor(record.WorkItemAuthorities, control.WorkItemRef)
+	_, reviewerRoleFound := reviewerRole(reviewer)
+	if !IsReviewCleanupControl(control) || !itemFound || !reviewerFound || !authorFound || !intentFound ||
+		!authorityFound || !reviewerRoleFound || control.GoalRef != record.Goal.Ref() ||
+		reviewer.GoalRef != control.GoalRef || reviewer.WorkItemRef != control.WorkItemRef ||
+		reviewer.AttemptNo != control.ExecutionAttempt || author.Purpose != ExecutionPurposeAuthor ||
+		intent.ActionKind != ActionLaunchAgent || intent.Subject.ProjectRef != record.Goal.Project() ||
+		intent.Subject.GoalRef != record.Goal.Ref() || intent.Subject.WorkItemRef != author.WorkItemRef ||
+		intent.Subject.ExecutionRef != author.Ref || intent.Subject.PlanGeneration != author.PlanGeneration ||
+		intent.Subject.AppSpecGeneration != author.AppSpecGeneration || intent.Subject.SpecHash != author.SpecHash ||
+		intent.ProposedBy != control.PrincipalRef || intent.Authority.Ref() != control.AuthorizationReceipt.Ref() ||
+		authority.PrincipalRef != control.PrincipalRef ||
+		authority.AuthorizationReceipt.Ref() != control.AuthorizationReceipt.Ref() {
+		return errors.New("review.cleanup_control_invalid")
+	}
+	return nil
+}
+
 // persistedReviewAttachment resolves the author from immutable evidence, not
 // from the WorkItem's current lifecycle revision. This keeps completed and
 // retried reviewer attempts valid after unrelated WorkItems progress while
@@ -151,26 +217,41 @@ func persistedReviewAttachment(record GoalRecord, item goal.WorkItem,
 			continue
 		}
 		change, changeFound := changeForAuthor(record, author)
-		binding, bindingFound := workspaceBindingForExecution(record, author.Ref)
-		if !changeFound || !bindingFound || change.WorkspaceRef != binding.Ref {
+		if !changeFound {
 			continue
 		}
-		for _, attestation := range record.Attestations {
-			if attestation.Kind != AttestationKindRequiredTests ||
-				attestation.Verdict != AttestationVerdictPassed || attestation.ExecutionRef != author.Ref ||
-				attestation.ChangeSetRef != change.Ref {
-				continue
-			}
-			subject, err := reviewSubjectFromEvidence(item, author, binding, change, attestation)
-			if err != nil || subject.Digest() != participant.ReviewSubjectDigest {
-				continue
-			}
-			attachment = ReviewAttachment{Author: author, Change: change, Subject: subject}
-			matches++
+		subject, err := ResolvePersistedReviewSubject(record, item, author, change)
+		if err == nil && subject.Digest() == participant.ReviewSubjectDigest {
+			attachment, matches = ReviewAttachment{Author: author, Change: change, Subject: subject}, matches+1
 		}
 	}
 	if matches != 1 {
 		return ReviewAttachment{}, errors.New("review.attachment_persisted_invalid")
 	}
 	return attachment, nil
+}
+
+// ResolvePersistedReviewSubject reconstructs one exact immutable review
+// subject from author/change/binding/PASS evidence after lifecycle progress.
+func ResolvePersistedReviewSubject(record GoalRecord, item goal.WorkItem, author ExecutionRecord,
+	change ChangeSet,
+) (review.Subject, error) {
+	binding, bindingFound := workspaceBindingForExecution(record, author.Ref)
+	var subject review.Subject
+	matches := 0
+	for _, pass := range record.Attestations {
+		if pass.Kind != AttestationKindRequiredTests || pass.Verdict != AttestationVerdictPassed ||
+			pass.ExecutionRef != author.Ref || pass.ChangeSetRef != change.Ref {
+			continue
+		}
+		candidate, err := reviewSubjectFromEvidence(item, author, binding, change, pass)
+		if err == nil {
+			subject, matches = candidate, matches+1
+		}
+	}
+	if author.Purpose != ExecutionPurposeAuthor || !bindingFound || change.ExecutionRef != author.Ref ||
+		change.WorkspaceRef != binding.Ref || matches != 1 {
+		return review.Subject{}, errors.New("review.subject_persisted_invalid")
+	}
+	return subject, nil
 }

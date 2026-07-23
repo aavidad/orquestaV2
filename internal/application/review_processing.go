@@ -60,13 +60,7 @@ func (orchestrator *Orchestrator) recordReviewerObservation(ctx context.Context,
 		AssessmentArtifactRef: stored.Ref.String(), AssessmentDigest: stored.Digest,
 		RecordedAt: at.UTC(),
 	}
-	assessment, err := review.NewAssessment(review.Assessment{
-		SubjectDigest: reviewFact.SubjectDigest, Role: role, Verdict: reviewFact.Verdict,
-		ReviewerExecutionRef: execution.Ref.String(), ReviewerExecutionAttempt: execution.AttemptNo,
-		LaunchReceiptRef: execution.LaunchReceiptRef, ReviewerExternalRef: execution.ExternalRef,
-		AssessmentArtifactRef: stored.Ref.String(),
-		AssessmentDigest:      stored.Digest, RecordedAt: at.UTC(),
-	})
+	assessment, err := reviewFact.Assessment()
 	if err != nil {
 		return orchestrator.quarantine(ctx, claim, "review.assessment_invalid")
 	}

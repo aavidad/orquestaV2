@@ -150,3 +150,58 @@ func changeForAuthor(record GoalRecord, execution ExecutionRecord) (ChangeSet, b
 	}
 	return result, found
 }
+
+// FailedReviewPreservesCandidate validates the only review failures allowed to
+// retain an immutable, non-integrated candidate for Director replan.
+func FailedReviewPreservesCandidate(record GoalRecord, item goal.WorkItem, author ExecutionRecord,
+	change ChangeSet,
+) bool {
+	subject, err := ResolvePersistedReviewSubject(record, item, author, change)
+	if err != nil {
+		return false
+	}
+	digest := subject.Digest()
+	latest := make(map[review.Role]ExecutionRecord, 2)
+	for _, participant := range record.Executions {
+		role, reviewer := reviewerRole(participant)
+		if !reviewer || participant.ReviewSubjectDigest != digest {
+			continue
+		}
+		if previous, found := latest[role]; !found || participant.AttemptNo > previous.AttemptNo {
+			latest[role] = participant
+		}
+	}
+	unavailable := false
+	for _, role := range []review.Role{review.RolePrimary, review.RoleAdversarial} {
+		participant, found := latest[role]
+		if !found {
+			return false
+		}
+		switch participant.State {
+		case ExecutionSucceeded:
+		case ExecutionFailed, ExecutionStopped:
+			unavailable = true
+		default:
+			return false
+		}
+	}
+	if author.FailureCode == "review.unavailable" {
+		return unavailable
+	}
+	if author.FailureCode != string(goal.ReplanCauseReviewChangesRequested) {
+		return false
+	}
+	assessments := make([]review.Assessment, 0, 2)
+	for _, fact := range record.Reviews {
+		if fact.SubjectDigest != digest || fact.ChangeSetRef != change.Ref {
+			continue
+		}
+		assessment, assessmentErr := fact.Assessment()
+		if assessmentErr != nil {
+			return false
+		}
+		assessments = append(assessments, assessment)
+	}
+	gate, err := review.EvaluateGate(subject, assessments)
+	return err == nil && gate.Status == review.GateChangesRequested
+}

@@ -159,6 +159,16 @@ type ReviewRecord struct {
 	RecordedAt               time.Time
 }
 
+func (record ReviewRecord) Assessment() (review.Assessment, error) {
+	return review.NewAssessment(review.Assessment{
+		SubjectDigest: record.SubjectDigest, Role: record.Role, Verdict: record.Verdict,
+		ReviewerExecutionRef: record.ReviewerExecutionRef.String(), ReviewerExecutionAttempt: record.ReviewerExecutionAttempt,
+		LaunchReceiptRef: record.LaunchReceiptRef, ReviewerExternalRef: record.ExternalRef,
+		AssessmentArtifactRef: record.AssessmentArtifactRef, AssessmentDigest: record.AssessmentDigest,
+		RecordedAt: record.RecordedAt,
+	})
+}
+
 type ArtifactRecord struct {
 	OccurrenceRef      string
 	Kind               ArtifactKind

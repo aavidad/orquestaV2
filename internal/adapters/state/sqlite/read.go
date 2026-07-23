@@ -13,7 +13,6 @@ import (
 	"orquesta/internal/governance"
 	"orquesta/internal/identity"
 	"orquesta/internal/ports"
-	"orquesta/internal/review"
 )
 
 func (repository *Repository) GetGoal(ctx context.Context, goalRef goal.GoalRef) (application.GoalRecord, error) {
@@ -263,11 +262,7 @@ external_ref,assessment_artifact_ref,assessment_digest,recorded_at FROM review_r
 			return nil, invalid(err)
 		}
 		record.ReviewerExecutionAttempt, record.RecordedAt = uint64(attempt), time.Unix(0, recorded).UTC()
-		if _, err := review.NewAssessment(review.Assessment{SubjectDigest: record.SubjectDigest, Role: record.Role,
-			Verdict: record.Verdict, ReviewerExecutionRef: executionValue, ReviewerExecutionAttempt: uint64(attempt),
-			LaunchReceiptRef: record.LaunchReceiptRef, ReviewerExternalRef: record.ExternalRef,
-			AssessmentArtifactRef: record.AssessmentArtifactRef,
-			AssessmentDigest:      record.AssessmentDigest, RecordedAt: record.RecordedAt}); err != nil {
+		if _, err := record.Assessment(); err != nil {
 			return nil, invalid(err)
 		}
 		records = append(records, record)

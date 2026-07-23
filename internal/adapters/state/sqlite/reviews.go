@@ -6,17 +6,10 @@ import (
 	"errors"
 
 	"orquesta/internal/application"
-	"orquesta/internal/review"
 )
 
 func (repository *Repository) RecordReviewAssessed(ctx context.Context, state application.ReviewAssessedState) error {
-	if _, err := review.NewAssessment(review.Assessment{SubjectDigest: state.Review.SubjectDigest,
-		Role: state.Review.Role, Verdict: state.Review.Verdict,
-		ReviewerExecutionRef:     state.Review.ReviewerExecutionRef.String(),
-		ReviewerExecutionAttempt: state.Review.ReviewerExecutionAttempt,
-		LaunchReceiptRef:         state.Review.LaunchReceiptRef, ReviewerExternalRef: state.Review.ExternalRef,
-		AssessmentArtifactRef: state.Review.AssessmentArtifactRef,
-		AssessmentDigest:      state.Review.AssessmentDigest, RecordedAt: state.Review.RecordedAt}); err != nil {
+	if _, err := state.Review.Assessment(); err != nil {
 		return invalid(err)
 	}
 	return repository.mutate(ctx, state.Claim, state.OperationAt, func(tx *sql.Tx) error {

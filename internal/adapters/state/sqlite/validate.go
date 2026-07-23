@@ -456,7 +456,7 @@ func failedWorkItemStagedOutputExecution(
 	if execution.FailureCode == "review.unavailable" ||
 		execution.FailureCode == string(goal.ReplanCauseReviewChangesRequested) {
 		item, found := record.Goal.WorkItem(execution.WorkItemRef)
-		if found && v18FailedReviewPreservesCandidate(record, item, execution, matchingChange) {
+		if found && application.FailedReviewPreservesCandidate(record, item, execution, matchingChange) {
 			return execution, true
 		}
 		return application.ExecutionRecord{}, false
