@@ -143,6 +143,11 @@ func applyMigrationSteps(
 				return current, migrated, invalid(err)
 			}
 		}
+		if migration.version == recoverySchemaV19 && current == recoverySchemaV18 {
+			if err := validateV19CouncilUpgradeSource(ctx, transaction); err != nil {
+				return current, migrated, invalid(err)
+			}
+		}
 		if _, err := transaction.ExecContext(ctx, migration.preSQL); err != nil {
 			return current, migrated, mapDatabaseError(err)
 		}
@@ -172,6 +177,36 @@ func applyMigrationSteps(
 		migrated = true
 	}
 	return current, migrated, nil
+}
+
+// V18 has no durable Council policy. Any write-scoped item that may still
+// progress, or whose external effect frontier is unsettled, must finish under
+// V18. V19 never guesses policy or whether an attempted effect happened.
+func validateV19CouncilUpgradeSource(ctx context.Context, transaction *sql.Tx) error {
+	var live, activeActions, unknownAttempts int
+	err := transaction.QueryRowContext(ctx, `
+WITH write_scoped AS (
+ SELECT DISTINCT goal_ref,work_item_ref FROM work_item_write_scopes
+)
+SELECT
+ (SELECT COUNT(*) FROM work_items item JOIN write_scoped scope
+   ON scope.goal_ref=item.goal_ref AND scope.work_item_ref=item.ref
+   WHERE item.state NOT IN ('succeeded','failed','skipped','canceled','superseded')),
+ (SELECT COUNT(*) FROM outbox action JOIN write_scoped scope
+   ON scope.goal_ref=action.goal_ref AND scope.work_item_ref=action.work_item_ref
+   WHERE action.completed_at IS NULL AND action.retired_at IS NULL AND action.quarantined_at IS NULL),
+ (SELECT COUNT(*) FROM effect_attempts attempt JOIN write_scoped scope
+   ON scope.goal_ref=attempt.goal_ref AND scope.work_item_ref=attempt.work_item_ref
+   LEFT JOIN effect_receipts receipt ON receipt.attempt_ref=attempt.ref
+   WHERE receipt.ref IS NULL)`).Scan(&live, &activeActions, &unknownAttempts)
+	if err != nil {
+		return err
+	}
+	if live+activeActions+unknownAttempts != 0 {
+		return fmt.Errorf("sqlite.v19_upgrade_requires_v18_council_policy:live=%d:active_actions=%d:unknown_attempts=%d",
+			live, activeActions, unknownAttempts)
+	}
+	return nil
 }
 
 func validateAtomicStateMigrationSource(ctx context.Context, transaction *sql.Tx) error {
