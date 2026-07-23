@@ -14,32 +14,49 @@ import (
 // second authority beside GoalRecord.
 type CouncilSubjectDigest string
 
+type CouncilRoundOpener string
+
+const (
+	CouncilRoundOpenerAuto     CouncilRoundOpener = "auto"
+	CouncilRoundOpenerDirector CouncilRoundOpener = "director"
+)
+
 type CouncilRoundRecord struct {
-	Ref            string
-	GoalRef        goal.GoalRef
-	WorkItemRef    goal.WorkItemRef
-	ChangeSetRef   string
-	Subject        council.Subject
-	SubjectDigest  CouncilSubjectDigest
-	OpenedBy       identity.PrincipalRef
-	OpenedAt       time.Time
-	IdempotencyKey string
+	Ref                     string
+	GoalRef                 goal.GoalRef
+	WorkItemRef             goal.WorkItemRef
+	ChangeSetRef            string
+	Subject                 council.Subject
+	SubjectDigest           CouncilSubjectDigest
+	OpenedBy                identity.PrincipalRef
+	OpenedAt                time.Time
+	IdempotencyKey          string
+	Opener                  CouncilRoundOpener
+	DirectorFence           uint64
+	RequestRef              string
+	RequestFingerprint      string
+	AuthorizationReceiptRef string
 }
 
 type CouncilDecisionRecord struct {
-	Ref           string
-	RoundRef      string
-	SubjectDigest CouncilSubjectDigest
-	Decision      council.Decision
-	RecordedAt    time.Time
+	Ref            string
+	RoundRef       string
+	SubjectDigest  CouncilSubjectDigest
+	Decision       council.Decision
+	DecisionDigest CouncilSubjectDigest
+	RecordedAt     time.Time
 }
 
 type CouncilSkipRecord struct {
-	Ref           string
-	Subject       council.Subject
-	SubjectDigest CouncilSubjectDigest
-	Skip          council.Skip
-	RecordedAt    time.Time
+	Ref                     string
+	Subject                 council.Subject
+	SubjectDigest           CouncilSubjectDigest
+	Skip                    council.Skip
+	SkipDigest              CouncilSubjectDigest
+	RecordedAt              time.Time
+	RequestRef              string
+	RequestFingerprint      string
+	AuthorizationReceiptRef string
 }
 
 // CouncilResolution is integration's one-of proof. A skip is never encoded as
@@ -47,19 +64,19 @@ type CouncilSkipRecord struct {
 type CouncilResolution struct {
 	SubjectDigest  CouncilSubjectDigest
 	DecisionRef    string
-	DecisionDigest string
+	DecisionDigest CouncilSubjectDigest
 	SkipRef        string
-	SkipDigest     string
+	SkipDigest     CouncilSubjectDigest
 }
 
 func (resolution CouncilResolution) Validate() error {
 	if !validCouncilDigest(string(resolution.SubjectDigest)) {
 		return errors.New("council.resolution_invalid")
 	}
-	decision := strings.TrimSpace(resolution.DecisionRef) != "" || strings.TrimSpace(resolution.DecisionDigest) != ""
-	skip := strings.TrimSpace(resolution.SkipRef) != "" || strings.TrimSpace(resolution.SkipDigest) != ""
-	if decision == skip || (decision && (!validCouncilRef(resolution.DecisionRef) || !validCouncilDigest(resolution.DecisionDigest))) ||
-		(skip && (!validCouncilRef(resolution.SkipRef) || !validCouncilDigest(resolution.SkipDigest))) {
+	decision := strings.TrimSpace(resolution.DecisionRef) != "" || strings.TrimSpace(string(resolution.DecisionDigest)) != ""
+	skip := strings.TrimSpace(resolution.SkipRef) != "" || strings.TrimSpace(string(resolution.SkipDigest)) != ""
+	if decision == skip || (decision && (!validCouncilRef(resolution.DecisionRef) || !validCouncilDigest(string(resolution.DecisionDigest)))) ||
+		(skip && (!validCouncilRef(resolution.SkipRef) || !validCouncilDigest(string(resolution.SkipDigest)))) {
 		return errors.New("council.resolution_invalid")
 	}
 	return nil
@@ -73,10 +90,10 @@ func councilResolutionEqual(left, right *CouncilResolution) bool {
 }
 
 func validCouncilDigest(value string) bool {
-	if len(value) != 64 {
+	if len(value) != len("sha256:")+64 || !strings.HasPrefix(value, "sha256:") {
 		return false
 	}
-	for _, char := range value {
+	for _, char := range value[len("sha256:"):] {
 		if !(char >= '0' && char <= '9' || char >= 'a' && char <= 'f') {
 			return false
 		}
@@ -85,7 +102,30 @@ func validCouncilDigest(value string) bool {
 }
 
 func validCouncilRef(value string) bool {
-	return strings.TrimSpace(value) != "" && strings.TrimSpace(value) == value
+	return len(value) > 0 && len(value) <= 512 && strings.TrimSpace(value) == value &&
+		!strings.ContainsAny(value, "\r\n\x00")
+}
+
+func councilDigest(value string) (CouncilSubjectDigest, bool) {
+	if validCouncilDigest(value) {
+		return CouncilSubjectDigest(value), true
+	}
+	if len(value) != 64 {
+		return "", false
+	}
+	for _, char := range value {
+		if !(char >= '0' && char <= '9' || char >= 'a' && char <= 'f') {
+			return "", false
+		}
+	}
+	return CouncilSubjectDigest("sha256:" + value), true
+}
+
+func rawCouncilDigest(value CouncilSubjectDigest) (string, bool) {
+	if !validCouncilDigest(string(value)) {
+		return "", false
+	}
+	return string(value[len("sha256:"):]), true
 }
 
 func councilPurpose(role council.Role) (ExecutionPurpose, bool) {
@@ -124,7 +164,7 @@ func validateCouncilIntegrationResolution(record GoalRecord, policy council.Poli
 		}
 		for _, decision := range record.CouncilDecisions {
 			if decision.Ref == resolution.DecisionRef && decision.SubjectDigest == resolution.SubjectDigest &&
-				decision.Decision.Digest == resolution.DecisionDigest && decision.Decision.Outcome == council.OutcomeAccepted {
+				decision.DecisionDigest == resolution.DecisionDigest && decision.Decision.Outcome == council.OutcomeAccepted {
 				return nil
 			}
 		}
@@ -134,7 +174,7 @@ func validateCouncilIntegrationResolution(record GoalRecord, policy council.Poli
 		return &StateError{Code: StateConflict}
 	}
 	for _, skip := range record.CouncilSkips {
-		if skip.Ref == resolution.SkipRef && skip.SubjectDigest == resolution.SubjectDigest && skip.Skip.Digest() == resolution.SkipDigest {
+		if skip.Ref == resolution.SkipRef && skip.SubjectDigest == resolution.SubjectDigest && skip.SkipDigest == resolution.SkipDigest {
 			return nil
 		}
 	}

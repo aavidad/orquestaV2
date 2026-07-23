@@ -142,6 +142,7 @@ type ExecutionRecord struct {
 	RecipientMailboxRetired bool
 	Purpose                 ExecutionPurpose
 	ReviewSubjectDigest     string
+	CouncilSubjectDigest    CouncilSubjectDigest
 }
 
 // ReviewRecord is a fact owned by the existing Goal state transaction, not a review lifecycle.
@@ -616,6 +617,8 @@ type StateRepository interface {
 	OpenCouncilRound(context.Context, OpenCouncilRoundState) (CouncilRoundRecord, bool, error)
 	RecordCouncilContribution(context.Context, CouncilContributionState) error
 	RecordCouncilSkip(context.Context, CouncilSkipState) (CouncilSkipRecord, bool, error)
+	RecordCouncilExecutionReplaced(context.Context, CouncilExecutionReplacedState) error
+	RecordCouncilExecutionFailed(context.Context, CouncilExecutionFailedState) error
 	RecordReviewExecutionReplaced(context.Context, ReviewExecutionReplacedState) error
 	RecordReviewExecutionFailed(context.Context, ReviewExecutionFailedState) error
 	RecordWorkspacePrepared(context.Context, WorkspacePreparedState) error
