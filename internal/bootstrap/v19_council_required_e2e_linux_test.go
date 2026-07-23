@@ -50,11 +50,7 @@ func TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E(t *testing.T) {
 		!v19CouncilFactHasBallot(current, council.RoleArbiter, council.BallotSecurityVeto) {
 		t.Fatalf("veto final=%+v", current.CouncilDecisions)
 	}
-	h.restart(t)
 	persisted := h.get(t, ref)
-	if len(persisted.CouncilDecisions) != 1 || persisted.CouncilDecisions[0].Decision.Outcome != council.OutcomeBlockedSecurity {
-		t.Fatalf("veto restart=%+v", persisted.CouncilDecisions)
-	}
 	if _, err := h.base.runtime.Orchestrator().IntegrateChange(context.Background(), h.base.access, application.IntegrateChangeRequest{RequestRef: "integrate:v19-veto", GoalRef: ref, ChangeRef: change.Ref, ExpectedTargetOID: h.target(t)}); err == nil {
 		t.Fatal("veto admitted integration")
 	}
@@ -97,7 +93,7 @@ func v19ReplanBlockedCouncil(t *testing.T, h *v19CouncilHarness, ref goal.GoalRe
 		Reason: "rework required after exact blocked security Council decision",
 		Plan: application.PlanSpec{WorkItems: []application.WorkItemSpec{{
 			Key: "rework-v19-blocked-security", Objective: "rework exact blocked security Council source",
-			Phase: source.Phase().String(), Role: source.Role().String(), WriteSet: []string{"subject/rework"},
+			Phase: source.Phase().String(), Role: source.Role().String(), WriteSet: []string{"internal/v19-rework"},
 			CouncilPolicy:  council.PolicyRequired,
 			RequiredTests:  []application.RequiredTestSpec{{Ref: "required-test:v19-rework", ToolRef: "tool:go", Arguments: []string{"test", "-buildvcs=false", "./...", "-count=1"}, WorkingDirectory: "subject"}},
 			OutputContract: goal.OutputContractEvidenceBundle,
@@ -120,6 +116,10 @@ func v19ReplanBlockedCouncil(t *testing.T, h *v19CouncilHarness, ref goal.GoalRe
 		t.Fatalf("blocked Council replan durable state=%+v successor=%+v retired=%+v", after.Goal, successor, retired)
 	}
 	h.restart(t)
+	persisted := h.get(t, ref)
+	if len(persisted.CouncilDecisions) != 1 || persisted.CouncilDecisions[0].Decision.Outcome != council.OutcomeBlockedSecurity {
+		t.Fatalf("blocked Council replan restart decision=%+v", persisted.CouncilDecisions)
+	}
 	replay, err := h.base.runtime.Orchestrator().ProposeDirectorPlan(context.Background(), h.base.access, request)
 	if err != nil || replay.Created || replay.Decision != result.Decision {
 		t.Fatalf("blocked Council replan restart replay=%+v err=%v", replay, err)
