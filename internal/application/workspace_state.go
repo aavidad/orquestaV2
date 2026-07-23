@@ -79,6 +79,7 @@ type AdmitIntegrationState struct {
 	ExpectedGoalRevision goal.Revision
 	ExpectedItemRevision goal.Revision
 	Action               ActionRecord
+	CouncilResolution    *CouncilResolution
 	OperationAt          time.Time
 }
 

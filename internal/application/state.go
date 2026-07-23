@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"orquesta/internal/council"
 	"orquesta/internal/goal"
 	"orquesta/internal/governance"
 	"orquesta/internal/identity"
@@ -73,6 +74,9 @@ const (
 	ExecutionPurposeAuthor            ExecutionPurpose = "author"
 	ExecutionPurposePrimaryReview     ExecutionPurpose = "primary_review"
 	ExecutionPurposeAdversarialReview ExecutionPurpose = "adversarial_review"
+	ExecutionPurposeCouncilProposer   ExecutionPurpose = "council_proposer"
+	ExecutionPurposeCouncilCritic     ExecutionPurpose = "council_critic"
+	ExecutionPurposeCouncilArbiter    ExecutionPurpose = "council_arbiter"
 )
 
 type ArtifactKind string
@@ -83,6 +87,7 @@ const (
 	ArtifactKindTestReport          ArtifactKind = "test_attestation_report"
 	ArtifactKindReviewAssessment    ArtifactKind = "review_assessment"
 	ArtifactKindReviewDiagnostic    ArtifactKind = "review_diagnostic"
+	ArtifactKindCouncilContribution ArtifactKind = "council_contribution"
 )
 
 type AttestationKind string
@@ -254,6 +259,7 @@ type ActionRecord struct {
 	ControlRef         string
 	ExpectedTargetOID  string
 	ReviewGateDigest   string
+	CouncilResolution  *CouncilResolution
 	EffectIntentRef    string
 	EffectIntent       EffectIntent
 	EffectApproval     *EffectApproval
@@ -348,6 +354,10 @@ type GoalRecord struct {
 	MergeObservations   []MergeObservation
 	IntegrationReceipts []IntegrationReceipt
 	Reviews             []ReviewRecord
+	CouncilRounds       []CouncilRoundRecord
+	CouncilFacts        []council.ContributionFact
+	CouncilDecisions    []CouncilDecisionRecord
+	CouncilSkips        []CouncilSkipRecord
 	ConsumptionReceipts []ActionConsumptionReceipt
 }
 
@@ -518,6 +528,7 @@ type ReviewAssessedState struct {
 	Review               ReviewRecord
 	BudgetSettlement     *governance.BudgetSettlement
 	Events               []EventRecord
+	AutoOpenCouncil      *OpenCouncilRoundState
 	OperationAt          time.Time
 }
 
@@ -602,6 +613,9 @@ type StateRepository interface {
 	RecordGoalSucceeded(context.Context, GoalSucceededState) error
 	RecordGoalFailed(context.Context, GoalFailedState) error
 	RecordReviewAssessed(context.Context, ReviewAssessedState) error
+	OpenCouncilRound(context.Context, OpenCouncilRoundState) (CouncilRoundRecord, bool, error)
+	RecordCouncilContribution(context.Context, CouncilContributionState) error
+	RecordCouncilSkip(context.Context, CouncilSkipState) (CouncilSkipRecord, bool, error)
 	RecordReviewExecutionReplaced(context.Context, ReviewExecutionReplacedState) error
 	RecordReviewExecutionFailed(context.Context, ReviewExecutionFailedState) error
 	RecordWorkspacePrepared(context.Context, WorkspacePreparedState) error

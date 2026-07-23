@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"orquesta/internal/council"
 	"orquesta/internal/goal"
 	"orquesta/internal/governance"
 	"orquesta/internal/identity"
@@ -2062,11 +2063,237 @@ func (repository *memoryRepository) RecordReviewAssessed(_ context.Context, stat
 	}
 	record.ConsumptionReceipts = append(record.ConsumptionReceipts,
 		consumptionReceipt(state.Claim, ActionConsumedCompleted, "", state.OperationAt))
+	before := cloneGoalRecord(repository.records[record.Goal.Ref()])
+	claimed := repository.actions[state.Claim.Action.Ref]
+	eventCount := len(repository.events)
 	repository.records[record.Goal.Ref()] = record
 	delete(repository.actions, state.Claim.Action.Ref)
 	repository.events = append(repository.events, state.Events...)
+	if state.AutoOpenCouncil != nil {
+		if _, _, err := repository.openCouncilRoundLocked(*state.AutoOpenCouncil); err != nil {
+			repository.records[before.Goal.Ref()] = before
+			repository.actions[state.Claim.Action.Ref] = claimed
+			for _, action := range state.AutoOpenCouncil.Actions {
+				delete(repository.actions, action.Ref)
+			}
+			repository.events = repository.events[:eventCount]
+			return err
+		}
+	}
 	_ = item
 	return nil
+}
+
+func (repository *memoryRepository) OpenCouncilRound(_ context.Context, state OpenCouncilRoundState) (CouncilRoundRecord, bool, error) {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	return repository.openCouncilRoundLocked(state)
+}
+
+func (repository *memoryRepository) openCouncilRoundLocked(state OpenCouncilRoundState) (CouncilRoundRecord, bool, error) {
+	record, found := repository.records[state.Round.GoalRef]
+	if !found || record.Goal.Revision() != state.ExpectedGoalRevision {
+		return CouncilRoundRecord{}, false, &StateError{Code: StateConflict}
+	}
+	item, found := record.Goal.WorkItem(state.Round.WorkItemRef)
+	itemPolicy, policyPresent := item.CouncilPolicy()
+	if !found || item.Revision() != state.ExpectedItemRevision || state.Round.GoalRef != record.Goal.Ref() ||
+		state.Round.Subject.GoalRef != record.Goal.Ref().String() || state.Round.Subject.WorkItemRef != item.Ref().String() ||
+		state.Round.SubjectDigest != CouncilSubjectDigest(state.Round.Subject.Digest()) || state.Round.Subject.Policy == council.PolicySkipByOperator ||
+		!policyPresent || itemPolicy != state.Round.Subject.Policy || !validCouncilRef(state.Round.Ref) ||
+		!validCouncilRef(state.Round.IdempotencyKey) || state.Round.OpenedAt.IsZero() {
+		return CouncilRoundRecord{}, false, &StateError{Code: StateInvalid}
+	}
+	if _, err := council.NewSubject(state.Round.Subject); err != nil {
+		return CouncilRoundRecord{}, false, &StateError{Code: StateInvalid, Cause: err}
+	}
+	for _, prior := range record.CouncilRounds {
+		if prior.SubjectDigest != state.Round.SubjectDigest {
+			continue
+		}
+		if prior != state.Round {
+			return CouncilRoundRecord{}, false, &StateError{Code: StateConflict}
+		}
+		return prior, false, nil
+	}
+	if councilSkipForSubject(record.CouncilSkips, state.Round.SubjectDigest) != nil ||
+		!validCouncilLaunches(state.Round, state.Executions, state.Actions) {
+		return CouncilRoundRecord{}, false, &StateError{Code: StateInvalid}
+	}
+	for _, execution := range state.Executions {
+		if _, exists := repository.actions["action:launch:"+execution.Ref.String()]; exists {
+			return CouncilRoundRecord{}, false, &StateError{Code: StateConflict}
+		}
+	}
+	record.CouncilRounds = append(record.CouncilRounds, state.Round)
+	record.Executions = append(record.Executions, state.Executions...)
+	for _, action := range state.Actions {
+		memoryAddActionFacts(&record, action)
+		repository.actions[action.Ref] = memoryAction{record: action}
+	}
+	repository.records[record.Goal.Ref()] = record
+	repository.events = append(repository.events, state.Events...)
+	return state.Round, true, nil
+}
+
+func (repository *memoryRepository) RecordCouncilContribution(_ context.Context, state CouncilContributionState) error {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	if err := repository.validateMutation(state.Claim, state.OperationAt, state.ExpectedGoalRevision, state.ExpectedItemRevision); err != nil {
+		return err
+	}
+	record := repository.records[state.Claim.Action.GoalRef]
+	role, councilExecution := councilRole(state.Execution)
+	round, found := councilRoundForSubject(record.CouncilRounds, CouncilSubjectDigest(state.Fact.SubjectDigest))
+	if !found || !councilExecution || state.Claim.Action.Kind != ActionObserveAgent ||
+		state.Execution.Ref != state.Claim.Action.ExecutionRef || state.Execution.State != ExecutionSucceeded ||
+		role != state.Fact.Role || state.Execution.AttemptNo != state.Fact.ExecutionAttempt ||
+		state.Execution.LaunchReceiptRef != state.Fact.LaunchReceiptRef || state.Execution.ExternalRef != state.Fact.ExternalRef ||
+		state.Artifact.Kind != ArtifactKindCouncilContribution || state.Artifact.Stored.MediaType != council.ContributionMediaType ||
+		state.Artifact.ExecutionRef != state.Execution.Ref || state.Artifact.Stored.Ref.String() != state.Fact.ArtifactRef ||
+		state.Artifact.Stored.Digest != state.Fact.ArtifactDigest {
+		return &StateError{Code: StateInvalid}
+	}
+	fact, err := council.NewContributionFact(state.Fact)
+	if err != nil || fact.SubjectDigest != string(round.SubjectDigest) {
+		return &StateError{Code: StateInvalid, Cause: err}
+	}
+	for _, prior := range record.CouncilFacts {
+		if prior.SubjectDigest == fact.SubjectDigest && (prior.Role == fact.Role || prior.IdempotencyKey == fact.IdempotencyKey) {
+			return &StateError{Code: StateConflict}
+		}
+	}
+	facts := append(append([]council.ContributionFact(nil), record.CouncilFacts...), fact)
+	decision, err := council.Evaluate(round.Subject, factsForCouncilSubject(facts, round.SubjectDigest))
+	if err != nil {
+		return &StateError{Code: StateInvalid, Cause: err}
+	}
+	if decision.Outcome == council.OutcomePending {
+		if state.Decision != nil {
+			return &StateError{Code: StateInvalid}
+		}
+	} else if state.Decision == nil || state.Decision.RoundRef != round.Ref || state.Decision.SubjectDigest != round.SubjectDigest ||
+		state.Decision.Decision.SubjectDigest != decision.SubjectDigest || state.Decision.Decision.Outcome != decision.Outcome ||
+		state.Decision.Decision.Digest != decision.Digest || !validCouncilRef(state.Decision.Ref) || state.Decision.RecordedAt.IsZero() {
+		return &StateError{Code: StateInvalid}
+	}
+	if err := repository.validateBudgetSettlementLocked(record, state.BudgetSettlement); err != nil {
+		return err
+	}
+	record.Executions = replaceExecution(record.Executions, state.Execution)
+	record.Artifacts = append(record.Artifacts, state.Artifact)
+	record.CouncilFacts = facts
+	if state.Decision != nil {
+		record.CouncilDecisions = append(record.CouncilDecisions, *state.Decision)
+	}
+	if state.BudgetSettlement != nil {
+		record.BudgetSettlements = append(record.BudgetSettlements, *state.BudgetSettlement)
+	}
+	record.ConsumptionReceipts = append(record.ConsumptionReceipts, consumptionReceipt(state.Claim, ActionConsumedCompleted, "", state.OperationAt))
+	repository.records[record.Goal.Ref()] = record
+	delete(repository.actions, state.Claim.Action.Ref)
+	repository.events = append(repository.events, state.Events...)
+	return nil
+}
+
+func (repository *memoryRepository) RecordCouncilSkip(_ context.Context, state CouncilSkipState) (CouncilSkipRecord, bool, error) {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	record, found := repository.records[goalRefForCouncilSubject(state.RoundSubject, repository.records)]
+	if !found || record.Goal.Revision() != state.ExpectedGoalRevision || state.PrincipalRef.String() != state.Skip.PrincipalRef {
+		return CouncilSkipRecord{}, false, &StateError{Code: StateConflict}
+	}
+	item, found := workItemForCouncilSubject(record.Goal, state.RoundSubject)
+	if !found || item.Revision() != state.ExpectedItemRevision || state.Record.Subject != state.RoundSubject ||
+		state.Record.SubjectDigest != CouncilSubjectDigest(state.RoundSubject.Digest()) || state.Record.Skip != state.Skip ||
+		state.Record.Skip.CouncilSubjectDigest != state.RoundSubject.Digest() || !validCouncilRef(state.Record.Ref) || state.Record.RecordedAt.IsZero() {
+		return CouncilSkipRecord{}, false, &StateError{Code: StateInvalid}
+	}
+	if _, err := council.NewSkip(state.RoundSubject, state.Skip); err != nil {
+		return CouncilSkipRecord{}, false, &StateError{Code: StateInvalid, Cause: err}
+	}
+	if itemPolicy, ok := item.CouncilPolicy(); !ok || itemPolicy != council.PolicySkipByOperator ||
+		councilRoundForSubjectExists(record.CouncilRounds, state.Record.SubjectDigest) || len(factsForCouncilSubject(record.CouncilFacts, state.Record.SubjectDigest)) != 0 {
+		return CouncilSkipRecord{}, false, &StateError{Code: StateConflict}
+	}
+	for _, prior := range record.CouncilSkips {
+		if prior.SubjectDigest != state.Record.SubjectDigest {
+			continue
+		}
+		if prior.Skip.Digest() != state.Skip.Digest() || prior != state.Record {
+			return CouncilSkipRecord{}, false, &StateError{Code: StateConflict}
+		}
+		return prior, false, nil
+	}
+	record.CouncilSkips = append(record.CouncilSkips, state.Record)
+	repository.records[record.Goal.Ref()] = record
+	repository.events = append(repository.events, state.Events...)
+	return state.Record, true, nil
+}
+
+func goalRefForCouncilSubject(subject council.Subject, records map[goal.GoalRef]GoalRecord) goal.GoalRef {
+	for ref := range records {
+		if ref.String() == subject.GoalRef {
+			return ref
+		}
+	}
+	return goal.GoalRef{}
+}
+
+func workItemForCouncilSubject(aggregate goal.Goal, subject council.Subject) (goal.WorkItem, bool) {
+	for _, item := range aggregate.WorkItems() {
+		if item.Ref().String() == subject.WorkItemRef {
+			return item, true
+		}
+	}
+	return goal.WorkItem{}, false
+}
+
+func validCouncilLaunches(round CouncilRoundRecord, executions []ExecutionRecord, actions []ActionRecord) bool {
+	if len(executions) != 3 || len(actions) != 3 {
+		return false
+	}
+	seen := map[council.Role]bool{}
+	for index, execution := range executions {
+		role, ok := councilRole(execution)
+		if !ok || seen[role] || execution.GoalRef != round.GoalRef || execution.WorkItemRef != round.WorkItemRef ||
+			execution.ReviewSubjectDigest != string(round.SubjectDigest) || execution.ArtifactMediaType != council.ContributionMediaType ||
+			actions[index].Kind != ActionLaunchAgent || actions[index].ExecutionRef != execution.Ref || actions[index].Ref != "action:launch:"+execution.Ref.String() {
+			return false
+		}
+		seen[role] = true
+	}
+	return len(seen) == 3
+}
+
+func councilRoundForSubject(rounds []CouncilRoundRecord, digest CouncilSubjectDigest) (CouncilRoundRecord, bool) {
+	for _, round := range rounds {
+		if round.SubjectDigest == digest {
+			return round, true
+		}
+	}
+	return CouncilRoundRecord{}, false
+}
+func councilRoundForSubjectExists(rounds []CouncilRoundRecord, digest CouncilSubjectDigest) bool {
+	_, ok := councilRoundForSubject(rounds, digest)
+	return ok
+}
+func councilSkipForSubject(skips []CouncilSkipRecord, digest CouncilSubjectDigest) *CouncilSkipRecord {
+	for index := range skips {
+		if skips[index].SubjectDigest == digest {
+			return &skips[index]
+		}
+	}
+	return nil
+}
+func factsForCouncilSubject(facts []council.ContributionFact, digest CouncilSubjectDigest) []council.ContributionFact {
+	result := make([]council.ContributionFact, 0, 3)
+	for _, fact := range facts {
+		if fact.SubjectDigest == string(digest) {
+			result = append(result, fact)
+		}
+	}
+	return result
 }
 
 func (repository *memoryRepository) RecordReviewExecutionReplaced(_ context.Context,
@@ -2219,7 +2446,8 @@ func (repository *memoryRepository) AdmitIntegration(_ context.Context, state Ad
 	if previous, exists := repository.integrationAdmits[key]; exists {
 		if previous.requestFingerprint != state.RequestFingerprint || previous.goalRef != state.GoalRef ||
 			previous.changeRef != state.ChangeRef || previous.action.Ref != state.Action.Ref ||
-			previous.action.ExpectedTargetOID != state.Action.ExpectedTargetOID {
+			previous.action.ExpectedTargetOID != state.Action.ExpectedTargetOID ||
+			!councilResolutionEqual(previous.action.CouncilResolution, state.CouncilResolution) {
 			return ActionRecord{}, false, &StateError{Code: StateConflict}
 		}
 		return cloneActionRecord(previous.action), false, nil
@@ -2227,7 +2455,7 @@ func (repository *memoryRepository) AdmitIntegration(_ context.Context, state Ad
 	if state.Action.Kind != ActionIntegrateChange || state.Action.GoalRef != state.GoalRef || state.Action.ChangeRef != state.ChangeRef ||
 		state.Action.EffectApproval == nil || state.Action.EffectIntent.Permission != identity.PermissionChangesIntegrate ||
 		state.Action.EffectIntent.RequestFingerprint != state.RequestFingerprint ||
-		record.Goal.Revision() != state.ExpectedGoalRevision {
+		record.Goal.Revision() != state.ExpectedGoalRevision || !councilResolutionEqual(state.Action.CouncilResolution, state.CouncilResolution) {
 		return ActionRecord{}, false, &StateError{Code: StateInvalid}
 	}
 	item, itemFound := record.Goal.WorkItem(state.Action.WorkItemRef)
@@ -2238,6 +2466,13 @@ func (repository *memoryRepository) AdmitIntegration(_ context.Context, state Ad
 		change.ExecutionRef != execution.Ref || change.ProjectRef != state.ProjectRef ||
 		!anyRequiredTestsPassForChange(record, item, execution, change) {
 		return ActionRecord{}, false, &StateError{Code: StateConflict}
+	}
+	if policy, requiresCouncil := item.CouncilPolicy(); requiresCouncil {
+		if err := validateCouncilIntegrationResolution(record, policy, state.Action.CouncilResolution); err != nil {
+			return ActionRecord{}, false, err
+		}
+	} else if state.Action.CouncilResolution != nil {
+		return ActionRecord{}, false, &StateError{Code: StateInvalid}
 	}
 	for _, receipt := range record.IntegrationReceipts {
 		if receipt.ChangeRef == state.ChangeRef && receipt.Status == ports.IntegrationStatusIntegrated {
@@ -2262,6 +2497,10 @@ func cloneActionRecord(action ActionRecord) ActionRecord {
 	if action.EffectApproval != nil {
 		approval := *action.EffectApproval
 		cloned.EffectApproval = &approval
+	}
+	if action.CouncilResolution != nil {
+		resolution := *action.CouncilResolution
+		cloned.CouncilResolution = &resolution
 	}
 	return cloned
 }
@@ -2408,6 +2647,10 @@ func cloneGoalRecord(record GoalRecord) GoalRecord {
 	record.MergeObservations = append([]MergeObservation(nil), record.MergeObservations...)
 	record.IntegrationReceipts = append([]IntegrationReceipt(nil), record.IntegrationReceipts...)
 	record.Reviews = append([]ReviewRecord(nil), record.Reviews...)
+	record.CouncilRounds = append([]CouncilRoundRecord(nil), record.CouncilRounds...)
+	record.CouncilFacts = append([]council.ContributionFact(nil), record.CouncilFacts...)
+	record.CouncilDecisions = append([]CouncilDecisionRecord(nil), record.CouncilDecisions...)
+	record.CouncilSkips = append([]CouncilSkipRecord(nil), record.CouncilSkips...)
 	record.ConsumptionReceipts = append([]ActionConsumptionReceipt(nil), record.ConsumptionReceipts...)
 	return record
 }

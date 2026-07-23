@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"orquesta/internal/council"
 	"orquesta/internal/goal"
 	"orquesta/internal/governance"
 )
@@ -36,6 +37,7 @@ type WorkItemSpec struct {
 	HandoffRequired     bool
 	Dependencies        []string
 	WriteSet            []string
+	CouncilPolicy       council.Policy
 	RequiredTests       []RequiredTestSpec
 	SkillRefs           []string
 	ToolRefs            []string
@@ -352,7 +354,7 @@ func compileWorkItemSpec(
 		Project: scope.projectRef, Objective: spec.Objective, CreatedAt: scope.createdAt,
 		Phase: phaseKey, Role: roleKey, Parent: parent, HandoffRequired: spec.HandoffRequired,
 		Dependencies: dependencies,
-		WriteSet:     writeSet, RequiredTests: requiredTests,
+		WriteSet:     writeSet, CouncilPolicy: spec.CouncilPolicy, RequiredTests: requiredTests,
 		SkillRefs: skillRefs, ToolRefs: toolRefs,
 		CapabilityRefs: capabilityRefs, OutputContract: contract,
 		BudgetDemand: demand, SecurityCriticality: spec.SecurityCriticality,
@@ -494,7 +496,10 @@ func writePlanFingerprint(digest hash.Hash, spec *PlanSpec) {
 	version := "orquesta.plan.v1"
 	declaresGovernance := planDeclaresGovernance(spec)
 	declaresRequiredTests := planDeclaresRequiredTests(spec)
-	if declaresRequiredTests {
+	declaresCouncil := planDeclaresCouncil(spec)
+	if declaresCouncil {
+		version = "orquesta.plan.v4"
+	} else if declaresRequiredTests {
 		version = "orquesta.plan.v3"
 	} else if declaresGovernance {
 		version = "orquesta.plan.v2"
@@ -528,6 +533,10 @@ func writePlanFingerprint(digest hash.Hash, spec *PlanSpec) {
 		writeFingerprintField(digest, string(item.OutputContract))
 		writeFingerprintStrings(digest, "dependencies", item.Dependencies)
 		writeFingerprintStrings(digest, "write_set", item.WriteSet)
+		if declaresCouncil {
+			writeFingerprintField(digest, "council_policy")
+			writeFingerprintField(digest, string(item.CouncilPolicy))
+		}
 		if declaresRequiredTests {
 			writeFingerprintField(digest, "required_tests")
 			writeFingerprintField(digest, strconv.Itoa(len(item.RequiredTests)))
@@ -555,6 +564,18 @@ func writePlanFingerprint(digest hash.Hash, spec *PlanSpec) {
 			writeFingerprintField(digest, string(item.ReasoningEffort))
 		}
 	}
+}
+
+func planDeclaresCouncil(spec *PlanSpec) bool {
+	if spec == nil {
+		return false
+	}
+	for _, item := range spec.WorkItems {
+		if item.CouncilPolicy != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func planDeclaresRequiredTests(spec *PlanSpec) bool {
