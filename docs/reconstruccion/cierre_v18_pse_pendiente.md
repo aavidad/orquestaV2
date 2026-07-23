@@ -1,9 +1,13 @@
-# V18: preparación P/S/E pendiente
+# V18: cierre P/S/E acreditado
 
-V18 `independent_reviews` permanece sin acreditar. Esta preparación no crea
-`product/evidence/v18_independent_reviews.json`, no captura output y no cambia
-el roadmap ni las capacidades. El receipt V3 se genera como parte de E, después
-de ejecutar S desde checkout `detached_clean`.
+V18 `independent_reviews` queda acreditada por
+`product/evidence/v18_independent_reviews.json`. La cadena válida es P
+`f0640009145e0ea28e8bbc955ebed2510cb02ce6`, S2
+`32ee17e407006d9e0aeb46557b1e160769dd4848` y E2
+`9d3469bad1433c1f83150292acdd7e5eef205352`; el candidate es
+`sha256:286e824a7173ee277d1e406c7eea67482f26738fa8eda6e2a9ed0b8d7f7a9664` y
+el output byte-idéntico ligado es
+`sha256:2f7b7a6b614387bf37fe1465acc77d05d97adc1ac64eaeabe1f0944ae69b0ca2`.
 
 Bases separadas:
 
@@ -20,18 +24,11 @@ revisión independiente [`review_receipt.json`](/home/alberto/Trabajo/orquesta-r
 (`sha256:ae9b5f2eb94fca720f562c87a6c90a8cadfa573d0725d7247bf0f05541b2c18d`);
 no es evidencia V18 ni una mutación prohibida.
 
-## Protocolo posterior
-
-1. P ejecuta el `execution_argv` del fixture desde el candidato limpio y crea
-   el commit inmutable con `product_delta_sealed_git_commit_oid` aún vacío.
-2. S escribe únicamente el OID de P, cambia el estado a
-   `p_product_delta_sealed_pending_evidence` y verifica el inventario exacto
-   del delta; sigue sin output, receipt ni promoción.
-3. E parte de checkout `detached_clean` de S, ejecuta exactamente el argv,
-   conserva output y genera el receipt V3 fuera del sujeto; ambos se registran
-   en el commit E. Solo entonces puede actualizar el roadmap y acreditar los
-   cinco IDs V18.
-
-El V18 real E2E sigue siendo requerido por el argv, pero no se ejecuta durante
-esta preparación. Un fallo en P, S o E conserva diagnóstico y deja V18
-`planned`/`declared`.
+El primer E fue invalidado antes de acreditar por el falso rojo global
+`BUG-REBUILD-20260723-333`; la cadena anterior no se reutilizó. E2 volvió a
+ejecutar el argv desde `detached_clean`, pasó la suite raíz y aceptación y fue
+revisada `GO` en
+`.orquesta-runtime/control-plane/runs/v18-seal-20260723T011000Z/e2_review_receipt.json`
+(`sha256:98a62d5a0f983f1e3509c1a46b0fb89de52b42c409749e40091869011add877b`).
+El siguiente frente es V19; `L-TRACE` y `L-SEAL` siguen vivos hasta que el
+operador registre su liberación.

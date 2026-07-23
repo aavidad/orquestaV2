@@ -1,13 +1,37 @@
 # Estado y handoff vivo del rebuild
 
-Última actualización: 2026-07-22 Europe/Madrid.
+Última actualización: 2026-07-23 Europe/Madrid.
 
 Este documento permite continuar el rebuild sin reconstruir el contexto de la
 sesión. Es estado operativo, no evidencia de aceptación. Los estados canónicos
 de capacidades, verticales y contratos viven en `product/roadmap.json`; los
 verdes viven en receipts fuera de su propio candidato.
 
-## Checkpoint verificable vigente: V17 acreditado
+## Checkpoint verificable vigente: V18 acreditado
+
+V18 `independent_reviews` queda acreditada por receipt V3 `PASS` y revisión
+independiente E2. Acredita exactamente `GOV-12`, `STG-13`, `STG-14`, `STG-16`
+y `EVD-06`. El corte vigente es **68/257 capacidades, 26,46 %; 18/37
+verticales, 48,65 %; 18/18 receipts**.
+
+```text
+producto P:          f0640009145e0ea28e8bbc955ebed2510cb02ce6
+sellado S2:          32ee17e407006d9e0aeb46557b1e160769dd4848
+evidencia E2:        9d3469bad1433c1f83150292acdd7e5eef205352
+candidate SHA:       sha256:286e824a7173ee277d1e406c7eea67482f26738fa8eda6e2a9ed0b8d7f7a9664
+output SHA:          sha256:2f7b7a6b614387bf37fe1465acc77d05d97adc1ac64eaeabe1f0944ae69b0ca2
+receipt:             product/evidence/v18_independent_reviews.json
+```
+
+La revisión E2 `GO` está en
+`.orquesta-runtime/control-plane/runs/v18-seal-20260723T011000Z/e2_review_receipt.json`
+(`sha256:98a62d5a0f983f1e3509c1a46b0fb89de52b42c409749e40091869011add877b`).
+`BUG-REBUILD-20260723-333` queda cerrado: los ratchets históricos validan el
+lifecycle V18 exacto. El primer E fue invalidado por ese falso rojo y no
+acredita nada. `L-TRACE` y `L-SEAL` siguen vivos; el siguiente frente es V19,
+sin afirmar aún su liberación.
+
+## Checkpoint histórico inmediato: V17 acreditado
 
 En `c309c588b3badad51d5832b76c37863cd233c0e0`, V01–V17 están
 cerrados por receipts V3 reproducibles. El corte canónico es **63/257

@@ -5,7 +5,7 @@
   "branch": "reconstruccion/v18-integration-prep",
   "worktree": "/home/alberto/Trabajo/orquesta-rebuild-worktrees/v18-integration-prep",
   "base_oid": "e311a97e4fdcafcf81c6114dbd904af4ed9293ad",
-  "owner_state": "integration_seal_authorized",
+  "owner_state": "accredited_handoff_complete_pending_lock_release",
   "owner_continuity_required": true,
   "preflight_only": false,
   "dependencies": [
@@ -86,6 +86,17 @@
     "subject_git_commit_oid": "6429643f97d73101ca68011e31411cc1a65b7f92",
     "subject_git_tree_oid": "80ab01ab4bee753348fd810a938e8090ff96a709",
     "finding_counts": {"P0": 0, "P1": 0, "P2": 0}
+  },
+  "e2_independent_review_receipt": {
+    "path": "/home/alberto/Trabajo/orquesta-rebuild/.orquesta-runtime/control-plane/runs/v18-seal-20260723T011000Z/e2_review_receipt.json",
+    "sha256": "98a62d5a0f983f1e3509c1a46b0fb89de52b42c409749e40091869011add877b",
+    "result": "GO",
+    "subject_git_commit_oid": "9d3469bad1433c1f83150292acdd7e5eef205352",
+    "subject_git_tree_oid": "0be0d07f601a0c65f327d057682c7d57afd726ad",
+    "sealed_source_git_commit_oid": "32ee17e407006d9e0aeb46557b1e160769dd4848",
+    "candidate_sha256": "sha256:286e824a7173ee277d1e406c7eea67482f26738fa8eda6e2a9ed0b8d7f7a9664",
+    "holder_pid_alive": true,
+    "held_locks": ["L-TRACE", "L-SEAL"]
   },
   "future_integration_files_requested_after_v17_rebase": [
     "internal/goal replan cause and snapshot fields selected against sealed V17",
@@ -180,11 +191,11 @@
     "e2e_max_wall_time_seconds": 180
   },
   "next_transition": {
-    "trigger": "independent integration review accepts the locally verified V18 commit",
+    "trigger": "recorded release of L-TRACE and L-SEAL after the accredited V18 handoff",
     "actions": [
-      "review the committed V18 delta and its exact regression evidence",
-    "integrate the commit under L-TRACE and L-SEAL with only the requested master files released",
-    "run P/S/E as the authorized integration owner; S still creates neither output nor receipt and E alone may promote roadmap evidence"
+      "handoff the next causal vertical V19 council",
+      "preserve the immutable V18 receipt and output",
+      "do not claim either lock released until its holder records release"
   ]
 }
 }

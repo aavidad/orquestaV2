@@ -3,9 +3,13 @@
 Fecha de decisión: 2026-07-22 Europe/Madrid. Base rebasada:
 `4428f46dd6b48659a4fb871a66cb72927f41cb93`.
 
-Estado: `implementation`. V17 está sellada por su receipt publicado, con sujeto
-fuente `a97ea3bc3771c6d89ec055e8189bda1bc6f97ce6`. Documento, fixture y tests
-definen gates de implementación; no son receipt ni evidencia de V18.
+Estado: `accredited`. V18 se cerró con P
+`f0640009145e0ea28e8bbc955ebed2510cb02ce6`, S2
+`32ee17e407006d9e0aeb46557b1e160769dd4848` y E2
+`9d3469bad1433c1f83150292acdd7e5eef205352`. El receipt V3 acredita el
+candidate `sha256:286e824a7173ee277d1e406c7eea67482f26738fa8eda6e2a9ed0b8d7f7a9664`
+y output `sha256:2f7b7a6b614387bf37fe1465acc77d05d97adc1ac64eaeabe1f0944ae69b0ca2`.
+El primer E fue invalidado por `BUG-REBUILD-20260723-333` y no acredita V18.
 
 V18 posee exactamente `GOV-12`, `STG-13`, `STG-14`, `STG-16` y `EVD-06` bajo
 `AC-V18-INDEPENDENT-REVIEWS`. Depende de V14, V16 y V17. Consejo, ballots,

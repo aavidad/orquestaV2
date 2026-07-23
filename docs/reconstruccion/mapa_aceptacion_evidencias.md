@@ -1,14 +1,25 @@
 # Mapa de aceptación y evidencias
 
-Fecha de corte: 2026-07-22
+Fecha de corte: 2026-07-23
 
-Estado: mapa explicativo del corte acreditado V16. No gobierna el roadmap total
+Estado: mapa explicativo del corte acreditado V18. No gobierna el roadmap total
 ni sustituye los receipts estructurados.
 
 [`product/capabilities.json`](../../product/capabilities.json) es el manifest
 ejecutable del corte. `status: accepted` significa que la capacidad tiene un
 contrato verificable en su `acceptance_ref`; este documento explica qué cubre y
 separa ese contrato de los resultados de una ejecución concreta.
+
+## V18: revisiones independientes acreditadas
+
+`AC-V18-INDEPENDENT-REVIEWS` queda cerrado por
+`product/evidence/v18_independent_reviews.json`: P
+`f0640009145e0ea28e8bbc955ebed2510cb02ce6`, S2
+`32ee17e407006d9e0aeb46557b1e160769dd4848` y E2
+`9d3469bad1433c1f83150292acdd7e5eef205352`; candidate
+`sha256:286e824a7173ee277d1e406c7eea67482f26738fa8eda6e2a9ed0b8d7f7a9664`.
+Acredita solo `GOV-12`, `STG-13`, `STG-14`, `STG-16` y `EVD-06`; el output
+ligado es `sha256:2f7b7a6b614387bf37fe1465acc77d05d97adc1ac64eaeabe1f0944ae69b0ca2`.
 
 ## Contratos por capacidad
 
@@ -201,13 +212,15 @@ corte sin receipt V15 válido: 48/257 = 18,68 %; 14/34 = 41,18 %; 14/14 receipts
 corte con receipt V15 válido: 56/257 = 21,79 %; 15/34 = 44,12 %; 15/15 receipts
 corte histórico antes de V16: 56/257 = 21,79 %; 15/34 = 44,12 %; 15/15 receipts
 corte vigente V16: 59/257 = 22,96 %; 16/34 = 47,06 %; 16/16 receipts
-corte vigente V17 con ruta extendida: 63/257 = 24,51 %; 17/37 = 45,95 %; 17/17 receipts
+corte histórico V17 con ruta extendida: 63/257 = 24,51 %; 17/37 = 45,95 %; 17/17 receipts
+corte vigente V18: 68/257 = 26,46 %; 18/37 = 48,65 %; 18/18 receipts
 ```
 
 ## Ejecuciones finales registradas
 
 | Fecha | Comando | Resultado | Alcance |
 |---|---|---|---|
+| 2026-07-23 | argv exacto de `AC-V18-INDEPENDENT-REVIEWS`, receipt `product/evidence/v18_independent_reviews.json` | receipt V3 `PASS`; P=`f0640009145e0ea28e8bbc955ebed2510cb02ce6`, S2=`32ee17e407006d9e0aeb46557b1e160769dd4848`, E2=`9d3469bad1433c1f83150292acdd7e5eef205352`; candidate `sha256:286e824a7173ee277d1e406c7eea67482f26738fa8eda6e2a9ed0b8d7f7a9664` | tres launches sobre el mismo sujeto, reviews/rework/integración explícita, SQLite/recovery, race, E2E real, vet y revisión E2 `GO` |
 | 2026-07-22 | argv exacto de `AC-V17-TEST-ATTESTOR`, registrado en `product/evidence/v17_test_attestor.json` | receipt V3 `PASS`; P=`d2f02073848c751130586fbc2f7eae5a9bfd822e`, S=`a97ea3bc3771c6d89ec055e8189bda1bc6f97ce6`, E=`c309c588b3badad51d5832b76c37863cd233c0e0`; candidate `sha256:8c0463aab77cde82a570cafd1d481bb07d97c143eac72ea32e758e82efa4c6c5`; output `sha256:49767386a260d3514158a3a66a2f00d62af36b13957ed376080999adca34471a` | atestador neutral, Git object stream, CAS filesystem, SQLite/recovery, bubblewrap/cgroup, race, E2E systemd real y vet desde `detached_clean` |
 | 2026-07-22 | `go test -mod=vendor -v -count=1 ./internal/bootstrap -run '^TestRealCodexAdapterClosesGoalThroughProductionMCPServer$' -args -orquesta-real-codex-config=/home/alberto/Trabajo/.orquesta-rebuild-real-e2e-v14-20260716T171502/orquesta.toml` | `PASS` en `5.42s`; marcador `ORQUESTA_CODEX_E2E_OK_4f25fa65f0e788447c1a08e82af93fcd` | no regresión de composición productiva, MCP, Codex real, SQLite y CAS sobre source digest V17; no sustituye el receipt P/S/E del atestador |
 | 2026-07-22 | argv exacto de `AC-V16-WORKSPACE-GIT`, registrado en `product/evidence/v16_workspace_git.json` | receipt V3 `PASS`; P=`b48162b0433dd32b6369ee324358e5f87af325ad`, S=`a4f602ab01c4e77f0d876c79c2c8e86b44b68fa4`, E=`38e1ffb82d6f71610ac0a745d693d52fd43dac22`; candidate `sha256:83962cf0feca66a38030b18f655d86201117df1d5b1cbe2efa795e8010c939a1`; output `sha256:1cf6dc65ac2138927bff503198eee1c63451437a04949ccb0d62e369e3187f2b` | workspace/Git local, SQLite/recovery, Codex binding, crash/replay, RBAC, CAS, 22 carreras, ratchets y vet desde `detached_clean` |

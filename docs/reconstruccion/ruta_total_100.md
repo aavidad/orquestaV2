@@ -1,6 +1,6 @@
 # Ruta canónica hasta Orquesta total
 
-Fecha: 2026-07-22
+Fecha: 2026-07-23
 
 Estado: autoridad de ejecución del rebuild. Esta ruta define el trabajo; no
 afirma que el producto total esté terminado.
@@ -185,7 +185,7 @@ causal; dentro de cada corte se ejecuta la ola máxima con write-sets disjuntos.
 | V15 Presupuestos, permisos y efectos | V06,V10,V12,V14 | Tokens, dinero, tiempo, procesos, disco, fairness y riesgo; `EffectIntent`, approval, attempt y receipt separados. Gate: cuota temporal no se vuelve fallo terminal; efecto sin autoridad no se ejecuta; retry es idempotente. |
 | V16 Workspace y Git local | V05–V06,V10,V14–V15 | `WorkspaceManager` y `VersionControl`; un worktree/ref opaco por ejecución, base exacta, inventario, commit e integración local por CAS. Gate: workspace persistido, Codex dentro del binding exacto, rework causal, conflicto/stale sin mutar destino y trabajo pendiente visible por usuario/proyecto. Reutiliza el mismo state/outbox/scheduler/ledger; no crea lifecycle ni store propios. `EXT-11` remoto queda en V28. |
 | V17 Artefactos y atestador | V06,V09,V15–V16 | CAS inmutable FS, metadata causal, `TestAttestor`, snapshot/diff y ataques de filesystem/sandbox. Gate: tests independientes reproducibles; traversal/symlink/hardlink/owner/modo/leaks fallan; ACK no equivale a artefacto. |
-| V18 Autor, reviews y refinery | V14,V16–V17 | Autor, reviewer primario y adversarial con tres launches distintos sobre misma generación/tree/diff/tests; rework e integración explícitos. Gate: retirar cualquier launch o cambiar el árbol bloquea promoción. |
+| V18 Autor, reviews y refinery | V14,V16–V17 | **Acreditada**: autor, reviewer primario y adversarial con tres launches distintos sobre misma generación/tree/diff/tests; rework e integración explícitos. Receipt V3 E2 acredita solo `GOV-12`, `STG-13`, `STG-14`, `STG-16` y `EVD-06`. |
 | V19 Consejo | V12,V17–V18 | Políticas `auto|required|skip_by_operator`, propuestas, crítica, ballots, disenso, veto de seguridad y decisión. Gate: tres E2E aislados; skip lleva principal/motivo/fecha/spec hash; Consejo nunca sustituye reviews. |
 | V20 Registro de comandos | V07,V10,V17 | Una definición de handlers/schemas/auth/i18n genera bindings HTTP, MCP y CLI y SDK pequeño. Gate: paridad semántica y códigos estables; ningún endpoint/provider mantiene lifecycle o DTO autoritativo propio. |
 | V21 i18n total | V20 | Catálogo owner para web, Wizard, CLI, notificaciones, errores, prompts y docs públicas; español default/fallback y locales BCP-47. Gate: paridad, plurales, fechas, números, moneda, timezone y fallback probados; códigos máquina invariantes. |
@@ -218,7 +218,8 @@ OID y digests autoritativos viven únicamente en
 ```text
 corte histórico antes de V16: 56/257 = 21,79 %; 15/37 = 40,54 %; 15/15 receipts
 corte histórico V16: 59/257 = 22,96 %; 16/37 = 43,24 %; 16/16 receipts
-corte vigente V17: 63/257 = 24,51 %; 17/37 = 45,95 %; 17/17 receipts
+corte histórico V17: 63/257 = 24,51 %; 17/37 = 45,95 %; 17/17 receipts
+corte vigente V18: 68/257 = 26,46 %; 18/37 = 48,65 %; 18/18 receipts
 ```
 
 El receipt V15 acredita únicamente `GOV-15`, `STG-09`, `ORC-08`, `ORC-09`,
@@ -231,7 +232,8 @@ siguen esperando V20 y la paridad i18n total espera V21.
 El análisis, implementación y sellado V16 están completos. V16 acredita solo
 `STG-02`, `STG-10` y `EXT-10`; Forge remoto no se abre hasta V28. V17 también
 está acreditada y añade exactamente `EVD-01`, `EVD-04`, `EVD-05` y `EVD-13`.
-V18 `independent_reviews` es la siguiente dependencia causal.
+V18 `independent_reviews` está acreditada; V19 Consejo es la siguiente
+dependencia causal.
 
 ## 6. Olas y transición a auto-orquestación
 
@@ -240,10 +242,9 @@ Ejemplos de paralelismo seguro:
 
 - V07 y contratos iniciales de V10 pueden avanzar tras V06 con write-sets
   separados; V08 consume la salida canónica de V07.
-- V16 y V17 ya tienen receipts estrictos; V18 puede continuar en su worktree
-  aislado, pero no se adelanta Forge remoto ni se integra otra vertical sin sus
-  dependencias.
-- V18, adapters iniciales de V21 y catálogos i18n pueden desarrollarse en ramas
+- V16–V18 ya tienen receipts estrictos; V19 puede continuar tras el handoff y
+  la liberación registrada de los locks compartidos.
+- V19, adapters iniciales de V21 y catálogos i18n pueden desarrollarse en ramas
   separadas, pero solo integran con sus dependencias acreditadas.
 - tras congelar contrato en V20, los adapters de V25 se portan en paralelo.
 - plugins de V28 se paralelizan por proceso/namespace; OPES espera únicamente
