@@ -61,6 +61,7 @@
     "docs/public/**",
     "docs/reconstruccion/analisis_y_contrato_v21_*.md",
     "docs/reconstruccion/worksets/v21_*.json",
+    "product_roadmap_v20_test.go",
     "product_roadmap_v21_test.go"
   ],
   "integration_files_requested": [
@@ -68,6 +69,11 @@
       "path": "scripts/check_rebuild_write_set.sh",
       "lease": "L-TRACE",
       "reason": "admit exact V21 product and acceptance subjects into the existing rebuild write-set checker"
+    },
+    {
+      "path": "product_roadmap_v20_test.go",
+      "lease": "L-TRACE",
+      "reason": "make the historical V20 successor ratchet defer V21 live state to its own receipt instead of forbidding later accreditation"
     },
     {
       "path": "product/roadmap.json",

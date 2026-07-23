@@ -48,8 +48,15 @@ func TestProductRoadmapV20ScopeAndLifecycleContract(t *testing.T) {
 		}
 	}
 	successor := index.contracts["AC-V21-I18N"]
-	if successor.Status != "planned" || successor.Receipt != "" {
-		t.Fatalf("V20 must not promote successor V21: %#v", successor)
+	if _, err := os.Stat("product/evidence/v21_i18n.json"); os.IsNotExist(err) {
+		if successor.Status != "planned" || successor.Receipt != "" {
+			t.Fatalf("V20 cannot promote successor V21 before its receipt: %#v", successor)
+		}
+	} else if err != nil {
+		t.Fatal(err)
+	} else if successor.Status != "executable" ||
+		successor.Receipt != "product/evidence/v21_i18n.json" {
+		t.Fatalf("V20 sees a V21 receipt without exact roadmap promotion: %#v", successor)
 	}
 }
 
