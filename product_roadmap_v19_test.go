@@ -57,6 +57,20 @@ func TestProductRoadmapV19ScopeAndControlledRedContract(t *testing.T) {
 	}
 }
 
+func TestProductRoadmapV19PlannedLifecycleHasNoEvidencePaths(t *testing.T) {
+	for _, path := range []string{
+		"product/evidence/v19_council_seal.json",
+		"product/evidence/v19_council.json",
+		"product/evidence/v19_council.output.txt",
+	} {
+		if _, err := os.Lstat(path); err == nil {
+			t.Fatalf("V19 planned lifecycle contains evidence: %s", path)
+		} else if !os.IsNotExist(err) {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestV19FocalEvidenceRejectsZeroTestPackagePass(t *testing.T) {
 	const name = "TestProductRoadmapV19ScopeAndControlledRedContract"
 	packagePassOnly := `{"Action":"pass","Package":"orquesta"}`

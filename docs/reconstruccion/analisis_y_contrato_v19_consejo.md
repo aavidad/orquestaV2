@@ -136,14 +136,46 @@ integración.
 
 ## Simplicidad y P/S/E
 
-Presupuesto producto máximo: 3.400 LOC; dominio 450, aplicación 1.250,
-SQLite/recovery 1.100, bootstrap 350; fichero máximo 350 salvo migración
-justificada. Sin duplicar tipos V18, scheduler ni autenticación.
+El presupuesto rojo inicial (3.400 LOC; dominio 450, aplicación 1.250,
+SQLite/recovery 1.100, bootstrap 350; fichero 350 salvo migración) ya no
+describe honestamente el árbol V19 en integración. Hasta V22 el límite operativo
+es 3.650 LOC: dominio 350, aplicación 1.300, SQLite/recovery 1.600 y bootstrap
+400. Cada cifra es el árbol actual inventariado más margen mínimo, no una
+acreditación de calidad. Fichero operativo máximo 1.450 para no falsear los
+adaptadores legacy que V19 toca; migraciones no obtienen excepción adicional.
 
-- `P`: producto y tests; no se autoacredita.
-- `S`: sella árbol, binario, configuración efectiva, gates V18 y sujetos Council.
-- `E`: ejecuta desde `detached_clean` tres E2E aislados y emite receipt V3
-  externo al candidato.
+Deuda V22 obligatoria: separar `claim/read/validate/write` SQLite y los
+adaptadores de aplicación que exceden 350, y volver a un presupuesto compacto
+por módulo. P no puede declarar verde simplicidad por estos límites; S registra
+LOC por capa y lista de ficheros >350. La fixture roja conserva sus números
+pre-P hasta que la transición `implemented_unsealed` actualice contrato y tests
+en el write-set de acreditación. Sin duplicar tipos V18, scheduler ni
+autenticación.
+
+- `P` (`implemented_unsealed`): producto y tests ya integrados, pero toda
+  capability V19 sigue `declared`, sin `evidence_refs` y sin receipt. La
+  aceptación deja de usar el rojo de producto ausente, pero solo verifica el
+  contrato P; no acredita nada.
+- `S` (`sealed_unexecuted`): sella árbol, binario, configuración efectiva,
+  gate/receipt V18 y sujetos Council en
+  `product/evidence/v19_council_seal.json`. Ese manifiesto no es receipt ni
+  cambia roadmap/capabilities. El output y receipt E siguen ausentes.
+- `E` (`executable`): desde `detached_clean` ejecuta los E2E aislados y emite
+  fuera del candidato `product/evidence/v19_council.output.txt` y receipt V3
+  `product/evidence/v19_council.json`. Solo después de receipt válido y review
+  externa `GO` se actualiza `AC-V19-COUNCIL` y las seis capabilities.
+
+Antes de P, estado único `planned`: `V19_PRODUCT_PENDING`, sin ninguno de los
+tres paths anteriores. No se permite saltar estados ni crear un placeholder de
+receipt/output. Tests de lifecycle deben aceptar exactamente esos cuatro
+estados, no una alternativa laxa.
+
+Comando E canónico (debe conservar eventos JSON `run` y `pass` de cada nombre,
+no solo `PASS` del package):
+
+```bash
+e2e_events=$(CGO_ENABLED=0 go test -mod=vendor -tags=v18_real_e2e,v19_real_e2e -json -count=1 -timeout=240s ./internal/bootstrap -run '^(TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd|TestV19CouncilAutoSQLiteFilesystemRestartE2E|TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E|TestV19CouncilSkipHumanReplayAndIntegrationE2E)$' 2>&1); e2e_status=$?; printf '%s\n' "$e2e_events"; [ "$e2e_status" -eq 0 ] && for test_name in TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd TestV19CouncilAutoSQLiteFilesystemRestartE2E TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E TestV19CouncilSkipHumanReplayAndIntegrationE2E; do printf '%s\n' "$e2e_events" | grep -F '"Action":"run"' | grep -F '"Package":"orquesta/internal/bootstrap"' | grep -F "\"Test\":\"$test_name\"" >/dev/null && printf '%s\n' "$e2e_events" | grep -F '"Action":"pass"' | grep -F '"Package":"orquesta/internal/bootstrap"' | grep -F "\"Test\":\"$test_name\"" >/dev/null || exit 1; done
+```
 
 Orden: contrato rojo endurecido → contrarrevisión → dominio → aplicación →
 SQLite/recovery → bootstrap/E2E → P/S/E → integración limpia.

@@ -3,12 +3,20 @@ package acceptance_test
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 )
 
 const v19FixturePath = "fixtures/v19_council.json"
+
+const (
+	v19SealManifestPath = "product/evidence/v19_council_seal.json"
+	v19ReceiptPath      = "product/evidence/v19_council.json"
+	v19OutputPath       = "product/evidence/v19_council.output.txt"
+)
 
 type v19Dependency struct {
 	Vertical                 string `json:"vertical"`
@@ -154,6 +162,44 @@ func TestAcceptanceV19Council(t *testing.T) {
 	assertV19SafetyAndPersistence(t, fixture)
 	assertV19E2E(t, fixture)
 	t.Fatalf("%s: V18 is accredited; only product V19 is absent", fixture.RedGate)
+}
+
+// TestV19PSEPlannedLifecycle forbids evidence before product implementation.
+// Future P/S/E transitions are deliberate: implemented_unsealed, then
+// sealed_unexecuted, then executable after the external V3 receipt.
+func TestV19PSEPlannedLifecycle(t *testing.T) {
+	fixture := loadV19Fixture(t)
+	if fixture.ImplementationStatus != "awaiting_product" || fixture.RedGate != "V19_PRODUCT_PENDING" {
+		t.Fatalf("V19 no longer planned: %+v", fixture)
+	}
+	for _, path := range []string{v19SealManifestPath, v19ReceiptPath, v19OutputPath} {
+		if _, err := os.Lstat(filepath.Join("..", filepath.FromSlash(path))); err == nil {
+			t.Fatalf("V19 pre-P evidence exists: %s", path)
+		} else if !os.IsNotExist(err) {
+			t.Fatal(err)
+		}
+	}
+	matches, err := filepath.Glob("../product/evidence/v19_council*")
+	if err != nil || len(matches) != 0 {
+		t.Fatalf("V19 pre-P evidence paths=%v err=%v", matches, err)
+	}
+	command := v19E2EValidationShellBody()
+	for _, value := range []string{
+		"-tags=v18_real_e2e,v19_real_e2e",
+		"TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd",
+		"TestV19CouncilAutoSQLiteFilesystemRestartE2E",
+		"TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E",
+		"TestV19CouncilSkipHumanReplayAndIntegrationE2E",
+		"\"Action\":\"run\"", "\"Action\":\"pass\"",
+	} {
+		if !strings.Contains(command, value) {
+			t.Fatalf("V19 E2E command lacks %q", value)
+		}
+	}
+}
+
+func v19E2EValidationShellBody() string {
+	return `e2e_events=$(CGO_ENABLED=0 go test -mod=vendor -tags=v18_real_e2e,v19_real_e2e -json -count=1 -timeout=240s ./internal/bootstrap -run "^(TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd|TestV19CouncilAutoSQLiteFilesystemRestartE2E|TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E|TestV19CouncilSkipHumanReplayAndIntegrationE2E)$" 2>&1); e2e_status=$?; printf '%s\n' "$e2e_events"; [ "$e2e_status" -eq 0 ] && for test_name in TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd TestV19CouncilAutoSQLiteFilesystemRestartE2E TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E TestV19CouncilSkipHumanReplayAndIntegrationE2E; do printf '%s\n' "$e2e_events" | grep -F '"Action":"run"' | grep -F '"Package":"orquesta/internal/bootstrap"' | grep -F "\"Test\":\"$test_name\"" >/dev/null && printf '%s\n' "$e2e_events" | grep -F '"Action":"pass"' | grep -F '"Package":"orquesta/internal/bootstrap"' | grep -F "\"Test\":\"$test_name\"" >/dev/null || exit 1; done`
 }
 
 func assertV19Dependency(t *testing.T, dependency v19Dependency) {
