@@ -2,9 +2,11 @@ package bootstrap
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -14,6 +16,7 @@ import (
 	"orquesta/internal/application"
 	"orquesta/internal/goal"
 	"orquesta/internal/ports"
+	"orquesta/internal/review"
 )
 
 type v16E2EFixture struct {
@@ -58,6 +61,9 @@ type v16WorkspaceAgent struct {
 	now      func() time.Time
 	writes   map[string]v16Write
 	launches *atomic.Int64
+	// allowReviews is opt-in compatibility for later gates. V16 scenarios keep
+	// their original author-only scheduling and assertions.
+	allowReviews bool
 
 	mu       sync.Mutex
 	resolver codex.WorkspacePathResolver
@@ -105,20 +111,22 @@ func (agent *v16WorkspaceAgent) Launch(
 	resolver := agent.resolver
 	writes := agent.writes[request.Objective]
 	agent.mu.Unlock()
-	if len(writes) == 0 {
+	if len(writes) == 0 && (!agent.allowReviews || request.ArtifactMediaType != review.AssessmentMediaType) {
 		return ports.AgentLaunchReceipt{}, errors.New("v16_test.agent_script_missing")
 	}
-	workspace, err := resolver.ResolveExecutionWorkspace(ctx, request.ExecutionWorkspaceRef)
-	if err != nil {
-		return ports.AgentLaunchReceipt{}, err
-	}
-	for relative, content := range writes {
-		target := filepath.Join(workspace, filepath.FromSlash(relative))
-		if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+	if len(writes) != 0 {
+		workspace, err := resolver.ResolveExecutionWorkspace(ctx, request.ExecutionWorkspaceRef)
+		if err != nil {
 			return ports.AgentLaunchReceipt{}, err
 		}
-		if err := os.WriteFile(target, []byte(content), 0o600); err != nil {
-			return ports.AgentLaunchReceipt{}, err
+		for relative, content := range writes {
+			target := filepath.Join(workspace, filepath.FromSlash(relative))
+			if err := os.MkdirAll(filepath.Dir(target), 0o700); err != nil {
+				return ports.AgentLaunchReceipt{}, err
+			}
+			if err := os.WriteFile(target, []byte(content), 0o600); err != nil {
+				return ports.AgentLaunchReceipt{}, err
+			}
 		}
 	}
 	agent.mu.Lock()
@@ -154,11 +162,41 @@ func (agent *v16WorkspaceAgent) Observe(
 	if closed || !found {
 		return ports.AgentObservation{}, errors.New("v16_test.observation_not_found")
 	}
-	return ports.AgentObservation{
+	observation := ports.AgentObservation{
 		ExecutionRef: execution, SpecHash: request.SpecHash, Status: ports.AgentCompleted,
 		MediaType: "text/plain", Content: []byte("v16 fake agent wrote the bound workspace"),
 		Usage: unknownTestUsage(), ObservedAt: agent.now(),
-	}, nil
+	}
+	if agent.allowReviews && request.ArtifactMediaType == review.AssessmentMediaType {
+		subjectDigest, role := v16ReviewEvidence(request.Objective)
+		payload, err := json.Marshal(review.Artifact{
+			SchemaVersion: 1, SubjectDigest: subjectDigest, Role: role,
+			Verdict: review.VerdictApprove, Summary: "Exact immutable subject approved by V16 fake",
+			Findings: []review.Finding{},
+		})
+		if err != nil {
+			return ports.AgentObservation{}, err
+		}
+		observation.MediaType, observation.Content = review.AssessmentMediaType, payload
+	}
+	return observation, nil
+}
+
+func v16ReviewEvidence(objective string) (string, review.Role) {
+	const prefix = "Review exact immutable evidence "
+	value := strings.TrimPrefix(objective, prefix)
+	end := strings.Index(value, ". Inspect with ")
+	if end < 0 {
+		return "", ""
+	}
+	var evidence struct {
+		SubjectDigest string      `json:"subject_digest"`
+		Role          review.Role `json:"role"`
+	}
+	if json.Unmarshal([]byte(value[:end]), &evidence) != nil {
+		return "", ""
+	}
+	return evidence.SubjectDigest, evidence.Role
 }
 
 func (agent *v16WorkspaceAgent) Shutdown(context.Context) error {

@@ -80,7 +80,7 @@ func (harness *v16Harness) build(t *testing.T) {
 		AgentFactory: func(_ config.Snapshot, clock application.Clock) (AgentAdapter, error) {
 			workspaceAgent = &v16WorkspaceAgent{
 				now: clock.Now, writes: harness.writes, launches: &harness.launches,
-				requests: make(map[goal.ExecutionRef]ports.AgentLaunchRequest),
+				requests: make(map[goal.ExecutionRef]ports.AgentLaunchRequest), allowReviews: true,
 			}
 			return workspaceAgent, nil
 		},
@@ -254,6 +254,8 @@ func (harness *v16Harness) driveToIntegrated(t *testing.T, ref goal.GoalRef, req
 		harness.driveToAttested(t, record)
 		record = harness.get(t, harness.access, ref)
 	}
+	harness.driveReviews(t, ref)
+	record = harness.get(t, harness.access, ref)
 	if len(record.IntegrationReceipts) == 0 {
 		if _, err := harness.runtime.Orchestrator().IntegrateChange(context.Background(), harness.access,
 			application.IntegrateChangeRequest{
@@ -263,6 +265,25 @@ func (harness *v16Harness) driveToIntegrated(t *testing.T, ref goal.GoalRef, req
 			t.Fatal(err)
 		}
 		harness.process(t, application.ActionIntegrateChange)
+	}
+}
+
+func (harness *v16Harness) driveReviews(t *testing.T, ref goal.GoalRef) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		record := harness.get(t, harness.access, ref)
+		if len(record.Reviews) == 2 {
+			return
+		}
+		result, err := harness.runtime.Orchestrator().ProcessNext(context.Background(), "worker:v16-reviews")
+		if err != nil || !result.Processed ||
+			(result.Action != application.ActionLaunchAgent && result.Action != application.ActionObserveAgent) {
+			t.Fatalf("drive V16 reviews result=%+v err=%v", result, err)
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("drive V16 reviews timed out")
+		}
 	}
 }
 

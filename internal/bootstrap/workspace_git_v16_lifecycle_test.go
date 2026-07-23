@@ -38,6 +38,8 @@ func v16TestCleanLifecycle(t *testing.T, fixture v16E2EFixture) {
 			record.Goal.State(), len(record.WorkspaceBindings), len(record.ChangeSets),
 			len(record.Artifacts), len(record.Attestations), len(record.IntegrationReceipts), record.Executions[0].State)
 	}
+	harness.driveReviews(t, goalRef)
+	record = harness.get(t, harness.access, goalRef)
 	before := v16Git(t, harness.git, harness.seed, "rev-parse", fixture.GitFixture.TargetRef)
 	pending := harness.pending(t, harness.access)
 	if len(pending) != 1 || pending[0].ChangeSet.Ref != record.ChangeSets[0].Ref {
@@ -73,9 +75,11 @@ func v16TestConflictAndStale(t *testing.T, fixture v16E2EFixture) {
 	conflictGoal := harness.submit(t, harness.access, "request:v16-conflict", "conflict-change", conflict.WriteSet)
 	harness.process(t, application.ActionPrepareWorkspace, application.ActionLaunchAgent,
 		application.ActionObserveAgent, application.ActionCommitChange, application.ActionAttestTest)
+	harness.driveReviews(t, conflictGoal)
 	staleGoal := harness.submit(t, harness.access, "request:v16-stale", "stale-change", []string{"src/stale.txt"})
 	harness.process(t, application.ActionPrepareWorkspace, application.ActionLaunchAgent,
 		application.ActionObserveAgent, application.ActionCommitChange, application.ActionAttestTest)
+	harness.driveReviews(t, staleGoal)
 	conflictRecord := harness.get(t, harness.access, conflictGoal)
 	staleRecord := harness.get(t, harness.access, staleGoal)
 	base := conflictRecord.WorkspaceBindings[0].BaseOID
@@ -148,9 +152,11 @@ func TestPendingChangesAreRBACScopedAndSurviveRestart(t *testing.T) {
 	ownerGoal := harness.submit(t, harness.access, "request:v16-owner-pending", "owner-pending", []string{"src/owner.txt"})
 	harness.process(t, application.ActionPrepareWorkspace, application.ActionLaunchAgent,
 		application.ActionObserveAgent, application.ActionCommitChange, application.ActionAttestTest)
+	harness.driveReviews(t, ownerGoal)
 	bobGoal := harness.submit(t, bobAlpha, "request:v16-bob-pending", "bob-pending", []string{"src/bob.txt"})
 	harness.process(t, application.ActionPrepareWorkspace, application.ActionLaunchAgent,
 		application.ActionObserveAgent, application.ActionCommitChange, application.ActionAttestTest)
+	harness.driveReviews(t, bobGoal)
 	ownerRecord := harness.get(t, harness.access, ownerGoal)
 	bobRecord := harness.get(t, bobAlpha, bobGoal)
 	if ownerRecord.ChangeSets[0].ActorRef == bobRecord.ChangeSets[0].ActorRef {

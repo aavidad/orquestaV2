@@ -125,6 +125,7 @@ func v16InjectIntegrationCrash(
 ) {
 	harness.process(t, application.ActionPrepareWorkspace, application.ActionLaunchAgent,
 		application.ActionObserveAgent, application.ActionCommitChange, application.ActionAttestTest)
+	harness.driveReviews(t, goalRef)
 	record := harness.get(t, harness.access, goalRef)
 	before := record.WorkspaceBindings[0].BaseOID
 	if _, err := harness.runtime.Orchestrator().IntegrateChange(context.Background(), harness.access,
@@ -161,6 +162,8 @@ func v16FinishCrashReplay(
 			harness.driveToAttested(t, record)
 			record = harness.get(t, harness.access, goalRef)
 		}
+		harness.driveReviews(t, goalRef)
+		record = harness.get(t, harness.access, goalRef)
 		if len(record.IntegrationReceipts) == 0 {
 			before := record.WorkspaceBindings[0].BaseOID
 			if _, err := harness.runtime.Orchestrator().IntegrateChange(context.Background(), harness.access,
@@ -191,8 +194,8 @@ func v16AssertCrashClosed(
 		len(closed.ChangeSets) != 1 || len(closed.IntegrationReceipts) != 1 ||
 		len(closed.MergeObservations) != 1 || closed.MergeObservations[0].Status != ports.MergeStatusClean ||
 		closed.IntegrationReceipts[0].Status != ports.IntegrationStatusIntegrated ||
-		len(closed.Artifacts) != 3 || len(closed.Attestations) != 2 ||
-		len(closed.EffectReceipts) != 5 || harness.launches.Load() != 1 {
+		len(closed.Artifacts) != 5 || len(closed.Attestations) != 2 ||
+		len(closed.EffectReceipts) != 7 || harness.launches.Load() != 3 {
 		t.Fatalf("frontier %s duplicated/lost effects: state=%s bindings=%d changes=%d artifacts=%d attestations=%d integrations=%d effect_receipts=%d launches=%d",
 			frontier, closed.Goal.State(), len(closed.WorkspaceBindings), len(closed.ChangeSets),
 			len(closed.Artifacts), len(closed.Attestations), len(closed.IntegrationReceipts),

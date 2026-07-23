@@ -40,6 +40,11 @@ func TestOpenRejectsUnsafePreexistingRootAndAncestorWithoutRepair(t *testing.T) 
 		if err := os.Mkdir(ancestor, 0o770); err != nil {
 			t.Fatal(err)
 		}
+		// Mkdir applies the process umask. Force the unsafe fixture mode so this
+		// security regression test is deterministic under both 0002 and 0022.
+		if err := os.Chmod(ancestor, 0o770); err != nil {
+			t.Fatal(err)
+		}
 		root := filepath.Join(ancestor, "artifacts")
 		assertOpenRejectedWithoutPath(t, root, ports.ArtifactErrorRootPermissions)
 		assertMode(t, ancestor, 0o770)
