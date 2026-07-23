@@ -61,6 +61,32 @@
     "docs/reconstruccion/cierre_v18_pse_pendiente.md"
   ],
   "locks_requested": ["L-TRACE", "L-SEAL"],
+  "locks_acquired": {
+    "integration_run_ref": "integration-run:v18-seal-20260723T011000Z",
+    "holder": {
+      "principal_ref": "codex-team:/root",
+      "branch": "reconstruccion/v18-integration-prep",
+      "worktree": "/home/alberto/Trabajo/orquesta-rebuild-worktrees/v18-integration-prep",
+      "process_pid": 3521912
+    },
+    "lease_receipt": {
+      "path": "/home/alberto/Trabajo/orquesta-rebuild/.orquesta-runtime/control-plane/runs/v18-seal-20260723T011000Z/lease_receipt.json",
+      "sha256": "a11a7ec31cdbd807a2eeb190d58e80ec0620aa3c6062fa626f5f725a8e592985",
+      "result": "ACQUIRED",
+      "valid_until": "2026-07-23T13:12:26Z",
+      "held_locks": ["L-TRACE", "L-SEAL"]
+    }
+  },
+  "independent_review_receipt": {
+    "path": "/home/alberto/Trabajo/orquesta-rebuild/.orquesta-runtime/control-plane/runs/v18-seal-20260723T011000Z/review_receipt.json",
+    "sha256": "ae9b5f2eb94fca720f562c87a6c90a8cadfa573d0725d7247bf0f05541b2c18d",
+    "result": "GO",
+    "reviewed_at": "2026-07-23T01:13:56Z",
+    "reviewer_principal_ref": "/root/v37_videojuegos_promotion_red_contract",
+    "subject_git_commit_oid": "6429643f97d73101ca68011e31411cc1a65b7f92",
+    "subject_git_tree_oid": "80ab01ab4bee753348fd810a938e8090ff96a709",
+    "finding_counts": {"P0": 0, "P1": 0, "P2": 0}
+  },
   "future_integration_files_requested_after_v17_rebase": [
     "internal/goal replan cause and snapshot fields selected against sealed V17",
     "internal/application execution review facts integration gate and StateRepository methods selected against sealed V17",

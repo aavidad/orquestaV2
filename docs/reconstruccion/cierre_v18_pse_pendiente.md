@@ -12,9 +12,13 @@ Bases separadas:
 
 La separación evita que el candidato V18 reatribuyera cambios V35--V37 ya
 integrados en `main`. El delta sí conserva
-`product/evidence/real_codex_mcp_e2e.json`: es evidencia genérica renovada por
-su responsable y sujeto canónico del candidato, no evidencia V18 ni una
-mutación prohibida.
+`product/evidence/real_codex_mcp_e2e.json`: es evidencia genérica renovada y
+sujeto canónico del candidato. Su ratificación queda enlazada al lease
+[`lease_receipt.json`](/home/alberto/Trabajo/orquesta-rebuild/.orquesta-runtime/control-plane/runs/v18-seal-20260723T011000Z/lease_receipt.json)
+(`sha256:a11a7ec31cdbd807a2eeb190d58e80ec0620aa3c6062fa626f5f725a8e592985`) y a la
+revisión independiente [`review_receipt.json`](/home/alberto/Trabajo/orquesta-rebuild/.orquesta-runtime/control-plane/runs/v18-seal-20260723T011000Z/review_receipt.json)
+(`sha256:ae9b5f2eb94fca720f562c87a6c90a8cadfa573d0725d7247bf0f05541b2c18d`);
+no es evidencia V18 ni una mutación prohibida.
 
 ## Protocolo posterior
 
