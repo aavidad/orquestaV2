@@ -2101,7 +2101,7 @@ func (repository *memoryRepository) openCouncilRoundLocked(state OpenCouncilRoun
 	itemPolicy, policyPresent := item.CouncilPolicy()
 	if !found || item.Revision() != state.ExpectedItemRevision || state.Round.GoalRef != record.Goal.Ref() ||
 		state.Round.Subject.GoalRef != record.Goal.Ref().String() || state.Round.Subject.WorkItemRef != item.Ref().String() ||
-		state.Round.SubjectDigest != mustCouncilDigest(state.Round.Subject.Digest()) || state.Round.Subject.Policy == council.PolicySkipByOperator ||
+		state.Round.SubjectDigest != CouncilSubjectDigest(state.Round.Subject.Digest()) || state.Round.Subject.Policy == council.PolicySkipByOperator ||
 		!policyPresent || itemPolicy != state.Round.Subject.Policy || !validCouncilRef(state.Round.Ref) ||
 		!validCouncilRef(state.Round.IdempotencyKey) || state.Round.OpenedAt.IsZero() ||
 		state.Round.OpenedBy != state.PrincipalRef ||
@@ -2164,8 +2164,7 @@ func (repository *memoryRepository) RecordCouncilContribution(_ context.Context,
 		return &StateError{Code: StateInvalid}
 	}
 	fact, err := council.NewContributionFact(state.Fact)
-	rawSubject, rawOK := rawCouncilDigest(round.SubjectDigest)
-	if err != nil || !rawOK || fact.SubjectDigest != rawSubject {
+	if err != nil || fact.SubjectDigest != string(round.SubjectDigest) {
 		return &StateError{Code: StateInvalid, Cause: err}
 	}
 	for _, prior := range record.CouncilFacts {
@@ -2184,7 +2183,7 @@ func (repository *memoryRepository) RecordCouncilContribution(_ context.Context,
 		}
 	} else if state.Decision == nil || state.Decision.RoundRef != round.Ref || state.Decision.SubjectDigest != round.SubjectDigest ||
 		state.Decision.Decision.SubjectDigest != decision.SubjectDigest || state.Decision.Decision.Outcome != decision.Outcome ||
-		state.Decision.Decision.Digest != decision.Digest || state.Decision.DecisionDigest != mustCouncilDigest(decision.Digest) ||
+		state.Decision.Decision.Digest != decision.Digest || state.Decision.DecisionDigest != CouncilSubjectDigest(decision.Digest) ||
 		!validCouncilRef(state.Decision.Ref) || state.Decision.RecordedAt.IsZero() {
 		return &StateError{Code: StateInvalid}
 	}
@@ -2252,6 +2251,7 @@ func (repository *memoryRepository) RecordCouncilExecutionFailed(_ context.Conte
 		expected = ExecutionDispatching
 	}
 	if !councilExecution || !found || role == "" || state.Execution.Ref != state.Claim.Action.ExecutionRef ||
+		state.Execution.GoalRef != record.Goal.Ref() || state.Execution.WorkItemRef != state.Claim.Action.WorkItemRef ||
 		state.Execution.State != ExecutionFailed || state.Execution.ReviewSubjectDigest != "" ||
 		state.Execution.CouncilSubjectDigest != round.SubjectDigest || state.Execution.FailureCode == "" ||
 		(state.Claim.Action.Kind != ActionLaunchAgent && state.Claim.Action.Kind != ActionObserveAgent) ||
@@ -2282,12 +2282,17 @@ func validCouncilReplacement(claim ActionClaim, record GoalRecord, failed, repla
 		expected = ExecutionDispatching
 	}
 	return councilExecution && found && failed.Ref == claim.Action.ExecutionRef && failed.State == ExecutionFailed &&
-		failed.ReviewSubjectDigest == "" && failed.CouncilSubjectDigest == round.SubjectDigest &&
+		failed.GoalRef == record.Goal.Ref() && failed.WorkItemRef == claim.Action.WorkItemRef &&
+		failed.ReviewSubjectDigest == "" && failed.CouncilSubjectDigest == round.SubjectDigest && validCouncilDigest(string(failed.CouncilSubjectDigest)) &&
 		storedExecutionState(record.Executions, failed.Ref) == expected && replacement.State == ExecutionQueued &&
 		replacement.ReplacesExecutionRef == failed.Ref && replacement.Purpose == failed.Purpose &&
+		replacement.GoalRef == failed.GoalRef && replacement.WorkItemRef == failed.WorkItemRef &&
+		replacement.PlanGeneration == failed.PlanGeneration && replacement.AppSpecGeneration == failed.AppSpecGeneration &&
+		replacement.SpecHash == failed.SpecHash && replacement.ArtifactMediaType == failed.ArtifactMediaType &&
 		replacement.CouncilSubjectDigest == failed.CouncilSubjectDigest && replacement.ReviewSubjectDigest == "" &&
-		replacement.AttemptNo == failed.AttemptNo+1 && action.Kind == ActionLaunchAgent &&
+		replacement.AttemptNo == failed.AttemptNo+1 && replacement.AttemptNo <= replacement.MaxExecutionAttempts && action.Kind == ActionLaunchAgent &&
 		action.Ref == "action:launch:"+replacement.Ref.String() && action.ExecutionRef == replacement.Ref &&
+		action.GoalRef == replacement.GoalRef && action.WorkItemRef == replacement.WorkItemRef &&
 		len(factsForCouncilSubjectRole(record.CouncilFacts, round.SubjectDigest, role)) == 0
 }
 
@@ -2323,9 +2328,9 @@ func (repository *memoryRepository) RecordCouncilSkip(_ context.Context, state C
 	}
 	item, found := workItemForCouncilSubject(record.Goal, state.RoundSubject)
 	if !found || item.Revision() != state.ExpectedItemRevision || state.Record.Subject != state.RoundSubject ||
-		state.Record.SubjectDigest != mustCouncilDigest(state.RoundSubject.Digest()) || state.Record.Skip != state.Skip ||
+		state.Record.SubjectDigest != CouncilSubjectDigest(state.RoundSubject.Digest()) || state.Record.Skip != state.Skip ||
 		state.Record.Skip.CouncilSubjectDigest != state.RoundSubject.Digest() || !validCouncilRef(state.Record.Ref) || state.Record.RecordedAt.IsZero() ||
-		state.Record.SkipDigest != mustCouncilDigest(state.Skip.Digest()) || state.Record.RequestRef != state.RequestRef ||
+		state.Record.SkipDigest != CouncilSubjectDigest(state.Skip.Digest()) || state.Record.RequestRef != state.RequestRef ||
 		state.Record.RequestFingerprint != state.RequestFingerprint || state.Record.AuthorizationReceiptRef != state.AuthorizationReceipt.Ref() {
 		return CouncilSkipRecord{}, false, &StateError{Code: StateInvalid}
 	}
@@ -2399,25 +2404,16 @@ func councilSkipForSubject(skips []CouncilSkipRecord, digest CouncilSubjectDiges
 	return nil
 }
 func factsForCouncilSubject(facts []council.ContributionFact, digest CouncilSubjectDigest) []council.ContributionFact {
-	raw, ok := rawCouncilDigest(digest)
-	if !ok {
+	if !validCouncilDigest(string(digest)) {
 		return nil
 	}
 	result := make([]council.ContributionFact, 0, 3)
 	for _, fact := range facts {
-		if fact.SubjectDigest == raw {
+		if fact.SubjectDigest == string(digest) {
 			result = append(result, fact)
 		}
 	}
 	return result
-}
-
-func mustCouncilDigest(raw string) CouncilSubjectDigest {
-	digest, ok := councilDigest(raw)
-	if !ok {
-		return ""
-	}
-	return digest
 }
 
 func (repository *memoryRepository) councilRoundAuthorityValid(record GoalRecord, item goal.WorkItem, state OpenCouncilRoundState) bool {

@@ -18,11 +18,22 @@ func TestCouncilResolutionIsExactlyOneProof(t *testing.T) {
 	if err := invalid.Validate(); err == nil {
 		t.Fatal("mixed decision and skip accepted")
 	}
+	raw := accepted
+	raw.DecisionDigest = CouncilSubjectDigest(string(makeDigest('a')))
+	if err := raw.Validate(); err == nil {
+		t.Fatal("raw decision digest accepted")
+	}
 }
 
 func TestCouncilDigestRequiresCanonicalPrefixAndStrictRefs(t *testing.T) {
 	if validCouncilDigest(string(makeDigest('a'))) || !validCouncilDigest("sha256:"+string(makeDigest('a'))) {
 		t.Fatal("council digest prefix contract changed")
+	}
+	if _, ok := councilDigest(string(makeDigest('a'))); ok {
+		t.Fatal("raw Council digest normalized")
+	}
+	if digest, ok := councilDigest("sha256:" + string(makeDigest('a'))); !ok || digest != CouncilSubjectDigest("sha256:"+string(makeDigest('a'))) {
+		t.Fatal("canonical Council digest rejected")
 	}
 	if validCouncilRef("round\nspoof") || validCouncilRef("round\x00spoof") || validCouncilRef("") {
 		t.Fatal("unsafe council ref accepted")

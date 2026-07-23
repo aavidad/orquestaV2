@@ -110,22 +110,7 @@ func councilDigest(value string) (CouncilSubjectDigest, bool) {
 	if validCouncilDigest(value) {
 		return CouncilSubjectDigest(value), true
 	}
-	if len(value) != 64 {
-		return "", false
-	}
-	for _, char := range value {
-		if !(char >= '0' && char <= '9' || char >= 'a' && char <= 'f') {
-			return "", false
-		}
-	}
-	return CouncilSubjectDigest("sha256:" + value), true
-}
-
-func rawCouncilDigest(value CouncilSubjectDigest) (string, bool) {
-	if !validCouncilDigest(string(value)) {
-		return "", false
-	}
-	return string(value[len("sha256:"):]), true
+	return "", false
 }
 
 func councilPurpose(role council.Role) (ExecutionPurpose, bool) {
