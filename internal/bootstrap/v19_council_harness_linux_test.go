@@ -124,6 +124,12 @@ func newV19CouncilAgent(external *v18ExternalAgent, ballots map[council.Role]cou
 		requests: map[goal.ExecutionRef]ports.AgentLaunchRequest{}, receipts: map[goal.ExecutionRef]ports.AgentLaunchReceipt{}, observations: map[goal.ExecutionRef]ports.AgentObservation{}}
 }
 
+func (a *v19CouncilAgent) councilLaunchCount() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return len(a.requests)
+}
+
 func (a *v19CouncilAgent) Launch(ctx context.Context, request ports.AgentLaunchRequest) (ports.AgentLaunchReceipt, error) {
 	if request.ArtifactMediaType != council.ContributionMediaType {
 		return a.v18PersistentAgentAdapter.Launch(ctx, request)

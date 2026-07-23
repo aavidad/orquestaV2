@@ -27,17 +27,26 @@ func TestV19CouncilAutoSQLiteFilesystemRestartE2E(t *testing.T) {
 	if len(record.CouncilRounds) != 1 || v19CouncilExecutions(record) != 3 || len(record.CouncilFacts) != 0 {
 		t.Fatalf("auto opening=%+v", record)
 	}
-	h.process(t, application.ActionLaunchAgent, application.ActionLaunchAgent, application.ActionLaunchAgent, application.ActionObserveAgent, application.ActionObserveAgent, application.ActionObserveAgent)
+	h.process(t, application.ActionLaunchAgent, application.ActionLaunchAgent, application.ActionLaunchAgent, application.ActionObserveAgent, application.ActionObserveAgent)
+	if current := h.get(t, ref); len(current.CouncilDecisions) != 0 || len(current.CouncilFacts) != 2 {
+		t.Fatalf("auto decided before third Council observation: facts=%+v decisions=%+v", current.CouncilFacts, current.CouncilDecisions)
+	}
+	h.process(t, application.ActionObserveAgent)
 	record = h.get(t, ref)
 	if len(record.CouncilDecisions) != 1 || record.CouncilDecisions[0].Decision.Outcome != council.OutcomeAccepted || len(record.CouncilDecisions[0].Decision.Dissent) != 1 {
 		t.Fatalf("auto decision=%+v", record.CouncilDecisions)
 	}
+	v19RequireCouncilDeliveries(t, record)
 	change := record.ChangeSets[0]
 	if _, err := h.base.runtime.Orchestrator().SkipCouncil(context.Background(), h.base.access, application.SkipCouncilRequest{RequestRef: "skip:v19-auto-post-round", GoalRef: ref, ChangeRef: change.Ref, ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: record.Goal.WorkItems()[0].Revision(), Reason: "must not replace an auto Council decision"}); err == nil {
 		t.Fatal("post-round auto Council skip accepted")
 	}
 	admitted, err := h.base.runtime.Orchestrator().IntegrateChange(context.Background(), h.base.access, application.IntegrateChangeRequest{RequestRef: "request:v19-auto-integrate", GoalRef: ref, ChangeRef: change.Ref, ExpectedTargetOID: before})
-	if err != nil || !admitted.Created || admitted.Action.CouncilResolution == nil {
+	if err != nil || !admitted.Created || admitted.Action.CouncilResolution == nil ||
+		admitted.Action.CouncilResolution.SubjectDigest != record.CouncilRounds[0].SubjectDigest ||
+		admitted.Action.CouncilResolution.DecisionRef != record.CouncilDecisions[0].Ref ||
+		admitted.Action.CouncilResolution.DecisionDigest != record.CouncilDecisions[0].DecisionDigest ||
+		admitted.Action.CouncilResolution.SkipRef != "" || admitted.Action.CouncilResolution.SkipDigest != "" {
 		t.Fatalf("auto integration=%+v err=%v", admitted, err)
 	}
 	h.restart(t)
@@ -59,6 +68,51 @@ func TestV19CouncilAutoSQLiteFilesystemRestartE2E(t *testing.T) {
 	cross, _ := ports.NewChangeSetRef("change-set:cross-substitution")
 	if _, err := h.base.runtime.Orchestrator().IntegrateChange(context.Background(), h.base.access, application.IntegrateChangeRequest{RequestRef: "request:v19-auto-cross", GoalRef: ref, ChangeRef: cross, ExpectedTargetOID: before}); err == nil {
 		t.Fatal("cross change substitution accepted")
+	}
+}
+
+// Generation/launch substitution and malformed receipts stay adversarial unit
+// contracts: TestPlanGenerationRejectsActionExecutionGenerationMismatch and
+// TestMalformedLaunchReceiptReconcilesWithSameEffectKey.
+func v19RequireCouncilDeliveries(t *testing.T, record application.GoalRecord) {
+	t.Helper()
+	if len(record.CouncilFacts) != 3 {
+		t.Fatalf("Council facts=%+v", record.CouncilFacts)
+	}
+	executions := map[string]application.ExecutionRecord{}
+	for _, execution := range record.Executions {
+		if execution.CouncilSubjectDigest != "" {
+			if execution.ExternalRef == "" || execution.LaunchReceiptRef == "" || execution.State != application.ExecutionSucceeded ||
+				executions[execution.Ref.String()].Ref.String() != "" {
+				t.Fatalf("Council execution=%+v", execution)
+			}
+			executions[execution.Ref.String()] = execution
+		}
+	}
+	if len(executions) != 3 {
+		t.Fatalf("Council executions=%+v", executions)
+	}
+	external, receipts, artifacts := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	for _, fact := range record.CouncilFacts {
+		execution, found := executions[fact.ExecutionRef]
+		if !found || fact.LaunchReceiptRef != execution.LaunchReceiptRef || fact.ExternalRef != execution.ExternalRef ||
+			fact.ArtifactRef == "" || fact.ArtifactDigest == "" || external[fact.ExternalRef] || receipts[fact.LaunchReceiptRef] || artifacts[fact.ArtifactRef] {
+			t.Fatalf("Council fact=%+v", fact)
+		}
+		external[fact.ExternalRef], receipts[fact.LaunchReceiptRef], artifacts[fact.ArtifactRef] = true, true, true
+	}
+	stored := map[string]bool{}
+	for _, artifact := range record.Artifacts {
+		if artifact.Kind == application.ArtifactKindCouncilContribution {
+			if _, found := executions[artifact.ExecutionRef.String()]; !found || artifact.Stored.MediaType != council.ContributionMediaType ||
+				artifact.Stored.Ref.String() == "" || !artifacts[artifact.Stored.Ref.String()] || stored[artifact.Stored.Ref.String()] {
+				t.Fatalf("Council artifact=%+v", artifact)
+			}
+			stored[artifact.Stored.Ref.String()] = true
+		}
+	}
+	if len(stored) != 3 {
+		t.Fatalf("Council stored artifacts=%+v", stored)
 	}
 }
 

@@ -15,7 +15,7 @@ func TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E(t *testing.T) {
 		return
 	}
 	h := newV19CouncilHarness(t, council.PolicyRequired, map[council.Role]council.Ballot{
-		council.RoleProposer: council.BallotSecurityVeto, council.RoleCritic: council.BallotAccept, council.RoleArbiter: council.BallotAccept,
+		council.RoleProposer: council.BallotAccept, council.RoleCritic: council.BallotAccept, council.RoleArbiter: council.BallotSecurityVeto,
 	})
 	defer h.shutdown(t)
 	ref := h.submit(t, "request:v19-required")
@@ -45,10 +45,14 @@ func TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E(t *testing.T) {
 		t.Fatalf("veto decided early=%+v", current.CouncilDecisions)
 	}
 	h.process(t, application.ActionObserveAgent)
-	if current := h.get(t, ref); len(current.CouncilDecisions) != 1 || current.CouncilDecisions[0].Decision.Outcome != council.OutcomeBlockedSecurity {
+	if current := h.get(t, ref); len(current.CouncilDecisions) != 1 || current.CouncilDecisions[0].Decision.Outcome != council.OutcomeBlockedSecurity ||
+		!v19CouncilFactHasBallot(current, council.RoleArbiter, council.BallotSecurityVeto) {
 		t.Fatalf("veto final=%+v", current.CouncilDecisions)
 	}
 	h.restart(t)
+	if persisted := h.get(t, ref); len(persisted.CouncilDecisions) != 1 || persisted.CouncilDecisions[0].Decision.Outcome != council.OutcomeBlockedSecurity {
+		t.Fatalf("veto restart=%+v", persisted.CouncilDecisions)
+	}
 	if _, err := h.base.runtime.Orchestrator().IntegrateChange(context.Background(), h.base.access, application.IntegrateChangeRequest{RequestRef: "integrate:v19-veto", GoalRef: ref, ChangeRef: change.Ref, ExpectedTargetOID: h.target(t)}); err == nil {
 		t.Fatal("veto admitted integration")
 	}
@@ -60,4 +64,13 @@ func TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E(t *testing.T) {
 	if result := second.get(t, secondRef); len(result.CouncilDecisions) != 1 || result.CouncilDecisions[0].Decision.Outcome != council.OutcomeNoConsensus || len(result.CouncilDecisions[0].Decision.Dissent) != 3 {
 		t.Fatalf("second Council no-consensus=%+v", result.CouncilDecisions)
 	}
+}
+
+func v19CouncilFactHasBallot(record application.GoalRecord, role council.Role, ballot council.Ballot) bool {
+	for _, fact := range record.CouncilFacts {
+		if fact.Role == role && fact.Ballot == ballot {
+			return true
+		}
+	}
+	return false
 }

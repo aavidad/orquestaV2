@@ -4,7 +4,9 @@ package bootstrap
 
 import (
 	"context"
+	"reflect"
 	"testing"
+	"time"
 
 	"orquesta/internal/application"
 	"orquesta/internal/council"
@@ -39,6 +41,19 @@ func TestV19CouncilSkipHumanReplayAndIntegrationE2E(t *testing.T) {
 	skipped, err := h.base.runtime.Orchestrator().SkipCouncil(context.Background(), h.base.access, request)
 	if err != nil || !skipped.Created {
 		t.Fatalf("skip=%+v err=%v", skipped, err)
+	}
+	if h.agent.councilLaunchCount() != 0 {
+		t.Fatal("skip launched a Council participant")
+	}
+	h.restart(t)
+	restarted := h.get(t, ref)
+	if len(restarted.CouncilSkips) != 1 || !reflect.DeepEqual(restarted.CouncilSkips[0], skipped.Skip) ||
+		restarted.CouncilSkips[0].Skip.PrincipalRef == "" || restarted.CouncilSkips[0].Skip.Reason != request.Reason ||
+		restarted.CouncilSkips[0].Skip.SpecHash == "" || restarted.CouncilSkips[0].Skip.IdempotencyKey == "" ||
+		restarted.CouncilSkips[0].Skip.CouncilSubjectDigest != string(restarted.CouncilSkips[0].SubjectDigest) ||
+		restarted.CouncilSkips[0].Skip.RecordedAtUTC.Location() != time.UTC ||
+		!reflect.DeepEqual(restarted.CouncilSkips[0].Subject, skipped.Skip.Subject) || h.agent.councilLaunchCount() != 0 {
+		t.Fatalf("skip restart durable=%+v", restarted.CouncilSkips)
 	}
 	replay, err := h.base.runtime.Orchestrator().SkipCouncil(context.Background(), h.base.access, request)
 	if err != nil || replay.Created || replay.Skip != skipped.Skip {
