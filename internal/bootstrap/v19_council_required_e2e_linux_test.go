@@ -8,6 +8,7 @@ import (
 
 	"orquesta/internal/application"
 	"orquesta/internal/council"
+	"orquesta/internal/goal"
 )
 
 func TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E(t *testing.T) {
@@ -50,12 +51,14 @@ func TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E(t *testing.T) {
 		t.Fatalf("veto final=%+v", current.CouncilDecisions)
 	}
 	h.restart(t)
-	if persisted := h.get(t, ref); len(persisted.CouncilDecisions) != 1 || persisted.CouncilDecisions[0].Decision.Outcome != council.OutcomeBlockedSecurity {
+	persisted := h.get(t, ref)
+	if len(persisted.CouncilDecisions) != 1 || persisted.CouncilDecisions[0].Decision.Outcome != council.OutcomeBlockedSecurity {
 		t.Fatalf("veto restart=%+v", persisted.CouncilDecisions)
 	}
 	if _, err := h.base.runtime.Orchestrator().IntegrateChange(context.Background(), h.base.access, application.IntegrateChangeRequest{RequestRef: "integrate:v19-veto", GoalRef: ref, ChangeRef: change.Ref, ExpectedTargetOID: h.target(t)}); err == nil {
 		t.Fatal("veto admitted integration")
 	}
+	v19ReplanBlockedCouncil(t, h, ref, lease.Lease, persisted)
 	second := newV19CouncilHarness(t, council.PolicyAuto, map[council.Role]council.Ballot{council.RoleProposer: council.BallotAccept, council.RoleCritic: council.BallotReject, council.RoleArbiter: council.BallotAbstain})
 	defer second.shutdown(t)
 	secondRef := second.submit(t, "request:v19-no-consensus")
@@ -73,4 +76,61 @@ func v19CouncilFactHasBallot(record application.GoalRecord, role council.Role, b
 		}
 	}
 	return false
+}
+
+func v19ReplanBlockedCouncil(t *testing.T, h *v19CouncilHarness, ref goal.GoalRef, lease application.DirectorLeaseRecord, record application.GoalRecord) {
+	t.Helper()
+	source := record.Goal.WorkItems()[0]
+	authorRef, bound := source.Execution()
+	author, found := v19Execution(record, authorRef)
+	decision := record.CouncilDecisions[0]
+	if !bound || !found || author.State != application.ExecutionAwaitingIntegration || decision.Decision.Outcome != council.OutcomeBlockedSecurity {
+		t.Fatalf("blocked Council replan source=%+v author=%+v decision=%+v", source, author, decision)
+	}
+	request := application.ProposeDirectorPlanRequest{
+		RequestRef: "replan:v19-blocked-security", GoalRef: ref,
+		ExpectedGoalRevision: record.Goal.Revision(), ExpectedPlanGeneration: record.Goal.PlanGeneration(),
+		LeaseToken: lease.Token, LeaseFence: lease.Fence, Cause: goal.ReplanCauseGovernanceDecision,
+		SourceWorkItemRef: source.Ref(), ExpectedWorkItemRevision: source.Revision(),
+		SourceExecutionRef: author.Ref, SourceExecutionAttempt: author.AttemptNo,
+		CouncilSubjectDigest: decision.SubjectDigest, CouncilDecisionRef: decision.Ref, CouncilDecisionDigest: decision.DecisionDigest,
+		Reason: "rework required after exact blocked security Council decision",
+		Plan: application.PlanSpec{WorkItems: []application.WorkItemSpec{{
+			Key: "rework-v19-blocked-security", Objective: "rework exact blocked security Council source",
+			Phase: source.Phase().String(), Role: source.Role().String(), WriteSet: []string{"subject/rework"},
+			CouncilPolicy:  council.PolicyRequired,
+			RequiredTests:  []application.RequiredTestSpec{{Ref: "required-test:v19-rework", ToolRef: "tool:go", Arguments: []string{"test", "-buildvcs=false", "./...", "-count=1"}, WorkingDirectory: "subject"}},
+			OutputContract: goal.OutputContractEvidenceBundle,
+		}}},
+	}
+	result, err := h.base.runtime.Orchestrator().ProposeDirectorPlan(context.Background(), h.base.access, request)
+	if err != nil || !result.Created || result.Decision.Cause != goal.ReplanCauseGovernanceDecision ||
+		result.Decision.CouncilSubjectDigest != decision.SubjectDigest || result.Decision.CouncilDecisionRef != decision.Ref ||
+		result.Decision.CouncilDecisionDigest != decision.DecisionDigest {
+		t.Fatalf("blocked Council replan=%+v err=%v", result, err)
+	}
+	after := h.get(t, ref)
+	updated, found := after.Goal.WorkItem(source.Ref())
+	successor := after.Goal.WorkItems()[len(after.Goal.WorkItems())-1]
+	reworkOf, linked := successor.ReworkOf()
+	retired, retiredFound := v19Execution(after, author.Ref)
+	if !found || updated.State() != goal.WorkItemStateSuperseded || after.Goal.PlanGeneration() != record.Goal.PlanGeneration()+1 ||
+		!linked || reworkOf != source.Ref() || !retiredFound || retired.State != application.ExecutionCanceled ||
+		retired.FailureCode != "application.execution_superseded" || len(after.IntegrationReceipts) != 0 {
+		t.Fatalf("blocked Council replan durable state=%+v successor=%+v retired=%+v", after.Goal, successor, retired)
+	}
+	h.restart(t)
+	replay, err := h.base.runtime.Orchestrator().ProposeDirectorPlan(context.Background(), h.base.access, request)
+	if err != nil || replay.Created || replay.Decision != result.Decision {
+		t.Fatalf("blocked Council replan restart replay=%+v err=%v", replay, err)
+	}
+}
+
+func v19Execution(record application.GoalRecord, ref goal.ExecutionRef) (application.ExecutionRecord, bool) {
+	for _, execution := range record.Executions {
+		if execution.Ref == ref {
+			return execution, true
+		}
+	}
+	return application.ExecutionRecord{}, false
 }
