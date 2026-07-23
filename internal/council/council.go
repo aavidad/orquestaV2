@@ -15,10 +15,14 @@ import (
 	"time"
 )
 
-const ContributionSchema = "orquesta.council.contribution.v1"
+const (
+	ContributionSchema    = "orquesta.council.contribution.v1"
+	ContributionMediaType = "application/vnd.orquesta.council-contribution+json"
+)
 
 var (
 	ErrInvalidSubject      = errors.New("council.subject_invalid")
+	ErrInvalidPolicy       = errors.New("council.policy_invalid")
 	ErrInvalidContribution = errors.New("council.contribution_invalid")
 	ErrInvalidFact         = errors.New("council.fact_invalid")
 	ErrSubjectMismatch     = errors.New("council.subject_mismatch")
@@ -32,6 +36,13 @@ const (
 	PolicyRequired       Policy = "required"
 	PolicySkipByOperator Policy = "skip_by_operator"
 )
+
+func ValidatePolicy(value Policy) error {
+	if !validPolicy(value) {
+		return ErrInvalidPolicy
+	}
+	return nil
+}
 
 type Role string
 
@@ -71,7 +82,7 @@ type Subject struct {
 
 func NewSubject(subject Subject) (Subject, error) {
 	if !validOpaque(subject.ProjectRef, 512) || !validDigest(subject.ReviewSubjectDigest) ||
-		!validDigest(subject.ReviewGateDigest) || !validPolicy(subject.Policy) ||
+		!validDigest(subject.ReviewGateDigest) || ValidatePolicy(subject.Policy) != nil ||
 		!validOpaque(subject.GoalRef, 512) || !validOpaque(subject.WorkItemRef, 512) ||
 		!validOpaque(subject.ChangeSetRef, 512) || !validHash(subject.SpecHash) ||
 		subject.PlanGeneration == 0 || subject.WorkItemGeneration == 0 || subject.AppSpecGeneration == 0 {
@@ -115,7 +126,7 @@ func DecodeContribution(content []byte) (Contribution, error) {
 
 func NewContribution(contribution Contribution) (Contribution, error) {
 	if contribution.Schema != ContributionSchema || !validDigest(contribution.SubjectDigest) ||
-		!validRole(contribution.Role) || !validOpaque(contribution.Body, 8000) || !validBallot(contribution.Ballot) ||
+		!validRole(contribution.Role) || !validText(contribution.Body, 8000) || !validBallot(contribution.Ballot) ||
 		len(contribution.Evidence) == 0 || len(contribution.Evidence) > 64 || !validEvidence(contribution.Evidence) ||
 		(contribution.Ballot == BallotSecurityVeto && !hasSecurityVetoEvidence(contribution.Evidence)) {
 		return Contribution{}, ErrInvalidContribution
@@ -205,7 +216,7 @@ func Evaluate(subject Subject, facts []ContributionFact) (Decision, error) {
 		return Decision{}, ErrSubjectMismatch
 	}
 	accepts, rejects, veto := 0, 0, false
-	for _, role := range roles() {
+	for _, role := range Roles() {
 		switch byRole[role].Ballot {
 		case BallotAccept:
 			accepts++
@@ -224,7 +235,7 @@ func Evaluate(subject Subject, facts []ContributionFact) (Decision, error) {
 		outcome = OutcomeRejected
 	}
 	decision := Decision{SubjectDigest: subject.Digest(), Outcome: outcome}
-	for _, role := range roles() {
+	for _, role := range Roles() {
 		fact := byRole[role]
 		if dissent(outcome, fact.Ballot) {
 			decision.Dissent = append(decision.Dissent, Dissent{Role: role, Ballot: fact.Ballot, FactDigest: fact.Digest()})
@@ -236,7 +247,7 @@ func Evaluate(subject Subject, facts []ContributionFact) (Decision, error) {
 
 func decisionDigest(decision Decision, facts map[Role]ContributionFact) string {
 	values := []string{"orquesta.council-decision.v1", decision.SubjectDigest, string(decision.Outcome)}
-	for _, role := range roles() {
+	for _, role := range Roles() {
 		values = append(values, string(role), facts[role].Digest())
 	}
 	for _, dissent := range decision.Dissent {
@@ -253,7 +264,7 @@ type Skip struct {
 
 func NewSkip(subject Subject, skip Skip) (Skip, error) {
 	if _, err := NewSubject(subject); err != nil || subject.Policy != PolicySkipByOperator ||
-		!validOpaque(skip.PrincipalRef, 512) || !validOpaque(skip.Reason, 4000) || skip.RecordedAtUTC.IsZero() ||
+		!validOpaque(skip.PrincipalRef, 512) || !validText(skip.Reason, 4000) || skip.RecordedAtUTC.IsZero() ||
 		skip.RecordedAtUTC.Location() != time.UTC || !validHash(skip.SpecHash) ||
 		!validOpaque(skip.IdempotencyKey, 512) || skip.SpecHash != subject.SpecHash || skip.CouncilSubjectDigest != subject.Digest() {
 		return Skip{}, ErrInvalidSkip
@@ -266,7 +277,7 @@ func (skip Skip) Digest() string {
 		skip.SpecHash, skip.IdempotencyKey, skip.CouncilSubjectDigest)
 }
 
-func roles() []Role { return []Role{RoleProposer, RoleCritic, RoleArbiter} }
+func Roles() []Role { return []Role{RoleProposer, RoleCritic, RoleArbiter} }
 func dissent(outcome Outcome, ballot Ballot) bool {
 	switch outcome {
 	case OutcomeAccepted:
@@ -307,6 +318,9 @@ func hasSecurityVetoEvidence(values []Evidence) bool {
 }
 func validOpaque(value string, maximum int) bool {
 	return value != "" && len(value) <= maximum && strings.TrimSpace(value) == value && !strings.ContainsAny(value, "\r\n\x00")
+}
+func validText(value string, maximum int) bool {
+	return value != "" && len(value) <= maximum && strings.TrimSpace(value) != "" && !strings.ContainsRune(value, '\x00')
 }
 func validDigest(value string) bool {
 	return strings.HasPrefix(value, "sha256:") && len(value) == len("sha256:")+sha256.Size*2 && validHex(strings.TrimPrefix(value, "sha256:"))

@@ -79,6 +79,30 @@ func TestContributionEnvelopeIsStrictAndVetoIsTyped(t *testing.T) {
 			t.Fatalf("invalid envelope: %v", err)
 		}
 	}
+	multiline := Contribution{Schema: ContributionSchema, SubjectDigest: s.Digest(), Role: RoleProposer, Body: "proposal\nrationale", Ballot: BallotAccept, Evidence: []Evidence{{Kind: "proof", Ref: "evidence:one"}}}
+	if _, err := NewContribution(multiline); err != nil {
+		t.Fatalf("multiline body rejected: %v", err)
+	}
+	multiline.Body = "proposal\x00rationale"
+	if _, err := NewContribution(multiline); !errors.Is(err, ErrInvalidContribution) {
+		t.Fatalf("NUL body accepted: %v", err)
+	}
+}
+
+func TestPolicyValidationAndRolesAreSafeForCallers(t *testing.T) {
+	for _, policy := range []Policy{PolicyAuto, PolicyRequired, PolicySkipByOperator} {
+		if err := ValidatePolicy(policy); err != nil {
+			t.Fatalf("policy %q: %v", policy, err)
+		}
+	}
+	if !errors.Is(ValidatePolicy("later"), ErrInvalidPolicy) {
+		t.Fatal("unknown policy accepted")
+	}
+	first, second := Roles(), Roles()
+	first[0] = Role("changed")
+	if len(second) != 3 || second[0] != RoleProposer {
+		t.Fatalf("roles not copied: %v", second)
+	}
 }
 
 func TestEvaluateWaitsForThreeAndDerivesExactOutcomesAndDissent(t *testing.T) {
@@ -141,7 +165,7 @@ func TestEvaluateRejectsSubstitutionAndReplayDigestBindsPayload(t *testing.T) {
 
 func TestSkipBindsPolicySubjectAndSpec(t *testing.T) {
 	s := subject(t, PolicySkipByOperator)
-	skip := Skip{PrincipalRef: "principal:operator", Reason: "authorized", SpecHash: s.SpecHash, IdempotencyKey: "skip:one", CouncilSubjectDigest: s.Digest(), RecordedAtUTC: time.Unix(1, 0).UTC()}
+	skip := Skip{PrincipalRef: "principal:operator", Reason: "authorized\nwith record", SpecHash: s.SpecHash, IdempotencyKey: "skip:one", CouncilSubjectDigest: s.Digest(), RecordedAtUTC: time.Unix(1, 0).UTC()}
 	first, err := NewSkip(s, skip)
 	if err != nil || first.Digest() != skip.Digest() {
 		t.Fatalf("skip=%+v err=%v", first, err)
@@ -151,6 +175,7 @@ func TestSkipBindsPolicySubjectAndSpec(t *testing.T) {
 		"spec":    func(v *Skip) { v.SpecHash = strings.Repeat("c", 64) },
 		"key":     func(v *Skip) { v.IdempotencyKey = "" },
 		"utc":     func(v *Skip) { v.RecordedAtUTC = v.RecordedAtUTC.In(time.FixedZone("offset", 3600)) },
+		"reason":  func(v *Skip) { v.Reason = "authorized\x00record" },
 	} {
 		t.Run(name, func(t *testing.T) {
 			changed := skip
