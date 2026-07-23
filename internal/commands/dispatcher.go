@@ -211,6 +211,10 @@ func (dispatcher *Dispatcher) bindAuthority(
 	if identity.ValidatePrincipal(invocation.Principal) != nil {
 		return handlerContext{}, failure(CodeUnauthenticated)
 	}
+	if invocation.Principal.Kind == identity.PrincipalKindService && !definition.ExecutionBound &&
+		definition.Permission != string(identity.PermissionArtifactsRead) {
+		return handlerContext{}, failure(CodeForbidden)
+	}
 	projectRef, err := goal.NewProjectRef(invocation.ProjectRef)
 	if err != nil {
 		return handlerContext{}, failure(CodeInvalidRequest)

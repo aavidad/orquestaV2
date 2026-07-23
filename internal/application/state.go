@@ -244,6 +244,7 @@ const (
 	ActionObserveAgent     ActionKind = "observe_agent"
 	ActionStopAgent        ActionKind = "stop_agent"
 	ActionDeliverMailbox   ActionKind = "deliver_mailbox"
+	ActionAdmitMailbox     ActionKind = "admit_mailbox"
 	ActionPrepareWorkspace ActionKind = "prepare_workspace"
 	ActionCommitChange     ActionKind = "commit_change"
 	ActionAttestTest       ActionKind = "attest_test"
@@ -497,9 +498,17 @@ type GoalSucceededState struct {
 	Attestation          AttestationRecord
 	NewExecutions        []ExecutionRecord
 	NewActions           []ActionRecord
+	PostArtifactAction   *ActionRecord
 	Events               []EventRecord
 	BudgetSettlement     *governance.BudgetSettlement
 	OperationAt          time.Time
+}
+
+type PostArtifactMailboxAdmittedState struct {
+	Claim        ActionClaim
+	MessageRef   MailboxMessageRef
+	AdmissionRef string
+	OperationAt  time.Time
 }
 
 type GoalFailedState struct {
@@ -612,6 +621,7 @@ type StateRepository interface {
 	RecordExecutionReplaced(context.Context, ExecutionReplacedState) error
 	RecordExecutionInterrupted(context.Context, ExecutionInterruptedState) error
 	RecordGoalSucceeded(context.Context, GoalSucceededState) error
+	RecordPostArtifactMailboxAdmitted(context.Context, PostArtifactMailboxAdmittedState) error
 	RecordGoalFailed(context.Context, GoalFailedState) error
 	RecordReviewAssessed(context.Context, ReviewAssessedState) error
 	OpenCouncilRound(context.Context, OpenCouncilRoundState) (CouncilRoundRecord, bool, error)

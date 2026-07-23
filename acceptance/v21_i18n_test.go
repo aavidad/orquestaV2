@@ -277,7 +277,7 @@ func v21AssertManifest(t *testing.T, root string, fixture v21Fixture, manifest v
 		"http": "machine_envelope_catalog_presenter", "mcp": "catalog_only",
 		"public_docs":   "localized_document_bundle",
 		"notifications": "catalog_required_before_activation",
-		"prompts":       "catalog_required_before_activation",
+		"prompts":       "catalog_only",
 		"web":           "catalog_required_before_activation",
 		"wizard":        "catalog_required_before_activation",
 	}
@@ -321,8 +321,22 @@ func v21AssertManifest(t *testing.T, root string, fixture v21Fixture, manifest v
 			t.Fatalf("invalid V21 surface state: %+v", surface)
 		}
 	}
-	assertV21ExactSet(t, "manifest active surfaces", active, fixture.ActiveSurfaceIDs)
-	assertV21ExactSet(t, "manifest future surfaces", future, fixture.FutureSurfaceIDs)
+	for _, historical := range fixture.ActiveSurfaceIDs {
+		if !containsV21String(active, historical) {
+			t.Fatalf("V21 active surface %q regressed: active=%v", historical, active)
+		}
+	}
+	for _, successorOwned := range active {
+		if !containsV21String(fixture.ActiveSurfaceIDs, successorOwned) &&
+			!containsV21String(fixture.FutureSurfaceIDs, successorOwned) {
+			t.Fatalf("unknown successor surface %q activated: active=%v", successorOwned, active)
+		}
+	}
+	for _, remaining := range future {
+		if !containsV21String(fixture.FutureSurfaceIDs, remaining) {
+			t.Fatalf("unknown V21 future surface %q: future=%v", remaining, future)
+		}
+	}
 
 	gotDocs := make([]v21PublicDocument, 0, len(manifest.PublicDocuments))
 	for _, document := range manifest.PublicDocuments {
@@ -420,4 +434,13 @@ func assertV21ExactSet(t *testing.T, name string, got, want []string) {
 	if !reflect.DeepEqual(actual, expected) {
 		t.Fatalf("V21 %s=%v want=%v", name, actual, expected)
 	}
+}
+
+func containsV21String(values []string, wanted string) bool {
+	for _, value := range values {
+		if value == wanted {
+			return true
+		}
+	}
+	return false
 }

@@ -100,6 +100,9 @@ func validateRecoveryVersion(ctx context.Context, tx *sql.Tx, version int) error
 		if version >= recoverySchemaV20 {
 			validators = append(validators, validateRecoveryV20CommandAudit)
 		}
+		if version >= recoverySchemaV21 {
+			validators = append(validators, validateRecoveryV21PostArtifactMailbox)
+		}
 		validators = append(validators, validateMigratedGoalRecords)
 		for _, validate := range validators {
 			if err := validate(ctx, tx); err != nil {

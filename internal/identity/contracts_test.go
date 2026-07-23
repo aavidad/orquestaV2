@@ -173,6 +173,37 @@ func TestMembershipDelegationUsesOneExactDefaultDenyMatrix(t *testing.T) {
 	}
 }
 
+func TestExecutionServiceRoleIsNarrowAndNeverGrantable(t *testing.T) {
+	for _, permission := range []Permission{
+		PermissionGoalsGet, PermissionGoalsDirect, PermissionArtifactsRead,
+	} {
+		if !RoleAllows(RoleExecutionService, permission) {
+			t.Errorf("execution service denied %s", permission)
+		}
+	}
+	for _, permission := range []Permission{
+		PermissionGoalsList, PermissionProjectStatus, PermissionGoalsCreate,
+		PermissionEffectsApprove, PermissionChangesIntegrate,
+	} {
+		if RoleAllows(RoleExecutionService, permission) {
+			t.Errorf("execution service allowed %s", permission)
+		}
+	}
+	for _, grantor := range []Role{RolePlatformAdmin, RoleProjectOwner, RoleProjectAdmin} {
+		if CanDelegateMembershipRole(grantor, RoleExecutionService) {
+			t.Errorf("%s can delegate execution service membership", grantor)
+		}
+	}
+	now := testTime()
+	principal, _ := NewPrincipalRef("principal:execution-service")
+	if _, err := NewMembership(MembershipInput{
+		PrincipalRef: principal, ProjectRef: testProject(t), Role: RoleExecutionService,
+		Revision: 1, Status: MembershipActive, GrantedBy: principal, GrantedAt: now,
+	}); err == nil {
+		t.Fatal("execution service role accepted as project membership")
+	}
+}
+
 func TestRequestPrincipalContextRejectsMissingInvalidAndSpoofedValues(t *testing.T) {
 	human := testPrincipal(t, "human", PrincipalKindHuman)
 	service := testPrincipal(t, "service", PrincipalKindService)

@@ -234,11 +234,18 @@ func TestLaunchHashAndPromptCarryPlanMetadata(t *testing.T) {
 			}
 		})
 	}
-	prompt := agentPrompt(request)
+	adapter := openTestAdapter(t, testConfig(t))
+	prompt, err := adapter.renderAgentPrompt(request)
+	if err != nil {
+		t.Fatalf("renderAgentPrompt() error = %v", err)
+	}
 	if strings.Contains(prompt, request.SpecHash) {
 		t.Fatal("spec hash leaked into model prompt")
 	}
 	for _, value := range []string{
+		request.ProjectRef.String(), request.GoalRef.String(), request.WorkItemRef.String(),
+		request.ExecutionRef.String(), strconv.FormatUint(uint64(request.PlanGeneration), 10),
+		strconv.FormatUint(uint64(request.AppSpecGeneration), 10),
 		request.PhaseRef, request.PhaseKey, request.PhaseTemplateRef,
 		request.PhaseInputRefs[0], request.PhaseCriterionRefs[0], request.RoleKey,
 		request.SkillRefs[0], request.ToolRefs[0], request.CapabilityRefs[0],
@@ -384,6 +391,7 @@ func TestAdapterRejectsNonPrivateOrSymlinkWorkRoot(t *testing.T) {
 	}
 	base := Config{
 		Command:                 executable,
+		PromptRenderer:          testPromptRenderer{},
 		ReasoningEffort:         "medium",
 		Timeout:                 5 * time.Second,
 		ProcessPipeDrainDelay:   250 * time.Millisecond,
@@ -578,11 +586,30 @@ func parseCodexHelperArguments(arguments []string) (helperOptions, error) {
 	sort.Strings(options.configs)
 	wantConfigs := []string{
 		`model_reasoning_effort="medium"`,
-		`shell_environment_policy.exclude=["CODEX_API_KEY","OPENAI_API_KEY"]`,
+		`shell_environment_policy.exclude=["CODEX_API_KEY","OPENAI_API_KEY","ORQUESTA_MCP_BEARER_TOKEN"]`,
 		`shell_environment_policy.experimental_use_profile=false`,
 		`shell_environment_policy.ignore_default_excludes=false`,
 		`shell_environment_policy.include_only=["CODEX_TEST_EXACT"]`,
 		`shell_environment_policy.inherit="all"`,
+	}
+	hasSessionURL := false
+	hasSessionBearerProjection := false
+	for _, config := range options.configs {
+		switch config {
+		case `mcp_servers.orquesta.url="http://127.0.0.1:7777/mcp"`:
+			hasSessionURL = true
+		case `mcp_servers.orquesta.bearer_token_env_var="ORQUESTA_MCP_BEARER_TOKEN"`:
+			hasSessionBearerProjection = true
+		}
+	}
+	if hasSessionURL != hasSessionBearerProjection {
+		return helperOptions{}, fmt.Errorf("incomplete session MCP projection")
+	}
+	if hasSessionURL {
+		wantConfigs = append(wantConfigs,
+			`mcp_servers.orquesta.url="http://127.0.0.1:7777/mcp"`,
+			`mcp_servers.orquesta.bearer_token_env_var="ORQUESTA_MCP_BEARER_TOKEN"`,
+		)
 	}
 	sort.Strings(wantConfigs)
 	if !reflect.DeepEqual(options.configs, wantConfigs) {
@@ -606,10 +633,16 @@ func validateHelperEnvironment(mode string) (string, error) {
 		strings.Contains(mode, "helper:encoded-secret-leak"),
 		strings.Contains(mode, "helper:artifact-secret-leak"):
 		credential = helperCredentialInitial
+	case strings.Contains(mode, "helper:session"):
+		credential = helperSessionBearer
 	}
 	want := []string{helperExactEnvironment}
 	if credential != "" {
-		want = append(want, codexAPIKeyEnvironment+"="+credential)
+		name := codexAPIKeyEnvironment
+		if strings.Contains(mode, "helper:session") {
+			name = codexMCPBearerTokenEnvironment
+		}
+		want = append(want, name+"="+credential)
 		sort.Strings(want)
 	}
 	if !reflect.DeepEqual(entries, want) {
@@ -645,6 +678,7 @@ func testConfig(t *testing.T) Config {
 		ProcessPipeDrainDelay:   250 * time.Millisecond,
 		MaxDiagnosticBytes:      256,
 		MaxConcurrentExecutions: 4,
+		PromptRenderer:          testPromptRenderer{},
 		Environment:             map[string]string{"CODEX_TEST_EXACT": "present"},
 		Now:                     func() time.Time { return time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC) },
 	}

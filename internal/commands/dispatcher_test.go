@@ -313,6 +313,25 @@ func testPrincipal(t *testing.T) identity.Principal {
 	return principal
 }
 
+func testExecutionServicePrincipal(t *testing.T) identity.Principal {
+	t.Helper()
+	principalRef, err := identity.NewPrincipalRef("principal:execution:test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	actorRef, err := goal.NewActorRef("actor:execution:test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	principal, err := identity.NewPrincipal(
+		principalRef, actorRef, identity.PrincipalKindService, "execution_token",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return principal
+}
+
 type testExecutionAuthority struct {
 	mu                sync.Mutex
 	expectedPrincipal identity.PrincipalRef
@@ -542,6 +561,32 @@ func TestCallerClaimedExecutionNeverBecomesAuthority(t *testing.T) {
 	result := invoke(t, dispatcher, "orquesta.system.status", "request:principal", map[string]any{}, true)
 	if result.Failure == nil || result.Failure.Code != CodeInvalidRequest || audit.admits != 0 {
 		t.Fatalf("result=%+v", result)
+	}
+}
+
+func TestExecutionServicePrincipalCannotEnterPrincipalGoalCommandsBeforeAudit(t *testing.T) {
+	dispatcher, api, audit := testDispatcher(t)
+	invocation := Invocation{
+		CommandID: "orquesta.goals.get", CommandVersion: "1",
+		RequestRef: "request:execution-service-goal-get", ProjectRef: "project:test",
+		Principal: testExecutionServicePrincipal(t),
+		Payload:   json.RawMessage(`{"goal_ref":"goal:test"}`),
+	}
+	result := dispatcher.Dispatch(context.Background(), invocation)
+	if result.Failure == nil || result.Failure.Code != CodeForbidden ||
+		result.AuditRef != "" || audit.admits != 0 || api.calls["GetGoal"] != 0 {
+		t.Fatalf("goals.get result=%+v admits=%d calls=%v", result, audit.admits, api.calls)
+	}
+
+	invocation.CommandID = "orquesta.artifacts.read"
+	invocation.RequestRef = "request:execution-service-artifact-read"
+	invocation.Payload = json.RawMessage(
+		`{"goal_ref":"goal:test","artifact_ref":"artifact:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`,
+	)
+	result = dispatcher.Dispatch(context.Background(), invocation)
+	if result.Failure != nil || result.AuditRef == "" ||
+		audit.admits != 1 || api.calls["GetArtifact"] != 1 {
+		t.Fatalf("artifacts.read result=%+v admits=%d calls=%v", result, audit.admits, api.calls)
 	}
 }
 

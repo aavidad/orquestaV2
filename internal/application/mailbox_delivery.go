@@ -33,7 +33,7 @@ func (orchestrator *Orchestrator) ClaimMailbox(
 		request.RecipientWorkItemRef, request.RecipientExecutionRef, "", 0, "",
 	)
 	if err := orchestrator.requireCurrentMailboxAccess(
-		ctx, principal.Ref, projectRef, identity.PermissionGoalsGet,
+		ctx, access, principal.Ref, projectRef, identity.PermissionGoalsGet,
 	); err != nil {
 		return MailboxClaimResult{}, err
 	}

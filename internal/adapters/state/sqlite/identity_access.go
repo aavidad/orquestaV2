@@ -13,6 +13,7 @@ import (
 	"orquesta/internal/application"
 	"orquesta/internal/goal"
 	"orquesta/internal/identity"
+	"orquesta/internal/ports"
 )
 
 const (
@@ -21,6 +22,7 @@ const (
 	authorizationReasonMembershipMissing = "rbac.membership_missing"
 	authorizationReasonMembershipRevoked = "rbac.membership_revoked"
 	authorizationReasonPermissionDenied  = "rbac.permission_denied"
+	authorizationReasonExecutionBound    = "execution.bound.allowed"
 )
 
 type authorizationRow struct {
@@ -54,6 +56,15 @@ func (repository *Repository) Authorize(
 	if err := ensurePrincipal(ctx, transaction, request.Principal()); err != nil {
 		return identity.AuthorizationReceipt{}, err
 	}
+	executionBound, executionRevision, err := executionAuthorization(
+		ctx, transaction, request,
+	)
+	if err != nil {
+		return identity.AuthorizationReceipt{}, err
+	}
+	if request.Principal().Kind == identity.PrincipalKindService && !executionBound {
+		return identity.AuthorizationReceipt{}, application.ErrForbidden
+	}
 	fingerprint := authorizationRequestFingerprint(request)
 	stored, found, err := findAuthorizationByRequest(ctx, transaction, request.Principal().Ref, request.RequestRef())
 	if err != nil {
@@ -82,9 +93,13 @@ func (repository *Repository) Authorize(
 	if now.Before(request.RequestedAt()) {
 		now = request.RequestedAt()
 	}
-	outcome, role, revision, reason, err := authorizationDecision(ctx, transaction, request)
-	if err != nil {
-		return identity.AuthorizationReceipt{}, err
+	outcome, role, revision, reason := identity.AuthorizationAllowed, identity.RoleExecutionService,
+		executionRevision, authorizationReasonExecutionBound
+	if !executionBound {
+		outcome, role, revision, reason, err = authorizationDecision(ctx, transaction, request)
+		if err != nil {
+			return identity.AuthorizationReceipt{}, err
+		}
 	}
 	decision, err := identity.NewAuthorizationDecision(identity.AuthorizationDecisionInput{
 		Request: request, Outcome: outcome, Role: role,
@@ -116,6 +131,125 @@ INSERT INTO authorization_receipts(
 		return identity.AuthorizationReceipt{}, err
 	}
 	return receipt, nil
+}
+
+func executionAuthorization(
+	ctx context.Context,
+	transaction *sql.Tx,
+	request identity.AuthorizationRequest,
+) (bool, identity.MembershipRevision, error) {
+	principal := request.Principal()
+	if principal.Kind != identity.PrincipalKindService {
+		return false, 0, nil
+	}
+	if request.Permission() != identity.PermissionGoalsGet &&
+		request.Permission() != identity.PermissionGoalsDirect &&
+		request.Permission() != identity.PermissionArtifactsRead {
+		return false, 0, nil
+	}
+	rows, err := transaction.QueryContext(ctx, `
+SELECT g.project_ref,e.goal_ref,e.work_item_ref,e.ref,COALESCE(e.replaces_execution_ref,''),
+       e.attempt_no,e.plan_generation,e.app_spec_generation,e.spec_hash
+FROM executions e JOIN goals g ON g.ref=e.goal_ref
+WHERE g.project_ref=? AND g.state='running' AND
+ (e.state IN ('dispatching','running') OR
+  (e.state='succeeded' AND EXISTS (
+    SELECT 1 FROM outbox action
+    WHERE action.goal_ref=e.goal_ref AND action.execution_ref=e.ref
+      AND action.kind='admit_mailbox' AND action.completed_at IS NULL
+      AND action.retired_at IS NULL AND action.quarantined_at IS NULL)))`,
+		request.ProjectRef().String(),
+	)
+	if err != nil {
+		return false, 0, mapDatabaseError(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var projectValue, goalValue, itemValue, executionValue, replacementValue, specHash string
+		var attempt, planGeneration, appSpecGeneration int64
+		if err := rows.Scan(&projectValue, &goalValue, &itemValue, &executionValue,
+			&replacementValue, &attempt, &planGeneration, &appSpecGeneration, &specHash); err != nil {
+			return false, 0, mapDatabaseError(err)
+		}
+		projectRef, _ := goal.NewProjectRef(projectValue)
+		goalRef, _ := goal.NewGoalRef(goalValue)
+		itemRef, _ := goal.NewWorkItemRef(itemValue)
+		executionRef, _ := goal.NewExecutionRef(executionValue)
+		var replacement goal.ExecutionRef
+		if replacementValue != "" {
+			replacement, _ = goal.NewExecutionRef(replacementValue)
+		}
+		session := ports.ExecutionSessionEnsureRequest{
+			ProjectRef: projectRef, GoalRef: goalRef, WorkItemRef: itemRef,
+			ExecutionRef: executionRef, ExecutionAttempt: uint64(attempt),
+			ReplacesExecutionRef: replacement, PlanGeneration: goal.PlanGeneration(planGeneration),
+			AppSpecGeneration: goal.AppSpecGeneration(appSpecGeneration), SpecHash: specHash,
+		}
+		authority, deriveErr := application.DeriveExecutionSessionAuthority(session, principal.Method)
+		if deriveErr != nil || authority.ServicePrincipal != principal {
+			continue
+		}
+		scoped, scopeErr := executionAuthorizationScope(ctx, transaction, request, authority)
+		if scopeErr != nil {
+			return false, 0, scopeErr
+		}
+		if scoped {
+			return true, identity.MembershipRevision(attempt), nil
+		}
+		return false, 0, nil
+	}
+	if err := rows.Err(); err != nil {
+		return false, 0, mapDatabaseError(err)
+	}
+	return false, 0, nil
+}
+
+func executionAuthorizationScope(
+	ctx context.Context,
+	transaction *sql.Tx,
+	request identity.AuthorizationRequest,
+	authority ports.ExecutionSessionAuthority,
+) (bool, error) {
+	switch request.Permission() {
+	case identity.PermissionGoalsDirect:
+		return request.ResourceRef() == authority.Request.GoalRef.String(), nil
+	case identity.PermissionArtifactsRead:
+		var count int
+		err := transaction.QueryRowContext(ctx, `
+SELECT COUNT(*)
+FROM mailbox_artifact_refs artifact
+JOIN mailbox_envelopes envelope
+ ON envelope.ref=artifact.mailbox_message_ref AND envelope.goal_ref=artifact.goal_ref
+WHERE artifact.artifact_ref=? AND envelope.goal_ref=? AND envelope.project_ref=?
+ AND envelope.recipient_execution_ref=? AND envelope.recipient_principal_ref=?`,
+			request.ResourceRef(), authority.Request.GoalRef.String(),
+			authority.Request.ProjectRef.String(), authority.Request.ExecutionRef.String(),
+			authority.ServicePrincipal.Ref.String(),
+		).Scan(&count)
+		if err != nil {
+			return false, mapDatabaseError(err)
+		}
+		return count > 0, nil
+	case identity.PermissionGoalsGet:
+		if request.ResourceRef() == authority.Request.GoalRef.String() {
+			return true, nil
+		}
+		var count int
+		err := transaction.QueryRowContext(ctx, `
+SELECT COUNT(*) FROM mailbox_envelopes WHERE ref=? AND goal_ref=? AND project_ref=?
+ AND ((source_execution_ref=? AND source_principal_ref=?) OR
+      (recipient_execution_ref=? AND recipient_principal_ref=?))`,
+			request.ResourceRef(), authority.Request.GoalRef.String(), authority.Request.ProjectRef.String(),
+			authority.Request.ExecutionRef.String(), authority.ServicePrincipal.Ref.String(),
+			authority.Request.ExecutionRef.String(), authority.ServicePrincipal.Ref.String(),
+		).Scan(&count)
+		if err != nil {
+			return false, mapDatabaseError(err)
+		}
+		return count > 0, nil
+	default:
+		return false, nil
+	}
 }
 
 func authorizationReplayRequest(

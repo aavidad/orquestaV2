@@ -209,7 +209,8 @@ func claimCandidateMatches(
 	capabilities ports.AgentCapabilities,
 ) (bool, error) {
 	if candidate.action.Kind == application.ActionPrepareWorkspace || candidate.action.Kind == application.ActionCommitChange ||
-		candidate.action.Kind == application.ActionAttestTest || candidate.action.Kind == application.ActionIntegrateChange {
+		candidate.action.Kind == application.ActionAttestTest || candidate.action.Kind == application.ActionIntegrateChange ||
+		candidate.action.Kind == application.ActionAdmitMailbox {
 		return true, nil
 	}
 	// Terminal stops settle locally; no provider identity is needed.
@@ -388,7 +389,7 @@ LEFT JOIN fairness_cursors goal_cursor
 WHERE o.completed_at IS NULL
   AND o.retired_at IS NULL
   AND o.quarantined_at IS NULL
-  AND o.kind IN ('launch_agent', 'observe_agent', 'stop_agent', 'prepare_workspace', 'commit_change', 'attest_test', 'integrate_change')
+  AND o.kind IN ('launch_agent', 'observe_agent', 'stop_agent', 'prepare_workspace', 'commit_change', 'attest_test', 'integrate_change', 'admit_mailbox')
   AND (o.governance_version = 1 OR o.kind = 'observe_agent'
        OR (o.kind = 'stop_agent' AND e.state IN ('succeeded', 'failed', 'canceled', 'stopped'))
        OR (o.governance_version = 0 AND o.last_error_code <> 'governance.legacy_reauthorization_required'))
@@ -397,7 +398,7 @@ WHERE o.completed_at IS NULL
   AND NOT EXISTS (
       SELECT 1 FROM outbox leased
       WHERE leased.goal_ref = o.goal_ref AND leased.work_item_ref = o.work_item_ref
-        AND leased.kind IN ('launch_agent', 'observe_agent', 'stop_agent', 'prepare_workspace', 'commit_change', 'attest_test', 'integrate_change')
+        AND leased.kind IN ('launch_agent', 'observe_agent', 'stop_agent', 'prepare_workspace', 'commit_change', 'attest_test', 'integrate_change', 'admit_mailbox')
         AND leased.ref <> o.ref AND leased.completed_at IS NULL
         AND leased.retired_at IS NULL AND leased.quarantined_at IS NULL
         AND leased.claim_token IS NOT NULL AND leased.claimed_until > ?
@@ -422,6 +423,7 @@ WHERE o.completed_at IS NULL
        AND attestation.plan_generation=o.plan_generation
        AND attestation.work_item_generation=o.work_item_generation
   )))
+  AND (o.kind <> 'admit_mailbox' OR (e.state='succeeded' AND wi.state='succeeded' AND wi.handoff_required=1))
   AND (o.kind <> 'observe_agent' OR NOT EXISTS (
       SELECT 1 FROM outbox stop
       WHERE stop.goal_ref = o.goal_ref AND stop.execution_ref = o.execution_ref
@@ -625,7 +627,8 @@ ORDER BY refs.goal_ref, refs.work_item_ref, refs.kind, refs.position`
 func candidateNeedsAgentRequirements(candidate claimCandidate) bool {
 	switch candidate.action.Kind {
 	case application.ActionPrepareWorkspace, application.ActionCommitChange,
-		application.ActionAttestTest, application.ActionIntegrateChange:
+		application.ActionAttestTest, application.ActionIntegrateChange,
+		application.ActionAdmitMailbox:
 		return false
 	default:
 		return !terminalStopSettlement(candidate)

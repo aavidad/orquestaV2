@@ -443,7 +443,7 @@ func TestRepositoryV12MigratesPopulatedV6ToV7(t *testing.T) {
 		t.Fatalf("migrate V6 to V7: %v", err)
 	}
 	t.Cleanup(func() { _ = migrated.Close() })
-	assertRecoverySchemaVersion(t, migrated.db, recoverySchemaV20)
+	assertRecoverySchemaVersion(t, migrated.db, recoverySchemaV21)
 	if _, err := migrated.GetGoal(ctx, state.Goal.Ref()); err != nil {
 		t.Fatalf("migrated Goal: %v", err)
 	}
@@ -737,7 +737,7 @@ func newSQLiteDirectorSystem(t *testing.T) *sqliteDirectorSystem {
 	ids := &sqliteDirectorIDs{}
 	project := mustRef(t, "project:v12-director", goal.NewProjectRef)
 	owner := testPrincipal(t, "principal:v12-owner", "actor:v12-owner", identity.PrincipalKindHuman)
-	service := testPrincipal(t, "principal:v12-service", "actor:v12-service", identity.PrincipalKindService)
+	service := testPrincipal(t, "principal:v12-service", "actor:v12-service", identity.PrincipalKindHuman)
 	provisionTestAccess(t, repository, owner, project, identity.RoleProjectOwner, clock.Now())
 	grantTestMembership(t, repository, owner, service, project, identity.RoleOperator, "membership:v12-service", clock.Now())
 	ownerAccess, err := application.NewAccess(owner, project)

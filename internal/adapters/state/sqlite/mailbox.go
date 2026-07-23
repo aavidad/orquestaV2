@@ -9,6 +9,7 @@ import (
 	"orquesta/internal/application"
 	"orquesta/internal/goal"
 	"orquesta/internal/identity"
+	"orquesta/internal/ports"
 )
 
 func (repository *Repository) MailboxReplay(
@@ -45,10 +46,7 @@ func (repository *Repository) AdmitMailbox(
 		return application.MailboxRecord{}, false, err
 	}
 	defer func() { _ = transaction.Rollback() }()
-	if _, err := requirePersistedAuthorization(
-		ctx, transaction, state.AuthorizationReceipt, state.Envelope.Source.PrincipalRef,
-		state.Envelope.ProjectRef, identity.PermissionGoalsDirect, state.Envelope.GoalRef.String(),
-	); err != nil {
+	if err := requirePersistedMailboxAdmissionAuthorization(ctx, transaction, state); err != nil {
 		return application.MailboxRecord{}, false, err
 	}
 	replay, found, err := readMailboxReplay(ctx, transaction, application.MailboxReplayRequest{
@@ -171,6 +169,141 @@ INSERT INTO outbox(
 	return record, true, nil
 }
 
+func requirePersistedMailboxRecipientAuthorization(
+	ctx context.Context,
+	transaction *sql.Tx,
+	receipt identity.AuthorizationReceipt,
+	principalRef identity.PrincipalRef,
+	projectRef goal.ProjectRef,
+	permission identity.Permission,
+	resourceRef string,
+) error {
+	persisted, err := requirePersistedAuthorizationFact(
+		ctx, transaction, receipt, principalRef, projectRef, permission, resourceRef,
+	)
+	if err != nil {
+		return err
+	}
+	if persisted.Decision().Role() == identity.RoleExecutionService {
+		return nil
+	}
+	_, err = requirePersistedAuthorization(
+		ctx, transaction, receipt, principalRef, projectRef, permission, resourceRef,
+	)
+	return err
+}
+
+func requirePersistedMailboxAdmissionAuthorization(
+	ctx context.Context,
+	transaction *sql.Tx,
+	state application.AdmitMailboxState,
+) error {
+	receipt, err := requirePersistedAuthorizationFact(
+		ctx, transaction, state.AuthorizationReceipt, state.Envelope.Source.PrincipalRef,
+		state.Envelope.ProjectRef, identity.PermissionGoalsDirect, state.Envelope.GoalRef.String(),
+	)
+	if err != nil {
+		return err
+	}
+	if receipt.Decision().Role() != identity.RoleExecutionService {
+		_, err = requirePersistedAuthorization(
+			ctx, transaction, state.AuthorizationReceipt, state.Envelope.Source.PrincipalRef,
+			state.Envelope.ProjectRef, identity.PermissionGoalsDirect, state.Envelope.GoalRef.String(),
+		)
+		return err
+	}
+	principal := receipt.Decision().Request().Principal()
+	var goalValue, itemValue, executionValue, replacementValue, specHash, projectValue string
+	var attempt, planGeneration, appSpecGeneration int64
+	err = transaction.QueryRowContext(ctx, `
+SELECT e.goal_ref,e.work_item_ref,e.ref,COALESCE(e.replaces_execution_ref,''),e.spec_hash,
+       g.project_ref,e.attempt_no,e.plan_generation,e.app_spec_generation
+FROM executions e JOIN goals g ON g.ref=e.goal_ref
+JOIN outbox action ON action.goal_ref=e.goal_ref AND action.execution_ref=e.ref
+WHERE e.ref=? AND e.goal_ref=? AND e.work_item_ref=? AND e.state='succeeded'
+ AND action.kind='admit_mailbox' AND action.completed_at IS NULL
+ AND action.retired_at IS NULL AND action.quarantined_at IS NULL`,
+		state.Envelope.Source.ExecutionRef.String(), state.Envelope.GoalRef.String(),
+		state.Envelope.ChildWorkItemRef.String(),
+	).Scan(&goalValue, &itemValue, &executionValue, &replacementValue, &specHash,
+		&projectValue, &attempt, &planGeneration, &appSpecGeneration)
+	if err != nil {
+		return mapDatabaseError(err)
+	}
+	goalRef, _ := goal.NewGoalRef(goalValue)
+	itemRef, _ := goal.NewWorkItemRef(itemValue)
+	executionRef, _ := goal.NewExecutionRef(executionValue)
+	projectRef, _ := goal.NewProjectRef(projectValue)
+	var replacement goal.ExecutionRef
+	if replacementValue != "" {
+		replacement, _ = goal.NewExecutionRef(replacementValue)
+	}
+	request := ports.ExecutionSessionEnsureRequest{
+		ProjectRef: projectRef, GoalRef: goalRef, WorkItemRef: itemRef,
+		ExecutionRef: executionRef, ExecutionAttempt: uint64(attempt),
+		ReplacesExecutionRef: replacement, PlanGeneration: goal.PlanGeneration(planGeneration),
+		AppSpecGeneration: goal.AppSpecGeneration(appSpecGeneration), SpecHash: specHash,
+	}
+	authority, deriveErr := application.DeriveExecutionSessionAuthority(request, principal.Method)
+	if deriveErr != nil || authority.ServicePrincipal != principal {
+		return conflict(errors.New("sqlite.execution_authorization_scope"))
+	}
+	recipientAuthority, err := mailboxExecutionAuthority(
+		ctx, transaction, state.Envelope.Recipient.ExecutionRef,
+		state.Envelope.GoalRef, state.Envelope.ParentWorkItemRef, principal.Method,
+	)
+	if err != nil {
+		return err
+	}
+	if recipientAuthority.ServicePrincipal.Ref != state.Envelope.Recipient.PrincipalRef {
+		return conflict(errors.New("sqlite.execution_recipient_scope"))
+	}
+	return ensurePrincipal(ctx, transaction, recipientAuthority.ServicePrincipal)
+}
+
+func mailboxExecutionAuthority(
+	ctx context.Context,
+	transaction *sql.Tx,
+	executionRef goal.ExecutionRef,
+	goalRef goal.GoalRef,
+	workItemRef goal.WorkItemRef,
+	authenticationMethod string,
+) (ports.ExecutionSessionAuthority, error) {
+	var projectValue, replacementValue, specHash string
+	var attempt, planGeneration, appSpecGeneration int64
+	err := transaction.QueryRowContext(ctx, `
+SELECT g.project_ref,COALESCE(e.replaces_execution_ref,''),e.spec_hash,
+       e.attempt_no,e.plan_generation,e.app_spec_generation
+FROM executions e JOIN goals g ON g.ref=e.goal_ref
+WHERE e.ref=? AND e.goal_ref=? AND e.work_item_ref=?
+ AND e.state='running' AND g.state='running'`,
+		executionRef.String(), goalRef.String(), workItemRef.String(),
+	).Scan(&projectValue, &replacementValue, &specHash, &attempt, &planGeneration, &appSpecGeneration)
+	if err != nil {
+		return ports.ExecutionSessionAuthority{}, mapDatabaseError(err)
+	}
+	projectRef, projectErr := goal.NewProjectRef(projectValue)
+	var replacement goal.ExecutionRef
+	var replacementErr error
+	if replacementValue != "" {
+		replacement, replacementErr = goal.NewExecutionRef(replacementValue)
+	}
+	if projectErr != nil || replacementErr != nil || attempt <= 0 ||
+		planGeneration <= 0 || appSpecGeneration <= 0 {
+		return ports.ExecutionSessionAuthority{}, invalid(errors.New("sqlite.execution_recipient_invalid"))
+	}
+	authority, err := application.DeriveExecutionSessionAuthority(ports.ExecutionSessionEnsureRequest{
+		ProjectRef: projectRef, GoalRef: goalRef, WorkItemRef: workItemRef,
+		ExecutionRef: executionRef, ExecutionAttempt: uint64(attempt),
+		ReplacesExecutionRef: replacement, PlanGeneration: goal.PlanGeneration(planGeneration),
+		AppSpecGeneration: goal.AppSpecGeneration(appSpecGeneration), SpecHash: specHash,
+	}, authenticationMethod)
+	if err != nil {
+		return ports.ExecutionSessionAuthority{}, invalid(errors.New("sqlite.execution_recipient_invalid"))
+	}
+	return authority, nil
+}
+
 func (repository *Repository) ClaimMailbox(
 	ctx context.Context,
 	state application.ClaimMailboxState,
@@ -183,7 +316,7 @@ func (repository *Repository) ClaimMailbox(
 		return application.MailboxClaim{}, false, err
 	}
 	defer func() { _ = transaction.Rollback() }()
-	if _, err := requirePersistedAuthorization(
+	if err := requirePersistedMailboxRecipientAuthorization(
 		ctx, transaction, state.AuthorizationReceipt, state.PrincipalRef,
 		state.ProjectRef, identity.PermissionGoalsGet, state.MessageRef.String(),
 	); err != nil {

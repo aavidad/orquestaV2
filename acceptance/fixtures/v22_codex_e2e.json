@@ -1,0 +1,138 @@
+{
+  "schema_version": 1,
+  "receipt_schema_version": 3,
+  "contract_id": "AC-V22-CODEX-E2E",
+  "trusted_base_git_commit_oid": "665ef446a32a7f0512255640fa99b2e7edd9f29d",
+  "product_delta_base_git_commit_oid": "665ef446a32a7f0512255640fa99b2e7edd9f29d",
+  "product_delta_sealed_git_commit_oid": "",
+  "seal_status": "development_unsealed_candidate_pending",
+  "seal_note": "Red contract only: no V22 product candidate, seal, execution or PASS exists.",
+  "command": "sh -c './scripts/check_rebuild_write_set.sh 665ef446a32a7f0512255640fa99b2e7edd9f29d && git diff --check 665ef446a32a7f0512255640fa99b2e7edd9f29d HEAD -- && go test -mod=vendor -count=1 . ./acceptance ./internal/... ./cmd/... ./sdk/... && timeout --kill-after=10s 300s go test -mod=vendor -race -count=1 -timeout=270s ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/bootstrap -run \"^(TestCodexChildDeliveryUsesSameExecutionServicePrincipalAfterArtifactPersistence|TestCodexRuntimeUsesCatalogOwnedPrompt|TestExecutionServicePrincipalExactScopeRevocationAndRestart|TestProductionBuildCreatesDurableExecutionAuthorityResolver)$\" && e2e_events=$(go test -mod=vendor -tags=v22_real_e2e -json -count=1 -timeout=900s ./acceptance -run \"^(TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP|TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess)$\" 2>&1); e2e_status=$?; printf \"%s\\n\" \"$e2e_events\"; [ \"$e2e_status\" -eq 0 ] && for test_name in TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess; do printf \"%s\\n\" \"$e2e_events\" | grep -F \"\\\"Action\\\":\\\"run\\\"\" | grep -F \"\\\"Package\\\":\\\"orquesta/acceptance\\\"\" | grep -F \"\\\"Test\\\":\\\"$test_name\\\"\" >/dev/null && printf \"%s\\n\" \"$e2e_events\" | grep -F \"\\\"Action\\\":\\\"pass\\\"\" | grep -F \"\\\"Package\\\":\\\"orquesta/acceptance\\\"\" | grep -F \"\\\"Test\\\":\\\"$test_name\\\"\" >/dev/null || exit 1; done && GOFLAGS=-mod=vendor go vet . ./acceptance ./internal/... ./cmd/... ./sdk/commands'",
+  "execution_argv": [
+    "sh",
+    "-c",
+    "./scripts/check_rebuild_write_set.sh 665ef446a32a7f0512255640fa99b2e7edd9f29d && git diff --check 665ef446a32a7f0512255640fa99b2e7edd9f29d HEAD -- && go test -mod=vendor -count=1 . ./acceptance ./internal/... ./cmd/... ./sdk/... && timeout --kill-after=10s 300s go test -mod=vendor -race -count=1 -timeout=270s ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/bootstrap -run \"^(TestCodexChildDeliveryUsesSameExecutionServicePrincipalAfterArtifactPersistence|TestCodexRuntimeUsesCatalogOwnedPrompt|TestExecutionServicePrincipalExactScopeRevocationAndRestart|TestProductionBuildCreatesDurableExecutionAuthorityResolver)$\" && e2e_events=$(go test -mod=vendor -tags=v22_real_e2e -json -count=1 -timeout=900s ./acceptance -run \"^(TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP|TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess)$\" 2>&1); e2e_status=$?; printf \"%s\\n\" \"$e2e_events\"; [ \"$e2e_status\" -eq 0 ] && for test_name in TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess; do printf \"%s\\n\" \"$e2e_events\" | grep -F \"\\\"Action\\\":\\\"run\\\"\" | grep -F \"\\\"Package\\\":\\\"orquesta/acceptance\\\"\" | grep -F \"\\\"Test\\\":\\\"$test_name\\\"\" >/dev/null && printf \"%s\\n\" \"$e2e_events\" | grep -F \"\\\"Action\\\":\\\"pass\\\"\" | grep -F \"\\\"Package\\\":\\\"orquesta/acceptance\\\"\" | grep -F \"\\\"Test\\\":\\\"$test_name\\\"\" >/dev/null || exit 1; done && GOFLAGS=-mod=vendor go vet . ./acceptance ./internal/... ./cmd/... ./sdk/commands"
+  ],
+  "output_path": "product/evidence/v22_codex_e2e.output.txt",
+  "receipt_path": "product/evidence/v22_codex_e2e.json",
+  "candidate_subjects": [],
+  "implementation_status": "development_unsealed",
+  "lifecycle_gate": "V22_DEVELOPMENT_UNSEALED",
+  "preflight_status": "contract_ready_product_pending",
+  "preflight_note": "V21 is accredited; V22 product tests, real E2E, durable execution identity and catalog-owned Codex prompt are absent.",
+  "blocking_dependency_vertical": "none",
+  "dependency_receipt_path": "product/evidence/v21_i18n.json",
+  "dependency_activation_contract": {
+    "contract": "AC-V21-I18N",
+    "result": "PASS",
+    "source_worktree_state": "detached_clean",
+    "product_oid": "e25f95bbd72b26adb6e81c9ca759582b0734cfb4",
+    "sealed_oid": "216e61e80c1b46ae049fbf2c5caefb1a69e5f7b3",
+    "evidence_oid": "665ef446a32a7f0512255640fa99b2e7edd9f29d",
+    "integration_head_oid": "665ef446a32a7f0512255640fa99b2e7edd9f29d"
+  },
+  "owned_capability_ids": ["AGT-01", "AGT-03", "EVD-09", "STG-11"],
+  "dependency_verticals": ["command_registry", "council", "i18n", "recovery_backup"],
+  "public_interface": "mcp",
+  "execution_bound_mailbox_commands": [
+    "orquesta.mailbox.acknowledge",
+    "orquesta.mailbox.admit",
+    "orquesta.mailbox.block",
+    "orquesta.mailbox.claim",
+    "orquesta.mailbox.consume",
+    "orquesta.mailbox.get",
+    "orquesta.mailbox.list",
+    "orquesta.mailbox.mark_delivered"
+  ],
+  "required_behavior_tests": [
+    "TestCodexChildDeliveryUsesSameExecutionServicePrincipalAfterArtifactPersistence",
+    "TestCodexRuntimeUsesCatalogOwnedPrompt",
+    "TestExecutionServicePrincipalExactScopeRevocationAndRestart",
+    "TestProductionBuildCreatesDurableExecutionAuthorityResolver",
+    "TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP",
+    "TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess"
+  ],
+  "required_real_e2e_tests": [
+    "TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP",
+    "TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess"
+  ],
+  "required_product_closures": [
+    "catalog_owned_codex_prompt",
+    "causal_post_artifact_delivery",
+    "durable_execution_authority_binding",
+    "execution_service_credential_lifecycle",
+    "four_goal_real_codex_mcp_e2e",
+    "owned_process_census",
+    "real_backup_crash_restart"
+  ],
+  "goal_scenarios": [
+    {
+      "id": "A",
+      "purpose": "parent_child_dag_and_execution_bound_mailbox",
+      "expected_terminal": "completed"
+    },
+    {
+      "id": "B",
+      "purpose": "selective_stop_without_cross_goal_damage",
+      "expected_terminal": "controlled_stop"
+    },
+    {
+      "id": "C",
+      "purpose": "workspace_tests_review_integration_and_close",
+      "expected_terminal": "completed"
+    },
+    {
+      "id": "D",
+      "purpose": "backup_crash_restart_exactly_once_resume_and_close",
+      "expected_terminal": "completed"
+    }
+  ],
+  "service_identity_assertions": [
+    "binding_is_durable_across_restart",
+    "binding_is_exact_for_service_project_and_execution",
+    "child_delivery_after_artifact_persistence_uses_same_execution_service_principal",
+    "human_operator_never_impersonates_child_for_mailbox_admit",
+    "old_identity_is_revoked_before_successor_runs",
+    "secret_is_absent_from_argv_env_prompt_goal_journal_receipt_log_and_artifact",
+    "service_has_no_broad_human_role",
+    "wrong_missing_or_revoked_binding_fails_before_audit_and_handler"
+  ],
+  "final_consistency_assertions": [
+    "A_C_D_completed_and_B_controlled_stop",
+    "all_required_tests_and_reviews_are_causal",
+    "mailbox_has_no_orphan_or_unconsumed_terminal_message",
+    "no_duplicate_effect_agent_or_integration_after_restart",
+    "no_owned_process_survives_harness_cleanup",
+    "no_terminal_contradiction_across_goal_execution_action_test_review_and_integration"
+  ],
+  "simplicity_budget": {
+    "product_delta_loc_max": 3000,
+    "test_and_harness_delta_loc_max": 4200,
+    "new_top_level_store_max": 0,
+    "lifecycle_writer_max": 1,
+    "scheduler_max": 1,
+    "command_registry_max": 1,
+    "active_provider_adapter_max": 1,
+    "product_file_loc_max": 500
+  },
+  "deferred_ownership": [
+    "generated_apps_and_self_change_remain_V33",
+    "hermes_claude_gemini_ollama_and_provider_catalog_remain_V25",
+    "postgres_s3_multihost_remain_V31",
+    "tools_skills_rag_plugins_and_deploy_remain_V26_to_V29",
+    "web_and_wizard_remain_V23_and_V24"
+  ],
+  "known_bug_refs": [
+    "BUG-ORQ-20260723-366",
+    "BUG-ORQ-20260723-390",
+    "BUG-ORQ-20260723-391",
+    "BUG-ORQ-20260723-394",
+    "BUG-ORQ-20260723-395",
+    "BUG-ORQ-20260723-396"
+  ],
+  "pse_contract": {
+    "P": "implementation commit freezes exact sorted candidate subjects without receipt output or roadmap accreditation",
+    "S": "separate seal commit binds P the fixture blob and the length-framed ordered subject digest without implying PASS",
+    "E": "exact fixture argv runs from detached-clean S; receipt V3 and output are external to the candidate before roadmap promotion"
+  }
+}

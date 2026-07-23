@@ -925,7 +925,11 @@ func seedUnownedLiveProcess(t *testing.T, config Config, request ports.AgentLaun
 	}
 	command.Dir = filepath.Join(config.WorkRoot, filepath.FromSlash(runPath))
 	command.Env = append([]string(nil), adapter.environment...)
-	command.Stdin, command.Stdout, command.Stderr = strings.NewReader(agentPrompt(request)), io.Discard, io.Discard
+	prompt, err := adapter.renderAgentPrompt(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	command.Stdin, command.Stdout, command.Stderr = strings.NewReader(prompt), io.Discard, io.Discard
 	configureProcessGroup(command, nil)
 	owner, err := adapter.acquireOwnerLock(runPath)
 	if err != nil {

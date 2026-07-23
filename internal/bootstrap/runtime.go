@@ -16,6 +16,7 @@ import (
 	"orquesta/internal/adapters/artifact/filesystem"
 	"orquesta/internal/adapters/attestor/bubblewrap"
 	"orquesta/internal/adapters/auth/bearer"
+	"orquesta/internal/adapters/auth/executiontoken"
 	"orquesta/internal/adapters/auth/localtoken"
 	"orquesta/internal/adapters/auth/oidc"
 	configtoml "orquesta/internal/adapters/config/toml"
@@ -66,6 +67,7 @@ type Runtime struct {
 	artifacts       *filesystem.Store
 	testAttestor    interface{ Close() error }
 	workspace       *gitlocal.Adapter
+	credentialStore interface{ Close() error }
 	agent           AgentAdapter
 	listener        net.Listener
 	httpServer      *http.Server
@@ -99,14 +101,59 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		return nil, err
 	}
 	cleanup.add(func() { _ = listener.Close() })
-	agent, capabilities, controller, err := openBuildAgent(ctx, setup.snapshot, setup.clock, options.AgentFactory)
+	promptRenderer, err := newCatalogCodexPromptRenderer(setup.catalog, setup.snapshot.APILocale())
 	if err != nil {
 		return nil, err
 	}
-	cleanup.add(func() { shutdownBuildAgent(agent, setup.snapshot.ServerShutdownTimeout()) })
-	identityComposition, err := composeIdentityRuntime(ctx, setup.snapshot, options.IdentityHTTPClient)
-	if err != nil {
-		return nil, err
+	var (
+		agent               AgentAdapter
+		capabilities        ports.AgentCapabilities
+		controller          application.AgentController
+		identityComposition identityRuntimeComposition
+		credentialStore     *credentiallocal.Store
+	)
+	openAgent := func() error {
+		agent, capabilities, controller, err = openBuildAgent(
+			ctx, setup.snapshot, setup.clock, options.AgentFactory, promptRenderer, credentialStore,
+		)
+		if err == nil {
+			cleanup.add(func() { shutdownBuildAgent(agent, setup.snapshot.ServerShutdownTimeout()) })
+		}
+		return err
+	}
+	openIdentity := func() error {
+		identityComposition, err = composeIdentityRuntime(
+			ctx, setup.snapshot, options.IdentityHTTPClient,
+		)
+		return err
+	}
+	openCredentials := func() error {
+		credentialStore, err = openBuildCredentialStore(setup.snapshot, setup.clock)
+		if err == nil {
+			cleanup.add(func() { _ = credentialStore.Close() })
+		}
+		return err
+	}
+	if options.AgentFactory != nil {
+		if err := openAgent(); err != nil {
+			return nil, err
+		}
+		if err := openIdentity(); err != nil {
+			return nil, err
+		}
+		if err := openCredentials(); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := openIdentity(); err != nil {
+			return nil, err
+		}
+		if err := openCredentials(); err != nil {
+			return nil, err
+		}
+		if err := openAgent(); err != nil {
+			return nil, err
+		}
 	}
 	var workspace *gitlocal.Adapter
 	if setup.snapshot.RepositoryLocalSeedPath() != "" {
@@ -126,10 +173,6 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	if testAttestor.closer != nil {
 		cleanup.add(func() { _ = testAttestor.closer.Close() })
 	}
-	authenticator, err := bearer.New(identityComposition.provider)
-	if err != nil {
-		return nil, err
-	}
 	if err := writeEffectiveSnapshot(ctx, setup.snapshot); err != nil {
 		return nil, err
 	}
@@ -138,6 +181,32 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		return nil, err
 	}
 	cleanup.add(func() { _ = repository.Close() })
+	executionBroker, err := executiontoken.New(credentialStore, repository)
+	if err != nil {
+		return nil, err
+	}
+	identityProvider, err := executiontoken.NewRoutedProvider(identityComposition.provider, executionBroker)
+	if err != nil {
+		return nil, err
+	}
+	authenticator, err := bearer.New(identityProvider)
+	if err != nil {
+		return nil, err
+	}
+	mcpEndpoint := "http://" + listener.Addr().String() + setup.snapshot.ServerMCPPath()
+	if options.AgentFactory == nil {
+		sessionResolver, err := newCodexExecutionSessionResolver(repository, executionBroker, mcpEndpoint)
+		if err != nil {
+			return nil, err
+		}
+		if err := bindAgentSessionResolver(agent, sessionResolver); err != nil {
+			return nil, err
+		}
+	}
+	postArtifactMailbox, err := newLoopbackPostArtifactMailboxAdmitter(executionBroker, mcpEndpoint)
+	if err != nil {
+		return nil, err
+	}
 	artifacts, err := filesystem.Open(setup.snapshot.ArtifactFilesystemRoot())
 	if err != nil {
 		return nil, err
@@ -145,13 +214,16 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	cleanup.add(func() { _ = artifacts.Close() })
 	orchestrator, err := newBuildOrchestrator(
 		setup, repository, artifacts, agent, controller, capabilities, workspace, testAttestor,
+		executionRuntimeComposition{
+			sessions: executionBroker, postArtifactMailbox: postArtifactMailbox,
+		},
 	)
 	if err != nil {
 		return nil, err
 	}
 	runtime, err := newBuildRuntime(
 		setup, options, listener, agent, repository, artifacts, orchestrator, authenticator,
-		testAttestor.closer, workspace,
+		testAttestor.closer, workspace, credentialStore,
 	)
 	if err != nil {
 		return nil, err
@@ -231,11 +303,25 @@ func openBuildListener(snapshot config.Snapshot, listener net.Listener) (net.Lis
 	return listener, nil
 }
 
+func openBuildCredentialStore(
+	snapshot config.Snapshot,
+	clock application.Clock,
+) (*credentiallocal.Store, error) {
+	return credentiallocal.Open(credentiallocal.Options{
+		Path: snapshot.CredentialsLocalPath(), OwnerUID: os.Geteuid(),
+		MaxStoreBytes: snapshot.CredentialsLocalMaxDocumentBytes(), Now: clock.Now,
+	})
+}
+
 func openBuildAgent(
 	ctx context.Context, snapshot config.Snapshot, clock local.Clock, factory AgentFactory,
+	promptRenderer codex.PromptRenderer,
+	credentialStore credentials.Store,
 ) (AgentAdapter, ports.AgentCapabilities, application.AgentController, error) {
 	if factory == nil {
-		factory = productionAgentFactory
+		factory = func(snapshot config.Snapshot, clock application.Clock) (AgentAdapter, error) {
+			return productionAgentAdapter(snapshot, clock, promptRenderer, credentialStore)
+		}
 	}
 	agent, err := factory(snapshot, clock)
 	if err != nil {
@@ -258,6 +344,10 @@ func openBuildAgent(
 
 type workspaceResolverBinder interface {
 	BindWorkspacePathResolver(codex.WorkspacePathResolver) error
+}
+
+type sessionResolverBinder interface {
+	BindSessionResolver(codex.SessionResolver) error
 }
 
 // localRepositoryLocator is deliberately a one-binding composition adapter.
@@ -376,6 +466,14 @@ func bindAgentWorkspaceResolver(agent AgentAdapter, resolver codex.WorkspacePath
 	return binder.BindWorkspacePathResolver(resolver)
 }
 
+func bindAgentSessionResolver(agent AgentAdapter, resolver codex.SessionResolver) error {
+	binder, ok := agent.(sessionResolverBinder)
+	if !ok {
+		return errors.New("bootstrap.agent_session_resolver_unsupported")
+	}
+	return binder.BindSessionResolver(resolver)
+}
+
 func shutdownBuildAgent(agent AgentAdapter, timeout time.Duration) {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -411,17 +509,30 @@ func newBuildOrchestrator(
 	setup buildSetup, repository *statesqlite.Repository, artifacts *filesystem.Store,
 	agent AgentAdapter, controller application.AgentController, capabilities ports.AgentCapabilities, workspace *gitlocal.Adapter,
 	testAttestor buildTestAttestorComposition,
+	execution ...executionRuntimeComposition,
 ) (*application.Orchestrator, error) {
 	return application.New(buildOrchestratorDependencies(
-		setup, repository, artifacts, agent, controller, capabilities, workspace, testAttestor,
+		setup, repository, artifacts, agent, controller, capabilities, workspace, testAttestor, execution...,
 	))
+}
+
+type executionRuntimeComposition struct {
+	sessions            ports.ExecutionSessionBroker
+	postArtifactMailbox application.PostArtifactMailboxAdmitter
 }
 
 func buildOrchestratorDependencies(
 	setup buildSetup, repository *statesqlite.Repository, artifacts *filesystem.Store,
 	agent AgentAdapter, controller application.AgentController, capabilities ports.AgentCapabilities, workspace *gitlocal.Adapter,
 	testAttestor buildTestAttestorComposition,
+	execution ...executionRuntimeComposition,
 ) application.Dependencies {
+	var executionSessions ports.ExecutionSessionBroker
+	var postArtifactMailbox application.PostArtifactMailboxAdmitter
+	if len(execution) == 1 {
+		executionSessions = execution[0].sessions
+		postArtifactMailbox = execution[0].postArtifactMailbox
+	}
 	return application.Dependencies{
 		State: repository, Access: repository,
 		Launcher: agent, Observer: agent, Controller: controller, Artifacts: artifacts,
@@ -437,6 +548,7 @@ func buildOrchestratorDependencies(
 		EffectApprovalTTL:     setup.snapshot.GovernanceEffectApprovalTTL(), BudgetPolicy: setup.budgetPolicy,
 		ObservationDelay: setup.snapshot.SchedulerObservationInterval(), ExecutionTimeout: setup.snapshot.SchedulerExecutionTimeout(),
 		AgentCapabilities: capabilities,
+		ExecutionSessions: executionSessions, PostArtifactMailbox: postArtifactMailbox,
 	}
 }
 
@@ -446,13 +558,18 @@ func newBuildRuntime(
 	authenticator *bearer.Middleware,
 	testAttestor interface{ Close() error },
 	workspace *gitlocal.Adapter,
+	credentialStore interface{ Close() error },
 ) (*Runtime, error) {
 	version := strings.TrimSpace(options.Version)
 	if version == "" {
 		version = "dev"
 	}
+	executionResolver := options.CommandExecutionResolver
+	if executionResolver == nil {
+		executionResolver = repository
+	}
 	surfaces, err := newCommandSurfaces(
-		setup, version, orchestrator, repository, options.CommandExecutionResolver,
+		setup, version, orchestrator, repository, executionResolver,
 	)
 	if err != nil {
 		return nil, err
@@ -468,7 +585,7 @@ func newBuildRuntime(
 	}
 	return &Runtime{
 		config: setup.snapshot, orchestrator: orchestrator, dispatcher: surfaces.dispatcher, repository: repository,
-		artifacts: artifacts, testAttestor: testAttestor, workspace: workspace,
+		artifacts: artifacts, testAttestor: testAttestor, workspace: workspace, credentialStore: credentialStore,
 		agent: agent, listener: listener, httpServer: httpServer,
 		workerRef: setup.workerRef, reportError: options.ReportError,
 		lifecycleCtx: lifecycleCtx, cancelLifecycle: cancelLifecycle,
@@ -701,6 +818,11 @@ func (runtime *Runtime) performShutdown() {
 			failures = append(failures, err)
 		}
 	}
+	if runtime.credentialStore != nil {
+		if err := runtime.credentialStore.Close(); err != nil {
+			failures = append(failures, err)
+		}
+	}
 	if err := runtime.repository.Close(); err != nil {
 		failures = append(failures, err)
 	}
@@ -744,7 +866,52 @@ func Run(ctx context.Context, options Options) error {
 	return errors.Join(serveErr, runtime.Shutdown(shutdownCtx))
 }
 
-func productionAgentFactory(snapshot config.Snapshot, clock application.Clock) (AgentAdapter, error) {
+func productionAgentFactory(
+	snapshot config.Snapshot, clock application.Clock, renderers ...codex.PromptRenderer,
+) (AgentAdapter, error) {
+	if snapshot.RuntimeProvider() != "codex" {
+		return nil, errors.New("bootstrap.runtime_provider_unsupported")
+	}
+	var promptRenderer codex.PromptRenderer
+	if len(renderers) == 1 {
+		promptRenderer = renderers[0]
+	} else if len(renderers) != 0 {
+		return nil, errors.New("bootstrap.codex_prompt_renderer_invalid")
+	} else {
+		catalog, err := i18n.LoadBundled()
+		if err != nil {
+			return nil, err
+		}
+		promptRenderer, err = newCatalogCodexPromptRenderer(catalog, snapshot.APILocale())
+		if err != nil {
+			return nil, err
+		}
+	}
+	credentialRef := snapshot.RuntimeCodexCredentialRef()
+	if credentialRef == "" {
+		return productionAgentAdapter(snapshot, clock, promptRenderer, nil)
+	}
+	store, err := credentiallocal.Open(credentiallocal.Options{
+		Path: snapshot.CredentialsLocalPath(), OwnerUID: os.Geteuid(),
+		MaxStoreBytes: snapshot.CredentialsLocalMaxDocumentBytes(), Now: clock.Now,
+	})
+	if err != nil {
+		return nil, err
+	}
+	agent, err := productionAgentAdapter(snapshot, clock, promptRenderer, store)
+	if err != nil {
+		_ = store.Close()
+		return nil, err
+	}
+	return &credentialAgent{AgentAdapter: agent, closeStore: store.Close}, nil
+}
+
+func productionAgentAdapter(
+	snapshot config.Snapshot,
+	clock application.Clock,
+	promptRenderer codex.PromptRenderer,
+	credentialStore credentials.Store,
+) (AgentAdapter, error) {
 	if snapshot.RuntimeProvider() != "codex" {
 		return nil, errors.New("bootstrap.runtime_provider_unsupported")
 	}
@@ -761,27 +928,18 @@ func productionAgentFactory(snapshot config.Snapshot, clock application.Clock) (
 		ProcessPipeDrainDelay:   snapshot.RuntimeCodexProcessPipeDrainDelay(),
 		MaxDiagnosticBytes:      snapshot.RuntimeCodexMaxDiagnosticBytes(),
 		MaxConcurrentExecutions: int(snapshot.RuntimeCodexMaxConcurrentExecutions()),
+		PromptRenderer:          promptRenderer,
 		Environment:             environment, Now: clock.Now,
 	}
 	credentialRef := snapshot.RuntimeCodexCredentialRef()
-	if credentialRef == "" {
-		return codex.New(adapterConfig)
+	if credentialRef != "" {
+		if credentialStore == nil {
+			return nil, errors.New("bootstrap.credential_store_required")
+		}
+		adapterConfig.CredentialStore = credentialStore
+		adapterConfig.CredentialRef = credentials.CredentialRef(credentialRef)
 	}
-	store, err := credentiallocal.Open(credentiallocal.Options{
-		Path: snapshot.CredentialsLocalPath(), OwnerUID: os.Geteuid(),
-		MaxStoreBytes: snapshot.CredentialsLocalMaxDocumentBytes(), Now: clock.Now,
-	})
-	if err != nil {
-		return nil, err
-	}
-	adapterConfig.CredentialStore = store
-	adapterConfig.CredentialRef = credentials.CredentialRef(credentialRef)
-	agent, err := codex.New(adapterConfig)
-	if err != nil {
-		_ = store.Close()
-		return nil, err
-	}
-	return &credentialAgent{AgentAdapter: agent, closeStore: store.Close}, nil
+	return codex.New(adapterConfig)
 }
 
 type credentialAgent struct {
@@ -805,6 +963,14 @@ func (agent *credentialAgent) BindWorkspacePathResolver(resolver codex.Workspace
 		return errors.New("bootstrap.agent_workspace_resolver_unsupported")
 	}
 	return binder.BindWorkspacePathResolver(resolver)
+}
+
+func (agent *credentialAgent) BindSessionResolver(resolver codex.SessionResolver) error {
+	binder, ok := agent.AgentAdapter.(sessionResolverBinder)
+	if !ok {
+		return errors.New("bootstrap.agent_session_resolver_unsupported")
+	}
+	return binder.BindSessionResolver(resolver)
 }
 
 func (agent *credentialAgent) ControlCapabilities(ctx context.Context) (ports.AgentControlCapabilities, error) {

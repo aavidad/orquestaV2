@@ -233,6 +233,35 @@ UPDATE executions SET recipient_mailbox_retired = 1 WHERE ref = ?`, state.Execut
 	})
 }
 
+func (repository *Repository) RecordPostArtifactMailboxAdmitted(
+	ctx context.Context,
+	state application.PostArtifactMailboxAdmittedState,
+) error {
+	if state.Claim.Action.Kind != application.ActionAdmitMailbox ||
+		state.MessageRef.String() == "" || state.AdmissionRef == "" {
+		return invalid(errors.New("sqlite.post_artifact_mailbox_invalid"))
+	}
+	return repository.mutate(ctx, state.Claim, state.OperationAt, func(transaction *sql.Tx) error {
+		var count int
+		err := transaction.QueryRowContext(ctx, `
+SELECT COUNT(*) FROM mailbox_admission_receipts receipt
+JOIN mailbox_envelopes envelope ON envelope.ref=receipt.mailbox_message_ref
+WHERE receipt.ref=? AND receipt.mailbox_message_ref=? AND
+ envelope.goal_ref=? AND envelope.child_work_item_ref=? AND
+ envelope.source_execution_ref=?`,
+			state.AdmissionRef, state.MessageRef.String(), state.Claim.Action.GoalRef.String(),
+			state.Claim.Action.WorkItemRef.String(), state.Claim.Action.ExecutionRef.String(),
+		).Scan(&count)
+		if err != nil {
+			return mapDatabaseError(err)
+		}
+		if count != 1 {
+			return conflict(errors.New("sqlite.post_artifact_mailbox_receipt_missing"))
+		}
+		return completeClaim(ctx, transaction, state.Claim, state.OperationAt, "", false)
+	})
+}
+
 func (repository *Repository) RecordGoalSucceeded(ctx context.Context, state application.GoalSucceededState) error {
 	if _, err := validateSucceeded(state); err != nil {
 		return invalid(err)
@@ -263,6 +292,11 @@ func (repository *Repository) RecordGoalSucceeded(ctx context.Context, state app
 		}
 		if err := insertScheduled(ctx, transaction, state.NewExecutions, state.NewActions); err != nil {
 			return err
+		}
+		if state.PostArtifactAction != nil {
+			if err := insertAction(ctx, transaction, *state.PostArtifactAction); err != nil {
+				return err
+			}
 		}
 		if err := requireReadyExecutions(ctx, transaction, state.Goal); err != nil {
 			return err

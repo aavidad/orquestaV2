@@ -23,7 +23,7 @@ func TestBundledCatalogStrictResolutionAndManifest(t *testing.T) {
 	if got := catalog.Locales(); !reflect.DeepEqual(got, []string{"es", "en"}) {
 		t.Fatalf("Locales() = %v", got)
 	}
-	if got := len(catalog.Keys()); got != 47 {
+	if got := len(catalog.Keys()); got != 48 {
 		t.Fatalf("Keys() count = %d", got)
 	}
 	for _, obsolete := range []string{
@@ -97,6 +97,30 @@ func TestBundledCatalogStrictResolutionAndManifest(t *testing.T) {
 	locales[0], keys[0] = "mutated", "mutated"
 	if catalog.Locales()[0] != "es" || catalog.Keys()[0] == "mutated" {
 		t.Fatal("Locales()/Keys() expose mutable catalog state")
+	}
+}
+
+func TestCodexPromptCatalogOwnsExactSafePlaceholderSet(t *testing.T) {
+	catalog, err := LoadBundled()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := sortedCopy([]string{
+		"app_spec_generation", "artifact_media_type", "capability_refs", "execution_ref",
+		"goal_ref", "objective", "output_contract", "phase_criterion_refs", "phase_input_refs",
+		"phase_key", "phase_ref", "phase_template_ref", "plan_generation", "project_ref",
+		"role_key", "skill_refs", "tool_refs", "work_item_ref", "write_set",
+	})
+	for _, locale := range catalog.Locales() {
+		message, err := catalog.message(locale, "prompt.codex.agent")
+		if err != nil || !reflect.DeepEqual(message.placeholders, want) {
+			t.Fatalf("locale=%s placeholders=%v want=%v error=%v", locale, message.placeholders, want, err)
+		}
+		for _, forbidden := range []string{"spec_hash", "session_ref", "secret", "token"} {
+			if contains(message.placeholders, forbidden) {
+				t.Fatalf("locale=%s forbidden prompt placeholder=%s", locale, forbidden)
+			}
+		}
 	}
 }
 
@@ -302,7 +326,7 @@ func testManifest(keys []string) []byte {
 			{ID: "mcp", State: "active", KeySources: []string{"surface:cli"}, LiteralPolicy: "catalog_only"},
 			{ID: "public_docs", State: "active", KeySources: []string{"public_documents"}, LiteralPolicy: "localized_document_bundle"},
 			{ID: "notifications", State: "future", LiteralPolicy: "catalog_required_before_activation"},
-			{ID: "prompts", State: "future", LiteralPolicy: "catalog_required_before_activation"},
+			{ID: "prompts", State: "active", KeySources: []string{"surface:cli"}, LiteralPolicy: "catalog_only"},
 			{ID: "web", State: "future", LiteralPolicy: "catalog_required_before_activation"},
 			{ID: "wizard", State: "future", LiteralPolicy: "catalog_required_before_activation"},
 		},

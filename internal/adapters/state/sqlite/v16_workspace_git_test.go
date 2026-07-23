@@ -35,7 +35,7 @@ func TestSQLiteWorkspaceGitRestartRaceAndReplay(t *testing.T) {
 		}
 	}
 	var version int
-	if err := repository.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != recoverySchemaV20 {
+	if err := repository.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != recoverySchemaV21 {
 		t.Fatalf("v16 version=%d err=%v", version, err)
 	}
 	if err := repository.Close(); err != nil {

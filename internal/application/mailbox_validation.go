@@ -24,7 +24,7 @@ func (orchestrator *Orchestrator) prepareMailboxMutation(
 		return nil, identity.AuthorizationReceipt{}, err
 	}
 	if err := orchestrator.requireCurrentMailboxAccess(
-		ctx, principal.Ref, projectRef, identity.PermissionGoalsGet,
+		ctx, access, principal.Ref, projectRef, identity.PermissionGoalsGet,
 	); err != nil {
 		return nil, identity.AuthorizationReceipt{}, err
 	}
@@ -61,10 +61,18 @@ func (orchestrator *Orchestrator) mailboxMutationAuthorization(
 
 func (orchestrator *Orchestrator) requireCurrentMailboxAccess(
 	ctx context.Context,
+	access Access,
 	principalRef identity.PrincipalRef,
 	projectRef goal.ProjectRef,
 	permission identity.Permission,
 ) error {
+	if access.executionServiceBound() {
+		principal, boundProject, err := access.values()
+		if err != nil || principal.Ref != principalRef || boundProject != projectRef {
+			return errForbidden
+		}
+		return nil
+	}
 	membership, err := orchestrator.access.Membership(ctx, principalRef, projectRef)
 	if err != nil {
 		if IsStateError(err, StateNotFound) {

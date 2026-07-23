@@ -68,7 +68,7 @@ func (repository *Repository) advanceMailbox(
 		return application.MailboxRecord{}, false, err
 	}
 	defer func() { _ = transaction.Rollback() }()
-	if _, err := requirePersistedAuthorization(
+	if err := requirePersistedMailboxRecipientAuthorization(
 		ctx, transaction, advance.authorization, advance.principalRef,
 		advance.projectRef, identity.PermissionGoalsGet, advance.messageRef.String(),
 	); err != nil {

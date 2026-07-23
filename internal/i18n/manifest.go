@@ -69,7 +69,7 @@ func validateManifest(manifest Manifest) error {
 		"cli": {"active", "catalog_only"}, "command_registry": {"active", "registry_keys_catalog_values"},
 		"http": {"active", "machine_envelope_catalog_presenter"}, "mcp": {"active", "catalog_only"},
 		"public_docs": {"active", "localized_document_bundle"}, "notifications": {"future", "catalog_required_before_activation"},
-		"prompts": {"future", "catalog_required_before_activation"}, "web": {"future", "catalog_required_before_activation"},
+		"prompts": {"active", "catalog_only"}, "web": {"future", "catalog_required_before_activation"},
 		"wizard": {"future", "catalog_required_before_activation"},
 	}
 	surfaces := make(map[string]Surface, len(manifest.Surfaces))

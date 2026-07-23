@@ -45,5 +45,6 @@
   "error.not_found": "The requested resource was not found.",
   "error.unauthenticated": "The request is not authenticated.",
   "error.unavailable": "The operation is temporarily unavailable.",
+  "prompt.codex.agent": "Produce one artifact for the following objective.\n\nProject reference:\n{project_ref}\n\nGoal reference:\n{goal_ref}\n\nWorkItem reference:\n{work_item_ref}\n\nExecution reference:\n{execution_ref}\n\nPlan generation:\n{plan_generation}\n\nAppSpec generation:\n{app_spec_generation}\n\nObjective:\n{objective}\n\nPhase instance:\n{phase_ref}\n\nPhase key:\n{phase_key}\n\nPhase template:\n{phase_template_ref}\n\nPhase inputs:\n{phase_input_refs}\n\nPhase criteria:\n{phase_criterion_refs}\n\nRole:\n{role_key}\n\nSkills:\n{skill_refs}\n\nTools:\n{tool_refs}\n\nCapabilities:\n{capability_refs}\n\nAllowed write scopes:\n{write_set}\n\nOutput contract:\n{output_contract}\n\nArtifact media type:\n{artifact_media_type}\n\nReturn only the JSON object required by the supplied schema. Set artifact to the complete artifact content.\n",
   "server.instructions": "Orquesta coordinates durable Goals through typed tools."
 }

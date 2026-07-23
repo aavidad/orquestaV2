@@ -67,7 +67,12 @@ func (writer *cappedDiagnostic) snapshot() ([]byte, bool) {
 	return append([]byte(nil), writer.buffer.Bytes()...), writer.truncated
 }
 
-func (adapter *Adapter) startExecutionLocked(callerContext context.Context, request ports.AgentLaunchRequest, state *executionState, environment []string) {
+func (adapter *Adapter) startExecutionLocked(callerContext context.Context, request ports.AgentLaunchRequest, state *executionState, environment []string, session *resolvedSession) {
+	prompt, err := adapter.renderAgentPrompt(request)
+	if err != nil {
+		adapter.finishWithoutProcessLocked(state, ErrorCode(err), []byte(err.Error()))
+		return
+	}
 	if err := adapter.prepareRuntimeFiles(state.runPath); err != nil {
 		adapter.finishWithoutProcessLocked(state, CodeStatePersistenceFailed, []byte(err.Error()))
 		return
@@ -94,7 +99,7 @@ func (adapter *Adapter) startExecutionLocked(callerContext context.Context, requ
 
 	diagnostic := &cappedDiagnostic{maximum: adapter.config.MaxDiagnosticBytes}
 	command, gateReader, gateWriter, commandErr := adapter.executionWorkspaceCommand(
-		runContext, state.runPath, workspaceBound, workspaceBound && len(request.WriteSet) != 0,
+		runContext, state.runPath, workspaceBound, workspaceBound && len(request.WriteSet) != 0, session,
 	)
 	if commandErr != nil {
 		timeout.Stop()
@@ -103,7 +108,7 @@ func (adapter *Adapter) startExecutionLocked(callerContext context.Context, requ
 		adapter.finishWithoutProcessLocked(state, CodeProcessStartFailed, []byte(commandErr.Error()))
 		return
 	}
-	adapter.configureExecutionCommand(command, runContext, workingDirectory, environment, request, diagnostic)
+	adapter.configureExecutionCommand(command, runContext, workingDirectory, environment, prompt, diagnostic)
 
 	var ownerLock *os.File
 	if adapter.processControlsEnabled() {
@@ -149,7 +154,7 @@ func (adapter *Adapter) startExecutionLocked(callerContext context.Context, requ
 
 func (adapter *Adapter) configureExecutionCommand(
 	command *exec.Cmd, runContext context.Context, workingDirectory string,
-	environment []string, request ports.AgentLaunchRequest, diagnostic *cappedDiagnostic,
+	environment []string, prompt string, diagnostic *cappedDiagnostic,
 ) {
 	command.WaitDelay = adapter.config.ProcessPipeDrainDelay
 	configureProcessGroup(command, func() error { return context.Cause(runContext) })
@@ -158,7 +163,7 @@ func (adapter *Adapter) configureExecutionCommand(
 	if command.Env == nil {
 		command.Env = []string{}
 	}
-	command.Stdin = strings.NewReader(agentPrompt(request))
+	command.Stdin = strings.NewReader(prompt)
 	command.Stdout = io.Discard
 	command.Stderr = diagnostic
 }
@@ -222,13 +227,13 @@ func (adapter *Adapter) executionWorkingDirectory(ctx context.Context, request p
 // existing non-workspace control tests. Production launch uses the explicit
 // workspace variant below.
 func (adapter *Adapter) executionCommand(runContext context.Context, runPath string) (*exec.Cmd, *os.File, *os.File, error) {
-	return adapter.executionWorkspaceCommand(runContext, runPath, false, false)
+	return adapter.executionWorkspaceCommand(runContext, runPath, false, false, nil)
 }
 
 func (adapter *Adapter) executionWorkspaceCommand(runContext context.Context, runPath string,
-	workspaceBound, workspaceWritable bool,
+	workspaceBound, workspaceWritable bool, session *resolvedSession,
 ) (*exec.Cmd, *os.File, *os.File, error) {
-	arguments := adapter.commandArguments(runPath, workspaceBound, workspaceWritable)
+	arguments := adapter.commandArgumentsWithSession(runPath, workspaceBound, workspaceWritable, session)
 	if !adapter.processControlsEnabled() {
 		return exec.CommandContext(runContext, adapter.command, arguments...), nil, nil, nil
 	}
@@ -551,6 +556,10 @@ func (adapter *Adapter) commandArguments(runPath string, workspace ...bool) []st
 	if len(workspace) >= 2 {
 		workspaceBound, workspaceWritable = workspace[0], workspace[0] && workspace[1]
 	}
+	return adapter.commandArgumentsWithSession(runPath, workspaceBound, workspaceWritable, nil)
+}
+
+func (adapter *Adapter) commandArgumentsWithSession(runPath string, workspaceBound, workspaceWritable bool, session *resolvedSession) []string {
 	schemaPath := filepath.Join(adapter.rootPath, filepath.FromSlash(path.Join(runPath, outputSchemaFileName)))
 	lastMessagePath := filepath.Join(adapter.rootPath, filepath.FromSlash(path.Join(runPath, lastMessageFileName)))
 	arguments := []string{
@@ -566,14 +575,14 @@ func (adapter *Adapter) commandArguments(runPath string, workspace ...bool) []st
 		"--config", fmt.Sprintf("model_reasoning_effort=%q", adapter.config.ReasoningEffort),
 		"--config", `shell_environment_policy.inherit="all"`,
 		"--config", shellEnvironmentIncludeOnly(adapter.config.Environment),
-		"--config", `shell_environment_policy.exclude=["CODEX_API_KEY","OPENAI_API_KEY"]`,
+		"--config", `shell_environment_policy.exclude=["CODEX_API_KEY","OPENAI_API_KEY","ORQUESTA_MCP_BEARER_TOKEN"]`,
 		"--config", `shell_environment_policy.ignore_default_excludes=false`,
 		"--config", `shell_environment_policy.experimental_use_profile=false`,
 	}
 	if adapter.config.Model != "" {
 		arguments = append(arguments, "--model", adapter.config.Model)
 	}
-	return arguments
+	return append(arguments, sessionArguments(session)...)
 }
 
 func codexSandbox(workspaceBound bool) string {
@@ -597,25 +606,6 @@ func clearEnvironment(environment []string) {
 	for index := range environment {
 		environment[index] = ""
 	}
-}
-
-func agentPrompt(request ports.AgentLaunchRequest) string {
-	return "Produce one artifact for the following objective.\n\n" +
-		"Objective:\n" + request.Objective + "\n\n" +
-		"Phase instance:\n" + request.PhaseRef + "\n\n" +
-		"Phase key:\n" + request.PhaseKey + "\n\n" +
-		"Phase template:\n" + request.PhaseTemplateRef + "\n\n" +
-		"Phase inputs:\n" + strings.Join(request.PhaseInputRefs, "\n") + "\n\n" +
-		"Phase criteria:\n" + strings.Join(request.PhaseCriterionRefs, "\n") + "\n\n" +
-		"Role:\n" + request.RoleKey + "\n\n" +
-		"Skills:\n" + strings.Join(request.SkillRefs, "\n") + "\n\n" +
-		"Tools:\n" + strings.Join(request.ToolRefs, "\n") + "\n\n" +
-		"Capabilities:\n" + strings.Join(request.CapabilityRefs, "\n") + "\n\n" +
-		"Allowed write scopes:\n" + strings.Join(request.WriteSet, "\n") + "\n\n" +
-		"Output contract:\n" + request.OutputContract + "\n\n" +
-		"Artifact media type:\n" + request.ArtifactMediaType + "\n\n" +
-		"Return only the JSON object required by the supplied schema. " +
-		"Set artifact to the complete artifact content.\n"
 }
 
 func (adapter *Adapter) readModelResult(runPath string, maxOutputBytes int64) (modelResult, string) {

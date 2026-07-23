@@ -12,6 +12,10 @@ const (
 	RoleReviewer      Role = "reviewer"
 	RoleOperator      Role = "operator"
 	RoleViewer        Role = "viewer"
+	// RoleExecutionService is never grantable as project membership. It exists
+	// only on authorization receipts whose adapter revalidated one exact
+	// execution-bound service principal.
+	RoleExecutionService Role = "execution_service"
 )
 
 type Permission string
@@ -35,7 +39,7 @@ const (
 func ValidateRole(role Role) error {
 	switch role {
 	case RolePlatformAdmin, RoleProjectOwner, RoleProjectAdmin, RoleContributor,
-		RoleReviewer, RoleOperator, RoleViewer:
+		RoleReviewer, RoleOperator, RoleViewer, RoleExecutionService:
 		return nil
 	default:
 		return errors.New("identity.invalid_role")
@@ -83,6 +87,9 @@ func RoleAllows(role Role, permission Permission) bool {
 			permission == PermissionEffectsApprove || permission == PermissionChangesIntegrate ||
 			permission == PermissionCouncilSkip || permission == PermissionArtifactsRead ||
 			permission == PermissionProjectStatus
+	case RoleExecutionService:
+		return permission == PermissionGoalsGet || permission == PermissionGoalsDirect ||
+			permission == PermissionArtifactsRead
 	default:
 		return false
 	}
@@ -91,7 +98,7 @@ func RoleAllows(role Role, permission Permission) bool {
 // CanDelegateMembershipRole is the complete membership delegation policy.
 // Unknown roles and the platform-wide role are never valid project grants.
 func CanDelegateMembershipRole(grantor Role, target Role) bool {
-	if target == RolePlatformAdmin || ValidateRole(target) != nil {
+	if target == RolePlatformAdmin || target == RoleExecutionService || ValidateRole(target) != nil {
 		return false
 	}
 	switch grantor {

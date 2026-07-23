@@ -57,3 +57,22 @@ func TestLaunchTargetDigestBindsExactExecution(t *testing.T) {
 		t.Fatal("execution attempt retained launch target digest")
 	}
 }
+
+func TestDeterministicExecutionSessionRefPreservesPreV22TargetDigest(t *testing.T) {
+	actor, project := testScope(t)
+	goalRef, _ := goal.NewGoalRef("goal:target-session")
+	itemRef, _ := goal.NewWorkItemRef("work-item:target-session")
+	executionRef, _ := goal.NewExecutionRef("execution:target-session")
+	request := ports.AgentLaunchRequest{
+		ExecutionRef: executionRef, GoalRef: goalRef, WorkItemRef: itemRef,
+		PlanGeneration: 1, AppSpecGeneration: 1, ExecutionAttempt: 1,
+		SpecHash: testDigest("target-session"), ActorRef: actor, ProjectRef: project,
+		IdempotencyKey: "launch:target-session",
+	}
+	legacy := authorLaunchTargetDigest(request)
+	session, _ := ports.NewExecutionSessionRef("execution-session:sha256:" + testDigest("session-ref"))
+	request.SessionRef = session
+	if got := authorLaunchTargetDigest(request); got != legacy {
+		t.Fatalf("deterministic SessionRef invalidated durable target: got=%s want=%s", got, legacy)
+	}
+}

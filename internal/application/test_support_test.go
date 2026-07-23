@@ -535,6 +535,25 @@ func (repository *memoryRepository) ApplyControl(
 	return state.Control, created, nil
 }
 
+func (repository *memoryRepository) RecordPostArtifactMailboxAdmitted(
+	_ context.Context,
+	state PostArtifactMailboxAdmittedState,
+) error {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	action, found := repository.actions[state.Claim.Action.Ref]
+	if !found || action.token != state.Claim.Token || state.MessageRef.String() == "" ||
+		state.AdmissionRef == "" {
+		return &StateError{Code: StateConflict}
+	}
+	delete(repository.actions, state.Claim.Action.Ref)
+	record := repository.records[state.Claim.Action.GoalRef]
+	record.ConsumptionReceipts = append(record.ConsumptionReceipts,
+		consumptionReceipt(state.Claim, ActionConsumedCompleted, "", state.OperationAt))
+	repository.records[state.Claim.Action.GoalRef] = record
+	return nil
+}
+
 func (repository *memoryRepository) ListGoals(_ context.Context, project goal.ProjectRef, limit int) ([]GoalSummary, error) {
 	repository.mu.Lock()
 	defer repository.mu.Unlock()
@@ -1678,6 +1697,9 @@ func (repository *memoryRepository) RecordGoalSucceeded(_ context.Context, state
 	for _, action := range state.NewActions {
 		memoryAddActionFacts(&record, action)
 		repository.actions[action.Ref] = memoryAction{record: action}
+	}
+	if state.PostArtifactAction != nil {
+		repository.actions[state.PostArtifactAction.Ref] = memoryAction{record: *state.PostArtifactAction}
 	}
 	repository.records[state.Goal.Ref()] = record
 	repository.events = append(repository.events, state.Events...)

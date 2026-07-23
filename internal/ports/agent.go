@@ -41,6 +41,9 @@ type AgentRequirements struct {
 
 type AgentLaunchRequest struct {
 	ExecutionRef goal.ExecutionRef
+	// SessionRef binds a child runtime to the exact durable execution tuple.
+	// Empty preserves compositions that do not expose execution-bound APIs.
+	SessionRef ExecutionSessionRef
 	// ExecutionWorkspaceRef is an opaque, optional execution workspace binding.
 	// When empty the adapter preserves the non-code path.  A physical path is
 	// deliberately never carried through this provider-neutral request.
@@ -158,6 +161,11 @@ func MatchAgentCapabilities(capabilities AgentCapabilities, requirements AgentRe
 }
 
 func ValidateAgentLaunchRequest(request AgentLaunchRequest) error {
+	if request.SessionRef.String() != "" {
+		if _, err := NewExecutionSessionRef(request.SessionRef.String()); err != nil {
+			return &AgentContractError{Code: "agent.execution_session_ref_invalid"}
+		}
+	}
 	switch {
 	case request.ExecutionRef.String() == "":
 		return &AgentContractError{Code: "agent.execution_ref_required"}

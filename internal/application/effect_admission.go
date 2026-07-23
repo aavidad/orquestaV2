@@ -321,6 +321,10 @@ func effectAdmissionFingerprint(fields ...string) string {
 }
 
 func authorLaunchTargetDigest(request ports.AgentLaunchRequest) string {
+	// SessionRef is a deterministic projection of the exact tuple below. It is
+	// deliberately not ratcheted into the persisted V15 effect fingerprint:
+	// doing so would invalidate pre-V22 pending actions without adding authority
+	// or entropy. The launch contract still carries and validates the opaque ref.
 	return effectAdmissionFingerprint(
 		"target:launch:v1", request.ProjectRef.String(), request.GoalRef.String(), request.WorkItemRef.String(),
 		request.ExecutionRef.String(), strconv.FormatUint(uint64(request.PlanGeneration), 10),

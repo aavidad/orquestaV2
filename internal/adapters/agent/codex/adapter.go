@@ -59,6 +59,10 @@ const (
 	CodeEnvironmentInvalid       = "codex.environment_invalid"
 	CodeCredentialInvalid        = "codex.credential_invalid"
 	CodeCredentialUnavailable    = "codex.credential_unavailable"
+	CodePromptRendererInvalid    = "codex.prompt_renderer_invalid"
+	CodePromptRenderFailed       = "codex.prompt_render_failed"
+	CodeSessionInvalid           = "codex.session_invalid"
+	CodeSessionUnavailable       = "codex.session_unavailable"
 	CodeWorkspaceResolverInvalid = "codex.workspace_resolver_invalid"
 	CodeWorkspaceUnavailable     = "codex.workspace_unavailable"
 	CodeWorkspaceUnsafe          = "codex.workspace_unsafe"
@@ -104,6 +108,8 @@ type Config struct {
 	Environment             map[string]string
 	CredentialStore         credentials.Store
 	CredentialRef           credentials.CredentialRef
+	PromptRenderer          PromptRenderer
+	SessionResolver         SessionResolver
 	WorkspacePathResolver   WorkspacePathResolver
 	Now                     func() time.Time
 }
@@ -185,6 +191,7 @@ type executionState struct {
 	terminalDurable     bool
 	cancel              context.CancelCauseFunc
 	credentialGuard     *credentials.LeakGuard
+	sessionGuard        *credentials.LeakGuard
 	process             *processRecord
 	ownerLock           *os.File
 	settled             chan struct{}
@@ -321,7 +328,26 @@ func (adapter *Adapter) Launch(ctx context.Context, request ports.AgentLaunchReq
 		return ports.AgentLaunchReceipt{}, err
 	}
 	if found {
-		return adapter.resumeLaunchRecordLocked(ctx, request, requestHash, record, runPath, false, nil, nil)
+		// A durable terminal is replayable without re-resolving a short-lived
+		// bearer. A non-terminal journal, including one written immediately
+		// before a crash, must resolve the exact requested session again before
+		// it can be adopted or recovered.
+		if record.SchemaVersion == stateSchemaVersion && record.RequestHash == requestHash {
+			if _, terminalFound, terminalErr := adapter.loadCausalTerminal(runPath, record.RequestHash, record.SpecHash, record.MaxOutputBytes); terminalErr != nil {
+				return ports.AgentLaunchReceipt{}, terminalErr
+			} else if terminalFound {
+				return adapter.resumeLaunchRecordLocked(ctx, request, requestHash, record, runPath, false, nil, nil, nil)
+			}
+		}
+		session, sessionErr := adapter.resolveSession(ctx, request)
+		if sessionErr != nil {
+			return ports.AgentLaunchReceipt{}, sessionErr
+		}
+		defer session.destroy()
+		if preflightErr := adapter.preflightSessionLaunch(session, request); preflightErr != nil {
+			return ports.AgentLaunchReceipt{}, preflightErr
+		}
+		return adapter.resumeLaunchRecordLocked(ctx, request, requestHash, record, runPath, false, nil, nil, session)
 	}
 	if adapter.activeExecutionCountLocked() >= adapter.config.MaxConcurrentExecutions {
 		return ports.AgentLaunchReceipt{}, &Error{
@@ -330,14 +356,24 @@ func (adapter *Adapter) Launch(ctx context.Context, request ports.AgentLaunchReq
 		}
 	}
 
+	session, err := adapter.resolveSession(ctx, request)
+	if err != nil {
+		return ports.AgentLaunchReceipt{}, err
+	}
+	defer session.destroy()
+	if err := adapter.preflightSessionLaunch(session, request); err != nil {
+		return ports.AgentLaunchReceipt{}, err
+	}
 	if adapter.config.CredentialStore != nil {
-		return adapter.launchWithCredentialLocked(ctx, request, requestHash)
+		return adapter.launchWithCredentialLocked(ctx, request, requestHash, session)
 	}
 	record, runPath, recordCreated, err := adapter.ensureLaunchRecord(request, requestHash)
 	if err != nil {
 		return ports.AgentLaunchReceipt{}, err
 	}
-	return adapter.resumeLaunchRecordLocked(ctx, request, requestHash, record, runPath, recordCreated, adapter.environment, nil)
+	environment := adapter.environmentWithSession(adapter.environment, session)
+	defer clearEnvironment(environment)
+	return adapter.resumeLaunchRecordLocked(ctx, request, requestHash, record, runPath, recordCreated, environment, nil, session)
 }
 
 func (adapter *Adapter) resumeLaunchRecordLocked(
@@ -349,10 +385,14 @@ func (adapter *Adapter) resumeLaunchRecordLocked(
 	recordCreated bool,
 	environment []string,
 	credentialGuard *credentials.LeakGuard,
+	session *resolvedSession,
 ) (ports.AgentLaunchReceipt, error) {
 	defer func() {
 		if credentialGuard != nil {
 			credentialGuard.Destroy()
+		}
+		if session != nil {
+			session.destroy()
 		}
 	}()
 	executionKey := request.ExecutionRef.String()
@@ -409,7 +449,11 @@ func (adapter *Adapter) resumeLaunchRecordLocked(
 	adapter.executions[executionKey] = state
 	state.credentialGuard = credentialGuard
 	credentialGuard = nil
-	adapter.startExecutionLocked(ctx, request, state, environment)
+	if session != nil {
+		state.sessionGuard = session.guard
+		session.guard = nil
+	}
+	adapter.startExecutionLocked(ctx, request, state, environment, session)
 	return receipt, nil
 }
 

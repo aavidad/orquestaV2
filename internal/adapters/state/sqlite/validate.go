@@ -720,7 +720,7 @@ func validateConsumptionReceipt(receipt application.ActionConsumptionReceipt) er
 	}
 	switch receipt.Kind {
 	case application.ActionLaunchAgent, application.ActionObserveAgent, application.ActionStopAgent,
-		application.ActionPrepareWorkspace:
+		application.ActionPrepareWorkspace, application.ActionAdmitMailbox:
 		if receipt.MailboxMessageRef.String() != "" || receipt.ChangeRef.String() != "" {
 			return errors.New("sqlite.consumption_receipt_mailbox_unexpected")
 		}
@@ -760,7 +760,7 @@ func validateAction(action application.ActionRecord) error {
 	}
 	switch action.Kind {
 	case application.ActionLaunchAgent, application.ActionObserveAgent, application.ActionDeliverMailbox,
-		application.ActionPrepareWorkspace:
+		application.ActionPrepareWorkspace, application.ActionAdmitMailbox:
 		if action.ControlRef != "" || action.ChangeRef.String() != "" || action.ExpectedTargetOID != "" ||
 			action.ReviewGateDigest != "" || action.CouncilResolution != nil {
 			return errors.New("sqlite.action_scope_unexpected")
@@ -994,6 +994,10 @@ func validateRequeued(state application.ActionRequeuedState) error {
 		if state.Execution.State != application.ExecutionAwaitingIntegration {
 			return errors.New("sqlite.requeue_integration_state_invalid")
 		}
+	case application.ActionAdmitMailbox:
+		if state.Execution.State != application.ExecutionSucceeded {
+			return errors.New("sqlite.requeue_mailbox_admission_state_invalid")
+		}
 	default:
 		return errors.New("sqlite.requeue_action_kind_invalid")
 	}
@@ -1184,6 +1188,15 @@ func validateSucceeded(state application.GoalSucceededState) (goal.WorkItem, err
 	}
 	if err := validateScheduled(state.Goal, state.NewExecutions, state.NewActions); err != nil {
 		return goal.WorkItem{}, err
+	}
+	if state.PostArtifactAction != nil {
+		action := *state.PostArtifactAction
+		if err := validateAction(action); err != nil || action.Kind != application.ActionAdmitMailbox ||
+			action.Ref != "action:admit-mailbox:"+state.Execution.Ref.String() ||
+			action.GoalRef != state.Goal.Ref() || action.WorkItemRef != item.Ref() ||
+			action.ExecutionRef != state.Execution.Ref || !item.HandoffRequired() {
+			return goal.WorkItem{}, errors.New("sqlite.post_artifact_action_invalid")
+		}
 	}
 	requiredEvents := []eventSemantic{
 		newEventSemantic("work_item.succeeded", state.Execution.WorkItemRef, state.Execution.Ref),

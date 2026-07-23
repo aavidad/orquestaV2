@@ -18,6 +18,7 @@ func (adapter *Adapter) launchWithCredentialLocked(
 	ctx context.Context,
 	request ports.AgentLaunchRequest,
 	requestHash string,
+	session *resolvedSession,
 ) (ports.AgentLaunchReceipt, error) {
 	var receipt ports.AgentLaunchReceipt
 	var launchErr error
@@ -33,12 +34,12 @@ func (adapter *Adapter) launchWithCredentialLocked(
 			launchErr = err
 			return err
 		}
-		if err := adapter.preflightCredentialLaunch(secret, guard, request); err != nil {
+		if err := adapter.preflightCredentialLaunch(secret, guard, request, session); err != nil {
 			guard.Destroy()
 			launchErr = err
 			return err
 		}
-		environment := adapter.environmentWithCredential(secret)
+		environment := adapter.environmentWithSession(adapter.environmentWithCredential(secret), session)
 		defer clearEnvironment(environment)
 		record, runPath, recordCreated, err := adapter.ensureLaunchRecord(request, requestHash)
 		if err != nil {
@@ -47,7 +48,7 @@ func (adapter *Adapter) launchWithCredentialLocked(
 			return err
 		}
 		receipt, launchErr = adapter.resumeLaunchRecordLocked(
-			ctx, request, requestHash, record, runPath, recordCreated, environment, guard,
+			ctx, request, requestHash, record, runPath, recordCreated, environment, guard, session,
 		)
 		return launchErr
 	})
@@ -63,17 +64,21 @@ func (adapter *Adapter) launchWithCredentialLocked(
 	return receipt, nil
 }
 
-func (adapter *Adapter) preflightCredentialLaunch(secret credentials.Secret, guard *credentials.LeakGuard, request ports.AgentLaunchRequest) error {
+func (adapter *Adapter) preflightCredentialLaunch(secret credentials.Secret, guard *credentials.LeakGuard, request ports.AgentLaunchRequest, session *resolvedSession) error {
 	material := secret.Bytes()
 	defer clearBytes(material)
 	if bytes.IndexByte(material, 0) >= 0 {
 		return &Error{Code: CodeCredentialInvalid}
 	}
+	prompt, err := adapter.renderAgentPrompt(request)
+	if err != nil {
+		return err
+	}
 	runPath := executionPath(request.ExecutionRef)
 	surfaces := []credentials.LeakSurface{
-		{Name: "prompt", Content: []byte(agentPrompt(request))},
+		{Name: "prompt", Content: []byte(prompt)},
 		{Name: "command", Content: []byte(adapter.command)},
-		{Name: "arguments", Content: []byte(strings.Join(adapter.commandArguments(runPath), "\x00"))},
+		{Name: "arguments", Content: []byte(strings.Join(adapter.commandArgumentsWithSession(runPath, false, false, session), "\x00"))},
 		{Name: "work_root", Content: []byte(adapter.rootPath)},
 	}
 	surfaces = append(surfaces, credentialLaunchRequestSurfaces(request)...)
@@ -140,13 +145,16 @@ func (adapter *Adapter) environmentWithCredential(secret credentials.Secret) []s
 }
 
 func (adapter *Adapter) gateCredentialTerminalLocked(state *executionState, terminal terminalRecord) (terminalRecord, error) {
-	guard := state.credentialGuard
-	if guard == nil {
+	guards := []*credentials.LeakGuard{state.credentialGuard, state.sessionGuard}
+	if guards[0] == nil && guards[1] == nil {
 		return terminal, nil
 	}
 	defer func() {
-		guard.Destroy()
+		for _, guard := range guards {
+			guard.Destroy()
+		}
 		state.credentialGuard = nil
+		state.sessionGuard = nil
 	}()
 	raw, readErr := adapter.readCredentialOutput(state.runPath, state.maxOutput)
 	defer clearBytes(raw)
@@ -163,7 +171,16 @@ func (adapter *Adapter) gateCredentialTerminalLocked(state *executionState, term
 		{Name: "artifact", Content: artifactProjection},
 		{Name: "decoded_artifact", Content: decodedArtifactProjection},
 	}
-	scanErr := guard.Scan(surfaces)
+	var scanErr error
+	for _, guard := range guards {
+		if guard == nil {
+			continue
+		}
+		if err := guard.Scan(surfaces); err != nil {
+			scanErr = err
+			break
+		}
+	}
 	if readErr == nil && scanErr == nil {
 		return terminal, nil
 	}

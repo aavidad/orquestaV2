@@ -41,6 +41,7 @@ type Membership struct {
 
 func NewMembership(input MembershipInput) (Membership, error) {
 	if input.PrincipalRef.String() == "" || input.ProjectRef.String() == "" ||
+		input.Role == RoleExecutionService ||
 		input.GrantedBy.String() == "" || input.GrantedAt.IsZero() || input.Revision == 0 {
 		return Membership{}, errors.New("identity.membership_required_field_missing")
 	}
@@ -105,6 +106,9 @@ func NewMembershipGrantRequest(input MembershipGrantRequestInput) (MembershipGra
 	if !validCode(input.RequestRef) || ValidatePrincipal(input.Actor) != nil ||
 		input.TargetRef.String() == "" || input.ProjectRef.String() == "" || input.RequestedAt.IsZero() ||
 		input.ExpectedRevision == maxMembershipRevision() {
+		return MembershipGrantRequest{}, errors.New("identity.membership_grant_invalid")
+	}
+	if input.Role == RoleExecutionService {
 		return MembershipGrantRequest{}, errors.New("identity.membership_grant_invalid")
 	}
 	if err := ValidateRole(input.Role); err != nil {
@@ -188,6 +192,9 @@ func NewMembershipAuditReceipt(input MembershipAuditReceiptInput) (MembershipAud
 	if !validCode(input.Ref) || !validCode(input.RequestRef) || input.ActorRef.String() == "" ||
 		input.TargetRef.String() == "" || input.ProjectRef.String() == "" || input.OccurredAt.IsZero() ||
 		input.PreviousRevision == maxMembershipRevision() || input.Revision != input.PreviousRevision+1 {
+		return MembershipAuditReceipt{}, errors.New("identity.membership_audit_invalid")
+	}
+	if input.Role == RoleExecutionService {
 		return MembershipAuditReceipt{}, errors.New("identity.membership_audit_invalid")
 	}
 	if err := ValidateRole(input.Role); err != nil {

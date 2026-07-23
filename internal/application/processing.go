@@ -54,6 +54,8 @@ func (orchestrator *Orchestrator) ProcessNext(ctx context.Context, workerRef str
 		err = orchestrator.processAttestTest(ctx, claim)
 	case ActionIntegrateChange:
 		err = orchestrator.processIntegrateChange(ctx, claim)
+	case ActionAdmitMailbox:
+		err = orchestrator.processPostArtifactMailboxAdmission(ctx, claim)
 	default:
 		err = orchestrator.quarantine(ctx, claim, fmt.Sprintf("application.action_kind_invalid:%s", claim.Action.Kind))
 	}
@@ -62,6 +64,10 @@ func (orchestrator *Orchestrator) ProcessNext(ctx context.Context, workerRef str
 
 func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim ActionClaim) error {
 	record, item, execution, phase, proceed, err := orchestrator.loadClaimedLaunch(ctx, claim)
+	if err != nil || !proceed {
+		return err
+	}
+	sessionRef, proceed, err := orchestrator.ensureExecutionSession(ctx, claim, record, execution)
 	if err != nil || !proceed {
 		return err
 	}
@@ -81,6 +87,7 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 			return orchestrator.quarantineUnapplied(ctx, claim, err.Error())
 		}
 	}
+	request.SessionRef = sessionRef
 	targetDigest := authorLaunchTargetDigest(request)
 	if isReviewerExecution(execution) || isCouncilExecution(execution) {
 		targetDigest = reviewerLaunchTargetDigest(request)
@@ -152,6 +159,33 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	}
 	return nil
+}
+
+func (orchestrator *Orchestrator) ensureExecutionSession(
+	ctx context.Context,
+	claim ActionClaim,
+	record GoalRecord,
+	execution ExecutionRecord,
+) (ports.ExecutionSessionRef, bool, error) {
+	if orchestrator.executionSessions == nil {
+		return "", true, nil
+	}
+	request := ExecutionSessionRequest(record.Goal, execution)
+	receipt, err := orchestrator.executionSessions.Ensure(ctx, request)
+	if err != nil {
+		requeueErr := orchestrator.requeueUnappliedEffect(
+			ctx, claim, execution, "", "application.execution_session_unavailable",
+		)
+		return "", false, requeueErr
+	}
+	method := receipt.Authority.ServicePrincipal.Method
+	expected, deriveErr := DeriveExecutionSessionAuthority(request, method)
+	if deriveErr != nil || !SameExecutionSessionAuthority(expected, receipt.Authority) ||
+		receipt.EnsuredAt.IsZero() {
+		err = orchestrator.quarantineUnapplied(ctx, claim, "application.execution_session_invalid")
+		return "", false, err
+	}
+	return receipt.Authority.SessionRef, true, nil
 }
 
 func (orchestrator *Orchestrator) loadClaimedLaunch(
@@ -600,6 +634,14 @@ func (orchestrator *Orchestrator) succeedGoal(ctx context.Context, claim ActionC
 	if err != nil {
 		return err
 	}
+	var postArtifactAction *ActionRecord
+	if orchestrator.postArtifactMailbox != nil && orchestrator.executionSessions != nil {
+		succeededItem, _ := aggregate.WorkItem(item.Ref())
+		postArtifactAction, err = postArtifactMailboxAction(aggregate, succeededItem, execution, transitionAt)
+		if err != nil {
+			return err
+		}
+	}
 	events := []EventRecord{{Ref: "event:work-succeeded:" + execution.Ref.String(), Kind: "work_item.succeeded", GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref, OccurredAt: transitionAt}}
 	if aggregate.State() == goal.GoalStateSucceeded {
 		events = append(events, EventRecord{Ref: "event:goal-succeeded:" + aggregate.Ref().String(), Kind: "goal.succeeded", GoalRef: aggregate.Ref(), OccurredAt: transitionAt})
@@ -612,8 +654,9 @@ func (orchestrator *Orchestrator) succeedGoal(ctx context.Context, claim ActionC
 		ExpectedItemRevision: item.Revision(), Goal: aggregate, Execution: execution,
 		Artifact: artifact, Attestation: attestation,
 		NewExecutions: newExecutions, NewActions: newActions, Events: events,
-		BudgetSettlement: settlement,
-		OperationAt:      transitionAt,
+		PostArtifactAction: postArtifactAction,
+		BudgetSettlement:   settlement,
+		OperationAt:        transitionAt,
 	})
 }
 

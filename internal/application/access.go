@@ -73,6 +73,11 @@ func (access Access) authenticatedExecution(expected goal.ExecutionRef) (goal.Ex
 	return access.authenticatedExec, nil
 }
 
+func (access Access) executionServiceBound() bool {
+	return access.authenticatedExec.String() != "" &&
+		access.principal.Kind == identity.PrincipalKindService
+}
+
 type MembershipGrantState struct {
 	AuthorizationReceipt identity.AuthorizationReceipt
 	Request              identity.MembershipGrantRequest

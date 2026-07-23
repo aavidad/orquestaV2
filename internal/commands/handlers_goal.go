@@ -60,11 +60,7 @@ func handleGetGoal(ctx context.Context, api applicationAPI, bound handlerContext
 		return nil, err
 	}
 	record, err := api.GetGoal(ctx, bound.access, ref)
-	return marshalApplication(struct {
-		Goal           goalView `json:"goal"`
-		ExecutionCount int      `json:"execution_count"`
-		ArtifactCount  int      `json:"artifact_count"`
-	}{projectGoal(record.Goal), len(record.Executions), len(record.Artifacts)}, err)
+	return marshalApplication(projectGoalRecord(record), err)
 }
 
 func handleListGoals(ctx context.Context, api applicationAPI, bound handlerContext, payload json.RawMessage) (json.RawMessage, error) {

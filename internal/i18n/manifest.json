@@ -101,9 +101,9 @@
     },
     {
       "id": "prompts",
-      "state": "future",
-      "key_sources": [],
-      "literal_policy": "catalog_required_before_activation"
+      "state": "active",
+      "key_sources": ["catalog:prompt.codex.agent"],
+      "literal_policy": "catalog_only"
     },
     {
       "id": "web",

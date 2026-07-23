@@ -440,6 +440,11 @@ func validateRecoveryAuthorizationTuple(decision identity.AuthorizationDecision)
 	case authorizationReasonAllowed:
 		valid = decision.Outcome() == identity.AuthorizationAllowed &&
 			identity.ValidateRole(role) == nil && identity.RoleAllows(role, permission) && revision > 0
+	case authorizationReasonExecutionBound:
+		principal := decision.Request().Principal()
+		valid = decision.Outcome() == identity.AuthorizationAllowed &&
+			role == identity.RoleExecutionService && identity.RoleAllows(role, permission) && revision > 0 &&
+			principal.Kind == identity.PrincipalKindService
 	case authorizationReasonProjectUnknown, authorizationReasonMembershipMissing:
 		valid = decision.Outcome() == identity.AuthorizationDenied && role == "" && revision == 0
 	case authorizationReasonMembershipRevoked:

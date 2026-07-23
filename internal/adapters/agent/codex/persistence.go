@@ -31,6 +31,7 @@ type launchRecord struct {
 	SchemaVersion         int                    `json:"schema_version"`
 	RequestHash           string                 `json:"request_hash"`
 	ExecutionRef          string                 `json:"execution_ref"`
+	ExecutionSessionRef   string                 `json:"execution_session_ref,omitempty"`
 	ExecutionWorkspaceRef string                 `json:"execution_workspace_ref,omitempty"`
 	GoalRef               string                 `json:"goal_ref"`
 	WorkItemRef           string                 `json:"work_item_ref"`
@@ -97,6 +98,7 @@ type legacyRequestHashDocument struct {
 type requestHashDocument struct {
 	SchemaVersion         int                    `json:"schema_version"`
 	ExecutionRef          string                 `json:"execution_ref"`
+	ExecutionSessionRef   string                 `json:"execution_session_ref,omitempty"`
 	ExecutionWorkspaceRef string                 `json:"execution_workspace_ref,omitempty"`
 	GoalRef               string                 `json:"goal_ref"`
 	WorkItemRef           string                 `json:"work_item_ref"`
@@ -131,7 +133,7 @@ func hashLaunchRequest(request ports.AgentLaunchRequest) (string, error) {
 // non-workspace execution.  V5 binds the opaque workspace ref into the same
 // canonical hash document, rather than silently reusing a V4 launch.
 func hashV4LaunchRequest(request ports.AgentLaunchRequest) (string, error) {
-	if request.ExecutionWorkspaceRef.String() != "" {
+	if request.ExecutionWorkspaceRef.String() != "" || request.SessionRef.String() != "" {
 		return "", &Error{Code: CodeExecutionConflict}
 	}
 	return hashLaunchRequestVersion(request, intermediateStateSchemaVersion)
@@ -141,6 +143,7 @@ func hashLaunchRequestVersion(request ports.AgentLaunchRequest, schemaVersion in
 	document := requestHashDocument{
 		SchemaVersion:         schemaVersion,
 		ExecutionRef:          request.ExecutionRef.String(),
+		ExecutionSessionRef:   request.SessionRef.String(),
 		ExecutionWorkspaceRef: request.ExecutionWorkspaceRef.String(),
 		GoalRef:               request.GoalRef.String(),
 		WorkItemRef:           request.WorkItemRef.String(),
@@ -230,6 +233,7 @@ func (adapter *Adapter) ensureLaunchRecord(request ports.AgentLaunchRequest, req
 		SchemaVersion:         stateSchemaVersion,
 		RequestHash:           requestHash,
 		ExecutionRef:          request.ExecutionRef.String(),
+		ExecutionSessionRef:   request.SessionRef.String(),
 		ExecutionWorkspaceRef: request.ExecutionWorkspaceRef.String(),
 		GoalRef:               request.GoalRef.String(),
 		WorkItemRef:           request.WorkItemRef.String(),
@@ -301,7 +305,7 @@ func (adapter *Adapter) readLaunchRecord(runPath string) (launchRecord, bool, er
 	}
 	switch record.SchemaVersion {
 	case legacyStateSchemaVersion:
-		if record.GoalRef != "" || record.WorkItemRef != "" ||
+		if record.ExecutionSessionRef != "" || record.GoalRef != "" || record.WorkItemRef != "" ||
 			record.PlanGeneration != 0 || record.AppSpecGeneration != 0 || record.ExecutionAttempt != 0 ||
 			record.ModelRef != "" || record.AgentRef != "" {
 			return launchRecord{}, false, &Error{Code: CodeStateInvalid}
@@ -322,6 +326,7 @@ func (adapter *Adapter) readLaunchRecord(runPath string) (launchRecord, bool, er
 
 func validateLaunchRecordV4(record launchRecord) error {
 	if record.SchemaVersion != intermediateStateSchemaVersion ||
+		record.ExecutionSessionRef != "" ||
 		record.GoalRef == "" ||
 		record.WorkItemRef == "" ||
 		record.PlanGeneration == 0 ||
@@ -340,6 +345,12 @@ func validateLaunchRecordV5(record launchRecord) error {
 		record.PlanGeneration == 0 || record.AppSpecGeneration == 0 || record.ExecutionAttempt == 0 ||
 		record.ModelRef == "" || record.AgentRef != AgentRef {
 		return &Error{Code: CodeStateInvalid}
+	}
+	if record.ExecutionSessionRef != "" {
+		ref, err := ports.NewExecutionSessionRef(record.ExecutionSessionRef)
+		if err != nil || ref.String() != record.ExecutionSessionRef {
+			return &Error{Code: CodeStateInvalid}
+		}
 	}
 	return nil
 }
@@ -370,6 +381,7 @@ func (adapter *Adapter) bindLegacyLaunchRecord(
 		SchemaVersion:         stateSchemaVersion,
 		RequestHash:           requestHash,
 		ExecutionRef:          legacy.ExecutionRef,
+		ExecutionSessionRef:   request.SessionRef.String(),
 		ExecutionWorkspaceRef: request.ExecutionWorkspaceRef.String(),
 		GoalRef:               request.GoalRef.String(),
 		WorkItemRef:           request.WorkItemRef.String(),

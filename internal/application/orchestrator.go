@@ -37,6 +37,8 @@ type Dependencies struct {
 	ObservationDelay        time.Duration
 	ExecutionTimeout        time.Duration
 	AgentCapabilities       ports.AgentCapabilities
+	ExecutionSessions       ports.ExecutionSessionBroker
+	PostArtifactMailbox     PostArtifactMailboxAdmitter
 }
 
 type Orchestrator struct {
@@ -63,6 +65,8 @@ type Orchestrator struct {
 	observationDelay        time.Duration
 	executionTimeout        time.Duration
 	agentCapabilities       ports.AgentCapabilities
+	executionSessions       ports.ExecutionSessionBroker
+	postArtifactMailbox     PostArtifactMailboxAdmitter
 }
 
 func New(dependencies Dependencies) (*Orchestrator, error) {
@@ -139,6 +143,8 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 		observationDelay:        dependencies.ObservationDelay,
 		executionTimeout:        dependencies.ExecutionTimeout,
 		agentCapabilities:       cloneAgentCapabilities(dependencies.AgentCapabilities),
+		executionSessions:       dependencies.ExecutionSessions,
+		postArtifactMailbox:     dependencies.PostArtifactMailbox,
 	}, nil
 }
 

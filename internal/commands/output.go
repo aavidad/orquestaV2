@@ -11,13 +11,14 @@ import (
 )
 
 type goalView struct {
-	GoalRef        string `json:"goal_ref"`
-	ProjectRef     string `json:"project_ref"`
-	State          string `json:"state"`
-	Revision       uint64 `json:"revision"`
-	PlanGeneration uint64 `json:"plan_generation"`
-	SpecHash       string `json:"spec_hash"`
-	WorkItemCount  int    `json:"work_item_count"`
+	GoalRef           string `json:"goal_ref"`
+	ProjectRef        string `json:"project_ref"`
+	State             string `json:"state"`
+	Revision          uint64 `json:"revision"`
+	PlanGeneration    uint64 `json:"plan_generation"`
+	AppSpecGeneration uint64 `json:"app_spec_generation"`
+	SpecHash          string `json:"spec_hash"`
+	WorkItemCount     int    `json:"work_item_count"`
 }
 
 type goalReceiptView struct {
@@ -45,7 +46,232 @@ func projectGoal(value goal.Goal) goalView {
 	return goalView{
 		GoalRef: value.Ref().String(), ProjectRef: value.Project().String(), State: string(value.State()),
 		Revision: uint64(value.Revision()), PlanGeneration: uint64(value.PlanGeneration()),
-		SpecHash: value.SpecHash(), WorkItemCount: value.WorkItemCount(),
+		AppSpecGeneration: uint64(value.AppSpec().Generation()), SpecHash: value.SpecHash(), WorkItemCount: value.WorkItemCount(),
+	}
+}
+
+type workItemView struct {
+	WorkItemRef       string   `json:"work_item_ref"`
+	State             string   `json:"state"`
+	Revision          uint64   `json:"revision"`
+	ParentWorkItemRef string   `json:"parent_work_item_ref"`
+	DependencyRefs    []string `json:"dependency_refs"`
+	HandoffRequired   bool     `json:"handoff_required"`
+	ExecutionRef      string   `json:"execution_ref"`
+	ArtifactRefs      []string `json:"artifact_refs"`
+	AttestationRefs   []string `json:"attestation_refs"`
+	Paused            bool     `json:"paused"`
+	CancelRequested   bool     `json:"cancel_requested"`
+	InterruptCode     string   `json:"interrupt_code"`
+}
+
+func projectWorkItem(value goal.WorkItem) workItemView {
+	parentRef := ""
+	if ref, ok := value.Parent(); ok {
+		parentRef = ref.String()
+	}
+	executionRef := ""
+	if ref, ok := value.Execution(); ok {
+		executionRef = ref.String()
+	}
+	interruptCode := ""
+	if cause, ok := value.InterruptCause(); ok {
+		interruptCode = string(cause)
+	}
+	dependencies := value.Dependencies()
+	dependencyRefs := make([]string, 0, len(dependencies))
+	for _, ref := range dependencies {
+		dependencyRefs = append(dependencyRefs, ref.String())
+	}
+	artifacts := value.Artifacts()
+	artifactRefs := make([]string, 0, len(artifacts))
+	for _, ref := range artifacts {
+		artifactRefs = append(artifactRefs, ref.String())
+	}
+	attestations := value.Attestations()
+	attestationRefs := make([]string, 0, len(attestations))
+	for _, ref := range attestations {
+		attestationRefs = append(attestationRefs, ref.String())
+	}
+	return workItemView{
+		WorkItemRef: value.Ref().String(), State: string(value.State()), Revision: uint64(value.Revision()),
+		ParentWorkItemRef: parentRef, DependencyRefs: dependencyRefs, HandoffRequired: value.HandoffRequired(),
+		ExecutionRef: executionRef, ArtifactRefs: artifactRefs, AttestationRefs: attestationRefs,
+		Paused: value.Paused(), CancelRequested: value.CancelRequested(), InterruptCode: interruptCode,
+	}
+}
+
+type executionView struct {
+	ExecutionRef            string `json:"execution_ref"`
+	WorkItemRef             string `json:"work_item_ref"`
+	AttemptNo               uint64 `json:"attempt_no"`
+	MaxAttempts             uint64 `json:"max_attempts"`
+	ReplacesExecutionRef    string `json:"replaces_execution_ref"`
+	PlanGeneration          uint64 `json:"plan_generation"`
+	AppSpecGeneration       uint64 `json:"app_spec_generation"`
+	State                   string `json:"state"`
+	Purpose                 string `json:"purpose"`
+	FailureCode             string `json:"failure_code"`
+	RecipientMailboxRetired bool   `json:"recipient_mailbox_retired"`
+}
+
+func projectExecution(value application.ExecutionRecord) executionView {
+	return executionView{
+		ExecutionRef: value.Ref.String(), WorkItemRef: value.WorkItemRef.String(),
+		AttemptNo: value.AttemptNo, MaxAttempts: value.MaxExecutionAttempts,
+		ReplacesExecutionRef: value.ReplacesExecutionRef.String(),
+		PlanGeneration:       uint64(value.PlanGeneration), AppSpecGeneration: uint64(value.AppSpecGeneration),
+		State: string(value.State), Purpose: string(value.Purpose), FailureCode: value.FailureCode,
+		RecipientMailboxRetired: value.RecipientMailboxRetired,
+	}
+}
+
+type requiredTestOutcomeView struct {
+	RequiredTestRef string `json:"required_test_ref"`
+	ExitCode        int    `json:"exit_code"`
+	OutputDigest    string `json:"output_digest"`
+}
+
+type attestationView struct {
+	AttestationRef    string                    `json:"attestation_ref"`
+	Kind              string                    `json:"kind"`
+	Verdict           string                    `json:"verdict"`
+	WorkItemRef       string                    `json:"work_item_ref"`
+	ExecutionRef      string                    `json:"execution_ref"`
+	ExecutionAttempt  uint64                    `json:"execution_attempt"`
+	PlanGeneration    uint64                    `json:"plan_generation"`
+	WorkItemRevision  uint64                    `json:"work_item_revision"`
+	AppSpecGeneration uint64                    `json:"app_spec_generation"`
+	ChangeRef         string                    `json:"change_ref"`
+	Tests             []requiredTestOutcomeView `json:"tests"`
+}
+
+func projectAttestation(value application.AttestationRecord) attestationView {
+	tests := make([]requiredTestOutcomeView, 0, len(value.Tests))
+	for _, outcome := range value.Tests {
+		tests = append(tests, requiredTestOutcomeView{
+			RequiredTestRef: outcome.RequiredTestRef.String(), ExitCode: outcome.ExitCode, OutputDigest: outcome.OutputDigest,
+		})
+	}
+	return attestationView{
+		AttestationRef: value.Ref.String(), Kind: string(value.Kind), Verdict: string(value.Verdict),
+		WorkItemRef: value.WorkItemRef.String(), ExecutionRef: value.ExecutionRef.String(),
+		ExecutionAttempt: value.ExecutionAttempt, PlanGeneration: uint64(value.PlanGeneration),
+		WorkItemRevision: uint64(value.WorkItemGeneration), AppSpecGeneration: uint64(value.AppSpecGeneration),
+		ChangeRef: value.ChangeSetRef.String(), Tests: tests,
+	}
+}
+
+type reviewView struct {
+	ReviewRef                string `json:"review_ref"`
+	WorkItemRef              string `json:"work_item_ref"`
+	ChangeRef                string `json:"change_ref"`
+	SubjectDigest            string `json:"subject_digest"`
+	Role                     string `json:"role"`
+	Verdict                  string `json:"verdict"`
+	ReviewerExecutionRef     string `json:"reviewer_execution_ref"`
+	ReviewerExecutionAttempt uint64 `json:"reviewer_execution_attempt"`
+}
+
+func projectReview(value application.ReviewRecord) reviewView {
+	return reviewView{
+		ReviewRef: value.Ref, WorkItemRef: value.WorkItemRef.String(), ChangeRef: value.ChangeSetRef.String(),
+		SubjectDigest: value.SubjectDigest, Role: string(value.Role), Verdict: string(value.Verdict),
+		ReviewerExecutionRef:     value.ReviewerExecutionRef.String(),
+		ReviewerExecutionAttempt: value.ReviewerExecutionAttempt,
+	}
+}
+
+type controlView struct {
+	ControlRef             string `json:"control_ref"`
+	Operation              string `json:"operation"`
+	Target                 string `json:"target"`
+	Status                 string `json:"status"`
+	Mode                   string `json:"mode"`
+	GoalRevision           uint64 `json:"goal_revision"`
+	PlanGeneration         uint64 `json:"plan_generation"`
+	AppSpecGeneration      uint64 `json:"app_spec_generation"`
+	WorkItemRef            string `json:"work_item_ref"`
+	WorkItemRevision       uint64 `json:"work_item_revision"`
+	ExecutionRef           string `json:"execution_ref"`
+	ExecutionAttempt       uint64 `json:"execution_attempt"`
+	ReceiptRef             string `json:"receipt_ref"`
+	SupersedesControlRef   string `json:"supersedes_control_ref"`
+	SupersededByControlRef string `json:"superseded_by_control_ref"`
+}
+
+func projectControl(value application.ControlRecord) controlView {
+	return controlView{
+		ControlRef: value.Ref, Operation: string(value.Operation), Target: string(value.Target),
+		Status: string(value.Status), Mode: string(value.Mode), GoalRevision: uint64(value.GoalRevision),
+		PlanGeneration: uint64(value.PlanGeneration), AppSpecGeneration: uint64(value.AppSpecGeneration),
+		WorkItemRef: value.WorkItemRef.String(), WorkItemRevision: uint64(value.WorkItemRevision),
+		ExecutionRef: value.ExecutionRef.String(), ExecutionAttempt: value.ExecutionAttempt,
+		ReceiptRef: value.ReceiptRef, SupersedesControlRef: value.SupersedesControlRef,
+		SupersededByControlRef: value.SupersededByControlRef,
+	}
+}
+
+type integrationReceiptView struct {
+	IntegrationRef  string `json:"integration_ref"`
+	ChangeRef       string `json:"change_ref"`
+	Status          string `json:"status"`
+	TargetBeforeOID string `json:"target_before_oid"`
+	TargetAfterOID  string `json:"target_after_oid"`
+	TreeOID         string `json:"tree_oid"`
+	ConflictDigest  string `json:"conflict_digest"`
+}
+
+func projectIntegrationReceipt(value application.IntegrationReceipt) integrationReceiptView {
+	return integrationReceiptView{
+		IntegrationRef: value.Ref, ChangeRef: value.ChangeRef.String(), Status: string(value.Status),
+		TargetBeforeOID: value.TargetBeforeOID, TargetAfterOID: value.TargetAfterOID,
+		TreeOID: value.TreeOID, ConflictDigest: value.ConflictDigest,
+	}
+}
+
+type goalRecordView struct {
+	Goal                goalView                 `json:"goal"`
+	ExecutionCount      int                      `json:"execution_count"`
+	ArtifactCount       int                      `json:"artifact_count"`
+	WorkItems           []workItemView           `json:"work_items"`
+	Executions          []executionView          `json:"executions"`
+	Attestations        []attestationView        `json:"attestations"`
+	Reviews             []reviewView             `json:"reviews"`
+	Controls            []controlView            `json:"controls"`
+	IntegrationReceipts []integrationReceiptView `json:"integration_receipts"`
+}
+
+func projectGoalRecord(value application.GoalRecord) goalRecordView {
+	items := value.Goal.WorkItems()
+	workItems := make([]workItemView, 0, len(items))
+	for _, item := range items {
+		workItems = append(workItems, projectWorkItem(item))
+	}
+	executions := make([]executionView, 0, len(value.Executions))
+	for _, execution := range value.Executions {
+		executions = append(executions, projectExecution(execution))
+	}
+	attestations := make([]attestationView, 0, len(value.Attestations))
+	for _, attestation := range value.Attestations {
+		attestations = append(attestations, projectAttestation(attestation))
+	}
+	reviews := make([]reviewView, 0, len(value.Reviews))
+	for _, review := range value.Reviews {
+		reviews = append(reviews, projectReview(review))
+	}
+	controls := make([]controlView, 0, len(value.Controls))
+	for _, control := range value.Controls {
+		controls = append(controls, projectControl(control))
+	}
+	integrationReceipts := make([]integrationReceiptView, 0, len(value.IntegrationReceipts))
+	for _, receipt := range value.IntegrationReceipts {
+		integrationReceipts = append(integrationReceipts, projectIntegrationReceipt(receipt))
+	}
+	return goalRecordView{
+		Goal: projectGoal(value.Goal), ExecutionCount: len(value.Executions), ArtifactCount: len(value.Artifacts),
+		WorkItems: workItems, Executions: executions, Attestations: attestations, Reviews: reviews,
+		Controls: controls, IntegrationReceipts: integrationReceipts,
 	}
 }
 
@@ -93,15 +319,35 @@ func projectLease(value application.DirectorLeaseRecord) leaseView {
 }
 
 type mailboxView struct {
-	MessageRef   string `json:"message_ref"`
-	GoalRef      string `json:"goal_ref"`
-	State        string `json:"state"`
-	AttemptCount int    `json:"attempt_count"`
+	MessageRef            string   `json:"message_ref"`
+	GoalRef               string   `json:"goal_ref"`
+	TargetPlanGeneration  uint64   `json:"target_plan_generation"`
+	Kind                  string   `json:"kind"`
+	ParentWorkItemRef     string   `json:"parent_work_item_ref"`
+	ChildWorkItemRef      string   `json:"child_work_item_ref"`
+	SourceWorkItemRef     string   `json:"source_work_item_ref"`
+	SourceExecutionRef    string   `json:"source_execution_ref"`
+	RecipientWorkItemRef  string   `json:"recipient_work_item_ref"`
+	RecipientExecutionRef string   `json:"recipient_execution_ref"`
+	Summary               string   `json:"summary"`
+	ArtifactRefs          []string `json:"artifact_refs"`
+	State                 string   `json:"state"`
+	AttemptCount          int      `json:"attempt_count"`
 }
 
 func projectMailbox(value application.MailboxRecord) mailboxView {
+	artifactRefs := make([]string, 0, len(value.Envelope.ArtifactRefs))
+	for _, ref := range value.Envelope.ArtifactRefs {
+		artifactRefs = append(artifactRefs, ref.String())
+	}
 	return mailboxView{
 		MessageRef: value.Envelope.Ref.String(), GoalRef: value.Envelope.GoalRef.String(),
+		TargetPlanGeneration: uint64(value.Envelope.TargetPlanGeneration), Kind: string(value.Envelope.Kind),
+		ParentWorkItemRef: value.Envelope.ParentWorkItemRef.String(), ChildWorkItemRef: value.Envelope.ChildWorkItemRef.String(),
+		SourceWorkItemRef: value.Envelope.Source.WorkItemRef.String(), SourceExecutionRef: value.Envelope.Source.ExecutionRef.String(),
+		RecipientWorkItemRef:  value.Envelope.Recipient.WorkItemRef.String(),
+		RecipientExecutionRef: value.Envelope.Recipient.ExecutionRef.String(),
+		Summary:               value.Envelope.Summary, ArtifactRefs: artifactRefs,
 		State: string(value.State), AttemptCount: len(value.Attempts),
 	}
 }

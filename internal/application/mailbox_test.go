@@ -997,9 +997,9 @@ func newMailboxTestSystem(t *testing.T, childCount int) *mailboxTestSystem {
 	agent := &scriptedAgent{now: clock.Now}
 	orchestrator, artifacts := newTestOrchestratorWithAccess(t, repository, accessStore, clock, agent)
 	project := mailboxMustRef(t, "project:mailbox", goal.NewProjectRef)
-	source := testPrincipal(t, "principal:mailbox-source", "actor:mailbox-source", identity.PrincipalKindService)
-	recipient := testPrincipal(t, "principal:mailbox-recipient", "actor:mailbox-recipient", identity.PrincipalKindService)
-	intruder := testPrincipal(t, "principal:mailbox-intruder", "actor:mailbox-intruder", identity.PrincipalKindService)
+	source := testPrincipal(t, "principal:mailbox-source", "actor:mailbox-source", identity.PrincipalKindHuman)
+	recipient := testPrincipal(t, "principal:mailbox-recipient", "actor:mailbox-recipient", identity.PrincipalKindHuman)
+	intruder := testPrincipal(t, "principal:mailbox-intruder", "actor:mailbox-intruder", identity.PrincipalKindHuman)
 	for _, principal := range []identity.Principal{source, recipient, intruder} {
 		membership, err := identity.NewMembership(identity.MembershipInput{
 			PrincipalRef: principal.Ref, ProjectRef: project, Role: identity.RoleOperator,

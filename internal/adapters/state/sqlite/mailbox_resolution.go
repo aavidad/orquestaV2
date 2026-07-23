@@ -35,7 +35,7 @@ func (repository *Repository) resolveMailbox(
 		return application.MailboxAcknowledgement{}, false, err
 	}
 	defer func() { _ = transaction.Rollback() }()
-	if _, err := requirePersistedAuthorization(
+	if err := requirePersistedMailboxRecipientAuthorization(
 		ctx, transaction, state.AuthorizationReceipt, state.PrincipalRef,
 		state.ProjectRef, identity.PermissionGoalsGet, state.MessageRef.String(),
 	); err != nil {

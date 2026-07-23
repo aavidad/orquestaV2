@@ -67,7 +67,7 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 	if err := repository.db.QueryRow("PRAGMA synchronous").Scan(&synchronous); err != nil {
 		t.Fatalf("synchronous: %v", err)
 	}
-	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != recoverySchemaV20 {
+	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != recoverySchemaV21 {
 		t.Fatalf("pragmas = fk:%d busy:%d version:%d", foreignKeys, busyTimeout, userVersion)
 	}
 	if synchronous != 2 {

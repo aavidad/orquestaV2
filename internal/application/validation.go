@@ -83,6 +83,12 @@ func validateClaimedRecord(claim ActionClaim, record GoalRecord, kind ActionKind
 			execution.ProviderAcceptedAt.IsZero() || !execution.DeadlineAt.After(execution.StartedAt) {
 			return errors.New("application.observe_state_invalid")
 		}
+	case ActionAdmitMailbox:
+		if claim.Action.Ref != "action:admit-mailbox:"+execution.Ref.String() ||
+			item.State() != goal.WorkItemStateSucceeded || !item.HandoffRequired() ||
+			execution.State != ExecutionSucceeded {
+			return errors.New("application.post_artifact_mailbox_state_invalid")
+		}
 	case ActionCommitChange:
 		if claim.Action.Ref != "action:commit-change:"+execution.Ref.String() ||
 			claim.Action.WorkItemGeneration > item.Revision() || item.State() != goal.WorkItemStateRunning ||

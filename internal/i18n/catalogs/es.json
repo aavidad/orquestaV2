@@ -45,5 +45,6 @@
   "error.not_found": "No se encontró el recurso solicitado.",
   "error.unauthenticated": "La solicitud no está autenticada.",
   "error.unavailable": "La operación no está disponible temporalmente.",
+  "prompt.codex.agent": "Produce un artefacto para el objetivo siguiente.\n\nReferencia de proyecto:\n{project_ref}\n\nReferencia de Goal:\n{goal_ref}\n\nReferencia de WorkItem:\n{work_item_ref}\n\nReferencia de ejecución:\n{execution_ref}\n\nGeneración del plan:\n{plan_generation}\n\nGeneración de AppSpec:\n{app_spec_generation}\n\nObjetivo:\n{objective}\n\nInstancia de fase:\n{phase_ref}\n\nClave de fase:\n{phase_key}\n\nPlantilla de fase:\n{phase_template_ref}\n\nEntradas de fase:\n{phase_input_refs}\n\nCriterios de fase:\n{phase_criterion_refs}\n\nRol:\n{role_key}\n\nSkills:\n{skill_refs}\n\nTools:\n{tool_refs}\n\nCapacidades:\n{capability_refs}\n\nÁmbitos de escritura permitidos:\n{write_set}\n\nContrato de salida:\n{output_contract}\n\nTipo de medio del artefacto:\n{artifact_media_type}\n\nDevuelve únicamente el objeto JSON exigido por el esquema suministrado. Establece artifact como el contenido completo del artefacto.\n",
   "server.instructions": "Orquesta coordina Goals durables mediante herramientas tipadas."
 }

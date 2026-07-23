@@ -34,14 +34,16 @@ func (orchestrator *Orchestrator) AdmitMailbox(
 	}
 	fingerprint := admitMailboxFingerprint(principal.Ref, projectRef, request)
 	if err := orchestrator.requireCurrentMailboxAccess(
-		ctx, principal.Ref, projectRef, identity.PermissionGoalsDirect,
+		ctx, access, principal.Ref, projectRef, identity.PermissionGoalsDirect,
 	); err != nil {
 		return MailboxAdmissionResult{}, err
 	}
-	if err := orchestrator.requireCurrentMailboxAccess(
-		ctx, request.RecipientPrincipalRef, projectRef, identity.PermissionGoalsGet,
-	); err != nil {
-		return MailboxAdmissionResult{}, err
+	if !access.executionServiceBound() {
+		if err := orchestrator.requireCurrentMailboxAccess(
+			ctx, Access{}, request.RecipientPrincipalRef, projectRef, identity.PermissionGoalsGet,
+		); err != nil {
+			return MailboxAdmissionResult{}, err
+		}
 	}
 	replay, found, err := orchestrator.state.MailboxReplay(ctx, MailboxReplayRequest{
 		Kind: MailboxMutationAdmit, RequestRef: request.RequestRef,
@@ -76,6 +78,18 @@ func (orchestrator *Orchestrator) AdmitMailbox(
 	}
 	if err := validateMailboxArtifacts(child, request.ArtifactRefs); err != nil {
 		return MailboxAdmissionResult{}, err
+	}
+	if access.executionServiceBound() {
+		parentExecution, found := executionByRef(record.Executions, request.RecipientExecutionRef)
+		if !found {
+			return MailboxAdmissionResult{}, &StateError{Code: StateConflict}
+		}
+		authority, authorityErr := DeriveExecutionSessionAuthority(
+			ExecutionSessionRequest(record.Goal, parentExecution), principal.Method,
+		)
+		if authorityErr != nil || authority.ServicePrincipal.Ref != request.RecipientPrincipalRef {
+			return MailboxAdmissionResult{}, errForbidden
+		}
 	}
 	authorization, err := orchestrator.authorizeIdempotentWithRequestRef(
 		ctx, access, identity.PermissionGoalsDirect, request.GoalRef.String(),

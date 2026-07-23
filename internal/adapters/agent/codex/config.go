@@ -44,6 +44,9 @@ func prepareConfig(config Config) (Config, string, []string, string, *os.Root, e
 	if config.MaxConcurrentExecutions <= 0 {
 		return Config{}, "", nil, "", nil, &Error{Code: CodeMaxConcurrentInvalid}
 	}
+	if config.PromptRenderer == nil {
+		return Config{}, "", nil, "", nil, &Error{Code: CodePromptRendererInvalid}
+	}
 	if config.Now == nil || config.Now().IsZero() {
 		return Config{}, "", nil, "", nil, &Error{Code: CodeClockInvalid}
 	}
@@ -51,6 +54,12 @@ func prepareConfig(config Config) (Config, string, []string, string, *os.Root, e
 		return Config{}, "", nil, "", nil, &Error{Code: CodeEnvironmentInvalid}
 	}
 	if _, found := config.Environment[openAIAPIKeyEnvironment]; found {
+		return Config{}, "", nil, "", nil, &Error{Code: CodeEnvironmentInvalid}
+	}
+	// This bearer is injected only for the short-lived Codex core process by
+	// SessionResolver. A public composition environment must never shadow it,
+	// otherwise it could be projected into the Codex tool-shell policy.
+	if _, found := config.Environment[codexMCPBearerTokenEnvironment]; found {
 		return Config{}, "", nil, "", nil, &Error{Code: CodeEnvironmentInvalid}
 	}
 	if (config.CredentialStore == nil) != (config.CredentialRef == "") {
