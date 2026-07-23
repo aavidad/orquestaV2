@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -13,6 +14,7 @@ import (
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"orquesta/internal/adapters/auth/localtoken"
+	commandcore "orquesta/internal/commands"
 	"orquesta/internal/goal"
 	"orquesta/internal/identity"
 	mcpiface "orquesta/internal/interfaces/mcp"
@@ -66,67 +68,114 @@ func TestRealMCPAPIClosesDurableGoalThroughSQLiteAndArtifactStore(t *testing.T) 
 	}
 	defer session.Close()
 
-	createdResult := callMCPTool(t, ctx, session, mcpiface.ToolGoalsCreate, map[string]any{
-		"project_ref": hierarchy.ProjectRef().String(), "request_ref": "request:mcp-e2e",
-		"statement": "produce API evidence", "confirm": true,
+	createdResult := callMCPTool(t, ctx, session, "orquesta.goals.create", map[string]any{
+		"version": "1", "project_ref": hierarchy.ProjectRef().String(), "request_ref": "request:mcp-e2e",
+		"payload": map[string]any{"statement": "produce API evidence", "confirm": true},
 	})
-	var created mcpiface.CreateGoalOutput
+	var created mcpiface.CommandToolOutput
 	decodeMCPOutput(t, createdResult, &created)
-	if createdResult.IsError || !created.Created || created.Goal == nil ||
-		created.Goal.ActorRef != principal.ActorRef.String() ||
-		created.Goal.ProjectRef != hierarchy.ProjectRef().String() {
+	var createdData struct {
+		Goal struct {
+			GoalRef    string `json:"goal_ref"`
+			ProjectRef string `json:"project_ref"`
+			SpecHash   string `json:"spec_hash"`
+		} `json:"goal"`
+	}
+	decodeCommandData(t, created.Result, &createdData)
+	if createdResult.IsError || created.Result.Failure != nil || created.Result.AuditRef == "" ||
+		createdData.Goal.GoalRef == "" || createdData.Goal.SpecHash == "" ||
+		createdData.Goal.ProjectRef != hierarchy.ProjectRef().String() {
 		t.Fatalf("create = %+v result=%+v", created, createdResult)
 	}
 
-	var closed mcpiface.GoalView
+	var closedGoalRef string
 	deadline := time.Now().Add(5 * time.Second)
+	poll := 0
 	for time.Now().Before(deadline) {
-		result := callMCPTool(t, ctx, session, mcpiface.ToolGoalsGet, map[string]any{
-			"project_ref": hierarchy.ProjectRef().String(), "goal_ref": created.Goal.GoalRef,
+		poll++
+		result := callMCPTool(t, ctx, session, "orquesta.goals.get", map[string]any{
+			"version": "1", "project_ref": hierarchy.ProjectRef().String(),
+			"request_ref": fmt.Sprintf("request:mcp-e2e:get:%d", poll),
+			"payload":     map[string]any{"goal_ref": createdData.Goal.GoalRef},
 		})
-		var output mcpiface.GetGoalOutput
+		var output mcpiface.CommandToolOutput
 		decodeMCPOutput(t, result, &output)
-		if !result.IsError && output.Goal != nil && output.Goal.State == string(goal.GoalStateSucceeded) {
-			closed = *output.Goal
+		var data struct {
+			Goal struct {
+				GoalRef string `json:"goal_ref"`
+				State   string `json:"state"`
+			} `json:"goal"`
+			ExecutionCount int `json:"execution_count"`
+			ArtifactCount  int `json:"artifact_count"`
+		}
+		decodeCommandData(t, output.Result, &data)
+		if !result.IsError && output.Result.Failure == nil && data.Goal.State == string(goal.GoalStateSucceeded) &&
+			data.ExecutionCount == 1 && data.ArtifactCount == 1 {
+			closedGoalRef = data.Goal.GoalRef
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	if closed.GoalRef == "" || len(closed.Artifacts) != 1 || len(closed.Attestations) != 1 || launches.Load() != 1 {
+	ref, err := goal.NewGoalRef(createdData.Goal.GoalRef)
+	if err != nil {
+		t.Fatalf("created goal ref: %v", err)
+	}
+	closed := waitTerminalGoal(t, runtime, ref)
+	if closedGoalRef == "" || len(closed.Artifacts) != 1 || len(closed.Attestations) != 1 || launches.Load() != 1 {
 		t.Fatalf("closure missing: goal=%+v launches=%d", closed, launches.Load())
 	}
 
-	artifactResult := callMCPTool(t, ctx, session, mcpiface.ToolArtifactsRead, map[string]any{
-		"project_ref": hierarchy.ProjectRef().String(), "goal_ref": closed.GoalRef,
-		"artifact_ref": closed.Artifacts[0].ArtifactRef,
+	artifactResult := callMCPTool(t, ctx, session, "orquesta.artifacts.read", map[string]any{
+		"version": "1", "project_ref": hierarchy.ProjectRef().String(), "request_ref": "request:mcp-e2e:artifact",
+		"payload": map[string]any{
+			"goal_ref": closed.Goal.Ref().String(), "artifact_ref": closed.Artifacts[0].Stored.Ref.String(),
+		},
 	})
-	var artifact mcpiface.ReadArtifactOutput
+	var artifact mcpiface.CommandToolOutput
 	decodeMCPOutput(t, artifactResult, &artifact)
-	if artifactResult.IsError || artifact.Artifact == nil {
+	var artifactData struct {
+		ContentBase64 string `json:"content_base64"`
+	}
+	decodeCommandData(t, artifact.Result, &artifactData)
+	if artifactResult.IsError || artifact.Result.Failure != nil || artifactData.ContentBase64 == "" {
 		t.Fatalf("artifact read = %+v result=%+v", artifact, artifactResult)
 	}
-	content, err := base64.StdEncoding.DecodeString(artifact.Artifact.ContentBase64)
+	content, err := base64.StdEncoding.DecodeString(artifactData.ContentBase64)
 	if err != nil || !strings.Contains(string(content), "produce API evidence") {
 		t.Fatalf("artifact content = %q err=%v", content, err)
 	}
 
-	replayResult := callMCPTool(t, ctx, session, mcpiface.ToolGoalsCreate, map[string]any{
-		"project_ref": hierarchy.ProjectRef().String(), "request_ref": "request:mcp-e2e",
-		"statement": "produce API evidence", "confirm": true,
+	replayResult := callMCPTool(t, ctx, session, "orquesta.goals.create", map[string]any{
+		"version": "1", "project_ref": hierarchy.ProjectRef().String(), "request_ref": "request:mcp-e2e",
+		"payload": map[string]any{"statement": "produce API evidence", "confirm": true},
 	})
-	var replay mcpiface.CreateGoalOutput
+	var replay mcpiface.CommandToolOutput
 	decodeMCPOutput(t, replayResult, &replay)
-	if replayResult.IsError || replay.Created || replay.Goal == nil || replay.Goal.GoalRef != closed.GoalRef || launches.Load() != 1 {
+	var replayData struct {
+		Goal struct {
+			GoalRef string `json:"goal_ref"`
+		} `json:"goal"`
+	}
+	decodeCommandData(t, replay.Result, &replayData)
+	if replayResult.IsError || replay.Result.Failure != nil || replay.Result.AuditRef != created.Result.AuditRef ||
+		replayData.Goal.GoalRef != closed.Goal.Ref().String() || launches.Load() != 1 {
 		t.Fatalf("idempotent replay = %+v launches=%d", replay, launches.Load())
 	}
 
-	statusResult := callMCPTool(t, ctx, session, mcpiface.ToolSystemStatus, map[string]any{
-		"project_ref": hierarchy.ProjectRef().String(),
+	statusResult := callMCPTool(t, ctx, session, "orquesta.system.status", map[string]any{
+		"version": "1", "project_ref": hierarchy.ProjectRef().String(), "request_ref": "request:mcp-e2e:status",
+		"payload": map[string]any{},
 	})
-	var status mcpiface.SystemStatusOutput
+	var status mcpiface.CommandToolOutput
 	decodeMCPOutput(t, statusResult, &status)
-	if statusResult.IsError || !status.Ready || status.Version != "test-e2e" || status.Goals != 1 ||
-		status.RunningGoals != 0 || status.PendingActions != 0 {
+	var statusData struct {
+		Goals          int64 `json:"goals"`
+		RunningGoals   int64 `json:"running_goals"`
+		PendingActions int64 `json:"pending_actions"`
+	}
+	decodeCommandData(t, status.Result, &statusData)
+	if statusResult.IsError || status.Result.Failure != nil || statusData.Goals != 1 ||
+		statusData.RunningGoals != 0 || statusData.PendingActions != 0 {
 		t.Fatalf("status = %+v result=%+v", status, statusResult)
 	}
 }
@@ -154,5 +203,15 @@ func decodeMCPOutput(t *testing.T, result *sdkmcp.CallToolResult, target any) {
 	}
 	if err := json.Unmarshal(payload, target); err != nil {
 		t.Fatalf("decode structured output %s: %v", payload, err)
+	}
+}
+
+func decodeCommandData(t *testing.T, result commandcore.Result, target any) {
+	t.Helper()
+	if result.Failure != nil {
+		t.Fatalf("command failure: %+v", result.Failure)
+	}
+	if err := json.Unmarshal(result.Data, target); err != nil {
+		t.Fatalf("decode command data %s: %v", result.Data, err)
 	}
 }

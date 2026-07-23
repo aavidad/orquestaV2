@@ -20,6 +20,7 @@ import (
 	"orquesta/internal/adapters/auth/localtoken"
 	"orquesta/internal/adapters/state/sqlite"
 	"orquesta/internal/application"
+	commandcore "orquesta/internal/commands"
 	"orquesta/internal/config"
 	"orquesta/internal/council"
 	"orquesta/internal/goal"
@@ -81,15 +82,11 @@ func TestMCPCreatesAndExecutesDiamondDAGAtomically(t *testing.T) {
 
 func TestMCPRejectsMalformedTypedPlanAsInvalidRequest(t *testing.T) {
 	harness := newDAGHarness(t, nil)
-	result := callMCPTool(t, context.Background(), harness.clientSession, mcpiface.ToolGoalsCreate, map[string]any{
-		"project_ref": harness.projectRef.String(), "request_ref": "request:mcp-invalid-plan",
-		"statement": "invalid plan", "confirm": true,
-		"plan": map[string]any{"phases": []any{}, "work_items": []any{}},
+	result := harness.callCreate(t, "request:mcp-invalid-plan", "invalid plan", map[string]any{
+		"phases": []any{}, "work_items": []any{},
 	})
-	var output mcpiface.CreateGoalOutput
-	decodeMCPOutput(t, result, &output)
-	if !result.IsError || output.Error == nil || output.Error.Code != "invalid_request" {
-		t.Fatalf("invalid typed plan output=%+v result=%+v", output, result)
+	if !result.IsError || result.Result.Failure == nil || result.Result.Failure.Code != "invalid_request" {
+		t.Fatalf("invalid typed plan result=%+v", result)
 	}
 }
 
@@ -110,18 +107,12 @@ func TestMCPRejectsUnknownParentMetadataAsInvalidRequest(t *testing.T) {
 	harness := newDAGHarness(t, nil)
 	item := planItem("child", "invalid child", "phase:work", nil, nil)
 	item["parent"] = "missing"
-	result := callMCPTool(t, context.Background(), harness.clientSession, mcpiface.ToolGoalsCreate, map[string]any{
-		"project_ref": harness.projectRef.String(), "request_ref": "request:mcp-v05-parent-invalid",
-		"statement": "reject unknown parent", "confirm": true,
-		"plan": map[string]any{
-			"phases":     []any{planPhase("phase-instance:work", "phase:work", "phase-template:program", nil, nil)},
-			"work_items": []any{item},
-		},
+	result := harness.callCreate(t, "request:mcp-v05-parent-invalid", "reject unknown parent", map[string]any{
+		"phases":     []any{planPhase("phase-instance:work", "phase:work", "phase-template:program", nil, nil)},
+		"work_items": []any{item},
 	})
-	var output mcpiface.CreateGoalOutput
-	decodeMCPOutput(t, result, &output)
-	if !result.IsError || output.Error == nil || output.Error.Code != "invalid_request" {
-		t.Fatalf("unknown parent output=%+v result=%+v", output, result)
+	if !result.IsError || result.Result.Failure == nil || result.Result.Failure.Code != "invalid_request" {
+		t.Fatalf("unknown parent result=%+v failure=%+v", result.Result, result.Result.Failure)
 	}
 }
 
@@ -196,9 +187,6 @@ func TestMCPRoundTripsPhaseMetadataAndExecutionRequirementsToAgent(t *testing.T)
 func TestMCPParentMetadataClosesWithoutMailboxOrRequeue(t *testing.T) {
 	ctx := context.Background()
 	harness := newDAGHarness(t, nil)
-	if _, exposed := reflect.TypeOf(mcpiface.WorkItemInput{}).FieldByName("HandoffRequired"); exposed {
-		t.Fatal("public MCP WorkItemInput exposes the internal handoff policy")
-	}
 	parent := planItem("parent", "coordinate", "phase:work", nil, nil)
 	child := planItem("child", "implement", "phase:work", nil, []string{"internal/child"})
 	child["parent"] = "parent"
@@ -210,7 +198,7 @@ func TestMCPParentMetadataClosesWithoutMailboxOrRequeue(t *testing.T) {
 	if len(stored.WorkItems) != 2 {
 		t.Fatalf("parent/child work items = %+v", stored.WorkItems)
 	}
-	byObjective := make(map[string]mcpiface.WorkItemView, len(stored.WorkItems))
+	byObjective := make(map[string]dagWorkItemView, len(stored.WorkItems))
 	for _, workItem := range stored.WorkItems {
 		byObjective[workItem.Objective] = workItem
 	}
@@ -343,7 +331,7 @@ func TestExhaustedRootInterruptsAndKeepsGoalOpenForDirectorReplan(t *testing.T) 
 func planItem(key, objective, phase string, dependencies, writeSet []string) map[string]any {
 	item := map[string]any{
 		"key": key, "objective": objective, "phase": phase, "role": "role:worker",
-		"dependencies": dependencies, "write_set": writeSet,
+		"dependencies": append([]string{}, dependencies...), "write_set": append([]string{}, writeSet...),
 		"output_contract": string(goal.OutputContractEvidenceBundle),
 	}
 	if len(writeSet) != 0 {
@@ -376,12 +364,81 @@ func planPhase(ref, key, templateRef string, inputRefs, criterionRefs []string) 
 	return result
 }
 
-func workStates(items []mcpiface.WorkItemView) map[string]string {
+func workStates(items []dagWorkItemView) map[string]string {
 	result := make(map[string]string, len(items))
 	for _, item := range items {
 		result[item.Objective] = item.State
 	}
 	return result
+}
+
+type dagPhaseView struct {
+	PhaseRef      string
+	TemplateRef   string
+	InputRefs     []string
+	CriterionRefs []string
+}
+
+type dagWorkItemView struct {
+	WorkItemRef    string
+	Objective      string
+	ParentRef      string
+	ChildRefs      []string
+	State          string
+	SkillRefs      []string
+	ToolRefs       []string
+	CapabilityRefs []string
+}
+
+type dagGoalView struct {
+	GoalRef        string
+	State          string
+	PlanGeneration uint64
+	ClosedAt       *time.Time
+	Phases         []dagPhaseView
+	WorkItems      []dagWorkItemView
+	Executions     []application.ExecutionRecord
+	Artifacts      []application.ArtifactRecord
+	Attestations   []application.AttestationRecord
+}
+
+func projectDAGGoal(record application.GoalRecord) dagGoalView {
+	snapshot := record.Goal.Snapshot()
+	phases := make([]dagPhaseView, 0, len(snapshot.Phases))
+	for _, phase := range snapshot.Phases {
+		phases = append(phases, dagPhaseView{
+			PhaseRef: phase.Ref, TemplateRef: phase.TemplateRef,
+			InputRefs:     append([]string(nil), phase.InputRefs...),
+			CriterionRefs: append([]string(nil), phase.CriterionRefs...),
+		})
+	}
+	children := make(map[string][]string, len(snapshot.WorkItems))
+	for _, item := range snapshot.WorkItems {
+		if item.ParentRef != "" {
+			children[item.ParentRef] = append(children[item.ParentRef], item.Ref)
+		}
+	}
+	items := make([]dagWorkItemView, 0, len(snapshot.WorkItems))
+	for _, item := range snapshot.WorkItems {
+		items = append(items, dagWorkItemView{
+			WorkItemRef: item.Ref, Objective: item.Objective, ParentRef: item.ParentRef,
+			ChildRefs: append([]string(nil), children[item.Ref]...), State: string(item.State),
+			SkillRefs: append([]string(nil), item.SkillRefs...), ToolRefs: append([]string(nil), item.ToolRefs...),
+			CapabilityRefs: append([]string(nil), item.CapabilityRefs...),
+		})
+	}
+	var closedAt *time.Time
+	if !snapshot.ClosedAt.IsZero() {
+		value := snapshot.ClosedAt
+		closedAt = &value
+	}
+	return dagGoalView{
+		GoalRef: snapshot.Ref, State: string(snapshot.State), PlanGeneration: uint64(snapshot.PlanGeneration),
+		ClosedAt: closedAt, Phases: phases, WorkItems: items,
+		Executions:   append([]application.ExecutionRecord(nil), record.Executions...),
+		Artifacts:    append([]application.ArtifactRecord(nil), record.Artifacts...),
+		Attestations: append([]application.AttestationRecord(nil), record.Attestations...),
+	}
 }
 
 type dagHarness struct {
@@ -469,9 +526,15 @@ func newDAGHarness(t *testing.T, failures map[string]bool) *dagHarness {
 	if err != nil {
 		t.Fatalf("load catalog: %v", err)
 	}
+	dispatcher, err := commandcore.NewDispatcher(orchestrator, repository, commandcore.APILimits{
+		MaxListLimit: 10, MaxRequestBytes: 64 * 1024,
+	})
+	if err != nil {
+		t.Fatalf("new DAG dispatcher: %v", err)
+	}
 	server, err := mcpiface.New(mcpiface.Config{
-		Orchestrator: orchestrator, Identity: identity.ContextProvider{}, Catalog: catalog, Locale: "es",
-		MaxListLimit: 10, MaxRequestBytes: 64 * 1024, Version: "dag-test",
+		Dispatcher: dispatcher, Identity: identity.ContextProvider{}, Catalog: catalog, Locale: "es",
+		Version: "dag-test",
 	})
 	if err != nil {
 		t.Fatalf("new DAG MCP: %v", err)
@@ -501,31 +564,50 @@ func mustDAGRef[T any](t *testing.T, value string, constructor func(string) (T, 
 	return ref
 }
 
-func (harness *dagHarness) create(t *testing.T, requestRef, statement string, plan map[string]any) mcpiface.GoalView {
-	t.Helper()
-	result := callMCPTool(t, context.Background(), harness.clientSession, mcpiface.ToolGoalsCreate, map[string]any{
-		"project_ref": harness.projectRef.String(), "request_ref": requestRef,
-		"statement": statement, "confirm": true, "plan": plan,
-	})
-	var output mcpiface.CreateGoalOutput
-	decodeMCPOutput(t, result, &output)
-	if result.IsError || !output.Created || output.Goal == nil {
-		t.Fatalf("create DAG output=%+v result=%+v", output, result)
-	}
-	return *output.Goal
+type dagCommandCall struct {
+	Result  commandcore.Result
+	IsError bool
 }
 
-func (harness *dagHarness) get(t *testing.T, goalRef string) mcpiface.GoalView {
+func (harness *dagHarness) callCreate(t *testing.T, requestRef, statement string, plan map[string]any) dagCommandCall {
 	t.Helper()
-	result := callMCPTool(t, context.Background(), harness.clientSession, mcpiface.ToolGoalsGet, map[string]any{
-		"project_ref": harness.projectRef.String(), "goal_ref": goalRef,
+	result := callMCPTool(t, context.Background(), harness.clientSession, "orquesta.goals.create", map[string]any{
+		"version": "1", "project_ref": harness.projectRef.String(), "request_ref": requestRef,
+		"payload": map[string]any{"statement": statement, "confirm": true, "plan": plan},
 	})
-	var output mcpiface.GetGoalOutput
+	var output mcpiface.CommandToolOutput
 	decodeMCPOutput(t, result, &output)
-	if result.IsError || output.Goal == nil {
-		t.Fatalf("get DAG output=%+v result=%+v", output, result)
+	return dagCommandCall{Result: output.Result, IsError: result.IsError}
+}
+
+func (harness *dagHarness) create(t *testing.T, requestRef, statement string, plan map[string]any) dagGoalView {
+	t.Helper()
+	result := harness.callCreate(t, requestRef, statement, plan)
+	if result.IsError || result.Result.Failure != nil {
+		t.Fatalf("create DAG result=%+v failure=%+v", result.Result, result.Result.Failure)
 	}
-	return *output.Goal
+	var data struct {
+		Goal struct {
+			GoalRef string `json:"goal_ref"`
+		} `json:"goal"`
+	}
+	if err := json.Unmarshal(result.Result.Data, &data); err != nil || data.Goal.GoalRef == "" {
+		t.Fatalf("decode create DAG data=%s err=%v", result.Result.Data, err)
+	}
+	return harness.get(t, data.Goal.GoalRef)
+}
+
+func (harness *dagHarness) get(t *testing.T, goalRef string) dagGoalView {
+	t.Helper()
+	ref, err := goal.NewGoalRef(goalRef)
+	if err != nil {
+		t.Fatalf("parse DAG goal ref: %v", err)
+	}
+	record, err := harness.orchestrator.GetGoal(context.Background(), harness.access, ref)
+	if err != nil {
+		t.Fatalf("get DAG goal: %v", err)
+	}
+	return projectDAGGoal(record)
 }
 
 func connectDAGClient(t *testing.T, endpoint string) *sdkmcp.ClientSession {

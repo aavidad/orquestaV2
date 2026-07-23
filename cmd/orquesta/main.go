@@ -31,8 +31,12 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintln(stdout, version)
 		return 0
 	}
+	if len(arguments) > 0 && arguments[0] == "command" {
+		return runCommand(arguments[1:], stdout, stderr)
+	}
 	if len(arguments) == 0 || arguments[0] != "serve" {
 		_, _ = fmt.Fprintln(stderr, catalog.Text(i18n.DefaultLocale, "error.invalid_request"))
+		_, _ = fmt.Fprintln(stderr, commandUsage)
 		_, _ = fmt.Fprintln(stderr, "orquesta serve [--config path] | orquesta version")
 		return 2
 	}

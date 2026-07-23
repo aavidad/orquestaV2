@@ -67,7 +67,7 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 	if err := repository.db.QueryRow("PRAGMA synchronous").Scan(&synchronous); err != nil {
 		t.Fatalf("synchronous: %v", err)
 	}
-	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != recoverySchemaV19 {
+	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != recoverySchemaV20 {
 		t.Fatalf("pragmas = fk:%d busy:%d version:%d", foreignKeys, busyTimeout, userVersion)
 	}
 	if synchronous != 2 {
@@ -89,7 +89,8 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 	}
 	wantTables := []string{
 		"action_consumption_receipts", "app_specs", "artifact_occurrences", "artifacts", "attestation_test_outcomes", "attestations", "authorization_receipts",
-		"budget_envelopes", "budget_reservations", "budget_settlements", "change_set_paths", "change_sets", "controls",
+		"budget_envelopes", "budget_reservations", "budget_settlements", "change_set_paths", "change_sets",
+		"command_invocations", "command_outcomes", "controls",
 		"council_decisions", "council_facts", "council_rounds", "council_skips",
 		"director_decisions", "director_lease_receipts", "director_leases", "effect_approvals", "effect_attempts", "effect_intents", "effect_receipts", "events", "executions", "fairness_cursors",
 		"goal_child_handoff_resolutions", "goal_phase_contract_refs", "goal_phases", "goals", "groups", "integration_receipts", "intents",

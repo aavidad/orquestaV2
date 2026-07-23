@@ -154,7 +154,7 @@ func (orchestrator *Orchestrator) loadDecidableEffectIntent(
 	}
 	if request.Decision == EffectApproved && intent.SecurityCriticality == governance.SecurityCriticalityCritical &&
 		intent.ProposedBy == principal {
-		return EffectIntent{}, errors.New("application.effect_critical_separation_required")
+		return EffectIntent{}, ErrEffectCriticalSeparationRequired
 	}
 	return intent, nil
 }

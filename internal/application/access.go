@@ -9,7 +9,11 @@ import (
 	"orquesta/internal/identity"
 )
 
-var errForbidden = errors.New("application.forbidden")
+// ErrForbidden is the stable authorization boundary shared with transports.
+// Wrapping it preserves classification without coupling callers to text.
+var ErrForbidden = errors.New("application.forbidden")
+
+var errForbidden = ErrForbidden
 
 // Access binds one authenticated principal to one explicit project request.
 // It carries no authority by itself; every use case still asks AccessRepository.

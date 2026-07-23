@@ -550,7 +550,7 @@ AND name IN ('work_items_handoff_required_immutable','work_items_governance_inse
 WHERE "table" IN ('goals','goal_phases','work_items')`).Scan(&workItemForeignKeys))
 	sqliteTestNoError(t, database.QueryRow(`SELECT COUNT(*) FROM sqlite_schema
 WHERE sql IS NOT NULL AND sql LIKE '%work_items_v19%'`).Scan(&staleWorkItemReferences))
-	if version != recoverySchemaV19 || receipt != 1 || violations != 0 || directorDecisionUniqueIndex != 1 ||
+	if version != recoverySchemaV20 || receipt != 1 || violations != 0 || directorDecisionUniqueIndex != 1 ||
 		workItemIndexes != 3 || workItemTriggers != 4 || workItemForeignKeys != 7 || staleWorkItemReferences != 0 {
 		t.Fatalf("V19 migration version=%d receipt=%d foreign_keys=%d director_decisions_unique_index=%d work_item_indexes=%d triggers=%d work_item_fks=%d stale_refs=%d",
 			version, receipt, violations, directorDecisionUniqueIndex, workItemIndexes, workItemTriggers,

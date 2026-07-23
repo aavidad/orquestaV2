@@ -303,7 +303,7 @@ UPDATE action_consumption_receipts SET worker_ref = 'worker:tampered';`); err !=
 		}
 		actualSchema, err := schemaInventoryDigest(context.Background(), repository.db)
 		sqliteTestNoError(t, err)
-		expectedSchema, err := canonicalSchemaInventoryDigest(recoverySchemaV19)
+		expectedSchema, err := canonicalSchemaInventoryDigest(recoverySchemaV20)
 		if err != nil || actualSchema != expectedSchema {
 			t.Fatalf("test failed to restore canonical schema: actual=%s expected=%s err=%v", actualSchema, expectedSchema, err)
 		}
@@ -378,7 +378,7 @@ UPDATE outbox SET plan_generation = plan_generation + 1 WHERE goal_ref = ?`,
 	}
 	actualSchema, err := schemaInventoryDigest(context.Background(), repository.db)
 	sqliteTestNoError(t, err)
-	expectedSchema, err := canonicalSchemaInventoryDigest(recoverySchemaV19)
+	expectedSchema, err := canonicalSchemaInventoryDigest(recoverySchemaV20)
 	if err != nil || actualSchema != expectedSchema {
 		t.Fatalf("test failed to restore canonical schema: actual=%s expected=%s err=%v", actualSchema, expectedSchema, err)
 	}
@@ -409,7 +409,7 @@ WHERE kind = 'observe_agent' AND completed_at IS NULL`); err != nil {
 	}
 	actualSchema, err := schemaInventoryDigest(context.Background(), repository.db)
 	sqliteTestNoError(t, err)
-	expectedSchema, err := canonicalSchemaInventoryDigest(recoverySchemaV19)
+	expectedSchema, err := canonicalSchemaInventoryDigest(recoverySchemaV20)
 	if err != nil || actualSchema != expectedSchema {
 		t.Fatalf("test failed to restore canonical schema: actual=%s expected=%s err=%v", actualSchema, expectedSchema, err)
 	}

@@ -47,3 +47,8 @@ func mapDatabaseError(err error) error {
 	}
 	return invalid(err)
 }
+
+func isSQLiteConstraintError(err error) bool {
+	var sqliteErr *sqlitedriver.Error
+	return errors.As(err, &sqliteErr) && sqliteErr.Code()&0xff == sqliteConstraint
+}

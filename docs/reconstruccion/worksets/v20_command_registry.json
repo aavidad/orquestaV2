@@ -1,0 +1,251 @@
+{
+  "schema_version": 2,
+  "vertical": "V20",
+  "slug": "command_registry",
+  "branch": "reconstruccion/v20-command-registry-integrated",
+  "worktree": "/home/alberto/Trabajo/orquesta-rebuild-worktrees/v20-command-registry-integrated",
+  "base_oid": "42692512b0048f116d660a53fbe6650e243bb4e3",
+  "capability_ids": [
+    "GOV-17",
+    "UI-02"
+  ],
+  "verified_dependency_receipts": [
+    "product/evidence/v07_config.json",
+    "product/evidence/v10_identity_projects_rbac.json",
+    "product/evidence/v17_test_attestor.json",
+    "product/evidence/v18_independent_reviews.json",
+    "product/evidence/v19_council.json"
+  ],
+  "pending_dependency_receipts": [],
+  "dependency_activation_contract": {
+    "contract": "AC-V19-COUNCIL",
+    "result": "PASS",
+    "source_worktree_state": "detached_clean",
+    "product_oid": "cccfb4a64bd2cfb788a2d604ccd8d008e946e8a3",
+    "sealed_oid": "f7a574e36528871ee07a5529a88be1f0a88511d7",
+    "evidence_oid": "42692512b0048f116d660a53fbe6650e243bb4e3",
+    "integration_head_oid": "42692512b0048f116d660a53fbe6650e243bb4e3",
+    "provisional_types_or_fields_consumed": []
+  },
+  "command_catalog_status": "integrated_catalog_complete",
+  "configuration_contract": {
+    "runtime_registry_mode": "compiled_generated_only",
+    "new_keys": [],
+    "cli_connection": "explicit_constructor_or_invocation_arguments"
+  },
+  "binding_contract": {
+    "generated_outputs": ["internal/commands/definitions_generated.go"],
+    "http_mcp_cli": "manual_adapters_runtime_derived_from_canonical_definitions",
+    "sdk": "generic_public_http_client_without_internal_imports",
+    "generator_runtime_validators": "two_defensive_copies_with_exact_acceptance_parity"
+  },
+  "i18n_contract": {
+    "bundled_locales": ["es", "en"],
+    "v20_owns": "command_and_stable_error_keys_only",
+    "error_output": "machine_code_and_message_key_unrendered",
+    "v21_retains": "locale_fallback_plural_dates_numbers_currency_timezone_and_formatting"
+  },
+  "audit_contract": {
+    "facts": ["command_invocations", "command_outcomes"],
+    "mutation": "insert_only",
+    "output_identity": "canonical_output_digest",
+    "unauthenticated_requests_create_audit": false,
+    "governance_roots": [
+      "orquesta.director.plan.propose",
+      "orquesta.effects.decide",
+      "orquesta.goals.control",
+      "orquesta.council.round.open",
+      "orquesta.council.skip"
+    ],
+    "root_chain": "invocation_outcome_to_authorization_receipt_to_root_fact",
+    "descendant_chain": "effect_intent_to_attempt_to_receipt_to_terminal_event_or_attestation",
+    "live_goal_descendants": "optional_until_present",
+    "terminal_descendants": "complete_and_causally_valid_when_applicable"
+  },
+  "execution_binding_contract": {
+    "client_value": "claimed_execution_ref_only",
+    "authority": "application_side_authenticated_principal_execution_resolver",
+    "fail_closed_without_resolver": true
+  },
+  "conscious_duplication_contract": {
+    "runtime_handler_dispatch_maps": 1,
+    "handler_permission_validation_maps": 2,
+    "public_wire_dto_mirrors": 3,
+    "legacy_v04_passive_dto_sources": 1,
+    "business_error_classifiers": 1,
+    "http_status_maps": 2,
+    "schema_authority": "internal/commands/registry.json",
+    "lifecycle_authority_added": false
+  },
+  "preflight_owned_globs": [
+    "docs/reconstruccion/analisis_y_contrato_v20_*.md",
+    "docs/reconstruccion/worksets/v20*.json",
+    "acceptance/v20_*.go",
+    "acceptance/fixtures/v20_*.json"
+  ],
+  "implementation_owned_globs_after_dependency": [
+    "internal/commands/**",
+    "internal/ports/command_audit*.go",
+    "internal/interfaces/httpapi/**",
+    "internal/interfaces/cli/**",
+    "sdk/commands/**",
+    "internal/adapters/state/sqlite/command_audit*.go",
+    "internal/adapters/state/sqlite/migrations/*_command_registry.sql",
+    "internal/adapters/state/sqlite/recovery_validation_v20.go",
+    "internal/bootstrap/command_*.go",
+    "cmd/orquesta/command.go",
+    "acceptance/v20_*.go",
+    "acceptance/fixtures/v20_*.json",
+    "product_roadmap_v20_test.go",
+    "docs/reconstruccion/analisis_y_contrato_v20_*.md",
+    "docs/reconstruccion/worksets/v20*.json"
+  ],
+  "integration_files_requested_after_dependency": [
+    {
+      "path": "internal/application/access.go",
+      "lease": "L-APPLICATION",
+      "reason": "export stable typed application errors consumed by the single command error classifier"
+    },
+    {
+      "path": "internal/application/effect_decision.go",
+      "lease": "L-APPLICATION",
+      "reason": "reuse the stable critical-effect separation error in the command classifier"
+    },
+    {
+      "path": "internal/application/effect_model.go",
+      "lease": "L-APPLICATION",
+      "reason": "export stable critical-effect errors consumed by the single command classifier"
+    },
+    {
+      "path": "internal/application/planning.go",
+      "lease": "L-APPLICATION",
+      "reason": "export stable plan-reference errors consumed by the single command classifier"
+    },
+    {
+      "path": "internal/interfaces/mcp/**",
+      "lease": "L-BINDINGS",
+      "reason": "replace handwritten runtime registration handlers and error authority with registry-derived dispatcher bindings while retaining passive V04 DTO symbols"
+    },
+    {
+      "path": "internal/adapters/state/sqlite/errors.go",
+      "lease": "L-STATE",
+      "reason": "classify exact SQLite constraint conflicts for append-only command audit"
+    },
+    {
+      "path": "internal/adapters/state/sqlite/recovery_validation.go",
+      "lease": "L-STATE",
+      "reason": "route exact V20 command-audit recovery validation through the existing authority"
+    },
+    {
+      "path": "internal/adapters/state/sqlite/recovery_validation_versions.go",
+      "lease": "L-STATE",
+      "reason": "accept only the exact post-V19 schema and V20 successor"
+    },
+    {
+      "path": "internal/bootstrap/runtime.go",
+      "lease": "L-BOOTSTRAP",
+      "reason": "compose one dispatcher and mount HTTP and MCP bindings derived from compiled definitions"
+    },
+    {
+      "path": "internal/bootstrap/codex_real_e2e_test.go",
+      "lease": "L-BOOTSTRAP",
+      "reason": "adapt the generic real Codex MCP caller to the canonical V20 envelope"
+    },
+    {
+      "path": "internal/bootstrap/dag_mcp_e2e_test.go",
+      "lease": "L-BOOTSTRAP",
+      "reason": "adapt DAG MCP E2E calls to the canonical V20 envelope without weakening behavior"
+    },
+    {
+      "path": "internal/bootstrap/mcp_e2e_test.go",
+      "lease": "L-BOOTSTRAP",
+      "reason": "adapt the accredited MCP E2E to the canonical V20 envelope"
+    },
+    {
+      "path": "cmd/orquesta/main.go",
+      "lease": "L-BINDINGS",
+      "reason": "route registry-derived CLI paths through the small HTTP SDK while preserving serve/version"
+    },
+    {
+      "path": "cmd/orquesta/main_test.go",
+      "lease": "L-BINDINGS",
+      "reason": "ratchet serve/version compatibility and the new command routing"
+    },
+    {
+      "path": "internal/i18n/catalogs/es.json",
+      "lease": "L-BINDINGS",
+      "reason": "add only V20 command descriptions and stable error-key text; full i18n remains V21"
+    },
+    {
+      "path": "internal/i18n/catalogs/en.json",
+      "lease": "L-BINDINGS",
+      "reason": "keep the current two bundled locales structurally parallel until V21"
+    },
+    {
+      "path": "product/roadmap.json",
+      "lease": "L-TRACE",
+      "reason": "transition AC-V20 only after the integrated V19-compatible product passes its real gate"
+    },
+    {
+      "path": "product_roadmap_test.go",
+      "lease": "L-TRACE",
+      "reason": "integrator-only focal V20 executable-contract and historical deferral ratchet update"
+    },
+    {
+      "path": "docs/inventario_bugs_orquesta_2026-06-30.md",
+      "lease": "L-TRACE",
+      "reason": "record V20 findings and their verified closure without removing incident history"
+    },
+    {
+      "path": "product/traceability/markdown_source_roles.jsonl",
+      "lease": "L-TRACE",
+      "reason": "refresh exact bug-inventory source hashes and disposition identity after the governed documentation change"
+    },
+    {
+      "path": "product/traceability/pending_sources.json",
+      "lease": "L-TRACE",
+      "reason": "refresh the deterministic historical bug-manifest digest"
+    },
+    {
+      "path": "product/traceability/source_dispositions.jsonl",
+      "lease": "L-TRACE",
+      "reason": "refresh exact bug-inventory source hashes and lesson identity"
+    },
+    {
+      "path": "product/evidence/real_codex_mcp_e2e.json",
+      "lease": "L-TRACE",
+      "reason": "refresh the generic Codex MCP evidence against the post-V20 production server without treating it as V20 accreditation"
+    },
+    {
+      "path": "scripts/check_rebuild_write_set.sh",
+      "lease": "L-TRACE",
+      "reason": "admit the V20 SDK and focal roadmap gate into the existing rebuild write-set checker"
+    }
+  ],
+  "preflight_forbidden_globs": [],
+  "required_tests_preflight": [
+    "go test -mod=vendor -count=1 ./acceptance -run '^TestAcceptanceV20CommandRegistry$'",
+    "go test -mod=vendor -count=1 . -run '^TestProductRoadmap(IsExhaustiveAndCausal|PlannedContractsAreNonRunnable)$'",
+    "git diff --check"
+  ],
+  "expected_preflight_red": "V20_RED integrated command registry product is absent on the accredited V19 base",
+  "required_tests_after_dependency": [
+    "accredited V19 receipt and integration OID gate before schema freeze",
+    "V20 focal contract and deterministic generation",
+    "HTTP MCP CLI SDK semantic parity matrix",
+    "application authorization and project/execution resolver isolation negatives",
+    "canonical config no-new-key and compiled-registry boundary",
+    "es/en key parity without V21 formatter ownership",
+    "SQLite migration recovery tamper and crash-frontier suite",
+    "race suite for dispatcher audit replay and concurrent idempotency",
+    "real HTTP MCP CLI SDK SQLite restart E2E",
+    "root architecture roadmap traceability and prior dependency receipts",
+    "go vet and git diff --check"
+  ],
+  "runtime_roots": [],
+  "cache_roots": [],
+  "locks_requested": [],
+  "status": "integrated_implementation_complete_pending_seal",
+  "blocking_reason": "pending_PSE_only",
+  "resume_condition": "Freeze exact P candidate subjects, bind S from detached-clean source, execute the exact V20 gate, and publish immutable V3 receipt/output in E."
+}

@@ -735,10 +735,9 @@ func TestProductRoadmapV14ScopeAndExecutableContract(t *testing.T) {
 		next.Receipt != "product/evidence/v15_budgets_effects.json" {
 		t.Fatalf("V14 successor V15 must advance only through its executable contract: %#v", next)
 	}
-	for _, id := range []string{"AC-V20-COMMAND-REGISTRY", "AC-V31-POSTGRES-S3-MULTIHOST"} {
-		if deferred := index.contracts[id]; deferred.Status != "planned" || deferred.Receipt != "" {
-			t.Fatalf("V14 prematurely opens deferred contract %s: %#v", id, deferred)
-		}
+	assertRoadmapV20Lifecycle(t, index, readRoadmapV20Fixture(t))
+	if deferred := index.contracts["AC-V31-POSTGRES-S3-MULTIHOST"]; deferred.Status != "planned" || deferred.Receipt != "" {
+		t.Fatalf("V14 prematurely opens deferred contract AC-V31-POSTGRES-S3-MULTIHOST: %#v", deferred)
 	}
 }
 
@@ -857,10 +856,9 @@ func TestProductRoadmapV15ScopeAndExecutableContract(t *testing.T) {
 	if next.Status != "executable" || next.Receipt != "product/evidence/v16_workspace_git.json" {
 		t.Fatalf("V15 successor V16 must advance only through its executable contract: %#v", next)
 	}
-	for _, id := range []string{"AC-V20-COMMAND-REGISTRY", "AC-V31-POSTGRES-S3-MULTIHOST"} {
-		if deferred := index.contracts[id]; deferred.Status != "planned" || deferred.Receipt != "" {
-			t.Fatalf("V15 contract preparation prematurely opens deferred contract %s: %#v", id, deferred)
-		}
+	assertRoadmapV20Lifecycle(t, index, readRoadmapV20Fixture(t))
+	if deferred := index.contracts["AC-V31-POSTGRES-S3-MULTIHOST"]; deferred.Status != "planned" || deferred.Receipt != "" {
+		t.Fatalf("V15 contract preparation prematurely opens deferred contract AC-V31-POSTGRES-S3-MULTIHOST: %#v", deferred)
 	}
 }
 

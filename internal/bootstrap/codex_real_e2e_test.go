@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"flag"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -61,53 +62,79 @@ func TestRealCodexAdapterClosesGoalThroughProductionMCPServer(t *testing.T) {
 	requestRef := "request:codex-real-e2e:" + suffix
 	marker := "ORQUESTA_CODEX_E2E_OK_" + suffix
 	t.Logf("real Codex evidence request_ref=%s marker=%s", requestRef, marker)
-	createdResult := callMCPTool(t, ctx, session, mcpiface.ToolGoalsCreate, map[string]any{
-		"project_ref": snapshot.ProjectDefault(),
-		"request_ref": requestRef,
-		"statement":   "Produce un artefacto de texto que contenga exactamente el marcador " + marker + ".",
-		"confirm":     true,
+	createdResult := callMCPTool(t, ctx, session, "orquesta.goals.create", map[string]any{
+		"version": "1", "project_ref": snapshot.ProjectDefault(), "request_ref": requestRef,
+		"payload": map[string]any{
+			"statement": "Produce un artefacto de texto que contenga exactamente el marcador " + marker + ".",
+			"confirm":   true,
+		},
 	})
-	var created mcpiface.CreateGoalOutput
+	var created mcpiface.CommandToolOutput
 	decodeMCPOutput(t, createdResult, &created)
-	if createdResult.IsError || !created.Created || created.Goal == nil {
+	var createdData struct {
+		Goal struct {
+			GoalRef string `json:"goal_ref"`
+		} `json:"goal"`
+	}
+	decodeCommandData(t, created.Result, &createdData)
+	if createdResult.IsError || created.Result.Failure != nil || createdData.Goal.GoalRef == "" {
 		t.Fatalf("create real Codex Goal: %+v result=%+v", created, createdResult)
 	}
 
-	var closed mcpiface.GoalView
-	for closed.GoalRef == "" {
+	closed := false
+	poll := 0
+	for !closed {
 		select {
 		case <-ctx.Done():
 			t.Fatalf("wait real Codex closure: %v", ctx.Err())
 		case <-time.After(250 * time.Millisecond):
 		}
-		result := callMCPTool(t, ctx, session, mcpiface.ToolGoalsGet, map[string]any{
-			"project_ref": snapshot.ProjectDefault(), "goal_ref": created.Goal.GoalRef,
+		poll++
+		result := callMCPTool(t, ctx, session, "orquesta.goals.get", map[string]any{
+			"version": "1", "project_ref": snapshot.ProjectDefault(),
+			"request_ref": fmt.Sprintf("%s:get:%d", requestRef, poll),
+			"payload":     map[string]any{"goal_ref": createdData.Goal.GoalRef},
 		})
-		var output mcpiface.GetGoalOutput
+		var output mcpiface.CommandToolOutput
 		decodeMCPOutput(t, result, &output)
-		if result.IsError || output.Goal == nil {
+		var data struct {
+			Goal struct {
+				State string `json:"state"`
+			} `json:"goal"`
+		}
+		decodeCommandData(t, output.Result, &data)
+		if result.IsError || output.Result.Failure != nil {
 			t.Fatalf("get real Codex Goal: %+v result=%+v", output, result)
 		}
-		if output.Goal.State == string(goal.GoalStateFailed) {
-			t.Fatalf("real Codex Goal failed: %+v", output.Goal.Executions)
+		if data.Goal.State == string(goal.GoalStateFailed) {
+			t.Fatalf("real Codex Goal failed: %+v", data.Goal)
 		}
-		if output.Goal.State == string(goal.GoalStateSucceeded) {
-			closed = *output.Goal
-		}
+		closed = data.Goal.State == string(goal.GoalStateSucceeded)
 	}
-	if len(closed.Artifacts) != 1 || len(closed.Attestations) != 1 {
-		t.Fatalf("real closure lacks evidence: %+v", closed)
+	goalRef, err := goal.NewGoalRef(createdData.Goal.GoalRef)
+	if err != nil {
+		t.Fatalf("parse real Codex Goal ref: %v", err)
 	}
-	artifactResult := callMCPTool(t, ctx, session, mcpiface.ToolArtifactsRead, map[string]any{
-		"project_ref": snapshot.ProjectDefault(), "goal_ref": closed.GoalRef,
-		"artifact_ref": closed.Artifacts[0].ArtifactRef,
+	record, err := runtime.Orchestrator().GetGoal(ctx, testRuntimeAccess(t, runtime), goalRef)
+	if err != nil || len(record.Artifacts) != 1 || len(record.Attestations) != 1 {
+		t.Fatalf("real closure lacks evidence: record=%+v err=%v", record, err)
+	}
+	artifactResult := callMCPTool(t, ctx, session, "orquesta.artifacts.read", map[string]any{
+		"version": "1", "project_ref": snapshot.ProjectDefault(), "request_ref": requestRef + ":artifact",
+		"payload": map[string]any{
+			"goal_ref": goalRef.String(), "artifact_ref": record.Artifacts[0].Stored.Ref.String(),
+		},
 	})
-	var artifact mcpiface.ReadArtifactOutput
+	var artifact mcpiface.CommandToolOutput
 	decodeMCPOutput(t, artifactResult, &artifact)
-	if artifactResult.IsError || artifact.Artifact == nil {
+	var artifactData struct {
+		ContentBase64 string `json:"content_base64"`
+	}
+	decodeCommandData(t, artifact.Result, &artifactData)
+	if artifactResult.IsError || artifact.Result.Failure != nil || artifactData.ContentBase64 == "" {
 		t.Fatalf("read real artifact: %+v result=%+v", artifact, artifactResult)
 	}
-	content, err := base64.StdEncoding.DecodeString(artifact.Artifact.ContentBase64)
+	content, err := base64.StdEncoding.DecodeString(artifactData.ContentBase64)
 	if err != nil || !strings.Contains(string(content), marker) {
 		t.Fatalf("real artifact missing marker: content=%q err=%v", content, err)
 	}

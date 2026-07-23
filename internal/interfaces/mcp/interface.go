@@ -7,52 +7,39 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"math"
 	"net/http"
 	"strings"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"orquesta/internal/application"
+	commandcore "orquesta/internal/commands"
 	"orquesta/internal/i18n"
 	"orquesta/internal/identity"
 )
 
 type Config struct {
-	Orchestrator    *application.Orchestrator
-	Identity        identity.Provider
-	Catalog         *i18n.Catalog
-	Locale          string
-	MaxListLimit    int
-	MaxRequestBytes int64
-	Version         string
+	Dispatcher commandcore.Executor
+	Identity   identity.Provider
+	Catalog    *i18n.Catalog
+	Locale     string
+	Version    string
 }
 
 type Interface struct {
-	orchestrator *application.Orchestrator
-	identity     identity.Provider
-	catalog      *i18n.Catalog
-	locale       string
-	maxListLimit int
-	version      string
-	server       *sdkmcp.Server
-	handler      http.Handler
+	server  *sdkmcp.Server
+	handler http.Handler
 }
 
 func New(config Config) (*Interface, error) {
 	switch {
-	case config.Orchestrator == nil:
-		return nil, errors.New("mcp.orchestrator_required")
+	case config.Dispatcher == nil || !config.Dispatcher.Limits().Valid():
+		return nil, errors.New("mcp.dispatcher_required")
 	case config.Identity == nil:
 		return nil, errors.New("mcp.identity_required")
 	case config.Catalog == nil:
 		return nil, errors.New("mcp.catalog_required")
 	case strings.TrimSpace(config.Locale) == "" || strings.TrimSpace(config.Locale) != config.Locale:
 		return nil, errors.New("mcp.locale_invalid")
-	case config.MaxListLimit <= 0:
-		return nil, errors.New("mcp.max_list_limit_invalid")
-	case config.MaxRequestBytes <= 0 || config.MaxRequestBytes == math.MaxInt64:
-		return nil, errors.New("mcp.max_request_bytes_invalid")
 	case strings.TrimSpace(config.Version) == "" || strings.TrimSpace(config.Version) != config.Version:
 		return nil, errors.New("mcp.version_invalid")
 	}
@@ -61,20 +48,14 @@ func New(config Config) (*Interface, error) {
 		&sdkmcp.Implementation{Name: "orquesta", Version: config.Version},
 		&sdkmcp.ServerOptions{
 			Instructions: config.Catalog.Text(config.Locale, "server.instructions"),
-			PageSize:     config.MaxListLimit,
+			PageSize:     config.Dispatcher.Limits().MaxListLimit,
 			Capabilities: &sdkmcp.ServerCapabilities{},
 		},
 	)
-	result := &Interface{
-		orchestrator: config.Orchestrator,
-		identity:     config.Identity,
-		catalog:      config.Catalog,
-		locale:       config.Locale,
-		maxListLimit: config.MaxListLimit,
-		version:      config.Version,
-		server:       server,
+	if err := RegisterCommandTools(server, config.Dispatcher, config.Identity); err != nil {
+		return nil, err
 	}
-	result.registerTools()
+	result := &Interface{server: server}
 
 	streamable := sdkmcp.NewStreamableHTTPHandler(
 		func(*http.Request) *sdkmcp.Server { return server },
@@ -84,7 +65,7 @@ func New(config Config) (*Interface, error) {
 			DisableLocalhostProtection: false,
 		},
 	)
-	limited := requestBodyLimit(config.MaxRequestBytes, streamable)
+	limited := requestBodyLimit(config.Dispatcher.Limits().MaxRequestBytes, streamable)
 	result.handler = http.NewCrossOriginProtection().Handler(limited)
 	return result, nil
 }

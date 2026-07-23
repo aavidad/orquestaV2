@@ -13,6 +13,11 @@ import (
 	"orquesta/internal/governance"
 )
 
+var (
+	ErrPlanParentUnknown     = errors.New("application.plan_parent_unknown")
+	ErrPlanDependencyUnknown = errors.New("application.plan_dependency_unknown")
+)
+
 // PlanSpec uses request-local keys; application generates durable refs.
 type PlanSpec struct {
 	Phases    []PhaseSpec
@@ -97,7 +102,7 @@ func (orchestrator *Orchestrator) compilePlan(
 
 	resolver := workItemRefResolver{
 		requestLocal:  refs,
-		parentUnknown: "application.plan_parent_unknown",
+		parentUnknown: ErrPlanParentUnknown,
 	}
 	scope := workItemCompileScope{
 		goalRef: goalRef, actorRef: actorRef, projectRef: projectRef, createdAt: at,
@@ -157,7 +162,7 @@ func (orchestrator *Orchestrator) compilePlanExtension(
 		requestLocal: newRefs,
 		existing:     existingRefs,
 		// Keep the existing Director error contract for an unknown parent.
-		parentUnknown: "application.plan_dependency_unknown",
+		parentUnknown: ErrPlanDependencyUnknown,
 	}
 	scope := workItemCompileScope{
 		goalRef: aggregate.Ref(), actorRef: aggregate.Actor(), projectRef: aggregate.Project(), createdAt: at,
@@ -266,25 +271,25 @@ type workItemCompileScope struct {
 type workItemRefResolver struct {
 	requestLocal  map[string]goal.WorkItemRef
 	existing      map[string]goal.WorkItemRef
-	parentUnknown string
+	parentUnknown error
 }
 
 func (resolver workItemRefResolver) dependency(value string) (goal.WorkItemRef, error) {
-	return resolver.resolve(value, "application.plan_dependency_unknown")
+	return resolver.resolve(value, ErrPlanDependencyUnknown)
 }
 
 func (resolver workItemRefResolver) parent(value string) (goal.WorkItemRef, error) {
 	return resolver.resolve(value, resolver.parentUnknown)
 }
 
-func (resolver workItemRefResolver) resolve(value, unknown string) (goal.WorkItemRef, error) {
+func (resolver workItemRefResolver) resolve(value string, unknown error) (goal.WorkItemRef, error) {
 	if ref, exists := resolver.requestLocal[value]; exists {
 		return ref, nil
 	}
 	if ref, exists := resolver.existing[value]; exists {
 		return ref, nil
 	}
-	return goal.WorkItemRef{}, errors.New(unknown)
+	return goal.WorkItemRef{}, unknown
 }
 
 func compileWorkItemSpec(

@@ -16,6 +16,11 @@ import (
 
 type EffectKind string
 
+var (
+	ErrEffectCriticalSeparationRequired       = errors.New("application.effect_critical_separation_required")
+	ErrEffectCriticalProjectAuthorityRequired = errors.New("application.effect_critical_project_authority_required")
+)
+
 const (
 	EffectKindAgentLaunch      EffectKind = "agent_launch"
 	EffectKindAgentStop        EffectKind = "agent_stop"
@@ -308,11 +313,11 @@ func ValidateEffectApproval(intent EffectIntent, approval EffectApproval) error 
 	}
 	if approval.Decision == EffectApproved && intent.SecurityCriticality == governance.SecurityCriticalityCritical &&
 		approval.DecidedBy == intent.ProposedBy {
-		return errors.New("application.effect_critical_separation_required")
+		return ErrEffectCriticalSeparationRequired
 	}
 	if approval.Decision == EffectApproved && intent.SecurityCriticality == governance.SecurityCriticalityCritical &&
 		!identity.IsProjectAuthority(approval.AuthorizationReceipt.Decision().Role()) {
-		return errors.New("application.effect_critical_project_authority_required")
+		return ErrEffectCriticalProjectAuthorityRequired
 	}
 	switch approval.Source {
 	case EffectApprovalSourceGoalConfirmation:

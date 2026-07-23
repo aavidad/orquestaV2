@@ -24,12 +24,12 @@ import (
 	"orquesta/internal/adapters/system/local"
 	gitlocal "orquesta/internal/adapters/workspace/gitlocal"
 	"orquesta/internal/application"
+	commandcore "orquesta/internal/commands"
 	"orquesta/internal/config"
 	"orquesta/internal/credentials"
 	"orquesta/internal/goal"
 	"orquesta/internal/i18n"
 	"orquesta/internal/identity"
-	mcpiface "orquesta/internal/interfaces/mcp"
 	"orquesta/internal/ports"
 )
 
@@ -42,12 +42,13 @@ type AgentAdapter interface {
 type AgentFactory func(config.Snapshot, application.Clock) (AgentAdapter, error)
 
 type Options struct {
-	ConfigPath         string
-	Version            string
-	Listener           net.Listener
-	AgentFactory       AgentFactory
-	IdentityHTTPClient *http.Client
-	ReportError        func(error)
+	ConfigPath               string
+	Version                  string
+	Listener                 net.Listener
+	AgentFactory             AgentFactory
+	IdentityHTTPClient       *http.Client
+	CommandExecutionResolver commandcore.ExecutionAuthorityResolver
+	ReportError              func(error)
 }
 
 type identityRuntimeComposition struct {
@@ -60,6 +61,7 @@ type identityRuntimeComposition struct {
 type Runtime struct {
 	config          config.Snapshot
 	orchestrator    *application.Orchestrator
+	dispatcher      *commandcore.Dispatcher
 	repository      *statesqlite.Repository
 	artifacts       *filesystem.Store
 	testAttestor    interface{ Close() error }
@@ -449,16 +451,15 @@ func newBuildRuntime(
 	if version == "" {
 		version = "dev"
 	}
-	interfaceServer, err := mcpiface.New(mcpiface.Config{
-		Orchestrator: orchestrator, Identity: identity.ContextProvider{}, Catalog: setup.catalog,
-		Locale: setup.snapshot.APILocale(), MaxListLimit: int(setup.snapshot.APIMaxListLimit()),
-		MaxRequestBytes: setup.snapshot.ServerMaxRequestBytes(), Version: version,
-	})
+	surfaces, err := newCommandSurfaces(
+		setup, version, orchestrator, repository, options.CommandExecutionResolver,
+	)
 	if err != nil {
 		return nil, err
 	}
 	mux := http.NewServeMux()
-	mux.Handle(setup.snapshot.ServerMCPPath(), authenticator.Wrap(interfaceServer.Handler()))
+	mux.Handle(setup.snapshot.ServerMCPPath(), authenticator.Wrap(surfaces.mcpHandler))
+	mux.Handle(commandHTTPPrefix, authenticator.Wrap(surfaces.httpHandler))
 	lifecycleCtx, cancelLifecycle := context.WithCancel(context.Background())
 	httpServer := &http.Server{
 		Handler: mux, ReadTimeout: setup.snapshot.ServerReadTimeout(),
@@ -466,7 +467,7 @@ func newBuildRuntime(
 		BaseContext: func(net.Listener) context.Context { return lifecycleCtx },
 	}
 	return &Runtime{
-		config: setup.snapshot, orchestrator: orchestrator, repository: repository,
+		config: setup.snapshot, orchestrator: orchestrator, dispatcher: surfaces.dispatcher, repository: repository,
 		artifacts: artifacts, testAttestor: testAttestor, workspace: workspace,
 		agent: agent, listener: listener, httpServer: httpServer,
 		workerRef: setup.workerRef, reportError: options.ReportError,
