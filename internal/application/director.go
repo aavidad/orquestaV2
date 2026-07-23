@@ -35,6 +35,9 @@ type ProposeDirectorPlanRequest struct {
 	ExpectedWorkItemRevision goal.Revision
 	SourceExecutionRef       goal.ExecutionRef
 	SourceExecutionAttempt   uint64
+	CouncilSubjectDigest     CouncilSubjectDigest
+	CouncilDecisionRef       string
+	CouncilDecisionDigest    CouncilSubjectDigest
 	Reason                   string
 	Plan                     PlanSpec
 }
@@ -280,7 +283,9 @@ func (orchestrator *Orchestrator) buildDirectorPlanState(ctx context.Context, re
 		Cause:                request.Cause, SourceWorkItemRef: request.SourceWorkItemRef,
 		SourceWorkItemRevision: request.ExpectedWorkItemRevision,
 		SourceExecutionRef:     request.SourceExecutionRef, SourceExecutionAttempt: request.SourceExecutionAttempt,
-		AppliedGoalRevision: updated.Revision(), AppliedPlanGeneration: updated.PlanGeneration(),
+		CouncilSubjectDigest: request.CouncilSubjectDigest, CouncilDecisionRef: request.CouncilDecisionRef,
+		CouncilDecisionDigest: request.CouncilDecisionDigest,
+		AppliedGoalRevision:   updated.Revision(), AppliedPlanGeneration: updated.PlanGeneration(),
 		Reason: request.Reason, DecidedAt: now, AuthorizationReceipt: authorization,
 	}
 	events := append([]EventRecord{{
@@ -374,8 +379,17 @@ func validateProposeDirectorPlanRequest(request ProposeDirectorPlanRequest) erro
 	if request.SourceWorkItemRef.String() == "" || request.ExpectedWorkItemRevision == 0 ||
 		request.SourceExecutionRef.String() == "" || request.SourceExecutionAttempt == 0 ||
 		(request.Cause != goal.ReplanCauseSplitPending && request.Cause != goal.ReplanCauseExecutionStopped &&
-			request.Cause != goal.ReplanCauseExecutionFailed && request.Cause != goal.ReplanCauseReviewChangesRequested) || len(request.Plan.Phases) != 0 {
+			request.Cause != goal.ReplanCauseExecutionFailed && request.Cause != goal.ReplanCauseReviewChangesRequested &&
+			request.Cause != goal.ReplanCauseGovernanceDecision) || len(request.Plan.Phases) != 0 {
 		return errors.New("application.director_plan_replan_fence_invalid")
+	}
+	if request.Cause == goal.ReplanCauseGovernanceDecision {
+		if !validCouncilDigest(string(request.CouncilSubjectDigest)) || !validCouncilRef(request.CouncilDecisionRef) ||
+			!validCouncilDigest(string(request.CouncilDecisionDigest)) {
+			return errors.New("application.director_plan_council_fence_invalid")
+		}
+	} else if request.CouncilSubjectDigest != "" || request.CouncilDecisionRef != "" || request.CouncilDecisionDigest != "" {
+		return errors.New("application.director_plan_council_fence_unexpected")
 	}
 	return nil
 }
@@ -418,6 +432,8 @@ func validateDirectorDecision(
 		decision.SourceWorkItemRevision != request.ExpectedWorkItemRevision ||
 		decision.SourceExecutionRef != request.SourceExecutionRef ||
 		decision.SourceExecutionAttempt != request.SourceExecutionAttempt ||
+		decision.CouncilSubjectDigest != request.CouncilSubjectDigest || decision.CouncilDecisionRef != request.CouncilDecisionRef ||
+		decision.CouncilDecisionDigest != request.CouncilDecisionDigest ||
 		decision.AppliedGoalRevision != request.ExpectedGoalRevision+1 ||
 		decision.AppliedPlanGeneration != request.ExpectedPlanGeneration+1 ||
 		decision.Reason != request.Reason || decision.DecidedAt.IsZero() ||
@@ -472,7 +488,8 @@ func directorPlanFingerprint(
 		strconv.FormatUint(uint64(request.ExpectedPlanGeneration), 10), request.LeaseToken,
 		strconv.FormatUint(request.LeaseFence, 10), string(request.Cause), request.SourceWorkItemRef.String(),
 		strconv.FormatUint(uint64(request.ExpectedWorkItemRevision), 10), request.SourceExecutionRef.String(),
-		strconv.FormatUint(request.SourceExecutionAttempt, 10), request.Reason,
+		strconv.FormatUint(request.SourceExecutionAttempt, 10), string(request.CouncilSubjectDigest), request.CouncilDecisionRef,
+		string(request.CouncilDecisionDigest), request.Reason,
 	)
 	writePlanFingerprint(digest, &request.Plan)
 	return fingerprintHex(digest)

@@ -280,11 +280,19 @@ func memoryDirectorDecisionValid(state ApplyDirectorPlanState) bool {
 	}
 	if decision.Cause == "" {
 		return decision.SourceWorkItemRef.String() == "" && decision.SourceWorkItemRevision == 0 &&
-			decision.SourceExecutionRef.String() == "" && decision.SourceExecutionAttempt == 0
+			decision.SourceExecutionRef.String() == "" && decision.SourceExecutionAttempt == 0 &&
+			decision.CouncilSubjectDigest == "" && decision.CouncilDecisionRef == "" && decision.CouncilDecisionDigest == ""
 	}
-	return (decision.Cause == goal.ReplanCauseSplitPending ||
+	baseCause := decision.Cause == goal.ReplanCauseSplitPending ||
 		decision.Cause == goal.ReplanCauseExecutionStopped ||
-		decision.Cause == goal.ReplanCauseExecutionFailed) &&
+		decision.Cause == goal.ReplanCauseExecutionFailed || decision.Cause == goal.ReplanCauseReviewChangesRequested
+	if decision.Cause == goal.ReplanCauseGovernanceDecision {
+		return decision.SourceWorkItemRef.String() != "" && decision.SourceWorkItemRevision != 0 &&
+			decision.SourceExecutionRef.String() != "" && decision.SourceExecutionAttempt != 0 &&
+			validCouncilDigest(string(decision.CouncilSubjectDigest)) && validCouncilRef(decision.CouncilDecisionRef) &&
+			validCouncilDigest(string(decision.CouncilDecisionDigest))
+	}
+	return baseCause && decision.CouncilSubjectDigest == "" && decision.CouncilDecisionRef == "" && decision.CouncilDecisionDigest == "" &&
 		decision.SourceWorkItemRef.String() != "" && decision.SourceWorkItemRevision != 0 &&
 		decision.SourceExecutionRef.String() != "" && decision.SourceExecutionAttempt != 0
 }
@@ -292,6 +300,12 @@ func memoryDirectorDecisionValid(state ApplyDirectorPlanState) bool {
 func memoryDirectorScheduleValid(state ApplyDirectorPlanState) bool {
 	if state.Decision.Cause == goal.ReplanCauseSplitPending {
 		if len(state.UpdatedExecutions) != 1 || len(state.RetireActionRefs) != 1 ||
+			state.UpdatedExecutions[0].Ref != state.Decision.SourceExecutionRef ||
+			state.UpdatedExecutions[0].State != ExecutionCanceled {
+			return false
+		}
+	} else if state.Decision.Cause == goal.ReplanCauseGovernanceDecision {
+		if len(state.UpdatedExecutions) != 1 || len(state.RetireActionRefs) != 0 ||
 			state.UpdatedExecutions[0].Ref != state.Decision.SourceExecutionRef ||
 			state.UpdatedExecutions[0].State != ExecutionCanceled {
 			return false

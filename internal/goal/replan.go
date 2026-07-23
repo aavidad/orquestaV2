@@ -12,6 +12,10 @@ const (
 	ReplanCauseExecutionStopped       ReplanCause = "execution_stopped"
 	ReplanCauseExecutionFailed        ReplanCause = "execution_failed"
 	ReplanCauseReviewChangesRequested ReplanCause = "review_changes_requested"
+	// ReplanCauseGovernanceDecision is deliberately domain-neutral: application
+	// adapters prove the external governance fact before asking Goal to replace
+	// the still-running source work item.
+	ReplanCauseGovernanceDecision ReplanCause = "governance_decision"
 )
 
 type ReplanInput struct {
@@ -49,7 +53,7 @@ func (goal Goal) ApplyReplan(expected Revision, input ReplanInput) (Goal, error)
 	updated.planGeneration, updated.items[source.ref] = next, source.superseded(input.At)
 	runningScopes := make([][]WriteScope, 0)
 	for _, item := range goal.items {
-		if item.state == WorkItemStateRunning {
+		if item.ref != source.ref && item.state == WorkItemStateRunning {
 			runningScopes = append(runningScopes, item.writeSet)
 		}
 	}
@@ -89,6 +93,8 @@ func (goal Goal) validReplanSource(source WorkItem, input ReplanInput) bool {
 			source.execution == input.CausalExecution && validExecutionRef(input.CausalExecution)
 	case ReplanCauseReviewChangesRequested:
 		return source.state == WorkItemStateInterrupted && source.execution == input.CausalExecution && validExecutionRef(input.CausalExecution)
+	case ReplanCauseGovernanceDecision:
+		return source.state == WorkItemStateRunning && source.execution == input.CausalExecution && validExecutionRef(input.CausalExecution)
 	}
 	return false
 }

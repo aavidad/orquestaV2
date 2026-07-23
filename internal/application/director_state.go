@@ -41,6 +41,9 @@ type DirectorDecisionRecord struct {
 	SourceWorkItemRevision goal.Revision
 	SourceExecutionRef     goal.ExecutionRef
 	SourceExecutionAttempt uint64
+	CouncilSubjectDigest   CouncilSubjectDigest
+	CouncilDecisionRef     string
+	CouncilDecisionDigest  CouncilSubjectDigest
 	AppliedGoalRevision    goal.Revision
 	AppliedPlanGeneration  goal.PlanGeneration
 	Reason                 string
