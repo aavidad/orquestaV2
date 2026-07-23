@@ -5,6 +5,7 @@ import (
 	"path"
 	"strings"
 
+	"orquesta/internal/council"
 	"orquesta/internal/governance"
 )
 
@@ -384,6 +385,12 @@ func validateWorkItemPlanMetadataForRestore(item WorkItem, allowMissingRequiredT
 			return domainError(ErrorInvalidPlan, "duplicate_write_scope")
 		}
 		seenScopes[scope] = struct{}{}
+	}
+	if item.councilPolicy != "" && council.ValidatePolicy(item.councilPolicy) != nil {
+		return domainError(ErrorInvalidPlan, "council_policy")
+	}
+	if len(item.writeSet) > 0 && item.councilPolicy == "" && !item.state.Terminal() {
+		return domainError(ErrorInvalidPlan, "council_policy")
 	}
 	if err := validateRequiredTests(item.requiredTests); err != nil {
 		return err

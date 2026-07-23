@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	"orquesta/internal/council"
 	"orquesta/internal/governance"
 )
 
@@ -90,6 +91,7 @@ func RestoreAppSpec(snapshot AppSpecSnapshot) (AppSpec, error) {
 // schemas preceding required tests and immutable governance metadata.
 func RestoreGoal(snapshot GoalSnapshot) (Goal, error) {
 	if snapshot.SchemaVersion != GoalSnapshotSchemaVersion &&
+		snapshot.SchemaVersion != councilPolicyCompatibleSnapshotSchemaVersion &&
 		snapshot.SchemaVersion != requiredTestsCompatibleSnapshotSchemaVersion &&
 		snapshot.SchemaVersion != governanceCompatibleSnapshotSchemaVersion {
 		return Goal{}, domainError(ErrorSnapshotInvalid, "schema_version")
@@ -210,6 +212,18 @@ func restoreWorkItem(snapshot WorkItemSnapshot, schemaVersion uint32) (WorkItem,
 	if err := firstError(dependenciesErr, writeSetErr, requiredTestsErr, parentErr); err != nil {
 		return WorkItem{}, err
 	}
+	if schemaVersion != GoalSnapshotSchemaVersion && snapshot.CouncilPolicy != "" {
+		return WorkItem{}, domainError(ErrorSnapshotInvalid, "council_policy_schema")
+	}
+	if schemaVersion == GoalSnapshotSchemaVersion && snapshot.CouncilPolicy != "" && council.ValidatePolicy(snapshot.CouncilPolicy) != nil {
+		return WorkItem{}, domainError(ErrorSnapshotInvalid, "council_policy")
+	}
+	if schemaVersion == GoalSnapshotSchemaVersion && len(writeSet) > 0 && council.ValidatePolicy(snapshot.CouncilPolicy) != nil {
+		return WorkItem{}, domainError(ErrorSnapshotInvalid, "council_policy")
+	}
+	if schemaVersion != GoalSnapshotSchemaVersion && len(writeSet) > 0 && !snapshot.State.Terminal() {
+		return WorkItem{}, domainError(ErrorSnapshotInvalid, "council_policy_legacy_live")
+	}
 	if snapshot.HandoffRequired == nil {
 		return WorkItem{}, domainError(ErrorSnapshotInvalid, "handoff_required")
 	}
@@ -239,7 +253,7 @@ func restoreWorkItem(snapshot WorkItemSnapshot, schemaVersion uint32) (WorkItem,
 		ref: ref, goal: goalRef, actor: actor, project: project,
 		objective: snapshot.Objective, phase: phase, role: role,
 		parent: parent, handoffRequired: handoffRequired,
-		dependencies: dependencies, writeSet: writeSet, requiredTests: requiredTests,
+		dependencies: dependencies, writeSet: writeSet, councilPolicy: snapshot.CouncilPolicy, requiredTests: requiredTests,
 		skillRefs: skillRefs, toolRefs: toolRefs, capabilityRefs: capabilityRefs,
 		outputContract: outputContract, skipReason: snapshot.SkipReason,
 		budgetDemand: budgetDemand, securityCriticality: criticality, reasoningEffort: effort,
@@ -263,7 +277,7 @@ func restoreWorkItem(snapshot WorkItemSnapshot, schemaVersion uint32) (WorkItem,
 }
 
 func restoreRequiredTests(snapshots []RequiredTestSpecSnapshot, schemaVersion uint32) ([]RequiredTestSpec, error) {
-	if schemaVersion != GoalSnapshotSchemaVersion {
+	if schemaVersion < councilPolicyCompatibleSnapshotSchemaVersion {
 		if len(snapshots) != 0 {
 			return nil, domainError(ErrorSnapshotInvalid, "required_tests_schema")
 		}

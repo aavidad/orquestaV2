@@ -3,10 +3,12 @@ package goal
 import (
 	"time"
 
+	"orquesta/internal/council"
 	"orquesta/internal/governance"
 )
 
-const GoalSnapshotSchemaVersion uint32 = 7
+const GoalSnapshotSchemaVersion uint32 = 8
+const councilPolicyCompatibleSnapshotSchemaVersion uint32 = 7
 const requiredTestsCompatibleSnapshotSchemaVersion uint32 = 6
 const governanceCompatibleSnapshotSchemaVersion uint32 = 5
 
@@ -65,6 +67,7 @@ type WorkItemSnapshot struct {
 	HandoffRequired     *bool
 	DependencyRefs      []string
 	WriteSet            []string
+	CouncilPolicy       council.Policy
 	RequiredTests       []RequiredTestSpecSnapshot
 	SkillRefs           []string
 	ToolRefs            []string
@@ -245,6 +248,7 @@ func snapshotWorkItem(item WorkItem) WorkItemSnapshot {
 		HandoffRequired: &handoffRequired,
 		DependencyRefs:  dependencies,
 		WriteSet:        writeSet,
+		CouncilPolicy:   item.councilPolicy,
 		RequiredTests:   requiredTests,
 		SkillRefs:       stringsFromRefs(item.skillRefs),
 		ToolRefs:        stringsFromRefs(item.toolRefs),

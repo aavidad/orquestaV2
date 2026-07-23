@@ -331,7 +331,7 @@ func TestSchemaV4RequiresExplicitCoherentHandoffField(t *testing.T) {
 	requireCode(t, err, domain.ErrorSnapshotInvalid)
 
 	wrongLegacyShape := pending.Snapshot()
-	wrongLegacyShape.SchemaVersion = domain.GoalSnapshotSchemaVersion - 2
+	wrongLegacyShape.SchemaVersion = domain.GoalSnapshotSchemaVersion - 3
 	_, err = domain.RestoreGoal(wrongLegacyShape)
 	requireCode(t, err, domain.ErrorSnapshotInvalid)
 }

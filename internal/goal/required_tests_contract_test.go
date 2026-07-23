@@ -121,7 +121,7 @@ func TestRequiredTestsSurvivePlanSnapshotRestoreAndReplan(t *testing.T) {
 	}
 }
 
-func TestLegacyWriterWithoutTestsRestoresFailClosedAndSurvivesRestart(t *testing.T) {
+func TestLegacyLiveWriterWithoutCouncilPolicyRestoresFailClosed(t *testing.T) {
 	fixture := newPlanFixture(t)
 	phase := mustPhase(t, "phase:required-tests-legacy")
 	ref := mustRef(t, "work-item:required-tests-legacy", domain.NewWorkItemRef)
@@ -133,21 +133,9 @@ func TestLegacyWriterWithoutTestsRestoresFailClosedAndSurvivesRestart(t *testing
 	}
 	legacy := cloneGoalSnapshot(planned.Snapshot())
 	legacy.SchemaVersion = domain.GoalSnapshotSchemaVersion - 1
-	legacy.WorkItems[0].RequiredTests = nil
-	restored, err := domain.RestoreGoal(legacy)
-	if err != nil {
-		t.Fatalf("legacy writer became unreadable: %v", err)
-	}
-	if len(restored.WorkItems()[0].RequiredTests()) != 0 {
-		t.Fatal("restore invented a legacy required test")
-	}
-	reemitted := restored.Snapshot()
-	if reemitted.SchemaVersion != domain.GoalSnapshotSchemaVersion || len(reemitted.WorkItems[0].RequiredTests) != 0 {
-		t.Fatalf("unsafe upgrade snapshot=%+v", reemitted.WorkItems[0].RequiredTests)
-	}
-	restarted, err := domain.RestoreGoal(reemitted)
-	if err != nil || len(restarted.WorkItems()[0].RequiredTests()) != 0 {
-		t.Fatalf("restart lost fail-closed legacy candidate: tests=%d err=%v", len(restarted.WorkItems()[0].RequiredTests()), err)
+	legacy.WorkItems[0].CouncilPolicy = ""
+	if _, err := domain.RestoreGoal(legacy); domain.ErrorCodeOf(err) != domain.ErrorSnapshotInvalid {
+		t.Fatalf("legacy live writer without policy error=%v", err)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	"orquesta/internal/council"
 	"orquesta/internal/governance"
 )
 
@@ -55,6 +56,7 @@ type NewWorkItemInput struct {
 	HandoffRequired     bool
 	Dependencies        []WorkItemRef
 	WriteSet            []WriteScope
+	CouncilPolicy       council.Policy
 	RequiredTests       []RequiredTestSpec
 	SkillRefs           []SkillRef
 	ToolRefs            []ToolRef
@@ -78,6 +80,7 @@ type WorkItem struct {
 	handoffRequired     bool
 	dependencies        []WorkItemRef
 	writeSet            []WriteScope
+	councilPolicy       council.Policy
 	requiredTests       []RequiredTestSpec
 	skillRefs           []SkillRef
 	toolRefs            []ToolRef
@@ -166,6 +169,7 @@ func NewWorkItem(input NewWorkItemInput) (WorkItem, error) {
 		handoffRequired: input.HandoffRequired,
 		dependencies:    append([]WorkItemRef(nil), input.Dependencies...),
 		writeSet:        append([]WriteScope(nil), input.WriteSet...),
+		councilPolicy:   input.CouncilPolicy,
 		requiredTests:   cloneRequiredTests(input.RequiredTests),
 		skillRefs:       cloneRefs(input.SkillRefs),
 		toolRefs:        cloneRefs(input.ToolRefs),
@@ -193,6 +197,9 @@ func (item WorkItem) Parent() (WorkItemRef, bool) { return item.parent, validWor
 func (item WorkItem) HandoffRequired() bool       { return item.handoffRequired }
 func (item WorkItem) Dependencies() []WorkItemRef { return cloneDependencies(item.dependencies) }
 func (item WorkItem) WriteSet() []WriteScope      { return cloneWriteSet(item.writeSet) }
+func (item WorkItem) CouncilPolicy() (council.Policy, bool) {
+	return item.councilPolicy, item.councilPolicy != ""
+}
 func (item WorkItem) RequiredTests() []RequiredTestSpec {
 	return cloneRequiredTests(item.requiredTests)
 }
@@ -426,6 +433,7 @@ func equalWorkItems(left, right WorkItem) bool {
 		left.project == right.project && left.objective == right.objective && left.phase == right.phase &&
 		left.role == right.role && left.parent == right.parent && left.handoffRequired == right.handoffRequired &&
 		refsEqual(left.dependencies, right.dependencies) && refsEqual(left.writeSet, right.writeSet) &&
+		left.councilPolicy == right.councilPolicy &&
 		requiredTestsEqual(left.requiredTests, right.requiredTests) &&
 		refsEqual(left.skillRefs, right.skillRefs) && refsEqual(left.toolRefs, right.toolRefs) &&
 		refsEqual(left.capabilityRefs, right.capabilityRefs) && left.outputContract == right.outputContract &&
