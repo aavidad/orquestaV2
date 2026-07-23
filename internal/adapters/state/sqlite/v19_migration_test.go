@@ -9,7 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"orquesta/internal/application"
 	"orquesta/internal/goal"
+	"orquesta/internal/identity"
 )
 
 func TestV19MigrationEmptyV18DatabaseCreatesCouncilFoundation(t *testing.T) {
@@ -111,6 +113,197 @@ WHERE ref='work-item:v19-closed'`)
 	if receipts != 1 {
 		t.Fatalf("V19 migration receipts=%d", receipts)
 	}
+}
+
+func TestV19MigrationPreservesHistoricalDirectorDecisionReplayAndImmutability(t *testing.T) {
+	path := populatedTerminalSQLiteV18Database(t)
+	database, err := sql.Open(driverName, path)
+	sqliteTestNoError(t, err)
+	historical := seedV18HistoricalDirectorDecision(t, database)
+	sqliteTestNoError(t, database.Close())
+
+	repository, err := Open(context.Background(), Options{Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 4})
+	if err != nil {
+		t.Fatalf("historical Director V18 migration: %s", sqliteTestErrorChain(err))
+	}
+	t.Cleanup(func() { _ = repository.Close() })
+	assertSQLiteV19MigrationHealthy(t, repository.db)
+
+	var cause, councilSubject string
+	var councilDecisionRef, councilDecisionDigest sql.NullString
+	sqliteTestNoError(t, repository.db.QueryRow(`SELECT cause,council_subject_digest,
+council_decision_ref,council_decision_digest FROM director_decisions WHERE ref=?`, historical.ref).
+		Scan(&cause, &councilSubject, &councilDecisionRef, &councilDecisionDigest))
+	if cause != "" || councilSubject != "" || councilDecisionRef.Valid || councilDecisionDigest.Valid {
+		t.Fatalf("historical Director Council copy cause=%q Council=%q/%+v/%+v",
+			cause, councilSubject, councilDecisionRef, councilDecisionDigest)
+	}
+
+	if _, err := repository.db.Exec(`INSERT INTO director_decisions(
+ ref,request_ref,request_fingerprint,authorization_receipt_ref,goal_ref,project_ref,principal_ref,
+ lease_fence,source_goal_revision,source_plan_generation,cause,source_work_item_ref,
+ source_work_item_revision,source_execution_ref,source_execution_attempt,applied_goal_revision,
+ applied_plan_generation,reason,decided_at,council_subject_digest,council_decision_ref,council_decision_digest
+) SELECT 'director-decision:v19-duplicate','director-request:v19-duplicate','fingerprint:v19-duplicate',
+ authorization_receipt_ref,goal_ref,project_ref,principal_ref,lease_fence,source_goal_revision,
+ source_plan_generation,cause,source_work_item_ref,source_work_item_revision,source_execution_ref,
+ source_execution_attempt,applied_goal_revision,applied_plan_generation,reason,decided_at,'',NULL,NULL
+FROM director_decisions WHERE ref=?`, historical.ref); err == nil {
+		t.Fatal("director decision generation uniqueness lost in V19 migration")
+	}
+	if _, err := repository.db.Exec(`UPDATE director_decisions SET reason='tampered' WHERE ref=?`, historical.ref); err == nil ||
+		!strings.Contains(err.Error(), "sqlite.director_decision_immutable") {
+		t.Fatalf("historical Director decision update=%v", err)
+	}
+	if _, err := repository.db.Exec(`DELETE FROM director_decisions WHERE ref=?`, historical.ref); err == nil ||
+		!strings.Contains(err.Error(), "sqlite.director_decision_immutable") {
+		t.Fatalf("historical Director decision delete=%v", err)
+	}
+	if _, _, err := validateRecoveryDatabase(context.Background(), repository.db); err != nil {
+		t.Fatalf("historical Director V19 recovery: %s", sqliteTestErrorChain(err))
+	}
+
+	goalRef := mustRef(t, historical.goalRef, goal.NewGoalRef)
+	projectRef := mustRef(t, historical.projectRef, goal.NewProjectRef)
+	principalRef := mustRef(t, historical.principalRef, identity.NewPrincipalRef)
+	decision, found, err := readDirectorDecisionByRequest(
+		context.Background(), repository.db, principalRef, projectRef, goalRef, historical.requestRef,
+	)
+	sqliteTestNoError(t, err)
+	if !found || decision.Ref != historical.ref || decision.RequestRef != historical.requestRef ||
+		decision.RequestFingerprint != historical.fingerprint || decision.GoalRef != goalRef ||
+		decision.PrincipalRef != principalRef || int64(decision.LeaseFence) != historical.fence ||
+		int64(decision.SourceGoalRevision) != historical.sourceRevision ||
+		int64(decision.SourcePlanGeneration) != historical.sourceGeneration ||
+		int64(decision.AppliedGoalRevision) != historical.appliedRevision ||
+		int64(decision.AppliedPlanGeneration) != historical.appliedGeneration || decision.Reason != historical.reason ||
+		decision.DecidedAt.UnixNano() != historical.decidedAt || decision.Cause != "" ||
+		decision.CouncilSubjectDigest != "" || decision.CouncilDecisionRef != "" ||
+		decision.CouncilDecisionDigest != "" {
+		t.Fatalf("historical Director reader=%+v found=%t", decision, found)
+	}
+	record, err := repository.GetGoal(context.Background(), goalRef)
+	sqliteTestNoError(t, err)
+	replayed, created, err := repository.ApplyDirectorPlan(context.Background(), application.ApplyDirectorPlanState{
+		RequestRef: historical.requestRef, RequestFingerprint: historical.fingerprint,
+		AuthorizationReceipt: decision.AuthorizationReceipt, PrincipalRef: principalRef, ProjectRef: projectRef,
+		GoalRef: goalRef, LeaseToken: "lease-token:v19-historical", LeaseFence: decision.LeaseFence,
+		ExpectedGoalRevision: decision.SourceGoalRevision, ExpectedPlanGeneration: decision.SourcePlanGeneration,
+		Goal: record.Goal, Decision: decision, OperationAt: decision.DecidedAt,
+	})
+	if err != nil || created || replayed != decision {
+		t.Fatalf("historical Director replay=%+v created=%t err=%s", replayed, created, sqliteTestErrorChain(err))
+	}
+}
+
+type v18HistoricalDirectorDecision struct {
+	ref, requestRef, fingerprint, authorizationRef string
+	goalRef, projectRef, principalRef              string
+	fence                                          int64
+	sourceRevision, sourceGeneration               int64
+	appliedRevision, appliedGeneration             int64
+	reason                                         string
+	decidedAt                                      int64
+}
+
+func seedV18HistoricalDirectorDecision(t *testing.T, database *sql.DB) v18HistoricalDirectorDecision {
+	t.Helper()
+	var result v18HistoricalDirectorDecision
+	var createdAt int64
+	var actorValue, principalKind, principalMethod string
+	sqliteTestNoError(t, database.QueryRow(`SELECT goal.ref,goal.project_ref,goal.requested_by_ref,
+goal.revision,goal.plan_generation,goal.created_at,principal.actor_ref,principal.kind,principal.authentication_method
+FROM goals goal JOIN principals principal ON principal.ref=goal.requested_by_ref
+WHERE goal.ref='goal:v19-closed'`).Scan(
+		&result.goalRef, &result.projectRef, &result.principalRef, &result.appliedRevision,
+		&result.appliedGeneration, &createdAt, &actorValue, &principalKind, &principalMethod,
+	))
+	if result.appliedRevision <= 1 || result.appliedGeneration <= 0 {
+		t.Fatalf("historical Director goal generation=%d/%d", result.appliedRevision, result.appliedGeneration)
+	}
+	result.ref = "director-decision:v18-historical"
+	result.requestRef = "director-request:v18-historical"
+	result.fence = 1
+	result.sourceRevision = result.appliedRevision - 1
+	result.sourceGeneration = result.appliedGeneration - 1
+	result.reason = "historical Director extension"
+	claimAt := createdAt + int64(time.Second)
+	result.decidedAt = claimAt + int64(time.Second)
+	leaseUntil := result.decidedAt + int64(time.Minute)
+	grantAt := claimAt - int64(time.Nanosecond)
+	mustV19Exec(t, database, `INSERT INTO workspaces(ref) VALUES ('workspace:v18-historical-director')`)
+	mustV19Exec(t, database, `INSERT INTO groups(ref,workspace_ref) VALUES ('group:v18-historical-director','workspace:v18-historical-director')`)
+	mustV19Exec(t, database, `INSERT INTO projects(ref,group_ref) VALUES (?,'group:v18-historical-director')`, result.projectRef)
+	mustV19Exec(t, database, `INSERT INTO project_memberships(
+principal_ref,project_ref,role,revision,status,granted_by_ref,granted_at,revoked_by_ref,revoked_at
+) VALUES (?,?,'project_owner',1,'active',?,?,NULL,NULL)`,
+		result.principalRef, result.projectRef, result.principalRef, grantAt)
+	mustV19Exec(t, database, `INSERT INTO membership_audit_receipts(
+ref,request_ref,request_fingerprint,action,actor_ref,target_ref,project_ref,role,previous_revision,revision,occurred_at
+) VALUES ('membership-audit:v18-historical-director','membership-request:v18-historical-director',
+'membership-fingerprint:v18-historical-director','membership.granted',?,?,?,'project_owner',0,1,?)`,
+		result.principalRef, result.principalRef, result.projectRef, grantAt)
+	principalRef := mustRef(t, result.principalRef, identity.NewPrincipalRef)
+	actorRef := mustRef(t, actorValue, goal.NewActorRef)
+	principal, err := identity.NewPrincipal(principalRef, actorRef, identity.PrincipalKind(principalKind), principalMethod)
+	sqliteTestNoError(t, err)
+	projectRef := mustRef(t, result.projectRef, goal.NewProjectRef)
+	makeAuthorization := func(requestRef string, at int64) (string, string) {
+		request, requestErr := identity.NewAuthorizationRequest(identity.AuthorizationRequestInput{
+			RequestRef: requestRef, Principal: principal, ProjectRef: projectRef,
+			Permission: identity.PermissionGoalsDirect, ResourceRef: result.goalRef,
+			RequestedAt: time.Unix(0, at).UTC(),
+		})
+		sqliteTestNoError(t, requestErr)
+		fingerprint := authorizationRequestFingerprint(request)
+		return deterministicRef("authorization-receipt", fingerprint), fingerprint
+	}
+	claimAuthorizationRef, claimFingerprint := makeAuthorization("director-claim:v18-historical", claimAt)
+	result.authorizationRef, result.fingerprint = makeAuthorization(result.requestRef, result.decidedAt)
+	claimReceiptRef := deterministicRef("director-lease-receipt", canonicalFingerprint(
+		"director-lease-receipt.v1", "claim", result.principalRef, "director-claim:v18-historical",
+		claimFingerprint, result.goalRef, result.projectRef,
+	))
+	for _, authorization := range []struct{ ref, request, fingerprint string }{
+		{claimAuthorizationRef, "director-claim:v18-historical", claimFingerprint},
+		{result.authorizationRef, result.requestRef, result.fingerprint},
+	} {
+		at := claimAt
+		if authorization.request == result.requestRef {
+			at = result.decidedAt
+		}
+		mustV19Exec(t, database, `INSERT INTO authorization_receipts(
+ref,request_ref,request_fingerprint,principal_ref,project_ref,permission,resource_ref,requested_at,
+outcome,role,membership_revision,reason_code,decided_at,recorded_at
+) VALUES (?,?,?,?,?,'goals.direct',?,?, 'allowed','project_owner',1,'rbac.allowed',?,?)`,
+			authorization.ref, authorization.request, authorization.fingerprint, result.principalRef,
+			result.projectRef, result.goalRef, at, at, at, at)
+	}
+	mustV19Exec(t, database, `INSERT INTO director_lease_receipts(
+ref,action,request_ref,request_fingerprint,authorization_receipt_ref,goal_ref,project_ref,principal_ref,
+fence,lease_until,occurred_at
+) VALUES (?,'claim','director-claim:v18-historical',
+	?,?,?,?,?,1,?,?)`,
+		claimReceiptRef, claimFingerprint, claimAuthorizationRef, result.goalRef, result.projectRef,
+		result.principalRef, leaseUntil, claimAt)
+	mustV19Exec(t, database, `INSERT INTO director_leases(
+goal_ref,project_ref,principal_ref,token,fence,lease_until,claim_request_ref,claim_request_fingerprint,
+claim_authorization_receipt_ref,renew_request_ref,renew_request_fingerprint,renew_authorization_receipt_ref,updated_at
+) VALUES (?,?,?,'lease-token:v18-historical',1,?,'director-claim:v18-historical',
+	?, ?,NULL,NULL,NULL,?)`,
+		result.goalRef, result.projectRef, result.principalRef, leaseUntil, claimFingerprint, claimAuthorizationRef, claimAt)
+	mustV19Exec(t, database, `INSERT INTO director_decisions(
+ref,request_ref,request_fingerprint,authorization_receipt_ref,goal_ref,project_ref,principal_ref,lease_fence,
+source_goal_revision,source_plan_generation,cause,source_work_item_ref,source_work_item_revision,
+source_execution_ref,source_execution_attempt,applied_goal_revision,applied_plan_generation,reason,decided_at
+) VALUES (?,?,?,?,?,?,?,?,?,?,'',NULL,0,NULL,0,?,?,?,?)`,
+		result.ref, result.requestRef, result.fingerprint, result.authorizationRef, result.goalRef,
+		result.projectRef, result.principalRef, result.fence, result.sourceRevision, result.sourceGeneration,
+		result.appliedRevision, result.appliedGeneration, result.reason, result.decidedAt)
+	mustV19Exec(t, database, `INSERT INTO events(ref,kind,goal_ref,work_item_ref,execution_ref,occurred_at)
+VALUES (?,'director.plan_applied',?,NULL,NULL,?)`,
+		"event:director-plan-applied:"+result.ref, result.goalRef, result.decidedAt)
+	return result
 }
 
 func TestV19MigrationRejectsPartialHistoricalInterruptPairAtomically(t *testing.T) {
@@ -379,9 +572,9 @@ func assertV19MigrationNeverStarted(t *testing.T, path string) {
 	}
 }
 
-func mustV19Exec(t *testing.T, database *sql.DB, statement string) {
+func mustV19Exec(t *testing.T, database *sql.DB, statement string, arguments ...any) {
 	t.Helper()
-	if _, err := database.Exec(statement); err != nil {
+	if _, err := database.Exec(statement, arguments...); err != nil {
 		t.Fatal(err)
 	}
 }
