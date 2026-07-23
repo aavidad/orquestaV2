@@ -94,6 +94,7 @@ type sqliteV15External struct {
 	stopCalls        int
 	observationUsage governance.ResourceUsage
 	reviewContent    []byte
+	reviewVerdict    review.Verdict
 }
 
 type sqliteV15DefinitelyUnapplied struct{}
@@ -169,10 +170,20 @@ func (external *sqliteV15External) Observe(
 				if strings.Contains(request.Objective, `"role":"adversarial"`) {
 					role = review.RoleAdversarial
 				}
+				verdict := external.reviewVerdict
+				if verdict == "" {
+					verdict = review.VerdictApprove
+				}
+				var findings []review.Finding
+				if verdict == review.VerdictChangesRequested {
+					findings = []review.Finding{{
+						Code: "sqlite.review.change", Severity: review.SeverityMedium,
+						EvidenceRef: "evidence:sqlite-review-change",
+					}}
+				}
 				payload, err := json.Marshal(review.Artifact{
 					SchemaVersion: 1, SubjectDigest: reviewSubjectDigestFromObjective(request.Objective),
-					Role: role, Verdict: review.VerdictApprove, Summary: "exact subject approved",
-					Findings: []review.Finding{},
+					Role: role, Verdict: verdict, Summary: "exact subject assessed", Findings: findings,
 				})
 				if err != nil {
 					return ports.AgentObservation{}, err

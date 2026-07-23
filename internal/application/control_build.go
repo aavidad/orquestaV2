@@ -105,6 +105,7 @@ func (orchestrator *Orchestrator) buildCancelControl(ctx context.Context, record
 		case ExecutionQueued, ExecutionAwaitingCommit, ExecutionAwaitingAttestation, ExecutionAwaitingIntegration:
 			previousState := current.State
 			current.State = ExecutionCanceled
+			current.FailureCode = "application.execution_canceled"
 			current.FinishedAt = state.OperationAt
 			state.Executions = append(state.Executions, current)
 			switch previousState {

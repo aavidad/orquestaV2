@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"orquesta/internal/application"
+	"orquesta/internal/council"
 	"orquesta/internal/goal"
 	"orquesta/internal/identity"
 )
@@ -541,6 +542,16 @@ func validateApplyDirectorPlanState(state application.ApplyDirectorPlanState) er
 		decision.SourceExecutionAttempt == 0 || state.ExpectedWorkItemRevision == 0 {
 		return errors.New("sqlite.director_replan_source_invalid")
 	}
+	if decision.Cause == goal.ReplanCauseGovernanceDecision {
+		if !validReviewDigest(string(decision.CouncilSubjectDigest)) ||
+			!validText(decision.CouncilDecisionRef) ||
+			!validReviewDigest(string(decision.CouncilDecisionDigest)) {
+			return errors.New("sqlite.director_council_fence_invalid")
+		}
+	} else if decision.CouncilSubjectDigest != "" || decision.CouncilDecisionRef != "" ||
+		decision.CouncilDecisionDigest != "" {
+		return errors.New("sqlite.director_council_fence_unexpected")
+	}
 	if err := validateDirectorReplanDelta(state); err != nil {
 		return err
 	}
@@ -568,28 +579,38 @@ func validateApplyDirectorPlanState(state application.ApplyDirectorPlanState) er
 
 func validateDirectorReplanDelta(state application.ApplyDirectorPlanState) error {
 	switch state.Decision.Cause {
-	case "", goal.ReplanCauseExecutionStopped, goal.ReplanCauseExecutionFailed:
+	case "", goal.ReplanCauseExecutionStopped, goal.ReplanCauseExecutionFailed,
+		goal.ReplanCauseReviewChangesRequested:
 		if len(state.UpdatedExecutions) != 0 || len(state.RetireActionRefs) != 0 {
 			return errors.New("sqlite.director_replan_delta_unexpected")
 		}
 	case goal.ReplanCauseSplitPending:
-		if len(state.UpdatedExecutions) != 1 || len(state.RetireActionRefs) != 1 {
+		if !validDirectorCanceledExecutionDelta(state, true) {
 			return errors.New("sqlite.director_split_delta_invalid")
 		}
-		execution := state.UpdatedExecutions[0]
-		if execution.Ref != state.Decision.SourceExecutionRef ||
-			execution.WorkItemRef != state.Decision.SourceWorkItemRef ||
-			execution.AttemptNo != state.Decision.SourceExecutionAttempt ||
-			execution.State != application.ExecutionCanceled ||
-			execution.FailureCode != "application.execution_superseded" ||
-			!execution.FinishedAt.Equal(state.OperationAt) ||
-			state.RetireActionRefs[0] != "action:launch:"+execution.Ref.String() {
-			return errors.New("sqlite.director_split_delta_invalid")
+	case goal.ReplanCauseGovernanceDecision:
+		if !validDirectorCanceledExecutionDelta(state, false) {
+			return errors.New("sqlite.director_council_delta_invalid")
 		}
 	default:
 		return errors.New("sqlite.director_replan_cause_invalid")
 	}
 	return nil
+}
+
+func validDirectorCanceledExecutionDelta(state application.ApplyDirectorPlanState, retireLaunch bool) bool {
+	if len(state.UpdatedExecutions) != 1 || len(state.RetireActionRefs) != 0 && !retireLaunch ||
+		len(state.RetireActionRefs) != 1 && retireLaunch {
+		return false
+	}
+	execution := state.UpdatedExecutions[0]
+	return execution.Ref == state.Decision.SourceExecutionRef &&
+		execution.WorkItemRef == state.Decision.SourceWorkItemRef &&
+		execution.AttemptNo == state.Decision.SourceExecutionAttempt &&
+		execution.State == application.ExecutionCanceled &&
+		execution.FailureCode == "application.execution_superseded" &&
+		execution.FinishedAt.Equal(state.OperationAt) &&
+		(!retireLaunch || state.RetireActionRefs[0] == "action:launch:"+execution.Ref.String())
 }
 
 func requireDirectorGoalScope(
@@ -817,6 +838,19 @@ func validateDirectorPlanTransition(
 		if causalExecution.State != application.ExecutionFailed {
 			return errors.New("sqlite.director_replan_execution_conflict")
 		}
+	case goal.ReplanCauseReviewChangesRequested:
+		change, changeFound := directorChangeForExecution(current, causalExecution)
+		interrupt, interrupted := beforeSource.InterruptCause()
+		if causalExecution.State != application.ExecutionFailed ||
+			causalExecution.FailureCode != string(goal.ReplanCauseReviewChangesRequested) ||
+			!changeFound || !interrupted || interrupt != goal.WorkItemInterruptExecutionFailed ||
+			!application.FailedReviewPreservesCandidate(current, beforeSource, causalExecution, change) {
+			return errors.New("sqlite.director_review_replan_causality_invalid")
+		}
+	case goal.ReplanCauseGovernanceDecision:
+		if !validDirectorCouncilReplan(current, beforeSource, causalExecution, state.Decision) {
+			return errors.New("sqlite.director_council_replan_causality_invalid")
+		}
 	default:
 		return errors.New("sqlite.director_replan_cause_invalid")
 	}
@@ -829,6 +863,60 @@ func validateDirectorPlanTransition(
 		}
 	}
 	return nil
+}
+
+func validDirectorCouncilReplan(current application.GoalRecord, source goal.WorkItem,
+	author application.ExecutionRecord, decision application.DirectorDecisionRecord,
+) bool {
+	change, changeFound := directorChangeForExecution(current, author)
+	round, roundFound := councilRoundFor(current.CouncilRounds, decision.CouncilSubjectDigest)
+	if author.State != application.ExecutionAwaitingIntegration || !changeFound || !roundFound ||
+		round.WorkItemRef != source.Ref() || round.ChangeSetRef != change.Ref.String() ||
+		round.Subject.SpecHash != author.SpecHash ||
+		application.ValidatePersistedCouncilSubject(current, round.Subject) != nil {
+		return false
+	}
+	for _, intent := range current.EffectIntents {
+		if intent.ActionKind == application.ActionIntegrateChange && intent.Subject.ExecutionRef == author.Ref {
+			return false
+		}
+	}
+	for _, receipt := range current.IntegrationReceipts {
+		if receipt.ChangeRef == change.Ref {
+			return false
+		}
+	}
+	for _, persisted := range current.CouncilDecisions {
+		if persisted.Ref != decision.CouncilDecisionRef ||
+			persisted.SubjectDigest != decision.CouncilSubjectDigest ||
+			persisted.DecisionDigest != decision.CouncilDecisionDigest ||
+			persisted.Decision.SubjectDigest != string(decision.CouncilSubjectDigest) ||
+			persisted.Decision.Digest != string(decision.CouncilDecisionDigest) {
+			continue
+		}
+		switch persisted.Decision.Outcome {
+		case council.OutcomeRejected, council.OutcomeNoConsensus, council.OutcomeBlockedSecurity:
+			return true
+		}
+	}
+	return false
+}
+
+func directorChangeForExecution(record application.GoalRecord,
+	execution application.ExecutionRecord,
+) (application.ChangeSet, bool) {
+	var result application.ChangeSet
+	found := false
+	for _, change := range record.ChangeSets {
+		if change.ExecutionRef != execution.Ref {
+			continue
+		}
+		if found {
+			return application.ChangeSet{}, false
+		}
+		result, found = change, true
+	}
+	return result, found
 }
 
 func updateDirectorExistingWorkItems(

@@ -182,9 +182,11 @@ func TestControlsCancelBeforeAndAfterLaunchPrepared(t *testing.T) {
 		closed := system.record(t)
 		canceledExecution, _ := executionByRef(closed.Executions, execution.Ref)
 		if closed.Goal.State() != goal.GoalStateCanceled || canceledExecution.State != ExecutionCanceled ||
+			canceledExecution.FailureCode != "application.execution_canceled" ||
 			system.launchCount() != 0 || system.stopCount() != 0 || system.actionCount() != 0 {
-			t.Fatalf("local cancel leaked effect: Goal=%s execution=%s launches=%d stops=%d actions=%d",
-				closed.Goal.State(), canceledExecution.State, system.launchCount(), system.stopCount(), system.actionCount())
+			t.Fatalf("local cancel leaked effect: Goal=%s execution=%s failure=%s launches=%d stops=%d actions=%d",
+				closed.Goal.State(), canceledExecution.State, canceledExecution.FailureCode,
+				system.launchCount(), system.stopCount(), system.actionCount())
 		}
 	})
 

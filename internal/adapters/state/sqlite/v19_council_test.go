@@ -17,8 +17,9 @@ import (
 )
 
 type sqliteV19CouncilObserver struct {
-	base *sqliteV15External
-	fail bool
+	base    *sqliteV15External
+	fail    bool
+	ballots map[council.Role]council.Ballot
 }
 
 func (observer *sqliteV19CouncilObserver) Observe(
@@ -59,10 +60,17 @@ func (observer *sqliteV19CouncilObserver) Observe(
 		json.Unmarshal([]byte(value[:end]), &evidence) != nil {
 		return ports.AgentObservation{}, errors.New("sqlite.v19_council_evidence_invalid")
 	}
+	ballot := council.BallotAccept
+	if configured := observer.ballots[role]; configured != "" {
+		ballot = configured
+	}
+	refs := []council.Evidence{{Kind: "review_gate", Ref: evidence.ReviewGate}}
+	if ballot == council.BallotSecurityVeto {
+		refs = append(refs, council.Evidence{Kind: "security_veto", Ref: "evidence:sqlite-v19-security-veto"})
+	}
 	content, _ := json.Marshal(council.Contribution{Schema: council.ContributionSchema,
 		SubjectDigest: evidence.SubjectDigest, Role: role, Body: "sqlite exact contribution",
-		Ballot:   council.BallotAccept,
-		Evidence: []council.Evidence{{Kind: "review_gate", Ref: evidence.ReviewGate}}})
+		Ballot: ballot, Evidence: refs})
 	return ports.AgentObservation{ExecutionRef: executionRef, SpecHash: receipt.SpecHash,
 		Status: ports.AgentCompleted, MediaType: council.ContributionMediaType,
 		Content: content, Usage: observer.base.observationUsage, ObservedAt: observer.base.clock.Now()}, nil

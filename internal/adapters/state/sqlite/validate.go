@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"orquesta/internal/application"
+	"orquesta/internal/council"
 	"orquesta/internal/goal"
 	"orquesta/internal/governance"
 	"orquesta/internal/identity"
@@ -262,10 +263,16 @@ func validateExecutionStateFields(execution application.ExecutionRecord) error {
 			return errors.New("sqlite.execution_failed_fields_invalid")
 		}
 	case application.ExecutionCanceled:
-		if execution.ProviderRef != "" || execution.ModelRef != "" || execution.AgentRef != "" ||
-			execution.ExternalRef != "" || !execution.StartedAt.IsZero() || !execution.DeadlineAt.IsZero() ||
-			!execution.ProviderAcceptedAt.IsZero() || !execution.LastObservedAt.IsZero() ||
-			!execution.ProviderObservedAt.IsZero() || execution.FinishedAt.IsZero() {
+		providerAccepted := execution.ProviderRef != ""
+		if execution.FinishedAt.IsZero() || !validText(execution.FailureCode) ||
+			(providerAccepted && (!validText(execution.ProviderRef) || !validText(execution.ModelRef) || !validText(execution.AgentRef) ||
+				!validText(execution.ExternalRef) || execution.StartedAt.IsZero() ||
+				execution.DeadlineAt.IsZero() || execution.ProviderAcceptedAt.IsZero() ||
+				(execution.LastObservedAt.IsZero() != execution.ProviderObservedAt.IsZero()))) ||
+			(!providerAccepted && (execution.ModelRef != "" || execution.AgentRef != "" ||
+				execution.ExternalRef != "" || !execution.StartedAt.IsZero() ||
+				!execution.DeadlineAt.IsZero() || !execution.ProviderAcceptedAt.IsZero() ||
+				!execution.LastObservedAt.IsZero() || !execution.ProviderObservedAt.IsZero())) {
 			return errors.New("sqlite.execution_canceled_fields_invalid")
 		}
 	case application.ExecutionStopped:
@@ -443,10 +450,58 @@ func workItemStagedOutputExecution(
 		(execution.State == application.ExecutionAwaitingAttestation || execution.State == application.ExecutionAwaitingIntegration) {
 		return execution, true
 	}
+	if item.State() == goal.WorkItemStateSuperseded && execution.State == application.ExecutionCanceled &&
+		execution.FailureCode == "application.execution_superseded" &&
+		negativeCouncilCandidatePreserved(record, item, execution, matchingChange) {
+		return execution, true
+	}
+	if item.State() == goal.WorkItemStateSuperseded && execution.State == application.ExecutionFailed &&
+		execution.FailureCode == string(goal.ReplanCauseReviewChangesRequested) {
+		return failedWorkItemStagedOutputExecution(execution, matchingChange, record)
+	}
 	if item.State() != goal.WorkItemStateInterrupted || execution.State != application.ExecutionFailed {
 		return application.ExecutionRecord{}, false
 	}
 	return failedWorkItemStagedOutputExecution(execution, matchingChange, record)
+}
+
+func negativeCouncilCandidatePreserved(
+	record application.GoalRecord,
+	item goal.WorkItem,
+	execution application.ExecutionRecord,
+	change application.ChangeSet,
+) bool {
+	for _, intent := range record.EffectIntents {
+		if intent.ActionKind == application.ActionIntegrateChange && intent.Subject.ExecutionRef == execution.Ref {
+			return false
+		}
+	}
+	for _, receipt := range record.IntegrationReceipts {
+		if receipt.ChangeRef == change.Ref {
+			return false
+		}
+	}
+	matches := 0
+	for _, round := range record.CouncilRounds {
+		if round.GoalRef != execution.GoalRef || round.WorkItemRef != item.Ref() ||
+			round.ChangeSetRef != change.Ref.String() || round.Subject.SpecHash != execution.SpecHash ||
+			round.SubjectDigest != application.CouncilSubjectDigest(round.Subject.Digest()) ||
+			application.ValidatePersistedCouncilSubject(record, round.Subject) != nil {
+			continue
+		}
+		for _, decision := range record.CouncilDecisions {
+			if decision.RoundRef != round.Ref || decision.SubjectDigest != round.SubjectDigest ||
+				decision.Decision.SubjectDigest != string(round.SubjectDigest) ||
+				decision.Decision.Digest != string(decision.DecisionDigest) {
+				continue
+			}
+			switch decision.Decision.Outcome {
+			case council.OutcomeRejected, council.OutcomeNoConsensus, council.OutcomeBlockedSecurity:
+				matches++
+			}
+		}
+	}
+	return matches == 1
 }
 
 func failedWorkItemStagedOutputExecution(

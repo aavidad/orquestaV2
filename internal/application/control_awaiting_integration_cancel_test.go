@@ -51,8 +51,10 @@ func TestCancelAwaitingIntegrationRetiresExactAdmittedAction(t *testing.T) {
 
 	canceled := system.record(t)
 	canceledExecution, found := executionByRef(canceled.Executions, execution.Ref)
-	if !found || canceledExecution.State != ExecutionCanceled {
-		t.Fatalf("cancel lifecycle: execution=%s", canceledExecution.State)
+	if !found || canceledExecution.State != ExecutionCanceled ||
+		canceledExecution.FailureCode != "application.execution_canceled" {
+		t.Fatalf("cancel lifecycle: execution=%s failure=%s",
+			canceledExecution.State, canceledExecution.FailureCode)
 	}
 	var retired *ActionConsumptionReceipt
 	for index := range canceled.ConsumptionReceipts {

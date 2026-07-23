@@ -113,6 +113,89 @@ WHERE ref='work-item:v19-closed'`)
 	}
 }
 
+func TestV19MigrationRejectsPartialHistoricalInterruptPairAtomically(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		update string
+	}{
+		{
+			name: "cause_without_time",
+			update: `UPDATE work_items SET state='superseded',revision=4,control_sequence=1,
+interrupt_cause='execution_failed',interrupted_at=NULL WHERE ref='work-item:v19-closed'`,
+		},
+		{
+			name: "time_without_cause",
+			update: `UPDATE work_items SET state='superseded',revision=4,control_sequence=1,
+interrupt_cause='',interrupted_at=finished_at WHERE ref='work-item:v19-closed'`,
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			path := populatedTerminalSQLiteV18Database(t)
+			database, err := sql.Open(driverName, path)
+			sqliteTestNoError(t, err)
+			mustV19Exec(t, database, test.update)
+			sqliteTestNoError(t, database.Close())
+
+			_, err = Open(context.Background(), Options{
+				Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 2,
+			})
+			if err == nil || !strings.Contains(sqliteTestErrorChain(err), "constraint failed") {
+				t.Fatalf("partial V18 interrupt pair migrated: %s", sqliteTestErrorChain(err))
+			}
+			assertV19MigrationNeverStarted(t, path)
+		})
+	}
+}
+
+func TestV19MigrationPreservesValidInterruptedPair(t *testing.T) {
+	path := populatedTerminalSQLiteV18Database(t)
+	database, err := sql.Open(driverName, path)
+	sqliteTestNoError(t, err)
+	rewriteRecoveryTrigger(t, database, "artifact_occurrences_immutable_delete", func() {
+		rewriteRecoveryTrigger(t, database, "attestations_immutable_delete", func() {
+			rewriteRecoveryTrigger(t, database, "artifacts_immutable_delete", func() {
+				mustV19Exec(t, database, `DELETE FROM attestation_test_outcomes`)
+				mustV19Exec(t, database, `DELETE FROM artifact_occurrences`)
+				mustV19Exec(t, database, `DELETE FROM attestations`)
+				mustV19Exec(t, database, `DELETE FROM artifacts`)
+			})
+		})
+	})
+	mustV19Exec(t, database, `UPDATE goals SET state='running',revision=6,control_sequence=1,closed_at=NULL
+WHERE ref='goal:v19-closed'`)
+	mustV19Exec(t, database, `UPDATE work_items SET state='interrupted',revision=4,control_sequence=1,
+interrupt_cause='execution_failed',interrupted_at=finished_at,finished_at=NULL
+WHERE ref='work-item:v19-closed'`)
+	mustV19Exec(t, database, `UPDATE executions SET state='failed',failure_code='application.execution_failed'
+WHERE ref='execution:v19-closed'`)
+	sqliteTestNoError(t, database.Close())
+
+	repository, err := Open(context.Background(), Options{
+		Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 2,
+	})
+	if err != nil {
+		t.Fatalf("valid interrupted V18 migration: %s", sqliteTestErrorChain(err))
+	}
+	assertSQLiteV19MigrationHealthy(t, repository.db)
+	var state, cause string
+	var interruptedAt int64
+	sqliteTestNoError(t, repository.db.QueryRow(`SELECT state,interrupt_cause,interrupted_at
+FROM work_items WHERE ref='work-item:v19-closed'`).Scan(&state, &cause, &interruptedAt))
+	if state != "interrupted" || cause != "execution_failed" || interruptedAt == 0 {
+		t.Fatalf("valid interrupted history=%q/%q/%d", state, cause, interruptedAt)
+	}
+	sqliteTestNoError(t, repository.Close())
+
+	reopened, err := Open(context.Background(), Options{
+		Path: path, BusyTimeout: testBusyTimeout, MaxOpenConnections: 2,
+	})
+	if err != nil {
+		t.Fatalf("valid interrupted V19 reopen: %s", sqliteTestErrorChain(err))
+	}
+	t.Cleanup(func() { _ = reopened.Close() })
+	assertSQLiteV19MigrationHealthy(t, reopened.db)
+}
+
 func TestV19MigrationPreservesSupersededTerminalWriterWithoutPolicy(t *testing.T) {
 	path := populatedTerminalSQLiteV18Database(t)
 	database, err := sql.Open(driverName, path)
@@ -258,12 +341,27 @@ func migrateSQLiteV19Prefix(t *testing.T, database *sql.DB, migrations []migrati
 
 func assertSQLiteV19MigrationHealthy(t *testing.T, database *sql.DB) {
 	t.Helper()
-	var version, receipt, violations int
+	var version, receipt, violations, directorDecisionUniqueIndex int
+	var workItemIndexes, workItemTriggers, workItemForeignKeys, staleWorkItemReferences int
 	sqliteTestNoError(t, database.QueryRow(`PRAGMA user_version`).Scan(&version))
 	sqliteTestNoError(t, database.QueryRow(`SELECT COUNT(*) FROM schema_migrations WHERE version=? AND name='014_council.sql'`, recoverySchemaV19).Scan(&receipt))
 	sqliteTestNoError(t, database.QueryRow(`SELECT COUNT(*) FROM pragma_foreign_key_check`).Scan(&violations))
-	if version != recoverySchemaV19 || receipt != 1 || violations != 0 {
-		t.Fatalf("V19 migration version=%d receipt=%d foreign_keys=%d", version, receipt, violations)
+	sqliteTestNoError(t, database.QueryRow(`SELECT COUNT(*) FROM pragma_index_list('director_decisions')
+WHERE name='director_decisions_goal_idx' AND "unique"=1`).Scan(&directorDecisionUniqueIndex))
+	sqliteTestNoError(t, database.QueryRow(`SELECT COUNT(*) FROM sqlite_schema WHERE type='index'
+AND name IN ('work_items_parent_idx','work_items_mailbox_lineage_idx','work_items_rework_idx')`).Scan(&workItemIndexes))
+	sqliteTestNoError(t, database.QueryRow(`SELECT COUNT(*) FROM sqlite_schema WHERE type='trigger'
+AND name IN ('work_items_handoff_required_immutable','work_items_governance_insert_guard',
+'work_items_governance_update_guard','work_items_council_policy_immutable')`).Scan(&workItemTriggers))
+	sqliteTestNoError(t, database.QueryRow(`SELECT COUNT(*) FROM pragma_foreign_key_list('work_items')
+WHERE "table" IN ('goals','goal_phases','work_items')`).Scan(&workItemForeignKeys))
+	sqliteTestNoError(t, database.QueryRow(`SELECT COUNT(*) FROM sqlite_schema
+WHERE sql IS NOT NULL AND sql LIKE '%work_items_v19%'`).Scan(&staleWorkItemReferences))
+	if version != recoverySchemaV19 || receipt != 1 || violations != 0 || directorDecisionUniqueIndex != 1 ||
+		workItemIndexes != 3 || workItemTriggers != 4 || workItemForeignKeys != 7 || staleWorkItemReferences != 0 {
+		t.Fatalf("V19 migration version=%d receipt=%d foreign_keys=%d director_decisions_unique_index=%d work_item_indexes=%d triggers=%d work_item_fks=%d stale_refs=%d",
+			version, receipt, violations, directorDecisionUniqueIndex, workItemIndexes, workItemTriggers,
+			workItemForeignKeys, staleWorkItemReferences)
 	}
 }
 

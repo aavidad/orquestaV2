@@ -25,8 +25,70 @@ CREATE UNIQUE INDEX authorization_receipts_mailbox_scope_idx ON authorization_re
 CREATE TRIGGER authorization_receipts_immutable_update BEFORE UPDATE ON authorization_receipts BEGIN SELECT RAISE(ABORT,'sqlite.authorization_receipt_immutable'); END;
 CREATE TRIGGER authorization_receipts_immutable_delete BEFORE DELETE ON authorization_receipts BEGIN SELECT RAISE(ABORT,'sqlite.authorization_receipt_immutable'); END;
 
-ALTER TABLE work_items ADD COLUMN council_policy TEXT NOT NULL DEFAULT ''
- CHECK(council_policy IN ('','auto','required','skip_by_operator'));
+DROP TRIGGER work_items_handoff_required_immutable;
+DROP TRIGGER work_items_governance_insert_guard;
+DROP TRIGGER work_items_governance_update_guard;
+DROP INDEX work_items_parent_idx;
+DROP INDEX work_items_mailbox_lineage_idx;
+DROP INDEX work_items_rework_idx;
+PRAGMA legacy_alter_table=ON;
+ALTER TABLE work_items RENAME TO work_items_v19;
+CREATE TABLE work_items (
+ ref TEXT PRIMARY KEY,goal_ref TEXT NOT NULL REFERENCES goals(ref) ON DELETE CASCADE,
+ actor_ref TEXT NOT NULL,project_ref TEXT NOT NULL,objective TEXT NOT NULL,phase_key TEXT NOT NULL,role_key TEXT NOT NULL,parent_ref TEXT,
+ output_contract TEXT NOT NULL CHECK(output_contract IN ('evidence_bundle','artifact','attestation')),
+ skip_reason TEXT NOT NULL DEFAULT '' CHECK(skip_reason IN ('','dependency_failed','dependency_canceled')),
+ interrupt_cause TEXT NOT NULL DEFAULT '' CHECK(interrupt_cause IN ('','execution_stopped','execution_failed')),rework_of TEXT,
+ state TEXT NOT NULL CHECK(state IN ('pending','running','succeeded','failed','skipped','interrupted','canceled','superseded')),
+ revision INTEGER NOT NULL CHECK(revision>0),paused INTEGER NOT NULL DEFAULT 0 CHECK(paused IN (0,1)),
+ cancel_requested INTEGER NOT NULL DEFAULT 0 CHECK(cancel_requested IN (0,1)),control_sequence INTEGER NOT NULL DEFAULT 0 CHECK(control_sequence>=0),
+ position INTEGER NOT NULL CHECK(position>=0),created_at INTEGER NOT NULL,started_at INTEGER,interrupted_at INTEGER,finished_at INTEGER,execution_ref TEXT,
+ handoff_required INTEGER NOT NULL DEFAULT 0 CHECK(handoff_required IN (0,1)),
+ governance_version INTEGER NOT NULL DEFAULT 0 CHECK(governance_version IN (0,1)),budget_demand_ref TEXT NOT NULL DEFAULT '',
+ budget_tokens INTEGER NOT NULL DEFAULT 0 CHECK(budget_tokens>=0),budget_money_micros INTEGER NOT NULL DEFAULT 0 CHECK(budget_money_micros>=0),
+ budget_currency TEXT NOT NULL DEFAULT '',budget_active_time_ns INTEGER NOT NULL DEFAULT 0 CHECK(budget_active_time_ns>=0),
+ budget_process_slots INTEGER NOT NULL DEFAULT 0 CHECK(budget_process_slots>=0),budget_disk_bytes INTEGER NOT NULL DEFAULT 0 CHECK(budget_disk_bytes>=0),
+ security_criticality TEXT NOT NULL DEFAULT 'normal' CHECK(security_criticality IN ('normal','sensitive','critical')),
+ reasoning_effort TEXT NOT NULL DEFAULT 'medium' CHECK(reasoning_effort IN ('low','medium','high','xhigh')),
+ council_policy TEXT NOT NULL DEFAULT '' CHECK(council_policy IN ('','auto','required','skip_by_operator')),
+ UNIQUE(goal_ref,ref),UNIQUE(goal_ref,position),
+ FOREIGN KEY(goal_ref,phase_key) REFERENCES goal_phases(goal_ref,phase_key) ON DELETE RESTRICT,
+ FOREIGN KEY(goal_ref,parent_ref) REFERENCES work_items(goal_ref,ref) ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+ FOREIGN KEY(goal_ref,rework_of) REFERENCES work_items(goal_ref,ref) ON DELETE RESTRICT DEFERRABLE INITIALLY DEFERRED,
+ CHECK(parent_ref IS NULL OR parent_ref<>ref),CHECK(rework_of IS NULL OR rework_of<>ref),
+ CHECK(
+  (state='interrupted' AND interrupt_cause<>'' AND interrupted_at IS NOT NULL) OR
+  (state IN ('canceled','superseded') AND ((interrupt_cause='' AND interrupted_at IS NULL) OR (interrupt_cause<>'' AND interrupted_at IS NOT NULL))) OR
+  (state NOT IN ('interrupted','canceled','superseded') AND interrupt_cause='' AND interrupted_at IS NULL)
+ )
+) STRICT;
+INSERT INTO work_items(
+ ref,goal_ref,actor_ref,project_ref,objective,phase_key,role_key,parent_ref,output_contract,skip_reason,interrupt_cause,rework_of,
+ state,revision,paused,cancel_requested,control_sequence,position,created_at,started_at,interrupted_at,finished_at,execution_ref,
+ handoff_required,governance_version,budget_demand_ref,budget_tokens,budget_money_micros,budget_currency,budget_active_time_ns,
+ budget_process_slots,budget_disk_bytes,security_criticality,reasoning_effort,council_policy
+) SELECT ref,goal_ref,actor_ref,project_ref,objective,phase_key,role_key,parent_ref,output_contract,
+ skip_reason,interrupt_cause,rework_of,state,revision,paused,cancel_requested,control_sequence,position,created_at,started_at,
+ interrupted_at,finished_at,execution_ref,handoff_required,governance_version,budget_demand_ref,budget_tokens,budget_money_micros,
+ budget_currency,budget_active_time_ns,budget_process_slots,budget_disk_bytes,security_criticality,reasoning_effort,'' FROM work_items_v19;
+DROP TABLE work_items_v19;
+PRAGMA legacy_alter_table=OFF;
+CREATE INDEX work_items_parent_idx ON work_items(goal_ref,parent_ref,position) WHERE parent_ref IS NOT NULL;
+CREATE UNIQUE INDEX work_items_mailbox_lineage_idx ON work_items(goal_ref,ref,parent_ref);
+CREATE INDEX work_items_rework_idx ON work_items(goal_ref,rework_of,position) WHERE rework_of IS NOT NULL;
+CREATE TRIGGER work_items_handoff_required_immutable BEFORE UPDATE OF handoff_required ON work_items
+WHEN NEW.handoff_required<>OLD.handoff_required BEGIN SELECT RAISE(ABORT,'sqlite.work_item_handoff_required_immutable'); END;
+CREATE TRIGGER work_items_governance_insert_guard BEFORE INSERT ON work_items WHEN NEW.governance_version=1 AND (
+ length(trim(NEW.budget_demand_ref))=0 OR (NEW.budget_money_micros>0 AND length(NEW.budget_currency)<>3) OR
+ (NEW.budget_currency<>'' AND (length(NEW.budget_currency)<>3 OR NEW.budget_currency GLOB '*[^A-Z]*')))
+BEGIN SELECT RAISE(ABORT,'sqlite.work_item_governance_invalid'); END;
+CREATE TRIGGER work_items_governance_update_guard BEFORE UPDATE OF governance_version,budget_demand_ref,budget_tokens,
+ budget_money_micros,budget_currency,budget_active_time_ns,budget_process_slots,budget_disk_bytes,security_criticality,reasoning_effort ON work_items
+WHEN NEW.governance_version<>OLD.governance_version OR NEW.budget_demand_ref<>OLD.budget_demand_ref OR NEW.budget_tokens<>OLD.budget_tokens OR
+ NEW.budget_money_micros<>OLD.budget_money_micros OR NEW.budget_currency<>OLD.budget_currency OR NEW.budget_active_time_ns<>OLD.budget_active_time_ns OR
+ NEW.budget_process_slots<>OLD.budget_process_slots OR NEW.budget_disk_bytes<>OLD.budget_disk_bytes OR
+ NEW.security_criticality<>OLD.security_criticality OR NEW.reasoning_effort<>OLD.reasoning_effort
+BEGIN SELECT RAISE(ABORT,'sqlite.work_item_governance_immutable'); END;
 CREATE TRIGGER work_items_council_policy_immutable
 BEFORE UPDATE OF council_policy ON work_items
 WHEN NEW.council_policy<>OLD.council_policy
@@ -234,9 +296,40 @@ CREATE TRIGGER outbox_integration_admission_immutable BEFORE UPDATE OF change_re
  review_gate_digest,council_subject_digest,council_resolution_kind,council_decision_ref,council_decision_digest,council_skip_ref,council_skip_digest ON outbox
 BEGIN SELECT RAISE(ABORT,'sqlite.outbox_integration_admission_immutable'); END;
 
-ALTER TABLE director_decisions ADD COLUMN council_subject_digest TEXT NOT NULL DEFAULT '';
-ALTER TABLE director_decisions ADD COLUMN council_decision_ref TEXT REFERENCES council_decisions(ref) ON DELETE RESTRICT;
-ALTER TABLE director_decisions ADD COLUMN council_decision_digest TEXT CHECK(
- (council_subject_digest='' AND council_decision_ref IS NULL AND council_decision_digest IS NULL) OR
- (length(council_subject_digest)=71 AND substr(council_subject_digest,1,7)='sha256:' AND
-  council_decision_ref IS NOT NULL AND length(council_decision_digest)=71 AND substr(council_decision_digest,1,7)='sha256:')) ;
+DROP TRIGGER director_decisions_immutable_update;
+DROP TRIGGER director_decisions_immutable_delete;
+PRAGMA legacy_alter_table=ON;
+ALTER TABLE director_decisions RENAME TO director_decisions_v19;
+CREATE TABLE director_decisions (
+ ref TEXT PRIMARY KEY CHECK(length(trim(ref))>0),request_ref TEXT NOT NULL CHECK(length(trim(request_ref))>0),request_fingerprint TEXT NOT NULL CHECK(length(trim(request_fingerprint))>0),
+ authorization_receipt_ref TEXT NOT NULL REFERENCES authorization_receipts(ref) ON DELETE RESTRICT,goal_ref TEXT NOT NULL,project_ref TEXT NOT NULL,
+ principal_ref TEXT NOT NULL REFERENCES principals(ref) ON DELETE RESTRICT,lease_fence INTEGER NOT NULL CHECK(lease_fence>0),
+ source_goal_revision INTEGER NOT NULL CHECK(source_goal_revision>0),source_plan_generation INTEGER NOT NULL CHECK(source_plan_generation>=0),
+ cause TEXT NOT NULL DEFAULT '' CHECK(cause IN ('','split_pending','execution_stopped','execution_failed','review_changes_requested','governance_decision')),
+ source_work_item_ref TEXT,source_work_item_revision INTEGER NOT NULL DEFAULT 0 CHECK(source_work_item_revision>=0),source_execution_ref TEXT,
+ source_execution_attempt INTEGER NOT NULL DEFAULT 0 CHECK(source_execution_attempt>=0),applied_goal_revision INTEGER NOT NULL CHECK(applied_goal_revision=source_goal_revision+1),
+ applied_plan_generation INTEGER NOT NULL CHECK(applied_plan_generation=source_plan_generation+1),reason TEXT NOT NULL CHECK(length(trim(reason))>0),decided_at INTEGER NOT NULL,
+ council_subject_digest TEXT NOT NULL DEFAULT '',council_decision_ref TEXT REFERENCES council_decisions(ref) ON DELETE RESTRICT,council_decision_digest TEXT,
+ UNIQUE(principal_ref,project_ref,request_ref),FOREIGN KEY(goal_ref,project_ref) REFERENCES goals(ref,project_ref) ON DELETE RESTRICT,
+ FOREIGN KEY(goal_ref,source_work_item_ref) REFERENCES work_items(goal_ref,ref) ON DELETE RESTRICT,
+ FOREIGN KEY(goal_ref,source_work_item_ref,source_execution_ref) REFERENCES executions(goal_ref,work_item_ref,ref) ON DELETE RESTRICT,
+ CHECK((cause='' AND source_work_item_ref IS NULL AND source_work_item_revision=0 AND source_execution_ref IS NULL AND source_execution_attempt=0) OR
+  (cause<>'' AND source_work_item_ref IS NOT NULL AND source_work_item_revision>0 AND source_execution_ref IS NOT NULL AND source_execution_attempt>0)),
+ CHECK((cause='governance_decision' AND length(council_subject_digest)=71 AND substr(council_subject_digest,1,7)='sha256:' AND council_decision_ref IS NOT NULL AND
+  length(council_decision_digest)=71 AND substr(council_decision_digest,1,7)='sha256:') OR
+  (cause<>'governance_decision' AND council_subject_digest='' AND council_decision_ref IS NULL AND council_decision_digest IS NULL))
+) STRICT;
+INSERT INTO director_decisions(
+ ref,request_ref,request_fingerprint,authorization_receipt_ref,goal_ref,project_ref,principal_ref,lease_fence,
+ source_goal_revision,source_plan_generation,cause,source_work_item_ref,source_work_item_revision,source_execution_ref,
+ source_execution_attempt,applied_goal_revision,applied_plan_generation,reason,decided_at,council_subject_digest,
+ council_decision_ref,council_decision_digest
+) SELECT ref,request_ref,request_fingerprint,authorization_receipt_ref,goal_ref,project_ref,principal_ref,lease_fence,
+ source_goal_revision,source_plan_generation,cause,source_work_item_ref,source_work_item_revision,source_execution_ref,source_execution_attempt,
+ applied_goal_revision,applied_plan_generation,reason,decided_at,'',NULL,NULL FROM director_decisions_v19;
+DROP TABLE director_decisions_v19;
+PRAGMA legacy_alter_table=OFF;
+CREATE UNIQUE INDEX director_decisions_goal_idx
+ ON director_decisions(goal_ref,applied_plan_generation);
+CREATE TRIGGER director_decisions_immutable_update BEFORE UPDATE ON director_decisions BEGIN SELECT RAISE(ABORT,'sqlite.director_decision_immutable'); END;
+CREATE TRIGGER director_decisions_immutable_delete BEFORE DELETE ON director_decisions BEGIN SELECT RAISE(ABORT,'sqlite.director_decision_immutable'); END;
