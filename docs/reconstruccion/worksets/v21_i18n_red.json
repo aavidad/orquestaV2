@@ -1,20 +1,137 @@
 {
-  "schema_version": 1,
-  "vertical": "i18n",
-  "base_commit": "e311a97e4fdcafcf81c6114dbd904af4ed9293ad",
-  "owned_capability_ids": ["UI-18"],
-  "dependencies": {
-    "required": ["command_registry"],
-    "awaiting_dependency": "command_registry",
-    "awaiting_acceptance_contract": "AC-V20-COMMAND-REGISTRY"
+  "schema_version": 2,
+  "vertical": "V21",
+  "slug": "i18n",
+  "branch": "reconstruccion/v21-i18n-integrated",
+  "worktree": "/home/alberto/Trabajo/orquesta-rebuild-worktrees/v21-i18n-integrated",
+  "base_oid": "8063d8ce3ed75dd5ec92108ef6e7e73ee8e11cb8",
+  "capability_ids": ["UI-18"],
+  "verified_dependency_receipts": [
+    "product/evidence/v20_command_registry.json"
+  ],
+  "pending_dependency_receipts": [],
+  "dependency_activation_contract": {
+    "contract": "AC-V20-COMMAND-REGISTRY",
+    "result": "PASS",
+    "source_worktree_state": "detached_clean",
+    "product_oid": "a3da82278a3ce947b4425665d92d961c99b2baaf",
+    "sealed_oid": "7f27685d992c9a8f5f308d94bbfc3e9828009d84",
+    "evidence_oid": "7b1bbaf475743c16c5749b6e4e039e23b0a8354b",
+    "integration_head_oid": "8063d8ce3ed75dd5ec92108ef6e7e73ee8e11cb8"
   },
-  "write_set": [
+  "ownership_contract": {
+    "manifest": "internal/i18n/manifest.json",
+    "default_locale": "es",
+    "fallback_locale": "es",
+    "enabled_locales": ["es", "en"],
+    "active_surfaces": ["cli", "command_registry", "http", "mcp", "public_docs"],
+    "future_surfaces": ["notifications", "prompts", "web", "wizard"],
+    "surface_policies": {
+      "cli": "catalog_only",
+      "command_registry": "registry_keys_catalog_values",
+      "http": "machine_envelope_catalog_presenter",
+      "mcp": "catalog_only",
+      "public_docs": "localized_document_bundle",
+      "future": "catalog_required_before_activation"
+    },
+    "public_document_id": "orquesta.quickstart",
+    "new_configuration_keys": []
+  },
+  "preflight_owned_globs": [
     "docs/reconstruccion/analisis_y_contrato_v21_*.md",
     "docs/reconstruccion/worksets/v21_*.json",
+    "docs/public/**",
     "acceptance/v21_*.go",
-    "acceptance/fixtures/v21_*.json"
+    "acceptance/fixtures/v21_*.json",
+    "product_roadmap_v21_test.go"
   ],
-  "forbidden": ["product/**", "config/**", "internal/**", "cmd/**", "roadmap", "evidence", "trace"],
-  "red_gate": "V21_PRODUCT_PENDING",
-  "implementation_status": "awaiting_product"
+  "implementation_owned_globs_after_contract": [
+    "internal/i18n/**",
+    "internal/interfaces/httpapi/**",
+    "internal/interfaces/mcp/**",
+    "internal/interfaces/cli/**",
+    "internal/bootstrap/command_*.go",
+    "cmd/orquesta/*.go",
+    "sdk/commands/client.go",
+    "sdk/commands/client_test.go",
+    "vendor/golang.org/x/text/**",
+    "vendor/modules.txt",
+    "acceptance/v21_*.go",
+    "acceptance/fixtures/v21_*.json",
+    "docs/public/**",
+    "docs/reconstruccion/analisis_y_contrato_v21_*.md",
+    "docs/reconstruccion/worksets/v21_*.json",
+    "product_roadmap_v21_test.go"
+  ],
+  "integration_files_requested": [
+    {
+      "path": "scripts/check_rebuild_write_set.sh",
+      "lease": "L-TRACE",
+      "reason": "admit exact V21 product and acceptance subjects into the existing rebuild write-set checker"
+    },
+    {
+      "path": "product/roadmap.json",
+      "lease": "L-TRACE",
+      "reason": "E-only transition of AC-V21 and UI-18 after immutable PASS evidence"
+    },
+    {
+      "path": "docs/inventario_bugs_orquesta_2026-06-30.md",
+      "lease": "L-TRACE",
+      "reason": "integration-only registration and closure evidence for incidents observed while delivering V21"
+    },
+    {
+      "path": "product/traceability/source_dispositions.jsonl",
+      "lease": "L-TRACE",
+      "reason": "integration-only source disposition ledger and hash update for V21 incident records"
+    },
+    {
+      "path": "product/traceability/markdown_source_roles.jsonl",
+      "lease": "L-TRACE",
+      "reason": "integration-only Markdown role ledger and hash update for V21 incident records"
+    },
+    {
+      "path": "product/traceability/pending_sources.json",
+      "lease": "L-TRACE",
+      "reason": "integration-only pending-source ledger and hash update for V21 incident records"
+    },
+    {
+      "path": "traceability_source_roles_test.go",
+      "lease": "L-TRACE",
+      "reason": "classify canonical docs/public locale pairs outside the legacy Markdown census"
+    },
+    {
+      "path": "product/evidence/real_codex_mcp_e2e.json",
+      "lease": "L-EVIDENCE",
+      "reason": "refresh the generic real Codex receipt after V21 changes its covered production source digest"
+    }
+  ],
+  "forbidden_globs": [
+    "modulos/**",
+    "product/evidence/v20_*"
+  ],
+  "required_tests_contract": [
+    "go test -mod=vendor -count=1 ./acceptance -run '^(TestV21.*|TestTypedExtractor.*|TestAcceptanceV21I18N)$'",
+    "go test -mod=vendor -count=1 . -run '^TestProductRoadmapV21'",
+    "git diff --check"
+  ],
+  "required_tests_product": [
+    "strict manifest and duplicate-free es/en catalogs",
+    "typed key extraction with missing unused and placeholder-set parity",
+    "BCP-47 validation and explicit Spanish fallback",
+    "plural number currency date timezone locale matrix",
+    "machine code key ref and digest invariance",
+    "race-free concurrent catalog reads",
+    "real HTTP MCP CLI production-composition E2E",
+    "root architecture roadmap traceability and V20 receipt",
+    "go vet and git diff --check"
+  ],
+  "candidate_freeze_recipe": "{ git diff --name-only 8063d8ce3ed75dd5ec92108ef6e7e73ee8e11cb8 --; git ls-files --others --exclude-standard; } | LC_ALL=C sort -u",
+  "receipt_path": "product/evidence/v21_i18n.json",
+  "output_path": "product/evidence/v21_i18n.output.txt",
+  "runtime_roots": [],
+  "cache_roots": [],
+  "locks_requested": [],
+  "status": "candidate_ready_pre_p",
+  "blocking_reason": "none; exact P/S/E lifecycle remains to execute",
+  "resume_condition": "Freeze P subjects, bind S from detached-clean source, execute the exact V21 gate and publish immutable V3 evidence."
 }

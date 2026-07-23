@@ -4,10 +4,9 @@ import (
 	"io"
 
 	"orquesta/internal/bootstrap"
+	"orquesta/internal/i18n"
 )
 
-const commandUsage = bootstrap.CommandUsage
-
-func runCommand(arguments []string, stdout, stderr io.Writer) int {
-	return bootstrap.RunCommand(arguments, stdout, stderr)
+func runCommand(arguments []string, catalog *i18n.Catalog, stdout, stderr io.Writer) int {
+	return bootstrap.RunCommand(arguments, catalog, stdout, stderr)
 }

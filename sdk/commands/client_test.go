@@ -155,7 +155,7 @@ func TestSDKRejectsRedirectWithoutMutatingCallerHTTPClient(t *testing.T) {
 		CommandID: "orquesta.system.status", Version: "1", RequestRef: "request:redirect",
 		ProjectRef: "project:sdk", Payload: json.RawMessage(`{}`),
 	})
-	if err == nil || redirected != 0 || httpClient.CheckRedirect != nil {
+	if !errors.Is(err, ErrRedirectRejected) || redirected != 0 || httpClient.CheckRedirect != nil {
 		t.Fatalf("err=%v redirected=%d caller_policy_changed=%t", err, redirected, httpClient.CheckRedirect != nil)
 	}
 }

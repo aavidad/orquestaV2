@@ -102,7 +102,7 @@ func TestHTTPMCPCLIAndSDKReturnEquivalentSuccessEnvelope(t *testing.T) {
 		t.Fatal(err)
 	}
 	mcpServer := sdkmcp.NewServer(&sdkmcp.Implementation{Name: "orquesta-v20", Version: "test"}, nil)
-	if err := RegisterCommandTools(mcpServer, executor, provider); err != nil {
+	if err := registerCommandToolsForTest(t, mcpServer, executor, provider, "es"); err != nil {
 		t.Fatal(err)
 	}
 	handler := sdkmcp.NewStreamableHTTPHandler(func(*http.Request) *sdkmcp.Server { return mcpServer }, &sdkmcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
@@ -124,7 +124,7 @@ func TestExecutionBoundCommandsResolveClaimedExecutionAgainstAuthenticatedPrinci
 	executor := &v20Executor{result: commandcore.Result{Data: json.RawMessage(`{}`), AuditRef: "audit:mcp"}}
 	provider := v20Identity{principal: v20Principal(t)}
 	server := sdkmcp.NewServer(&sdkmcp.Implementation{Name: "orquesta-v20", Version: "test"}, nil)
-	if err := RegisterCommandTools(server, executor, provider); err != nil {
+	if err := registerCommandToolsForTest(t, server, executor, provider, "es"); err != nil {
 		t.Fatal(err)
 	}
 	handler := sdkmcp.NewStreamableHTTPHandler(func(*http.Request) *sdkmcp.Server { return server }, &sdkmcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
@@ -260,7 +260,7 @@ func invokeAllCommandSurfaces(t *testing.T, executor *v20Executor, provider v20I
 	}
 
 	mcpServer := sdkmcp.NewServer(&sdkmcp.Implementation{Name: "orquesta-v20", Version: "test"}, nil)
-	if err := RegisterCommandTools(mcpServer, executor, provider); err != nil {
+	if err := registerCommandToolsForTest(t, mcpServer, executor, provider, "es"); err != nil {
 		t.Fatal(err)
 	}
 	handler := sdkmcp.NewStreamableHTTPHandler(func(*http.Request) *sdkmcp.Server { return mcpServer }, &sdkmcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
@@ -301,7 +301,7 @@ func decodeSDKCommandResult(t *testing.T, input sdkcommands.Result) commandcore.
 func TestMCPPublishesExactlyCanonicalSchemasForAllCommands(t *testing.T) {
 	executor := &v20Executor{}
 	server := sdkmcp.NewServer(&sdkmcp.Implementation{Name: "orquesta-v20", Version: "test"}, nil)
-	if err := RegisterCommandTools(server, executor, v20Identity{principal: v20Principal(t)}); err != nil {
+	if err := registerCommandToolsForTest(t, server, executor, v20Identity{principal: v20Principal(t)}, "es"); err != nil {
 		t.Fatal(err)
 	}
 	handler := sdkmcp.NewStreamableHTTPHandler(func(*http.Request) *sdkmcp.Server { return server }, &sdkmcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
@@ -347,7 +347,7 @@ func TestMCPRejectsOversizedArgumentsBeforeAuthorityOrDispatch(t *testing.T) {
 	executor := &v20Executor{limits: commandcore.APILimits{MaxRequestBytes: 96, MaxListLimit: 10}}
 	provider := v20Identity{principal: v20Principal(t)}
 	server := sdkmcp.NewServer(&sdkmcp.Implementation{Name: "orquesta-v20", Version: "test"}, nil)
-	if err := RegisterCommandTools(server, executor, provider); err != nil {
+	if err := registerCommandToolsForTest(t, server, executor, provider, "es"); err != nil {
 		t.Fatal(err)
 	}
 	handler := sdkmcp.NewStreamableHTTPHandler(func(*http.Request) *sdkmcp.Server { return server }, &sdkmcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
@@ -366,7 +366,7 @@ func TestMCPRejectsOversizedArgumentsBeforeAuthorityOrDispatch(t *testing.T) {
 func TestMCPRejectsMissingCanonicalPayloadBeforeAuthorityOrDispatch(t *testing.T) {
 	executor := &v20Executor{}
 	server := sdkmcp.NewServer(&sdkmcp.Implementation{Name: "orquesta-v20", Version: "test"}, nil)
-	if err := RegisterCommandTools(server, executor, v20Identity{principal: v20Principal(t)}); err != nil {
+	if err := registerCommandToolsForTest(t, server, executor, v20Identity{principal: v20Principal(t)}, "es"); err != nil {
 		t.Fatal(err)
 	}
 	handler := sdkmcp.NewStreamableHTTPHandler(func(*http.Request) *sdkmcp.Server { return server }, &sdkmcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})

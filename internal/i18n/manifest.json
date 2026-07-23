@@ -1,0 +1,130 @@
+{
+  "schema_version": 1,
+  "default_locale": "es",
+  "fallback_locale": "es",
+  "enabled_locales": ["es", "en"],
+  "catalogs": [
+    {"locale": "es", "path": "catalogs/es.json"},
+    {"locale": "en", "path": "catalogs/en.json"}
+  ],
+  "surfaces": [
+    {
+      "id": "cli",
+      "state": "active",
+      "key_sources": [
+        "catalog:cli.command.usage",
+        "catalog:cli.root.usage",
+        "catalog:cli.serve.usage",
+        "catalog:error.cli.command_arguments_invalid",
+        "catalog:error.cli.command_runner_unavailable",
+        "catalog:error.cli.command_unknown",
+        "catalog:error.cli.credential_invalid",
+        "catalog:error.cli.locale_invalid",
+        "catalog:error.cli.output_invalid",
+        "catalog:error.cli.redirect_rejected",
+        "catalog:error.cli.request_invalid",
+        "catalog:error.cli.request_origin_invalid",
+        "catalog:error.cli.url_insecure",
+        "catalog:error.cli.url_invalid",
+        "surface:http"
+      ],
+      "literal_policy": "catalog_only"
+    },
+    {
+      "id": "command_registry",
+      "state": "active",
+      "key_sources": [
+        "catalog:command.artifacts.read.description",
+        "catalog:command.changes.integrate.description",
+        "catalog:command.changes.list.description",
+        "catalog:command.council.round.open.description",
+        "catalog:command.council.skip.description",
+        "catalog:command.director.claim.description",
+        "catalog:command.director.plan.propose.description",
+        "catalog:command.director.renew.description",
+        "catalog:command.effects.decide.description",
+        "catalog:command.goals.amend.description",
+        "catalog:command.goals.control.description",
+        "catalog:command.goals.create.description",
+        "catalog:command.goals.get.description",
+        "catalog:command.goals.list.description",
+        "catalog:command.mailbox.acknowledge.description",
+        "catalog:command.mailbox.admit.description",
+        "catalog:command.mailbox.block.description",
+        "catalog:command.mailbox.claim.description",
+        "catalog:command.mailbox.consume.description",
+        "catalog:command.mailbox.get.description",
+        "catalog:command.mailbox.list.description",
+        "catalog:command.mailbox.mark_delivered.description",
+        "catalog:command.projects.memberships.grant.description",
+        "catalog:command.projects.memberships.revoke.description",
+        "catalog:command.system.status.description"
+      ],
+      "literal_policy": "registry_keys_catalog_values"
+    },
+    {
+      "id": "http",
+      "state": "active",
+      "key_sources": [
+        "catalog:error.conflict",
+        "catalog:error.forbidden",
+        "catalog:error.internal",
+        "catalog:error.invalid_request",
+        "catalog:error.not_found",
+        "catalog:error.unauthenticated",
+        "catalog:error.unavailable",
+        "surface:command_registry"
+      ],
+      "literal_policy": "machine_envelope_catalog_presenter"
+    },
+    {
+      "id": "mcp",
+      "state": "active",
+      "key_sources": [
+        "catalog:server.instructions",
+        "surface:command_registry",
+        "surface:http"
+      ],
+      "literal_policy": "catalog_only"
+    },
+    {
+      "id": "public_docs",
+      "state": "active",
+      "key_sources": ["public_documents"],
+      "literal_policy": "localized_document_bundle"
+    },
+    {
+      "id": "notifications",
+      "state": "future",
+      "key_sources": [],
+      "literal_policy": "catalog_required_before_activation"
+    },
+    {
+      "id": "prompts",
+      "state": "future",
+      "key_sources": [],
+      "literal_policy": "catalog_required_before_activation"
+    },
+    {
+      "id": "web",
+      "state": "future",
+      "key_sources": [],
+      "literal_policy": "catalog_required_before_activation"
+    },
+    {
+      "id": "wizard",
+      "state": "future",
+      "key_sources": [],
+      "literal_policy": "catalog_required_before_activation"
+    }
+  ],
+  "public_documents": [
+    {
+      "id": "orquesta.quickstart",
+      "locales": {
+        "es": "docs/public/es/README.md",
+        "en": "docs/public/en/README.md"
+      }
+    }
+  ]
+}

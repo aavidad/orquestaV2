@@ -7,6 +7,10 @@ import (
 	"time"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+
+	commandcore "orquesta/internal/commands"
+	"orquesta/internal/i18n"
+	"orquesta/internal/identity"
 )
 
 func connectOfficialClient(t *testing.T, endpoint string) *sdkmcp.ClientSession {
@@ -49,4 +53,19 @@ func testContext(t *testing.T) context.Context {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	t.Cleanup(cancel)
 	return ctx
+}
+
+func registerCommandToolsForTest(
+	t *testing.T,
+	server *sdkmcp.Server,
+	dispatcher commandcore.Executor,
+	provider identity.Provider,
+	locale string,
+) error {
+	t.Helper()
+	catalog, err := i18n.LoadBundled()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return RegisterCommandTools(server, dispatcher, provider, catalog, locale)
 }

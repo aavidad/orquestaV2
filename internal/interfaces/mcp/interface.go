@@ -6,6 +6,7 @@ package mcpinterface
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -43,16 +44,23 @@ func New(config Config) (*Interface, error) {
 	case strings.TrimSpace(config.Version) == "" || strings.TrimSpace(config.Version) != config.Version:
 		return nil, errors.New("mcp.version_invalid")
 	}
+	if _, err := config.Catalog.Resolve(config.Locale); err != nil {
+		return nil, fmt.Errorf("mcp.locale_invalid: %w", err)
+	}
+	instructions, err := config.Catalog.Text(config.Locale, "server.instructions")
+	if err != nil {
+		return nil, fmt.Errorf("mcp.instructions_unavailable: %w", err)
+	}
 
 	server := sdkmcp.NewServer(
 		&sdkmcp.Implementation{Name: "orquesta", Version: config.Version},
 		&sdkmcp.ServerOptions{
-			Instructions: config.Catalog.Text(config.Locale, "server.instructions"),
+			Instructions: instructions,
 			PageSize:     config.Dispatcher.Limits().MaxListLimit,
 			Capabilities: &sdkmcp.ServerCapabilities{},
 		},
 	)
-	if err := RegisterCommandTools(server, config.Dispatcher, config.Identity); err != nil {
+	if err := RegisterCommandTools(server, config.Dispatcher, config.Identity, config.Catalog, config.Locale); err != nil {
 		return nil, err
 	}
 	result := &Interface{server: server}
@@ -92,17 +100,17 @@ func requestBodyLimit(maximum int64, next http.Handler) http.Handler {
 		}
 		if request.ContentLength > maximum {
 			_ = request.Body.Close()
-			http.Error(writer, http.StatusText(http.StatusRequestEntityTooLarge), http.StatusRequestEntityTooLarge)
+			writer.WriteHeader(http.StatusRequestEntityTooLarge)
 			return
 		}
 		payload, err := io.ReadAll(io.LimitReader(request.Body, maximum+1))
 		_ = request.Body.Close()
 		if err != nil {
-			http.Error(writer, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
+			writer.WriteHeader(http.StatusBadRequest)
 			return
 		}
 		if int64(len(payload)) > maximum {
-			http.Error(writer, http.StatusText(http.StatusRequestEntityTooLarge), http.StatusRequestEntityTooLarge)
+			writer.WriteHeader(http.StatusRequestEntityTooLarge)
 			return
 		}
 		request.Body = io.NopCloser(bytes.NewReader(payload))

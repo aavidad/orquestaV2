@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os/exec"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -17,6 +18,7 @@ import (
 
 	commandcore "orquesta/internal/commands"
 	"orquesta/internal/goal"
+	"orquesta/internal/i18n"
 	"orquesta/internal/identity"
 	mcpinterface "orquesta/internal/interfaces/mcp"
 	sdkcommands "orquesta/sdk/commands"
@@ -137,31 +139,66 @@ func TestRealHTTPMCPCLIAndSDKParityEndToEnd(t *testing.T) {
 
 func invokeRealCommandCLI(t *testing.T, runtime *Runtime, root, requestRef string) sdkcommands.Result {
 	t.Helper()
+	return invokeRealCommandCLIRequest(t, runtime, root, i18n.DefaultLocale, requestRef, "{}", "system", "status")
+}
+
+func invokeRealCommandCLIRequest(
+	t *testing.T,
+	runtime *Runtime,
+	root, locale, requestRef, payload string,
+	path ...string,
+) sdkcommands.Result {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	command := exec.CommandContext(ctx, "go",
+	arguments := []string{
 		"run", "-mod=vendor", "./cmd/orquesta", "command",
-		"--url", "http://"+runtime.Address(),
-		"--credential-file", root+"/secrets/local-owner.token",
+		"--locale", locale,
+		"--url", "http://" + runtime.Address(),
+		"--credential-file", root + "/secrets/local-owner.token",
 		"--max-credential-bytes", "4096",
 		"--max-response-bytes", "65536",
 		"--timeout", "5s",
 		"--request-ref", requestRef,
 		"--project-ref", "project:default",
-		"--payload", "{}",
-		"--", "system", "status",
-	)
+		"--payload", payload,
+		"--",
+	}
+	arguments = append(arguments, path...)
+	command := exec.CommandContext(ctx, "go", arguments...)
 	command.Dir = "../.."
 	var stdout, stderr bytes.Buffer
 	command.Stdout, command.Stderr = &stdout, &stderr
-	if err := command.Run(); err != nil {
-		t.Fatalf("real CLI: %v stdout=%q stderr=%q", err, stdout.String(), stderr.String())
-	}
+	runErr := command.Run()
 	var result sdkcommands.Result
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 		t.Fatalf("decode real CLI stdout=%q err=%v", stdout.String(), err)
 	}
+	if runErr != nil {
+		var exitErr *exec.ExitError
+		if !errors.As(runErr, &exitErr) || exitErr.ExitCode() != 1 || result.Failure == nil {
+			t.Fatalf("real CLI: %v stdout=%q stderr=%q", runErr, stdout.String(), stderr.String())
+		}
+	}
 	return result
+}
+
+func invokeRealCommandCLIHelp(t *testing.T, locale string) string {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	command := exec.CommandContext(ctx, "go", "run", "-mod=vendor", "./cmd/orquesta",
+		"command", "--locale", locale, "--help")
+	command.Dir = "../.."
+	var stdout, stderr bytes.Buffer
+	command.Stdout, command.Stderr = &stdout, &stderr
+	if err := command.Run(); err != nil {
+		t.Fatalf("%s real CLI help: %v stdout=%q stderr=%q", locale, err, stdout.String(), stderr.String())
+	}
+	if stderr.Len() != 0 {
+		t.Fatalf("%s real CLI help stderr=%q", locale, stderr.String())
+	}
+	return strings.TrimSpace(stdout.String())
 }
 
 func TestExecutionResolverIsSharedByGeneratedHTTPAndMCPAndNilFailsClosed(t *testing.T) {

@@ -399,7 +399,7 @@ func traceReadMarkdownSourceCounterreviews(
 
 func traceMarkdownPartitionFilesystemScope(paths []string) (legacy, rebuildAuthority []string) {
 	for _, path := range paths {
-		if strings.HasPrefix(path, "docs/reconstruccion/") {
+		if strings.HasPrefix(path, "docs/reconstruccion/") || strings.HasPrefix(path, "docs/public/") {
 			rebuildAuthority = append(rebuildAuthority, path)
 			continue
 		}
@@ -657,7 +657,7 @@ func traceMarkdownExpectedRoles(entry traceMarkdownSourceRole, disposition trace
 
 func traceMarkdownOrigin(path string) string {
 	switch {
-	case strings.HasPrefix(path, "docs/reconstruccion/"):
+	case strings.HasPrefix(path, "docs/reconstruccion/"), strings.HasPrefix(path, "docs/public/"):
 		return "rebuild_authority"
 	case strings.HasPrefix(path, "docs/"):
 		return "legacy_root_document"

@@ -42,6 +42,10 @@ const (
 	CodeInternal        = "internal"
 )
 
+// ErrRedirectRejected reports a server redirect that the command client has
+// intentionally not followed. Commands never replay requests to a new target.
+var ErrRedirectRejected = errors.New("commandsdk.redirect_rejected")
+
 type Request struct {
 	CommandID           string
 	Version             string
@@ -69,7 +73,7 @@ func New(config Config) (*Client, error) {
 	}
 	httpClient := *config.HTTPClient
 	httpClient.CheckRedirect = func(*http.Request, []*http.Request) error {
-		return http.ErrUseLastResponse
+		return ErrRedirectRejected
 	}
 	return &Client{baseURL: baseURL, http: &httpClient, maximum: config.MaxResponseBytes}, nil
 }
@@ -101,6 +105,9 @@ func (client *Client) Invoke(ctx context.Context, request Request) (Result, erro
 	httpRequest.Header.Set("Content-Type", "application/json")
 	response, err := client.http.Do(httpRequest)
 	if err != nil {
+		if errors.Is(err, ErrRedirectRejected) {
+			return Result{}, ErrRedirectRejected
+		}
 		return Result{}, err
 	}
 	defer response.Body.Close()

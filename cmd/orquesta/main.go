@@ -32,12 +32,14 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	if len(arguments) > 0 && arguments[0] == "command" {
-		return runCommand(arguments[1:], stdout, stderr)
+		return runCommand(arguments[1:], catalog, stdout, stderr)
 	}
 	if len(arguments) == 0 || arguments[0] != "serve" {
-		_, _ = fmt.Fprintln(stderr, catalog.Text(i18n.DefaultLocale, "error.invalid_request"))
-		_, _ = fmt.Fprintln(stderr, commandUsage)
-		_, _ = fmt.Fprintln(stderr, "orquesta serve [--config path] | orquesta version")
+		if !writeCatalogText(stderr, catalog, i18n.DefaultLocale, "error.invalid_request") ||
+			!writeCatalogText(stderr, catalog, i18n.DefaultLocale, "cli.root.usage") {
+			_, _ = fmt.Fprintln(stderr, "code=i18n_catalog_unavailable")
+			return 1
+		}
 		return 2
 	}
 	flags := flag.NewFlagSet("orquesta serve", flag.ContinueOnError)
@@ -45,10 +47,16 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	configPath := flags.String("config", "", "")
 	if err := flags.Parse(arguments[1:]); err != nil || flags.NArg() != 0 {
 		if errors.Is(err, flag.ErrHelp) {
-			_, _ = fmt.Fprintln(stdout, "orquesta serve [--config path]")
-			return 0
+			if writeCatalogText(stdout, catalog, i18n.DefaultLocale, "cli.serve.usage") {
+				return 0
+			}
+			_, _ = fmt.Fprintln(stderr, "code=i18n_catalog_unavailable")
+			return 1
 		}
-		_, _ = fmt.Fprintln(stderr, catalog.Text(i18n.DefaultLocale, "error.invalid_request"))
+		if !writeCatalogText(stderr, catalog, i18n.DefaultLocale, "error.invalid_request") {
+			_, _ = fmt.Fprintln(stderr, "code=i18n_catalog_unavailable")
+			return 1
+		}
 		return 2
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -61,8 +69,22 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		},
 	})
 	if err != nil {
-		_, _ = fmt.Fprintf(stderr, "%s code=%s\n", catalog.Text(i18n.DefaultLocale, "error.internal"), err.Error())
+		text, textErr := catalog.Text(i18n.DefaultLocale, "error.internal")
+		if textErr != nil {
+			_, _ = fmt.Fprintln(stderr, "code=i18n_catalog_unavailable")
+			return 1
+		}
+		_, _ = fmt.Fprintf(stderr, "%s code=internal\n", text)
 		return 1
 	}
 	return 0
+}
+
+func writeCatalogText(writer io.Writer, catalog *i18n.Catalog, locale, key string) bool {
+	text, err := catalog.Text(locale, key)
+	if err != nil {
+		return false
+	}
+	_, _ = fmt.Fprintln(writer, text)
+	return true
 }

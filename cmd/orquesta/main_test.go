@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"orquesta/internal/i18n"
 )
 
 func TestVersionAndInvalidCommandDoNotStartRuntime(t *testing.T) {
@@ -147,7 +149,16 @@ func TestCommandRejectsInsecureRemoteURL(t *testing.T) {
 		"--request-ref", "request:remote", "--project-ref", "project:cli", "--payload", "{}",
 		"--", "system", "status",
 	}, &stdout, &stderr)
-	if code != 2 || !strings.Contains(stderr.String(), "cli.command_arguments_invalid") {
+	catalog, err := i18n.LoadBundled()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := catalog.Text(i18n.DefaultLocale, "error.cli.url_insecure")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if code != 2 || !strings.Contains(stderr.String(), want) ||
+		!strings.Contains(stderr.String(), "code=cli.url_insecure") {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
 }

@@ -5,11 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"strings"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	commandcore "orquesta/internal/commands"
+	"orquesta/internal/i18n"
 	"orquesta/internal/identity"
 )
 
@@ -31,9 +34,16 @@ func RegisterCommandTools(
 	server *sdkmcp.Server,
 	dispatcher commandcore.Executor,
 	provider identity.Provider,
+	catalog *i18n.Catalog,
+	locale string,
 ) error {
-	if server == nil || dispatcher == nil || provider == nil || !dispatcher.Limits().Valid() {
+	if server == nil || dispatcher == nil || provider == nil || catalog == nil ||
+		strings.TrimSpace(locale) == "" || strings.TrimSpace(locale) != locale ||
+		!dispatcher.Limits().Valid() {
 		return errors.New("mcp.command_config_invalid")
+	}
+	if _, err := catalog.Resolve(locale); err != nil {
+		return fmt.Errorf("mcp.command_locale_invalid: %w", err)
 	}
 	definitions := commandcore.CanonicalDefinitions()
 	tools := make(map[string]struct{}, len(definitions))
@@ -54,9 +64,13 @@ func RegisterCommandTools(
 		if err != nil {
 			return err
 		}
+		description, err := catalog.Text(locale, definition.DescriptionKey)
+		if err != nil {
+			return fmt.Errorf("mcp.command_description_unavailable: %w", err)
+		}
 		readOnly := definition.Kind == commandcore.KindQuery
 		tool := &sdkmcp.Tool{
-			Name: binding.Path, Description: definition.DescriptionKey,
+			Name: binding.Path, Description: description,
 			InputSchema: inputSchema, OutputSchema: outputSchema,
 			Annotations: &sdkmcp.ToolAnnotations{ReadOnlyHint: readOnly, IdempotentHint: true},
 		}

@@ -11,6 +11,11 @@ import (
 	sdkcommands "orquesta/sdk/commands"
 )
 
+var (
+	ErrCommandRunnerUnavailable = errors.New("cli.command_runner_unavailable")
+	ErrCommandUnknown           = errors.New("cli.command_unknown")
+)
+
 type commandBinding struct{ CommandID, Version, Path string }
 type Invoker interface {
 	Invoke(context.Context, sdkcommands.Request) (sdkcommands.Result, error)
@@ -43,11 +48,11 @@ func New(invoker Invoker) (*Runner, error) {
 
 func (runner *Runner) Run(ctx context.Context, path []string, requestRef, projectRef, claimedExecutionRef string, payload json.RawMessage) (sdkcommands.Result, error) {
 	if runner == nil {
-		return sdkcommands.Result{}, errors.New("cli.command_runner_unavailable")
+		return sdkcommands.Result{}, ErrCommandRunnerUnavailable
 	}
 	binding, ok := runner.paths[strings.Join(path, " ")]
 	if !ok {
-		return sdkcommands.Result{}, errors.New("cli.command_unknown")
+		return sdkcommands.Result{}, ErrCommandUnknown
 	}
 	return runner.invoker.Invoke(ctx, sdkcommands.Request{CommandID: binding.CommandID, Version: binding.Version, RequestRef: requestRef, ProjectRef: projectRef, ClaimedExecutionRef: claimedExecutionRef, Payload: payload})
 }
