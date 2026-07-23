@@ -4,9 +4,9 @@
   "contract_id": "AC-V19-COUNCIL",
   "trusted_base_git_commit_oid": "6f244a7594141c74dc28e095e0e5e32a05102826",
   "product_delta_base_git_commit_oid": "6f244a7594141c74dc28e095e0e5e32a05102826",
-  "product_delta_sealed_git_commit_oid": "",
-  "seal_status": "p_implemented_unsealed_pending_seal",
-  "seal_note": "P has product and tests only; S manifest and E receipt/output are absent and no PASS is implied.",
+  "product_delta_sealed_git_commit_oid": "cccfb4a64bd2cfb788a2d604ccd8d008e946e8a3",
+  "seal_status": "s_product_delta_sealed_pending_execution",
+  "seal_note": "S seals exact P source, binary, configuration, V18 dependency, Council subjects and measured debt; execution receipt/output remain absent and no PASS is implied.",
   "command": "sh -c './scripts/check_rebuild_write_set.sh 6f244a7594141c74dc28e095e0e5e32a05102826 && git diff --check 6f244a7594141c74dc28e095e0e5e32a05102826 HEAD -- && go test -mod=vendor -count=1 . ./acceptance ./internal/... ./cmd/... && timeout --kill-after=10s 240s go test -mod=vendor -race -count=1 -timeout=210s ./internal/application ./internal/adapters/state/sqlite -run \"^(TestCouncilRequiredOpenUsesRecordedAuthorizationTimeAndReplays|TestCouncilSkipUsesRecordedAuthorizationTimeAndReplays|TestSQLiteV19CouncilRoundFactsDecisionReplayRestartAndConcurrency|TestSQLiteDirectorCouncilNegativeReplanRestart)$\" && e2e_events=$(CGO_ENABLED=0 go test -mod=vendor -tags=v17_real_e2e,v18_real_e2e,v19_real_e2e -json -count=1 -timeout=240s ./internal/bootstrap -run \"^(TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd|TestV19CouncilAutoSQLiteFilesystemRestartE2E|TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E|TestV19CouncilSkipHumanReplayAndIntegrationE2E)$\" 2>&1); e2e_status=$?; printf '%s\\n' \"$e2e_events\"; [ \"$e2e_status\" -eq 0 ] && for test_name in TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd TestV19CouncilAutoSQLiteFilesystemRestartE2E TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E TestV19CouncilSkipHumanReplayAndIntegrationE2E; do printf '%s\\n' \"$e2e_events\" | grep -F '\"Action\":\"run\"' | grep -F '\"Package\":\"orquesta/internal/bootstrap\"' | grep -F \"\\\"Test\\\":\\\"$test_name\\\"\" >/dev/null && printf '%s\\n' \"$e2e_events\" | grep -F '\"Action\":\"pass\"' | grep -F '\"Package\":\"orquesta/internal/bootstrap\"' | grep -F \"\\\"Test\\\":\\\"$test_name\\\"\" >/dev/null || exit 1; done && GOFLAGS=-mod=vendor go vet . ./acceptance ./internal/... ./cmd/...'",
   "execution_argv": ["sh", "-c", "./scripts/check_rebuild_write_set.sh 6f244a7594141c74dc28e095e0e5e32a05102826 && git diff --check 6f244a7594141c74dc28e095e0e5e32a05102826 HEAD -- && go test -mod=vendor -count=1 . ./acceptance ./internal/... ./cmd/... && timeout --kill-after=10s 240s go test -mod=vendor -race -count=1 -timeout=210s ./internal/application ./internal/adapters/state/sqlite -run \"^(TestCouncilRequiredOpenUsesRecordedAuthorizationTimeAndReplays|TestCouncilSkipUsesRecordedAuthorizationTimeAndReplays|TestSQLiteV19CouncilRoundFactsDecisionReplayRestartAndConcurrency|TestSQLiteDirectorCouncilNegativeReplanRestart)$\" && e2e_events=$(CGO_ENABLED=0 go test -mod=vendor -tags=v17_real_e2e,v18_real_e2e,v19_real_e2e -json -count=1 -timeout=240s ./internal/bootstrap -run \"^(TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd|TestV19CouncilAutoSQLiteFilesystemRestartE2E|TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E|TestV19CouncilSkipHumanReplayAndIntegrationE2E)$\" 2>&1); e2e_status=$?; printf '%s\\n' \"$e2e_events\"; [ \"$e2e_status\" -eq 0 ] && for test_name in TestRealGitSQLiteFilesystemCASBubblewrapIndependentReviewsEndToEnd TestV19CouncilAutoSQLiteFilesystemRestartE2E TestV19CouncilRequiredStaleOpenAndVetoWaitsThreeE2E TestV19CouncilSkipHumanReplayAndIntegrationE2E; do printf '%s\\n' \"$e2e_events\" | grep -F '\"Action\":\"run\"' | grep -F '\"Package\":\"orquesta/internal/bootstrap\"' | grep -F \"\\\"Test\\\":\\\"$test_name\\\"\" >/dev/null && printf '%s\\n' \"$e2e_events\" | grep -F '\"Action\":\"pass\"' | grep -F '\"Package\":\"orquesta/internal/bootstrap\"' | grep -F \"\\\"Test\\\":\\\"$test_name\\\"\" >/dev/null || exit 1; done && GOFLAGS=-mod=vendor go vet . ./acceptance ./internal/... ./cmd/..."],
   "output_path": "product/evidence/v19_council.output.txt",
@@ -154,7 +154,7 @@
     "sealed_source_git_commit_oid": "32ee17e407006d9e0aeb46557b1e160769dd4848",
     "status": "verified_accredited"
   },
-  "implementation_status": "implemented_unsealed",
+  "implementation_status": "sealed_unexecuted",
   "p_source_paths": [
     "internal/council/council.go",
     "internal/application/council_commands.go",
@@ -336,5 +336,5 @@
     "S": "seal exact tree binary effective configuration V18 gate subjects and council subjects",
     "E": "detached_clean execution of three isolated E2Es with external V3 receipt"
   },
-  "lifecycle_gate": "V19_IMPLEMENTED_UNSEALED"
+  "lifecycle_gate": "V19_SEALED_UNEXECUTED"
 }
