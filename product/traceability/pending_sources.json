@@ -168,7 +168,7 @@
         "docs/runbooks/incidencia_*.md"
       ],
       "expected_file_count": 151,
-      "manifest_sha256": "sha256:9648b653ca78be36178b604135d6fccb54c2d523d8723ba59402fb71240cc23f",
+      "manifest_sha256": "sha256:224ac2eb89bf85beda829ed3abb5518c21c9690dfee74366a199a8108385ae50",
       "next_gate": "Implement and execute each pending invariant lesson test; a historical incident remains open evidence until that test is accredited."
     },
     {
