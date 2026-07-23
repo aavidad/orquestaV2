@@ -75,9 +75,14 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 		if err != nil {
 			return orchestrator.quarantineUnapplied(ctx, claim, err.Error())
 		}
+	} else if isCouncilExecution(execution) {
+		request, err = councilAgentLaunchRequest(record, item, execution, phase)
+		if err != nil {
+			return orchestrator.quarantineUnapplied(ctx, claim, err.Error())
+		}
 	}
 	targetDigest := authorLaunchTargetDigest(request)
-	if isReviewerExecution(execution) {
+	if isReviewerExecution(execution) || isCouncilExecution(execution) {
 		targetDigest = reviewerLaunchTargetDigest(request)
 	}
 	if targetDigest != claim.Action.EffectIntent.TargetDigest {
@@ -94,6 +99,9 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 	record, item, execution = latest, latestItem, latestExecution
 	if isReviewerExecution(execution) && !reviewExternalRefAvailable(record, execution, receipt.ExternalRef) {
 		return orchestrator.abortReviewerLaunch(ctx, claim, record, execution, attempt, receipt)
+	}
+	if isCouncilExecution(execution) && !councilExternalRefAvailable(record, execution, receipt.ExternalRef) {
+		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	}
 	transitionAt := lifecycleTime(orchestrator.clock.Now(), record.Goal, item)
 	execution.State = ExecutionRunning
@@ -223,6 +231,24 @@ func (orchestrator *Orchestrator) prepareLaunchDispatch(
 		record.Executions = replaceExecution(record.Executions, execution)
 		return record, item, execution, true, nil
 	}
+	if isCouncilExecution(execution) {
+		if err := validateCouncilLaunch(record, item, execution); err != nil {
+			err = orchestrator.quarantineUnapplied(ctx, claim, err.Error())
+			return GoalRecord{}, goal.WorkItem{}, ExecutionRecord{}, false, err
+		}
+		execution.State = ExecutionDispatching
+		err := orchestrator.state.RecordLaunchPrepared(ctx, LaunchPreparedState{
+			Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), Goal: aggregate, Execution: execution,
+			Event: EventRecord{Ref: "event:execution-dispatching:" + execution.Ref.String(), Kind: "execution.dispatching",
+				GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref, OccurredAt: transitionAt},
+			OperationAt: transitionAt,
+		})
+		if err != nil {
+			return GoalRecord{}, goal.WorkItem{}, ExecutionRecord{}, false, err
+		}
+		record.Executions = replaceExecution(record.Executions, execution)
+		return record, item, execution, true, nil
+	}
 	switch item.State() {
 	case goal.WorkItemStatePending:
 		var startErr error
@@ -331,6 +357,10 @@ func (orchestrator *Orchestrator) dispatchLaunchEffect(
 				)
 			} else {
 				switch {
+				case isCouncilExecution(latestExecution):
+					handled = orchestrator.replaceCouncilExecution(
+						ctx, claim, latest, latestExecution, "agent.launch_failed", orchestrator.clock.Now(), unknownUsage(), 0, true,
+					)
 				case latestItem.CancelRequested():
 					handled = orchestrator.settleCanceledLaunchRejection(
 						ctx, claim, latest, latestItem, latestExecution, attempt.Ref, "agent.launch_failed",
@@ -365,6 +395,10 @@ func (orchestrator *Orchestrator) dispatchLaunchEffect(
 	}
 	if isReviewerExecution(execution) && !reviewExternalRefAvailable(record, execution, receipt.ExternalRef) {
 		err = orchestrator.abortReviewerLaunch(ctx, claim, record, execution, attempt, receipt)
+		return EffectAttempt{}, ports.AgentLaunchReceipt{}, false, err
+	}
+	if isCouncilExecution(execution) && !councilExternalRefAvailable(record, execution, receipt.ExternalRef) {
+		err = orchestrator.quarantineUnknownApplied(ctx, claim)
 		return EffectAttempt{}, ports.AgentLaunchReceipt{}, false, err
 	}
 	return attempt, receipt, true, nil
@@ -406,6 +440,9 @@ func (orchestrator *Orchestrator) processObservation(ctx context.Context, claim 
 	execution, found := executionForAction(record, claim.Action)
 	if !ok || !found || item.State() != goal.WorkItemStateRunning || execution.State != ExecutionRunning {
 		return &StateError{Code: StateConflict}
+	}
+	if isCouncilExecution(execution) {
+		return orchestrator.processCouncilObservation(ctx, claim, record, item, execution)
 	}
 	reviewer := isReviewerExecution(execution)
 	observation, observeErr := orchestrator.observer.Observe(ctx, execution.Ref)

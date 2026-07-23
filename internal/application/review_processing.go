@@ -100,10 +100,17 @@ func (orchestrator *Orchestrator) recordReviewerObservation(ctx context.Context,
 			Kind: string(goal.ReplanCauseReviewChangesRequested), GoalRef: aggregate.Ref(), WorkItemRef: item.Ref(),
 			ExecutionRef: author.Ref, OccurredAt: at.UTC()})
 	}
+	var autoOpen *OpenCouncilRoundState
+	if gate.Status == review.GateApproved {
+		autoOpen, err = orchestrator.autoCouncilOpenState(candidate, item, author, change, at)
+		if err != nil {
+			return err
+		}
+	}
 	return orchestrator.state.RecordReviewAssessed(ctx, ReviewAssessedState{
 		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: item.Revision(),
 		Goal: aggregate, ReviewerExecution: execution, AuthorExecution: author,
-		Artifact: artifact, Review: reviewFact, BudgetSettlement: settlement, Events: events, OperationAt: at.UTC(),
+		Artifact: artifact, Review: reviewFact, BudgetSettlement: settlement, Events: events, AutoOpenCouncil: autoOpen, OperationAt: at.UTC(),
 	})
 }
 
