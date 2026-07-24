@@ -164,6 +164,10 @@ UPDATE executions SET state=?,execution_session_ref=?,finished_at=created_at WHE
 				err = scheduleExecutionSessionRevocation(ctx, tx, execution.GoalRef,
 					execution.WorkItemRef, execution.Ref, "", system.clock.Now())
 			}
+			if err == nil {
+				err = scheduleExecutionSessionRevocation(ctx, tx, execution.GoalRef,
+					execution.WorkItemRef, execution.Ref, "", system.clock.Now())
+			}
 			if err != nil {
 				t.Fatal(err)
 			}

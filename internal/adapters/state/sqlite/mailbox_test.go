@@ -376,7 +376,63 @@ WHERE execution_ref=? AND kind='revoke_execution_session' AND completed_at IS NU
 	}); err == nil || changed {
 		t.Fatalf("revoked source claimed recipient mailbox changed=%v err=%v", changed, err)
 	}
+	requireV21RevocationThenMissing(t, repository, childObserve.Action.ExecutionRef.String())
+}
 
+func TestQuarantinedPostArtifactAdmissionSchedulesOneDurableRevocation(t *testing.T) {
+	ctx := context.Background()
+	clock := &sqliteMembershipClock{now: time.Date(2026, 7, 24, 20, 0, 0, 0, time.UTC)}
+	path := filepath.Join(t.TempDir(), "post-artifact-quarantine", "orquesta.sqlite")
+	repository := openMailboxTestRepository(t, path, clock)
+	defer func() { _ = repository.Close() }()
+
+	fixture := newMailboxGoalFixture(t, clock.Now())
+	if _, fresh, err := createLegacyGoal(t, repository, fixture.state); err != nil || !fresh {
+		t.Fatalf("create quarantine Goal fresh=%v err=%v", fresh, err)
+	}
+	for index := 0; index < 2; index++ {
+		clock.Advance(time.Second)
+		startMailboxExecution(t, repository,
+			mustMailboxSchedulerClaim(t, repository, "quarantine-launch", index, clock.Now()),
+			clock.Now())
+	}
+	clock.Advance(time.Second)
+	childObserve := mustMailboxSchedulerClaim(t, repository, "quarantine-observe", 0, clock.Now())
+	authority, err := repository.ExecutionSessionAuthority(
+		ctx, childObserve.Action.ExecutionRef, "execution_token",
+	)
+	sqliteTestNoError(t, err)
+	mustV10Exec(t, repository.db, `UPDATE executions SET execution_session_ref=? WHERE ref=?`,
+		authority.SessionRef.String(), childObserve.Action.ExecutionRef.String())
+	succeedMailboxChildWithPostArtifact(t, repository, childObserve, clock.Now(), true)
+
+	_ = mustMailboxSchedulerClaim(t, repository, "quarantine-parent-observe", 0, clock.Now())
+	admitClaim := mustMailboxSchedulerClaim(t, repository, "quarantine-admit", 0, clock.Now())
+	if admitClaim.Action.Kind != application.ActionAdmitMailbox {
+		t.Fatalf("quarantine claim=%+v", admitClaim)
+	}
+	if _, _, err := validateRecoveryDatabase(ctx, repository.db); err != nil {
+		t.Fatalf("pending handoff recovery: %s", sqliteTestErrorChain(err))
+	}
+	clock.Advance(time.Second)
+	at := clock.Now()
+	sqliteTestNoError(t, repository.QuarantineAction(ctx, application.ActionQuarantinedState{
+		Claim: admitClaim, ErrorCode: "application.post_artifact_mailbox_receipt_invalid",
+		Event: application.EventRecord{
+			Ref: "event:action-quarantined:post-artifact", Kind: "action.quarantined",
+			GoalRef: admitClaim.Action.GoalRef, WorkItemRef: admitClaim.Action.WorkItemRef,
+			ExecutionRef: admitClaim.Action.ExecutionRef, OccurredAt: at,
+		},
+		OperationAt: at,
+	}))
+	var revocations int
+	if err := repository.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM outbox
+WHERE execution_ref=? AND kind='revoke_execution_session'`,
+		admitClaim.Action.ExecutionRef.String()).Scan(&revocations); err != nil || revocations != 1 {
+		t.Fatalf("quarantine revocations=%d err=%v", revocations, err)
+	}
+	repository = restartMailboxTestRepository(t, repository, path, clock)
+	requireV21RevocationThenMissing(t, repository, admitClaim.Action.ExecutionRef.String())
 }
 
 func TestMailboxRestartPreservesEveryCausalFrontier(t *testing.T) {
@@ -1954,10 +2010,11 @@ func succeedMailboxWorkItem(
 		Events: events, BudgetSettlement: budgetSettlement, OperationAt: at,
 	}
 	if postArtifact {
+		succeededItem, _ := updated.WorkItem(item.Ref())
 		state.PostArtifactAction = &application.ActionRecord{
 			Ref: "action:admit-mailbox:" + execution.Ref.String(), Kind: application.ActionAdmitMailbox,
 			GoalRef: updated.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref,
-			PlanGeneration: execution.PlanGeneration, WorkItemGeneration: item.Revision(), AvailableAt: at,
+			PlanGeneration: execution.PlanGeneration, WorkItemGeneration: succeededItem.Revision(), AvailableAt: at,
 		}
 	}
 	if err := repository.RecordGoalSucceeded(context.Background(), state); err != nil {

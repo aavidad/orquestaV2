@@ -47,7 +47,86 @@ WHERE action.kind='admit_mailbox' AND (
 	if invalid != 0 {
 		return errors.New("sqlite.recovery_v21_post_artifact_mailbox_invalid")
 	}
+	if err := validateRecoveryV21ExecutionSessionRevocations(ctx, tx); err != nil {
+		return err
+	}
 	return validateRecoveryV21ExecutionAuthorizationScope(ctx, tx)
+}
+
+func validateRecoveryV21ExecutionSessionRevocations(ctx context.Context, tx *sql.Tx) error {
+	var invalid, missing int
+	if err := tx.QueryRowContext(ctx, `
+WITH active_admission AS (
+ SELECT goal_ref,work_item_ref,execution_ref FROM outbox
+ WHERE kind='admit_mailbox' AND completed_at IS NULL
+  AND retired_at IS NULL AND quarantined_at IS NULL
+)
+SELECT
+(SELECT COUNT(*) FROM outbox action
+LEFT JOIN work_items item
+ ON item.goal_ref=action.goal_ref AND item.ref=action.work_item_ref
+LEFT JOIN executions execution
+ ON execution.goal_ref=action.goal_ref AND execution.work_item_ref=action.work_item_ref
+ AND execution.ref=action.execution_ref
+LEFT JOIN work_item_fences item_fence
+ ON item_fence.goal_ref=action.goal_ref AND item_fence.work_item_ref=action.work_item_ref
+LEFT JOIN action_consumption_receipts receipt ON receipt.action_ref=action.ref
+LEFT JOIN active_admission admission
+ ON admission.goal_ref=action.goal_ref AND admission.work_item_ref=action.work_item_ref
+ AND admission.execution_ref=action.execution_ref
+WHERE action.kind='revoke_execution_session' AND (
+ action.ref<>'action:revoke-execution-session:'||action.execution_ref OR item.ref IS NULL OR
+ execution.ref IS NULL OR execution.execution_session_ref='' OR
+ execution.state NOT IN ('succeeded','failed','canceled','stopped') OR execution.finished_at IS NULL OR
+ action.plan_generation<>execution.plan_generation OR action.work_item_generation<>item.revision OR
+ action.mailbox_message_ref IS NOT NULL OR action.control_ref IS NOT NULL OR action.change_ref<>'' OR
+ action.expected_target_oid<>'' OR action.admission_request_ref<>'' OR action.admission_request_fingerprint<>'' OR
+ action.governance_version<>0 OR action.effect_intent_ref IS NOT NULL OR action.review_gate_digest<>'' OR
+ action.council_subject_digest<>'' OR action.council_resolution_kind<>'' OR action.council_decision_ref IS NOT NULL OR
+ action.council_decision_digest IS NOT NULL OR action.council_skip_ref IS NOT NULL OR action.council_skip_digest IS NOT NULL OR
+ action.retired_at IS NOT NULL OR action.quarantined_at IS NOT NULL OR
+ action.last_error_code NOT IN ('','application.execution_session_revoke_unavailable') OR
+ (action.claim_token IS NULL)<>(action.claimed_by IS NULL) OR (action.claim_token IS NULL)<>(action.claimed_until IS NULL) OR
+ (action.claim_token IS NULL AND ((action.delivery_attempt=0)<>(action.fence=0) OR action.delivery_attempt<0 OR action.fence<0)) OR
+ (action.fence>0 AND (item_fence.fence IS NULL OR item_fence.fence<action.fence)) OR
+ (action.claim_token IS NOT NULL AND (length(trim(action.claim_token))=0 OR length(trim(action.claimed_by))=0 OR
+   action.delivery_attempt<=0 OR action.fence<=0 OR
+   (action.completed_at IS NULL AND item_fence.fence<>action.fence))) OR
+ admission.execution_ref IS NOT NULL OR
+ (action.completed_at IS NULL AND receipt.action_ref IS NOT NULL) OR
+ (action.completed_at IS NOT NULL AND (
+   receipt.action_ref IS NULL OR action.last_error_code<>'' OR receipt.governance_version<>0 OR receipt.kind<>action.kind OR
+   receipt.goal_ref<>action.goal_ref OR receipt.work_item_ref<>action.work_item_ref OR receipt.execution_ref<>action.execution_ref OR
+   receipt.plan_generation<>action.plan_generation OR receipt.work_item_generation<>action.work_item_generation OR
+   receipt.fence<>action.fence OR receipt.delivery_attempt<>action.delivery_attempt OR
+   receipt.claim_token<>action.claim_token OR receipt.worker_ref<>action.claimed_by OR receipt.outcome<>'completed' OR
+   receipt.error_code<>'' OR receipt.change_ref<>'' OR receipt.mailbox_message_ref IS NOT NULL OR
+   receipt.consumed_at<>action.completed_at OR receipt.consumed_at>=action.claimed_until OR
+   receipt.effect_receipt_ref IS NOT NULL OR receipt.legacy_effect_status IS NOT NULL OR
+   receipt.legacy_effect_confirmed_at IS NOT NULL
+ ))
+)),
+(SELECT COUNT(*) FROM executions execution
+ LEFT JOIN active_admission admission
+  ON admission.goal_ref=execution.goal_ref AND admission.work_item_ref=execution.work_item_ref
+  AND admission.execution_ref=execution.ref
+ WHERE execution.execution_session_ref<>'' AND execution.state IN ('succeeded','failed','canceled','stopped')
+ AND NOT EXISTS (
+  SELECT 1 FROM outbox action WHERE action.kind='revoke_execution_session'
+   AND action.goal_ref=execution.goal_ref AND action.work_item_ref=execution.work_item_ref
+   AND action.execution_ref=execution.ref
+ )
+ AND admission.execution_ref IS NULL)
+`).Scan(&invalid, &missing); err != nil {
+		return err
+	}
+	if invalid != 0 {
+		return errors.New("sqlite.recovery_v21_execution_session_revocation_invalid")
+	}
+	if missing != 0 {
+		return errors.New("sqlite.recovery_v21_execution_session_revocation_missing")
+	}
+	return nil
 }
 
 type recoveryV21ExecutionAuthorization struct {
