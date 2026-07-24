@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,6 +16,31 @@ import (
 	"orquesta/internal/credentials"
 	"orquesta/internal/ports"
 )
+
+type recoverySessionResolver struct {
+	material    string
+	unavailable bool
+	mismatch    bool
+}
+
+func (resolver *recoverySessionResolver) ResolveCodexSession(_ context.Context, request ports.AgentLaunchRequest) (Session, error) {
+	return resolver.session(request.SessionRef)
+}
+
+func (resolver *recoverySessionResolver) RecoverCodexSession(_ context.Context, request ports.AgentLaunchRequest) (Session, error) {
+	return resolver.session(request.SessionRef)
+}
+
+func (resolver *recoverySessionResolver) session(ref ports.ExecutionSessionRef) (Session, error) {
+	if resolver.unavailable {
+		return Session{}, errors.New("recovery unavailable")
+	}
+	if resolver.mismatch {
+		ref, _ = ports.NewExecutionSessionRef("execution-session:mismatch")
+	}
+	secret, _ := credentials.NewSecret([]byte(resolver.material))
+	return Session{Ref: ref, Endpoint: "http://127.0.0.1:7777/mcp", BearerToken: secret}, nil
+}
 
 func TestCredentialRecoveryScrubsUntrustedLastMessage(t *testing.T) {
 	config := testConfig(t)
@@ -29,12 +55,45 @@ func TestCredentialRecoveryScrubsUntrustedLastMessage(t *testing.T) {
 
 	adapter := openTestAdapter(t, config)
 	observation, err := adapter.Observe(context.Background(), request.ExecutionRef)
-	if err != nil || observation.Status != ports.AgentFailed || observation.ErrorCode != CodeExecutionInterrupted {
+	if ErrorCode(err) != CodeSessionUnavailable || !reflect.DeepEqual(observation, ports.AgentObservation{}) {
 		t.Fatalf("recovery observation=%+v err=%v", observation, err)
 	}
 	payload, err := os.ReadFile(lastMessagePath)
 	if err != nil || bytes.Contains(payload, []byte(helperCredentialInitial)) || len(payload) != 0 {
 		t.Fatalf("interrupted credential output survived recovery: %q err=%v", payload, err)
+	}
+}
+
+func TestObserveRecoveryAuthorityFailureScrubsAndRejectsOutput(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		code string
+		set  func(*recoverySessionResolver)
+	}{
+		{"unavailable", CodeSessionUnavailable, func(value *recoverySessionResolver) { value.unavailable = true }},
+		{"mismatch", CodeSessionInvalid, func(value *recoverySessionResolver) { value.mismatch = true }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			config := testConfig(t)
+			resolver := &recoverySessionResolver{material: helperSessionBearer}
+			test.set(resolver)
+			config.SessionResolver = resolver
+			request := testRequest(t, "guard-recovery-"+test.name, "helper:success", 1024)
+			request.SessionRef, _ = ports.NewExecutionSessionRef("execution-session:guard-recovery-" + test.name)
+			_, runPath := seedAcceptedExecution(t, config, request)
+			output := filepath.Join(config.WorkRoot, filepath.FromSlash(runPath), lastMessageFileName)
+			if err := os.WriteFile(output, []byte(helperSessionBearer), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			adapter := openTestAdapter(t, config)
+			observation, err := adapter.Observe(context.Background(), request.ExecutionRef)
+			if ErrorCode(err) != test.code || !reflect.DeepEqual(observation, ports.AgentObservation{}) {
+				t.Fatalf("Observe() observation=%+v error=%v", observation, err)
+			}
+			if payload, readErr := os.ReadFile(output); readErr != nil || len(payload) != 0 {
+				t.Fatalf("rejected output=%q error=%v", payload, readErr)
+			}
+		})
 	}
 }
 

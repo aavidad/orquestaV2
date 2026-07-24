@@ -33,6 +33,8 @@ type launchRecord struct {
 	ExecutionRef          string                 `json:"execution_ref"`
 	ExecutionSessionRef   string                 `json:"execution_session_ref,omitempty"`
 	ExecutionWorkspaceRef string                 `json:"execution_workspace_ref,omitempty"`
+	ActorRef              string                 `json:"actor_ref,omitempty"`
+	ProjectRef            string                 `json:"project_ref,omitempty"`
 	GoalRef               string                 `json:"goal_ref"`
 	WorkItemRef           string                 `json:"work_item_ref"`
 	PlanGeneration        goal.PlanGeneration    `json:"plan_generation"`
@@ -235,6 +237,8 @@ func (adapter *Adapter) ensureLaunchRecord(request ports.AgentLaunchRequest, req
 		ExecutionRef:          request.ExecutionRef.String(),
 		ExecutionSessionRef:   request.SessionRef.String(),
 		ExecutionWorkspaceRef: request.ExecutionWorkspaceRef.String(),
+		ActorRef:              request.ActorRef.String(),
+		ProjectRef:            request.ProjectRef.String(),
 		GoalRef:               request.GoalRef.String(),
 		WorkItemRef:           request.WorkItemRef.String(),
 		PlanGeneration:        request.PlanGeneration,
@@ -305,7 +309,8 @@ func (adapter *Adapter) readLaunchRecord(runPath string) (launchRecord, bool, er
 	}
 	switch record.SchemaVersion {
 	case legacyStateSchemaVersion:
-		if record.ExecutionSessionRef != "" || record.GoalRef != "" || record.WorkItemRef != "" ||
+		if record.ExecutionSessionRef != "" || record.ActorRef != "" || record.ProjectRef != "" ||
+			record.GoalRef != "" || record.WorkItemRef != "" ||
 			record.PlanGeneration != 0 || record.AppSpecGeneration != 0 || record.ExecutionAttempt != 0 ||
 			record.ModelRef != "" || record.AgentRef != "" {
 			return launchRecord{}, false, &Error{Code: CodeStateInvalid}
@@ -327,6 +332,8 @@ func (adapter *Adapter) readLaunchRecord(runPath string) (launchRecord, bool, er
 func validateLaunchRecordV4(record launchRecord) error {
 	if record.SchemaVersion != intermediateStateSchemaVersion ||
 		record.ExecutionSessionRef != "" ||
+		record.ActorRef != "" ||
+		record.ProjectRef != "" ||
 		record.GoalRef == "" ||
 		record.WorkItemRef == "" ||
 		record.PlanGeneration == 0 ||
@@ -349,6 +356,17 @@ func validateLaunchRecordV5(record launchRecord) error {
 	if record.ExecutionSessionRef != "" {
 		ref, err := ports.NewExecutionSessionRef(record.ExecutionSessionRef)
 		if err != nil || ref.String() != record.ExecutionSessionRef {
+			return &Error{Code: CodeStateInvalid}
+		}
+	}
+	if (record.ActorRef == "") != (record.ProjectRef == "") {
+		return &Error{Code: CodeStateInvalid}
+	}
+	if record.ActorRef != "" {
+		actorRef, actorErr := goal.NewActorRef(record.ActorRef)
+		projectRef, projectErr := goal.NewProjectRef(record.ProjectRef)
+		if actorErr != nil || projectErr != nil ||
+			actorRef.String() != record.ActorRef || projectRef.String() != record.ProjectRef {
 			return &Error{Code: CodeStateInvalid}
 		}
 	}
@@ -383,6 +401,8 @@ func (adapter *Adapter) bindLegacyLaunchRecord(
 		ExecutionRef:          legacy.ExecutionRef,
 		ExecutionSessionRef:   request.SessionRef.String(),
 		ExecutionWorkspaceRef: request.ExecutionWorkspaceRef.String(),
+		ActorRef:              request.ActorRef.String(),
+		ProjectRef:            request.ProjectRef.String(),
 		GoalRef:               request.GoalRef.String(),
 		WorkItemRef:           request.WorkItemRef.String(),
 		PlanGeneration:        request.PlanGeneration,

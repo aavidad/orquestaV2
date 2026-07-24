@@ -342,11 +342,18 @@ func (adapter *Adapter) Launch(ctx context.Context, request ports.AgentLaunchReq
 		}
 		session, sessionErr := adapter.resolveSession(ctx, request)
 		if sessionErr != nil {
-			return ports.AgentLaunchReceipt{}, sessionErr
+			return ports.AgentLaunchReceipt{}, adapter.scrubRecoveryFailure(runPath, sessionErr)
 		}
 		defer session.destroy()
 		if preflightErr := adapter.preflightSessionLaunch(session, request); preflightErr != nil {
-			return ports.AgentLaunchReceipt{}, preflightErr
+			return ports.AgentLaunchReceipt{}, adapter.scrubRecoveryFailure(runPath, preflightErr)
+		}
+		if adapter.config.CredentialStore != nil {
+			receipt, credentialErr := adapter.launchWithCredentialLocked(ctx, request, requestHash, session)
+			if credentialErr != nil {
+				return ports.AgentLaunchReceipt{}, adapter.scrubRecoveryFailure(runPath, credentialErr)
+			}
+			return receipt, nil
 		}
 		return adapter.resumeLaunchRecordLocked(ctx, request, requestHash, record, runPath, false, nil, nil, session)
 	}
@@ -431,9 +438,16 @@ func (adapter *Adapter) resumeLaunchRecordLocked(
 		adapter.executions[executionKey] = state
 		return receipt, nil
 	}
+	state.credentialGuard = credentialGuard
+	credentialGuard = nil
+	if session != nil {
+		state.sessionGuard = session.guard
+		session.guard = nil
+	}
 	if !recordCreated {
 		adopted, adoptErr := adapter.adoptPersistedProcessLocked(state)
 		if adoptErr != nil {
+			destroyExecutionGuards(state)
 			return ports.AgentLaunchReceipt{}, adoptErr
 		}
 		if adopted || state.terminal != nil {
@@ -448,12 +462,6 @@ func (adapter *Adapter) resumeLaunchRecordLocked(
 	}
 
 	adapter.executions[executionKey] = state
-	state.credentialGuard = credentialGuard
-	credentialGuard = nil
-	if session != nil {
-		state.sessionGuard = session.guard
-		session.guard = nil
-	}
 	adapter.startExecutionLocked(ctx, request, state, environment, session)
 	return receipt, nil
 }
@@ -515,8 +523,12 @@ func (adapter *Adapter) Observe(ctx context.Context, executionRef goal.Execution
 		state.terminal = &terminal
 		state.terminalDurable = true
 	} else {
+		if recoveryErr := adapter.recoverExecutionGuards(ctx, record, state); recoveryErr != nil {
+			return ports.AgentObservation{}, adapter.scrubRecoveryFailure(runPath, recoveryErr)
+		}
 		adopted, adoptErr := adapter.adoptPersistedProcessLocked(state)
 		if adoptErr != nil {
+			destroyExecutionGuards(state)
 			return ports.AgentObservation{}, adoptErr
 		}
 		if !adopted && state.terminal == nil {
@@ -530,15 +542,20 @@ func (adapter *Adapter) Observe(ctx context.Context, executionRef goal.Execution
 }
 
 func (adapter *Adapter) recoverInterruptedExecutionLocked(state *executionState) error {
-	if err := adapter.credentialOutputScrub(state.runPath); err != nil {
-		return err
-	}
 	terminal := terminalRecord{
 		SchemaVersion: stateSchemaVersion,
 		RequestHash:   state.terminalRequestHash,
 		Status:        ports.AgentFailed,
 		ErrorCode:     CodeExecutionInterrupted,
 		ObservedAt:    adapter.terminalTime(state.receipt.AcceptedAt),
+	}
+	var gateErr error
+	terminal, gateErr = adapter.gateCredentialTerminalLocked(state, terminal)
+	if gateErr != nil {
+		return gateErr
+	}
+	if err := adapter.credentialOutputScrub(state.runPath); err != nil {
+		return err
 	}
 	persisted, err := adapter.persistTerminal(state.runPath, terminal, state.receipt.SpecHash, state.maxOutput)
 	if err != nil {

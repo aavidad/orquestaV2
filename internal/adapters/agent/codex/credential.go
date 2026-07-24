@@ -22,12 +22,7 @@ func (adapter *Adapter) launchWithCredentialLocked(
 ) (ports.AgentLaunchReceipt, error) {
 	var receipt ports.AgentLaunchReceipt
 	var launchErr error
-	_, useErr := adapter.config.CredentialStore.Use(ctx, credentials.UseRequest{
-		ActorRef: request.ActorRef.String(), RequestRef: "request:codex-launch:" + request.ExecutionRef.String(),
-		CredentialRef: adapter.config.CredentialRef, OwnerRef: credentials.OwnerRef(request.ActorRef.String()),
-		ScopeRef: credentials.ScopeRef(request.ProjectRef.String()), PurposeRef: credentials.PurposeRef(ProviderRef),
-		Version: 0,
-	}, func(secret credentials.Secret) error {
+	_, useErr := adapter.config.CredentialStore.Use(ctx, adapter.credentialUseRequest(request), func(secret credentials.Secret) error {
 		defer secret.Destroy()
 		guard, err := credentials.NewLeakGuard(secret)
 		if err != nil {
@@ -62,6 +57,14 @@ func (adapter *Adapter) launchWithCredentialLocked(
 		return ports.AgentLaunchReceipt{}, &Error{Code: CodeCredentialUnavailable, Cause: useErr}
 	}
 	return receipt, nil
+}
+
+func (adapter *Adapter) credentialUseRequest(request ports.AgentLaunchRequest) credentials.UseRequest {
+	return credentials.UseRequest{
+		ActorRef: request.ActorRef.String(), RequestRef: "request:codex-launch:" + request.ExecutionRef.String(),
+		CredentialRef: adapter.config.CredentialRef, OwnerRef: credentials.OwnerRef(request.ActorRef.String()),
+		ScopeRef: credentials.ScopeRef(request.ProjectRef.String()), PurposeRef: credentials.PurposeRef(ProviderRef),
+	}
 }
 
 func (adapter *Adapter) preflightCredentialLaunch(secret credentials.Secret, guard *credentials.LeakGuard, request ports.AgentLaunchRequest, session *resolvedSession) error {

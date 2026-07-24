@@ -207,6 +207,7 @@ func (adapter *Adapter) finishStoppedProcessLocked(state *executionState, proof 
 	if err := adapter.credentialOutputScrub(state.runPath); err != nil {
 		return err
 	}
+	destroyExecutionGuards(state)
 	terminal := terminalRecord{
 		SchemaVersion: stateSchemaVersion, RequestHash: state.terminalRequestHash,
 		Status: ports.AgentFailed, ErrorCode: CodeExecutionStopped,

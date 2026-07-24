@@ -17,6 +17,11 @@ type SessionResolver interface {
 	ResolveCodexSession(context.Context, ports.AgentLaunchRequest) (Session, error)
 }
 
+// SessionRecoveryResolver rematerializes authority for one material-free durable binding.
+type SessionRecoveryResolver interface {
+	RecoverCodexSession(context.Context, ports.AgentLaunchRequest) (Session, error)
+}
+
 type Session struct {
 	Ref         ports.ExecutionSessionRef
 	Endpoint    string
@@ -82,8 +87,12 @@ func (adapter *Adapter) resolveSession(ctx context.Context, request ports.AgentL
 	if err != nil {
 		return nil, &Error{Code: CodeSessionUnavailable, Cause: err}
 	}
+	return validateResolvedSession(request.SessionRef, resolved)
+}
+
+func validateResolvedSession(expected ports.ExecutionSessionRef, resolved Session) (*resolvedSession, error) {
 	canonicalRef, refErr := ports.NewExecutionSessionRef(resolved.Ref.String())
-	if refErr != nil || canonicalRef != resolved.Ref || resolved.Ref != request.SessionRef || !validSessionEndpoint(resolved.Endpoint) {
+	if refErr != nil || canonicalRef != resolved.Ref || resolved.Ref != expected || !validSessionEndpoint(resolved.Endpoint) {
 		resolved.BearerToken.Destroy()
 		return nil, &Error{Code: CodeSessionInvalid}
 	}
@@ -101,6 +110,21 @@ func (adapter *Adapter) resolveSession(ctx context.Context, request ports.AgentL
 		return nil, &Error{Code: CodeSessionInvalid, Cause: err}
 	}
 	return &resolvedSession{endpoint: resolved.Endpoint, token: token, guard: guard}, nil
+}
+
+func (adapter *Adapter) recoverSession(
+	ctx context.Context,
+	request ports.AgentLaunchRequest,
+) (*resolvedSession, error) {
+	resolver, ok := adapter.config.SessionResolver.(SessionRecoveryResolver)
+	if !ok || request.SessionRef.String() == "" {
+		return nil, &Error{Code: CodeSessionUnavailable}
+	}
+	resolved, err := resolver.RecoverCodexSession(ctx, request)
+	if err != nil {
+		return nil, &Error{Code: CodeSessionUnavailable, Cause: err}
+	}
+	return validateResolvedSession(request.SessionRef, resolved)
 }
 
 func validSessionEndpoint(raw string) bool {

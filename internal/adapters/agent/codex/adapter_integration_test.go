@@ -491,6 +491,12 @@ func runCodexHelper(arguments []string) error {
 		return writeHelperResult(options.outputPath, "artifact:credential-initial")
 	case strings.Contains(mode, "helper:credential-rotated"):
 		return writeHelperResult(options.outputPath, "artifact:credential-rotated")
+	case strings.Contains(mode, "helper:restart-provider-leak"):
+		time.Sleep(150 * time.Millisecond)
+		return writeHelperResult(options.outputPath, credentialMaterial)
+	case strings.Contains(mode, "helper:restart-session-leak"):
+		time.Sleep(150 * time.Millisecond)
+		return writeHelperResult(options.outputPath, credentialMaterial)
 	case strings.Contains(mode, "helper:encoded-secret-leak"):
 		return writeHelperResult(options.outputPath, base64.StdEncoding.EncodeToString([]byte(credentialMaterial)))
 	case strings.Contains(mode, "helper:secret-leak"):
@@ -629,6 +635,10 @@ func validateHelperEnvironment(mode string) (string, error) {
 	sort.Strings(entries)
 	credential := ""
 	switch {
+	case strings.Contains(mode, "helper:restart-session-leak"):
+		credential = helperSessionBearer
+	case strings.Contains(mode, "helper:restart-provider-leak"):
+		credential = helperCredentialInitial
 	case strings.Contains(mode, "helper:credential-rotated"):
 		credential = helperCredentialRotated
 	case strings.Contains(mode, "helper:credential-initial"), strings.Contains(mode, "helper:secret-leak"),
@@ -641,7 +651,7 @@ func validateHelperEnvironment(mode string) (string, error) {
 	want := []string{helperExactEnvironment}
 	if credential != "" {
 		name := codexAPIKeyEnvironment
-		if strings.Contains(mode, "helper:session") {
+		if strings.Contains(mode, "helper:session") || strings.Contains(mode, "helper:restart-session-leak") {
 			name = helperSessionEnvironment
 		}
 		want = append(want, name+"="+credential)

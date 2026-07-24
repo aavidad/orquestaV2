@@ -56,6 +56,10 @@ func (resolver *codexExecutionSessionResolver) ResolveCodexSession(ctx context.C
 	return codex.Session{Ref: authority.SessionRef, Endpoint: resolver.endpoint, BearerToken: token}, nil
 }
 
+func (resolver *codexExecutionSessionResolver) RecoverCodexSession(ctx context.Context, binding ports.AgentLaunchRequest) (codex.Session, error) {
+	return resolver.ResolveCodexSession(ctx, binding)
+}
+
 func executionAuthorityMatchesLaunch(authority ports.ExecutionSessionAuthority, request ports.AgentLaunchRequest) bool {
 	binding := authority.Request
 	return binding.ProjectRef == request.ProjectRef &&

@@ -16,8 +16,54 @@ import (
 	"testing"
 	"time"
 
+	"orquesta/internal/credentials"
 	"orquesta/internal/ports"
 )
+
+func TestReopenedLiveProcessRetainsExactSecretGuards(t *testing.T) {
+	for _, test := range []struct {
+		name, objective, environment string
+		launchReplay                 bool
+		provider                     bool
+	}{
+		{"launch-provider", "helper:restart-provider-leak", codexAPIKeyEnvironment + "=" + helperCredentialInitial, true, true},
+		{"observe-session", "helper:restart-session-leak", helperSessionEnvironment + "=" + helperSessionBearer, false, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			config := testConfig(t)
+			config.SessionResolver = &recoverySessionResolver{material: helperSessionBearer}
+			if test.provider {
+				config.CredentialStore = &credentialTestStore{material: helperCredentialInitial, version: 1}
+				config.CredentialRef = credentials.CredentialRef("credential:codex-primary")
+			}
+			request := testRequest(t, "recovery-"+test.name, test.objective, 1024)
+			request.SessionRef, _ = ports.NewExecutionSessionRef("execution-session:recovery-" + test.name)
+			command, _, _ := seedUnownedLiveProcess(t, config, request, test.environment)
+			reopened := openTestAdapter(t, config)
+			if test.launchReplay {
+				if _, err := reopened.Launch(context.Background(), request); err != nil {
+					t.Fatalf("Launch(replay): %v", err)
+				}
+			}
+			observation := awaitTerminal(t, reopened, request.ExecutionRef)
+			if observation.Status != ports.AgentFailed || observation.ErrorCode != CodeSecretLeak || len(observation.Content) != 0 {
+				t.Fatalf("recovered terminal=%+v", observation)
+			}
+			if err := command.Wait(); err != nil {
+				t.Fatalf("Wait: %v", err)
+			}
+			runRoot := filepath.Join(config.WorkRoot, filepath.FromSlash(executionPath(request.ExecutionRef)))
+			if output, err := os.ReadFile(filepath.Join(runRoot, lastMessageFileName)); err != nil || len(output) != 0 {
+				t.Fatalf("last message=%q error=%v", output, err)
+			}
+			if terminal, err := os.ReadFile(filepath.Join(runRoot, terminalFileName)); err != nil ||
+				strings.Contains(string(terminal), helperCredentialInitial) ||
+				strings.Contains(string(terminal), helperSessionBearer) {
+				t.Fatalf("terminal retained secret: %q error=%v", terminal, err)
+			}
+		})
+	}
+}
 
 func TestCodexSelectiveStopPreservesSiblingProcessTrees(t *testing.T) {
 	config := processTreeTestConfig(t)
@@ -901,7 +947,7 @@ func TestCodexRestoredDatabaseCannotAdoptSourceProcess(t *testing.T) {
 	}
 }
 
-func seedUnownedLiveProcess(t *testing.T, config Config, request ports.AgentLaunchRequest) (*exec.Cmd, processRecord, ports.AgentLaunchReceipt) {
+func seedUnownedLiveProcess(t *testing.T, config Config, request ports.AgentLaunchRequest, privateEnvironment ...string) (*exec.Cmd, processRecord, ports.AgentLaunchReceipt) {
 	t.Helper()
 	adapter, err := New(config)
 	if err != nil {
@@ -924,7 +970,7 @@ func seedUnownedLiveProcess(t *testing.T, config Config, request ports.AgentLaun
 		t.Fatal(err)
 	}
 	command.Dir = filepath.Join(config.WorkRoot, filepath.FromSlash(runPath))
-	command.Env = append([]string(nil), adapter.environment...)
+	command.Env = append(append([]string(nil), adapter.environment...), privateEnvironment...)
 	prompt, err := adapter.renderAgentPrompt(request)
 	if err != nil {
 		t.Fatal(err)
