@@ -2,9 +2,7 @@ package application
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/binary"
-	"encoding/hex"
 	"errors"
 	"hash"
 	"strings"
@@ -26,24 +24,26 @@ func DeriveExecutionSessionAuthority(
 	request ports.ExecutionSessionEnsureRequest,
 	authenticationMethod string,
 ) (ports.ExecutionSessionAuthority, error) {
-	if err := ValidateExecutionSessionEnsureRequest(request); err != nil ||
+	if request.ProjectRef.String() == "" || request.GoalRef.String() == "" ||
+		request.WorkItemRef.String() == "" || request.ExecutionRef.String() == "" ||
+		request.ExecutionAttempt == 0 || request.PlanGeneration == 0 ||
+		request.AppSpecGeneration == 0 || !goal.IsCanonicalAppSpecHash(request.SpecHash) ||
+		(request.ExecutionAttempt == 1 && request.ReplacesExecutionRef.String() != "") ||
+		(request.ExecutionAttempt > 1 && request.ReplacesExecutionRef.String() == "") ||
 		strings.TrimSpace(authenticationMethod) != authenticationMethod || authenticationMethod == "" ||
 		strings.ContainsAny(authenticationMethod, "\x00\r\n") {
 		return ports.ExecutionSessionAuthority{}, errExecutionSessionInvalid
 	}
-	digest := sha256.New()
-	writeExecutionSessionField(digest, executionSessionDerivationVersion)
-	writeExecutionSessionField(digest, request.ProjectRef.String())
-	writeExecutionSessionField(digest, request.GoalRef.String())
-	writeExecutionSessionField(digest, request.WorkItemRef.String())
-	writeExecutionSessionField(digest, request.ExecutionRef.String())
+	digest := fingerprintDigest(executionSessionDerivationVersion,
+		request.ProjectRef.String(), request.GoalRef.String(),
+		request.WorkItemRef.String(), request.ExecutionRef.String())
 	writeExecutionSessionUint(digest, request.ExecutionAttempt)
-	writeExecutionSessionField(digest, request.ReplacesExecutionRef.String())
+	writeFingerprintField(digest, request.ReplacesExecutionRef.String())
 	writeExecutionSessionUint(digest, uint64(request.PlanGeneration))
 	writeExecutionSessionUint(digest, uint64(request.AppSpecGeneration))
-	writeExecutionSessionField(digest, request.SpecHash)
-	writeExecutionSessionField(digest, authenticationMethod)
-	suffix := hex.EncodeToString(digest.Sum(nil))
+	writeFingerprintField(digest, request.SpecHash)
+	writeFingerprintField(digest, authenticationMethod)
+	suffix := fingerprintHex(digest)
 
 	sessionRef, sessionErr := ports.NewExecutionSessionRef("execution-session:sha256:" + suffix)
 	principalRef, principalErr := identity.NewPrincipalRef("principal:execution:sha256:" + suffix)
@@ -60,18 +60,6 @@ func DeriveExecutionSessionAuthority(
 	return ports.ExecutionSessionAuthority{SessionRef: sessionRef, ServicePrincipal: principal, Request: request}, nil
 }
 
-func ValidateExecutionSessionEnsureRequest(request ports.ExecutionSessionEnsureRequest) error {
-	if request.ProjectRef.String() == "" || request.GoalRef.String() == "" ||
-		request.WorkItemRef.String() == "" || request.ExecutionRef.String() == "" ||
-		request.ExecutionAttempt == 0 || request.PlanGeneration == 0 ||
-		request.AppSpecGeneration == 0 || !goal.IsCanonicalAppSpecHash(request.SpecHash) ||
-		(request.ExecutionAttempt == 1 && request.ReplacesExecutionRef.String() != "") ||
-		(request.ExecutionAttempt > 1 && request.ReplacesExecutionRef.String() == "") {
-		return errExecutionSessionInvalid
-	}
-	return nil
-}
-
 func ExecutionSessionRequest(
 	aggregate goal.Goal,
 	execution ExecutionRecord,
@@ -81,11 +69,6 @@ func ExecutionSessionRequest(
 		ExecutionRef: execution.Ref, ExecutionAttempt: execution.AttemptNo, ReplacesExecutionRef: execution.ReplacesExecutionRef,
 		PlanGeneration: execution.PlanGeneration, AppSpecGeneration: execution.AppSpecGeneration, SpecHash: execution.SpecHash,
 	}
-}
-
-func writeExecutionSessionField(digest hash.Hash, value string) {
-	_ = binary.Write(digest, binary.BigEndian, uint64(len(value)))
-	_, _ = digest.Write([]byte(value))
 }
 
 func writeExecutionSessionUint(digest hash.Hash, value uint64) {
