@@ -49,6 +49,7 @@ func (o v22Object) objects(key string) []v22Object {
 }
 
 type v22AdmissionIdentity struct { Message, Admission, SourcePrincipal, SourceExecution, RecipientPrincipal, RecipientExecution string }
+type v22MailboxFence struct { Admission v22AdmissionIdentity; Delivered, Sibling string }
 
 func v22Must[T any](value T, err error) T { if err != nil { panic(err) }; return value }
 func v22Decode[T any](path string) T {
@@ -75,13 +76,15 @@ func TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP(t *tes
 	for _, id := range []string{"A", "C"} { h.waitProgress(ctx, refs[id], progress[id]) }
 	exactD := running[refs["D"]].text("execution_ref"); current := h.runningExecution(ctx, refs["D"]).text("execution_ref")
 	v22Require(t, current == exactD, "B stop disturbed D execution: got=%s want=%s", current, exactD)
-	admission := h.assertMailboxArtifactIsolation(ctx, refs["A"]); backup := h.backup(ctx); h.verifyRestoreCopy(ctx, backup, refs["D"], exactD)
+	fence := h.assertMailboxArtifactIsolation(ctx, refs["A"]); admission := fence.Admission
+	backup := h.backup(ctx); h.verifyRestoreCopy(ctx, backup, refs["D"], running[refs["D"]])
 	current = h.runningExecution(ctx, refs["D"]).text("execution_ref")
 	v22Require(t, current == exactD, "D execution changed before crash: got=%s want=%s", current, exactD)
 	h.kill() // non-cooperative server death: SIGKILL, never Runtime.Shutdown.
 	alive, aliveErr := v22ProcessAlive(dProcess)
 	v22Require(t, aliveErr == nil && alive, "D exact process did not survive server SIGKILL: alive=%v err=%v", alive, aliveErr)
-	h.restart(ctx); h.waitAdopted(ctx, refs["D"], running[refs["D"]], dProcess)
+	h.restart(ctx); h.probeMailboxArtifactIsolation(ctx, refs["A"], fence, "restart")
+	h.waitAdopted(ctx, refs["D"], running[refs["D"]], dProcess)
 	recovered, recoveredOK := h.completedAdmission(ctx, refs["A"])
 	v22Require(t, recoveredOK && recovered == admission, "restart changed completed service admission: got=%+v want=%+v found=%v", recovered, admission, recoveredOK)
 	completed := map[string]v22GoalProjection{}
@@ -90,6 +93,9 @@ func TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP(t *tes
 		v22Require(t, state == "succeeded", "%s state=%s", id, state)
 		v22NoContradiction(t, completed[id])
 	}
+	h.assertSucceededGoal(ctx, refs["A"])
+	recovered, recoveredOK = h.completedAdmission(ctx, refs["A"])
+	v22Require(t, recoveredOK && recovered == admission, "terminal Goal changed completed admission: got=%+v want=%+v found=%v", recovered, admission, recoveredOK)
 	v22AssertAdoptedCompletion(t, completed["D"], exactD); v22AssertFourGoals(t, completed, b, admission)
 }
 
@@ -166,15 +172,28 @@ func (h *v22Harness) backup(ctx context.Context) application.BackupRef {
 	})
 	return ref
 }
-func (h *v22Harness) verifyRestoreCopy(ctx context.Context, backup application.BackupRef, goalRaw, executionRaw string) {
+func (h *v22Harness) verifyRestoreCopy(ctx context.Context, backup application.BackupRef, goalRaw string, want v22ExecutionProjection) {
 	var restored string
 	h.recovery(ctx, func(recovery *statesqlite.Recovery) {
 		target := v22Must(application.NewRecoveryTargetRef("recovery-target:v22-real")); v22Must(recovery.RestoreBackup(ctx, backup, target)); restored = v22Must(recovery.TargetPath(target))
 	})
-	copyRepository := v22Must(sql.Open("sqlite", restored)); defer copyRepository.Close()
-	var found int
-	err := copyRepository.QueryRowContext(ctx, `SELECT COUNT(*) FROM executions WHERE goal_ref=? AND ref=?`, goalRaw, executionRaw).Scan(&found)
-	v22Require(h.t, err == nil && found == 1 && h.state != restored, "isolated restore D execution=%d state=%q restored=%q err=%v", found, h.state, restored, err)
+	copyRepository := v22Must(statesqlite.Open(ctx, statesqlite.Options{Path: restored, BusyTimeout: 5 * time.Second, MaxOpenConnections: 1})); defer copyRepository.Close()
+	goalRef := mustGoalRef(goalRaw); executionRef := v22Must(goal.NewExecutionRef(want.text("execution_ref")))
+	workItemRef := v22Must(goal.NewWorkItemRef(want.text("work_item_ref")))
+	record := v22Must(copyRepository.GetGoal(ctx, goalRef))
+	v22Require(h.t, h.state != restored && record.Goal.Ref() == goalRef && record.Goal.State() == goal.GoalStateRunning &&
+		record.Goal.PlanGeneration() == goal.PlanGeneration(want.number("plan_generation")) &&
+		record.Goal.AppSpec().Generation() == goal.AppSpecGeneration(want.number("app_spec_generation")) &&
+		record.Goal.SpecHash() != "" && record.Goal.WorkItemCount() == 1 && len(record.Executions) == 1,
+		"restored D aggregate not exact: state=%q restored=%q goal=%+v executions=%+v", h.state, restored, record.Goal, record.Executions)
+	execution := record.Executions[0]; item, itemOK := record.Goal.WorkItem(execution.WorkItemRef); aggregateExecution, bound := item.Execution()
+	v22Require(h.t, itemOK && bound && aggregateExecution == executionRef && item.Ref() == workItemRef &&
+		execution.Ref == executionRef && execution.GoalRef == goalRef && execution.WorkItemRef == workItemRef &&
+		execution.State == application.ExecutionRunning && execution.AttemptNo == want.number("attempt_no") &&
+		execution.PlanGeneration == goal.PlanGeneration(want.number("plan_generation")) &&
+		execution.AppSpecGeneration == goal.AppSpecGeneration(want.number("app_spec_generation")) &&
+		execution.SpecHash == record.Goal.SpecHash() && execution.ReplacesExecutionRef.String() == "",
+		"restored D execution not exact: item=%+v execution=%+v want=%s", item, execution, executionRef)
 }
 func (h *v22Harness) recovery(ctx context.Context, run func(*statesqlite.Recovery)) {
 	repository := v22Must(statesqlite.Open(ctx, statesqlite.Options{Path: h.state, BusyTimeout: 5 * time.Second, MaxOpenConnections: 8})); defer repository.Close()
@@ -254,7 +273,7 @@ func (h *v22Harness) waitTerminal(ctx context.Context, ref string) v22GoalProjec
 func v22Terminal(state string) bool {
 	return state == "succeeded" || state == "failed" || state == "cancelled" || state == "stopped"
 }
-func (h *v22Harness) assertMailboxArtifactIsolation(ctx context.Context, goalRaw string) v22AdmissionIdentity {
+func (h *v22Harness) assertMailboxArtifactIsolation(ctx context.Context, goalRaw string) v22MailboxFence {
 	for {
 		admission, ok := h.completedAdmission(ctx, goalRaw); items := map[string]v22Object{}
 		for _, item := range h.get(ctx, goalRaw).objects("work_items") { items[item.text("execution_ref")] = item }
@@ -263,30 +282,38 @@ func (h *v22Harness) assertMailboxArtifactIsolation(ctx context.Context, goalRaw
 		for execution, item := range items {
 			if execution != admission.SourceExecution && execution != admission.RecipientExecution && len(item.strings("artifact_refs")) == 1 { sibling = item.strings("artifact_refs")[0] }
 		}
-		if ok && len(source.strings("artifact_refs")) == 1 && recipient.text("state") == "running" && sibling != "" { return h.probeMailboxArtifactIsolation(ctx, goalRaw, admission, source.strings("artifact_refs")[0], sibling) }
+		if ok && len(source.strings("artifact_refs")) == 1 && recipient.text("state") == "running" && sibling != "" {
+			fence := v22MailboxFence{Admission: admission, Delivered: source.strings("artifact_refs")[0], Sibling: sibling}
+			return h.probeMailboxArtifactIsolation(ctx, goalRaw, fence, "initial")
+		}
 		v22Wait(h.t, ctx, "A completed admission, delivered/sibling artifacts and live recipient")
 	}
 }
-func (h *v22Harness) probeMailboxArtifactIsolation(ctx context.Context, goalRaw string, admission v22AdmissionIdentity, delivered, sibling string) v22AdmissionIdentity {
+func (h *v22Harness) probeMailboxArtifactIsolation(ctx context.Context, goalRaw string, fence v22MailboxFence, phase string) v22MailboxFence {
 	repository := v22Must(statesqlite.Open(ctx, statesqlite.Options{Path: h.state, BusyTimeout: 5 * time.Second, MaxOpenConnections: 1})); defer repository.Close()
+	admission, delivered, sibling := fence.Admission, fence.Delivered, fence.Sibling
 	recipientRef := v22Must(goal.NewExecutionRef(admission.RecipientExecution))
 	authority, err := repository.ExecutionSessionAuthority(ctx, recipientRef, "execution_token")
 	v22Require(h.t, err == nil && authority.ServicePrincipal.Ref.String() == admission.RecipientPrincipal, "recipient authority drift: %+v admission=%+v err=%v", authority, admission, err)
 	record := v22Must(repository.GetGoal(ctx, mustGoalRef(goalRaw)))
-	sourceExact := false
+	sourceExact, recipientExact := false, false
 	for _, execution := range record.Executions {
 		if execution.Ref.String() == admission.SourceExecution {
 			source := v22Must(application.DeriveExecutionSessionAuthority(application.ExecutionSessionRequest(record.Goal, execution), "execution_token")); sourceExact = source.ServicePrincipal.Ref.String() == admission.SourcePrincipal
 		}
+		if execution.Ref == recipientRef {
+			expected := v22Must(application.DeriveExecutionSessionAuthority(application.ExecutionSessionRequest(record.Goal, execution), "execution_token"))
+			recipientExact = authority == expected
+		}
 	}
-	v22Require(h.t, sourceExact, "source authority drift: admission=%+v", admission)
+	v22Require(h.t, sourceExact && recipientExact, "%s exact execution authority drift: authority=%+v admission=%+v", phase, authority, admission)
 	authorize := func(ref, artifact string) (identity.AuthorizationReceipt, error) {
-		request := v22Must(identity.NewAuthorizationRequest(identity.AuthorizationRequestInput{RequestRef: "authorization:v22-real:" + ref, Principal: authority.ServicePrincipal, ProjectRef: record.Goal.Project(), Permission: identity.PermissionArtifactsRead, ResourceRef: artifact, RequestedAt: time.Now().UTC()}))
+		request := v22Must(identity.NewAuthorizationRequest(identity.AuthorizationRequestInput{RequestRef: "authorization:v22-real:" + phase + ":" + ref, Principal: authority.ServicePrincipal, ProjectRef: record.Goal.Project(), Permission: identity.PermissionArtifactsRead, ResourceRef: artifact, RequestedAt: time.Now().UTC()}))
 		return repository.Authorize(ctx, request)
 	}
 	receipt, deliveredErr := authorize("delivered", delivered); _, siblingErr := authorize("sibling", sibling)
 	v22Require(h.t, delivered != sibling && deliveredErr == nil && receipt.Decision().Role() == identity.RoleExecutionService && errors.Is(siblingErr, application.ErrForbidden), "artifact delivery fence delivered=%s sibling=%s receipt=%+v errors=%v/%v", delivered, sibling, receipt, deliveredErr, siblingErr)
-	return admission
+	return fence
 }
 func (h *v22Harness) completedAdmission(ctx context.Context, goalRef string) (v22AdmissionIdentity, bool) {
 	database := v22Must(sql.Open("sqlite", h.state)); defer database.Close()
@@ -296,6 +323,11 @@ func (h *v22Harness) completedAdmission(ctx context.Context, goalRef string) (v2
 	v22Require(h.t, err == nil, "read completed admission: %v", err); return found, true
 }
 func mustGoalRef(raw string) goal.GoalRef { return v22Must(goal.NewGoalRef(raw)) }
+func (h *v22Harness) assertSucceededGoal(ctx context.Context, raw string) {
+	repository := v22Must(statesqlite.Open(ctx, statesqlite.Options{Path: h.state, BusyTimeout: 5 * time.Second, MaxOpenConnections: 1})); defer repository.Close()
+	ref := mustGoalRef(raw); record := v22Must(repository.GetGoal(ctx, ref))
+	v22Require(h.t, record.Goal.Ref() == ref && record.Goal.State() == goal.GoalStateSucceeded && record.Goal.IsTerminal(), "restarted A Goal not terminal/succeeded: %+v", record.Goal)
+}
 func (h *v22Harness) census() {
 	until := time.Now().Add(20 * time.Second)
 	for time.Now().Before(until) {
