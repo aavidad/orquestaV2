@@ -122,8 +122,8 @@ func assertRoadmapV22Lifecycle(t *testing.T, index roadmapTestIndex, fixture roa
 	}
 	if contract.Status != "planned" ||
 		contract.TestRef != "planned:acceptance/v22_codex_e2e_test.go" ||
-		contract.Command != "planned:"+fixture.Command ||
-		contract.Fixture != "planned:acceptance/fixtures/v22_codex_e2e.json" ||
+		contract.Command != "planned:go test -mod=vendor -count=1 . ./acceptance ./internal/... ./cmd/... ./sdk/... -run '^TestAcceptance$'" ||
+		contract.Fixture != "planned:fixtures/v22_codex_e2e" ||
 		contract.Receipt != "" ||
 		!reflect.DeepEqual(contract.Assertions, assertions) {
 		t.Fatalf("V22 planned contract is unsafe or does not bind its exact future gate: %#v", contract)
