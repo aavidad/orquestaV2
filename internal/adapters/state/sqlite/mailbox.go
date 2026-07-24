@@ -9,7 +9,6 @@ import (
 	"orquesta/internal/application"
 	"orquesta/internal/goal"
 	"orquesta/internal/identity"
-	"orquesta/internal/ports"
 )
 
 func (repository *Repository) MailboxReplay(
@@ -213,95 +212,40 @@ func requirePersistedMailboxAdmissionAuthorization(
 		return err
 	}
 	principal := receipt.Decision().Request().Principal()
-	var goalValue, itemValue, executionValue, replacementValue, specHash, projectValue string
-	var attempt, planGeneration, appSpecGeneration int64
-	err = transaction.QueryRowContext(ctx, `
-SELECT e.goal_ref,e.work_item_ref,e.ref,COALESCE(e.replaces_execution_ref,''),e.spec_hash,
-       g.project_ref,e.attempt_no,e.plan_generation,e.app_spec_generation
-FROM executions e JOIN goals g ON g.ref=e.goal_ref
-JOIN outbox action ON action.goal_ref=e.goal_ref AND action.execution_ref=e.ref
-WHERE e.ref=? AND e.goal_ref=? AND e.work_item_ref=? AND e.state='succeeded'
- AND action.kind='admit_mailbox' AND action.completed_at IS NULL
- AND action.retired_at IS NULL AND action.quarantined_at IS NULL`,
-		state.Envelope.Source.ExecutionRef.String(), state.Envelope.GoalRef.String(),
-		state.Envelope.ChildWorkItemRef.String(),
-	).Scan(&goalValue, &itemValue, &executionValue, &replacementValue, &specHash,
-		&projectValue, &attempt, &planGeneration, &appSpecGeneration)
-	if err != nil {
-		return mapDatabaseError(err)
-	}
-	goalRef, _ := goal.NewGoalRef(goalValue)
-	itemRef, _ := goal.NewWorkItemRef(itemValue)
-	executionRef, _ := goal.NewExecutionRef(executionValue)
-	projectRef, _ := goal.NewProjectRef(projectValue)
-	var replacement goal.ExecutionRef
-	if replacementValue != "" {
-		replacement, _ = goal.NewExecutionRef(replacementValue)
-	}
-	request := ports.ExecutionSessionEnsureRequest{
-		ProjectRef: projectRef, GoalRef: goalRef, WorkItemRef: itemRef,
-		ExecutionRef: executionRef, ExecutionAttempt: uint64(attempt),
-		ReplacesExecutionRef: replacement, PlanGeneration: goal.PlanGeneration(planGeneration),
-		AppSpecGeneration: goal.AppSpecGeneration(appSpecGeneration), SpecHash: specHash,
-	}
-	authority, deriveErr := application.DeriveExecutionSessionAuthority(request, principal.Method)
-	if deriveErr != nil || authority.ServicePrincipal != principal {
-		return conflict(errors.New("sqlite.execution_authorization_scope"))
-	}
-	recipientAuthority, err := mailboxExecutionAuthority(
-		ctx, transaction, state.Envelope.Recipient.ExecutionRef,
-		state.Envelope.GoalRef, state.Envelope.ParentWorkItemRef, principal.Method,
+	source, found, err := findExecutionAuthority(
+		ctx, transaction, state.Envelope.Source.ExecutionRef, principal,
 	)
 	if err != nil {
 		return err
 	}
-	if recipientAuthority.ServicePrincipal.Ref != state.Envelope.Recipient.PrincipalRef {
+	sourceRequest := source.authority.Request
+	if !found || !source.active || source.authority.ServicePrincipal != principal ||
+		sourceRequest.ProjectRef != state.Envelope.ProjectRef ||
+		sourceRequest.GoalRef != state.Envelope.GoalRef ||
+		sourceRequest.WorkItemRef != state.Envelope.ChildWorkItemRef {
+		return conflict(errors.New("sqlite.execution_authorization_scope"))
+	}
+	recipient, found, err := findExecutionAuthority(
+		ctx, transaction, state.Envelope.Recipient.ExecutionRef,
+		identity.Principal{Method: principal.Method},
+	)
+	if err != nil {
+		return err
+	}
+	var recipientRunning bool
+	if err := transaction.QueryRowContext(ctx, `SELECT state='running' FROM executions WHERE ref=?`,
+		state.Envelope.Recipient.ExecutionRef.String()).Scan(&recipientRunning); err != nil {
+		return mapDatabaseError(err)
+	}
+	recipientRequest := recipient.authority.Request
+	if !found || !recipient.active || !recipientRunning ||
+		recipientRequest.ProjectRef != state.Envelope.ProjectRef ||
+		recipientRequest.GoalRef != state.Envelope.GoalRef ||
+		recipientRequest.WorkItemRef != state.Envelope.ParentWorkItemRef ||
+		recipient.authority.ServicePrincipal.Ref != state.Envelope.Recipient.PrincipalRef {
 		return conflict(errors.New("sqlite.execution_recipient_scope"))
 	}
-	return ensurePrincipal(ctx, transaction, recipientAuthority.ServicePrincipal)
-}
-
-func mailboxExecutionAuthority(
-	ctx context.Context,
-	transaction *sql.Tx,
-	executionRef goal.ExecutionRef,
-	goalRef goal.GoalRef,
-	workItemRef goal.WorkItemRef,
-	authenticationMethod string,
-) (ports.ExecutionSessionAuthority, error) {
-	var projectValue, replacementValue, specHash string
-	var attempt, planGeneration, appSpecGeneration int64
-	err := transaction.QueryRowContext(ctx, `
-SELECT g.project_ref,COALESCE(e.replaces_execution_ref,''),e.spec_hash,
-       e.attempt_no,e.plan_generation,e.app_spec_generation
-FROM executions e JOIN goals g ON g.ref=e.goal_ref
-WHERE e.ref=? AND e.goal_ref=? AND e.work_item_ref=?
- AND e.state='running' AND g.state='running'`,
-		executionRef.String(), goalRef.String(), workItemRef.String(),
-	).Scan(&projectValue, &replacementValue, &specHash, &attempt, &planGeneration, &appSpecGeneration)
-	if err != nil {
-		return ports.ExecutionSessionAuthority{}, mapDatabaseError(err)
-	}
-	projectRef, projectErr := goal.NewProjectRef(projectValue)
-	var replacement goal.ExecutionRef
-	var replacementErr error
-	if replacementValue != "" {
-		replacement, replacementErr = goal.NewExecutionRef(replacementValue)
-	}
-	if projectErr != nil || replacementErr != nil || attempt <= 0 ||
-		planGeneration <= 0 || appSpecGeneration <= 0 {
-		return ports.ExecutionSessionAuthority{}, invalid(errors.New("sqlite.execution_recipient_invalid"))
-	}
-	authority, err := application.DeriveExecutionSessionAuthority(ports.ExecutionSessionEnsureRequest{
-		ProjectRef: projectRef, GoalRef: goalRef, WorkItemRef: workItemRef,
-		ExecutionRef: executionRef, ExecutionAttempt: uint64(attempt),
-		ReplacesExecutionRef: replacement, PlanGeneration: goal.PlanGeneration(planGeneration),
-		AppSpecGeneration: goal.AppSpecGeneration(appSpecGeneration), SpecHash: specHash,
-	}, authenticationMethod)
-	if err != nil {
-		return ports.ExecutionSessionAuthority{}, invalid(errors.New("sqlite.execution_recipient_invalid"))
-	}
-	return authority, nil
+	return ensurePrincipal(ctx, transaction, recipient.authority.ServicePrincipal)
 }
 
 func (repository *Repository) ClaimMailbox(

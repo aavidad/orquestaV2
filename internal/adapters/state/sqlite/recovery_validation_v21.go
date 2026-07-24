@@ -4,11 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
 
-	"orquesta/internal/application"
 	"orquesta/internal/goal"
 	"orquesta/internal/identity"
-	"orquesta/internal/ports"
 )
 
 func validateRecoveryV21PostArtifactMailbox(ctx context.Context, tx *sql.Tx) error {
@@ -52,17 +51,16 @@ WHERE action.kind='admit_mailbox' AND (
 }
 
 type recoveryV21ExecutionAuthorization struct {
-	principalRef string
-	method       string
-	projectRef   string
-	permission   identity.Permission
-	resourceRef  string
+	principal   identity.Principal
+	projectRef  goal.ProjectRef
+	permission  identity.Permission
+	resourceRef string
 }
 
 func validateRecoveryV21ExecutionAuthorizationScope(ctx context.Context, tx *sql.Tx) error {
 	rows, err := tx.QueryContext(ctx, `
-SELECT receipt.principal_ref,principal.authentication_method,receipt.project_ref,
-       receipt.permission,receipt.resource_ref
+SELECT receipt.principal_ref,principal.actor_ref,principal.kind,
+       principal.authentication_method,receipt.project_ref,receipt.permission,receipt.resource_ref
 FROM authorization_receipts receipt
 JOIN principals principal ON principal.ref=receipt.principal_ref
 WHERE receipt.reason_code=?`,
@@ -74,12 +72,24 @@ WHERE receipt.reason_code=?`,
 	var authorizations []recoveryV21ExecutionAuthorization
 	for rows.Next() {
 		var authorization recoveryV21ExecutionAuthorization
-		if err := rows.Scan(
-			&authorization.principalRef, &authorization.method, &authorization.projectRef,
-			&authorization.permission, &authorization.resourceRef,
-		); err != nil {
+		var principalRef, actorRef, kind, projectRef string
+		if err := rows.Scan(&principalRef, &actorRef, &kind, &authorization.principal.Method,
+			&projectRef, &authorization.permission, &authorization.resourceRef); err != nil {
 			_ = rows.Close()
 			return err
+		}
+		var parseErr error
+		authorization.principal.Ref, parseErr = identity.NewPrincipalRef(principalRef)
+		if parseErr == nil {
+			authorization.principal.ActorRef, parseErr = goal.NewActorRef(actorRef)
+		}
+		authorization.principal.Kind = identity.PrincipalKind(kind)
+		if parseErr == nil {
+			authorization.projectRef, parseErr = goal.NewProjectRef(projectRef)
+		}
+		if parseErr != nil || identity.ValidatePrincipal(authorization.principal) != nil {
+			_ = rows.Close()
+			return errors.New("sqlite.recovery_v21_execution_authority_invalid")
 		}
 		authorizations = append(authorizations, authorization)
 	}
@@ -107,111 +117,22 @@ func validateRecoveryV21ExecutionAuthorization(
 	tx *sql.Tx,
 	authorization recoveryV21ExecutionAuthorization,
 ) (bool, error) {
-	rows, err := tx.QueryContext(ctx, `
-SELECT execution.goal_ref,execution.work_item_ref,execution.ref,
-       COALESCE(execution.replaces_execution_ref,''),execution.attempt_no,
-       execution.plan_generation,execution.app_spec_generation,execution.spec_hash
-FROM executions execution
-JOIN goals goal ON goal.ref=execution.goal_ref
-WHERE goal.project_ref=?`,
-		authorization.projectRef,
+	match, found, err := findExecutionAuthority(
+		ctx, tx, goal.ExecutionRef{}, authorization.principal,
 	)
-	if err != nil {
+	if err != nil || !found {
 		return false, err
 	}
-	defer rows.Close()
-	projectRef, err := goal.NewProjectRef(authorization.projectRef)
-	if err != nil {
-		return false, err
-	}
-	for rows.Next() {
-		var goalValue, itemValue, executionValue, replacementValue, specHash string
-		var attempt, planGeneration, appSpecGeneration int64
-		if err := rows.Scan(
-			&goalValue, &itemValue, &executionValue, &replacementValue, &attempt,
-			&planGeneration, &appSpecGeneration, &specHash,
-		); err != nil {
-			return false, err
-		}
-		goalRef, goalErr := goal.NewGoalRef(goalValue)
-		itemRef, itemErr := goal.NewWorkItemRef(itemValue)
-		executionRef, executionErr := goal.NewExecutionRef(executionValue)
-		var replacement goal.ExecutionRef
-		var replacementErr error
-		if replacementValue != "" {
-			replacement, replacementErr = goal.NewExecutionRef(replacementValue)
-		}
-		if goalErr != nil || itemErr != nil || executionErr != nil || replacementErr != nil ||
-			attempt <= 0 || planGeneration <= 0 || appSpecGeneration <= 0 {
-			return false, errors.New("sqlite.recovery_v21_execution_authority_invalid")
-		}
-		authority, deriveErr := application.DeriveExecutionSessionAuthority(
-			ports.ExecutionSessionEnsureRequest{
-				ProjectRef: projectRef, GoalRef: goalRef, WorkItemRef: itemRef,
-				ExecutionRef: executionRef, ExecutionAttempt: uint64(attempt),
-				ReplacesExecutionRef: replacement, PlanGeneration: goal.PlanGeneration(planGeneration),
-				AppSpecGeneration: goal.AppSpecGeneration(appSpecGeneration), SpecHash: specHash,
-			},
-			authorization.method,
-		)
-		if deriveErr != nil {
-			return false, deriveErr
-		}
-		if authority.ServicePrincipal.Ref.String() != authorization.principalRef {
-			continue
-		}
-		scoped, scopeErr := validateRecoveryV21ExecutionResourceScope(
-			ctx, tx, authorization, authority,
-		)
-		return scoped, scopeErr
-	}
-	if err := rows.Err(); err != nil {
-		return false, err
-	}
-	return false, nil
-}
-
-func validateRecoveryV21ExecutionResourceScope(
-	ctx context.Context,
-	tx *sql.Tx,
-	authorization recoveryV21ExecutionAuthorization,
-	authority ports.ExecutionSessionAuthority,
-) (bool, error) {
-	switch authorization.permission {
-	case identity.PermissionGoalsDirect:
-		return authorization.resourceRef == authority.Request.GoalRef.String(), nil
-	case identity.PermissionGoalsGet:
-		if authorization.resourceRef == authority.Request.GoalRef.String() {
-			return true, nil
-		}
-		var count int
-		err := tx.QueryRowContext(ctx, `
-SELECT COUNT(*)
-FROM mailbox_envelopes envelope
-WHERE envelope.ref=? AND envelope.project_ref=? AND envelope.goal_ref=?
- AND ((envelope.source_principal_ref=? AND envelope.source_execution_ref=?) OR
-      (envelope.recipient_principal_ref=? AND envelope.recipient_execution_ref=?))`,
-			authorization.resourceRef, authorization.projectRef,
-			authority.Request.GoalRef.String(),
-			authorization.principalRef, authority.Request.ExecutionRef.String(),
-			authorization.principalRef, authority.Request.ExecutionRef.String(),
-		).Scan(&count)
-		return count > 0, err
-	case identity.PermissionArtifactsRead:
-		var count int
-		err := tx.QueryRowContext(ctx, `
-SELECT COUNT(*)
-FROM mailbox_artifact_refs artifact
-JOIN mailbox_envelopes envelope
- ON envelope.ref=artifact.mailbox_message_ref AND envelope.goal_ref=artifact.goal_ref
-WHERE artifact.artifact_ref=? AND envelope.project_ref=? AND envelope.goal_ref=?
- AND envelope.recipient_principal_ref=? AND envelope.recipient_execution_ref=?`,
-			authorization.resourceRef, authorization.projectRef,
-			authority.Request.GoalRef.String(), authorization.principalRef,
-			authority.Request.ExecutionRef.String(),
-		).Scan(&count)
-		return count > 0, err
-	default:
+	if match.authority.Request.ProjectRef != authorization.projectRef {
 		return false, nil
 	}
+	request, err := identity.NewAuthorizationRequest(identity.AuthorizationRequestInput{
+		RequestRef: "recovery.execution.scope", Principal: authorization.principal,
+		ProjectRef: authorization.projectRef, Permission: authorization.permission,
+		ResourceRef: authorization.resourceRef, RequestedAt: time.Unix(1, 0),
+	})
+	if err != nil {
+		return false, err
+	}
+	return executionAuthorizationScope(ctx, tx, request, match.authority)
 }
