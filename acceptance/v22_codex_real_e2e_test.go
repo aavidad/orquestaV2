@@ -58,6 +58,18 @@ type v22WorkProjection struct {
 	Attestations []string `json:"attestation_refs"`
 	Interrupt    string   `json:"interrupt_code"`
 }
+type v22MailboxReceiptProjection struct {
+	MessageRef            string `json:"message_ref"`
+	State                 string `json:"state"`
+	SourcePrincipalRef    string `json:"source_principal_ref"`
+	SourceExecutionRef    string `json:"source_execution_ref"`
+	RecipientPrincipalRef string `json:"recipient_principal_ref"`
+	RecipientExecutionRef string `json:"recipient_execution_ref"`
+	AdmissionRef          string `json:"admission_ref"`
+	ConsumptionRef        string `json:"consumption_ref"`
+	AcknowledgementRef    string `json:"acknowledgement_ref"`
+	Outcome               string `json:"outcome"`
+}
 type v22GoalProjection struct {
 	Goal struct {
 		Ref      string `json:"goal_ref"`
@@ -114,6 +126,7 @@ type v22GoalProjection struct {
 		Tree     string `json:"tree_oid"`
 		Conflict string `json:"conflict_digest"`
 	} `json:"integration_receipts"`
+	MailboxReceipts []v22MailboxReceiptProjection `json:"mailbox_receipts"`
 }
 type v22Harness struct {
 	t                                     *testing.T
@@ -622,6 +635,19 @@ func v22AssertMailboxClosure(t *testing.T, a v22GoalProjection) {
 		parent.Execution == "" || child.Execution == "" || parent.Execution == child.Execution ||
 		len(parent.Artifacts) == 0 || len(child.Artifacts) == 0 {
 		t.Fatalf("A lacks exact admitted/consumed/acknowledged handoff closure: parent=%+v child=%+v", parent, child)
+	}
+	if len(a.MailboxReceipts) != 1 {
+		t.Fatalf("A mailbox receipts=%d want exactly one and zero orphans: %+v", len(a.MailboxReceipts), a.MailboxReceipts)
+	}
+	receipt := a.MailboxReceipts[0]
+	if receipt.MessageRef == "" || receipt.State != "acknowledged" ||
+		receipt.SourcePrincipalRef == "" || receipt.SourceExecutionRef != child.Execution ||
+		receipt.RecipientPrincipalRef == "" || receipt.RecipientPrincipalRef == receipt.SourcePrincipalRef ||
+		receipt.RecipientExecutionRef != parent.Execution || receipt.AdmissionRef == "" ||
+		receipt.ConsumptionRef == "" || receipt.AcknowledgementRef == "" ||
+		receipt.AdmissionRef == receipt.ConsumptionRef || receipt.AdmissionRef == receipt.AcknowledgementRef ||
+		receipt.ConsumptionRef == receipt.AcknowledgementRef || receipt.Outcome != "acknowledged" {
+		t.Fatalf("A public mailbox receipt is not exact admission/consume/ACK evidence: %+v", receipt)
 	}
 	for _, execution := range a.Executions {
 		if execution.MailboxRetired {
