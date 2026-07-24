@@ -794,7 +794,7 @@ func (h *v22Harness) waitProgress(ctx context.Context, ref string, before v22Goa
 	for {
 		after := h.get(ctx, ref)
 		state := after.object("goal").text("state")
-		v22Require(h.t, state != "failed" && state != "cancelled" && state != "stopped", "independent Goal damaged by B cancellation: %+v", after.object("goal"))
+		v22Require(h.t, state != "failed" && state != "canceled" && state != "stopped", "independent Goal damaged by B cancellation: %+v", after.object("goal"))
 		if after.object("goal").number("revision") > before.object("goal").number("revision") || after.number("artifact_count") > before.number("artifact_count") || v22ExecutionStates(after) != v22ExecutionStates(before) {
 			return
 		}
@@ -811,7 +811,7 @@ func (h *v22Harness) waitTerminal(ctx context.Context, ref string) v22GoalProjec
 	}
 }
 func v22Terminal(state string) bool {
-	return state == "succeeded" || state == "failed" || state == "cancelled" || state == "stopped"
+	return state == "succeeded" || state == "failed" || state == "canceled" || state == "stopped"
 }
 func (h *v22Harness) assertMailboxArtifactIsolation(ctx context.Context, goalRaw string) v22MailboxFence {
 	for {
@@ -975,7 +975,7 @@ func v22Wait(t *testing.T, ctx context.Context, what string) {
 func v22AssertFourGoals(t *testing.T, done map[string]v22GoalProjection, b v22GoalProjection, admission v22AdmissionIdentity, councilIntegration v22CouncilIntegration) {
 	t.Helper()
 	state := b.object("goal").text("state")
-	v22Require(t, state == "cancelled", "B=%s", state)
+	v22Require(t, state == "canceled", "B=%s", state)
 	v22AssertMailboxClosure(t, done["A"], admission)
 	v22AssertProgrammingClosure(t, done["C"], councilIntegration)
 	work := 0
@@ -1005,13 +1005,13 @@ func v22NoContradiction(t *testing.T, g v22GoalProjection) {
 func (h *v22Harness) waitCancelled(ctx context.Context, ref string, execution v22ExecutionProjection, process v22ProcessRecord) v22GoalProjection {
 	h.t.Helper()
 	terminal := h.waitTerminal(ctx, ref)
-	v22Require(h.t, terminal.object("goal").text("state") == "cancelled", "B=%s, want controlled cancellation", terminal.object("goal").text("state"))
+	v22Require(h.t, terminal.object("goal").text("state") == "canceled", "B=%s, want controlled cancellation", terminal.object("goal").text("state"))
 	v22AssertProcessGone(h.t, process)
 	v22AssertStopEvidence(h.t, process)
 	for {
 		b := h.get(ctx, ref)
 		goalView, executionSettled := b.object("goal"), true
-		v22Require(h.t, goalView.text("state") == "cancelled", "B changed after cancellation: %+v", goalView)
+		v22Require(h.t, goalView.text("state") == "canceled", "B changed after cancellation: %+v", goalView)
 		for _, current := range b.objects("executions") {
 			if current.text("execution_ref") == execution.text("execution_ref") && current.text("state") == "running" {
 				executionSettled = false
