@@ -15,11 +15,10 @@ import (
 const (
 	AuthenticationMethod = "execution_token"
 	credentialPurpose    = credentials.PurposeRef("orquesta.execution-session.v1")
+	revocationReason     = "execution_terminal"
 	secretBytes          = 32
 )
 
-// Broker composes material-free execution authority with the existing secret
-// store. SQLite remains the Goal state's only durable authority writer.
 type Broker struct {
 	store     credentials.Store
 	authority application.ExecutionSessionAuthoritySource
@@ -32,18 +31,10 @@ func New(
 	store credentials.Store,
 	authority application.ExecutionSessionAuthoritySource,
 ) (*Broker, error) {
-	return newWithRandom(store, authority, rand.Reader)
-}
-
-func newWithRandom(
-	store credentials.Store,
-	authority application.ExecutionSessionAuthoritySource,
-	random io.Reader,
-) (*Broker, error) {
-	if store == nil || authority == nil || random == nil {
+	if store == nil || authority == nil {
 		return nil, &Error{Code: CodeDependenciesRequired}
 	}
-	return &Broker{store: store, authority: authority, random: random}, nil
+	return &Broker{store: store, authority: authority, random: rand.Reader}, nil
 }
 
 func (broker *Broker) Ensure(
@@ -76,7 +67,7 @@ func (broker *Broker) Ensure(
 	}
 	result, createErr := broker.store.Create(ctx, credentials.CreateRequest{
 		ActorRef:      authority.ServicePrincipal.ActorRef.String(),
-		RequestRef:    ensureRequestRef(authority.SessionRef),
+		RequestRef:    requestRef("ensure", authority.SessionRef),
 		CredentialRef: credentialRef,
 		OwnerRef:      credentials.OwnerRef(authority.ServicePrincipal.Ref.String()),
 		ScopeRefs:     []credentials.ScopeRef{credentials.ScopeRef(request.ProjectRef.String())},
@@ -84,9 +75,7 @@ func (broker *Broker) Ensure(
 		Material:      secret,
 	})
 	if createErr == nil {
-		return ports.ExecutionSessionReceipt{
-			Authority: authority, EnsuredAt: result.Metadata.CreatedAt, Replayed: result.Replayed,
-		}, nil
+		return ports.ExecutionSessionReceipt{Authority: authority, EnsuredAt: result.Metadata.CreatedAt, Replayed: result.Replayed}, nil
 	}
 	if !credentials.HasErrorCode(createErr, credentials.ErrorAlreadyExists) &&
 		!credentials.HasErrorCode(createErr, credentials.ErrorIdempotencyConflict) {
@@ -96,13 +85,9 @@ func (broker *Broker) Ensure(
 	if err != nil {
 		return ports.ExecutionSessionReceipt{}, err
 	}
-	return ports.ExecutionSessionReceipt{
-		Authority: authority, EnsuredAt: receipt.OccurredAt, Replayed: true,
-	}, nil
+	return ports.ExecutionSessionReceipt{Authority: authority, EnsuredAt: receipt.OccurredAt, Replayed: true}, nil
 }
 
-// UseToken materializes the composite child token only inside callback scope.
-// It is intended for provider adapters injecting a private child environment.
 func (broker *Broker) UseToken(
 	ctx context.Context,
 	request ports.ExecutionSessionEnsureRequest,
@@ -128,6 +113,37 @@ func (broker *Broker) UseToken(
 	return err
 }
 
+func (broker *Broker) Revoke(
+	ctx context.Context,
+	request ports.ExecutionSessionEnsureRequest,
+) error {
+	if broker == nil || broker.store == nil || ctx == nil {
+		return &Error{Code: CodeContextInvalid}
+	}
+	authority, err := application.DeriveExecutionSessionAuthority(request, AuthenticationMethod)
+	if err != nil {
+		return &Error{Code: CodeRequestInvalid}
+	}
+	ref, err := credentialRef(authority.SessionRef)
+	if err != nil {
+		return &Error{Code: CodeRequestInvalid}
+	}
+	result, err := broker.store.Revoke(ctx, credentials.RevokeRequest{
+		ActorRef: authority.ServicePrincipal.ActorRef.String(), RequestRef: requestRef("revoke", authority.SessionRef),
+		CredentialRef: ref, OwnerRef: credentials.OwnerRef(authority.ServicePrincipal.Ref.String()),
+		ExpectedVersion: 1, Reason: revocationReason,
+	})
+	if credentials.HasErrorCode(err, credentials.ErrorNotFound) {
+		return nil
+	}
+	if err != nil || !result.Metadata.Revoked || result.Metadata.RevokedAt.IsZero() ||
+		result.Metadata.CredentialRef != ref ||
+		result.Metadata.OwnerRef != credentials.OwnerRef(authority.ServicePrincipal.Ref.String()) {
+		return &Error{Code: CodeCredentialUnavailable, Cause: err}
+	}
+	return nil
+}
+
 func (broker *Broker) useSecret(
 	ctx context.Context,
 	authority ports.ExecutionSessionAuthority,
@@ -140,7 +156,7 @@ func (broker *Broker) useSecret(
 	}
 	receipt, err := broker.store.Use(ctx, credentials.UseRequest{
 		ActorRef:      authority.ServicePrincipal.ActorRef.String(),
-		RequestRef:    useRequestRef(operation, authority.SessionRef),
+		RequestRef:    requestRef(operation, authority.SessionRef),
 		CredentialRef: ref,
 		OwnerRef:      credentials.OwnerRef(authority.ServicePrincipal.Ref.String()),
 		ScopeRef:      credentials.ScopeRef(authority.Request.ProjectRef.String()),
@@ -166,10 +182,6 @@ func credentialRef(session ports.ExecutionSessionRef) (credentials.CredentialRef
 	return ref, nil
 }
 
-func ensureRequestRef(ref ports.ExecutionSessionRef) string {
-	return "request:execution-session-ensure:" + strings.TrimPrefix(ref.String(), "execution-session:")
-}
-
-func useRequestRef(operation string, ref ports.ExecutionSessionRef) string {
+func requestRef(operation string, ref ports.ExecutionSessionRef) string {
 	return "request:execution-session-" + operation + ":" + strings.TrimPrefix(ref.String(), "execution-session:")
 }

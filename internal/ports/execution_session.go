@@ -10,8 +10,7 @@ import (
 	"orquesta/internal/identity"
 )
 
-// ExecutionSessionRef is an opaque, execution-scoped authentication session.
-// It is authority metadata, never credential material or a transport endpoint.
+// ExecutionSessionRef is opaque authority metadata, never credential material or an endpoint.
 type ExecutionSessionRef string
 
 func NewExecutionSessionRef(value string) (ExecutionSessionRef, error) {
@@ -24,8 +23,7 @@ func NewExecutionSessionRef(value string) (ExecutionSessionRef, error) {
 
 func (ref ExecutionSessionRef) String() string { return string(ref) }
 
-// ExecutionSessionEnsureRequest is the complete immutable execution identity
-// from which an adapter may materialize an ephemeral child credential.
+// ExecutionSessionEnsureRequest is the immutable identity used to materialize an ephemeral credential.
 type ExecutionSessionEnsureRequest struct {
 	ProjectRef           goal.ProjectRef
 	GoalRef              goal.GoalRef
@@ -38,9 +36,7 @@ type ExecutionSessionEnsureRequest struct {
 	SpecHash             string
 }
 
-// ExecutionSessionAuthority is the material-free authority projection. Every
-// field is either persisted by the Goal aggregate or deterministically derived
-// from that persisted tuple.
+// ExecutionSessionAuthority is persisted or deterministically derived, never secret material.
 type ExecutionSessionAuthority struct {
 	SessionRef       ExecutionSessionRef
 	ServicePrincipal identity.Principal
@@ -53,9 +49,8 @@ type ExecutionSessionReceipt struct {
 	Replayed  bool
 }
 
-// ExecutionSessionBroker owns credential materialization outside durable Goal
-// state. Ensure is causally idempotent for an equal request. Revocation belongs
-// to durable execution lifecycle: credential material alone grants no authority.
+// ExecutionSessionBroker materializes causally idempotent credentials outside Goal state.
 type ExecutionSessionBroker interface {
 	Ensure(context.Context, ExecutionSessionEnsureRequest) (ExecutionSessionReceipt, error)
+	Revoke(context.Context, ExecutionSessionEnsureRequest) error
 }

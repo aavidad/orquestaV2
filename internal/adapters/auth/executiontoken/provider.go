@@ -70,7 +70,7 @@ func (broker *Broker) Authenticate(
 
 func applicationAuthority(authority ports.ExecutionSessionAuthority) (ports.ExecutionSessionAuthority, error) {
 	expected, err := application.DeriveExecutionSessionAuthority(authority.Request, AuthenticationMethod)
-	if err != nil || !application.SameExecutionSessionAuthority(expected, authority) {
+	if err != nil || expected != authority {
 		return ports.ExecutionSessionAuthority{}, errors.New("executiontoken.authority_invalid")
 	}
 	return expected, nil

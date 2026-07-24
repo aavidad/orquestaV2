@@ -124,6 +124,7 @@ type ExecutionRecord struct {
 	ModelRef              string
 	AgentRef              string
 	ExternalRef           string
+	ExecutionSessionRef   ports.ExecutionSessionRef
 	ExecutionWorkspaceRef ports.ExecutionWorkspaceRef
 	BudgetReservationRef  string
 	EffectIntentRef       string
@@ -249,6 +250,7 @@ const (
 	ActionCommitChange     ActionKind = "commit_change"
 	ActionAttestTest       ActionKind = "attest_test"
 	ActionIntegrateChange  ActionKind = "integrate_change"
+	ActionRevokeSession    ActionKind = "revoke_execution_session"
 )
 
 type ActionRecord struct {
@@ -512,6 +514,11 @@ type PostArtifactMailboxAdmittedState struct {
 	OperationAt  time.Time
 }
 
+type ExecutionSessionRevokedState struct {
+	Claim       ActionClaim
+	OperationAt time.Time
+}
+
 type GoalFailedState struct {
 	Claim                ActionClaim
 	ExpectedGoalRevision goal.Revision
@@ -623,6 +630,7 @@ type StateRepository interface {
 	RecordExecutionInterrupted(context.Context, ExecutionInterruptedState) error
 	RecordGoalSucceeded(context.Context, GoalSucceededState) error
 	RecordPostArtifactMailboxAdmitted(context.Context, PostArtifactMailboxAdmittedState) error
+	RecordExecutionSessionRevoked(context.Context, ExecutionSessionRevokedState) error
 	RecordGoalFailed(context.Context, GoalFailedState) error
 	RecordReviewAssessed(context.Context, ReviewAssessedState) error
 	OpenCouncilRound(context.Context, OpenCouncilRoundState) (CouncilRoundRecord, bool, error)

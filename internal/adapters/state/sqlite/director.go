@@ -436,6 +436,10 @@ func (repository *Repository) applyDirectorPlanChange(
 		if err := updateExecutionCAS(ctx, transaction, execution, stored.State); err != nil {
 			return application.DirectorDecisionRecord{}, err
 		}
+		if err := scheduleExecutionSessionRevocation(ctx, transaction, execution.GoalRef,
+			execution.WorkItemRef, execution.Ref, "", state.OperationAt); err != nil {
+			return application.DirectorDecisionRecord{}, err
+		}
 	}
 	for _, actionRef := range state.RetireActionRefs {
 		if err := consumeRetiredAction(ctx, transaction, actionRef, state.Decision.Ref, state.OperationAt); err != nil {

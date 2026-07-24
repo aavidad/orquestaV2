@@ -56,10 +56,49 @@ func (orchestrator *Orchestrator) ProcessNext(ctx context.Context, workerRef str
 		err = orchestrator.processIntegrateChange(ctx, claim)
 	case ActionAdmitMailbox:
 		err = orchestrator.processPostArtifactMailboxAdmission(ctx, claim)
+	case ActionRevokeSession:
+		err = orchestrator.processExecutionSessionRevocation(ctx, claim)
 	default:
 		err = orchestrator.quarantine(ctx, claim, fmt.Sprintf("application.action_kind_invalid:%s", claim.Action.Kind))
 	}
 	return result, err
+}
+
+func (orchestrator *Orchestrator) processExecutionSessionRevocation(ctx context.Context, claim ActionClaim) error {
+	record, err := orchestrator.state.GetGoal(ctx, claim.Action.GoalRef)
+	if err != nil {
+		return err
+	}
+	execution, found := executionForAction(record, claim.Action)
+	if !found || claim.Action.Kind != ActionRevokeSession ||
+		claim.Action.Ref != "action:revoke-execution-session:"+execution.Ref.String() ||
+		!terminalExecutionState(execution.State) {
+		return &StateError{Code: StateConflict}
+	}
+	if orchestrator.executionSessions == nil {
+		return orchestrator.requeueExecutionSessionRevocation(ctx, claim, execution)
+	}
+	if err := orchestrator.executionSessions.Revoke(ctx, ExecutionSessionRequest(record.Goal, execution)); err != nil {
+		return orchestrator.requeueExecutionSessionRevocation(ctx, claim, execution)
+	}
+	return orchestrator.state.RecordExecutionSessionRevoked(ctx, ExecutionSessionRevokedState{
+		Claim: claim, OperationAt: orchestrator.clock.Now().UTC(),
+	})
+}
+
+func (orchestrator *Orchestrator) requeueExecutionSessionRevocation(
+	ctx context.Context, claim ActionClaim, execution ExecutionRecord,
+) error {
+	now := orchestrator.clock.Now().UTC()
+	return orchestrator.state.RequeueAction(ctx, ActionRequeuedState{
+		Claim: claim, Execution: execution, ErrorCode: "application.execution_session_revoke_unavailable",
+		AvailableAt: now.Add(orchestrator.observationDelay), OperationAt: now,
+	})
+}
+
+func terminalExecutionState(state ExecutionState) bool {
+	return state == ExecutionSucceeded || state == ExecutionFailed ||
+		state == ExecutionCanceled || state == ExecutionStopped
 }
 
 func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim ActionClaim) error {
@@ -71,6 +110,7 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 	if err != nil || !proceed {
 		return err
 	}
+	execution.ExecutionSessionRef = sessionRef
 	record, item, execution, proceed, err = orchestrator.prepareLaunchDispatch(ctx, claim, record, item, execution)
 	if err != nil || !proceed {
 		return err
@@ -180,7 +220,7 @@ func (orchestrator *Orchestrator) ensureExecutionSession(
 	}
 	method := receipt.Authority.ServicePrincipal.Method
 	expected, deriveErr := DeriveExecutionSessionAuthority(request, method)
-	if deriveErr != nil || !SameExecutionSessionAuthority(expected, receipt.Authority) ||
+	if deriveErr != nil || expected != receipt.Authority ||
 		receipt.EnsuredAt.IsZero() {
 		err = orchestrator.quarantineUnapplied(ctx, claim, "application.execution_session_invalid")
 		return "", false, err

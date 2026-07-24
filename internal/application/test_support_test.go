@@ -560,6 +560,23 @@ func (repository *memoryRepository) RecordPostArtifactMailboxAdmitted(
 	return nil
 }
 
+func (repository *memoryRepository) RecordExecutionSessionRevoked(
+	_ context.Context, state ExecutionSessionRevokedState,
+) error {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	action, found := repository.actions[state.Claim.Action.Ref]
+	if !found || action.token != state.Claim.Token {
+		return &StateError{Code: StateConflict}
+	}
+	delete(repository.actions, state.Claim.Action.Ref)
+	record := repository.records[state.Claim.Action.GoalRef]
+	record.ConsumptionReceipts = append(record.ConsumptionReceipts,
+		consumptionReceipt(state.Claim, ActionConsumedCompleted, "", state.OperationAt))
+	repository.records[state.Claim.Action.GoalRef] = record
+	return nil
+}
+
 func (repository *memoryRepository) ListGoals(_ context.Context, project goal.ProjectRef, limit int) ([]GoalSummary, error) {
 	repository.mu.Lock()
 	defer repository.mu.Unlock()

@@ -645,6 +645,10 @@ func readExecutions(ctx context.Context, source queryer, goalValue string) ([]ap
 	if schema.council {
 		reviewProjection = "purpose, review_subject_digest, council_subject_digest"
 	}
+	sessionProjection := "''"
+	if schema.session {
+		sessionProjection = "execution_session_ref"
+	}
 	rows, err := source.QueryContext(ctx, `
 SELECT ref, goal_ref, work_item_ref, state, artifact_media_type, idempotency_key,
        attempt_no, max_execution_attempts, replaces_execution_ref,
@@ -653,7 +657,7 @@ SELECT ref, goal_ref, work_item_ref, state, artifact_media_type, idempotency_key
 	       external_ref, created_at,
        deadline_at, started_at, provider_accepted_at, last_observed_at,
        provider_observed_at, finished_at, failure_code, `+markerProjection+`,
-	       `+governanceProjection+`, `+workspaceProjection+`, `+reviewProjection+`
+	       `+governanceProjection+`, `+workspaceProjection+`, `+reviewProjection+`, `+sessionProjection+`
 FROM executions
 WHERE goal_ref = ?
 ORDER BY (
@@ -688,7 +692,7 @@ type storedExecution struct {
 	created                                                           int64
 	deadline, started, accepted, observed, providerObserved, finished sql.NullInt64
 	replaces, reservation, intent, receipt, repository, workspace     sql.NullString
-	purpose, reviewSubject, councilSubject                            string
+	purpose, reviewSubject, councilSubject, session                   string
 	attempt, maxAttempts, plan, appSpec, mailbox, governanceVersion   int64
 }
 
@@ -700,7 +704,7 @@ func scanExecution(rows *sql.Rows) (storedExecution, error) {
 		&v.record.AgentRef, &v.record.ExternalRef, &v.created, &v.deadline, &v.started,
 		&v.accepted, &v.observed, &v.providerObserved, &v.finished, &v.record.FailureCode,
 		&v.mailbox, &v.governanceVersion, &v.reservation, &v.intent, &v.receipt, &v.repository, &v.workspace,
-		&v.purpose, &v.reviewSubject, &v.councilSubject)
+		&v.purpose, &v.reviewSubject, &v.councilSubject, &v.session)
 	if err != nil {
 		return storedExecution{}, mapDatabaseError(err)
 	}
@@ -752,6 +756,11 @@ func restoreExecution(v storedExecution) (application.ExecutionRecord, error) {
 	}
 	if v.workspace.Valid && v.workspace.String != "" {
 		if record.ExecutionWorkspaceRef, err = ports.NewExecutionWorkspaceRef(v.workspace.String); err != nil {
+			return record, invalid(err)
+		}
+	}
+	if v.session != "" {
+		if record.ExecutionSessionRef, err = ports.NewExecutionSessionRef(v.session); err != nil {
 			return record, invalid(err)
 		}
 	}

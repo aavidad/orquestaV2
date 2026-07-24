@@ -5,15 +5,19 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"orquesta/internal/adapters/auth/executiontoken"
+	credentiallocal "orquesta/internal/adapters/credentials/local"
 	"orquesta/internal/application"
 	"orquesta/internal/credentials"
 	"orquesta/internal/goal"
+	"orquesta/internal/identity"
 	"orquesta/internal/ports"
 )
 
@@ -22,11 +26,7 @@ type bootstrapExecutionSessionAuthoritySource struct {
 	uses      int
 }
 
-func (source *bootstrapExecutionSessionAuthoritySource) ExecutionSessionAuthority(
-	_ context.Context,
-	executionRef goal.ExecutionRef,
-	method string,
-) (ports.ExecutionSessionAuthority, error) {
+func (source *bootstrapExecutionSessionAuthoritySource) ExecutionSessionAuthority(_ context.Context, executionRef goal.ExecutionRef, method string) (ports.ExecutionSessionAuthority, error) {
 	if source == nil || source.authority.Request.ExecutionRef != executionRef ||
 		method != executiontoken.AuthenticationMethod {
 		return ports.ExecutionSessionAuthority{}, errors.New("bootstrap.test_execution_authority_not_found")
@@ -41,30 +41,20 @@ type bootstrapExecutionSessionCredentialStore struct {
 	uses     int
 }
 
-func (store *bootstrapExecutionSessionCredentialStore) Create(
-	_ context.Context,
-	request credentials.CreateRequest,
-) (credentials.MutationResult, error) {
+func (store *bootstrapExecutionSessionCredentialStore) Create(_ context.Context, request credentials.CreateRequest) (credentials.MutationResult, error) {
 	if store.metadata.CredentialRef != "" {
 		return credentials.MutationResult{}, credentials.NewError(credentials.ErrorAlreadyExists, "credential_ref")
 	}
 	store.material = request.Material.Bytes()
 	store.metadata = credentials.Metadata{
-		CredentialRef: request.CredentialRef,
-		OwnerRef:      request.OwnerRef,
-		ScopeRefs:     append([]credentials.ScopeRef(nil), request.ScopeRefs...),
-		PurposeRef:    request.PurposeRef,
-		Version:       1,
-		CreatedAt:     time.Date(2026, 7, 23, 12, 0, 0, 0, time.UTC),
+		CredentialRef: request.CredentialRef, OwnerRef: request.OwnerRef,
+		ScopeRefs: append([]credentials.ScopeRef(nil), request.ScopeRefs...), PurposeRef: request.PurposeRef,
+		Version: 1, CreatedAt: time.Date(2026, 7, 23, 12, 0, 0, 0, time.UTC),
 	}
 	return credentials.MutationResult{Metadata: store.metadata}, nil
 }
 
-func (store *bootstrapExecutionSessionCredentialStore) Use(
-	_ context.Context,
-	request credentials.UseRequest,
-	callback func(credentials.Secret) error,
-) (credentials.Receipt, error) {
+func (store *bootstrapExecutionSessionCredentialStore) Use(_ context.Context, request credentials.UseRequest, callback func(credentials.Secret) error) (credentials.Receipt, error) {
 	if store.metadata.CredentialRef != request.CredentialRef || store.metadata.OwnerRef != request.OwnerRef ||
 		store.metadata.PurposeRef != request.PurposeRef || len(store.metadata.ScopeRefs) != 1 ||
 		store.metadata.ScopeRefs[0] != request.ScopeRef {
@@ -85,17 +75,11 @@ func (store *bootstrapExecutionSessionCredentialStore) Use(
 	}, nil
 }
 
-func (*bootstrapExecutionSessionCredentialStore) Rotate(
-	context.Context,
-	credentials.RotateRequest,
-) (credentials.MutationResult, error) {
+func (*bootstrapExecutionSessionCredentialStore) Rotate(context.Context, credentials.RotateRequest) (credentials.MutationResult, error) {
 	return credentials.MutationResult{}, credentials.NewError(credentials.ErrorInvalidRequest, "rotate")
 }
 
-func (*bootstrapExecutionSessionCredentialStore) Revoke(
-	context.Context,
-	credentials.RevokeRequest,
-) (credentials.MutationResult, error) {
+func (*bootstrapExecutionSessionCredentialStore) Revoke(context.Context, credentials.RevokeRequest) (credentials.MutationResult, error) {
 	return credentials.MutationResult{}, credentials.NewError(credentials.ErrorInvalidRequest, "revoke")
 }
 
@@ -114,6 +98,57 @@ func TestCodexExecutionSessionResolverResolvesExactBoundSession(t *testing.T) {
 	if store.uses != 1 {
 		t.Fatalf("credential use count=%d want 1", store.uses)
 	}
+}
+
+func TestExecutionCredentialStorePhysicallyRevokesAcrossRestart(t *testing.T) {
+	ctx := context.Background()
+	_, _, authority, _ := bootstrapSessionResolver(t)
+	source := &bootstrapExecutionSessionAuthoritySource{authority: authority}
+	path := filepath.Join(t.TempDir(), "credentials.json")
+	store := openBootstrapCredentialStore(t, path)
+	broker, _ := executiontoken.New(store, source)
+	if _, err := broker.Ensure(ctx, authority.Request); err != nil {
+		t.Fatal(err)
+	}
+	var token []byte
+	if err := broker.UseToken(ctx, authority.Request, func(value []byte) error {
+		token = append([]byte(nil), value...)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	credential, _ := identity.NewCredential(token)
+	if principal, err := broker.Authenticate(ctx, credential); err != nil || principal != authority.ServicePrincipal {
+		t.Fatalf("Authenticate principal=%+v err=%v", principal, err)
+	}
+	wrong := append([]byte(nil), token...)
+	wrong[len(wrong)-2] ^= 1
+	wrongCredential, _ := identity.NewCredential(wrong)
+	if _, err := broker.Authenticate(ctx, wrongCredential); !executiontoken.IsError(err, executiontoken.CodeAuthenticationFailed) {
+		t.Fatalf("wrong material err=%v", err)
+	}
+	_ = store.Close()
+	store = openBootstrapCredentialStore(t, path)
+	broker, _ = executiontoken.New(store, source)
+	if err := broker.Revoke(ctx, authority.Request); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := broker.Authenticate(ctx, credential); !executiontoken.IsError(err, executiontoken.CodeAuthenticationFailed) {
+		t.Fatalf("revoked Authenticate err=%v", err)
+	}
+	_ = store.Close()
+	content, err := os.ReadFile(path)
+	if err != nil || strings.Contains(string(content), `"material"`) {
+		t.Fatalf("revoked store retained material err=%v", err)
+	}
+	store = openBootstrapCredentialStore(t, path)
+	defer store.Close()
+	broker, _ = executiontoken.New(store, source)
+	if err := broker.Revoke(ctx, authority.Request); err != nil {
+		t.Fatal(err)
+	}
+	clear(token)
+	clear(wrong)
 }
 
 func TestCodexExecutionSessionResolverFailsClosedForAnyBindingMismatch(t *testing.T) {
@@ -197,15 +232,12 @@ func TestExecutionBearerTransportBindsBearerToExactTargetAndRedirectsNeverReceiv
 		t.Fatalf("newExecutionBearerTransport: %v", err)
 	}
 	defer transport.destroy()
-	client := &http.Client{
-		Transport: transport,
-		CheckRedirect: func(request *http.Request, _ []*http.Request) error {
-			observed.Lock()
-			redirectAuthorization = request.Header.Get("Authorization")
-			observed.Unlock()
-			return errors.New("redirect forbidden")
-		},
-	}
+	client := &http.Client{Transport: transport, CheckRedirect: func(request *http.Request, _ []*http.Request) error {
+		observed.Lock()
+		redirectAuthorization = request.Header.Get("Authorization")
+		observed.Unlock()
+		return errors.New("redirect forbidden")
+	}}
 	response, err := client.Get(server.URL + "/mcp")
 	if response != nil {
 		_ = response.Body.Close()
@@ -219,30 +251,12 @@ func TestExecutionBearerTransportBindsBearerToExactTargetAndRedirectsNeverReceiv
 		t.Fatalf("initial authorization=%q redirect authorization=%q redirected=%t", initialAuthorization, redirectAuthorization, redirected)
 	}
 
-	wrongPath, err := http.NewRequest(http.MethodGet, server.URL+"/other", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := transport.RoundTrip(wrongPath); err == nil || err.Error() != "bootstrap.execution_session_target_forbidden" {
-		t.Fatalf("wrong path error=%v", err)
-	}
-	queryTarget, err := http.NewRequest(http.MethodGet, server.URL+"/mcp?unexpected=yes", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := transport.RoundTrip(queryTarget); err == nil || err.Error() != "bootstrap.execution_session_target_forbidden" {
-		t.Fatalf("query target error=%v", err)
-	}
+	forbiddenRequest(t, transport, server.URL+"/other")
+	queryTarget := forbiddenRequest(t, transport, server.URL+"/mcp?unexpected=yes")
 	if queryTarget.Header.Get("Authorization") != "" {
 		t.Fatal("bearer mutated caller request on query target")
 	}
-	foreign, err := http.NewRequest(http.MethodGet, "http://127.0.0.1:1/mcp", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := transport.RoundTrip(foreign); err == nil || err.Error() != "bootstrap.execution_session_target_forbidden" {
-		t.Fatalf("foreign target error=%v", err)
-	}
+	foreign := forbiddenRequest(t, transport, "http://127.0.0.1:1/mcp")
 	if foreign.Header.Get("Authorization") != "" {
 		t.Fatal("bearer mutated the caller request on forbidden target")
 	}
@@ -251,17 +265,37 @@ func TestExecutionBearerTransportBindsBearerToExactTargetAndRedirectsNeverReceiv
 	if len(transport.material) != 0 {
 		t.Fatal("transport retained bearer material after destroy")
 	}
-	if _, err := transport.RoundTrip(foreign); err == nil || err.Error() != "bootstrap.execution_session_target_forbidden" {
-		t.Fatalf("destroyed transport error=%v", err)
-	}
+	forbiddenRequest(t, transport, foreign.URL.String())
 }
 
-func bootstrapSessionResolver(t *testing.T) (
-	*codexExecutionSessionResolver,
-	ports.AgentLaunchRequest,
-	ports.ExecutionSessionAuthority,
-	*bootstrapExecutionSessionCredentialStore,
-) {
+func forbiddenRequest(t *testing.T, transport http.RoundTripper, target string) *http.Request {
+	t.Helper()
+	request, err := http.NewRequest(http.MethodGet, target, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := transport.RoundTrip(request); err == nil || err.Error() != "bootstrap.execution_session_target_forbidden" {
+		t.Fatalf("target %q error=%v", target, err)
+	}
+	return request
+}
+
+func openBootstrapCredentialStore(t *testing.T, path string) *credentiallocal.Store {
+	t.Helper()
+	if err := os.Chmod(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	store, err := credentiallocal.Open(credentiallocal.Options{
+		Path: path, OwnerUID: os.Geteuid(), MaxStoreBytes: 1 << 20,
+		Now: func() time.Time { return time.Date(2026, 7, 23, 9, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return store
+}
+
+func bootstrapSessionResolver(t *testing.T) (*codexExecutionSessionResolver, ports.AgentLaunchRequest, ports.ExecutionSessionAuthority, *bootstrapExecutionSessionCredentialStore) {
 	t.Helper()
 	project, _ := goal.NewProjectRef("project:bootstrap-session")
 	goalRef, _ := goal.NewGoalRef("goal:bootstrap-session")

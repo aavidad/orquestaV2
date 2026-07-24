@@ -720,7 +720,7 @@ func validateConsumptionReceipt(receipt application.ActionConsumptionReceipt) er
 	}
 	switch receipt.Kind {
 	case application.ActionLaunchAgent, application.ActionObserveAgent, application.ActionStopAgent,
-		application.ActionPrepareWorkspace, application.ActionAdmitMailbox:
+		application.ActionPrepareWorkspace, application.ActionAdmitMailbox, application.ActionRevokeSession:
 		if receipt.MailboxMessageRef.String() != "" || receipt.ChangeRef.String() != "" {
 			return errors.New("sqlite.consumption_receipt_mailbox_unexpected")
 		}
@@ -760,7 +760,7 @@ func validateAction(action application.ActionRecord) error {
 	}
 	switch action.Kind {
 	case application.ActionLaunchAgent, application.ActionObserveAgent, application.ActionDeliverMailbox,
-		application.ActionPrepareWorkspace, application.ActionAdmitMailbox:
+		application.ActionPrepareWorkspace, application.ActionAdmitMailbox, application.ActionRevokeSession:
 		if action.ControlRef != "" || action.ChangeRef.String() != "" || action.ExpectedTargetOID != "" ||
 			action.ReviewGateDigest != "" || action.CouncilResolution != nil {
 			return errors.New("sqlite.action_scope_unexpected")
@@ -998,6 +998,10 @@ func validateRequeued(state application.ActionRequeuedState) error {
 		if state.Execution.State != application.ExecutionSucceeded {
 			return errors.New("sqlite.requeue_mailbox_admission_state_invalid")
 		}
+	case application.ActionRevokeSession:
+		if !applicationTerminalExecution(state.Execution.State) {
+			return errors.New("sqlite.requeue_execution_session_revocation_state_invalid")
+		}
 	default:
 		return errors.New("sqlite.requeue_action_kind_invalid")
 	}
@@ -1011,6 +1015,11 @@ func validateRequeued(state application.ActionRequeuedState) error {
 		}
 	}
 	return nil
+}
+
+func applicationTerminalExecution(state application.ExecutionState) bool {
+	return state == application.ExecutionSucceeded || state == application.ExecutionFailed ||
+		state == application.ExecutionCanceled || state == application.ExecutionStopped
 }
 
 func validateQuarantined(state application.ActionQuarantinedState) error {

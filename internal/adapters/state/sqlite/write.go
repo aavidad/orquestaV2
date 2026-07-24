@@ -444,7 +444,7 @@ func executionInsertArguments(execution application.ExecutionRecord) []any {
 	}
 }
 
-type executionSchema struct{ mailbox, governance, workspace, reviews, council bool }
+type executionSchema struct{ mailbox, governance, workspace, reviews, council, session bool }
 
 func readExecutionSchema(ctx context.Context, source queryer) (executionSchema, error) {
 	var schema executionSchema
@@ -453,7 +453,7 @@ func readExecutionSchema(ctx context.Context, source queryer) (executionSchema, 
 		value *bool
 	}{{"recipient_mailbox_retired", &schema.mailbox}, {"governance_version", &schema.governance},
 		{"execution_workspace_ref", &schema.workspace}, {"purpose", &schema.reviews},
-		{"council_subject_digest", &schema.council}} {
+		{"council_subject_digest", &schema.council}, {"execution_session_ref", &schema.session}} {
 		found, err := sqliteTableHasColumn(ctx, source, "executions", column.name)
 		if err != nil {
 			return executionSchema{}, mapDatabaseError(err)
@@ -537,7 +537,10 @@ WHERE ref = ? AND goal_ref = ? AND work_item_ref = ? AND state = ?
 	if err := requireOneRow(result); err != nil {
 		return err
 	}
-	return updateExecutionWorkspaceCAS(ctx, transaction, execution)
+	if err := updateExecutionWorkspaceCAS(ctx, transaction, execution); err != nil {
+		return err
+	}
+	return updateExecutionSessionCAS(ctx, transaction, execution)
 }
 
 func requireExecutionReviewIdentity(ctx context.Context, source queryer, execution application.ExecutionRecord) error {
@@ -593,6 +596,25 @@ WHERE ref=? AND goal_ref=? AND work_item_ref=? AND state=?`,
 	return requireOneRow(updated)
 }
 
+func updateExecutionSessionCAS(
+	ctx context.Context, transaction *sql.Tx, execution application.ExecutionRecord,
+) error {
+	persisted, err := sqliteTableHasColumn(ctx, transaction, "executions", "execution_session_ref")
+	if err != nil || !persisted {
+		return mapDatabaseError(err)
+	}
+	updated, err := transaction.ExecContext(ctx, `
+UPDATE executions SET execution_session_ref=?
+WHERE ref=? AND goal_ref=? AND work_item_ref=? AND state=?
+ AND (execution_session_ref='' OR execution_session_ref=?)`,
+		execution.ExecutionSessionRef.String(), execution.Ref.String(), execution.GoalRef.String(),
+		execution.WorkItemRef.String(), string(execution.State), execution.ExecutionSessionRef.String())
+	if err != nil {
+		return mapDatabaseError(err)
+	}
+	return requireOneRow(updated)
+}
+
 func acceptExecutionCAS(ctx context.Context, transaction *sql.Tx, execution application.ExecutionRecord) error {
 	result, err := transaction.ExecContext(ctx, `
 UPDATE executions
@@ -641,7 +663,10 @@ WHERE ref = ? AND goal_ref = ? AND work_item_ref = ? AND state = 'dispatching'
 	if err != nil {
 		return mapDatabaseError(err)
 	}
-	return requireOneRow(result)
+	if err := requireOneRow(result); err != nil {
+		return err
+	}
+	return updateExecutionSessionCAS(ctx, transaction, execution)
 }
 
 func updateGoalCAS(

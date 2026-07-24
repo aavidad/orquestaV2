@@ -14,13 +14,15 @@ type testExecutionSessionBroker struct {
 	at       time.Time
 }
 
-func (broker *testExecutionSessionBroker) Ensure(
-	_ context.Context,
-	request ports.ExecutionSessionEnsureRequest,
-) (ports.ExecutionSessionReceipt, error) {
+func (broker *testExecutionSessionBroker) Ensure(_ context.Context, request ports.ExecutionSessionEnsureRequest) (ports.ExecutionSessionReceipt, error) {
 	broker.requests = append(broker.requests, request)
 	authority, err := DeriveExecutionSessionAuthority(request, "execution_token")
 	return ports.ExecutionSessionReceipt{Authority: authority, EnsuredAt: broker.at}, err
+}
+
+func (broker *testExecutionSessionBroker) Revoke(_ context.Context, request ports.ExecutionSessionEnsureRequest) error {
+	_, err := DeriveExecutionSessionAuthority(request, "execution_token")
+	return err
 }
 
 func TestProcessLaunchEnsuresExactSessionAndCarriesOpaqueRef(t *testing.T) {
@@ -38,8 +40,8 @@ func TestProcessLaunchEnsuresExactSessionAndCarriesOpaqueRef(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := orchestrator.ProcessNext(ctx, "worker:execution-session-launch")
-	if err != nil || !result.Processed || len(broker.requests) != 1 {
+	if result, err := orchestrator.ProcessNext(ctx, "worker:execution-session-launch"); err != nil ||
+		!result.Processed || len(broker.requests) != 1 {
 		t.Fatalf("ProcessNext result=%+v ensures=%d err=%v", result, len(broker.requests), err)
 	}
 	record, err := repository.GetGoal(ctx, submitted.Record.Goal.Ref())
@@ -52,13 +54,15 @@ func TestProcessLaunchEnsuresExactSessionAndCarriesOpaqueRef(t *testing.T) {
 		t.Fatalf("Ensure request=%+v want=%+v", broker.requests[0], want)
 	}
 	agent.mu.Lock()
-	defer agent.mu.Unlock()
 	if len(agent.launchRequests) != 1 || agent.launchRequests[0].SessionRef.String() == "" {
+		agent.mu.Unlock()
 		t.Fatalf("launch requests=%+v", agent.launchRequests)
 	}
+	sessionRef := agent.launchRequests[0].SessionRef
+	agent.mu.Unlock()
 	authority, err := DeriveExecutionSessionAuthority(want, "execution_token")
-	if err != nil || agent.launchRequests[0].SessionRef != authority.SessionRef {
-		t.Fatalf("SessionRef=%s authority=%+v err=%v", agent.launchRequests[0].SessionRef, authority, err)
+	if err != nil || sessionRef != authority.SessionRef {
+		t.Fatalf("SessionRef=%s authority=%+v err=%v", sessionRef, authority, err)
 	}
 }
 

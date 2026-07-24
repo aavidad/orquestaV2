@@ -188,6 +188,10 @@ func TestCodexChildDeliveryUsesSameExecutionServicePrincipalAfterArtifactPersist
 		ctx, childObserve.Action.ExecutionRef, "execution_token",
 	)
 	sqliteTestNoError(t, err)
+	if _, err := repository.db.ExecContext(ctx, `UPDATE executions SET execution_session_ref=? WHERE ref=?`,
+		sourceBefore.SessionRef.String(), childObserve.Action.ExecutionRef.String()); err != nil {
+		t.Fatal(err)
+	}
 	childArtifact := succeedMailboxChildWithPostArtifact(
 		t, repository, childObserve, clock.Now(), true,
 	)
@@ -198,7 +202,7 @@ func TestCodexChildDeliveryUsesSameExecutionServicePrincipalAfterArtifactPersist
 	sourceAfter, err := repository.ExecutionSessionAuthority(
 		ctx, childObserve.Action.ExecutionRef, "execution_token",
 	)
-	if err != nil || !application.SameExecutionSessionAuthority(sourceBefore, sourceAfter) {
+	if err != nil || sourceBefore != sourceAfter {
 		t.Fatalf("post-artifact authority=%+v before=%+v err=%v", sourceAfter, sourceBefore, err)
 	}
 	parent, _ := persisted.Goal.WorkItem(fixture.parentRef)
@@ -374,6 +378,12 @@ FROM attestations WHERE goal_ref=? AND artifact_ref=?`,
 		admitClaim.Action.ExecutionRef != childObserve.Action.ExecutionRef {
 		t.Fatalf("post-artifact claim=%+v", admitClaim)
 	}
+	var revocations int
+	if err := repository.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM outbox
+WHERE execution_ref=? AND kind='revoke_execution_session'`,
+		childObserve.Action.ExecutionRef.String()).Scan(&revocations); err != nil || revocations != 0 {
+		t.Fatalf("credential revoked before handoff count=%d err=%v", revocations, err)
+	}
 	clock.Advance(time.Second)
 	sqliteTestNoError(t, repository.RecordPostArtifactMailboxAdmitted(
 		ctx, application.PostArtifactMailboxAdmittedState{
@@ -381,6 +391,11 @@ FROM attestations WHERE goal_ref=? AND artifact_ref=?`,
 			OperationAt: clock.Now(),
 		},
 	))
+	if err := repository.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM outbox
+WHERE execution_ref=? AND kind='revoke_execution_session' AND completed_at IS NULL`,
+		childObserve.Action.ExecutionRef.String()).Scan(&revocations); err != nil || revocations != 1 {
+		t.Fatalf("post-handoff revocation count=%d err=%v", revocations, err)
+	}
 	repository = restartMailboxTestRepository(t, repository, path, clock)
 	if _, err := repository.ExecutionSessionAuthority(
 		ctx, childObserve.Action.ExecutionRef, "execution_token",

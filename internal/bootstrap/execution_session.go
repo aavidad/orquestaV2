@@ -26,34 +26,19 @@ type codexExecutionSessionResolver struct {
 	endpoint  string
 }
 
-func newCodexExecutionSessionResolver(
-	authority application.ExecutionSessionAuthoritySource,
-	broker *executiontoken.Broker,
-	endpoint string,
-) (codex.SessionResolver, error) {
+func newCodexExecutionSessionResolver(authority application.ExecutionSessionAuthoritySource, broker *executiontoken.Broker, endpoint string) (codex.SessionResolver, error) {
 	if authority == nil || broker == nil || !validLoopbackMCPEndpoint(endpoint) {
 		return nil, errors.New("bootstrap.execution_session_resolver_invalid")
 	}
-	return &codexExecutionSessionResolver{
-		authority: authority,
-		broker:    broker,
-		endpoint:  endpoint,
-	}, nil
+	return &codexExecutionSessionResolver{authority: authority, broker: broker, endpoint: endpoint}, nil
 }
 
-func (resolver *codexExecutionSessionResolver) ResolveCodexSession(
-	ctx context.Context,
-	request ports.AgentLaunchRequest,
-) (codex.Session, error) {
+func (resolver *codexExecutionSessionResolver) ResolveCodexSession(ctx context.Context, request ports.AgentLaunchRequest) (codex.Session, error) {
 	if resolver == nil || resolver.authority == nil || resolver.broker == nil ||
 		request.SessionRef.String() == "" {
 		return codex.Session{}, errors.New("bootstrap.execution_session_unavailable")
 	}
-	authority, err := resolver.authority.ExecutionSessionAuthority(
-		ctx,
-		request.ExecutionRef,
-		executiontoken.AuthenticationMethod,
-	)
+	authority, err := resolver.authority.ExecutionSessionAuthority(ctx, request.ExecutionRef, executiontoken.AuthenticationMethod)
 	if err != nil || authority.SessionRef != request.SessionRef ||
 		!executionAuthorityMatchesLaunch(authority, request) {
 		return codex.Session{}, errors.New("bootstrap.execution_session_unavailable")
@@ -68,17 +53,10 @@ func (resolver *codexExecutionSessionResolver) ResolveCodexSession(
 		token.Destroy()
 		return codex.Session{}, errors.New("bootstrap.execution_session_unavailable")
 	}
-	return codex.Session{
-		Ref:         authority.SessionRef,
-		Endpoint:    resolver.endpoint,
-		BearerToken: token,
-	}, nil
+	return codex.Session{Ref: authority.SessionRef, Endpoint: resolver.endpoint, BearerToken: token}, nil
 }
 
-func executionAuthorityMatchesLaunch(
-	authority ports.ExecutionSessionAuthority,
-	request ports.AgentLaunchRequest,
-) bool {
+func executionAuthorityMatchesLaunch(authority ports.ExecutionSessionAuthority, request ports.AgentLaunchRequest) bool {
 	binding := authority.Request
 	return binding.ProjectRef == request.ProjectRef &&
 		binding.GoalRef == request.GoalRef &&
@@ -95,24 +73,17 @@ type loopbackPostArtifactMailboxAdmitter struct {
 	endpoint string
 }
 
-func newLoopbackPostArtifactMailboxAdmitter(
-	broker *executiontoken.Broker,
-	endpoint string,
-) (application.PostArtifactMailboxAdmitter, error) {
+func newLoopbackPostArtifactMailboxAdmitter(broker *executiontoken.Broker, endpoint string) (application.PostArtifactMailboxAdmitter, error) {
 	if broker == nil || !validLoopbackMCPEndpoint(endpoint) {
 		return nil, errors.New("bootstrap.post_artifact_mailbox_admitter_invalid")
 	}
 	return &loopbackPostArtifactMailboxAdmitter{broker: broker, endpoint: endpoint}, nil
 }
 
-func (admitter *loopbackPostArtifactMailboxAdmitter) AdmitPostArtifactMailbox(
-	ctx context.Context,
-	request application.PostArtifactMailboxAdmissionRequest,
-) (application.PostArtifactMailboxAdmissionReceipt, error) {
+func (admitter *loopbackPostArtifactMailboxAdmitter) AdmitPostArtifactMailbox(ctx context.Context, request application.PostArtifactMailboxAdmissionRequest) (application.PostArtifactMailboxAdmissionReceipt, error) {
 	if admitter == nil || admitter.broker == nil || ctx == nil ||
 		strings.TrimSpace(request.RequestRef) != request.RequestRef || request.RequestRef == "" {
-		return application.PostArtifactMailboxAdmissionReceipt{},
-			errors.New("bootstrap.post_artifact_mailbox_request_invalid")
+		return application.PostArtifactMailboxAdmissionReceipt{}, errors.New("bootstrap.post_artifact_mailbox_request_invalid")
 	}
 	var receipt application.PostArtifactMailboxAdmissionReceipt
 	err := admitter.broker.UseToken(ctx, request.Session, func(token []byte) error {
@@ -121,33 +92,23 @@ func (admitter *loopbackPostArtifactMailboxAdmitter) AdmitPostArtifactMailbox(
 		return callErr
 	})
 	if err != nil {
-		return application.PostArtifactMailboxAdmissionReceipt{},
-			errors.New("bootstrap.post_artifact_mailbox_unavailable")
+		return application.PostArtifactMailboxAdmissionReceipt{}, errors.New("bootstrap.post_artifact_mailbox_unavailable")
 	}
 	return receipt, nil
 }
 
-func callPostArtifactMailboxMCP(
-	ctx context.Context,
-	endpoint string,
-	token []byte,
-	request application.PostArtifactMailboxAdmissionRequest,
-) (application.PostArtifactMailboxAdmissionReceipt, error) {
+func callPostArtifactMailboxMCP(ctx context.Context, endpoint string, token []byte, request application.PostArtifactMailboxAdmissionRequest) (application.PostArtifactMailboxAdmissionReceipt, error) {
 	transport, err := newExecutionBearerTransport(endpoint, token)
 	if err != nil {
 		return application.PostArtifactMailboxAdmissionReceipt{}, err
 	}
 	defer transport.destroy()
-	httpClient := &http.Client{
-		Transport: transport,
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return errors.New("bootstrap.execution_session_redirect_forbidden")
-		},
-	}
-	client := sdkmcp.NewClient(
-		&sdkmcp.Implementation{Name: "orquesta-post-artifact-mailbox", Version: "1"},
-		nil,
-	)
+	httpClient := &http.Client{Transport: transport, CheckRedirect: func(*http.Request, []*http.Request) error {
+		return errors.New("bootstrap.execution_session_redirect_forbidden")
+	}}
+	client := sdkmcp.NewClient(&sdkmcp.Implementation{
+		Name: "orquesta-post-artifact-mailbox", Version: "1",
+	}, nil)
 	session, err := client.Connect(ctx, &sdkmcp.StreamableClientTransport{
 		Endpoint: endpoint, HTTPClient: httpClient,
 	}, nil)
@@ -176,8 +137,7 @@ func callPostArtifactMailboxMCP(
 		},
 	})
 	if err != nil || result == nil || result.IsError {
-		return application.PostArtifactMailboxAdmissionReceipt{},
-			errors.New("bootstrap.post_artifact_mailbox_call_failed")
+		return application.PostArtifactMailboxAdmissionReceipt{}, errors.New("bootstrap.post_artifact_mailbox_call_failed")
 	}
 	encoded, err := json.Marshal(result.StructuredContent)
 	if err != nil {
@@ -187,8 +147,7 @@ func callPostArtifactMailboxMCP(
 		Result commandcore.Result `json:"result"`
 	}
 	if err := json.Unmarshal(encoded, &output); err != nil || output.Result.Failure != nil {
-		return application.PostArtifactMailboxAdmissionReceipt{},
-			errors.New("bootstrap.post_artifact_mailbox_result_invalid")
+		return application.PostArtifactMailboxAdmissionReceipt{}, errors.New("bootstrap.post_artifact_mailbox_result_invalid")
 	}
 	var data struct {
 		Receipt struct {
@@ -202,18 +161,14 @@ func callPostArtifactMailboxMCP(
 	}
 	goalRef, err := goal.NewGoalRef(data.Receipt.GoalRef)
 	if err != nil || goalRef != request.GoalRef {
-		return application.PostArtifactMailboxAdmissionReceipt{},
-			errors.New("bootstrap.post_artifact_mailbox_receipt_invalid")
+		return application.PostArtifactMailboxAdmissionReceipt{}, errors.New("bootstrap.post_artifact_mailbox_receipt_invalid")
 	}
 	messageRef, err := application.NewMailboxMessageRef(data.Receipt.MessageRef)
 	if err != nil || data.Receipt.AdmissionRef == "" {
-		return application.PostArtifactMailboxAdmissionReceipt{},
-			errors.New("bootstrap.post_artifact_mailbox_receipt_invalid")
+		return application.PostArtifactMailboxAdmissionReceipt{}, errors.New("bootstrap.post_artifact_mailbox_receipt_invalid")
 	}
 	return application.PostArtifactMailboxAdmissionReceipt{
-		GoalRef:      goalRef,
-		MessageRef:   messageRef,
-		AdmissionRef: data.Receipt.AdmissionRef,
+		GoalRef: goalRef, MessageRef: messageRef, AdmissionRef: data.Receipt.AdmissionRef,
 	}, nil
 }
 
@@ -239,8 +194,8 @@ func newExecutionBearerTransport(endpoint string, material []byte) (*executionBe
 		return nil, errors.New("bootstrap.execution_session_transport_invalid")
 	}
 	return &executionBearerTransport{
-		base: http.DefaultTransport, scheme: parsed.Scheme, host: parsed.Host,
-		path: parsed.EscapedPath(), material: append([]byte(nil), material...),
+		base: http.DefaultTransport, scheme: parsed.Scheme, host: parsed.Host, path: parsed.EscapedPath(),
+		material: append([]byte(nil), material...),
 	}, nil
 }
 

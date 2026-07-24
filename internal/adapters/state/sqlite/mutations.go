@@ -262,6 +262,18 @@ WHERE receipt.ref=? AND receipt.mailbox_message_ref=? AND
 	})
 }
 
+func (repository *Repository) RecordExecutionSessionRevoked(
+	ctx context.Context, state application.ExecutionSessionRevokedState,
+) error {
+	if state.Claim.Action.Kind != application.ActionRevokeSession ||
+		state.Claim.Action.Ref != "action:revoke-execution-session:"+state.Claim.Action.ExecutionRef.String() {
+		return invalid(errors.New("sqlite.execution_session_revocation_invalid"))
+	}
+	return repository.mutate(ctx, state.Claim, state.OperationAt, func(transaction *sql.Tx) error {
+		return completeClaim(ctx, transaction, state.Claim, state.OperationAt, "", false)
+	})
+}
+
 func (repository *Repository) RecordGoalSucceeded(ctx context.Context, state application.GoalSucceededState) error {
 	if _, err := validateSucceeded(state); err != nil {
 		return invalid(err)

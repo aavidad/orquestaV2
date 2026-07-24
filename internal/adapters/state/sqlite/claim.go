@@ -210,7 +210,7 @@ func claimCandidateMatches(
 ) (bool, error) {
 	if candidate.action.Kind == application.ActionPrepareWorkspace || candidate.action.Kind == application.ActionCommitChange ||
 		candidate.action.Kind == application.ActionAttestTest || candidate.action.Kind == application.ActionIntegrateChange ||
-		candidate.action.Kind == application.ActionAdmitMailbox {
+		candidate.action.Kind == application.ActionAdmitMailbox || candidate.action.Kind == application.ActionRevokeSession {
 		return true, nil
 	}
 	// Terminal stops settle locally; no provider identity is needed.
@@ -389,7 +389,7 @@ LEFT JOIN fairness_cursors goal_cursor
 WHERE o.completed_at IS NULL
   AND o.retired_at IS NULL
   AND o.quarantined_at IS NULL
-  AND o.kind IN ('launch_agent', 'observe_agent', 'stop_agent', 'prepare_workspace', 'commit_change', 'attest_test', 'integrate_change', 'admit_mailbox')
+  AND o.kind IN ('launch_agent', 'observe_agent', 'stop_agent', 'prepare_workspace', 'commit_change', 'attest_test', 'integrate_change', 'admit_mailbox', 'revoke_execution_session')
   AND (o.governance_version = 1 OR o.kind = 'observe_agent'
        OR (o.kind = 'stop_agent' AND e.state IN ('succeeded', 'failed', 'canceled', 'stopped'))
        OR (o.governance_version = 0 AND o.last_error_code <> 'governance.legacy_reauthorization_required'))
@@ -424,6 +424,7 @@ WHERE o.completed_at IS NULL
        AND attestation.work_item_generation=o.work_item_generation
   )))
   AND (o.kind <> 'admit_mailbox' OR (e.state='succeeded' AND wi.state='succeeded' AND wi.handoff_required=1))
+  AND (o.kind <> 'revoke_execution_session' OR e.state IN ('succeeded','failed','canceled','stopped'))
   AND (o.kind <> 'observe_agent' OR NOT EXISTS (
       SELECT 1 FROM outbox stop
       WHERE stop.goal_ref = o.goal_ref AND stop.execution_ref = o.execution_ref
@@ -628,7 +629,7 @@ func candidateNeedsAgentRequirements(candidate claimCandidate) bool {
 	switch candidate.action.Kind {
 	case application.ActionPrepareWorkspace, application.ActionCommitChange,
 		application.ActionAttestTest, application.ActionIntegrateChange,
-		application.ActionAdmitMailbox:
+		application.ActionAdmitMailbox, application.ActionRevokeSession:
 		return false
 	default:
 		return !terminalStopSettlement(candidate)
@@ -759,7 +760,63 @@ WHERE ref = ? AND claim_token = ? AND claimed_by = ? AND claimed_until = ?
 	if effect != nil {
 		receipt.EffectReceiptRef = effect.Ref
 	}
-	return insertActionConsumptionReceipt(ctx, transaction, receipt, version, effect)
+	if err := insertActionConsumptionReceipt(ctx, transaction, receipt, version, effect); err != nil {
+		return err
+	}
+	if quarantined {
+		return nil
+	}
+	return scheduleExecutionSessionRevocation(ctx, transaction, claim.Action.GoalRef,
+		claim.Action.WorkItemRef, claim.Action.ExecutionRef, claim.Action.Kind, at)
+}
+
+func scheduleExecutionSessionRevocation(
+	ctx context.Context, tx *sql.Tx, goalRef goal.GoalRef, itemRef goal.WorkItemRef,
+	executionRef goal.ExecutionRef, completedKind application.ActionKind, at time.Time,
+) error {
+	if completedKind == application.ActionRevokeSession {
+		return nil
+	}
+	supported, err := sqliteTableHasColumn(ctx, tx, "outbox", "admission_request_ref")
+	if err != nil || !supported {
+		return err
+	}
+	var state, purpose string
+	var handoff int64
+	var plan, revision int64
+	err = tx.QueryRowContext(ctx, `SELECT e.state,e.purpose,w.handoff_required,e.plan_generation,w.revision
+FROM executions e JOIN work_items w ON w.goal_ref=e.goal_ref AND w.ref=e.work_item_ref
+WHERE e.goal_ref=? AND e.work_item_ref=? AND e.ref=? AND e.execution_session_ref<>''`,
+		goalRef.String(), itemRef.String(), executionRef.String(),
+	).Scan(&state, &purpose, &handoff, &plan, &revision)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return mapDatabaseError(err)
+	}
+	if state != string(application.ExecutionSucceeded) && state != string(application.ExecutionFailed) &&
+		state != string(application.ExecutionCanceled) && state != string(application.ExecutionStopped) {
+		return nil
+	}
+	if state == string(application.ExecutionSucceeded) && handoff == 1 &&
+		(purpose == string(application.ExecutionPurposeWork) || purpose == string(application.ExecutionPurposeAuthor)) &&
+		completedKind != application.ActionAdmitMailbox {
+		return nil
+	}
+	ref := "action:revoke-execution-session:" + executionRef.String()
+	var exists int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM outbox WHERE ref=?`, ref).Scan(&exists); err != nil {
+		return mapDatabaseError(err)
+	}
+	if exists != 0 {
+		return nil
+	}
+	return insertAction(ctx, tx, application.ActionRecord{
+		Ref: ref, Kind: application.ActionRevokeSession, GoalRef: goalRef,
+		WorkItemRef: itemRef, ExecutionRef: executionRef,
+		PlanGeneration: goal.PlanGeneration(plan), WorkItemGeneration: goal.Revision(revision), AvailableAt: at,
+	})
 }
 
 func insertActionConsumptionReceipt(
