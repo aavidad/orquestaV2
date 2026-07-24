@@ -48,6 +48,11 @@ func (broker *sqliteExecutionSessionBroker) Revoke(
 }
 func TestExecutionServicePrincipalExactScopeRevocationAndRestart(t *testing.T) {
 	ctx, system := context.Background(), newSQLiteV15System(t, 2)
+	broker := &sqliteExecutionSessionBroker{at: system.clock.Now()}
+	system.orchestrator = sqliteV22Orchestrator(t, system, broker)
+	if persisted, err := sqliteTableHasColumn(ctx, system.repository.db, "executions", "execution_session_ref"); err != nil || !persisted {
+		t.Fatalf("execution_session_ref schema persisted=%t err=%v", persisted, err)
+	}
 	created := system.submit(t, "request:v22-execution-authority")
 	queued := created.Record.Executions[0]
 	if _, err := system.repository.ExecutionSessionAuthority(ctx, queued.Ref, "execution_token"); !application.IsStateError(err, application.StateNotFound) {
@@ -55,6 +60,15 @@ func TestExecutionServicePrincipalExactScopeRevocationAndRestart(t *testing.T) {
 	}
 	if result, err := system.orchestrator.ProcessNext(ctx, "worker:v22-execution-authority"); err != nil || !result.Processed {
 		t.Fatalf("ProcessNext result=%+v err=%v", result, err)
+	}
+	if broker.ensures != 1 {
+		t.Fatalf("execution session ensures=%d", broker.ensures)
+	}
+	var durableSession string
+	if err := system.repository.db.QueryRowContext(ctx,
+		`SELECT execution_session_ref FROM executions WHERE ref=?`, queued.Ref.String(),
+	).Scan(&durableSession); err != nil {
+		t.Fatal(err)
 	}
 	record, err := system.repository.GetGoal(ctx, created.Record.Goal.Ref())
 	if err != nil || len(record.Executions) != 1 {
@@ -64,6 +78,10 @@ func TestExecutionServicePrincipalExactScopeRevocationAndRestart(t *testing.T) {
 	authority, err := system.repository.ExecutionSessionAuthority(ctx, execution.Ref, "execution_token")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if durableSession != authority.SessionRef.String() || execution.ExecutionSessionRef != authority.SessionRef {
+		t.Fatalf("durable execution session row=%s record=%s authority=%s",
+			durableSession, execution.ExecutionSessionRef, authority.SessionRef)
 	}
 	if authority.Request != application.ExecutionSessionRequest(record.Goal, execution) {
 		t.Fatalf("authority tuple=%+v execution=%+v", authority, execution)
@@ -87,6 +105,14 @@ func TestExecutionServicePrincipalExactScopeRevocationAndRestart(t *testing.T) {
 		t.Fatalf("human substitution err=%v", err)
 	}
 	restartSQLiteV15System(t, system)
+	record, err = system.repository.GetGoal(ctx, created.Record.Goal.Ref())
+	if err != nil || len(record.Executions) != 1 {
+		t.Fatalf("restart GetGoal executions=%d err=%v", len(record.Executions), err)
+	}
+	if record.Executions[0].ExecutionSessionRef != authority.SessionRef {
+		t.Fatalf("restart durable execution session=%s authority=%s",
+			record.Executions[0].ExecutionSessionRef, authority.SessionRef)
+	}
 	resolved, err = system.repository.ResolveExecution(ctx, authority.ServicePrincipal, system.project, execution.Ref)
 	if err != nil || resolved != execution.Ref {
 		t.Fatalf("restart ResolveExecution resolved=%s err=%v", resolved, err)

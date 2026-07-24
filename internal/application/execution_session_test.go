@@ -60,8 +60,9 @@ func TestProcessLaunchEnsuresExactSessionAndCarriesOpaqueRef(t *testing.T) {
 	sessionRef := agent.launchRequests[0].SessionRef
 	agent.mu.Unlock()
 	authority, err := DeriveExecutionSessionAuthority(want, "execution_token")
-	if err != nil || sessionRef != authority.SessionRef {
-		t.Fatalf("SessionRef=%s authority=%+v err=%v", sessionRef, authority, err)
+	if err != nil || sessionRef != authority.SessionRef || execution.ExecutionSessionRef != sessionRef {
+		t.Fatalf("SessionRef=%s durable=%s authority=%+v err=%v",
+			sessionRef, execution.ExecutionSessionRef, authority, err)
 	}
 }
 
