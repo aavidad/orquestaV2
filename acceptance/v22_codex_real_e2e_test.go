@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -114,9 +115,14 @@ func TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess(t *testing.T) {
 	h.stop(); h.census()
 }
 
+func TestV22TrustedAttestorToolchainPrerequisite(t *testing.T) {
+	root := v22TrustedToolchainRoot(t)
+	v22Require(t, filepath.IsAbs(root), "V22 trusted Go toolchain root must be absolute: %q", root)
+}
+
 func v22Start(t *testing.T, ctx context.Context) *v22Harness {
 	t.Helper(); root := t.TempDir(); codex := v22Must(exec.LookPath("codex")); git := v22Must(exec.LookPath("git")); goTool := v22Must(exec.LookPath("go"))
-	bwrap, toolchain := v22AttestorPrerequisites(t, ctx, goTool)
+	bwrap, toolchain := v22AttestorPrerequisites(t)
 	v22Seed(t, ctx, root, git)
 	h := &v22Harness{t: t, root: root, binary: filepath.Join(root, "orquesta"), config: filepath.Join(root, "orquesta.toml"), state: filepath.Join(root, "state", "orquesta.sqlite"), endpoint: "http://127.0.0.1:" + v22Port(t) + "/mcp"}
 	v22Require(t, os.WriteFile(h.config, []byte(v22Config(root, strings.TrimSuffix(h.endpoint, "/mcp")[len("http://127.0.0.1:"):], codex, bwrap, toolchain)), 0o600) == nil, "write V22 config")
@@ -548,14 +554,31 @@ func v22Config(root, port, codex, bwrap, toolchain string) string {
 	template := "[server]\nlisten = \"127.0.0.1:%s\"\nshutdown_timeout = \"10s\"\n[state.sqlite]\npath = %s\n[artifact.filesystem]\nroot = %s\n[credentials.local]\npath = %s\n[runtime]\nprovider = \"codex\"\nmax_output_bytes = 1048576\n[runtime.codex]\ncommand = %s\ntimeout = \"10m\"\nmax_concurrent_executions = 4\nwork_root = %s\n[workspace.local]\nroot = %s\n[repository.local]\nseed_path = %s\ntarget_ref = \"refs/heads/main\"\n[test_attestor]\nprovider = \"bubblewrap\"\ntimeout = \"2m\"\n[test_attestor.bubblewrap]\ncommand = %s\n[test_attestor.go]\ntoolchain_root = %s\n[test_attestor.resources]\ncgroup_root = \"/sys/fs/cgroup\"\n[identity]\nlocal_token_path = %s\n[project]\ndefault = \"project:v22-real\"\n[scheduler]\npoll_interval = \"50ms\"\nobservation_interval = \"100ms\"\nexecution_timeout = \"11m\"\nattest_test_claim_lease = \"5m\"\n[config]\neffective_path = %s\n"
 	return fmt.Sprintf(template, port, q(filepath.Join(root, "state", "orquesta.sqlite")), q(filepath.Join(root, "artifacts")), q(filepath.Join(root, "secrets", "credentials.json")), q(codex), q(filepath.Join(root, "work")), q(filepath.Join(root, "workspaces")), q(filepath.Join(root, "seed")), q(bwrap), q(toolchain), q(filepath.Join(root, "secrets", "local-owner.token")), q(filepath.Join(root, "effective.json")))
 }
-func v22AttestorPrerequisites(t *testing.T, ctx context.Context, goTool string) (string, string) {
+func v22AttestorPrerequisites(t *testing.T) (string, string) {
 	t.Helper(); bwrap, err := exec.LookPath("bwrap")
 	v22Require(t, err == nil, "V22 requires real bubblewrap test attestor: %v", err)
-	output, err := exec.CommandContext(ctx, goTool, "env", "GOROOT").Output()
-	v22Require(t, err == nil, "V22 resolve Go toolchain root: %v", err)
-	toolchain := strings.TrimSpace(string(output))
+	toolchain := v22TrustedToolchainRoot(t)
 	v22Require(t, filepath.IsAbs(bwrap) && filepath.IsAbs(toolchain), "V22 invalid bwrap/GOROOT: %q %q", bwrap, toolchain)
 	return bwrap, toolchain
+}
+func v22TrustedToolchainRoot(t *testing.T) string {
+	t.Helper()
+	for _, candidate := range []string{"/usr/local/go", runtime.GOROOT()} {
+		root, rootErr := os.Lstat(candidate)
+		binary, binaryErr := os.Lstat(filepath.Join(candidate, "bin", "go"))
+		if rootErr != nil || binaryErr != nil {
+			continue
+		}
+		rootStat, rootOK := root.Sys().(*syscall.Stat_t)
+		binaryStat, binaryOK := binary.Sys().(*syscall.Stat_t)
+		if root.IsDir() && binary.Mode().IsRegular() &&
+			rootOK && binaryOK && rootStat.Uid == 0 && binaryStat.Uid == 0 &&
+			root.Mode().Perm()&0o022 == 0 && binary.Mode().Perm()&0o022 == 0 && binary.Mode().Perm()&0o111 != 0 {
+			return candidate
+		}
+	}
+	t.Fatal("V22_GATE_REAL_E2E_TOOLCHAIN_UNSAFE: root-owned immutable Go toolchain unavailable")
+	return ""
 }
 func v22Seed(t *testing.T, ctx context.Context, root, git string) {
 	seed := filepath.Join(root, "seed")
