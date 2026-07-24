@@ -510,7 +510,7 @@ func (h *v22Harness) census() {
 func (h *v22Harness) liveProcesses() []v22ProcessRecord {
 	records, live := v22ProcessRecords(h.t, h.root), []v22ProcessRecord{}
 	for _, record := range records {
-		alive, err := v22ProcessAlive(record)
+		alive, err := v22ProcessGroupAlive(record)
 		if err != nil {
 			h.t.Fatal(err)
 		}

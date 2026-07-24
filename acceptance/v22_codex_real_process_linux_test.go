@@ -105,7 +105,7 @@ func v22ProcessAlive(record v22ProcessRecord) (bool, error) {
 func v22AssertProcessGone(t *testing.T, record v22ProcessRecord) {
 	t.Helper()
 	for until := time.Now().Add(20 * time.Second); time.Now().Before(until); time.Sleep(50 * time.Millisecond) {
-		if live, err := v22ProcessAlive(record); err != nil {
+		if live, err := v22ProcessGroupAlive(record); err != nil {
 			t.Fatal(err)
 		} else if !live {
 			return
@@ -155,7 +155,22 @@ func v22ReadStopJSON(t *testing.T, path string, target any) {
 }
 
 func v22KillExact(record v22ProcessRecord) {
-	if live, _ := v22ProcessAlive(record); live {
+	if live, _ := v22ProcessGroupAlive(record); live {
 		_ = syscall.Kill(-record.PGID, syscall.SIGKILL)
 	}
+}
+
+func v22ProcessGroupAlive(record v22ProcessRecord) (bool, error) {
+	boot, err := os.ReadFile("/proc/sys/kernel/random/boot_id")
+	if err != nil || strings.TrimSpace(string(boot)) != record.Boot {
+		return false, err
+	}
+	err = syscall.Kill(-record.PGID, 0)
+	if err == nil || errors.Is(err, syscall.EPERM) {
+		return true, nil
+	}
+	if errors.Is(err, syscall.ESRCH) {
+		return false, nil
+	}
+	return false, err
 }
