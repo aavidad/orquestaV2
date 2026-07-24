@@ -22,7 +22,7 @@ for path in "${changed[@]}"; do
     esac
   elif [[ "$base_ref" == "665ef446a32a7f0512255640fa99b2e7edd9f29d" ]]; then
     case "$path" in
-      acceptance/fixtures/v22_codex_e2e.json|acceptance/v21_i18n_test.go|acceptance/v22_codex_e2e_support_test.go|acceptance/v22_codex_e2e_test.go|acceptance/v22_codex_real_e2e_test.go|acceptance/v22_simplicity_budget_test.go|\
+      acceptance/fixtures/v22_codex_e2e.json|acceptance/v20_simplicity_budget_test.go|acceptance/v21_i18n_test.go|acceptance/v21_simplicity_budget_test.go|acceptance/v22_codex_e2e_support_test.go|acceptance/v22_codex_e2e_test.go|acceptance/v22_codex_real_e2e_test.go|acceptance/v22_simplicity_budget_test.go|\
       docs/inventario_bugs_orquesta_2026-06-30.md|docs/reconstruccion/analisis_y_contrato_v22_codex_e2e.md|docs/reconstruccion/handoff_v22_sesion_2026-07-23.md|docs/reconstruccion/manual_revision_claude_v22.md|\
       internal/adapters/agent/codex/adapter.go|internal/adapters/agent/codex/adapter_integration_test.go|internal/adapters/agent/codex/config.go|internal/adapters/agent/codex/control_linux_test.go|internal/adapters/agent/codex/credential.go|internal/adapters/agent/codex/persistence.go|internal/adapters/agent/codex/process.go|internal/adapters/agent/codex/prompt.go|internal/adapters/agent/codex/prompt_test.go|internal/adapters/agent/codex/session.go|internal/adapters/agent/codex/session_test.go|\
       internal/adapters/auth/executiontoken/broker.go|internal/adapters/auth/executiontoken/errors.go|internal/adapters/auth/executiontoken/provider.go|internal/adapters/auth/executiontoken/provider_test.go|internal/adapters/auth/executiontoken/routed_provider.go|internal/adapters/auth/executiontoken/routed_provider_test.go|\
