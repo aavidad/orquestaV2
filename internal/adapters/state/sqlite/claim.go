@@ -763,9 +763,6 @@ WHERE ref = ? AND claim_token = ? AND claimed_by = ? AND claimed_until = ?
 	if err := insertActionConsumptionReceipt(ctx, transaction, receipt, version, effect); err != nil {
 		return err
 	}
-	if quarantined {
-		return nil
-	}
 	return scheduleExecutionSessionRevocation(ctx, transaction, claim.Action.GoalRef,
 		claim.Action.WorkItemRef, claim.Action.ExecutionRef, claim.Action.Kind, at)
 }
