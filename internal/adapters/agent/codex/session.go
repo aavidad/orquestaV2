@@ -11,11 +11,8 @@ import (
 	"orquesta/internal/ports"
 )
 
-// SessionResolver is adapter-local on purpose. It receives the exact launch
-// identity and resolves a per-execution opaque ref into ephemeral transport
-// material immediately before a child process starts.
-// Neither the endpoint nor token is written to a goal, journal, receipt, prompt
-// or provider-neutral port.
+// SessionResolver turns exact launch identity into ephemeral per-execution
+// transport material; no endpoint or token enters provider-neutral state.
 type SessionResolver interface {
 	ResolveCodexSession(context.Context, ports.AgentLaunchRequest) (Session, error)
 }
@@ -115,20 +112,18 @@ func validSessionEndpoint(raw string) bool {
 		parsed.ForceQuery || parsed.Fragment != "" {
 		return false
 	}
-	if parsed.Scheme == "https" {
-		return true
-	}
-	return parsed.Scheme == "http" && net.ParseIP(parsed.Hostname()) != nil && net.ParseIP(parsed.Hostname()).IsLoopback()
+	return parsed.Scheme == "https" ||
+		parsed.Scheme == "http" && net.ParseIP(parsed.Hostname()) != nil &&
+			net.ParseIP(parsed.Hostname()).IsLoopback()
 }
 
 func (adapter *Adapter) environmentWithSession(base []string, session *resolvedSession) []string {
-	environment := append([]string(nil), base...)
 	if session == nil {
-		return environment
+		return append([]string(nil), base...)
 	}
 	material := session.token.Bytes()
 	defer clearBytes(material)
-	return append(environment, adapter.config.MCPBearerTokenEnvVar+"="+string(material))
+	return append(append([]string(nil), base...), adapter.config.MCPBearerTokenEnvVar+"="+string(material))
 }
 
 func (adapter *Adapter) preflightSessionLaunch(session *resolvedSession, request ports.AgentLaunchRequest) error {
@@ -162,8 +157,6 @@ func sessionArguments(session *resolvedSession, bearerTokenEnvVar string) []stri
 	if session == nil {
 		return nil
 	}
-	return []string{
-		"--config", `mcp_servers.orquesta.url="` + session.endpoint + `"`,
-		"--config", `mcp_servers.orquesta.bearer_token_env_var="` + bearerTokenEnvVar + `"`,
-	}
+	return []string{"--config", `mcp_servers.orquesta.url="` + session.endpoint + `"`,
+		"--config", `mcp_servers.orquesta.bearer_token_env_var="` + bearerTokenEnvVar + `"`}
 }

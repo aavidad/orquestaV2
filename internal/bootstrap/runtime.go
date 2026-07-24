@@ -122,9 +122,7 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		return err
 	}
 	openIdentity := func() error {
-		identityComposition, err = composeIdentityRuntime(
-			ctx, setup.snapshot, options.IdentityHTTPClient,
-		)
+		identityComposition, err = composeIdentityRuntime(ctx, setup.snapshot, options.IdentityHTTPClient)
 		return err
 	}
 	openCredentials := func() error {
@@ -134,24 +132,12 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		}
 		return err
 	}
+	buildSteps := []func() error{openIdentity, openCredentials, openAgent}
 	if options.AgentFactory != nil {
-		if err := openAgent(); err != nil {
-			return nil, err
-		}
-		if err := openIdentity(); err != nil {
-			return nil, err
-		}
-		if err := openCredentials(); err != nil {
-			return nil, err
-		}
-	} else {
-		if err := openIdentity(); err != nil {
-			return nil, err
-		}
-		if err := openCredentials(); err != nil {
-			return nil, err
-		}
-		if err := openAgent(); err != nil {
+		buildSteps[0], buildSteps[1], buildSteps[2] = openAgent, openIdentity, openCredentials
+	}
+	for _, step := range buildSteps {
+		if err := step(); err != nil {
 			return nil, err
 		}
 	}
@@ -303,10 +289,7 @@ func openBuildListener(snapshot config.Snapshot, listener net.Listener) (net.Lis
 	return listener, nil
 }
 
-func openBuildCredentialStore(
-	snapshot config.Snapshot,
-	clock application.Clock,
-) (*credentiallocal.Store, error) {
+func openBuildCredentialStore(snapshot config.Snapshot, clock application.Clock) (*credentiallocal.Store, error) {
 	return credentiallocal.Open(credentiallocal.Options{
 		Path: snapshot.CredentialsLocalPath(), OwnerUID: os.Geteuid(),
 		MaxStoreBytes: snapshot.CredentialsLocalMaxDocumentBytes(), Now: clock.Now,
@@ -527,11 +510,9 @@ func buildOrchestratorDependencies(
 	testAttestor buildTestAttestorComposition,
 	execution ...executionRuntimeComposition,
 ) application.Dependencies {
-	var executionSessions ports.ExecutionSessionBroker
-	var postArtifactMailbox application.PostArtifactMailboxAdmitter
+	var composition executionRuntimeComposition
 	if len(execution) == 1 {
-		executionSessions = execution[0].sessions
-		postArtifactMailbox = execution[0].postArtifactMailbox
+		composition = execution[0]
 	}
 	return application.Dependencies{
 		State: repository, Access: repository,
@@ -548,7 +529,7 @@ func buildOrchestratorDependencies(
 		EffectApprovalTTL:     setup.snapshot.GovernanceEffectApprovalTTL(), BudgetPolicy: setup.budgetPolicy,
 		ObservationDelay: setup.snapshot.SchedulerObservationInterval(), ExecutionTimeout: setup.snapshot.SchedulerExecutionTimeout(),
 		AgentCapabilities: capabilities,
-		ExecutionSessions: executionSessions, PostArtifactMailbox: postArtifactMailbox,
+		ExecutionSessions: composition.sessions, PostArtifactMailbox: composition.postArtifactMailbox,
 	}
 }
 

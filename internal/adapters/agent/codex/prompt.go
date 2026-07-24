@@ -8,32 +8,19 @@ import (
 	"orquesta/internal/ports"
 )
 
-// AgentPrompt contains the complete human-facing prompt payload. Protocol
-// identity and output schema stay outside this type and remain provider-stable.
+// AgentPrompt contains human-facing data; protocol identity stays provider-stable.
 type AgentPrompt struct {
-	ProjectRef         string
-	GoalRef            string
-	WorkItemRef        string
-	ExecutionRef       string
-	PlanGeneration     string
-	AppSpecGeneration  string
-	Objective          string
-	PhaseRef           string
-	PhaseKey           string
-	PhaseTemplateRef   string
-	PhaseInputRefs     string
-	PhaseCriterionRefs string
-	RoleKey            string
-	SkillRefs          string
-	ToolRefs           string
-	CapabilityRefs     string
-	WriteSet           string
-	OutputContract     string
-	ArtifactMediaType  string
+	ProjectRef, GoalRef, WorkItemRef, ExecutionRef string
+	PlanGeneration, AppSpecGeneration              string
+	Objective                                      string
+	PhaseRef, PhaseKey, PhaseTemplateRef           string
+	PhaseInputRefs, PhaseCriterionRefs             string
+	RoleKey                                        string
+	SkillRefs, ToolRefs, CapabilityRefs            string
+	WriteSet, OutputContract, ArtifactMediaType    string
 }
 
-// PromptRenderer is supplied by composition. The Codex adapter owns neither
-// locale selection nor a message catalog.
+// PromptRenderer keeps locale and catalog ownership in composition.
 type PromptRenderer interface {
 	RenderAgentPrompt(AgentPrompt) (string, error)
 }
