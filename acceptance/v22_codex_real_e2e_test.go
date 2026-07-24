@@ -48,6 +48,16 @@ type v22ExecutionProjection struct {
 	App            uint64 `json:"app_spec_generation"`
 	MailboxRetired bool   `json:"recipient_mailbox_retired"`
 }
+type v22WorkProjection struct {
+	Ref          string   `json:"work_item_ref"`
+	State        string   `json:"state"`
+	Parent       string   `json:"parent_work_item_ref"`
+	Handoff      bool     `json:"handoff_required"`
+	Execution    string   `json:"execution_ref"`
+	Artifacts    []string `json:"artifact_refs"`
+	Attestations []string `json:"attestation_refs"`
+	Interrupt    string   `json:"interrupt_code"`
+}
 type v22GoalProjection struct {
 	Goal struct {
 		Ref      string `json:"goal_ref"`
@@ -57,20 +67,11 @@ type v22GoalProjection struct {
 		App      uint64 `json:"app_spec_generation"`
 		Hash     string `json:"spec_hash"`
 	} `json:"goal"`
-	ExecutionCount int `json:"execution_count"`
-	ArtifactCount  int `json:"artifact_count"`
-	WorkItems      []struct {
-		Ref          string   `json:"work_item_ref"`
-		State        string   `json:"state"`
-		Parent       string   `json:"parent_work_item_ref"`
-		Handoff      bool     `json:"handoff_required"`
-		Execution    string   `json:"execution_ref"`
-		Artifacts    []string `json:"artifact_refs"`
-		Attestations []string `json:"attestation_refs"`
-		Interrupt    string   `json:"interrupt_code"`
-	} `json:"work_items"`
-	Executions   []v22ExecutionProjection `json:"executions"`
-	Attestations []struct {
+	ExecutionCount int                      `json:"execution_count"`
+	ArtifactCount  int                      `json:"artifact_count"`
+	WorkItems      []v22WorkProjection      `json:"work_items"`
+	Executions     []v22ExecutionProjection `json:"executions"`
+	Attestations   []struct {
 		Ref       string `json:"attestation_ref"`
 		Verdict   string `json:"verdict"`
 		Work      string `json:"work_item_ref"`
@@ -213,7 +214,7 @@ func v22Start(t *testing.T, ctx context.Context) *v22Harness {
 	}
 	t.Cleanup(h.close) // Registered before any owned process can be launched.
 	build := exec.CommandContext(ctx, goTool, "build", "-mod=vendor", "-trimpath", "-buildvcs=false", "-o", h.binary, "./cmd/orquesta")
-	build.Dir = v22Root(t)
+	build.Dir = evidenceRepositoryRoot(t)
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build external cmd/orquesta: %v\n%s", err, out)
 	}
@@ -608,16 +609,7 @@ func v22AssertStopped(t *testing.T, b v22GoalProjection, execution v22ExecutionP
 
 func v22AssertMailboxClosure(t *testing.T, a v22GoalProjection) {
 	t.Helper()
-	var parent, child *struct {
-		Ref          string   `json:"work_item_ref"`
-		State        string   `json:"state"`
-		Parent       string   `json:"parent_work_item_ref"`
-		Handoff      bool     `json:"handoff_required"`
-		Execution    string   `json:"execution_ref"`
-		Artifacts    []string `json:"artifact_refs"`
-		Attestations []string `json:"attestation_refs"`
-		Interrupt    string   `json:"interrupt_code"`
-	}
+	var parent, child *v22WorkProjection
 	for index := range a.WorkItems {
 		item := &a.WorkItems[index]
 		if item.Handoff {
@@ -710,49 +702,18 @@ func v22Item(key, objective, phase string, write []string, handoff bool, parent 
 
 func v22Config(root, port, codex, bwrap, toolchain string) string {
 	q := func(v string) string { b, _ := json.Marshal(v); return string(b) }
-	return fmt.Sprintf(`[server]
-listen = "127.0.0.1:%s"
-shutdown_timeout = "10s"
-[state.sqlite]
-path = %s
-[artifact.filesystem]
-root = %s
-[credentials.local]
-path = %s
-[runtime]
-provider = "codex"
-max_output_bytes = 1048576
-[runtime.codex]
-command = %s
-timeout = "10m"
-max_concurrent_executions = 4
-work_root = %s
-[workspace.local]
-root = %s
-[repository.local]
-seed_path = %s
-target_ref = "refs/heads/main"
-[test_attestor]
-provider = "bubblewrap"
-timeout = "2m"
-[test_attestor.bubblewrap]
-command = %s
-[test_attestor.go]
-toolchain_root = %s
-[test_attestor.resources]
-cgroup_root = "/sys/fs/cgroup"
-[identity]
-local_token_path = %s
-[project]
-default = "project:v22-real"
-[scheduler]
-poll_interval = "50ms"
-observation_interval = "100ms"
-execution_timeout = "11m"
-attest_test_claim_lease = "5m"
-[config]
-effective_path = %s
-`, port, q(filepath.Join(root, "state", "orquesta.sqlite")), q(filepath.Join(root, "artifacts")), q(filepath.Join(root, "secrets", "credentials.json")), q(codex), q(filepath.Join(root, "work")), q(filepath.Join(root, "workspaces")), q(filepath.Join(root, "seed")), q(bwrap), q(toolchain), q(filepath.Join(root, "secrets", "local-owner.token")), q(filepath.Join(root, "effective.json")))
+	template := "[server]\nlisten = \"127.0.0.1:%s\"\nshutdown_timeout = \"10s\"\n" +
+		"[state.sqlite]\npath = %s\n[artifact.filesystem]\nroot = %s\n[credentials.local]\npath = %s\n" +
+		"[runtime]\nprovider = \"codex\"\nmax_output_bytes = 1048576\n[runtime.codex]\ncommand = %s\ntimeout = \"10m\"\nmax_concurrent_executions = 4\nwork_root = %s\n" +
+		"[workspace.local]\nroot = %s\n[repository.local]\nseed_path = %s\ntarget_ref = \"refs/heads/main\"\n" +
+		"[test_attestor]\nprovider = \"bubblewrap\"\ntimeout = \"2m\"\n[test_attestor.bubblewrap]\ncommand = %s\n[test_attestor.go]\ntoolchain_root = %s\n[test_attestor.resources]\ncgroup_root = \"/sys/fs/cgroup\"\n" +
+		"[identity]\nlocal_token_path = %s\n[project]\ndefault = \"project:v22-real\"\n" +
+		"[scheduler]\npoll_interval = \"50ms\"\nobservation_interval = \"100ms\"\nexecution_timeout = \"11m\"\nattest_test_claim_lease = \"5m\"\n[config]\neffective_path = %s\n"
+	return fmt.Sprintf(template, port, q(filepath.Join(root, "state", "orquesta.sqlite")),
+		q(filepath.Join(root, "artifacts")), q(filepath.Join(root, "secrets", "credentials.json")),
+		q(codex), q(filepath.Join(root, "work")), q(filepath.Join(root, "workspaces")),
+		q(filepath.Join(root, "seed")), q(bwrap), q(toolchain),
+		q(filepath.Join(root, "secrets", "local-owner.token")), q(filepath.Join(root, "effective.json")))
 }
 func v22AttestorPrerequisites(t *testing.T, ctx context.Context, goTool string) (string, string) {
 	t.Helper()
@@ -772,29 +733,24 @@ func v22AttestorPrerequisites(t *testing.T, ctx context.Context, goTool string) 
 }
 func v22Seed(ctx context.Context, root, git string) error {
 	seed := filepath.Join(root, "seed")
-	for _, args := range [][]string{{"init", "--initial-branch=main", seed}, {"-C", seed, "config", "user.email", "v22@example.invalid"}, {"-C", seed, "config", "user.name", "V22 E2E"}} {
+	run := func(args ...string) error {
 		if out, err := exec.CommandContext(ctx, git, args...).CombinedOutput(); err != nil {
 			return fmt.Errorf("git %v: %w: %s", args, err, out)
+		}
+		return nil
+	}
+	for _, args := range [][]string{{"init", "--initial-branch=main", seed}, {"-C", seed, "config", "user.email", "v22@example.invalid"}, {"-C", seed, "config", "user.name", "V22 E2E"}} {
+		if err := run(args...); err != nil {
+			return err
 		}
 	}
 	if err := os.WriteFile(filepath.Join(seed, "README.md"), []byte("V22 real workspace\n"), 0o600); err != nil {
 		return err
 	}
-	if out, err := exec.CommandContext(ctx, git, "-C", seed, "add", "README.md").CombinedOutput(); err != nil {
-		return fmt.Errorf("git add: %w: %s", err, out)
+	if err := run("-C", seed, "add", "README.md"); err != nil {
+		return err
 	}
-	if out, err := exec.CommandContext(ctx, git, "-C", seed, "commit", "-m", "V22 seed").CombinedOutput(); err != nil {
-		return fmt.Errorf("git commit: %w: %s", err, out)
-	}
-	return nil
-}
-func v22Root(t *testing.T) string {
-	t.Helper()
-	root, err := filepath.Abs("..")
-	if err != nil {
-		t.Fatal(err)
-	}
-	return root
+	return run("-C", seed, "commit", "-m", "V22 seed")
 }
 func v22Port(t *testing.T) string {
 	t.Helper()
