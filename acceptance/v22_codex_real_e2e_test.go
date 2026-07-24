@@ -130,17 +130,14 @@ func TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP(t *tes
 		}
 		b := h.get(ctx, refs["B"])
 		bGoal := b.object("goal")
-		h.call(ctx, "orquesta.goals.control", map[string]any{"operation": "stop", "target": "goal", "goal_ref": refs["B"], "expected_goal_revision": bGoal.number("revision"), "expected_plan_generation": bGoal.number("plan_generation"), "expected_app_spec_generation": bGoal.number("app_spec_generation"), "expected_spec_hash": bGoal.text("spec_hash"), "reason": "V22 public selective stop while A/C/D progress"})
-		b = h.waitTerminal(ctx, refs["B"])
-		bState := b.object("goal").text("state")
-		v22Require(t, bState == "stopped" || bState == "cancelled", "B=%s, want controlled stop", bState)
-		v22AssertStopped(t, b, running[refs["B"]], bProcess)
+		h.call(ctx, "orquesta.goals.control", map[string]any{"operation": "cancel", "target": "goal", "goal_ref": refs["B"], "expected_goal_revision": bGoal.number("revision"), "expected_plan_generation": bGoal.number("plan_generation"), "expected_app_spec_generation": bGoal.number("app_spec_generation"), "expected_spec_hash": bGoal.text("spec_hash"), "reason": "V22 public selective cancellation while A/C/D progress"})
+		b = h.waitCancelled(ctx, refs["B"], running[refs["B"]], bProcess)
 		for _, id := range []string{"A", "C"} {
 			h.waitProgress(ctx, refs[id], progress[id])
 		}
 		exactD := running[refs["D"]].text("execution_ref")
 		current := h.runningExecution(ctx, refs["D"]).text("execution_ref")
-		v22Require(t, current == exactD, "B stop disturbed D execution: got=%s want=%s", current, exactD)
+		v22Require(t, current == exactD, "B cancellation disturbed D execution: got=%s want=%s", current, exactD)
 		fence := h.assertMailboxArtifactIsolation(ctx, refs["A"])
 		admission := fence.Admission
 		expectedD := v22RestoreExpectation(t, h.get(ctx, refs["D"]))
@@ -802,7 +799,7 @@ func (h *v22Harness) waitProgress(ctx context.Context, ref string, before v22Goa
 	for {
 		after := h.get(ctx, ref)
 		state := after.object("goal").text("state")
-		v22Require(h.t, state != "failed" && state != "cancelled" && state != "stopped", "independent Goal damaged by B stop: %+v", after.object("goal"))
+		v22Require(h.t, state != "failed" && state != "cancelled" && state != "stopped", "independent Goal damaged by B cancellation: %+v", after.object("goal"))
 		if after.object("goal").number("revision") > before.object("goal").number("revision") || after.number("artifact_count") > before.number("artifact_count") || v22ExecutionStates(after) != v22ExecutionStates(before) {
 			return
 		}
@@ -983,7 +980,7 @@ func v22Wait(t *testing.T, ctx context.Context, what string) {
 func v22AssertFourGoals(t *testing.T, done map[string]v22GoalProjection, b v22GoalProjection, admission v22AdmissionIdentity, councilIntegration v22CouncilIntegration) {
 	t.Helper()
 	state := b.object("goal").text("state")
-	v22Require(t, state == "stopped" || state == "cancelled", "B=%s", state)
+	v22Require(t, state == "cancelled", "B=%s", state)
 	v22AssertMailboxClosure(t, done["A"], admission)
 	v22AssertProgrammingClosure(t, done["C"], councilIntegration)
 	work := 0
@@ -1010,20 +1007,28 @@ func v22NoContradiction(t *testing.T, g v22GoalProjection) {
 	}
 }
 
-func v22AssertStopped(t *testing.T, b v22GoalProjection, execution v22ExecutionProjection, process v22ProcessRecord) {
-	t.Helper()
-	v22AssertProcessGone(t, process)
-	v22AssertStopEvidence(t, process)
-	for _, current := range b.objects("executions") {
-		v22Require(t, current.text("execution_ref") != execution.text("execution_ref") || current.text("state") != "running", "B exact execution remains running: %+v", current)
-	}
-	goalView := b.object("goal")
-	for _, control := range b.objects("controls") {
-		if control.text("operation") == "stop" && control.text("target") == "goal" && control.text("status") == "confirmed" && control.text("receipt_ref") != "" && control.number("plan_generation") == goalView.number("plan_generation") && control.number("app_spec_generation") == goalView.number("app_spec_generation") {
-			return
+func (h *v22Harness) waitCancelled(ctx context.Context, ref string, execution v22ExecutionProjection, process v22ProcessRecord) v22GoalProjection {
+	h.t.Helper()
+	terminal := h.waitTerminal(ctx, ref)
+	v22Require(h.t, terminal.object("goal").text("state") == "cancelled", "B=%s, want controlled cancellation", terminal.object("goal").text("state"))
+	v22AssertProcessGone(h.t, process)
+	v22AssertStopEvidence(h.t, process)
+	for {
+		b := h.get(ctx, ref)
+		goalView, executionSettled := b.object("goal"), true
+		v22Require(h.t, goalView.text("state") == "cancelled", "B changed after cancellation: %+v", goalView)
+		for _, current := range b.objects("executions") {
+			if current.text("execution_ref") == execution.text("execution_ref") && current.text("state") == "running" {
+				executionSettled = false
+			}
 		}
+		for _, control := range b.objects("controls") {
+			if executionSettled && control.text("operation") == "cancel" && control.text("target") == "goal" && control.text("status") == "confirmed" && control.text("receipt_ref") != "" && control.number("plan_generation") == goalView.number("plan_generation") && control.number("app_spec_generation") == goalView.number("app_spec_generation") {
+				return b
+			}
+		}
+		v22Wait(h.t, ctx, "B exact confirmed cancellation")
 	}
-	t.Fatalf("B lacks exact confirmed public control receipt: %+v", b.objects("controls"))
 }
 
 func v22AssertMailboxClosure(t *testing.T, a v22GoalProjection, want v22AdmissionIdentity) {
@@ -1090,7 +1095,7 @@ func v22PlanA() map[string]any {
 	)
 }
 func v22PlanB() map[string]any {
-	return v22Plan("b", v22Item("stop", "Remain working until public selective stop; do not affect another Goal.", "phase:b", nil, false, nil, "artifact"))
+	return v22Plan("b", v22Item("stop", "Remain working until public selective cancellation; do not affect another Goal.", "phase:b", nil, false, nil, "artifact"))
 }
 func v22PlanC() map[string]any {
 	return v22Plan("c", v22Item("program", "Use isolated Git workspace: add a minimal go.mod, v22_marker.go with a Marker function, and v22_marker_test.go that verifies it; run the required Go test, obtain review, then integrate.", "phase:c", []string{"go.mod", "v22_marker.go", "v22_marker_test.go"}, false, nil, "evidence_bundle"))
