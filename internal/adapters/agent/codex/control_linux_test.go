@@ -316,7 +316,7 @@ func TestLegacyLiveReplayBindsOnlyAfterExactAuthority(t *testing.T) {
 }
 
 func TestCodexSelectiveStopPreservesSiblingProcessTrees(t *testing.T) {
-	config := processTreeTestConfig(t)
+	config := durableControlProcessTreeTestConfig(t)
 	adapter := openTestAdapter(t, config)
 	requests := make([]ports.AgentLaunchRequest, 4)
 	grandchildren := make([]int, 4)
@@ -345,9 +345,10 @@ func TestCodexSelectiveStopPreservesSiblingProcessTrees(t *testing.T) {
 
 func TestCodexSelectiveStopAdoptsAfterCrashAndRejectsReusedPID(t *testing.T) {
 	t.Run("adopts exact live process", func(t *testing.T) {
-		config := processTreeTestConfig(t)
+		config := durableControlProcessTreeTestConfig(t)
 		request := testRequest(t, "adopted-control", "adopted process tree", 1024)
 		command, record, launch := seedUnownedLiveProcess(t, config, request)
+		cleanupSeededProcess(t, command, record)
 		grandchild := awaitGrandchildPID(t, config, request)
 
 		adapter := openTestAdapter(t, config)
@@ -365,9 +366,10 @@ func TestCodexSelectiveStopAdoptsAfterCrashAndRejectsReusedPID(t *testing.T) {
 	})
 
 	t.Run("retries forced signal after crash between intent and syscall", func(t *testing.T) {
-		config := processTreeTestConfig(t)
+		config := durableControlProcessTreeTestConfig(t)
 		request := testRequest(t, "forced-intent-before-syscall", "recover forced intent", 1024)
 		command, record, launch := seedUnownedLiveProcess(t, config, request)
+		cleanupSeededProcess(t, command, record)
 		grandchild := awaitGrandchildPID(t, config, request)
 		stop := stopRequestForLaunch(launch, ports.AgentStopForced, "stop:forced-intent-before-syscall")
 		requestHash, err := hashStopRequest(stop)
@@ -447,6 +449,7 @@ func TestCodexSelectiveStopAdoptsAfterCrashAndRejectsReusedPID(t *testing.T) {
 		}
 		request := testRequest(t, "request-before-natural-exit", "natural exit after request", 1024)
 		command, record, launch := seedUnownedLiveProcess(t, config, request)
+		cleanupSeededProcess(t, command, record)
 		awaitPath(t, readyPath)
 
 		stop := stopRequestForLaunch(launch, ports.AgentStopForced, "stop:request-without-effect")
@@ -487,9 +490,10 @@ func TestCodexSelectiveStopAdoptsAfterCrashAndRejectsReusedPID(t *testing.T) {
 	})
 
 	t.Run("durable stopped terminal survives crash before receipt", func(t *testing.T) {
-		config := processTreeTestConfig(t)
+		config := durableControlProcessTreeTestConfig(t)
 		request := testRequest(t, "crash-after-stopped-terminal", "crash after stopped terminal", 1024)
-		command, _, launch := seedUnownedLiveProcess(t, config, request)
+		command, process, launch := seedUnownedLiveProcess(t, config, request)
+		cleanupSeededProcess(t, command, process)
 		grandchild := awaitGrandchildPID(t, config, request)
 		stop := stopRequestForLaunch(launch, ports.AgentStopForced, "stop:crash-after-terminal")
 		requestHash, err := hashStopRequest(stop)
@@ -559,7 +563,8 @@ func TestCodexSelectiveStopAdoptsAfterCrashAndRejectsReusedPID(t *testing.T) {
 	t.Run("crash after signal effect fences replay without inventing proof", func(t *testing.T) {
 		config, termLog := ignoreTermTreeTestConfig(t)
 		request := testRequest(t, "crash-after-signal-effect", "ignore TERM across owner crash", 1024)
-		command, _, launch := seedUnownedLiveProcess(t, config, request)
+		command, process, launch := seedUnownedLiveProcess(t, config, request)
+		cleanupSeededProcess(t, command, process)
 		grandchild := awaitGrandchildPID(t, config, request)
 		cooperative := stopRequestForLaunch(launch, ports.AgentStopCooperative, "stop:crash-after-effect")
 		requestHash, err := hashStopRequest(cooperative)
@@ -651,7 +656,8 @@ func TestCodexSelectiveStopAdoptsAfterCrashAndRejectsReusedPID(t *testing.T) {
 			"CODEX_TERM_LOG": termLog, "CODEX_NATURAL_READY": readyPath, "CODEX_NATURAL_RELEASE": releasePath,
 		}
 		request := testRequest(t, "proof-before-uncertain-intent", "natural exit after durable proof", 1024)
-		command, _, launch := seedUnownedLiveProcess(t, config, request)
+		command, process, launch := seedUnownedLiveProcess(t, config, request)
+		cleanupSeededProcess(t, command, process)
 		awaitPath(t, readyPath)
 
 		seeder, err := New(config)
@@ -725,6 +731,7 @@ func TestCodexSelectiveStopAdoptsAfterCrashAndRejectsReusedPID(t *testing.T) {
 		config.Timeout = 10 * time.Second
 		request := testRequest(t, "leader-gone-child-live", "helper:background-success", 1024)
 		command, record, launch := seedUnownedLiveProcess(t, config, request)
+		cleanupSeededProcess(t, command, record)
 		childPath := filepath.Join(config.WorkRoot, filepath.FromSlash(executionPath(request.ExecutionRef)), backgroundSuccessPIDFile)
 		child := awaitPIDFile(t, childPath)
 		// Do not reap the leader yet: the detached child inherited the test
@@ -838,9 +845,10 @@ func TestCodexSelectiveStopAdoptsAfterCrashAndRejectsReusedPID(t *testing.T) {
 	})
 
 	t.Run("shutdown discovers and waits for process tree after restart", func(t *testing.T) {
-		config := processTreeTestConfig(t)
+		config := durableControlProcessTreeTestConfig(t)
 		request := testRequest(t, "adopted-shutdown", "adopted shutdown process tree", 1024)
 		command, record, _ := seedUnownedLiveProcess(t, config, request)
+		cleanupSeededProcess(t, command, record)
 		grandchild := awaitGrandchildPID(t, config, request)
 		adapter := openTestAdapter(t, config)
 
@@ -857,9 +865,10 @@ func TestCodexSelectiveStopAdoptsAfterCrashAndRejectsReusedPID(t *testing.T) {
 	})
 
 	t.Run("shutdown continues after corrupt journal and stops later valid tree", func(t *testing.T) {
-		config := processTreeTestConfig(t)
+		config := durableControlProcessTreeTestConfig(t)
 		request := testRequest(t, "shutdown-after-corrupt-journal", "valid tree after corrupt journal", 1024)
 		command, record, _ := seedUnownedLiveProcess(t, config, request)
+		cleanupSeededProcess(t, command, record)
 		grandchild := awaitGrandchildPID(t, config, request)
 		corruptPath := filepath.Join(config.WorkRoot, "executions", "000-corrupt", processFileName)
 		if err := os.MkdirAll(filepath.Dir(corruptPath), 0o700); err != nil {
@@ -896,9 +905,10 @@ func TestCodexSelectiveStopAdoptsAfterCrashAndRejectsReusedPID(t *testing.T) {
 	})
 
 	t.Run("shutdown cannot report success after adopted signal failure", func(t *testing.T) {
-		config := processTreeTestConfig(t)
+		config := durableControlProcessTreeTestConfig(t)
 		request := testRequest(t, "adopted-shutdown-signal-failure", "adopted shutdown signal failure", 1024)
 		command, record, _ := seedUnownedLiveProcess(t, config, request)
+		cleanupSeededProcess(t, command, record)
 		grandchild := awaitGrandchildPID(t, config, request)
 		adapter, err := New(config)
 		if err != nil {
@@ -943,13 +953,14 @@ func TestCodexSelectiveStopAdoptsAfterCrashAndRejectsReusedPID(t *testing.T) {
 	})
 
 	t.Run("rejects reused pid marker", func(t *testing.T) {
-		config := processTreeTestConfig(t)
+		config := durableControlProcessTreeTestConfig(t)
 		request := testRequest(t, "reused-pid-control", "reused pid process tree", 1024)
 		request.SessionRef, _ = ports.NewExecutionSessionRef("execution-session:reused-pid")
 		config.SessionResolver = sessionResolverFunc(func(context.Context, ports.AgentLaunchRequest) (Session, error) {
 			return Session{}, errors.New("authority unavailable")
 		})
 		command, record, launch := seedUnownedLiveProcess(t, config, request)
+		cleanupSeededProcess(t, command, record)
 		grandchild := awaitGrandchildPID(t, config, request)
 		tampered := record
 		tampered.BirthMarker += "-stale"
@@ -980,6 +991,31 @@ func TestCodexSelectiveStopAdoptsAfterCrashAndRejectsReusedPID(t *testing.T) {
 		_ = platformSignalProcess(record, ports.AgentStopForced)
 		_ = command.Wait()
 		assertProcessGoneWithESRCH(t, grandchild)
+	})
+}
+
+func durableControlProcessTreeTestConfig(t *testing.T) Config {
+	t.Helper()
+	config := processTreeTestConfig(t)
+	helper := "#!/bin/sh\n" +
+		"/bin/sleep 600 &\n" +
+		"grandchild=$!\n" +
+		"printf '%s\\n' \"$grandchild\" > " + processTreePIDFile + "\n" +
+		"wait \"$grandchild\"\n"
+	if err := os.WriteFile(config.Command, []byte(helper), 0o700); err != nil {
+		t.Fatalf("WriteFile(durable process tree helper) error = %v", err)
+	}
+	return config
+}
+
+func cleanupSeededProcess(t *testing.T, command *exec.Cmd, record processRecord) {
+	t.Helper()
+	t.Cleanup(func() {
+		if err := signalProcessTree(record, ports.AgentStopForced); err != nil && !errors.Is(err, os.ErrProcessDone) {
+			t.Errorf("cleanup seeded process tree: %v", err)
+			return
+		}
+		_ = command.Wait()
 	})
 }
 
