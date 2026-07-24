@@ -372,6 +372,67 @@ func (adapter *Adapter) bindLegacyLaunchRecord(
 	request ports.AgentLaunchRequest,
 	requestHash string,
 ) (launchRecord, error) {
+	candidate, err := adapter.legacyLaunchCandidate(legacy, request, requestHash)
+	if err != nil {
+		return launchRecord{}, err
+	}
+	upgrade := launchUpgradeRecord{
+		SchemaVersion:       stateSchemaVersion,
+		SourceSchemaVersion: legacy.SchemaVersion,
+		SourceRequestHash:   legacy.RequestHash,
+		Launch:              candidate,
+	}
+	created, err := adapter.publishJSON(runPath, launchUpgradeFileName, upgrade)
+	if err != nil {
+		return launchRecord{}, err
+	}
+	if !created {
+		found, readErr := adapter.readPrivateJSON(path.Join(runPath, launchUpgradeFileName), &upgrade)
+		if readErr != nil {
+			return launchRecord{}, readErr
+		}
+		if !found {
+			return launchRecord{}, &Error{Code: CodeStateInvalid}
+		}
+	}
+	if err := validateLegacyLaunchUpgrade(upgrade, legacy); err != nil {
+		return launchRecord{}, err
+	}
+	if upgrade.Launch.RequestHash != requestHash {
+		return launchRecord{}, &Error{Code: CodeExecutionConflict}
+	}
+	return upgrade.Launch, nil
+}
+
+func (adapter *Adapter) previewLegacyLaunchRecord(
+	runPath string,
+	legacy launchRecord,
+	request ports.AgentLaunchRequest,
+	requestHash string,
+) (launchRecord, bool, error) {
+	candidate, err := adapter.legacyLaunchCandidate(legacy, request, requestHash)
+	if err != nil {
+		return launchRecord{}, false, err
+	}
+	var upgrade launchUpgradeRecord
+	found, err := adapter.readPrivateJSON(path.Join(runPath, launchUpgradeFileName), &upgrade)
+	if err != nil || !found {
+		return candidate, false, err
+	}
+	if err := validateLegacyLaunchUpgrade(upgrade, legacy); err != nil {
+		return launchRecord{}, false, err
+	}
+	if upgrade.Launch.RequestHash != requestHash {
+		return launchRecord{}, false, &Error{Code: CodeExecutionConflict}
+	}
+	return upgrade.Launch, true, nil
+}
+
+func (adapter *Adapter) legacyLaunchCandidate(
+	legacy launchRecord,
+	request ports.AgentLaunchRequest,
+	requestHash string,
+) (launchRecord, error) {
 	var legacyHash string
 	var err error
 	switch legacy.SchemaVersion {
@@ -410,32 +471,7 @@ func (adapter *Adapter) bindLegacyLaunchRecord(
 		AcceptedAt:            legacy.AcceptedAt,
 		MaxOutputBytes:        legacy.MaxOutputBytes,
 	}
-	upgrade := launchUpgradeRecord{
-		SchemaVersion:       stateSchemaVersion,
-		SourceSchemaVersion: legacy.SchemaVersion,
-		SourceRequestHash:   legacy.RequestHash,
-		Launch:              candidate,
-	}
-	created, err := adapter.publishJSON(runPath, launchUpgradeFileName, upgrade)
-	if err != nil {
-		return launchRecord{}, err
-	}
-	if !created {
-		found, readErr := adapter.readPrivateJSON(path.Join(runPath, launchUpgradeFileName), &upgrade)
-		if readErr != nil {
-			return launchRecord{}, readErr
-		}
-		if !found {
-			return launchRecord{}, &Error{Code: CodeStateInvalid}
-		}
-	}
-	if err := validateLegacyLaunchUpgrade(upgrade, legacy); err != nil {
-		return launchRecord{}, err
-	}
-	if upgrade.Launch.RequestHash != requestHash {
-		return launchRecord{}, &Error{Code: CodeExecutionConflict}
-	}
-	return upgrade.Launch, nil
+	return candidate, nil
 }
 
 func validateLegacyLaunchUpgrade(upgrade launchUpgradeRecord, legacy launchRecord) error {

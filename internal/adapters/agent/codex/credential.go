@@ -53,6 +53,31 @@ func (adapter *Adapter) launchWithCredentialLocked(ctx context.Context, request 
 	return receipt, nil
 }
 
+func (adapter *Adapter) preflightCredentialAuthority(ctx context.Context, request ports.AgentLaunchRequest, session *resolvedSession) error {
+	var preflightErr error
+	_, useErr := adapter.config.CredentialStore.Use(ctx, adapter.credentialUseRequest(request), func(secret credentials.Secret) error {
+		defer secret.Destroy()
+		guard, err := credentials.NewLeakGuard(secret)
+		if err != nil {
+			preflightErr = err
+			return err
+		}
+		defer guard.Destroy()
+		preflightErr = adapter.preflightCredentialLaunch(secret, guard, request, session)
+		return preflightErr
+	})
+	if preflightErr != nil {
+		return preflightErr
+	}
+	if useErr != nil {
+		if errors.Is(useErr, context.Canceled) || errors.Is(useErr, context.DeadlineExceeded) {
+			return useErr
+		}
+		return &Error{Code: CodeCredentialUnavailable, Cause: useErr}
+	}
+	return nil
+}
+
 func (adapter *Adapter) credentialUseRequest(request ports.AgentLaunchRequest) credentials.UseRequest {
 	return credentials.UseRequest{ActorRef: request.ActorRef.String(), RequestRef: "request:codex-launch:" + request.ExecutionRef.String(),
 		CredentialRef: adapter.config.CredentialRef, OwnerRef: credentials.OwnerRef(request.ActorRef.String()),
@@ -127,11 +152,18 @@ func recoveryAuthorityFailure(err error) bool {
 		code == CodeSessionUnavailable || code == CodeSecretLeak
 }
 
-func (adapter *Adapter) quarantineLaunchRecoveryLocked(ctx context.Context, request ports.AgentLaunchRequest, record launchRecord, runPath string, cause error) error {
+func (adapter *Adapter) quarantineLaunchRecoveryLocked(
+	ctx context.Context,
+	request ports.AgentLaunchRequest,
+	record launchRecord,
+	terminalRequestHash, runPath string,
+	cause error,
+) error {
 	state, err := adapter.recoveryState(record, runPath, request.ExecutionRef)
 	if err != nil {
 		return errors.Join(err, cause)
 	}
+	state.terminalRequestHash = terminalRequestHash
 	return adapter.quarantineRecoveryFailureLocked(ctx, state, cause)
 }
 

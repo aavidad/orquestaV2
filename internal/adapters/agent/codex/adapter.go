@@ -330,41 +330,58 @@ func (adapter *Adapter) Launch(ctx context.Context, request ports.AgentLaunchReq
 	}
 	if found {
 		sourceSchema := record.SchemaVersion
-		validatedRecord, _, replayErr := adapter.validateLaunchReplay(runPath, record, request, requestHash)
+		validatedRecord, receipt, trustedReplay, replayErr := adapter.validateLaunchReplay(runPath, record, request, requestHash)
 		if replayErr != nil {
 			return ports.AgentLaunchReceipt{}, replayErr
 		}
 		if sourceSchema == stateSchemaVersion {
 			record = validatedRecord
 		}
-		if _, terminalFound, terminalErr := adapter.loadCausalTerminal(runPath, record.RequestHash, record.SpecHash, record.MaxOutputBytes); terminalErr != nil {
+		terminal, terminalFound, terminalErr := adapter.loadCausalTerminal(runPath, record.RequestHash, record.SpecHash, record.MaxOutputBytes)
+		if terminalErr != nil {
 			return ports.AgentLaunchReceipt{}, terminalErr
-		} else if terminalFound {
-			return adapter.resumeLaunchRecordLocked(ctx, request, requestHash, record, runPath, false, nil, nil, nil)
+		}
+		if terminalFound && trustedReplay {
+			return adapter.replayTerminalLaunchLocked(executionKey, requestHash, record, receipt, runPath, terminal), nil
 		}
 		session, sessionErr := adapter.resolveSession(ctx, request)
 		if sessionErr != nil {
 			if ctx.Err() != nil {
 				return ports.AgentLaunchReceipt{}, ctx.Err()
 			}
-			return ports.AgentLaunchReceipt{}, adapter.quarantineLaunchRecoveryLocked(ctx, request, record, runPath, sessionErr)
+			if trustedReplay && recoveryAuthorityFailure(sessionErr) {
+				sessionErr = adapter.quarantineLaunchRecoveryLocked(ctx, request, validatedRecord, record.RequestHash, runPath, sessionErr)
+			}
+			return ports.AgentLaunchReceipt{}, sessionErr
 		}
 		defer session.destroy()
 		if preflightErr := adapter.preflightSessionLaunch(session, request); preflightErr != nil {
-			if recoveryAuthorityFailure(preflightErr) {
-				preflightErr = adapter.quarantineLaunchRecoveryLocked(ctx, request, record, runPath, preflightErr)
+			if trustedReplay && recoveryAuthorityFailure(preflightErr) {
+				preflightErr = adapter.quarantineLaunchRecoveryLocked(ctx, request, validatedRecord, record.RequestHash, runPath, preflightErr)
 			}
 			return ports.AgentLaunchReceipt{}, preflightErr
 		}
+		if !trustedReplay && session == nil && adapter.config.CredentialStore == nil {
+			return ports.AgentLaunchReceipt{}, &Error{Code: CodeSessionUnavailable}
+		}
 		if adapter.config.CredentialStore != nil {
+			if terminalFound {
+				if credentialErr := adapter.preflightCredentialAuthority(ctx, request, session); credentialErr != nil {
+					return ports.AgentLaunchReceipt{}, credentialErr
+				}
+				return adapter.replayTerminalLaunchLocked(executionKey, requestHash, record, receipt, runPath, terminal), nil
+			}
 			receipt, credentialErr := adapter.launchWithCredentialLocked(ctx, request, requestHash, session)
 			if credentialErr != nil {
-				if recoveryAuthorityFailure(credentialErr) {
-					credentialErr = adapter.quarantineLaunchRecoveryLocked(ctx, request, record, runPath, credentialErr)
+				if trustedReplay && recoveryAuthorityFailure(credentialErr) {
+					credentialErr = adapter.quarantineLaunchRecoveryLocked(ctx, request, validatedRecord, record.RequestHash, runPath, credentialErr)
 				}
 				return ports.AgentLaunchReceipt{}, credentialErr
 			}
 			return receipt, nil
+		}
+		if terminalFound {
+			return adapter.replayTerminalLaunchLocked(executionKey, requestHash, record, receipt, runPath, terminal), nil
 		}
 		return adapter.resumeLaunchRecordLocked(ctx, request, requestHash, record, runPath, false, nil, nil, session)
 	}
@@ -395,24 +412,40 @@ func (adapter *Adapter) Launch(ctx context.Context, request ports.AgentLaunchReq
 	return adapter.resumeLaunchRecordLocked(ctx, request, requestHash, record, runPath, recordCreated, environment, nil, session)
 }
 
-func (adapter *Adapter) validateLaunchReplay(runPath string, record launchRecord, request ports.AgentLaunchRequest, requestHash string) (launchRecord, ports.AgentLaunchReceipt, error) {
+func (adapter *Adapter) validateLaunchReplay(runPath string, record launchRecord, request ports.AgentLaunchRequest, requestHash string) (launchRecord, ports.AgentLaunchReceipt, bool, error) {
 	var err error
+	trusted := record.SchemaVersion == stateSchemaVersion
 	if record.SchemaVersion != stateSchemaVersion {
-		record, err = adapter.bindLegacyLaunchRecord(runPath, record, request, requestHash)
+		record, trusted, err = adapter.previewLegacyLaunchRecord(runPath, record, request, requestHash)
 	} else if record.RequestHash != requestHash {
-		return record, ports.AgentLaunchReceipt{}, &Error{Code: CodeExecutionConflict}
+		return record, ports.AgentLaunchReceipt{}, false, &Error{Code: CodeExecutionConflict}
 	}
 	if err != nil {
-		return record, ports.AgentLaunchReceipt{}, err
+		return record, ports.AgentLaunchReceipt{}, false, err
 	}
 	receipt, err := record.receipt(request.ExecutionRef)
 	if err == nil {
 		err = ports.ValidateAgentLaunchReceipt(request, receipt)
 	}
 	if err != nil {
-		return record, ports.AgentLaunchReceipt{}, &Error{Code: CodeStateInvalid, Cause: err}
+		return record, ports.AgentLaunchReceipt{}, false, &Error{Code: CodeStateInvalid, Cause: err}
 	}
-	return record, receipt, nil
+	return record, receipt, trusted, nil
+}
+
+func (adapter *Adapter) replayTerminalLaunchLocked(
+	executionKey, requestHash string,
+	record launchRecord,
+	receipt ports.AgentLaunchReceipt,
+	runPath string,
+	terminal terminalRecord,
+) ports.AgentLaunchReceipt {
+	adapter.executions[executionKey] = &executionState{
+		requestHash: requestHash, terminalRequestHash: record.RequestHash, receipt: receipt,
+		maxOutput: record.MaxOutputBytes, runPath: runPath, status: terminal.Status,
+		terminal: &terminal, terminalDurable: true,
+	}
+	return receipt
 }
 
 func (adapter *Adapter) resumeLaunchRecordLocked(ctx context.Context, request ports.AgentLaunchRequest, requestHash string, record launchRecord, runPath string, recordCreated bool, environment []string, credentialGuard *credentials.LeakGuard, session *resolvedSession) (ports.AgentLaunchReceipt, error) {
@@ -426,7 +459,14 @@ func (adapter *Adapter) resumeLaunchRecordLocked(ctx context.Context, request po
 	}()
 	executionKey := request.ExecutionRef.String()
 	terminalRequestHash := record.RequestHash
-	record, receipt, err := adapter.validateLaunchReplay(runPath, record, request, requestHash)
+	var err error
+	if record.SchemaVersion != stateSchemaVersion {
+		record, err = adapter.bindLegacyLaunchRecord(runPath, record, request, requestHash)
+		if err != nil {
+			return ports.AgentLaunchReceipt{}, err
+		}
+	}
+	record, receipt, _, err := adapter.validateLaunchReplay(runPath, record, request, requestHash)
 	if err != nil {
 		return ports.AgentLaunchReceipt{}, err
 	}

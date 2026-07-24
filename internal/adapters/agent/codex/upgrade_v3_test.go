@@ -2,6 +2,7 @@ package codex
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"orquesta/internal/credentials"
 	"orquesta/internal/ports"
 )
 
@@ -77,6 +79,71 @@ func TestAdapterUpgradeV3ObservePreservesDurableTerminalWithoutRelaunch(t *testi
 	}
 }
 
+func TestAdapterUpgradeV3TerminalLaunchAuthorizesWithoutUpgrade(t *testing.T) {
+	config := testConfig(t)
+	request := testRequest(t, "upgrade-v3-terminal-launch", "helper:success", 1024)
+	request.SessionRef, _ = ports.NewExecutionSessionRef("execution-session:upgrade-v3-terminal-launch")
+	_, runPath := seedPersistedV3Execution(t, config, request, &terminalRecord{
+		SchemaVersion: legacyStateSchemaVersion,
+		Status:        ports.AgentCompleted,
+		MediaType:     "text/plain",
+		Artifact:      "historical terminal",
+		ObservedAt:    config.Now().UTC().Add(time.Second),
+	})
+	config.SessionResolver = sessionResolverFunc(func(_ context.Context, candidate ports.AgentLaunchRequest) (Session, error) {
+		if candidate.SessionRef != request.SessionRef || candidate.PlanGeneration != request.PlanGeneration {
+			return Session{}, errors.New("authority unavailable")
+		}
+		secret, _ := credentials.NewSecret([]byte(helperSessionBearer))
+		return Session{Ref: candidate.SessionRef, Endpoint: "http://127.0.0.1:7777/mcp", BearerToken: secret}, nil
+	})
+	adapter := openTestAdapter(t, config)
+	untrusted := request
+	untrusted.SessionRef, _ = ports.NewExecutionSessionRef("execution-session:upgrade-v3-terminal-attacker")
+	untrusted.PlanGeneration++
+	if _, err := adapter.Launch(context.Background(), untrusted); ErrorCode(err) != CodeSessionUnavailable {
+		t.Fatalf("Launch(untrusted V3 terminal) error = %v, code = %q", err, ErrorCode(err))
+	}
+	upgradePath := filepath.Join(config.WorkRoot, filepath.FromSlash(runPath), launchUpgradeFileName)
+	if _, err := os.Stat(upgradePath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("untrusted terminal replay created upgrade: %v", err)
+	}
+	receipt, err := adapter.Launch(context.Background(), request)
+	if err != nil {
+		t.Fatalf("Launch(authorized V3 terminal) error = %v", err)
+	}
+	if err := ports.ValidateAgentLaunchReceipt(request, receipt); err != nil {
+		t.Fatalf("Launch(V3 terminal) receipt = %+v, error = %v", receipt, err)
+	}
+	observation, err := adapter.Observe(context.Background(), request.ExecutionRef)
+	if err != nil || observation.Status != ports.AgentCompleted || string(observation.Content) != "historical terminal" {
+		t.Fatalf("Observe(V3 terminal) = %+v, %v", observation, err)
+	}
+	if _, err := os.Stat(upgradePath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("terminal replay created upgrade: %v", err)
+	}
+}
+
+func TestAdapterUpgradeV3LaunchWithoutPhysicalAuthorityCreatesNoUpgrade(t *testing.T) {
+	config := testConfig(t)
+	request := testRequest(t, "upgrade-v3-no-authority", "helper:success", 1024)
+	_, runPath := seedPersistedV3Execution(t, config, request, &terminalRecord{
+		SchemaVersion: legacyStateSchemaVersion,
+		Status:        ports.AgentCompleted,
+		MediaType:     "text/plain",
+		Artifact:      "historical terminal",
+		ObservedAt:    config.Now().UTC().Add(time.Second),
+	})
+	adapter := openTestAdapter(t, config)
+	if _, err := adapter.Launch(context.Background(), request); ErrorCode(err) != CodeSessionUnavailable {
+		t.Fatalf("Launch(V3 without authority) error = %v, code = %q", err, ErrorCode(err))
+	}
+	upgradePath := filepath.Join(config.WorkRoot, filepath.FromSlash(runPath), launchUpgradeFileName)
+	if _, err := os.Stat(upgradePath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("authority-free replay created upgrade: %v", err)
+	}
+}
+
 func TestAdapterUpgradeV3ObservePersistsInterruptedWithoutRelaunch(t *testing.T) {
 	config := testConfig(t)
 	request := testRequest(t, "upgrade-v3-observe-interrupted", "helper:success", 1024)
@@ -111,8 +178,13 @@ func TestAdapterUpgradeV3ObservePersistsInterruptedWithoutRelaunch(t *testing.T)
 
 func TestAdapterUpgradeV3LaunchBindsV4ReceiptAndInterruptedReplay(t *testing.T) {
 	config := testConfig(t)
+	config.CredentialStore = &credentialTestStore{material: helperCredentialInitial, version: 1}
+	config.CredentialRef = credentials.CredentialRef("credential:codex-primary")
 	request := testRequest(t, "upgrade-v3-dispatching", "helper:success", 1024)
 	legacyHash, runPath := seedPersistedV3Execution(t, config, request, nil)
+	if err := os.WriteFile(filepath.Join(config.WorkRoot, filepath.FromSlash(runPath), lastMessageFileName), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	first := openTestAdapter(t, config)
 	firstReceipt, err := first.Launch(context.Background(), request)
@@ -169,8 +241,13 @@ func TestAdapterUpgradeV3LaunchBindsV4ReceiptAndInterruptedReplay(t *testing.T) 
 
 func TestAdapterUpgradeV3ConcurrentBindingHasSingleDurableWinner(t *testing.T) {
 	config := testConfig(t)
+	config.CredentialStore = &credentialTestStore{material: helperCredentialInitial, version: 1}
+	config.CredentialRef = credentials.CredentialRef("credential:codex-primary")
 	firstRequest := testRequest(t, "upgrade-v3-race", "helper:success", 1024)
-	_, _ = seedPersistedV3Execution(t, config, firstRequest, nil)
+	_, runPath := seedPersistedV3Execution(t, config, firstRequest, nil)
+	if err := os.WriteFile(filepath.Join(config.WorkRoot, filepath.FromSlash(runPath), lastMessageFileName), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
 	secondRequest := firstRequest
 	secondRequest.PlanGeneration++
 	requests := []ports.AgentLaunchRequest{firstRequest, secondRequest}

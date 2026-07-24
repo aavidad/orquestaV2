@@ -216,6 +216,105 @@ func TestPromptFailureDoesNotQuarantineLiveProcess(t *testing.T) {
 	awaitProcessIdentityGone(t, process)
 }
 
+func TestLegacyLiveReplayBindsOnlyAfterExactAuthority(t *testing.T) {
+	config := processTreeTestConfig(t)
+	request := testRequest(t, "legacy-authority-binding", "legacy authority process tree", 1024)
+	request.SessionRef, _ = ports.NewExecutionSessionRef("execution-session:legacy-authority-binding")
+	command, process, _ := seedUnownedLiveProcess(t, config, request)
+	_ = awaitGrandchildPID(t, config, request)
+	runPath := executionPath(request.ExecutionRef)
+	requestPath := filepath.Join(config.WorkRoot, filepath.FromSlash(runPath), requestFileName)
+	currentPayload, err := os.ReadFile(requestPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var current launchRecord
+	if err := json.Unmarshal(currentPayload, &current); err != nil {
+		t.Fatal(err)
+	}
+	legacyHash, err := hashLegacyLaunchRequest(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := persistedLaunchRecordV3{
+		SchemaVersion: legacyStateSchemaVersion, RequestHash: legacyHash,
+		ExecutionRef: current.ExecutionRef, SpecHash: current.SpecHash, ProviderRef: current.ProviderRef,
+		ExternalRef: current.ExternalRef, IdempotencyKey: current.IdempotencyKey,
+		AcceptedAt: current.AcceptedAt, MaxOutputBytes: current.MaxOutputBytes,
+	}
+	legacyPayload, err := json.Marshal(legacy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(requestPath, legacyPayload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	legacyProcess := process
+	legacyProcess.RequestHash = legacyHash
+	processPayload, err := json.Marshal(legacyProcess)
+	if err != nil {
+		t.Fatal(err)
+	}
+	processPath := filepath.Join(config.WorkRoot, filepath.FromSlash(runPath), processFileName)
+	if err := os.WriteFile(processPath, processPayload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	config.SessionResolver = sessionResolverFunc(func(_ context.Context, candidate ports.AgentLaunchRequest) (Session, error) {
+		if candidate.SessionRef != request.SessionRef || candidate.PlanGeneration != request.PlanGeneration {
+			return Session{}, errors.New("authority unavailable")
+		}
+		secret, _ := credentials.NewSecret([]byte(helperSessionBearer))
+		return Session{Ref: candidate.SessionRef, Endpoint: "http://127.0.0.1:7777/mcp", BearerToken: secret}, nil
+	})
+	outputPath := filepath.Join(config.WorkRoot, filepath.FromSlash(runPath), lastMessageFileName)
+	if err := os.WriteFile(outputPath, []byte("untrusted replay must not scrub"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reopened := openTestAdapter(t, config)
+	untrusted := request
+	untrusted.SessionRef, _ = ports.NewExecutionSessionRef("execution-session:legacy-authority-attacker")
+	untrusted.PlanGeneration++
+	if _, err := reopened.Launch(context.Background(), untrusted); ErrorCode(err) != CodeSessionUnavailable {
+		t.Fatalf("untrusted replay error=%v code=%q", err, ErrorCode(err))
+	}
+	if payload, err := os.ReadFile(outputPath); err != nil || string(payload) != "untrusted replay must not scrub" {
+		t.Fatalf("untrusted replay scrubbed output=%q error=%v", payload, err)
+	}
+	if identity, err := platformInspectProcess(process); err != nil || identity != processIdentityAlive {
+		t.Fatalf("untrusted replay process identity=%v error=%v", identity, err)
+	}
+	for _, name := range []string{launchUpgradeFileName, terminalFileName} {
+		if _, err := os.Stat(filepath.Join(config.WorkRoot, filepath.FromSlash(runPath), name)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("untrusted replay created %s: %v", name, err)
+		}
+	}
+	_, err = reopened.Launch(context.Background(), request)
+	if err != nil {
+		t.Fatalf("authorized replay error=%v", err)
+	}
+	if lock, err := reopened.acquireOwnerLock(runPath); lock != nil || !errors.Is(err, errOwnerLockBusy) {
+		t.Fatalf("authorized replay did not adopt process: lock=%v error=%v", lock, err)
+	}
+	upgradePayload, err := os.ReadFile(filepath.Join(config.WorkRoot, filepath.FromSlash(runPath), launchUpgradeFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var upgrade launchUpgradeRecord
+	if err := json.Unmarshal(upgradePayload, &upgrade); err != nil {
+		t.Fatal(err)
+	}
+	if upgrade.Launch.RequestHash != mustRequestHash(t, request) ||
+		upgrade.Launch.ExecutionSessionRef != request.SessionRef.String() ||
+		upgrade.Launch.PlanGeneration != request.PlanGeneration {
+		t.Fatalf("authorized binding=%+v", upgrade)
+	}
+	if err := platformSignalProcess(process, ports.AgentStopForced); err != nil {
+		t.Fatalf("signal adopted legacy process: %v", err)
+	}
+	_ = command.Wait()
+	awaitProcessIdentityGone(t, process)
+}
+
 func TestCodexSelectiveStopPreservesSiblingProcessTrees(t *testing.T) {
 	config := processTreeTestConfig(t)
 	adapter := openTestAdapter(t, config)

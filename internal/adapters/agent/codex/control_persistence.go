@@ -156,7 +156,8 @@ func (adapter *Adapter) processRecordForState(state *executionState) (processRec
 		return processRecord{}, found, err
 	}
 	if record.ExecutionRef != state.receipt.ExecutionRef.String() ||
-		record.RequestHash != state.requestHash || record.RuntimeScope != adapter.config.RuntimeScope {
+		(record.RequestHash != state.requestHash && record.RequestHash != state.terminalRequestHash) ||
+		record.RuntimeScope != adapter.config.RuntimeScope {
 		return processRecord{}, false, &Error{Code: CodeProcessOwnershipInvalid}
 	}
 	return record, true, nil
