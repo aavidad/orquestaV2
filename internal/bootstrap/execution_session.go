@@ -14,7 +14,6 @@ import (
 	"orquesta/internal/adapters/agent/codex"
 	"orquesta/internal/adapters/auth/executiontoken"
 	"orquesta/internal/application"
-	commandcore "orquesta/internal/commands"
 	"orquesta/internal/credentials"
 	"orquesta/internal/goal"
 	"orquesta/internal/ports"
@@ -27,7 +26,7 @@ type codexExecutionSessionResolver struct {
 }
 
 func newCodexExecutionSessionResolver(authority application.ExecutionSessionAuthoritySource, broker *executiontoken.Broker, endpoint string) (codex.SessionResolver, error) {
-	if authority == nil || broker == nil || !validLoopbackMCPEndpoint(endpoint) {
+	if authority == nil || broker == nil || loopbackMCPEndpoint(endpoint) == nil {
 		return nil, errors.New("bootstrap.execution_session_resolver_invalid")
 	}
 	return &codexExecutionSessionResolver{authority: authority, broker: broker, endpoint: endpoint}, nil
@@ -78,7 +77,7 @@ type loopbackPostArtifactMailboxAdmitter struct {
 }
 
 func newLoopbackPostArtifactMailboxAdmitter(broker *executiontoken.Broker, endpoint string) (application.PostArtifactMailboxAdmitter, error) {
-	if broker == nil || !validLoopbackMCPEndpoint(endpoint) {
+	if broker == nil || loopbackMCPEndpoint(endpoint) == nil {
 		return nil, errors.New("bootstrap.post_artifact_mailbox_admitter_invalid")
 	}
 	return &loopbackPostArtifactMailboxAdmitter{broker: broker, endpoint: endpoint}, nil
@@ -148,9 +147,12 @@ func callPostArtifactMailboxMCP(ctx context.Context, endpoint string, token []by
 		return application.PostArtifactMailboxAdmissionReceipt{}, err
 	}
 	var output struct {
-		Result commandcore.Result `json:"result"`
+		Result struct {
+			Data    json.RawMessage `json:"data"`
+			Failure *struct{}       `json:"failure"`
+		} `json:"result"`
 	}
-	if err := json.Unmarshal(encoded, &output); err != nil || output.Result.Failure != nil {
+	if json.Unmarshal(encoded, &output) != nil || output.Result.Failure != nil {
 		return application.PostArtifactMailboxAdmissionReceipt{}, errors.New("bootstrap.post_artifact_mailbox_result_invalid")
 	}
 	var data struct {
@@ -185,36 +187,29 @@ func artifactRefStrings(refs []goal.ArtifactRef) []string {
 }
 
 type executionBearerTransport struct {
-	base     http.RoundTripper
-	scheme   string
-	host     string
-	path     string
+	target   url.URL
 	material []byte
 }
 
 func newExecutionBearerTransport(endpoint string, material []byte) (*executionBearerTransport, error) {
-	parsed, err := url.Parse(endpoint)
-	if err != nil || len(material) == 0 || !validLoopbackMCPEndpoint(endpoint) {
+	parsed := loopbackMCPEndpoint(endpoint)
+	if parsed == nil || len(material) == 0 {
 		return nil, errors.New("bootstrap.execution_session_transport_invalid")
 	}
 	return &executionBearerTransport{
-		base: http.DefaultTransport, scheme: parsed.Scheme, host: parsed.Host, path: parsed.EscapedPath(),
-		material: append([]byte(nil), material...),
+		target: *parsed, material: append([]byte(nil), material...),
 	}, nil
 }
 
 func (transport *executionBearerTransport) RoundTrip(request *http.Request) (*http.Response, error) {
 	if transport == nil || request == nil || request.URL == nil ||
-		request.URL.Scheme != transport.scheme || request.URL.Host != transport.host ||
-		request.URL.EscapedPath() != transport.path || request.URL.User != nil ||
-		request.URL.RawQuery != "" || request.URL.ForceQuery || request.URL.Fragment != "" ||
-		len(transport.material) == 0 {
+		*request.URL != transport.target || len(transport.material) == 0 {
 		return nil, errors.New("bootstrap.execution_session_target_forbidden")
 	}
 	cloned := request.Clone(request.Context())
 	cloned.Header = request.Header.Clone()
 	cloned.Header.Set("Authorization", "Bearer "+string(transport.material))
-	return transport.base.RoundTrip(cloned)
+	return http.DefaultTransport.RoundTrip(cloned)
 }
 
 func (transport *executionBearerTransport) destroy() {
@@ -225,13 +220,16 @@ func (transport *executionBearerTransport) destroy() {
 	transport.material = nil
 }
 
-func validLoopbackMCPEndpoint(endpoint string) bool {
+func loopbackMCPEndpoint(endpoint string) *url.URL {
 	parsed, err := url.Parse(endpoint)
 	if err != nil || parsed.Scheme != "http" || parsed.User != nil ||
 		parsed.Host == "" || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" ||
 		parsed.Path == "" {
-		return false
+		return nil
 	}
 	address := net.ParseIP(parsed.Hostname())
-	return address != nil && address.IsLoopback()
+	if address == nil || !address.IsLoopback() {
+		return nil
+	}
+	return parsed
 }
