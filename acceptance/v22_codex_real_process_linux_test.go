@@ -3,9 +3,13 @@
 package acceptance_test
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -110,6 +114,53 @@ func v22AssertCooperativeStopEvidence(t *testing.T, record v22ProcessRecord) {
 	}
 }
 
+type v22StopRequestEvidence struct {
+	SchemaVersion  int       `json:"schema_version"`
+	RequestHash    string    `json:"request_hash"`
+	IdempotencyKey string    `json:"idempotency_key"`
+	Mode           string    `json:"mode"`
+	RequestedAt    time.Time `json:"requested_at"`
+}
+
+type v22StopIntentEvidence struct {
+	SchemaVersion  int       `json:"schema_version"`
+	RequestHash    string    `json:"request_hash"`
+	IdempotencyKey string    `json:"idempotency_key"`
+	Mode           string    `json:"mode"`
+	Sequence       uint64    `json:"sequence"`
+	PreparedAt     time.Time `json:"prepared_at"`
+}
+
+type v22StopSignalEvidence struct {
+	SchemaVersion  int       `json:"schema_version"`
+	RequestHash    string    `json:"request_hash"`
+	IdempotencyKey string    `json:"idempotency_key"`
+	Mode           string    `json:"mode"`
+	Sequence       uint64    `json:"sequence"`
+	SignaledAt     time.Time `json:"signaled_at"`
+}
+
+type v22StopCompletionEvidence struct {
+	SchemaVersion  int       `json:"schema_version"`
+	RequestHash    string    `json:"request_hash"`
+	IdempotencyKey string    `json:"idempotency_key"`
+	Mode           string    `json:"mode"`
+	Sequence       uint64    `json:"sequence"`
+	ObservedAt     time.Time `json:"observed_at"`
+}
+
+type v22StoppedTerminalEvidence struct {
+	SchemaVersion       int       `json:"schema_version"`
+	RequestHash         string    `json:"request_hash"`
+	Status              string    `json:"status"`
+	MediaType           string    `json:"media_type,omitempty"`
+	Artifact            string    `json:"artifact,omitempty"`
+	ErrorCode           string    `json:"error_code,omitempty"`
+	ObservedAt          time.Time `json:"observed_at"`
+	Diagnostic          []byte    `json:"diagnostic,omitempty"`
+	DiagnosticTruncated bool      `json:"diagnostic_truncated,omitempty"`
+}
+
 func v22ValidateCooperativeStopEvidence(record v22ProcessRecord) error {
 	dir := filepath.Dir(record.path)
 	requests, _ := filepath.Glob(filepath.Join(dir, "stop-*.request.json"))
@@ -125,99 +176,169 @@ func v22ValidateCooperativeStopEvidence(record v22ProcessRecord) error {
 			len(requests), len(intents), len(signals), len(completions), len(terminals), len(receipts),
 		)
 	}
-	request, err := v22ReadEvidenceObject(requests[0])
+	request, err := v22ReadStrictEvidence[v22StopRequestEvidence](requests[0])
 	if err != nil {
 		return err
 	}
-	intent, err := v22ReadEvidenceObject(intents[0])
+	intent, err := v22ReadStrictEvidence[v22StopIntentEvidence](intents[0])
 	if err != nil {
 		return err
 	}
-	signal, err := v22ReadEvidenceObject(signals[0])
+	signal, err := v22ReadStrictEvidence[v22StopSignalEvidence](signals[0])
 	if err != nil {
 		return err
 	}
-	completion, err := v22ReadEvidenceObject(completions[0])
+	completion, err := v22ReadStrictEvidence[v22StopCompletionEvidence](completions[0])
 	if err != nil {
 		return err
 	}
-	terminal, err := v22ReadEvidenceObject(terminals[0])
+	terminal, err := v22ReadStrictEvidence[v22StoppedTerminalEvidence](terminals[0])
 	if err != nil {
 		return err
 	}
-	hash, key, mode := request.text("request_hash"), request.text("idempotency_key"), request.text("mode")
-	sequence := intent.number("sequence")
-	if hash == "" || key == "" || mode != "cooperative" || sequence == 0 ||
-		intent.text("request_hash") != hash || signal.text("request_hash") != hash || completion.text("request_hash") != hash ||
-		intent.text("idempotency_key") != key || signal.text("idempotency_key") != key || completion.text("idempotency_key") != key ||
-		intent.text("mode") != mode || signal.text("mode") != mode || completion.text("mode") != mode ||
-		signal.number("sequence") != sequence || completion.number("sequence") != sequence {
+	stem := v22StopEvidenceStem(request.IdempotencyKey)
+	if request.SchemaVersion != 1 || intent.SchemaVersion != 1 ||
+		signal.SchemaVersion != 1 || completion.SchemaVersion != 1 ||
+		request.RequestHash == "" || request.IdempotencyKey == "" || request.Mode != "cooperative" ||
+		request.RequestedAt.IsZero() || intent.PreparedAt.IsZero() ||
+		signal.SignaledAt.IsZero() || completion.ObservedAt.IsZero() ||
+		filepath.Base(requests[0]) != stem+".request.json" ||
+		filepath.Base(intents[0]) != stem+".signal-intent.json" ||
+		filepath.Base(signals[0]) != stem+".signal.json" {
 		return fmt.Errorf(
 			"causal stop chain mismatch: request=%+v intent=%+v signal=%+v completion=%+v",
 			request, intent, signal, completion,
 		)
 	}
-	if terminal.text("request_hash") != record.Hash ||
-		terminal.text("status") != "failed" ||
-		terminal.text("error_code") != "codex.execution_stopped" {
+	if intent.RequestHash != request.RequestHash || signal.RequestHash != request.RequestHash ||
+		completion.RequestHash != request.RequestHash ||
+		intent.IdempotencyKey != request.IdempotencyKey || signal.IdempotencyKey != request.IdempotencyKey ||
+		completion.IdempotencyKey != request.IdempotencyKey ||
+		intent.Mode != request.Mode || signal.Mode != request.Mode || completion.Mode != request.Mode ||
+		intent.Sequence != 1 || signal.Sequence != 1 || completion.Sequence != 1 {
+		return fmt.Errorf(
+			"causal stop fence mismatch: request=%+v intent=%+v signal=%+v completion=%+v",
+			request, intent, signal, completion,
+		)
+	}
+	if record.Hash == "" || terminal.SchemaVersion != 5 || terminal.ObservedAt.IsZero() ||
+		terminal.RequestHash != record.Hash ||
+		terminal.Status != "failed" ||
+		terminal.ErrorCode != "codex.execution_stopped" {
 		return fmt.Errorf("terminal does not bind stopped process: process=%+v terminal=%+v", record, terminal)
 	}
 	return nil
 }
 
-func v22ReadEvidenceObject(path string) (v22Object, error) {
+func v22StopEvidenceStem(idempotencyKey string) string {
+	digest := sha256.Sum256([]byte(idempotencyKey))
+	return "stop-" + hex.EncodeToString(digest[:])
+}
+
+func v22ReadStrictEvidence[T any](path string) (T, error) {
+	var value T
 	payload, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", filepath.Base(path), err)
+		return value, fmt.Errorf("read %s: %w", filepath.Base(path), err)
 	}
-	var object v22Object
-	if err := json.Unmarshal(payload, &object); err != nil {
-		return nil, fmt.Errorf("decode %s: %w", filepath.Base(path), err)
+	if len(payload) == 0 || len(payload) > 64<<10 {
+		return value, fmt.Errorf("invalid evidence size in %s: %d", filepath.Base(path), len(payload))
 	}
-	return object, nil
+	decoder := json.NewDecoder(bytes.NewReader(payload))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&value); err != nil {
+		return value, fmt.Errorf("decode %s: %w", filepath.Base(path), err)
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		return value, fmt.Errorf("trailing JSON in %s", filepath.Base(path))
+	}
+	return value, nil
 }
 
 func TestV22CooperativeStopEvidenceRequiresReceiptlessCausalChain(t *testing.T) {
 	dir := t.TempDir()
 	record := v22ProcessRecord{Hash: "sha256:launch", path: filepath.Join(dir, "process.json")}
-	fixtures := map[string]v22Object{
-		"stop-fence.request.json":       {"request_hash": "sha256:stop", "idempotency_key": "stop-key", "mode": "cooperative"},
-		"stop-fence.signal-intent.json": {"request_hash": "sha256:stop", "idempotency_key": "stop-key", "mode": "cooperative", "sequence": float64(7)},
-		"stop-fence.signal.json":        {"request_hash": "sha256:stop", "idempotency_key": "stop-key", "mode": "cooperative", "sequence": float64(7)},
-		"stop-completion.json":          {"request_hash": "sha256:stop", "idempotency_key": "stop-key", "mode": "cooperative", "sequence": float64(7)},
-		"terminal.json":                 {"request_hash": record.Hash, "status": "failed", "error_code": "codex.execution_stopped"},
+	now := time.Date(2026, 7, 25, 0, 0, 0, 0, time.UTC)
+	request := v22StopRequestEvidence{
+		SchemaVersion: 1, RequestHash: "sha256:stop", IdempotencyKey: "stop-key",
+		Mode: "cooperative", RequestedAt: now,
 	}
-	for name, fixture := range fixtures {
-		payload, err := json.Marshal(fixture)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, name), payload, 0o600); err != nil {
-			t.Fatal(err)
-		}
+	intent := v22StopIntentEvidence{
+		SchemaVersion: 1, RequestHash: request.RequestHash, IdempotencyKey: request.IdempotencyKey,
+		Mode: request.Mode, Sequence: 1, PreparedAt: now.Add(time.Second),
 	}
+	signal := v22StopSignalEvidence{
+		SchemaVersion: 1, RequestHash: request.RequestHash, IdempotencyKey: request.IdempotencyKey,
+		Mode: request.Mode, Sequence: 1, SignaledAt: now.Add(2 * time.Second),
+	}
+	completion := v22StopCompletionEvidence{
+		SchemaVersion: 1, RequestHash: request.RequestHash, IdempotencyKey: request.IdempotencyKey,
+		Mode: request.Mode, Sequence: 1, ObservedAt: now.Add(3 * time.Second),
+	}
+	terminal := v22StoppedTerminalEvidence{
+		SchemaVersion: 5, RequestHash: record.Hash, Status: "failed",
+		ErrorCode: "codex.execution_stopped", ObservedAt: now.Add(4 * time.Second),
+	}
+	stem := v22StopEvidenceStem(request.IdempotencyKey)
+	requestPath := filepath.Join(dir, stem+".request.json")
+	v22WriteEvidenceFixture(t, requestPath, request)
+	v22WriteEvidenceFixture(t, filepath.Join(dir, stem+".signal-intent.json"), intent)
+	v22WriteEvidenceFixture(t, filepath.Join(dir, stem+".signal.json"), signal)
+	v22WriteEvidenceFixture(t, filepath.Join(dir, "stop-completion.json"), completion)
+	v22WriteEvidenceFixture(t, filepath.Join(dir, "terminal.json"), terminal)
 	if err := v22ValidateCooperativeStopEvidence(record); err != nil {
 		t.Fatalf("valid receiptless chain rejected: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "stop-fence.receipt.json"), []byte(`{}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	receiptPath := filepath.Join(dir, stem+".receipt.json")
+	v22WriteEvidenceFixture(t, receiptPath, struct{}{})
 	if err := v22ValidateCooperativeStopEvidence(record); err == nil {
 		t.Fatal("physical stop receipt accepted for live cooperative chain")
 	}
-	if err := os.Remove(filepath.Join(dir, "stop-fence.receipt.json")); err != nil {
+	if err := os.Remove(receiptPath); err != nil {
 		t.Fatal(err)
 	}
-	fixtures["stop-completion.json"]["sequence"] = float64(8)
-	payload, err := json.Marshal(fixtures["stop-completion.json"])
-	if err != nil {
-		t.Fatal(err)
+	completion.Sequence = 2
+	v22WriteEvidenceFixture(t, filepath.Join(dir, "stop-completion.json"), completion)
+	if err := v22ValidateCooperativeStopEvidence(record); err == nil {
+		t.Fatal("mismatched stop fence accepted")
 	}
-	if err := os.WriteFile(filepath.Join(dir, "stop-completion.json"), payload, 0o600); err != nil {
+	completion.Sequence = 1
+	v22WriteEvidenceFixture(t, filepath.Join(dir, "stop-completion.json"), completion)
+	v22WriteEvidenceFixture(t, requestPath, map[string]any{
+		"schema_version": 1, "request_hash": request.RequestHash,
+		"idempotency_key": request.IdempotencyKey, "mode": request.Mode,
+		"requested_at": request.RequestedAt, "unknown": true,
+	})
+	if err := v22ValidateCooperativeStopEvidence(record); err == nil {
+		t.Fatal("unknown stop request field accepted")
+	}
+	v22WriteEvidenceFixture(t, requestPath, request)
+	wrongPath := filepath.Join(dir, "stop-wrong.request.json")
+	if err := os.Rename(requestPath, wrongPath); err != nil {
 		t.Fatal(err)
 	}
 	if err := v22ValidateCooperativeStopEvidence(record); err == nil {
-		t.Fatal("mismatched stop fence accepted")
+		t.Fatal("stop request filename not bound to idempotency key")
+	}
+	if err := os.Rename(wrongPath, requestPath); err != nil {
+		t.Fatal(err)
+	}
+	terminal.SchemaVersion = 4
+	v22WriteEvidenceFixture(t, filepath.Join(dir, "terminal.json"), terminal)
+	if err := v22ValidateCooperativeStopEvidence(record); err == nil {
+		t.Fatal("non-V22 terminal schema accepted")
+	}
+}
+
+func v22WriteEvidenceFixture(t *testing.T, path string, value any) {
+	t.Helper()
+	payload, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, payload, 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 
