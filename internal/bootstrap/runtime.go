@@ -121,23 +121,25 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		}
 		return err
 	}
-	openIdentity := func() error {
-		identityComposition, err = composeIdentityRuntime(ctx, setup.snapshot, options.IdentityHTTPClient)
-		return err
-	}
-	openCredentials := func() error {
-		credentialStore, err = openBuildCredentialStore(setup.snapshot, setup.clock)
-		if err == nil {
-			cleanup.add(func() { _ = credentialStore.Close() })
-		}
-		return err
-	}
-	buildSteps := []func() error{openIdentity, openCredentials, openAgent}
 	if options.AgentFactory != nil {
-		buildSteps[0], buildSteps[1], buildSteps[2] = openAgent, openIdentity, openCredentials
+		if err := openAgent(); err != nil {
+			return nil, err
+		}
 	}
-	for _, step := range buildSteps {
-		if err := step(); err != nil {
+	identityComposition, err = composeIdentityRuntime(ctx, setup.snapshot, options.IdentityHTTPClient)
+	if err != nil {
+		return nil, err
+	}
+	credentialStore, err = credentiallocal.Open(credentiallocal.Options{
+		Path: setup.snapshot.CredentialsLocalPath(), OwnerUID: os.Geteuid(),
+		MaxStoreBytes: setup.snapshot.CredentialsLocalMaxDocumentBytes(), Now: setup.clock.Now,
+	})
+	if err != nil {
+		return nil, err
+	}
+	cleanup.add(func() { _ = credentialStore.Close() })
+	if options.AgentFactory == nil {
+		if err := openAgent(); err != nil {
 			return nil, err
 		}
 	}
@@ -185,7 +187,13 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		if err != nil {
 			return nil, err
 		}
-		if err := bindAgentSessionResolver(agent, sessionResolver); err != nil {
+		binder, ok := agent.(interface {
+			BindSessionResolver(codex.SessionResolver) error
+		})
+		if !ok {
+			return nil, errors.New("bootstrap.agent_session_resolver_unsupported")
+		}
+		if err := binder.BindSessionResolver(sessionResolver); err != nil {
 			return nil, err
 		}
 	}
@@ -200,9 +208,7 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	cleanup.add(func() { _ = artifacts.Close() })
 	orchestrator, err := newBuildOrchestrator(
 		setup, repository, artifacts, agent, controller, capabilities, workspace, testAttestor,
-		executionRuntimeComposition{
-			sessions: executionBroker, postArtifactMailbox: postArtifactMailbox,
-		},
+		executionRuntimeComposition{sessions: executionBroker, postArtifactMailbox: postArtifactMailbox},
 	)
 	if err != nil {
 		return nil, err
@@ -289,13 +295,6 @@ func openBuildListener(snapshot config.Snapshot, listener net.Listener) (net.Lis
 	return listener, nil
 }
 
-func openBuildCredentialStore(snapshot config.Snapshot, clock application.Clock) (*credentiallocal.Store, error) {
-	return credentiallocal.Open(credentiallocal.Options{
-		Path: snapshot.CredentialsLocalPath(), OwnerUID: os.Geteuid(),
-		MaxStoreBytes: snapshot.CredentialsLocalMaxDocumentBytes(), Now: clock.Now,
-	})
-}
-
 func openBuildAgent(
 	ctx context.Context, snapshot config.Snapshot, clock local.Clock, factory AgentFactory,
 	promptRenderer codex.PromptRenderer,
@@ -327,10 +326,6 @@ func openBuildAgent(
 
 type workspaceResolverBinder interface {
 	BindWorkspacePathResolver(codex.WorkspacePathResolver) error
-}
-
-type sessionResolverBinder interface {
-	BindSessionResolver(codex.SessionResolver) error
 }
 
 // localRepositoryLocator is deliberately a one-binding composition adapter.
@@ -447,14 +442,6 @@ func bindAgentWorkspaceResolver(agent AgentAdapter, resolver codex.WorkspacePath
 		return errors.New("bootstrap.agent_workspace_resolver_unsupported")
 	}
 	return binder.BindWorkspacePathResolver(resolver)
-}
-
-func bindAgentSessionResolver(agent AgentAdapter, resolver codex.SessionResolver) error {
-	binder, ok := agent.(sessionResolverBinder)
-	if !ok {
-		return errors.New("bootstrap.agent_session_resolver_unsupported")
-	}
-	return binder.BindSessionResolver(resolver)
 }
 
 func shutdownBuildAgent(agent AgentAdapter, timeout time.Duration) {
@@ -836,15 +823,13 @@ func Run(ctx context.Context, options Options) error {
 	if err != nil {
 		return err
 	}
-	if err := runtime.Start(ctx); err != nil {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), runtime.config.ServerShutdownTimeout())
-		defer cancel()
-		return errors.Join(err, runtime.Shutdown(shutdownCtx))
+	runErr := runtime.Start(ctx)
+	if runErr == nil {
+		runErr = runtime.Wait()
 	}
-	serveErr := runtime.Wait()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), runtime.config.ServerShutdownTimeout())
 	defer cancel()
-	return errors.Join(serveErr, runtime.Shutdown(shutdownCtx))
+	return errors.Join(runErr, runtime.Shutdown(shutdownCtx))
 }
 
 func productionAgentFactory(
@@ -884,15 +869,12 @@ func productionAgentFactory(
 		_ = store.Close()
 		return nil, err
 	}
-	return &credentialAgent{AgentAdapter: agent, closeStore: store.Close}, nil
+	return &credentialAgent{Adapter: agent, closeStore: store.Close}, nil
 }
 
 func productionAgentAdapter(
-	snapshot config.Snapshot,
-	clock application.Clock,
-	promptRenderer codex.PromptRenderer,
-	credentialStore credentials.Store,
-) (AgentAdapter, error) {
+	snapshot config.Snapshot, clock application.Clock, promptRenderer codex.PromptRenderer, credentialStore credentials.Store,
+) (*codex.Adapter, error) {
 	if snapshot.RuntimeProvider() != "codex" {
 		return nil, errors.New("bootstrap.runtime_provider_unsupported")
 	}
@@ -925,54 +907,14 @@ func productionAgentAdapter(
 }
 
 type credentialAgent struct {
-	AgentAdapter
+	*codex.Adapter
 	closeStore func() error
 	closeOnce  sync.Once
 	closeErr   error
 }
 
-func (agent *credentialAgent) BindRuntimeScope(scope string) error {
-	binder, ok := agent.AgentAdapter.(runtimeScopeBinder)
-	if !ok {
-		return errors.New("bootstrap.agent_runtime_scope_unsupported")
-	}
-	return binder.BindRuntimeScope(scope)
-}
-
-func (agent *credentialAgent) BindWorkspacePathResolver(resolver codex.WorkspacePathResolver) error {
-	binder, ok := agent.AgentAdapter.(workspaceResolverBinder)
-	if !ok {
-		return errors.New("bootstrap.agent_workspace_resolver_unsupported")
-	}
-	return binder.BindWorkspacePathResolver(resolver)
-}
-
-func (agent *credentialAgent) BindSessionResolver(resolver codex.SessionResolver) error {
-	binder, ok := agent.AgentAdapter.(sessionResolverBinder)
-	if !ok {
-		return errors.New("bootstrap.agent_session_resolver_unsupported")
-	}
-	return binder.BindSessionResolver(resolver)
-}
-
-func (agent *credentialAgent) ControlCapabilities(ctx context.Context) (ports.AgentControlCapabilities, error) {
-	controller, ok := agent.AgentAdapter.(application.AgentController)
-	if !ok {
-		return ports.AgentControlCapabilities{}, errors.New("bootstrap.agent_controller_unavailable")
-	}
-	return controller.ControlCapabilities(ctx)
-}
-
-func (agent *credentialAgent) Stop(ctx context.Context, request ports.AgentStopRequest) (ports.AgentStopReceipt, error) {
-	controller, ok := agent.AgentAdapter.(application.AgentController)
-	if !ok {
-		return ports.AgentStopReceipt{}, errors.New("bootstrap.agent_controller_unavailable")
-	}
-	return controller.Stop(ctx, request)
-}
-
 func (agent *credentialAgent) Shutdown(ctx context.Context) error {
-	agentErr := agent.AgentAdapter.Shutdown(ctx)
+	agentErr := agent.Adapter.Shutdown(ctx)
 	agent.closeOnce.Do(func() { agent.closeErr = agent.closeStore() })
 	return errors.Join(agentErr, agent.closeErr)
 }
