@@ -1081,22 +1081,22 @@ func v22ExecutionStates(g v22GoalProjection) string {
 }
 
 func v22PlanA() map[string]any {
-	parent := v22Item("parent", "Poll the execution-bound mailbox, deliver/consume/ACK its child, read only delivered artifact refs, then remain live for 20 seconds before producing the parent artifact.", "phase:a", []string{"docs/v22-parent.md"}, false, nil, "artifact")
+	parent := v22Item("parent", "Poll the execution-bound mailbox, deliver/consume/ACK its child, read only delivered artifact refs, then remain live for 20 seconds before producing the parent artifact.", "phase:a", nil, false, nil, "artifact")
 	parent["dependencies"] = []string{"sibling"}
 	return v22Plan("a",
-		v22Item("sibling", "Produce a distinct independent artifact containing V22-SIBLING-NOT-DELIVERED.", "phase:a", []string{"docs/v22-sibling.md"}, false, nil, "artifact"),
+		v22Item("sibling", "Produce a distinct independent artifact containing V22-SIBLING-NOT-DELIVERED.", "phase:a", nil, false, nil, "artifact"),
 		parent,
-		v22Item("child", "Produce a distinct child artifact containing V22-CHILD-DELIVERED and let post-artifact delivery admit it to parent.", "phase:a", []string{"docs/v22-child.md"}, true, "parent", "artifact"),
+		v22Item("child", "Produce a distinct child artifact containing V22-CHILD-DELIVERED and let post-artifact delivery admit it to parent.", "phase:a", nil, true, "parent", "artifact"),
 	)
 }
 func v22PlanB() map[string]any {
-	return v22Plan("b", v22Item("stop", "Remain working until public selective stop; do not affect another Goal.", "phase:b", []string{"docs/v22-stop.md"}, false, nil, "artifact"))
+	return v22Plan("b", v22Item("stop", "Remain working until public selective stop; do not affect another Goal.", "phase:b", nil, false, nil, "artifact"))
 }
 func v22PlanC() map[string]any {
 	return v22Plan("c", v22Item("program", "Use isolated Git workspace: add a minimal go.mod, v22_marker.go with a Marker function, and v22_marker_test.go that verifies it; run the required Go test, obtain review, then integrate.", "phase:c", []string{"go.mod", "v22_marker.go", "v22_marker_test.go"}, false, nil, "evidence_bundle"))
 }
 func v22PlanD() map[string]any {
-	return v22Plan("d", v22Item("recover", "Remain live across crash, resume exactly once after restart, and produce recovery artifact.", "phase:d", []string{"docs/v22-recover.md"}, false, nil, "artifact"))
+	return v22Plan("d", v22Item("recover", "Remain live across crash, resume exactly once after restart, and produce recovery artifact.", "phase:d", nil, false, nil, "artifact"))
 }
 func v22Plan(key string, items ...map[string]any) map[string]any {
 	return map[string]any{"phases": []any{v22Phase(key)}, "work_items": items}
@@ -1105,11 +1105,12 @@ func v22Phase(key string) map[string]any {
 	return map[string]any{"ref": "phase-instance:" + key, "key": "phase:" + key, "template_ref": "phase-template:program"}
 }
 func v22Item(key, objective, phase string, write []string, handoff bool, parent any, output string) map[string]any {
-	item := map[string]any{"key": key, "objective": objective, "phase": phase, "role": "role:codex", "dependencies": []string{}, "write_set": write, "handoff_required": handoff, "output_contract": output, "council_policy": "required"}
+	item := map[string]any{"key": key, "objective": objective, "phase": phase, "role": "role:codex", "dependencies": []string{}, "write_set": []string{}, "handoff_required": handoff, "output_contract": output}
 	if parent != nil {
 		item["parent"] = parent
 	}
 	if key == "program" {
+		item["write_set"] = write
 		item["council_policy"] = "auto"
 		item["required_tests"] = []any{map[string]any{"ref": "required-test:v22-c", "tool_ref": "tool:go", "arguments": []string{"test", "./..."}, "working_directory": "."}}
 	}
