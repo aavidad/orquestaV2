@@ -33,7 +33,7 @@ for path in "${changed[@]}"; do
       internal/commands/definitions_generated.go|internal/commands/dispatcher.go|internal/commands/dispatcher_test.go|internal/commands/handlers_goal.go|internal/commands/model.go|internal/commands/output.go|internal/commands/registry.json|internal/commands/v22_public_projection_test.go|\
       internal/config/config_test.go|internal/config/keys_generated.go|internal/config/registry.go|internal/config/value.go|\
       internal/i18n/catalog_test.go|internal/i18n/catalogs/en.json|internal/i18n/catalogs/es.json|internal/i18n/manifest.go|internal/i18n/manifest.json|internal/identity/contracts_test.go|internal/identity/membership.go|internal/identity/policy.go|internal/interfaces/mcp/v22_public_projection_test.go|internal/ports/agent.go|internal/ports/execution_session.go|\
-      product/evidence/v22_codex_e2e.json|product/evidence/v22_codex_e2e.output.txt|product/roadmap.json|product/traceability/markdown_source_roles.jsonl|product/traceability/pending_sources.json|product/traceability/source_dispositions.jsonl|product_roadmap_v22_test.go|scripts/check_rebuild_write_set.sh)
+      product/evidence/real_codex_mcp_e2e.json|product/evidence/v22_codex_e2e.json|product/evidence/v22_codex_e2e.output.txt|product/roadmap.json|product/traceability/markdown_source_roles.jsonl|product/traceability/pending_sources.json|product/traceability/source_dispositions.jsonl|product_roadmap_v22_test.go|scripts/check_rebuild_write_set.sh)
         ;;
       *)
         invalid+=("$path")
