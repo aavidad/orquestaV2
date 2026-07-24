@@ -125,12 +125,12 @@ func TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP(t *tes
 		bProcess := v22WaitProcess(t, h.root, running[refs["B"]].text("execution_ref"))
 		dProcess := v22WaitProcess(t, h.root, running[refs["D"]].text("execution_ref"))
 		cProgress := h.get(ctx, refs["C"])
+		fence := h.assertMailboxArtifactIsolation(ctx, refs["A"])
+		admission := fence.Admission
 		b := h.get(ctx, refs["B"])
 		bGoal := b.object("goal")
 		h.call(ctx, "orquesta.goals.control", map[string]any{"operation": "cancel", "target": "goal", "goal_ref": refs["B"], "expected_goal_revision": bGoal.number("revision"), "expected_plan_generation": bGoal.number("plan_generation"), "expected_app_spec_generation": bGoal.number("app_spec_generation"), "expected_spec_hash": bGoal.text("spec_hash"), "reason": "V22 public selective cancellation while A/C/D progress"})
 		b = h.waitCancelled(ctx, refs["B"], running[refs["B"]], bProcess)
-		fence := h.assertMailboxArtifactIsolation(ctx, refs["A"])
-		admission := fence.Admission
 		h.waitProgress(ctx, refs["C"], cProgress)
 		exactD := running[refs["D"]].text("execution_ref")
 		current := h.runningExecution(ctx, refs["D"]).text("execution_ref")
