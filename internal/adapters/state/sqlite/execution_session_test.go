@@ -86,7 +86,6 @@ func TestExecutionServicePrincipalExactScopeRevocationAndRestart(t *testing.T) {
 	if _, err := system.repository.ResolveExecution(ctx, human, system.project, execution.Ref); !application.IsStateError(err, application.StateNotFound) {
 		t.Fatalf("human substitution err=%v", err)
 	}
-
 	restartSQLiteV15System(t, system)
 	resolved, err = system.repository.ResolveExecution(ctx, authority.ServicePrincipal, system.project, execution.Ref)
 	if err != nil || resolved != execution.Ref {

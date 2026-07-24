@@ -6,8 +6,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"net"
 	"net/http"
+	statesqlite "orquesta/internal/adapters/state/sqlite"
+	"orquesta/internal/application"
+	"orquesta/internal/goal"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,12 +20,6 @@ import (
 	"syscall"
 	"testing"
 	"time"
-
-	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
-
-	statesqlite "orquesta/internal/adapters/state/sqlite"
-	"orquesta/internal/application"
-	"orquesta/internal/goal"
 )
 
 // The harness owns only temporary files and processes. Every operation that
@@ -168,7 +166,6 @@ func TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP(t *tes
 	if current := h.runningExecution(ctx, refs["D"]); current.Ref != running[refs["D"]].Ref {
 		t.Fatalf("B stop disturbed D execution: got=%s want=%s", current.Ref, running[refs["D"]].Ref)
 	}
-
 	backup := h.backup(ctx)
 	h.verifyRestoreCopy(ctx, backup, refs["D"], running[refs["D"]].Ref)
 	if current := h.runningExecution(ctx, refs["D"]); current.Ref != running[refs["D"]].Ref {
@@ -180,7 +177,6 @@ func TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP(t *tes
 	}
 	h.restart(ctx)
 	h.waitAdopted(ctx, refs["D"], running[refs["D"]], dProcess)
-
 	completed := map[string]v22GoalProjection{}
 	for _, id := range []string{"A", "C", "D"} {
 		completed[id] = h.waitTerminal(ctx, refs[id])

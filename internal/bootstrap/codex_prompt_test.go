@@ -2,20 +2,17 @@ package bootstrap
 
 import (
 	"context"
-	"os"
-	"strings"
-	"testing"
-
 	"orquesta/internal/adapters/agent/codex"
 	localruntime "orquesta/internal/adapters/system/local"
 	"orquesta/internal/i18n"
+	"os"
+	"strings"
+	"testing"
 )
 
 func TestCodexRuntimeUsesCatalogOwnedPrompt(t *testing.T) {
 	catalog, err := i18n.LoadBundled()
-	if err != nil {
-		t.Fatal(err)
-	}
+	v22NoError(t, err)
 	prompt := fullCodexPromptFixture()
 	for _, test := range []struct {
 		locale, marker string
@@ -38,12 +35,9 @@ func TestCodexRuntimeUsesCatalogOwnedPrompt(t *testing.T) {
 			t.Fatalf("locale=%s prompt=%q error=%v", test.locale, rendered, err)
 		}
 	}
-
 	root, configPath := credentialFactoryFixture(t)
 	handle, err := os.OpenFile(configPath, os.O_APPEND|os.O_WRONLY, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	v22NoError(t, err)
 	if _, err := handle.WriteString("\n[api]\nlocale = \"en\"\n"); err != nil {
 		_ = handle.Close()
 		t.Fatal(err)
@@ -56,9 +50,7 @@ func TestCodexRuntimeUsesCatalogOwnedPrompt(t *testing.T) {
 		t.Fatalf("load config in %s: %v", root, err)
 	}
 	renderer, err := newCatalogCodexPromptRenderer(catalog, snapshot.APILocale())
-	if err != nil {
-		t.Fatal(err)
-	}
+	v22NoError(t, err)
 	agent, err := productionAgentFactory(snapshot, localruntime.Clock{}, renderer)
 	if err != nil {
 		t.Fatalf("production factory: %v", err)

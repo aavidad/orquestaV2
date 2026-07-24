@@ -3,13 +3,12 @@ package codex
 import (
 	"context"
 	"errors"
+	"orquesta/internal/credentials"
+	"orquesta/internal/ports"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"orquesta/internal/credentials"
-	"orquesta/internal/ports"
 )
 
 const helperSessionBearer = "v22<session>ephemeral"
@@ -41,7 +40,6 @@ func TestBindSessionResolverIsIdempotentAndCannotReplaceAuthority(t *testing.T) 
 	if err := adapter.BindSessionResolver(second); ErrorCode(err) != CodeSessionInvalid {
 		t.Fatalf("replacement error=%v code=%q", err, ErrorCode(err))
 	}
-
 	configured := testConfig(t)
 	configured.SessionResolver = first
 	configuredAdapter := openTestAdapter(t, configured)
@@ -65,7 +63,6 @@ func TestBindSessionResolverRejectsClosedOrUsedAdapter(t *testing.T) {
 	if err := closed.BindSessionResolver(resolver); ErrorCode(err) != CodeSessionInvalid {
 		t.Fatalf("closed bind error=%v code=%q", err, ErrorCode(err))
 	}
-
 	used := openTestAdapter(t, testConfig(t))
 	used.mu.Lock()
 	used.executions["execution:already-used"] = &executionState{}
@@ -222,14 +219,12 @@ func TestSessionLaunchKeepsBearerOutOfJournalAndShellProjection(t *testing.T) {
 	adapter := openTestAdapter(t, config)
 	request := testRequest(t, "session-launch", "helper:success helper:session", 1024)
 	request.SessionRef, _ = ports.NewExecutionSessionRef("execution-session:session-launch")
-
 	if _, err := adapter.Launch(context.Background(), request); err != nil {
 		t.Fatalf("Launch() error = %v", err)
 	}
 	if observation := awaitTerminal(t, adapter, request.ExecutionRef); observation.Status != ports.AgentCompleted {
 		t.Fatalf("session launch observation = %+v", observation)
 	}
-
 	runDirectory := filepath.Join(config.WorkRoot, filepath.FromSlash(executionPath(request.ExecutionRef)))
 	for _, fileName := range []string{requestFileName, terminalFileName, lastMessageFileName} {
 		payload, err := os.ReadFile(filepath.Join(runDirectory, fileName))
@@ -267,7 +262,6 @@ func TestSessionPrestartJournalReplayResolvesExactSession(t *testing.T) {
 	if mustRequestHash(t, request) == mustRequestHash(t, otherSession) {
 		t.Fatal("opaque execution session reference did not bind the launch identity")
 	}
-
 	seed, err := New(config)
 	if err != nil {
 		t.Fatalf("New(seed) error = %v", err)
@@ -280,7 +274,6 @@ func TestSessionPrestartJournalReplayResolvesExactSession(t *testing.T) {
 	if err := seed.Close(); err != nil {
 		t.Fatalf("Close(seed) error = %v", err)
 	}
-
 	reopened := openTestAdapter(t, config)
 	if _, err := reopened.Launch(context.Background(), request); err != nil {
 		t.Fatalf("Launch(replay) error = %v", err)

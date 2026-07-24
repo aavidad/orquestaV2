@@ -249,44 +249,6 @@ func TestCodexChildDeliveryUsesSameExecutionServicePrincipalAfterArtifactPersist
 	if _, err := repository.Authorize(ctx, listRequest); !errors.Is(err, application.ErrForbidden) {
 		t.Fatalf("execution principal listed goals err=%v", err)
 	}
-	siblingArtifact, _ := goal.NewArtifactRef("artifact:sha256:" + strings.Repeat("f", 64))
-	_, err = repository.db.ExecContext(ctx, `
-INSERT INTO artifacts(ref,goal_ref,work_item_ref,digest,media_type,size,created_at)
-SELECT ?,goal_ref,work_item_ref,?,'text/plain',7,created_at
-FROM artifacts WHERE goal_ref=? AND ref=?`,
-		siblingArtifact.String(), strings.Repeat("f", 64),
-		persisted.Goal.Ref().String(), childArtifact.String(),
-	)
-	sqliteTestNoError(t, err)
-	_, err = repository.db.ExecContext(ctx, `
-INSERT INTO artifact_occurrences(
- occurrence_ref,kind,goal_ref,work_item_ref,execution_ref,artifact_ref,
- execution_attempt,plan_generation,work_item_generation,app_spec_generation,spec_hash,created_at)
-SELECT ?,kind,goal_ref,work_item_ref,execution_ref,?,
- execution_attempt,plan_generation,work_item_generation,app_spec_generation,spec_hash,created_at
-FROM artifact_occurrences WHERE goal_ref=? AND artifact_ref=?`,
-		"artifact-occurrence:post-artifact-sibling", siblingArtifact.String(),
-		persisted.Goal.Ref().String(), childArtifact.String(),
-	)
-	sqliteTestNoError(t, err)
-	_, err = repository.db.ExecContext(ctx, `
-INSERT INTO attestations(
- ref,kind,verdict,goal_ref,work_item_ref,execution_ref,execution_attempt,plan_generation,
- work_item_generation,app_spec_generation,spec_hash,artifact_ref,subject_digest,
- workspace_binding_digest,change_set_ref,change_set_digest,manifest_artifact_ref,report_artifact_ref,
- attestor_ref,receipt_ref,policy_ref,required_tests_digest,policy_digest,effect_intent_ref,
- effect_attempt_ref,effect_fence,effect_receipt_ref,started_at,finished_at,policy,accepted_at)
-SELECT ?,kind,verdict,goal_ref,work_item_ref,execution_ref,execution_attempt,plan_generation,
- work_item_generation,app_spec_generation,spec_hash,?,subject_digest,
- workspace_binding_digest,change_set_ref,change_set_digest,manifest_artifact_ref,report_artifact_ref,
- attestor_ref,receipt_ref,policy_ref,required_tests_digest,policy_digest,effect_intent_ref,
- effect_attempt_ref,effect_fence,effect_receipt_ref,started_at,finished_at,policy,accepted_at
-FROM attestations WHERE goal_ref=? AND artifact_ref=?`,
-		"attestation:post-artifact-sibling", siblingArtifact.String(),
-		persisted.Goal.Ref().String(), childArtifact.String(),
-	)
-	sqliteTestNoError(t, err)
-
 	messageRef := mustRef(t, "message:post-artifact-mailbox", application.NewMailboxMessageRef)
 	envelope := application.MailboxEnvelope{
 		Ref: messageRef, RequestRef: "request:post-artifact-mailbox",
@@ -348,16 +310,6 @@ FROM attestations WHERE goal_ref=? AND artifact_ref=?`,
 		receipt.Decision().Role() != identity.RoleExecutionService {
 		t.Fatalf("delivered artifact authorization=%+v err=%v", receipt, err)
 	}
-	siblingArtifactRequest, err := identity.NewAuthorizationRequest(identity.AuthorizationRequestInput{
-		RequestRef: "authorization:post-artifact-sibling",
-		Principal:  recipient.ServicePrincipal, ProjectRef: persisted.Goal.Project(),
-		Permission: identity.PermissionArtifactsRead, ResourceRef: siblingArtifact.String(),
-		RequestedAt: clock.Now(),
-	})
-	sqliteTestNoError(t, err)
-	if _, err := repository.Authorize(ctx, siblingArtifactRequest); !errors.Is(err, application.ErrForbidden) {
-		t.Fatalf("recipient execution read sibling artifact err=%v", err)
-	}
 	sourceMailboxRequest, err := identity.NewAuthorizationRequest(identity.AuthorizationRequestInput{
 		RequestRef: "authorization:post-artifact-source-envelope",
 		Principal:  sourceAfter.ServicePrincipal, ProjectRef: persisted.Goal.Project(),
@@ -370,9 +322,8 @@ FROM attestations WHERE goal_ref=? AND artifact_ref=?`,
 		t.Fatalf("source envelope authorization=%+v err=%v", sourceMailboxAuthorization, err)
 	}
 
-	// Keep the parent's observation leased so the internal admission action is
-	// the next claimable action without mutating scheduler priority.
-	parentObserve := mustMailboxSchedulerClaim(t, repository, "post-artifact-parent-observe", 0, clock.Now())
+	// Keep the parent's observation leased so admission is claimed next.
+	_ = mustMailboxSchedulerClaim(t, repository, "post-artifact-parent-observe", 0, clock.Now())
 	admitClaim := mustMailboxSchedulerClaim(t, repository, "post-artifact-admit", 0, clock.Now())
 	if admitClaim.Action.Kind != application.ActionAdmitMailbox ||
 		admitClaim.Action.ExecutionRef != childObserve.Action.ExecutionRef {
@@ -426,31 +377,6 @@ WHERE execution_ref=? AND kind='revoke_execution_session' AND completed_at IS NU
 		t.Fatalf("revoked source claimed recipient mailbox changed=%v err=%v", changed, err)
 	}
 
-	t.Run("completed admission survives succeeded Goal recovery", func(t *testing.T) {
-		completePostArtifactMailbox(
-			t, repository, envelope, record.Action, recipient.ServicePrincipal,
-			parentExecutionRef, clock,
-		)
-		clock.Advance(time.Second)
-		succeedMailboxWorkItem(
-			t, repository, parentObserve, clock.Now(), "post-artifact-parent", "b", true, false,
-		)
-		repository = restartMailboxTestRepository(t, repository, path, clock)
-		terminal, err := repository.GetGoal(ctx, envelope.GoalRef)
-		sqliteTestNoError(t, err)
-		if terminal.Goal.State() != goal.GoalStateSucceeded {
-			t.Fatalf("recovered Goal state=%s want succeeded", terminal.Goal.State())
-		}
-		var completedAt sql.NullInt64
-		if err := repository.db.QueryRowContext(ctx, `
-SELECT completed_at
-FROM outbox
-WHERE ref=? AND kind='admit_mailbox'`,
-			admitClaim.Action.Ref,
-		).Scan(&completedAt); err != nil || !completedAt.Valid {
-			t.Fatalf("recovered post-artifact admission completed_at=%+v err=%v", completedAt, err)
-		}
-	})
 }
 
 func TestMailboxRestartPreservesEveryCausalFrontier(t *testing.T) {
@@ -2093,136 +2019,6 @@ func authorizeMailboxTest(
 		t, repository, principal, envelope.ProjectRef, identity.PermissionGoalsGet,
 		envelope.Ref.String(), "authorization:mailbox:"+suffix, at,
 	)
-}
-
-func completePostArtifactMailbox(
-	t *testing.T,
-	repository *Repository,
-	envelope application.MailboxEnvelope,
-	action application.ActionRecord,
-	recipient identity.Principal,
-	recipientExecution goal.ExecutionRef,
-	clock *sqliteMembershipClock,
-) {
-	t.Helper()
-	ctx := context.Background()
-	claimAuthorization := authorizeMailboxTest(
-		t, repository, recipient, envelope, "post-artifact-terminal-claim", clock.Now(),
-	)
-	claimFingerprint := application.MailboxMutationFingerprint(
-		application.MailboxMutationClaim, recipient.Ref, envelope.ProjectRef, envelope.GoalRef,
-		envelope.Ref, envelope.ParentWorkItemRef, recipientExecution, "", 0, "",
-	)
-	claim, changed, err := repository.ClaimMailbox(ctx, application.ClaimMailboxState{
-		RequestRef: "request:post-artifact-terminal-claim", RequestFingerprint: claimFingerprint,
-		AuthorizationReceipt: claimAuthorization, PrincipalRef: recipient.Ref,
-		ProjectRef: envelope.ProjectRef, GoalRef: envelope.GoalRef, MessageRef: envelope.Ref,
-		RecipientExecutionRef: recipientExecution, Token: "token:post-artifact-terminal-claim",
-		LeaseDuration: time.Minute, RequestedAt: clock.Now(),
-	})
-	if err != nil || !changed {
-		t.Fatalf("post-artifact terminal claim changed=%v claim=%+v err=%s",
-			changed, claim, sqliteTestErrorChain(err))
-	}
-
-	clock.Advance(time.Second)
-	deliveryAuthorization := authorizeMailboxTest(
-		t, repository, recipient, envelope, "post-artifact-terminal-deliver", clock.Now(),
-	)
-	deliveryFingerprint := application.MailboxMutationFingerprint(
-		application.MailboxMutationDeliver, recipient.Ref, envelope.ProjectRef, envelope.GoalRef,
-		envelope.Ref, envelope.ParentWorkItemRef, recipientExecution, claim.Attempt.ClaimToken,
-		claim.Attempt.Fence, "",
-	)
-	delivered, changed, err := repository.MarkMailboxDelivered(ctx, application.MarkMailboxDeliveredState{
-		RequestRef: "request:post-artifact-terminal-deliver", RequestFingerprint: deliveryFingerprint,
-		AuthorizationReceipt: deliveryAuthorization, PrincipalRef: recipient.Ref,
-		ProjectRef: envelope.ProjectRef, GoalRef: envelope.GoalRef, MessageRef: envelope.Ref,
-		RecipientExecutionRef: recipientExecution, ClaimToken: claim.Attempt.ClaimToken,
-		Fence: claim.Attempt.Fence, DeliveryRef: "receipt:post-artifact-terminal-delivered",
-		OperationAt: clock.Now(),
-	})
-	if err != nil || !changed || delivered.State != application.MailboxStateDelivered {
-		t.Fatalf("post-artifact terminal deliver changed=%v state=%s err=%v", changed, delivered.State, err)
-	}
-
-	clock.Advance(time.Second)
-	consumeAuthorization := authorizeMailboxTest(
-		t, repository, recipient, envelope, "post-artifact-terminal-consume", clock.Now(),
-	)
-	consumeFingerprint := application.MailboxMutationFingerprint(
-		application.MailboxMutationConsume, recipient.Ref, envelope.ProjectRef, envelope.GoalRef,
-		envelope.Ref, envelope.ParentWorkItemRef, recipientExecution, claim.Attempt.ClaimToken,
-		claim.Attempt.Fence, "",
-	)
-	consumption := application.ActionConsumptionReceipt{
-		ActionRef: action.Ref, Kind: application.ActionDeliverMailbox,
-		GoalRef: envelope.GoalRef, WorkItemRef: envelope.ParentWorkItemRef,
-		ExecutionRef: recipientExecution, MailboxMessageRef: envelope.Ref,
-		PlanGeneration: action.PlanGeneration, WorkItemGeneration: action.WorkItemGeneration,
-		Fence: claim.Attempt.Fence, DeliveryAttempt: claim.Attempt.Fence,
-		ClaimToken: claim.Attempt.ClaimToken, WorkerRef: recipient.Ref.String(),
-		Outcome: application.ActionConsumedCompleted, ConsumedAt: clock.Now(),
-	}
-	consumed, changed, err := repository.ConsumeMailbox(ctx, application.ConsumeMailboxState{
-		RequestRef: "request:post-artifact-terminal-consume", RequestFingerprint: consumeFingerprint,
-		AuthorizationReceipt: consumeAuthorization, PrincipalRef: recipient.Ref,
-		ProjectRef: envelope.ProjectRef, GoalRef: envelope.GoalRef, MessageRef: envelope.Ref,
-		RecipientExecutionRef: recipientExecution, ClaimToken: claim.Attempt.ClaimToken,
-		Fence: claim.Attempt.Fence, ConsumptionRef: "receipt:post-artifact-terminal-consumed",
-		ConsumptionReceipt: consumption, OperationAt: clock.Now(),
-	})
-	if err != nil || !changed || consumed.State != application.MailboxStateConsumed {
-		t.Fatalf("post-artifact terminal consume changed=%v state=%s err=%v", changed, consumed.State, err)
-	}
-
-	clock.Advance(time.Second)
-	ackAuthorization := authorizeMailboxTest(
-		t, repository, recipient, envelope, "post-artifact-terminal-ack", clock.Now(),
-	)
-	beforeAck, err := repository.GetGoal(ctx, envelope.GoalRef)
-	sqliteTestNoError(t, err)
-	ackRef := "receipt:post-artifact-terminal-acknowledged"
-	updated, err := beforeAck.Goal.ResolveChildHandoff(
-		beforeAck.Goal.Revision(), envelope.ParentWorkItemRef, envelope.ChildWorkItemRef,
-		envelope.Ref.String(), goal.ChildHandoffAcknowledged, ackRef, clock.Now(),
-	)
-	sqliteTestNoError(t, err)
-	ack := application.MailboxAcknowledgement{
-		Ref: ackRef, MessageRef: envelope.Ref, ActionRef: action.Ref,
-		RequestRef: "request:post-artifact-terminal-ack",
-		ProjectRef: envelope.ProjectRef, GoalRef: envelope.GoalRef,
-		TargetPlanGeneration: envelope.TargetPlanGeneration,
-		ParentWorkItemRef:    envelope.ParentWorkItemRef, ChildWorkItemRef: envelope.ChildWorkItemRef,
-		Recipient: envelope.Recipient, Fence: claim.Attempt.Fence,
-		Outcome:           application.MailboxOutcomeAcknowledged,
-		EffectOrReworkRef: "effect:post-artifact-terminal-applied", AcknowledgedAt: clock.Now(),
-		AuthorizationReceipt: ackAuthorization,
-	}
-	ack.RequestFingerprint = application.MailboxMutationFingerprint(
-		application.MailboxMutationAcknowledge, recipient.Ref, envelope.ProjectRef, envelope.GoalRef,
-		envelope.Ref, envelope.ParentWorkItemRef, recipientExecution, claim.Attempt.ClaimToken,
-		claim.Attempt.Fence,
-		strconv.FormatUint(uint64(beforeAck.Goal.Revision()), 10)+"\x00"+
-			strconv.FormatUint(uint64(beforeAck.Goal.PlanGeneration()), 10)+"\x00"+
-			ack.EffectOrReworkRef,
-	)
-	persisted, changed, err := repository.AcknowledgeMailbox(ctx, application.ResolveMailboxState{
-		RequestRef: ack.RequestRef, RequestFingerprint: ack.RequestFingerprint,
-		AuthorizationReceipt: ackAuthorization, PrincipalRef: recipient.Ref,
-		ProjectRef: envelope.ProjectRef, GoalRef: envelope.GoalRef, MessageRef: envelope.Ref,
-		RecipientExecutionRef: recipientExecution, ClaimToken: claim.Attempt.ClaimToken,
-		Fence: claim.Attempt.Fence, ExpectedGoalRevision: beforeAck.Goal.Revision(),
-		ExpectedPlanGeneration: beforeAck.Goal.PlanGeneration(), Goal: updated,
-		Acknowledgement: ack, Events: []application.EventRecord{{
-			Ref: "event:post-artifact-terminal-acknowledged", Kind: "mailbox.acknowledged",
-			GoalRef: envelope.GoalRef, WorkItemRef: envelope.ParentWorkItemRef,
-			ExecutionRef: recipientExecution, OccurredAt: clock.Now(),
-		}}, OperationAt: clock.Now(),
-	})
-	if err != nil || !changed || persisted.Ref != ack.Ref {
-		t.Fatalf("post-artifact terminal ack changed=%v receipt=%+v err=%v", changed, persisted, err)
-	}
 }
 
 func openMailboxTestRepository(

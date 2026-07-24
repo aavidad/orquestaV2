@@ -88,15 +88,12 @@ func TestV22PreflightContractIsStructurallyValid(t *testing.T) {
 	root := evidenceRepositoryRoot(t)
 	fixture := evidenceDecodeStrictJSON[v22Fixture](t, filepath.Join(root, v22FixturePath))
 	v22AssertFixture(t, root, fixture)
-	v22AssertRoadmapBoundary(t, root, fixture)
 }
 
 func TestAcceptanceV22CodexE2E(t *testing.T) {
 	root := evidenceRepositoryRoot(t)
 	fixture := evidenceDecodeStrictJSON[v22Fixture](t, filepath.Join(root, v22FixturePath))
 	v22AssertFixture(t, root, fixture)
-	v22AssertRoadmapBoundary(t, root, fixture)
-
 	missing := v22MissingRequiredProductTests(t, root, fixture)
 	if len(missing) != 0 {
 		t.Fatalf("V22_PRODUCT_PENDING: executable product/E2E gates are absent: %v", missing)

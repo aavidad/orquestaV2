@@ -2,10 +2,9 @@ package codex
 
 import (
 	"errors"
+	"orquesta/internal/ports"
 	"strings"
 	"testing"
-
-	"orquesta/internal/ports"
 )
 
 type testPromptRenderer struct {
@@ -66,7 +65,6 @@ func TestAdapterUsesInjectedTypedPromptRenderer(t *testing.T) {
 	if strings.Contains(rendered, request.SpecHash) {
 		t.Fatal("spec hash leaked into rendered prompt")
 	}
-
 	request.SessionRef, _ = ports.NewExecutionSessionRef("execution-session:must-not-leak")
 	config.PromptRenderer = testPromptRenderer{}
 	adapter = openTestAdapter(t, config)
@@ -89,7 +87,6 @@ func TestAdapterRejectsMissingOrFailingPromptRenderer(t *testing.T) {
 	if adapter, err := New(config); adapter != nil || ErrorCode(err) != CodePromptRendererInvalid {
 		t.Fatalf("missing renderer adapter=%v error=%v", adapter, err)
 	}
-
 	config = testConfig(t)
 	config.PromptRenderer = testPromptRenderer{render: func(AgentPrompt) (string, error) {
 		return "", errors.New("render failed")

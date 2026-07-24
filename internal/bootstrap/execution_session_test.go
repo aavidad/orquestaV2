@@ -21,6 +21,13 @@ import (
 	"orquesta/internal/ports"
 )
 
+func v22NoError(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 type bootstrapExecutionSessionAuthoritySource struct {
 	authority ports.ExecutionSessionAuthority
 	uses      int
@@ -36,56 +43,24 @@ func (source *bootstrapExecutionSessionAuthoritySource) ExecutionSessionAuthorit
 }
 
 type bootstrapExecutionSessionCredentialStore struct {
-	material []byte
-	metadata credentials.Metadata
-	uses     int
+	credentials.Store
+	uses int
 }
 
-func (store *bootstrapExecutionSessionCredentialStore) Create(_ context.Context, request credentials.CreateRequest) (credentials.MutationResult, error) {
-	if store.metadata.CredentialRef != "" {
-		return credentials.MutationResult{}, credentials.NewError(credentials.ErrorAlreadyExists, "credential_ref")
+func (store *bootstrapExecutionSessionCredentialStore) Use(
+	ctx context.Context,
+	request credentials.UseRequest,
+	callback func(credentials.Secret) error,
+) (credentials.Receipt, error) {
+	receipt, err := store.Store.Use(ctx, request, callback)
+	if err == nil {
+		store.uses++
 	}
-	store.material = request.Material.Bytes()
-	store.metadata = credentials.Metadata{
-		CredentialRef: request.CredentialRef, OwnerRef: request.OwnerRef,
-		ScopeRefs: append([]credentials.ScopeRef(nil), request.ScopeRefs...), PurposeRef: request.PurposeRef,
-		Version: 1, CreatedAt: time.Date(2026, 7, 23, 12, 0, 0, 0, time.UTC),
-	}
-	return credentials.MutationResult{Metadata: store.metadata}, nil
-}
-
-func (store *bootstrapExecutionSessionCredentialStore) Use(_ context.Context, request credentials.UseRequest, callback func(credentials.Secret) error) (credentials.Receipt, error) {
-	if store.metadata.CredentialRef != request.CredentialRef || store.metadata.OwnerRef != request.OwnerRef ||
-		store.metadata.PurposeRef != request.PurposeRef || len(store.metadata.ScopeRefs) != 1 ||
-		store.metadata.ScopeRefs[0] != request.ScopeRef {
-		return credentials.Receipt{}, credentials.NewError(credentials.ErrorScopeDenied, "scope")
-	}
-	secret, err := credentials.NewSecret(store.material)
-	if err != nil {
-		return credentials.Receipt{}, err
-	}
-	defer secret.Destroy()
-	if err := callback(secret); err != nil {
-		return credentials.Receipt{}, err
-	}
-	store.uses++
-	return credentials.Receipt{
-		CredentialRef: request.CredentialRef, OwnerRef: request.OwnerRef, ScopeRef: request.ScopeRef,
-		PurposeRef: request.PurposeRef, Version: 1, OccurredAt: store.metadata.CreatedAt,
-	}, nil
-}
-
-func (*bootstrapExecutionSessionCredentialStore) Rotate(context.Context, credentials.RotateRequest) (credentials.MutationResult, error) {
-	return credentials.MutationResult{}, credentials.NewError(credentials.ErrorInvalidRequest, "rotate")
-}
-
-func (*bootstrapExecutionSessionCredentialStore) Revoke(context.Context, credentials.RevokeRequest) (credentials.MutationResult, error) {
-	return credentials.MutationResult{}, credentials.NewError(credentials.ErrorInvalidRequest, "revoke")
+	return receipt, err
 }
 
 func TestCodexExecutionSessionResolverResolvesExactBoundSession(t *testing.T) {
 	resolver, request, authority, store := bootstrapSessionResolver(t)
-
 	session, err := resolver.ResolveCodexSession(context.Background(), request)
 	if err != nil {
 		t.Fatalf("ResolveCodexSession: %v", err)
@@ -176,7 +151,6 @@ func TestCodexExecutionSessionResolverFailsClosedForAnyBindingMismatch(t *testin
 		t.Run(test.name, func(t *testing.T) {
 			resolver, request, _, store := bootstrapSessionResolver(t)
 			test.mutate(&request)
-
 			_, err := resolver.ResolveCodexSession(context.Background(), request)
 			if err == nil || err.Error() != "bootstrap.execution_session_unavailable" {
 				t.Fatalf("ResolveCodexSession mismatch error=%v", err)
@@ -226,7 +200,6 @@ func TestExecutionBearerTransportBindsBearerToExactTargetAndRedirectsNeverReceiv
 		}
 	}))
 	defer server.Close()
-
 	transport, err := newExecutionBearerTransport(server.URL+"/mcp", []byte(token))
 	if err != nil {
 		t.Fatalf("newExecutionBearerTransport: %v", err)
@@ -250,7 +223,6 @@ func TestExecutionBearerTransportBindsBearerToExactTargetAndRedirectsNeverReceiv
 	if initialAuthorization != "Bearer "+token || redirectAuthorization != "" || redirected {
 		t.Fatalf("initial authorization=%q redirect authorization=%q redirected=%t", initialAuthorization, redirectAuthorization, redirected)
 	}
-
 	forbiddenRequest(t, transport, server.URL+"/other")
 	queryTarget := forbiddenRequest(t, transport, server.URL+"/mcp?unexpected=yes")
 	if queryTarget.Header.Get("Authorization") != "" {
@@ -260,7 +232,6 @@ func TestExecutionBearerTransportBindsBearerToExactTargetAndRedirectsNeverReceiv
 	if foreign.Header.Get("Authorization") != "" {
 		t.Fatal("bearer mutated the caller request on forbidden target")
 	}
-
 	transport.destroy()
 	if len(transport.material) != 0 {
 		t.Fatal("transport retained bearer material after destroy")
@@ -316,7 +287,17 @@ func bootstrapSessionResolver(t *testing.T) (*codexExecutionSessionResolver, por
 	}
 	request.SessionRef = authority.SessionRef
 	source := &bootstrapExecutionSessionAuthoritySource{authority: authority}
-	store := &bootstrapExecutionSessionCredentialStore{}
+	credentialRoot := t.TempDir()
+	v22NoError(t, os.Chmod(credentialRoot, 0o700))
+	localStore, err := credentiallocal.Open(credentiallocal.Options{
+		Path: filepath.Join(credentialRoot, "credentials.json"), OwnerUID: os.Geteuid(),
+		MaxStoreBytes: 1 << 20, Now: func() time.Time { return time.Date(2026, 7, 23, 12, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		t.Fatalf("open credential store: %v", err)
+	}
+	t.Cleanup(func() { _ = localStore.Close() })
+	store := &bootstrapExecutionSessionCredentialStore{Store: localStore}
 	broker, err := executiontoken.New(store, source)
 	if err != nil {
 		t.Fatalf("new execution token broker: %v", err)

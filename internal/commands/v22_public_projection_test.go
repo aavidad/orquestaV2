@@ -2,15 +2,14 @@ package commands
 
 import (
 	"encoding/json"
-	"reflect"
-	"strings"
-	"testing"
-	"time"
-
 	"orquesta/internal/application"
 	"orquesta/internal/goal"
 	"orquesta/internal/identity"
 	"orquesta/internal/ports"
+	"reflect"
+	"strings"
+	"testing"
+	"time"
 )
 
 func TestV22GoalAndMailboxPublicSchemasExposeCausalEvidenceWithoutPrivateFields(t *testing.T) {
@@ -55,7 +54,6 @@ func TestV22GoalAndMailboxPublicSchemasExposeCausalEvidenceWithoutPrivateFields(
 	if !ok || !v22JSONSemanticallyEqual(getMailbox.OutputSchema, messages.Items) {
 		t.Fatal("mailbox.get and mailbox.list item schemas drift")
 	}
-
 	for _, definition := range []Definition{goalDefinition, getMailbox, listMailbox} {
 		body := strings.ToLower(string(definition.OutputSchema))
 		for _, forbidden := range []string{
@@ -73,8 +71,8 @@ func TestV22GoalAndMailboxPublicSchemasExposeCausalEvidenceWithoutPrivateFields(
 func TestV22PublicProjectionCarriesRefsAttemptsStatesCodesAndDoesNotLeakPrivateValues(t *testing.T) {
 	workItem := v22WorkItem(t)
 	execution := application.ExecutionRecord{
-		Ref: v22ExecutionRef(t, "execution:public"), WorkItemRef: workItem.Ref(),
-		AttemptNo: 2, MaxExecutionAttempts: 3, ReplacesExecutionRef: v22ExecutionRef(t, "execution:old"),
+		Ref: v22MustRef(t, "execution:public", goal.NewExecutionRef), WorkItemRef: workItem.Ref(),
+		AttemptNo: 2, MaxExecutionAttempts: 3, ReplacesExecutionRef: v22MustRef(t, "execution:old", goal.NewExecutionRef),
 		PlanGeneration: 4, AppSpecGeneration: 5, State: application.ExecutionStopped,
 		Purpose: application.ExecutionPurposeWork, FailureCode: "agent.stopped",
 		RecipientMailboxRetired: true,
@@ -82,17 +80,11 @@ func TestV22PublicProjectionCarriesRefsAttemptsStatesCodesAndDoesNotLeakPrivateV
 		AgentRef: "secret-agent", IdempotencyKey: "secret-idempotency",
 	}
 	testRef, err := goal.NewRequiredTestRef("required-test:public")
-	if err != nil {
-		t.Fatal(err)
-	}
+	v22NoError(t, err)
 	changeRef, err := ports.NewChangeSetRef("change:public")
-	if err != nil {
-		t.Fatal(err)
-	}
+	v22NoError(t, err)
 	attestationRef, err := goal.NewAttestationRef("attestation:public")
-	if err != nil {
-		t.Fatal(err)
-	}
+	v22NoError(t, err)
 	attestation := application.AttestationRecord{
 		Ref: attestationRef, Kind: application.AttestationKindRequiredTests,
 		Verdict: application.AttestationVerdictPassed, WorkItemRef: workItem.Ref(),
@@ -119,7 +111,6 @@ func TestV22PublicProjectionCarriesRefsAttemptsStatesCodesAndDoesNotLeakPrivateV
 		TargetBeforeOID: "oid-before", TargetAfterOID: "oid-after", TreeOID: "oid-tree",
 		SourceOID: "secret-source-oid", TargetRef: "secret-target-ref", AdapterRef: "secret-adapter",
 	}
-
 	projected := goalRecordView{
 		Goal: projectGoal(goal.Goal{}), ExecutionCount: 1, ArtifactCount: 0,
 		WorkItems:    []workItemView{projectWorkItem(workItem)},
@@ -130,9 +121,7 @@ func TestV22PublicProjectionCarriesRefsAttemptsStatesCodesAndDoesNotLeakPrivateV
 		MailboxReceipts:     []mailboxReceiptView{},
 	}
 	encoded, err := json.Marshal(projected)
-	if err != nil {
-		t.Fatal(err)
-	}
+	v22NoError(t, err)
 	if _, err := validatePayload(v22Definition(t, "orquesta.goals.get").OutputSchema, encoded); err != nil {
 		t.Fatalf("projected goals.get output violates schema: %v data=%s", err, encoded)
 	}
@@ -158,34 +147,30 @@ func TestV22PublicProjectionCarriesRefsAttemptsStatesCodesAndDoesNotLeakPrivateV
 
 func TestV22MailboxProjectionExposesCompactHandoffAndNoAdmissionSecrets(t *testing.T) {
 	messageRef, err := application.NewMailboxMessageRef("mailbox-message:public")
-	if err != nil {
-		t.Fatal(err)
-	}
+	v22NoError(t, err)
 	artifactRef, err := goal.NewArtifactRef("artifact:public")
-	if err != nil {
-		t.Fatal(err)
-	}
+	v22NoError(t, err)
 	record := application.MailboxRecord{
 		Envelope: application.MailboxEnvelope{
-			Ref: messageRef, GoalRef: v22GoalRef(t, "goal:public"), TargetPlanGeneration: 7,
+			Ref: messageRef, GoalRef: v22MustRef(t, "goal:public", goal.NewGoalRef), TargetPlanGeneration: 7,
 			Kind:              application.MailboxKindChildDelivery,
-			ParentWorkItemRef: v22WorkItemRef(t, "work-item:parent"),
-			ChildWorkItemRef:  v22WorkItemRef(t, "work-item:child"),
+			ParentWorkItemRef: v22MustRef(t, "work-item:parent", goal.NewWorkItemRef),
+			ChildWorkItemRef:  v22MustRef(t, "work-item:child", goal.NewWorkItemRef),
 			Source: application.MailboxEndpoint{
-				PrincipalRef: v22PrincipalRef(t, "principal:child"),
-				WorkItemRef:  v22WorkItemRef(t, "work-item:child"),
-				ExecutionRef: v22ExecutionRef(t, "execution:child"),
+				PrincipalRef: v22MustRef(t, "principal:child", identity.NewPrincipalRef),
+				WorkItemRef:  v22MustRef(t, "work-item:child", goal.NewWorkItemRef),
+				ExecutionRef: v22MustRef(t, "execution:child", goal.NewExecutionRef),
 			},
 			Recipient: application.MailboxEndpoint{
-				PrincipalRef: v22PrincipalRef(t, "principal:parent"),
-				WorkItemRef:  v22WorkItemRef(t, "work-item:parent"),
-				ExecutionRef: v22ExecutionRef(t, "execution:parent"),
+				PrincipalRef: v22MustRef(t, "principal:parent", identity.NewPrincipalRef),
+				WorkItemRef:  v22MustRef(t, "work-item:parent", goal.NewWorkItemRef),
+				ExecutionRef: v22MustRef(t, "execution:parent", goal.NewExecutionRef),
 			},
 			Summary: "child result ready", ArtifactRefs: []goal.ArtifactRef{artifactRef},
 			RequestFingerprint: "secret-mailbox-fingerprint", ContentHash: "secret-content-hash",
 		},
 		Admission: application.MailboxAdmissionReceipt{
-			Ref: "admission:public", PrincipalRef: v22PrincipalRef(t, "principal:child"),
+			Ref: "admission:public", PrincipalRef: v22MustRef(t, "principal:child", identity.NewPrincipalRef),
 		},
 		State: application.MailboxStateAcknowledged,
 		Attempts: []application.MailboxDeliveryAttempt{{
@@ -198,9 +183,7 @@ func TestV22MailboxProjectionExposesCompactHandoffAndNoAdmissionSecrets(t *testi
 	}
 	projected := projectMailbox(record)
 	encoded, err := json.Marshal(projected)
-	if err != nil {
-		t.Fatal(err)
-	}
+	v22NoError(t, err)
 	if _, err := validatePayload(v22Definition(t, "orquesta.mailbox.get").OutputSchema, encoded); err != nil {
 		t.Fatalf("projected mailbox output violates schema: %v data=%s", err, encoded)
 	}
@@ -218,9 +201,7 @@ func TestV22MailboxProjectionExposesCompactHandoffAndNoAdmissionSecrets(t *testi
 		}
 	}
 	goalEncoded, err := json.Marshal(projectGoalRecord(application.GoalRecord{Mailboxes: []application.MailboxRecord{record}}))
-	if err != nil {
-		t.Fatal(err)
-	}
+	v22NoError(t, err)
 	if _, err := validatePayload(v22Definition(t, "orquesta.goals.get").OutputSchema, goalEncoded); err != nil {
 		t.Fatalf("mailbox receipt projection violates goals.get schema: %v data=%s", err, goalEncoded)
 	}
@@ -238,9 +219,7 @@ func TestV22MailboxProjectionExposesCompactHandoffAndNoAdmissionSecrets(t *testi
 
 func TestV22EmptyPublicCollectionsEncodeAsArrays(t *testing.T) {
 	encoded, err := json.Marshal(projectGoalRecord(application.GoalRecord{}))
-	if err != nil {
-		t.Fatal(err)
-	}
+	v22NoError(t, err)
 	var decoded map[string]any
 	if err := json.Unmarshal(encoded, &decoded); err != nil {
 		t.Fatal(err)
@@ -266,70 +245,28 @@ func v22Definition(t *testing.T, id string) Definition {
 func v22WorkItem(t *testing.T) goal.WorkItem {
 	t.Helper()
 	item, err := goal.NewWorkItem(goal.NewWorkItemInput{
-		Ref: v22WorkItemRef(t, "work-item:child"), Goal: v22GoalRef(t, "goal:public"),
-		Actor: v22ActorRef(t, "actor:public"), Project: v22ProjectRef(t, "project:public"),
+		Ref: v22MustRef(t, "work-item:child", goal.NewWorkItemRef), Goal: v22MustRef(t, "goal:public", goal.NewGoalRef),
+		Actor: v22MustRef(t, "actor:public", goal.NewActorRef), Project: v22MustRef(t, "project:public", goal.NewProjectRef),
 		Objective: "return child result", CreatedAt: time.Date(2026, 7, 23, 12, 0, 0, 0, time.UTC),
-		Parent: v22WorkItemRef(t, "work-item:parent"), HandoffRequired: true,
-		Dependencies: []goal.WorkItemRef{v22WorkItemRef(t, "work-item:dependency")},
+		Parent: v22MustRef(t, "work-item:parent", goal.NewWorkItemRef), HandoffRequired: true,
+		Dependencies: []goal.WorkItemRef{v22MustRef(t, "work-item:dependency", goal.NewWorkItemRef)},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	v22NoError(t, err)
 	return item
 }
 
-func v22GoalRef(t *testing.T, value string) goal.GoalRef {
+func v22MustRef[T any](t *testing.T, value string, parse func(string) (T, error)) T {
 	t.Helper()
-	ref, err := goal.NewGoalRef(value)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ref, err := parse(value)
+	v22NoError(t, err)
 	return ref
 }
 
-func v22WorkItemRef(t *testing.T, value string) goal.WorkItemRef {
+func v22NoError(t *testing.T, err error) {
 	t.Helper()
-	ref, err := goal.NewWorkItemRef(value)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return ref
-}
-
-func v22ExecutionRef(t *testing.T, value string) goal.ExecutionRef {
-	t.Helper()
-	ref, err := goal.NewExecutionRef(value)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return ref
-}
-
-func v22ActorRef(t *testing.T, value string) goal.ActorRef {
-	t.Helper()
-	ref, err := goal.NewActorRef(value)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return ref
-}
-
-func v22ProjectRef(t *testing.T, value string) goal.ProjectRef {
-	t.Helper()
-	ref, err := goal.NewProjectRef(value)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return ref
-}
-
-func v22PrincipalRef(t *testing.T, value string) identity.PrincipalRef {
-	t.Helper()
-	ref, err := identity.NewPrincipalRef(value)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return ref
 }
 
 func containsV22(values []string, target string) bool {

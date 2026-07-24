@@ -25,7 +25,6 @@ func TestProductRoadmapV22ScopeAndLifecycleContract(t *testing.T) {
 		t.Fatalf("V22 dependency receipt is not accredited: %v", err)
 	}
 	assertRoadmapV22Lifecycle(t, index, fixture)
-
 	vertical := index.verticals["codex_e2e"]
 	if !reflect.DeepEqual(vertical.DependsOn,
 		[]string{"recovery_backup", "council", "command_registry", "i18n"}) ||
