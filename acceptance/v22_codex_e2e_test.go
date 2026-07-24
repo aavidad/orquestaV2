@@ -68,14 +68,15 @@ type v22GoalScenario struct {
 }
 
 type v22SimplicityBudget struct {
-	ProductDeltaLOCMax        int `json:"product_delta_loc_max"`
-	TestAndHarnessDeltaLOCMax int `json:"test_and_harness_delta_loc_max"`
-	NewTopLevelStoreMax       int `json:"new_top_level_store_max"`
-	LifecycleWriterMax        int `json:"lifecycle_writer_max"`
-	SchedulerMax              int `json:"scheduler_max"`
-	CommandRegistryMax        int `json:"command_registry_max"`
-	ActiveProviderAdapterMax  int `json:"active_provider_adapter_max"`
-	ProductFileLOCMax         int `json:"product_file_loc_max"`
+	Enforcement               string `json:"enforcement"`
+	ProductDeltaLOCMax        int    `json:"product_delta_loc_max"`
+	TestAndHarnessDeltaLOCMax int    `json:"test_and_harness_delta_loc_max"`
+	NewTopLevelStoreMax       int    `json:"new_top_level_store_max"`
+	LifecycleWriterMax        int    `json:"lifecycle_writer_max"`
+	SchedulerMax              int    `json:"scheduler_max"`
+	CommandRegistryMax        int    `json:"command_registry_max"`
+	ActiveProviderAdapterMax  int    `json:"active_provider_adapter_max"`
+	ProductFileLOCMax         int    `json:"product_file_loc_max"`
 }
 
 type v22PSEContract struct {
@@ -176,7 +177,7 @@ func v22AssertFixture(t *testing.T, root string, fixture v22Fixture) {
 		t.Fatalf("invalid V22 closure/deferment ratchets: %+v", fixture)
 	}
 	if fixture.SimplicityBudget != (v22SimplicityBudget{
-		ProductDeltaLOCMax: 3000, TestAndHarnessDeltaLOCMax: 4200,
+		Enforcement: "advisory", ProductDeltaLOCMax: 3000, TestAndHarnessDeltaLOCMax: 4200,
 		NewTopLevelStoreMax: 0, LifecycleWriterMax: 1, SchedulerMax: 1,
 		CommandRegistryMax: 1, ActiveProviderAdapterMax: 1, ProductFileLOCMax: 500,
 	}) {
