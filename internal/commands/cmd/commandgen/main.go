@@ -52,11 +52,19 @@ type definition struct {
 		Path   string `json:"path"`
 	} `json:"http"`
 	MCP struct {
-		Tool string `json:"tool"`
+		Tool        string          `json:"tool"`
+		Annotations *mcpAnnotations `json:"annotations"`
 	} `json:"mcp"`
 	CLI struct {
 		Path []string `json:"path"`
 	} `json:"cli"`
+}
+
+type mcpAnnotations struct {
+	ReadOnly    *bool `json:"read_only"`
+	Destructive *bool `json:"destructive"`
+	Idempotent  *bool `json:"idempotent"`
+	OpenWorld   *bool `json:"open_world"`
 }
 
 func main() {
@@ -140,6 +148,7 @@ func run(root, registryPath string, mode generationMode) error {
 func validate(definitions []definition) error {
 	ids, handlers, bindings := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for _, item := range definitions {
+		annotations := item.MCP.Annotations
 		wantReplay := "application_receipt"
 		if item.Kind == "query" {
 			wantReplay = "read_reexecute"
@@ -155,6 +164,12 @@ func validate(definitions []definition) error {
 			item.DescriptionKey != "command."+strings.TrimPrefix(item.ID, "orquesta.")+".description" ||
 			!equalStrings(item.ErrorCodes, errorCodes) ||
 			item.HTTP.Method != "POST" || item.HTTP.Path != "/api/v1/commands/"+item.ID ||
+			annotations == nil || annotations.ReadOnly == nil ||
+			annotations.Destructive == nil || annotations.Idempotent == nil ||
+			annotations.OpenWorld == nil ||
+			*annotations.ReadOnly != (item.Kind == "query") ||
+			(*annotations.ReadOnly && *annotations.Destructive) ||
+			!*annotations.Idempotent ||
 			item.MCP.Tool != item.ID || !equalStrings(item.CLI.Path, strings.Split(strings.TrimPrefix(item.ID, "orquesta."), ".")) {
 			return errors.New("commandgen.definition_invalid")
 		}
@@ -228,7 +243,7 @@ func generateDefinitions(registry document, digest string) []byte {
 	fmt.Fprintf(&out, "const RegistrySourceSHA256 = %q\n\n", digest)
 	fmt.Fprintln(&out, "var compiledDefinitions = []Definition{")
 	for _, item := range registry.Commands {
-		fmt.Fprintf(&out, "{ID:%q, Version:%q, Kind:Kind(%q), Handler:%q, Permission:%q, Audience:Audience(%q), ExecutionBound:%t, ReplayMode:ReplayMode(%q), InputSchema:[]byte(%q), OutputSchema:[]byte(%q), DescriptionKey:%q, ErrorCodes:%#v, HTTP:HTTPBinding{Method:%q, Path:%q}, MCP:MCPBinding{Tool:%q}, CLI:CLIBinding{Path:%#v}},\n", item.ID, item.Version, item.Kind, item.Handler, item.Permission, item.Audience, item.ExecutionBound, item.ReplayMode, string(item.InputSchema), string(item.OutputSchema), item.DescriptionKey, item.ErrorCodes, item.HTTP.Method, item.HTTP.Path, item.MCP.Tool, item.CLI.Path)
+		fmt.Fprintf(&out, "{ID:%q, Version:%q, Kind:Kind(%q), Handler:%q, Permission:%q, Audience:Audience(%q), ExecutionBound:%t, ReplayMode:ReplayMode(%q), InputSchema:[]byte(%q), OutputSchema:[]byte(%q), DescriptionKey:%q, ErrorCodes:%#v, HTTP:HTTPBinding{Method:%q, Path:%q}, MCP:MCPBinding{Tool:%q, Annotations:MCPAnnotations{ReadOnly:%t, Destructive:%t, Idempotent:%t, OpenWorld:%t}}, CLI:CLIBinding{Path:%#v}},\n", item.ID, item.Version, item.Kind, item.Handler, item.Permission, item.Audience, item.ExecutionBound, item.ReplayMode, string(item.InputSchema), string(item.OutputSchema), item.DescriptionKey, item.ErrorCodes, item.HTTP.Method, item.HTTP.Path, item.MCP.Tool, *item.MCP.Annotations.ReadOnly, *item.MCP.Annotations.Destructive, *item.MCP.Annotations.Idempotent, *item.MCP.Annotations.OpenWorld, item.CLI.Path)
 	}
 	fmt.Fprintln(&out, "}")
 	return out.Bytes()

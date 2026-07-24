@@ -81,6 +81,33 @@ func TestGeneratorRejectsContractMutationsAndTrailingJSON(t *testing.T) {
 			value.Commands[0].InputSchema = json.RawMessage(`{"type":"object","properties":{}}`)
 		}},
 		{"missing_binding", func(value *document) { value.Commands[0].MCP.Tool = "" }},
+		{"missing_annotations", func(value *document) {
+			value.Commands[0].MCP.Annotations = nil
+		}},
+		{"missing_read_only_annotation", func(value *document) {
+			value.Commands[0].MCP.Annotations.ReadOnly = nil
+		}},
+		{"missing_destructive_annotation", func(value *document) {
+			value.Commands[0].MCP.Annotations.Destructive = nil
+		}},
+		{"missing_idempotent_annotation", func(value *document) {
+			value.Commands[0].MCP.Annotations.Idempotent = nil
+		}},
+		{"missing_open_world_annotation", func(value *document) {
+			value.Commands[0].MCP.Annotations.OpenWorld = nil
+		}},
+		{"query_not_read_only", func(value *document) {
+			no := false
+			value.Commands[2].MCP.Annotations.ReadOnly = &no
+		}},
+		{"query_destructive", func(value *document) {
+			yes := true
+			value.Commands[2].MCP.Annotations.Destructive = &yes
+		}},
+		{"non_idempotent", func(value *document) {
+			no := false
+			value.Commands[0].MCP.Annotations.Idempotent = &no
+		}},
 		{"wrong_description", func(value *document) { value.Commands[0].DescriptionKey = "command.other.description" }},
 		{"wrong_cli", func(value *document) { value.Commands[0].CLI.Path = []string{"other"} }},
 		{"wrong_errors", func(value *document) { value.Commands[0].ErrorCodes[0] = "other" }},

@@ -16,6 +16,9 @@ func validateDefinition(definition Definition) error {
 		definition.Permission == "" || definition.Handler == "" || ValidateSchemaContract(definition.InputSchema) != nil ||
 		ValidateSchemaContract(definition.OutputSchema) != nil || definition.HTTP.Method != "POST" ||
 		definition.HTTP.Path != "/api/v1/commands/"+definition.ID || definition.MCP.Tool != definition.ID ||
+		definition.MCP.Annotations.ReadOnly != (definition.Kind == KindQuery) ||
+		(definition.MCP.Annotations.ReadOnly && definition.MCP.Annotations.Destructive) ||
+		!definition.MCP.Annotations.Idempotent ||
 		len(definition.CLI.Path) == 0 || len(definition.ErrorCodes) != len(stableErrorCodes) {
 		return errContract
 	}

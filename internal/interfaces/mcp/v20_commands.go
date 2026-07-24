@@ -68,11 +68,17 @@ func RegisterCommandTools(
 		if err != nil {
 			return fmt.Errorf("mcp.command_description_unavailable: %w", err)
 		}
-		readOnly := definition.Kind == commandcore.KindQuery
+		destructive := definition.MCP.Annotations.Destructive
+		openWorld := definition.MCP.Annotations.OpenWorld
 		tool := &sdkmcp.Tool{
 			Name: binding.Path, Description: description,
 			InputSchema: inputSchema, OutputSchema: outputSchema,
-			Annotations: &sdkmcp.ToolAnnotations{ReadOnlyHint: readOnly, IdempotentHint: true},
+			Annotations: &sdkmcp.ToolAnnotations{
+				ReadOnlyHint:    definition.MCP.Annotations.ReadOnly,
+				DestructiveHint: &destructive,
+				IdempotentHint:  definition.MCP.Annotations.Idempotent,
+				OpenWorldHint:   &openWorld,
+			},
 		}
 		server.AddTool(tool, func(ctx context.Context, request *sdkmcp.CallToolRequest) (*sdkmcp.CallToolResult, error) {
 			return callCommandTool(ctx, request, binding, definition, dispatcher, provider), nil

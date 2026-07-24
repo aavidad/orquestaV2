@@ -33,7 +33,15 @@ type HTTPBinding struct {
 }
 
 type MCPBinding struct {
-	Tool string `json:"tool"`
+	Tool        string         `json:"tool"`
+	Annotations MCPAnnotations `json:"annotations"`
+}
+
+type MCPAnnotations struct {
+	ReadOnly    bool `json:"read_only"`
+	Destructive bool `json:"destructive"`
+	Idempotent  bool `json:"idempotent"`
+	OpenWorld   bool `json:"open_world"`
 }
 
 type CLIBinding struct {

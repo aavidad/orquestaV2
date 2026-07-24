@@ -318,10 +318,32 @@ func TestMCPPublishesExactlyCanonicalSchemasForAllCommands(t *testing.T) {
 	for _, definition := range executor.Definitions() {
 		definitions[definition.ID] = definition
 	}
+	monotonicMailboxMutations := map[string]bool{
+		"orquesta.mailbox.claim":          true,
+		"orquesta.mailbox.mark_delivered": true,
+		"orquesta.mailbox.consume":        true,
+		"orquesta.mailbox.acknowledge":    true,
+	}
 	for _, tool := range listed.Tools {
 		definition, ok := definitions[tool.Name]
 		if !ok {
 			t.Fatalf("unexpected tool=%q", tool.Name)
+		}
+		wantReadOnly := definition.Kind == commandcore.KindQuery
+		wantDestructive := !wantReadOnly && !monotonicMailboxMutations[tool.Name]
+		if tool.Annotations == nil || tool.Annotations.DestructiveHint == nil ||
+			tool.Annotations.OpenWorldHint == nil ||
+			tool.Annotations.ReadOnlyHint != wantReadOnly ||
+			*tool.Annotations.DestructiveHint != wantDestructive ||
+			!tool.Annotations.IdempotentHint || *tool.Annotations.OpenWorldHint {
+			t.Fatalf("%s annotations=%+v want read_only=%t destructive=%t idempotent=true open_world=false",
+				tool.Name, tool.Annotations, wantReadOnly, wantDestructive)
+		}
+		if definition.MCP.Annotations.ReadOnly != wantReadOnly ||
+			definition.MCP.Annotations.Destructive != wantDestructive ||
+			!definition.MCP.Annotations.Idempotent ||
+			definition.MCP.Annotations.OpenWorld {
+			t.Fatalf("%s canonical annotations=%+v", tool.Name, definition.MCP.Annotations)
 		}
 		encoded, err := json.Marshal(tool.InputSchema)
 		if err != nil {
