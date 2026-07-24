@@ -124,22 +124,17 @@ func TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP(t *tes
 		running := h.waitRunning(ctx, refs["A"], refs["B"], refs["C"], refs["D"])
 		bProcess := v22WaitProcess(t, h.root, running[refs["B"]].text("execution_ref"))
 		dProcess := v22WaitProcess(t, h.root, running[refs["D"]].text("execution_ref"))
-		progress := map[string]v22GoalProjection{}
-		for _, id := range []string{"A", "C", "D"} {
-			progress[id] = h.get(ctx, refs[id])
-		}
+		cProgress := h.get(ctx, refs["C"])
 		b := h.get(ctx, refs["B"])
 		bGoal := b.object("goal")
 		h.call(ctx, "orquesta.goals.control", map[string]any{"operation": "cancel", "target": "goal", "goal_ref": refs["B"], "expected_goal_revision": bGoal.number("revision"), "expected_plan_generation": bGoal.number("plan_generation"), "expected_app_spec_generation": bGoal.number("app_spec_generation"), "expected_spec_hash": bGoal.text("spec_hash"), "reason": "V22 public selective cancellation while A/C/D progress"})
 		b = h.waitCancelled(ctx, refs["B"], running[refs["B"]], bProcess)
-		for _, id := range []string{"A", "C"} {
-			h.waitProgress(ctx, refs[id], progress[id])
-		}
+		fence := h.assertMailboxArtifactIsolation(ctx, refs["A"])
+		admission := fence.Admission
+		h.waitProgress(ctx, refs["C"], cProgress)
 		exactD := running[refs["D"]].text("execution_ref")
 		current := h.runningExecution(ctx, refs["D"]).text("execution_ref")
 		v22Require(t, current == exactD, "B cancellation disturbed D execution: got=%s want=%s", current, exactD)
-		fence := h.assertMailboxArtifactIsolation(ctx, refs["A"])
-		admission := fence.Admission
 		expectedD := v22RestoreExpectation(t, h.get(ctx, refs["D"]))
 		backup := h.backup(ctx)
 		h.verifyRestoreCopy(ctx, backup, expectedD)
@@ -1086,7 +1081,7 @@ func v22ExecutionStates(g v22GoalProjection) string {
 }
 
 func v22PlanA() map[string]any {
-	parent := v22Item("parent", "Use only the execution-bound MCP mailbox surface, never goals.get or SQLite. Execute this exact sequence: mailbox.list, mailbox.get, mailbox.claim, mailbox.mark_delivered, mailbox.consume, mailbox.acknowledge. Preserve claim_token and fence from claim through every later command; pass expected_goal_revision and expected_plan_generation returned by claim into acknowledge, with your own opaque effect_or_rework_ref. Read only the delivered artifact refs. After the ACK, execute `sleep 20`, then produce the parent artifact.", "phase:a", nil, false, nil, "artifact")
+	parent := v22Item("parent", "Use only the execution-bound MCP mailbox surface, never goals.get or SQLite. Execute this exact sequence: mailbox.list, mailbox.get, mailbox.claim, mailbox.mark_delivered, mailbox.consume, mailbox.acknowledge. Preserve claim_token and fence from claim through every later command; pass expected_goal_revision and expected_plan_generation returned by claim into acknowledge, with your own opaque effect_or_rework_ref. Read only the delivered artifact refs. After the ACK, execute `sleep 60`, then produce the parent artifact.", "phase:a", nil, false, nil, "artifact")
 	parent["dependencies"] = []string{"sibling"}
 	return v22Plan("a",
 		v22Item("sibling", "Produce a distinct independent artifact containing V22-SIBLING-NOT-DELIVERED.", "phase:a", nil, false, nil, "artifact"),
