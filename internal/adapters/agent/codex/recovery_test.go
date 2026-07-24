@@ -30,7 +30,8 @@ func TestCredentialRecoveryScrubsUntrustedLastMessage(t *testing.T) {
 
 	adapter := openTestAdapter(t, config)
 	observation, err := adapter.Observe(context.Background(), request.ExecutionRef)
-	if ErrorCode(err) != CodeSessionUnavailable || !reflect.DeepEqual(observation, ports.AgentObservation{}) {
+	if err != nil || observation.Status != ports.AgentFailed || observation.ErrorCode != CodeSecretLeak ||
+		len(observation.Content) != 0 {
 		t.Fatalf("recovery observation=%+v err=%v", observation, err)
 	}
 	payload, err := os.ReadFile(lastMessagePath)

@@ -31,16 +31,19 @@ func TestReopenedLiveProcessRetainsExactSecretGuards(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			config := testConfig(t)
-			config.SessionResolver = sessionResolverFunc(func(_ context.Context, request ports.AgentLaunchRequest) (Session, error) {
-				secret, _ := credentials.NewSecret([]byte(helperSessionBearer))
-				return Session{Ref: request.SessionRef, Endpoint: "http://127.0.0.1:7777/mcp", BearerToken: secret}, nil
-			})
 			if test.provider {
 				config.CredentialStore = &credentialTestStore{material: helperCredentialInitial, version: 1}
 				config.CredentialRef = credentials.CredentialRef("credential:codex-primary")
+			} else {
+				config.SessionResolver = sessionResolverFunc(func(_ context.Context, request ports.AgentLaunchRequest) (Session, error) {
+					secret, _ := credentials.NewSecret([]byte(helperSessionBearer))
+					return Session{Ref: request.SessionRef, Endpoint: "http://127.0.0.1:7777/mcp", BearerToken: secret}, nil
+				})
 			}
 			request := testRequest(t, "recovery-"+test.name, test.objective, 1024)
-			request.SessionRef, _ = ports.NewExecutionSessionRef("execution-session:recovery-" + test.name)
+			if !test.provider {
+				request.SessionRef, _ = ports.NewExecutionSessionRef("execution-session:recovery-" + test.name)
+			}
 			command, _, _ := seedUnownedLiveProcess(t, config, request, test.environment)
 			reopened := openTestAdapter(t, config)
 			if test.launchReplay {
@@ -63,6 +66,67 @@ func TestReopenedLiveProcessRetainsExactSecretGuards(t *testing.T) {
 				strings.Contains(string(terminal), helperCredentialInitial) ||
 				strings.Contains(string(terminal), helperSessionBearer) {
 				t.Fatalf("terminal retained secret: %q error=%v", terminal, err)
+			}
+		})
+	}
+}
+
+func TestRecoveryFailureQuarantinesLiveProcessBeforeFinalScrub(t *testing.T) {
+	for _, test := range []struct {
+		name, secret, environment, code string
+		launch                          bool
+	}{
+		{"launch-session", helperSessionBearer, helperSessionEnvironment + "=" + helperSessionBearer, CodeSessionUnavailable, true},
+		{"observe-provider", helperCredentialInitial, codexAPIKeyEnvironment + "=" + helperCredentialInitial, CodeCredentialUnavailable, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			helperPath := filepath.Join(t.TempDir(), "late-secret.sh")
+			script := "#!/bin/sh\n" +
+				"secret=\"${CODEX_API_KEY:-${ORQUESTA_MCP_BEARER_TOKEN:-}}\"\n" +
+				"trap 'printf \"%s\" \"$secret\" > " + lastMessageFileName +
+				"; printf late > recovery-late.marker; exit 0' TERM\n" +
+				"printf ready > recovery-ready.marker\nwhile :; do sleep 1; done\n"
+			if err := os.WriteFile(helperPath, []byte(script), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			config := testConfig(t)
+			config.Command = helperPath
+			request := testRequest(t, "quarantine-"+test.name, "late secret after recovery scrub", 1024)
+			if test.launch {
+				request.SessionRef, _ = ports.NewExecutionSessionRef("execution-session:quarantine-launch")
+				config.SessionResolver = sessionResolverFunc(func(context.Context, ports.AgentLaunchRequest) (Session, error) {
+					return Session{}, errors.New("authority unavailable")
+				})
+			} else {
+				config.CredentialStore = &credentialTestStore{material: test.secret, version: 1, revoked: true}
+				config.CredentialRef = credentials.CredentialRef("credential:codex-primary")
+			}
+			command, process, _ := seedUnownedLiveProcess(t, config, request, test.environment)
+			runRoot := filepath.Join(config.WorkRoot, filepath.FromSlash(executionPath(request.ExecutionRef)))
+			awaitPath(t, filepath.Join(runRoot, "recovery-ready.marker"))
+			outputPath := filepath.Join(runRoot, lastMessageFileName)
+			if err := os.WriteFile(outputPath, []byte("before-first-scrub"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			reopened := openTestAdapter(t, config)
+			var err error
+			if test.launch {
+				_, err = reopened.Launch(context.Background(), request)
+			} else {
+				_, err = reopened.Observe(context.Background(), request.ExecutionRef)
+			}
+			if ErrorCode(err) != test.code {
+				t.Fatalf("recovery error=%v code=%q", err, ErrorCode(err))
+			}
+			awaitPath(t, filepath.Join(runRoot, "recovery-late.marker"))
+			if err := command.Wait(); err != nil {
+				t.Fatalf("Wait: %v", err)
+			}
+			if identity, inspectErr := platformInspectProcess(process); inspectErr != nil || identity != processIdentityGone {
+				t.Fatalf("process identity=%v error=%v", identity, inspectErr)
+			}
+			if output, readErr := os.ReadFile(outputPath); readErr != nil || len(output) != 0 {
+				t.Fatalf("final output=%q error=%v", output, readErr)
 			}
 		})
 	}

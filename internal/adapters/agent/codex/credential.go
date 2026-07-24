@@ -15,12 +15,7 @@ import (
 	"orquesta/internal/ports"
 )
 
-func (adapter *Adapter) launchWithCredentialLocked(
-	ctx context.Context,
-	request ports.AgentLaunchRequest,
-	requestHash string,
-	session *resolvedSession,
-) (ports.AgentLaunchReceipt, error) {
+func (adapter *Adapter) launchWithCredentialLocked(ctx context.Context, request ports.AgentLaunchRequest, requestHash string, session *resolvedSession) (ports.AgentLaunchReceipt, error) {
 	var receipt ports.AgentLaunchReceipt
 	var launchErr error
 	_, useErr := adapter.config.CredentialStore.Use(ctx, adapter.credentialUseRequest(request), func(secret credentials.Secret) error {
@@ -43,9 +38,7 @@ func (adapter *Adapter) launchWithCredentialLocked(
 			launchErr = err
 			return err
 		}
-		receipt, launchErr = adapter.resumeLaunchRecordLocked(
-			ctx, request, requestHash, record, runPath, recordCreated, environment, guard, session,
-		)
+		receipt, launchErr = adapter.resumeLaunchRecordLocked(ctx, request, requestHash, record, runPath, recordCreated, environment, guard, session)
 		return launchErr
 	})
 	if launchErr != nil {
@@ -61,23 +54,19 @@ func (adapter *Adapter) launchWithCredentialLocked(
 }
 
 func (adapter *Adapter) credentialUseRequest(request ports.AgentLaunchRequest) credentials.UseRequest {
-	return credentials.UseRequest{
-		ActorRef: request.ActorRef.String(), RequestRef: "request:codex-launch:" + request.ExecutionRef.String(),
+	return credentials.UseRequest{ActorRef: request.ActorRef.String(), RequestRef: "request:codex-launch:" + request.ExecutionRef.String(),
 		CredentialRef: adapter.config.CredentialRef, OwnerRef: credentials.OwnerRef(request.ActorRef.String()),
-		ScopeRef: credentials.ScopeRef(request.ProjectRef.String()), PurposeRef: credentials.PurposeRef(ProviderRef),
-	}
+		ScopeRef: credentials.ScopeRef(request.ProjectRef.String()), PurposeRef: credentials.PurposeRef(ProviderRef)}
 }
 
 func (record launchRecord) recoveryRequest(receipt ports.AgentLaunchReceipt) ports.AgentLaunchRequest {
 	actorRef, _ := goal.NewActorRef(record.ActorRef)
 	projectRef, _ := goal.NewProjectRef(record.ProjectRef)
 	sessionRef, _ := ports.NewExecutionSessionRef(record.ExecutionSessionRef)
-	return ports.AgentLaunchRequest{
-		SessionRef: sessionRef, ProjectRef: projectRef, ActorRef: actorRef,
+	return ports.AgentLaunchRequest{SessionRef: sessionRef, ProjectRef: projectRef, ActorRef: actorRef,
 		GoalRef: receipt.GoalRef, WorkItemRef: receipt.WorkItemRef, ExecutionRef: receipt.ExecutionRef,
 		ExecutionAttempt: receipt.ExecutionAttempt, PlanGeneration: receipt.PlanGeneration,
-		AppSpecGeneration: receipt.AppSpecGeneration, SpecHash: record.SpecHash,
-	}
+		AppSpecGeneration: receipt.AppSpecGeneration, SpecHash: record.SpecHash}
 }
 
 func (adapter *Adapter) recoverExecutionGuards(ctx context.Context, record launchRecord, state *executionState) error {
@@ -89,9 +78,13 @@ func (adapter *Adapter) recoverExecutionGuards(ctx context.Context, record launc
 		return &Error{Code: CodeCredentialUnavailable}
 	}
 	request := record.recoveryRequest(state.receipt)
-	session, err := adapter.recoverSession(ctx, request)
-	if err != nil {
-		return err
+	var session *resolvedSession
+	var err error
+	if record.ExecutionSessionRef != "" {
+		session, err = adapter.recoverSession(ctx, request)
+		if err != nil {
+			return err
+		}
 	}
 	defer session.destroy()
 	var credentialGuard *credentials.LeakGuard
@@ -126,11 +119,61 @@ func destroyExecutionGuards(state *executionState) {
 	}
 }
 
-func (adapter *Adapter) scrubRecoveryFailure(runPath string, cause error) error {
-	if err := adapter.credentialOutputScrub(runPath); err != nil {
-		return err
+func (adapter *Adapter) quarantineLaunchRecoveryLocked(ctx context.Context, request ports.AgentLaunchRequest, record launchRecord, runPath string, cause error) error {
+	state, err := adapter.recoveryState(record, runPath, request.ExecutionRef)
+	if err != nil {
+		return errors.Join(cause, err)
 	}
-	return cause
+	return adapter.quarantineRecoveryFailureLocked(ctx, state, cause)
+}
+
+func (adapter *Adapter) recoveryState(record launchRecord, runPath string, executionRef goal.ExecutionRef) (*executionState, error) {
+	receipt, err := adapter.observationReceipt(record, executionRef)
+	if err != nil {
+		return nil, err
+	}
+	return &executionState{requestHash: record.RequestHash, terminalRequestHash: record.RequestHash,
+		receipt: receipt, maxOutput: record.MaxOutputBytes, runPath: runPath, status: ports.AgentPending}, nil
+}
+
+func (adapter *Adapter) quarantineRecoveryFailureLocked(ctx context.Context, state *executionState, cause error) error {
+	firstScrub := adapter.credentialOutputScrub(state.runPath)
+	adopted, adoptErr := adapter.adoptPersistedProcessLocked(state)
+	var stopErr error
+	if adopted {
+		record := *state.process
+		for index, mode := range []ports.AgentStopMode{ports.AgentStopCooperative, ports.AgentStopForced} {
+			stopErr = signalProcessTree(record, mode)
+			if errors.Is(stopErr, os.ErrProcessDone) {
+				stopErr = nil
+				break
+			}
+			if stopErr != nil {
+				break
+			}
+			timeout := adapter.config.ProcessPipeDrainDelay
+			if index > 0 || timeout > adapter.config.Timeout {
+				timeout = adapter.config.Timeout
+			}
+			waitCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
+			gone, waitErr := waitForExactProcess(waitCtx, record, nil)
+			cancel()
+			stopErr = waitErr
+			if gone {
+				stopErr = nil
+				break
+			}
+			if !errors.Is(stopErr, context.DeadlineExceeded) {
+				break
+			}
+		}
+		if errors.Is(stopErr, context.DeadlineExceeded) {
+			stopErr = &Error{Code: CodeProcessCleanupFailed, Cause: stopErr}
+		}
+		adapter.releaseProcessOwnershipLocked(state)
+	}
+	destroyExecutionGuards(state)
+	return errors.Join(cause, firstScrub, adoptErr, stopErr, adapter.credentialOutputScrub(state.runPath))
 }
 
 func (adapter *Adapter) preflightCredentialLaunch(secret credentials.Secret, guard *credentials.LeakGuard, request ports.AgentLaunchRequest, session *resolvedSession) error {
@@ -246,10 +289,8 @@ func (adapter *Adapter) gateCredentialTerminalLocked(state *executionState, term
 	clearBytes(terminal.Diagnostic)
 	terminal.Diagnostic = nil
 	terminal.Artifact = ""
-	redacted := terminalRecord{
-		SchemaVersion: stateSchemaVersion, RequestHash: terminal.RequestHash,
-		Status: ports.AgentFailed, ErrorCode: CodeSecretLeak, ObservedAt: terminal.ObservedAt,
-	}
+	redacted := terminalRecord{SchemaVersion: stateSchemaVersion, RequestHash: terminal.RequestHash,
+		Status: ports.AgentFailed, ErrorCode: CodeSecretLeak, ObservedAt: terminal.ObservedAt}
 	if scrubErr := adapter.credentialOutputScrub(state.runPath); scrubErr != nil {
 		return redacted, &Error{Code: CodeStatePersistenceFailed, Cause: scrubErr}
 	}
@@ -286,10 +327,7 @@ func (adapter *Adapter) scrubCredentialOutput(runPath string) error {
 	if removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
 		return &Error{Code: CodeStatePersistenceFailed, Cause: errors.Join(writeErr, removeErr)}
 	}
-	if err := adapter.syncDirectoryCausally(runPath); err != nil {
-		return err
-	}
-	return nil
+	return adapter.syncDirectoryCausally(runPath)
 }
 
 func clearBytes(material []byte) {
