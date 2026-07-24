@@ -11,8 +11,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-
-	"orquesta/internal/config"
 )
 
 func TestV19PSourceFixtureEnvelopeAndProductPaths(t *testing.T) {
@@ -70,9 +68,6 @@ func validateV19SealRepositoryBindings(repositoryRoot string, manifest v19SealMa
 	if err := validateV19SealV18Binding(repositoryRoot, product.GitCommitOID, manifest); err != nil {
 		return err
 	}
-	if err := validateV19SealConfigBinding(manifest); err != nil {
-		return err
-	}
 	production, tests, large, err := v19SealMeasuredBudget(repositoryRoot, fixture, product.GitCommitOID)
 	if err != nil {
 		return err
@@ -81,7 +76,7 @@ func validateV19SealRepositoryBindings(repositoryRoot string, manifest v19SealMa
 		!reflect.DeepEqual(large, manifest.Budget.FilesOver350) {
 		return fmt.Errorf("v19 seal measured budget or large-file inventory differs")
 	}
-	binarySHA, binarySize, goVersion, err := v19BuildSealedBinary(repositoryRoot, product.GitCommitOID)
+	binarySHA, binarySize, goVersion, err := v19BuildSealedBinary(repositoryRoot, product.GitCommitOID, manifest)
 	if err != nil {
 		return err
 	}
@@ -108,24 +103,6 @@ func validateV19SealV18Binding(repositoryRoot, productOID string, manifest v19Se
 		receipt.SealedSource.GitCommitOID != dependency.SealedSourceGitCommitOID ||
 		receipt.CandidateSHA256 != dependency.CandidateSHA256 {
 		return fmt.Errorf("v19 seal V18 receipt content differs")
-	}
-	return nil
-}
-
-func validateV19SealConfigBinding(manifest v19SealManifest) error {
-	snapshot, err := config.Resolve(config.ResolveOptions{Environment: map[string]string{}})
-	if err != nil {
-		return err
-	}
-	effective, err := snapshot.EffectiveJSON()
-	if err != nil {
-		return err
-	}
-	sealed := manifest.EffectiveConfig
-	if sealed.SchemaVersion != snapshot.SchemaVersion() || sealed.RegistryRevision != snapshot.RegistryRevision() ||
-		sealed.RegistrySHA256 != snapshot.RegistryHash() || sealed.SnapshotSHA256 != snapshot.Hash() ||
-		sealed.EffectiveSHA256 != evidenceBytesSHA256(effective) {
-		return fmt.Errorf("v19 seal effective config identity differs")
 	}
 	return nil
 }
@@ -209,7 +186,7 @@ func v19SealFileKind(path string) string {
 	return "production"
 }
 
-func v19BuildSealedBinary(repositoryRoot, productOID string) (string, int64, string, error) {
+func v19BuildSealedBinary(repositoryRoot, productOID string, manifest v19SealManifest) (string, int64, string, error) {
 	root, err := os.MkdirTemp("", "orquesta-v19-seal-")
 	if err != nil {
 		return "", 0, "", err
@@ -225,9 +202,20 @@ func v19BuildSealedBinary(repositoryRoot, productOID string) (string, int64, str
 			return "", 0, "", err
 		}
 	}
+	env := append(os.Environ(), "GOCACHE="+filepath.Join(root, "cache"), "GOTMPDIR="+filepath.Join(root, "tmp"))
+	probe := []byte("package main\nimport(\"crypto/sha256\";\"encoding/hex\";\"fmt\";\"orquesta/internal/config\")\nfunc main(){s,e:=config.Resolve(config.ResolveOptions{Environment:map[string]string{}});if e!=nil{panic(e)};b,e:=s.EffectiveJSON();if e!=nil{panic(e)};d:=sha256.Sum256(b);fmt.Printf(\"%d %s %s %s sha256:%s\",s.SchemaVersion(),s.RegistryRevision(),s.RegistryHash(),s.Hash(),hex.EncodeToString(d[:]))}\n")
+	if err := os.WriteFile(filepath.Join(source, "v19_config_probe.go"), probe, 0o600); err != nil {
+		return "", 0, "", err
+	}
+	check := exec.Command("sh", "-c", "go test -mod=vendor -count=1 ./internal/config -run '^TestCanonicalRegistryAndEveryGeneratedArtifactStaySynchronized$' >/dev/null && go run -mod=vendor ./v19_config_probe.go")
+	check.Dir, check.Env = source, env
+	identity, err := check.Output()
+	if fields := strings.Fields(string(identity)); err != nil || !v19ConfigIdentityMatches(fields, manifest) {
+		return "", 0, "", fmt.Errorf("V19 sealed config at %s differs from historical manifest: %w", productOID, err)
+	}
 	build := exec.Command("go", "build", "-mod=vendor", "-trimpath", "-buildvcs=false", "-ldflags=-buildid=", "-o", binary, "./cmd/orquesta")
 	build.Dir = source
-	build.Env = append(os.Environ(), "CGO_ENABLED=0", "GOCACHE="+filepath.Join(root, "cache"), "GOTMPDIR="+filepath.Join(root, "tmp"))
+	build.Env = append(env, "CGO_ENABLED=0")
 	if output, err := build.CombinedOutput(); err != nil {
 		return "", 0, "", fmt.Errorf("build V19 sealed binary: %w: %s", err, output)
 	}
@@ -243,6 +231,12 @@ func v19BuildSealedBinary(repositoryRoot, productOID string) (string, int64, str
 	version.Dir = source
 	versionRaw, err := version.Output()
 	return sha, info.Size(), strings.TrimSpace(string(versionRaw)), err
+}
+
+func v19ConfigIdentityMatches(fields []string, manifest v19SealManifest) bool {
+	sealed := manifest.EffectiveConfig
+	return len(fields) == 5 && fields[0] == strconv.Itoa(sealed.SchemaVersion) && fields[1] == sealed.RegistryRevision &&
+		fields[2] == sealed.RegistrySHA256 && fields[3] == sealed.SnapshotSHA256 && fields[4] == sealed.EffectiveSHA256
 }
 
 func v19NonEmptyLines(content []byte) []string {

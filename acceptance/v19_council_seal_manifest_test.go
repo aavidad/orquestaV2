@@ -227,6 +227,9 @@ func TestV19SealManifestStrictSchemaRejectsUnknownAndTamperedIdentity(t *testing
 	if validateV19SealManifest(manifest, fixture) == nil {
 		t.Fatal("tampered V19 binary digest accepted")
 	}
+	if v19ConfigIdentityMatches([]string{"2", "test", "sha256:" + strings.Repeat("0", 64), manifest.EffectiveConfig.SnapshotSHA256, manifest.EffectiveConfig.EffectiveSHA256}, manifest) {
+		t.Fatal("tampered V19 sealed registry identity accepted")
+	}
 	content, err := json.Marshal(validV19SealManifestFixture(t, fixture))
 	if err != nil {
 		t.Fatal(err)
