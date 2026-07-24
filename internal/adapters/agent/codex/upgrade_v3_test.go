@@ -79,7 +79,7 @@ func TestAdapterUpgradeV3ObservePreservesDurableTerminalWithoutRelaunch(t *testi
 	}
 }
 
-func TestAdapterUpgradeV3TerminalLaunchAuthorizesWithoutUpgrade(t *testing.T) {
+func TestAdapterUpgradeV3TerminalLaunchAuthorizesAndBinds(t *testing.T) {
 	config := testConfig(t)
 	request := testRequest(t, "upgrade-v3-terminal-launch", "helper:success", 1024)
 	request.SessionRef, _ = ports.NewExecutionSessionRef("execution-session:upgrade-v3-terminal-launch")
@@ -119,8 +119,88 @@ func TestAdapterUpgradeV3TerminalLaunchAuthorizesWithoutUpgrade(t *testing.T) {
 	if err != nil || observation.Status != ports.AgentCompleted || string(observation.Content) != "historical terminal" {
 		t.Fatalf("Observe(V3 terminal) = %+v, %v", observation, err)
 	}
-	if _, err := os.Stat(upgradePath); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("terminal replay created upgrade: %v", err)
+	upgrade := readPersistedV3Upgrade(t, config, runPath)
+	if upgrade.Launch.RequestHash != mustRequestHash(t, request) ||
+		upgrade.Launch.ExecutionSessionRef != request.SessionRef.String() ||
+		upgrade.Launch.PlanGeneration != request.PlanGeneration {
+		t.Fatalf("terminal binding = %+v", upgrade)
+	}
+}
+
+func TestAdapterUpgradeV3ConcurrentTerminalBindingHasSingleWinner(t *testing.T) {
+	config := testConfig(t)
+	config.SessionResolver = sessionResolverFunc(func(_ context.Context, request ports.AgentLaunchRequest) (Session, error) {
+		secret, _ := credentials.NewSecret([]byte(helperSessionBearer))
+		return Session{Ref: request.SessionRef, Endpoint: "http://127.0.0.1:7777/mcp", BearerToken: secret}, nil
+	})
+	firstRequest := testRequest(t, "upgrade-v3-terminal-race", "helper:success", 1024)
+	firstRequest.SessionRef, _ = ports.NewExecutionSessionRef("execution-session:upgrade-v3-terminal-race")
+	legacyHash, runPath := seedPersistedV3Execution(t, config, firstRequest, &terminalRecord{
+		SchemaVersion: legacyStateSchemaVersion,
+		Status:        ports.AgentCompleted,
+		MediaType:     "text/plain",
+		Artifact:      "historical terminal",
+		ObservedAt:    config.Now().UTC().Add(time.Second),
+	})
+	secondRequest := firstRequest
+	secondRequest.PlanGeneration++
+	requests := []ports.AgentLaunchRequest{firstRequest, secondRequest}
+	adapters := make([]*Adapter, len(requests))
+	for index := range adapters {
+		var err error
+		adapters[index], err = New(config)
+		if err != nil {
+			t.Fatalf("New(adapter %d) error = %v", index, err)
+		}
+		defer func(adapter *Adapter) { _ = adapter.Close() }(adapters[index])
+	}
+	type result struct {
+		receipt ports.AgentLaunchReceipt
+		err     error
+	}
+	results := make([]result, len(requests))
+	start := make(chan struct{})
+	var group sync.WaitGroup
+	for index := range requests {
+		group.Add(1)
+		go func(index int) {
+			defer group.Done()
+			<-start
+			results[index].receipt, results[index].err = adapters[index].Launch(context.Background(), requests[index])
+		}(index)
+	}
+	close(start)
+	group.Wait()
+	winner := -1
+	for index, result := range results {
+		if result.err == nil {
+			if winner != -1 {
+				t.Fatalf("multiple terminal bindings won: results=%+v", results)
+			}
+			winner = index
+		} else if ErrorCode(result.err) != CodeExecutionConflict {
+			t.Fatalf("loser error=%v code=%q", result.err, ErrorCode(result.err))
+		}
+	}
+	if winner == -1 {
+		t.Fatalf("no terminal binding won: results=%+v", results)
+	}
+	upgrade := readPersistedV3Upgrade(t, config, runPath)
+	if upgrade.Launch.RequestHash != mustRequestHash(t, requests[winner]) {
+		t.Fatalf("terminal binding winner=%+v", upgrade)
+	}
+	reopened := openTestAdapter(t, config)
+	replayed, err := reopened.Launch(context.Background(), requests[winner])
+	if err != nil || replayed != results[winner].receipt {
+		t.Fatalf("winner replay receipt=%+v error=%v want=%+v", replayed, err, results[winner].receipt)
+	}
+	loser := 1 - winner
+	if _, err := reopened.Launch(context.Background(), requests[loser]); ErrorCode(err) != CodeExecutionConflict {
+		t.Fatalf("loser replay error=%v code=%q", err, ErrorCode(err))
+	}
+	terminal := readPersistedTerminal(t, config, runPath)
+	if terminal.RequestHash != legacyHash || terminal.SchemaVersion != legacyStateSchemaVersion {
+		t.Fatalf("terminal causal identity changed: %+v", terminal)
 	}
 }
 

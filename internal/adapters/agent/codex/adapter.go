@@ -369,6 +369,10 @@ func (adapter *Adapter) Launch(ctx context.Context, request ports.AgentLaunchReq
 				if credentialErr := adapter.preflightCredentialAuthority(ctx, request, session); credentialErr != nil {
 					return ports.AgentLaunchReceipt{}, credentialErr
 				}
+				receipt, replayErr = adapter.bindLegacyTerminalReceipt(runPath, record, request, requestHash)
+				if replayErr != nil {
+					return ports.AgentLaunchReceipt{}, replayErr
+				}
 				return adapter.replayTerminalLaunchLocked(executionKey, requestHash, record, receipt, runPath, terminal), nil
 			}
 			receipt, credentialErr := adapter.launchWithCredentialLocked(ctx, request, requestHash, session)
@@ -381,6 +385,10 @@ func (adapter *Adapter) Launch(ctx context.Context, request ports.AgentLaunchReq
 			return receipt, nil
 		}
 		if terminalFound {
+			receipt, replayErr = adapter.bindLegacyTerminalReceipt(runPath, record, request, requestHash)
+			if replayErr != nil {
+				return ports.AgentLaunchReceipt{}, replayErr
+			}
 			return adapter.replayTerminalLaunchLocked(executionKey, requestHash, record, receipt, runPath, terminal), nil
 		}
 		return adapter.resumeLaunchRecordLocked(ctx, request, requestHash, record, runPath, false, nil, nil, session)
@@ -431,6 +439,20 @@ func (adapter *Adapter) validateLaunchReplay(runPath string, record launchRecord
 		return record, ports.AgentLaunchReceipt{}, false, &Error{Code: CodeStateInvalid, Cause: err}
 	}
 	return record, receipt, trusted, nil
+}
+
+func (adapter *Adapter) bindLegacyTerminalReceipt(
+	runPath string,
+	record launchRecord,
+	request ports.AgentLaunchRequest,
+	requestHash string,
+) (ports.AgentLaunchReceipt, error) {
+	bound, err := adapter.bindLegacyLaunchRecord(runPath, record, request, requestHash)
+	if err != nil {
+		return ports.AgentLaunchReceipt{}, err
+	}
+	_, receipt, _, err := adapter.validateLaunchReplay(runPath, bound, request, requestHash)
+	return receipt, err
 }
 
 func (adapter *Adapter) replayTerminalLaunchLocked(
