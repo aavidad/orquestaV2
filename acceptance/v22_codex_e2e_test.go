@@ -256,6 +256,22 @@ func TestV22ReceiptV3AndPSESealAreExact(t *testing.T) {
 	receipt := evidenceDecodeStrictJSON[evidenceReceiptV3](t,
 		filepath.Join(root, filepath.FromSlash(fixture.ReceiptPath)))
 	v22AssertExactSeal(t, root, fixture, receipt.SealedSource.GitCommitOID)
+	if !v22ExecutionUsesExactSeal(receipt, receipt.SealedSource.GitCommitOID) {
+		t.Fatal("V22 E source is not exact detached-clean S")
+	}
+}
+
+func v22ExecutionUsesExactSeal(receipt evidenceReceiptV3, seal string) bool {
+	return receipt.SealedSource.GitCommitOID == seal && receipt.Execution.SourceGitCommitOID == seal &&
+		receipt.Execution.SourceWorktreeState == "detached_clean" && receipt.Execution.SourceStatusPorcelainSHA256 == evidenceBytesSHA256(nil)
+}
+
+func TestV22ExecutionSourceRejectsDescendantOfSeal(t *testing.T) {
+	seal, descendant := strings.Repeat("a", 40), strings.Repeat("b", 40)
+	receipt := evidenceReceiptV3{SealedSource: evidenceSealedSourceV3{GitCommitOID: descendant}, Execution: evidenceReceiptExecutionV3{SourceGitCommitOID: descendant, SourceWorktreeState: "detached_clean", SourceStatusPorcelainSHA256: evidenceBytesSHA256(nil)}}
+	if v22ExecutionUsesExactSeal(receipt, seal) {
+		t.Fatal("V22 accepted descendant as exact S")
+	}
 }
 
 func v22AssertCandidateSubjects(t *testing.T, root string, fixture v22Fixture, sealed string) {
