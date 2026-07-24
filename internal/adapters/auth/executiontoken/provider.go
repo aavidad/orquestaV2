@@ -1,36 +1,31 @@
 package executiontoken
 
 import (
-	"bytes"
 	"context"
 	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 
-	"orquesta/internal/application"
 	"orquesta/internal/credentials"
 	"orquesta/internal/goal"
 	"orquesta/internal/identity"
-	"orquesta/internal/ports"
 )
 
 const tokenPrefix = "orqex1."
 
+var errTokenInvalid = errors.New("executiontoken.token_invalid")
 var _ identity.IdentityProvider = (*Broker)(nil)
 
 func (*Broker) AuthenticationMethod() identity.AuthenticationMethod {
 	return identity.AuthenticationMethod(AuthenticationMethod)
 }
 
-func (broker *Broker) Authenticate(
-	ctx context.Context,
-	credential identity.Credential,
-) (identity.Principal, error) {
-	if broker == nil || broker.store == nil || broker.authority == nil || ctx == nil {
-		return identity.Principal{}, &Error{Code: CodeContextInvalid}
+func (broker *Broker) Authenticate(ctx context.Context, credential identity.Credential) (identity.Principal, error) {
+	if err := broker.validateContext(ctx); err != nil {
+		return identity.Principal{}, err
 	}
-	if err := ctx.Err(); err != nil {
-		return identity.Principal{}, &Error{Code: CodeContextInvalid, Cause: err}
+	if broker.authority == nil {
+		return identity.Principal{}, executionError(CodeContextInvalid)
 	}
 	var executionRef goal.ExecutionRef
 	var presented []byte
@@ -41,18 +36,16 @@ func (broker *Broker) Authenticate(
 	})
 	if err != nil {
 		clear(presented)
-		return identity.Principal{}, &Error{Code: CodeAuthenticationFailed}
+		return identity.Principal{}, executionError(CodeAuthenticationFailed)
 	}
 	defer clear(presented)
 	authority, err := broker.authority.ExecutionSessionAuthority(ctx, executionRef, AuthenticationMethod)
-	if err != nil || identity.ValidatePrincipal(authority.ServicePrincipal) != nil ||
+	expected, deriveErr := executionAuthority(authority.Request)
+	if err != nil || deriveErr != nil || expected != authority ||
+		identity.ValidatePrincipal(authority.ServicePrincipal) != nil ||
 		authority.ServicePrincipal.Kind != identity.PrincipalKindService ||
 		authority.ServicePrincipal.Method != AuthenticationMethod {
-		return identity.Principal{}, &Error{Code: CodeAuthenticationFailed}
-	}
-	expected, err := applicationAuthority(authority)
-	if err != nil {
-		return identity.Principal{}, &Error{Code: CodeAuthenticationFailed}
+		return identity.Principal{}, executionError(CodeAuthenticationFailed)
 	}
 	matched := false
 	_, err = broker.useSecret(ctx, expected, "authenticate", func(secret credentials.Secret) error {
@@ -63,17 +56,9 @@ func (broker *Broker) Authenticate(
 		return nil
 	})
 	if err != nil || !matched {
-		return identity.Principal{}, &Error{Code: CodeAuthenticationFailed}
+		return identity.Principal{}, executionError(CodeAuthenticationFailed)
 	}
 	return authority.ServicePrincipal, nil
-}
-
-func applicationAuthority(authority ports.ExecutionSessionAuthority) (ports.ExecutionSessionAuthority, error) {
-	expected, err := application.DeriveExecutionSessionAuthority(authority.Request, AuthenticationMethod)
-	if err != nil || expected != authority {
-		return ports.ExecutionSessionAuthority{}, errors.New("executiontoken.authority_invalid")
-	}
-	return expected, nil
 }
 
 func encodeToken(executionRef goal.ExecutionRef, secret []byte) []byte {
@@ -86,32 +71,30 @@ func encodeToken(executionRef goal.ExecutionRef, secret []byte) []byte {
 }
 
 func parseToken(token []byte) (goal.ExecutionRef, []byte, error) {
-	if len(token) < len(tokenPrefix)+3 || len(token) > 2048 ||
-		!bytes.HasPrefix(token, []byte(tokenPrefix)) {
-		return goal.ExecutionRef{}, nil, errors.New("executiontoken.token_invalid")
+	if len(token) > 2048 || len(token) < len(tokenPrefix)+3 || string(token[:len(tokenPrefix)]) != tokenPrefix {
+		return goal.ExecutionRef{}, nil, errTokenInvalid
 	}
 	body := token[len(tokenPrefix):]
-	separator := bytes.IndexByte(body, '.')
-	if separator <= 0 || separator == len(body)-1 || bytes.IndexByte(body[separator+1:], '.') >= 0 {
-		return goal.ExecutionRef{}, nil, errors.New("executiontoken.token_invalid")
+	separator := len(body) - base64.RawURLEncoding.EncodedLen(secretBytes) - 1
+	if separator <= 0 || body[separator] != '.' {
+		return goal.ExecutionRef{}, nil, errTokenInvalid
 	}
 	executionBytes := make([]byte, base64.RawURLEncoding.DecodedLen(separator))
 	executionLength, err := base64.RawURLEncoding.Decode(executionBytes, body[:separator])
 	if err != nil {
 		clear(executionBytes)
-		return goal.ExecutionRef{}, nil, errors.New("executiontoken.token_invalid")
+		return goal.ExecutionRef{}, nil, errTokenInvalid
 	}
 	defer clear(executionBytes)
 	executionRef, err := goal.NewExecutionRef(string(executionBytes[:executionLength]))
 	if err != nil {
-		return goal.ExecutionRef{}, nil, errors.New("executiontoken.token_invalid")
+		return goal.ExecutionRef{}, nil, errTokenInvalid
 	}
-	encodedMaterial := body[separator+1:]
-	material := make([]byte, base64.RawURLEncoding.DecodedLen(len(encodedMaterial)))
-	materialLength, err := base64.RawURLEncoding.Decode(material, encodedMaterial)
+	material := make([]byte, secretBytes)
+	materialLength, err := base64.RawURLEncoding.Decode(material, body[separator+1:])
 	if err != nil || materialLength != secretBytes {
 		clear(material)
-		return goal.ExecutionRef{}, nil, errors.New("executiontoken.token_invalid")
+		return goal.ExecutionRef{}, nil, errTokenInvalid
 	}
-	return executionRef, material[:materialLength], nil
+	return executionRef, material, nil
 }

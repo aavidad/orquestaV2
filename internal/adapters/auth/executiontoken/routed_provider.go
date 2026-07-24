@@ -20,10 +20,7 @@ type RoutedProvider struct {
 
 var _ identity.IdentityProvider = (*RoutedProvider)(nil)
 
-func NewRoutedProvider(
-	human identity.IdentityProvider,
-	execution *Broker,
-) (*RoutedProvider, error) {
+func NewRoutedProvider(human identity.IdentityProvider, execution *Broker) (*RoutedProvider, error) {
 	if human == nil || human.AuthenticationMethod() == "" || execution == nil {
 		return nil, errors.New("executiontoken.routed_provider_dependencies_required")
 	}
@@ -34,10 +31,7 @@ func (*RoutedProvider) AuthenticationMethod() identity.AuthenticationMethod {
 	return RoutedAuthenticationMethod
 }
 
-func (provider *RoutedProvider) Authenticate(
-	ctx context.Context,
-	credential identity.Credential,
-) (identity.Principal, error) {
+func (provider *RoutedProvider) Authenticate(ctx context.Context, credential identity.Credential) (identity.Principal, error) {
 	if provider == nil || provider.human == nil || provider.execution == nil {
 		return identity.Principal{}, errors.New("executiontoken.routed_provider_unavailable")
 	}

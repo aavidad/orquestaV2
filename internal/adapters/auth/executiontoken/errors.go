@@ -33,6 +33,13 @@ func (err *Error) Unwrap() error {
 	return err.Cause
 }
 
+func executionError(code ErrorCode, cause ...error) error {
+	if len(cause) == 0 || cause[0] == nil {
+		return &Error{Code: code}
+	}
+	return &Error{Code: code, Cause: cause[0]}
+}
+
 func IsError(err error, code ErrorCode) bool {
 	var target *Error
 	return errors.As(err, &target) && target.Code == code
