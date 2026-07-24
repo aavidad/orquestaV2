@@ -760,6 +760,11 @@ func (repository *memoryRepository) ClaimMailbox(
 	if err := repository.mailboxCurrentRecipientLocked(record); err != nil {
 		return MailboxClaim{}, false, err
 	}
+	current, exists := repository.records[state.GoalRef]
+	if !exists || current.Goal.Project() != state.ProjectRef ||
+		current.Goal.PlanGeneration() < record.Envelope.TargetPlanGeneration {
+		return MailboxClaim{}, false, &StateError{Code: StateConflict}
+	}
 	if record.State != MailboxStateAdmitted && record.State != MailboxStateClaimed &&
 		record.State != MailboxStateDelivered {
 		return MailboxClaim{}, false, &StateError{Code: StateConflict}
@@ -776,7 +781,9 @@ func (repository *memoryRepository) ClaimMailbox(
 		MessageRef: state.MessageRef, ActionRef: record.Action.Ref,
 		Recipient: record.Envelope.Recipient, ClaimRequestRef: state.RequestRef,
 		ClaimToken: state.Token, Fence: next,
-		ClaimedAt: now, LeaseUntil: now.Add(state.LeaseDuration),
+		ExpectedGoalRevision:   current.Goal.Revision(),
+		ExpectedPlanGeneration: current.Goal.PlanGeneration(),
+		ClaimedAt:              now, LeaseUntil: now.Add(state.LeaseDuration),
 	}
 	if state.RequestedAt.After(now) || !attempt.LeaseUntil.After(attempt.ClaimedAt) {
 		return MailboxClaim{}, false, &StateError{Code: StateInvalid}

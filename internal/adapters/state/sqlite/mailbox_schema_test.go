@@ -218,6 +218,49 @@ ORDER BY name`)
 	}
 }
 
+func TestMailboxV22MigrationBackfillsHistoricalACKFencesWithoutInventingGenerationOne(t *testing.T) {
+	database, err := sql.Open(driverName, "file:mailbox-v22-fence-backfill?mode=memory&cache=shared")
+	sqliteTestNoError(t, err)
+	defer database.Close()
+	mustV10Exec(t, database, `CREATE TABLE goals(
+ref TEXT PRIMARY KEY,revision INTEGER NOT NULL,plan_generation INTEGER NOT NULL)`)
+	mustV10Exec(t, database, `CREATE TABLE mailbox_envelopes(
+ref TEXT PRIMARY KEY,goal_ref TEXT NOT NULL,plan_generation INTEGER NOT NULL)`)
+	mustV10Exec(t, database, `CREATE TABLE mailbox_delivery_acks(
+mailbox_message_ref TEXT PRIMARY KEY,expected_goal_revision INTEGER NOT NULL,
+expected_plan_generation INTEGER NOT NULL)`)
+	mustV10Exec(t, database, `CREATE TABLE mailbox_delivery_attempts(
+mailbox_message_ref TEXT NOT NULL,marker TEXT NOT NULL)`)
+	mustV10Exec(t, database, `CREATE TRIGGER mailbox_delivery_attempt_progress_guard
+BEFORE UPDATE ON mailbox_delivery_attempts BEGIN SELECT 1; END`)
+	mustV10Exec(t, database, `INSERT INTO goals VALUES
+('goal:active',9,4),('goal:resolved',20,6)`)
+	mustV10Exec(t, database, `INSERT INTO mailbox_envelopes VALUES
+('message:active','goal:active',3),('message:resolved','goal:resolved',5)`)
+	mustV10Exec(t, database, `INSERT INTO mailbox_delivery_acks VALUES
+('message:resolved',15,5)`)
+	mustV10Exec(t, database, `INSERT INTO mailbox_delivery_attempts VALUES
+('message:active','active'),('message:resolved','resolved')`)
+
+	migrations, err := loadMigrations()
+	sqliteTestNoError(t, err)
+	v22 := migrations[recoverySchemaV21-1].sql
+	start := strings.Index(v22, "ALTER TABLE mailbox_delivery_attempts ADD COLUMN expected_goal_revision")
+	end := strings.Index(v22, "CREATE TRIGGER mailbox_delivery_attempt_progress_guard\n")
+	if start < 0 || end <= start {
+		t.Fatal("V22 mailbox ACK fence backfill not found in canonical migration")
+	}
+	mustV10Exec(t, database, v22[start:end])
+
+	rows := mailboxRows(t, database, `
+SELECT marker,expected_goal_revision,expected_plan_generation
+FROM mailbox_delivery_attempts ORDER BY marker`)
+	want := []string{"[active 9 4]", "[resolved 15 5]"}
+	if !reflect.DeepEqual(rows, want) {
+		t.Fatalf("V22 historical ACK fence backfill=%v want=%v", rows, want)
+	}
+}
+
 func TestMailboxSchemaV13EnforcesExactRecipientProgressAndImmutableCausalReceipts(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mailbox-contract", "orquesta.sqlite")
 	seedV09DatabaseForV10(t, path)
@@ -235,9 +278,9 @@ func TestMailboxSchemaV13EnforcesExactRecipientProgressAndImmutableCausalReceipt
 	base := mailboxUnix(time.Date(2026, 7, 16, 8, 0, 0, 0, time.UTC))
 
 	var goalRef, projectRef, parentRef, parentExecutionRef, phaseKey string
-	var planGeneration, parentGeneration int64
+	var goalRevision, planGeneration, parentGeneration int64
 	if err := database.QueryRow(`
-SELECT goal.ref, goal.project_ref, goal.plan_generation,
+SELECT goal.ref, goal.project_ref, goal.revision, goal.plan_generation,
        item.ref, item.revision, item.phase_key, execution.ref
 FROM goals goal
 JOIN work_items item ON item.goal_ref = goal.ref
@@ -245,8 +288,8 @@ JOIN executions execution
   ON execution.goal_ref = item.goal_ref AND execution.work_item_ref = item.ref
 WHERE goal.ref = 'goal:v10-v09'
 ORDER BY item.position, execution.attempt_no
-LIMIT 1`).Scan(
-		&goalRef, &projectRef, &planGeneration,
+	LIMIT 1`).Scan(
+		&goalRef, &projectRef, &goalRevision, &planGeneration,
 		&parentRef, &parentGeneration, &phaseKey, &parentExecutionRef,
 	); err != nil {
 		t.Fatal(err)
@@ -402,16 +445,32 @@ WHERE ref = 'action:mailbox-one'`, leaseUntil)
     claim_token = 'claim:mailbox-one', claimed_by = 'principal:mailbox-recipient',
     claimed_until = ?, delivery_attempt = 1, fence = 1
 WHERE ref = 'action:mailbox-one'`, leaseUntil)
-	mustV10Exec(t, database, `INSERT INTO mailbox_delivery_attempts(
+	mailboxRequireSQLError(t, database, `INSERT INTO mailbox_delivery_attempts(
 	    mailbox_message_ref, action_ref, project_ref, recipient_principal_ref,
-	    fence, claim_token,
+	    fence, claim_token, expected_goal_revision, expected_plan_generation,
 	    claim_request_ref, claim_request_fingerprint, claim_authorization_receipt_ref,
 	    claimed_at, lease_until
 	) VALUES (
 	    'message:mailbox-one', 'action:mailbox-one', ?,
-	    'principal:mailbox-recipient', 1, 'claim:mailbox-one',
+	    'principal:mailbox-recipient', 1, 'claim:mailbox-one', ?, ?,
 	    'request:mailbox-claim', 'fingerprint:mailbox-claim', 'auth:mailbox-claim', ?, ?
-	)`, projectRef, base+2, leaseUntil)
+	)`, projectRef, goalRevision+1, planGeneration, base+2, leaseUntil)
+	mustV10Exec(t, database, `INSERT INTO mailbox_delivery_attempts(
+	    mailbox_message_ref, action_ref, project_ref, recipient_principal_ref,
+	    fence, claim_token, expected_goal_revision, expected_plan_generation,
+	    claim_request_ref, claim_request_fingerprint, claim_authorization_receipt_ref,
+	    claimed_at, lease_until
+	) VALUES (
+	    'message:mailbox-one', 'action:mailbox-one', ?,
+	    'principal:mailbox-recipient', 1, 'claim:mailbox-one', ?, ?,
+	    'request:mailbox-claim', 'fingerprint:mailbox-claim', 'auth:mailbox-claim', ?, ?
+	)`, projectRef, goalRevision, planGeneration, base+2, leaseUntil)
+	mailboxRequireSQLError(t, database, `UPDATE mailbox_delivery_attempts
+SET expected_goal_revision=expected_goal_revision+1
+WHERE mailbox_message_ref='message:mailbox-one' AND fence=1`)
+	mailboxRequireSQLError(t, database, `UPDATE mailbox_delivery_attempts
+SET expected_plan_generation=expected_plan_generation+1
+WHERE mailbox_message_ref='message:mailbox-one' AND fence=1`)
 
 	mailboxRequireSQLError(t, database, `UPDATE mailbox_delivery_attempts SET
     consumption_request_ref = 'request:mailbox-consume',

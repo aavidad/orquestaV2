@@ -192,6 +192,8 @@ func validateMailboxClaim(
 		attempt.MessageRef != messageRef || attempt.Recipient != endpoint ||
 		!validMailboxText(attempt.ActionRef) || attempt.ClaimRequestRef != requestRef ||
 		!validMailboxText(attempt.ClaimToken) || attempt.Fence == 0 ||
+		attempt.ExpectedGoalRevision == 0 ||
+		attempt.ExpectedPlanGeneration < claim.Record.Envelope.TargetPlanGeneration ||
 		attempt.ClaimedAt.IsZero() || !attempt.LeaseUntil.After(attempt.ClaimedAt) {
 		return &StateError{Code: StateConflict}
 	}

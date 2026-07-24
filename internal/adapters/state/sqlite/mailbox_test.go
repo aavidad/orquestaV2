@@ -677,14 +677,48 @@ SELECT COUNT(*) FROM outbox WHERE kind = 'deliver_mailbox' AND goal_ref = ?`,
 		RecipientExecutionRef: parentExecution, Token: "token:mailbox-claim-one",
 		LeaseDuration: time.Minute, RequestedAt: clock.Now(),
 	})
-	if err != nil || !changed || firstClaim.Attempt.Fence != 1 {
+	if err != nil || !changed || firstClaim.Attempt.Fence != 1 ||
+		firstClaim.Attempt.ExpectedGoalRevision == 0 ||
+		firstClaim.Attempt.ExpectedPlanGeneration < envelope.TargetPlanGeneration {
 		t.Fatalf("first claim changed=%v claim=%+v err=%v cause=%v", changed, firstClaim, err, errors.Unwrap(err))
 	}
 	assertMailboxClaimReplayHistorical(
 		t, repository, envelope, recipient, "request:mailbox-claim-one", claimFingerprint, firstClaim.Attempt,
 	)
+	beforeAdvance, err := repository.GetGoal(ctx, envelope.GoalRef)
+	sqliteTestNoError(t, err)
+	advancedPlan, err := goal.NewPlan(goal.PlanInput{
+		Generation: beforeAdvance.Goal.PlanGeneration() + 1,
+		Phases:     beforeAdvance.Goal.Phases(), WorkItems: beforeAdvance.Goal.WorkItems(),
+	})
+	sqliteTestNoError(t, err)
+	advancedGoal, err := beforeAdvance.Goal.ApplyPlan(beforeAdvance.Goal.Revision(), advancedPlan)
+	sqliteTestNoError(t, err)
+	if _, err = repository.db.Exec(
+		`UPDATE goals SET revision=?,plan_generation=? WHERE ref=? AND revision=?`,
+		advancedGoal.Revision(), advancedGoal.PlanGeneration(), envelope.GoalRef.String(),
+		beforeAdvance.Goal.Revision(),
+	); err != nil {
+		t.Fatal(err)
+	}
 	repository = restartMailboxTestRepository(t, repository, path, clock)
 	assertMailboxState(t, repository, envelope, application.MailboxStateClaimed, 1)
+	assertMailboxClaimReplayHistorical(
+		t, repository, envelope, recipient, "request:mailbox-claim-one", claimFingerprint, firstClaim.Attempt,
+	)
+	afterAdvance, err := repository.GetGoal(ctx, envelope.GoalRef)
+	if err != nil || afterAdvance.Goal.Revision() == firstClaim.Attempt.ExpectedGoalRevision ||
+		afterAdvance.Goal.PlanGeneration() == firstClaim.Attempt.ExpectedPlanGeneration {
+		t.Fatalf("restart fixture did not preserve advanced Goal: goal=%+v claim=%+v err=%v",
+			afterAdvance.Goal.Snapshot(), firstClaim.Attempt, err)
+	}
+	if _, err = repository.db.Exec(
+		`UPDATE goals SET revision=?,plan_generation=? WHERE ref=? AND revision=?`,
+		beforeAdvance.Goal.Revision(), beforeAdvance.Goal.PlanGeneration(), envelope.GoalRef.String(),
+		afterAdvance.Goal.Revision(),
+	); err != nil {
+		t.Fatal(err)
+	}
 
 	clock.Advance(2 * time.Minute)
 	expiredClaimReplay, found, err := repository.MailboxReplay(ctx, application.MailboxReplayRequest{

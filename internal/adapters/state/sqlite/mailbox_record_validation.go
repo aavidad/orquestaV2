@@ -77,6 +77,8 @@ func validatePersistedMailboxRecord(record application.MailboxRecord) error {
 		if attempt.MessageRef != envelope.Ref || attempt.ActionRef != action.Ref ||
 			attempt.Recipient != envelope.Recipient || !validText(attempt.ClaimRequestRef) ||
 			!validText(attempt.ClaimToken) || attempt.Fence != uint64(index+1) ||
+			attempt.ExpectedGoalRevision == 0 ||
+			attempt.ExpectedPlanGeneration < envelope.TargetPlanGeneration ||
 			attempt.ClaimedAt.IsZero() ||
 			!attempt.LeaseUntil.After(attempt.ClaimedAt) {
 			return errors.New("sqlite.mailbox_record_attempt_invalid")

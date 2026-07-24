@@ -217,6 +217,48 @@ func TestV22MailboxProjectionExposesCompactHandoffAndNoAdmissionSecrets(t *testi
 	}
 }
 
+func TestV22MailboxClaimProjectionCarriesRequiredACKFences(t *testing.T) {
+	messageRef, err := application.NewMailboxMessageRef("mailbox-message:claim-fences")
+	v22NoError(t, err)
+	principalRef, err := identity.NewPrincipalRef("principal:claim-fences")
+	v22NoError(t, err)
+	workItemRef, err := goal.NewWorkItemRef("work-item:claim-fences")
+	v22NoError(t, err)
+	executionRef, err := goal.NewExecutionRef("execution:claim-fences")
+	v22NoError(t, err)
+	result := application.MailboxClaimResult{
+		Claim: application.MailboxClaim{Attempt: application.MailboxDeliveryAttempt{
+			MessageRef: messageRef,
+			Recipient: application.MailboxEndpoint{
+				PrincipalRef: principalRef, WorkItemRef: workItemRef, ExecutionRef: executionRef,
+			},
+			ClaimToken: "claim-token:claim-fences", Fence: 2,
+		}},
+		GoalRevision: 9, PlanGeneration: 3,
+	}
+	encoded, err := json.Marshal(struct {
+		Receipt mailboxClaimView `json:"receipt"`
+	}{Receipt: projectMailboxClaim(result)})
+	v22NoError(t, err)
+	definition := v22Definition(t, "orquesta.mailbox.claim")
+	if _, err := validatePayload(definition.OutputSchema, encoded); err != nil {
+		t.Fatalf("mailbox claim ACK fences violate schema: %v data=%s", err, encoded)
+	}
+	var projected struct {
+		Receipt mailboxClaimView `json:"receipt"`
+	}
+	v22NoError(t, json.Unmarshal(encoded, &projected))
+	if projected.Receipt.ExpectedGoalRevision != 9 ||
+		projected.Receipt.ExpectedPlanGeneration != 3 {
+		t.Fatalf("mailbox claim lost ACK fences: %+v", projected.Receipt)
+	}
+	for _, field := range []string{"expected_goal_revision", "expected_plan_generation"} {
+		if !strings.Contains(string(definition.OutputSchema), `"`+field+`"`) {
+			t.Fatalf("mailbox claim schema lacks %s", field)
+		}
+	}
+}
+
 func TestV22EmptyPublicCollectionsEncodeAsArrays(t *testing.T) {
 	encoded, err := json.Marshal(projectGoalRecord(application.GoalRecord{}))
 	v22NoError(t, err)

@@ -195,3 +195,119 @@ WHEN NEW.governance_version=1 AND (
    SELECT 1 FROM effect_attempts attempt
    WHERE attempt.action_ref=NEW.action_ref AND attempt.action_fence=NEW.fence)))
 BEGIN SELECT RAISE(ABORT,'sqlite.action_consumption_effect_receipt_invalid'); END;
+ALTER TABLE mailbox_delivery_attempts ADD COLUMN expected_goal_revision INTEGER NOT NULL DEFAULT 0 CHECK(expected_goal_revision>=0);
+ALTER TABLE mailbox_delivery_attempts ADD COLUMN expected_plan_generation INTEGER NOT NULL DEFAULT 0 CHECK(expected_plan_generation>=0);
+DROP TRIGGER mailbox_delivery_attempt_progress_guard;
+UPDATE mailbox_delivery_attempts
+SET expected_goal_revision=COALESCE(
+     (SELECT ack.expected_goal_revision FROM mailbox_delivery_acks ack
+      WHERE ack.mailbox_message_ref=mailbox_delivery_attempts.mailbox_message_ref),
+     (SELECT goal.revision FROM mailbox_envelopes envelope
+      JOIN goals goal ON goal.ref=envelope.goal_ref
+      WHERE envelope.ref=mailbox_delivery_attempts.mailbox_message_ref)),
+    expected_plan_generation=COALESCE(
+     (SELECT ack.expected_plan_generation FROM mailbox_delivery_acks ack
+      WHERE ack.mailbox_message_ref=mailbox_delivery_attempts.mailbox_message_ref),
+     (SELECT goal.plan_generation FROM mailbox_envelopes envelope
+      JOIN goals goal ON goal.ref=envelope.goal_ref
+      WHERE envelope.ref=mailbox_delivery_attempts.mailbox_message_ref));
+CREATE TRIGGER mailbox_delivery_attempt_progress_guard
+BEFORE UPDATE ON mailbox_delivery_attempts
+WHEN NOT (
+    NEW.mailbox_message_ref = OLD.mailbox_message_ref
+    AND NEW.action_ref = OLD.action_ref
+    AND NEW.project_ref = OLD.project_ref
+    AND NEW.recipient_principal_ref = OLD.recipient_principal_ref
+    AND NEW.fence = OLD.fence AND NEW.claim_token = OLD.claim_token
+    AND NEW.expected_goal_revision = OLD.expected_goal_revision
+    AND NEW.expected_plan_generation = OLD.expected_plan_generation
+    AND NEW.claim_request_ref = OLD.claim_request_ref
+    AND NEW.claim_request_fingerprint = OLD.claim_request_fingerprint
+    AND NEW.claim_authorization_receipt_ref = OLD.claim_authorization_receipt_ref
+    AND NEW.claimed_at = OLD.claimed_at AND NEW.lease_until = OLD.lease_until
+    AND EXISTS (
+        SELECT 1 FROM outbox action
+        WHERE action.ref = OLD.action_ref
+          AND action.mailbox_message_ref = OLD.mailbox_message_ref
+          AND action.claim_token = OLD.claim_token
+          AND action.claimed_by = OLD.recipient_principal_ref
+          AND action.claimed_until = OLD.lease_until
+          AND action.delivery_attempt = OLD.fence AND action.fence = OLD.fence
+          AND action.completed_at IS NULL AND action.retired_at IS NULL
+          AND action.quarantined_at IS NULL
+    )
+    AND (
+        (
+            OLD.delivery_request_ref IS NULL
+            AND OLD.delivery_request_fingerprint IS NULL
+            AND OLD.delivery_authorization_receipt_ref IS NULL
+            AND OLD.delivery_ref IS NULL AND OLD.delivered_at IS NULL
+            AND OLD.consumption_request_ref IS NULL
+            AND OLD.consumption_request_fingerprint IS NULL
+            AND OLD.consumption_authorization_receipt_ref IS NULL
+            AND OLD.consumption_ref IS NULL AND OLD.consumed_at IS NULL
+            AND NEW.delivery_request_ref IS NOT NULL
+            AND NEW.delivery_request_fingerprint IS NOT NULL
+            AND NEW.delivery_authorization_receipt_ref IS NOT NULL
+            AND NEW.delivery_ref IS NOT NULL AND NEW.delivered_at IS NOT NULL
+            AND NEW.delivered_at >= OLD.claimed_at AND NEW.delivered_at < OLD.lease_until
+            AND NEW.consumption_request_ref IS NULL
+            AND NEW.consumption_request_fingerprint IS NULL
+            AND NEW.consumption_authorization_receipt_ref IS NULL
+            AND NEW.consumption_ref IS NULL AND NEW.consumed_at IS NULL
+            AND EXISTS (
+                SELECT 1 FROM authorization_receipts authorization
+                WHERE authorization.ref = NEW.delivery_authorization_receipt_ref
+                  AND authorization.principal_ref = OLD.recipient_principal_ref
+                  AND authorization.project_ref = OLD.project_ref
+                  AND authorization.permission = 'goals.get'
+                  AND authorization.resource_ref = OLD.mailbox_message_ref
+                  AND authorization.outcome = 'allowed'
+            )
+        )
+        OR
+        (
+            OLD.delivery_request_ref IS NOT NULL
+            AND NEW.delivery_request_ref = OLD.delivery_request_ref
+            AND NEW.delivery_request_fingerprint = OLD.delivery_request_fingerprint
+            AND NEW.delivery_authorization_receipt_ref = OLD.delivery_authorization_receipt_ref
+            AND NEW.delivery_ref = OLD.delivery_ref
+            AND OLD.delivered_at IS NOT NULL AND NEW.delivered_at = OLD.delivered_at
+            AND OLD.consumption_request_ref IS NULL
+            AND OLD.consumption_request_fingerprint IS NULL
+            AND OLD.consumption_authorization_receipt_ref IS NULL
+            AND OLD.consumption_ref IS NULL AND OLD.consumed_at IS NULL
+            AND NEW.consumption_request_ref IS NOT NULL
+            AND NEW.consumption_request_fingerprint IS NOT NULL
+            AND NEW.consumption_authorization_receipt_ref IS NOT NULL
+            AND NEW.consumption_ref IS NOT NULL AND NEW.consumed_at IS NOT NULL
+            AND NEW.consumed_at >= OLD.delivered_at AND NEW.consumed_at < OLD.lease_until
+            AND EXISTS (
+                SELECT 1 FROM authorization_receipts authorization
+                WHERE authorization.ref = NEW.consumption_authorization_receipt_ref
+                  AND authorization.principal_ref = OLD.recipient_principal_ref
+                  AND authorization.project_ref = OLD.project_ref
+                  AND authorization.permission = 'goals.get'
+                  AND authorization.resource_ref = OLD.mailbox_message_ref
+                  AND authorization.outcome = 'allowed'
+            )
+        )
+    )
+)
+BEGIN SELECT RAISE(ABORT, 'sqlite.mailbox_delivery_attempt_progress_invalid'); END;
+CREATE TRIGGER mailbox_delivery_attempt_ack_fences_insert_guard
+BEFORE INSERT ON mailbox_delivery_attempts
+WHEN NEW.expected_goal_revision<=0 OR NEW.expected_plan_generation<=0
+ OR NOT EXISTS (
+  SELECT 1 FROM mailbox_envelopes envelope
+  JOIN goals goal ON goal.ref=envelope.goal_ref
+  WHERE envelope.ref=NEW.mailbox_message_ref
+   AND envelope.project_ref=NEW.project_ref
+   AND goal.project_ref=NEW.project_ref
+   AND goal.revision=NEW.expected_goal_revision
+   AND goal.plan_generation=NEW.expected_plan_generation
+   AND NEW.expected_plan_generation>=envelope.plan_generation)
+BEGIN SELECT RAISE(ABORT,'sqlite.mailbox_delivery_attempt_ack_fences_invalid'); END;
+CREATE TRIGGER mailbox_delivery_attempt_ack_fences_immutable
+BEFORE UPDATE OF expected_goal_revision,expected_plan_generation ON mailbox_delivery_attempts
+BEGIN SELECT RAISE(ABORT,'sqlite.mailbox_delivery_attempt_ack_fences_immutable'); END;

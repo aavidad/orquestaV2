@@ -369,19 +369,22 @@ func projectMailboxAdmission(value application.MailboxRecord) mailboxAdmissionVi
 }
 
 type mailboxClaimView struct {
-	MessageRef            string `json:"message_ref"`
-	RecipientPrincipalRef string `json:"recipient_principal_ref"`
-	RecipientWorkItemRef  string `json:"recipient_work_item_ref"`
-	RecipientExecutionRef string `json:"recipient_execution_ref"`
-	ClaimToken            string `json:"claim_token"`
-	Fence                 uint64 `json:"fence"`
+	MessageRef             string `json:"message_ref"`
+	RecipientPrincipalRef  string `json:"recipient_principal_ref"`
+	RecipientWorkItemRef   string `json:"recipient_work_item_ref"`
+	RecipientExecutionRef  string `json:"recipient_execution_ref"`
+	ClaimToken             string `json:"claim_token"`
+	Fence                  uint64 `json:"fence"`
+	ExpectedGoalRevision   uint64 `json:"expected_goal_revision"`
+	ExpectedPlanGeneration uint64 `json:"expected_plan_generation"`
 }
 
-func projectMailboxClaim(value application.MailboxClaim) mailboxClaimView {
+func projectMailboxClaim(value application.MailboxClaimResult) mailboxClaimView {
 	return mailboxClaimView{
-		MessageRef: value.Attempt.MessageRef.String(), RecipientPrincipalRef: value.Attempt.Recipient.PrincipalRef.String(),
-		RecipientWorkItemRef: value.Attempt.Recipient.WorkItemRef.String(), RecipientExecutionRef: value.Attempt.Recipient.ExecutionRef.String(),
-		ClaimToken: value.Attempt.ClaimToken, Fence: value.Attempt.Fence,
+		MessageRef: value.Claim.Attempt.MessageRef.String(), RecipientPrincipalRef: value.Claim.Attempt.Recipient.PrincipalRef.String(),
+		RecipientWorkItemRef: value.Claim.Attempt.Recipient.WorkItemRef.String(), RecipientExecutionRef: value.Claim.Attempt.Recipient.ExecutionRef.String(),
+		ClaimToken: value.Claim.Attempt.ClaimToken, Fence: value.Claim.Attempt.Fence,
+		ExpectedGoalRevision: uint64(value.GoalRevision), ExpectedPlanGeneration: uint64(value.PlanGeneration),
 	}
 }
 

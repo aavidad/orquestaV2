@@ -96,7 +96,7 @@ func handleClaimMailbox(ctx context.Context, api applicationAPI, bound handlerCo
 	result, err := api.ClaimMailbox(ctx, bound.access, application.ClaimMailboxRequest{RequestRef: bound.requestRef, GoalRef: goalRef, MessageRef: messageRef, RecipientWorkItemRef: workRef, RecipientExecutionRef: bound.executionRef})
 	return marshalApplication(struct {
 		Receipt mailboxClaimView `json:"receipt"`
-	}{projectMailboxClaim(result.Claim)}, err)
+	}{projectMailboxClaim(result)}, err)
 }
 func handleMarkMailboxDelivered(ctx context.Context, api applicationAPI, bound handlerContext, payload json.RawMessage) (json.RawMessage, error) {
 	var input mailboxClaimInput

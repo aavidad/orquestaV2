@@ -221,6 +221,7 @@ func readMailboxAttempts(
 ) ([]application.MailboxDeliveryAttempt, error) {
 	rows, err := source.QueryContext(ctx, `
 SELECT action_ref, project_ref, recipient_principal_ref, fence, claim_token,
+       expected_goal_revision, expected_plan_generation,
        claim_request_ref, claim_request_fingerprint, claim_authorization_receipt_ref,
        claimed_at, lease_until,
        delivery_request_ref, delivery_request_fingerprint,
@@ -238,7 +239,7 @@ WHERE mailbox_message_ref = ? ORDER BY fence`, record.Envelope.Ref.String())
 		var attempt application.MailboxDeliveryAttempt
 		var projectValue, principalValue string
 		var claimFingerprint, claimAuthorizationRef string
-		var fence, claimedAt, leaseUntil int64
+		var fence, expectedGoalRevision, expectedPlanGeneration, claimedAt, leaseUntil int64
 		var deliveryRequest, deliveryFingerprint, deliveryAuthorizationRef sql.NullString
 		var consumptionRequest, consumptionFingerprint, consumptionAuthorizationRef sql.NullString
 		var deliveryRef, consumptionRef sql.NullString
@@ -246,7 +247,8 @@ WHERE mailbox_message_ref = ? ORDER BY fence`, record.Envelope.Ref.String())
 		if err := rows.Scan(
 			&attempt.ActionRef, &projectValue,
 			&principalValue,
-			&fence, &attempt.ClaimToken, &attempt.ClaimRequestRef,
+			&fence, &attempt.ClaimToken, &expectedGoalRevision, &expectedPlanGeneration,
+			&attempt.ClaimRequestRef,
 			&claimFingerprint, &claimAuthorizationRef, &claimedAt, &leaseUntil,
 			&deliveryRequest, &deliveryFingerprint, &deliveryAuthorizationRef,
 			&deliveryRef, &deliveredAt, &consumptionRequest, &consumptionFingerprint,
@@ -254,7 +256,8 @@ WHERE mailbox_message_ref = ? ORDER BY fence`, record.Envelope.Ref.String())
 		); err != nil {
 			return nil, mapDatabaseError(err)
 		}
-		if fence <= 0 {
+		if fence <= 0 || expectedGoalRevision <= 0 ||
+			expectedPlanGeneration < int64(record.Envelope.TargetPlanGeneration) {
 			return nil, invalid(errors.New("sqlite.mailbox_attempt_generation_invalid"))
 		}
 		attempt.MessageRef = record.Envelope.Ref
@@ -265,6 +268,8 @@ WHERE mailbox_message_ref = ? ORDER BY fence`, record.Envelope.Ref.String())
 		attempt.Recipient.WorkItemRef = record.Envelope.Recipient.WorkItemRef
 		attempt.Recipient.ExecutionRef = record.Envelope.Recipient.ExecutionRef
 		attempt.Fence = uint64(fence)
+		attempt.ExpectedGoalRevision = goal.Revision(expectedGoalRevision)
+		attempt.ExpectedPlanGeneration = goal.PlanGeneration(expectedPlanGeneration)
 		attempt.ClaimedAt = time.Unix(0, claimedAt).UTC()
 		attempt.LeaseUntil = time.Unix(0, leaseUntil).UTC()
 		if attempt.ActionRef != record.Action.Ref || projectValue != record.Envelope.ProjectRef.String() ||

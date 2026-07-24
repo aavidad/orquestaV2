@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "revision": "2026-07-24.1",
+  "revision": "2026-07-25.1",
   "commands": [
     {
       "id": "orquesta.goals.create", "version": "1", "kind": "command", "handler": "Submit", "permission": "goals.create", "audience": "principal", "execution_bound": false, "replay_mode": "application_receipt",
@@ -84,7 +84,7 @@
     },
     {
       "id": "orquesta.mailbox.claim", "version": "1", "kind": "command", "handler": "ClaimMailbox", "permission": "goals.get", "audience": "execution", "execution_bound": true, "replay_mode": "application_receipt",
-      "input_schema": {"type":"object","properties":{"goal_ref":{"type":"string"},"message_ref":{"type":"string"},"recipient_work_item_ref":{"type":"string"}},"required":["goal_ref","message_ref","recipient_work_item_ref"],"additionalProperties":false}, "output_schema": {"type":"object","properties":{"receipt":{"type":"object","properties":{"message_ref":{"type":"string"},"recipient_principal_ref":{"type":"string"},"recipient_work_item_ref":{"type":"string"},"recipient_execution_ref":{"type":"string"},"claim_token":{"type":"string"},"fence":{"type":"integer","minimum":1}},"required":["message_ref","recipient_principal_ref","recipient_work_item_ref","recipient_execution_ref","claim_token","fence"],"additionalProperties":false}},"required":["receipt"],"additionalProperties":false},
+      "input_schema": {"type":"object","properties":{"goal_ref":{"type":"string"},"message_ref":{"type":"string"},"recipient_work_item_ref":{"type":"string"}},"required":["goal_ref","message_ref","recipient_work_item_ref"],"additionalProperties":false}, "output_schema": {"type":"object","properties":{"receipt":{"type":"object","properties":{"message_ref":{"type":"string"},"recipient_principal_ref":{"type":"string"},"recipient_work_item_ref":{"type":"string"},"recipient_execution_ref":{"type":"string"},"claim_token":{"type":"string"},"fence":{"type":"integer","minimum":1},"expected_goal_revision":{"type":"integer","minimum":1},"expected_plan_generation":{"type":"integer","minimum":1}},"required":["message_ref","recipient_principal_ref","recipient_work_item_ref","recipient_execution_ref","claim_token","fence","expected_goal_revision","expected_plan_generation"],"additionalProperties":false}},"required":["receipt"],"additionalProperties":false},
       "description_key": "command.mailbox.claim.description", "error_codes": ["invalid_request","unauthenticated","forbidden","not_found","conflict","unavailable","internal"], "http": {"method":"POST","path":"/api/v1/commands/orquesta.mailbox.claim"}, "mcp": {"tool":"orquesta.mailbox.claim"}, "cli": {"path":["mailbox","claim"]}
     },
     {

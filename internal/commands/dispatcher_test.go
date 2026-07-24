@@ -221,7 +221,9 @@ func (api *fakeApplication) ClaimMailbox(_ context.Context, _ application.Access
 	if !claimed {
 		claim.Record.State = application.MailboxStateDelivered
 	}
-	return application.MailboxClaimResult{Claim: claim, Claimed: claimed}, nil
+	return application.MailboxClaimResult{
+		Claim: claim, GoalRevision: 1, PlanGeneration: 1, Claimed: claimed,
+	}, nil
 }
 func (api *fakeApplication) MarkMailboxDelivered(_ context.Context, _ application.Access, request application.MarkMailboxDeliveredRequest) (application.MailboxMutationResult, error) {
 	changed := api.called("MarkMailboxDelivered") == 1

@@ -272,6 +272,105 @@ func TestMailboxConcurrentClaimHasOneExactRecipientWinner(t *testing.T) {
 	system.assertMailboxCounts(t, [5]int{1, 1, 0, 0, 0})
 }
 
+func TestMailboxClaimReplayKeepsDurableACKFencesAfterGoalAdvances(t *testing.T) {
+	ctx := context.Background()
+	system := newMailboxTestSystem(t, 1)
+	admitted := system.admit(t, 0, "mailbox-admit:durable-ack-fences")
+	request := system.claimRequest(admitted.Record, "mailbox-claim:durable-ack-fences")
+	first, err := system.orchestrator.ClaimMailbox(ctx, system.recipientAccess, request)
+	if err != nil || !first.Claimed || first.GoalRevision == 0 ||
+		first.PlanGeneration != admitted.Record.Envelope.TargetPlanGeneration {
+		t.Fatalf("fresh claim fences=%+v err=%v", first, err)
+	}
+
+	system.repository.mu.Lock()
+	record := system.repository.records[system.goalRef]
+	phase := record.Goal.Phases()[0]
+	appended, appendErr := goal.NewWorkItem(goal.NewWorkItemInput{
+		Ref:  mailboxMustRef(t, "work-item:mailbox-fence-advance", goal.NewWorkItemRef),
+		Goal: system.goalRef, Actor: system.source.ActorRef, Project: system.project,
+		Objective: "advance the durable fence fixture", CreatedAt: system.clock.Now(), Phase: phase.Key(),
+	})
+	if appendErr == nil {
+		plan, planErr := goal.NewPlan(goal.PlanInput{
+			Generation: record.Goal.PlanGeneration() + 1,
+			Phases:     record.Goal.Phases(), WorkItems: append(record.Goal.WorkItems(), appended),
+		})
+		appendErr = planErr
+		if appendErr == nil {
+			record.Goal, appendErr = record.Goal.ApplyPlan(record.Goal.Revision(), plan)
+		}
+	}
+	if appendErr == nil {
+		system.repository.records[system.goalRef] = record
+	}
+	system.repository.mu.Unlock()
+	if appendErr != nil {
+		t.Fatal(appendErr)
+	}
+	if record.Goal.Revision() == first.GoalRevision ||
+		record.Goal.PlanGeneration() == first.PlanGeneration {
+		t.Fatal("Goal fixture did not advance both ACK frontiers")
+	}
+
+	replayed, err := system.orchestrator.ClaimMailbox(ctx, system.recipientAccess, request)
+	if err != nil || replayed.Claimed || replayed.GoalRevision != first.GoalRevision ||
+		replayed.PlanGeneration != first.PlanGeneration ||
+		!reflect.DeepEqual(replayed.Claim, first.Claim) {
+		t.Fatalf("claim replay changed durable fences: first=%+v replay=%+v err=%v", first, replayed, err)
+	}
+}
+
+func TestMailboxDeliveryAndConsumptionKeepClaimACKFencesCurrent(t *testing.T) {
+	ctx := context.Background()
+	system := newMailboxTestSystem(t, 1)
+	admitted := system.admit(t, 0, "mailbox-admit:ack-fence-invariant")
+	before, err := system.repository.GetGoal(ctx, system.goalRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	claim, err := system.orchestrator.ClaimMailbox(
+		ctx, system.recipientAccess,
+		system.claimRequest(admitted.Record, "mailbox-claim:ack-fence-invariant"),
+	)
+	if err != nil || !claim.Claimed ||
+		claim.GoalRevision != before.Goal.Revision() ||
+		claim.PlanGeneration != before.Goal.PlanGeneration() {
+		t.Fatalf("claim did not return current ACK fences: claim=%+v err=%v", claim, err)
+	}
+	if _, err = system.orchestrator.MarkMailboxDelivered(
+		ctx, system.recipientAccess,
+		system.deliverRequest(claim.Claim, "mailbox-deliver:ack-fence-invariant"),
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = system.orchestrator.ConsumeMailbox(ctx, system.recipientAccess, ConsumeMailboxRequest{
+		RequestRef: "mailbox-consume:ack-fence-invariant", GoalRef: system.goalRef,
+		MessageRef: admitted.Record.Envelope.Ref, RecipientWorkItemRef: system.parentRef,
+		RecipientExecutionRef: system.parentExecution, ClaimToken: claim.Claim.Attempt.ClaimToken,
+		Fence: claim.Claim.Attempt.Fence,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	after, err := system.repository.GetGoal(ctx, system.goalRef)
+	if err != nil || after.Goal.Revision() != claim.GoalRevision ||
+		after.Goal.PlanGeneration() != claim.PlanGeneration {
+		t.Fatalf("delivery/consume advanced ACK fences: goal=%+v claim=%+v err=%v", after.Goal.Snapshot(), claim, err)
+	}
+	acknowledged, err := system.orchestrator.AcknowledgeMailbox(
+		ctx, system.recipientAccess, AcknowledgeMailboxRequest(ResolveMailboxRequest{
+			RequestRef: "mailbox-ack:ack-fence-invariant", GoalRef: system.goalRef,
+			MessageRef: admitted.Record.Envelope.Ref, RecipientWorkItemRef: system.parentRef,
+			RecipientExecutionRef: system.parentExecution, ClaimToken: claim.Claim.Attempt.ClaimToken,
+			Fence: claim.Claim.Attempt.Fence, ExpectedGoalRevision: claim.GoalRevision,
+			ExpectedPlanGeneration: claim.PlanGeneration, EffectOrReworkRef: "effect:ack-fence-invariant",
+		}),
+	)
+	if err != nil || !acknowledged.Created {
+		t.Fatalf("ACK rejected claim fences: result=%+v err=%v", acknowledged, err)
+	}
+}
+
 func TestMailboxDeliverActionIsNeverClaimedByGenericScheduler(t *testing.T) {
 	ctx := context.Background()
 	system := newMailboxTestSystem(t, 1)

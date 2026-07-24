@@ -84,8 +84,10 @@ type MailboxAdmissionResult struct {
 }
 
 type MailboxClaimResult struct {
-	Claim   MailboxClaim
-	Claimed bool
+	Claim          MailboxClaim
+	GoalRevision   goal.Revision
+	PlanGeneration goal.PlanGeneration
+	Claimed        bool
 }
 
 type MailboxMutationResult struct {

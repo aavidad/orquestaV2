@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"orquesta/internal/goal"
 	"orquesta/internal/identity"
 )
 
@@ -53,7 +54,7 @@ func (orchestrator *Orchestrator) ClaimMailbox(
 		if err := validateMailboxClaim(replay.Claim, request.RequestRef, request.MessageRef, endpoint, ""); err != nil {
 			return MailboxClaimResult{}, err
 		}
-		return MailboxClaimResult{Claim: cloneMailboxClaim(replay.Claim)}, nil
+		return mailboxClaimResult(projectRef, request.GoalRef, replay.Claim, false)
 	}
 	authorization, err := orchestrator.mailboxMutationAuthorization(
 		ctx, access, MailboxMutationClaim, request.RequestRef, fingerprint, request.MessageRef,
@@ -78,7 +79,28 @@ func (orchestrator *Orchestrator) ClaimMailbox(
 	if err := validateMailboxClaim(claim, request.RequestRef, request.MessageRef, endpoint, token); err != nil {
 		return MailboxClaimResult{}, err
 	}
-	return MailboxClaimResult{Claim: cloneMailboxClaim(claim), Claimed: claimed}, nil
+	return mailboxClaimResult(projectRef, request.GoalRef, claim, claimed)
+}
+
+func mailboxClaimResult(
+	projectRef goal.ProjectRef,
+	goalRef goal.GoalRef,
+	claim MailboxClaim,
+	claimed bool,
+) (MailboxClaimResult, error) {
+	envelope := claim.Record.Envelope
+	attempt := claim.Attempt
+	if envelope.ProjectRef != projectRef {
+		return MailboxClaimResult{}, &StateError{Code: StateNotFound}
+	}
+	if envelope.GoalRef != goalRef || attempt.ExpectedGoalRevision == 0 ||
+		attempt.ExpectedPlanGeneration < envelope.TargetPlanGeneration {
+		return MailboxClaimResult{}, &StateError{Code: StateConflict}
+	}
+	return MailboxClaimResult{
+		Claim: cloneMailboxClaim(claim), GoalRevision: attempt.ExpectedGoalRevision,
+		PlanGeneration: attempt.ExpectedPlanGeneration, Claimed: claimed,
+	}, nil
 }
 
 func (orchestrator *Orchestrator) MarkMailboxDelivered(

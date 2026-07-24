@@ -300,6 +300,18 @@ func (repository *Repository) ClaimMailbox(
 	if err := requireMailboxCurrentRecipient(ctx, transaction, stored); err != nil {
 		return application.MailboxClaim{}, false, err
 	}
+	var currentProject string
+	var expectedGoalRevision, expectedPlanGeneration int64
+	if err := transaction.QueryRowContext(ctx, `
+SELECT project_ref, revision, plan_generation FROM goals WHERE ref = ?`,
+		state.GoalRef.String(),
+	).Scan(&currentProject, &expectedGoalRevision, &expectedPlanGeneration); err != nil {
+		return application.MailboxClaim{}, false, mapDatabaseError(err)
+	}
+	if currentProject != state.ProjectRef.String() || expectedGoalRevision <= 0 ||
+		expectedPlanGeneration < int64(stored.Envelope.TargetPlanGeneration) {
+		return application.MailboxClaim{}, false, conflict(errors.New("sqlite.mailbox_claim_goal_fence_invalid"))
+	}
 	var claimedUntil, completedAt, retiredAt sql.NullInt64
 	var deliveryAttempt, currentFence int64
 	if err := transaction.QueryRowContext(ctx, `
@@ -342,11 +354,13 @@ WHERE ref = ? AND kind = 'deliver_mailbox' AND mailbox_message_ref = ?
 INSERT INTO mailbox_delivery_attempts(
     mailbox_message_ref, action_ref, project_ref, recipient_principal_ref,
     fence, claim_token,
+    expected_goal_revision, expected_plan_generation,
     claim_request_ref, claim_request_fingerprint, claim_authorization_receipt_ref,
     claimed_at, lease_until
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		state.MessageRef.String(), stored.Action.Ref, state.ProjectRef.String(),
 		state.PrincipalRef.String(), fence, state.Token,
+		expectedGoalRevision, expectedPlanGeneration,
 		state.RequestRef, state.RequestFingerprint, state.AuthorizationReceipt.Ref(),
 		requiredTime(now), requiredTime(leaseUntil),
 	)

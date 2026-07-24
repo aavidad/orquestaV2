@@ -89,18 +89,20 @@ type MailboxAdmissionReceipt struct {
 // MailboxDeliveryAttempt records one fenced at-least-once delivery. Prior
 // attempts are immutable evidence and are never overwritten by reclaim.
 type MailboxDeliveryAttempt struct {
-	MessageRef      MailboxMessageRef
-	ActionRef       string
-	Recipient       MailboxEndpoint
-	ClaimRequestRef string
-	ClaimToken      string
-	Fence           uint64
-	ClaimedAt       time.Time
-	LeaseUntil      time.Time
-	DeliveryRef     string
-	DeliveredAt     time.Time
-	ConsumptionRef  string
-	ConsumedAt      time.Time
+	MessageRef             MailboxMessageRef
+	ActionRef              string
+	Recipient              MailboxEndpoint
+	ClaimRequestRef        string
+	ClaimToken             string
+	Fence                  uint64
+	ExpectedGoalRevision   goal.Revision
+	ExpectedPlanGeneration goal.PlanGeneration
+	ClaimedAt              time.Time
+	LeaseUntil             time.Time
+	DeliveryRef            string
+	DeliveredAt            time.Time
+	ConsumptionRef         string
+	ConsumedAt             time.Time
 }
 
 type MailboxAcknowledgement struct {
