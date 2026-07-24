@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -193,6 +194,20 @@ func v22AssertFixture(t *testing.T, root string, fixture v22Fixture) {
 			len(fixture.CandidateSubjects) != 0 {
 			t.Fatalf("invalid V22 red lifecycle: %+v", fixture)
 		}
+		if v22ExecutionEvidencePresent(t, root, fixture) {
+			t.Fatal("V22 development state contains execution evidence")
+		}
+	case "implemented_unsealed":
+		if fixture.ProductDeltaSealedGitCommitOID != "" ||
+			fixture.SealStatus != "p_implemented_unsealed_pending_seal" ||
+			fixture.LifecycleGate != "V22_IMPLEMENTED_UNSEALED" ||
+			fixture.PreflightStatus != "integrated_implementation_complete" {
+			t.Fatalf("invalid V22 P lifecycle: %+v", fixture)
+		}
+		v22AssertCandidateSubjects(t, root, fixture, "")
+		if v22ExecutionEvidencePresent(t, root, fixture) {
+			t.Fatal("V22 P contains execution evidence")
+		}
 	case "sealed_unexecuted":
 		if fixture.ProductDeltaSealedGitCommitOID == "" ||
 			fixture.SealStatus != "s_product_delta_sealed_pending_execution" ||
@@ -200,6 +215,14 @@ func v22AssertFixture(t *testing.T, root string, fixture v22Fixture) {
 			len(fixture.CandidateSubjects) == 0 ||
 			!sort.StringsAreSorted(fixture.CandidateSubjects) {
 			t.Fatalf("invalid V22 sealed lifecycle: %+v", fixture)
+		}
+		v22AssertCandidateSubjects(t, root, fixture, fixture.ProductDeltaSealedGitCommitOID)
+		if !v22ExecutionEvidencePresent(t, root, fixture) {
+			head, err := evidenceGit(root, "rev-parse", "HEAD")
+			if err != nil {
+				t.Fatal(err)
+			}
+			v22AssertExactSeal(t, root, fixture, strings.TrimSpace(string(head)))
 		}
 	default:
 		t.Fatalf("invalid V22 implementation status %q", fixture.ImplementationStatus)
@@ -217,6 +240,112 @@ func v22AssertFixture(t *testing.T, root string, fixture v22Fixture) {
 		ExecutedNotBefore:       "2026-07-23T00:00:00Z",
 		TrustedBaseGitCommitOID: "8063d8ce3ed75dd5ec92108ef6e7e73ee8e11cb8",
 	})
+}
+
+func TestV22ReceiptV3AndPSESealAreExact(t *testing.T) {
+	root := evidenceRepositoryRoot(t)
+	fixture := evidenceDecodeStrictJSON[v22Fixture](t, filepath.Join(root, v22FixturePath))
+	if !v22ExecutionEvidencePresent(t, root, fixture) {
+		return
+	}
+	if fixture.ImplementationStatus != "sealed_unexecuted" {
+		t.Fatalf("V22 evidence exists outside S lifecycle: %s", fixture.ImplementationStatus)
+	}
+	evidenceAssertReceiptV3(t, root, evidenceReceiptV3Expectation{
+		Contract: "AC-V22-CODEX-E2E", FixturePath: v22FixturePath,
+		ReceiptPath: fixture.ReceiptPath, ExecutedNotBefore: "2026-07-24T00:00:00Z",
+		TrustedBaseGitCommitOID: v22ContractBaseGitCommitOID,
+	})
+	receipt := evidenceDecodeStrictJSON[evidenceReceiptV3](t,
+		filepath.Join(root, filepath.FromSlash(fixture.ReceiptPath)))
+	v22AssertExactSeal(t, root, fixture, receipt.SealedSource.GitCommitOID)
+}
+
+func v22AssertCandidateSubjects(t *testing.T, root string, fixture v22Fixture, sealed string) {
+	t.Helper()
+	if len(fixture.CandidateSubjects) == 0 || !sort.StringsAreSorted(fixture.CandidateSubjects) {
+		t.Fatalf("V22 candidate subjects are empty or unsorted")
+	}
+	if err := evidenceValidateCandidateSubjects(
+		fixture.CandidateSubjects, fixture.ReceiptPath, fixture.OutputPath,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if sealed != "" {
+		evidenceAssertCandidateDelta(t, "V22", root, v22ContractBaseGitCommitOID,
+			sealed, fixture.CandidateSubjects)
+		return
+	}
+	if got := v22CurrentCandidateSubjects(t, root); !reflect.DeepEqual(got, fixture.CandidateSubjects) {
+		t.Fatalf("V22 P subjects differ from exact base..P delta:\ngot=%v\nwant=%v", got, fixture.CandidateSubjects)
+	}
+}
+
+func v22CurrentCandidateSubjects(t *testing.T, root string) []string {
+	t.Helper()
+	unique := map[string]struct{}{}
+	for _, arguments := range [][]string{
+		{"diff", "--name-only", v22ContractBaseGitCommitOID, "--"},
+		{"ls-files", "--others", "--exclude-standard"},
+	} {
+		output, err := evidenceGit(root, arguments...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, relative := range strings.Fields(string(output)) {
+			unique[filepath.ToSlash(relative)] = struct{}{}
+		}
+	}
+	result := make([]string, 0, len(unique))
+	for relative := range unique {
+		result = append(result, relative)
+	}
+	sort.Strings(result)
+	return result
+}
+
+func v22AssertExactSeal(t *testing.T, root string, fixture v22Fixture, sealed string) {
+	t.Helper()
+	line, err := evidenceGit(root, "rev-list", "--parents", "-n", "1", sealed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity := strings.Fields(string(line))
+	if len(identity) != 2 || identity[0] != sealed ||
+		identity[1] != fixture.ProductDeltaSealedGitCommitOID {
+		t.Fatalf("V22 S is not an exact child of P: %v", identity)
+	}
+	delta, err := evidenceGit(root, "diff", "--name-only",
+		fixture.ProductDeltaSealedGitCommitOID, sealed, "--")
+	if err != nil || strings.TrimSpace(string(delta)) != v22FixturePath {
+		t.Fatalf("V22 P->S delta=%q err=%v, want only fixture", delta, err)
+	}
+	for _, relative := range []string{fixture.ReceiptPath, fixture.OutputPath} {
+		inside, err := evidenceGit(root, "ls-tree", "-r", "--name-only", sealed, "--", relative)
+		if err != nil || strings.TrimSpace(string(inside)) != "" {
+			t.Fatalf("V22 evidence %q is inside S: output=%q err=%v", relative, inside, err)
+		}
+		if info, err := os.Lstat(filepath.Join(root, filepath.FromSlash(relative))); err == nil &&
+			!info.Mode().IsRegular() {
+			t.Fatalf("V22 evidence %q is not regular", relative)
+		}
+	}
+}
+
+func v22ExecutionEvidencePresent(t *testing.T, root string, fixture v22Fixture) bool {
+	t.Helper()
+	present := 0
+	for _, relative := range []string{fixture.ReceiptPath, fixture.OutputPath} {
+		if info, err := os.Lstat(filepath.Join(root, filepath.FromSlash(relative))); err == nil && info.Mode().IsRegular() {
+			present++
+		} else if err != nil && !os.IsNotExist(err) {
+			t.Fatal(err)
+		}
+	}
+	if present == 1 {
+		t.Fatal("V22 receipt and output must appear atomically")
+	}
+	return present == 2
 }
 
 func v22AssertExactSet(t *testing.T, label string, got, want []string) {
