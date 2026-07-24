@@ -22,6 +22,27 @@ type mailboxReplayLocator struct {
 	outcome            string
 }
 
+func readGoalMailboxRecords(ctx context.Context, source queryer, goalValue string) ([]application.MailboxRecord, error) {
+	persisted, err := sqliteTableHasColumn(ctx, source, "mailbox_envelopes", "ref")
+	if err != nil || !persisted {
+		return nil, mapDatabaseError(err)
+	}
+	refs, err := readContractRefs(ctx, source, `
+SELECT ref FROM mailbox_envelopes WHERE goal_ref = ? ORDER BY admitted_at, ref`, goalValue)
+	if err != nil {
+		return nil, err
+	}
+	records := make([]application.MailboxRecord, 0, len(refs))
+	for _, ref := range refs {
+		record, err := readMailboxRecord(ctx, source, ref)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, record)
+	}
+	return records, nil
+}
+
 func readMailboxRecord(ctx context.Context, source queryer, messageValue string) (application.MailboxRecord, error) {
 	var record application.MailboxRecord
 	var projectValue, goalValue, kind, sourcePrincipalValue, childValue, sourceExecutionValue string

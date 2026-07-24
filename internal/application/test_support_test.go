@@ -191,6 +191,12 @@ func (repository *memoryRepository) GetGoal(_ context.Context, ref goal.GoalRef)
 	if !ok {
 		return GoalRecord{}, &StateError{Code: StateNotFound}
 	}
+	record.Mailboxes = nil
+	for _, mailbox := range repository.mailboxes {
+		if mailbox.Envelope.GoalRef == ref {
+			record.Mailboxes = append(record.Mailboxes, mailbox)
+		}
+	}
 	return cloneGoalRecord(record), nil
 }
 
@@ -2810,6 +2816,10 @@ func cloneGoalRecord(record GoalRecord) GoalRecord {
 	record.MergeObservations = append([]MergeObservation(nil), record.MergeObservations...)
 	record.IntegrationReceipts = append([]IntegrationReceipt(nil), record.IntegrationReceipts...)
 	record.Reviews = append([]ReviewRecord(nil), record.Reviews...)
+	record.Mailboxes = append([]MailboxRecord(nil), record.Mailboxes...)
+	for index := range record.Mailboxes {
+		record.Mailboxes[index] = cloneMailboxRecord(record.Mailboxes[index])
+	}
 	record.CouncilRounds = append([]CouncilRoundRecord(nil), record.CouncilRounds...)
 	record.CouncilFacts = append([]council.ContributionFact(nil), record.CouncilFacts...)
 	record.CouncilDecisions = append([]CouncilDecisionRecord(nil), record.CouncilDecisions...)

@@ -240,6 +240,7 @@ type goalRecordView struct {
 	Reviews             []reviewView             `json:"reviews"`
 	Controls            []controlView            `json:"controls"`
 	IntegrationReceipts []integrationReceiptView `json:"integration_receipts"`
+	MailboxReceipts     []mailboxReceiptView     `json:"mailbox_receipts"`
 }
 
 func projectGoalRecord(value application.GoalRecord) goalRecordView {
@@ -268,10 +269,14 @@ func projectGoalRecord(value application.GoalRecord) goalRecordView {
 	for _, receipt := range value.IntegrationReceipts {
 		integrationReceipts = append(integrationReceipts, projectIntegrationReceipt(receipt))
 	}
+	mailboxReceipts := make([]mailboxReceiptView, 0, len(value.Mailboxes))
+	for _, mailbox := range value.Mailboxes {
+		mailboxReceipts = append(mailboxReceipts, projectMailboxReceipt(mailbox))
+	}
 	return goalRecordView{
 		Goal: projectGoal(value.Goal), ExecutionCount: len(value.Executions), ArtifactCount: len(value.Artifacts),
 		WorkItems: workItems, Executions: executions, Attestations: attestations, Reviews: reviews,
-		Controls: controls, IntegrationReceipts: integrationReceipts,
+		Controls: controls, IntegrationReceipts: integrationReceipts, MailboxReceipts: mailboxReceipts,
 	}
 }
 
@@ -333,6 +338,37 @@ type mailboxView struct {
 	ArtifactRefs          []string `json:"artifact_refs"`
 	State                 string   `json:"state"`
 	AttemptCount          int      `json:"attempt_count"`
+}
+
+type mailboxReceiptView struct {
+	MessageRef            string `json:"message_ref"`
+	State                 string `json:"state"`
+	SourcePrincipalRef    string `json:"source_principal_ref"`
+	SourceExecutionRef    string `json:"source_execution_ref"`
+	RecipientPrincipalRef string `json:"recipient_principal_ref"`
+	RecipientExecutionRef string `json:"recipient_execution_ref"`
+	AdmissionRef          string `json:"admission_ref"`
+	ConsumptionRef        string `json:"consumption_ref"`
+	AcknowledgementRef    string `json:"acknowledgement_ref"`
+	Outcome               string `json:"outcome"`
+}
+
+func projectMailboxReceipt(value application.MailboxRecord) mailboxReceiptView {
+	result := mailboxReceiptView{
+		MessageRef: value.Envelope.Ref.String(), State: string(value.State),
+		SourcePrincipalRef:    value.Admission.PrincipalRef.String(),
+		SourceExecutionRef:    value.Envelope.Source.ExecutionRef.String(),
+		RecipientPrincipalRef: value.Envelope.Recipient.PrincipalRef.String(),
+		RecipientExecutionRef: value.Envelope.Recipient.ExecutionRef.String(),
+		AdmissionRef:          value.Admission.Ref,
+	}
+	if len(value.Attempts) != 0 {
+		result.ConsumptionRef = value.Attempts[len(value.Attempts)-1].ConsumptionRef
+	}
+	if value.Acknowledgement != nil {
+		result.AcknowledgementRef, result.Outcome = value.Acknowledgement.Ref, string(value.Acknowledgement.Outcome)
+	}
+	return result
 }
 
 func projectMailbox(value application.MailboxRecord) mailboxView {

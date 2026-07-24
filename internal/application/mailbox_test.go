@@ -734,6 +734,14 @@ func TestMailboxAcknowledgementReplayNeverRedelivers(t *testing.T) {
 	if actionStillPending {
 		t.Fatal("ACK left deliver_mailbox action pending")
 	}
+	projected, err := system.orchestrator.GetGoal(ctx, system.recipientAccess, system.goalRef)
+	if err != nil || len(projected.Mailboxes) != 1 ||
+		projected.Mailboxes[0].Admission.Ref != flow.admission.Record.Admission.Ref ||
+		projected.Mailboxes[0].Attempts[0].ConsumptionRef == "" ||
+		projected.Mailboxes[0].Acknowledgement == nil ||
+		projected.Mailboxes[0].Acknowledgement.Ref != first.Acknowledgement.Ref {
+		t.Fatalf("Goal query lost causal mailbox receipts: %+v err=%v", projected.Mailboxes, err)
+	}
 }
 
 func TestMailboxParentClosureRequiresEveryChildResolution(t *testing.T) {

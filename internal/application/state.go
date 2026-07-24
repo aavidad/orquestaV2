@@ -356,6 +356,7 @@ type GoalRecord struct {
 	MergeObservations   []MergeObservation
 	IntegrationReceipts []IntegrationReceipt
 	Reviews             []ReviewRecord
+	Mailboxes           []MailboxRecord
 	CouncilRounds       []CouncilRoundRecord
 	CouncilFacts        []council.ContributionFact
 	CouncilDecisions    []CouncilDecisionRecord

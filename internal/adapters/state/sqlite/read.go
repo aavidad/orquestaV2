@@ -203,6 +203,10 @@ func readGoalRecord(ctx context.Context, source queryer, goalValue string) (appl
 	if err != nil {
 		return application.GoalRecord{}, err
 	}
+	mailboxes, err := readGoalMailboxRecords(ctx, source, goalValue)
+	if err != nil {
+		return application.GoalRecord{}, err
+	}
 	councilRecords, err := readCouncilGoalRecords(ctx, source, goalValue)
 	if err != nil {
 		return application.GoalRecord{}, err
@@ -218,7 +222,7 @@ func readGoalRecord(ctx context.Context, source queryer, goalValue string) (appl
 		ConsumptionReceipts: data.consumptionReceipts,
 		WorkspaceBindings:   workspaceFacts.bindings, ChangeSets: workspaceFacts.changes,
 		MergeObservations: workspaceFacts.observations, IntegrationReceipts: workspaceFacts.receipts,
-		Reviews:       reviews,
+		Reviews: reviews, Mailboxes: mailboxes,
 		CouncilRounds: councilRecords.rounds, CouncilFacts: councilRecords.facts,
 		CouncilDecisions: councilRecords.decisions, CouncilSkips: councilRecords.skips,
 	}

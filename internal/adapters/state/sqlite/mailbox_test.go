@@ -854,7 +854,12 @@ SELECT COUNT(*) FROM outbox WHERE kind = 'deliver_mailbox' AND goal_ref = ?`,
 	sqliteTestNoError(t, err)
 	if final.Acknowledgement == nil || len(finalGoal.Goal.ChildHandoffResolutions()) != 1 ||
 		finalGoal.Goal.ChildHandoffResolutions()[0].ReceiptRef() != ackRef ||
-		finalGoal.Goal.PlanGeneration() != envelope.TargetPlanGeneration+1 {
+		finalGoal.Goal.PlanGeneration() != envelope.TargetPlanGeneration+1 ||
+		len(finalGoal.Mailboxes) != 1 ||
+		finalGoal.Mailboxes[0].Admission.Ref != admission.Ref ||
+		finalGoal.Mailboxes[0].Attempts[1].ConsumptionRef != "receipt:mailbox-consumed" ||
+		finalGoal.Mailboxes[0].Acknowledgement == nil ||
+		finalGoal.Mailboxes[0].Acknowledgement.Ref != ackRef {
 		t.Fatalf("restart lost terminal mailbox/Goal fact: mailbox=%+v goal=%+v", final, finalGoal.Goal.Snapshot())
 	}
 	if replay, found, err := repository.MailboxReplay(ctx, application.MailboxReplayRequest{

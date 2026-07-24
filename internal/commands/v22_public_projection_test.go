@@ -9,6 +9,7 @@ import (
 
 	"orquesta/internal/application"
 	"orquesta/internal/goal"
+	"orquesta/internal/identity"
 	"orquesta/internal/ports"
 )
 
@@ -23,7 +24,7 @@ func TestV22GoalAndMailboxPublicSchemasExposeCausalEvidenceWithoutPrivateFields(
 	}
 	for _, field := range []string{
 		"goal", "execution_count", "artifact_count", "work_items", "executions",
-		"attestations", "reviews", "controls", "integration_receipts",
+		"attestations", "reviews", "controls", "integration_receipts", "mailbox_receipts",
 	} {
 		if _, ok := goalSchema.Properties[field]; !ok || !containsV22(goalSchema.Required, field) {
 			t.Fatalf("goals.get missing required public field %q", field)
@@ -40,7 +41,6 @@ func TestV22GoalAndMailboxPublicSchemasExposeCausalEvidenceWithoutPrivateFields(
 		!containsV22(goalObject.Required, "app_spec_generation") {
 		t.Fatal("goals.get goal lacks required app_spec_generation")
 	}
-
 	getMailbox := v22Definition(t, "orquesta.mailbox.get")
 	listMailbox := v22Definition(t, "orquesta.mailbox.list")
 	var listSchema struct {
@@ -60,7 +60,7 @@ func TestV22GoalAndMailboxPublicSchemasExposeCausalEvidenceWithoutPrivateFields(
 		body := strings.ToLower(string(definition.OutputSchema))
 		for _, forbidden := range []string{
 			"external_ref", "repository_ref", "execution_workspace_ref", "provider_ref",
-			"model_ref", "agent_ref", "principal_ref", "idempotency_key", "effect_intent_ref",
+			"model_ref", "agent_ref", "idempotency_key", "effect_intent_ref",
 			"request_fingerprint", "claim_token",
 		} {
 			if strings.Contains(body, forbidden) {
@@ -127,6 +127,7 @@ func TestV22PublicProjectionCarriesRefsAttemptsStatesCodesAndDoesNotLeakPrivateV
 		Attestations: []attestationView{projectAttestation(attestation)},
 		Reviews:      []reviewView{projectReview(review)}, Controls: []controlView{projectControl(control)},
 		IntegrationReceipts: []integrationReceiptView{projectIntegrationReceipt(integration)},
+		MailboxReceipts:     []mailboxReceiptView{},
 	}
 	encoded, err := json.Marshal(projected)
 	if err != nil {
@@ -171,20 +172,29 @@ func TestV22MailboxProjectionExposesCompactHandoffAndNoAdmissionSecrets(t *testi
 			ParentWorkItemRef: v22WorkItemRef(t, "work-item:parent"),
 			ChildWorkItemRef:  v22WorkItemRef(t, "work-item:child"),
 			Source: application.MailboxEndpoint{
+				PrincipalRef: v22PrincipalRef(t, "principal:child"),
 				WorkItemRef:  v22WorkItemRef(t, "work-item:child"),
 				ExecutionRef: v22ExecutionRef(t, "execution:child"),
 			},
 			Recipient: application.MailboxEndpoint{
+				PrincipalRef: v22PrincipalRef(t, "principal:parent"),
 				WorkItemRef:  v22WorkItemRef(t, "work-item:parent"),
 				ExecutionRef: v22ExecutionRef(t, "execution:parent"),
 			},
 			Summary: "child result ready", ArtifactRefs: []goal.ArtifactRef{artifactRef},
 			RequestFingerprint: "secret-mailbox-fingerprint", ContentHash: "secret-content-hash",
 		},
-		State: application.MailboxStateDelivered,
+		Admission: application.MailboxAdmissionReceipt{
+			Ref: "admission:public", PrincipalRef: v22PrincipalRef(t, "principal:child"),
+		},
+		State: application.MailboxStateAcknowledged,
 		Attempts: []application.MailboxDeliveryAttempt{{
 			ClaimToken: "secret-claim-token", DeliveryRef: "secret-delivery-receipt",
+			ConsumptionRef: "consumption:public",
 		}},
+		Acknowledgement: &application.MailboxAcknowledgement{
+			Ref: "acknowledgement:public", Outcome: application.MailboxOutcomeAcknowledged,
+		},
 	}
 	projected := projectMailbox(record)
 	encoded, err := json.Marshal(projected)
@@ -207,6 +217,23 @@ func TestV22MailboxProjectionExposesCompactHandoffAndNoAdmissionSecrets(t *testi
 			t.Fatalf("mailbox output leaked %q: %s", secret, encoded)
 		}
 	}
+	goalEncoded, err := json.Marshal(projectGoalRecord(application.GoalRecord{Mailboxes: []application.MailboxRecord{record}}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := validatePayload(v22Definition(t, "orquesta.goals.get").OutputSchema, goalEncoded); err != nil {
+		t.Fatalf("mailbox receipt projection violates goals.get schema: %v data=%s", err, goalEncoded)
+	}
+	receipt := projectMailboxReceipt(record)
+	if receipt.SourcePrincipalRef != "principal:child" || receipt.SourceExecutionRef != "execution:child" ||
+		receipt.RecipientPrincipalRef != "principal:parent" || receipt.RecipientExecutionRef != "execution:parent" ||
+		receipt.AdmissionRef != "admission:public" || receipt.ConsumptionRef != "consumption:public" ||
+		receipt.AcknowledgementRef != "acknowledgement:public" || receipt.Outcome != "acknowledged" {
+		t.Fatalf("goals.get mailbox receipt lost causal refs: %+v", receipt)
+	}
+	if strings.Contains(string(goalEncoded), "secret-") {
+		t.Fatalf("goals.get mailbox receipts leaked private values: %s", goalEncoded)
+	}
 }
 
 func TestV22EmptyPublicCollectionsEncodeAsArrays(t *testing.T) {
@@ -218,7 +245,7 @@ func TestV22EmptyPublicCollectionsEncodeAsArrays(t *testing.T) {
 	if err := json.Unmarshal(encoded, &decoded); err != nil {
 		t.Fatal(err)
 	}
-	for _, field := range []string{"work_items", "executions", "attestations", "reviews", "controls", "integration_receipts"} {
+	for _, field := range []string{"work_items", "executions", "attestations", "reviews", "controls", "integration_receipts", "mailbox_receipts"} {
 		if value, ok := decoded[field]; !ok || reflect.TypeOf(value).Kind() != reflect.Slice {
 			t.Fatalf("%s=%#v, want array", field, value)
 		}
@@ -290,6 +317,15 @@ func v22ActorRef(t *testing.T, value string) goal.ActorRef {
 func v22ProjectRef(t *testing.T, value string) goal.ProjectRef {
 	t.Helper()
 	ref, err := goal.NewProjectRef(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ref
+}
+
+func v22PrincipalRef(t *testing.T, value string) identity.PrincipalRef {
+	t.Helper()
+	ref, err := identity.NewPrincipalRef(value)
 	if err != nil {
 		t.Fatal(err)
 	}

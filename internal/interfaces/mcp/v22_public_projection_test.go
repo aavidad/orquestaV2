@@ -24,7 +24,8 @@ func TestV22GoalsGetExpandedProjectionHasHTTPMCPParity(t *testing.T) {
 		"attestations":[],
 		"reviews":[],
 		"controls":[],
-		"integration_receipts":[]
+		"integration_receipts":[],
+		"mailbox_receipts":[{"message_ref":"message:public","state":"acknowledged","source_principal_ref":"principal:child","source_execution_ref":"execution:child","recipient_principal_ref":"principal:parent","recipient_execution_ref":"execution:public","admission_ref":"admission:public","consumption_ref":"consumption:public","acknowledgement_ref":"acknowledgement:public","outcome":"acknowledged"}]
 	}`)
 	executor := &v20Executor{result: commandcore.Result{Data: data, AuditRef: "audit:v22-public"}}
 	provider := v20Identity{principal: v20Principal(t)}
@@ -87,12 +88,19 @@ func TestV22GoalsGetExpandedProjectionHasHTTPMCPParity(t *testing.T) {
 			AttemptNo   uint64 `json:"attempt_no"`
 			FailureCode string `json:"failure_code"`
 		} `json:"executions"`
+		MailboxReceipts []struct {
+			Admission       string `json:"admission_ref"`
+			Consumption     string `json:"consumption_ref"`
+			Acknowledgement string `json:"acknowledgement_ref"`
+		} `json:"mailbox_receipts"`
 	}
 	if err := json.Unmarshal(data, &projected); err != nil {
 		t.Fatal(err)
 	}
 	if projected.Goal.AppSpecGeneration != 1 || len(projected.WorkItems) != 1 ||
-		len(projected.Executions) != 1 || projected.Executions[0].AttemptNo != 1 {
+		len(projected.Executions) != 1 || projected.Executions[0].AttemptNo != 1 ||
+		len(projected.MailboxReceipts) != 1 || projected.MailboxReceipts[0].Admission == "" ||
+		projected.MailboxReceipts[0].Consumption == "" || projected.MailboxReceipts[0].Acknowledgement == "" {
 		t.Fatalf("projection=%+v", projected)
 	}
 }
