@@ -415,10 +415,14 @@ type changeView struct {
 }
 
 func projectChange(value application.PendingChange) changeView {
+	targetOID := value.Observation.TargetOID
+	if targetOID == "" {
+		targetOID = value.ChangeSet.BaseOID
+	}
 	return changeView{
 		ChangeRef: value.ChangeSet.Ref.String(), GoalRef: value.ChangeSet.GoalRef.String(),
 		WorkItemRef: value.ChangeSet.WorkItemRef.String(), ExecutionRef: value.ChangeSet.ExecutionRef.String(),
-		Status: string(value.Observation.Status), TargetOID: value.Observation.TargetOID,
+		Status: string(value.Observation.Status), TargetOID: targetOID,
 	}
 }
 

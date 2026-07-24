@@ -231,6 +231,56 @@ func TestV22EmptyPublicCollectionsEncodeAsArrays(t *testing.T) {
 	}
 }
 
+func TestPendingChangeProjectionUsesImmutableBaseBeforeFirstObservation(t *testing.T) {
+	const baseOID = "1111111111111111111111111111111111111111"
+	projected := projectChange(application.PendingChange{ChangeSet: application.ChangeSet{
+		Ref:          v22MustRef(t, "change:initial", ports.NewChangeSetRef),
+		GoalRef:      v22MustRef(t, "goal:initial", goal.NewGoalRef),
+		WorkItemRef:  v22MustRef(t, "work-item:initial", goal.NewWorkItemRef),
+		ExecutionRef: v22MustRef(t, "execution:initial", goal.NewExecutionRef),
+		BaseOID:      baseOID,
+	}})
+
+	if projected.Status != "" {
+		t.Fatalf("status=%q, want no authoritative observation", projected.Status)
+	}
+	if projected.TargetOID != baseOID || projected.TargetOID == "" {
+		t.Fatalf("target_oid=%q, want immutable base %q", projected.TargetOID, baseOID)
+	}
+}
+
+func TestPendingChangeProjectionPreservesObservedTargetAndStatus(t *testing.T) {
+	const (
+		baseOID     = "1111111111111111111111111111111111111111"
+		observedOID = "2222222222222222222222222222222222222222"
+	)
+	for _, status := range []ports.MergeStatus{ports.MergeStatusStale, ports.MergeStatusConflicted} {
+		t.Run(string(status), func(t *testing.T) {
+			projected := projectChange(application.PendingChange{
+				ChangeSet: application.ChangeSet{
+					Ref:          v22MustRef(t, "change:observed", ports.NewChangeSetRef),
+					GoalRef:      v22MustRef(t, "goal:observed", goal.NewGoalRef),
+					WorkItemRef:  v22MustRef(t, "work-item:observed", goal.NewWorkItemRef),
+					ExecutionRef: v22MustRef(t, "execution:observed", goal.NewExecutionRef),
+					BaseOID:      baseOID,
+				},
+				Observation: application.MergeObservation{
+					Ref:       "merge-observation:observed",
+					Status:    status,
+					TargetOID: observedOID,
+				},
+			})
+
+			if projected.Status != string(status) {
+				t.Fatalf("status=%q, want %q", projected.Status, status)
+			}
+			if projected.TargetOID != observedOID || projected.TargetOID == "" {
+				t.Fatalf("target_oid=%q, want observed target %q", projected.TargetOID, observedOID)
+			}
+		})
+	}
+}
+
 func v22Definition(t *testing.T, id string) Definition {
 	t.Helper()
 	for _, definition := range CanonicalDefinitions() {
