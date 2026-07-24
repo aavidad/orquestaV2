@@ -10,6 +10,18 @@ import (
 	"orquesta/internal/ports"
 )
 
+func projectValues[S, D any](values []S, project func(S) D) []D {
+	result := make([]D, 0, len(values))
+	for _, value := range values {
+		result = append(result, project(value))
+	}
+	return result
+}
+
+func projectRefs[T interface{ String() string }](refs []T) []string {
+	return projectValues(refs, func(ref T) string { return ref.String() })
+}
+
 type goalView struct {
 	GoalRef           string `json:"goal_ref"`
 	ProjectRef        string `json:"project_ref"`
@@ -78,25 +90,10 @@ func projectWorkItem(value goal.WorkItem) workItemView {
 	if cause, ok := value.InterruptCause(); ok {
 		interruptCode = string(cause)
 	}
-	dependencies := value.Dependencies()
-	dependencyRefs := make([]string, 0, len(dependencies))
-	for _, ref := range dependencies {
-		dependencyRefs = append(dependencyRefs, ref.String())
-	}
-	artifacts := value.Artifacts()
-	artifactRefs := make([]string, 0, len(artifacts))
-	for _, ref := range artifacts {
-		artifactRefs = append(artifactRefs, ref.String())
-	}
-	attestations := value.Attestations()
-	attestationRefs := make([]string, 0, len(attestations))
-	for _, ref := range attestations {
-		attestationRefs = append(attestationRefs, ref.String())
-	}
 	return workItemView{
 		WorkItemRef: value.Ref().String(), State: string(value.State()), Revision: uint64(value.Revision()),
-		ParentWorkItemRef: parentRef, DependencyRefs: dependencyRefs, HandoffRequired: value.HandoffRequired(),
-		ExecutionRef: executionRef, ArtifactRefs: artifactRefs, AttestationRefs: attestationRefs,
+		ParentWorkItemRef: parentRef, DependencyRefs: projectRefs(value.Dependencies()), HandoffRequired: value.HandoffRequired(),
+		ExecutionRef: executionRef, ArtifactRefs: projectRefs(value.Artifacts()), AttestationRefs: projectRefs(value.Attestations()),
 		Paused: value.Paused(), CancelRequested: value.CancelRequested(), InterruptCode: interruptCode,
 	}
 }
@@ -147,12 +144,11 @@ type attestationView struct {
 }
 
 func projectAttestation(value application.AttestationRecord) attestationView {
-	tests := make([]requiredTestOutcomeView, 0, len(value.Tests))
-	for _, outcome := range value.Tests {
-		tests = append(tests, requiredTestOutcomeView{
+	tests := projectValues(value.Tests, func(outcome ports.RequiredTestOutcome) requiredTestOutcomeView {
+		return requiredTestOutcomeView{
 			RequiredTestRef: outcome.RequiredTestRef.String(), ExitCode: outcome.ExitCode, OutputDigest: outcome.OutputDigest,
-		})
-	}
+		}
+	})
 	return attestationView{
 		AttestationRef: value.Ref.String(), Kind: string(value.Kind), Verdict: string(value.Verdict),
 		WorkItemRef: value.WorkItemRef.String(), ExecutionRef: value.ExecutionRef.String(),
@@ -244,39 +240,15 @@ type goalRecordView struct {
 }
 
 func projectGoalRecord(value application.GoalRecord) goalRecordView {
-	items := value.Goal.WorkItems()
-	workItems := make([]workItemView, 0, len(items))
-	for _, item := range items {
-		workItems = append(workItems, projectWorkItem(item))
-	}
-	executions := make([]executionView, 0, len(value.Executions))
-	for _, execution := range value.Executions {
-		executions = append(executions, projectExecution(execution))
-	}
-	attestations := make([]attestationView, 0, len(value.Attestations))
-	for _, attestation := range value.Attestations {
-		attestations = append(attestations, projectAttestation(attestation))
-	}
-	reviews := make([]reviewView, 0, len(value.Reviews))
-	for _, review := range value.Reviews {
-		reviews = append(reviews, projectReview(review))
-	}
-	controls := make([]controlView, 0, len(value.Controls))
-	for _, control := range value.Controls {
-		controls = append(controls, projectControl(control))
-	}
-	integrationReceipts := make([]integrationReceiptView, 0, len(value.IntegrationReceipts))
-	for _, receipt := range value.IntegrationReceipts {
-		integrationReceipts = append(integrationReceipts, projectIntegrationReceipt(receipt))
-	}
-	mailboxReceipts := make([]mailboxReceiptView, 0, len(value.Mailboxes))
-	for _, mailbox := range value.Mailboxes {
-		mailboxReceipts = append(mailboxReceipts, projectMailboxReceipt(mailbox))
-	}
 	return goalRecordView{
 		Goal: projectGoal(value.Goal), ExecutionCount: len(value.Executions), ArtifactCount: len(value.Artifacts),
-		WorkItems: workItems, Executions: executions, Attestations: attestations, Reviews: reviews,
-		Controls: controls, IntegrationReceipts: integrationReceipts, MailboxReceipts: mailboxReceipts,
+		WorkItems:           projectValues(value.Goal.WorkItems(), projectWorkItem),
+		Executions:          projectValues(value.Executions, projectExecution),
+		Attestations:        projectValues(value.Attestations, projectAttestation),
+		Reviews:             projectValues(value.Reviews, projectReview),
+		Controls:            projectValues(value.Controls, projectControl),
+		IntegrationReceipts: projectValues(value.IntegrationReceipts, projectIntegrationReceipt),
+		MailboxReceipts:     projectValues(value.Mailboxes, projectMailboxReceipt),
 	}
 }
 
@@ -372,10 +344,6 @@ func projectMailboxReceipt(value application.MailboxRecord) mailboxReceiptView {
 }
 
 func projectMailbox(value application.MailboxRecord) mailboxView {
-	artifactRefs := make([]string, 0, len(value.Envelope.ArtifactRefs))
-	for _, ref := range value.Envelope.ArtifactRefs {
-		artifactRefs = append(artifactRefs, ref.String())
-	}
 	return mailboxView{
 		MessageRef: value.Envelope.Ref.String(), GoalRef: value.Envelope.GoalRef.String(),
 		TargetPlanGeneration: uint64(value.Envelope.TargetPlanGeneration), Kind: string(value.Envelope.Kind),
@@ -383,7 +351,7 @@ func projectMailbox(value application.MailboxRecord) mailboxView {
 		SourceWorkItemRef: value.Envelope.Source.WorkItemRef.String(), SourceExecutionRef: value.Envelope.Source.ExecutionRef.String(),
 		RecipientWorkItemRef:  value.Envelope.Recipient.WorkItemRef.String(),
 		RecipientExecutionRef: value.Envelope.Recipient.ExecutionRef.String(),
-		Summary:               value.Envelope.Summary, ArtifactRefs: artifactRefs,
+		Summary:               value.Envelope.Summary, ArtifactRefs: projectRefs(value.Envelope.ArtifactRefs),
 		State: string(value.State), AttemptCount: len(value.Attempts),
 	}
 }
