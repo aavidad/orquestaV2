@@ -61,6 +61,9 @@ func v22AddedLines(t *testing.T, root string) map[string]int {
 }
 
 func v22DeltaClass(path string) string {
+	if strings.HasPrefix(path, "product/evidence/") {
+		return ""
+	}
 	if strings.HasSuffix(path, "_test.go") || strings.HasPrefix(path, "acceptance/") || strings.Contains(path, "/fixtures/") || strings.HasPrefix(path, "scripts/") {
 		return "test"
 	}
@@ -68,6 +71,12 @@ func v22DeltaClass(path string) string {
 		return "product"
 	}
 	return ""
+}
+
+func TestV22SimplicityBudgetExcludesOnlyPostSealEvidence(t *testing.T) {
+	if v22DeltaClass("product/evidence/v22_codex_e2e.json") != "" || v22DeltaClass("product/roadmap.json") != "product" {
+		t.Fatal("V22 budget must exclude only post-seal evidence")
+	}
 }
 
 func v22PhysicalLines(t *testing.T, path string) int {
