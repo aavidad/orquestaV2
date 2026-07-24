@@ -329,29 +329,40 @@ func (adapter *Adapter) Launch(ctx context.Context, request ports.AgentLaunchReq
 		return ports.AgentLaunchReceipt{}, err
 	}
 	if found {
-		// A durable terminal is replayable without re-resolving a short-lived
-		// bearer. A non-terminal journal, including one written immediately
-		// before a crash, must resolve the exact requested session again before
-		// it can be adopted or recovered.
-		if record.SchemaVersion == stateSchemaVersion && record.RequestHash == requestHash {
-			if _, terminalFound, terminalErr := adapter.loadCausalTerminal(runPath, record.RequestHash, record.SpecHash, record.MaxOutputBytes); terminalErr != nil {
-				return ports.AgentLaunchReceipt{}, terminalErr
-			} else if terminalFound {
-				return adapter.resumeLaunchRecordLocked(ctx, request, requestHash, record, runPath, false, nil, nil, nil)
-			}
+		sourceSchema := record.SchemaVersion
+		validatedRecord, _, replayErr := adapter.validateLaunchReplay(runPath, record, request, requestHash)
+		if replayErr != nil {
+			return ports.AgentLaunchReceipt{}, replayErr
+		}
+		if sourceSchema == stateSchemaVersion {
+			record = validatedRecord
+		}
+		if _, terminalFound, terminalErr := adapter.loadCausalTerminal(runPath, record.RequestHash, record.SpecHash, record.MaxOutputBytes); terminalErr != nil {
+			return ports.AgentLaunchReceipt{}, terminalErr
+		} else if terminalFound {
+			return adapter.resumeLaunchRecordLocked(ctx, request, requestHash, record, runPath, false, nil, nil, nil)
 		}
 		session, sessionErr := adapter.resolveSession(ctx, request)
 		if sessionErr != nil {
+			if ctx.Err() != nil {
+				return ports.AgentLaunchReceipt{}, ctx.Err()
+			}
 			return ports.AgentLaunchReceipt{}, adapter.quarantineLaunchRecoveryLocked(ctx, request, record, runPath, sessionErr)
 		}
 		defer session.destroy()
 		if preflightErr := adapter.preflightSessionLaunch(session, request); preflightErr != nil {
-			return ports.AgentLaunchReceipt{}, adapter.quarantineLaunchRecoveryLocked(ctx, request, record, runPath, preflightErr)
+			if recoveryAuthorityFailure(preflightErr) {
+				preflightErr = adapter.quarantineLaunchRecoveryLocked(ctx, request, record, runPath, preflightErr)
+			}
+			return ports.AgentLaunchReceipt{}, preflightErr
 		}
 		if adapter.config.CredentialStore != nil {
 			receipt, credentialErr := adapter.launchWithCredentialLocked(ctx, request, requestHash, session)
 			if credentialErr != nil {
-				return ports.AgentLaunchReceipt{}, adapter.quarantineLaunchRecoveryLocked(ctx, request, record, runPath, credentialErr)
+				if recoveryAuthorityFailure(credentialErr) {
+					credentialErr = adapter.quarantineLaunchRecoveryLocked(ctx, request, record, runPath, credentialErr)
+				}
+				return ports.AgentLaunchReceipt{}, credentialErr
 			}
 			return receipt, nil
 		}
@@ -384,6 +395,26 @@ func (adapter *Adapter) Launch(ctx context.Context, request ports.AgentLaunchReq
 	return adapter.resumeLaunchRecordLocked(ctx, request, requestHash, record, runPath, recordCreated, environment, nil, session)
 }
 
+func (adapter *Adapter) validateLaunchReplay(runPath string, record launchRecord, request ports.AgentLaunchRequest, requestHash string) (launchRecord, ports.AgentLaunchReceipt, error) {
+	var err error
+	if record.SchemaVersion != stateSchemaVersion {
+		record, err = adapter.bindLegacyLaunchRecord(runPath, record, request, requestHash)
+	} else if record.RequestHash != requestHash {
+		return record, ports.AgentLaunchReceipt{}, &Error{Code: CodeExecutionConflict}
+	}
+	if err != nil {
+		return record, ports.AgentLaunchReceipt{}, err
+	}
+	receipt, err := record.receipt(request.ExecutionRef)
+	if err == nil {
+		err = ports.ValidateAgentLaunchReceipt(request, receipt)
+	}
+	if err != nil {
+		return record, ports.AgentLaunchReceipt{}, &Error{Code: CodeStateInvalid, Cause: err}
+	}
+	return record, receipt, nil
+}
+
 func (adapter *Adapter) resumeLaunchRecordLocked(ctx context.Context, request ports.AgentLaunchRequest, requestHash string, record launchRecord, runPath string, recordCreated bool, environment []string, credentialGuard *credentials.LeakGuard, session *resolvedSession) (ports.AgentLaunchReceipt, error) {
 	defer func() {
 		if credentialGuard != nil {
@@ -395,21 +426,9 @@ func (adapter *Adapter) resumeLaunchRecordLocked(ctx context.Context, request po
 	}()
 	executionKey := request.ExecutionRef.String()
 	terminalRequestHash := record.RequestHash
-	if record.SchemaVersion == legacyStateSchemaVersion || record.SchemaVersion == intermediateStateSchemaVersion {
-		upgraded, err := adapter.bindLegacyLaunchRecord(runPath, record, request, requestHash)
-		if err != nil {
-			return ports.AgentLaunchReceipt{}, err
-		}
-		record = upgraded
-	} else if record.RequestHash != requestHash {
-		return ports.AgentLaunchReceipt{}, &Error{Code: CodeExecutionConflict}
-	}
-	receipt, err := record.receipt(request.ExecutionRef)
+	record, receipt, err := adapter.validateLaunchReplay(runPath, record, request, requestHash)
 	if err != nil {
 		return ports.AgentLaunchReceipt{}, err
-	}
-	if err := ports.ValidateAgentLaunchReceipt(request, receipt); err != nil {
-		return ports.AgentLaunchReceipt{}, &Error{Code: CodeStateInvalid, Cause: err}
 	}
 	state := &executionState{requestHash: requestHash, terminalRequestHash: terminalRequestHash,
 		receipt: receipt, maxOutput: record.MaxOutputBytes, runPath: runPath, status: ports.AgentPending}
@@ -496,7 +515,10 @@ func (adapter *Adapter) Observe(ctx context.Context, executionRef goal.Execution
 		state.status, state.terminal, state.terminalDurable = terminal.Status, &terminal, true
 	} else {
 		if recoveryErr := adapter.recoverExecutionGuards(ctx, record, state); recoveryErr != nil {
-			return ports.AgentObservation{}, adapter.quarantineRecoveryFailureLocked(ctx, state, recoveryErr)
+			if recoveryAuthorityFailure(recoveryErr) {
+				recoveryErr = adapter.quarantineRecoveryFailureLocked(ctx, state, recoveryErr)
+			}
+			return ports.AgentObservation{}, recoveryErr
 		}
 		adopted, adoptErr := adapter.adoptPersistedProcessLocked(state)
 		if adoptErr != nil {

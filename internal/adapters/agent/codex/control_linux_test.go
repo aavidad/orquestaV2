@@ -81,8 +81,7 @@ func TestRecoveryFailureQuarantinesLiveProcessBeforeFinalScrub(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			helperPath := filepath.Join(t.TempDir(), "late-secret.sh")
-			script := "#!/bin/sh\n" +
-				"secret=\"${CODEX_API_KEY:-${ORQUESTA_MCP_BEARER_TOKEN:-}}\"\n" +
+			script := "#!/bin/sh\nsecret=\"${CODEX_API_KEY:-${ORQUESTA_MCP_BEARER_TOKEN:-}}\"\n" +
 				"trap 'printf \"%s\" \"$secret\" > " + lastMessageFileName +
 				"; printf late > recovery-late.marker; exit 0' TERM\n" +
 				"printf ready > recovery-ready.marker\nwhile :; do sleep 1; done\n"
@@ -109,6 +108,19 @@ func TestRecoveryFailureQuarantinesLiveProcessBeforeFinalScrub(t *testing.T) {
 				t.Fatal(err)
 			}
 			reopened := openTestAdapter(t, config)
+			if test.launch {
+				conflict := request
+				conflict.Objective += " conflicting replay"
+				if _, err := reopened.Launch(context.Background(), conflict); ErrorCode(err) != CodeExecutionConflict {
+					t.Fatalf("conflicting Launch error=%v", err)
+				}
+				if output, _ := os.ReadFile(outputPath); string(output) != "before-first-scrub" {
+					t.Fatalf("conflicting Launch touched output=%q", output)
+				}
+				if identity, _ := platformInspectProcess(process); identity != processIdentityAlive {
+					t.Fatalf("conflicting Launch process identity=%v", identity)
+				}
+			}
 			var err error
 			if test.launch {
 				_, err = reopened.Launch(context.Background(), request)
@@ -122,14 +134,86 @@ func TestRecoveryFailureQuarantinesLiveProcessBeforeFinalScrub(t *testing.T) {
 			if err := command.Wait(); err != nil {
 				t.Fatalf("Wait: %v", err)
 			}
-			if identity, inspectErr := platformInspectProcess(process); inspectErr != nil || identity != processIdentityGone {
-				t.Fatalf("process identity=%v error=%v", identity, inspectErr)
+			awaitProcessIdentityGone(t, process)
+			assertNoMaterialInTree(t, config.WorkRoot, helperCredentialInitial, helperSessionBearer)
+			replay := openTestAdapter(t, config)
+			if _, err := replay.Launch(context.Background(), request); err != nil {
+				t.Fatalf("terminal Launch replay: %v", err)
 			}
-			if output, readErr := os.ReadFile(outputPath); readErr != nil || len(output) != 0 {
-				t.Fatalf("final output=%q error=%v", output, readErr)
+			if observation, err := replay.Observe(context.Background(), request.ExecutionRef); err != nil ||
+				observation.Status != ports.AgentFailed || observation.ErrorCode != test.code || len(observation.Content) != 0 {
+				t.Fatalf("terminal replay=%+v error=%v", observation, err)
 			}
 		})
 	}
+}
+
+func TestCanceledRecoveryDoesNotQuarantineLiveProcess(t *testing.T) {
+	for _, launch := range []bool{true, false} {
+		name := "observe"
+		if launch {
+			name = "launch"
+		}
+		t.Run(name, func(t *testing.T) {
+			config := processTreeTestConfig(t)
+			ctx, cancel := context.WithCancel(context.Background())
+			config.SessionResolver = sessionResolverFunc(func(context.Context, ports.AgentLaunchRequest) (Session, error) {
+				cancel()
+				return Session{}, ctx.Err()
+			})
+			request := testRequest(t, "canceled-recovery-"+name, "canceled recovery process tree", 1024)
+			request.SessionRef, _ = ports.NewExecutionSessionRef("execution-session:canceled-recovery-" + name)
+			command, process, _ := seedUnownedLiveProcess(t, config, request)
+			reopened := openTestAdapter(t, config)
+			var err error
+			if launch {
+				_, err = reopened.Launch(ctx, request)
+			} else {
+				_, err = reopened.Observe(ctx, request.ExecutionRef)
+			}
+			if !errors.Is(err, context.Canceled) {
+				t.Fatalf("recovery error=%v", err)
+			}
+			if identity, inspectErr := platformInspectProcess(process); inspectErr != nil || identity != processIdentityAlive {
+				t.Fatalf("canceled recovery process identity=%v error=%v", identity, inspectErr)
+			}
+			terminalPath := filepath.Join(config.WorkRoot, filepath.FromSlash(executionPath(request.ExecutionRef)), terminalFileName)
+			if _, err := os.Stat(terminalPath); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("canceled recovery invented terminal: %v", err)
+			}
+			_ = platformSignalProcess(process, ports.AgentStopForced)
+			_ = command.Wait()
+			awaitProcessIdentityGone(t, process)
+		})
+	}
+}
+
+func TestPromptFailureDoesNotQuarantineLiveProcess(t *testing.T) {
+	config := processTreeTestConfig(t)
+	request := testRequest(t, "prompt-failure-recovery", "prompt failure process tree", 1024)
+	request.SessionRef, _ = ports.NewExecutionSessionRef("execution-session:prompt-failure-recovery")
+	command, process, _ := seedUnownedLiveProcess(t, config, request)
+	config.SessionResolver = sessionResolverFunc(func(context.Context, ports.AgentLaunchRequest) (Session, error) {
+		secret, _ := credentials.NewSecret([]byte(helperSessionBearer))
+		return Session{Ref: request.SessionRef, Endpoint: "http://127.0.0.1:7777/mcp", BearerToken: secret}, nil
+	})
+	config.PromptRenderer = testPromptRenderer{render: func(AgentPrompt) (string, error) {
+		return "", errors.New("render unavailable")
+	}}
+	reopened := openTestAdapter(t, config)
+	if _, err := reopened.Launch(context.Background(), request); ErrorCode(err) != CodePromptRenderFailed {
+		t.Fatalf("prompt recovery error=%v code=%q", err, ErrorCode(err))
+	}
+	if identity, inspectErr := platformInspectProcess(process); inspectErr != nil || identity != processIdentityAlive {
+		t.Fatalf("prompt failure process identity=%v error=%v", identity, inspectErr)
+	}
+	terminalPath := filepath.Join(config.WorkRoot, filepath.FromSlash(executionPath(request.ExecutionRef)), terminalFileName)
+	if _, err := os.Stat(terminalPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("prompt failure invented terminal: %v", err)
+	}
+	_ = platformSignalProcess(process, ports.AgentStopForced)
+	_ = command.Wait()
+	awaitProcessIdentityGone(t, process)
 }
 
 func TestCodexSelectiveStopPreservesSiblingProcessTrees(t *testing.T) {
@@ -555,12 +639,21 @@ func TestCodexSelectiveStopAdoptsAfterCrashAndRejectsReusedPID(t *testing.T) {
 		if err != nil || observation.Status != ports.AgentRunning {
 			t.Fatalf("Observe(live child) = %+v, %v", observation, err)
 		}
-		contender, err := New(config)
+		busyConfig := config
+		busyConfig.CredentialStore = &credentialTestStore{material: helperCredentialInitial, version: 1, revoked: true}
+		busyConfig.CredentialRef = credentials.CredentialRef("credential:codex-primary")
+		contender, err := New(busyConfig)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if lock, err := contender.acquireOwnerLock(executionPath(request.ExecutionRef)); lock != nil || !errors.Is(err, errOwnerLockBusy) {
 			t.Fatalf("owner lock after leader exit = %v, %v", lock, err)
+		}
+		if _, err := contender.Observe(context.Background(), request.ExecutionRef); ErrorCode(err) != CodeProcessOwnershipBusy {
+			t.Fatalf("busy recovery error=%v code=%q", err, ErrorCode(err))
+		}
+		if _, err := os.Stat(filepath.Join(filepath.Dir(childPath), terminalFileName)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("busy recovery invented terminal: %v", err)
 		}
 		_ = contender.root.Close()
 
@@ -753,6 +846,10 @@ func TestCodexSelectiveStopAdoptsAfterCrashAndRejectsReusedPID(t *testing.T) {
 	t.Run("rejects reused pid marker", func(t *testing.T) {
 		config := processTreeTestConfig(t)
 		request := testRequest(t, "reused-pid-control", "reused pid process tree", 1024)
+		request.SessionRef, _ = ports.NewExecutionSessionRef("execution-session:reused-pid")
+		config.SessionResolver = sessionResolverFunc(func(context.Context, ports.AgentLaunchRequest) (Session, error) {
+			return Session{}, errors.New("authority unavailable")
+		})
 		command, record, launch := seedUnownedLiveProcess(t, config, request)
 		grandchild := awaitGrandchildPID(t, config, request)
 		tampered := record
@@ -770,6 +867,16 @@ func TestCodexSelectiveStopAdoptsAfterCrashAndRejectsReusedPID(t *testing.T) {
 		}
 		if err := syscall.Kill(grandchild, 0); err != nil {
 			t.Fatalf("stale marker signaled target: %v", err)
+		}
+		recovery := openTestAdapter(t, config)
+		if _, err := recovery.Observe(context.Background(), request.ExecutionRef); ErrorCode(err) != CodeProcessIdentityMismatch {
+			t.Fatalf("mismatch recovery error=%v code=%q", err, ErrorCode(err))
+		}
+		if err := syscall.Kill(grandchild, 0); err != nil {
+			t.Fatalf("mismatch recovery signaled target: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(filepath.Dir(processPath), terminalFileName)); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("mismatch recovery invented terminal: %v", err)
 		}
 		_ = platformSignalProcess(record, ports.AgentStopForced)
 		_ = command.Wait()

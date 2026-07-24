@@ -83,23 +83,25 @@ func (adapter *Adapter) recoverExecutionGuards(ctx context.Context, record launc
 	if record.ExecutionSessionRef != "" {
 		session, err = adapter.recoverSession(ctx, request)
 		if err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			return err
 		}
 	}
 	defer session.destroy()
 	var credentialGuard *credentials.LeakGuard
 	if needsCredential {
-		var guardErr error
 		_, err = adapter.config.CredentialStore.Use(ctx, adapter.credentialUseRequest(request), func(secret credentials.Secret) error {
-			credentialGuard, guardErr = credentials.NewLeakGuard(secret)
-			return guardErr
+			credentialGuard, err = credentials.NewLeakGuard(secret)
+			return err
 		})
-		if guardErr != nil || err != nil {
+		if err != nil {
 			credentialGuard.Destroy()
 			if ctx.Err() != nil {
 				return ctx.Err()
 			}
-			return &Error{Code: CodeCredentialUnavailable, Cause: errors.Join(guardErr, err)}
+			return &Error{Code: CodeCredentialUnavailable, Cause: err}
 		}
 	}
 	state.credentialGuard = credentialGuard
@@ -119,10 +121,16 @@ func destroyExecutionGuards(state *executionState) {
 	}
 }
 
+func recoveryAuthorityFailure(err error) bool {
+	code := ErrorCode(err)
+	return code == CodeCredentialInvalid || code == CodeCredentialUnavailable || code == CodeSessionInvalid ||
+		code == CodeSessionUnavailable || code == CodeSecretLeak
+}
+
 func (adapter *Adapter) quarantineLaunchRecoveryLocked(ctx context.Context, request ports.AgentLaunchRequest, record launchRecord, runPath string, cause error) error {
 	state, err := adapter.recoveryState(record, runPath, request.ExecutionRef)
 	if err != nil {
-		return errors.Join(cause, err)
+		return errors.Join(err, cause)
 	}
 	return adapter.quarantineRecoveryFailureLocked(ctx, state, cause)
 }
@@ -137,8 +145,30 @@ func (adapter *Adapter) recoveryState(record launchRecord, runPath string, execu
 }
 
 func (adapter *Adapter) quarantineRecoveryFailureLocked(ctx context.Context, state *executionState, cause error) error {
-	firstScrub := adapter.credentialOutputScrub(state.runPath)
+	if !recoveryAuthorityFailure(cause) {
+		return cause
+	}
 	adopted, adoptErr := adapter.adoptPersistedProcessLocked(state)
+	if adoptErr != nil {
+		return errors.Join(adoptErr, cause)
+	}
+	if !adopted && state.terminal == nil {
+		record, found, inspectErr := adapter.processRecordForState(state)
+		var gone bool
+		if inspectErr == nil && found {
+			gone, inspectErr = inspectProcessTree(record)
+		}
+		if inspectErr == nil && found && !gone {
+			inspectErr = &Error{Code: CodeProcessCleanupFailed}
+		}
+		if inspectErr != nil {
+			return errors.Join(inspectErr, cause)
+		}
+	}
+	if adopted {
+		defer adapter.releaseProcessOwnershipLocked(state)
+	}
+	firstScrub := adapter.recoveryScrub(state.runPath)
 	var stopErr error
 	if adopted {
 		record := *state.process
@@ -149,6 +179,9 @@ func (adapter *Adapter) quarantineRecoveryFailureLocked(ctx context.Context, sta
 				break
 			}
 			if stopErr != nil {
+				if index == 0 && ErrorCode(stopErr) == CodeProcessSignalFailed {
+					continue
+				}
 				break
 			}
 			timeout := adapter.config.ProcessPipeDrainDelay
@@ -167,13 +200,31 @@ func (adapter *Adapter) quarantineRecoveryFailureLocked(ctx context.Context, sta
 				break
 			}
 		}
-		if errors.Is(stopErr, context.DeadlineExceeded) {
-			stopErr = &Error{Code: CodeProcessCleanupFailed, Cause: stopErr}
-		}
-		adapter.releaseProcessOwnershipLocked(state)
 	}
-	destroyExecutionGuards(state)
-	return errors.Join(cause, firstScrub, adoptErr, stopErr, adapter.credentialOutputScrub(state.runPath))
+	finalScrub := adapter.recoveryScrub(state.runPath)
+	if stopErr != nil {
+		return errors.Join(&Error{Code: CodeProcessCleanupFailed, Cause: stopErr}, finalScrub, firstScrub, cause)
+	}
+	if finalScrub != nil {
+		return errors.Join(finalScrub, firstScrub, cause)
+	}
+	if state.terminal == nil {
+		terminal := terminalRecord{SchemaVersion: stateSchemaVersion, RequestHash: state.terminalRequestHash,
+			Status: ports.AgentFailed, ErrorCode: ErrorCode(cause), ObservedAt: adapter.terminalTime(state.receipt.AcceptedAt)}
+		persisted, err := adapter.persistTerminal(state.runPath, terminal, state.receipt.SpecHash, state.maxOutput)
+		if err != nil {
+			return errors.Join(err, firstScrub, cause)
+		}
+		state.status, state.terminal, state.terminalDurable = persisted.Status, &persisted, true
+	}
+	return errors.Join(firstScrub, cause)
+}
+
+func (adapter *Adapter) recoveryScrub(runPath string) error {
+	if err := adapter.credentialOutputScrub(runPath); err != nil {
+		return &Error{Code: CodeStatePersistenceFailed, Cause: err}
+	}
+	return nil
 }
 
 func (adapter *Adapter) preflightCredentialLaunch(secret credentials.Secret, guard *credentials.LeakGuard, request ports.AgentLaunchRequest, session *resolvedSession) error {

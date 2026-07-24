@@ -77,6 +77,25 @@ func TestObserveRecoveryAuthorityFailureScrubsAndRejectsOutput(t *testing.T) {
 	}
 }
 
+func TestRecoveryScrubFailureOutranksAuthorityAndPublishesNoTerminal(t *testing.T) {
+	config := testConfig(t)
+	config.SessionResolver = sessionResolverFunc(func(context.Context, ports.AgentLaunchRequest) (Session, error) {
+		return Session{}, errors.New("authority unavailable")
+	})
+	request := testRequest(t, "recovery-scrub-priority", "helper:success", 1024)
+	request.SessionRef, _ = ports.NewExecutionSessionRef("execution-session:recovery-scrub-priority")
+	_, runPath := seedAcceptedExecution(t, config, request)
+	adapter := openTestAdapter(t, config)
+	adapter.credentialOutputScrub = func(string) error { return errors.New("scrub unavailable") }
+	if _, err := adapter.Observe(context.Background(), request.ExecutionRef); ErrorCode(err) != CodeStatePersistenceFailed {
+		t.Fatalf("Observe() error=%v code=%q", err, ErrorCode(err))
+	}
+	terminalPath := filepath.Join(config.WorkRoot, filepath.FromSlash(runPath), terminalFileName)
+	if _, err := os.Stat(terminalPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("unsafe terminal published: %v", err)
+	}
+}
+
 func TestAdapterRejectsPersistedSpecHashThatDoesNotEchoRequest(t *testing.T) {
 	config := testConfig(t)
 	request := testRequest(t, "tampered-spec-hash", "helper:success", 1024)
