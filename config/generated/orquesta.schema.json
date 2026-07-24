@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:orquesta:config:2026-07-22.23",
+  "$id": "urn:orquesta:config:2026-07-24.24",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -515,6 +515,18 @@
               "x-sensitive": false,
               "x-validator-ids": [
                 "integer_bounds"
+              ]
+            },
+            "mcp_bearer_token_env_var": {
+              "default": "ORQUESTA_MCP_BEARER_TOKEN",
+              "type": "string",
+              "x-env-alias": "ORQUESTA_RUNTIME_CODEX_MCP_BEARER_TOKEN_ENV_VAR",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.codex.mcp_bearer_token_env_var",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "environment_name"
               ]
             },
             "model": {
@@ -1050,8 +1062,8 @@
       "type": "object"
     }
   },
-  "x-registry-revision": "2026-07-22.23",
-  "x-registry-hash": "sha256:99aa6485dcadafc4d38c3bdbfb35df7116b6a13c4f1f0e934501de9c4284e973",
+  "x-registry-revision": "2026-07-24.24",
+  "x-registry-hash": "sha256:d5f7d35fb8577b90632eb7997098f55eb2530251bb8572ee801e44ab96cf824e",
   "x-source-max-bytes": 1048576,
   "x-aliases": [],
   "x-cross-validators": [

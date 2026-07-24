@@ -575,14 +575,14 @@ func (adapter *Adapter) commandArgumentsWithSession(runPath string, workspaceBou
 		"--config", fmt.Sprintf("model_reasoning_effort=%q", adapter.config.ReasoningEffort),
 		"--config", `shell_environment_policy.inherit="all"`,
 		"--config", shellEnvironmentIncludeOnly(adapter.config.Environment),
-		"--config", `shell_environment_policy.exclude=["CODEX_API_KEY","OPENAI_API_KEY","ORQUESTA_MCP_BEARER_TOKEN"]`,
+		"--config", shellEnvironmentExclude(adapter.config.MCPBearerTokenEnvVar),
 		"--config", `shell_environment_policy.ignore_default_excludes=false`,
 		"--config", `shell_environment_policy.experimental_use_profile=false`,
 	}
 	if adapter.config.Model != "" {
 		arguments = append(arguments, "--model", adapter.config.Model)
 	}
-	return append(arguments, sessionArguments(session)...)
+	return append(arguments, sessionArguments(session, adapter.config.MCPBearerTokenEnvVar)...)
 }
 
 func codexSandbox(workspaceBound bool) string {
@@ -600,6 +600,11 @@ func shellEnvironmentIncludeOnly(environment map[string]string) string {
 	sort.Strings(names)
 	payload, _ := json.Marshal(names)
 	return "shell_environment_policy.include_only=" + string(payload)
+}
+
+func shellEnvironmentExclude(bearerTokenEnvVar string) string {
+	payload, _ := json.Marshal([]string{codexAPIKeyEnvironment, openAIAPIKeyEnvironment, bearerTokenEnvVar})
+	return "shell_environment_policy.exclude=" + string(payload)
 }
 
 func clearEnvironment(environment []string) {

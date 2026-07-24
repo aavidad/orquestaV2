@@ -343,7 +343,7 @@ func validateValidatorIDs(definition registryKeyDefinition) error {
 			continue
 		}
 		switch validator {
-		case "trimmed_non_empty_string", "trimmed_optional_string", "opaque_ref":
+		case "trimmed_non_empty_string", "trimmed_optional_string", "opaque_ref", "environment_name":
 			if definition.Type != valueTypeString {
 				return fmt.Errorf("string validator requires string type")
 			}

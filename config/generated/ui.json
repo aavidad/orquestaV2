@@ -1,8 +1,8 @@
 {
   "document_type": "orquesta.config_ui",
   "schema_version": 2,
-  "registry_revision": "2026-07-22.23",
-  "registry_hash": "sha256:99aa6485dcadafc4d38c3bdbfb35df7116b6a13c4f1f0e934501de9c4284e973",
+  "registry_revision": "2026-07-24.24",
+  "registry_hash": "sha256:d5f7d35fb8577b90632eb7997098f55eb2530251bb8572ee801e44ab96cf824e",
   "aliases": [],
   "cross_validators": [
     {
@@ -373,6 +373,18 @@
       "validator_ids": [
         "unique_non_empty_string_list",
         "environment_name_list"
+      ]
+    },
+    {
+      "key": "runtime.codex.mcp_bearer_token_env_var",
+      "semantic_ref": "orquesta.config.runtime.codex.mcp_bearer_token_env_var",
+      "label_key": "config.field.runtime.codex.mcp_bearer_token_env_var",
+      "type": "string",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "validator_ids": [
+        "environment_name"
       ]
     },
     {

@@ -27,6 +27,7 @@ import (
 
 const (
 	helperExactEnvironment   = "CODEX_TEST_EXACT=present"
+	helperSessionEnvironment = "ORQUESTA_MCP_BEARER_TOKEN"
 	helperCredentialInitial  = "v08<credential>initial"
 	helperCredentialRotated  = "v08<credential>rotated"
 	backgroundSuccessPIDFile = "background-success.pid"
@@ -397,6 +398,7 @@ func TestAdapterRejectsNonPrivateOrSymlinkWorkRoot(t *testing.T) {
 		ProcessPipeDrainDelay:   250 * time.Millisecond,
 		MaxDiagnosticBytes:      64,
 		MaxConcurrentExecutions: 1,
+		MCPBearerTokenEnvVar:    "ORQUESTA_MCP_BEARER_TOKEN",
 		Environment:             map[string]string{"CODEX_TEST_EXACT": "present"},
 		Now:                     func() time.Time { return time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC) },
 	}
@@ -640,7 +642,7 @@ func validateHelperEnvironment(mode string) (string, error) {
 	if credential != "" {
 		name := codexAPIKeyEnvironment
 		if strings.Contains(mode, "helper:session") {
-			name = codexMCPBearerTokenEnvironment
+			name = helperSessionEnvironment
 		}
 		want = append(want, name+"="+credential)
 		sort.Strings(want)
@@ -678,6 +680,7 @@ func testConfig(t *testing.T) Config {
 		ProcessPipeDrainDelay:   250 * time.Millisecond,
 		MaxDiagnosticBytes:      256,
 		MaxConcurrentExecutions: 4,
+		MCPBearerTokenEnvVar:    "ORQUESTA_MCP_BEARER_TOKEN",
 		PromptRenderer:          testPromptRenderer{},
 		Environment:             map[string]string{"CODEX_TEST_EXACT": "present"},
 		Now:                     func() time.Time { return time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC) },

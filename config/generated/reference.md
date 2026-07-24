@@ -2,9 +2,9 @@
 
 # Orquesta configuration registry
 
-Registry revision: `2026-07-22.23`
+Registry revision: `2026-07-24.24`
 
-Registry hash: `sha256:99aa6485dcadafc4d38c3bdbfb35df7116b6a13c4f1f0e934501de9c4284e973`
+Registry hash: `sha256:d5f7d35fb8577b90632eb7997098f55eb2530251bb8572ee801e44ab96cf824e`
 
 Precedence: `default < file < env`
 
@@ -40,6 +40,7 @@ Source limit: `1048576` bytes
         "HOME",
         "CODEX_HOME"
       ]` | `ORQUESTA_RUNTIME_CODEX_ENV_ALLOWLIST` | `true` | `unique_non_empty_string_list, environment_name_list` |
+| `runtime.codex.mcp_bearer_token_env_var` | `string` | `"ORQUESTA_MCP_BEARER_TOKEN"` | `ORQUESTA_RUNTIME_CODEX_MCP_BEARER_TOKEN_ENV_VAR` | `true` | `environment_name` |
 | `runtime.codex.credential_ref` | `credential_ref` | `"[REDACTED]"` | `ORQUESTA_RUNTIME_CODEX_CREDENTIAL_REF` | `true` | `credential_ref` |
 | `workspace.local.root` | `path` | `"./var/workspaces"` | `ORQUESTA_WORKSPACE_LOCAL_ROOT` | `true` | `non_empty_path` |
 | `repository.local.seed_path` | `optional_path` | `""` | `ORQUESTA_REPOSITORY_LOCAL_SEED_PATH` | `true` | `optional_path` |

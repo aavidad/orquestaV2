@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "revision": "2026-07-22.23",
+  "revision": "2026-07-24.24",
   "precedence": [
     "default",
     "file",
@@ -432,6 +432,20 @@
       "validator_ids": [
         "unique_non_empty_string_list",
         "environment_name_list"
+      ]
+    },
+    {
+      "key": "runtime.codex.mcp_bearer_token_env_var",
+      "go_name": "RuntimeCodexMCPBearerTokenEnvVar",
+      "semantic_ref": "orquesta.config.runtime.codex.mcp_bearer_token_env_var",
+      "type": "string",
+      "default": "ORQUESTA_MCP_BEARER_TOKEN",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_RUNTIME_CODEX_MCP_BEARER_TOKEN_ENV_VAR",
+      "validator_ids": [
+        "environment_name"
       ]
     },
     {

@@ -928,6 +928,7 @@ func productionAgentAdapter(
 		ProcessPipeDrainDelay:   snapshot.RuntimeCodexProcessPipeDrainDelay(),
 		MaxDiagnosticBytes:      snapshot.RuntimeCodexMaxDiagnosticBytes(),
 		MaxConcurrentExecutions: int(snapshot.RuntimeCodexMaxConcurrentExecutions()),
+		MCPBearerTokenEnvVar:    snapshot.RuntimeCodexMCPBearerTokenEnvVar(),
 		PromptRenderer:          promptRenderer,
 		Environment:             environment, Now: clock.Now,
 	}

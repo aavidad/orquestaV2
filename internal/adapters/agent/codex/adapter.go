@@ -105,6 +105,7 @@ type Config struct {
 	ProcessPipeDrainDelay   time.Duration
 	MaxDiagnosticBytes      int64
 	MaxConcurrentExecutions int
+	MCPBearerTokenEnvVar    string
 	Environment             map[string]string
 	CredentialStore         credentials.Store
 	CredentialRef           credentials.CredentialRef

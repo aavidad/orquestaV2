@@ -33,6 +33,7 @@ max_diagnostic_bytes = 65536
 max_concurrent_executions = 70
 work_root = "./var/work"
 env_allowlist = ["PATH", "HOME", "CODEX_HOME"]
+mcp_bearer_token_env_var = "ORQUESTA_MCP_BEARER_TOKEN"
 credential_ref = ""
 
 [workspace.local]

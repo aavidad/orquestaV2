@@ -95,6 +95,7 @@ func TestSessionRefFailsClosedWithoutResolver(t *testing.T) {
 
 func TestSessionProjectionIsPerExecutionAndKeepsBearerOutOfArguments(t *testing.T) {
 	config := testConfig(t)
+	config.MCPBearerTokenEnvVar = "PRIVATE_MCP_TOKEN"
 	var seen []string
 	config.SessionResolver = sessionResolverFunc(func(_ context.Context, request ports.AgentLaunchRequest) (Session, error) {
 		seen = append(seen, request.ExecutionRef.String())
@@ -117,15 +118,16 @@ func TestSessionProjectionIsPerExecutionAndKeepsBearerOutOfArguments(t *testing.
 		arguments := adapter.commandArgumentsWithSession("run:session", false, false, session)
 		joined := strings.Join(arguments, "\x00")
 		if !strings.Contains(joined, `mcp_servers.orquesta.url="http://127.0.0.1:7777/mcp"`) ||
-			!strings.Contains(joined, `mcp_servers.orquesta.bearer_token_env_var="ORQUESTA_MCP_BEARER_TOKEN"`) ||
+			!strings.Contains(joined, `mcp_servers.orquesta.bearer_token_env_var="PRIVATE_MCP_TOKEN"`) ||
+			!strings.Contains(joined, `shell_environment_policy.exclude=["CODEX_API_KEY","OPENAI_API_KEY","PRIVATE_MCP_TOKEN"]`) ||
 			strings.Contains(joined, "session-token-") {
 			t.Fatalf("unsafe or incomplete session arguments: %q", joined)
 		}
 		environment := adapter.environmentWithSession(adapter.environment, session)
-		if !containsExactEnvironment(environment, codexMCPBearerTokenEnvironment+"=session-token-"+request.ExecutionRef.String()) {
+		if !containsExactEnvironment(environment, config.MCPBearerTokenEnvVar+"=session-token-"+request.ExecutionRef.String()) {
 			t.Fatalf("session token missing from exact child environment: %q", environment)
 		}
-		if strings.Contains(shellEnvironmentIncludeOnly(adapter.config.Environment), codexMCPBearerTokenEnvironment) {
+		if strings.Contains(shellEnvironmentIncludeOnly(adapter.config.Environment), config.MCPBearerTokenEnvVar) {
 			t.Fatal("session bearer reached the Codex shell/tool include-only projection")
 		}
 		clearEnvironment(environment)
@@ -181,9 +183,20 @@ func TestSessionResolutionRejectsInvalidOrLeakingMaterial(t *testing.T) {
 
 func TestSessionBearerCannotBeConfiguredAsPublicEnvironment(t *testing.T) {
 	config := testConfig(t)
-	config.Environment[codexMCPBearerTokenEnvironment] = "not-a-session"
+	config.MCPBearerTokenEnvVar = "PRIVATE_MCP_TOKEN"
+	config.Environment[config.MCPBearerTokenEnvVar] = "not-a-session"
 	if adapter, err := New(config); adapter != nil || ErrorCode(err) != CodeEnvironmentInvalid {
 		t.Fatalf("New() adapter=%v error=%v code=%q", adapter, err, ErrorCode(err))
+	}
+}
+
+func TestSessionBearerEnvironmentNameRejectsReservedAndInjectableValues(t *testing.T) {
+	for _, name := range []string{"", "lowercase", "CODEX_API_KEY", "OPENAI_API_KEY", `TOKEN"]`, "TOKEN\nOTHER"} {
+		config := testConfig(t)
+		config.MCPBearerTokenEnvVar = name
+		if adapter, err := New(config); adapter != nil || ErrorCode(err) != CodeEnvironmentInvalid {
+			t.Fatalf("name=%q adapter=%v error=%v code=%q", name, adapter, err, ErrorCode(err))
+		}
 	}
 }
 

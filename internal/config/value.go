@@ -95,6 +95,11 @@ func validateDeclaredValue(definition registryKeyDefinition, value any) error {
 					return fmt.Errorf("invalid child environment name")
 				}
 			}
+		case "environment_name":
+			name, ok := value.(string)
+			if !ok || !validChildEnvironmentName(name) {
+				return fmt.Errorf("invalid environment name")
+			}
 		case "opaque_ref":
 			text, ok := value.(string)
 			if !ok || text == "" || strings.TrimSpace(text) != text || strings.ContainsRune(text, '\x00') {

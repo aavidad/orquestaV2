@@ -11,8 +11,6 @@ import (
 	"orquesta/internal/ports"
 )
 
-const codexMCPBearerTokenEnvironment = "ORQUESTA_MCP_BEARER_TOKEN"
-
 // SessionResolver is adapter-local on purpose. It receives the exact launch
 // identity and resolves a per-execution opaque ref into ephemeral transport
 // material immediately before a child process starts.
@@ -130,7 +128,7 @@ func (adapter *Adapter) environmentWithSession(base []string, session *resolvedS
 	}
 	material := session.token.Bytes()
 	defer clearBytes(material)
-	return append(environment, codexMCPBearerTokenEnvironment+"="+string(material))
+	return append(environment, adapter.config.MCPBearerTokenEnvVar+"="+string(material))
 }
 
 func (adapter *Adapter) preflightSessionLaunch(session *resolvedSession, request ports.AgentLaunchRequest) error {
@@ -160,12 +158,12 @@ func (adapter *Adapter) preflightSessionLaunch(session *resolvedSession, request
 	return nil
 }
 
-func sessionArguments(session *resolvedSession) []string {
+func sessionArguments(session *resolvedSession, bearerTokenEnvVar string) []string {
 	if session == nil {
 		return nil
 	}
 	return []string{
 		"--config", `mcp_servers.orquesta.url="` + session.endpoint + `"`,
-		"--config", `mcp_servers.orquesta.bearer_token_env_var="` + codexMCPBearerTokenEnvironment + `"`,
+		"--config", `mcp_servers.orquesta.bearer_token_env_var="` + bearerTokenEnvVar + `"`,
 	}
 }

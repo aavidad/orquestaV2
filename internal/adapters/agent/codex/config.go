@@ -50,6 +50,9 @@ func prepareConfig(config Config) (Config, string, []string, string, *os.Root, e
 	if config.Now == nil || config.Now().IsZero() {
 		return Config{}, "", nil, "", nil, &Error{Code: CodeClockInvalid}
 	}
+	if !validPrivateEnvironmentName(config.MCPBearerTokenEnvVar) {
+		return Config{}, "", nil, "", nil, &Error{Code: CodeEnvironmentInvalid}
+	}
 	if _, found := config.Environment[codexAPIKeyEnvironment]; found {
 		return Config{}, "", nil, "", nil, &Error{Code: CodeEnvironmentInvalid}
 	}
@@ -59,7 +62,7 @@ func prepareConfig(config Config) (Config, string, []string, string, *os.Root, e
 	// This bearer is injected only for the short-lived Codex core process by
 	// SessionResolver. A public composition environment must never shadow it,
 	// otherwise it could be projected into the Codex tool-shell policy.
-	if _, found := config.Environment[codexMCPBearerTokenEnvironment]; found {
+	if _, found := config.Environment[config.MCPBearerTokenEnvVar]; found {
 		return Config{}, "", nil, "", nil, &Error{Code: CodeEnvironmentInvalid}
 	}
 	if (config.CredentialStore == nil) != (config.CredentialRef == "") {
@@ -85,6 +88,18 @@ func prepareConfig(config Config) (Config, string, []string, string, *os.Root, e
 	}
 	config.Environment = cloneEnvironment(config.Environment)
 	return config, command, environment, rootPath, root, nil
+}
+
+func validPrivateEnvironmentName(name string) bool {
+	if name == "" || name == codexAPIKeyEnvironment || name == openAIAPIKeyEnvironment || name[0] < 'A' || name[0] > 'Z' {
+		return false
+	}
+	for _, character := range name {
+		if (character < 'A' || character > 'Z') && (character < '0' || character > '9') && character != '_' {
+			return false
+		}
+	}
+	return true
 }
 
 func validReasoningEffort(value string) bool {

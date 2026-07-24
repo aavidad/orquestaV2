@@ -38,7 +38,8 @@ func TestResolveReturnsImmutableTypedCanonicalDefaults(t *testing.T) {
 		t.Fatal("credential-store defaults missing")
 	}
 	if snapshot.RuntimeMaxOutputBytes() != 1048576 || snapshot.RuntimeCodexMaxDiagnosticBytes() != 65536 ||
-		snapshot.RuntimeCodexMaxConcurrentExecutions() != 70 || snapshot.RuntimeCodexProcessPipeDrainDelay() != 250*time.Millisecond {
+		snapshot.RuntimeCodexMaxConcurrentExecutions() != 70 || snapshot.RuntimeCodexProcessPipeDrainDelay() != 250*time.Millisecond ||
+		snapshot.RuntimeCodexMCPBearerTokenEnvVar() != "ORQUESTA_MCP_BEARER_TOKEN" {
 		t.Fatal("runtime defaults missing")
 	}
 	if snapshot.GovernanceBudgetCurrency() != "USD" || snapshot.GovernanceGlobalTokenBudget() != 14000000 ||
@@ -104,12 +105,15 @@ read_timeout = "21s"
 [runtime.codex]
 model = "file-model"
 env_allowlist = ["FILE_ONLY"]
+mcp_bearer_token_env_var = "FILE_MCP_TOKEN"
 `, map[string]string{
-		"ORQUESTA_SERVER_LISTEN":               "127.0.0.1:9191",
-		"ORQUESTA_RUNTIME_CODEX_ENV_ALLOWLIST": "PATH, CODEX_HOME, EXTRA_ALLOWED",
+		"ORQUESTA_SERVER_LISTEN":                          "127.0.0.1:9191",
+		"ORQUESTA_RUNTIME_CODEX_ENV_ALLOWLIST":            "PATH, CODEX_HOME, EXTRA_ALLOWED",
+		"ORQUESTA_RUNTIME_CODEX_MCP_BEARER_TOKEN_ENV_VAR": "PRIVATE_MCP_TOKEN",
 	})
 	if snapshot.ServerListen() != "127.0.0.1:9191" || snapshot.ServerReadTimeout() != 21*time.Second ||
-		snapshot.RuntimeCodexModel() != "file-model" || snapshot.ProjectDefault() != "project:default" {
+		snapshot.RuntimeCodexModel() != "file-model" || snapshot.ProjectDefault() != "project:default" ||
+		snapshot.RuntimeCodexMCPBearerTokenEnvVar() != "PRIVATE_MCP_TOKEN" {
 		t.Fatal("default < file < env precedence failed")
 	}
 	want := []string{"PATH", "CODEX_HOME", "EXTRA_ALLOWED"}
@@ -121,6 +125,17 @@ env_allowlist = ["FILE_ONLY"]
 	assertSource(t, snapshot, KeyProjectDefault, SourceDefault)
 	_, err := Resolve(ResolveOptions{Environment: map[string]string{"UNDECLARED": "value"}})
 	assertConfigError(t, err, ErrorUnknownKey, Key("UNDECLARED"))
+}
+
+func TestResolveRejectsUnsafeMCPBearerTokenEnvironmentName(t *testing.T) {
+	for _, value := range []string{"lowercase", "TOKEN\"\n[server]\nlisten=\"0.0.0.0:1\"", "TOKEN=VALUE"} {
+		t.Run(value, func(t *testing.T) {
+			_, err := Resolve(ResolveOptions{TOML: []byte(
+				"[runtime.codex]\nmcp_bearer_token_env_var = " + strconv.Quote(value) + "\n",
+			)})
+			assertConfigError(t, err, ErrorValueInvalid, KeyRuntimeCodexMCPBearerTokenEnvVar)
+		})
+	}
 }
 
 func TestOIDCAndDirectorSettingsResolveOnlyThroughCanonicalRegistry(t *testing.T) {
