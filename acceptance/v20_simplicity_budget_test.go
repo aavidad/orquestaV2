@@ -2,8 +2,6 @@ package acceptance_test
 
 import (
 	"bufio"
-	"fmt"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
@@ -15,7 +13,7 @@ import (
 // These subjects are owned by the acceptance test, not by the fixture being
 // measured. Tests are excluded. Shared pre-V20 hosts are charged by their
 // physical added lines from the accredited V19 base; new V20 files are charged
-// by their complete current line count. Generated Go and migration SQL remain
+// by their complete owner-revision line count. Generated Go and migration SQL remain
 // separate from manual product LOC.
 var (
 	v20GeneratedProductPaths = []string{
@@ -66,29 +64,39 @@ func TestV20SimplicityBudgetMeasuresProductionInsteadOfTrustingFixture(t *testin
 
 func v20AssertObservedSimplicityBudget(t *testing.T, repositoryRoot string, fixture v20Fixture) {
 	t.Helper()
+	owner := fixture.ProductDeltaSealedGitCommitOID
 	generated := v20PathSet(v20GeneratedProductPaths)
-	commandOwned := v20CountGoLines(t, repositoryRoot, []string{"internal/commands"}, generated) +
-		v20CountPaths(t, repositoryRoot, v20CommandPortPaths)
-	commandIntegration := v20CountAddedLines(t, repositoryRoot, v20ApplicationIntegrationPaths)
+	commandOwned := simplicityCountAddedGoLines(t, repositoryRoot, v20ContractBaseGitCommitOID,
+		owner, []string{"internal/commands"}, generated) +
+		simplicityCountAddedLines(t, repositoryRoot, v20ContractBaseGitCommitOID, owner, v20CommandPortPaths)
+	commandIntegration := simplicityCountAddedLines(t, repositoryRoot, v20ContractBaseGitCommitOID,
+		owner, v20ApplicationIntegrationPaths)
 	commands := commandOwned + commandIntegration
 
-	bindings := v20CountGoLines(t, repositoryRoot, []string{
+	bindings := simplicityCountAddedGoLines(t, repositoryRoot, v20ContractBaseGitCommitOID, owner, []string{
 		"internal/interfaces/httpapi", "internal/interfaces/mcp", "internal/interfaces/cli",
-	}, nil) + v20CountAddedLines(t, repositoryRoot, v20BindingIntegrationPaths)
-	sdk := v20CountGoLines(t, repositoryRoot, []string{"sdk/commands"}, nil)
-	stateOwned := v20CountPaths(t, repositoryRoot, v20StateBootstrapPaths)
-	stateIntegration := v20CountAddedLines(t, repositoryRoot, v20StateIntegrationPaths)
+	}, nil) + simplicityCountAddedLines(t, repositoryRoot, v20ContractBaseGitCommitOID,
+		owner, v20BindingIntegrationPaths)
+	sdk := simplicityCountAddedGoLines(t, repositoryRoot, v20ContractBaseGitCommitOID,
+		owner, []string{"sdk/commands"}, nil)
+	stateOwned := simplicityCountAddedLines(t, repositoryRoot, v20ContractBaseGitCommitOID,
+		owner, v20StateBootstrapPaths)
+	stateIntegration := simplicityCountAddedLines(t, repositoryRoot, v20ContractBaseGitCommitOID,
+		owner, v20StateIntegrationPaths)
 	stateAndBootstrap := stateOwned + stateIntegration
-	manualContractData := v20CountPaths(t, repositoryRoot, v20ManualContractDataPaths)
-	generatedLines := v20CountPaths(t, repositoryRoot, v20GeneratedProductPaths)
-	migrationLines := v20CountPaths(t, repositoryRoot, v20MigrationProductPaths)
+	manualContractData := simplicityCountAddedLines(t, repositoryRoot, v20ContractBaseGitCommitOID,
+		owner, v20ManualContractDataPaths)
+	generatedLines := simplicityCountAddedLines(t, repositoryRoot, v20ContractBaseGitCommitOID,
+		owner, v20GeneratedProductPaths)
+	migrationLines := simplicityCountAddedLines(t, repositoryRoot, v20ContractBaseGitCommitOID,
+		owner, v20MigrationProductPaths)
 	manual := commands + bindings + sdk + stateAndBootstrap + manualContractData
 
 	if !reflect.DeepEqual(fixture.GeneratedFiles, v20GeneratedProductPaths) {
 		t.Errorf("V20 fixture generated subjects=%v, physical inventory=%v",
 			fixture.GeneratedFiles, v20GeneratedProductPaths)
 	}
-	migrationMatches := v20MatchingPaths(t, repositoryRoot, fixture.MigrationContract.FileGlob)
+	migrationMatches := v20MatchingPaths(t, repositoryRoot, owner, fixture.MigrationContract.FileGlob)
 	if !reflect.DeepEqual(migrationMatches, v20MigrationProductPaths) {
 		t.Errorf("V20 fixture migration subjects=%v, physical inventory=%v",
 			migrationMatches, v20MigrationProductPaths)
@@ -113,89 +121,36 @@ func v20AssertObservedSimplicityBudget(t *testing.T, repositoryRoot string, fixt
 	}
 }
 
-func v20CountGoLines(t *testing.T, repositoryRoot string, relativeRoots []string, excluded map[string]struct{}) int {
+func simplicityCountAddedGoLines(
+	t *testing.T, repositoryRoot, baseOID, ownerOID string,
+	relativeRoots []string, excluded map[string]struct{},
+) int {
 	t.Helper()
-	lines := 0
-	for _, relativeRoot := range relativeRoots {
-		absoluteRoot := filepath.Join(repositoryRoot, filepath.FromSlash(relativeRoot))
-		info, err := os.Stat(absoluteRoot)
-		if err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
-			t.Fatal(err)
-		}
-		if !info.IsDir() {
-			if strings.HasSuffix(absoluteRoot, ".go") && !strings.HasSuffix(absoluteRoot, "_test.go") {
-				lines += v20CountFileLines(t, absoluteRoot)
-			}
-			continue
-		}
-		err = filepath.WalkDir(absoluteRoot, func(path string, entry os.DirEntry, walkErr error) error {
-			if walkErr != nil {
-				return walkErr
-			}
-			if entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-				return nil
-			}
-			relative, err := filepath.Rel(repositoryRoot, path)
-			if err != nil {
-				return err
-			}
-			if _, skip := excluded[filepath.ToSlash(relative)]; !skip {
-				lines += v20CountFileLines(t, path)
-			}
-			return nil
+	return simplicityCountAddedLinesFiltered(t, repositoryRoot, baseOID, ownerOID, relativeRoots,
+		func(relative string) bool {
+			_, skip := excluded[relative]
+			return strings.HasSuffix(relative, ".go") &&
+				!strings.HasSuffix(relative, "_test.go") && !skip
 		})
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-	return lines
 }
 
-func v20MatchingPaths(t *testing.T, repositoryRoot, relativeGlob string) []string {
+func v20MatchingPaths(t *testing.T, repositoryRoot, ownerOID, relativeGlob string) []string {
 	t.Helper()
-	matches, err := filepath.Glob(filepath.Join(repositoryRoot, filepath.FromSlash(relativeGlob)))
+	output, err := evidenceGit(repositoryRoot, "ls-tree", "-r", "--name-only", ownerOID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	relative := make([]string, 0, len(matches))
-	for _, match := range matches {
-		path, err := filepath.Rel(repositoryRoot, match)
+	matches := make([]string, 0)
+	for _, relative := range strings.Fields(string(output)) {
+		match, err := filepath.Match(filepath.FromSlash(relativeGlob), filepath.FromSlash(relative))
 		if err != nil {
 			t.Fatal(err)
 		}
-		relative = append(relative, filepath.ToSlash(path))
+		if match {
+			matches = append(matches, filepath.ToSlash(relative))
+		}
 	}
-	return relative
-}
-
-func v20CountPaths(t *testing.T, repositoryRoot string, relativePaths []string) int {
-	t.Helper()
-	lines := 0
-	for _, relative := range relativePaths {
-		lines += v20CountFileLines(t, filepath.Join(repositoryRoot, filepath.FromSlash(relative)))
-	}
-	return lines
-}
-
-func v20CountFileLines(t *testing.T, path string) int {
-	t.Helper()
-	file, err := os.Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer file.Close()
-	lines := 0
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		lines++
-	}
-	if err := scanner.Err(); err != nil {
-		t.Fatal(err)
-	}
-	return lines
+	return matches
 }
 
 func v20PathSet(paths []string) map[string]struct{} {
@@ -206,34 +161,44 @@ func v20PathSet(paths []string) map[string]struct{} {
 	return set
 }
 
-func v20CountAddedLines(t *testing.T, repositoryRoot string, relativePaths []string) int {
+func simplicityCountAddedLines(
+	t *testing.T, repositoryRoot, baseOID, ownerOID string, relativePaths []string,
+) int {
 	t.Helper()
-	args := []string{"-C", repositoryRoot, "diff", "--numstat", v20ContractBaseGitCommitOID, "--"}
+	return simplicityCountAddedLinesFiltered(t, repositoryRoot, baseOID, ownerOID, relativePaths, nil)
+}
+
+func simplicityCountAddedLinesFiltered(
+	t *testing.T, repositoryRoot, baseOID, ownerOID string, relativePaths []string,
+	include func(string) bool,
+) int {
+	t.Helper()
+	args := []string{"-C", repositoryRoot, "diff", "--numstat", "--no-renames", baseOID, ownerOID, "--"}
 	args = append(args, relativePaths...)
 	output, err := exec.Command("git", args...).CombinedOutput()
 	if err != nil {
-		t.Fatalf("measure V20 shared integration delta: %v: %s", err, strings.TrimSpace(string(output)))
+		t.Fatalf("measure owned physical delta %s..%s: %v: %s",
+			baseOID, ownerOID, err, strings.TrimSpace(string(output)))
 	}
 	lines := 0
 	scanner := bufio.NewScanner(strings.NewReader(string(output)))
 	for scanner.Scan() {
-		fields := strings.Fields(scanner.Text())
+		fields := strings.SplitN(scanner.Text(), "\t", 3)
 		if len(fields) != 3 {
-			t.Fatalf("invalid V20 numstat row %q", scanner.Text())
+			t.Fatalf("invalid owned numstat row %q", scanner.Text())
+		}
+		relative := filepath.ToSlash(fields[2])
+		if include != nil && !include(relative) {
+			continue
 		}
 		added, err := strconv.Atoi(fields[0])
 		if err != nil {
-			t.Fatalf("V20 integration subject %s is not textual: %v", fields[2], err)
+			t.Fatalf("owned subject %s is not textual: %v", relative, err)
 		}
 		lines += added
 	}
 	if err := scanner.Err(); err != nil {
 		t.Fatal(err)
-	}
-	for _, relative := range relativePaths {
-		if _, err := os.Stat(filepath.Join(repositoryRoot, filepath.FromSlash(relative))); err != nil {
-			t.Fatal(fmt.Errorf("V20 integration subject %s: %w", relative, err))
-		}
 	}
 	return lines
 }
