@@ -2,30 +2,6 @@ ALTER TABLE executions ADD COLUMN execution_session_ref TEXT NOT NULL DEFAULT ''
 CREATE TRIGGER executions_session_ref_once BEFORE UPDATE OF execution_session_ref ON executions
 WHEN NEW.execution_session_ref<>OLD.execution_session_ref AND (OLD.execution_session_ref<>'' OR NEW.execution_session_ref='')
 BEGIN SELECT RAISE(ABORT,'sqlite.execution_session_ref_immutable'); END;
-DROP TRIGGER authorization_receipts_immutable_update;
-DROP TRIGGER authorization_receipts_immutable_delete;
-DROP INDEX authorization_receipts_project_idx;
-DROP INDEX authorization_receipts_mailbox_scope_idx;
-DROP TRIGGER action_consumption_receipt_guard;
-DROP TRIGGER action_consumption_effect_receipt_guard;
-DROP TRIGGER action_consumption_receipts_immutable_update;
-DROP TRIGGER action_consumption_receipts_immutable_delete;
-DROP INDEX action_consumption_scheduler_fence_idx;
-DROP INDEX action_consumption_mailbox_fence_idx;
-DROP TRIGGER outbox_identity_immutable;
-DROP TRIGGER outbox_mailbox_recipient_guard;
-DROP TRIGGER outbox_mailbox_recipient_insert_guard;
-DROP TRIGGER outbox_mailbox_retirement_guard;
-DROP TRIGGER outbox_governance_insert_guard;
-DROP TRIGGER outbox_governance_immutable;
-DROP TRIGGER outbox_integration_admission_immutable;
-DROP INDEX outbox_claim_token_idx;
-DROP INDEX outbox_one_active_stop_per_execution_idx;
-DROP INDEX outbox_one_active_mailbox_idx;
-DROP INDEX outbox_one_active_change_effect_idx;
-DROP INDEX outbox_claimable_idx;
-DROP INDEX outbox_integration_admission_request_idx;
-DROP INDEX outbox_one_active_per_item_generation_idx;
 PRAGMA legacy_alter_table=ON;
 ALTER TABLE authorization_receipts RENAME TO authorization_receipts_v16;
 ALTER TABLE action_consumption_receipts RENAME TO action_consumption_receipts_v16;
