@@ -1086,7 +1086,7 @@ func v22ExecutionStates(g v22GoalProjection) string {
 }
 
 func v22PlanA() map[string]any {
-	parent := v22Item("parent", "Poll the execution-bound mailbox, deliver/consume/ACK its child, read only delivered artifact refs, then remain live for 20 seconds before producing the parent artifact.", "phase:a", nil, false, nil, "artifact")
+	parent := v22Item("parent", "Use only the execution-bound MCP mailbox surface, never goals.get or SQLite. Execute this exact sequence: mailbox.list, mailbox.get, mailbox.claim, mailbox.mark_delivered, mailbox.consume, mailbox.acknowledge. Preserve claim_token and fence from claim through every later command; pass expected_goal_revision and expected_plan_generation returned by claim into acknowledge, with your own opaque effect_or_rework_ref. Read only the delivered artifact refs. After the ACK, execute `sleep 20`, then produce the parent artifact.", "phase:a", nil, false, nil, "artifact")
 	parent["dependencies"] = []string{"sibling"}
 	return v22Plan("a",
 		v22Item("sibling", "Produce a distinct independent artifact containing V22-SIBLING-NOT-DELIVERED.", "phase:a", nil, false, nil, "artifact"),
