@@ -71,6 +71,18 @@ type ExecutionAuthorityResolver interface {
 	) (goal.ExecutionRef, error)
 }
 
+// ExecutionPrincipalClassifier distinguishes a generic service principal from
+// one derived from a durable execution tuple. Found remains true after the
+// execution becomes terminal, superseded, or is observed through another
+// project scope, so it can never fall back to project-membership RBAC.
+type ExecutionPrincipalClassifier interface {
+	ClassifyExecutionPrincipal(
+		context.Context,
+		identity.Principal,
+		goal.ProjectRef,
+	) (found bool, active bool, executionRef goal.ExecutionRef, err error)
+}
+
 // Invocation contains authenticated principal identity separately from the
 // payload. ClaimedExecutionRef remains untrusted input until the dispatcher
 // resolves it through ExecutionAuthorityResolver.

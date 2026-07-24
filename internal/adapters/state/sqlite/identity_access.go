@@ -56,13 +56,13 @@ func (repository *Repository) Authorize(
 	if err := ensurePrincipal(ctx, transaction, request.Principal()); err != nil {
 		return identity.AuthorizationReceipt{}, err
 	}
-	executionBound, executionRevision, err := executionAuthorization(
+	executionPrincipal, executionBound, executionRevision, err := executionAuthorization(
 		ctx, transaction, request,
 	)
 	if err != nil {
 		return identity.AuthorizationReceipt{}, err
 	}
-	if request.Principal().Kind == identity.PrincipalKindService && !executionBound {
+	if executionPrincipal && !executionBound {
 		return identity.AuthorizationReceipt{}, application.ErrForbidden
 	}
 	fingerprint := authorizationRequestFingerprint(request)
@@ -137,71 +137,30 @@ func executionAuthorization(
 	ctx context.Context,
 	transaction *sql.Tx,
 	request identity.AuthorizationRequest,
-) (bool, identity.MembershipRevision, error) {
+) (bool, bool, identity.MembershipRevision, error) {
 	principal := request.Principal()
 	if principal.Kind != identity.PrincipalKindService {
-		return false, 0, nil
+		return false, false, 0, nil
 	}
-	if request.Permission() != identity.PermissionGoalsGet &&
-		request.Permission() != identity.PermissionGoalsDirect &&
-		request.Permission() != identity.PermissionArtifactsRead {
-		return false, 0, nil
-	}
-	rows, err := transaction.QueryContext(ctx, `
-SELECT g.project_ref,e.goal_ref,e.work_item_ref,e.ref,COALESCE(e.replaces_execution_ref,''),
-       e.attempt_no,e.plan_generation,e.app_spec_generation,e.spec_hash
-FROM executions e JOIN goals g ON g.ref=e.goal_ref
-WHERE g.project_ref=? AND g.state='running' AND
- (e.state IN ('dispatching','running') OR
-  (e.state='succeeded' AND EXISTS (
-    SELECT 1 FROM outbox action
-    WHERE action.goal_ref=e.goal_ref AND action.execution_ref=e.ref
-      AND action.kind='admit_mailbox' AND action.completed_at IS NULL
-      AND action.retired_at IS NULL AND action.quarantined_at IS NULL)))`,
-		request.ProjectRef().String(),
+	match, found, err := findExecutionAuthority(
+		ctx, transaction, goal.ExecutionRef{}, principal,
 	)
 	if err != nil {
-		return false, 0, mapDatabaseError(err)
+		return false, false, 0, err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var projectValue, goalValue, itemValue, executionValue, replacementValue, specHash string
-		var attempt, planGeneration, appSpecGeneration int64
-		if err := rows.Scan(&projectValue, &goalValue, &itemValue, &executionValue,
-			&replacementValue, &attempt, &planGeneration, &appSpecGeneration, &specHash); err != nil {
-			return false, 0, mapDatabaseError(err)
-		}
-		projectRef, _ := goal.NewProjectRef(projectValue)
-		goalRef, _ := goal.NewGoalRef(goalValue)
-		itemRef, _ := goal.NewWorkItemRef(itemValue)
-		executionRef, _ := goal.NewExecutionRef(executionValue)
-		var replacement goal.ExecutionRef
-		if replacementValue != "" {
-			replacement, _ = goal.NewExecutionRef(replacementValue)
-		}
-		session := ports.ExecutionSessionEnsureRequest{
-			ProjectRef: projectRef, GoalRef: goalRef, WorkItemRef: itemRef,
-			ExecutionRef: executionRef, ExecutionAttempt: uint64(attempt),
-			ReplacesExecutionRef: replacement, PlanGeneration: goal.PlanGeneration(planGeneration),
-			AppSpecGeneration: goal.AppSpecGeneration(appSpecGeneration), SpecHash: specHash,
-		}
-		authority, deriveErr := application.DeriveExecutionSessionAuthority(session, principal.Method)
-		if deriveErr != nil || authority.ServicePrincipal != principal {
-			continue
-		}
-		scoped, scopeErr := executionAuthorizationScope(ctx, transaction, request, authority)
-		if scopeErr != nil {
-			return false, 0, scopeErr
-		}
-		if scoped {
-			return true, identity.MembershipRevision(attempt), nil
-		}
-		return false, 0, nil
+	if !found {
+		return false, false, 0, nil
 	}
-	if err := rows.Err(); err != nil {
-		return false, 0, mapDatabaseError(err)
+	authority := match.authority
+	if !match.active || authority.Request.ProjectRef != request.ProjectRef() ||
+		!identity.RoleAllows(identity.RoleExecutionService, request.Permission()) {
+		return true, false, 0, nil
 	}
-	return false, 0, nil
+	scoped, err := executionAuthorizationScope(ctx, transaction, request, authority)
+	if err != nil {
+		return true, false, 0, err
+	}
+	return true, scoped, identity.MembershipRevision(authority.Request.ExecutionAttempt), nil
 }
 
 func executionAuthorizationScope(

@@ -22,7 +22,7 @@ func TestRepositoryV10AuthorizationScopesProjectsPrincipalsAndDefaultsToDeny(t *
 	projectA := mustRef(t, "project:auth-a", goal.NewProjectRef)
 	projectB := mustRef(t, "project:auth-b", goal.NewProjectRef)
 	owner := testPrincipal(t, "principal:owner", "actor:shared", identity.PrincipalKindHuman)
-	service := testPrincipal(t, "principal:service", "actor:shared", identity.PrincipalKindHuman)
+	service := testPrincipal(t, "principal:service", "actor:shared", identity.PrincipalKindService)
 	human := testPrincipal(t, "principal:human", "actor:shared", identity.PrincipalKindHuman)
 	provisionTestAccess(t, repository, owner, projectA, identity.RoleProjectOwner, now)
 	provisionTestAccess(t, repository, owner, projectB, identity.RoleProjectOwner, now)

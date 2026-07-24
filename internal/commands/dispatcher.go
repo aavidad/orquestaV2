@@ -211,15 +211,33 @@ func (dispatcher *Dispatcher) bindAuthority(
 	if identity.ValidatePrincipal(invocation.Principal) != nil {
 		return handlerContext{}, failure(CodeUnauthenticated)
 	}
-	if invocation.Principal.Kind == identity.PrincipalKindService && !definition.ExecutionBound &&
-		definition.Permission != string(identity.PermissionArtifactsRead) {
-		return handlerContext{}, failure(CodeForbidden)
-	}
 	projectRef, err := goal.NewProjectRef(invocation.ProjectRef)
 	if err != nil {
 		return handlerContext{}, failure(CodeInvalidRequest)
 	}
 	bound := handlerContext{principal: invocation.Principal, projectRef: projectRef, requestRef: invocation.RequestRef}
+	var classifiedExecution goal.ExecutionRef
+	if invocation.Principal.Kind == identity.PrincipalKindService {
+		classifier, ok := dispatcher.executionAuthority.(ExecutionPrincipalClassifier)
+		if !ok {
+			return handlerContext{}, failure(CodeForbidden)
+		}
+		found, active, executionRef, classifyErr := classifier.ClassifyExecutionPrincipal(
+			ctx, invocation.Principal, projectRef,
+		)
+		if classifyErr != nil || found != (executionRef.String() != "") || active && !found {
+			return handlerContext{}, failure(CodeForbidden)
+		}
+		if found {
+			if !active || !definition.ExecutionBound &&
+				definition.Permission != string(identity.PermissionArtifactsRead) {
+				return handlerContext{}, failure(CodeForbidden)
+			}
+			classifiedExecution = executionRef
+		} else if definition.ExecutionBound {
+			return handlerContext{}, failure(CodeForbidden)
+		}
+	}
 	if definition.ExecutionBound {
 		if !validOpaque(invocation.ClaimedExecutionRef) || dispatcher.executionAuthority == nil {
 			return handlerContext{}, failure(CodeForbidden)
@@ -228,10 +246,16 @@ func (dispatcher *Dispatcher) bindAuthority(
 		if err != nil {
 			return handlerContext{}, failure(CodeForbidden)
 		}
-		resolved, err := dispatcher.executionAuthority.ResolveExecution(
-			ctx, invocation.Principal, projectRef, claimed,
-		)
-		if err != nil || resolved.String() == "" || resolved != claimed {
+		resolved := classifiedExecution
+		if resolved.String() == "" {
+			resolved, err = dispatcher.executionAuthority.ResolveExecution(
+				ctx, invocation.Principal, projectRef, claimed,
+			)
+			if err != nil {
+				return handlerContext{}, failure(CodeForbidden)
+			}
+		}
+		if resolved.String() == "" || resolved != claimed {
 			return handlerContext{}, failure(CodeForbidden)
 		}
 		bound.executionRef = resolved

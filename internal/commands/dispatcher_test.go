@@ -315,17 +315,9 @@ func testPrincipal(t *testing.T) identity.Principal {
 
 func testExecutionServicePrincipal(t *testing.T) identity.Principal {
 	t.Helper()
-	principalRef, err := identity.NewPrincipalRef("principal:execution:test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	actorRef, err := goal.NewActorRef("actor:execution:test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	principal, err := identity.NewPrincipal(
-		principalRef, actorRef, identity.PrincipalKindService, "execution_token",
-	)
+	principalRef, _ := identity.NewPrincipalRef("principal:execution:test")
+	actorRef, _ := goal.NewActorRef("actor:execution:test")
+	principal, err := identity.NewPrincipal(principalRef, actorRef, identity.PrincipalKindService, "opaque_authn")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -367,6 +359,16 @@ func (authority *testExecutionAuthority) ResolveExecution(
 		return authority.resolvedExecution, nil
 	}
 	return claimed, nil
+}
+
+func (authority *testExecutionAuthority) ClassifyExecutionPrincipal(
+	_ context.Context, principal identity.Principal, projectRef goal.ProjectRef,
+) (bool, bool, goal.ExecutionRef, error) {
+	if principal.Ref.String() != "principal:execution:test" {
+		return false, false, goal.ExecutionRef{}, nil
+	}
+	executionRef, _ := goal.NewExecutionRef("execution:test")
+	return true, projectRef.String() == "project:test", executionRef, nil
 }
 
 func exactTestExecutionAuthority(t *testing.T) *testExecutionAuthority {
@@ -567,26 +569,28 @@ func TestCallerClaimedExecutionNeverBecomesAuthority(t *testing.T) {
 func TestExecutionServicePrincipalCannotEnterPrincipalGoalCommandsBeforeAudit(t *testing.T) {
 	dispatcher, api, audit := testDispatcher(t)
 	invocation := Invocation{
-		CommandID: "orquesta.goals.get", CommandVersion: "1",
-		RequestRef: "request:execution-service-goal-get", ProjectRef: "project:test",
-		Principal: testExecutionServicePrincipal(t),
-		Payload:   json.RawMessage(`{"goal_ref":"goal:test"}`),
+		CommandID: "orquesta.goals.get", CommandVersion: "1", RequestRef: "request:execution-service-goal-get",
+		ProjectRef: "project:test", Principal: testExecutionServicePrincipal(t), Payload: json.RawMessage(`{"goal_ref":"goal:test"}`),
 	}
 	result := dispatcher.Dispatch(context.Background(), invocation)
-	if result.Failure == nil || result.Failure.Code != CodeForbidden ||
-		result.AuditRef != "" || audit.admits != 0 || api.calls["GetGoal"] != 0 {
+	if result.Failure == nil || result.Failure.Code != CodeForbidden || result.AuditRef != "" ||
+		audit.admits != 0 || api.calls["GetGoal"] != 0 {
 		t.Fatalf("goals.get result=%+v admits=%d calls=%v", result, audit.admits, api.calls)
 	}
 
-	invocation.CommandID = "orquesta.artifacts.read"
-	invocation.RequestRef = "request:execution-service-artifact-read"
-	invocation.Payload = json.RawMessage(
-		`{"goal_ref":"goal:test","artifact_ref":"artifact:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`,
-	)
+	invocation.CommandID, invocation.RequestRef = "orquesta.artifacts.read", "request:execution-service-artifact-read"
+	invocation.Payload = json.RawMessage(`{"goal_ref":"goal:test","artifact_ref":"artifact:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}`)
 	result = dispatcher.Dispatch(context.Background(), invocation)
-	if result.Failure != nil || result.AuditRef == "" ||
-		audit.admits != 1 || api.calls["GetArtifact"] != 1 {
+	if result.Failure != nil || result.AuditRef == "" || audit.admits != 1 || api.calls["GetArtifact"] != 1 {
 		t.Fatalf("artifacts.read result=%+v admits=%d calls=%v", result, audit.admits, api.calls)
+	}
+	generic := testExecutionServicePrincipal(t)
+	generic.Ref, _ = identity.NewPrincipalRef("principal:generic-service")
+	invocation.CommandID, invocation.RequestRef = "orquesta.system.status", "request:generic-service-status"
+	invocation.Principal, invocation.Payload = generic, json.RawMessage(`{}`)
+	result = dispatcher.Dispatch(context.Background(), invocation)
+	if result.Failure != nil || audit.admits != 2 || api.calls["Status"] != 1 {
+		t.Fatalf("generic service result=%+v admits=%d calls=%v", result, audit.admits, api.calls)
 	}
 }
 
