@@ -29,20 +29,9 @@ func (repository *Repository) ClassifyExecutionPrincipal(
 		principal.Kind != identity.PrincipalKindService || projectRef.String() == "" {
 		return false, false, goal.ExecutionRef{}, errors.New("sqlite.execution_principal_invalid")
 	}
-	transaction, err := beginReadTransaction(ctx, repository)
-	if err != nil {
+	match, found, err := repository.readExecutionAuthority(ctx, goal.ExecutionRef{}, principal)
+	if err != nil || !found {
 		return false, false, goal.ExecutionRef{}, err
-	}
-	defer func() { _ = transaction.Rollback() }()
-	match, found, err := findExecutionAuthority(ctx, transaction, goal.ExecutionRef{}, principal)
-	if err != nil {
-		return false, false, goal.ExecutionRef{}, err
-	}
-	if err := commit(transaction); err != nil {
-		return false, false, goal.ExecutionRef{}, err
-	}
-	if !found {
-		return false, false, goal.ExecutionRef{}, nil
 	}
 	return true, match.active && match.authority.Request.ProjectRef == projectRef,
 		match.authority.Request.ExecutionRef, nil
@@ -61,8 +50,9 @@ func (repository *Repository) ResolveExecution(
 		executionRef.String() == "" {
 		return goal.ExecutionRef{}, stateError(application.StateNotFound, errors.New("sqlite.execution_authority_not_found"))
 	}
-	found, active, resolved, err := repository.ClassifyExecutionPrincipal(ctx, principal, projectRef)
-	if err != nil || !found || !active || resolved != executionRef {
+	match, found, err := repository.readExecutionAuthority(ctx, executionRef, principal)
+	if err != nil || !found || !match.active || match.authority.ServicePrincipal != principal ||
+		match.authority.Request.ProjectRef != projectRef {
 		return goal.ExecutionRef{}, stateError(application.StateNotFound, errors.New("sqlite.execution_authority_not_found"))
 	}
 	return executionRef, nil
@@ -73,36 +63,31 @@ func (repository *Repository) ExecutionSessionAuthority(
 	executionRef goal.ExecutionRef,
 	authenticationMethod string,
 ) (ports.ExecutionSessionAuthority, error) {
-	return repository.executionSessionAuthority(ctx, executionRef, authenticationMethod, goal.ProjectRef{})
-}
-
-func (repository *Repository) executionSessionAuthority(
-	ctx context.Context,
-	executionRef goal.ExecutionRef,
-	authenticationMethod string,
-	expectedProject goal.ProjectRef,
-) (ports.ExecutionSessionAuthority, error) {
 	if ctx == nil || executionRef.String() == "" || authenticationMethod == "" {
 		return ports.ExecutionSessionAuthority{}, stateError(application.StateNotFound, errors.New("sqlite.execution_authority_not_found"))
 	}
-	transaction, err := beginReadTransaction(ctx, repository)
+	match, found, err := repository.readExecutionAuthority(
+		ctx, executionRef, identity.Principal{Method: authenticationMethod},
+	)
 	if err != nil {
 		return ports.ExecutionSessionAuthority{}, err
 	}
-	defer func() { _ = transaction.Rollback() }()
-	principal := identity.Principal{Method: authenticationMethod}
-	match, found, err := findExecutionAuthority(ctx, transaction, executionRef, principal)
-	if err != nil {
-		return ports.ExecutionSessionAuthority{}, err
-	}
-	if !found || !match.active || expectedProject.String() != "" &&
-		match.authority.Request.ProjectRef != expectedProject {
+	if !found || !match.active {
 		return ports.ExecutionSessionAuthority{}, stateError(application.StateNotFound, errors.New("sqlite.execution_authority_not_found"))
 	}
-	if err := commit(transaction); err != nil {
-		return ports.ExecutionSessionAuthority{}, err
-	}
 	return match.authority, nil
+}
+
+func (repository *Repository) readExecutionAuthority(
+	ctx context.Context,
+	executionRef goal.ExecutionRef,
+	principal identity.Principal,
+) (executionAuthorityMatch, bool, error) {
+	database, err := repository.database()
+	if err != nil {
+		return executionAuthorityMatch{}, false, err
+	}
+	return findExecutionAuthority(ctx, database, executionRef, principal)
 }
 
 func findExecutionAuthority(
