@@ -15,10 +15,7 @@ import (
 // transport material; no endpoint or token enters provider-neutral state.
 type SessionResolver interface {
 	ResolveCodexSession(context.Context, ports.AgentLaunchRequest) (Session, error)
-}
-
-// SessionRecoveryResolver rematerializes authority for one material-free durable binding.
-type SessionRecoveryResolver interface {
+	// RecoverCodexSession rematerializes authority for one material-free durable binding.
 	RecoverCodexSession(context.Context, ports.AgentLaunchRequest) (Session, error)
 }
 
@@ -65,10 +62,8 @@ func (session *resolvedSession) destroy() {
 	if session == nil {
 		return
 	}
-	if session.guard != nil {
-		session.guard.Destroy()
-		session.guard = nil
-	}
+	session.guard.Destroy()
+	session.guard = nil
 	session.token.Destroy()
 	session.endpoint = ""
 }
@@ -116,11 +111,10 @@ func (adapter *Adapter) recoverSession(
 	ctx context.Context,
 	request ports.AgentLaunchRequest,
 ) (*resolvedSession, error) {
-	resolver, ok := adapter.config.SessionResolver.(SessionRecoveryResolver)
-	if !ok || request.SessionRef.String() == "" {
+	if adapter.config.SessionResolver == nil || request.SessionRef.String() == "" {
 		return nil, &Error{Code: CodeSessionUnavailable}
 	}
-	resolved, err := resolver.RecoverCodexSession(ctx, request)
+	resolved, err := adapter.config.SessionResolver.RecoverCodexSession(ctx, request)
 	if err != nil {
 		return nil, &Error{Code: CodeSessionUnavailable, Cause: err}
 	}
@@ -163,11 +157,7 @@ func (adapter *Adapter) preflightSessionLaunch(session *resolvedSession, request
 		{Name: "command", Content: []byte(adapter.command)},
 		{Name: "arguments", Content: []byte(strings.Join(adapter.commandArgumentsWithSession("run:session", false, false, session), "\x00"))},
 	}
-	defer func() {
-		for index := range surfaces {
-			clearBytes(surfaces[index].Content)
-		}
-	}()
+	defer clearLeakSurfaces(surfaces)
 	if err := session.guard.Scan(surfaces); err != nil {
 		if credentials.HasErrorCode(err, credentials.ErrorSecretLeak) {
 			return &Error{Code: CodeSecretLeak}

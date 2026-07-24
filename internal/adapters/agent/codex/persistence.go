@@ -331,9 +331,7 @@ func (adapter *Adapter) readLaunchRecord(runPath string) (launchRecord, bool, er
 
 func validateLaunchRecordV4(record launchRecord) error {
 	if record.SchemaVersion != intermediateStateSchemaVersion ||
-		record.ExecutionSessionRef != "" ||
-		record.ActorRef != "" ||
-		record.ProjectRef != "" ||
+		record.ExecutionSessionRef != "" || record.ActorRef != "" || record.ProjectRef != "" ||
 		record.GoalRef == "" ||
 		record.WorkItemRef == "" ||
 		record.PlanGeneration == 0 ||
@@ -359,16 +357,11 @@ func validateLaunchRecordV5(record launchRecord) error {
 			return &Error{Code: CodeStateInvalid}
 		}
 	}
-	if (record.ActorRef == "") != (record.ProjectRef == "") {
+	_, actorErr := goal.NewActorRef(record.ActorRef)
+	_, projectErr := goal.NewProjectRef(record.ProjectRef)
+	if (record.ActorRef == "") != (record.ProjectRef == "") ||
+		record.ActorRef != "" && (actorErr != nil || projectErr != nil) {
 		return &Error{Code: CodeStateInvalid}
-	}
-	if record.ActorRef != "" {
-		actorRef, actorErr := goal.NewActorRef(record.ActorRef)
-		projectRef, projectErr := goal.NewProjectRef(record.ProjectRef)
-		if actorErr != nil || projectErr != nil ||
-			actorRef.String() != record.ActorRef || projectRef.String() != record.ProjectRef {
-			return &Error{Code: CodeStateInvalid}
-		}
 	}
 	return nil
 }

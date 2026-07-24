@@ -17,31 +17,6 @@ import (
 	"orquesta/internal/ports"
 )
 
-type recoverySessionResolver struct {
-	material    string
-	unavailable bool
-	mismatch    bool
-}
-
-func (resolver *recoverySessionResolver) ResolveCodexSession(_ context.Context, request ports.AgentLaunchRequest) (Session, error) {
-	return resolver.session(request.SessionRef)
-}
-
-func (resolver *recoverySessionResolver) RecoverCodexSession(_ context.Context, request ports.AgentLaunchRequest) (Session, error) {
-	return resolver.session(request.SessionRef)
-}
-
-func (resolver *recoverySessionResolver) session(ref ports.ExecutionSessionRef) (Session, error) {
-	if resolver.unavailable {
-		return Session{}, errors.New("recovery unavailable")
-	}
-	if resolver.mismatch {
-		ref, _ = ports.NewExecutionSessionRef("execution-session:mismatch")
-	}
-	secret, _ := credentials.NewSecret([]byte(resolver.material))
-	return Session{Ref: ref, Endpoint: "http://127.0.0.1:7777/mcp", BearerToken: secret}, nil
-}
-
 func TestCredentialRecoveryScrubsUntrustedLastMessage(t *testing.T) {
 	config := testConfig(t)
 	config.CredentialStore = &credentialTestStore{material: helperCredentialInitial, version: 1}
@@ -66,18 +41,22 @@ func TestCredentialRecoveryScrubsUntrustedLastMessage(t *testing.T) {
 
 func TestObserveRecoveryAuthorityFailureScrubsAndRejectsOutput(t *testing.T) {
 	for _, test := range []struct {
-		name string
-		code string
-		set  func(*recoverySessionResolver)
+		name     string
+		code     string
+		resolver SessionResolver
 	}{
-		{"unavailable", CodeSessionUnavailable, func(value *recoverySessionResolver) { value.unavailable = true }},
-		{"mismatch", CodeSessionInvalid, func(value *recoverySessionResolver) { value.mismatch = true }},
+		{"unavailable", CodeSessionUnavailable, sessionResolverFunc(func(context.Context, ports.AgentLaunchRequest) (Session, error) {
+			return Session{}, errors.New("recovery unavailable")
+		})},
+		{"mismatch", CodeSessionInvalid, sessionResolverFunc(func(context.Context, ports.AgentLaunchRequest) (Session, error) {
+			ref, _ := ports.NewExecutionSessionRef("execution-session:mismatch")
+			secret, _ := credentials.NewSecret([]byte(helperSessionBearer))
+			return Session{Ref: ref, Endpoint: "http://127.0.0.1:7777/mcp", BearerToken: secret}, nil
+		})},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			config := testConfig(t)
-			resolver := &recoverySessionResolver{material: helperSessionBearer}
-			test.set(resolver)
-			config.SessionResolver = resolver
+			config.SessionResolver = test.resolver
 			request := testRequest(t, "guard-recovery-"+test.name, "helper:success", 1024)
 			request.SessionRef, _ = ports.NewExecutionSessionRef("execution-session:guard-recovery-" + test.name)
 			_, runPath := seedAcceptedExecution(t, config, request)

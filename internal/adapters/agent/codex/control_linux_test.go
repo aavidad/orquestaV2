@@ -31,7 +31,10 @@ func TestReopenedLiveProcessRetainsExactSecretGuards(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			config := testConfig(t)
-			config.SessionResolver = &recoverySessionResolver{material: helperSessionBearer}
+			config.SessionResolver = sessionResolverFunc(func(_ context.Context, request ports.AgentLaunchRequest) (Session, error) {
+				secret, _ := credentials.NewSecret([]byte(helperSessionBearer))
+				return Session{Ref: request.SessionRef, Endpoint: "http://127.0.0.1:7777/mcp", BearerToken: secret}, nil
+			})
 			if test.provider {
 				config.CredentialStore = &credentialTestStore{material: helperCredentialInitial, version: 1}
 				config.CredentialRef = credentials.CredentialRef("credential:codex-primary")

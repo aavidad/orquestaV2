@@ -18,10 +18,16 @@ type sessionResolverFunc func(context.Context, ports.AgentLaunchRequest) (Sessio
 func (function sessionResolverFunc) ResolveCodexSession(ctx context.Context, request ports.AgentLaunchRequest) (Session, error) {
 	return function(ctx, request)
 }
+func (function sessionResolverFunc) RecoverCodexSession(ctx context.Context, request ports.AgentLaunchRequest) (Session, error) {
+	return function(ctx, request)
+}
 
 type sessionResolverStub struct{ id int }
 
 func (*sessionResolverStub) ResolveCodexSession(context.Context, ports.AgentLaunchRequest) (Session, error) {
+	return Session{}, errors.New("unused")
+}
+func (*sessionResolverStub) RecoverCodexSession(context.Context, ports.AgentLaunchRequest) (Session, error) {
 	return Session{}, errors.New("unused")
 }
 

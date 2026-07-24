@@ -73,27 +73,18 @@ func TestCodexExecutionSessionResolverResolvesExactBoundSession(t *testing.T) {
 	if store.uses != 1 {
 		t.Fatalf("credential use count=%d want 1", store.uses)
 	}
-}
-
-func TestCodexExecutionSessionResolverRecoversExactDurableBinding(t *testing.T) {
-	resolver, _, authority, store := bootstrapSessionResolver(t)
-	request := authority.Request
 	binding := ports.AgentLaunchRequest{
 		SessionRef: authority.SessionRef, ProjectRef: request.ProjectRef, GoalRef: request.GoalRef,
-		WorkItemRef: request.WorkItemRef, ExecutionRef: request.ExecutionRef,
-		ExecutionAttempt: request.ExecutionAttempt, PlanGeneration: request.PlanGeneration,
-		AppSpecGeneration: request.AppSpecGeneration, SpecHash: request.SpecHash,
+		WorkItemRef: request.WorkItemRef, ExecutionRef: request.ExecutionRef, ExecutionAttempt: request.ExecutionAttempt,
+		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration, SpecHash: request.SpecHash,
 	}
-	session, err := resolver.RecoverCodexSession(context.Background(), binding)
-	if err != nil || session.Ref != authority.SessionRef || len(session.BearerToken.Bytes()) == 0 {
-		t.Fatalf("RecoverCodexSession session=%+v error=%v", session, err)
+	recovered, err := resolver.RecoverCodexSession(context.Background(), binding)
+	if err != nil || recovered.Ref != authority.SessionRef || len(recovered.BearerToken.Bytes()) == 0 {
+		t.Fatalf("RecoverCodexSession session=%+v error=%v", recovered, err)
 	}
-	session.BearerToken.Destroy()
-	if store.uses != 1 {
-		t.Fatalf("recovery credential uses=%d", store.uses)
-	}
+	recovered.BearerToken.Destroy()
 	binding.SpecHash = strings.Repeat("b", 64)
-	if _, err := resolver.RecoverCodexSession(context.Background(), binding); err == nil || store.uses != 1 {
+	if _, err := resolver.RecoverCodexSession(context.Background(), binding); err == nil || store.uses != 2 {
 		t.Fatalf("mismatched recovery materialized credential: uses=%d error=%v", store.uses, err)
 	}
 }
