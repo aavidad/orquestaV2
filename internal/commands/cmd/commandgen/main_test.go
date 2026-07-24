@@ -108,6 +108,10 @@ func TestGeneratorRejectsContractMutationsAndTrailingJSON(t *testing.T) {
 			no := false
 			value.Commands[0].MCP.Annotations.Idempotent = &no
 		}},
+		{"open_world_true", func(value *document) {
+			yes := true
+			value.Commands[0].MCP.Annotations.OpenWorld = &yes
+		}},
 		{"wrong_description", func(value *document) { value.Commands[0].DescriptionKey = "command.other.description" }},
 		{"wrong_cli", func(value *document) { value.Commands[0].CLI.Path = []string{"other"} }},
 		{"wrong_errors", func(value *document) { value.Commands[0].ErrorCodes[0] = "other" }},

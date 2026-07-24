@@ -638,5 +638,10 @@ func TestApplicationHandlersEnforceDescriptorPermissionAndExistingUseCaseAuthori
 		if mutated.Permission != definition.Permission && validateDefinition(mutated) == nil {
 			t.Fatalf("mutated permission accepted for %s", definition.ID)
 		}
+		mutated = definition
+		mutated.MCP.Annotations.OpenWorld = true
+		if validateDefinition(mutated) == nil {
+			t.Fatalf("open-world annotation accepted for %s", definition.ID)
+		}
 	}
 }

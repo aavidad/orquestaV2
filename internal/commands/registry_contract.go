@@ -19,6 +19,7 @@ func validateDefinition(definition Definition) error {
 		definition.MCP.Annotations.ReadOnly != (definition.Kind == KindQuery) ||
 		(definition.MCP.Annotations.ReadOnly && definition.MCP.Annotations.Destructive) ||
 		!definition.MCP.Annotations.Idempotent ||
+		definition.MCP.Annotations.OpenWorld ||
 		len(definition.CLI.Path) == 0 || len(definition.ErrorCodes) != len(stableErrorCodes) {
 		return errContract
 	}

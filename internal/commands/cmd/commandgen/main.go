@@ -170,6 +170,7 @@ func validate(definitions []definition) error {
 			*annotations.ReadOnly != (item.Kind == "query") ||
 			(*annotations.ReadOnly && *annotations.Destructive) ||
 			!*annotations.Idempotent ||
+			*annotations.OpenWorld ||
 			item.MCP.Tool != item.ID || !equalStrings(item.CLI.Path, strings.Split(strings.TrimPrefix(item.ID, "orquesta."), ".")) {
 			return errors.New("commandgen.definition_invalid")
 		}
