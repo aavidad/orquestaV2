@@ -25,7 +25,7 @@ import (
 	"time"
 )
 
-// Scenario mutations use official MCP; recovery and security probes are read-only.
+// Scenario mutations use official MCP; live-state probes are read-only and authorization mutates only isolated restore copies.
 const v22RealDeadline = 12 * time.Minute
 
 type v22Output struct { Result struct { Data json.RawMessage `json:"data"`; Failure any `json:"failure"` } `json:"result"` }
@@ -49,7 +49,15 @@ func (o v22Object) objects(key string) []v22Object {
 }
 
 type v22AdmissionIdentity struct { Message, Admission, SourcePrincipal, SourceExecution, RecipientPrincipal, RecipientExecution string }
-type v22MailboxFence struct { Admission v22AdmissionIdentity; Delivered, Sibling string }
+type v22MailboxFence struct {
+	Admission v22AdmissionIdentity; Delivered, Sibling string
+	InitialReceipt identity.AuthorizationReceipt; InitialReceiptRef, InitialRequestRef, InitialCopyPath, InitialCopyTarget string
+}
+type v22IsolatedCopy struct { Path, Target string }
+type v22RestoreExpected struct {
+	Project, Goal, Spec, GoalState, Work, Execution, Replaces, ExecutionState, Purpose string
+	Plan, App, Attempt, MaxAttempts, WorkItems, Executions uint64
+}
 
 func v22Must[T any](value T, err error) T { if err != nil { panic(err) }; return value }
 func v22Decode[T any](path string) T {
@@ -77,7 +85,8 @@ func TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP(t *tes
 	exactD := running[refs["D"]].text("execution_ref"); current := h.runningExecution(ctx, refs["D"]).text("execution_ref")
 	v22Require(t, current == exactD, "B stop disturbed D execution: got=%s want=%s", current, exactD)
 	fence := h.assertMailboxArtifactIsolation(ctx, refs["A"]); admission := fence.Admission
-	backup := h.backup(ctx); h.verifyRestoreCopy(ctx, backup, refs["D"], running[refs["D"]])
+	expectedD := v22RestoreExpectation(t, h.get(ctx, refs["D"]))
+	backup := h.backup(ctx); h.verifyRestoreCopy(ctx, backup, expectedD)
 	current = h.runningExecution(ctx, refs["D"]).text("execution_ref")
 	v22Require(t, current == exactD, "D execution changed before crash: got=%s want=%s", current, exactD)
 	h.kill() // non-cooperative server death: SIGKILL, never Runtime.Shutdown.
@@ -172,32 +181,46 @@ func (h *v22Harness) backup(ctx context.Context) application.BackupRef {
 	})
 	return ref
 }
-func (h *v22Harness) verifyRestoreCopy(ctx context.Context, backup application.BackupRef, goalRaw string, want v22ExecutionProjection) {
+func (h *v22Harness) verifyRestoreCopy(ctx context.Context, backup application.BackupRef, want v22RestoreExpected) {
 	var restored string
 	h.recovery(ctx, func(recovery *statesqlite.Recovery) {
 		target := v22Must(application.NewRecoveryTargetRef("recovery-target:v22-real")); v22Must(recovery.RestoreBackup(ctx, backup, target)); restored = v22Must(recovery.TargetPath(target))
 	})
 	copyRepository := v22Must(statesqlite.Open(ctx, statesqlite.Options{Path: restored, BusyTimeout: 5 * time.Second, MaxOpenConnections: 1})); defer copyRepository.Close()
-	goalRef := mustGoalRef(goalRaw); executionRef := v22Must(goal.NewExecutionRef(want.text("execution_ref")))
-	workItemRef := v22Must(goal.NewWorkItemRef(want.text("work_item_ref")))
+	goalRef := mustGoalRef(want.Goal); executionRef := v22Must(goal.NewExecutionRef(want.Execution))
+	workItemRef := v22Must(goal.NewWorkItemRef(want.Work))
 	record := v22Must(copyRepository.GetGoal(ctx, goalRef))
-	v22Require(h.t, h.state != restored && record.Goal.Ref() == goalRef && record.Goal.State() == goal.GoalStateRunning &&
-		record.Goal.PlanGeneration() == goal.PlanGeneration(want.number("plan_generation")) &&
-		record.Goal.AppSpec().Generation() == goal.AppSpecGeneration(want.number("app_spec_generation")) &&
-		record.Goal.SpecHash() != "" && record.Goal.WorkItemCount() == 1 && len(record.Executions) == 1,
-		"restored D aggregate not exact: state=%q restored=%q goal=%+v executions=%+v", h.state, restored, record.Goal, record.Executions)
+	v22Require(h.t, h.state != restored && record.Goal.Ref() == goalRef && record.Goal.Project().String() == want.Project &&
+		string(record.Goal.State()) == want.GoalState && record.Goal.PlanGeneration() == goal.PlanGeneration(want.Plan) &&
+		record.Goal.AppSpec().Generation() == goal.AppSpecGeneration(want.App) && record.Goal.SpecHash() == want.Spec &&
+		uint64(record.Goal.WorkItemCount()) == want.WorkItems && uint64(len(record.Executions)) == want.Executions,
+		"restored D aggregate differs from pre-backup tuple: state=%q restored=%q goal=%+v want=%+v", h.state, restored, record.Goal, want)
 	execution := record.Executions[0]; item, itemOK := record.Goal.WorkItem(execution.WorkItemRef); aggregateExecution, bound := item.Execution()
 	v22Require(h.t, itemOK && bound && aggregateExecution == executionRef && item.Ref() == workItemRef &&
 		execution.Ref == executionRef && execution.GoalRef == goalRef && execution.WorkItemRef == workItemRef &&
-		execution.State == application.ExecutionRunning && execution.AttemptNo == want.number("attempt_no") &&
-		execution.PlanGeneration == goal.PlanGeneration(want.number("plan_generation")) &&
-		execution.AppSpecGeneration == goal.AppSpecGeneration(want.number("app_spec_generation")) &&
-		execution.SpecHash == record.Goal.SpecHash() && execution.ReplacesExecutionRef.String() == "",
-		"restored D execution not exact: item=%+v execution=%+v want=%s", item, execution, executionRef)
+		string(execution.State) == want.ExecutionState && execution.AttemptNo == want.Attempt &&
+		execution.MaxExecutionAttempts == want.MaxAttempts && execution.PlanGeneration == goal.PlanGeneration(want.Plan) &&
+		execution.AppSpecGeneration == goal.AppSpecGeneration(want.App) && execution.SpecHash == want.Spec &&
+		execution.ReplacesExecutionRef.String() == want.Replaces && string(execution.Purpose) == want.Purpose,
+		"restored D execution differs from pre-backup tuple: item=%+v execution=%+v want=%+v", item, execution, want)
 }
 func (h *v22Harness) recovery(ctx context.Context, run func(*statesqlite.Recovery)) {
 	repository := v22Must(statesqlite.Open(ctx, statesqlite.Options{Path: h.state, BusyTimeout: 5 * time.Second, MaxOpenConnections: 8})); defer repository.Close()
 	recovery := v22Must(statesqlite.NewRecovery(statesqlite.RecoveryOptions{Repository: repository, BackupRoot: filepath.Join(h.root, "backup"), RestoreRoot: filepath.Join(h.root, "restore")})); defer recovery.Close(); run(recovery)
+}
+func v22RestoreExpectation(t *testing.T, projection v22GoalProjection) v22RestoreExpected {
+	t.Helper(); view, executions := projection.object("goal"), projection.objects("executions")
+	v22Require(t, view.text("state") == "running" && len(executions) == 1, "D pre-backup projection not exact/running: %+v", projection)
+	execution := executions[0]
+	expected := v22RestoreExpected{Project: view.text("project_ref"), Goal: view.text("goal_ref"), Spec: view.text("spec_hash"),
+		GoalState: view.text("state"), Work: execution.text("work_item_ref"), Execution: execution.text("execution_ref"),
+		Replaces: execution.text("replaces_execution_ref"), ExecutionState: execution.text("state"), Purpose: execution.text("purpose"),
+		Plan: view.number("plan_generation"), App: view.number("app_spec_generation"), Attempt: execution.number("attempt_no"),
+		MaxAttempts: execution.number("max_attempts"), WorkItems: view.number("work_item_count"), Executions: projection.number("execution_count")}
+	v22Require(t, expected.Project != "" && expected.Goal != "" && expected.Spec != "" && expected.Work != "" && expected.Execution != "" &&
+		expected.Plan > 0 && expected.App > 0 && expected.Attempt > 0 && expected.MaxAttempts > 0 && expected.WorkItems == 1 && expected.Executions == 1,
+		"D pre-backup tuple incomplete: %+v", expected)
+	return expected
 }
 
 func (h *v22Harness) create(ctx context.Context, id string, plan map[string]any) string {
@@ -290,12 +313,16 @@ func (h *v22Harness) assertMailboxArtifactIsolation(ctx context.Context, goalRaw
 	}
 }
 func (h *v22Harness) probeMailboxArtifactIsolation(ctx context.Context, goalRaw string, fence v22MailboxFence, phase string) v22MailboxFence {
-	repository := v22Must(statesqlite.Open(ctx, statesqlite.Options{Path: h.state, BusyTimeout: 5 * time.Second, MaxOpenConnections: 1})); defer repository.Close()
+	deliveredRequest, siblingRequest := "authorization:v22-real:"+phase+":delivered", "authorization:v22-real:"+phase+":sibling"
+	v22Require(h.t, h.liveAuthorizationReceiptCount(ctx, deliveredRequest, siblingRequest) == 0, "%s authorization probe already mutated live DB", phase)
+	isolated := h.isolatedStateCopy(ctx, phase)
+	isolatedRepository := v22Must(statesqlite.Open(ctx, statesqlite.Options{Path: isolated.Path, BusyTimeout: 5 * time.Second, MaxOpenConnections: 1}))
+	defer isolatedRepository.Close()
 	admission, delivered, sibling := fence.Admission, fence.Delivered, fence.Sibling
 	recipientRef := v22Must(goal.NewExecutionRef(admission.RecipientExecution))
-	authority, err := repository.ExecutionSessionAuthority(ctx, recipientRef, "execution_token")
+	authority, err := isolatedRepository.ExecutionSessionAuthority(ctx, recipientRef, "execution_token")
 	v22Require(h.t, err == nil && authority.ServicePrincipal.Ref.String() == admission.RecipientPrincipal, "recipient authority drift: %+v admission=%+v err=%v", authority, admission, err)
-	record := v22Must(repository.GetGoal(ctx, mustGoalRef(goalRaw)))
+	record := v22Must(isolatedRepository.GetGoal(ctx, mustGoalRef(goalRaw)))
 	sourceExact, recipientExact := false, false
 	for _, execution := range record.Executions {
 		if execution.Ref.String() == admission.SourceExecution {
@@ -307,13 +334,47 @@ func (h *v22Harness) probeMailboxArtifactIsolation(ctx context.Context, goalRaw 
 		}
 	}
 	v22Require(h.t, sourceExact && recipientExact, "%s exact execution authority drift: authority=%+v admission=%+v", phase, authority, admission)
-	authorize := func(ref, artifact string) (identity.AuthorizationReceipt, error) {
-		request := v22Must(identity.NewAuthorizationRequest(identity.AuthorizationRequestInput{RequestRef: "authorization:v22-real:" + phase + ":" + ref, Principal: authority.ServicePrincipal, ProjectRef: record.Goal.Project(), Permission: identity.PermissionArtifactsRead, ResourceRef: artifact, RequestedAt: time.Now().UTC()}))
-		return repository.Authorize(ctx, request)
+	authorize := func(requestRef, artifact string) (identity.AuthorizationReceipt, error) {
+		request := v22Must(identity.NewAuthorizationRequest(identity.AuthorizationRequestInput{RequestRef: requestRef, Principal: authority.ServicePrincipal, ProjectRef: record.Goal.Project(), Permission: identity.PermissionArtifactsRead, ResourceRef: artifact, RequestedAt: time.Now().UTC()}))
+		return isolatedRepository.Authorize(ctx, request)
 	}
-	receipt, deliveredErr := authorize("delivered", delivered); _, siblingErr := authorize("sibling", sibling)
-	v22Require(h.t, delivered != sibling && deliveredErr == nil && receipt.Decision().Role() == identity.RoleExecutionService && errors.Is(siblingErr, application.ErrForbidden), "artifact delivery fence delivered=%s sibling=%s receipt=%+v errors=%v/%v", delivered, sibling, receipt, deliveredErr, siblingErr)
+	receipt, deliveredErr := authorize(deliveredRequest, delivered); _, siblingErr := authorize(siblingRequest, sibling)
+	v22Require(h.t, delivered != sibling && deliveredErr == nil && receipt.Decision().Outcome() == identity.AuthorizationAllowed &&
+		receipt.Decision().Role() == identity.RoleExecutionService && receipt.Decision().Request().RequestRef() == deliveredRequest &&
+		errors.Is(siblingErr, application.ErrForbidden), "%s artifact delivery fence delivered=%s sibling=%s receipt=%+v errors=%v/%v", phase, delivered, sibling, receipt, deliveredErr, siblingErr)
+	v22Require(h.t, isolatedRepository.Close() == nil && h.liveAuthorizationReceiptCount(ctx, deliveredRequest, siblingRequest) == 0,
+		"%s isolated authorization leaked into live DB", phase)
+	if phase == "initial" {
+		fence.InitialReceipt, fence.InitialReceiptRef, fence.InitialRequestRef = receipt, receipt.Ref(), deliveredRequest
+		fence.InitialCopyPath, fence.InitialCopyTarget = isolated.Path, isolated.Target
+		v22Require(h.t, fence.InitialReceiptRef != "" && fence.InitialReceipt.Decision().Request().RequestRef() == fence.InitialRequestRef,
+			"initial authorization receipt/request not exact: %+v", fence)
+	} else {
+		v22Require(h.t, fence.InitialReceipt.Ref() == fence.InitialReceiptRef &&
+			fence.InitialReceipt.Decision().Request().RequestRef() == fence.InitialRequestRef &&
+			deliveredRequest != fence.InitialRequestRef && receipt.Ref() != fence.InitialReceiptRef &&
+			receipt.Decision().Request().RequestRef() == deliveredRequest &&
+			isolated.Path != fence.InitialCopyPath && isolated.Target != fence.InitialCopyTarget,
+			"restart authorization reused initial receipt/request: initial=%+v new=%+v request=%s", fence.InitialReceipt, receipt, deliveredRequest)
+	}
 	return fence
+}
+func (h *v22Harness) isolatedStateCopy(ctx context.Context, phase string) v22IsolatedCopy {
+	var isolated v22IsolatedCopy
+	h.recovery(ctx, func(recovery *statesqlite.Recovery) {
+		receipt := v22Must(recovery.CreateBackup(ctx)); v22Must(recovery.VerifyBackup(ctx, receipt.Ref))
+		target := v22Must(application.NewRecoveryTargetRef("recovery-target:v22-auth-" + phase))
+		v22Must(recovery.RestoreBackup(ctx, receipt.Ref, target))
+		isolated = v22IsolatedCopy{Path: v22Must(recovery.TargetPath(target)), Target: target.String()}
+	})
+	v22Require(h.t, isolated.Path != "" && isolated.Path != h.state && isolated.Target != "",
+		"%s authorization copy not isolated: state=%q copy=%+v", phase, h.state, isolated)
+	return isolated
+}
+func (h *v22Harness) liveAuthorizationReceiptCount(ctx context.Context, first, second string) int {
+	database := v22Must(sql.Open("sqlite", h.state)); defer database.Close()
+	var count int; err := database.QueryRowContext(ctx, `SELECT COUNT(*) FROM authorization_receipts WHERE request_ref=? OR request_ref=?`, first, second).Scan(&count)
+	v22Require(h.t, err == nil, "read live authorization receipts: %v", err); return count
 }
 func (h *v22Harness) completedAdmission(ctx context.Context, goalRef string) (v22AdmissionIdentity, bool) {
 	database := v22Must(sql.Open("sqlite", h.state)); defer database.Close()
