@@ -1101,7 +1101,7 @@ func v22PlanC() map[string]any {
 	return v22Plan("c", v22Item("program", "Use isolated Git workspace: add a minimal go.mod, v22_marker.go with a Marker function, and v22_marker_test.go that verifies it; run the required Go test, obtain review, then integrate.", "phase:c", []string{"go.mod", "v22_marker.go", "v22_marker_test.go"}, false, nil, "evidence_bundle"))
 }
 func v22PlanD() map[string]any {
-	return v22Plan("d", v22Item("recover", "Remain live across crash, resume exactly once after restart, and produce recovery artifact.", "phase:d", nil, false, nil, "artifact"))
+	return v22Plan("d", v22Item("recover", "Remain live across crash and resume exactly once after restart. Before producing the final recovery artifact, execute the shell command `sleep 180`; do not finish early.", "phase:d", nil, false, nil, "artifact"))
 }
 func v22Plan(key string, items ...map[string]any) map[string]any {
 	return map[string]any{"phases": []any{v22Phase(key)}, "work_items": items}
