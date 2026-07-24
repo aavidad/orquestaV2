@@ -1,4 +1,4 @@
-//go:build v22_real_e2e
+//go:build v22_real_e2e && linux
 
 package acceptance_test
 
@@ -11,9 +11,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -21,6 +21,7 @@ import (
 
 	statesqlite "orquesta/internal/adapters/state/sqlite"
 	"orquesta/internal/application"
+	"orquesta/internal/goal"
 )
 
 // The harness owns only temporary files and processes. Every operation that
@@ -34,6 +35,18 @@ type v22Output struct {
 			Code string `json:"code"`
 		} `json:"failure"`
 	} `json:"result"`
+}
+type v22ExecutionProjection struct {
+	Ref            string `json:"execution_ref"`
+	Work           string `json:"work_item_ref"`
+	Replaces       string `json:"replaces_execution_ref"`
+	State          string `json:"state"`
+	Purpose        string `json:"purpose"`
+	Failure        string `json:"failure_code"`
+	Attempt        uint64 `json:"attempt_no"`
+	Plan           uint64 `json:"plan_generation"`
+	App            uint64 `json:"app_spec_generation"`
+	MailboxRetired bool   `json:"recipient_mailbox_retired"`
 }
 type v22GoalProjection struct {
 	Goal struct {
@@ -56,24 +69,49 @@ type v22GoalProjection struct {
 		Attestations []string `json:"attestation_refs"`
 		Interrupt    string   `json:"interrupt_code"`
 	} `json:"work_items"`
-	Executions []struct {
-		Ref     string `json:"execution_ref"`
-		Work    string `json:"work_item_ref"`
-		Attempt uint64 `json:"attempt_no"`
-		State   string `json:"state"`
-		Failure string `json:"failure_code"`
-	} `json:"executions"`
+	Executions   []v22ExecutionProjection `json:"executions"`
 	Attestations []struct {
-		Tests []struct {
-			Ref  string `json:"required_test_ref"`
-			Exit int    `json:"exit_code"`
+		Ref       string `json:"attestation_ref"`
+		Verdict   string `json:"verdict"`
+		Work      string `json:"work_item_ref"`
+		Execution string `json:"execution_ref"`
+		Change    string `json:"change_ref"`
+		Tests     []struct {
+			Ref    string `json:"required_test_ref"`
+			Output string `json:"output_digest"`
+			Exit   int    `json:"exit_code"`
 		} `json:"tests"`
 	} `json:"attestations"`
 	Reviews []struct {
-		Ref string `json:"review_ref"`
+		Ref       string `json:"review_ref"`
+		Work      string `json:"work_item_ref"`
+		Change    string `json:"change_ref"`
+		Subject   string `json:"subject_digest"`
+		Role      string `json:"role"`
+		Verdict   string `json:"verdict"`
+		Execution string `json:"reviewer_execution_ref"`
+		Attempt   uint64 `json:"reviewer_execution_attempt"`
 	} `json:"reviews"`
+	Controls []struct {
+		Ref          string `json:"control_ref"`
+		Operation    string `json:"operation"`
+		Target       string `json:"target"`
+		Status       string `json:"status"`
+		Receipt      string `json:"receipt_ref"`
+		Execution    string `json:"execution_ref"`
+		GoalRevision uint64 `json:"goal_revision"`
+		Plan         uint64 `json:"plan_generation"`
+		App          uint64 `json:"app_spec_generation"`
+		Attempt      uint64 `json:"execution_attempt"`
+	} `json:"controls"`
 	Integrations []struct {
-		Ref string `json:"integration_ref"`
+		Ref      string `json:"integration_ref"`
+		Change   string `json:"change_ref"`
+		Status   string `json:"status"`
+		Before   string `json:"target_before_oid"`
+		After    string `json:"target_after_oid"`
+		Tree     string `json:"tree_oid"`
+		Conflict string `json:"conflict_digest"`
 	} `json:"integration_receipts"`
 }
 type v22Harness struct {
@@ -90,9 +128,14 @@ func TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP(t *tes
 	ctx, cancel := context.WithTimeout(context.Background(), v22RealDeadline)
 	defer cancel()
 	h := v22Start(t, ctx)
-	defer h.close()
 	refs := map[string]string{"A": h.create(ctx, "A", v22PlanA()), "B": h.create(ctx, "B", v22PlanB()), "C": h.create(ctx, "C", v22PlanC()), "D": h.create(ctx, "D", v22PlanD())}
-	h.waitRunning(ctx, refs["A"], refs["B"], refs["C"], refs["D"])
+	running := h.waitRunning(ctx, refs["A"], refs["B"], refs["C"], refs["D"])
+	bProcess := v22WaitProcess(t, h.root, running[refs["B"]].Ref)
+	dProcess := v22WaitProcess(t, h.root, running[refs["D"]].Ref)
+	progress := map[string]v22GoalProjection{}
+	for _, id := range []string{"A", "C", "D"} {
+		progress[id] = h.get(ctx, refs[id])
+	}
 	b := h.get(ctx, refs["B"])
 	h.call(ctx, "orquesta.goals.control", map[string]any{
 		"operation": "stop", "target": "goal", "goal_ref": refs["B"],
@@ -104,12 +147,25 @@ func TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP(t *tes
 	if b.Goal.State != "stopped" && b.Goal.State != "cancelled" {
 		t.Fatalf("B=%s, want controlled stop", b.Goal.State)
 	}
+	v22AssertStopped(t, b, running[refs["B"]], bProcess)
+	for _, id := range []string{"A", "C"} {
+		h.waitProgress(ctx, refs[id], progress[id])
+	}
+	if current := h.runningExecution(ctx, refs["D"]); current.Ref != running[refs["D"]].Ref {
+		t.Fatalf("B stop disturbed D execution: got=%s want=%s", current.Ref, running[refs["D"]].Ref)
+	}
 
-	h.waitExecution(ctx, refs["D"])
 	backup := h.backup(ctx)
+	h.verifyRestoreCopy(ctx, backup, refs["D"], running[refs["D"]].Ref)
+	if current := h.runningExecution(ctx, refs["D"]); current.Ref != running[refs["D"]].Ref {
+		t.Fatalf("D execution changed before crash: got=%s want=%s", current.Ref, running[refs["D"]].Ref)
+	}
 	h.kill() // non-cooperative server death: SIGKILL, never Runtime.Shutdown.
-	h.restore(ctx, backup)
+	if alive, err := v22ProcessAlive(dProcess); err != nil || !alive {
+		t.Fatalf("D exact process did not survive server SIGKILL: alive=%v err=%v", alive, err)
+	}
 	h.restart(ctx)
+	h.waitAdopted(ctx, refs["D"], running[refs["D"]], dProcess)
 
 	completed := map[string]v22GoalProjection{}
 	for _, id := range []string{"A", "C", "D"} {
@@ -119,6 +175,7 @@ func TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP(t *tes
 		}
 		v22NoContradiction(t, completed[id])
 	}
+	v22AssertAdoptedCompletion(t, completed["D"], running[refs["D"]].Ref)
 	v22AssertFourGoals(t, completed, b)
 }
 
@@ -126,7 +183,6 @@ func TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), v22RealDeadline)
 	defer cancel()
 	h := v22Start(t, ctx)
-	defer h.close()
 	v22NoContradiction(t, h.waitTerminal(ctx, h.create(ctx, "census", v22PlanC())))
 	h.stop()
 	h.census()
@@ -155,6 +211,7 @@ func v22Start(t *testing.T, ctx context.Context) *v22Harness {
 	if err := os.WriteFile(h.config, []byte(v22Config(root, strings.TrimSuffix(h.endpoint, "/mcp")[len("http://127.0.0.1:"):], codex, bwrap, toolchain)), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(h.close) // Registered before any owned process can be launched.
 	build := exec.CommandContext(ctx, goTool, "build", "-mod=vendor", "-trimpath", "-buildvcs=false", "-o", h.binary, "./cmd/orquesta")
 	build.Dir = v22Root(t)
 	if out, err := build.CombinedOutput(); err != nil {
@@ -170,6 +227,7 @@ func (h *v22Harness) launch(ctx context.Context) {
 		h.t.Fatal(err)
 	}
 	cmd := exec.Command(h.binary, "serve", "--config", h.config)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Stdout, cmd.Stderr = log, log
 	if err := cmd.Start(); err != nil {
 		h.t.Fatalf("start external cmd/orquesta: %v", err)
@@ -263,7 +321,7 @@ func (h *v22Harness) backup(ctx context.Context) application.BackupRef {
 	})
 	return ref
 }
-func (h *v22Harness) restore(ctx context.Context, backup application.BackupRef) {
+func (h *v22Harness) verifyRestoreCopy(ctx context.Context, backup application.BackupRef, goalRaw, executionRaw string) {
 	var restored string
 	h.recovery(ctx, func(recovery *statesqlite.Recovery) {
 		target, err := application.NewRecoveryTargetRef("recovery-target:v22-real")
@@ -278,7 +336,27 @@ func (h *v22Harness) restore(ctx context.Context, backup application.BackupRef) 
 			h.t.Fatalf("V09 restored target path: %v", err)
 		}
 	})
-	h.repointState(restored)
+	copyRepository, err := statesqlite.Open(ctx, statesqlite.Options{Path: restored, BusyTimeout: 5 * time.Second, MaxOpenConnections: 1})
+	if err != nil {
+		h.t.Fatalf("open isolated restored copy: %v", err)
+	}
+	defer copyRepository.Close()
+	goalRef, err := goal.NewGoalRef(goalRaw)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	record, err := copyRepository.GetGoal(ctx, goalRef)
+	if err != nil {
+		h.t.Fatalf("read D from isolated restored copy: %v", err)
+	}
+	found := false
+	for _, execution := range record.Executions {
+		found = found || execution.Ref.String() == executionRaw
+	}
+	if !found || h.state == restored {
+		h.t.Fatalf("isolated restore lost D execution or replaced original state: found=%v state=%q restored=%q",
+			found, h.state, restored)
+	}
 }
 func (h *v22Harness) recovery(ctx context.Context, run func(*statesqlite.Recovery)) {
 	repository, err := statesqlite.Open(ctx, statesqlite.Options{Path: h.state, BusyTimeout: 5 * time.Second, MaxOpenConnections: 8})
@@ -292,23 +370,6 @@ func (h *v22Harness) recovery(ctx context.Context, run func(*statesqlite.Recover
 	}
 	defer recovery.Close()
 	run(recovery)
-}
-
-func (h *v22Harness) repointState(next string) {
-	content, err := os.ReadFile(h.config)
-	if err != nil {
-		h.t.Fatal(err)
-	}
-	oldJSON, _ := json.Marshal(h.state)
-	nextJSON, _ := json.Marshal(next)
-	updated := strings.Replace(string(content), string(oldJSON), string(nextJSON), 1)
-	if updated == string(content) {
-		h.t.Fatal("V22 config lacks current state path")
-	}
-	if err := os.WriteFile(h.config, []byte(updated), 0o600); err != nil {
-		h.t.Fatal(err)
-	}
-	h.state = next
 }
 
 func (h *v22Harness) create(ctx context.Context, id string, plan map[string]any) string {
@@ -356,27 +417,68 @@ func (h *v22Harness) get(ctx context.Context, ref string) v22GoalProjection {
 	v22Data(h.t, r, &g)
 	return g
 }
-func (h *v22Harness) waitExecution(ctx context.Context, ref string) {
+func (h *v22Harness) waitRunning(ctx context.Context, refs ...string) map[string]v22ExecutionProjection {
 	for {
-		if h.get(ctx, ref).ExecutionCount > 0 {
-			return
-		}
-		v22Wait(h.t, ctx, "execution")
-	}
-}
-func (h *v22Harness) waitRunning(ctx context.Context, refs ...string) {
-	for {
-		n := 0
+		running := map[string]v22ExecutionProjection{}
 		for _, ref := range refs {
 			g := h.get(ctx, ref)
-			if g.Goal.State == "running" && g.ExecutionCount > 0 {
-				n++
+			switch g.Goal.State {
+			case "succeeded", "failed", "cancelled", "stopped":
+				h.t.Fatalf("Goal %s became terminal before exact running observation: %s", ref, g.Goal.State)
+			}
+			for _, execution := range g.Executions {
+				if g.Goal.State == "running" && execution.State == "running" &&
+					execution.Ref != "" && execution.Work != "" && execution.Attempt > 0 &&
+					execution.Plan == g.Goal.Plan && execution.App == g.Goal.App {
+					running[ref] = execution
+					break
+				}
 			}
 		}
-		if n == len(refs) {
-			return
+		if len(running) == len(refs) {
+			return running
 		}
 		v22Wait(h.t, ctx, "parallel Goals")
+	}
+}
+func v22AssertAdoptedCompletion(t *testing.T, d v22GoalProjection, exact string) {
+	t.Helper()
+	for _, execution := range d.Executions {
+		if execution.Ref == exact && execution.Purpose == "work" && execution.State == "succeeded" {
+			return
+		}
+	}
+	t.Fatalf("restart did not complete the pre-crash D execution %s: %+v", exact, d.Executions)
+}
+func (h *v22Harness) runningExecution(ctx context.Context, ref string) v22ExecutionProjection {
+	return h.waitRunning(ctx, ref)[ref]
+}
+func (h *v22Harness) waitAdopted(ctx context.Context, ref string, want v22ExecutionProjection, process v22ProcessRecord) {
+	for {
+		g := h.get(ctx, ref)
+		for _, execution := range g.Executions {
+			if execution.Ref == want.Ref && execution.State == "running" && execution.Replaces == "" {
+				alive, err := v22ProcessAlive(process)
+				if err != nil || !alive {
+					h.t.Fatalf("restart did not adopt exact D process: alive=%v err=%v", alive, err)
+				}
+				return
+			}
+		}
+		v22Wait(h.t, ctx, "D exact execution adoption")
+	}
+}
+func (h *v22Harness) waitProgress(ctx context.Context, ref string, before v22GoalProjection) {
+	for {
+		after := h.get(ctx, ref)
+		if after.Goal.State == "failed" || after.Goal.State == "cancelled" || after.Goal.State == "stopped" {
+			h.t.Fatalf("independent Goal damaged by B stop: %+v", after.Goal)
+		}
+		if after.Goal.Revision > before.Goal.Revision || after.ArtifactCount > before.ArtifactCount ||
+			v22ExecutionStates(after) != v22ExecutionStates(before) {
+			return
+		}
+		v22Wait(h.t, ctx, "independent Goal progress")
 	}
 }
 func (h *v22Harness) waitTerminal(ctx context.Context, ref string) v22GoalProjection {
@@ -392,14 +494,30 @@ func (h *v22Harness) waitTerminal(ctx context.Context, ref string) v22GoalProjec
 func (h *v22Harness) census() {
 	until := time.Now().Add(20 * time.Second)
 	for time.Now().Before(until) {
-		if len(v22PIDs(h.root)) == 0 {
+		if len(h.liveProcesses()) == 0 {
 			return
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	if p := v22PIDs(h.root); len(p) > 0 {
-		h.t.Fatalf("owned process survives cleanup: %v", p)
+	if records := h.liveProcesses(); len(records) > 0 {
+		for _, record := range records {
+			v22KillExact(record)
+		}
+		h.t.Errorf("owned exact processes survived cleanup and were killed: %+v", records)
 	}
+}
+func (h *v22Harness) liveProcesses() []v22ProcessRecord {
+	records, live := v22ProcessRecords(h.t, h.root), []v22ProcessRecord{}
+	for _, record := range records {
+		alive, err := v22ProcessAlive(record)
+		if err != nil {
+			h.t.Fatal(err)
+		}
+		if alive {
+			live = append(live, record)
+		}
+	}
+	return live
 }
 
 type v22Bearer struct{ token string }
@@ -433,33 +551,20 @@ func v22AssertFourGoals(t *testing.T, done map[string]v22GoalProjection, b v22Go
 	if b.Goal.State != "stopped" && b.Goal.State != "cancelled" {
 		t.Fatalf("B=%s", b.Goal.State)
 	}
-	for _, e := range b.Executions {
-		if e.State == "running" {
-			t.Fatalf("B running execution: %+v", e)
-		}
-	}
-	c := done["C"]
-	if len(c.Attestations) == 0 || len(c.Reviews) == 0 || len(c.Integrations) == 0 {
-		t.Fatalf("C lacks public test/review/integration receipts: %+v", c)
-	}
-	for _, a := range c.Attestations {
-		for _, test := range a.Tests {
-			if test.Exit != 0 {
-				t.Fatalf("C test %s exit=%d", test.Ref, test.Exit)
+	v22AssertMailboxClosure(t, done["A"])
+	v22AssertProgrammingClosure(t, done["C"])
+	d := done["D"]
+	work := 0
+	for _, execution := range d.Executions {
+		if execution.Purpose == "work" {
+			work++
+			if execution.Replaces != "" {
+				t.Fatalf("D duplicated/replaced work after restart: %+v", execution)
 			}
 		}
 	}
-	handoff := false
-	for _, w := range done["A"].WorkItems {
-		if w.Handoff {
-			handoff = true
-			if w.Parent == "" || w.Execution == "" || len(w.Artifacts) == 0 {
-				t.Fatalf("A mailbox handoff lacks public causal evidence: %+v", w)
-			}
-		}
-	}
-	if !handoff {
-		t.Fatal("A missing parent/child handoff")
+	if work != 1 {
+		t.Fatalf("D work execution count=%d want exactly one", work)
 	}
 }
 func v22NoContradiction(t *testing.T, g v22GoalProjection) {
@@ -469,7 +574,8 @@ func v22NoContradiction(t *testing.T, g v22GoalProjection) {
 	}
 	seen := map[string]bool{}
 	for _, e := range g.Executions {
-		if e.Ref == "" || e.Work == "" || e.Attempt == 0 || e.State != "succeeded" || e.Failure != "" || seen[e.Ref] {
+		if e.Ref == "" || e.Work == "" || e.Attempt == 0 || e.Plan != g.Goal.Plan ||
+			e.App != g.Goal.App || e.State != "succeeded" || e.Failure != "" || seen[e.Ref] {
 			t.Fatalf("execution contradiction: %+v", e)
 		}
 		seen[e.Ref] = true
@@ -479,6 +585,98 @@ func v22NoContradiction(t *testing.T, g v22GoalProjection) {
 			t.Fatalf("work item contradiction: %+v", w)
 		}
 	}
+}
+
+func v22AssertStopped(t *testing.T, b v22GoalProjection, execution v22ExecutionProjection, process v22ProcessRecord) {
+	t.Helper()
+	v22AssertProcessGone(t, process)
+	v22AssertStopEvidence(t, process)
+	for _, current := range b.Executions {
+		if current.Ref == execution.Ref && current.State == "running" {
+			t.Fatalf("B exact execution remains running: %+v", current)
+		}
+	}
+	for _, control := range b.Controls {
+		if control.Operation == "stop" && control.Target == "goal" &&
+			control.Status == "confirmed" && control.Receipt != "" &&
+			control.Plan == b.Goal.Plan && control.App == b.Goal.App {
+			return
+		}
+	}
+	t.Fatalf("B lacks exact confirmed public control receipt: %+v", b.Controls)
+}
+
+func v22AssertMailboxClosure(t *testing.T, a v22GoalProjection) {
+	t.Helper()
+	var parent, child *struct {
+		Ref          string   `json:"work_item_ref"`
+		State        string   `json:"state"`
+		Parent       string   `json:"parent_work_item_ref"`
+		Handoff      bool     `json:"handoff_required"`
+		Execution    string   `json:"execution_ref"`
+		Artifacts    []string `json:"artifact_refs"`
+		Attestations []string `json:"attestation_refs"`
+		Interrupt    string   `json:"interrupt_code"`
+	}
+	for index := range a.WorkItems {
+		item := &a.WorkItems[index]
+		if item.Handoff {
+			child = item
+		} else {
+			parent = item
+		}
+	}
+	if parent == nil || child == nil || child.Parent != parent.Ref ||
+		parent.Execution == "" || child.Execution == "" || parent.Execution == child.Execution ||
+		len(parent.Artifacts) == 0 || len(child.Artifacts) == 0 {
+		t.Fatalf("A lacks exact admitted/consumed/acknowledged handoff closure: parent=%+v child=%+v", parent, child)
+	}
+	for _, execution := range a.Executions {
+		if execution.MailboxRetired {
+			t.Fatalf("A contains retired/orphan recipient mailbox: %+v", execution)
+		}
+	}
+}
+
+func v22AssertProgrammingClosure(t *testing.T, c v22GoalProjection) {
+	t.Helper()
+	if len(c.Reviews) != 2 || len(c.Integrations) != 1 {
+		t.Fatalf("C review/integration cardinality=%d/%d want 2/1", len(c.Reviews), len(c.Integrations))
+	}
+	first, second, integration := c.Reviews[0], c.Reviews[1], c.Integrations[0]
+	roles := map[string]bool{first.Role: true, second.Role: true}
+	if !roles["primary"] || !roles["adversarial"] || first.Verdict != "approve" ||
+		second.Verdict != "approve" || first.Change == "" || first.Change != second.Change ||
+		first.Subject == "" || first.Subject != second.Subject || first.Work != second.Work ||
+		first.Execution == second.Execution || first.Attempt == 0 || second.Attempt == 0 {
+		t.Fatalf("C reviews do not bind primary+adversarial to one exact subject: %+v %+v", first, second)
+	}
+	if integration.Change != first.Change || integration.Status != "integrated" ||
+		integration.Ref == "" || integration.Before == "" || integration.After == "" ||
+		integration.Tree == "" || integration.Conflict != "" {
+		t.Fatalf("C integration is not causal to approved change: %+v", integration)
+	}
+	passed := false
+	for _, attestation := range c.Attestations {
+		if attestation.Work != first.Work || attestation.Change != first.Change ||
+			attestation.Verdict != "passed" || attestation.Ref == "" || attestation.Execution == "" {
+			continue
+		}
+		for _, test := range attestation.Tests {
+			passed = passed || test.Ref == "required-test:v22-c" && test.Exit == 0 && test.Output != ""
+		}
+	}
+	if !passed {
+		t.Fatalf("C reviews/integration lack causal required-test PASS: %+v", c.Attestations)
+	}
+}
+
+func v22ExecutionStates(g v22GoalProjection) string {
+	var value strings.Builder
+	for _, execution := range g.Executions {
+		fmt.Fprintf(&value, "%s=%s;", execution.Ref, execution.State)
+	}
+	return value.String()
 }
 
 func v22PlanA() map[string]any {
@@ -606,23 +804,4 @@ func v22Port(t *testing.T) string {
 	}
 	defer l.Close()
 	return fmt.Sprint(l.Addr().(*net.TCPAddr).Port)
-}
-func v22PIDs(root string) []int {
-	entries, err := os.ReadDir("/proc")
-	if err != nil {
-		return nil
-	}
-	var pids []int
-	for _, entry := range entries {
-		var pid int
-		if _, err := fmt.Sscanf(entry.Name(), "%d", &pid); err != nil || pid == os.Getpid() {
-			continue
-		}
-		b, err := os.ReadFile(filepath.Join("/proc", entry.Name(), "cmdline"))
-		if err == nil && strings.Contains(string(b), root) {
-			pids = append(pids, pid)
-		}
-	}
-	sort.Ints(pids)
-	return pids
 }
