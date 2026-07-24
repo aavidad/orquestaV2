@@ -60,14 +60,14 @@ func (orchestrator *Orchestrator) processPostArtifactMailboxAdmission(
 	if err != nil {
 		return err
 	}
-	child, childFound := record.Goal.WorkItem(claim.Action.WorkItemRef)
-	execution, executionFound := executionForAction(record, claim.Action)
-	parentRef, hasParent := child.Parent()
+	if err := validateClaimedRecord(claim, record, ActionAdmitMailbox); err != nil {
+		return orchestrator.quarantine(ctx, claim, "application.post_artifact_mailbox_invalid")
+	}
+	child, _ := record.Goal.WorkItem(claim.Action.WorkItemRef)
+	execution, _ := executionForAction(record, claim.Action)
+	parentRef, _ := child.Parent()
 	parent, parentFound := record.Goal.WorkItem(parentRef)
-	if !childFound || !executionFound || !hasParent || !parentFound ||
-		claim.Action.Kind != ActionAdmitMailbox || claim.Action.Ref != "action:admit-mailbox:"+execution.Ref.String() ||
-		child.State() != goal.WorkItemStateSucceeded || !child.HandoffRequired() || execution.State != ExecutionSucceeded ||
-		parent.State() != goal.WorkItemStateRunning {
+	if !parentFound || parent.State() != goal.WorkItemStateRunning {
 		return orchestrator.quarantine(ctx, claim, "application.post_artifact_mailbox_invalid")
 	}
 	parentExecutionRef, hasParentExecution := parent.Execution()
