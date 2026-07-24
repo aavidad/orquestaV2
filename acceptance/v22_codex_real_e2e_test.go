@@ -1007,7 +1007,7 @@ func (h *v22Harness) waitCancelled(ctx context.Context, ref string, execution v2
 	terminal := h.waitTerminal(ctx, ref)
 	v22Require(h.t, terminal.object("goal").text("state") == "canceled", "B=%s, want controlled cancellation", terminal.object("goal").text("state"))
 	v22AssertProcessGone(h.t, process)
-	v22AssertStopEvidence(h.t, process)
+	v22AssertCooperativeStopEvidence(h.t, process)
 	for {
 		b := h.get(ctx, ref)
 		goalView, executionSettled := b.object("goal"), true
