@@ -67,8 +67,11 @@ func (orchestrator *Orchestrator) processPostArtifactMailboxAdmission(
 	execution, _ := executionForAction(record, claim.Action)
 	parentRef, _ := child.Parent()
 	parent, parentFound := record.Goal.WorkItem(parentRef)
-	if !parentFound || parent.State() != goal.WorkItemStateRunning {
+	if !parentFound || parent.State().Terminal() {
 		return orchestrator.quarantine(ctx, claim, "application.post_artifact_mailbox_invalid")
+	}
+	if parent.State() != goal.WorkItemStateRunning {
+		return orchestrator.requeuePostArtifactMailbox(ctx, claim, execution, "application.post_artifact_parent_unavailable")
 	}
 	parentExecutionRef, hasParentExecution := parent.Execution()
 	parentExecution, found := executionByRef(record.Executions, parentExecutionRef)
