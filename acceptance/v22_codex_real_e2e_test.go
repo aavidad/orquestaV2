@@ -1711,14 +1711,105 @@ func v22NoContradiction(t *testing.T, g v22GoalProjection) {
 	t.Helper()
 	goalView, executions := g.object("goal"), g.objects("executions")
 	v22Require(t, goalView.text("state") == "succeeded" && g.number("execution_count") == uint64(len(executions)) && g.number("artifact_count") > 0, "terminal projection contradiction: %+v", g)
-	seen := map[string]bool{}
-	for _, execution := range executions {
-		ref := execution.text("execution_ref")
-		v22Require(t, ref != "" && execution.text("work_item_ref") != "" && execution.number("attempt_no") > 0 && execution.number("plan_generation") == goalView.number("plan_generation") && execution.number("app_spec_generation") == goalView.number("app_spec_generation") && execution.text("state") == "succeeded" && execution.text("failure_code") == "" && !seen[ref], "execution contradiction: %+v", execution)
-		seen[ref] = true
-	}
+	contradiction := v22ExecutionHistoryContradiction(goalView, executions)
+	v22Require(t, contradiction == "", "%s", contradiction)
 	for _, work := range g.objects("work_items") {
 		v22Require(t, work.text("state") == "succeeded" && work.text("execution_ref") != "" && len(work.strings("artifact_refs")) > 0 && len(work.strings("attestation_refs")) > 0 && work.text("interrupt_code") == "", "work item contradiction: %+v", work)
+	}
+}
+
+func v22ExecutionHistoryContradiction(goalView v22Object, executions []v22Object) string {
+	byRef := make(map[string]v22Object, len(executions))
+	successors := make(map[string]int, len(executions))
+	for _, execution := range executions {
+		ref := execution.text("execution_ref")
+		attempt, maximum := execution.number("attempt_no"), execution.number("max_attempts")
+		if ref == "" || execution.text("work_item_ref") == "" || attempt == 0 || maximum == 0 || attempt > maximum ||
+			execution.number("plan_generation") != goalView.number("plan_generation") ||
+			execution.number("app_spec_generation") != goalView.number("app_spec_generation") ||
+			execution.text("purpose") == "" {
+			return fmt.Sprintf("execution identity contradiction: %+v", execution)
+		}
+		if _, duplicate := byRef[ref]; duplicate {
+			return fmt.Sprintf("duplicate execution contradiction: %s", ref)
+		}
+		byRef[ref] = execution
+		switch execution.text("state") {
+		case "succeeded":
+			if execution.text("failure_code") != "" {
+				return fmt.Sprintf("successful execution retained failure: %+v", execution)
+			}
+		case "failed":
+			if execution.text("failure_code") == "" || attempt >= maximum {
+				return fmt.Sprintf("unrecoverable execution in successful Goal: %+v", execution)
+			}
+		default:
+			return fmt.Sprintf("non-terminal execution in successful Goal: %+v", execution)
+		}
+	}
+	for _, execution := range executions {
+		parentRef := execution.text("replaces_execution_ref")
+		if parentRef == "" {
+			if execution.number("attempt_no") != 1 {
+				return fmt.Sprintf("replacement root attempt contradiction: %+v", execution)
+			}
+			continue
+		}
+		parent, found := byRef[parentRef]
+		if !found || parent.text("state") != "failed" || execution.number("attempt_no") != parent.number("attempt_no")+1 ||
+			execution.number("max_attempts") != parent.number("max_attempts") ||
+			execution.text("work_item_ref") != parent.text("work_item_ref") ||
+			execution.text("purpose") != parent.text("purpose") ||
+			execution.number("plan_generation") != parent.number("plan_generation") ||
+			execution.number("app_spec_generation") != parent.number("app_spec_generation") {
+			return fmt.Sprintf("replacement chain contradiction: child=%+v parent=%+v", execution, parent)
+		}
+		successors[parentRef]++
+	}
+	for _, execution := range executions {
+		ref := execution.text("execution_ref")
+		if execution.text("state") == "failed" && successors[ref] != 1 {
+			return fmt.Sprintf("failed execution successor count=%d: %+v", successors[ref], execution)
+		}
+		if execution.text("state") == "succeeded" && successors[ref] != 0 {
+			return fmt.Sprintf("successful execution replaced: %+v", execution)
+		}
+	}
+	return ""
+}
+
+func TestV22SuccessfulGoalAcceptsOnlyClosedReplacementHistory(t *testing.T) {
+	goalView := v22Object{
+		"plan_generation":     float64(2),
+		"app_spec_generation": float64(3),
+	}
+	failed := v22Object{
+		"execution_ref": "execution:one", "work_item_ref": "work-item:one",
+		"attempt_no": float64(1), "max_attempts": float64(3),
+		"replaces_execution_ref": "", "plan_generation": float64(2),
+		"app_spec_generation": float64(3), "state": "failed",
+		"purpose": "council_proposer", "failure_code": "codex.credential_output_unverifiable",
+	}
+	succeeded := v22Object{
+		"execution_ref": "execution:two", "work_item_ref": "work-item:one",
+		"attempt_no": float64(2), "max_attempts": float64(3),
+		"replaces_execution_ref": "execution:one", "plan_generation": float64(2),
+		"app_spec_generation": float64(3), "state": "succeeded",
+		"purpose": "council_proposer", "failure_code": "",
+	}
+	if contradiction := v22ExecutionHistoryContradiction(goalView, []v22Object{failed, succeeded}); contradiction != "" {
+		t.Fatalf("closed retry chain rejected: %s", contradiction)
+	}
+	if contradiction := v22ExecutionHistoryContradiction(goalView, []v22Object{failed}); contradiction == "" {
+		t.Fatal("unreplaced failed execution accepted in successful Goal")
+	}
+	invalidChild := v22Object{}
+	for key, value := range succeeded {
+		invalidChild[key] = value
+	}
+	invalidChild["purpose"] = "council_critic"
+	if contradiction := v22ExecutionHistoryContradiction(goalView, []v22Object{failed, invalidChild}); contradiction == "" {
+		t.Fatal("cross-role replacement accepted")
 	}
 }
 
