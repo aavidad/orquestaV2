@@ -150,7 +150,7 @@ func waitSandboxCompletion(ctx context.Context, done <-chan error, overflow <-ch
 	return waitErr, failure
 }
 
-func (adapter *Adapter) command(snapshot *sandboxSnapshot, spec goal.RequiredTestSpec) (*exec.Cmd, *cappedOutputs, *os.File, error) {
+func (adapter *Adapter) command(snapshot *sandboxSnapshot, spec goal.RequiredTestSpec) (*exec.Cmd, *cappedOutputs, *sealedArguments, error) {
 	metadata, err := validatePinned(adapter.inputs.bubblewrap, adapter.inputs.bubblewrapMeta.uid, false)
 	if err != nil || metadata != adapter.inputs.bubblewrapMeta {
 		return nil, nil, nil, &Error{Code: CodeBinaryUnsafe}
@@ -169,7 +169,7 @@ func (adapter *Adapter) command(snapshot *sandboxSnapshot, spec goal.RequiredTes
 	}
 	arguments.auxiliary = append(arguments.auxiliary, goRun)
 	files := []*os.File{adapter.inputs.bubblewrap, adapter.inputs.root, goRun}
-	fail := func(err error) (*exec.Cmd, *cappedOutputs, *os.File, error) {
+	fail := func(err error) (*exec.Cmd, *cappedOutputs, *sealedArguments, error) {
 		_ = arguments.Close()
 		return nil, nil, nil, err
 	}
@@ -207,5 +207,5 @@ func (adapter *Adapter) command(snapshot *sandboxSnapshot, spec goal.RequiredTes
 	command.WaitDelay = adapter.config.Limits.CleanupTimeout
 	output := &cappedOutputs{remaining: adapter.config.Limits.MaxOutputBytes, overflow: make(chan struct{})}
 	command.Stdout, command.Stderr = cappedWriter{output, &output.stdout}, cappedWriter{output, &output.stderr}
-	return command, output, arguments.File, nil
+	return command, output, arguments, nil
 }

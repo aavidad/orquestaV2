@@ -125,7 +125,7 @@ func TestSandboxArgumentsDenyAmbientAuthority(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer arguments.Close()
-	args := strings.Join(readArgumentFile(t, arguments), "\x00")
+	args := strings.Join(readArgumentFile(t, arguments.File), "\x00")
 	for _, required := range []string{"--unshare-all\x00--unshare-user\x00--disable-userns\x00--assert-userns-disabled", "--clearenv", "--cap-drop\x00ALL", "--uid\x0065534", "--gid\x0065534", "--ro-bind-fd\x004\x00/toolchain", "--ro-bind-data\x005\x00/toolchain/bin/go", "--remount-ro\x00/subject", "--size"} {
 		if !strings.Contains(args, required) {
 			t.Errorf("missing %q in %q", required, args)
@@ -180,6 +180,35 @@ func TestSandboxParentExecutesBubblewrapWithTrulyEmptyEnvironment(t *testing.T) 
 	defer arguments.Close()
 	if command.Env == nil || len(command.Env) != 0 {
 		t.Fatalf("sandbox parent inherited environment: %#v", command.Env)
+	}
+}
+
+func TestCommandCleanupClosesAuxiliaryAndPreservesSnapshotDescriptors(t *testing.T) {
+	policy := PolicyIdentity{PolicyRef, testDigest("policy")}
+	run := testRun(t, policy)
+	snapshot, err := readSnapshotStream(bytes.NewReader(
+		testStream(t, run.Request, "internal/main.go", []byte("package main\n")),
+	), run.Request, 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer snapshot.Close()
+	adapter := testAdapter(t, &testSnapshotSource{}, policy)
+	adapter.inputs = testPinnedFiles(t)
+	_, _, arguments, err := adapter.command(snapshot, run.Request.RequiredTests[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	auxiliaryFD := arguments.auxiliary[0].Fd()
+	snapshotFD := snapshot.entries[0].file.Fd()
+	if err := arguments.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := unix.FcntlInt(auxiliaryFD, unix.F_GETFD, 0); !errors.Is(err, unix.EBADF) {
+		t.Fatalf("auxiliary descriptor remained open: fd=%d err=%v", auxiliaryFD, err)
+	}
+	if _, err := unix.FcntlInt(snapshotFD, unix.F_GETFD, 0); err != nil {
+		t.Fatalf("snapshot descriptor closed with command inputs: fd=%d err=%v", snapshotFD, err)
 	}
 }
 
@@ -312,6 +341,46 @@ func TestPreflightExecutesPinnedGoThroughSandboxPath(t *testing.T) {
 	adapter.cgroups = controller
 	if err := adapter.preflight(); err != nil || session.closes.Load() != 1 || controller.active.Load() != 0 {
 		t.Fatalf("preflight err=%v closes=%d active=%d", err, session.closes.Load(), controller.active.Load())
+	}
+}
+
+func TestRunTestClosesCommandDescriptorsAfterSuccess(t *testing.T) {
+	policy := PolicyIdentity{PolicyRef, testDigest("policy")}
+	adapter := testAdapter(t, &testSnapshotSource{}, policy)
+	adapter.inputs = testPinnedFiles(t)
+	session := &fakeCgroupSession{}
+	controller := &fakeCgroupController{session: session}
+	session.controller = controller
+	adapter.cgroups = controller
+	before := openDescriptorCount(t)
+	for range 8 {
+		if err := adapter.preflight(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if after := openDescriptorCount(t); after != before {
+		t.Fatalf("command descriptor leak after success: before=%d after=%d", before, after)
+	}
+}
+
+func TestRunTestClosesCommandDescriptorsWhenStartFails(t *testing.T) {
+	policy := PolicyIdentity{PolicyRef, testDigest("policy")}
+	run := testRun(t, policy)
+	adapter := testAdapter(t, &testSnapshotSource{}, policy)
+	adapter.inputs = testPinnedFilesWithBubblewrap(t, []byte("not-an-executable"))
+	session := &fakeCgroupSession{}
+	controller := &fakeCgroupController{session: session}
+	session.controller = controller
+	adapter.cgroups = controller
+	before := openDescriptorCount(t)
+	for range 8 {
+		outcome, err := adapter.runTest(context.Background(), &sandboxSnapshot{}, run.Request.RequiredTests[0])
+		if outcome != (ports.RequiredTestOutcome{}) || ErrorCode(err) != CodeExecutionFailed {
+			t.Fatalf("outcome=%+v code=%q err=%v", outcome, ErrorCode(err), err)
+		}
+	}
+	if after := openDescriptorCount(t); after != before {
+		t.Fatalf("command descriptor leak after start failure: before=%d after=%d", before, after)
 	}
 }
 
@@ -560,6 +629,12 @@ func testFile(t *testing.T, value string) *os.File {
 	return file
 }
 func testPinnedFiles(t *testing.T) *pinnedInputs {
+	t.Helper()
+	return testPinnedFilesWithBubblewrap(t, []byte("#!/bin/sh\nexit 0\n"))
+}
+
+func testPinnedFilesWithBubblewrap(t *testing.T, bubblewrapContent []byte) *pinnedInputs {
+	t.Helper()
 	root := t.TempDir()
 	if err := os.Chmod(root, 0o700); err != nil {
 		t.Fatal(err)
@@ -571,7 +646,7 @@ func testPinnedFiles(t *testing.T) *pinnedInputs {
 		t.Fatal(err)
 	}
 	bubblewrapPath := filepath.Join(t.TempDir(), "bwrap")
-	if err := os.WriteFile(bubblewrapPath, []byte("#!/bin/sh\nexit 0\n"), 0o500); err != nil {
+	if err := os.WriteFile(bubblewrapPath, bubblewrapContent, 0o500); err != nil {
 		t.Fatal(err)
 	}
 	inputs, err := openPinnedInputs(Config{BubblewrapCommand: bubblewrapPath, ToolchainRoot: root}, uint32(os.Geteuid()))
@@ -584,6 +659,15 @@ func testPinnedFiles(t *testing.T) *pinnedInputs {
 		}
 	})
 	return inputs
+}
+
+func openDescriptorCount(t *testing.T) int {
+	t.Helper()
+	entries, err := os.ReadDir("/proc/self/fd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return len(entries)
 }
 
 func readArgumentFile(t *testing.T, file *os.File) []string {
