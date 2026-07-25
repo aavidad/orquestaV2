@@ -46,6 +46,7 @@ write_fake_executable() {
 }
 
 readonly LAUNCHER="$TEST_ROOT/orquesta-firecracker-launcher"
+readonly SUPERVISOR="$TEST_ROOT/orquesta-firecracker-attestor-e2e"
 readonly FIRECRACKER="$TEST_ROOT/firecracker"
 readonly JAILER="$TEST_ROOT/jailer"
 readonly KERNEL="$TEST_ROOT/vmlinux"
@@ -58,6 +59,7 @@ readonly PRIMITIVES_UNIT="$TEST_ROOT/rendered-primitives-unit.service"
 readonly UNIT="$TEST_ROOT/rendered-unit.service"
 
 write_fake_executable "$LAUNCHER" "orquesta-firecracker-launcher"
+write_fake_executable "$SUPERVISOR" "orquesta-firecracker-attestor-e2e"
 write_fake_executable "$FIRECRACKER" "Firecracker"
 write_fake_executable "$JAILER" "jailer"
 printf 'kernel-fixture\n' >"$KERNEL"
@@ -69,6 +71,7 @@ printf '%s\n' \
   >"$MANIFEST"
 chmod 0600 "$MANIFEST"
 launcher_sha="$(sha256sum "$LAUNCHER" | awk '{print $1}')"
+supervisor_sha="$(sha256sum "$SUPERVISOR" | awk '{print $1}')"
 firecracker_sha="$(sha256sum "$FIRECRACKER" | awk '{print $1}')"
 jailer_sha="$(sha256sum "$JAILER" | awk '{print $1}')"
 kernel_sha="$(sha256sum "$KERNEL" | awk '{print $1}')"
@@ -77,12 +80,14 @@ manifest_sha="$(sha256sum "$MANIFEST" | awk '{print $1}')"
 readonly -a BASE_ARGUMENTS=(
   --profile host-128g-16
   --launcher-source "$LAUNCHER"
+  --supervisor-source "$SUPERVISOR"
   --firecracker-source "$FIRECRACKER"
   --jailer-source "$JAILER"
   --kernel-source "$KERNEL"
   --guest-source "$GUEST"
   --guest-manifest-source "$MANIFEST"
   --launcher-sha256 "$launcher_sha"
+  --supervisor-sha256 "$supervisor_sha"
   --firecracker-sha256 "$firecracker_sha"
   --jailer-sha256 "$jailer_sha"
   --kernel-sha256 "$kernel_sha"
@@ -94,7 +99,78 @@ readonly -a BASE_ARGUMENTS=(
   --jail-gid 65534
 )
 
+run_with_argument_pair() {
+  local target_flag="$1"
+  local replacement_state="$2"
+  local replacement_value="${3:-}"
+  local -a arguments=()
+  local skip_value="false"
+  local current
+  for current in "${BASE_ARGUMENTS[@]}"; do
+    if [[ "$skip_value" == "true" ]]; then
+      skip_value="false"
+      continue
+    fi
+    if [[ "$current" == "$target_flag" ]]; then
+      skip_value="true"
+      if [[ "$replacement_state" == "replace" ]]; then
+        arguments+=("$target_flag" "$replacement_value")
+      fi
+      continue
+    fi
+    arguments+=("$current")
+  done
+  "$INSTALLER" --dry-run "${arguments[@]}"
+}
+
 "$INSTALLER" --dry-run "${BASE_ARGUMENTS[@]}" >"$OUTPUT"
+
+if run_with_argument_pair --supervisor-source remove \
+  >"$TEST_ROOT/missing-supervisor-source.out" 2>&1; then
+  fail "missing_supervisor_source_accepted"
+fi
+assert_contains \
+  "$TEST_ROOT/missing-supervisor-source.out" \
+  "error=all_source_flags_required"
+
+if run_with_argument_pair --supervisor-sha256 remove \
+  >"$TEST_ROOT/missing-supervisor-sha.out" 2>&1; then
+  fail "missing_supervisor_sha_accepted"
+fi
+assert_contains \
+  "$TEST_ROOT/missing-supervisor-sha.out" \
+  "error=all_expected_sha256_flags_required"
+
+if run_with_argument_pair \
+  --supervisor-sha256 replace \
+  0000000000000000000000000000000000000000000000000000000000000000 \
+  >"$TEST_ROOT/supervisor-hash-mismatch.out" 2>&1; then
+  fail "wrong_supervisor_hash_accepted"
+fi
+assert_contains \
+  "$TEST_ROOT/supervisor-hash-mismatch.out" \
+  "error=supervisor_sha256_mismatch"
+
+readonly TAMPERED_SUPERVISOR="$TEST_ROOT/orquesta-firecracker-attestor-e2e-tampered"
+cp -- "$SUPERVISOR" "$TAMPERED_SUPERVISOR"
+printf '%s\n' "# tamper" >>"$TAMPERED_SUPERVISOR"
+chmod 0700 "$TAMPERED_SUPERVISOR"
+if run_with_argument_pair \
+  --supervisor-source replace "$TAMPERED_SUPERVISOR" \
+  >"$TEST_ROOT/supervisor-tamper.out" 2>&1; then
+  fail "tampered_supervisor_accepted"
+fi
+assert_contains \
+  "$TEST_ROOT/supervisor-tamper.out" \
+  "error=supervisor_sha256_mismatch"
+
+if run_with_argument_pair --supervisor-source replace relative-supervisor \
+  >"$TEST_ROOT/supervisor-relative-path.out" 2>&1; then
+  fail "relative_supervisor_path_accepted"
+fi
+assert_contains \
+  "$TEST_ROOT/supervisor-relative-path.out" \
+  "error=supervisor_source_not_absolute"
 
 awk '/-----BEGIN CONFIG JSON-----/{emit=1;next}/-----END CONFIG JSON-----/{emit=0}emit' "$OUTPUT" >"$CONFIG"
 awk '/-----BEGIN PRIMITIVES HELPER-----/{emit=1;next}/-----END PRIMITIVES HELPER-----/{emit=0}emit' "$OUTPUT" >"$HELPER"
@@ -196,6 +272,10 @@ PY
 )"
 assert_contains "$OUTPUT" "expected_asset_digest=$expected_asset_digest"
 assert_contains "$OUTPUT" "orquesta_config_key=test_attestor.microvm.expected_asset_digest"
+assert_contains \
+  "$OUTPUT" \
+  "supervisor_path=/usr/local/libexec/orquesta-firecracker-attestor-e2e-$supervisor_sha"
+assert_not_contains "$OUTPUT" "supervisor_path=$SUPERVISOR"
 assert_contains "$OUTPUT" "activation=not_performed"
 assert_not_contains "$OUTPUT" "bubblewrap"
 
@@ -374,16 +454,18 @@ write_activation_evidence() {
   local primitives_digest="$5"
   local assets_digest="$6"
   local policy_digest="$7"
+  local supervisor_digest="$8"
   python3 - \
     "$path" "$config_sha" "$unit_sha" "$launcher_digest" \
-    "$primitives_digest" "$assets_digest" "$policy_digest" <<'PY'
+    "$primitives_digest" "$assets_digest" "$policy_digest" \
+    "$supervisor_digest" <<'PY'
 import json
 import pathlib
 import sys
 
 (
     path, config_sha, unit_sha, launcher_sha, primitives_sha, asset_digest,
-    policy_digest,
+    policy_digest, supervisor_sha,
 ) = sys.argv[1:]
 alphabet = "abcdefghijklmnopqrstuvwxyz234567"
 run_ids = ["orq-" + "a" * 51 + alphabet[index] for index in range(17)]
@@ -415,7 +497,7 @@ document = {
         "primitives_unit_sha256": primitives_sha,
         "launcher_sha256": launcher_sha,
         "config_sha256": config_sha,
-        "supervisor_sha256": "9" * 64,
+        "supervisor_sha256": supervisor_sha,
         "asset_digest": asset_digest,
     },
     "policy_digest": policy_digest,
@@ -490,6 +572,7 @@ readonly RECEIPT_PRIMITIVES_SHA="ddddddddddddddddddddddddddddddddddddddddddddddd
 readonly RECEIPT_ASSET_DIGEST="eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
 readonly RECEIPT_EVIDENCE_SHA="ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
 readonly RECEIPT_POLICY_DIGEST="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+readonly RECEIPT_SUPERVISOR_SHA="9999999999999999999999999999999999999999999999999999999999999999"
 readonly RECEIPT_TEST_ROOT="$TEST_ROOT/receipts"
 mkdir "$RECEIPT_TEST_ROOT"
 readonly VALID_RECEIPT="$RECEIPT_TEST_ROOT/valid.receipt"
@@ -505,7 +588,7 @@ readonly VALID_EVIDENCE="$RECEIPT_TEST_ROOT/valid.evidence.json"
 write_activation_evidence \
   "$VALID_EVIDENCE" "$RECEIPT_CONFIG_SHA" "$RECEIPT_UNIT_SHA" \
   "$RECEIPT_LAUNCHER_SHA" "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST" \
-  "$RECEIPT_POLICY_DIGEST"
+  "$RECEIPT_POLICY_DIGEST" "$RECEIPT_SUPERVISOR_SHA"
 BUNDLE_EVIDENCE_SHA="$(sha256sum "$VALID_EVIDENCE" | awk '{print $1}')"
 readonly BUNDLE_EVIDENCE_SHA
 readonly VALID_BUNDLE_RECEIPT="$RECEIPT_TEST_ROOT/valid-bundle.receipt"
@@ -516,7 +599,8 @@ write_activation_receipt \
 validate_bundle_with_fake_root \
   "$VALID_BUNDLE_RECEIPT" "$VALID_EVIDENCE" \
   "$RECEIPT_CONFIG_SHA" "$RECEIPT_UNIT_SHA" "$RECEIPT_LAUNCHER_SHA" \
-  "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST"
+  "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST" \
+  "$RECEIPT_SUPERVISOR_SHA"
 
 write_receipt_for_evidence() {
   local receipt="$1"
@@ -547,6 +631,8 @@ elif mutation == "candidate":
     document["candidate"]["config_sha256"] = "8" * 64
 elif mutation == "policy":
     document["policy_digest"] = "7" * 64
+elif mutation == "supervisor_hash":
+    document["candidate"]["supervisor_sha256"] = "8" * 64
 else:
     raise SystemExit("unknown mutation")
 pathlib.Path(destination).write_bytes(
@@ -562,7 +648,8 @@ readonly BUNDLE_ACTIVATION_MARKER="$RECEIPT_TEST_ROOT/bundle-activation.marker"
 run_fake_bundle_activation \
   "$VALID_BUNDLE_RECEIPT" "$VALID_EVIDENCE" "$BUNDLE_ACTIVATION_MARKER" \
   "$RECEIPT_CONFIG_SHA" "$RECEIPT_UNIT_SHA" "$RECEIPT_LAUNCHER_SHA" \
-  "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST"
+  "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST" \
+  "$RECEIPT_SUPERVISOR_SHA"
 [[ "$(<"$BUNDLE_ACTIVATION_MARKER")" == "activated" ]] ||
   fail "valid_bundle_did_not_reach_activation"
 rm -- "$BUNDLE_ACTIVATION_MARKER"
@@ -571,7 +658,8 @@ expect_bundle_activation_rejected \
   "missing_evidence" "$VALID_BUNDLE_RECEIPT" \
   "$RECEIPT_TEST_ROOT/missing.evidence.json" "$BUNDLE_ACTIVATION_MARKER" \
   "$RECEIPT_CONFIG_SHA" "$RECEIPT_UNIT_SHA" "$RECEIPT_LAUNCHER_SHA" \
-  "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST"
+  "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST" \
+  "$RECEIPT_SUPERVISOR_SHA"
 
 readonly HASH_MISMATCH_EVIDENCE="$RECEIPT_TEST_ROOT/hash-mismatch.evidence.json"
 cp -- "$VALID_EVIDENCE" "$HASH_MISMATCH_EVIDENCE"
@@ -581,16 +669,18 @@ chmod 0400 "$HASH_MISMATCH_EVIDENCE"
 expect_bundle_activation_rejected \
   "evidence_hash" "$VALID_BUNDLE_RECEIPT" "$HASH_MISMATCH_EVIDENCE" \
   "$BUNDLE_ACTIVATION_MARKER" "$RECEIPT_CONFIG_SHA" "$RECEIPT_UNIT_SHA" \
-  "$RECEIPT_LAUNCHER_SHA" "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST"
+  "$RECEIPT_LAUNCHER_SHA" "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST" \
+  "$RECEIPT_SUPERVISOR_SHA"
 
-for mutation in schema candidate policy; do
+for mutation in schema candidate policy supervisor_hash; do
   bad_evidence="$(evidence_variant "$mutation" "$mutation")"
   bad_evidence_receipt="$RECEIPT_TEST_ROOT/$mutation-bundle.receipt"
   write_receipt_for_evidence "$bad_evidence_receipt" "$bad_evidence"
   expect_bundle_activation_rejected \
     "$mutation" "$bad_evidence_receipt" "$bad_evidence" \
     "$BUNDLE_ACTIVATION_MARKER" "$RECEIPT_CONFIG_SHA" "$RECEIPT_UNIT_SHA" \
-    "$RECEIPT_LAUNCHER_SHA" "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST"
+    "$RECEIPT_LAUNCHER_SHA" "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST" \
+    "$RECEIPT_SUPERVISOR_SHA"
 done
 
 readonly TRUNCATED_EVIDENCE="$RECEIPT_TEST_ROOT/truncated.evidence.json"
@@ -601,7 +691,8 @@ write_receipt_for_evidence "$TRUNCATED_RECEIPT" "$TRUNCATED_EVIDENCE"
 expect_bundle_activation_rejected \
   "truncated" "$TRUNCATED_RECEIPT" "$TRUNCATED_EVIDENCE" \
   "$BUNDLE_ACTIVATION_MARKER" "$RECEIPT_CONFIG_SHA" "$RECEIPT_UNIT_SHA" \
-  "$RECEIPT_LAUNCHER_SHA" "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST"
+  "$RECEIPT_LAUNCHER_SHA" "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST" \
+  "$RECEIPT_SUPERVISOR_SHA"
 
 receipt_variant() {
   local name="$1"
@@ -736,6 +827,26 @@ install_immutable_file "$immutable_source" "$immutable_destination" "$immutable_
 inode_after="$(stat -c '%i' "$immutable_destination")"
 [[ "$inode_before" == "$inode_after" ]] || fail "immutable_install_not_idempotent"
 
+supervisor_destination="$TEST_ROOT/orquesta-firecracker-attestor-e2e-$supervisor_sha"
+install_immutable_file \
+  "$SUPERVISOR" "$supervisor_destination" "$supervisor_sha" \
+  "$test_uid" "$test_gid" 0755
+supervisor_inode_before="$(stat -c '%i' "$supervisor_destination")"
+install_immutable_file \
+  "$SUPERVISOR" "$supervisor_destination" "$supervisor_sha" \
+  "$test_uid" "$test_gid" 0755
+supervisor_inode_after="$(stat -c '%i' "$supervisor_destination")"
+[[ "$supervisor_inode_before" == "$supervisor_inode_after" ]] ||
+  fail "supervisor_install_not_idempotent"
+chmod 0700 "$supervisor_destination"
+printf '%s\n' "# tamper" >>"$supervisor_destination"
+chmod 0755 "$supervisor_destination"
+if (verify_immutable_file \
+  "$supervisor_destination" "$supervisor_sha" "$test_uid" "$test_gid" 0755 \
+  >/dev/null 2>&1); then
+  fail "tampered_installed_supervisor_accepted"
+fi
+
 readonly LOCK_TEST_PARENT="$TEST_ROOT/transaction-lock"
 readonly LOCK_TEST_PATH="$LOCK_TEST_PARENT/installer.lock"
 readonly LOCK_READY="$LOCK_TEST_PARENT/ready"
@@ -843,17 +954,22 @@ if [[ "$(id -u)" != "0" ]]; then
   if (verify_root_trusted_source "launcher" "$LAUNCHER") >/dev/null 2>&1; then
     fail "nonroot_source_accepted_as_root_trusted"
   fi
+  if (verify_root_trusted_source "supervisor" "$SUPERVISOR") >/dev/null 2>&1; then
+    fail "nonroot_supervisor_accepted_as_root_trusted"
+  fi
 fi
 
 if "$INSTALLER" --dry-run \
   --profile host-128g-16 \
   --launcher-source "$LAUNCHER" \
+  --supervisor-source "$SUPERVISOR" \
   --firecracker-source "$FIRECRACKER" \
   --jailer-source "$JAILER" \
   --kernel-source "$KERNEL" \
   --guest-source "$GUEST" \
   --guest-manifest-source "$MANIFEST" \
   --launcher-sha256 "$launcher_sha" \
+  --supervisor-sha256 "$supervisor_sha" \
   --firecracker-sha256 "$firecracker_sha" \
   --jailer-sha256 "$jailer_sha" \
   --kernel-sha256 "$kernel_sha" \
@@ -871,12 +987,14 @@ bad_jailer_sha="$(sha256sum "$BAD_JAILER" | awk '{print $1}')"
 if "$INSTALLER" --dry-run \
   --profile host-128g-16 \
   --launcher-source "$LAUNCHER" \
+  --supervisor-source "$SUPERVISOR" \
   --firecracker-source "$FIRECRACKER" \
   --jailer-source "$BAD_JAILER" \
   --kernel-source "$KERNEL" \
   --guest-source "$GUEST" \
   --guest-manifest-source "$MANIFEST" \
   --launcher-sha256 "$launcher_sha" \
+  --supervisor-sha256 "$supervisor_sha" \
   --firecracker-sha256 "$firecracker_sha" \
   --jailer-sha256 "$bad_jailer_sha" \
   --kernel-sha256 "$kernel_sha" \
@@ -897,12 +1015,14 @@ chmod 0700 "$HASH_GATED_FIRECRACKER"
 if "$INSTALLER" --dry-run \
   --profile host-128g-16 \
   --launcher-source "$LAUNCHER" \
+  --supervisor-source "$SUPERVISOR" \
   --firecracker-source "$HASH_GATED_FIRECRACKER" \
   --jailer-source "$JAILER" \
   --kernel-source "$KERNEL" \
   --guest-source "$GUEST" \
   --guest-manifest-source "$MANIFEST" \
   --launcher-sha256 "$launcher_sha" \
+  --supervisor-sha256 "$supervisor_sha" \
   --firecracker-sha256 0000000000000000000000000000000000000000000000000000000000000000 \
   --jailer-sha256 "$jailer_sha" \
   --kernel-sha256 "$kernel_sha" \

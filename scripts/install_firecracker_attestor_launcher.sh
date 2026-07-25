@@ -54,12 +54,14 @@ readonly MAX_E2E_EVIDENCE_BYTES=16777216
 MODE=""
 REQUESTED_PROFILE=""
 LAUNCHER_SOURCE=""
+SUPERVISOR_SOURCE=""
 FIRECRACKER_SOURCE=""
 JAILER_SOURCE=""
 KERNEL_SOURCE=""
 GUEST_SOURCE=""
 GUEST_MANIFEST_SOURCE=""
 EXPECTED_LAUNCHER_SHA256=""
+EXPECTED_SUPERVISOR_SHA256=""
 EXPECTED_FIRECRACKER_SHA256=""
 EXPECTED_JAILER_SHA256=""
 EXPECTED_KERNEL_SHA256=""
@@ -80,12 +82,14 @@ usage() {
     "  $0 (--dry-run|--check|--apply|--activate) \\" \
     "    --profile host-128g-16 \\" \
     "    --launcher-source /ruta/absoluta/orquesta-firecracker-launcher \\" \
+    "    --supervisor-source /ruta/absoluta/orquesta-firecracker-attestor-e2e \\" \
     "    --firecracker-source /ruta/absoluta/firecracker \\" \
     "    --jailer-source /ruta/absoluta/jailer \\" \
     "    --kernel-source /ruta/absoluta/vmlinux \\" \
     "    --guest-source /ruta/absoluta/guest.cpio.gz \\" \
     "    --guest-manifest-source /ruta/absoluta/guest.manifest.json \\" \
-    "    --launcher-sha256 HEX --firecracker-sha256 HEX --jailer-sha256 HEX \\" \
+    "    --launcher-sha256 HEX --supervisor-sha256 HEX \\" \
+    "    --firecracker-sha256 HEX --jailer-sha256 HEX \\" \
     "    --kernel-sha256 HEX --guest-sha256 HEX --guest-manifest-sha256 HEX \\" \
     "    --allowed-uid UID --allowed-gid GID --jail-uid UID --jail-gid GID" \
     "" \
@@ -123,17 +127,19 @@ parse_arguments() {
         MODE="${1#--}"
         shift
         ;;
-      --profile|--launcher-source|--firecracker-source|--jailer-source|--kernel-source|--guest-source|--guest-manifest-source|--launcher-sha256|--firecracker-sha256|--jailer-sha256|--kernel-sha256|--guest-sha256|--guest-manifest-sha256|--allowed-uid|--allowed-gid|--jail-uid|--jail-gid|--e2e-receipt|--e2e-evidence)
+      --profile|--launcher-source|--supervisor-source|--firecracker-source|--jailer-source|--kernel-source|--guest-source|--guest-manifest-source|--launcher-sha256|--supervisor-sha256|--firecracker-sha256|--jailer-sha256|--kernel-sha256|--guest-sha256|--guest-manifest-sha256|--allowed-uid|--allowed-gid|--jail-uid|--jail-gid|--e2e-receipt|--e2e-evidence)
         (($# >= 2)) || die "missing_value:$1"
         case "$1" in
           --profile) REQUESTED_PROFILE="$2" ;;
           --launcher-source) LAUNCHER_SOURCE="$2" ;;
+          --supervisor-source) SUPERVISOR_SOURCE="$2" ;;
           --firecracker-source) FIRECRACKER_SOURCE="$2" ;;
           --jailer-source) JAILER_SOURCE="$2" ;;
           --kernel-source) KERNEL_SOURCE="$2" ;;
           --guest-source) GUEST_SOURCE="$2" ;;
           --guest-manifest-source) GUEST_MANIFEST_SOURCE="$2" ;;
           --launcher-sha256) EXPECTED_LAUNCHER_SHA256="$2" ;;
+          --supervisor-sha256) EXPECTED_SUPERVISOR_SHA256="$2" ;;
           --firecracker-sha256) EXPECTED_FIRECRACKER_SHA256="$2" ;;
           --jailer-sha256) EXPECTED_JAILER_SHA256="$2" ;;
           --kernel-sha256) EXPECTED_KERNEL_SHA256="$2" ;;
@@ -162,17 +168,19 @@ parse_arguments() {
   [[ "$REQUESTED_PROFILE" == "$PROFILE" ]] || die "profile_must_be:$PROFILE"
   local value
   for value in \
-    "$LAUNCHER_SOURCE" "$FIRECRACKER_SOURCE" "$JAILER_SOURCE" \
+    "$LAUNCHER_SOURCE" "$SUPERVISOR_SOURCE" "$FIRECRACKER_SOURCE" "$JAILER_SOURCE" \
     "$KERNEL_SOURCE" "$GUEST_SOURCE" "$GUEST_MANIFEST_SOURCE"; do
     [[ -n "$value" ]] || die "all_source_flags_required"
   done
   for value in \
-    "$EXPECTED_LAUNCHER_SHA256" "$EXPECTED_FIRECRACKER_SHA256" \
+    "$EXPECTED_LAUNCHER_SHA256" "$EXPECTED_SUPERVISOR_SHA256" \
+    "$EXPECTED_FIRECRACKER_SHA256" \
     "$EXPECTED_JAILER_SHA256" "$EXPECTED_KERNEL_SHA256" \
     "$EXPECTED_GUEST_SHA256" "$EXPECTED_GUEST_MANIFEST_SHA256"; do
     [[ -n "$value" ]] || die "all_expected_sha256_flags_required"
   done
   parse_sha256 "launcher_sha256" "$EXPECTED_LAUNCHER_SHA256"
+  parse_sha256 "supervisor_sha256" "$EXPECTED_SUPERVISOR_SHA256"
   parse_sha256 "firecracker_sha256" "$EXPECTED_FIRECRACKER_SHA256"
   parse_sha256 "jailer_sha256" "$EXPECTED_JAILER_SHA256"
   parse_sha256 "kernel_sha256" "$EXPECTED_KERNEL_SHA256"
@@ -210,7 +218,7 @@ canonical_source() {
     die "${label}_source_not_canonical"
   [[ "$(stat -c '%h' -- "$source_path")" == "1" ]] || die "${label}_source_link_count"
   case "$label" in
-    launcher|firecracker|jailer)
+    launcher|supervisor|firecracker|jailer)
       [[ -x "$source_path" ]] || die "${label}_source_not_executable"
       ;;
   esac
@@ -999,6 +1007,7 @@ validate_evidence() {
   local launcher_sha="$5"
   local primitives_unit_sha="$6"
   local asset_digest="$7"
+  local supervisor_sha="$8"
   [[ "$evidence" == /* && -f "$evidence" && ! -L "$evidence" ]] ||
     die "evidence_type"
   [[ "$(realpath -e -- "$evidence")" == "$evidence" ]] ||
@@ -1008,7 +1017,8 @@ validate_evidence() {
   verify_root_trusted_source "evidence" "$evidence"
   if ! python3 - \
     "$evidence" "$receipt" "$config_sha" "$unit_sha" "$primitives_unit_sha" \
-    "$launcher_sha" "$asset_digest" "$MAX_E2E_EVIDENCE_BYTES" <<'PY'
+    "$launcher_sha" "$asset_digest" "$supervisor_sha" \
+    "$MAX_E2E_EVIDENCE_BYTES" <<'PY'
 import datetime
 import hashlib
 import json
@@ -1018,7 +1028,7 @@ import sys
 
 (
     evidence_path, receipt_path, config_sha, unit_sha, primitives_unit_sha,
-    launcher_sha, asset_digest, max_bytes,
+    launcher_sha, asset_digest, supervisor_sha, max_bytes,
 ) = sys.argv[1:]
 raw = pathlib.Path(evidence_path).read_bytes()
 if not 0 < len(raw) <= int(max_bytes):
@@ -1110,11 +1120,12 @@ expected_candidate = {
     "unit_sha256": unit_sha,
     "primitives_unit_sha256": primitives_unit_sha,
     "launcher_sha256": launcher_sha,
+    "supervisor_sha256": supervisor_sha,
     "asset_digest": asset_digest,
 }
 if any(candidate.get(key) != value for key, value in expected_candidate.items()):
     raise SystemExit("evidence_candidate")
-if digest.fullmatch(candidate.get("supervisor_sha256", "")) is None:
+if digest.fullmatch(supervisor_sha) is None:
     raise SystemExit("evidence_supervisor")
 
 unit = document["unit"]
@@ -1217,9 +1228,18 @@ PY
 validate_activation_bundle() {
   local receipt="$1"
   local evidence="$2"
-  shift 2
-  validate_receipt "$receipt" "$@"
-  validate_evidence "$evidence" "$receipt" "$@"
+  local config_sha="$3"
+  local unit_sha="$4"
+  local launcher_sha="$5"
+  local primitives_unit_sha="$6"
+  local asset_digest="$7"
+  local supervisor_sha="$8"
+  validate_receipt \
+    "$receipt" "$config_sha" "$unit_sha" "$launcher_sha" \
+    "$primitives_unit_sha" "$asset_digest"
+  validate_evidence \
+    "$evidence" "$receipt" "$config_sha" "$unit_sha" "$launcher_sha" \
+    "$primitives_unit_sha" "$asset_digest" "$supervisor_sha"
 }
 
 read_unit_enabled_state() {
@@ -1414,6 +1434,7 @@ main() {
     verify_source_stable "$label" "$path"
   done <<EOF
 launcher:$LAUNCHER_SOURCE
+supervisor:$SUPERVISOR_SOURCE
 firecracker:$FIRECRACKER_SOURCE
 jailer:$JAILER_SOURCE
 kernel:$KERNEL_SOURCE
@@ -1421,14 +1442,16 @@ guest:$GUEST_SOURCE
 guest_manifest:$GUEST_MANIFEST_SOURCE
 EOF
 
-  local launcher_sha firecracker_sha jailer_sha kernel_sha guest_sha manifest_sha
+  local launcher_sha supervisor_sha firecracker_sha jailer_sha kernel_sha guest_sha manifest_sha
   launcher_sha="$(sha256_file "$LAUNCHER_SOURCE")"
+  supervisor_sha="$(sha256_file "$SUPERVISOR_SOURCE")"
   firecracker_sha="$(sha256_file "$FIRECRACKER_SOURCE")"
   jailer_sha="$(sha256_file "$JAILER_SOURCE")"
   kernel_sha="$(sha256_file "$KERNEL_SOURCE")"
   guest_sha="$(sha256_file "$GUEST_SOURCE")"
   manifest_sha="$(sha256_file "$GUEST_MANIFEST_SOURCE")"
   verify_expected_sha256 "launcher" "$launcher_sha" "$EXPECTED_LAUNCHER_SHA256"
+  verify_expected_sha256 "supervisor" "$supervisor_sha" "$EXPECTED_SUPERVISOR_SHA256"
   verify_expected_sha256 "firecracker" "$firecracker_sha" "$EXPECTED_FIRECRACKER_SHA256"
   verify_expected_sha256 "jailer" "$jailer_sha" "$EXPECTED_JAILER_SHA256"
   verify_expected_sha256 "kernel" "$kernel_sha" "$EXPECTED_KERNEL_SHA256"
@@ -1446,6 +1469,7 @@ EOF
       verify_root_trusted_source "$label" "$path"
     done <<EOF
 launcher:$LAUNCHER_SOURCE
+supervisor:$SUPERVISOR_SOURCE
 firecracker:$FIRECRACKER_SOURCE
 jailer:$JAILER_SOURCE
 kernel:$KERNEL_SOURCE
@@ -1457,8 +1481,9 @@ EOF
   verify_binary_version "jailer" "$JAILER_SOURCE"
   verify_guest_manifest "$GUEST_MANIFEST_SOURCE" "$guest_sha"
 
-  local launcher_path firecracker_path jailer_path kernel_path guest_path manifest_path
+  local launcher_path supervisor_path firecracker_path jailer_path kernel_path guest_path manifest_path
   launcher_path="$LIBEXEC_ROOT/orquesta-firecracker-launcher-$launcher_sha"
+  supervisor_path="$LIBEXEC_ROOT/orquesta-firecracker-attestor-e2e-$supervisor_sha"
   firecracker_path="$INSTALL_ROOT/firecracker-$firecracker_sha"
   jailer_path="$INSTALL_ROOT/jailer-$jailer_sha"
   kernel_path="$INSTALL_ROOT/vmlinux-$kernel_sha"
@@ -1511,6 +1536,7 @@ EOF
       "expected_asset_digest=$asset_digest" \
       "orquesta_config_key=test_attestor.microvm.expected_asset_digest" \
       "launcher_path=$launcher_path" \
+      "supervisor_path=$supervisor_path" \
       "config_path=$config_path" \
       "primitives_unit_path=$primitives_unit_path" \
       "unit_path=$unit_path" \
@@ -1553,6 +1579,7 @@ EOF
     ensure_runtime_root
     check_host_capacity "$(stat -c '%s' -- "$GUEST_SOURCE")" "$(stat -c '%s' -- "$KERNEL_SOURCE")"
     install_immutable_file "$LAUNCHER_SOURCE" "$launcher_path" "$launcher_sha" 0 0 0755
+    install_immutable_file "$SUPERVISOR_SOURCE" "$supervisor_path" "$supervisor_sha" 0 0 0755
     install_immutable_file "$FIRECRACKER_SOURCE" "$firecracker_path" "$firecracker_sha" 0 0 0755
     install_immutable_file "$JAILER_SOURCE" "$jailer_path" "$jailer_sha" 0 0 0755
     install_immutable_file "$KERNEL_SOURCE" "$kernel_path" "$kernel_sha" 0 0 0444
@@ -1568,6 +1595,7 @@ EOF
       "apply=staged" \
       "expected_asset_digest=$asset_digest" \
       "config_path=$config_path" \
+      "supervisor_path=$supervisor_path" \
       "primitives_unit_path=$primitives_unit_path" \
       "unit_path=$unit_path" \
       "activation=not_performed" \
@@ -1586,7 +1614,9 @@ EOF
   verify_directory_exact "$RUNTIME_PARENT" 0 0 0755
   verify_runtime_root
   verify_immutable_file "$LAUNCHER_SOURCE" "$launcher_sha" "$(stat -c '%u' "$LAUNCHER_SOURCE")" "$(stat -c '%g' "$LAUNCHER_SOURCE")" "$(stat -c '%a' "$LAUNCHER_SOURCE")"
+  verify_immutable_file "$SUPERVISOR_SOURCE" "$supervisor_sha" "$(stat -c '%u' "$SUPERVISOR_SOURCE")" "$(stat -c '%g' "$SUPERVISOR_SOURCE")" "$(stat -c '%a' "$SUPERVISOR_SOURCE")"
   verify_immutable_file "$launcher_path" "$launcher_sha" 0 0 0755
+  verify_immutable_file "$supervisor_path" "$supervisor_sha" 0 0 0755
   verify_immutable_file "$firecracker_path" "$firecracker_sha" 0 0 0755
   verify_immutable_file "$jailer_path" "$jailer_sha" 0 0 0755
   verify_immutable_file "$kernel_path" "$kernel_sha" 0 0 0444
@@ -1607,13 +1637,14 @@ EOF
       "check=ok" \
       "expected_asset_digest=$asset_digest" \
       "config_path=$config_path" \
+      "supervisor_path=$supervisor_path" \
       "unit_path=$unit_path"
     exit 0
   fi
 
   validate_activation_bundle \
     "$E2E_RECEIPT" "$E2E_EVIDENCE" "$config_sha" "$unit_sha" "$launcher_sha" \
-    "$primitives_unit_sha" "$asset_digest"
+    "$primitives_unit_sha" "$asset_digest" "$supervisor_sha"
   local evidence_sha
   evidence_sha="$(sha256_file "$E2E_EVIDENCE")"
   local installed_evidence="$RECEIPT_ROOT/$evidence_sha.evidence.json"
@@ -1623,7 +1654,7 @@ EOF
   install_immutable_file "$E2E_RECEIPT" "$installed_receipt" "$(sha256_file "$E2E_RECEIPT")" 0 0 0400
   validate_activation_bundle \
     "$installed_receipt" "$installed_evidence" "$config_sha" "$unit_sha" "$launcher_sha" \
-    "$primitives_unit_sha" "$asset_digest"
+    "$primitives_unit_sha" "$asset_digest" "$supervisor_sha"
   activate_unit "$unit_path"
 }
 
