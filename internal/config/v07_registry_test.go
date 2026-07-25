@@ -46,6 +46,15 @@ func TestRegistryRejectsSemanticEnvironmentValidatorAndCrossValidatorDrift(t *te
 		{name: "cross validator repeated key", mutate: func(source *registryFile) {
 			source.CrossValidators[0].Keys[1] = source.CrossValidators[0].Keys[0]
 		}},
+		{name: "required cross validator duration bound omitted", mutate: func(source *registryFile) {
+			source.CrossValidators[1].MaximumDuration = ""
+		}},
+		{name: "cross validator duration bound misplaced", mutate: func(source *registryFile) {
+			source.CrossValidators[0].MaximumDuration = "30s"
+		}},
+		{name: "cross validator duration bound invalid", mutate: func(source *registryFile) {
+			source.CrossValidators[1].MaximumDuration = "invalid"
+		}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -164,6 +173,9 @@ func TestResolveExecutesEveryDeclaredCrossValidator(t *testing.T) {
 		toml string
 	}{
 		{name: "runtime timeout", toml: "[runtime.codex]\ntimeout = \"45m\""},
+		{name: "supervisor start reaches runtime", toml: "[runtime.codex]\ntimeout = \"5s\"\nsupervisor_start_timeout = \"5s\""},
+		{name: "supervisor start reaches shutdown", toml: "[server]\nshutdown_timeout = \"5s\"\n[runtime.codex]\nsupervisor_start_timeout = \"5s\""},
+		{name: "supervisor start exceeds absolute bound", toml: "[server]\nshutdown_timeout = \"2m\"\n[runtime.codex]\ntimeout = \"2m\"\nsupervisor_start_timeout = \"31s\""},
 		{name: "non loopback", toml: "[server]\nlisten = \"0.0.0.0:8080\""},
 		{name: "non literal MCP path", toml: "[server]\nmcp_path = \"/mcp/../other\""},
 		{name: "overlapping paths", toml: "[artifact.filesystem]\nroot = \"./var/state\""},
@@ -184,7 +196,7 @@ func TestResolveExecutesEveryDeclaredCrossValidator(t *testing.T) {
 			assertConfigError(t, err, ErrorCrossValidation, "")
 		})
 	}
-	if got := CrossValidators(); len(got) != 6 {
+	if got := CrossValidators(); len(got) != 7 {
 		t.Fatalf("cross validator catalog = %+v", got)
 	} else {
 		got[0].Keys[0] = "mutated"

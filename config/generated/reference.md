@@ -2,9 +2,9 @@
 
 # Orquesta configuration registry
 
-Registry revision: `2026-07-24.24`
+Registry revision: `2026-07-25.25`
 
-Registry hash: `sha256:d5f7d35fb8577b90632eb7997098f55eb2530251bb8572ee801e44ab96cf824e`
+Registry hash: `sha256:c216dccdb6fd489cda88eaf0bf81d4ac4635f6858d3dafdbc6e01cd5a7e001de`
 
 Precedence: `default < file < env`
 
@@ -32,9 +32,11 @@ Source limit: `1048576` bytes
 | `runtime.codex.reasoning` | `string` | `"medium"` | `ORQUESTA_RUNTIME_CODEX_REASONING` | `true` | `allowed_values` |
 | `runtime.codex.timeout` | `duration` | `"30m"` | `ORQUESTA_RUNTIME_CODEX_TIMEOUT` | `true` | `positive_duration` |
 | `runtime.codex.process_pipe_drain_delay` | `duration` | `"250ms"` | `ORQUESTA_RUNTIME_CODEX_PROCESS_PIPE_DRAIN_DELAY` | `true` | `positive_duration` |
+| `runtime.codex.supervisor_start_timeout` | `duration` | `"1s"` | `ORQUESTA_RUNTIME_CODEX_SUPERVISOR_START_TIMEOUT` | `true` | `positive_duration` |
 | `runtime.codex.max_diagnostic_bytes` | `integer` | `65536` | `ORQUESTA_RUNTIME_CODEX_MAX_DIAGNOSTIC_BYTES` | `true` | `integer_bounds` |
 | `runtime.codex.max_concurrent_executions` | `integer` | `70` | `ORQUESTA_RUNTIME_CODEX_MAX_CONCURRENT_EXECUTIONS` | `true` | `integer_bounds` |
 | `runtime.codex.work_root` | `path` | `"./var/work"` | `ORQUESTA_RUNTIME_CODEX_WORK_ROOT` | `true` | `non_empty_path` |
+| `runtime.codex.cgroup_root` | `optional_path` | `""` | `ORQUESTA_RUNTIME_CODEX_CGROUP_ROOT` | `true` | `optional_path` |
 | `runtime.codex.env_allowlist` | `string_list` | `[
         "PATH",
         "HOME",
@@ -87,6 +89,7 @@ Source limit: `1048576` bytes
 ## Cross validators
 
 - `runtime_codex_timeout_before_scheduler_execution_timeout`: `runtime.codex.timeout`, `scheduler.execution_timeout`
+- `runtime_codex_supervisor_start_timeout_bounded`: `runtime.codex.supervisor_start_timeout`, `runtime.codex.timeout`, `server.shutdown_timeout`
 - `server_listen_loopback`: `server.listen`
 - `server_mcp_path_literal`: `server.mcp_path`
 - `runtime_paths_disjoint`: `state.sqlite.path`, `artifact.filesystem.root`, `credentials.local.path`, `runtime.codex.work_root`, `workspace.local.root`, `config.effective_path`, `identity.local_token_path`

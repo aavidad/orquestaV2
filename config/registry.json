@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "revision": "2026-07-24.24",
+  "revision": "2026-07-25.25",
   "precedence": [
     "default",
     "file",
@@ -17,6 +17,15 @@
       "keys": [
         "runtime.codex.timeout",
         "scheduler.execution_timeout"
+      ]
+    },
+    {
+      "id": "runtime_codex_supervisor_start_timeout_bounded",
+      "maximum_duration": "30s",
+      "keys": [
+        "runtime.codex.supervisor_start_timeout",
+        "runtime.codex.timeout",
+        "server.shutdown_timeout"
       ]
     },
     {
@@ -370,6 +379,20 @@
       ]
     },
     {
+      "key": "runtime.codex.supervisor_start_timeout",
+      "go_name": "RuntimeCodexSupervisorStartTimeout",
+      "semantic_ref": "orquesta.config.runtime.codex.supervisor_start_timeout",
+      "type": "duration",
+      "default": "1s",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_RUNTIME_CODEX_SUPERVISOR_START_TIMEOUT",
+      "validator_ids": [
+        "positive_duration"
+      ]
+    },
+    {
       "key": "runtime.codex.max_diagnostic_bytes",
       "go_name": "RuntimeCodexMaxDiagnosticBytes",
       "semantic_ref": "orquesta.config.runtime.codex.max_diagnostic_bytes",
@@ -413,6 +436,20 @@
       "env_alias": "ORQUESTA_RUNTIME_CODEX_WORK_ROOT",
       "validator_ids": [
         "non_empty_path"
+      ]
+    },
+    {
+      "key": "runtime.codex.cgroup_root",
+      "go_name": "RuntimeCodexCgroupRoot",
+      "semantic_ref": "orquesta.config.runtime.codex.cgroup_root",
+      "type": "optional_path",
+      "default": "",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_RUNTIME_CODEX_CGROUP_ROOT",
+      "validator_ids": [
+        "optional_path"
       ]
     },
     {

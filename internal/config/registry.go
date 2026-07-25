@@ -48,8 +48,9 @@ type registryAliasDefinition struct {
 }
 
 type registryCrossValidatorDefinition struct {
-	ID   string `json:"id"`
-	Keys []Key  `json:"keys"`
+	ID              string `json:"id"`
+	Keys            []Key  `json:"keys"`
+	MaximumDuration string `json:"maximum_duration,omitempty"`
 }
 
 type registryKeyDefinition struct {
@@ -436,6 +437,9 @@ func validateCrossValidators(definitions []registryCrossValidatorDefinition, key
 		"runtime_codex_timeout_before_scheduler_execution_timeout": {
 			KeyRuntimeCodexTimeout, KeySchedulerExecutionTimeout,
 		},
+		"runtime_codex_supervisor_start_timeout_bounded": {
+			KeyRuntimeCodexSupervisorStartTimeout, KeyRuntimeCodexTimeout, KeyServerShutdownTimeout,
+		},
 		"server_listen_loopback":  {KeyServerListen},
 		"server_mcp_path_literal": {KeyServerMCPPath},
 		"runtime_paths_disjoint": {
@@ -485,6 +489,16 @@ func validateCrossValidators(definitions []registryCrossValidatorDefinition, key
 		for index := range want {
 			if definition.Keys[index] != want[index] {
 				return fmt.Errorf("cross validator key order mismatch")
+			}
+		}
+		requiresMaximumDuration := definition.ID == "runtime_codex_supervisor_start_timeout_bounded"
+		if requiresMaximumDuration != (definition.MaximumDuration != "") {
+			return fmt.Errorf("cross validator duration bound mismatch")
+		}
+		if definition.MaximumDuration != "" {
+			maximum, err := time.ParseDuration(definition.MaximumDuration)
+			if err != nil || maximum <= 0 {
+				return fmt.Errorf("invalid cross validator duration bound")
 			}
 		}
 	}
@@ -539,7 +553,10 @@ func cloneRegistryKeyDefinition(definition registryKeyDefinition) registryKeyDef
 func cloneCrossValidators(source []registryCrossValidatorDefinition) []registryCrossValidatorDefinition {
 	result := make([]registryCrossValidatorDefinition, len(source))
 	for index, definition := range source {
-		result[index] = registryCrossValidatorDefinition{ID: definition.ID, Keys: append([]Key(nil), definition.Keys...)}
+		result[index] = registryCrossValidatorDefinition{
+			ID: definition.ID, Keys: append([]Key(nil), definition.Keys...),
+			MaximumDuration: definition.MaximumDuration,
+		}
 	}
 	return result
 }

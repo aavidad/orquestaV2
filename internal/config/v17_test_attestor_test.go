@@ -99,6 +99,7 @@ seed_path = "/repo"
 max_output_bytes = 2097152
 [runtime.codex]
 timeout = "1s"
+supervisor_start_timeout = "500ms"
 [server]
 shutdown_timeout = "15s"
 [test_attestor]

@@ -129,6 +129,16 @@ func validateCrossRegistryValues(registry registry, values map[Key]resolvedValue
 			if !runtimePathsDisjoint(values, sourcePath) {
 				return fail(validator.ID)
 			}
+		case "runtime_codex_supervisor_start_timeout_bounded":
+			start, startOK := values[KeyRuntimeCodexSupervisorStartTimeout].value.(time.Duration)
+			runtimeTimeout, runtimeOK := values[KeyRuntimeCodexTimeout].value.(time.Duration)
+			shutdownTimeout, shutdownOK := values[KeyServerShutdownTimeout].value.(time.Duration)
+			maximum, maximumErr := time.ParseDuration(validator.MaximumDuration)
+			if !startOK || !runtimeOK || !shutdownOK || maximumErr != nil ||
+				start <= 0 || start > maximum ||
+				start >= runtimeTimeout || start >= shutdownTimeout {
+				return fail(validator.ID)
+			}
 		case "identity_provider_requirements":
 			provider, providerOK := values[KeyIdentityProvider].value.(string)
 			issuer, issuerOK := values[KeyIdentityOIDCIssuer].value.(string)

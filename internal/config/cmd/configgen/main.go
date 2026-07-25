@@ -39,8 +39,9 @@ type registryAliasDefinition struct {
 }
 
 type registryCrossValidatorDefinition struct {
-	ID   string   `json:"id"`
-	Keys []string `json:"keys"`
+	ID              string   `json:"id"`
+	Keys            []string `json:"keys"`
+	MaximumDuration string   `json:"maximum_duration,omitempty"`
 }
 
 type registryKey struct {

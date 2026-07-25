@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:orquesta:config:2026-07-24.24",
+  "$id": "urn:orquesta:config:2026-07-25.25",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -443,6 +443,18 @@
         "codex": {
           "additionalProperties": false,
           "properties": {
+            "cgroup_root": {
+              "default": "",
+              "type": "string",
+              "x-env-alias": "ORQUESTA_RUNTIME_CODEX_CGROUP_ROOT",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.codex.cgroup_root",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "optional_path"
+              ]
+            },
             "command": {
               "default": "codex",
               "type": "string",
@@ -571,6 +583,19 @@
               "x-sensitive": false,
               "x-validator-ids": [
                 "allowed_values"
+              ]
+            },
+            "supervisor_start_timeout": {
+              "default": "1s",
+              "pattern": "^[1-9][0-9]*(ns|us|µs|ms|s|m|h)([0-9].*)?$",
+              "type": "string",
+              "x-env-alias": "ORQUESTA_RUNTIME_CODEX_SUPERVISOR_START_TIMEOUT",
+              "x-restart-required": true,
+              "x-scope": "runtime",
+              "x-semantic-ref": "orquesta.config.runtime.codex.supervisor_start_timeout",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "positive_duration"
               ]
             },
             "timeout": {
@@ -1062,8 +1087,8 @@
       "type": "object"
     }
   },
-  "x-registry-revision": "2026-07-24.24",
-  "x-registry-hash": "sha256:d5f7d35fb8577b90632eb7997098f55eb2530251bb8572ee801e44ab96cf824e",
+  "x-registry-revision": "2026-07-25.25",
+  "x-registry-hash": "sha256:c216dccdb6fd489cda88eaf0bf81d4ac4635f6858d3dafdbc6e01cd5a7e001de",
   "x-source-max-bytes": 1048576,
   "x-aliases": [],
   "x-cross-validators": [
@@ -1073,6 +1098,15 @@
         "runtime.codex.timeout",
         "scheduler.execution_timeout"
       ]
+    },
+    {
+      "id": "runtime_codex_supervisor_start_timeout_bounded",
+      "keys": [
+        "runtime.codex.supervisor_start_timeout",
+        "runtime.codex.timeout",
+        "server.shutdown_timeout"
+      ],
+      "maximum_duration": "30s"
     },
     {
       "id": "server_listen_loopback",

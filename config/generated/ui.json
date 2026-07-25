@@ -1,8 +1,8 @@
 {
   "document_type": "orquesta.config_ui",
   "schema_version": 2,
-  "registry_revision": "2026-07-24.24",
-  "registry_hash": "sha256:d5f7d35fb8577b90632eb7997098f55eb2530251bb8572ee801e44ab96cf824e",
+  "registry_revision": "2026-07-25.25",
+  "registry_hash": "sha256:c216dccdb6fd489cda88eaf0bf81d4ac4635f6858d3dafdbc6e01cd5a7e001de",
   "aliases": [],
   "cross_validators": [
     {
@@ -11,6 +11,15 @@
         "runtime.codex.timeout",
         "scheduler.execution_timeout"
       ]
+    },
+    {
+      "id": "runtime_codex_supervisor_start_timeout_bounded",
+      "keys": [
+        "runtime.codex.supervisor_start_timeout",
+        "runtime.codex.timeout",
+        "server.shutdown_timeout"
+      ],
+      "maximum_duration": "30s"
     },
     {
       "id": "server_listen_loopback",
@@ -323,6 +332,18 @@
       ]
     },
     {
+      "key": "runtime.codex.supervisor_start_timeout",
+      "semantic_ref": "orquesta.config.runtime.codex.supervisor_start_timeout",
+      "label_key": "config.field.runtime.codex.supervisor_start_timeout",
+      "type": "duration",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "validator_ids": [
+        "positive_duration"
+      ]
+    },
+    {
       "key": "runtime.codex.max_diagnostic_bytes",
       "semantic_ref": "orquesta.config.runtime.codex.max_diagnostic_bytes",
       "label_key": "config.field.runtime.codex.max_diagnostic_bytes",
@@ -360,6 +381,18 @@
       "restart_required": true,
       "validator_ids": [
         "non_empty_path"
+      ]
+    },
+    {
+      "key": "runtime.codex.cgroup_root",
+      "semantic_ref": "orquesta.config.runtime.codex.cgroup_root",
+      "label_key": "config.field.runtime.codex.cgroup_root",
+      "type": "optional_path",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "validator_ids": [
+        "optional_path"
       ]
     },
     {
