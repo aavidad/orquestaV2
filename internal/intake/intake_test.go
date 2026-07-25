@@ -2,6 +2,7 @@ package intake
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 )
 
@@ -184,6 +185,141 @@ func TestStateAccessorsReturnDefensiveCopies(t *testing.T) {
 		state.History()[0].Origin != OriginChat {
 		t.Fatal("caller mutated immutable state through an accessor")
 	}
+}
+
+func TestSnapshotRoundTripIsCompleteDefensiveAndContinuesRevisionSequence(t *testing.T) {
+	state := stateWithDecision(t)
+	exported := state.Snapshot()
+	restored, err := Restore(exported)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(restored.Snapshot(), state.Snapshot()) {
+		t.Fatalf("round trip mismatch:\nrestored=%+v\nwant=%+v", restored.Snapshot(), state.Snapshot())
+	}
+
+	exported.Issues[0].Field = "mutated"
+	exported.Questions[0].DerivedFrom[0] = "intake-issue:mutated"
+	exported.Questions[0].Options[0].Ref = "intake-option:mutated"
+	exported.Decisions[0].Choice = "intake-option:mutated"
+	exported.History[0].Origin = OriginForm
+	if state.Issues()[0].Field != "audience" ||
+		restored.Questions()[0].DerivedFrom[0] != "intake-issue:audience-gap" ||
+		restored.Questions()[0].Options[0].Ref != "intake-option:audience-team" ||
+		restored.Decisions()[0].Choice != "intake-option:audience-personal" ||
+		restored.History()[0].Origin != OriginChat {
+		t.Fatal("snapshot or restored state aliases caller-owned memory")
+	}
+
+	next, err := Apply(restored, Change{
+		StateRef: testStateRef, ExpectedRevision: 3, Origin: OriginChat,
+		Choices: []Choice{{
+			QuestionRef: "intake-question:audience",
+			OptionRef:   "intake-option:audience-team",
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.Revision() != 4 || len(next.History()) != 3 || len(next.Decisions()) != 2 {
+		t.Fatalf("restored sequence did not continue: %+v", next.Snapshot())
+	}
+	if _, err = Apply(restored, Change{
+		StateRef: testStateRef, ExpectedRevision: 2, Origin: OriginChat,
+		Choices: []Choice{{
+			QuestionRef: "intake-question:audience",
+			OptionRef:   "intake-option:audience-team",
+		}},
+	}); ErrorCodeOf(err) != ErrorRevisionConflict {
+		t.Fatalf("restored state accepted stale revision: %v", err)
+	}
+}
+
+func TestRestoreRejectsImpossibleSnapshots(t *testing.T) {
+	valid := stateWithDecision(t).Snapshot()
+	tests := []struct {
+		name   string
+		mutate func(*Snapshot)
+	}{
+		{name: "schema", mutate: func(value *Snapshot) { value.Schema = "orquesta.intake.state.v2" }},
+		{name: "ref", mutate: func(value *Snapshot) { value.Ref = "form:private" }},
+		{name: "policy", mutate: func(value *Snapshot) { value.Policy.MaxQuestionRounds = 0 }},
+		{name: "revision without history", mutate: func(value *Snapshot) { value.Revision++ }},
+		{name: "round total", mutate: func(value *Snapshot) { value.QuestionRounds = 0 }},
+		{name: "round beyond policy", mutate: func(value *Snapshot) { value.QuestionRounds = 4 }},
+		{name: "history revision", mutate: func(value *Snapshot) { value.History[0].Revision = 3 }},
+		{name: "history origin", mutate: func(value *Snapshot) { value.History[0].Origin = "private" }},
+		{name: "negative count", mutate: func(value *Snapshot) { value.History[0].IssuesAdded = -1 }},
+		{name: "unaccounted issue", mutate: func(value *Snapshot) { value.History[0].IssuesAdded = 0 }},
+		{name: "question before issue", mutate: func(value *Snapshot) {
+			value.History[0].IssuesAdded = 0
+			value.History[1].IssuesAdded = 1
+		}},
+		{name: "invalid issue", mutate: func(value *Snapshot) { value.Issues[0].Kind = "unknown" }},
+		{name: "duplicate question ref", mutate: func(value *Snapshot) {
+			value.Questions = append(value.Questions, cloneQuestions(value.Questions)...)
+			value.History[1].QuestionsAdded = 1
+		}},
+		{name: "decision unknown choice", mutate: func(value *Snapshot) {
+			value.Decisions[0].Choice = "intake-option:unknown"
+		}},
+		{name: "decision false recommendation", mutate: func(value *Snapshot) {
+			value.Decisions[0].Recommendation = "intake-option:audience-personal"
+		}},
+		{name: "decision false rationale", mutate: func(value *Snapshot) {
+			value.Decisions[0].RecommendationRationale = "intake.option.false.rationale"
+		}},
+		{name: "decision wrong origin", mutate: func(value *Snapshot) {
+			value.Decisions[0].Origin = OriginChat
+		}},
+		{name: "decision wrong revision", mutate: func(value *Snapshot) {
+			value.Decisions[0].Revision = 2
+		}},
+		{name: "unaccounted decision", mutate: func(value *Snapshot) {
+			value.History[1].ChoicesRecorded = 0
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			candidate := cloneSnapshot(valid)
+			test.mutate(&candidate)
+			if state, err := Restore(candidate); err == nil {
+				t.Fatalf("impossible snapshot restored: %+v", state.Snapshot())
+			}
+		})
+	}
+}
+
+func stateWithDecision(t *testing.T) State {
+	t.Helper()
+	state := mustState(t, 3)
+	state, err := Apply(state, Change{
+		StateRef: testStateRef, ExpectedRevision: 1, Origin: OriginChat,
+		Issues:    []Issue{audienceGap()},
+		Questions: []Question{audienceQuestion(true, false)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err = Apply(state, Change{
+		StateRef: testStateRef, ExpectedRevision: 2, Origin: OriginForm,
+		Choices: []Choice{{
+			QuestionRef: "intake-question:audience",
+			OptionRef:   "intake-option:audience-personal",
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return state
+}
+
+func cloneSnapshot(value Snapshot) Snapshot {
+	value.Issues = cloneIssues(value.Issues)
+	value.Questions = cloneQuestions(value.Questions)
+	value.Decisions = append([]Decision(nil), value.Decisions...)
+	value.History = append([]Mutation(nil), value.History...)
+	return value
 }
 
 func mustState(t *testing.T, maxRounds uint32) State {
