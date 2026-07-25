@@ -9,18 +9,21 @@ canónico `host-128g-16`. La instalación es deliberadamente bifásica:
 
 1. `--apply` instala candidatos inmutables y prepara primitivas del host, pero
    no enlaza, arranca ni habilita el servicio productivo.
-2. `--activate` solo acepta un recibo root-owned que declare superado el E2E
-   físico del candidato exacto.
+2. `--activate` solo acepta el receipt V2 y la evidencia root-owned del E2E
+   físico superado por el candidato exacto.
 
 El instalador no cambia, detiene ni redimensiona Bubblewrap. Tampoco borra
 versiones anteriores, runtime residual, namespaces o cgroups existentes. Una
 ruta existente que no cumpla el contrato se rechaza para revisión operativa.
 
-En este corte aún no existe en el repositorio un ejecutor canónico del E2E
-Firecracker físico de 16 microVM. Por tanto se puede preparar y arrancar
-temporalmente el candidato, pero **no se debe crear el recibo ni ejecutar
-`--activate`** hasta incorporar y ejecutar ese E2E. El recibo no sustituye la
-evidencia: es el gate de promoción de una evidencia externa todavía pendiente.
+El ejecutor canónico ya existe en
+`cmd/orquesta-firecracker-attestor-e2e`. A fecha de este corte **no se ha
+ejecutado físicamente**: falta el toolchain fijado
+`/srv/orquesta-self/toolchains/go1.25.11` y no existe evidencia de la secuencia
+física `1 + 16`. Por tanto el candidato puede quedar staged, con
+`daemon-reload` aplicado e inactivo, pero no hay activación ni receipt válido.
+El receipt no sustituye la evidencia: ambos son entradas obligatorias de
+`--activate`.
 
 ## Capacidad fijada
 
@@ -224,81 +227,74 @@ shellcheck \
 scripts/test_install_firecracker_attestor_launcher.sh
 ```
 
-## 4. Arranque temporal del candidato
+## 4. E2E físico del candidato staged
 
-`--apply` imprime `unit_path` y `primitives_unit_path`. El basename de
-`unit_path` es una unidad versionada ya visible para systemd, pero no habilitada.
-Desde una sesión root:
-
-```bash
-systemctl daemon-reload
-systemctl start orquesta-firecracker-attestor-<UNIT_SHA256>.service
-systemctl is-active --quiet \
-  orquesta-firecracker-attestor-<UNIT_SHA256>.service
-```
-
-Esto arranca el candidato versionado directamente; no crea ni cambia el enlace
-productivo y no toca Bubblewrap. La unidad depende de su preparador versionado.
-
-El E2E futuro que autorice promoción deberá ejecutar mediante el socket
-canónico, como el UID/GID permitido, al menos:
-
-1. una atestación real que arranque el initrd, ejecute un test y devuelva
-   evidencia válida;
-2. una ola concurrente de 16 solicitudes con guest 4096 MiB, cgroup 5 GiB,
-   512 PIDs y cuota 200000/100000;
-3. observación durante la ola de `memory.swap.max=0` en cada cgroup;
-4. ausencia de red guest, API socket, vsock y consola/serial;
-5. al terminar, cero procesos Firecracker/jailer propios, cero hijos del parent
-   cgroup y cero directorios de runs residuales.
-
-Después de capturar la evidencia, detener solo la unidad versionada probada:
+La secuencia obligatoria es: compilar con Go `1.25.11` fijado, `--apply`,
+`systemctl daemon-reload`, comprobar que el candidato está **inactivo**, ejecutar
+el E2E físico `1 + 16`, validar cero residual y solo entonces `--activate`.
+No se arranca manualmente la unidad antes del E2E: el ejecutor inicia y detiene
+la unidad versionada candidata y comprueba su identidad estable.
 
 ```bash
-systemctl stop orquesta-firecracker-attestor-<UNIT_SHA256>.service
-systemctl is-active --quiet \
+CGO_ENABLED=0 \
+  /srv/orquesta-self/toolchains/go1.25.11/bin/go build \
+  -mod=vendor -trimpath -buildvcs=false \
+  -o /ABS/build/orquesta-firecracker-attestor-e2e \
+  ./cmd/orquesta-firecracker-attestor-e2e
+sha256sum /ABS/build/orquesta-firecracker-attestor-e2e
+sudo install -o root -g root -m 0755 \
+  /ABS/build/orquesta-firecracker-attestor-e2e \
+  /usr/local/libexec/orquesta-firecracker-attestor-e2e-<SUPERVISOR_SHA256>
+sudo sha256sum \
+  /usr/local/libexec/orquesta-firecracker-attestor-e2e-<SUPERVISOR_SHA256>
+# aplicar el mismo juego explícito de flags anterior con --apply
+sudo systemctl daemon-reload
+! sudo systemctl is-active --quiet \
   orquesta-firecracker-attestor-<UNIT_SHA256>.service
+sudo /usr/local/libexec/orquesta-firecracker-attestor-e2e-<SUPERVISOR_SHA256> \
+  --spec /ABS/root/e2e-spec.json
 ```
 
-El segundo comando debe devolver estado no activo. No deshabilitar ni parar
-Bubblewrap.
+El E2E realiza una atestación física y después una ola física de 16; verifica
+límites, `memory.swap.max=0`, red/API/vsock/serial ausentes y deja unidad,
+procesos, cgroup y directorios de runs sin residuo. No habilita el alias
+productivo ni toca Bubblewrap. El estado actual bloquea este paso porque faltan
+el Go fijado y la evidencia `1 + 16`; no se debe fabricar un receipt manual. El
+SHA del supervisor se obtiene del binario construido con flags reproducibles y
+después se verifica de nuevo sobre la copia root-owned. La ruta `/ABS/build`
+puede pertenecer al usuario que compila; solo la copia content-addressed bajo
+`/usr/local/libexec` entra en la spec y debe tener ancestros root-owned seguros.
 
-Hasta que exista el ejecutor canónico de esos cinco puntos, el procedimiento se
-detiene aquí. No se improvisa un recibo manual.
+La spec es JSON estricto (sin claves desconocidas) y debe ser un fichero regular
+`root:root`, enlace único, `0400`, con ruta absoluta canónica y ancestros
+`root:root` sin escritura de grupo/otros. Su forma exacta es:
 
-## 5. Recibo y activación futura
-
-Cuando el E2E canónico exista y quede verde, su cierre debe escribir un fichero
-root-owned, regular, `0400`, link count 1 y con estas líneas exactas:
-
-```text
-schema=orquesta_firecracker_activation_receipt.v1
-status=passed
-config_sha256=<CONFIG_SHA256>
-unit_sha256=<UNIT_SHA256>
-primitives_unit_sha256=<PRIMITIVES_UNIT_SHA256>
-launcher_sha256=<LAUNCHER_SHA256>
-asset_digest=<EXPECTED_ASSET_DIGEST_PUBLICADO_POR_APPLY>
-e2e_suite=orquesta.firecracker-attestor.physical-16.v1
-max_concurrent_runs=16
-physical_microvm_count=16
-all_attestations_valid=true
-zero_residual_runs=true
-network_absent=true
-memory_swap_max_zero=true
+```json
+{"candidate":{"unit_name":"orquesta-firecracker-attestor-<UNIT_SHA256>.service","unit_path":"/etc/systemd/system/orquesta-firecracker-attestor-<UNIT_SHA256>.service","unit_sha256":"<UNIT_SHA256>","primitives_unit_path":"/etc/systemd/system/orquesta-firecracker-primitives-<PRIMITIVES_UNIT_SHA256>.service","primitives_unit_sha256":"<PRIMITIVES_UNIT_SHA256>","launcher_path":"/usr/local/libexec/orquesta-firecracker-launcher-<LAUNCHER_SHA256>","launcher_sha256":"<LAUNCHER_SHA256>","launcher_socket_path":"/run/orquesta/firecracker-launcher.sock","config_path":"/etc/orquesta/firecracker/launcher-<CONFIG_SHA256>.json","config_sha256":"<CONFIG_SHA256>","supervisor_path":"/usr/local/libexec/orquesta-firecracker-attestor-e2e-<SUPERVISOR_SHA256>","supervisor_sha256":"<SUPERVISOR_SHA256>","runtime_root":"/run/orquesta","cgroup_root":"/sys/fs/cgroup","parent_cgroup":"orquesta-firecracker-attestor","netns_path":"/run/netns/orquesta-firecracker-attestor-empty","asset_digest":"<ASSET_DIGEST>"},"policy_digest":"<POLICY_DIGEST>","evidence_path":"/var/lib/orquesta/firecracker-e2e/evidence-<NONCE>.json","receipt_path":"/var/lib/orquesta/firecracker-e2e/receipt-<NONCE>.txt","phase_timeout":"10m","cleanup_timeout":"30s","stable_for":"2s","poll_interval":"250ms","child_uid":1000,"child_gid":1000,"workload":{"socket_path":"/run/orquesta/firecracker-launcher.sock","expected_asset_digest":"<ASSET_DIGEST>","work_root":"/var/lib/orquesta/firecracker-e2e/work-<NONCE>","git_command":"/usr/bin/git","test_sleep":"15s","attestation_timeout":"5m","attestation_cleanup_timeout":"30s","max_output_bytes":67108864,"max_subject_bytes":536870912}}
 ```
 
-Entonces se ejecuta el mismo comando explícito de instalación con
-`--activate` en lugar de `--apply` y se añade:
+`candidate.launcher_socket_path` debe ser idéntico a
+`workload.socket_path`; `candidate.asset_digest` debe ser idéntico a
+`workload.expected_asset_digest`. El supervisor es un binario content-addressed
+root-owned y sus ancestros son seguros. El `work_root` ya existe, es hijo
+privado `0700`, vacío y propiedad del UID/GID no-root hijo. Los padres de
+`evidence_path` y `receipt_path` son `root:root` seguros; los outputs se crean
+sin sobrescribirlos.
+
+## 5. Activación tras evidencia real
+
+Con receipt V2 y evidencia producidos por ese E2E, se ejecuta el mismo comando
+explícito de instalación con `--activate` y ambos flags:
 
 ```text
 --e2e-receipt /ABS/evidencia/firecracker-activation.receipt
+--e2e-evidence /ABS/evidencia/firecracker-e2e.json
 ```
 
 La activación:
 
 1. vuelve a verificar artefactos, runtime, bind, netns y cgroup;
-2. instala una copia content-addressed del recibo;
+2. instala copias content-addressed de la evidencia y del recibo ligado a ella;
 3. cambia atómicamente el symlink canónico a la unidad ya probada;
 4. habilita la unidad versionada real, nunca el alias enlazado que systemd
    rechaza, arranca esa unidad y valida que quede activa;
