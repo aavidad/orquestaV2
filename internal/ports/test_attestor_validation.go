@@ -15,6 +15,13 @@ func (err *TestAttestorContractError) Error() string {
 	return err.Code
 }
 
+func (err *TestAttestorContractError) CauseCode() string {
+	if err == nil {
+		return ""
+	}
+	return err.Code
+}
+
 func TestAttestorContractErrorCode(err error) string {
 	var contractErr *TestAttestorContractError
 	if errors.As(err, &contractErr) {

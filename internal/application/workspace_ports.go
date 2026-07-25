@@ -2,6 +2,8 @@ package application
 
 import (
 	"context"
+	"errors"
+	"strings"
 
 	"orquesta/internal/ports"
 )
@@ -28,6 +30,31 @@ type TestAttestationRun = ports.TestAttestationRun
 // TestAttestor executes declared tests for one immutable logical run.
 type TestAttestor interface {
 	Attest(context.Context, ports.TestAttestationRun) (ports.TestAttestationResult, error)
+}
+
+type testAttestorCauseError interface {
+	error
+	CauseCode() string
+}
+
+func testAttestorCauseCode(err error) string {
+	var cause testAttestorCauseError
+	if !errors.As(err, &cause) {
+		return ""
+	}
+	code := cause.CauseCode()
+	if len(code) == 0 || len(code) > 160 || !strings.HasPrefix(code, "test_attestor.") {
+		return ""
+	}
+	for _, character := range code {
+		if character >= 'a' && character <= 'z' ||
+			character >= '0' && character <= '9' ||
+			character == '.' || character == '_' || character == '-' {
+			continue
+		}
+		return ""
+	}
+	return code
 }
 
 func ValidateTestAttestationRun(run TestAttestationRun) error {

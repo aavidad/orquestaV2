@@ -50,6 +50,12 @@ type Config struct {
 type Error struct{ Code string }
 
 func (err *Error) Error() string { return err.Code }
+func (err *Error) CauseCode() string {
+	if err == nil {
+		return ""
+	}
+	return err.Code
+}
 func ErrorCode(err error) string {
 	var target *Error
 	if errors.As(err, &target) {

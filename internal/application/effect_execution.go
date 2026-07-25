@@ -22,6 +22,21 @@ func (orchestrator *Orchestrator) actionCallContext(parent context.Context, clai
 
 const effectUnknownAppliedCode = "application.effect_unknown_applied"
 
+type effectUnknownAppliedError struct {
+	causeCode string
+}
+
+func (err *effectUnknownAppliedError) Error() string {
+	return effectUnknownAppliedCode
+}
+
+func (err *effectUnknownAppliedError) CauseCode() string {
+	if err == nil {
+		return ""
+	}
+	return err.causeCode
+}
+
 // priorEffectAttemptBlocksDispatch reports whether a causal physical attempt
 // prevents repeating the same action and intent. A terminal receipt confirms
 // the effect, while only one exact causal zero-release proves it was unapplied.

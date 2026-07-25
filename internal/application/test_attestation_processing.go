@@ -58,7 +58,7 @@ func (orchestrator *Orchestrator) processAttestTest(ctx context.Context, claim A
 	result, err := orchestrator.testAttestor.Attest(effectCtx, run)
 	cancel()
 	if err != nil {
-		return orchestrator.quarantineUnknownApplied(ctx, claim)
+		return orchestrator.quarantineUnknownAppliedWithCause(ctx, claim, testAttestorCauseCode(err))
 	}
 	if err := ports.ValidateTestAttestationResult(request, result); err != nil {
 		return orchestrator.quarantineUnknownApplied(ctx, claim)

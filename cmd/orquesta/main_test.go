@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +16,36 @@ import (
 
 	"orquesta/internal/i18n"
 )
+
+type codedWorkerTestError struct {
+	message string
+	cause   string
+}
+
+func (err *codedWorkerTestError) Error() string     { return err.message }
+func (err *codedWorkerTestError) CauseCode() string { return err.cause }
+
+func TestWorkerErrorLogAttrsIncludeOnlySafeTypedCause(t *testing.T) {
+	attributes := workerErrorLogAttrs(&codedWorkerTestError{
+		message: "application.effect_unknown_applied",
+		cause:   "test_attestor.snapshot_limit_exceeded",
+	})
+	if len(attributes) != 2 ||
+		attributes[0].Key != "code" || attributes[0].Value.String() != "application.effect_unknown_applied" ||
+		attributes[1].Key != "cause_code" ||
+		attributes[1].Value.String() != "test_attestor.snapshot_limit_exceeded" {
+		t.Fatalf("typed attributes=%+v", attributes)
+	}
+	for _, err := range []error{
+		&codedWorkerTestError{message: "application.effect_unknown_applied", cause: "secret\nvalue"},
+		errors.New("application.effect_unknown_applied"),
+	} {
+		attributes = workerErrorLogAttrs(err)
+		if len(attributes) != 1 || attributes[0].Key != "code" {
+			t.Fatalf("unsafe attributes=%+v", attributes)
+		}
+	}
+}
 
 func TestMain(testMain *testing.M) {
 	if len(os.Args) == 2 && os.Args[1] == "__orquesta_internal_codex_supervisor_v1" {

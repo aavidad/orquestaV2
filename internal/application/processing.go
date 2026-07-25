@@ -1124,6 +1124,14 @@ func (orchestrator *Orchestrator) quarantineUnapplied(ctx context.Context, claim
 }
 
 func (orchestrator *Orchestrator) quarantineUnknownApplied(ctx context.Context, claim ActionClaim) error {
+	return orchestrator.quarantineUnknownAppliedWithCause(ctx, claim, "")
+}
+
+func (orchestrator *Orchestrator) quarantineUnknownAppliedWithCause(
+	ctx context.Context,
+	claim ActionClaim,
+	causeCode string,
+) error {
 	now := orchestrator.clock.Now()
 	err := orchestrator.state.QuarantineAction(ctx, ActionQuarantinedState{
 		Claim: claim, ErrorCode: effectUnknownAppliedCode, OperationAt: now,
@@ -1137,6 +1145,9 @@ func (orchestrator *Orchestrator) quarantineUnknownApplied(ctx context.Context, 
 	})
 	if err != nil {
 		return err
+	}
+	if causeCode != "" {
+		return &effectUnknownAppliedError{causeCode: causeCode}
 	}
 	return errors.New(effectUnknownAppliedCode)
 }

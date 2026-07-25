@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"orquesta/internal/bootstrap"
@@ -65,11 +66,9 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	err = bootstrap.Run(ctx, bootstrap.Options{
-		ConfigPath: *configPath,
-		Version:    version,
-		ReportError: func(err error) {
-			slog.Error("worker_error", "code", err.Error())
-		},
+		ConfigPath:  *configPath,
+		Version:     version,
+		ReportError: reportWorkerError,
 	})
 	if err != nil {
 		text, textErr := catalog.Text(i18n.DefaultLocale, "error.internal")
@@ -81,6 +80,45 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+type workerCauseCodeError interface {
+	error
+	CauseCode() string
+}
+
+func reportWorkerError(err error) {
+	if err == nil {
+		return
+	}
+	slog.LogAttrs(context.Background(), slog.LevelError, "worker_error", workerErrorLogAttrs(err)...)
+}
+
+func workerErrorLogAttrs(err error) []slog.Attr {
+	attributes := []slog.Attr{slog.String("code", err.Error())}
+	var cause workerCauseCodeError
+	if errors.As(err, &cause) {
+		code := cause.CauseCode()
+		if validWorkerCauseCode(code) {
+			attributes = append(attributes, slog.String("cause_code", code))
+		}
+	}
+	return attributes
+}
+
+func validWorkerCauseCode(code string) bool {
+	if len(code) == 0 || len(code) > 160 || !strings.HasPrefix(code, "test_attestor.") {
+		return false
+	}
+	for _, character := range code {
+		if character >= 'a' && character <= 'z' ||
+			character >= '0' && character <= '9' ||
+			character == '.' || character == '_' || character == '-' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func writeCatalogText(writer io.Writer, catalog *i18n.Catalog, locale, key string) bool {
