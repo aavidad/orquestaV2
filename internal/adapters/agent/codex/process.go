@@ -1009,7 +1009,7 @@ func (adapter *Adapter) commandArgumentsWithSession(runPath string, workspaceBou
 		"--output-last-message", lastMessagePath,
 		"--config", fmt.Sprintf("model_reasoning_effort=%q", adapter.config.ReasoningEffort),
 		"--config", `shell_environment_policy.inherit="all"`,
-		"--config", shellEnvironmentIncludeOnly(adapter.config.Environment),
+		"--config", adapter.shellEnvironmentIncludeOnly(),
 		"--config", shellEnvironmentExclude(adapter.config.MCPBearerTokenEnvVar),
 		"--config", `shell_environment_policy.ignore_default_excludes=false`,
 		"--config", `shell_environment_policy.experimental_use_profile=false`,
@@ -1035,6 +1035,16 @@ func shellEnvironmentIncludeOnly(environment map[string]string) string {
 	sort.Strings(names)
 	payload, _ := json.Marshal(names)
 	return "shell_environment_policy.include_only=" + string(payload)
+}
+
+func (adapter *Adapter) shellEnvironmentIncludeOnly() string {
+	if adapter.accountHomePath == "" {
+		return shellEnvironmentIncludeOnly(adapter.config.Environment)
+	}
+	environment := cloneEnvironment(adapter.config.Environment)
+	environment["HOME"] = ""
+	environment["CODEX_HOME"] = ""
+	return shellEnvironmentIncludeOnly(environment)
 }
 
 func shellEnvironmentExclude(bearerTokenEnvVar string) string {

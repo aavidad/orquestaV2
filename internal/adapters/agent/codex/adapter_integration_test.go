@@ -205,8 +205,8 @@ func TestAdapterRejectsExecutionPayloadConflict(t *testing.T) {
 }
 
 func TestLaunchHashAndPromptCarryPlanMetadata(t *testing.T) {
-	if stateSchemaVersion != 5 {
-		t.Fatalf("launch metadata schema version = %d, want explicit V5 cut", stateSchemaVersion)
+	if stateSchemaVersion != 6 {
+		t.Fatalf("launch metadata schema version = %d, want explicit V6 cut", stateSchemaVersion)
 	}
 	request := testRequest(t, "plan-metadata", "helper:success", 1024)
 	baseHash := mustRequestHash(t, request)
@@ -624,6 +624,8 @@ func runCodexHelper(arguments []string) error {
 		return os.WriteFile(options.outputPath, []byte(`{"artifact":"`+credentialMaterial+`"}`), 0o600)
 	case strings.Contains(mode, "helper:artifact-secret-leak"):
 		return writeHelperResult(options.outputPath, credentialMaterial)
+	case strings.Contains(mode, "helper:account-home"):
+		return writeHelperResult(options.outputPath, "artifact:account-home-ok")
 	case strings.Contains(mode, "helper:success"):
 		if options.model != "" {
 			return fmt.Errorf("unexpected model %q", options.model)
@@ -762,7 +764,14 @@ func parseCodexHelperArguments(arguments []string) (helperOptions, error) {
 		)
 	}
 	sort.Strings(wantConfigs)
-	if !reflect.DeepEqual(options.configs, wantConfigs) {
+	accountConfigs := append([]string(nil), wantConfigs...)
+	for index, value := range accountConfigs {
+		if value == `shell_environment_policy.include_only=["CODEX_TEST_EXACT"]` {
+			accountConfigs[index] = `shell_environment_policy.include_only=["CODEX_HOME","CODEX_TEST_EXACT","HOME"]`
+		}
+	}
+	sort.Strings(accountConfigs)
+	if !reflect.DeepEqual(options.configs, wantConfigs) && !reflect.DeepEqual(options.configs, accountConfigs) {
 		return helperOptions{}, fmt.Errorf("shell environment policy mismatch")
 	}
 	return options, nil
@@ -791,6 +800,28 @@ func validateHelperEnvironment(mode string) (string, error) {
 		credential = helperSessionBearer
 	}
 	want := []string{helperExactEnvironment}
+	if strings.Contains(mode, "helper:account-home") {
+		home := ""
+		codexHome := ""
+		filtered := entries[:0]
+		for _, entry := range entries {
+			switch {
+			case strings.HasPrefix(entry, "HOME="):
+				home = strings.TrimPrefix(entry, "HOME=")
+			case strings.HasPrefix(entry, "CODEX_HOME="):
+				codexHome = strings.TrimPrefix(entry, "CODEX_HOME=")
+			default:
+				filtered = append(filtered, entry)
+			}
+		}
+		if home == "" || home != codexHome || !filepath.IsAbs(home) {
+			return "", fmt.Errorf("account HOME/CODEX_HOME mismatch")
+		}
+		if _, err := os.Stat(filepath.Join(home, accountAuthFileName)); err != nil {
+			return "", fmt.Errorf("account auth unavailable: %w", err)
+		}
+		entries = filtered
+	}
 	if credential != "" {
 		name := codexAPIKeyEnvironment
 		if strings.Contains(mode, "helper:session") || strings.Contains(mode, "helper:restart-session-leak") {

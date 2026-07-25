@@ -58,6 +58,8 @@ const (
 	CodeDiagnosticLimitInvalid        = "codex.max_diagnostic_bytes_invalid"
 	CodeMaxConcurrentInvalid          = "codex.max_concurrent_executions_invalid"
 	CodeEnvironmentInvalid            = "codex.environment_invalid"
+	CodeAccountProfileInvalid         = "codex.account_profile_invalid"
+	CodeAccountProfileUnavailable     = "codex.account_profile_unavailable"
 	CodeCredentialInvalid             = "codex.credential_invalid"
 	CodeCredentialUnavailable         = "codex.credential_unavailable"
 	CodeCredentialOutputUnverifiable  = "codex.credential_output_unverifiable"
@@ -108,16 +110,26 @@ type Config struct {
 	CgroupRoot string
 	// RuntimeScope is an opaque, host-local identity supplied by bootstrap. It
 	// must not be stored in the application database or copied by its backup.
-	RuntimeScope                      string
-	Model                             string
-	ReasoningEffort                   string
-	Timeout                           time.Duration
-	ProcessPipeDrainDelay             time.Duration
-	SupervisorStartTimeout            time.Duration
-	MaxDiagnosticBytes                int64
-	MaxConcurrentExecutions           int
-	MCPBearerTokenEnvVar              string
-	Environment                       map[string]string
+	RuntimeScope            string
+	Model                   string
+	ReasoningEffort         string
+	Timeout                 time.Duration
+	ProcessPipeDrainDelay   time.Duration
+	SupervisorStartTimeout  time.Duration
+	MaxDiagnosticBytes      int64
+	MaxConcurrentExecutions int
+	MCPBearerTokenEnvVar    string
+	Environment             map[string]string
+	// AccountHomeRoot and AccountProfile opt into one account-bound Codex
+	// daemon. The selected persistent profile is projected directly as both
+	// HOME and CODEX_HOME so Codex can persist credential refreshes. A
+	// lifetime lease and MaxConcurrentExecutions=1 prevent concurrent use.
+	// Multiple accounts run as separate daemons with disjoint WorkRoots.
+	// This adapter boundary does not replace the neutral multi-home capacity
+	// and pool contract that selects those daemon profiles.
+	AccountHomeRoot                   string
+	AccountProfile                    string
+	AccountAuthMaxDocumentBytes       int64
 	CredentialStore                   credentials.Store
 	CredentialRef                     credentials.CredentialRef
 	PromptRenderer                    PromptRenderer
@@ -171,21 +183,24 @@ func ErrorCode(err error) string {
 }
 
 type Adapter struct {
-	config                Config
-	command               string
-	environment           []string
-	rootPath              string
-	root                  *os.Root
-	cgroups               *codexCgroupRoot
-	syncDirectoryFn       func(*os.Root, string) error
-	processCleanup        func(*exec.Cmd) error
-	credentialOutputScrub func(string) error
-	beforeCgroupCleanup   func(string) error
-	shutdownSignal        func(processRecord, ports.AgentStopMode) error
-	shutdownInspect       func(processRecord) (bool, error)
-	workspaceResolver     WorkspacePathResolver
-	lifecycle             context.Context
-	cancelLifecycle       context.CancelCauseFunc
+	config                   Config
+	command                  string
+	environment              []string
+	rootPath                 string
+	root                     *os.Root
+	cgroups                  *codexCgroupRoot
+	accountHomePath          string
+	accountProfileBindingRef string
+	accountProfileLock       *os.File
+	syncDirectoryFn          func(*os.Root, string) error
+	processCleanup           func(*exec.Cmd) error
+	credentialOutputScrub    func(string) error
+	beforeCgroupCleanup      func(string) error
+	shutdownSignal           func(processRecord, ports.AgentStopMode) error
+	shutdownInspect          func(processRecord) (bool, error)
+	workspaceResolver        WorkspacePathResolver
+	lifecycle                context.Context
+	cancelLifecycle          context.CancelCauseFunc
 
 	mu                sync.Mutex
 	closed            bool
@@ -227,15 +242,28 @@ func New(config Config) (*Adapter, error) {
 	if err != nil {
 		return nil, err
 	}
+	accountProfileLock, accountHomePath, err := openAccountProfileLease(validated)
+	if err != nil {
+		_ = root.Close()
+		return nil, err
+	}
+	accountProfileBindingRef, err := deriveAccountProfileRef(validated.AccountHomeRoot, validated.AccountProfile)
+	if err != nil {
+		_ = closeAccountProfileLease(accountProfileLock)
+		_ = root.Close()
+		return nil, err
+	}
 	var cgroups *codexCgroupRoot
 	if validated.CgroupRoot != "" {
 		cgroups, err = openCodexCgroupRoot(validated.CgroupRoot)
 		if err != nil {
+			_ = closeAccountProfileLease(accountProfileLock)
 			_ = root.Close()
 			return nil, err
 		}
 	} else if platformCgroupRequired() && validated.RuntimeScope != "" &&
 		!validated.allowLegacyProcessControlForTests {
+		_ = closeAccountProfileLease(accountProfileLock)
 		_ = root.Close()
 		return nil, &Error{Code: CodeCgroupRootRequired}
 	}
@@ -245,21 +273,24 @@ func New(config Config) (*Adapter, error) {
 	operationsDone := make(chan struct{})
 	close(operationsDone)
 	adapter := &Adapter{
-		config:            validated,
-		command:           command,
-		environment:       environment,
-		rootPath:          rootPath,
-		root:              root,
-		cgroups:           cgroups,
-		workspaceResolver: validated.WorkspacePathResolver,
-		syncDirectoryFn:   syncCodexDirectory,
-		processCleanup:    cleanupProcessGroup,
-		lifecycle:         lifecycle,
-		cancelLifecycle:   cancelLifecycle,
-		executions:        make(map[string]*executionState),
-		waitsDone:         waitsDone,
-		operationsDone:    operationsDone,
-		shutdownDone:      make(chan struct{}),
+		config:                   validated,
+		command:                  command,
+		environment:              environment,
+		rootPath:                 rootPath,
+		root:                     root,
+		cgroups:                  cgroups,
+		accountHomePath:          accountHomePath,
+		accountProfileBindingRef: accountProfileBindingRef,
+		accountProfileLock:       accountProfileLock,
+		workspaceResolver:        validated.WorkspacePathResolver,
+		syncDirectoryFn:          syncCodexDirectory,
+		processCleanup:           cleanupProcessGroup,
+		lifecycle:                lifecycle,
+		cancelLifecycle:          cancelLifecycle,
+		executions:               make(map[string]*executionState),
+		waitsDone:                waitsDone,
+		operationsDone:           operationsDone,
+		shutdownDone:             make(chan struct{}),
 	}
 	adapter.shutdownSignal = adapter.signalProcessTree
 	adapter.shutdownInspect = adapter.inspectProcessTree
@@ -378,7 +409,7 @@ func (adapter *Adapter) Launch(ctx context.Context, request ports.AgentLaunchReq
 	}
 	defer endOperation()
 	ctx = operationContext
-	requestHash, err := hashLaunchRequest(request)
+	requestHash, err := adapter.hashLaunchRequest(request)
 	if err != nil {
 		return ports.AgentLaunchReceipt{}, &Error{Code: CodeStateInvalid, Cause: err}
 	}
@@ -503,6 +534,9 @@ func (adapter *Adapter) validateLaunchReplay(runPath string, record launchRecord
 	if err != nil {
 		return record, ports.AgentLaunchReceipt{}, false, err
 	}
+	if err := adapter.validateAccountProfileBinding(record); err != nil {
+		return record, ports.AgentLaunchReceipt{}, false, err
+	}
 	receipt, err := record.receipt(request.ExecutionRef)
 	if err == nil {
 		err = ports.ValidateAgentLaunchReceipt(request, receipt)
@@ -575,6 +609,14 @@ func (adapter *Adapter) resumeLaunchRecordLocked(
 	if err != nil {
 		return ports.AgentLaunchReceipt{}, err
 	}
+	launchEnvironment := environment
+	if recordCreated && record.AccountProfileRef != "" {
+		launchEnvironment, err = adapter.accountExecutionEnvironment(environment)
+		if err != nil {
+			return ports.AgentLaunchReceipt{}, err
+		}
+		defer clearEnvironment(launchEnvironment)
+	}
 	state := &executionState{requestHash: requestHash, terminalRequestHash: terminalRequestHash,
 		receipt: receipt, maxOutput: record.MaxOutputBytes, artifactMediaType: request.ArtifactMediaType,
 		runPath: runPath, status: ports.AgentPending}
@@ -609,7 +651,7 @@ func (adapter *Adapter) resumeLaunchRecordLocked(
 	}
 
 	adapter.executions[executionKey] = state
-	start := adapter.startExecutionLocked(ctx, callerContext, request, state, environment, session)
+	start := adapter.startExecutionLocked(ctx, callerContext, request, state, launchEnvironment, session)
 	if start != nil {
 		adapter.mu.Unlock()
 		adapter.resolveExecutionStart(start)
@@ -884,7 +926,12 @@ func (adapter *Adapter) finalizeShutdown(
 	adapter.mu.Unlock()
 	<-waitsDone
 
-	shutdownErr := errors.Join(discoveryErr, adoptedErr, adapter.root.Close())
+	shutdownErr := errors.Join(
+		discoveryErr,
+		adoptedErr,
+		closeAccountProfileLease(adapter.accountProfileLock),
+		adapter.root.Close(),
+	)
 	if adapter.cgroups != nil {
 		shutdownErr = errors.Join(shutdownErr, adapter.cgroups.close())
 	}

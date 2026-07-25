@@ -928,20 +928,30 @@ func productionAgentAdapter(
 	if err != nil {
 		return nil, err
 	}
+	accountHomeRoot := snapshot.RuntimeCodexAccountHomeRoot()
+	if accountHomeRoot != "" {
+		accountHomeRoot, err = canonicalRuntimePath(accountHomeRoot)
+		if err != nil {
+			return nil, errors.New("bootstrap.account_home_path_invalid")
+		}
+	}
 	adapterConfig := codex.Config{
-		Command:                 snapshot.RuntimeCodexCommand(),
-		WorkRoot:                snapshot.RuntimeCodexWorkRoot(),
-		CgroupRoot:              snapshot.RuntimeCodexCgroupRoot(),
-		Model:                   snapshot.RuntimeCodexModel(),
-		ReasoningEffort:         snapshot.RuntimeCodexReasoning(),
-		Timeout:                 snapshot.RuntimeCodexTimeout(),
-		ProcessPipeDrainDelay:   snapshot.RuntimeCodexProcessPipeDrainDelay(),
-		SupervisorStartTimeout:  snapshot.RuntimeCodexSupervisorStartTimeout(),
-		MaxDiagnosticBytes:      snapshot.RuntimeCodexMaxDiagnosticBytes(),
-		MaxConcurrentExecutions: int(snapshot.RuntimeCodexMaxConcurrentExecutions()),
-		MCPBearerTokenEnvVar:    snapshot.RuntimeCodexMCPBearerTokenEnvVar(),
-		PromptRenderer:          promptRenderer,
-		Environment:             environment, Now: clock.Now,
+		Command:                     snapshot.RuntimeCodexCommand(),
+		WorkRoot:                    snapshot.RuntimeCodexWorkRoot(),
+		CgroupRoot:                  snapshot.RuntimeCodexCgroupRoot(),
+		Model:                       snapshot.RuntimeCodexModel(),
+		ReasoningEffort:             snapshot.RuntimeCodexReasoning(),
+		Timeout:                     snapshot.RuntimeCodexTimeout(),
+		ProcessPipeDrainDelay:       snapshot.RuntimeCodexProcessPipeDrainDelay(),
+		SupervisorStartTimeout:      snapshot.RuntimeCodexSupervisorStartTimeout(),
+		MaxDiagnosticBytes:          snapshot.RuntimeCodexMaxDiagnosticBytes(),
+		MaxConcurrentExecutions:     int(snapshot.RuntimeCodexMaxConcurrentExecutions()),
+		MCPBearerTokenEnvVar:        snapshot.RuntimeCodexMCPBearerTokenEnvVar(),
+		AccountHomeRoot:             accountHomeRoot,
+		AccountProfile:              snapshot.RuntimeCodexAccountProfile(),
+		AccountAuthMaxDocumentBytes: snapshot.RuntimeCodexAccountAuthMaxDocumentBytes(),
+		PromptRenderer:              promptRenderer,
+		Environment:                 environment, Now: clock.Now,
 	}
 	credentialRef := snapshot.RuntimeCodexCredentialRef()
 	if credentialRef != "" {
@@ -998,6 +1008,7 @@ func validateRuntimePaths(snapshot config.Snapshot, sourceConfigPath string) err
 		{raw: snapshot.ConfigEffectivePath(), code: "bootstrap.effective_path_invalid"},
 		{raw: snapshot.IdentityLocalTokenPath(), code: "bootstrap.local_token_path_invalid"},
 		{raw: snapshot.CredentialsLocalPath(), code: "bootstrap.credential_path_invalid"},
+		{raw: snapshot.WorkspaceLocalRoot(), code: "bootstrap.workspace_path_invalid"},
 	}
 	for index := range paths {
 		var err error
@@ -1006,7 +1017,15 @@ func validateRuntimePaths(snapshot config.Snapshot, sourceConfigPath string) err
 		}
 	}
 	statePath, artifactRoot, workRoot := paths[0].value, paths[1].value, paths[2].value
-	effectivePath, tokenPath, credentialPath := paths[3].value, paths[4].value, paths[5].value
+	effectivePath, tokenPath, credentialPath, workspaceRoot := paths[3].value, paths[4].value, paths[5].value, paths[6].value
+	accountHomeRoot := ""
+	if strings.TrimSpace(snapshot.RuntimeCodexAccountHomeRoot()) != "" {
+		var err error
+		accountHomeRoot, err = canonicalRuntimePath(snapshot.RuntimeCodexAccountHomeRoot())
+		if err != nil {
+			return errors.New("bootstrap.account_home_path_invalid")
+		}
+	}
 	rawCredentialReservedPaths := credentiallocal.ReservedPaths(snapshot.CredentialsLocalPath())
 	credentialReservedPaths := make([]string, 0, len(rawCredentialReservedPaths))
 	for _, raw := range rawCredentialReservedPaths {
@@ -1021,11 +1040,16 @@ func validateRuntimePaths(snapshot config.Snapshot, sourceConfigPath string) err
 	if overlapsAny(stateDirectory, artifactRoot, workRoot) || overlapsAny(artifactRoot, workRoot) ||
 		overlapsAny(effectivePath, statePath, artifactRoot, workRoot) ||
 		overlapsAny(tokenDirectory, stateDirectory, artifactRoot, workRoot, effectivePath) ||
-		overlapsAny(credentialPath, stateDirectory, artifactRoot, workRoot, effectivePath, tokenPath) {
+		overlapsAny(credentialPath, stateDirectory, artifactRoot, workRoot, effectivePath, tokenPath) ||
+		overlapsAny(workspaceRoot, stateDirectory, artifactRoot, workRoot, effectivePath, tokenDirectory, credentialPath) {
+		return errors.New("bootstrap.runtime_paths_overlap")
+	}
+	if accountHomeRoot != "" &&
+		overlapsAny(accountHomeRoot, stateDirectory, artifactRoot, workRoot, effectivePath, tokenDirectory, credentialPath, workspaceRoot) {
 		return errors.New("bootstrap.runtime_paths_overlap")
 	}
 	for _, reservedPath := range credentialReservedPaths {
-		if overlapsAny(reservedPath, stateDirectory, artifactRoot, workRoot, effectivePath, tokenPath) {
+		if overlapsAny(reservedPath, stateDirectory, artifactRoot, workRoot, effectivePath, tokenPath, workspaceRoot, accountHomeRoot) {
 			return errors.New("bootstrap.runtime_paths_overlap")
 		}
 	}
@@ -1034,7 +1058,7 @@ func validateRuntimePaths(snapshot config.Snapshot, sourceConfigPath string) err
 		if err != nil {
 			return errors.New("bootstrap.config_path_invalid")
 		}
-		if overlapsAny(configPath, statePath, artifactRoot, workRoot, effectivePath, tokenDirectory, credentialPath) {
+		if overlapsAny(configPath, statePath, artifactRoot, workRoot, effectivePath, tokenDirectory, credentialPath, workspaceRoot, accountHomeRoot) {
 			return errors.New("bootstrap.runtime_paths_overlap")
 		}
 		for _, reservedPath := range credentialReservedPaths {
@@ -1047,7 +1071,13 @@ func validateRuntimePaths(snapshot config.Snapshot, sourceConfigPath string) err
 }
 
 func overlapsAny(path string, others ...string) bool {
+	if strings.TrimSpace(path) == "" {
+		return false
+	}
 	for _, other := range others {
+		if strings.TrimSpace(other) == "" {
+			continue
+		}
 		if pathsOverlap(path, other) {
 			return true
 		}

@@ -21,9 +21,11 @@ import (
 const (
 	legacyStateSchemaVersion       = 3
 	intermediateStateSchemaVersion = 4
-	stateSchemaVersion             = 5
+	accountlessStateSchemaVersion  = 5
+	stateSchemaVersion             = 6
 	requestFileName                = "request.json"
-	launchUpgradeFileName          = "request-v5-upgrade.json"
+	legacyLaunchUpgradeFileName    = "request-v5-upgrade.json"
+	launchUpgradeFileName          = "request-v6-upgrade.json"
 	terminalFileName               = "terminal.json"
 )
 
@@ -33,6 +35,7 @@ type launchRecord struct {
 	ExecutionRef          string                 `json:"execution_ref"`
 	ExecutionSessionRef   string                 `json:"execution_session_ref,omitempty"`
 	ExecutionWorkspaceRef string                 `json:"execution_workspace_ref,omitempty"`
+	AccountProfileRef     string                 `json:"account_profile_ref,omitempty"`
 	ActorRef              string                 `json:"actor_ref,omitempty"`
 	ProjectRef            string                 `json:"project_ref,omitempty"`
 	GoalRef               string                 `json:"goal_ref"`
@@ -102,6 +105,7 @@ type requestHashDocument struct {
 	ExecutionRef          string                 `json:"execution_ref"`
 	ExecutionSessionRef   string                 `json:"execution_session_ref,omitempty"`
 	ExecutionWorkspaceRef string                 `json:"execution_workspace_ref,omitempty"`
+	AccountProfileRef     string                 `json:"account_profile_ref,omitempty"`
 	GoalRef               string                 `json:"goal_ref"`
 	WorkItemRef           string                 `json:"work_item_ref"`
 	PlanGeneration        goal.PlanGeneration    `json:"plan_generation"`
@@ -131,6 +135,10 @@ func hashLaunchRequest(request ports.AgentLaunchRequest) (string, error) {
 	return hashLaunchRequestVersion(request, stateSchemaVersion)
 }
 
+func (adapter *Adapter) hashLaunchRequest(request ports.AgentLaunchRequest) (string, error) {
+	return hashLaunchRequestDocument(request, stateSchemaVersion, adapter.accountProfileRef())
+}
+
 // hashV4LaunchRequest preserves the exact V4 journal identity for an existing
 // non-workspace execution.  V5 binds the opaque workspace ref into the same
 // canonical hash document, rather than silently reusing a V4 launch.
@@ -141,12 +149,21 @@ func hashV4LaunchRequest(request ports.AgentLaunchRequest) (string, error) {
 	return hashLaunchRequestVersion(request, intermediateStateSchemaVersion)
 }
 
+func hashV5LaunchRequest(request ports.AgentLaunchRequest) (string, error) {
+	return hashLaunchRequestVersion(request, accountlessStateSchemaVersion)
+}
+
 func hashLaunchRequestVersion(request ports.AgentLaunchRequest, schemaVersion int) (string, error) {
+	return hashLaunchRequestDocument(request, schemaVersion, "")
+}
+
+func hashLaunchRequestDocument(request ports.AgentLaunchRequest, schemaVersion int, accountProfileRef string) (string, error) {
 	document := requestHashDocument{
 		SchemaVersion:         schemaVersion,
 		ExecutionRef:          request.ExecutionRef.String(),
 		ExecutionSessionRef:   request.SessionRef.String(),
 		ExecutionWorkspaceRef: request.ExecutionWorkspaceRef.String(),
+		AccountProfileRef:     accountProfileRef,
 		GoalRef:               request.GoalRef.String(),
 		WorkItemRef:           request.WorkItemRef.String(),
 		PlanGeneration:        request.PlanGeneration,
@@ -237,6 +254,7 @@ func (adapter *Adapter) ensureLaunchRecord(request ports.AgentLaunchRequest, req
 		ExecutionRef:          request.ExecutionRef.String(),
 		ExecutionSessionRef:   request.SessionRef.String(),
 		ExecutionWorkspaceRef: request.ExecutionWorkspaceRef.String(),
+		AccountProfileRef:     adapter.accountProfileRef(),
 		ActorRef:              request.ActorRef.String(),
 		ProjectRef:            request.ProjectRef.String(),
 		GoalRef:               request.GoalRef.String(),
@@ -288,6 +306,9 @@ func (adapter *Adapter) loadLaunchRecord(executionRef goal.ExecutionRef) (launch
 	if record.ExecutionRef != executionRef.String() {
 		return launchRecord{}, runPath, false, &Error{Code: CodeStateInvalid}
 	}
+	if err := adapter.validateAccountProfileBinding(record); err != nil {
+		return launchRecord{}, runPath, false, err
+	}
 	return record, runPath, true, nil
 }
 
@@ -309,7 +330,8 @@ func (adapter *Adapter) readLaunchRecord(runPath string) (launchRecord, bool, er
 	}
 	switch record.SchemaVersion {
 	case legacyStateSchemaVersion:
-		if record.ExecutionSessionRef != "" || record.ActorRef != "" || record.ProjectRef != "" ||
+		if record.ExecutionSessionRef != "" || record.AccountProfileRef != "" ||
+			record.ActorRef != "" || record.ProjectRef != "" ||
 			record.GoalRef != "" || record.WorkItemRef != "" ||
 			record.PlanGeneration != 0 || record.AppSpecGeneration != 0 || record.ExecutionAttempt != 0 ||
 			record.ModelRef != "" || record.AgentRef != "" {
@@ -319,8 +341,12 @@ func (adapter *Adapter) readLaunchRecord(runPath string) (launchRecord, bool, er
 		if err := validateLaunchRecordV4(record); err != nil {
 			return launchRecord{}, false, err
 		}
-	case stateSchemaVersion:
+	case accountlessStateSchemaVersion:
 		if err := validateLaunchRecordV5(record); err != nil {
+			return launchRecord{}, false, err
+		}
+	case stateSchemaVersion:
+		if err := validateLaunchRecordV6(record); err != nil {
 			return launchRecord{}, false, err
 		}
 	default:
@@ -331,7 +357,8 @@ func (adapter *Adapter) readLaunchRecord(runPath string) (launchRecord, bool, er
 
 func validateLaunchRecordV4(record launchRecord) error {
 	if record.SchemaVersion != intermediateStateSchemaVersion ||
-		record.ExecutionSessionRef != "" || record.ActorRef != "" || record.ProjectRef != "" ||
+		record.ExecutionSessionRef != "" || record.AccountProfileRef != "" ||
+		record.ActorRef != "" || record.ProjectRef != "" ||
 		record.GoalRef == "" ||
 		record.WorkItemRef == "" ||
 		record.PlanGeneration == 0 ||
@@ -345,12 +372,30 @@ func validateLaunchRecordV4(record launchRecord) error {
 }
 
 func validateLaunchRecordV5(record launchRecord) error {
-	if record.SchemaVersion != stateSchemaVersion ||
+	if record.SchemaVersion != accountlessStateSchemaVersion ||
 		record.GoalRef == "" || record.WorkItemRef == "" ||
 		record.PlanGeneration == 0 || record.AppSpecGeneration == 0 || record.ExecutionAttempt == 0 ||
 		record.ModelRef == "" || record.AgentRef != AgentRef {
 		return &Error{Code: CodeStateInvalid}
 	}
+	if record.AccountProfileRef != "" {
+		return &Error{Code: CodeStateInvalid}
+	}
+	return validateLaunchRecordIdentity(record)
+}
+
+func validateLaunchRecordV6(record launchRecord) error {
+	if record.SchemaVersion != stateSchemaVersion ||
+		record.GoalRef == "" || record.WorkItemRef == "" ||
+		record.PlanGeneration == 0 || record.AppSpecGeneration == 0 || record.ExecutionAttempt == 0 ||
+		record.ModelRef == "" || record.AgentRef != AgentRef ||
+		record.AccountProfileRef != "" && !validAccountProfileRef(record.AccountProfileRef) {
+		return &Error{Code: CodeStateInvalid}
+	}
+	return validateLaunchRecordIdentity(record)
+}
+
+func validateLaunchRecordIdentity(record launchRecord) error {
 	if record.ExecutionSessionRef != "" {
 		ref, err := ports.NewExecutionSessionRef(record.ExecutionSessionRef)
 		if err != nil || ref.String() != record.ExecutionSessionRef {
@@ -372,14 +417,18 @@ func (adapter *Adapter) bindLegacyLaunchRecord(
 	request ports.AgentLaunchRequest,
 	requestHash string,
 ) (launchRecord, error) {
-	candidate, err := adapter.legacyLaunchCandidate(legacy, request, requestHash)
+	source, err := adapter.legacyLaunchSource(runPath, legacy)
+	if err != nil {
+		return launchRecord{}, err
+	}
+	candidate, err := adapter.legacyLaunchCandidate(source, request, requestHash)
 	if err != nil {
 		return launchRecord{}, err
 	}
 	upgrade := launchUpgradeRecord{
 		SchemaVersion:       stateSchemaVersion,
-		SourceSchemaVersion: legacy.SchemaVersion,
-		SourceRequestHash:   legacy.RequestHash,
+		SourceSchemaVersion: source.SchemaVersion,
+		SourceRequestHash:   source.RequestHash,
 		Launch:              candidate,
 	}
 	created, err := adapter.publishJSON(runPath, launchUpgradeFileName, upgrade)
@@ -395,7 +444,7 @@ func (adapter *Adapter) bindLegacyLaunchRecord(
 			return launchRecord{}, &Error{Code: CodeStateInvalid}
 		}
 	}
-	if err := validateLegacyLaunchUpgrade(upgrade, legacy); err != nil {
+	if err := validateLegacyLaunchUpgrade(upgrade, source); err != nil {
 		return launchRecord{}, err
 	}
 	if upgrade.Launch.RequestHash != requestHash {
@@ -410,7 +459,11 @@ func (adapter *Adapter) previewLegacyLaunchRecord(
 	request ports.AgentLaunchRequest,
 	requestHash string,
 ) (launchRecord, bool, error) {
-	candidate, err := adapter.legacyLaunchCandidate(legacy, request, requestHash)
+	source, err := adapter.legacyLaunchSource(runPath, legacy)
+	if err != nil {
+		return launchRecord{}, false, err
+	}
+	candidate, err := adapter.legacyLaunchCandidate(source, request, requestHash)
 	if err != nil {
 		return launchRecord{}, false, err
 	}
@@ -419,7 +472,7 @@ func (adapter *Adapter) previewLegacyLaunchRecord(
 	if err != nil || !found {
 		return candidate, false, err
 	}
-	if err := validateLegacyLaunchUpgrade(upgrade, legacy); err != nil {
+	if err := validateLegacyLaunchUpgrade(upgrade, source); err != nil {
 		return launchRecord{}, false, err
 	}
 	if upgrade.Launch.RequestHash != requestHash {
@@ -428,11 +481,30 @@ func (adapter *Adapter) previewLegacyLaunchRecord(
 	return upgrade.Launch, true, nil
 }
 
+func (adapter *Adapter) legacyLaunchSource(runPath string, original launchRecord) (launchRecord, error) {
+	if original.SchemaVersion != legacyStateSchemaVersion &&
+		original.SchemaVersion != intermediateStateSchemaVersion {
+		return original, nil
+	}
+	var upgrade launchUpgradeRecord
+	found, err := adapter.readPrivateJSON(path.Join(runPath, legacyLaunchUpgradeFileName), &upgrade)
+	if err != nil || !found {
+		return original, err
+	}
+	if err := validateAccountlessLaunchUpgrade(upgrade, original); err != nil {
+		return launchRecord{}, err
+	}
+	return upgrade.Launch, nil
+}
+
 func (adapter *Adapter) legacyLaunchCandidate(
 	legacy launchRecord,
 	request ports.AgentLaunchRequest,
 	requestHash string,
 ) (launchRecord, error) {
+	if adapter.accountProfileRef() != "" {
+		return launchRecord{}, &Error{Code: CodeAccountProfileUnavailable}
+	}
 	var legacyHash string
 	var err error
 	switch legacy.SchemaVersion {
@@ -440,6 +512,8 @@ func (adapter *Adapter) legacyLaunchCandidate(
 		legacyHash, err = hashLegacyLaunchRequest(request)
 	case intermediateStateSchemaVersion:
 		legacyHash, err = hashV4LaunchRequest(request)
+	case accountlessStateSchemaVersion:
+		legacyHash, err = hashV5LaunchRequest(request)
 	default:
 		return launchRecord{}, &Error{Code: CodeStateInvalid}
 	}
@@ -455,6 +529,7 @@ func (adapter *Adapter) legacyLaunchCandidate(
 		ExecutionRef:          legacy.ExecutionRef,
 		ExecutionSessionRef:   request.SessionRef.String(),
 		ExecutionWorkspaceRef: request.ExecutionWorkspaceRef.String(),
+		AccountProfileRef:     "",
 		ActorRef:              request.ActorRef.String(),
 		ProjectRef:            request.ProjectRef.String(),
 		GoalRef:               request.GoalRef.String(),
@@ -476,14 +551,32 @@ func (adapter *Adapter) legacyLaunchCandidate(
 
 func validateLegacyLaunchUpgrade(upgrade launchUpgradeRecord, legacy launchRecord) error {
 	if upgrade.SchemaVersion != stateSchemaVersion ||
-		(upgrade.SourceSchemaVersion != legacyStateSchemaVersion && upgrade.SourceSchemaVersion != intermediateStateSchemaVersion) ||
+		(upgrade.SourceSchemaVersion != legacyStateSchemaVersion &&
+			upgrade.SourceSchemaVersion != intermediateStateSchemaVersion &&
+			upgrade.SourceSchemaVersion != accountlessStateSchemaVersion) ||
+		upgrade.SourceRequestHash != legacy.RequestHash {
+		return &Error{Code: CodeStateInvalid}
+	}
+	if err := validateLaunchRecordV6(upgrade.Launch); err != nil {
+		return err
+	}
+	return validateLaunchUpgradeIdentity(upgrade.Launch, legacy)
+}
+
+func validateAccountlessLaunchUpgrade(upgrade launchUpgradeRecord, legacy launchRecord) error {
+	if upgrade.SchemaVersion != accountlessStateSchemaVersion ||
+		(upgrade.SourceSchemaVersion != legacyStateSchemaVersion &&
+			upgrade.SourceSchemaVersion != intermediateStateSchemaVersion) ||
 		upgrade.SourceRequestHash != legacy.RequestHash {
 		return &Error{Code: CodeStateInvalid}
 	}
 	if err := validateLaunchRecordV5(upgrade.Launch); err != nil {
 		return err
 	}
-	launch := upgrade.Launch
+	return validateLaunchUpgradeIdentity(upgrade.Launch, legacy)
+}
+
+func validateLaunchUpgradeIdentity(launch, legacy launchRecord) error {
 	if launch.ExecutionRef != legacy.ExecutionRef ||
 		launch.SpecHash != legacy.SpecHash ||
 		launch.ProviderRef != legacy.ProviderRef ||
@@ -541,7 +634,8 @@ func (record launchRecord) receipt(executionRef goal.ExecutionRef) (ports.AgentL
 }
 
 func (adapter *Adapter) observationReceipt(record launchRecord, executionRef goal.ExecutionRef) (ports.AgentLaunchReceipt, error) {
-	if record.SchemaVersion == stateSchemaVersion || record.SchemaVersion == intermediateStateSchemaVersion {
+	if record.SchemaVersion == stateSchemaVersion || record.SchemaVersion == accountlessStateSchemaVersion ||
+		record.SchemaVersion == intermediateStateSchemaVersion {
 		return record.receipt(executionRef)
 	}
 	if record.SchemaVersion != legacyStateSchemaVersion || record.ExecutionRef != executionRef.String() {
@@ -586,7 +680,10 @@ func (adapter *Adapter) loadTerminal(runPath, requestHash, specHash string, maxO
 	if err != nil || !found {
 		return terminalRecord{}, found, err
 	}
-	if (terminal.SchemaVersion != legacyStateSchemaVersion && terminal.SchemaVersion != intermediateStateSchemaVersion && terminal.SchemaVersion != stateSchemaVersion) ||
+	if (terminal.SchemaVersion != legacyStateSchemaVersion &&
+		terminal.SchemaVersion != intermediateStateSchemaVersion &&
+		terminal.SchemaVersion != accountlessStateSchemaVersion &&
+		terminal.SchemaVersion != stateSchemaVersion) ||
 		terminal.RequestHash != requestHash || terminal.ObservedAt.IsZero() {
 		return terminalRecord{}, false, &Error{Code: CodeStateInvalid}
 	}

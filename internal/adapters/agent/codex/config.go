@@ -51,6 +51,9 @@ func prepareConfig(config Config) (Config, string, []string, string, *os.Root, e
 	if config.MaxConcurrentExecutions <= 0 {
 		return Config{}, "", nil, "", nil, &Error{Code: CodeMaxConcurrentInvalid}
 	}
+	if err := validateAccountProfileConfig(config); err != nil {
+		return Config{}, "", nil, "", nil, err
+	}
 	if config.PromptRenderer == nil {
 		return Config{}, "", nil, "", nil, &Error{Code: CodePromptRendererInvalid}
 	}
@@ -95,6 +98,46 @@ func prepareConfig(config Config) (Config, string, []string, string, *os.Root, e
 	}
 	config.Environment = cloneEnvironment(config.Environment)
 	return config, command, environment, rootPath, root, nil
+}
+
+func validateAccountProfileConfig(config Config) error {
+	if (config.AccountHomeRoot == "") != (config.AccountProfile == "") {
+		return &Error{Code: CodeAccountProfileInvalid}
+	}
+	if config.AccountProfile == "" {
+		return nil
+	}
+	if config.AccountAuthMaxDocumentBytes <= 0 {
+		return &Error{Code: CodeAccountProfileInvalid}
+	}
+	if config.CredentialStore != nil || config.CredentialRef != "" {
+		return &Error{Code: CodeAccountProfileInvalid}
+	}
+	if !filepath.IsAbs(config.AccountHomeRoot) ||
+		filepath.Clean(config.AccountHomeRoot) != config.AccountHomeRoot ||
+		strings.ContainsRune(config.AccountHomeRoot, '\x00') ||
+		!validAccountProfileID(config.AccountProfile) ||
+		config.MaxConcurrentExecutions != 1 {
+		return &Error{Code: CodeAccountProfileInvalid}
+	}
+	return nil
+}
+
+func validAccountProfileID(value string) bool {
+	if value == "" || len(value) > 64 || strings.TrimSpace(value) != value {
+		return false
+	}
+	for index, character := range value {
+		switch {
+		case character >= 'a' && character <= 'z':
+		case character >= 'A' && character <= 'Z':
+		case character >= '0' && character <= '9':
+		case index > 0 && strings.ContainsRune("_-", character):
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func validPrivateEnvironmentName(name string) bool {
