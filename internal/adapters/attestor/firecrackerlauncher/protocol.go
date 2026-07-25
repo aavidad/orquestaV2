@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	launchercontract "orquesta/internal/testattestorprotocol/launcher"
 	firecrackerdrive "orquesta/internal/testattestorprotocol/rawdrive"
 )
 
@@ -29,27 +30,8 @@ const (
 	maxCapturedOutputBytes = firecrackerdrive.MaxCapturedOutputBytes
 )
 
-type LaunchRequest struct {
-	Nonce                  string
-	InputDigest            string
-	SubjectDigest          string
-	PolicyDigest           string
-	Timeout                time.Duration
-	GuestMemoryMiB         uint32
-	MemoryMaxBytes         uint64
-	PIDsMax                uint32
-	CPUQuotaMicros         uint64
-	CPUPeriodMicros        uint64
-	OutputDriveBytes       uint64
-	MaxCapturedOutputBytes uint64
-}
-
-type LaunchResponse struct {
-	Nonce        string
-	Code         string
-	OutputDigest string
-	AssetDigest  string
-}
+type LaunchRequest = launchercontract.LaunchRequest
+type LaunchResponse = launchercontract.LaunchResponse
 
 func marshalRequest(request LaunchRequest) ([]byte, error) {
 	if !validLaunchRequestShape(request) {

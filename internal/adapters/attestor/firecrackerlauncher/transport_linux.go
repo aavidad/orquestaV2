@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	launchercontract "orquesta/internal/testattestorprotocol/launcher"
 )
 
 type Client struct {
@@ -17,10 +19,7 @@ type Client struct {
 	trustedUID uint32
 }
 
-type ClientResult struct {
-	Response LaunchResponse
-	Output   *os.File
-}
+type ClientResult = launchercontract.ClientResult
 
 func NewClient(socketPath string) (*Client, error) {
 	return newClient(socketPath, 0)
@@ -268,3 +267,5 @@ func closeFiles(files []*os.File) {
 		}
 	}
 }
+
+var _ launchercontract.Client = (*Client)(nil)

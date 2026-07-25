@@ -5,14 +5,13 @@ package firecrackerlauncher
 import (
 	"context"
 	"os"
+
+	launchercontract "orquesta/internal/testattestorprotocol/launcher"
 )
 
 type Client struct{}
 
-type ClientResult struct {
-	Response LaunchResponse
-	Output   *os.File
-}
+type ClientResult = launchercontract.ClientResult
 
 func NewClient(string) (*Client, error) {
 	return nil, launcherError(CodeUnavailable)
@@ -26,3 +25,5 @@ func (*Client) Launch(
 ) (ClientResult, error) {
 	return ClientResult{}, launcherError(CodeUnavailable)
 }
+
+var _ launchercontract.Client = (*Client)(nil)

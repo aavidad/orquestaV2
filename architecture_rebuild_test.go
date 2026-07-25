@@ -19,6 +19,7 @@ import (
 
 const (
 	rebuildArchitectureEnvLoader        = "internal/config/env_loader.go"
+	rebuildArchitectureLauncherContract = "orquesta/internal/testattestorprotocol/launcher"
 	rebuildArchitectureRawDriveProtocol = "orquesta/internal/testattestorprotocol/rawdrive"
 )
 
@@ -156,16 +157,21 @@ func TestRebuildArchitecture(t *testing.T) {
 		}
 	})
 
-	t.Run("test_attestor_raw_drive_protocol_is_standard_library_only", func(t *testing.T) {
-		for _, file := range rebuildArchitectureFilesUnder(files, "internal/testattestorprotocol/rawdrive") {
-			for _, imported := range file.imports {
-				if !rebuildArchitectureIsStandardLibraryImport(imported.path) {
-					rebuildArchitectureImportError(
-						t,
-						file,
-						imported,
-						"raw-drive wire protocol must depend only on the standard library",
-					)
+	t.Run("test_attestor_shared_protocols_are_standard_library_only", func(t *testing.T) {
+		for _, root := range []string{
+			"internal/testattestorprotocol/launcher",
+			"internal/testattestorprotocol/rawdrive",
+		} {
+			for _, file := range rebuildArchitectureFilesUnder(files, root) {
+				for _, imported := range file.imports {
+					if !rebuildArchitectureIsStandardLibraryImport(imported.path) {
+						rebuildArchitectureImportError(
+							t,
+							file,
+							imported,
+							"shared test-attestor protocols must depend only on the standard library",
+						)
+					}
 				}
 			}
 		}
@@ -195,10 +201,12 @@ func TestRebuildArchitecture(t *testing.T) {
 				}
 			}
 		}
-		if !rebuildArchitectureIsSharedAdapterProtocol(rebuildArchitectureRawDriveProtocol) ||
+		if !rebuildArchitectureIsSharedAdapterProtocol(rebuildArchitectureLauncherContract) ||
+			!rebuildArchitectureIsSharedAdapterProtocol(rebuildArchitectureRawDriveProtocol) ||
 			rebuildArchitectureIsSharedAdapterProtocol("orquesta/internal/adapters/attestor/firecracker") ||
+			rebuildArchitectureIsSharedAdapterProtocol(rebuildArchitectureLauncherContract+"/mutant") ||
 			rebuildArchitectureIsSharedAdapterProtocol(rebuildArchitectureRawDriveProtocol+"/mutant") {
-			t.Fatal("raw-drive exception must remain exact and outside internal/adapters")
+			t.Fatal("shared protocol exceptions must remain exact and outside internal/adapters")
 		}
 	})
 
@@ -722,7 +730,8 @@ func rebuildArchitectureIsStandardLibraryImport(importPath string) bool {
 }
 
 func rebuildArchitectureIsSharedAdapterProtocol(importPath string) bool {
-	return importPath == rebuildArchitectureRawDriveProtocol
+	return importPath == rebuildArchitectureLauncherContract ||
+		importPath == rebuildArchitectureRawDriveProtocol
 }
 
 func rebuildArchitectureIsMCPImport(importPath string) bool {
