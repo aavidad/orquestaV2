@@ -863,23 +863,59 @@ validate_receipt() {
   [[ "$receipt" == /* && -f "$receipt" && ! -L "$receipt" ]] || die "receipt_type"
   [[ "$(realpath -e -- "$receipt")" == "$receipt" ]] || die "receipt_path_not_canonical"
   [[ "$(stat -c '%u:%g:%a:%h' -- "$receipt")" == "0:0:400:1" ]] || die "receipt_metadata"
-  local expected
-  expected="$(printf '%s\n' \
-    "schema=orquesta_firecracker_activation_receipt.v1" \
-    "status=passed" \
-    "config_sha256=$config_sha" \
-    "unit_sha256=$unit_sha" \
-    "primitives_unit_sha256=$primitives_unit_sha" \
-    "launcher_sha256=$launcher_sha" \
-    "asset_digest=$asset_digest" \
-    "e2e_suite=orquesta.firecracker-attestor.physical-16.v1" \
-    "max_concurrent_runs=16" \
-    "physical_microvm_count=16" \
-    "all_attestations_valid=true" \
-    "zero_residual_runs=true" \
-    "network_absent=true" \
-    "memory_swap_max_zero=true")"
-  [[ "$(<"$receipt")" == "$expected" ]] || die "receipt_content"
+  verify_root_trusted_source "receipt" "$receipt"
+  if ! python3 - \
+    "$receipt" "$config_sha" "$unit_sha" "$primitives_unit_sha" \
+    "$launcher_sha" "$asset_digest" <<'PY'
+import pathlib
+import re
+import sys
+
+path = pathlib.Path(sys.argv[1])
+config_sha, unit_sha, primitives_unit_sha, launcher_sha, asset_digest = sys.argv[2:]
+raw = path.read_bytes()
+try:
+    text = raw.decode("ascii")
+except UnicodeDecodeError as exc:
+    raise SystemExit("receipt_not_ascii") from exc
+lines = text.splitlines(keepends=True)
+if len(lines) != 20 or any(not line.endswith("\n") for line in lines):
+    raise SystemExit("receipt_line_framing")
+values = [line[:-1] for line in lines]
+digest = re.compile(r"[0-9a-f]{64}\Z")
+for index, prefix in ((7, "evidence_sha256="), (8, "policy_digest=")):
+    if not values[index].startswith(prefix):
+        raise SystemExit("receipt_digest_field")
+    if digest.fullmatch(values[index][len(prefix):]) is None:
+        raise SystemExit("receipt_digest_format")
+expected = [
+    "schema=orquesta_firecracker_activation_receipt.v2",
+    "status=passed",
+    f"config_sha256={config_sha}",
+    f"unit_sha256={unit_sha}",
+    f"primitives_unit_sha256={primitives_unit_sha}",
+    f"launcher_sha256={launcher_sha}",
+    f"asset_digest={asset_digest}",
+    values[7],
+    values[8],
+    "e2e_suite=orquesta.firecracker-attestor.physical-16.v1",
+    "max_concurrent_runs=16",
+    "physical_microvm_count=16",
+    "concurrent_high_water=16",
+    "all_attestations_valid=true",
+    "zero_residual_runs=true",
+    "network_absent=true",
+    "api_absent=true",
+    "vsock_absent=true",
+    "serial_absent=true",
+    "memory_swap_max_zero=true",
+]
+if values != expected or raw != ("\n".join(expected) + "\n").encode("ascii"):
+    raise SystemExit("receipt_contract")
+PY
+  then
+    die "receipt_content"
+  fi
 }
 
 read_unit_enabled_state() {

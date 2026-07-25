@@ -259,6 +259,225 @@ assert_contains "$LAUNCHER_LIFECYCLE_SOURCE" 'Do not pass --new-pid-ns or --daem
 # ejercitan con el uid/gid del test; la segunda pasada conserva inode y bytes.
 # shellcheck disable=SC1090
 source "$INSTALLER"
+
+# `validate_receipt` exige root real en producción. Estas funciones sustituyen
+# solo metadata para probar el contrato sin privilegios ni efectos del host.
+fake_receipt_stat() {
+  local format="${2:-}"
+  local path="${*: -1}"
+  case "$format" in
+    '%u:%g:%a:%h')
+      printf '%s\n' "${FAKE_RECEIPT_METADATA:-0:0:400:1}"
+      ;;
+    '%u:%g')
+      printf '%s\n' "0:0"
+      ;;
+    '%a')
+      if [[ -n "${FAKE_RECEIPT_UNSAFE_ANCESTOR:-}" &&
+        "$path" == "$FAKE_RECEIPT_UNSAFE_ANCESTOR" ]]; then
+        printf '%s\n' "777"
+      else
+        printf '%s\n' "755"
+      fi
+      ;;
+    *)
+      command stat "$@"
+      ;;
+  esac
+}
+
+validate_receipt_with_fake_root() (
+  # shellcheck disable=SC2329
+  stat() {
+    fake_receipt_stat "$@"
+  }
+  validate_receipt "$@"
+)
+
+run_fake_receipt_activation() (
+  local receipt="$1"
+  local marker="$2"
+  shift 2
+  # shellcheck disable=SC2329
+  stat() {
+    fake_receipt_stat "$@"
+  }
+  activate_unit() {
+    printf '%s\n' "activated" >"$marker"
+  }
+  validate_receipt "$receipt" "$@"
+  activate_unit "/fake/content-addressed-unit"
+)
+
+write_activation_receipt() {
+  local path="$1"
+  local config_sha="$2"
+  local unit_sha="$3"
+  local launcher_digest="$4"
+  local primitives_digest="$5"
+  local assets_digest="$6"
+  local evidence_digest="$7"
+  local policy_digest="$8"
+  printf '%s\n' \
+    "schema=orquesta_firecracker_activation_receipt.v2" \
+    "status=passed" \
+    "config_sha256=$config_sha" \
+    "unit_sha256=$unit_sha" \
+    "primitives_unit_sha256=$primitives_digest" \
+    "launcher_sha256=$launcher_digest" \
+    "asset_digest=$assets_digest" \
+    "evidence_sha256=$evidence_digest" \
+    "policy_digest=$policy_digest" \
+    "e2e_suite=orquesta.firecracker-attestor.physical-16.v1" \
+    "max_concurrent_runs=16" \
+    "physical_microvm_count=16" \
+    "concurrent_high_water=16" \
+    "all_attestations_valid=true" \
+    "zero_residual_runs=true" \
+    "network_absent=true" \
+    "api_absent=true" \
+    "vsock_absent=true" \
+    "serial_absent=true" \
+    "memory_swap_max_zero=true" >"$path"
+  chmod 0400 "$path"
+}
+
+expect_receipt_rejected() {
+  local label="$1"
+  local path="$2"
+  shift 2
+  if validate_receipt_with_fake_root "$path" "$@" >/dev/null 2>&1; then
+    fail "receipt_accepted:$label"
+  fi
+}
+
+readonly RECEIPT_CONFIG_SHA="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+readonly RECEIPT_UNIT_SHA="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+readonly RECEIPT_LAUNCHER_SHA="cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+readonly RECEIPT_PRIMITIVES_SHA="dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+readonly RECEIPT_ASSET_DIGEST="eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+readonly RECEIPT_EVIDENCE_SHA="ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+readonly RECEIPT_POLICY_DIGEST="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+readonly RECEIPT_TEST_ROOT="$TEST_ROOT/receipts"
+mkdir "$RECEIPT_TEST_ROOT"
+readonly VALID_RECEIPT="$RECEIPT_TEST_ROOT/valid.receipt"
+write_activation_receipt \
+  "$VALID_RECEIPT" "$RECEIPT_CONFIG_SHA" "$RECEIPT_UNIT_SHA" \
+  "$RECEIPT_LAUNCHER_SHA" "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST" \
+  "$RECEIPT_EVIDENCE_SHA" "$RECEIPT_POLICY_DIGEST"
+validate_receipt_with_fake_root \
+  "$VALID_RECEIPT" "$RECEIPT_CONFIG_SHA" "$RECEIPT_UNIT_SHA" \
+  "$RECEIPT_LAUNCHER_SHA" "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST"
+
+receipt_variant() {
+  local name="$1"
+  local old="$2"
+  local new="$3"
+  local path="$RECEIPT_TEST_ROOT/$name.receipt"
+  cp -- "$VALID_RECEIPT" "$path"
+  chmod 0600 "$path"
+  sed -i "s|$old|$new|" "$path"
+  chmod 0400 "$path"
+  printf '%s\n' "$path"
+}
+
+bad_receipt="$(
+  receipt_variant schema \
+    "schema=orquesta_firecracker_activation_receipt.v2" \
+    "schema=orquesta_firecracker_activation_receipt.v1"
+)"
+expect_receipt_rejected \
+  "schema" "$bad_receipt" "$RECEIPT_CONFIG_SHA" "$RECEIPT_UNIT_SHA" \
+  "$RECEIPT_LAUNCHER_SHA" "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST"
+
+bad_receipt="$(
+  receipt_variant evidence \
+    "evidence_sha256=$RECEIPT_EVIDENCE_SHA" \
+    "evidence_sha256=FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+)"
+expect_receipt_rejected \
+  "evidence_sha256" "$bad_receipt" "$RECEIPT_CONFIG_SHA" "$RECEIPT_UNIT_SHA" \
+  "$RECEIPT_LAUNCHER_SHA" "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST"
+
+bad_receipt="$(
+  receipt_variant policy \
+    "policy_digest=$RECEIPT_POLICY_DIGEST" \
+    "policy_digest=0123456789abcdef"
+)"
+expect_receipt_rejected \
+  "policy_digest" "$bad_receipt" "$RECEIPT_CONFIG_SHA" "$RECEIPT_UNIT_SHA" \
+  "$RECEIPT_LAUNCHER_SHA" "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST"
+
+bad_receipt="$(
+  receipt_variant high-water \
+    "concurrent_high_water=16" \
+    "concurrent_high_water=15"
+)"
+expect_receipt_rejected \
+  "concurrent_high_water" "$bad_receipt" "$RECEIPT_CONFIG_SHA" "$RECEIPT_UNIT_SHA" \
+  "$RECEIPT_LAUNCHER_SHA" "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST"
+
+for boolean_field in api_absent vsock_absent serial_absent; do
+  bad_receipt="$(
+    receipt_variant "$boolean_field" \
+      "$boolean_field=true" \
+      "$boolean_field=false"
+  )"
+  expect_receipt_rejected \
+    "$boolean_field" "$bad_receipt" "$RECEIPT_CONFIG_SHA" "$RECEIPT_UNIT_SHA" \
+    "$RECEIPT_LAUNCHER_SHA" "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST"
+done
+
+readonly TAMPERED_RECEIPT="$RECEIPT_TEST_ROOT/tampered.receipt"
+cp -- "$VALID_RECEIPT" "$TAMPERED_RECEIPT"
+chmod 0600 "$TAMPERED_RECEIPT"
+printf '%s\n' "unexpected=true" >>"$TAMPERED_RECEIPT"
+chmod 0400 "$TAMPERED_RECEIPT"
+expect_receipt_rejected \
+  "tamper" "$TAMPERED_RECEIPT" "$RECEIPT_CONFIG_SHA" "$RECEIPT_UNIT_SHA" \
+  "$RECEIPT_LAUNCHER_SHA" "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST"
+
+if FAKE_RECEIPT_UNSAFE_ANCESTOR="$RECEIPT_TEST_ROOT" \
+  validate_receipt_with_fake_root \
+    "$VALID_RECEIPT" "$RECEIPT_CONFIG_SHA" "$RECEIPT_UNIT_SHA" \
+    "$RECEIPT_LAUNCHER_SHA" "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST" \
+    >/dev/null 2>&1; then
+  fail "receipt_unsafe_ancestor_accepted"
+fi
+
+readonly RECEIPT_SYMLINK_ROOT="$TEST_ROOT/receipt-link"
+ln -s -- "$RECEIPT_TEST_ROOT" "$RECEIPT_SYMLINK_ROOT"
+if validate_receipt_with_fake_root \
+  "$RECEIPT_SYMLINK_ROOT/valid.receipt" \
+  "$RECEIPT_CONFIG_SHA" "$RECEIPT_UNIT_SHA" "$RECEIPT_LAUNCHER_SHA" \
+  "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST" >/dev/null 2>&1; then
+  fail "receipt_symlink_ancestor_accepted"
+fi
+
+if FAKE_RECEIPT_METADATA="0:0:600:1" validate_receipt_with_fake_root \
+  "$VALID_RECEIPT" "$RECEIPT_CONFIG_SHA" "$RECEIPT_UNIT_SHA" \
+  "$RECEIPT_LAUNCHER_SHA" "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST" \
+  >/dev/null 2>&1; then
+  fail "receipt_wrong_mode_accepted"
+fi
+
+readonly FAKE_ACTIVATION_MARKER="$RECEIPT_TEST_ROOT/activation.marker"
+run_fake_receipt_activation \
+  "$VALID_RECEIPT" "$FAKE_ACTIVATION_MARKER" \
+  "$RECEIPT_CONFIG_SHA" "$RECEIPT_UNIT_SHA" "$RECEIPT_LAUNCHER_SHA" \
+  "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST"
+[[ "$(<"$FAKE_ACTIVATION_MARKER")" == "activated" ]] ||
+  fail "valid_receipt_did_not_reach_activation"
+rm -- "$FAKE_ACTIVATION_MARKER"
+if run_fake_receipt_activation \
+  "$TAMPERED_RECEIPT" "$FAKE_ACTIVATION_MARKER" \
+  "$RECEIPT_CONFIG_SHA" "$RECEIPT_UNIT_SHA" "$RECEIPT_LAUNCHER_SHA" \
+  "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST" >/dev/null 2>&1; then
+  fail "tampered_receipt_reached_activation"
+fi
+[[ ! -e "$FAKE_ACTIVATION_MARKER" ]] ||
+  fail "tampered_receipt_activation_effect"
+
 golden_asset_digest="$(
   canonical_asset_digest \
     1111111111111111111111111111111111111111111111111111111111111111 \
