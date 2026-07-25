@@ -1,9 +1,10 @@
-# Perfil Firecracker para host de 128 GiB
+# Perfil Firecracker de 16 microVM para host clase 128 GB
 
 Fecha de dimensionado: 2026-07-25.
 
 Este perfil configura el atestador `microvm` para admitir hasta 16 ejecuciones
-simultáneas en un host dedicado de 128 GiB. No cambia el default portable de
+simultáneas en un host clase 128 GB. El host de referencia expone
+132 039 225 344 bytes, unos 122,97 GiB. No cambia el default portable de
 `test_attestor.max_concurrent_runs`, que sigue siendo 2.
 
 ```toml
@@ -29,11 +30,11 @@ pids_max = 512
 cpu_quota_micros = 200000
 ```
 
-El presupuesto nominal de cgroup es `16 × 5 GiB = 80 GiB`. En un host de
-128 GiB deja 48 GiB nominales para el sistema, el launcher, page cache y
-variación de carga. Cada guest recibe 4 GiB y el cgroup conserva 1 GiB adicional.
-El guest puede alojar dos copias del sujeto máximo de 512 MiB, una salida máxima
-de 64 MiB y 2 GiB de reserva operativa.
+El presupuesto nominal de cgroup es `16 × 5 GiB = 80 GiB`. El preflight suma
+una reserva global de 2 GiB y exige 82 GiB físicos. En el host de referencia
+quedan unos 40,97 GiB después de ese gate. Cada guest recibe 4 GiB y el cgroup
+conserva 1 GiB adicional. El guest puede alojar dos copias del sujeto máximo de
+512 MiB, una salida máxima de 64 MiB y las reservas internas documentadas.
 
 Con el periodo canónico de 100 000 microsegundos del protocolo Firecracker,
 `cpu_quota_micros = 200000` representa 2 vCPU por microVM: 32 vCPU nominales

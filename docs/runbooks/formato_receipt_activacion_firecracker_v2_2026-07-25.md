@@ -48,9 +48,12 @@ cuyo SHA-256 figura en `evidence_sha256`; también es regular, `root:root`,
 `0400`, enlace único y con padres seguros. El E2E físico lo publica junto con
 el receipt, tras una atestación y una ola de 16 microVM, y deja el candidato
 detenido. El candidato debe estar staged, con `systemctl daemon-reload` hecho e
-inactivo antes de lanzar el E2E; no se permite un arranque manual previo.
+inactivo antes de lanzar el E2E; no se permite un arranque manual previo. La
+identidad `candidate.supervisor_sha256` de esa evidencia debe coincidir con el
+séptimo artefacto confiado mediante `--supervisor-source` y
+`--supervisor-sha256`.
 
 Estado a 2026-07-25: el ejecutor está en
 `cmd/orquesta-firecracker-attestor-e2e`, pero no se ha ejecutado físicamente.
-Falta `/srv/orquesta-self/toolchains/go1.25.11` y no existe evidencia `1 + 16`.
-Por ello no hay receipt V2 válido ni servicio activado.
+El toolchain Go 1.25.11 root-owned ya está instalado; no existe todavía
+evidencia `1 + 16`. Por ello no hay receipt V2 válido ni servicio activado.

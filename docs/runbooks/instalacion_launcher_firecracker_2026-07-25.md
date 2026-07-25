@@ -18,12 +18,11 @@ ruta existente que no cumpla el contrato se rechaza para revisión operativa.
 
 El ejecutor canónico ya existe en
 `cmd/orquesta-firecracker-attestor-e2e`. A fecha de este corte **no se ha
-ejecutado físicamente**: falta el toolchain fijado
-`/srv/orquesta-self/toolchains/go1.25.11` y no existe evidencia de la secuencia
-física `1 + 16`. Por tanto el candidato puede quedar staged, con
-`daemon-reload` aplicado e inactivo, pero no hay activación ni receipt válido.
-El receipt no sustituye la evidencia: ambos son entradas obligatorias de
-`--activate`.
+ejecutado físicamente**. El toolchain fijado
+`/srv/orquesta-self/toolchains/go1.25.11` ya está instalado; quedan el build
+final, el stage privilegiado y la secuencia física `1 + 16`. Por tanto todavía
+no hay activación ni receipt válido. El receipt no sustituye la evidencia:
+ambos son entradas obligatorias de `--activate`.
 
 ## Capacidad fijada
 
@@ -38,11 +37,11 @@ Los valores salen del registro y del perfil vigente
 | PIDs | 512 | 8192 |
 | Sujeto | 512 MiB | 8 GiB |
 
-En 128 GiB, el techo de cgroups deja 48 GiB nominales al host, launcher,
-page cache y variaciones. La reserva operativa canónica de 2 GiB participa en
-el preflight, pero no se suma como memoria guest. Dieciséis es un techo estático,
-no admisión dinámica: si el host tiene presión real, el scheduler debe lanzar
-menos trabajo.
+El gate exige al menos `16 × 5 GiB + 2 GiB = 82 GiB` físicos. El host de esta
+instalación, comercializado como 128 GB, expone 122,97 GiB: deja unos 42,97 GiB
+antes de descontar consumo vivo del host. La reserva operativa canónica de
+2 GiB ya participa en el preflight. Dieciséis es un techo estático, no admisión
+dinámica: si el host tiene presión real, el scheduler debe lanzar menos trabajo.
 
 El envelope del launcher deriva el input raw máximo como `512 MiB + 1 MiB de
 metadata + 1024 bytes de framing`. La salida capturada queda en 64 MiB y el
@@ -85,8 +84,8 @@ obviamente imposible.
 - kernel compatible.
 - initrd reproducible `guest.cpio.gz` y su manifiesto completo generado por
   `scripts/build_firecracker_attestor_guest.sh`.
-- launcher compilado desde el mismo corte.
-- los seis SHA-256 esperados, obtenidos de la revisión/build reproducible y
+- launcher y supervisor E2E compilados desde el mismo corte.
+- los siete SHA-256 esperados, obtenidos de la revisión/build reproducible y
   fijados antes de invocar el instalador;
 - UID/GID del consumidor no-root y UID/GID exclusivos del jail. UID y GID del
   consumidor deben ser distintos de los del jail; los del jail no pueden ser
@@ -104,14 +103,14 @@ como si fuera procedencia. Los hashes esperados son entradas de confianza. El
 instalador compara todos antes de ejecutar `firecracker --version` o
 `jailer --version`.
 
-Si cualquier modo se ejecuta con EUID 0, las seis fuentes deben ser
+Si cualquier modo se ejecuta con EUID 0, las siete fuentes deben ser
 `root:root`, sin escritura de grupo/otros, link count 1 y con todos sus
-ancestros `root:root` no sustituibles. Esto también cubre launcher, kernel e
-initrd, que serán ejecutables directa o indirectamente después. Una ruta bajo
-un directorio de usuario o `/tmp` se rechaza aunque sus bytes tengan el hash
-correcto. Preparar previamente un staging root-owned dedicado.
+ancestros `root:root` no sustituibles. Esto también cubre launcher, supervisor,
+kernel e initrd, que serán ejecutables directa o indirectamente después. Una
+ruta bajo un directorio de usuario o `/tmp` se rechaza aunque sus bytes tengan
+el hash correcto. Preparar previamente un staging root-owned dedicado.
 
-El instalador Bash no conserva un descriptor ejecutable para las seis fuentes
+El instalador Bash no conserva un descriptor ejecutable para las siete fuentes
 durante toda la transacción. Reduce la ventana con hashes esperados, metadatos
 estables, ancestros no sustituibles y reverificación de la copia instalada,
 pero un proceso root concurrente sigue dentro de la frontera de confianza del
@@ -119,7 +118,9 @@ operador. No ejecutar otra mutación root sobre el staging durante
 `--apply`, `--check` o `--activate`. El launcher instalado sí abre y fija sus
 assets mediante descriptor antes de servir peticiones. Sustituir esta parte del
 instalador por `openat2`/`fexecve` queda como endurecimiento P2 separado; no se
-presenta aquí como garantía ya cerrada.
+presenta aquí como garantía ya cerrada. Antes de elevar privilegios, copiar
+también el propio instalador a ese staging, verificar su SHA-256 y ejecutar la
+copia root-owned; no ejecutar como root el script mutable del checkout.
 
 ## 1. Dry-run no-root
 
@@ -131,12 +132,14 @@ scripts/install_firecracker_attestor_launcher.sh \
   --dry-run \
   --profile host-128g-16 \
   --launcher-source /ABS/build/orquesta-firecracker-launcher \
+  --supervisor-source /ABS/build/orquesta-firecracker-attestor-e2e \
   --firecracker-source /ABS/firecracker-v1.16.1/firecracker \
   --jailer-source /ABS/firecracker-v1.16.1/jailer \
   --kernel-source /ABS/kernel/vmlinux \
   --guest-source /ABS/guest/guest.cpio.gz \
   --guest-manifest-source /ABS/guest/guest.manifest.json \
   --launcher-sha256 <LAUNCHER_SHA256_REVISADO> \
+  --supervisor-sha256 <SUPERVISOR_SHA256_REVISADO> \
   --firecracker-sha256 <FIRECRACKER_SHA256_REVISADO> \
   --jailer-sha256 <JAILER_SHA256_REVISADO> \
   --kernel-sha256 <KERNEL_SHA256_REVISADO> \
@@ -179,7 +182,8 @@ una sesión root. La salida publica los paths content-addressed exactos.
 
 El stage crea o verifica:
 
-- launcher y helper en `/usr/local/libexec`, con nombre por hash y modo `0755`;
+- launcher, supervisor E2E y helper en `/usr/local/libexec`, con nombre por
+  hash y modo `0755`;
 - Firecracker, jailer, kernel, `guest.cpio.gz` y manifiesto en
   `/usr/local/lib/orquesta/firecracker`, por hash;
 - configuración root-owned `0400` en `/etc/orquesta/firecracker`;
@@ -242,12 +246,8 @@ CGO_ENABLED=0 \
   -o /ABS/build/orquesta-firecracker-attestor-e2e \
   ./cmd/orquesta-firecracker-attestor-e2e
 sha256sum /ABS/build/orquesta-firecracker-attestor-e2e
-sudo install -o root -g root -m 0755 \
-  /ABS/build/orquesta-firecracker-attestor-e2e \
-  /usr/local/libexec/orquesta-firecracker-attestor-e2e-<SUPERVISOR_SHA256>
-sudo sha256sum \
-  /usr/local/libexec/orquesta-firecracker-attestor-e2e-<SUPERVISOR_SHA256>
-# aplicar el mismo juego explícito de flags anterior con --apply
+# copiar los siete inputs y el instalador a staging root-owned;
+# ejecutar allí --dry-run, --apply y --check con el mismo juego de flags
 sudo systemctl daemon-reload
 ! sudo systemctl is-active --quiet \
   orquesta-firecracker-attestor-<UNIT_SHA256>.service
@@ -258,19 +258,19 @@ sudo /usr/local/libexec/orquesta-firecracker-attestor-e2e-<SUPERVISOR_SHA256> \
 El E2E realiza una atestación física y después una ola física de 16; verifica
 límites, `memory.swap.max=0`, red/API/vsock/serial ausentes y deja unidad,
 procesos, cgroup y directorios de runs sin residuo. No habilita el alias
-productivo ni toca Bubblewrap. El estado actual bloquea este paso porque faltan
-el Go fijado y la evidencia `1 + 16`; no se debe fabricar un receipt manual. El
-SHA del supervisor se obtiene del binario construido con flags reproducibles y
-después se verifica de nuevo sobre la copia root-owned. La ruta `/ABS/build`
-puede pertenecer al usuario que compila; solo la copia content-addressed bajo
-`/usr/local/libexec` entra en la spec y debe tener ancestros root-owned seguros.
+productivo ni toca Bubblewrap. El estado actual bloquea este paso porque falta
+la evidencia `1 + 16`; no se debe fabricar un receipt manual. El SHA del
+supervisor se obtiene del binario construido con flags reproducibles y se
+entrega al instalador como `--supervisor-sha256`. `--apply` instala la copia
+root-owned content-addressed y `--activate` exige que la evidencia física cite
+exactamente ese hash.
 
 La spec es JSON estricto (sin claves desconocidas) y debe ser un fichero regular
 `root:root`, enlace único, `0400`, con ruta absoluta canónica y ancestros
 `root:root` sin escritura de grupo/otros. Su forma exacta es:
 
 ```json
-{"candidate":{"unit_name":"orquesta-firecracker-attestor-<UNIT_SHA256>.service","unit_path":"/etc/systemd/system/orquesta-firecracker-attestor-<UNIT_SHA256>.service","unit_sha256":"<UNIT_SHA256>","primitives_unit_path":"/etc/systemd/system/orquesta-firecracker-primitives-<PRIMITIVES_UNIT_SHA256>.service","primitives_unit_sha256":"<PRIMITIVES_UNIT_SHA256>","launcher_path":"/usr/local/libexec/orquesta-firecracker-launcher-<LAUNCHER_SHA256>","launcher_sha256":"<LAUNCHER_SHA256>","launcher_socket_path":"/run/orquesta/firecracker-launcher.sock","config_path":"/etc/orquesta/firecracker/launcher-<CONFIG_SHA256>.json","config_sha256":"<CONFIG_SHA256>","supervisor_path":"/usr/local/libexec/orquesta-firecracker-attestor-e2e-<SUPERVISOR_SHA256>","supervisor_sha256":"<SUPERVISOR_SHA256>","runtime_root":"/run/orquesta","cgroup_root":"/sys/fs/cgroup","parent_cgroup":"orquesta-firecracker-attestor","netns_path":"/run/netns/orquesta-firecracker-attestor-empty","asset_digest":"<ASSET_DIGEST>"},"policy_digest":"<POLICY_DIGEST>","evidence_path":"/var/lib/orquesta/firecracker-e2e/evidence-<NONCE>.json","receipt_path":"/var/lib/orquesta/firecracker-e2e/receipt-<NONCE>.txt","phase_timeout":"10m","cleanup_timeout":"30s","stable_for":"2s","poll_interval":"250ms","child_uid":1000,"child_gid":1000,"workload":{"socket_path":"/run/orquesta/firecracker-launcher.sock","expected_asset_digest":"<ASSET_DIGEST>","work_root":"/var/lib/orquesta/firecracker-e2e/work-<NONCE>","git_command":"/usr/bin/git","test_sleep":"15s","attestation_timeout":"5m","attestation_cleanup_timeout":"30s","max_output_bytes":67108864,"max_subject_bytes":536870912}}
+{"candidate":{"unit_name":"orquesta-firecracker-attestor-<UNIT_SHA256>.service","unit_path":"/etc/systemd/system/orquesta-firecracker-attestor-<UNIT_SHA256>.service","unit_sha256":"<UNIT_SHA256>","primitives_unit_path":"/etc/systemd/system/orquesta-firecracker-primitives-<PRIMITIVES_UNIT_SHA256>.service","primitives_unit_sha256":"<PRIMITIVES_UNIT_SHA256>","launcher_path":"/usr/local/libexec/orquesta-firecracker-launcher-<LAUNCHER_SHA256>","launcher_sha256":"<LAUNCHER_SHA256>","launcher_socket_path":"/run/orquesta/firecracker-launcher.sock","config_path":"/etc/orquesta/firecracker/launcher-<CONFIG_SHA256>.json","config_sha256":"<CONFIG_SHA256>","supervisor_path":"/usr/local/libexec/orquesta-firecracker-attestor-e2e-<SUPERVISOR_SHA256>","supervisor_sha256":"<SUPERVISOR_SHA256>","runtime_root":"/run/orquesta","cgroup_root":"/sys/fs/cgroup","parent_cgroup":"orquesta-firecracker-attestor","netns_path":"/run/netns/orquesta-firecracker-attestor-empty","asset_digest":"<ASSET_DIGEST>"},"policy_digest":"","evidence_path":"/var/lib/orquesta/firecracker-e2e/evidence-<NONCE>.json","receipt_path":"/var/lib/orquesta/firecracker-e2e/receipt-<NONCE>.txt","phase_timeout":"10m","cleanup_timeout":"30s","stable_for":"2s","poll_interval":"250ms","child_uid":1000,"child_gid":1000,"workload":{"socket_path":"/run/orquesta/firecracker-launcher.sock","expected_asset_digest":"<ASSET_DIGEST>","work_root":"/var/lib/orquesta/firecracker-e2e/work-<NONCE>","git_command":"/usr/bin/git","test_sleep":"15s","attestation_timeout":"5m","attestation_cleanup_timeout":"30s","max_output_bytes":67108864,"max_subject_bytes":536870912}}
 ```
 
 `candidate.launcher_socket_path` debe ser idéntico a
@@ -280,6 +280,10 @@ root-owned y sus ancestros son seguros. El `work_root` ya existe, es hijo
 privado `0700`, vacío y propiedad del UID/GID no-root hijo. Los padres de
 `evidence_path` y `receipt_path` son `root:root` seguros; los outputs se crean
 sin sobrescribirlos.
+
+`policy_digest` puede ser `""` en la spec inicial. La fase física de una VM
+descubre el digest real y la fase de 16 exige exactamente el mismo valor; el
+receipt y la evidencia finales siempre contienen un SHA-256 válido.
 
 ## 5. Activación tras evidencia real
 
