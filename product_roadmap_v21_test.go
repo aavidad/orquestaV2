@@ -45,8 +45,17 @@ func TestProductRoadmapV21ScopeAndLifecycleContract(t *testing.T) {
 		t.Fatalf("V21 capability has invalid causal ownership: %#v", entry)
 	}
 	successor := index.contracts["AC-V22-CODEX-E2E"]
-	if successor.Status != "planned" || successor.Receipt != "" {
-		t.Fatalf("V21 must not promote successor V22: %#v", successor)
+	if _, err := os.Stat("product/evidence/v22_codex_e2e.json"); os.IsNotExist(err) {
+		if successor.Status != "planned" || successor.Receipt != "" {
+			t.Fatalf("V21 cannot promote successor V22 before its receipt: %#v", successor)
+		}
+	} else if err != nil {
+		t.Fatal(err)
+	} else if successor.Status != "executable" ||
+		successor.TestRef != "acceptance/v22_codex_e2e_test.go" ||
+		successor.Fixture != "acceptance/fixtures/v22_codex_e2e.json" ||
+		successor.Receipt != "product/evidence/v22_codex_e2e.json" {
+		t.Fatalf("V21 sees a V22 receipt without exact roadmap promotion: %#v", successor)
 	}
 }
 

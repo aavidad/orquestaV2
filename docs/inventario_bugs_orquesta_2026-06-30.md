@@ -4666,3 +4666,9 @@ sus cuatro fixtures exactos. La guarda conserva el mismo `base_ref` y no abre
 prefijos generales de `scripts/` ni `testdata/`; incorpora solo esas seis rutas
 canónicas. Evidencia: `scripts/check_rebuild_write_set.sh` devuelve
 `rebuild_write_set_ok` y `git diff --check` queda verde.
+
+## Incidentes vivos de acreditación V22 del 2026-07-25
+
+| ID | Estado | Área | Síntoma | Hipótesis arquitectónica | Evidencia/cierre | Acción |
+|---|---|---|---|---|---|---|
+| BUG-ORQ-20260725-451 | cerrado | V22/roadmap/promoción post-E | al materializar el recibo E6, la suite raíz rechazó la promoción correcta de `AC-V22-CODEX-E2E` porque la prueba V21 exigía incondicionalmente que el sucesor continuara `planned` | la guarda predecesora no distinguía el estado causal sin recibo del estado acreditado con recibo; V20 ya contenía el patrón correcto | `product_roadmap_v21_test.go` acepta exactamente `planned` sin recibo V22 o `executable` con test, fixture y recibo canónicos. E6 sobre `d1b551a136fe133560e9c1228e54477acd429473` acredita además los cierres pendientes 449 y 450: suite, `-race`, `go vet` y dos E2E Codex PASS; salida SHA-256 `11f060156fe035fc1bc45723940d731f3d1a9169bb1fa0f93898442390d2bb0b`; cero unidades o procesos propios residuales | conservar la doble guarda causal y no promover un sucesor antes de que exista su par recibo/salida exacto |
