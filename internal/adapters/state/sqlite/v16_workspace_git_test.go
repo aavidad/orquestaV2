@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -48,6 +49,61 @@ func TestSQLiteWorkspaceGitRestartRaceAndReplay(t *testing.T) {
 	defer reopened.Close()
 	if _, _, err := validateRecoveryDatabase(context.Background(), reopened.db); err != nil {
 		t.Fatalf("validate v16 recovery: %v", err)
+	}
+}
+
+func TestWorkspaceBindingResolvesExactDurablePrepareCausalityWithOneConnection(t *testing.T) {
+	system := seedSQLiteV16Integrated(t)
+	goals, err := system.repository.ListGoals(context.Background(), system.project, 10)
+	if err != nil || len(goals) != 1 {
+		t.Fatalf("list seeded Goal: goals=%+v err=%v", goals, err)
+	}
+	record, err := system.repository.GetGoal(context.Background(), goals[0].Ref)
+	if err != nil || len(record.WorkspaceBindings) != 1 {
+		t.Fatalf("read seeded workspace binding: bindings=%+v err=%v", record.WorkspaceBindings, err)
+	}
+	binding := record.WorkspaceBindings[0]
+	var prepareIntent application.EffectIntent
+	for _, intent := range record.EffectIntents {
+		if intent.Ref == binding.EffectIntentRef {
+			prepareIntent = intent
+			break
+		}
+	}
+	var prepareReceipt application.EffectReceipt
+	for _, receipt := range record.EffectReceipts {
+		if receipt.Ref == binding.ReceiptRef {
+			prepareReceipt = receipt
+			break
+		}
+	}
+	if prepareIntent.Ref == "" || prepareReceipt.Ref == "" {
+		t.Fatalf("seed lacks prepare causality: intent=%+v receipt=%+v", prepareIntent, prepareReceipt)
+	}
+
+	// The exact lookup must not deadlock by nesting a second query behind an
+	// open row when production limits SQLite to one connection.
+	system.repository.db.SetMaxOpenConns(1)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	recovery, found, err := system.repository.WorkspaceBinding(ctx, binding.Ref)
+	if err != nil || !found {
+		t.Fatalf("resolve exact binding: found=%v recovery=%+v err=%v", found, recovery, err)
+	}
+	if !reflect.DeepEqual(recovery.Binding, binding) ||
+		recovery.PrepareIdempotencyKey != prepareIntent.IdempotencyKey ||
+		recovery.PreparedReceiptRef != prepareReceipt.ExternalRef {
+		t.Fatalf("recovery lost exact causality: got=%+v binding=%+v intent=%+v receipt=%+v",
+			recovery, binding, prepareIntent, prepareReceipt)
+	}
+
+	missing, err := ports.NewExecutionWorkspaceRef("workspace:missing-v22")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if recovery, found, err = system.repository.WorkspaceBinding(context.Background(), missing); err != nil ||
+		found || !reflect.DeepEqual(recovery, WorkspaceBindingRecovery{}) {
+		t.Fatalf("missing exact binding guessed: found=%v recovery=%+v err=%v", found, recovery, err)
 	}
 }
 

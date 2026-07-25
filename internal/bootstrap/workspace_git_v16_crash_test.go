@@ -25,6 +25,38 @@ func TestWorkspaceEffectsReplayEveryCrashFrontierExactlyOnce(t *testing.T) {
 	}
 }
 
+func TestReviewerResolvesAuthorWorkspaceAfterRuntimeRestart(t *testing.T) {
+	fixture := v16LoadFixture(t)
+	harness := newV16Harness(t, fixture, map[string]v16Write{
+		"restart-before-review": {"src/restart-review.txt": "durable workspace\n"},
+	})
+	harness.resolveReviewWorkspaces = true
+	harness.restart(t)
+	goalRef := v16SubmitSkipWriter(t, harness, harness.access, "request:v22-review-restart",
+		"restart-before-review", []string{"src/restart-review.txt"})
+	harness.driveToAttested(t, harness.get(t, harness.access, goalRef))
+	before := harness.get(t, harness.access, goalRef)
+	if len(before.WorkspaceBindings) != 1 ||
+		before.Executions[0].State != application.ExecutionAwaitingIntegration ||
+		harness.launches.Load() != 1 {
+		t.Fatalf("author precondition incomplete: bindings=%d state=%s launches=%d",
+			len(before.WorkspaceBindings), before.Executions[0].State, harness.launches.Load())
+	}
+
+	// A new gitlocal.Adapter has no in-memory prepare record. Reviews reuse the
+	// author's workspace ref, so their resolver must rehydrate exact SQLite
+	// causality and verify the durable Git markers.
+	harness.restart(t)
+	harness.driveReviews(t, goalRef)
+	after := harness.get(t, harness.access, goalRef)
+	if len(after.Reviews) != 2 || len(after.WorkspaceBindings) != 1 ||
+		after.Executions[0].State != application.ExecutionAwaitingIntegration ||
+		harness.launches.Load() != 3 {
+		t.Fatalf("post-restart reviews failed or replayed prepare: reviews=%d bindings=%d state=%s launches=%d",
+			len(after.Reviews), len(after.WorkspaceBindings), after.Executions[0].State, harness.launches.Load())
+	}
+}
+
 func v16RunCrashFrontier(t *testing.T, fixture v16E2EFixture, frontier string) {
 	harness := newV16Harness(t, fixture, map[string]v16Write{
 		"crash-change": {"src/crash.txt": "survives " + frontier + "\n"},

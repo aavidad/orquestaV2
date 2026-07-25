@@ -63,7 +63,8 @@ type v16WorkspaceAgent struct {
 	launches *atomic.Int64
 	// allowReviews is opt-in compatibility for later gates. V16 scenarios keep
 	// their original author-only scheduling and assertions.
-	allowReviews bool
+	allowReviews            bool
+	resolveReviewWorkspaces bool
 
 	mu       sync.Mutex
 	resolver codex.WorkspacePathResolver
@@ -114,7 +115,8 @@ func (agent *v16WorkspaceAgent) Launch(
 	if len(writes) == 0 && (!agent.allowReviews || request.ArtifactMediaType != review.AssessmentMediaType) {
 		return ports.AgentLaunchReceipt{}, errors.New("v16_test.agent_script_missing")
 	}
-	if len(writes) != 0 {
+	if len(writes) != 0 ||
+		(agent.resolveReviewWorkspaces && request.ArtifactMediaType == review.AssessmentMediaType) {
 		workspace, err := resolver.ResolveExecutionWorkspace(ctx, request.ExecutionWorkspaceRef)
 		if err != nil {
 			return ports.AgentLaunchReceipt{}, err
@@ -214,15 +216,16 @@ func v16AgentCapabilities() ports.AgentCapabilities {
 }
 
 type v16Harness struct {
-	t             *testing.T
-	fixture       v16E2EFixture
-	root          string
-	seed          string
-	workspaceRoot string
-	configPath    string
-	git           string
-	writes        map[string]v16Write
-	launches      atomic.Int64
-	runtime       *Runtime
-	access        application.Access
+	t                       *testing.T
+	fixture                 v16E2EFixture
+	root                    string
+	seed                    string
+	workspaceRoot           string
+	configPath              string
+	git                     string
+	writes                  map[string]v16Write
+	resolveReviewWorkspaces bool
+	launches                atomic.Int64
+	runtime                 *Runtime
+	access                  application.Access
 }

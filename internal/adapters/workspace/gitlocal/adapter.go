@@ -19,6 +19,8 @@ import (
 
 const adapterRef = "workspace:git-local"
 
+func AdapterReference() string { return adapterRef }
+
 // LocalRepositoryLocator is composition-owned. It maps an opaque repository
 // reference to an already authorised local checkout; no request supplies a
 // path, URL, branch or remote.
@@ -31,6 +33,20 @@ type LocalRepositoryLocator interface {
 type LocalRepositoryBinding struct {
 	Path      string
 	TargetRef string
+}
+
+// DurableWorkspaceBindingResolver rematerializes only the opaque causal
+// prepare contract. Physical paths remain private and derived by this adapter.
+type DurableWorkspaceBindingResolver interface {
+	ResolveDurableWorkspaceBinding(
+		context.Context,
+		ports.ExecutionWorkspaceRef,
+	) (DurableWorkspaceBinding, bool, error)
+}
+
+type DurableWorkspaceBinding struct {
+	Request  ports.WorkspacePrepareRequest
+	Prepared ports.WorkspacePrepared
 }
 
 type Config struct {
@@ -64,6 +80,9 @@ type Adapter struct {
 	commits     map[ports.ChangeSetRef]commitRecord
 	commitKeys  map[string]commitRecord
 	releases    map[string]releaseRecord
+
+	bindingResolver DurableWorkspaceBindingResolver
+	resolved        map[ports.ExecutionWorkspaceRef]resolvedWorkspaceRecord
 }
 
 type snapshotRaceStage uint8
@@ -137,6 +156,7 @@ func newAdapter(config Config, pinPolicy gitPinPolicy) (*Adapter, error) {
 		commits:     make(map[ports.ChangeSetRef]commitRecord),
 		commitKeys:  make(map[string]commitRecord),
 		releases:    make(map[string]releaseRecord),
+		resolved:    make(map[ports.ExecutionWorkspaceRef]resolvedWorkspaceRecord),
 	}, nil
 }
 
@@ -177,6 +197,45 @@ func (adapter *Adapter) ensureAvailable() error {
 		return &Error{Code: CodeUnavailable}
 	}
 	return nil
+}
+
+// BindDurableWorkspaceBindingResolver completes restart recovery only after
+// bootstrap has opened and validated its durable state authority.
+func (adapter *Adapter) BindDurableWorkspaceBindingResolver(resolver DurableWorkspaceBindingResolver) error {
+	if adapter == nil || resolver == nil {
+		return &Error{Code: CodeConfigInvalid}
+	}
+	adapter.gitMu.RLock()
+	defer adapter.gitMu.RUnlock()
+	adapter.stateMu.Lock()
+	defer adapter.stateMu.Unlock()
+	if adapter.closed || adapter.bindingResolver != nil || len(adapter.prepared) != 0 || len(adapter.resolved) != 0 {
+		return &Error{Code: CodeConfigInvalid}
+	}
+	adapter.bindingResolver = resolver
+	return nil
+}
+
+type resolvedWorkspaceRecord struct {
+	repositoryRef identity.RepositoryRef
+	path          string
+	gitFile       string
+}
+
+func (adapter *Adapter) resolvedWorkspace(ref ports.ExecutionWorkspaceRef) (resolvedWorkspaceRecord, bool) {
+	adapter.stateMu.RLock()
+	defer adapter.stateMu.RUnlock()
+	record, found := adapter.resolved[ref]
+	return record, found
+}
+
+func (adapter *Adapter) rememberResolvedWorkspace(
+	ref ports.ExecutionWorkspaceRef,
+	record resolvedWorkspaceRecord,
+) {
+	adapter.stateMu.Lock()
+	adapter.resolved[ref] = record
+	adapter.stateMu.Unlock()
 }
 
 func equalPrepare(left, right ports.WorkspacePrepareRequest) bool {

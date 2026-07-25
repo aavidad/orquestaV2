@@ -81,6 +81,7 @@ func (harness *v16Harness) build(t *testing.T) {
 			workspaceAgent = &v16WorkspaceAgent{
 				now: clock.Now, writes: harness.writes, launches: &harness.launches,
 				requests: make(map[goal.ExecutionRef]ports.AgentLaunchRequest), allowReviews: true,
+				resolveReviewWorkspaces: harness.resolveReviewWorkspaces,
 			}
 			return workspaceAgent, nil
 		},

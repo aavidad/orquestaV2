@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -87,52 +88,139 @@ func readWorkspaceBindings(ctx context.Context, source queryer, goalValue string
 	if err != nil {
 		return nil, mapDatabaseError(err)
 	}
+	return scanWorkspaceBindings(ctx, source, rows)
+}
+
+// WorkspaceBinding resolves one exact durable binding for composition-owned
+// adapter recovery. It never enumerates goals or guesses a repository from a
+// physical worktree.
+type WorkspaceBindingRecovery struct {
+	Binding               application.WorkspaceBinding
+	PrepareIdempotencyKey string
+	PreparedReceiptRef    string
+}
+
+func (repository *Repository) WorkspaceBinding(
+	ctx context.Context,
+	ref ports.ExecutionWorkspaceRef,
+) (WorkspaceBindingRecovery, bool, error) {
+	if ref.String() == "" {
+		return WorkspaceBindingRecovery{}, false, invalid(fmt.Errorf("sqlite.workspace_binding_ref_invalid"))
+	}
+	database, err := repository.database()
+	if err != nil {
+		return WorkspaceBindingRecovery{}, false, err
+	}
+	row := database.QueryRowContext(ctx, `SELECT ref,principal_ref,actor_ref,project_ref,repository_ref,goal_ref,work_item_ref,execution_ref,execution_attempt,plan_generation,app_spec_generation,app_spec_hash,write_set_digest,target_ref,base_oid,object_format,adapter_ref,intent_ref,attempt_ref,action_fence,effect_receipt_ref,prepared_at FROM workspace_bindings WHERE ref=?`, ref.String())
+	binding, refValue, err := scanWorkspaceBinding(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return WorkspaceBindingRecovery{}, false, nil
+	}
+	if err != nil {
+		return WorkspaceBindingRecovery{}, false, err
+	}
+	binding.WriteSet, err = readWorkspaceWriteSet(ctx, database, refValue)
+	if err != nil {
+		return WorkspaceBindingRecovery{}, false, err
+	}
+	if binding.Ref != ref || application.ValidateWorkspaceBinding(binding) != nil {
+		return WorkspaceBindingRecovery{}, false, invalid(fmt.Errorf("sqlite.workspace_binding_invalid"))
+	}
+	var idempotencyKey, preparedReceiptRef string
+	if err := database.QueryRowContext(
+		ctx, `SELECT intent.idempotency_key,receipt.external_ref
+FROM effect_intents intent
+JOIN effect_attempts attempt
+  ON attempt.ref=?
+ AND attempt.intent_ref=intent.ref
+ AND attempt.intent_digest=intent.digest
+ AND attempt.action_ref=intent.action_ref
+ AND attempt.action_fence=?
+JOIN effect_receipts receipt
+  ON receipt.intent_ref=intent.ref
+ AND receipt.intent_digest=intent.digest
+ AND receipt.attempt_ref=attempt.ref
+ AND receipt.action_ref=intent.action_ref
+ AND receipt.action_fence=attempt.action_fence
+ AND receipt.idempotency_key=intent.idempotency_key
+ AND receipt.ref=?
+ AND receipt.status='prepared'
+WHERE intent.ref=? AND intent.kind='prepare_workspace'`,
+		binding.EffectAttemptRef, binding.EffectFence, binding.ReceiptRef, binding.EffectIntentRef,
+	).Scan(&idempotencyKey, &preparedReceiptRef); err != nil {
+		return WorkspaceBindingRecovery{}, false, mapDatabaseError(err)
+	}
+	if idempotencyKey == "" || preparedReceiptRef == "" {
+		return WorkspaceBindingRecovery{}, false, invalid(fmt.Errorf("sqlite.workspace_binding_idempotency_invalid"))
+	}
+	return WorkspaceBindingRecovery{
+		Binding: binding, PrepareIdempotencyKey: idempotencyKey, PreparedReceiptRef: preparedReceiptRef,
+	}, true, nil
+}
+
+type rowScanner interface {
+	Scan(...any) error
+}
+
+func scanWorkspaceBinding(row rowScanner) (application.WorkspaceBinding, string, error) {
+	var b application.WorkspaceBinding
+	var ref, principal, actor, project, repository, goalRef, item, execution, format string
+	var attempt, plan, spec, fence, prepared int64
+	if err := row.Scan(&ref, &principal, &actor, &project, &repository, &goalRef, &item, &execution, &attempt, &plan, &spec, &b.SpecHash, &b.WriteSetDigest, &b.TargetRef, &b.BaseOID, &format, &b.AdapterRef, &b.EffectIntentRef, &b.EffectAttemptRef, &fence, &b.ReceiptRef, &prepared); err != nil {
+		return application.WorkspaceBinding{}, "", mapDatabaseError(err)
+	}
+	var err error
+	if b.Ref, err = ports.NewExecutionWorkspaceRef(ref); err != nil {
+		return application.WorkspaceBinding{}, "", invalid(err)
+	}
+	if b.PrincipalRef, err = identity.NewPrincipalRef(principal); err != nil {
+		return application.WorkspaceBinding{}, "", invalid(err)
+	}
+	if b.ActorRef, err = goal.NewActorRef(actor); err != nil {
+		return application.WorkspaceBinding{}, "", invalid(err)
+	}
+	if b.ProjectRef, err = goal.NewProjectRef(project); err != nil {
+		return application.WorkspaceBinding{}, "", invalid(err)
+	}
+	if b.RepositoryRef, err = identity.NewRepositoryRef(repository); err != nil {
+		return application.WorkspaceBinding{}, "", invalid(err)
+	}
+	if b.GoalRef, err = goal.NewGoalRef(goalRef); err != nil {
+		return application.WorkspaceBinding{}, "", invalid(err)
+	}
+	if b.WorkItemRef, err = goal.NewWorkItemRef(item); err != nil {
+		return application.WorkspaceBinding{}, "", invalid(err)
+	}
+	if b.ExecutionRef, err = goal.NewExecutionRef(execution); err != nil {
+		return application.WorkspaceBinding{}, "", invalid(err)
+	}
+	b.ExecutionAttempt = uint64(attempt)
+	b.PlanGeneration = goal.PlanGeneration(plan)
+	b.AppSpecGeneration = goal.AppSpecGeneration(spec)
+	b.ObjectFormat = ports.GitObjectFormat(format)
+	b.EffectFence = uint64(fence)
+	b.PreparedAt = time.Unix(0, prepared).UTC()
+	return b, ref, nil
+}
+
+func scanWorkspaceBindings(
+	ctx context.Context,
+	source queryer,
+	rows *sql.Rows,
+) ([]application.WorkspaceBinding, error) {
 	defer rows.Close()
 	var result []application.WorkspaceBinding
 	for rows.Next() {
-		var b application.WorkspaceBinding
-		var ref, principal, actor, project, repository, goalRef, item, execution, format string
-		var attempt, plan, spec, fence, prepared int64
-		if err := rows.Scan(&ref, &principal, &actor, &project, &repository, &goalRef, &item, &execution, &attempt, &plan, &spec, &b.SpecHash, &b.WriteSetDigest, &b.TargetRef, &b.BaseOID, &format, &b.AdapterRef, &b.EffectIntentRef, &b.EffectAttemptRef, &fence, &b.ReceiptRef, &prepared); err != nil {
-			return nil, mapDatabaseError(err)
+		b, ref, err := scanWorkspaceBinding(rows)
+		if err != nil {
+			return nil, err
 		}
-		var e error
-		if b.Ref, e = ports.NewExecutionWorkspaceRef(ref); e != nil {
-			return nil, invalid(e)
+		b.WriteSet, err = readWorkspaceWriteSet(ctx, source, ref)
+		if err != nil {
+			return nil, err
 		}
-		if b.PrincipalRef, e = identity.NewPrincipalRef(principal); e != nil {
-			return nil, invalid(e)
-		}
-		if b.ActorRef, e = goal.NewActorRef(actor); e != nil {
-			return nil, invalid(e)
-		}
-		if b.ProjectRef, e = goal.NewProjectRef(project); e != nil {
-			return nil, invalid(e)
-		}
-		if b.RepositoryRef, e = identity.NewRepositoryRef(repository); e != nil {
-			return nil, invalid(e)
-		}
-		if b.GoalRef, e = goal.NewGoalRef(goalRef); e != nil {
-			return nil, invalid(e)
-		}
-		if b.WorkItemRef, e = goal.NewWorkItemRef(item); e != nil {
-			return nil, invalid(e)
-		}
-		if b.ExecutionRef, e = goal.NewExecutionRef(execution); e != nil {
-			return nil, invalid(e)
-		}
-		b.ExecutionAttempt = uint64(attempt)
-		b.PlanGeneration = goal.PlanGeneration(plan)
-		b.AppSpecGeneration = goal.AppSpecGeneration(spec)
-		b.ObjectFormat = ports.GitObjectFormat(format)
-		b.EffectFence = uint64(fence)
-		b.PreparedAt = time.Unix(0, prepared).UTC()
-		b.WriteSet, e = readWorkspaceWriteSet(ctx, source, ref)
-		if e != nil {
-			return nil, e
-		}
-		if e = application.ValidateWorkspaceBinding(b); e != nil {
-			return nil, invalid(e)
+		if err = application.ValidateWorkspaceBinding(b); err != nil {
+			return nil, invalid(err)
 		}
 		result = append(result, b)
 	}

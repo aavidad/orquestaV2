@@ -169,6 +169,13 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		return nil, err
 	}
 	cleanup.add(func() { _ = repository.Close() })
+	if workspace != nil {
+		if err := workspace.BindDurableWorkspaceBindingResolver(
+			sqliteWorkspaceBindingResolver{repository: repository},
+		); err != nil {
+			return nil, err
+		}
+	}
 	executionBroker, err := executiontoken.New(credentialStore, repository)
 	if err != nil {
 		return nil, err
@@ -331,6 +338,52 @@ type localRepositoryLocator struct {
 	repositoryRef identity.RepositoryRef
 	seedPath      string
 	targetRef     string
+}
+
+type sqliteWorkspaceBindingResolver struct {
+	repository *statesqlite.Repository
+}
+
+func (resolver sqliteWorkspaceBindingResolver) ResolveDurableWorkspaceBinding(
+	ctx context.Context,
+	ref ports.ExecutionWorkspaceRef,
+) (gitlocal.DurableWorkspaceBinding, bool, error) {
+	if resolver.repository == nil {
+		return gitlocal.DurableWorkspaceBinding{}, false, errors.New("bootstrap.workspace_state_unavailable")
+	}
+	recovery, found, err := resolver.repository.WorkspaceBinding(ctx, ref)
+	if err != nil || !found {
+		return gitlocal.DurableWorkspaceBinding{}, found, err
+	}
+	binding := recovery.Binding
+	if application.ValidateWorkspaceBinding(binding) != nil || binding.Ref != ref ||
+		binding.AdapterRef != gitlocal.AdapterReference() {
+		return gitlocal.DurableWorkspaceBinding{}, false, errors.New("bootstrap.workspace_binding_invalid")
+	}
+	request := ports.WorkspacePrepareRequest{
+		WorkspaceRef: binding.Ref, PrincipalRef: binding.PrincipalRef,
+		ActorRef: binding.ActorRef, ProjectRef: binding.ProjectRef, RepositoryRef: binding.RepositoryRef,
+		GoalRef: binding.GoalRef, WorkItemRef: binding.WorkItemRef, ExecutionRef: binding.ExecutionRef,
+		ExecutionAttempt: binding.ExecutionAttempt, PlanGeneration: binding.PlanGeneration,
+		AppSpecGeneration: binding.AppSpecGeneration, AppSpecHash: binding.SpecHash,
+		WriteSet: append([]string(nil), binding.WriteSet...), WriteSetDigest: binding.WriteSetDigest,
+		// Application prepare requests canonically leave TargetRef empty; the
+		// composition-owned locator supplies the configured target.
+		TargetRef: "", IntentRef: binding.EffectIntentRef, AttemptRef: binding.EffectAttemptRef,
+		ActionFence: binding.EffectFence, IdempotencyKey: recovery.PrepareIdempotencyKey,
+		PreparedAt: binding.PreparedAt,
+	}
+	prepared := ports.WorkspacePrepared{
+		WorkspaceRef: binding.Ref, RepositoryRef: binding.RepositoryRef, ExecutionRef: binding.ExecutionRef,
+		TargetRef: binding.TargetRef, BaseOID: binding.BaseOID, ObjectFormat: binding.ObjectFormat,
+		WriteSetDigest: binding.WriteSetDigest, AdapterRef: binding.AdapterRef,
+		ReceiptRef: recovery.PreparedReceiptRef, PreparedAt: binding.PreparedAt,
+	}
+	if ports.ValidateWorkspacePrepareRequest(request) != nil ||
+		ports.ValidateWorkspacePrepared(request, prepared) != nil {
+		return gitlocal.DurableWorkspaceBinding{}, false, errors.New("bootstrap.workspace_binding_invalid")
+	}
+	return gitlocal.DurableWorkspaceBinding{Request: request, Prepared: prepared}, true, nil
 }
 
 func (locator localRepositoryLocator) LocateLocalRepository(_ context.Context, ref identity.RepositoryRef) (gitlocal.LocalRepositoryBinding, error) {

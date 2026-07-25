@@ -251,23 +251,100 @@ func (adapter *Adapter) ResolveExecutionWorkspace(ctx context.Context, ref ports
 	if ref.String() == "" {
 		return "", &Error{Code: CodeWorkspaceNotFound}
 	}
-	record, found := adapter.preparedRecord(ref)
-	if !found {
-		return "", &Error{Code: CodeWorkspaceNotFound}
+	record, prepared := adapter.preparedRecord(ref)
+	var path, expectedGitFile string
+	var repositoryRef identity.RepositoryRef
+	if prepared {
+		path, expectedGitFile, repositoryRef = record.path, record.gitFile, record.request.RepositoryRef
+	} else if resolved, found := adapter.resolvedWorkspace(ref); found {
+		path, expectedGitFile, repositoryRef = resolved.path, resolved.gitFile, resolved.repositoryRef
+	} else {
+		resolved, err := adapter.recoverWorkspaceResolution(ctx, ref)
+		if err != nil {
+			return "", err
+		}
+		path, expectedGitFile, repositoryRef = resolved.path, resolved.gitFile, resolved.repositoryRef
 	}
-	path := record.path
 	if _, err := os.Lstat(path); os.IsNotExist(err) {
 		return "", &Error{Code: CodeWorkspaceNotFound}
 	}
-	repository, _, err := adapter.repository(ctx, record.request.RepositoryRef)
+	repository, _, err := adapter.repository(ctx, repositoryRef)
 	if err != nil {
 		return "", err
 	}
 	gitDir, err := adapter.verifyWorkspace(ctx, repository, path, "", ref)
-	if err != nil || gitDir != record.gitFile {
+	if err != nil || gitDir != expectedGitFile {
 		return "", &Error{Code: CodeWorkspaceUnsafe, Cause: err}
 	}
 	return path, nil
+}
+
+func (adapter *Adapter) recoverWorkspaceResolution(
+	ctx context.Context,
+	ref ports.ExecutionWorkspaceRef,
+) (resolvedWorkspaceRecord, error) {
+	unlock := adapter.lockScopes("workspace:" + ref.String())
+	defer unlock()
+	if record, found := adapter.preparedRecord(ref); found {
+		return resolvedWorkspaceRecord{
+			repositoryRef: record.request.RepositoryRef, path: record.path, gitFile: record.gitFile,
+		}, nil
+	}
+	if record, found := adapter.resolvedWorkspace(ref); found {
+		return record, nil
+	}
+	adapter.stateMu.RLock()
+	resolver := adapter.bindingResolver
+	adapter.stateMu.RUnlock()
+	if resolver == nil {
+		return resolvedWorkspaceRecord{}, &Error{Code: CodeWorkspaceNotFound}
+	}
+	recovered, found, err := resolver.ResolveDurableWorkspaceBinding(ctx, ref)
+	if err != nil {
+		return resolvedWorkspaceRecord{}, &Error{Code: CodeWorkspaceUnsafe, Cause: err}
+	}
+	if !found {
+		return resolvedWorkspaceRecord{}, &Error{Code: CodeWorkspaceNotFound}
+	}
+	request, prepared := recovered.Request, recovered.Prepared
+	if request.WorkspaceRef != ref || prepared.WorkspaceRef != ref ||
+		prepared.AdapterRef != adapterRef ||
+		prepared.ReceiptRef != digestRef("workspace-receipt:", request.IdempotencyKey) ||
+		ports.ValidateWorkspacePrepareRequest(request) != nil ||
+		ports.ValidateWorkspacePrepared(request, prepared) != nil {
+		return resolvedWorkspaceRecord{}, &Error{Code: CodeWorkspaceUnsafe}
+	}
+	repository, _, err := adapter.repository(ctx, request.RepositoryRef)
+	if err != nil {
+		return resolvedWorkspaceRecord{}, err
+	}
+	path := adapter.workspacePath(ref)
+	gitDir, err := adapter.verifyWorkspace(ctx, repository, path, "", ref)
+	if err != nil {
+		return resolvedWorkspaceRecord{}, &Error{Code: CodeWorkspaceUnsafe, Cause: err}
+	}
+	base, err := adapter.workspaceBaseOID(ctx, repository, ref)
+	if err != nil || base != prepared.BaseOID {
+		return resolvedWorkspaceRecord{}, &Error{Code: CodeWorkspaceUnsafe, Cause: err}
+	}
+	prepareMarkerFound, err := adapter.effectMarkerMatches(
+		ctx, repository, markerRef(request.IdempotencyKey),
+		effectMarkerMessage("prepare", prepareRequestDigest(request)), CodeWorkspaceUnsafe,
+	)
+	if err != nil || !prepareMarkerFound {
+		return resolvedWorkspaceRecord{}, &Error{Code: CodeWorkspaceUnsafe, Cause: err}
+	}
+	digest := workspaceBindingDigest(request, prepared)
+	key := "workspace-binding:" + ref.String() + ":" + digest
+	markerFound, err := adapter.effectMarkerMatches(
+		ctx, repository, markerRef(key), workspaceBindingMarkerMessage(ref, digest), CodeWorkspaceUnsafe,
+	)
+	if err != nil || !markerFound {
+		return resolvedWorkspaceRecord{}, &Error{Code: CodeWorkspaceUnsafe, Cause: err}
+	}
+	record := resolvedWorkspaceRecord{repositoryRef: request.RepositoryRef, path: path, gitFile: gitDir}
+	adapter.rememberResolvedWorkspace(ref, record)
+	return record, nil
 }
 
 func (adapter *Adapter) repository(ctx context.Context, ref identity.RepositoryRef) (string, LocalRepositoryBinding, error) {
