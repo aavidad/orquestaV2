@@ -265,7 +265,8 @@ func v20AssertRegistryAndHandlers(t *testing.T, repositoryRoot string, fixture v
 			!reflect.DeepEqual(definition.ErrorCodes, fixture.StableErrorCodes) ||
 			definition.HTTP.Method != "POST" ||
 			definition.HTTP.Path != "/api/v1/commands/"+definition.ID ||
-			definition.MCP.Tool != definition.ID || !reflect.DeepEqual(definition.CLI.Path, wantCLI) ||
+			definition.MCP.Tool != definition.ID || !v20MCPAnnotationsAreCanonical(definition) ||
+			!reflect.DeepEqual(definition.CLI.Path, wantCLI) ||
 			len(definition.InputSchema) == 0 || len(definition.OutputSchema) == 0 ||
 			!json.Valid(definition.InputSchema) || !json.Valid(definition.OutputSchema) {
 			t.Errorf("V20 definition differs from canonical contract: %+v", definition)
@@ -325,6 +326,28 @@ func v20AssertRegistryAndHandlers(t *testing.T, repositoryRoot string, fixture v
 			t.Errorf("V20 private authority %s is forbidden", forbidden)
 		}
 	}
+}
+
+func v20MCPAnnotationsAreCanonical(definition v20RegistryDefinition) bool {
+	annotations := definition.MCP.Annotations
+	if annotations == nil || annotations.ReadOnly == nil || annotations.Destructive == nil ||
+		annotations.Idempotent == nil || annotations.OpenWorld == nil {
+		return false
+	}
+	wantReadOnly := definition.Kind == "query"
+	wantDestructive := !wantReadOnly
+	switch definition.ID {
+	case "orquesta.mailbox.claim",
+		"orquesta.mailbox.mark_delivered",
+		"orquesta.mailbox.consume",
+		"orquesta.mailbox.acknowledge":
+		// These mailbox transitions are monotonic, not destructive effects.
+		wantDestructive = false
+	}
+	return *annotations.ReadOnly == wantReadOnly &&
+		*annotations.Destructive == wantDestructive &&
+		*annotations.Idempotent &&
+		!*annotations.OpenWorld
 }
 
 func v20AssertGeneratedBindings(t *testing.T, repositoryRoot string, fixture v20Fixture) {

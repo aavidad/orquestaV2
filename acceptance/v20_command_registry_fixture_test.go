@@ -129,7 +129,18 @@ type v20HTTPBinding struct {
 }
 
 type v20MCPBinding struct {
-	Tool string `json:"tool"`
+	Tool        string             `json:"tool"`
+	Annotations *v20MCPAnnotations `json:"annotations"`
+}
+
+// v20MCPAnnotations is an additive registry extension introduced after the
+// V20 contract was sealed. Pointers preserve strict presence checks while the
+// enclosing V20 decoder continues rejecting genuinely unknown JSON fields.
+type v20MCPAnnotations struct {
+	ReadOnly    *bool `json:"read_only"`
+	Destructive *bool `json:"destructive"`
+	Idempotent  *bool `json:"idempotent"`
+	OpenWorld   *bool `json:"open_world"`
 }
 
 type v20CLIBinding struct {
