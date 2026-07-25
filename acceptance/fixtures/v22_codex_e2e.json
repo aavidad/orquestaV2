@@ -4,9 +4,9 @@
   "contract_id": "AC-V22-CODEX-E2E",
   "trusted_base_git_commit_oid": "665ef446a32a7f0512255640fa99b2e7edd9f29d",
   "product_delta_base_git_commit_oid": "665ef446a32a7f0512255640fa99b2e7edd9f29d",
-  "product_delta_sealed_git_commit_oid": "eee274d56c6f76a215fe496d4254cd6d77fbdfab",
-  "seal_status": "s_product_delta_sealed_pending_execution",
-  "seal_note": "S binds the exact stable V22 P product candidate; E receipt/output are absent and no PASS is implied.",
+  "product_delta_sealed_git_commit_oid": "",
+  "seal_status": "p_implemented_unsealed_pending_seal",
+  "seal_note": "P freezes the exact V22 product, tests, documentation, generic real receipt and traceability candidate; S and E are absent and no PASS is implied.",
   "command": "sh -c './scripts/check_rebuild_write_set.sh 665ef446a32a7f0512255640fa99b2e7edd9f29d && git diff --check 665ef446a32a7f0512255640fa99b2e7edd9f29d HEAD -- && go test -mod=vendor -count=1 . ./acceptance ./internal/... ./cmd/... ./sdk/... && timeout --kill-after=10s 300s go test -mod=vendor -race -count=1 -timeout=270s ./internal/adapters/agent/codex ./internal/adapters/state/sqlite ./internal/bootstrap -run \"^(TestCodexChildDeliveryUsesSameExecutionServicePrincipalAfterArtifactPersistence|TestCodexRuntimeUsesCatalogOwnedPrompt|TestExecutionServicePrincipalExactScopeRevocationAndRestart|TestProductionBuildCreatesDurableExecutionAuthorityResolver)$\" && e2e_events=$(go test -mod=vendor -tags=v22_real_e2e -json -count=1 -timeout=900s ./acceptance -run \"^(TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP|TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess)$\" 2>&1); e2e_status=$?; printf \"%s\\n\" \"$e2e_events\"; [ \"$e2e_status\" -eq 0 ] && for test_name in TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess; do printf \"%s\\n\" \"$e2e_events\" | grep -F \"\\\"Action\\\":\\\"run\\\"\" | grep -F \"\\\"Package\\\":\\\"orquesta/acceptance\\\"\" | grep -F \"\\\"Test\\\":\\\"$test_name\\\"\" >/dev/null && printf \"%s\\n\" \"$e2e_events\" | grep -F \"\\\"Action\\\":\\\"pass\\\"\" | grep -F \"\\\"Package\\\":\\\"orquesta/acceptance\\\"\" | grep -F \"\\\"Test\\\":\\\"$test_name\\\"\" >/dev/null || exit 1; done && GOFLAGS=-mod=vendor go vet . ./acceptance ./internal/... ./cmd/... ./sdk/commands'",
   "execution_argv": [
     "sh",
@@ -185,10 +185,10 @@
     "product_roadmap_v22_test.go",
     "scripts/check_rebuild_write_set.sh"
   ],
-  "implementation_status": "sealed_unexecuted",
-  "lifecycle_gate": "V22_SEALED_UNEXECUTED",
+  "implementation_status": "implemented_unsealed",
+  "lifecycle_gate": "V22_IMPLEMENTED_UNSEALED",
   "preflight_status": "integrated_implementation_complete",
-  "preflight_note": "V21 and the refreshed generic Codex smoke are accredited; S binds the exact V22 P product, tests, documentation and traceability candidate, while E remains absent.",
+  "preflight_note": "V21 and the refreshed generic Codex smoke are accredited; the exact V22 candidate is frozen in P, with no S binding or E PASS evidence.",
   "blocking_dependency_vertical": "none",
   "dependency_receipt_path": "product/evidence/v21_i18n.json",
   "dependency_activation_contract": {
