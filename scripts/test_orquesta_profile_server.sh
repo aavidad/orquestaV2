@@ -39,7 +39,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -88,13 +87,26 @@ func main() {
 		}
 		if json.NewDecoder(request.Body).Decode(&input) != nil ||
 			input.Version != "1" ||
-			input.RequestRef != "request:profile-server-readiness" ||
+			!validReadinessRef(input.RequestRef) ||
 			input.ProjectRef != values["project.default"] {
 			http.Error(writer, "bad request", http.StatusBadRequest)
 			return
 		}
+		if err := os.WriteFile(filepath.Join(os.Getenv("HOME"), "readiness-ref.txt"), []byte(input.RequestRef), 0o600); err != nil {
+			panic(err)
+		}
 		writer.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(writer, `{"command_id":"orquesta.system.status","command_version":"1","request_ref":"request:profile-server-readiness","data":{"goals":0,"running_goals":0,"pending_actions":0,"quarantined_actions":0},"audit_ref":"audit:profile-readiness"}`)
+		if err := json.NewEncoder(writer).Encode(map[string]any{
+			"command_id": "orquesta.system.status", "command_version": "1",
+			"request_ref": input.RequestRef,
+			"data": map[string]int{
+				"goals": 0, "running_goals": 0,
+				"pending_actions": 0, "quarantined_actions": 0,
+			},
+			"audit_ref": "audit:profile-readiness",
+		}); err != nil {
+			panic(err)
+		}
 	})
 	listener, err := net.Listen("tcp", values["server.listen"])
 	if err != nil {
@@ -106,6 +118,13 @@ func main() {
 	signal.Notify(stop, syscall.SIGTERM)
 	<-stop
 	server.Close()
+}
+
+func validReadinessRef(value string) bool {
+	const prefix = "request:profile-server-readiness:"
+	suffix := strings.TrimPrefix(value, prefix)
+	decoded, err := hex.DecodeString(suffix)
+	return strings.HasPrefix(value, prefix) && err == nil && len(decoded) == sha256.Size
 }
 
 func readConfig(path string) map[string]string {
@@ -271,6 +290,8 @@ grep -q "status=running profile=CodexA pid=$pid_a" \
 start_profile CodexB >"$TEST_ROOT/start-b.out"
 assert_observed_environment CodexA
 assert_observed_environment CodexB
+readiness_ref_a="$(<"$BASE/CodexA/daemon-home/readiness-ref.txt")"
+[[ "$readiness_ref_a" =~ ^request:profile-server-readiness:[0-9a-f]{64}$ ]]
 [ ! -e "$BASE/CodexA/daemon-home/auth.json" ]
 [ ! -e "$BASE/CodexA/daemon-home/.codex" ]
 [ "$(sha256sum "$ACCOUNTS/CodexA/auth.json" | awk '{print $1}')" != \
@@ -308,6 +329,8 @@ printf '{"account":"account-a-refreshed"}\n' >"$ACCOUNTS/CodexA/auth.json"
 chmod 600 "$ACCOUNTS/CodexA/auth.json"
 write_config CodexA "$(available_port)" 1 1048576
 start_profile CodexA >/dev/null
+readiness_ref_restart="$(<"$BASE/CodexA/daemon-home/readiness-ref.txt")"
+[ "$readiness_ref_restart" != "$readiness_ref_a" ]
 "$SCRIPT" stop --profile CodexA --runtime-base "$BASE" >/dev/null
 
 # El límite de auth procede del snapshot TOML, no de un 1 MiB local.

@@ -722,6 +722,12 @@ done
   kill -TERM "$started_pid" 2>/dev/null || true
   fail "daemon_start_identity_unavailable"
 }
+readiness_nonce="$(
+  printf '%s\n%s\n%s\n' "$profile" "$started_pid" "$started_ref" |
+    sha256sum |
+    awk '{print $1}'
+)"
+readonly READINESS_REQUEST_REF="request:profile-server-readiness:$readiness_nonce"
 safe_write_value "$PID_FILE" "$started_pid"
 safe_write_value "$START_REF_FILE" "$started_ref"
 safe_write_value "$BINARY_ID_FILE" "$binary_id"
@@ -733,14 +739,15 @@ for _ in $(seq 1 100); do
   if ! pid_alive "$started_pid"; then
     break
   fi
-  if python3 - "$listen" "$token_path" "$project_ref" <<'PY' >/dev/null 2>&1
+  if python3 - "$listen" "$token_path" "$project_ref" \
+    "$READINESS_REQUEST_REF" <<'PY' >/dev/null 2>&1
 import json
 import os
 import stat
 import sys
 import urllib.request
 
-host_port, token_path, project_ref = sys.argv[1:]
+host_port, token_path, project_ref, request_ref = sys.argv[1:]
 metadata = os.stat(token_path, follow_symlinks=False)
 if (
     not stat.S_ISREG(metadata.st_mode)
@@ -757,7 +764,7 @@ if not token or b"\r" in token or b"\n" in token:
 body = json.dumps(
     {
         "version": "1",
-        "request_ref": "request:profile-server-readiness",
+        "request_ref": request_ref,
         "project_ref": project_ref,
         "payload": {},
     },
@@ -778,7 +785,7 @@ data = result.get("data")
 if (
     result.get("command_id") != "orquesta.system.status"
     or result.get("command_version") != "1"
-    or result.get("request_ref") != "request:profile-server-readiness"
+    or result.get("request_ref") != request_ref
     or result.get("failure") is not None
     or not isinstance(result.get("audit_ref"), str)
     or not result["audit_ref"]
