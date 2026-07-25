@@ -133,7 +133,7 @@ func (runner *fakeRunner) Close() error {
 }
 
 func TestUnixLauncherRoundTripUsesPeerCredentialsAndDescriptors(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "runtime")
+	root := filepath.Join(shortUDSTempDirForTest(t), "runtime")
 	config := validConfigForTest(root)
 	prepareRuntimeRoot(t, root)
 	runner := &fakeRunner{output: []byte("ORQ-RESULT")}
@@ -194,8 +194,54 @@ func TestUnixLauncherRoundTripUsesPeerCredentialsAndDescriptors(t *testing.T) {
 	}
 }
 
+func TestUnixLauncherHarnessUsesPrivateShortUDSTempsWithLongTMPDIR(t *testing.T) {
+	longTMPDIR := filepath.Join(t.TempDir(), strings.Repeat("long-", 30))
+	if err := os.Mkdir(longTMPDIR, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if len(filepath.Join(longTMPDIR, "runtime", "launcher.sock")) <
+		len(unix.RawSockaddrUnix{}.Path) {
+		t.Fatal("long TMPDIR fixture does not exceed sun_path")
+	}
+	t.Setenv("TMPDIR", longTMPDIR)
+
+	var first, second string
+	t.Run("launcher_starts", func(t *testing.T) {
+		first = shortUDSTempDirForTest(t)
+		second = shortUDSTempDirForTest(t)
+		if first == second {
+			t.Fatalf("short UDS test directories are not unique: %s", first)
+		}
+		info, err := os.Stat(first)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o700 {
+			t.Fatalf("short UDS test directory is not private: mode=%v", info.Mode())
+		}
+		root := filepath.Join(first, "runtime")
+		config := validConfigForTest(root)
+		if len(config.SocketPath) >= len(unix.RawSockaddrUnix{}.Path) {
+			t.Fatalf("short UDS test socket exceeds sun_path: %s", config.SocketPath)
+		}
+		prepareRuntimeRoot(t, root)
+		server, err := newServer(config, &fakeRunner{}, uint32(os.Geteuid()))
+		if err != nil {
+			t.Fatalf("launcher unavailable with long TMPDIR: %v", err)
+		}
+		if err := server.Close(); err != nil {
+			t.Fatal(err)
+		}
+	})
+	for _, root := range []string{first, second} {
+		if _, err := os.Lstat(root); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("short UDS test directory remains after cleanup: %s: %v", root, err)
+		}
+	}
+}
+
 func TestCapturedOutputLimitIsIndependentFromOutputDrive(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "runtime")
+	root := filepath.Join(shortUDSTempDirForTest(t), "runtime")
 	config := validConfigForTest(root)
 	config.MaxCapturedOutputBytes = 16 << 20
 	prepareRuntimeRoot(t, root)
@@ -224,7 +270,7 @@ func TestCapturedOutputLimitIsIndependentFromOutputDrive(t *testing.T) {
 }
 
 func TestUnixLauncherRejectsUnauthorizedPeerBeforeRunner(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "runtime")
+	root := filepath.Join(shortUDSTempDirForTest(t), "runtime")
 	config := validConfigForTest(root)
 	config.AllowedUID = uint32(os.Geteuid()) + 1
 	prepareRuntimeRoot(t, root)
@@ -256,7 +302,7 @@ func TestUnixLauncherRejectsUnauthorizedPeerBeforeRunner(t *testing.T) {
 }
 
 func TestUnixLauncherRejectsMissingAndExcessDescriptorsWithoutLeaks(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "runtime")
+	root := filepath.Join(shortUDSTempDirForTest(t), "runtime")
 	config := validConfigForTest(root)
 	prepareRuntimeRoot(t, root)
 	runner := &fakeRunner{output: []byte("must-not-run")}
@@ -321,7 +367,7 @@ func TestUnixLauncherRejectsMissingAndExcessDescriptorsWithoutLeaks(t *testing.T
 }
 
 func TestUnixLauncherTimeoutIsStableAndCleanupRemovesSocket(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "runtime")
+	root := filepath.Join(shortUDSTempDirForTest(t), "runtime")
 	config := validConfigForTest(root)
 	prepareRuntimeRoot(t, root)
 	runner := &fakeRunner{wait: true}
@@ -353,7 +399,7 @@ func TestUnixLauncherTimeoutIsStableAndCleanupRemovesSocket(t *testing.T) {
 }
 
 func TestUnixLauncherCleanupFailureDominatesExpiredRequest(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "runtime")
+	root := filepath.Join(shortUDSTempDirForTest(t), "runtime")
 	config := validConfigForTest(root)
 	prepareRuntimeRoot(t, root)
 	runner := &fakeRunner{
@@ -472,7 +518,7 @@ func TestSealedInputStreamsDeclaredSizeAndOutputDriveIsVariable(t *testing.T) {
 }
 
 func TestServeStopsWithSilentPeer(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "runtime")
+	root := filepath.Join(shortUDSTempDirForTest(t), "runtime")
 	config := validConfigForTest(root)
 	config.CleanupTimeout = 25 * time.Millisecond
 	prepareRuntimeRoot(t, root)
@@ -507,7 +553,7 @@ func TestServeStopsWithSilentPeer(t *testing.T) {
 }
 
 func TestServerCloseStopsRunnerBeforeWaitingForBlockedHandler(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "runtime")
+	root := filepath.Join(shortUDSTempDirForTest(t), "runtime")
 	config := validConfigForTest(root)
 	config.CleanupTimeout = 250 * time.Millisecond
 	prepareRuntimeRoot(t, root)
@@ -577,7 +623,7 @@ func TestServerCloseStopsRunnerBeforeWaitingForBlockedHandler(t *testing.T) {
 
 func TestServerIsSingleStartAndRejectsServeAfterClose(t *testing.T) {
 	t.Run("double_serve", func(t *testing.T) {
-		root := filepath.Join(t.TempDir(), "runtime")
+		root := filepath.Join(shortUDSTempDirForTest(t), "runtime")
 		config := validConfigForTest(root)
 		prepareRuntimeRoot(t, root)
 		server, err := newServer(config, &fakeRunner{}, uint32(os.Geteuid()))
@@ -600,7 +646,7 @@ func TestServerIsSingleStartAndRejectsServeAfterClose(t *testing.T) {
 		}
 	})
 	t.Run("serve_after_close", func(t *testing.T) {
-		root := filepath.Join(t.TempDir(), "runtime")
+		root := filepath.Join(shortUDSTempDirForTest(t), "runtime")
 		config := validConfigForTest(root)
 		prepareRuntimeRoot(t, root)
 		server, err := newServer(config, &fakeRunner{}, uint32(os.Geteuid()))
@@ -617,7 +663,7 @@ func TestServerIsSingleStartAndRejectsServeAfterClose(t *testing.T) {
 }
 
 func TestRuntimeRootAndSocketHaveExactGroupAccess(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "runtime")
+	root := filepath.Join(shortUDSTempDirForTest(t), "runtime")
 	config := validConfigForTest(root)
 	prepareRuntimeRoot(t, root)
 	server, err := newServer(config, &fakeRunner{}, uint32(os.Geteuid()))
@@ -650,7 +696,7 @@ func TestRuntimeRootAndSocketHaveExactGroupAccess(t *testing.T) {
 }
 
 func TestMaxConcurrentRunsBoundsAcceptedHandlers(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "runtime")
+	root := filepath.Join(shortUDSTempDirForTest(t), "runtime")
 	config := validConfigForTest(root)
 	config.MaxConcurrentRuns = 1
 	config.CleanupTimeout = 250 * time.Millisecond
@@ -719,7 +765,7 @@ func TestReceivePacketClosesExcessAndTruncatedRights(t *testing.T) {
 }
 
 func TestLauncherRejectsUnalignedInputDriveBeforeRunner(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "runtime")
+	root := filepath.Join(shortUDSTempDirForTest(t), "runtime")
 	config := validConfigForTest(root)
 	prepareRuntimeRoot(t, root)
 	runner := &fakeRunner{}
@@ -765,7 +811,7 @@ func TestLauncherRejectsUnalignedInputDriveBeforeRunner(t *testing.T) {
 }
 
 func TestServerMapsValidationDeadlineToExecutionTimeout(t *testing.T) {
-	root := filepath.Join(t.TempDir(), "runtime")
+	root := filepath.Join(shortUDSTempDirForTest(t), "runtime")
 	config := validConfigForTest(root)
 	prepareRuntimeRoot(t, root)
 	runner := &fakeRunner{}
@@ -807,7 +853,7 @@ func TestServerMapsValidationDeadlineToExecutionTimeout(t *testing.T) {
 }
 
 func TestClientAuthenticatesServerBeforeSendingDescriptors(t *testing.T) {
-	parent := t.TempDir()
+	parent := shortUDSTempDirForTest(t)
 	if err := os.Chmod(parent, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -877,7 +923,7 @@ func TestInputValidationAndConnectHonorCanceledContext(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer unix.Close(socket)
-	if err := connectSocketContext(ctx, socket, filepath.Join(t.TempDir(), "absent.sock")); !errors.Is(err, context.Canceled) {
+	if err := connectSocketContext(ctx, socket, filepath.Join(shortUDSTempDirForTest(t), "absent.sock")); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled connect continued: %v", err)
 	}
 	sourcePath := filepath.Join(t.TempDir(), "input.drive")
@@ -931,7 +977,7 @@ func TestServePropagatesRunnerAndSocketCleanupErrors(t *testing.T) {
 		t.Fatalf("cleanup failure lost behind primary failure: %v", err)
 	}
 	t.Run("runner_close", func(t *testing.T) {
-		root := filepath.Join(t.TempDir(), "runtime")
+		root := filepath.Join(shortUDSTempDirForTest(t), "runtime")
 		config := validConfigForTest(root)
 		prepareRuntimeRoot(t, root)
 		runner := &fakeRunner{closeErr: errors.New("physical runner cleanup detail")}
@@ -946,7 +992,7 @@ func TestServePropagatesRunnerAndSocketCleanupErrors(t *testing.T) {
 		}
 	})
 	t.Run("socket_replaced", func(t *testing.T) {
-		root := filepath.Join(t.TempDir(), "runtime")
+		root := filepath.Join(shortUDSTempDirForTest(t), "runtime")
 		config := validConfigForTest(root)
 		prepareRuntimeRoot(t, root)
 		server, err := newServer(config, &fakeRunner{}, uint32(os.Geteuid()))
@@ -968,7 +1014,7 @@ func TestServePropagatesRunnerAndSocketCleanupErrors(t *testing.T) {
 }
 
 func TestRuntimePathRejectsIntermediateSymlink(t *testing.T) {
-	base := t.TempDir()
+	base := shortUDSTempDirForTest(t)
 	if err := os.Chmod(base, 0o700); err != nil {
 		t.Fatal(err)
 	}

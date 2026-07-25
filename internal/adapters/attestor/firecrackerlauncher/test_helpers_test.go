@@ -4,8 +4,29 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"testing"
 	"time"
 )
+
+const shortUDSTestParent = "/tmp"
+
+func shortUDSTempDirForTest(t testing.TB) string {
+	t.Helper()
+	root, err := os.MkdirTemp(shortUDSTestParent, "orq-fcl-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(root, 0o700); err != nil {
+		_ = os.RemoveAll(root)
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(root); err != nil {
+			t.Errorf("remove short UDS test directory: %v", err)
+		}
+	})
+	return root
+}
 
 func validConfigForTest(root string) Config {
 	uid, gid := uint32(os.Geteuid()), uint32(os.Getegid())
