@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"orquesta/internal/adapters/attestor/firecrackerlauncher"
 )
 
 func TestLauncherCLIRequiresOnlyCanonicalConfigArgument(t *testing.T) {
@@ -24,6 +26,28 @@ func TestLauncherCLIRequiresOnlyCanonicalConfigArgument(t *testing.T) {
 			stderr.String() != "code=test_attestor.firecracker_launcher_config_invalid\n" ||
 			stdout.Len() != 0 {
 			t.Fatalf("arguments=%q status/output=%d %q %q", arguments, status, stdout.String(), stderr.String())
+		}
+	}
+}
+
+func TestLauncherCLIPreservesSafeKVMPreflightSubstageCodes(t *testing.T) {
+	codes := []string{
+		firecrackerlauncher.CodeKVMOpenUnavailable,
+		firecrackerlauncher.CodeKVMMetadataUnsafe,
+		firecrackerlauncher.CodeKVMAPIUnavailable,
+		firecrackerlauncher.CodeKVMVersionUnsupported,
+	}
+	for _, code := range codes {
+		var output bytes.Buffer
+		err := &firecrackerlauncher.Error{Code: code}
+		if got := safeErrorCode(err); got != code {
+			t.Fatalf("code=%q got=%q", code, got)
+		}
+		writeCode(&output, safeErrorCode(err))
+		if output.String() != "code="+code+"\n" ||
+			strings.Contains(output.String(), "/dev/kvm") ||
+			strings.Contains(output.String(), "operation not permitted") {
+			t.Fatalf("unsafe diagnostic output: %q", output.String())
 		}
 	}
 }
