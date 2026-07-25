@@ -371,7 +371,7 @@ func (repository *memoryRepository) ApplyControl(
 		state.AuthorizationReceipt, state.PrincipalRef, state.ProjectRef,
 		identity.PermissionGoalsDirect, state.GoalRef.String(),
 	)
-	if IsReviewCleanupControl(state.Control) {
+	if IsRoundCleanupControl(state.Control) {
 		authorized = memoryWriteAuthorizationValid(
 			state.AuthorizationReceipt, state.PrincipalRef, state.ProjectRef,
 			identity.PermissionGoalsCreate, state.ProjectRef.String(),
@@ -483,7 +483,7 @@ func (repository *memoryRepository) ApplyControl(
 		}
 	}
 	for _, cleanup := range state.NewControls {
-		if !IsReviewCleanupControl(cleanup) {
+		if !IsRoundCleanupControl(cleanup) {
 			return ControlRecord{}, false, &StateError{Code: StateInvalid}
 		}
 		current.Controls = append(current.Controls, cleanup)
@@ -2311,10 +2311,55 @@ func (repository *memoryRepository) RecordCouncilExecutionFailed(_ context.Conte
 		len(factsForCouncilSubjectRole(record.CouncilFacts, round.SubjectDigest, role)) != 0 {
 		return &StateError{Code: StateInvalid}
 	}
+	if state.Goal.Ref() != record.Goal.Ref() ||
+		(state.AuthorExecution.Ref.String() != "" && state.AuthorExecution.State != ExecutionFailed) ||
+		(state.AuthorExecution.Ref.String() == "" && len(state.CleanupControls) == 0 && state.ResolvedCleanup == nil) {
+		return &StateError{Code: StateInvalid}
+	}
 	if err := repository.validateBudgetSettlementLocked(record, state.BudgetSettlement); err != nil {
 		return err
 	}
+	for _, actionRef := range state.RetireActionRefs {
+		if _, found := repository.actions[actionRef]; !found {
+			return &StateError{Code: StateConflict}
+		}
+	}
+	for _, control := range state.CleanupControls {
+		if !IsCouncilCleanupControl(control) {
+			return &StateError{Code: StateInvalid}
+		}
+		record.Controls = append(record.Controls, control)
+	}
+	if state.ResolvedCleanup != nil {
+		previous, found := controlByRef(record.Controls, state.ResolvedCleanup.Ref)
+		if !found || previous.Status != ControlRequested || !IsCouncilCleanupControl(*state.ResolvedCleanup) ||
+			state.ResolvedCleanup.Status != ControlConfirmed ||
+			state.ResolvedCleanup.ExecutionRef != state.Execution.Ref ||
+			state.ResolvedCleanup.ExecutionAttempt != state.Execution.AttemptNo {
+			return &StateError{Code: StateInvalid}
+		}
+		record.Controls = replaceControl(record.Controls, *state.ResolvedCleanup)
+	}
+	for _, action := range state.CleanupActions {
+		if _, found := repository.actions[action.Ref]; found {
+			return &StateError{Code: StateConflict}
+		}
+		memoryAddActionFacts(&record, action)
+	}
+	record.Goal = state.Goal
 	record.Executions = replaceExecution(record.Executions, state.Execution)
+	if state.AuthorExecution.Ref.String() != "" {
+		record.Executions = replaceExecution(record.Executions, state.AuthorExecution)
+	}
+	for _, retirement := range state.RetiredPeers {
+		previous, found := executionByRef(record.Executions, retirement.Execution.Ref)
+		if !found || previous.State != retirement.ExpectedState || !isCouncilExecution(retirement.Execution) ||
+			retirement.Execution.State != ExecutionFailed ||
+			retirement.Execution.CouncilSubjectDigest != state.Execution.CouncilSubjectDigest {
+			return &StateError{Code: StateConflict}
+		}
+		record.Executions = replaceExecution(record.Executions, retirement.Execution)
+	}
 	if state.BudgetSettlement != nil {
 		record.BudgetSettlements = append(record.BudgetSettlements, *state.BudgetSettlement)
 	}
@@ -2322,6 +2367,18 @@ func (repository *memoryRepository) RecordCouncilExecutionFailed(_ context.Conte
 		consumptionReceipt(state.Claim, ActionConsumedCompleted, state.Execution.FailureCode, state.OperationAt))
 	repository.records[record.Goal.Ref()] = record
 	delete(repository.actions, state.Claim.Action.Ref)
+	for _, actionRef := range state.RetireActionRefs {
+		if retired, found := repository.retireActionLocked(actionRef,
+			"council-round:"+state.Execution.Ref.String(), "system:council-round", state.OperationAt); found {
+			record.ConsumptionReceipts = append(record.ConsumptionReceipts, retired)
+		} else {
+			return &StateError{Code: StateConflict}
+		}
+	}
+	for _, action := range state.CleanupActions {
+		repository.actions[action.Ref] = memoryAction{record: action}
+	}
+	repository.records[record.Goal.Ref()] = record
 	repository.events = append(repository.events, state.Events...)
 	return nil
 }

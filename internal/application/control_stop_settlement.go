@@ -23,6 +23,11 @@ func (orchestrator *Orchestrator) settleStopped(
 			ctx, claim, record, item, execution, control, receipt, effectReceipt,
 		)
 	}
+	if IsCouncilCleanupControl(control) {
+		return orchestrator.settleCouncilCleanupStopped(
+			ctx, claim, record, item, execution, control, receipt, effectReceipt,
+		)
+	}
 	at := lifecycleTime(effectReceipt.ConfirmedAt, record.Goal, item)
 	aggregate := record.Goal
 	previousExecutionState := execution.State

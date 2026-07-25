@@ -179,6 +179,15 @@ func (orchestrator *Orchestrator) processLaunch(ctx context.Context, claim Actio
 		if err != nil {
 			return orchestrator.quarantineUnknownApplied(ctx, claim)
 		}
+	} else if cleanup, pending := pendingCouncilCleanupControl(record, execution); pending {
+		policy, policyErr := historicalEffectPolicy(record)
+		if policyErr != nil {
+			return orchestrator.quarantineUnknownApplied(ctx, claim)
+		}
+		next, err = orchestrator.councilCleanupStopAction(policy, cleanup, record.Goal, item, execution, transitionAt)
+		if err != nil {
+			return orchestrator.quarantineUnknownApplied(ctx, claim)
+		}
 	}
 	err = orchestrator.state.RecordLaunchAccepted(ctx, LaunchAcceptedState{
 		Claim: claim, Execution: execution, NextAction: next, EffectReceipt: externalReceipt,
@@ -429,11 +438,16 @@ func (orchestrator *Orchestrator) dispatchLaunchEffect(
 				handled = orchestrator.resolveUnappliedReviewCleanupLaunch(
 					ctx, claim, latest, latestItem, latestExecution, cleanup, attempt.Ref, orchestrator.clock.Now(),
 				)
+			} else if cleanup, pending := pendingCouncilCleanupControl(latest, latestExecution); isCouncilExecution(latestExecution) && pending {
+				handled = orchestrator.resolveUnappliedCouncilCleanupLaunch(
+					ctx, claim, latest, latestItem, latestExecution, cleanup, attempt.Ref, orchestrator.clock.Now(),
+				)
 			} else {
 				switch {
 				case isCouncilExecution(latestExecution):
 					handled = orchestrator.replaceCouncilExecution(
-						ctx, claim, latest, latestExecution, "agent.launch_failed", orchestrator.clock.Now(), unknownUsage(), 0, true,
+						ctx, claim, latest, latestExecution, "agent.launch_failed", failedExecutionMayRetry,
+						orchestrator.clock.Now(), unknownUsage(), 0, true,
 					)
 				case latestItem.CancelRequested():
 					handled = orchestrator.settleCanceledLaunchRejection(
@@ -445,7 +459,8 @@ func (orchestrator *Orchestrator) dispatchLaunchEffect(
 					)
 				default:
 					handled = orchestrator.replaceExecutionAttempt(
-						ctx, claim, latest, "agent.launch_failed", orchestrator.clock.Now(), unknownUsage(), 0, true,
+						ctx, claim, latest, "agent.launch_failed", failedExecutionMayRetry,
+						orchestrator.clock.Now(), unknownUsage(), 0, true,
 					)
 				}
 			}
@@ -524,10 +539,11 @@ func (orchestrator *Orchestrator) processObservation(ctx context.Context, claim 
 		if orchestrator.executionExpired(execution, claim) {
 			if reviewer {
 				return orchestrator.replaceReviewerExecution(ctx, claim, record, execution,
-					"application.execution_expired", orchestrator.clock.Now(), unknownUsage(), 0, false)
+					"application.execution_expired", failedExecutionMayRetry,
+					orchestrator.clock.Now(), unknownUsage(), 0, false)
 			}
 			return orchestrator.replaceExecutionAttempt(
-				ctx, claim, record, "application.execution_expired", orchestrator.clock.Now(),
+				ctx, claim, record, "application.execution_expired", failedExecutionMayRetry, orchestrator.clock.Now(),
 				unknownUsage(), 0, false,
 			)
 		}
@@ -545,7 +561,7 @@ func (orchestrator *Orchestrator) processObservation(ctx context.Context, claim 
 			return orchestrator.quarantine(ctx, claim, code)
 		}
 		if reviewer {
-			return orchestrator.replaceReviewerExecution(ctx, claim, record, execution, code,
+			return orchestrator.replaceReviewerExecution(ctx, claim, record, execution, code, failedExecutionMayRetry,
 				orchestrator.clock.Now(), observation.Usage, int64(len(observation.Content)), false)
 		}
 		return orchestrator.failGoal(ctx, claim, record, code)
@@ -560,7 +576,7 @@ func (orchestrator *Orchestrator) processObservation(ctx context.Context, claim 
 	if observation.Status == ports.AgentCompleted && !compatibleMediaType(execution.ArtifactMediaType, observation.MediaType) {
 		if reviewer {
 			return orchestrator.replaceReviewerExecution(ctx, claim, record, execution,
-				"agent.observation_media_type_mismatch", orchestrator.clock.Now(), observation.Usage,
+				"agent.observation_media_type_mismatch", failedExecutionMayRetry, orchestrator.clock.Now(), observation.Usage,
 				int64(len(observation.Content)), false)
 		}
 		return orchestrator.failGoal(ctx, claim, record, "agent.observation_media_type_mismatch")
@@ -573,22 +589,23 @@ func (orchestrator *Orchestrator) processObservation(ctx context.Context, claim 
 		if orchestrator.executionExpired(execution, claim) {
 			if reviewer {
 				return orchestrator.replaceReviewerExecution(ctx, claim, record, execution,
-					"application.execution_expired", transitionAt, observation.Usage,
+					"application.execution_expired", failedExecutionMayRetry, transitionAt, observation.Usage,
 					int64(len(observation.Content)), false)
 			}
 			return orchestrator.replaceExecutionAttempt(
-				ctx, claim, record, "application.execution_expired", transitionAt,
+				ctx, claim, record, "application.execution_expired", failedExecutionMayRetry, transitionAt,
 				observation.Usage, int64(len(observation.Content)), false,
 			)
 		}
 		return orchestrator.requeue(ctx, claim, execution, "")
 	case ports.AgentFailed:
+		retryPolicy := failedExecutionRetryPolicyFor(observation)
 		if reviewer {
 			return orchestrator.replaceReviewerExecution(ctx, claim, record, execution,
-				observation.ErrorCode, transitionAt, observation.Usage, int64(len(observation.Content)), false)
+				observation.ErrorCode, retryPolicy, transitionAt, observation.Usage, int64(len(observation.Content)), false)
 		}
 		return orchestrator.replaceExecutionAttempt(
-			ctx, claim, record, observation.ErrorCode, transitionAt,
+			ctx, claim, record, observation.ErrorCode, retryPolicy, transitionAt,
 			observation.Usage, int64(len(observation.Content)), false,
 		)
 	case ports.AgentCompleted:
@@ -774,11 +791,37 @@ func (orchestrator *Orchestrator) failGoalAt(
 	})
 }
 
-func (orchestrator *Orchestrator) replaceExecutionAttempt(ctx context.Context, claim ActionClaim, record GoalRecord, code string, at time.Time, usage governance.ResourceUsage, diskBytes int64, definitelyUnapplied bool) error {
+type failedExecutionRetryPolicy uint8
+
+const (
+	failedExecutionMayRetry failedExecutionRetryPolicy = iota
+	failedExecutionMustTerminate
+)
+
+func failedExecutionRetryPolicyFor(observation ports.AgentObservation) failedExecutionRetryPolicy {
+	if observation.FailureDisposition == ports.AgentFailureDispositionTerminalSecurity {
+		return failedExecutionMustTerminate
+	}
+	return failedExecutionMayRetry
+}
+
+func (orchestrator *Orchestrator) replaceExecutionAttempt(ctx context.Context, claim ActionClaim, record GoalRecord,
+	code string, retryPolicy failedExecutionRetryPolicy, at time.Time, usage governance.ResourceUsage,
+	diskBytes int64, definitelyUnapplied bool,
+) error {
 	item, ok := record.Goal.WorkItem(claim.Action.WorkItemRef)
 	execution, found := executionForAction(record, claim.Action)
 	if !ok || !found || item.State() != goal.WorkItemStateRunning {
 		return &StateError{Code: StateConflict}
+	}
+	switch retryPolicy {
+	case failedExecutionMustTerminate:
+		return orchestrator.interruptExhaustedExecution(
+			ctx, claim, record, execution, item, code, at, usage, diskBytes, definitelyUnapplied,
+		)
+	case failedExecutionMayRetry:
+	default:
+		return errors.New("application.execution_retry_policy_invalid")
 	}
 	authority, authorityFound := workItemAuthorityFor(record.WorkItemAuthorities, item.Ref())
 	if !authorityFound {

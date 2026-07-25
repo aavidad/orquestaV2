@@ -55,7 +55,7 @@ func (repository *Repository) ApplyControl(
 	if state.OperationAt.After(now) {
 		return application.ControlRecord{}, false, invalid(errors.New("sqlite.control_operation_time_future"))
 	}
-	if application.IsReviewCleanupControl(state.Control) {
+	if application.IsRoundCleanupControl(state.Control) {
 		if _, err := requirePersistedAuthorizationFact(
 			ctx, transaction, state.AuthorizationReceipt, state.PrincipalRef,
 			state.ProjectRef, identity.PermissionGoalsCreate, state.ProjectRef.String(),

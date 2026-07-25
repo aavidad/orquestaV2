@@ -58,13 +58,25 @@ type CouncilExecutionReplacedState struct {
 	OperationAt          time.Time
 }
 
-// CouncilExecutionFailed preserves a failed/exhausted role as a durable fact.
-// It never manufactures a decision or retires the remaining Council roles.
+type CouncilParticipantRetirement struct {
+	Execution     ExecutionRecord
+	ExpectedState ExecutionState
+}
+
+// CouncilExecutionFailed preserves a failed/exhausted role as a durable fact
+// and atomically begins causal cleanup of the remaining live round.
 type CouncilExecutionFailedState struct {
 	Claim                ActionClaim
 	ExpectedGoalRevision goal.Revision
 	ExpectedItemRevision goal.Revision
 	Execution            ExecutionRecord
+	Goal                 goal.Goal
+	AuthorExecution      ExecutionRecord
+	RetiredPeers         []CouncilParticipantRetirement
+	RetireActionRefs     []string
+	CleanupControls      []ControlRecord
+	CleanupActions       []ActionRecord
+	ResolvedCleanup      *ControlRecord
 	BudgetSettlement     *governance.BudgetSettlement
 	Events               []EventRecord
 	OperationAt          time.Time

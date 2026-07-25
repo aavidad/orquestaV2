@@ -26,10 +26,11 @@ func (orchestrator *Orchestrator) recordReviewerObservation(ctx context.Context,
 		)
 		if diagnosticErr != nil {
 			return orchestrator.replaceReviewerExecution(ctx, claim, record, execution,
-				"artifact.store_failed", at, observation.Usage, int64(len(observation.Content)), false)
+				"artifact.store_failed", failedExecutionMayRetry, at, observation.Usage, int64(len(observation.Content)), false)
 		}
 		return orchestrator.replaceReviewerExecutionWithDiagnostic(ctx, claim, record, execution,
-			"review.assessment_invalid", at, observation.Usage, int64(len(observation.Content)), false, diagnostic)
+			"review.assessment_invalid", failedExecutionMayRetry, at,
+			observation.Usage, int64(len(observation.Content)), false, diagnostic)
 	}
 	for _, prior := range record.Reviews {
 		if prior.SubjectDigest == payload.SubjectDigest && prior.Role == role {
@@ -41,7 +42,7 @@ func (orchestrator *Orchestrator) recordReviewerObservation(ctx context.Context,
 	})
 	if err != nil {
 		return orchestrator.replaceReviewerExecution(ctx, claim, record, execution,
-			"artifact.store_failed", at, observation.Usage, int64(len(observation.Content)), false)
+			"artifact.store_failed", failedExecutionMayRetry, at, observation.Usage, int64(len(observation.Content)), false)
 	}
 	attachment, attachmentErr := reviewAttached(record, item, execution, orchestrator.testAttestationPolicy)
 	author, change := attachment.Author, attachment.Change
@@ -115,17 +116,19 @@ func (orchestrator *Orchestrator) recordReviewerObservation(ctx context.Context,
 }
 
 func (orchestrator *Orchestrator) replaceReviewerExecution(ctx context.Context, claim ActionClaim,
-	record GoalRecord, execution ExecutionRecord, code string, at time.Time, usage governance.ResourceUsage,
+	record GoalRecord, execution ExecutionRecord, code string, retryPolicy failedExecutionRetryPolicy,
+	at time.Time, usage governance.ResourceUsage,
 	diskBytes int64, definitelyUnapplied bool,
 ) error {
 	return orchestrator.replaceReviewerExecutionWithDiagnostic(
-		ctx, claim, record, execution, code, at, usage, diskBytes, definitelyUnapplied, nil,
+		ctx, claim, record, execution, code, retryPolicy, at, usage, diskBytes, definitelyUnapplied, nil,
 	)
 }
 
 func (orchestrator *Orchestrator) replaceReviewerExecutionWithDiagnostic(ctx context.Context, claim ActionClaim,
-	record GoalRecord, execution ExecutionRecord, code string, at time.Time, usage governance.ResourceUsage,
-	diskBytes int64, definitelyUnapplied bool, diagnostic *ArtifactRecord,
+	record GoalRecord, execution ExecutionRecord, code string, retryPolicy failedExecutionRetryPolicy,
+	at time.Time, usage governance.ResourceUsage, diskBytes int64, definitelyUnapplied bool,
+	diagnostic *ArtifactRecord,
 ) error {
 	item, found := record.Goal.WorkItem(execution.WorkItemRef)
 	if !found || !isReviewerExecution(execution) || item.State() != goal.WorkItemStateRunning {
@@ -137,7 +140,12 @@ func (orchestrator *Orchestrator) replaceReviewerExecutionWithDiagnostic(ctx con
 	if err != nil {
 		return err
 	}
-	if execution.AttemptNo >= execution.MaxExecutionAttempts {
+	switch retryPolicy {
+	case failedExecutionMayRetry, failedExecutionMustTerminate:
+	default:
+		return errors.New("application.review_retry_policy_invalid")
+	}
+	if retryPolicy == failedExecutionMustTerminate || execution.AttemptNo >= execution.MaxExecutionAttempts {
 		retired, actionRefs, cleanupControls, cleanupActions, cleanupEvents, cleanupErr :=
 			orchestrator.reviewCleanupPlan(record, item, execution.Ref, execution.ReviewSubjectDigest,
 				claim.Action.Ref, at)

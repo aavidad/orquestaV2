@@ -90,8 +90,8 @@ func validateControlResult(
 	authorizationValid := directorAuthorizationValid(
 		record.AuthorizationReceipt, principal, projectRef, request.GoalRef,
 	)
-	if IsReviewCleanupControl(record) {
-		authorizationValid = ReviewCleanupAuthorizationValid(record)
+	if IsRoundCleanupControl(record) {
+		authorizationValid = RoundCleanupAuthorizationValid(record)
 	}
 	if record.Ref == "" || record.RequestRef != request.RequestRef ||
 		record.RequestFingerprint != fingerprint || record.PrincipalRef != principal ||
@@ -166,8 +166,8 @@ func ValidatePersistedControlRecord(record ControlRecord) error {
 		return errors.New("application.control_record_invalid")
 	}
 	authorizationRequest := record.AuthorizationReceipt.Decision().Request()
-	if IsReviewCleanupControl(record) {
-		if !ReviewCleanupAuthorizationValid(record) {
+	if IsRoundCleanupControl(record) {
+		if !RoundCleanupAuthorizationValid(record) {
 			return errors.New("application.control_record_invalid")
 		}
 	} else if authorizationRequest.RequestRef() != controlAuthorizationRequestRef(record.RequestRef, fingerprint) ||
@@ -179,6 +179,13 @@ func ValidatePersistedControlRecord(record ControlRecord) error {
 
 func ReviewCleanupAuthorizationValid(record ControlRecord) bool {
 	if !IsReviewCleanupControl(record) {
+		return false
+	}
+	return RoundCleanupAuthorizationValid(record)
+}
+
+func RoundCleanupAuthorizationValid(record ControlRecord) bool {
+	if !IsRoundCleanupControl(record) {
 		return false
 	}
 	request := record.AuthorizationReceipt.Decision().Request()

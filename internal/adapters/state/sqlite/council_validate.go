@@ -33,6 +33,19 @@ func validateGoalRecordCouncil(
 		}
 		rounds[round.SubjectDigest] = round
 	}
+	for _, control := range record.Controls {
+		if !application.IsCouncilCleanupControl(control) {
+			continue
+		}
+		execution, executionFound := executions[control.ExecutionRef]
+		item, itemFound := items[control.WorkItemRef]
+		_, roundFound := rounds[execution.CouncilSubjectDigest]
+		if !executionFound || !itemFound || !roundFound ||
+			execution.GoalRef != record.Goal.Ref() || execution.WorkItemRef != item.Ref() ||
+			!application.RoundCleanupAuthorizationValid(control) {
+			return errors.New("sqlite.goal_record_council_cleanup_invalid")
+		}
+	}
 	roles := make(map[application.CouncilSubjectDigest]map[council.Role]bool, len(rounds))
 	for _, fact := range record.CouncilFacts {
 		digest := application.CouncilSubjectDigest(fact.SubjectDigest)

@@ -17,9 +17,10 @@ import (
 )
 
 type sqliteV19CouncilObserver struct {
-	base    *sqliteV15External
-	fail    bool
-	ballots map[council.Role]council.Ballot
+	base             *sqliteV15External
+	fail             bool
+	terminalSecurity bool
+	ballots          map[council.Role]council.Ballot
 }
 
 func (observer *sqliteV19CouncilObserver) Observe(
@@ -37,6 +38,12 @@ func (observer *sqliteV19CouncilObserver) Observe(
 	observer.base.mu.Unlock()
 	if !requested || request.ArtifactMediaType != council.ContributionMediaType {
 		return observer.base.Observe(ctx, executionRef)
+	}
+	if observer.terminalSecurity {
+		return ports.AgentObservation{ExecutionRef: executionRef, SpecHash: receipt.SpecHash,
+			Status: ports.AgentFailed, FailureDisposition: ports.AgentFailureDispositionTerminalSecurity,
+			ErrorCode: "provider.security_failure", Usage: observer.base.observationUsage,
+			ObservedAt: observer.base.clock.Now()}, nil
 	}
 	if observer.fail {
 		return ports.AgentObservation{ExecutionRef: executionRef, SpecHash: receipt.SpecHash,
@@ -120,6 +127,78 @@ func seedSQLiteV19Council(
 		application.ActionLaunchAgent, application.ActionLaunchAgent,
 		application.ActionObserveAgent, application.ActionObserveAgent)
 	return system, result.Record.Goal.Ref()
+}
+
+func TestSQLiteV19TerminalSecurityCouncilCleanupRestartAndReplay(t *testing.T) {
+	system, goalRef := seedSQLiteV19Council(t, council.PolicyAuto, false)
+	processSQLiteV16Actions(t, system,
+		application.ActionLaunchAgent, application.ActionLaunchAgent, application.ActionLaunchAgent,
+		application.ActionObserveAgent)
+	system.orchestrator = newSQLiteV19CouncilOrchestrator(t, system,
+		&sqliteV19CouncilObserver{base: system.external, terminalSecurity: true})
+	processSQLiteV16Actions(t, system, application.ActionObserveAgent)
+	mid, err := system.repository.GetGoal(context.Background(), goalRef)
+	sqliteTestNoError(t, err)
+	failed, running, replacements := 0, 0, 0
+	for _, execution := range mid.Executions {
+		if execution.CouncilSubjectDigest == "" {
+			continue
+		}
+		if execution.State == application.ExecutionFailed && execution.FailureCode == "provider.security_failure" {
+			failed++
+		}
+		if execution.State == application.ExecutionRunning {
+			running++
+		}
+		if execution.ReplacesExecutionRef.String() != "" {
+			replacements++
+		}
+	}
+	if failed != 1 || running != 1 || replacements != 0 || len(mid.CouncilFacts) != 1 ||
+		len(mid.CouncilDecisions) != 0 {
+		t.Fatalf("terminal Council mid failed=%d running=%d replacements=%d facts=%d decisions=%d",
+			failed, running, replacements, len(mid.CouncilFacts), len(mid.CouncilDecisions))
+	}
+	processSQLiteV16Actions(t, system, application.ActionStopAgent)
+	closed, err := system.repository.GetGoal(context.Background(), goalRef)
+	sqliteTestNoError(t, err)
+	item := closed.Goal.WorkItems()[0]
+	authorFailed, peersStopped := 0, 0
+	for _, execution := range closed.Executions {
+		switch {
+		case execution.Purpose == application.ExecutionPurposeAuthor &&
+			execution.State == application.ExecutionFailed && execution.FailureCode == "council.unavailable":
+			authorFailed++
+		case execution.CouncilSubjectDigest != "" && execution.State == application.ExecutionStopped &&
+			execution.FailureCode == "council.round_aborted":
+			peersStopped++
+		}
+	}
+	if closed.Goal.State() == goal.GoalStateSucceeded || item.State() != goal.WorkItemStateInterrupted ||
+		authorFailed != 1 || peersStopped != 1 || len(closed.CouncilFacts) != 1 ||
+		len(closed.CouncilDecisions) != 0 || len(closed.IntegrationReceipts) != 0 {
+		t.Fatalf("terminal Council closed state=%s item=%s author=%d peers=%d facts=%d decisions=%d integrations=%d",
+			closed.Goal.State(), item.State(), authorFailed, peersStopped, len(closed.CouncilFacts),
+			len(closed.CouncilDecisions), len(closed.IntegrationReceipts))
+	}
+	if _, _, err := validateRecoveryDatabase(context.Background(), system.repository.db); err != nil {
+		t.Fatalf("terminal Council recovery validation: %v", err)
+	}
+	sqliteTestNoError(t, system.repository.Close())
+	system.repository = openSQLiteV15Repository(t, system.path, system.clock.Now)
+	system.orchestrator = newSQLiteV19CouncilOrchestrator(t, system,
+		&sqliteV19CouncilObserver{base: system.external, terminalSecurity: true})
+	restarted, err := system.repository.GetGoal(context.Background(), goalRef)
+	sqliteTestNoError(t, err)
+	if restarted.Goal.WorkItems()[0].State() != goal.WorkItemStateInterrupted ||
+		len(restarted.CouncilDecisions) != 0 {
+		t.Fatalf("restart terminal Council item=%s decisions=%d",
+			restarted.Goal.WorkItems()[0].State(), len(restarted.CouncilDecisions))
+	}
+	result, err := system.orchestrator.ProcessNext(context.Background(), "worker:terminal-council-replay")
+	if err != nil || result.Processed {
+		t.Fatalf("terminal Council replay result=%+v err=%v", result, err)
+	}
 }
 
 func TestSQLiteV19CouncilRoundFactsDecisionReplayRestartAndConcurrency(t *testing.T) {
@@ -266,33 +345,57 @@ WHERE action.kind='integrate_change' AND action.completed_at IS NULL`).Scan(
 	}
 }
 
-func TestSQLiteV19CouncilRetryAndExhaustionPreservePeersAtomically(t *testing.T) {
+func TestSQLiteV19CouncilRetryThenExhaustionAbortsCohortAtomically(t *testing.T) {
 	system, goalRef := seedSQLiteV19Council(t, council.PolicyAuto, true)
-	processed := 0
-	for i := 0; i < 50 && processed < 18; i++ {
+	for i := 0; i < 100; i++ {
 		result, err := system.orchestrator.ProcessNext(context.Background(), "worker:v19-failure")
 		sqliteTestNoError(t, err)
-		if result.Processed {
-			processed++
-		} else {
+		record, getErr := system.repository.GetGoal(context.Background(), goalRef)
+		sqliteTestNoError(t, getErr)
+		if !result.Processed && record.Goal.WorkItems()[0].State() == goal.WorkItemStateInterrupted {
+			break
+		}
+		if !result.Processed {
 			system.clock.Advance(time.Second)
 		}
 	}
 	record, err := system.repository.GetGoal(context.Background(), goalRef)
 	sqliteTestNoError(t, err)
-	failed, councilExecutions := 0, 0
+	failed, replacements, exhaustedLeaves, stopped := 0, 0, 0, 0
 	for _, execution := range record.Executions {
 		if execution.CouncilSubjectDigest == "" {
 			continue
 		}
-		councilExecutions++
 		if execution.State == application.ExecutionFailed {
 			failed++
 		}
+		if execution.ReplacesExecutionRef.String() != "" {
+			replacements++
+		}
+		if execution.State == application.ExecutionFailed &&
+			execution.FailureCode == "council.contribution_invalid" &&
+			execution.AttemptNo == execution.MaxExecutionAttempts {
+			exhaustedLeaves++
+		}
+		if execution.State == application.ExecutionStopped && execution.FailureCode == "council.round_aborted" {
+			stopped++
+		}
 	}
-	if councilExecutions != 9 || failed != 9 || len(record.CouncilFacts) != 0 || len(record.CouncilDecisions) != 0 {
-		t.Fatalf("executions=%d failed=%d facts=%d decisions=%d", councilExecutions, failed,
-			len(record.CouncilFacts), len(record.CouncilDecisions))
+	item := record.Goal.WorkItems()[0]
+	authorFailures := 0
+	for _, execution := range record.Executions {
+		if execution.Purpose == application.ExecutionPurposeAuthor &&
+			execution.State == application.ExecutionFailed && execution.FailureCode == "council.unavailable" {
+			authorFailures++
+		}
+	}
+	if replacements == 0 || exhaustedLeaves != 1 || failed == 0 ||
+		item.State() != goal.WorkItemStateInterrupted || authorFailures != 1 ||
+		len(record.CouncilFacts) != 0 || len(record.CouncilDecisions) != 0 ||
+		len(record.IntegrationReceipts) != 0 {
+		t.Fatalf("replacements=%d exhausted=%d failed=%d stopped=%d item=%s author=%d facts=%d decisions=%d integrations=%d",
+			replacements, exhaustedLeaves, failed, stopped, item.State(), authorFailures,
+			len(record.CouncilFacts), len(record.CouncilDecisions), len(record.IntegrationReceipts))
 	}
 	var persistedFacts, persistedDecisions int
 	sqliteTestNoError(t, system.repository.db.QueryRow(`SELECT COUNT(*) FROM council_facts`).Scan(&persistedFacts))
@@ -302,6 +405,21 @@ func TestSQLiteV19CouncilRetryAndExhaustionPreservePeersAtomically(t *testing.T)
 	}
 	if _, _, err := validateRecoveryDatabase(context.Background(), system.repository.db); err != nil {
 		t.Fatalf("failed Council recovery: %v", err)
+	}
+	sqliteTestNoError(t, system.repository.Close())
+	system.repository = openSQLiteV15Repository(t, system.path, system.clock.Now)
+	system.orchestrator = newSQLiteV19CouncilOrchestrator(t, system,
+		&sqliteV19CouncilObserver{base: system.external, fail: true})
+	restarted, err := system.repository.GetGoal(context.Background(), goalRef)
+	sqliteTestNoError(t, err)
+	if restarted.Goal.WorkItems()[0].State() != goal.WorkItemStateInterrupted ||
+		len(restarted.CouncilDecisions) != 0 {
+		t.Fatalf("restart exhausted Council item=%s decisions=%d",
+			restarted.Goal.WorkItems()[0].State(), len(restarted.CouncilDecisions))
+	}
+	result, err := system.orchestrator.ProcessNext(context.Background(), "worker:v19-failure-replay")
+	if err != nil || result.Processed {
+		t.Fatalf("exhausted Council replay result=%+v err=%v", result, err)
 	}
 }
 

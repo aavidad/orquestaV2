@@ -11,6 +11,7 @@ import (
 	"orquesta/internal/application"
 	"orquesta/internal/council"
 	"orquesta/internal/goal"
+	"orquesta/internal/identity"
 )
 
 func (repository *Repository) RecordCouncilContribution(
@@ -150,8 +151,71 @@ func (repository *Repository) RecordCouncilExecutionFailed(
 			len(councilFactsForRole(current.CouncilFacts, round.SubjectDigest, role)) != 0 {
 			return invalid(errors.New("sqlite.council_execution_failure_invalid"))
 		}
+		if state.Goal.Ref() != current.Goal.Ref() ||
+			(state.AuthorExecution.Ref.String() != "" && state.AuthorExecution.State != application.ExecutionFailed) ||
+			(state.AuthorExecution.Ref.String() == "" && len(state.CleanupControls) == 0 && state.ResolvedCleanup == nil) {
+			return invalid(errors.New("sqlite.council_failure_cleanup_invalid"))
+		}
+		if state.Goal.Revision() != state.ExpectedGoalRevision {
+			if err := updateGoalCAS(ctx, tx, state.Goal, state.ExpectedGoalRevision); err != nil {
+				return err
+			}
+		}
+		item, itemFound := state.Goal.WorkItem(state.Claim.Action.WorkItemRef)
+		if !itemFound {
+			return invalid(errors.New("sqlite.council_work_item_missing"))
+		}
+		if item.Revision() != state.ExpectedItemRevision {
+			if err := updateWorkItemCAS(ctx, tx, item, state.ExpectedItemRevision); err != nil {
+				return err
+			}
+		}
 		if err := updateExecutionCAS(ctx, tx, state.Execution, expected); err != nil {
 			return err
+		}
+		if state.AuthorExecution.Ref.String() != "" {
+			if err := updateExecutionCAS(ctx, tx, state.AuthorExecution, application.ExecutionAwaitingIntegration); err != nil {
+				return err
+			}
+		}
+		for _, retirement := range state.RetiredPeers {
+			storedPeer, peerFound := executionFor(current.Executions, retirement.Execution.Ref)
+			if !peerFound || storedPeer.State != retirement.ExpectedState ||
+				!isCouncilExecutionForSubject(retirement.Execution, round.SubjectDigest) ||
+				retirement.Execution.State != application.ExecutionFailed {
+				return invalid(errors.New("sqlite.council_retirement_invalid"))
+			}
+			if err := updateExecutionCAS(ctx, tx, retirement.Execution, retirement.ExpectedState); err != nil {
+				return err
+			}
+		}
+		for _, control := range state.CleanupControls {
+			if !application.IsCouncilCleanupControl(control) ||
+				application.ValidatePersistedControlRecord(control) != nil {
+				return invalid(errors.New("sqlite.council_cleanup_control_invalid"))
+			}
+			if err := validateCouncilCleanupControlAuthority(ctx, tx, control); err != nil {
+				return invalid(err)
+			}
+			if err := insertControl(ctx, tx, control); err != nil {
+				return err
+			}
+		}
+		if state.ResolvedCleanup != nil {
+			if !application.IsCouncilCleanupControl(*state.ResolvedCleanup) ||
+				state.ResolvedCleanup.Status != application.ControlConfirmed ||
+				state.ResolvedCleanup.ExecutionRef != state.Execution.Ref ||
+				state.ResolvedCleanup.ExecutionAttempt != state.Execution.AttemptNo {
+				return invalid(errors.New("sqlite.council_cleanup_resolution_invalid"))
+			}
+			if err := updateControl(ctx, tx, *state.ResolvedCleanup); err != nil {
+				return err
+			}
+		}
+		for _, action := range state.CleanupActions {
+			if err := insertAction(ctx, tx, action); err != nil {
+				return err
+			}
 		}
 		if state.BudgetSettlement != nil {
 			if err := insertBudgetSettlement(ctx, tx, *state.BudgetSettlement); err != nil {
@@ -161,8 +225,59 @@ func (repository *Repository) RecordCouncilExecutionFailed(
 		if err := completeClaim(ctx, tx, state.Claim, state.OperationAt, state.Execution.FailureCode, false); err != nil {
 			return err
 		}
+		for _, actionRef := range state.RetireActionRefs {
+			if err := settleRetiredLaunchReservation(ctx, tx, actionRef, state.OperationAt); err != nil {
+				return err
+			}
+			if err := consumeRetiredAction(ctx, tx, actionRef,
+				"council-round:"+state.Execution.Ref.String(), state.OperationAt); err != nil {
+				return err
+			}
+		}
 		return insertEvents(ctx, tx, state.Events)
 	})
+}
+
+func isCouncilExecutionForSubject(execution application.ExecutionRecord,
+	subject application.CouncilSubjectDigest,
+) bool {
+	_, ok := councilExecutionRole(execution)
+	return ok && execution.CouncilSubjectDigest == subject && execution.ReviewSubjectDigest == ""
+}
+
+func validateCouncilCleanupControlAuthority(ctx context.Context, tx *sql.Tx,
+	record application.ControlRecord,
+) error {
+	var matches int
+	err := tx.QueryRowContext(ctx, `
+SELECT COUNT(*)
+FROM executions participant
+JOIN executions author ON author.goal_ref=participant.goal_ref
+ AND author.work_item_ref=participant.work_item_ref AND author.purpose='author'
+JOIN effect_intents intent ON intent.ref=author.effect_intent_ref
+JOIN work_item_authorities authority ON authority.goal_ref=participant.goal_ref
+ AND authority.work_item_ref=participant.work_item_ref
+WHERE participant.goal_ref=? AND participant.work_item_ref=? AND participant.ref=?
+ AND participant.purpose IN ('council_proposer','council_critic','council_arbiter')
+ AND intent.action_kind='launch_agent' AND intent.kind='agent_launch'
+ AND intent.project_ref=? AND intent.goal_ref=participant.goal_ref
+ AND intent.work_item_ref=participant.work_item_ref AND intent.execution_ref=author.ref
+ AND intent.plan_generation=author.plan_generation
+ AND intent.app_spec_generation=author.app_spec_generation AND intent.spec_hash=author.spec_hash
+ AND intent.proposed_by_ref=? AND intent.permission=? AND intent.authority_receipt_ref=?
+ AND authority.principal_ref=intent.proposed_by_ref AND authority.permission=intent.permission
+ AND authority.authorization_receipt_ref=intent.authority_receipt_ref`,
+		record.GoalRef.String(), record.WorkItemRef.String(), record.ExecutionRef.String(),
+		record.ProjectRef.String(), record.PrincipalRef.String(), string(identity.PermissionGoalsCreate),
+		record.AuthorizationReceipt.Ref(),
+	).Scan(&matches)
+	if err != nil {
+		return err
+	}
+	if matches != 1 {
+		return errors.New("sqlite.council_cleanup_authority_invalid")
+	}
+	return nil
 }
 
 func insertCouncilFact(

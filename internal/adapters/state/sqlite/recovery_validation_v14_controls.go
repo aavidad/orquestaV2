@@ -150,6 +150,10 @@ func validateRecoveryV14ControlBinding(
 		if err := validateReviewCleanupControlAuthority(ctx, transaction, record); err != nil {
 			return err
 		}
+	} else if application.IsCouncilCleanupControl(record) {
+		if err := validateCouncilCleanupControlAuthority(ctx, transaction, record); err != nil {
+			return err
+		}
 	}
 	var projectValue, specHash string
 	var goalRevision, planGeneration, appSpecGeneration, goalCreatedAt int64
@@ -209,6 +213,9 @@ FROM executions WHERE goal_ref = ? AND ref = ?`,
 	if application.IsReviewCleanupControl(record) {
 		eventRef = "event:review-cleanup-requested:" + record.ExecutionRef.String()
 		eventKind = "review.cleanup_requested"
+	} else if application.IsCouncilCleanupControl(record) {
+		eventRef = "event:council-cleanup-requested:" + record.ExecutionRef.String()
+		eventKind = "council.cleanup_requested"
 	} else {
 		eventRef = "event:control:" + record.Ref
 		eventKind = "control." + string(record.Operation)

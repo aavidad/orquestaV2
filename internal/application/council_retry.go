@@ -10,7 +10,8 @@ import (
 )
 
 func (orchestrator *Orchestrator) replaceCouncilExecution(ctx context.Context, claim ActionClaim, record GoalRecord,
-	execution ExecutionRecord, code string, at time.Time, usage governance.ResourceUsage, diskBytes int64, definitelyUnapplied bool,
+	execution ExecutionRecord, code string, retryPolicy failedExecutionRetryPolicy, at time.Time,
+	usage governance.ResourceUsage, diskBytes int64, definitelyUnapplied bool,
 ) error {
 	item, found := record.Goal.WorkItem(execution.WorkItemRef)
 	role, councilExecution := councilRole(execution)
@@ -23,11 +24,33 @@ func (orchestrator *Orchestrator) replaceCouncilExecution(ctx context.Context, c
 	if err != nil {
 		return err
 	}
-	if execution.AttemptNo >= execution.MaxExecutionAttempts {
+	switch retryPolicy {
+	case failedExecutionMayRetry, failedExecutionMustTerminate:
+	default:
+		return errors.New("application.council_retry_policy_invalid")
+	}
+	if retryPolicy == failedExecutionMustTerminate || execution.AttemptNo >= execution.MaxExecutionAttempts {
+		retired, actionRefs, cleanupControls, cleanupActions, cleanupEvents, cleanupErr :=
+			orchestrator.councilCleanupPlan(record, item, execution.Ref, execution.CouncilSubjectDigest,
+				claim.Action.Ref, at)
+		if cleanupErr != nil {
+			return cleanupErr
+		}
+		aggregate, author := record.Goal, ExecutionRecord{}
+		if !councilCleanupStillActive(record, execution, retired) {
+			aggregate, author, cleanupErr = orchestrator.interruptAuthorForCouncilFailure(record, item, at)
+			if cleanupErr != nil {
+				return cleanupErr
+			}
+		}
+		events := append([]EventRecord{{Ref: "event:council-failed:" + execution.Ref.String(), Kind: "council.failed",
+			GoalRef: record.Goal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref, OccurredAt: at.UTC()}},
+			cleanupEvents...)
 		return orchestrator.state.RecordCouncilExecutionFailed(ctx, CouncilExecutionFailedState{Claim: claim,
 			ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: item.Revision(), Execution: execution,
-			BudgetSettlement: settlement, Events: []EventRecord{{Ref: "event:council-failed:" + execution.Ref.String(), Kind: "council.failed",
-				GoalRef: record.Goal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref, OccurredAt: at.UTC()}}, OperationAt: at.UTC()})
+			Goal: aggregate, AuthorExecution: author, RetiredPeers: retired, RetireActionRefs: actionRefs,
+			CleanupControls: cleanupControls, CleanupActions: cleanupActions,
+			BudgetSettlement: settlement, Events: events, OperationAt: at.UTC()})
 	}
 	replacement, err := councilReplacementExecution(execution, role, at)
 	if err != nil {

@@ -527,6 +527,13 @@ func failedWorkItemStagedOutputExecution(
 		}
 		return application.ExecutionRecord{}, false
 	}
+	if execution.FailureCode == "council.unavailable" {
+		item, found := record.Goal.WorkItem(execution.WorkItemRef)
+		if found && failedCouncilPreservesCandidate(record, item, execution, matchingChange) {
+			return execution, true
+		}
+		return application.ExecutionRecord{}, false
+	}
 	wantStatus := ports.IntegrationStatus("")
 	switch execution.FailureCode {
 	case "version_control.integration_conflicted":
@@ -544,6 +551,67 @@ func failedWorkItemStagedOutputExecution(
 		}
 	}
 	return application.ExecutionRecord{}, false
+}
+
+func failedCouncilPreservesCandidate(record application.GoalRecord, item goal.WorkItem,
+	author application.ExecutionRecord, change application.ChangeSet,
+) bool {
+	for _, intent := range record.EffectIntents {
+		if intent.ActionKind == application.ActionIntegrateChange && intent.Subject.ExecutionRef == author.Ref {
+			return false
+		}
+	}
+	for _, receipt := range record.IntegrationReceipts {
+		if receipt.ChangeRef == change.Ref {
+			return false
+		}
+	}
+	var matchedRound *application.CouncilRoundRecord
+	for index := range record.CouncilRounds {
+		round := &record.CouncilRounds[index]
+		if round.GoalRef != author.GoalRef || round.WorkItemRef != item.Ref() ||
+			round.ChangeSetRef != change.Ref.String() || round.Subject.SpecHash != author.SpecHash ||
+			round.SubjectDigest != application.CouncilSubjectDigest(round.Subject.Digest()) ||
+			application.ValidatePersistedCouncilSubject(record, round.Subject) != nil {
+			continue
+		}
+		if matchedRound != nil {
+			return false
+		}
+		matchedRound = round
+	}
+	if matchedRound == nil {
+		return false
+	}
+	for _, decision := range record.CouncilDecisions {
+		if decision.RoundRef == matchedRound.Ref || decision.SubjectDigest == matchedRound.SubjectDigest {
+			return false
+		}
+	}
+	replaced := make(map[goal.ExecutionRef]bool)
+	for _, execution := range record.Executions {
+		if execution.ReplacesExecutionRef.String() != "" {
+			replaced[execution.ReplacesExecutionRef] = true
+		}
+	}
+	terminalFailures := 0
+	for _, execution := range record.Executions {
+		if execution.GoalRef != author.GoalRef || execution.WorkItemRef != item.Ref() ||
+			execution.CouncilSubjectDigest != matchedRound.SubjectDigest {
+			continue
+		}
+		if execution.State == application.ExecutionQueued ||
+			execution.State == application.ExecutionDispatching ||
+			execution.State == application.ExecutionRunning {
+			return false
+		}
+		if execution.State == application.ExecutionFailed &&
+			execution.FailureCode != "" && execution.FailureCode != "council.round_aborted" &&
+			!replaced[execution.Ref] {
+			terminalFailures++
+		}
+	}
+	return terminalFailures >= 1
 }
 
 func stagedArtifactHasExactAttestation(

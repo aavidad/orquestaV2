@@ -146,6 +146,8 @@ func countRecoveryV14StopEffectReceipt(
 	expectedFailureCode := "application.execution_stopped"
 	if application.IsReviewCleanupControl(control) {
 		expectedFailureCode = "review.round_aborted"
+	} else if application.IsCouncilCleanupControl(control) {
+		expectedFailureCode = "council.round_aborted"
 	}
 	if (status == string(ports.AgentStopped) || status == string(ports.AgentStopAlreadyStopped)) &&
 		(executionState != string(application.ExecutionStopped) || !finishedAt.Valid ||

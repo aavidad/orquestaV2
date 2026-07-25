@@ -70,7 +70,7 @@ func validateApplyControlState(state application.ApplyControlState) error {
 		return errors.New("sqlite.control_status_invalid")
 	}
 	for _, cleanup := range state.NewControls {
-		if !application.IsReviewCleanupControl(cleanup) || cleanup.Status != application.ControlRequested ||
+		if !application.IsRoundCleanupControl(cleanup) || cleanup.Status != application.ControlRequested ||
 			cleanup.GoalRef != state.GoalRef || cleanup.ProjectRef != state.ProjectRef {
 			return errors.New("sqlite.control_cleanup_invalid")
 		}

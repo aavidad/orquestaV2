@@ -18,13 +18,13 @@ func (orchestrator *Orchestrator) processCouncilObservation(ctx context.Context,
 	if observeErr != nil {
 		if orchestrator.executionExpired(execution, claim) {
 			return orchestrator.replaceCouncilExecution(ctx, claim, record, execution, "application.execution_expired",
-				orchestrator.clock.Now(), unknownUsage(), 0, false)
+				failedExecutionMayRetry, orchestrator.clock.Now(), unknownUsage(), 0, false)
 		}
 		return orchestrator.requeue(ctx, claim, execution, "agent.observe_failed")
 	}
 	if observation.ExecutionRef != execution.Ref {
 		return orchestrator.replaceCouncilExecution(ctx, claim, record, execution, "agent.observation_execution_mismatch",
-			orchestrator.clock.Now(), observation.Usage, int64(len(observation.Content)), false)
+			failedExecutionMayRetry, orchestrator.clock.Now(), observation.Usage, int64(len(observation.Content)), false)
 	}
 	if err := ports.ValidateAgentObservation(observation, execution.MaxOutputBytes); err != nil {
 		code := ports.AgentContractErrorCode(err)
@@ -32,7 +32,7 @@ func (orchestrator *Orchestrator) processCouncilObservation(ctx context.Context,
 			return orchestrator.quarantine(ctx, claim, code)
 		}
 		return orchestrator.replaceCouncilExecution(ctx, claim, record, execution, code,
-			orchestrator.clock.Now(), observation.Usage, int64(len(observation.Content)), false)
+			failedExecutionMayRetry, orchestrator.clock.Now(), observation.Usage, int64(len(observation.Content)), false)
 	}
 	if observation.SpecHash != record.Goal.SpecHash() {
 		return orchestrator.quarantine(ctx, claim, "agent.observation_spec_hash_mismatch")
@@ -43,21 +43,21 @@ func (orchestrator *Orchestrator) processCouncilObservation(ctx context.Context,
 	case ports.AgentPending, ports.AgentRunning:
 		if orchestrator.executionExpired(execution, claim) {
 			return orchestrator.replaceCouncilExecution(ctx, claim, record, execution, "application.execution_expired",
-				at, observation.Usage, int64(len(observation.Content)), false)
+				failedExecutionMayRetry, at, observation.Usage, int64(len(observation.Content)), false)
 		}
 		return orchestrator.requeue(ctx, claim, execution, "")
 	case ports.AgentFailed:
 		return orchestrator.replaceCouncilExecution(ctx, claim, record, execution, observation.ErrorCode,
-			at, observation.Usage, int64(len(observation.Content)), false)
+			failedExecutionRetryPolicyFor(observation), at, observation.Usage, int64(len(observation.Content)), false)
 	case ports.AgentCompleted:
 		if !compatibleMediaType(execution.ArtifactMediaType, observation.MediaType) {
 			return orchestrator.replaceCouncilExecution(ctx, claim, record, execution, "agent.observation_media_type_mismatch",
-				at, observation.Usage, int64(len(observation.Content)), false)
+				failedExecutionMayRetry, at, observation.Usage, int64(len(observation.Content)), false)
 		}
 		return orchestrator.recordCouncilObservation(ctx, claim, record, item, execution, observation, at)
 	default:
 		return orchestrator.replaceCouncilExecution(ctx, claim, record, execution, "agent.observation_status_invalid",
-			at, observation.Usage, int64(len(observation.Content)), false)
+			failedExecutionMayRetry, at, observation.Usage, int64(len(observation.Content)), false)
 	}
 }
 
@@ -75,12 +75,12 @@ func (orchestrator *Orchestrator) recordCouncilObservation(ctx context.Context, 
 	payload, err := council.DecodeContribution(observation.Content)
 	if err != nil || payload.Role != role || payload.SubjectDigest != string(round.SubjectDigest) {
 		return orchestrator.replaceCouncilExecution(ctx, claim, record, execution, "council.contribution_invalid",
-			at, observation.Usage, int64(len(observation.Content)), false)
+			failedExecutionMayRetry, at, observation.Usage, int64(len(observation.Content)), false)
 	}
 	stored, err := orchestrator.publishTestArtifact(ctx, ports.PutArtifactRequest{MediaType: council.ContributionMediaType, Content: observation.Content})
 	if err != nil {
 		return orchestrator.replaceCouncilExecution(ctx, claim, record, execution, "artifact.store_failed",
-			at, observation.Usage, int64(len(observation.Content)), false)
+			failedExecutionMayRetry, at, observation.Usage, int64(len(observation.Content)), false)
 	}
 	fact, err := council.NewContributionFact(council.ContributionFact{SubjectDigest: string(round.SubjectDigest), Role: role, Ballot: payload.Ballot,
 		ExecutionRef: execution.Ref.String(), ExecutionAttempt: execution.AttemptNo, LaunchReceiptRef: execution.LaunchReceiptRef,
