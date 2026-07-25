@@ -4666,6 +4666,10 @@ sus cuatro fixtures exactos. La guarda conserva el mismo `base_ref` y no abre
 prefijos generales de `scripts/` ni `testdata/`; incorpora solo esas seis rutas
 canónicas. Evidencia: `scripts/check_rebuild_write_set.sh` devuelve
 `rebuild_write_set_ok` y `git diff --check` queda verde.
+Recurrencia cerrada por `908c41b298`: el fallback general seguía sin reconocer
+cinco rutas ya integradas de V18--V22 y los dos scripts exactos del arranque
+HOME. La corrección añade únicamente esas siete rutas, conserva el mismo
+`base_ref`, no abre prefijos y vuelve a producir `rebuild_write_set_ok`.
 
 ## Incidentes vivos de acreditación V22 del 2026-07-25
 
