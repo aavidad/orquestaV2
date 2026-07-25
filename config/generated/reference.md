@@ -2,9 +2,9 @@
 
 # Orquesta configuration registry
 
-Registry revision: `2026-07-25.26`
+Registry revision: `2026-07-25.27`
 
-Registry hash: `sha256:608b36745662a6c9605d5e0668e98284e87656cdd57d361278348b9a35a45b9f`
+Registry hash: `sha256:e2a35b8c56ecbfd7f52d3073f99d82cb16cb4a87f71f1c1d8eccf746786af48e`
 
 Precedence: `default < file < env`
 
@@ -55,6 +55,8 @@ Source limit: `1048576` bytes
 | `test_attestor.timeout` | `duration` | `"15m"` | `ORQUESTA_TEST_ATTESTOR_TIMEOUT` | `true` | `positive_duration` |
 | `test_attestor.max_concurrent_runs` | `integer` | `2` | `ORQUESTA_TEST_ATTESTOR_MAX_CONCURRENT_RUNS` | `true` | `integer_bounds` |
 | `test_attestor.bubblewrap.command` | `optional_path` | `""` | `ORQUESTA_TEST_ATTESTOR_BUBBLEWRAP_COMMAND` | `true` | `optional_path` |
+| `test_attestor.microvm.launcher_socket` | `optional_path` | `""` | `ORQUESTA_TEST_ATTESTOR_MICROVM_LAUNCHER_SOCKET` | `true` | `optional_path` |
+| `test_attestor.microvm.guest_memory_mib` | `integer` | `512` | `ORQUESTA_TEST_ATTESTOR_MICROVM_GUEST_MEMORY_MIB` | `true` | `integer_bounds` |
 | `test_attestor.go.toolchain_root` | `optional_path` | `""` | `ORQUESTA_TEST_ATTESTOR_GO_TOOLCHAIN_ROOT` | `true` | `optional_path` |
 | `test_attestor.resources.cgroup_root` | `optional_path` | `""` | `ORQUESTA_TEST_ATTESTOR_CGROUP_ROOT` | `true` | `optional_path` |
 | `test_attestor.resources.memory_max_bytes` | `integer` | `2147483648` | `ORQUESTA_TEST_ATTESTOR_MEMORY_MAX_BYTES` | `true` | `integer_bounds` |
@@ -98,7 +100,7 @@ Source limit: `1048576` bytes
 - `server_mcp_path_literal`: `server.mcp_path`
 - `runtime_paths_disjoint`: `state.sqlite.path`, `artifact.filesystem.root`, `credentials.local.path`, `runtime.codex.work_root`, `runtime.codex.account_home_root`, `workspace.local.root`, `config.effective_path`, `identity.local_token_path`
 - `identity_provider_requirements`: `identity.provider`, `identity.oidc.issuer`, `identity.oidc.audience`, `identity.oidc.clock_skew`, `identity.oidc.upstream_timeout`
-- `test_attestor_provider_requirements`: `test_attestor.provider`, `test_attestor.timeout`, `test_attestor.bubblewrap.command`, `test_attestor.go.toolchain_root`, `runtime.max_output_bytes`, `test_attestor.max_subject_bytes`, `test_attestor.max_concurrent_runs`, `repository.local.seed_path`, `test_attestor.resources.cgroup_root`, `test_attestor.resources.memory_max_bytes`, `test_attestor.resources.pids_max`, `test_attestor.resources.cpu_quota_micros`, `server.shutdown_timeout`, `scheduler.attest_test_claim_lease`, `scheduler.execution_timeout`
+- `test_attestor_provider_requirements`: `test_attestor.provider`, `test_attestor.timeout`, `test_attestor.bubblewrap.command`, `test_attestor.microvm.launcher_socket`, `test_attestor.microvm.guest_memory_mib`, `test_attestor.go.toolchain_root`, `runtime.max_output_bytes`, `test_attestor.max_subject_bytes`, `test_attestor.max_concurrent_runs`, `repository.local.seed_path`, `test_attestor.resources.cgroup_root`, `test_attestor.resources.memory_max_bytes`, `test_attestor.resources.pids_max`, `test_attestor.resources.cpu_quota_micros`, `server.shutdown_timeout`, `scheduler.attest_test_claim_lease`, `scheduler.execution_timeout`
 
 ## Temporary aliases
 

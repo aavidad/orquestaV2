@@ -57,6 +57,10 @@ max_concurrent_runs = 2
 [test_attestor.bubblewrap]
 command = ""
 
+[test_attestor.microvm]
+launcher_socket = ""
+guest_memory_mib = 512
+
 [test_attestor.go]
 toolchain_root = ""
 

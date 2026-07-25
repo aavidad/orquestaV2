@@ -177,6 +177,8 @@ func validateCrossRegistryValues(registry registry, values map[Key]resolvedValue
 func validTestAttestorValues(values map[Key]resolvedValue) bool {
 	provider, providerOK := values[KeyTestAttestorProvider].value.(string)
 	command, commandOK := values[KeyTestAttestorBubblewrapCommand].value.(string)
+	launcherSocket, launcherSocketOK := values[KeyTestAttestorMicroVMLauncherSocket].value.(string)
+	guestMemoryMiB, guestMemoryOK := values[KeyTestAttestorMicroVMGuestMemoryMiB].value.(int64)
 	toolchain, toolchainOK := values[KeyTestAttestorGoToolchainRoot].value.(string)
 	maxOutput, outputOK := values[KeyRuntimeMaxOutputBytes].value.(int64)
 	maxSubject, subjectOK := values[KeyTestAttestorMaxSubjectBytes].value.(int64)
@@ -190,15 +192,27 @@ func validTestAttestorValues(values map[Key]resolvedValue) bool {
 	cleanup, cleanupOK := values[KeyServerShutdownTimeout].value.(time.Duration)
 	attestLease, leaseOK := values[KeySchedulerAttestTestClaimLease].value.(time.Duration)
 	executionTimeout, executionOK := values[KeySchedulerExecutionTimeout].value.(time.Duration)
-	allTyped := providerOK && commandOK && toolchainOK && outputOK && subjectOK && timeoutOK && concurrentOK &&
-		seedOK && cgroupOK && memoryOK && pidsOK && quotaOK && cleanupOK && leaseOK && executionOK
-	if !allTyped || provider != "bubblewrap" {
-		return allTyped
+	allTyped := providerOK && commandOK && launcherSocketOK && guestMemoryOK && toolchainOK &&
+		outputOK && subjectOK && timeoutOK && concurrentOK && seedOK && cgroupOK && memoryOK &&
+		pidsOK && quotaOK && cleanupOK && leaseOK && executionOK
+	if !allTyped {
+		return false
 	}
-	return canonicalAbsolutePath(command) && canonicalAbsolutePath(toolchain) && seedPath != "" &&
-		canonicalAbsolutePath(cgroupRoot) && maxOutput > 0 && maxSubject > 0 && maxConcurrent > 0 &&
+	if provider == "disabled" {
+		return true
+	}
+	common := seedPath != "" && maxOutput > 0 && maxSubject > 0 && maxConcurrent > 0 &&
 		memory > maxOutput && pids > 0 && quota > 0 && timeout > 0 && cleanup > 0 &&
 		timeout < attestLease && cleanup < attestLease-timeout && attestLease < executionTimeout
+	if provider == "bubblewrap" {
+		return canonicalAbsolutePath(command) && canonicalAbsolutePath(toolchain) &&
+			canonicalAbsolutePath(cgroupRoot) && common
+	}
+	if provider == "microvm" {
+		return canonicalAbsolutePath(launcherSocket) &&
+			guestMemoryMiB > 0 && guestMemoryMiB <= memory/(1<<20) && common
+	}
+	return false
 }
 
 func canonicalAbsolutePath(value string) bool {

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:orquesta:config:2026-07-25.26",
+  "$id": "urn:orquesta:config:2026-07-25.27",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -1007,11 +1007,44 @@
             "integer_bounds"
           ]
         },
+        "microvm": {
+          "additionalProperties": false,
+          "properties": {
+            "guest_memory_mib": {
+              "default": 512,
+              "maximum": 16384,
+              "minimum": 64,
+              "type": "integer",
+              "x-env-alias": "ORQUESTA_TEST_ATTESTOR_MICROVM_GUEST_MEMORY_MIB",
+              "x-restart-required": true,
+              "x-scope": "attestor",
+              "x-semantic-ref": "orquesta.config.test_attestor.microvm.guest_memory_mib",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "integer_bounds"
+              ]
+            },
+            "launcher_socket": {
+              "default": "",
+              "type": "string",
+              "x-env-alias": "ORQUESTA_TEST_ATTESTOR_MICROVM_LAUNCHER_SOCKET",
+              "x-restart-required": true,
+              "x-scope": "attestor",
+              "x-semantic-ref": "orquesta.config.test_attestor.microvm.launcher_socket",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "optional_path"
+              ]
+            }
+          },
+          "type": "object"
+        },
         "provider": {
           "default": "disabled",
           "enum": [
             "disabled",
-            "bubblewrap"
+            "bubblewrap",
+            "microvm"
           ],
           "type": "string",
           "x-env-alias": "ORQUESTA_TEST_ATTESTOR_PROVIDER",
@@ -1125,8 +1158,8 @@
       "type": "object"
     }
   },
-  "x-registry-revision": "2026-07-25.26",
-  "x-registry-hash": "sha256:608b36745662a6c9605d5e0668e98284e87656cdd57d361278348b9a35a45b9f",
+  "x-registry-revision": "2026-07-25.27",
+  "x-registry-hash": "sha256:e2a35b8c56ecbfd7f52d3073f99d82cb16cb4a87f71f1c1d8eccf746786af48e",
   "x-source-max-bytes": 1048576,
   "x-aliases": [],
   "x-cross-validators": [
@@ -1196,6 +1229,8 @@
         "test_attestor.provider",
         "test_attestor.timeout",
         "test_attestor.bubblewrap.command",
+        "test_attestor.microvm.launcher_socket",
+        "test_attestor.microvm.guest_memory_mib",
         "test_attestor.go.toolchain_root",
         "runtime.max_output_bytes",
         "test_attestor.max_subject_bytes",

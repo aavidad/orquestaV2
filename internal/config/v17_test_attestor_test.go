@@ -14,11 +14,13 @@ func TestTestAttestorRegistryIsMinimalAndDisabledByDefault(t *testing.T) {
 	keys := []Key{KeyTestAttestorProvider, KeyTestAttestorMaxSubjectBytes,
 		KeyTestAttestorTimeout,
 		KeyTestAttestorMaxConcurrentRuns, KeyTestAttestorBubblewrapCommand, KeyTestAttestorGoToolchainRoot,
+		KeyTestAttestorMicroVMLauncherSocket, KeyTestAttestorMicroVMGuestMemoryMiB,
 		KeyTestAttestorCgroupRoot, KeyTestAttestorMemoryMaxBytes, KeyTestAttestorPIDsMax,
 		KeyTestAttestorCPUQuotaMicros}
 	if snapshot.TestAttestorProvider() != "disabled" || snapshot.SchedulerExecutionTimeout() != 45*time.Minute ||
 		snapshot.TestAttestorTimeout() != 15*time.Minute ||
 		snapshot.TestAttestorMaxSubjectBytes() != 512<<20 || snapshot.TestAttestorMaxConcurrentRuns() != 2 ||
+		snapshot.TestAttestorMicroVMGuestMemoryMiB() != 512 ||
 		snapshot.TestAttestorMemoryMaxBytes() != 2<<30 || snapshot.TestAttestorPIDsMax() != 256 {
 		t.Fatalf("unsafe attestor defaults: %+v", snapshot)
 	}
@@ -92,6 +94,72 @@ attest_test_claim_lease = "3m"
 	}
 }
 
+func TestMicroVMConfigurationIsOneValidatedUnit(t *testing.T) {
+	document := []byte(`[repository.local]
+seed_path = "/repo"
+[runtime]
+max_output_bytes = 2097152
+[test_attestor]
+provider = "microvm"
+timeout = "2m"
+max_subject_bytes = 16777216
+max_concurrent_runs = 3
+[test_attestor.microvm]
+launcher_socket = "/run/orquesta/firecracker-launcher.sock"
+guest_memory_mib = 512
+[test_attestor.resources]
+memory_max_bytes = 2147483648
+pids_max = 128
+cpu_quota_micros = 200000
+[scheduler]
+attest_test_claim_lease = "3m"
+`)
+	snapshot, err := Resolve(ResolveOptions{TOML: document})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.TestAttestorProvider() != "microvm" ||
+		snapshot.TestAttestorMicroVMLauncherSocket() != "/run/orquesta/firecracker-launcher.sock" ||
+		snapshot.TestAttestorMicroVMGuestMemoryMiB() != 512 ||
+		snapshot.TestAttestorBubblewrapCommand() != "" || snapshot.TestAttestorGoToolchainRoot() != "" ||
+		snapshot.TestAttestorCgroupRoot() != "" {
+		t.Fatalf("microvm config lost: %+v", snapshot)
+	}
+	withoutSocket := []byte(strings.Replace(
+		string(document), `launcher_socket = "/run/orquesta/firecracker-launcher.sock"`+"\n", "", 1,
+	))
+	if _, err := Resolve(ResolveOptions{TOML: withoutSocket}); err == nil ||
+		!HasErrorCode(err, ErrorCrossValidation) {
+		t.Fatalf("microvm config without launcher socket accepted: %v", err)
+	}
+	for name, mutation := range map[string]string{
+		"guest exceeds cgroup": strings.Replace(string(document), "guest_memory_mib = 512", "guest_memory_mib = 4096", 1),
+		"relative socket": strings.Replace(
+			string(document), "/run/orquesta/firecracker-launcher.sock", "launcher.sock", 1,
+		),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := Resolve(ResolveOptions{TOML: []byte(mutation)}); err == nil ||
+				!HasErrorCode(err, ErrorCrossValidation) {
+				t.Fatalf("unsafe microvm config accepted: %v", err)
+			}
+		})
+	}
+}
+
+func TestDisabledProviderIgnoresIncompleteMicroVMConfiguration(t *testing.T) {
+	snapshot, err := Resolve(ResolveOptions{TOML: []byte(
+		"[test_attestor.microvm]\nlauncher_socket = \"launcher.sock\"\n",
+	)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.TestAttestorProvider() != "disabled" ||
+		snapshot.TestAttestorMicroVMLauncherSocket() != "launcher.sock" {
+		t.Fatalf("disabled provider semantics changed: %+v", snapshot)
+	}
+}
+
 func TestTestAttestorTimeoutOrdering(t *testing.T) {
 	base := `[repository.local]
 seed_path = "/repo"
@@ -140,6 +208,7 @@ execution_timeout = "90s"
 func TestOptionalPathRejectsWhitespaceAndNULWithoutAliases(t *testing.T) {
 	for _, document := range []string{"[repository.local]\nseed_path = \" /repo\"\n",
 		"[test_attestor.bubblewrap]\ncommand = \"/usr/bin/bwrap \"\n",
+		"[test_attestor.microvm]\nlauncher_socket = \"/run/launcher\\u0000tail\"\n",
 		"[test_attestor.go]\ntoolchain_root = \"/usr/local/go\\u0000tail\"\n"} {
 		if _, err := ParseExplicit([]byte(document)); err == nil || !HasErrorCode(err, ErrorValueInvalid) {
 			t.Fatalf("unsafe optional path accepted: %q err=%v", document, err)

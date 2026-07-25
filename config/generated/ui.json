@@ -1,8 +1,8 @@
 {
   "document_type": "orquesta.config_ui",
   "schema_version": 2,
-  "registry_revision": "2026-07-25.26",
-  "registry_hash": "sha256:608b36745662a6c9605d5e0668e98284e87656cdd57d361278348b9a35a45b9f",
+  "registry_revision": "2026-07-25.27",
+  "registry_hash": "sha256:e2a35b8c56ecbfd7f52d3073f99d82cb16cb4a87f71f1c1d8eccf746786af48e",
   "aliases": [],
   "cross_validators": [
     {
@@ -71,6 +71,8 @@
         "test_attestor.provider",
         "test_attestor.timeout",
         "test_attestor.bubblewrap.command",
+        "test_attestor.microvm.launcher_socket",
+        "test_attestor.microvm.guest_memory_mib",
         "test_attestor.go.toolchain_root",
         "runtime.max_output_bytes",
         "test_attestor.max_subject_bytes",
@@ -529,7 +531,8 @@
       ],
       "allowed_values": [
         "disabled",
-        "bubblewrap"
+        "bubblewrap",
+        "microvm"
       ]
     },
     {
@@ -583,6 +586,32 @@
       "validator_ids": [
         "optional_path"
       ]
+    },
+    {
+      "key": "test_attestor.microvm.launcher_socket",
+      "semantic_ref": "orquesta.config.test_attestor.microvm.launcher_socket",
+      "label_key": "config.field.test_attestor.microvm.launcher_socket",
+      "type": "optional_path",
+      "sensitive": false,
+      "scope": "attestor",
+      "restart_required": true,
+      "validator_ids": [
+        "optional_path"
+      ]
+    },
+    {
+      "key": "test_attestor.microvm.guest_memory_mib",
+      "semantic_ref": "orquesta.config.test_attestor.microvm.guest_memory_mib",
+      "label_key": "config.field.test_attestor.microvm.guest_memory_mib",
+      "type": "integer",
+      "sensitive": false,
+      "scope": "attestor",
+      "restart_required": true,
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 64,
+      "maximum": 16384
     },
     {
       "key": "test_attestor.go.toolchain_root",

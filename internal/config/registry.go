@@ -456,7 +456,9 @@ func validateCrossValidators(definitions []registryCrossValidatorDefinition, key
 			KeyIdentityOIDCUpstreamTimeout,
 		},
 		"test_attestor_provider_requirements": {
-			KeyTestAttestorProvider, KeyTestAttestorTimeout, KeyTestAttestorBubblewrapCommand, KeyTestAttestorGoToolchainRoot,
+			KeyTestAttestorProvider, KeyTestAttestorTimeout, KeyTestAttestorBubblewrapCommand,
+			KeyTestAttestorMicroVMLauncherSocket, KeyTestAttestorMicroVMGuestMemoryMiB,
+			KeyTestAttestorGoToolchainRoot,
 			KeyRuntimeMaxOutputBytes, KeyTestAttestorMaxSubjectBytes,
 			KeyTestAttestorMaxConcurrentRuns, KeyRepositoryLocalSeedPath,
 			KeyTestAttestorCgroupRoot, KeyTestAttestorMemoryMaxBytes,

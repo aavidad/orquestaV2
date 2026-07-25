@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "revision": "2026-07-25.26",
+  "revision": "2026-07-25.27",
   "precedence": [
     "default",
     "file",
@@ -78,6 +78,8 @@
         "test_attestor.provider",
         "test_attestor.timeout",
         "test_attestor.bubblewrap.command",
+        "test_attestor.microvm.launcher_socket",
+        "test_attestor.microvm.guest_memory_mib",
         "test_attestor.go.toolchain_root",
         "runtime.max_output_bytes",
         "test_attestor.max_subject_bytes",
@@ -610,7 +612,8 @@
       ],
       "allowed_values": [
         "disabled",
-        "bubblewrap"
+        "bubblewrap",
+        "microvm"
       ]
     },
     {
@@ -672,6 +675,36 @@
       "validator_ids": [
         "optional_path"
       ]
+    },
+    {
+      "key": "test_attestor.microvm.launcher_socket",
+      "go_name": "TestAttestorMicroVMLauncherSocket",
+      "semantic_ref": "orquesta.config.test_attestor.microvm.launcher_socket",
+      "type": "optional_path",
+      "default": "",
+      "sensitive": false,
+      "scope": "attestor",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_TEST_ATTESTOR_MICROVM_LAUNCHER_SOCKET",
+      "validator_ids": [
+        "optional_path"
+      ]
+    },
+    {
+      "key": "test_attestor.microvm.guest_memory_mib",
+      "go_name": "TestAttestorMicroVMGuestMemoryMiB",
+      "semantic_ref": "orquesta.config.test_attestor.microvm.guest_memory_mib",
+      "type": "integer",
+      "default": 512,
+      "sensitive": false,
+      "scope": "attestor",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_TEST_ATTESTOR_MICROVM_GUEST_MEMORY_MIB",
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 64,
+      "maximum": 16384
     },
     {
       "key": "test_attestor.go.toolchain_root",
