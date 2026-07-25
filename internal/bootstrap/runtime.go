@@ -15,6 +15,8 @@ import (
 	"orquesta/internal/adapters/agent/codex"
 	"orquesta/internal/adapters/artifact/filesystem"
 	"orquesta/internal/adapters/attestor/bubblewrap"
+	"orquesta/internal/adapters/attestor/firecrackerclient"
+	"orquesta/internal/adapters/attestor/firecrackerlauncher"
 	"orquesta/internal/adapters/auth/bearer"
 	"orquesta/internal/adapters/auth/executiontoken"
 	"orquesta/internal/adapters/auth/localtoken"
@@ -32,6 +34,7 @@ import (
 	"orquesta/internal/i18n"
 	"orquesta/internal/identity"
 	"orquesta/internal/ports"
+	launcherprotocol "orquesta/internal/testattestorprotocol/launcher"
 )
 
 type AgentAdapter interface {
@@ -265,6 +268,7 @@ type buildSetup struct {
 const (
 	testAttestorDisabled   = "disabled"
 	testAttestorBubblewrap = "bubblewrap"
+	testAttestorMicroVM    = "microvm"
 )
 
 type buildTestAttestorComposition struct {
@@ -447,8 +451,51 @@ func openBuildTestAttestor(
 			return buildTestAttestorComposition{}, err
 		}
 		return buildTestAttestorComposition{attestor: attestor, policy: policy, closer: attestor}, nil
+	case testAttestorMicroVM:
+		if workspace == nil {
+			return buildTestAttestorComposition{}, errors.New("bootstrap.test_attestor_workspace_required")
+		}
+		launcher, err := firecrackerlauncher.NewClient(
+			snapshot.TestAttestorMicroVMLauncherSocket(),
+		)
+		if err != nil {
+			return buildTestAttestorComposition{}, err
+		}
+		attestor, err := firecrackerclient.New(firecrackerConfig(snapshot, workspace, launcher, clock.Now))
+		if err != nil {
+			return buildTestAttestorComposition{}, err
+		}
+		identity := attestor.PolicyIdentity()
+		policy := application.TestAttestationPolicy{Ref: identity.Ref, Digest: identity.Digest}
+		if err := application.ValidateTestAttestationPolicy(policy); err != nil {
+			_ = attestor.Close()
+			return buildTestAttestorComposition{}, err
+		}
+		return buildTestAttestorComposition{attestor: attestor, policy: policy, closer: attestor}, nil
 	default:
 		return buildTestAttestorComposition{}, errors.New("bootstrap.test_attestor_provider_unsupported")
+	}
+}
+
+func firecrackerConfig(
+	snapshot config.Snapshot,
+	source firecrackerclient.SnapshotStreamSource,
+	launcher launcherprotocol.Client,
+	now func() time.Time,
+) firecrackerclient.Config {
+	return firecrackerclient.Config{
+		Launcher: launcher, SnapshotSource: source, Now: now,
+		ExpectedAssetDigest: snapshot.TestAttestorMicroVMExpectedAssetDigest(),
+		Limits: firecrackerclient.Limits{
+			Timeout: snapshot.TestAttestorTimeout(), CleanupTimeout: snapshot.ServerShutdownTimeout(),
+			MaxOutputBytes:    uint64(snapshot.RuntimeMaxOutputBytes()),
+			MaxSubjectBytes:   snapshot.TestAttestorMaxSubjectBytes(),
+			MaxConcurrentRuns: int(snapshot.TestAttestorMaxConcurrentRuns()),
+			GuestMemoryMiB:    uint32(snapshot.TestAttestorMicroVMGuestMemoryMiB()),
+			MemoryMaxBytes:    uint64(snapshot.TestAttestorMemoryMaxBytes()),
+			PIDsMax:           uint32(snapshot.TestAttestorPIDsMax()),
+			CPUQuotaMicros:    uint64(snapshot.TestAttestorCPUQuotaMicros()),
+		},
 	}
 }
 
