@@ -9,6 +9,11 @@ import (
 	"time"
 )
 
+// CPUPeriodMicrosV0 is part of the launcher wire contract. Callers configure
+// only the quota; both protocol ends must use this fixed period to derive vCPU
+// capacity identically.
+const CPUPeriodMicrosV0 = uint64(100_000)
+
 type LaunchRequest struct {
 	Nonce                  string
 	InputDigest            string

@@ -20,7 +20,7 @@ const (
 	maxProtocolField       = 256
 	requestMagic           = "ORQ-FCLAUNCH-1\x00"
 	responseMagic          = "ORQ-FCRESPONSE-1\x00"
-	defaultCPUPeriod       = uint64(100_000)
+	defaultCPUPeriod       = launchercontract.CPUPeriodMicrosV0
 	minGuestMemoryMiB      = uint32(128)
 	maxFirecrackerVCPUs    = uint32(32)
 	minimumMemoryMaxBytes  = uint64(minGuestMemoryMiB+128) << 20
