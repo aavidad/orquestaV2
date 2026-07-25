@@ -2,8 +2,8 @@
   "schema_version": 1,
   "kind": "real_codex_mcp_e2e",
   "result": "PASS",
-  "source_sha256": "sha256:d5269ab973809f3c60675de11b3cf5c30675023f9c2a0a218e8d34bdeddb16c2",
-  "executed_at": "2026-07-25T07:49:48+02:00",
-  "marker": "ORQUESTA_CODEX_E2E_OK_fbc9c7e097df4b7bc4d9d014178dc6b1",
+  "source_sha256": "sha256:3ccb3044d929b2d0212502151f8fe955b9556c5e7a2636df09d9154b7619b615",
+  "executed_at": "2026-07-25T09:03:33+02:00",
+  "marker": "ORQUESTA_CODEX_E2E_OK_53a49afc6b4af2d8272576be3e32c4e8",
   "command": "go test -mod=vendor -v -count=1 ./internal/bootstrap -run '^TestRealCodexAdapterClosesGoalThroughProductionMCPServer$' -args -orquesta-real-codex-config=/tmp/orquesta-v22-generic-real-p3b/orquesta.toml"
 }
