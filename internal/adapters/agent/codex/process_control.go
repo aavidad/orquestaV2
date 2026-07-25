@@ -1,6 +1,7 @@
 package codex
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"os"
@@ -376,7 +377,10 @@ func parseProcessStat(payload []byte) (string, int, error) {
 	return fields[0], pgid, nil
 }
 
-func (adapter *Adapter) discoverPersistedProcessesLocked() error {
+func (adapter *Adapter) discoverPersistedProcessesLocked(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	names, err := adapter.stopJournalNames("executions")
 	if err != nil {
 		return err
@@ -385,14 +389,88 @@ func (adapter *Adapter) discoverPersistedProcessesLocked() error {
 	discoveryErrors := make([]error, 0)
 	for _, name := range names {
 		runPath := path.Join("executions", name)
-		if err := adapter.discoverPersistedProcessLocked(runPath); err != nil {
+		if err := adapter.discoverPersistedProcessLocked(ctx, runPath); err != nil {
 			discoveryErrors = append(discoveryErrors, err)
 		}
 	}
 	return errors.Join(discoveryErrors...)
 }
 
-func (adapter *Adapter) discoverPersistedProcessLocked(runPath string) error {
+// discoverShutdownProcessesLocked acquires only exact process ownership for
+// termination. It deliberately does not settle provider output: recovery of
+// credential and session guards belongs to the normal runtime-scope activation
+// path, while shutdown must remain able to kill durable processes even when
+// their external authority is no longer available.
+func (adapter *Adapter) discoverShutdownProcessesLocked(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	names, err := adapter.stopJournalNames("executions")
+	if err != nil {
+		return err
+	}
+	sort.Strings(names)
+	discoveryErrors := make([]error, 0)
+	for _, name := range names {
+		runPath := path.Join("executions", name)
+		if err := adapter.discoverShutdownProcessLocked(ctx, runPath); err != nil {
+			discoveryErrors = append(discoveryErrors, err)
+		}
+	}
+	return errors.Join(discoveryErrors...)
+}
+
+func (adapter *Adapter) discoverShutdownProcessLocked(ctx context.Context, runPath string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	process, found, err := adapter.readProcessRecord(runPath)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return adapter.cleanupOrphanedCgroup(runPath, adapter.config.SupervisorStartTimeout)
+	}
+	executionRef, err := goal.NewExecutionRef(process.ExecutionRef)
+	if err != nil {
+		return &Error{Code: CodeProcessOwnershipInvalid, Cause: err}
+	}
+	if existing := adapter.executions[executionRef.String()]; existing != nil && existing.process != nil {
+		return nil
+	}
+	launch, expectedPath, found, err := adapter.loadLaunchRecord(executionRef)
+	if err != nil {
+		return err
+	}
+	if !found || expectedPath != runPath || launch.RequestHash != process.RequestHash {
+		return &Error{Code: CodeProcessOwnershipInvalid}
+	}
+	if _, terminalFound, err := adapter.loadCausalTerminal(
+		runPath, launch.RequestHash, launch.SpecHash, launch.MaxOutputBytes,
+	); err != nil {
+		return err
+	} else if terminalFound {
+		return adapter.cleanupOrphanedCgroup(runPath, adapter.config.SupervisorStartTimeout)
+	}
+	receipt, err := launch.receipt(executionRef)
+	if err != nil {
+		return err
+	}
+	state := &executionState{
+		requestHash: launch.RequestHash, terminalRequestHash: launch.RequestHash,
+		receipt: receipt, maxOutput: launch.MaxOutputBytes, runPath: runPath, status: ports.AgentPending,
+	}
+	if _, _, err := adapter.ownProcessLocked(state); err != nil {
+		return err
+	}
+	adapter.executions[executionRef.String()] = state
+	return nil
+}
+
+func (adapter *Adapter) discoverPersistedProcessLocked(ctx context.Context, runPath string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	process, found, err := adapter.readProcessRecord(runPath)
 	if err != nil {
 		return err
@@ -427,12 +505,21 @@ func (adapter *Adapter) discoverPersistedProcessLocked(runPath string) error {
 		requestHash: launch.RequestHash, terminalRequestHash: launch.RequestHash,
 		receipt: receipt, maxOutput: launch.MaxOutputBytes, runPath: runPath, status: ports.AgentPending,
 	}
+	if recoveryErr := adapter.recoverExecutionGuards(ctx, launch, state); recoveryErr != nil {
+		if recoveryAuthorityFailure(recoveryErr) {
+			recoveryErr = adapter.quarantineRecoveryFailureLocked(ctx, state, recoveryErr)
+		}
+		return recoveryErr
+	}
 	adopted, err := adapter.adoptPersistedProcessLocked(state)
 	if err != nil {
+		destroyExecutionGuards(state)
 		return err
 	}
 	if adopted {
 		adapter.executions[executionRef.String()] = state
+	} else {
+		destroyExecutionGuards(state)
 	}
 	return nil
 }

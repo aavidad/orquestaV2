@@ -186,16 +186,17 @@ type Adapter struct {
 	lifecycle             context.Context
 	cancelLifecycle       context.CancelCauseFunc
 
-	mu             sync.Mutex
-	closed         bool
-	executions     map[string]*executionState
-	activeWaits    int
-	waitsDone      chan struct{}
-	operations     int
-	operationsDone chan struct{}
-	shutdownOnce   sync.Once
-	shutdownDone   chan struct{}
-	shutdownErr    error
+	mu                sync.Mutex
+	closed            bool
+	runtimeScopeReady bool
+	executions        map[string]*executionState
+	activeWaits       int
+	waitsDone         chan struct{}
+	operations        int
+	operationsDone    chan struct{}
+	shutdownOnce      sync.Once
+	shutdownDone      chan struct{}
+	shutdownErr       error
 }
 
 type executionState struct {
@@ -269,9 +270,12 @@ func New(config Config) (*Adapter, error) {
 // composition root has opened its durable state file. Construction deliberately
 // permits an empty scope so executable/work-root preflight can still happen
 // before any durable composition state is created.
-func (adapter *Adapter) BindRuntimeScope(scope string) error {
+func (adapter *Adapter) BindRuntimeScope(ctx context.Context, scope string) error {
 	if adapter == nil {
 		return &Error{Code: CodeUnavailable}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	if scope == "" || strings.TrimSpace(scope) != scope || strings.ContainsRune(scope, '\x00') {
 		return &Error{Code: CodeRuntimeScopeInvalid}
@@ -281,21 +285,29 @@ func (adapter *Adapter) BindRuntimeScope(scope string) error {
 	if adapter.closed {
 		return &Error{Code: CodeUnavailable}
 	}
-	if adapter.config.RuntimeScope == scope {
+	if adapter.config.RuntimeScope == scope && adapter.runtimeScopeReady {
 		return nil
 	}
-	if adapter.config.RuntimeScope != "" || len(adapter.executions) != 0 {
+	if adapter.config.RuntimeScope != "" && adapter.config.RuntimeScope != scope {
+		return &Error{Code: CodeRuntimeScopeInvalid}
+	}
+	if adapter.config.RuntimeScope == "" && len(adapter.executions) != 0 {
 		return &Error{Code: CodeRuntimeScopeInvalid}
 	}
 	if platformCgroupRequired() && adapter.cgroups == nil {
 		if adapter.config.allowLegacyProcessControlForTests {
 			adapter.config.RuntimeScope = scope
+			adapter.runtimeScopeReady = true
 			return nil
 		}
 		return &Error{Code: CodeCgroupRootRequired}
 	}
 	adapter.config.RuntimeScope = scope
-	return adapter.discoverPersistedProcessesLocked()
+	if err := adapter.discoverPersistedProcessesLocked(ctx); err != nil {
+		return err
+	}
+	adapter.runtimeScopeReady = true
+	return nil
 }
 
 // BindWorkspacePathResolver attaches the composition-owned local resolver only
@@ -862,7 +874,7 @@ func (adapter *Adapter) finalizeShutdown(
 	// goroutine resumes finalization and closes shutdownDone exactly once.
 	<-operationsDone
 	adapter.mu.Lock()
-	adopted, discoveryErr := adapter.adoptedProcessesLocked()
+	adopted, discoveryErr := adapter.adoptedProcessesLocked(context.WithoutCancel(shutdownCtx))
 	adapter.mu.Unlock()
 	adoptedErr := adapter.stopAdoptedProcesses(shutdownCtx, adopted)
 
@@ -934,8 +946,8 @@ type adoptedProcess struct {
 	record processRecord
 }
 
-func (adapter *Adapter) adoptedProcessesLocked() ([]adoptedProcess, error) {
-	discoveryErr := adapter.discoverPersistedProcessesLocked()
+func (adapter *Adapter) adoptedProcessesLocked(ctx context.Context) ([]adoptedProcess, error) {
+	discoveryErr := adapter.discoverShutdownProcessesLocked(ctx)
 	processes := make([]adoptedProcess, 0)
 	for _, state := range adapter.executions {
 		if state.process == nil || state.ownerLock == nil || state.cancel != nil {
@@ -978,6 +990,7 @@ func (adapter *Adapter) releaseAdoptedProcessOwnership(processes []adoptedProces
 		if process.state.process != nil && *process.state.process == process.record {
 			adapter.releaseProcessOwnershipLocked(process.state)
 		}
+		destroyExecutionGuards(process.state)
 	}
 }
 

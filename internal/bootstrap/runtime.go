@@ -164,7 +164,7 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 	if err := writeEffectiveSnapshot(ctx, setup.snapshot); err != nil {
 		return nil, err
 	}
-	repository, err := openBuildRepository(ctx, setup, agent, identityComposition)
+	repository, err := openBuildRepository(ctx, setup, identityComposition)
 	if err != nil {
 		return nil, err
 	}
@@ -187,15 +187,11 @@ func Build(ctx context.Context, options Options) (*Runtime, error) {
 		if err != nil {
 			return nil, err
 		}
-		binder, ok := agent.(interface {
-			BindSessionResolver(codex.SessionResolver) error
-		})
-		if !ok {
-			return nil, errors.New("bootstrap.agent_session_resolver_unsupported")
-		}
-		if err := binder.BindSessionResolver(sessionResolver); err != nil {
+		if err := bindCodexAgentAuthority(ctx, agent, repository, sessionResolver); err != nil {
 			return nil, err
 		}
+	} else if err := bindAgentRuntimeScope(ctx, agent, repository); err != nil {
+		return nil, err
 	}
 	postArtifactMailbox, err := newLoopbackPostArtifactMailboxAdmitter(executionBroker, mcpEndpoint)
 	if err != nil {
@@ -451,7 +447,7 @@ func shutdownBuildAgent(agent AgentAdapter, timeout time.Duration) {
 }
 
 func openBuildRepository(
-	ctx context.Context, setup buildSetup, agent AgentAdapter, composition identityRuntimeComposition,
+	ctx context.Context, setup buildSetup, composition identityRuntimeComposition,
 ) (*statesqlite.Repository, error) {
 	repository, err := statesqlite.Open(ctx, statesqlite.Options{
 		Path: setup.snapshot.StateSQLitePath(), BusyTimeout: setup.snapshot.StateSQLiteBusyTimeout(),
@@ -461,9 +457,6 @@ func openBuildRepository(
 		return nil, err
 	}
 	fail := func(err error) (*statesqlite.Repository, error) { _ = repository.Close(); return nil, err }
-	if err := bindAgentRuntimeScope(agent, repository); err != nil {
-		return fail(err)
-	}
 	if composition.provisionLocal {
 		err = repository.ProvisionLocalAccess(
 			ctx, composition.localPrincipal, composition.localHierarchy, identity.RoleProjectOwner, setup.clock.Now(),

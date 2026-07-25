@@ -1,24 +1,48 @@
 package bootstrap
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"strings"
+
+	"orquesta/internal/adapters/agent/codex"
 )
 
 const runtimeScopeDomain = "orquesta.runtime-scope.local-state.v1"
 
 type runtimeScopeBinder interface {
-	BindRuntimeScope(string) error
+	BindRuntimeScope(context.Context, string) error
 }
 
 type localStateIdentitySource interface {
 	LocalStateIdentity() (string, bool, error)
 }
 
-func bindAgentRuntimeScope(agent AgentAdapter, state localStateIdentitySource) error {
+func bindCodexAgentAuthority(
+	ctx context.Context,
+	agent AgentAdapter,
+	state localStateIdentitySource,
+	sessionResolver codex.SessionResolver,
+) error {
+	binder, ok := agent.(interface {
+		BindSessionResolver(codex.SessionResolver) error
+	})
+	if !ok {
+		return errors.New("bootstrap.agent_session_resolver_unsupported")
+	}
+	if err := binder.BindSessionResolver(sessionResolver); err != nil {
+		return err
+	}
+	return bindAgentRuntimeScope(ctx, agent, state)
+}
+
+func bindAgentRuntimeScope(ctx context.Context, agent AgentAdapter, state localStateIdentitySource) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	binder, ok := agent.(runtimeScopeBinder)
 	if !ok {
 		return nil
@@ -38,7 +62,7 @@ func bindAgentRuntimeScope(agent AgentAdapter, state localStateIdentitySource) e
 	if identity == "" || strings.TrimSpace(identity) != identity || strings.ContainsRune(identity, '\x00') {
 		return errors.New("bootstrap.local_state_identity_invalid")
 	}
-	return binder.BindRuntimeScope(runtimeScopeForLocalStateIdentity(identity))
+	return binder.BindRuntimeScope(ctx, runtimeScopeForLocalStateIdentity(identity))
 }
 
 func runtimeScopeForLocalStateIdentity(identity string) string {

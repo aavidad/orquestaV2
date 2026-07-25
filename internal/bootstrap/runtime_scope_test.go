@@ -10,12 +10,13 @@ import (
 	"orquesta/internal/adapters/agent/codex"
 	"orquesta/internal/application"
 	"orquesta/internal/config"
+	"orquesta/internal/ports"
 )
 
 func TestBindAgentRuntimeScopeUsesStateIdentitySource(t *testing.T) {
 	agent := newRuntimeScopeCaptureAgent()
 	state := &runtimeIdentitySource{identity: "local-state:sha256:active", supported: true}
-	if err := bindAgentRuntimeScope(agent, state); err != nil {
+	if err := bindAgentRuntimeScope(context.Background(), agent, state); err != nil {
 		t.Fatalf("bind runtime scope: %v", err)
 	}
 	want := runtimeScopeForLocalStateIdentity(state.identity)
@@ -27,7 +28,7 @@ func TestBindAgentRuntimeScopeUsesStateIdentitySource(t *testing.T) {
 func TestBindAgentRuntimeScopeLeavesUnsupportedPlatformDisabled(t *testing.T) {
 	agent := newRuntimeScopeCaptureAgent()
 	state := &runtimeIdentitySource{supported: false}
-	if err := bindAgentRuntimeScope(agent, state); err != nil {
+	if err := bindAgentRuntimeScope(context.Background(), agent, state); err != nil {
 		t.Fatalf("unsupported identity: %v", err)
 	}
 	if state.calls != 1 || agent.scope != "" {
@@ -70,6 +71,46 @@ func TestBuildBindsAgentToOpenedRepositoryIdentity(t *testing.T) {
 	}
 }
 
+func TestBindCodexAgentAuthorityBindsSessionBeforeRuntimeDiscovery(t *testing.T) {
+	agent := &orderedRuntimeScopeAgent{
+		AgentAdapter: newCountingAgent(fixedBootstrapClock{}, &atomic.Int64{}),
+	}
+	state := &runtimeIdentitySource{identity: "local-state:sha256:restart", supported: true}
+	if err := bindCodexAgentAuthority(context.Background(), agent, state, &sessionResolverStub{}); err != nil {
+		t.Fatalf("bind Codex authority: %v", err)
+	}
+	if len(agent.bindings) != 2 || agent.bindings[0] != "session" || agent.bindings[1] != "runtime" {
+		t.Fatalf("authority binding order=%v", agent.bindings)
+	}
+}
+
+type orderedRuntimeScopeAgent struct {
+	AgentAdapter
+	scope    string
+	bindings []string
+}
+
+func (agent *orderedRuntimeScopeAgent) BindSessionResolver(codex.SessionResolver) error {
+	agent.bindings = append(agent.bindings, "session")
+	return nil
+}
+
+func (agent *orderedRuntimeScopeAgent) BindRuntimeScope(_ context.Context, scope string) error {
+	agent.bindings = append(agent.bindings, "runtime")
+	agent.scope = scope
+	return nil
+}
+
+type sessionResolverStub struct{}
+
+func (*sessionResolverStub) ResolveCodexSession(context.Context, ports.AgentLaunchRequest) (codex.Session, error) {
+	return codex.Session{}, nil
+}
+
+func (*sessionResolverStub) RecoverCodexSession(context.Context, ports.AgentLaunchRequest) (codex.Session, error) {
+	return codex.Session{}, nil
+}
+
 func TestCredentialAgentDelegatesRuntimeScopeAndController(t *testing.T) {
 	root, configPath := credentialFactoryFixture(t)
 	snapshot, err := loadConfigSnapshot(context.Background(), configPath)
@@ -85,7 +126,7 @@ func TestCredentialAgentDelegatesRuntimeScopeAndController(t *testing.T) {
 	if !ok {
 		t.Fatalf("credential wrapper does not expose runtime scope binding: %T", agent)
 	}
-	if err := binder.BindRuntimeScope("runtime-scope:test-credential-wrapper"); runtime.GOOS == "linux" {
+	if err := binder.BindRuntimeScope(context.Background(), "runtime-scope:test-credential-wrapper"); runtime.GOOS == "linux" {
 		if codex.ErrorCode(err) != codex.CodeCgroupRootRequired {
 			t.Fatalf("bind without delegated cgroup = %v", err)
 		}
@@ -130,7 +171,7 @@ func newRuntimeScopeCaptureAgent() *runtimeScopeCaptureAgent {
 	}
 }
 
-func (agent *runtimeScopeCaptureAgent) BindRuntimeScope(scope string) error {
+func (agent *runtimeScopeCaptureAgent) BindRuntimeScope(_ context.Context, scope string) error {
 	agent.scope = scope
 	return nil
 }

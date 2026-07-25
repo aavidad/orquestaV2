@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+	"orquesta/internal/credentials"
 	"orquesta/internal/goal"
 	"orquesta/internal/governance"
 	"orquesta/internal/ports"
@@ -32,6 +33,227 @@ const (
 	supervisorObserverTestArgument = "__orquesta_test_codex_supervisor_observer_v1"
 	supervisorOwnerReadyFileName   = "owner-ready"
 )
+
+func TestBindRuntimeScopeRetriesCanceledGuardRecoveryBeforeAdoption(t *testing.T) {
+	config := supervisorTestConfig(t)
+	const suffix = "runtime-scope-session-recovery"
+	request := supervisorTestRequest(suffix, "helper:session helper:block", 1024)
+	runSupervisorTestSubprocess(
+		t, supervisorOwnerTestArgument, config.WorkRoot, suffix, request.Objective,
+	)
+	record := awaitSupervisorProcessRecord(t, config.WorkRoot, request.ExecutionRef)
+	t.Cleanup(func() {
+		if controller, err := openCodexCgroupRoot(config.CgroupRoot); err == nil {
+			_ = controller.kill(record)
+			_ = controller.drain(record, config.SupervisorStartTimeout)
+			_ = controller.remove(record)
+			_ = controller.close()
+		} else {
+			t.Errorf("open cleanup cgroup root: %v", err)
+		}
+	})
+
+	recoveryConfig := config
+	recoveryConfig.RuntimeScope = ""
+	reopened, err := New(recoveryConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var calls atomic.Int64
+	firstContext, cancelFirst := context.WithCancel(context.Background())
+	resolver := sessionResolverFunc(func(ctx context.Context, request ports.AgentLaunchRequest) (Session, error) {
+		if calls.Add(1) == 1 {
+			cancelFirst()
+			return Session{}, ctx.Err()
+		}
+		secret, secretErr := credentials.NewSecret([]byte(helperSessionBearer))
+		if secretErr != nil {
+			return Session{}, secretErr
+		}
+		return Session{
+			Ref: request.SessionRef, Endpoint: "http://127.0.0.1:7777/mcp", BearerToken: secret,
+		}, nil
+	})
+	if err := reopened.BindSessionResolver(resolver); err != nil {
+		t.Fatal(err)
+	}
+	if err := reopened.BindRuntimeScope(firstContext, config.RuntimeScope); !errors.Is(err, context.Canceled) {
+		t.Fatalf("first runtime binding error=%v", err)
+	}
+	reopened.mu.Lock()
+	firstReady := reopened.runtimeScopeReady
+	_, firstAdopted := reopened.executions[request.ExecutionRef.String()]
+	reopened.mu.Unlock()
+	if firstReady || firstAdopted {
+		t.Fatalf("canceled discovery ready=%v adopted=%v", firstReady, firstAdopted)
+	}
+	if err := reopened.BindRuntimeScope(
+		context.Background(), "runtime-scope:different-local-state",
+	); ErrorCode(err) != CodeRuntimeScopeInvalid {
+		t.Fatalf("different scope after failed discovery=%v code=%q", err, ErrorCode(err))
+	}
+	if calls.Load() != 1 {
+		t.Fatalf("different scope retried discovery calls=%d", calls.Load())
+	}
+	if err := reopened.BindRuntimeScope(context.Background(), config.RuntimeScope); err != nil {
+		t.Fatalf("retry runtime binding: %v", err)
+	}
+	reopened.mu.Lock()
+	state := reopened.executions[request.ExecutionRef.String()]
+	ready := reopened.runtimeScopeReady
+	guarded := state != nil && state.sessionGuard != nil && state.process != nil
+	hasState, hasSessionGuard, hasProcess := state != nil, false, false
+	if state != nil {
+		hasSessionGuard, hasProcess = state.sessionGuard != nil, state.process != nil
+	}
+	reopened.mu.Unlock()
+	if !ready || !guarded || calls.Load() != 2 {
+		t.Fatalf(
+			"retry ready=%v guarded=%v state=%v session_guard=%v process=%v calls=%d",
+			ready, guarded, hasState, hasSessionGuard, hasProcess, calls.Load(),
+		)
+	}
+	if err := reopened.BindSessionResolver(&sessionResolverStub{id: 99}); ErrorCode(err) != CodeSessionInvalid {
+		t.Fatalf("resolver replacement after adoption=%v code=%q", err, ErrorCode(err))
+	}
+
+	shutdownContext, cancelShutdown := context.WithTimeout(context.Background(), 5*time.Second)
+	err = reopened.Shutdown(shutdownContext)
+	cancelShutdown()
+	if err != nil {
+		t.Fatalf("shutdown recovered process: %v", err)
+	}
+	reopened.mu.Lock()
+	guardRetained := state.sessionGuard != nil || state.credentialGuard != nil
+	reopened.mu.Unlock()
+	if guardRetained {
+		t.Fatal("shutdown retained recovered authority guards")
+	}
+}
+
+func TestBindRuntimeScopeQuarantinesAuthorityFailureBeforeAdoption(t *testing.T) {
+	config := supervisorTestConfig(t)
+	const suffix = "runtime-scope-session-recovery-quarantine"
+	request := supervisorTestRequest(suffix, "helper:session helper:block", 1024)
+	runSupervisorTestSubprocess(
+		t, supervisorOwnerTestArgument, config.WorkRoot, suffix, request.Objective,
+	)
+	record := awaitSupervisorProcessRecord(t, config.WorkRoot, request.ExecutionRef)
+	t.Cleanup(func() {
+		if controller, err := openCodexCgroupRoot(config.CgroupRoot); err == nil {
+			_ = controller.kill(record)
+			_ = controller.drain(record, config.SupervisorStartTimeout)
+			_ = controller.remove(record)
+			_ = controller.close()
+		} else {
+			t.Errorf("open cleanup cgroup root: %v", err)
+		}
+	})
+	runDirectory := filepath.Join(
+		config.WorkRoot, filepath.FromSlash(executionPath(request.ExecutionRef)),
+	)
+	outputPath := filepath.Join(runDirectory, lastMessageFileName)
+	if err := os.WriteFile(outputPath, []byte(helperSessionBearer), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	recoveryConfig := config
+	recoveryConfig.RuntimeScope = ""
+	reopened, err := New(recoveryConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := reopened.BindSessionResolver(sessionResolverFunc(func(
+		context.Context, ports.AgentLaunchRequest,
+	) (Session, error) {
+		return Session{}, errors.New("authority unavailable")
+	})); err != nil {
+		t.Fatal(err)
+	}
+	err = reopened.BindRuntimeScope(context.Background(), config.RuntimeScope)
+	if ErrorCode(err) != CodeSessionUnavailable {
+		t.Fatalf("runtime binding authority failure=%v code=%q", err, ErrorCode(err))
+	}
+	if identity, inspectErr := platformInspectProcess(record); inspectErr != nil ||
+		identity != processIdentityGone {
+		t.Fatalf("quarantined process identity=%v error=%v", identity, inspectErr)
+	}
+	if output, readErr := os.ReadFile(outputPath); readErr != nil || len(output) != 0 {
+		t.Fatalf("quarantined output=%q error=%v", output, readErr)
+	}
+	terminal, found, loadErr := reopened.loadCausalTerminal(
+		executionPath(request.ExecutionRef), mustRequestHash(t, request), request.SpecHash, request.MaxOutputBytes,
+	)
+	if loadErr != nil || !found || terminal.ErrorCode != CodeSessionUnavailable {
+		t.Fatalf("quarantine terminal=%+v found=%v error=%v", terminal, found, loadErr)
+	}
+	reopened.mu.Lock()
+	ready := reopened.runtimeScopeReady
+	_, adopted := reopened.executions[request.ExecutionRef.String()]
+	reopened.mu.Unlock()
+	if ready || adopted {
+		t.Fatalf("failed authority ready=%v adopted=%v", ready, adopted)
+	}
+	shutdownContext, cancelShutdown := context.WithTimeout(context.Background(), 5*time.Second)
+	err = reopened.Shutdown(shutdownContext)
+	cancelShutdown()
+	if err != nil {
+		t.Fatalf("shutdown quarantined adapter: %v", err)
+	}
+}
+
+func TestCanceledShutdownStillDiscoversAndSignalsPersistedProcess(t *testing.T) {
+	config := supervisorTestConfig(t)
+	const suffix = "shutdown-canceled-forced-intent-discovery"
+	request := supervisorTestRequest(suffix, "helper:block", 1024)
+	runSupervisorTestSubprocess(
+		t, supervisorOwnerTestArgument, config.WorkRoot, suffix, request.Objective,
+	)
+	record := awaitSupervisorProcessRecord(t, config.WorkRoot, request.ExecutionRef)
+	t.Cleanup(func() {
+		if controller, err := openCodexCgroupRoot(config.CgroupRoot); err == nil {
+			_ = controller.kill(record)
+			_ = controller.drain(record, config.SupervisorStartTimeout)
+			_ = controller.remove(record)
+			_ = controller.close()
+		} else {
+			t.Errorf("open cleanup cgroup root: %v", err)
+		}
+	})
+
+	reopened, err := New(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	shutdownContext, cancelShutdown := context.WithCancel(context.Background())
+	cancelShutdown()
+	if err := reopened.Shutdown(shutdownContext); !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled shutdown=%v", err)
+	}
+	select {
+	case <-reopened.shutdownDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("canceled shutdown did not finish exact discovery")
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		identity, inspectErr := platformInspectProcess(record)
+		if inspectErr == nil && identity == processIdentityGone {
+			break
+		}
+		if !time.Now().Before(deadline) {
+			t.Fatalf("persisted process omitted after canceled shutdown: identity=%v error=%v", identity, inspectErr)
+		}
+		time.Sleep(time.Millisecond)
+	}
+	reopened.mu.Lock()
+	state := reopened.executions[request.ExecutionRef.String()]
+	ownershipReleased := state != nil && state.ownerLock == nil
+	reopened.mu.Unlock()
+	if !ownershipReleased {
+		t.Fatal("canceled shutdown retained persisted process ownership")
+	}
+}
 
 func TestSupervisorSurvivesAbruptOwnerExitAndDoubleRestart(t *testing.T) {
 	config := supervisorTestConfig(t)
@@ -384,7 +606,7 @@ func TestSupervisorForcedIntentCrashRecoversPopulatedAndEmptyLeaf(t *testing.T) 
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := reopened.BindRuntimeScope(config.RuntimeScope); err != nil {
+			if err := reopened.BindRuntimeScope(context.Background(), config.RuntimeScope); err != nil {
 				t.Fatal(err)
 			}
 			stopContext, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -544,7 +766,7 @@ func TestTerminalCgroupCleanupFailureRetriesAfterRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := reopened.BindRuntimeScope(config.RuntimeScope); err != nil {
+	if err := reopened.BindRuntimeScope(context.Background(), config.RuntimeScope); err != nil {
 		t.Fatal(err)
 	}
 	observation, err := reopened.Observe(context.Background(), request.ExecutionRef)
@@ -691,7 +913,7 @@ func TestCgroupLaunchRollbackStagesPersistTerminalBeforeCleanupAndRestart(t *tes
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := reopened.BindRuntimeScope(config.RuntimeScope); err != nil {
+			if err := reopened.BindRuntimeScope(context.Background(), config.RuntimeScope); err != nil {
 				t.Fatal(err)
 			}
 			observation, err := reopened.Observe(context.Background(), request.ExecutionRef)
@@ -990,6 +1212,19 @@ func runSupervisorTestProcess(arguments []string) (int, bool) {
 		config.MaxDiagnosticBytes = 64
 	} else if strings.Contains(suffix, "forced-intent-") {
 		objective = "helper:block"
+	} else if strings.Contains(suffix, "session-recovery") {
+		objective = "helper:session helper:block"
+		config.SessionResolver = sessionResolverFunc(func(
+			_ context.Context, request ports.AgentLaunchRequest,
+		) (Session, error) {
+			secret, secretErr := credentials.NewSecret([]byte(helperSessionBearer))
+			if secretErr != nil {
+				return Session{}, secretErr
+			}
+			return Session{
+				Ref: request.SessionRef, Endpoint: "http://127.0.0.1:7777/mcp", BearerToken: secret,
+			}, nil
+		})
 	}
 	adapter, err := New(config)
 	if err != nil {
@@ -1088,7 +1323,8 @@ func runSupervisorTestSubprocess(t *testing.T, mode, workRoot, suffix, objective
 	// fixed delayed-success objective and never carry credentials in argv.
 	if objective != "helper:delayed-success" {
 		// Delayed failure uses the same owner fixture with a suffix convention.
-		if objective != "helper:delayed-failure" && objective != "helper:block" {
+		if objective != "helper:delayed-failure" && objective != "helper:block" &&
+			objective != "helper:session helper:block" {
 			t.Fatalf("unsupported supervisor subprocess objective %q", objective)
 		}
 	}
@@ -1134,7 +1370,7 @@ func supervisorTestRequest(suffix, objective string, maxOutput int64) ports.Agen
 	workItemRef, _ := goal.NewWorkItemRef("work-item:" + suffix)
 	actorRef, _ := goal.NewActorRef("actor:local-owner")
 	projectRef, _ := goal.NewProjectRef("project:default")
-	return ports.AgentLaunchRequest{
+	request := ports.AgentLaunchRequest{
 		ExecutionRef: executionRef, GoalRef: goalRef, WorkItemRef: workItemRef,
 		PlanGeneration: 2, AppSpecGeneration: 3, ExecutionAttempt: 1,
 		SpecHash: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
@@ -1156,6 +1392,10 @@ func supervisorTestRequest(suffix, objective string, maxOutput int64) ports.Agen
 		SecurityCriticality: governance.SecurityCriticalityNormal,
 		ReasoningEffort:     governance.ReasoningEffortMedium,
 	}
+	if strings.Contains(suffix, "session-recovery") {
+		request.SessionRef, _ = ports.NewExecutionSessionRef("execution-session:" + suffix)
+	}
+	return request
 }
 
 func awaitSupervisorProcessRecord(t *testing.T, workRoot string, executionRef goal.ExecutionRef) processRecord {
