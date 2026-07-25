@@ -294,6 +294,14 @@ validate_receipt_with_fake_root() (
   validate_receipt "$@"
 )
 
+validate_bundle_with_fake_root() (
+  # shellcheck disable=SC2329
+  stat() {
+    fake_receipt_stat "$@"
+  }
+  validate_activation_bundle "$@"
+)
+
 run_fake_receipt_activation() (
   local receipt="$1"
   local marker="$2"
@@ -306,6 +314,22 @@ run_fake_receipt_activation() (
     printf '%s\n' "activated" >"$marker"
   }
   validate_receipt "$receipt" "$@"
+  activate_unit "/fake/content-addressed-unit"
+)
+
+run_fake_bundle_activation() (
+  local receipt="$1"
+  local evidence="$2"
+  local marker="$3"
+  shift 3
+  # shellcheck disable=SC2329
+  stat() {
+    fake_receipt_stat "$@"
+  }
+  activate_unit() {
+    printf '%s\n' "activated" >"$marker"
+  }
+  validate_activation_bundle "$receipt" "$evidence" "$@"
   activate_unit "/fake/content-addressed-unit"
 )
 
@@ -342,6 +366,100 @@ write_activation_receipt() {
   chmod 0400 "$path"
 }
 
+write_activation_evidence() {
+  local path="$1"
+  local config_sha="$2"
+  local unit_sha="$3"
+  local launcher_digest="$4"
+  local primitives_digest="$5"
+  local assets_digest="$6"
+  local policy_digest="$7"
+  python3 - \
+    "$path" "$config_sha" "$unit_sha" "$launcher_digest" \
+    "$primitives_digest" "$assets_digest" "$policy_digest" <<'PY'
+import json
+import pathlib
+import sys
+
+(
+    path, config_sha, unit_sha, launcher_sha, primitives_sha, asset_digest,
+    policy_digest,
+) = sys.argv[1:]
+alphabet = "abcdefghijklmnopqrstuvwxyz234567"
+run_ids = ["orq-" + "a" * 51 + alphabet[index] for index in range(17)]
+
+def phase(ids, pids):
+    return {
+        "requested_runs": len(ids),
+        "high_water_runs": len(ids),
+        "samples": 2,
+        "run_ids": ids,
+        "firecracker_pids": pids,
+        "limits_exact": True,
+        "memory_swap_max_zero": True,
+        "network_absent": True,
+        "api_absent": True,
+        "vsock_absent": True,
+        "serial_absent": True,
+        "unit_identity_stable": True,
+    }
+
+document = {
+    "schema": "orquesta.firecracker-attestor.physical-16.evidence.v2",
+    "suite": "orquesta.firecracker-attestor.physical-16.v1",
+    "status": "passed",
+    "started_at": "2026-07-25T10:00:00Z",
+    "finished_at": "2026-07-25T10:01:00Z",
+    "candidate": {
+        "unit_sha256": unit_sha,
+        "primitives_unit_sha256": primitives_sha,
+        "launcher_sha256": launcher_sha,
+        "config_sha256": config_sha,
+        "supervisor_sha256": "9" * 64,
+        "asset_digest": asset_digest,
+    },
+    "policy_digest": policy_digest,
+    "unit": {
+        "unit_name": f"orquesta-firecracker-attestor-{unit_sha}.service",
+        "main_pid": 1234,
+        "invocation_id": "1" * 32,
+        "active": True,
+        "fragment_path": (
+            f"/etc/systemd/system/orquesta-firecracker-attestor-{unit_sha}.service"
+        ),
+        "loaded": True,
+        "need_daemon_reload": False,
+    },
+    "phase_one": phase(run_ids[:1], [1001]),
+    "phase_sixteen": phase(run_ids[1:], list(range(2001, 2017))),
+    "attestations": [
+        {
+            "ref": f"attestation-{0 if index == 1 else index:02d}",
+            "run_id": current_run_id,
+            "subject_digest": f"{1 if index == 1 else index + 1:064x}",
+            "receipt_ref": f"attestation-{0 if index == 1 else index:02d}",
+            "policy_digest": policy_digest,
+            "valid": True,
+        }
+        for index, current_run_id in enumerate(run_ids)
+    ],
+    "cleanup": {
+        "stable_samples": 2,
+        "residual_runs": 0,
+        "residual_cgroups": 0,
+        "residual_processes": 0,
+        "unit_stopped": True,
+        "socket_absent": True,
+    },
+}
+pathlib.Path(path).write_bytes(
+    json.dumps(document, separators=(",", ":"), ensure_ascii=True).encode("ascii")
+    + b"\n"
+)
+PY
+  chmod 0400 "$path"
+}
+
 expect_receipt_rejected() {
   local label="$1"
   local path="$2"
@@ -349,6 +467,20 @@ expect_receipt_rejected() {
   if validate_receipt_with_fake_root "$path" "$@" >/dev/null 2>&1; then
     fail "receipt_accepted:$label"
   fi
+}
+
+expect_bundle_activation_rejected() {
+  local label="$1"
+  local receipt="$2"
+  local evidence="$3"
+  local marker="$4"
+  shift 4
+  rm -f -- "$marker"
+  if run_fake_bundle_activation \
+    "$receipt" "$evidence" "$marker" "$@" >/dev/null 2>&1; then
+    fail "bundle_accepted:$label"
+  fi
+  [[ ! -e "$marker" ]] || fail "bundle_activation_effect:$label"
 }
 
 readonly RECEIPT_CONFIG_SHA="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -367,6 +499,108 @@ write_activation_receipt \
   "$RECEIPT_EVIDENCE_SHA" "$RECEIPT_POLICY_DIGEST"
 validate_receipt_with_fake_root \
   "$VALID_RECEIPT" "$RECEIPT_CONFIG_SHA" "$RECEIPT_UNIT_SHA" \
+  "$RECEIPT_LAUNCHER_SHA" "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST"
+
+readonly VALID_EVIDENCE="$RECEIPT_TEST_ROOT/valid.evidence.json"
+write_activation_evidence \
+  "$VALID_EVIDENCE" "$RECEIPT_CONFIG_SHA" "$RECEIPT_UNIT_SHA" \
+  "$RECEIPT_LAUNCHER_SHA" "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST" \
+  "$RECEIPT_POLICY_DIGEST"
+BUNDLE_EVIDENCE_SHA="$(sha256sum "$VALID_EVIDENCE" | awk '{print $1}')"
+readonly BUNDLE_EVIDENCE_SHA
+readonly VALID_BUNDLE_RECEIPT="$RECEIPT_TEST_ROOT/valid-bundle.receipt"
+write_activation_receipt \
+  "$VALID_BUNDLE_RECEIPT" "$RECEIPT_CONFIG_SHA" "$RECEIPT_UNIT_SHA" \
+  "$RECEIPT_LAUNCHER_SHA" "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST" \
+  "$BUNDLE_EVIDENCE_SHA" "$RECEIPT_POLICY_DIGEST"
+validate_bundle_with_fake_root \
+  "$VALID_BUNDLE_RECEIPT" "$VALID_EVIDENCE" \
+  "$RECEIPT_CONFIG_SHA" "$RECEIPT_UNIT_SHA" "$RECEIPT_LAUNCHER_SHA" \
+  "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST"
+
+write_receipt_for_evidence() {
+  local receipt="$1"
+  local evidence="$2"
+  local policy="${3:-$RECEIPT_POLICY_DIGEST}"
+  local evidence_sha
+  evidence_sha="$(sha256sum "$evidence" | awk '{print $1}')"
+  write_activation_receipt \
+    "$receipt" "$RECEIPT_CONFIG_SHA" "$RECEIPT_UNIT_SHA" \
+    "$RECEIPT_LAUNCHER_SHA" "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST" \
+    "$evidence_sha" "$policy"
+}
+
+evidence_variant() {
+  local name="$1"
+  local mutation="$2"
+  local path="$RECEIPT_TEST_ROOT/$name.evidence.json"
+  python3 - "$VALID_EVIDENCE" "$path" "$mutation" <<'PY'
+import json
+import pathlib
+import sys
+
+source, destination, mutation = sys.argv[1:]
+document = json.loads(pathlib.Path(source).read_bytes())
+if mutation == "schema":
+    document["schema"] = "orquesta.firecracker-attestor.physical-16.evidence.v1"
+elif mutation == "candidate":
+    document["candidate"]["config_sha256"] = "8" * 64
+elif mutation == "policy":
+    document["policy_digest"] = "7" * 64
+else:
+    raise SystemExit("unknown mutation")
+pathlib.Path(destination).write_bytes(
+    json.dumps(document, separators=(",", ":"), ensure_ascii=True).encode("ascii")
+    + b"\n"
+)
+PY
+  chmod 0400 "$path"
+  printf '%s\n' "$path"
+}
+
+readonly BUNDLE_ACTIVATION_MARKER="$RECEIPT_TEST_ROOT/bundle-activation.marker"
+run_fake_bundle_activation \
+  "$VALID_BUNDLE_RECEIPT" "$VALID_EVIDENCE" "$BUNDLE_ACTIVATION_MARKER" \
+  "$RECEIPT_CONFIG_SHA" "$RECEIPT_UNIT_SHA" "$RECEIPT_LAUNCHER_SHA" \
+  "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST"
+[[ "$(<"$BUNDLE_ACTIVATION_MARKER")" == "activated" ]] ||
+  fail "valid_bundle_did_not_reach_activation"
+rm -- "$BUNDLE_ACTIVATION_MARKER"
+
+expect_bundle_activation_rejected \
+  "missing_evidence" "$VALID_BUNDLE_RECEIPT" \
+  "$RECEIPT_TEST_ROOT/missing.evidence.json" "$BUNDLE_ACTIVATION_MARKER" \
+  "$RECEIPT_CONFIG_SHA" "$RECEIPT_UNIT_SHA" "$RECEIPT_LAUNCHER_SHA" \
+  "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST"
+
+readonly HASH_MISMATCH_EVIDENCE="$RECEIPT_TEST_ROOT/hash-mismatch.evidence.json"
+cp -- "$VALID_EVIDENCE" "$HASH_MISMATCH_EVIDENCE"
+chmod 0600 "$HASH_MISMATCH_EVIDENCE"
+printf ' ' >>"$HASH_MISMATCH_EVIDENCE"
+chmod 0400 "$HASH_MISMATCH_EVIDENCE"
+expect_bundle_activation_rejected \
+  "evidence_hash" "$VALID_BUNDLE_RECEIPT" "$HASH_MISMATCH_EVIDENCE" \
+  "$BUNDLE_ACTIVATION_MARKER" "$RECEIPT_CONFIG_SHA" "$RECEIPT_UNIT_SHA" \
+  "$RECEIPT_LAUNCHER_SHA" "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST"
+
+for mutation in schema candidate policy; do
+  bad_evidence="$(evidence_variant "$mutation" "$mutation")"
+  bad_evidence_receipt="$RECEIPT_TEST_ROOT/$mutation-bundle.receipt"
+  write_receipt_for_evidence "$bad_evidence_receipt" "$bad_evidence"
+  expect_bundle_activation_rejected \
+    "$mutation" "$bad_evidence_receipt" "$bad_evidence" \
+    "$BUNDLE_ACTIVATION_MARKER" "$RECEIPT_CONFIG_SHA" "$RECEIPT_UNIT_SHA" \
+    "$RECEIPT_LAUNCHER_SHA" "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST"
+done
+
+readonly TRUNCATED_EVIDENCE="$RECEIPT_TEST_ROOT/truncated.evidence.json"
+head -c 128 -- "$VALID_EVIDENCE" >"$TRUNCATED_EVIDENCE"
+chmod 0400 "$TRUNCATED_EVIDENCE"
+readonly TRUNCATED_RECEIPT="$RECEIPT_TEST_ROOT/truncated-bundle.receipt"
+write_receipt_for_evidence "$TRUNCATED_RECEIPT" "$TRUNCATED_EVIDENCE"
+expect_bundle_activation_rejected \
+  "truncated" "$TRUNCATED_RECEIPT" "$TRUNCATED_EVIDENCE" \
+  "$BUNDLE_ACTIVATION_MARKER" "$RECEIPT_CONFIG_SHA" "$RECEIPT_UNIT_SHA" \
   "$RECEIPT_LAUNCHER_SHA" "$RECEIPT_PRIMITIVES_SHA" "$RECEIPT_ASSET_DIGEST"
 
 receipt_variant() {
@@ -501,6 +735,58 @@ inode_before="$(stat -c '%i' "$immutable_destination")"
 install_immutable_file "$immutable_source" "$immutable_destination" "$immutable_sha" "$test_uid" "$test_gid" 0600
 inode_after="$(stat -c '%i' "$immutable_destination")"
 [[ "$inode_before" == "$inode_after" ]] || fail "immutable_install_not_idempotent"
+
+readonly LOCK_TEST_PARENT="$TEST_ROOT/transaction-lock"
+readonly LOCK_TEST_PATH="$LOCK_TEST_PARENT/installer.lock"
+readonly LOCK_READY="$LOCK_TEST_PARENT/ready"
+readonly LOCK_RELEASE="$LOCK_TEST_PARENT/release"
+readonly LOCK_EFFECT="$LOCK_TEST_PARENT/effect"
+mkdir -m 0700 "$LOCK_TEST_PARENT"
+mkfifo -m 0600 "$LOCK_RELEASE"
+lock_test_uid="$(id -u)"
+lock_test_gid="$(id -g)"
+(
+  acquire_transaction_lock \
+    "$LOCK_TEST_PATH" "$LOCK_TEST_PARENT" "$lock_test_uid" "$lock_test_gid" 5
+  printf '%s\n' "locked" >"$LOCK_READY"
+  IFS= read -r release <"$LOCK_RELEASE"
+  [[ "$release" == "release" ]] || exit 1
+  release_transaction_lock
+) &
+lock_holder_pid=$!
+lock_ready="false"
+for _ in {1..500}; do
+  if [[ -f "$LOCK_READY" ]]; then
+    lock_ready="true"
+    break
+  fi
+  kill -0 "$lock_holder_pid" 2>/dev/null ||
+    fail "transaction_lock_holder_failed"
+  sleep 0.01
+done
+[[ "$lock_ready" == "true" ]] || fail "transaction_lock_holder_timeout"
+if (
+  acquire_transaction_lock \
+    "$LOCK_TEST_PATH" "$LOCK_TEST_PARENT" "$lock_test_uid" "$lock_test_gid" 1
+  printf '%s\n' "unsafe" >"$LOCK_EFFECT"
+) >"$LOCK_TEST_PARENT/contender.out" 2>&1; then
+  fail "transaction_lock_contention_accepted"
+fi
+assert_contains "$LOCK_TEST_PARENT/contender.out" "error=transaction_lock_timeout"
+[[ ! -e "$LOCK_EFFECT" ]] || fail "transaction_lock_contention_effect"
+printf '%s\n' "release" >"$LOCK_RELEASE"
+wait "$lock_holder_pid"
+(
+  acquire_transaction_lock \
+    "$LOCK_TEST_PATH" "$LOCK_TEST_PARENT" "$lock_test_uid" "$lock_test_gid" 1
+  printf '%s\n' "serialized" >"$LOCK_EFFECT"
+  release_transaction_lock
+)
+[[ "$(<"$LOCK_EFFECT")" == "serialized" ]] ||
+  fail "transaction_lock_postcondition"
+lock_metadata="$(stat -c '%u:%g:%a:%h' "$LOCK_TEST_PATH")"
+[[ "$lock_metadata" == "$lock_test_uid:$lock_test_gid:600:1" ]] ||
+  fail "transaction_lock_metadata_postcondition"
 
 tampered_config="$TEST_ROOT/tampered-config.json"
 python3 - "$CONFIG" "$tampered_config" <<'PY'
@@ -767,6 +1053,24 @@ fi
 assert_contains \
   "$TEST_ROOT/activate-without-receipt.out" \
   "error=activate_requires_e2e_receipt"
+
+if "$INSTALLER" --activate "${BASE_ARGUMENTS[@]}" \
+  --e2e-receipt "$VALID_BUNDLE_RECEIPT" \
+  >"$TEST_ROOT/activate-without-evidence.out" 2>&1; then
+  fail "activation_without_physical_e2e_evidence"
+fi
+assert_contains \
+  "$TEST_ROOT/activate-without-evidence.out" \
+  "error=activate_requires_e2e_evidence"
+
+if "$INSTALLER" --dry-run "${BASE_ARGUMENTS[@]}" \
+  --e2e-evidence "$VALID_EVIDENCE" \
+  >"$TEST_ROOT/dry-run-with-evidence.out" 2>&1; then
+  fail "evidence_accepted_outside_activation"
+fi
+assert_contains \
+  "$TEST_ROOT/dry-run-with-evidence.out" \
+  "error=e2e_bundle_only_valid_with_activate"
 
 bash -n "$INSTALLER" "$0"
 "$SHELLCHECK_COMMAND" "$INSTALLER" "$0"

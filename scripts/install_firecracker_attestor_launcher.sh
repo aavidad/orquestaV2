@@ -15,6 +15,9 @@ readonly CONFIG_ROOT="$CONFIG_PARENT/firecracker"
 readonly UNIT_ROOT="/etc/systemd/system"
 readonly RECEIPT_ROOT="$CONFIG_ROOT/receipts"
 readonly SYSTEMD_UNIT="/etc/systemd/system/orquesta-firecracker-attestor.service"
+readonly TRANSACTION_LOCK_PARENT="/run"
+readonly TRANSACTION_LOCK_PATH="$TRANSACTION_LOCK_PARENT/orquesta-firecracker-attestor-installer.lock"
+readonly TRANSACTION_LOCK_TIMEOUT_SECONDS=30
 readonly RUNTIME_PARENT="/srv/orquesta-self/runtime"
 readonly RUNTIME_BACKING_ROOT="$RUNTIME_PARENT/firecracker-attestor"
 readonly SOCKET_ROOT="/run/orquesta"
@@ -46,6 +49,7 @@ readonly MAX_CLEANUP_DEPTH=32
 readonly MAX_DIAGNOSTIC_BYTES=1048576
 readonly OPERATIONAL_RESERVE_BYTES=2147483648
 readonly PER_RUN_DISK_OVERHEAD_BYTES=134217728
+readonly MAX_E2E_EVIDENCE_BYTES=16777216
 
 MODE=""
 REQUESTED_PROFILE=""
@@ -66,7 +70,9 @@ ALLOWED_GID=""
 JAIL_UID=""
 JAIL_GID=""
 E2E_RECEIPT=""
+E2E_EVIDENCE=""
 WORK_ROOT=""
+TRANSACTION_LOCK_FD=""
 
 usage() {
   printf '%s\n' \
@@ -83,7 +89,8 @@ usage() {
     "    --kernel-sha256 HEX --guest-sha256 HEX --guest-manifest-sha256 HEX \\" \
     "    --allowed-uid UID --allowed-gid GID --jail-uid UID --jail-gid GID" \
     "" \
-    "--activate exige además --e2e-receipt /ruta/absoluta/receipt."
+    "--activate exige además --e2e-receipt /ruta/absoluta/receipt y" \
+    "--e2e-evidence /ruta/absoluta/evidence.json."
 }
 
 die() {
@@ -116,7 +123,7 @@ parse_arguments() {
         MODE="${1#--}"
         shift
         ;;
-      --profile|--launcher-source|--firecracker-source|--jailer-source|--kernel-source|--guest-source|--guest-manifest-source|--launcher-sha256|--firecracker-sha256|--jailer-sha256|--kernel-sha256|--guest-sha256|--guest-manifest-sha256|--allowed-uid|--allowed-gid|--jail-uid|--jail-gid|--e2e-receipt)
+      --profile|--launcher-source|--firecracker-source|--jailer-source|--kernel-source|--guest-source|--guest-manifest-source|--launcher-sha256|--firecracker-sha256|--jailer-sha256|--kernel-sha256|--guest-sha256|--guest-manifest-sha256|--allowed-uid|--allowed-gid|--jail-uid|--jail-gid|--e2e-receipt|--e2e-evidence)
         (($# >= 2)) || die "missing_value:$1"
         case "$1" in
           --profile) REQUESTED_PROFILE="$2" ;;
@@ -137,6 +144,7 @@ parse_arguments() {
           --jail-uid) JAIL_UID="$2" ;;
           --jail-gid) JAIL_GID="$2" ;;
           --e2e-receipt) E2E_RECEIPT="$2" ;;
+          --e2e-evidence) E2E_EVIDENCE="$2" ;;
         esac
         shift 2
         ;;
@@ -187,8 +195,9 @@ parse_arguments() {
   [[ "$ALLOWED_GID" != "$JAIL_GID" ]] || die "allowed_gid_must_differ_from_jail_gid"
   if [[ "$MODE" == "activate" ]]; then
     [[ -n "$E2E_RECEIPT" ]] || die "activate_requires_e2e_receipt"
-  elif [[ -n "$E2E_RECEIPT" ]]; then
-    die "e2e_receipt_only_valid_with_activate"
+    [[ -n "$E2E_EVIDENCE" ]] || die "activate_requires_e2e_evidence"
+  elif [[ -n "$E2E_RECEIPT" || -n "$E2E_EVIDENCE" ]]; then
+    die "e2e_bundle_only_valid_with_activate"
   fi
 }
 
@@ -759,6 +768,70 @@ require_root() {
   [[ "$(id -u)" == "0" ]] || die "root_required_for_$MODE"
 }
 
+verify_lock_parent() {
+  local parent="$1"
+  local owner="$2"
+  local group="$3"
+  [[ "$parent" == /* && -d "$parent" && ! -L "$parent" ]] ||
+    die "transaction_lock_parent_type"
+  [[ "$(realpath -e -- "$parent")" == "$parent" ]] ||
+    die "transaction_lock_parent_not_canonical"
+  [[ "$(stat -c '%u:%g' -- "$parent")" == "$owner:$group" ]] ||
+    die "transaction_lock_parent_owner"
+  local parent_mode
+  parent_mode="$(stat -c '%a' -- "$parent")"
+  (( (8#$parent_mode & 0022) == 0 )) || die "transaction_lock_parent_writable"
+}
+
+acquire_transaction_lock() {
+  local lock_path="${1:-$TRANSACTION_LOCK_PATH}"
+  local parent="${2:-$TRANSACTION_LOCK_PARENT}"
+  local owner="${3:-0}"
+  local group="${4:-0}"
+  local timeout_seconds="${5:-$TRANSACTION_LOCK_TIMEOUT_SECONDS}"
+  if [[ ! "$timeout_seconds" =~ ^[1-9][0-9]*$ ]] ||
+    (( 10#$timeout_seconds > 300 )); then
+    die "transaction_lock_timeout_invalid"
+  fi
+  [[ "$lock_path" == "$parent/"* && "$(dirname -- "$lock_path")" == "$parent" ]] ||
+    die "transaction_lock_path"
+  verify_lock_parent "$parent" "$owner" "$group"
+  if [[ ! -e "$lock_path" && ! -L "$lock_path" ]]; then
+    install -o "$owner" -g "$group" -m 0600 -- /dev/null "$lock_path"
+  fi
+  [[ -f "$lock_path" && ! -L "$lock_path" ]] || die "transaction_lock_type"
+  [[ "$(realpath -e -- "$lock_path")" == "$lock_path" ]] ||
+    die "transaction_lock_not_canonical"
+  [[ "$(stat -c '%u:%g:%a:%h' -- "$lock_path")" == "$owner:$group:600:1" ]] ||
+    die "transaction_lock_metadata"
+  local path_identity lock_fd descriptor_identity
+  path_identity="$(stat -c '%d:%i' -- "$lock_path")"
+  exec {lock_fd}<>"$lock_path" || die "transaction_lock_open"
+  descriptor_identity="$(
+    stat -Lc '%d:%i:%u:%g:%a:%h' -- "/proc/self/fd/$lock_fd"
+  )"
+  if [[ "$descriptor_identity" != "$path_identity:$owner:$group:600:1" ]]; then
+    exec {lock_fd}>&-
+    die "transaction_lock_changed"
+  fi
+  if ! flock -w "$timeout_seconds" "$lock_fd"; then
+    exec {lock_fd}>&-
+    die "transaction_lock_timeout"
+  fi
+  [[ "$(stat -c '%d:%i' -- "$lock_path")" == "$path_identity" ]] || {
+    exec {lock_fd}>&-
+    die "transaction_lock_replaced"
+  }
+  TRANSACTION_LOCK_FD="$lock_fd"
+}
+
+release_transaction_lock() {
+  if [[ -n "$TRANSACTION_LOCK_FD" ]]; then
+    exec {TRANSACTION_LOCK_FD}>&-
+    TRANSACTION_LOCK_FD=""
+  fi
+}
+
 verify_directory_exact() {
   local path="$1"
   local owner="$2"
@@ -916,6 +989,237 @@ PY
   then
     die "receipt_content"
   fi
+}
+
+validate_evidence() {
+  local evidence="$1"
+  local receipt="$2"
+  local config_sha="$3"
+  local unit_sha="$4"
+  local launcher_sha="$5"
+  local primitives_unit_sha="$6"
+  local asset_digest="$7"
+  [[ "$evidence" == /* && -f "$evidence" && ! -L "$evidence" ]] ||
+    die "evidence_type"
+  [[ "$(realpath -e -- "$evidence")" == "$evidence" ]] ||
+    die "evidence_path_not_canonical"
+  [[ "$(stat -c '%u:%g:%a:%h' -- "$evidence")" == "0:0:400:1" ]] ||
+    die "evidence_metadata"
+  verify_root_trusted_source "evidence" "$evidence"
+  if ! python3 - \
+    "$evidence" "$receipt" "$config_sha" "$unit_sha" "$primitives_unit_sha" \
+    "$launcher_sha" "$asset_digest" "$MAX_E2E_EVIDENCE_BYTES" <<'PY'
+import datetime
+import hashlib
+import json
+import pathlib
+import re
+import sys
+
+(
+    evidence_path, receipt_path, config_sha, unit_sha, primitives_unit_sha,
+    launcher_sha, asset_digest, max_bytes,
+) = sys.argv[1:]
+raw = pathlib.Path(evidence_path).read_bytes()
+if not 0 < len(raw) <= int(max_bytes):
+    raise SystemExit("evidence_size")
+receipt_raw = pathlib.Path(receipt_path).read_bytes()
+receipt_lines = receipt_raw.decode("ascii").splitlines()
+if len(receipt_lines) != 20:
+    raise SystemExit("receipt_lines")
+receipt_values = dict(line.split("=", 1) for line in receipt_lines)
+evidence_sha = receipt_values.get("evidence_sha256", "")
+policy_digest = receipt_values.get("policy_digest", "")
+if hashlib.sha256(raw).hexdigest() != evidence_sha:
+    raise SystemExit("evidence_hash")
+
+def strict_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate_key")
+        result[key] = value
+    return result
+
+def reject_constant(value):
+    raise ValueError("nonfinite_number:" + value)
+
+try:
+    document = json.loads(
+        raw, object_pairs_hook=strict_object, parse_constant=reject_constant,
+    )
+except (UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+    raise SystemExit("evidence_json") from exc
+
+digest = re.compile(r"[0-9a-f]{64}\Z")
+run_id = re.compile(r"orq-[a-z2-7]{52}\Z")
+invocation_id = re.compile(r"[0-9a-f]{32}\Z")
+integer = lambda value: isinstance(value, int) and not isinstance(value, bool)
+exact_keys = lambda value, keys: isinstance(value, dict) and set(value) == keys
+
+root_keys = {
+    "schema", "suite", "status", "started_at", "finished_at", "candidate",
+    "policy_digest", "unit", "phase_one", "phase_sixteen", "attestations",
+    "cleanup",
+}
+candidate_keys = {
+    "unit_sha256", "primitives_unit_sha256", "launcher_sha256",
+    "config_sha256", "supervisor_sha256", "asset_digest",
+}
+unit_keys = {
+    "unit_name", "main_pid", "invocation_id", "active", "fragment_path",
+    "loaded", "need_daemon_reload",
+}
+phase_keys = {
+    "requested_runs", "high_water_runs", "samples", "run_ids",
+    "firecracker_pids", "limits_exact", "memory_swap_max_zero",
+    "network_absent", "api_absent", "vsock_absent", "serial_absent",
+    "unit_identity_stable",
+}
+attestation_keys = {
+    "ref", "run_id", "subject_digest", "receipt_ref", "policy_digest", "valid",
+}
+cleanup_keys = {
+    "stable_samples", "residual_runs", "residual_cgroups",
+    "residual_processes", "unit_stopped", "socket_absent",
+}
+if not exact_keys(document, root_keys):
+    raise SystemExit("evidence_root")
+if (
+    document["schema"] != "orquesta.firecracker-attestor.physical-16.evidence.v2"
+    or document["suite"] != "orquesta.firecracker-attestor.physical-16.v1"
+    or document["status"] != "passed"
+    or document["policy_digest"] != policy_digest
+    or digest.fullmatch(policy_digest) is None
+):
+    raise SystemExit("evidence_identity")
+for field in ("started_at", "finished_at"):
+    value = document[field]
+    if not isinstance(value, str) or not value.endswith("Z"):
+        raise SystemExit("evidence_time")
+    try:
+        datetime.datetime.fromisoformat(value[:-1] + "+00:00")
+    except ValueError as exc:
+        raise SystemExit("evidence_time") from exc
+
+candidate = document["candidate"]
+if not exact_keys(candidate, candidate_keys):
+    raise SystemExit("evidence_candidate_keys")
+expected_candidate = {
+    "config_sha256": config_sha,
+    "unit_sha256": unit_sha,
+    "primitives_unit_sha256": primitives_unit_sha,
+    "launcher_sha256": launcher_sha,
+    "asset_digest": asset_digest,
+}
+if any(candidate.get(key) != value for key, value in expected_candidate.items()):
+    raise SystemExit("evidence_candidate")
+if digest.fullmatch(candidate.get("supervisor_sha256", "")) is None:
+    raise SystemExit("evidence_supervisor")
+
+unit = document["unit"]
+expected_unit_name = "orquesta-firecracker-attestor-" + unit_sha + ".service"
+expected_fragment_path = "/etc/systemd/system/" + expected_unit_name
+if (
+    not exact_keys(unit, unit_keys)
+    or unit["unit_name"] != expected_unit_name
+    or not integer(unit["main_pid"]) or unit["main_pid"] <= 0
+    or invocation_id.fullmatch(unit["invocation_id"]) is None
+    or unit["active"] is not True or unit["loaded"] is not True
+    or unit["need_daemon_reload"] is not False
+    or unit["fragment_path"] != expected_fragment_path
+):
+    raise SystemExit("evidence_unit")
+
+def validate_phase(name, expected):
+    phase = document[name]
+    if (
+        not exact_keys(phase, phase_keys)
+        or phase["requested_runs"] != expected
+        or phase["high_water_runs"] != expected
+        or not integer(phase["samples"]) or phase["samples"] <= 0
+        or not isinstance(phase["run_ids"], list)
+        or len(phase["run_ids"]) != expected
+        or not isinstance(phase["firecracker_pids"], list)
+        or len(phase["firecracker_pids"]) != expected
+        or any(run_id.fullmatch(value) is None for value in phase["run_ids"])
+        or len(set(phase["run_ids"])) != expected
+        or any(not integer(value) or value <= 0 for value in phase["firecracker_pids"])
+        or len(set(phase["firecracker_pids"])) != expected
+        or any(
+            phase[field] is not True
+            for field in (
+                "limits_exact", "memory_swap_max_zero", "network_absent",
+                "api_absent", "vsock_absent", "serial_absent",
+                "unit_identity_stable",
+            )
+        )
+    ):
+        raise SystemExit("evidence_" + name)
+    return phase["run_ids"]
+
+one_ids = validate_phase("phase_one", 1)
+sixteen_ids = validate_phase("phase_sixteen", 16)
+all_ids = one_ids + sixteen_ids
+if len(set(all_ids)) != 17:
+    raise SystemExit("evidence_run_ids")
+
+attestations = document["attestations"]
+if not isinstance(attestations, list) or len(attestations) != 17:
+    raise SystemExit("evidence_attestations")
+refs, outcome_ids, subjects, receipt_refs = [], [], [], []
+for outcome in attestations:
+    if (
+        not exact_keys(outcome, attestation_keys)
+        or not isinstance(outcome["ref"], str) or not outcome["ref"]
+        or outcome["ref"] != outcome["receipt_ref"]
+        or run_id.fullmatch(outcome["run_id"]) is None
+        or digest.fullmatch(outcome["subject_digest"]) is None
+        or outcome["policy_digest"] != policy_digest
+        or outcome["valid"] is not True
+    ):
+        raise SystemExit("evidence_attestation")
+    refs.append(outcome["ref"])
+    outcome_ids.append(outcome["run_id"])
+    subjects.append(outcome["subject_digest"])
+    receipt_refs.append(outcome["receipt_ref"])
+if set(outcome_ids) != set(all_ids) or len(set(outcome_ids)) != 17:
+    raise SystemExit("evidence_attestation_identity")
+by_run = {
+    current_run_id: (ref, subject, receipt_ref)
+    for current_run_id, ref, subject, receipt_ref
+    in zip(outcome_ids, refs, subjects, receipt_refs, strict=True)
+}
+for phase_ids in (one_ids, sixteen_ids):
+    phase_values = [by_run[current_run_id] for current_run_id in phase_ids]
+    for position in range(3):
+        if len({value[position] for value in phase_values}) != len(phase_ids):
+            raise SystemExit("evidence_attestation_phase_identity")
+
+cleanup = document["cleanup"]
+if (
+    not exact_keys(cleanup, cleanup_keys)
+    or not integer(cleanup["stable_samples"]) or cleanup["stable_samples"] < 2
+    or any(
+        not integer(cleanup[field]) or cleanup[field] != 0
+        for field in ("residual_runs", "residual_cgroups", "residual_processes")
+    )
+    or cleanup["unit_stopped"] is not True
+    or cleanup["socket_absent"] is not True
+):
+    raise SystemExit("evidence_cleanup")
+PY
+  then
+    die "evidence_content"
+  fi
+}
+
+validate_activation_bundle() {
+  local receipt="$1"
+  local evidence="$2"
+  shift 2
+  validate_receipt "$receipt" "$@"
+  validate_evidence "$evidence" "$receipt" "$@"
 }
 
 read_unit_enabled_state() {
@@ -1089,6 +1393,7 @@ cleanup_work_root() {
   if [[ -n "$WORK_ROOT" && -d "$WORK_ROOT" ]]; then
     rm -rf -- "$WORK_ROOT"
   fi
+  release_transaction_lock
 }
 
 main() {
@@ -1223,6 +1528,8 @@ EOF
   fi
 
   require_root
+  require_command flock
+  acquire_transaction_lock
   require_command ip
   require_command df
   require_command findmnt
@@ -1304,13 +1611,18 @@ EOF
     exit 0
   fi
 
-  validate_receipt \
-    "$E2E_RECEIPT" "$config_sha" "$unit_sha" "$launcher_sha" \
+  validate_activation_bundle \
+    "$E2E_RECEIPT" "$E2E_EVIDENCE" "$config_sha" "$unit_sha" "$launcher_sha" \
     "$primitives_unit_sha" "$asset_digest"
+  local evidence_sha
+  evidence_sha="$(sha256_file "$E2E_EVIDENCE")"
+  local installed_evidence="$RECEIPT_ROOT/$evidence_sha.evidence.json"
   local installed_receipt="$RECEIPT_ROOT/$unit_sha.receipt"
+  install_immutable_file \
+    "$E2E_EVIDENCE" "$installed_evidence" "$evidence_sha" 0 0 0400
   install_immutable_file "$E2E_RECEIPT" "$installed_receipt" "$(sha256_file "$E2E_RECEIPT")" 0 0 0400
-  validate_receipt \
-    "$installed_receipt" "$config_sha" "$unit_sha" "$launcher_sha" \
+  validate_activation_bundle \
+    "$installed_receipt" "$installed_evidence" "$config_sha" "$unit_sha" "$launcher_sha" \
     "$primitives_unit_sha" "$asset_digest"
   activate_unit "$unit_path"
 }
