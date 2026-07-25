@@ -16,6 +16,7 @@ func validateGoalWorkSpecLimitsV0(issues *[]GoalWorkIssueV0, spec GoalWorkSpecV0
 	validateGoalStringLimitV0(issues, "domain_ref", spec.DomainRef, GoalWorkSpecMaxStringBytesV0)
 	validateGoalStringLimitV0(issues, "work_kind", spec.WorkKind, GoalWorkSpecMaxStringBytesV0)
 	validateGoalStringLimitV0(issues, "work_profile_kind", spec.WorkProfileKind, GoalWorkSpecMaxStringBytesV0)
+	validateGoalStringLimitV0(issues, "reasoning_effort", spec.ReasoningEffort, GoalWorkSpecMaxStringBytesV0)
 	validateGoalStringLimitV0(issues, "objective", spec.Objective, GoalWorkSpecMaxStringBytesV0)
 	validateGoalStringLimitV0(issues, "director_kind", spec.DirectorKind, GoalWorkSpecMaxStringBytesV0)
 

@@ -17,6 +17,11 @@ const (
 	GoalDirectorKindRuntimeGoalV0 = "runtime_goal"
 	GoalDirectorKindCodexGoalV0   = "codex_goal"
 
+	GoalReasoningEffortLowV0    = "low"
+	GoalReasoningEffortMediumV0 = "medium"
+	GoalReasoningEffortHighV0   = "high"
+	GoalReasoningEffortXHighV0  = "xhigh"
+
 	GoalRuleEnforcementAdvisoryV0 = "advisory"
 	GoalRuleEnforcementHardV0     = "hard"
 
@@ -40,6 +45,7 @@ const (
 	ErrGoalObjectiveRequiredV0                             = "goal_objective_required"
 	ErrGoalDirectorRequiredV0                              = "goal_director_kind_required"
 	ErrGoalDirectorInvalidV0                               = "goal_director_kind_invalid"
+	ErrGoalReasoningEffortInvalidV0                        = "goal_reasoning_effort_invalid"
 	ErrGoalWriteSetRequiredV0                              = "goal_write_set_required"
 	ErrGoalWriteSetInvalidV0                               = "goal_write_set_invalid"
 	ErrGoalDestructiveAuthorizationInvalidV0               = "goal_destructive_authorization_invalid"
@@ -99,6 +105,7 @@ type GoalWorkSpecV0 struct {
 	DomainRef                 string                                 `json:"domain_ref,omitempty"`
 	WorkKind                  string                                 `json:"work_kind,omitempty"`
 	WorkProfileKind           string                                 `json:"work_profile_kind,omitempty"`
+	ReasoningEffort           string                                 `json:"reasoning_effort,omitempty"`
 	Objective                 string                                 `json:"objective"`
 	DirectorKind              string                                 `json:"director_kind"`
 	ContextRefs               []GoalContextRefV0                     `json:"context_refs,omitempty"`

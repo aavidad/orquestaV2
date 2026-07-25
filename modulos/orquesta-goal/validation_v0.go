@@ -132,6 +132,7 @@ func NormalizeGoalWorkSpecV0(spec GoalWorkSpecV0) GoalWorkSpecV0 {
 	spec.DomainRef = strings.TrimSpace(spec.DomainRef)
 	spec.WorkKind = strings.TrimSpace(spec.WorkKind)
 	spec.WorkProfileKind = strings.TrimSpace(spec.WorkProfileKind)
+	spec.ReasoningEffort = strings.TrimSpace(spec.ReasoningEffort)
 	spec.Objective = strings.TrimSpace(spec.Objective)
 	spec.DirectorKind = strings.TrimSpace(spec.DirectorKind)
 	if spec.DirectorKind == "" {
@@ -384,6 +385,9 @@ func ValidateGoalWorkSpecV0(spec GoalWorkSpecV0) []GoalWorkIssueV0 {
 	} else if spec.DirectorKind != GoalDirectorKindRuntimeGoalV0 && spec.DirectorKind != GoalDirectorKindCodexGoalV0 {
 		issues = append(issues, GoalWorkIssueV0{Code: ErrGoalDirectorInvalidV0, Field: "director_kind"})
 	}
+	if spec.ReasoningEffort != "" && !ValidGoalReasoningEffortV0(spec.ReasoningEffort) {
+		issues = append(issues, GoalWorkIssueV0{Code: ErrGoalReasoningEffortInvalidV0, Field: "reasoning_effort"})
+	}
 	if len(spec.WriteSet) == 0 {
 		issues = append(issues, GoalWorkIssueV0{Code: ErrGoalWriteSetRequiredV0, Field: "write_set"})
 	}
@@ -459,6 +463,18 @@ func ValidateGoalWorkSpecV0(spec GoalWorkSpecV0) []GoalWorkIssueV0 {
 		validateRequiredGoalRefV0(&issues, "closure_policy.required_evidence_refs", evidenceRef)
 	}
 	return issues
+}
+
+func ValidGoalReasoningEffortV0(value string) bool {
+	switch value {
+	case GoalReasoningEffortLowV0,
+		GoalReasoningEffortMediumV0,
+		GoalReasoningEffortHighV0,
+		GoalReasoningEffortXHighV0:
+		return true
+	default:
+		return false
+	}
 }
 
 func validateGoalIntentManifestIdentityV0(issues *[]GoalWorkIssueV0, manifestRef, manifestSHA256 string) {

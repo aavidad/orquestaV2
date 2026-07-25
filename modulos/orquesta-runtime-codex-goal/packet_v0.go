@@ -51,6 +51,7 @@ type CodexGoalStartPacketV0 struct {
 	ProjectRef           string                                `json:"project_ref,omitempty"`
 	WorkKind             string                                `json:"work_kind,omitempty"`
 	WorkProfileKind      string                                `json:"work_profile_kind,omitempty"`
+	ReasoningEffort      string                                `json:"reasoning_effort,omitempty"`
 	TaskCostClass        string                                `json:"task_cost_class,omitempty"`
 	Objective            string                                `json:"objective"`
 	Prompt               string                                `json:"prompt"`
@@ -183,6 +184,7 @@ func BuildCodexGoalStartPacketV0(spec orquestagoal.GoalWorkSpecV0) (CodexGoalSta
 		ProjectRef:           spec.ProjectRef,
 		WorkKind:             spec.WorkKind,
 		WorkProfileKind:      spec.WorkProfileKind,
+		ReasoningEffort:      spec.ReasoningEffort,
 		TaskCostClass:        CodexGoalTaskCostClassForWriteSetV0(spec.WriteSet),
 		Objective:            spec.Objective,
 		Prompt:               prompt,

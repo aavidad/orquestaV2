@@ -103,6 +103,42 @@ func TestNormalizeGoalWorkSpecV0UsaRuntimeGoalPorDefecto(t *testing.T) {
 	}
 }
 
+func TestValidateGoalWorkSpecV0ConservaReasoningEffortXHighV0(t *testing.T) {
+	spec := GoalWorkSpecV0{
+		GoalRef:         "goal-ref-reasoning-xhigh-001",
+		Objective:       "Conservar esfuerzo autorizado por WorkItem.",
+		DirectorKind:    GoalDirectorKindCodexGoalV0,
+		ReasoningEffort: " xhigh ",
+		WriteSet:        []GoalWriteScopeV0{{Path: "modulos/orquesta-goal"}},
+	}
+	normalized := NormalizeGoalWorkSpecV0(spec)
+	if normalized.ReasoningEffort != GoalReasoningEffortXHighV0 {
+		t.Fatalf("reasoning_effort=%q", normalized.ReasoningEffort)
+	}
+	if issues := ValidateGoalWorkSpecV0(normalized); len(issues) != 0 {
+		t.Fatalf("issues=%v", issues)
+	}
+}
+
+func TestValidateGoalWorkSpecV0RechazaReasoningEffortNoCanonicoV0(t *testing.T) {
+	for _, effort := range []string{"auto", "XHIGH", "max"} {
+		spec := GoalWorkSpecV0{
+			GoalRef:         "goal-ref-reasoning-invalid-001",
+			Objective:       "Rechazar esfuerzo no autorizado.",
+			DirectorKind:    GoalDirectorKindCodexGoalV0,
+			ReasoningEffort: effort,
+			WriteSet:        []GoalWriteScopeV0{{Path: "modulos/orquesta-goal"}},
+		}
+		if !hasGoalIssueFieldCodeV0(
+			ValidateGoalWorkSpecV0(spec),
+			"reasoning_effort",
+			ErrGoalReasoningEffortInvalidV0,
+		) {
+			t.Fatalf("reasoning_effort=%q aceptado", effort)
+		}
+	}
+}
+
 func TestNormalizeGoalWorkSpecV0NoMutaSlicesDeEntrada(t *testing.T) {
 	spec := GoalWorkSpecV0{
 		GoalRef:           " goal-ref-001 ",

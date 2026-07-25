@@ -136,6 +136,24 @@ func TestBuildCodexGoalStartPacketV0PropagaIntentManifestV0(t *testing.T) {
 	}
 }
 
+func TestBuildCodexGoalStartPacketV0PropagaReasoningEffortExactoV0(t *testing.T) {
+	spec := validCodexGoalSpecV0()
+	spec.ReasoningEffort = orquestagoal.GoalReasoningEffortXHighV0
+
+	packet, issues := BuildCodexGoalStartPacketV0(spec)
+
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+	if packet.ReasoningEffort != orquestagoal.GoalReasoningEffortXHighV0 {
+		t.Fatalf("reasoning_effort=%q", packet.ReasoningEffort)
+	}
+	raw, err := json.Marshal(packet)
+	if err != nil || !strings.Contains(string(raw), `"reasoning_effort":"xhigh"`) {
+		t.Fatalf("packet json=%s err=%v", raw, err)
+	}
+}
+
 func TestBuildCodexGoalStartPacketV0ProyectaAutorizacionesDestructivasAlContratoDireccionV0(t *testing.T) {
 	spec := validCodexGoalSpecV0()
 	spec.DestructiveAuthorizations = []orquestagoal.GoalDestructiveChangeAuthorizationV0{{
