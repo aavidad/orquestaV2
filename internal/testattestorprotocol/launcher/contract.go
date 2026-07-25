@@ -41,9 +41,20 @@ type ClientResult struct {
 	Output   *os.File
 }
 
+// Identity is the immutable logical identity of one configured launcher
+// transport. It binds transport semantics and its trust target; it is not by
+// itself proof that a peer or asset is trusted.
+type Identity struct {
+	Ref    string
+	Digest string
+}
+
 // Client is implemented by the authenticated local launcher transport. The
 // application adapter depends on this contract and receives the implementation
-// from composition; it never imports the privileged launcher adapter.
+// from composition; it never imports the privileged launcher adapter. Launch
+// must obey context cancellation, release its own transport resources and
+// never retain the borrowed input descriptor after returning.
 type Client interface {
+	Identity() Identity
 	Launch(context.Context, LaunchRequest, *os.File, int64) (ClientResult, error)
 }

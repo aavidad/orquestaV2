@@ -36,6 +36,44 @@ type closeUnblockedRunner struct {
 	close   sync.Once
 }
 
+func TestClientIdentityBindsCanonicalSocketAndTrustedUID(t *testing.T) {
+	first, err := newClient("/run/orquesta/launcher.sock", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := newClient("/run/orquesta/launcher.sock", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherPath, err := newClient("/run/orquesta/other.sock", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherUID, err := newClient("/run/orquesta/launcher.sock", 1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity := first.Identity()
+	if identity.Ref != "launcher:firecracker:uds:v1" ||
+		!validDigest(identity.Digest) ||
+		identity != second.Identity() ||
+		identity == otherPath.Identity() ||
+		identity == otherUID.Identity() {
+		t.Fatalf(
+			"first=%+v second=%+v path=%+v uid=%+v",
+			identity,
+			second.Identity(),
+			otherPath.Identity(),
+			otherUID.Identity(),
+		)
+	}
+	mutated := identity
+	mutated.Digest = strings.Repeat("f", 64)
+	if first.Identity() != identity {
+		t.Fatal("caller mutated stored launcher identity")
+	}
+}
+
 func (runner *closeUnblockedRunner) Run(
 	context.Context,
 	LaunchRequest,

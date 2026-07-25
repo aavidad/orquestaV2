@@ -4,8 +4,13 @@ package firecrackerlauncher
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
 	"errors"
+	"hash"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 
@@ -17,6 +22,7 @@ import (
 type Client struct {
 	socketPath string
 	trustedUID uint32
+	identity   launchercontract.Identity
 }
 
 type ClientResult = launchercontract.ClientResult
@@ -29,7 +35,48 @@ func newClient(socketPath string, trustedUID uint32) (*Client, error) {
 	if !canonicalAbsolute(socketPath) {
 		return nil, launcherError(CodeConfigInvalid)
 	}
-	return &Client{socketPath: socketPath, trustedUID: trustedUID}, nil
+	return &Client{
+		socketPath: socketPath,
+		trustedUID: trustedUID,
+		identity:   configuredClientIdentity(socketPath, trustedUID),
+	}, nil
+}
+
+// Identity binds UDS transport semantics, canonical socket path and trusted
+// server UID. Real trust still requires composition to protect the path,
+// SO_PEERCRED to authenticate the connected peer, and launcher asset checks.
+func (client *Client) Identity() launchercontract.Identity {
+	if client == nil {
+		return launchercontract.Identity{}
+	}
+	return client.identity
+}
+
+func configuredClientIdentity(
+	socketPath string,
+	trustedUID uint32,
+) launchercontract.Identity {
+	digest := sha256.New()
+	for _, value := range []string{
+		"orquesta.test-attestor.firecracker-launcher-client.v1",
+		"launcher:firecracker:uds:v1",
+		socketPath,
+		strconv.FormatUint(uint64(trustedUID), 10),
+		"sock-seqpacket;scm-rights;so-peercred;server-uid",
+	} {
+		writeClientIdentityField(digest, value)
+	}
+	return launchercontract.Identity{
+		Ref:    "launcher:firecracker:uds:v1",
+		Digest: hex.EncodeToString(digest.Sum(nil)),
+	}
+}
+
+func writeClientIdentityField(digest hash.Hash, value string) {
+	var size [8]byte
+	binary.BigEndian.PutUint64(size[:], uint64(len(value)))
+	_, _ = digest.Write(size[:])
+	_, _ = digest.Write([]byte(value))
 }
 
 func (client *Client) Launch(

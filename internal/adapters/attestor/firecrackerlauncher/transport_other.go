@@ -17,6 +17,10 @@ func NewClient(string) (*Client, error) {
 	return nil, launcherError(CodeUnavailable)
 }
 
+func (*Client) Identity() launchercontract.Identity {
+	return launchercontract.Identity{}
+}
+
 func (*Client) Launch(
 	context.Context,
 	LaunchRequest,
