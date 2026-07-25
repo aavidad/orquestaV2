@@ -80,6 +80,20 @@ func TestGuestManifestAcceptsCurrentBuilderSchema(t *testing.T) {
 	}
 }
 
+func TestCanonicalAssetDigestMatchesInstallerGolden(t *testing.T) {
+	config := Config{
+		FirecrackerSHA256:   strings.Repeat("1", 64),
+		JailerSHA256:        strings.Repeat("2", 64),
+		KernelSHA256:        strings.Repeat("3", 64),
+		GuestSHA256:         strings.Repeat("4", 64),
+		GuestManifestSHA256: strings.Repeat("5", 64),
+	}
+	const want = "1b248da4d891d9e08e1febb62e93ff1c317917035c1bb1382da2712c064a549d"
+	if got := canonicalAssetDigest(config); got != want {
+		t.Fatalf("canonical asset digest=%q want=%q", got, want)
+	}
+}
+
 func TestAssetPreflightRejectsTamperModesLinksDigestsAndManifest(t *testing.T) {
 	tests := map[string]func(*testing.T, *Config){
 		"digest": func(_ *testing.T, config *Config) {
