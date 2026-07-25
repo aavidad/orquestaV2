@@ -190,8 +190,10 @@ El stage crea o verifica:
 - unidades versionadas root-owned `0444` en `/etc/systemd/system`;
 - backing root `root:<allowed_gid>` `0750` y marker root-owned `0400`;
 - bind exacto a `/run/orquesta`;
-- netns fijado `/run/netns/orquesta-firecracker-attestor-empty`, `nsfs`
-  root-owned `0600`, solo loopback DOWN, sin direcciones ni rutas;
+- netns fijado `/run/netns/orquesta-firecracker-attestor-empty`, `nsfs`,
+  root-owned, un enlace y modo seguro `[46][04][04]` —el montaje puede exponer
+  `0444` aunque se solicite `0600`—, solo loopback DOWN, sin direcciones ni
+  rutas;
 - parent cgroup v2 `/sys/fs/cgroup/orquesta-firecracker-attestor`, root-owned
   `0755`, vacío, con `cpu`, `memory` y `pids` delegados.
 
