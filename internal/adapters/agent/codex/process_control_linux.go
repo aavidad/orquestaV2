@@ -73,7 +73,7 @@ func platformInspectProcess(record processRecord) (processIdentityState, error) 
 		return processIdentityMismatch, nil
 	}
 	state, pgid, birth, err := readLinuxProcess(record.PID)
-	if errors.Is(err, os.ErrNotExist) {
+	if processGoneError(err) {
 		return processIdentityGone, nil
 	}
 	if err != nil {
@@ -108,6 +108,45 @@ func platformSignalProcess(record processRecord, mode ports.AgentStopMode) error
 	} else {
 		return err
 	}
+}
+
+func platformSignalCgroupSupervisor(record processRecord, mode ports.AgentStopMode) error {
+	signal := unix.SIGTERM
+	if mode == ports.AgentStopForced {
+		signal = unix.SIGUSR1
+	}
+	return pidfdSignalExact(
+		record.PID, record.PGID, record.BootID, record.BirthMarker, signal,
+	)
+}
+
+func pidfdSignalExact(pid, pgid int, bootID, birth string, signal unix.Signal) error {
+	fd, err := unix.PidfdOpen(pid, 0)
+	if errors.Is(err, unix.ESRCH) {
+		return os.ErrProcessDone
+	}
+	if err != nil {
+		return err
+	}
+	defer unix.Close(fd)
+	state, currentPGID, currentBirth, readErr := readLinuxProcess(pid)
+	currentBoot, bootErr := linuxBootID()
+	if processGoneError(readErr) || state == "Z" || state == "X" {
+		return os.ErrProcessDone
+	}
+	if readErr != nil || bootErr != nil || currentPGID != pgid ||
+		currentBoot != bootID || currentBirth != birth {
+		return &Error{Code: CodeProcessIdentityMismatch, Cause: errors.Join(readErr, bootErr)}
+	}
+	if err := unix.PidfdSendSignal(fd, signal, nil, 0); errors.Is(err, unix.ESRCH) {
+		return os.ErrProcessDone
+	} else {
+		return err
+	}
+}
+
+func processGoneError(err error) bool {
+	return errors.Is(err, os.ErrNotExist) || errors.Is(err, unix.ESRCH)
 }
 
 func readLinuxProcess(pid int) (string, int, string, error) {

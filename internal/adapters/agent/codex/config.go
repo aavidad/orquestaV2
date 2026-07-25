@@ -23,6 +23,10 @@ func prepareConfig(config Config) (Config, string, []string, string, *os.Root, e
 	if config.WorkRoot == "" || strings.TrimSpace(config.WorkRoot) != config.WorkRoot {
 		return Config{}, "", nil, "", nil, &Error{Code: CodeWorkRootRequired}
 	}
+	if config.CgroupRoot != "" &&
+		(!filepath.IsAbs(config.CgroupRoot) || filepath.Clean(config.CgroupRoot) != config.CgroupRoot) {
+		return Config{}, "", nil, "", nil, &Error{Code: CodeCgroupRootInvalid}
+	}
 	if strings.TrimSpace(config.RuntimeScope) != config.RuntimeScope || strings.ContainsRune(config.RuntimeScope, '\x00') {
 		return Config{}, "", nil, "", nil, &Error{Code: CodeRuntimeScopeInvalid}
 	}
@@ -37,6 +41,9 @@ func prepareConfig(config Config) (Config, string, []string, string, *os.Root, e
 	}
 	if config.ProcessPipeDrainDelay <= 0 {
 		return Config{}, "", nil, "", nil, &Error{Code: CodeProcessPipeDrainInvalid}
+	}
+	if config.SupervisorStartTimeout <= 0 {
+		return Config{}, "", nil, "", nil, &Error{Code: CodeSupervisorStartTimeoutInvalid}
 	}
 	if config.MaxDiagnosticBytes <= 0 {
 		return Config{}, "", nil, "", nil, &Error{Code: CodeDiagnosticLimitInvalid}

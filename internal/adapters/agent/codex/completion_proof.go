@@ -51,7 +51,8 @@ func (adapter *Adapter) loadCompletionProof(
 
 func (adapter *Adapter) validCompletionProof(state *executionState, proof completionProof) ([]byte, bool) {
 	record := state.process
-	if record == nil || proof.SchemaVersion != completionProofSchema ||
+	if record == nil || record.SchemaVersion != cgroupProcessSchemaVersion ||
+		proof.SchemaVersion != completionProofSchema ||
 		!verifyCompletionProofSignature(*record, proof) ||
 		proof.SupervisorInstance != record.SupervisorInstance ||
 		proof.ExecutionRef != record.ExecutionRef || proof.ExecutionRef != state.receipt.ExecutionRef.String() ||
@@ -62,16 +63,44 @@ func (adapter *Adapter) validCompletionProof(state *executionState, proof comple
 		proof.RuntimeScope != adapter.config.RuntimeScope ||
 		proof.SupervisorPID != record.PID || proof.SupervisorPGID != record.PGID ||
 		proof.SupervisorBootID != record.BootID || proof.SupervisorBirthMarker != record.BirthMarker ||
+		proof.CgroupRootDevice != record.CgroupRootDevice ||
+		proof.CgroupRootInode != record.CgroupRootInode ||
+		proof.CgroupControlDevice != record.CgroupControlDevice ||
+		proof.CgroupControlInode != record.CgroupControlInode ||
+		proof.CgroupName != record.CgroupName ||
+		proof.CgroupDevice != record.CgroupDevice ||
+		proof.CgroupInode != record.CgroupInode ||
 		!proof.TreeGone || proof.DiagnosticSize < 0 ||
 		proof.DiagnosticSize > adapter.config.MaxDiagnosticBytes ||
 		proof.DiagnosticHash == "" ||
-		(proof.Cause != supervisorCauseNatural && proof.Cause != supervisorCauseTimeout) {
+		(proof.Cause != supervisorCauseNatural && proof.Cause != supervisorCauseTimeout &&
+			proof.Cause != supervisorCauseStop) {
 		return nil, false
 	}
-	if proof.WorkerPID <= 0 || proof.WorkerPGID != record.PGID ||
+	if proof.WorkerPID <= 0 || proof.WorkerPGID <= 0 ||
 		proof.WorkerBootID != record.BootID || proof.WorkerBirthMarker == "" {
 		// A failed exec has no worker identity and therefore cannot prove a
 		// completed execution. It remains fail-closed as interrupted.
+		return nil, false
+	}
+	if proof.Cause == supervisorCauseStop {
+		intent, found, err := adapter.loadWinningStopSignalIntent(state.runPath)
+		if err != nil || !found ||
+			proof.StopRequestHash != intent.RequestHash ||
+			proof.StopIdempotency != intent.Idempotency ||
+			proof.StopMode != string(intent.Mode) ||
+			proof.StopSequence != intent.Sequence {
+			return nil, false
+		}
+	} else if proof.StopRequestHash != "" || proof.StopIdempotency != "" ||
+		proof.StopMode != "" || proof.StopSequence != 0 {
+		return nil, false
+	}
+	if adapter.cgroups == nil {
+		return nil, false
+	}
+	populated, err := adapter.cgroups.populated(*record)
+	if err != nil || populated {
 		return nil, false
 	}
 	if proof.Exited == (proof.Signal != 0) ||

@@ -15,6 +15,7 @@ import (
 const (
 	processSchemaVersion           = 1
 	supervisedProcessSchemaVersion = 2
+	cgroupProcessSchemaVersion     = 3
 	processFileName                = "process.json"
 	ownerLockFileName              = "owner.lock"
 	stopCompletionName             = "stop-completion.json"
@@ -31,6 +32,13 @@ type processRecord struct {
 	PGID                int    `json:"pgid"`
 	BootID              string `json:"boot_id"`
 	BirthMarker         string `json:"birth_marker"`
+	CgroupName          string `json:"cgroup_name,omitempty"`
+	CgroupRootDevice    uint64 `json:"cgroup_root_device,omitempty"`
+	CgroupRootInode     uint64 `json:"cgroup_root_inode,omitempty"`
+	CgroupControlDevice uint64 `json:"cgroup_control_device,omitempty"`
+	CgroupControlInode  uint64 `json:"cgroup_control_inode,omitempty"`
+	CgroupDevice        uint64 `json:"cgroup_device,omitempty"`
+	CgroupInode         uint64 `json:"cgroup_inode,omitempty"`
 }
 
 type stopRequestRecord struct {
@@ -145,18 +153,35 @@ func (adapter *Adapter) readProcessRecord(runPath string) (processRecord, bool, 
 	if err != nil || !found {
 		return processRecord{}, found, err
 	}
-	if (record.SchemaVersion != processSchemaVersion && record.SchemaVersion != supervisedProcessSchemaVersion) ||
+	if (record.SchemaVersion != processSchemaVersion && record.SchemaVersion != supervisedProcessSchemaVersion &&
+		record.SchemaVersion != cgroupProcessSchemaVersion) ||
 		(record.SchemaVersion == processSchemaVersion &&
-			(record.SupervisorInstance != "" || record.CompletionPublicKey != "")) ||
+			(record.SupervisorInstance != "" || record.CompletionPublicKey != "" ||
+				processRecordHasCgroupIdentity(record))) ||
 		(record.SchemaVersion == supervisedProcessSchemaVersion &&
 			(!validSupervisorToken(record.SupervisorInstance, "supervisor:") ||
-				!validCompletionPublicKey(record.CompletionPublicKey))) ||
+				!validCompletionPublicKey(record.CompletionPublicKey) ||
+				processRecordHasCgroupIdentity(record))) ||
+		(record.SchemaVersion == cgroupProcessSchemaVersion &&
+			(!validSupervisorToken(record.SupervisorInstance, "supervisor:") ||
+				!validCompletionPublicKey(record.CompletionPublicKey) ||
+				!validCgroupName(record.CgroupName) ||
+				record.CgroupRootDevice == 0 || record.CgroupRootInode == 0 ||
+				record.CgroupControlDevice == 0 || record.CgroupControlInode == 0 ||
+				record.CgroupDevice == 0 || record.CgroupInode == 0)) ||
 		record.ExecutionRef == "" ||
 		record.RequestHash == "" || record.RuntimeScope == "" || record.PID <= 0 ||
 		record.PGID <= 0 || record.BootID == "" || record.BirthMarker == "" {
 		return processRecord{}, false, &Error{Code: CodeProcessOwnershipInvalid}
 	}
 	return record, true, nil
+}
+
+func processRecordHasCgroupIdentity(record processRecord) bool {
+	return record.CgroupName != "" || record.CgroupRootDevice != 0 ||
+		record.CgroupRootInode != 0 || record.CgroupControlDevice != 0 ||
+		record.CgroupControlInode != 0 || record.CgroupDevice != 0 ||
+		record.CgroupInode != 0
 }
 
 func (adapter *Adapter) processRecordForState(state *executionState) (processRecord, bool, error) {

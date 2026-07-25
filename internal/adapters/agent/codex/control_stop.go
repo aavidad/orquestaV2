@@ -11,6 +11,7 @@ type stopPreparation struct {
 	state        *executionState
 	process      processRecord
 	settled      <-chan struct{}
+	starting     <-chan struct{}
 	observedGone bool
 	receipt      ports.AgentStopReceipt
 	complete     bool
@@ -59,6 +60,18 @@ func (adapter *Adapter) prepareStopLocked(
 		receipt, err := adapter.confirmTerminalStopLocked(state, request, requestHash, requested)
 		return stopPreparation{receipt: receipt, complete: true}, err
 	}
+	if state.starting != nil {
+		// READY is the first point at which the supervisor can safely receive
+		// signals. Do not even persist a stop request before that point: a
+		// caller cancellation here must leave natural completion unfenced.
+		return stopPreparation{state: state, starting: state.starting.resolved}, nil
+	}
+	if state.startupRollback && state.settled != nil {
+		// READY failed or launch cancellation won. Wait for the launch waiter
+		// to persist the rollback terminal; a stop cannot race that commit or
+		// manufacture an effect against an already-aborting process.
+		return stopPreparation{state: state, starting: state.settled}, nil
+	}
 	if !requested {
 		if _, err := adapter.ensureStopRequest(runPath, requestHash, request); err != nil {
 			return stopPreparation{}, err
@@ -73,6 +86,14 @@ func (adapter *Adapter) prepareLiveStopLocked(
 	request ports.AgentStopRequest,
 	requestHash string,
 ) (stopPreparation, error) {
+	if state.starting != nil {
+		// Defensive revalidation for direct/internal callers. Public Stop
+		// reaches this only after prepareStopLocked has fenced the same token.
+		return stopPreparation{state: state, starting: state.starting.resolved}, nil
+	}
+	if state.startupRollback && state.settled != nil {
+		return stopPreparation{state: state, starting: state.settled}, nil
+	}
 	record, _, err := adapter.ownProcessLocked(state)
 	if errors.Is(err, errOwnerLockBusy) {
 		receipt, validateErr := validatedStopReceipt(request, pendingStopReceipt(request))
@@ -97,8 +118,27 @@ func (adapter *Adapter) prepareLiveStopLocked(
 	if winnerFound {
 		state.stopProof.Store(&winner)
 	}
-	treeGone, err := inspectProcessTree(record)
+	treeGone, err := adapter.inspectProcessTree(record)
 	if err != nil {
+		// A concurrently settled execution can remove its exact leaf after
+		// publishing the causal terminal. Accept only that durable terminal;
+		// a missing leaf without it remains an identity failure.
+		if ErrorCode(err) == CodeCgroupIdentityMismatch {
+			terminal, found, loadErr := adapter.loadCausalTerminal(
+				runPath, state.terminalRequestHash, state.receipt.SpecHash, state.maxOutput,
+			)
+			if loadErr != nil {
+				return stopPreparation{}, loadErr
+			}
+			if found {
+				state.status, state.terminal, state.terminalDurable =
+					terminal.Status, &terminal, true
+				receipt, confirmErr := adapter.confirmTerminalStopLocked(
+					state, request, requestHash, true,
+				)
+				return stopPreparation{receipt: receipt, complete: true}, confirmErr
+			}
+		}
 		return stopPreparation{}, err
 	}
 	if err := adapter.signalStopIfNeededLocked(
@@ -146,7 +186,7 @@ func (adapter *Adapter) signalStopIfNeededLocked(
 		// Existing intent fences an unknowable crash-before/after-syscall effect.
 		return err
 	}
-	if err := signalProcessTree(record, request.Mode); err != nil {
+	if err := adapter.shutdownSignal(record, request.Mode); err != nil {
 		if errors.Is(err, os.ErrProcessDone) {
 			return nil
 		}
@@ -167,11 +207,13 @@ func (adapter *Adapter) signalForcedIntentLocked(
 	runPath string,
 	intent stopSignalIntent,
 ) error {
-	if err := signalProcessTree(record, ports.AgentStopForced); err != nil {
-		if errors.Is(err, os.ErrProcessDone) {
+	if err := adapter.shutdownSignal(record, ports.AgentStopForced); err != nil {
+		if !errors.Is(err, os.ErrProcessDone) {
+			return err
+		}
+		if record.SchemaVersion != cgroupProcessSchemaVersion {
 			return nil
 		}
-		return err
 	}
 	proof, err := adapter.persistStopSignalProof(runPath, intent)
 	if err != nil {

@@ -343,6 +343,52 @@ func TestCodexSelectiveStopPreservesSiblingProcessTrees(t *testing.T) {
 	}
 }
 
+func TestForcedStopSettlementUsesCallerDeadlineNotSupervisorStartTimeout(t *testing.T) {
+	config := testConfig(t)
+	config.SupervisorStartTimeout = 5 * time.Millisecond
+	adapter := openTestAdapter(t, config)
+
+	const settlementDelay = 75 * time.Millisecond
+	cleanupStarted := make(chan struct{})
+	processCleanup := adapter.processCleanup
+	adapter.processCleanup = func(command *exec.Cmd) error {
+		close(cleanupStarted)
+		time.Sleep(settlementDelay)
+		return processCleanup(command)
+	}
+
+	request := testRequest(t, "forced-stop-settlement-context", "helper:block", 1024)
+	if _, err := adapter.Launch(context.Background(), request); err != nil {
+		t.Fatal(err)
+	}
+	launch := launchReceiptForRequest(t, adapter, request)
+	stop := stopRequestForLaunch(launch, ports.AgentStopForced, "stop:forced-settlement-context")
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	started := time.Now()
+	receipt, err := adapter.Stop(ctx, stop)
+	elapsed := time.Since(started)
+	if err != nil || receipt.Status != ports.AgentStopped {
+		t.Fatalf("Stop() = %+v, %v after %s; want stopped", receipt, err, elapsed)
+	}
+	select {
+	case <-cleanupStarted:
+	default:
+		t.Fatal("Stop() returned before delayed settlement started")
+	}
+	if elapsed < settlementDelay {
+		t.Fatalf("Stop() returned after %s before delayed settlement %s", elapsed, settlementDelay)
+	}
+	if receipt.ReceiptRef == "" || receipt.ConfirmedAt.IsZero() {
+		t.Fatalf("Stop() returned incomplete durable receipt: %+v", receipt)
+	}
+	observation, err := adapter.Observe(context.Background(), request.ExecutionRef)
+	if err != nil || observation.Status != ports.AgentFailed || observation.ErrorCode != CodeExecutionStopped {
+		t.Fatalf("Observe() = %+v, %v; want durable stopped terminal", observation, err)
+	}
+}
+
 func TestCodexSelectiveStopAdoptsAfterCrashAndRejectsReusedPID(t *testing.T) {
 	t.Run("adopts exact live process", func(t *testing.T) {
 		config := durableControlProcessTreeTestConfig(t)
@@ -823,6 +869,17 @@ func TestCodexSelectiveStopAdoptsAfterCrashAndRejectsReusedPID(t *testing.T) {
 
 	t.Run("supervisor proof bypasses obsolete parent cleanup hook", func(t *testing.T) {
 		config := processTreeTestConfig(t)
+		root, rootErr := supervisorTestCgroupRoot()
+		if rootErr != nil {
+			t.Skipf("delegated cgroup v2 unavailable: %v", rootErr)
+		}
+		controller, rootErr := openCodexCgroupRoot(root)
+		if rootErr != nil {
+			t.Skipf("delegated cgroup v2 unavailable: %v", rootErr)
+		}
+		_ = controller.close()
+		config.CgroupRoot = root
+		config.allowLegacyProcessControlForTests = false
 		adapter := openTestAdapter(t, config)
 		adapter.processCleanup = func(*exec.Cmd) error { return errors.New("test cleanup failed") }
 		request := testRequest(t, "stop-cleanup-failure", "cleanup failure after forced stop", 1024)

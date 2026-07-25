@@ -31,6 +31,8 @@ const (
 	helperCredentialInitial  = "v08<credential>initial"
 	helperCredentialRotated  = "v08<credential>rotated"
 	backgroundSuccessPIDFile = "background-success.pid"
+	setsidPIDFile            = "setsid-descendant.pid"
+	workerFDAuditFile        = "worker-fd-audit.json"
 )
 
 func init() {
@@ -312,7 +314,7 @@ func TestAdapterBoundsFailureDiagnosticAndReturnsOnlyTypedCode(t *testing.T) {
 			if err != nil || !found {
 				t.Fatalf("loadTerminal() found=%v error=%v", found, err)
 			}
-			if !adapter.processControlsEnabled() {
+			if adapter.cgroups == nil {
 				if len(terminal.Diagnostic) != int(config.MaxDiagnosticBytes) || !terminal.DiagnosticTruncated {
 					t.Fatalf(
 						"legacy diagnostic bytes=%d truncated=%v",
@@ -472,6 +474,7 @@ func TestAdapterRejectsNonPrivateOrSymlinkWorkRoot(t *testing.T) {
 		ReasoningEffort:         "medium",
 		Timeout:                 5 * time.Second,
 		ProcessPipeDrainDelay:   250 * time.Millisecond,
+		SupervisorStartTimeout:  5 * time.Second,
 		MaxDiagnosticBytes:      64,
 		MaxConcurrentExecutions: 1,
 		MCPBearerTokenEnvVar:    "ORQUESTA_MCP_BEARER_TOKEN",
@@ -545,6 +548,29 @@ func runCodexHelper(arguments []string) error {
 
 	mode := string(prompt)
 	switch {
+	case strings.Contains(mode, "helper:fd-audit-block"):
+		audit := struct {
+			PID     int               `json:"pid"`
+			Targets map[string]string `json:"targets"`
+		}{
+			PID:     os.Getpid(),
+			Targets: make(map[string]string),
+		}
+		for descriptor := 3; descriptor <= 8; descriptor++ {
+			name := strconv.Itoa(descriptor)
+			if target, err := os.Readlink("/proc/self/fd/" + name); err == nil {
+				audit.Targets[name] = target
+			}
+		}
+		payload, err := json.Marshal(audit)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(workerFDAuditFile, payload, 0o600); err != nil {
+			return err
+		}
+		time.Sleep(30 * time.Second)
+		return fmt.Errorf("fd audit helper was not canceled")
 	case strings.Contains(mode, "helper:delayed-failure"):
 		time.Sleep(500 * time.Millisecond)
 		_, _ = os.Stderr.Write(bytes.Repeat([]byte("private delayed failure diagnostic"), 128))
@@ -565,6 +591,17 @@ func runCodexHelper(arguments []string) error {
 			return fmt.Errorf("release background child: %w", err)
 		}
 		return writeHelperResult(options.outputPath, "artifact:background-success")
+	case strings.Contains(mode, "helper:setsid-background-success"):
+		if err := startSetsidHelper(); err != nil {
+			return err
+		}
+		return writeHelperResult(options.outputPath, "artifact:setsid-background-success")
+	case strings.Contains(mode, "helper:setsid-block"):
+		if err := startSetsidHelper(); err != nil {
+			return err
+		}
+		time.Sleep(30 * time.Second)
+		return fmt.Errorf("setsid block helper was not canceled")
 	case strings.Contains(mode, "helper:model"):
 		if options.model != "test-model" {
 			return fmt.Errorf("model = %q, want test-model", options.model)
@@ -606,6 +643,28 @@ func runCodexHelper(arguments []string) error {
 		return fmt.Errorf("unknown helper objective")
 	}
 	return nil
+}
+
+func startSetsidHelper() error {
+	setsid := ""
+	for _, candidate := range []string{"/usr/bin/setsid", "/bin/setsid"} {
+		if info, err := os.Stat(candidate); err == nil && info.Mode().IsRegular() {
+			setsid = candidate
+			break
+		}
+	}
+	if setsid == "" {
+		return errors.New("setsid unavailable")
+	}
+	child := exec.Command(setsid, "/bin/sh", "-c", `trap '' TERM; exec /bin/sleep 30`)
+	child.Stderr = os.Stderr
+	if err := child.Start(); err != nil {
+		return fmt.Errorf("start setsid child: %w", err)
+	}
+	if err := os.WriteFile(setsidPIDFile, []byte(strconv.Itoa(child.Process.Pid)), 0o600); err != nil {
+		return fmt.Errorf("write setsid pid: %w", err)
+	}
+	return child.Process.Release()
 }
 
 type helperOptions struct {
@@ -765,18 +824,20 @@ func testConfig(t *testing.T) Config {
 		t.Fatalf("Chmod(work root) error = %v", err)
 	}
 	return Config{
-		Command:                 executable,
-		WorkRoot:                workRoot,
-		RuntimeScope:            "runtime-scope:test",
-		ReasoningEffort:         "medium",
-		Timeout:                 5 * time.Second,
-		ProcessPipeDrainDelay:   250 * time.Millisecond,
-		MaxDiagnosticBytes:      256,
-		MaxConcurrentExecutions: 4,
-		MCPBearerTokenEnvVar:    "ORQUESTA_MCP_BEARER_TOKEN",
-		PromptRenderer:          testPromptRenderer{},
-		Environment:             map[string]string{"CODEX_TEST_EXACT": "present"},
-		Now:                     func() time.Time { return time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC) },
+		Command:                           executable,
+		WorkRoot:                          workRoot,
+		RuntimeScope:                      "runtime-scope:test",
+		ReasoningEffort:                   "medium",
+		Timeout:                           5 * time.Second,
+		ProcessPipeDrainDelay:             250 * time.Millisecond,
+		SupervisorStartTimeout:            5 * time.Second,
+		MaxDiagnosticBytes:                256,
+		MaxConcurrentExecutions:           4,
+		MCPBearerTokenEnvVar:              "ORQUESTA_MCP_BEARER_TOKEN",
+		PromptRenderer:                    testPromptRenderer{},
+		Environment:                       map[string]string{"CODEX_TEST_EXACT": "present"},
+		Now:                               func() time.Time { return time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC) },
+		allowLegacyProcessControlForTests: true,
 	}
 }
 

@@ -28,3 +28,7 @@ func platformInspectProcess(processRecord) (processIdentityState, error) {
 func platformSignalProcess(processRecord, ports.AgentStopMode) error {
 	return errors.New(CodeControlUnsupported)
 }
+
+func platformSignalCgroupSupervisor(processRecord, ports.AgentStopMode) error {
+	return errors.New(CodeControlUnsupported)
+}

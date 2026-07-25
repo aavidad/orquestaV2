@@ -15,7 +15,13 @@ import (
 	"orquesta/internal/ports"
 )
 
-func (adapter *Adapter) launchWithCredentialLocked(ctx context.Context, request ports.AgentLaunchRequest, requestHash string, session *resolvedSession) (ports.AgentLaunchReceipt, error) {
+func (adapter *Adapter) launchWithCredentialLocked(
+	ctx context.Context,
+	callerContext context.Context,
+	request ports.AgentLaunchRequest,
+	requestHash string,
+	session *resolvedSession,
+) (ports.AgentLaunchReceipt, error) {
 	var receipt ports.AgentLaunchReceipt
 	var launchErr error
 	_, useErr := adapter.config.CredentialStore.Use(ctx, adapter.credentialUseRequest(request), func(secret credentials.Secret) error {
@@ -38,7 +44,9 @@ func (adapter *Adapter) launchWithCredentialLocked(ctx context.Context, request 
 			launchErr = err
 			return err
 		}
-		receipt, launchErr = adapter.resumeLaunchRecordLocked(ctx, request, requestHash, record, runPath, recordCreated, environment, guard, session)
+		receipt, launchErr = adapter.resumeLaunchRecordLocked(
+			ctx, callerContext, request, requestHash, record, runPath, recordCreated, environment, guard, session,
+		)
 		return launchErr
 	})
 	if launchErr != nil {
@@ -188,7 +196,7 @@ func (adapter *Adapter) quarantineRecoveryFailureLocked(ctx context.Context, sta
 		record, found, inspectErr := adapter.processRecordForState(state)
 		var gone bool
 		if inspectErr == nil && found {
-			gone, inspectErr = inspectProcessTree(record)
+			gone, inspectErr = adapter.inspectProcessTree(record)
 		}
 		if inspectErr == nil && found && !gone {
 			inspectErr = &Error{Code: CodeProcessCleanupFailed}
@@ -205,7 +213,7 @@ func (adapter *Adapter) quarantineRecoveryFailureLocked(ctx context.Context, sta
 	if adopted {
 		record := *state.process
 		for index, mode := range []ports.AgentStopMode{ports.AgentStopCooperative, ports.AgentStopForced} {
-			stopErr = signalProcessTree(record, mode)
+			stopErr = adapter.signalProcessTree(record, mode)
 			if errors.Is(stopErr, os.ErrProcessDone) {
 				stopErr = nil
 				break

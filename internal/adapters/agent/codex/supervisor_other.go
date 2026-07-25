@@ -7,7 +7,7 @@ import (
 	"errors"
 )
 
-func platformSupervisorCommand(context.Context, supervisorEnvelope) (supervisorCommand, error) {
+func platformSupervisorCommand(context.Context, supervisorEnvelope, *codexCgroupLeaf) (supervisorCommand, error) {
 	return supervisorCommand{}, errors.New(CodeControlUnsupported)
 }
 

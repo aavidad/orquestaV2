@@ -2,6 +2,7 @@ package codex
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"orquesta/internal/ports"
@@ -13,6 +14,11 @@ func (adapter *Adapter) ControlCapabilities(ctx context.Context) (ports.AgentCon
 	}
 	if err := ctx.Err(); err != nil {
 		return ports.AgentControlCapabilities{}, err
+	}
+	select {
+	case <-adapter.lifecycle.Done():
+		return ports.AgentControlCapabilities{}, &Error{Code: CodeUnavailable}
+	default:
 	}
 	adapter.mu.Lock()
 	closed := adapter.closed
@@ -38,12 +44,38 @@ func (adapter *Adapter) Stop(ctx context.Context, request ports.AgentStopRequest
 	if err != nil {
 		return ports.AgentStopReceipt{}, &Error{Code: CodeStateInvalid, Cause: err}
 	}
-
-	adapter.mu.Lock()
-	preparation, err := adapter.prepareStopLocked(request, requestHash)
-	adapter.mu.Unlock()
+	operationContext, endOperation, err := adapter.beginOperation(ctx)
 	if err != nil {
 		return ports.AgentStopReceipt{}, err
+	}
+	defer endOperation()
+	ctx = operationContext
+
+	var preparation stopPreparation
+	for {
+		adapter.mu.Lock()
+		preparation, err = adapter.prepareStopLocked(request, requestHash)
+		adapter.mu.Unlock()
+		if err != nil {
+			return ports.AgentStopReceipt{}, err
+		}
+		if preparation.starting == nil {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			if errors.Is(context.Cause(ctx), errAdapterShutdown) {
+				return ports.AgentStopReceipt{}, &Error{Code: CodeUnavailable}
+			}
+			return validatedStopReceipt(request, pendingStopReceipt(request))
+		case <-preparation.starting:
+		}
+		if ctx.Err() != nil {
+			if errors.Is(context.Cause(ctx), errAdapterShutdown) {
+				return ports.AgentStopReceipt{}, &Error{Code: CodeUnavailable}
+			}
+			return validatedStopReceipt(request, pendingStopReceipt(request))
+		}
 	}
 	if preparation.complete {
 		return preparation.receipt, nil
@@ -54,8 +86,13 @@ func (adapter *Adapter) Stop(ctx context.Context, request ports.AgentStopRequest
 	if request.Mode == ports.AgentStopCooperative && !preparation.observedGone {
 		return validatedStopReceipt(request, pendingStopReceipt(request))
 	}
-	observedGone, waitErr := waitForExactProcess(ctx, preparation.process, preparation.settled)
+	observedGone, waitErr := waitForExactProcessWithInspector(
+		ctx, preparation.process, preparation.settled, adapter.inspectProcessTree,
+	)
 	if waitErr != nil {
+		if errors.Is(context.Cause(ctx), errAdapterShutdown) {
+			return ports.AgentStopReceipt{}, &Error{Code: CodeUnavailable}
+		}
 		if ctx.Err() != nil {
 			return validatedStopReceipt(request, pendingStopReceipt(request))
 		}
@@ -198,8 +235,36 @@ func (adapter *Adapter) terminalStopStatusLocked(
 
 func (adapter *Adapter) finishStoppedProcessLocked(state *executionState, proof stopSignalProof) error {
 	if state.terminal != nil {
+		if !state.terminalDurable {
+			return &Error{Code: CodeStatePersistenceFailed}
+		}
+		if err := adapter.cleanupTerminalCgroup(state); err != nil {
+			return err
+		}
 		adapter.releaseProcessOwnershipLocked(state)
 		return nil
+	}
+	requireProof := adapter.requireDurableStopProof
+	if state.process != nil && state.process.SchemaVersion == cgroupProcessSchemaVersion {
+		requireProof = adapter.requireWinningStopProof
+	}
+	if err := requireProof(state.runPath, proof); err != nil {
+		return err
+	}
+	if proof.Mode == ports.AgentStopCooperative && state.process != nil &&
+		state.process.SchemaVersion == cgroupProcessSchemaVersion {
+		completion, result, found := adapter.loadCompletionProof(state)
+		clearBytes(result)
+		if !found {
+			return adapter.recoverInterruptedExecutionLocked(state)
+		}
+		if completion.Cause != supervisorCauseStop ||
+			completion.StopRequestHash != proof.RequestHash ||
+			completion.StopIdempotency != proof.Idempotency ||
+			completion.StopMode != string(proof.Mode) ||
+			completion.StopSequence != proof.Sequence {
+			return adapter.finishSupervisedProcessWithStopProofLocked(state, proof)
+		}
 	}
 	if _, err := adapter.persistStopCompletion(state.runPath, proof); err != nil {
 		return err
@@ -219,7 +284,34 @@ func (adapter *Adapter) finishStoppedProcessLocked(state *executionState, proof 
 	}
 	terminal, state.terminalDurable = persisted, true
 	state.status, state.terminal = terminal.Status, &terminal
+	if err := adapter.cleanupTerminalCgroup(state); err != nil {
+		return err
+	}
 	adapter.releaseProcessOwnershipLocked(state)
+	return nil
+}
+
+func (adapter *Adapter) requireWinningStopProof(runPath string, proof stopSignalProof) error {
+	intent, found, err := adapter.loadWinningStopSignalIntent(runPath)
+	if err != nil {
+		return err
+	}
+	if !found || intent.RequestHash != proof.RequestHash ||
+		intent.Idempotency != proof.Idempotency || intent.Mode != proof.Mode ||
+		intent.Sequence != proof.Sequence {
+		return &Error{Code: CodeStopConflict}
+	}
+	return adapter.requireDurableStopProof(runPath, proof)
+}
+
+func (adapter *Adapter) requireDurableStopProof(runPath string, proof stopSignalProof) error {
+	winner, found, err := adapter.loadWinningStopSignalProof(runPath)
+	if err != nil {
+		return err
+	}
+	if !found || winner != proof {
+		return &Error{Code: CodeStopConflict}
+	}
 	return nil
 }
 

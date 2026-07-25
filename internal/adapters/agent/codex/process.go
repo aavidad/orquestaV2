@@ -40,6 +40,19 @@ type modelResult struct {
 	Artifact string `json:"artifact"`
 }
 
+// executionStart is the identity token for the only launch allowed to resolve
+// a persisted process from pre-READY to running/rollback. The process is
+// already started and fenced when this token is published under Adapter.mu;
+// only the READY read happens without that mutex.
+type executionStart struct {
+	state       *executionState
+	runContext  context.Context
+	cancel      context.CancelCauseFunc
+	readyReader *os.File
+	cgroupLeaf  *codexCgroupLeaf
+	resolved    chan struct{}
+}
+
 type cappedDiagnostic struct {
 	mu        sync.Mutex
 	buffer    bytes.Buffer
@@ -73,20 +86,27 @@ func (writer *cappedDiagnostic) snapshot() ([]byte, bool) {
 	return append([]byte(nil), writer.buffer.Bytes()...), writer.truncated
 }
 
-func (adapter *Adapter) startExecutionLocked(callerContext context.Context, request ports.AgentLaunchRequest, state *executionState, environment []string, session *resolvedSession) {
+func (adapter *Adapter) startExecutionLocked(
+	operationContext context.Context,
+	callerContext context.Context,
+	request ports.AgentLaunchRequest,
+	state *executionState,
+	environment []string,
+	session *resolvedSession,
+) *executionStart {
 	prompt, err := adapter.renderAgentPrompt(request)
 	if err != nil {
 		adapter.finishWithoutProcessLocked(state, ErrorCode(err), []byte(err.Error()))
-		return
+		return nil
 	}
 	if err := adapter.prepareRuntimeFiles(state.runPath); err != nil {
 		adapter.finishWithoutProcessLocked(state, CodeStatePersistenceFailed, []byte(err.Error()))
-		return
+		return nil
 	}
-	workingDirectory, workspaceBound, err := adapter.executionWorkingDirectory(callerContext, request, state.runPath)
+	workingDirectory, workspaceBound, err := adapter.executionWorkingDirectory(operationContext, request, state.runPath)
 	if err != nil {
 		adapter.finishWithoutProcessLocked(state, ErrorCode(err), []byte(err.Error()))
-		return
+		return nil
 	}
 	runContext, cancel := context.WithCancelCause(adapter.lifecycle)
 	timeout := time.AfterFunc(adapter.config.Timeout, func() {
@@ -116,7 +136,7 @@ func (adapter *Adapter) startExecutionLocked(callerContext context.Context, requ
 		commandErr          error
 		supervisor          supervisorCommand
 	)
-	if adapter.processControlsEnabled() {
+	if adapter.processControlsEnabled() && adapter.cgroups != nil {
 		instance, instanceErr := newSupervisorInstance()
 		if instanceErr != nil {
 			commandErr = instanceErr
@@ -128,6 +148,13 @@ func (adapter *Adapter) startExecutionLocked(callerContext context.Context, requ
 			}
 			supervisorPublicKey = publicKey
 			runDirectory := filepath.Join(adapter.rootPath, filepath.FromSlash(state.runPath))
+			var leaf *codexCgroupLeaf
+			if commandErr == nil {
+				leaf, commandErr = adapter.allocateExecutionCgroup(state.runPath)
+			}
+			if commandErr == nil && adapter.config.launchFailureStageForTests == "pre_gate" {
+				commandErr = errors.New("injected pre-gate launch failure")
+			}
 			envelope := supervisorEnvelope{
 				SchemaVersion: supervisorEnvelopeSchema, SupervisorInstance: instance,
 				ExecutionRef: request.ExecutionRef.String(), RequestHash: state.requestHash,
@@ -146,8 +173,20 @@ func (adapter *Adapter) startExecutionLocked(callerContext context.Context, requ
 				MaxDiagnosticBytes:  adapter.config.MaxDiagnosticBytes,
 				MaxOutputBytes:      request.MaxOutputBytes,
 			}
+			if leaf != nil {
+				envelope.CgroupRootDevice = adapter.cgroups.rootIdentity.Device
+				envelope.CgroupRootInode = adapter.cgroups.rootIdentity.Inode
+				envelope.CgroupControlDevice = adapter.cgroups.controlIdentity.Device
+				envelope.CgroupControlInode = adapter.cgroups.controlIdentity.Inode
+				envelope.CgroupName = leaf.name
+				envelope.CgroupDevice = leaf.identity.Device
+				envelope.CgroupInode = leaf.identity.Inode
+			}
 			if commandErr == nil {
-				supervisor, commandErr = platformSupervisorCommand(runContext, envelope)
+				supervisor, commandErr = platformSupervisorCommand(runContext, envelope, leaf)
+			}
+			if commandErr != nil && leaf != nil {
+				_ = leaf.close()
 			}
 			clearSupervisorEnvelope(&envelope)
 			supervised = commandErr == nil
@@ -166,7 +205,7 @@ func (adapter *Adapter) startExecutionLocked(callerContext context.Context, requ
 		cancel(errExecutionFinished)
 		close(finished)
 		adapter.finishWithoutProcessLocked(state, CodeProcessStartFailed, []byte(commandErr.Error()))
-		return
+		return nil
 	}
 	if supervised {
 		adapter.configureSupervisorCommand(command, runContext)
@@ -184,13 +223,23 @@ func (adapter *Adapter) startExecutionLocked(callerContext context.Context, requ
 				_ = supervisor.sealed.Close()
 				_ = supervisor.diagnosticReader.Close()
 				_ = supervisor.diagnosticWriter.Close()
+				_ = supervisor.controlCgroup.Close()
+				_ = supervisor.workCgroup.Close()
+				_ = supervisor.readyReader.Close()
+				_ = supervisor.readyWriter.Close()
+				_ = supervisor.cgroupLeaf.close()
 			}
 			timeout.Stop()
 			cancel(errExecutionFinished)
 			close(finished)
 			adapter.finishWithoutProcessLocked(state, CodeProcessStartFailed, []byte(commandErr.Error()))
-			return
+			return nil
 		}
+	}
+	if supervised && adapter.config.launchFailureStageForTests == "start" {
+		command.Path = filepath.Join(
+			adapter.rootPath, ".orquesta-injected-missing-supervisor",
+		)
 	}
 	startErr := command.Start()
 	clearEnvironment(command.Env)
@@ -201,6 +250,9 @@ func (adapter *Adapter) startExecutionLocked(callerContext context.Context, requ
 	if supervised {
 		_ = supervisor.sealed.Close()
 		_ = supervisor.diagnosticWriter.Close()
+		_ = supervisor.controlCgroup.Close()
+		_ = supervisor.workCgroup.Close()
+		_ = supervisor.readyWriter.Close()
 		done := make(chan struct{})
 		diagnosticDone = done
 		diagnosticReader = supervisor.diagnosticReader
@@ -216,6 +268,11 @@ func (adapter *Adapter) startExecutionLocked(callerContext context.Context, requ
 		}
 		if supervised {
 			_ = supervisor.diagnosticReader.Close()
+			_ = supervisor.readyReader.Close()
+			_ = supervisor.cgroupLeaf.close()
+			awaitDiagnosticDrain(
+				diagnosticDone, diagnosticReader, adapter.config.ProcessPipeDrainDelay,
+			)
 		}
 		releaseOwnerLock(ownerLock)
 		timeout.Stop()
@@ -224,22 +281,41 @@ func (adapter *Adapter) startExecutionLocked(callerContext context.Context, requ
 		_, _ = diagnostic.Write([]byte(startErr.Error()))
 		payload, truncated := diagnostic.snapshot()
 		adapter.finishWithoutProcessLockedWithDiagnostic(state, CodeProcessStartFailed, payload, truncated)
-		return
+		return nil
 	}
 	if !adapter.releaseGatedStartLocked(
 		command, gateWriter, ownerLock, timeout, cancel, finished, request, state,
-		supervisorInstance, supervisorPublicKey,
+		supervisorInstance, supervisorPublicKey, supervisor.cgroupLeaf,
 	) {
-		return
+		if supervised {
+			_ = supervisor.readyReader.Close()
+			awaitDiagnosticDrain(
+				diagnosticDone, diagnosticReader, adapter.config.ProcessPipeDrainDelay,
+			)
+		}
+		return nil
 	}
-	state.status = ports.AgentRunning
 	state.cancel = cancel
 	state.settled = make(chan struct{})
-	adapter.waitGroup.Add(1)
+	var start *executionStart
+	var startupResolved <-chan struct{}
+	if supervised {
+		start = &executionStart{
+			state: state, runContext: runContext, cancel: cancel,
+			readyReader: supervisor.readyReader, cgroupLeaf: supervisor.cgroupLeaf,
+			resolved: make(chan struct{}),
+		}
+		state.starting = start
+		startupResolved = start.resolved
+	} else {
+		state.status = ports.AgentRunning
+	}
+	adapter.beginExecutionWaitLocked()
 	go adapter.waitForExecution(
 		command, runContext, cancel, timeout, finished, request, state, diagnostic, diagnosticDone,
-		diagnosticReader,
+		diagnosticReader, startupResolved,
 	)
+	return start
 }
 
 func (adapter *Adapter) configureSupervisorCommand(command *exec.Cmd, runContext context.Context) {
@@ -272,6 +348,7 @@ func (adapter *Adapter) releaseGatedStartLocked(
 	command *exec.Cmd, gateWriter, ownerLock *os.File, timeout *time.Timer,
 	cancel context.CancelCauseFunc, finished chan struct{},
 	request ports.AgentLaunchRequest, state *executionState, supervisorInstance, supervisorPublicKey string,
+	cgroupLeaf *codexCgroupLeaf,
 ) bool {
 	if !adapter.processControlsEnabled() {
 		return true
@@ -284,16 +361,32 @@ func (adapter *Adapter) releaseGatedStartLocked(
 	}
 	supervised := supervisorInstance != ""
 	if supervised {
-		record.SchemaVersion = supervisedProcessSchemaVersion
+		record.SchemaVersion = cgroupProcessSchemaVersion
 		record.SupervisorInstance = supervisorInstance
 		record.CompletionPublicKey = supervisorPublicKey
+		adapter.cgroups.populateRecord(&record, cgroupLeaf)
 	}
 	if err != nil {
 		adapter.abortGatedStartLocked(command, gateWriter, ownerLock, timeout, cancel, finished, state, err)
+		_ = cgroupLeaf.close()
+		return false
+	}
+	if supervised {
+		if err := cgroupLeaf.apply(command.Process); err != nil {
+			adapter.abortGatedStartLocked(command, gateWriter, ownerLock, timeout, cancel, finished, state, err)
+			_ = cgroupLeaf.close()
+			return false
+		}
+	}
+	if adapter.config.launchFailureStageForTests == "persist" {
+		err := errors.New("injected process persistence failure")
+		adapter.abortGatedStartLocked(command, gateWriter, ownerLock, timeout, cancel, finished, state, err)
+		_ = cgroupLeaf.close()
 		return false
 	}
 	if err := adapter.persistProcessRecord(state.runPath, record); err != nil {
 		adapter.abortGatedStartLocked(command, gateWriter, ownerLock, timeout, cancel, finished, state, err)
+		_ = cgroupLeaf.close()
 		return false
 	}
 	state.process, state.ownerLock = &record, ownerLock
@@ -305,13 +398,92 @@ func (adapter *Adapter) releaseGatedStartLocked(
 	}
 	if releaseErr != nil {
 		adapter.abortGatedStartLocked(command, gateWriter, ownerLock, timeout, cancel, finished, state, releaseErr)
+		_ = cgroupLeaf.close()
 		return false
 	}
 	if err := gateWriter.Close(); err != nil {
 		adapter.abortGatedStartLocked(command, nil, ownerLock, timeout, cancel, finished, state, err)
+		_ = cgroupLeaf.close()
 		return false
 	}
 	return true
+}
+
+func (adapter *Adapter) resolveExecutionStart(start *executionStart) {
+	var readyErr error
+	if adapter.config.launchFailureStageForTests == "ready" {
+		readyErr = errors.New("injected supervisor READY failure")
+		_ = start.readyReader.Close()
+	} else {
+		readyErr = awaitSupervisorReady(start.runContext, start.readyReader, adapter.config.SupervisorStartTimeout)
+	}
+	if closeErr := start.cgroupLeaf.close(); readyErr == nil {
+		readyErr = closeErr
+	}
+
+	adapter.mu.Lock()
+	defer adapter.mu.Unlock()
+	if start.state.starting != start {
+		// The token comparison is the final defense against a stale launch
+		// resolving a state replaced by recovery or another operation.
+		close(start.resolved)
+		return
+	}
+	start.state.starting = nil
+	cause := context.Cause(start.runContext)
+	proof := start.state.stopProof.Load()
+	ready := readyErr == nil && !adapter.closed && cause == nil && proof == nil
+	start.state.startupRollback = !ready
+	switch {
+	case ready:
+		start.state.status = ports.AgentRunning
+	case errors.Is(cause, errAdapterShutdown):
+		start.cancel(errAdapterShutdown)
+	case cause != nil:
+		// Preserve the exact timeout/caller cancellation already installed on
+		// runContext; the process command observes it cooperatively.
+	default:
+		start.state.startupErrorCode = CodeStatePersistenceFailed
+		start.cancel(errExecutionCanceled)
+	}
+	close(start.resolved)
+}
+
+func awaitSupervisorReady(ctx context.Context, reader *os.File, timeout time.Duration) error {
+	if reader == nil || timeout <= 0 {
+		return errors.New("supervisor ready channel unavailable")
+	}
+	defer reader.Close()
+	deadline := time.Now().Add(timeout)
+	if callerDeadline, ok := ctx.Deadline(); ok && callerDeadline.Before(deadline) {
+		deadline = callerDeadline
+	}
+	if err := reader.SetReadDeadline(deadline); err != nil {
+		return err
+	}
+	stopCancellation := context.AfterFunc(ctx, func() {
+		_ = reader.SetReadDeadline(time.Now())
+	})
+	defer stopCancellation()
+	var payload [15]byte
+	if _, err := io.ReadFull(reader, payload[:]); err != nil {
+		if ctx.Err() != nil {
+			return context.Cause(ctx)
+		}
+		return err
+	}
+	if string(payload[:]) != "isolated\nready\n" {
+		return errors.New("invalid supervisor ready acknowledgement")
+	}
+	var extra [1]byte
+	count, err := reader.Read(extra[:])
+	if count != 0 || !errors.Is(err, io.EOF) {
+		if ctx.Err() != nil {
+			return context.Cause(ctx)
+		}
+		return errors.New("invalid supervisor ready framing")
+	}
+	return nil
 }
 
 func (adapter *Adapter) executionWorkingDirectory(ctx context.Context, request ports.AgentLaunchRequest, runPath string) (string, bool, error) {
@@ -399,10 +571,14 @@ func (adapter *Adapter) waitForExecution(
 	diagnostic *cappedDiagnostic,
 	diagnosticDone <-chan struct{},
 	diagnosticReader *os.File,
+	startupResolved <-chan struct{},
 ) {
-	defer adapter.waitGroup.Done()
+	defer adapter.endExecutionWait()
 	waitErr := command.Wait()
 	awaitDiagnosticDrain(diagnosticDone, diagnosticReader, adapter.config.ProcessPipeDrainDelay)
+	if startupResolved != nil {
+		<-startupResolved
+	}
 	if errors.Is(waitErr, exec.ErrWaitDelay) && command.ProcessState != nil && command.ProcessState.Success() {
 		waitErr = nil
 	}
@@ -417,7 +593,7 @@ func (adapter *Adapter) waitForExecution(
 	adapter.mu.Unlock()
 	var cleanupErr error
 	if proof != nil && proof.Mode == ports.AgentStopCooperative && cause == nil {
-		groupGone, inspectErr := inspectProcessTree(*state.process)
+		groupGone, inspectErr := adapter.inspectProcessTree(*state.process)
 		if inspectErr != nil {
 			cleanupErr = inspectErr
 		} else {
@@ -575,6 +751,10 @@ func (adapter *Adapter) completeExecutionLocked(
 	state.status = persisted.Status
 	state.terminalDurable = true
 	state.cancel = nil
+	if err := adapter.cleanupTerminalCgroup(state); err != nil {
+		adapter.settleExecutionLocked(state)
+		return
+	}
 	adapter.releaseProcessOwnershipLocked(state)
 	adapter.settleExecutionLocked(state)
 	_ = adapter.removeCompletionArtifacts(state.runPath)
@@ -611,17 +791,36 @@ func (adapter *Adapter) buildTerminal(
 	case errors.Is(cause, errExecutionTimeout):
 		terminal.ErrorCode = CodeExecutionTimeout
 		return terminal
-	case errors.Is(cause, errExecutionCanceled), errors.Is(cause, errAdapterShutdown):
+	case errors.Is(cause, errAdapterShutdown):
+		terminal.ErrorCode = CodeExecutionCanceled
+		return terminal
+	case state.startupErrorCode != "":
+		terminal.ErrorCode = state.startupErrorCode
+		return terminal
+	case errors.Is(cause, errExecutionCanceled):
 		terminal.ErrorCode = CodeExecutionCanceled
 		return terminal
 	case cleanupErr != nil:
 		terminal.ErrorCode = CodeProcessCleanupFailed
 		return terminal
-	case proof != nil:
-		terminal.ErrorCode = CodeExecutionStopped
-		return terminal
 	case completion != nil && completion.Cause == supervisorCauseTimeout:
 		terminal.ErrorCode = CodeExecutionTimeout
+		return terminal
+	case proof != nil && proof.Mode == ports.AgentStopForced:
+		terminal.ErrorCode = CodeExecutionStopped
+		return terminal
+	case proof != nil && proof.Mode == ports.AgentStopCooperative &&
+		completion != nil && completion.Cause == supervisorCauseStop &&
+		completion.StopRequestHash == proof.RequestHash &&
+		completion.StopIdempotency == proof.Idempotency &&
+		completion.StopMode == string(proof.Mode) &&
+		completion.StopSequence == proof.Sequence:
+		terminal.ErrorCode = CodeExecutionStopped
+		return terminal
+	case proof != nil && completion == nil:
+		// A cooperative delivery is not an escalation authority. Without the
+		// supervisor's signed stop settlement it cannot be called stopped.
+		terminal.ErrorCode = CodeExecutionInterrupted
 		return terminal
 	case state.process != nil && state.process.SupervisorInstance != "" && completion == nil:
 		terminal.ErrorCode = CodeExecutionInterrupted
@@ -674,6 +873,25 @@ func (adapter *Adapter) finishSupervisedProcessLocked(state *executionState) err
 	return nil
 }
 
+func (adapter *Adapter) finishSupervisedProcessWithStopProofLocked(
+	state *executionState,
+	stopProof stopSignalProof,
+) error {
+	if proof, result, found := adapter.loadCompletionProof(state); found {
+		state.artifactMediaType = proof.ArtifactMediaType
+		clearBytes(result)
+	}
+	request := ports.AgentLaunchRequest{
+		ArtifactMediaType: state.artifactMediaType,
+		MaxOutputBytes:    state.maxOutput,
+	}
+	adapter.completeExecutionLocked(request, state, &stopProof, nil, nil, nil, nil, false)
+	if state.terminal == nil || !state.terminalDurable {
+		return &Error{Code: CodeStatePersistenceFailed}
+	}
+	return nil
+}
+
 func (adapter *Adapter) terminalTime(fallback time.Time) time.Time {
 	observedAt := adapter.config.Now()
 	if observedAt.IsZero() {
@@ -716,6 +934,11 @@ func (adapter *Adapter) finishWithoutProcessLockedWithDiagnostic(state *executio
 	}
 	state.status = terminal.Status
 	state.terminal = &terminal
+	if state.terminalDurable && adapter.cgroups != nil {
+		// The terminal is the rollback commit point. Only after it is durable
+		// may pre-gate failure cleanup kill/remove the leaf and its journals.
+		_ = adapter.cleanupOrphanedCgroup(state.runPath, adapter.config.SupervisorStartTimeout)
+	}
 }
 
 func (adapter *Adapter) prepareRuntimeFiles(runPath string) error {

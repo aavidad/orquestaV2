@@ -10,7 +10,10 @@ import (
 )
 
 func configureProcessGroup(command *exec.Cmd, cause func() error) {
-	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if command.SysProcAttr == nil {
+		command.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	command.SysProcAttr.Setpgid = true
 	command.Cancel = func() error {
 		if command.Process == nil {
 			return os.ErrProcessDone

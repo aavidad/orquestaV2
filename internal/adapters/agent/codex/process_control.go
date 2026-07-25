@@ -26,7 +26,8 @@ const (
 var errOwnerLockBusy = errors.New(CodeProcessOwnershipBusy)
 
 func (adapter *Adapter) processControlsEnabled() bool {
-	return adapter != nil && adapter.config.RuntimeScope != "" && platformProcessControlSupported()
+	return adapter != nil && adapter.config.RuntimeScope != "" && platformProcessControlSupported() &&
+		(adapter.cgroups != nil || adapter.config.allowLegacyProcessControlForTests)
 }
 
 func (adapter *Adapter) acquireOwnerLock(runPath string) (*os.File, error) {
@@ -91,7 +92,7 @@ func (adapter *Adapter) adoptPersistedProcessLocked(state *executionState) (bool
 	if err != nil {
 		return false, err
 	}
-	treeGone, inspectErr := inspectProcessTree(record)
+	treeGone, inspectErr := adapter.inspectProcessTree(record)
 	if inspectErr != nil {
 		releaseOwnerLock(owner)
 		return false, inspectErr
@@ -105,8 +106,80 @@ func (adapter *Adapter) adoptPersistedProcessLocked(state *executionState) (bool
 	if proofFound {
 		state.stopProof.Store(&proof)
 	}
+	intent, intentFound, intentErr := adapter.loadWinningStopSignalIntent(state.runPath)
+	if record.SchemaVersion == cgroupProcessSchemaVersion {
+		identity, identityErr := platformInspectProcess(record)
+		populated, populatedErr := adapter.cgroups.populated(record)
+		if identityErr != nil || populatedErr != nil {
+			adapter.releaseProcessOwnershipLocked(state)
+			return false, errors.Join(identityErr, populatedErr)
+		}
+		if identity == processIdentityGone && intentErr == nil && intentFound &&
+			intent.Mode == ports.AgentStopForced {
+			intentProven := proofFound &&
+				intent.RequestHash == proof.RequestHash &&
+				intent.Idempotency == proof.Idempotency &&
+				intent.Mode == proof.Mode && intent.Sequence == proof.Sequence
+			if !intentProven {
+				if err := adapter.signalForcedIntentLocked(
+					state, record, state.runPath, intent,
+				); err != nil {
+					adapter.releaseProcessOwnershipLocked(state)
+					return false, err
+				}
+				proof, proofFound = *state.stopProof.Load(), true
+			}
+			// A restart must finish the exact forced intent whether the previous
+			// owner crashed before or after cgroup.kill and whether the leaf was
+			// already empty when adoption began.
+			if err := adapter.cgroups.drain(record, adapter.config.SupervisorStartTimeout); err != nil {
+				adapter.releaseProcessOwnershipLocked(state)
+				return false, err
+			}
+			if !proofFound {
+				adapter.releaseProcessOwnershipLocked(state)
+				return false, &Error{Code: CodeStopConflict}
+			}
+			if err := adapter.finishStoppedProcessLocked(state, proof); err != nil {
+				adapter.releaseProcessOwnershipLocked(state)
+				return false, err
+			}
+			return false, nil
+		}
+		if identity == processIdentityGone && populated {
+			if err := adapter.cgroups.drain(record, adapter.config.SupervisorStartTimeout); err != nil {
+				adapter.releaseProcessOwnershipLocked(state)
+				return false, err
+			}
+			if err := adapter.recoverInterruptedExecutionLocked(state); err != nil {
+				adapter.releaseProcessOwnershipLocked(state)
+				return false, err
+			}
+			if err := adapter.cleanupTerminalCgroup(state); err != nil {
+				return false, err
+			}
+			return false, nil
+		}
+	}
 	if treeGone {
 		if proofFound {
+			requireProof := adapter.requireDurableStopProof
+			if record.SchemaVersion == cgroupProcessSchemaVersion {
+				requireProof = adapter.requireWinningStopProof
+			}
+			if err := requireProof(state.runPath, proof); err != nil {
+				if intentErr != nil || !intentFound || intent.Mode != ports.AgentStopForced {
+					adapter.releaseProcessOwnershipLocked(state)
+					return false, errors.Join(err, intentErr)
+				}
+				if err := adapter.signalForcedIntentLocked(
+					state, record, state.runPath, intent,
+				); err != nil {
+					adapter.releaseProcessOwnershipLocked(state)
+					return false, err
+				}
+				proof = *state.stopProof.Load()
+			}
 			if err := adapter.finishStoppedProcessLocked(state, proof); err != nil {
 				adapter.releaseProcessOwnershipLocked(state)
 				return false, err
@@ -119,6 +192,26 @@ func (adapter *Adapter) adoptPersistedProcessLocked(state *executionState) (bool
 			return false, requestErr
 		}
 		if hasStopRequest {
+			if completion, result, found := adapter.loadCompletionProof(state); found &&
+				completion.Cause == supervisorCauseStop {
+				clearBytes(result)
+				intent, intentFound, intentErr := adapter.loadWinningStopSignalIntent(state.runPath)
+				if intentErr != nil || !intentFound {
+					adapter.releaseProcessOwnershipLocked(state)
+					return false, errors.Join(intentErr, &Error{Code: CodeStopConflict})
+				}
+				proof, persistErr := adapter.persistStopSignalProof(state.runPath, intent)
+				if persistErr != nil {
+					adapter.releaseProcessOwnershipLocked(state)
+					return false, persistErr
+				}
+				state.stopProof.Store(&proof)
+				if err := adapter.finishStoppedProcessLocked(state, proof); err != nil {
+					adapter.releaseProcessOwnershipLocked(state)
+					return false, err
+				}
+				return false, nil
+			}
 			adapter.releaseProcessOwnershipLocked(state)
 			return false, nil
 		}
@@ -159,6 +252,36 @@ func inspectProcessTree(record processRecord) (bool, error) {
 	return members == 0, nil
 }
 
+func (adapter *Adapter) inspectProcessTree(record processRecord) (bool, error) {
+	if record.SchemaVersion != cgroupProcessSchemaVersion {
+		if adapter == nil || !adapter.config.allowLegacyProcessControlForTests {
+			return false, &Error{Code: CodeControlUnsupported}
+		}
+		return inspectProcessTree(record)
+	}
+	if adapter == nil || adapter.cgroups == nil {
+		return false, &Error{Code: CodeCgroupRootRequired}
+	}
+	identity, err := platformInspectProcess(record)
+	if err != nil {
+		return false, &Error{Code: CodeProcessInspectionFailed, Cause: err}
+	}
+	if identity == processIdentityMismatch {
+		return false, &Error{Code: CodeProcessIdentityMismatch}
+	}
+	populated, err := adapter.cgroups.populated(record)
+	if err != nil {
+		// cgroupfs refuses rmdir while populated. Therefore an exact missing
+		// leaf, together with the already verified gone supervisor identity,
+		// is equivalent to populated=0 and closes the cleanup race with Stop.
+		if identity == processIdentityGone && errors.Is(err, os.ErrNotExist) {
+			return true, nil
+		}
+		return false, &Error{Code: ErrorCode(err), Cause: errors.Join(errors.New("inspect cgroup population"), err)}
+	}
+	return identity == processIdentityGone && !populated, nil
+}
+
 func signalProcessTree(record processRecord, mode ports.AgentStopMode) error {
 	gone, err := inspectProcessTree(record)
 	if err != nil {
@@ -182,6 +305,28 @@ func signalProcessTree(record processRecord, mode ports.AgentStopMode) error {
 		return &Error{Code: CodeProcessSignalFailed, Cause: err}
 	}
 	return nil
+}
+
+func (adapter *Adapter) signalProcessTree(record processRecord, mode ports.AgentStopMode) error {
+	if record.SchemaVersion != cgroupProcessSchemaVersion {
+		if adapter == nil || !adapter.config.allowLegacyProcessControlForTests {
+			return &Error{Code: CodeControlUnsupported}
+		}
+		return signalProcessTree(record, mode)
+	}
+	if adapter == nil || adapter.cgroups == nil {
+		return &Error{Code: CodeCgroupRootRequired}
+	}
+	if _, err := adapter.cgroups.populated(record); err != nil {
+		return &Error{Code: ErrorCode(err), Cause: errors.Join(errors.New("signal cgroup population"), err)}
+	}
+	err := platformSignalCgroupSupervisor(record, mode)
+	if errors.Is(err, os.ErrProcessDone) && mode == ports.AgentStopForced {
+		// The syscall effect is all that belongs under adapter.mu. Stop then
+		// waits for exact populated=0 through inspectProcessTree after unlock.
+		return adapter.cgroups.kill(record)
+	}
+	return err
 }
 
 func processGroupMemberCount(pgid int) (int, error) {
@@ -249,8 +394,11 @@ func (adapter *Adapter) discoverPersistedProcessesLocked() error {
 
 func (adapter *Adapter) discoverPersistedProcessLocked(runPath string) error {
 	process, found, err := adapter.readProcessRecord(runPath)
-	if err != nil || !found {
+	if err != nil {
 		return err
+	}
+	if !found {
+		return adapter.cleanupOrphanedCgroup(runPath, adapter.config.SupervisorStartTimeout)
 	}
 	executionRef, err := goal.NewExecutionRef(process.ExecutionRef)
 	if err != nil {
@@ -273,7 +421,7 @@ func (adapter *Adapter) discoverPersistedProcessLocked(runPath string) error {
 	if _, terminalFound, err := adapter.loadCausalTerminal(runPath, launch.RequestHash, launch.SpecHash, launch.MaxOutputBytes); err != nil {
 		return err
 	} else if terminalFound {
-		return nil
+		return adapter.cleanupOrphanedCgroup(runPath, adapter.config.SupervisorStartTimeout)
 	}
 	state := &executionState{
 		requestHash: launch.RequestHash, terminalRequestHash: launch.RequestHash,

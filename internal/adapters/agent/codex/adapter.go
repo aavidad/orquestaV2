@@ -25,55 +25,61 @@ const (
 )
 
 const (
-	CodeUnavailable              = "codex.unavailable"
-	CodeCapacityUnavailable      = "codex.capacity_unavailable"
-	CodeExecutionConflict        = "codex.execution_conflict"
-	CodeExecutionNotFound        = "codex.execution_not_found"
-	CodeExecutionInterrupted     = "codex.execution_interrupted"
-	CodeExecutionCanceled        = "codex.execution_canceled"
-	CodeExecutionStopped         = "codex.execution_stopped"
-	CodeExecutionTimeout         = "codex.execution_timeout"
-	CodeProcessStartFailed       = "codex.process_start_failed"
-	CodeProcessFailed            = "codex.process_failed"
-	CodeProcessCleanupFailed     = "codex.process_cleanup_failed"
-	CodeOutputMissing            = "codex.output_missing"
-	CodeOutputTooLarge           = "codex.output_too_large"
-	CodeOutputInvalid            = "codex.output_invalid"
-	CodeStateInvalid             = "codex.state_invalid"
-	CodeStatePersistenceFailed   = "codex.state_persistence_failed"
-	CodeClockInvalid             = "codex.clock_invalid"
-	CodeCommandRequired          = "codex.command_required"
-	CodeCommandInvalid           = "codex.command_invalid"
-	CodeCommandNotFound          = "codex.command_not_found"
-	CodeWorkRootRequired         = "codex.work_root_required"
-	CodeWorkRootCreateFailed     = "codex.work_root_create_failed"
-	CodeWorkRootInvalid          = "codex.work_root_invalid"
-	CodeWorkRootPermissions      = "codex.work_root_permissions"
-	CodeWorkRootOpenFailed       = "codex.work_root_open_failed"
-	CodeRuntimeScopeInvalid      = "codex.runtime_scope_invalid"
-	CodeReasoningEffortInvalid   = "codex.reasoning_effort_invalid"
-	CodeTimeoutInvalid           = "codex.timeout_invalid"
-	CodeProcessPipeDrainInvalid  = "codex.process_pipe_drain_delay_invalid"
-	CodeDiagnosticLimitInvalid   = "codex.max_diagnostic_bytes_invalid"
-	CodeMaxConcurrentInvalid     = "codex.max_concurrent_executions_invalid"
-	CodeEnvironmentInvalid       = "codex.environment_invalid"
-	CodeCredentialInvalid        = "codex.credential_invalid"
-	CodeCredentialUnavailable    = "codex.credential_unavailable"
-	CodePromptRendererInvalid    = "codex.prompt_renderer_invalid"
-	CodePromptRenderFailed       = "codex.prompt_render_failed"
-	CodeSessionInvalid           = "codex.session_invalid"
-	CodeSessionUnavailable       = "codex.session_unavailable"
-	CodeWorkspaceResolverInvalid = "codex.workspace_resolver_invalid"
-	CodeWorkspaceUnavailable     = "codex.workspace_unavailable"
-	CodeWorkspaceUnsafe          = "codex.workspace_unsafe"
-	CodeSecretLeak               = "codex.secret_leak"
-	CodeControlUnsupported       = "codex.control_unsupported"
-	CodeProcessOwnershipBusy     = "codex.process_ownership_busy"
-	CodeProcessOwnershipInvalid  = "codex.process_ownership_invalid"
-	CodeProcessIdentityMismatch  = "codex.process_identity_mismatch"
-	CodeProcessInspectionFailed  = "codex.process_inspection_failed"
-	CodeProcessSignalFailed      = "codex.process_signal_failed"
-	CodeStopConflict             = "codex.stop_conflict"
+	CodeUnavailable                   = "codex.unavailable"
+	CodeCapacityUnavailable           = "codex.capacity_unavailable"
+	CodeExecutionConflict             = "codex.execution_conflict"
+	CodeExecutionNotFound             = "codex.execution_not_found"
+	CodeExecutionInterrupted          = "codex.execution_interrupted"
+	CodeExecutionCanceled             = "codex.execution_canceled"
+	CodeExecutionStopped              = "codex.execution_stopped"
+	CodeExecutionTimeout              = "codex.execution_timeout"
+	CodeProcessStartFailed            = "codex.process_start_failed"
+	CodeProcessFailed                 = "codex.process_failed"
+	CodeProcessCleanupFailed          = "codex.process_cleanup_failed"
+	CodeOutputMissing                 = "codex.output_missing"
+	CodeOutputTooLarge                = "codex.output_too_large"
+	CodeOutputInvalid                 = "codex.output_invalid"
+	CodeStateInvalid                  = "codex.state_invalid"
+	CodeStatePersistenceFailed        = "codex.state_persistence_failed"
+	CodeClockInvalid                  = "codex.clock_invalid"
+	CodeCommandRequired               = "codex.command_required"
+	CodeCommandInvalid                = "codex.command_invalid"
+	CodeCommandNotFound               = "codex.command_not_found"
+	CodeWorkRootRequired              = "codex.work_root_required"
+	CodeWorkRootCreateFailed          = "codex.work_root_create_failed"
+	CodeWorkRootInvalid               = "codex.work_root_invalid"
+	CodeWorkRootPermissions           = "codex.work_root_permissions"
+	CodeWorkRootOpenFailed            = "codex.work_root_open_failed"
+	CodeRuntimeScopeInvalid           = "codex.runtime_scope_invalid"
+	CodeReasoningEffortInvalid        = "codex.reasoning_effort_invalid"
+	CodeTimeoutInvalid                = "codex.timeout_invalid"
+	CodeProcessPipeDrainInvalid       = "codex.process_pipe_drain_delay_invalid"
+	CodeSupervisorStartTimeoutInvalid = "codex.supervisor_start_timeout_invalid"
+	CodeDiagnosticLimitInvalid        = "codex.max_diagnostic_bytes_invalid"
+	CodeMaxConcurrentInvalid          = "codex.max_concurrent_executions_invalid"
+	CodeEnvironmentInvalid            = "codex.environment_invalid"
+	CodeCredentialInvalid             = "codex.credential_invalid"
+	CodeCredentialUnavailable         = "codex.credential_unavailable"
+	CodePromptRendererInvalid         = "codex.prompt_renderer_invalid"
+	CodePromptRenderFailed            = "codex.prompt_render_failed"
+	CodeSessionInvalid                = "codex.session_invalid"
+	CodeSessionUnavailable            = "codex.session_unavailable"
+	CodeWorkspaceResolverInvalid      = "codex.workspace_resolver_invalid"
+	CodeWorkspaceUnavailable          = "codex.workspace_unavailable"
+	CodeWorkspaceUnsafe               = "codex.workspace_unsafe"
+	CodeSecretLeak                    = "codex.secret_leak"
+	CodeControlUnsupported            = "codex.control_unsupported"
+	CodeProcessOwnershipBusy          = "codex.process_ownership_busy"
+	CodeProcessOwnershipInvalid       = "codex.process_ownership_invalid"
+	CodeProcessIdentityMismatch       = "codex.process_identity_mismatch"
+	CodeProcessInspectionFailed       = "codex.process_inspection_failed"
+	CodeProcessSignalFailed           = "codex.process_signal_failed"
+	CodeStopConflict                  = "codex.stop_conflict"
+	CodeCgroupRootRequired            = "codex.cgroup_root_required"
+	CodeCgroupRootInvalid             = "codex.cgroup_root_invalid"
+	CodeCgroupCreateFailed            = "codex.cgroup_create_failed"
+	CodeCgroupIdentityMismatch        = "codex.cgroup_identity_mismatch"
+	CodeCgroupDrainFailed             = "codex.cgroup_drain_failed"
 )
 
 // WorkspacePathResolver is deliberately adapter-local.  It resolves the
@@ -96,23 +102,29 @@ var (
 type Config struct {
 	Command  string
 	WorkRoot string
+	// CgroupRoot is the composition-delegated cgroup v2 directory used only
+	// for Codex execution boundaries. It is distinct from attestor resources.
+	CgroupRoot string
 	// RuntimeScope is an opaque, host-local identity supplied by bootstrap. It
 	// must not be stored in the application database or copied by its backup.
-	RuntimeScope            string
-	Model                   string
-	ReasoningEffort         string
-	Timeout                 time.Duration
-	ProcessPipeDrainDelay   time.Duration
-	MaxDiagnosticBytes      int64
-	MaxConcurrentExecutions int
-	MCPBearerTokenEnvVar    string
-	Environment             map[string]string
-	CredentialStore         credentials.Store
-	CredentialRef           credentials.CredentialRef
-	PromptRenderer          PromptRenderer
-	SessionResolver         SessionResolver
-	WorkspacePathResolver   WorkspacePathResolver
-	Now                     func() time.Time
+	RuntimeScope                      string
+	Model                             string
+	ReasoningEffort                   string
+	Timeout                           time.Duration
+	ProcessPipeDrainDelay             time.Duration
+	SupervisorStartTimeout            time.Duration
+	MaxDiagnosticBytes                int64
+	MaxConcurrentExecutions           int
+	MCPBearerTokenEnvVar              string
+	Environment                       map[string]string
+	CredentialStore                   credentials.Store
+	CredentialRef                     credentials.CredentialRef
+	PromptRenderer                    PromptRenderer
+	SessionResolver                   SessionResolver
+	WorkspacePathResolver             WorkspacePathResolver
+	Now                               func() time.Time
+	allowLegacyProcessControlForTests bool
+	launchFailureStageForTests        string
 }
 
 // Error exposes only a stable machine code. Cause is retained for local
@@ -163,22 +175,27 @@ type Adapter struct {
 	environment           []string
 	rootPath              string
 	root                  *os.Root
+	cgroups               *codexCgroupRoot
 	syncDirectoryFn       func(*os.Root, string) error
 	processCleanup        func(*exec.Cmd) error
 	credentialOutputScrub func(string) error
+	beforeCgroupCleanup   func(string) error
 	shutdownSignal        func(processRecord, ports.AgentStopMode) error
 	shutdownInspect       func(processRecord) (bool, error)
 	workspaceResolver     WorkspacePathResolver
 	lifecycle             context.Context
 	cancelLifecycle       context.CancelCauseFunc
 
-	mu           sync.Mutex
-	closed       bool
-	executions   map[string]*executionState
-	waitGroup    sync.WaitGroup
-	shutdownOnce sync.Once
-	shutdownDone chan struct{}
-	shutdownErr  error
+	mu             sync.Mutex
+	closed         bool
+	executions     map[string]*executionState
+	activeWaits    int
+	waitsDone      chan struct{}
+	operations     int
+	operationsDone chan struct{}
+	shutdownOnce   sync.Once
+	shutdownDone   chan struct{}
+	shutdownErr    error
 }
 
 type executionState struct {
@@ -197,6 +214,9 @@ type executionState struct {
 	process             *processRecord
 	ownerLock           *os.File
 	settled             chan struct{}
+	starting            *executionStart
+	startupRollback     bool
+	startupErrorCode    string
 	stopProof           atomic.Pointer[stopSignalProof]
 }
 
@@ -205,23 +225,42 @@ func New(config Config) (*Adapter, error) {
 	if err != nil {
 		return nil, err
 	}
+	var cgroups *codexCgroupRoot
+	if validated.CgroupRoot != "" {
+		cgroups, err = openCodexCgroupRoot(validated.CgroupRoot)
+		if err != nil {
+			_ = root.Close()
+			return nil, err
+		}
+	} else if platformCgroupRequired() && validated.RuntimeScope != "" &&
+		!validated.allowLegacyProcessControlForTests {
+		_ = root.Close()
+		return nil, &Error{Code: CodeCgroupRootRequired}
+	}
 	lifecycle, cancelLifecycle := context.WithCancelCause(context.Background())
+	waitsDone := make(chan struct{})
+	close(waitsDone)
+	operationsDone := make(chan struct{})
+	close(operationsDone)
 	adapter := &Adapter{
 		config:            validated,
 		command:           command,
 		environment:       environment,
 		rootPath:          rootPath,
 		root:              root,
+		cgroups:           cgroups,
 		workspaceResolver: validated.WorkspacePathResolver,
 		syncDirectoryFn:   syncCodexDirectory,
 		processCleanup:    cleanupProcessGroup,
-		shutdownSignal:    signalProcessTree,
-		shutdownInspect:   inspectProcessTree,
 		lifecycle:         lifecycle,
 		cancelLifecycle:   cancelLifecycle,
 		executions:        make(map[string]*executionState),
+		waitsDone:         waitsDone,
+		operationsDone:    operationsDone,
 		shutdownDone:      make(chan struct{}),
 	}
+	adapter.shutdownSignal = adapter.signalProcessTree
+	adapter.shutdownInspect = adapter.inspectProcessTree
 	adapter.credentialOutputScrub = adapter.scrubCredentialOutput
 	return adapter, nil
 }
@@ -248,8 +287,15 @@ func (adapter *Adapter) BindRuntimeScope(scope string) error {
 	if adapter.config.RuntimeScope != "" || len(adapter.executions) != 0 {
 		return &Error{Code: CodeRuntimeScopeInvalid}
 	}
+	if platformCgroupRequired() && adapter.cgroups == nil {
+		if adapter.config.allowLegacyProcessControlForTests {
+			adapter.config.RuntimeScope = scope
+			return nil
+		}
+		return &Error{Code: CodeCgroupRootRequired}
+	}
 	adapter.config.RuntimeScope = scope
-	return nil
+	return adapter.discoverPersistedProcessesLocked()
 }
 
 // BindWorkspacePathResolver attaches the composition-owned local resolver only
@@ -275,6 +321,11 @@ func (adapter *Adapter) Capabilities(ctx context.Context) (ports.AgentCapabiliti
 	}
 	if err := ctx.Err(); err != nil {
 		return ports.AgentCapabilities{}, err
+	}
+	select {
+	case <-adapter.lifecycle.Done():
+		return ports.AgentCapabilities{}, &Error{Code: CodeUnavailable}
+	default:
 	}
 	adapter.mu.Lock()
 	closed := adapter.closed
@@ -307,6 +358,13 @@ func (adapter *Adapter) Launch(ctx context.Context, request ports.AgentLaunchReq
 	if err := ports.ValidateAgentLaunchRequest(request); err != nil {
 		return ports.AgentLaunchReceipt{}, err
 	}
+	callerContext := ctx
+	operationContext, endOperation, err := adapter.beginOperation(ctx)
+	if err != nil {
+		return ports.AgentLaunchReceipt{}, err
+	}
+	defer endOperation()
+	ctx = operationContext
 	requestHash, err := hashLaunchRequest(request)
 	if err != nil {
 		return ports.AgentLaunchReceipt{}, &Error{Code: CodeStateInvalid, Cause: err}
@@ -376,7 +434,7 @@ func (adapter *Adapter) Launch(ctx context.Context, request ports.AgentLaunchReq
 				}
 				return adapter.replayTerminalLaunchLocked(executionKey, requestHash, record, receipt, runPath, terminal), nil
 			}
-			receipt, credentialErr := adapter.launchWithCredentialLocked(ctx, request, requestHash, session)
+			receipt, credentialErr := adapter.launchWithCredentialLocked(ctx, callerContext, request, requestHash, session)
 			if credentialErr != nil {
 				if trustedReplay && recoveryAuthorityFailure(credentialErr) {
 					credentialErr = adapter.quarantineLaunchRecoveryLocked(ctx, request, validatedRecord, record.RequestHash, runPath, credentialErr)
@@ -392,7 +450,7 @@ func (adapter *Adapter) Launch(ctx context.Context, request ports.AgentLaunchReq
 			}
 			return adapter.replayTerminalLaunchLocked(executionKey, requestHash, record, receipt, runPath, terminal), nil
 		}
-		return adapter.resumeLaunchRecordLocked(ctx, request, requestHash, record, runPath, false, nil, nil, session)
+		return adapter.resumeLaunchRecordLocked(ctx, callerContext, request, requestHash, record, runPath, false, nil, nil, session)
 	}
 	if adapter.activeExecutionCountLocked() >= adapter.config.MaxConcurrentExecutions {
 		return ports.AgentLaunchReceipt{}, &Error{
@@ -410,7 +468,7 @@ func (adapter *Adapter) Launch(ctx context.Context, request ports.AgentLaunchReq
 		return ports.AgentLaunchReceipt{}, err
 	}
 	if adapter.config.CredentialStore != nil {
-		return adapter.launchWithCredentialLocked(ctx, request, requestHash, session)
+		return adapter.launchWithCredentialLocked(ctx, callerContext, request, requestHash, session)
 	}
 	record, runPath, recordCreated, err := adapter.ensureLaunchRecord(request, requestHash)
 	if err != nil {
@@ -418,7 +476,7 @@ func (adapter *Adapter) Launch(ctx context.Context, request ports.AgentLaunchReq
 	}
 	environment := adapter.environmentWithSession(adapter.environment, session)
 	defer clearEnvironment(environment)
-	return adapter.resumeLaunchRecordLocked(ctx, request, requestHash, record, runPath, recordCreated, environment, nil, session)
+	return adapter.resumeLaunchRecordLocked(ctx, callerContext, request, requestHash, record, runPath, recordCreated, environment, nil, session)
 }
 
 func (adapter *Adapter) validateLaunchReplay(runPath string, record launchRecord, request ports.AgentLaunchRequest, requestHash string) (launchRecord, ports.AgentLaunchReceipt, bool, error) {
@@ -471,7 +529,18 @@ func (adapter *Adapter) replayTerminalLaunchLocked(
 	return receipt
 }
 
-func (adapter *Adapter) resumeLaunchRecordLocked(ctx context.Context, request ports.AgentLaunchRequest, requestHash string, record launchRecord, runPath string, recordCreated bool, environment []string, credentialGuard *credentials.LeakGuard, session *resolvedSession) (ports.AgentLaunchReceipt, error) {
+func (adapter *Adapter) resumeLaunchRecordLocked(
+	ctx context.Context,
+	callerContext context.Context,
+	request ports.AgentLaunchRequest,
+	requestHash string,
+	record launchRecord,
+	runPath string,
+	recordCreated bool,
+	environment []string,
+	credentialGuard *credentials.LeakGuard,
+	session *resolvedSession,
+) (ports.AgentLaunchReceipt, error) {
 	defer func() {
 		if credentialGuard != nil {
 			credentialGuard.Destroy()
@@ -527,7 +596,12 @@ func (adapter *Adapter) resumeLaunchRecordLocked(ctx context.Context, request po
 	}
 
 	adapter.executions[executionKey] = state
-	adapter.startExecutionLocked(ctx, request, state, environment, session)
+	start := adapter.startExecutionLocked(ctx, callerContext, request, state, environment, session)
+	if start != nil {
+		adapter.mu.Unlock()
+		adapter.resolveExecutionStart(start)
+		adapter.mu.Lock()
+	}
 	return receipt, nil
 }
 
@@ -551,6 +625,12 @@ func (adapter *Adapter) Observe(ctx context.Context, executionRef goal.Execution
 	if executionRef.String() == "" {
 		return ports.AgentObservation{}, &ports.AgentContractError{Code: "agent.execution_ref_required"}
 	}
+	operationContext, endOperation, err := adapter.beginOperation(ctx)
+	if err != nil {
+		return ports.AgentObservation{}, err
+	}
+	defer endOperation()
+	ctx = operationContext
 	executionKey := executionRef.String()
 
 	adapter.mu.Lock()
@@ -559,7 +639,39 @@ func (adapter *Adapter) Observe(ctx context.Context, executionRef goal.Execution
 		return ports.AgentObservation{}, &Error{Code: CodeUnavailable}
 	}
 	if state, found := adapter.executions[executionKey]; found {
-		return adapter.observeStateLocked(executionKey, executionRef, state)
+		for state.starting != nil || (state.startupRollback && state.terminal == nil && state.settled != nil) {
+			starting := state.settled
+			if state.starting != nil {
+				starting = state.starting.resolved
+			}
+			adapter.mu.Unlock()
+			select {
+			case <-ctx.Done():
+				adapter.mu.Lock()
+				if errors.Is(context.Cause(ctx), errAdapterShutdown) {
+					return ports.AgentObservation{}, &Error{Code: CodeUnavailable}
+				}
+				return ports.AgentObservation{}, ctx.Err()
+			case <-starting:
+			}
+			adapter.mu.Lock()
+			if ctx.Err() != nil {
+				if errors.Is(context.Cause(ctx), errAdapterShutdown) {
+					return ports.AgentObservation{}, &Error{Code: CodeUnavailable}
+				}
+				return ports.AgentObservation{}, ctx.Err()
+			}
+			if adapter.closed {
+				return ports.AgentObservation{}, &Error{Code: CodeUnavailable}
+			}
+			current, stillFound := adapter.executions[executionKey]
+			if !stillFound || current != state {
+				break
+			}
+		}
+		if current, stillFound := adapter.executions[executionKey]; stillFound && current == state {
+			return adapter.observeStateLocked(executionKey, executionRef, state)
+		}
 	}
 
 	record, runPath, found, err := adapter.loadLaunchRecord(executionRef)
@@ -616,13 +728,16 @@ func (adapter *Adapter) recoverInterruptedExecutionLocked(state *executionState)
 		return err
 	}
 	state.status, state.terminal, state.terminalDurable = persisted.Status, &persisted, true
+	if err := adapter.cleanupTerminalCgroup(state); err != nil {
+		return err
+	}
 	adapter.releaseProcessOwnershipLocked(state)
 	return nil
 }
 
 func (adapter *Adapter) observeStateLocked(executionKey string, executionRef goal.ExecutionRef, state *executionState) (ports.AgentObservation, error) {
 	if state.terminal == nil && state.process != nil && state.cancel == nil {
-		treeGone, err := inspectProcessTree(*state.process)
+		treeGone, err := adapter.inspectProcessTree(*state.process)
 		if err != nil {
 			return ports.AgentObservation{}, err
 		}
@@ -667,6 +782,12 @@ func (adapter *Adapter) observeStateLocked(executionKey string, executionRef goa
 		state.status = persisted.Status
 		state.terminalDurable = true
 	}
+	if state.terminal != nil && state.terminalDurable {
+		if err := adapter.cleanupTerminalCgroup(state); err != nil {
+			return ports.AgentObservation{}, err
+		}
+		adapter.releaseProcessOwnershipLocked(state)
+	}
 	observation, err := adapter.observationForState(executionRef, state)
 	if err == nil && state.terminal != nil && state.terminalDurable {
 		delete(adapter.executions, executionKey)
@@ -699,34 +820,113 @@ func (adapter *Adapter) Shutdown(ctx context.Context) error {
 	if adapter == nil {
 		return nil
 	}
+	// Cancellation is deliberately published before taking mu. A launch may be
+	// outside the mutex waiting for supervisor READY, and an operation already
+	// inside the mutex still receives the lifecycle cause immediately.
+	adapter.cancelLifecycle(errAdapterShutdown)
 	adapter.mu.Lock()
 	if !adapter.closed {
 		adapter.closed = true
-		adapter.cancelLifecycle(errAdapterShutdown)
 	}
 	adapter.shutdownOnce.Do(func() {
-		adopted, discoveryErr := adapter.adoptedProcessesLocked()
-		// Shutdown callers normally provide the composition deadline. Config.Timeout
-		// bounds Close(context.Background()) too, so adopted-process inspection can
-		// never retain the root descriptor indefinitely.
-		shutdownCtx, cancel := context.WithTimeout(ctx, adapter.config.Timeout)
-		go func() {
-			defer cancel()
-			adoptedErr := adapter.stopAdoptedProcesses(shutdownCtx, adopted)
-			adapter.waitGroup.Wait()
-			adapter.shutdownErr = errors.Join(discoveryErr, adoptedErr, adapter.root.Close())
-			close(adapter.shutdownDone)
-		}()
+		shutdownCtx, cancel := context.WithTimeout(ctx, adapter.config.SupervisorStartTimeout)
+		operationsDone := adapter.operationsDone
+		go adapter.finalizeShutdown(shutdownCtx, cancel, operationsDone)
 	})
 	done := adapter.shutdownDone
 	adapter.mu.Unlock()
 
+	waitContext := ctx
+	cancelWait := func() {}
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		waitContext, cancelWait = context.WithTimeout(ctx, adapter.config.SupervisorStartTimeout)
+	}
+	defer cancelWait()
 	select {
-	case <-ctx.Done():
-		return ctx.Err()
+	case <-waitContext.Done():
+		return waitContext.Err()
 	case <-done:
 		return adapter.shutdownErr
 	}
+}
+
+func (adapter *Adapter) finalizeShutdown(
+	shutdownCtx context.Context,
+	cancel context.CancelFunc,
+	operationsDone <-chan struct{},
+) {
+	defer cancel()
+	// The coordinator is unique. Deadlines bound the caller and the stop phase,
+	// but never authorize closing root/cgroup descriptors while an operation or
+	// command waiter still owns them. Once those owners cooperate, this same
+	// goroutine resumes finalization and closes shutdownDone exactly once.
+	<-operationsDone
+	adapter.mu.Lock()
+	adopted, discoveryErr := adapter.adoptedProcessesLocked()
+	adapter.mu.Unlock()
+	adoptedErr := adapter.stopAdoptedProcesses(shutdownCtx, adopted)
+
+	adapter.mu.Lock()
+	waitsDone := adapter.waitsDone
+	adapter.mu.Unlock()
+	<-waitsDone
+
+	shutdownErr := errors.Join(discoveryErr, adoptedErr, adapter.root.Close())
+	if adapter.cgroups != nil {
+		shutdownErr = errors.Join(shutdownErr, adapter.cgroups.close())
+	}
+	adapter.mu.Lock()
+	adapter.shutdownErr = shutdownErr
+	close(adapter.shutdownDone)
+	adapter.mu.Unlock()
+}
+
+func (adapter *Adapter) beginOperation(ctx context.Context) (context.Context, func(), error) {
+	adapter.mu.Lock()
+	if adapter.closed || context.Cause(adapter.lifecycle) != nil {
+		adapter.mu.Unlock()
+		return nil, nil, &Error{Code: CodeUnavailable}
+	}
+	if adapter.operations == 0 {
+		adapter.operationsDone = make(chan struct{})
+	}
+	adapter.operations++
+	adapter.mu.Unlock()
+
+	operationContext, cancelOperation := context.WithCancelCause(ctx)
+	stopLifecycle := context.AfterFunc(adapter.lifecycle, func() {
+		cancelOperation(errAdapterShutdown)
+	})
+	var once sync.Once
+	end := func() {
+		once.Do(func() {
+			stopLifecycle()
+			cancelOperation(errExecutionFinished)
+			adapter.mu.Lock()
+			adapter.operations--
+			if adapter.operations == 0 {
+				close(adapter.operationsDone)
+			}
+			adapter.mu.Unlock()
+		})
+	}
+	return operationContext, end, nil
+}
+
+func (adapter *Adapter) beginExecutionWaitLocked() {
+	if adapter.activeWaits == 0 {
+		adapter.waitsDone = make(chan struct{})
+	}
+	adapter.activeWaits++
+}
+
+func (adapter *Adapter) endExecutionWait() {
+	adapter.mu.Lock()
+	adapter.activeWaits--
+	if adapter.activeWaits == 0 {
+		close(adapter.waitsDone)
+	}
+	adapter.mu.Unlock()
 }
 
 type adoptedProcess struct {

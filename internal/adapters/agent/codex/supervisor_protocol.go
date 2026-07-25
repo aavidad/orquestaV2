@@ -21,12 +21,13 @@ import (
 const (
 	localSupervisorArgument       = "__orquesta_internal_codex_supervisor_v1"
 	supervisorEnvelopeSchema      = 1
-	completionProofSchema         = 1
+	completionProofSchema         = 2
 	completionProofFileName       = "completion-proof.json"
 	maxSupervisorEnvelopeBytes    = 64 << 20
 	maxCompletionProofExtraBytes  = 16 << 10
 	supervisorCauseNatural        = "natural"
 	supervisorCauseTimeout        = "timeout"
+	supervisorCauseStop           = "stop"
 	supervisorInternalFailureExit = 125
 )
 
@@ -51,12 +52,22 @@ type supervisorEnvelope struct {
 	PipeDrainDelayNanos  int64    `json:"pipe_drain_delay_nanos"`
 	MaxDiagnosticBytes   int64    `json:"max_diagnostic_bytes"`
 	MaxOutputBytes       int64    `json:"max_output_bytes"`
+	CgroupRootDevice     uint64   `json:"cgroup_root_device"`
+	CgroupRootInode      uint64   `json:"cgroup_root_inode"`
+	CgroupControlDevice  uint64   `json:"cgroup_control_device"`
+	CgroupControlInode   uint64   `json:"cgroup_control_inode"`
+	CgroupName           string   `json:"cgroup_name"`
+	CgroupDevice         uint64   `json:"cgroup_device"`
+	CgroupInode          uint64   `json:"cgroup_inode"`
 }
 
 type supervisorCommand struct {
 	command                            *exec.Cmd
 	gateReader, gateWriter, sealed     *os.File
 	diagnosticReader, diagnosticWriter *os.File
+	controlCgroup, workCgroup          *os.File
+	cgroupLeaf                         *codexCgroupLeaf
+	readyReader, readyWriter           *os.File
 }
 
 type completionProof struct {
@@ -76,16 +87,27 @@ type completionProof struct {
 	WorkerPGID            int    `json:"worker_pgid"`
 	WorkerBootID          string `json:"worker_boot_id"`
 	WorkerBirthMarker     string `json:"worker_birth_marker"`
+	CgroupRootDevice      uint64 `json:"cgroup_root_device"`
+	CgroupRootInode       uint64 `json:"cgroup_root_inode"`
+	CgroupControlDevice   uint64 `json:"cgroup_control_device"`
+	CgroupControlInode    uint64 `json:"cgroup_control_inode"`
+	CgroupName            string `json:"cgroup_name"`
+	CgroupDevice          uint64 `json:"cgroup_device"`
+	CgroupInode           uint64 `json:"cgroup_inode"`
 
-	Cause          string `json:"cause"`
-	Exited         bool   `json:"exited"`
-	ExitCode       int    `json:"exit_code"`
-	Signal         int    `json:"signal"`
-	TreeGone       bool   `json:"tree_gone"`
-	ResultFound    bool   `json:"result_found"`
-	ResultSize     int64  `json:"result_size"`
-	ResultHash     string `json:"result_sha256"`
-	ResultTooLarge bool   `json:"result_too_large"`
+	Cause           string `json:"cause"`
+	StopRequestHash string `json:"stop_request_hash,omitempty"`
+	StopIdempotency string `json:"stop_idempotency_key,omitempty"`
+	StopMode        string `json:"stop_mode,omitempty"`
+	StopSequence    uint64 `json:"stop_sequence,omitempty"`
+	Exited          bool   `json:"exited"`
+	ExitCode        int    `json:"exit_code"`
+	Signal          int    `json:"signal"`
+	TreeGone        bool   `json:"tree_gone"`
+	ResultFound     bool   `json:"result_found"`
+	ResultSize      int64  `json:"result_size"`
+	ResultHash      string `json:"result_sha256"`
+	ResultTooLarge  bool   `json:"result_too_large"`
 
 	DiagnosticSize      int64  `json:"diagnostic_size"`
 	DiagnosticHash      string `json:"diagnostic_sha256"`
@@ -134,6 +156,12 @@ func validateSupervisorEnvelope(envelope supervisorEnvelope) error {
 		envelope.TimeoutNanos <= 0 || envelope.PipeDrainDelayNanos < 0 ||
 		envelope.MaxDiagnosticBytes <= 0 || envelope.MaxOutputBytes <= 0 {
 		return errors.New("invalid supervisor envelope")
+	}
+	if envelope.CgroupRootDevice == 0 || envelope.CgroupRootInode == 0 ||
+		envelope.CgroupControlDevice == 0 || envelope.CgroupControlInode == 0 ||
+		!validCgroupName(envelope.CgroupName) ||
+		envelope.CgroupDevice == 0 || envelope.CgroupInode == 0 {
+		return errors.New("invalid supervisor cgroup envelope")
 	}
 	for _, value := range append(append([]string(nil), envelope.Arguments...), envelope.Environment...) {
 		if strings.ContainsRune(value, 0) {
