@@ -142,12 +142,21 @@ func v22AssertFixture(t *testing.T, root string, fixture v22Fixture) {
 		"orquesta.mailbox.list", "orquesta.mailbox.mark_delivered",
 	})
 	v22AssertExactSet(t, "required behavior tests", fixture.RequiredBehaviorTests, []string{
+		"TestAgentContractFailureDispositionIsClosedAndFailedOnly",
 		"TestCodexChildDeliveryUsesSameExecutionServicePrincipalAfterArtifactPersistence",
 		"TestCodexRuntimeUsesCatalogOwnedPrompt",
+		"TestCredentialLeakDispositionSurvivesRestart",
+		"TestCredentialUnverifiableOutputIsScrubbedAndRetryable",
 		"TestExecutionServicePrincipalExactScopeRevocationAndRestart",
 		"TestProductionBuildCreatesDurableExecutionAuthorityResolver",
+		"TestSQLiteV19TerminalSecurityCouncilCleanupRestartAndReplay",
+		"TestTerminalSecurityAbortsCouncilCohortWithoutDecisionOrOrphanAction",
+		"TestTerminalSecurityAbortsReviewRoundAndInterruptsAuthorAfterCleanup",
+		"TestTerminalSecurityCouncilCleanupFencesDispatchingPeerUntilAcceptedStop",
+		"TestTerminalSecurityInterruptsOrdinaryWorkWithoutReplacementOrFalseClosure",
 		"TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP",
 		"TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess",
+		"TestV22SuccessfulGoalAcceptsOnlyClosedReplacementHistory",
 	})
 	v22AssertExactSet(t, "required real E2E tests", fixture.RequiredRealE2ETests, []string{
 		"TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP",
@@ -173,6 +182,7 @@ func v22AssertFixture(t *testing.T, root string, fixture v22Fixture) {
 			[]string{
 				"BUG-ORQ-20260723-366", "BUG-ORQ-20260723-390", "BUG-ORQ-20260723-391",
 				"BUG-ORQ-20260723-394", "BUG-ORQ-20260723-395", "BUG-ORQ-20260723-396",
+				"BUG-ORQ-20260725-449", "BUG-ORQ-20260725-450",
 			}) {
 		t.Fatalf("invalid V22 closure/deferment ratchets: %+v", fixture)
 	}
