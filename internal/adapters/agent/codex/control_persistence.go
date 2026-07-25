@@ -13,21 +13,24 @@ import (
 )
 
 const (
-	processSchemaVersion = 1
-	processFileName      = "process.json"
-	ownerLockFileName    = "owner.lock"
-	stopCompletionName   = "stop-completion.json"
+	processSchemaVersion           = 1
+	supervisedProcessSchemaVersion = 2
+	processFileName                = "process.json"
+	ownerLockFileName              = "owner.lock"
+	stopCompletionName             = "stop-completion.json"
 )
 
 type processRecord struct {
-	SchemaVersion int    `json:"schema_version"`
-	ExecutionRef  string `json:"execution_ref"`
-	RequestHash   string `json:"request_hash"`
-	RuntimeScope  string `json:"runtime_scope"`
-	PID           int    `json:"pid"`
-	PGID          int    `json:"pgid"`
-	BootID        string `json:"boot_id"`
-	BirthMarker   string `json:"birth_marker"`
+	SchemaVersion       int    `json:"schema_version"`
+	SupervisorInstance  string `json:"supervisor_instance,omitempty"`
+	CompletionPublicKey string `json:"completion_public_key,omitempty"`
+	ExecutionRef        string `json:"execution_ref"`
+	RequestHash         string `json:"request_hash"`
+	RuntimeScope        string `json:"runtime_scope"`
+	PID                 int    `json:"pid"`
+	PGID                int    `json:"pgid"`
+	BootID              string `json:"boot_id"`
+	BirthMarker         string `json:"birth_marker"`
 }
 
 type stopRequestRecord struct {
@@ -142,7 +145,13 @@ func (adapter *Adapter) readProcessRecord(runPath string) (processRecord, bool, 
 	if err != nil || !found {
 		return processRecord{}, found, err
 	}
-	if record.SchemaVersion != processSchemaVersion || record.ExecutionRef == "" ||
+	if (record.SchemaVersion != processSchemaVersion && record.SchemaVersion != supervisedProcessSchemaVersion) ||
+		(record.SchemaVersion == processSchemaVersion &&
+			(record.SupervisorInstance != "" || record.CompletionPublicKey != "")) ||
+		(record.SchemaVersion == supervisedProcessSchemaVersion &&
+			(!validSupervisorToken(record.SupervisorInstance, "supervisor:") ||
+				!validCompletionPublicKey(record.CompletionPublicKey))) ||
+		record.ExecutionRef == "" ||
 		record.RequestHash == "" || record.RuntimeScope == "" || record.PID <= 0 ||
 		record.PGID <= 0 || record.BootID == "" || record.BirthMarker == "" {
 		return processRecord{}, false, &Error{Code: CodeProcessOwnershipInvalid}

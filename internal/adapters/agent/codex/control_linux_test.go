@@ -821,7 +821,7 @@ func TestCodexSelectiveStopAdoptsAfterCrashAndRejectsReusedPID(t *testing.T) {
 		}
 	})
 
-	t.Run("cleanup failure outranks a successful stop signal", func(t *testing.T) {
+	t.Run("supervisor proof bypasses obsolete parent cleanup hook", func(t *testing.T) {
 		config := processTreeTestConfig(t)
 		adapter := openTestAdapter(t, config)
 		adapter.processCleanup = func(*exec.Cmd) error { return errors.New("test cleanup failed") }
@@ -834,12 +834,12 @@ func TestCodexSelectiveStopAdoptsAfterCrashAndRejectsReusedPID(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		receipt, err := adapter.Stop(ctx, stopRequestForLaunch(launch, ports.AgentStopForced, "stop:cleanup-failure"))
-		if err != nil || receipt.Status != ports.AgentStopAlreadyFailed {
-			t.Fatalf("Stop(cleanup failure) = %+v, %v", receipt, err)
+		if err != nil || receipt.Status != ports.AgentStopped {
+			t.Fatalf("Stop(supervised cleanup) = %+v, %v", receipt, err)
 		}
 		observation, err := adapter.Observe(context.Background(), request.ExecutionRef)
-		if err != nil || observation.ErrorCode != CodeProcessCleanupFailed {
-			t.Fatalf("Observe(cleanup failure) = %+v, %v", observation, err)
+		if err != nil || observation.ErrorCode != CodeExecutionStopped {
+			t.Fatalf("Observe(supervised cleanup) = %+v, %v", observation, err)
 		}
 		assertProcessGoneWithESRCH(t, grandchild)
 	})

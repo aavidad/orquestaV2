@@ -186,6 +186,7 @@ type executionState struct {
 	terminalRequestHash string
 	receipt             ports.AgentLaunchReceipt
 	maxOutput           int64
+	artifactMediaType   string
 	runPath             string
 	status              ports.AgentStatus
 	terminal            *terminalRecord
@@ -493,7 +494,8 @@ func (adapter *Adapter) resumeLaunchRecordLocked(ctx context.Context, request po
 		return ports.AgentLaunchReceipt{}, err
 	}
 	state := &executionState{requestHash: requestHash, terminalRequestHash: terminalRequestHash,
-		receipt: receipt, maxOutput: record.MaxOutputBytes, runPath: runPath, status: ports.AgentPending}
+		receipt: receipt, maxOutput: record.MaxOutputBytes, artifactMediaType: request.ArtifactMediaType,
+		runPath: runPath, status: ports.AgentPending}
 	if terminal, found, loadErr := adapter.loadCausalTerminal(runPath, terminalRequestHash, record.SpecHash, record.MaxOutputBytes); loadErr != nil {
 		return ports.AgentLaunchReceipt{}, loadErr
 	} else if found {
@@ -630,13 +632,25 @@ func (adapter *Adapter) observeStateLocked(executionKey string, executionRef goa
 					return ports.AgentObservation{}, err
 				}
 			} else {
-				// A durable request only proves intent. Read it so journal I/O
-				// failures remain visible, then recover the unknowable exit.
-				if _, err := adapter.hasDurableStopRequest(state.runPath); err != nil {
-					return ports.AgentObservation{}, err
+				hasStopRequest, requestErr := adapter.hasDurableStopRequest(state.runPath)
+				if requestErr != nil {
+					return ports.AgentObservation{}, requestErr
 				}
-				if err := adapter.recoverInterruptedExecutionLocked(state); err != nil {
-					return ports.AgentObservation{}, err
+				if hasStopRequest {
+					if err := adapter.recoverInterruptedExecutionLocked(state); err != nil {
+						return ports.AgentObservation{}, err
+					}
+				} else {
+					if _, result, completionFound := adapter.loadCompletionProof(state); completionFound {
+						clearBytes(result)
+						if err := adapter.finishSupervisedProcessLocked(state); err != nil {
+							return ports.AgentObservation{}, err
+						}
+					} else {
+						if err := adapter.recoverInterruptedExecutionLocked(state); err != nil {
+							return ports.AgentObservation{}, err
+						}
+					}
 				}
 			}
 		}

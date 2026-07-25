@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"orquesta/internal/ports"
@@ -40,12 +41,15 @@ type modelResult struct {
 }
 
 type cappedDiagnostic struct {
+	mu        sync.Mutex
 	buffer    bytes.Buffer
 	maximum   int64
 	truncated bool
 }
 
 func (writer *cappedDiagnostic) Write(payload []byte) (int, error) {
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
 	written := len(payload)
 	remaining := writer.maximum - int64(writer.buffer.Len())
 	if remaining <= 0 {
@@ -64,6 +68,8 @@ func (writer *cappedDiagnostic) Write(payload []byte) (int, error) {
 }
 
 func (writer *cappedDiagnostic) snapshot() ([]byte, bool) {
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
 	return append([]byte(nil), writer.buffer.Bytes()...), writer.truncated
 }
 
@@ -98,9 +104,63 @@ func (adapter *Adapter) startExecutionLocked(callerContext context.Context, requ
 	}
 
 	diagnostic := &cappedDiagnostic{maximum: adapter.config.MaxDiagnosticBytes}
-	command, gateReader, gateWriter, commandErr := adapter.executionWorkspaceCommand(
-		runContext, state.runPath, workspaceBound, workspaceBound && len(request.WriteSet) != 0, session,
+	var (
+		command             *exec.Cmd
+		gateReader          *os.File
+		gateWriter          *os.File
+		supervisorInstance  string
+		supervisorPublicKey string
+		supervised          bool
+		diagnosticDone      <-chan struct{}
+		diagnosticReader    *os.File
+		commandErr          error
+		supervisor          supervisorCommand
 	)
+	if adapter.processControlsEnabled() {
+		instance, instanceErr := newSupervisorInstance()
+		if instanceErr != nil {
+			commandErr = instanceErr
+		} else {
+			supervisorInstance = instance
+			publicKey, privateKey, keyErr := newCompletionSigningKey()
+			if keyErr != nil {
+				commandErr = keyErr
+			}
+			supervisorPublicKey = publicKey
+			runDirectory := filepath.Join(adapter.rootPath, filepath.FromSlash(state.runPath))
+			envelope := supervisorEnvelope{
+				SchemaVersion: supervisorEnvelopeSchema, SupervisorInstance: instance,
+				ExecutionRef: request.ExecutionRef.String(), RequestHash: state.requestHash,
+				SpecHash: request.SpecHash, ArtifactMediaType: request.ArtifactMediaType,
+				RuntimeScope:        adapter.config.RuntimeScope,
+				CompletionPublicKey: publicKey, CompletionPrivateKey: privateKey,
+				Command: adapter.command,
+				Arguments: adapter.commandArgumentsWithSession(
+					state.runPath, workspaceBound, workspaceBound && len(request.WriteSet) != 0, session,
+				),
+				Environment: append([]string(nil), environment...), WorkingDirectory: workingDirectory,
+				Prompt: prompt, RunDirectory: runDirectory,
+				ResultPath:          filepath.Join(runDirectory, lastMessageFileName),
+				TimeoutNanos:        int64(adapter.config.Timeout),
+				PipeDrainDelayNanos: int64(adapter.config.ProcessPipeDrainDelay),
+				MaxDiagnosticBytes:  adapter.config.MaxDiagnosticBytes,
+				MaxOutputBytes:      request.MaxOutputBytes,
+			}
+			if commandErr == nil {
+				supervisor, commandErr = platformSupervisorCommand(runContext, envelope)
+			}
+			clearSupervisorEnvelope(&envelope)
+			supervised = commandErr == nil
+			if supervised {
+				command, gateReader, gateWriter = supervisor.command, supervisor.gateReader, supervisor.gateWriter
+				timeout.Stop()
+			}
+		}
+	} else {
+		command, gateReader, gateWriter, commandErr = adapter.executionWorkspaceCommand(
+			runContext, state.runPath, workspaceBound, workspaceBound && len(request.WriteSet) != 0, session,
+		)
+	}
 	if commandErr != nil {
 		timeout.Stop()
 		cancel(errExecutionFinished)
@@ -108,7 +168,11 @@ func (adapter *Adapter) startExecutionLocked(callerContext context.Context, requ
 		adapter.finishWithoutProcessLocked(state, CodeProcessStartFailed, []byte(commandErr.Error()))
 		return
 	}
-	adapter.configureExecutionCommand(command, runContext, workingDirectory, environment, prompt, diagnostic)
+	if supervised {
+		adapter.configureSupervisorCommand(command, runContext)
+	} else {
+		adapter.configureExecutionCommand(command, runContext, workingDirectory, environment, prompt, diagnostic)
+	}
 
 	var ownerLock *os.File
 	if adapter.processControlsEnabled() {
@@ -116,6 +180,11 @@ func (adapter *Adapter) startExecutionLocked(callerContext context.Context, requ
 		if commandErr != nil {
 			_ = gateReader.Close()
 			_ = gateWriter.Close()
+			if supervised {
+				_ = supervisor.sealed.Close()
+				_ = supervisor.diagnosticReader.Close()
+				_ = supervisor.diagnosticWriter.Close()
+			}
 			timeout.Stop()
 			cancel(errExecutionFinished)
 			close(finished)
@@ -129,9 +198,24 @@ func (adapter *Adapter) startExecutionLocked(callerContext context.Context, requ
 	if gateReader != nil {
 		_ = gateReader.Close()
 	}
+	if supervised {
+		_ = supervisor.sealed.Close()
+		_ = supervisor.diagnosticWriter.Close()
+		done := make(chan struct{})
+		diagnosticDone = done
+		diagnosticReader = supervisor.diagnosticReader
+		go func() {
+			_, _ = io.Copy(diagnostic, supervisor.diagnosticReader)
+			_ = supervisor.diagnosticReader.Close()
+			close(done)
+		}()
+	}
 	if startErr != nil {
 		if gateWriter != nil {
 			_ = gateWriter.Close()
+		}
+		if supervised {
+			_ = supervisor.diagnosticReader.Close()
 		}
 		releaseOwnerLock(ownerLock)
 		timeout.Stop()
@@ -142,14 +226,30 @@ func (adapter *Adapter) startExecutionLocked(callerContext context.Context, requ
 		adapter.finishWithoutProcessLockedWithDiagnostic(state, CodeProcessStartFailed, payload, truncated)
 		return
 	}
-	if !adapter.releaseGatedStartLocked(command, gateWriter, ownerLock, timeout, cancel, finished, request, state) {
+	if !adapter.releaseGatedStartLocked(
+		command, gateWriter, ownerLock, timeout, cancel, finished, request, state,
+		supervisorInstance, supervisorPublicKey,
+	) {
 		return
 	}
 	state.status = ports.AgentRunning
 	state.cancel = cancel
 	state.settled = make(chan struct{})
 	adapter.waitGroup.Add(1)
-	go adapter.waitForExecution(command, runContext, cancel, timeout, finished, request, state, diagnostic)
+	go adapter.waitForExecution(
+		command, runContext, cancel, timeout, finished, request, state, diagnostic, diagnosticDone,
+		diagnosticReader,
+	)
+}
+
+func (adapter *Adapter) configureSupervisorCommand(command *exec.Cmd, runContext context.Context) {
+	command.WaitDelay = adapter.config.ProcessPipeDrainDelay
+	configureProcessGroup(command, func() error { return context.Cause(runContext) })
+	command.Dir = "/"
+	command.Env = []string{}
+	command.Stdin = nil
+	command.Stdout = nil
+	command.Stderr = nil
 }
 
 func (adapter *Adapter) configureExecutionCommand(
@@ -171,7 +271,7 @@ func (adapter *Adapter) configureExecutionCommand(
 func (adapter *Adapter) releaseGatedStartLocked(
 	command *exec.Cmd, gateWriter, ownerLock *os.File, timeout *time.Timer,
 	cancel context.CancelCauseFunc, finished chan struct{},
-	request ports.AgentLaunchRequest, state *executionState,
+	request ports.AgentLaunchRequest, state *executionState, supervisorInstance, supervisorPublicKey string,
 ) bool {
 	if !adapter.processControlsEnabled() {
 		return true
@@ -182,6 +282,12 @@ func (adapter *Adapter) releaseGatedStartLocked(
 		RequestHash: state.requestHash, RuntimeScope: adapter.config.RuntimeScope,
 		PID: command.Process.Pid, PGID: pgid, BootID: bootID, BirthMarker: birthMarker,
 	}
+	supervised := supervisorInstance != ""
+	if supervised {
+		record.SchemaVersion = supervisedProcessSchemaVersion
+		record.SupervisorInstance = supervisorInstance
+		record.CompletionPublicKey = supervisorPublicKey
+	}
 	if err != nil {
 		adapter.abortGatedStartLocked(command, gateWriter, ownerLock, timeout, cancel, finished, state, err)
 		return false
@@ -191,8 +297,14 @@ func (adapter *Adapter) releaseGatedStartLocked(
 		return false
 	}
 	state.process, state.ownerLock = &record, ownerLock
-	if _, err := gateWriter.Write([]byte("run\n")); err != nil {
-		adapter.abortGatedStartLocked(command, gateWriter, ownerLock, timeout, cancel, finished, state, err)
+	var releaseErr error
+	if supervised {
+		releaseErr = json.NewEncoder(gateWriter).Encode(record)
+	} else {
+		_, releaseErr = gateWriter.Write([]byte("run\n"))
+	}
+	if releaseErr != nil {
+		adapter.abortGatedStartLocked(command, gateWriter, ownerLock, timeout, cancel, finished, state, releaseErr)
 		return false
 	}
 	if err := gateWriter.Close(); err != nil {
@@ -285,9 +397,12 @@ func (adapter *Adapter) waitForExecution(
 	request ports.AgentLaunchRequest,
 	state *executionState,
 	diagnostic *cappedDiagnostic,
+	diagnosticDone <-chan struct{},
+	diagnosticReader *os.File,
 ) {
 	defer adapter.waitGroup.Done()
 	waitErr := command.Wait()
+	awaitDiagnosticDrain(diagnosticDone, diagnosticReader, adapter.config.ProcessPipeDrainDelay)
 	if errors.Is(waitErr, exec.ErrWaitDelay) && command.ProcessState != nil && command.ProcessState.Success() {
 		waitErr = nil
 	}
@@ -332,9 +447,12 @@ func (adapter *Adapter) waitForExecution(
 		}
 	}
 	if cleanupErr == nil {
-		cleanupErr = errors.New(CodeProcessCleanupFailed)
-		if adapter.processCleanup != nil {
-			cleanupErr = adapter.processCleanup(command)
+		supervised := state.process != nil && state.process.SupervisorInstance != ""
+		if !supervised {
+			cleanupErr = errors.New(CodeProcessCleanupFailed)
+			if adapter.processCleanup != nil {
+				cleanupErr = adapter.processCleanup(command)
+			}
 		}
 	}
 	if cleanupErr != nil {
@@ -345,6 +463,27 @@ func (adapter *Adapter) waitForExecution(
 	proof = state.stopProof.Load()
 	adapter.completeExecutionLocked(request, state, proof, waitErr, cleanupErr, cause, diagnosticPayload, diagnosticTruncated)
 	adapter.mu.Unlock()
+}
+
+func awaitDiagnosticDrain(done <-chan struct{}, reader *os.File, delay time.Duration) {
+	if done == nil {
+		return
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-done:
+		return
+	case <-timer.C:
+		if reader != nil {
+			_ = reader.Close()
+		}
+	}
+	timer.Reset(delay)
+	select {
+	case <-done:
+	case <-timer.C:
+	}
 }
 
 func equalStopSignalProof(left, right *stopSignalProof) bool {
@@ -364,7 +503,34 @@ func (adapter *Adapter) completeExecutionLocked(
 	diagnosticPayload []byte,
 	diagnosticTruncated bool,
 ) {
-	terminal := adapter.buildTerminal(request, state, proof, waitErr, cleanupErr, cause, diagnosticPayload, diagnosticTruncated)
+	var completion *completionProof
+	var completionResult []byte
+	unresolvedStop := false
+	if proof == nil {
+		var stopErr error
+		unresolvedStop, stopErr = adapter.hasDurableStopRequest(state.runPath)
+		unresolvedStop = unresolvedStop || stopErr != nil
+	}
+	if !unresolvedStop && state.process != nil && state.process.SupervisorInstance != "" {
+		if candidate, result, found := adapter.loadCompletionProof(state); found {
+			completion = &candidate
+			completionResult = result
+			if int64(len(diagnosticPayload)) != candidate.DiagnosticSize ||
+				digestBytes(diagnosticPayload) != candidate.DiagnosticHash {
+				clearBytes(diagnosticPayload)
+				diagnosticPayload = nil
+				diagnosticTruncated = false
+			} else {
+				diagnosticTruncated = candidate.DiagnosticTruncated
+			}
+		}
+	}
+	defer clearBytes(diagnosticPayload)
+	defer clearBytes(completionResult)
+	terminal := adapter.buildTerminal(
+		request, state, proof, completion, completionResult, waitErr, cleanupErr, cause,
+		diagnosticPayload, diagnosticTruncated,
+	)
 	if terminal.ErrorCode == CodeExecutionStopped {
 		if proof != nil {
 			if err := adapter.finishStoppedProcessLocked(state, *proof); err == nil {
@@ -386,6 +552,11 @@ func (adapter *Adapter) completeExecutionLocked(
 		adapter.settleExecutionLocked(state)
 		return
 	}
+	if state.process != nil && state.process.SupervisorInstance != "" {
+		clearBytes(terminal.Diagnostic)
+		terminal.Diagnostic = nil
+		terminal.DiagnosticTruncated = false
+	}
 	persisted, err := adapter.persistTerminal(state.runPath, terminal, state.receipt.SpecHash, state.maxOutput)
 	if err != nil {
 		terminal.Status = ports.AgentFailed
@@ -406,6 +577,7 @@ func (adapter *Adapter) completeExecutionLocked(
 	state.cancel = nil
 	adapter.releaseProcessOwnershipLocked(state)
 	adapter.settleExecutionLocked(state)
+	_ = adapter.removeCompletionArtifacts(state.runPath)
 }
 
 func (adapter *Adapter) settleExecutionLocked(state *executionState) {
@@ -419,6 +591,8 @@ func (adapter *Adapter) buildTerminal(
 	request ports.AgentLaunchRequest,
 	state *executionState,
 	proof *stopSignalProof,
+	completion *completionProof,
+	completionResult []byte,
 	waitErr error,
 	cleanupErr error,
 	cause error,
@@ -446,12 +620,34 @@ func (adapter *Adapter) buildTerminal(
 	case proof != nil:
 		terminal.ErrorCode = CodeExecutionStopped
 		return terminal
-	case waitErr != nil:
+	case completion != nil && completion.Cause == supervisorCauseTimeout:
+		terminal.ErrorCode = CodeExecutionTimeout
+		return terminal
+	case state.process != nil && state.process.SupervisorInstance != "" && completion == nil:
+		terminal.ErrorCode = CodeExecutionInterrupted
+		return terminal
+	case completion != nil && (!completion.Exited || completion.ExitCode != 0):
+		terminal.ErrorCode = CodeProcessFailed
+		return terminal
+	case completion == nil && waitErr != nil:
 		terminal.ErrorCode = CodeProcessFailed
 		return terminal
 	}
 
-	result, code := adapter.readModelResult(state.runPath, request.MaxOutputBytes)
+	var result modelResult
+	var code string
+	if completion != nil {
+		switch {
+		case completion.ResultTooLarge:
+			code = CodeOutputTooLarge
+		case !completion.ResultFound:
+			code = CodeOutputMissing
+		default:
+			result, code = decodeModelResult(completionResult, request.MaxOutputBytes)
+		}
+	} else {
+		result, code = adapter.readModelResult(state.runPath, request.MaxOutputBytes)
+	}
 	if code != "" {
 		terminal.ErrorCode = code
 		return terminal
@@ -460,6 +656,22 @@ func (adapter *Adapter) buildTerminal(
 	terminal.MediaType = request.ArtifactMediaType
 	terminal.Artifact = result.Artifact
 	return terminal
+}
+
+func (adapter *Adapter) finishSupervisedProcessLocked(state *executionState) error {
+	if proof, result, found := adapter.loadCompletionProof(state); found {
+		state.artifactMediaType = proof.ArtifactMediaType
+		clearBytes(result)
+	}
+	request := ports.AgentLaunchRequest{
+		ArtifactMediaType: state.artifactMediaType,
+		MaxOutputBytes:    state.maxOutput,
+	}
+	adapter.completeExecutionLocked(request, state, nil, nil, nil, nil, nil, false)
+	if state.terminal == nil || !state.terminalDurable {
+		return &Error{Code: CodeStatePersistenceFailed}
+	}
+	return nil
 }
 
 func (adapter *Adapter) terminalTime(fallback time.Time) time.Time {
@@ -629,6 +841,13 @@ func (adapter *Adapter) readModelResult(runPath string, maxOutputBytes int64) (m
 	if err != nil {
 		return modelResult{}, CodeOutputInvalid
 	}
+	if int64(len(payload)) > maxOutputBytes {
+		return modelResult{}, CodeOutputTooLarge
+	}
+	return decodeModelResult(payload, maxOutputBytes)
+}
+
+func decodeModelResult(payload []byte, maxOutputBytes int64) (modelResult, string) {
 	if int64(len(payload)) > maxOutputBytes {
 		return modelResult{}, CodeOutputTooLarge
 	}

@@ -3,16 +3,26 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"orquesta/internal/adapters/agent/codex"
 	"orquesta/internal/i18n"
 )
+
+func TestMain(testMain *testing.M) {
+	if codex.IsLocalSupervisorInvocation(os.Args[1:]) {
+		os.Exit(run(os.Args[1:], io.Discard, io.Discard))
+	}
+	os.Exit(testMain.Run())
+}
 
 func TestVersionAndInvalidCommandDoNotStartRuntime(t *testing.T) {
 	var stdout bytes.Buffer
@@ -24,6 +34,25 @@ func TestVersionAndInvalidCommandDoNotStartRuntime(t *testing.T) {
 	stderr.Reset()
 	if code := run([]string{"unknown"}, &stdout, &stderr); code != 2 || !strings.Contains(stderr.String(), "solicitud") {
 		t.Fatalf("invalid: code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestPrivateCodexSupervisorDispatchFailsClosedWithoutDescriptors(t *testing.T) {
+	if !codex.IsLocalSupervisorInvocation([]string{"__orquesta_internal_codex_supervisor_v1"}) ||
+		codex.IsLocalSupervisorInvocation(nil) ||
+		codex.IsLocalSupervisorInvocation([]string{"__orquesta_internal_codex_supervisor_v1", "extra"}) {
+		t.Fatal("private supervisor dispatch matcher is not exact")
+	}
+	command := exec.Command(os.Args[0], "__orquesta_internal_codex_supervisor_v1")
+	command.Env = []string{}
+	err := command.Run()
+	exitError, ok := err.(*exec.ExitError)
+	if !ok || exitError.ExitCode() != 125 {
+		exitCode := -1
+		if command.ProcessState != nil {
+			exitCode = command.ProcessState.ExitCode()
+		}
+		t.Fatalf("descriptorless private dispatch error=%v exit=%d, want 125", err, exitCode)
 	}
 }
 

@@ -44,6 +44,16 @@ func init() {
 	os.Exit(0)
 }
 
+func TestMain(main *testing.M) {
+	if IsLocalSupervisorInvocation(os.Args[1:]) {
+		os.Exit(RunLocalSupervisor())
+	}
+	if code, handled := runSupervisorTestProcess(os.Args); handled {
+		os.Exit(code)
+	}
+	os.Exit(main.Run())
+}
+
 func TestAdapterSuccessfulExecutionUsesHardenedCommandAndPrivateTerminal(t *testing.T) {
 	config := testConfig(t)
 	adapter := openTestAdapter(t, config)
@@ -271,32 +281,73 @@ func TestAdapterRejectsOversizeResultBeforeParsing(t *testing.T) {
 }
 
 func TestAdapterBoundsFailureDiagnosticAndReturnsOnlyTypedCode(t *testing.T) {
-	config := testConfig(t)
-	config.MaxDiagnosticBytes = 64
-	adapter := openTestAdapter(t, config)
-	request := testRequest(t, "failure", "helper:failure", 1024)
-	if _, err := adapter.Launch(context.Background(), request); err != nil {
-		t.Fatalf("Launch() error = %v", err)
-	}
-	observation := awaitTerminal(t, adapter, request.ExecutionRef)
-	if observation.Status != ports.AgentFailed || observation.ErrorCode != CodeProcessFailed || len(observation.Content) != 0 {
-		t.Fatalf("failure observation = %+v", observation)
-	}
+	for _, test := range []struct {
+		name          string
+		runtimeScope  string
+		executionName string
+	}{
+		{name: "supervisor when supported", runtimeScope: "runtime-scope:test", executionName: "failure-supervised"},
+		{name: "legacy without process controls", executionName: "failure-legacy"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			config := testConfig(t)
+			config.MaxDiagnosticBytes = 64
+			config.RuntimeScope = test.runtimeScope
+			adapter := openTestAdapter(t, config)
+			request := testRequest(t, test.executionName, "helper:failure", 1024)
+			if _, err := adapter.Launch(context.Background(), request); err != nil {
+				t.Fatalf("Launch() error = %v", err)
+			}
+			observation := awaitTerminal(t, adapter, request.ExecutionRef)
+			if observation.Status != ports.AgentFailed || observation.ErrorCode != CodeProcessFailed || len(observation.Content) != 0 {
+				t.Fatalf("failure observation = %+v", observation)
+			}
 
-	terminal, found, err := adapter.loadTerminal(executionPath(request.ExecutionRef), mustRequestHash(t, request), request.SpecHash, request.MaxOutputBytes)
-	if err != nil || !found {
-		t.Fatalf("loadTerminal() found=%v error=%v", found, err)
-	}
-	if len(terminal.Diagnostic) != int(config.MaxDiagnosticBytes) || !terminal.DiagnosticTruncated {
-		t.Fatalf("diagnostic bytes=%d truncated=%v", len(terminal.Diagnostic), terminal.DiagnosticTruncated)
-	}
-	if strings.Contains(observation.ErrorCode, string(terminal.Diagnostic)) {
-		t.Fatal("diagnostic leaked through domain error code")
+			terminal, found, err := adapter.loadTerminal(
+				executionPath(request.ExecutionRef),
+				mustRequestHash(t, request),
+				request.SpecHash,
+				request.MaxOutputBytes,
+			)
+			if err != nil || !found {
+				t.Fatalf("loadTerminal() found=%v error=%v", found, err)
+			}
+			if !adapter.processControlsEnabled() {
+				if len(terminal.Diagnostic) != int(config.MaxDiagnosticBytes) || !terminal.DiagnosticTruncated {
+					t.Fatalf(
+						"legacy diagnostic bytes=%d truncated=%v",
+						len(terminal.Diagnostic),
+						terminal.DiagnosticTruncated,
+					)
+				}
+				return
+			}
+			if len(terminal.Diagnostic) != 0 || terminal.DiagnosticTruncated {
+				t.Fatalf(
+					"supervised diagnostic persisted: bytes=%d truncated=%v",
+					len(terminal.Diagnostic),
+					terminal.DiagnosticTruncated,
+				)
+			}
+			terminalPayload, err := os.ReadFile(filepath.Join(
+				config.WorkRoot,
+				filepath.FromSlash(executionPath(request.ExecutionRef)),
+				terminalFileName,
+			))
+			if err != nil {
+				t.Fatalf("ReadFile(terminal) error = %v", err)
+			}
+			if bytes.Contains(terminalPayload, bytes.Repeat([]byte("failure-diagnostic"), 2)) {
+				t.Fatal("raw diagnostic persisted in supervised terminal")
+			}
+		})
 	}
 }
 
 func TestAdapterCleanupFailureCannotProduceSuccessfulTerminal(t *testing.T) {
-	adapter := openTestAdapter(t, testConfig(t))
+	config := testConfig(t)
+	config.RuntimeScope = ""
+	adapter := openTestAdapter(t, config)
 	adapter.processCleanup = func(*exec.Cmd) error { return errors.New("injected cleanup failure") }
 	request := testRequest(t, "cleanup-failure", "helper:success", 1024)
 	if _, err := adapter.Launch(context.Background(), request); err != nil {
@@ -305,6 +356,31 @@ func TestAdapterCleanupFailureCannotProduceSuccessfulTerminal(t *testing.T) {
 	observation := awaitTerminal(t, adapter, request.ExecutionRef)
 	if observation.Status != ports.AgentFailed || observation.ErrorCode != CodeProcessCleanupFailed || len(observation.Content) != 0 {
 		t.Fatalf("cleanup failure observation = %+v", observation)
+	}
+}
+
+func TestDiagnosticDrainIsBoundedWhenAWriterIsRetained(t *testing.T) {
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer writer.Close()
+	done := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(io.Discard, reader)
+		_ = reader.Close()
+		close(done)
+	}()
+
+	started := time.Now()
+	awaitDiagnosticDrain(done, reader, 10*time.Millisecond)
+	if elapsed := time.Since(started); elapsed > 250*time.Millisecond {
+		t.Fatalf("diagnostic drain remained blocked for %s", elapsed)
+	}
+	select {
+	case <-done:
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("diagnostic reader did not close after bounded drain")
 	}
 }
 
@@ -469,6 +545,13 @@ func runCodexHelper(arguments []string) error {
 
 	mode := string(prompt)
 	switch {
+	case strings.Contains(mode, "helper:delayed-failure"):
+		time.Sleep(500 * time.Millisecond)
+		_, _ = os.Stderr.Write(bytes.Repeat([]byte("private delayed failure diagnostic"), 128))
+		os.Exit(23)
+	case strings.Contains(mode, "helper:delayed-success"):
+		time.Sleep(500 * time.Millisecond)
+		return writeHelperResult(options.outputPath, "artifact:delayed-success")
 	case strings.Contains(mode, "helper:background-success"):
 		child := exec.Command("/bin/sleep", "30")
 		child.Stderr = os.Stderr

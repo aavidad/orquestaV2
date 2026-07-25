@@ -198,8 +198,13 @@ func (adapter *Adapter) hasDurableStopRequest(runPath string) (bool, error) {
 		return false, err
 	}
 	for _, name := range names {
-		if strings.HasPrefix(name, "stop-") && strings.HasSuffix(name, ".request.json") {
-			return true, nil
+		if !strings.HasPrefix(name, "stop-") {
+			continue
+		}
+		for _, suffix := range []string{".request.json", ".signal-intent.json", ".signal.json"} {
+			if strings.HasSuffix(name, suffix) {
+				return true, nil
+			}
 		}
 	}
 	return false, nil

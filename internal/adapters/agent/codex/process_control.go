@@ -113,11 +113,22 @@ func (adapter *Adapter) adoptPersistedProcessLocked(state *executionState) (bool
 			}
 			return false, nil
 		}
-		// Presence of a request is not evidence that its signal happened. Do
-		// not collapse unreadable journal state into absence either.
-		if _, requestErr := adapter.hasDurableStopRequest(state.runPath); requestErr != nil {
+		hasStopRequest, requestErr := adapter.hasDurableStopRequest(state.runPath)
+		if requestErr != nil {
 			adapter.releaseProcessOwnershipLocked(state)
 			return false, requestErr
+		}
+		if hasStopRequest {
+			adapter.releaseProcessOwnershipLocked(state)
+			return false, nil
+		}
+		if _, result, completionFound := adapter.loadCompletionProof(state); completionFound {
+			clearBytes(result)
+			if err := adapter.finishSupervisedProcessLocked(state); err != nil {
+				adapter.releaseProcessOwnershipLocked(state)
+				return false, err
+			}
+			return false, nil
 		}
 		adapter.releaseProcessOwnershipLocked(state)
 		return false, nil
@@ -133,6 +144,13 @@ func inspectProcessTree(record processRecord) (bool, error) {
 	}
 	if identity == processIdentityMismatch {
 		return false, &Error{Code: CodeProcessIdentityMismatch}
+	}
+	if identity == processIdentityGone && record.SupervisorInstance != "" {
+		// A recycled process group is not proof that it still belongs to this
+		// execution. Schema V2 delegates exact descendant drainage to the
+		// identity-bound supervisor and never signals a PGID after that leader
+		// is gone.
+		return true, nil
 	}
 	members, err := processGroupMemberCount(record.PGID)
 	if err != nil {

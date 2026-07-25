@@ -403,14 +403,15 @@ func (adapter *Adapter) readCredentialOutput(runPath string, maximum int64) ([]b
 func (adapter *Adapter) scrubCredentialOutput(runPath string) error {
 	filePath := path.Join(runPath, lastMessageFileName)
 	writeErr := adapter.writePrivateRuntimeFile(filePath, nil)
+	artifactErr := adapter.removeCompletionArtifacts(runPath)
 	if writeErr == nil {
-		return nil
+		return artifactErr
 	}
 	removeErr := adapter.root.Remove(filePath)
 	if removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
-		return &Error{Code: CodeStatePersistenceFailed, Cause: errors.Join(writeErr, removeErr)}
+		return &Error{Code: CodeStatePersistenceFailed, Cause: errors.Join(writeErr, removeErr, artifactErr)}
 	}
-	return adapter.syncDirectoryCausally(runPath)
+	return errors.Join(adapter.syncDirectoryCausally(runPath), artifactErr)
 }
 
 func clearBytes(material []byte) {
