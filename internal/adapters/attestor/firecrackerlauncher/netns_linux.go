@@ -53,10 +53,7 @@ func openEmptyNetNamespace(
 	var stat unix.Stat_t
 	var filesystem unix.Statfs_t
 	if unix.Fstat(fd, &stat) != nil || unix.Fstatfs(fd, &filesystem) != nil ||
-		filesystem.Type != unix.NSFS_MAGIC ||
-		stat.Mode&unix.S_IFMT != unix.S_IFREG ||
-		stat.Uid != owner || stat.Gid != owner || stat.Nlink != 1 ||
-		stat.Mode&0o777 != 0o600 {
+		!netNamespaceMetadataIsSecure(stat, filesystem, owner) {
 		_ = file.Close()
 		return nil, launcherError(CodeNetworkUnsafe)
 	}
@@ -74,6 +71,24 @@ func openEmptyNetNamespace(
 		return nil, launcherError(CodeNetworkUnsafe)
 	}
 	return namespace, nil
+}
+
+func netNamespaceMetadataIsSecure(
+	stat unix.Stat_t,
+	filesystem unix.Statfs_t,
+	owner uint32,
+) bool {
+	if filesystem.Type != unix.NSFS_MAGIC ||
+		stat.Mode&unix.S_IFMT != unix.S_IFREG ||
+		stat.Uid != owner || stat.Gid != owner || stat.Nlink != 1 {
+		return false
+	}
+	switch stat.Mode & 0o7777 {
+	case 0o400, 0o404, 0o440, 0o444, 0o600, 0o604, 0o640, 0o644:
+		return true
+	default:
+		return false
+	}
 }
 
 func probeEmptyNetNamespace(target *os.File, timeout time.Duration) error {

@@ -313,8 +313,8 @@ assert_contains "$NETNS_VALIDATOR" 'netns_metadata_is_secure()'
 # shellcheck disable=SC1090
 source "$NETNS_VALIDATOR"
 for secure_netns_metadata in \
-  0:0:400:1 0:0:440:1 0:0:444:1 \
-  0:0:600:1 0:0:640:1 0:0:644:1; do
+  0:0:400:1 0:0:404:1 0:0:440:1 0:0:444:1 \
+  0:0:600:1 0:0:604:1 0:0:640:1 0:0:644:1; do
   netns_metadata_is_secure "$secure_netns_metadata" ||
     fail "secure_netns_metadata_rejected:$secure_netns_metadata"
 done
