@@ -130,6 +130,7 @@ func TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP(t *tes
 		h.call(ctx, "orquesta.goals.control", map[string]any{"operation": "cancel", "target": "goal", "goal_ref": refs["B"], "expected_goal_revision": bGoal.number("revision"), "expected_plan_generation": bGoal.number("plan_generation"), "expected_app_spec_generation": bGoal.number("app_spec_generation"), "expected_spec_hash": bGoal.text("spec_hash"), "reason": "V22 public selective cancellation while A/C/D progress"})
 		fence := h.assertMailboxArtifactIsolation(ctx, refs["A"])
 		admission := fence.Admission
+		aParentProcess := v22WaitProcess(t, h.root, admission.RecipientExecution)
 		b = h.waitCancelled(ctx, refs["B"], running[refs["B"]], bProcess)
 		exactD := running[refs["D"]].text("execution_ref")
 		current := h.runningExecution(ctx, refs["D"]).text("execution_ref")
@@ -139,9 +140,11 @@ func TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP(t *tes
 		h.verifyRestoreCopy(ctx, backup, expectedD)
 		current = h.runningExecution(ctx, refs["D"]).text("execution_ref")
 		v22Require(t, current == exactD, "D execution changed before crash: got=%s want=%s", current, exactD)
+		aSleep := v22WaitExactSleep(t, aParentProcess, 60)
+		dSleep := v22WaitExactSleep(t, dProcess, 180)
 		h.kill() // non-cooperative server death: SIGKILL, never Runtime.Shutdown.
-		alive, aliveErr := v22ProcessAlive(dProcess)
-		v22Require(t, aliveErr == nil && alive, "D exact process did not survive server SIGKILL: alive=%v err=%v", alive, aliveErr)
+		v22RequireExactSleepAlive(t, aParentProcess, aSleep, 60)
+		v22RequireExactSleepAlive(t, dProcess, dSleep, 180)
 		h.restart(ctx)
 		h.probeMailboxArtifactIsolation(ctx, refs["A"], fence, "restart")
 		h.waitAdopted(ctx, refs["D"], running[refs["D"]], dProcess)

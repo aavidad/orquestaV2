@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -29,6 +30,18 @@ type v22ProcessRecord struct {
 	Boot   string `json:"boot_id"`
 	Birth  string `json:"birth_marker"`
 	path   string
+}
+
+type v22ProcStat struct {
+	PID, PPID, PGID int
+	State, Birth    string
+}
+
+type v22SleepWitness struct {
+	PID, PGID  int
+	Birth      string
+	Executable string
+	Argv       []string
 }
 
 func v22ProcessRecords(t *testing.T, root string) map[string]v22ProcessRecord {
@@ -76,23 +89,311 @@ func v22ProcessAlive(record v22ProcessRecord) (bool, error) {
 	if err != nil || strings.TrimSpace(string(boot)) != record.Boot {
 		return false, err
 	}
-	payload, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", record.PID))
+	stat, err := v22ReadProcStat(record.PID)
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil
 	}
 	if err != nil {
 		return false, err
 	}
-	end := strings.LastIndexByte(string(payload), ')')
-	if end < 0 {
-		return false, errors.New("invalid /proc stat")
+	return stat.PID == record.PID && stat.PGID == record.PGID && stat.Birth == record.Birth &&
+		stat.State != "Z" && stat.State != "X", nil
+}
+
+func v22WaitExactSleep(t *testing.T, record v22ProcessRecord, seconds int) v22SleepWitness {
+	t.Helper()
+	for until := time.Now().Add(45 * time.Second); time.Now().Before(until); time.Sleep(25 * time.Millisecond) {
+		witness, found, err := v22FindExactSleep(record, seconds)
+		v22Require(t, err == nil, "inspect exact sleep %d for %s: %v", seconds, record.Exec, err)
+		if found {
+			return witness
+		}
 	}
-	fields := strings.Fields(string(payload[end+1:]))
+	t.Fatalf("no exact /usr/bin/sleep %d descendant for %+v", seconds, record)
+	return v22SleepWitness{}
+}
+
+func v22RequireExactSleepAlive(t *testing.T, record v22ProcessRecord, witness v22SleepWitness, seconds int) {
+	t.Helper()
+	leaderAlive, err := v22ProcessAlive(record)
+	v22Require(t, err == nil && leaderAlive, "exact leader did not survive server SIGKILL: execution=%s alive=%v err=%v", record.Exec, leaderAlive, err)
+	alive, err := v22ExactSleepAlive(record, witness, seconds)
+	v22Require(t, err == nil && alive, "exact sleep descendant did not survive server SIGKILL: execution=%s witness=%+v alive=%v err=%v", record.Exec, witness, alive, err)
+}
+
+func v22FindExactSleep(record v22ProcessRecord, seconds int) (v22SleepWitness, bool, error) {
+	leaderAlive, err := v22ProcessAlive(record)
+	if err != nil || !leaderAlive {
+		return v22SleepWitness{}, false, err
+	}
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		return v22SleepWitness{}, false, err
+	}
+	for _, entry := range entries {
+		pid, parseErr := strconv.Atoi(entry.Name())
+		if parseErr != nil || pid == record.PID {
+			continue
+		}
+		stat, statErr := v22ReadProcStat(pid)
+		if statErr != nil || stat.State == "Z" || stat.State == "X" || stat.PGID != record.PGID {
+			continue
+		}
+		witness, exact, inspectErr := v22InspectExactSleep(record, stat, seconds)
+		if inspectErr != nil {
+			if errors.Is(inspectErr, os.ErrNotExist) {
+				continue
+			}
+			return v22SleepWitness{}, false, inspectErr
+		}
+		if exact {
+			return witness, true, nil
+		}
+	}
+	return v22SleepWitness{}, false, nil
+}
+
+func v22ExactSleepAlive(record v22ProcessRecord, witness v22SleepWitness, seconds int) (bool, error) {
+	stat, err := v22ReadProcStat(witness.PID)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if stat.PID != witness.PID || stat.PGID != witness.PGID || stat.Birth != witness.Birth ||
+		stat.State == "Z" || stat.State == "X" {
+		return false, nil
+	}
+	got, exact, err := v22InspectExactSleep(record, stat, seconds)
+	return exact && got.Executable == witness.Executable &&
+		v22EqualStrings(got.Argv, witness.Argv), err
+}
+
+func v22InspectExactSleep(record v22ProcessRecord, stat v22ProcStat, seconds int) (v22SleepWitness, bool, error) {
+	if stat.PGID != record.PGID {
+		return v22SleepWitness{}, false, nil
+	}
+	descendant, err := v22ProcessDescendsFrom(stat.PID, record.PID)
+	if err != nil || !descendant {
+		return v22SleepWitness{}, false, err
+	}
+	executable, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", stat.PID))
+	if err != nil {
+		return v22SleepWitness{}, false, err
+	}
+	expectedExecutable, err := filepath.EvalSymlinks("/usr/bin/sleep")
+	if err != nil {
+		return v22SleepWitness{}, false, err
+	}
+	if filepath.Clean(executable) != filepath.Clean(expectedExecutable) {
+		return v22SleepWitness{}, false, nil
+	}
+	payload, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", stat.PID))
+	if err != nil {
+		return v22SleepWitness{}, false, err
+	}
+	argv, err := v22ParseProcCmdline(payload)
+	if err != nil {
+		return v22SleepWitness{}, false, nil
+	}
+	if !v22ExactSleepArgv(expectedExecutable, executable, argv, seconds) {
+		return v22SleepWitness{}, false, nil
+	}
+	return v22SleepWitness{
+		PID: stat.PID, PGID: stat.PGID, Birth: stat.Birth,
+		Executable: executable, Argv: argv,
+	}, true, nil
+}
+
+func v22ProcessDescendsFrom(pid, ancestor int) (bool, error) {
+	seen := map[int]bool{}
+	for current, depth := pid, 0; current > 0 && depth < 64; depth++ {
+		if current == ancestor {
+			return true, nil
+		}
+		if seen[current] {
+			return false, errors.New("cycle in /proc ancestry")
+		}
+		seen[current] = true
+		stat, err := v22ReadProcStat(current)
+		if err != nil {
+			return false, err
+		}
+		if stat.PPID <= 0 || stat.PPID == current {
+			return false, nil
+		}
+		current = stat.PPID
+	}
+	return false, nil
+}
+
+func v22ReadProcStat(pid int) (v22ProcStat, error) {
+	payload, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	if err != nil {
+		return v22ProcStat{}, err
+	}
+	return v22ParseProcStat(payload)
+}
+
+func v22ParseProcStat(payload []byte) (v22ProcStat, error) {
+	raw := string(payload)
+	open, end := strings.IndexByte(raw, '('), strings.LastIndexByte(raw, ')')
+	if open <= 0 || end <= open {
+		return v22ProcStat{}, errors.New("invalid /proc stat")
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(raw[:open]))
+	if err != nil || pid <= 0 {
+		return v22ProcStat{}, errors.New("invalid /proc pid")
+	}
+	fields := strings.Fields(raw[end+1:])
 	if len(fields) <= 19 {
-		return false, errors.New("short /proc stat")
+		return v22ProcStat{}, errors.New("short /proc stat")
 	}
-	pgid, err := strconv.Atoi(fields[2])
-	return err == nil && pgid == record.PGID && fields[19] == record.Birth && fields[0] != "Z" && fields[0] != "X", err
+	ppid, ppidErr := strconv.Atoi(fields[1])
+	pgid, pgidErr := strconv.Atoi(fields[2])
+	if ppidErr != nil || pgidErr != nil || ppid < 0 || pgid <= 0 || fields[0] == "" || fields[19] == "" {
+		return v22ProcStat{}, errors.New("invalid /proc identity")
+	}
+	return v22ProcStat{PID: pid, PPID: ppid, PGID: pgid, State: fields[0], Birth: fields[19]}, nil
+}
+
+func v22ParseProcCmdline(payload []byte) ([]string, error) {
+	if len(payload) < 2 || payload[len(payload)-1] != 0 {
+		return nil, errors.New("invalid /proc cmdline")
+	}
+	raw := bytes.Split(payload[:len(payload)-1], []byte{0})
+	argv := make([]string, len(raw))
+	for index, value := range raw {
+		if len(value) == 0 {
+			return nil, errors.New("empty /proc argument")
+		}
+		argv[index] = string(value)
+	}
+	return argv, nil
+}
+
+func v22ExactSleepArgv(expectedExecutable, executable string, argv []string, seconds int) bool {
+	return filepath.Clean(executable) == filepath.Clean(expectedExecutable) && len(argv) == 2 &&
+		(argv[0] == "sleep" || argv[0] == "/usr/bin/sleep" || argv[0] == executable) &&
+		argv[1] == strconv.Itoa(seconds)
+}
+
+func v22EqualStrings(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func TestV22ExactSleepIdentityParsersAreStrict(t *testing.T) {
+	fields := make([]string, 20)
+	for index := range fields {
+		fields[index] = "0"
+	}
+	fields[0], fields[1], fields[2], fields[19] = "S", "4000", "4242", "123456"
+	stat, err := v22ParseProcStat([]byte("4242 (sleep (fixture)) " + strings.Join(fields, " ")))
+	if err != nil || stat != (v22ProcStat{PID: 4242, PPID: 4000, PGID: 4242, State: "S", Birth: "123456"}) {
+		t.Fatalf("exact stat parse=%+v err=%v", stat, err)
+	}
+	for _, invalid := range [][]byte{
+		[]byte("4242 sleep S 4000 4242"),
+		[]byte("4242 (sleep) S 4000"),
+		[]byte("not-a-pid (sleep) " + strings.Join(fields, " ")),
+	} {
+		if _, err := v22ParseProcStat(invalid); err == nil {
+			t.Fatalf("invalid stat accepted: %q", invalid)
+		}
+	}
+
+	argv, err := v22ParseProcCmdline([]byte("sleep\x00180\x00"))
+	if err != nil || !v22EqualStrings(argv, []string{"sleep", "180"}) {
+		t.Fatalf("exact cmdline parse=%q err=%v", argv, err)
+	}
+	for _, invalid := range [][]byte{
+		[]byte("sleep\x00180"),
+		[]byte("sleep\x00\x00180\x00"),
+	} {
+		if _, err := v22ParseProcCmdline(invalid); err == nil {
+			t.Fatalf("invalid cmdline accepted: %q", invalid)
+		}
+	}
+	for _, candidate := range []struct {
+		expected   string
+		executable string
+		argv       []string
+		seconds    int
+	}{
+		{"/resolved/sleep", "/resolved/sleep", []string{"sleep 180"}, 180},
+		{"/resolved/sleep", "/resolved/sleep", []string{"sleep", "60"}, 180},
+		{"/resolved/sleep", "/tmp/sleep", []string{"sleep", "180"}, 180},
+		{"/resolved/sleep", "/resolved/sleep", []string{"wrapper", "180"}, 180},
+	} {
+		if v22ExactSleepArgv(candidate.expected, candidate.executable, candidate.argv, candidate.seconds) {
+			t.Fatalf("inexact sleep identity accepted: %+v", candidate)
+		}
+	}
+	if !v22ExactSleepArgv("/resolved/sleep", "/resolved/sleep", []string{"sleep", "180"}, 180) ||
+		!v22ExactSleepArgv("/resolved/sleep", "/resolved/sleep", []string{"/usr/bin/sleep", "60"}, 60) {
+		t.Fatal("exact sleep identity rejected")
+	}
+}
+
+func TestV22ExactSleepIdentityBindsOwnedProcessTree(t *testing.T) {
+	command := exec.Command("/bin/sh", "-c", "sleep 3 & wait")
+	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
+		_ = command.Wait()
+	}()
+	stat, err := v22ReadProcStat(command.Process.Pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	boot, err := os.ReadFile("/proc/sys/kernel/random/boot_id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := v22ProcessRecord{
+		Exec: "execution:v22-sleep-identity", PID: stat.PID, PGID: stat.PGID,
+		Boot: strings.TrimSpace(string(boot)), Birth: stat.Birth,
+	}
+	var witness v22SleepWitness
+	var found bool
+	for until := time.Now().Add(2 * time.Second); time.Now().Before(until); time.Sleep(10 * time.Millisecond) {
+		witness, found, err = v22FindExactSleep(record, 3)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if found {
+			break
+		}
+	}
+	if !found {
+		t.Fatal("owned exact sleep descendant not found")
+	}
+	alive, err := v22ExactSleepAlive(record, witness, 3)
+	if err != nil || !alive {
+		t.Fatalf("owned exact sleep witness not alive: witness=%+v alive=%v err=%v", witness, alive, err)
+	}
+	tampered := witness
+	tampered.Birth += "0"
+	if alive, err := v22ExactSleepAlive(record, tampered, 3); err != nil || alive {
+		t.Fatalf("tampered birth accepted: alive=%v err=%v", alive, err)
+	}
+	wrongGroup := record
+	wrongGroup.PGID++
+	if _, found, err := v22FindExactSleep(wrongGroup, 3); err != nil || found {
+		t.Fatalf("wrong process group accepted: found=%v err=%v", found, err)
+	}
 }
 
 func v22AssertProcessGone(t *testing.T, record v22ProcessRecord) {
