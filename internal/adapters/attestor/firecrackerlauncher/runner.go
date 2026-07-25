@@ -18,13 +18,3 @@ type Runner interface {
 	Run(context.Context, LaunchRequest, *os.File, *os.File) (RunResult, error)
 	Close() error
 }
-
-type unavailableRunner struct{}
-
-func (unavailableRunner) Run(context.Context, LaunchRequest, *os.File, *os.File) (RunResult, error) {
-	return RunResult{}, launcherError(CodeUnavailable)
-}
-
-func (unavailableRunner) Close() error {
-	return nil
-}

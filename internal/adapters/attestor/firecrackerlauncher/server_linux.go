@@ -28,6 +28,7 @@ type Server struct {
 	closed      bool
 	started     bool
 	connections map[int]struct{}
+	serveCancel context.CancelFunc
 	close       sync.Once
 	active      sync.WaitGroup
 	closeErr    error
@@ -37,10 +38,18 @@ func NewServer(config Config) (*Server, error) {
 	if os.Geteuid() != 0 {
 		return nil, launcherError(CodePrivilegeRequired)
 	}
-	// Physical jailer execution remains deliberately unavailable until its
-	// cgroup and cleanup implementation is accredited. The transport can be
-	// installed safely: every request fails closed with CodeUnavailable.
-	return newServer(config, unavailableRunner{}, 0)
+	runner, err := newPhysicalRunner(config)
+	if err != nil {
+		return nil, err
+	}
+	server, err := newServer(config, runner, 0)
+	if err == nil {
+		return server, nil
+	}
+	if closeErr := runner.Close(); closeErr != nil {
+		return nil, launcherError(CodeCleanupFailed)
+	}
+	return nil, err
 }
 
 func newServer(config Config, runner Runner, trustedOwner uint32) (*Server, error) {
@@ -68,16 +77,19 @@ func newServer(config Config, runner Runner, trustedOwner uint32) (*Server, erro
 }
 
 func (server *Server) Serve(ctx context.Context) (result error) {
-	if server == nil {
+	if server == nil || ctx == nil {
 		return launcherError(CodeUnavailable)
 	}
-	if !server.beginServe() {
+	serveContext, cancel := context.WithCancel(ctx)
+	if !server.beginServe(cancel) {
+		cancel()
 		return launcherError(CodeUnavailable)
 	}
+	defer cancel()
 	done := make(chan struct{})
 	go func() {
 		select {
-		case <-ctx.Done():
+		case <-serveContext.Done():
 			server.closeListener()
 		case <-done:
 		}
@@ -89,25 +101,26 @@ func (server *Server) Serve(ctx context.Context) (result error) {
 	for {
 		select {
 		case server.slots <- struct{}{}:
-		case <-ctx.Done():
+		case <-serveContext.Done():
 			return nil
 		}
 		listener, pinErr := server.pinListener()
 		if pinErr != nil {
 			<-server.slots
-			if ctx.Err() != nil || server.isClosed() {
+			if serveContext.Err() != nil || server.isClosed() {
 				return nil
 			}
 			return launcherError(CodeUnavailable)
 		}
-		connection, err := server.acceptConnection(ctx, listener)
+		connection, err := server.acceptConnection(serveContext, listener)
 		_ = unix.Close(listener)
 		if err != nil {
 			<-server.slots
 			server.mu.Lock()
 			closed := server.closed
 			server.mu.Unlock()
-			if closed || ctx.Err() != nil || errors.Is(err, unix.EBADF) || errors.Is(err, unix.EINVAL) {
+			if closed || serveContext.Err() != nil ||
+				errors.Is(err, unix.EBADF) || errors.Is(err, unix.EINVAL) {
 				return nil
 			}
 			return launcherError(CodeUnavailable)
@@ -124,18 +137,19 @@ func (server *Server) Serve(ctx context.Context) (result error) {
 		}
 		go func() {
 			defer server.finishConnection(connection)
-			server.handle(ctx, connection)
+			server.handle(serveContext, connection)
 		}()
 	}
 }
 
-func (server *Server) beginServe() bool {
+func (server *Server) beginServe(cancel context.CancelFunc) bool {
 	server.mu.Lock()
 	defer server.mu.Unlock()
-	if server.closed || server.started || server.listener < 0 {
+	if cancel == nil || server.closed || server.started || server.listener < 0 {
 		return false
 	}
 	server.started = true
+	server.serveCancel = cancel
 	return true
 }
 
@@ -246,7 +260,7 @@ func (server *Server) handle(parent context.Context, connection int) {
 	runResult, runErr := server.runner.Run(requestContext, request, files[0], outputDrive)
 	if runErr != nil {
 		code := safeCode(runErr, CodeExecutionFailed)
-		if requestContext.Err() != nil {
+		if requestContext.Err() != nil && code != CodeCleanupFailed {
 			code = contextFailureCode(requestContext)
 		}
 		server.sendFailure(connection, request.Nonce, code)
@@ -301,9 +315,10 @@ func (server *Server) Close() error {
 	}
 	server.close.Do(func() {
 		server.closeListener()
+		runnerErr := normalizeCleanupError(server.runner.Close())
 		server.active.Wait()
 		server.closeErr = errors.Join(
-			normalizeCleanupError(server.runner.Close()),
+			runnerErr,
 			removeLauncherSocket(server.runtimeRoot, filepath.Base(server.config.SocketPath), server.socket),
 			normalizeCleanupError(server.runtimeRoot.Close()),
 		)
@@ -328,6 +343,7 @@ func (server *Server) closeListener() {
 		return
 	}
 	server.closed = true
+	cancel := server.serveCancel
 	listener := server.listener
 	server.listener = -1
 	if listener >= 0 {
@@ -337,6 +353,9 @@ func (server *Server) closeListener() {
 		_ = unix.Shutdown(connection, unix.SHUT_RDWR)
 	}
 	server.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 	if listener >= 0 {
 		_ = unix.Close(listener)
 	}

@@ -29,6 +29,29 @@ type fakeRunner struct {
 	closed   bool
 }
 
+type closeUnblockedRunner struct {
+	entered chan struct{}
+	release chan struct{}
+	enter   sync.Once
+	close   sync.Once
+}
+
+func (runner *closeUnblockedRunner) Run(
+	context.Context,
+	LaunchRequest,
+	*os.File,
+	*os.File,
+) (RunResult, error) {
+	runner.enter.Do(func() { close(runner.entered) })
+	<-runner.release
+	return RunResult{}, launcherError(CodeUnavailable)
+}
+
+func (runner *closeUnblockedRunner) Close() error {
+	runner.close.Do(func() { close(runner.release) })
+	return nil
+}
+
 func (runner *fakeRunner) Run(
 	ctx context.Context,
 	request LaunchRequest,
@@ -37,6 +60,9 @@ func (runner *fakeRunner) Run(
 ) (RunResult, error) {
 	if runner.wait {
 		<-ctx.Done()
+		if runner.err != nil {
+			return RunResult{}, runner.err
+		}
 		return RunResult{}, ctx.Err()
 	}
 	content, err := io.ReadAll(io.NewSectionReader(input, 0, 1<<20))
@@ -288,6 +314,60 @@ func TestUnixLauncherTimeoutIsStableAndCleanupRemovesSocket(t *testing.T) {
 	}
 }
 
+func TestUnixLauncherCleanupFailureDominatesExpiredRequest(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "runtime")
+	config := validConfigForTest(root)
+	prepareRuntimeRoot(t, root)
+	runner := &fakeRunner{
+		wait: true,
+		err:  launcherError(CodeCleanupFailed),
+	}
+	server, err := newServer(config, runner, uint32(os.Geteuid()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancel, done := serveForTest(t, server)
+	defer func() {
+		cancel()
+		<-done
+	}()
+	input, digest, err := NewSealedInput(
+		inputDrivePayloadForTest("input"),
+		config.MaxInputBytes,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer input.Close()
+	request := validLaunchRequestForTest()
+	request.InputDigest = digest
+	request.Timeout = 30 * time.Millisecond
+	payload, err := marshalRequest(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	socket := connectForTest(t, config.SocketPath)
+	defer unix.Close(socket)
+	if count, err := unix.SendmsgN(
+		socket,
+		payload,
+		unix.UnixRights(int(input.Fd())),
+		nil,
+		0,
+	); err != nil || count != len(payload) {
+		t.Fatalf("send request: count=%d err=%v", count, err)
+	}
+	responsePayload, files, err := receivePacket(socket, 1)
+	closeFiles(files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := unmarshalResponse(responsePayload)
+	if err != nil || response.Code != CodeCleanupFailed {
+		t.Fatalf("cleanup failure hidden by request timeout: response=%+v err=%v", response, err)
+	}
+}
+
 func TestDescriptorsRejectRegularFilesAndInputDigestDrift(t *testing.T) {
 	regular := filepath.Join(t.TempDir(), "regular")
 	if err := os.WriteFile(regular, []byte("input"), 0o400); err != nil {
@@ -385,6 +465,75 @@ func TestServeStopsWithSilentPeer(t *testing.T) {
 		}
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("Serve remained blocked by silent peer")
+	}
+}
+
+func TestServerCloseStopsRunnerBeforeWaitingForBlockedHandler(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "runtime")
+	config := validConfigForTest(root)
+	config.CleanupTimeout = 250 * time.Millisecond
+	prepareRuntimeRoot(t, root)
+	runner := &closeUnblockedRunner{
+		entered: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	server, err := newServer(config, runner, uint32(os.Geteuid()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, serveDone := serveForTest(t, server)
+	input, digest, err := NewSealedInput(
+		inputDrivePayloadForTest("blocked-runner"),
+		config.MaxInputBytes,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer input.Close()
+	request := validLaunchRequestForTest()
+	request.InputDigest = digest
+	request.Timeout = 2 * time.Second
+	client, err := newClient(config.SocketPath, uint32(os.Geteuid()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	clientDone := make(chan error, 1)
+	go func() {
+		result, launchErr := client.Launch(
+			context.Background(),
+			request,
+			input,
+			config.MaxInputBytes,
+		)
+		if result.Output != nil {
+			_ = result.Output.Close()
+		}
+		clientDone <- launchErr
+	}()
+	select {
+	case <-runner.entered:
+	case <-time.After(time.Second):
+		t.Fatal("runner was not entered")
+	}
+	started := time.Now()
+	if err := server.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if elapsed := time.Since(started); elapsed > 500*time.Millisecond {
+		t.Fatalf("Close waited for request timeout: %s", elapsed)
+	}
+	select {
+	case <-clientDone:
+	case <-time.After(time.Second):
+		t.Fatal("client remained blocked after Close")
+	}
+	select {
+	case err := <-serveDone:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Serve remained blocked after Close")
 	}
 }
 

@@ -24,9 +24,16 @@ type configDocument struct {
 	SocketPath             string `json:"socket_path"`
 	RuntimeRoot            string `json:"runtime_root"`
 	FirecrackerCommand     string `json:"firecracker_command"`
+	FirecrackerSHA256      string `json:"firecracker_sha256"`
 	JailerCommand          string `json:"jailer_command"`
+	JailerSHA256           string `json:"jailer_sha256"`
 	KernelImage            string `json:"kernel_image"`
+	KernelSHA256           string `json:"kernel_sha256"`
 	GuestImage             string `json:"guest_image"`
+	GuestSHA256            string `json:"guest_sha256"`
+	GuestManifest          string `json:"guest_manifest"`
+	GuestManifestSHA256    string `json:"guest_manifest_sha256"`
+	NetNSPath              string `json:"netns_path"`
 	CgroupRoot             string `json:"cgroup_root"`
 	ParentCgroup           string `json:"parent_cgroup"`
 	AllowedUID             uint32 `json:"allowed_uid"`
@@ -42,6 +49,8 @@ type configDocument struct {
 	MaxConcurrentRuns      uint32 `json:"max_concurrent_runs"`
 	MaxTimeout             string `json:"max_timeout"`
 	CleanupTimeout         string `json:"cleanup_timeout"`
+	MaxCleanupEntries      uint32 `json:"max_cleanup_entries"`
+	MaxCleanupDepth        uint32 `json:"max_cleanup_depth"`
 	MaxDiagnosticBytes     int64  `json:"max_diagnostic_bytes"`
 }
 
@@ -113,8 +122,12 @@ func loadConfig(path string, trustedOwner uint32) (firecrackerlauncher.Config, e
 	}
 	config := firecrackerlauncher.Config{
 		SocketPath: document.SocketPath, RuntimeRoot: document.RuntimeRoot,
-		FirecrackerCommand: document.FirecrackerCommand, JailerCommand: document.JailerCommand,
-		KernelImage: document.KernelImage, GuestImage: document.GuestImage,
+		FirecrackerCommand: document.FirecrackerCommand, FirecrackerSHA256: document.FirecrackerSHA256,
+		JailerCommand: document.JailerCommand, JailerSHA256: document.JailerSHA256,
+		KernelImage: document.KernelImage, KernelSHA256: document.KernelSHA256,
+		GuestImage: document.GuestImage, GuestSHA256: document.GuestSHA256,
+		GuestManifest: document.GuestManifest, GuestManifestSHA256: document.GuestManifestSHA256,
+		NetNSPath:  document.NetNSPath,
 		CgroupRoot: document.CgroupRoot, ParentCgroup: document.ParentCgroup,
 		AllowedUID: document.AllowedUID, AllowedGID: document.AllowedGID,
 		JailUID: document.JailUID, JailGID: document.JailGID,
@@ -125,6 +138,8 @@ func loadConfig(path string, trustedOwner uint32) (firecrackerlauncher.Config, e
 		MaxCPUQuotaMicros: document.MaxCPUQuotaMicros,
 		MaxConcurrentRuns: document.MaxConcurrentRuns,
 		MaxTimeout:        maxTimeout, CleanupTimeout: cleanupTimeout,
+		MaxCleanupEntries:  document.MaxCleanupEntries,
+		MaxCleanupDepth:    document.MaxCleanupDepth,
 		MaxDiagnosticBytes: document.MaxDiagnosticBytes,
 	}
 	if err := firecrackerlauncher.ValidateConfig(config); err != nil {

@@ -15,6 +15,7 @@ const (
 	CodeInputInvalid       = "test_attestor.firecracker_launcher_input_invalid"
 	CodeOutputInvalid      = "test_attestor.firecracker_launcher_output_invalid"
 	CodeAssetsUnsafe       = "test_attestor.firecracker_launcher_assets_unsafe"
+	CodeNetworkUnsafe      = "test_attestor.firecracker_launcher_network_unsafe"
 	CodeRuntimeRootUnsafe  = "test_attestor.firecracker_launcher_runtime_root_unsafe"
 	CodeResourceUnsafe     = "test_attestor.firecracker_launcher_resource_unsafe"
 	CodeExecutionFailed    = "test_attestor.firecracker_launcher_execution_failed"

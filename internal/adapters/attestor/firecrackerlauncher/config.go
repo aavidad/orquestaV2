@@ -10,15 +10,24 @@ const (
 	runtimeMarkerName      = ".orquesta-firecracker-launcher-root"
 	maxDiagnosticBytesHard = int64(64 << 20)
 	maxConcurrentRunsHard  = uint32(256)
+	maxCleanupEntriesHard  = uint32(1 << 20)
+	maxCleanupDepthHard    = uint32(128)
 )
 
 type Config struct {
 	SocketPath             string
 	RuntimeRoot            string
 	FirecrackerCommand     string
+	FirecrackerSHA256      string
 	JailerCommand          string
+	JailerSHA256           string
 	KernelImage            string
+	KernelSHA256           string
 	GuestImage             string
+	GuestSHA256            string
+	GuestManifest          string
+	GuestManifestSHA256    string
+	NetNSPath              string
 	CgroupRoot             string
 	ParentCgroup           string
 	AllowedUID             uint32
@@ -34,6 +43,8 @@ type Config struct {
 	MaxConcurrentRuns      uint32
 	MaxTimeout             time.Duration
 	CleanupTimeout         time.Duration
+	MaxCleanupEntries      uint32
+	MaxCleanupDepth        uint32
 	MaxDiagnosticBytes     int64
 }
 
@@ -45,8 +56,12 @@ func validateConfig(config Config) error {
 	if !canonicalAbsolute(config.SocketPath) || !canonicalAbsolute(config.RuntimeRoot) ||
 		!canonicalAbsolute(config.FirecrackerCommand) || !canonicalAbsolute(config.JailerCommand) ||
 		!canonicalAbsolute(config.KernelImage) || !canonicalAbsolute(config.GuestImage) ||
+		!canonicalAbsolute(config.GuestManifest) || !canonicalAbsolute(config.NetNSPath) ||
 		!canonicalAbsolute(config.CgroupRoot) || config.RuntimeRoot == "/" ||
 		!pathWithin(config.RuntimeRoot, config.SocketPath) || !validRelativeCgroup(config.ParentCgroup) ||
+		!validDigest(config.FirecrackerSHA256) || !validDigest(config.JailerSHA256) ||
+		!validDigest(config.KernelSHA256) || !validDigest(config.GuestSHA256) ||
+		!validDigest(config.GuestManifestSHA256) ||
 		config.AllowedUID == ^uint32(0) || config.AllowedGID == ^uint32(0) ||
 		config.JailUID == 0 || config.JailGID == 0 ||
 		config.JailUID == ^uint32(0) || config.JailGID == ^uint32(0) ||
@@ -62,6 +77,10 @@ func validateConfig(config Config) error {
 		config.MaxConcurrentRuns > maxConcurrentRunsHard ||
 		config.MaxTimeout <= 0 || config.CleanupTimeout <= 0 ||
 		config.CleanupTimeout >= config.MaxTimeout ||
+		config.MaxCleanupEntries == 0 ||
+		config.MaxCleanupEntries > maxCleanupEntriesHard ||
+		config.MaxCleanupDepth == 0 ||
+		config.MaxCleanupDepth > maxCleanupDepthHard ||
 		config.MaxDiagnosticBytes <= 0 || config.MaxDiagnosticBytes > maxDiagnosticBytesHard {
 		return launcherError(CodeConfigInvalid)
 	}
