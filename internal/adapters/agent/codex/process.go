@@ -998,6 +998,7 @@ func (adapter *Adapter) commandArgumentsWithSession(runPath string, workspaceBou
 	schemaPath := filepath.Join(adapter.rootPath, filepath.FromSlash(path.Join(runPath, outputSchemaFileName)))
 	lastMessagePath := filepath.Join(adapter.rootPath, filepath.FromSlash(path.Join(runPath, lastMessageFileName)))
 	arguments := []string{
+		"--ask-for-approval", "never",
 		"exec",
 		"--ephemeral",
 		"--ignore-user-config",

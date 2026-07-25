@@ -42,7 +42,7 @@ type workerDescriptorAudit struct {
 }
 
 func init() {
-	if len(os.Args) < 2 || os.Args[1] != "exec" {
+	if len(os.Args) < 2 || os.Args[1] != "--ask-for-approval" && os.Args[1] != "exec" {
 		return
 	}
 	if err := runCodexHelper(os.Args[1:]); err != nil {
@@ -682,6 +682,10 @@ type helperOptions struct {
 }
 
 func parseCodexHelperArguments(arguments []string) (helperOptions, error) {
+	if len(arguments) < 2 || arguments[0] != "--ask-for-approval" || arguments[1] != "never" {
+		return helperOptions{}, fmt.Errorf("non-interactive approval policy missing")
+	}
+	arguments = arguments[2:]
 	if len(arguments) == 0 || arguments[0] != "exec" {
 		return helperOptions{}, fmt.Errorf("missing exec subcommand")
 	}

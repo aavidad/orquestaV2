@@ -16,6 +16,38 @@ func (function workspacePathResolverFunc) ResolveExecutionWorkspace(ctx context.
 	return function(ctx, ref)
 }
 
+func TestCodexCommandArgumentsForceNonInteractiveApproval(t *testing.T) {
+	adapter := openTestAdapter(t, testConfig(t))
+	session := &resolvedSession{endpoint: "http://127.0.0.1:7777/mcp"}
+	for _, test := range []struct {
+		name      string
+		arguments []string
+	}{
+		{name: "unbound", arguments: adapter.commandArguments("run:unbound")},
+		{name: "review", arguments: adapter.commandArguments("run:review", true, false)},
+		{name: "writer", arguments: adapter.commandArguments("run:writer", true, true)},
+		{name: "session", arguments: adapter.commandArgumentsWithSession("run:session", false, false, session)},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if len(test.arguments) < 3 ||
+				test.arguments[0] != "--ask-for-approval" ||
+				test.arguments[1] != "never" ||
+				test.arguments[2] != "exec" {
+				t.Fatalf("non-interactive prefix = %q", test.arguments)
+			}
+			seen := 0
+			for _, argument := range test.arguments {
+				if argument == "--ask-for-approval" {
+					seen++
+				}
+			}
+			if seen != 1 {
+				t.Fatalf("approval policy occurrences = %d, want 1", seen)
+			}
+		})
+	}
+}
+
 func TestBoundReviewerWorkspaceUsesReadOnlySandbox(t *testing.T) {
 	adapter := &Adapter{config: testConfig(t)}
 	arguments := adapter.commandArguments("run:review", true, false)
