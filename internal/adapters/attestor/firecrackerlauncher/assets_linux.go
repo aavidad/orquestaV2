@@ -11,6 +11,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"strings"
 	"sync"
 
 	"golang.org/x/sys/unix"
@@ -54,7 +55,9 @@ type guestManifestDocument struct {
 	SourceCommit          string `json:"source_commit"`
 	RunnerSHA256          string `json:"runner_sha256"`
 	BusyboxSHA256         string `json:"busybox_sha256"`
+	BusyboxVersion        string `json:"busybox_version"`
 	ToolchainTreeSHA256   string `json:"toolchain_tree_sha256"`
+	ToolchainVersion      string `json:"toolchain_version"`
 	ImageSHA256           string `json:"image_sha256"`
 	UnpackedBytes         uint64 `json:"unpacked_bytes"`
 	MinimumGuestMemoryMiB uint32 `json:"minimum_guest_memory_mib"`
@@ -218,7 +221,9 @@ func validateGuestManifest(asset *pinnedAsset, guestDigest string) (uint32, erro
 		!validSourceCommit(document.SourceCommit) ||
 		!validPrefixedDigest(document.RunnerSHA256) ||
 		!validPrefixedDigest(document.BusyboxSHA256) ||
+		!validGuestAssetVersion(document.BusyboxVersion, "v") ||
 		!validPrefixedDigest(document.ToolchainTreeSHA256) ||
+		!validGuestAssetVersion(document.ToolchainVersion, "go") ||
 		document.ImageSHA256 != "sha256:"+guestDigest ||
 		document.Build.CGOEnabled || !document.Build.Trimpath ||
 		document.Build.BuildVCS || !document.Build.RunnerDoubleBuild ||
@@ -240,6 +245,24 @@ func validateGuestManifest(asset *pinnedAsset, guestDigest string) (uint32, erro
 		return 0, launcherError(CodeAssetsUnsafe)
 	}
 	return minimumGuestMemoryMiB, nil
+}
+
+func validGuestAssetVersion(value, prefix string) bool {
+	if len(value) <= len(prefix) || len(value) > 128 ||
+		!strings.HasPrefix(value, prefix) {
+		return false
+	}
+	for _, character := range value {
+		if character >= 'a' && character <= 'z' ||
+			character >= 'A' && character <= 'Z' ||
+			character >= '0' && character <= '9' ||
+			character == '.' || character == '_' ||
+			character == '+' || character == '-' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func minimumGuestMemoryForManifest(unpackedBytes uint64) (uint32, bool) {

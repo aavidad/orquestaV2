@@ -51,7 +51,7 @@ func TestAssetPreflightPinsExpectedRootEquivalentFilesAndManifest(t *testing.T) 
 func TestGuestManifestAcceptsCurrentBuilderSchema(t *testing.T) {
 	imageDigest := strings.Repeat("a", 64)
 	raw := []byte(fmt.Sprintf(
-		`{"schema_version":"orquesta_test_attestor_guest.v0","platform":"linux/amd64","source_commit":"%s","runner_sha256":"sha256:%s","busybox_sha256":"sha256:%s","toolchain_tree_sha256":"sha256:%s","image_sha256":"sha256:%s","unpacked_bytes":%d,"minimum_guest_memory_mib":%d,"memory_contract":{"scratch_fixed_reserve_bytes":%d,"scratch_cache_reserve_bytes":%d,"tmpfs_percent":%d,"kernel_runtime_headroom_percent":%d,"formula":"%s"},"build":{"cgo_enabled":false,"trimpath":true,"buildvcs":false,"runner_double_build":true,"source":"exact_commit_private_export","archive":"newc","owner":"0:0","mtime_epoch":0,"gzip_name_time":false,"toolchain_directories":"0555","toolchain_executables":"0555","toolchain_data":"0444","toolchain_symlinks":"relative_internal","toolchain_nobody_go_test":true}}`+"\n",
+		`{"schema_version":"orquesta_test_attestor_guest.v0","platform":"linux/amd64","source_commit":"%s","runner_sha256":"sha256:%s","busybox_sha256":"sha256:%s","busybox_version":"v1.36.1","toolchain_tree_sha256":"sha256:%s","toolchain_version":"go1.25.0","image_sha256":"sha256:%s","unpacked_bytes":%d,"minimum_guest_memory_mib":%d,"memory_contract":{"scratch_fixed_reserve_bytes":%d,"scratch_cache_reserve_bytes":%d,"tmpfs_percent":%d,"kernel_runtime_headroom_percent":%d,"formula":"%s"},"build":{"cgo_enabled":false,"trimpath":true,"buildvcs":false,"runner_double_build":true,"source":"exact_commit_private_export","archive":"newc","owner":"0:0","mtime_epoch":0,"gzip_name_time":false,"toolchain_directories":"0555","toolchain_executables":"0555","toolchain_data":"0444","toolchain_symlinks":"relative_internal","toolchain_nobody_go_test":true}}`+"\n",
 		strings.Repeat("b", 40),
 		strings.Repeat("c", 64),
 		strings.Repeat("d", 64),
@@ -149,6 +149,18 @@ func TestGuestManifestRequiresExactReproducibleSourceFields(t *testing.T) {
 		"toolchain_nobody_not_tested": func(document *guestManifestDocument) {
 			document.Build.ToolchainNobodyGoTest = false
 		},
+		"busybox_version_missing": func(document *guestManifestDocument) {
+			document.BusyboxVersion = ""
+		},
+		"busybox_version_unsafe": func(document *guestManifestDocument) {
+			document.BusyboxVersion = "v1.36.1\nforged"
+		},
+		"toolchain_version_missing": func(document *guestManifestDocument) {
+			document.ToolchainVersion = ""
+		},
+		"toolchain_version_unsafe": func(document *guestManifestDocument) {
+			document.ToolchainVersion = "go1.25.0 linux/amd64"
+		},
 	}
 	for name, mutate := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -244,7 +256,9 @@ func validGuestManifestForTest(imageDigest string) []byte {
 	document.SourceCommit = strings.Repeat("a", 40)
 	document.RunnerSHA256 = "sha256:" + strings.Repeat("1", 64)
 	document.BusyboxSHA256 = "sha256:" + strings.Repeat("2", 64)
+	document.BusyboxVersion = "v1.36.1"
 	document.ToolchainTreeSHA256 = "sha256:" + strings.Repeat("3", 64)
+	document.ToolchainVersion = "go1.25.0"
 	document.ImageSHA256 = "sha256:" + imageDigest
 	document.UnpackedBytes = 32 << 20
 	document.MinimumGuestMemoryMiB = 470
