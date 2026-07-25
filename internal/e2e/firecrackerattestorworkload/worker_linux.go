@@ -8,6 +8,7 @@ package firecrackerattestorworkload
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base32"
 	"encoding/hex"
 	"errors"
 	"io"
@@ -27,6 +28,7 @@ import (
 	"orquesta/internal/goal"
 	"orquesta/internal/identity"
 	"orquesta/internal/ports"
+	launcherprotocol "orquesta/internal/testattestorprotocol/launcher"
 )
 
 const (
@@ -61,8 +63,9 @@ type Config struct {
 	ConcurrentRuns      int
 }
 
-// Summary is deterministic for one configuration and contains no filesystem
-// paths, launcher diagnostics, nonces, timestamps, or captured test output.
+// Summary contains no filesystem paths, launcher diagnostics, nonces,
+// timestamps, or captured test output. RunID exposes only the launcher's
+// canonical physical identifier derived from a fresh nonce.
 type Summary struct {
 	Attempted    int                  `json:"attempted"`
 	Passed       int                  `json:"passed"`
@@ -76,6 +79,7 @@ type AttestationSummary struct {
 	WorkspaceBindingDigest string `json:"workspace_binding_digest"`
 	ChangeSetDigest        string `json:"change_set_digest"`
 	ReceiptRef             string `json:"receipt_ref"`
+	RunID                  string `json:"run_id"`
 }
 
 type Error struct {
@@ -175,8 +179,9 @@ func Run(ctx context.Context, config Config) (summary Summary, resultErr error) 
 	if err != nil {
 		return Summary{}, failure(codeConfigInvalid, err)
 	}
+	recordingLauncher := newRecordingLauncherClient(launcher)
 	attestor, err = firecrackerclient.New(firecrackerclient.Config{
-		Launcher:            launcher,
+		Launcher:            recordingLauncher,
 		SnapshotSource:      gitAdapter,
 		Now:                 func() time.Time { return logicalTime },
 		ExpectedAssetDigest: config.ExpectedAssetDigest,
@@ -202,7 +207,140 @@ func Run(ctx context.Context, config Config) (summary Summary, resultErr error) 
 			return Summary{}, err
 		}
 	}
-	return executeConcurrentAttestations(ctx, runs, attestor.Attest)
+	summary, err = executeConcurrentAttestations(ctx, runs, attestor.Attest)
+	if err != nil {
+		return Summary{}, err
+	}
+	launches, err := recordingLauncher.launches()
+	if err != nil {
+		return Summary{}, failure(codeCausalityInvalid, err)
+	}
+	if err := correlateSummaryLaunches(&summary, launches); err != nil {
+		return Summary{}, failure(codeCausalityInvalid, err)
+	}
+	return summary, nil
+}
+
+type launchedRun struct {
+	nonce         string
+	runID         string
+	subjectDigest string
+}
+
+// recordingLauncherClient is scoped to one worker invocation, which is one
+// physical phase. It retains nonces only in-process and returns only the
+// canonical run IDs needed by the privileged supervisor.
+type recordingLauncherClient struct {
+	delegate launcherprotocol.Client
+
+	mu      sync.Mutex
+	records []launchedRun
+	err     error
+}
+
+func newRecordingLauncherClient(delegate launcherprotocol.Client) *recordingLauncherClient {
+	return &recordingLauncherClient{delegate: delegate}
+}
+
+func (client *recordingLauncherClient) Identity() launcherprotocol.Identity {
+	if client == nil || client.delegate == nil {
+		return launcherprotocol.Identity{}
+	}
+	return client.delegate.Identity()
+}
+
+func (client *recordingLauncherClient) Launch(
+	ctx context.Context,
+	request launcherprotocol.LaunchRequest,
+	input *os.File,
+	maxInputBytes int64,
+) (launcherprotocol.ClientResult, error) {
+	if client == nil || client.delegate == nil {
+		return launcherprotocol.ClientResult{}, failure(codeCausalityInvalid, nil)
+	}
+	runID, err := runIDFromNonce(request.Nonce)
+	if err != nil || !validDigest(request.SubjectDigest) {
+		return launcherprotocol.ClientResult{}, failure(codeCausalityInvalid, err)
+	}
+	client.mu.Lock()
+	if client.err != nil {
+		err := client.err
+		client.mu.Unlock()
+		return launcherprotocol.ClientResult{}, failure(codeCausalityInvalid, err)
+	}
+	for _, existing := range client.records {
+		if existing.nonce == request.Nonce ||
+			existing.runID == runID ||
+			existing.subjectDigest == request.SubjectDigest {
+			duplicateErr := errors.New("duplicate physical launch identity")
+			client.err = duplicateErr
+			client.mu.Unlock()
+			return launcherprotocol.ClientResult{}, failure(codeCausalityInvalid, duplicateErr)
+		}
+	}
+	client.records = append(client.records, launchedRun{
+		nonce: request.Nonce, runID: runID, subjectDigest: request.SubjectDigest,
+	})
+	client.mu.Unlock()
+	return client.delegate.Launch(ctx, request, input, maxInputBytes)
+}
+
+func (client *recordingLauncherClient) launches() ([]launchedRun, error) {
+	if client == nil {
+		return nil, errors.New("nil recording launcher")
+	}
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return append([]launchedRun(nil), client.records...), client.err
+}
+
+func runIDFromNonce(nonce string) (string, error) {
+	if len(nonce) != sha256.Size*2 ||
+		strings.Trim(nonce, "0123456789abcdef") != "" {
+		return "", errors.New("invalid launcher nonce")
+	}
+	raw, err := hex.DecodeString(nonce)
+	if err != nil || len(raw) != sha256.Size {
+		return "", errors.New("invalid launcher nonce")
+	}
+	encoded := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(raw)
+	return "orq-" + strings.ToLower(encoded), nil
+}
+
+func correlateSummaryLaunches(summary *Summary, launches []launchedRun) error {
+	if summary == nil || len(launches) != summary.Attempted ||
+		len(summary.Attestations) != summary.Attempted {
+		return errors.New("physical launch count mismatch")
+	}
+	bySubject := make(map[string]launchedRun, len(launches))
+	runIDs := make(map[string]struct{}, len(launches))
+	for _, launch := range launches {
+		expectedRunID, err := runIDFromNonce(launch.nonce)
+		if err != nil || expectedRunID != launch.runID || !validDigest(launch.subjectDigest) {
+			return errors.New("invalid physical launch identity")
+		}
+		if _, duplicate := bySubject[launch.subjectDigest]; duplicate {
+			return errors.New("duplicate physical launch subject")
+		}
+		if _, duplicate := runIDs[launch.runID]; duplicate {
+			return errors.New("duplicate physical launch run")
+		}
+		bySubject[launch.subjectDigest] = launch
+		runIDs[launch.runID] = struct{}{}
+	}
+	for index := range summary.Attestations {
+		attestation := &summary.Attestations[index]
+		launch, ok := bySubject[attestation.SubjectDigest]
+		if !ok || attestation.ReceiptRef == "" {
+			return errors.New("attestation has no physical launch")
+		}
+		attestation.RunID = launch.runID
+		delete(bySubject, attestation.SubjectDigest)
+	}
+	if len(bySubject) != 0 {
+		return errors.New("physical launch has no attestation")
+	}
+	return nil
 }
 
 type causalReferences struct {

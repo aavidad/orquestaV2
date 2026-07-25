@@ -35,6 +35,7 @@ type AttestationSummary struct {
 	WorkspaceBindingDigest string `json:"workspace_binding_digest"`
 	ChangeSetDigest        string `json:"change_set_digest"`
 	ReceiptRef             string `json:"receipt_ref"`
+	RunID                  string `json:"run_id"`
 }
 
 type Error struct {

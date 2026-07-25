@@ -4,6 +4,7 @@ package firecrackerattestorworkload
 
 import (
 	"context"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -19,6 +20,7 @@ import (
 	"orquesta/internal/goal"
 	"orquesta/internal/identity"
 	"orquesta/internal/ports"
+	launcherprotocol "orquesta/internal/testattestorprotocol/launcher"
 )
 
 func TestWorkerConfigRequiresEmptyPrivateRootAndBoundedConcurrency(t *testing.T) {
@@ -219,12 +221,162 @@ func TestExecuteConcurrentAttestationsRejectsDuplicateSubjectsAndReceipts(t *tes
 	}
 }
 
+func TestRecordingLauncherDerivesCanonicalRunIDsConcurrently(t *testing.T) {
+	const count = 16
+	delegate := &recordingDelegate{}
+	client := newRecordingLauncherClient(delegate)
+	errorsCh := make(chan error, count)
+	var wait sync.WaitGroup
+	for index := 0; index < count; index++ {
+		wait.Add(1)
+		go func(index int) {
+			defer wait.Done()
+			var nonce [32]byte
+			nonce[len(nonce)-1] = byte(index + 1)
+			_, err := client.Launch(
+				context.Background(),
+				launcherprotocol.LaunchRequest{
+					Nonce:         hex.EncodeToString(nonce[:]),
+					SubjectDigest: digestString("subject:" + strconv.Itoa(index)),
+				},
+				nil,
+				0,
+			)
+			errorsCh <- err
+		}(index)
+	}
+	wait.Wait()
+	close(errorsCh)
+	for err := range errorsCh {
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	launches, err := client.launches()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(launches) != count || delegate.calls.Load() != count {
+		t.Fatalf("launches=%d delegate_calls=%d", len(launches), delegate.calls.Load())
+	}
+	seen := make(map[string]struct{}, count)
+	for _, launch := range launches {
+		expected, err := runIDFromNonce(launch.nonce)
+		if err != nil || launch.runID != expected {
+			t.Fatalf("launch=%+v error=%v", launch, err)
+		}
+		if _, duplicate := seen[launch.runID]; duplicate {
+			t.Fatal("duplicate derived run ID")
+		}
+		seen[launch.runID] = struct{}{}
+	}
+}
+
+func TestRunIDFromNonceRejectsInvalidAndMatchesLauncherVector(t *testing.T) {
+	if runID, err := runIDFromNonce(strings.Repeat("0", 64)); err != nil ||
+		runID != "orq-"+strings.Repeat("a", 52) {
+		t.Fatalf("zero vector run_id=%q error=%v", runID, err)
+	}
+	for _, nonce := range []string{
+		"", strings.Repeat("0", 63), strings.Repeat("A", 64),
+		strings.Repeat("g", 64),
+	} {
+		if _, err := runIDFromNonce(nonce); err == nil {
+			t.Fatalf("invalid nonce accepted: %q", nonce)
+		}
+	}
+	delegate := &recordingDelegate{}
+	client := newRecordingLauncherClient(delegate)
+	if _, err := client.Launch(
+		context.Background(),
+		launcherprotocol.LaunchRequest{
+			Nonce: strings.Repeat("A", 64), SubjectDigest: digestString("subject"),
+		},
+		nil,
+		0,
+	); err == nil {
+		t.Fatal("invalid nonce reached delegate")
+	}
+	launches, err := client.launches()
+	if err != nil || len(launches) != 0 || delegate.calls.Load() != 0 {
+		t.Fatalf(
+			"invalid launch recorded: launches=%+v calls=%d error=%v",
+			launches, delegate.calls.Load(), err,
+		)
+	}
+}
+
+func TestRecordingLauncherRejectsDuplicateNonceRunAndSubject(t *testing.T) {
+	tests := map[string]struct {
+		secondNonce   string
+		secondSubject string
+	}{
+		"nonce_and_run": {
+			secondNonce:   strings.Repeat("0", 64),
+			secondSubject: digestString("subject:2"),
+		},
+		"subject": {
+			secondNonce:   strings.Repeat("1", 64),
+			secondSubject: digestString("subject:1"),
+		},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			delegate := &recordingDelegate{}
+			client := newRecordingLauncherClient(delegate)
+			if _, err := client.Launch(
+				context.Background(),
+				launcherprotocol.LaunchRequest{
+					Nonce:         strings.Repeat("0", 64),
+					SubjectDigest: digestString("subject:1"),
+				},
+				nil,
+				0,
+			); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := client.Launch(
+				context.Background(),
+				launcherprotocol.LaunchRequest{
+					Nonce:         test.secondNonce,
+					SubjectDigest: test.secondSubject,
+				},
+				nil,
+				0,
+			); err == nil {
+				t.Fatal("duplicate launch accepted")
+			}
+			if delegate.calls.Load() != 1 {
+				t.Fatalf("duplicate reached delegate: calls=%d", delegate.calls.Load())
+			}
+		})
+	}
+}
+
 func TestPhysicalTestSourceUsesConfiguredDurationWithoutRuntimeEnvironment(t *testing.T) {
 	source := string(physicalTestSource(125 * time.Millisecond))
 	if !strings.Contains(source, "125000000 * time.Nanosecond") ||
 		strings.Contains(source, "Getenv") {
 		t.Fatalf("source=%q", source)
 	}
+}
+
+type recordingDelegate struct {
+	calls atomic.Int32
+}
+
+func (*recordingDelegate) Identity() launcherprotocol.Identity {
+	return launcherprotocol.Identity{Ref: "launcher:test", Digest: digestString("launcher")}
+}
+
+func (delegate *recordingDelegate) Launch(
+	context.Context,
+	launcherprotocol.LaunchRequest,
+	*os.File,
+	int64,
+) (launcherprotocol.ClientResult, error) {
+	delegate.calls.Add(1)
+	return launcherprotocol.ClientResult{}, nil
 }
 
 func validWorkerLimits(concurrent int) firecrackerclient.Limits {
