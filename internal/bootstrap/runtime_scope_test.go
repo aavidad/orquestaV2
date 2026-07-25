@@ -2,10 +2,12 @@ package bootstrap
 
 import (
 	"context"
+	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"orquesta/internal/adapters/agent/codex"
 	"orquesta/internal/application"
 	"orquesta/internal/config"
 )
@@ -83,7 +85,11 @@ func TestCredentialAgentDelegatesRuntimeScopeAndController(t *testing.T) {
 	if !ok {
 		t.Fatalf("credential wrapper does not expose runtime scope binding: %T", agent)
 	}
-	if err := binder.BindRuntimeScope("runtime-scope:test-credential-wrapper"); err != nil {
+	if err := binder.BindRuntimeScope("runtime-scope:test-credential-wrapper"); runtime.GOOS == "linux" {
+		if codex.ErrorCode(err) != codex.CodeCgroupRootRequired {
+			t.Fatalf("bind without delegated cgroup = %v", err)
+		}
+	} else if err != nil {
 		t.Fatalf("bind delegated runtime scope: %v", err)
 	}
 	controller, ok := agent.(application.AgentController)

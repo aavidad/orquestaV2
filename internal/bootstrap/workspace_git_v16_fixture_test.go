@@ -72,6 +72,7 @@ max_output_bytes = 65536
 
 [runtime.codex]
 timeout = "1s"
+supervisor_start_timeout = "500ms"
 max_concurrent_executions = 4
 work_root = %s
 env_allowlist = ["PATH"]

@@ -37,6 +37,7 @@ func TestRealCodexBudgetsAndEffectsThroughProductionComposition(t *testing.T) {
 		"[runtime.codex]\ncommand = "+strconv.Quote(helperPath)+"\ntimeout = \"5s\"",
 	)
 	replaceTestConfigValue(t, configPath, "max_concurrent_executions = 4\n", "")
+	configureTestCodexRuntimeCgroup(t, configPath)
 
 	runtime, err := Build(context.Background(), Options{ConfigPath: configPath, Version: "v15-budget-effect-e2e"})
 	if err != nil {

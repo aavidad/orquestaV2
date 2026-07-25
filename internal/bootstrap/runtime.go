@@ -885,10 +885,12 @@ func productionAgentAdapter(
 	adapterConfig := codex.Config{
 		Command:                 snapshot.RuntimeCodexCommand(),
 		WorkRoot:                snapshot.RuntimeCodexWorkRoot(),
+		CgroupRoot:              snapshot.RuntimeCodexCgroupRoot(),
 		Model:                   snapshot.RuntimeCodexModel(),
 		ReasoningEffort:         snapshot.RuntimeCodexReasoning(),
 		Timeout:                 snapshot.RuntimeCodexTimeout(),
 		ProcessPipeDrainDelay:   snapshot.RuntimeCodexProcessPipeDrainDelay(),
+		SupervisorStartTimeout:  snapshot.RuntimeCodexSupervisorStartTimeout(),
 		MaxDiagnosticBytes:      snapshot.RuntimeCodexMaxDiagnosticBytes(),
 		MaxConcurrentExecutions: int(snapshot.RuntimeCodexMaxConcurrentExecutions()),
 		MCPBearerTokenEnvVar:    snapshot.RuntimeCodexMCPBearerTokenEnvVar(),
