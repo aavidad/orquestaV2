@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net"
 	"path"
 	"path/filepath"
@@ -164,7 +165,7 @@ func validateCrossRegistryValues(registry registry, values map[Key]resolvedValue
 				return fail(validator.ID)
 			}
 		case "test_attestor_provider_requirements":
-			if !validTestAttestorValues(values) {
+			if !validTestAttestorValues(values, validator) {
 				return fail(validator.ID)
 			}
 		default:
@@ -174,7 +175,10 @@ func validateCrossRegistryValues(registry registry, values map[Key]resolvedValue
 	return nil
 }
 
-func validTestAttestorValues(values map[Key]resolvedValue) bool {
+func validTestAttestorValues(
+	values map[Key]resolvedValue,
+	policy registryCrossValidatorDefinition,
+) bool {
 	provider, providerOK := values[KeyTestAttestorProvider].value.(string)
 	command, commandOK := values[KeyTestAttestorBubblewrapCommand].value.(string)
 	launcherSocket, launcherSocketOK := values[KeyTestAttestorMicroVMLauncherSocket].value.(string)
@@ -210,9 +214,52 @@ func validTestAttestorValues(values map[Key]resolvedValue) bool {
 	}
 	if provider == "microvm" {
 		return canonicalAbsolutePath(launcherSocket) &&
-			guestMemoryMiB > 0 && guestMemoryMiB+128 <= memory/(1<<20) && common
+			quota <= policy.MicroVMMaxCPUQuotaMicros &&
+			validMicroVMCapacity(guestMemoryMiB, memory, maxSubject, maxOutput, policy) && common
 	}
 	return false
+}
+
+func validMicroVMCapacity(
+	guestMemoryMiB, memoryMaxBytes, maxSubjectBytes, maxOutputBytes int64,
+	policy registryCrossValidatorDefinition,
+) bool {
+	if guestMemoryMiB < policy.MicroVMMinimumGuestMemoryMiB ||
+		memoryMaxBytes <= 0 || maxSubjectBytes <= 0 || maxOutputBytes <= 0 {
+		return false
+	}
+	guestBytes, ok := checkedMultiplyNonNegative(guestMemoryMiB, 1<<20)
+	if !ok {
+		return false
+	}
+	minimumCgroupBytes, ok := checkedAddNonNegative(guestBytes, policy.MicroVMCgroupHeadroomBytes)
+	if !ok || memoryMaxBytes < minimumCgroupBytes {
+		return false
+	}
+	snapshotWorkingBytes, ok := checkedMultiplyNonNegative(maxSubjectBytes, 2)
+	if !ok {
+		return false
+	}
+	snapshotAndOutputBytes, ok := checkedAddNonNegative(snapshotWorkingBytes, maxOutputBytes)
+	if !ok {
+		return false
+	}
+	minimumGuestBytes, ok := checkedAddNonNegative(snapshotAndOutputBytes, policy.MicroVMOperationalReserveBytes)
+	return ok && guestBytes >= minimumGuestBytes
+}
+
+func checkedMultiplyNonNegative(left, right int64) (int64, bool) {
+	if left < 0 || right < 0 || left != 0 && right > math.MaxInt64/left {
+		return 0, false
+	}
+	return left * right, true
+}
+
+func checkedAddNonNegative(left, right int64) (int64, bool) {
+	if left < 0 || right < 0 || left > math.MaxInt64-right {
+		return 0, false
+	}
+	return left + right, true
 }
 
 func canonicalAbsolutePath(value string) bool {

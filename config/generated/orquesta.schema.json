@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:orquesta:config:2026-07-25.27",
+  "$id": "urn:orquesta:config:2026-07-25.29",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -1011,9 +1011,9 @@
           "additionalProperties": false,
           "properties": {
             "guest_memory_mib": {
-              "default": 1536,
+              "default": 4096,
               "maximum": 16384,
-              "minimum": 64,
+              "minimum": 128,
               "type": "integer",
               "x-env-alias": "ORQUESTA_TEST_ATTESTOR_MICROVM_GUEST_MEMORY_MIB",
               "x-restart-required": true,
@@ -1086,7 +1086,7 @@
               ]
             },
             "memory_max_bytes": {
-              "default": 2147483648,
+              "default": 5368709120,
               "maximum": 17179869184,
               "minimum": 268435456,
               "type": "integer",
@@ -1100,7 +1100,7 @@
               ]
             },
             "pids_max": {
-              "default": 256,
+              "default": 512,
               "maximum": 4096,
               "minimum": 16,
               "type": "integer",
@@ -1158,8 +1158,8 @@
       "type": "object"
     }
   },
-  "x-registry-revision": "2026-07-25.27",
-  "x-registry-hash": "sha256:18d8893c772054ae1d7610b34485f5d64eb23a6b6e73a41d0f135fcaa5d2b53e",
+  "x-registry-revision": "2026-07-25.29",
+  "x-registry-hash": "sha256:26ce93b2b7906a875a89d2bd05b215a09a261e487ae64cdf8438585659acc6a2",
   "x-source-max-bytes": 1048576,
   "x-aliases": [],
   "x-cross-validators": [
@@ -1243,7 +1243,11 @@
         "server.shutdown_timeout",
         "scheduler.attest_test_claim_lease",
         "scheduler.execution_timeout"
-      ]
+      ],
+      "microvm_minimum_guest_memory_mib": 128,
+      "microvm_cgroup_headroom_bytes": 1073741824,
+      "microvm_operational_reserve_bytes": 2147483648,
+      "microvm_max_cpu_quota_micros": 3200000
     }
   ]
 }

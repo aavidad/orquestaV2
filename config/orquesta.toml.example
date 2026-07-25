@@ -59,15 +59,15 @@ command = ""
 
 [test_attestor.microvm]
 launcher_socket = ""
-guest_memory_mib = 1536
+guest_memory_mib = 4096
 
 [test_attestor.go]
 toolchain_root = ""
 
 [test_attestor.resources]
 cgroup_root = ""
-memory_max_bytes = 2147483648
-pids_max = 256
+memory_max_bytes = 5368709120
+pids_max = 512
 cpu_quota_micros = 200000
 
 [identity]

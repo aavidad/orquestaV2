@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "revision": "2026-07-25.27",
+  "revision": "2026-07-25.29",
   "precedence": [
     "default",
     "file",
@@ -74,6 +74,10 @@
     },
     {
       "id": "test_attestor_provider_requirements",
+      "microvm_minimum_guest_memory_mib": 128,
+      "microvm_cgroup_headroom_bytes": 1073741824,
+      "microvm_operational_reserve_bytes": 2147483648,
+      "microvm_max_cpu_quota_micros": 3200000,
       "keys": [
         "test_attestor.provider",
         "test_attestor.timeout",
@@ -695,7 +699,7 @@
       "go_name": "TestAttestorMicroVMGuestMemoryMiB",
       "semantic_ref": "orquesta.config.test_attestor.microvm.guest_memory_mib",
       "type": "integer",
-      "default": 1536,
+      "default": 4096,
       "sensitive": false,
       "scope": "attestor",
       "restart_required": true,
@@ -703,7 +707,7 @@
       "validator_ids": [
         "integer_bounds"
       ],
-      "minimum": 64,
+      "minimum": 128,
       "maximum": 16384
     },
     {
@@ -739,7 +743,7 @@
       "go_name": "TestAttestorMemoryMaxBytes",
       "semantic_ref": "orquesta.config.test_attestor.resources.memory_max_bytes",
       "type": "integer",
-      "default": 2147483648,
+      "default": 5368709120,
       "sensitive": false,
       "scope": "attestor",
       "restart_required": true,
@@ -755,7 +759,7 @@
       "go_name": "TestAttestorPIDsMax",
       "semantic_ref": "orquesta.config.test_attestor.resources.pids_max",
       "type": "integer",
-      "default": 256,
+      "default": 512,
       "sensitive": false,
       "scope": "attestor",
       "restart_required": true,

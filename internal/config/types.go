@@ -35,10 +35,16 @@ type AliasDefinition struct {
 }
 
 // CrossValidatorDefinition declares one multi-key invariant. Execution is
-// selected by ID; the registry remains the only source of the dependency set.
+// selected by ID; the registry remains the only source of dependencies and
+// policy parameters.
 type CrossValidatorDefinition struct {
-	ID   string
-	Keys []Key
+	ID                             string
+	Keys                           []Key
+	MaximumDuration                string
+	MicroVMMinimumGuestMemoryMiB   int64
+	MicroVMCgroupHeadroomBytes     int64
+	MicroVMOperationalReserveBytes int64
+	MicroVMMaxCPUQuotaMicros       int64
 }
 
 // KeyDefinition is a detached description of one canonical key. Slice and

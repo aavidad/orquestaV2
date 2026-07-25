@@ -55,6 +55,24 @@ func TestRegistryRejectsSemanticEnvironmentValidatorAndCrossValidatorDrift(t *te
 		{name: "cross validator duration bound invalid", mutate: func(source *registryFile) {
 			source.CrossValidators[1].MaximumDuration = "invalid"
 		}},
+		{name: "microVM policy omitted", mutate: func(source *registryFile) {
+			source.CrossValidators[len(source.CrossValidators)-1].MicroVMCgroupHeadroomBytes = 0
+		}},
+		{name: "microVM policy misplaced", mutate: func(source *registryFile) {
+			source.CrossValidators[0].MicroVMCgroupHeadroomBytes = 1
+		}},
+		{name: "microVM minimum differs from key bound", mutate: func(source *registryFile) {
+			source.CrossValidators[len(source.CrossValidators)-1].MicroVMMinimumGuestMemoryMiB++
+		}},
+		{name: "microVM quota exceeds shared key range", mutate: func(source *registryFile) {
+			source.CrossValidators[len(source.CrossValidators)-1].MicroVMMaxCPUQuotaMicros = 10_000_001
+		}},
+		{name: "microVM policy overflows", mutate: func(source *registryFile) {
+			source.CrossValidators[len(source.CrossValidators)-1].MicroVMCgroupHeadroomBytes = 1<<63 - 1
+		}},
+		{name: "microVM reserve invalidates defaults", mutate: func(source *registryFile) {
+			source.CrossValidators[len(source.CrossValidators)-1].MicroVMOperationalReserveBytes = 3 << 30
+		}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -208,6 +226,13 @@ func TestResolveExecutesEveryDeclaredCrossValidator(t *testing.T) {
 		got[0].Keys[0] = "mutated"
 		if CrossValidators()[0].Keys[0] == "mutated" {
 			t.Fatal("cross validator keys are not detached")
+		}
+		microVM := got[len(got)-1]
+		if microVM.MicroVMMinimumGuestMemoryMiB != 128 ||
+			microVM.MicroVMCgroupHeadroomBytes != 1<<30 ||
+			microVM.MicroVMOperationalReserveBytes != 2<<30 ||
+			microVM.MicroVMMaxCPUQuotaMicros != 3_200_000 {
+			t.Fatalf("canonical microVM cross-validator policy lost: %+v", microVM)
 		}
 	}
 }

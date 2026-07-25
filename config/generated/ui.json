@@ -1,8 +1,8 @@
 {
   "document_type": "orquesta.config_ui",
   "schema_version": 2,
-  "registry_revision": "2026-07-25.27",
-  "registry_hash": "sha256:18d8893c772054ae1d7610b34485f5d64eb23a6b6e73a41d0f135fcaa5d2b53e",
+  "registry_revision": "2026-07-25.29",
+  "registry_hash": "sha256:26ce93b2b7906a875a89d2bd05b215a09a261e487ae64cdf8438585659acc6a2",
   "aliases": [],
   "cross_validators": [
     {
@@ -85,7 +85,11 @@
         "server.shutdown_timeout",
         "scheduler.attest_test_claim_lease",
         "scheduler.execution_timeout"
-      ]
+      ],
+      "microvm_minimum_guest_memory_mib": 128,
+      "microvm_cgroup_headroom_bytes": 1073741824,
+      "microvm_operational_reserve_bytes": 2147483648,
+      "microvm_max_cpu_quota_micros": 3200000
     }
   ],
   "fields": [
@@ -610,7 +614,7 @@
       "validator_ids": [
         "integer_bounds"
       ],
-      "minimum": 64,
+      "minimum": 128,
       "maximum": 16384
     },
     {

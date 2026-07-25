@@ -48,9 +48,13 @@ type registryAliasDefinition struct {
 }
 
 type registryCrossValidatorDefinition struct {
-	ID              string `json:"id"`
-	Keys            []Key  `json:"keys"`
-	MaximumDuration string `json:"maximum_duration,omitempty"`
+	ID                             string `json:"id"`
+	Keys                           []Key  `json:"keys"`
+	MaximumDuration                string `json:"maximum_duration,omitempty"`
+	MicroVMMinimumGuestMemoryMiB   int64  `json:"microvm_minimum_guest_memory_mib,omitempty"`
+	MicroVMCgroupHeadroomBytes     int64  `json:"microvm_cgroup_headroom_bytes,omitempty"`
+	MicroVMOperationalReserveBytes int64  `json:"microvm_operational_reserve_bytes,omitempty"`
+	MicroVMMaxCPUQuotaMicros       int64  `json:"microvm_max_cpu_quota_micros,omitempty"`
 }
 
 type registryKeyDefinition struct {
@@ -507,6 +511,60 @@ func validateCrossValidators(definitions []registryCrossValidatorDefinition, key
 				return fmt.Errorf("invalid cross validator duration bound")
 			}
 		}
+		requiresMicroVMPolicy := definition.ID == "test_attestor_provider_requirements"
+		hasMicroVMPolicy := definition.MicroVMMinimumGuestMemoryMiB != 0 ||
+			definition.MicroVMCgroupHeadroomBytes != 0 ||
+			definition.MicroVMOperationalReserveBytes != 0 ||
+			definition.MicroVMMaxCPUQuotaMicros != 0
+		if requiresMicroVMPolicy != hasMicroVMPolicy {
+			return fmt.Errorf("cross validator microVM policy mismatch")
+		}
+		if !requiresMicroVMPolicy {
+			continue
+		}
+		if definition.MicroVMMinimumGuestMemoryMiB <= 0 ||
+			definition.MicroVMCgroupHeadroomBytes <= 0 ||
+			definition.MicroVMOperationalReserveBytes <= 0 ||
+			definition.MicroVMMaxCPUQuotaMicros <= 0 {
+			return fmt.Errorf("invalid cross validator microVM policy")
+		}
+		guestDefinition := keys[KeyTestAttestorMicroVMGuestMemoryMiB]
+		if guestDefinition.Minimum == nil ||
+			*guestDefinition.Minimum != definition.MicroVMMinimumGuestMemoryMiB {
+			return fmt.Errorf("microVM minimum guest policy differs from key bound")
+		}
+		quotaDefinition := keys[KeyTestAttestorCPUQuotaMicros]
+		if quotaDefinition.Minimum == nil || quotaDefinition.Maximum == nil ||
+			definition.MicroVMMaxCPUQuotaMicros < *quotaDefinition.Minimum ||
+			definition.MicroVMMaxCPUQuotaMicros > *quotaDefinition.Maximum {
+			return fmt.Errorf("microVM CPU quota policy exceeds key bounds")
+		}
+		guestBytes, ok := checkedMultiplyNonNegative(definition.MicroVMMinimumGuestMemoryMiB, 1<<20)
+		if !ok {
+			return fmt.Errorf("microVM minimum guest policy overflows")
+		}
+		if _, ok := checkedAddNonNegative(guestBytes, definition.MicroVMCgroupHeadroomBytes); !ok {
+			return fmt.Errorf("microVM cgroup policy overflows")
+		}
+		memoryDefinition := keys[KeyTestAttestorMemoryMaxBytes]
+		subjectDefinition := keys[KeyTestAttestorMaxSubjectBytes]
+		outputDefinition := keys[KeyRuntimeMaxOutputBytes]
+		guestDefault, guestErr := parseDefaultValue(guestDefinition)
+		memoryDefault, memoryErr := parseDefaultValue(memoryDefinition)
+		subjectDefault, subjectErr := parseDefaultValue(subjectDefinition)
+		outputDefault, outputErr := parseDefaultValue(outputDefinition)
+		quotaDefault, quotaErr := parseDefaultValue(quotaDefinition)
+		guestValue, guestOK := guestDefault.(int64)
+		memoryValue, memoryOK := memoryDefault.(int64)
+		subjectValue, subjectOK := subjectDefault.(int64)
+		outputValue, outputOK := outputDefault.(int64)
+		quotaValue, quotaOK := quotaDefault.(int64)
+		if guestErr != nil || memoryErr != nil || subjectErr != nil || outputErr != nil || quotaErr != nil ||
+			!guestOK || !memoryOK || !subjectOK || !outputOK || !quotaOK ||
+			quotaValue > definition.MicroVMMaxCPUQuotaMicros ||
+			!validMicroVMCapacity(guestValue, memoryValue, subjectValue, outputValue, definition) {
+			return fmt.Errorf("microVM defaults violate canonical policy")
+		}
 	}
 	return nil
 }
@@ -561,7 +619,11 @@ func cloneCrossValidators(source []registryCrossValidatorDefinition) []registryC
 	for index, definition := range source {
 		result[index] = registryCrossValidatorDefinition{
 			ID: definition.ID, Keys: append([]Key(nil), definition.Keys...),
-			MaximumDuration: definition.MaximumDuration,
+			MaximumDuration:                definition.MaximumDuration,
+			MicroVMMinimumGuestMemoryMiB:   definition.MicroVMMinimumGuestMemoryMiB,
+			MicroVMCgroupHeadroomBytes:     definition.MicroVMCgroupHeadroomBytes,
+			MicroVMOperationalReserveBytes: definition.MicroVMOperationalReserveBytes,
+			MicroVMMaxCPUQuotaMicros:       definition.MicroVMMaxCPUQuotaMicros,
 		}
 	}
 	return result
@@ -637,7 +699,14 @@ func CrossValidators() []CrossValidatorDefinition {
 	}
 	result := make([]CrossValidatorDefinition, len(loaded.crossValidators))
 	for index, definition := range loaded.crossValidators {
-		result[index] = CrossValidatorDefinition{ID: definition.ID, Keys: append([]Key(nil), definition.Keys...)}
+		result[index] = CrossValidatorDefinition{
+			ID: definition.ID, Keys: append([]Key(nil), definition.Keys...),
+			MaximumDuration:                definition.MaximumDuration,
+			MicroVMMinimumGuestMemoryMiB:   definition.MicroVMMinimumGuestMemoryMiB,
+			MicroVMCgroupHeadroomBytes:     definition.MicroVMCgroupHeadroomBytes,
+			MicroVMOperationalReserveBytes: definition.MicroVMOperationalReserveBytes,
+			MicroVMMaxCPUQuotaMicros:       definition.MicroVMMaxCPUQuotaMicros,
+		}
 	}
 	return result
 }

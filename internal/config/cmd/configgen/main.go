@@ -39,9 +39,13 @@ type registryAliasDefinition struct {
 }
 
 type registryCrossValidatorDefinition struct {
-	ID              string   `json:"id"`
-	Keys            []string `json:"keys"`
-	MaximumDuration string   `json:"maximum_duration,omitempty"`
+	ID                             string   `json:"id"`
+	Keys                           []string `json:"keys"`
+	MaximumDuration                string   `json:"maximum_duration,omitempty"`
+	MicroVMMinimumGuestMemoryMiB   int64    `json:"microvm_minimum_guest_memory_mib,omitempty"`
+	MicroVMCgroupHeadroomBytes     int64    `json:"microvm_cgroup_headroom_bytes,omitempty"`
+	MicroVMOperationalReserveBytes int64    `json:"microvm_operational_reserve_bytes,omitempty"`
+	MicroVMMaxCPUQuotaMicros       int64    `json:"microvm_max_cpu_quota_micros,omitempty"`
 }
 
 type registryKey struct {
@@ -349,7 +353,17 @@ func renderReference(registry registryFile, semanticHash string) []byte {
 	}
 	output.WriteString("\n## Cross validators\n\n")
 	for _, validator := range registry.CrossValidators {
-		fmt.Fprintf(&output, "- `%s`: `%s`\n", validator.ID, strings.Join(validator.Keys, "`, `"))
+		fmt.Fprintf(&output, "- `%s`: `%s`", validator.ID, strings.Join(validator.Keys, "`, `"))
+		if validator.MaximumDuration != "" {
+			fmt.Fprintf(&output, "; maximum duration `%s`", validator.MaximumDuration)
+		}
+		if validator.MicroVMMinimumGuestMemoryMiB != 0 {
+			fmt.Fprintf(&output,
+				"; microVM minimum guest `%d MiB`, cgroup headroom `%d` bytes, operational reserve `%d` bytes, maximum CPU quota `%d` micros",
+				validator.MicroVMMinimumGuestMemoryMiB, validator.MicroVMCgroupHeadroomBytes,
+				validator.MicroVMOperationalReserveBytes, validator.MicroVMMaxCPUQuotaMicros)
+		}
+		output.WriteByte('\n')
 	}
 	output.WriteString("\n## Temporary aliases\n\n")
 	if len(registry.Aliases) == 0 {

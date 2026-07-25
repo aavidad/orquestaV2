@@ -1,6 +1,7 @@
 package config
 
 import (
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -20,8 +21,8 @@ func TestTestAttestorRegistryIsMinimalAndDisabledByDefault(t *testing.T) {
 	if snapshot.TestAttestorProvider() != "disabled" || snapshot.SchedulerExecutionTimeout() != 45*time.Minute ||
 		snapshot.TestAttestorTimeout() != 15*time.Minute ||
 		snapshot.TestAttestorMaxSubjectBytes() != 512<<20 || snapshot.TestAttestorMaxConcurrentRuns() != 2 ||
-		snapshot.TestAttestorMicroVMGuestMemoryMiB() != 1536 ||
-		snapshot.TestAttestorMemoryMaxBytes() != 2<<30 || snapshot.TestAttestorPIDsMax() != 256 {
+		snapshot.TestAttestorMicroVMGuestMemoryMiB() != 4096 ||
+		snapshot.TestAttestorMemoryMaxBytes() != 5<<30 || snapshot.TestAttestorPIDsMax() != 512 {
 		t.Fatalf("unsafe attestor defaults: %+v", snapshot)
 	}
 	for _, key := range keys {
@@ -29,6 +30,10 @@ func TestTestAttestorRegistryIsMinimalAndDisabledByDefault(t *testing.T) {
 		if !found || !metadata.RestartRequired || metadata.Scope != "attestor" {
 			t.Fatalf("missing attestor metadata for %s: %+v", key, metadata)
 		}
+	}
+	guestMetadata, _ := snapshot.Metadata(KeyTestAttestorMicroVMGuestMemoryMiB)
+	if guestMetadata.Minimum == nil || *guestMetadata.Minimum != 128 {
+		t.Fatalf("microVM guest minimum=%v want=128 MiB", guestMetadata.Minimum)
 	}
 	count := 0
 	registry, err := loadRegistry()
@@ -92,6 +97,12 @@ attest_test_claim_lease = "3m"
 			}
 		})
 	}
+	maximumSharedQuota := []byte(strings.Replace(
+		string(document), "cpu_quota_micros = 200000", "cpu_quota_micros = 10000000", 1,
+	))
+	if _, err := Resolve(ResolveOptions{TOML: maximumSharedQuota}); err != nil {
+		t.Fatalf("bubblewrap lost its shared CPU quota range: %v", err)
+	}
 }
 
 func TestMicroVMConfigurationIsOneValidatedUnit(t *testing.T) {
@@ -106,9 +117,9 @@ max_subject_bytes = 16777216
 max_concurrent_runs = 3
 [test_attestor.microvm]
 launcher_socket = "/run/orquesta/firecracker-launcher.sock"
-guest_memory_mib = 512
+guest_memory_mib = 3072
 [test_attestor.resources]
-memory_max_bytes = 2147483648
+memory_max_bytes = 4294967296
 pids_max = 128
 cpu_quota_micros = 200000
 [scheduler]
@@ -120,7 +131,7 @@ attest_test_claim_lease = "3m"
 	}
 	if snapshot.TestAttestorProvider() != "microvm" ||
 		snapshot.TestAttestorMicroVMLauncherSocket() != "/run/orquesta/firecracker-launcher.sock" ||
-		snapshot.TestAttestorMicroVMGuestMemoryMiB() != 512 ||
+		snapshot.TestAttestorMicroVMGuestMemoryMiB() != 3072 ||
 		snapshot.TestAttestorBubblewrapCommand() != "" || snapshot.TestAttestorGoToolchainRoot() != "" ||
 		snapshot.TestAttestorCgroupRoot() != "" {
 		t.Fatalf("microvm config lost: %+v", snapshot)
@@ -132,20 +143,126 @@ attest_test_claim_lease = "3m"
 		!HasErrorCode(err, ErrorCrossValidation) {
 		t.Fatalf("microvm config without launcher socket accepted: %v", err)
 	}
-	for name, mutation := range map[string]string{
-		"guest exceeds cgroup": strings.Replace(string(document), "guest_memory_mib = 512", "guest_memory_mib = 4096", 1),
-		"guest lacks overhead": strings.Replace(string(document), "guest_memory_mib = 512", "guest_memory_mib = 1985", 1),
-		"relative socket": strings.Replace(
-			string(document), "/run/orquesta/firecracker-launcher.sock", "launcher.sock", 1,
-		),
+	for name, testCase := range map[string]struct {
+		document string
+		code     ErrorCode
+	}{
+		"guest below minimum": {
+			document: strings.Replace(string(document), "guest_memory_mib = 3072", "guest_memory_mib = 127", 1),
+			code:     ErrorValueInvalid,
+		},
+		"guest exceeds cgroup margin": {
+			document: strings.Replace(string(document), "memory_max_bytes = 4294967296", "memory_max_bytes = 4294967295", 1),
+			code:     ErrorCrossValidation,
+		},
+		"guest cannot hold subject working set": {
+			document: strings.Replace(string(document), "max_subject_bytes = 16777216", "max_subject_bytes = 1073741824", 1),
+			code:     ErrorCrossValidation,
+		},
+		"relative socket": {
+			document: strings.Replace(string(document), "/run/orquesta/firecracker-launcher.sock", "launcher.sock", 1),
+			code:     ErrorCrossValidation,
+		},
+		"quota exceeds Firecracker vCPU limit": {
+			document: strings.Replace(string(document), "cpu_quota_micros = 200000", "cpu_quota_micros = 3200001", 1),
+			code:     ErrorCrossValidation,
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if _, err := Resolve(ResolveOptions{TOML: []byte(mutation)}); err == nil ||
-				!HasErrorCode(err, ErrorCrossValidation) {
+			if _, err := Resolve(ResolveOptions{TOML: []byte(testCase.document)}); err == nil ||
+				!HasErrorCode(err, testCase.code) {
 				t.Fatalf("unsafe microvm config accepted: %v", err)
 			}
 		})
 	}
+	maximumMicroVMQuota := []byte(strings.Replace(
+		string(document), "cpu_quota_micros = 200000", "cpu_quota_micros = 3200000", 1,
+	))
+	if _, err := Resolve(ResolveOptions{TOML: maximumMicroVMQuota}); err != nil {
+		t.Fatalf("canonical maximum microVM CPU quota rejected: %v", err)
+	}
+}
+
+func TestMicroVMHost128GiBProfileForSixteenRunsValidates(t *testing.T) {
+	document := []byte(`[repository.local]
+seed_path = "/repo"
+[runtime]
+max_output_bytes = 67108864
+[test_attestor]
+provider = "microvm"
+max_subject_bytes = 536870912
+max_concurrent_runs = 16
+[test_attestor.microvm]
+launcher_socket = "/run/orquesta/firecracker-launcher.sock"
+guest_memory_mib = 4096
+[test_attestor.resources]
+memory_max_bytes = 5368709120
+pids_max = 512
+cpu_quota_micros = 200000
+`)
+	snapshot, err := Resolve(ResolveOptions{TOML: document})
+	if err != nil {
+		t.Fatalf("128 GiB host profile rejected: %v", err)
+	}
+	if snapshot.TestAttestorProvider() != "microvm" ||
+		snapshot.TestAttestorMaxConcurrentRuns() != 16 ||
+		snapshot.TestAttestorMicroVMGuestMemoryMiB() != 4096 ||
+		snapshot.TestAttestorMemoryMaxBytes() != 5<<30 ||
+		snapshot.TestAttestorPIDsMax() != 512 ||
+		snapshot.TestAttestorCPUQuotaMicros() != 200000 ||
+		snapshot.TestAttestorMaxSubjectBytes() != 512<<20 ||
+		snapshot.RuntimeMaxOutputBytes() != 64<<20 {
+		t.Fatalf("128 GiB host profile lost: %+v", snapshot)
+	}
+}
+
+func TestMicroVMCapacityRejectsOverflowAndUnsatisfiableCombinations(t *testing.T) {
+	policy := testMicroVMPolicy(t)
+	const (
+		guest4GiB  = int64(4096)
+		cgroup5GiB = int64(5 << 30)
+	)
+	for name, values := range map[string][4]int64{
+		"guest byte conversion overflow": {
+			math.MaxInt64, math.MaxInt64, 1, 1,
+		},
+		"cgroup headroom overflow": {
+			math.MaxInt64 / (1 << 20), math.MaxInt64, 1, 1,
+		},
+		"snapshot working set overflow": {
+			guest4GiB, cgroup5GiB, math.MaxInt64/2 + 1, 1,
+		},
+		"output addition overflow": {
+			guest4GiB, cgroup5GiB, 1, math.MaxInt64,
+		},
+		"cgroup margin unsatisfiable": {
+			guest4GiB, cgroup5GiB - 1, 512 << 20, 64 << 20,
+		},
+		"guest capacity unsatisfiable": {
+			guest4GiB, cgroup5GiB, 1 << 30, 64 << 20,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if validMicroVMCapacity(values[0], values[1], values[2], values[3], policy) {
+				t.Fatal("unsafe microVM capacity accepted")
+			}
+		})
+	}
+}
+
+func testMicroVMPolicy(t *testing.T) registryCrossValidatorDefinition {
+	t.Helper()
+	registry, err := loadRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, validator := range registry.crossValidators {
+		if validator.ID == "test_attestor_provider_requirements" {
+			return validator
+		}
+	}
+	t.Fatal("canonical microVM policy is missing")
+	return registryCrossValidatorDefinition{}
 }
 
 func TestDisabledProviderIgnoresIncompleteMicroVMConfiguration(t *testing.T) {
