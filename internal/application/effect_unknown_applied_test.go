@@ -71,6 +71,113 @@ func TestActionCallContextIsBoundedByClaimLease(t *testing.T) {
 	}
 }
 
+type claimBoundStopController struct {
+	calls         int
+	deadline      time.Time
+	enteredAt     time.Time
+	hasDeadline   bool
+	unboundedWait time.Duration
+}
+
+func (*claimBoundStopController) ControlCapabilities(context.Context) (ports.AgentControlCapabilities, error) {
+	return ports.AgentControlCapabilities{CooperativeStop: true, ForcedStop: true}, nil
+}
+
+func (controller *claimBoundStopController) Stop(
+	ctx context.Context,
+	request ports.AgentStopRequest,
+) (ports.AgentStopReceipt, error) {
+	controller.calls++
+	controller.enteredAt = time.Now()
+	controller.deadline, controller.hasDeadline = ctx.Deadline()
+	select {
+	case <-ctx.Done():
+	case <-time.After(controller.unboundedWait):
+		return ports.AgentStopReceipt{}, errors.New("test.stop_context_unbounded")
+	}
+	return ports.AgentStopReceipt{
+		ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
+		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
+		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash,
+		ProviderRef: request.ProviderRef, ModelRef: request.ModelRef, AgentRef: request.AgentRef,
+		ExternalRef: request.ExternalRef, Mode: request.Mode, IdempotencyKey: request.IdempotencyKey,
+		Status: ports.AgentStopPending,
+	}, nil
+}
+
+type liveQuarantineContextState struct {
+	StateRepository
+	contextErr error
+}
+
+func (state *liveQuarantineContextState) QuarantineAction(
+	ctx context.Context,
+	request ActionQuarantinedState,
+) error {
+	state.contextErr = ctx.Err()
+	if state.contextErr != nil {
+		return state.contextErr
+	}
+	return state.StateRepository.QuarantineAction(ctx, request)
+}
+
+func TestProcessStopUsesClaimBoundContextWithoutReplayingTimedOutEffect(t *testing.T) {
+	const lease = 40 * time.Millisecond
+	system := newControlTestSystem(t, nil)
+	system.launch(t)
+	record := system.record(t)
+	item := record.Goal.WorkItems()[0]
+	execution := mustBoundExecution(t, record, item.Ref())
+	if _, err := system.orchestrator.Control(
+		context.Background(),
+		system.access,
+		system.request(
+			t, "control:claim-bound-stop", ControlStop, ControlTargetExecution, item.Ref(), execution.Ref,
+		),
+	); err != nil {
+		t.Fatal(err)
+	}
+	claim, found, err := system.repository.ClaimNextAction(context.Background(), ClaimRequest{
+		WorkerRef: "worker:claim-bound-stop", Token: "claim:claim-bound-stop",
+		LeaseDuration: lease, Capabilities: testAgentCapabilities(),
+	})
+	if err != nil || !found || claim.Action.Kind != ActionStopAgent {
+		t.Fatalf("claim stop: found=%v claim=%+v err=%v", found, claim, err)
+	}
+	controller := &claimBoundStopController{unboundedWait: time.Second}
+	state := &liveQuarantineContextState{StateRepository: system.repository}
+	system.orchestrator.controller = controller
+	system.orchestrator.state = state
+
+	started := time.Now()
+	err = system.orchestrator.processStop(context.Background(), claim)
+	elapsed := time.Since(started)
+	if err == nil || err.Error() != effectUnknownAppliedCode {
+		t.Fatalf("timed-out stop error=%v want=%s", err, effectUnknownAppliedCode)
+	}
+	callBudget := controller.deadline.Sub(controller.enteredAt)
+	if controller.calls != 1 || !controller.hasDeadline ||
+		callBudget <= 0 || callBudget > lease || elapsed >= controller.unboundedWait {
+		t.Fatalf(
+			"stop context calls=%d deadline=%s entered=%s budget=%s elapsed=%s lease=%s",
+			controller.calls, controller.deadline, controller.enteredAt, callBudget, elapsed, lease,
+		)
+	}
+	if state.contextErr != nil {
+		t.Fatalf("quarantine inherited canceled effect context: %v", state.contextErr)
+	}
+
+	system.clock.Advance(time.Minute)
+	result, recoveryErr := system.orchestrator.ProcessNext(context.Background(), "worker:claim-bound-stop-recovery")
+	if recoveryErr != nil || result.Processed && result.Action == ActionStopAgent || controller.calls != 1 {
+		t.Fatalf(
+			"timed-out stop replayed: result=%+v calls=%d err=%v",
+			result, controller.calls, recoveryErr,
+		)
+	}
+	assertUnknownAppliedConsumption(t, system.record(t), ActionStopAgent)
+}
+
 func (state terminalEffectFaultState) ApplyControl(
 	context.Context,
 	ApplyControlState,

@@ -53,7 +53,9 @@ func (orchestrator *Orchestrator) processStop(ctx context.Context, claim ActionC
 	if err != nil {
 		return err
 	}
-	receipt, stopErr := orchestrator.controller.Stop(ctx, request)
+	effectCtx, cancel := orchestrator.actionCallContext(ctx, claim)
+	receipt, stopErr := orchestrator.controller.Stop(effectCtx, request)
+	cancel()
 	if stopErr != nil {
 		return orchestrator.quarantineUnknownApplied(ctx, claim)
 	}
