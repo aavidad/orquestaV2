@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -17,6 +16,47 @@ type Supervisor struct {
 	monitor   MonitorPort
 	publisher PublisherPort
 	clock     Clock
+}
+
+const (
+	failureCodePreflight          = "firecracker_attestor_e2e.preflight_failed"
+	failureCodeStart              = "firecracker_attestor_e2e.start_failed"
+	failureCodeReadiness          = "firecracker_attestor_e2e.readiness_failed"
+	failureCodeReadinessTimeout   = "firecracker_attestor_e2e.readiness_timeout"
+	failureCodeUnitIdentity       = "firecracker_attestor_e2e.unit_identity_invalid"
+	failureCodeInitialQuiescence  = "firecracker_attestor_e2e.initial_quiescence_failed"
+	failureCodePhaseOne           = "firecracker_attestor_e2e.phase_one_failed"
+	failureCodePhaseSixteen       = "firecracker_attestor_e2e.phase_sixteen_failed"
+	failureCodeQuiescence         = "firecracker_attestor_e2e.quiescence_failed"
+	failureCodeStop               = "firecracker_attestor_e2e.stop_failed"
+	failureCodePostStop           = "firecracker_attestor_e2e.post_stop_quiescence_failed"
+	failureCodeFailureCleanup     = "firecracker_attestor_e2e.failure_cleanup_failed"
+	failureCodePublish            = "firecracker_attestor_e2e.publish_failed"
+	failureCodeSupervisorFallback = "firecracker_attestor_e2e.failed"
+)
+
+type supervisorFailure struct {
+	stage string
+	code  string
+	cause error
+}
+
+func (failure *supervisorFailure) Error() string { return failure.code }
+func (failure *supervisorFailure) Unwrap() error { return failure.cause }
+
+func newSupervisorFailure(stage, code string, cause error) error {
+	return &supervisorFailure{stage: stage, code: code, cause: cause}
+}
+
+// FailureDiagnostic returns only fixed machine values. Wrapped OS errors and
+// paths remain available to internal callers through errors.Unwrap, but never
+// cross the command's public diagnostic boundary.
+func FailureDiagnostic(err error) (stage, code string) {
+	var failure *supervisorFailure
+	if errors.As(err, &failure) {
+		return failure.stage, failure.code
+	}
+	return "supervisor", failureCodeSupervisorFallback
 }
 
 func New(
@@ -48,17 +88,7 @@ func (supervisor *Supervisor) Run(ctx context.Context) (publication Publication,
 	candidate, err := supervisor.unit.Preflight(preflightContext, supervisor.config)
 	cancelPreflight()
 	if err != nil {
-		return Publication{}, fmt.Errorf("preflight: %w", err)
-	}
-	startContext, cancelStart := context.WithTimeout(
-		ctx, supervisor.config.CleanupTimeout,
-	)
-	unit, err := supervisor.unit.Start(
-		startContext, supervisor.config.Candidate.UnitName,
-	)
-	cancelStart()
-	if err != nil {
-		return Publication{}, fmt.Errorf("start: %w", err)
+		return Publication{}, newSupervisorFailure("preflight", failureCodePreflight, err)
 	}
 	stopped := false
 	defer func() {
@@ -77,57 +107,108 @@ func (supervisor *Supervisor) Run(ctx context.Context) (publication Publication,
 				cleanupContext,
 				UnitIdentity{
 					UnitName:     supervisor.config.Candidate.UnitName,
-					FragmentPath: unit.FragmentPath,
+					FragmentPath: supervisor.config.Candidate.UnitPath,
 					Loaded:       true,
 				},
 			)
 			cancelCleanup()
 			if cleanupErr != nil || !cleanAfterStop(cleanup) {
-				cleanupErr = fmt.Errorf(
-					"failure_cleanup: %w",
+				cleanupErr = newSupervisorFailure(
+					"failure_cleanup",
+					failureCodeFailureCleanup,
 					errors.Join(cleanupErr, ErrInvalid),
 				)
 			}
-			resultErr = errors.Join(resultErr, stopErr, cleanupErr)
+			if stopErr != nil {
+				stopErr = newSupervisorFailure(
+					"failure_cleanup", failureCodeFailureCleanup, stopErr,
+				)
+			}
+			// Residual privileged state outranks the primary gate failure in
+			// the public diagnostic while retaining both causes internally.
+			resultErr = errors.Join(stopErr, cleanupErr, resultErr)
 		}
 	}()
+	startContext, cancelStart := context.WithTimeout(
+		ctx, supervisor.config.CleanupTimeout,
+	)
+	unit, err := supervisor.unit.Start(
+		startContext, supervisor.config.Candidate.UnitName,
+	)
+	cancelStart()
+	if err != nil {
+		return Publication{}, newSupervisorFailure("start", failureCodeStart, err)
+	}
 	if err := validateActiveUnit(
 		unit,
 		supervisor.config.Candidate.UnitName,
 		supervisor.config.Candidate.UnitPath,
 	); err != nil {
-		return Publication{}, err
+		return Publication{}, newSupervisorFailure(
+			"start_identity", failureCodeUnitIdentity, err,
+		)
+	}
+	readinessContext, cancelReadiness := context.WithTimeout(
+		ctx, supervisor.config.CleanupTimeout,
+	)
+	unit, err = supervisor.unit.WaitReady(
+		readinessContext, supervisor.config, unit,
+	)
+	cancelReadiness()
+	if err != nil {
+		code := failureCodeReadiness
+		if errors.Is(err, errReadinessTimeout) {
+			code = failureCodeReadinessTimeout
+		}
+		return Publication{}, newSupervisorFailure("readiness", code, err)
+	}
+	if err := validateActiveUnit(
+		unit,
+		supervisor.config.Candidate.UnitName,
+		supervisor.config.Candidate.UnitPath,
+	); err != nil {
+		return Publication{}, newSupervisorFailure(
+			"readiness", failureCodeUnitIdentity, err,
+		)
 	}
 	initialContext, cancelInitial := context.WithTimeout(ctx, supervisor.config.CleanupTimeout)
 	initial, err := supervisor.monitor.WaitQuiescent(initialContext, unit)
 	cancelInitial()
 	if err != nil || !cleanBeforeStop(initial) {
-		return Publication{}, fmt.Errorf("initial_quiescence: %w", errors.Join(err, ErrInvalid))
+		return Publication{}, newSupervisorFailure(
+			"initial_quiescence",
+			failureCodeInitialQuiescence,
+			errors.Join(err, ErrInvalid),
+		)
 	}
 
 	phaseOne, oneOutcomes, err := supervisor.runPhase(
 		ctx, unit, 1, supervisor.config.PolicyDigest,
 	)
 	if err != nil {
-		return Publication{}, fmt.Errorf("phase_one: %w", err)
+		return Publication{}, newSupervisorFailure("phase_one", failureCodePhaseOne, err)
 	}
 	if err := validatePhase(phaseOne, 1); err != nil {
-		return Publication{}, fmt.Errorf("phase_one: %w", err)
+		return Publication{}, newSupervisorFailure("phase_one", failureCodePhaseOne, err)
 	}
 	policyDigest, err := validatePhaseOutcomes(
 		phaseOne, oneOutcomes, 1, supervisor.config.PolicyDigest,
 	)
 	if err != nil {
-		return Publication{}, fmt.Errorf("phase_one: %w", err)
+		return Publication{}, newSupervisorFailure("phase_one", failureCodePhaseOne, err)
 	}
 	phaseSixteen, sixteenOutcomes, err := supervisor.runPhase(
 		ctx, unit, ExpectedConcurrentRuns, policyDigest,
 	)
 	if err != nil {
-		return Publication{}, fmt.Errorf("phase_sixteen: %w", err)
+		return Publication{}, newSupervisorFailure(
+			"phase_sixteen", failureCodePhaseSixteen, err,
+		)
 	}
 	if err := validatePhase(phaseSixteen, ExpectedConcurrentRuns); err != nil {
-		return Publication{}, fmt.Errorf("phase_sixteen: %w", err)
+		return Publication{}, newSupervisorFailure(
+			"phase_sixteen", failureCodePhaseSixteen, err,
+		)
 	}
 	if _, err := validatePhaseOutcomes(
 		phaseSixteen,
@@ -135,20 +216,26 @@ func (supervisor *Supervisor) Run(ctx context.Context) (publication Publication,
 		ExpectedConcurrentRuns,
 		policyDigest,
 	); err != nil {
-		return Publication{}, fmt.Errorf("phase_sixteen: %w", err)
+		return Publication{}, newSupervisorFailure(
+			"phase_sixteen", failureCodePhaseSixteen, err,
+		)
 	}
 	allOutcomes := append(append(
 		make([]AttestationOutcome, 0, 1+ExpectedConcurrentRuns),
 		oneOutcomes...,
 	), sixteenOutcomes...)
 	if err := validateOutcomes(allOutcomes, policyDigest); err != nil {
-		return Publication{}, err
+		return Publication{}, newSupervisorFailure(
+			"attestations", failureCodePhaseSixteen, err,
+		)
 	}
 	cleanupContext, cancelCleanup := context.WithTimeout(ctx, supervisor.config.CleanupTimeout)
 	cleanup, err := supervisor.monitor.WaitQuiescent(cleanupContext, unit)
 	cancelCleanup()
 	if err != nil || !cleanBeforeStop(cleanup) {
-		return Publication{}, fmt.Errorf("quiescence: %w", errors.Join(err, ErrInvalid))
+		return Publication{}, newSupervisorFailure(
+			"quiescence", failureCodeQuiescence, errors.Join(err, ErrInvalid),
+		)
 	}
 	stopContext, cancelStop := context.WithTimeout(
 		ctx, supervisor.config.CleanupTimeout,
@@ -156,7 +243,7 @@ func (supervisor *Supervisor) Run(ctx context.Context) (publication Publication,
 	err = supervisor.unit.Stop(stopContext, supervisor.config.Candidate.UnitName)
 	cancelStop()
 	if err != nil {
-		return Publication{}, fmt.Errorf("stop: %w", err)
+		return Publication{}, newSupervisorFailure("stop", failureCodeStop, err)
 	}
 	postStopContext, cancelPostStop := context.WithTimeout(
 		ctx, supervisor.config.CleanupTimeout,
@@ -167,7 +254,11 @@ func (supervisor *Supervisor) Run(ctx context.Context) (publication Publication,
 	})
 	cancelPostStop()
 	if err != nil || !cleanAfterStop(cleanup) {
-		return Publication{}, fmt.Errorf("post_stop_quiescence: %w", errors.Join(err, ErrInvalid))
+		return Publication{}, newSupervisorFailure(
+			"post_stop_quiescence",
+			failureCodePostStop,
+			errors.Join(err, ErrInvalid),
+		)
 	}
 	stopped = true
 
@@ -188,7 +279,7 @@ func (supervisor *Supervisor) Run(ctx context.Context) (publication Publication,
 	receipt := receiptFor(evidence)
 	publication, err = supervisor.publisher.Publish(evidence, receipt)
 	if err != nil {
-		return Publication{}, fmt.Errorf("publish: %w", err)
+		return Publication{}, newSupervisorFailure("publish", failureCodePublish, err)
 	}
 	return publication, nil
 }

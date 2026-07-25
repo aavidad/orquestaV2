@@ -208,6 +208,143 @@ func TestSupervisorBoundsPreflightWithCleanupTimeout(t *testing.T) {
 	}
 }
 
+func TestSupervisorWaitsForExplicitReadinessBeforeQuiescence(t *testing.T) {
+	unit := &delayedReadyUnit{
+		entered: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	monitor := &fakeMonitor{}
+	workload := &fakeWorkload{policy: testDigest}
+	supervisor, err := New(
+		validSupervisorConfig(), unit, workload, monitor, &fakePublisher{},
+		fakeClock{time.Unix(1_700_000_000, 0)},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := make(chan error, 1)
+	go func() {
+		_, runErr := supervisor.Run(context.Background())
+		result <- runErr
+	}()
+	<-unit.entered
+	if monitor.waitCount != 0 || workload.calls != 0 {
+		t.Fatalf(
+			"work advanced before readiness: waits=%d phases=%d",
+			monitor.waitCount,
+			workload.calls,
+		)
+	}
+	close(unit.release)
+	if err := <-result; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSupervisorBoundsReadinessAndStopsCandidate(t *testing.T) {
+	config := validSupervisorConfig()
+	config.CleanupTimeout = 20 * time.Millisecond
+	unit := &neverReadyUnit{}
+	monitor := &fakeMonitor{}
+	publisher := &fakePublisher{}
+	supervisor, err := New(
+		config, unit, &fakeWorkload{policy: testDigest}, monitor, publisher,
+		fakeClock{time.Unix(1_700_000_000, 0)},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	started := time.Now()
+	if _, err := supervisor.Run(context.Background()); err == nil {
+		t.Fatal("never-ready candidate passed")
+	} else if stage, code := FailureDiagnostic(err); stage != "readiness" ||
+		code != failureCodeReadinessTimeout {
+		t.Fatalf("diagnostic=%s/%s err=%v", stage, code, err)
+	}
+	if elapsed := time.Since(started); elapsed > 250*time.Millisecond {
+		t.Fatalf("readiness exceeded cleanup budget: %s", elapsed)
+	}
+	if unit.stopCount != 1 || monitor.waitCount != 1 || publisher.called {
+		t.Fatalf(
+			"failure cleanup mismatch unit=%+v monitor=%+v publisher=%+v",
+			unit,
+			monitor,
+			publisher,
+		)
+	}
+}
+
+func TestSupervisorStartFailureStillStopsExactCandidate(t *testing.T) {
+	unit := &fakeUnit{startErr: errors.New("systemctl returned after partial start")}
+	monitor := &fakeMonitor{}
+	publisher := &fakePublisher{}
+	supervisor, err := New(
+		validSupervisorConfig(), unit, &fakeWorkload{policy: testDigest},
+		monitor, publisher, fakeClock{time.Unix(1_700_000_000, 0)},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := supervisor.Run(context.Background()); err == nil {
+		t.Fatal("partial start failure passed")
+	} else if stage, code := FailureDiagnostic(err); stage != "start" ||
+		code != failureCodeStart {
+		t.Fatalf("diagnostic=%s/%s err=%v", stage, code, err)
+	}
+	if unit.stopCount != 1 || monitor.waitCount != 1 || publisher.called {
+		t.Fatalf(
+			"partial start cleanup mismatch unit=%+v monitor=%+v publisher=%+v",
+			unit,
+			monitor,
+			publisher,
+		)
+	}
+}
+
+func TestSupervisorReadinessDiagnosticDoesNotExposeCause(t *testing.T) {
+	const sensitive = "open /srv/private/launcher.sock: permission denied"
+	unit := &failedReadyUnit{cause: errors.New(sensitive)}
+	supervisor, err := New(
+		validSupervisorConfig(), unit, &fakeWorkload{policy: testDigest},
+		&fakeMonitor{}, &fakePublisher{},
+		fakeClock{time.Unix(1_700_000_000, 0)},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := supervisor.Run(context.Background()); err == nil {
+		t.Fatal("unsafe readiness passed")
+	} else {
+		stage, code := FailureDiagnostic(err)
+		if stage != "readiness" || code != failureCodeReadiness {
+			t.Fatalf("diagnostic=%s/%s", stage, code)
+		}
+		if strings.Contains(err.Error(), sensitive) ||
+			strings.Contains(err.Error(), "/srv/") {
+			t.Fatalf("public error leaks cause: %q", err.Error())
+		}
+	}
+}
+
+func TestSupervisorCleanupFailureOutranksPrimaryFailureDiagnostic(t *testing.T) {
+	unit := &fakeUnit{stopErr: errors.New("stop /srv/private/unit: denied")}
+	monitor := &fakeMonitor{badPeak: true}
+	supervisor, err := New(
+		validSupervisorConfig(), unit, &fakeWorkload{policy: testDigest},
+		monitor, &fakePublisher{},
+		fakeClock{time.Unix(1_700_000_000, 0)},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := supervisor.Run(context.Background()); err == nil {
+		t.Fatal("cleanup failure passed")
+	} else if stage, code := FailureDiagnostic(err); stage != "failure_cleanup" ||
+		code != failureCodeFailureCleanup {
+		t.Fatalf("diagnostic=%s/%s err=%v", stage, code, err)
+	}
+}
+
 func TestRunPhaseCancelsWorkloadImmediatelyWhenMonitorFails(t *testing.T) {
 	config := validSupervisorConfig()
 	config.PhaseTimeout = time.Second
@@ -440,6 +577,7 @@ type fakeUnit struct {
 	startCount   int
 	stopCount    int
 	stopped      bool
+	startErr     error
 	stopErr      error
 	fragmentPath string
 }
@@ -455,11 +593,22 @@ func (unit *fakeUnit) Preflight(context.Context, Config) (CandidateIdentity, err
 
 func (unit *fakeUnit) Start(_ context.Context, name string) (UnitIdentity, error) {
 	unit.startCount++
+	if unit.startErr != nil {
+		return UnitIdentity{}, unit.startErr
+	}
 	return UnitIdentity{
 		UnitName: name, MainPID: 42,
 		InvocationID: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", Active: true,
 		FragmentPath: unit.path(name), Loaded: true,
 	}, nil
+}
+
+func (unit *fakeUnit) WaitReady(
+	ctx context.Context,
+	_ Config,
+	baseline UnitIdentity,
+) (UnitIdentity, error) {
+	return unit.Observe(ctx, baseline.UnitName)
 }
 
 func (unit *fakeUnit) Observe(_ context.Context, name string) (UnitIdentity, error) {
@@ -505,12 +654,64 @@ func (blockingPreflightUnit) Start(context.Context, string) (UnitIdentity, error
 	return UnitIdentity{}, errors.New("unexpected start")
 }
 
+func (blockingPreflightUnit) WaitReady(
+	context.Context,
+	Config,
+	UnitIdentity,
+) (UnitIdentity, error) {
+	return UnitIdentity{}, errors.New("unexpected readiness")
+}
+
 func (blockingPreflightUnit) Observe(context.Context, string) (UnitIdentity, error) {
 	return UnitIdentity{}, errors.New("unexpected observe")
 }
 
 func (blockingPreflightUnit) Stop(context.Context, string) error {
 	return errors.New("unexpected stop")
+}
+
+type delayedReadyUnit struct {
+	fakeUnit
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (unit *delayedReadyUnit) WaitReady(
+	ctx context.Context,
+	_ Config,
+	baseline UnitIdentity,
+) (UnitIdentity, error) {
+	close(unit.entered)
+	select {
+	case <-ctx.Done():
+		return UnitIdentity{}, errReadinessTimeout
+	case <-unit.release:
+		return unit.Observe(ctx, baseline.UnitName)
+	}
+}
+
+type neverReadyUnit struct{ fakeUnit }
+
+func (unit *neverReadyUnit) WaitReady(
+	ctx context.Context,
+	_ Config,
+	_ UnitIdentity,
+) (UnitIdentity, error) {
+	<-ctx.Done()
+	return UnitIdentity{}, errReadinessTimeout
+}
+
+type failedReadyUnit struct {
+	fakeUnit
+	cause error
+}
+
+func (unit *failedReadyUnit) WaitReady(
+	context.Context,
+	Config,
+	UnitIdentity,
+) (UnitIdentity, error) {
+	return UnitIdentity{}, unit.cause
 }
 
 type fakeWorkload struct {

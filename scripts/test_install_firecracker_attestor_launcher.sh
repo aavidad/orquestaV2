@@ -57,6 +57,10 @@ readonly CONFIG="$TEST_ROOT/rendered-config.json"
 readonly HELPER="$TEST_ROOT/rendered-helper.sh"
 readonly PRIMITIVES_UNIT="$TEST_ROOT/rendered-primitives-unit.service"
 readonly UNIT="$TEST_ROOT/rendered-unit.service"
+readonly TEST_ALLOWED_UID=42420
+readonly TEST_ALLOWED_GID=42421
+[[ "$(id -u)" != "$TEST_ALLOWED_UID" && "$(id -g)" != "$TEST_ALLOWED_GID" ]] ||
+  fail "allowed_identity_fixture_matches_test_process"
 
 write_fake_executable "$LAUNCHER" "orquesta-firecracker-launcher"
 write_fake_executable "$SUPERVISOR" "orquesta-firecracker-attestor-e2e"
@@ -93,8 +97,8 @@ readonly -a BASE_ARGUMENTS=(
   --kernel-sha256 "$kernel_sha"
   --guest-sha256 "$guest_sha"
   --guest-manifest-sha256 "$manifest_sha"
-  --allowed-uid 1000
-  --allowed-gid 1000
+  --allowed-uid "$TEST_ALLOWED_UID"
+  --allowed-gid "$TEST_ALLOWED_GID"
   --jail-uid 65534
   --jail-gid 65534
 )
@@ -222,8 +226,8 @@ assert document["max_memory_bytes"] == 5 * 1024 * 1024 * 1024
 assert document["max_pids"] == 512
 assert document["max_cpu_quota_micros"] == 200_000
 assert document["max_concurrent_runs"] == 16
-assert document["allowed_uid"] == 1000 and document["jail_uid"] == 65534
-assert document["allowed_gid"] == 1000 and document["jail_gid"] == 65534
+assert document["allowed_uid"] == 42420 and document["jail_uid"] == 65534
+assert document["allowed_gid"] == 42421 and document["jail_gid"] == 65534
 assert document["firecracker_sha256"] == digests[firecracker]
 assert document["jailer_sha256"] == digests[jailer]
 assert document["kernel_sha256"] == digests[kernel]
@@ -325,6 +329,9 @@ for unsafe_netns_metadata in \
 done
 
 assert_contains "$UNIT" "NoNewPrivileges=yes"
+assert_line "$UNIT" "User=0"
+assert_line "$UNIT" "Group=0"
+assert_not_contains "$UNIT" "Group=$TEST_ALLOWED_GID"
 assert_contains "$UNIT" "Requires=orquesta-firecracker-primitives-"
 assert_contains "$UNIT" "ExecStartPre=/usr/local/libexec/orquesta-firecracker-primitives-"
 assert_contains "$UNIT" " --check"

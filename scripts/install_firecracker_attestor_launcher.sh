@@ -665,7 +665,7 @@ ConditionPathExists=/dev/kvm
 [Service]
 Type=simple
 User=0
-Group=$ALLOWED_GID
+Group=0
 UMask=0077
 ExecStartPre=$helper_path --check
 ExecStart=$launcher_path --config $config_path

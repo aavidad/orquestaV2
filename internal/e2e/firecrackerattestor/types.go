@@ -110,6 +110,7 @@ type WorkloadPort interface {
 type UnitPort interface {
 	Preflight(context.Context, Config) (CandidateIdentity, error)
 	Start(context.Context, string) (UnitIdentity, error)
+	WaitReady(context.Context, Config, UnitIdentity) (UnitIdentity, error)
 	Observe(context.Context, string) (UnitIdentity, error)
 	Stop(context.Context, string) error
 }

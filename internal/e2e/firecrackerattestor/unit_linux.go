@@ -15,11 +15,17 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
 
 const systemctlPath = "/usr/bin/systemctl"
+
+var (
+	errReadinessTimeout = errors.New("firecracker_attestor_e2e.readiness_timeout")
+	errReadinessUnsafe  = errors.New("firecracker_attestor_e2e.readiness_unsafe")
+)
 
 type LinuxUnit struct{}
 
@@ -76,6 +82,7 @@ func (LinuxUnit) Preflight(ctx context.Context, config Config) (CandidateIdentit
 	unitContent, err := readTrustedFile(candidate.UnitPath, 64<<10)
 	if err != nil ||
 		!bytes.Contains(unitContent, []byte("User=0\n")) ||
+		!bytes.Contains(unitContent, []byte("Group=0\n")) ||
 		!bytes.Contains(unitContent, []byte("NoNewPrivileges=yes\n")) ||
 		!bytes.Contains(unitContent, []byte("IPAddressDeny=any\n")) ||
 		!bytes.Contains(unitContent, []byte(
@@ -113,6 +120,165 @@ func (LinuxUnit) Start(ctx context.Context, unit string) (UnitIdentity, error) {
 		)
 	}
 	return identity, nil
+}
+
+func (LinuxUnit) WaitReady(
+	ctx context.Context,
+	config Config,
+	baseline UnitIdentity,
+) (UnitIdentity, error) {
+	return waitLauncherReady(
+		ctx,
+		config,
+		baseline,
+		func(ctx context.Context, unit string) (UnitIdentity, error) {
+			return observeSystemdUnit(ctx, unit)
+		},
+		func(config Config, identity UnitIdentity) (bool, error) {
+			return probeLauncherReadiness(config, identity, 0, 0)
+		},
+	)
+}
+
+func waitLauncherReady(
+	ctx context.Context,
+	config Config,
+	baseline UnitIdentity,
+	observe func(context.Context, string) (UnitIdentity, error),
+	probe func(Config, UnitIdentity) (bool, error),
+) (UnitIdentity, error) {
+	if ctx == nil || validateSupervisorConfig(config) != nil ||
+		observe == nil || probe == nil ||
+		validateActiveUnit(
+			baseline,
+			config.Candidate.UnitName,
+			config.Candidate.UnitPath,
+		) != nil {
+		return UnitIdentity{}, errReadinessUnsafe
+	}
+	ticker := time.NewTicker(config.PollInterval)
+	defer ticker.Stop()
+	for {
+		if ctx.Err() != nil {
+			return UnitIdentity{}, errReadinessTimeout
+		}
+		current, err := observe(ctx, baseline.UnitName)
+		if err != nil {
+			if ctx.Err() != nil {
+				return UnitIdentity{}, errReadinessTimeout
+			}
+			return UnitIdentity{}, errors.Join(errReadinessUnsafe, err)
+		}
+		if !unitIdentityMatches(baseline, current) {
+			return UnitIdentity{}, errReadinessUnsafe
+		}
+		ready, err := probe(config, current)
+		if err != nil {
+			return UnitIdentity{}, errors.Join(errReadinessUnsafe, err)
+		}
+		if ready {
+			return current, nil
+		}
+		select {
+		case <-ctx.Done():
+			return UnitIdentity{}, errReadinessTimeout
+		case <-ticker.C:
+		}
+	}
+}
+
+func probeLauncherReadiness(
+	config Config,
+	identity UnitIdentity,
+	trustedUID uint32,
+	trustedGID uint32,
+) (bool, error) {
+	candidate := config.Candidate
+	if filepath.Dir(candidate.LauncherSocketPath) != candidate.RuntimeRoot {
+		return false, errReadinessUnsafe
+	}
+	runtimeRoot, err := openDirectoryNoLinks(
+		"/", strings.TrimPrefix(candidate.RuntimeRoot, "/"),
+	)
+	if err != nil {
+		return false, errReadinessUnsafe
+	}
+	defer runtimeRoot.Close()
+	var runtimeStat unix.Stat_t
+	if unix.Fstat(int(runtimeRoot.Fd()), &runtimeStat) != nil ||
+		runtimeStat.Mode&unix.S_IFMT != unix.S_IFDIR ||
+		runtimeStat.Uid != trustedUID ||
+		runtimeStat.Gid != config.ChildGID ||
+		runtimeStat.Mode&0o777 != 0o750 {
+		return false, errReadinessUnsafe
+	}
+	runs, err := openDirectoryAt(runtimeRoot, "runs")
+	if errors.Is(err, unix.ENOENT) {
+		return false, nil
+	}
+	if err != nil {
+		return false, errReadinessUnsafe
+	}
+	var runsStat unix.Stat_t
+	runsSafe := unix.Fstat(int(runs.Fd()), &runsStat) == nil &&
+		runsStat.Mode&unix.S_IFMT == unix.S_IFDIR &&
+		runsStat.Uid == trustedUID && runsStat.Gid == trustedGID &&
+		runsStat.Mode&0o777 == 0o700
+	_ = runs.Close()
+	if !runsSafe {
+		return false, errReadinessUnsafe
+	}
+	socketName := filepath.Base(candidate.LauncherSocketPath)
+	var socketStat unix.Stat_t
+	err = unix.Fstatat(
+		int(runtimeRoot.Fd()),
+		socketName,
+		&socketStat,
+		unix.AT_SYMLINK_NOFOLLOW,
+	)
+	if errors.Is(err, unix.ENOENT) {
+		return false, nil
+	}
+	if err != nil ||
+		socketStat.Mode&unix.S_IFMT != unix.S_IFSOCK ||
+		socketStat.Uid != trustedUID ||
+		socketStat.Gid != config.ChildGID ||
+		socketStat.Mode&0o777 != 0o660 {
+		return false, errReadinessUnsafe
+	}
+	socket, err := unix.Socket(
+		unix.AF_UNIX,
+		unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC|unix.SOCK_NONBLOCK,
+		0,
+	)
+	if err != nil {
+		return false, errReadinessUnsafe
+	}
+	defer unix.Close(socket)
+	err = unix.Connect(
+		socket,
+		&unix.SockaddrUnix{Name: candidate.LauncherSocketPath},
+	)
+	if transientLauncherReadinessError(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, errReadinessUnsafe
+	}
+	credential, err := unix.GetsockoptUcred(socket, unix.SOL_SOCKET, unix.SO_PEERCRED)
+	if err != nil ||
+		credential.Pid != int32(identity.MainPID) ||
+		credential.Uid != trustedUID ||
+		credential.Gid != trustedGID {
+		return false, errReadinessUnsafe
+	}
+	return true, nil
+}
+
+func transientLauncherReadinessError(err error) bool {
+	return errors.Is(err, unix.ECONNREFUSED) ||
+		errors.Is(err, unix.EAGAIN) ||
+		errors.Is(err, unix.EINPROGRESS)
 }
 
 func (LinuxUnit) Observe(ctx context.Context, unit string) (UnitIdentity, error) {

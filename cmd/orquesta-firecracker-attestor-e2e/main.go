@@ -123,7 +123,7 @@ func run(arguments []string, stdout, stderr io.Writer) int {
 	defer cancelSupervisor()
 	publication, err := supervisor.Run(supervisorContext)
 	if err != nil {
-		writeStatus(stderr, "firecracker_attestor_e2e.failed")
+		writeSupervisorFailure(stderr, err)
 		return 1
 	}
 	_, _ = fmt.Fprintf(
@@ -216,6 +216,16 @@ func loadSpec(path string) (firecrackerattestor.Config, error) {
 
 func writeStatus(writer io.Writer, code string) {
 	_, _ = fmt.Fprintf(writer, "status=failed\ncode=%s\n", code)
+}
+
+func writeSupervisorFailure(writer io.Writer, err error) {
+	stage, code := firecrackerattestor.FailureDiagnostic(err)
+	_, _ = fmt.Fprintf(
+		writer,
+		"status=failed\nstage=%s\ncode=%s\n",
+		stage,
+		code,
+	)
 }
 
 type physicalWorkloadHandler struct{}
