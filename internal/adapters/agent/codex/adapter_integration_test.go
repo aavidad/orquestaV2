@@ -35,6 +35,12 @@ const (
 	workerFDAuditFile        = "worker-fd-audit.json"
 )
 
+type workerDescriptorAudit struct {
+	PID         int               `json:"pid"`
+	Targets     map[string]string `json:"targets"`
+	CloseOnExec map[string]bool   `json:"close_on_exec"`
+}
+
 func init() {
 	if len(os.Args) < 2 || os.Args[1] != "exec" {
 		return
@@ -549,17 +555,16 @@ func runCodexHelper(arguments []string) error {
 	mode := string(prompt)
 	switch {
 	case strings.Contains(mode, "helper:fd-audit-block"):
-		audit := struct {
-			PID     int               `json:"pid"`
-			Targets map[string]string `json:"targets"`
-		}{
-			PID:     os.Getpid(),
-			Targets: make(map[string]string),
+		audit := workerDescriptorAudit{
+			PID:         os.Getpid(),
+			Targets:     make(map[string]string),
+			CloseOnExec: make(map[string]bool),
 		}
 		for descriptor := 3; descriptor <= 8; descriptor++ {
 			name := strconv.Itoa(descriptor)
 			if target, err := os.Readlink("/proc/self/fd/" + name); err == nil {
 				audit.Targets[name] = target
+				audit.CloseOnExec[name] = platformDescriptorCloseOnExec(descriptor)
 			}
 		}
 		payload, err := json.Marshal(audit)

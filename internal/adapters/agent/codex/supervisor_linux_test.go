@@ -450,10 +450,7 @@ func TestSupervisorWorkerDoesNotInheritPrivateControlDescriptors(t *testing.T) {
 		config.WorkRoot, filepath.FromSlash(executionPath(request.ExecutionRef)),
 	)
 	auditPath := filepath.Join(runDirectory, workerFDAuditFile)
-	var audit struct {
-		PID     int               `json:"pid"`
-		Targets map[string]string `json:"targets"`
-	}
+	var audit workerDescriptorAudit
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		payload, err := os.ReadFile(auditPath)
@@ -480,8 +477,16 @@ func TestSupervisorWorkerDoesNotInheritPrivateControlDescriptors(t *testing.T) {
 		if _, private := privateTargets[target]; private {
 			t.Fatalf("worker inherited supervisor fd %s target %q", descriptor, target)
 		}
-		if strings.Contains(target, "memfd:orquesta-codex-supervisor") ||
-			strings.HasPrefix(target, "/sys/fs/cgroup") {
+		if strings.Contains(target, "memfd:orquesta-codex-supervisor") {
+			t.Fatalf("worker inherited private fd %s target %q", descriptor, target)
+		}
+		// Go 1.25 keeps its own O_CLOEXEC cpu.max descriptor open to
+		// update GOMAXPROCS after cgroup moves. An inherited descriptor
+		// necessarily lacks FD_CLOEXEC after exec, so distinguish ownership
+		// by descriptor flags instead of treating every cgroup target as
+		// supervisor state.
+		if strings.HasPrefix(target, "/sys/fs/cgroup") &&
+			!audit.CloseOnExec[descriptor] {
 			t.Fatalf("worker inherited private fd %s target %q", descriptor, target)
 		}
 		if (descriptor == "5" || descriptor == "8") && strings.HasPrefix(target, "pipe:[") {
