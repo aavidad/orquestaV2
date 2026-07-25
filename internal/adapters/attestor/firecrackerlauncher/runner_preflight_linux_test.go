@@ -93,6 +93,10 @@ func TestPreflightKVMReturnsSafeCodeForEveryFailedSubstage(t *testing.T) {
 			mutate: func(fake *kvmPreflightFake) { fake.version = kvmAPIVersion + 1 },
 			code:   CodeKVMVersionUnsupported,
 		},
+		"pointer_output_helper_zero": {
+			mutate: func(fake *kvmPreflightFake) { fake.version = 0 },
+			code:   CodeKVMVersionUnsupported,
+		},
 	}
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {

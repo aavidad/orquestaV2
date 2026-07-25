@@ -91,7 +91,7 @@ func preflightKVM() error {
 		},
 		fstat: unix.Fstat,
 		apiVersion: func(fd int) (int, error) {
-			return unix.IoctlGetInt(fd, kvmGetAPIVersionIOCTL)
+			return unix.IoctlRetInt(fd, kvmGetAPIVersionIOCTL)
 		},
 		close: unix.Close,
 	})
