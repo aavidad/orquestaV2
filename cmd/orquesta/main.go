@@ -11,7 +11,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	"orquesta/internal/adapters/agent/codex"
 	"orquesta/internal/bootstrap"
 	"orquesta/internal/i18n"
 )
@@ -23,8 +22,8 @@ func main() {
 }
 
 func run(arguments []string, stdout, stderr io.Writer) int {
-	if codex.IsLocalSupervisorInvocation(arguments) {
-		return codex.RunLocalSupervisor()
+	if exitCode, handled := bootstrap.DispatchPrivateInvocation(arguments); handled {
+		return exitCode
 	}
 	catalog, err := i18n.LoadBundled()
 	if err != nil {

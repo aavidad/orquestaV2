@@ -13,12 +13,11 @@ import (
 	"testing"
 	"time"
 
-	"orquesta/internal/adapters/agent/codex"
 	"orquesta/internal/i18n"
 )
 
 func TestMain(testMain *testing.M) {
-	if codex.IsLocalSupervisorInvocation(os.Args[1:]) {
+	if len(os.Args) == 2 && os.Args[1] == "__orquesta_internal_codex_supervisor_v1" {
 		os.Exit(run(os.Args[1:], io.Discard, io.Discard))
 	}
 	os.Exit(testMain.Run())
@@ -38,11 +37,6 @@ func TestVersionAndInvalidCommandDoNotStartRuntime(t *testing.T) {
 }
 
 func TestPrivateCodexSupervisorDispatchFailsClosedWithoutDescriptors(t *testing.T) {
-	if !codex.IsLocalSupervisorInvocation([]string{"__orquesta_internal_codex_supervisor_v1"}) ||
-		codex.IsLocalSupervisorInvocation(nil) ||
-		codex.IsLocalSupervisorInvocation([]string{"__orquesta_internal_codex_supervisor_v1", "extra"}) {
-		t.Fatal("private supervisor dispatch matcher is not exact")
-	}
 	command := exec.Command(os.Args[0], "__orquesta_internal_codex_supervisor_v1")
 	command.Env = []string{}
 	err := command.Run()

@@ -3,13 +3,19 @@ package bootstrap
 import (
 	"os"
 	"testing"
-
-	"orquesta/internal/adapters/agent/codex"
 )
 
 func TestMain(main *testing.M) {
-	if codex.IsLocalSupervisorInvocation(os.Args[1:]) {
-		os.Exit(codex.RunLocalSupervisor())
+	if exitCode, handled := DispatchPrivateInvocation(os.Args[1:]); handled {
+		os.Exit(exitCode)
 	}
 	os.Exit(main.Run())
+}
+
+func TestPrivateInvocationMatcherIsExact(t *testing.T) {
+	if !isPrivateInvocation([]string{"__orquesta_internal_codex_supervisor_v1"}) ||
+		isPrivateInvocation(nil) ||
+		isPrivateInvocation([]string{"__orquesta_internal_codex_supervisor_v1", "extra"}) {
+		t.Fatal("private supervisor dispatch matcher is not exact")
+	}
 }
