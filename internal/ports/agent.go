@@ -19,6 +19,14 @@ const (
 	AgentFailed    AgentStatus = "failed"
 )
 
+type AgentFailureDisposition string
+
+const (
+	// AgentFailureDispositionTerminalSecurity marks a security failure that
+	// must not be retried. Empty preserves the legacy retryable behavior.
+	AgentFailureDispositionTerminalSecurity AgentFailureDisposition = "terminal_security"
+)
+
 type AgentCapabilities struct {
 	ProviderRef    string
 	ModelRef       string
@@ -94,14 +102,15 @@ type AgentLaunchReceipt struct {
 }
 
 type AgentObservation struct {
-	ExecutionRef goal.ExecutionRef
-	SpecHash     string
-	Status       AgentStatus
-	MediaType    string
-	Content      []byte
-	ErrorCode    string
-	Usage        governance.ResourceUsage
-	ObservedAt   time.Time
+	ExecutionRef       goal.ExecutionRef
+	SpecHash           string
+	Status             AgentStatus
+	FailureDisposition AgentFailureDisposition
+	MediaType          string
+	Content            []byte
+	ErrorCode          string
+	Usage              governance.ResourceUsage
+	ObservedAt         time.Time
 }
 
 type AgentContractError struct {
@@ -431,6 +440,15 @@ func ValidateAgentObservation(observation AgentObservation, maxOutputBytes int64
 	}
 	if governance.ValidateResourceUsage(observation.Usage) != nil {
 		return &AgentContractError{Code: "agent.observation_usage_invalid"}
+	}
+	switch observation.FailureDisposition {
+	case "":
+	case AgentFailureDispositionTerminalSecurity:
+		if observation.Status != AgentFailed {
+			return &AgentContractError{Code: "agent.observation_failure_disposition_conflict"}
+		}
+	default:
+		return &AgentContractError{Code: "agent.observation_failure_disposition_invalid"}
 	}
 	switch observation.Status {
 	case AgentPending, AgentRunning:

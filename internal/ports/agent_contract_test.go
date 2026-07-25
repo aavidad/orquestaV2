@@ -220,6 +220,35 @@ func TestAgentContractRejectsIdentityMismatchAndFalseTerminalState(t *testing.T)
 	}
 }
 
+func TestAgentContractFailureDispositionIsClosedAndFailedOnly(t *testing.T) {
+	request := validAgentLaunchRequest(t)
+	valid := AgentObservation{
+		ExecutionRef:       request.ExecutionRef,
+		SpecHash:           request.SpecHash,
+		Status:             AgentFailed,
+		FailureDisposition: AgentFailureDispositionTerminalSecurity,
+		ErrorCode:          "provider.security_failure",
+		Usage:              governance.ResourceUsage{Quality: governance.UsageQualityUnknown},
+		ObservedAt:         time.Unix(11, 0).UTC(),
+	}
+	if err := ValidateAgentObservation(valid, request.MaxOutputBytes); err != nil {
+		t.Fatalf("terminal security observation rejected: %v", err)
+	}
+
+	conflict := valid
+	conflict.Status = AgentRunning
+	conflict.ErrorCode = ""
+	if code := AgentContractErrorCode(ValidateAgentObservation(conflict, request.MaxOutputBytes)); code != "agent.observation_failure_disposition_conflict" {
+		t.Fatalf("non-failed disposition code = %q", code)
+	}
+
+	unknown := valid
+	unknown.FailureDisposition = AgentFailureDisposition("provider_retry_policy")
+	if code := AgentContractErrorCode(ValidateAgentObservation(unknown, request.MaxOutputBytes)); code != "agent.observation_failure_disposition_invalid" {
+		t.Fatalf("unknown disposition code = %q", code)
+	}
+}
+
 func TestAgentContractRejectsReceiptSpecHashMismatchAndInvalidObservationHash(t *testing.T) {
 	request := validAgentLaunchRequest(t)
 	receipt := validAgentLaunchReceipt(request)

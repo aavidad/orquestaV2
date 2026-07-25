@@ -602,15 +602,20 @@ func (adapter *Adapter) loadTerminal(runPath, requestHash, specHash string, maxO
 }
 
 func (terminal terminalRecord) observation(executionRef goal.ExecutionRef, specHash string) ports.AgentObservation {
+	var disposition ports.AgentFailureDisposition
+	if terminal.Status == ports.AgentFailed && terminal.ErrorCode == CodeSecretLeak {
+		disposition = ports.AgentFailureDispositionTerminalSecurity
+	}
 	return ports.AgentObservation{
-		ExecutionRef: executionRef,
-		SpecHash:     specHash,
-		Status:       terminal.Status,
-		MediaType:    terminal.MediaType,
-		Content:      append([]byte(nil), []byte(terminal.Artifact)...),
-		ErrorCode:    terminal.ErrorCode,
-		Usage:        unknownCodexUsage(),
-		ObservedAt:   terminal.ObservedAt,
+		ExecutionRef:       executionRef,
+		SpecHash:           specHash,
+		Status:             terminal.Status,
+		FailureDisposition: disposition,
+		MediaType:          terminal.MediaType,
+		Content:            append([]byte(nil), []byte(terminal.Artifact)...),
+		ErrorCode:          terminal.ErrorCode,
+		Usage:              unknownCodexUsage(),
+		ObservedAt:         terminal.ObservedAt,
 	}
 }
 

@@ -60,6 +60,7 @@ const (
 	CodeEnvironmentInvalid            = "codex.environment_invalid"
 	CodeCredentialInvalid             = "codex.credential_invalid"
 	CodeCredentialUnavailable         = "codex.credential_unavailable"
+	CodeCredentialOutputUnverifiable  = "codex.credential_output_unverifiable"
 	CodePromptRendererInvalid         = "codex.prompt_renderer_invalid"
 	CodePromptRenderFailed            = "codex.prompt_render_failed"
 	CodeSessionInvalid                = "codex.session_invalid"

@@ -380,8 +380,15 @@ func (adapter *Adapter) gateCredentialTerminalLocked(state *executionState, term
 	clearBytes(terminal.Diagnostic)
 	terminal.Diagnostic = nil
 	terminal.Artifact = ""
+	failureCode := CodeCredentialUnavailable
+	switch {
+	case readErr != nil:
+		failureCode = CodeCredentialOutputUnverifiable
+	case credentials.HasErrorCode(scanErr, credentials.ErrorSecretLeak):
+		failureCode = CodeSecretLeak
+	}
 	redacted := terminalRecord{SchemaVersion: stateSchemaVersion, RequestHash: terminal.RequestHash,
-		Status: ports.AgentFailed, ErrorCode: CodeSecretLeak, ObservedAt: terminal.ObservedAt}
+		Status: ports.AgentFailed, ErrorCode: failureCode, ObservedAt: terminal.ObservedAt}
 	if scrubErr := adapter.credentialOutputScrub(state.runPath); scrubErr != nil {
 		return redacted, &Error{Code: CodeStatePersistenceFailed, Cause: scrubErr}
 	}
@@ -398,12 +405,12 @@ func (adapter *Adapter) readCredentialOutput(runPath string, maximum int64) ([]b
 	filePath := path.Join(runPath, lastMessageFileName)
 	info, err := adapter.root.Lstat(filePath)
 	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() || info.Size() > maximum {
-		return nil, errors.New("codex.credential_output_unverifiable")
+		return nil, &Error{Code: CodeCredentialOutputUnverifiable, Cause: err}
 	}
 	payload, err := adapter.root.ReadFile(filePath)
 	if err != nil || int64(len(payload)) > maximum {
 		clearBytes(payload)
-		return nil, errors.New("codex.credential_output_unverifiable")
+		return nil, &Error{Code: CodeCredentialOutputUnverifiable, Cause: err}
 	}
 	return payload, nil
 }

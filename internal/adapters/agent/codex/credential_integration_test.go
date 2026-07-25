@@ -56,6 +56,33 @@ func TestCredentialLaunchRotationRevocationAndLeakGate(t *testing.T) {
 	assertNoMaterialInTree(t, config.WorkRoot, helperCredentialInitial, helperCredentialRotated)
 }
 
+func TestCredentialLeakDispositionSurvivesRestart(t *testing.T) {
+	store := &credentialTestStore{material: helperCredentialInitial, version: 1}
+	config := testConfig(t)
+	config.CredentialStore = store
+	config.CredentialRef = "credential:codex-primary"
+	request := testRequest(t, "secret-leak-restart", "helper:encoded-secret-leak", 1024)
+	first := openTestAdapter(t, config)
+	if _, err := first.Launch(context.Background(), request); err != nil {
+		t.Fatalf("Launch: %v", err)
+	}
+	observation := awaitTerminal(t, first, request.ExecutionRef)
+	if observation.ErrorCode != CodeSecretLeak ||
+		observation.FailureDisposition != ports.AgentFailureDispositionTerminalSecurity {
+		t.Fatalf("first terminal=%+v", observation)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	reopened := openTestAdapter(t, config)
+	recovered, err := reopened.Observe(context.Background(), request.ExecutionRef)
+	if err != nil || recovered.ErrorCode != CodeSecretLeak ||
+		recovered.FailureDisposition != ports.AgentFailureDispositionTerminalSecurity {
+		t.Fatalf("recovered terminal=%+v error=%v", recovered, err)
+	}
+}
+
 func TestCredentialPreflightRejectsPromptAndArguments(t *testing.T) {
 	for _, test := range []struct {
 		name        string
@@ -191,12 +218,79 @@ func TestCredentialLeakGateFailsClosedWhenScrubFails(t *testing.T) {
 	terminal, err = adapter.gateCredentialTerminalLocked(state, terminalRecord{
 		SchemaVersion: stateSchemaVersion, RequestHash: mustRequestHash(t, request), Status: ports.AgentCompleted, ObservedAt: config.Now(),
 	})
-	if ErrorCode(err) != CodeCredentialUnavailable || terminal.ErrorCode != CodeSecretLeak {
+	if ErrorCode(err) != CodeCredentialUnavailable || terminal.ErrorCode != CodeCredentialUnavailable {
 		t.Fatalf("unexpected scan failure did not fail closed: terminal=%+v err=%v", terminal, err)
 	}
 	payload, readErr := os.ReadFile(filepath.Join(config.WorkRoot, filepath.FromSlash(runPath), lastMessageFileName))
 	if readErr != nil || len(payload) != 0 {
 		t.Fatalf("unexpected scan failure did not scrub raw output: %q err=%v", payload, readErr)
+	}
+}
+
+func TestCredentialUnverifiableOutputIsScrubbedAndRetryable(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		seed func(*testing.T, string)
+	}{
+		{name: "missing"},
+		{name: "symlink", seed: func(t *testing.T, output string) {
+			target := filepath.Join(t.TempDir(), "target")
+			if err := os.WriteFile(target, []byte("outside"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(target, output); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{name: "nonregular", seed: func(t *testing.T, output string) {
+			if err := os.Mkdir(output, 0o700); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{name: "oversize", seed: func(t *testing.T, output string) {
+			if err := os.WriteFile(output, bytes.Repeat([]byte("x"), 9), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			config := testConfig(t)
+			adapter := openTestAdapter(t, config)
+			request := testRequest(t, "unverifiable-"+test.name, "helper:success", 8)
+			_, runPath, created, err := adapter.ensureLaunchRecord(request, mustRequestHash(t, request))
+			if err != nil || !created {
+				t.Fatalf("seed launch created=%v err=%v", created, err)
+			}
+			output := filepath.Join(config.WorkRoot, filepath.FromSlash(runPath), lastMessageFileName)
+			if test.seed != nil {
+				test.seed(t, output)
+			}
+			secret := mustTestSecret(t, helperCredentialInitial)
+			guard, err := credentials.NewLeakGuard(secret)
+			secret.Destroy()
+			if err != nil {
+				t.Fatal(err)
+			}
+			state := &executionState{runPath: runPath, maxOutput: 8, credentialGuard: guard}
+			terminal, err := adapter.gateCredentialTerminalLocked(state, terminalRecord{
+				SchemaVersion: stateSchemaVersion, RequestHash: mustRequestHash(t, request),
+				Status: ports.AgentCompleted, Artifact: "safe", ObservedAt: config.Now(),
+			})
+			if err != nil || terminal.Status != ports.AgentFailed ||
+				terminal.ErrorCode != CodeCredentialOutputUnverifiable {
+				t.Fatalf("terminal=%+v err=%v", terminal, err)
+			}
+			observation := terminal.observation(request.ExecutionRef, request.SpecHash)
+			if observation.FailureDisposition != "" ||
+				ports.ValidateAgentObservation(observation, request.MaxOutputBytes) != nil {
+				t.Fatalf("unverifiable output became terminal security: %+v", observation)
+			}
+			info, statErr := os.Lstat(output)
+			if statErr != nil && !errors.Is(statErr, os.ErrNotExist) ||
+				statErr == nil && (!info.Mode().IsRegular() || info.Size() != 0) {
+				t.Fatalf("scrubbed output info=%+v err=%v", info, statErr)
+			}
+		})
 	}
 }
 
@@ -209,6 +303,13 @@ func assertCredentialOutcome(t *testing.T, adapter *Adapter, suffix, objective s
 	observation := awaitTerminal(t, adapter, request.ExecutionRef)
 	if observation.Status != status || observation.ErrorCode != code || string(observation.Content) != artifact {
 		t.Fatalf("terminal(%s)=%+v", suffix, observation)
+	}
+	wantDisposition := ports.AgentFailureDisposition("")
+	if code == CodeSecretLeak {
+		wantDisposition = ports.AgentFailureDispositionTerminalSecurity
+	}
+	if observation.FailureDisposition != wantDisposition {
+		t.Fatalf("terminal disposition(%s)=%q want=%q", suffix, observation.FailureDisposition, wantDisposition)
 	}
 }
 
