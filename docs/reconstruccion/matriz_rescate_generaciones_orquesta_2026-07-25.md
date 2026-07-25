@@ -32,12 +32,17 @@ eliminados después del barrido requieren el siguiente lote.
   de caracterización en la arquitectura nueva. No imports, bridges, dual-writes
   ni fallbacks hacia `/home/alberto/Trabajo/orquesta`.
 
-**Regla operativa: buscar solución legacy antes de implementar.** Para cada
-capacidad nueva o bug: (1) consultar esta matriz y los canones históricos,
-(2) localizar por símbolo/contrato la solución más cercana, (3) extraer
-invariante, fallo conocido y evidencia útil, (4) decidir `equivalente`,
-`adaptar` o `descartar`, y (5) registrar la decisión en el capability/bug. La
-búsqueda no autoriza copiar arquitectura ni declarar una capacidad acreditada.
+**Regla operativa: revisar todo el inventario legacy antes de cada V.** Antes de
+abrir una V se recorren las cuatro familias históricas, los árboles
+independientes deduplicados y las ramas de reconstrucción, aunque a primera
+vista una fuente parezca ajena. Para cada capacidad nueva o bug: (1) consultar
+esta matriz y los cánones históricos, (2) comparar identidades, índices y diffs
+de todas las familias, (3) profundizar por símbolo/contrato en los candidatos
+aplicables, (4) extraer invariante, fallo conocido y evidencia útil, (5) decidir
+`ya_integrado`, `adaptar` o `descartar`, y (6) registrar la decisión en el
+capability/bug. La búsqueda no autoriza copiar arquitectura ni declarar una
+capacidad acreditada. Al final del roadmap se repite además una revisión global
+del producto completo.
 
 ## Fuentes de código deduplicadas
 

@@ -1,7 +1,7 @@
 # Informe de integración de generaciones Orquesta — 2026-07-25
 
-Estado: mapa inicial cerrado; consulta focal antes de cada V y revisión global
-al final del roadmap.
+Estado: mapa inicial cerrado; barrido de todas las familias legacy antes de
+cada V y revisión global al final del roadmap.
 
 ## Veredicto ejecutivo
 
@@ -34,6 +34,24 @@ Nada se integra solo por existir en una versión anterior. No se harán
 `cherry-pick` masivos, imports al árbol clásico, bridges permanentes ni
 dual-writes. Las fuentes antiguas se conservan y se usan para extraer contratos,
 casos adversariales, fixtures y decisiones de diseño.
+
+## Puerta de entrada obligatoria para cada V
+
+Antes de iniciar una nueva V se revisará el inventario completo de las cuatro
+familias históricas, sus árboles independientes deduplicados y las ramas de
+reconstrucción relacionadas. El barrido debe comprobar si existe trabajo útil
+en cualquiera de ellas, no solo en la fuente que parezca más cercana.
+
+Para mantener el avance, el primer paso usa identidades Git, índices, diffs,
+símbolos y documentos de cierre; la lectura profunda se reserva para los
+candidatos aplicables a la V. Cada hallazgo queda clasificado como
+`ya_integrado`, `adaptar` o `descartar`, con evidencia y motivo. Superar esta
+puerta no acredita la V: el código adaptado todavía debe pasar sus contratos,
+pruebas y recibos actuales.
+
+La revisión global al final del roadmap se mantiene como una segunda defensa:
+volverá a comparar el producto completo con todas las generaciones para
+detectar mejoras transversales que no pertenecían claramente a una sola V.
 
 ## Alcance y evidencia
 
