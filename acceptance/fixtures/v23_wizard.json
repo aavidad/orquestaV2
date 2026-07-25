@@ -1,0 +1,197 @@
+{
+  "schema_version": 1,
+  "contract_id": "AC-V23-WIZARD",
+  "implementation_status": "partial_green_unsealed",
+  "task_context": {
+    "project_ref": "project:v23",
+    "goal_ref": "goal:a7b8704cc9b368213fd7c201dfc8e6c9",
+    "work_item_ref": "work-item:7e8333c215d71ea3199bb4b48fea7a15",
+    "execution_ref": "execution:1e8b0c8164d7dda5e626f43e108996f8",
+    "plan_generation": 1,
+    "app_spec_generation": 1
+  },
+  "owned_capability_ids": [
+    "WIZ-03",
+    "WIZ-04",
+    "WIZ-15"
+  ],
+  "phase_criteria": [
+    "criterion:v23-one-versioned-intake",
+    "criterion:v23-gap-derived-questions",
+    "criterion:v23-visible-recommendation",
+    "criterion:v23-nonempty-required-test"
+  ],
+  "package_path": "internal/intake",
+  "state_schema": "orquesta.intake.state.v1",
+  "allowed_origins": [
+    "chat",
+    "form"
+  ],
+  "typed_round_policy": {
+    "field": "max_question_rounds",
+    "example_value": 2,
+    "zero_is_invalid": true,
+    "package_default": "none",
+    "canonical_configuration": "pending_goal_with_lease_L-CONFIG"
+  },
+  "stable_error_codes": [
+    "intake.channel_state_creation_forbidden",
+    "intake.choice_conflict",
+    "intake.duplicate_ref",
+    "intake.invalid_argument",
+    "intake.invalid_origin",
+    "intake.invalid_ref",
+    "intake.issue_not_found",
+    "intake.message_key_invalid",
+    "intake.option_not_found",
+    "intake.question_not_found",
+    "intake.recommendation_count",
+    "intake.revision_conflict",
+    "intake.round_limit",
+    "intake.state_mismatch"
+  ],
+  "required_assertions": [
+    "chat_and_form_advance_one_ref_and_revision_sequence",
+    "failed_change_does_not_mutate_the_current_snapshot",
+    "question_references_at_least_one_recorded_gap_or_contradiction",
+    "required_test_runs_named_contract_and_two_negatives",
+    "selected_and_recommended_options_coexist_when_they_differ",
+    "typed_policy_is_shared_across_origins_and_has_no_package_default"
+  ],
+  "required_test": {
+    "command": "go test -mod=vendor -race -count=1 -v ./acceptance -run '^(TestAcceptanceV23WizardIntakeContract|TestV23WizardIntakeNegativeAndAtomicContract|TestV23WizardRoundPolicyHasNoPackageDefaultAndNoPerOriginReset)$'",
+    "test_names": [
+      "TestAcceptanceV23WizardIntakeContract",
+      "TestV23WizardIntakeNegativeAndAtomicContract",
+      "TestV23WizardRoundPolicyHasNoPackageDefaultAndNoPerOriginReset"
+    ],
+    "reject_no_tests_to_run": true
+  },
+  "candidate_files": [
+    "acceptance/fixtures/v23_wizard.json",
+    "acceptance/v23_wizard_test.go",
+    "docs/reconstruccion/analisis_y_contrato_v23_wizard.md",
+    "internal/intake/errors.go",
+    "internal/intake/intake_test.go",
+    "internal/intake/model.go",
+    "internal/intake/state.go"
+  ],
+  "forbidden_import_boundaries": [
+    "adapters",
+    "bootstrap",
+    "database",
+    "filesystem",
+    "interfaces",
+    "legacy",
+    "orquesta/modulos",
+    "provider"
+  ],
+  "remaining_wiz": [
+    {
+      "id": "WIZ-01",
+      "status": "pending"
+    },
+    {
+      "id": "WIZ-02",
+      "status": "pending"
+    },
+    {
+      "id": "WIZ-05",
+      "status": "pending"
+    },
+    {
+      "id": "WIZ-06",
+      "status": "pending"
+    },
+    {
+      "id": "WIZ-07",
+      "status": "pending"
+    },
+    {
+      "id": "WIZ-08",
+      "status": "pending"
+    },
+    {
+      "id": "WIZ-09",
+      "status": "pending"
+    },
+    {
+      "id": "WIZ-10",
+      "status": "pending"
+    },
+    {
+      "id": "WIZ-11",
+      "status": "pending"
+    },
+    {
+      "id": "WIZ-12",
+      "status": "roadmap_rejected"
+    },
+    {
+      "id": "WIZ-13",
+      "status": "pending"
+    },
+    {
+      "id": "WIZ-14",
+      "status": "roadmap_rejected"
+    },
+    {
+      "id": "WIZ-16",
+      "status": "pending"
+    },
+    {
+      "id": "WIZ-17",
+      "status": "pending"
+    },
+    {
+      "id": "WIZ-18",
+      "status": "pending"
+    },
+    {
+      "id": "WIZ-19",
+      "status": "pending"
+    },
+    {
+      "id": "WIZ-20",
+      "status": "pending"
+    },
+    {
+      "id": "WIZ-21",
+      "status": "pending"
+    },
+    {
+      "id": "WIZ-22",
+      "status": "pending"
+    },
+    {
+      "id": "WIZ-23",
+      "status": "pending"
+    },
+    {
+      "id": "WIZ-24",
+      "status": "pending"
+    },
+    {
+      "id": "WIZ-25",
+      "status": "pending"
+    }
+  ],
+  "deferred_scopes": [
+    "application_idempotency",
+    "canonical_round_default_under_L-CONFIG",
+    "causal_plan_creation",
+    "command_registry_binding",
+    "dossier_generation",
+    "durable_cas_persistence_and_restart",
+    "explicit_confirmation",
+    "freeze_after_confirmation",
+    "full_wizard_i18n_catalog",
+    "roadmap_promotion",
+    "seal_and_receipt",
+    "templates_and_domain_packs",
+    "web_surface"
+  ],
+  "seal_status": "not_sealed",
+  "receipt_path": "",
+  "next_causal_dependency": "application_owned_persistence_and_command_binding_using_the_same_expected_revision_contract"
+}
