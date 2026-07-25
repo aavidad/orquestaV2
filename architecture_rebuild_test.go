@@ -17,7 +17,10 @@ import (
 	"orquesta/internal/config"
 )
 
-const rebuildArchitectureEnvLoader = "internal/config/env_loader.go"
+const (
+	rebuildArchitectureEnvLoader        = "internal/config/env_loader.go"
+	rebuildArchitectureRawDriveProtocol = "orquesta/internal/testattestorprotocol/rawdrive"
+)
 
 type rebuildArchitectureImport struct {
 	path string
@@ -153,6 +156,21 @@ func TestRebuildArchitecture(t *testing.T) {
 		}
 	})
 
+	t.Run("test_attestor_raw_drive_protocol_is_standard_library_only", func(t *testing.T) {
+		for _, file := range rebuildArchitectureFilesUnder(files, "internal/testattestorprotocol/rawdrive") {
+			for _, imported := range file.imports {
+				if !rebuildArchitectureIsStandardLibraryImport(imported.path) {
+					rebuildArchitectureImportError(
+						t,
+						file,
+						imported,
+						"raw-drive wire protocol must depend only on the standard library",
+					)
+				}
+			}
+		}
+	})
+
 	t.Run("adapters_depend_only_on_inward_contracts", func(t *testing.T) {
 		for _, file := range rebuildArchitectureFilesUnder(files, "internal/adapters") {
 			allowed := []string{
@@ -169,10 +187,18 @@ func TestRebuildArchitecture(t *testing.T) {
 				allowed = append(allowed, "orquesta/internal/config")
 			}
 			for _, imported := range file.imports {
+				if rebuildArchitectureIsSharedAdapterProtocol(imported.path) {
+					continue
+				}
 				if reason := rebuildArchitectureOnlyInternalPackages(imported.path, allowed...); reason != "" {
 					rebuildArchitectureImportError(t, file, imported, "internal/adapters "+reason)
 				}
 			}
+		}
+		if !rebuildArchitectureIsSharedAdapterProtocol(rebuildArchitectureRawDriveProtocol) ||
+			rebuildArchitectureIsSharedAdapterProtocol("orquesta/internal/adapters/attestor/firecracker") ||
+			rebuildArchitectureIsSharedAdapterProtocol(rebuildArchitectureRawDriveProtocol+"/mutant") {
+			t.Fatal("raw-drive exception must remain exact and outside internal/adapters")
 		}
 	})
 
@@ -685,6 +711,18 @@ func rebuildArchitectureOnlyInternalPackages(importPath string, allowed ...strin
 		}
 	}
 	return "may not depend on " + importPath
+}
+
+func rebuildArchitectureIsStandardLibraryImport(importPath string) bool {
+	if importPath == "" || strings.HasPrefix(importPath, "orquesta/") {
+		return false
+	}
+	first, _, _ := strings.Cut(importPath, "/")
+	return !strings.Contains(first, ".")
+}
+
+func rebuildArchitectureIsSharedAdapterProtocol(importPath string) bool {
+	return importPath == rebuildArchitectureRawDriveProtocol
 }
 
 func rebuildArchitectureIsMCPImport(importPath string) bool {

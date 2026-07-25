@@ -1,4 +1,4 @@
-package firecracker
+package rawdrive
 
 import (
 	"bytes"
@@ -35,6 +35,24 @@ func TestInputDriveRoundTripCanonicalAndPreallocated(t *testing.T) {
 	frameBytes := binary.BigEndian.Uint64(first[48:56])
 	if !allZero(first[frameBytes:]) {
 		t.Fatal("input drive padding is not zero")
+	}
+}
+
+func TestCanonicalWireGoldens(t *testing.T) {
+	input := encodeInput(t, validInput(), validSnapshot("wire-golden"), 0)
+	output := encodeOutput(t, validOutput(), 0)
+	for name, value := range map[string][]byte{
+		"input":  input,
+		"output": output,
+	} {
+		got := sha256.Sum256(value)
+		want := map[string]string{
+			"input":  "2d9a9cd32e17181aade5e0c8ecc1f46adb788413d0e1a83854a855f056e7a28f",
+			"output": "31b1ba231a7a11df718531d6ef40b14544a3353397e9bf25316afa45f0debb40",
+		}[name]
+		if digestString(got[:]) != want {
+			t.Fatalf("%s wire SHA-256=%s", name, digestString(got[:]))
+		}
 	}
 }
 

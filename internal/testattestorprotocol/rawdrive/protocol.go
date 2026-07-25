@@ -1,7 +1,7 @@
-// Package firecracker defines the canonical raw-drive protocol used by the
-// Firecracker test-attestor adapter. It contains framing only: it does not
-// launch a VMM, inspect host configuration, or depend on core/port DTOs.
-package firecracker
+// Package rawdrive defines the canonical raw-drive protocol shared by the host
+// and isolated test-attestor guest. It contains framing only: it does not
+// launch a VMM, inspect host configuration, or depend on application DTOs.
+package rawdrive
 
 import (
 	"bytes"
@@ -53,17 +53,17 @@ var (
 )
 
 const (
-	CodeInvalid          = "test_attestor.firecracker.drive_invalid"
-	CodeLimit            = "test_attestor.firecracker.drive_limit_exceeded"
-	CodeTruncated        = "test_attestor.firecracker.drive_truncated"
-	CodeTampered         = "test_attestor.firecracker.drive_tampered"
-	CodeTrailingData     = "test_attestor.firecracker.drive_trailing_data"
-	CodeAlignment        = "test_attestor.firecracker.drive_alignment_invalid"
-	CodeIO               = "test_attestor.firecracker.drive_io"
-	CodeMetadataInvalid  = "test_attestor.firecracker.metadata_invalid"
-	CodeSnapshotInvalid  = "test_attestor.firecracker.snapshot_invalid"
-	CodeOutputInvalid    = "test_attestor.firecracker.output_invalid"
-	CodeOutputIncomplete = "test_attestor.firecracker.output_incomplete"
+	CodeInvalid          = "test_attestor.raw_drive.invalid"
+	CodeLimit            = "test_attestor.raw_drive.limit_exceeded"
+	CodeTruncated        = "test_attestor.raw_drive.truncated"
+	CodeTampered         = "test_attestor.raw_drive.tampered"
+	CodeTrailingData     = "test_attestor.raw_drive.trailing_data"
+	CodeAlignment        = "test_attestor.raw_drive.alignment_invalid"
+	CodeIO               = "test_attestor.raw_drive.io"
+	CodeMetadataInvalid  = "test_attestor.raw_drive.metadata_invalid"
+	CodeSnapshotInvalid  = "test_attestor.raw_drive.snapshot_invalid"
+	CodeOutputInvalid    = "test_attestor.raw_drive.output_invalid"
+	CodeOutputIncomplete = "test_attestor.raw_drive.output_incomplete"
 )
 
 // Error exposes a stable machine code while retaining an optional I/O cause.

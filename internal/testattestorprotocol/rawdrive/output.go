@@ -1,4 +1,4 @@
-package firecracker
+package rawdrive
 
 import (
 	"crypto/sha256"

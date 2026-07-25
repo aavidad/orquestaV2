@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	firecrackerdrive "orquesta/internal/adapters/attestor/firecracker"
+	firecrackerdrive "orquesta/internal/testattestorprotocol/rawdrive"
 )
 
 const (

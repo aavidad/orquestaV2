@@ -1,4 +1,4 @@
-package firecracker
+package rawdrive
 
 import (
 	"bytes"
@@ -11,8 +11,8 @@ import (
 	"unicode/utf8"
 )
 
-// RequiredTest is the adapter-local, argv-safe test declaration transported to
-// the guest. Order is significant and preserved.
+// RequiredTest is the argv-safe wire declaration transported to the isolated
+// test guest. Order is significant and preserved.
 type RequiredTest struct {
 	Ref              string
 	ToolRef          string
