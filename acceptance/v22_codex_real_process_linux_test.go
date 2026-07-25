@@ -4,6 +4,7 @@ package acceptance_test
 
 import (
 	"bytes"
+	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/base64"
@@ -46,6 +47,11 @@ type v22SleepWitness struct {
 	Birth      string
 	Executable string
 	Argv       []string
+}
+
+type v22SleepExpectation struct {
+	Process v22ProcessRecord
+	Seconds int
 }
 
 func v22ProcessRecords(t *testing.T, root string) map[string]v22ProcessRecord {
@@ -127,17 +133,45 @@ func v22ProcessAlive(record v22ProcessRecord) (bool, error) {
 		stat.State != "Z" && stat.State != "X", nil
 }
 
-func v22WaitExactSleep(t *testing.T, record v22ProcessRecord, seconds int) v22SleepWitness {
+func v22WaitExactSleeps(t *testing.T, ctx context.Context, expected ...v22SleepExpectation) []v22SleepWitness {
 	t.Helper()
-	for until := time.Now().Add(45 * time.Second); time.Now().Before(until); time.Sleep(25 * time.Millisecond) {
-		witness, found, err := v22FindExactSleep(record, seconds)
-		v22Require(t, err == nil, "inspect exact sleep %d for %s: %v", seconds, record.Exec, err)
-		if found {
-			return witness
+	v22Require(t, len(expected) > 0, "exact sleep wait requires expectations")
+	waitContext, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	witnesses := make([]v22SleepWitness, len(expected))
+	observed := make([]bool, len(expected))
+	for {
+		allAlive := true
+		for index, expectation := range expected {
+			v22Require(t, expectation.Process.Exec != "" && expectation.Seconds > 0,
+				"invalid exact sleep expectation: %+v", expectation)
+			if !observed[index] {
+				witness, found, err := v22FindExactSleep(expectation.Process, expectation.Seconds)
+				v22Require(t, err == nil, "inspect exact sleep %d for %s: %v",
+					expectation.Seconds, expectation.Process.Exec, err)
+				if found {
+					witnesses[index], observed[index] = witness, true
+				}
+			}
+			if !observed[index] {
+				allAlive = false
+				continue
+			}
+			alive, err := v22ExactSleepAlive(expectation.Process, witnesses[index], expectation.Seconds)
+			v22Require(t, err == nil, "revalidate exact sleep %d for %s: %v",
+				expectation.Seconds, expectation.Process.Exec, err)
+			allAlive = allAlive && alive
+		}
+		if allAlive {
+			return witnesses
+		}
+		select {
+		case <-waitContext.Done():
+			t.Fatalf("exact sleeps not alive together: observed=%v expectations=%+v: %v",
+				observed, expected, waitContext.Err())
+		case <-time.After(25 * time.Millisecond):
 		}
 	}
-	t.Fatalf("no exact /usr/bin/sleep %d descendant for %+v", seconds, record)
-	return v22SleepWitness{}
 }
 
 func v22RequireExactSleepAlive(t *testing.T, record v22ProcessRecord, witness v22SleepWitness, seconds int) {
@@ -163,7 +197,7 @@ func v22FindExactSleep(record v22ProcessRecord, seconds int) (v22SleepWitness, b
 			continue
 		}
 		stat, statErr := v22ReadProcStat(pid)
-		if statErr != nil || stat.State == "Z" || stat.State == "X" || stat.PGID != record.PGID {
+		if statErr != nil || stat.State == "Z" || stat.State == "X" {
 			continue
 		}
 		witness, exact, inspectErr := v22InspectExactSleep(record, stat, seconds)
@@ -174,13 +208,23 @@ func v22FindExactSleep(record v22ProcessRecord, seconds int) (v22SleepWitness, b
 			return v22SleepWitness{}, false, inspectErr
 		}
 		if exact {
-			return witness, true, nil
+			alive, liveErr := v22ExactSleepAlive(record, witness, seconds)
+			if liveErr != nil {
+				return v22SleepWitness{}, false, liveErr
+			}
+			if alive {
+				return witness, true, nil
+			}
 		}
 	}
 	return v22SleepWitness{}, false, nil
 }
 
 func v22ExactSleepAlive(record v22ProcessRecord, witness v22SleepWitness, seconds int) (bool, error) {
+	leaderAlive, err := v22ProcessAlive(record)
+	if err != nil || !leaderAlive {
+		return false, err
+	}
 	stat, err := v22ReadProcStat(witness.PID)
 	if errors.Is(err, os.ErrNotExist) {
 		return false, nil
@@ -198,9 +242,6 @@ func v22ExactSleepAlive(record v22ProcessRecord, witness v22SleepWitness, second
 }
 
 func v22InspectExactSleep(record v22ProcessRecord, stat v22ProcStat, seconds int) (v22SleepWitness, bool, error) {
-	if stat.PGID != record.PGID {
-		return v22SleepWitness{}, false, nil
-	}
 	descendant, err := v22ProcessDescendsFrom(stat.PID, record.PID)
 	if err != nil || !descendant {
 		return v22SleepWitness{}, false, err
@@ -401,16 +442,37 @@ func TestV22ExactSleepIdentityParsersAreStrict(t *testing.T) {
 }
 
 func TestV22ExactSleepIdentityBindsOwnedProcessTree(t *testing.T) {
-	command := exec.Command("/bin/sh", "-c", "sleep 3 & wait")
+	setsid := v22Must(exec.LookPath("setsid"))
+	command := exec.Command("/bin/sh", "-c", strconv.Quote(setsid)+" /usr/bin/sleep 5 & wait")
 	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	if err := command.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer func() {
+	sibling := exec.Command("/bin/sh", "-c", "/usr/bin/sleep 5 & wait")
+	sibling.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := sibling.Start(); err != nil {
 		_ = syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
 		_ = command.Wait()
+		t.Fatal(err)
+	}
+	var witness, siblingWitness v22SleepWitness
+	defer func() {
+		if witness.PGID > 0 && witness.PGID != command.Process.Pid {
+			_ = syscall.Kill(-witness.PGID, syscall.SIGKILL)
+		}
+		_ = syscall.Kill(-command.Process.Pid, syscall.SIGKILL)
+		_ = command.Wait()
+		if siblingWitness.PGID > 0 {
+			_ = syscall.Kill(-siblingWitness.PGID, syscall.SIGKILL)
+		}
+		_ = syscall.Kill(-sibling.Process.Pid, syscall.SIGKILL)
+		_ = sibling.Wait()
 	}()
 	stat, err := v22ReadProcStat(command.Process.Pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	siblingStat, err := v22ReadProcStat(sibling.Process.Pid)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -422,10 +484,13 @@ func TestV22ExactSleepIdentityBindsOwnedProcessTree(t *testing.T) {
 		Exec: "execution:v22-sleep-identity", PID: stat.PID, PGID: stat.PGID,
 		Boot: strings.TrimSpace(string(boot)), Birth: stat.Birth,
 	}
-	var witness v22SleepWitness
+	siblingRecord := v22ProcessRecord{
+		Exec: "execution:v22-sleep-sibling", PID: siblingStat.PID, PGID: siblingStat.PGID,
+		Boot: strings.TrimSpace(string(boot)), Birth: siblingStat.Birth,
+	}
 	var found bool
 	for until := time.Now().Add(2 * time.Second); time.Now().Before(until); time.Sleep(10 * time.Millisecond) {
-		witness, found, err = v22FindExactSleep(record, 3)
+		witness, found, err = v22FindExactSleep(record, 5)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -436,18 +501,46 @@ func TestV22ExactSleepIdentityBindsOwnedProcessTree(t *testing.T) {
 	if !found {
 		t.Fatal("owned exact sleep descendant not found")
 	}
-	alive, err := v22ExactSleepAlive(record, witness, 3)
+	if witness.PGID == record.PGID {
+		t.Fatalf("setsid sleep did not enter a distinct process group: record=%+v witness=%+v", record, witness)
+	}
+	alive, err := v22ExactSleepAlive(record, witness, 5)
 	if err != nil || !alive {
 		t.Fatalf("owned exact sleep witness not alive: witness=%+v alive=%v err=%v", witness, alive, err)
 	}
-	tampered := witness
-	tampered.Birth += "0"
-	if alive, err := v22ExactSleepAlive(record, tampered, 3); err != nil || alive {
-		t.Fatalf("tampered birth accepted: alive=%v err=%v", alive, err)
+	for name, tamper := range map[string]func(*v22SleepWitness){
+		"pgid":       func(value *v22SleepWitness) { value.PGID++ },
+		"birth":      func(value *v22SleepWitness) { value.Birth += "0" },
+		"executable": func(value *v22SleepWitness) { value.Executable += ".tampered" },
+		"argv":       func(value *v22SleepWitness) { value.Argv[1] = "6" },
+	} {
+		t.Run("rejects_tampered_"+name, func(t *testing.T) {
+			tampered := witness
+			tampered.Argv = append([]string(nil), witness.Argv...)
+			tamper(&tampered)
+			if alive, err := v22ExactSleepAlive(record, tampered, 5); err != nil || alive {
+				t.Fatalf("tampered %s accepted: witness=%+v alive=%v err=%v", name, tampered, alive, err)
+			}
+		})
+	}
+	for until := time.Now().Add(2 * time.Second); time.Now().Before(until); time.Sleep(10 * time.Millisecond) {
+		siblingWitness, found, err = v22FindExactSleep(siblingRecord, 5)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if found {
+			break
+		}
+	}
+	if !found {
+		t.Fatal("sibling exact sleep descendant not found")
+	}
+	if alive, err := v22ExactSleepAlive(record, siblingWitness, 5); err != nil || alive {
+		t.Fatalf("non-descendant sibling accepted: witness=%+v alive=%v err=%v", siblingWitness, alive, err)
 	}
 	wrongGroup := record
 	wrongGroup.PGID++
-	if _, found, err := v22FindExactSleep(wrongGroup, 3); err != nil || found {
+	if _, found, err := v22FindExactSleep(wrongGroup, 5); err != nil || found {
 		t.Fatalf("wrong process group accepted: found=%v err=%v", found, err)
 	}
 }

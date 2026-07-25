@@ -140,8 +140,11 @@ func TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP(t *tes
 		h.verifyRestoreCopy(ctx, backup, expectedD)
 		current = h.runningExecution(ctx, refs["D"]).text("execution_ref")
 		v22Require(t, current == exactD, "D execution changed before crash: got=%s want=%s", current, exactD)
-		aSleep := v22WaitExactSleep(t, aParentProcess, 60)
-		dSleep := v22WaitExactSleep(t, dProcess, 180)
+		sleeps := v22WaitExactSleeps(t, ctx,
+			v22SleepExpectation{Process: aParentProcess, Seconds: 60},
+			v22SleepExpectation{Process: dProcess, Seconds: 180},
+		)
+		aSleep, dSleep := sleeps[0], sleeps[1]
 		h.kill() // non-cooperative server death: SIGKILL, never Runtime.Shutdown.
 		v22RequireExactSleepAlive(t, aParentProcess, aSleep, 60)
 		v22RequireExactSleepAlive(t, dProcess, dSleep, 180)
