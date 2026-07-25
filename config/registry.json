@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "revision": "2026-07-25.29",
+  "revision": "2026-07-25.30",
   "precedence": [
     "default",
     "file",
@@ -83,6 +83,7 @@
         "test_attestor.timeout",
         "test_attestor.bubblewrap.command",
         "test_attestor.microvm.launcher_socket",
+        "test_attestor.microvm.expected_asset_digest",
         "test_attestor.microvm.guest_memory_mib",
         "test_attestor.go.toolchain_root",
         "runtime.max_output_bytes",
@@ -692,6 +693,20 @@
       "env_alias": "ORQUESTA_TEST_ATTESTOR_MICROVM_LAUNCHER_SOCKET",
       "validator_ids": [
         "optional_path"
+      ]
+    },
+    {
+      "key": "test_attestor.microvm.expected_asset_digest",
+      "go_name": "TestAttestorMicroVMExpectedAssetDigest",
+      "semantic_ref": "orquesta.config.test_attestor.microvm.expected_asset_digest",
+      "type": "string",
+      "default": "",
+      "sensitive": false,
+      "scope": "attestor",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_TEST_ATTESTOR_MICROVM_EXPECTED_ASSET_DIGEST",
+      "validator_ids": [
+        "trimmed_optional_string"
       ]
     },
     {

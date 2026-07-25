@@ -59,6 +59,7 @@ command = ""
 
 [test_attestor.microvm]
 launcher_socket = ""
+expected_asset_digest = ""
 guest_memory_mib = 4096
 
 [test_attestor.go]

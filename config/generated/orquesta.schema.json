@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:orquesta:config:2026-07-25.29",
+  "$id": "urn:orquesta:config:2026-07-25.30",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -1010,6 +1010,18 @@
         "microvm": {
           "additionalProperties": false,
           "properties": {
+            "expected_asset_digest": {
+              "default": "",
+              "type": "string",
+              "x-env-alias": "ORQUESTA_TEST_ATTESTOR_MICROVM_EXPECTED_ASSET_DIGEST",
+              "x-restart-required": true,
+              "x-scope": "attestor",
+              "x-semantic-ref": "orquesta.config.test_attestor.microvm.expected_asset_digest",
+              "x-sensitive": false,
+              "x-validator-ids": [
+                "trimmed_optional_string"
+              ]
+            },
             "guest_memory_mib": {
               "default": 4096,
               "maximum": 16384,
@@ -1158,8 +1170,8 @@
       "type": "object"
     }
   },
-  "x-registry-revision": "2026-07-25.29",
-  "x-registry-hash": "sha256:26ce93b2b7906a875a89d2bd05b215a09a261e487ae64cdf8438585659acc6a2",
+  "x-registry-revision": "2026-07-25.30",
+  "x-registry-hash": "sha256:3df2bb315eb9a45f9c0812e90ee91ae65d1943e7ffdafe13e97f082d9a4e7c6c",
   "x-source-max-bytes": 1048576,
   "x-aliases": [],
   "x-cross-validators": [
@@ -1230,6 +1242,7 @@
         "test_attestor.timeout",
         "test_attestor.bubblewrap.command",
         "test_attestor.microvm.launcher_socket",
+        "test_attestor.microvm.expected_asset_digest",
         "test_attestor.microvm.guest_memory_mib",
         "test_attestor.go.toolchain_root",
         "runtime.max_output_bytes",

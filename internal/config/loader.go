@@ -182,6 +182,7 @@ func validTestAttestorValues(
 	provider, providerOK := values[KeyTestAttestorProvider].value.(string)
 	command, commandOK := values[KeyTestAttestorBubblewrapCommand].value.(string)
 	launcherSocket, launcherSocketOK := values[KeyTestAttestorMicroVMLauncherSocket].value.(string)
+	expectedAssetDigest, assetDigestOK := values[KeyTestAttestorMicroVMExpectedAssetDigest].value.(string)
 	guestMemoryMiB, guestMemoryOK := values[KeyTestAttestorMicroVMGuestMemoryMiB].value.(int64)
 	toolchain, toolchainOK := values[KeyTestAttestorGoToolchainRoot].value.(string)
 	maxOutput, outputOK := values[KeyRuntimeMaxOutputBytes].value.(int64)
@@ -196,7 +197,7 @@ func validTestAttestorValues(
 	cleanup, cleanupOK := values[KeyServerShutdownTimeout].value.(time.Duration)
 	attestLease, leaseOK := values[KeySchedulerAttestTestClaimLease].value.(time.Duration)
 	executionTimeout, executionOK := values[KeySchedulerExecutionTimeout].value.(time.Duration)
-	allTyped := providerOK && commandOK && launcherSocketOK && guestMemoryOK && toolchainOK &&
+	allTyped := providerOK && commandOK && launcherSocketOK && assetDigestOK && guestMemoryOK && toolchainOK &&
 		outputOK && subjectOK && timeoutOK && concurrentOK && seedOK && cgroupOK && memoryOK &&
 		pidsOK && quotaOK && cleanupOK && leaseOK && executionOK
 	if !allTyped {
@@ -214,10 +215,19 @@ func validTestAttestorValues(
 	}
 	if provider == "microvm" {
 		return canonicalAbsolutePath(launcherSocket) &&
+			validBareSHA256(expectedAssetDigest) &&
 			quota <= policy.MicroVMMaxCPUQuotaMicros &&
 			validMicroVMCapacity(guestMemoryMiB, memory, maxSubject, maxOutput, policy) && common
 	}
 	return false
+}
+
+func validBareSHA256(value string) bool {
+	if len(value) != sha256.Size*2 || value != strings.ToLower(value) {
+		return false
+	}
+	_, err := hex.DecodeString(value)
+	return err == nil
 }
 
 func validMicroVMCapacity(

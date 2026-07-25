@@ -15,7 +15,8 @@ func TestTestAttestorRegistryIsMinimalAndDisabledByDefault(t *testing.T) {
 	keys := []Key{KeyTestAttestorProvider, KeyTestAttestorMaxSubjectBytes,
 		KeyTestAttestorTimeout,
 		KeyTestAttestorMaxConcurrentRuns, KeyTestAttestorBubblewrapCommand, KeyTestAttestorGoToolchainRoot,
-		KeyTestAttestorMicroVMLauncherSocket, KeyTestAttestorMicroVMGuestMemoryMiB,
+		KeyTestAttestorMicroVMLauncherSocket, KeyTestAttestorMicroVMExpectedAssetDigest,
+		KeyTestAttestorMicroVMGuestMemoryMiB,
 		KeyTestAttestorCgroupRoot, KeyTestAttestorMemoryMaxBytes, KeyTestAttestorPIDsMax,
 		KeyTestAttestorCPUQuotaMicros}
 	if snapshot.TestAttestorProvider() != "disabled" || snapshot.SchedulerExecutionTimeout() != 45*time.Minute ||
@@ -117,6 +118,7 @@ max_subject_bytes = 16777216
 max_concurrent_runs = 3
 [test_attestor.microvm]
 launcher_socket = "/run/orquesta/firecracker-launcher.sock"
+expected_asset_digest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 guest_memory_mib = 3072
 [test_attestor.resources]
 memory_max_bytes = 4294967296
@@ -131,6 +133,7 @@ attest_test_claim_lease = "3m"
 	}
 	if snapshot.TestAttestorProvider() != "microvm" ||
 		snapshot.TestAttestorMicroVMLauncherSocket() != "/run/orquesta/firecracker-launcher.sock" ||
+		snapshot.TestAttestorMicroVMExpectedAssetDigest() != strings.Repeat("a", 64) ||
 		snapshot.TestAttestorMicroVMGuestMemoryMiB() != 3072 ||
 		snapshot.TestAttestorBubblewrapCommand() != "" || snapshot.TestAttestorGoToolchainRoot() != "" ||
 		snapshot.TestAttestorCgroupRoot() != "" {
@@ -142,6 +145,13 @@ attest_test_claim_lease = "3m"
 	if _, err := Resolve(ResolveOptions{TOML: withoutSocket}); err == nil ||
 		!HasErrorCode(err, ErrorCrossValidation) {
 		t.Fatalf("microvm config without launcher socket accepted: %v", err)
+	}
+	withoutAssetDigest := []byte(strings.Replace(
+		string(document), `expected_asset_digest = "`+strings.Repeat("a", 64)+`"`+"\n", "", 1,
+	))
+	if _, err := Resolve(ResolveOptions{TOML: withoutAssetDigest}); err == nil ||
+		!HasErrorCode(err, ErrorCrossValidation) {
+		t.Fatalf("microvm config without expected asset digest accepted: %v", err)
 	}
 	for name, testCase := range map[string]struct {
 		document string
@@ -161,6 +171,10 @@ attest_test_claim_lease = "3m"
 		},
 		"relative socket": {
 			document: strings.Replace(string(document), "/run/orquesta/firecracker-launcher.sock", "launcher.sock", 1),
+			code:     ErrorCrossValidation,
+		},
+		"asset digest malformed": {
+			document: strings.Replace(string(document), strings.Repeat("a", 64), "AAAA", 1),
 			code:     ErrorCrossValidation,
 		},
 		"quota exceeds Firecracker vCPU limit": {
@@ -194,6 +208,7 @@ max_subject_bytes = 536870912
 max_concurrent_runs = 16
 [test_attestor.microvm]
 launcher_socket = "/run/orquesta/firecracker-launcher.sock"
+expected_asset_digest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 guest_memory_mib = 4096
 [test_attestor.resources]
 memory_max_bytes = 5368709120

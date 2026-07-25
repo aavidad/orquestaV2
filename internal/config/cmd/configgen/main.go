@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"go/format"
@@ -86,7 +87,7 @@ func main() {
 		fatalf("read registry: %v", err)
 	}
 	if err := configpkg.ValidateRegistrySource(source); err != nil {
-		fatalf("validate registry: %v", err)
+		fatalf("validate registry: %v: %v", err, errors.Unwrap(err))
 	}
 	var registry registryFile
 	decoder := json.NewDecoder(bytes.NewReader(source))
