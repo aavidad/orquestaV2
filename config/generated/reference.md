@@ -4,7 +4,7 @@
 
 Registry revision: `2026-07-25.27`
 
-Registry hash: `sha256:e2a35b8c56ecbfd7f52d3073f99d82cb16cb4a87f71f1c1d8eccf746786af48e`
+Registry hash: `sha256:18d8893c772054ae1d7610b34485f5d64eb23a6b6e73a41d0f135fcaa5d2b53e`
 
 Precedence: `default < file < env`
 
@@ -56,7 +56,7 @@ Source limit: `1048576` bytes
 | `test_attestor.max_concurrent_runs` | `integer` | `2` | `ORQUESTA_TEST_ATTESTOR_MAX_CONCURRENT_RUNS` | `true` | `integer_bounds` |
 | `test_attestor.bubblewrap.command` | `optional_path` | `""` | `ORQUESTA_TEST_ATTESTOR_BUBBLEWRAP_COMMAND` | `true` | `optional_path` |
 | `test_attestor.microvm.launcher_socket` | `optional_path` | `""` | `ORQUESTA_TEST_ATTESTOR_MICROVM_LAUNCHER_SOCKET` | `true` | `optional_path` |
-| `test_attestor.microvm.guest_memory_mib` | `integer` | `512` | `ORQUESTA_TEST_ATTESTOR_MICROVM_GUEST_MEMORY_MIB` | `true` | `integer_bounds` |
+| `test_attestor.microvm.guest_memory_mib` | `integer` | `1536` | `ORQUESTA_TEST_ATTESTOR_MICROVM_GUEST_MEMORY_MIB` | `true` | `integer_bounds` |
 | `test_attestor.go.toolchain_root` | `optional_path` | `""` | `ORQUESTA_TEST_ATTESTOR_GO_TOOLCHAIN_ROOT` | `true` | `optional_path` |
 | `test_attestor.resources.cgroup_root` | `optional_path` | `""` | `ORQUESTA_TEST_ATTESTOR_CGROUP_ROOT` | `true` | `optional_path` |
 | `test_attestor.resources.memory_max_bytes` | `integer` | `2147483648` | `ORQUESTA_TEST_ATTESTOR_MEMORY_MAX_BYTES` | `true` | `integer_bounds` |

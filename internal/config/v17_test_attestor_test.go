@@ -20,7 +20,7 @@ func TestTestAttestorRegistryIsMinimalAndDisabledByDefault(t *testing.T) {
 	if snapshot.TestAttestorProvider() != "disabled" || snapshot.SchedulerExecutionTimeout() != 45*time.Minute ||
 		snapshot.TestAttestorTimeout() != 15*time.Minute ||
 		snapshot.TestAttestorMaxSubjectBytes() != 512<<20 || snapshot.TestAttestorMaxConcurrentRuns() != 2 ||
-		snapshot.TestAttestorMicroVMGuestMemoryMiB() != 512 ||
+		snapshot.TestAttestorMicroVMGuestMemoryMiB() != 1536 ||
 		snapshot.TestAttestorMemoryMaxBytes() != 2<<30 || snapshot.TestAttestorPIDsMax() != 256 {
 		t.Fatalf("unsafe attestor defaults: %+v", snapshot)
 	}
@@ -134,6 +134,7 @@ attest_test_claim_lease = "3m"
 	}
 	for name, mutation := range map[string]string{
 		"guest exceeds cgroup": strings.Replace(string(document), "guest_memory_mib = 512", "guest_memory_mib = 4096", 1),
+		"guest lacks overhead": strings.Replace(string(document), "guest_memory_mib = 512", "guest_memory_mib = 1985", 1),
 		"relative socket": strings.Replace(
 			string(document), "/run/orquesta/firecracker-launcher.sock", "launcher.sock", 1,
 		),

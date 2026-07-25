@@ -695,7 +695,7 @@
       "go_name": "TestAttestorMicroVMGuestMemoryMiB",
       "semantic_ref": "orquesta.config.test_attestor.microvm.guest_memory_mib",
       "type": "integer",
-      "default": 512,
+      "default": 1536,
       "sensitive": false,
       "scope": "attestor",
       "restart_required": true,

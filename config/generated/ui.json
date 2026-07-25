@@ -2,7 +2,7 @@
   "document_type": "orquesta.config_ui",
   "schema_version": 2,
   "registry_revision": "2026-07-25.27",
-  "registry_hash": "sha256:e2a35b8c56ecbfd7f52d3073f99d82cb16cb4a87f71f1c1d8eccf746786af48e",
+  "registry_hash": "sha256:18d8893c772054ae1d7610b34485f5d64eb23a6b6e73a41d0f135fcaa5d2b53e",
   "aliases": [],
   "cross_validators": [
     {

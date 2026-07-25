@@ -210,7 +210,7 @@ func validTestAttestorValues(values map[Key]resolvedValue) bool {
 	}
 	if provider == "microvm" {
 		return canonicalAbsolutePath(launcherSocket) &&
-			guestMemoryMiB > 0 && guestMemoryMiB <= memory/(1<<20) && common
+			guestMemoryMiB > 0 && guestMemoryMiB+128 <= memory/(1<<20) && common
 	}
 	return false
 }
