@@ -300,6 +300,30 @@ assert_contains "$HELPER" 'memory.swap.max'
 assert_contains "$HELPER" 'cgroup_parent_has_children'
 assert_not_contains "$HELPER" 'rm -'
 
+# Ejercita la función exacta renderizada: Linux/nsfs puede normalizar el handle
+# persistente a 0444 aunque se solicite 0600. Se aceptan ambas representaciones
+# y solo variantes con dueño root, un enlace y sin escritura/ejecución ajena.
+readonly NETNS_VALIDATOR="$TEST_ROOT/netns-metadata-validator.sh"
+sed -n '/^netns_metadata_is_secure() {$/,/^}$/p' "$HELPER" >"$NETNS_VALIDATOR"
+assert_contains "$NETNS_VALIDATOR" 'netns_metadata_is_secure()'
+# shellcheck disable=SC1090
+source "$NETNS_VALIDATOR"
+for secure_netns_metadata in \
+  0:0:400:1 0:0:440:1 0:0:444:1 \
+  0:0:600:1 0:0:640:1 0:0:644:1; do
+  netns_metadata_is_secure "$secure_netns_metadata" ||
+    fail "secure_netns_metadata_rejected:$secure_netns_metadata"
+done
+for unsafe_netns_metadata in \
+  1:0:444:1 0:1:444:1 0:0:444:2 \
+  0:0:200:1 0:0:420:1 0:0:402:1 \
+  0:0:500:1 0:0:410:1 0:0:401:1 \
+  0:0:4644:1 0:0:444:1:extra invalid; do
+  if netns_metadata_is_secure "$unsafe_netns_metadata"; then
+    fail "unsafe_netns_metadata_accepted:$unsafe_netns_metadata"
+  fi
+done
+
 assert_contains "$UNIT" "NoNewPrivileges=yes"
 assert_contains "$UNIT" "Requires=orquesta-firecracker-primitives-"
 assert_contains "$UNIT" "ExecStartPre=/usr/local/libexec/orquesta-firecracker-primitives-"

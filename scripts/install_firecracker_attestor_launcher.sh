@@ -441,6 +441,12 @@ readonly RUNTIME_BACKING_MARKER="$RUNTIME_BACKING_MARKER"
 readonly RUNTIME_MARKER_CONTENT="$RUNTIME_MARKER_CONTENT"
 
 fail() { printf 'error=primitive_%s\n' "\$1" >&2; exit 1; }
+netns_metadata_is_secure() {
+  # nsfs may expose a persistent network-namespace handle as 0444 even after
+  # chmod(0600).  The security contract is root ownership, one link, owner
+  # readability and no group/other write or execute bits, not one exact mode.
+  [[ "\$1" =~ ^0:0:[46][04][04]:1\$ ]]
+}
 [[ "\$#" == 1 && ( "\$1" == "--ensure" || "\$1" == "--check" ) ]] || fail usage
 readonly MODE="\$1"
 [[ "\$(id -u)" == 0 ]] || fail root_required
@@ -523,8 +529,9 @@ if [[ ! -e "\$NETNS_PATH" ]]; then
   ip -n "\$NETNS_NAME" -6 route flush table all
 fi
 [[ ! -L "\$NETNS_PATH" && -f "\$NETNS_PATH" ]] || fail netns_type
-[[ "\$(stat -c '%u:%g:%a:%h' -- "\$NETNS_PATH")" == "0:0:600:1" ]] || fail netns_metadata
 [[ "\$(stat -f -c '%T' -- "\$NETNS_PATH")" == "nsfs" ]] || fail netns_filesystem
+netns_metadata_is_secure "\$(stat -c '%u:%g:%a:%h' -- "\$NETNS_PATH")" ||
+  fail netns_metadata
 [[ "\$(ip -n "\$NETNS_NAME" -o link show | wc -l)" == "1" ]] || fail netns_link_count
 ip -n "\$NETNS_NAME" -o link show dev lo | grep -q 'state DOWN' || fail loopback_not_down
 if ip -n "\$NETNS_NAME" -o link show dev lo | grep -q '<[^>]*UP'; then fail loopback_up; fi
