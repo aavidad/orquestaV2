@@ -787,6 +787,15 @@ func (h *v22Harness) waitAdopted(ctx context.Context, ref string, want v22Execut
 			if execution.text("execution_ref") == want.text("execution_ref") && execution.text("state") == "running" && execution.text("replaces_execution_ref") == "" {
 				alive, err := v22ProcessAlive(process)
 				v22Require(h.t, err == nil && alive, "restart did not adopt exact D process: alive=%v err=%v", alive, err)
+				adopted, found := v22ProcessRecords(h.t, h.root)[process.Exec]
+				v22Require(
+					h.t,
+					found && adopted.CompletionPublicKey == process.CompletionPublicKey,
+					"restart changed D completion public key: found=%v got=%q want=%q",
+					found,
+					adopted.CompletionPublicKey,
+					process.CompletionPublicKey,
+				)
 				return
 			}
 		}

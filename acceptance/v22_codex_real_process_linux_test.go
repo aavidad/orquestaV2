@@ -4,7 +4,9 @@ package acceptance_test
 
 import (
 	"bytes"
+	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -21,16 +23,17 @@ import (
 )
 
 type v22ProcessRecord struct {
-	Schema     int    `json:"schema_version"`
-	Supervisor string `json:"supervisor_instance"`
-	Exec       string `json:"execution_ref"`
-	Hash       string `json:"request_hash"`
-	Scope      string `json:"runtime_scope"`
-	PID        int    `json:"pid"`
-	PGID       int    `json:"pgid"`
-	Boot       string `json:"boot_id"`
-	Birth      string `json:"birth_marker"`
-	path       string
+	Schema              int    `json:"schema_version"`
+	Supervisor          string `json:"supervisor_instance"`
+	CompletionPublicKey string `json:"completion_public_key"`
+	Exec                string `json:"execution_ref"`
+	Hash                string `json:"request_hash"`
+	Scope               string `json:"runtime_scope"`
+	PID                 int    `json:"pid"`
+	PGID                int    `json:"pgid"`
+	Boot                string `json:"boot_id"`
+	Birth               string `json:"birth_marker"`
+	path                string
 }
 
 type v22ProcStat struct {
@@ -58,6 +61,7 @@ func v22ProcessRecords(t *testing.T, root string) map[string]v22ProcessRecord {
 		record := v22Decode[v22ProcessRecord](path)
 		record.path = path
 		if record.Schema != 2 || !v22ValidSupervisorInstance(record.Supervisor) ||
+			!v22ValidCompletionPublicKey(record.CompletionPublicKey) ||
 			record.Exec == "" || record.Hash == "" || record.Scope == "" ||
 			record.PID <= 0 || record.PGID <= 0 || record.Boot == "" || record.Birth == "" {
 			return fmt.Errorf("invalid process identity in %s", path)
@@ -79,6 +83,17 @@ func v22ValidSupervisorInstance(value string) bool {
 	}
 	_, err := hex.DecodeString(strings.TrimPrefix(value, prefix))
 	return err == nil
+}
+
+func v22ValidCompletionPublicKey(value string) bool {
+	const prefix = "ed25519:"
+	if !strings.HasPrefix(value, prefix) {
+		return false
+	}
+	encoded := strings.TrimPrefix(value, prefix)
+	payload, err := base64.RawStdEncoding.DecodeString(encoded)
+	return err == nil && len(payload) == ed25519.PublicKeySize &&
+		base64.RawStdEncoding.EncodeToString(payload) == encoded
 }
 
 func v22WaitProcess(t *testing.T, root, execution string) v22ProcessRecord {
@@ -314,6 +329,22 @@ func TestV22ExactSleepIdentityParsersAreStrict(t *testing.T) {
 	} {
 		if v22ValidSupervisorInstance(invalid) {
 			t.Fatalf("invalid supervisor instance accepted: %q", invalid)
+		}
+	}
+
+	validPublicKey := "ed25519:" + base64.RawStdEncoding.EncodeToString(bytes.Repeat([]byte{0xab}, ed25519.PublicKeySize))
+	if !v22ValidCompletionPublicKey(validPublicKey) {
+		t.Fatal("exact completion public key rejected")
+	}
+	for _, invalid := range []string{
+		"", "ed25519:", "other:" + strings.TrimPrefix(validPublicKey, "ed25519:"),
+		"ed25519:" + base64.RawStdEncoding.EncodeToString(bytes.Repeat([]byte{0xab}, ed25519.PublicKeySize-1)),
+		"ed25519:" + base64.RawStdEncoding.EncodeToString(bytes.Repeat([]byte{0xab}, ed25519.PublicKeySize+1)),
+		"ed25519:" + base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{0xab}, ed25519.PublicKeySize)),
+		"ed25519:not-base64!",
+	} {
+		if v22ValidCompletionPublicKey(invalid) {
+			t.Fatalf("invalid completion public key accepted: %q", invalid)
 		}
 	}
 
