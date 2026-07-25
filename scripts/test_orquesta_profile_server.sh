@@ -17,6 +17,7 @@ ACCOUNTS="$TEST_ROOT/accounts"
 FAKE_SOURCE="$TEST_ROOT/fake-server.go"
 FAKE_BINARY="$TEST_ROOT/orquesta-fake"
 GO_CACHE="$TEST_ROOT/go-cache"
+REPOSITORY="$TEST_ROOT/repository"
 mkdir -m 700 "$BASE" "$ACCOUNTS" "$GO_CACHE"
 
 cleanup() {
@@ -233,6 +234,30 @@ start_profile() {
     --exec-path "$(dirname "$(realpath "$(command -v go)")"):/usr/local/bin:/usr/bin"
 }
 
+start_profile_with_nofile() {
+  profile="$1"
+  nofile="$2"
+  (
+    ulimit -S -n "$nofile"
+    start_profile "$profile"
+  )
+}
+
+enable_bubblewrap_attestor() {
+  profile="$1"
+  max_concurrent="$2"
+  cat >>"$TEST_ROOT/$profile.toml" <<EOF
+
+[repository.local]
+seed_path = "$REPOSITORY"
+
+[test_attestor]
+provider = "bubblewrap"
+max_concurrent_runs = $max_concurrent
+EOF
+  chmod 600 "$TEST_ROOT/$profile.toml"
+}
+
 expect_failure() {
   expected="$1"
   shift
@@ -371,6 +396,39 @@ write_config CodexA "$(available_port)" 70 1048576
 expect_failure orquesta_config_invalid start_profile CodexA
 
 "$SCRIPT" stop --profile CodexB --runtime-base "$BASE" >/dev/null
+
+# El preflight usa solo blobs regulares del HEAD autorizado y replica las
+# reservas 64 + concurrencia*(entradas+16) del attestor bubblewrap.
+mkdir -m 700 "$REPOSITORY"
+git -C "$REPOSITORY" init -q
+for entry in $(seq 1 20); do
+  printf 'tracked-%s\n' "$entry" >"$REPOSITORY/tracked-$entry"
+done
+git -C "$REPOSITORY" add .
+git -C "$REPOSITORY" \
+  -c user.name=Orquesta \
+  -c user.email=orquesta.invalid \
+  commit -qm "fixture"
+for entry in $(seq 1 100); do
+  printf 'untracked-%s\n' "$entry" >"$REPOSITORY/untracked-$entry"
+done
+
+write_config CodexA "$(available_port)" 1 1048576
+enable_bubblewrap_attestor CodexA 1
+start_profile_with_nofile CodexA 128 >/dev/null
+"$SCRIPT" stop --profile CodexA --runtime-base "$BASE" >/dev/null
+
+write_config CodexA "$(available_port)" 1 1048576
+enable_bubblewrap_attestor CodexA 2
+expect_failure test_attestor_nofile_insufficient \
+  start_profile_with_nofile CodexA 128
+grep -q 'action=increase_process_nofile_limit' "$TEST_ROOT/failure.err"
+[ ! -e "$BASE/CodexA/run/server.pid" ]
+
+# Un provider distinto de bubblewrap no queda sujeto al preflight NOFILE.
+write_config CodexA "$(available_port)" 1 1048576
+start_profile_with_nofile CodexA 80 >/dev/null
+"$SCRIPT" stop --profile CodexA --runtime-base "$BASE" >/dev/null
 
 # Un abuelo escribible invalida la cadena aunque root y perfil sigan en 0700.
 chmod 722 "$TEST_ROOT"

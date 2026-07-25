@@ -610,19 +610,57 @@ if (
     or "\r" in project_ref
 ):
     raise ValueError("project")
+test_attestor = value.get("test_attestor")
+attestor_provider = (
+    test_attestor.get("provider")
+    if isinstance(test_attestor, dict)
+    else None
+)
+if attestor_provider == "bubblewrap":
+    attestor_max_concurrent = test_attestor.get("max_concurrent_runs")
+    repository = value.get("repository")
+    repository_local = (
+        repository.get("local")
+        if isinstance(repository, dict)
+        else None
+    )
+    repository_seed_path = (
+        repository_local.get("seed_path")
+        if isinstance(repository_local, dict)
+        else None
+    )
+    if (
+        type(attestor_max_concurrent) is not int
+        or not 1 <= attestor_max_concurrent <= 64
+        or not isinstance(repository_seed_path, str)
+        or not repository_seed_path
+        or not os.path.isabs(repository_seed_path)
+        or os.path.normpath(repository_seed_path) != repository_seed_path
+    ):
+        raise ValueError("test_attestor")
+else:
+    attestor_provider = "other"
+    attestor_max_concurrent = 0
+    repository_seed_path = "-"
 print(listen)
 print(token_path)
 print(project_ref)
 print(account_auth_max_document_bytes)
+print(attestor_provider)
+print(attestor_max_concurrent)
+print(repository_seed_path)
 PY
 )" 2>/dev/null || fail "orquesta_config_invalid"
 
 mapfile -t validation_lines <<<"$validation_output"
-[ "${#validation_lines[@]}" -eq 4 ] || fail "orquesta_config_invalid"
+[ "${#validation_lines[@]}" -eq 7 ] || fail "orquesta_config_invalid"
 listen="${validation_lines[0]}"
 token_path="${validation_lines[1]}"
 project_ref="${validation_lines[2]}"
 account_auth_max_document_bytes="${validation_lines[3]}"
+attestor_provider="${validation_lines[4]}"
+attestor_max_concurrent="${validation_lines[5]}"
+repository_seed_path="${validation_lines[6]}"
 [ -n "$listen" ] &&
   [ -n "$token_path" ] &&
   [ -n "$project_ref" ] &&
@@ -669,6 +707,160 @@ case "$state" in
     remove_stale_identity
     ;;
 esac
+
+preflight_bubblewrap_nofile() {
+  git_command="$(PATH="$exec_path" command -v git 2>/dev/null || true)"
+  if [ -z "$git_command" ] || ! private_executable "$git_command"; then
+    fail_action \
+      "test_attestor_git_unavailable" \
+      "install_trusted_git_in_exec_path"
+  fi
+
+  set +e
+  python3 - \
+    "$git_command" \
+    "$repository_seed_path" \
+    "$attestor_max_concurrent" <<'PY' >/dev/null 2>&1
+import os
+import resource
+import stat
+import subprocess
+import sys
+
+git_command, repository, concurrent_text = sys.argv[1:]
+descriptor_global_reserve = 64
+descriptor_run_reserve = 16
+
+try:
+    concurrent = int(concurrent_text)
+    metadata = os.lstat(repository)
+    if (
+        concurrent < 1
+        or not os.path.isabs(repository)
+        or os.path.normpath(repository) != repository
+        or os.path.realpath(repository) != repository
+        or not stat.S_ISDIR(metadata.st_mode)
+    ):
+        raise ValueError("repository")
+except (OSError, ValueError):
+    raise SystemExit(41)
+
+try:
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    infinity = resource.RLIM_INFINITY
+    open_descriptors = len(os.listdir("/proc/self/fd"))
+    if (
+        soft in (-1, infinity)
+        or hard in (-1, infinity)
+        or soft <= 0
+        or hard <= 0
+        or soft > hard
+    ):
+        raise ValueError("rlimit")
+    available = soft - open_descriptors - descriptor_global_reserve
+    per_run = available // concurrent - descriptor_run_reserve
+except (OSError, ValueError):
+    raise SystemExit(42)
+
+if per_run <= 0:
+    raise SystemExit(40)
+
+try:
+    tree_result = subprocess.run(
+        [
+            git_command,
+            "--no-pager",
+            "-C",
+            repository,
+            "rev-parse",
+            "--verify",
+            "HEAD^{tree}",
+        ],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    tree_oid = tree_result.stdout.strip()
+    if (
+        tree_result.returncode != 0
+        or len(tree_oid) not in (40, 64)
+        or any(character not in b"0123456789abcdef" for character in tree_oid)
+    ):
+        raise ValueError("head")
+    process = subprocess.Popen(
+        [
+            git_command,
+            "--no-pager",
+            "-C",
+            repository,
+            "ls-tree",
+            "-r",
+            "-z",
+            "--full-tree",
+            tree_oid.decode("ascii"),
+        ],
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    )
+except (OSError, UnicodeError, ValueError):
+    raise SystemExit(41)
+
+pending = b""
+descriptor_entries = 0
+try:
+    while True:
+        chunk = process.stdout.read(65536)
+        if not chunk:
+            break
+        pending += chunk
+        records = pending.split(b"\0")
+        pending = records.pop()
+        if len(pending) > 8192:
+            raise ValueError("entry")
+        for record in records:
+            mode = record.split(b" ", 1)[0]
+            if mode in (b"100644", b"100755"):
+                descriptor_entries += 1
+                if descriptor_entries > per_run:
+                    process.kill()
+                    process.wait()
+                    raise SystemExit(40)
+    if pending or process.wait() != 0:
+        raise ValueError("tree")
+except SystemExit:
+    raise
+except (OSError, ValueError):
+    process.kill()
+    process.wait()
+    raise SystemExit(41)
+PY
+  preflight_status="$?"
+  set -e
+  case "$preflight_status" in
+    0) ;;
+    40)
+      fail_action \
+        "test_attestor_nofile_insufficient" \
+        "increase_process_nofile_limit"
+      ;;
+    41)
+      fail_action \
+        "test_attestor_repository_head_unavailable" \
+        "repair_configured_repository_head"
+      ;;
+    *)
+      fail_action \
+        "test_attestor_nofile_probe_failed" \
+        "configure_finite_process_nofile_limits"
+      ;;
+  esac
+}
+
+if [ "$attestor_provider" = "bubblewrap" ]; then
+  preflight_bubblewrap_nofile
+fi
 
 exec 9<>"$GLOBAL_LEASE_LOCK"
 flock -n 9 || fail "profile_in_use"
