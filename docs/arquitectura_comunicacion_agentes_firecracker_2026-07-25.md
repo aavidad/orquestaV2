@@ -1,18 +1,16 @@
-# Arquitectura futura: comunicación de agentes Firecracker
+# Arquitectura de comunicación de agentes Firecracker
 
-Fecha: 2026-07-25. Estado: decisión de arquitectura para la capability futura
-de runtime general de agentes; no implementada ni acreditada. Autoridad:
-`AGENTS.md`, la secuencia de
+Fecha: 2026-07-25. Actualización: 2026-07-26. Estado: implementación del primer
+corte autorizada; no cableada ni acreditada físicamente. Autoridad:
+`AGENTS.md`, `product/roadmap.json`,
 `decision_atestacion_bubblewrap_microvm_2026-07-25.md` y BUG-ORQ-20260725-467.
 
 ## Alcance y precondición
 
-Este documento no amplía el `TestAttestor` V23: su microVM sigue sin red. La
-evaluación de agentes Firecracker solo puede abrirse después de:
-
-```text
-TestAttestor Firecracker -> recuperar V23 -> Orquesta autoprogramable
-```
+Este documento no amplía el `TestAttestor` V23: su microVM sigue sin red ni
+vsock. El operador adelantó el 2026-07-26 el contrato y adaptador de plan de red
+para agentes. No autorizó ejecutar root, cambiar la red del host, cablear
+agentes reales ni declarar acreditación sin el E2E físico separado.
 
 Será una capability independiente, con contratos, presupuesto y acreditación
 de composición propios. No presupone que workspaces, rootfs, caches, tmpfs/RAM
@@ -66,20 +64,28 @@ mensajes, bytes y concurrencia. El broker aplica backpressure explícito y
 retry/idempotencia acotados; nunca se elude la presión mediante un canal directo
 entre VMs.
 
-## Egress y frontera de red
+## Transporte, egress y frontera de red
 
-Por defecto la microVM no tiene egress. Cuando una capability aprobada requiera
-salida, la allowlist mínima contiene solo:
+La microVM de agente no tiene NIC, TAP, bridge, rutas IP ni NAT. El único
+transporte es vsock y la allowlist contiene:
 
 1. el gateway/broker Orquesta autenticado;
 2. un proxy o buscador controlado que aplique política, identidad, cuota y
    receipt.
 
-No hay acceso directo a Internet, LAN, host ni metadata. Si se usa NAT, queda
-encerrado en el netns de esa microVM y subordinado a reglas nftables exactas de
-origen, destino, puerto y estado; no es un puente abierto ni una ruta compartida
-para east-west. La política bloquea expresamente los rangos y endpoints vetados
-de la sección anterior y todo lo que no esté permitido.
+No hay acceso IP directo a Internet, LAN, host ni metadata. El proxy
+HTTP(S)/buscador vive en el host y valida destino, resolución, redirects,
+puertos, identidad, scope y cuota antes de cualquier egress. Si Codex necesita
+HTTP convencional dentro del guest, un adaptador local enlaza loopback guest
+con el servicio vsock autorizado; no crea una interfaz IP fuera del guest.
+NAT queda prohibido para este perfil: no existe fallback a TAP, bridge,
+`iptables`/`nftables` o red compartida.
+
+El host CID de vsock y los puertos exactos de broker/proxy se fijan en una
+política sellada. La identidad de lanzamiento liga proyecto, Goal, WorkItem,
+ejecución, generación, intento y agente; el broker/proxy no confían en el CID
+como autenticación. Política, plan efectivo y receipt llevan digests
+independientes.
 
 Gateway, proxy, política o su verificación indisponibles, ambiguos o inválidos
 producen denegación fail-closed: no se crea una conectividad degradada, no se
@@ -95,9 +101,9 @@ arranque. Debe incluir, como mínimo:
   SSH, montajes y filesystem ajeno: todas denegadas;
 - pruebas de que host filesystem, procesos/sockets host, LAN, loopback host,
   RFC1918, ULA, link-local y metadata no son alcanzables;
-- pruebas de allowlist: solo gateway y proxy/buscador autorizado alcanzables;
-  inbound, Internet directo, puertos no autorizados y NAT fuera del netns
-  denegados;
+- pruebas de allowlist: solo los puertos vsock exactos del gateway y del
+  proxy/buscador autorizado son alcanzables; inbound, CID/puertos no
+  autorizados, Internet directo y cualquier NIC/TAP/NAT se deniegan;
 - pruebas del gateway: autenticación, ACL por Goal y parentesco, aislamiento
   entre Goals, causalidad, fencing cuando aplique, idempotencia, auditoría y
   entrega de mailbox/CAS por refs opacas;

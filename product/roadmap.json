@@ -44,7 +44,27 @@
     "declarative_a2ui": "rejected_until_real_need",
     "time_travel": "rejected_use_causal_generations_and_backup",
     "opes_games": "rejected_outside_core_production",
-    "advanced_retrieval": "conditional_on_versioned_benchmark"
+    "advanced_retrieval": "conditional_on_versioned_benchmark",
+    "agent_microvm_network": {
+      "status": "approved_for_implementation_not_wired",
+      "capability_refs": [
+        "EVD-13",
+        "EXT-21"
+      ],
+      "transport": "vsock_only",
+      "guest_ip_network": "forbidden",
+      "allowed_services": [
+        "orquesta_broker",
+        "controlled_egress_proxy"
+      ],
+      "authentication": "launch_identity_bound_to_goal_work_item_execution_agent_and_generation",
+      "internet": "controlled_proxy_only",
+      "inbound": "forbidden",
+      "east_west": "forbidden",
+      "fallback_nat": "forbidden",
+      "physical_accreditation": "pending_separate_multi_microvm_e2e",
+      "test_attestor_scope": "unchanged_no_network_no_vsock"
+    }
   },
   "verticals": [
     {
