@@ -69,6 +69,10 @@ func (runner *physicalRunner) Run(
 		runner.config.validateRequest(request) != nil {
 		return RunResult{}, launcherError(CodeUnavailable)
 	}
+	if runner.assets.minimumGuestMemoryMiB == 0 ||
+		request.GuestMemoryMiB < runner.assets.minimumGuestMemoryMiB {
+		return RunResult{}, launcherError(CodeResourceUnsafe)
+	}
 	if _, err := validateInputDriveDescriptor(
 		parent,
 		inputDrive,

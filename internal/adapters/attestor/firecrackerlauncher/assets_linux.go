@@ -21,6 +21,13 @@ const (
 	maxKernelAssetBytes     = int64(2 << 30)
 	maxGuestAssetBytes      = int64(8 << 30)
 	maxGuestManifestBytes   = int64(64 << 10)
+
+	guestMemoryMiBBytes               = uint64(1 << 20)
+	guestScratchFixedReserveBytes     = uint64(64 << 20)
+	guestScratchCacheReserveBytes     = uint64(256 << 20)
+	guestScratchTmpfsPercent          = uint32(75)
+	guestKernelRuntimeHeadroomPercent = uint32(25)
+	guestMemoryFormula                = "ceil(ceil((unpacked_bytes+scratch_fixed_reserve_bytes+scratch_cache_reserve_bytes)/MiB)*100/tmpfs_percent)"
 )
 
 type pinnedAsset struct {
@@ -30,39 +37,49 @@ type pinnedAsset struct {
 }
 
 type assetSet struct {
-	firecracker *pinnedAsset
-	jailer      *pinnedAsset
-	kernel      *pinnedAsset
-	guest       *pinnedAsset
-	manifest    *pinnedAsset
-	digest      string
-	close       sync.Once
-	closeErr    error
+	firecracker           *pinnedAsset
+	jailer                *pinnedAsset
+	kernel                *pinnedAsset
+	guest                 *pinnedAsset
+	manifest              *pinnedAsset
+	digest                string
+	minimumGuestMemoryMiB uint32
+	close                 sync.Once
+	closeErr              error
 }
 
 type guestManifestDocument struct {
-	SchemaVersion       string `json:"schema_version"`
-	Platform            string `json:"platform"`
-	SourceCommit        string `json:"source_commit"`
-	RunnerSHA256        string `json:"runner_sha256"`
-	BusyboxSHA256       string `json:"busybox_sha256"`
-	ToolchainTreeSHA256 string `json:"toolchain_tree_sha256"`
-	ImageSHA256         string `json:"image_sha256"`
-	Build               struct {
-		CGOEnabled           bool   `json:"cgo_enabled"`
-		Trimpath             bool   `json:"trimpath"`
-		BuildVCS             bool   `json:"buildvcs"`
-		RunnerDoubleBuild    bool   `json:"runner_double_build"`
-		Source               string `json:"source"`
-		Archive              string `json:"archive"`
-		Owner                string `json:"owner"`
-		MtimeEpoch           int64  `json:"mtime_epoch"`
-		GzipNameTime         bool   `json:"gzip_name_time"`
-		ToolchainDirectories string `json:"toolchain_directories"`
-		ToolchainExecutables string `json:"toolchain_executables"`
-		ToolchainData        string `json:"toolchain_data"`
-		ToolchainSymlinks    string `json:"toolchain_symlinks"`
-		ToolchainNobodyProbe bool   `json:"toolchain_nobody_probe"`
+	SchemaVersion         string `json:"schema_version"`
+	Platform              string `json:"platform"`
+	SourceCommit          string `json:"source_commit"`
+	RunnerSHA256          string `json:"runner_sha256"`
+	BusyboxSHA256         string `json:"busybox_sha256"`
+	ToolchainTreeSHA256   string `json:"toolchain_tree_sha256"`
+	ImageSHA256           string `json:"image_sha256"`
+	UnpackedBytes         uint64 `json:"unpacked_bytes"`
+	MinimumGuestMemoryMiB uint32 `json:"minimum_guest_memory_mib"`
+	MemoryContract        struct {
+		ScratchFixedReserveBytes     uint64 `json:"scratch_fixed_reserve_bytes"`
+		ScratchCacheReserveBytes     uint64 `json:"scratch_cache_reserve_bytes"`
+		TmpfsPercent                 uint32 `json:"tmpfs_percent"`
+		KernelRuntimeHeadroomPercent uint32 `json:"kernel_runtime_headroom_percent"`
+		Formula                      string `json:"formula"`
+	} `json:"memory_contract"`
+	Build struct {
+		CGOEnabled            bool   `json:"cgo_enabled"`
+		Trimpath              bool   `json:"trimpath"`
+		BuildVCS              bool   `json:"buildvcs"`
+		RunnerDoubleBuild     bool   `json:"runner_double_build"`
+		Source                string `json:"source"`
+		Archive               string `json:"archive"`
+		Owner                 string `json:"owner"`
+		MtimeEpoch            int64  `json:"mtime_epoch"`
+		GzipNameTime          bool   `json:"gzip_name_time"`
+		ToolchainDirectories  string `json:"toolchain_directories"`
+		ToolchainExecutables  string `json:"toolchain_executables"`
+		ToolchainData         string `json:"toolchain_data"`
+		ToolchainSymlinks     string `json:"toolchain_symlinks"`
+		ToolchainNobodyGoTest bool   `json:"toolchain_nobody_go_test"`
 	} `json:"build"`
 }
 
@@ -102,9 +119,14 @@ func openAssetSet(config Config, owner uint32) (*assetSet, error) {
 		firecracker: opened[0], jailer: opened[1], kernel: opened[2],
 		guest: opened[3], manifest: opened[4],
 	}
-	if err := validateGuestManifest(assets.manifest, config.GuestSHA256); err != nil {
+	minimumGuestMemoryMiB, err := validateGuestManifest(
+		assets.manifest,
+		config.GuestSHA256,
+	)
+	if err != nil {
 		return fail()
 	}
+	assets.minimumGuestMemoryMiB = minimumGuestMemoryMiB
 	assets.digest = canonicalAssetDigest(config)
 	return assets, nil
 }
@@ -175,20 +197,23 @@ func sameTrustedAssetMetadata(left, right unix.Stat_t) bool {
 		left.Ctim == right.Ctim
 }
 
-func validateGuestManifest(asset *pinnedAsset, guestDigest string) error {
+func validateGuestManifest(asset *pinnedAsset, guestDigest string) (uint32, error) {
 	if asset == nil || asset.file == nil || asset.size <= 0 ||
 		asset.size > maxGuestManifestBytes {
-		return launcherError(CodeAssetsUnsafe)
+		return 0, launcherError(CodeAssetsUnsafe)
 	}
 	content, err := io.ReadAll(io.NewSectionReader(asset.file, 0, asset.size))
 	if err != nil {
-		return launcherError(CodeAssetsUnsafe)
+		return 0, launcherError(CodeAssetsUnsafe)
 	}
 	var document guestManifestDocument
 	decoder := json.NewDecoder(bytes.NewReader(content))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&document) != nil || decoder.Decode(&struct{}{}) != io.EOF ||
-		document.SchemaVersion != "orquesta_test_attestor_guest.v0" ||
+	if decoder.Decode(&document) != nil || decoder.Decode(&struct{}{}) != io.EOF {
+		return 0, launcherError(CodeAssetsUnsafe)
+	}
+	minimumGuestMemoryMiB, memoryOK := minimumGuestMemoryForManifest(document.UnpackedBytes)
+	if document.SchemaVersion != "orquesta_test_attestor_guest.v0" ||
 		document.Platform != "linux/amd64" ||
 		!validSourceCommit(document.SourceCommit) ||
 		!validPrefixedDigest(document.RunnerSHA256) ||
@@ -205,10 +230,42 @@ func validateGuestManifest(asset *pinnedAsset, guestDigest string) error {
 		document.Build.ToolchainExecutables != "0555" ||
 		document.Build.ToolchainData != "0444" ||
 		document.Build.ToolchainSymlinks != "relative_internal" ||
-		!document.Build.ToolchainNobodyProbe {
-		return launcherError(CodeAssetsUnsafe)
+		!document.Build.ToolchainNobodyGoTest ||
+		document.MemoryContract.ScratchFixedReserveBytes != guestScratchFixedReserveBytes ||
+		document.MemoryContract.ScratchCacheReserveBytes != guestScratchCacheReserveBytes ||
+		document.MemoryContract.TmpfsPercent != guestScratchTmpfsPercent ||
+		document.MemoryContract.KernelRuntimeHeadroomPercent != guestKernelRuntimeHeadroomPercent ||
+		document.MemoryContract.Formula != guestMemoryFormula ||
+		!memoryOK || document.MinimumGuestMemoryMiB != minimumGuestMemoryMiB {
+		return 0, launcherError(CodeAssetsUnsafe)
 	}
-	return nil
+	return minimumGuestMemoryMiB, nil
+}
+
+func minimumGuestMemoryForManifest(unpackedBytes uint64) (uint32, bool) {
+	if unpackedBytes == 0 ||
+		unpackedBytes > ^uint64(0)-guestScratchFixedReserveBytes-guestScratchCacheReserveBytes {
+		return 0, false
+	}
+	requiredBytes := unpackedBytes +
+		guestScratchFixedReserveBytes +
+		guestScratchCacheReserveBytes
+	requiredMiB := requiredBytes / guestMemoryMiBBytes
+	if requiredBytes%guestMemoryMiBBytes != 0 {
+		requiredMiB++
+	}
+	if requiredMiB > ^uint64(0)/100 {
+		return 0, false
+	}
+	scaled := requiredMiB * 100
+	minimumMiB := scaled / uint64(guestScratchTmpfsPercent)
+	if scaled%uint64(guestScratchTmpfsPercent) != 0 {
+		minimumMiB++
+	}
+	if minimumMiB == 0 || minimumMiB > uint64(^uint32(0)) {
+		return 0, false
+	}
+	return uint32(minimumMiB), true
 }
 
 func validSourceCommit(value string) bool {

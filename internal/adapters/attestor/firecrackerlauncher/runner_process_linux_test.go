@@ -172,6 +172,23 @@ func TestPhysicalRunnerBuildsIsolatedJailerCommandAndCopiesOutput(t *testing.T) 
 	}
 }
 
+func TestPhysicalRunnerRejectsGuestMemoryBelowPinnedManifest(t *testing.T) {
+	runner, factory, cgroup, namespace, request, input, output := physicalRunnerFixture(t, "success")
+	runner.assets.minimumGuestMemoryMiB = request.GuestMemoryMiB + 1
+	if _, err := runner.Run(context.Background(), request, input, output); ErrorCode(err) != CodeResourceUnsafe {
+		t.Fatalf("memory below manifest minimum accepted: %v", err)
+	}
+	if len(factory.args) != 0 || len(cgroup.prepared) != 0 || namespace.revalidated != 0 {
+		t.Fatalf(
+			"effects before manifest memory rejection: commands=%d cgroups=%d netns=%d",
+			len(factory.args), len(cgroup.prepared), namespace.revalidated,
+		)
+	}
+	if err := runner.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestJailerArgumentsNeverDetachObservedFirecrackerLifecycle(t *testing.T) {
 	config := validConfigForTest("/run/orquesta-firecracker")
 	request := validLaunchRequestForTest()
@@ -493,12 +510,13 @@ func fakeAssetSetForRunnerTest(t *testing.T) *assetSet {
 		return &pinnedAsset{file: file, size: int64(len(content)), digest: digestBytes([]byte(content))}
 	}
 	return &assetSet{
-		firecracker: newAsset("firecracker"),
-		jailer:      newAsset("jailer"),
-		kernel:      newAsset("kernel"),
-		guest:       newAsset("guest"),
-		manifest:    newAsset("manifest"),
-		digest:      digestBytes([]byte("physical-assets")),
+		firecracker:           newAsset("firecracker"),
+		jailer:                newAsset("jailer"),
+		kernel:                newAsset("kernel"),
+		guest:                 newAsset("guest"),
+		manifest:              newAsset("manifest"),
+		digest:                digestBytes([]byte("physical-assets")),
+		minimumGuestMemoryMiB: minGuestMemoryMiB,
 	}
 }
 

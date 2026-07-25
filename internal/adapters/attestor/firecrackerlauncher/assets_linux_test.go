@@ -42,20 +42,28 @@ func TestAssetPreflightPinsExpectedRootEquivalentFilesAndManifest(t *testing.T) 
 	}
 	defer assets.Close()
 	if !validDigest(assets.digest) ||
-		assets.digest != canonicalAssetDigest(config) {
-		t.Fatalf("asset digest=%q", assets.digest)
+		assets.digest != canonicalAssetDigest(config) ||
+		assets.minimumGuestMemoryMiB != 470 {
+		t.Fatalf("asset digest=%q minimum=%d", assets.digest, assets.minimumGuestMemoryMiB)
 	}
 }
 
 func TestGuestManifestAcceptsCurrentBuilderSchema(t *testing.T) {
 	imageDigest := strings.Repeat("a", 64)
 	raw := []byte(fmt.Sprintf(
-		`{"schema_version":"orquesta_test_attestor_guest.v0","platform":"linux/amd64","source_commit":"%s","runner_sha256":"sha256:%s","busybox_sha256":"sha256:%s","toolchain_tree_sha256":"sha256:%s","image_sha256":"sha256:%s","build":{"cgo_enabled":false,"trimpath":true,"buildvcs":false,"runner_double_build":true,"source":"exact_commit_private_export","archive":"newc","owner":"0:0","mtime_epoch":0,"gzip_name_time":false,"toolchain_directories":"0555","toolchain_executables":"0555","toolchain_data":"0444","toolchain_symlinks":"relative_internal","toolchain_nobody_probe":true}}`+"\n",
+		`{"schema_version":"orquesta_test_attestor_guest.v0","platform":"linux/amd64","source_commit":"%s","runner_sha256":"sha256:%s","busybox_sha256":"sha256:%s","toolchain_tree_sha256":"sha256:%s","image_sha256":"sha256:%s","unpacked_bytes":%d,"minimum_guest_memory_mib":%d,"memory_contract":{"scratch_fixed_reserve_bytes":%d,"scratch_cache_reserve_bytes":%d,"tmpfs_percent":%d,"kernel_runtime_headroom_percent":%d,"formula":"%s"},"build":{"cgo_enabled":false,"trimpath":true,"buildvcs":false,"runner_double_build":true,"source":"exact_commit_private_export","archive":"newc","owner":"0:0","mtime_epoch":0,"gzip_name_time":false,"toolchain_directories":"0555","toolchain_executables":"0555","toolchain_data":"0444","toolchain_symlinks":"relative_internal","toolchain_nobody_go_test":true}}`+"\n",
 		strings.Repeat("b", 40),
 		strings.Repeat("c", 64),
 		strings.Repeat("d", 64),
 		strings.Repeat("e", 64),
 		imageDigest,
+		uint64(32<<20),
+		uint32(470),
+		guestScratchFixedReserveBytes,
+		guestScratchCacheReserveBytes,
+		guestScratchTmpfsPercent,
+		guestKernelRuntimeHeadroomPercent,
+		guestMemoryFormula,
 	))
 	path := filepath.Join(t.TempDir(), "manifest.json")
 	writeStrictAssetForTest(t, path, raw, 0o444)
@@ -64,10 +72,10 @@ func TestGuestManifestAcceptsCurrentBuilderSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer file.Close()
-	if err := validateGuestManifest(
+	if minimum, err := validateGuestManifest(
 		&pinnedAsset{file: file, size: int64(len(raw)), digest: digestBytes(raw)},
 		imageDigest,
-	); err != nil {
+	); err != nil || minimum != 470 {
 		t.Fatal(err)
 	}
 }
@@ -126,6 +134,21 @@ func TestGuestManifestRequiresExactReproducibleSourceFields(t *testing.T) {
 		"source_not_exact_private_export": func(document *guestManifestDocument) {
 			document.Build.Source = "working_tree"
 		},
+		"unpacked_size_missing": func(document *guestManifestDocument) {
+			document.UnpackedBytes = 0
+		},
+		"unpacked_size_overflow": func(document *guestManifestDocument) {
+			document.UnpackedBytes = ^uint64(0)
+		},
+		"minimum_memory_false": func(document *guestManifestDocument) {
+			document.MinimumGuestMemoryMiB++
+		},
+		"memory_formula_changed": func(document *guestManifestDocument) {
+			document.MemoryContract.Formula = "other"
+		},
+		"toolchain_nobody_not_tested": func(document *guestManifestDocument) {
+			document.Build.ToolchainNobodyGoTest = false
+		},
 	}
 	for name, mutate := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -145,7 +168,7 @@ func TestGuestManifestRequiresExactReproducibleSourceFields(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer file.Close()
-			if err := validateGuestManifest(
+			if _, err := validateGuestManifest(
 				&pinnedAsset{file: file, size: int64(len(raw) + 1)},
 				imageDigest,
 			); ErrorCode(err) != CodeAssetsUnsafe {
@@ -223,6 +246,13 @@ func validGuestManifestForTest(imageDigest string) []byte {
 	document.BusyboxSHA256 = "sha256:" + strings.Repeat("2", 64)
 	document.ToolchainTreeSHA256 = "sha256:" + strings.Repeat("3", 64)
 	document.ImageSHA256 = "sha256:" + imageDigest
+	document.UnpackedBytes = 32 << 20
+	document.MinimumGuestMemoryMiB = 470
+	document.MemoryContract.ScratchFixedReserveBytes = guestScratchFixedReserveBytes
+	document.MemoryContract.ScratchCacheReserveBytes = guestScratchCacheReserveBytes
+	document.MemoryContract.TmpfsPercent = guestScratchTmpfsPercent
+	document.MemoryContract.KernelRuntimeHeadroomPercent = guestKernelRuntimeHeadroomPercent
+	document.MemoryContract.Formula = guestMemoryFormula
 	document.Build.Trimpath = true
 	document.Build.RunnerDoubleBuild = true
 	document.Build.Source = "exact_commit_private_export"
@@ -232,7 +262,7 @@ func validGuestManifestForTest(imageDigest string) []byte {
 	document.Build.ToolchainExecutables = "0555"
 	document.Build.ToolchainData = "0444"
 	document.Build.ToolchainSymlinks = "relative_internal"
-	document.Build.ToolchainNobodyProbe = true
+	document.Build.ToolchainNobodyGoTest = true
 	content, _ := json.Marshal(document)
 	return append(content, '\n')
 }
