@@ -91,6 +91,42 @@ type v22RestoreExpected struct {
 	Plan, App, Attempt, MaxAttempts, WorkItems, Executions                             uint64
 }
 
+type v22CgroupProcessRecord struct {
+	Schema              int    `json:"schema_version"`
+	Supervisor          string `json:"supervisor_instance"`
+	CompletionPublicKey string `json:"completion_public_key"`
+	Exec                string `json:"execution_ref"`
+	Hash                string `json:"request_hash"`
+	Scope               string `json:"runtime_scope"`
+	PID                 int    `json:"pid"`
+	PGID                int    `json:"pgid"`
+	Boot                string `json:"boot_id"`
+	Birth               string `json:"birth_marker"`
+	CgroupName          string `json:"cgroup_name"`
+	CgroupRootDevice    uint64 `json:"cgroup_root_device"`
+	CgroupRootInode     uint64 `json:"cgroup_root_inode"`
+	CgroupControlDevice uint64 `json:"cgroup_control_device"`
+	CgroupControlInode  uint64 `json:"cgroup_control_inode"`
+	CgroupDevice        uint64 `json:"cgroup_device"`
+	CgroupInode         uint64 `json:"cgroup_inode"`
+	path                string
+}
+
+type v22OwnedPIDWitness struct {
+	PID   int
+	Birth string
+}
+
+func (record v22CgroupProcessRecord) process() v22ProcessRecord {
+	return v22ProcessRecord{
+		Schema: record.Schema, Supervisor: record.Supervisor,
+		CompletionPublicKey: record.CompletionPublicKey,
+		Exec:                record.Exec, Hash: record.Hash, Scope: record.Scope,
+		PID: record.PID, PGID: record.PGID, Boot: record.Boot, Birth: record.Birth,
+		path: record.path,
+	}
+}
+
 func v22Must[T any](value T, err error) T {
 	if err != nil {
 		panic(err)
@@ -106,13 +142,13 @@ func v22Decode[T any](path string) T {
 }
 
 type v22Harness struct {
-	t                                                *testing.T
-	root, binary, config, state, endpoint, codexHome string
-	server                                           *exec.Cmd
-	log                                              *os.File
-	session                                          *sdkmcp.ClientSession
-	mu                                               sync.Mutex
-	request                                          uint64
+	t                                                                       *testing.T
+	root, binary, config, state, endpoint, codexHome, cgroupRoot, cgroupCtl string
+	server                                                                  *exec.Cmd
+	log                                                                     *os.File
+	session                                                                 *sdkmcp.ClientSession
+	mu                                                                      sync.Mutex
+	request                                                                 uint64
 }
 
 func TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP(t *testing.T) {
@@ -122,16 +158,17 @@ func TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP(t *tes
 		h := v22Start(t, ctx)
 		refs := map[string]string{"A": h.create(ctx, "A", v22PlanA()), "B": h.create(ctx, "B", v22PlanB()), "C": h.create(ctx, "C", v22PlanC()), "D": h.create(ctx, "D", v22PlanD())}
 		running := h.waitRunning(ctx, refs["A"], refs["B"], refs["C"], refs["D"])
-		bProcess := v22WaitProcess(t, h.root, running[refs["B"]].text("execution_ref"))
-		dProcess := v22WaitProcess(t, h.root, running[refs["D"]].text("execution_ref"))
+		bProcess := h.waitCgroupProcess(running[refs["B"]].text("execution_ref"))
+		bWorkers := h.cgroupWorkerWitnesses(bProcess)
+		dProcess := h.waitCgroupProcess(running[refs["D"]].text("execution_ref"))
 		cProgress := h.get(ctx, refs["C"])
 		b := h.get(ctx, refs["B"])
 		bGoal := b.object("goal")
 		h.call(ctx, "orquesta.goals.control", map[string]any{"operation": "cancel", "target": "goal", "goal_ref": refs["B"], "expected_goal_revision": bGoal.number("revision"), "expected_plan_generation": bGoal.number("plan_generation"), "expected_app_spec_generation": bGoal.number("app_spec_generation"), "expected_spec_hash": bGoal.text("spec_hash"), "reason": "V22 public selective cancellation while A/C/D progress"})
 		fence := h.assertMailboxArtifactIsolation(ctx, refs["A"])
 		admission := fence.Admission
-		aParentProcess := v22WaitProcess(t, h.root, admission.RecipientExecution)
-		b = h.waitCancelled(ctx, refs["B"], running[refs["B"]], bProcess)
+		aParentProcess := h.waitCgroupProcess(admission.RecipientExecution)
+		b = h.waitCancelled(ctx, refs["B"], running[refs["B"]], bProcess, bWorkers)
 		exactD := running[refs["D"]].text("execution_ref")
 		current := h.runningExecution(ctx, refs["D"]).text("execution_ref")
 		v22Require(t, current == exactD, "B cancellation disturbed D execution: got=%s want=%s", current, exactD)
@@ -141,16 +178,19 @@ func TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP(t *tes
 		current = h.runningExecution(ctx, refs["D"]).text("execution_ref")
 		v22Require(t, current == exactD, "D execution changed before crash: got=%s want=%s", current, exactD)
 		sleeps := v22WaitExactSleeps(t, ctx,
-			v22SleepExpectation{Process: aParentProcess, Seconds: 60},
-			v22SleepExpectation{Process: dProcess, Seconds: 180},
+			v22SleepExpectation{Process: aParentProcess.process(), Seconds: 60},
+			v22SleepExpectation{Process: dProcess.process(), Seconds: 180},
 		)
 		aSleep, dSleep := sleeps[0], sleeps[1]
 		h.kill() // non-cooperative server death: SIGKILL, never Runtime.Shutdown.
-		v22RequireExactSleepAlive(t, aParentProcess, aSleep, 60)
-		v22RequireExactSleepAlive(t, dProcess, dSleep, 180)
+		v22RequireExactSleepAlive(t, aParentProcess.process(), aSleep, 60)
+		v22RequireExactSleepAlive(t, dProcess.process(), dSleep, 180)
+		h.assertCgroupLive(aParentProcess, aSleep, 60)
+		h.assertCgroupLive(dProcess, dSleep, 180)
 		h.restart(ctx)
 		h.probeMailboxArtifactIsolation(ctx, refs["A"], fence, "restart")
 		h.waitAdopted(ctx, refs["D"], running[refs["D"]], dProcess)
+		h.assertCgroupLive(dProcess, dSleep, 180)
 		h.waitProgress(ctx, refs["C"], cProgress)
 		recovered, recoveredOK := h.completedAdmission(ctx, refs["A"])
 		v22Require(t, recoveredOK && recovered == admission, "restart changed completed service admission: got=%+v want=%+v found=%v", recovered, admission, recoveredOK)
@@ -162,6 +202,10 @@ func TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP(t *tes
 			v22Require(t, state == "succeeded", "%s state=%s", id, state)
 			v22NoContradiction(t, completed[id])
 		}
+		v22AssertPIDWitnessesGone(t,
+			v22OwnedPIDWitness{PID: aSleep.PID, Birth: aSleep.Birth},
+			v22OwnedPIDWitness{PID: dSleep.PID, Birth: dSleep.Birth},
+		)
 		h.assertSucceededGoal(ctx, refs["A"])
 		recovered, recoveredOK = h.completedAdmission(ctx, refs["A"])
 		v22Require(t, recoveredOK && recovered == admission, "terminal Goal changed completed admission: got=%+v want=%+v found=%v", recovered, admission, recoveredOK)
@@ -180,8 +224,8 @@ func TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess(t *testing.T) {
 		terminal := h.waitTerminal(ctx, ref)
 		v22NoContradiction(t, terminal)
 		v22AssertProgrammingClosure(t, terminal, councilIntegration)
-		h.stop()
-		h.census()
+		records := h.requireCgroupProcessRecords()
+		h.close(records)
 	})
 }
 
@@ -444,9 +488,16 @@ func v22Start(t *testing.T, ctx context.Context) *v22Harness {
 	v22Require(t, os.Chmod(root, 0o700) == nil, "secure V22 harness root")
 	bwrap, toolchain := v22AttestorPrerequisites(t)
 	v22Seed(t, ctx, root, git)
-	h := &v22Harness{t: t, root: root, binary: filepath.Join(root, "orquesta"), config: filepath.Join(root, "orquesta.toml"), state: filepath.Join(root, "state", "orquesta.sqlite"), endpoint: "http://127.0.0.1:" + v22Port(t) + "/mcp", codexHome: v22PrivateCodexHome(t, root)}
-	v22Require(t, os.WriteFile(h.config, []byte(v22Config(root, strings.TrimSuffix(h.endpoint, "/mcp")[len("http://127.0.0.1:"):], codex, bwrap, toolchain, v22ConfiguredCgroupRoot(t))), 0o600) == nil, "write V22 config")
-	t.Cleanup(h.close) // Registered before any owned process can be launched.
+	cgroupRoot := v22ConfiguredCgroupRoot(t)
+	h := &v22Harness{
+		t: t, root: root, binary: filepath.Join(root, "orquesta"),
+		config: filepath.Join(root, "orquesta.toml"), state: filepath.Join(root, "state", "orquesta.sqlite"),
+		endpoint:  "http://127.0.0.1:" + v22Port(t) + "/mcp",
+		codexHome: v22PrivateCodexHome(t, root), cgroupRoot: cgroupRoot,
+		cgroupCtl: filepath.Join(cgroupRoot, "runner"),
+	}
+	v22Require(t, os.WriteFile(h.config, []byte(v22Config(root, strings.TrimSuffix(h.endpoint, "/mcp")[len("http://127.0.0.1:"):], codex, bwrap, toolchain, cgroupRoot)), 0o600) == nil, "write V22 config")
+	t.Cleanup(h.cleanup) // Cleanup snapshots non-empty schema 3 evidence before stopping any owner.
 	build := exec.CommandContext(ctx, goTool, "build", "-mod=vendor", "-trimpath", "-buildvcs=false", "-o", h.binary, "./cmd/orquesta")
 	build.Dir = evidenceRepositoryRoot(t)
 	out, err := build.CombinedOutput()
@@ -488,7 +539,21 @@ func (h *v22Harness) connect(ctx context.Context) error {
 	return err
 }
 func (h *v22Harness) restart(ctx context.Context) { h.releaseLog(); h.server = nil; h.launch(ctx) }
-func (h *v22Harness) close()                      { h.stop(); h.census() }
+func (h *v22Harness) cleanup() {
+	stopped := false
+	defer func() {
+		if !stopped {
+			h.stop()
+		}
+	}()
+	records := h.cgroupProcessRecords()
+	h.close(records)
+	stopped = true
+}
+func (h *v22Harness) close(records map[string]v22CgroupProcessRecord) {
+	h.stop()
+	h.census(records)
+}
 func (h *v22Harness) releaseLog() {
 	if h.log != nil {
 		_ = h.log.Close()
@@ -783,21 +848,21 @@ func v22AssertAdoptedCompletion(t *testing.T, d v22GoalProjection, exact string)
 func (h *v22Harness) runningExecution(ctx context.Context, ref string) v22ExecutionProjection {
 	return h.waitRunning(ctx, ref)[ref]
 }
-func (h *v22Harness) waitAdopted(ctx context.Context, ref string, want v22ExecutionProjection, process v22ProcessRecord) {
+func (h *v22Harness) waitAdopted(ctx context.Context, ref string, want v22ExecutionProjection, process v22CgroupProcessRecord) {
 	for {
 		g := h.get(ctx, ref)
 		for _, execution := range g.objects("executions") {
 			if execution.text("execution_ref") == want.text("execution_ref") && execution.text("state") == "running" && execution.text("replaces_execution_ref") == "" {
-				alive, err := v22ProcessAlive(process)
+				alive, err := v22ProcessAlive(process.process())
 				v22Require(h.t, err == nil && alive, "restart did not adopt exact D process: alive=%v err=%v", alive, err)
-				adopted, found := v22ProcessRecords(h.t, h.root)[process.Exec]
+				adopted, found := h.cgroupProcessRecords()[process.Exec]
 				v22Require(
 					h.t,
-					found && adopted.CompletionPublicKey == process.CompletionPublicKey,
-					"restart changed D completion public key: found=%v got=%q want=%q",
+					found && v22SameCgroupProcessIdentity(adopted, process),
+					"restart changed D process/cgroup identity: found=%v got=%+v want=%+v",
 					found,
-					adopted.CompletionPublicKey,
-					process.CompletionPublicKey,
+					adopted,
+					process,
 				)
 				return
 			}
@@ -938,31 +1003,671 @@ func (h *v22Harness) assertSucceededGoal(ctx context.Context, raw string) {
 	record := v22Must(repository.GetGoal(ctx, ref))
 	v22Require(h.t, record.Goal.Ref() == ref && record.Goal.State() == goal.GoalStateSucceeded && record.Goal.IsTerminal(), "restarted A Goal not terminal/succeeded: %+v", record.Goal)
 }
-func (h *v22Harness) census() {
+
+func v22ReadCgroupProcessRecord(path string) (v22CgroupProcessRecord, error) {
+	var record v22CgroupProcessRecord
+	payload, err := os.ReadFile(path)
+	if err != nil {
+		return record, err
+	}
+	if len(payload) == 0 || len(payload) > 64<<10 {
+		return record, fmt.Errorf("invalid process record size: %d", len(payload))
+	}
+	decoder := json.NewDecoder(bytes.NewReader(payload))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&record); err != nil {
+		return record, err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		return record, errors.New("trailing process record JSON")
+	}
+	record.path = path
+	if record.Schema != 3 || !v22ValidSupervisorInstance(record.Supervisor) ||
+		!v22ValidCompletionPublicKey(record.CompletionPublicKey) ||
+		record.Exec == "" || record.Hash == "" || record.Scope == "" ||
+		record.PID <= 0 || record.PGID <= 0 || record.Boot == "" || record.Birth == "" ||
+		!v22ValidCgroupName(record.CgroupName) ||
+		record.CgroupRootDevice == 0 || record.CgroupRootInode == 0 ||
+		record.CgroupControlDevice == 0 || record.CgroupControlInode == 0 ||
+		record.CgroupDevice == 0 || record.CgroupInode == 0 ||
+		(record.CgroupRootDevice == record.CgroupControlDevice &&
+			record.CgroupRootInode == record.CgroupControlInode) ||
+		(record.CgroupRootDevice == record.CgroupDevice &&
+			record.CgroupRootInode == record.CgroupInode) ||
+		(record.CgroupControlDevice == record.CgroupDevice &&
+			record.CgroupControlInode == record.CgroupInode) {
+		return v22CgroupProcessRecord{}, errors.New("invalid schema 3 process/cgroup identity")
+	}
+	return record, nil
+}
+
+func v22ValidCgroupName(value string) bool {
+	const prefix = "execution-"
+	if !strings.HasPrefix(value, prefix) || len(value) != len(prefix)+64 {
+		return false
+	}
+	_, err := hex.DecodeString(strings.TrimPrefix(value, prefix))
+	return err == nil
+}
+
+func v22SameCgroupProcessIdentity(left, right v22CgroupProcessRecord) bool {
+	return left == right
+}
+
+func (h *v22Harness) cgroupProcessRecords() map[string]v22CgroupProcessRecord {
+	h.t.Helper()
+	found := map[string]v22CgroupProcessRecord{}
+	err := filepath.WalkDir(filepath.Join(h.root, "work"), func(path string, entry os.DirEntry, err error) error {
+		if errors.Is(err, os.ErrNotExist) {
+			return filepath.SkipDir
+		}
+		if err != nil || entry.IsDir() || entry.Name() != "process.json" {
+			return err
+		}
+		record, err := v22ReadCgroupProcessRecord(path)
+		if err != nil {
+			return fmt.Errorf("%s: %w", path, err)
+		}
+		if _, duplicate := found[record.Exec]; duplicate {
+			return fmt.Errorf("duplicate process identity for %s", record.Exec)
+		}
+		found[record.Exec] = record
+		return nil
+	})
+	v22Require(h.t, err == nil, "schema 3 process/cgroup census: %v", err)
+	return found
+}
+
+func (h *v22Harness) requireCgroupProcessRecords() map[string]v22CgroupProcessRecord {
+	h.t.Helper()
+	records := h.cgroupProcessRecords()
+	v22Require(h.t, len(records) > 0, "schema 3 process/cgroup census is empty")
+	return records
+}
+
+func (h *v22Harness) waitCgroupProcess(execution string) v22CgroupProcessRecord {
+	h.t.Helper()
+	for until := time.Now().Add(20 * time.Second); time.Now().Before(until); time.Sleep(50 * time.Millisecond) {
+		record, ok := h.cgroupProcessRecords()[execution]
+		if !ok {
+			continue
+		}
+		_, err := h.validateCgroupBoundary(record)
+		v22Require(h.t, err == nil, "persisted cgroup boundary: %v", err)
+		live, err := v22ProcessAlive(record.process())
+		v22Require(h.t, err == nil, "process liveness: %v", err)
+		if live {
+			return record
+		}
+	}
+	h.t.Fatalf("no live persisted schema 3 process/cgroup identity for %s", execution)
+	return v22CgroupProcessRecord{}
+}
+
+type v22CgroupIdentity struct {
+	device uint64
+	inode  uint64
+}
+
+func v22CgroupDirectoryIdentity(path string) (v22CgroupIdentity, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return v22CgroupIdentity{}, err
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	var filesystem syscall.Statfs_t
+	if !ok || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 ||
+		info.Mode().Perm()&0o022 != 0 || int(stat.Uid) != os.Geteuid() ||
+		syscall.Statfs(path, &filesystem) != nil || uint64(filesystem.Type) != 0x63677270 {
+		return v22CgroupIdentity{}, fmt.Errorf("unsafe cgroup directory %s", path)
+	}
+	return v22CgroupIdentity{device: uint64(stat.Dev), inode: stat.Ino}, nil
+}
+
+func (h *v22Harness) validateCgroupParents(record v22CgroupProcessRecord) error {
+	if h.cgroupRoot == "" || h.cgroupCtl == "" ||
+		!filepath.IsAbs(h.cgroupRoot) || filepath.Clean(h.cgroupRoot) != h.cgroupRoot ||
+		filepath.Dir(h.cgroupCtl) != h.cgroupRoot || filepath.Base(h.cgroupCtl) != "runner" ||
+		!v22ValidCgroupName(record.CgroupName) {
+		return errors.New("invalid configured cgroup boundary")
+	}
+	rootIdentity, err := v22CgroupDirectoryIdentity(h.cgroupRoot)
+	if err != nil {
+		return err
+	}
+	controlIdentity, err := v22CgroupDirectoryIdentity(h.cgroupCtl)
+	if err != nil {
+		return err
+	}
+	if rootIdentity != (v22CgroupIdentity{record.CgroupRootDevice, record.CgroupRootInode}) ||
+		controlIdentity != (v22CgroupIdentity{record.CgroupControlDevice, record.CgroupControlInode}) {
+		return fmt.Errorf(
+			"cgroup parent identity mismatch: root=%+v control=%+v record=%+v",
+			rootIdentity, controlIdentity, record,
+		)
+	}
+	return nil
+}
+
+func (h *v22Harness) validateCgroupBoundary(record v22CgroupProcessRecord) (string, error) {
+	if err := h.validateCgroupParents(record); err != nil {
+		return "", err
+	}
+	leaf := filepath.Join(h.cgroupRoot, record.CgroupName)
+	leafIdentity, err := v22CgroupDirectoryIdentity(leaf)
+	if err != nil {
+		return "", err
+	}
+	if leafIdentity != (v22CgroupIdentity{record.CgroupDevice, record.CgroupInode}) {
+		return "", fmt.Errorf(
+			"cgroup leaf identity mismatch: leaf=%+v record=%+v",
+			leafIdentity, record,
+		)
+	}
+	return leaf, nil
+}
+
+func v22ReadCgroupPopulated(path string) (bool, error) {
+	payload, err := os.ReadFile(filepath.Join(path, "cgroup.events"))
+	if err != nil || len(payload) == 0 || len(payload) > 4096 {
+		return false, errors.Join(err, errors.New("invalid cgroup.events"))
+	}
+	fields := strings.Fields(string(payload))
+	if len(fields)%2 != 0 {
+		return false, errors.New("invalid cgroup.events fields")
+	}
+	seen := map[string]bool{}
+	populatedFound, populated := false, false
+	for index := 0; index < len(fields); index += 2 {
+		name, value := fields[index], fields[index+1]
+		if name == "" || seen[name] {
+			return false, errors.New("duplicate cgroup.events field")
+		}
+		seen[name] = true
+		if name != "populated" {
+			continue
+		}
+		populatedFound = true
+		switch value {
+		case "0":
+			populated = false
+		case "1":
+			populated = true
+		default:
+			return false, errors.New("invalid cgroup populated value")
+		}
+	}
+	if !populatedFound {
+		return false, errors.New("missing cgroup populated event")
+	}
+	return populated, nil
+}
+
+func v22ReadCgroupPIDs(path string) ([]int, error) {
+	payload, err := os.ReadFile(filepath.Join(path, "cgroup.procs"))
+	if err != nil || len(payload) > 64<<10 {
+		return nil, errors.Join(err, errors.New("invalid cgroup.procs"))
+	}
+	fields := strings.Fields(string(payload))
+	pids := make([]int, 0, len(fields))
+	seen := map[int]bool{}
+	for _, value := range fields {
+		pid, err := strconv.Atoi(value)
+		if err != nil || pid <= 0 || seen[pid] {
+			return nil, errors.New("invalid cgroup PID")
+		}
+		seen[pid] = true
+		pids = append(pids, pid)
+	}
+	return pids, nil
+}
+
+func v22ProcessCgroupPath(pid int) (string, error) {
+	payload, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "cgroup"))
+	if err != nil || len(payload) == 0 || len(payload) > 4096 {
+		return "", errors.Join(err, errors.New("invalid process cgroup"))
+	}
+	lines := strings.Split(strings.TrimSpace(string(payload)), "\n")
+	if len(lines) != 1 || !strings.HasPrefix(lines[0], "0::/") {
+		return "", errors.New("process is not in a single cgroup v2 hierarchy")
+	}
+	return filepath.Join("/sys/fs/cgroup", strings.TrimPrefix(lines[0], "0::/")), nil
+}
+
+func v22ContainsPID(pids []int, want int) bool {
+	for _, pid := range pids {
+		if pid == want {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *v22Harness) cgroupWorkerWitnesses(record v22CgroupProcessRecord) []v22OwnedPIDWitness {
+	h.t.Helper()
+	leaf, err := h.validateCgroupBoundary(record)
+	v22Require(h.t, err == nil, "worker cgroup boundary: %v", err)
+	populated, err := v22ReadCgroupPopulated(leaf)
+	v22Require(h.t, err == nil && populated, "worker cgroup not populated: execution=%s err=%v", record.Exec, err)
+	pids, err := v22ReadCgroupPIDs(leaf)
+	v22Require(h.t, err == nil && len(pids) > 0, "worker cgroup has no processes: execution=%s err=%v", record.Exec, err)
+	witnesses := make([]v22OwnedPIDWitness, 0, len(pids))
+	for _, pid := range pids {
+		stat, err := v22ReadProcStat(pid)
+		v22Require(h.t, err == nil && stat.State != "Z" && stat.State != "X",
+			"capture live worker cgroup PID: execution=%s pid=%d err=%v", record.Exec, pid, err)
+		cgroup, err := v22ProcessCgroupPath(pid)
+		v22Require(h.t, err == nil && cgroup == leaf,
+			"captured worker outside exact leaf: execution=%s pid=%d got=%q want=%q err=%v",
+			record.Exec, pid, cgroup, leaf, err)
+		witnesses = append(witnesses, v22OwnedPIDWitness{PID: pid, Birth: stat.Birth})
+	}
+	return witnesses
+}
+
+func v22AssertPIDWitnessesGone(t *testing.T, witnesses ...v22OwnedPIDWitness) {
+	t.Helper()
+	v22Require(t, len(witnesses) > 0, "owned PID witness set is empty")
+	for until := time.Now().Add(20 * time.Second); time.Now().Before(until); time.Sleep(50 * time.Millisecond) {
+		live := false
+		for _, witness := range witnesses {
+			stat, err := v22ReadProcStat(witness.PID)
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			v22Require(t, err == nil, "inspect owned PID witness %+v: %v", witness, err)
+			live = live || (stat.Birth == witness.Birth && stat.State != "Z" && stat.State != "X")
+		}
+		if !live {
+			return
+		}
+	}
+	t.Fatalf("owned PID witnesses survived containment cleanup: %+v", witnesses)
+}
+
+func (h *v22Harness) assertCgroupLive(
+	record v22CgroupProcessRecord,
+	witness v22SleepWitness,
+	seconds int,
+) {
+	h.t.Helper()
+	process := record.process()
+	supervisorAlive, err := v22ProcessAlive(process)
+	v22Require(h.t, err == nil && supervisorAlive,
+		"supervisor identity invalid before cgroup observation: execution=%s alive=%v err=%v",
+		record.Exec, supervisorAlive, err)
+	sleepAlive, err := v22ExactSleepAlive(process, witness, seconds)
+	v22Require(h.t, err == nil && sleepAlive,
+		"sleep identity/argv/ancestry invalid before cgroup observation: execution=%s witness=%+v alive=%v err=%v",
+		record.Exec, witness, sleepAlive, err)
+
+	leafBefore, err := h.validateCgroupBoundary(record)
+	v22Require(h.t, err == nil, "live cgroup boundary before observation: %v", err)
+	supervisorBefore, err := v22ProcessCgroupPath(record.PID)
+	v22Require(h.t, err == nil && supervisorBefore == h.cgroupCtl,
+		"supervisor escaped control cgroup before observation: execution=%s got=%q want=%q err=%v",
+		record.Exec, supervisorBefore, h.cgroupCtl, err)
+	sleepBefore, err := v22ProcessCgroupPath(witness.PID)
+	v22Require(h.t, err == nil && sleepBefore == leafBefore,
+		"setsid/bwrap descendant escaped leaf before observation: execution=%s pid=%d got=%q want=%q err=%v",
+		record.Exec, witness.PID, sleepBefore, leafBefore, err)
+	populatedBefore, err := v22ReadCgroupPopulated(leafBefore)
+	v22Require(h.t, err == nil && populatedBefore,
+		"live cgroup not populated before observation: execution=%s populated=%v err=%v",
+		record.Exec, populatedBefore, err)
+	pidsBefore, err := v22ReadCgroupPIDs(leafBefore)
+	v22Require(h.t, err == nil && v22ContainsPID(pidsBefore, witness.PID),
+		"exact descendant absent from leaf before observation: execution=%s witness=%+v leaf_pids=%v err=%v",
+		record.Exec, witness, pidsBefore, err)
+
+	leafAfter, err := h.validateCgroupBoundary(record)
+	v22Require(h.t, err == nil && leafAfter == leafBefore,
+		"live cgroup boundary changed during observation: before=%q after=%q err=%v",
+		leafBefore, leafAfter, err)
+	supervisorAfter, err := v22ProcessCgroupPath(record.PID)
+	v22Require(h.t, err == nil && supervisorAfter == h.cgroupCtl && supervisorAfter == supervisorBefore,
+		"supervisor cgroup changed during observation: execution=%s before=%q after=%q err=%v",
+		record.Exec, supervisorBefore, supervisorAfter, err)
+	sleepAfter, err := v22ProcessCgroupPath(witness.PID)
+	v22Require(h.t, err == nil && sleepAfter == leafAfter && sleepAfter == sleepBefore,
+		"setsid/bwrap descendant cgroup changed during observation: execution=%s before=%q after=%q err=%v",
+		record.Exec, sleepBefore, sleepAfter, err)
+	populatedAfter, err := v22ReadCgroupPopulated(leafAfter)
+	v22Require(h.t, err == nil && populatedAfter,
+		"live cgroup not populated after observation: execution=%s populated=%v err=%v",
+		record.Exec, populatedAfter, err)
+	pidsAfter, err := v22ReadCgroupPIDs(leafAfter)
+	v22Require(h.t, err == nil && v22ContainsPID(pidsAfter, witness.PID),
+		"exact descendant absent from leaf after observation: execution=%s witness=%+v leaf_pids=%v err=%v",
+		record.Exec, witness, pidsAfter, err)
+
+	supervisorAlive, err = v22ProcessAlive(process)
+	v22Require(h.t, err == nil && supervisorAlive,
+		"supervisor PID/PGID/boot/birth changed during cgroup observation: execution=%s alive=%v err=%v",
+		record.Exec, supervisorAlive, err)
+	sleepAlive, err = v22ExactSleepAlive(process, witness, seconds)
+	v22Require(h.t, err == nil && sleepAlive,
+		"sleep PID/PGID/birth/exe/argv/ancestry changed during cgroup observation: execution=%s witness=%+v alive=%v err=%v",
+		record.Exec, witness, sleepAlive, err)
+}
+
+func v22CgroupJournalsPresent(runDirectory string) (bool, error) {
+	present := false
+	for _, name := range []string{"cgroup-allocation.json", "cgroup-boundary.json"} {
+		info, err := os.Lstat(filepath.Join(runDirectory, name))
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return false, err
+		}
+		if !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
+			return false, fmt.Errorf("unsafe cgroup journal %s", name)
+		}
+		present = true
+	}
+	return present, nil
+}
+
+func v22TerminalCgroupState(
+	record v22CgroupProcessRecord,
+	leafIdentity *v22CgroupIdentity,
+	populated bool,
+	pids []int,
+	supervisorAlive, journalsPresent bool,
+) (bool, error) {
+	if supervisorAlive {
+		return false, nil
+	}
+	if leafIdentity == nil {
+		return !journalsPresent, nil
+	}
+	want := v22CgroupIdentity{record.CgroupDevice, record.CgroupInode}
+	if *leafIdentity != want {
+		return false, fmt.Errorf("terminal cgroup leaf identity mismatch: got=%+v want=%+v", *leafIdentity, want)
+	}
+	if populated || len(pids) != 0 || journalsPresent {
+		return false, nil
+	}
+	// Empty exact leaf is a valid intermediate observation, not terminal
+	// cleanup. Product removes both leaf and causal allocation journals.
+	return false, nil
+}
+
+func v22CgroupProcessFixture() v22CgroupProcessRecord {
+	return v22CgroupProcessRecord{
+		Schema: 3, Supervisor: "supervisor:" + strings.Repeat("a", 64),
+		CompletionPublicKey: "ed25519:" + strings.Repeat("A", 43),
+		Exec:                "execution:v22-cgroup", Hash: "sha256:request", Scope: "runtime:v22",
+		PID: 4242, PGID: 4242, Boot: "boot", Birth: "birth",
+		CgroupName:       "execution-" + strings.Repeat("b", 64),
+		CgroupRootDevice: 1, CgroupRootInode: 2,
+		CgroupControlDevice: 1, CgroupControlInode: 3,
+		CgroupDevice: 1, CgroupInode: 4,
+	}
+}
+
+func v22WriteCgroupProcessFixture(t *testing.T, value any, trailing string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "process.json")
+	payload, err := json.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload = append(payload, trailing...)
+	if err := os.WriteFile(path, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func v22CgroupProcessDocument(t *testing.T, record v22CgroupProcessRecord) map[string]any {
+	t.Helper()
+	payload, err := json.Marshal(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	document := map[string]any{}
+	if err := json.Unmarshal(payload, &document); err != nil {
+		t.Fatal(err)
+	}
+	return document
+}
+
+func TestV22CgroupProcessSchema3IsStrict(t *testing.T) {
+	record := v22CgroupProcessFixture()
+	path := v22WriteCgroupProcessFixture(t, record, "")
+	parsed, err := v22ReadCgroupProcessRecord(path)
+	expected := record
+	expected.path = path
+	if err != nil || !v22SameCgroupProcessIdentity(parsed, expected) {
+		t.Fatalf("valid schema 3 record rejected: parsed=%+v err=%v", parsed, err)
+	}
+	for _, schema := range []int{1, 2} {
+		legacy := record
+		legacy.Schema = schema
+		if _, err := v22ReadCgroupProcessRecord(v22WriteCgroupProcessFixture(t, legacy, "")); err == nil {
+			t.Fatalf("legacy process schema %d accepted", schema)
+		}
+	}
+	unknown := v22CgroupProcessDocument(t, record)
+	unknown["unknown"] = true
+	if _, err := v22ReadCgroupProcessRecord(v22WriteCgroupProcessFixture(t, unknown, "")); err == nil {
+		t.Fatal("unknown process field accepted")
+	}
+	if _, err := v22ReadCgroupProcessRecord(v22WriteCgroupProcessFixture(t, record, "\n{}")); err == nil {
+		t.Fatal("trailing process JSON accepted")
+	}
+}
+
+func TestV22CgroupProcessIdentityFieldsFailClosed(t *testing.T) {
+	record := v22CgroupProcessFixture()
+	fields := []string{
+		"cgroup_root_device", "cgroup_root_inode",
+		"cgroup_control_device", "cgroup_control_inode",
+		"cgroup_device", "cgroup_inode",
+	}
+	for _, field := range fields {
+		t.Run("zero_"+field, func(t *testing.T) {
+			document := v22CgroupProcessDocument(t, record)
+			document[field] = float64(0)
+			if _, err := v22ReadCgroupProcessRecord(v22WriteCgroupProcessFixture(t, document, "")); err == nil {
+				t.Fatalf("zero %s accepted", field)
+			}
+		})
+		t.Run("missing_"+field, func(t *testing.T) {
+			document := v22CgroupProcessDocument(t, record)
+			delete(document, field)
+			if _, err := v22ReadCgroupProcessRecord(v22WriteCgroupProcessFixture(t, document, "")); err == nil {
+				t.Fatalf("missing %s accepted", field)
+			}
+		})
+	}
+	invalidName := record
+	invalidName.CgroupName = "execution-../runner"
+	if _, err := v22ReadCgroupProcessRecord(v22WriteCgroupProcessFixture(t, invalidName, "")); err == nil {
+		t.Fatal("invalid cgroup name accepted")
+	}
+	for name, duplicate := range map[string]func(*v22CgroupProcessRecord){
+		"root_control": func(value *v22CgroupProcessRecord) {
+			value.CgroupControlDevice, value.CgroupControlInode =
+				value.CgroupRootDevice, value.CgroupRootInode
+		},
+		"root_leaf": func(value *v22CgroupProcessRecord) {
+			value.CgroupDevice, value.CgroupInode =
+				value.CgroupRootDevice, value.CgroupRootInode
+		},
+		"control_leaf": func(value *v22CgroupProcessRecord) {
+			value.CgroupDevice, value.CgroupInode =
+				value.CgroupControlDevice, value.CgroupControlInode
+		},
+	} {
+		t.Run("duplicate_"+name, func(t *testing.T) {
+			candidate := record
+			duplicate(&candidate)
+			if _, err := v22ReadCgroupProcessRecord(v22WriteCgroupProcessFixture(t, candidate, "")); err == nil {
+				t.Fatalf("duplicate cgroup identity %s accepted", name)
+			}
+		})
+	}
+}
+
+func TestV22TerminalCgroupStateRequiresExactEmptyRemoval(t *testing.T) {
+	record := v22CgroupProcessFixture()
+	if ready, err := v22TerminalCgroupState(record, nil, false, nil, false, false); err != nil || !ready {
+		t.Fatalf("absent leaf with dead supervisor and removed journals rejected: ready=%v err=%v", ready, err)
+	}
+	if ready, err := v22TerminalCgroupState(record, nil, false, nil, true, false); err != nil || ready {
+		t.Fatalf("absent leaf with live supervisor accepted: ready=%v err=%v", ready, err)
+	}
+	if ready, err := v22TerminalCgroupState(record, nil, false, nil, false, true); err != nil || ready {
+		t.Fatalf("residual cgroup journals accepted: ready=%v err=%v", ready, err)
+	}
+	exact := v22CgroupIdentity{record.CgroupDevice, record.CgroupInode}
+	replacement := v22CgroupIdentity{record.CgroupDevice, record.CgroupInode + 1}
+	if _, err := v22TerminalCgroupState(record, &replacement, false, nil, false, false); err == nil {
+		t.Fatal("replacement cgroup inode accepted")
+	}
+	if ready, err := v22TerminalCgroupState(record, &exact, true, nil, false, false); err != nil || ready {
+		t.Fatalf("populated cgroup accepted: ready=%v err=%v", ready, err)
+	}
+	if ready, err := v22TerminalCgroupState(record, &exact, false, []int{5000}, false, false); err != nil || ready {
+		t.Fatalf("cgroup with populated=false but owned PIDs accepted: ready=%v err=%v", ready, err)
+	}
+	if ready, err := v22TerminalCgroupState(record, &exact, false, nil, false, false); err != nil || ready {
+		t.Fatalf("empty but unremoved cgroup leaf accepted as final cleanup: ready=%v err=%v", ready, err)
+	}
+}
+
+func TestV22TerminalCgroupCensusRejectsEmptyPreStopEvidence(t *testing.T) {
+	h := &v22Harness{}
+	if ready, err := h.terminalCgroupCensus(map[string]v22CgroupProcessRecord{}); err == nil || ready {
+		t.Fatalf("empty pre-stop census accepted: ready=%v err=%v", ready, err)
+	}
+}
+
+func TestV22CodexAndAttestorCgroupConfigKeysStaySeparate(t *testing.T) {
+	config := v22Config("/tmp/v22", "1234", "/bin/codex", "/bin/bwrap", "/toolchain", "/sys/fs/cgroup/delegated")
+	if strings.Count(config, "cgroup_root = \"/sys/fs/cgroup/delegated\"") != 2 ||
+		!strings.Contains(config, "[runtime.codex]\ncommand = \"/bin/codex\"\ntimeout = \"10m\"\nsupervisor_start_timeout = \"5s\"") ||
+		!strings.Contains(config, "[test_attestor.resources]\ncgroup_root = \"/sys/fs/cgroup/delegated\"") {
+		t.Fatalf("runtime Codex and test attestor cgroup roots are not separate config keys:\n%s", config)
+	}
+}
+
+func (h *v22Harness) cgroupRecordDrained(record v22CgroupProcessRecord) (bool, error) {
+	if err := h.validateCgroupParents(record); err != nil {
+		return false, err
+	}
+	alive, err := v22ProcessAlive(record.process())
+	if err != nil {
+		return false, err
+	}
+	journals, err := v22CgroupJournalsPresent(filepath.Dir(record.path))
+	if err != nil {
+		return false, err
+	}
+	leaf := filepath.Join(h.cgroupRoot, record.CgroupName)
+	leafIdentity, err := v22CgroupDirectoryIdentity(leaf)
+	if errors.Is(err, os.ErrNotExist) {
+		return v22TerminalCgroupState(record, nil, false, nil, alive, journals)
+	}
+	if err != nil {
+		return false, err
+	}
+	populated, err := v22ReadCgroupPopulated(leaf)
+	if err != nil {
+		return false, err
+	}
+	pids, err := v22ReadCgroupPIDs(leaf)
+	if err != nil {
+		return false, err
+	}
+	return v22TerminalCgroupState(record, &leafIdentity, populated, pids, alive, journals)
+}
+
+func (h *v22Harness) assertCgroupDrained(record v22CgroupProcessRecord) {
+	h.t.Helper()
+	for until := time.Now().Add(20 * time.Second); time.Now().Before(until); time.Sleep(50 * time.Millisecond) {
+		drained, err := h.cgroupRecordDrained(record)
+		v22Require(h.t, err == nil, "terminal cgroup observation: %v", err)
+		if drained {
+			return
+		}
+	}
+	h.t.Fatalf("terminal schema 3 cgroup remains populated: %+v", record)
+}
+
+func (h *v22Harness) terminalCgroupCensus(records map[string]v22CgroupProcessRecord) (bool, error) {
+	if len(records) == 0 {
+		return false, errors.New("terminal cgroup census has no pre-stop records")
+	}
+	ready := true
+	for _, record := range records {
+		drained, err := h.cgroupRecordDrained(record)
+		if err != nil {
+			return false, err
+		}
+		ready = ready && drained
+	}
+	rootPIDs, err := v22ReadCgroupPIDs(h.cgroupRoot)
+	if err != nil {
+		return false, err
+	}
+	controlPIDs, err := v22ReadCgroupPIDs(h.cgroupCtl)
+	if err != nil {
+		return false, err
+	}
+	ready = ready && len(rootPIDs) == 0 &&
+		len(controlPIDs) == 1 && controlPIDs[0] == os.Getpid()
+	entries, err := os.ReadDir(h.cgroupRoot)
+	if err != nil {
+		return false, err
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() || entry.Name() == filepath.Base(h.cgroupCtl) {
+			continue
+		}
+		path := filepath.Join(h.cgroupRoot, entry.Name())
+		if _, err := v22CgroupDirectoryIdentity(path); err != nil {
+			return false, err
+		}
+		populated, err := v22ReadCgroupPopulated(path)
+		if err != nil {
+			return false, err
+		}
+		pids, err := v22ReadCgroupPIDs(path)
+		if err != nil {
+			return false, err
+		}
+		ready = false
+		if populated || len(pids) != 0 {
+			continue
+		}
+	}
+	return ready, nil
+}
+
+func (h *v22Harness) census(records map[string]v22CgroupProcessRecord) {
+	h.t.Helper()
+	v22Require(h.t, len(records) > 0, "terminal cgroup census requires pre-stop records")
 	until := time.Now().Add(20 * time.Second)
 	for time.Now().Before(until) {
-		if len(h.liveProcesses()) == 0 {
+		ready, err := h.terminalCgroupCensus(records)
+		v22Require(h.t, err == nil, "terminal schema 3 cgroup census: %v", err)
+		if ready {
 			return
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	if records := h.liveProcesses(); len(records) > 0 {
-		for _, record := range records {
-			v22KillExact(record)
-		}
-		h.t.Errorf("owned exact processes survived cleanup and were killed: %+v", records)
-	}
-}
-func (h *v22Harness) liveProcesses() []v22ProcessRecord {
-	records, live := v22ProcessRecords(h.t, h.root), []v22ProcessRecord{}
 	for _, record := range records {
-		alive, err := v22ProcessGroupAlive(record)
-		v22Require(h.t, err == nil, "process group liveness: %v", err)
-		if alive {
-			live = append(live, record)
+		leaf, err := h.validateCgroupBoundary(record)
+		if err == nil {
+			_ = os.WriteFile(filepath.Join(leaf, "cgroup.kill"), []byte("1"), 0o600)
 		}
 	}
-	return live
+	h.t.Errorf("owned schema 3 cgroups/processes survived cleanup: %+v", records)
 }
 
 type v22Bearer struct{ token string }
@@ -1017,12 +1722,19 @@ func v22NoContradiction(t *testing.T, g v22GoalProjection) {
 	}
 }
 
-func (h *v22Harness) waitCancelled(ctx context.Context, ref string, execution v22ExecutionProjection, process v22ProcessRecord) v22GoalProjection {
+func (h *v22Harness) waitCancelled(
+	ctx context.Context,
+	ref string,
+	execution v22ExecutionProjection,
+	process v22CgroupProcessRecord,
+	workers []v22OwnedPIDWitness,
+) v22GoalProjection {
 	h.t.Helper()
 	terminal := h.waitTerminal(ctx, ref)
 	v22Require(h.t, terminal.object("goal").text("state") == "canceled", "B=%s, want controlled cancellation", terminal.object("goal").text("state"))
-	v22AssertProcessGone(h.t, process)
-	v22AssertCooperativeStopEvidence(h.t, process)
+	h.assertCgroupDrained(process)
+	v22AssertPIDWitnessesGone(h.t, workers...)
+	v22AssertCooperativeStopEvidence(h.t, process.process())
 	for {
 		b := h.get(ctx, ref)
 		goalView, executionSettled := b.object("goal"), true
@@ -1134,8 +1846,8 @@ func v22Item(key, objective, phase string, write []string, handoff bool, parent 
 
 func v22Config(root, port, codex, bwrap, toolchain, cgroupRoot string) string {
 	q := func(v string) string { b, _ := json.Marshal(v); return string(b) }
-	template := "[server]\nlisten = \"127.0.0.1:%s\"\nshutdown_timeout = \"10s\"\n[state.sqlite]\npath = %s\n[artifact.filesystem]\nroot = %s\n[credentials.local]\npath = %s\n[runtime]\nprovider = \"codex\"\nmax_output_bytes = 1048576\n[runtime.codex]\ncommand = %s\ntimeout = \"10m\"\nmax_concurrent_executions = 4\nwork_root = %s\n[workspace.local]\nroot = %s\n[repository.local]\nseed_path = %s\ntarget_ref = \"refs/heads/main\"\n[test_attestor]\nprovider = \"bubblewrap\"\ntimeout = \"5m\"\nmax_concurrent_runs = 4\n[test_attestor.bubblewrap]\ncommand = %s\n[test_attestor.go]\ntoolchain_root = %s\n[test_attestor.resources]\ncgroup_root = %s\n[identity]\nlocal_token_path = %s\n[project]\ndefault = \"project:v22-real\"\n[scheduler]\npoll_interval = \"50ms\"\nobservation_interval = \"100ms\"\nexecution_timeout = \"11m\"\nattest_test_claim_lease = \"6m\"\n[config]\neffective_path = %s\n"
-	return fmt.Sprintf(template, port, q(filepath.Join(root, "state", "orquesta.sqlite")), q(filepath.Join(root, "artifacts")), q(filepath.Join(root, "secrets", "credentials.json")), q(codex), q(filepath.Join(root, "work")), q(filepath.Join(root, "workspaces")), q(filepath.Join(root, "seed")), q(bwrap), q(toolchain), q(cgroupRoot), q(filepath.Join(root, "secrets", "local-owner.token")), q(filepath.Join(root, "effective.json")))
+	template := "[server]\nlisten = \"127.0.0.1:%s\"\nshutdown_timeout = \"10s\"\n[state.sqlite]\npath = %s\n[artifact.filesystem]\nroot = %s\n[credentials.local]\npath = %s\n[runtime]\nprovider = \"codex\"\nmax_output_bytes = 1048576\n[runtime.codex]\ncommand = %s\ntimeout = \"10m\"\nsupervisor_start_timeout = \"5s\"\nmax_concurrent_executions = 4\nwork_root = %s\ncgroup_root = %s\n[workspace.local]\nroot = %s\n[repository.local]\nseed_path = %s\ntarget_ref = \"refs/heads/main\"\n[test_attestor]\nprovider = \"bubblewrap\"\ntimeout = \"5m\"\nmax_concurrent_runs = 4\n[test_attestor.bubblewrap]\ncommand = %s\n[test_attestor.go]\ntoolchain_root = %s\n[test_attestor.resources]\ncgroup_root = %s\n[identity]\nlocal_token_path = %s\n[project]\ndefault = \"project:v22-real\"\n[scheduler]\npoll_interval = \"50ms\"\nobservation_interval = \"100ms\"\nexecution_timeout = \"11m\"\nattest_test_claim_lease = \"6m\"\n[config]\neffective_path = %s\n"
+	return fmt.Sprintf(template, port, q(filepath.Join(root, "state", "orquesta.sqlite")), q(filepath.Join(root, "artifacts")), q(filepath.Join(root, "secrets", "credentials.json")), q(codex), q(filepath.Join(root, "work")), q(cgroupRoot), q(filepath.Join(root, "workspaces")), q(filepath.Join(root, "seed")), q(bwrap), q(toolchain), q(cgroupRoot), q(filepath.Join(root, "secrets", "local-owner.token")), q(filepath.Join(root, "effective.json")))
 }
 func v22AttestorPrerequisites(t *testing.T) (string, string) {
 	t.Helper()
