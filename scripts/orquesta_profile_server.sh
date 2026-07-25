@@ -618,6 +618,13 @@ attestor_provider = (
 )
 if attestor_provider == "bubblewrap":
     attestor_max_concurrent = test_attestor.get("max_concurrent_runs")
+    attestor_max_subject_bytes = test_attestor.get("max_subject_bytes")
+    bubblewrap = test_attestor.get("bubblewrap")
+    bubblewrap_command = (
+        bubblewrap.get("command")
+        if isinstance(bubblewrap, dict)
+        else None
+    )
     repository = value.get("repository")
     repository_local = (
         repository.get("local")
@@ -632,15 +639,30 @@ if attestor_provider == "bubblewrap":
     if (
         type(attestor_max_concurrent) is not int
         or not 1 <= attestor_max_concurrent <= 64
+        or type(attestor_max_subject_bytes) is not int
+        or not 1048576 <= attestor_max_subject_bytes <= 8589934592
+        or not isinstance(bubblewrap_command, str)
+        or not os.path.isabs(bubblewrap_command)
+        or os.path.normpath(bubblewrap_command) != bubblewrap_command
+        or os.path.realpath(bubblewrap_command) != bubblewrap_command
         or not isinstance(repository_seed_path, str)
         or not repository_seed_path
         or not os.path.isabs(repository_seed_path)
         or os.path.normpath(repository_seed_path) != repository_seed_path
     ):
         raise ValueError("test_attestor")
+    bubblewrap_metadata = os.stat(bubblewrap_command, follow_symlinks=False)
+    if (
+        not stat.S_ISREG(bubblewrap_metadata.st_mode)
+        or not bubblewrap_metadata.st_mode & stat.S_IXUSR
+        or bubblewrap_metadata.st_mode & 0o022
+    ):
+        raise ValueError("test_attestor")
 else:
     attestor_provider = "other"
     attestor_max_concurrent = 0
+    attestor_max_subject_bytes = 0
+    bubblewrap_command = "-"
     repository_seed_path = "-"
 print(listen)
 print(token_path)
@@ -648,19 +670,23 @@ print(project_ref)
 print(account_auth_max_document_bytes)
 print(attestor_provider)
 print(attestor_max_concurrent)
+print(attestor_max_subject_bytes)
+print(bubblewrap_command)
 print(repository_seed_path)
 PY
 )" 2>/dev/null || fail "orquesta_config_invalid"
 
 mapfile -t validation_lines <<<"$validation_output"
-[ "${#validation_lines[@]}" -eq 7 ] || fail "orquesta_config_invalid"
+[ "${#validation_lines[@]}" -eq 9 ] || fail "orquesta_config_invalid"
 listen="${validation_lines[0]}"
 token_path="${validation_lines[1]}"
 project_ref="${validation_lines[2]}"
 account_auth_max_document_bytes="${validation_lines[3]}"
 attestor_provider="${validation_lines[4]}"
 attestor_max_concurrent="${validation_lines[5]}"
-repository_seed_path="${validation_lines[6]}"
+attestor_max_subject_bytes="${validation_lines[6]}"
+bubblewrap_command="${validation_lines[7]}"
+repository_seed_path="${validation_lines[8]}"
 [ -n "$listen" ] &&
   [ -n "$token_path" ] &&
   [ -n "$project_ref" ] &&
@@ -708,7 +734,7 @@ case "$state" in
     ;;
 esac
 
-preflight_bubblewrap_nofile() {
+preflight_bubblewrap_capacity() {
   git_command="$(PATH="$exec_path" command -v git 2>/dev/null || true)"
   if [ -z "$git_command" ] || ! private_executable "$git_command"; then
     fail_action \
@@ -720,22 +746,38 @@ preflight_bubblewrap_nofile() {
   python3 - \
     "$git_command" \
     "$repository_seed_path" \
-    "$attestor_max_concurrent" <<'PY' >/dev/null 2>&1
+    "$attestor_max_concurrent" \
+    "$attestor_max_subject_bytes" \
+    "$bubblewrap_command" <<'PY' >/dev/null 2>&1
+import fcntl
 import os
+import posixpath
 import resource
 import stat
 import subprocess
 import sys
 
-git_command, repository, concurrent_text = sys.argv[1:]
+(
+    git_command,
+    repository,
+    concurrent_text,
+    max_subject_text,
+    bubblewrap_command,
+) = sys.argv[1:]
 descriptor_global_reserve = 64
 descriptor_run_reserve = 16
+# Hasta 128 argumentos del RequiredTestSpec más CLI y holgura de protocolo.
+argument_count_margin = 192
+fixed_runner_arguments = 72
+max_subject_entries = 1_000_000
 
 try:
     concurrent = int(concurrent_text)
+    max_subject_bytes = int(max_subject_text)
     metadata = os.lstat(repository)
     if (
         concurrent < 1
+        or max_subject_bytes < 1048576
         or not os.path.isabs(repository)
         or os.path.normpath(repository) != repository
         or os.path.realpath(repository) != repository
@@ -808,7 +850,9 @@ except (OSError, UnicodeError, ValueError):
     raise SystemExit(41)
 
 pending = b""
-descriptor_entries = 0
+regular_entries = 0
+symlink_entries = 0
+directories = set()
 try:
     while True:
         chunk = process.stdout.read(65536)
@@ -820,13 +864,42 @@ try:
         if len(pending) > 8192:
             raise ValueError("entry")
         for record in records:
-            mode = record.split(b" ", 1)[0]
+            header, separator, name_bytes = record.partition(b"\t")
+            fields = header.split(b" ")
+            if not separator or len(fields) != 3:
+                raise ValueError("entry")
+            mode = fields[0]
+            try:
+                name = name_bytes.decode("utf-8")
+            except UnicodeDecodeError:
+                raise ValueError("entry")
+            if (
+                not name
+                or name.startswith("/")
+                or posixpath.normpath(name) != name
+                or any(part in ("", ".", "..") for part in name.split("/"))
+            ):
+                raise ValueError("entry")
+            parent = posixpath.dirname(name) or "."
+            depth = 0
+            while parent != ".":
+                depth += 1
+                if depth > 256:
+                    raise ValueError("entry")
+                directories.add(parent)
+                parent = posixpath.dirname(parent) or "."
             if mode in (b"100644", b"100755"):
-                descriptor_entries += 1
-                if descriptor_entries > per_run:
+                regular_entries += 1
+                if regular_entries > per_run:
                     process.kill()
                     process.wait()
                     raise SystemExit(40)
+            elif mode == b"120000":
+                symlink_entries += 1
+            elif mode == b"160000":
+                raise ValueError("gitlink")
+            else:
+                raise ValueError("mode")
     if pending or process.wait() != 0:
         raise ValueError("tree")
 except SystemExit:
@@ -835,6 +908,82 @@ except (OSError, ValueError):
     process.kill()
     process.wait()
     raise SystemExit(41)
+
+entry_budget = min(max_subject_bytes // 1024 + 1, max_subject_entries)
+if regular_entries + symlink_entries + len(directories) > entry_budget:
+    raise SystemExit(43)
+
+required_arguments = (
+    fixed_runner_arguments
+    + 2 * len(directories)
+    + 5 * regular_entries
+    + 3 * symlink_entries
+    + argument_count_margin
+)
+probe_base = [
+    "--unshare-all",
+    "--unshare-user",
+    "--disable-userns",
+    "--assert-userns-disabled",
+    "--die-with-parent",
+    "--new-session",
+    "--clearenv",
+    "--ro-bind",
+    "/",
+    "/",
+]
+if required_arguments < len(probe_base):
+    raise SystemExit(44)
+probe_arguments = probe_base + ["--unshare-ipc"] * (
+    required_arguments - len(probe_base)
+)
+payload = b"\0".join(value.encode("utf-8") for value in probe_arguments) + b"\0"
+if len(payload) > max_subject_bytes:
+    raise SystemExit(43)
+
+try:
+    descriptor = os.memfd_create(
+        "orquesta-bwrap-argument-probe",
+        os.MFD_CLOEXEC | os.MFD_ALLOW_SEALING,
+    )
+    try:
+        if os.write(descriptor, payload) != len(payload):
+            raise OSError("short write")
+        os.fchmod(descriptor, 0o400)
+        fcntl.fcntl(
+            descriptor,
+            fcntl.F_ADD_SEALS,
+            fcntl.F_SEAL_WRITE
+            | fcntl.F_SEAL_GROW
+            | fcntl.F_SEAL_SHRINK
+            | fcntl.F_SEAL_SEAL,
+        )
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        probe = subprocess.run(
+            [
+                bubblewrap_command,
+                "--args",
+                str(descriptor),
+                "--",
+                "/bin/true",
+            ],
+            pass_fds=(descriptor,),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            env={},
+            check=False,
+        )
+    finally:
+        os.close(descriptor)
+except OSError:
+    raise SystemExit(44)
+
+if probe.returncode != 0:
+    diagnostic = probe.stderr[:4096].decode("utf-8", errors="replace").lower()
+    if "exceeded maximum number of arguments" in diagnostic:
+        raise SystemExit(43)
+    raise SystemExit(44)
 PY
   preflight_status="$?"
   set -e
@@ -850,16 +999,26 @@ PY
         "test_attestor_repository_head_unavailable" \
         "repair_configured_repository_head"
       ;;
-    *)
+    42)
       fail_action \
         "test_attestor_nofile_probe_failed" \
         "configure_finite_process_nofile_limits"
+      ;;
+    43)
+      fail_action \
+        "test_attestor_bubblewrap_arguments_insufficient" \
+        "configure_bubblewrap_with_sufficient_argument_capacity"
+      ;;
+    *)
+      fail_action \
+        "test_attestor_bubblewrap_probe_failed" \
+        "repair_configured_bubblewrap"
       ;;
   esac
 }
 
 if [ "$attestor_provider" = "bubblewrap" ]; then
-  preflight_bubblewrap_nofile
+  preflight_bubblewrap_capacity
 fi
 
 exec 9<>"$GLOBAL_LEASE_LOCK"

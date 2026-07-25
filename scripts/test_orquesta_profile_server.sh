@@ -18,6 +18,9 @@ FAKE_SOURCE="$TEST_ROOT/fake-server.go"
 FAKE_BINARY="$TEST_ROOT/orquesta-fake"
 GO_CACHE="$TEST_ROOT/go-cache"
 REPOSITORY="$TEST_ROOT/repository"
+FAKE_BWRAP_9000="$TEST_ROOT/fake-bwrap-9000"
+FAKE_BWRAP_65536="$TEST_ROOT/fake-bwrap-65536"
+FAKE_BWRAP_FAILED="$TEST_ROOT/fake-bwrap-failed"
 mkdir -m 700 "$BASE" "$ACCOUNTS" "$GO_CACHE"
 
 cleanup() {
@@ -161,6 +164,46 @@ GO
 GOCACHE="$GO_CACHE" go build -o "$FAKE_BINARY" "$FAKE_SOURCE"
 chmod 755 "$FAKE_BINARY"
 
+write_fake_bwrap() {
+  command_path="$1"
+  capacity="$2"
+  cat >"$command_path" <<EOF
+#!/usr/bin/env python3
+import os
+import sys
+
+capacity = $capacity
+if len(sys.argv) != 5 or sys.argv[1] != "--args" or sys.argv[3:] != ["--", "/bin/true"]:
+    raise SystemExit(97)
+with open("/proc/self/fd/" + sys.argv[2], "rb") as arguments:
+    values = [item for item in arguments.read().split(b"\\0") if item]
+expected = [
+    b"--unshare-all", b"--unshare-user", b"--disable-userns",
+    b"--assert-userns-disabled", b"--die-with-parent", b"--new-session",
+    b"--clearenv", b"--ro-bind", b"/", b"/",
+]
+if values[:len(expected)] != expected:
+    raise SystemExit(98)
+count = len(values)
+count += len(sys.argv) - 1
+if count > capacity:
+    print("bwrap: Exceeded maximum number of arguments %d" % capacity, file=sys.stderr)
+    raise SystemExit(1)
+EOF
+  chmod 755 "$command_path"
+}
+
+write_fake_bwrap "$FAKE_BWRAP_9000" 9000
+write_fake_bwrap "$FAKE_BWRAP_65536" 65536
+cat >"$FAKE_BWRAP_FAILED" <<'PY'
+#!/usr/bin/env python3
+import sys
+
+print("bwrap: probe failure", file=sys.stderr)
+raise SystemExit(1)
+PY
+chmod 755 "$FAKE_BWRAP_FAILED"
+
 available_port() {
   python3 - <<'PY'
 import socket
@@ -246,6 +289,7 @@ start_profile_with_nofile() {
 enable_bubblewrap_attestor() {
   profile="$1"
   max_concurrent="$2"
+  bubblewrap_command="${3:-$FAKE_BWRAP_65536}"
   cat >>"$TEST_ROOT/$profile.toml" <<EOF
 
 [repository.local]
@@ -253,7 +297,11 @@ seed_path = "$REPOSITORY"
 
 [test_attestor]
 provider = "bubblewrap"
+max_subject_bytes = 536870912
 max_concurrent_runs = $max_concurrent
+
+[test_attestor.bubblewrap]
+command = "$bubblewrap_command"
 EOF
   chmod 600 "$TEST_ROOT/$profile.toml"
 }
@@ -398,7 +446,7 @@ expect_failure orquesta_config_invalid start_profile CodexA
 "$SCRIPT" stop --profile CodexB --runtime-base "$BASE" >/dev/null
 
 # El preflight usa solo blobs regulares del HEAD autorizado y replica las
-# reservas 64 + concurrencia*(entradas+16) del attestor bubblewrap.
+# reservas NOFILE y el número real de argumentos del attestor bubblewrap.
 mkdir -m 700 "$REPOSITORY"
 git -C "$REPOSITORY" init -q
 for entry in $(seq 1 20); do
@@ -425,7 +473,39 @@ expect_failure test_attestor_nofile_insufficient \
 grep -q 'action=increase_process_nofile_limit' "$TEST_ROOT/failure.err"
 [ ! -e "$BASE/CodexA/run/server.pid" ]
 
-# Un provider distinto de bubblewrap no queda sujeto al preflight NOFILE.
+# 1800 blobs fuerzan más de 9000 argumentos; el mismo HEAD cabe en 65536.
+for entry in $(seq 21 1820); do
+  printf 'tracked-%s\n' "$entry" >"$REPOSITORY/tracked-$entry"
+done
+mkdir "$REPOSITORY/nested"
+ln -s ../tracked-1 "$REPOSITORY/nested/link"
+git -C "$REPOSITORY" add -- 'tracked-*' nested/link
+git -C "$REPOSITORY" \
+  -c user.name=Orquesta \
+  -c user.email=orquesta.invalid \
+  commit -qm "fixture amplia"
+
+write_config CodexA "$(available_port)" 1 1048576
+enable_bubblewrap_attestor CodexA 1 "$FAKE_BWRAP_9000"
+expect_failure test_attestor_bubblewrap_arguments_insufficient \
+  start_profile_with_nofile CodexA 4096
+grep -q 'action=configure_bubblewrap_with_sufficient_argument_capacity' \
+  "$TEST_ROOT/failure.err"
+[ ! -e "$BASE/CodexA/run/server.pid" ]
+
+write_config CodexA "$(available_port)" 1 1048576
+enable_bubblewrap_attestor CodexA 1 "$FAKE_BWRAP_FAILED"
+expect_failure test_attestor_bubblewrap_probe_failed \
+  start_profile_with_nofile CodexA 4096
+grep -q 'action=repair_configured_bubblewrap' "$TEST_ROOT/failure.err"
+[ ! -e "$BASE/CodexA/run/server.pid" ]
+
+write_config CodexA "$(available_port)" 1 1048576
+enable_bubblewrap_attestor CodexA 1 "$FAKE_BWRAP_65536"
+start_profile_with_nofile CodexA 4096 >/dev/null
+"$SCRIPT" stop --profile CodexA --runtime-base "$BASE" >/dev/null
+
+# Un provider distinto de bubblewrap no queda sujeto a ningún preflight suyo.
 write_config CodexA "$(available_port)" 1 1048576
 start_profile_with_nofile CodexA 80 >/dev/null
 "$SCRIPT" stop --profile CodexA --runtime-base "$BASE" >/dev/null
