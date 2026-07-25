@@ -20,6 +20,7 @@ max_concurrent_runs = 16
 
 [test_attestor.microvm]
 launcher_socket = "/run/orquesta/firecracker-launcher.sock"
+expected_asset_digest = "<EXPECTED_ASSET_DIGEST_PUBLICADO_POR_APPLY>"
 guest_memory_mib = 4096
 
 [test_attestor.resources]
