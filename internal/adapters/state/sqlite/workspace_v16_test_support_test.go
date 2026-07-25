@@ -281,6 +281,28 @@ func newSQLiteV16OrchestratorWithStateAndAttestor(
 	state application.StateRepository,
 	attestor application.TestAttestor,
 ) *application.Orchestrator {
+	return newSQLiteV16OrchestratorWithStateAttestorAndSessions(
+		t, system, state, attestor, nil,
+	)
+}
+
+func newSQLiteV16OrchestratorWithSessions(
+	t *testing.T,
+	system *sqliteV15System,
+	sessions ports.ExecutionSessionBroker,
+) *application.Orchestrator {
+	return newSQLiteV16OrchestratorWithStateAttestorAndSessions(
+		t, system, system.repository, &sqliteTestAttestor{}, sessions,
+	)
+}
+
+func newSQLiteV16OrchestratorWithStateAttestorAndSessions(
+	t *testing.T,
+	system *sqliteV15System,
+	state application.StateRepository,
+	attestor application.TestAttestor,
+	sessions ports.ExecutionSessionBroker,
+) *application.Orchestrator {
 	t.Helper()
 	orchestrator, err := application.New(application.Dependencies{
 		State: state, Access: system.repository,
@@ -297,7 +319,7 @@ func newSQLiteV16OrchestratorWithStateAndAttestor(
 		DirectorLeaseDuration: 30 * time.Second,
 		EffectApprovalTTL:     system.policy.EffectApprovalTTL, BudgetPolicy: system.policy,
 		ObservationDelay: time.Second, ExecutionTimeout: time.Hour,
-		AgentCapabilities: sqliteTestCapabilities(),
+		AgentCapabilities: sqliteTestCapabilities(), ExecutionSessions: sessions,
 	})
 	sqliteTestNoError(t, err)
 	return orchestrator

@@ -87,11 +87,15 @@ func ValidatePersistedReviewerBinding(record GoalRecord, item goal.WorkItem,
 	}
 	switch participant.State {
 	case ExecutionSucceeded:
-		if facts != 1 {
+		if facts != 1 && (facts != 0 || !persistedReviewerSettledDuringCancel(record, item, participant)) {
 			return errors.New("review.persisted_assessment_invalid")
 		}
 	case ExecutionQueued, ExecutionDispatching, ExecutionRunning, ExecutionFailed, ExecutionStopped:
 		if facts != 0 {
+			return errors.New("review.persisted_assessment_invalid")
+		}
+	case ExecutionCanceled:
+		if facts != 0 || !persistedReviewerCancelCausal(record, item, participant) {
 			return errors.New("review.persisted_assessment_invalid")
 		}
 	default:
@@ -126,6 +130,107 @@ func ValidatePersistedReviewerBinding(record GoalRecord, item goal.WorkItem,
 		return errors.New("review.persisted_launch_invalid")
 	}
 	return nil
+}
+
+func persistedReviewerCancelCausal(
+	record GoalRecord,
+	item goal.WorkItem,
+	participant ExecutionRecord,
+) bool {
+	if participant.FailureCode != "application.execution_canceled" || participant.FinishedAt.IsZero() {
+		return false
+	}
+	_, found := persistedReviewerCancelControl(record, item, participant, true)
+	return found
+}
+
+func persistedReviewerSettledDuringCancel(
+	record GoalRecord,
+	item goal.WorkItem,
+	participant ExecutionRecord,
+) bool {
+	if participant.State != ExecutionSucceeded || participant.FinishedAt.IsZero() {
+		return false
+	}
+	control, found := persistedReviewerCancelControl(record, item, participant, false)
+	if !found {
+		return false
+	}
+	stopActionRef := "action:stop:" + control.Ref + ":" + participant.Ref.String()
+	stopEffects := 0
+	stopReceiptRef := ""
+	for _, receipt := range record.EffectReceipts {
+		if receipt.ActionRef != stopActionRef || receipt.Subject.ExecutionRef != participant.Ref ||
+			receipt.Subject.GoalRef != participant.GoalRef ||
+			receipt.Subject.WorkItemRef != participant.WorkItemRef ||
+			receipt.Status != EffectStatusAlreadyCompleted ||
+			receipt.ConfirmedAt.Before(control.RequestedAt) ||
+			receipt.ConfirmedAt.After(participant.FinishedAt) {
+			continue
+		}
+		stopReceiptRef = receipt.Ref
+		stopEffects++
+	}
+	if stopEffects != 1 {
+		return false
+	}
+	stopConsumptions, observations := 0, 0
+	for _, receipt := range record.ConsumptionReceipts {
+		if receipt.ExecutionRef != participant.Ref || receipt.GoalRef != participant.GoalRef ||
+			receipt.WorkItemRef != participant.WorkItemRef ||
+			receipt.Outcome != ActionConsumedCompleted || receipt.ErrorCode != "" {
+			continue
+		}
+		switch {
+		case receipt.Kind == ActionStopAgent && receipt.ActionRef == stopActionRef &&
+			receipt.EffectReceiptRef == stopReceiptRef:
+			stopConsumptions++
+		case receipt.Kind == ActionObserveAgent &&
+			receipt.ActionRef == "action:observe:"+participant.Ref.String() &&
+			receipt.EffectReceiptRef == "" && receipt.ConsumedAt.Equal(participant.FinishedAt):
+			observations++
+		}
+	}
+	return stopConsumptions == 1 && observations == 1
+}
+
+func persistedReviewerCancelControl(
+	record GoalRecord,
+	item goal.WorkItem,
+	participant ExecutionRecord,
+	exactRequestTime bool,
+) (ControlRecord, bool) {
+	if item.State() == goal.WorkItemStateRunning {
+		if !item.CancelRequested() {
+			return ControlRecord{}, false
+		}
+	} else if item.State() != goal.WorkItemStateCanceled {
+		return ControlRecord{}, false
+	}
+	var selected ControlRecord
+	matches := 0
+	for _, control := range record.Controls {
+		targetsItem := control.Target == ControlTargetGoal ||
+			control.Target == ControlTargetWorkItem && control.WorkItemRef == item.Ref()
+		causalTime := !participant.FinishedAt.Before(control.RequestedAt)
+		if exactRequestTime {
+			causalTime = participant.FinishedAt.Equal(control.RequestedAt)
+		}
+		if control.Status == ControlConfirmed && item.State() == goal.WorkItemStateCanceled {
+			causalTime = causalTime && !participant.FinishedAt.After(control.ConfirmedAt)
+		}
+		if item.State() == goal.WorkItemStateRunning && control.Status != ControlRequested {
+			continue
+		}
+		if control.Operation != ControlCancel ||
+			(control.Status != ControlRequested && control.Status != ControlConfirmed) ||
+			control.GoalRef != participant.GoalRef || !targetsItem || !causalTime ||
+			ValidatePersistedControlRecord(control) != nil {
+			continue
+		}
+		selected, matches = control, matches+1
+	}
+	return selected, matches == 1
 }
 
 // ValidatePersistedReviewRecord centralizes the pure aggregate invariant used

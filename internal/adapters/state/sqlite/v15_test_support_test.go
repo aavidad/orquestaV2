@@ -92,6 +92,7 @@ type sqliteV15External struct {
 	launchGate       chan struct{}
 	launchCalls      int
 	stopCalls        int
+	stopStatus       ports.AgentStopStatus
 	observationUsage governance.ResourceUsage
 	reviewContent    []byte
 	reviewVerdict    review.Verdict
@@ -270,14 +271,18 @@ func (external *sqliteV15External) Stop(
 ) (ports.AgentStopReceipt, error) {
 	external.mu.Lock()
 	external.stopCalls++
+	status := external.stopStatus
 	external.mu.Unlock()
+	if status == "" {
+		status = ports.AgentStopped
+	}
 	return ports.AgentStopReceipt{
 		ExecutionRef: request.ExecutionRef, GoalRef: request.GoalRef, WorkItemRef: request.WorkItemRef,
 		PlanGeneration: request.PlanGeneration, AppSpecGeneration: request.AppSpecGeneration,
 		ExecutionAttempt: request.ExecutionAttempt, SpecHash: request.SpecHash,
 		ProviderRef: request.ProviderRef, ModelRef: request.ModelRef, AgentRef: request.AgentRef,
 		ExternalRef: request.ExternalRef, Mode: request.Mode, IdempotencyKey: request.IdempotencyKey,
-		Status: ports.AgentStopped, ReceiptRef: "provider-stop:" + request.ExecutionRef.String(),
+		Status: status, ReceiptRef: "provider-stop:" + request.ExecutionRef.String(),
 		ConfirmedAt: external.clock.Now(),
 	}, nil
 }

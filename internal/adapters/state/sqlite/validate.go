@@ -427,6 +427,10 @@ func workItemStagedOutputExecution(
 	if bindingMatches != 1 {
 		return application.ExecutionRecord{}, false
 	}
+	if canceledStagedOutputPreserved(record, item, execution) &&
+		canceledAwaitingCommitPreserved(record, execution) {
+		return execution, true
+	}
 	if item.State() == goal.WorkItemStateRunning && execution.State == application.ExecutionAwaitingCommit {
 		return execution, true
 	}
@@ -446,6 +450,9 @@ func workItemStagedOutputExecution(
 	if !changeFound {
 		return application.ExecutionRecord{}, false
 	}
+	if canceledStagedOutputPreserved(record, item, execution) {
+		return execution, true
+	}
 	if item.State() == goal.WorkItemStateRunning &&
 		(execution.State == application.ExecutionAwaitingAttestation || execution.State == application.ExecutionAwaitingIntegration) {
 		return execution, true
@@ -463,6 +470,67 @@ func workItemStagedOutputExecution(
 		return application.ExecutionRecord{}, false
 	}
 	return failedWorkItemStagedOutputExecution(execution, matchingChange, record)
+}
+
+func canceledStagedOutputPreserved(
+	record application.GoalRecord,
+	item goal.WorkItem,
+	execution application.ExecutionRecord,
+) bool {
+	if item.State() != goal.WorkItemStateCanceled || execution.State != application.ExecutionCanceled ||
+		execution.FailureCode != "application.execution_canceled" || execution.FinishedAt.IsZero() {
+		return false
+	}
+	itemFinishedAt, finished := item.FinishedAt()
+	if !finished || !itemFinishedAt.Equal(execution.FinishedAt) {
+		return false
+	}
+	matches := 0
+	for _, control := range record.Controls {
+		exactTarget := control.Target == application.ControlTargetGoal ||
+			control.Target == application.ControlTargetWorkItem && control.WorkItemRef == item.Ref()
+		causalTime := !execution.FinishedAt.Before(control.RequestedAt)
+		switch control.Status {
+		case application.ControlRequested:
+			causalTime = causalTime && control.Target == application.ControlTargetGoal
+		case application.ControlConfirmed:
+			causalTime = causalTime && !execution.FinishedAt.After(control.ConfirmedAt)
+		default:
+			causalTime = false
+		}
+		if control.Operation != application.ControlCancel || control.GoalRef != execution.GoalRef ||
+			!exactTarget || !causalTime ||
+			application.ValidatePersistedControlRecord(control) != nil {
+			continue
+		}
+		matches++
+	}
+	return matches == 1
+}
+
+func canceledAwaitingCommitPreserved(
+	record application.GoalRecord,
+	execution application.ExecutionRecord,
+) bool {
+	for _, change := range record.ChangeSets {
+		if change.ExecutionRef == execution.Ref {
+			return false
+		}
+	}
+	matches := 0
+	for _, receipt := range record.ConsumptionReceipts {
+		if receipt.Kind != application.ActionCommitChange ||
+			receipt.ActionRef != "action:commit-change:"+execution.Ref.String() ||
+			receipt.GoalRef != execution.GoalRef || receipt.WorkItemRef != execution.WorkItemRef ||
+			receipt.ExecutionRef != execution.Ref || receipt.PlanGeneration != execution.PlanGeneration ||
+			receipt.Outcome != application.ActionConsumedCompleted ||
+			receipt.ErrorCode != "application.action_retired" ||
+			receipt.ChangeRef.String() == "" || receipt.EffectReceiptRef != "" {
+			continue
+		}
+		matches++
+	}
+	return matches == 1
 }
 
 func negativeCouncilCandidatePreserved(

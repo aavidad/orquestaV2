@@ -76,6 +76,14 @@ func persistControlGoalAndExecutions(
 		if err := updateExecutionCAS(ctx, transaction, execution, stored.State); err != nil {
 			return err
 		}
+		if applicationTerminalExecution(execution.State) {
+			if err := scheduleExecutionSessionRevocation(
+				ctx, transaction, execution.GoalRef, execution.WorkItemRef,
+				execution.Ref, "", state.OperationAt,
+			); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

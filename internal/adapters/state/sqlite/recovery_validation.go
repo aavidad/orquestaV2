@@ -223,6 +223,44 @@ func validateRecoveryOutboxLegacy(ctx context.Context, transaction *sql.Tx) erro
 	if hasPurpose {
 		executionPurpose, boundPurpose = "e.purpose", "bound.purpose"
 	}
+	hasRetiredActions, err := sqliteTableHasColumn(ctx, transaction, "outbox", "retired_at")
+	if err != nil {
+		return err
+	}
+	stopRetirementPredicate := ""
+	if hasRetiredActions {
+		stopRetirementPredicate = " AND stop.retired_at IS NULL"
+	}
+	hasControls, err := sqliteTableHasColumn(ctx, transaction, "controls", "operation")
+	if err != nil {
+		return err
+	}
+	stopCancelProof := "0"
+	if hasControls {
+		stopCancelProof = `(SELECT COUNT(*) FROM outbox stop
+        JOIN controls cancel_control
+         ON cancel_control.ref=stop.control_ref
+         AND cancel_control.goal_ref=stop.goal_ref
+        WHERE stop.kind='stop_agent' AND stop.goal_ref=o.goal_ref
+         AND stop.work_item_ref=o.work_item_ref AND stop.execution_ref=o.execution_ref
+         AND stop.quarantined_at IS NULL` + stopRetirementPredicate + `
+         AND cancel_control.operation='cancel'
+         AND cancel_control.status='requested'
+         AND (cancel_control.target='goal'
+          OR (cancel_control.target='work_item'
+           AND cancel_control.work_item_ref=stop.work_item_ref))
+         AND (stop.completed_at IS NULL OR EXISTS (
+          SELECT 1 FROM action_consumption_receipts stop_receipt
+          WHERE stop_receipt.action_ref=stop.ref
+           AND stop_receipt.kind='stop_agent'
+           AND stop_receipt.goal_ref=stop.goal_ref
+           AND stop_receipt.work_item_ref=stop.work_item_ref
+           AND stop_receipt.execution_ref=stop.execution_ref
+           AND stop_receipt.outcome='completed'
+           AND stop_receipt.error_code=''
+           AND stop_receipt.consumed_at=stop.completed_at
+         )))`
+	}
 	rows, err := transaction.QueryContext(ctx, fmt.Sprintf(`
 SELECT o.ref, o.kind, o.goal_ref, o.work_item_ref, o.execution_ref,
        o.plan_generation, o.work_item_generation, o.available_at,
@@ -230,6 +268,7 @@ SELECT o.ref, o.kind, o.goal_ref, o.work_item_ref, o.execution_ref,
        o.completed_at, o.quarantined_at, wf.fence,
        e.plan_generation, e.state, e.attempt_no, %s,
        wi.revision, wi.state, wi.execution_ref,
+       %s,
        %s, bound.state,
        g.plan_generation, g.state
 FROM outbox o
@@ -244,7 +283,7 @@ JOIN goals g ON g.ref = o.goal_ref
 LEFT JOIN executions bound ON bound.goal_ref=wi.goal_ref AND bound.work_item_ref=wi.ref AND bound.ref=wi.execution_ref
 LEFT JOIN work_item_fences wf ON wf.goal_ref = o.goal_ref AND wf.work_item_ref = o.work_item_ref
 WHERE o.kind IN ('launch_agent', 'observe_agent')
-ORDER BY o.ref`, executionPurpose, boundPurpose))
+ORDER BY o.ref`, executionPurpose, stopCancelProof, boundPurpose))
 	if err != nil {
 		return err
 	}
@@ -254,6 +293,7 @@ ORDER BY o.ref`, executionPurpose, boundPurpose))
 		var kind, goalValue, itemValue, executionValue string
 		var planGeneration, itemGeneration, availableAt, deliveryAttempt, fence int64
 		var executionPlanGeneration, executionAttempt, currentItemRevision, currentGoalPlanGeneration int64
+		var pendingStops int64
 		var executionState, executionPurpose, currentItemState, currentGoalState string
 		var boundPurpose, boundState sql.NullString
 		var currentExecutionRef sql.NullString
@@ -266,6 +306,7 @@ ORDER BY o.ref`, executionPurpose, boundPurpose))
 			&deliveryAttempt, &fence, &completedAt, &quarantinedAt, &currentFence,
 			&executionPlanGeneration, &executionState, &executionAttempt, &executionPurpose,
 			&currentItemRevision, &currentItemState, &currentExecutionRef,
+			&pendingStops,
 			&boundPurpose, &boundState,
 			&currentGoalPlanGeneration, &currentGoalState,
 		); err != nil {
@@ -313,6 +354,7 @@ ORDER BY o.ref`, executionPurpose, boundPurpose))
 			currentGoalPlanGeneration,
 			currentGoalState,
 			executionPurpose,
+			pendingStops,
 			boundPurpose,
 			boundState,
 		) {
@@ -364,12 +406,15 @@ func activeRecoveryActionState(
 	currentGoalPlanGeneration int64,
 	currentGoalState string,
 	executionPurpose string,
+	pendingStops int64,
 	boundPurpose sql.NullString,
 	boundState sql.NullString,
 ) bool {
 	if planGeneration > currentGoalPlanGeneration || currentGoalState != "running" {
 		return false
 	}
+	exactOrCancelStop := itemGeneration == currentItemRevision ||
+		pendingStops == 1 && itemGeneration <= currentItemRevision
 	switch kind {
 	case application.ActionLaunchAgent:
 		if executionPurpose == string(application.ExecutionPurposePrimaryReview) ||
@@ -377,7 +422,8 @@ func activeRecoveryActionState(
 			executionPurpose == string(application.ExecutionPurposeCouncilProposer) ||
 			executionPurpose == string(application.ExecutionPurposeCouncilCritic) ||
 			executionPurpose == string(application.ExecutionPurposeCouncilArbiter) {
-			return (executionState == "queued" || executionState == "dispatching") && currentItemState == "running" &&
+			return (executionState == "queued" || executionState == "dispatching") &&
+				currentItemState == "running" &&
 				currentExecutionRef.Valid && currentExecutionRef.String != executionRef && boundPurpose.String == "author" &&
 				boundState.String == "awaiting_integration" && itemGeneration <= currentItemRevision
 		}
@@ -400,11 +446,12 @@ func activeRecoveryActionState(
 			executionPurpose == string(application.ExecutionPurposeCouncilArbiter) {
 			return executionState == "running" && currentItemState == "running" && currentExecutionRef.Valid &&
 				currentExecutionRef.String != executionRef && boundPurpose.String == "author" &&
-				boundState.String == "awaiting_integration" && itemGeneration == currentItemRevision
+				boundState.String == "awaiting_integration" &&
+				exactOrCancelStop
 		}
 		return executionState == "running" && currentItemState == "running" &&
 			currentExecutionRef.Valid && currentExecutionRef.String == executionRef &&
-			itemGeneration == currentItemRevision
+			exactOrCancelStop
 	default:
 		return false
 	}

@@ -104,10 +104,6 @@ func (orchestrator *Orchestrator) buildCancelControl(ctx context.Context, record
 		switch current.State {
 		case ExecutionQueued, ExecutionAwaitingCommit, ExecutionAwaitingAttestation, ExecutionAwaitingIntegration:
 			previousState := current.State
-			current.State = ExecutionCanceled
-			current.FailureCode = "application.execution_canceled"
-			current.FinishedAt = state.OperationAt
-			state.Executions = append(state.Executions, current)
 			switch previousState {
 			case ExecutionQueued:
 				initialRef := "action:launch:" + current.Ref.String()
@@ -126,12 +122,34 @@ func (orchestrator *Orchestrator) buildCancelControl(ctx context.Context, record
 				}
 				state.RetireActionRefs = append(state.RetireActionRefs, integrationRefs...)
 			}
+			if deferBoundAuthorCancel(state.Goal, updatedItem, current, record.Executions) {
+				continue
+			}
+			current.State = ExecutionCanceled
+			current.FailureCode = "application.execution_canceled"
+			current.FinishedAt = state.OperationAt
+			state.Executions = append(state.Executions, current)
 		case ExecutionDispatching, ExecutionRunning:
 			action, actionErr := orchestrator.stopAction(policy, state.Control, state.Goal, updatedItem, current, state.OperationAt)
 			if actionErr != nil {
 				return actionErr
 			}
 			state.NewActions = append(state.NewActions, action)
+		}
+	}
+	for _, current := range state.Goal.WorkItems() {
+		if request.Target == ControlTargetWorkItem && current.Ref() != request.WorkItemRef {
+			continue
+		}
+		if current.State() != goal.WorkItemStateRunning || !current.CancelRequested() ||
+			len(cancelExecutions(record.Executions, ControlTargetWorkItem, current.Ref())) != 0 {
+			continue
+		}
+		state.Goal, err = state.Goal.CompleteWorkItemCancel(
+			state.Goal.Revision(), current.Revision(), current.Ref(), state.OperationAt,
+		)
+		if err != nil {
+			return err
 		}
 	}
 	if len(state.NewActions) == 0 {
@@ -154,6 +172,24 @@ func (orchestrator *Orchestrator) buildCancelControl(ctx context.Context, record
 	state.NewActions = append(state.NewActions, newActions...)
 	state.Events = append(state.Events, scheduledEvents...)
 	return nil
+}
+
+func deferBoundAuthorCancel(
+	aggregate goal.Goal,
+	item goal.WorkItem,
+	execution ExecutionRecord,
+	executions []ExecutionRecord,
+) bool {
+	bound, found := item.Execution()
+	if !found || bound != execution.Ref || isReviewerExecution(execution) || isCouncilExecution(execution) ||
+		(execution.State != ExecutionAwaitingCommit &&
+			execution.State != ExecutionAwaitingAttestation &&
+			execution.State != ExecutionAwaitingIntegration) {
+		return false
+	}
+	current, found := aggregate.WorkItem(item.Ref())
+	return found && current.State() == goal.WorkItemStateRunning && current.CancelRequested() &&
+		len(cancelExecutions(executions, ControlTargetWorkItem, item.Ref())) != 0
 }
 
 func replaceExecutions(existing, updates []ExecutionRecord) []ExecutionRecord {

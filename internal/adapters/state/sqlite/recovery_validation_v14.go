@@ -10,8 +10,9 @@ import (
 )
 
 type recoveryControlEffects struct {
-	actions int
-	effects int
+	actions      int
+	effects      int
+	finalEffects int
 }
 
 func validateRecoveryV14Controls(ctx context.Context, transaction *sql.Tx) error {
@@ -50,6 +51,23 @@ func validateRecoveryV14Controls(ctx context.Context, transaction *sql.Tx) error
 			if control.Status == application.ControlRequested && counts.actions == 0 {
 				return fmt.Errorf("sqlite.recovery_control_cancel_lifecycle_invalid:%s", ref)
 			}
+			if control.Target == application.ControlTargetWorkItem {
+				if control.Status == application.ControlRequested && counts.finalEffects != 0 {
+					return fmt.Errorf("sqlite.recovery_stop_effect_control_invalid:%s", ref)
+				}
+				if control.Status == application.ControlConfirmed && counts.actions != 0 &&
+					counts.finalEffects != 1 {
+					terminalReceipt, terminalErr := recoveryV14CancelTerminalReceipt(
+						ctx, transaction, control,
+					)
+					if terminalErr != nil {
+						return terminalErr
+					}
+					if !terminalReceipt {
+						return fmt.Errorf("sqlite.recovery_stop_effect_control_invalid:%s", ref)
+					}
+				}
+			}
 			if control.Status == application.ControlConfirmed && control.Target == application.ControlTargetGoal &&
 				control.ReceiptRef != "receipt:"+control.Ref {
 				return fmt.Errorf("sqlite.recovery_control_cancel_receipt_invalid:%s", ref)
@@ -67,6 +85,46 @@ func validateRecoveryV14Controls(ctx context.Context, transaction *sql.Tx) error
 		}
 	}
 	return validateRecoveryV14MailboxRetirements(ctx, transaction)
+}
+
+func recoveryV14CancelTerminalReceipt(
+	ctx context.Context,
+	tx *sql.Tx,
+	control application.ControlRecord,
+) (bool, error) {
+	if control.Status != application.ControlConfirmed ||
+		control.Target != application.ControlTargetWorkItem {
+		return false, nil
+	}
+	var matches int
+	err := tx.QueryRowContext(ctx, `
+SELECT COUNT(*)
+FROM action_consumption_receipts receipt
+JOIN executions execution
+ ON execution.goal_ref=receipt.goal_ref
+ AND execution.work_item_ref=receipt.work_item_ref
+ AND execution.ref=receipt.execution_ref
+WHERE receipt.goal_ref=? AND receipt.work_item_ref=?
+ AND receipt.outcome='completed' AND receipt.effect_receipt_ref IS NULL
+ AND receipt.consumed_at=? AND execution.finished_at=receipt.consumed_at
+ AND execution.state IN ('succeeded','failed')
+ AND (
+  (receipt.kind='observe_agent' AND receipt.error_code=''
+   AND receipt.action_ref='action:observe:'||receipt.execution_ref
+   AND ?='receipt:observation:'||receipt.execution_ref)
+  OR
+  (receipt.kind='launch_agent'
+   AND receipt.error_code='agent.launch_definitely_not_applied'
+   AND receipt.action_ref='action:launch:'||receipt.execution_ref
+   AND ?='receipt:launch-rejected:'||receipt.execution_ref)
+ )`,
+		control.GoalRef.String(), control.WorkItemRef.String(),
+		requiredTime(control.ConfirmedAt), control.ReceiptRef, control.ReceiptRef,
+	).Scan(&matches)
+	if err != nil {
+		return false, err
+	}
+	return matches == 1, nil
 }
 
 func recoveryV14LocalTerminalStop(

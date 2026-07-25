@@ -11,7 +11,7 @@ import (
 )
 
 type retiredActionRow struct {
-	kind, goalRef, itemRef, executionRef                   string
+	kind, goalRef, itemRef, executionRef, changeRef        string
 	planGeneration, itemGeneration, deliveryAttempt, fence int64
 	governanceVersion                                      int64
 	token, worker                                          sql.NullString
@@ -102,16 +102,16 @@ func readRetiredAction(
 	}
 	query := `
 SELECT kind, goal_ref, work_item_ref, execution_ref,
-       plan_generation, work_item_generation, delivery_attempt, fence,
+       change_ref, plan_generation, work_item_generation, delivery_attempt, fence,
        claim_token, claimed_by, claimed_until, completed_at, retired_at, quarantined_at
 FROM outbox WHERE ref = ?`
 	destinations := []any{&row.kind, &row.goalRef, &row.itemRef, &row.executionRef,
-		&row.planGeneration, &row.itemGeneration, &row.deliveryAttempt, &row.fence,
+		&row.changeRef, &row.planGeneration, &row.itemGeneration, &row.deliveryAttempt, &row.fence,
 		&row.token, &row.worker, &row.leaseUntil, &row.completedAt, &row.retiredAt, &row.quarantinedAt}
 	if governed {
 		query = `
 SELECT kind, goal_ref, work_item_ref, execution_ref,
-       plan_generation, work_item_generation, delivery_attempt, fence,
+       change_ref, plan_generation, work_item_generation, delivery_attempt, fence,
        claim_token, claimed_by, claimed_until, completed_at, retired_at, quarantined_at,
        governance_version
 FROM outbox WHERE ref = ?`
@@ -131,12 +131,12 @@ func insertRetirementReceipt(
 	if governed {
 		_, err := transaction.ExecContext(ctx, `
 INSERT INTO action_consumption_receipts(
-    action_ref, governance_version, kind, goal_ref, work_item_ref, execution_ref,
+    action_ref, governance_version, kind, goal_ref, work_item_ref, execution_ref, change_ref,
     plan_generation, work_item_generation, fence, delivery_attempt,
     claim_token, worker_ref, outcome, error_code, consumed_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?)`,
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?)`,
 			actionRef, row.governanceVersion, row.kind, row.goalRef, row.itemRef, row.executionRef,
-			row.planGeneration, row.itemGeneration, row.fence, row.deliveryAttempt,
+			row.changeRef, row.planGeneration, row.itemGeneration, row.fence, row.deliveryAttempt,
 			row.token.String, row.worker.String, retirementCode, requiredTime(at),
 		)
 		if err != nil {
@@ -146,12 +146,12 @@ INSERT INTO action_consumption_receipts(
 	}
 	_, err := transaction.ExecContext(ctx, `
 INSERT INTO action_consumption_receipts(
-    action_ref, kind, goal_ref, work_item_ref, execution_ref,
+    action_ref, kind, goal_ref, work_item_ref, execution_ref, change_ref,
     plan_generation, work_item_generation, fence, delivery_attempt,
     claim_token, worker_ref, outcome, error_code, consumed_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?)`,
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?)`,
 		actionRef, row.kind, row.goalRef, row.itemRef, row.executionRef,
-		row.planGeneration, row.itemGeneration, row.fence, row.deliveryAttempt,
+		row.changeRef, row.planGeneration, row.itemGeneration, row.fence, row.deliveryAttempt,
 		row.token.String, row.worker.String, retirementCode, requiredTime(at),
 	)
 	if err != nil {

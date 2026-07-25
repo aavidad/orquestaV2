@@ -139,23 +139,32 @@ func (orchestrator *Orchestrator) settleCanceledExecution(ctx context.Context, c
 	if !found || (terminalState != ExecutionSucceeded && terminalState != ExecutionFailed) {
 		return &StateError{Code: StateConflict}
 	}
-	aggregate, err := record.Goal.CompleteWorkItemCancel(
-		record.Goal.Revision(), item.Revision(), item.Ref(), at,
-	)
-	if err != nil {
-		return err
-	}
-	aggregate, err = orchestrator.closeCanceledScope(aggregate, control, at)
-	if err != nil {
-		return err
-	}
 	previousExecutionState := execution.State
 	execution.State, execution.FailureCode, execution.FinishedAt = terminalState, failureCode, at
 	if !providerObservedAt.IsZero() {
 		execution.LastObservedAt = at
 		execution.ProviderObservedAt = providerObservedAt.UTC()
 	}
-	if control.Target == ControlTargetWorkItem || aggregate.IsTerminal() {
+	aggregate := record.Goal
+	updates := []ExecutionRecord{execution}
+	existing := replaceExecution(record.Executions, execution)
+	deferredAggregate, deferred, err := completeCanceledWorkItem(aggregate, item, existing, at)
+	if err != nil {
+		return err
+	}
+	aggregate = deferredAggregate
+	if len(deferred) != 0 {
+		updates = append(updates, deferred...)
+		existing = replaceExecutions(existing, deferred)
+	}
+	updatedItem, _ := aggregate.WorkItem(item.Ref())
+	if updatedItem.State() == goal.WorkItemStateCanceled {
+		aggregate, err = orchestrator.closeCanceledScope(aggregate, control, at)
+		if err != nil {
+			return err
+		}
+	}
+	if !activeExecutionInControlScope(existing, control) {
 		control.Status = ControlConfirmed
 		control.ConfirmedAt = at
 		control.ReceiptRef = confirmedControlReceiptRef(control, receiptRef)
@@ -166,11 +175,14 @@ func (orchestrator *Orchestrator) settleCanceledExecution(ctx context.Context, c
 			Kind: "execution." + string(execution.State), GoalRef: execution.GoalRef,
 			WorkItemRef: execution.WorkItemRef, ExecutionRef: execution.Ref, OccurredAt: at,
 		},
-		{
+	}
+	events = append(events, canceledExecutionEvents(deferred, at)...)
+	if updatedItem.State() == goal.WorkItemStateCanceled {
+		events = append(events, EventRecord{
 			Ref: "event:work-canceled:" + execution.Ref.String(), Kind: "work_item.canceled",
 			GoalRef: execution.GoalRef, WorkItemRef: execution.WorkItemRef,
 			ExecutionRef: execution.Ref, OccurredAt: at,
-		},
+		})
 	}
 	if aggregate.IsTerminal() {
 		events = append(events, EventRecord{
@@ -178,7 +190,6 @@ func (orchestrator *Orchestrator) settleCanceledExecution(ctx context.Context, c
 			Kind: "goal." + string(aggregate.State()), GoalRef: aggregate.Ref(), OccurredAt: at,
 		})
 	}
-	existing := replaceExecution(record.Executions, execution)
 	newExecutions, newActions, scheduledEvents, err := orchestrator.scheduleHistoricalReady(
 		ctx, record, aggregate, existing, at,
 	)
@@ -194,7 +205,7 @@ func (orchestrator *Orchestrator) settleCanceledExecution(ctx context.Context, c
 		ExpectedWorkItemRevision: item.Revision(), ExpectedExecutionState: previousExecutionState,
 		ExpectedControlStatus: ControlRequested, Claim: claim, Goal: aggregate,
 		ClaimErrorCode:               claimErrorCode,
-		Executions:                   append([]ExecutionRecord{execution}, newExecutions...),
+		Executions:                   append(updates, newExecutions...),
 		NewActions:                   newActions,
 		RetireActionRefs:             []string{"action:stop:" + control.Ref + ":" + execution.Ref.String()},
 		RetireMailboxForExecutionRef: execution.Ref,

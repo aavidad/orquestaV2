@@ -130,7 +130,6 @@ func countRecoveryV14StopEffectReceipt(
 	}
 	current := counts[controlRef]
 	current.effects++
-	counts[controlRef] = current
 	confirmed := time.Unix(0, confirmedAt).UTC()
 	if control.Operation == application.ControlStop &&
 		(control.Status != application.ControlConfirmed || control.ReceiptRef != receiptRef ||
@@ -138,11 +137,13 @@ func countRecoveryV14StopEffectReceipt(
 		return fmt.Errorf("sqlite.recovery_stop_effect_control_invalid:%s", actionRef)
 	}
 	if control.Operation == application.ControlCancel && control.Target == application.ControlTargetWorkItem &&
-		status == string(ports.AgentStopped) &&
-		(control.Status != application.ControlConfirmed || control.ReceiptRef != receiptRef ||
-			!control.ConfirmedAt.Equal(confirmed)) {
-		return fmt.Errorf("sqlite.recovery_stop_effect_control_invalid:%s", actionRef)
+		(status == string(ports.AgentStopped) || status == string(ports.AgentStopAlreadyStopped)) {
+		if control.Status == application.ControlConfirmed &&
+			control.ReceiptRef == receiptRef && control.ConfirmedAt.Equal(confirmed) {
+			current.finalEffects++
+		}
 	}
+	counts[controlRef] = current
 	expectedFailureCode := "application.execution_stopped"
 	if application.IsReviewCleanupControl(control) {
 		expectedFailureCode = "review.round_aborted"

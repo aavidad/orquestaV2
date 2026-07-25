@@ -42,13 +42,15 @@ func (orchestrator *Orchestrator) settleStopped(
 	var err error
 	if control.Operation == ControlCancel {
 		candidate := replaceExecution(record.Executions, execution)
-		if !activeExecutionInItem(candidate, item.Ref()) && !item.IsTerminal() {
-			aggregate, err = aggregate.CompleteWorkItemCancel(
-				aggregate.Revision(), item.Revision(), item.Ref(), at,
-			)
-			if err == nil {
-				aggregate, err = orchestrator.closeCanceledScope(aggregate, control, at)
-			}
+		var deferred []ExecutionRecord
+		aggregate, deferred, err = completeCanceledWorkItem(aggregate, item, candidate, at)
+		if err == nil && len(deferred) != 0 {
+			updates = append(updates, deferred...)
+			candidate = replaceExecutions(candidate, deferred)
+		}
+		updatedItem, _ := aggregate.WorkItem(item.Ref())
+		if err == nil && updatedItem.State() == goal.WorkItemStateCanceled {
+			aggregate, err = orchestrator.closeCanceledScope(aggregate, control, at)
 		}
 		if err == nil && !activeExecutionInControlScope(candidate, control) {
 			control.Status = ControlConfirmed
@@ -98,6 +100,7 @@ func (orchestrator *Orchestrator) settleStopped(
 	}
 	updatedItem, _ := aggregate.WorkItem(item.Ref())
 	events := stoppedExecutionEvents(aggregate, updatedItem, execution, at)
+	events = append(events, canceledExecutionEvents(updates[1:], at)...)
 	events = append(events, retirementEvents...)
 	existing := replaceExecutions(record.Executions, updates)
 	newExecutions, newActions, scheduledEvents, err := orchestrator.scheduleHistoricalReady(
