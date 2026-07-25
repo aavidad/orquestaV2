@@ -257,6 +257,7 @@ export GOSUMDB=off
 export GOTOOLCHAIN=local
 export CGO_ENABLED=0
 /bin/busybox mkdir -p /tmp/go-cache /tmp/go-path
+/bin/busybox mount -t devtmpfs -o mode=0755,nosuid devtmpfs /dev
 /bin/busybox mount -t proc proc /proc
 /bin/busybox mount -t sysfs sysfs /sys
 exec /orquesta-test-guest

@@ -91,6 +91,7 @@ test_reproducible_fake_build() {
     }
   done
   init="$(gzip -dc "$TEST_ROOT/first/guest.cpio.gz" | cpio --quiet -i --to-stdout init)"
+  grep -Fqx '/bin/busybox mount -t devtmpfs -o mode=0755,nosuid devtmpfs /dev' <<<"$init"
   grep -Fqx 'exec /orquesta-test-guest' <<<"$init"
   grep -Fqx 'export GOROOT=/toolchain' <<<"$init"
   grep -Fqx 'export GOPROXY=off' <<<"$init"
