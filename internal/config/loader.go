@@ -139,6 +139,16 @@ func validateCrossRegistryValues(registry registry, values map[Key]resolvedValue
 				start >= runtimeTimeout || start >= shutdownTimeout {
 				return fail(validator.ID)
 			}
+		case "runtime_codex_account_profiles_complete":
+			root, rootOK := values[KeyRuntimeCodexAccountHomeRoot].value.(string)
+			profile, profileOK := values[KeyRuntimeCodexAccountProfile].value.(string)
+			maxConcurrent, concurrentOK := values[KeyRuntimeCodexMaxConcurrentExecutions].value.(int64)
+			credentialRef, credentialOK := values[KeyRuntimeCodexCredentialRef].value.(CredentialRef)
+			if !rootOK || !profileOK || !concurrentOK || !credentialOK ||
+				(root == "") != (profile == "") ||
+				profile != "" && (maxConcurrent != 1 || credentialRef != "" || !validCodexAccountProfile(profile)) {
+				return fail(validator.ID)
+			}
 		case "identity_provider_requirements":
 			provider, providerOK := values[KeyIdentityProvider].value.(string)
 			issuer, issuerOK := values[KeyIdentityOIDCIssuer].value.(string)
@@ -200,6 +210,23 @@ func canonicalOIDCIssuer(value string) bool {
 	return err == nil && canonical == value && strings.HasPrefix(canonical, "https://")
 }
 
+func validCodexAccountProfile(value string) bool {
+	if value == "" || len(value) > 64 {
+		return false
+	}
+	for index, character := range value {
+		switch {
+		case character >= 'a' && character <= 'z':
+		case character >= 'A' && character <= 'Z':
+		case character >= '0' && character <= '9':
+		case index > 0 && (character == '_' || character == '-'):
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 func literalMCPPath(value string) bool {
 	if !strings.HasPrefix(value, "/") || value == "/" || path.Clean(value) != value {
 		return false
@@ -230,6 +257,7 @@ func runtimePathsDisjoint(values map[Key]resolvedValue, sourcePath string) bool 
 	artifactRoot, artifactOK := canonical(KeyArtifactFilesystemRoot)
 	credentialPath, credentialOK := canonical(KeyCredentialsLocalPath)
 	workRoot, workOK := canonical(KeyRuntimeCodexWorkRoot)
+	accountHomeRoot, accountHomeOK := canonical(KeyRuntimeCodexAccountHomeRoot)
 	workspaceRoot, workspaceOK := canonical(KeyWorkspaceLocalRoot)
 	effectivePath, effectiveOK := canonical(KeyConfigEffectivePath)
 	tokenPath, tokenOK := canonical(KeyIdentityLocalTokenPath)
@@ -247,6 +275,17 @@ func runtimePathsDisjoint(values map[Key]resolvedValue, sourcePath string) bool 
 		{workspaceRoot, stateDirectory}, {workspaceRoot, artifactRoot}, {workspaceRoot, credentialPath},
 		{workspaceRoot, workRoot}, {workspaceRoot, effectivePath}, {workspaceRoot, tokenDirectory},
 	}
+	if accountHomeOK {
+		pairs = append(pairs,
+			[2]string{accountHomeRoot, stateDirectory},
+			[2]string{accountHomeRoot, artifactRoot},
+			[2]string{accountHomeRoot, credentialPath},
+			[2]string{accountHomeRoot, workRoot},
+			[2]string{accountHomeRoot, workspaceRoot},
+			[2]string{accountHomeRoot, effectivePath},
+			[2]string{accountHomeRoot, tokenDirectory},
+		)
+	}
 	for _, pair := range pairs {
 		if pathsOverlap(pair[0], pair[1]) {
 			return false
@@ -257,7 +296,11 @@ func runtimePathsDisjoint(values map[Key]resolvedValue, sourcePath string) bool 
 		if err != nil {
 			return false
 		}
-		for _, other := range []string{statePath, artifactRoot, credentialPath, workRoot, workspaceRoot, effectivePath, tokenDirectory} {
+		otherPaths := []string{statePath, artifactRoot, credentialPath, workRoot, workspaceRoot, effectivePath, tokenDirectory}
+		if accountHomeOK {
+			otherPaths = append(otherPaths, accountHomeRoot)
+		}
+		for _, other := range otherPaths {
 			if pathsOverlap(configPath, other) {
 				return false
 			}

@@ -2,9 +2,9 @@
 
 # Orquesta configuration registry
 
-Registry revision: `2026-07-25.25`
+Registry revision: `2026-07-25.26`
 
-Registry hash: `sha256:c216dccdb6fd489cda88eaf0bf81d4ac4635f6858d3dafdbc6e01cd5a7e001de`
+Registry hash: `sha256:608b36745662a6c9605d5e0668e98284e87656cdd57d361278348b9a35a45b9f`
 
 Precedence: `default < file < env`
 
@@ -42,6 +42,9 @@ Source limit: `1048576` bytes
         "HOME",
         "CODEX_HOME"
       ]` | `ORQUESTA_RUNTIME_CODEX_ENV_ALLOWLIST` | `true` | `unique_non_empty_string_list, environment_name_list` |
+| `runtime.codex.account_home_root` | `optional_path` | `""` | `ORQUESTA_RUNTIME_CODEX_ACCOUNT_HOME_ROOT` | `true` | `optional_path` |
+| `runtime.codex.account_profile` | `string` | `""` | `ORQUESTA_RUNTIME_CODEX_ACCOUNT_PROFILE` | `true` | `trimmed_optional_string` |
+| `runtime.codex.account_auth_max_document_bytes` | `integer` | `1048576` | `ORQUESTA_RUNTIME_CODEX_ACCOUNT_AUTH_MAX_DOCUMENT_BYTES` | `true` | `integer_bounds` |
 | `runtime.codex.mcp_bearer_token_env_var` | `string` | `"ORQUESTA_MCP_BEARER_TOKEN"` | `ORQUESTA_RUNTIME_CODEX_MCP_BEARER_TOKEN_ENV_VAR` | `true` | `environment_name` |
 | `runtime.codex.credential_ref` | `credential_ref` | `"[REDACTED]"` | `ORQUESTA_RUNTIME_CODEX_CREDENTIAL_REF` | `true` | `credential_ref` |
 | `workspace.local.root` | `path` | `"./var/workspaces"` | `ORQUESTA_WORKSPACE_LOCAL_ROOT` | `true` | `non_empty_path` |
@@ -90,9 +93,10 @@ Source limit: `1048576` bytes
 
 - `runtime_codex_timeout_before_scheduler_execution_timeout`: `runtime.codex.timeout`, `scheduler.execution_timeout`
 - `runtime_codex_supervisor_start_timeout_bounded`: `runtime.codex.supervisor_start_timeout`, `runtime.codex.timeout`, `server.shutdown_timeout`
+- `runtime_codex_account_profiles_complete`: `runtime.codex.account_home_root`, `runtime.codex.account_profile`, `runtime.codex.max_concurrent_executions`, `runtime.codex.credential_ref`
 - `server_listen_loopback`: `server.listen`
 - `server_mcp_path_literal`: `server.mcp_path`
-- `runtime_paths_disjoint`: `state.sqlite.path`, `artifact.filesystem.root`, `credentials.local.path`, `runtime.codex.work_root`, `workspace.local.root`, `config.effective_path`, `identity.local_token_path`
+- `runtime_paths_disjoint`: `state.sqlite.path`, `artifact.filesystem.root`, `credentials.local.path`, `runtime.codex.work_root`, `runtime.codex.account_home_root`, `workspace.local.root`, `config.effective_path`, `identity.local_token_path`
 - `identity_provider_requirements`: `identity.provider`, `identity.oidc.issuer`, `identity.oidc.audience`, `identity.oidc.clock_skew`, `identity.oidc.upstream_timeout`
 - `test_attestor_provider_requirements`: `test_attestor.provider`, `test_attestor.timeout`, `test_attestor.bubblewrap.command`, `test_attestor.go.toolchain_root`, `runtime.max_output_bytes`, `test_attestor.max_subject_bytes`, `test_attestor.max_concurrent_runs`, `repository.local.seed_path`, `test_attestor.resources.cgroup_root`, `test_attestor.resources.memory_max_bytes`, `test_attestor.resources.pids_max`, `test_attestor.resources.cpu_quota_micros`, `server.shutdown_timeout`, `scheduler.attest_test_claim_lease`, `scheduler.execution_timeout`
 

@@ -176,6 +176,12 @@ func TestResolveExecutesEveryDeclaredCrossValidator(t *testing.T) {
 		{name: "supervisor start reaches runtime", toml: "[runtime.codex]\ntimeout = \"5s\"\nsupervisor_start_timeout = \"5s\""},
 		{name: "supervisor start reaches shutdown", toml: "[server]\nshutdown_timeout = \"5s\"\n[runtime.codex]\nsupervisor_start_timeout = \"5s\""},
 		{name: "supervisor start exceeds absolute bound", toml: "[server]\nshutdown_timeout = \"2m\"\n[runtime.codex]\ntimeout = \"2m\"\nsupervisor_start_timeout = \"31s\""},
+		{name: "account root without profiles", toml: "[runtime.codex]\naccount_home_root = \"/srv/codex-accounts\""},
+		{name: "account profile without root", toml: "[runtime.codex]\naccount_profile = \"account-a\""},
+		{name: "account profile concurrent refresh unsafe", toml: "[runtime.codex]\naccount_home_root = \"/srv/codex-accounts\"\naccount_profile = \"account-a\""},
+		{name: "account profile format", toml: "[runtime.codex]\naccount_home_root = \"/srv/codex-accounts\"\naccount_profile = \".account\"\nmax_concurrent_executions = 1"},
+		{name: "account root overlaps work", toml: "[runtime.codex]\naccount_home_root = \"./var/work/accounts\"\naccount_profile = \"account-a\"\nmax_concurrent_executions = 1"},
+		{name: "account profile conflicts with credential authority", toml: "[runtime.codex]\naccount_home_root = \"/srv/codex-accounts\"\naccount_profile = \"account-a\"\nmax_concurrent_executions = 1\ncredential_ref = \"credential:codex\""},
 		{name: "non loopback", toml: "[server]\nlisten = \"0.0.0.0:8080\""},
 		{name: "non literal MCP path", toml: "[server]\nmcp_path = \"/mcp/../other\""},
 		{name: "overlapping paths", toml: "[artifact.filesystem]\nroot = \"./var/state\""},
@@ -196,13 +202,32 @@ func TestResolveExecutesEveryDeclaredCrossValidator(t *testing.T) {
 			assertConfigError(t, err, ErrorCrossValidation, "")
 		})
 	}
-	if got := CrossValidators(); len(got) != 7 {
+	if got := CrossValidators(); len(got) != 8 {
 		t.Fatalf("cross validator catalog = %+v", got)
 	} else {
 		got[0].Keys[0] = "mutated"
 		if CrossValidators()[0].Keys[0] == "mutated" {
 			t.Fatal("cross validator keys are not detached")
 		}
+	}
+}
+
+func TestResolveOwnsAccountProfileConfiguration(t *testing.T) {
+	snapshot, err := Resolve(ResolveOptions{TOML: []byte(
+		"[runtime.codex]\n" +
+			"account_home_root = \"/srv/codex-accounts\"\n" +
+			"account_profile = \"Codex_1\"\n" +
+			"account_auth_max_document_bytes = 2097152\n" +
+			"max_concurrent_executions = 1\n",
+	)})
+	if err != nil {
+		t.Fatalf("Resolve(account profile) error = %v", err)
+	}
+	if snapshot.RuntimeCodexAccountHomeRoot() != "/srv/codex-accounts" ||
+		snapshot.RuntimeCodexAccountProfile() != "Codex_1" ||
+		snapshot.RuntimeCodexAccountAuthMaxDocumentBytes() != 2097152 ||
+		snapshot.RuntimeCodexMaxConcurrentExecutions() != 1 {
+		t.Fatalf("account profile snapshot drifted")
 	}
 }
 

@@ -440,11 +440,15 @@ func validateCrossValidators(definitions []registryCrossValidatorDefinition, key
 		"runtime_codex_supervisor_start_timeout_bounded": {
 			KeyRuntimeCodexSupervisorStartTimeout, KeyRuntimeCodexTimeout, KeyServerShutdownTimeout,
 		},
+		"runtime_codex_account_profiles_complete": {
+			KeyRuntimeCodexAccountHomeRoot, KeyRuntimeCodexAccountProfile, KeyRuntimeCodexMaxConcurrentExecutions,
+			KeyRuntimeCodexCredentialRef,
+		},
 		"server_listen_loopback":  {KeyServerListen},
 		"server_mcp_path_literal": {KeyServerMCPPath},
 		"runtime_paths_disjoint": {
 			KeyStateSQLitePath, KeyArtifactFilesystemRoot, KeyCredentialsLocalPath, KeyRuntimeCodexWorkRoot,
-			KeyWorkspaceLocalRoot,
+			KeyRuntimeCodexAccountHomeRoot, KeyWorkspaceLocalRoot,
 			KeyConfigEffectivePath, KeyIdentityLocalTokenPath,
 		},
 		"identity_provider_requirements": {

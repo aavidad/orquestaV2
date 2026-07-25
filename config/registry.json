@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "revision": "2026-07-25.25",
+  "revision": "2026-07-25.26",
   "precedence": [
     "default",
     "file",
@@ -29,6 +29,15 @@
       ]
     },
     {
+      "id": "runtime_codex_account_profiles_complete",
+      "keys": [
+        "runtime.codex.account_home_root",
+        "runtime.codex.account_profile",
+        "runtime.codex.max_concurrent_executions",
+        "runtime.codex.credential_ref"
+      ]
+    },
+    {
       "id": "server_listen_loopback",
       "keys": [
         "server.listen"
@@ -47,6 +56,7 @@
         "artifact.filesystem.root",
         "credentials.local.path",
         "runtime.codex.work_root",
+        "runtime.codex.account_home_root",
         "workspace.local.root",
         "config.effective_path",
         "identity.local_token_path"
@@ -470,6 +480,50 @@
         "unique_non_empty_string_list",
         "environment_name_list"
       ]
+    },
+    {
+      "key": "runtime.codex.account_home_root",
+      "go_name": "RuntimeCodexAccountHomeRoot",
+      "semantic_ref": "orquesta.config.runtime.codex.account_home_root",
+      "type": "optional_path",
+      "default": "",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_RUNTIME_CODEX_ACCOUNT_HOME_ROOT",
+      "validator_ids": [
+        "optional_path"
+      ]
+    },
+    {
+      "key": "runtime.codex.account_profile",
+      "go_name": "RuntimeCodexAccountProfile",
+      "semantic_ref": "orquesta.config.runtime.codex.account_profile",
+      "type": "string",
+      "default": "",
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_RUNTIME_CODEX_ACCOUNT_PROFILE",
+      "validator_ids": [
+        "trimmed_optional_string"
+      ]
+    },
+    {
+      "key": "runtime.codex.account_auth_max_document_bytes",
+      "go_name": "RuntimeCodexAccountAuthMaxDocumentBytes",
+      "semantic_ref": "orquesta.config.runtime.codex.account_auth_max_document_bytes",
+      "type": "integer",
+      "default": 1048576,
+      "sensitive": false,
+      "scope": "runtime",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_RUNTIME_CODEX_ACCOUNT_AUTH_MAX_DOCUMENT_BYTES",
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1024,
+      "maximum": 16777216
     },
     {
       "key": "runtime.codex.mcp_bearer_token_env_var",
