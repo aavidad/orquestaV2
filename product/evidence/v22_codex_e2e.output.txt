@@ -1,0 +1,90 @@
+rebuild_write_set_ok base=665ef446a32a7f0512255640fa99b2e7edd9f29d files=192
+go: downloading go1.25.11 (linux/amd64)
+ok  	orquesta	6.397s
+ok  	orquesta/acceptance	53.488s
+ok  	orquesta/internal/adapters/agent/codex	9.290s
+ok  	orquesta/internal/adapters/agent/fake	0.002s
+ok  	orquesta/internal/adapters/artifact/filesystem	0.010s
+ok  	orquesta/internal/adapters/attestor/bubblewrap	0.008s
+ok  	orquesta/internal/adapters/auth/bearer	0.002s
+ok  	orquesta/internal/adapters/auth/executiontoken	0.002s
+ok  	orquesta/internal/adapters/auth/localtoken	0.003s
+ok  	orquesta/internal/adapters/auth/oidc	1.164s
+ok  	orquesta/internal/adapters/config/effectivefile	0.070s
+ok  	orquesta/internal/adapters/config/jsonimport	0.040s
+ok  	orquesta/internal/adapters/config/toml	0.022s
+ok  	orquesta/internal/adapters/credentials/local	0.049s
+ok  	orquesta/internal/adapters/state/sqlite	116.950s
+ok  	orquesta/internal/adapters/system/local	0.002s
+ok  	orquesta/internal/adapters/workspace/gitlocal	6.491s
+ok  	orquesta/internal/application	0.182s
+ok  	orquesta/internal/bootstrap	20.613s
+ok  	orquesta/internal/commands	0.031s
+ok  	orquesta/internal/commands/cmd/commandgen	0.028s
+ok  	orquesta/internal/config	0.197s
+?   	orquesta/internal/config/cmd/configgen	[no test files]
+ok  	orquesta/internal/council	0.002s
+ok  	orquesta/internal/credentials	0.002s
+ok  	orquesta/internal/goal	0.007s
+ok  	orquesta/internal/governance	0.002s
+ok  	orquesta/internal/i18n	0.007s
+ok  	orquesta/internal/identity	0.002s
+ok  	orquesta/internal/interfaces/cli	0.002s
+ok  	orquesta/internal/interfaces/httpapi	0.003s
+ok  	orquesta/internal/interfaces/mcp	0.062s
+ok  	orquesta/internal/ports	0.003s
+ok  	orquesta/internal/review	0.002s
+ok  	orquesta/cmd/orquesta	0.031s
+?   	orquesta/cmd/orquesta-cli	[no test files]
+ok  	orquesta/cmd/orquesta-guardian	5.235s
+ok  	orquesta/cmd/orquesta-server	92.953s
+ok  	orquesta/sdk/commands	0.006s
+ok  	orquesta/internal/ports	1.010s
+ok  	orquesta/internal/application	1.033s
+ok  	orquesta/internal/adapters/agent/codex	2.032s
+ok  	orquesta/internal/adapters/state/sqlite	51.971s
+ok  	orquesta/internal/bootstrap	14.046s
+{"Time":"2026-07-25T09:29:55.821904922+02:00","Action":"start","Package":"orquesta/acceptance"}
+{"Time":"2026-07-25T09:29:55.825257825+02:00","Action":"run","Package":"orquesta/acceptance","Test":"TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP"}
+{"Time":"2026-07-25T09:29:55.825293145+02:00","Action":"output","Package":"orquesta/acceptance","Test":"TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP","Output":"=== RUN   TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP\n"}
+{"Time":"2026-07-25T09:29:55.825302265+02:00","Action":"output","Package":"orquesta/acceptance","Test":"TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP","Output":"=== PAUSE TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP\n"}
+{"Time":"2026-07-25T09:29:55.825304505+02:00","Action":"pause","Package":"orquesta/acceptance","Test":"TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP"}
+{"Time":"2026-07-25T09:29:55.825307335+02:00","Action":"run","Package":"orquesta/acceptance","Test":"TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess"}
+{"Time":"2026-07-25T09:29:55.825309365+02:00","Action":"output","Package":"orquesta/acceptance","Test":"TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess","Output":"=== RUN   TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess\n"}
+{"Time":"2026-07-25T09:29:55.825312155+02:00","Action":"output","Package":"orquesta/acceptance","Test":"TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess","Output":"=== PAUSE TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess\n"}
+{"Time":"2026-07-25T09:29:55.825314065+02:00","Action":"pause","Package":"orquesta/acceptance","Test":"TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess"}
+{"Time":"2026-07-25T09:29:55.825316525+02:00","Action":"run","Package":"orquesta/acceptance","Test":"TestV22SuccessfulGoalAcceptsOnlyClosedReplacementHistory"}
+{"Time":"2026-07-25T09:29:55.825318515+02:00","Action":"output","Package":"orquesta/acceptance","Test":"TestV22SuccessfulGoalAcceptsOnlyClosedReplacementHistory","Output":"=== RUN   TestV22SuccessfulGoalAcceptsOnlyClosedReplacementHistory\n"}
+{"Time":"2026-07-25T09:29:55.825366435+02:00","Action":"output","Package":"orquesta/acceptance","Test":"TestV22SuccessfulGoalAcceptsOnlyClosedReplacementHistory","Output":"--- PASS: TestV22SuccessfulGoalAcceptsOnlyClosedReplacementHistory (0.00s)\n"}
+{"Time":"2026-07-25T09:29:55.825373825+02:00","Action":"pass","Package":"orquesta/acceptance","Test":"TestV22SuccessfulGoalAcceptsOnlyClosedReplacementHistory","Elapsed":0}
+{"Time":"2026-07-25T09:29:55.825379335+02:00","Action":"cont","Package":"orquesta/acceptance","Test":"TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP"}
+{"Time":"2026-07-25T09:29:55.825381155+02:00","Action":"output","Package":"orquesta/acceptance","Test":"TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP","Output":"=== CONT  TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP\n"}
+{"Time":"2026-07-25T09:29:55.825435255+02:00","Action":"cont","Package":"orquesta/acceptance","Test":"TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess"}
+{"Time":"2026-07-25T09:29:55.825445455+02:00","Action":"output","Package":"orquesta/acceptance","Test":"TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess","Output":"=== CONT  TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess\n"}
+{"Time":"2026-07-25T09:33:26.654657773+02:00","Action":"output","Package":"orquesta/acceptance","Test":"TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess","Output":"Running as unit: orquesta-v22-5d9f788c291e60cf3412082b.service\n"}
+{"Time":"2026-07-25T09:33:26.654707953+02:00","Action":"output","Package":"orquesta/acceptance","Test":"TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess","Output":"=== RUN   TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess\n"}
+{"Time":"2026-07-25T09:33:26.654710283+02:00","Action":"output","Package":"orquesta/acceptance","Test":"TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess","Output":"V22_REAL_E2E_INNER_OK:TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess:orquesta-v22-5d9f788c291e60cf3412082b.service\n"}
+{"Time":"2026-07-25T09:33:26.654714713+02:00","Action":"output","Package":"orquesta/acceptance","Test":"TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess","Output":"--- PASS: TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess (210.79s)\n"}
+{"Time":"2026-07-25T09:33:26.654717453+02:00","Action":"output","Package":"orquesta/acceptance","Test":"TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess","Output":"PASS\n"}
+{"Time":"2026-07-25T09:33:26.654719683+02:00","Action":"output","Package":"orquesta/acceptance","Test":"TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess","Output":"          Finished with result: success\n"}
+{"Time":"2026-07-25T09:33:26.654722113+02:00","Action":"output","Package":"orquesta/acceptance","Test":"TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess","Output":"Main processes terminated with: code=exited, status=0/SUCCESS\n"}
+{"Time":"2026-07-25T09:33:26.654723653+02:00","Action":"output","Package":"orquesta/acceptance","Test":"TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess","Output":"               Service runtime: 3min 30.794s\n"}
+{"Time":"2026-07-25T09:33:26.654725423+02:00","Action":"output","Package":"orquesta/acceptance","Test":"TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess","Output":"             CPU time consumed: 1min 52.144s\n"}
+{"Time":"2026-07-25T09:33:26.654726923+02:00","Action":"output","Package":"orquesta/acceptance","Test":"TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess","Output":"                   Memory peak: 1G (swap: 0B)\n"}
+{"Time":"2026-07-25T09:33:26.698784479+02:00","Action":"output","Package":"orquesta/acceptance","Test":"TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess","Output":"--- PASS: TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess (210.87s)\n"}
+{"Time":"2026-07-25T09:34:11.696981761+02:00","Action":"output","Package":"orquesta/acceptance","Test":"TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess","Output":"Running as unit: orquesta-v22-4f93d3c21cdb2d1d728ac7e5.service\n"}
+{"Time":"2026-07-25T09:34:11.697000021+02:00","Action":"output","Package":"orquesta/acceptance","Test":"TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess","Output":"=== RUN   TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP\n"}
+{"Time":"2026-07-25T09:34:11.697002941+02:00","Action":"output","Package":"orquesta/acceptance","Test":"TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess","Output":"V22_REAL_E2E_INNER_OK:TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP:orquesta-v22-4f93d3c21cdb2d1d728ac7e5.service\n"}
+{"Time":"2026-07-25T09:34:11.697006461+02:00","Action":"output","Package":"orquesta/acceptance","Test":"TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess","Output":"--- PASS: TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP (255.83s)\n"}
+{"Time":"2026-07-25T09:34:11.697009871+02:00","Action":"output","Package":"orquesta/acceptance","Test":"TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess","Output":"PASS\n"}
+{"Time":"2026-07-25T09:34:11.697012201+02:00","Action":"output","Package":"orquesta/acceptance","Test":"TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess","Output":"          Finished with result: success\n"}
+{"Time":"2026-07-25T09:34:11.697014221+02:00","Action":"output","Package":"orquesta/acceptance","Test":"TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess","Output":"Main processes terminated with: code=exited, status=0/SUCCESS\n"}
+{"Time":"2026-07-25T09:34:11.697268531+02:00","Action":"output","Package":"orquesta/acceptance","Test":"TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess","Output":"               Service runtime: 4min 15.837s\n"}
+{"Time":"2026-07-25T09:34:11.697273981+02:00","Action":"output","Package":"orquesta/acceptance","Test":"TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess","Output":"             CPU time consumed: 2min 53.240s\n"}
+{"Time":"2026-07-25T09:34:11.697276511+02:00","Action":"output","Package":"orquesta/acceptance","Test":"TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess","Output":"                   Memory peak: 1G (swap: 0B)\n"}
+{"Time":"2026-07-25T09:34:11.779046179+02:00","Action":"pass","Package":"orquesta/acceptance","Test":"TestV22RealCodexNoTerminalContradictionAndNoOwnedProcess","Elapsed":210.87}
+{"Time":"2026-07-25T09:34:11.779064629+02:00","Action":"output","Package":"orquesta/acceptance","Test":"TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP","Output":"--- PASS: TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP (255.95s)\n"}
+{"Time":"2026-07-25T09:34:11.779071749+02:00","Action":"pass","Package":"orquesta/acceptance","Test":"TestV22RealCodexFourGoalsSelectiveStopCrashRestartAndCloseThroughMCP","Elapsed":255.95}
+{"Time":"2026-07-25T09:34:11.779074839+02:00","Action":"output","Package":"orquesta/acceptance","Output":"PASS\n"}
+{"Time":"2026-07-25T09:34:11.780293669+02:00","Action":"output","Package":"orquesta/acceptance","Output":"ok  \torquesta/acceptance\t255.958s\n"}
+{"Time":"2026-07-25T09:34:11.780316249+02:00","Action":"pass","Package":"orquesta/acceptance","Elapsed":255.958}
