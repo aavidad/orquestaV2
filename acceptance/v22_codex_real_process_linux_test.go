@@ -21,15 +21,16 @@ import (
 )
 
 type v22ProcessRecord struct {
-	Schema int    `json:"schema_version"`
-	Exec   string `json:"execution_ref"`
-	Hash   string `json:"request_hash"`
-	Scope  string `json:"runtime_scope"`
-	PID    int    `json:"pid"`
-	PGID   int    `json:"pgid"`
-	Boot   string `json:"boot_id"`
-	Birth  string `json:"birth_marker"`
-	path   string
+	Schema     int    `json:"schema_version"`
+	Supervisor string `json:"supervisor_instance"`
+	Exec       string `json:"execution_ref"`
+	Hash       string `json:"request_hash"`
+	Scope      string `json:"runtime_scope"`
+	PID        int    `json:"pid"`
+	PGID       int    `json:"pgid"`
+	Boot       string `json:"boot_id"`
+	Birth      string `json:"birth_marker"`
+	path       string
 }
 
 type v22ProcStat struct {
@@ -56,7 +57,9 @@ func v22ProcessRecords(t *testing.T, root string) map[string]v22ProcessRecord {
 		}
 		record := v22Decode[v22ProcessRecord](path)
 		record.path = path
-		if record.Schema != 1 || record.Exec == "" || record.Hash == "" || record.Scope == "" || record.PID <= 0 || record.PGID <= 0 || record.Boot == "" || record.Birth == "" {
+		if record.Schema != 2 || !v22ValidSupervisorInstance(record.Supervisor) ||
+			record.Exec == "" || record.Hash == "" || record.Scope == "" ||
+			record.PID <= 0 || record.PGID <= 0 || record.Boot == "" || record.Birth == "" {
 			return fmt.Errorf("invalid process identity in %s", path)
 		}
 		if _, duplicate := found[record.Exec]; duplicate {
@@ -67,6 +70,15 @@ func v22ProcessRecords(t *testing.T, root string) map[string]v22ProcessRecord {
 	})
 	v22Require(t, err == nil, "process census: %v", err)
 	return found
+}
+
+func v22ValidSupervisorInstance(value string) bool {
+	const prefix = "supervisor:"
+	if !strings.HasPrefix(value, prefix) || len(value) != len(prefix)+64 {
+		return false
+	}
+	_, err := hex.DecodeString(strings.TrimPrefix(value, prefix))
+	return err == nil
 }
 
 func v22WaitProcess(t *testing.T, root, execution string) v22ProcessRecord {
@@ -292,6 +304,19 @@ func v22EqualStrings(left, right []string) bool {
 }
 
 func TestV22ExactSleepIdentityParsersAreStrict(t *testing.T) {
+	validSupervisor := "supervisor:" + strings.Repeat("ab", 32)
+	if !v22ValidSupervisorInstance(validSupervisor) {
+		t.Fatal("exact supervisor instance rejected")
+	}
+	for _, invalid := range []string{
+		"", "supervisor:", "supervisor:" + strings.Repeat("a", 63),
+		"supervisor:" + strings.Repeat("z", 64), "other:" + strings.Repeat("ab", 32),
+	} {
+		if v22ValidSupervisorInstance(invalid) {
+			t.Fatalf("invalid supervisor instance accepted: %q", invalid)
+		}
+	}
+
 	fields := make([]string, 20)
 	for index := range fields {
 		fields[index] = "0"
