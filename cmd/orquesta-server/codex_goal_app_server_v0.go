@@ -94,6 +94,14 @@ func serverCodexGoalModelRouteForPacketV0(
 	packet orquestaruntimecodexgoal.CodexGoalStartPacketV0,
 ) (orquestacapacity.ModelRoutingDecisionV0, string, error) {
 	taskRef := strings.TrimSpace(packet.GoalRef)
+	reasoningEffort := strings.TrimSpace(packet.ReasoningEffort)
+	if reasoningEffort != "" && !orquestagoal.ValidGoalReasoningEffortV0(reasoningEffort) {
+		return orquestacapacity.ModelRoutingDecisionV0{
+			TaskRef:      taskRef,
+			Rejected:     true,
+			RejectionRef: "model-routing-reasoning-effort-invalid",
+		}, "", fmt.Errorf("model_routing_rejected:model-routing-reasoning-effort-invalid")
+	}
 	request := orquestacapacity.ModelRoutingRequestV0{
 		TaskRef: taskRef,
 		Level:   orquestacapacity.ModelRoutingLevelNormalV0,
@@ -108,6 +116,11 @@ func serverCodexGoalModelRouteForPacketV0(
 	decision := orquestacapacity.ResolveModelRoutingV0(routing.Policy, request)
 	if decision.Rejected {
 		return decision, "", fmt.Errorf("model_routing_rejected:%s", decision.RejectionRef)
+	}
+	// GoalWorkSpecV0 carries the effort already authorized for the WorkItem and
+	// its EffectIntent. Routing selects the model but must not re-decide it.
+	if reasoningEffort != "" {
+		decision.ReasoningEffort = reasoningEffort
 	}
 	model := strings.TrimSpace(routing.ModelAlias[decision.SelectedModelRef])
 	if model == "" {

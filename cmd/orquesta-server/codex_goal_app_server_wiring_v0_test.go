@@ -137,6 +137,76 @@ func TestServerCodexGoalCostRoutingStarterV0AplicaModelRoutingCanonicoV0(t *test
 	}
 }
 
+func TestServerCodexGoalCostRoutingStarterV0ConservaReasoningEffortXHighAutorizadoV0(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{
+		thread: serverCodexAppServerThreadV0{ID: "thread-ref-reasoning-xhigh"},
+		goal:   serverCodexAppServerThreadGoalV0{ThreadID: "thread-ref-reasoning-xhigh", Status: "active"},
+		turn:   serverCodexAppServerTurnV0{ID: "turn-ref-reasoning-xhigh", Status: "inProgress"},
+	}
+	starter := serverCodexGoalCostRoutingStarterV0{
+		Backend: serverCodexAppServerGoalBackendV0{
+			Protocol:        protocol,
+			CWD:             t.TempDir(),
+			Model:           "gpt-5.6-sol",
+			ReasoningEffort: orquestagoal.GoalReasoningEffortHighV0,
+			ApprovalPolicy:  "never",
+			Runtime:         &serverCodexAppServerGoalRuntimeV0{},
+		},
+		ModelRouting: defaultCodexModelRoutingConfigV0(),
+	}
+	spec := orquestagoal.GoalWorkSpecV0{
+		GoalRef:         "goal-ref-reasoning-xhigh",
+		Objective:       "Propagar esfuerzo causal del WorkItem y EffectIntent.",
+		DirectorKind:    orquestagoal.GoalDirectorKindCodexGoalV0,
+		ReasoningEffort: orquestagoal.GoalReasoningEffortXHighV0,
+		WriteSet:        []orquestagoal.GoalWriteScopeV0{{Path: "cmd/orquesta-server"}},
+	}
+	packet, issues := orquestaruntimecodexgoal.BuildCodexGoalStartPacketV0(spec)
+	if len(issues) != 0 {
+		t.Fatalf("issues=%+v", issues)
+	}
+
+	receipt, err := starter.StartCodexGoalV0(context.Background(), packet)
+
+	if err != nil {
+		t.Fatalf("StartCodexGoalV0: %v receipt=%+v", err, receipt)
+	}
+	if protocol.settingsParams.Effort != orquestagoal.GoalReasoningEffortXHighV0 ||
+		protocol.turnParams.Effort != orquestagoal.GoalReasoningEffortXHighV0 {
+		t.Fatalf(
+			"settings effort=%q turn effort=%q packet=%q",
+			protocol.settingsParams.Effort,
+			protocol.turnParams.Effort,
+			packet.ReasoningEffort,
+		)
+	}
+	if protocol.turnParams.Model != "gpt-5.6-terra" {
+		t.Fatalf("turn model=%q", protocol.turnParams.Model)
+	}
+}
+
+func TestServerCodexGoalCostRoutingStarterV0RechazaReasoningEffortNoCanonicoV0(t *testing.T) {
+	protocol := &fakeCodexAppServerProtocolV0{}
+	starter := serverCodexGoalCostRoutingStarterV0{
+		Backend:      serverCodexAppServerGoalBackendV0{Protocol: protocol, CWD: t.TempDir()},
+		ModelRouting: defaultCodexModelRoutingConfigV0(),
+	}
+
+	receipt, err := starter.StartCodexGoalV0(context.Background(), orquestaruntimecodexgoal.CodexGoalStartPacketV0{
+		GoalRef:         "goal-ref-reasoning-invalid",
+		ReasoningEffort: "auto",
+		WriteSet:        []orquestagoal.GoalWriteScopeV0{{Path: "cmd/orquesta-server"}},
+	})
+
+	if err == nil || receipt.Status != orquestagoal.GoalStatusInvalidV0 ||
+		receipt.IssueCode != "codex_goal_model_routing_rejected" {
+		t.Fatalf("receipt=%+v err=%v", receipt, err)
+	}
+	if protocol.turnParams.ThreadID != "" {
+		t.Fatalf("reasoning invalido alcanzo turn/start: %+v", protocol.turnParams)
+	}
+}
+
 func TestServerCodexGoalCostRoutingStarterV0RechazaConfigInvalidaV0(t *testing.T) {
 	protocol := &fakeCodexAppServerProtocolV0{}
 	starter := serverCodexGoalCostRoutingStarterV0{
@@ -1101,11 +1171,12 @@ exit 2
 }
 
 type fakeCodexAppServerProtocolV0 struct {
-	calls       []string
-	startParams serverCodexAppServerThreadStartParamsV0
-	setParams   serverCodexAppServerThreadGoalSetParamsV0
-	turnParams  serverCodexAppServerTurnStartParamsV0
-	getThreadID string
+	calls          []string
+	startParams    serverCodexAppServerThreadStartParamsV0
+	settingsParams serverCodexAppServerThreadSettingsUpdateParamsV0
+	setParams      serverCodexAppServerThreadGoalSetParamsV0
+	turnParams     serverCodexAppServerTurnStartParamsV0
+	getThreadID    string
 
 	thread           serverCodexAppServerThreadV0
 	goal             serverCodexAppServerThreadGoalV0
@@ -1192,9 +1263,10 @@ func (fake *fakeCodexAppServerProtocolV0) StartThreadV0(
 }
 
 func (fake *fakeCodexAppServerProtocolV0) UpdateThreadSettingsV0(
-	context.Context,
-	serverCodexAppServerThreadSettingsUpdateParamsV0,
+	_ context.Context,
+	params serverCodexAppServerThreadSettingsUpdateParamsV0,
 ) error {
+	fake.settingsParams = params
 	return nil
 }
 
