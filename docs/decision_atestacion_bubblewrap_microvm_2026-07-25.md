@@ -108,11 +108,13 @@ identidad runtime no-root; kernel e imagen guest mínimos digeridos/root-owned;
 imagen guest acreditada aún. Este mínimo sirve solo para atestar el sujeto V23:
 no define workspaces de agentes, caches de agentes ni un runtime general.
 
-Inicialmente no se habilita red, TAP, DHCP ni vsock. La E/S se limita a
-virtio-serial con framing acotado para request, stdout/stderr y reporte. Vsock
-permanece deshabilitado hasta disponer de ACL por CID/puerto, autenticación y
-receipt: actualmente no tiene ACL. El guest recibe el snapshot sellado, no
-rutas host escribibles, HOME, secretos ni estado del runtime.
+Firecracker 1.16.1 no soporta virtio-serial. El diseño provisional, todavía por
+acreditar, no habilita red, TAP, DHCP, consola 8250 ni vsock: usa un drive
+virtio raw de entrada read-only sellado y un drive raw de salida RW,
+preasignado y acotado, para solicitud, stdout/stderr y reporte. Vsock queda
+para una evolución futura únicamente después de ACL por CID/puerto,
+autenticación y receipt. El guest recibe el snapshot sellado, no rutas host
+escribibles, HOME, secretos ni estado del runtime.
 
 La aceptación microVM exige PASS/FAIL/no-tests, timeout/cancelación, KVM/image/
 jailer/cgroup/red/vsock negativos, boot y apagado real, subject/policy digest
@@ -142,6 +144,19 @@ coste y recuperación con evidencia de composición; no se presume que una
 microVM de `TestAttestor` sea una plataforma válida para agentes. Si se aprueba,
 será una nueva capability con contratos, presupuesto, persistencia de checkpoints
 y pruebas de restart/recovery propias.
+
+Para esa deuda futura de agentes, son requisitos obligatorios de aceptación:
+filesystem del host nunca montado y LAN del host nunca enrutable desde la
+microVM; red privada por microVM; sin east-west ni peer networking directo; y toda salida
+exclusivamente por proxy de egress/controlador de búsquedas con política
+explícita, sin inbound. La colaboración solo podrá viajar mediante gateway de
+Orquesta, mailbox causal y CAS/artefactos autorizados, siempre ligados a la
+identidad Goal/tarea/parent-child. Cada VM solo podrá alcanzar ese gateway y el
+proxy. La política debe bloquear loopback host, RFC1918, ULA, link-local,
+endpoints de metadata/SSRF y puertos no autorizados. NAT nunca será abierto:
+solo puede existir subordinado al netns de la microVM y a reglas nftables
+exactas. Esto no aplica aún al `TestAttestor` V23, que sigue sin red, ni
+autoriza implementación antes de «Orquesta autoprogramable».
 
 ## Amenazas e invariantes
 
