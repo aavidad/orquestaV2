@@ -329,13 +329,16 @@ pin_toolchain_source() {
   TOOLCHAIN_SOURCE_IDENTITY="$(stat -Lc '%d:%i:%u:%g' -- "$TOOLCHAIN_PINNED_ROOT")" ||
     fail "toolchain_pin_probe_failed" "repair_toolchain_root" || return
   if ((TOOLCHAIN_REQUIRE_ROOT_OWNERSHIP == 1)); then
-    validate_stable_toolchain_ownership "$TOOLCHAIN_PINNED_ROOT" || return
+    # /proc/<pid>/fd/<n> is a process-owned symlink even when its pinned
+    # directory is entirely root-owned. Validate the resolved directory, then
+    # keep using the descriptor identity for every subsequent operation.
+    validate_stable_toolchain_ownership "$pinned_resolved" || return
   fi
   verify_toolchain_pin
 }
 
 verify_toolchain_pin() {
-  local identity path_identity
+  local identity path_identity pinned_resolved
   [[ -n "$TOOLCHAIN_PINNED_ROOT" && -n "$TOOLCHAIN_SOURCE_IDENTITY" ]] ||
     fail "toolchain_not_pinned" "pin_toolchain_before_copy" || return
   identity="$(stat -Lc '%d:%i:%u:%g' -- "$TOOLCHAIN_PINNED_ROOT")" ||
@@ -347,8 +350,11 @@ verify_toolchain_pin() {
   [[ "$path_identity" = "$TOOLCHAIN_SOURCE_IDENTITY" ]] ||
     fail "toolchain_path_changed" "retry_with_stable_toolchain_root" || return
   if ((TOOLCHAIN_REQUIRE_ROOT_OWNERSHIP == 1)); then
-    validate_stable_toolchain_ownership "$TOOLCHAIN_PINNED_ROOT" || return
-    validate_stable_toolchain_ownership "$TOOLCHAIN_ROOT" || return
+    pinned_resolved="$(readlink -e -- "$TOOLCHAIN_PINNED_ROOT")" ||
+      fail "toolchain_pin_unresolvable" "repair_toolchain_root" || return
+    [[ "$pinned_resolved" = "$TOOLCHAIN_ROOT" ]] ||
+      fail "toolchain_pin_mismatch" "retry_with_stable_toolchain_root" || return
+    validate_stable_toolchain_ownership "$pinned_resolved" || return
   fi
   reject_descendant_mounts "$TOOLCHAIN_ROOT" || return
 }

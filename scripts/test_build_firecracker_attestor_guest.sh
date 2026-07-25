@@ -312,6 +312,30 @@ test_toolchain_pin_race() {
   release_toolchain_pin
 }
 
+test_root_ownership_validation_uses_resolved_toolchain() {
+  local source="$TEST_ROOT/toolchain-resolved-ownership"
+  local original_validator validation_calls=0
+  cp -a "$TEST_ROOT/toolchain" "$source"
+  original_validator="$(declare -f validate_stable_toolchain_ownership)"
+  validate_stable_toolchain_ownership() {
+    [[ "$1" == "$source" && "$1" != /proc/*/fd/* ]] || {
+      printf 'guest_builder_test_failed ownership_validated_process_symlink path=%s\n' \
+        "$1" >&2
+      return 1
+    }
+    validation_calls=$((validation_calls + 1))
+  }
+  TOOLCHAIN_ROOT="$source"
+  pin_toolchain_source "$TOOLCHAIN_ROOT" 1
+  [[ "$validation_calls" -ge 2 ]] || {
+    printf 'guest_builder_test_failed resolved_ownership_validation_calls=%s\n' \
+      "$validation_calls" >&2
+    return 1
+  }
+  release_toolchain_pin
+  eval "$original_validator"
+}
+
 test_real_go_nobody_probe() {
   run_nobody_go_test_probe /usr/local/go "$TEST_ROOT/real-go-nobody-probe"
 }
@@ -599,6 +623,7 @@ test_exact_commit_export_and_double_compile
 test_submount_guard
 test_busybox_pin_race
 test_toolchain_pin_race
+test_root_ownership_validation_uses_resolved_toolchain
 test_real_go_nobody_probe
 test_publish_no_clobber_and_partial_diagnostic
 test_publish_race_has_single_matching_winner
