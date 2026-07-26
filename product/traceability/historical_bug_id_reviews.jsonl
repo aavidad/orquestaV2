@@ -136,3 +136,5 @@
 {"schema_version":1,"bug_id":"BUG-ORQ-20260713-273","capability_ids":["APP-11","EVD-11"],"review_note":"Fixture E2E creó raíz 0775 y activó correctamente fail-closed de seguridad."}
 {"schema_version":1,"bug_id":"BUG-ORQ-20260713-274","capability_ids":["APP-11","STG-09"],"review_note":"Fixture pidió un fichero distinto del autorizado por AGENTS/write-set y Goal bloqueó correctamente."}
 {"schema_version":1,"bug_id":"BUG-ORQ-20260715-275","capability_ids":["GOV-16","STG-09"],"review_note":"Guard de write-set conservaba una allowlist anterior y rechazaba seis rutas V08/V11 ya versionadas y acreditadas."}
+{"schema_version":1,"bug_id":"BUG-ORQ-20260725-467","capability_ids":["AGT-01","EVD-13","ORC-15"],"review_note":"La migración de agentes a Firecracker requiere transporte vsock acotado, aislamiento acreditado y colaboración solo mediante el broker Orquesta."}
+{"schema_version":1,"bug_id":"BUG-ORQ-20260726-507","capability_ids":["AGT-01","EVD-13","OPS-03"],"review_note":"La autorización de red debe consumir el reto antes de ledgers, verificar secretos en callback y abrir por control-flow; el receipt solo conserva evidencia."}

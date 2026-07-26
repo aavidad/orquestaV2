@@ -3,7 +3,8 @@
 Fecha: 2026-07-25. Actualización: 2026-07-26. Estado: implementación del primer
 corte autorizada; no cableada ni acreditada físicamente. Autoridad:
 `AGENTS.md`, `product/roadmap.json`,
-`decision_atestacion_bubblewrap_microvm_2026-07-25.md` y BUG-ORQ-20260725-467.
+`decision_atestacion_bubblewrap_microvm_2026-07-25.md`,
+BUG-ORQ-20260725-467 y BUG-ORQ-20260726-507.
 
 ## Alcance y precondición
 
@@ -168,3 +169,13 @@ arranque. Debe incluir, como mínimo:
 Los receipts de estas pruebas deben ligar la configuración efectiva, digests de
 imagen/política/reglas, refs causales y sujeto acreditado. Un resultado de
 `TestAttestor` o una prueba aislada de red no sustituye esta acreditación.
+
+## Estado de validación de la rama
+
+Los tests de reconstrucción de trazabilidad y los tests focales del contrato de
+red pasan localmente. El gate raíz conserva únicamente dos fallos esperados,
+`TestRealCodexReceiptMatchesCurrentProductSource` y
+`TestV17RealCodexReceiptMatchesCurrentProductSource`, porque sus receipts reales
+preceden al nuevo sujeto. No se reescriben ni se simulan en esta rama: solo
+pueden re-sellarse mediante el smoke Codex real exacto después de integrar el
+corte en `main`.
