@@ -288,6 +288,277 @@ SELECT COUNT(*) FROM effect_attempts WHERE execution_ref=?`,
 	}
 }
 
+func TestSQLitePreparedRetryClosesLocallyAfterLateBudgetExhaustion(t *testing.T) {
+	tests := []struct {
+		name             string
+		explicitApproval bool
+		staleAdmission   func(*testing.T, *sqliteV15System)
+		assertAdmission  func(*testing.T, *sqliteV15System, application.ActionClaim)
+	}{
+		{
+			name: "revoked_authority",
+			staleAdmission: func(t *testing.T, system *sqliteV15System) {
+				revokeSQLiteV15Owner(t, system)
+				system.clock.Advance(2 * time.Minute)
+			},
+		},
+		{
+			name: "expired_explicit_approval", explicitApproval: true,
+			staleAdmission: func(_ *testing.T, system *sqliteV15System) {
+				system.clock.Advance(system.policy.EffectApprovalTTL + time.Second)
+			},
+			assertAdmission: func(t *testing.T, system *sqliteV15System, claim application.ActionClaim) {
+				t.Helper()
+				var expiresAt int64
+				if err := system.repository.db.QueryRow(`
+SELECT expires_at FROM effect_approvals WHERE ref=? AND source='explicit_decision'`,
+					claim.EffectApproval.Ref).Scan(&expiresAt); err != nil {
+					t.Fatal(err)
+				}
+				if expiresAt > system.clock.Now().UTC().UnixNano() {
+					t.Fatalf("explicit approval remains current: expires_at=%d now=%d",
+						expiresAt, system.clock.Now().UTC().UnixNano())
+				}
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			system := newSQLiteV15System(t, 2)
+			for _, envelope := range []*governance.BudgetEnvelope{
+				&system.policy.DeploymentEnvelope,
+				&system.policy.ProjectEnvelopeTemplate,
+				&system.policy.GoalEnvelopeTemplate,
+			} {
+				envelope.Limit.Tokens = 300
+				envelope.Limit.MoneyMicros = 300
+			}
+			system.orchestrator = newSQLiteV15Orchestrator(
+				t, system.repository, system.clock, system.external, system.policy, system.ids,
+			)
+			criticality := governance.SecurityCriticalityNormal
+			if test.explicitApproval {
+				criticality = governance.SecurityCriticalitySensitive
+			}
+			created, err := system.orchestrator.Submit(context.Background(), system.access, application.SubmitRequest{
+				RequestRef: "request:v15-prepared-late-" + test.name,
+				Statement:  "prepared retry must close without provider after late exhaustion",
+				Confirm:    true,
+				Plan: &application.PlanSpec{
+					Phases: []application.PhaseSpec{{
+						Ref: "phase-instance:v15-prepared-late-" + test.name,
+						Key: "phase:v15-prepared-late-" + test.name, TemplateRef: "phase-template:parallel",
+					}},
+					WorkItems: []application.WorkItemSpec{
+						{Key: "a", Objective: "crash after launch preparation",
+							Phase: "phase:v15-prepared-late-" + test.name,
+							Role:  "role:worker", OutputContract: goal.OutputContractEvidenceBundle,
+							SecurityCriticality: criticality, ReasoningEffort: governance.ReasoningEffortMedium},
+						{Key: "b", Objective: "settle peer with overrun",
+							Phase: "phase:v15-prepared-late-" + test.name,
+							Role:  "role:worker", OutputContract: goal.OutputContractEvidenceBundle,
+							SecurityCriticality: criticality, ReasoningEffort: governance.ReasoningEffortMedium},
+					},
+				},
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if test.explicitApproval {
+				for index, intent := range created.Record.EffectIntents {
+					approveSQLiteV15Intent(t, system, created.Record.Goal.Ref(), intent,
+						fmt.Sprintf("initial:%d", index))
+				}
+			}
+			for index := 0; index < 2; index++ {
+				if result, processErr := system.orchestrator.ProcessNext(
+					context.Background(), fmt.Sprintf("worker:v15-prepared-initial:%s:%d", test.name, index),
+				); processErr != nil || !result.Processed || result.Action != application.ActionLaunchAgent {
+					t.Fatalf("initial launch %d result=%+v err=%v", index, result, processErr)
+				}
+			}
+			system.external.observationStatus = ports.AgentFailed
+			system.external.observationError = "codex.process_failed"
+			system.clock.Advance(time.Second)
+			if result, processErr := system.orchestrator.ProcessNext(
+				context.Background(), "worker:v15-prepared-first-failure:"+test.name,
+			); processErr != nil || !result.Processed || result.Action != application.ActionObserveAgent {
+				t.Fatalf("first failure result=%+v err=%v", result, processErr)
+			}
+
+			system.clock.Advance(system.policy.QuotaRetryDelay)
+			if test.explicitApproval {
+				record, recordErr := system.repository.GetGoal(context.Background(), created.Record.Goal.Ref())
+				if recordErr != nil {
+					t.Fatal(recordErr)
+				}
+				var retryIntent application.EffectIntent
+				for _, execution := range record.Executions {
+					if execution.AttemptNo != 2 {
+						continue
+					}
+					for _, intent := range record.EffectIntents {
+						if intent.ActionKind == application.ActionLaunchAgent &&
+							intent.Subject.ExecutionRef == execution.Ref {
+							retryIntent = intent
+						}
+					}
+				}
+				if retryIntent.Ref == "" {
+					t.Fatal("retry effect intent missing")
+				}
+				approveSQLiteV15Intent(t, system, created.Record.Goal.Ref(), retryIntent, "retry")
+			}
+			retryClaim := claimSQLiteV15(t, system, "claim:v15-prepared-retry:"+test.name)
+			if retryClaim.Disposition != application.ActionClaimDispositionNormal ||
+				retryClaim.Action.Kind != application.ActionLaunchAgent ||
+				retryClaim.BudgetReservationRef == "" {
+				t.Fatalf("prepared retry claim=%+v", retryClaim)
+			}
+			retry, sessionRef := prepareSQLiteV15RetryLaunchWithSession(t, system, retryClaim)
+
+			system.external.observationStatus = ports.AgentCompleted
+			system.external.observationError = ""
+			system.external.observationUsage = governance.ResourceUsage{
+				Resources: governance.ResourceVector{
+					Tokens: 200, MoneyMicros: 200, Currency: governance.Currency("USD"),
+				},
+				Known: governance.AllResourceDimensions, Quality: governance.UsageQualityExact,
+			}
+			if result, processErr := system.orchestrator.ProcessNext(
+				context.Background(), "worker:v15-prepared-peer:"+test.name,
+			); processErr != nil || !result.Processed || result.Action != application.ActionObserveAgent {
+				t.Fatalf("peer settlement result=%+v err=%v", result, processErr)
+			}
+			test.staleAdmission(t, system)
+			if test.assertAdmission != nil {
+				test.assertAdmission(t, system, retryClaim)
+			}
+
+			launchesBefore := system.external.launchCalls
+			if result, processErr := system.orchestrator.ProcessNext(
+				context.Background(), "worker:v15-prepared-park:"+test.name,
+			); processErr != nil || result.Processed {
+				t.Fatalf("stale prepared admission result=%+v err=%v", result, processErr)
+			}
+			parked, err := system.repository.GetGoal(context.Background(), created.Record.Goal.Ref())
+			parkedRetry, found := sqliteExecutionByRef(parked.Executions, retry.Ref)
+			if err != nil || !found || parkedRetry.State != application.ExecutionDispatching ||
+				parkedRetry.BudgetReservationRef != "" || parkedRetry.EffectIntentRef != "" ||
+				parkedRetry.ExecutionSessionRef != sessionRef {
+				t.Fatalf("parked retry=%+v found=%v err=%v", parkedRetry, found, err)
+			}
+
+			system.clock.Advance(system.policy.QuotaRetryDelay)
+			if result, processErr := system.orchestrator.ProcessNext(
+				context.Background(), "worker:v15-prepared-local:"+test.name,
+			); processErr != nil || !result.Processed || result.Action != application.ActionLaunchAgent {
+				t.Fatalf("local closure result=%+v err=%v", result, processErr)
+			}
+			if system.external.launchCalls != launchesBefore {
+				t.Fatalf("prepared retry reached provider calls=%d before=%d",
+					system.external.launchCalls, launchesBefore)
+			}
+			final, err := system.repository.GetGoal(context.Background(), created.Record.Goal.Ref())
+			failed, found := sqliteExecutionByRef(final.Executions, retry.Ref)
+			item, itemFound := final.Goal.WorkItem(retry.WorkItemRef)
+			var revokeActions, attempts, activeReservations int
+			if queryErr := system.repository.db.QueryRow(`
+SELECT COUNT(*) FROM outbox
+WHERE kind='revoke_execution_session' AND execution_ref=? AND completed_at IS NULL`,
+				retry.Ref.String()).Scan(&revokeActions); queryErr != nil {
+				t.Fatal(queryErr)
+			}
+			if queryErr := system.repository.db.QueryRow(`
+SELECT COUNT(*) FROM effect_attempts WHERE execution_ref=?`,
+				retry.Ref.String()).Scan(&attempts); queryErr != nil {
+				t.Fatal(queryErr)
+			}
+			if queryErr := system.repository.db.QueryRow(`
+SELECT COUNT(*) FROM budget_reservations reservation
+LEFT JOIN budget_settlements settlement ON settlement.reservation_ref=reservation.ref
+WHERE reservation.execution_ref=? AND settlement.ref IS NULL`,
+				retry.Ref.String()).Scan(&activeReservations); queryErr != nil {
+				t.Fatal(queryErr)
+			}
+			if err != nil || !found || !itemFound ||
+				failed.State != application.ExecutionFailed ||
+				failed.FailureCode != "codex.process_failed" ||
+				failed.ExecutionSessionRef != sessionRef ||
+				item.State() != goal.WorkItemStateInterrupted ||
+				revokeActions != 1 || attempts != 0 || activeReservations != 0 {
+				t.Fatalf("prepared retry final=%+v item=%+v found=%v/%v revoke=%d attempts=%d active=%d err=%v",
+					failed, item, found, itemFound, revokeActions, attempts, activeReservations, err)
+			}
+			restartSQLiteV15System(t, system)
+			if _, _, recoveryErr := validateRecoveryDatabase(
+				context.Background(), system.repository.db,
+			); recoveryErr != nil {
+				t.Fatalf("prepared retry recovery: %v cause=%v", recoveryErr, errors.Unwrap(recoveryErr))
+			}
+		})
+	}
+}
+
+func approveSQLiteV15Intent(
+	t *testing.T,
+	system *sqliteV15System,
+	goalRef goal.GoalRef,
+	intent application.EffectIntent,
+	suffix string,
+) {
+	t.Helper()
+	result, err := system.orchestrator.DecideEffect(context.Background(), system.access,
+		application.DecideEffectRequest{
+			RequestRef: "approval:v15-prepared:" + suffix, GoalRef: goalRef, IntentRef: intent.Ref,
+			ExpectedIntentDigest: intent.Digest, Decision: application.EffectApproved,
+			Reason: "bounded explicit approval for prepared retry regression",
+		})
+	if err != nil || !result.Created {
+		t.Fatalf("approve intent %s created=%v err=%v", intent.Ref, result.Created, err)
+	}
+}
+
+func prepareSQLiteV15RetryLaunchWithSession(
+	t *testing.T,
+	system *sqliteV15System,
+	claim application.ActionClaim,
+) (application.ExecutionRecord, ports.ExecutionSessionRef) {
+	t.Helper()
+	record, err := system.repository.GetGoal(context.Background(), claim.Action.GoalRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	execution, found := sqliteExecutionByRef(record.Executions, claim.Action.ExecutionRef)
+	if !found || execution.State != application.ExecutionQueued || execution.AttemptNo <= 1 {
+		t.Fatalf("retry execution before prepare=%+v found=%v", execution, found)
+	}
+	sessionRef, err := ports.NewExecutionSessionRef(
+		"execution-session:sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	execution.State = application.ExecutionDispatching
+	execution.BudgetReservationRef = claim.BudgetReservationRef
+	execution.EffectIntentRef = claim.Action.EffectIntentRef
+	execution.ExecutionSessionRef = sessionRef
+	at := system.clock.Now().UTC()
+	state := application.LaunchPreparedState{
+		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(),
+		Goal: record.Goal, Execution: execution, OperationAt: at,
+		Event: application.EventRecord{
+			Ref:  "event:execution-dispatching:" + execution.Ref.String(),
+			Kind: "execution.dispatching", GoalRef: execution.GoalRef,
+			WorkItemRef: execution.WorkItemRef, ExecutionRef: execution.Ref, OccurredAt: at,
+		},
+	}
+	if err := system.repository.RecordLaunchPrepared(context.Background(), state); err != nil {
+		t.Fatal(err)
+	}
+	return execution, sessionRef
+}
+
 func TestSQLiteQueuedRetryWaitsForReleasablePeerCapacity(t *testing.T) {
 	system := newSQLiteV15System(t, 2)
 	for _, envelope := range []*governance.BudgetEnvelope{
