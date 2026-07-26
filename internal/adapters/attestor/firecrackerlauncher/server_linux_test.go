@@ -322,6 +322,8 @@ func TestUnixLauncherRejectsMissingAndExcessDescriptorsWithoutLeaks(t *testing.T
 	request.InputDigest = digest
 	payload, _ := marshalRequest(request)
 	socket := connectForTest(t, config.SocketPath)
+	waitForConnectionsForTest(t, server, 1)
+	missingConnectionOwner := registeredConnectionOwnerForTest(t, server)
 	if _, err := unix.SendmsgN(socket, payload, nil, nil, 0); err != nil {
 		t.Fatal(err)
 	}
@@ -335,10 +337,14 @@ func TestUnixLauncherRejectsMissingAndExcessDescriptorsWithoutLeaks(t *testing.T
 	if err != nil || response.Code != CodeDescriptorInvalid {
 		t.Fatalf("response=%+v err=%v", response, err)
 	}
+	waitForConnectionsForTest(t, server, 0)
+	waitForDescriptorOwnerCountForTest(t, missingConnectionOwner, 0)
 
 	inputOwner := descriptorOwnerForFileForTest(t, input)
 	baselineOwned := openDescriptorCountForOwnerForTest(t, inputOwner)
 	socket = connectForTest(t, config.SocketPath)
+	waitForConnectionsForTest(t, server, 1)
+	excessConnectionOwner := registeredConnectionOwnerForTest(t, server)
 	if _, err := unix.SendmsgN(
 		socket,
 		payload,
@@ -358,16 +364,11 @@ func TestUnixLauncherRejectsMissingAndExcessDescriptorsWithoutLeaks(t *testing.T
 	if err != nil || response.Code != CodeDescriptorInvalid {
 		t.Fatalf("excess descriptor response=%+v err=%v", response, err)
 	}
-	// The response is the causal barrier: the server sends it only after
-	// receivePacket has rejected and closed both received copies.
-	if got := openDescriptorCountForOwnerForTest(t, inputOwner); got != baselineOwned {
-		t.Fatalf(
-			"server retained descriptors for owner %+v: before=%d after=%d",
-			inputOwner,
-			baselineOwned,
-			got,
-		)
-	}
+	// The response plus empty registry form the causal barrier: finishConnection
+	// must have reclaimed the accepted socket and both received rights.
+	waitForConnectionsForTest(t, server, 0)
+	waitForDescriptorOwnerCountForTest(t, excessConnectionOwner, 0)
+	waitForDescriptorOwnerCountForTest(t, inputOwner, baselineOwned)
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 	if len(runner.requests) != 0 {

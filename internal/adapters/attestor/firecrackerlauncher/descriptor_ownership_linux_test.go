@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -102,14 +101,7 @@ func TestCanceledSealedInputReclaimsItsOwnedDescriptor(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("canceled sealed input did not return")
 	}
-	if got := openDescriptorCountForOwnerForTest(t, owned); got != before[owned] {
-		t.Fatalf(
-			"canceled sealed input retained owner %+v: before=%d after=%d",
-			owned,
-			before[owned],
-			got,
-		)
-	}
+	waitForDescriptorOwnerCountForTest(t, owned, before[owned])
 }
 
 func descriptorOwnerForFileForTest(t *testing.T, file *os.File) descriptorOwnerForTest {
@@ -121,12 +113,35 @@ func descriptorOwnerForFileForTest(t *testing.T, file *os.File) descriptorOwnerF
 	return descriptorOwnerForTest{device: uint64(stat.Dev), inode: stat.Ino}
 }
 
+func registeredConnectionOwnerForTest(t *testing.T, server *Server) descriptorOwnerForTest {
+	t.Helper()
+	server.mu.Lock()
+	defer server.mu.Unlock()
+	if len(server.connections) != 1 {
+		t.Fatalf("expected one registered connection, got %d", len(server.connections))
+	}
+	for connection := range server.connections {
+		var stat unix.Stat_t
+		if unix.Fstat(connection, &stat) != nil || stat.Mode&unix.S_IFMT != unix.S_IFSOCK {
+			t.Fatalf("could not identify registered connection %d", connection)
+		}
+		return descriptorOwnerForTest{device: uint64(stat.Dev), inode: stat.Ino}
+	}
+	t.Fatal("registered connection disappeared")
+	return descriptorOwnerForTest{}
+}
+
 func openDescriptorOwnersForTest(
 	t *testing.T,
 	linkTarget string,
 ) map[descriptorOwnerForTest]int {
 	t.Helper()
-	entries, err := os.ReadDir("/proc/self/fd")
+	procFD, err := os.Open("/proc/self/fd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer procFD.Close()
+	entries, err := procFD.ReadDir(-1)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,25 +151,75 @@ func openDescriptorOwnersForTest(
 		if err != nil {
 			continue
 		}
-		if linkTarget != "" {
-			target, err := os.Readlink(filepath.Join("/proc/self/fd", entry.Name()))
-			if err != nil || !strings.Contains(target, linkTarget) {
-				continue
-			}
+		targetBefore, ok := procDescriptorTargetForTest(int(procFD.Fd()), entry.Name())
+		if !ok || linkTarget != "" && !strings.Contains(targetBefore, linkTarget) {
+			continue
 		}
-		var stat unix.Stat_t
-		if unix.Fstat(fd, &stat) != nil {
+		var sourceBefore unix.Stat_t
+		if unix.Fstat(fd, &sourceBefore) != nil {
+			continue
+		}
+		stable, err := unix.Openat(
+			int(procFD.Fd()),
+			entry.Name(),
+			unix.O_PATH|unix.O_CLOEXEC,
+			0,
+		)
+		if err != nil {
+			continue
+		}
+		var pinned, sourceAfter unix.Stat_t
+		targetAfter, targetOK := procDescriptorTargetForTest(int(procFD.Fd()), entry.Name())
+		pinnedErr := unix.Fstat(stable, &pinned)
+		sourceErr := unix.Fstat(fd, &sourceAfter)
+		_ = unix.Close(stable)
+		if !targetOK || targetAfter != targetBefore || pinnedErr != nil || sourceErr != nil ||
+			!sameDescriptorOwnerForTest(sourceBefore, pinned) ||
+			!sameDescriptorOwnerForTest(pinned, sourceAfter) {
 			continue
 		}
 		owners[descriptorOwnerForTest{
-			device: uint64(stat.Dev),
-			inode:  stat.Ino,
+			device: uint64(pinned.Dev),
+			inode:  pinned.Ino,
 		}]++
 	}
 	return owners
 }
 
+func procDescriptorTargetForTest(procFD int, name string) (string, bool) {
+	buffer := make([]byte, 4096)
+	count, err := unix.Readlinkat(procFD, name, buffer)
+	if err != nil || count == len(buffer) {
+		return "", false
+	}
+	return string(buffer[:count]), true
+}
+
+func sameDescriptorOwnerForTest(first, second unix.Stat_t) bool {
+	return first.Dev == second.Dev && first.Ino == second.Ino
+}
+
 func openDescriptorCountForOwnerForTest(t *testing.T, owner descriptorOwnerForTest) int {
 	t.Helper()
 	return openDescriptorOwnersForTest(t, "")[owner]
+}
+
+func waitForDescriptorOwnerCountForTest(
+	t *testing.T,
+	owner descriptorOwnerForTest,
+	want int,
+) {
+	t.Helper()
+	for attempts := 0; attempts < 100; attempts++ {
+		if openDescriptorCountForOwnerForTest(t, owner) == want {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf(
+		"descriptor owner %+v did not return to %d; got %d",
+		owner,
+		want,
+		openDescriptorCountForOwnerForTest(t, owner),
+	)
 }
