@@ -5,8 +5,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"strings"
 
-	"orquesta/internal/credentials"
 	"orquesta/internal/goal"
 )
 
@@ -20,7 +20,7 @@ const (
 	AgentMicroVMReservedAnyCID          uint32                 = ^uint32(0)
 	AgentMicroVMServiceBroker           string                 = "orquesta_broker"
 	AgentMicroVMServiceControlledProxy  string                 = "controlled_egress_proxy"
-	AgentMicroVMLaunchCredentialPurpose credentials.PurposeRef = "purpose:agent-microvm-launch-proof"
+	AgentMicroVMLaunchCredentialPurpose string                 = "purpose:agent-microvm-launch-proof"
 )
 
 type AgentMicroVMEgressMode string
@@ -50,11 +50,11 @@ type AgentMicroVMVsockService struct {
 }
 
 type AgentMicroVMLaunchCredentialBinding struct {
-	Ref        credentials.CredentialRef
-	OwnerRef   credentials.OwnerRef
-	ScopeRef   credentials.ScopeRef
-	PurposeRef credentials.PurposeRef
-	Version    credentials.Version
+	Ref        string
+	OwnerRef   string
+	ScopeRef   string
+	PurposeRef string
+	Version    uint64
 }
 
 // AgentMicroVMNetworkPolicy has no representation for a NIC, TAP, bridge, NAT
@@ -159,20 +159,19 @@ func AgentMicroVMLaunchBindingDigest(
 		SpecHash:             scope.SpecHash,
 		AgentRef:             scope.AgentRef,
 		IdentityRef:          identityRef,
-		CredentialRef:        credential.Ref.String(),
-		CredentialOwnerRef:   credential.OwnerRef.String(),
-		CredentialScopeRef:   credential.ScopeRef.String(),
-		CredentialPurposeRef: credential.PurposeRef.String(),
-		CredentialVersion:    uint64(credential.Version),
+		CredentialRef:        credential.Ref,
+		CredentialOwnerRef:   credential.OwnerRef,
+		CredentialScopeRef:   credential.ScopeRef,
+		CredentialPurposeRef: credential.PurposeRef,
+		CredentialVersion:    credential.Version,
 		AttestationRef:       attestationRef.String(),
 	}
 	return agentMicroVMNetworkDocumentDigest(document)
 }
 
-func AgentMicroVMLaunchCredentialScopeRef(scope AgentMicroVMNetworkScope) credentials.ScopeRef {
-	return credentials.ScopeRef(
-		"scope:agent-microvm-launch:" + agentMicroVMNetworkDocumentDigest(agentMicroVMLaunchScopeDocument(scope)),
-	)
+func AgentMicroVMLaunchCredentialScopeRef(scope AgentMicroVMNetworkScope) string {
+	return "scope:agent-microvm-launch:" +
+		agentMicroVMNetworkDocumentDigest(agentMicroVMLaunchScopeDocument(scope))
 }
 
 func AgentMicroVMNetworkPolicyDigest(policy AgentMicroVMNetworkPolicy) (string, error) {
@@ -205,14 +204,33 @@ func validAgentMicroVMLaunchCredential(
 	scope AgentMicroVMNetworkScope,
 	binding AgentMicroVMLaunchCredentialBinding,
 ) bool {
-	return credentials.ValidateCredentialRef(binding.Ref) == nil &&
-		credentials.ValidateOwnerRef(binding.OwnerRef) == nil &&
-		binding.OwnerRef.String() == scope.ProjectRef.String() &&
-		credentials.ValidateScopeRef(binding.ScopeRef) == nil &&
+	return validAgentMicroVMCredentialRef(binding.Ref) &&
+		validWorkspaceLogicalRef(binding.OwnerRef) &&
+		binding.OwnerRef == scope.ProjectRef.String() &&
+		validWorkspaceLogicalRef(binding.ScopeRef) &&
 		binding.ScopeRef == AgentMicroVMLaunchCredentialScopeRef(scope) &&
-		credentials.ValidatePurposeRef(binding.PurposeRef) == nil &&
+		validWorkspaceLogicalRef(binding.PurposeRef) &&
 		binding.PurposeRef == AgentMicroVMLaunchCredentialPurpose &&
 		binding.Version > 0
+}
+
+func validAgentMicroVMCredentialRef(value string) bool {
+	const prefix = "credential:"
+	if !strings.HasPrefix(value, prefix) {
+		return false
+	}
+	identifier := strings.TrimPrefix(value, prefix)
+	if len(identifier) == 0 || len(identifier) > 128 {
+		return false
+	}
+	for index, character := range identifier {
+		if character >= 'a' && character <= 'z' || character >= '0' && character <= '9' ||
+			index > 0 && (character == '.' || character == '_' || character == '-') {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func agentMicroVMNetworkError(suffix string) error {
@@ -275,10 +293,10 @@ func agentMicroVMNetworkPolicyProjection(policy AgentMicroVMNetworkPolicy) agent
 		Schema: AgentMicroVMNetworkPolicySchema, Ref: policy.Ref, Scope: scope,
 		GuestCID: policy.GuestCID, LaunchIdentityRef: policy.LaunchIdentityRef,
 		LaunchCredential: agentMicroVMLaunchCredentialDocument{
-			Ref: policy.LaunchCredential.Ref.String(), OwnerRef: policy.LaunchCredential.OwnerRef.String(),
-			ScopeRef:   policy.LaunchCredential.ScopeRef.String(),
-			PurposeRef: policy.LaunchCredential.PurposeRef.String(),
-			Version:    uint64(policy.LaunchCredential.Version),
+			Ref: policy.LaunchCredential.Ref, OwnerRef: policy.LaunchCredential.OwnerRef,
+			ScopeRef:   policy.LaunchCredential.ScopeRef,
+			PurposeRef: policy.LaunchCredential.PurposeRef,
+			Version:    policy.LaunchCredential.Version,
 		},
 		LaunchAttestationRef: policy.LaunchAttestationRef.String(),
 		LaunchBindingDigest:  policy.LaunchBindingDigest, EgressMode: string(policy.EgressMode),
