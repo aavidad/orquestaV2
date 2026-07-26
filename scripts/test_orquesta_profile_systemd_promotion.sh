@@ -394,6 +394,10 @@ for version, name in (
 connection.execute("PRAGMA user_version=19")
 connection.execute("CREATE TABLE IF NOT EXISTS post_cut(value TEXT NOT NULL)")
 connection.execute("INSERT INTO post_cut(value) SELECT 'preserved' WHERE NOT EXISTS(SELECT 1 FROM post_cut)")
+if (pathlib.Path(root) / "state" / "destructive-audit").exists():
+    connection.execute(
+        "DELETE FROM command_invocations WHERE value='historic'"
+    )
 for table in ("authorization_receipts", "command_invocations", "command_outcomes"):
     connection.execute(f"INSERT INTO {table}(value) VALUES('health-delta')")
 if (pathlib.Path(root) / "state" / "destructive-migration").exists():
@@ -1072,6 +1076,10 @@ db.execute(
 )
 for table in ("command_invocations", "command_outcomes"):
     db.execute(f"CREATE TABLE {table}(value TEXT NOT NULL)")
+for table in (
+    "authorization_receipts","command_invocations","command_outcomes"
+):
+    db.execute(f"INSERT INTO {table}(value) VALUES('historic')")
 db.execute("PRAGMA user_version=16")
 db.commit()
 db.close()
@@ -1425,6 +1433,9 @@ database = sqlite3.connect(sys.argv[1])
 database.execute(
     "INSERT INTO goals VALUES(2,'legitimate-post-cut','goal:2')"
 )
+database.execute(
+    "INSERT INTO command_invocations(value) VALUES('legitimate-post-cut')"
+)
 database.commit()
 database.close()
 PY
@@ -1491,6 +1502,13 @@ run_fails "sqlite_post_start_invalid" \
   'SELECT COUNT(*) FROM goals')" -eq 0 ] &&
   [ ! -e "$FIXTURE/promotion/promotion.receipt" ] ||
   fail_test "destructive_functional_data_not_detected"
+
+new_fixture destructive-audit-history
+: >"$FIXTURE/state/destructive-audit"
+run_fails "sqlite_post_start_invalid" \
+  "$SUBJECT" --apply "${CONTRACT[@]}"
+[ ! -e "$FIXTURE/promotion/promotion.receipt" ] ||
+  fail_test "destructive_audit_history_not_detected"
 
 new_fixture primary-replaced-before-receipt
 : >"$FIXTURE/state/phase60-after-publish-fail"

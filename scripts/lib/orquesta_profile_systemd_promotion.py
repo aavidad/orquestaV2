@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+from collections import Counter
 import copy
 import ctypes
 import hashlib
@@ -317,6 +318,45 @@ def functional_data_sha256(
         except sqlite3.Error as error:
             raise ContractError("functional_projection_changed") from error
     return digest.hexdigest()
+
+
+def audit_row_fingerprints(
+    connection: sqlite3.Connection,
+    table: str,
+    columns: tuple[str, ...],
+) -> Counter[str]:
+    selected = ",".join(quote_identifier(column) for column in columns)
+    result: Counter[str] = Counter()
+    for row in connection.execute(f"SELECT {selected} FROM {quote_identifier(table)}"):
+        digest = hashlib.sha256()
+        for value in row:
+            encoded = encode_sqlite_value(value)
+            digest.update(len(encoded).to_bytes(8, "big"))
+            digest.update(encoded)
+        result[digest.hexdigest()] += 1
+    return result
+
+
+def verify_audit_history_preserved(
+    source: sqlite3.Connection, current: sqlite3.Connection
+) -> None:
+    for table in sorted(FUNCTIONAL_AUDIT_TABLES):
+        source_columns = tuple(
+            str(row[1])
+            for row in source.execute(f"PRAGMA table_info({quote_identifier(table)})")
+        )
+        current_columns = {
+            str(row[1])
+            for row in current.execute(f"PRAGMA table_info({quote_identifier(table)})")
+        }
+        if not source_columns or not set(source_columns).issubset(current_columns):
+            raise ContractError("sqlite_audit_schema_changed")
+        expected = audit_row_fingerprints(source, table, source_columns)
+        observed = audit_row_fingerprints(current, table, source_columns)
+        if any(
+            observed[fingerprint] < count for fingerprint, count in expected.items()
+        ):
+            raise ContractError("sqlite_audit_history_changed")
 
 
 def rename_noreplace(source: str, target: str) -> None:
@@ -1840,6 +1880,7 @@ def command_sqlite_after(args: argparse.Namespace) -> None:
         ):
             raise ContractError("sqlite_after")
         validate_v23_schema(connection, pathlib.Path(args.repository))
+        verify_audit_history_preserved(backup, connection)
         if not args.skip_functional:
             projection = functional_projection(backup)
             if functional_data_sha256(backup, projection) != functional_data_sha256(
