@@ -616,6 +616,17 @@ run_fails() {
   }
 }
 
+set_contract_value() {
+  local key="$1" replacement="$2" index
+  for index in "${!CONTRACT[@]}"; do
+    if [ "${CONTRACT[$index]}" = "$key" ]; then
+      CONTRACT[index + 1]="$replacement"
+      return
+    fi
+  done
+  fail_test "contract_key_not_found"
+}
+
 sqlite_value() {
   /usr/bin/python3 - "$1" "$2" <<'PY'
 import sqlite3
@@ -650,6 +661,15 @@ run_fails "candidate_revision_not_ancestor" \
   "$SUBJECT" --apply "${CONTRACT[@]}"
 [ ! -s "$FIXTURE/log/profile" ] && [ ! -s "$FIXTURE/log/adapter" ] ||
   fail_test "candidate_rebinding_mutated"
+
+new_fixture rollback-shared-drift
+printf '%s\n' '[workspace.local]' \
+  'root = "/tmp/desvio-no-autorizado"' >>"$FIXTURE/rollback.toml"
+set_contract_value --expected-rollback-config-sha256 \
+  "$(sha256_of "$FIXTURE/rollback.toml")"
+run_fails "config_pair_invalid" "$SUBJECT" --apply "${CONTRACT[@]}"
+[ ! -s "$FIXTURE/log/profile" ] && [ ! -s "$FIXTURE/log/adapter" ] ||
+  fail_test "rollback_shared_drift_mutated"
 
 new_fixture snapshot-replacement
 : >"$FIXTURE/state/stop-fail"
