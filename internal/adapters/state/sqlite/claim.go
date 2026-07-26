@@ -24,6 +24,8 @@ type claimCandidate struct {
 	agentRef          string
 	executionState    application.ExecutionState
 	executionPurpose  application.ExecutionPurpose
+	executionAttempt  int64
+	replacesExecution string
 	deliveryAttempt   int64
 	order             claimCandidateOrder
 }
@@ -169,6 +171,8 @@ type claimSelection struct {
 	approval          application.EffectApproval
 	reservation       governance.BudgetReservation
 	reservationExists bool
+	disposition       application.ActionClaimDisposition
+	budgetExhaustion  application.RetryBudgetExhaustion
 }
 
 func selectClaimCandidate(
@@ -178,6 +182,16 @@ func selectClaimCandidate(
 ) (claimSelection, bool, error) {
 	for index := range candidates {
 		candidate := &candidates[index]
+		exhaustion, local, err := admitIrreversibleRetryBeforeExternal(ctx, tx, candidate)
+		if err != nil {
+			return claimSelection{}, false, err
+		}
+		if local {
+			return claimSelection{
+				candidate: *candidate, disposition: application.ActionClaimDispositionRetryBudgetIrreversible,
+				budgetExhaustion: exhaustion,
+			}, true, nil
+		}
 		matches, err := claimCandidateMatches(*candidate, requirements, capabilities)
 		if err != nil {
 			return claimSelection{}, false, err
@@ -199,7 +213,10 @@ func selectClaimCandidate(
 		if !capacity {
 			continue
 		}
-		return claimSelection{*candidate, approval, reservation, exists}, true, nil
+		return claimSelection{
+			candidate: *candidate, approval: approval, reservation: reservation, reservationExists: exists,
+			disposition: application.ActionClaimDispositionNormal,
+		}, true, nil
 	}
 	return claimSelection{}, false, nil
 }
@@ -274,6 +291,63 @@ func admitClaimBudget(
 	return governance.BudgetReservation{}, false, false, err
 }
 
+func admitIrreversibleRetryBeforeExternal(
+	ctx context.Context,
+	tx *sql.Tx,
+	candidate *claimCandidate,
+) (application.RetryBudgetExhaustion, bool, error) {
+	if candidate.governanceVersion != 1 || candidate.action.Kind != application.ActionLaunchAgent ||
+		candidate.executionAttempt <= 1 || candidate.replacesExecution == "" {
+		return application.RetryBudgetExhaustion{}, false, nil
+	}
+	intent, found, err := requireCandidateEffectIntent(ctx, tx, *candidate)
+	if err != nil || !found {
+		return application.RetryBudgetExhaustion{}, false, err
+	}
+	candidate.action.EffectIntent = intent
+	_, _, capacity, err := prepareBudgetAdmission(ctx, tx, *candidate)
+	if err != nil || capacity {
+		return application.RetryBudgetExhaustion{}, false, err
+	}
+	disposition, evidence, err := classifyQueuedRetryBudget(ctx, tx, *candidate)
+	if err != nil {
+		return application.RetryBudgetExhaustion{}, false, err
+	}
+	return evidence, disposition == application.RetryBudgetIrreversible, nil
+}
+
+func classifyQueuedRetryBudget(
+	ctx context.Context,
+	tx *sql.Tx,
+	candidate claimCandidate,
+) (application.RetryBudgetDisposition, application.RetryBudgetExhaustion, error) {
+	envelopes, err := requireBudgetEnvelopes(
+		ctx, tx, candidate.projectRef, candidate.action.GoalRef,
+		candidate.action.EffectIntent.PolicyHash, candidate.action.EffectIntent.PolicyRevision,
+	)
+	if err != nil {
+		return "", application.RetryBudgetExhaustion{}, err
+	}
+	var goalEnvelope governance.BudgetEnvelope
+	for _, envelope := range envelopes {
+		if envelope.Scope == governance.BudgetScopeGoal {
+			goalEnvelope = envelope
+			break
+		}
+	}
+	settlements, err := readBudgetSettlementsForGoal(ctx, tx, candidate.action.GoalRef.String())
+	if err != nil {
+		return "", application.RetryBudgetExhaustion{}, err
+	}
+	disposition, evidence, err := application.ClassifyGoalRetryBudget(
+		goalEnvelope, settlements, candidate.action.EffectIntent.Demand,
+	)
+	if err != nil {
+		return "", application.RetryBudgetExhaustion{}, invalid(err)
+	}
+	return disposition, evidence, nil
+}
+
 func claimSelectedCandidate(
 	ctx context.Context, tx *sql.Tx, request application.ClaimRequest,
 	selected claimSelection, now, leaseUntil time.Time,
@@ -294,20 +368,29 @@ ON CONFLICT(goal_ref,work_item_ref) DO UPDATE SET fence=work_item_fences.fence+1
 	}
 	reservation := selected.reservation
 	if candidate.governanceVersion == 1 && candidate.action.Kind == application.ActionLaunchAgent {
-		if !selected.reservationExists {
+		if selected.disposition == application.ActionClaimDispositionNormal && !selected.reservationExists {
 			reservation, err = insertBudgetReservation(ctx, tx, candidate, uint64(fence), now)
 		}
-		if err == nil {
+		if err == nil && selected.disposition == application.ActionClaimDispositionNormal {
 			err = bindClaimedLaunchExecution(ctx, tx, candidate, reservation)
 		}
 		if err != nil {
 			return application.ActionClaim{}, err
 		}
 	}
+	marker := ""
+	if selected.disposition == application.ActionClaimDispositionRetryBudgetIrreversible {
+		marker, err = application.RetryBudgetExhaustionMarker(selected.budgetExhaustion)
+		if err != nil {
+			return application.ActionClaim{}, invalid(err)
+		}
+	}
 	result, err := tx.ExecContext(ctx, `UPDATE outbox SET claim_token=?,claimed_by=?,claimed_until=?,delivery_attempt=?,fence=?
+ ,last_error_code=CASE WHEN ?<>'' THEN ? ELSE last_error_code END
 WHERE ref=? AND completed_at IS NULL AND retired_at IS NULL AND quarantined_at IS NULL
 AND available_at<=? AND (claim_token IS NULL OR claimed_until<=?)`, request.Token, request.WorkerRef,
-		requiredTime(leaseUntil), deliveryAttempt, fence, candidate.action.Ref, requiredTime(now), requiredTime(now))
+		requiredTime(leaseUntil), deliveryAttempt, fence, marker, marker,
+		candidate.action.Ref, requiredTime(now), requiredTime(now))
 	if err != nil {
 		return application.ActionClaim{}, mapDatabaseError(err)
 	}
@@ -315,8 +398,10 @@ AND available_at<=? AND (claim_token IS NULL OR claimed_until<=?)`, request.Toke
 		return application.ActionClaim{}, err
 	}
 	claim := application.ActionClaim{Action: candidate.action, Token: request.Token, WorkerRef: request.WorkerRef,
-		DeliveryAttempt: uint64(deliveryAttempt), Fence: uint64(fence), BudgetReservationRef: reservation.Ref,
-		BudgetReservation: reservation, EffectApproval: selected.approval, LeaseUntil: leaseUntil}
+		DeliveryAttempt: uint64(deliveryAttempt), Fence: uint64(fence),
+		Disposition: selected.disposition, RetryBudgetExhaustion: selected.budgetExhaustion,
+		BudgetReservationRef: reservation.Ref,
+		BudgetReservation:    reservation, EffectApproval: selected.approval, LeaseUntil: leaseUntil}
 	if candidate.governanceVersion == 1 && candidate.action.Kind == application.ActionLaunchAgent {
 		if err := advanceFairness(ctx, tx, candidate.projectRef, candidate.action.GoalRef, now); err != nil {
 			return application.ActionClaim{}, err
@@ -373,7 +458,7 @@ SELECT o.ref, o.kind, o.goal_ref, o.work_item_ref, o.execution_ref,
        o.control_ref, %s, o.effect_intent_ref, o.governance_version,
        o.plan_generation, o.work_item_generation, o.available_at, g.project_ref,
        o.delivery_attempt, wi.role_key, e.state, e.purpose,
-	   e.provider_ref, e.model_ref, e.agent_ref,
+	   e.provider_ref, e.model_ref, e.agent_ref,e.attempt_no,COALESCE(e.replaces_execution_ref,''),
        CASE o.kind WHEN 'stop_agent' THEN 0 WHEN 'prepare_workspace' THEN 1 WHEN 'launch_agent' THEN 2 WHEN 'commit_change' THEN 3 WHEN 'attest_test' THEN 4 WHEN 'integrate_change' THEN 5 WHEN 'observe_agent' THEN 6 ELSE 7 END,
        CASE WHEN o.kind = 'launch_agent' THEN COALESCE(project_cursor.ordinal, 0) ELSE 0 END,
        CASE WHEN o.kind = 'launch_agent' THEN COALESCE(goal_cursor.ordinal, 0) ELSE 0 END
@@ -508,7 +593,8 @@ func scanClaimCandidate(rows *sql.Rows) (claimCandidate, error) {
 		&councilDecisionDigest, &councilSkipRef, &councilSkipDigest, &effectIntentRef, &candidate.governanceVersion, &planGeneration,
 		&itemGeneration, &availableAt, &projectValue, &candidate.deliveryAttempt,
 		&candidate.roleKey, &candidate.executionState, &candidate.executionPurpose, &candidate.providerRef,
-		&candidate.modelRef, &candidate.agentRef, &candidate.order.kind,
+		&candidate.modelRef, &candidate.agentRef, &candidate.executionAttempt, &candidate.replacesExecution,
+		&candidate.order.kind,
 		&candidate.order.project, &candidate.order.goal)
 	if err != nil {
 		return candidate, mapDatabaseError(err)
@@ -654,6 +740,7 @@ func requireClaim(ctx context.Context, transaction *sql.Tx, claim application.Ac
 	var token, worker sql.NullString
 	var leaseUntil, completedAt, quarantinedAt sql.NullInt64
 	var deliveryAttempt, fence, currentFence int64
+	var lastErrorCode string
 	workspaceColumns, err := sqliteTableHasColumn(ctx, transaction, "outbox", "change_ref")
 	if err != nil {
 		return mapDatabaseError(err)
@@ -666,14 +753,14 @@ func requireClaim(ctx context.Context, transaction *sql.Tx, claim application.Ac
 SELECT o.kind, o.goal_ref, o.work_item_ref, o.execution_ref, o.control_ref, %s,
        o.plan_generation, o.work_item_generation, o.available_at,
        o.claim_token, o.claimed_by, o.claimed_until, o.delivery_attempt, o.fence,
-       o.completed_at, o.quarantined_at, wf.fence
+       o.completed_at, o.quarantined_at, o.last_error_code, wf.fence
 FROM outbox o
 JOIN work_item_fences wf ON wf.goal_ref = o.goal_ref AND wf.work_item_ref = o.work_item_ref
 WHERE o.ref = ?`, changeProjection), claim.Action.Ref).Scan(
 		&kind, &goalValue, &itemValue, &executionValue, &controlRef, &changeRef, &expectedTarget, &reviewGateDigest,
 		&planGeneration, &itemGeneration, &availableAt,
 		&token, &worker, &leaseUntil, &deliveryAttempt, &fence,
-		&completedAt, &quarantinedAt, &currentFence,
+		&completedAt, &quarantinedAt, &lastErrorCode, &currentFence,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return conflict(err)
@@ -694,6 +781,19 @@ WHERE o.ref = ?`, changeProjection), claim.Action.Ref).Scan(
 		itemGeneration != int64(claim.Action.WorkItemGeneration) ||
 		availableAt != requiredTime(claim.Action.AvailableAt) {
 		return conflict(errors.New("sqlite.claim_cas_conflict"))
+	}
+	marker, markerErr := application.RetryBudgetExhaustionMarker(claim.RetryBudgetExhaustion)
+	switch claim.Disposition {
+	case application.ActionClaimDispositionNormal:
+		if strings.HasPrefix(lastErrorCode, application.RetryBudgetExhaustionMarkerPrefix) {
+			return conflict(errors.New("sqlite.claim_disposition_conflict"))
+		}
+	case application.ActionClaimDispositionRetryBudgetIrreversible:
+		if markerErr != nil || lastErrorCode != marker {
+			return conflict(errors.New("sqlite.claim_disposition_conflict"))
+		}
+	default:
+		return conflict(errors.New("sqlite.claim_disposition_invalid"))
 	}
 	return nil
 }
@@ -718,6 +818,13 @@ func completeClaimWithEffect(
 	quarantined bool,
 	effect *application.EffectReceipt,
 ) error {
+	if claim.Disposition == application.ActionClaimDispositionRetryBudgetIrreversible {
+		marker, err := application.RetryBudgetExhaustionMarker(claim.RetryBudgetExhaustion)
+		if err != nil {
+			return invalid(err)
+		}
+		errorCode = marker
+	}
 	var quarantineAt any
 	outcome := application.ActionConsumedCompleted
 	if quarantined {

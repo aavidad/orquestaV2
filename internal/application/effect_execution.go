@@ -353,7 +353,7 @@ func settlementForExecutionAttempt(
 	at time.Time,
 	definitelyUnapplied bool,
 ) (*governance.BudgetSettlement, error) {
-	if definitelyUnapplied {
+	if definitelyUnapplied && claim.BudgetReservationRef != "" {
 		settlement, err := releaseSettlementForAttempt(
 			claim, "effect-attempt:"+claim.Action.Ref+":"+claim.Token, at,
 		)

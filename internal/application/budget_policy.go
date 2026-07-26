@@ -2,6 +2,8 @@ package application
 
 import (
 	"errors"
+	"sort"
+	"strconv"
 	"time"
 
 	"orquesta/internal/goal"
@@ -89,51 +91,176 @@ func retryFitsIrreversibleGoalBudget(
 		governance.ValidateBudgetDemand(demand) != nil {
 		return false, errors.New("application.execution_retry_budget_invalid")
 	}
-	policy, err := historicalEffectPolicy(record)
+	settlements, err := validatedGoalBudgetSettlements(record, settlement)
 	if err != nil {
 		return false, err
 	}
-	charged := governance.ResourceVector{}
-	currentSeen := false
-	for _, prior := range record.BudgetSettlements {
-		reservation, found := reservationByRef(record.BudgetReservations, prior.ReservationRef)
-		if !found || reservation.GoalRef != record.Goal.Ref().String() {
-			return false, errors.New("application.execution_retry_budget_invalid")
-		}
-		if prior.ReservationRef == settlement.ReservationRef {
-			if prior != *settlement {
-				return false, errors.New("application.execution_retry_budget_conflict")
-			}
-			currentSeen = true
-		}
-		durableCharge := prior.Charged
-		// Process slots are concurrent capacity, not cumulative consumption.
-		// A settled reservation releases its slot even when telemetry was
-		// unknown and reconciliation conservatively recorded it as charged.
-		durableCharge.ProcessSlots = 0
-		charged, err = governance.Add(charged, durableCharge)
-		if err != nil {
-			return false, err
-		}
+	envelope, err := historicalGoalBudgetEnvelope(record)
+	if err != nil {
+		return false, err
 	}
-	if !currentSeen {
-		reservation, found := reservationByRef(record.BudgetReservations, settlement.ReservationRef)
-		if !found || reservation.GoalRef != record.Goal.Ref().String() ||
-			settlement.Reserved != reservation.Resources {
-			return false, errors.New("application.execution_retry_budget_invalid")
+	disposition, _, err := ClassifyGoalRetryBudget(envelope, settlements, demand)
+	return disposition == RetryBudgetFits, err
+}
+
+type RetryBudgetDisposition string
+
+const (
+	RetryBudgetFits                   RetryBudgetDisposition = "fits"
+	RetryBudgetIrreversible           RetryBudgetDisposition = "irreversible"
+	RetryBudgetExhaustionMarkerPrefix                        = "budget.retry_irreversible:"
+)
+
+// ClassifyGoalRetryBudget is the single policy projection shared by retry
+// creation and late SQLite admission. Settled tokens, money, active time and
+// disk are cumulative. Process slots are current capacity, so only the new
+// demand contributes slots after settlements.
+func ClassifyGoalRetryBudget(
+	envelope governance.BudgetEnvelope,
+	settlements []governance.BudgetSettlement,
+	demand governance.BudgetDemand,
+) (RetryBudgetDisposition, RetryBudgetExhaustion, error) {
+	if governance.ValidateBudgetEnvelope(envelope) != nil || envelope.Scope != governance.BudgetScopeGoal ||
+		governance.ValidateBudgetDemand(demand) != nil {
+		return "", RetryBudgetExhaustion{}, errors.New("application.execution_retry_budget_invalid")
+	}
+	ordered := append([]governance.BudgetSettlement(nil), settlements...)
+	sort.Slice(ordered, func(left, right int) bool { return ordered[left].Ref < ordered[right].Ref })
+	charged := governance.ResourceVector{}
+	fields := []string{
+		envelope.SubjectRef, envelope.Ref, envelope.PolicyHash, strconv.FormatUint(envelope.Revision, 10),
+		envelope.CreatedAt.UTC().Format(time.RFC3339Nano),
+	}
+	fields = append(fields, resourceVectorFingerprintFields(envelope.Limit)...)
+	fields = append(fields, demand.Ref)
+	fields = append(fields, resourceVectorFingerprintFields(demand.Resources)...)
+	for index, settlement := range ordered {
+		if governance.ValidateBudgetSettlement(settlement) != nil ||
+			(index > 0 && ordered[index-1].Ref == settlement.Ref) {
+			return "", RetryBudgetExhaustion{}, errors.New("application.execution_retry_budget_invalid")
 		}
 		durableCharge := settlement.Charged
+		// A settled process slot is released even when reconciliation retained
+		// it conservatively because provider telemetry was unknown.
 		durableCharge.ProcessSlots = 0
+		var err error
 		charged, err = governance.Add(charged, durableCharge)
 		if err != nil {
-			return false, err
+			return "", RetryBudgetExhaustion{}, err
 		}
+		fields = append(fields, settlement.Ref, settlement.ReservationRef, settlement.CausalAttemptRef,
+			settlement.SettledAt.UTC().Format(time.RFC3339Nano))
+		fields = append(fields, resourceVectorFingerprintFields(settlement.Charged)...)
 	}
 	required, err := governance.Add(charged, demand.Resources)
 	if err != nil {
-		return false, err
+		return "", RetryBudgetExhaustion{}, err
 	}
-	return governance.Fits(policy.GoalLimit, required)
+	fits, err := governance.Fits(envelope.Limit, required)
+	if err != nil {
+		return "", RetryBudgetExhaustion{}, err
+	}
+	evidence := RetryBudgetExhaustion{
+		EnvelopeRef: envelope.Ref, PolicyHash: envelope.PolicyHash, PolicyRevision: envelope.Revision,
+		Limit: envelope.Limit, Settled: charged, Demand: demand, Required: required,
+		FrontierDigest: fingerprintFields("orquesta.retry-budget.frontier.v1", fields...),
+	}
+	evidence.GoalRef, err = goal.NewGoalRef(envelope.SubjectRef)
+	if err != nil {
+		return "", RetryBudgetExhaustion{}, errors.New("application.execution_retry_budget_invalid")
+	}
+	if fits {
+		return RetryBudgetFits, evidence, nil
+	}
+	return RetryBudgetIrreversible, evidence, nil
+}
+
+func resourceVectorFingerprintFields(vector governance.ResourceVector) []string {
+	return []string{
+		strconv.FormatInt(vector.Tokens, 10), strconv.FormatInt(vector.MoneyMicros, 10), string(vector.Currency),
+		strconv.FormatInt(vector.ActiveTimeNS, 10), strconv.FormatInt(vector.ProcessSlots, 10),
+		strconv.FormatInt(vector.DiskBytes, 10),
+	}
+}
+
+func RetryBudgetExhaustionMarker(evidence RetryBudgetExhaustion) (string, error) {
+	if evidence.GoalRef.String() == "" || evidence.EnvelopeRef == "" || !validEffectDigest(evidence.PolicyHash) ||
+		evidence.PolicyRevision == 0 || governance.ValidateResourceVector(evidence.Limit) != nil ||
+		governance.ValidateResourceVector(evidence.Settled) != nil ||
+		governance.ValidateBudgetDemand(evidence.Demand) != nil ||
+		governance.ValidateResourceVector(evidence.Required) != nil ||
+		!validEffectDigest(evidence.FrontierDigest) {
+		return "", errors.New("application.retry_budget_exhaustion_invalid")
+	}
+	required, err := governance.Add(evidence.Settled, evidence.Demand.Resources)
+	if err != nil || required != evidence.Required {
+		return "", errors.New("application.retry_budget_exhaustion_invalid")
+	}
+	fits, err := governance.Fits(evidence.Limit, evidence.Required)
+	if err != nil || fits {
+		return "", errors.New("application.retry_budget_exhaustion_invalid")
+	}
+	return RetryBudgetExhaustionMarkerPrefix + evidence.FrontierDigest, nil
+}
+
+func historicalGoalBudgetEnvelope(record GoalRecord) (governance.BudgetEnvelope, error) {
+	if _, err := historicalEffectPolicy(record); err != nil {
+		return governance.BudgetEnvelope{}, err
+	}
+	for _, envelope := range record.BudgetEnvelopes {
+		if envelope.Scope == governance.BudgetScopeGoal {
+			return envelope, nil
+		}
+	}
+	return governance.BudgetEnvelope{}, errors.New("application.goal_effect_policy_invalid")
+}
+
+func validatedGoalBudgetSettlements(
+	record GoalRecord,
+	additional *governance.BudgetSettlement,
+) ([]governance.BudgetSettlement, error) {
+	result := append([]governance.BudgetSettlement(nil), record.BudgetSettlements...)
+	additionalSeen := additional == nil
+	for _, settlement := range record.BudgetSettlements {
+		reservation, found := reservationByRef(record.BudgetReservations, settlement.ReservationRef)
+		if !found || reservation.GoalRef != record.Goal.Ref().String() ||
+			settlement.Reserved != reservation.Resources {
+			return nil, errors.New("application.execution_retry_budget_invalid")
+		}
+		if additional != nil && settlement.ReservationRef == additional.ReservationRef {
+			if settlement != *additional {
+				return nil, errors.New("application.execution_retry_budget_conflict")
+			}
+			additionalSeen = true
+		}
+	}
+	if !additionalSeen {
+		if governance.ValidateBudgetSettlement(*additional) != nil {
+			return nil, errors.New("application.execution_retry_budget_invalid")
+		}
+		reservation, found := reservationByRef(record.BudgetReservations, additional.ReservationRef)
+		if !found || reservation.GoalRef != record.Goal.Ref().String() ||
+			additional.Reserved != reservation.Resources {
+			return nil, errors.New("application.execution_retry_budget_invalid")
+		}
+		result = append(result, *additional)
+	}
+	return result, nil
+}
+
+func retryBudgetExhaustionForRecord(
+	record GoalRecord,
+	demand governance.BudgetDemand,
+) (RetryBudgetDisposition, RetryBudgetExhaustion, error) {
+	envelope, err := historicalGoalBudgetEnvelope(record)
+	if err != nil {
+		return "", RetryBudgetExhaustion{}, err
+	}
+	settlements, err := validatedGoalBudgetSettlements(record, nil)
+	if err != nil {
+		return "", RetryBudgetExhaustion{}, err
+	}
+	return ClassifyGoalRetryBudget(envelope, settlements, demand)
 }
 
 func ValidateBudgetPolicy(policy BudgetPolicy) error {

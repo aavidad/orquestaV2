@@ -272,16 +272,40 @@ type ActionRecord struct {
 	AvailableAt        time.Time
 }
 
+type ActionClaimDisposition string
+
+const (
+	ActionClaimDispositionNormal                  ActionClaimDisposition = ""
+	ActionClaimDispositionRetryBudgetIrreversible ActionClaimDisposition = "retry_budget_irreversible"
+)
+
+// RetryBudgetExhaustion is the typed, replayable projection that proves a
+// queued replacement cannot fit after all concurrent reservations disappear.
+// FrontierDigest binds the immutable settlement facts used by the decision.
+type RetryBudgetExhaustion struct {
+	GoalRef        goal.GoalRef
+	EnvelopeRef    string
+	PolicyHash     string
+	PolicyRevision uint64
+	Limit          governance.ResourceVector
+	Settled        governance.ResourceVector
+	Demand         governance.BudgetDemand
+	Required       governance.ResourceVector
+	FrontierDigest string
+}
+
 type ActionClaim struct {
-	Action               ActionRecord
-	Token                string
-	WorkerRef            string
-	DeliveryAttempt      uint64
-	Fence                uint64
-	BudgetReservationRef string
-	BudgetReservation    governance.BudgetReservation
-	EffectApproval       EffectApproval
-	LeaseUntil           time.Time
+	Action                ActionRecord
+	Token                 string
+	WorkerRef             string
+	DeliveryAttempt       uint64
+	Fence                 uint64
+	Disposition           ActionClaimDisposition
+	RetryBudgetExhaustion RetryBudgetExhaustion
+	BudgetReservationRef  string
+	BudgetReservation     governance.BudgetReservation
+	EffectApproval        EffectApproval
+	LeaseUntil            time.Time
 }
 
 type ClaimRequest struct {

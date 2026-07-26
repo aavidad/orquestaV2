@@ -39,6 +39,12 @@ func (orchestrator *Orchestrator) ProcessNext(ctx context.Context, workerRef str
 		return ProcessResult{}, err
 	}
 	result := ProcessResult{Processed: true, GoalRef: claim.Action.GoalRef, Action: claim.Action.Kind}
+	if claim.Disposition == ActionClaimDispositionRetryBudgetIrreversible {
+		return result, orchestrator.processIrreversibleRetryBudget(ctx, claim)
+	}
+	if claim.Disposition != ActionClaimDispositionNormal {
+		return result, &StateError{Code: StateConflict}
+	}
 	switch claim.Action.Kind {
 	case ActionPrepareWorkspace:
 		err = orchestrator.processPrepareWorkspace(ctx, claim)
@@ -62,6 +68,75 @@ func (orchestrator *Orchestrator) ProcessNext(ctx context.Context, workerRef str
 		err = orchestrator.quarantine(ctx, claim, fmt.Sprintf("application.action_kind_invalid:%s", claim.Action.Kind))
 	}
 	return result, err
+}
+
+func (orchestrator *Orchestrator) processIrreversibleRetryBudget(
+	ctx context.Context,
+	claim ActionClaim,
+) error {
+	if claim.Action.Kind != ActionLaunchAgent ||
+		claim.Disposition != ActionClaimDispositionRetryBudgetIrreversible {
+		return &StateError{Code: StateConflict}
+	}
+	record, err := orchestrator.state.GetGoal(ctx, claim.Action.GoalRef)
+	if err != nil {
+		return err
+	}
+	if err := validateClaimedRecord(claim, record, ActionLaunchAgent); err != nil {
+		return &StateError{Code: StateConflict}
+	}
+	item, itemFound := record.Goal.WorkItem(claim.Action.WorkItemRef)
+	execution, executionFound := executionForAction(record, claim.Action)
+	predecessor, predecessorFound := executionByRef(record.Executions, execution.ReplacesExecutionRef)
+	intent, intentFound := effectIntentByRef(record.EffectIntents, claim.Action.EffectIntentRef)
+	if !itemFound || !executionFound || !predecessorFound || !intentFound ||
+		execution.State != ExecutionQueued || execution.AttemptNo <= 1 ||
+		predecessor.Ref != execution.ReplacesExecutionRef || predecessor.State != ExecutionFailed ||
+		predecessor.GoalRef != execution.GoalRef || predecessor.WorkItemRef != execution.WorkItemRef ||
+		execution.BudgetReservationRef != "" || execution.EffectIntentRef != "" ||
+		execution.LaunchReceiptRef != "" || execution.ExecutionSessionRef.String() != "" ||
+		!execution.StartedAt.IsZero() || !execution.ProviderAcceptedAt.IsZero() ||
+		claim.BudgetReservationRef != "" || claim.BudgetReservation != (governance.BudgetReservation{}) ||
+		intent.Ref != claim.Action.EffectIntent.Ref ||
+		EffectIntentDigest(intent) != EffectIntentDigest(claim.Action.EffectIntent) ||
+		intent.ActionRef != claim.Action.Ref || intent.ActionKind != ActionLaunchAgent ||
+		intent.Subject.GoalRef != execution.GoalRef || intent.Subject.WorkItemRef != execution.WorkItemRef ||
+		intent.Subject.ExecutionRef != execution.Ref || intent.Demand != item.BudgetDemand() ||
+		priorEffectAttemptBlocksDispatch(record, claim.Action) {
+		return &StateError{Code: StateConflict}
+	}
+	disposition, evidence, err := retryBudgetExhaustionForRecord(record, item.BudgetDemand())
+	if err != nil {
+		return err
+	}
+	if disposition != RetryBudgetIrreversible || evidence != claim.RetryBudgetExhaustion {
+		// A new durable settlement changed the frontier after claim. Never
+		// consume a decision proved against a different causal snapshot.
+		return &StateError{Code: StateConflict}
+	}
+	code := predecessor.FailureCode
+	if code == "" {
+		code = "governance.retry_budget_irreversible"
+	}
+	at := orchestrator.clock.Now().UTC()
+	switch {
+	case isReviewerExecution(execution):
+		return orchestrator.replaceReviewerExecution(
+			ctx, claim, record, execution, code, failedExecutionMustTerminate,
+			at, unknownUsage(), 0, true,
+		)
+	case isCouncilExecution(execution):
+		return orchestrator.replaceCouncilExecution(
+			ctx, claim, record, execution, code, failedExecutionMustTerminate,
+			at, unknownUsage(), 0, true,
+		)
+	case execution.Purpose == ExecutionPurposeWork || execution.Purpose == ExecutionPurposeAuthor:
+		return orchestrator.interruptExhaustedExecution(
+			ctx, claim, record, execution, item, code, at, unknownUsage(), 0, true,
+		)
+	default:
+		return &StateError{Code: StateConflict}
+	}
 }
 
 func (orchestrator *Orchestrator) processExecutionSessionRevocation(ctx context.Context, claim ActionClaim) error {

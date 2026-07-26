@@ -936,6 +936,22 @@ func validateClaim(claim application.ActionClaim) error {
 		claim.Fence > maxSQLiteInteger || claim.LeaseUntil.IsZero() {
 		return errors.New("sqlite.claim_invalid")
 	}
+	switch claim.Disposition {
+	case application.ActionClaimDispositionNormal:
+		if claim.RetryBudgetExhaustion != (application.RetryBudgetExhaustion{}) {
+			return errors.New("sqlite.claim_disposition_invalid")
+		}
+	case application.ActionClaimDispositionRetryBudgetIrreversible:
+		if claim.Action.Kind != application.ActionLaunchAgent || claim.BudgetReservationRef != "" ||
+			claim.BudgetReservation != (governance.BudgetReservation{}) {
+			return errors.New("sqlite.claim_disposition_invalid")
+		}
+		if _, err := application.RetryBudgetExhaustionMarker(claim.RetryBudgetExhaustion); err != nil {
+			return errors.New("sqlite.claim_disposition_invalid")
+		}
+	default:
+		return errors.New("sqlite.claim_disposition_invalid")
+	}
 	if err := validateAction(claim.Action); err != nil {
 		return errors.New("sqlite.claim_action_invalid")
 	}
