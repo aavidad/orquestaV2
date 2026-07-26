@@ -34,14 +34,89 @@ const (
 )
 
 func init() {
-	if len(os.Args) < 2 || os.Args[1] != "exec" {
+	if len(os.Args) < 2 ||
+		os.Args[1] != "--ask-for-approval" && os.Args[1] != "exec" {
 		return
 	}
-	if err := runBootstrapCredentialCodexHelper(os.Args[2:]); err != nil {
+	arguments, err := parseBootstrapCredentialCodexHelperArguments(os.Args[1:])
+	if err == nil {
+		err = runBootstrapCredentialCodexHelper(arguments)
+	}
+	if err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(91)
 	}
 	os.Exit(0)
+}
+
+func TestParseBootstrapCredentialCodexHelperArgumentsRequiresExactGlobalPrefix(t *testing.T) {
+	arguments, err := parseBootstrapCredentialCodexHelperArguments([]string{
+		"--ask-for-approval", "never", "exec",
+		"--ephemeral", "--output-last-message", "/tmp/result",
+	})
+	if err != nil {
+		t.Fatalf("parse exact helper arguments: %v", err)
+	}
+	want := []string{"--ephemeral", "--output-last-message", "/tmp/result"}
+	if strings.Join(arguments, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("post-exec arguments = %q want %q", arguments, want)
+	}
+}
+
+func TestParseBootstrapCredentialCodexHelperArgumentsRejectsAmbiguousInvocation(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		arguments []string
+	}{
+		{name: "approval value differs", arguments: []string{"--ask-for-approval", "on-request", "exec"}},
+		{name: "approval value missing", arguments: []string{"--ask-for-approval", "exec"}},
+		{name: "legacy exec without policy", arguments: []string{"exec"}},
+		{name: "exec absent", arguments: []string{"--ask-for-approval", "never"}},
+		{
+			name: "approval duplicated before exec",
+			arguments: []string{
+				"--ask-for-approval", "never",
+				"--ask-for-approval", "never", "exec",
+			},
+		},
+		{
+			name: "approval duplicated after exec",
+			arguments: []string{
+				"--ask-for-approval", "never", "exec",
+				"--ask-for-approval", "never",
+			},
+		},
+		{
+			name: "exec duplicated",
+			arguments: []string{
+				"--ask-for-approval", "never", "exec", "exec",
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := parseBootstrapCredentialCodexHelperArguments(test.arguments); err == nil {
+				t.Fatalf("parseBootstrapCredentialCodexHelperArguments(%q) succeeded", test.arguments)
+			}
+		})
+	}
+}
+
+func parseBootstrapCredentialCodexHelperArguments(arguments []string) ([]string, error) {
+	if len(arguments) < 3 ||
+		arguments[0] != "--ask-for-approval" ||
+		arguments[1] != "never" ||
+		arguments[2] != "exec" {
+		return nil, errors.New("bootstrap credential helper requires --ask-for-approval never exec")
+	}
+	for _, argument := range arguments[3:] {
+		switch argument {
+		case "--ask-for-approval":
+			return nil, errors.New("bootstrap credential helper approval policy duplicated")
+		case "exec":
+			return nil, errors.New("bootstrap credential helper exec subcommand duplicated")
+		}
+	}
+	return arguments[3:], nil
 }
 
 func TestLocalCredentialStoreIntegratesWithCodexLaunchRotationAndRevocation(t *testing.T) {
