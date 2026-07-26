@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import copy
 import ctypes
 import hashlib
@@ -22,6 +23,11 @@ import urllib.parse
 HEX = re.compile(r"^[0-9a-f]{64}$")
 BACKUP_SCHEMA = "orquesta_profile_systemd_promotion_backup.v1"
 RECEIPT_SCHEMA = "orquesta_profile_systemd_promotion_receipt.v1"
+FUNCTIONAL_AUDIT_TABLES = {
+    "authorization_receipts",
+    "command_invocations",
+    "command_outcomes",
+}
 RENAME_NOREPLACE = 1
 AT_FDCWD = -100
 
@@ -204,6 +210,84 @@ def sqlite_facts(
     return quick, version, migrations, migrations_sha, logical.hexdigest()
 
 
+def quote_identifier(value: str) -> str:
+    return '"' + value.replace('"', '""') + '"'
+
+
+def encode_sqlite_value(value: object) -> bytes:
+    if value is None:
+        return b"n:"
+    if isinstance(value, int):
+        return b"i:" + str(value).encode("ascii")
+    if isinstance(value, float):
+        return b"f:" + value.hex().encode("ascii")
+    if isinstance(value, str):
+        return b"s:" + value.encode("utf-8")
+    if isinstance(value, bytes):
+        return b"b:" + base64.b64encode(value)
+    raise ContractError("functional_value_type")
+
+
+def functional_projection(
+    connection: sqlite3.Connection,
+) -> list[tuple[str, tuple[str, ...]]]:
+    tables = [
+        row[0]
+        for row in connection.execute(
+            "SELECT name FROM sqlite_schema "
+            "WHERE type='table' AND name NOT LIKE 'sqlite_%' "
+            "AND name <> 'schema_migrations' ORDER BY name"
+        )
+    ]
+    tables = [table for table in tables if table not in FUNCTIONAL_AUDIT_TABLES]
+    projection: list[tuple[str, tuple[str, ...]]] = []
+    for table in tables:
+        columns = tuple(
+            row[1]
+            for row in connection.execute(
+                f"PRAGMA table_info({quote_identifier(table)})"
+            )
+        )
+        if not columns:
+            raise ContractError("functional_table_columns")
+        projection.append((table, columns))
+    return projection
+
+
+def functional_data_sha256(
+    connection: sqlite3.Connection,
+    projection: list[tuple[str, tuple[str, ...]]],
+) -> str:
+    digest = hashlib.sha256()
+    for table, columns in projection:
+        digest.update(b"table\0" + table.encode("utf-8") + b"\0")
+        for column in columns:
+            digest.update(b"column\0" + column.encode("utf-8") + b"\0")
+        selected = ",".join(quote_identifier(column) for column in columns)
+        ordering = ",".join(
+            f"typeof({quote_identifier(column)}),"
+            f"quote({quote_identifier(column)})"
+            for column in columns
+        )
+        query = (
+            f"SELECT {selected} FROM {quote_identifier(table)} "
+            f"ORDER BY {ordering}"
+        )
+        try:
+            rows = connection.execute(query)
+            for row in rows:
+                digest.update(b"row\0")
+                for value in row:
+                    encoded = encode_sqlite_value(value)
+                    digest.update(str(len(encoded)).encode("ascii"))
+                    digest.update(b":")
+                    digest.update(encoded)
+                    digest.update(b"\0")
+        except sqlite3.Error as error:
+            raise ContractError("functional_projection_changed") from error
+    return digest.hexdigest()
+
+
 def rename_noreplace(source: str, target: str) -> None:
     libc = ctypes.CDLL(None, use_errno=True)
     renameat2 = getattr(libc, "renameat2", None)
@@ -288,6 +372,36 @@ def command_publish_record(args: argparse.Namespace) -> None:
     publish_private_record(str(target), content, str(directory))
 
 
+def command_remove_record(args: argparse.Namespace) -> None:
+    directory = pathlib.Path(args.directory)
+    target = pathlib.Path(args.path)
+    metadata = os.lstat(directory)
+    if (
+        not stat.S_ISDIR(metadata.st_mode)
+        or stat.S_IMODE(metadata.st_mode) != 0o700
+        or metadata.st_uid != os.getuid()
+        or directory.resolve(strict=True) != directory
+        or target.parent != directory
+        or "\x00" in args.content
+        or args.content.endswith("\n")
+    ):
+        raise ContractError("record_target")
+    try:
+        expected = (args.content + "\n").encode("ascii")
+    except UnicodeEncodeError as error:
+        raise ContractError("record_ascii") from error
+    observed, _ = secure_read(
+        str(target),
+        maximum=max(len(expected), 1),
+        expected_uid=os.getuid(),
+        allowed_modes=(0o600,),
+    )
+    if observed != expected:
+        raise ContractError("record_conflict")
+    os.unlink(target)
+    fsync_directory(str(directory))
+
+
 def command_final_receipt(args: argparse.Namespace) -> None:
     raw, _ = secure_read(
         args.path,
@@ -302,7 +416,7 @@ def command_final_receipt(args: argparse.Namespace) -> None:
     if not text.endswith("\n"):
         raise ContractError("final_receipt_framing")
     lines = text.splitlines()
-    if len(lines) != 12:
+    if len(lines) != 14:
         raise ContractError("final_receipt_framing")
     values: dict[str, str] = {}
     for line in lines:
@@ -325,6 +439,8 @@ def command_final_receipt(args: argparse.Namespace) -> None:
         "firecracker_root_evidence_scope",
         "firecracker_application_attestation",
         "backup_restore_performed",
+        "old_unit_outcome",
+        "functional_data_sha256",
     }
     result = values.get("result")
     if result == "primary":
@@ -349,6 +465,12 @@ def command_final_receipt(args: argparse.Namespace) -> None:
         != "operator_reference_only"
         or values.get("firecracker_application_attestation") != "pending"
         or values.get("backup_restore_performed") != "false"
+        or values.get("old_unit_outcome") != args.old_unit_outcome
+        or (
+            args.functional_data_sha is not None
+            and values.get("functional_data_sha256") != args.functional_data_sha
+        )
+        or not HEX.fullmatch(values.get("functional_data_sha256", ""))
     ):
         raise ContractError("final_receipt_contract")
     print(result)
@@ -518,6 +640,7 @@ def expected_v23_migrations(repository: str) -> list[tuple[int, str, str]]:
 
 def command_sqlite_after(args: argparse.Namespace) -> None:
     connection = connect_read_only(args.path)
+    backup = connect_read_only(args.backup)
     try:
         quick, version, _, _, _ = sqlite_facts(connection)
         observed = list(
@@ -541,7 +664,29 @@ def command_sqlite_after(args: argparse.Namespace) -> None:
             or counts != [1, 1, 1]
         ):
             raise ContractError("sqlite_after")
+        if not args.skip_functional:
+            projection = functional_projection(backup)
+            if functional_data_sha256(
+                backup, projection
+            ) != functional_data_sha256(connection, projection):
+                raise ContractError("sqlite_functional_data_changed")
     finally:
+        backup.close()
+        connection.close()
+
+
+def command_functional_digest(args: argparse.Namespace) -> None:
+    connection = connect_read_only(args.path)
+    projection_source = connect_read_only(args.projection_from)
+    try:
+        projection = functional_projection(projection_source)
+        source_digest = functional_data_sha256(projection_source, projection)
+        observed_digest = functional_data_sha256(connection, projection)
+        if source_digest != observed_digest:
+            raise ContractError("sqlite_functional_data_changed")
+        print(observed_digest)
+    finally:
+        projection_source.close()
         connection.close()
 
 
@@ -612,6 +757,13 @@ def command_backup(args: argparse.Namespace) -> None:
     receipt_exists = os.path.lexists(args.receipt)
     if receipt_exists and not target_exists:
         raise ContractError("backup_pair_incomplete")
+    fence = sqlite3.connect(args.source, timeout=0, isolation_level=None)
+    fence.execute("PRAGMA busy_timeout=1000")
+    try:
+        fence.execute("BEGIN IMMEDIATE")
+    except sqlite3.Error:
+        fence.close()
+        raise
     source_db = connect_read_only(args.source)
     temporary = ""
     descriptor = -1
@@ -718,6 +870,8 @@ def command_backup(args: argparse.Namespace) -> None:
         print(target_sha)
     finally:
         source_db.close()
+        fence.execute("ROLLBACK")
+        fence.close()
         if descriptor >= 0:
             os.close(descriptor)
         if temporary and os.path.exists(temporary):
@@ -823,8 +977,15 @@ def parser() -> argparse.ArgumentParser:
 
     after = commands.add_parser("sqlite-after", add_help=False)
     after.add_argument("--path", required=True)
+    after.add_argument("--backup", required=True)
     after.add_argument("--repository", required=True)
+    after.add_argument("--skip-functional", action="store_true")
     after.set_defaults(handler=command_sqlite_after)
+
+    functional = commands.add_parser("functional-digest", add_help=False)
+    functional.add_argument("--path", required=True)
+    functional.add_argument("--projection-from", required=True)
+    functional.set_defaults(handler=command_functional_digest)
 
     effective = commands.add_parser("effective", add_help=False)
     for name in (
@@ -854,6 +1015,11 @@ def parser() -> argparse.ArgumentParser:
         publish.add_argument("--" + name, required=True)
     publish.set_defaults(handler=command_publish_record)
 
+    remove = commands.add_parser("remove-record", add_help=False)
+    for name in ("path", "directory", "content"):
+        remove.add_argument("--" + name, required=True)
+    remove.set_defaults(handler=command_remove_record)
+
     final = commands.add_parser("final-receipt", add_help=False)
     for name in (
         "path",
@@ -863,8 +1029,10 @@ def parser() -> argparse.ArgumentParser:
         "rollback-config-sha",
         "backup-sha",
         "root-gate-ref",
+        "old-unit-outcome",
     ):
         final.add_argument("--" + name, required=True)
+    final.add_argument("--functional-data-sha")
     final.add_argument("--owner-uid", required=True, type=int)
     final.set_defaults(handler=command_final_receipt)
     return root

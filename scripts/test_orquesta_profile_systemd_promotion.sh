@@ -52,7 +52,9 @@ write_proc_stat() {
 
 write_fake_tools() {
   local root="$1"
-  mkdir -m 700 "$root/tools"
+  mkdir -m 700 "$root/tools" "$root/tools/lib"
+  cp "$SCRIPT_DIR/lib/profile_maintenance_marker.py" \
+    "$root/tools/lib/profile_maintenance_marker.py"
   printf '%s\n' '#!/bin/true' >"$root/tools/binary"
   printf '%s\n' '#!/bin/true' >"$root/tools/live-binary"
   printf '%s\n' '#!/bin/true' >"$root/tools/bubblewrap"
@@ -97,14 +99,29 @@ action="${1:-}"
 shift || true
 runtime_base=""
 profile=""
+maintenance_ref=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --runtime-base) runtime_base="$2"; shift 2 ;;
     --profile) profile="$2"; shift 2 ;;
+    --maintenance-ref) maintenance_ref="$2"; shift 2 ;;
     *) shift ;;
   esac
 done
 run="$runtime_base/$profile/run"
+marker="$runtime_base/.profile-locks/$profile.maintenance"
+if [ "$action" != status ]; then
+  if [ -e "$marker" ]; then
+    [ "$(<"$marker")" = "maintenance_ref=$maintenance_ref" ] &&
+      [ -n "$maintenance_ref" ] || {
+        printf 'orquesta_profile_server: status=error reason_code=profile_maintenance_active\n' >&2
+        exit 1
+      }
+  elif [ -n "$maintenance_ref" ]; then
+    printf 'orquesta_profile_server: status=error reason_code=maintenance_marker_missing\n' >&2
+    exit 1
+  fi
+fi
 case "$action" in
   start)
     if [ -e "$root/state/live" ]; then
@@ -128,7 +145,8 @@ case "$action" in
     printf 'orquesta_profile_server: status=stopped profile=%s\n' "$profile"
     ;;
   status)
-    if [ -f "$run/server.pid" ]; then
+    if [ -f "$run/server.pid" ] &&
+      [ -e "$root/proc/$(<"$run/server.pid")/exe" ]; then
       printf 'orquesta_profile_server: status=running profile=%s pid=%s\n' \
         "$profile" "$(<"$run/server.pid")"
       exit 0
@@ -188,9 +206,9 @@ SubState=running
 Result=success
 ExecMainCode=0
 ExecMainStatus=0
-MainPID=30001
+MainPID=$(<"$root/state/main-pid")
 ControlGroup=/orquesta-v23-Codex12.service
-InvocationID=0123456789abcdef0123456789abcdef
+InvocationID=$(<"$root/state/invocation-id")
 Type=exec
 CollectMode=inactive-or-failed
 Delegate=yes
@@ -225,6 +243,25 @@ EOF
 #!/usr/bin/env bash
 set -euo pipefail
 root="\$(dirname "\$(dirname "\$0")")"
+if [ "\${1:-}" = backup ]; then
+  if flock -n "\$root/runtime/.profile-locks/$PROFILE.lease.lock" /bin/true; then
+    printf '%s\n' 'promotion_helper: status=error reason_code=lease_not_held' >&2
+    exit 1
+  fi
+fi
+case " \$* " in
+  *" \$root/runtime/.profile-locks/$PROFILE.maintenance "*)
+    if flock -n "\$root/runtime/.profile-locks/$PROFILE.control.lock" /bin/true; then
+      printf '%s\n' 'promotion_helper: status=error reason_code=control_lock_not_held' >&2
+      exit 1
+    fi
+    if [ "\${1:-}" = publish-record ] &&
+      [ -e "\$root/state/marker-publish-fail" ]; then
+      printf '%s\n' 'promotion_helper: status=error reason_code=injected_marker_publish_failure' >&2
+      exit 1
+    fi
+    ;;
+esac
 if [ "\${1:-}" = backup ] && [ -e "\$root/state/backup-fail" ]; then
   printf '%s\n' 'promotion_helper: status=error reason_code=injected_backup_failure' >&2
   exit 1
@@ -234,6 +271,20 @@ if [ "\${1:-}" = backup ] && [ -e "\$root/state/backup-target-only-fail" ]; then
   find "\$root/runtime/$PROFILE/state/backups" -maxdepth 1 \
     -type f -name '*.receipt' -delete
   printf '%s\n' 'promotion_helper: status=error reason_code=injected_target_only_failure' >&2
+  exit 1
+fi
+if [ "\${1:-}" = publish-record ] &&
+  [ -e "\$root/state/phase60-after-publish-fail" ] &&
+  [[ " \$* " == *" \$root/promotion/phase.60-primary-ready "* ]]; then
+  "$REAL_HELPER" "\$@"
+  printf '%s\n' 'promotion_helper: status=error reason_code=injected_phase60_failure' >&2
+  exit 1
+fi
+if [ "\${1:-}" = publish-record ] &&
+  [ -e "\$root/state/rollback-snapshot-after-publish-fail" ] &&
+  [[ " \$* " == *" \$root/promotion/candidate-rollback.snapshot "* ]]; then
+  "$REAL_HELPER" "\$@"
+  printf '%s\n' 'promotion_helper: status=error reason_code=injected_rollback_snapshot_failure' >&2
   exit 1
 fi
 exec "$REAL_HELPER" "\$@"
@@ -253,6 +304,7 @@ binary=""
 repository=""
 runtime=""
 profile=""
+maintenance_ref=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --config) config="$2"; shift 2 ;;
@@ -260,21 +312,40 @@ while [ "$#" -gt 0 ]; do
     --repository-root) repository="$2"; shift 2 ;;
     --runtime-base) runtime="$2"; shift 2 ;;
     --profile) profile="$2"; shift 2 ;;
+    --maintenance-ref) maintenance_ref="$2"; shift 2 ;;
     *) shift ;;
   esac
 done
 kind=primary
 case "$config" in */rollback.toml) kind=rollback ;; esac
+marker="$runtime/.profile-locks/$profile.maintenance"
+if [ "$operation" != check ]; then
+  [ -e "$marker" ] &&
+    [ "$(<"$marker")" = "maintenance_ref=$maintenance_ref" ] ||
+    {
+      printf 'orquesta_profile_systemd_user: status=error reason_code=maintenance_ref_mismatch\n' >&2
+      exit 1
+    }
+fi
 case "$operation" in
   check)
     [ "$(<"$root/state/unit")" = loaded ] &&
-      [ "$(<"$root/state/mode")" = "$kind" ] || {
+      [ "$(<"$root/state/mode")" = "$kind" ] &&
+      [ -f "$runtime/$profile/run/server.pid" ] &&
+      [ -e "$root/proc/$(<"$runtime/$profile/run/server.pid")/exe" ] || {
         printf 'orquesta_profile_systemd_user: status=error reason_code=unit_not_ready\n' >&2
         exit 1
       }
     printf 'orquesta_profile_systemd_user: status=running action=check\n'
     ;;
   collect)
+    if [ ! -e "$root/state/initial-collect-complete" ]; then
+      if flock -n "$runtime/.profile-locks/$profile.lease.lock" /bin/true; then
+        printf 'orquesta_profile_systemd_user: status=error reason_code=lease_not_held\n' >&2
+        exit 1
+      fi
+      : >"$root/state/initial-collect-complete"
+    fi
     printf 'collect|%s|%s\n' "$config" "$binary" >>"$root/log/adapter"
     if [ -e "$root/state/collect-fail" ]; then
       printf 'orquesta_profile_systemd_user: status=error reason_code=unit_collection_timeout\n' >&2
@@ -282,15 +353,27 @@ case "$operation" in
     fi
     printf '%s\n' not-found >"$root/state/unit"
     ;;
+  stop-profile)
+    "$root/tools/profile" stop --profile "$profile" \
+      --runtime-base "$runtime" --maintenance-ref "$maintenance_ref" >/dev/null
+    if [ -e "$root/state/stop-after-effect-fail" ]; then
+      printf 'orquesta_profile_systemd_user: status=error reason_code=injected_after_stop_failure\n' >&2
+      exit 1
+    fi
+    ;;
   start)
+    flock -n "$runtime/.profile-locks/$profile.lease.lock" /bin/true || {
+      printf 'orquesta_profile_systemd_user: status=error reason_code=lease_still_held\n' >&2
+      exit 1
+    }
     printf 'start|%s|%s\n' "$config" "$binary" >>"$root/log/adapter"
     db="$(awk -F'"' '/^path = / {print $2; exit}' "$config")"
-    /usr/bin/python3 - "$db" "$repository" <<'PY'
+    /usr/bin/python3 - "$db" "$repository" "$root" <<'PY'
 import hashlib
 import pathlib
 import sqlite3
 import sys
-db, repository = sys.argv[1:]
+db, repository, root = sys.argv[1:]
 connection = sqlite3.connect(db)
 for version, name in (
     (17, "017_intake.sql"),
@@ -306,6 +389,10 @@ for version, name in (
 connection.execute("PRAGMA user_version=19")
 connection.execute("CREATE TABLE IF NOT EXISTS post_cut(value TEXT NOT NULL)")
 connection.execute("INSERT INTO post_cut(value) SELECT 'preserved' WHERE NOT EXISTS(SELECT 1 FROM post_cut)")
+for table in ("authorization_receipts", "command_invocations", "command_outcomes"):
+    connection.execute(f"INSERT INTO {table}(value) VALUES('health-delta')")
+if (pathlib.Path(root) / "state" / "destructive-migration").exists():
+    connection.execute("DELETE FROM goals")
 connection.commit()
 connection.close()
 PY
@@ -360,7 +447,7 @@ PY
   *) exit 93 ;;
 esac
 EOF
-  chmod 500 "$root/tools/"*
+  chmod 500 "$root/tools/"* "$root/tools/lib/profile_maintenance_marker.py"
 }
 
 write_configs() {
@@ -454,6 +541,36 @@ PY
   chmod 660 "$root/launcher.sock"
 }
 
+start_sqlite_writer() {
+  local root="$1"
+  /usr/bin/python3 - \
+    "$root/runtime/$PROFILE/state/orquesta.sqlite" \
+    "$root/state/writer-ready" <<'PY' &
+import pathlib
+import sqlite3
+import sys
+import time
+database = sqlite3.connect(sys.argv[1], isolation_level=None)
+database.execute("BEGIN IMMEDIATE")
+pathlib.Path(sys.argv[2]).touch()
+while True:
+    time.sleep(1)
+PY
+  WRITER_PID="$!"
+  SOCKET_PIDS+=("$WRITER_PID")
+  for _ in $(seq 1 100); do
+    [ -e "$root/state/writer-ready" ] && return
+    sleep 0.01
+  done
+  fail_test "writer_not_ready"
+}
+
+stop_sqlite_writer() {
+  kill "$WRITER_PID" 2>/dev/null || true
+  wait "$WRITER_PID" 2>/dev/null || true
+  rm -f "$FIXTURE/state/writer-ready"
+}
+
 new_fixture() {
   local name="$1" root
   root="$TEST_ROOT/$name"
@@ -463,12 +580,14 @@ new_fixture() {
     "$root/promotion" "$root/proc" "$root/cgroup"
   mkdir -p \
     "$root/repository/internal/adapters/state/sqlite/migrations" \
+    "$root/runtime/.profile-locks" \
     "$root/runtime/$PROFILE/state/backups" "$root/runtime/$PROFILE/run" \
     "$root/cgroup/orquesta-v23-Codex12.service/orquesta-control" \
     "$root/proc/$MAIN_PID" \
     "$root/proc/$DAEMON_PID"
   chmod 700 \
     "$root/repository/internal/adapters/state/sqlite/migrations" \
+    "$root/runtime/.profile-locks" \
     "$root/runtime/$PROFILE/state/backups" "$root/runtime/$PROFILE/run" \
     "$root/cgroup/orquesta-v23-Codex12.service/orquesta-control" \
     "$root/proc/$MAIN_PID" "$root/proc/$DAEMON_PID"
@@ -478,11 +597,17 @@ new_fixture() {
   printf '%s\n' "$CANDIDATE_REVISION" >"$root/state/candidate-revision"
   : >"$root/state/candidate-is-ancestor"
   printf '%s\n' loaded >"$root/state/unit"
+  printf '%s\n' "$MAIN_PID" >"$root/state/main-pid"
+  printf '%s\n' 0123456789abcdef0123456789abcdef \
+    >"$root/state/invocation-id"
   printf '%s\n' old >"$root/state/mode"
   : >"$root/state/live"
   : >"$root/state/firecracker-ready"
   : >"$root/log/adapter"
   : >"$root/log/profile"
+  : >"$root/runtime/.profile-locks/$PROFILE.control.lock"
+  : >"$root/runtime/.profile-locks/$PROFILE.lease.lock"
+  chmod 600 "$root/runtime/.profile-locks/"*
   write_fake_tools "$root"
   write_proc_stat "$root/proc/$MAIN_PID/stat" "$MAIN_PID" 11111
   write_proc_stat "$root/proc/$DAEMON_PID/stat" "$DAEMON_PID" 12345
@@ -519,6 +644,10 @@ for version in range(1,17):
     db.execute("INSERT INTO schema_migrations VALUES(?,?,?)",(version,f"{version:03d}_old.sql","sha256:"+"0"*64))
 db.execute("CREATE TABLE durable(value TEXT NOT NULL)")
 db.execute("INSERT INTO durable VALUES('before-cut')")
+db.execute("CREATE TABLE goals(id INTEGER PRIMARY KEY,value TEXT NOT NULL)")
+db.execute("INSERT INTO goals VALUES(1,'preserved-goal')")
+for table in ("authorization_receipts", "command_invocations", "command_outcomes"):
+    db.execute(f"CREATE TABLE {table}(value TEXT NOT NULL)")
 db.execute("PRAGMA user_version=16")
 db.commit()
 db.close()
@@ -552,6 +681,8 @@ PY
     --expected-systemd-adapter-sha256 "$(sha256_of "$root/tools/adapter")"
     --promotion-helper "$root/tools/helper"
     --expected-promotion-helper-sha256 "$(sha256_of "$root/tools/helper")"
+    --expected-maintenance-marker-reader-sha256 \
+    "$(sha256_of "$root/tools/lib/profile_maintenance_marker.py")"
     --runtime-base "$root/runtime" --source-codex-home "$root/source-home"
     --binary "$root/tools/binary"
     --expected-binary-sha256 "$(sha256_of "$root/tools/binary")"
@@ -671,6 +802,27 @@ run_fails "config_pair_invalid" "$SUBJECT" --apply "${CONTRACT[@]}"
 [ ! -s "$FIXTURE/log/profile" ] && [ ! -s "$FIXTURE/log/adapter" ] ||
   fail_test "rollback_shared_drift_mutated"
 
+new_fixture maintenance-reader-drift
+chmod 700 "$FIXTURE/tools/lib/profile_maintenance_marker.py"
+printf '%s\n' '# drift' \
+  >>"$FIXTURE/tools/lib/profile_maintenance_marker.py"
+chmod 500 "$FIXTURE/tools/lib/profile_maintenance_marker.py"
+run_fails "maintenance-marker-reader-sha256_drift" \
+  "$SUBJECT" --apply "${CONTRACT[@]}"
+[ ! -s "$FIXTURE/log/profile" ] && [ ! -s "$FIXTURE/log/adapter" ] ||
+  fail_test "maintenance_reader_drift_mutated"
+
+new_fixture snapshot-only-reentry
+: >"$FIXTURE/state/marker-publish-fail"
+run_fails "maintenance_marker_publish_failed" \
+  "$SUBJECT" --apply "${CONTRACT[@]}"
+[ -e "$FIXTURE/promotion/pre-stop.snapshot" ] &&
+  [ ! -e "$FIXTURE/runtime/.profile-locks/$PROFILE.maintenance" ] ||
+  fail_test "snapshot_only_not_reproduced"
+rm -f "$FIXTURE/state/marker-publish-fail"
+run_ok "status=primary_ready mode=primary" \
+  "$SUBJECT" --apply "${CONTRACT[@]}"
+
 new_fixture snapshot-replacement
 : >"$FIXTURE/state/stop-fail"
 run_fails "profile_stop_failed" "$SUBJECT" --apply "${CONTRACT[@]}"
@@ -686,6 +838,28 @@ run_fails "pre_stop_snapshot_live_mismatch" \
   [ ! -s "$FIXTURE/log/profile" ] ||
   fail_test "replacement_daemon_stopped"
 
+new_fixture stop-effect-loaded-reentry
+: >"$FIXTURE/state/stop-after-effect-fail"
+run_fails "profile_stop_failed" "$SUBJECT" --apply "${CONTRACT[@]}"
+[ -e "$FIXTURE/promotion/old-unit.outcome" ] &&
+  [ ! -e "$FIXTURE/runtime/$PROFILE/run/server.pid" ] &&
+  [ "$(<"$FIXTURE/state/unit")" = loaded ] ||
+  fail_test "stop_effect_loaded_not_reproduced"
+rm -f "$FIXTURE/state/stop-after-effect-fail"
+run_ok "status=primary_ready mode=primary" \
+  "$SUBJECT" --apply "${CONTRACT[@]}"
+
+new_fixture stop-effect-reboot-reentry
+: >"$FIXTURE/state/stop-after-effect-fail"
+run_fails "profile_stop_failed" "$SUBJECT" --apply "${CONTRACT[@]}"
+printf '%s\n' not-found >"$FIXTURE/state/unit"
+rm -f "$FIXTURE/state/stop-after-effect-fail"
+run_ok "status=primary_ready mode=primary" \
+  "$SUBJECT" --apply "${CONTRACT[@]}"
+grep -Fqx 'old_unit_outcome=matched' \
+  "$FIXTURE/promotion/promotion.receipt" ||
+  fail_test "reboot_outcome_not_preserved"
+
 new_fixture primary-success
 run_ok "status=primary_ready mode=primary" \
   "$SUBJECT" --apply "${CONTRACT[@]}"
@@ -698,10 +872,34 @@ if [ "$(sqlite_value "$FIXTURE/runtime/$PROFILE/state/orquesta.sqlite" \
   ! grep -Fqx 'firecracker_application_attestation=pending' \
     "$FIXTURE/promotion/promotion.receipt" ||
   ! grep -Fqx 'backup_restore_performed=false' \
-    "$FIXTURE/promotion/promotion.receipt"; then
+    "$FIXTURE/promotion/promotion.receipt" ||
+  ! grep -Fqx 'old_unit_outcome=matched' \
+    "$FIXTURE/promotion/promotion.receipt" ||
+  [ -e "$FIXTURE/runtime/.profile-locks/$PROFILE.maintenance" ]; then
   fail_test "primary_receipt"
 fi
 operations_before="$(wc -l <"$FIXTURE/log/adapter")"
+original_functional_digest="$(
+  awk -F= '$1 == "functional_data_sha256" { print $2 }' \
+    "$FIXTURE/promotion/promotion.receipt"
+)"
+sed -i \
+  's/^functional_data_sha256=.*/functional_data_sha256=0000000000000000000000000000000000000000000000000000000000000000/' \
+  "$FIXTURE/promotion/promotion.receipt"
+run_fails "final_receipt_invalid" "$SUBJECT" "${CONTRACT[@]}"
+sed -i \
+  "s/^functional_data_sha256=.*/functional_data_sha256=$original_functional_digest/" \
+  "$FIXTURE/promotion/promotion.receipt"
+/usr/bin/python3 - "$FIXTURE/runtime/$PROFILE/state/orquesta.sqlite" <<'PY'
+import sqlite3
+import sys
+database = sqlite3.connect(sys.argv[1])
+database.execute("INSERT INTO goals VALUES(2,'legitimate-post-cut')")
+database.commit()
+database.close()
+PY
+run_ok "status=complete action=check mode=primary" \
+  "$SUBJECT" "${CONTRACT[@]}"
 run_ok "status=complete mode=primary" \
   "$SUBJECT" --apply "${CONTRACT[@]}"
 [ "$(wc -l <"$FIXTURE/log/adapter")" -eq "$operations_before" ] ||
@@ -718,6 +916,28 @@ rm -f "$FIXTURE/state/backup-fail"
 run_ok "status=primary_ready mode=primary" \
   "$SUBJECT" --apply "${CONTRACT[@]}"
 
+new_fixture sqlite-writer-fence
+start_sqlite_writer "$FIXTURE"
+run_fails "sqlite_backup_failed" "$SUBJECT" --apply "${CONTRACT[@]}"
+stop_sqlite_writer
+run_ok "status=primary_ready mode=primary" \
+  "$SUBJECT" --apply "${CONTRACT[@]}"
+
+new_fixture foreign-unit-before-collect
+: >"$FIXTURE/state/collect-fail"
+run_fails "unit_collection_timeout" \
+  "$SUBJECT" --apply "${CONTRACT[@]}"
+[ -e "$FIXTURE/promotion/phase.30-backup-published" ] ||
+  fail_test "phase30_not_reproduced"
+collect_lines="$(wc -l <"$FIXTURE/log/adapter")"
+printf '%s\n' fedcba9876543210fedcba9876543210 \
+  >"$FIXTURE/state/invocation-id"
+rm -f "$FIXTURE/state/collect-fail"
+run_fails "pre_stop_snapshot_unit_mismatch" \
+  "$SUBJECT" --apply "${CONTRACT[@]}"
+[ "$(wc -l <"$FIXTURE/log/adapter")" -eq "$collect_lines" ] ||
+  fail_test "foreign_unit_was_collected"
+
 new_fixture target-only-backup-reentry
 : >"$FIXTURE/state/backup-target-only-fail"
 run_fails "sqlite_backup_failed" "$SUBJECT" --apply "${CONTRACT[@]}"
@@ -732,6 +952,46 @@ run_ok "status=primary_ready mode=primary" \
 [ "$(find "$FIXTURE/runtime/$PROFILE/state/backups" -maxdepth 1 \
   -type f -name '*.receipt' | wc -l)" -eq 1 ] ||
   fail_test "target_only_backup_not_recovered"
+
+new_fixture destructive-functional-data
+: >"$FIXTURE/state/destructive-migration"
+run_fails "sqlite_post_start_invalid" \
+  "$SUBJECT" --apply "${CONTRACT[@]}"
+[ "$(sqlite_value "$FIXTURE/runtime/$PROFILE/state/orquesta.sqlite" \
+  'SELECT COUNT(*) FROM goals')" -eq 0 ] &&
+  [ ! -e "$FIXTURE/promotion/promotion.receipt" ] ||
+  fail_test "destructive_functional_data_not_detected"
+
+new_fixture primary-replaced-before-receipt
+: >"$FIXTURE/state/phase60-after-publish-fail"
+run_fails "private_record_publish_failed" \
+  "$SUBJECT" --apply "${CONTRACT[@]}"
+[ -e "$FIXTURE/promotion/phase.60-primary-ready" ] ||
+  fail_test "primary_phase60_not_reproduced"
+write_proc_stat "$FIXTURE/proc/$DAEMON_PID/stat" "$DAEMON_PID" 65432
+printf '%s\n' 65432 >"$FIXTURE/runtime/$PROFILE/run/server.start_ref"
+rm -f "$FIXTURE/state/phase60-after-publish-fail"
+run_fails "candidate_unit_identity_mismatch" \
+  "$SUBJECT" --apply "${CONTRACT[@]}"
+[ -e "$FIXTURE/runtime/$PROFILE/run/server.pid" ] ||
+  fail_test "replacement_primary_was_stopped"
+
+new_fixture rollback-stopped-before-receipt
+: >"$FIXTURE/state/primary-fail"
+: >"$FIXTURE/state/rollback-snapshot-after-publish-fail"
+run_fails "private_record_publish_failed" \
+  "$SUBJECT" --apply "${CONTRACT[@]}"
+[ -e "$FIXTURE/promotion/candidate-rollback.snapshot" ] ||
+  fail_test "rollback_snapshot_not_reproduced"
+maintenance_ref="$(
+  cut -d= -f2 "$FIXTURE/runtime/.profile-locks/$PROFILE.maintenance"
+)"
+"$FIXTURE/tools/profile" stop --profile "$PROFILE" \
+  --runtime-base "$FIXTURE/runtime" \
+  --maintenance-ref "$maintenance_ref" >/dev/null
+rm -f "$FIXTURE/state/rollback-snapshot-after-publish-fail"
+run_ok "status=available mode=rollback" \
+  "$SUBJECT" --apply "${CONTRACT[@]}"
 
 new_fixture primary-false-positive-rollback
 : >"$FIXTURE/state/primary-fail"
