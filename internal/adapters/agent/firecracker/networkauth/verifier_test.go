@@ -17,6 +17,7 @@ import (
 )
 
 var errAttestationDenied = errors.New("attestation denied")
+var errOpeningFailed = errors.New("opening failed")
 
 type credentialStoreFake struct {
 	credentials.Store
@@ -68,6 +69,33 @@ func (verifier *attestationVerifierFake) VerifyLaunchAttestation(
 	return nil
 }
 
+type openingFake struct {
+	callCount atomic.Int32
+	err       error
+}
+
+func (opening *openingFake) Open(_ context.Context) error {
+	opening.callCount.Add(1)
+	return opening.err
+}
+
+type testClock struct {
+	mu  sync.RWMutex
+	now time.Time
+}
+
+func (clock *testClock) Now() time.Time {
+	clock.mu.RLock()
+	defer clock.mu.RUnlock()
+	return clock.now
+}
+
+func (clock *testClock) Set(now time.Time) {
+	clock.mu.Lock()
+	defer clock.mu.Unlock()
+	clock.now = now
+}
+
 func validNetworkPolicy(t *testing.T) ports.AgentMicroVMNetworkPolicy {
 	t.Helper()
 	projectRef, _ := goal.NewProjectRef("project:network-auth")
@@ -106,6 +134,7 @@ type verifierFixture struct {
 	challenges   *MemoryChallengeStore
 	credentials  *credentialStoreFake
 	attestations *attestationVerifierFake
+	clock        *testClock
 	now          time.Time
 	key          []byte
 }
@@ -113,13 +142,14 @@ type verifierFixture struct {
 func newVerifierFixture(t *testing.T) verifierFixture {
 	t.Helper()
 	now := time.Unix(500, 0).UTC()
+	clock := &testClock{now: now}
 	policy := validNetworkPolicy(t)
 	policyDigest, err := ports.AgentMicroVMNetworkPolicyDigest(policy)
 	if err != nil {
 		t.Fatal(err)
 	}
 	challenges, err := NewMemoryChallengeStore(ChallengeStoreOptions{
-		Now: func() time.Time { return now }, Random: bytes.NewReader(bytes.Repeat([]byte{0x42}, 4096)),
+		Now: clock.Now, Random: bytes.NewReader(bytes.Repeat([]byte{0x42}, 4096)),
 		TTL: time.Minute, MaxActive: 8,
 	})
 	if err != nil {
@@ -135,7 +165,7 @@ func newVerifierFixture(t *testing.T) verifierFixture {
 	}}
 	verifier, err := New(Config{
 		CredentialStore: credentialStore, Attestations: attestations, Challenges: challenges,
-		Now: func() time.Time { return now }, VerifierRef: "verifier:agent-firecracker-network",
+		Now: clock.Now, VerifierRef: "verifier:agent-firecracker-network",
 		CredentialActorRef: "actor:agent-firecracker-network",
 	})
 	if err != nil {
@@ -143,7 +173,8 @@ func newVerifierFixture(t *testing.T) verifierFixture {
 	}
 	return verifierFixture{
 		verifier: verifier, challenges: challenges, credentials: credentialStore,
-		attestations: attestations, now: now, key: append([]byte(nil), credentialStore.material...),
+		attestations: attestations, clock: clock, now: now,
+		key: append([]byte(nil), credentialStore.material...),
 	}
 }
 
@@ -185,33 +216,51 @@ func TestVerifierAuthorizesOnceAndRejectsIdenticalReplay(t *testing.T) {
 	fixture := newVerifierFixture(t)
 	request := fixture.proofRequest(t)
 	defer request.Proof.Destroy()
-	receipt, err := fixture.verifier.Verify(context.Background(), request)
+	opening := &openingFake{}
+	receipt, err := fixture.verifier.Authorize(context.Background(), request, opening.Open)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := ports.ValidateAgentMicroVMLaunchAuthorizationReceipt(request, receipt); err != nil {
 		t.Fatalf("receipt invalid: %v", err)
 	}
-	if _, err := fixture.verifier.Verify(context.Background(), request); ErrorCode(err) !=
+	if _, err := fixture.verifier.Authorize(context.Background(), request, opening.Open); ErrorCode(err) !=
 		"agent_firecracker_network_auth.challenge_denied" {
 		t.Fatalf("identical replay error = %v", err)
 	}
+	if got := fixture.credentials.useCount.Load(); got != 1 {
+		t.Fatalf("credential uses = %d, want 1", got)
+	}
+	if got := fixture.attestations.callCount.Load(); got != 1 {
+		t.Fatalf("attestation calls = %d, want 1", got)
+	}
+	if got := opening.callCount.Load(); got != 1 {
+		t.Fatalf("opening calls = %d, want 1", got)
+	}
 }
 
-func TestVerifierDoesNotConsumeChallengeOnBadProof(t *testing.T) {
+func TestVerifierBadProofConsumesChallengeAndCannotRetry(t *testing.T) {
 	fixture := newVerifierFixture(t)
 	request := fixture.proofRequest(t)
 	defer request.Proof.Destroy()
+	opening := &openingFake{}
 	badProof, _ := ports.NewAgentMicroVMLaunchProof(bytes.Repeat([]byte{0xff}, sha256.Size))
 	bad := request
 	bad.Proof = badProof
 	defer bad.Proof.Destroy()
-	if _, err := fixture.verifier.Verify(context.Background(), bad); ErrorCode(err) !=
+	if _, err := fixture.verifier.Authorize(context.Background(), bad, opening.Open); ErrorCode(err) !=
 		"agent_firecracker_network_auth.proof_invalid" {
 		t.Fatalf("bad proof error = %v", err)
 	}
-	if _, err := fixture.verifier.Verify(context.Background(), request); err != nil {
-		t.Fatalf("valid proof after rejection failed: %v", err)
+	if _, err := fixture.verifier.Authorize(context.Background(), request, opening.Open); ErrorCode(err) !=
+		"agent_firecracker_network_auth.challenge_denied" {
+		t.Fatalf("retry after bad proof error = %v", err)
+	}
+	if got := fixture.credentials.useCount.Load(); got != 1 {
+		t.Fatalf("credential uses = %d, want 1", got)
+	}
+	if got := opening.callCount.Load(); got != 0 {
+		t.Fatalf("opening calls = %d, want 0", got)
 	}
 }
 
@@ -220,26 +269,72 @@ func TestVerifierRejectsAttestationBeforeCredentialUse(t *testing.T) {
 	fixture.attestations.deny = true
 	request := fixture.proofRequest(t)
 	defer request.Proof.Destroy()
-	if _, err := fixture.verifier.Verify(context.Background(), request); ErrorCode(err) !=
+	opening := &openingFake{}
+	if _, err := fixture.verifier.Authorize(context.Background(), request, opening.Open); ErrorCode(err) !=
 		"agent_firecracker_network_auth.attestation_denied" {
 		t.Fatalf("attestation error = %v", err)
 	}
 	if got := fixture.credentials.useCount.Load(); got != 0 {
 		t.Fatalf("credential used before attestation: %d", got)
 	}
+	fixture.attestations.deny = false
+	if _, err := fixture.verifier.Authorize(context.Background(), request, opening.Open); ErrorCode(err) !=
+		"agent_firecracker_network_auth.challenge_denied" {
+		t.Fatalf("retry after attestation denial error = %v", err)
+	}
+	if got := fixture.attestations.callCount.Load(); got != 1 {
+		t.Fatalf("attestation calls = %d, want 1", got)
+	}
+	if got := opening.callCount.Load(); got != 0 {
+		t.Fatalf("opening calls = %d, want 0", got)
+	}
+}
+
+func TestVerifierMissingAndExpiredChallengesDoNotCrossLedgers(t *testing.T) {
+	t.Run("missing", func(t *testing.T) {
+		fixture := newVerifierFixture(t)
+		request := fixture.proofRequest(t)
+		defer request.Proof.Destroy()
+		request.ChallengeRef = "challenge:agent-microvm:missing"
+		opening := &openingFake{}
+		if _, err := fixture.verifier.Authorize(context.Background(), request, opening.Open); ErrorCode(err) !=
+			"agent_firecracker_network_auth.challenge_denied" {
+			t.Fatalf("missing challenge error = %v", err)
+		}
+		if fixture.credentials.useCount.Load() != 0 || fixture.attestations.callCount.Load() != 0 ||
+			opening.callCount.Load() != 0 {
+			t.Fatalf("missing challenge crossed a ledger or opening")
+		}
+	})
+	t.Run("expiry_is_inclusive", func(t *testing.T) {
+		fixture := newVerifierFixture(t)
+		request := fixture.proofRequest(t)
+		defer request.Proof.Destroy()
+		fixture.clock.Set(fixture.now.Add(time.Minute))
+		opening := &openingFake{}
+		if _, err := fixture.verifier.Authorize(context.Background(), request, opening.Open); ErrorCode(err) !=
+			"agent_firecracker_network_auth.challenge_denied" {
+			t.Fatalf("expired challenge error = %v", err)
+		}
+		if fixture.credentials.useCount.Load() != 0 || fixture.attestations.callCount.Load() != 0 ||
+			opening.callCount.Load() != 0 {
+			t.Fatalf("expired challenge crossed a ledger or opening")
+		}
+	})
 }
 
 func TestVerifierConcurrentReplayHasSingleWinner(t *testing.T) {
 	fixture := newVerifierFixture(t)
 	request := fixture.proofRequest(t)
 	defer request.Proof.Destroy()
+	opening := &openingFake{}
 	var wait sync.WaitGroup
 	var successes atomic.Int32
 	wait.Add(2)
 	for range 2 {
 		go func() {
 			defer wait.Done()
-			if _, err := fixture.verifier.Verify(context.Background(), request); err == nil {
+			if _, err := fixture.verifier.Authorize(context.Background(), request, opening.Open); err == nil {
 				successes.Add(1)
 			}
 		}()
@@ -247,6 +342,37 @@ func TestVerifierConcurrentReplayHasSingleWinner(t *testing.T) {
 	wait.Wait()
 	if got := successes.Load(); got != 1 {
 		t.Fatalf("concurrent winners = %d, want 1", got)
+	}
+	if got := fixture.credentials.useCount.Load(); got != 1 {
+		t.Fatalf("concurrent credential uses = %d, want 1", got)
+	}
+	if got := fixture.attestations.callCount.Load(); got != 1 {
+		t.Fatalf("concurrent attestation calls = %d, want 1", got)
+	}
+	if got := opening.callCount.Load(); got != 1 {
+		t.Fatalf("concurrent opening calls = %d, want 1", got)
+	}
+}
+
+func TestVerifierOpeningFailureConsumesAuthorization(t *testing.T) {
+	fixture := newVerifierFixture(t)
+	request := fixture.proofRequest(t)
+	defer request.Proof.Destroy()
+	opening := &openingFake{err: errOpeningFailed}
+	if _, err := fixture.verifier.Authorize(context.Background(), request, opening.Open); ErrorCode(err) !=
+		"agent_firecracker_network_auth.opening_failed" {
+		t.Fatalf("opening error = %v", err)
+	}
+	opening.err = nil
+	if _, err := fixture.verifier.Authorize(context.Background(), request, opening.Open); ErrorCode(err) !=
+		"agent_firecracker_network_auth.challenge_denied" {
+		t.Fatalf("retry after opening failure error = %v", err)
+	}
+	if got := fixture.credentials.useCount.Load(); got != 1 {
+		t.Fatalf("credential uses = %d, want 1", got)
+	}
+	if got := opening.callCount.Load(); got != 1 {
+		t.Fatalf("opening calls = %d, want 1", got)
 	}
 }
 
@@ -281,7 +407,7 @@ func TestMemoryChallengeStoreBindsScopeAndExpires(t *testing.T) {
 		"agent_firecracker_network_auth.challenge_binding_mismatch" {
 		t.Fatalf("binding error = %v", err)
 	}
-	now = now.Add(2 * time.Second)
+	now = now.Add(time.Second)
 	valid := mismatched
 	valid.ExecutionRef = issue.ExecutionRef
 	if err := store.Consume(context.Background(), valid); ErrorCode(err) !=
