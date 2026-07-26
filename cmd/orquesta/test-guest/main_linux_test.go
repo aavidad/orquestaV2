@@ -4,8 +4,8 @@ package main
 
 import "testing"
 
-func TestScratchMountContractAllowsNobodyTraversalAndCapsRAM(t *testing.T) {
-	if scratchMode != 0o711 || scratchOptions != "mode=0711,size=75%" {
-		t.Fatalf("mode=%#o options=%q", scratchMode, scratchOptions)
+func TestGuestMainRejectsExecutionOutsidePID1(t *testing.T) {
+	if status := run(nil); status != 2 {
+		t.Fatalf("status=%d", status)
 	}
 }
