@@ -47,7 +47,7 @@ Los valores salen del registro y del perfil vigente
 | Sujeto | 512 MiB | 8 GiB |
 
 El gate exige al menos `16 × 5 GiB + 2 GiB = 82 GiB` físicos. El host de esta
-instalación, comercializado como 128 GB, expone 122,97 GiB: deja unos 42,97 GiB
+instalación, comercializado como 128 GB, expone 122,97 GiB: deja unos 40,97 GiB
 antes de descontar consumo vivo del host. La reserva operativa canónica de
 2 GiB ya participa en el preflight. Dieciséis es un techo estático, no admisión
 dinámica: si el host tiene presión real, el scheduler debe lanzar menos trabajo.
@@ -105,7 +105,9 @@ el proceso consumidor debe conectar exactamente con `allowed-uid` y
 `allowed-gid`.
 
 El instalador nunca llama a `sudo`. `--apply`, `--check` y `--activate` exigen
-que el operador ya esté en una sesión root. `--dry-run` es no-root.
+que el operador ya esté en una sesión root. `--dry-run` es no-root. El wrapper
+de handoff sí abre la ventana de privilegio con `sudo -v` antes de invocar su
+secuencia; esa elevación pertenece al operador/wrapper, no al instalador.
 
 No se debe calcular un hash de una fuente arbitraria y pasarlo inmediatamente
 como si fuera procedencia. Los hashes esperados son entradas de confianza. El
@@ -156,8 +158,8 @@ scripts/install_firecracker_attestor_launcher.sh \
   --guest-manifest-sha256 <MANIFEST_SHA256_REVISADO> \
   --allowed-uid 1000 \
   --allowed-gid 1000 \
-  --jail-uid 65534 \
-  --jail-gid 65534
+  --jail-uid 65432 \
+  --jail-gid 65432
 ```
 
 Revisar primero `expected_asset_digest=<SHA256>`. Es el digest canónico que
@@ -252,25 +254,10 @@ entonces `--activate`.
 No se arranca manualmente la unidad antes del E2E: el ejecutor inicia y detiene
 la unidad versionada candidata y comprueba su identidad estable.
 
-```bash
-build_parent="$(mktemp -d /tmp/orquesta-firecracker-host-build.XXXXXX)"
-/home/alberto/Trabajo/orquestaV2/scripts/build_firecracker_host_bundle.sh \
-  --confirm-real \
-  --source-root /home/alberto/Trabajo/orquestaV2 \
-  --source-commit 3451d3108c0c14b9539bec1ca134afd07a9beb19 \
-  --toolchain-root /srv/orquesta-self/toolchains/go1.25.11 \
-  --output-root "$build_parent/bundle" \
-  --tmp-parent "$build_parent"
-sha256sum "$build_parent"/bundle/*
-# copiar los siete inputs y el instalador a staging root-owned;
-# copiar también el recibo de build y su verificador fijado por SHA;
-# ejecutar allí --dry-run, --apply y --check con el mismo juego de flags
-sudo systemctl daemon-reload
-! sudo systemctl is-active --quiet \
-  orquesta-firecracker-attestor-<UNIT_SHA256>.service
-sudo /usr/local/libexec/orquesta-firecracker-attestor-e2e-<SUPERVISOR_SHA256> \
-  --spec /ABS/root/e2e-spec.json
-```
+El bloque ejecutable histórico que construía y lanzaba `3451d310…` queda
+retirado; no se sustituye aquí por una receta ejecutable. El operador debe usar
+exclusivamente el wrapper identificado en el handoff actual, tras verificar
+sus identidades estáticas y con la autorización privilegiada correspondiente.
 
 `buildvcs=false` es deliberado para conservar bytes reproducibles, por lo que
 `go version -m` puede mostrar `(devel)`. La procedencia no se infiere de ese
@@ -296,68 +283,31 @@ estricta contra los dos ELF staged. Un cambio de fuente, toolchain, receta,
 campo JSON, binario o verificador corta antes de `--apply`. El recibo queda
 fuera de los binarios que acredita, como exige la regla de sujetos inmutables.
 
-Para el candidato `3451d3108c0c14b9539bec1ca134afd07a9beb19`, el rebuild
-independiente produjo bytes idénticos a las dos compilaciones previas:
+### Handoff actual del candidato (evidencia estática; no E2E)
+
+El bloque ejecutable anterior para `3451d3108c0c14b9539bec1ca134afd07a9beb19`
+queda retirado por obsoleto. No debe reutilizarse ni inferirse de él una
+activación, receipt, nonce, resultado PASS o ejecución física.
+
+El único handoff vigente conocido por esta documentación es el wrapper
+`/home/alberto/Trabajo/orquesta/script/ejecutar_firecracker_root_v2.sh`, sobre
+la revisión `815c1f295391a077a6023a10637a7d52afab1eb6` y árbol
+`37450649443f7f44061afa3d7d6e8b3bc73fcf84`. Sus identidades estáticas son:
 
 ```text
-source_tree=a716368249de9ef4ebf3d93fe2eb44630a8ba438
-launcher_sha256=e625d01c0c7298eb36931ca3344625fc3497498bd98967551a8d508d0a906323
-supervisor_sha256=dd335825332730a476130c62629a422fb6d478df2fcc30b006c3645a37dcba3b
-host_build_receipt_sha256=ba367934b520326181662e2e65febd5a21f50d2d3a7d21bc8fdfb2a5cc0ecff9
+driver_sha256=3af57693a3926d4ccd8ed471434575e310f0183cd3b3c02d88a7c27b1b3509d3
+wrapper_sha256=760b80a159cdd6183c71101b86a1aee8f239de6346cd30c7d828f2f9ddfff83f
+driver_source=/tmp/orquesta-firecracker-root-v2.rfuWOn/run-root-e2e.sh
+driver_target=/srv/orquesta-self/operator/firecracker-root-e2e-815c1f295391a077a6023a10637a7d52afab1eb6
+asset_digest=7df880f7cbfbf82d076254b474c46c6e85065a921a819308482343613a83d1f0
+candidate_unit=orquesta-firecracker-attestor-36fbd58046da0b9ad0fd5e68188412b98324bd0ad1a478e51d2d648f829d7d1d.service
 ```
 
-El driver exacto de este candidato consume launcher y supervisor únicamente
-desde `host-reproducible-v2`; no conserva `bin-a`/`bin-b` como fuentes de
-staging. Su SHA-256 es
-`d26c35bb52d57755afc20d4838101a4a8c2d958c759994279e35689f080e0024`.
-La frontera de handoff verifica ese digest después de copiar el driver a una
-ruta root-only y antes de ejecutarlo. No se introduce un self-hash dentro del
-propio driver: el sujeto no puede contener establemente su propio digest y la
-acreditación debe vivir fuera del sujeto.
-
-Bloque exacto para el host observado; **no** sustituir rutas, revisión ni
-digests:
-
-```bash
-set -euo pipefail
-readonly driver_source="/tmp/orquesta-firecracker-501.5wcLGs1H/run-root-e2e.sh"
-readonly driver_target="/srv/orquesta-self/operator/firecracker-root-e2e-3451d3108c0c14b9539bec1ca134afd07a9beb19"
-readonly driver_sha256="d26c35bb52d57755afc20d4838101a4a8c2d958c759994279e35689f080e0024"
-
-[[ "$(stat -c '%u:%g:%a:%h' "$driver_source")" == "1000:1000:500:1" ]]
-printf '%s  %s\n' "$driver_sha256" "$driver_source" | sha256sum -c -
-[[ "$(sudo stat -c '%u:%g:%a' /srv)" == "0:0:755" ]]
-[[ "$(sudo stat -c '%u:%g:%a' /srv/orquesta-self)" == "0:0:755" ]]
-[[ "$(sudo stat -c '%u:%g:%a' /srv/orquesta-self/operator)" == "0:0:755" ]]
-
-if sudo test -e "$driver_target" || sudo test -L "$driver_target"; then
-  [[ "$(sudo stat -c '%u:%g:%a:%h' "$driver_target")" == "0:0:500:1" ]]
-  printf '%s  %s\n' "$driver_sha256" "$driver_target" |
-    sudo env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C sha256sum -c -
-fi
-
-sudo install -o root -g root -m 0500 -- "$driver_source" "$driver_target"
-[[ "$(sudo stat -c '%u:%g:%a:%h' "$driver_target")" == "0:0:500:1" ]]
-printf '%s  %s\n' "$driver_sha256" "$driver_target" |
-  sudo env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C sha256sum -c -
-sudo env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin LC_ALL=C "$driver_target"
-```
-
-Con `set -e`, cualquier diferencia de hash o metadata corta antes del último
-`sudo env -i`; el driver no llega a ejecutarse. Si ya existe un target distinto,
-también se rechaza antes de sobrescribirlo.
-
-Hasta ejecutar este bloque, los scripts
-`scripts/build_firecracker_host_bundle.sh` y
-`scripts/verify_firecracker_host_bundle_receipt.py` son parte inmutable del
-handoff: el driver exige respectivamente los hashes `ff6950ab…` y
-`2e06b6ea…`. La correccion que mueve los tres comandos bajo
-`cmd/orquesta/**` queda preservada en la rama remota
-`agente/firecracker-cmd-product-root` (`37893ace`, `6e1cbe7b`) y no debe
-fusionarse antes del E2E root. Tras obtener el receipt fisico se integra esa
-rama, se actualizan las referencias documentales y los futuros bundles se
-construyen desde un candidato nuevo; el bundle y driver anteriores no se
-reescriben.
+El wrapper, no el instalador, solicita `sudo -v` como preflight de operador.
+El driver permanece inactivo hasta validar la secuencia física `1 + 16` del
+candidato exacto. Esta documentación solo fija el handoff estático: no afirma
+que el wrapper se haya ejecutado, que exista evidencia/receipt, que haya PASS,
+que se haya emitido nonce ni que la unidad esté activada.
 
 El E2E realiza una atestación física y después una ola física de 16; verifica
 límites, `memory.swap.max=0`, red/API/vsock/serial ausentes y deja unidad,
@@ -374,7 +324,7 @@ La spec es JSON estricto (sin claves desconocidas) y debe ser un fichero regular
 `root:root` sin escritura de grupo/otros. Su forma exacta es:
 
 ```json
-{"candidate":{"unit_name":"orquesta-firecracker-attestor-<UNIT_SHA256>.service","unit_path":"/etc/systemd/system/orquesta-firecracker-attestor-<UNIT_SHA256>.service","unit_sha256":"<UNIT_SHA256>","primitives_unit_path":"/etc/systemd/system/orquesta-firecracker-primitives-<PRIMITIVES_UNIT_SHA256>.service","primitives_unit_sha256":"<PRIMITIVES_UNIT_SHA256>","launcher_path":"/usr/local/libexec/orquesta-firecracker-launcher-<LAUNCHER_SHA256>","launcher_sha256":"<LAUNCHER_SHA256>","launcher_socket_path":"/run/orquesta/firecracker-launcher.sock","config_path":"/etc/orquesta/firecracker/launcher-<CONFIG_SHA256>.json","config_sha256":"<CONFIG_SHA256>","supervisor_path":"/usr/local/libexec/orquesta-firecracker-attestor-e2e-<SUPERVISOR_SHA256>","supervisor_sha256":"<SUPERVISOR_SHA256>","runtime_root":"/run/orquesta","cgroup_root":"/sys/fs/cgroup","parent_cgroup":"orquesta-firecracker-attestor","netns_path":"/run/netns/orquesta-firecracker-attestor-empty","asset_digest":"<ASSET_DIGEST>"},"policy_digest":"","evidence_path":"/var/lib/orquesta/firecracker-e2e/evidence-<NONCE>.json","receipt_path":"/var/lib/orquesta/firecracker-e2e/receipt-<NONCE>.txt","phase_timeout":"10m","cleanup_timeout":"30s","stable_for":"2s","poll_interval":"250ms","child_uid":1000,"child_gid":1000,"workload":{"socket_path":"/run/orquesta/firecracker-launcher.sock","expected_asset_digest":"<ASSET_DIGEST>","work_root":"/var/lib/orquesta/firecracker-e2e/work-<NONCE>","git_command":"/usr/bin/git","test_sleep":"15s","attestation_timeout":"5m","attestation_cleanup_timeout":"30s","max_output_bytes":67108864,"max_subject_bytes":536870912}}
+{"candidate":{"unit_name":"orquesta-firecracker-attestor-36fbd58046da0b9ad0fd5e68188412b98324bd0ad1a478e51d2d648f829d7d1d.service","unit_path":"/etc/systemd/system/orquesta-firecracker-attestor-36fbd58046da0b9ad0fd5e68188412b98324bd0ad1a478e51d2d648f829d7d1d.service","unit_sha256":"36fbd58046da0b9ad0fd5e68188412b98324bd0ad1a478e51d2d648f829d7d1d","primitives_unit_path":"/etc/systemd/system/orquesta-firecracker-primitives-<PRIMITIVES_UNIT_SHA256>.service","primitives_unit_sha256":"<PRIMITIVES_UNIT_SHA256>","launcher_path":"/usr/local/libexec/orquesta-firecracker-launcher-<LAUNCHER_SHA256>","launcher_sha256":"<LAUNCHER_SHA256>","launcher_socket_path":"/run/orquesta/firecracker-launcher.sock","config_path":"/etc/orquesta/firecracker/launcher-<CONFIG_SHA256>.json","config_sha256":"<CONFIG_SHA256>","supervisor_path":"/usr/local/libexec/orquesta-firecracker-attestor-e2e-<SUPERVISOR_SHA256>","supervisor_sha256":"<SUPERVISOR_SHA256>","runtime_root":"/run/orquesta","cgroup_root":"/sys/fs/cgroup","parent_cgroup":"orquesta-firecracker-attestor","netns_path":"/run/netns/orquesta-firecracker-attestor-empty","asset_digest":"7df880f7cbfbf82d076254b474c46c6e85065a921a819308482343613a83d1f0"},"policy_digest":"","evidence_path":"/var/lib/orquesta/firecracker-e2e/evidence-<NONCE>.json","receipt_path":"/var/lib/orquesta/firecracker-e2e/receipt-<NONCE>.txt","phase_timeout":"10m","cleanup_timeout":"60s","stable_for":"2s","poll_interval":"250ms","child_uid":1000,"child_gid":1000,"workload":{"socket_path":"/run/orquesta/firecracker-launcher.sock","expected_asset_digest":"7df880f7cbfbf82d076254b474c46c6e85065a921a819308482343613a83d1f0","work_root":"/var/lib/orquesta/firecracker-e2e/work-<NONCE>","git_command":"/usr/bin/git","test_sleep":"15s","attestation_timeout":"5m","attestation_cleanup_timeout":"60s","max_output_bytes":67108864,"max_subject_bytes":536870912}}
 ```
 
 `candidate.launcher_socket_path` debe ser idéntico a
