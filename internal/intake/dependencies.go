@@ -95,6 +95,34 @@ func (state State) projectDecisions() (
 		}
 		offset = end
 	}
+	for _, question := range state.questions {
+		latestRevision := latestQuestionVersionRevision(
+			state.questionVersions,
+			question.Ref,
+		)
+		decision, active := current[question.Ref]
+		if !active || latestRevision == 0 || decision.Revision >= latestRevision {
+			continue
+		}
+		change := DecisionChange{
+			QuestionRef: question.Ref,
+			Revision:    latestRevision,
+		}
+		if value, found := reopened[question.Ref]; found {
+			value.InvalidatedBy = appendDecisionChanges(
+				value.InvalidatedBy,
+				change,
+			)
+			reopened[question.Ref] = value
+		} else {
+			reopened[question.Ref] = ReopenedDecision{
+				QuestionRef:      question.Ref,
+				PreviousDecision: decision,
+				InvalidatedBy:    []DecisionChange{change},
+			}
+		}
+		delete(current, question.Ref)
+	}
 	return current, reopened
 }
 
