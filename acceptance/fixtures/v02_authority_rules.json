@@ -101,7 +101,8 @@
       "Close"
     ],
     "pure_transition_helpers": [
-      "orquesta/internal/application.BuildMailboxResolutionGoal"
+      "orquesta/internal/application.BuildMailboxResolutionGoal",
+      "orquesta/internal/application.completeCanceledWorkItem"
     ],
     "ready_method": "ReadyWorkItems",
     "scheduler_method": "ProcessNext",
