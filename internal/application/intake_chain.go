@@ -131,19 +131,45 @@ func intakeChainChange(previous, next intake.State) (intake.Change, error) {
 		len(nextSnapshot.History)-len(previousSnapshot.History) != 1 ||
 		!intakeChainPrefix(nextSnapshot.History, previousSnapshot.History) ||
 		!intakeChainPrefix(nextSnapshot.Issues, previousSnapshot.Issues) ||
-		!intakeChainQuestionPrefix(nextSnapshot.Questions, previousSnapshot.Questions) ||
+		!intakeChainQuestionVersionPrefix(
+			next.QuestionVersions(),
+			previous.QuestionVersions(),
+		) ||
 		!intakeChainPrefix(nextSnapshot.Decisions, previousSnapshot.Decisions) {
 		return intake.Change{}, errIntakeChainInvalid
 	}
 
 	mutation := nextSnapshot.History[len(nextSnapshot.History)-1]
 	issuesAdded := len(nextSnapshot.Issues) - len(previousSnapshot.Issues)
-	questionsAdded := len(nextSnapshot.Questions) - len(previousSnapshot.Questions)
+	questionsAdded := mutation.QuestionsAdded
+	questionsRevised := mutation.QuestionsRevised
 	choicesRecorded := len(nextSnapshot.Decisions) - len(previousSnapshot.Decisions)
 	if mutation.Revision != nextSnapshot.Revision ||
 		mutation.IssuesAdded != issuesAdded ||
 		mutation.QuestionsAdded != questionsAdded ||
 		mutation.ChoicesRecorded != choicesRecorded {
+		return intake.Change{}, errIntakeChainInvalid
+	}
+
+	previousVersions := previous.QuestionVersions()
+	nextVersions := next.QuestionVersions()
+	versionDelta := nextVersions[len(previousVersions):]
+	if len(versionDelta) != questionsAdded+questionsRevised {
+		return intake.Change{}, errIntakeChainInvalid
+	}
+	questions := make([]intake.Question, 0, questionsAdded)
+	revisions := make([]intake.Question, 0, questionsRevised)
+	for _, version := range versionDelta {
+		if version.Revision != mutation.Revision {
+			return intake.Change{}, errIntakeChainInvalid
+		}
+		if version.ReplacesRevision == 0 {
+			questions = append(questions, cloneSnapshotQuestion(version.Question))
+		} else {
+			revisions = append(revisions, cloneSnapshotQuestion(version.Question))
+		}
+	}
+	if len(questions) != questionsAdded || len(revisions) != questionsRevised {
 		return intake.Change{}, errIntakeChainInvalid
 	}
 
@@ -165,10 +191,9 @@ func intakeChainChange(previous, next intake.State) (intake.Change, error) {
 			[]intake.Issue(nil),
 			nextSnapshot.Issues[len(previousSnapshot.Issues):]...,
 		),
-		Questions: cloneSnapshotQuestions(
-			nextSnapshot.Questions[len(previousSnapshot.Questions):],
-		),
-		Choices: choices,
+		Questions:         questions,
+		QuestionRevisions: revisions,
+		Choices:           choices,
 	}, nil
 }
 
@@ -184,7 +209,10 @@ func intakeChainPrefix[T comparable](values, prefix []T) bool {
 	return true
 }
 
-func intakeChainQuestionPrefix(values, prefix []intake.Question) bool {
+func intakeChainQuestionVersionPrefix(
+	values,
+	prefix []intake.QuestionVersion,
+) bool {
 	if len(values) < len(prefix) {
 		return false
 	}
