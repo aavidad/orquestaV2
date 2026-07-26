@@ -190,6 +190,38 @@ expect_failure launcher_identity "$VERIFIER" \
   --launcher "$TEST_ROOT/launcher-tampered" --expected-launcher-sha256 "$LAUNCHER_SHA" \
   --supervisor "$TEST_ROOT/supervisor" --expected-supervisor-sha256 "$SUPERVISOR_SHA"
 
+cp "$TEST_ROOT/launcher" "$TEST_ROOT/launcher-group-writable"
+chmod 0775 "$TEST_ROOT/launcher-group-writable"
+expect_failure launcher_identity "$VERIFIER" \
+  --receipt "$TEST_ROOT/receipt.json" \
+  --expected-receipt-sha256 "$(sha256sum "$TEST_ROOT/receipt.json" | cut -d' ' -f1)" \
+  --expected-source-commit "$COMMIT" --expected-source-tree "$TREE" \
+  --expected-source-archive-sha256 "$ARCHIVE_SHA" \
+  --expected-source-commit-object-sha256 "$COMMIT_OBJECT_SHA" \
+  --expected-toolchain-version go1.25.11 \
+  --expected-toolchain-tree-sha256 "$TOOLCHAIN_TREE_SHA" \
+  --expected-toolchain-go-sha256 "$TOOLCHAIN_GO_SHA" \
+  --expected-builder-sha256 "$BUILDER_SHA" \
+  --builder "$TEST_ROOT/builder" \
+  --launcher "$TEST_ROOT/launcher-group-writable" --expected-launcher-sha256 "$LAUNCHER_SHA" \
+  --supervisor "$TEST_ROOT/supervisor" --expected-supervisor-sha256 "$SUPERVISOR_SHA"
+
+cp "$TEST_ROOT/supervisor" "$TEST_ROOT/supervisor-group-writable"
+chmod 0775 "$TEST_ROOT/supervisor-group-writable"
+expect_failure supervisor_identity "$VERIFIER" \
+  --receipt "$TEST_ROOT/receipt.json" \
+  --expected-receipt-sha256 "$(sha256sum "$TEST_ROOT/receipt.json" | cut -d' ' -f1)" \
+  --expected-source-commit "$COMMIT" --expected-source-tree "$TREE" \
+  --expected-source-archive-sha256 "$ARCHIVE_SHA" \
+  --expected-source-commit-object-sha256 "$COMMIT_OBJECT_SHA" \
+  --expected-toolchain-version go1.25.11 \
+  --expected-toolchain-tree-sha256 "$TOOLCHAIN_TREE_SHA" \
+  --expected-toolchain-go-sha256 "$TOOLCHAIN_GO_SHA" \
+  --expected-builder-sha256 "$BUILDER_SHA" \
+  --builder "$TEST_ROOT/builder" \
+  --launcher "$TEST_ROOT/launcher" --expected-launcher-sha256 "$LAUNCHER_SHA" \
+  --supervisor "$TEST_ROOT/supervisor-group-writable" --expected-supervisor-sha256 "$SUPERVISOR_SHA"
+
 cp "$TEST_ROOT/builder" "$TEST_ROOT/builder-tampered"
 chmod 0755 "$TEST_ROOT/builder-tampered"
 printf 'tamper\n' >>"$TEST_ROOT/builder-tampered"
