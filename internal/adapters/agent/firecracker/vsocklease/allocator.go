@@ -34,7 +34,8 @@ type Config struct {
 }
 
 type Allocator struct {
-	config Config
+	config           Config
+	beginTransaction func(context.Context) (*sql.Conn, error)
 }
 
 var _ ports.AgentMicroVMVsockCIDAllocator = (*Allocator)(nil)
@@ -85,7 +86,9 @@ func Open(ctx context.Context, config Config) (*Allocator, error) {
 	if err := verifyDurability(ctx, config.DB); err != nil {
 		return nil, err
 	}
-	return &Allocator{config: config}, nil
+	allocator := &Allocator{config: config}
+	allocator.beginTransaction = allocator.beginImmediate
+	return allocator, nil
 }
 
 func (allocator *Allocator) Reserve(
@@ -108,12 +111,12 @@ func (allocator *Allocator) Reserve(
 	if err != nil {
 		return ports.AgentMicroVMVsockCIDLease{}, allocatorError("reservation_request_invalid")
 	}
-	now := allocator.now()
-	connection, err := allocator.beginImmediate(ctx)
+	connection, err := allocator.beginTransaction(ctx)
 	if err != nil {
 		return ports.AgentMicroVMVsockCIDLease{}, err
 	}
 	defer rollback(connection)
+	now := allocator.now()
 	if err := expireLeases(ctx, connection, request.PoolRef, now); err != nil {
 		return ports.AgentMicroVMVsockCIDLease{}, allocatorError("store_unavailable")
 	}
@@ -194,12 +197,12 @@ func (allocator *Allocator) Renew(
 		return ports.AgentMicroVMVsockCIDLease{}, allocatorError("renewal_request_invalid")
 	}
 	requestDigest, _ := ports.AgentMicroVMVsockCIDRenewalRequestDigest(request)
-	now := allocator.now()
-	connection, err := allocator.beginImmediate(ctx)
+	connection, err := allocator.beginTransaction(ctx)
 	if err != nil {
 		return ports.AgentMicroVMVsockCIDLease{}, err
 	}
 	defer rollback(connection)
+	now := allocator.now()
 	if err := expireLeases(ctx, connection, request.PoolRef, now); err != nil {
 		return ports.AgentMicroVMVsockCIDLease{}, allocatorError("store_unavailable")
 	}
@@ -283,12 +286,12 @@ func (allocator *Allocator) Recover(
 		request.PoolRef != allocator.config.PoolRef {
 		return ports.AgentMicroVMVsockCIDLease{}, allocatorError("recovery_request_invalid")
 	}
-	now := allocator.now()
-	connection, err := allocator.beginImmediate(ctx)
+	connection, err := allocator.beginTransaction(ctx)
 	if err != nil {
 		return ports.AgentMicroVMVsockCIDLease{}, err
 	}
 	defer rollback(connection)
+	now := allocator.now()
 	if err := expireLeases(ctx, connection, request.PoolRef, now); err != nil {
 		return ports.AgentMicroVMVsockCIDLease{}, allocatorError("store_unavailable")
 	}
@@ -321,12 +324,12 @@ func (allocator *Allocator) Release(
 		return ports.AgentMicroVMVsockCIDReleaseReceipt{}, allocatorError("release_request_invalid")
 	}
 	requestDigest, _ := ports.AgentMicroVMVsockCIDReleaseRequestDigest(request)
-	now := allocator.now()
-	connection, err := allocator.beginImmediate(ctx)
+	connection, err := allocator.beginTransaction(ctx)
 	if err != nil {
 		return ports.AgentMicroVMVsockCIDReleaseReceipt{}, err
 	}
 	defer rollback(connection)
+	now := allocator.now()
 	if err := expireLeases(ctx, connection, request.PoolRef, now); err != nil {
 		return ports.AgentMicroVMVsockCIDReleaseReceipt{}, allocatorError("store_unavailable")
 	}

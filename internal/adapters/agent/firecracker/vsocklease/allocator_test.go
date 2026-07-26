@@ -419,3 +419,155 @@ ON agent_microvm_vsock_cid_reservations (pool_ref, guest_cid)`); err != nil {
 		t.Fatalf("in-memory store = %v", err)
 	}
 }
+
+func TestAllocatorEvaluatesTimeAfterContendedBegin(t *testing.T) {
+	t.Run("reserve starts lease after lock acquisition", func(t *testing.T) {
+		database, allocator, clock := newContentionAllocator(t, 120)
+		releaseWriter := holdWriteTransaction(t, database)
+		entered := observeTransactionBegin(allocator)
+		type result struct {
+			lease ports.AgentMicroVMVsockCIDLease
+			err   error
+		}
+		resultChannel := make(chan result, 1)
+		request := testReservationRequest(t, 1)
+		go func() {
+			lease, err := allocator.Reserve(context.Background(), request)
+			resultChannel <- result{lease: lease, err: err}
+		}()
+		waitTransactionBegin(t, entered)
+		clock.Advance(2 * time.Minute)
+		releaseWriter()
+		got := <-resultChannel
+		if got.err != nil {
+			t.Fatal(got.err)
+		}
+		wantAcquiredAt := time.Date(2026, 7, 26, 15, 2, 0, 0, time.UTC)
+		if got.lease.AcquiredAt != wantAcquiredAt ||
+			got.lease.ExpiresAt != wantAcquiredAt.Add(10*time.Minute) {
+			t.Fatalf("lease used pre-lock clock: %+v", got.lease)
+		}
+	})
+
+	tests := map[string]func(
+		context.Context,
+		*Allocator,
+		ports.AgentMicroVMVsockCIDLease,
+	) error{
+		"renew observes expiry while waiting": func(
+			ctx context.Context,
+			allocator *Allocator,
+			lease ports.AgentMicroVMVsockCIDLease,
+		) error {
+			_, err := allocator.Renew(ctx, ports.AgentMicroVMVsockCIDRenewalRequest{
+				PoolRef: lease.PoolRef, ScopeDigest: lease.ScopeDigest,
+				LeaseRef: lease.LeaseRef, OwnerRef: lease.OwnerRef,
+				FencingToken: lease.FencingToken, ExpectedRevision: lease.Revision,
+				LeaseDuration: 2 * time.Minute, IdempotencyKey: "renew-after-contention",
+			})
+			return err
+		},
+		"recover observes expiry while waiting": func(
+			ctx context.Context,
+			allocator *Allocator,
+			lease ports.AgentMicroVMVsockCIDLease,
+		) error {
+			_, err := allocator.Recover(ctx, ports.AgentMicroVMVsockCIDRecoveryRequest{
+				PoolRef: lease.PoolRef, ScopeDigest: lease.ScopeDigest,
+				LeaseRef: lease.LeaseRef, OwnerRef: lease.OwnerRef,
+				FencingToken: lease.FencingToken,
+			})
+			return err
+		},
+		"release observes expiry while waiting": func(
+			ctx context.Context,
+			allocator *Allocator,
+			lease ports.AgentMicroVMVsockCIDLease,
+		) error {
+			_, err := allocator.Release(ctx, ports.AgentMicroVMVsockCIDReleaseRequest{
+				PoolRef: lease.PoolRef, ScopeDigest: lease.ScopeDigest,
+				LeaseRef: lease.LeaseRef, OwnerRef: lease.OwnerRef,
+				FencingToken: lease.FencingToken, ExpectedRevision: lease.Revision,
+				IdempotencyKey: "release-after-contention",
+			})
+			return err
+		},
+	}
+	for name, operation := range tests {
+		t.Run(name, func(t *testing.T) {
+			database, allocator, clock := newContentionAllocator(t, 121)
+			request := testReservationRequest(t, 1)
+			request.LeaseDuration = time.Minute
+			lease, err := allocator.Reserve(context.Background(), request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			releaseWriter := holdWriteTransaction(t, database)
+			entered := observeTransactionBegin(allocator)
+			resultChannel := make(chan error, 1)
+			go func() {
+				resultChannel <- operation(context.Background(), allocator, lease)
+			}()
+			waitTransactionBegin(t, entered)
+			clock.Advance(time.Minute)
+			releaseWriter()
+			if err := <-resultChannel; ErrorCode(err) !=
+				"agent_firecracker_vsock_cid.lease_inactive" {
+				t.Fatalf("operation used pre-lock clock: %v", err)
+			}
+		})
+	}
+}
+
+func newContentionAllocator(
+	t *testing.T,
+	guestCID uint32,
+) (*sql.DB, *Allocator, *testClock) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "vsock-contention.db")
+	database := openTestDatabase(t, path, true)
+	t.Cleanup(func() { _ = database.Close() })
+	clock := &testClock{now: time.Date(2026, 7, 26, 15, 0, 0, 0, time.UTC)}
+	return database, openTestAllocator(t, database, clock, guestCID, guestCID), clock
+}
+
+func holdWriteTransaction(t *testing.T, database *sql.DB) func() {
+	t.Helper()
+	connection, err := database.Conn(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := connection.ExecContext(context.Background(), "BEGIN IMMEDIATE"); err != nil {
+		_ = connection.Close()
+		t.Fatal(err)
+	}
+	var once sync.Once
+	release := func() {
+		once.Do(func() {
+			_, _ = connection.ExecContext(context.Background(), "ROLLBACK")
+			_ = connection.Close()
+		})
+	}
+	t.Cleanup(release)
+	return release
+}
+
+func observeTransactionBegin(allocator *Allocator) <-chan struct{} {
+	entered := make(chan struct{})
+	original := allocator.beginTransaction
+	var once sync.Once
+	allocator.beginTransaction = func(ctx context.Context) (*sql.Conn, error) {
+		once.Do(func() { close(entered) })
+		return original(ctx)
+	}
+	return entered
+}
+
+func waitTransactionBegin(t *testing.T, entered <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("operation did not attempt BEGIN IMMEDIATE")
+	}
+}
