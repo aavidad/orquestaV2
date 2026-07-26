@@ -76,6 +76,7 @@ timeout = "1s"
 supervisor_start_timeout = "500ms"
 max_concurrent_executions = 4
 work_root = %s
+cache_root = %s
 
 [identity]
 local_token_path = %s
@@ -89,8 +90,9 @@ execution_timeout = "10s"
 
 [config]
 effective_path = %s
-`, strconv.Quote(root+"/state/orquesta.sqlite"), strconv.Quote(root+"/artifacts"),
+	`, strconv.Quote(root+"/state/orquesta.sqlite"), strconv.Quote(root+"/artifacts"),
 		strconv.Quote(root+"/secrets/credentials.json"), strconv.Quote(root+"/work"),
+		strconv.Quote(root+"/cache/codex-go"),
 		strconv.Quote(root+"/secrets/local-owner.token"),
 		strconv.Quote(root+"/effective_config.json"))
 	if err := os.WriteFile(configPath, []byte(content), 0o600); err != nil {
