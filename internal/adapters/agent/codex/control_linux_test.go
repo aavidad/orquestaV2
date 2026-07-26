@@ -216,7 +216,7 @@ func TestPromptFailureDoesNotQuarantineLiveProcess(t *testing.T) {
 	awaitProcessIdentityGone(t, process)
 }
 
-func TestLegacyLiveReplayBindsOnlyAfterExactAuthority(t *testing.T) {
+func TestLegacyLiveReplayQuarantinesWithoutInventingAuthority(t *testing.T) {
 	config := processTreeTestConfig(t)
 	request := testRequest(t, "legacy-authority-binding", "legacy authority process tree", 1024)
 	request.SessionRef, _ = ports.NewExecutionSessionRef("execution-session:legacy-authority-binding")
@@ -274,45 +274,24 @@ func TestLegacyLiveReplayBindsOnlyAfterExactAuthority(t *testing.T) {
 	untrusted := request
 	untrusted.SessionRef, _ = ports.NewExecutionSessionRef("execution-session:legacy-authority-attacker")
 	untrusted.PlanGeneration++
-	if _, err := reopened.Launch(context.Background(), untrusted); ErrorCode(err) != CodeSessionUnavailable {
+	if _, err := reopened.Launch(context.Background(), untrusted); ErrorCode(err) != CodeLegacyExecutionRequiresNewAttempt {
 		t.Fatalf("untrusted replay error=%v code=%q", err, ErrorCode(err))
 	}
-	if payload, err := os.ReadFile(outputPath); err != nil || string(payload) != "untrusted replay must not scrub" {
-		t.Fatalf("untrusted replay scrubbed output=%q error=%v", payload, err)
-	}
-	if identity, err := platformInspectProcess(process); err != nil || identity != processIdentityAlive {
-		t.Fatalf("untrusted replay process identity=%v error=%v", identity, err)
-	}
-	for _, name := range []string{launchUpgradeFileName, terminalFileName} {
-		if _, err := os.Stat(filepath.Join(config.WorkRoot, filepath.FromSlash(runPath), name)); !errors.Is(err, os.ErrNotExist) {
-			t.Fatalf("untrusted replay created %s: %v", name, err)
-		}
-	}
-	_, err = reopened.Launch(context.Background(), request)
-	if err != nil {
-		t.Fatalf("authorized replay error=%v", err)
-	}
-	if lock, err := reopened.acquireOwnerLock(runPath); lock != nil || !errors.Is(err, errOwnerLockBusy) {
-		t.Fatalf("authorized replay did not adopt process: lock=%v error=%v", lock, err)
-	}
-	upgradePayload, err := os.ReadFile(filepath.Join(config.WorkRoot, filepath.FromSlash(runPath), launchUpgradeFileName))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var upgrade launchUpgradeRecord
-	if err := json.Unmarshal(upgradePayload, &upgrade); err != nil {
-		t.Fatal(err)
-	}
-	if upgrade.Launch.RequestHash != mustRequestHash(t, request) ||
-		upgrade.Launch.ExecutionSessionRef != request.SessionRef.String() ||
-		upgrade.Launch.PlanGeneration != request.PlanGeneration {
-		t.Fatalf("authorized binding=%+v", upgrade)
-	}
-	if err := platformSignalProcess(process, ports.AgentStopForced); err != nil {
-		t.Fatalf("signal adopted legacy process: %v", err)
+	if payload, err := os.ReadFile(outputPath); err != nil || len(payload) != 0 {
+		t.Fatalf("legacy quarantine left output=%q error=%v", payload, err)
 	}
 	_ = command.Wait()
 	awaitProcessIdentityGone(t, process)
+	if _, err := reopened.Launch(context.Background(), request); ErrorCode(err) != CodeLegacyExecutionRequiresNewAttempt {
+		t.Fatalf("exact replay error=%v code=%q", err, ErrorCode(err))
+	}
+	if _, err := os.Stat(filepath.Join(config.WorkRoot, filepath.FromSlash(runPath), launchUpgradeFileName)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("legacy quarantine created upgrade: %v", err)
+	}
+	terminal := readPersistedTerminal(t, config, runPath)
+	if terminal.RequestHash != legacyHash || terminal.Status != ports.AgentFailed {
+		t.Fatalf("legacy terminal identity=%+v", terminal)
+	}
 }
 
 func TestCodexSelectiveStopPreservesSiblingProcessTrees(t *testing.T) {

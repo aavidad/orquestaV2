@@ -62,7 +62,7 @@ func TestV7LaunchRecordRejectsMissingOrInvalidReasoningEffort(t *testing.T) {
 	}
 }
 
-func TestV6ReplayBindsOneExactReasoningEffortDurably(t *testing.T) {
+func TestV6WithoutPhysicalEffortNeverBindsV7(t *testing.T) {
 	config := testConfig(t)
 	config.ReasoningEffort = string(governance.ReasoningEffortHigh)
 	config.CredentialStore = &credentialTestStore{material: helperCredentialInitial, version: 1}
@@ -71,58 +71,70 @@ func TestV6ReplayBindsOneExactReasoningEffortDurably(t *testing.T) {
 	high.ReasoningEffort = governance.ReasoningEffortHigh
 	runPath := seedPersistedV6Launch(t, config, high)
 
+	config.ReasoningEffort = string(governance.ReasoningEffortXHigh)
 	first := openTestAdapter(t, config)
 	xhigh := high
 	xhigh.ReasoningEffort = governance.ReasoningEffortXHigh
-	if _, err := first.Launch(context.Background(), xhigh); ErrorCode(err) != CodeExecutionConflict {
-		t.Fatalf("V6 replay changed historical effort: error=%v code=%q", err, ErrorCode(err))
+	if _, err := first.Launch(context.Background(), xhigh); ErrorCode(err) != CodeLegacyExecutionRequiresNewAttempt {
+		t.Fatalf("V6 xhigh replay error=%v code=%q", err, ErrorCode(err))
 	}
 	if _, err := os.Stat(filepath.Join(
 		config.WorkRoot, filepath.FromSlash(runPath), launchUpgradeFileName,
 	)); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("conflicting effort persisted V7 binding: %v", err)
+		t.Fatalf("V6 replay persisted V7 binding: %v", err)
 	}
-	firstReceipt, err := first.Launch(context.Background(), high)
+	if _, err := first.Launch(context.Background(), high); ErrorCode(err) != CodeLegacyExecutionRequiresNewAttempt {
+		t.Fatalf("V6 high replay error=%v code=%q", err, ErrorCode(err))
+	}
+	observation := awaitTerminal(t, first, high.ExecutionRef)
+	if observation.Status != ports.AgentFailed ||
+		observation.ErrorCode != CodeExecutionInterrupted {
+		t.Fatalf("V6 terminal compatibility=%+v", observation)
+	}
+	terminal := readPersistedTerminal(t, config, runPath)
+	v6Hash, err := hashV6LaunchRequest(high, first.accountProfileRef())
 	if err != nil {
-		t.Fatalf("Launch(V6 high) error = %v", err)
-	}
-	firstObservation := awaitTerminal(t, first, high.ExecutionRef)
-	if firstObservation.Status != ports.AgentFailed ||
-		firstObservation.ErrorCode != CodeCredentialOutputUnverifiable {
-		t.Fatalf("V6 prestart recovery = %+v", firstObservation)
-	}
-	var upgrade launchUpgradeRecord
-	found, err := first.readPrivateJSON(path.Join(runPath, launchUpgradeFileName), &upgrade)
-	if err != nil || !found {
-		t.Fatalf("read V7 upgrade found=%v error=%v", found, err)
-	}
-	if upgrade.SchemaVersion != stateSchemaVersion ||
-		upgrade.SourceSchemaVersion != profileStateSchemaVersion ||
-		upgrade.Launch.ReasoningEffort != governance.ReasoningEffortHigh ||
-		upgrade.Launch.RequestHash != mustRequestHash(t, high) {
-		t.Fatalf("V6 -> V7 reasoning binding = %+v", upgrade)
-	}
-	if err := first.Close(); err != nil {
 		t.Fatal(err)
 	}
-
-	second := openTestAdapter(t, config)
-	replayed, err := second.Launch(context.Background(), high)
-	if err != nil || replayed != firstReceipt {
-		t.Fatalf("V7 restart replay receipt=%+v error=%v want=%+v", replayed, err, firstReceipt)
+	if terminal.RequestHash != v6Hash {
+		t.Fatalf("V6 terminal changed causal hash: %+v", terminal)
 	}
-	replayedObservation := awaitTerminal(t, second, high.ExecutionRef)
-	if replayedObservation.Status != firstObservation.Status ||
-		replayedObservation.ErrorCode != firstObservation.ErrorCode {
-		t.Fatalf("V7 restart observation=%+v want=%+v", replayedObservation, firstObservation)
+	retry := newV7RetryRequest(t, high, "reasoning-v7-retry", governance.ReasoningEffortHigh)
+	retry.Objective = "helper:credential-initial helper:reasoning:high"
+	if _, err := first.Launch(context.Background(), retry); err != nil {
+		t.Fatalf("Launch(V7 retry): %v", err)
 	}
-
-	if _, err := second.Launch(context.Background(), xhigh); ErrorCode(err) != CodeExecutionConflict {
-		t.Fatalf("conflicting xhigh replay error=%v code=%q", err, ErrorCode(err))
+	if retryObservation := awaitTerminal(t, first, retry.ExecutionRef); retryObservation.Status != ports.AgentCompleted {
+		t.Fatalf(
+			"V7 retry observation=%+v terminal=%+v",
+			retryObservation, readPersistedTerminal(t, config, executionPath(retry.ExecutionRef)),
+		)
 	}
 	if _, err := os.Stat(filepath.Join(config.WorkRoot, filepath.FromSlash(runPath), "helper-invocations")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("prestart V6 journal was relaunched: %v", err)
+		t.Fatalf("legacy V6 journal was relaunched: %v", err)
 	}
+}
+
+func newV7RetryRequest(
+	t *testing.T,
+	legacy ports.AgentLaunchRequest,
+	suffix string,
+	effort governance.ReasoningEffort,
+) ports.AgentLaunchRequest {
+	t.Helper()
+	retry := testRequest(
+		t, suffix, "helper:reasoning:"+string(effort)+" helper:success", legacy.MaxOutputBytes,
+	)
+	retry.GoalRef = legacy.GoalRef
+	retry.WorkItemRef = legacy.WorkItemRef
+	retry.PlanGeneration = legacy.PlanGeneration
+	retry.AppSpecGeneration = legacy.AppSpecGeneration
+	retry.ExecutionAttempt = legacy.ExecutionAttempt + 1
+	retry.SpecHash = legacy.SpecHash
+	retry.ActorRef = legacy.ActorRef
+	retry.ProjectRef = legacy.ProjectRef
+	retry.ReasoningEffort = effort
+	return retry
 }
 
 func seedPersistedV6Launch(t *testing.T, config Config, request ports.AgentLaunchRequest) string {

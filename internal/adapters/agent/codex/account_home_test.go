@@ -5,6 +5,7 @@ package codex
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -315,29 +316,26 @@ func TestAccountProfileRejectsAccountlessLegacyJournals(t *testing.T) {
 	}
 }
 
-func TestAccountProfileV6ReplayBindsV7Reasoning(t *testing.T) {
+func TestAccountProfileV6ReplayRequiresNewV7Attempt(t *testing.T) {
 	root, _ := secureAccountFixture(t, accountTestProfile)
 	config := accountTestConfig(t, root, accountTestProfile)
-	config.ReasoningEffort = string(governance.ReasoningEffortHigh)
 	request := testRequest(t, "account-v6-v7-reasoning", "helper:account-home", 1024)
 	request.ReasoningEffort = governance.ReasoningEffortHigh
 	runPath := seedPersistedV6Launch(t, config, request)
 
 	adapter := openTestAdapter(t, config)
-	if _, err := adapter.Launch(context.Background(), request); err != nil {
-		t.Fatalf("Launch(V6 account replay) error=%v", err)
+	if _, err := adapter.Launch(context.Background(), request); ErrorCode(err) != CodeLegacyExecutionRequiresNewAttempt {
+		t.Fatalf("Launch(V6 account replay) error=%v code=%q", err, ErrorCode(err))
 	}
 	observation := awaitTerminal(t, adapter, request.ExecutionRef)
-	if observation.Status != ports.AgentFailed || observation.ErrorCode != CodeExecutionInterrupted {
+	if observation.Status != ports.AgentFailed ||
+		observation.ErrorCode != CodeExecutionInterrupted {
 		t.Fatalf("V6 account replay observation=%+v", observation)
 	}
-	var upgrade launchUpgradeRecord
-	found, err := adapter.readPrivateJSON(filepath.ToSlash(filepath.Join(runPath, launchUpgradeFileName)), &upgrade)
-	if err != nil || !found ||
-		upgrade.SourceSchemaVersion != profileStateSchemaVersion ||
-		upgrade.Launch.ReasoningEffort != request.ReasoningEffort ||
-		upgrade.Launch.AccountProfileRef != adapter.accountProfileRef() {
-		t.Fatalf("account V6 -> V7 upgrade=%+v found=%v error=%v", upgrade, found, err)
+	if _, err := os.Stat(filepath.Join(
+		config.WorkRoot, filepath.FromSlash(runPath), launchUpgradeFileName,
+	)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("account V6 replay created V7 binding: %v", err)
 	}
 }
 
@@ -476,7 +474,7 @@ func TestAccountProfileRemovalFailsBeforeReplay(t *testing.T) {
 	}
 }
 
-func TestV7UpgradePreservesDurableV6UpgradeAsCausalSource(t *testing.T) {
+func TestExistingV7UpgradePreservesDurableV6CausalSource(t *testing.T) {
 	config := testConfig(t)
 	request := testRequest(t, "v6-v7-upgrade-chain", "helper:success", 1024)
 	seedAccountlessLaunchRecord(t, config, request, legacyStateSchemaVersion)
@@ -512,8 +510,20 @@ func TestV7UpgradePreservesDurableV6UpgradeAsCausalSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := seeder.bindLegacyLaunchRecord(runPath, legacy, request, currentHash); err != nil {
-		t.Fatalf("bindLegacyLaunchRecord() error = %v", err)
+	v7 := v6
+	v7.SchemaVersion = stateSchemaVersion
+	v7.RequestHash = currentHash
+	v7.ReasoningEffort = request.ReasoningEffort
+	v7Upgrade := launchUpgradeRecord{
+		SchemaVersion:       stateSchemaVersion,
+		SourceSchemaVersion: v6.SchemaVersion,
+		SourceRequestHash:   v6.RequestHash,
+		Launch:              v7,
+	}
+	if created, err := seeder.publishJSON(
+		runPath, launchUpgradeFileName, v7Upgrade,
+	); err != nil || !created {
+		t.Fatalf("publish preexisting V7 upgrade created=%v error=%v", created, err)
 	}
 	if err := seeder.Close(); err != nil {
 		t.Fatal(err)

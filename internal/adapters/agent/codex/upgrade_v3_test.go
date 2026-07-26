@@ -79,7 +79,7 @@ func TestAdapterUpgradeV3ObservePreservesDurableTerminalWithoutRelaunch(t *testi
 	}
 }
 
-func TestAdapterUpgradeV3TerminalLaunchAuthorizesAndBinds(t *testing.T) {
+func TestAdapterUpgradeV3TerminalLaunchRequiresNewAttemptWithoutBinding(t *testing.T) {
 	config := testConfig(t)
 	request := testRequest(t, "upgrade-v3-terminal-launch", "helper:success", 1024)
 	request.SessionRef, _ = ports.NewExecutionSessionRef("execution-session:upgrade-v3-terminal-launch")
@@ -101,33 +101,26 @@ func TestAdapterUpgradeV3TerminalLaunchAuthorizesAndBinds(t *testing.T) {
 	untrusted := request
 	untrusted.SessionRef, _ = ports.NewExecutionSessionRef("execution-session:upgrade-v3-terminal-attacker")
 	untrusted.PlanGeneration++
-	if _, err := adapter.Launch(context.Background(), untrusted); ErrorCode(err) != CodeSessionUnavailable {
+	if _, err := adapter.Launch(context.Background(), untrusted); ErrorCode(err) != CodeLegacyExecutionRequiresNewAttempt {
 		t.Fatalf("Launch(untrusted V3 terminal) error = %v, code = %q", err, ErrorCode(err))
 	}
 	upgradePath := filepath.Join(config.WorkRoot, filepath.FromSlash(runPath), launchUpgradeFileName)
 	if _, err := os.Stat(upgradePath); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("untrusted terminal replay created upgrade: %v", err)
 	}
-	receipt, err := adapter.Launch(context.Background(), request)
-	if err != nil {
-		t.Fatalf("Launch(authorized V3 terminal) error = %v", err)
-	}
-	if err := ports.ValidateAgentLaunchReceipt(request, receipt); err != nil {
-		t.Fatalf("Launch(V3 terminal) receipt = %+v, error = %v", receipt, err)
+	if _, err := adapter.Launch(context.Background(), request); ErrorCode(err) != CodeLegacyExecutionRequiresNewAttempt {
+		t.Fatalf("Launch(exact V3 terminal) error = %v, code = %q", err, ErrorCode(err))
 	}
 	observation, err := adapter.Observe(context.Background(), request.ExecutionRef)
 	if err != nil || observation.Status != ports.AgentCompleted || string(observation.Content) != "historical terminal" {
 		t.Fatalf("Observe(V3 terminal) = %+v, %v", observation, err)
 	}
-	upgrade := readPersistedV3Upgrade(t, config, runPath)
-	if upgrade.Launch.RequestHash != mustRequestHash(t, request) ||
-		upgrade.Launch.ExecutionSessionRef != request.SessionRef.String() ||
-		upgrade.Launch.PlanGeneration != request.PlanGeneration {
-		t.Fatalf("terminal binding = %+v", upgrade)
+	if _, err := os.Stat(upgradePath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("exact terminal replay created upgrade: %v", err)
 	}
 }
 
-func TestAdapterUpgradeV3ConcurrentTerminalBindingHasSingleWinner(t *testing.T) {
+func TestAdapterUpgradeV3ConcurrentTerminalReplayNeverBinds(t *testing.T) {
 	config := testConfig(t)
 	config.SessionResolver = sessionResolverFunc(func(_ context.Context, request ports.AgentLaunchRequest) (Session, error) {
 		secret, _ := credentials.NewSecret([]byte(helperSessionBearer))
@@ -171,32 +164,19 @@ func TestAdapterUpgradeV3ConcurrentTerminalBindingHasSingleWinner(t *testing.T) 
 	}
 	close(start)
 	group.Wait()
-	winner := -1
 	for index, result := range results {
-		if result.err == nil {
-			if winner != -1 {
-				t.Fatalf("multiple terminal bindings won: results=%+v", results)
-			}
-			winner = index
-		} else if ErrorCode(result.err) != CodeExecutionConflict {
-			t.Fatalf("loser error=%v code=%q", result.err, ErrorCode(result.err))
+		if ErrorCode(result.err) != CodeLegacyExecutionRequiresNewAttempt {
+			t.Fatalf("replay %d error=%v code=%q", index, result.err, ErrorCode(result.err))
 		}
 	}
-	if winner == -1 {
-		t.Fatalf("no terminal binding won: results=%+v", results)
-	}
-	upgrade := readPersistedV3Upgrade(t, config, runPath)
-	if upgrade.Launch.RequestHash != mustRequestHash(t, requests[winner]) {
-		t.Fatalf("terminal binding winner=%+v", upgrade)
+	if _, err := os.Stat(filepath.Join(config.WorkRoot, filepath.FromSlash(runPath), launchUpgradeFileName)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("concurrent terminal replay created upgrade: %v", err)
 	}
 	reopened := openTestAdapter(t, config)
-	replayed, err := reopened.Launch(context.Background(), requests[winner])
-	if err != nil || replayed != results[winner].receipt {
-		t.Fatalf("winner replay receipt=%+v error=%v want=%+v", replayed, err, results[winner].receipt)
-	}
-	loser := 1 - winner
-	if _, err := reopened.Launch(context.Background(), requests[loser]); ErrorCode(err) != CodeExecutionConflict {
-		t.Fatalf("loser replay error=%v code=%q", err, ErrorCode(err))
+	for index, request := range requests {
+		if _, err := reopened.Launch(context.Background(), request); ErrorCode(err) != CodeLegacyExecutionRequiresNewAttempt {
+			t.Fatalf("replay %d error=%v code=%q", index, err, ErrorCode(err))
+		}
 	}
 	terminal := readPersistedTerminal(t, config, runPath)
 	if terminal.RequestHash != legacyHash || terminal.SchemaVersion != legacyStateSchemaVersion {
@@ -215,7 +195,7 @@ func TestAdapterUpgradeV3LaunchWithoutPhysicalAuthorityCreatesNoUpgrade(t *testi
 		ObservedAt:    config.Now().UTC().Add(time.Second),
 	})
 	adapter := openTestAdapter(t, config)
-	if _, err := adapter.Launch(context.Background(), request); ErrorCode(err) != CodeSessionUnavailable {
+	if _, err := adapter.Launch(context.Background(), request); ErrorCode(err) != CodeLegacyExecutionRequiresNewAttempt {
 		t.Fatalf("Launch(V3 without authority) error = %v, code = %q", err, ErrorCode(err))
 	}
 	upgradePath := filepath.Join(config.WorkRoot, filepath.FromSlash(runPath), launchUpgradeFileName)
@@ -256,7 +236,7 @@ func TestAdapterUpgradeV3ObservePersistsInterruptedWithoutRelaunch(t *testing.T)
 	}
 }
 
-func TestAdapterUpgradeV3LaunchBindsV4ReceiptAndInterruptedReplay(t *testing.T) {
+func TestAdapterUpgradeV3DispatchingRequiresNewAttemptAndPreservesInterrupted(t *testing.T) {
 	config := testConfig(t)
 	config.CredentialStore = &credentialTestStore{material: helperCredentialInitial, version: 1}
 	config.CredentialRef = credentials.CredentialRef("credential:codex-primary")
@@ -267,15 +247,8 @@ func TestAdapterUpgradeV3LaunchBindsV4ReceiptAndInterruptedReplay(t *testing.T) 
 	}
 
 	first := openTestAdapter(t, config)
-	firstReceipt, err := first.Launch(context.Background(), request)
-	if err != nil {
-		t.Fatalf("Launch(V3 dispatching) error = %v", err)
-	}
-	if err := ports.ValidateAgentLaunchReceipt(request, firstReceipt); err != nil {
-		t.Fatalf("synthesized V4 receipt error = %v; receipt=%+v", err, firstReceipt)
-	}
-	if firstReceipt.ModelRef != DefaultModelRef || firstReceipt.AgentRef != AgentRef {
-		t.Fatalf("synthesized provider identity = %+v", firstReceipt)
+	if _, err := first.Launch(context.Background(), request); ErrorCode(err) != CodeLegacyExecutionRequiresNewAttempt {
+		t.Fatalf("Launch(V3 dispatching) error = %v, code = %q", err, ErrorCode(err))
 	}
 	firstObservation := awaitTerminal(t, first, request.ExecutionRef)
 	if firstObservation.Status != ports.AgentFailed || firstObservation.ErrorCode != CodeExecutionInterrupted {
@@ -284,12 +257,8 @@ func TestAdapterUpgradeV3LaunchBindsV4ReceiptAndInterruptedReplay(t *testing.T) 
 
 	config.Now = func() time.Time { return time.Date(2032, 1, 2, 3, 4, 5, 0, time.UTC) }
 	second := openTestAdapter(t, config)
-	secondReceipt, err := second.Launch(context.Background(), request)
-	if err != nil {
-		t.Fatalf("Launch(V3 replay) error = %v", err)
-	}
-	if secondReceipt != firstReceipt {
-		t.Fatalf("V3 synthesized receipt changed: got=%+v want=%+v", secondReceipt, firstReceipt)
+	if _, err := second.Launch(context.Background(), request); ErrorCode(err) != CodeLegacyExecutionRequiresNewAttempt {
+		t.Fatalf("Launch(V3 replay) error = %v, code = %q", err, ErrorCode(err))
 	}
 	secondObservation := awaitTerminal(t, second, request.ExecutionRef)
 	if !reflect.DeepEqual(secondObservation, firstObservation) {
@@ -298,17 +267,11 @@ func TestAdapterUpgradeV3LaunchBindsV4ReceiptAndInterruptedReplay(t *testing.T) 
 
 	conflicting := request
 	conflicting.PlanGeneration++
-	if _, err := second.Launch(context.Background(), conflicting); ErrorCode(err) != CodeExecutionConflict {
-		t.Fatalf("Launch(conflicting V4 binding) error = %v, code = %q", err, ErrorCode(err))
+	if _, err := second.Launch(context.Background(), conflicting); ErrorCode(err) != CodeLegacyExecutionRequiresNewAttempt {
+		t.Fatalf("Launch(V3 unknown causality) error = %v, code = %q", err, ErrorCode(err))
 	}
-	upgrade := readPersistedV3Upgrade(t, config, runPath)
-	currentHash, err := hashLaunchRequest(request)
-	if err != nil {
-		t.Fatalf("hashLaunchRequest() error = %v", err)
-	}
-	if upgrade.SourceRequestHash != legacyHash || upgrade.Launch.RequestHash != currentHash ||
-		upgrade.Launch.GoalRef != request.GoalRef.String() || upgrade.Launch.PlanGeneration != request.PlanGeneration {
-		t.Fatalf("V3->V4 binding = %+v", upgrade)
+	if _, err := os.Stat(filepath.Join(config.WorkRoot, filepath.FromSlash(runPath), launchUpgradeFileName)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("V3 dispatching replay created upgrade: %v", err)
 	}
 	terminal := readPersistedTerminal(t, config, runPath)
 	if terminal.SchemaVersion != stateSchemaVersion || terminal.RequestHash != legacyHash {
@@ -319,7 +282,7 @@ func TestAdapterUpgradeV3LaunchBindsV4ReceiptAndInterruptedReplay(t *testing.T) 
 	}
 }
 
-func TestAdapterUpgradeV3ConcurrentBindingHasSingleDurableWinner(t *testing.T) {
+func TestAdapterUpgradeV3ConcurrentDispatchingReplayNeverBinds(t *testing.T) {
 	config := testConfig(t)
 	config.CredentialStore = &credentialTestStore{material: helperCredentialInitial, version: 1}
 	config.CredentialRef = credentials.CredentialRef("credential:codex-primary")
@@ -359,35 +322,24 @@ func TestAdapterUpgradeV3ConcurrentBindingHasSingleDurableWinner(t *testing.T) {
 	close(start)
 	group.Wait()
 
-	winner := -1
 	for index, result := range results {
-		if result.err == nil {
-			if winner != -1 {
-				t.Fatalf("multiple V4 bindings won: results=%+v", results)
-			}
-			winner = index
-			continue
-		}
-		if ErrorCode(result.err) != CodeExecutionConflict {
-			t.Fatalf("loser error = %v, code = %q", result.err, ErrorCode(result.err))
+		if ErrorCode(result.err) != CodeLegacyExecutionRequiresNewAttempt {
+			t.Fatalf("replay %d error = %v, code = %q", index, result.err, ErrorCode(result.err))
 		}
 	}
-	if winner == -1 {
-		t.Fatalf("no V4 binding won: results=%+v", results)
+	if _, err := os.Stat(filepath.Join(config.WorkRoot, filepath.FromSlash(runPath), launchUpgradeFileName)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("concurrent V3 replay created upgrade: %v", err)
 	}
-	observation := awaitTerminal(t, adapters[winner], requests[winner].ExecutionRef)
+	observation := awaitTerminal(t, adapters[0], requests[0].ExecutionRef)
 	if observation.Status != ports.AgentFailed || observation.ErrorCode != CodeExecutionInterrupted {
-		t.Fatalf("winner recovery = %+v", observation)
+		t.Fatalf("V3 recovery = %+v", observation)
 	}
 
 	reopened := openTestAdapter(t, config)
-	replayed, err := reopened.Launch(context.Background(), requests[winner])
-	if err != nil || replayed != results[winner].receipt {
-		t.Fatalf("winner replay receipt=%+v error=%v want=%+v", replayed, err, results[winner].receipt)
-	}
-	loser := 1 - winner
-	if _, err := reopened.Launch(context.Background(), requests[loser]); ErrorCode(err) != CodeExecutionConflict {
-		t.Fatalf("loser replay error = %v, code = %q", err, ErrorCode(err))
+	for index, request := range requests {
+		if _, err := reopened.Launch(context.Background(), request); ErrorCode(err) != CodeLegacyExecutionRequiresNewAttempt {
+			t.Fatalf("replay %d error=%v code=%q", index, err, ErrorCode(err))
+		}
 	}
 }
 
@@ -458,21 +410,6 @@ func seedPersistedV3Execution(
 		t.Fatalf("Close(V3 seeder) error = %v", err)
 	}
 	return requestHash, runPath
-}
-
-func readPersistedV3Upgrade(t *testing.T, config Config, runPath string) launchUpgradeRecord {
-	t.Helper()
-	adapter, err := New(config)
-	if err != nil {
-		t.Fatalf("New(upgrade reader) error = %v", err)
-	}
-	defer func() { _ = adapter.Close() }()
-	var upgrade launchUpgradeRecord
-	found, err := adapter.readPrivateJSON(path.Join(runPath, launchUpgradeFileName), &upgrade)
-	if err != nil || !found {
-		t.Fatalf("read upgrade found=%v error=%v", found, err)
-	}
-	return upgrade
 }
 
 func readPersistedTerminal(t *testing.T, config Config, runPath string) terminalRecord {

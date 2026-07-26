@@ -458,36 +458,10 @@ func (adapter *Adapter) bindLegacyLaunchRecord(
 		}
 		return bound, nil
 	}
-	candidate, err := adapter.legacyLaunchCandidate(source, request, requestHash)
-	if err != nil {
+	if err := adapter.validateLegacyLaunchRequest(source, request); err != nil {
 		return launchRecord{}, err
 	}
-	upgrade := launchUpgradeRecord{
-		SchemaVersion:       stateSchemaVersion,
-		SourceSchemaVersion: source.SchemaVersion,
-		SourceRequestHash:   source.RequestHash,
-		Launch:              candidate,
-	}
-	created, err := adapter.publishJSON(runPath, launchUpgradeFileName, upgrade)
-	if err != nil {
-		return launchRecord{}, err
-	}
-	if !created {
-		found, readErr := adapter.readPrivateJSON(path.Join(runPath, launchUpgradeFileName), &upgrade)
-		if readErr != nil {
-			return launchRecord{}, readErr
-		}
-		if !found {
-			return launchRecord{}, &Error{Code: CodeStateInvalid}
-		}
-	}
-	if err := validateLegacyLaunchUpgrade(upgrade, source); err != nil {
-		return launchRecord{}, err
-	}
-	if upgrade.Launch.RequestHash != requestHash {
-		return launchRecord{}, &Error{Code: CodeExecutionConflict}
-	}
-	return upgrade.Launch, nil
+	return launchRecord{}, &Error{Code: CodeLegacyExecutionRequiresNewAttempt}
 }
 
 func (adapter *Adapter) previewLegacyLaunchRecord(
@@ -506,11 +480,10 @@ func (adapter *Adapter) previewLegacyLaunchRecord(
 		}
 		return bound, true, nil
 	}
-	candidate, err := adapter.legacyLaunchCandidate(source, request, requestHash)
-	if err != nil {
+	if err := adapter.validateLegacyLaunchRequest(source, request); err != nil {
 		return launchRecord{}, false, err
 	}
-	return candidate, false, nil
+	return launchRecord{}, false, &Error{Code: CodeLegacyExecutionRequiresNewAttempt}
 }
 
 // loadLegacyBoundLaunchRecord resolves the complete immutable upgrade chain
@@ -566,13 +539,12 @@ func (adapter *Adapter) legacyLaunchSource(runPath string, original launchRecord
 	return source, nil
 }
 
-func (adapter *Adapter) legacyLaunchCandidate(
+func (adapter *Adapter) validateLegacyLaunchRequest(
 	legacy launchRecord,
 	request ports.AgentLaunchRequest,
-	requestHash string,
-) (launchRecord, error) {
+) error {
 	if legacy.SchemaVersion != profileStateSchemaVersion && adapter.accountProfileRef() != "" {
-		return launchRecord{}, &Error{Code: CodeAccountProfileUnavailable}
+		return &Error{Code: CodeAccountProfileUnavailable}
 	}
 	var legacyHash string
 	var err error
@@ -586,47 +558,15 @@ func (adapter *Adapter) legacyLaunchCandidate(
 	case profileStateSchemaVersion:
 		legacyHash, err = hashV6LaunchRequest(request, legacy.AccountProfileRef)
 	default:
-		return launchRecord{}, &Error{Code: CodeStateInvalid}
+		return &Error{Code: CodeStateInvalid}
 	}
 	if err != nil {
-		return launchRecord{}, &Error{Code: CodeStateInvalid, Cause: err}
+		return &Error{Code: CodeStateInvalid, Cause: err}
 	}
 	if legacy.RequestHash != legacyHash {
-		return launchRecord{}, &Error{Code: CodeExecutionConflict}
+		return &Error{Code: CodeExecutionConflict}
 	}
-	// V3-V6 did not persist reasoning effort in the request identity. Those
-	// adapters executed the composition-wide configured effort, so that exact
-	// effective value is the only deterministic historical binding available.
-	// Requiring it prevents a replay from claiming that a live legacy process
-	// was launched with a different per-request effort.
-	if request.ReasoningEffort != governance.ReasoningEffort(adapter.config.ReasoningEffort) {
-		return launchRecord{}, &Error{Code: CodeExecutionConflict}
-	}
-	candidate := launchRecord{
-		SchemaVersion:         stateSchemaVersion,
-		RequestHash:           requestHash,
-		ExecutionRef:          legacy.ExecutionRef,
-		ExecutionSessionRef:   request.SessionRef.String(),
-		ExecutionWorkspaceRef: request.ExecutionWorkspaceRef.String(),
-		AccountProfileRef:     legacy.AccountProfileRef,
-		ActorRef:              request.ActorRef.String(),
-		ProjectRef:            request.ProjectRef.String(),
-		GoalRef:               request.GoalRef.String(),
-		WorkItemRef:           request.WorkItemRef.String(),
-		PlanGeneration:        request.PlanGeneration,
-		AppSpecGeneration:     request.AppSpecGeneration,
-		ExecutionAttempt:      request.ExecutionAttempt,
-		SpecHash:              legacy.SpecHash,
-		ProviderRef:           legacy.ProviderRef,
-		ModelRef:              adapter.modelRef(),
-		AgentRef:              AgentRef,
-		ExternalRef:           legacy.ExternalRef,
-		IdempotencyKey:        legacy.IdempotencyKey,
-		AcceptedAt:            legacy.AcceptedAt,
-		MaxOutputBytes:        legacy.MaxOutputBytes,
-		ReasoningEffort:       request.ReasoningEffort,
-	}
-	return candidate, nil
+	return nil
 }
 
 func validateLegacyLaunchUpgrade(upgrade launchUpgradeRecord, legacy launchRecord) error {
