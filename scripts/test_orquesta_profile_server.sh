@@ -4,6 +4,7 @@ umask 077
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)"
 SCRIPT="$ROOT/scripts/orquesta_profile_server.sh"
+FIRECRACKER_PROBE="$ROOT/scripts/lib/firecracker_launcher_probe.py"
 TEST_PARENT="$(python3 - <<'PY'
 import os
 import pwd
@@ -25,9 +26,15 @@ FAKE_BWRAP_65536="$TEST_ROOT/fake-bwrap-65536"
 FAKE_BWRAP_FAILED="$TEST_ROOT/fake-bwrap-failed"
 FAKE_TOOLCHAIN="$TEST_ROOT/go-toolchain"
 UNSAFE_TOOLCHAIN="$TEST_ROOT/go-toolchain-unsafe"
+LAUNCHER_ROOT="$TEST_ROOT/firecracker-launcher"
+LAUNCHER_FIXTURE_PID=""
 mkdir -m 700 "$BASE" "$ACCOUNTS" "$GO_CACHE"
 
 cleanup() {
+  if [ -n "$LAUNCHER_FIXTURE_PID" ] &&
+    kill -0 "$LAUNCHER_FIXTURE_PID" 2>/dev/null; then
+    kill -TERM "$LAUNCHER_FIXTURE_PID" 2>/dev/null || true
+  fi
   for profile in CodexA CodexB; do
     "$SCRIPT" stop --profile "$profile" --runtime-base "$BASE" \
       >/dev/null 2>&1 || true
@@ -71,10 +78,11 @@ func main() {
 	}
 	sum := sha256.Sum256(auth)
 	observed := map[string]any{
-		"home":       os.Getenv("HOME"),
-		"codex_home": os.Getenv("CODEX_HOME"),
-		"auth_sha":   hex.EncodeToString(sum[:]),
+		"home":        os.Getenv("HOME"),
+		"codex_home":  os.Getenv("CODEX_HOME"),
+		"auth_sha":    hex.EncodeToString(sum[:]),
 		"environment": os.Environ(),
+		"pid":         os.Getpid(),
 	}
 	encoded, _ := json.Marshal(observed)
 	if err := os.WriteFile(filepath.Join(os.Getenv("HOME"), "observed.json"), encoded, 0o600); err != nil {
@@ -184,7 +192,10 @@ go version -m "$REAL_BINARY" |
     "$REAL_BINARY" serve --help
 ) >"$TEST_ROOT/real-cli-probe.out" 2>"$TEST_ROOT/real-cli-probe.err"
 grep -Fq 'orquesta serve [--config' "$TEST_ROOT/real-cli-probe.out"
-[ ! -s "$TEST_ROOT/real-cli-probe.err" ]
+if [ -s "$TEST_ROOT/real-cli-probe.err" ]; then
+  sed -n '1,20p' "$TEST_ROOT/real-cli-probe.err" >&2
+  exit 1
+fi
 [ -z "$(find "$REAL_CLI_PROBE_ROOT" -mindepth 1 -print -quit)" ]
 
 mkdir -m 700 "$FAKE_TOOLCHAIN" "$FAKE_TOOLCHAIN/bin"
@@ -316,6 +327,18 @@ start_profile() {
     --exec-path "$(dirname "$(realpath "$(command -v go)")"):/usr/local/bin:/usr/bin"
 }
 
+start_profile_with_driver() {
+  driver="$1"
+  profile="$2"
+  "$driver" start \
+    --profile "$profile" \
+    --runtime-base "$BASE" \
+    --source-codex-home "$ACCOUNTS/$profile" \
+    --binary "$FAKE_BINARY" \
+    --config "$TEST_ROOT/$profile.toml" \
+    --exec-path "$(dirname "$(realpath "$(command -v go)")"):/usr/local/bin:/usr/bin"
+}
+
 start_profile_with_nofile() {
   profile="$1"
   nofile="$2"
@@ -345,6 +368,79 @@ EOF
   chmod 600 "$TEST_ROOT/$profile.toml"
 }
 
+enable_microvm_attestor() {
+  profile="$1"
+  launcher_socket="$2"
+  cat >>"$TEST_ROOT/$profile.toml" <<EOF
+
+[test_attestor]
+provider = "microvm"
+max_subject_bytes = 536870912
+max_concurrent_runs = 16
+
+[test_attestor.microvm]
+launcher_socket = "$launcher_socket"
+expected_asset_digest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+guest_memory_mib = 4096
+EOF
+  chmod 600 "$TEST_ROOT/$profile.toml"
+}
+
+start_launcher_fixture() {
+  launcher_socket="$1"
+  observation="$2"
+  ready_file="$3"
+  unlink_after="${4:-no}"
+  connection_count="${5:-1}"
+  python3 - \
+    "$launcher_socket" \
+    "$observation" \
+    "$ready_file" \
+    "$unlink_after" \
+    "$connection_count" <<'PY' &
+import os
+import socket
+import sys
+
+socket_path, observation_path, ready_path, unlink_after, connection_count_text = sys.argv[1:]
+connection_count = int(connection_count_text)
+listener = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+listener.bind(socket_path)
+os.chmod(socket_path, 0o660)
+listener.listen(1)
+with open(ready_path, "x", encoding="ascii") as ready:
+    ready.write("ready\n")
+payload_bytes = 0
+for _ in range(connection_count):
+    connection, _ = listener.accept()
+    payload_bytes += len(connection.recv(1))
+    connection.close()
+with open(observation_path, "x", encoding="ascii") as observation:
+    observation.write(str(payload_bytes) + "\n")
+listener.close()
+if unlink_after == "yes":
+    os.unlink(socket_path)
+PY
+  launcher_pid="$!"
+  LAUNCHER_FIXTURE_PID="$launcher_pid"
+  for _ in $(seq 1 100); do
+    [ -e "$ready_file" ] && [ -S "$launcher_socket" ] && return
+    kill -0 "$launcher_pid" 2>/dev/null || return 1
+    sleep 0.01
+  done
+  return 1
+}
+
+expect_probe_status() {
+  expected_status="$1"
+  shift
+  set +e
+  "$@" >/dev/null 2>&1
+  observed_status="$?"
+  set -e
+  [ "$observed_status" -eq "$expected_status" ]
+}
+
 expect_failure() {
   expected="$1"
   shift
@@ -353,7 +449,10 @@ expect_failure() {
   result=$?
   set -e
   [ "$result" -ne 0 ]
-  grep -q "reason_code=$expected" "$TEST_ROOT/failure.err"
+  if ! grep -q "reason_code=$expected" "$TEST_ROOT/failure.err"; then
+    sed -n '1,20p' "$TEST_ROOT/failure.err" >&2
+    exit 1
+  fi
   if grep -E '/home/|/tmp/|auth.json|token' "$TEST_ROOT/failure.err"; then
     echo "el error publicó una ruta o nombre sensible" >&2
     exit 1
@@ -379,8 +478,96 @@ PY
 }
 
 bash -n "$SCRIPT"
+PYTHONPYCACHEPREFIX="$TEST_ROOT/pycache" \
+  python3 -m py_compile "$FIRECRACKER_PROBE"
 grep -Fq '[ "$(uname -s 2>/dev/null)" = "Linux" ] || fail "platform_unsupported"' \
   "$SCRIPT"
+
+# La sonda UDS no envía ninguna petición: solo conecta, acredita peer y cierra.
+mkdir -m 700 "$LAUNCHER_ROOT"
+launcher_uid="$(id -u)"
+launcher_gid="$(id -g)"
+PROFILE_TEST_DRIVER_ROOT="$TEST_ROOT/profile-test-driver"
+mkdir -m 700 "$PROFILE_TEST_DRIVER_ROOT" "$PROFILE_TEST_DRIVER_ROOT/lib"
+cp -- "$SCRIPT" "$PROFILE_TEST_DRIVER_ROOT/orquesta_profile_server.sh"
+cp -- \
+  "$FIRECRACKER_PROBE" \
+  "$ROOT/scripts/lib/pidfd_signal.py" \
+  "$PROFILE_TEST_DRIVER_ROOT/lib/"
+# Producción conserva peer root:root. La copia aislada solo permite que el
+# fixture no privilegiado recorra start/status/cleanup con el mismo protocolo.
+sed -i \
+  -e "s/--trusted-uid 0/--trusted-uid $launcher_uid/" \
+  -e "s/--trusted-gid 0/--trusted-gid $launcher_gid/" \
+  "$PROFILE_TEST_DRIVER_ROOT/orquesta_profile_server.sh"
+chmod 755 \
+  "$PROFILE_TEST_DRIVER_ROOT/orquesta_profile_server.sh" \
+  "$PROFILE_TEST_DRIVER_ROOT/lib/firecracker_launcher_probe.py" \
+  "$PROFILE_TEST_DRIVER_ROOT/lib/pidfd_signal.py"
+connectable_socket="$LAUNCHER_ROOT/connectable.sock"
+connectable_observation="$LAUNCHER_ROOT/connectable.observed"
+start_launcher_fixture \
+  "$connectable_socket" \
+  "$connectable_observation" \
+  "$LAUNCHER_ROOT/connectable.ready"
+"$FIRECRACKER_PROBE" \
+  --socket "$connectable_socket" \
+  --trusted-uid "$launcher_uid" \
+  --trusted-gid "$launcher_gid"
+wait "$LAUNCHER_FIXTURE_PID"
+LAUNCHER_FIXTURE_PID=""
+[ "$(<"$connectable_observation")" = "0" ]
+
+# Ausencia y un inode UDS sin listener fallan como indisponibilidad.
+expect_probe_status 41 \
+  "$FIRECRACKER_PROBE" \
+  --socket "$LAUNCHER_ROOT/missing.sock" \
+  --trusted-uid "$launcher_uid" \
+  --trusted-gid "$launcher_gid"
+rejected_socket="$LAUNCHER_ROOT/rejected.sock"
+python3 - "$rejected_socket" <<'PY'
+import os
+import socket
+import sys
+
+listener = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+listener.bind(sys.argv[1])
+os.chmod(sys.argv[1], 0o660)
+listener.close()
+PY
+expect_probe_status 41 \
+  "$FIRECRACKER_PROBE" \
+  --socket "$rejected_socket" \
+  --trusted-uid "$launcher_uid" \
+  --trusted-gid "$launcher_gid"
+
+# Symlink y peer con GID distinto no pueden acreditar el launcher configurado.
+identity_socket="$LAUNCHER_ROOT/identity.sock"
+start_launcher_fixture \
+  "$identity_socket" \
+  "$LAUNCHER_ROOT/identity.observed" \
+  "$LAUNCHER_ROOT/identity.ready"
+expect_probe_status 43 \
+  "$FIRECRACKER_PROBE" \
+  --socket "$identity_socket" \
+  --trusted-uid "$launcher_uid" \
+  --trusted-gid "$((launcher_gid + 1))"
+wait "$LAUNCHER_FIXTURE_PID"
+LAUNCHER_FIXTURE_PID=""
+symlink_target="$LAUNCHER_ROOT/symlink-target.sock"
+start_launcher_fixture \
+  "$symlink_target" \
+  "$LAUNCHER_ROOT/symlink.observed" \
+  "$LAUNCHER_ROOT/symlink.ready"
+ln -s "$symlink_target" "$LAUNCHER_ROOT/symlink.sock"
+expect_probe_status 42 \
+  "$FIRECRACKER_PROBE" \
+  --socket "$LAUNCHER_ROOT/symlink.sock" \
+  --trusted-uid "$launcher_uid" \
+  --trusted-gid "$launcher_gid"
+kill -TERM "$LAUNCHER_FIXTURE_PID"
+wait "$LAUNCHER_FIXTURE_PID" 2>/dev/null || true
+LAUNCHER_FIXTURE_PID=""
 
 prepare_account CodexA account-a
 prepare_account CodexB account-b
@@ -562,6 +749,86 @@ start_profile_with_nofile CodexA 4096 >/dev/null
 write_config CodexA "$(available_port)" 1 1048576
 start_profile_with_nofile CodexA 80 >/dev/null
 "$SCRIPT" stop --profile CodexA --runtime-base "$BASE" >/dev/null
+
+# MicroVM falla antes de publicar PID/running cuando el launcher no escucha.
+write_config CodexA "$(available_port)" 1 1048576
+profile_missing_socket="/run/orquesta-profile-server-test-$$.sock"
+[ ! -e "$profile_missing_socket" ]
+enable_microvm_attestor CodexA "$profile_missing_socket"
+expect_failure test_attestor_microvm_launcher_unavailable start_profile CodexA
+[ ! -e "$BASE/CodexA/run/server.pid" ]
+
+# Un launcher vivo permite el start, pero status deja de publicar running si
+# ese mismo UDS desaparece después de las sondas de arranque.
+status_socket="$LAUNCHER_ROOT/disappears-before-status.sock"
+status_observation="$LAUNCHER_ROOT/disappears-before-status.observed"
+start_launcher_fixture \
+  "$status_socket" \
+  "$status_observation" \
+  "$LAUNCHER_ROOT/disappears-before-status.ready" \
+  yes \
+  2
+write_config CodexA "$(available_port)" 1 1048576
+enable_microvm_attestor CodexA "$status_socket"
+start_profile_with_driver \
+  "$PROFILE_TEST_DRIVER_ROOT/orquesta_profile_server.sh" \
+  CodexA >/dev/null
+status_daemon_pid="$(<"$BASE/CodexA/run/server.pid")"
+wait "$LAUNCHER_FIXTURE_PID"
+LAUNCHER_FIXTURE_PID=""
+[ "$(<"$status_observation")" = "0" ]
+expect_failure test_attestor_microvm_launcher_unavailable \
+  "$PROFILE_TEST_DRIVER_ROOT/orquesta_profile_server.sh" \
+  status \
+  --profile CodexA \
+  --runtime-base "$BASE"
+kill -0 "$status_daemon_pid"
+"$PROFILE_TEST_DRIVER_ROOT/orquesta_profile_server.sh" \
+  stop \
+  --profile CodexA \
+  --runtime-base "$BASE" >/dev/null
+if kill -0 "$status_daemon_pid" 2>/dev/null; then
+  echo "el daemon sobrevivió al stop posterior al status microVM" >&2
+  exit 1
+fi
+
+# Si el launcher muere tras la primera sonda, el daemon ya arrancado se cierra
+# antes de publicar running y se retira toda su identidad de proceso.
+race_socket="$LAUNCHER_ROOT/disappears-after-preflight.sock"
+start_launcher_fixture \
+  "$race_socket" \
+  "$LAUNCHER_ROOT/disappears-after-preflight.observed" \
+  "$LAUNCHER_ROOT/disappears-after-preflight.ready" \
+  yes
+write_config CodexA "$(available_port)" 1 1048576
+enable_microvm_attestor CodexA "$race_socket"
+expect_failure test_attestor_microvm_launcher_unavailable \
+  start_profile_with_driver \
+  "$PROFILE_TEST_DRIVER_ROOT/orquesta_profile_server.sh" \
+  CodexA
+wait "$LAUNCHER_FIXTURE_PID"
+LAUNCHER_FIXTURE_PID=""
+race_daemon_pid="$(
+  python3 - "$BASE/CodexA/daemon-home/observed.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as handle:
+    print(json.load(handle)["pid"])
+PY
+)"
+[[ "$race_daemon_pid" =~ ^[1-9][0-9]*$ ]]
+for _ in $(seq 1 100); do
+  kill -0 "$race_daemon_pid" 2>/dev/null || break
+  sleep 0.01
+done
+if kill -0 "$race_daemon_pid" 2>/dev/null; then
+  echo "el daemon sobrevivió al fallo final del launcher microVM" >&2
+  exit 1
+fi
+[ ! -e "$BASE/CodexA/run/server.pid" ]
+[ ! -e "$BASE/CodexA/run/server.start_ref" ]
+[ ! -e "$BASE/CodexA/run/server.binary_id" ]
 
 # Un abuelo escribible invalida la cadena aunque root y perfil sigan en 0700.
 chmod 722 "$TEST_ROOT"
