@@ -623,9 +623,9 @@ func (adapter *Adapter) waitForExecution(
 				return
 			}
 			// A forced proof superseded the cooperative snapshot while its
-			// leader was settling. Re-evaluate as forced and run the normal
-			// cleanup path so cleanup failures still outrank stopped.
-			proof = currentProof
+			// leader was settling. Fall through to the normal cleanup path;
+			// the proof is read again under the mutex before completion so
+			// cleanup failures still outrank stopped.
 			adapter.mu.Unlock()
 		}
 	}
