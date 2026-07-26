@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"orquesta/internal/governance"
 	"orquesta/internal/ports"
 )
 
@@ -314,6 +315,31 @@ func TestAccountProfileRejectsAccountlessLegacyJournals(t *testing.T) {
 	}
 }
 
+func TestAccountProfileV6ReplayBindsV7Reasoning(t *testing.T) {
+	root, _ := secureAccountFixture(t, accountTestProfile)
+	config := accountTestConfig(t, root, accountTestProfile)
+	request := testRequest(t, "account-v6-v7-reasoning", "helper:account-home", 1024)
+	request.ReasoningEffort = governance.ReasoningEffortHigh
+	runPath := seedPersistedV6Launch(t, config, request)
+
+	adapter := openTestAdapter(t, config)
+	if _, err := adapter.Launch(context.Background(), request); err != nil {
+		t.Fatalf("Launch(V6 account replay) error=%v", err)
+	}
+	observation := awaitTerminal(t, adapter, request.ExecutionRef)
+	if observation.Status != ports.AgentFailed || observation.ErrorCode != CodeExecutionInterrupted {
+		t.Fatalf("V6 account replay observation=%+v", observation)
+	}
+	var upgrade launchUpgradeRecord
+	found, err := adapter.readPrivateJSON(filepath.ToSlash(filepath.Join(runPath, launchUpgradeFileName)), &upgrade)
+	if err != nil || !found ||
+		upgrade.SourceSchemaVersion != profileStateSchemaVersion ||
+		upgrade.Launch.ReasoningEffort != request.ReasoningEffort ||
+		upgrade.Launch.AccountProfileRef != adapter.accountProfileRef() {
+		t.Fatalf("account V6 -> V7 upgrade=%+v found=%v error=%v", upgrade, found, err)
+	}
+}
+
 func TestAccountProfileIdentitySeparatesRootsWithSameProfileName(t *testing.T) {
 	firstRoot, _ := secureAccountFixture(t, accountTestProfile)
 	secondRoot, _ := secureAccountFixture(t, accountTestProfile)
@@ -449,9 +475,9 @@ func TestAccountProfileRemovalFailsBeforeReplay(t *testing.T) {
 	}
 }
 
-func TestV6UpgradePreservesDurableV5UpgradeAsCausalSource(t *testing.T) {
+func TestV7UpgradePreservesDurableV6UpgradeAsCausalSource(t *testing.T) {
 	config := testConfig(t)
-	request := testRequest(t, "v5-v6-upgrade-chain", "helper:success", 1024)
+	request := testRequest(t, "v6-v7-upgrade-chain", "helper:success", 1024)
 	seedAccountlessLaunchRecord(t, config, request, legacyStateSchemaVersion)
 	seeder, err := New(config)
 	if err != nil {
@@ -471,6 +497,16 @@ func TestV6UpgradePreservesDurableV5UpgradeAsCausalSource(t *testing.T) {
 	if created, err := seeder.publishJSON(runPath, legacyLaunchUpgradeFileName, oldUpgrade); err != nil || !created {
 		t.Fatalf("publish old upgrade created=%v error=%v", created, err)
 	}
+	v6 := profileV6Record(t, v5, request)
+	v6Upgrade := launchUpgradeRecord{
+		SchemaVersion:       profileStateSchemaVersion,
+		SourceSchemaVersion: v5.SchemaVersion,
+		SourceRequestHash:   v5.RequestHash,
+		Launch:              v6,
+	}
+	if created, err := seeder.publishJSON(runPath, profileLaunchUpgradeFileName, v6Upgrade); err != nil || !created {
+		t.Fatalf("publish V6 upgrade created=%v error=%v", created, err)
+	}
 	currentHash, err := hashLaunchRequest(request)
 	if err != nil {
 		t.Fatal(err)
@@ -486,12 +522,13 @@ func TestV6UpgradePreservesDurableV5UpgradeAsCausalSource(t *testing.T) {
 	var upgrade launchUpgradeRecord
 	found, err = adapter.readPrivateJSON(filepath.ToSlash(filepath.Join(runPath, launchUpgradeFileName)), &upgrade)
 	if err != nil || !found {
-		t.Fatalf("read V6 upgrade found=%v error=%v", found, err)
+		t.Fatalf("read V7 upgrade found=%v error=%v", found, err)
 	}
-	if upgrade.SourceSchemaVersion != accountlessStateSchemaVersion ||
-		upgrade.SourceRequestHash != v5.RequestHash ||
-		upgrade.Launch.SchemaVersion != stateSchemaVersion {
-		t.Fatalf("V5 -> V6 causal chain lost: %+v", upgrade)
+	if upgrade.SourceSchemaVersion != profileStateSchemaVersion ||
+		upgrade.SourceRequestHash != v6.RequestHash ||
+		upgrade.Launch.SchemaVersion != stateSchemaVersion ||
+		upgrade.Launch.ReasoningEffort != request.ReasoningEffort {
+		t.Fatalf("V6 -> V7 causal chain lost: %+v", upgrade)
 	}
 }
 
@@ -523,6 +560,18 @@ func accountlessV5Record(t *testing.T, legacy launchRecord, request ports.AgentL
 		AcceptedAt:            legacy.AcceptedAt,
 		MaxOutputBytes:        legacy.MaxOutputBytes,
 	}
+}
+
+func profileV6Record(t *testing.T, legacy launchRecord, request ports.AgentLaunchRequest) launchRecord {
+	t.Helper()
+	requestHash, err := hashV6LaunchRequest(request, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := accountlessV5Record(t, legacy, request)
+	record.SchemaVersion = profileStateSchemaVersion
+	record.RequestHash = requestHash
+	return record
 }
 
 func seedAccountlessLaunchRecord(

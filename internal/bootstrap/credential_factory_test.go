@@ -34,10 +34,14 @@ const (
 )
 
 func init() {
-	if len(os.Args) < 2 || os.Args[1] != "exec" {
+	if len(os.Args) < 2 || os.Args[1] != "--ask-for-approval" {
 		return
 	}
-	if err := runBootstrapCredentialCodexHelper(os.Args[2:]); err != nil {
+	if len(os.Args) < 4 || os.Args[2] != "never" || os.Args[3] != "exec" {
+		_, _ = fmt.Fprintln(os.Stderr, "bootstrap helper requires non-interactive approval")
+		os.Exit(91)
+	}
+	if err := runBootstrapCredentialCodexHelper(os.Args[4:]); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(91)
 	}

@@ -464,7 +464,8 @@ func (adapter *Adapter) Launch(ctx context.Context, request ports.AgentLaunchReq
 			}
 			return ports.AgentLaunchReceipt{}, preflightErr
 		}
-		if !trustedReplay && session == nil && adapter.config.CredentialStore == nil {
+		if !trustedReplay && session == nil && adapter.config.CredentialStore == nil &&
+			record.AccountProfileRef == "" {
 			return ports.AgentLaunchReceipt{}, &Error{Code: CodeSessionUnavailable}
 		}
 		if adapter.config.CredentialStore != nil {

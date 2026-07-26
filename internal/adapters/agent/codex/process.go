@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"orquesta/internal/governance"
 	"orquesta/internal/ports"
 )
 
@@ -163,7 +164,8 @@ func (adapter *Adapter) startExecutionLocked(
 				CompletionPublicKey: publicKey, CompletionPrivateKey: privateKey,
 				Command: adapter.command,
 				Arguments: adapter.commandArgumentsWithSession(
-					state.runPath, workspaceBound, workspaceBound && len(request.WriteSet) != 0, session,
+					state.runPath, workspaceBound, workspaceBound && len(request.WriteSet) != 0,
+					request.ReasoningEffort, session,
 				),
 				Environment: append([]string(nil), environment...), WorkingDirectory: workingDirectory,
 				Prompt: prompt, RunDirectory: runDirectory,
@@ -197,7 +199,8 @@ func (adapter *Adapter) startExecutionLocked(
 		}
 	} else {
 		command, gateReader, gateWriter, commandErr = adapter.executionWorkspaceCommand(
-			runContext, state.runPath, workspaceBound, workspaceBound && len(request.WriteSet) != 0, session,
+			runContext, state.runPath, workspaceBound, workspaceBound && len(request.WriteSet) != 0,
+			request.ReasoningEffort, session,
 		)
 	}
 	if commandErr != nil {
@@ -511,13 +514,17 @@ func (adapter *Adapter) executionWorkingDirectory(ctx context.Context, request p
 // existing non-workspace control tests. Production launch uses the explicit
 // workspace variant below.
 func (adapter *Adapter) executionCommand(runContext context.Context, runPath string) (*exec.Cmd, *os.File, *os.File, error) {
-	return adapter.executionWorkspaceCommand(runContext, runPath, false, false, nil)
+	return adapter.executionWorkspaceCommand(
+		runContext, runPath, false, false, governance.ReasoningEffort(adapter.config.ReasoningEffort), nil,
+	)
 }
 
 func (adapter *Adapter) executionWorkspaceCommand(runContext context.Context, runPath string,
-	workspaceBound, workspaceWritable bool, session *resolvedSession,
+	workspaceBound, workspaceWritable bool, reasoningEffort governance.ReasoningEffort, session *resolvedSession,
 ) (*exec.Cmd, *os.File, *os.File, error) {
-	arguments := adapter.commandArgumentsWithSession(runPath, workspaceBound, workspaceWritable, session)
+	arguments := adapter.commandArgumentsWithSession(
+		runPath, workspaceBound, workspaceWritable, reasoningEffort, session,
+	)
 	if !adapter.processControlsEnabled() {
 		return exec.CommandContext(runContext, adapter.command, arguments...), nil, nil, nil
 	}
@@ -991,10 +998,17 @@ func (adapter *Adapter) commandArguments(runPath string, workspace ...bool) []st
 	if len(workspace) >= 2 {
 		workspaceBound, workspaceWritable = workspace[0], workspace[0] && workspace[1]
 	}
-	return adapter.commandArgumentsWithSession(runPath, workspaceBound, workspaceWritable, nil)
+	return adapter.commandArgumentsWithSession(
+		runPath, workspaceBound, workspaceWritable, governance.ReasoningEffort(adapter.config.ReasoningEffort), nil,
+	)
 }
 
-func (adapter *Adapter) commandArgumentsWithSession(runPath string, workspaceBound, workspaceWritable bool, session *resolvedSession) []string {
+func (adapter *Adapter) commandArgumentsWithSession(
+	runPath string,
+	workspaceBound, workspaceWritable bool,
+	reasoningEffort governance.ReasoningEffort,
+	session *resolvedSession,
+) []string {
 	schemaPath := filepath.Join(adapter.rootPath, filepath.FromSlash(path.Join(runPath, outputSchemaFileName)))
 	lastMessagePath := filepath.Join(adapter.rootPath, filepath.FromSlash(path.Join(runPath, lastMessageFileName)))
 	arguments := []string{
@@ -1008,7 +1022,7 @@ func (adapter *Adapter) commandArgumentsWithSession(runPath string, workspaceBou
 		"--sandbox", codexSandbox(workspaceWritable),
 		"--output-schema", schemaPath,
 		"--output-last-message", lastMessagePath,
-		"--config", fmt.Sprintf("model_reasoning_effort=%q", adapter.config.ReasoningEffort),
+		"--config", fmt.Sprintf("model_reasoning_effort=%q", reasoningEffort),
 		"--config", `shell_environment_policy.inherit="all"`,
 		"--config", adapter.shellEnvironmentIncludeOnly(),
 		"--config", shellEnvironmentExclude(adapter.config.MCPBearerTokenEnvVar),
