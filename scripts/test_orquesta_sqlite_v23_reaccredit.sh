@@ -510,6 +510,9 @@ grep -q 'reason_code=command_failed' "$FIXTURE/stderr" ||
 [ "$("$COMMANDS/systemctl" --user show ignored.service \
   --property=LoadState --value)" = "not-found" ] ||
   fail_test "start_failure_unit_residue"
+if find "$OUTPUT/accounts" -type f -name auth.json -print -quit | grep -q .; then
+  fail_test "start_failure_auth_residue"
+fi
 
 write_fixture config-live
 python3 - "$PRIVATE/config-template.toml" "$LIVE/tool" <<'PY'

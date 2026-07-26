@@ -1055,6 +1055,10 @@ def main(arguments: Sequence[str]) -> int:
     output_root: Path | None = None
     runner: Runner | None = None
     cleanup_args: dict[str, Any] | None = None
+    cleanup_guard: IntegrityGuard | None = None
+    credential_cleanup_context: (
+        tuple[Path, dict[str, Path], str] | None
+    ) = None
     try:
         if not REVISION_RE.fullmatch(args.expected_revision):
             fail("expected_revision_invalid")
@@ -1326,6 +1330,11 @@ def main(arguments: Sequence[str]) -> int:
             bubblewrap,
             live_root,
         )
+        credential_cleanup_context = (
+            projected_auth,
+            isolated_config_paths,
+            synthetic_auth_sha,
+        )
         database = runtime_root / "state" / "orquesta.sqlite"
         database.parent.mkdir(mode=0o700, parents=True)
         os.chmod(database.parent, 0o700)
@@ -1358,6 +1367,19 @@ def main(arguments: Sequence[str]) -> int:
                 )
             )
         guard = IntegrityGuard([*source_guard.files, *projected_guard_files])
+        cleanup_guard = IntegrityGuard(
+            [
+                *projected_guard_files,
+                GuardedFile(
+                    "systemctl", systemctl, args.expected_systemctl_sha256
+                ),
+                GuardedFile(
+                    "systemd_run",
+                    systemd_run,
+                    args.expected_systemd_run_sha256,
+                ),
+            ]
+        )
         guard.verify()
         runner = Runner(output_root, guard, args.command_timeout)
         buildinfo = runner.run(
@@ -1740,6 +1762,8 @@ def main(arguments: Sequence[str]) -> int:
         if output_root is not None and output_root.exists():
             if runner is not None and cleanup_args is not None:
                 try:
+                    if cleanup_guard is not None:
+                        runner.guard = cleanup_guard
                     adapter_path = cleanup_args["adapter"]
                     common_cleanup = {
                         key: value
@@ -1763,6 +1787,13 @@ def main(arguments: Sequence[str]) -> int:
                         except HarnessError:
                             continue
                 except (HarnessError, KeyError):
+                    pass
+            if credential_cleanup_context is not None:
+                try:
+                    remove_credential_projections(
+                        output_root, *credential_cleanup_context
+                    )
+                except HarnessError:
                     pass
             failure_path = output_root / "failure.json"
             if not failure_path.exists():
