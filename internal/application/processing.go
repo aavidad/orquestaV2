@@ -89,12 +89,13 @@ func (orchestrator *Orchestrator) processIrreversibleRetryBudget(
 	execution, executionFound := executionForAction(record, claim.Action)
 	predecessor, predecessorFound := executionByRef(record.Executions, execution.ReplacesExecutionRef)
 	intent, intentFound := effectIntentByRef(record.EffectIntents, claim.Action.EffectIntentRef)
+	localState := execution.State == ExecutionQueued || execution.State == ExecutionDispatching
 	if !itemFound || !executionFound || !predecessorFound || !intentFound ||
-		execution.State != ExecutionQueued || execution.AttemptNo <= 1 ||
+		!localState || execution.AttemptNo <= 1 ||
 		predecessor.Ref != execution.ReplacesExecutionRef || predecessor.State != ExecutionFailed ||
 		predecessor.GoalRef != execution.GoalRef || predecessor.WorkItemRef != execution.WorkItemRef ||
 		execution.BudgetReservationRef != "" || execution.EffectIntentRef != "" ||
-		execution.LaunchReceiptRef != "" || execution.ExecutionSessionRef.String() != "" ||
+		execution.LaunchReceiptRef != "" ||
 		!execution.StartedAt.IsZero() || !execution.ProviderAcceptedAt.IsZero() ||
 		claim.BudgetReservationRef != "" || claim.BudgetReservation != (governance.BudgetReservation{}) ||
 		intent.Ref != claim.Action.EffectIntent.Ref ||
@@ -1023,6 +1024,7 @@ func (orchestrator *Orchestrator) interruptExhaustedExecution(
 	definitelyUnapplied bool,
 ) error {
 	at = lifecycleTime(at, record.Goal, item)
+	expectedExecutionState := execution.State
 	aggregate, err := record.Goal.InterruptWorkItem(
 		record.Goal.Revision(), item.Revision(), item.Ref(), execution.Ref,
 		goal.WorkItemInterruptExecutionFailed, at,
@@ -1061,7 +1063,8 @@ func (orchestrator *Orchestrator) interruptExhaustedExecution(
 	events = append(events, scheduledEvents...)
 	return orchestrator.state.RecordExecutionInterrupted(ctx, ExecutionInterruptedState{
 		Claim: claim, ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: item.Revision(),
-		Goal: aggregate, Execution: execution, NewExecutions: newExecutions, NewActions: newActions,
+		ExpectedExecutionState: expectedExecutionState,
+		Goal:                   aggregate, Execution: execution, NewExecutions: newExecutions, NewActions: newActions,
 		Events: events, BudgetSettlement: settlement, OperationAt: at,
 	})
 }

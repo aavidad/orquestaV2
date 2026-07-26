@@ -19,6 +19,7 @@ func (orchestrator *Orchestrator) replaceCouncilExecution(ctx context.Context, c
 		return &StateError{Code: StateConflict}
 	}
 	at = lifecycleTime(at, record.Goal, item)
+	expectedExecutionState := execution.State
 	execution.State, execution.FailureCode, execution.FinishedAt = ExecutionFailed, stableFailureCode(code), at.UTC()
 	settlement, err := settlementForExecutionAttempt(record, claim, execution, usage, diskBytes, at, definitelyUnapplied)
 	if err != nil {
@@ -51,7 +52,8 @@ func (orchestrator *Orchestrator) replaceCouncilExecution(ctx context.Context, c
 			GoalRef: record.Goal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: execution.Ref, OccurredAt: at.UTC()}},
 			cleanupEvents...)
 		return orchestrator.state.RecordCouncilExecutionFailed(ctx, CouncilExecutionFailedState{Claim: claim,
-			ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: item.Revision(), Execution: execution,
+			ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: item.Revision(),
+			ExpectedExecutionState: expectedExecutionState, Execution: execution,
 			Goal: aggregate, AuthorExecution: author, RetiredPeers: retired, RetireActionRefs: actionRefs,
 			CleanupControls: cleanupControls, CleanupActions: cleanupActions,
 			BudgetSettlement: settlement, Events: events, OperationAt: at.UTC()})
@@ -84,7 +86,8 @@ func (orchestrator *Orchestrator) replaceCouncilExecution(ctx context.Context, c
 		{Ref: "event:council-queued:" + replacement.Ref.String(), Kind: "council.queued", GoalRef: record.Goal.Ref(), WorkItemRef: item.Ref(), ExecutionRef: replacement.Ref, OccurredAt: at.UTC()},
 	}
 	return orchestrator.state.RecordCouncilExecutionReplaced(ctx, CouncilExecutionReplacedState{Claim: claim,
-		ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: item.Revision(), FailedExecution: execution,
+		ExpectedGoalRevision: record.Goal.Revision(), ExpectedItemRevision: item.Revision(),
+		ExpectedExecutionState: expectedExecutionState, FailedExecution: execution,
 		ReplacementExecution: replacement, NextAction: next, BudgetSettlement: settlement, Events: events, OperationAt: at.UTC()})
 }
 

@@ -1284,6 +1284,11 @@ func validateExecutionReplaced(state application.ExecutionReplacedState) error {
 }
 
 func validateExecutionInterrupted(state application.ExecutionInterruptedState) error {
+	if err := validateFailedExecutionExpectedState(
+		state.Claim, state.ExpectedExecutionState, true,
+	); err != nil {
+		return err
+	}
 	item, err := validateGoalMutation(
 		state.Claim, state.ExpectedGoalRevision, state.ExpectedItemRevision,
 		state.Goal, state.Execution,
@@ -1311,6 +1316,30 @@ func validateExecutionInterrupted(state application.ExecutionInterruptedState) e
 			newEventSemantic("execution.queued", execution.WorkItemRef, execution.Ref))
 	}
 	return validateExactMutationEvents(state.Events, state.Goal, requiredEvents, false)
+}
+
+func validateFailedExecutionExpectedState(
+	claim application.ActionClaim,
+	expected application.ExecutionState,
+	allowIrreversible bool,
+) error {
+	switch claim.Disposition {
+	case application.ActionClaimDispositionNormal:
+		if claim.Action.Kind == application.ActionLaunchAgent &&
+			expected == application.ExecutionDispatching {
+			return nil
+		}
+		if claim.Action.Kind == application.ActionObserveAgent &&
+			expected == application.ExecutionRunning {
+			return nil
+		}
+	case application.ActionClaimDispositionRetryBudgetIrreversible:
+		if allowIrreversible && claim.Action.Kind == application.ActionLaunchAgent &&
+			(expected == application.ExecutionQueued || expected == application.ExecutionDispatching) {
+			return nil
+		}
+	}
+	return errors.New("sqlite.failed_execution_expected_state_invalid")
 }
 
 func validateSucceeded(state application.GoalSucceededState) (goal.WorkItem, error) {

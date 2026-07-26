@@ -1681,6 +1681,9 @@ func (repository *memoryRepository) RecordExecutionInterrupted(
 		state.Execution.RecipientMailboxRetired = true
 	}
 	record := repository.records[state.Goal.Ref()]
+	if storedExecutionState(record.Executions, state.Execution.Ref) != state.ExpectedExecutionState {
+		return &StateError{Code: StateConflict}
+	}
 	if err := repository.validateBudgetSettlementLocked(record, state.BudgetSettlement); err != nil {
 		return err
 	}
@@ -2268,6 +2271,9 @@ func (repository *memoryRepository) RecordCouncilExecutionReplaced(_ context.Con
 	if !validCouncilReplacement(state.Claim, record, state.FailedExecution, state.ReplacementExecution, state.NextAction) {
 		return &StateError{Code: StateInvalid}
 	}
+	if storedExecutionState(record.Executions, state.FailedExecution.Ref) != state.ExpectedExecutionState {
+		return &StateError{Code: StateConflict}
+	}
 	if _, exists := repository.actions[state.NextAction.Ref]; exists {
 		return &StateError{Code: StateConflict}
 	}
@@ -2298,16 +2304,12 @@ func (repository *memoryRepository) RecordCouncilExecutionFailed(_ context.Conte
 	record := repository.records[state.Claim.Action.GoalRef]
 	role, councilExecution := councilRole(state.Execution)
 	round, found := councilRoundForSubject(record.CouncilRounds, state.Execution.CouncilSubjectDigest)
-	expected := ExecutionRunning
-	if state.Claim.Action.Kind == ActionLaunchAgent {
-		expected = ExecutionDispatching
-	}
 	if !councilExecution || !found || role == "" || state.Execution.Ref != state.Claim.Action.ExecutionRef ||
 		state.Execution.GoalRef != record.Goal.Ref() || state.Execution.WorkItemRef != state.Claim.Action.WorkItemRef ||
 		state.Execution.State != ExecutionFailed || state.Execution.ReviewSubjectDigest != "" ||
 		state.Execution.CouncilSubjectDigest != round.SubjectDigest || state.Execution.FailureCode == "" ||
 		(state.Claim.Action.Kind != ActionLaunchAgent && state.Claim.Action.Kind != ActionObserveAgent) ||
-		storedExecutionState(record.Executions, state.Execution.Ref) != expected ||
+		storedExecutionState(record.Executions, state.Execution.Ref) != state.ExpectedExecutionState ||
 		len(factsForCouncilSubjectRole(record.CouncilFacts, round.SubjectDigest, role)) != 0 {
 		return &StateError{Code: StateInvalid}
 	}
@@ -2559,6 +2561,9 @@ func (repository *memoryRepository) RecordReviewExecutionReplaced(_ context.Cont
 		state.NextAction.ExecutionRef != state.ReplacementExecution.Ref {
 		return &StateError{Code: StateInvalid}
 	}
+	if storedExecutionState(record.Executions, state.FailedExecution.Ref) != state.ExpectedExecutionState {
+		return &StateError{Code: StateConflict}
+	}
 	if err := repository.validateBudgetSettlementLocked(record, state.BudgetSettlement); err != nil {
 		return err
 	}
@@ -2594,6 +2599,9 @@ func (repository *memoryRepository) RecordReviewExecutionFailed(_ context.Contex
 		(state.AuthorExecution.Ref.String() != "" && state.AuthorExecution.State != ExecutionFailed) ||
 		(state.AuthorExecution.Ref.String() == "" && len(state.CleanupControls) == 0 && state.ResolvedCleanup == nil) {
 		return &StateError{Code: StateInvalid}
+	}
+	if storedExecutionState(record.Executions, state.Execution.Ref) != state.ExpectedExecutionState {
+		return &StateError{Code: StateConflict}
 	}
 	if err := repository.validateBudgetSettlementLocked(record, state.BudgetSettlement); err != nil {
 		return err
