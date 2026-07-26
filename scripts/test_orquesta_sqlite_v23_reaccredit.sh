@@ -24,6 +24,26 @@ fail_test() {
   exit 1
 }
 
+assert_failure_cleanup() {
+  expected_reason="$1"
+  expected_verified="$2"
+  expected_unit_state="$3"
+  python3 - "$OUTPUT/failure.json" "$expected_reason" \
+    "$expected_verified" "$expected_unit_state" <<'PY'
+import json
+import pathlib
+import sys
+
+receipt = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert receipt["result"] == "fail"
+assert receipt["reason_code"] == sys.argv[2]
+assert receipt["cleanup_verified"] is (sys.argv[3] == "true")
+assert receipt["residues"]["unit_load_state"] == sys.argv[4]
+assert isinstance(receipt["cleanup_attempts"], list)
+assert not receipt["residues"]["credential_projections"]
+PY
+}
+
 sha256_of() {
   sha256sum -- "$1" | awk '{print $1}'
 }
@@ -80,8 +100,10 @@ EOF
 import hashlib
 import os
 import pathlib
+import signal
 import sqlite3
 import sys
+import time
 import tomllib
 
 args = sys.argv[1:]
@@ -192,6 +214,12 @@ if operation == "start":
             encoding="utf-8",
         )
     state.write_text("loaded\n", encoding="utf-8")
+    if (systemctl.parent / "break-evidence-after-unit").exists():
+        evidence = pathlib.Path(values["--config"]).parent / "evidence"
+        evidence.rename(evidence.with_name("evidence-before-fault"))
+        evidence.write_text("fault\n", encoding="utf-8")
+    if (systemctl.parent / "hang-start-after-unit").exists():
+        time.sleep(30)
     if (systemctl.parent / "fail-start-after-unit").exists():
         raise SystemExit(97)
     print(
@@ -206,12 +234,27 @@ elif operation == "check":
         f"main_pid=100 daemon_pid=101 invocation_id={invocation}"
     )
 elif operation == "stop-profile":
+    if (systemctl.parent / "cleanup-actions-fail").exists():
+        raise SystemExit(98)
+    if (systemctl.parent / "cleanup-hangs-with-child").exists():
+        child = os.fork()
+        if child == 0:
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
+            time.sleep(30)
+            raise SystemExit(0)
+        (systemctl.parent / "cleanup-child-pid").write_text(
+            str(child) + "\n",
+            encoding="utf-8",
+        )
+        time.sleep(30)
     print(
         "orquesta_profile_systemd_user: status=profile_stopped "
         f"action=stop-profile unit={values['--unit']} "
         f"profile={values['--profile']} invocation_id={invocation}"
     )
 elif operation == "collect":
+    if (systemctl.parent / "cleanup-actions-fail").exists():
+        raise SystemExit(99)
     state.write_text("not-found\n", encoding="utf-8")
     print(
         "orquesta_profile_systemd_user: status=collected action=collect "
@@ -236,13 +279,22 @@ set -euo pipefail
 state_file="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/unit-state"
 unit=""
 property=""
+action=""
 for argument in "$@"; do
   case "$argument" in
     --property=*) property="${argument#--property=}" ;;
+    stop|reset-failed) action="$argument" ;;
     *.service) unit="$argument" ;;
   esac
 done
-if [ "$property" = "ControlGroup" ]; then
+if [ -n "$action" ]; then
+  if [ -e "$(dirname "$state_file")/systemctl-fallback-fails" ]; then
+    exit 1
+  fi
+  if [ "$action" = stop ]; then
+    printf '%s\n' 'not-found' >"$state_file"
+  fi
+elif [ "$property" = "ControlGroup" ]; then
   if [ -n "$unit" ]; then
     printf '/user.slice/user-%s.slice/user@%s.service/app.slice/%s\n' \
       "$(id -u)" "$(id -u)" "$unit"
@@ -608,6 +660,102 @@ grep -q 'reason_code=command_failed' "$FIXTURE/stderr" ||
   fail_test "start_failure_unit_residue"
 if find "$OUTPUT/accounts" -type f -name auth.json -print -quit | grep -q .; then
   fail_test "start_failure_auth_residue"
+fi
+assert_failure_cleanup command_failed true not-found ||
+  fail_test "start_failure_cleanup_receipt"
+
+write_fixture cleanup-fallback
+: >"$COMMANDS/fail-start-after-unit"
+: >"$COMMANDS/cleanup-actions-fail"
+set_common_value --command-timeout 1
+if "$SUBJECT" "${COMMON[@]}" >"$FIXTURE/stdout" 2>"$FIXTURE/stderr"; then
+  fail_test "cleanup_fallback_failure_accepted"
+fi
+assert_failure_cleanup command_failed true not-found ||
+  fail_test "cleanup_fallback_receipt"
+python3 - "$OUTPUT/failure.json" <<'PY' ||
+import json
+import pathlib
+import sys
+
+receipt = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+returncodes = {
+    item["label"]: item["returncode"] for item in receipt["cleanup_attempts"]
+}
+assert returncodes["failure-cleanup-stop"] == 98
+assert returncodes["failure-cleanup-collect"] == 99
+assert returncodes["failure-cleanup-systemctl-stop"] == 0
+PY
+  fail_test "cleanup_fallback_attempts"
+
+write_fixture cleanup-residue
+: >"$COMMANDS/fail-start-after-unit"
+: >"$COMMANDS/cleanup-actions-fail"
+: >"$COMMANDS/systemctl-fallback-fails"
+set_common_value --command-timeout 1
+if "$SUBJECT" "${COMMON[@]}" >"$FIXTURE/stdout" 2>"$FIXTURE/stderr"; then
+  fail_test "cleanup_residue_failure_accepted"
+fi
+assert_failure_cleanup command_failed false loaded ||
+  fail_test "cleanup_residue_receipt"
+
+write_fixture start-timeout
+: >"$COMMANDS/hang-start-after-unit"
+set_common_value --command-timeout 1
+if "$SUBJECT" "${COMMON[@]}" >"$FIXTURE/stdout" 2>"$FIXTURE/stderr"; then
+  fail_test "start_timeout_accepted"
+fi
+assert_failure_cleanup command_timeout true not-found ||
+  fail_test "start_timeout_cleanup_receipt"
+
+write_fixture post-start-os-error
+: >"$COMMANDS/break-evidence-after-unit"
+if "$SUBJECT" "${COMMON[@]}" >"$FIXTURE/stdout" 2>"$FIXTURE/stderr"; then
+  fail_test "post_start_os_error_accepted"
+fi
+assert_failure_cleanup unexpected_os_error true not-found ||
+  fail_test "post_start_os_error_cleanup_receipt"
+
+for requested_signal in TERM INT HUP; do
+  write_fixture "signal-${requested_signal,,}"
+  : >"$COMMANDS/hang-start-after-unit"
+  set_common_value --command-timeout 30
+  "$SUBJECT" "${COMMON[@]}" >"$FIXTURE/stdout" 2>"$FIXTURE/stderr" &
+  harness_pid="$!"
+  loaded=false
+  for _ in $(seq 1 100); do
+    if [ -f "$COMMANDS/unit-state" ] &&
+      [ "$(<"$COMMANDS/unit-state")" = loaded ]; then
+      loaded=true
+      break
+    fi
+    sleep 0.05
+  done
+  [ "$loaded" = true ] || fail_test "signal_unit_not_started"
+  kill "-$requested_signal" "$harness_pid"
+  set +e
+  wait "$harness_pid"
+  signal_status="$?"
+  set -e
+  [ "$signal_status" -ne 0 ] || fail_test "signal_exit_zero"
+  assert_failure_cleanup interrupted_by_signal true not-found ||
+    fail_test "signal_cleanup_receipt"
+done
+
+write_fixture cleanup-timeout-child
+: >"$COMMANDS/fail-start-after-unit"
+: >"$COMMANDS/cleanup-hangs-with-child"
+set_common_value --command-timeout 1
+if "$SUBJECT" "${COMMON[@]}" >"$FIXTURE/stdout" 2>"$FIXTURE/stderr"; then
+  fail_test "cleanup_timeout_child_accepted"
+fi
+assert_failure_cleanup command_failed true not-found ||
+  fail_test "cleanup_timeout_child_receipt"
+cleanup_child_pid="$(<"$COMMANDS/cleanup-child-pid")"
+if [ -r "/proc/$cleanup_child_pid/stat" ]; then
+  cleanup_child_state="$(awk '{print $3}' "/proc/$cleanup_child_pid/stat")"
+  [ "$cleanup_child_state" = Z ] ||
+    fail_test "cleanup_timeout_child_alive"
 fi
 
 write_fixture new-functional-row

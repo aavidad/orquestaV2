@@ -11,12 +11,14 @@ import json
 import os
 import re
 import secrets
+import signal
 import shutil
 import socket
 import sqlite3
 import stat
 import subprocess
 import sys
+import time
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -771,20 +773,27 @@ class Runner:
         for name in ("DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR"):
             if name in os.environ:
                 environment[name] = os.environ[name]
+        process: subprocess.Popen[bytes] | None = None
         try:
-            completed = subprocess.run(
+            process = subprocess.Popen(
                 list(argv),
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                timeout=self.timeout,
-                check=False,
                 env=environment,
+                start_new_session=True,
             )
+            stdout_full, stderr_full = process.communicate(timeout=self.timeout)
         except subprocess.TimeoutExpired as error:
+            if process is not None:
+                terminate_process_group(process)
             fail("command_timeout", f"{label}:{error.timeout}")
-        stdout = completed.stdout[:1024 * 1024]
-        stderr = completed.stderr[:1024 * 1024]
+        except BaseException:
+            if process is not None:
+                terminate_process_group(process)
+            raise
+        stdout = stdout_full[:1024 * 1024]
+        stderr = stderr_full[:1024 * 1024]
         index = len(self.items) + 1
         stdout_path = self.evidence_root / f"{index:02d}-{label}.stdout"
         stderr_path = self.evidence_root / f"{index:02d}-{label}.stderr"
@@ -793,7 +802,7 @@ class Runner:
         item = CommandEvidence(
             label=label,
             argv=list(argv),
-            returncode=completed.returncode,
+            returncode=process.returncode,
             stdout_path=stdout_path,
             stderr_path=stderr_path,
             stdout=stdout.decode("utf-8", errors="replace"),
@@ -801,12 +810,35 @@ class Runner:
         )
         self.items.append(item)
         self.guard.verify()
-        if completed.returncode not in allowed:
+        if process.returncode not in allowed:
             fail(
                 "command_failed",
-                f"{label}:exit={completed.returncode}:stderr={item.stderr[:512]!r}",
+                f"{label}:exit={process.returncode}:stderr={item.stderr[:512]!r}",
             )
         return item
+
+
+def terminate_process_group(process: subprocess.Popen[bytes]) -> None:
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    try:
+        process.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        os.killpg(process.pid, 0)
+    except ProcessLookupError:
+        return
+    try:
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        return
+    try:
+        process.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+        pass
 
 
 def parse_invocation(output: str, expected_action: str) -> str:
@@ -1103,6 +1135,21 @@ def write_receipt(path: Path, value: dict[str, Any]) -> str:
     return sha256_bytes(encoded)
 
 
+def write_terminal_receipt(path: Path, value: dict[str, Any]) -> str:
+    pending = path.with_name("." + path.name + ".pending")
+    digest = write_receipt(pending, value)
+    os.replace(pending, path)
+    try:
+        descriptor = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+    except OSError:
+        pass
+    return digest
+
+
 def parser() -> argparse.ArgumentParser:
     result = argparse.ArgumentParser(
         prog=PROGRAM,
@@ -1217,13 +1264,292 @@ def adapter_arguments(
     ]
 
 
+def cleanup_command(
+    label: str,
+    argv: Sequence[str],
+    guard: IntegrityGuard,
+    timeout: int,
+) -> dict[str, Any]:
+    attempt: dict[str, Any] = {
+        "label": label,
+        "argv": list(argv),
+        "returncode": None,
+        "completed": False,
+    }
+    process: subprocess.Popen[bytes] | None = None
+    try:
+        guard.verify()
+        environment = {"PATH": "/usr/bin:/bin", "LC_ALL": "C"}
+        for name in ("DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR"):
+            if name in os.environ:
+                environment[name] = os.environ[name]
+        process = subprocess.Popen(
+            list(argv),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            env=environment,
+            start_new_session=True,
+        )
+        stdout, stderr = process.communicate(timeout=timeout)
+        attempt["returncode"] = process.returncode
+        attempt["completed"] = True
+        attempt["stdout"] = stdout[:4096].decode(
+            "utf-8", errors="replace"
+        )
+        attempt["stderr"] = stderr[:4096].decode(
+            "utf-8", errors="replace"
+        )
+    except subprocess.TimeoutExpired:
+        if process is not None:
+            terminate_process_group(process)
+        attempt["error"] = "timeout"
+    except BaseException as error:
+        if process is not None:
+            terminate_process_group(process)
+        attempt["error"] = type(error).__name__
+    return attempt
+
+
+def exact_identity_paths(runtime_root: Path) -> tuple[Path, ...]:
+    return tuple(
+        runtime_root / relative
+        for relative in (
+            "run/server.pid",
+            "run/server.start_ref",
+            "run/server.binary_id",
+            "run/server.binary_sha256",
+            "run/server.config_sha256",
+        )
+    )
+
+
+def cleanup_census(
+    proc_root: Path,
+    binary: Path,
+    database: Path,
+    runtime_root: Path,
+    output_root: Path,
+    synthetic_auth_sha: str,
+    unit_load_state: str,
+) -> dict[str, Any]:
+    census: dict[str, Any] = {
+        "unit_load_state": unit_load_state,
+        "candidate_pids": [],
+        "database_open_pids": [],
+        "identity_files": [],
+        "sqlite_ancillary_files": [],
+        "credential_projections": [],
+        "scan_errors": [],
+    }
+    try:
+        census.update(scan_processes(proc_root, binary, database))
+    except (HarnessError, OSError) as error:
+        census["scan_errors"].append(f"processes:{type(error).__name__}")
+    census["identity_files"] = [
+        str(path.relative_to(output_root))
+        for path in exact_identity_paths(runtime_root)
+        if path.exists() or path.is_symlink()
+    ]
+    census["sqlite_ancillary_files"] = [
+        str(path.relative_to(output_root))
+        for path in (
+            Path(str(database) + "-wal"),
+            Path(str(database) + "-shm"),
+            Path(str(database) + "-journal"),
+        )
+        if path.exists() or path.is_symlink()
+    ]
+    try:
+        for current, _, files in os.walk(output_root, followlinks=False):
+            for name in files:
+                candidate = Path(current) / name
+                if name == "auth.json":
+                    census["credential_projections"].append(
+                        str(candidate.relative_to(output_root))
+                    )
+                    continue
+                try:
+                    if sha256_file(candidate) == synthetic_auth_sha:
+                        census["credential_projections"].append(
+                            str(candidate.relative_to(output_root))
+                        )
+                except OSError as error:
+                    census["scan_errors"].append(
+                        f"credentials:{type(error).__name__}"
+                    )
+    except OSError as error:
+        census["scan_errors"].append(
+            f"credentials_walk:{type(error).__name__}"
+        )
+    return census
+
+
+def cleanup_verified(census: dict[str, Any]) -> bool:
+    return (
+        census["unit_load_state"] == "not-found"
+        and not census["candidate_pids"]
+        and not census["database_open_pids"]
+        and not census["identity_files"]
+        and not census["sqlite_ancillary_files"]
+        and not census["credential_projections"]
+        and not census["scan_errors"]
+        and not census.get("cleanup_errors", [])
+    )
+
+
+def perform_failure_cleanup(
+    *,
+    cleanup_args: dict[str, Any],
+    adapter_guard: IntegrityGuard,
+    systemctl_guard: IntegrityGuard,
+    timeout: int,
+    proc_root: Path,
+    binary: Path,
+    database: Path,
+    runtime_root: Path,
+    output_root: Path,
+    credential_context: tuple[Path, dict[str, Path], str],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    adapter_path = cleanup_args["adapter"]
+    common_cleanup = {
+        key: value for key, value in cleanup_args.items() if key != "adapter"
+    }
+    attempts: list[dict[str, Any]] = []
+    for operation, label in (
+        ("stop-profile", "failure-cleanup-stop"),
+        ("collect", "failure-cleanup-collect"),
+    ):
+        attempts.append(
+            cleanup_command(
+                label,
+                adapter_arguments(adapter_path, operation, **common_cleanup),
+                adapter_guard,
+                timeout,
+            )
+        )
+    systemctl = common_cleanup["systemctl"]
+    unit = common_cleanup["unit"]
+
+    def observe_unit(label: str) -> str:
+        attempt = cleanup_command(
+            label,
+            [
+                str(systemctl),
+                "--user",
+                "show",
+                unit,
+                "--property=LoadState",
+                "--value",
+            ],
+            systemctl_guard,
+            timeout,
+        )
+        attempts.append(attempt)
+        if attempt.get("returncode") != 0:
+            return "unknown"
+        state = str(attempt.get("stdout", "")).strip()
+        return state if state and "\n" not in state else "unknown"
+
+    unit_state = observe_unit("failure-cleanup-unit-before-fallback")
+    if unit_state != "not-found":
+        for label, action in (
+            ("failure-cleanup-systemctl-stop", "stop"),
+            ("failure-cleanup-systemctl-reset-failed", "reset-failed"),
+        ):
+            attempts.append(
+                cleanup_command(
+                    label,
+                    [str(systemctl), "--user", action, unit],
+                    systemctl_guard,
+                    timeout,
+                )
+            )
+        attempts.append(
+            cleanup_command(
+                "failure-cleanup-collect-retry",
+                adapter_arguments(adapter_path, "collect", **common_cleanup),
+                adapter_guard,
+                timeout,
+            )
+        )
+        deadline = time.monotonic() + min(timeout, 5)
+        while True:
+            unit_state = observe_unit("failure-cleanup-unit-after-fallback")
+            if unit_state == "not-found" or time.monotonic() >= deadline:
+                break
+            time.sleep(0.1)
+
+    preliminary = cleanup_census(
+        proc_root,
+        binary,
+        database,
+        runtime_root,
+        output_root,
+        credential_context[2],
+        unit_state,
+    )
+    if (
+        unit_state == "not-found"
+        and not preliminary["candidate_pids"]
+        and not preliminary["database_open_pids"]
+    ):
+        for identity in exact_identity_paths(runtime_root):
+            try:
+                identity.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError:
+                preliminary["scan_errors"].append("identity_cleanup:OSError")
+        if database.exists() and not database.is_symlink():
+            try:
+                connection = sqlite3.connect(database)
+                try:
+                    connection.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                finally:
+                    connection.close()
+            except sqlite3.Error:
+                preliminary["scan_errors"].append("sqlite_cleanup:Error")
+    try:
+        remove_credential_projections(output_root, *credential_context)
+    except HarnessError:
+        preliminary["scan_errors"].append("credential_cleanup:HarnessError")
+    final_state = observe_unit("failure-cleanup-unit-final")
+    census = cleanup_census(
+        proc_root,
+        binary,
+        database,
+        runtime_root,
+        output_root,
+        credential_context[2],
+        final_state,
+    )
+    census["cleanup_errors"] = preliminary["scan_errors"]
+    return attempts, census
+
+
 def main(arguments: Sequence[str]) -> int:
     args = parser().parse_args(arguments)
     os.umask(0o077)
+    handled_signals = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
+    previous_signal_handlers = {
+        current: signal.getsignal(current) for current in handled_signals
+    }
+    terminal_published = False
+
+    def interrupt_handler(signum: int, _frame: Any) -> None:
+        fail("interrupted_by_signal", signal.Signals(signum).name)
+
+    for current in handled_signals:
+        signal.signal(current, interrupt_handler)
     output_root: Path | None = None
     runner: Runner | None = None
     cleanup_args: dict[str, Any] | None = None
     cleanup_guard: IntegrityGuard | None = None
+    cleanup_systemctl_guard: IntegrityGuard | None = None
+    cleanup_resource_context: (
+        tuple[Path, Path, Path, Path] | None
+    ) = None
     credential_cleanup_context: (
         tuple[Path, dict[str, Path], str] | None
     ) = None
@@ -1553,7 +1879,11 @@ def main(arguments: Sequence[str]) -> int:
         guard = IntegrityGuard([*source_guard.files, *projected_guard_files])
         cleanup_guard = IntegrityGuard(
             [
-                *projected_guard_files,
+                *[
+                    item
+                    for item in projected_guard_files
+                    if item.label != "synthetic_auth_projected"
+                ],
                 GuardedFile(
                     "systemctl", systemctl, args.expected_systemctl_sha256
                 ),
@@ -1563,6 +1893,19 @@ def main(arguments: Sequence[str]) -> int:
                     args.expected_systemd_run_sha256,
                 ),
             ]
+        )
+        cleanup_systemctl_guard = IntegrityGuard(
+            [
+                GuardedFile(
+                    "systemctl", systemctl, args.expected_systemctl_sha256
+                )
+            ]
+        )
+        cleanup_resource_context = (
+            proc_root,
+            projected_binary,
+            database,
+            runtime_root,
         )
         guard.verify()
         runner.guard = guard
@@ -1954,44 +2297,69 @@ def main(arguments: Sequence[str]) -> int:
             },
             "evidence": [item.receipt(output_root) for item in runner.items],
         }
-        receipt_sha = write_receipt(receipt_path, receipt)
-        validate_private_tree(output_root, executable_paths)
-        print(
-            f"{PROGRAM}: status=accredited receipt={receipt_path} "
-            f"receipt_sha256={receipt_sha}"
-        )
+        for current in handled_signals:
+            signal.signal(current, signal.SIG_IGN)
+        receipt_sha = write_terminal_receipt(receipt_path, receipt)
+        terminal_published = True
+        try:
+            print(
+                f"{PROGRAM}: status=accredited receipt={receipt_path} "
+                f"receipt_sha256={receipt_sha}"
+            )
+        except OSError:
+            pass
         return 0
-    except HarnessError as error:
+    except (HarnessError, KeyboardInterrupt, OSError) as caught:
+        for current in handled_signals:
+            signal.signal(current, signal.SIG_IGN)
+        if isinstance(caught, HarnessError):
+            error = caught
+        elif isinstance(caught, KeyboardInterrupt):
+            error = HarnessError("interrupted_by_signal", "SIGINT")
+        else:
+            error = HarnessError(
+                "unexpected_os_error",
+                f"{type(caught).__name__}:{caught}",
+            )
+        cleanup_attempts: list[dict[str, Any]] = []
+        cleanup_residues: dict[str, Any] = {
+            "unit_load_state": "unknown",
+            "candidate_pids": [],
+            "database_open_pids": [],
+            "identity_files": [],
+            "sqlite_ancillary_files": [],
+            "credential_projections": [],
+            "scan_errors": ["cleanup_context_unavailable"],
+            "cleanup_errors": [],
+        }
         if output_root is not None and output_root.exists():
-            if runner is not None and cleanup_args is not None:
+            if (
+                cleanup_args is not None
+                and cleanup_guard is not None
+                and cleanup_systemctl_guard is not None
+                and cleanup_resource_context is not None
+                and credential_cleanup_context is not None
+            ):
                 try:
-                    if cleanup_guard is not None:
-                        runner.guard = cleanup_guard
-                    adapter_path = cleanup_args["adapter"]
-                    common_cleanup = {
-                        key: value
-                        for key, value in cleanup_args.items()
-                        if key != "adapter"
-                    }
-                    for cleanup_operation, cleanup_label in (
-                        ("stop-profile", "failure-cleanup-stop"),
-                        ("collect", "failure-cleanup-collect"),
-                    ):
-                        try:
-                            runner.run(
-                                cleanup_label,
-                                adapter_arguments(
-                                    adapter_path,
-                                    cleanup_operation,
-                                    **common_cleanup,
-                                ),
-                                allowed=frozenset({0, 1, 3}),
-                            )
-                        except HarnessError:
-                            continue
-                except (HarnessError, KeyError):
-                    pass
-            if credential_cleanup_context is not None:
+                    cleanup_attempts, cleanup_residues = (
+                        perform_failure_cleanup(
+                            cleanup_args=cleanup_args,
+                            adapter_guard=cleanup_guard,
+                            systemctl_guard=cleanup_systemctl_guard,
+                            timeout=args.command_timeout,
+                            proc_root=cleanup_resource_context[0],
+                            binary=cleanup_resource_context[1],
+                            database=cleanup_resource_context[2],
+                            runtime_root=cleanup_resource_context[3],
+                            output_root=output_root,
+                            credential_context=credential_cleanup_context,
+                        )
+                    )
+                except (HarnessError, KeyError, OSError) as cleanup_error:
+                    cleanup_residues["cleanup_errors"].append(
+                        type(cleanup_error).__name__
+                    )
+            elif credential_cleanup_context is not None:
                 try:
                     remove_credential_projections(
                         output_root, *credential_cleanup_context
@@ -2009,6 +2377,11 @@ def main(arguments: Sequence[str]) -> int:
                             "created_at": utc_now(),
                             "reason_code": error.code,
                             "detail": error.detail,
+                            "cleanup_attempts": cleanup_attempts,
+                            "cleanup_verified": cleanup_verified(
+                                cleanup_residues
+                            ),
+                            "residues": cleanup_residues,
                         },
                     )
                 except (OSError, HarnessError):
@@ -2019,6 +2392,10 @@ def main(arguments: Sequence[str]) -> int:
             file=sys.stderr,
         )
         return 1
+    finally:
+        if not terminal_published:
+            for current, previous in previous_signal_handlers.items():
+                signal.signal(current, previous)
 
 
 if __name__ == "__main__":
