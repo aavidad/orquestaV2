@@ -143,6 +143,7 @@ func intakeChainChange(previous, next intake.State) (intake.Change, error) {
 	issuesAdded := len(nextSnapshot.Issues) - len(previousSnapshot.Issues)
 	questionsAdded := mutation.QuestionsAdded
 	questionsRevised := mutation.QuestionsRevised
+	questionsRetired := mutation.QuestionsRetired
 	choicesRecorded := len(nextSnapshot.Decisions) - len(previousSnapshot.Decisions)
 	if mutation.Revision != nextSnapshot.Revision ||
 		mutation.IssuesAdded != issuesAdded ||
@@ -154,22 +155,30 @@ func intakeChainChange(previous, next intake.State) (intake.Change, error) {
 	previousVersions := previous.QuestionVersions()
 	nextVersions := next.QuestionVersions()
 	versionDelta := nextVersions[len(previousVersions):]
-	if len(versionDelta) != questionsAdded+questionsRevised {
+	if len(versionDelta) != questionsAdded+questionsRevised+questionsRetired {
 		return intake.Change{}, errIntakeChainInvalid
 	}
 	questions := make([]intake.Question, 0, questionsAdded)
 	revisions := make([]intake.Question, 0, questionsRevised)
+	retirements := make([]intake.QuestionRef, 0, questionsRetired)
 	for _, version := range versionDelta {
 		if version.Revision != mutation.Revision {
 			return intake.Change{}, errIntakeChainInvalid
 		}
-		if version.ReplacesRevision == 0 {
+		if version.Retired {
+			if version.ReplacesRevision == 0 {
+				return intake.Change{}, errIntakeChainInvalid
+			}
+			retirements = append(retirements, version.Question.Ref)
+		} else if version.ReplacesRevision == 0 {
 			questions = append(questions, cloneSnapshotQuestion(version.Question))
 		} else {
 			revisions = append(revisions, cloneSnapshotQuestion(version.Question))
 		}
 	}
-	if len(questions) != questionsAdded || len(revisions) != questionsRevised {
+	if len(questions) != questionsAdded ||
+		len(revisions) != questionsRevised ||
+		len(retirements) != questionsRetired {
 		return intake.Change{}, errIntakeChainInvalid
 	}
 
@@ -191,9 +200,10 @@ func intakeChainChange(previous, next intake.State) (intake.Change, error) {
 			[]intake.Issue(nil),
 			nextSnapshot.Issues[len(previousSnapshot.Issues):]...,
 		),
-		Questions:         questions,
-		QuestionRevisions: revisions,
-		Choices:           choices,
+		Questions:           questions,
+		QuestionRevisions:   revisions,
+		QuestionRetirements: retirements,
+		Choices:             choices,
 	}, nil
 }
 
