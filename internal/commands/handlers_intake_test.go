@@ -228,6 +228,10 @@ func TestIntakeErrorsPreservePublicConflictInvalidAndNotFoundClasses(t *testing.
 	}{
 		{&intake.DomainError{Code: intake.ErrorRevisionConflict, Field: "change.expected_revision"}, CodeConflict},
 		{&intake.DomainError{Code: intake.ErrorInvalidRef, Field: "state_ref"}, CodeInvalidRequest},
+		{&intake.DomainError{Code: intake.ErrorQuestionRound, Field: "request.question_round"}, CodeInvalidRequest},
+		{&intake.DomainError{Code: intake.ErrorRecommendationsDone, Field: "request.question_round"}, CodeInvalidRequest},
+		{&intake.DomainError{Code: intake.ErrorDependencyCycle, Field: "change.questions.depends_on"}, CodeInvalidRequest},
+		{&intake.DomainError{Code: intake.ErrorDependencyPending, Field: "change.choices.question_ref[0]"}, CodeInvalidRequest},
 		{&application.StateError{Code: application.StateNotFound}, CodeNotFound},
 	}
 	for _, test := range tests {

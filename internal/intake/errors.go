@@ -23,6 +23,10 @@ const (
 	ErrorMessageKeyInvalid    ErrorCode = "intake.message_key_invalid"
 	ErrorRoundLimit           ErrorCode = "intake.round_limit"
 	ErrorChoiceConflict       ErrorCode = "intake.choice_conflict"
+	ErrorQuestionRound        ErrorCode = "intake.question_round_not_found"
+	ErrorRecommendationsDone  ErrorCode = "intake.recommendations_already_resolved"
+	ErrorDependencyCycle      ErrorCode = "intake.question_dependency_cycle"
+	ErrorDependencyPending    ErrorCode = "intake.question_dependency_pending"
 )
 
 // DomainError deliberately contains no human-facing text. A public surface

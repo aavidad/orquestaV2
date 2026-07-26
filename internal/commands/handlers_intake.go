@@ -150,7 +150,9 @@ func normalizeIntakeError(err error) error {
 	case intake.ErrorInvalidArgument, intake.ErrorInvalidRef, intake.ErrorInvalidOrigin,
 		intake.ErrorChannelStateCreation, intake.ErrorDuplicateRef, intake.ErrorIssueNotFound,
 		intake.ErrorQuestionNotFound, intake.ErrorOptionNotFound, intake.ErrorRecommendationCount,
-		intake.ErrorMessageKeyInvalid, intake.ErrorRoundLimit, intake.ErrorChoiceConflict:
+		intake.ErrorMessageKeyInvalid, intake.ErrorRoundLimit, intake.ErrorChoiceConflict,
+		intake.ErrorQuestionRound, intake.ErrorRecommendationsDone,
+		intake.ErrorDependencyCycle, intake.ErrorDependencyPending:
 		return commandError{code: CodeInvalidRequest, cause: err}
 	default:
 		return err

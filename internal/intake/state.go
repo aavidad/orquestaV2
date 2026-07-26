@@ -41,12 +41,21 @@ func (state State) Decisions() []Decision  { return append([]Decision(nil), stat
 func (state State) History() []Mutation    { return append([]Mutation(nil), state.history...) }
 
 func (state State) CurrentDecision(ref QuestionRef) (Decision, bool) {
-	for index := len(state.decisions) - 1; index >= 0; index-- {
-		if state.decisions[index].QuestionRef == ref {
-			return state.decisions[index], true
+	decisions, _ := state.projectDecisions()
+	decision, found := decisions[ref]
+	return decision, found
+}
+
+func (state State) ReopenedDecisions() []ReopenedDecision {
+	_, reopened := state.projectDecisions()
+	result := make([]ReopenedDecision, 0, len(reopened))
+	for _, question := range state.questions {
+		if decision, found := reopened[question.Ref]; found {
+			decision.InvalidatedBy = append([]DecisionChange(nil), decision.InvalidatedBy...)
+			result = append(result, decision)
 		}
 	}
-	return Decision{}, false
+	return result
 }
 
 // Apply validates the complete change before allocating the next immutable
@@ -111,6 +120,14 @@ func Apply(current State, change Change) (State, error) {
 		}
 		questionsByRef[question.Ref] = question
 	}
+	for index, question := range change.Questions {
+		if err := validateQuestionDependencies(question, index, questionsByRef); err != nil {
+			return State{}, err
+		}
+	}
+	if hasQuestionDependencyCycle(questionsByRef) {
+		return State{}, domainError(ErrorDependencyCycle, "change.questions.depends_on")
+	}
 	if len(change.Questions) > 0 && current.questionRounds >= current.policy.MaxQuestionRounds {
 		return State{}, domainError(ErrorRoundLimit, "policy.max_question_rounds")
 	}
@@ -144,6 +161,21 @@ func Apply(current State, change Change) (State, error) {
 			return State{}, domainError(ErrorRecommendationCount, "change.questions.options.recommended")
 		}
 		resolved = append(resolved, resolvedChoice{choice: choice, recommendation: recommendation})
+	}
+	currentDecisions, _ := current.projectDecisions()
+	for index, item := range resolved {
+		question := questionsByRef[item.choice.QuestionRef]
+		for _, dependencyRef := range question.DependsOn {
+			if _, included := choiceQuestions[dependencyRef]; included {
+				continue
+			}
+			if _, decided := currentDecisions[dependencyRef]; !decided {
+				return State{}, domainError(
+					ErrorDependencyPending,
+					indexedField("change.choices.question_ref", index),
+				)
+			}
+		}
 	}
 
 	updated := current.clone()
@@ -252,6 +284,36 @@ func validateQuestion(question Question, index int, issues map[IssueRef]struct{}
 	return nil
 }
 
+func validateQuestionDependencies(
+	question Question,
+	index int,
+	questions map[QuestionRef]Question,
+) error {
+	dependencies := make(map[QuestionRef]struct{}, len(question.DependsOn))
+	for _, ref := range question.DependsOn {
+		if !validRef(string(ref), "intake-question:") {
+			return domainError(
+				ErrorInvalidRef,
+				indexedField("change.questions.depends_on", index),
+			)
+		}
+		if _, duplicate := dependencies[ref]; duplicate {
+			return domainError(
+				ErrorDuplicateRef,
+				indexedField("change.questions.depends_on", index),
+			)
+		}
+		if _, exists := questions[ref]; !exists {
+			return domainError(
+				ErrorQuestionNotFound,
+				indexedField("change.questions.depends_on", index),
+			)
+		}
+		dependencies[ref] = struct{}{}
+	}
+	return nil
+}
+
 func recommendedOption(question Question) (Option, bool) {
 	var found Option
 	count := 0
@@ -317,6 +379,7 @@ func cloneQuestions(values []Question) []Question {
 	for index, question := range values {
 		out[index] = question
 		out[index].DerivedFrom = append([]IssueRef(nil), question.DerivedFrom...)
+		out[index].DependsOn = append([]QuestionRef(nil), question.DependsOn...)
 		out[index].Options = append([]Option(nil), question.Options...)
 	}
 	return out

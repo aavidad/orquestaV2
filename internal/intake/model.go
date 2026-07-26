@@ -52,11 +52,12 @@ type Option struct {
 // Question is valid only when DerivedFrom refers to one or more recorded gaps
 // or contradictions.
 type Question struct {
-	Ref         QuestionRef `json:"ref"`
-	DerivedFrom []IssueRef  `json:"derived_from"`
-	PromptKey   MessageKey  `json:"prompt_key"`
-	WhyKey      MessageKey  `json:"why_key"`
-	Options     []Option    `json:"options"`
+	Ref         QuestionRef   `json:"ref"`
+	DerivedFrom []IssueRef    `json:"derived_from"`
+	DependsOn   []QuestionRef `json:"depends_on,omitempty"`
+	PromptKey   MessageKey    `json:"prompt_key"`
+	WhyKey      MessageKey    `json:"why_key"`
+	Options     []Option      `json:"options"`
 }
 
 type Choice struct {
@@ -95,4 +96,62 @@ type Mutation struct {
 	QuestionsAdded  int      `json:"questions_added"`
 	ChoicesRecorded int      `json:"choices_recorded"`
 	QuestionRound   uint32   `json:"question_round"`
+}
+
+// AcceptRecommendationsRequest identifies one exact shared-state revision and
+// question round. BuildAcceptRecommendationsChange compiles it to the regular
+// Change contract so durable CAS, fingerprints and replay need no side path.
+type AcceptRecommendationsRequest struct {
+	StateRef         Ref      `json:"state_ref"`
+	ExpectedRevision Revision `json:"expected_revision"`
+	Origin           Origin   `json:"origin"`
+	QuestionRound    uint32   `json:"question_round"`
+}
+
+type ContextKind string
+
+const (
+	ContextClarification ContextKind = "clarification"
+	ContextHelp          ContextKind = "help"
+)
+
+// ContextRequest is a read against an exact intake revision. An empty
+// QuestionRefs list means every question; a non-empty list preserves caller
+// order. It never becomes a Mutation.
+type ContextRequest struct {
+	StateRef         Ref           `json:"state_ref"`
+	ExpectedRevision Revision      `json:"expected_revision"`
+	Origin           Origin        `json:"origin"`
+	Kind             ContextKind   `json:"kind"`
+	QuestionRefs     []QuestionRef `json:"question_refs,omitempty"`
+}
+
+type QuestionContext struct {
+	Question         Question          `json:"question"`
+	CurrentDecision  *Decision         `json:"current_decision,omitempty"`
+	ReopenedDecision *ReopenedDecision `json:"reopened_decision,omitempty"`
+}
+
+// Context is a deterministic re-emission of already recorded intake facts.
+// It contains no free-form answer and grants no mutation authority.
+type Context struct {
+	StateRef  Ref               `json:"state_ref"`
+	Revision  Revision          `json:"revision"`
+	Origin    Origin            `json:"origin"`
+	Kind      ContextKind       `json:"kind"`
+	Issues    []Issue           `json:"issues,omitempty"`
+	Questions []QuestionContext `json:"questions,omitempty"`
+}
+
+type DecisionChange struct {
+	QuestionRef QuestionRef `json:"question_ref"`
+	Revision    Revision    `json:"revision"`
+}
+
+// ReopenedDecision is a derived view, not another state collection. Previous
+// remains in Decisions for audit while CurrentDecision reports it as inactive.
+type ReopenedDecision struct {
+	QuestionRef      QuestionRef      `json:"question_ref"`
+	PreviousDecision Decision         `json:"previous_decision"`
+	InvalidatedBy    []DecisionChange `json:"invalidated_by"`
 }
