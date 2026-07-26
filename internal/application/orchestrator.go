@@ -15,6 +15,7 @@ const (
 type Dependencies struct {
 	State                   StateRepository
 	IntakeStore             IntakeStore
+	IntakeDossierStore      IntakeDossierStore
 	Access                  AccessRepository
 	Launcher                AgentLauncher
 	Observer                AgentObserver
@@ -45,6 +46,7 @@ type Dependencies struct {
 type Orchestrator struct {
 	state                   StateRepository
 	intake                  *IntakeService
+	intakeDossier           *IntakeDossierService
 	access                  AccessRepository
 	launcher                AgentLauncher
 	observer                AgentObserver
@@ -129,9 +131,21 @@ func New(dependencies Dependencies) (*Orchestrator, error) {
 			return nil, err
 		}
 	}
+	var intakeDossierService *IntakeDossierService
+	if dependencies.IntakeDossierStore != nil {
+		var err error
+		intakeDossierService, err = NewIntakeDossierService(
+			dependencies.IntakeStore,
+			dependencies.IntakeDossierStore,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
 	return &Orchestrator{
 		state:                   dependencies.State,
 		intake:                  intakeService,
+		intakeDossier:           intakeDossierService,
 		access:                  dependencies.Access,
 		launcher:                dependencies.Launcher,
 		observer:                dependencies.Observer,

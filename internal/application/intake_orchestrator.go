@@ -98,3 +98,61 @@ func (orchestrator *Orchestrator) ApplyIntake(
 	request.AuthorizationReceipt = authorization
 	return orchestrator.intake.ApplyIntake(ctx, request)
 }
+
+func (orchestrator *Orchestrator) PrepareIntakeDossier(
+	ctx context.Context,
+	access Access,
+	request PrepareIntakeDossierRequest,
+) (IntakeDossierResult, error) {
+	if orchestrator == nil || orchestrator.intakeDossier == nil {
+		return IntakeDossierResult{}, errors.New("application.unavailable")
+	}
+	authorizationRequestRef, err := IntakeDossierAuthorizationRequestRef(request.RequestRef)
+	if err != nil {
+		return IntakeDossierResult{}, err
+	}
+	principal, projectRef, err := access.values()
+	if err != nil {
+		return IntakeDossierResult{}, err
+	}
+	authorization, err := orchestrator.authorizeIdempotentWithRequestRef(
+		ctx,
+		access,
+		identity.PermissionGoalsCreate,
+		projectRef.String(),
+		orchestrator.clock.Now(),
+		authorizationRequestRef,
+	)
+	if err != nil {
+		return IntakeDossierResult{}, err
+	}
+	request.ActorRef = principal.ActorRef
+	request.ProjectRef = projectRef
+	request.AuthorizationReceipt = authorization
+	return orchestrator.intakeDossier.PrepareIntakeDossier(ctx, request)
+}
+
+func (orchestrator *Orchestrator) GetIntakeDossier(
+	ctx context.Context,
+	access Access,
+	request GetIntakeDossierRequest,
+) (IntakeDossierRecord, error) {
+	if orchestrator == nil || orchestrator.intakeDossier == nil {
+		return IntakeDossierRecord{}, errors.New("application.unavailable")
+	}
+	principal, projectRef, err := access.values()
+	if err != nil {
+		return IntakeDossierRecord{}, err
+	}
+	if _, err = orchestrator.authorizeRead(
+		ctx,
+		access,
+		identity.PermissionGoalsGet,
+		string(request.DossierRef),
+	); err != nil {
+		return IntakeDossierRecord{}, err
+	}
+	request.ActorRef = principal.ActorRef
+	request.ProjectRef = projectRef
+	return orchestrator.intakeDossier.GetIntakeDossier(ctx, request)
+}
