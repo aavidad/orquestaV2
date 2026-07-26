@@ -702,6 +702,88 @@ SELECT COUNT(*) FROM agent_microvm_vsock_cid_operations`).Scan(&operations); err
 	}
 }
 
+func TestAllocatorRetriesLostRollbackToResponseWithoutCommittingBusiness(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "vsock-lost-rollback-to-response.db")
+	database := openTestDatabase(t, path, true)
+	database.SetMaxOpenConns(1)
+	t.Cleanup(func() { _ = database.Close() })
+	start := time.Date(2026, 7, 26, 15, 45, 30, 0, time.UTC)
+	clock := &testClock{now: start}
+	allocator := openTestAllocator(t, database, clock, 145, 145)
+	request := testReservationRequest(t, 1)
+	request.LeaseDuration = time.Minute
+	lease, err := allocator.Reserve(context.Background(), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`
+CREATE TRIGGER agent_microvm_vsock_cid_fail_second_operation
+BEFORE INSERT ON agent_microvm_vsock_cid_operations
+WHEN NEW.idempotency_key = 'reserve-vsock-cid:2'
+BEGIN
+    SELECT RAISE(ABORT, 'injected operation failure after reservation insert');
+END`); err != nil {
+		t.Fatal(err)
+	}
+	originalExec := allocator.execTransaction
+	var rollbackToAttempts int
+	allocator.execTransaction = func(
+		ctx context.Context,
+		connection *sql.Conn,
+		statement string,
+	) (sql.Result, error) {
+		if statement == businessSavepointRollback {
+			rollbackToAttempts++
+			result, err := originalExec(ctx, connection, statement)
+			if err != nil {
+				return result, err
+			}
+			if rollbackToAttempts == 1 {
+				return result, errors.New("injected lost ROLLBACK TO response")
+			}
+			return result, nil
+		}
+		return originalExec(ctx, connection, statement)
+	}
+
+	clock.Set(start.Add(2 * time.Minute))
+	if _, err := allocator.Reserve(
+		context.Background(), testReservationRequest(t, 2),
+	); ErrorCode(err) != "agent_firecracker_vsock_cid.store_unavailable" {
+		t.Fatalf("downstream failure with lost ROLLBACK TO response = %v", err)
+	}
+	if rollbackToAttempts != businessRollbackToMaximumAttempts {
+		t.Fatalf("ROLLBACK TO attempts = %d, want %d",
+			rollbackToAttempts, businessRollbackToMaximumAttempts)
+	}
+	allocator.execTransaction = originalExec
+
+	var reservations, operations int
+	if err := database.QueryRow(`
+SELECT COUNT(*) FROM agent_microvm_vsock_cid_reservations`).Scan(&reservations); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.QueryRow(`
+SELECT COUNT(*) FROM agent_microvm_vsock_cid_operations`).Scan(&operations); err != nil {
+		t.Fatal(err)
+	}
+	var fencingToken int64
+	if err := database.QueryRow(`
+SELECT fencing_token
+FROM agent_microvm_vsock_cid_generations
+WHERE pool_ref = ? AND guest_cid = ?`,
+		lease.PoolRef, lease.GuestCID,
+	).Scan(&fencingToken); err != nil {
+		t.Fatal(err)
+	}
+	if reservations != 1 || operations != 1 || fencingToken != int64(lease.FencingToken) {
+		t.Fatalf("business survived lost rollback response: reservations=%d operations=%d fencing=%d",
+			reservations, operations, fencingToken)
+	}
+	assertTemporalFrontierBlocksT1(t, database, allocator, clock, lease,
+		start.Add(2*time.Minute), reservationStateExpired)
+}
+
 func TestAllocatorPreservesTemporalFrontierBeforeBusinessSavepoint(t *testing.T) {
 	t.Run("expiry update fails after clock advance", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "vsock-expiry-failure.db")
@@ -939,6 +1021,62 @@ WHERE pool_ref = ? AND idempotency_key = ?`,
 				state, operationCount)
 		}
 	})
+}
+
+func TestAllocatorDiscardsConnectionWhenBeginResponseIsLost(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "vsock-lost-begin-response.db")
+	database := openTestDatabase(t, path, true)
+	database.SetMaxOpenConns(1)
+	t.Cleanup(func() { _ = database.Close() })
+	clock := &testClock{now: time.Date(2026, 7, 26, 16, 10, 0, 0, time.UTC)}
+	allocator := openTestAllocator(t, database, clock, 146, 146)
+	originalExec := allocator.execTransaction
+	var injected bool
+	allocator.execTransaction = func(
+		ctx context.Context,
+		connection *sql.Conn,
+		statement string,
+	) (sql.Result, error) {
+		if statement == "BEGIN IMMEDIATE" && !injected {
+			injected = true
+			result, err := originalExec(ctx, connection, statement)
+			if err != nil {
+				return result, err
+			}
+			return result, errors.New("injected lost BEGIN response")
+		}
+		return originalExec(ctx, connection, statement)
+	}
+	request := testReservationRequest(t, 1)
+	if _, err := allocator.Reserve(
+		context.Background(), request,
+	); ErrorCode(err) != "agent_firecracker_vsock_cid.store_unavailable" {
+		t.Fatalf("lost BEGIN response = %v", err)
+	}
+	if !injected {
+		t.Fatal("BEGIN failpoint was not reached")
+	}
+	allocator.execTransaction = originalExec
+
+	var reservations, operations, clocks int
+	for table, destination := range map[string]*int{
+		"agent_microvm_vsock_cid_reservations": &reservations,
+		"agent_microvm_vsock_cid_operations":   &operations,
+		"agent_microvm_vsock_cid_clock":        &clocks,
+	} {
+		if err := database.QueryRow("SELECT COUNT(*) FROM " + table).Scan(destination); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if reservations != 0 || operations != 0 || clocks != 0 {
+		t.Fatalf("lost BEGIN response left effects: reservations=%d operations=%d clocks=%d",
+			reservations, operations, clocks)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	if _, err := allocator.Reserve(ctx, request); err != nil {
+		t.Fatalf("discarded BEGIN connection left lock or transaction alive: %v", err)
+	}
 }
 
 func TestAllocatorDiscardsConnectionsWhenTransactionCleanupFails(t *testing.T) {
