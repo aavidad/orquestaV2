@@ -642,6 +642,27 @@ grep -q 'reason_code=migration_file_symlink_or_noncanonical' \
 [ ! -e "$COMMANDS/operations" ] ||
   fail_test "migration_symlink_adapter_called"
 
+write_fixture extra-migration-row
+python3 - "$PRIVATE/backup.sqlite" <<'PY'
+import sqlite3
+import sys
+
+with sqlite3.connect(sys.argv[1]) as connection:
+    connection.execute(
+        "INSERT INTO schema_migrations VALUES(20,'020_future.sql','sha256:future')"
+    )
+PY
+chmod 600 -- "$PRIVATE/backup.sqlite"
+set_common_value --expected-backup-sha256 \
+  "$(sha256_of "$PRIVATE/backup.sqlite")"
+if "$SUBJECT" "${COMMON[@]}" >"$FIXTURE/stdout" 2>"$FIXTURE/stderr"; then
+  fail_test "extra_migration_row_accepted"
+fi
+grep -q 'reason_code=schema_migration_count_invalid' "$FIXTURE/stderr" ||
+  fail_test "extra_migration_row_reason"
+[ ! -e "$COMMANDS/operations" ] ||
+  fail_test "extra_migration_row_adapter_called"
+
 write_fixture hash
 set_common_value --expected-backup-sha256 \
   aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa

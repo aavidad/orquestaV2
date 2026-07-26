@@ -526,14 +526,13 @@ def validate_migrations(
     expected: dict[int, dict[str, str]],
     final_version: int,
 ) -> None:
-    selected = [row for row in rows if int(row["version"]) <= final_version]
-    if len(selected) != final_version:
+    if len(rows) != final_version:
         fail(
             "schema_migration_count_invalid",
-            f"expected={final_version} observed={len(selected)}",
+            f"expected={final_version} observed={len(rows)}",
         )
     seen: set[int] = set()
-    for row in selected:
+    for row in rows:
         version = int(row["version"])
         if version in seen or version not in expected:
             fail("schema_migration_version_invalid", str(version))
