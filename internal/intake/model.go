@@ -97,11 +97,15 @@ type Change struct {
 	Issues           []Issue    `json:"issues,omitempty"`
 	Questions        []Question `json:"questions,omitempty"`
 	// QuestionRevisions replaces the active payload of an existing derived
-	// question without rewriting its immutable versions. Only a causally
-	// identified derivation may revise a question.
-	QuestionRevisions []Question         `json:"question_revisions,omitempty"`
-	Choices           []Choice           `json:"choices,omitempty"`
-	Derivation        DerivationIdentity `json:"derivation,omitempty,omitzero"`
+	// question, or restores its latest tombstoned projection, without
+	// rewriting immutable versions. Only the derivation that created the
+	// latest version may revise it.
+	QuestionRevisions []Question `json:"question_revisions,omitempty"`
+	// QuestionRetirements appends a tombstone for active derived questions
+	// that their exact creating derivation no longer emits.
+	QuestionRetirements []QuestionRef      `json:"question_retirements,omitempty"`
+	Choices             []Choice           `json:"choices,omitempty"`
+	Derivation          DerivationIdentity `json:"derivation,omitempty,omitzero"`
 }
 
 // QuestionVersion is the append-only provenance of one question projection.
@@ -111,6 +115,7 @@ type QuestionVersion struct {
 	Question         Question `json:"question"`
 	Revision         Revision `json:"revision"`
 	ReplacesRevision Revision `json:"replaces_revision,omitempty"`
+	Retired          bool     `json:"retired,omitempty"`
 }
 
 // Decision stores the actual choice and the recommendation as simultaneous
@@ -133,6 +138,7 @@ type Mutation struct {
 	IssuesAdded      int                `json:"issues_added"`
 	QuestionsAdded   int                `json:"questions_added"`
 	QuestionsRevised int                `json:"questions_revised,omitempty"`
+	QuestionsRetired int                `json:"questions_retired,omitempty"`
 	ChoicesRecorded  int                `json:"choices_recorded"`
 	QuestionRound    uint32             `json:"question_round"`
 	Derivation       DerivationIdentity `json:"derivation,omitempty,omitzero"`

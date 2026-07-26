@@ -164,7 +164,7 @@ func (service *WizardGapsService) ApplyWizardGaps(
 	if err != nil {
 		return ApplyWizardGapsResult{}, err
 	}
-	evaluation, err := evaluateWizardGaps(
+	evaluated, err := evaluateWizardGapsDetailed(
 		base,
 		request.Facts,
 		request.PackRefs,
@@ -173,22 +173,24 @@ func (service *WizardGapsService) ApplyWizardGaps(
 	if err != nil {
 		return ApplyWizardGapsResult{}, err
 	}
-	change, err := wizardGapsChange(
+	change, err := wizardGapsChangeWithReconciliation(
 		base,
 		request.Origin,
 		evaluator.Identity(),
-		evaluation,
+		evaluated.result,
+		evaluated.reconcilable,
 	)
 	if err != nil {
 		return ApplyWizardGapsResult{}, err
 	}
 	result := ApplyWizardGapsResult{
-		Record: current, Evaluation: evaluation,
+		Record: current, Evaluation: evaluated.result,
 		InputDurability:   wizardGapsDurability(),
 		EvaluatorIdentity: evaluator.Identity(),
 	}
 	if len(change.Issues) == 0 && len(change.Questions) == 0 &&
-		len(change.QuestionRevisions) == 0 {
+		len(change.QuestionRevisions) == 0 &&
+		len(change.QuestionRetirements) == 0 {
 		if current.State.Revision() != request.ExpectedRevision {
 			return ApplyWizardGapsResult{}, &intake.DomainError{
 				Code:  intake.ErrorRevisionConflict,
@@ -212,17 +214,55 @@ func (service *WizardGapsService) ApplyWizardGaps(
 	return result, nil
 }
 
+type detailedWizardGapsEvaluation struct {
+	result       gaps.Result
+	reconcilable map[intake.QuestionRef]struct{}
+}
+
 func evaluateWizardGaps(
 	state intake.State,
 	facts gaps.Facts,
 	packRefs []catalog.PackRef,
 	evaluator wizardGapsEvaluator,
 ) (gaps.Result, error) {
+	evaluated, err := evaluateWizardGapsDetailed(
+		state,
+		facts,
+		packRefs,
+		evaluator,
+	)
+	return evaluated.result, err
+}
+
+func evaluateWizardGapsDetailed(
+	state intake.State,
+	facts gaps.Facts,
+	packRefs []catalog.PackRef,
+	evaluator wizardGapsEvaluator,
+) (detailedWizardGapsEvaluation, error) {
 	preflight, err := preflightWizardGapsQuestions(state, evaluator)
 	if err != nil {
-		return gaps.Result{}, err
+		return detailedWizardGapsEvaluation{}, err
 	}
 	selections, remaining := wizardGapsDimensionSelections(state, preflight.dimensions)
+	preliminary, err := evaluator.Evaluate(gaps.Input{
+		Facts: facts, Selections: selections, PackRefs: packRefs,
+	})
+	if err != nil {
+		return detailedWizardGapsEvaluation{}, err
+	}
+	reconcilable, err := wizardGapsCounterfactualReconciliation(
+		state,
+		facts,
+		selections,
+		packRefs,
+		evaluator,
+		preliminary,
+	)
+	if err != nil {
+		return detailedWizardGapsEvaluation{}, err
+	}
+	preflight.reopened = reconcilable
 	if err = preflightWizardGapsDimensionPayloads(
 		preflight,
 		evaluator,
@@ -230,20 +270,14 @@ func evaluateWizardGaps(
 		selections,
 		packRefs,
 	); err != nil {
-		return gaps.Result{}, err
-	}
-	preliminary, err := evaluator.Evaluate(gaps.Input{
-		Facts: facts, Selections: selections, PackRefs: packRefs,
-	})
-	if err != nil {
-		return gaps.Result{}, err
+		return detailedWizardGapsEvaluation{}, err
 	}
 	if err = preflightWizardGapsSupplementalQuestions(
 		preflight,
 		evaluator,
 		preliminary,
 	); err != nil {
-		return gaps.Result{}, err
+		return detailedWizardGapsEvaluation{}, err
 	}
 	knownQuestions := make(map[gaps.QuestionRef]struct{})
 	for _, question := range preliminary.Questions() {
@@ -261,11 +295,32 @@ func evaluateWizardGaps(
 			FreeText: decision.AnswerText,
 		})
 	}
-	return evaluator.Evaluate(gaps.Input{
+	result, err := evaluator.Evaluate(gaps.Input{
 		Facts: facts, Selections: selections,
 		QuestionSelections: questionSelections,
 		PackRefs:           packRefs,
 	})
+	if err != nil {
+		return detailedWizardGapsEvaluation{}, err
+	}
+	return detailedWizardGapsEvaluation{
+		result: result, reconcilable: reconcilable,
+	}, nil
+}
+
+func wizardGapsChange(
+	state intake.State,
+	origin intake.Origin,
+	derivation intake.DerivationIdentity,
+	evaluation gaps.Result,
+) (intake.Change, error) {
+	return wizardGapsChangeWithReconciliation(
+		state,
+		origin,
+		derivation,
+		evaluation,
+		wizardGapsReconcilableQuestions(state),
+	)
 }
 
 func wizardGapsDimensionSelections(
@@ -300,11 +355,12 @@ func wizardGapsDimensionSelections(
 	return selections, remaining
 }
 
-func wizardGapsChange(
+func wizardGapsChangeWithReconciliation(
 	state intake.State,
 	origin intake.Origin,
 	derivation intake.DerivationIdentity,
 	evaluation gaps.Result,
+	reconcilableQuestions map[intake.QuestionRef]struct{},
 ) (intake.Change, error) {
 	existingIssues := make(map[intake.IssueRef]intake.Issue, len(state.Issues()))
 	for _, issue := range state.Issues() {
@@ -317,7 +373,14 @@ func wizardGapsChange(
 	for _, question := range state.Questions() {
 		existingQuestions[question.Ref] = question
 	}
-	reopenedQuestions := wizardGapsReconcilableQuestions(state)
+	_, questionDerivations, err := wizardGapsArtifactDerivations(state)
+	if err != nil {
+		return intake.Change{}, err
+	}
+	latestVersions := make(map[intake.QuestionRef]intake.QuestionVersion)
+	for _, version := range state.QuestionVersions() {
+		latestVersions[version.Question.Ref] = version
+	}
 
 	issues := make([]intake.Issue, 0)
 	for _, issue := range evaluation.Issues() {
@@ -335,11 +398,13 @@ func wizardGapsChange(
 	}
 	questions := make([]intake.Question, 0)
 	revisions := make([]intake.Question, 0)
+	expectedQuestions := make(map[intake.QuestionRef]struct{})
 	for _, question := range evaluation.Questions() {
 		projected := question.IntakeQuestion()
+		expectedQuestions[projected.Ref] = struct{}{}
 		if existing, found := existingQuestions[projected.Ref]; found {
 			if !wizardGapsQuestionPayloadEqual(existing, projected) {
-				if _, causallyReopened := reopenedQuestions[projected.Ref]; !causallyReopened {
+				if _, causallyAffected := reconcilableQuestions[projected.Ref]; !causallyAffected {
 					return intake.Change{}, wizardGapsProjectionConflict(
 						"question",
 						string(projected.Ref),
@@ -349,32 +414,48 @@ func wizardGapsChange(
 			}
 			continue
 		}
+		if latest, found := latestVersions[projected.Ref]; found {
+			if !latest.Retired ||
+				questionDerivations[projected.Ref] != derivation {
+				return intake.Change{}, wizardGapsProjectionConflict(
+					"question",
+					string(projected.Ref),
+				)
+			}
+			if _, causallyAffected := reconcilableQuestions[projected.Ref]; !causallyAffected {
+				return intake.Change{}, wizardGapsProjectionConflict(
+					"question",
+					string(projected.Ref),
+				)
+			}
+			revisions = append(revisions, projected)
+			continue
+		}
 		questions = append(questions, projected)
+	}
+	retirements := make([]intake.QuestionRef, 0)
+	for _, question := range state.Questions() {
+		if _, stillEmitted := expectedQuestions[question.Ref]; stillEmitted {
+			continue
+		}
+		if questionDerivations[question.Ref] != derivation {
+			continue
+		}
+		if _, currentlyAnswered := state.CurrentDecision(question.Ref); currentlyAnswered {
+			continue
+		}
+		if _, causallyAffected := reconcilableQuestions[question.Ref]; !causallyAffected {
+			continue
+		}
+		retirements = append(retirements, question.Ref)
 	}
 	return intake.Change{
 		StateRef: state.Ref(), ExpectedRevision: state.Revision(),
 		Origin: origin, Issues: issues, Questions: questions,
-		QuestionRevisions: revisions,
-		Derivation:        derivation,
+		QuestionRevisions:   revisions,
+		QuestionRetirements: retirements,
+		Derivation:          derivation,
 	}, nil
-}
-
-// wizardGapsReconcilableQuestions opens one bounded reconciliation window when
-// the Intake proves that a prior answer was causally reopened. The pinned
-// evaluator may revise any of its structurally validated active projections in
-// that reevaluation: calculated recommendations can depend on shared inputs
-// beyond the answer dependency used to invalidate Decisions.
-func wizardGapsReconcilableQuestions(
-	state intake.State,
-) map[intake.QuestionRef]struct{} {
-	result := make(map[intake.QuestionRef]struct{})
-	if len(state.ReopenedDecisions()) == 0 {
-		return result
-	}
-	for _, question := range state.Questions() {
-		result[question.Ref] = struct{}{}
-	}
-	return result
 }
 
 func wizardGapsQuestionPayloadEqual(

@@ -62,3 +62,54 @@ func TestQuestionRevisionSnapshotReplayRejectsTamperedVersionChain(t *testing.T)
 		t.Fatalf("tampered replaces_revision err=%v", err)
 	}
 }
+
+func TestQuestionRetirementHistoricalRevisionReconstructsExactActiveSet(
+	t *testing.T,
+) {
+	state, err := intake.NewState(
+		"intake:question-retirement-history",
+		intake.Policy{MaxQuestionRounds: 3},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity, err := intake.NewDerivationIdentity(
+		"orquesta.test.questions",
+		"v1",
+		strings.Repeat("8", 64),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := intakeQuestionChange(1, intake.OriginChat)
+	root.StateRef = state.Ref()
+	root.Derivation = identity
+	initial, err := intake.Apply(state, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	questionRef := initial.Questions()[0].Ref
+	retired, err := intake.Apply(initial, intake.Change{
+		StateRef: initial.Ref(), ExpectedRevision: initial.Revision(),
+		Origin: intake.OriginForm, Derivation: identity,
+		QuestionRetirements: []intake.QuestionRef{questionRef},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	historical, err := intakeStateAtRevision(retired, initial.Revision())
+	if err != nil ||
+		!reflect.DeepEqual(SnapshotIntake(historical), SnapshotIntake(initial)) {
+		t.Fatalf(
+			"historical err=%v got=%+v want=%+v",
+			err,
+			SnapshotIntake(historical),
+			SnapshotIntake(initial),
+		)
+	}
+	restored, err := RestoreIntake(SnapshotIntake(retired))
+	if err != nil ||
+		!reflect.DeepEqual(SnapshotIntake(restored), SnapshotIntake(retired)) {
+		t.Fatalf("retirement restore err=%v state=%+v", err, SnapshotIntake(restored))
+	}
+}

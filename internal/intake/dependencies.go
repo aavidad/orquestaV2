@@ -90,40 +90,77 @@ func (state State) projectDecisions() (
 		}
 
 		for _, decision := range group {
+			if _, activeQuestion := questions[decision.QuestionRef]; !activeQuestion {
+				delete(current, decision.QuestionRef)
+				delete(reopened, decision.QuestionRef)
+				continue
+			}
 			current[decision.QuestionRef] = decision
 			delete(reopened, decision.QuestionRef)
 		}
 		offset = end
 	}
 	for _, question := range state.questions {
-		latestRevision := latestQuestionVersionRevision(
-			state.questionVersions,
-			question.Ref,
-		)
 		decision, active := current[question.Ref]
-		if !active || latestRevision == 0 || decision.Revision >= latestRevision {
+		if !active {
+			if value, found := reopened[question.Ref]; found {
+				decision, active = value.PreviousDecision, true
+			}
+		}
+		if !active {
 			continue
 		}
-		change := DecisionChange{
-			QuestionRef: question.Ref,
-			Revision:    latestRevision,
+		changes := questionVersionChangesFor(
+			question.Ref,
+			decision.Revision,
+			state.questions,
+			state.questionVersions,
+			dependencies,
+		)
+		if len(changes) == 0 {
+			continue
 		}
 		if value, found := reopened[question.Ref]; found {
 			value.InvalidatedBy = appendDecisionChanges(
 				value.InvalidatedBy,
-				change,
+				changes...,
 			)
 			reopened[question.Ref] = value
 		} else {
 			reopened[question.Ref] = ReopenedDecision{
 				QuestionRef:      question.Ref,
 				PreviousDecision: decision,
-				InvalidatedBy:    []DecisionChange{change},
+				InvalidatedBy:    changes,
 			}
 		}
 		delete(current, question.Ref)
 	}
 	return current, reopened
+}
+
+func questionVersionChangesFor(
+	target QuestionRef,
+	decisionRevision Revision,
+	questions []Question,
+	versions []QuestionVersion,
+	dependencies map[QuestionRef]map[QuestionRef]struct{},
+) []DecisionChange {
+	result := make([]DecisionChange, 0)
+	for _, source := range questions {
+		latestRevision := latestQuestionVersionRevision(versions, source.Ref)
+		if latestRevision == 0 || latestRevision <= decisionRevision {
+			continue
+		}
+		_, dependent := dependencies[target][source.Ref]
+		if target != source.Ref && !dependent {
+			continue
+		}
+		result = append(result, DecisionChange{
+			QuestionRef: source.Ref,
+			Revision:    latestRevision,
+		})
+	}
+	return result
 }
 
 func dependencyChangesFor(
