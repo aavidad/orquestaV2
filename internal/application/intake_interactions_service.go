@@ -171,28 +171,61 @@ func intakeStateAtRevision(
 		[]intake.Mutation(nil),
 		snapshot.History[:mutationCount]...,
 	)
-	issues, questions, decisions := 0, 0, 0
+	issues, questions, questionVersions, questionRevisions, decisions := 0, 0, 0, 0, 0
 	var rounds uint32
 	for _, mutation := range snapshot.History {
 		issues += mutation.IssuesAdded
 		questions += mutation.QuestionsAdded
+		questionVersions += mutation.QuestionsAdded + mutation.QuestionsRevised
+		questionRevisions += mutation.QuestionsRevised
 		decisions += mutation.ChoicesRecorded
 		rounds = mutation.QuestionRound
 	}
 	if issues > len(snapshot.Issues) ||
-		questions > len(snapshot.Questions) ||
+		(len(snapshot.QuestionVersions) == 0 && questions > len(snapshot.Questions)) ||
+		(len(snapshot.QuestionVersions) > 0 &&
+			questionVersions > len(snapshot.QuestionVersions)) ||
 		decisions > len(snapshot.Decisions) {
 		return intake.State{}, &StateError{Code: StateConflict}
 	}
 	snapshot.Revision = revision
 	snapshot.QuestionRounds = rounds
 	snapshot.Issues = append([]intake.Issue(nil), snapshot.Issues[:issues]...)
-	snapshot.Questions = cloneSnapshotQuestions(snapshot.Questions[:questions])
+	if len(snapshot.QuestionVersions) == 0 {
+		snapshot.Questions = cloneSnapshotQuestions(snapshot.Questions[:questions])
+	} else {
+		snapshot.QuestionVersions = append(
+			[]intake.QuestionVersion(nil),
+			snapshot.QuestionVersions[:questionVersions]...,
+		)
+		snapshot.Questions = activeQuestionsFromVersions(snapshot.QuestionVersions)
+		if questionRevisions == 0 {
+			snapshot.QuestionVersions = nil
+		}
+	}
 	snapshot.Decisions = append(
 		[]intake.Decision(nil),
 		snapshot.Decisions[:decisions]...,
 	)
 	return RestoreIntake(snapshot)
+}
+
+func activeQuestionsFromVersions(
+	versions []intake.QuestionVersion,
+) []intake.Question {
+	order := make([]intake.QuestionRef, 0)
+	active := make(map[intake.QuestionRef]intake.Question)
+	for _, version := range versions {
+		if _, found := active[version.Question.Ref]; !found {
+			order = append(order, version.Question.Ref)
+		}
+		active[version.Question.Ref] = cloneSnapshotQuestion(version.Question)
+	}
+	result := make([]intake.Question, 0, len(order))
+	for _, ref := range order {
+		result = append(result, active[ref])
+	}
+	return result
 }
 
 func (service *IntakeService) GetIntakeContext(

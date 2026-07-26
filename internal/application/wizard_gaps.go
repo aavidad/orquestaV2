@@ -187,7 +187,8 @@ func (service *WizardGapsService) ApplyWizardGaps(
 		InputDurability:   wizardGapsDurability(),
 		EvaluatorIdentity: evaluator.Identity(),
 	}
-	if len(change.Issues) == 0 && len(change.Questions) == 0 {
+	if len(change.Issues) == 0 && len(change.Questions) == 0 &&
+		len(change.QuestionRevisions) == 0 {
 		if current.State.Revision() != request.ExpectedRevision {
 			return ApplyWizardGapsResult{}, &intake.DomainError{
 				Code:  intake.ErrorRevisionConflict,
@@ -316,6 +317,7 @@ func wizardGapsChange(
 	for _, question := range state.Questions() {
 		existingQuestions[question.Ref] = question
 	}
+	reopenedQuestions := wizardGapsReconcilableQuestions(state)
 
 	issues := make([]intake.Issue, 0)
 	for _, issue := range evaluation.Issues() {
@@ -332,14 +334,18 @@ func wizardGapsChange(
 		issues = append(issues, projected)
 	}
 	questions := make([]intake.Question, 0)
+	revisions := make([]intake.Question, 0)
 	for _, question := range evaluation.Questions() {
 		projected := question.IntakeQuestion()
 		if existing, found := existingQuestions[projected.Ref]; found {
 			if !wizardGapsQuestionPayloadEqual(existing, projected) {
-				return intake.Change{}, wizardGapsProjectionConflict(
-					"question",
-					string(projected.Ref),
-				)
+				if _, causallyReopened := reopenedQuestions[projected.Ref]; !causallyReopened {
+					return intake.Change{}, wizardGapsProjectionConflict(
+						"question",
+						string(projected.Ref),
+					)
+				}
+				revisions = append(revisions, projected)
 			}
 			continue
 		}
@@ -348,8 +354,27 @@ func wizardGapsChange(
 	return intake.Change{
 		StateRef: state.Ref(), ExpectedRevision: state.Revision(),
 		Origin: origin, Issues: issues, Questions: questions,
-		Derivation: derivation,
+		QuestionRevisions: revisions,
+		Derivation:        derivation,
 	}, nil
+}
+
+// wizardGapsReconcilableQuestions opens one bounded reconciliation window when
+// the Intake proves that a prior answer was causally reopened. The pinned
+// evaluator may revise any of its structurally validated active projections in
+// that reevaluation: calculated recommendations can depend on shared inputs
+// beyond the answer dependency used to invalidate Decisions.
+func wizardGapsReconcilableQuestions(
+	state intake.State,
+) map[intake.QuestionRef]struct{} {
+	result := make(map[intake.QuestionRef]struct{})
+	if len(state.ReopenedDecisions()) == 0 {
+		return result
+	}
+	for _, question := range state.Questions() {
+		result[question.Ref] = struct{}{}
+	}
+	return result
 }
 
 func wizardGapsQuestionPayloadEqual(

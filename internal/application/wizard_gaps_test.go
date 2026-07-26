@@ -309,7 +309,7 @@ func TestWizardGapsDerivesDurableFreeTextFromCurrentDecision(t *testing.T) {
 	}
 }
 
-func TestWizardGapsKeepsCausalReopenDespiteChangedProjectionConflict(t *testing.T) {
+func TestWizardGapsReconcilesChangedProjectionAndReplaysExactly(t *testing.T) {
 	system, service := newWizardGapsTestSystem(t)
 	first, err := service.ApplyWizardGaps(
 		context.Background(),
@@ -395,26 +395,51 @@ func TestWizardGapsKeepsCausalReopenDespiteChangedProjectionConflict(t *testing.
 	}
 
 	applyCalls := system.store.applyCalls
+	request := wizardGapsRequest(
+		t,
+		system,
+		"request:wizard-gaps-reopen-evaluate",
+		changedParent.Record.State.Revision(),
+	)
 	result, err := service.ApplyWizardGaps(
 		context.Background(),
-		wizardGapsRequest(
-			t,
-			system,
-			"request:wizard-gaps-reopen-evaluate",
-			changedParent.Record.State.Revision(),
-		),
+		request,
 	)
-	if !IsStateError(err, StateConflict) ||
-		!errors.Is(err, ErrWizardGapsProjectionConflict) ||
-		result.Changed ||
-		system.store.applyCalls != applyCalls {
+	if err != nil || !result.Changed ||
+		system.store.applyCalls != applyCalls+1 {
+		var projection *WizardGapsProjectionConflictError
+		_ = errors.As(err, &projection)
 		t.Fatalf(
-			"evaluation err=%v changed=%t calls=%d/%d",
+			"evaluation err=%v projection=%+v changed=%t calls=%d/%d",
 			err,
+			projection,
 			result.Changed,
 			applyCalls,
 			system.store.applyCalls,
 		)
+	}
+	activeChild := questionByIntakeRef(
+		t,
+		result.Record.State.Questions(),
+		intake.QuestionRef(child.Ref()),
+	)
+	if wizardGapsQuestionPayloadEqual(activeChild, child.IntakeQuestion()) {
+		t.Fatal("reconciliation kept the stale child projection")
+	}
+	versions := result.Record.State.QuestionVersions()
+	if len(versions) <= len(first.Record.State.QuestionVersions()) {
+		t.Fatalf("question versions were not appended: %+v", versions)
+	}
+	var latest intake.QuestionVersion
+	for _, version := range versions {
+		if version.Question.Ref == intake.QuestionRef(child.Ref()) {
+			latest = version
+		}
+	}
+	if latest.Question.Ref != intake.QuestionRef(child.Ref()) ||
+		latest.ReplacesRevision == 0 ||
+		latest.Revision != result.Record.State.Revision() {
+		t.Fatalf("latest question version = %+v", latest)
 	}
 	current, getErr := system.service.GetIntake(
 		context.Background(),
@@ -431,6 +456,40 @@ func TestWizardGapsKeepsCausalReopenDespiteChangedProjectionConflict(t *testing.
 	); found {
 		t.Fatal("Wizard evaluation restored invalidated U3 decision")
 	}
+	reopened = current.State.ReopenedDecisions()
+	if len(reopened) == 0 ||
+		reopened[0].QuestionRef != intake.QuestionRef(child.Ref()) {
+		t.Fatalf("reconciled reopen=%+v", reopened)
+	}
+
+	replayed, replayErr := service.ApplyWizardGaps(context.Background(), request)
+	if replayErr != nil || replayed.Changed ||
+		replayed.Record.Receipt != result.Record.Receipt ||
+		system.store.applyCalls != applyCalls+1 {
+		t.Fatalf(
+			"replay err=%v changed=%t receipt=%+v/%+v calls=%d",
+			replayErr,
+			replayed.Changed,
+			replayed.Record.Receipt,
+			result.Record.Receipt,
+			system.store.applyCalls,
+		)
+	}
+}
+
+func questionByIntakeRef(
+	t *testing.T,
+	questions []intake.Question,
+	ref intake.QuestionRef,
+) intake.Question {
+	t.Helper()
+	for _, question := range questions {
+		if question.Ref == ref {
+			return question
+		}
+	}
+	t.Fatalf("question %s missing", ref)
+	return intake.Question{}
 }
 
 func TestWizardGapsProjectsExplicitPackAsRequestScopedContext(t *testing.T) {
