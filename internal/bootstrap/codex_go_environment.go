@@ -131,10 +131,6 @@ func ensurePrivateCodexGoCacheDirectory(path string) error {
 	return nil
 }
 
-func validateCodexGoToolchain(configuredRoot string) (string, error) {
-	return validateCodexGoToolchainWithTrust(configuredRoot, codexGoToolchainOwnerTrusted)
-}
-
 func validateCodexGoToolchainWithTrust(
 	configuredRoot string,
 	ownerTrusted codexGoToolchainTrust,
