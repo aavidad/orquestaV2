@@ -27,6 +27,11 @@ type descriptorOwnerForTest struct {
 	inode  uint64
 }
 
+type registeredConnectionForTest struct {
+	owner descriptorOwnerForTest
+	done  <-chan struct{}
+}
+
 func (reader *descriptorBarrierReaderForTest) Read([]byte) (int, error) {
 	reader.enterOnce.Do(func() { close(reader.entered) })
 	<-reader.release
@@ -113,22 +118,60 @@ func descriptorOwnerForFileForTest(t *testing.T, file *os.File) descriptorOwnerF
 	return descriptorOwnerForTest{device: uint64(stat.Dev), inode: stat.Ino}
 }
 
-func registeredConnectionOwnerForTest(t *testing.T, server *Server) descriptorOwnerForTest {
+func acceptRegisteredConnectionForTest(
+	t *testing.T,
+	ctx context.Context,
+	server *Server,
+) registeredConnectionForTest {
 	t.Helper()
-	server.mu.Lock()
-	defer server.mu.Unlock()
-	if len(server.connections) != 1 {
-		t.Fatalf("expected one registered connection, got %d", len(server.connections))
+	server.slots <- struct{}{}
+	listener, err := server.pinListener()
+	if err != nil {
+		<-server.slots
+		t.Fatal(err)
 	}
-	for connection := range server.connections {
-		var stat unix.Stat_t
-		if unix.Fstat(connection, &stat) != nil || stat.Mode&unix.S_IFMT != unix.S_IFSOCK {
-			t.Fatalf("could not identify registered connection %d", connection)
+	connection, err := server.acceptConnection(ctx, listener)
+	_ = unix.Close(listener)
+	if err != nil {
+		<-server.slots
+		t.Fatalf("could not accept test connection: %v", err)
+	}
+	if err := setSocketTimeouts(connection, server.config.CleanupTimeout); err != nil {
+		_ = unix.Close(connection)
+		<-server.slots
+		t.Fatalf("could not configure test connection: %v", err)
+	}
+	if !server.registerConnection(connection) {
+		if connection >= 0 {
+			_ = unix.Close(connection)
 		}
-		return descriptorOwnerForTest{device: uint64(stat.Dev), inode: stat.Ino}
+		<-server.slots
+		t.Fatal("could not register test connection")
 	}
-	t.Fatal("registered connection disappeared")
-	return descriptorOwnerForTest{}
+	var stat unix.Stat_t
+	if unix.Fstat(connection, &stat) != nil || stat.Mode&unix.S_IFMT != unix.S_IFSOCK {
+		server.finishConnection(connection)
+		t.Fatalf("could not identify registered connection %d", connection)
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer server.finishConnection(connection)
+		server.handle(ctx, connection)
+	}()
+	return registeredConnectionForTest{
+		owner: descriptorOwnerForTest{device: uint64(stat.Dev), inode: stat.Ino},
+		done:  done,
+	}
+}
+
+func waitForFinishedConnectionForTest(t *testing.T, connection registeredConnectionForTest) {
+	t.Helper()
+	select {
+	case <-connection.done:
+	case <-time.After(2 * time.Second):
+		t.Fatalf("connection owner %+v did not finish", connection.owner)
+	}
 }
 
 func openDescriptorOwnersForTest(
@@ -210,16 +253,23 @@ func waitForDescriptorOwnerCountForTest(
 	want int,
 ) {
 	t.Helper()
-	for attempts := 0; attempts < 100; attempts++ {
+	deadline := time.NewTimer(2 * time.Second)
+	defer deadline.Stop()
+	poll := time.NewTicker(time.Millisecond)
+	defer poll.Stop()
+	for {
 		if openDescriptorCountForOwnerForTest(t, owner) == want {
 			return
 		}
-		time.Sleep(time.Millisecond)
+		select {
+		case <-poll.C:
+		case <-deadline.C:
+			t.Fatalf(
+				"descriptor owner %+v did not return to %d; got %d",
+				owner,
+				want,
+				openDescriptorCountForOwnerForTest(t, owner),
+			)
+		}
 	}
-	t.Fatalf(
-		"descriptor owner %+v did not return to %d; got %d",
-		owner,
-		want,
-		openDescriptorCountForOwnerForTest(t, owner),
-	)
 }
