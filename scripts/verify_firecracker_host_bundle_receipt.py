@@ -328,7 +328,7 @@ def validate(args: argparse.Namespace) -> str:
         artifacts["launcher"],
         label="launcher",
         expected_file="orquesta-firecracker-launcher",
-        expected_package="./cmd/orquesta-firecracker-launcher",
+        expected_package="./cmd/orquesta/firecracker-launcher",
         path=args.launcher,
         expected_sha256=args.expected_launcher_sha256,
     )
@@ -336,7 +336,7 @@ def validate(args: argparse.Namespace) -> str:
         artifacts["supervisor"],
         label="supervisor",
         expected_file="orquesta-firecracker-attestor-e2e",
-        expected_package="./cmd/orquesta-firecracker-attestor-e2e",
+        expected_package="./cmd/orquesta/firecracker-attestor-e2e",
         path=args.supervisor,
         expected_sha256=args.expected_supervisor_sha256,
     )

@@ -314,14 +314,14 @@ document = {
         "launcher": {
             "file": "orquesta-firecracker-launcher",
             "mode": "0755",
-            "package": "./cmd/orquesta-firecracker-launcher",
+            "package": "./cmd/orquesta/firecracker-launcher",
             "sha256": f"sha256:{launcher_sha}",
             "size_bytes": int(launcher_size),
         },
         "supervisor": {
             "file": "orquesta-firecracker-attestor-e2e",
             "mode": "0755",
-            "package": "./cmd/orquesta-firecracker-attestor-e2e",
+            "package": "./cmd/orquesta/firecracker-attestor-e2e",
             "sha256": f"sha256:{supervisor_sha}",
             "size_bytes": int(supervisor_size),
         },
@@ -437,8 +437,8 @@ main() {
     GIT_NO_REPLACE_OBJECTS=1 git -C "$SOURCE_ROOT" cat-file commit "$SOURCE_COMMIT" |
     env -i PATH="$SAFE_PATH" LC_ALL=C sha256sum | cut -d' ' -f1)"
 
-  build_pair launcher ./cmd/orquesta-firecracker-launcher
-  build_pair supervisor ./cmd/orquesta-firecracker-attestor-e2e
+  build_pair launcher ./cmd/orquesta/firecracker-launcher
+  build_pair supervisor ./cmd/orquesta/firecracker-attestor-e2e
 
   toolchain_tree_after="$(sha256_tree "$TOOLCHAIN_ROOT")"
   [[ "$toolchain_tree_after" == "$toolchain_tree_before" ]] ||
