@@ -158,6 +158,15 @@ func (repository *Repository) ApplyIntake(
 	); err != nil {
 		return application.IntakeRecord{}, false, err
 	}
+	if frozen, err := intakeDossierConfirmed(
+		ctx, transaction, state.ActorRef, state.ProjectRef, state.State.Ref(),
+	); err != nil {
+		return application.IntakeRecord{}, false, err
+	} else if frozen {
+		return application.IntakeRecord{}, false, conflict(
+			errors.New("sqlite.intake_dossier_confirmed"),
+		)
+	}
 	chain, err := readIntakeChain(
 		ctx, transaction, state.ActorRef, state.ProjectRef, state.State.Ref(),
 	)

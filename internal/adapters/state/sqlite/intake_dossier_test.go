@@ -232,7 +232,7 @@ func TestIntakeDossierMigration018RollsBackPartialSchema(t *testing.T) {
 	var version, receipt, dossiers int
 	sqliteTestNoError(t, database.QueryRow(`PRAGMA user_version`).Scan(&version))
 	sqliteTestNoError(t, database.QueryRow(
-		`SELECT COUNT(*) FROM schema_migrations WHERE version=?`, recoverySchemaV23,
+		`SELECT COUNT(*) FROM schema_migrations WHERE version=?`, recoverySchemaV23Dossier,
 	).Scan(&receipt))
 	sqliteTestNoError(t, database.QueryRow(`
 SELECT COUNT(*) FROM sqlite_schema

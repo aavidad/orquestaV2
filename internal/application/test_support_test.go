@@ -23,25 +23,27 @@ import (
 )
 
 type memoryRepository struct {
-	mu                  sync.Mutex
-	records             map[goal.GoalRef]GoalRecord
-	requests            map[string]goal.GoalRef
-	successors          map[goal.AppSpecRef]goal.GoalRef
-	actions             map[string]memoryAction
-	events              []EventRecord
-	directorLeases      map[goal.GoalRef]DirectorLeaseRecord
-	directorRequests    map[string]memoryDirectorMutation
-	controlRequests     map[string]ControlReplayRequest
-	controlRefs         map[string]string
-	mailboxes           map[MailboxMessageRef]MailboxRecord
-	mailboxRequests     map[string]memoryMailboxMutation
-	mailboxAdmits       int
-	mailboxClaims       int
-	mailboxDeliveries   int
-	mailboxConsumptions int
-	mailboxResolutions  int
-	integrationAdmits   map[string]memoryIntegrationAdmission
-	now                 func() time.Time
+	mu                   sync.Mutex
+	records              map[goal.GoalRef]GoalRecord
+	requests             map[string]goal.GoalRef
+	successors           map[goal.AppSpecRef]goal.GoalRef
+	actions              map[string]memoryAction
+	events               []EventRecord
+	directorLeases       map[goal.GoalRef]DirectorLeaseRecord
+	directorRequests     map[string]memoryDirectorMutation
+	controlRequests      map[string]ControlReplayRequest
+	controlRefs          map[string]string
+	mailboxes            map[MailboxMessageRef]MailboxRecord
+	mailboxRequests      map[string]memoryMailboxMutation
+	mailboxAdmits        int
+	mailboxClaims        int
+	mailboxDeliveries    int
+	mailboxConsumptions  int
+	mailboxResolutions   int
+	integrationAdmits    map[string]memoryIntegrationAdmission
+	dossierConfirmations map[string]IntakeDossierConfirmationRecord
+	confirmedDossiers    map[IntakeDossierRef]string
+	now                  func() time.Time
 }
 
 type memoryMailboxMutation struct {
@@ -74,24 +76,32 @@ type memoryIntegrationAdmission struct {
 
 func newMemoryRepository() *memoryRepository {
 	return &memoryRepository{
-		records:           make(map[goal.GoalRef]GoalRecord),
-		requests:          make(map[string]goal.GoalRef),
-		successors:        make(map[goal.AppSpecRef]goal.GoalRef),
-		actions:           make(map[string]memoryAction),
-		directorLeases:    make(map[goal.GoalRef]DirectorLeaseRecord),
-		directorRequests:  make(map[string]memoryDirectorMutation),
-		controlRequests:   make(map[string]ControlReplayRequest),
-		controlRefs:       make(map[string]string),
-		mailboxes:         make(map[MailboxMessageRef]MailboxRecord),
-		mailboxRequests:   make(map[string]memoryMailboxMutation),
-		integrationAdmits: make(map[string]memoryIntegrationAdmission),
-		now:               time.Now,
+		records:              make(map[goal.GoalRef]GoalRecord),
+		requests:             make(map[string]goal.GoalRef),
+		successors:           make(map[goal.AppSpecRef]goal.GoalRef),
+		actions:              make(map[string]memoryAction),
+		directorLeases:       make(map[goal.GoalRef]DirectorLeaseRecord),
+		directorRequests:     make(map[string]memoryDirectorMutation),
+		controlRequests:      make(map[string]ControlReplayRequest),
+		controlRefs:          make(map[string]string),
+		mailboxes:            make(map[MailboxMessageRef]MailboxRecord),
+		mailboxRequests:      make(map[string]memoryMailboxMutation),
+		integrationAdmits:    make(map[string]memoryIntegrationAdmission),
+		dossierConfirmations: make(map[string]IntakeDossierConfirmationRecord),
+		confirmedDossiers:    make(map[IntakeDossierRef]string),
+		now:                  time.Now,
 	}
 }
 
 func (repository *memoryRepository) CreateGoal(_ context.Context, state CreateGoalState) (GoalRecord, bool, error) {
 	repository.mu.Lock()
 	defer repository.mu.Unlock()
+	return repository.createGoalLocked(state)
+}
+
+func (repository *memoryRepository) createGoalLocked(
+	state CreateGoalState,
+) (GoalRecord, bool, error) {
 	intent := state.Goal.AppSpec().Intent()
 	if !memoryWriteAuthorizationValid(
 		state.AuthorizationReceipt, state.RequestedBy, state.Goal.Project(), identity.PermissionGoalsCreate,
@@ -132,6 +142,61 @@ func (repository *memoryRepository) CreateGoal(_ context.Context, state CreateGo
 	repository.records[state.Goal.Ref()] = record
 	repository.events = append(repository.events, state.Events...)
 	return cloneGoalRecord(record), true, nil
+}
+
+func (repository *memoryRepository) ConfirmIntakeDossierAndCreateGoal(
+	_ context.Context,
+	state ConfirmIntakeDossierState,
+) (IntakeDossierConfirmationRecord, bool, error) {
+	repository.mu.Lock()
+	defer repository.mu.Unlock()
+	if err := ValidateIntakeDossierConfirmationState(state); err != nil {
+		return IntakeDossierConfirmationRecord{}, false, err
+	}
+	confirmation := state.Confirmation
+	requestKey := confirmation.PrincipalRef.String() + "\x00" +
+		confirmation.ProjectRef.String() + "\x00" + confirmation.RequestRef
+	if existing, found := repository.dossierConfirmations[requestKey]; found {
+		if existing.Confirmation.RequestFingerprint !=
+			confirmation.RequestFingerprint ||
+			existing.Confirmation.DossierRef != confirmation.DossierRef ||
+			existing.Confirmation.AuthorizationReceiptRef !=
+				confirmation.AuthorizationReceiptRef {
+			return IntakeDossierConfirmationRecord{}, false,
+				&StateError{Code: StateConflict}
+		}
+		live, found := repository.records[existing.Confirmation.GoalRef]
+		if !found {
+			return IntakeDossierConfirmationRecord{}, false,
+				&StateError{Code: StateConflict}
+		}
+		existing.Goal = live
+		return cloneIntakeDossierConfirmationRecord(existing), false, nil
+	}
+	if _, found := repository.confirmedDossiers[confirmation.DossierRef]; found {
+		return IntakeDossierConfirmationRecord{}, false,
+			&StateError{Code: StateConflict}
+	}
+	record, created, err := repository.createGoalLocked(state.CreateGoal)
+	if err != nil || !created {
+		if err == nil {
+			err = &StateError{Code: StateConflict}
+		}
+		return IntakeDossierConfirmationRecord{}, false, err
+	}
+	persisted := IntakeDossierConfirmationRecord{
+		Goal: record, Confirmation: confirmation,
+	}
+	repository.dossierConfirmations[requestKey] = persisted
+	repository.confirmedDossiers[confirmation.DossierRef] = requestKey
+	return cloneIntakeDossierConfirmationRecord(persisted), true, nil
+}
+
+func cloneIntakeDossierConfirmationRecord(
+	record IntakeDossierConfirmationRecord,
+) IntakeDossierConfirmationRecord {
+	record.Goal = cloneGoalRecord(record.Goal)
+	return record
 }
 
 func (repository *memoryRepository) AmendGoal(_ context.Context, state AmendGoalState) (GoalRecord, bool, error) {

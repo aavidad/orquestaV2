@@ -9,6 +9,7 @@ import (
 	"orquesta/internal/goal"
 	"orquesta/internal/governance"
 	"orquesta/internal/identity"
+	"orquesta/internal/intake"
 	"orquesta/internal/ports"
 	"orquesta/internal/review"
 )
@@ -426,6 +427,44 @@ type CreateGoalState struct {
 	BudgetEnvelopes      []governance.BudgetEnvelope
 }
 
+// IntakeDossierConfirmation is the immutable causal binding produced when an
+// exact dossier freezes its source intake and creates the initial Goal.
+// It is a fact of the Goal creation transaction, not another lifecycle.
+type IntakeDossierConfirmation struct {
+	Ref                     string
+	RequestRef              string
+	RequestFingerprint      string
+	PrincipalRef            identity.PrincipalRef
+	ActorRef                goal.ActorRef
+	ProjectRef              goal.ProjectRef
+	StateRef                intake.Ref
+	StateRevision           intake.Revision
+	StateDigest             string
+	SourceIntakeReceiptRef  string
+	DossierRef              IntakeDossierRef
+	DossierDigest           string
+	PlanDigest              string
+	GoalRef                 goal.GoalRef
+	AppSpecRef              goal.AppSpecRef
+	SpecHash                string
+	AuthorizationReceiptRef string
+	ConfirmedAt             time.Time
+}
+
+// ConfirmIntakeDossierState carries the complete application decision that a
+// StateRepository adapter must persist atomically. CreateGoal has already been
+// built from Dossier; the adapter revalidates both before committing.
+type ConfirmIntakeDossierState struct {
+	CreateGoal   CreateGoalState
+	Dossier      IntakeDossier
+	Confirmation IntakeDossierConfirmation
+}
+
+type IntakeDossierConfirmationRecord struct {
+	Goal         GoalRecord
+	Confirmation IntakeDossierConfirmation
+}
+
 // AmendGoalState carries a fully constructed successor plus the source fence
 // that the repository must revalidate atomically. Generated refs are not part
 // of idempotency: an equal replay returns the already persisted successor.
@@ -627,6 +666,7 @@ type ReviewExecutionFailedState struct {
 type StateRepository interface {
 	GovernanceRepository
 	CreateGoal(context.Context, CreateGoalState) (GoalRecord, bool, error)
+	ConfirmIntakeDossierAndCreateGoal(context.Context, ConfirmIntakeDossierState) (IntakeDossierConfirmationRecord, bool, error)
 	AmendGoal(context.Context, AmendGoalState) (GoalRecord, bool, error)
 	GetGoal(context.Context, goal.GoalRef) (GoalRecord, error)
 	ListGoals(context.Context, goal.ProjectRef, int) ([]GoalSummary, error)

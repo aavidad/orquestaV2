@@ -52,38 +52,22 @@ func (orchestrator *Orchestrator) Submit(ctx context.Context, access Access, req
 		return SubmitResult{}, err
 	}
 	now = authorizationCausalFloor(now, authorizationReceipt)
-	aggregate, goalRef, err := orchestrator.buildSubmittedGoal(ctx, request, principal, projectRef, now)
-	if err != nil {
-		return SubmitResult{}, err
-	}
-
-	authorities := workItemAuthorities(
-		aggregate.WorkItems(), principal.Ref, identity.PermissionGoalsCreate,
-		EffectApprovalSourceGoalConfirmation, authorizationReceipt, now,
-	)
-	executions, actions, scheduledEvents, err := orchestrator.scheduleReady(
-		ctx, aggregate, nil, authorities, orchestrator.budgetPolicy.effectPolicy(), now,
-	)
-	if err != nil {
-		return SubmitResult{}, err
-	}
-	events := append([]EventRecord{{
-		Ref: "event:goal-created:" + goalRef.String(), Kind: "goal.created",
-		GoalRef: goalRef, OccurredAt: now,
-	}}, scheduledEvents...)
 	fingerprint := submissionFingerprint(access, request)
-	record, created, err := orchestrator.state.CreateGoal(ctx, CreateGoalState{
-		RequestRef: request.RequestRef, RequestFingerprint: fingerprint,
-		AuthorizationReceipt: authorizationReceipt, RequestedBy: principal.Ref,
-		Goal:       aggregate,
-		Executions: executions, Actions: actions, Events: events, WorkItemAuthorities: authorities,
-		BudgetEnvelopes: orchestrator.budgetPolicy.envelopes(projectRef, goalRef, now),
-	})
+	createState, err := orchestrator.prepareGoalCreation(
+		ctx, request, principal, projectRef, authorizationReceipt, now,
+		initialAppSpecReason, fingerprint,
+	)
+	if err != nil {
+		return SubmitResult{}, err
+	}
+	record, created, err := orchestrator.state.CreateGoal(ctx, createState)
 	if err != nil {
 		return SubmitResult{}, err
 	}
 	if created {
-		if err := validatePersistedCandidate(aggregate, executions, record); err != nil {
+		if err := validatePersistedCandidate(
+			createState.Goal, createState.Executions, record,
+		); err != nil {
 			return SubmitResult{}, err
 		}
 	}
@@ -99,6 +83,7 @@ func (orchestrator *Orchestrator) buildSubmittedGoal(
 	principal identity.Principal,
 	projectRef goal.ProjectRef,
 	now time.Time,
+	reason string,
 ) (goal.Goal, goal.GoalRef, error) {
 	intentRef, err := newIntentRef(ctx, orchestrator.ids)
 	if err != nil {
@@ -121,7 +106,7 @@ func (orchestrator *Orchestrator) buildSubmittedGoal(
 	}
 	appSpec, err := goal.NewInitialAppSpec(goal.AppSpecInput{
 		Ref: appSpecRef, Intent: intent, Objective: request.NormalizedObjective,
-		Reason: initialAppSpecReason, ConfirmedBy: principal.ActorRef, ConfirmedAt: now,
+		Reason: reason, ConfirmedBy: principal.ActorRef, ConfirmedAt: now,
 	})
 	if err != nil {
 		return goal.Goal{}, goal.GoalRef{}, err
@@ -143,6 +128,48 @@ func (orchestrator *Orchestrator) buildSubmittedGoal(
 		return goal.Goal{}, goal.GoalRef{}, err
 	}
 	return aggregate, goalRef, nil
+}
+
+func (orchestrator *Orchestrator) prepareGoalCreation(
+	ctx context.Context,
+	request SubmitRequest,
+	principal identity.Principal,
+	projectRef goal.ProjectRef,
+	authorizationReceipt identity.AuthorizationReceipt,
+	now time.Time,
+	reason string,
+	fingerprint string,
+) (CreateGoalState, error) {
+	aggregate, goalRef, err := orchestrator.buildSubmittedGoal(
+		ctx, request, principal, projectRef, now, reason,
+	)
+	if err != nil {
+		return CreateGoalState{}, err
+	}
+	authorities := workItemAuthorities(
+		aggregate.WorkItems(), principal.Ref, identity.PermissionGoalsCreate,
+		EffectApprovalSourceGoalConfirmation, authorizationReceipt, now,
+	)
+	executions, actions, scheduledEvents, err := orchestrator.scheduleReady(
+		ctx, aggregate, nil, authorities,
+		orchestrator.budgetPolicy.effectPolicy(), now,
+	)
+	if err != nil {
+		return CreateGoalState{}, err
+	}
+	events := append([]EventRecord{{
+		Ref: "event:goal-created:" + goalRef.String(), Kind: "goal.created",
+		GoalRef: goalRef, OccurredAt: now,
+	}}, scheduledEvents...)
+	return CreateGoalState{
+		RequestRef: request.RequestRef, RequestFingerprint: fingerprint,
+		AuthorizationReceipt: authorizationReceipt, RequestedBy: principal.Ref,
+		Goal: aggregate, Executions: executions, Actions: actions, Events: events,
+		WorkItemAuthorities: authorities,
+		BudgetEnvelopes: orchestrator.budgetPolicy.envelopes(
+			projectRef, goalRef, now,
+		),
+	}, nil
 }
 
 func submissionFingerprint(access Access, request SubmitRequest) string {

@@ -71,6 +71,15 @@ func (repository *Repository) CreateIntakeDossier(
 		}
 		return record, false, nil
 	}
+	if frozen, err := intakeDossierConfirmed(
+		ctx, transaction, state.ActorRef, state.ProjectRef, state.Dossier.StateRef(),
+	); err != nil {
+		return application.IntakeDossierRecord{}, false, err
+	} else if frozen {
+		return application.IntakeDossierRecord{}, false, conflict(
+			errors.New("sqlite.intake_dossier_confirmed"),
+		)
+	}
 	if err := requirePersistedIntakeDossierAuthorization(
 		ctx, transaction, state.AuthorizationReceipt, state.ActorRef, state.ProjectRef,
 	); err != nil {
