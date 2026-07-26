@@ -448,9 +448,15 @@ func (adapter *Adapter) bindLegacyLaunchRecord(
 	request ports.AgentLaunchRequest,
 	requestHash string,
 ) (launchRecord, error) {
-	source, err := adapter.legacyLaunchSource(runPath, legacy)
+	source, bound, found, err := adapter.loadLegacyBoundLaunchRecord(runPath, legacy)
 	if err != nil {
 		return launchRecord{}, err
+	}
+	if found {
+		if bound.RequestHash != requestHash {
+			return launchRecord{}, &Error{Code: CodeExecutionConflict}
+		}
+		return bound, nil
 	}
 	candidate, err := adapter.legacyLaunchCandidate(source, request, requestHash)
 	if err != nil {
@@ -490,26 +496,44 @@ func (adapter *Adapter) previewLegacyLaunchRecord(
 	request ports.AgentLaunchRequest,
 	requestHash string,
 ) (launchRecord, bool, error) {
-	source, err := adapter.legacyLaunchSource(runPath, legacy)
+	source, bound, found, err := adapter.loadLegacyBoundLaunchRecord(runPath, legacy)
 	if err != nil {
 		return launchRecord{}, false, err
+	}
+	if found {
+		if bound.RequestHash != requestHash {
+			return launchRecord{}, false, &Error{Code: CodeExecutionConflict}
+		}
+		return bound, true, nil
 	}
 	candidate, err := adapter.legacyLaunchCandidate(source, request, requestHash)
 	if err != nil {
 		return launchRecord{}, false, err
 	}
+	return candidate, false, nil
+}
+
+// loadLegacyBoundLaunchRecord resolves the complete immutable upgrade chain
+// without manufacturing fields that were absent from the historical request.
+// The returned source is the last pre-V7 identity. When a durable V7 binding
+// exists, bound is authoritative even if the adapter's current defaults differ.
+func (adapter *Adapter) loadLegacyBoundLaunchRecord(
+	runPath string,
+	legacy launchRecord,
+) (source launchRecord, bound launchRecord, found bool, err error) {
+	source, err = adapter.legacyLaunchSource(runPath, legacy)
+	if err != nil {
+		return launchRecord{}, launchRecord{}, false, err
+	}
 	var upgrade launchUpgradeRecord
-	found, err := adapter.readPrivateJSON(path.Join(runPath, launchUpgradeFileName), &upgrade)
+	found, err = adapter.readPrivateJSON(path.Join(runPath, launchUpgradeFileName), &upgrade)
 	if err != nil || !found {
-		return candidate, false, err
+		return source, launchRecord{}, false, err
 	}
 	if err := validateLegacyLaunchUpgrade(upgrade, source); err != nil {
-		return launchRecord{}, false, err
+		return launchRecord{}, launchRecord{}, false, err
 	}
-	if upgrade.Launch.RequestHash != requestHash {
-		return launchRecord{}, false, &Error{Code: CodeExecutionConflict}
-	}
-	return upgrade.Launch, true, nil
+	return source, upgrade.Launch, true, nil
 }
 
 func (adapter *Adapter) legacyLaunchSource(runPath string, original launchRecord) (launchRecord, error) {
@@ -568,6 +592,14 @@ func (adapter *Adapter) legacyLaunchCandidate(
 		return launchRecord{}, &Error{Code: CodeStateInvalid, Cause: err}
 	}
 	if legacy.RequestHash != legacyHash {
+		return launchRecord{}, &Error{Code: CodeExecutionConflict}
+	}
+	// V3-V6 did not persist reasoning effort in the request identity. Those
+	// adapters executed the composition-wide configured effort, so that exact
+	// effective value is the only deterministic historical binding available.
+	// Requiring it prevents a replay from claiming that a live legacy process
+	// was launched with a different per-request effort.
+	if request.ReasoningEffort != governance.ReasoningEffort(adapter.config.ReasoningEffort) {
 		return launchRecord{}, &Error{Code: CodeExecutionConflict}
 	}
 	candidate := launchRecord{

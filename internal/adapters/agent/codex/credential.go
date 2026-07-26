@@ -12,6 +12,7 @@ import (
 
 	"orquesta/internal/credentials"
 	"orquesta/internal/goal"
+	"orquesta/internal/governance"
 	"orquesta/internal/ports"
 )
 
@@ -92,15 +93,22 @@ func (adapter *Adapter) credentialUseRequest(request ports.AgentLaunchRequest) c
 		ScopeRef: credentials.ScopeRef(request.ProjectRef.String()), PurposeRef: credentials.PurposeRef(ProviderRef)}
 }
 
-func (record launchRecord) recoveryRequest(receipt ports.AgentLaunchReceipt) ports.AgentLaunchRequest {
+func (adapter *Adapter) recoveryRequest(record launchRecord, receipt ports.AgentLaunchReceipt) ports.AgentLaunchRequest {
 	actorRef, _ := goal.NewActorRef(record.ActorRef)
 	projectRef, _ := goal.NewProjectRef(record.ProjectRef)
 	sessionRef, _ := ports.NewExecutionSessionRef(record.ExecutionSessionRef)
+	reasoningEffort := record.ReasoningEffort
+	if record.SchemaVersion < stateSchemaVersion {
+		// Before V7 effort belonged to the immutable adapter configuration,
+		// not to the request journal. Recover that exact effective value so
+		// authority checks never receive an empty or newly invented effort.
+		reasoningEffort = governance.ReasoningEffort(adapter.config.ReasoningEffort)
+	}
 	return ports.AgentLaunchRequest{SessionRef: sessionRef, ProjectRef: projectRef, ActorRef: actorRef,
 		GoalRef: receipt.GoalRef, WorkItemRef: receipt.WorkItemRef, ExecutionRef: receipt.ExecutionRef,
 		ExecutionAttempt: receipt.ExecutionAttempt, PlanGeneration: receipt.PlanGeneration,
 		AppSpecGeneration: receipt.AppSpecGeneration, SpecHash: record.SpecHash,
-		ReasoningEffort: record.ReasoningEffort}
+		ReasoningEffort: reasoningEffort}
 }
 
 func (adapter *Adapter) recoverExecutionGuards(ctx context.Context, record launchRecord, state *executionState) error {
@@ -111,7 +119,7 @@ func (adapter *Adapter) recoverExecutionGuards(ctx context.Context, record launc
 	if needsCredential && (record.ActorRef == "" || record.ProjectRef == "") {
 		return &Error{Code: CodeCredentialUnavailable}
 	}
-	request := record.recoveryRequest(state.receipt)
+	request := adapter.recoveryRequest(record, state.receipt)
 	var session *resolvedSession
 	var err error
 	if record.ExecutionSessionRef != "" {

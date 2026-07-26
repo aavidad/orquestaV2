@@ -318,6 +318,7 @@ func TestAccountProfileRejectsAccountlessLegacyJournals(t *testing.T) {
 func TestAccountProfileV6ReplayBindsV7Reasoning(t *testing.T) {
 	root, _ := secureAccountFixture(t, accountTestProfile)
 	config := accountTestConfig(t, root, accountTestProfile)
+	config.ReasoningEffort = string(governance.ReasoningEffortHigh)
 	request := testRequest(t, "account-v6-v7-reasoning", "helper:account-home", 1024)
 	request.ReasoningEffort = governance.ReasoningEffortHigh
 	runPath := seedPersistedV6Launch(t, config, request)

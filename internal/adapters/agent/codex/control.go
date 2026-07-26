@@ -126,8 +126,19 @@ func (adapter *Adapter) controlTargetLocked(request ports.AgentStopRequest) (*ex
 	if err != nil {
 		return nil, runPath, err
 	}
-	if !found || record.SchemaVersion != stateSchemaVersion {
+	if !found {
 		return nil, runPath, &Error{Code: CodeExecutionNotFound}
+	}
+	terminalRequestHash := record.RequestHash
+	if record.SchemaVersion != stateSchemaVersion {
+		_, bound, upgraded, loadErr := adapter.loadLegacyBoundLaunchRecord(runPath, record)
+		if loadErr != nil {
+			return nil, runPath, loadErr
+		}
+		if !upgraded {
+			return nil, runPath, &Error{Code: CodeExecutionNotFound}
+		}
+		record = bound
 	}
 	launch, err := record.receipt(request.ExecutionRef)
 	if err != nil {
@@ -143,10 +154,12 @@ func (adapter *Adapter) controlTargetLocked(request ports.AgentStopRequest) (*ex
 		return state, runPath, nil
 	}
 	state := &executionState{
-		requestHash: record.RequestHash, terminalRequestHash: record.RequestHash,
+		requestHash: record.RequestHash, terminalRequestHash: terminalRequestHash,
 		receipt: launch, maxOutput: record.MaxOutputBytes, runPath: runPath, status: ports.AgentPending,
 	}
-	if terminal, terminalFound, loadErr := adapter.loadCausalTerminal(runPath, record.RequestHash, record.SpecHash, record.MaxOutputBytes); loadErr != nil {
+	if terminal, terminalFound, loadErr := adapter.loadCausalTerminal(
+		runPath, terminalRequestHash, record.SpecHash, record.MaxOutputBytes,
+	); loadErr != nil {
 		return nil, runPath, loadErr
 	} else if terminalFound {
 		state.status, state.terminal, state.terminalDurable = terminal.Status, &terminal, true
