@@ -10,14 +10,15 @@ import (
 // State is an immutable intake snapshot. All slices are private and accessors
 // return defensive copies.
 type State struct {
-	ref            Ref
-	revision       Revision
-	policy         Policy
-	questionRounds uint32
-	issues         []Issue
-	questions      []Question
-	decisions      []Decision
-	history        []Mutation
+	ref              Ref
+	revision         Revision
+	policy           Policy
+	questionRounds   uint32
+	issues           []Issue
+	questions        []Question
+	questionVersions []QuestionVersion
+	decisions        []Decision
+	history          []Mutation
 }
 
 func NewState(ref Ref, policy Policy) (State, error) {
@@ -54,8 +55,19 @@ func (state State) Policy() Policy         { return state.policy }
 func (state State) QuestionRounds() uint32 { return state.questionRounds }
 func (state State) Issues() []Issue        { return cloneIssues(state.issues) }
 func (state State) Questions() []Question  { return cloneQuestions(state.questions) }
-func (state State) Decisions() []Decision  { return append([]Decision(nil), state.decisions...) }
-func (state State) History() []Mutation    { return append([]Mutation(nil), state.history...) }
+func (state State) QuestionVersions() []QuestionVersion {
+	return cloneQuestionVersions(state.questionVersions)
+}
+func (state State) HasQuestionRevisions() bool {
+	for _, version := range state.questionVersions {
+		if version.ReplacesRevision != 0 {
+			return true
+		}
+	}
+	return false
+}
+func (state State) Decisions() []Decision { return append([]Decision(nil), state.decisions...) }
+func (state State) History() []Mutation   { return append([]Mutation(nil), state.history...) }
 
 func (state State) CurrentDecision(ref QuestionRef) (Decision, bool) {
 	decisions, _ := state.projectDecisions()
@@ -99,7 +111,8 @@ func Apply(current State, change Change) (State, error) {
 	); err != nil {
 		return State{}, err
 	}
-	if len(change.Issues) == 0 && len(change.Questions) == 0 && len(change.Choices) == 0 {
+	if len(change.Issues) == 0 && len(change.Questions) == 0 &&
+		len(change.QuestionRevisions) == 0 && len(change.Choices) == 0 {
 		return State{}, domainError(ErrorInvalidArgument, "change")
 	}
 	if current.revision == Revision(math.MaxUint64) {
@@ -121,11 +134,15 @@ func Apply(current State, change Change) (State, error) {
 	}
 
 	questionsByRef := make(map[QuestionRef]Question, len(current.questions)+len(change.Questions))
-	optionRefs := make(map[OptionRef]struct{})
+	optionOwners := make(map[OptionRef]QuestionRef)
+	currentQuestionRefs := make(map[QuestionRef]struct{}, len(current.questions))
 	for _, question := range current.questions {
 		questionsByRef[question.Ref] = question
-		for _, option := range question.Options {
-			optionRefs[option.Ref] = struct{}{}
+		currentQuestionRefs[question.Ref] = struct{}{}
+	}
+	for _, version := range current.questionVersions {
+		for _, option := range version.Question.Options {
+			optionOwners[option.Ref] = version.Question.Ref
 		}
 	}
 	for index, question := range change.Questions {
@@ -136,14 +153,61 @@ func Apply(current State, change Change) (State, error) {
 			return State{}, domainError(ErrorDuplicateRef, "change.questions.ref")
 		}
 		for _, option := range question.Options {
-			if _, exists := optionRefs[option.Ref]; exists {
+			if _, exists := optionOwners[option.Ref]; exists {
 				return State{}, domainError(ErrorDuplicateRef, "change.questions.options.ref")
 			}
-			optionRefs[option.Ref] = struct{}{}
+			optionOwners[option.Ref] = question.Ref
 		}
 		questionsByRef[question.Ref] = question
 	}
+	if len(change.QuestionRevisions) > 0 && change.Derivation.IsZero() {
+		return State{}, domainError(ErrorInvalidArgument, "change.derivation")
+	}
+	revisedRefs := make(map[QuestionRef]struct{}, len(change.QuestionRevisions))
+	for index, question := range change.QuestionRevisions {
+		if err := validateQuestion(question, index, issueRefs); err != nil {
+			return State{}, err
+		}
+		existing, exists := questionsByRef[question.Ref]
+		_, existedBeforeChange := currentQuestionRefs[question.Ref]
+		if !exists || !existedBeforeChange {
+			return State{}, domainError(
+				ErrorQuestionNotFound,
+				indexedField("change.question_revisions.ref", index),
+			)
+		}
+		if _, duplicate := revisedRefs[question.Ref]; duplicate {
+			return State{}, domainError(
+				ErrorDuplicateRef,
+				"change.question_revisions.ref",
+			)
+		}
+		if questionEqual(existing, question) {
+			return State{}, domainError(
+				ErrorInvalidArgument,
+				indexedField("change.question_revisions", index),
+			)
+		}
+		for _, option := range question.Options {
+			if owner, found := optionOwners[option.Ref]; found && owner != question.Ref {
+				return State{}, domainError(
+					ErrorDuplicateRef,
+					"change.question_revisions.options.ref",
+				)
+			}
+		}
+		for _, option := range question.Options {
+			optionOwners[option.Ref] = question.Ref
+		}
+		revisedRefs[question.Ref] = struct{}{}
+		questionsByRef[question.Ref] = question
+	}
 	for index, question := range change.Questions {
+		if err := validateQuestionDependencies(question, index, questionsByRef); err != nil {
+			return State{}, err
+		}
+	}
+	for index, question := range change.QuestionRevisions {
 		if err := validateQuestionDependencies(question, index, questionsByRef); err != nil {
 			return State{}, err
 		}
@@ -214,6 +278,32 @@ func Apply(current State, change Change) (State, error) {
 		updated.questionRounds++
 	}
 	updated.revision++
+	for _, question := range change.Questions {
+		updated.questionVersions = append(updated.questionVersions, QuestionVersion{
+			Question: cloneQuestion(question), Revision: updated.revision,
+		})
+	}
+	for _, revision := range change.QuestionRevisions {
+		questionIndex := -1
+		for index := range updated.questions {
+			if updated.questions[index].Ref == revision.Ref {
+				questionIndex = index
+				break
+			}
+		}
+		if questionIndex < 0 {
+			return State{}, domainError(ErrorQuestionNotFound, "change.question_revisions.ref")
+		}
+		previousRevision := latestQuestionVersionRevision(
+			updated.questionVersions,
+			revision.Ref,
+		)
+		updated.questions[questionIndex] = cloneQuestion(revision)
+		updated.questionVersions = append(updated.questionVersions, QuestionVersion{
+			Question: cloneQuestion(revision), Revision: updated.revision,
+			ReplacesRevision: previousRevision,
+		})
+	}
 	for _, item := range resolved {
 		updated.decisions = append(updated.decisions, Decision{
 			QuestionRef:             item.choice.QuestionRef,
@@ -228,7 +318,8 @@ func Apply(current State, change Change) (State, error) {
 	updated.history = append(updated.history, Mutation{
 		Origin: change.Origin, Revision: updated.revision,
 		IssuesAdded: len(change.Issues), QuestionsAdded: len(change.Questions),
-		ChoicesRecorded: len(change.Choices), QuestionRound: updated.questionRounds,
+		QuestionsRevised: len(change.QuestionRevisions),
+		ChoicesRecorded:  len(change.Choices), QuestionRound: updated.questionRounds,
 		Derivation: change.Derivation,
 	})
 	return updated, nil
@@ -242,9 +333,64 @@ func (state State) initialized() bool {
 func (state State) clone() State {
 	state.issues = cloneIssues(state.issues)
 	state.questions = cloneQuestions(state.questions)
+	state.questionVersions = cloneQuestionVersions(state.questionVersions)
 	state.decisions = append([]Decision(nil), state.decisions...)
 	state.history = append([]Mutation(nil), state.history...)
 	return state
+}
+
+func latestQuestionVersionRevision(
+	versions []QuestionVersion,
+	ref QuestionRef,
+) Revision {
+	for index := len(versions) - 1; index >= 0; index-- {
+		if versions[index].Question.Ref == ref {
+			return versions[index].Revision
+		}
+	}
+	return 0
+}
+
+func cloneQuestionVersions(values []QuestionVersion) []QuestionVersion {
+	result := make([]QuestionVersion, len(values))
+	for index, value := range values {
+		result[index] = value
+		result[index].Question = cloneQuestion(value.Question)
+	}
+	return result
+}
+
+func cloneQuestion(question Question) Question {
+	question.DerivedFrom = append([]IssueRef(nil), question.DerivedFrom...)
+	question.DependsOn = append([]QuestionRef(nil), question.DependsOn...)
+	question.Options = append([]Option(nil), question.Options...)
+	return question
+}
+
+func questionEqual(left, right Question) bool {
+	if left.Ref != right.Ref || left.PromptKey != right.PromptKey ||
+		left.WhyKey != right.WhyKey ||
+		len(left.DerivedFrom) != len(right.DerivedFrom) ||
+		len(left.DependsOn) != len(right.DependsOn) ||
+		len(left.Options) != len(right.Options) {
+		return false
+	}
+	for index := range left.DerivedFrom {
+		if left.DerivedFrom[index] != right.DerivedFrom[index] {
+			return false
+		}
+	}
+	for index := range left.DependsOn {
+		if left.DependsOn[index] != right.DependsOn[index] {
+			return false
+		}
+	}
+	for index := range left.Options {
+		if left.Options[index] != right.Options[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func validateIssue(issue Issue, index int) error {
