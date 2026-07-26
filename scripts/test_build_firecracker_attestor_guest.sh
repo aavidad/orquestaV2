@@ -167,7 +167,7 @@ EOF
 test_exact_commit_export_and_double_compile() {
   local repository="$TEST_ROOT/compile-source"
   local head output mutator_pid
-  mkdir -p "$repository/cmd/orquesta-test-guest"
+  mkdir -p "$repository/cmd/orquesta/test-guest"
   cat >"$repository/go.mod" <<'EOF'
 module example.invalid/orquesta-guest-build-test
 
@@ -176,7 +176,7 @@ EOF
   cat >"$repository/.gitignore" <<'EOF'
 ignored.go
 EOF
-  cat >"$repository/cmd/orquesta-test-guest/main.go" <<'EOF'
+  cat >"$repository/cmd/orquesta/test-guest/main.go" <<'EOF'
 package main
 
 import "fmt"
@@ -191,9 +191,9 @@ EOF
   git -C "$repository" add .
   git -C "$repository" commit --quiet -m source
   head="$(git -C "$repository" rev-parse HEAD)"
-  printf 'package main\nfunc ignored syntax\n' >"$repository/cmd/orquesta-test-guest/ignored.go"
+  printf 'package main\nfunc ignored syntax\n' >"$repository/cmd/orquesta/test-guest/ignored.go"
   validate_source_provenance "$repository" "$head"
-  cat >"$repository/cmd/orquesta-test-guest/main.go" <<'EOF'
+  cat >"$repository/cmd/orquesta/test-guest/main.go" <<'EOF'
 package main
 
 import "fmt"
@@ -202,7 +202,7 @@ func main() {
 	fmt.Println("moved-ref")
 }
 EOF
-  git -C "$repository" add cmd/orquesta-test-guest/main.go
+  git -C "$repository" add cmd/orquesta/test-guest/main.go
   git -C "$repository" commit --quiet -m moved-ref
   assert_failure_contains 'code=source_head_mismatch' \
     validate_source_provenance "$repository" "$head"
@@ -215,14 +215,14 @@ EOF
   prepare_run_dir
   SOURCE_EXPORT_ROOT="$RUN_DIR/source"
   export_source_commit "$SOURCE_ROOT" "$SOURCE_COMMIT" "$SOURCE_EXPORT_ROOT"
-  [[ ! -e "$SOURCE_EXPORT_ROOT/cmd/orquesta-test-guest/ignored.go" ]] || {
+  [[ ! -e "$SOURCE_EXPORT_ROOT/cmd/orquesta/test-guest/ignored.go" ]] || {
     printf 'guest_builder_test_failed ignored_go_exported\n' >&2
     exit 1
   }
   (
     for _ in {1..100}; do
       printf 'package main\nfunc concurrent mutation\n' \
-        >"$repository/cmd/orquesta-test-guest/main.go"
+        >"$repository/cmd/orquesta/test-guest/main.go"
       sleep 0.005
     done
   ) &
@@ -527,7 +527,7 @@ test_memory_contract_alignment() {
   grep -Fq 'scratchCacheReserveBytes = 256 << 20' \
     "$ROOT/internal/adapters/attestor/firecrackerguest/runner_linux.go"
   grep -Fq 'scratchOptions  = "mode=0711,size=75%"' \
-    "$ROOT/cmd/orquesta-test-guest/main_linux.go"
+    "$ROOT/cmd/orquesta/test-guest/main_linux.go"
 }
 
 test_reproducible_fake_build() {

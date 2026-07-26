@@ -47,14 +47,14 @@ document = {
         "launcher": {
             "file": "orquesta-firecracker-launcher",
             "mode": "0755",
-            "package": "./cmd/orquesta-firecracker-launcher",
+            "package": "./cmd/orquesta/firecracker-launcher",
             "sha256": "sha256:$LAUNCHER_SHA",
             "size_bytes": $LAUNCHER_SIZE,
         },
         "supervisor": {
             "file": "orquesta-firecracker-attestor-e2e",
             "mode": "0755",
-            "package": "./cmd/orquesta-firecracker-attestor-e2e",
+            "package": "./cmd/orquesta/firecracker-attestor-e2e",
             "sha256": "sha256:$SUPERVISOR_SHA",
             "size_bytes": $SUPERVISOR_SIZE,
         },

@@ -58,7 +58,7 @@ Usage:
     --output ABS_PATH --manifest ABS_PATH --tmp-parent ABS_PATH [--keep-temp]
 
 Builds a deterministic TestAttestor initramfs. It compiles
-./cmd/orquesta-test-guest with the supplied local Go toolchain, then packages
+./cmd/orquesta/test-guest with the supplied local Go toolchain, then packages
 only the static runner, a static BusyBox and the complete toolchain under
 /toolchain. It performs no download, installation, network setup, SSH,
 cloud-init, secret capture or agent execution.
@@ -455,8 +455,8 @@ prepare_inputs() {
   fi
   [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$|^[0-9a-f]{64}$ ]] ||
     fail "source_commit_invalid" "provide_lowercase_40_or_64_hex_commit" || return
-  [[ -d "$SOURCE_ROOT/cmd/orquesta-test-guest" ]] ||
-    fail "guest_command_missing" "finish_cmd_orquesta-test-guest_before_real_build" || return
+  [[ -d "$SOURCE_ROOT/cmd/orquesta/test-guest" ]] ||
+    fail "guest_command_missing" "finish_cmd_orquesta_test_guest_before_real_build" || return
   validate_source_provenance "$SOURCE_ROOT" "$SOURCE_COMMIT" || return
   pin_toolchain_source "$TOOLCHAIN_ROOT" 1 || return
   probe_pinned_toolchain || return
@@ -594,7 +594,7 @@ compile_runner_once() {
       GOPATH="$build_root/go-path" GOENV=off GOPROXY=off GOSUMDB=off GOTOOLCHAIN=local \
       CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
       "$TOOLCHAIN_PINNED_ROOT/bin/go" build -mod=vendor -trimpath -buildvcs=false \
-      -o "$runner" ./cmd/orquesta-test-guest || build_status=$?
+      -o "$runner" ./cmd/orquesta/test-guest || build_status=$?
     verify_toolchain_pin || exit 1
     ((build_status == 0)) ||
       fail "runner_build_failed" "inspect_pinned_toolchain_and_exact_source" || exit 1
