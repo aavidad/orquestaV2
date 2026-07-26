@@ -629,6 +629,12 @@ func runCodexHelper(arguments []string) error {
 			return err
 		}
 		return writeHelperResult(options.outputPath, "artifact:setsid-background-success")
+	case strings.Contains(mode, "helper:setsid-late-output-block"):
+		if err := startSetsidLateOutputHelper(options.outputPath); err != nil {
+			return err
+		}
+		time.Sleep(30 * time.Second)
+		return fmt.Errorf("setsid late-output helper was not canceled")
 	case strings.Contains(mode, "helper:setsid-block"):
 		if err := startSetsidHelper(); err != nil {
 			return err
@@ -695,6 +701,32 @@ func startSetsidHelper() error {
 	child.Stderr = os.Stderr
 	if err := child.Start(); err != nil {
 		return fmt.Errorf("start setsid child: %w", err)
+	}
+	if err := os.WriteFile(setsidPIDFile, []byte(strconv.Itoa(child.Process.Pid)), 0o600); err != nil {
+		return fmt.Errorf("write setsid pid: %w", err)
+	}
+	return child.Process.Release()
+}
+
+func startSetsidLateOutputHelper(outputPath string) error {
+	setsid := ""
+	for _, candidate := range []string{"/usr/bin/setsid", "/bin/setsid"} {
+		if info, err := os.Stat(candidate); err == nil && info.Mode().IsRegular() {
+			setsid = candidate
+			break
+		}
+	}
+	if setsid == "" {
+		return errors.New("setsid unavailable")
+	}
+	child := exec.Command(
+		setsid, "/bin/sh", "-c",
+		`trap '' TERM; sleep 0.25; printf '{"artifact":"late"}' > "$1"; sleep 30`,
+		"orquesta-setsid-late-output", outputPath,
+	)
+	child.Stderr = os.Stderr
+	if err := child.Start(); err != nil {
+		return fmt.Errorf("start setsid late-output child: %w", err)
 	}
 	if err := os.WriteFile(setsidPIDFile, []byte(strconv.Itoa(child.Process.Pid)), 0o600); err != nil {
 		return fmt.Errorf("write setsid pid: %w", err)
