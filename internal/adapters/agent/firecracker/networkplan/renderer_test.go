@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"orquesta/internal/goal"
 	"orquesta/internal/ports"
@@ -66,10 +67,35 @@ func validRequest(t *testing.T) RenderRequest {
 	if err != nil {
 		t.Fatal(err)
 	}
+	reservationRequest := ports.AgentMicroVMVsockCIDReservationRequest{
+		PoolRef: "vsock-pool:host-128g-16", Scope: policy.Scope,
+		OwnerRef: policy.LaunchIdentityRef, LeaseDuration: 10 * time.Minute,
+		IdempotencyKey: "reserve-vsock-cid:execution:firecracker-network:2",
+	}
+	requestDigest, err := ports.AgentMicroVMVsockCIDReservationRequestDigest(reservationRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scopeDigest, err := ports.AgentMicroVMNetworkScopeDigest(policy.Scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	acquiredAt := time.Date(2026, 7, 26, 9, 0, 0, 0, time.UTC)
+	lease := ports.AgentMicroVMVsockCIDLease{
+		PoolRef: reservationRequest.PoolRef, ScopeDigest: scopeDigest,
+		ExecutionRef: policy.Scope.ExecutionRef.String(), AgentRef: policy.Scope.AgentRef,
+		OwnerRef: policy.LaunchIdentityRef, RequestDigest: requestDigest,
+		IdempotencyKey: reservationRequest.IdempotencyKey, GuestCID: policy.GuestCID,
+		FencingToken: 7, Revision: 1, AcquiredAt: acquiredAt,
+		ExpiresAt:  acquiredAt.Add(reservationRequest.LeaseDuration),
+		AdapterRef: "adapter:firecracker-vsock-cid",
+	}
+	lease.LeaseRef = ports.AgentMicroVMVsockCIDLeaseRef(lease)
+	lease.VsockBackendRef = ports.AgentMicroVMVsockBackendRef(lease.LeaseRef)
+	lease.ReceiptRef = ports.AgentMicroVMVsockCIDLeaseReceiptRef(lease)
 	return RenderRequest{
 		Policy: policy, ExpectedPolicyDigest: policyDigest,
-		VsockBackendRef: "vsock-backend:execution:firecracker-network",
-		IdempotencyKey:  "network-plan:execution:firecracker-network:2",
+		CIDLease: lease, IdempotencyKey: "network-plan:execution:firecracker-network:2",
 	}
 }
 
@@ -125,6 +151,10 @@ func TestRenderProducesDeterministicVsockOnlyPlan(t *testing.T) {
 	if first.Receipt.Status != ReceiptStatus ||
 		first.Receipt.PolicyDigest != request.ExpectedPolicyDigest ||
 		first.Receipt.LaunchCredentialRef != request.Policy.LaunchCredential.Ref ||
+		first.Receipt.VsockCIDLeaseRef != request.CIDLease.LeaseRef ||
+		first.Receipt.VsockCIDFencingToken != request.CIDLease.FencingToken ||
+		first.Receipt.VsockCIDLeaseRevision != request.CIDLease.Revision ||
+		first.Receipt.VsockCIDLeaseReceiptRef != request.CIDLease.ReceiptRef ||
 		!strings.HasPrefix(first.Receipt.ReceiptRef, "agent-microvm-network-plan-receipt:") {
 		t.Fatalf("receipt does not bind plan: %+v", first.Receipt)
 	}
@@ -154,9 +184,18 @@ func TestRenderRejectsPolicyTamperAndAmbiguousRouting(t *testing.T) {
 			func(request *RenderRequest) { request.Policy.LaunchCredential.Ref = "credential:other" },
 			"agent_firecracker_network_plan.policy_invalid",
 		},
-		"backend missing": {
-			func(request *RenderRequest) { request.VsockBackendRef = "" },
-			"agent_firecracker_network_plan.vsock_backend_ref_invalid",
+		"lease missing": {
+			func(request *RenderRequest) { request.CIDLease = ports.AgentMicroVMVsockCIDLease{} },
+			"agent_firecracker_network_plan.cid_lease_invalid",
+		},
+		"lease from other owner": {
+			func(request *RenderRequest) {
+				request.CIDLease.OwnerRef = "launch-identity:other"
+				request.CIDLease.LeaseRef = ports.AgentMicroVMVsockCIDLeaseRef(request.CIDLease)
+				request.CIDLease.VsockBackendRef = ports.AgentMicroVMVsockBackendRef(request.CIDLease.LeaseRef)
+				request.CIDLease.ReceiptRef = ports.AgentMicroVMVsockCIDLeaseReceiptRef(request.CIDLease)
+			},
+			"agent_firecracker_network_plan.cid_lease_binding_mismatch",
 		},
 		"idempotency missing": {
 			func(request *RenderRequest) { request.IdempotencyKey = "" },
@@ -204,9 +243,10 @@ func TestRenderReceiptBindsBackendAndRejectsMutation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	changedBackend := request
-	changedBackend.VsockBackendRef = "vsock-backend:other"
-	other, err := Render(Config{AdapterRef: "adapter:agent-firecracker-network-plan"}, changedBackend)
+	changedLease := request
+	changedLease.CIDLease.Revision++
+	changedLease.CIDLease.ReceiptRef = ports.AgentMicroVMVsockCIDLeaseReceiptRef(changedLease.CIDLease)
+	other, err := Render(Config{AdapterRef: "adapter:agent-firecracker-network-plan"}, changedLease)
 	if err != nil {
 		t.Fatal(err)
 	}

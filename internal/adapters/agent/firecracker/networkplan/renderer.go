@@ -37,7 +37,7 @@ type Config struct {
 type RenderRequest struct {
 	Policy               ports.AgentMicroVMNetworkPolicy
 	ExpectedPolicyDigest string
-	VsockBackendRef      string
+	CIDLease             ports.AgentMicroVMVsockCIDLease
 	IdempotencyKey       string
 }
 
@@ -59,6 +59,10 @@ type PlanReceipt struct {
 	LaunchCredentialVersion    uint64
 	LaunchAttestationRef       string
 	LaunchBindingDigest        string
+	VsockCIDLeaseRef           string
+	VsockCIDFencingToken       uint64
+	VsockCIDLeaseRevision      uint64
+	VsockCIDLeaseReceiptRef    string
 	VsockBackendRef            string
 	BackendBindingDigest       string
 	PlanDigest                 string
@@ -101,14 +105,14 @@ func Render(config Config, request RenderRequest) (RenderedPlan, error) {
 	if err != nil || request.ExpectedPolicyDigest != policyDigest {
 		return RenderedPlan{}, planError("policy_digest_mismatch")
 	}
-	if !validRef(request.VsockBackendRef) {
-		return RenderedPlan{}, planError("vsock_backend_ref_invalid")
+	if err := validateCIDLease(request.Policy, request.CIDLease); err != nil {
+		return RenderedPlan{}, err
 	}
 	if !validRef(request.IdempotencyKey) {
 		return RenderedPlan{}, planError("idempotency_key_invalid")
 	}
 
-	backendDigest := backendBindingDigest(request.Policy, policyDigest, request.VsockBackendRef)
+	backendDigest := backendBindingDigest(request.Policy, policyDigest, request.CIDLease)
 	document := planProjection(request, policyDigest, backendDigest)
 	payload, err := json.Marshal(document)
 	if err != nil {
@@ -131,8 +135,13 @@ func Render(config Config, request RenderRequest) (RenderedPlan, error) {
 		LaunchCredentialVersion:    request.Policy.LaunchCredential.Version,
 		LaunchAttestationRef:       request.Policy.LaunchAttestationRef.String(),
 		LaunchBindingDigest:        request.Policy.LaunchBindingDigest,
-		VsockBackendRef:            request.VsockBackendRef, BackendBindingDigest: backendDigest,
-		PlanDigest: planDigest, IdempotencyKey: request.IdempotencyKey,
+		VsockCIDLeaseRef:           request.CIDLease.LeaseRef,
+		VsockCIDFencingToken:       request.CIDLease.FencingToken,
+		VsockCIDLeaseRevision:      request.CIDLease.Revision,
+		VsockCIDLeaseReceiptRef:    request.CIDLease.ReceiptRef,
+		VsockBackendRef:            request.CIDLease.VsockBackendRef,
+		BackendBindingDigest:       backendDigest,
+		PlanDigest:                 planDigest, IdempotencyKey: request.IdempotencyKey,
 		ReceiptRef: "agent-microvm-network-plan-receipt:" + planDigest,
 	}
 	return RenderedPlan{Document: payload, Receipt: receipt}, nil
@@ -171,6 +180,10 @@ type planDocument struct {
 	Transport                  string             `json:"transport"`
 	GuestCID                   uint32             `json:"guest_cid"`
 	HostCID                    uint32             `json:"host_cid"`
+	VsockCIDLeaseRef           string             `json:"vsock_cid_lease_ref"`
+	VsockCIDFencingToken       uint64             `json:"vsock_cid_fencing_token"`
+	VsockCIDLeaseRevision      uint64             `json:"vsock_cid_lease_revision"`
+	VsockCIDLeaseReceiptRef    string             `json:"vsock_cid_lease_receipt_ref"`
 	VsockBackendRef            string             `json:"vsock_backend_ref"`
 	BackendBindingDigest       string             `json:"backend_binding_digest"`
 	NetworkInterfaces          []networkInterface `json:"network_interfaces"`
@@ -238,7 +251,11 @@ func planProjection(
 		LaunchAuthentication:       "credential_store_challenge_and_attestation_required",
 		ServicesBlockedUntilAuth:   true,
 		Transport:                  Transport, GuestCID: policy.GuestCID, HostCID: ports.AgentMicroVMVsockHostCID,
-		VsockBackendRef: request.VsockBackendRef, BackendBindingDigest: backendDigest,
+		VsockCIDLeaseRef:        request.CIDLease.LeaseRef,
+		VsockCIDFencingToken:    request.CIDLease.FencingToken,
+		VsockCIDLeaseRevision:   request.CIDLease.Revision,
+		VsockCIDLeaseReceiptRef: request.CIDLease.ReceiptRef,
+		VsockBackendRef:         request.CIDLease.VsockBackendRef, BackendBindingDigest: backendDigest,
 		NetworkInterfaces: make([]networkInterface, 0),
 		AllowedServices: []allowedService{
 			allowedServiceProjection(ports.AgentMicroVMServiceBroker, policy.Broker),
@@ -266,25 +283,51 @@ func allowedServiceProjection(service string, endpoint ports.AgentMicroVMVsockSe
 func backendBindingDigest(
 	policy ports.AgentMicroVMNetworkPolicy,
 	policyDigest string,
-	backendRef string,
+	lease ports.AgentMicroVMVsockCIDLease,
 ) string {
 	document := struct {
-		Schema       string `json:"schema"`
-		ExecutionRef string `json:"execution_ref"`
-		AgentRef     string `json:"agent_ref"`
-		GuestCID     uint32 `json:"guest_cid"`
-		PolicyDigest string `json:"policy_digest"`
-		BackendRef   string `json:"backend_ref"`
+		Schema          string `json:"schema"`
+		ExecutionRef    string `json:"execution_ref"`
+		AgentRef        string `json:"agent_ref"`
+		GuestCID        uint32 `json:"guest_cid"`
+		PolicyDigest    string `json:"policy_digest"`
+		LeaseRef        string `json:"lease_ref"`
+		FencingToken    uint64 `json:"fencing_token"`
+		LeaseRevision   uint64 `json:"lease_revision"`
+		LeaseReceiptRef string `json:"lease_receipt_ref"`
+		BackendRef      string `json:"backend_ref"`
 	}{
 		Schema:       "orquesta.agent-firecracker-vsock-backend-binding.v1",
 		ExecutionRef: policy.Scope.ExecutionRef.String(), AgentRef: policy.Scope.AgentRef,
-		GuestCID: policy.GuestCID, PolicyDigest: policyDigest, BackendRef: backendRef,
+		GuestCID: policy.GuestCID, PolicyDigest: policyDigest,
+		LeaseRef: lease.LeaseRef, FencingToken: lease.FencingToken,
+		LeaseRevision: lease.Revision, LeaseReceiptRef: lease.ReceiptRef,
+		BackendRef: lease.VsockBackendRef,
 	}
 	payload, err := json.Marshal(document)
 	if err != nil {
 		panic("agent Firecracker backend binding cannot fail: " + err.Error())
 	}
 	return digestBytes(payload)
+}
+
+func validateCIDLease(
+	policy ports.AgentMicroVMNetworkPolicy,
+	lease ports.AgentMicroVMVsockCIDLease,
+) error {
+	if err := ports.ValidateAgentMicroVMVsockCIDLease(lease); err != nil {
+		return planError("cid_lease_invalid")
+	}
+	scopeDigest, err := ports.AgentMicroVMNetworkScopeDigest(policy.Scope)
+	if err != nil ||
+		lease.ScopeDigest != scopeDigest ||
+		lease.ExecutionRef != policy.Scope.ExecutionRef.String() ||
+		lease.AgentRef != policy.Scope.AgentRef ||
+		lease.OwnerRef != policy.LaunchIdentityRef ||
+		lease.GuestCID != policy.GuestCID {
+		return planError("cid_lease_binding_mismatch")
+	}
+	return nil
 }
 
 func digestBytes(payload []byte) string {
