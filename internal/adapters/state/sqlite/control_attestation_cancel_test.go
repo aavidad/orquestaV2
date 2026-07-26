@@ -205,8 +205,17 @@ func TestSQLiteCancelRacingStartedAttestationQuarantinesRatherThanRetires(t *tes
 
 func TestSQLiteCancelExpiredAttestationAttemptTakesOverClaimCausally(t *testing.T) {
 	const attestLease = 2 * time.Minute
-	for _, reclaimed := range []bool{false, true} {
-		t.Run(map[bool]string{false: "expired_original_claim", true: "expired_reclaimed_claim"}[reclaimed],
+	cases := []struct {
+		name             string
+		reclaimed        bool
+		expireAfterClaim bool
+	}{
+		{name: "expired_original_claim"},
+		{name: "expired_reclaimed_claim", reclaimed: true, expireAfterClaim: true},
+		{name: "live_reclaimed_claim_with_old_attempt", reclaimed: true},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name,
 			func(t *testing.T) {
 				system, goalRef := seedSQLiteV17Committed(t, &sqliteTestAttestor{})
 				oldClaim := claimV17WithLeases(
@@ -226,7 +235,7 @@ func TestSQLiteCancelExpiredAttestationAttemptTakesOverClaimCausally(t *testing.
 				system.repository = openSQLiteV15Repository(t, system.path, system.clock.Now)
 
 				currentClaim := oldClaim
-				if reclaimed {
+				if testCase.reclaimed {
 					currentClaim = claimV17WithLeases(
 						t, system.repository, "claim:attestation-after-restart",
 						time.Minute, attestLease, system.policy,
@@ -236,18 +245,18 @@ func TestSQLiteCancelExpiredAttestationAttemptTakesOverClaimCausally(t *testing.
 						t.Fatalf("reclaim did not advance scheduler identity: old=%+v current=%+v",
 							oldClaim, currentClaim)
 					}
-					sqliteTestNoError(t, system.repository.Close())
-					system.clock.Advance(attestLease)
-					system.repository = openSQLiteV15Repository(t, system.path, system.clock.Now)
+					if testCase.expireAfterClaim {
+						sqliteTestNoError(t, system.repository.Close())
+						system.clock.Advance(attestLease)
+						system.repository = openSQLiteV15Repository(t, system.path, system.clock.Now)
+					}
 				}
 				system.orchestrator = newSQLiteV16Orchestrator(t, system)
 				before, err := system.repository.GetGoal(context.Background(), goalRef)
 				sqliteTestNoError(t, err)
 				request := bug453ControlRequest(
 					before, application.ControlCancel, application.ControlTargetWorkItem,
-					"request:cancel-expired-attestation:"+map[bool]string{
-						false: "original", true: "reclaimed",
-					}[reclaimed],
+					"request:cancel-attestation:"+testCase.name,
 				)
 
 				canceled, err := system.orchestrator.Control(
@@ -267,22 +276,31 @@ FROM outbox WHERE ref=?`, oldClaim.Action.Ref).Scan(
 					&row.token, &row.worker, &row.leaseUntil, &row.deliveryAttempt, &row.fence,
 					&completedAt, &row.quarantinedAt,
 				))
-				wantToken := "retire:" + canceled.Control.Ref + ":" + oldClaim.Action.Ref
-				wantWorker := "system:" + canceled.Control.Ref
+				wantToken := currentClaim.Token
+				wantWorker := currentClaim.WorkerRef
+				wantAttempt := currentClaim.DeliveryAttempt
+				wantLease := currentClaim.LeaseUntil.UnixNano()
+				if !testCase.reclaimed || testCase.expireAfterClaim {
+					wantToken = "retire:" + canceled.Control.Ref + ":" + oldClaim.Action.Ref
+					wantWorker = "system:" + canceled.Control.Ref
+					wantAttempt++
+					wantLease = completedAt + 1
+				}
 				if row.token != wantToken || row.worker != wantWorker ||
-					row.deliveryAttempt != int64(currentClaim.DeliveryAttempt+1) ||
+					row.deliveryAttempt != int64(wantAttempt) ||
 					row.fence != int64(currentClaim.Fence) ||
 					!row.quarantinedAt.Valid || row.quarantinedAt.Int64 != completedAt ||
-					row.leaseUntil != completedAt+1 {
-					t.Fatalf("control takeover row=%+v completed=%d want token/worker=%s/%s attempt/fence=%d/%d",
+					row.leaseUntil != wantLease {
+					t.Fatalf("causal cancellation row=%+v completed=%d want token/worker=%s/%s lease/attempt/fence=%d/%d/%d",
 						row, completedAt, wantToken, wantWorker,
-						currentClaim.DeliveryAttempt+1, currentClaim.Fence)
+						wantLease, wantAttempt, currentClaim.Fence)
 				}
 				var receiptToken, receiptWorker, outcome, code string
-				var receiptAttempt, receiptFence, attempts, attestations, effectReceipts int64
+				var receiptAttempt, receiptFence, receiptConsumedAt int64
+				var attempts, attestations, effectReceipts int64
 				sqliteTestNoError(t, system.repository.db.QueryRow(`
 SELECT receipt.claim_token,receipt.worker_ref,receipt.delivery_attempt,receipt.fence,
-       receipt.outcome,receipt.error_code,
+       receipt.consumed_at,receipt.outcome,receipt.error_code,
        (SELECT COUNT(*) FROM effect_attempts WHERE action_ref=receipt.action_ref),
        (SELECT COUNT(*) FROM attestations WHERE kind='required_tests'),
        (SELECT COUNT(*) FROM effect_receipts WHERE action_ref=receipt.action_ref)
@@ -290,15 +308,19 @@ FROM action_consumption_receipts receipt WHERE receipt.action_ref=?`,
 					oldClaim.Action.Ref,
 				).Scan(
 					&receiptToken, &receiptWorker, &receiptAttempt, &receiptFence,
-					&outcome, &code, &attempts, &attestations, &effectReceipts,
+					&receiptConsumedAt, &outcome, &code,
+					&attempts, &attestations, &effectReceipts,
 				))
 				if receiptToken != wantToken || receiptWorker != wantWorker ||
-					receiptAttempt != int64(currentClaim.DeliveryAttempt+1) ||
+					receiptAttempt != int64(wantAttempt) ||
 					receiptFence != int64(currentClaim.Fence) ||
+					receiptConsumedAt != completedAt ||
+					completedAt != system.clock.Now().UnixNano() ||
 					outcome != "quarantined" || code != "application.effect_unknown_applied" ||
 					attempts != 1 || attestations != 0 || effectReceipts != 0 {
-					t.Fatalf("control takeover receipt identity=%s/%s attempt/fence=%d/%d outcome/code=%s/%s facts=%d/%d/%d",
+					t.Fatalf("causal cancellation receipt identity=%s/%s attempt/fence/time=%d/%d/%d completed=%d outcome/code=%s/%s facts=%d/%d/%d",
 						receiptToken, receiptWorker, receiptAttempt, receiptFence,
+						receiptConsumedAt, completedAt,
 						outcome, code, attempts, attestations, effectReceipts)
 				}
 				var persistedAttemptFence int64
