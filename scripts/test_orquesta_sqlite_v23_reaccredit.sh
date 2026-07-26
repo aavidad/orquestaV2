@@ -125,6 +125,10 @@ if operation == "start":
                 checksum = "sha256:" + hashlib.sha256(
                     migration.read_bytes()
                 ).hexdigest()
+                if not (systemctl.parent / "skip-migration-ddl").exists():
+                    connection.executescript(
+                        migration.read_text(encoding="utf-8")
+                    )
                 connection.execute(
                     "INSERT INTO schema_migrations VALUES(?,?,?)",
                     (version, migration.name, checksum),
@@ -288,12 +292,24 @@ EOF
 
   for version in $(seq 1 19); do
     case "$version" in
-      17) name="017_intake.sql" ;;
-      18) name="018_intake_dossiers.sql" ;;
-      19) name="019_intake_dossier_confirmations.sql" ;;
-      *) name="$(printf '%03d_fixture.sql' "$version")" ;;
+      17)
+        name="017_intake.sql"
+        migration_sql='CREATE TABLE intake_states_fixture(ref TEXT PRIMARY KEY);'
+        ;;
+      18)
+        name="018_intake_dossiers.sql"
+        migration_sql='CREATE TABLE intake_dossiers_fixture(ref TEXT PRIMARY KEY);'
+        ;;
+      19)
+        name="019_intake_dossier_confirmations.sql"
+        migration_sql='CREATE TABLE intake_confirmations_fixture(ref TEXT PRIMARY KEY);'
+        ;;
+      *)
+        name="$(printf '%03d_fixture.sql' "$version")"
+        migration_sql="-- fixture migration $version"
+        ;;
     esac
-    printf '%s\n' "-- fixture migration $version" \
+    printf '%s\n' "$migration_sql" \
       >"$REPOSITORY/internal/adapters/state/sqlite/migrations/$name"
     chmod 600 -- \
       "$REPOSITORY/internal/adapters/state/sqlite/migrations/$name"
@@ -406,6 +422,7 @@ assert set(receipt) == {
 assert receipt["schema_version"] == "orquesta_sqlite_upgrade_audit.v1"
 assert receipt["result"] == "pass"
 assert receipt["harness"]["checks"]["user_version_16_19_19"] is True
+assert receipt["harness"]["checks"]["schema_manifest_exact"] is True
 assert receipt["source"]["user_version"] == 16
 assert receipt["first_start"]["result_user_version"] == 19
 assert receipt["restart"]["result_user_version"] == 19
@@ -572,6 +589,17 @@ grep -q 'reason_code=status_audit_delta_invalid' "$FIXTURE/stderr" ||
 [ "$("$COMMANDS/systemctl" --user show ignored.service \
   --property=LoadState --value)" = "not-found" ] ||
   fail_test "rewritten_audit_history_unit_residue"
+
+write_fixture migration-receipts-without-ddl
+: >"$COMMANDS/skip-migration-ddl"
+if "$SUBJECT" "${COMMON[@]}" >"$FIXTURE/stdout" 2>"$FIXTURE/stderr"; then
+  fail_test "migration_receipts_without_ddl_accepted"
+fi
+grep -q 'reason_code=sqlite_schema_manifest_changed' "$FIXTURE/stderr" ||
+  fail_test "migration_receipts_without_ddl_reason"
+[ "$("$COMMANDS/systemctl" --user show ignored.service \
+  --property=LoadState --value)" = "not-found" ] ||
+  fail_test "migration_receipts_without_ddl_unit_residue"
 
 write_fixture config-live
 python3 - "$PRIVATE/config-template.toml" "$LIVE/tool" <<'PY'

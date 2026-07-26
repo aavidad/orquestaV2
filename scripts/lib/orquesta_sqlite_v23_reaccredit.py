@@ -400,6 +400,25 @@ def table_names(connection: sqlite3.Connection) -> list[str]:
     return [str(row[0]) for row in rows]
 
 
+def sqlite_schema_manifest(connection: sqlite3.Connection) -> list[dict[str, Any]]:
+    rows = connection.execute(
+        """
+        SELECT type,name,tbl_name,sql
+        FROM sqlite_schema
+        ORDER BY type,name,tbl_name,sql
+        """
+    ).fetchall()
+    return [
+        {
+            "type": str(row[0]),
+            "name": str(row[1]),
+            "table": str(row[2]),
+            "sql": None if row[3] is None else str(row[3]),
+        }
+        for row in rows
+    ]
+
+
 def table_columns(connection: sqlite3.Connection, table: str) -> list[str]:
     rows = connection.execute(
         f"PRAGMA table_info({quote_identifier(table)})"
@@ -572,6 +591,7 @@ def sqlite_snapshot(
             table: table_row_fingerprints(connection, table)
             for table in AUDIT_TABLES
         }
+        schema_manifest = sqlite_schema_manifest(connection)
     except sqlite3.Error as error:
         fail("sqlite_snapshot_failed", str(error))
     finally:
@@ -599,6 +619,7 @@ def sqlite_snapshot(
             "core_counts": {table: counts[table] for table in CORE_TABLES},
             "audit_counts": {table: counts[table] for table in AUDIT_TABLES},
             "audit_row_fingerprints": audit_row_fingerprints,
+            "schema_manifest": schema_manifest,
             "status_invocation_refs": status_refs,
             "migration_counts": migration_counts,
             "migrations": migrations,
@@ -642,6 +663,62 @@ def load_expected_migrations(
         expected, sort_keys=True, separators=(",", ":")
     ).encode("utf-8")
     return expected, guarded, sha256_bytes(canonical)
+
+
+def build_expected_v19_schema_manifest(
+    backup: Path,
+    target: Path,
+    migration_files: dict[int, GuardedFile],
+    expected_migrations: dict[int, dict[str, str]],
+) -> list[dict[str, Any]]:
+    copy_private(backup, target, 0o600)
+    try:
+        connection = sqlite3.connect(target)
+        try:
+            current = int(
+                connection.execute("PRAGMA user_version").fetchone()[0]
+            )
+            if current != 16:
+                fail("expected_schema_source_not_v16", str(current))
+            connection.execute("PRAGMA foreign_keys=OFF")
+            for version in (17, 18, 19):
+                migration = migration_files[version]
+                try:
+                    sql = migration.path.read_text(encoding="utf-8")
+                except (OSError, UnicodeError) as error:
+                    fail("expected_schema_migration_read_failed", str(error))
+                connection.executescript(sql)
+                connection.execute(
+                    """
+                    INSERT INTO schema_migrations(version,name,checksum)
+                    VALUES(?,?,?)
+                    """,
+                    (
+                        version,
+                        expected_migrations[version]["name"],
+                        expected_migrations[version]["checksum"],
+                    ),
+                )
+                connection.execute(f"PRAGMA user_version={version}")
+                connection.commit()
+            return sqlite_schema_manifest(connection)
+        except sqlite3.Error as error:
+            fail("expected_schema_build_failed", str(error))
+        finally:
+            connection.close()
+    finally:
+        for candidate in (
+            target,
+            Path(str(target) + "-journal"),
+            Path(str(target) + "-wal"),
+            Path(str(target) + "-shm"),
+        ):
+            try:
+                candidate.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError as error:
+                fail("expected_schema_cleanup_failed", str(error))
 
 
 @dataclass
@@ -1312,6 +1389,20 @@ def main(arguments: Sequence[str]) -> int:
         ):
             directory.mkdir(mode=0o700, exist_ok=True)
             os.chmod(directory, 0o700)
+        migration_files = {
+            version: next(
+                item
+                for item in migration_guards
+                if item.path.name == expected_migrations[version]["name"]
+            )
+            for version in (17, 18, 19)
+        }
+        expected_schema_manifest = build_expected_v19_schema_manifest(
+            backup,
+            evidence_root / ".expected-v19-schema.sqlite",
+            migration_files,
+            expected_migrations,
+        )
 
         profile = "SqliteReaccredit" + secrets.token_hex(8)
         if not PROFILE_RE.fullmatch(profile):
@@ -1608,6 +1699,8 @@ def main(arguments: Sequence[str]) -> int:
                 fail("functional_counts_changed", f"cycle={cycle}")
             if not audit_delta_valid(source_snapshot, snapshot, cycle):
                 fail("status_audit_delta_invalid", f"cycle={cycle}")
+            if snapshot["schema_manifest"] != expected_schema_manifest:
+                fail("sqlite_schema_manifest_changed", f"cycle={cycle}")
             cycles.append(
                 {
                     "cycle": cycle,
@@ -1785,6 +1878,7 @@ def main(arguments: Sequence[str]) -> int:
                     "migrations_17_18_19_once": True,
                     "quick_check_and_foreign_keys": True,
                     "functional_digest_and_counts_equal": True,
+                    "schema_manifest_exact": True,
                     "one_status_audit_per_cycle": True,
                     "invocation_ids_distinct": True,
                     "config_paths_isolated": True,
