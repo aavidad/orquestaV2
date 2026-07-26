@@ -686,6 +686,14 @@ func (adapter *Adapter) completeExecutionLocked(
 	diagnosticPayload []byte,
 	diagnosticTruncated bool,
 ) {
+	if state == nil || state.terminal != nil || state.quarantine != nil {
+		clearBytes(diagnosticPayload)
+		if state != nil {
+			state.cancel = nil
+			adapter.settleExecutionLocked(state)
+		}
+		return
+	}
 	var completion *completionProof
 	var completionResult []byte
 	unresolvedStop := false

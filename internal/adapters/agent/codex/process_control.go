@@ -517,9 +517,28 @@ func (adapter *Adapter) discoverPersistedProcessLocked(ctx context.Context, runP
 		requestHash: effectiveLaunch.RequestHash, terminalRequestHash: terminalRequestHash,
 		receipt: receipt, maxOutput: effectiveLaunch.MaxOutputBytes, runPath: runPath, status: ports.AgentPending,
 	}
+	if intent, found, loadErr := adapter.loadQuarantineIntent(runPath, process); loadErr != nil {
+		return loadErr
+	} else if found {
+		adapter.executions[executionRef.String()] = state
+		quarantineErr := adapter.quarantineExecutionLocked(
+			ctx, state, &Error{Code: intent.ErrorCode},
+		)
+		if state.terminal != nil && state.terminalDurable &&
+			state.terminal.ErrorCode == intent.ErrorCode {
+			return nil
+		}
+		return quarantineErr
+	}
 	if recoveryErr := adapter.recoverExecutionGuards(ctx, effectiveLaunch, state); recoveryErr != nil {
 		if recoveryAuthorityFailure(recoveryErr) {
-			recoveryErr = adapter.quarantineRecoveryFailureLocked(ctx, state, recoveryErr)
+			quarantineCause := recoveryErr
+			if effectiveLaunch.SchemaVersion != stateSchemaVersion {
+				quarantineCause = &Error{
+					Code: CodeLegacyExecutionRequiresNewAttempt, Cause: recoveryErr,
+				}
+			}
+			recoveryErr = adapter.quarantineExecutionLocked(ctx, state, quarantineCause)
 		}
 		return recoveryErr
 	}

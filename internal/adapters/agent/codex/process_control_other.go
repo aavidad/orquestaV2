@@ -32,3 +32,11 @@ func platformSignalProcess(processRecord, ports.AgentStopMode) error {
 func platformSignalCgroupSupervisor(processRecord, ports.AgentStopMode) error {
 	return errors.New(CodeControlUnsupported)
 }
+
+func platformSignalCgroupQuarantine(processRecord) error {
+	return errors.New(CodeControlUnsupported)
+}
+
+func platformKillExactProcess(processRecord) error {
+	return errors.New(CodeControlUnsupported)
+}

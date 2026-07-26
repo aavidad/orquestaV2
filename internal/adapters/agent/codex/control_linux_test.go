@@ -130,11 +130,14 @@ func TestRecoveryFailureQuarantinesLiveProcessBeforeFinalScrub(t *testing.T) {
 			if ErrorCode(err) != test.code {
 				t.Fatalf("recovery error=%v code=%q", err, ErrorCode(err))
 			}
-			awaitPath(t, filepath.Join(runRoot, "recovery-late.marker"))
-			if err := command.Wait(); err != nil {
-				t.Fatalf("Wait: %v", err)
-			}
+			_ = command.Wait()
 			awaitProcessIdentityGone(t, process)
+			if _, err := os.Stat(filepath.Join(runRoot, "recovery-late.marker")); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("quarantine allowed late TERM handler output: %v", err)
+			}
+			if output, err := os.ReadFile(outputPath); err != nil || len(output) != 0 {
+				t.Fatalf("quarantine output=%q error=%v", output, err)
+			}
 			assertNoMaterialInTree(t, config.WorkRoot, helperCredentialInitial, helperSessionBearer)
 			replay := openTestAdapter(t, config)
 			if _, err := replay.Launch(context.Background(), request); err != nil {

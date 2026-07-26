@@ -120,6 +120,18 @@ func platformSignalCgroupSupervisor(record processRecord, mode ports.AgentStopMo
 	)
 }
 
+func platformSignalCgroupQuarantine(record processRecord) error {
+	return pidfdSignalExact(
+		record.PID, record.PGID, record.BootID, record.BirthMarker, unix.SIGUSR1,
+	)
+}
+
+func platformKillExactProcess(record processRecord) error {
+	return pidfdSignalExact(
+		record.PID, record.PGID, record.BootID, record.BirthMarker, unix.SIGKILL,
+	)
+}
+
 func pidfdSignalExact(pid, pgid int, bootID, birth string, signal unix.Signal) error {
 	fd, err := unix.PidfdOpen(pid, 0)
 	if errors.Is(err, unix.ESRCH) {
