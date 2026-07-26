@@ -354,7 +354,8 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		t.Fatalf("invalid task context: %+v", fixture.TaskContext)
 	}
 	if !reflect.DeepEqual(fixture.OwnedCapabilityIDs, []string{
-		"WIZ-03", "WIZ-04", "WIZ-15", "WIZ-23",
+		"WIZ-03", "WIZ-04", "WIZ-05", "WIZ-07",
+		"WIZ-15", "WIZ-18", "WIZ-23",
 	}) ||
 		!reflect.DeepEqual(fixture.PhaseCriteria, []string{
 			"criterion:v23-one-versioned-intake",
@@ -402,6 +403,37 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 			RequiredOutputFields:   []string{"intake_ref", "project_ref", "revision", "receipt_ref"},
 		},
 		{
+			ID:         "orquesta.intakes.recommendations.accept",
+			Handler:    "AcceptIntakeRecommendations",
+			Permission: "goals.create", Kind: "command", ReplayMode: "application_receipt",
+			ForbiddenPayloadFields: wantForbidden,
+			OutputKey:              "intake",
+			RequiredEnvelopeFields: []string{"intake"},
+			RequiredOutputFields:   []string{"intake_ref", "project_ref", "revision", "receipt_ref"},
+		},
+		{
+			ID: "orquesta.intakes.context.get", Handler: "GetIntakeContext",
+			Permission: "goals.get", Kind: "query", ReplayMode: "read_reexecute",
+			ForbiddenPayloadFields: wantForbidden,
+			OutputKey:              "context",
+			RequiredEnvelopeFields: []string{"context"},
+			RequiredOutputFields: []string{
+				"state_ref", "revision", "origin", "kind", "issues", "questions",
+			},
+		},
+		{
+			ID:         "orquesta.intakes.wizard.dossier.prepare",
+			Handler:    "PrepareWizardDossier",
+			Permission: "goals.create", Kind: "command", ReplayMode: "application_receipt",
+			ForbiddenPayloadFields: append(
+				append([]string(nil), wantForbidden...),
+				"authorization_receipt_ref",
+			),
+			OutputKey:              "dossier",
+			RequiredEnvelopeFields: []string{"dossier", "identity", "preview"},
+			RequiredOutputFields:   dossierOutput,
+		},
+		{
 			ID: "orquesta.intakes.dossier.prepare", Handler: "PrepareIntakeDossier",
 			Permission: "goals.create", Kind: "command", ReplayMode: "application_receipt",
 			ForbiddenPayloadFields: []string{"actor_ref", "project_ref", "request_ref", "request_fingerprint", "authorization_receipt_ref"},
@@ -446,6 +478,7 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		t.Fatalf("invalid round policy boundary: %+v", fixture.TypedRoundPolicy)
 	}
 	wantErrors := []string{
+		string(intake.ErrorAnswerTextForbidden), string(intake.ErrorAnswerTextRequired),
 		string(intake.ErrorChannelStateCreation), string(intake.ErrorChoiceConflict),
 		string(intake.ErrorDependencyCycle), string(intake.ErrorDependencyPending),
 		string(intake.ErrorDuplicateRef), string(intake.ErrorInvalidArgument),
@@ -487,7 +520,7 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		t.Fatalf("invalid required test: %+v", fixture.RequiredTest)
 	}
 	wantIntegrationGate := v23WizardRequiredTest{
-		Command: "go test -mod=vendor -count=1 ./internal/application ./internal/adapters/state/sqlite ./internal/commands ./internal/bootstrap -run '^(TestBuildIntakeDossierBindsVerifiedRecordPlanAndCompleteDecisions|TestIntakeDossierHashProjectsEveryCurrentDecisionField|TestBuildIntakeDossierRejectsTamperedRecordUnresolvedStateAndInvalidPlan|TestBuildIntakeDossierRejectsEveryCompilerInvalidPlanMetadata|TestIntakeDossierServiceExactReplaySurvivesLaterIntakeWithoutReread|TestIntakeDossierServiceRejectsCoherentlyRewrittenAdapterFingerprint|TestIntakeDossierSnapshotRoundTripLosesNoDataAndRecomputesIdentity|TestIntakeDossierSQLiteRestartAndHistoricalReplay|TestIntakeDossierSQLiteReusesContentAndRecordsDistinctRequests|TestV23DossierRecoveryRejectsTamperedCanonicalSnapshot|TestIntakeServiceReplayReturnsExactReceiptAfterLaterMutation|TestIntakeServiceRejectsStaleAndDivergentRequestsWithoutWrite|TestIntakeSQLiteRestartAndHistoricalReplay|TestIntakeSQLiteConcurrentCASAdmitsOneReceipt|TestV23RecoveryRejectsDivergentIntakeBranch|TestOrchestratorIntakeUsesAuthenticatedScopeInsteadOfSpoofedRequestFields|TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState|TestIntakeDossierCommandsBindAuthorityRejectSpoofAndProjectCompletePlan|TestConfirmIntakeDossierCommandBindsEnvelopeAndExposesExactReceipt|TestConfirmIntakeDossierCreatesRunningGoalFromExactDossier|TestConfirmIntakeDossierExactReplayAndSingleGoalPerDossier|TestConfirmIntakeDossierExactReplayAcceptsLiveGoalProgress|TestV23ConfirmIntakeDossierRejectsSubstitutedPersistedBindings|TestV23ConfirmIntakeDossierReplayRejectsIncompleteLiveRecord|TestIntakeDossierConfirmationSQLiteAtomicReplayRestartAndFreeze|TestIntakeDossierConfirmationSQLiteConcurrentExactReplayAndDivergence|TestIntakeDossierConfirmationSQLiteRollsBackGoalAndOutboxOnReceiptFailure|TestV23DossierConfirmationRecoveryRejectsTamperedBinding|TestV23DossierConfirmationRecoveryAcceptsLivePlanGeneration|TestHistoricalGlobalRegistryDigestReplaysOnlyUnchangedDefinitionAfterAdditiveUpgrade|TestHistoricalRegistryAdmissionReplaysThroughCurrentDispatcherAndSQLite|TestV23IntakeDispatcherPersistsCASAndReplayAcrossRestart|TestV23DossierCommandsPersistReplayAndCanonicalReadAcrossRestart)$'",
+		Command: "go test -mod=vendor -count=1 ./internal/intake ./internal/wizard/catalog ./internal/wizard/gaps ./internal/application ./internal/adapters/state/sqlite ./internal/commands ./internal/bootstrap -run '^(TestBuildIntakeDossierBindsVerifiedRecordPlanAndCompleteDecisions|TestIntakeDossierHashProjectsEveryCurrentDecisionField|TestBuildIntakeDossierRejectsTamperedRecordUnresolvedStateAndInvalidPlan|TestBuildIntakeDossierRejectsEveryCompilerInvalidPlanMetadata|TestIntakeDossierServiceExactReplaySurvivesLaterIntakeWithoutReread|TestIntakeDossierServiceRejectsCoherentlyRewrittenAdapterFingerprint|TestIntakeDossierSnapshotRoundTripLosesNoDataAndRecomputesIdentity|TestIntakeDossierSQLiteRestartAndHistoricalReplay|TestIntakeDossierSQLiteReusesContentAndRecordsDistinctRequests|TestV23DossierRecoveryRejectsTamperedCanonicalSnapshot|TestIntakeServiceReplayReturnsExactReceiptAfterLaterMutation|TestIntakeServiceRejectsStaleAndDivergentRequestsWithoutWrite|TestIntakeSQLiteRestartAndHistoricalReplay|TestIntakeSQLiteConcurrentCASAdmitsOneReceipt|TestV23RecoveryRejectsDivergentIntakeBranch|TestOrchestratorIntakeUsesAuthenticatedScopeInsteadOfSpoofedRequestFields|TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState|TestIntakeDossierCommandsBindAuthorityRejectSpoofAndProjectCompletePlan|TestConfirmIntakeDossierCommandBindsEnvelopeAndExposesExactReceipt|TestConfirmIntakeDossierCreatesRunningGoalFromExactDossier|TestConfirmIntakeDossierExactReplayAndSingleGoalPerDossier|TestConfirmIntakeDossierExactReplayAcceptsLiveGoalProgress|TestV23ConfirmIntakeDossierRejectsSubstitutedPersistedBindings|TestV23ConfirmIntakeDossierReplayRejectsIncompleteLiveRecord|TestIntakeDossierConfirmationSQLiteAtomicReplayRestartAndFreeze|TestIntakeDossierConfirmationSQLiteConcurrentExactReplayAndDivergence|TestIntakeDossierConfirmationSQLiteRollsBackGoalAndOutboxOnReceiptFailure|TestV23DossierConfirmationRecoveryRejectsTamperedBinding|TestV23DossierConfirmationRecoveryAcceptsLivePlanGeneration|TestHistoricalGlobalRegistryDigestReplaysOnlyUnchangedDefinitionAfterAdditiveUpgrade|TestHistoricalRegistryAdmissionReplaysThroughCurrentDispatcherAndSQLite|TestV23IntakeDispatcherPersistsCASAndReplayAcrossRestart|TestV23DossierCommandsPersistReplayAndCanonicalReadAcrossRestart|TestDerivationIdentityIsValidatedAndRecordedInSingleMutationHistory|TestBuiltInV1SemanticDigestGolden|TestEvaluatorV1SourceDigestGolden|TestEvaluatorV1SemanticDigestGolden|TestWizardGapsFirstEvaluationPersistsThroughIntakeWriter|TestWizardGapsRejectsAlteredCanonicalAnsweredQuestionPayload|TestIntakeSQLiteDerivationIdentitySurvivesRestartAndReplay)$'",
 		TestNames: []string{
 			"TestBuildIntakeDossierBindsVerifiedRecordPlanAndCompleteDecisions",
 			"TestIntakeDossierHashProjectsEveryCurrentDecisionField",
@@ -522,6 +555,13 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 			"TestHistoricalRegistryAdmissionReplaysThroughCurrentDispatcherAndSQLite",
 			"TestV23IntakeDispatcherPersistsCASAndReplayAcrossRestart",
 			"TestV23DossierCommandsPersistReplayAndCanonicalReadAcrossRestart",
+			"TestDerivationIdentityIsValidatedAndRecordedInSingleMutationHistory",
+			"TestBuiltInV1SemanticDigestGolden",
+			"TestEvaluatorV1SourceDigestGolden",
+			"TestEvaluatorV1SemanticDigestGolden",
+			"TestWizardGapsFirstEvaluationPersistsThroughIntakeWriter",
+			"TestWizardGapsRejectsAlteredCanonicalAnsweredQuestionPayload",
+			"TestIntakeSQLiteDerivationIdentitySurvivesRestartAndReplay",
 		},
 		RejectNoTestsToRun: true,
 	}
@@ -549,19 +589,24 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		"intake_dependency_reopen_projection",
 		"intake_pure_context_reemission",
 		"intake_recommendation_batch_compiler",
+		"public_pure_context_command",
+		"public_recommendation_batch_command",
+		"public_wizard_dossier_prepare",
+		"versioned_wizard_gaps_evaluator_identity",
+		"wizard_gap_application_compiler_fail_closed",
 		"wizard_catalog_foundation_and_15_domain_packs",
 	}) {
 		t.Fatalf("invalid completed integration scope: %+v", fixture.CompletedScopes)
 	}
 	wantDeferred := []string{
-		"dossier_generation", "full_universal_question_catalog",
-		"full_wizard_i18n_catalog", "roadmap_promotion",
-		"seal_and_receipt", "template_wiring", "web_surface",
+		"dossier_generation", "roadmap_promotion", "seal_and_receipt",
+		"web_surface", "wizard_gap_public_binding_and_reconciliation",
+		"wizard_help_surface",
 	}
 	if !reflect.DeepEqual(fixture.DeferredScopes, wantDeferred) {
 		t.Fatalf("invalid deferred scope: %+v", fixture.DeferredScopes)
 	}
-	if fixture.NextDependency != "intake_decisions_and_stage_templates" {
+	if fixture.NextDependency != "wizard_gap_reconciliation_before_public_binding" {
 		t.Fatalf("invalid next dependency: %q", fixture.NextDependency)
 	}
 	wantCandidateFiles := []string{
@@ -574,6 +619,8 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		"internal/intake/intake_test.go",
 		"internal/intake/interactions.go",
 		"internal/intake/interactions_test.go",
+		"internal/intake/answer_text.go",
+		"internal/intake/derivation_test.go",
 		"internal/intake/model.go",
 		"internal/intake/state.go",
 	}
@@ -600,13 +647,19 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		"internal/application/intake_dossier_snapshot_test.go",
 		"internal/application/intake_dossier_test.go",
 		"internal/application/intake_chain.go",
+		"internal/application/intake_derivation_test.go",
 		"internal/application/intake_orchestrator.go",
 		"internal/application/intake_service.go",
+		"internal/application/wizard_gaps.go",
+		"internal/application/wizard_gaps_identity_test.go",
+		"internal/application/wizard_gaps_preflight.go",
+		"internal/application/wizard_gaps_test.go",
 		"internal/adapters/state/sqlite/intake_dossier.go",
 		"internal/adapters/state/sqlite/intake_dossier_confirmation.go",
 		"internal/adapters/state/sqlite/intake_dossier_confirmation_test.go",
 		"internal/adapters/state/sqlite/intake_dossier_test.go",
 		"internal/adapters/state/sqlite/intake_dependencies_test.go",
+		"internal/adapters/state/sqlite/intake_derivation_test.go",
 		"internal/adapters/state/sqlite/intake.go",
 		"internal/adapters/state/sqlite/migrations/018_intake_dossiers.sql",
 		"internal/adapters/state/sqlite/migrations/019_intake_dossier_confirmations.sql",
@@ -628,7 +681,18 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		"internal/wizard/catalog/catalog_test.go",
 		"internal/wizard/catalog/errors.go",
 		"internal/wizard/catalog/model.go",
+		"internal/wizard/catalog/semantic.go",
+		"internal/wizard/catalog/semantic_test.go",
 		"internal/wizard/catalog/validation.go",
+		"internal/wizard/gaps/catalog.go",
+		"internal/wizard/gaps/engine.go",
+		"internal/wizard/gaps/evaluator.go",
+		"internal/wizard/gaps/evaluator_test.go",
+		"internal/wizard/gaps/input.go",
+		"internal/wizard/gaps/model.go",
+		"internal/wizard/gaps/rules.go",
+		"internal/wizard/gaps/semantic.go",
+		"internal/wizard/gaps/semantic_corpus.go",
 	}
 	if !reflect.DeepEqual(fixture.IntegrationFiles, wantIntegrationFiles) {
 		t.Fatalf("invalid integration files: %+v", fixture.IntegrationFiles)
@@ -690,9 +754,10 @@ func assertV23PublicCommandBindings(t *testing.T, bindings []v23WizardBinding) {
 func assertV23RemainingCapabilities(t *testing.T, remaining []v23WizardCapability) {
 	t.Helper()
 	completed := map[string]struct{}{
-		"WIZ-03": {}, "WIZ-04": {}, "WIZ-15": {}, "WIZ-23": {},
+		"WIZ-03": {}, "WIZ-04": {}, "WIZ-05": {}, "WIZ-07": {},
+		"WIZ-15": {}, "WIZ-18": {}, "WIZ-23": {},
 	}
-	want := make(map[string]string, 21)
+	want := make(map[string]string, 18)
 	for number := 1; number <= 25; number++ {
 		id := "WIZ-" + twoDigits(number)
 		if _, found := completed[id]; found {
@@ -701,6 +766,11 @@ func assertV23RemainingCapabilities(t *testing.T, remaining []v23WizardCapabilit
 		want[id] = "pending"
 	}
 	want["WIZ-12"], want["WIZ-14"] = "roadmap_rejected", "roadmap_rejected"
+	for _, id := range []string{
+		"WIZ-08", "WIZ-11", "WIZ-20", "WIZ-21", "WIZ-22", "WIZ-24", "WIZ-25",
+	} {
+		want[id] = "partial"
+	}
 	got := make(map[string]string, len(remaining))
 	for _, capability := range remaining {
 		if _, duplicate := got[capability.ID]; duplicate {
