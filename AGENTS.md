@@ -52,6 +52,19 @@ Quedan congelados y en solo lectura:
 - scripts, estados, runtimes y documentos históricos fuera de la superficie
   nueva, salvo lectura o retirada acreditada durante el cutover.
 
+Corte operativo local del 2026-07-26:
+
+- en `/home/alberto/Trabajo/orquestaV2` las rutas inequívocas de código legacy
+  están fuera de la vista mediante `sparse-checkout`; no se han borrado del
+  repositorio ni de su historia;
+- la copia completa navegable para consulta vive en
+  `/home/alberto/Trabajo/orquestaV2-legacy-consulta`;
+- no desactives el `sparse-checkout` ni materialices esas rutas en un worktree
+  de producto. Si una caracterización exige leerlas, usa la copia de consulta
+  en solo lectura;
+- la evidencia y el procedimiento reversible están en
+  `docs/reconstruccion/separacion_legacy_consulta_2026-07-26.md`.
+
 Reglas estrictas:
 
 - cero imports desde `orquesta/modulos/...` en producto nuevo;
