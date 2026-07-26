@@ -1451,8 +1451,8 @@ func assertRoadmapImplementationDecisions(t *testing.T, decisions []roadmapImple
 			[]string{"guest_ip_network", "tap", "bridge", "nat", "inbound", "east_west", "direct_internet"}) {
 		t.Fatalf("agent microVM implementation scope drifted: %#v", decision)
 	}
-	if len(decision.TestRefs) != 4 {
-		t.Fatalf("agent microVM implementation tests = %v, want 4", decision.TestRefs)
+	if len(decision.TestRefs) != 6 {
+		t.Fatalf("agent microVM implementation tests = %v, want 6", decision.TestRefs)
 	}
 	for _, ref := range decision.TestRefs {
 		requireRepositoryFile(t, ".", ref)
