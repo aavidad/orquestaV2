@@ -171,13 +171,16 @@ func intakeStateAtRevision(
 		[]intake.Mutation(nil),
 		snapshot.History[:mutationCount]...,
 	)
-	issues, questions, questionVersions, questionRevisions, decisions := 0, 0, 0, 0, 0
+	issues, questions, questionVersions, questionTransitions, decisions := 0, 0, 0, 0, 0
 	var rounds uint32
 	for _, mutation := range snapshot.History {
 		issues += mutation.IssuesAdded
 		questions += mutation.QuestionsAdded
-		questionVersions += mutation.QuestionsAdded + mutation.QuestionsRevised
-		questionRevisions += mutation.QuestionsRevised
+		questionVersions += mutation.QuestionsAdded +
+			mutation.QuestionsRevised +
+			mutation.QuestionsRetired
+		questionTransitions += mutation.QuestionsRevised +
+			mutation.QuestionsRetired
 		decisions += mutation.ChoicesRecorded
 		rounds = mutation.QuestionRound
 	}
@@ -199,7 +202,7 @@ func intakeStateAtRevision(
 			snapshot.QuestionVersions[:questionVersions]...,
 		)
 		snapshot.Questions = activeQuestionsFromVersions(snapshot.QuestionVersions)
-		if questionRevisions == 0 {
+		if questionTransitions == 0 {
 			snapshot.QuestionVersions = nil
 		}
 	}
@@ -216,6 +219,16 @@ func activeQuestionsFromVersions(
 	order := make([]intake.QuestionRef, 0)
 	active := make(map[intake.QuestionRef]intake.Question)
 	for _, version := range versions {
+		if version.Retired {
+			delete(active, version.Question.Ref)
+			for index, ref := range order {
+				if ref == version.Question.Ref {
+					order = append(order[:index], order[index+1:]...)
+					break
+				}
+			}
+			continue
+		}
 		if _, found := active[version.Question.Ref]; !found {
 			order = append(order, version.Question.Ref)
 		}
