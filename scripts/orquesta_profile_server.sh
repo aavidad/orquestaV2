@@ -10,6 +10,7 @@ umask 077
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 readonly PIDFD_SIGNAL="$SCRIPT_DIR/lib/pidfd_signal.py"
 readonly FIRECRACKER_LAUNCHER_PROBE="$SCRIPT_DIR/lib/firecracker_launcher_probe.py"
+readonly PROFILE_MAINTENANCE_MARKER_READER="$SCRIPT_DIR/lib/profile_maintenance_marker.py"
 
 fail() {
   printf 'orquesta_profile_server: status=error reason_code=%s\n' "$1" >&2
@@ -26,9 +27,12 @@ usage() {
   cat <<'EOF'
 uso:
   orquesta_profile_server.sh start --profile NOMBRE --runtime-base RUTA \
-    --source-codex-home RUTA --binary RUTA --config RUTA --exec-path PATH
-  orquesta_profile_server.sh status --profile NOMBRE --runtime-base RUTA
-  orquesta_profile_server.sh stop --profile NOMBRE --runtime-base RUTA
+    --source-codex-home RUTA --binary RUTA --config RUTA --exec-path PATH \
+    [--maintenance-ref SHA256]
+  orquesta_profile_server.sh status --profile NOMBRE --runtime-base RUTA \
+    [--maintenance-ref SHA256]
+  orquesta_profile_server.sh stop --profile NOMBRE --runtime-base RUTA \
+    [--maintenance-ref SHA256]
 
 Cada daemon queda ligado a un único perfil persistente y admite una sola
 ejecución concurrente.
@@ -52,6 +56,7 @@ source_codex_home=""
 binary=""
 config_source=""
 exec_path=""
+maintenance_ref=""
 
 while [ "$#" -gt 0 ]; do
   option="$1"
@@ -92,6 +97,12 @@ while [ "$#" -gt 0 ]; do
       exec_path="$2"
       shift 2
       ;;
+    --maintenance-ref)
+      require_value "$@"
+      [ -z "$maintenance_ref" ] || fail "argument_repeated" 2
+      maintenance_ref="$2"
+      shift 2
+      ;;
     --help|-h)
       usage
       exit 0
@@ -126,6 +137,9 @@ esac
 
 [[ "$profile" =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$ ]] ||
   fail "profile_invalid" 2
+[ -z "$maintenance_ref" ] ||
+  [[ "$maintenance_ref" =~ ^[0-9a-f]{64}$ ]] ||
+  fail "maintenance_ref_invalid" 2
 
 command -v uname >/dev/null 2>&1 || fail "platform_probe_unavailable"
 [ "$(uname -s 2>/dev/null)" = "Linux" ] || fail "platform_unsupported"
@@ -314,6 +328,7 @@ readonly DAEMON_HOME="$RUNTIME_ROOT/daemon-home"
 readonly GLOBAL_LOCK_ROOT="$runtime_base/.profile-locks"
 readonly GLOBAL_CONTROL_LOCK="$GLOBAL_LOCK_ROOT/$profile.control.lock"
 readonly GLOBAL_LEASE_LOCK="$GLOBAL_LOCK_ROOT/$profile.lease.lock"
+readonly GLOBAL_MAINTENANCE_MARKER="$GLOBAL_LOCK_ROOT/$profile.maintenance"
 
 numeric_pid() {
   [[ "$1" =~ ^[1-9][0-9]*$ ]]
@@ -413,6 +428,10 @@ remove_stale_identity() {
 prepare_global_profile_locks() {
   command -v flock >/dev/null 2>&1 || fail "profile_lock_unavailable"
   if [ ! -e "$GLOBAL_LOCK_ROOT" ]; then
+    if [ "$ACTION" = "status" ]; then
+      [ ! -e "$RUNTIME_ROOT" ] || fail "profile_lock_root_missing"
+      return
+    fi
     if mkdir -m 700 -- "$GLOBAL_LOCK_ROOT" 2>/dev/null; then
       :
     elif [ ! -d "$GLOBAL_LOCK_ROOT" ]; then
@@ -422,6 +441,7 @@ prepare_global_profile_locks() {
   private_directory "$GLOBAL_LOCK_ROOT" || fail "profile_lock_root_not_private"
   for lock_file in "$GLOBAL_CONTROL_LOCK" "$GLOBAL_LEASE_LOCK"; do
     if [ ! -e "$lock_file" ]; then
+      [ "$ACTION" != "status" ] || fail "profile_lock_missing"
       (umask 077; : >"$lock_file") || fail "profile_lock_create_failed"
     fi
     private_regular_file "$lock_file" || fail "profile_lock_not_private"
@@ -430,7 +450,31 @@ prepare_global_profile_locks() {
   flock -w 10 8 || fail "profile_control_busy"
 }
 
+read_maintenance_marker() {
+  private_executable "$PROFILE_MAINTENANCE_MARKER_READER" || return 1
+  "$PROFILE_MAINTENANCE_MARKER_READER" \
+    "$GLOBAL_MAINTENANCE_MARKER" \
+    "$CURRENT_UID"
+}
+
+authorize_profile_mutation() {
+  if [ ! -e "$GLOBAL_MAINTENANCE_MARKER" ] &&
+    [ ! -L "$GLOBAL_MAINTENANCE_MARKER" ]; then
+    [ -z "$maintenance_ref" ] || fail "maintenance_marker_missing"
+    return
+  fi
+  observed_maintenance_ref="$(read_maintenance_marker 2>/dev/null)" ||
+    fail "maintenance_marker_invalid"
+  [ -n "$maintenance_ref" ] || fail "profile_maintenance_active"
+  [ "$maintenance_ref" = "$observed_maintenance_ref" ] ||
+    fail "maintenance_ref_mismatch"
+}
+
 prepare_global_profile_locks
+
+if [ "$ACTION" != "status" ]; then
+  authorize_profile_mutation
+fi
 
 case "$ACTION" in
   status)
