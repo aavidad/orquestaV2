@@ -124,7 +124,9 @@ renueva, recupera ni libera autoridad. No se usa `max(now, high_water)` como
 reloj lógico porque congelaría la expiración durante el retroceso y podría
 alargar indebidamente la exclusividad. High-water y expiraciones observadas se
 confirman también antes de devolver un rechazo semántico: hacer rollback de
-ambos permitiría resucitar un lease expirado tras un retroceso posterior. Los
+ambos permitiría resucitar un lease expirado tras un retroceso posterior. Esto
+incluye `fencing_exhausted`: el agotamiento no concede un CID, pero confirma la
+frontera temporal y los tombstones observados antes de detectarlo. Los
 límites mínimo y máximo de duración pertenecen al registro canónico
 (`agent.firecracker.vsock_cid.*_lease_duration`) y Reserve/Renew rechazan fuera
 de esos límites en la frontera. El registro acota el máximo operativo a `24h`;
@@ -132,7 +134,9 @@ el adaptador no duplica ese default/policy, pero valida siempre la suma exacta
 en nanosegundos y rechaza `lease_time_unrepresentable` antes de que
 `time.Add`/`UnixNano` puedan desbordar el límite de SQLite. El schema exige
 tiempos positivos, expiración posterior a adquisición y coherencia entre
-estado y tiempo de liberación.
+estado y tiempo de liberación. El reloj observado también debe reconstruirse
+exactamente desde su `UnixNano`: una fecha exterior al rango que envuelva a un
+entero positivo queda rechazada como `clock_invalid`, no reinterpretada.
 
 El receipt de lease sigue sin ser autoridad por posesión. La composición que
 pueda hacer alcanzable un backend debe consultar la reserva activa
@@ -152,9 +156,15 @@ synchronous, foreign keys y busy timeout.
 Una conexión solo vuelve al pool tras `COMMIT` o `ROLLBACK` acreditado. Si
 falla el rollback manual o el rollback compensatorio posterior a un COMMIT
 fallido, el adaptador marca la conexión física como `driver.ErrBadConn` para
-que `database/sql` la descarte. Failpoints de COMMIT/ROLLBACK prueban que no
-quedan filas ambiguas ni locks vivos y que el mismo request puede reintentarse
-en una conexión nueva.
+que `database/sql` la descarte. Una guarda de ownership finaliza la transacción
+al primer intento de commit y evita que el `defer` ejecute otro rollback sobre
+una conexión ya cerrada o descartada. Si SQLite aplicó el COMMIT pero su
+respuesta se perdió, el resultado externo es ambiguo por definición: la
+conexión se descarta y el mismo request debe reintentarse con su idempotency
+key. El ledger durable devuelve entonces el receipt exacto sin duplicar
+efectos. Failpoints separan el fallo de COMMIT previo a aplicar —cero filas— del
+fallo de respuesta posterior —una única operación recuperable por replay— y
+prueban además ausencia de locks vivos.
 
 No hay GC ni retención destructiva en este corte. Borrar operaciones,
 tombstones, generaciones o high-water sin otro ancla durable reabriría replay,
@@ -197,9 +207,9 @@ El corte 2026-07-26 implementa:
   Firecracker que usa la base canónica entregada por composición, conserva
   tombstones/generaciones/high-water, aplica duración mínima y soporta
   concurrencia entre instancias, restart, descarte de transacciones ambiguas,
-  tiempos extremos representables y rechazo de rollback de reloj; el schema
-  está descrito por el adaptador pero aún no pertenece a una migración canónica
-  ni está cableado;
+  tiempos extremos representables, agotamiento irreversible de fencing y
+  rechazo de rollback o wrap del reloj; el schema está descrito por el
+  adaptador pero aún no pertenece a una migración canónica ni está cableado;
 - render determinista `planned_not_applied` con cero interfaces, TAP, bridge,
   NAT, inbound, east-west o Internet directo, allowlist vsock exacta, lease CID
   y recibo ligado también a los bytes exactos del documento renderizado.
@@ -236,13 +246,15 @@ arranque. Debe incluir, como mínimo:
   exclusión de CID `0/1/2` y `VMADDR_CID_ANY`, restart/recovery, expiración
   inclusiva, idempotencia, revisión de renovación, fencing monotónico, intento
   de liberación ajena, reutilización ABA, duración mínima, high-water tras
-  restart, límites extremos de Reserve/Renew y rechazo de las cuatro operaciones
-  con reloj regresivo;
+  restart, agotamiento de fencing con tombstone/high-water confirmados, límites
+  extremos de Reserve/Renew, rechazo de wrap `UnixNano` positivo y rechazo de
+  las cuatro operaciones con reloj regresivo;
 - negativos file-backed de schema y PRAGMA: drift durable del índice único,
   journal distinto de WAL, synchronous inferior a FULL, foreign keys apagadas
   y busy timeout nulo;
-- failpoints file-backed de COMMIT, ROLLBACK compensatorio y ROLLBACK diferido:
-  cero efectos ambiguos, cero lock residual y retry idempotente posterior;
+- failpoints file-backed de COMMIT antes y después de aplicar, ROLLBACK
+  compensatorio y ROLLBACK diferido: cero lock residual, cero efectos en el
+  fallo pre-apply y receipt durable único por replay en respuesta post-apply;
 - pruebas del gateway: autenticación, ACL por Goal y parentesco, aislamiento
   entre Goals, causalidad, fencing cuando aplique, idempotencia, auditoría y
   entrega de mailbox/CAS por refs opacas;
