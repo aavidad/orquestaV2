@@ -13,12 +13,14 @@
   "owned_capability_ids": [
     "WIZ-03",
     "WIZ-04",
-    "WIZ-15"
+    "WIZ-15",
+    "WIZ-23"
   ],
   "phase_criteria": [
     "criterion:v23-one-versioned-intake",
     "criterion:v23-gap-derived-questions",
     "criterion:v23-visible-recommendation",
+    "criterion:v23-confirm-exact-dossier-into-immutable-appspec",
     "criterion:v23-nonempty-required-test"
   ],
   "package_path": "internal/intake",
@@ -35,6 +37,8 @@
       "kind": "command",
       "replay_mode": "application_receipt",
       "forbidden_payload_fields": ["actor_ref", "project_ref", "request_ref", "request_fingerprint"],
+      "output_key": "intake",
+      "required_envelope_fields": ["intake"],
       "required_output_fields": ["intake_ref", "project_ref", "revision", "receipt_ref"]
     },
     {
@@ -44,6 +48,8 @@
       "kind": "query",
       "replay_mode": "read_reexecute",
       "forbidden_payload_fields": ["actor_ref", "project_ref", "request_ref", "request_fingerprint"],
+      "output_key": "intake",
+      "required_envelope_fields": ["intake"],
       "required_output_fields": ["state_schema", "intake_ref", "actor_ref", "project_ref", "revision", "max_question_rounds", "question_rounds", "issues", "questions", "decisions", "history"]
     },
     {
@@ -53,6 +59,8 @@
       "kind": "command",
       "replay_mode": "application_receipt",
       "forbidden_payload_fields": ["actor_ref", "project_ref", "request_ref", "request_fingerprint"],
+      "output_key": "intake",
+      "required_envelope_fields": ["intake"],
       "required_output_fields": ["intake_ref", "project_ref", "revision", "receipt_ref"]
     },
     {
@@ -62,6 +70,8 @@
       "kind": "command",
       "replay_mode": "application_receipt",
       "forbidden_payload_fields": ["actor_ref", "project_ref", "request_ref", "request_fingerprint", "authorization_receipt_ref"],
+      "output_key": "dossier",
+      "required_envelope_fields": ["dossier"],
       "required_output_fields": ["schema", "dossier_ref", "actor_ref", "project_ref", "intake_ref", "intake_revision", "intake_digest", "source_intake_receipt_ref", "statement", "objective", "sections", "diagrams", "decisions", "risk_refs", "plan", "plan_digest", "digest", "generation_receipt"]
     },
     {
@@ -71,7 +81,20 @@
       "kind": "query",
       "replay_mode": "read_reexecute",
       "forbidden_payload_fields": ["actor_ref", "project_ref", "request_ref", "request_fingerprint"],
+      "output_key": "dossier",
+      "required_envelope_fields": ["dossier"],
       "required_output_fields": ["schema", "dossier_ref", "actor_ref", "project_ref", "intake_ref", "intake_revision", "intake_digest", "source_intake_receipt_ref", "statement", "objective", "sections", "diagrams", "decisions", "risk_refs", "plan", "plan_digest", "digest", "generation_receipt"]
+    },
+    {
+      "id": "orquesta.intakes.dossier.confirm",
+      "handler": "ConfirmIntakeDossier",
+      "permission": "goals.create",
+      "kind": "command",
+      "replay_mode": "application_receipt",
+      "forbidden_payload_fields": ["actor_ref", "project_ref", "request_ref", "request_fingerprint", "authorization_receipt_ref", "goal_ref", "app_spec_ref"],
+      "output_key": "confirmation",
+      "required_envelope_fields": ["goal", "confirmation"],
+      "required_output_fields": ["receipt_ref", "request_ref", "request_fingerprint", "principal_ref", "actor_ref", "project_ref", "intake_ref", "intake_revision", "intake_digest", "source_intake_receipt_ref", "dossier_ref", "dossier_digest", "plan_digest", "goal_ref", "app_spec_ref", "spec_hash", "authorization_receipt_ref", "confirmed_at"]
     }
   ],
   "typed_round_policy": {
@@ -101,6 +124,7 @@
     "chat_and_form_advance_one_ref_and_revision_sequence",
     "failed_change_does_not_mutate_the_current_snapshot",
     "question_references_at_least_one_recorded_gap_or_contradiction",
+    "exact_dossier_confirmation_freezes_it_and_creates_one_causal_goal",
     "required_test_runs_named_contract_and_two_negatives",
     "selected_and_recommended_options_coexist_when_they_differ",
     "typed_policy_is_shared_across_origins_and_has_no_package_default"
@@ -115,7 +139,7 @@
     "reject_no_tests_to_run": true
   },
   "integration_gate": {
-    "command": "go test -mod=vendor -count=1 ./internal/application ./internal/adapters/state/sqlite ./internal/commands ./internal/bootstrap -run '^(TestBuildIntakeDossierBindsVerifiedRecordPlanAndCompleteDecisions|TestIntakeDossierHashProjectsEveryCurrentDecisionField|TestBuildIntakeDossierRejectsTamperedRecordUnresolvedStateAndInvalidPlan|TestBuildIntakeDossierRejectsEveryCompilerInvalidPlanMetadata|TestIntakeDossierServiceExactReplaySurvivesLaterIntakeWithoutReread|TestIntakeDossierServiceRejectsCoherentlyRewrittenAdapterFingerprint|TestIntakeDossierSnapshotRoundTripLosesNoDataAndRecomputesIdentity|TestIntakeDossierSQLiteRestartAndHistoricalReplay|TestIntakeDossierSQLiteReusesContentAndRecordsDistinctRequests|TestV23DossierRecoveryRejectsTamperedCanonicalSnapshot|TestIntakeServiceReplayReturnsExactReceiptAfterLaterMutation|TestIntakeServiceRejectsStaleAndDivergentRequestsWithoutWrite|TestIntakeSQLiteRestartAndHistoricalReplay|TestIntakeSQLiteConcurrentCASAdmitsOneReceipt|TestV23RecoveryRejectsDivergentIntakeBranch|TestOrchestratorIntakeUsesAuthenticatedScopeInsteadOfSpoofedRequestFields|TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState|TestIntakeDossierCommandsBindAuthorityRejectSpoofAndProjectCompletePlan|TestHistoricalGlobalRegistryDigestReplaysOnlyUnchangedDefinitionAfterAdditiveUpgrade|TestHistoricalRegistryAdmissionReplaysThroughCurrentDispatcherAndSQLite|TestV23IntakeDispatcherPersistsCASAndReplayAcrossRestart|TestV23DossierCommandsPersistReplayAndCanonicalReadAcrossRestart)$'",
+    "command": "go test -mod=vendor -count=1 ./internal/application ./internal/adapters/state/sqlite ./internal/commands ./internal/bootstrap -run '^(TestBuildIntakeDossierBindsVerifiedRecordPlanAndCompleteDecisions|TestIntakeDossierHashProjectsEveryCurrentDecisionField|TestBuildIntakeDossierRejectsTamperedRecordUnresolvedStateAndInvalidPlan|TestBuildIntakeDossierRejectsEveryCompilerInvalidPlanMetadata|TestIntakeDossierServiceExactReplaySurvivesLaterIntakeWithoutReread|TestIntakeDossierServiceRejectsCoherentlyRewrittenAdapterFingerprint|TestIntakeDossierSnapshotRoundTripLosesNoDataAndRecomputesIdentity|TestIntakeDossierSQLiteRestartAndHistoricalReplay|TestIntakeDossierSQLiteReusesContentAndRecordsDistinctRequests|TestV23DossierRecoveryRejectsTamperedCanonicalSnapshot|TestIntakeServiceReplayReturnsExactReceiptAfterLaterMutation|TestIntakeServiceRejectsStaleAndDivergentRequestsWithoutWrite|TestIntakeSQLiteRestartAndHistoricalReplay|TestIntakeSQLiteConcurrentCASAdmitsOneReceipt|TestV23RecoveryRejectsDivergentIntakeBranch|TestOrchestratorIntakeUsesAuthenticatedScopeInsteadOfSpoofedRequestFields|TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState|TestIntakeDossierCommandsBindAuthorityRejectSpoofAndProjectCompletePlan|TestConfirmIntakeDossierCommandBindsEnvelopeAndExposesExactReceipt|TestConfirmIntakeDossierCreatesRunningGoalFromExactDossier|TestConfirmIntakeDossierExactReplayAndSingleGoalPerDossier|TestConfirmIntakeDossierExactReplayAcceptsLiveGoalProgress|TestV23ConfirmIntakeDossierRejectsSubstitutedPersistedBindings|TestV23ConfirmIntakeDossierReplayRejectsIncompleteLiveRecord|TestIntakeDossierConfirmationSQLiteAtomicReplayRestartAndFreeze|TestIntakeDossierConfirmationSQLiteConcurrentExactReplayAndDivergence|TestIntakeDossierConfirmationSQLiteRollsBackGoalAndOutboxOnReceiptFailure|TestV23DossierConfirmationRecoveryRejectsTamperedBinding|TestV23DossierConfirmationRecoveryAcceptsLivePlanGeneration|TestHistoricalGlobalRegistryDigestReplaysOnlyUnchangedDefinitionAfterAdditiveUpgrade|TestHistoricalRegistryAdmissionReplaysThroughCurrentDispatcherAndSQLite|TestV23IntakeDispatcherPersistsCASAndReplayAcrossRestart|TestV23DossierCommandsPersistReplayAndCanonicalReadAcrossRestart)$'",
     "test_names": [
       "TestBuildIntakeDossierBindsVerifiedRecordPlanAndCompleteDecisions",
       "TestIntakeDossierHashProjectsEveryCurrentDecisionField",
@@ -135,6 +159,17 @@
       "TestOrchestratorIntakeUsesAuthenticatedScopeInsteadOfSpoofedRequestFields",
       "TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState",
       "TestIntakeDossierCommandsBindAuthorityRejectSpoofAndProjectCompletePlan",
+      "TestConfirmIntakeDossierCommandBindsEnvelopeAndExposesExactReceipt",
+      "TestConfirmIntakeDossierCreatesRunningGoalFromExactDossier",
+      "TestConfirmIntakeDossierExactReplayAndSingleGoalPerDossier",
+      "TestConfirmIntakeDossierExactReplayAcceptsLiveGoalProgress",
+      "TestV23ConfirmIntakeDossierRejectsSubstitutedPersistedBindings",
+      "TestV23ConfirmIntakeDossierReplayRejectsIncompleteLiveRecord",
+      "TestIntakeDossierConfirmationSQLiteAtomicReplayRestartAndFreeze",
+      "TestIntakeDossierConfirmationSQLiteConcurrentExactReplayAndDivergence",
+      "TestIntakeDossierConfirmationSQLiteRollsBackGoalAndOutboxOnReceiptFailure",
+      "TestV23DossierConfirmationRecoveryRejectsTamperedBinding",
+      "TestV23DossierConfirmationRecoveryAcceptsLivePlanGeneration",
       "TestHistoricalGlobalRegistryDigestReplaysOnlyUnchangedDefinitionAfterAdditiveUpgrade",
       "TestHistoricalRegistryAdmissionReplaysThroughCurrentDispatcherAndSQLite",
       "TestV23IntakeDispatcherPersistsCASAndReplayAcrossRestart",
@@ -152,9 +187,14 @@
     "internal/intake/state.go"
   ],
   "integration_files": [
+    "docs/reconstruccion/corte_v23_comandos_dossier_2026-07-26.md",
     "docs/reconstruccion/corte_v23_dossier_durable_2026-07-26.md",
     "docs/reconstruccion/corte_v23_intake_durable_2026-07-26.md",
     "internal/application/intake_dossier.go",
+    "internal/application/intake_dossier_confirmation.go",
+    "internal/application/intake_dossier_confirmation_adversarial_test.go",
+    "internal/application/intake_dossier_confirmation_test.go",
+    "internal/application/intake_dossier_plan_binding.go",
     "internal/application/intake_dossier_service.go",
     "internal/application/intake_dossier_service_test.go",
     "internal/application/intake_dossier_snapshot.go",
@@ -164,9 +204,12 @@
     "internal/application/intake_orchestrator.go",
     "internal/application/intake_service.go",
     "internal/adapters/state/sqlite/intake_dossier.go",
+    "internal/adapters/state/sqlite/intake_dossier_confirmation.go",
+    "internal/adapters/state/sqlite/intake_dossier_confirmation_test.go",
     "internal/adapters/state/sqlite/intake_dossier_test.go",
     "internal/adapters/state/sqlite/intake.go",
     "internal/adapters/state/sqlite/migrations/018_intake_dossiers.sql",
+    "internal/adapters/state/sqlite/migrations/019_intake_dossier_confirmations.sql",
     "internal/adapters/state/sqlite/migrations/017_intake.sql",
     "internal/adapters/state/sqlite/recovery_validation_v23_dossier.go",
     "internal/adapters/state/sqlite/recovery_validation_v23.go",
@@ -266,10 +309,6 @@
       "status": "pending"
     },
     {
-      "id": "WIZ-23",
-      "status": "pending"
-    },
-    {
       "id": "WIZ-24",
       "status": "pending"
     },
@@ -284,14 +323,14 @@
     "command_registry_binding",
     "durable_cas_persistence_and_restart",
     "durable_dossier_persistence",
-    "public_dossier_commands"
+    "public_dossier_commands",
+    "causal_plan_creation",
+    "explicit_confirmation",
+    "freeze_after_confirmation"
   ],
   "deferred_scopes": [
     "canonical_round_default_under_L-CONFIG",
-    "causal_plan_creation",
     "dossier_generation",
-    "explicit_confirmation",
-    "freeze_after_confirmation",
     "full_wizard_i18n_catalog",
     "roadmap_promotion",
     "seal_and_receipt",
@@ -300,5 +339,5 @@
   ],
   "seal_status": "not_sealed",
   "receipt_path": "",
-  "next_causal_dependency": "dossier_confirmation_freeze_and_causal_plan_creation"
+  "next_causal_dependency": "canonical_round_default_and_wizard_catalog"
 }

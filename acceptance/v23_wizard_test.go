@@ -71,6 +71,8 @@ type v23WizardBinding struct {
 	Kind                   string   `json:"kind"`
 	ReplayMode             string   `json:"replay_mode"`
 	ForbiddenPayloadFields []string `json:"forbidden_payload_fields"`
+	OutputKey              string   `json:"output_key"`
+	RequiredEnvelopeFields []string `json:"required_envelope_fields"`
 	RequiredOutputFields   []string `json:"required_output_fields"`
 }
 
@@ -275,11 +277,14 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 	}) {
 		t.Fatalf("invalid task context: %+v", fixture.TaskContext)
 	}
-	if !reflect.DeepEqual(fixture.OwnedCapabilityIDs, []string{"WIZ-03", "WIZ-04", "WIZ-15"}) ||
+	if !reflect.DeepEqual(fixture.OwnedCapabilityIDs, []string{
+		"WIZ-03", "WIZ-04", "WIZ-15", "WIZ-23",
+	}) ||
 		!reflect.DeepEqual(fixture.PhaseCriteria, []string{
 			"criterion:v23-one-versioned-intake",
 			"criterion:v23-gap-derived-questions",
 			"criterion:v23-visible-recommendation",
+			"criterion:v23-confirm-exact-dossier-into-immutable-appspec",
 			"criterion:v23-nonempty-required-test",
 		}) ||
 		!reflect.DeepEqual(fixture.AllowedOrigins, []string{"chat", "form"}) {
@@ -296,12 +301,16 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 			ID: "orquesta.intakes.create", Handler: "CreateIntake",
 			Permission: "goals.create", Kind: "command", ReplayMode: "application_receipt",
 			ForbiddenPayloadFields: wantForbidden,
+			OutputKey:              "intake",
+			RequiredEnvelopeFields: []string{"intake"},
 			RequiredOutputFields:   []string{"intake_ref", "project_ref", "revision", "receipt_ref"},
 		},
 		{
 			ID: "orquesta.intakes.get", Handler: "GetIntake",
 			Permission: "goals.get", Kind: "query", ReplayMode: "read_reexecute",
 			ForbiddenPayloadFields: wantForbidden,
+			OutputKey:              "intake",
+			RequiredEnvelopeFields: []string{"intake"},
 			RequiredOutputFields: []string{
 				"state_schema", "intake_ref", "actor_ref", "project_ref", "revision",
 				"max_question_rounds", "question_rounds", "issues", "questions",
@@ -312,19 +321,42 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 			ID: "orquesta.intakes.apply", Handler: "ApplyIntake",
 			Permission: "goals.create", Kind: "command", ReplayMode: "application_receipt",
 			ForbiddenPayloadFields: wantForbidden,
+			OutputKey:              "intake",
+			RequiredEnvelopeFields: []string{"intake"},
 			RequiredOutputFields:   []string{"intake_ref", "project_ref", "revision", "receipt_ref"},
 		},
 		{
 			ID: "orquesta.intakes.dossier.prepare", Handler: "PrepareIntakeDossier",
 			Permission: "goals.create", Kind: "command", ReplayMode: "application_receipt",
 			ForbiddenPayloadFields: []string{"actor_ref", "project_ref", "request_ref", "request_fingerprint", "authorization_receipt_ref"},
+			OutputKey:              "dossier",
+			RequiredEnvelopeFields: []string{"dossier"},
 			RequiredOutputFields:   dossierOutput,
 		},
 		{
 			ID: "orquesta.intakes.dossier.get", Handler: "GetIntakeDossier",
 			Permission: "goals.get", Kind: "query", ReplayMode: "read_reexecute",
 			ForbiddenPayloadFields: wantForbidden,
+			OutputKey:              "dossier",
+			RequiredEnvelopeFields: []string{"dossier"},
 			RequiredOutputFields:   dossierOutput,
+		},
+		{
+			ID: "orquesta.intakes.dossier.confirm", Handler: "ConfirmIntakeDossier",
+			Permission: "goals.create", Kind: "command", ReplayMode: "application_receipt",
+			ForbiddenPayloadFields: append(
+				append([]string(nil), wantForbidden...),
+				"authorization_receipt_ref", "goal_ref", "app_spec_ref",
+			),
+			OutputKey:              "confirmation",
+			RequiredEnvelopeFields: []string{"goal", "confirmation"},
+			RequiredOutputFields: []string{
+				"receipt_ref", "request_ref", "request_fingerprint", "principal_ref",
+				"actor_ref", "project_ref", "intake_ref", "intake_revision",
+				"intake_digest", "source_intake_receipt_ref", "dossier_ref",
+				"dossier_digest", "plan_digest", "goal_ref", "app_spec_ref",
+				"spec_hash", "authorization_receipt_ref", "confirmed_at",
+			},
 		},
 	}
 	if !reflect.DeepEqual(fixture.PublicBindings, wantBindings) {
@@ -349,6 +381,7 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		"chat_and_form_advance_one_ref_and_revision_sequence",
 		"failed_change_does_not_mutate_the_current_snapshot",
 		"question_references_at_least_one_recorded_gap_or_contradiction",
+		"exact_dossier_confirmation_freezes_it_and_creates_one_causal_goal",
 		"required_test_runs_named_contract_and_two_negatives",
 		"selected_and_recommended_options_coexist_when_they_differ",
 		"typed_policy_is_shared_across_origins_and_has_no_package_default",
@@ -370,7 +403,7 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		t.Fatalf("invalid required test: %+v", fixture.RequiredTest)
 	}
 	wantIntegrationGate := v23WizardRequiredTest{
-		Command: "go test -mod=vendor -count=1 ./internal/application ./internal/adapters/state/sqlite ./internal/commands ./internal/bootstrap -run '^(TestBuildIntakeDossierBindsVerifiedRecordPlanAndCompleteDecisions|TestIntakeDossierHashProjectsEveryCurrentDecisionField|TestBuildIntakeDossierRejectsTamperedRecordUnresolvedStateAndInvalidPlan|TestBuildIntakeDossierRejectsEveryCompilerInvalidPlanMetadata|TestIntakeDossierServiceExactReplaySurvivesLaterIntakeWithoutReread|TestIntakeDossierServiceRejectsCoherentlyRewrittenAdapterFingerprint|TestIntakeDossierSnapshotRoundTripLosesNoDataAndRecomputesIdentity|TestIntakeDossierSQLiteRestartAndHistoricalReplay|TestIntakeDossierSQLiteReusesContentAndRecordsDistinctRequests|TestV23DossierRecoveryRejectsTamperedCanonicalSnapshot|TestIntakeServiceReplayReturnsExactReceiptAfterLaterMutation|TestIntakeServiceRejectsStaleAndDivergentRequestsWithoutWrite|TestIntakeSQLiteRestartAndHistoricalReplay|TestIntakeSQLiteConcurrentCASAdmitsOneReceipt|TestV23RecoveryRejectsDivergentIntakeBranch|TestOrchestratorIntakeUsesAuthenticatedScopeInsteadOfSpoofedRequestFields|TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState|TestIntakeDossierCommandsBindAuthorityRejectSpoofAndProjectCompletePlan|TestHistoricalGlobalRegistryDigestReplaysOnlyUnchangedDefinitionAfterAdditiveUpgrade|TestHistoricalRegistryAdmissionReplaysThroughCurrentDispatcherAndSQLite|TestV23IntakeDispatcherPersistsCASAndReplayAcrossRestart|TestV23DossierCommandsPersistReplayAndCanonicalReadAcrossRestart)$'",
+		Command: "go test -mod=vendor -count=1 ./internal/application ./internal/adapters/state/sqlite ./internal/commands ./internal/bootstrap -run '^(TestBuildIntakeDossierBindsVerifiedRecordPlanAndCompleteDecisions|TestIntakeDossierHashProjectsEveryCurrentDecisionField|TestBuildIntakeDossierRejectsTamperedRecordUnresolvedStateAndInvalidPlan|TestBuildIntakeDossierRejectsEveryCompilerInvalidPlanMetadata|TestIntakeDossierServiceExactReplaySurvivesLaterIntakeWithoutReread|TestIntakeDossierServiceRejectsCoherentlyRewrittenAdapterFingerprint|TestIntakeDossierSnapshotRoundTripLosesNoDataAndRecomputesIdentity|TestIntakeDossierSQLiteRestartAndHistoricalReplay|TestIntakeDossierSQLiteReusesContentAndRecordsDistinctRequests|TestV23DossierRecoveryRejectsTamperedCanonicalSnapshot|TestIntakeServiceReplayReturnsExactReceiptAfterLaterMutation|TestIntakeServiceRejectsStaleAndDivergentRequestsWithoutWrite|TestIntakeSQLiteRestartAndHistoricalReplay|TestIntakeSQLiteConcurrentCASAdmitsOneReceipt|TestV23RecoveryRejectsDivergentIntakeBranch|TestOrchestratorIntakeUsesAuthenticatedScopeInsteadOfSpoofedRequestFields|TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState|TestIntakeDossierCommandsBindAuthorityRejectSpoofAndProjectCompletePlan|TestConfirmIntakeDossierCommandBindsEnvelopeAndExposesExactReceipt|TestConfirmIntakeDossierCreatesRunningGoalFromExactDossier|TestConfirmIntakeDossierExactReplayAndSingleGoalPerDossier|TestConfirmIntakeDossierExactReplayAcceptsLiveGoalProgress|TestV23ConfirmIntakeDossierRejectsSubstitutedPersistedBindings|TestV23ConfirmIntakeDossierReplayRejectsIncompleteLiveRecord|TestIntakeDossierConfirmationSQLiteAtomicReplayRestartAndFreeze|TestIntakeDossierConfirmationSQLiteConcurrentExactReplayAndDivergence|TestIntakeDossierConfirmationSQLiteRollsBackGoalAndOutboxOnReceiptFailure|TestV23DossierConfirmationRecoveryRejectsTamperedBinding|TestV23DossierConfirmationRecoveryAcceptsLivePlanGeneration|TestHistoricalGlobalRegistryDigestReplaysOnlyUnchangedDefinitionAfterAdditiveUpgrade|TestHistoricalRegistryAdmissionReplaysThroughCurrentDispatcherAndSQLite|TestV23IntakeDispatcherPersistsCASAndReplayAcrossRestart|TestV23DossierCommandsPersistReplayAndCanonicalReadAcrossRestart)$'",
 		TestNames: []string{
 			"TestBuildIntakeDossierBindsVerifiedRecordPlanAndCompleteDecisions",
 			"TestIntakeDossierHashProjectsEveryCurrentDecisionField",
@@ -390,6 +423,17 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 			"TestOrchestratorIntakeUsesAuthenticatedScopeInsteadOfSpoofedRequestFields",
 			"TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState",
 			"TestIntakeDossierCommandsBindAuthorityRejectSpoofAndProjectCompletePlan",
+			"TestConfirmIntakeDossierCommandBindsEnvelopeAndExposesExactReceipt",
+			"TestConfirmIntakeDossierCreatesRunningGoalFromExactDossier",
+			"TestConfirmIntakeDossierExactReplayAndSingleGoalPerDossier",
+			"TestConfirmIntakeDossierExactReplayAcceptsLiveGoalProgress",
+			"TestV23ConfirmIntakeDossierRejectsSubstitutedPersistedBindings",
+			"TestV23ConfirmIntakeDossierReplayRejectsIncompleteLiveRecord",
+			"TestIntakeDossierConfirmationSQLiteAtomicReplayRestartAndFreeze",
+			"TestIntakeDossierConfirmationSQLiteConcurrentExactReplayAndDivergence",
+			"TestIntakeDossierConfirmationSQLiteRollsBackGoalAndOutboxOnReceiptFailure",
+			"TestV23DossierConfirmationRecoveryRejectsTamperedBinding",
+			"TestV23DossierConfirmationRecoveryAcceptsLivePlanGeneration",
 			"TestHistoricalGlobalRegistryDigestReplaysOnlyUnchangedDefinitionAfterAdditiveUpgrade",
 			"TestHistoricalRegistryAdmissionReplaysThroughCurrentDispatcherAndSQLite",
 			"TestV23IntakeDispatcherPersistsCASAndReplayAcrossRestart",
@@ -414,19 +458,21 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		"durable_cas_persistence_and_restart",
 		"durable_dossier_persistence",
 		"public_dossier_commands",
+		"causal_plan_creation",
+		"explicit_confirmation",
+		"freeze_after_confirmation",
 	}) {
 		t.Fatalf("invalid completed integration scope: %+v", fixture.CompletedScopes)
 	}
 	wantDeferred := []string{
-		"canonical_round_default_under_L-CONFIG", "causal_plan_creation",
-		"dossier_generation", "explicit_confirmation", "freeze_after_confirmation",
+		"canonical_round_default_under_L-CONFIG", "dossier_generation",
 		"full_wizard_i18n_catalog", "roadmap_promotion",
 		"seal_and_receipt", "templates_and_domain_packs", "web_surface",
 	}
 	if !reflect.DeepEqual(fixture.DeferredScopes, wantDeferred) {
 		t.Fatalf("invalid deferred scope: %+v", fixture.DeferredScopes)
 	}
-	if fixture.NextDependency != "dossier_confirmation_freeze_and_causal_plan_creation" {
+	if fixture.NextDependency != "canonical_round_default_and_wizard_catalog" {
 		t.Fatalf("invalid next dependency: %q", fixture.NextDependency)
 	}
 	wantCandidateFiles := []string{
@@ -447,9 +493,14 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		}
 	}
 	wantIntegrationFiles := []string{
+		"docs/reconstruccion/corte_v23_comandos_dossier_2026-07-26.md",
 		"docs/reconstruccion/corte_v23_dossier_durable_2026-07-26.md",
 		"docs/reconstruccion/corte_v23_intake_durable_2026-07-26.md",
 		"internal/application/intake_dossier.go",
+		"internal/application/intake_dossier_confirmation.go",
+		"internal/application/intake_dossier_confirmation_adversarial_test.go",
+		"internal/application/intake_dossier_confirmation_test.go",
+		"internal/application/intake_dossier_plan_binding.go",
 		"internal/application/intake_dossier_service.go",
 		"internal/application/intake_dossier_service_test.go",
 		"internal/application/intake_dossier_snapshot.go",
@@ -459,9 +510,12 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		"internal/application/intake_orchestrator.go",
 		"internal/application/intake_service.go",
 		"internal/adapters/state/sqlite/intake_dossier.go",
+		"internal/adapters/state/sqlite/intake_dossier_confirmation.go",
+		"internal/adapters/state/sqlite/intake_dossier_confirmation_test.go",
 		"internal/adapters/state/sqlite/intake_dossier_test.go",
 		"internal/adapters/state/sqlite/intake.go",
 		"internal/adapters/state/sqlite/migrations/018_intake_dossiers.sql",
+		"internal/adapters/state/sqlite/migrations/019_intake_dossier_confirmations.sql",
 		"internal/adapters/state/sqlite/migrations/017_intake.sql",
 		"internal/adapters/state/sqlite/recovery_validation_v23_dossier.go",
 		"internal/adapters/state/sqlite/recovery_validation_v23.go",
@@ -509,6 +563,7 @@ func assertV23PublicCommandBindings(t *testing.T, bindings []v23WizardBinding) {
 			}
 		}
 		var output struct {
+			Required   []string `json:"required"`
 			Properties map[string]struct {
 				Properties map[string]json.RawMessage `json:"properties"`
 				Required   []string                   `json:"required"`
@@ -517,24 +572,27 @@ func assertV23PublicCommandBindings(t *testing.T, bindings []v23WizardBinding) {
 		if err := json.Unmarshal(definition.OutputSchema, &output); err != nil {
 			t.Fatalf("%s output schema: %v", binding.ID, err)
 		}
-		outputKey := "intake"
-		if strings.HasPrefix(binding.ID, "orquesta.intakes.dossier.") {
-			outputKey = "dossier"
+		if !reflect.DeepEqual(output.Required, binding.RequiredEnvelopeFields) {
+			t.Fatalf("%s envelope fields=%v want=%v", binding.ID,
+				output.Required, binding.RequiredEnvelopeFields)
 		}
-		intakeOutput, exists := output.Properties[outputKey]
-		if !exists || !reflect.DeepEqual(intakeOutput.Required, binding.RequiredOutputFields) {
+		boundOutput, exists := output.Properties[binding.OutputKey]
+		if !exists || !reflect.DeepEqual(boundOutput.Required, binding.RequiredOutputFields) {
 			t.Fatalf("%s output fields=%v want=%v", binding.ID,
-				intakeOutput.Required, binding.RequiredOutputFields)
+				boundOutput.Required, binding.RequiredOutputFields)
 		}
 	}
 }
 
 func assertV23RemainingCapabilities(t *testing.T, remaining []v23WizardCapability) {
 	t.Helper()
-	want := make(map[string]string, 22)
+	completed := map[string]struct{}{
+		"WIZ-03": {}, "WIZ-04": {}, "WIZ-15": {}, "WIZ-23": {},
+	}
+	want := make(map[string]string, 21)
 	for number := 1; number <= 25; number++ {
 		id := "WIZ-" + twoDigits(number)
-		if id == "WIZ-03" || id == "WIZ-04" || id == "WIZ-15" {
+		if _, found := completed[id]; found {
 			continue
 		}
 		want[id] = "pending"
