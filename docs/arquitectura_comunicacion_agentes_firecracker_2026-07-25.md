@@ -109,17 +109,22 @@ El corte 2026-07-26 implementa:
 - contrato neutral de política y scope exacto con digests causales;
 - binding a una versión de credencial con owner/scope/purpose exactos y
   atestación del lanzamiento;
-- protocolo transitorio de challenge/proof HMAC, receipt sin secreto y
-  negativos de replay entre Goal e intento;
+- verificador host mínimo que exige la atestación exacta antes de usar la
+  credencial, calcula HMAC-SHA256 solo dentro del callback de
+  `CredentialStore`, compara con `hmac.Equal` y emite un receipt sin secreto;
+- almacén de challenges en memoria, acotado y ligado a política, lanzamiento,
+  ejecución y agente; el consumo es atómico y una segunda presentación
+  idéntica queda denegada. Un reinicio invalida los challenges pendientes
+  (fail-closed) y una caída tras consumir exige emitir uno nuevo;
 - render determinista `planned_not_applied` con cero interfaces, TAP, bridge,
-  NAT, inbound, east-west o Internet directo, y allowlist vsock exacta.
+  NAT, inbound, east-west o Internet directo, allowlist vsock exacta y recibo
+  ligado también a los bytes exactos del documento renderizado.
 
 No implementa ni simula conectividad física. La siguiente dependencia causal
 es un corte separado con:
 
-1. verificador host que implemente `AgentMicroVMLaunchProofVerifier`, lea el
-   secreto solo mediante `CredentialStore`, consuma el challenge una sola vez y
-   verifique la atestación antes de exponer broker o proxy;
+1. adaptador físico de atestación y wiring del verificador ya implementado
+   delante de cada apertura de sesión del broker y del proxy;
 2. reserva content-addressed de un backend vsock distinto por VM y composición
    Firecracker que materialice el plan sin NIC;
 3. bridge HTTP guest loopback→vsock y proxy host-side con política SSRF,
