@@ -402,4 +402,20 @@ ON agent_microvm_vsock_cid_reservations (pool_ref, guest_cid)`); err != nil {
 	); ErrorCode(err) != "agent_firecracker_vsock_cid.schema_mismatch" {
 		t.Fatalf("non-unique schema = %v", err)
 	}
+
+	memoryDatabase, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = memoryDatabase.Close() })
+	for _, statement := range SchemaStatements() {
+		if _, err := memoryDatabase.Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := Open(
+		context.Background(), testConfig(memoryDatabase, clock, 32, 47),
+	); ErrorCode(err) != "agent_firecracker_vsock_cid.durability_unavailable" {
+		t.Fatalf("in-memory store = %v", err)
+	}
 }

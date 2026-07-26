@@ -82,6 +82,9 @@ func Open(ctx context.Context, config Config) (*Allocator, error) {
 	if err := verifySchema(ctx, config.DB); err != nil {
 		return nil, err
 	}
+	if err := verifyDurability(ctx, config.DB); err != nil {
+		return nil, err
+	}
 	return &Allocator{config: config}, nil
 }
 
@@ -697,6 +700,44 @@ WHERE type = ? AND name = ?`, object.Kind, object.Name).Scan(&definition)
 		if normalizeSQL(definition) != normalizeSQL(schemaStatements[index]) {
 			return allocatorError("schema_mismatch")
 		}
+	}
+	return nil
+}
+
+func verifyDurability(ctx context.Context, database *sql.DB) error {
+	connection, err := database.Conn(ctx)
+	if err != nil {
+		return allocatorError("store_unavailable")
+	}
+	defer connection.Close()
+	var journalMode string
+	var synchronous, foreignKeys, busyTimeout int
+	if err := connection.QueryRowContext(ctx, "PRAGMA journal_mode").Scan(&journalMode); err != nil ||
+		connection.QueryRowContext(ctx, "PRAGMA synchronous").Scan(&synchronous) != nil ||
+		connection.QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&foreignKeys) != nil ||
+		connection.QueryRowContext(ctx, "PRAGMA busy_timeout").Scan(&busyTimeout) != nil {
+		return allocatorError("durability_unavailable")
+	}
+	rows, err := connection.QueryContext(ctx, "PRAGMA database_list")
+	if err != nil {
+		return allocatorError("durability_unavailable")
+	}
+	defer rows.Close()
+	durableMain := false
+	for rows.Next() {
+		var sequence int
+		var name, path string
+		if err := rows.Scan(&sequence, &name, &path); err != nil {
+			return allocatorError("durability_unavailable")
+		}
+		if name == "main" && strings.TrimSpace(path) != "" {
+			durableMain = true
+		}
+	}
+	if rows.Err() != nil || !durableMain ||
+		!strings.EqualFold(journalMode, "wal") ||
+		synchronous < 2 || foreignKeys != 1 || busyTimeout <= 0 {
+		return allocatorError("durability_unavailable")
 	}
 	return nil
 }
