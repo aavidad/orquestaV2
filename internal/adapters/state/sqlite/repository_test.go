@@ -67,7 +67,7 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 	if err := repository.db.QueryRow("PRAGMA synchronous").Scan(&synchronous); err != nil {
 		t.Fatalf("synchronous: %v", err)
 	}
-	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != recoverySchemaV21 {
+	if foreignKeys != 1 || busyTimeout != int(testBusyTimeout.Milliseconds()) || userVersion != recoverySchemaV23 {
 		t.Fatalf("pragmas = fk:%d busy:%d version:%d", foreignKeys, busyTimeout, userVersion)
 	}
 	if synchronous != 2 {
@@ -93,7 +93,7 @@ func TestRepositoryOpenAppliesPrivateModesMigrationsAndPragmas(t *testing.T) {
 		"command_invocations", "command_outcomes", "controls",
 		"council_decisions", "council_facts", "council_rounds", "council_skips",
 		"director_decisions", "director_lease_receipts", "director_leases", "effect_approvals", "effect_attempts", "effect_intents", "effect_receipts", "events", "executions", "fairness_cursors",
-		"goal_child_handoff_resolutions", "goal_phase_contract_refs", "goal_phases", "goals", "groups", "integration_receipts", "intents",
+		"goal_child_handoff_resolutions", "goal_phase_contract_refs", "goal_phases", "goals", "groups", "intake_receipts", "intake_states", "integration_receipts", "intents",
 		"mailbox_admission_receipts", "mailbox_artifact_refs", "mailbox_delivery_acks", "mailbox_delivery_attempts", "mailbox_envelopes", "mailbox_retirements",
 		"membership_audit_receipts", "merge_observations", "outbox", "principals", "project_memberships", "projects", "repositories", "review_records", "schema_migrations",
 		"work_item_authorities", "work_item_dependencies", "work_item_fences", "work_item_required_test_arguments", "work_item_required_tests", "work_item_requirement_refs", "work_item_write_scopes", "work_items",

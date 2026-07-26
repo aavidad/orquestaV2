@@ -63,7 +63,7 @@ func TestRepositoryMigratesPopulatedV2ToCanonicalAppSpecsAndSecondOpenIsStable(t
 	if err := repository.db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&receipts); err != nil {
 		t.Fatalf("migration receipts: %v", err)
 	}
-	if version != recoverySchemaV21 || receipts != recoverySchemaV21 {
+	if version != recoverySchemaV23 || receipts != recoverySchemaV23 {
 		t.Fatalf("migration state version=%d receipts=%d", version, receipts)
 	}
 }
