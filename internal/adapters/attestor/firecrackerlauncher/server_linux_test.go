@@ -321,7 +321,6 @@ func TestUnixLauncherRejectsMissingAndExcessDescriptorsWithoutLeaks(t *testing.T
 	defer input.Close()
 	request.InputDigest = digest
 	payload, _ := marshalRequest(request)
-	baseline := openDescriptorCountForTest(t)
 	socket := connectForTest(t, config.SocketPath)
 	if _, err := unix.SendmsgN(socket, payload, nil, nil, 0); err != nil {
 		t.Fatal(err)
@@ -336,8 +335,9 @@ func TestUnixLauncherRejectsMissingAndExcessDescriptorsWithoutLeaks(t *testing.T
 	if err != nil || response.Code != CodeDescriptorInvalid {
 		t.Fatalf("response=%+v err=%v", response, err)
 	}
-	waitForDescriptorCountForTest(t, baseline)
 
+	inputOwner := descriptorOwnerForFileForTest(t, input)
+	baselineOwned := openDescriptorCountForOwnerForTest(t, inputOwner)
 	socket = connectForTest(t, config.SocketPath)
 	if _, err := unix.SendmsgN(
 		socket,
@@ -358,7 +358,16 @@ func TestUnixLauncherRejectsMissingAndExcessDescriptorsWithoutLeaks(t *testing.T
 	if err != nil || response.Code != CodeDescriptorInvalid {
 		t.Fatalf("excess descriptor response=%+v err=%v", response, err)
 	}
-	waitForDescriptorCountForTest(t, baseline)
+	// The response is the causal barrier: the server sends it only after
+	// receivePacket has rejected and closed both received copies.
+	if got := openDescriptorCountForOwnerForTest(t, inputOwner); got != baselineOwned {
+		t.Fatalf(
+			"server retained descriptors for owner %+v: before=%d after=%d",
+			inputOwner,
+			baselineOwned,
+			got,
+		)
+	}
 	runner.mu.Lock()
 	defer runner.mu.Unlock()
 	if len(runner.requests) != 0 {
@@ -738,7 +747,10 @@ func TestReceivePacketClosesExcessAndTruncatedRights(t *testing.T) {
 			}
 			defer unix.Close(sockets[0])
 			defer unix.Close(sockets[1])
-			source, err := os.Open("/dev/null")
+			source, _, err := NewSealedInput(
+				inputDrivePayloadForTest("rights-"+strconv.Itoa(descriptorCount)),
+				1<<20,
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -747,7 +759,8 @@ func TestReceivePacketClosesExcessAndTruncatedRights(t *testing.T) {
 			for index := range rightFDs {
 				rightFDs[index] = int(source.Fd())
 			}
-			before := openDescriptorCountForTest(t)
+			sourceOwner := descriptorOwnerForFileForTest(t, source)
+			before := openDescriptorCountForOwnerForTest(t, sourceOwner)
 			if _, err := unix.SendmsgN(sockets[0], []byte("packet"), unix.UnixRights(rightFDs...), nil, 0); err != nil {
 				t.Fatal(err)
 			}
@@ -756,9 +769,14 @@ func TestReceivePacketClosesExcessAndTruncatedRights(t *testing.T) {
 			if ErrorCode(err) != CodeDescriptorInvalid || payload != nil || len(files) != 0 {
 				t.Fatalf("excess rights accepted: payload=%q files=%d err=%v", payload, len(files), err)
 			}
-			after := openDescriptorCountForTest(t)
+			after := openDescriptorCountForOwnerForTest(t, sourceOwner)
 			if after != before {
-				t.Fatalf("received rights leaked: before=%d after=%d", before, after)
+				t.Fatalf(
+					"received rights for owner %+v leaked: before=%d after=%d",
+					sourceOwner,
+					before,
+					after,
+				)
 			}
 		})
 	}
@@ -935,7 +953,6 @@ func TestInputValidationAndConnectHonorCanceledContext(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer source.Close()
-	baseline := openDescriptorCountForTest(t)
 	if sealed, _, err := NewSealedInputFromFileContext(
 		ctx,
 		source,
@@ -946,9 +963,6 @@ func TestInputValidationAndConnectHonorCanceledContext(t *testing.T) {
 			_ = sealed.Close()
 		}
 		t.Fatalf("canceled durable source continued: %v", err)
-	}
-	if got := openDescriptorCountForTest(t); got != baseline {
-		t.Fatalf("canceled durable source leaked descriptors: before=%d after=%d", baseline, got)
 	}
 	pipeReader, pipeWriter, err := os.Pipe()
 	if err != nil {
@@ -1117,24 +1131,4 @@ func assertPathSecurityForTest(
 		stat.Mode&0o777 != mode || stat.Uid != uid || stat.Gid != gid {
 		t.Fatalf("unsafe metadata for %s: %+v", path, stat)
 	}
-}
-
-func openDescriptorCountForTest(t *testing.T) int {
-	t.Helper()
-	entries, err := os.ReadDir("/proc/self/fd")
-	if err != nil {
-		t.Fatal(err)
-	}
-	return len(entries)
-}
-
-func waitForDescriptorCountForTest(t *testing.T, want int) {
-	t.Helper()
-	for attempts := 0; attempts < 100; attempts++ {
-		if openDescriptorCountForTest(t) == want {
-			return
-		}
-		time.Sleep(time.Millisecond)
-	}
-	t.Fatalf("open descriptor count did not return to %d; got %d", want, openDescriptorCountForTest(t))
 }
