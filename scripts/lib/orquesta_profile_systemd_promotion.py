@@ -466,10 +466,7 @@ def command_final_receipt(args: argparse.Namespace) -> None:
         or values.get("firecracker_application_attestation") != "pending"
         or values.get("backup_restore_performed") != "false"
         or values.get("old_unit_outcome") != args.old_unit_outcome
-        or (
-            args.functional_data_sha is not None
-            and values.get("functional_data_sha256") != args.functional_data_sha
-        )
+        or values.get("functional_data_sha256") != args.functional_data_sha
         or not HEX.fullmatch(values.get("functional_data_sha256", ""))
     ):
         raise ContractError("final_receipt_contract")
@@ -1032,7 +1029,7 @@ def parser() -> argparse.ArgumentParser:
         "old-unit-outcome",
     ):
         final.add_argument("--" + name, required=True)
-    final.add_argument("--functional-data-sha")
+    final.add_argument("--functional-data-sha", required=True)
     final.add_argument("--owner-uid", required=True, type=int)
     final.set_defaults(handler=command_final_receipt)
     return root
