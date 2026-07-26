@@ -39,7 +39,9 @@ func (executor *v20Executor) Limits() commandcore.APILimits {
 	if executor.limits.Valid() {
 		return executor.limits
 	}
-	return commandcore.APILimits{MaxRequestBytes: 4096, MaxListLimit: 100}
+	return commandcore.APILimits{
+		MaxRequestBytes: 4096, MaxListLimit: 100, IntakeMaxQuestionRounds: 1,
+	}
 }
 
 type v20Identity struct {
@@ -366,7 +368,9 @@ func TestMCPPublishesExactlyCanonicalSchemasForAllCommands(t *testing.T) {
 }
 
 func TestMCPRejectsOversizedArgumentsBeforeAuthorityOrDispatch(t *testing.T) {
-	executor := &v20Executor{limits: commandcore.APILimits{MaxRequestBytes: 96, MaxListLimit: 10}}
+	executor := &v20Executor{limits: commandcore.APILimits{
+		MaxRequestBytes: 96, MaxListLimit: 10, IntakeMaxQuestionRounds: 1,
+	}}
 	provider := v20Identity{principal: v20Principal(t)}
 	server := sdkmcp.NewServer(&sdkmcp.Implementation{Name: "orquesta-v20", Version: "test"}, nil)
 	if err := registerCommandToolsForTest(t, server, executor, provider, "es"); err != nil {

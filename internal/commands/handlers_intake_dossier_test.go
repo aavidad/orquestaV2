@@ -163,7 +163,9 @@ func TestIntakeDossierCommandsBindAuthorityRejectSpoofAndProjectCompletePlan(t *
 	api := &captureDossierApplication{fakeApplication: newFakeApplication()}
 	audit := newMemoryAudit()
 	dispatcher, err := newDispatcher(
-		api, audit, APILimits{MaxRequestBytes: 1 << 20, MaxListLimit: 100},
+		api, audit, APILimits{
+			MaxRequestBytes: 1 << 20, MaxListLimit: 100, IntakeMaxQuestionRounds: 6,
+		},
 		exactTestExecutionAuthority(t),
 	)
 	if err != nil {
@@ -283,7 +285,9 @@ func TestIntakeDossierCommandsBindAuthorityRejectSpoofAndProjectCompletePlan(t *
 func TestIntakeDossierInvalidInputKeepsPublicInvalidRequestClass(t *testing.T) {
 	api := &invalidDossierApplication{fakeApplication: newFakeApplication()}
 	dispatcher, err := newDispatcher(
-		api, newMemoryAudit(), APILimits{MaxRequestBytes: 1 << 20, MaxListLimit: 100},
+		api, newMemoryAudit(), APILimits{
+			MaxRequestBytes: 1 << 20, MaxListLimit: 100, IntakeMaxQuestionRounds: 6,
+		},
 		exactTestExecutionAuthority(t),
 	)
 	if err != nil {
@@ -302,7 +306,9 @@ func TestConfirmIntakeDossierCommandBindsEnvelopeAndExposesExactReceipt(t *testi
 	api := &captureDossierApplication{fakeApplication: newFakeApplication()}
 	audit := newMemoryAudit()
 	dispatcher, err := newDispatcher(
-		api, audit, APILimits{MaxRequestBytes: 1 << 20, MaxListLimit: 100},
+		api, audit, APILimits{
+			MaxRequestBytes: 1 << 20, MaxListLimit: 100, IntakeMaxQuestionRounds: 6,
+		},
 		exactTestExecutionAuthority(t),
 	)
 	if err != nil {

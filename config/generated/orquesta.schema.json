@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:orquesta:config:2026-07-26.32",
+  "$id": "urn:orquesta:config:2026-07-26.33",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -402,6 +402,26 @@
           "x-sensitive": false,
           "x-validator-ids": [
             "allowed_values"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "intake": {
+      "additionalProperties": false,
+      "properties": {
+        "max_question_rounds": {
+          "default": 6,
+          "maximum": 4294967295,
+          "minimum": 1,
+          "type": "integer",
+          "x-env-alias": "ORQUESTA_INTAKE_MAX_QUESTION_ROUNDS",
+          "x-restart-required": true,
+          "x-scope": "intake",
+          "x-semantic-ref": "orquesta.config.intake.max_question_rounds",
+          "x-sensitive": false,
+          "x-validator-ids": [
+            "integer_bounds"
           ]
         }
       },
@@ -1239,8 +1259,8 @@
       "type": "object"
     }
   },
-  "x-registry-revision": "2026-07-26.32",
-  "x-registry-hash": "sha256:7a676618918142d2c286d0feb1686fabd73a6e4817e9849d94f4283f01e0d6ed",
+  "x-registry-revision": "2026-07-26.33",
+  "x-registry-hash": "sha256:c44eedea0312d4cf9c40b2bac85c4d448cc956e2afad1ed87cc5342eb8576161",
   "x-source-max-bytes": 1048576,
   "x-aliases": [],
   "x-cross-validators": [

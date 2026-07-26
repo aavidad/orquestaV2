@@ -33,7 +33,7 @@ func TestV23IntakeDispatcherPersistsCASAndReplayAcrossRestart(t *testing.T) {
 	}
 
 	createPayload := map[string]any{
-		"intake_ref": "intake:v23-e2e", "max_question_rounds": 2,
+		"intake_ref": "intake:v23-e2e",
 	}
 	created := dispatchV23IntakeCommand(t, first, principal, projectRef,
 		"orquesta.intakes.create", "request:v23-intake-create", createPayload)
@@ -219,7 +219,7 @@ func assertV23IntakeState(
 		state.ActorRef != principal.ActorRef.String() ||
 		state.ProjectRef != projectRef ||
 		state.Revision != 2 ||
-		state.MaxQuestionRounds != 2 ||
+		state.MaxQuestionRounds != 6 ||
 		state.QuestionRounds != 1 ||
 		len(state.Issues) != 1 ||
 		len(state.Questions) != 1 {

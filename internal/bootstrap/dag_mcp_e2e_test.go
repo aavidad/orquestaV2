@@ -528,6 +528,7 @@ func newDAGHarness(t *testing.T, failures map[string]bool) *dagHarness {
 	}
 	dispatcher, err := commandcore.NewDispatcher(orchestrator, repository, commandcore.APILimits{
 		MaxListLimit: 10, MaxRequestBytes: 64 * 1024,
+		IntakeMaxQuestionRounds: uint32(snapshot.IntakeMaxQuestionRounds()),
 	})
 	if err != nil {
 		t.Fatalf("new DAG dispatcher: %v", err)

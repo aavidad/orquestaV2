@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "revision": "2026-07-26.32",
+  "revision": "2026-07-26.33",
   "precedence": [
     "default",
     "file",
@@ -1101,6 +1101,22 @@
       "validator_ids": [
         "positive_duration"
       ]
+    },
+    {
+      "key": "intake.max_question_rounds",
+      "go_name": "IntakeMaxQuestionRounds",
+      "semantic_ref": "orquesta.config.intake.max_question_rounds",
+      "type": "integer",
+      "default": 6,
+      "sensitive": false,
+      "scope": "intake",
+      "restart_required": true,
+      "env_alias": "ORQUESTA_INTAKE_MAX_QUESTION_ROUNDS",
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1,
+      "maximum": 4294967295
     },
     {
       "key": "mailbox.max_envelope_bytes",

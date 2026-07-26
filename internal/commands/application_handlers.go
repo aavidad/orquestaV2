@@ -80,7 +80,10 @@ func (dispatcher *Dispatcher) applicationHandlers() map[string]handler {
 		"ConsumeMailbox": wrap(handleConsumeMailbox), "GetMailbox": wrap(handleGetMailbox),
 		"ListMailbox": wrap(handleListMailbox), "AcknowledgeMailbox": wrap(handleAcknowledgeMailbox),
 		"BlockMailbox": wrap(handleBlockMailbox), "OpenCouncilRound": wrap(handleOpenCouncilRound),
-		"SkipCouncil": wrap(handleSkipCouncil), "CreateIntake": wrap(handleCreateIntake),
+		"SkipCouncil": wrap(handleSkipCouncil),
+		"CreateIntake": func(ctx context.Context, bound handlerContext, payload json.RawMessage) (json.RawMessage, error) {
+			return handleCreateIntake(ctx, dispatcher.application, bound, payload, dispatcher.intakePolicy)
+		},
 		"GetIntake": wrap(handleGetIntake), "ApplyIntake": wrap(handleApplyIntake),
 		"PrepareIntakeDossier": wrap(handlePrepareIntakeDossier),
 		"GetIntakeDossier":     wrap(handleGetIntakeDossier),

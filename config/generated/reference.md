@@ -2,9 +2,9 @@
 
 # Orquesta configuration registry
 
-Registry revision: `2026-07-26.32`
+Registry revision: `2026-07-26.33`
 
-Registry hash: `sha256:7a676618918142d2c286d0feb1686fabd73a6e4817e9849d94f4283f01e0d6ed`
+Registry hash: `sha256:c44eedea0312d4cf9c40b2bac85c4d448cc956e2afad1ed87cc5342eb8576161`
 
 Precedence: `default < file < env`
 
@@ -83,6 +83,7 @@ Source limit: `1048576` bytes
 | `governance.default_execution_money_micros_budget` | `integer` | `1000000` | `ORQUESTA_GOVERNANCE_DEFAULT_EXECUTION_MONEY_MICROS_BUDGET` | `true` | `integer_bounds` |
 | `governance.effect_approval_ttl` | `duration` | `"24h"` | `ORQUESTA_GOVERNANCE_EFFECT_APPROVAL_TTL` | `true` | `positive_duration` |
 | `director.lease_duration` | `duration` | `"2m"` | `ORQUESTA_DIRECTOR_LEASE_DURATION` | `true` | `positive_duration` |
+| `intake.max_question_rounds` | `integer` | `6` | `ORQUESTA_INTAKE_MAX_QUESTION_ROUNDS` | `true` | `integer_bounds` |
 | `mailbox.max_envelope_bytes` | `integer` | `65536` | `ORQUESTA_MAILBOX_MAX_ENVELOPE_BYTES` | `true` | `integer_bounds` |
 | `scheduler.poll_interval` | `duration` | `"500ms"` | `ORQUESTA_SCHEDULER_POLL_INTERVAL` | `true` | `positive_duration` |
 | `scheduler.observation_interval` | `duration` | `"2s"` | `ORQUESTA_SCHEDULER_OBSERVATION_INTERVAL` | `true` | `positive_duration` |

@@ -1,8 +1,8 @@
 {
   "document_type": "orquesta.config_ui",
   "schema_version": 2,
-  "registry_revision": "2026-07-26.32",
-  "registry_hash": "sha256:7a676618918142d2c286d0feb1686fabd73a6e4817e9849d94f4283f01e0d6ed",
+  "registry_revision": "2026-07-26.33",
+  "registry_hash": "sha256:c44eedea0312d4cf9c40b2bac85c4d448cc956e2afad1ed87cc5342eb8576161",
   "aliases": [],
   "cross_validators": [
     {
@@ -956,6 +956,20 @@
       "validator_ids": [
         "positive_duration"
       ]
+    },
+    {
+      "key": "intake.max_question_rounds",
+      "semantic_ref": "orquesta.config.intake.max_question_rounds",
+      "label_key": "config.field.intake.max_question_rounds",
+      "type": "integer",
+      "sensitive": false,
+      "scope": "intake",
+      "restart_required": true,
+      "validator_ids": [
+        "integer_bounds"
+      ],
+      "minimum": 1,
+      "maximum": 4294967295
     },
     {
       "key": "mailbox.max_envelope_bytes",

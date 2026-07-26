@@ -118,7 +118,9 @@ func TestRealOrchestratorCommandReplaySurvivesAggregateProgressWithoutSecondEffe
 	if err != nil {
 		t.Fatal(err)
 	}
-	dispatcher, err := NewDispatcher(orchestrator, newMemoryAudit(), APILimits{MaxRequestBytes: 1 << 20, MaxListLimit: 100})
+	dispatcher, err := NewDispatcher(orchestrator, newMemoryAudit(), APILimits{
+		MaxRequestBytes: 1 << 20, MaxListLimit: 100, IntakeMaxQuestionRounds: 6,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

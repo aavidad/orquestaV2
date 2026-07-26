@@ -31,7 +31,9 @@ func (executor *testExecutor) Definitions() []commandcore.Definition {
 	return commandcore.CanonicalDefinitions()
 }
 func (*testExecutor) Limits() commandcore.APILimits {
-	return commandcore.APILimits{MaxRequestBytes: 4096, MaxListLimit: 100}
+	return commandcore.APILimits{
+		MaxRequestBytes: 4096, MaxListLimit: 100, IntakeMaxQuestionRounds: 1,
+	}
 }
 
 type testIdentity struct {

@@ -9,8 +9,8 @@ import (
 )
 
 type createIntakeInput struct {
-	IntakeRef         string `json:"intake_ref"`
-	MaxQuestionRounds uint32 `json:"max_question_rounds"`
+	IntakeRef         string  `json:"intake_ref"`
+	MaxQuestionRounds *uint32 `json:"max_question_rounds"`
 }
 
 type applyIntakeInput struct {
@@ -48,17 +48,22 @@ func handleCreateIntake(
 	api applicationAPI,
 	bound handlerContext,
 	payload json.RawMessage,
+	defaultPolicy intake.Policy,
 ) (json.RawMessage, error) {
 	var input createIntakeInput
 	if err := decodePayload(payload, &input); err != nil {
 		return nil, err
+	}
+	policy := defaultPolicy
+	if input.MaxQuestionRounds != nil {
+		policy.MaxQuestionRounds = *input.MaxQuestionRounds
 	}
 	result, err := api.CreateIntake(ctx, bound.access, application.CreateIntakeRequest{
 		RequestRef: bound.requestRef,
 		ActorRef:   bound.principal.ActorRef,
 		ProjectRef: bound.projectRef,
 		StateRef:   intake.Ref(input.IntakeRef),
-		Policy:     intake.Policy{MaxQuestionRounds: input.MaxQuestionRounds},
+		Policy:     policy,
 	})
 	return marshalApplication(struct {
 		Intake intakeMutationView `json:"intake"`

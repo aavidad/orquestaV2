@@ -37,7 +37,9 @@ func TestHistoricalGlobalRegistryDigestReplaysOnlyUnchangedDefinitionAfterAdditi
 	}
 	audit := newMemoryAudit()
 	dispatcher, err := newDispatcher(
-		api, audit, APILimits{MaxRequestBytes: 1 << 20, MaxListLimit: 100},
+		api, audit, APILimits{
+			MaxRequestBytes: 1 << 20, MaxListLimit: 100, IntakeMaxQuestionRounds: 6,
+		},
 		exactTestExecutionAuthority(t),
 	)
 	if err != nil {

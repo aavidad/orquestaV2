@@ -99,7 +99,9 @@ func TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState(t *testi
 	api := &captureIntakeApplication{fakeApplication: newFakeApplication()}
 	audit := newMemoryAudit()
 	dispatcher, err := newDispatcher(
-		api, audit, APILimits{MaxRequestBytes: 1 << 20, MaxListLimit: 100},
+		api, audit, APILimits{
+			MaxRequestBytes: 1 << 20, MaxListLimit: 100, IntakeMaxQuestionRounds: 6,
+		},
 		exactTestExecutionAuthority(t),
 	)
 	if err != nil {
@@ -163,6 +165,39 @@ func TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState(t *testi
 	if spoof.Failure == nil || spoof.Failure.Code != CodeInvalidRequest ||
 		len(api.creates) != 1 || audit.admits != 3 {
 		t.Fatalf("spoof=%+v creates=%d admits=%d", spoof, len(api.creates), audit.admits)
+	}
+}
+
+func TestCreateIntakeUsesConfiguredDefaultAndPreservesExplicitOverride(t *testing.T) {
+	api := &captureIntakeApplication{fakeApplication: newFakeApplication()}
+	dispatcher, err := newDispatcher(
+		api, newMemoryAudit(), APILimits{
+			MaxRequestBytes: 1 << 20, MaxListLimit: 100, IntakeMaxQuestionRounds: 6,
+		},
+		exactTestExecutionAuthority(t),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defaulted := invoke(t, dispatcher, "orquesta.intakes.create", "request:intake-default", map[string]any{
+		"intake_ref": "intake:default",
+	}, false)
+	overridden := invoke(t, dispatcher, "orquesta.intakes.create", "request:intake-override", map[string]any{
+		"intake_ref": "intake:override", "max_question_rounds": 9,
+	}, false)
+	invalid := invoke(t, dispatcher, "orquesta.intakes.create", "request:intake-invalid", map[string]any{
+		"intake_ref": "intake:invalid", "max_question_rounds": 0,
+	}, false)
+
+	if defaulted.Failure != nil || overridden.Failure != nil ||
+		invalid.Failure == nil || invalid.Failure.Code != CodeInvalidRequest {
+		t.Fatalf("defaulted=%+v overridden=%+v invalid=%+v", defaulted, overridden, invalid)
+	}
+	if len(api.creates) != 2 ||
+		api.creates[0].Policy.MaxQuestionRounds != 6 ||
+		api.creates[1].Policy.MaxQuestionRounds != 9 {
+		t.Fatalf("create policies=%+v", api.creates)
 	}
 }
 

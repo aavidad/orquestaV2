@@ -54,7 +54,9 @@ func TestCanonicalSchemasAreRecursiveClosedWorldAndRejectNull(t *testing.T) {
 func TestAPILimitsApplyToRequestBytesAndAllListQueries(t *testing.T) {
 	api, audit := newFakeApplication(), newMemoryAudit()
 	dispatcher, err := newDispatcher(
-		api, audit, APILimits{MaxRequestBytes: 1024, MaxListLimit: 2},
+		api, audit, APILimits{
+			MaxRequestBytes: 1024, MaxListLimit: 2, IntakeMaxQuestionRounds: 6,
+		},
 		exactTestExecutionAuthority(t),
 	)
 	if err != nil {
@@ -268,7 +270,9 @@ func TestCompletionCreatedFalseRequiresExactConcurrentTerminal(t *testing.T) {
 		mutate         bool
 	}{{name: "exact"}, {name: "changed", mutate: true, wantCode: CodeConflict}} {
 		audit := existingCompletionAudit{memoryAudit: newMemoryAudit(), mutate: test.mutate}
-		dispatcher, err := newDispatcher(newFakeApplication(), audit, APILimits{MaxRequestBytes: 1024, MaxListLimit: 10})
+		dispatcher, err := newDispatcher(newFakeApplication(), audit, APILimits{
+			MaxRequestBytes: 1024, MaxListLimit: 10, IntakeMaxQuestionRounds: 6,
+		})
 		if err != nil {
 			t.Fatal(err)
 		}

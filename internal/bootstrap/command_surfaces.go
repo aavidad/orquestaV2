@@ -27,8 +27,9 @@ func newCommandSurfaces(
 	execution commandcore.ExecutionAuthorityResolver,
 ) (commandSurfaces, error) {
 	dispatcher, err := commandcore.NewDispatcher(orchestrator, repository, commandcore.APILimits{
-		MaxRequestBytes: setup.snapshot.ServerMaxRequestBytes(),
-		MaxListLimit:    int(setup.snapshot.APIMaxListLimit()),
+		MaxRequestBytes:         setup.snapshot.ServerMaxRequestBytes(),
+		MaxListLimit:            int(setup.snapshot.APIMaxListLimit()),
+		IntakeMaxQuestionRounds: uint32(setup.snapshot.IntakeMaxQuestionRounds()),
 	}, execution)
 	if err != nil {
 		return commandSurfaces{}, err

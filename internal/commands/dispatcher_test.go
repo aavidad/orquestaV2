@@ -385,11 +385,24 @@ func exactTestExecutionAuthority(t *testing.T) *testExecutionAuthority {
 	}
 }
 
+func TestCommandDispatcherRejectsZeroIntakeRoundPolicyAtConstruction(t *testing.T) {
+	limits := APILimits{MaxRequestBytes: 1 << 20, MaxListLimit: 100}
+	if limits.Valid() {
+		t.Fatal("zero intake round policy accepted as valid")
+	}
+	dispatcher, err := newDispatcher(newFakeApplication(), newMemoryAudit(), limits)
+	if err == nil || dispatcher != nil {
+		t.Fatalf("dispatcher=%v err=%v", dispatcher, err)
+	}
+}
+
 func testDispatcher(t *testing.T) (*Dispatcher, *fakeApplication, *memoryAudit) {
 	t.Helper()
 	api, audit := newFakeApplication(), newMemoryAudit()
 	dispatcher, err := newDispatcher(
-		api, audit, APILimits{MaxRequestBytes: 1 << 20, MaxListLimit: 100},
+		api, audit, APILimits{
+			MaxRequestBytes: 1 << 20, MaxListLimit: 100, IntakeMaxQuestionRounds: 6,
+		},
 		exactTestExecutionAuthority(t),
 	)
 	if err != nil {
@@ -482,7 +495,9 @@ func TestCommandDispatcherBindsPrincipalProjectAndExecutionOutsidePayload(t *tes
 
 	t.Run("nil resolver fails before audit", func(t *testing.T) {
 		api, audit := newFakeApplication(), newMemoryAudit()
-		dispatcher, err := newDispatcher(api, audit, APILimits{MaxRequestBytes: 1 << 20, MaxListLimit: 100})
+		dispatcher, err := newDispatcher(api, audit, APILimits{
+			MaxRequestBytes: 1 << 20, MaxListLimit: 100, IntakeMaxQuestionRounds: 6,
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -507,7 +522,9 @@ func TestCommandDispatcherBindsPrincipalProjectAndExecutionOutsidePayload(t *tes
 		authority := exactTestExecutionAuthority(t)
 		authority.resolvedExecution, _ = goal.NewExecutionRef("execution:successor")
 		dispatcher, err := newDispatcher(
-			api, audit, APILimits{MaxRequestBytes: 1 << 20, MaxListLimit: 100}, authority,
+			api, audit, APILimits{
+				MaxRequestBytes: 1 << 20, MaxListLimit: 100, IntakeMaxQuestionRounds: 6,
+			}, authority,
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -523,7 +540,9 @@ func TestCommandDispatcherBindsPrincipalProjectAndExecutionOutsidePayload(t *tes
 		api, audit := newFakeApplication(), newMemoryAudit()
 		authority := exactTestExecutionAuthority(t)
 		dispatcher, err := newDispatcher(
-			api, audit, APILimits{MaxRequestBytes: 1 << 20, MaxListLimit: 100}, authority,
+			api, audit, APILimits{
+				MaxRequestBytes: 1 << 20, MaxListLimit: 100, IntakeMaxQuestionRounds: 6,
+			}, authority,
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -541,7 +560,9 @@ func TestCommandDispatcherBindsPrincipalProjectAndExecutionOutsidePayload(t *tes
 		api, audit := newFakeApplication(), newMemoryAudit()
 		authority := exactTestExecutionAuthority(t)
 		dispatcher, err := newDispatcher(
-			api, audit, APILimits{MaxRequestBytes: 1 << 20, MaxListLimit: 100}, authority,
+			api, audit, APILimits{
+				MaxRequestBytes: 1 << 20, MaxListLimit: 100, IntakeMaxQuestionRounds: 6,
+			}, authority,
 		)
 		if err != nil {
 			t.Fatal(err)

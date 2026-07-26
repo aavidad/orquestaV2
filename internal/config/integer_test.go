@@ -20,6 +20,9 @@ max_concurrent_executions = 23
 [scheduler]
 max_execution_attempts = 5
 
+[intake]
+max_question_rounds = 9
+
 [api]
 max_list_limit = 50
 locale = "en"
@@ -27,17 +30,20 @@ locale = "en"
 [config]
 effective_max_existing_bytes = 32768
 `, map[string]string{
-		"ORQUESTA_RUNTIME_MAX_OUTPUT_BYTES": "16384",
-		"ORQUESTA_API_MAX_LIST_LIMIT":       "75",
+		"ORQUESTA_RUNTIME_MAX_OUTPUT_BYTES":   "16384",
+		"ORQUESTA_INTAKE_MAX_QUESTION_ROUNDS": "12",
+		"ORQUESTA_API_MAX_LIST_LIMIT":         "75",
 	})
 	if snapshot.ServerMaxRequestBytes() != 2048 || snapshot.RuntimeMaxOutputBytes() != 16384 ||
 		snapshot.RuntimeCodexMaxDiagnosticBytes() != 8192 || snapshot.RuntimeCodexMaxConcurrentExecutions() != 23 ||
-		snapshot.SchedulerMaxExecutionAttempts() != 5 || snapshot.APIMaxListLimit() != 75 || snapshot.APILocale() != "en" ||
+		snapshot.SchedulerMaxExecutionAttempts() != 5 || snapshot.IntakeMaxQuestionRounds() != 12 ||
+		snapshot.APIMaxListLimit() != 75 || snapshot.APILocale() != "en" ||
 		snapshot.ConfigEffectiveMaxExistingBytes() != 32768 {
 		t.Fatal("unexpected typed integer snapshot")
 	}
 	assertSource(t, snapshot, KeyServerMaxRequestBytes, SourceFile)
 	assertSource(t, snapshot, KeyRuntimeMaxOutputBytes, SourceEnv)
+	assertSource(t, snapshot, KeyIntakeMaxQuestionRounds, SourceEnv)
 
 	metadata, found := snapshot.Metadata(KeyServerMaxRequestBytes)
 	if !found || metadata.Type != string(valueTypeInteger) || metadata.Minimum == nil || metadata.Maximum == nil {
@@ -46,6 +52,29 @@ effective_max_existing_bytes = 32768
 	if *metadata.Minimum != 1 || *metadata.Maximum != 1073741824 {
 		t.Fatalf("integer bounds = %d..%d", *metadata.Minimum, *metadata.Maximum)
 	}
+}
+
+func TestIntakeRoundDefaultIsTypedValidatedAndEffectivelyProjected(t *testing.T) {
+	snapshot := resolveTOML(t, "", nil)
+	metadata, found := snapshot.Metadata(KeyIntakeMaxQuestionRounds)
+	if !found || snapshot.IntakeMaxQuestionRounds() != 6 ||
+		metadata.Source != SourceDefault || metadata.Type != string(valueTypeInteger) ||
+		metadata.Minimum == nil || *metadata.Minimum != 1 ||
+		metadata.Maximum == nil || *metadata.Maximum != 4294967295 {
+		t.Fatalf("intake round default metadata=%+v found=%v value=%d",
+			metadata, found, snapshot.IntakeMaxQuestionRounds())
+	}
+	for _, entry := range snapshot.effectiveDocument().Entries {
+		if entry.Key == KeyIntakeMaxQuestionRounds {
+			if entry.Value != int64(6) || entry.Source != SourceDefault ||
+				entry.Minimum == nil || *entry.Minimum != 1 ||
+				entry.Maximum == nil || *entry.Maximum != 4294967295 {
+				t.Fatalf("effective intake rounds=%+v", entry)
+			}
+			return
+		}
+	}
+	t.Fatal("effective intake rounds entry missing")
 }
 
 func TestSchedulerRegistryRetiresConflatedMaxActionAttempts(t *testing.T) {
@@ -79,6 +108,8 @@ func TestIntegerConfigRejectsWrongTypeOverflowAndBounds(t *testing.T) {
 		{name: "string", toml: "[server]\nmax_request_bytes = \"12\"", key: KeyServerMaxRequestBytes},
 		{name: "below minimum", toml: "[server]\nmax_request_bytes = 0", key: KeyServerMaxRequestBytes},
 		{name: "above maximum", toml: "[server]\nmax_request_bytes = 1073741825", key: KeyServerMaxRequestBytes},
+		{name: "intake rounds below minimum", toml: "[intake]\nmax_question_rounds = 0", key: KeyIntakeMaxQuestionRounds},
+		{name: "intake rounds above uint32", toml: "[intake]\nmax_question_rounds = 4294967296", key: KeyIntakeMaxQuestionRounds},
 		{
 			name:        "environment fractional",
 			environment: map[string]string{"ORQUESTA_API_MAX_LIST_LIMIT": "1.5"},

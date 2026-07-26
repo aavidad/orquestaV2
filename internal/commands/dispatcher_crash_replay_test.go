@@ -43,7 +43,9 @@ func TestCommandDispatcherCrashAfterMutatingHandlerReplaysApplicationReceiptWith
 	crashFrontier := &failFirstCommandAuditCompletion{delegate: durableAudit}
 
 	beforeCrash, err := NewDispatcher(
-		orchestrator, crashFrontier, APILimits{MaxRequestBytes: 1 << 20, MaxListLimit: 100},
+		orchestrator, crashFrontier, APILimits{
+			MaxRequestBytes: 1 << 20, MaxListLimit: 100, IntakeMaxQuestionRounds: 6,
+		},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -57,7 +59,9 @@ func TestCommandDispatcherCrashAfterMutatingHandlerReplaysApplicationReceiptWith
 	// A fresh dispatcher represents process recovery: durable admission and
 	// application state survive, while the terminal audit fact was not written.
 	afterCrash, err := NewDispatcher(
-		orchestrator, durableAudit, APILimits{MaxRequestBytes: 1 << 20, MaxListLimit: 100},
+		orchestrator, durableAudit, APILimits{
+			MaxRequestBytes: 1 << 20, MaxListLimit: 100, IntakeMaxQuestionRounds: 6,
+		},
 	)
 	if err != nil {
 		t.Fatal(err)

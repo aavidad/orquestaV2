@@ -103,6 +103,9 @@ effect_approval_ttl = "24h"
 [director]
 lease_duration = "2m"
 
+[intake]
+max_question_rounds = 6
+
 [mailbox]
 max_envelope_bytes = 65536
 

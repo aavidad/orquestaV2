@@ -10,6 +10,7 @@ import (
 	"orquesta/internal/application"
 	"orquesta/internal/goal"
 	"orquesta/internal/identity"
+	"orquesta/internal/intake"
 )
 
 type handler func(context.Context, handlerContext, json.RawMessage) (json.RawMessage, error)
@@ -34,6 +35,7 @@ type Dispatcher struct {
 	audit              AuditPort
 	executionAuthority ExecutionAuthorityResolver
 	limits             APILimits
+	intakePolicy       intake.Policy
 	definitions        []Definition
 	byID               map[string]Definition
 	handlers           map[string]handler
@@ -66,6 +68,7 @@ func newDispatcher(
 	}
 	dispatcher := &Dispatcher{
 		application: api, audit: audit, executionAuthority: authority, limits: limits,
+		intakePolicy: intake.Policy{MaxQuestionRounds: limits.IntakeMaxQuestionRounds},
 	}
 	dispatcher.handlers = dispatcher.applicationHandlers()
 	dispatcher.definitions = cloneDefinitions(compiledDefinitions)

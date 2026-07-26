@@ -121,8 +121,13 @@ type Failure struct {
 type CommandAuditRecord = ports.CommandAuditRecord
 
 type APILimits struct {
-	MaxRequestBytes int64
-	MaxListLimit    int
+	MaxRequestBytes         int64
+	MaxListLimit            int
+	IntakeMaxQuestionRounds uint32
 }
 
-func (limits APILimits) Valid() bool { return limits.MaxRequestBytes > 0 && limits.MaxListLimit > 0 }
+func (limits APILimits) Valid() bool {
+	return limits.MaxRequestBytes > 0 &&
+		limits.MaxListLimit > 0 &&
+		limits.IntakeMaxQuestionRounds > 0
+}

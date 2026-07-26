@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "revision": "2026-07-26.3",
+  "revision": "2026-07-26.4",
   "commands": [
     {
       "id": "orquesta.goals.create", "version": "1", "kind": "command", "handler": "Submit", "permission": "goals.create", "audience": "principal", "execution_bound": false, "replay_mode": "application_receipt",
@@ -129,7 +129,7 @@
     },
     {
       "id": "orquesta.intakes.create", "version": "1", "kind": "command", "handler": "CreateIntake", "permission": "goals.create", "audience": "principal", "execution_bound": false, "replay_mode": "application_receipt",
-      "input_schema": {"type":"object","properties":{"intake_ref":{"type":"string"},"max_question_rounds":{"type":"integer","minimum":1}},"required":["intake_ref","max_question_rounds"],"additionalProperties":false}, "output_schema": {"type":"object","properties":{"intake":{"type":"object","properties":{"intake_ref":{"type":"string"},"project_ref":{"type":"string"},"revision":{"type":"integer","minimum":1},"receipt_ref":{"type":"string"}},"required":["intake_ref","project_ref","revision","receipt_ref"],"additionalProperties":false}},"required":["intake"],"additionalProperties":false},
+      "input_schema": {"type":"object","properties":{"intake_ref":{"type":"string"},"max_question_rounds":{"type":"integer","minimum":1}},"required":["intake_ref"],"additionalProperties":false}, "output_schema": {"type":"object","properties":{"intake":{"type":"object","properties":{"intake_ref":{"type":"string"},"project_ref":{"type":"string"},"revision":{"type":"integer","minimum":1},"receipt_ref":{"type":"string"}},"required":["intake_ref","project_ref","revision","receipt_ref"],"additionalProperties":false}},"required":["intake"],"additionalProperties":false},
       "description_key": "command.intakes.create.description", "error_codes": ["invalid_request","unauthenticated","forbidden","not_found","conflict","unavailable","internal"], "http": {"method":"POST","path":"/api/v1/commands/orquesta.intakes.create"}, "mcp": {"tool":"orquesta.intakes.create","annotations":{"read_only":false,"destructive":true,"idempotent":true,"open_world":false}}, "cli": {"path":["intakes","create"]}
     },
     {
