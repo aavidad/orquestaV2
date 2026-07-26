@@ -353,11 +353,17 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		t.Fatalf("invalid required test: %+v", fixture.RequiredTest)
 	}
 	wantIntegrationGate := v23WizardRequiredTest{
-		Command: "go test -mod=vendor -count=1 ./internal/application ./internal/adapters/state/sqlite ./internal/commands ./internal/bootstrap -run '^(TestBuildIntakeDossierBindsVerifiedRecordPlanAndCompleteDecisions|TestIntakeDossierHashProjectsEveryCurrentDecisionField|TestBuildIntakeDossierRejectsTamperedRecordUnresolvedStateAndInvalidPlan|TestIntakeServiceReplayReturnsExactReceiptAfterLaterMutation|TestIntakeServiceRejectsStaleAndDivergentRequestsWithoutWrite|TestIntakeSQLiteRestartAndHistoricalReplay|TestIntakeSQLiteConcurrentCASAdmitsOneReceipt|TestV23RecoveryRejectsDivergentIntakeBranch|TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState|TestHistoricalGlobalRegistryDigestReplaysOnlyUnchangedDefinitionAfterAdditiveUpgrade|TestHistoricalRegistryAdmissionReplaysThroughCurrentDispatcherAndSQLite|TestV23IntakeDispatcherPersistsCASAndReplayAcrossRestart)$'",
+		Command: "go test -mod=vendor -count=1 ./internal/application ./internal/adapters/state/sqlite ./internal/commands ./internal/bootstrap -run '^(TestBuildIntakeDossierBindsVerifiedRecordPlanAndCompleteDecisions|TestIntakeDossierHashProjectsEveryCurrentDecisionField|TestBuildIntakeDossierRejectsTamperedRecordUnresolvedStateAndInvalidPlan|TestIntakeDossierServiceExactReplaySurvivesLaterIntakeWithoutReread|TestIntakeDossierServiceRejectsCoherentlyRewrittenAdapterFingerprint|TestIntakeDossierSnapshotRoundTripLosesNoDataAndRecomputesIdentity|TestIntakeDossierSQLiteRestartAndHistoricalReplay|TestIntakeDossierSQLiteReusesContentAndRecordsDistinctRequests|TestV23DossierRecoveryRejectsTamperedCanonicalSnapshot|TestIntakeServiceReplayReturnsExactReceiptAfterLaterMutation|TestIntakeServiceRejectsStaleAndDivergentRequestsWithoutWrite|TestIntakeSQLiteRestartAndHistoricalReplay|TestIntakeSQLiteConcurrentCASAdmitsOneReceipt|TestV23RecoveryRejectsDivergentIntakeBranch|TestIntakeCommandsBindAuthorityOutsidePayloadAndProjectPublicState|TestHistoricalGlobalRegistryDigestReplaysOnlyUnchangedDefinitionAfterAdditiveUpgrade|TestHistoricalRegistryAdmissionReplaysThroughCurrentDispatcherAndSQLite|TestV23IntakeDispatcherPersistsCASAndReplayAcrossRestart)$'",
 		TestNames: []string{
 			"TestBuildIntakeDossierBindsVerifiedRecordPlanAndCompleteDecisions",
 			"TestIntakeDossierHashProjectsEveryCurrentDecisionField",
 			"TestBuildIntakeDossierRejectsTamperedRecordUnresolvedStateAndInvalidPlan",
+			"TestIntakeDossierServiceExactReplaySurvivesLaterIntakeWithoutReread",
+			"TestIntakeDossierServiceRejectsCoherentlyRewrittenAdapterFingerprint",
+			"TestIntakeDossierSnapshotRoundTripLosesNoDataAndRecomputesIdentity",
+			"TestIntakeDossierSQLiteRestartAndHistoricalReplay",
+			"TestIntakeDossierSQLiteReusesContentAndRecordsDistinctRequests",
+			"TestV23DossierRecoveryRejectsTamperedCanonicalSnapshot",
 			"TestIntakeServiceReplayReturnsExactReceiptAfterLaterMutation",
 			"TestIntakeServiceRejectsStaleAndDivergentRequestsWithoutWrite",
 			"TestIntakeSQLiteRestartAndHistoricalReplay",
@@ -385,15 +391,15 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		"application_dossier_builder",
 		"command_registry_binding",
 		"durable_cas_persistence_and_restart",
+		"durable_dossier_persistence",
 	}) {
 		t.Fatalf("invalid completed integration scope: %+v", fixture.CompletedScopes)
 	}
 	wantDeferred := []string{
 		"canonical_round_default_under_L-CONFIG", "causal_plan_creation",
-		"dossier_generation", "durable_dossier_persistence",
-		"explicit_confirmation", "freeze_after_confirmation",
-		"full_wizard_i18n_catalog", "roadmap_promotion", "seal_and_receipt",
-		"templates_and_domain_packs", "web_surface",
+		"dossier_generation", "explicit_confirmation", "freeze_after_confirmation",
+		"full_wizard_i18n_catalog", "public_dossier_commands", "roadmap_promotion",
+		"seal_and_receipt", "templates_and_domain_packs", "web_surface",
 	}
 	if !reflect.DeepEqual(fixture.DeferredScopes, wantDeferred) {
 		t.Fatalf("invalid deferred scope: %+v", fixture.DeferredScopes)
@@ -419,14 +425,23 @@ func assertV23WizardFixture(t *testing.T, root string, fixture v23WizardFixture)
 		}
 	}
 	wantIntegrationFiles := []string{
+		"docs/reconstruccion/corte_v23_dossier_durable_2026-07-26.md",
 		"docs/reconstruccion/corte_v23_intake_durable_2026-07-26.md",
 		"internal/application/intake_dossier.go",
+		"internal/application/intake_dossier_service.go",
+		"internal/application/intake_dossier_service_test.go",
+		"internal/application/intake_dossier_snapshot.go",
+		"internal/application/intake_dossier_snapshot_test.go",
 		"internal/application/intake_dossier_test.go",
 		"internal/application/intake_chain.go",
 		"internal/application/intake_orchestrator.go",
 		"internal/application/intake_service.go",
+		"internal/adapters/state/sqlite/intake_dossier.go",
+		"internal/adapters/state/sqlite/intake_dossier_test.go",
 		"internal/adapters/state/sqlite/intake.go",
+		"internal/adapters/state/sqlite/migrations/018_intake_dossiers.sql",
 		"internal/adapters/state/sqlite/migrations/017_intake.sql",
+		"internal/adapters/state/sqlite/recovery_validation_v23_dossier.go",
 		"internal/adapters/state/sqlite/recovery_validation_v23.go",
 		"internal/bootstrap/command_registry_upgrade_e2e_test.go",
 		"internal/bootstrap/intake_e2e_test.go",

@@ -19,6 +19,11 @@ que V23 esté completa.
 > persistencia, validación ejecutable por el orquestador, confirmación, freeze
 > y creación atómica del Goal siguen pendientes. V23 continúa
 > `partial_green_unsealed`.
+>
+> Corte posterior: `docs/reconstruccion/corte_v23_dossier_durable_2026-07-26.md`
+> ya acredita persistencia, replay, restart y recovery del dossier. Siguen
+> pendientes su generación editorial, comandos públicos, confirmación, freeze
+> y creación atómica del Goal.
 
 Contexto causal:
 
@@ -254,9 +259,7 @@ aceptados quedan pendientes; los rechazados por roadmap no se reabren:
 
 Pendientes explícitos del gate V23:
 
-- persistencia, restart y CAS durable transaccional mediante el writer de
-  application;
-- idempotencia del comando de application sobre la misma identidad y revisión;
+- comandos públicos y wiring de la preparación/consulta del dossier;
 - definición y bindings en `internal/commands/registry.json`;
 - activación de la superficie Wizard y catálogo i18n completo;
 - generación del dossier final;
@@ -303,10 +306,10 @@ go test -mod=vendor -race -count=1 -v ./acceptance -run '^(TestAcceptanceV23Wiza
 ```
 
 Esta aceptación verde demuestra semántica offline del paquete. La evidencia
-de integración separada añade intake durable y el builder candidato del
-dossier, pero todavía no demuestra persistencia durable del dossier,
-confirmación, freeze, creación causal de plan, E2E web, promoción del roadmap,
-receipt ni sello.
+de integración separada añade intake y dossier durables, replay, restart y
+recovery. Todavía no demuestra generación editorial del dossier, comandos
+públicos, confirmación, freeze, creación causal de plan, E2E web, promoción del
+roadmap, receipt ni sello.
 
 Verificación ejecutada:
 
