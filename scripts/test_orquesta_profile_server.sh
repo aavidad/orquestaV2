@@ -16,6 +16,8 @@ BASE="$TEST_ROOT/runtime"
 ACCOUNTS="$TEST_ROOT/accounts"
 FAKE_SOURCE="$TEST_ROOT/fake-server.go"
 FAKE_BINARY="$TEST_ROOT/orquesta-fake"
+REAL_BINARY="$TEST_ROOT/orquesta-real"
+REAL_CLI_PROBE_ROOT="$TEST_ROOT/real-cli-probe"
 GO_CACHE="$TEST_ROOT/go-cache"
 REPOSITORY="$TEST_ROOT/repository"
 FAKE_BWRAP_9000="$TEST_ROOT/fake-bwrap-9000"
@@ -165,6 +167,25 @@ GO
 
 GOCACHE="$GO_CACHE" go build -o "$FAKE_BINARY" "$FAKE_SOURCE"
 chmod 755 "$FAKE_BINARY"
+
+# Acredita la identidad y el verbo contra el binario real sin arrancar runtime:
+# `serve --help` termina en el parser antes de abrir red, estado o SQLite.
+mkdir -m 700 "$REAL_CLI_PROBE_ROOT"
+GOCACHE="$GO_CACHE" GOFLAGS=-mod=vendor \
+  go build -o "$REAL_BINARY" "$ROOT/cmd/orquesta"
+chmod 755 "$REAL_BINARY"
+go version -m "$REAL_BINARY" |
+  grep -Eq '^[[:space:]]*path[[:space:]]+orquesta/cmd/orquesta$'
+(
+  cd "$REAL_CLI_PROBE_ROOT"
+  env -i \
+    "HOME=$REAL_CLI_PROBE_ROOT" \
+    "PATH=/usr/local/bin:/usr/bin:/bin" \
+    "$REAL_BINARY" serve --help
+) >"$TEST_ROOT/real-cli-probe.out" 2>"$TEST_ROOT/real-cli-probe.err"
+grep -Fq 'orquesta serve [--config' "$TEST_ROOT/real-cli-probe.out"
+[ ! -s "$TEST_ROOT/real-cli-probe.err" ]
+[ -z "$(find "$REAL_CLI_PROBE_ROOT" -mindepth 1 -print -quit)" ]
 
 mkdir -m 700 "$FAKE_TOOLCHAIN" "$FAKE_TOOLCHAIN/bin"
 printf '#!/bin/sh\nexit 97\n' >"$FAKE_TOOLCHAIN/bin/go"
