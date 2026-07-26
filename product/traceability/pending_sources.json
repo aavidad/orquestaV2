@@ -90,6 +90,7 @@
       "kind": "bug",
       "status": "entries_disposed_lesson_tests_pending",
       "exact_paths": [
+        "docs/arquitectura_comunicacion_agentes_firecracker_2026-07-25.md",
         "docs/auditoria_claude_estado_orquesta_2026-07-03.md",
         "docs/auditoria_codigo_muerto_duplicado_2026-07-04.md",
         "docs/auditoria_diseno_estructural_2026-07-06.md",
@@ -167,8 +168,8 @@
         "docs/incidencias/*.md",
         "docs/runbooks/incidencia_*.md"
       ],
-      "expected_file_count": 151,
-      "manifest_sha256": "sha256:8e7f1a2ca5ea48b89d175bac2d8013a0f2132d7bd734b5603d593343eb667f26",
+      "expected_file_count": 152,
+      "manifest_sha256": "sha256:3e652e89506ea8cd3aa0929728f7c53fa26099fa5270b4e47921992f5aa7a290",
       "next_gate": "Implement and execute each pending invariant lesson test; a historical incident remains open evidence until that test is accredited."
     },
     {

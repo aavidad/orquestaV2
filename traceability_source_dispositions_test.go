@@ -270,12 +270,12 @@ func TestTraceabilityRebuildSourceDispositions(t *testing.T) {
 	if len(missing) != 0 || len(entries) != len(expected) {
 		t.Fatalf("source disposition coverage incomplete: entries=%d expected=%d missing=%v", len(entries), len(expected), missing)
 	}
-	wantKinds := map[string]int{"task": 164, "bug": 151, "skill": 19}
-	wantDecisionCounts := map[string]int{"accepted": 76, "historical": 239, "conditional": 19}
+	wantKinds := map[string]int{"task": 164, "bug": 152, "skill": 19}
+	wantDecisionCounts := map[string]int{"accepted": 77, "historical": 239, "conditional": 19}
 	if !reflect.DeepEqual(kindCounts, wantKinds) || !reflect.DeepEqual(decisionCounts, wantDecisionCounts) {
 		t.Fatalf("source disposition counts kinds=%v decisions=%v, want kinds=%v decisions=%v", kindCounts, decisionCounts, wantKinds, wantDecisionCounts)
 	}
-	t.Logf("source_dispositions: entries=%d tasks=164 bugs=151 skills=19 coverage=100%% hashes=verified", len(entries))
+	t.Logf("source_dispositions: entries=%d tasks=164 bugs=152 skills=19 coverage=100%% hashes=verified", len(entries))
 }
 
 func traceSourceHasRole(source traceSourceDisposition, role string) bool {
