@@ -51,18 +51,54 @@ func TestRunDriveRoundTripPassAndFailurePreservesOrder(t *testing.T) {
 	}
 }
 
-func TestRunNoTestsUsesReservedFailureExit(t *testing.T) {
-	input := validGuestInput()
-	input.RequiredTests = input.RequiredTests[:1]
-	output, _, runErr := runGuest(t, input, guestSourceSnapshot(t, input.SubjectDigest), &fakeExecutor{
-		results: []ExecutionResult{{ExitCode: 0, OutputDigest: guestTestDigest("empty")}},
-	})
-	if runErr != nil {
-		t.Fatal(runErr)
+func TestRunPreservesFailuresAndRejectsSuccessfulZeroTests(t *testing.T) {
+	tests := []struct {
+		name        string
+		result      ExecutionResult
+		wantExit    uint8
+		wantVerdict firecracker.Verdict
+	}{
+		{
+			name: "executed test passes",
+			result: ExecutionResult{
+				ExitCode: 0, TestCases: 1, OutputDigest: guestTestDigest("pass"),
+			},
+			wantExit: 0, wantVerdict: firecracker.VerdictPassed,
+		},
+		{
+			name: "successful process without tests fails",
+			result: ExecutionResult{
+				ExitCode: 0, TestCases: 0, OutputDigest: guestTestDigest("empty"),
+			},
+			wantExit: NoTestsExitCode, wantVerdict: firecracker.VerdictFailed,
+		},
+		{
+			name: "real process failure is preserved",
+			result: ExecutionResult{
+				ExitCode: 7, TestCases: 0, OutputDigest: guestTestDigest("failed"),
+			},
+			wantExit: 7, wantVerdict: firecracker.VerdictFailed,
+		},
 	}
-	if output.Verdict != firecracker.VerdictFailed || len(output.Outcomes) != 1 ||
-		output.Outcomes[0].ExitCode != NoTestsExitCode {
-		t.Fatalf("zero tests accepted: %+v", output)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			input := validGuestInput()
+			input.RequiredTests = input.RequiredTests[:1]
+			output, _, runErr := runGuest(
+				t,
+				input,
+				guestSourceSnapshot(t, input.SubjectDigest),
+				&fakeExecutor{results: []ExecutionResult{test.result}},
+			)
+			if runErr != nil {
+				t.Fatal(runErr)
+			}
+			if output.Verdict != test.wantVerdict || len(output.Outcomes) != 1 ||
+				output.Outcomes[0].ExitCode != test.wantExit {
+				t.Fatalf("output=%+v want verdict/exit=%d/%d",
+					output, test.wantVerdict, test.wantExit)
+			}
+		})
 	}
 }
 
