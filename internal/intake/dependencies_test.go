@@ -133,6 +133,85 @@ func TestDecisionChangeReopensDeclaredDependentsTransitively(t *testing.T) {
 	}
 }
 
+func TestParentQuestionRevisionReopensOwnAndDependentDecisionsTransitively(
+	t *testing.T,
+) {
+	identity, err := NewDerivationIdentity(
+		"orquesta.test.questions",
+		"v1",
+		"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := mustState(t, 3)
+	root := testQuestion("root", "root", nil)
+	child := testQuestion("child", "child", []QuestionRef{root.Ref})
+	leaf := testQuestion("leaf", "leaf", []QuestionRef{child.Ref})
+	independent := testQuestion("independent", "independent", nil)
+	state, err = Apply(state, Change{
+		StateRef: testStateRef, ExpectedRevision: 1, Origin: OriginChat,
+		Issues: []Issue{
+			testIssue("root"), testIssue("child"), testIssue("leaf"),
+			testIssue("independent"),
+		},
+		Questions: []Question{root, child, leaf, independent},
+		Choices: []Choice{
+			{QuestionRef: root.Ref, OptionRef: root.Options[0].Ref},
+			{QuestionRef: child.Ref, OptionRef: child.Options[0].Ref},
+			{QuestionRef: leaf.Ref, OptionRef: leaf.Options[0].Ref},
+			{
+				QuestionRef: independent.Ref,
+				OptionRef:   independent.Options[0].Ref,
+			},
+		},
+		Derivation: identity,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	revisedRoot := root
+	revisedRoot.Options = append([]Option(nil), root.Options...)
+	revisedRoot.Options[0].Recommended = false
+	revisedRoot.Options[1].Recommended = true
+	revised, err := Apply(state, Change{
+		StateRef: testStateRef, ExpectedRevision: state.Revision(),
+		Origin: OriginForm, Derivation: identity,
+		QuestionRevisions: []Question{revisedRoot},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	reopened := revised.ReopenedDecisions()
+	if len(reopened) != 3 {
+		t.Fatalf("reopened=%+v, want root+child+leaf", reopened)
+	}
+	if decision, found := revised.CurrentDecision(independent.Ref); !found ||
+		decision.Choice != independent.Options[0].Ref {
+		t.Fatalf("independent decision=%+v found=%t", decision, found)
+	}
+	for _, ref := range []QuestionRef{root.Ref, child.Ref, leaf.Ref} {
+		if _, found := revised.CurrentDecision(ref); found {
+			t.Fatalf("%s decision remained current", ref)
+		}
+		var got *ReopenedDecision
+		for index := range reopened {
+			if reopened[index].QuestionRef == ref {
+				got = &reopened[index]
+				break
+			}
+		}
+		if got == nil || len(got.InvalidatedBy) != 1 ||
+			got.InvalidatedBy[0] != (DecisionChange{
+				QuestionRef: root.Ref,
+				Revision:    revised.Revision(),
+			}) {
+			t.Fatalf("%s reopen=%+v", ref, got)
+		}
+	}
+}
+
 func TestQuestionDependenciesRejectUnknownDuplicateAndCyclesAtomically(t *testing.T) {
 	tests := []struct {
 		name      string
